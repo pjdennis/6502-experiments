@@ -3,11 +3,15 @@ PORTA = $6001
 DDRB = $6002
 DDRA = $6003
 
+DISPLAY_DATA_MASK = %11110000
+
 E  = %00001000
 RW = %00000100
 RS = %00000010
 
 BF = %10000000
+
+DISPLAY_BITS_MASK = (DISPLAY_DATA_MASK | E | RW | RS)
 
 CMD_CLEAR_DISPLAY           = %00000001
 CMD_RETURN_HOME             = %00000010
@@ -32,23 +36,24 @@ reset:
   ldx #$ff ; Initialize stack
   txs
 
+  lda #0   ; Initialize status flags
+  pha
+  plp
+
   lda #0; Set all pins on port A to input
   sta DDRA
-  lda #(%11110000 | E | RW | RS) ; Set display control pins and data pins on port B to output
-  sta DDRB
   lda #0
   sta PORTB
+  lda #(%11110000 | E | RW | RS) ; Set display control pins and data pins on port B to output
+  sta DDRB
 
   jsr reset_display
 
   ; Initialize display
-  lda #(CMD_DISPLAY_ON_OFF_CONTROL | %100) ; Display on; cursor off; blink off 
-  jsr display_command
-
   lda #(CMD_ENTRY_MODE_SET | %10)          ; Increment and shift cursor; don't shift display 
   jsr display_command
 
-  lda #(CMD_CLEAR_DISPLAY)                 ; Clear display
+  lda #(CMD_DISPLAY_ON_OFF_CONTROL | %100) ; Display on; cursor off; blink off 
   jsr display_command
 
   ; Create character
@@ -98,34 +103,66 @@ reset_display:
   jsr delay_10_thousandths
 
   lda #(CMD_FUNCTION_SET | %10000)         ; Set 8-bit mode
-  jsr single_part_display_command
+  jsr display_command_8bit_no_wait
 
   lda #41
   jsr delay_10_thousandths
 
   lda #(CMD_FUNCTION_SET | %10000)         ; Set 8-bit mode
-  jsr single_part_display_command
+  jsr display_command_8bit_no_wait
 
   lda #1
   jsr delay_10_thousandths
 
   lda #(CMD_FUNCTION_SET | %10000)         ; Set 8-bit mode
-  jsr single_part_display_command
+  jsr display_command_8bit_no_wait
 
-  lda #1
-  jsr delay_10_thousandths
+  jsr wait_for_not_busy_8bit
 
   lda #CMD_FUNCTION_SET                    ; Set 4-bit mode
-  jsr single_part_display_command
+  jsr display_command_8bit_no_wait
 
   lda #(CMD_FUNCTION_SET | %01000)         ; Set 4-bit mode; 2-line display; 5x8 font
   jsr display_command
 
+  lda #(CMD_DISPLAY_ON_OFF_CONTROL | %000) ; Display off; cursor off; blink off 
+  jsr display_command
+
+  lda #(CMD_CLEAR_DISPLAY)                 ; Clear display
+  jsr display_command
+
+  rts
+
+wait_for_not_busy_8bit:
+  pha
+  lda DDRB
+  pha
+  and #(~DISPLAY_BITS_MASK & $ff)
+  ora #(E | RW | RS) ; Set display control pins on port B to output; data pins to input
+  sta DDRB
+still_busy_8bit:
+  lda #RW        ; Set RW flag for reading
+  sta PORTB
+  ora #E         ; Set E flag to trigger read
+  sta PORTB
+  lda PORTB
+  and #BF        ; Check busy flag
+  bne still_busy_8bit
+
+  lda #RW        ; Clear E flag
+  sta PORTB
+
+  pla
+  sta DDRB
+  pla
   rts
 
 wait_for_not_busy:
   pha
-  lda #(E | RW | RS) ; Set display control pins on port B to output
+  lda DDRB
+  pha
+  and #(~DISPLAY_BITS_MASK & $ff)
+  ora #(E | RW | RS) ; Set display control pins on port B to output; data pins to input
   sta DDRB
 still_busy:
   lda #RW        ; Set RW flag for reading
@@ -151,16 +188,16 @@ not_busy:
   lda #RW
   sta PORTB
 
-  lda #(%11110000 | E | RW | RS) ; Set display control pins and data pins on port B to output
+  pla
   sta DDRB
   pla
   rts
 
-single_part_display_command:
+display_command_8bit_no_wait:
   sta PORTB
-  ora #E         ; Set E bit to send instruction
+  ora #E          ; Set E bit to send instruction
   sta PORTB
-  and #(~E)      ; Clear E bit
+  and #(~E)       ; Clear E bit
   sta PORTB
   rts
 
@@ -170,9 +207,9 @@ display_command:
   and #%11110000
 
   sta PORTB
-  ora #E         ; Set E bit to send instruction
+  ora #E          ; Set E bit to send instruction
   sta PORTB
-  and #(~E)      ; Clear E bit
+  and #(~E)       ; Clear E bit
   sta PORTB
 
   pla
@@ -182,9 +219,9 @@ display_command:
   asl
 
   sta PORTB
-  ora #E         ; Set E bit to send instruction
+  ora #E          ; Set E bit to send instruction
   sta PORTB
-  and #(~E)      ; Clear E bit
+  and #(~E & $ff) ; Clear E bit
   sta PORTB
 
   rts
@@ -194,11 +231,11 @@ display_character:
   pha
   and #%11110000
 
-  ora #RS        ; Set RS bit
+  ora #RS         ; Set RS bit
   sta PORTB
-  ora #E         ; Set E bit to send instruction
+  ora #E          ; Set E bit to send instruction
   sta PORTB
-  and #(~E)      ; Clear E bit
+  and #(~E & $ff) ; Clear E bit
   sta PORTB
 
   pla
@@ -207,11 +244,11 @@ display_character:
   asl
   asl
 
-  ora #RS        ; Set RS bit
+  ora #RS         ; Set RS bit
   sta PORTB
-  ora #E         ; Set E bit to send instruction
+  ora #E          ; Set E bit to send instruction
   sta PORTB
-  and #(~E)      ; Clear E bit
+  and #(~E & $ff) ; Clear E bit
   sta PORTB
 
   rts
