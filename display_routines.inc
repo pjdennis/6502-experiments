@@ -80,6 +80,7 @@ still_busy_8bit:
 
 
 display_command_8bit_no_wait:
+  lsr             ; Shift to match display data location
   and #DISPLAY_DATA_MASK
   sta DISPLAY_SCRATCH
   lda PORTB
@@ -145,6 +146,7 @@ still_busy:
 display_command:
   jsr wait_for_not_busy
   pha
+  lsr ; Shift to match display data location
   and #DISPLAY_DATA_MASK
   sta DISPLAY_SCRATCH
 
@@ -159,10 +161,10 @@ display_command:
   sta PORTB
 
   pla
+  asl ; shift lower byte to display data location
   asl
   asl
-  asl
-  asl
+  and #DISPLAY_DATA_MASK
   sta DISPLAY_SCRATCH
 
   lda PORTB
@@ -181,6 +183,7 @@ display_command:
 display_character:
   jsr wait_for_not_busy
   pha
+  lsr ; Shift to match display data location
   and #DISPLAY_DATA_MASK
   sta DISPLAY_SCRATCH
 
@@ -196,10 +199,10 @@ display_character:
   sta PORTB
 
   pla
+  asl ; Shift to match display data location
   asl
   asl
-  asl
-  asl
+  and #DISPLAY_DATA_MASK
   sta DISPLAY_SCRATCH
 
   lda PORTB

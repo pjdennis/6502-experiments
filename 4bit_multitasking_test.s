@@ -15,14 +15,14 @@ BUTTON1           = %01000000
 BUTTON2           = %10000000
 
 ; PORTB assignments
-DISPLAY_DATA_MASK = %11110000
-E                 = %00001000
-RW                = %00000100
-RS                = %00000010
-BF                = %10000000
+DISPLAY_DATA_MASK = %01111000
+E                 = %00000100
+RW                = %00000010
+RS                = %00000001
+BF                = %01000000
 DISPLAY_BITS_MASK = (DISPLAY_DATA_MASK | E | RW | RS)
 
-FLASH_LED         = %00000001
+FLASH_LED         = %10000000
 
   .include display_parameters.inc
 
@@ -42,8 +42,8 @@ IT1         = %01000000
 IT2         = %00100000
 
 ;DELAY = 1000 ; 1000 1 MHZ cycles = 1 ms
-;DELAY = 2000 ; 2000 microseconds = 2 milliseconds; rate = 500 Hz
-DELAY = 3822; 261.6 Hz; 'Middle C' 
+DELAY = 2000 ; 2000 microseconds = 2 milliseconds; rate = 500 Hz
+;DELAY = 3822; 261.6 Hz; 'Middle C' 
 
 BUSY_COUNTER_DELTA     = 1
 
