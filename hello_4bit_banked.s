@@ -15,11 +15,17 @@ IERSETCLEAR = %10000000
 IT1 = %01000000
 
 ; PORTA assignments
-BUTTON1           = %00000001
-BUTTON2           = %00000010
+BUTTON1           = %10000000
+BUTTON2           = %01000000
 ILED              = %00100000
-LED               = %01000000
-BANK              = %10000000
+LED               = %00010000
+BANK              = %00001111
+
+BANK_A            = %0100
+BANK_B            = %0101
+
+BANK_START        = %00000100
+BANK_STOP         = %00010000
 
 ; PORTB assignments
 DISPLAY_DATA_MASK = %11110000
@@ -44,14 +50,19 @@ DISPLAY_FIRST_LINE  = $00
 DISPLAY_SECOND_LINE = $40
 
 ; Memory locations
-DISPLAY_STRING_PARAM   = $0000
+
+TEST_PARAM             = $0000
+DISPLAY_STRING_PARAM   = $0004
 CREATE_CHARACTER_PARAM = $0002
 
 INTERRUPT_COUNTER      = $0012
 BUSY_COUNTER           = $0014
 
 BANK_TEST_CHAR         = $0020
+BANK_TEST_CHAR_FIXED   = $2020
 STACK_POINTER_SAVE     = $0021
+BANK_SWITCH_SCRATCH    = $0022
+
 
 ; Character definitions
 CHARACTER_PD = 0
@@ -60,6 +71,12 @@ CHARACTER_ANGEL = 1
 DELAY = 1000 ; 1 MHZ cycles
 
   .org $8000
+
+character_t:
+  .byte 'Q'
+
+string_foo:
+  .asciiz "Foo"
 
 reset:
   ldx #$ff ; Initialize stack
@@ -70,7 +87,7 @@ reset:
   plp
 
   ; Initialize 6522 ports
-  lda #0
+  lda #BANK_A
   sta PORTA
   lda #(BANK | LED | ILED) ; Set pin direction  on port A
   sta DDRA
@@ -90,6 +107,8 @@ reset:
   jsr display_command
 
 
+  jmp skip_create_characters
+
   ; Create characters
   lda #<character_pd
   ldx #>character_pd
@@ -101,19 +120,91 @@ reset:
   ldy #CHARACTER_ANGEL
   jsr create_character
 
+skip_create_characters:
 
   ; Display some stuff
   lda #(CMD_SET_DDRAM_ADDRESS | DISPLAY_FIRST_LINE) ; Move to first line
   jsr display_command
 
   ; Display message 1
-  lda #<message1
-  ldx #>message1
-  jsr display_string
+  ;lda #<message1
+  ;ldx #>message1
+  ;jsr display_string
 
+
+  jmp skip_write_stuff
+
+  lda #'X'
+  jsr display_character
+
+  lda #'Y'
+  sta DISPLAY_STRING_PARAM
+  lda #'Z'
+  sta DISPLAY_STRING_PARAM + 1
+
+  lda DISPLAY_STRING_PARAM
+  jsr display_character
+
+  lda DISPLAY_STRING_PARAM + 1
+  jsr display_character
+
+  lda #<(character_t - 1)
+  sta DISPLAY_STRING_PARAM
+  lda #>(character_t - 1)
+  sta DISPLAY_STRING_PARAM + 1
+  ldy #1
+  lda (DISPLAY_STRING_PARAM),Y
+  jsr display_character
+
+
+  lda #>string_foo
+  jsr convert_to_hex
+  jsr display_character
+  txa
+  jsr display_character
+
+  lda #<string_foo
+  jsr convert_to_hex
+  jsr display_character
+  txa
+  jsr display_character
+
+  lda #<string_foo
+  sta TEST_PARAM
+  lda #>string_foo
+  sta TEST_PARAM + 1
+;  ldy #0
+;  lda (TEST_PARAM),Y
+  lda #'X'
+  jsr test_routine
+
+  lda TEST_PARAM + 1
+
+  jsr convert_to_hex
+  jsr display_character
+  lda TEST_PARAM
+  pha
+  txa
+  jsr display_character
+
+  pla
+  jsr convert_to_hex
+  jsr display_character
+  txa
+  jsr display_character
+
+
+skip_write_stuff:
+
+;  lda #<string_foo
+;  ldx #>string_foo
+;  jsr display_string
+
+
+
+  jmp skip_bank_switching
 
   ; Test out the bank switching
-
   ; store 'A' into bank 0
   ldx #'A'
   stx BANK_TEST_CHAR
@@ -147,42 +238,125 @@ reset:
   ; display the characer retrieved from bank 1
   jsr display_character
 
+skip_bank_switching:
+
+
+
+  ; Store 'Ambidextrous' across the banks
+  ldx #BANK_START
+  lda #'A'
+  jsr store_in_bank
+
+  inx
+  lda #'m'
+  jsr store_in_bank
+
+  inx
+  lda #'b'
+  jsr store_in_bank
+
+  inx
+  lda #'i'
+  jsr store_in_bank
+
+  inx
+  lda #'d'
+  jsr store_in_bank
+
+  inx
+  lda #'e'
+  jsr store_in_bank
+
+  inx
+  lda #'x'
+  jsr store_in_bank
+
+  inx
+  lda #'t'
+  jsr store_in_bank
+
+  inx
+  lda #'r'
+  jsr store_in_bank
+
+  inx
+  lda #'o'
+  jsr store_in_bank
+
+  inx
+  lda #'u'
+  jsr store_in_bank
+
+  inx
+  lda #'s'
+  jsr store_in_bank
+
+  ; Retrieve and print from the banks
+  ldx #BANK_START
+bank_print_loop:
+  jsr retrieve_from_bank
+  jsr display_character
+
+  inx
+  cpx #BANK_STOP
+  bne bank_print_loop
+
+
+
 
   ; Display more stuff
   lda #(CMD_SET_DDRAM_ADDRESS | DISPLAY_SECOND_LINE) ; Move to second line
   jsr display_command
 
-  lda #CHARACTER_PD     ; Custom character graphic 'PD'
-  jsr display_character 
 
-  lda #' '
-  jsr display_character
+;  lda #CHARACTER_PD     ; Custom character graphic 'PD'
+;  jsr display_character 
 
-  lda #%10111100        ; Japanese character
-  jsr display_character
+;  lda #' '
+;  jsr display_character
 
-  lda #' '
-  jsr display_character
+;  lda #%10111100        ; Japanese character
+;  jsr display_character
 
-  lda #CHARACTER_ANGEL  ; Custom character graphic 'Angel'
-  jsr display_character
+;  lda #' '
+;  jsr display_character
 
-  lda #' '
-  jsr display_character
+;  lda #CHARACTER_ANGEL  ; Custom character graphic 'Angel'
+;  jsr display_character
+
+;  lda #' '
+;  jsr display_character
 
   ; display a hex number
-  lda #$a2
-  jsr convert_to_hex
-  jsr display_character
-  txa
-  jsr display_character
+;  lda #$a2
+;  jsr convert_to_hex
+;  jsr display_character
+;  txa
+;  jsr display_character
 
-  lda #$92
-  jsr convert_to_hex
-  jsr display_character
-  txa
-  jsr display_character
+;  lda #$92
+;  jsr convert_to_hex
+;  jsr display_character
+;  txa
+;  jsr display_character
 
+
+;  HERE
+
+  lda #'A'
+  sta BANK_TEST_CHAR_FIXED
+
+  ldx #BANK_START
+bank_fixed_loop:
+  jsr bank_fixed_test
+  jsr display_character
+  inx
+  cpx #BANK_STOP
+  bne bank_fixed_loop
+
+
+  ; Skip second process and interrupts
+  jmp run_counter
 
   ; Configure the second process
   lda #<led_control
@@ -213,6 +387,96 @@ reset:
   ; Start the main routine
   jmp run_counter
 
+; On entry X = bank to test
+; On exit  A = value retrieved from bank
+bank_fixed_test
+  stx BANK_SWITCH_SCRATCH
+
+  sei
+  lda PORTA
+  tax
+  and #(~BANK & $ff)
+  ora BANK_SWITCH_SCRATCH
+  ; new bank in A; old bank in X; value in Y
+  sta PORTA
+  nop ; might not need these
+  nop
+  nop
+  nop
+  ldy BANK_TEST_CHAR_FIXED
+  tya
+  iny
+  sty BANK_TEST_CHAR_FIXED
+  stx PORTA
+  nop ; might not need these
+  nop
+  nop
+  nop
+  cli
+  ldx BANK_SWITCH_SCRATCH
+
+  rts
+
+
+; On entry A = value to store
+;          X = bank to store in
+; On exit  X is preserved
+store_in_bank:
+  stx BANK_SWITCH_SCRATCH
+  tay
+
+  sei
+  lda PORTA
+  tax
+  and #(~BANK & $ff)
+  ora BANK_SWITCH_SCRATCH
+  ; new bank in A; old bank in X; value in Y
+  sta PORTA
+  nop ; might not need these
+  nop
+  nop
+  nop
+  sty BANK_TEST_CHAR
+  stx PORTA
+  nop ; might not need these
+  nop
+  nop
+  nop
+  cli
+  ldx BANK_SWITCH_SCRATCH
+
+  rts
+
+
+; On entry X = bank to retrieve from
+; On exit  A = value retrieved
+;          X is preserved
+retrieve_from_bank:
+  stx BANK_SWITCH_SCRATCH
+
+  sei
+  lda PORTA
+  tax
+  and #(~BANK & $ff)
+  ora BANK_SWITCH_SCRATCH
+  ; new bank in A; old bank in X; load value to Y
+  sta PORTA
+  nop ; might not need these
+  nop
+  nop
+  nop
+  ldy BANK_TEST_CHAR
+  stx PORTA
+  nop ; might not need these
+  nop
+  nop
+  nop
+  cli
+
+  ldx BANK_SWITCH_SCRATCH
+  tya
+  
+  rts
 
 ; Routine will switch LED on or off based on button presses
 led_control:
@@ -245,7 +509,7 @@ run_counter:
   sta BUSY_COUNTER
   sta BUSY_COUNTER + 1
 run_counter_repeat:
-  lda #(CMD_SET_DDRAM_ADDRESS | (DISPLAY_SECOND_LINE + 11))
+  lda #(CMD_SET_DDRAM_ADDRESS | (DISPLAY_SECOND_LINE + 12 + 2))
   jsr display_command
 
   lda BUSY_COUNTER + 1
@@ -254,11 +518,11 @@ run_counter_repeat:
   txa
   jsr display_character
 
-  lda BUSY_COUNTER
-  jsr convert_to_hex
-  jsr display_character
-  txa
-  jsr display_character
+;  lda BUSY_COUNTER
+;  jsr convert_to_hex
+;  jsr display_character
+;  txa
+;  jsr display_character
 
   inc BUSY_COUNTER
   bne run_counter_repeat
@@ -473,13 +737,24 @@ display_command_8bit_no_wait:
   rts
 
 
+
+
+test_routine:
+  pha
+  pla
+  rts
+
+
+
+
 wait_for_not_busy:
   pha
+  sei
   lda DDRB
-  pha
   and #(~DISPLAY_BITS_MASK & $ff)
   ora #(E | RW | RS) ; Set display control pins on port B to output; data pins to input
   sta DDRB
+  cli
 still_busy:
   lda #RW        ; Set RW flag for reading
 
@@ -509,8 +784,12 @@ not_busy:
   sta PORTB
   cli
 
-  pla
+  sei
+  lda DDRB
+  and #(~DISPLAY_BITS_MASK & $ff)
+  ora #DISPLAY_BITS_MASK
   sta DDRB
+  cli
   pla
 
   rts
