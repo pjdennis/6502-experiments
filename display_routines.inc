@@ -145,13 +145,17 @@ still_busy:
 display_command:
   jsr wait_for_not_busy
   pha
-  and #%11110000
+  and #DISPLAY_DATA_MASK
+  sta DISPLAY_SCRATCH
 
   sei
+  lda PORTB
+  and #(~DISPLAY_BITS_MASK & $ff)
+  ora DISPLAY_SCRATCH
   sta PORTB
   ora #E          ; Set E bit to send instruction
   sta PORTB
-  and #(~E)       ; Clear E bit
+  and #(~E & $ff) ; Clear E bit
   sta PORTB
 
   pla
@@ -159,7 +163,11 @@ display_command:
   asl
   asl
   asl
+  sta DISPLAY_SCRATCH
 
+  lda PORTB
+  and #(~DISPLAY_BITS_MASK & $ff)
+  ora DISPLAY_SCRATCH
   sta PORTB
   ora #E          ; Set E bit to send instruction
   sta PORTB
@@ -173,10 +181,14 @@ display_command:
 display_character:
   jsr wait_for_not_busy
   pha
-  and #%11110000
+  and #DISPLAY_DATA_MASK
+  sta DISPLAY_SCRATCH
 
-  ora #RS         ; Set RS bit
   sei
+  lda PORTB
+  and #(~DISPLAY_BITS_MASK & $ff)
+  ora DISPLAY_SCRATCH
+  ora #RS         ; Set RS bit
   sta PORTB
   ora #E          ; Set E bit to send instruction
   sta PORTB
@@ -188,7 +200,11 @@ display_character:
   asl
   asl
   asl
+  sta DISPLAY_SCRATCH
 
+  lda PORTB
+  and #(~DISPLAY_BITS_MASK & $ff)
+  ora DISPLAY_SCRATCH
   ora #RS         ; Set RS bit
   sta PORTB
   ora #E          ; Set E bit to send instruction

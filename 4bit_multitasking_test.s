@@ -82,7 +82,6 @@ reset:
   jsr display_character
 
 
-  jmp run_counter
   jmp flash_led
 
 

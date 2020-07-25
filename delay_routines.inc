@@ -1,3 +1,6 @@
+; On entry A = delay in 10 thousandths of a second
+; On exit  A is preserved
+;          X, Y are not preserved
 delay_10_thousandths:
   tax
 outer_delay:       ; looking to have 100 cycles per iteration
