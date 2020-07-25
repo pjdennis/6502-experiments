@@ -29,13 +29,17 @@ FLASH_LED         = %00000001
 ; 6522 timer registers
 T1CL = $6004
 T1CH = $6005
+T2CL = $6008
+T2CH = $6009
 ACR  = $600B
 IFR  = $600D
 IER  = $600E
 
+
 ; 6522 timer flag masks
 IERSETCLEAR = %10000000
 IT1         = %01000000
+IT2         = %00100000
 
 ;DELAY = 1000 ; 1000 1 MHZ cycles = 1 ms
 ;DELAY = 2000 ; 2000 microseconds = 2 milliseconds; rate = 500 Hz
@@ -122,16 +126,16 @@ reset:
 
 
   ; Configure timer
-  lda #%01000000 ; Timer 1 free run mode 
+  lda #%00000000 ; Timer 2 one shot run mode 
   sta ACR
-  lda #(IERSETCLEAR | IT1)
+  lda #(IERSETCLEAR | IT2)
   sta IER
 
   ; Set timer delay which starts timer as a side effect
   lda #<DELAY
-  sta T1CL
+  sta T2CL
   lda #>DELAY
-  sta T1CH     ; store to the high register starts the timer
+  sta T2CH     ; store to the high register starts the timer
 
 
   ; Start the main routine
@@ -391,51 +395,51 @@ banks_exist:
 
 ; Interrupt handler - switch memory banks and routines
 interrupt:
-  ; Save outgoing bank registers to stack
-  pha
-  jsr interrupt_led_on
-  txa
+  pha                     ; Start saving outgoing bank registers to stack
+
+  jsr interrupt_led_on    ; (Turn on the interrupt activity LED)
+
+  lda #<DELAY             ; (Reset 6552 timer to trigger next interrupt)
+  sta T2CL
+  lda #>DELAY
+  sta T2CH                ; (Store to the high register starts the timer and clears interrupt)
+  
+  txa                     ; Finish saving outgoing bank registers to stack
   pha
   tya
   pha
 
-  ; Save outgoing bank stack pointer to save location
-  tsx
+  tsx                     ; Save outgoing bank stack pointer to save location
   stx STACK_POINTER_SAVE
-
-  ; Increment the memory bank
-  lda PORTA
+  
+  lda PORTA               ; Increment the memory bank
   tay
   and #BANK
   tax
   inx
   cpx FIRST_UNUSED_BANK
-  bne no_bank_reset
-  ldx #BANK_START
-no_bank_reset:
-  stx TASK_SWITCH_SCRATCH
+  bne switch_to_incoming_bank
+  ldx #BANK_START         ; We were on the last bank so start over at the first
+switch_to_incoming_bank:
+  stx TASK_SWITCH_SCRATCH ; Switch to incoming bank
   tya
   and #(~BANK & $ff)
   ora TASK_SWITCH_SCRATCH
   sta PORTA
-
-  ; Restore incoming bank stack pointer from save location
-  ldx STACK_POINTER_SAVE
+  
+  ldx STACK_POINTER_SAVE ; Restore incoming bank stack pointer from save location
   txs
-
-  ; reset 6522 timer
-  lda #IT1
-  sta IFR
-
-  ; Restore incoming bank registers from stack
-  pla
+ 
+  pla                    ; Start restoring incoming bank registers from stack
   tay
   pla
   tax
-  jsr interrupt_led_off
-  pla
 
-  rti
+  jsr interrupt_led_off  ; (Turn off interrupt activity LED)
+
+  pla                    ; Finish restoring incoming bank registers from stack
+
+  rti                    ; Return to the program in the incoming bank
 
 
 interrupt_led_on:
