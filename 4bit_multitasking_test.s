@@ -37,12 +37,23 @@ IER  = $600E
 IERSETCLEAR = %10000000
 IT1         = %01000000
 
-DELAY = 1000 ; 1000 1 MHZ cycles = 1 ms
+;DELAY = 1000 ; 1000 1 MHZ cycles = 1 ms
+;DELAY = 2000 ; 2000 microseconds = 2 milliseconds; rate = 500 Hz
+DELAY = 3822; 261.6 Hz; 'Middle C' 
 
-; Memory locations
+BUSY_COUNTER_DELTA     = 1
+
+; Banked memory locations
 BUSY_COUNTER           = $0000 ; 2 bytes
-STACK_POINTER_SAVE     = $0002
-DISPLAY_SCRATCH        = $0003
+BUSY_COUNTER_INCREMENT = $0002 ; 2 bytes
+BUSY_COUNTER_LOCATION  = $0004
+STACK_POINTER_SAVE     = $0005
+DISPLAY_SCRATCH        = $0006
+TASK_SWITCH_SCRATCH    = $0007
+
+; Shared memory locations 
+FIRST_UNUSED_BANK      = $2000
+SCREEN_LOCK            = $2001
 
   .org $8000
 
@@ -73,22 +84,41 @@ reset:
   lda #(DISPLAY_BITS_MASK | FLASH_LED) ; Set display control pins and data pins on port B to output
   sta DDRB
 
+  ; Initialize process control area
+  lda #(BANK_START + 1)
+  sta FIRST_UNUSED_BANK
+
+  lda #0
+  sta SCREEN_LOCK
 
   ; Initialize display
   jsr reset_and_enable_display_no_cursor
 
-  ; Print Something
-  lda #'X'
-  jsr display_character
 
+  ; Configure the additional processes
+  lda #<run_counter_top_left
+  ldx #>run_counter_top_left
+  jsr initialize_additional_process
 
-  jmp flash_led
+  lda #<run_counter_top_right
+  ldx #>run_counter_top_right
+  jsr initialize_additional_process
 
+  lda #<run_counter_bottom_left
+  ldx #>run_counter_bottom_left
+  jsr initialize_additional_process
 
-  ; Configure the second process
-  lda #<led_control
-  ldx #>led_control
-  jsr initialize_second_process
+  lda #<run_counter_bottom_right
+  ldx #>run_counter_bottom_right
+  jsr initialize_additional_process
+
+  lda #<run_chase
+  ldx #>run_chase
+  jsr initialize_additional_process
+
+  lda #<flash_led
+  ldx #>flash_led
+  jsr initialize_additional_process
 
 
   ; Configure timer
@@ -105,7 +135,7 @@ reset:
 
 
   ; Start the main routine
-  jmp run_counter
+  jmp led_control
 
 
 ; Routine will flash an LED using busy wait for delay
@@ -165,12 +195,48 @@ led_off:
 
 
 ; Busy loop incrementing and displaying counter
+run_counter_top_left:
+  lda #BUSY_COUNTER_DELTA
+  ldx #(DISPLAY_FIRST_LINE + 0)
+  jmp run_counter
+
+; Busy loop incrementing and displaying counter
+run_counter_top_right:
+  lda #(-BUSY_COUNTER_DELTA)
+  ldx #(DISPLAY_FIRST_LINE + 12)
+  jmp run_counter
+
+; Busy loop incrementing and displaying counter
+run_counter_bottom_left:
+  lda #(-BUSY_COUNTER_DELTA)
+  ldx #(DISPLAY_SECOND_LINE + 0)
+  jmp run_counter
+
+; Busy loop incrementing and displaying counter
+run_counter_bottom_right:
+  lda #BUSY_COUNTER_DELTA
+  ldx #(DISPLAY_SECOND_LINE + 12)
+  jmp run_counter
+
 run_counter:
+  stx BUSY_COUNTER_LOCATION
+
+  sta BUSY_COUNTER_INCREMENT
+  ldy #0
+  tax
+  bpl store_counter_increment_high_byte
+  dey
+store_counter_increment_high_byte:
+  sty BUSY_COUNTER_INCREMENT + 1
+
   lda #0
   sta BUSY_COUNTER
   sta BUSY_COUNTER + 1
 run_counter_repeat:
-  lda #(CMD_SET_DDRAM_ADDRESS | (DISPLAY_SECOND_LINE + 11))
+  jsr lock_screen
+
+  lda BUSY_COUNTER_LOCATION
+  ora #CMD_SET_DDRAM_ADDRESS
   jsr display_command
 
   lda BUSY_COUNTER + 1
@@ -185,31 +251,115 @@ run_counter_repeat:
   txa
   jsr display_character
 
-  inc BUSY_COUNTER
-  bne run_counter_repeat
-  inc BUSY_COUNTER + 1
+  jsr unlock_screen
+
+  ; Add busy counter delta
+  lda BUSY_COUNTER
+  clc
+  adc BUSY_COUNTER_INCREMENT
+  sta BUSY_COUNTER
+  lda BUSY_COUNTER + 1
+  adc BUSY_COUNTER_INCREMENT + 1
+  sta BUSY_COUNTER + 1
+
+  lda #100
+  jsr delay_10_thousandths
+
   jmp run_counter_repeat
 
 
-; Set up stack, etc. so that second process will start running on next interrupt
+run_chase:
+  ldx #(DISPLAY_FIRST_LINE + 5)
+
+run_chase_right:
+  jsr lock_screen
+  txa
+  pha
+  sec
+  ora #CMD_SET_DDRAM_ADDRESS
+  jsr display_command
+  lda #' '
+  jsr display_character
+  lda #'X'
+  jsr display_character
+  jsr unlock_screen
+
+  lda #250
+  jsr delay_10_thousandths
+
+  pla
+  tax
+  inx
+  cpx #(DISPLAY_FIRST_LINE + 10)
+  bne run_chase_right
+
+  ldx #(DISPLAY_FIRST_LINE + 9)
+
+run_chase_left:
+  jsr lock_screen
+  txa
+  pha
+  ora #CMD_SET_DDRAM_ADDRESS
+  jsr display_command
+  lda #'X'
+  jsr display_character
+  lda #' '
+  jsr display_character
+  jsr unlock_screen
+
+  lda #125
+  jsr delay_10_thousandths
+
+  pla
+  tax
+  dex
+  cpx #(DISPLAY_FIRST_LINE + 4)
+  bne run_chase_left
+  jmp run_chase
+  
+
+lock_screen:
+  lda #0
+  sei
+  cmp SCREEN_LOCK
+  beq lock_acquired
+  cli
+  jmp lock_screen
+lock_acquired:
+  inc SCREEN_LOCK
+  cli
+  rts
+
+unlock_screen:
+  lda #0
+  sta SCREEN_LOCK
+  rts
+
+
+; Set up stack, etc. so that additional process will start running on next interrupt
 ; On entry A = low source address
 ;          X = high byte source address
-initialize_second_process:
+initialize_additional_process:
   tay            ; low order address in Y
-
-  lda PORTA      ; Switch to bank 1
-  ora #%00001000
+  lda FIRST_UNUSED_BANK
+  cmp #BANK_STOP
+  bne banks_exist
+  rts            ; Silently ignore attempts to add too many processes
+banks_exist:
+  lda PORTA      ; Switch to first unused bank
+  and #(~BANK & $ff)
+  ora FIRST_UNUSED_BANK
   sta PORTA
 
   txa            ; High order address in A
 
-  tsx            ; Save bank 0 stack pointer to save location
+  tsx            ; Save first bank stack pointer to save location
   stx STACK_POINTER_SAVE
 
-  ldx #$ff       ; Initialize stack on bank 1
+  ldx #$ff       ; Initialize stack for new bank 
   txs
 
-  ; Set up stack on bank 1 for RTI to start routine
+  ; Set up stack on new bank for RTI to start routine
   pha            ; Push high order address
   tya            ; Push low order address
   pha
@@ -219,19 +369,22 @@ initialize_second_process:
   pha            ; Push 'X' = 0
   pha            ; Push 'Y' = 0
 
-  lda STACK_POINTER_SAVE ; bank 0 stack pointer in A
+  lda STACK_POINTER_SAVE ; first bank stack pointer in A
 
-  ; Save bank 1 stack pointer to save location
+  ; Save new bank stack pointer to save location
   tsx
   stx STACK_POINTER_SAVE
 
-  ; Restore bank 0 stack pointer
+  ; Restore first bank stack pointer
   tax
   txs
 
-  lda PORTA      ; Switch to bank 0
-  and #(~%00001000 & $ff)
+  lda PORTA      ; Switch to first bank
+  and #(~BANK & $ff)
+  ora #BANK_START
   sta PORTA
+
+  inc FIRST_UNUSED_BANK
 
   rts
 
@@ -250,9 +403,20 @@ interrupt:
   tsx
   stx STACK_POINTER_SAVE
 
-  ; Toggle the memory bank
+  ; Increment the memory bank
   lda PORTA
-  eor #%00001000
+  tay
+  and #BANK
+  tax
+  inx
+  cpx FIRST_UNUSED_BANK
+  bne no_bank_reset
+  ldx #BANK_START
+no_bank_reset:
+  stx TASK_SWITCH_SCRATCH
+  tya
+  and #(~BANK & $ff)
+  ora TASK_SWITCH_SCRATCH
   sta PORTA
 
   ; Restore incoming bank stack pointer from save location
