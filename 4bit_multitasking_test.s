@@ -12,7 +12,7 @@ BANK_STOP         = %00010000
 ILED              = %00010000
 LED               = %00100000
 BUTTON1           = %01000000
-BUTTON2           = %10000000
+FLASH_LED         = %10000000
 
 ; PORTB assignments
 DISPLAY_DATA_MASK = %01111000
@@ -20,30 +20,32 @@ E                 = %00000100
 RW                = %00000010
 RS                = %00000001
 BF                = %01000000
+T1_SQWAVE_OUT     = %10000000
 DISPLAY_BITS_MASK = (DISPLAY_DATA_MASK | E | RW | RS)
 
-FLASH_LED         = %10000000
-
   .include display_parameters.inc
+  .include musical_notes.inc
 
 ; 6522 timer registers
 T1CL = $6004
 T1CH = $6005
+T1LL = $6006
+T1LH = $6007
 T2CL = $6008
 T2CH = $6009
 ACR  = $600B
 IFR  = $600D
 IER  = $600E
 
+ACR_T1_CONT_SQWAVE = %11000000
 
 ; 6522 timer flag masks
 IERSETCLEAR = %10000000
 IT1         = %01000000
 IT2         = %00100000
 
-;DELAY = 1000 ; 1000 1 MHZ cycles = 1 ms
-DELAY = 2000 ; 2000 microseconds = 2 milliseconds; rate = 500 Hz
-;DELAY = 3822; 261.6 Hz; 'Middle C' 
+DELAY      = 2000 ; 2000 microseconds = 2 milliseconds; rate = 500 Hz
+NOTE_DELAY = NOTE_C4
 
 BUSY_COUNTER_DELTA     = 1
 
@@ -54,6 +56,7 @@ BUSY_COUNTER_LOCATION  = $0004
 STACK_POINTER_SAVE     = $0005
 DISPLAY_SCRATCH        = $0006
 TASK_SWITCH_SCRATCH    = $0007
+NOTE_PLAYING           = $0008
 
 ; Shared memory locations 
 FIRST_UNUSED_BANK      = $2000
@@ -79,13 +82,13 @@ reset:
   ; Initialize 6522 port A (memory banking control)
   lda #BANK_START
   sta PORTA
-  lda #(BANK | LED | ILED) ; Set pin direction  on port A
+  lda #(BANK | LED | ILED | FLASH_LED) ; Set pin direction  on port A
   sta DDRA
 
   ; Initialize 6522 port B (display control)
   lda #0
   sta PORTB
-  lda #(DISPLAY_BITS_MASK | FLASH_LED) ; Set display control pins and data pins on port B to output
+  lda #(DISPLAY_BITS_MASK | T1_SQWAVE_OUT) ; Set display pins and T1 output pins to output
   sta DDRB
 
   ; Initialize process control area
@@ -94,6 +97,7 @@ reset:
 
   lda #0
   sta SCREEN_LOCK
+  sta NOTE_PLAYING
 
   ; Initialize display
   jsr reset_and_enable_display_no_cursor
@@ -124,38 +128,121 @@ reset:
   ldx #>flash_led
   jsr initialize_additional_process
 
+  lda #<play_music
+  ldx #>play_music
+  jsr initialize_additional_process
 
-  ; Configure timer
-  lda #%00000000 ; Timer 2 one shot run mode 
+
+  ; Configure timers
+  lda #0  ; Timer 2 one shot run mode 
   sta ACR
-  lda #(IERSETCLEAR | IT2)
+  lda #(IERSETCLEAR | IT2) ; Enable timer 2 interrupts
   sta IER
 
-  ; Set timer delay which starts timer as a side effect
+  ; Start timer 2 (interrupt timer)
   lda #<DELAY
   sta T2CL
   lda #>DELAY
-  sta T2CH     ; store to the high register starts the timer
+  sta T2CH     ; Store to high register starts the timer
 
 
   ; Start the main routine
   jmp led_control
 
 
+play_music:
+  ldx #NOTE_IDX_C4
+music_loop_up:
+  txa
+  pha
+  jsr start_note
+  jsr delay_tenth
+  pla
+  tax
+  inx
+  cpx #(NOTE_IDX_C5 + 1)
+  bne music_loop_up
+
+  ldx #NOTE_IDX_B4
+music_loop_down:
+  txa
+  pha
+  jsr start_note
+  jsr delay_tenth
+  pla
+  tax
+  dex
+  cpx #(NOTE_IDX_C4 - 1)
+  bne music_loop_down
+
+  jsr stop_note
+  jsr delay_tenth
+
+  jmp play_music
+
+
+; On entry A = index of note
+start_note:
+  asl
+  tay
+  lda NOTE_PLAYING
+  beq first_note
+  ; not the first note
+  lda notes,Y
+  sta T1LL
+  lda notes + 1,Y
+  sta T1LH
+  rts
+first_note:
+  lda #ACR_T1_CONT_SQWAVE  ; Enable timer 1 continuous square wave
+  sta ACR
+
+  lda notes,Y
+  sta T1CL
+  lda notes + 1,Y
+  sta T1CH                 ; Starts the timer
+  lda #1
+  sta NOTE_PLAYING
+  rts
+
+
+stop_note:
+  lda #0
+  sta ACR
+  STA T1CL
+  STA T1CH
+  sta NOTE_PLAYING
+  rts
+
+notes:
+  .word NOTE_C4  
+  .word NOTE_CS4
+  .word NOTE_D4 
+  .word NOTE_DS4
+  .word NOTE_E4	
+  .word NOTE_F4	
+  .word NOTE_FS4
+  .word NOTE_G4	
+  .word NOTE_GS4
+  .word NOTE_A4 
+  .word NOTE_AS4
+  .word NOTE_B4 
+  .word NOTE_C5
+
 ; Routine will flash an LED using busy wait for delay
 flash_led:
   sei
-  lda PORTB
+  lda PORTA
   ora #FLASH_LED
-  sta PORTB
+  sta PORTA
   cli
 
   jsr delay_tenth
 
   sei
-  lda PORTB
+  lda PORTA
   and #(~FLASH_LED & $ff)
-  sta PORTB
+  sta PORTA
   cli
 
   jsr delay_tenth
@@ -167,34 +254,36 @@ delay_tenth:
   lda #200
   jsr delay_10_thousandths
   jsr delay_10_thousandths   
-  jsr delay_10_thousandths   
-  jsr delay_10_thousandths   
-  jsr delay_10_thousandths   
+  ;jsr delay_10_thousandths   
+  ;jsr delay_10_thousandths   
+  ;jsr delay_10_thousandths   
   rts
 
 
-; Routine will switch LED on or off based on button presses
 led_control:
   lda PORTA
   and #BUTTON1
-  beq led_on
-  lda PORTA
-  and #BUTTON2
-  beq led_off
-  jmp led_control
-led_on:
+  bne led_control
+  ; Button down; toggle LED state
   sei
   lda PORTA
-  ora #LED
+  eor #LED
   sta PORTA
   cli
-  jmp led_control
-led_off:
-  sei
+
+led_wait_button:
+  ldx #10
+led_wait_button_outer:
+  ldy #30
+led_wait_button_inner:
   lda PORTA
-  and #(~LED & $ff)
-  sta PORTA
-  cli
+  and #BUTTON1
+  beq led_wait_button
+  dey
+  bne led_wait_button_inner
+  dex
+  bne led_wait_button_outer
+
   jmp led_control
 
 
