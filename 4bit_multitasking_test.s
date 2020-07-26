@@ -44,23 +44,26 @@ IERSETCLEAR = %10000000
 IT1         = %01000000
 IT2         = %00100000
 
-DELAY      = 2000 ; 2000 microseconds = 2 milliseconds; rate = 500 Hz
-NOTE_DELAY = NOTE_C4
+DELAY       = 2000 ; 2000 microseconds = 2 milliseconds; rate = 500 Hz
+DELAY_DIV   = (DELAY / 1000)
 
 BUSY_COUNTER_DELTA     = 1
 
 ; Banked memory locations
 BUSY_COUNTER           = $0000 ; 2 bytes
 BUSY_COUNTER_INCREMENT = $0002 ; 2 bytes
-BUSY_COUNTER_LOCATION  = $0004
-STACK_POINTER_SAVE     = $0005
-DISPLAY_SCRATCH        = $0006
-TASK_SWITCH_SCRATCH    = $0007
-NOTE_PLAYING           = $0008
+WAKE_AT                = $0004 ; 2 bytes
+BUSY_COUNTER_LOCATION  = $0006
+STACK_POINTER_SAVE     = $0007
+DISPLAY_SCRATCH        = $0008
+TASK_SWITCH_SCRATCH    = $0009
+SLEEPING               = $000B
 
-; Shared memory locations 
-FIRST_UNUSED_BANK      = $2000
-SCREEN_LOCK            = $2001
+; Shared memory locations
+TICKS_COUNTER          = $2000 ; 2 bytes
+FIRST_UNUSED_BANK      = $2002
+SCREEN_LOCK            = $2003
+NOTE_PLAYING           = $2004
 
   .org $8000
 
@@ -98,6 +101,9 @@ reset:
   lda #0
   sta SCREEN_LOCK
   sta NOTE_PLAYING
+  sta SLEEPING
+  sta TICKS_COUNTER
+  sta TICKS_COUNTER + 1
 
   ; Initialize display
   jsr reset_and_enable_display_no_cursor
@@ -132,6 +138,9 @@ reset:
   ldx #>play_music
   jsr initialize_additional_process
 
+  lda #<print_ticks_counter
+  ldx #>print_ticks_counter
+  jsr initialize_additional_process 
 
   ; Configure timers
   lda #0  ; Timer 2 one shot run mode 
@@ -229,24 +238,61 @@ notes:
   .word NOTE_B4 
   .word NOTE_C5
 
+print_ticks_counter:
+  jsr lock_screen
+
+  lda #(CMD_SET_DDRAM_ADDRESS | DISPLAY_SECOND_LINE + 6)
+  jsr display_command
+
+  sei
+  lda TICKS_COUNTER
+  pha
+  lda TICKS_COUNTER + 1
+  cli
+
+  jsr convert_to_hex
+  jsr display_character
+  txa
+  jsr display_character
+
+  pla
+  jsr convert_to_hex
+  jsr display_character
+  txa
+  jsr display_character
+
+  jsr unlock_screen
+
+  lda #100
+  jsr delay_10_thousandths
+
+  jmp print_ticks_counter
+
+
+; Routine will flash an LED using busy wait for delay
+flash_led_sleep:
+  sei
+  lda PORTA
+  eor #FLASH_LED
+  sta PORTA
+  cli
+
+  lda #<1000
+  ldx #>1000
+  jsr sleep_milliseconds
+  
+  jmp flash_led_sleep
+
 ; Routine will flash an LED using busy wait for delay
 flash_led:
   sei
   lda PORTA
-  ora #FLASH_LED
+  eor #FLASH_LED
   sta PORTA
   cli
 
   jsr delay_tenth
 
-  sei
-  lda PORTA
-  and #(~FLASH_LED & $ff)
-  sta PORTA
-  cli
-
-  jsr delay_tenth
-  
   jmp flash_led
 
 
@@ -400,8 +446,13 @@ run_chase_left:
   jsr display_character
   jsr unlock_screen
 
-  lda #125
-  jsr delay_10_thousandths
+;  lda #125
+;  jsr delay_10_thousandths
+
+  lda #<(1000 / DELAY_DIV)
+  ldx #>(1000 / DELAY_DIV)
+  jsr sleep
+  
 
   pla
   tax
@@ -449,6 +500,9 @@ banks_exist:
   tsx            ; Save first bank stack pointer to save location
   stx STACK_POINTER_SAVE
 
+  ldx #0         ; Task is not sleeping
+  sta SLEEPING
+
   ldx #$ff       ; Initialize stack for new bank 
   txs
 
@@ -482,6 +536,40 @@ banks_exist:
   rts
 
 
+;On entry A = Sleep count low
+;         X = Sleep count high
+;On exit  Y,X preserved
+;         A not preserved
+sleep_milliseconds:
+  pha ; divide millis by 2 (assuming DELAY = 500)
+  txa
+  lsr
+  tax
+  pla
+  ror
+  jmp sleep ; tail call
+
+;On entry A = Sleep count low
+;         X = Sleep count high
+;On exit  Y,X preserved
+;         A not preserved
+sleep:
+  sei
+  clc
+  adc TICKS_COUNTER
+  sta WAKE_AT
+  txa
+  adc TICKS_COUNTER + 1
+  sta WAKE_AT + 1
+  lda #1
+  sta SLEEPING
+  cli
+sleep1:
+  lda SLEEPING
+  bne sleep1
+  rts
+
+
 ; Interrupt handler - switch memory banks and routines
 interrupt:
   pha                     ; Start saving outgoing bank registers to stack
@@ -500,7 +588,8 @@ interrupt:
 
   tsx                     ; Save outgoing bank stack pointer to save location
   stx STACK_POINTER_SAVE
-  
+
+next_bank:  
   lda PORTA               ; Increment the memory bank
   tay
   and #BANK
@@ -511,13 +600,34 @@ interrupt:
   ldx #BANK_START         ; We were on the last bank so start over at the first
 switch_to_incoming_bank:
   stx TASK_SWITCH_SCRATCH ; Switch to incoming bank
-  tya
+  tya                     ; Original value of PORTA
   and #(~BANK & $ff)
   ora TASK_SWITCH_SCRATCH
   sta PORTA
-  
+
+  lda SLEEPING
+  beq not_sleeping
+
+  lda TICKS_COUNTER    ; Compare TICKS_COUNTER - WAKE_AT
+  cmp WAKE_AT
+  lda TICKS_COUNTER + 1
+  sbc WAKE_AT + 1
+  bvc interrupt01
+  eor #$80
+interrupt01:
+  bmi next_bank        ; TICKS_COUNTER < WAKE_AT so not waking; go to next bank
+
+  lda #0
+  sta SLEEPING         ; Stop sleeping
+
+not_sleeping:
   ldx STACK_POINTER_SAVE ; Restore incoming bank stack pointer from save location
   txs
+
+  inc TICKS_COUNTER       ; Increment the ticks counter
+  bne dont_increment_high_ticks
+  inc TICKS_COUNTER + 1
+dont_increment_high_ticks:
  
   pla                    ; Start restoring incoming bank registers from stack
   tay
