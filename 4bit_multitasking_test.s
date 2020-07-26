@@ -44,7 +44,8 @@ IERSETCLEAR = %10000000
 IT1         = %01000000
 IT2         = %00100000
 
-DELAY       = 2000 ; 2000 microseconds = 2 milliseconds; rate = 500 Hz
+;DELAY      = 2000 ; 2000 microseconds = 2 milliseconds; rate = 500 Hz
+DELAY       = 1000 ; 1000 microseconds = 1 milliseconds; rate = 1000 Hz
 DELAY_DIV   = (DELAY / 1000)
 
 BUSY_COUNTER_DELTA     = 1
@@ -130,8 +131,8 @@ reset:
   ldx #>run_chase
   jsr initialize_additional_process
 
-  lda #<flash_led
-  ldx #>flash_led
+  lda #<flash_led_sleep
+  ldx #>flash_led_sleep
   jsr initialize_additional_process
 
   lda #<play_music
@@ -141,6 +142,10 @@ reset:
   lda #<print_ticks_counter
   ldx #>print_ticks_counter
   jsr initialize_additional_process 
+
+  lda #<led_control
+  ldx #>led_control
+  jsr initialize_additional_process
 
   ; Configure timers
   lda #0  ; Timer 2 one shot run mode 
@@ -155,8 +160,9 @@ reset:
   sta T2CH     ; Store to high register starts the timer
 
 
-  ; Start the main routine
-  jmp led_control
+  ; For now we need at least one process with a busy loop to ensure not all proceses are sleeping
+busy_loop:
+  jmp busy_loop
 
 
 play_music:
@@ -165,7 +171,11 @@ music_loop_up:
   txa
   pha
   jsr start_note
-  jsr delay_tenth
+  
+  lda #<500
+  ldx #>500
+  jsr sleep_milliseconds
+
   pla
   tax
   inx
@@ -177,7 +187,11 @@ music_loop_down:
   txa
   pha
   jsr start_note
-  jsr delay_tenth
+
+  lda #<500
+  ldx #>500
+  jsr sleep_milliseconds
+
   pla
   tax
   dex
@@ -185,7 +199,10 @@ music_loop_down:
   bne music_loop_down
 
   jsr stop_note
-  jsr delay_tenth
+  
+  lda #<1500
+  ldx #>1500
+  jsr sleep_milliseconds
 
   jmp play_music
 
@@ -263,8 +280,7 @@ print_ticks_counter:
 
   jsr unlock_screen
 
-  lda #100
-  jsr delay_10_thousandths
+  jsr delay_tenth
 
   jmp print_ticks_counter
 
@@ -277,32 +293,23 @@ flash_led_sleep:
   sta PORTA
   cli
 
-  lda #<1000
-  ldx #>1000
+  lda #<300
+  ldx #>300
   jsr sleep_milliseconds
   
   jmp flash_led_sleep
 
-; Routine will flash an LED using busy wait for delay
-flash_led:
-  sei
-  lda PORTA
-  eor #FLASH_LED
-  sta PORTA
-  cli
-
-  jsr delay_tenth
-
-  jmp flash_led
-
 
 delay_tenth:
-  lda #200
-  jsr delay_10_thousandths
-  jsr delay_10_thousandths   
-  ;jsr delay_10_thousandths   
-  ;jsr delay_10_thousandths   
-  ;jsr delay_10_thousandths   
+  pha
+  phx
+
+  lda #100
+  ldx #0
+  jsr sleep_milliseconds
+
+  plx
+  pla
   rts
 
 
@@ -318,17 +325,18 @@ led_control:
   cli
 
 led_wait_button:
-  ldx #10
-led_wait_button_outer:
-  ldy #30
-led_wait_button_inner:
+  ldy #5
+led_wait_button_loop:
+  lda #<10
+  ldx #>10
+  jsr sleep_milliseconds
+
   lda PORTA
   and #BUTTON1
   beq led_wait_button
+  
   dey
-  bne led_wait_button_inner
-  dex
-  bne led_wait_button_outer
+  bne led_wait_button_loop
 
   jmp led_control
 
@@ -401,8 +409,9 @@ run_counter_repeat:
   adc BUSY_COUNTER_INCREMENT + 1
   sta BUSY_COUNTER + 1
 
-  lda #100
-  jsr delay_10_thousandths
+  lda #<100
+  ldx #>100
+  jsr sleep_milliseconds
 
   jmp run_counter_repeat
 
@@ -423,8 +432,9 @@ run_chase_right:
   jsr display_character
   jsr unlock_screen
 
-  lda #250
-  jsr delay_10_thousandths
+  lda #<(100 / DELAY_DIV)
+  ldx #>(100 / DELAY_DIV)
+  jsr sleep
 
   pla
   tax
@@ -446,13 +456,9 @@ run_chase_left:
   jsr display_character
   jsr unlock_screen
 
-;  lda #125
-;  jsr delay_10_thousandths
-
-  lda #<(1000 / DELAY_DIV)
-  ldx #>(1000 / DELAY_DIV)
+  lda #<(100 / DELAY_DIV)
+  ldx #>(100 / DELAY_DIV)
   jsr sleep
-  
 
   pla
   tax
@@ -541,12 +547,12 @@ banks_exist:
 ;On exit  Y,X preserved
 ;         A not preserved
 sleep_milliseconds:
-  pha ; divide millis by 2 (assuming DELAY = 500)
-  txa
-  lsr
-  tax
-  pla
-  ror
+;  pha ; divide millis by 2 (assuming DELAY = 500)
+;  txa
+;  lsr
+;  tax
+;  pla
+;  ror
   jmp sleep ; tail call
 
 ;On entry A = Sleep count low
