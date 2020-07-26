@@ -614,14 +614,11 @@ switch_to_incoming_bank:
   lda SLEEPING
   beq not_sleeping
 
-  lda TICKS_COUNTER    ; Compare TICKS_COUNTER - WAKE_AT
-  cmp WAKE_AT
-  lda TICKS_COUNTER + 1
-  sbc WAKE_AT + 1
-  bvc interrupt01
-  eor #$80
-interrupt01:
-  bmi next_bank        ; TICKS_COUNTER < WAKE_AT so not waking; go to next bank
+  lda WAKE_AT             ; Compare WAKE_AT - TICKS_COUNTER
+  cmp TICKS_COUNTER
+  lda WAKE_AT + 1
+  sbc TICKS_COUNTER + 1
+  bpl next_bank           ; Next bank if WAKE_AT > TICKS_COUNTER
 
   lda #0
   sta SLEEPING         ; Stop sleeping
