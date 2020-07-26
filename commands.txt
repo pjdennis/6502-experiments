@@ -1,2 +1,3 @@
-./vasm6502_oldstyle -Fbin -dotdir <filename>
-phil$ minipro -p AT28C256 -w a.out
+./vasm6502_oldstyle -wdc02 -Fbin -dotdir <filename>
+minipro -p AT28C256 -w a.out || echo -e '\x1B[1;31mFailed!\x1B[0m\a'
+

@@ -1,6 +1,7 @@
 ; On entry A = value to convert
 ; On exit  X = low result
 ;          A = high result
+;          Y is preserved
 convert_to_hex:
   pha
   and #$0f

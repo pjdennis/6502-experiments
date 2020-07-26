@@ -1,0 +1,16 @@
+; 6522 registers
+T1CL = $6004
+T1CH = $6005
+T1LL = $6006
+T1LH = $6007
+T2CL = $6008
+T2CH = $6009
+ACR  = $600B
+IFR  = $600D
+IER  = $600E
+
+; 6522 flag masks
+IERSETCLEAR        = %10000000
+IT1                = %01000000
+IT2                = %00100000
+ACR_T1_CONT_SQWAVE = %11000000
