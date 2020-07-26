@@ -54,11 +54,12 @@ BUSY_COUNTER_DELTA     = 1
 BUSY_COUNTER           = $0000 ; 2 bytes
 BUSY_COUNTER_INCREMENT = $0002 ; 2 bytes
 WAKE_AT                = $0004 ; 2 bytes
-BUSY_COUNTER_LOCATION  = $0006
-STACK_POINTER_SAVE     = $0007
-DISPLAY_SCRATCH        = $0008
-TASK_SWITCH_SCRATCH    = $0009
-SLEEPING               = $000B
+PLAY_SONG_PARAM        = $0006 ; 2 bytes
+BUSY_COUNTER_LOCATION  = $0008
+STACK_POINTER_SAVE     = $0009
+DISPLAY_SCRATCH        = $000A
+TASK_SWITCH_SCRATCH    = $000B
+SLEEPING               = $000C
 
 ; Shared memory locations
 TICKS_COUNTER          = $2000 ; 2 bytes
@@ -135,8 +136,8 @@ reset:
   ldx #>flash_led_sleep
   jsr initialize_additional_process
 
-  lda #<play_music
-  ldx #>play_music
+  lda #<play_ditty
+  ldx #>play_ditty
   jsr initialize_additional_process
 
   lda #<print_ticks_counter
@@ -162,41 +163,81 @@ reset:
 
   ; For now we need at least one process with a busy loop to ensure not all proceses are sleeping
 busy_loop:
-  jmp busy_loop
+  bra busy_loop
 
 
-play_music:
-  ldx #NOTE_IDX_C4
-music_loop_up:
-  txa
-  pha
+play_ditty:
+  lda #<ditty
+  ldx #>ditty
+  jmp play_song ; tail call
+
+
+play_song:
+  sta PLAY_SONG_PARAM
+replay_song:
+  phx
+  stx PLAY_SONG_PARAM + 1
+  ldy #0                   ; Music position counter
+song_loop:
+  lda (PLAY_SONG_PARAM),Y
+  cmp #NOTE_IDX_NULL
+  beq done_with_song
+  cmp #NOTE_IDX_REST
+  beq song_rest
+  jsr start_note
+  bra song_delay
+song_rest:
+  jsr stop_note
+song_delay:
+  iny
+  lda (PLAY_SONG_PARAM),Y
+  asl
+  phy
+  tay
+  lda durations,Y
+  ldx durations + 1,Y
+  ply
+  jsr sleep_milliseconds
+  iny
+  bne song_loop
+  ; increment the song param high byte
+  inc PLAY_SONG_PARAM + 1
+  bra song_loop
+done_with_song:
+  jsr stop_note
+  lda #<1000
+  ldx #>1000
+  jsr sleep_milliseconds
+  plx
+  bra replay_song 
+
+
+play_chromatic_scale:
+  ldy #NOTE_IDX_C4
+scale_loop_up:
+  tya
   jsr start_note
   
   lda #<500
   ldx #>500
   jsr sleep_milliseconds
 
-  pla
-  tax
-  inx
-  cpx #(NOTE_IDX_C5 + 1)
-  bne music_loop_up
+  iny
+  cpy #(NOTE_IDX_C5 + 1)
+  bne scale_loop_up
 
-  ldx #NOTE_IDX_B4
-music_loop_down:
-  txa
-  pha
+  ldy #NOTE_IDX_B4
+scale_loop_down:
+  tya
   jsr start_note
 
   lda #<500
   ldx #>500
   jsr sleep_milliseconds
 
-  pla
-  tax
-  dex
-  cpx #(NOTE_IDX_C4 - 1)
-  bne music_loop_down
+  dey
+  cpy #(NOTE_IDX_C4 - 1)
+  bne scale_loop_down
 
   jsr stop_note
   
@@ -204,11 +245,14 @@ music_loop_down:
   ldx #>1500
   jsr sleep_milliseconds
 
-  jmp play_music
+  bra play_chromatic_scale
 
 
 ; On entry A = index of note
+; On exit  X, Y are preserved
+;          A is not preserved
 start_note:
+  phy
   asl
   tay
   lda NOTE_PLAYING
@@ -218,7 +262,7 @@ start_note:
   sta T1LL
   lda notes + 1,Y
   sta T1LH
-  rts
+  bra start_note_done
 first_note:
   lda #ACR_T1_CONT_SQWAVE  ; Enable timer 1 continuous square wave
   sta ACR
@@ -229,21 +273,27 @@ first_note:
   sta T1CH                 ; Starts the timer
   lda #1
   sta NOTE_PLAYING
+start_note_done:
+  ply
   rts
 
 
 stop_note:
+  lda NOTE_PLAYING
+  beq note_stopped
   lda #0
   sta ACR
   STA T1CL
   STA T1CH
   sta NOTE_PLAYING
+note_stopped:
   rts
 
+
 notes:
-  .word NOTE_C4  
+  .word NOTE_C4
   .word NOTE_CS4
-  .word NOTE_D4 
+  .word NOTE_D4
   .word NOTE_DS4
   .word NOTE_E4	
   .word NOTE_F4	
@@ -255,11 +305,63 @@ notes:
   .word NOTE_B4 
   .word NOTE_C5
 
+durations:
+  .word 1000 ; SEMIBREVE
+  .word  500 ; MINIM
+  .word  250 ; CROTCHET
+  .word  125 ; QUAVER
+  .word   62 ; SEMIQUAVER
+
+
+ditty:
+  .byte NOTE_IDX_C4,   DURATION_SEMIBREVE 
+
+  .byte NOTE_IDX_E4,   DURATION_SEMIBREVE
+
+  .byte NOTE_IDX_G4,   DURATION_QUAVER
+  .byte NOTE_IDX_REST, DURATION_QUAVER
+  .byte NOTE_IDX_REST, DURATION_QUAVER
+  .byte NOTE_IDX_F4,   DURATION_QUAVER
+  .byte NOTE_IDX_E4,   DURATION_CROTCHET
+  .byte NOTE_IDX_D4,   DURATION_CROTCHET
+
+  .byte NOTE_IDX_C4,   DURATION_SEMIBREVE
+
+  .byte NOTE_IDX_A4,   DURATION_QUAVER
+  .byte NOTE_IDX_G4,   DURATION_QUAVER
+  .byte NOTE_IDX_A4,   DURATION_QUAVER
+  .byte NOTE_IDX_G4,   DURATION_QUAVER
+  .byte NOTE_IDX_A4,   DURATION_QUAVER
+  .byte NOTE_IDX_G4,   DURATION_QUAVER
+  .byte NOTE_IDX_F4,   DURATION_QUAVER
+  .byte NOTE_IDX_E4,   DURATION_QUAVER
+
+  .byte NOTE_IDX_G4,   DURATION_QUAVER
+  .byte NOTE_IDX_F4,   DURATION_QUAVER
+  .byte NOTE_IDX_G4,   DURATION_QUAVER
+  .byte NOTE_IDX_F4,   DURATION_QUAVER
+  .byte NOTE_IDX_G4,   DURATION_QUAVER
+  .byte NOTE_IDX_F4,   DURATION_QUAVER
+  .byte NOTE_IDX_E4,   DURATION_QUAVER
+  .byte NOTE_IDX_D4,   DURATION_QUAVER
+
+  .byte NOTE_IDX_E4,   DURATION_QUAVER
+  .byte NOTE_IDX_D4,   DURATION_QUAVER
+  .byte NOTE_IDX_E4,   DURATION_QUAVER
+  .byte NOTE_IDX_F4,   DURATION_QUAVER
+  .byte NOTE_IDX_E4,   DURATION_CROTCHET
+  .byte NOTE_IDX_D4,   DURATION_CROTCHET
+
+  .byte NOTE_IDX_C4,   DURATION_SEMIBREVE
+
+  .byte NOTE_IDX_NULL
+
+
 print_ticks_counter:
   jsr lock_screen
 
-  lda #(CMD_SET_DDRAM_ADDRESS | DISPLAY_SECOND_LINE + 6)
-  jsr display_command
+  lda #(DISPLAY_SECOND_LINE + 6)
+  jsr move_cursor
 
   sei
   lda TICKS_COUNTER
@@ -267,22 +369,15 @@ print_ticks_counter:
   lda TICKS_COUNTER + 1
   cli
 
-  jsr convert_to_hex
-  jsr display_character
-  txa
-  jsr display_character
-
+  jsr display_hex
   pla
-  jsr convert_to_hex
-  jsr display_character
-  txa
-  jsr display_character
+  jsr display_hex
 
   jsr unlock_screen
 
   jsr delay_tenth
 
-  jmp print_ticks_counter
+  bra print_ticks_counter
 
 
 ; Routine will flash an LED using busy wait for delay
@@ -297,7 +392,7 @@ flash_led_sleep:
   ldx #>300
   jsr sleep_milliseconds
   
-  jmp flash_led_sleep
+  bra flash_led_sleep
 
 
 delay_tenth:
@@ -316,14 +411,19 @@ delay_tenth:
 led_control:
   lda PORTA
   and #BUTTON1
-  bne led_control
-  ; Button down; toggle LED state
+  beq button_down
+
+  lda #<50
+  ldx #>50
+  jsr sleep_milliseconds
+
+  bra led_control
+button_down:
   sei
   lda PORTA
   eor #LED
   sta PORTA
   cli
-
 led_wait_button:
   ldy #5
 led_wait_button_loop:
@@ -338,36 +438,35 @@ led_wait_button_loop:
   dey
   bne led_wait_button_loop
 
-  jmp led_control
+  bra led_control
 
 
 ; Busy loop incrementing and displaying counter
 run_counter_top_left:
   lda #BUSY_COUNTER_DELTA
   ldx #(DISPLAY_FIRST_LINE + 0)
-  jmp run_counter
+  bra run_counter
 
 ; Busy loop incrementing and displaying counter
 run_counter_top_right:
   lda #(-BUSY_COUNTER_DELTA)
   ldx #(DISPLAY_FIRST_LINE + 12)
-  jmp run_counter
+  bra run_counter
 
 ; Busy loop incrementing and displaying counter
 run_counter_bottom_left:
   lda #(-BUSY_COUNTER_DELTA)
   ldx #(DISPLAY_SECOND_LINE + 0)
-  jmp run_counter
+  bra run_counter
 
 ; Busy loop incrementing and displaying counter
 run_counter_bottom_right:
   lda #BUSY_COUNTER_DELTA
   ldx #(DISPLAY_SECOND_LINE + 12)
-  jmp run_counter
+  bra run_counter
 
 run_counter:
   stx BUSY_COUNTER_LOCATION
-
   sta BUSY_COUNTER_INCREMENT
   ldy #0
   tax
@@ -383,8 +482,7 @@ run_counter_repeat:
   jsr lock_screen
 
   lda BUSY_COUNTER_LOCATION
-  ora #CMD_SET_DDRAM_ADDRESS
-  jsr display_command
+  jsr move_cursor
 
   lda BUSY_COUNTER + 1
   jsr convert_to_hex
@@ -413,77 +511,73 @@ run_counter_repeat:
   ldx #>100
   jsr sleep_milliseconds
 
-  jmp run_counter_repeat
+  bra run_counter_repeat
 
 
 run_chase:
-  ldx #(DISPLAY_FIRST_LINE + 5)
-
+  ldy #(DISPLAY_FIRST_LINE + 5)
 run_chase_right:
   jsr lock_screen
-  txa
-  pha
-  sec
-  ora #CMD_SET_DDRAM_ADDRESS
-  jsr display_command
+  tya
+  jsr move_cursor
   lda #' '
   jsr display_character
   lda #'X'
   jsr display_character
   jsr unlock_screen
 
-  lda #<(100 / DELAY_DIV)
-  ldx #>(100 / DELAY_DIV)
+  lda #<(150 / DELAY_DIV)
+  ldx #>(150 / DELAY_DIV)
   jsr sleep
 
-  pla
-  tax
-  inx
-  cpx #(DISPLAY_FIRST_LINE + 10)
+  iny
+  cpy #(DISPLAY_FIRST_LINE + 10)
   bne run_chase_right
 
-  ldx #(DISPLAY_FIRST_LINE + 9)
-
+  ldy #(DISPLAY_FIRST_LINE + 9)
 run_chase_left:
   jsr lock_screen
-  txa
-  pha
-  ora #CMD_SET_DDRAM_ADDRESS
-  jsr display_command
+  tya
+  jsr move_cursor
   lda #'X'
   jsr display_character
   lda #' '
   jsr display_character
   jsr unlock_screen
 
-  lda #<(100 / DELAY_DIV)
-  ldx #>(100 / DELAY_DIV)
+  lda #<(150 / DELAY_DIV)
+  ldx #>(150 / DELAY_DIV)
   jsr sleep
 
-  pla
-  tax
-  dex
-  cpx #(DISPLAY_FIRST_LINE + 4)
+  dey
+  cpy #(DISPLAY_FIRST_LINE + 4)
   bne run_chase_left
-  jmp run_chase
+
+  bra run_chase
   
 
 lock_screen:
-  lda #0
   sei
-  cmp SCREEN_LOCK
+  lda SCREEN_LOCK
   beq lock_acquired
   cli
-  jmp lock_screen
+  bra lock_screen
 lock_acquired:
   inc SCREEN_LOCK
   cli
   rts
 
+
 unlock_screen:
   lda #0
   sta SCREEN_LOCK
   rts
+
+display_hex:
+  jsr convert_to_hex
+  jsr display_character
+  txa
+  jmp display_character ; tail call
 
 
 ; Set up stack, etc. so that additional process will start running on next interrupt
@@ -544,7 +638,7 @@ banks_exist:
 
 ;On entry A = Sleep count low
 ;         X = Sleep count high
-;On exit  Y,X preserved
+;On exit  X,Y preserved
 ;         A not preserved
 sleep_milliseconds:
 ;  pha ; divide millis by 2 (assuming DELAY = 500)
@@ -587,10 +681,8 @@ interrupt:
   lda #>DELAY
   sta T2CH                ; (Store to the high register starts the timer and clears interrupt)
   
-  txa                     ; Finish saving outgoing bank registers to stack
-  pha
-  tya
-  pha
+  phx                     ; Finish saving outgoing bank registers to stack
+  phy
 
   tsx                     ; Save outgoing bank stack pointer to save location
   stx STACK_POINTER_SAVE
@@ -632,10 +724,8 @@ not_sleeping:
   inc TICKS_COUNTER + 1
 dont_increment_high_ticks:
  
-  pla                    ; Start restoring incoming bank registers from stack
-  tay
-  pla
-  tax
+  ply                    ; Start restoring incoming bank registers from stack
+  plx
 
   jsr interrupt_led_off  ; (Turn off interrupt activity LED)
 

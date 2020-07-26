@@ -96,8 +96,7 @@ display_command_8bit_no_wait:
 
 wait_for_not_busy:
   pha
-  txa
-  pha
+  phx
 
   ; Set data direction for display data pins to input
   sei
@@ -137,8 +136,7 @@ still_busy:
   sta DDRB
   cli
 
-  pla
-  tax
+  plx
   pla
   rts
 
@@ -179,7 +177,9 @@ display_command:
 
   rts
 
-
+; On Entry A = Character to display
+; On Exit X, Y preserved
+;         A not preserved
 display_character:
   jsr wait_for_not_busy
   pha
@@ -217,3 +217,10 @@ display_character:
   cli
 
   rts
+
+; On entry A = location to move to
+; On exit  X, Y preserved
+;          A not preserved 
+move_cursor:
+  ora #CMD_SET_DDRAM_ADDRESS
+  jmp display_command        ; tail call
