@@ -39,9 +39,8 @@ PLAY_SONG_PARAM        = $0006 ; 2 bytes
 MORSE_STRING_PARAM     = $0008 ; 2 bytes
 BUSY_COUNTER_LOCATION  = $000A
 STACK_POINTER_SAVE     = $000B
-DISPLAY_SCRATCH        = $000C
-TASK_SWITCH_SCRATCH    = $000D
-SLEEPING               = $000E
+TASK_SWITCH_SCRATCH    = $000C
+SLEEPING               = $000D
 
 ; Shared memory locations
 TICKS_COUNTER          = $2000 ; 2 bytes
