@@ -1,6 +1,6 @@
-; Play a song
-; Requires PLAY_SONG_PARAM 2 byte location for temporary storage of song location
+PLAY_SONG_PARAM  = $0000 ; 2 bytes
 
+; Play a song
 play_song:
   sta PLAY_SONG_PARAM
 replay_song:

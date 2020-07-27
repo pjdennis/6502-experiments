@@ -1,7 +1,8 @@
-MORSE_TIME_UNIT = 150 ; Milliseconds
-
-MORSE_DELAY_NOT_PENDING = 0
+MORSE_TIME_UNIT         = 150 ; Milliseconds
 MORSE_DELAY_PENDING     = 1
+MORSE_DELAY_NOT_PENDING = 0
+
+MORSE_STRING_PARAM     = $0000 ; 2 bytes
 
 ; On entry A = low byte of address
 ;          X = high byte of address

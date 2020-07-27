@@ -1,27 +1,26 @@
-; Requirements
-; BUSY_COUNTER            - 2 byte private memory location used for storing the counter value
-; BUSY_COUNTER_INCREMENT  - 2 byte private memory location used for storing increment value
-; BUSY_COUNTER_DELTA      - Value used to add or subtract from counter
+BUSY_COUNTER_DELTA = 1         ; Value to add/subtract from counter on each cycle
 
-; Busy loop incrementing and displaying counter
+BUSY_COUNTER           = $0000 ; 2 bytes
+BUSY_COUNTER_INCREMENT = $0002 ; 2 bytes
+BUSY_COUNTER_LOCATION  = $0004
+
+; Busy loops incrementing and displaying counter
+
 run_counter_top_left:
   lda #BUSY_COUNTER_DELTA
   ldx #(DISPLAY_FIRST_LINE + 0)
   bra run_counter
 
-; Busy loop incrementing and displaying counter
 run_counter_top_right:
   lda #(-BUSY_COUNTER_DELTA)
   ldx #(DISPLAY_FIRST_LINE + 12)
   bra run_counter
 
-; Busy loop incrementing and displaying counter
 run_counter_bottom_left:
   lda #(-BUSY_COUNTER_DELTA)
   ldx #(DISPLAY_SECOND_LINE + 0)
   bra run_counter
 
-; Busy loop incrementing and displaying counter
 run_counter_bottom_right:
   lda #BUSY_COUNTER_DELTA
   ldx #(DISPLAY_SECOND_LINE + 12)
@@ -47,22 +46,16 @@ run_counter_repeat:
   jsr move_cursor
 
   lda BUSY_COUNTER + 1
-  jsr convert_to_hex
-  jsr display_character
-  txa
-  jsr display_character
+  jsr display_hex
 
   lda BUSY_COUNTER
-  jsr convert_to_hex
-  jsr display_character
-  txa
-  jsr display_character
+  jsr display_hex
 
   jsr unlock_screen
 
   ; Add busy counter delta
-  lda BUSY_COUNTER
   clc
+  lda BUSY_COUNTER
   adc BUSY_COUNTER_INCREMENT
   sta BUSY_COUNTER
   lda BUSY_COUNTER + 1

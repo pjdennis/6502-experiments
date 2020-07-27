@@ -29,18 +29,10 @@ DISPLAY_BITS_MASK = (DISPLAY_DATA_MASK | E | RW | RS)
 
 DELAY       = 2000 ; 2000 microseconds = 2 milliseconds; rate = 500 Hz
 
-BUSY_COUNTER_DELTA     = 1
-
-; Banked memory locations
-BUSY_COUNTER           = $0000 ; 2 bytes
-BUSY_COUNTER_INCREMENT = $0002 ; 2 bytes
-WAKE_AT                = $0004 ; 2 bytes
-PLAY_SONG_PARAM        = $0006 ; 2 bytes
-MORSE_STRING_PARAM     = $0008 ; 2 bytes
-BUSY_COUNTER_LOCATION  = $000A
-STACK_POINTER_SAVE     = $000B
-TASK_SWITCH_SCRATCH    = $000C
-SLEEPING               = $000D
+; Banked zero page supervisor locations starting at $00e0
+WAKE_AT                = $00e0 ; 2 bytes
+SLEEPING               = $00e2
+STACK_POINTER_SAVE     = $00e3
 
 ; Shared memory locations
 TICKS_COUNTER          = $2000 ; 2 bytes
@@ -60,6 +52,7 @@ LED_CONTROL_RELOCATE   = $3000
   .include musical_notes_tables.inc
   .include utilities.inc
   .include sound.inc
+  .include console.inc
 
   ; Programs
   .include prg_counters.inc
@@ -135,15 +128,15 @@ reset:
   ldx #>play_ditty
   jsr initialize_additional_process
 
-  lda #<print_ticks_counter
-  ldx #>print_ticks_counter
-  jsr initialize_additional_process 
+;  lda #<print_ticks_counter
+;  ldx #>print_ticks_counter
+;  jsr initialize_additional_process 
 
 ;  lda #<led_control
 ;  ldx #>led_control
 ;  jsr initialize_additional_process
 
-
+; Test out running a process from ram
   ldx #0
 copy_loop:
   cpx #(led_control_end - led_control)
@@ -155,6 +148,10 @@ copy_loop:
 copy_done:
   lda #<LED_CONTROL_RELOCATE
   ldx #>LED_CONTROL_RELOCATE
+  jsr initialize_additional_process
+
+  lda #<console_demo
+  ldx #>console_demo
   jsr initialize_additional_process
 
 
@@ -174,6 +171,25 @@ copy_done:
   ; For now we need at least one process with a busy loop to ensure not all proceses are sleeping
 busy_loop:
   bra busy_loop
+
+
+console_message: .asciiz 'Hello, World! This is a long scrolling message. Phil X Angel :) ...... '
+
+console_demo:
+  lda #(DISPLAY_SECOND_LINE + 5) ; Console position
+  ldx #6                         ; Console length
+  jsr console_initialize
+console_demo_repeat:
+  ldy #0
+console_demo_loop:
+  lda console_message, Y
+  beq console_demo_repeat
+  jsr console_print_character
+  lda #<180
+  ldx #>180
+  jsr sleep_milliseconds
+  iny
+  bra console_demo_loop
 
 
 morse_message:
@@ -287,7 +303,8 @@ sleep1:
 interrupt:
   pha                     ; Start saving outgoing bank registers to stack
 
-  jsr interrupt_led_on    ; (Turn on the interrupt activity LED)
+  lda #ILED               ; Turn on interrupt activity LED
+  tsb PORTA
 
   lda #<DELAY             ; (Reset 6552 timer to trigger next interrupt)
   sta T2CL
@@ -302,19 +319,17 @@ interrupt:
 
 next_bank:  
   lda PORTA               ; Increment the memory bank
-  tay
   and #BANK_MASK
-  tax
-  inx
-  cpx FIRST_UNUSED_BANK
+  inc
+  cmp FIRST_UNUSED_BANK
   bne switch_to_incoming_bank
-  ldx #BANK_START         ; We were on the last bank so start over at the first
+  lda #BANK_START         ; We were on the last bank so start over at the first
 switch_to_incoming_bank:
-  stx TASK_SWITCH_SCRATCH ; Switch to incoming bank
-  tya                     ; Original value of PORTA
-  and #(~BANK_MASK & $ff)
-  ora TASK_SWITCH_SCRATCH
-  sta PORTA
+  tax
+  lda #BANK_MASK
+  trb PORTA
+  txa
+  tsb PORTA               ; Switch to incoming bank
 
   lda SLEEPING
   beq not_sleeping
@@ -341,25 +356,12 @@ dont_increment_high_ticks:
   ply                    ; Start restoring incoming bank registers from stack
   plx
 
-  jsr interrupt_led_off  ; (Turn off interrupt activity LED)
+  lda #ILED              ; Turn off interrupt activity LED
+  trb PORTA
 
   pla                    ; Finish restoring incoming bank registers from stack
 
   rti                    ; Return to the program in the incoming bank
-
-
-interrupt_led_on:
-  lda PORTA
-  ora #ILED
-  sta PORTA
-  rts
-
-
-interrupt_led_off:
-  lda PORTA
-  and #(~ILED & $ff)
-  sta PORTA
-  rts
 
 
 ; Vectors
