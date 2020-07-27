@@ -48,6 +48,8 @@ FIRST_UNUSED_BANK      = $2002
 SCREEN_LOCK            = $2003
 NOTE_PLAYING           = $2004
 
+LED_CONTROL_RELOCATE   = $3000
+
   .org $8000
 
   ; Place code for delay_routines at start of page to ensure no page boundary crossings during timing loops
@@ -70,12 +72,6 @@ NOTE_PLAYING           = $2004
   .include prg_led_control.inc
 
 reset:
-  sei
-  ; Disable 6522 interrupts
-  lda #(~IERSETCLEAR & $ff) ; Disable all interrupts
-  sta IER
-  cli
-
   ldx #$ff ; Initialize stack
   txs
 
@@ -143,8 +139,22 @@ reset:
   ldx #>print_ticks_counter
   jsr initialize_additional_process 
 
-  lda #<led_control
-  ldx #>led_control
+;  lda #<led_control
+;  ldx #>led_control
+;  jsr initialize_additional_process
+
+
+  ldx #0
+copy_loop:
+  cpx #(led_control_end - led_control)
+  beq copy_done
+  lda led_control,X
+  sta LED_CONTROL_RELOCATE,X
+  inx
+  bra copy_loop
+copy_done:
+  lda #<LED_CONTROL_RELOCATE
+  ldx #>LED_CONTROL_RELOCATE
   jsr initialize_additional_process
 
 
@@ -316,7 +326,8 @@ switch_to_incoming_bank:
   bpl next_bank           ; Next bank if WAKE_AT > TICKS_COUNTER
 
   lda #0
-  sta SLEEPING         ; Stop sleeping
+  sta SLEEPING            ; Stop sleeping
+
 
 not_sleeping:
   ldx STACK_POINTER_SAVE ; Restore incoming bank stack pointer from save location

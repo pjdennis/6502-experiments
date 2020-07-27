@@ -1,5 +1,4 @@
 ; Program will toggle an LED on and off based on a button press
-
 led_control:
   lda PORTA
   and #BUTTON1
@@ -31,4 +30,4 @@ led_wait_button_loop:
   bne led_wait_button_loop
 
   bra led_control
-
+led_control_end:
