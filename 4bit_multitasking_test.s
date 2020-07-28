@@ -228,11 +228,27 @@ repeat_morse_message:
   ldx #>morse_message
   jsr send_morse_string
 
-  lda #<2000
-  ldx #>2000
-  jsr sleep_milliseconds
+
+  lda #' '
+  jsr write_to_buffer_with_delay
+  lda #'.'
+  jsr write_to_buffer_with_delay
+  jsr write_to_buffer_with_delay
+  jsr write_to_buffer_with_delay
+  lda #' '
 
   bra repeat_morse_message
+
+
+; On entry A = the character to send
+write_to_buffer_with_delay:
+  pha
+  jsr buffer_write
+  lda #<500
+  ldx #>500
+  jsr sleep_milliseconds
+  pla
+  rts
 
 
 morse_callback:
