@@ -236,6 +236,7 @@ repeat_morse_message:
   jsr write_to_buffer_with_delay
   jsr write_to_buffer_with_delay
   lda #' '
+  jsr write_to_buffer_with_delay
 
   bra repeat_morse_message
 
