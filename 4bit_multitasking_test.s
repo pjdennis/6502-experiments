@@ -40,6 +40,11 @@ FIRST_UNUSED_BANK      = $2002
 SCREEN_LOCK            = $2003
 NOTE_PLAYING           = $2004
 
+BUFFER_READ_POS        = $21fd
+BUFFER_WRITE_POS       = $21fe
+BUFFER_LOCK            = $21ff
+BUFFER_DATA            = $2200    
+
 LED_CONTROL_RELOCATE   = $3000
 
   .org $8000
@@ -53,6 +58,7 @@ LED_CONTROL_RELOCATE   = $3000
   .include utilities.inc
   .include sound.inc
   .include console.inc
+  .include buffer.inc
 
   ; Programs
   .include prg_counters.inc
@@ -150,8 +156,13 @@ copy_done:
   ldx #>LED_CONTROL_RELOCATE
   jsr initialize_additional_process
 
-  lda #<console_demo
-  ldx #>console_demo
+;  lda #<console_demo
+;  ldx #>console_demo
+;  jsr initialize_additional_process
+
+  jsr buffer_initialize
+  lda #<console_write_buffer
+  ldx #>console_write_buffer
   jsr initialize_additional_process
 
 
@@ -193,6 +204,17 @@ console_demo_loop:
   bra console_demo_loop
 
 
+console_write_buffer:
+  lda #(DISPLAY_SECOND_LINE + 5) ; Console position
+  ldx #6                         ; Console length
+  jsr console_initialize
+console_write_buffer_repeat:
+  jsr buffer_read
+  jsr console_print_character
+  jsr console_show
+  bra console_write_buffer_repeat
+
+
 morse_message:
   .asciiz 'HELLO WORLD THIS IS A COMPUTER BUILT BY PHIL'
 
@@ -214,11 +236,7 @@ repeat_morse_message:
 
 
 morse_callback:
-  sei
-  lda PORTA
-  eor #LED
-  sta PORTA
-  cli
+  jsr buffer_write
   rts
 
 

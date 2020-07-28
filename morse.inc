@@ -35,12 +35,14 @@ morse_string_loop:
   jsr morse_delay
   pla
 morse_string_send_letter:
+  jsr morse_invoke_callback 
   jsr send_morse_letter
   ldx #MORSE_DELAY_PENDING
   bra morse_string_letter_done
 morse_string_space:
   cpx #MORSE_DELAY_PENDING
   bne morse_string_letter_done
+  jsr morse_invoke_callback 
   lda #7                            ; Inter-word delay
   jsr morse_delay
   ldx #MORSE_DELAY_NOT_PENDING
@@ -56,8 +58,6 @@ morse_string_done:
 ; On exit X, Y are preserved
 ;         A is not preserved
 send_morse_letter:
-  jsr morse_invoke_callback 
-
   phx
   phy
   sec
