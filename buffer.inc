@@ -86,12 +86,13 @@ buffer_lock_not_full:
   pha
   phx
 buffer_lock_not_full_wait:
+  jsr buffer_lock
   lda BUFFER_WRITE_POS
   cmp BUFFER_READ_POS
   bpl buffer_locked_not_full
   jsr buffer_unlock
   lda #1
-  lda #0
+  ldx #0
   jsr sleep_milliseconds
   bra buffer_lock_not_full_wait
 buffer_locked_not_full:

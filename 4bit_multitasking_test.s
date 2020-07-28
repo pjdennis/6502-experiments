@@ -156,8 +156,8 @@ copy_done:
   ldx #>LED_CONTROL_RELOCATE
   jsr initialize_additional_process
 
-;  lda #<console_demo
-;  ldx #>console_demo
+;  lda #<console_demo_2
+;  ldx #>console_demo_2
 ;  jsr initialize_additional_process
 
   jsr buffer_initialize
@@ -186,6 +186,17 @@ busy_loop:
 
 console_message: .asciiz 'Hello, World! This is a long scrolling message. Phil X Angel :) ...... '
 
+console_demo_2:
+console_demo_2_repeat:
+  ldy #0
+console_demo_2_loop:
+  lda console_message, Y
+  beq console_demo_2_repeat
+  jsr buffer_write
+  iny
+  bra console_demo_2_loop
+
+
 console_demo:
   lda #(DISPLAY_SECOND_LINE + 5) ; Console position
   ldx #6                         ; Console length
@@ -212,6 +223,9 @@ console_write_buffer_repeat:
   jsr buffer_read
   jsr console_print_character
   jsr console_show
+;  lda #<200
+;  ldx #>200
+;  jsr sleep_milliseconds
   bra console_write_buffer_repeat
 
 
@@ -236,7 +250,6 @@ repeat_morse_message:
   jsr write_to_buffer_with_delay
   jsr write_to_buffer_with_delay
   lda #' '
-  jsr write_to_buffer_with_delay
 
   bra repeat_morse_message
 
