@@ -3,14 +3,14 @@ MORSE_DELAY_PENDING     = 1
 MORSE_DELAY_NOT_PENDING = 0
 
 MORSE_STRING_PARAM       = $0000 ; 2 bytes
-;MORSE_CHARACTER_CALLBACK = $0002 ; 2 bytes
+MORSE_CHARACTER_CALLBACK = $0002 ; 2 bytes
 
 ; On entry A = low byte of callback address
 ;          X = high byte of callback address
-;initialize_morse:
-;  sta MORSE_CHARACTER_CALLBACK
-;  stx MORSE_CHARACTER_CALLBACK + 1
-
+initialize_morse:
+  sta MORSE_CHARACTER_CALLBACK
+  stx MORSE_CHARACTER_CALLBACK + 1
+  rts
 
 ; On entry A = low byte of address
 ;          X = high byte of address
@@ -128,39 +128,39 @@ morse_delay_loop:
 
 ; On entry A contains the character to publish
 ; On exit  A, X, Y are preserved
-;morse_invoke_callback:
-;  sei
-;  lda PORTA
-;  eor #FLASH_LED
-;  sta PORTA
-;  cli
-;  rts
+morse_invoke_callback:
+  sei
+  lda PORTA
+  eor #FLASH_LED
+  sta PORTA
+  cli
+  rts
 
 
-;  pha
-;  phx
+  pha
+  phx
 
-;  ldx MORSE_CHARACTER_CALLBACK
-;  bne morse_has_callback
-;  ldx MORSE_CHARACTER_CALLBACK + 1
-;  beq morse_no_callback
-;morse_has_callback:
-;  phy
-;  ; Push return address onto stack
-;  ldx #>(morse_invoke_callback_return - 1)
-;  phx
-;  ldx #<(morse_invoke_callback_return - 1)
-;  phx
-;  ; Jump to callback routing
-;  ldx #0
-;  jmp (MORSE_CHARACTER_CALLBACK, X)
+  ldx MORSE_CHARACTER_CALLBACK
+  bne morse_has_callback
+  ldx MORSE_CHARACTER_CALLBACK + 1
+  beq morse_no_callback
+morse_has_callback:
+  phy
+  ; Push return address onto stack
+  ldx #>(morse_invoke_callback_return - 1)
+  phx
+  ldx #<(morse_invoke_callback_return - 1)
+  phx
+  ; Jump to callback routing
+  ldx #0
+  jmp (MORSE_CHARACTER_CALLBACK, X)
 
-;morse_invoke_callback_return:
-;  ply
-;morse_no_callback:
-;  plx
-;  pla
-;  rts
+morse_invoke_callback_return:
+  ply
+morse_no_callback:
+  plx
+  pla
+  rts
 
 
 morse_letters:

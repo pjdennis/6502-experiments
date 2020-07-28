@@ -197,11 +197,11 @@ morse_message:
   .asciiz 'HELLO WORLD THIS IS A COMPUTER BUILT BY PHIL'
 
 send_morse_message:
-;  lda #<morse_callback
-;  ldx #>morse_callback
-;  jsr initialize_morse
+  lda #<morse_callback
+  ldx #>morse_callback
+  jsr initialize_morse
 
-;repeat_morse_message:
+repeat_morse_message:
   lda #<morse_message
   ldx #>morse_message
   jsr send_morse_string
@@ -210,8 +210,7 @@ send_morse_message:
   ldx #>2000
   jsr sleep_milliseconds
 
-   bra send_morse_message
-;  bra repeat_morse_message
+  bra repeat_morse_message
 
 
 morse_callback:
@@ -221,6 +220,7 @@ morse_callback:
   sta PORTA
   cli
   rts
+
 
 ; Set up stack, etc. so that additional process will start running on next interrupt
 ; On entry A = low source address
