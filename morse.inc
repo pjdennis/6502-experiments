@@ -56,7 +56,7 @@ morse_string_done:
 ; On exit X, Y are preserved
 ;         A is not preserved
 send_morse_letter:
-;  jsr morse_invoke_callback 
+  jsr morse_invoke_callback 
 
   phx
   phy
@@ -129,14 +129,6 @@ morse_delay_loop:
 ; On entry A contains the character to publish
 ; On exit  A, X, Y are preserved
 morse_invoke_callback:
-  sei
-  lda PORTA
-  eor #FLASH_LED
-  sta PORTA
-  cli
-  rts
-
-
   pha
   phx
 

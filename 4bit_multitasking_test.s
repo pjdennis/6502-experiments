@@ -216,7 +216,7 @@ repeat_morse_message:
 morse_callback:
   sei
   lda PORTA
-  eor #FLASH_LED
+  eor #LED
   sta PORTA
   cli
   rts
