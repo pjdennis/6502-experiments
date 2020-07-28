@@ -185,6 +185,7 @@ console_demo_loop:
   lda console_message, Y
   beq console_demo_repeat
   jsr console_print_character
+  jsr console_show
   lda #<180
   ldx #>180
   jsr sleep_milliseconds
@@ -196,6 +197,11 @@ morse_message:
   .asciiz 'HELLO WORLD THIS IS A COMPUTER BUILT BY PHIL'
 
 send_morse_message:
+;  lda #<morse_callback
+;  ldx #>morse_callback
+;  jsr initialize_morse
+
+;repeat_morse_message:
   lda #<morse_message
   ldx #>morse_message
   jsr send_morse_string
@@ -204,8 +210,17 @@ send_morse_message:
   ldx #>2000
   jsr sleep_milliseconds
 
-  bra send_morse_message
+   bra send_morse_message
+;  bra repeat_morse_message
 
+
+morse_callback:
+  sei
+  lda PORTA
+  eor #FLASH_LED
+  sta PORTA
+  cli
+  rts
 
 ; Set up stack, etc. so that additional process will start running on next interrupt
 ; On entry A = low source address
@@ -221,7 +236,6 @@ banks_exist:
   tsx
   stx STACK_POINTER_SAVE
   tax            ; high order address in X
-
   lda PORTA      ; Switch to first unused bank
   and #(~BANK_MASK & $ff)
   ora FIRST_UNUSED_BANK

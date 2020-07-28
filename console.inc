@@ -48,24 +48,41 @@ console_print_add_character:
   iny
   sty CONSOLE_CHARACTER_COUNT
 
-  ; Show the console text
+  ply
+  plx
+  rts
+
+
+; Show console on screen
+; On exit A, X, Y are preserved
+console_show:
+  pha
+  phx
+
   jsr lock_screen
 
   lda CONSOLE_POSITION
   jsr move_cursor
 
-  ldy #0
+  ldx #0
 console_show_loop:
-  cpy CONSOLE_CHARACTER_COUNT
-  beq console_show_loop_done
-  lda CONSOLE_TEXT, Y
+  cpx CONSOLE_CHARACTER_COUNT
+  beq console_clear_loop
+  lda CONSOLE_TEXT, X
   jsr display_character
-  iny
+  inx
   bra console_show_loop
-console_show_loop_done:
-
+console_clear_loop:
+  cpx CONSOLE_LENGTH
+  beq console_show_done
+  lda #' '
+  jsr display_character
+  inx
+  bra console_clear_loop
+console_show_done:
   jsr unlock_screen
 
-  ply
   plx
+  pla
   rts
+
