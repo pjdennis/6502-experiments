@@ -126,10 +126,6 @@ reset:
   ldx #>run_chase
   jsr initialize_additional_process
 
-  lda #<send_morse_message
-  ldx #>send_morse_message
-  jsr initialize_additional_process
-
   lda #<play_ditty
   ldx #>play_ditty
   jsr initialize_additional_process
@@ -154,6 +150,10 @@ copy_loop:
 copy_done:
   lda #<LED_CONTROL_RELOCATE
   ldx #>LED_CONTROL_RELOCATE
+  jsr initialize_additional_process
+
+  lda #<send_morse_message
+  ldx #>send_morse_message
   jsr initialize_additional_process
 
 ;  lda #<console_demo_2
