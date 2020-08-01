@@ -85,6 +85,14 @@ clear_loop:
   sta IER
 
 
+  ldx #200
+start_delay_loop:
+  lda #200
+  jsr delay_10_thousandths
+  dex
+  bne start_delay_loop 
+
+
 display_loop:
   lda #DISPLAY_FIRST_LINE
   jsr move_cursor
@@ -122,15 +130,19 @@ interrupt:               ; 6?
   beq check_for_shift_complete ; 2 (not taken)
 
   lda #ICB2              ; 2 Disable the interrupt
-  sta IER                ; 4
-  stz PCR                ; 4 Clear CB2 control
+  ;sta IER                ; 4
+  ;stz PCR                ; 4 Clear CB2 control
+
+  lda #104               ; 2 ; 2 MHz / 9600 bps / 2
+  sta T2CL               ; 3
 
   stz SR                 ; 4 Start the shifting; maybe we are ~ 52 cycles in to the ISR? 
 
   lda #ILED              ; 2  Turn on interrupt activity LED
   tsb PORTA
-  nop
-  nop
+  
+  lda #ICB2              ; 2 Clear the CB2 interrupt flag
+  sta IFR                ; 4
   nop
   nop
   nop
@@ -148,21 +160,21 @@ check_for_shift_complete:
 
   lda #$77
   sta DOWN_TIMES
+  inc DOWN_TIMES + 1
 
   phx
   phy
 
+  lda #0                    ; Disable shifting while reading shift register
+  sta ACR                   ; which hopefully will prevent shift from restarting
   ldy SR
-
-  lda #0                 ; Turn off shifting
+  lda #ACR_SR_IN_T2         ; Then reconfigure the shift function ready for next time
   sta ACR
-
-;  lda #ICB2
-;  sta IFR
-;  lda #ISR
-;  sta IER
-;  lda #(IERSETCLEAR | ICB2) ; Enable CB2 interrupts
-;  sta IER
+;  lda #PCR_CB2_IND_POS_E    ; Resest CB2 pin mode for next interrupt
+;  sta PCR
+  lda #(IERSETCLEAR | ICB2) ; Reenable CB2 pin interrupt
+  sta IER
+ 
 
   ldx #0
 move1:
