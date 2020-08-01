@@ -157,10 +157,10 @@ check_for_shift_complete:
   lda #0                 ; Turn off shifting
   sta ACR
 
-  lda #ICB2
-  sta IFR
-  lda #ISR
-  sta IER
+;  lda #ICB2
+;  sta IFR
+;  lda #ISR
+;  sta IER
 ;  lda #(IERSETCLEAR | ICB2) ; Enable CB2 interrupts
 ;  sta IER
 
@@ -173,6 +173,9 @@ move1:
   bne move1
 
   sty UP_TIMES + 7
+
+
+
 
   ply
   plx
