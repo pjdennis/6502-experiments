@@ -165,6 +165,8 @@ copy_done:
   ldx #>console_write_buffer
   jsr initialize_additional_process
 
+  ; Configure CA2 for stand alone interrupt input
+
 
   ; Configure interrupt timer
   lda #0  ; Timer 2 one shot run mode 

@@ -1,3 +1,9 @@
-./vasm6502_oldstyle -wdc02 -Fbin -dotdir <filename>
+./vasm6502_oldstyle -wdc02 -wfail -Fbin -dotdir <filename>
 minipro -p AT28C256 -w a.out || echo -e '\x1B[1;31mFailed!\x1B[0m\a'
 
+screen /dev/cu.usbserial-1410 115200
+Ctrl-A + d
+screen -list
+screen -r
+
+Using SiLabs CP210X NOT Prolific
