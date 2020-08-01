@@ -70,8 +70,12 @@ clear_loop:
   cpx #8
   bne clear_loop
 
+  ; Configure shift clock time
+  lda #52                ; 2 ; 1 MHz / 9600 bps / 2
+  sta T2CL               ; 3
+
   ; Configure CB2 for independent interrupt - negative edge
-  lda #PCR_CB2_IND_NEG_E
+  lda #PCR_CB2_IND_POS_E
   sta PCR
 
   lda #(IERSETCLEAR | ICB2 | ISR) ; Enable CB2 and SR interrupts
@@ -108,34 +112,40 @@ display_down:
 
 
 ; Interrupt handler - switch memory banks and routines
-interrupt:
+interrupt:               ; 6?
   pha
 
-  lda #ILED              ; Turn on interrupt activity LED
+  lda IFR                ; 3
+  and #ICB2              ; 2
+  beq check_for_shift_complete ; 2 (not taken)
+
+  lda #ICB2              ; 2 Disable the interrupt
+  ;sta IFR                ; 3
+  sta IER                ; 3
+  lda #0                 ; 2 Clear CB2 control
+  sta PCR                ; 3
+
+  lda #ACR_SR_IN_T2      ; 2 Shift in under control of T2
+  sta ACR                ; 3
+
+  lda #0                 ; 2
+  sta SR                 ; 3 Start the shifting; maybe we are ~ 52 cycles in to the ISR? 
+
+  lda #ILED              ; 2  Turn on interrupt activity LED
   tsb PORTA
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
 
-  lda IFR
-  and #ICB2
-  beq check_for_shift_complete
-
-  lda #ICB2              ; Disable and clear the interrupt
-  sta IFR
-  sta IER
-  lda #0                 ; Clear CB2 control
-  sta PCR
-
-  lda #ACR_SR_IN_T2      ; Shift in under control of T2
-  sta ACR
-
-  ; Configure shift clock time
-  lda #52               ; 1 MHz / 9600 bps / 2
-  sta T2CL
-
-  lda #0
-  sta SR                 ; Start the shifting; maybe we are ~ 52 cycles in to the ISR? 
   bra interrupt_done
 
 check_for_shift_complete:
+  lda #ILED              ; 2  Turn on interrupt activity LED
+  tsb PORTA
+  
   lda IFR
   and #ISR
   beq interrupt_done
@@ -146,9 +156,10 @@ check_for_shift_complete:
   phx
   phy
 
+  ldy SR
+
   lda #0                 ; Turn off shifting
   sta ACR
-  ldy SR
 
   lda #ICB2
   sta IFR
