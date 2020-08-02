@@ -78,7 +78,7 @@ clear_loop:
   stz DOWN_TIMES, X
   inx
   cpx #8
-  bne clear_loop:
+  bne clear_loop
 
   stz BUTTON_DOWN_COUNTER
   stz BUTTON_UP_COUNTER

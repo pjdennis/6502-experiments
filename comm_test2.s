@@ -71,7 +71,7 @@ clear_loop:
   bne clear_loop
 
   ; Configure shift clock time
-  lda #104               ; 2 ; 2 MHz / 9600 bps / 2
+  lda #208               ; 2 ; 2 MHz / 4800 bps / 2
   sta T2CL               ; 3
 
   lda #ACR_SR_IN_T2      ; 2 Shift in under control of T2
@@ -129,7 +129,7 @@ interrupt:               ; 6?
   and #ICB2              ; 2
   beq check_for_shift_complete ; 2 (not taken)
 
-  lda #ICB2              ; 2 Disable the interrupt
+  ;lda #ICB2              ; 2 Disable the interrupt
   ;sta IER                ; 4
   ;stz PCR                ; 4 Clear CB2 control
 
@@ -170,10 +170,8 @@ check_for_shift_complete:
   ldy SR
   lda #ACR_SR_IN_T2         ; Then reconfigure the shift function ready for next time
   sta ACR
-;  lda #PCR_CB2_IND_POS_E    ; Resest CB2 pin mode for next interrupt
-;  sta PCR
-  lda #(IERSETCLEAR | ICB2) ; Reenable CB2 pin interrupt
-  sta IER
+  ;lda #(IERSETCLEAR | ICB2) ; Reenable CB2 pin interrupt
+  ;sta IER
  
 
   ldx #0
