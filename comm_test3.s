@@ -143,19 +143,11 @@ display_down:
 interrupt:                       ; 7 cycles to get into the handler
   pha                            ; 3
 
-; lda #ILED                          ; 2  Turn on interrupt activity LED
-; tsb PORTA                          ; 6
-
   lda SERIAL_WAITING             ; 3 (zero page)
-  beq check_for_timer_interrupt  ; 2 (when not taken)
+  beq timer_interrupt  ; 2 (when not taken)
 
 
-check_for_cb2_interrupt:
-; lda IFR                            ; 4
-; and #ICB2                          ; 2
-; beq error_unexpected_interrupt     ; 2 (assuming not taken) 
-; cb2 interrupt detected
-
+cb2_interrupt:
   lda #>FIRST_BIT_TIMER_INTERVAL ; 2 Start the timer (low byte already in latch)
   sta T1CH                       ; 4 (Starts at about 21 cycles in)
 
@@ -180,11 +172,7 @@ check_for_cb2_interrupt:
   rti                            ; 6 (About 43 cycles to get out)
 
 
-check_for_timer_interrupt:
-; lda IFR                            ; 4
-; and #IT1                           ; 2
-; beq error_unexpected_interrupt     ; 2 (assuming not taken)
-; Timer interrupt detected
+timer_interrupt:
   lda PORTA                      ; 4 (read at 20 cycles in)
   sec
   and #SERIAL_IN
@@ -221,7 +209,7 @@ move1:
   sta IFR
 
   lda #<FIRST_BIT_TIMER_INTERVAL ; Load timer duration to center of first bit
-  sta T1CL                       ;
+  sta T1CL
 
   lda #NUMBER_OF_BITS
   sta BIT_COUNT
@@ -234,16 +222,8 @@ move1:
   lda #(IERSETCLEAR | ICB2)      ; Renable CB2 interrupts
   sta IER
 
-  bra interrupt_done
-
-
-error_unexpected_interrupt:
-
 
 interrupt_done:
-; lda #ILED                      ; 2 Turn off interrupt activity LED
-; trb PORTA                      ; 6
-
   pla                            ; 4
   rti                            ; 6 Return to the program in the incoming bank
 
