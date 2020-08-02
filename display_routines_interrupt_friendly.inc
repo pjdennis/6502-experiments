@@ -102,6 +102,7 @@ wait_for_not_busy:
   phx
 
 still_busy:
+  sei                    ; Disable interrupts
   lda #DISPLAY_DATA_MASK ; - Set display data pins on port B to input
   trb DDRB
 
@@ -121,6 +122,7 @@ still_busy:
 
   lda #DISPLAY_DATA_MASK
   tsb DDRB               ; - Set display data pins on port B back to output
+  cli                    ; Renable interrupts
 
   txa
   and #BF                ; Check busy flag
@@ -163,6 +165,7 @@ send_to_display:
   lsr                    ; Shift upper byte to display data location
   and #DISPLAY_DATA_MASK ; First 4 bits to send are in A
 
+  sei                    ; Disable interrupts
   tsb PORTB              ; - Output the command first 4 bits
   txa                    ; - Flag for type of command to send is in X
   tsb PORTB              ; - Set flag (RS or not) to indicate command vs character
@@ -179,6 +182,7 @@ send_to_display:
   trb PORTB              ; - Clear E bit
   lda #DISPLAY_BITS_MASK ;
   trb PORTB              ; - Clear data lines and command flags ready for next send
+  cli                    ; Reenable interrupts
 
   ply
   plx

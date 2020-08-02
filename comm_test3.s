@@ -28,15 +28,18 @@ DISPLAY_BITS_MASK = (DISPLAY_DATA_MASK | E | RW | RS)
   .include 6522.inc
 
 
-BIT_TIMER_INTERVAL       = 3333 ; 1 MHz / 300 bps
+BIT_TIMER_INTERVAL       = 104  ; 1 MHz / 9600 bps
+;BIT_TIMER_INTERVAL      = 208  ; 1 MHz / 4800 bps
+;BIT_TIMER_INTERVAL      = 3333 ; 1 MHz / 300 bps
+FIRST_BIT_TIMER_INTERVAL = BIT_TIMER_INTERVAL * 1.33 - 29 - 22
 NUMBER_OF_BITS           = 8    ; Not counting start or stop bits. There's no parity bit.
 STATE_WAITING_FOR_CB2    = 0
 STATE_WAITING_FOR_TIMER  = 1
 
 ; Shared ram locations
-BIT_COUNT           = $2000
-BIT_VALUE           = $2001
-SERIAL_STATE        = $2002
+BIT_COUNT           = $00
+BIT_VALUE           = $01
+SERIAL_STATE        = $02
 DOWN_TIMES          = $2100
 UP_TIMES            = $2200
 
@@ -86,10 +89,6 @@ clear_loop:
   lda #ACR_T1_CONT
   sta ACR  
 
-  ; Load low byte timer interval into T1 latch
-  lda #<BIT_TIMER_INTERVAL
-  sta T1CL
-
   ; Configure CB2 for independent interrupt; Positive edge because we're inverting
   ; the incoming serial receive line to adapt voltage levels
   lda #PCR_CB2_IND_POS_E
@@ -136,62 +135,73 @@ display_down:
 
 
 ; Interrupt handler - Read in serial data
-interrupt:                      ; 7 cycles to get into the handler
-  pha                           ; 3
+interrupt:                       ; 7 cycles to get into the handler
+  pha                            ; 3
 
-  lda #ILED                     ; 2  Turn on interrupt activity LED
-  tsb PORTA                     ; 4
+; lda #ILED                      ; 2  Turn on interrupt activity LED
+; tsb PORTA                      ; 6
 
-  lda SERIAL_STATE              ; 4
-  cmp #STATE_WAITING_FOR_TIMER  ; 2
-  beq check_for_timer_interrupt ; 2 (when not taken)
+  lda SERIAL_STATE               ; 3 (zero page)
+  cmp #STATE_WAITING_FOR_TIMER   ; 2
+  beq check_for_timer_interrupt  ; 2 (when not taken)
   ; Only other option is STATE_WAITING_FOR_CB2 - fall through
 
 
 check_for_cb2_interrupt:
-  lda IFR                        ; 4
-  and #ICB2                      ; 2
-  beq error_unexpected_interrupt ; 2 (assuming not taken) 
+; lda IFR                        ; 4
+; and #ICB2                      ; 2
+; beq error_unexpected_interrupt ; 2 (assuming not taken) 
 ; cb2 interrupt detected
-  lda #>BIT_TIMER_INTERVAL       ; 4 Start the timer (low byte already in latch)
-  sta T1CH                       ; 4 (Starts at about 40 cycles in)
 
-  lda #(IERSETCLEAR | IT1)       ; Enable timer interrupts
+
+  lda #<FIRST_BIT_TIMER_INTERVAL ; 2 Load timer duration to center of first bit
+  sta T1CL                       ; 4
+  lda #>FIRST_BIT_TIMER_INTERVAL ; 2 Start the timer (low byte already in latch)
+  sta T1CH                       ; 4 (Starts at about 29 cycles in)
+
+  lda #IT1                       ; 2 Clear timer interrupt
+  sta IFR                        ; 4
+
+  lda #<BIT_TIMER_INTERVAL       ; 2 Load bit-to-bit timer duration into latches
+  sta T1LL                       ; 4
+  lda #>BIT_TIMER_INTERVAL       ; 2
+  sta T1LH                       ; 4
+
+  lda #(IERSETCLEAR | IT1)       ; 2 Enable timer interrupts
   sta IER
 
-  lda #IT1                       ; Clear timer interrupt
-  sta IFR
+  lda #ICB2                      ; 2 Disable the CB2 interrupt
+  sta IER                        ; 4
 
-  lda #ICB2                      ; Disable the CB2 interrupt
-  sta IER
-
-  lda #STATE_WAITING_FOR_TIMER
-  sta SERIAL_STATE
+  lda #STATE_WAITING_FOR_TIMER   ; 2
+  sta SERIAL_STATE               ; 3 (zero page)
  
-  bra interrupt_done
+  ; Dup of interrupt_done code
+  pla                            ; 4
+  rti                            ; 6 (About 41 cycles to get out)
 
 
 check_for_timer_interrupt:
-  lda IFR
-  and #IT1
-  beq error_unexpected_interrupt
+; lda IFR                        ; 4
+; and #IT1                       ; 2
+; beq error_unexpected_interrupt ; 2 (assuming not taken)
 ; Timer interrupt detected
-  lda PORTA
+  lda PORTA                      ; 4 (read at 22 cycles in)
   sec
   and #SERIAL_IN
-  beq process_serial_bit        ; pin is low meaning a 1 came in on serial
-  clc                           ; pin is high meaning a zero came in on serial
+  beq process_serial_bit         ; pin is low meaning a 1 came in on serial
+  clc                            ; pin is high meaning a zero came in on serial
 process_serial_bit:
   ror BIT_VALUE
 
-  lda #IT1                      ; Clear the timer interrupt
+  lda #IT1                       ; Clear the timer interrupt
   sta IFR
 
   dec BIT_COUNT
-  bne interrupt_done  
+  bne interrupt_done 
 
 ; Done with the byte
-  lda #IT1                      ; Disable timer interrupts
+  lda #IT1                       ; Disable timer interrupts
   sta IER
  
   phx
@@ -208,7 +218,7 @@ move1:
   sta UP_TIMES + 7
 
 ; Reset serial state
-  lda #ICB2                     ; Clear CB2 interrupt
+  lda #ICB2                      ; Clear CB2 interrupt
   sta IFR
 
   lda #NUMBER_OF_BITS
@@ -219,7 +229,7 @@ move1:
 
   stz BIT_VALUE
 
-  lda #(IERSETCLEAR | ICB2)     ; Renable CB2 interrupts
+  lda #(IERSETCLEAR | ICB2)      ; Renable CB2 interrupts
   sta IER
 
   bra interrupt_done
@@ -229,11 +239,11 @@ error_unexpected_interrupt:
 
 
 interrupt_done:
-  lda #ILED              ; Turn off interrupt activity LED
-  trb PORTA
+; lda #ILED                      ; 2 Turn off interrupt activity LED
+; trb PORTA                      ; 6
 
-  pla
-  rti                    ; Return to the program in the incoming bank
+  pla                            ; 4
+  rti                            ; 6 Return to the program in the incoming bank
 
 
 ; Vectors
