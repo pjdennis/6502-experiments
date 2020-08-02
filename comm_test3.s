@@ -31,7 +31,9 @@ DISPLAY_BITS_MASK = (DISPLAY_DATA_MASK | E | RW | RS)
 BIT_TIMER_INTERVAL       = 104  ; 1 MHz / 9600 bps
 ;BIT_TIMER_INTERVAL      = 208  ; 1 MHz / 4800 bps
 ;BIT_TIMER_INTERVAL      = 3333 ; 1 MHz / 300 bps
-FIRST_BIT_TIMER_INTERVAL = BIT_TIMER_INTERVAL * 1.33 - 29 - 22
+ICB2_TO_T1_START         = 21
+IT1_TO_READ              = 20
+FIRST_BIT_TIMER_INTERVAL = BIT_TIMER_INTERVAL * 1.33 - ICB2_TO_T1_START - IT1_TO_READ
 NUMBER_OF_BITS           = 8    ; Not counting start or stop bits. There's no parity bit.
 STATE_WAITING_FOR_CB2    = 0
 STATE_WAITING_FOR_TIMER  = 1
@@ -39,7 +41,7 @@ STATE_WAITING_FOR_TIMER  = 1
 ; Shared ram locations
 BIT_COUNT           = $00
 BIT_VALUE           = $01
-SERIAL_STATE        = $02
+SERIAL_WAITING      = $02
 DOWN_TIMES          = $2100
 UP_TIMES            = $2200
 
@@ -95,11 +97,14 @@ clear_loop:
   sta PCR
 
   ; Initialize for serial receive
+  lda #<FIRST_BIT_TIMER_INTERVAL ; Load timer duration to center of first bit
+  sta T1CL
+
   lda #NUMBER_OF_BITS
   sta BIT_COUNT
 
-  lda #STATE_WAITING_FOR_CB2
-  sta SERIAL_STATE
+  lda #1
+  sta SERIAL_WAITING
 
   stz BIT_VALUE
 
@@ -138,26 +143,21 @@ display_down:
 interrupt:                       ; 7 cycles to get into the handler
   pha                            ; 3
 
-; lda #ILED                      ; 2  Turn on interrupt activity LED
-; tsb PORTA                      ; 6
+; lda #ILED                          ; 2  Turn on interrupt activity LED
+; tsb PORTA                          ; 6
 
-  lda SERIAL_STATE               ; 3 (zero page)
-  cmp #STATE_WAITING_FOR_TIMER   ; 2
+  lda SERIAL_WAITING             ; 3 (zero page)
   beq check_for_timer_interrupt  ; 2 (when not taken)
-  ; Only other option is STATE_WAITING_FOR_CB2 - fall through
 
 
 check_for_cb2_interrupt:
-; lda IFR                        ; 4
-; and #ICB2                      ; 2
-; beq error_unexpected_interrupt ; 2 (assuming not taken) 
+; lda IFR                            ; 4
+; and #ICB2                          ; 2
+; beq error_unexpected_interrupt     ; 2 (assuming not taken) 
 ; cb2 interrupt detected
 
-
-  lda #<FIRST_BIT_TIMER_INTERVAL ; 2 Load timer duration to center of first bit
-  sta T1CL                       ; 4
   lda #>FIRST_BIT_TIMER_INTERVAL ; 2 Start the timer (low byte already in latch)
-  sta T1CH                       ; 4 (Starts at about 29 cycles in)
+  sta T1CH                       ; 4 (Starts at about 21 cycles in)
 
   lda #IT1                       ; 2 Clear timer interrupt
   sta IFR                        ; 4
@@ -168,25 +168,24 @@ check_for_cb2_interrupt:
   sta T1LH                       ; 4
 
   lda #(IERSETCLEAR | IT1)       ; 2 Enable timer interrupts
-  sta IER
+  sta IER                        ; 4
 
   lda #ICB2                      ; 2 Disable the CB2 interrupt
   sta IER                        ; 4
 
-  lda #STATE_WAITING_FOR_TIMER   ; 2
-  sta SERIAL_STATE               ; 3 (zero page)
+  stz SERIAL_WAITING             ; 3 (zero page)
  
   ; Dup of interrupt_done code
   pla                            ; 4
-  rti                            ; 6 (About 41 cycles to get out)
+  rti                            ; 6 (About 43 cycles to get out)
 
 
 check_for_timer_interrupt:
-; lda IFR                        ; 4
-; and #IT1                       ; 2
-; beq error_unexpected_interrupt ; 2 (assuming not taken)
+; lda IFR                            ; 4
+; and #IT1                           ; 2
+; beq error_unexpected_interrupt     ; 2 (assuming not taken)
 ; Timer interrupt detected
-  lda PORTA                      ; 4 (read at 22 cycles in)
+  lda PORTA                      ; 4 (read at 20 cycles in)
   sec
   and #SERIAL_IN
   beq process_serial_bit         ; pin is low meaning a 1 came in on serial
@@ -221,11 +220,14 @@ move1:
   lda #ICB2                      ; Clear CB2 interrupt
   sta IFR
 
+  lda #<FIRST_BIT_TIMER_INTERVAL ; Load timer duration to center of first bit
+  sta T1CL                       ;
+
   lda #NUMBER_OF_BITS
   sta BIT_COUNT
 
-  lda #STATE_WAITING_FOR_CB2
-  sta SERIAL_STATE
+  lda #1
+  sta SERIAL_WAITING
 
   stz BIT_VALUE
 
