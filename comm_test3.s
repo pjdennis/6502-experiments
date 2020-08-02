@@ -43,7 +43,8 @@ UP_TIMES            = $2200
 
   .org $8000
 
-  ; Place code for delay_routines at start of page to ensure no page boundary crossings during timing loops
+  ; Place code for delay_routines at start of page to ensure no page boundary crossings
+  ; during timing loops
   .include delay_routines.inc
 
   .include display_routines.inc
@@ -85,6 +86,10 @@ clear_loop:
   lda #ACR_T1_CONT
   sta ACR  
 
+  ; Load low byte timer interval into T1 latch
+  lda #<BIT_TIMER_INTERVAL
+  sta T1CL
+
   ; Configure CB2 for independent interrupt; Positive edge because we're inverting
   ; the incoming serial receive line to adapt voltage levels
   lda #PCR_CB2_IND_POS_E
@@ -113,8 +118,6 @@ display_up:
   inx
   cpx #8
   bne display_up
-  lda #200
-  jsr delay_10_thousandths
 
   lda #DISPLAY_SECOND_LINE
   jsr move_cursor
@@ -125,19 +128,16 @@ display_down:
   inx
   cpx #8
   bne display_down
-  lda #200
+  
+  lda #100
   jsr delay_10_thousandths
-
-  inc DOWN_TIMES + 2
 
   bra display_loop
 
 
 ; Interrupt handler - Read in serial data
-interrupt:                      ; 6?
+interrupt:                      ; 7 cycles to get into the handler
   pha                           ; 3
-
-  inc DOWN_TIMES + 3
 
   lda #ILED                     ; 2  Turn on interrupt activity LED
   tsb PORTA                     ; 4
@@ -151,16 +151,10 @@ interrupt:                      ; 6?
 check_for_cb2_interrupt:
   lda IFR                        ; 4
   and #ICB2                      ; 2
-  bne cb2_transition_detected    ; 3 (when taken)
-  jmp error_unexpected_interrupt ; relative branch to error is out of range 
-
-cb2_transition_detected:
-  inc DOWN_TIMES + 4
-
-  lda #<BIT_TIMER_INTERVAL       ; 4 Start the timer
-  sta T1CL                       ; 4
-  lda #>BIT_TIMER_INTERVAL       ; 4
-  sta T1CH                       ; 4 (Starts at about 54 cycles in)
+  beq error_unexpected_interrupt ; 2 (assuming not taken) 
+; cb2 interrupt detected
+  lda #>BIT_TIMER_INTERVAL       ; 4 Start the timer (low byte already in latch)
+  sta T1CH                       ; 4 (Starts at about 40 cycles in)
 
   lda #(IERSETCLEAR | IT1)       ; Enable timer interrupts
   sta IER
@@ -168,9 +162,6 @@ cb2_transition_detected:
   lda #IT1                       ; Clear timer interrupt
   sta IFR
 
-  ; TODO - no point clearing the CB2 interrupt here
-  lda #ICB2                      ; Clear CB2 interrupt
-  sta IFR
   lda #ICB2                      ; Disable the CB2 interrupt
   sta IER
 
@@ -181,14 +172,11 @@ cb2_transition_detected:
 
 
 check_for_timer_interrupt:
-  inc DOWN_TIMES + 5
-
   lda IFR
   and #IT1
   beq error_unexpected_interrupt
 ; Timer interrupt detected
   lda PORTA
-  INC DOWN_TIMES + 6
   sec
   and #SERIAL_IN
   beq process_serial_bit        ; pin is low meaning a 1 came in on serial
@@ -205,10 +193,6 @@ process_serial_bit:
 ; Done with the byte
   lda #IT1                      ; Disable timer interrupts
   sta IER
-
-  lda #$77                      ; Save the value
-  sta DOWN_TIMES
-  inc DOWN_TIMES + 1
  
   phx
   ldx #0
@@ -242,7 +226,6 @@ move1:
 
 
 error_unexpected_interrupt:
-  inc DOWN_TIMES + 7
 
 
 interrupt_done:
