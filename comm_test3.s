@@ -7,8 +7,8 @@ DDRA  = $6003
 BANK_MASK         = %00001111
 ILED              = %00010000
 LED               = %00100000
-SERIAL_IN         = %01000000
-FLASH_LED         = %10000000
+FLASH_LED         = %01000000
+SERIAL_IN         = %10000000
 
 BANK_START        = %00000100
 BANK_STOP         = %00010000
@@ -28,14 +28,15 @@ DISPLAY_BITS_MASK = (DISPLAY_DATA_MASK | E | RW | RS)
   .include 6522.inc
 
 
-BIT_TIMER_INTERVAL       = 104  ; 1 MHz / 9600 bps
+BIT_TIMER_INTERVAL       = 51   ; 1 MHz / 19200 bps
+;BIT_TIMER_INTERVAL      = 104  ; 1 MHz / 9600 bps
 ;BIT_TIMER_INTERVAL      = 208  ; 1 MHz / 4800 bps
 ;BIT_TIMER_INTERVAL      = 3333 ; 1 MHz / 300 bps
 ICB2_TO_T1_START         = 19
 IT1_TO_READ              = 20
 
 ;FIRST_BIT_TIMER_INTERVAL = BIT_TIMER_INTERVAL * 1.33 - ICB2_TO_T1_START - IT1_TO_READ
-FIRST_BIT_TIMER_INTERVAL = BIT_TIMER_INTERVAL * 1.7 - ICB2_TO_T1_START - IT1_TO_READ
+FIRST_BIT_TIMER_INTERVAL = BIT_TIMER_INTERVAL * 1.5 - ICB2_TO_T1_START - IT1_TO_READ
 
 NUMBER_OF_BITS           = 8    ; Not counting start or stop bits. There's no parity bit.
 STATE_WAITING_FOR_CB2    = 0
@@ -172,11 +173,13 @@ cb2_interrupt:
 
 timer_interrupt:
   lda PORTA                      ; 4 (read at 20 cycles in)
-  sec                            ; 2
-  and #SERIAL_IN                 ; 2
-  beq process_serial_bit         ; 3 (assuming taken) pin is low meaning a 1 came in on serial
-  clc                            ; 2 pin is high meaning a zero came in on serial
-process_serial_bit:
+;  sec                            ; 2
+;  and #SERIAL_IN                 ; 2
+;  beq process_serial_bit         ; 3 (assuming taken) pin is low meaning a 1 came in on serial
+;  clc                            ; 2 pin is high meaning a zero came in on serial
+;process_serial_bit:
+  rol                            ; 2 Assumes input pin is on bit 7
+
   ror BIT_VALUE                  ; 5 (zero page)
 
   lda #IT1                       ; 2 Clear the timer interrupt
@@ -186,7 +189,7 @@ process_serial_bit:
 
   ; Dup of interrupt_done code
   pla                            ; 4
-  rti                            ; 6 (About 31 cycles to get out)
+  rti                            ; 6 (About 25 cycles to get out)
 
 done_with_byte:
   lda #ICB2                      ; Clear CB2 interrupt
