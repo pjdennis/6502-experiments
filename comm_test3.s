@@ -191,8 +191,7 @@ process_serial_bit:
 
 ; Stop timer 1 while keeping timer interrupts enabled
   stz ACR                        ; Timer to 1 shot mode
-  lda #1                         ; Load a 1 into the timer; will expire after one cycle
-  sta T1CL
+  stz T1CL                       ; Load a 0 into the timer; will expire after one cycleL
   stz T1CH
 
   phx
