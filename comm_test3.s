@@ -31,7 +31,7 @@ DISPLAY_BITS_MASK = (DISPLAY_DATA_MASK | E | RW | RS)
 BIT_TIMER_INTERVAL       = 104  ; 1 MHz / 9600 bps
 ;BIT_TIMER_INTERVAL      = 208  ; 1 MHz / 4800 bps
 ;BIT_TIMER_INTERVAL      = 3333 ; 1 MHz / 300 bps
-ICB2_TO_T1_START         = 21 - 2
+ICB2_TO_T1_START         = 19
 IT1_TO_READ              = 20
 FIRST_BIT_TIMER_INTERVAL = BIT_TIMER_INTERVAL * 1.33 - ICB2_TO_T1_START - IT1_TO_READ
 NUMBER_OF_BITS           = 8    ; Not counting start or stop bits. There's no parity bit.
@@ -147,24 +147,18 @@ interrupt:                       ; 7 cycles to get into the handler
   pha                            ; 3
 
   lda SERIAL_WAITING             ; 3 (zero page)
-  beq timer_interrupt  ; 2 (when not taken)
+  beq timer_interrupt            ; 2 (when not taken)
 
 
 cb2_interrupt:
 ;  lda #>FIRST_BIT_TIMER_INTERVAL ; 2 Start the timer (low byte already in latch)
 ;  sta T1CH                       ; 4 (Starts at about 21 cycles in)
-  stz T1CH                       ; 4 Assumes FIRST_BIT_TIMER_INTERVAL < 256
-
-  lda #IT1                       ; 2 Clear timer interrupt
-  sta IFR                        ; 4
+  stz T1CH                       ; 4 Assumes FIRST_BIT_TIMER_INTERVAL < 256 (19 cycles in)
 
   lda #<BIT_TIMER_INTERVAL       ; 2 Load bit-to-bit timer duration into latches
   sta T1LL                       ; 4
 ;  lda #>BIT_TIMER_INTERVAL       ; 2 ; Commenting this assumes FIRST_BIT_TIMER_INTERVAL < 256
 ;  sta T1LH                       ; 4
-
-;  lda #(IERSETCLEAR | IT1)       ; 2 Enable timer interrupts
-;  sta IER                        ; 4
 
   lda #ICB2                      ; 2 Disable the CB2 interrupt
   sta IER                        ; 4
@@ -173,7 +167,7 @@ cb2_interrupt:
  
   ; Dup of interrupt_done code
   pla                            ; 4
-  rti                            ; 6 (About 43 cycles to get out)
+  rti                            ; 6 (About 25 cycles to get out)
 
 
 timer_interrupt:
@@ -195,15 +189,11 @@ process_serial_bit:
   lda #ICB2                      ; Clear CB2 interrupt
   sta IFR
 
-;  lda #IT1                       ; Disable timer interrupts
-;  sta IER
-; Attempt to stop timer 1 while keeping timer interrupts enabled
-  lda #0                         ; Timer to 1 shot mode
-  sta ACR
+; Stop timer 1 while keeping timer interrupts enabled
+  stz ACR                        ; Timer to 1 shot mode
   lda #1                         ; Load a 1 into the timer; will expire after one cycle
   sta T1CL
-  lda #0
-  sta T1CH
+  stz T1CH
 
   phx
   ldx #0
