@@ -28,10 +28,12 @@ DISPLAY_BITS_MASK = (DISPLAY_DATA_MASK | E | RW | RS)
   .include 6522.inc
 
 
-BIT_TIMER_INTERVAL       = 51   ; 1 MHz / 19200 bps
-;BIT_TIMER_INTERVAL      = 104  ; 1 MHz / 9600 bps
-;BIT_TIMER_INTERVAL      = 208  ; 1 MHz / 4800 bps
-;BIT_TIMER_INTERVAL      = 3333 ; 1 MHz / 300 bps
+BIT_TIMER_INTERVAL       = 69 - 1  ; 4 MHz / 57600 bps
+;BIT_TIMER_INTERVAL      = 104 - 1 ; 4 MHz / 38400 bps
+;BIT_TIMER_INTERVAL      = 52 - 1  ; 1 MHz / 19200 bps
+;BIT_TIMER_INTERVAL      = 104     ; 1 MHz / 9600 bps
+;BIT_TIMER_INTERVAL      = 208     ; 1 MHz / 4800 bps
+;BIT_TIMER_INTERVAL      = 3333    ; 1 MHz / 300 bps
 ICB2_TO_T1_START         = 19
 IT1_TO_READ              = 20
 
@@ -43,11 +45,12 @@ STATE_WAITING_FOR_CB2    = 0
 STATE_WAITING_FOR_TIMER  = 1
 
 ; Shared ram locations
-BIT_VALUE           = $00
-SERIAL_WAITING      = $01
+UP_TIMES_P          = $00 ; 2 bytes
+BIT_VALUE           = $02
+SERIAL_WAITING      = $03
 DOWN_TIMES          = $2100
 UP_TIMES            = $2200
-
+DATA_BUFFER         = $2300
 
   .org $8000
 
@@ -82,13 +85,17 @@ reset:
   jsr reset_and_enable_display_no_cursor
 
 
-  ldx #0
+  ldx #8
 clear_loop:
+  dex
   stz UP_TIMES, X
   stz DOWN_TIMES, X
-  inx
-  cpx #8
   bne clear_loop
+
+  lda #<(UP_TIMES + 8)
+  sta UP_TIMES_P
+  lda #>(UP_TIMES + 8)
+  sta UP_TIMES_P + 1
 
   ; Configure T1 continuous clock
   lda #ACR_T1_CONT
@@ -117,17 +124,29 @@ clear_loop:
 
 
 display_loop:
-  lda #DISPLAY_FIRST_LINE
-  jsr move_cursor
-  ldx #0
-display_up:
+  ldy #8                   ; Copy data to buffer in reverse order, ready for display
+  lda UP_TIMES_P
+  clc
+  adc #($100 - 8)
+  tax
+copy_loop:
   lda UP_TIMES, X
-  jsr display_hex
   inx
-  cpx #8
+  dey
+  sta DATA_BUFFER, Y
+  bne copy_loop
+
+  lda #DISPLAY_FIRST_LINE  ; Display the first line
+  jsr move_cursor
+  ldx #8                   ; Display data that is in reverse order in DATA_BUFFER
+display_up:
+  dex
+  lda DATA_BUFFER, X
+  jsr display_hex
+  cpx #0
   bne display_up
 
-  lda #DISPLAY_SECOND_LINE
+  lda #DISPLAY_SECOND_LINE ; Display the second line
   jsr move_cursor
   ldx #0
 display_down:
@@ -136,12 +155,14 @@ display_down:
   inx
   cpx #8
   bne display_down
-  
+
   lda #100
   jsr delay_10_thousandths
 
   bra display_loop
 
+
+  .org $ff00                     ; Place in it's own page to avoid extra cycles during branch
 
 ; Interrupt handler - Read in serial data
 interrupt:                       ; 7 cycles to get into the handler
@@ -192,42 +213,34 @@ timer_interrupt:
   rti                            ; 6 (About 25 cycles to get out)
 
 done_with_byte:
-  lda #ICB2                      ; Clear CB2 interrupt
-  sta IFR
+  lda #ICB2                      ; 2 Clear CB2 interrupt
+  sta IFR                        ; 4
 
 ; Stop timer 1 while keeping timer interrupts enabled
-  stz ACR                        ; Timer to 1 shot mode
-  stz T1CL                       ; Load a 0 into the timer; will expire after one cycleL
-  stz T1CH
+  stz ACR                        ; 4 Timer to 1 shot mode
+  stz T1CL                       ; 4 Load a 0 into the timer; will expire after one cycleL
+  stz T1CH                       ; 4
 
-  phx
-  ldx #0
-move1:
-  lda UP_TIMES + 1, X
-  sta UP_TIMES, X
-  inx
-  cpx #7
-  bne move1
-  plx
-
-  lda BIT_VALUE
-  sta UP_TIMES + 7
+  lda BIT_VALUE                  ; 3 (zero page)
+  sta (UP_TIMES_P)               ; 5 (indirect, zero page)
+  inc UP_TIMES_P                 ; 5 (zero page)
 
 ; Reset serial state
-  lda #<FIRST_BIT_TIMER_INTERVAL ; Load timer duration to center of first bit
-  sta T1CL
+  lda #<FIRST_BIT_TIMER_INTERVAL ; 2 Load timer duration to center of first bit
+  sta T1CL                       ; 4
 
-  lda #1
-  sta SERIAL_WAITING
+  lda #1                         ; 2
+  sta SERIAL_WAITING             ; 4
 
-  lda #$80
-  sta BIT_VALUE
+  lda #$80                       ; 2
+  sta BIT_VALUE                  ; 4
 
-  lda #(IERSETCLEAR | ICB2)      ; Renable CB2 interrupts
-  sta IER
+  lda #(IERSETCLEAR | ICB2)      ; 2 Renable CB2 interrupts
+  sta IER                        ; 4
 
+; TODO clear timer and CB2 interrupts in the same statement
   lda #IT1                       ; Clear the timer interrupt flag
-  sta IFR
+  sta IFR                        ; 4
 
   ; Configure T1 continuous clock
   lda #ACR_T1_CONT
