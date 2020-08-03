@@ -6,4 +6,8 @@ Ctrl-A + d
 screen -list
 screen -r
 
+minicom
+
+stty -f /dev/cu.usbserial-1410 cstopb 38400 & cat hello_4bit_banked.s > /dev/cu.usbserial-1410
+
 Using SiLabs CP210X NOT Prolific
