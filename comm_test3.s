@@ -45,12 +45,11 @@ STATE_WAITING_FOR_CB2    = 0
 STATE_WAITING_FOR_TIMER  = 1
 
 ; Shared ram locations
-UP_TIMES_P          = $00 ; 2 bytes
+RECEIVED_DATA_P     = $00 ; 2 bytes
 BIT_VALUE           = $02
 SERIAL_WAITING      = $03
-DOWN_TIMES          = $2100
-UP_TIMES            = $2200
-DATA_BUFFER         = $2300
+RECEIVED_DATA       = $2100
+DATA_BUFFER         = $2200
 
   .org $8000
 
@@ -85,17 +84,17 @@ reset:
   jsr reset_and_enable_display_no_cursor
 
 
-  ldx #8
+  ldx #16
+  lda #' '
 clear_loop:
   dex
-  stz UP_TIMES, X
-  stz DOWN_TIMES, X
+  sta RECEIVED_DATA, X
   bne clear_loop
 
-  lda #<(UP_TIMES + 8)
-  sta UP_TIMES_P
-  lda #>(UP_TIMES + 8)
-  sta UP_TIMES_P + 1
+  lda #<(RECEIVED_DATA + 16)
+  sta RECEIVED_DATA_P
+  lda #>(RECEIVED_DATA + 16)
+  sta RECEIVED_DATA_P + 1
 
   ; Configure T1 continuous clock
   lda #ACR_T1_CONT
@@ -124,42 +123,58 @@ clear_loop:
 
 
 display_loop:
-  ldy #8                   ; Copy data to buffer in reverse order, ready for display
-  lda UP_TIMES_P
+  ldy #0                   ; Copy data to buffer, ready for display
+  lda RECEIVED_DATA_P
   clc
-  adc #($100 - 8)
+  adc #($100 - 16)
   tax
 copy_loop:
-  lda UP_TIMES, X
-  inx
-  dey
+  lda RECEIVED_DATA, X
   sta DATA_BUFFER, Y
+  inx
+  iny
+  cpy #16
   bne copy_loop
 
-  lda #DISPLAY_FIRST_LINE  ; Display the first line
+  lda #DISPLAY_FIRST_LINE  ; Display the first line - hex characters
   jsr move_cursor
   ldx #8                   ; Display data that is in reverse order in DATA_BUFFER
-display_up:
-  dex
+display_hex_loop:
   lda DATA_BUFFER, X
   jsr display_hex
-  cpx #0
-  bne display_up
+  inx
+  cpx #16
+  bne display_hex_loop
 
-  lda #DISPLAY_SECOND_LINE ; Display the second line
+  lda #DISPLAY_SECOND_LINE ; Display the second line - ASCII characters
   jsr move_cursor
   ldx #0
-display_down:
-  lda DOWN_TIMES, X
-  jsr display_hex
+display_ascii_loop:
+  lda DATA_BUFFER, X
+  jsr force_to_printable
+  jsr display_character
   inx
-  cpx #8
-  bne display_down
+  cpx #16
+  bne display_ascii_loop
 
   lda #100
   jsr delay_10_thousandths
 
   bra display_loop
+
+
+; On entry A = Character code
+; On exit  A = Character code if printable else %10100101 (dot char)
+; Note that ~ is not available on the display - could make custom char
+force_to_printable:
+  cmp #' '
+  bmi not_printable
+  cmp #('~' + 1)
+  bpl not_printable
+  rts
+not_printable:
+  lda #%10100101 ; Dot in center of cell
+  rts  
 
 
   .org $ff00                     ; Place in it's own page to avoid extra cycles during branch
@@ -222,8 +237,8 @@ done_with_byte:
   stz T1CH                       ; 4
 
   lda BIT_VALUE                  ; 3 (zero page)
-  sta (UP_TIMES_P)               ; 5 (indirect, zero page)
-  inc UP_TIMES_P                 ; 5 (zero page)
+  sta (RECEIVED_DATA_P)          ; 5 (indirect, zero page)
+  inc RECEIVED_DATA_P            ; 5 (zero page)
 
 ; Reset serial state
   lda #<FIRST_BIT_TIMER_INTERVAL ; 2 Load timer duration to center of first bit
