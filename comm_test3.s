@@ -186,7 +186,7 @@ process_serial_bit:
 
   ; Dup of interrupt_done code
   pla                            ; 4
-  rti                            ; 6 (About 34 cycles to get out)
+  rti                            ; 6 (About 31 cycles to get out)
 
 done_with_byte:
   lda #ICB2                      ; Clear CB2 interrupt
