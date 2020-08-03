@@ -33,15 +33,17 @@ BIT_TIMER_INTERVAL       = 104  ; 1 MHz / 9600 bps
 ;BIT_TIMER_INTERVAL      = 3333 ; 1 MHz / 300 bps
 ICB2_TO_T1_START         = 19
 IT1_TO_READ              = 20
-FIRST_BIT_TIMER_INTERVAL = BIT_TIMER_INTERVAL * 1.33 - ICB2_TO_T1_START - IT1_TO_READ
+
+;FIRST_BIT_TIMER_INTERVAL = BIT_TIMER_INTERVAL * 1.33 - ICB2_TO_T1_START - IT1_TO_READ
+FIRST_BIT_TIMER_INTERVAL = BIT_TIMER_INTERVAL * 1.7 - ICB2_TO_T1_START - IT1_TO_READ
+
 NUMBER_OF_BITS           = 8    ; Not counting start or stop bits. There's no parity bit.
 STATE_WAITING_FOR_CB2    = 0
 STATE_WAITING_FOR_TIMER  = 1
 
 ; Shared ram locations
-BIT_COUNT           = $00
-BIT_VALUE           = $01
-SERIAL_WAITING      = $02
+BIT_VALUE           = $00
+SERIAL_WAITING      = $01
 DOWN_TIMES          = $2100
 UP_TIMES            = $2200
 
@@ -100,13 +102,11 @@ clear_loop:
   lda #<FIRST_BIT_TIMER_INTERVAL ; Load timer duration to center of first bit
   sta T1CL
 
-  lda #NUMBER_OF_BITS
-  sta BIT_COUNT
-
   lda #1
   sta SERIAL_WAITING
 
-  stz BIT_VALUE
+  lda #$80
+  sta BIT_VALUE
 
   lda #(IERSETCLEAR | ICB2) ; Enable CB2 interrupts
   sta IER
@@ -172,20 +172,23 @@ cb2_interrupt:
 
 timer_interrupt:
   lda PORTA                      ; 4 (read at 20 cycles in)
-  sec
-  and #SERIAL_IN
-  beq process_serial_bit         ; pin is low meaning a 1 came in on serial
-  clc                            ; pin is high meaning a zero came in on serial
+  sec                            ; 2
+  and #SERIAL_IN                 ; 2
+  beq process_serial_bit         ; 3 (assuming taken) pin is low meaning a 1 came in on serial
+  clc                            ; 2 pin is high meaning a zero came in on serial
 process_serial_bit:
-  ror BIT_VALUE
+  ror BIT_VALUE                  ; 5 (zero page)
 
-  lda #IT1                       ; Clear the timer interrupt
-  sta IFR
+  lda #IT1                       ; 2 Clear the timer interrupt
+  sta IFR                        ; 4
 
-  dec BIT_COUNT
-  bne interrupt_done 
+  bcs done_with_byte             ; 2 (when not taken)
 
-; Done with the byte
+  ; Dup of interrupt_done code
+  pla                            ; 4
+  rti                            ; 6 (About 34 cycles to get out)
+
+done_with_byte:
   lda #ICB2                      ; Clear CB2 interrupt
   sta IFR
 
@@ -211,13 +214,11 @@ move1:
   lda #<FIRST_BIT_TIMER_INTERVAL ; Load timer duration to center of first bit
   sta T1CL
 
-  lda #NUMBER_OF_BITS
-  sta BIT_COUNT
-
   lda #1
   sta SERIAL_WAITING
 
-  stz BIT_VALUE
+  lda #$80
+  sta BIT_VALUE
 
   lda #(IERSETCLEAR | ICB2)      ; Renable CB2 interrupts
   sta IER
