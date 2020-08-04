@@ -28,8 +28,10 @@ DISPLAY_BITS_MASK = (DISPLAY_DATA_MASK | E | RW | RS)
   .include 6522.inc
 
 
-BIT_TIMER_INTERVAL       = 104 - 1 ; 2 MHz / 19200 bps
+UPLOAD_SIZE               = 431
+
 ;BIT_TIMER_INTERVAL      = 208 - 1 ; 2 MHz / 9600 bps   ; 2 byte counter
+BIT_TIMER_INTERVAL      = 104 - 1 ; 2 MHz / 19200 bps
 ;BIT_TIMER_INTERVAL      = 52 - 1  ; 2 MHz / 38400 bps
 ;BIT_TIMER_INTERVAL      = 69 - 1  ; 4 MHz / 57600 bps
 ;BIT_TIMER_INTERVAL      = 104 - 1 ; 4 MHz / 38400 bps
@@ -48,12 +50,16 @@ STATE_WAITING_FOR_CB2    = 0
 STATE_WAITING_FOR_TIMER  = 1
 
 ; Shared ram locations
-RECEIVED_DATA_P     = $00 ; 2 bytes
-RECEIVE_COUNTER     = $02 ; 2 bytes
-BIT_VALUE           = $04
-SERIAL_WAITING      = $05
-RECEIVED_DATA       = $2000
-DATA_BUFFER         = $2100
+DISPLAY_STRING_PARAM     = $00 ; 2 bytes
+UPLOAD_LOCATION          = $02 ; 2 bytes
+BIT_VALUE                = $04
+SERIAL_WAITING           = $05
+DATA_LOADED              = $06
+
+UPLOAD_TO                = $2000
+UPLOAD_TO_STOP           = UPLOAD_TO + UPLOAD_SIZE
+
+INTERRUPT_ROUTINE        = $3f00
 
   .org $8000
 
@@ -88,20 +94,21 @@ reset:
   jsr reset_and_enable_display_no_cursor
 
 
-  ldx #16
-  lda #' '
-clear_loop:
-  dex
-  sta RECEIVED_DATA, X
-  bne clear_loop
+  ; relocate the interrupt handler
+  ldx #0
+relocate_copy_loop:
+  cpx #(interrupt_end - interrupt)
+  beq relocate_copy_done
+  lda interrupt, X
+  sta INTERRUPT_ROUTINE, X
+  inx
+  bra relocate_copy_loop
+relocate_copy_done:
 
-  lda #<(RECEIVED_DATA + 16)
-  sta RECEIVED_DATA_P
-  lda #>(RECEIVED_DATA + 16)
-  sta RECEIVED_DATA_P + 1
-
-  stz RECEIVE_COUNTER
-  stz RECEIVE_COUNTER + 1
+  lda #<UPLOAD_TO
+  sta UPLOAD_LOCATION
+  lda #>UPLOAD_TO
+  sta UPLOAD_LOCATION + 1
 
   ; Configure T1 continuous clock
   lda #ACR_T1_CONT
@@ -113,7 +120,7 @@ clear_loop:
   sta PCR
 
   ; Initialize for serial receive
-  lda #<FIRST_BIT_TIMER_INTERVAL ; Load timer duration to center of first bit
+  lda #<FIRST_BIT_TIMER_INTERVAL  ; Load timer duration to center of first bit
   sta T1CL
 
   lda #1
@@ -122,72 +129,70 @@ clear_loop:
   lda #$80
   sta BIT_VALUE
 
-  lda #(IERSETCLEAR | ICB2) ; Enable CB2 interrupts
+  stz DATA_LOADED
+
+  lda #(IERSETCLEAR | ICB2 | IT1) ; Enable CB2 and timer interrupts
   sta IER
 
-  lda #(IERSETCLEAR | IT1)       ; Enable timer interrupts
-  sta IER
+  lda #<ready_message
+  ldx #>ready_message
+  jsr display_string
 
+wait_for_upload:
+  lda DATA_LOADED
+  beq wait_for_upload
 
-display_loop:
-  ldy #0                   ; Copy data to buffer, ready for display
-  lda RECEIVED_DATA_P
-  clc
-  adc #($100 - 16)
+  lda #DISPLAY_FIRST_LINE
+  jsr move_cursor
+  lda #<loaded_message
+  ldx #>loaded_message
+  jsr display_string
+
+  sec
+  lda UPLOAD_LOCATION
+  sbc #<UPLOAD_TO
   tax
-copy_loop:
-  lda RECEIVED_DATA, X
-  sta DATA_BUFFER, Y
-  inx
-  iny
-  cpy #16
-  bne copy_loop
+  lda UPLOAD_LOCATION + 1
+  sbc #>UPLOAD_TO
 
-  lda #DISPLAY_FIRST_LINE  ; Display the first line - hex characters
+  jsr display_hex
+  txa
+  jsr display_hex
+   
+  lda #0                         ; Set CB2 back to default behavior
+  sta PCR 
+
+  lda #(IERSETCLEAR | IT1)       ; Disable T1 interrupts
+  sta IER
+
+  lda #$40                       ; rti opcode
+  sta INTERRUPT_ROUTINE          ; set a 'null' interrupt routine
+
+  lda #DISPLAY_SECOND_LINE
   jsr move_cursor
-  ldx #8
-display_hex_loop:
-  lda DATA_BUFFER, X
-  jsr display_hex
-  inx
-  cpx #16
-  bne display_hex_loop
+  lda #<ready_to_run_message
+  ldx #>ready_to_run_message
+  jsr display_string
 
-  lda #DISPLAY_SECOND_LINE ; Display the second line - counter and ASCII characters
-  jsr move_cursor
+  jmp UPLOAD_TO                  ; Jump to and run the main program
 
-  lda RECEIVE_COUNTER + 1
-  jsr display_hex
-  lda RECEIVE_COUNTER
-  jsr display_hex
+ready_message:        asciiz 'Ready.'
+loaded_message:       asciiz 'Loaded: '
+ready_to_run_message: asciiz 'Ready to run.'
 
-  ldx #4
-display_ascii_loop:
-  lda DATA_BUFFER, X
-  jsr force_to_printable
+
+display_string:
+  sta DISPLAY_STRING_PARAM
+  stx DISPLAY_STRING_PARAM + 1
+  ldy #0
+print_loop:
+  lda (DISPLAY_STRING_PARAM),Y
+  beq done_printing
   jsr display_character
-  inx
-  cpx #16
-  bne display_ascii_loop
-
-  lda #100
-  jsr delay_10_thousandths
-
-  bra display_loop
-
-
-; On entry A = Character code
-; On exit  A = Character code if printable else %10100101 (dot char)
-; Note that ~ and \ are not available on the display - could make custom chars
-force_to_printable:
-  cmp #' '
-  bmi not_printable
-  cmp #('~' + 1)
-  bpl not_printable
+  iny
+  jmp print_loop
+done_printing:
   rts
-not_printable:
-  lda #%10100101 ; Dot in center of cell
-  rts  
 
 
   .org $ff00                     ; Place in it's own page to avoid extra cycles during branch
@@ -262,16 +267,31 @@ done_with_byte:
   stz T1CH                       ; 4
 
   lda BIT_VALUE                  ; 3 (zero page)
-  sta (RECEIVED_DATA_P)          ; 5 (indirect, zero page)
-  inc RECEIVED_DATA_P            ; 5 (zero page)
+  sta (UPLOAD_LOCATION)
+  inc UPLOAD_LOCATION
+  bne check_for_upload_done
+  inc UPLOAD_LOCATION + 1
 
+check_for_upload_done:
   lda #(IT1 | ICB2)              ; Clear the timer and cb2 interrupt flags
   sta IFR                        ; 4
 
-  inc RECEIVE_COUNTER
-  bne counter_incremented
-  inc RECEIVE_COUNTER + 1
-counter_incremented:
+  lda UPLOAD_LOCATION
+  cmp #<UPLOAD_TO_STOP
+  bne upload_not_done
+  lda UPLOAD_LOCATION + 1
+  cmp #>UPLOAD_TO_STOP
+  bne upload_not_done
+; Upload done
+  lda #1
+  sta DATA_LOADED
+
+  lda #ILED                      ; Turn off interrupt activity LED
+  trb PORTA
+
+  bra interrupt_done    
+
+upload_not_done:
 
 ; Reset serial state
   lda #<FIRST_BIT_TIMER_INTERVAL ; 2 Load timer duration to center of first bit
@@ -286,11 +306,9 @@ counter_incremented:
   lda #(IERSETCLEAR | ICB2)      ; 2 Renable CB2 interrupts
   sta IER                        ; 4
 
-; TODO clear timer and CB2 interrupts in the same statement
-
   ; Configure T1 continuous clock
   lda #ACR_T1_CONT
-  sta ACR  
+  sta ACR 
 
   lda #ILED                      ; Turn off interrupt activity LED
   trb PORTA
@@ -298,9 +316,9 @@ counter_incremented:
 interrupt_done:
   pla                            ; 4
   rti                            ; 6 Return to the program in the incoming bank
-
+interrupt_end:
 
 ; Vectors
   .org $fffc
   .word reset
-  .word interrupt
+  .word INTERRUPT_ROUTINE

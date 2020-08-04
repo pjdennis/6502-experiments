@@ -1,8 +1,16 @@
 ./vasm6502_oldstyle -wdc02 -wfail -Fbin -dotdir <filename>
 minipro -p AT28C256 -w a.out || echo -e '\x1B[1;31mFailed!\x1B[0m\a'
 
+screen /dev/cu.usbserial-1410 19200
+
+
 screen /dev/cu.usbserial-1410 115200
-Ctrl-A + d
+Detatch: Ctrl-A + Ctrl-D
+screen -X readreg p ../hello_ram.out && screen -X paste p
+
+screen -X -p 0 readreg p hello_ram.out && screen -X -p 0 paste p
+
+
 screen -list
 screen -r
 
