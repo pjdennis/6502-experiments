@@ -11,6 +11,9 @@ screen -X readreg p ../hello_ram.out && screen -X paste p
 screen -X -p 0 readreg p hello_ram.out && screen -X -p 0 paste p
 
 
+./vasm6502_oldstyle -wdc02 -wfail -Fbin -dotdir hello_flash.s -o hello_flash.out && python transfer.py hello_flash.out && cksum -o 1 hello_flash.out | sed -n 's/\(^[0-9]*\) .*/obase=16; \1/p' | bc
+
+
 screen -list
 screen -r
 
