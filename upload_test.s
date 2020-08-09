@@ -6,7 +6,8 @@ DDRA  = $6003
 ; PORTA assignments
 BANK_MASK         = %00001111
 ILED              = %00010000
-LED               = %00100000
+;LED              = %00100000
+BUTTON            = %00100000
 FLASH_LED         = %01000000
 SERIAL_IN         = %10000000
 
@@ -27,11 +28,8 @@ DISPLAY_BITS_MASK = (DISPLAY_DATA_MASK | E | RW | RS)
   .include display_parameters.inc
   .include 6522.inc
 
-
-UPLOAD_SIZE               = 431
-
 ;BIT_TIMER_INTERVAL      = 208 - 1 ; 2 MHz / 9600 bps   ; 2 byte counter
-BIT_TIMER_INTERVAL      = 104 - 1 ; 2 MHz / 19200 bps
+BIT_TIMER_INTERVAL       = 104 - 1 ; 2 MHz / 19200 bps
 ;BIT_TIMER_INTERVAL      = 52 - 1  ; 2 MHz / 38400 bps
 ;BIT_TIMER_INTERVAL      = 69 - 1  ; 4 MHz / 57600 bps
 ;BIT_TIMER_INTERVAL      = 104 - 1 ; 4 MHz / 38400 bps
@@ -52,12 +50,15 @@ STATE_WAITING_FOR_TIMER  = 1
 ; Shared ram locations
 DISPLAY_STRING_PARAM     = $00 ; 2 bytes
 UPLOAD_LOCATION          = $02 ; 2 bytes
-BIT_VALUE                = $04
-SERIAL_WAITING           = $05
-DATA_LOADED              = $06
+UPLOAD_L_CHK_1           = $04 ; 2 bytes
+UPLOAD_L_CHK_2           = $06 ; 2 bytes
+CHECKSUM_P               = $08 ; 2 bytes
+CHECKSUM_VALUE           = $0a ; 2 bytes
+BIT_VALUE                = $0c
+SERIAL_WAITING           = $0d
+DATA_LOAD_STARTED        = $0e
 
 UPLOAD_TO                = $2000
-UPLOAD_TO_STOP           = UPLOAD_TO + UPLOAD_SIZE
 
 INTERRUPT_ROUTINE        = $3f00
 
@@ -81,7 +82,7 @@ reset:
   ; Initialize 6522 port A (memory banking control)
   lda #BANK_START
   sta PORTA
-  lda #(BANK_MASK | LED | ILED | FLASH_LED) ; Set pin direction  on port A
+  lda #(BANK_MASK | ILED) ; Set pin direction  on port A
   sta DDRA
 
   ; Initialize 6522 port B (display control)
@@ -129,7 +130,7 @@ relocate_copy_done:
   lda #$80
   sta BIT_VALUE
 
-  stz DATA_LOADED
+  stz DATA_LOAD_STARTED
 
   lda #(IERSETCLEAR | ICB2 | IT1) ; Enable CB2 and timer interrupts
   sta IER
@@ -138,12 +139,49 @@ relocate_copy_done:
   ldx #>ready_message
   jsr display_string
 
-wait_for_upload:
-  lda DATA_LOADED
-  beq wait_for_upload
+wait_for_upload_start:
+  lda DATA_LOAD_STARTED
+  beq wait_for_upload_start
 
-  lda #DISPLAY_FIRST_LINE
-  jsr move_cursor
+wait_for_upload:
+  sei
+  lda UPLOAD_LOCATION
+  ldx UPLOAD_LOCATION + 1
+  cli
+
+  sta UPLOAD_L_CHK_1
+  stx UPLOAD_L_CHK_1 + 1
+
+  ldx #10
+upload_wait_loop:
+  lda #100
+  jsr delay_10_thousandths
+  dex
+  bne upload_wait_loop
+
+  sei
+  lda UPLOAD_LOCATION
+  ldx UPLOAD_LOCATION + 1
+  cli
+
+  sta UPLOAD_L_CHK_2
+  stx UPLOAD_L_CHK_2 + 1
+
+  lda UPLOAD_L_CHK_1
+  cmp UPLOAD_L_CHK_2
+  bne wait_for_upload
+  lda UPLOAD_L_CHK_1 + 1
+  cmp UPLOAD_L_CHK_2 + 1
+  bne wait_for_upload
+
+; upload done
+  lda #0                         ; Set CB2 back to default behavior
+  sta PCR 
+
+  lda #(IERSETCLEAR | IT1 | ICB2) ; Disable T1 and CB2 interrupts
+  sta IER
+
+  jsr clear_display
   lda #<loaded_message
   ldx #>loaded_message
   jsr display_string
@@ -158,15 +196,15 @@ wait_for_upload:
   jsr display_hex
   txa
   jsr display_hex
-   
-  lda #0                         ; Set CB2 back to default behavior
-  sta PCR 
 
-  lda #(IERSETCLEAR | IT1)       ; Disable T1 interrupts
-  sta IER
+  lda #' '
+  jsr display_character
 
-  lda #$40                       ; rti opcode
-  sta INTERRUPT_ROUTINE          ; set a 'null' interrupt routine
+  jsr calculate_checksum
+  lda CHECKSUM_VALUE + 1
+  jsr display_hex
+  lda CHECKSUM_VALUE
+  jsr display_hex
 
   lda #DISPLAY_SECOND_LINE
   jsr move_cursor
@@ -174,11 +212,23 @@ wait_for_upload:
   ldx #>ready_to_run_message
   jsr display_string
 
+  jsr wait_for_button
+
+  jsr clear_display
+  lda #<running_message
+  ldx #>running_message
+  jsr display_string
+
+  lda #$40                       ; rti opcode
+  sta INTERRUPT_ROUTINE          ; set a 'null' interrupt routine
+
   jmp UPLOAD_TO                  ; Jump to and run the main program
 
+
 ready_message:        asciiz 'Ready.'
-loaded_message:       asciiz 'Loaded: '
+loaded_message:       asciiz 'Loaded '
 ready_to_run_message: asciiz 'Ready to run.'
+running_message:      asciiz 'Running...'
 
 
 display_string:
@@ -194,6 +244,63 @@ print_loop:
 done_printing:
   rts
 
+
+wait_for_button:
+  lda PORTA
+  and #BUTTON
+  bne wait_for_button
+wait_button_up:
+  ldy #5
+wait_button_up_loop:
+  lda #100
+  jsr delay_10_thousandths
+  lda PORTA
+  and #BUTTON
+  beq wait_button_up
+  dey
+  bne wait_button_up_loop
+  rts
+
+; On exit X, Y are preserved
+;         A is not preserved
+calculate_checksum:
+  stz CHECKSUM_VALUE
+  stz CHECKSUM_VALUE + 1
+
+  lda #<UPLOAD_TO
+  sta CHECKSUM_P
+  lda #>UPLOAD_TO
+  sta CHECKSUM_P + 1
+
+checksum_loop:
+  lda CHECKSUM_P
+  cmp UPLOAD_LOCATION
+  bne checksum_not_done
+  lda CHECKSUM_P + 1
+  cmp UPLOAD_LOCATION + 1
+  beq checksum_done
+
+checksum_not_done:
+  lda CHECKSUM_VALUE + 1
+  ror
+  ror CHECKSUM_VALUE
+  ror CHECKSUM_VALUE + 1
+
+  clc
+  lda (CHECKSUM_P)
+  adc CHECKSUM_VALUE
+  sta CHECKSUM_VALUE
+  lda #0
+  adc CHECKSUM_VALUE + 1
+  sta CHECKSUM_VALUE + 1
+
+  inc CHECKSUM_P
+  bne checksum_loop
+  inc CHECKSUM_P + 1
+  bra checksum_loop
+
+checksum_done:
+  rts
 
   .org $ff00                     ; Place in it's own page to avoid extra cycles during branch
 
@@ -266,32 +373,18 @@ done_with_byte:
   stz T1CL                       ; 4 Load a 0 into the timer; will expire after one cycle
   stz T1CH                       ; 4
 
+  lda #1
+  sta DATA_LOAD_STARTED
+
   lda BIT_VALUE                  ; 3 (zero page)
   sta (UPLOAD_LOCATION)
   inc UPLOAD_LOCATION
-  bne check_for_upload_done
+  bne upload_location_incremented
   inc UPLOAD_LOCATION + 1
 
-check_for_upload_done:
+upload_location_incremented:
   lda #(IT1 | ICB2)              ; Clear the timer and cb2 interrupt flags
   sta IFR                        ; 4
-
-  lda UPLOAD_LOCATION
-  cmp #<UPLOAD_TO_STOP
-  bne upload_not_done
-  lda UPLOAD_LOCATION + 1
-  cmp #>UPLOAD_TO_STOP
-  bne upload_not_done
-; Upload done
-  lda #1
-  sta DATA_LOADED
-
-  lda #ILED                      ; Turn off interrupt activity LED
-  trb PORTA
-
-  bra interrupt_done    
-
-upload_not_done:
 
 ; Reset serial state
   lda #<FIRST_BIT_TIMER_INTERVAL ; 2 Load timer duration to center of first bit
