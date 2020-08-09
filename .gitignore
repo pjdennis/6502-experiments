@@ -1,6 +1,6 @@
 *.obj
 *.bin
-a.out
+*.out
 vasm6502_oldstyle
 vobjdump
 *.swp
