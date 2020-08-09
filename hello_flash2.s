@@ -47,6 +47,50 @@ ROM_DISPLAY_CHARACTER = display_character + ($8000 - $2000) - 3
 
 
 program_entry:
+  lda #(BANK_MASK | ILED)
+  sta DDRA
+
+button_wait:
+  lda PORTA
+  and #BUTTON
+  bne button_wait
+
+
+  lda #'X'
+  ;jsr ROM_DISPLAY_CHARACTER
+  jsr display_character
+
+flash_loop:
+  lda PORTA
+  eor #ILED
+  sta PORTA
+
+;  ldx #10
+;delay_loop:
+;  lda #200
+;  jsr delay_10_thousandths
+;  dex
+;  bne delay_loop
+
+;  ldx #0
+;loop1:
+;  ldy #0
+;loop2:
+;  nop
+;  nop
+;  nop
+;  nop
+;  nop
+;  nop
+;  nop
+;  nop
+;  dey
+;  bne loop2
+;  dex
+;  bne loop1
+  bra flash_loop
+
+
   ; Clear the display
   lda #CMD_CLEAR_DISPLAY
   jsr display_command
@@ -57,17 +101,7 @@ program_entry:
 
   stz COUNTER
   stz COUNTER + 1
-
-  ldx #0
 forever:
-  inx
-  cpx #10
-  bne do_not_flash
-  lda PORTA
-  eor #ILED
-  sta PORTA
-  ldx #0
-do_not_flash:
   lda #DISPLAY_SECOND_LINE
   jsr move_cursor
   lda COUNTER + 1
@@ -83,6 +117,10 @@ do_not_flash:
 
 
 message: asciiz 'Hello, from ram!'
+
+
+my_routine:
+  rts
 
 
 display_string:
