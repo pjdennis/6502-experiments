@@ -28,15 +28,13 @@ DISPLAY_BITS_MASK = (DISPLAY_DATA_MASK | E | RW | RS)
   .include display_parameters.inc
   .include 6522.inc
 
-;BIT_TIMER_INTERVAL      = 208 - 1 ; 2 MHz / 9600 bps   ; 2 byte counter
-BIT_TIMER_INTERVAL       = 104 - 1 ; 2 MHz / 19200 bps
-;BIT_TIMER_INTERVAL      = 52 - 1  ; 2 MHz / 38400 bps
-;BIT_TIMER_INTERVAL      = 69 - 1  ; 4 MHz / 57600 bps
-;BIT_TIMER_INTERVAL      = 104 - 1 ; 4 MHz / 38400 bps
-;BIT_TIMER_INTERVAL      = 52 - 1  ; 1 MHz / 19200 bps
-;BIT_TIMER_INTERVAL      = 104     ; 1 MHz / 9600 bps
-;BIT_TIMER_INTERVAL      = 208     ; 1 MHz / 4800 bps
-;BIT_TIMER_INTERVAL      = 3333    ; 1 MHz / 300 bps
+;BIT_TIMER_INTERVAL      =  208 - 1 ; 2 MHz 9600  bps;  1 MHz 4800  bps ; 2 byte counter
+BIT_TIMER_INTERVAL       =  104 - 1 ; 2 MHz 19200 bps;  1 MHz 9600  bps ; "
+;BIT_TIMER_INTERVAL      =   52 - 1 ; 2 MHz 38400 bps;  1 MHz 19200 bps ; 1 byte counter
+;BIT_TIMER_INTERVAL      =   69 - 1 ; 4 MHz / 57600 bps
+;BIT_TIMER_INTERVAL      =  104 - 1 ; 4 MHz / 38400 bps
+;BIT_TIMER_INTERVAL      = 3333 - 1 ; 1 MHz / 300 bps
+
 ICB2_TO_T1_START         = 19
 IT1_TO_READ              = 20
 
