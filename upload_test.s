@@ -176,7 +176,7 @@ upload_wait_loop:
   lda #0                         ; Set CB2 back to default behavior
   sta PCR 
 
-  lda #(IERSETCLEAR | IT1 | ICB2) ; Disable T1 and CB2 interrupts
+  lda #(IT1 | ICB2) ; Disable T1 and CB2 interrupts
   sta IER
 
   jsr clear_display
