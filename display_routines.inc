@@ -41,8 +41,7 @@ reset_display:
   lda #(CMD_DISPLAY_ON_OFF_CONTROL | %000) ; Display off; cursor off; blink off 
   jsr display_command
 
-  lda #(CMD_CLEAR_DISPLAY)                 ; Clear display
-  jsr display_command
+  jsr clear_display
 
   rts
 
@@ -184,6 +183,14 @@ send_to_display:
   plx
   rts
 
+
+; On exit A, X, Y preserved
+clear_display:
+  pha
+  lda #CMD_CLEAR_DISPLAY     ; clear display
+  jsr display_command
+  pla
+  rts
 
 ; On entry A = location to move to
 ; On exit  X, Y preserved
