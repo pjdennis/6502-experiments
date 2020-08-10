@@ -29,6 +29,11 @@ delay_tenth:
   rts
 
 
+CP_M_PARAM_BYTES = 6
+CP_M_DEST_OFFSET = 0
+CP_M_SRC_OFFSET  = 2
+CP_M_LEN_OFFSET  = 4
+
 ; On entry return address location contains destination, source, length
 ; On exit  A, X, Y are preserved
 copy_memory:
@@ -36,55 +41,58 @@ copy_memory:
   phx
   phy
 
+  ; Read parameter block location (minus one) into CP_M_BLOCK_P and fix up the return address
   tsx
   clc
-  lda $104,X          ; Low byte of return address
-  sta CP_BLOCK_P
-  adc #6              ; This number of bytes of parameters
+  lda $104,X                  ; Low byte of return address
+  sta CP_M_BLOCK_P
+  adc #CP_M_PARAM_BYTES       ; This number of bytes of parameters
   sta $104,X
-  lda $105,X          ; High byte of return address
-  sta CP_BLOCK_P + 1
+  lda $105,X                  ; High byte of return address
+  sta CP_M_BLOCK_P + 1
   adc #0
   sta $105,X
 
-  ldy #(1 + 0)        ; Destination pointer
-  lda (CP_BLOCK_P),Y
-  sta CP_DEST_P
+  ; Read parameter values
+  ldy #(1 + CP_M_DEST_OFFSET) ; Destination pointer
+  lda (CP_M_BLOCK_P),Y
+  sta CP_M_DEST_P
   iny
-  lda (CP_BLOCK_P),Y
-  sta CP_DEST_P + 1
+  lda (CP_M_BLOCK_P),Y
+  sta CP_M_DEST_P + 1
 
-  ldy #(1 + 2)        ; Source pointer
-  lda (CP_BLOCK_P),Y
-  sta CP_SRC_P
+  ldy #(1 + CP_M_SRC_OFFSET)  ; Source pointer
+  lda (CP_M_BLOCK_P),Y
+  sta CP_M_SRC_P
   iny
-  lda (CP_BLOCK_P),Y
-  sta CP_SRC_P + 1
+  lda (CP_M_BLOCK_P),Y
+  sta CP_M_SRC_P + 1
 
-; Routine from http://6502.org/source/general/memory_move.html
-  ldy #(1 + 4 + 1)          ; Load length high byte ...
-  lda (CP_BLOCK_P),Y
-  tax                       ; ... into X
+  ; Routine adapted from http://6502.org/source/general/memory_move.html
+  ; for copying memory (or moving down from a higher to lower address)
+  ldy #(1 + CP_M_LEN_OFFSET + 1) ; Load length high byte ...
+  lda (CP_M_BLOCK_P),Y
+  tax                            ; ... into X
   beq copy_memory_remainder
   ldy #0
-copy_memory_page_loop:      ; move a page at a time
-  lda (CP_SRC_P),Y
-  sta (CP_DEST_P),Y
+copy_memory_page_loop:           ; move a page at a time
+  lda (CP_M_SRC_P),Y
+  sta (CP_M_DEST_P),Y
   iny
   bne copy_memory_page_loop
-  inc CP_SRC_P + 1
-  inc CP_DEST_P + 1
+  inc CP_M_SRC_P + 1
+  inc CP_M_DEST_P + 1
   dex
   bne copy_memory_page_loop
 copy_memory_remainder:
-  ldy #(1 + 4)              ; Load length low byte ...
-  lda (CP_BLOCK_P),Y
-  tax                       ; ... into X
+  ldy #(1 + CP_M_LEN_OFFSET)     ; Load length low byte ...
+  lda (CP_M_BLOCK_P),Y
+  tax                            ; ... into X
   beq copy_memory_done
   ldy #0
-copy_memory_remainder_loop: ; move the remaining bytes
-  lda (CP_SRC_P),Y
-  sta (CP_DEST_P),Y
+copy_memory_remainder_loop:      ; move the remaining bytes
+  lda (CP_M_SRC_P),Y
+  sta (CP_M_DEST_P),Y
   iny
   dex
   bne copy_memory_remainder_loop
