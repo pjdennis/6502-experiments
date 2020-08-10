@@ -170,21 +170,9 @@ program_entry:
 ;  ldx #>led_control
 ;  jsr initialize_additional_process
 
-; Test out relocating a process to another location in RAM
-
+  ; Test out relocating a process to another location in RAM
   jsr copy_memory
   .word LED_CONTROL_RELOCATE, led_control, led_control_end - led_control
-
-;  ldx #0
-;copy_loop:
-;  cpx #(led_control_end - led_control)
-;  beq copy_done
-;  lda led_control,X
-;  sta LED_CONTROL_RELOCATE,X
-;  inx
-;  bra copy_loop
-;copy_done:
-
   lda #<LED_CONTROL_RELOCATE
   ldx #>LED_CONTROL_RELOCATE
   jsr initialize_additional_process
