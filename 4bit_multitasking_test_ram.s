@@ -9,12 +9,20 @@ DDRA  = $6003
 BANK_MASK         = %00001111
 ILED              = %00010000
 BUTTON1           = %00100000
-FLASH_LED         = %01000000
 LED               = %01000000
+SERIAL_RX         = %10000000
+
+FLASH_LED         = ILED
+
+;ILED             = %00010000
+;FLASH_LED        = %01000000
 
 ;BUTTON1          = %01000000
 ;FLASH_LED        = %10000000
 ;LED              = %00100000
+
+PORTA_OUT_MASK    = BANK_MASK | LED | ILED
+;PORTA_OUT_MASK   = BANK_MASK | LED | ILED | FLASH_LED
 
 BANK_START        = %00000100
 BANK_STOP         = %00010000
@@ -28,6 +36,8 @@ RS                = %00000001
 
 BF                = %01000000
 DISPLAY_BITS_MASK = (DISPLAY_DATA_MASK | E | RW | RS)
+
+PORTB_OUT_MASK    = DISPLAY_BITS_MASK | T1_SQWAVE_OUT
 
   .include display_parameters.inc
   .include musical_notes.inc
@@ -58,7 +68,7 @@ INTERRUPT_ROUTINE      = $3f00
   .org $2000
   jmp program_entry
 
-  ; Place code for delay_routines at start of page to ensure no page boundary crossings during timing loops
+  ; Place delay_routines at start of page to ensure no page boundary crossings during timing loops
   .include delay_routines.inc
 
   .include display_routines.inc
@@ -80,27 +90,27 @@ INTERRUPT_ROUTINE      = $3f00
   .include prg_led_control.inc
 
 program_entry:
-  ldx #$ff ; Initialize stack
+  ldx #$ff                                 ; Initialize stack
   txs
 
-  lda #0   ; Initialize status flags
+  lda #0                                   ; Initialize status flags
   pha
   plp
 
   ; Initialize 6522 port A (memory banking control)
   lda #BANK_START
   sta PORTA
-  lda #(BANK_MASK | LED | ILED | FLASH_LED) ; Set pin direction  on port A
+  lda #PORTA_OUT_MASK                      ; Set pin direction on port A
   sta DDRA
 
   ; Initialize 6522 port B (display control)
   lda #0
   sta PORTB
-  lda #(DISPLAY_BITS_MASK | T1_SQWAVE_OUT) ; Set display pins and T1 output pins to output
+  lda #PORTB_OUT_MASK                      ; Set pin direction on port B
   sta DDRB
 
   ; Set up interrupt handler redirect
-  lda #$4c          ; jmp
+  lda #$4c                                 ; jmp
   sta INTERRUPT_ROUTINE
   lda #<interrupt
   sta INTERRUPT_ROUTINE + 1
@@ -142,13 +152,9 @@ program_entry:
   ldx #>run_chase
   jsr initialize_additional_process
 
-
-
   lda #<play_ditty
   ldx #>play_ditty
   jsr initialize_additional_process
-
-  jmp skip_program_setup
 
 ;  lda #<print_ticks_counter
 ;  ldx #>print_ticks_counter
@@ -158,7 +164,7 @@ program_entry:
 ;  ldx #>led_control
 ;  jsr initialize_additional_process
 
-; Test out running a process from ram
+; Test out relocating a process to another location in RAM
   ldx #0
 copy_loop:
   cpx #(led_control_end - led_control)
@@ -172,33 +178,19 @@ copy_done:
   ldx #>LED_CONTROL_RELOCATE
   jsr initialize_additional_process
 
+  jsr add_morse_demo
 
-skip_program_setup:
+;  jsr add_console_demo
 
-
-  lda #<send_morse_message
-  ldx #>send_morse_message
-  jsr initialize_additional_process
-
-;  lda #<console_demo_2
-;  ldx #>console_demo_2
-;  jsr initialize_additional_process
-
-  jsr buffer_initialize
-  lda #<console_write_buffer
-  ldx #>console_write_buffer
-  jsr initialize_additional_process
-
-
-  ; Configure interrupt timer
-  lda #0  ; Timer 2 one shot run mode 
+  ; Configure timer 2 to be used for task switching
+  lda #0                   ; Timer 2 one shot run mode 
   sta ACR
 
   ; Start timer 2 (interrupt timer)
   lda #<DELAY
   sta T2CL
   lda #>DELAY
-  sta T2CH     ; Store to high register starts the timer
+  sta T2CH                 ; Store to high register starts the timer
 
   lda #(IERSETCLEAR | IT2) ; Enable timer 2 interrupts
   sta IER
@@ -206,6 +198,20 @@ skip_program_setup:
   ; For now we need at least one process with a busy loop to ensure not all proceses are sleeping
 busy_loop:
   bra busy_loop
+
+
+add_console_demo:
+  jsr buffer_initialize
+
+  lda #<console_write_buffer
+  ldx #>console_write_buffer
+  jsr initialize_additional_process
+
+  lda #<console_demo_2
+  ldx #>console_demo_2
+  jsr initialize_additional_process
+
+  rts
 
 
 console_message: .asciiz 'Hello, World! This is a long scrolling message. Phil X Angel :) ...... '
@@ -217,9 +223,11 @@ console_demo_2_loop:
   lda console_message, Y
   beq console_demo_2_repeat
   jsr buffer_write
+  lda #<200
+  ldx #>200
+  jsr sleep_milliseconds
   iny
   bra console_demo_2_loop
-
 
 console_demo:
   lda #(DISPLAY_SECOND_LINE + 5) ; Console position
@@ -247,10 +255,21 @@ console_write_buffer_repeat:
   jsr buffer_read
   jsr console_print_character
   jsr console_show
-;  lda #<200
-;  ldx #>200
-;  jsr sleep_milliseconds
   bra console_write_buffer_repeat
+
+
+add_morse_demo:
+  jsr buffer_initialize
+
+  lda #<console_write_buffer
+  ldx #>console_write_buffer
+  jsr initialize_additional_process
+
+  lda #<send_morse_message
+  ldx #>send_morse_message
+  jsr initialize_additional_process
+
+  rts
 
 
 morse_message:
@@ -265,7 +284,6 @@ repeat_morse_message:
   lda #<morse_message
   ldx #>morse_message
   jsr send_morse_string
-
 
   lda #' '
   jsr write_to_buffer_with_delay
@@ -389,8 +407,8 @@ sleep1:
 interrupt:
   pha                     ; Start saving outgoing bank registers to stack
 
-  lda #ILED               ; Turn on interrupt activity LED
-  tsb PORTA
+;  lda #ILED               ; Turn on interrupt activity LED
+;  tsb PORTA
 
   lda #<DELAY             ; (Reset 6552 timer to trigger next interrupt)
   sta T2CL
@@ -442,8 +460,8 @@ dont_increment_high_ticks:
   ply                    ; Start restoring incoming bank registers from stack
   plx
 
-  lda #ILED              ; Turn off interrupt activity LED
-  trb PORTA
+;  lda #ILED              ; Turn off interrupt activity LED
+;  trb PORTA
 
   pla                    ; Finish restoring incoming bank registers from stack
 
