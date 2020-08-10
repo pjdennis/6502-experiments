@@ -12,6 +12,7 @@ initialize_morse:
   stx MORSE_CHARACTER_CALLBACK + 1
   rts
 
+
 ; On entry A = low byte of address
 ;          X = high byte of address
 ; On exit  Y is preserved

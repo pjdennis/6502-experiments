@@ -78,6 +78,7 @@ INTERRUPT_ROUTINE      = $3f00
   .include sound.inc
   .include console.inc
   .include buffer.inc
+  .include morse.inc
 
   ; Programs
   .include prg_counters.inc
@@ -86,8 +87,9 @@ INTERRUPT_ROUTINE      = $3f00
   .include prg_ditty.inc
   .include prg_print_ticks_counter.inc
   ;.include prg_flash_led.inc
-  .include morse.inc
   .include prg_led_control.inc
+  .include prg_morse_demo.inc
+  .include prg_console_demo.inc
 
 program_entry:
   ldx #$ff                                 ; Initialize stack
@@ -198,118 +200,6 @@ copy_done:
   ; For now we need at least one process with a busy loop to ensure not all proceses are sleeping
 busy_loop:
   bra busy_loop
-
-
-add_console_demo:
-  jsr buffer_initialize
-
-  lda #<console_write_buffer
-  ldx #>console_write_buffer
-  jsr initialize_additional_process
-
-  lda #<console_demo_2
-  ldx #>console_demo_2
-  jsr initialize_additional_process
-
-  rts
-
-
-console_message: .asciiz 'Hello, World! This is a long scrolling message. Phil X Angel :) ...... '
-
-console_demo_2:
-console_demo_2_repeat:
-  ldy #0
-console_demo_2_loop:
-  lda console_message, Y
-  beq console_demo_2_repeat
-  jsr buffer_write
-  lda #<200
-  ldx #>200
-  jsr sleep_milliseconds
-  iny
-  bra console_demo_2_loop
-
-console_demo:
-  lda #(DISPLAY_SECOND_LINE + 5) ; Console position
-  ldx #6                         ; Console length
-  jsr console_initialize
-console_demo_repeat:
-  ldy #0
-console_demo_loop:
-  lda console_message, Y
-  beq console_demo_repeat
-  jsr console_print_character
-  jsr console_show
-  lda #<180
-  ldx #>180
-  jsr sleep_milliseconds
-  iny
-  bra console_demo_loop
-
-
-console_write_buffer:
-  lda #(DISPLAY_SECOND_LINE + 5) ; Console position
-  ldx #6                         ; Console length
-  jsr console_initialize
-console_write_buffer_repeat:
-  jsr buffer_read
-  jsr console_print_character
-  jsr console_show
-  bra console_write_buffer_repeat
-
-
-add_morse_demo:
-  jsr buffer_initialize
-
-  lda #<console_write_buffer
-  ldx #>console_write_buffer
-  jsr initialize_additional_process
-
-  lda #<send_morse_message
-  ldx #>send_morse_message
-  jsr initialize_additional_process
-
-  rts
-
-
-morse_message:
-  .asciiz 'HELLO WORLD THIS IS A COMPUTER BUILT BY PHIL'
-
-send_morse_message:
-  lda #<morse_callback
-  ldx #>morse_callback
-  jsr initialize_morse
-
-repeat_morse_message:
-  lda #<morse_message
-  ldx #>morse_message
-  jsr send_morse_string
-
-  lda #' '
-  jsr write_to_buffer_with_delay
-  lda #'.'
-  jsr write_to_buffer_with_delay
-  jsr write_to_buffer_with_delay
-  jsr write_to_buffer_with_delay
-  lda #' '
-
-  bra repeat_morse_message
-
-
-; On entry A = the character to send
-write_to_buffer_with_delay:
-  pha
-  jsr buffer_write
-  lda #<500
-  ldx #>500
-  jsr sleep_milliseconds
-  pla
-  rts
-
-
-morse_callback:
-  jsr buffer_write
-  rts
 
 
 ; Set up stack, etc. so that additional process will start running on next interrupt
