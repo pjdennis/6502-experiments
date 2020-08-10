@@ -46,9 +46,14 @@ PORTB_OUT_MASK    = DISPLAY_BITS_MASK | T1_SQWAVE_OUT
 DELAY                  = CLOCK_FREQ_KHZ * 2  ; 1 KHz / 2 = 500 Hz
 
 ; Banked zero page supervisor locations starting at $00e0
-WAKE_AT                = $00e0 ; 2 bytes
-SLEEPING               = $00e2
-STACK_POINTER_SAVE     = $00e3
+WAKE_AT                = $e0 ; 2 bytes
+SLEEPING               = $e2
+STACK_POINTER_SAVE     = $e3
+
+CP_BLOCK_P             = $e4 ; 2 bytes
+CP_DEST_P              = $e6 ; 2 bytes
+CP_SRC_P               = $e8 ; 2 bytes
+CP_LEN                 = $ea ; 2 bytes
 
 ; Shared memory locations
 TICKS_COUNTER          = $3b00 ; 2 bytes
@@ -133,6 +138,8 @@ program_entry:
   ; Initialize display
   jsr reset_and_enable_display_no_cursor
 
+  ;jmp relocate_test
+
   ; Configure the additional processes
   lda #<run_counter_top_left
   ldx #>run_counter_top_left
@@ -167,15 +174,20 @@ program_entry:
 ;  jsr initialize_additional_process
 
 ; Test out relocating a process to another location in RAM
-  ldx #0
-copy_loop:
-  cpx #(led_control_end - led_control)
-  beq copy_done
-  lda led_control,X
-  sta LED_CONTROL_RELOCATE,X
-  inx
-  bra copy_loop
-copy_done:
+
+  jsr copy_memory
+  .word LED_CONTROL_RELOCATE, led_control, led_control_end - led_control
+
+;  ldx #0
+;copy_loop:
+;  cpx #(led_control_end - led_control)
+;  beq copy_done
+;  lda led_control,X
+;  sta LED_CONTROL_RELOCATE,X
+;  inx
+;  bra copy_loop
+;copy_done:
+
   lda #<LED_CONTROL_RELOCATE
   ldx #>LED_CONTROL_RELOCATE
   jsr initialize_additional_process
@@ -200,6 +212,40 @@ copy_done:
   ; For now we need at least one process with a busy loop to ensure not all proceses are sleeping
 busy_loop:
   bra busy_loop
+
+
+relocate_test:
+  jsr copy_memory
+  .byte $42, $43, $44, $45, $46, $47
+
+  lda #'#'
+  jsr display_character
+  lda #' '
+  jsr display_character
+
+  lda CP_DEST_P
+  jsr display_hex
+  lda CP_DEST_P + 1
+  jsr display_hex
+
+  lda #' '
+  jsr display_character
+
+  lda CP_SRC_P
+  jsr display_hex
+  lda CP_SRC_P + 1
+  jsr display_hex
+
+  lda #' '
+  jsr display_character
+
+  lda CP_LEN
+  jsr display_hex
+  lda CP_LEN + 1
+  jsr display_hex
+ 
+stop_now:
+  bra stop_now
 
 
 ; Set up stack, etc. so that additional process will start running on next interrupt
