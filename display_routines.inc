@@ -1,3 +1,5 @@
+  .include display_parameters.inc
+
 reset_and_enable_display_no_cursor:  
   jsr reset_display
 
