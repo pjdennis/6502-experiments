@@ -72,6 +72,32 @@ copy_memory:
   adc CP_BLOCK_P + 1
   sta $105,X
 
+; Routine from http://6502.org/source/general/memory_move.html
+  ldy #0
+  ldx CP_LEN + 1
+  beq copy_memory_2
+copy_memory_1:           ; move a page at a time
+  lda (CP_SRC_P),Y
+  sta (CP_DEST_P),Y
+  iny
+  bne copy_memory_1
+  inc CP_SRC_P + 1
+  inc CP_DEST_P + 1
+  dex
+  bne copy_memory_1
+copy_memory_2:
+  ldx CP_LEN
+  beq copy_memory_4
+copy_memory_3:           ; move the remaining bytes
+  lda (CP_SRC_P),Y
+  sta (CP_DEST_P),Y
+  iny
+  dex
+  bne copy_memory_3
+copy_memory_4:
+  bra copy_memory_done
+
+
 copy_memory_loop:
   ; Check for CP_LEN decremented to zero
   lda CP_LEN
