@@ -37,101 +37,59 @@ copy_memory:
   phy
 
   tsx
-  lda $104,X       ; low byte of return address
+  clc
+  lda $104,X          ; Low byte of return address
   sta CP_BLOCK_P
-  lda $105,X       ; high byte of return address
+  adc #6              ; This number of bytes of parameters
+  sta $104,X
+  lda $105,X          ; High byte of return address
   sta CP_BLOCK_P + 1
+  adc #0
+  sta $105,X
 
-  ldy #1
-
+  ldy #(1 + 0)        ; Destination pointer
   lda (CP_BLOCK_P),Y
   sta CP_DEST_P
   iny
   lda (CP_BLOCK_P),Y
   sta CP_DEST_P + 1
-  iny
 
+  ldy #(1 + 2)        ; Source pointer
   lda (CP_BLOCK_P),Y
   sta CP_SRC_P
   iny
   lda (CP_BLOCK_P),Y
   sta CP_SRC_P + 1
-  iny
-
-  lda (CP_BLOCK_P),Y
-  sta CP_LEN
-  iny
-  lda (CP_BLOCK_P),Y
-  sta CP_LEN + 1
-
-  tya
-  clc
-  adc CP_BLOCK_P
-  sta $104,X
-  lda #0
-  adc CP_BLOCK_P + 1
-  sta $105,X
 
 ; Routine from http://6502.org/source/general/memory_move.html
+  ldy #(1 + 4 + 1)          ; Load length high byte ...
+  lda (CP_BLOCK_P),Y
+  tax                       ; ... into X
+  beq copy_memory_remainder
   ldy #0
-  ldx CP_LEN + 1
-  beq copy_memory_2
-copy_memory_1:           ; move a page at a time
+copy_memory_page_loop:      ; move a page at a time
   lda (CP_SRC_P),Y
   sta (CP_DEST_P),Y
   iny
-  bne copy_memory_1
+  bne copy_memory_page_loop
   inc CP_SRC_P + 1
   inc CP_DEST_P + 1
   dex
-  bne copy_memory_1
-copy_memory_2:
-  ldx CP_LEN
-  beq copy_memory_4
-copy_memory_3:           ; move the remaining bytes
-  lda (CP_SRC_P),Y
-  sta (CP_DEST_P),Y
-  iny
-  dex
-  bne copy_memory_3
-copy_memory_4:
-  bra copy_memory_done
-
-
-copy_memory_loop:
-  ; Check for CP_LEN decremented to zero
-  lda CP_LEN
-  bne copy_memory_still_going
-  lda CP_LEN + 1
+  bne copy_memory_page_loop
+copy_memory_remainder:
+  ldy #(1 + 4)              ; Load length low byte ...
+  lda (CP_BLOCK_P),Y
+  tax                       ; ... into X
   beq copy_memory_done
-copy_memory_still_going:
-
-  ; Copy the byte
-  lda (CP_SRC_P)
-  sta (CP_DEST_P)
-
-  ; Increment source pointer
-  inc CP_SRC_P
-  bne copy_memory_src_p_high_correct
-  inc CP_SRC_P + 1
-copy_memory_src_p_high_correct:
-
-  ; Increment destination pointer
-  inc CP_DEST_P
-  bne copy_memory_dest_p_high_correct
-  inc CP_DEST_P + 1
-copy_memory_dest_p_high_correct:
-
-  ; Decrement the length
-  lda CP_LEN
-  bne copy_memory_high_correct
-  dec CP_LEN + 1
-copy_memory_high_correct:
-  dec CP_LEN
-  bra copy_memory_loop
+  ldy #0
+copy_memory_remainder_loop: ; move the remaining bytes
+  lda (CP_SRC_P),Y
+  sta (CP_DEST_P),Y
+  iny
+  dex
+  bne copy_memory_remainder_loop
 
 copy_memory_done:
-
   ply
   plx
   pla
