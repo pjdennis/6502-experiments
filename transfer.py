@@ -12,4 +12,4 @@ with serial.Serial(
 
   #ser.write(bytearray([len(data) & 0xff, (len(data) >> 8) & 0xff]))
   ser.write(data)
-  time.sleep(1)
+  time.sleep(2)
