@@ -3,7 +3,8 @@ import sys
 import pause
 from datetime import datetime, timedelta
 
-baudrate=19200
+baudrate  = 38400
+#baudrate = 19200
 stopbits_constant=serial.STOPBITS_TWO
 
 if (stopbits_constant == serial.STOPBITS_ONE):
