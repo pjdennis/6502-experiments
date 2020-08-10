@@ -1,3 +1,5 @@
+CLOCK_FREQ_KHZ    = 2000
+
 PORTB = $6000
 PORTA = $6001
 DDRB  = $6002
@@ -31,7 +33,7 @@ DISPLAY_BITS_MASK = (DISPLAY_DATA_MASK | E | RW | RS)
   .include musical_notes.inc
   .include 6522.inc
 
-DELAY                  = 2000 ; 2000 microseconds = 2 milliseconds; rate = 500 Hz
+DELAY                  = CLOCK_FREQ_KHZ * 2  ; 1 KHz / 2 = 500 Hz
 
 ; Banked zero page supervisor locations starting at $00e0
 WAKE_AT                = $00e0 ; 2 bytes
@@ -141,12 +143,12 @@ program_entry:
   jsr initialize_additional_process
 
 
+
+  lda #<play_ditty
+  ldx #>play_ditty
+  jsr initialize_additional_process
+
   jmp skip_program_setup
-
-
-;  lda #<play_ditty
-;  ldx #>play_ditty
-;  jsr initialize_additional_process
 
 ;  lda #<print_ticks_counter
 ;  ldx #>print_ticks_counter
@@ -351,7 +353,7 @@ banks_exist:
 ;         A not preserved
 sleep_milliseconds:
   phx
-  pha ; divide millis by 2 (assuming DELAY = 500)
+  pha ; divide millis by 2 (assuming 500 KHz interrupt rate)
   txa
   lsr
   tax
