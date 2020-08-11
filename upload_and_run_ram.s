@@ -210,6 +210,21 @@ upload_wait_loop:
   lda #(IERSETCLEAR | ICA2)
   sta IER
 
+  lda #<UPLOAD_TO
+  sta CP_M_DEST_P
+  lda #>UPLOAD_TO
+  sta CP_M_DEST_P + 1
+
+  lda #<(UPLOAD_TO + 2)
+  sta CP_M_SRC_P
+  lda #>(UPLOAD_TO + 2)
+  sta CP_M_SRC_P + 1
+
+  lda UPLOAD_TO
+  sta CP_M_LEN
+  lda UPLOAD_TO + 1
+  sta CP_M_LEN + 1
+
   jsr clear_display
 
   lda #'L'
@@ -217,9 +232,9 @@ upload_wait_loop:
   lda #' '
   jsr display_character
 
-  lda UPLOAD_TO + 1
+  lda CP_M_LEN + 1
   jsr display_hex
-  lda UPLOAD_TO
+  lda CP_M_LEN
   jsr display_hex
 
   lda #' '
@@ -238,20 +253,13 @@ upload_wait_loop:
   lda #' '
   jsr display_character
 
-  lda #<(UPLOAD_TO + 2)
-  sta CP_M_SRC_P
-  lda #>(UPLOAD_TO + 2)
-  sta CP_M_SRC_P + 1
-
   jsr calculate_checksum
   lda CHECKSUM_VALUE + 1
   jsr display_hex
   lda CHECKSUM_VALUE
   jsr display_hex
 
-
-  jmp stop_here
-
+  jsr copy_memory
 
   lda #DISPLAY_SECOND_LINE
   jsr move_cursor
