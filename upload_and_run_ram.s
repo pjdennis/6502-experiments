@@ -229,22 +229,7 @@ wait_for_done:
   cmp UPLOAD_STOP_AT
   bne wait_for_done
 
-
-  lda #(DISPLAY_FIRST_LINE + 5)
-  jsr move_cursor
-
-  sec
-  lda UPLOAD_LOCATION
-  sbc #<(UPLOAD_TO + 4)
-  tax
-  lda UPLOAD_LOCATION + 1
-  sbc #>(UPLOAD_TO + 4)
-  jsr display_hex
-  txa
-  jsr display_hex
-
-
-  jmp stop_here
+  ; TODO: Then display uploaded checksum
 
 
 ; upload done
@@ -254,7 +239,7 @@ wait_for_done:
   lda #(IT1 | ICB2) ; Disable T1 and CB2 interrupts
   sta IER
 
-  ; Point interrupt handler to reset routing
+  ; Point interrupt handler to reset routine
   lda #$4c                       ; jmp opcode
   sta INTERRUPT_ROUTINE
   lda #<reset_interrupt
@@ -316,6 +301,10 @@ wait_for_done:
   jsr display_hex
   lda CHECKSUM_VALUE
   jsr display_hex
+
+
+  ; TODO: Then display checksum
+
 
   jsr copy_memory
 
@@ -382,9 +371,12 @@ wait_button_up_loop:
   bne wait_button_up_loop
   rts
 
-; On exit X, Y are preserved
-;         A is not preserved
+; On exit A, X, Y are preserved
 calculate_checksum:
+  pha
+  phx
+  phy
+
   stz CHECKSUM_VALUE
   stz CHECKSUM_VALUE + 1
 
@@ -393,15 +385,16 @@ calculate_checksum:
   lda CP_M_SRC_P + 1
   sta CHECKSUM_P + 1
 
-checksum_loop:
-  lda CHECKSUM_P
-  cmp UPLOAD_LOCATION
-  bne checksum_not_done
-  lda CHECKSUM_P + 1
-  cmp UPLOAD_LOCATION + 1
-  beq checksum_done
+  ldx CP_M_LEN          ; Low byte of count
+  ldy CP_M_LEN + 1      ; High byte of count
 
+checksum_loop:
+  cpy #0
+  bne checksum_not_done
+  cpx #0
+  beq checksum_done
 checksum_not_done:
+
   lda CHECKSUM_VALUE + 1
   ror
   ror CHECKSUM_VALUE
@@ -416,11 +409,20 @@ checksum_not_done:
   sta CHECKSUM_VALUE + 1
 
   inc CHECKSUM_P
-  bne checksum_loop
+  bne checksum_p_increment_done
   inc CHECKSUM_P + 1
+checksum_p_increment_done:
+
+  dex
+  cpx #$ff
+  bne checksum_loop
+  dey
   bra checksum_loop
 
 checksum_done:
+  ply
+  plx
+  pla
   rts
 
 
