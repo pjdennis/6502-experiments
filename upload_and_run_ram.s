@@ -59,7 +59,6 @@ CP_M_LEN                 = $1e ; 2 bytes
 
 BIT_VALUE                = $10
 SERIAL_WAITING           = $11
-DATA_LOAD_STARTED        = $12
 
 ; For EEPROM Operation
 ;UPLOAD_TO               = $2000
@@ -144,18 +143,12 @@ relocate_copy_done:
   lda #$80
   sta BIT_VALUE
 
-  stz DATA_LOAD_STARTED
-
   lda #(IERSETCLEAR | ICB2 | IT1) ; Enable CB2 and timer interrupts
   sta IER
 
   lda #<ready_message
   ldx #>ready_message
   jsr display_string
-
-wait_for_upload_start:
-  lda DATA_LOAD_STARTED
-  beq wait_for_upload_start
 
 wait_for_length:
   sei
@@ -445,9 +438,6 @@ done_with_byte:
   stz ACR                        ; 4 Timer to 1 shot mode
   stz T1CL                       ; 4 Load a 0 into the timer; will expire after one cycle
   stz T1CH                       ; 4
-
-  lda #1
-  sta DATA_LOAD_STARTED
 
   lda BIT_VALUE                  ; 3 (zero page)
   sta (UPLOAD_LOCATION)
