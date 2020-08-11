@@ -228,28 +228,30 @@ upload_wait_loop:
   sec
   lda UPLOAD_LOCATION
   sbc #<(UPLOAD_TO + 2)
-  sta CP_M_LEN
+  tax
   lda UPLOAD_LOCATION + 1
   sbc #>(UPLOAD_TO + 2)
-  sta CP_M_LEN + 1
-
-  lda CP_M_LEN + 1
   jsr display_hex
-  lda CP_M_LEN
+  txa
   jsr display_hex
-
-
-  jmp stop_here
-
 
   lda #' '
   jsr display_character
+
+  lda #<(UPLOAD_TO + 2)
+  sta CP_M_SRC_P
+  lda #>(UPLOAD_TO + 2)
+  sta CP_M_SRC_P + 1
 
   jsr calculate_checksum
   lda CHECKSUM_VALUE + 1
   jsr display_hex
   lda CHECKSUM_VALUE
   jsr display_hex
+
+
+  jmp stop_here
+
 
   lda #DISPLAY_SECOND_LINE
   jsr move_cursor
@@ -319,9 +321,9 @@ calculate_checksum:
   stz CHECKSUM_VALUE
   stz CHECKSUM_VALUE + 1
 
-  lda #<UPLOAD_TO
+  lda CP_M_SRC_P
   sta CHECKSUM_P
-  lda #>UPLOAD_TO
+  lda CP_M_SRC_P + 1
   sta CHECKSUM_P + 1
 
 checksum_loop:
