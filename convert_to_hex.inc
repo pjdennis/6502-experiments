@@ -8,7 +8,7 @@ convert_to_hex:
   cmp #10
   bcs convert_to_hex_character_low
   adc #'0'
-  jmp convert_to_hex_done_low
+  bra convert_to_hex_done_low
 convert_to_hex_character_low:
   clc
   adc #('A' - 10)
