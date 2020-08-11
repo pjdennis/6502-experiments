@@ -50,16 +50,18 @@ STATE_WAITING_FOR_TIMER  = 1
 DISPLAY_STRING_PARAM     = $00 ; 2 bytes
 UPLOAD_LOCATION          = $02 ; 2 bytes
 UPLOAD_STOP_AT           = $04 ; 2 bytes
-UPLOAD_LOCATION_COPY     = $06 ; 2 bytes
-CHECKSUM_P               = $08 ; 2 bytes
-CHECKSUM_VALUE           = $0a ; 2 bytes
+UPLOADED_CHECKSUM_P      = $06 ; 2 bytes
+UPLOADED_CHECKSUM        = $08 ; 2 bytes
+UPLOAD_LOCATION_COPY     = $0a ; 2 bytes
+CHECKSUM_P               = $0c ; 2 bytes
+CHECKSUM_VALUE           = $0e ; 2 bytes
 
-CP_M_DEST_P              = $0c ; 2 bytes
-CP_M_SRC_P               = $0e ; 2 bytes
-CP_M_LEN                 = $10 ; 2 bytes
+CP_M_DEST_P              = $10 ; 2 bytes
+CP_M_SRC_P               = $12 ; 2 bytes
+CP_M_LEN                 = $14 ; 2 bytes
 
-BIT_VALUE                = $12
-SERIAL_WAITING           = $13
+BIT_VALUE                = $16
+SERIAL_WAITING           = $17
 
 ; For EEPROM Operation
 ;UPLOAD_TO               = $2000
@@ -275,6 +277,7 @@ wait_for_done:
   lda #' '
   jsr display_character
 
+  ; Display The length uploaded
   lda CP_M_LEN + 1
   jsr display_hex
   lda CP_M_LEN
@@ -283,29 +286,38 @@ wait_for_done:
   lda #' '
   jsr display_character
 
-  sec
-  lda UPLOAD_LOCATION
-  sbc #<(UPLOAD_TO + 2)
-  tax
-  lda UPLOAD_LOCATION + 1
-  sbc #>(UPLOAD_TO + 2)
-  jsr display_hex
-  txa
-  jsr display_hex
-
-  lda #' '
-  jsr display_character
-
+  ; Display the calculated checksum
   jsr calculate_checksum
   lda CHECKSUM_VALUE + 1
   jsr display_hex
   lda CHECKSUM_VALUE
   jsr display_hex
 
+  lda #' '
+  jsr display_character
 
-  ; TODO: Then display checksum
+  ; Display the uploaded checksum
+  sec
+  lda UPLOAD_STOP_AT
+  sbc #2
+  sta UPLOADED_CHECKSUM_P
+  lda UPLOAD_STOP_AT + 1
+  sbc #0
+  sta UPLOADED_CHECKSUM_P + 1
 
+  ldy #0
+  lda (UPLOADED_CHECKSUM_P),Y
+  sta UPLOADED_CHECKSUM
+  iny
+  lda (UPLOADED_CHECKSUM_P),Y
+  sta UPLOADED_CHECKSUM + 1
 
+  lda UPLOADED_CHECKSUM + 1
+  jsr display_hex
+  lda UPLOADED_CHECKSUM
+  jsr display_hex
+
+  ; Relocate upload to the correct location for running it
   jsr copy_memory
 
   lda #DISPLAY_SECOND_LINE
