@@ -22,7 +22,10 @@ if(source_len > 0xffff):
 
 length_bytes = bytearray([source_len & 0xff, (source_len >> 8) & 0xff])
 print("Length: ", length_bytes)
-data = length_bytes + source_data
+
+checksum_bytes = bytearray([0x42, 0x43])  #TODO - calculate checksum
+
+data = length_bytes + source_data + checksum_bytes
 
 number_of_bits = len(data) * (1 + 8 + stopbits_number)
 

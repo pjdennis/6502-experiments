@@ -187,15 +187,6 @@ length_available:
 
   jsr clear_display
 
-
-  lda UPLOAD_STOP_AT + 1
-  jsr display_hex
-  lda UPLOAD_STOP_AT
-  jsr display_hex
-
-  jmp stop_here
-
-
   lda #<loading_message
   ldx #>loading_message
   jsr display_string
@@ -230,10 +221,30 @@ wait_for_done:
   lda #100
   jsr delay_10_thousandths
 
-  bra wait_for_done
+  ; compare high byte and then low byte to allow lock free correctness
+  lda UPLOAD_LOCATION + 1
+  cmp UPLOAD_STOP_AT + 1
+  bne wait_for_done
+  lda UPLOAD_LOCATION
+  cmp UPLOAD_STOP_AT
+  bne wait_for_done
 
-  ;TODO - wait until we have received enough bytes based on received length
 
+  lda #(DISPLAY_FIRST_LINE + 5)
+  jsr move_cursor
+
+  sec
+  lda UPLOAD_LOCATION
+  sbc #<(UPLOAD_TO + 4)
+  tax
+  lda UPLOAD_LOCATION + 1
+  sbc #>(UPLOAD_TO + 4)
+  jsr display_hex
+  txa
+  jsr display_hex
+
+
+  jmp stop_here
 
 
 ; upload done
