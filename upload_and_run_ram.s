@@ -49,18 +49,17 @@ STATE_WAITING_FOR_TIMER  = 1
 ; Shared ram locations
 DISPLAY_STRING_PARAM     = $00 ; 2 bytes
 UPLOAD_LOCATION          = $02 ; 2 bytes
-UPLOAD_L_CHK_1           = $04 ; 2 bytes
-UPLOAD_L_CHK_2           = $06 ; 2 bytes
-CHECKSUM_P               = $08 ; 2 bytes
-CHECKSUM_VALUE           = $0a ; 2 bytes
+UPLOAD_LOCATION_COPY     = $04 ; 2 bytes
+CHECKSUM_P               = $06 ; 2 bytes
+CHECKSUM_VALUE           = $08 ; 2 bytes
 
-CP_M_DEST_P              = $0c ; 2 bytes
-CP_M_SRC_P               = $0e ; 2 bytes
-CP_M_LEN                 = $10 ; 2 bytes
+CP_M_DEST_P              = $0a ; 2 bytes
+CP_M_SRC_P               = $0c ; 2 bytes
+CP_M_LEN                 = $1e ; 2 bytes
 
-BIT_VALUE                = $12
-SERIAL_WAITING           = $13
-DATA_LOAD_STARTED        = $14
+BIT_VALUE                = $10
+SERIAL_WAITING           = $11
+DATA_LOAD_STARTED        = $12
 
 ; For EEPROM Operation
 ;UPLOAD_TO               = $2000
@@ -158,36 +157,38 @@ wait_for_upload_start:
   lda DATA_LOAD_STARTED
   beq wait_for_upload_start
 
-wait_for_upload:
+wait_for_length:
   sei
   lda UPLOAD_LOCATION
   ldx UPLOAD_LOCATION + 1
   cli
 
-  sta UPLOAD_L_CHK_1
-  stx UPLOAD_L_CHK_1 + 1
+  sta UPLOAD_LOCATION_COPY
+  stx UPLOAD_LOCATION_COPY + 1
 
-  ldx #10
-upload_wait_loop:
-  lda #100
-  jsr delay_10_thousandths
-  dex
-  bne upload_wait_loop
+  ; Comparison - jump back to wait_for_upload_start if UPLOAD_LOCATION < UPLOAD_TO + 2
+  lda UPLOAD_LOCATION_COPY + 1   ; compare high bytes
+  cmp #>(UPLOAD_TO + 2)
+  bcc wait_for_length
+  bne length_available
+  lda UPLOAD_LOCATION_COPY       ; compare low bytes
+  cmp #<(UPLOAD_TO + 2)
+  bcc wait_for_length
 
-  sei
-  lda UPLOAD_LOCATION
-  ldx UPLOAD_LOCATION + 1
-  cli
+length_available:
+  jsr clear_display
+  lda UPLOAD_TO + 1
+  jsr display_hex
+  lda UPLOAD_TO
+  jsr display_hex
 
-  sta UPLOAD_L_CHK_2
-  stx UPLOAD_L_CHK_2 + 1
 
-  lda UPLOAD_L_CHK_1
-  cmp UPLOAD_L_CHK_2
-  bne wait_for_upload
-  lda UPLOAD_L_CHK_1 + 1
-  cmp UPLOAD_L_CHK_2 + 1
-  bne wait_for_upload
+  jmp stop_here
+
+
+  ;TODO - wait until we have received enough bytes based on received length
+
+
 
 ; upload done
   lda #0                         ; Set CB2 back to default behavior
