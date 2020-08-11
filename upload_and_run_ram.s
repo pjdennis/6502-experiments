@@ -170,6 +170,11 @@ wait_for_length:
 
 length_available:
   jsr clear_display
+
+  lda #<loading_message
+  ldx #>loading_message
+  jsr display_string
+
   lda UPLOAD_TO + 1
   jsr display_hex
   lda UPLOAD_TO
@@ -282,6 +287,7 @@ forever:
 
 
 ready_message:        asciiz 'Ready (RAM).'
+loading_message:      asciiz 'Load 0000 / ' ; 5, 12
 loaded_message:       asciiz 'Loaded '
 ready_to_run_message: asciiz 'Ready to run.'
 running_message:      asciiz 'Running...'
