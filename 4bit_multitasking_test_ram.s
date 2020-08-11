@@ -79,6 +79,7 @@ INTERRUPT_ROUTINE      = $3f00
   .include convert_to_hex.inc
   .include musical_notes_tables.inc
   .include utilities.inc
+  .include copy_memory_inline.inc
   .include sound.inc
   .include console.inc
   .include buffer.inc
@@ -171,7 +172,7 @@ program_entry:
 ;  jsr initialize_additional_process
 
   ; Test out relocating a process to another location in RAM
-  jsr copy_memory
+  jsr copy_memory_inline
   .word LED_CONTROL_RELOCATE, led_control, led_control_end - led_control
   lda #<LED_CONTROL_RELOCATE
   ldx #>LED_CONTROL_RELOCATE
