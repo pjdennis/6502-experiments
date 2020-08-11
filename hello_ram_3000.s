@@ -1,19 +1,16 @@
-CLOCK_FREQ_KHZ = 2000
+CLOCK_FREQ_KHZ    = 2000
 
-PORTB = $6000
-PORTA = $6001
-DDRB  = $6002
-DDRA  = $6003
+PORTB             = $6000
+PORTA             = $6001
+DDRB              = $6002
+DDRA              = $6003
 
 ; PORTA assignments
 BANK_MASK         = %00001111
 ILED              = %00010000
-LED               = %00100000
-FLASH_LED         = %01000000
-SERIAL_IN         = %10000000
-
-BANK_START        = %00000100
-BANK_STOP         = %00010000
+BUTTON1           = %00100000
+LED               = %01000000
+SERIAL_RX         = %10000000
 
 ; PORTB assignments
 T1_SQWAVE_OUT     = %10000000
@@ -34,7 +31,7 @@ COUNTER               = $02 ; 2 bytes
 
 INTERRUPT_ROUTINE     = $3f00
 
-  .org $2000
+  .org $3000
   jmp program_entry
 
   ; Place code for delay_routines at start of page to ensure no page boundary crossings
@@ -46,27 +43,7 @@ INTERRUPT_ROUTINE     = $3f00
 
 
 program_entry:
-  ldx #$ff ; Initialize stack
-  txs
-
-  lda #0   ; Initialize status flags
-  pha
-  plp
-
-  ; Initialize 6522 port A (memory banking control)
-  lda #BANK_START
-  sta PORTA
-  lda #(BANK_MASK | LED | ILED | FLASH_LED) ; Set pin direction  on port A
-  sta DDRA
-
-  ; Initialize 6522 port B (display control)
-  lda #0
-  sta PORTB
-  lda #(DISPLAY_BITS_MASK | T1_SQWAVE_OUT) ; Set display pins and T1 output pins to output
-  sta DDRB
-
-  ; Initialize display
-  jsr reset_and_enable_display_no_cursor
+  jsr clear_display
 
   lda #<message
   ldx #>message
@@ -77,12 +54,15 @@ program_entry:
 forever:
   lda #DISPLAY_SECOND_LINE
   jsr move_cursor
+
   lda COUNTER + 1
   jsr display_hex
   lda COUNTER
   jsr display_hex
+
   lda #200
   jsr delay_10_thousandths
+
   inc COUNTER
   bne forever
   inc COUNTER + 1
@@ -104,10 +84,3 @@ print_loop:
   jmp print_loop
 done_printing:
   rts
-
-
-; Vectors
-;  .org $fffc
-;  .word program_entry
-;  .word 0
-
