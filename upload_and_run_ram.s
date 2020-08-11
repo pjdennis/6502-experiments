@@ -49,16 +49,17 @@ STATE_WAITING_FOR_TIMER  = 1
 ; Shared ram locations
 DISPLAY_STRING_PARAM     = $00 ; 2 bytes
 UPLOAD_LOCATION          = $02 ; 2 bytes
-UPLOAD_LOCATION_COPY     = $04 ; 2 bytes
-CHECKSUM_P               = $06 ; 2 bytes
-CHECKSUM_VALUE           = $08 ; 2 bytes
+UPLOAD_STOP_AT           = $04 ; 2 bytes
+UPLOAD_LOCATION_COPY     = $06 ; 2 bytes
+CHECKSUM_P               = $08 ; 2 bytes
+CHECKSUM_VALUE           = $0a ; 2 bytes
 
-CP_M_DEST_P              = $0a ; 2 bytes
-CP_M_SRC_P               = $0c ; 2 bytes
-CP_M_LEN                 = $1e ; 2 bytes
+CP_M_DEST_P              = $0c ; 2 bytes
+CP_M_SRC_P               = $0e ; 2 bytes
+CP_M_LEN                 = $10 ; 2 bytes
 
-BIT_VALUE                = $10
-SERIAL_WAITING           = $11
+BIT_VALUE                = $12
+SERIAL_WAITING           = $13
 
 ; For EEPROM Operation
 ;UPLOAD_TO               = $2000
@@ -160,16 +161,40 @@ wait_for_length:
   stx UPLOAD_LOCATION_COPY + 1
 
   ; Comparison - jump back to wait_for_upload_start if UPLOAD_LOCATION < UPLOAD_TO + 2
-  lda UPLOAD_LOCATION_COPY + 1   ; compare high bytes
+  lda UPLOAD_LOCATION_COPY + 1   ; Compare high bytes
   cmp #>(UPLOAD_TO + 2)
   bcc wait_for_length
   bne length_available
-  lda UPLOAD_LOCATION_COPY       ; compare low bytes
+  lda UPLOAD_LOCATION_COPY       ; Compare low bytes
   cmp #<(UPLOAD_TO + 2)
   bcc wait_for_length
 
 length_available:
+  clc                            ; Add length to upload location
+  lda #<UPLOAD_TO
+  adc UPLOAD_TO
+  tax
+  lda #>UPLOAD_TO
+  adc UPLOAD_TO + 1
+  tay
+  clc
+  txa
+  adc #4                         ; Add 4 extra bytes (length and checksum)
+  sta UPLOAD_STOP_AT
+  tya
+  adc #0
+  sta UPLOAD_STOP_AT + 1
+
   jsr clear_display
+
+
+  lda UPLOAD_STOP_AT + 1
+  jsr display_hex
+  lda UPLOAD_STOP_AT
+  jsr display_hex
+
+  jmp stop_here
+
 
   lda #<loading_message
   ldx #>loading_message
