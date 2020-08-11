@@ -180,9 +180,32 @@ length_available:
   lda UPLOAD_TO
   jsr display_hex
 
+wait_for_done:
+  sei
+  lda UPLOAD_LOCATION
+  ldx UPLOAD_LOCATION + 1
+  cli
 
-  jmp stop_here
+  sta UPLOAD_LOCATION_COPY
+  stx UPLOAD_LOCATION_COPY + 1
 
+  lda #(DISPLAY_FIRST_LINE + 5)
+  jsr move_cursor
+
+  sec
+  lda UPLOAD_LOCATION_COPY
+  sbc #<(UPLOAD_TO + 2)
+  tax
+  lda UPLOAD_LOCATION_COPY + 1
+  sbc #>(UPLOAD_TO + 2)
+  jsr display_hex
+  txa
+  jsr display_hex
+
+  lda #100
+  jsr delay_10_thousandths
+
+  bra wait_for_done
 
   ;TODO - wait until we have received enough bytes based on received length
 
