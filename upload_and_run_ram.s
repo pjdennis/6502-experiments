@@ -53,9 +53,14 @@ UPLOAD_L_CHK_1           = $04 ; 2 bytes
 UPLOAD_L_CHK_2           = $06 ; 2 bytes
 CHECKSUM_P               = $08 ; 2 bytes
 CHECKSUM_VALUE           = $0a ; 2 bytes
-BIT_VALUE                = $0c
-SERIAL_WAITING           = $0d
-DATA_LOAD_STARTED        = $0e
+
+CP_M_DEST_P              = $0c ; 2 bytes
+CP_M_SRC_P               = $0e ; 2 bytes
+CP_M_LEN                 = $10 ; 2 bytes
+
+BIT_VALUE                = $12
+SERIAL_WAITING           = $13
+DATA_LOAD_STARTED        = $14
 
 ; For EEPROM Operation
 ;UPLOAD_TO               = $2000
@@ -79,6 +84,7 @@ INTERRUPT_ROUTINE        = $3f00
 
   .include display_routines.inc
   .include convert_to_hex.inc
+  .include copy_memory.inc
 
 program_start:
   ldx #$ff ; Initialize stack
@@ -205,20 +211,36 @@ upload_wait_loop:
   sta IER
 
   jsr clear_display
-  lda #<loaded_message
-  ldx #>loaded_message
-  jsr display_string
+
+  lda #'L'
+  jsr display_character
+  lda #' '
+  jsr display_character
+
+  lda UPLOAD_TO + 1
+  jsr display_hex
+  lda UPLOAD_TO
+  jsr display_hex
+
+  lda #' '
+  jsr display_character
 
   sec
   lda UPLOAD_LOCATION
-  sbc #<UPLOAD_TO
-  tax
+  sbc #<(UPLOAD_TO + 2)
+  sta CP_M_LEN
   lda UPLOAD_LOCATION + 1
-  sbc #>UPLOAD_TO
+  sbc #>(UPLOAD_TO + 2)
+  sta CP_M_LEN + 1
 
+  lda CP_M_LEN + 1
   jsr display_hex
-  txa
+  lda CP_M_LEN
   jsr display_hex
+
+
+  jmp stop_here
+
 
   lda #' '
   jsr display_character
@@ -243,6 +265,16 @@ upload_wait_loop:
   jsr display_string
 
   jmp UPLOAD_TO                  ; Jump to and run the main program
+
+
+stop_here:
+  lda #DISPLAY_SECOND_LINE + 15
+  jsr move_cursor
+
+  lda #'.'
+  jsr display_character
+forever:
+  bra forever
 
 
 ready_message:        asciiz 'Ready (RAM).'

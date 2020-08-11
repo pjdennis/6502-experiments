@@ -13,7 +13,16 @@ else:
   stopbits_number = 2.0
 
 with open(sys.argv[1], "rb") as binaryfile:
-  data = bytearray(binaryfile.read())
+  source_data = bytearray(binaryfile.read())
+
+source_len = len(source_data)
+
+if(source_len > 0xffff):
+  raise ValueError("Cannot transfer more than 0xffff bytes")
+
+length_bytes = bytearray([source_len & 0xff, (source_len >> 8) & 0xff])
+print("Length: ", length_bytes)
+data = length_bytes + source_data
 
 number_of_bits = len(data) * (1 + 8 + stopbits_number)
 
