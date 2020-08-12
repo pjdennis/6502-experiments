@@ -7,6 +7,14 @@ baudrate  = 38400
 #baudrate = 19200
 stopbits_constant=serial.STOPBITS_TWO
 
+#BSD checksum as calculated by cksum -o 1
+def bsd_checksum(data):
+  sum = 0
+  for byte in data:
+    sum = (sum >> 1) | (sum << 15)
+    sum = (sum + byte) & 0xffff
+  return sum
+
 if (stopbits_constant == serial.STOPBITS_ONE):
   stopbits_number = 1.0
 else:
@@ -20,10 +28,14 @@ source_len = len(source_data)
 if(source_len > 0xffff):
   raise ValueError("Cannot transfer more than 0xffff bytes")
 
-length_bytes = bytearray([source_len & 0xff, (source_len >> 8) & 0xff])
-print("Length: ", length_bytes)
+checksum = bsd_checksum(source_data)
 
-checksum_bytes = bytearray([0x42, 0x43])  #TODO - calculate checksum
+length_bytes = bytearray([source_len & 0xff, (source_len >> 8) & 0xff])
+print("Length:   ", hex(source_len))
+
+checksum_bytes = bytearray([checksum & 0xff, (checksum >> 8) & 0xff])
+print("Checksum: ", hex(checksum))
+#checksum_bytes = bytearray([0x42, 0x43])  #TODO - calculate checksum
 
 data = length_bytes + source_data + checksum_bytes
 
