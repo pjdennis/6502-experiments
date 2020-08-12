@@ -270,33 +270,9 @@ wait_for_done:
   lda UPLOAD_TO + 1
   sta CP_M_LEN + 1
 
-  jsr clear_display
-
-  lda #'L'
-  jsr display_character
-  lda #' '
-  jsr display_character
-
-  ; Display The length uploaded
-  lda CP_M_LEN + 1
-  jsr display_hex
-  lda CP_M_LEN
-  jsr display_hex
-
-  lda #' '
-  jsr display_character
-
-  ; Display the calculated checksum
   jsr calculate_checksum
-  lda CHECKSUM_VALUE + 1
-  jsr display_hex
-  lda CHECKSUM_VALUE
-  jsr display_hex
 
-  lda #' '
-  jsr display_character
-
-  ; Display the uploaded checksum
+  ; Obtain uploaded checksum
   sec
   lda UPLOAD_STOP_AT
   sbc #2
@@ -312,28 +288,61 @@ wait_for_done:
   lda (UPLOADED_CHECKSUM_P),Y
   sta UPLOADED_CHECKSUM + 1
 
+  jsr clear_display
+
+  ; Compare checksums
+  lda CHECKSUM_VALUE
+  cmp UPLOADED_CHECKSUM
+  bne bad_checksum
+  lda CHECKSUM_VALUE + 1
+  cmp UPLOADED_CHECKSUM + 1
+  bne bad_checksum
+
+; Good checksum
+  
+  jsr copy_memory                ; Relocate upload to the correct location for running it
+  jmp UPLOAD_TO                  ; Jump to and run the main program
+
+bad_checksum:
+  lda #<checksum_failed_message
+  ldx #>checksum_failed_message
+  jsr display_string
+
+  lda #(DISPLAY_SECOND_LINE)
+  jsr move_cursor
+
+  lda #'L'
+  jsr display_character
+  lda #' '
+  jsr display_character
+
+  ; Display The length uploaded
+  lda CP_M_LEN + 1
+  jsr display_hex
+  lda CP_M_LEN
+  jsr display_hex
+
+  lda #' '
+  jsr display_character
+
+  ; Display the uploaded checksum
   lda UPLOADED_CHECKSUM + 1
   jsr display_hex
   lda UPLOADED_CHECKSUM
   jsr display_hex
 
-  ; Relocate upload to the correct location for running it
-  jsr copy_memory
+  lda #' '
+  jsr display_character
 
-  lda #DISPLAY_SECOND_LINE
-  jsr move_cursor
-  lda #<ready_to_run_message
-  ldx #>ready_to_run_message
-  jsr display_string
+  ; Display the calculated checksum
+  jsr calculate_checksum
+  lda CHECKSUM_VALUE + 1
+  jsr display_hex
+  lda CHECKSUM_VALUE
+  jsr display_hex
 
-  jsr wait_for_button
-
-  jsr clear_display
-  lda #<running_message
-  ldx #>running_message
-  jsr display_string
-
-  jmp UPLOAD_TO                  ; Jump to and run the main program
+keep_waiting:
+  bra keep_waiting
 
 
 stop_here:
@@ -346,11 +355,10 @@ forever:
   bra forever
 
 
-ready_message:        asciiz 'Ready (RAM).'
-loading_message:      asciiz 'Load 0000 / ' ; 5, 12
-loaded_message:       asciiz 'Loaded '
-ready_to_run_message: asciiz 'Ready to run.'
-running_message:      asciiz 'Running...'
+ready_message:            asciiz 'Ready (RAM).'
+loading_message:          asciiz 'Load 0000 / '
+loaded_message:           asciiz 'Loaded '
+checksum_failed_message:  asciiz 'Checksum failed!'
 
 
 display_string:
