@@ -42,7 +42,7 @@ IT1_TO_READ              = 20
 ;FIRST_BIT_TIMER_INTERVAL = BIT_TIMER_INTERVAL * 1.33 - ICB2_TO_T1_START - IT1_TO_READ
 FIRST_BIT_TIMER_INTERVAL = BIT_TIMER_INTERVAL * 1.5 - ICB2_TO_T1_START - IT1_TO_READ
 
-NUMBER_OF_BITS           = 8    ; Not counting start or stop bits. There's no parity bit.
+NUMBER_OF_BITS           = 8   ; Not counting start or stop bits. There's no parity bit.
 STATE_WAITING_FOR_CB2    = 0
 STATE_WAITING_FOR_TIMER  = 1
 
@@ -225,6 +225,7 @@ upload_not_done:
   lda #(DISPLAY_FIRST_LINE + 5)
   jsr move_cursor
 
+  ; Calculate number of bytes uploaded so far
   sec
   lda UPLOAD_LOCATION_COPY
   sbc #<(UPLOAD_TO + 2)
@@ -235,6 +236,7 @@ upload_not_done:
   txa
   jsr display_hex
 
+  ; Delay for 10 milliseconds
   lda #100
   jsr delay_10_thousandths
 
@@ -261,6 +263,9 @@ upload_done:
   lda #(IERSETCLEAR | ICA2)
   sta IER
 
+  jsr clear_display
+
+  ; Prepare parameters for checksum calculation and memory copy
   lda #<UPLOAD_TO
   sta CP_M_DEST_P
   lda #>UPLOAD_TO
@@ -276,6 +281,7 @@ upload_done:
   lda UPLOAD_TO + 1
   sta CP_M_LEN + 1
 
+  ; Calculate checksum
   jsr calculate_checksum
 
   ; Obtain uploaded checksum
@@ -287,14 +293,11 @@ upload_done:
   sbc #0
   sta UPLOADED_CHECKSUM_P + 1
 
-  ldy #0
-  lda (UPLOADED_CHECKSUM_P),Y
+  lda (UPLOADED_CHECKSUM_P)
   sta UPLOADED_CHECKSUM
-  iny
+  ldy #1
   lda (UPLOADED_CHECKSUM_P),Y
   sta UPLOADED_CHECKSUM + 1
-
-  jsr clear_display
 
   ; Compare checksums
   lda CHECKSUM_VALUE
@@ -304,8 +307,7 @@ upload_done:
   cmp UPLOADED_CHECKSUM + 1
   bne bad_checksum
 
-; Good checksum
-  
+; Good checksum  
   jsr copy_memory                ; Relocate upload to the correct location for running it
   jmp UPLOAD_TO                  ; Jump to and run the main program
 
@@ -319,6 +321,7 @@ bad_checksum:
 
   lda #'L'
   jsr display_character
+
   lda #' '
   jsr display_character
 
@@ -346,23 +349,12 @@ bad_checksum:
   lda CHECKSUM_VALUE
   jsr display_hex
 
-keep_waiting:
-  bra keep_waiting
-
-
-stop_here:
-  lda #DISPLAY_SECOND_LINE + 15
-  jsr move_cursor
-
-  lda #'.'
-  jsr display_character
 forever:
   bra forever
 
 
 ready_message:            asciiz 'Ready (RAM).'
 loading_message:          asciiz 'Load 0000 / '
-loaded_message:           asciiz 'Loaded '
 checksum_failed_message:  asciiz 'Checksum failed!'
 
 
@@ -380,28 +372,8 @@ done_printing:
   rts
 
 
-wait_for_button:
-  lda PORTA
-  and #BUTTON
-  bne wait_for_button
-wait_button_up:
-  ldy #5
-wait_button_up_loop:
-  lda #100
-  jsr delay_10_thousandths
-  lda PORTA
-  and #BUTTON
-  beq wait_button_up
-  dey
-  bne wait_button_up_loop
-  rts
-
-; On exit A, X, Y are preserved
+; On exit A, X, Y are not preserved
 calculate_checksum:
-  pha
-  phx
-  phy
-
   stz CHECKSUM_VALUE
   stz CHECKSUM_VALUE + 1
 
@@ -445,9 +417,6 @@ checksum_p_increment_done:
   bra checksum_loop
 
 checksum_done:
-  ply
-  plx
-  pla
   rts
 
 
