@@ -1,50 +1,15 @@
-PORTB             = $6000
-PORTA             = $6001
-DDRB              = $6002
-DDRA              = $6003
+  .include base_config_v1.inc
 
-; PORTA assignments
-BANK_MASK         = %00001111
-ILED              = %00010000
-;LED              = %00100000
-BUTTON            = %00100000
-FLASH_LED         = %01000000
-SERIAL_IN         = %10000000
-
-BANK_START        = %00000100
-BANK_STOP         = %00010000
-
-; PORTB assignments
-T1_SQWAVE_OUT     = %10000000
-DISPLAY_DATA_MASK = %01111000
-E                 = %00000100
-RW                = %00000010
-RS                = %00000001
-
-BF                = %01000000
-DISPLAY_BITS_MASK = (DISPLAY_DATA_MASK | E | RW | RS)
-
-; Include additional definitions
-  .include display_parameters.inc
-  .include 6522.inc
-
-CLOCK_FREQ_KHZ           = 2000
 ;BIT_TIMER_INTERVAL      =  208 - 1 ; 2 MHz 9600  bps;  1 MHz 4800  bps ; 2 byte counter
 ;BIT_TIMER_INTERVAL      =  104 - 1 ; 2 MHz 19200 bps;  1 MHz 9600  bps ; "
 BIT_TIMER_INTERVAL       =   52 - 1 ; 2 MHz 38400 bps;  1 MHz 19200 bps ; 1 byte counter
 ;BIT_TIMER_INTERVAL      =   69 - 1 ; 4 MHz / 57600 bps
 ;BIT_TIMER_INTERVAL      =  104 - 1 ; 4 MHz / 38400 bps
-;BIT_TIMER_INTERVAL      = 3333 - 1 ; 1 MHz / 300 bps
 
 ICB2_TO_T1_START         = 19
 IT1_TO_READ              = 20
 
-;FIRST_BIT_TIMER_INTERVAL = BIT_TIMER_INTERVAL * 1.33 - ICB2_TO_T1_START - IT1_TO_READ
 FIRST_BIT_TIMER_INTERVAL = BIT_TIMER_INTERVAL * 1.5 - ICB2_TO_T1_START - IT1_TO_READ
-
-NUMBER_OF_BITS           = 8   ; Not counting start or stop bits. There's no parity bit.
-STATE_WAITING_FOR_CB2    = 0
-STATE_WAITING_FOR_TIMER  = 1
 
 ; Shared ram locations
 DISPLAY_STRING_PARAM     = $00 ; 2 bytes
@@ -63,21 +28,10 @@ CP_M_LEN                 = $14 ; 2 bytes
 BIT_VALUE                = $16
 SERIAL_WAITING           = $17
 
-; For EEPROM Operation
-;UPLOAD_TO               = $2000
-; For RAM Testing
-;UPLOAD_TO                = $3000
-
 INTERRUPT_ROUTINE        = $3f00
 
-; For EEPROM Operation:
-; .org $8000
-; ...end
-
-; For RAM Operation:
   .org ORIGIN
   jmp program_start
-; ...end
 
   ; Place code for delay_routines at start of page to ensure no page boundary crossings
   ; during timing loops
@@ -98,13 +52,13 @@ program_start:
   ; Initialize 6522 port A (memory banking control)
   lda #BANK_START
   sta PORTA
-  lda #(BANK_MASK | ILED) ; Set pin direction  on port A
+  lda #BANK_MASK         ; Set pin direction on port A
   sta DDRA
 
   ; Initialize 6522 port B (display control)
   lda #0
   sta PORTB
-  lda #(DISPLAY_BITS_MASK | T1_SQWAVE_OUT) ; Set display pins and T1 output pins to output
+  lda #DISPLAY_BITS_MASK ; Set pin direction on port B
   sta DDRB
 
   ; Initialize display
@@ -469,9 +423,6 @@ timer_interrupt:
   rti                            ; 6 (About 25 cycles to get out)
 
 done_with_byte:
-  lda #ILED                      ; Turn on interrupt activity LED
-  tsb PORTA
-
 ; Stop timer 1 while keeping timer interrupts enabled
   stz ACR                        ; 4 Timer to 1 shot mode
   stz T1CL                       ; 4 Load a 0 into the timer; will expire after one cycle
@@ -503,9 +454,6 @@ upload_location_incremented:
   ; Configure T1 continuous clock
   lda #ACR_T1_CONT
   sta ACR 
-
-  lda #ILED                      ; Turn off interrupt activity LED
-  trb PORTA
 
 interrupt_done:
   pla                            ; 4
