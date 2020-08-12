@@ -1,4 +1,6 @@
+; On exit A, X, Y are preserved
 lock_screen:
+  pha
   sei
   lda SCREEN_LOCK
   beq lock_acquired
@@ -7,15 +9,17 @@ lock_screen:
 lock_acquired:
   inc SCREEN_LOCK
   cli
+  pla
   rts
 
 
+; On exit A, X, Y are preserved
 unlock_screen:
-  lda #0
-  sta SCREEN_LOCK
+  stz SCREEN_LOCK
   rts
 
 
+; On exit A, X, Y are preserved
 delay_tenth:
   pha
   phx
