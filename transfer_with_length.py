@@ -28,16 +28,17 @@ source_len = len(source_data)
 if(source_len > 0xffff):
   raise ValueError("Cannot transfer more than 0xffff bytes")
 
-checksum = bsd_checksum(source_data)
-
 length_bytes = bytearray([source_len & 0xff, (source_len >> 8) & 0xff])
 print("Length:   ", hex(source_len))
 
+checksum = bsd_checksum(source_data)
+#checksum = 0x4243
+
 checksum_bytes = bytearray([checksum & 0xff, (checksum >> 8) & 0xff])
 print("Checksum: ", hex(checksum))
-#checksum_bytes = bytearray([0x42, 0x43])  #TODO - calculate checksum
 
-data = length_bytes + source_data + checksum_bytes
+#bogus = bytearray([0x44, 0x45])
+data = length_bytes + source_data + checksum_bytes #+ bogus
 
 number_of_bits = len(data) * (1 + 8 + stopbits_number)
 

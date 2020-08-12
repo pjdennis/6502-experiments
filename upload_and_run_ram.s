@@ -110,17 +110,20 @@ program_start:
   ; Initialize display
   jsr reset_and_enable_display_no_cursor
 
-
   ; relocate the interrupt handler
-  ldx #0
-relocate_copy_loop:
-  cpx #(interrupt_end - interrupt)
-  beq relocate_copy_done
-  lda interrupt, X
-  sta INTERRUPT_ROUTINE, X
-  inx
-  bra relocate_copy_loop
-relocate_copy_done:
+  lda #<INTERRUPT_ROUTINE
+  sta CP_M_DEST_P
+  lda #>INTERRUPT_ROUTINE
+  sta CP_M_DEST_P + 1
+  lda #<interrupt
+  sta CP_M_SRC_P
+  lda #>interrupt
+  sta CP_M_SRC_P + 1
+  lda #<(interrupt_end - interrupt)
+  sta CP_M_LEN
+  lda #>(interrupt_end - interrupt)
+  sta CP_M_LEN + 1
+  jsr copy_memory
 
   lda #<UPLOAD_TO
   sta UPLOAD_LOCATION
@@ -163,6 +166,7 @@ wait_for_length:
   stx UPLOAD_LOCATION_COPY + 1
 
   ; Comparison - jump back to wait_for_upload_start if UPLOAD_LOCATION < UPLOAD_TO + 2
+  ; Taken from here: http://www.6502.org/tutorials/compare_beyond.html
   lda UPLOAD_LOCATION_COPY + 1   ; Compare high bytes
   cmp #>(UPLOAD_TO + 2)
   bcc wait_for_length
@@ -207,6 +211,17 @@ wait_for_done:
   sta UPLOAD_LOCATION_COPY
   stx UPLOAD_LOCATION_COPY + 1
 
+  ; Comparison - upload done if  UPLOAD_LOCATION >= UPLOAD_STOP_AT
+  ; Taken from here: http://www.6502.org/tutorials/compare_beyond.html
+  lda UPLOAD_LOCATION_COPY + 1   ; Compare high bytes
+  cmp UPLOAD_STOP_AT + 1
+  bcc upload_not_done
+  bne upload_done
+  lda UPLOAD_LOCATION_COPY       ; Compare low bytes
+  cmp UPLOAD_STOP_AT
+  bcs upload_done
+
+upload_not_done:
   lda #(DISPLAY_FIRST_LINE + 5)
   jsr move_cursor
 
@@ -223,18 +238,9 @@ wait_for_done:
   lda #100
   jsr delay_10_thousandths
 
-  ; compare high byte and then low byte to allow lock free correctness
-  lda UPLOAD_LOCATION + 1
-  cmp UPLOAD_STOP_AT + 1
-  bne wait_for_done
-  lda UPLOAD_LOCATION
-  cmp UPLOAD_STOP_AT
-  bne wait_for_done
+  bra wait_for_done
 
-  ; TODO: Then display uploaded checksum
-
-
-; upload done
+upload_done:
   lda #0                         ; Set CB2 back to default behavior
   sta PCR 
 
@@ -335,7 +341,6 @@ bad_checksum:
   jsr display_character
 
   ; Display the calculated checksum
-  jsr calculate_checksum
   lda CHECKSUM_VALUE + 1
   jsr display_hex
   lda CHECKSUM_VALUE
