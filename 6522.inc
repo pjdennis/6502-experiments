@@ -1,15 +1,17 @@
 ; 6522 registers
-T1CL = $6004
-T1CH = $6005
-T1LL = $6006
-T1LH = $6007
-T2CL = $6008
-T2CH = $6009
-SR   = $600A
-ACR  = $600B
-PCR  = $600C
-IFR  = $600D
-IER  = $600E
+T1CL    = $6004
+T1CH    = $6005
+T1LL    = $6006
+T1LH    = $6007
+T2CL    = $6008
+T2CH    = $6009
+SR      = $600A
+ACR     = $600B
+PCR     = $600C
+IFR     = $600D
+IER     = $600E
+PORTANH = $600F
+
 
 ; 6522 flag masks
 IERSETCLEAR        = %10000000
@@ -23,7 +25,14 @@ ICA2               = %00000001
 
 ACR_T1_CONT        = %01000000
 ACR_T1_CONT_SQWAVE = %11000000
+
 ACR_SR_IN_T2       = %00000100
+ACR_SR_IN_CK       = %00001000
+ACR_SR_IN_CB1      = %00001100
+ACR_SR_OUT_FR_T2   = %00010000
+ACR_SR_OUT_T2      = %00010100
+ACR_SR_OUT_CK      = %00011000
+ACR_SR_OUT_CB1     = %00011100
 
 PCR_CA2_IND_NEG_E  = %00000010 ; CA2 Independent interrupt input - negative edge
 PCR_CA2_IND_POS_E  = %00000110 ; CA2 Independent interrupt input - positive edge
