@@ -18,20 +18,20 @@ initialize_restart_handler:
   lda #>reset_interrupt
   sta INTERRUPT_ROUTINE + 2
 
-  ; Configure and enable CA2 independent interrupts
-  lda #PCR_CA2_IND_NEG_E
+  ; Configure and enable CB2 independent interrupts
+  lda #PCR_CB2_IND_NEG_E
   sta PCR
-  lda #(IERSETCLEAR | ICA2)
+  lda #(IERSETCLEAR | ICB2)
   sta IER
   rts
 
 
-; Triggered by CA2 negative edge
+; Triggered by CB2 negative edge
 reset_interrupt:
-  ; Clear and reset CA2 interrupts
+  ; Clear and reset CB2 interrupts
   lda #0
   sta PCR
-  lda #ICA2
+  lda #ICB2
   sta IER
   sta IFR
 

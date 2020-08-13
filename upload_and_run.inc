@@ -6,10 +6,10 @@ BIT_TIMER_INTERVAL       =   52 - 1 ; 2 MHz 38400 bps;  1 MHz 19200 bps ; 1 byte
 ;BIT_TIMER_INTERVAL      =   69 - 1 ; 4 MHz / 57600 bps
 ;BIT_TIMER_INTERVAL      =  104 - 1 ; 4 MHz / 38400 bps
 
-ICB2_TO_T1_START         = 19
+ICA2_TO_T1_START         = 19
 IT1_TO_READ              = 20
 
-FIRST_BIT_TIMER_INTERVAL = BIT_TIMER_INTERVAL * 1.5 - ICB2_TO_T1_START - IT1_TO_READ
+FIRST_BIT_TIMER_INTERVAL = BIT_TIMER_INTERVAL * 1.5 - ICA2_TO_T1_START - IT1_TO_READ
 
 ; Shared ram locations
 DISPLAY_STRING_PARAM     = $00 ; 2 bytes
@@ -88,9 +88,9 @@ program_start:
   lda #ACR_T1_CONT
   sta ACR  
 
-  ; Configure CB2 for independent interrupt; Negative edge because we're not inverting
+  ; Configure CA2 for independent interrupt; Negative edge because we're not inverting
   ; the incoming serial receive line to adapt voltage levels
-  lda #PCR_CB2_IND_NEG_E
+  lda #PCR_CA2_IND_NEG_E
   sta PCR
 
   ; Initialize for serial receive
@@ -103,7 +103,7 @@ program_start:
   lda #$80
   sta BIT_VALUE
 
-  lda #(IERSETCLEAR | ICB2 | IT1) ; Enable CB2 and timer interrupts
+  lda #(IERSETCLEAR | ICA2 | IT1) ; Enable CA2 and timer interrupts
   sta IER
 
   lda #<ready_message
@@ -197,10 +197,10 @@ upload_not_done:
   bra wait_for_done
 
 upload_done:
-  lda #0                         ; Set CB2 back to default behavior
+  lda #0                         ; Set CA2 back to default behavior
   sta PCR 
 
-  lda #(IT1 | ICB2) ; Disable T1 and CB2 interrupts
+  lda #(IT1 | ICA2) ; Disable T1 and CA2 interrupts
   sta IER
 
   .ifdef UPLOAD_RAM
@@ -390,7 +390,7 @@ cb2_interrupt:
   sta T1LL                       ; 4
 ; End of code for faster speeds  ;
 
-  lda #ICB2                      ; 2 Disable the CB2 interrupt
+  lda #ICA2                      ; 2 Disable the CA2 interrupt
   sta IER                        ; 4
 
   stz SERIAL_WAITING             ; 3 (zero page)
@@ -435,7 +435,7 @@ done_with_byte:
   inc UPLOAD_LOCATION + 1
 
 upload_location_incremented:
-  lda #(IT1 | ICB2)              ; Clear the timer and cb2 interrupt flags
+  lda #(IT1 | ICA2)              ; Clear the timer and cb2 interrupt flags
   sta IFR                        ; 4
 
 ; Reset serial state
@@ -448,7 +448,7 @@ upload_location_incremented:
   lda #$80                       ; 2
   sta BIT_VALUE                  ; 4
 
-  lda #(IERSETCLEAR | ICB2)      ; 2 Renable CB2 interrupts
+  lda #(IERSETCLEAR | ICA2)      ; 2 Renable CA2 interrupts
   sta IER                        ; 4
 
   ; Configure T1 continuous clock
