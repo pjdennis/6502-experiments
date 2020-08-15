@@ -1,6 +1,10 @@
   .include base_config_v1.inc
 
 BUTTON          = %00100000
+SH_OUT_DATA     = %01000000
+SH_OUT_CLOCK    = %00010000
+
+IO_PINS_MASK    = BUTTON | SH_OUT_DATA | SH_OUT_CLOCK
 
 D_S_I_P         = $00
 
@@ -14,20 +18,76 @@ D_S_I_P         = $00
   .include delay_routines.inc
 
 program_entry:
-  lda #BUTTON
-  trb DDRA
+  lda #SH_OUT_CLOCK
+  tsb PORTA
 
+  lda DDRA
+  and #(~IO_PINS_MASK & $ff)
+  ora #(SH_OUT_DATA | SH_OUT_CLOCK)
+  sta DDRA
+
+  lda #ACR_SR_IN_T2
+  sta ACR
+  lda #100
+  sta T2CL
+
+;  lda #0
+;  jsr send_via_io_pins
+ 
+main_loop:
+  jsr clear_display 
   jsr display_string_immediate
-  asciiz "Shift in..."
+  .asciiz "Press to send"
+  jsr wait_for_button_down
+
+  lda #%10010001
+  jsr send_via_io_pins
+
+  jsr wait_for_button_up
+  jsr clear_display
+  jsr display_string_immediate
+  .asciiz "Press to read"
+  jsr wait_for_button_down
+
+  lda #SH_OUT_DATA
+  trb PORTA
+
+  lda SR   ; initialize read
+  jsr wait_for_button_up
+
+  
+  lda SR
+  jsr clear_display
+  jsr display_binary
+
+  jmp stop_here
+
+
+  lda #0
+  jsr send_via_io_pins
+
+  jsr clear_display
+  jsr display_string_immediate
+  .asciiz "Message sent"
+
+  jsr wait_for_button_up
+  bra main_loop
+
+  jsr clear_display
+  jsr display_string_immediate
+  asciiz "ACR set to SR IN"
+
+  jsr wait_for_button_up
+
 
   lda #DISPLAY_SECOND_LINE
   jsr move_cursor
 
-  lda #%10010101
-  jsr display_binary
+;  lda #%10010101
+;  jsr display_binary
 
 
-  jmp stop_here
+;  jmp stop_here
 
 
   ldx #0
@@ -37,9 +97,9 @@ repeat:
   lda #DISPLAY_SECOND_LINE
   jsr move_cursor
   txa
-  jsr display_hex
+  jsr display_binary
 
-  jsr send_serial
+;  jsr send_serial
 
   jsr wait_for_button_up
 
@@ -48,6 +108,63 @@ repeat:
 
 wait:
   bra wait
+
+send_via_io_pins:
+  pha
+  phx
+  phy
+
+  ldy #8
+send_via_io_pins_loop:
+
+  asl
+  tax
+  bcs send_via_io_pins_one
+; send a zero
+  jsr wait_for_button_down
+  lda #SH_OUT_DATA
+  trb PORTA
+  jsr wait_for_button_up
+
+  jsr wait_for_button_down
+  lda #SH_OUT_CLOCK
+  trb PORTA
+  jsr wait_for_button_up
+
+  jsr wait_for_button_down
+  tsb PORTA
+  jsr wait_for_button_up
+
+  bra send_via_io_pins_continue
+
+send_via_io_pins_one
+; send a one
+  jsr wait_for_button_down
+  lda #SH_OUT_DATA
+  tsb PORTA
+  jsr wait_for_button_up
+
+  jsr wait_for_button_down
+  lda #SH_OUT_CLOCK
+  trb PORTA
+  jsr wait_for_button_up
+
+  jsr wait_for_button_down
+  tsb PORTA
+  jsr wait_for_button_up
+
+send_via_io_pins_continue:
+  txa
+  dey
+  bne send_via_io_pins_loop
+
+  ply
+  plx
+  pla
+  rts
+
+
+
 
 
 send_serial_with_delay:
@@ -101,22 +218,30 @@ short_delay_loop:
 
 
 wait_for_button_down:
+  pha
+wait_for_button_down_loop:
   lda PORTA
   and #BUTTON
-  bne wait_for_button_down
+  bne wait_for_button_down_loop
+  pla
   rts
 
 
 wait_for_button_up:
+  pha
+  phy
+wait_for_button_up_outer_loop:
   ldy #5
-wait_for_button_up_loop:
+wait_for_button_up_inner_loop:
   lda #100
   jsr delay_10_thousandths
   lda PORTA
   and #BUTTON
-  beq wait_for_button_up
+  beq wait_for_button_up_outer_loop
   dey
-  bne wait_for_button_up_loop
+  bne wait_for_button_up_inner_loop
+  ply
+  pla
   rts
 
 

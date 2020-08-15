@@ -16,6 +16,9 @@ program_entry:
   lda #BUTTON
   trb DDRA
 
+  lda #ACR_SR_OUT_CK
+  sta ACR
+
   jsr display_string_immediate
   asciiz "Shift patterns.."
 
@@ -89,13 +92,6 @@ send_serial_with_delay:
 
 
 send_serial:
-  pha
-  ;lda #$00
-  ;sta T2CL
-  ;lda #ACR_SR_OUT_T2
-  lda #ACR_SR_OUT_CK
-  sta ACR
-  pla
   sta SR
   rts
 
