@@ -12,7 +12,10 @@ SH_IN_CLOCK     = %10000000
 
 IO_PINS_MASK_B  = SH_IN_CLOCK
 
-D_S_I_P         = $00
+D_S_I_P         = $00    ; Two bytes
+TEMP            = $02
+
+TRANSLATE       = $200
 
   .org $2000
   jmp program_entry
@@ -48,6 +51,8 @@ program_entry:
 
   lda #0
   jsr send_via_io_pins
+
+  jsr build_translate
  
 main_loop:
   jsr clear_display 
@@ -80,12 +85,19 @@ data_wait_loop:
   jsr wait_for_button_down
   jsr clear_display
   jsr display_string_immediate
-  .asciiz "Received: "
+  .asciiz "Rec: "
+  lda SR
+  tax
+  jsr display_binary
+
   lda #DISPLAY_SECOND_LINE
   jsr move_cursor
-
-  lda SR
+  jsr display_string_immediate
+  .asciiz "Tra: "
+  txa
+  jsr translate
   jsr display_binary
+
   jsr wait_for_button_up
 
   jsr wait_for_button_down
@@ -252,6 +264,40 @@ wait_for_button_up_inner_loop:
   dey
   bne wait_for_button_up_inner_loop
   ply
+  pla
+  rts
+
+translate:
+  phx
+  tax
+  lda TRANSLATE,X
+  plx
+  rts
+
+
+build_translate:
+  pha
+  phx
+  phy
+
+  ldx #0
+build_translate_loop:
+  txa
+  ldy #8
+build_translate_shift_loop: 
+  asl
+  ror TEMP
+  dey
+  bne build_translate_shift_loop
+  
+  lda TEMP
+  sta TRANSLATE,X
+
+  inx
+  bne build_translate_loop
+
+  ply
+  plx
   pla
   rts
 
