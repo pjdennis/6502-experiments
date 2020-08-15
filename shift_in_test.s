@@ -22,6 +22,9 @@ D_S_I_P         = $00
   .include delay_routines.inc
 
 program_entry:
+  lda #$00
+  sta IER
+
   lda #SH_OUT_CLOCK
   tsb PORTA
 
@@ -38,78 +41,76 @@ program_entry:
   ora #(SH_IN_CLOCK)
   sta DDRB
 
-  lda #ACR_SR_IN_CB1
+  lda #ACR_SR_IN_CK
   sta ACR
-  lda #100
-  sta T2CL
 
-;  lda #0
-;  jsr send_via_io_pins
+  lda #0
+  jsr send_via_io_pins
  
 main_loop:
+  lda #1
+  sta T2CL
+  lda #0
+  sta T2CH
+
   jsr clear_display 
   jsr display_string_immediate
   .asciiz "Press to send"
-  jsr wait_for_button_down
 
+  jsr wait_for_button_down
   lda #%10010001
   jsr send_via_io_pins
-
   jsr wait_for_button_up
+
   jsr clear_display
   jsr display_string_immediate
   .asciiz "Press to read"
-  jsr wait_for_button_down
 
+  jsr wait_for_button_down
   lda #SH_OUT_DATA
   trb PORTA
 
-  ldx #8
-shift_in_loop:
-  jsr wait_for_button_down
+  lda #ACR_SR_IN_T2
+  sta ACR
+
   lda #SH_IN_CLOCK
-  trb PORTB
+  trb PORTB ; 2 to complete?
+  
+  lda #40 - 2 -2 - 12; 2
+  sta T2CL  ; 4
+  lda #0    ; 2
+  sta T2CH  ; 4
+
+  lda #18
+  sta T2CL
+
+
+  lda SR   ; Start shifting
+;  lda #0
+;  sta SR
+ 
+
   jsr clear_display
   jsr display_string_immediate
-  .asciiz "Clock low"
+  .asciiz "Press to show"
+  jsr wait_for_button_up
+
+  jsr wait_for_button_down
+  jsr clear_display
+  lda SR
+  jsr display_binary
   jsr wait_for_button_up
 
   jsr wait_for_button_down
   lda #SH_IN_CLOCK
   tsb PORTB
-  jsr clear_display
-  jsr display_string_immediate
-  .asciiz "Clock high"
-  jsr wait_for_button_up
-
-  dex
-  bne shift_in_loop
-
-  lda SR
-  jsr clear_display
-  jsr display_binary
-
-  jmp stop_here
-
-
-  ldx #0
-repeat:
-  jsr wait_for_button_down
-
-  lda #DISPLAY_SECOND_LINE
-  jsr move_cursor
-  txa
-  jsr display_binary
-
-;  jsr send_serial
+  lda #ACR_SR_IN_CK
+  sta ACR
 
   jsr wait_for_button_up
 
-  inx
-  bra repeat
+  jmp main_loop 
 
-wait:
-  bra wait
 
 send_via_io_pins:
   pha
@@ -166,7 +167,34 @@ send_via_io_pins_continue:
   rts
 
 
+shift_in_using_cb2:
+  pha
+  phx
 
+  ldx #8
+shift_in_loop:
+  jsr wait_for_button_down
+  lda #SH_IN_CLOCK
+  trb PORTB
+  jsr clear_display
+  jsr display_string_immediate
+  .asciiz "Clock low"
+  jsr wait_for_button_up
+
+  jsr wait_for_button_down
+  lda #SH_IN_CLOCK
+  tsb PORTB
+  jsr clear_display
+  jsr display_string_immediate
+  .asciiz "Clock high"
+  jsr wait_for_button_up
+
+  dex
+  bne shift_in_loop
+
+  plx
+  pla
+  rts
 
 
 send_serial_with_delay:
