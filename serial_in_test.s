@@ -2,9 +2,7 @@
 
 BPS               = 9600
 
-;HALF_BIT_INTERVAL = (CLOCK_FREQ_KHZ * 1000 / BPS / 2)
-
-HALF_BIT_INTERVAL = 104 ; 2 MHz 9600 bps 
+HALF_BIT_INTERVAL = CLOCK_FREQ_KHZ * 1000.0 / BPS / 2
 
 D_S_I_P           = $00    ; Two bytes
 CP_M_DEST_P       = $02    ; Two bytes
