@@ -1,11 +1,13 @@
   .include base_config_v1.inc
 
 ;BPS_HUNDREDS          =  96     ;  9600 bps
-;BPS_HUNDREDS          = 192     ; 19200 bps
+;BPS_HUNDREDS           = 192     ; 19200 bps
 ;BPS_HUNDREDS          = 384     ; 38400 bps
-BPS_HUNDREDS           = 576     ; 57600 bps
+BPS_HUNDREDS          = 576     ; 57600 bps
 
 HALF_BIT_INTERVAL      = CLOCK_FREQ_KHZ * 5 / BPS_HUNDREDS
+INITIAL_INTERVAL       = HALF_BIT_INTERVAL * 2 - 2 - 20
+SUBSEQUENT_INTERVAL    = HALF_BIT_INTERVAL - 2
 
 ; Shared ram locations
 DISPLAY_STRING_PARAM   = $00     ; 2 bytes
@@ -94,6 +96,9 @@ program_start:
   sta IFR
   lda #(IERSETCLEAR | ICB2)
   sta IER
+
+  lda #INITIAL_INTERVAL
+  sta T2CL
 
   lda #<ready_message
   ldx #>ready_message
@@ -419,11 +424,12 @@ interrupt:                       ; 7 + 2 (avg) cycles to get into the handler
   bne interrupt_shift_done
 
 interrupt_serial_in_start:
-  lda #(HALF_BIT_INTERVAL * 2 - 2 - 24)       ; 2
-  sta T2CL                                    ; 4
+  ; -2 -26 is the most that can be reduced at 57600 without causing the shift
+  ; start to be delayed... presuming anything less results in T2 expiring before
+  ; the low order latch has been reset
   stz T2CH                                    ; 4
 
-  lda #(HALF_BIT_INTERVAL - 2)
+  lda #SUBSEQUENT_INTERVAL                    ; -1 good; -2+ bad
   sta T2CL
 
   lda SR   ; Start shifting
@@ -436,26 +442,30 @@ interrupt_serial_in_start:
   lda #(IERSETCLEAR | ISR)
   sta IER
 
-  bra interrupt_done
+  pla
+  rti
 
 interrupt_shift_done:
   lda SR                                      ; Clears interrupt
   sta (UPLOAD_P)
-  lda #ACR_SR_IN_T2
   stz ACR
+  lda #ACR_SR_IN_T2
   sta ACR
-  inc UPLOAD_P
-  bne interrupt_upload_incremented
-  inc UPLOAD_P + 1
-interrupt_upload_incremented:
-  dec WAITING_FOR_SHIFT
 
   lda #ICB2
   sta IFR
   lda #(IERSETCLEAR | ICB2)
   sta IER
 
-interrupt_done:
+  lda #INITIAL_INTERVAL
+  sta T2CL
+
+  inc UPLOAD_P
+  bne interrupt_upload_incremented
+  inc UPLOAD_P + 1
+interrupt_upload_incremented:
+  dec WAITING_FOR_SHIFT
+
   pla
   rti
 interrupt_end:
