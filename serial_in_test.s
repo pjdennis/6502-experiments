@@ -1,7 +1,8 @@
   .include base_config_v1.inc
 
-BPS_HUNDREDS     = 96
-;PBS_HUNDREDS      = 384
+;BPS_HUNDREDS     = 96
+;BPS_HUNDREDS     = 384
+BPS_HUNDREDS      = 576
 
 HALF_BIT_INTERVAL = CLOCK_FREQ_KHZ * 5 / BPS_HUNDREDS
 
@@ -102,7 +103,7 @@ interrupt:
   bne interrupt_shift_done
 
 interrupt_serial_in_start:
-  lda #(HALF_BIT_INTERVAL * 2 - 2 - 20 - 10)  ; 2
+  lda #(HALF_BIT_INTERVAL * 2 - 2 - 24)       ; 2
   sta T2CL                                    ; 4
   stz T2CH                                    ; 4
 
