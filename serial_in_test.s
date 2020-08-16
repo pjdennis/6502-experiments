@@ -1,8 +1,9 @@
   .include base_config_v1.inc
 
-BPS               = 9600
+BPS_HUNDREDS     = 96
+;PBS_HUNDREDS      = 384
 
-HALF_BIT_INTERVAL = CLOCK_FREQ_KHZ * 1000.0 / BPS / 2
+HALF_BIT_INTERVAL = CLOCK_FREQ_KHZ * 5 / BPS_HUNDREDS
 
 D_S_I_P           = $00    ; Two bytes
 CP_M_DEST_P       = $02    ; Two bytes
