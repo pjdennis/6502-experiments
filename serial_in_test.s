@@ -16,10 +16,13 @@ D_S_I_P           = $00    ; Two bytes
 CP_M_DEST_P       = $02    ; Two bytes
 CP_M_SRC_P        = $04    ; Two bytes
 CP_M_LEN          = $06    ; Two bytes
-TEMP              = $08
-TRANSFER_STARTED  = $09
+UPLOAD_P          = $08    ; Two bytes
+WAITING_FOR_SHIFT = $0a
+TEMP              = $0b
 
 TRANSLATE         = $200
+
+UPLOAD_TO         = $3000
 
 INTERRUPT_ROUTINE = $3f00
 
@@ -80,91 +83,111 @@ program_entry:
 main_loop:
   jsr clear_display 
   jsr display_string_immediate
-  .asciiz "Waiting for data"
+  .asciiz "Wait for start"
 
-  stz TRANSFER_STARTED
+  stz WAITING_FOR_SHIFT
 
-  lda #ACR_SR_IN_T2
-  sta ACR
+  lda #<UPLOAD_TO
+  sta UPLOAD_P
+  lda #>UPLOAD_TO
+  sta UPLOAD_P + 1
 
   lda #PCR_CB2_IND_NEG_E
   sta PCR
 
   lda #ICB2
   sta IFR
-
   lda #(IERSETCLEAR | ICB2)
   sta IER
 
-data_wait_loop:
-  lda TRANSFER_STARTED
-  beq data_wait_loop
- 
-  jsr wait_for_button_up
-  jsr clear_display
-  jsr display_string_immediate
-  .asciiz "Press to show"
+wait_for_end:
+  lda UPLOAD_P + 1
+  cmp #>(UPLOAD_TO + 2)
+  bcc wait_for_end
+  bne at_end
+  lda UPLOAD_P
+  cmp #<(UPLOAD_TO + 2)
+  bcc wait_for_end
+at_end:
+  ; Now we have received two bytes
 
-  jsr wait_for_button_down
   jsr clear_display
   jsr display_string_immediate
-  .asciiz "Rec: "
-  lda SR
-  tax
+  .asciiz "B1: "
+  lda UPLOAD_TO
   jsr display_binary
 
   lda #DISPLAY_SECOND_LINE
   jsr move_cursor
   jsr display_string_immediate
-  .asciiz "Tra: "
-  txa
-  jsr translate
+  .asciiz "B2: "
+  lda UPLOAD_TO + 1
   jsr display_binary
 
-
   jmp stop_here
-
-
-  jsr wait_for_button_up
-
-  jsr wait_for_button_down
-
+  
   jmp main_loop 
 
 
 interrupt:
   pha
 
-  lda IFR
-  and #ICB2
-  bne interrupt_serial_in_start
-  ;TODO check for other interrupt types
+  lda WAITING_FOR_SHIFT
+  bne interrupt_shift_done
 
-  bra interrupt_done
 interrupt_serial_in_start:
-  lda #0
-  sta PCR
-
-  lda #(HALF_BIT_INTERVAL * 2) - 2 - 10 - 12  ; 2
+  lda #(HALF_BIT_INTERVAL * 2 - 2 - 20 - 12)  ; 2
   sta T2CL                                    ; 4
   lda #0                                      ; 2
   sta T2CH                                    ; 4
+
+  lda #ACR_SR_IN_T2
+  sta ACR
 
   lda #(HALF_BIT_INTERVAL - 2)
   sta T2CL
 
   lda SR   ; Start shifting
 
+  inc WAITING_FOR_SHIFT
+  
   lda #ICB2
-  sta IFR
   sta IER
 
-  inc TRANSFER_STARTED
+  lda #ISR
+  sta IFR
+  lda #(IERSETCLEAR | ISR)
+  sta IER
+
+  bra interrupt_done
+
+interrupt_shift_done:
+  phx
+  ldx SR                                      ; Clears interrupt
+  lda TRANSLATE,X
+  plx
+  sta (UPLOAD_P)
+  inc UPLOAD_P
+  bne interrupt_upload_incremented
+  inc UPLOAD_P + 1
+interrupt_upload_incremented:
+
+  lda #0
+  sta ACR
+
+  dec WAITING_FOR_SHIFT
+
+  lda #ISR
+  sta IER
+
+  lda #ICB2
+  sta IFR
+  lda #(IERSETCLEAR | ICB2)
+  sta IER
 
 interrupt_done:
   pla
   rti
-
 interrupt_end:
 
 
