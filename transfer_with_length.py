@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 port              = "/dev/tty.usbserial-1410"
 baudrate          = 38400
-stopbits_constant = serial.STOPBITS_TWO
+stopbits          = 2
 
 #BSD checksum as calculated by cksum -o 1
 def bsd_checksum(data):
@@ -15,10 +15,12 @@ def bsd_checksum(data):
     sum = (sum + byte) & 0xffff
   return sum
 
-if (stopbits_constant == serial.STOPBITS_ONE):
-  stopbits_number = 1.0
+if (stopbits == 1):
+  stopbits_constant = serial.STOPBITS_ONE
+elif (stopbits == 2):
+  stopbits_constant = serial.STOPBITS_TWO
 else:
-  stopbits_number = 2.0
+  raise ValueError("Stop bits must be 1 or 2") 
 
 with open(sys.argv[1], "rb") as binaryfile:
   source_data = bytearray(binaryfile.read())
@@ -36,7 +38,7 @@ checksum_bytes = bytearray([checksum & 0xff, (checksum >> 8) & 0xff])
 
 data = length_bytes + source_data + checksum_bytes
 
-number_of_bits = len(data) * (1 + 8 + stopbits_number)
+number_of_bits = len(data) * (1 + 8 + stopbits)
 
 print("Uploading...")
 print("Length:   ", hex(source_len))
