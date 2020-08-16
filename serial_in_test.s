@@ -101,10 +101,9 @@ interrupt:
   bne interrupt_shift_done
 
 interrupt_serial_in_start:
-  lda #(HALF_BIT_INTERVAL * 2 - 2 - 20 - 12)  ; 2
+  lda #(HALF_BIT_INTERVAL * 2 - 2 - 20 - 10)  ; 2
   sta T2CL                                    ; 4
-  lda #0                                      ; 2
-  sta T2CH                                    ; 4
+  stz T2CH                                    ; 4
 
   lda #(HALF_BIT_INTERVAL - 2)
   sta T2CL
@@ -116,8 +115,6 @@ interrupt_serial_in_start:
   lda #ICB2
   sta IER
 
-  lda #ISR
-  sta IFR
   lda #(IERSETCLEAR | ISR)
   sta IER
 
@@ -126,6 +123,9 @@ interrupt_serial_in_start:
 interrupt_shift_done:
   phx
   ldx SR                                      ; Clears interrupt
+  lda #ACR_SR_IN_T2
+  stz ACR
+  sta ACR
   lda TRANSLATE,X
   plx
   sta (UPLOAD_P)
@@ -133,15 +133,7 @@ interrupt_shift_done:
   bne interrupt_upload_incremented
   inc UPLOAD_P + 1
 interrupt_upload_incremented:
-
-  lda #ACR_SR_IN_T2
-  stz ACR
-  sta ACR
-
   dec WAITING_FOR_SHIFT
-
-  lda #ISR
-  sta IER
 
   lda #ICB2
   sta IFR
