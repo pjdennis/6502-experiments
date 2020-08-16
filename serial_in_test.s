@@ -1,8 +1,8 @@
   .include base_config_v1.inc
 
 ;BPS_HUNDREDS     = 96
-;BPS_HUNDREDS     = 384
-BPS_HUNDREDS      = 576
+BPS_HUNDREDS      = 384
+;BPS_HUNDREDS     = 576
 
 HALF_BIT_INTERVAL = CLOCK_FREQ_KHZ * 5 / BPS_HUNDREDS
 
