@@ -11,16 +11,14 @@ HALF_BIT_INTERVAL      = CLOCK_FREQ_KHZ * 5 / BPS_HUNDREDS
 DISPLAY_STRING_PARAM   = $00     ; 2 bytes
 UPLOAD_P               = $02     ; 2 bytes
 UPLOAD_STOP_AT         = $04     ; 2 bytes
-UPLOADED_CHECKSUM_P    = $06     ; 2 bytes
+TEMP_P                 = $06     ; 2 bytes
 UPLOADED_CHECKSUM      = $08     ; 2 bytes
-CHECKSUM_P             = $0a     ; 2 bytes
-CHECKSUM_VALUE         = $0c     ; 2 bytes
-TRANSLATE_P            = $0e     ; 2 bytes
-CP_M_DEST_P            = $10     ; 2 bytes
-CP_M_SRC_P             = $12     ; 2 bytes
-CP_M_LEN               = $14     ; 2 bytes
-WAITING_FOR_SHIFT      = $16
-TEMP                   = $17
+CHECKSUM_VALUE         = $0a     ; 2 bytes
+CP_M_DEST_P            = $0c     ; 2 bytes
+CP_M_SRC_P             = $0e     ; 2 bytes
+CP_M_LEN               = $10     ; 2 bytes
+WAITING_FOR_SHIFT      = $12
+TEMP                   = $13
 
 TRANSLATE              = $0200
 INTERRUPT_ROUTINE      = $3f00
@@ -208,7 +206,7 @@ upload_done:
   sta CP_M_SRC_P + 1
 
   ; Translate data (reverse the bit order)
-  ;jsr translate_data
+  jsr translate_data
 
   ; Calculate checksum
   jsr calculate_checksum
@@ -217,19 +215,15 @@ upload_done:
   sec
   lda UPLOAD_STOP_AT
   sbc #2
-  sta UPLOADED_CHECKSUM_P
+  sta TEMP_P
   lda UPLOAD_STOP_AT + 1
   sbc #0
-  sta UPLOADED_CHECKSUM_P + 1
+  sta TEMP_P + 1
 
-  lda (UPLOADED_CHECKSUM_P)
-  tax
-  lda TRANSLATE,X
+  lda (TEMP_P)
   sta UPLOADED_CHECKSUM
   ldy #1
-  lda (UPLOADED_CHECKSUM_P),Y
-  tax
-  lda TRANSLATE,X
+  lda (TEMP_P),Y
   sta UPLOADED_CHECKSUM + 1
 
   ; Compare checksums
@@ -302,12 +296,18 @@ done_printing:
 
 translate_data:
   lda CP_M_SRC_P
-  sta TRANSLATE_P
+  sta TEMP_P
   lda CP_M_SRC_P + 1
-  sta TRANSLATE_P + 1
+  sta TEMP_P + 1
 
-  ldx CP_M_LEN                   ; Low byte of count
-  ldy CP_M_LEN + 1               ; High byte of count
+  ; Translate count + 2 bytes, to include checksum
+  clc
+  lda CP_M_LEN
+  adc #2                         ; Low byte of count
+  tax
+  lda CP_M_LEN + 1
+  adc #0
+  tay                            ; High byte of count
 translate_loop:
   cpy #0
   bne translate_not_done
@@ -315,15 +315,15 @@ translate_loop:
   beq translate_done
 translate_not_done:
   stx TEMP
-  lda (TRANSLATE_P)
+  lda (TEMP_P)
   tax
   lda TRANSLATE,X
-  sta (TRANSLATE_P)
+  sta (TEMP_P)
   ldx TEMP
 
-  inc TRANSLATE_P
+  inc TEMP_P
   bne translate_p_increment_done
-  inc TRANSLATE_P + 1
+  inc TEMP_P + 1
 translate_p_increment_done:
 
   dex
@@ -334,8 +334,6 @@ translate_p_increment_done:
 
 translate_done:
   rts
-  
-
 
 
 ; On exit A, X, Y are not preserved
@@ -344,9 +342,9 @@ calculate_checksum:
   stz CHECKSUM_VALUE + 1
 
   lda CP_M_SRC_P
-  sta CHECKSUM_P
+  sta TEMP_P
   lda CP_M_SRC_P + 1
-  sta CHECKSUM_P + 1
+  sta TEMP_P + 1
 
   ldx CP_M_LEN                   ; Low byte of count
   ldy CP_M_LEN + 1               ; High byte of count
@@ -364,16 +362,16 @@ checksum_not_done:
   ror CHECKSUM_VALUE + 1
 
   clc
-  lda (CHECKSUM_P)
+  lda (TEMP_P)
   adc CHECKSUM_VALUE
   sta CHECKSUM_VALUE
   lda #0
   adc CHECKSUM_VALUE + 1
   sta CHECKSUM_VALUE + 1
 
-  inc CHECKSUM_P
+  inc TEMP_P
   bne checksum_p_increment_done
-  inc CHECKSUM_P + 1
+  inc TEMP_P + 1
 checksum_p_increment_done:
 
   dex
