@@ -1,21 +1,27 @@
   .include base_config_v1.inc
 
-BUTTON          = %00100000
-SH_OUT_DATA     = %01000000
-SH_OUT_CLOCK    = %00010000
+BUTTON            = %00100000
+SH_OUT_DATA       = %01000000
+SH_OUT_CLOCK      = %00010000
 
 HALF_BIT_INTERVAL = 104 ; 2 MHz 9600 bps 
 
-IO_PINS_MASK_A  = BUTTON | SH_OUT_DATA | SH_OUT_CLOCK | SERIAL_IN
+IO_PINS_MASK_A    = BUTTON | SH_OUT_DATA | SH_OUT_CLOCK | SERIAL_IN
 
-SH_IN_CLOCK     = %10000000
+SH_IN_CLOCK       = %10000000
 
-IO_PINS_MASK_B  = SH_IN_CLOCK
+IO_PINS_MASK_B    = SH_IN_CLOCK
 
-D_S_I_P         = $00    ; Two bytes
-TEMP            = $02
+D_S_I_P           = $00    ; Two bytes
+CP_M_DEST_P       = $02    ; Two bytes
+CP_M_SRC_P        = $04    ; Two bytes
+CP_M_LEN          = $06    ; Two bytes
+TEMP              = $08
+TRANSFER_STARTED  = $09
 
-TRANSLATE       = $200
+TRANSLATE         = $200
+
+INTERRUPT_ROUTINE = $3f00
 
   .org $2000
   jmp program_entry
@@ -25,6 +31,7 @@ TRANSLATE       = $200
   .include display_binary.inc
   .include display_string_immediate.inc
   .include delay_routines.inc
+  .include copy_memory.inc
 
 program_entry:
   lda #$00
@@ -46,36 +53,52 @@ program_entry:
   ora #(SH_IN_CLOCK)
   sta DDRB
 
+  ; Clear out the LEDs
   lda #ACR_SR_IN_CK
   sta ACR
-
   lda #0
   jsr send_via_io_pins
 
+  ; Build serial data translation table
   jsr build_translate
+
+  ; Relocate the interrupt handler
+  lda #<INTERRUPT_ROUTINE
+  sta CP_M_DEST_P
+  lda #>INTERRUPT_ROUTINE
+  sta CP_M_DEST_P + 1
+  lda #<interrupt
+  sta CP_M_SRC_P
+  lda #>interrupt
+  sta CP_M_SRC_P + 1
+  lda #<(interrupt_end - interrupt)
+  sta CP_M_LEN
+  lda #>(interrupt_end - interrupt)
+  sta CP_M_LEN + 1
+  jsr copy_memory
  
 main_loop:
   jsr clear_display 
   jsr display_string_immediate
   .asciiz "Waiting for data"
 
+  stz TRANSFER_STARTED
+
   lda #ACR_SR_IN_T2
   sta ACR
 
+  lda #PCR_CB2_IND_NEG_E
+  sta PCR
+
+  lda #ICB2
+  sta IFR
+
+  lda #(IERSETCLEAR | ICB2)
+  sta IER
+
 data_wait_loop:
-  lda PORTA
-  and #SERIAL_IN
-  bne data_wait_loop
-
-  lda #(HALF_BIT_INTERVAL * 2) - 2 - 2 - 12  ; 2
-  sta T2CL             ; 4
-  lda #0               ; 2
-  sta T2CH             ; 4
-
-  lda #(HALF_BIT_INTERVAL - 2)
-  sta T2CL
-
-  lda SR   ; Start shifting
+  lda TRANSFER_STARTED
+  beq data_wait_loop
  
   jsr wait_for_button_up
   jsr clear_display
@@ -98,11 +121,51 @@ data_wait_loop:
   jsr translate
   jsr display_binary
 
+
+  jmp stop_here
+
+
   jsr wait_for_button_up
 
   jsr wait_for_button_down
 
   jmp main_loop 
+
+
+interrupt:
+  pha
+
+  lda IFR
+  and #ICB2
+  bne interrupt_serial_in_start
+  ;TODO check for other interrupt types
+
+  bra interrupt_done
+interrupt_serial_in_start:
+  lda #0
+  sta PCR
+
+  lda #(HALF_BIT_INTERVAL * 2) - 2 - 10 - 12  ; 2
+  sta T2CL                                    ; 4
+  lda #0                                      ; 2
+  sta T2CH                                    ; 4
+
+  lda #(HALF_BIT_INTERVAL - 2)
+  sta T2CL
+
+  lda SR   ; Start shifting
+
+  lda #ICB2
+  sta IFR
+  sta IER
+
+  inc TRANSFER_STARTED
+
+interrupt_done:
+  pla
+  rti
+
+interrupt_end:
 
 
 send_via_io_pins:
