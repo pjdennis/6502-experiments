@@ -69,7 +69,7 @@ LED_CONTROL_RELOCATE   = $3800
 
 INTERRUPT_ROUTINE      = $3f00
 
-  .org $2000
+  .org $3000
   jmp program_entry
 
   ; Place delay_routines at start of page to ensure no page boundary crossings during timing loops

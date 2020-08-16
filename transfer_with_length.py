@@ -4,7 +4,11 @@ import pause
 from datetime import datetime, timedelta
 
 port              = "/dev/tty.usbserial-1410"
-baudrate          = 38400
+
+#baudrate         = 19200
+#baudrate         = 38400
+baudrate          = 57600
+
 stopbits          = 2
 
 #BSD checksum as calculated by cksum -o 1
@@ -41,8 +45,10 @@ data = length_bytes + source_data + checksum_bytes
 number_of_bits = len(data) * (1 + 8 + stopbits)
 
 print("Uploading...")
-print("Length:   ", hex(source_len))
-print("Checksum: ", hex(checksum))
+print("Bps:       ", baudrate)
+print("Stop bits: ", stopbits)
+print("Length:    ", hex(source_len))
+print("Checksum:  ", hex(checksum))
 
 # Duration of send allowing for 2% transfer speed loss
 duration_of_send = timedelta(seconds = number_of_bits / baudrate * 1.02)
