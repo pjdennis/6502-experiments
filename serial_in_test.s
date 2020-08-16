@@ -92,6 +92,9 @@ main_loop:
   lda #>UPLOAD_TO
   sta UPLOAD_P + 1
 
+  lda #ACR_SR_IN_T2
+  sta ACR
+
   lda #PCR_CB2_IND_NEG_E
   sta PCR
 
@@ -141,9 +144,6 @@ interrupt_serial_in_start:
   lda #0                                      ; 2
   sta T2CH                                    ; 4
 
-  lda #ACR_SR_IN_T2
-  sta ACR
-
   lda #(HALF_BIT_INTERVAL - 2)
   sta T2CL
 
@@ -172,7 +172,8 @@ interrupt_shift_done:
   inc UPLOAD_P + 1
 interrupt_upload_incremented:
 
-  lda #0
+  lda #ACR_SR_IN_T2
+  stz ACR
   sta ACR
 
   dec WAITING_FOR_SHIFT
