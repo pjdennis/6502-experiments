@@ -15,12 +15,12 @@ UPLOADED_CHECKSUM_P    = $06     ; 2 bytes
 UPLOADED_CHECKSUM      = $08     ; 2 bytes
 CHECKSUM_P             = $0a     ; 2 bytes
 CHECKSUM_VALUE         = $0c     ; 2 bytes
-
-CP_M_DEST_P            = $0e     ; 2 bytes
-CP_M_SRC_P             = $10     ; 2 bytes
-CP_M_LEN               = $12     ; 2 bytes
-WAITING_FOR_SHIFT      = $14
-TEMP                   = $15
+TRANSLATE_P            = $0e     ; 2 bytes
+CP_M_DEST_P            = $10     ; 2 bytes
+CP_M_SRC_P             = $12     ; 2 bytes
+CP_M_LEN               = $14     ; 2 bytes
+WAITING_FOR_SHIFT      = $16
+TEMP                   = $17
 
 TRANSLATE              = $0200
 INTERRUPT_ROUTINE      = $3f00
@@ -115,16 +115,24 @@ wait_for_length:
   bcc wait_for_length
 
 length_available:
+  ldx UPLOAD_TO
+  lda TRANSLATE,X
+  sta CP_M_LEN
+  ldx UPLOAD_TO + 1
+  lda TRANSLATE,X
+  sta CP_M_LEN + 1
+
   clc                            ; Add length to upload location
   lda #<UPLOAD_TO
-  adc UPLOAD_TO
+  adc CP_M_LEN
   tax
   lda #>UPLOAD_TO
-  adc UPLOAD_TO + 1
+  adc CP_M_LEN + 1
   tay
-  clc
+
+  clc                            ; Add 4 extra bytes (length and checksum)
   txa
-  adc #4                         ; Add 4 extra bytes (length and checksum)
+  adc #4   
   sta UPLOAD_STOP_AT
   tya
   adc #0
@@ -136,9 +144,9 @@ length_available:
   ldx #>loading_message
   jsr display_string
 
-  lda UPLOAD_TO + 1
+  lda CP_M_LEN + 1
   jsr display_hex
-  lda UPLOAD_TO
+  lda CP_M_LEN
   jsr display_hex
 
 wait_for_done:
@@ -199,10 +207,8 @@ upload_done:
   lda #>(UPLOAD_TO + 2)
   sta CP_M_SRC_P + 1
 
-  lda UPLOAD_TO
-  sta CP_M_LEN
-  lda UPLOAD_TO + 1
-  sta CP_M_LEN + 1
+  ; Translate data (reverse the bit order)
+  ;jsr translate_data
 
   ; Calculate checksum
   jsr calculate_checksum
@@ -217,9 +223,13 @@ upload_done:
   sta UPLOADED_CHECKSUM_P + 1
 
   lda (UPLOADED_CHECKSUM_P)
+  tax
+  lda TRANSLATE,X
   sta UPLOADED_CHECKSUM
   ldy #1
   lda (UPLOADED_CHECKSUM_P),Y
+  tax
+  lda TRANSLATE,X
   sta UPLOADED_CHECKSUM + 1
 
   ; Compare checksums
@@ -288,6 +298,44 @@ print_loop:
   jmp print_loop
 done_printing:
   rts
+
+
+translate_data:
+  lda CP_M_SRC_P
+  sta TRANSLATE_P
+  lda CP_M_SRC_P + 1
+  sta TRANSLATE_P + 1
+
+  ldx CP_M_LEN                   ; Low byte of count
+  ldy CP_M_LEN + 1               ; High byte of count
+translate_loop:
+  cpy #0
+  bne translate_not_done
+  cpx #0
+  beq translate_done
+translate_not_done:
+  stx TEMP
+  lda (TRANSLATE_P)
+  tax
+  lda TRANSLATE,X
+  sta (TRANSLATE_P)
+  ldx TEMP
+
+  inc TRANSLATE_P
+  bne translate_p_increment_done
+  inc TRANSLATE_P + 1
+translate_p_increment_done:
+
+  dex
+  cpx #$ff
+  bne translate_loop
+  dey
+  bra translate_loop
+
+translate_done:
+  rts
+  
+
 
 
 ; On exit A, X, Y are not preserved
@@ -393,14 +441,11 @@ interrupt_serial_in_start:
   bra interrupt_done
 
 interrupt_shift_done:
-  phx
-  ldx SR                                      ; Clears interrupt
+  lda SR                                      ; Clears interrupt
+  sta (UPLOAD_P)
   lda #ACR_SR_IN_T2
   stz ACR
   sta ACR
-  lda TRANSLATE,X
-  plx
-  sta (UPLOAD_P)
   inc UPLOAD_P
   bne interrupt_upload_incremented
   inc UPLOAD_P + 1
