@@ -1,13 +1,13 @@
   .include base_config_v1.inc
 
 ;BPS_HUNDREDS          =  96     ;  9600 bps
-;BPS_HUNDREDS           = 192     ; 19200 bps
+;BPS_HUNDREDS          = 192     ; 19200 bps
 ;BPS_HUNDREDS          = 384     ; 38400 bps
-BPS_HUNDREDS          = 576     ; 57600 bps
+BPS_HUNDREDS           = 576     ; 57600 bps
 
 HALF_BIT_INTERVAL      = CLOCK_FREQ_KHZ * 5 / BPS_HUNDREDS
-INITIAL_INTERVAL       = HALF_BIT_INTERVAL * 2 - 2 - 20
-SUBSEQUENT_INTERVAL    = HALF_BIT_INTERVAL - 2
+INITIAL_INTERVAL       = HALF_BIT_INTERVAL * 2 - 2 - 20 + 6
+SUBSEQUENT_INTERVAL    = HALF_BIT_INTERVAL - 2 - 1
 
 ; Shared ram locations
 DISPLAY_STRING_PARAM   = $00     ; 2 bytes
@@ -21,6 +21,8 @@ CP_M_SRC_P             = $0e     ; 2 bytes
 CP_M_LEN               = $10     ; 2 bytes
 WAITING_FOR_SHIFT      = $12
 TEMP                   = $13
+VALUE_PENDING          = $14
+VALUE                  = $15
 
 TRANSLATE              = $0200
 INTERRUPT_ROUTINE      = $3f00
@@ -80,6 +82,7 @@ program_start:
   jsr copy_memory
 
   stz WAITING_FOR_SHIFT
+  stz VALUE_PENDING
 
   lda #<UPLOAD_TO
   sta UPLOAD_P
@@ -135,7 +138,7 @@ length_available:
 
   clc                            ; Add 4 extra bytes (length and checksum)
   txa
-  adc #4   
+  adc #3   
   sta UPLOAD_STOP_AT
   tya
   adc #0
@@ -192,6 +195,21 @@ upload_done:
   sta IER
   sta IFR
   cli  
+
+  ; Store the last value
+  lda VALUE
+  sta (UPLOAD_P)
+  inc UPLOAD_P
+  bne upload_p_incremented
+  inc UPLOAD_P + 1
+upload_p_incremented:
+  dec VALUE_PENDING
+
+  inc UPLOAD_STOP_AT
+  bne upload_stop_at_incremented
+  inc UPLOAD_STOP_AT + 1
+upload_stop_at_incremented:
+
 
   .ifdef UPLOAD_RAM
   ;jsr initialize_restart_handler
@@ -434,20 +452,37 @@ interrupt_serial_in_start:
 
   lda SR   ; Start shifting
 
-  inc WAITING_FOR_SHIFT
-  
   lda #ICB2
   sta IER
 
   lda #(IERSETCLEAR | ISR)
   sta IER
 
+  inc WAITING_FOR_SHIFT
+
+  lda VALUE_PENDING
+  beq value_not_pending
+
+; Value pending
+  lda VALUE
+  sta (UPLOAD_P)
+  inc UPLOAD_P
+  bne interrupt_upload_incremented
+  inc UPLOAD_P + 1
+interrupt_upload_incremented:
+
+  pla
+  rti
+
+value_not_pending:
+  inc VALUE_PENDING
+
   pla
   rti
 
 interrupt_shift_done:
   lda SR                                      ; Clears interrupt
-  sta (UPLOAD_P)
+  sta VALUE
   stz ACR
   lda #ACR_SR_IN_T2
   sta ACR
@@ -460,10 +495,6 @@ interrupt_shift_done:
   lda #INITIAL_INTERVAL
   sta T2CL
 
-  inc UPLOAD_P
-  bne interrupt_upload_incremented
-  inc UPLOAD_P + 1
-interrupt_upload_incremented:
   dec WAITING_FOR_SHIFT
 
   pla
