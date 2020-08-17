@@ -481,9 +481,9 @@ value_not_pending:
   rti
 
 interrupt_shift_done:
+  stz ACR
   lda SR                                      ; Clears interrupt
   sta VALUE
-  stz ACR
   lda #ACR_SR_IN_T2
   sta ACR
 
