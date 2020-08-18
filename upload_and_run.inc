@@ -2,8 +2,8 @@
 
 ;BPS_HUNDREDS          =  96     ;  9600 bps
 ;BPS_HUNDREDS          = 192     ; 19200 bps
-;BPS_HUNDREDS          = 384     ; 38400 bps
-BPS_HUNDREDS           = 576     ; 57600 bps
+BPS_HUNDREDS          = 384     ; 38400 bps
+;BPS_HUNDREDS           = 576     ; 57600 bps
 
 HALF_BIT_INTERVAL      = CLOCK_FREQ_KHZ * 5 / BPS_HUNDREDS
 ; -2 -26 is the most that can be reduced at 57600 without causing the shift
@@ -26,8 +26,6 @@ CP_M_SRC_P             = $0e     ; 2 bytes
 CP_M_LEN               = $10     ; 2 bytes
 WAITING_FOR_SHIFT      = $12
 TEMP                   = $13
-VALUE_PENDING          = $14
-VALUE                  = $15
 
 TRANSLATE              = $0200
 INTERRUPT_ROUTINE      = $3f00
@@ -87,7 +85,6 @@ program_start:
   jsr copy_memory
 
   stz WAITING_FOR_SHIFT
-  stz VALUE_PENDING
 
   lda #<UPLOAD_TO
   sta UPLOAD_P
@@ -140,7 +137,7 @@ length_available:
 
   clc                            ; Add 4 extra bytes (length and checksum)
   txa
-  adc #3   
+  adc #4
   sta UPLOAD_STOP_AT
   tya
   adc #0
@@ -197,21 +194,6 @@ upload_done:
   sta IER
   sta IFR
   cli  
-
-  ; Store the last value
-  lda VALUE
-  sta (UPLOAD_P)
-  inc UPLOAD_P
-  bne upload_p_incremented
-  inc UPLOAD_P + 1
-upload_p_incremented:
-  dec VALUE_PENDING
-
-  inc UPLOAD_STOP_AT
-  bne upload_stop_at_incremented
-  inc UPLOAD_STOP_AT + 1
-upload_stop_at_incremented:
-
 
   .ifdef UPLOAD_RAM
   ;jsr initialize_restart_handler
@@ -445,15 +427,21 @@ interrupt:                                    ; 7 + 2 (avg) cycles to get into t
 
 interrupt_shift_done:
   stz ACR                                     ; 4
-  lda SR                                      ; 4 Clears interrupt
-  sta VALUE                                   ; 3
 
   lda #ICB2                                   ; 2
   sta IFR                                     ; 4
   lda #(IERSETCLEAR | ICB2)                   ; 2
   sta IER                                     ; 4
 
+  lda SR                                      ; 4 Clears interrupt
+
   stz WAITING_FOR_SHIFT                       ; 3
+
+  sta (UPLOAD_P)
+  inc UPLOAD_P
+  bne interrupt_upload_incremented
+  inc UPLOAD_P + 1
+interrupt_upload_incremented:
 
   pla                                         ; 3
   rti                                         ; 6 - 49 to get out of interrupt handler
@@ -479,23 +467,6 @@ interrupt_serial_in_start:                    ; 15 to get to here
 
   lda #1
   sta WAITING_FOR_SHIFT
-
-  lda VALUE_PENDING
-  beq value_not_pending
-
-; Value pending
-  lda VALUE
-  sta (UPLOAD_P)
-  inc UPLOAD_P
-  bne interrupt_upload_incremented
-  inc UPLOAD_P + 1
-interrupt_upload_incremented:
-
-  pla
-  rti
-
-value_not_pending:
-  inc VALUE_PENDING
 
   pla
   rti
