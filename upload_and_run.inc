@@ -99,8 +99,11 @@ program_start:
 
   lda #ICB2
   sta IFR
-  lda #(IERSETCLEAR | ICB2)
+  lda #(IERSETCLEAR | ICB2 | ISR)
   sta IER
+
+  lda #INITIAL_INTERVAL                       ; 2
+  sta T2CL                                    ; 4
 
   lda #<ready_message
   ldx #>ready_message
@@ -423,35 +426,12 @@ interrupt:                                    ; 7 + 2 (avg) cycles to get into t
   pha
 
   lda WAITING_FOR_SHIFT                       ; 3
-  beq interrupt_serial_in_start               ; 2 (not taken) 3 (taken)
-
-interrupt_shift_done:
-  stz ACR                                     ; 4
-
-  lda #ICB2                                   ; 2
-  sta IFR                                     ; 4
-  lda #(IERSETCLEAR | ICB2)                   ; 2
-  sta IER                                     ; 4
-
-  lda SR                                      ; 4 Clears interrupt
-
-  stz WAITING_FOR_SHIFT                       ; 3
-
-  sta (UPLOAD_P)
-  inc UPLOAD_P
-  bne interrupt_upload_incremented
-  inc UPLOAD_P + 1
-interrupt_upload_incremented:
-
-  pla                                         ; 3
-  rti                                         ; 6 - 49 to get out of interrupt handler
+  bne interrupt_shift_done                    ; 2 (not taken) 3 (taken)
 
 interrupt_serial_in_start:                    ; 15 to get to here
   lda #ACR_SR_IN_T2                           ; 2
   sta ACR                                     ; 4
 
-  lda #INITIAL_INTERVAL                       ; 2
-  sta T2CL                                    ; 4
   stz T2CH                                    ; 4
 
   lda SR                                      ; 4 Start shifting - 35 to get to here
@@ -462,13 +442,44 @@ interrupt_serial_in_start:                    ; 15 to get to here
   lda #ICB2
   sta IER
 
-  lda #(IERSETCLEAR | ISR)
-  sta IER
-
-  lda #1
-  sta WAITING_FOR_SHIFT
+  inc WAITING_FOR_SHIFT
 
   pla
   rti
+
+interrupt_shift_done:
+  stz ACR                                     ; 4
+
+  lda #ICB2                                   ; 2
+  sta IFR                                     ; 4
+  lda #(IERSETCLEAR | ICB2)                   ; 2
+  sta IER                                     ; 4
+
+  lda #INITIAL_INTERVAL                       ; 2
+  sta T2CL                                    ; 4
+
+  lda SR                                      ; 4 Clears interrupt
+
+  stz WAITING_FOR_SHIFT                       ; 3
+
+  cli
+  pha
+
+  lda #40
+interrupt_wait_loop:
+  clc
+  sbc #1
+  bne interrupt_wait_loop
+
+  pla
+
+  sta (UPLOAD_P)
+  inc UPLOAD_P
+  bne interrupt_upload_incremented
+  inc UPLOAD_P + 1
+interrupt_upload_incremented:
+
+  pla                                         ; 3
+  rti                                         ; 6 - 49 to get out of interrupt handler
 
 interrupt_end:
