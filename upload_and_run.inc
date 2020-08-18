@@ -10,9 +10,9 @@ HALF_BIT_INTERVAL      = CLOCK_FREQ_KHZ * 5 / BPS_HUNDREDS
 ; start to be delayed... presuming anything less results in T2 expiring before
 ; the low order latch has been reset
 ;INITIAL_INTERVAL       = HALF_BIT_INTERVAL * 2 - 2 - 20 + 6
-INITIAL_INTERVAL       = HALF_BIT_INTERVAL * 2 - 2 - 20 - 4 ; TODO - -6?
+INITIAL_INTERVAL       = HALF_BIT_INTERVAL * 2 - 2 - 20 - 6 ; -5 and -6 worked here
 ;SUBSEQUENT_INTERVAL    = HALF_BIT_INTERVAL - 2 - 1 ; -1 OK -2, -3, ... not OK
-SUBSEQUENT_INTERVAL    = HALF_BIT_INTERVAL - 2 - 1
+SUBSEQUENT_INTERVAL    = HALF_BIT_INTERVAL - 2
 
 ; Shared ram locations
 DISPLAY_STRING_PARAM   = $00     ; 2 bytes
