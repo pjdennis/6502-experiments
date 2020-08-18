@@ -2,8 +2,8 @@
 
 ;BPS_HUNDREDS          =  96     ;  9600 bps
 ;BPS_HUNDREDS          = 192     ; 19200 bps
-BPS_HUNDREDS          = 384     ; 38400 bps
-;BPS_HUNDREDS           = 576     ; 57600 bps
+;BPS_HUNDREDS          = 384     ; 38400 bps
+BPS_HUNDREDS           = 576     ; 57600 bps
 
 HALF_BIT_INTERVAL      = CLOCK_FREQ_KHZ * 5 / BPS_HUNDREDS
 ; -2 -26 is the most that can be reduced at 57600 without causing the shift
@@ -463,15 +463,17 @@ interrupt_shift_done:
   stz WAITING_FOR_SHIFT                       ; 3
 
   cli
-  pha
 
-  lda #40
-interrupt_wait_loop:
-  clc
-  sbc #1
-  bne interrupt_wait_loop
-
-  pla
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
 
   sta (UPLOAD_P)
   inc UPLOAD_P
