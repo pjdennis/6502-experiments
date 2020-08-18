@@ -39,7 +39,12 @@ ACR_SR_OUT_CB1     = %00011100
 
 PCR_CA2_IND_NEG_E  = %00000010 ; CA2 Independent interrupt input - negative edge
 PCR_CA2_IND_POS_E  = %00000110 ; CA2 Independent interrupt input - positive edge
+
+PCR_CB2_NEG_E      = %00000000 ; CB2 Input - negative edge
 PCR_CB2_IND_NEG_E  = %00100000 ; CB2 Independent interrupt input - negative edge
+PCR_CB2_POS_E      = %01000000 ; CB2 Input - positive edge
 PCR_CB2_IND_POS_E  = %01100000 ; CB2 Independent interrupt input - positive edge
+PCR_CB2_HAND_OUT   = %10000000 ; CB2 Handshake output
+PCR_DB2_PULSE_OUT  = %10100000 ; CB2 Pulse output
 PCR_CB2_LOW_OUT    = %11000000 ; CB2 Low output
 PCR_CB2_HIGH_OUT   = %11100000 ; CB2 High output

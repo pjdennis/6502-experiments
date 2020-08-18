@@ -475,7 +475,8 @@ interrupt_serial_in_start:
   lda #(IERSETCLEAR | ISR)
   sta IER
 
-  inc WAITING_FOR_SHIFT
+  lda #1
+  sta WAITING_FOR_SHIFT
 
   lda VALUE_PENDING
   beq value_not_pending
