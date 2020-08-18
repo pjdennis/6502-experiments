@@ -440,7 +440,24 @@ interrupt:                       ; 7 + 2 (avg) cycles to get into the handler
   pha
 
   lda WAITING_FOR_SHIFT
-  bne interrupt_shift_done
+  beq interrupt_serial_in_start
+
+interrupt_shift_done:
+  stz ACR
+  lda SR                                      ; Clears interrupt
+  sta VALUE
+  lda #ACR_SR_IN_T2
+  sta ACR
+
+  lda #ICB2
+  sta IFR
+  lda #(IERSETCLEAR | ICB2)
+  sta IER
+
+  stz WAITING_FOR_SHIFT
+
+  pla
+  rti
 
 interrupt_serial_in_start:
   lda #INITIAL_INTERVAL                       ; 2
@@ -480,20 +497,4 @@ value_not_pending:
   pla
   rti
 
-interrupt_shift_done:
-  stz ACR
-  lda SR                                      ; Clears interrupt
-  sta VALUE
-  lda #ACR_SR_IN_T2
-  sta ACR
-
-  lda #ICB2
-  sta IFR
-  lda #(IERSETCLEAR | ICB2)
-  sta IER
-
-  stz WAITING_FOR_SHIFT
-
-  pla
-  rti
 interrupt_end:
