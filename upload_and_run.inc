@@ -1,17 +1,18 @@
   .include base_config_v1.inc
 
 ;BPS_HUNDREDS          =  96     ;  9600 bps
-BPS_HUNDREDS          = 192     ; 19200 bps
+;BPS_HUNDREDS          = 192     ; 19200 bps
 ;BPS_HUNDREDS          = 384     ; 38400 bps
-;BPS_HUNDREDS           = 576     ; 57600 bps
+BPS_HUNDREDS           = 576     ; 57600 bps
 
 HALF_BIT_INTERVAL      = CLOCK_FREQ_KHZ * 5 / BPS_HUNDREDS
 ; -2 -26 is the most that can be reduced at 57600 without causing the shift
 ; start to be delayed... presuming anything less results in T2 expiring before
 ; the low order latch has been reset
-INITIAL_INTERVAL       = HALF_BIT_INTERVAL * 2 - 2 - 20 + 6
+;INITIAL_INTERVAL       = HALF_BIT_INTERVAL * 2 - 2 - 20 + 6
+INITIAL_INTERVAL       = HALF_BIT_INTERVAL * 2 - 2 - 20 - 4 ; TODO - -6?
 ;SUBSEQUENT_INTERVAL    = HALF_BIT_INTERVAL - 2 - 1 ; -1 OK -2, -3, ... not OK
-SUBSEQUENT_INTERVAL    = HALF_BIT_INTERVAL - 2
+SUBSEQUENT_INTERVAL    = HALF_BIT_INTERVAL - 2 - 1
 
 ; Shared ram locations
 DISPLAY_STRING_PARAM   = $00     ; 2 bytes
@@ -436,30 +437,31 @@ build_translate_shift_loop:
 
 
 ; Interrupt handler - Read in serial data
-interrupt:                       ; 7 + 2 (avg) cycles to get into the handler
+interrupt:                                    ; 7 + 2 (avg) cycles to get into the handler
   pha
 
-  lda WAITING_FOR_SHIFT
-  beq interrupt_serial_in_start
+  lda WAITING_FOR_SHIFT                       ; 3
+  beq interrupt_serial_in_start               ; 2 (not taken) 3 (taken)
 
 interrupt_shift_done:
-  stz ACR
-  lda SR                                      ; Clears interrupt
-  sta VALUE
-  lda #ACR_SR_IN_T2
-  sta ACR
+  stz ACR                                     ; 4
+  lda SR                                      ; 4 Clears interrupt
+  sta VALUE                                   ; 3
 
-  lda #ICB2
-  sta IFR
-  lda #(IERSETCLEAR | ICB2)
-  sta IER
+  lda #ICB2                                   ; 2
+  sta IFR                                     ; 4
+  lda #(IERSETCLEAR | ICB2)                   ; 2
+  sta IER                                     ; 4
 
-  stz WAITING_FOR_SHIFT
+  stz WAITING_FOR_SHIFT                       ; 3
 
-  pla
-  rti
+  pla                                         ; 3
+  rti                                         ; 6 - 49 to get out of interrupt handler
 
-interrupt_serial_in_start:
+interrupt_serial_in_start:                    ; 15 to get to here
+  lda #ACR_SR_IN_T2                           ; 2
+  sta ACR                                     ; 4
+
   lda #INITIAL_INTERVAL                       ; 2
   sta T2CL                                    ; 4
   stz T2CH                                    ; 4
@@ -467,7 +469,7 @@ interrupt_serial_in_start:
   lda #SUBSEQUENT_INTERVAL                    ; 2
   sta T2CL                                    ; 4
 
-  lda SR                                      ; 4 Start shifting
+  lda SR                                      ; 4 Start shifting - 41 to get to here
 
   lda #ICB2
   sta IER
