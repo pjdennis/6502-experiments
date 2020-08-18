@@ -5,9 +5,9 @@ from datetime import datetime, timedelta
 
 port              = "/dev/tty.usbserial-1410"
 
-#baudrate         = 19200
+baudrate         = 19200
 #baudrate         = 38400
-baudrate          = 57600
+#baudrate          = 57600
 
 stopbits          = 1
 
