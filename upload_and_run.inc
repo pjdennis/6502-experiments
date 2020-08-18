@@ -466,10 +466,10 @@ interrupt_serial_in_start:                    ; 15 to get to here
   sta T2CL                                    ; 4
   stz T2CH                                    ; 4
 
+  lda SR                                      ; 4 Start shifting - 35 to get to here
+
   lda #SUBSEQUENT_INTERVAL                    ; 2
   sta T2CL                                    ; 4
-
-  lda SR                                      ; 4 Start shifting - 41 to get to here
 
   lda #ICB2
   sta IER
