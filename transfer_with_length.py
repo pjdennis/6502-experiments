@@ -9,7 +9,7 @@ port              = "/dev/tty.usbserial-1410"
 #baudrate         = 38400
 baudrate          = 57600
 
-stopbits          = 2
+stopbits          = 1
 
 #BSD checksum as calculated by cksum -o 1
 def bsd_checksum(data):
