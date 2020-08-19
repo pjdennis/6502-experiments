@@ -50,8 +50,6 @@ program_start:
   pha
   plp
 
-  jsr build_translate
-
   ; Initialize 6522 port A (memory banking control)
   lda #BANK_START
   sta PORTA
@@ -82,15 +80,14 @@ program_start:
   sta CP_M_LEN + 1
   jsr copy_memory
 
+  jsr build_translate
+
   stz WAITING_FOR_SHIFT
 
   lda #<UPLOAD_TO
   sta UPLOAD_P
   lda #>UPLOAD_TO
   sta UPLOAD_P + 1
-
-  lda #ACR_SR_IN_T2               ; Shift in at T2 rate
-  sta ACR
 
   lda #PCR_CB2_IND_NEG_E          ; CB2 independent interrupt negative edge
   sta PCR
@@ -220,12 +217,12 @@ upload_done:
   jsr calculate_checksum
 
   ; Obtain uploaded checksum
-  sec
-  lda UPLOAD_STOP_AT
-  sbc #2
+  clc
+  lda #<(UPLOAD_TO + 2)
+  adc CP_M_LEN
   sta TEMP_P
-  lda UPLOAD_STOP_AT + 1
-  sbc #0
+  lda #>(UPLOAD_TO + 2)
+  adc CP_M_LEN + 1
   sta TEMP_P + 1
 
   lda (TEMP_P)
@@ -297,8 +294,8 @@ translate_data:
   ; Translate count + 2 bytes, to include checksum
   clc
   lda CP_M_LEN
-  adc #2                          ; Low byte of count
-  tax
+  adc #2
+  tax                             ; Low byte of count
   lda CP_M_LEN + 1
   adc #0
   tay                             ; High byte of count
