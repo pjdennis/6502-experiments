@@ -1,7 +1,7 @@
 ; Program will toggle an LED on and off based on a button press
 led_control:
   lda PORTA
-  and #BUTTON1
+  and #CONTROL_BUTTON
   beq button_down
 
   lda #<50
@@ -12,7 +12,7 @@ led_control:
 button_down:
   sei
   lda PORTA
-  eor #LED
+  eor #CONTROL_LED
   sta PORTA
   cli
 led_wait_button:
@@ -23,7 +23,7 @@ led_wait_button_loop:
   jsr sleep_milliseconds
 
   lda PORTA
-  and #BUTTON1
+  and #CONTROL_BUTTON
   beq led_wait_button
   
   dey

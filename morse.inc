@@ -97,13 +97,13 @@ morse_letter_done:
 ;          A is not preserved
 morse_send_part:
   pha                     ; Turn on LED
-  lda #FLASH_LED
+  lda #MORSE_LED
   tsb PORTA
   pla
 
   jsr morse_delay         ; Delay for specified units
 
-  lda #FLASH_LED          ; Turn off LED
+  lda #MORSE_LED          ; Turn off LED
   trb PORTA
 
   rts

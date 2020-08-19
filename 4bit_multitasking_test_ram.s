@@ -7,22 +7,12 @@ DDRA  = $6003
 
 ; PORTA assignments
 BANK_MASK         = %00001111
-ILED              = %00010000
-BUTTON1           = %00100000
-LED               = %01000000
-SERIAL_RX         = %10000000
+MORSE_LED         = %00010000
+CONTROL_BUTTON    = %00100000
+CONTROL_LED       = %01000000
+FLASH_LED         = %10000000
 
-FLASH_LED         = ILED
-
-;ILED             = %00010000
-;FLASH_LED        = %01000000
-
-;BUTTON1          = %01000000
-;FLASH_LED        = %10000000
-;LED              = %00100000
-
-PORTA_OUT_MASK    = BANK_MASK | LED | ILED
-;PORTA_OUT_MASK   = BANK_MASK | LED | ILED | FLASH_LED
+PORTA_OUT_MASK   = BANK_MASK | CONTROL_LED | MORSE_LED | FLASH_LED
 
 BANK_START        = %00000100
 BANK_STOP         = %00010000
@@ -91,7 +81,7 @@ INTERRUPT_ROUTINE      = $3f00
   .include prg_play_song.inc
   .include prg_ditty.inc
   .include prg_print_ticks_counter.inc
-  ;.include prg_flash_led.inc
+  .include prg_flash_led.inc
   .include prg_led_control.inc
   .include prg_morse_demo.inc
   .include prg_console_demo.inc
@@ -161,6 +151,10 @@ program_entry:
 
   lda #<play_ditty
   ldx #>play_ditty
+  jsr initialize_additional_process
+
+  lda #<flash_led
+  ldx #>flash_led
   jsr initialize_additional_process
 
 ;  lda #<print_ticks_counter
