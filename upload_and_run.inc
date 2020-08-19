@@ -9,9 +9,7 @@ HALF_BIT_INTERVAL      = CLOCK_FREQ_KHZ * 5 / BPS_HUNDREDS
 ; -2 -26 is the most that can be reduced at 57600 without causing the shift
 ; start to be delayed... presuming anything less results in T2 expiring before
 ; the low order latch has been reset
-;INITIAL_INTERVAL       = HALF_BIT_INTERVAL * 2 - 2 - 20 + 6
-INITIAL_INTERVAL       = HALF_BIT_INTERVAL * 2 - 2 - 20 - 6 ; -5 and -6 worked here
-;SUBSEQUENT_INTERVAL    = HALF_BIT_INTERVAL - 2 - 1 ; -1 OK -2, -3, ... not OK
+INITIAL_INTERVAL       = HALF_BIT_INTERVAL * 2 - 2 - 24
 SUBSEQUENT_INTERVAL    = HALF_BIT_INTERVAL - 2
 
 ; Shared ram locations
