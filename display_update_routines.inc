@@ -1,3 +1,5 @@
+  .include display_parameters.inc
+
 wait_for_not_busy:
   pha
   phx

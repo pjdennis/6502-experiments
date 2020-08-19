@@ -1,9 +1,9 @@
   .include base_config_v1.inc
 
-;BPS_HUNDREDS          =  96     ;  9600 bps
-;BPS_HUNDREDS          = 192     ; 19200 bps
-;BPS_HUNDREDS          = 384     ; 38400 bps
-BPS_HUNDREDS           = 576     ; 57600 bps
+;BPS_HUNDREDS          =  96      ;  9600 bps
+;BPS_HUNDREDS          = 192      ; 19200 bps
+;BPS_HUNDREDS          = 384      ; 38400 bps
+BPS_HUNDREDS           = 576      ; 57600 bps
 
 HALF_BIT_INTERVAL      = CLOCK_FREQ_KHZ * 5 / BPS_HUNDREDS
 ; -2 -26 is the most that can be reduced at 57600 without causing the shift
@@ -13,15 +13,15 @@ INITIAL_INTERVAL       = HALF_BIT_INTERVAL * 2 - 2 - 24
 SUBSEQUENT_INTERVAL    = HALF_BIT_INTERVAL - 2
 
 ; Shared ram locations
-DISPLAY_STRING_PARAM   = $00     ; 2 bytes
-UPLOAD_P               = $02     ; 2 bytes
-UPLOAD_STOP_AT         = $04     ; 2 bytes
-TEMP_P                 = $06     ; 2 bytes
-UPLOADED_CHECKSUM      = $08     ; 2 bytes
-CHECKSUM_VALUE         = $0a     ; 2 bytes
-CP_M_DEST_P            = $0c     ; 2 bytes
-CP_M_SRC_P             = $0e     ; 2 bytes
-CP_M_LEN               = $10     ; 2 bytes
+DISPLAY_STRING_PARAM   = $00      ; 2 bytes
+UPLOAD_P               = $02      ; 2 bytes
+UPLOAD_STOP_AT         = $04      ; 2 bytes
+TEMP_P                 = $06      ; 2 bytes
+UPLOADED_CHECKSUM      = $08      ; 2 bytes
+CHECKSUM_VALUE         = $0a      ; 2 bytes
+CP_M_DEST_P            = $0c      ; 2 bytes
+CP_M_SRC_P             = $0e      ; 2 bytes
+CP_M_LEN               = $10      ; 2 bytes
 WAITING_FOR_SHIFT      = $12
 TEMP                   = $13
 
@@ -36,7 +36,7 @@ INTERRUPT_ROUTINE      = $3f00
   .include delay_routines.inc
 
   .include display_routines.inc
-  .include convert_to_hex.inc
+  .include display_string.inc
   .include copy_memory.inc
 
 loading_message:          asciiz 'Load 0000 / '
@@ -55,13 +55,13 @@ program_start:
   ; Initialize 6522 port A (memory banking control)
   lda #BANK_START
   sta PORTA
-  lda #BANK_MASK                 ; Set pin direction on port A
+  lda #BANK_MASK                  ; Set pin direction on port A
   sta DDRA
 
   ; Initialize 6522 port B (display control)
   lda #0
   sta PORTB
-  lda #DISPLAY_BITS_MASK         ; Set pin direction on port B
+  lda #DISPLAY_BITS_MASK          ; Set pin direction on port B
   sta DDRB
 
   ; Initialize display
@@ -89,19 +89,19 @@ program_start:
   lda #>UPLOAD_TO
   sta UPLOAD_P + 1
 
-  lda #ACR_SR_IN_T2
+  lda #ACR_SR_IN_T2               ; Shift in at T2 rate
   sta ACR
 
-  lda #PCR_CB2_IND_NEG_E
+  lda #PCR_CB2_IND_NEG_E          ; CB2 independent interrupt negative edge
   sta PCR
 
-  lda #ICB2
+  lda #ICB2                       ; Clear any pending CB2 interrupt
   sta IFR
-  lda #(IERSETCLEAR | ICB2 | ISR)
+  lda #(IERSETCLEAR | ICB2 | ISR) ; Enable interrupts for SR and CB2
   sta IER
 
-  lda #INITIAL_INTERVAL                       ; 2
-  sta T2CL                                    ; 4
+  lda #INITIAL_INTERVAL
+  sta T2CL
 
   lda #<ready_message
   ldx #>ready_message
@@ -112,11 +112,11 @@ wait_for_length:
   ; Taken from here: http://www.6502.org/tutorials/compare_beyond.html
   ; Comparison is safe without locking pointer since it's increasing monatomically
   ; and we compare high bytes first
-  lda UPLOAD_P + 1               ; Compare high bytes
+  lda UPLOAD_P + 1                ; Compare high bytes
   cmp #>(UPLOAD_TO + 2)
   bcc wait_for_length
   bne length_available
-  lda UPLOAD_P                   ; Compare low bytes
+  lda UPLOAD_P                    ; Compare low bytes
   cmp #<(UPLOAD_TO + 2)
   bcc wait_for_length
 
@@ -128,7 +128,7 @@ length_available:
   lda TRANSLATE,X
   sta CP_M_LEN + 1
 
-  clc                            ; Add length to upload location
+  clc                             ; Add length to upload location
   lda #<UPLOAD_TO
   adc CP_M_LEN
   tax
@@ -136,7 +136,7 @@ length_available:
   adc CP_M_LEN + 1
   tay
 
-  clc                            ; Add 4 extra bytes (length and checksum)
+  clc                             ; Add 4 extra bytes (length and checksum)
   txa
   adc #4
   sta UPLOAD_STOP_AT
@@ -144,13 +144,13 @@ length_available:
   adc #0
   sta UPLOAD_STOP_AT + 1
 
-  jsr clear_display
+  jsr clear_display               ; Display the 'loading' message...
 
   lda #<loading_message
   ldx #>loading_message
   jsr display_string
 
-  lda CP_M_LEN + 1
+  lda CP_M_LEN + 1                ; ...and display total size to be uploaded
   jsr display_hex
   lda CP_M_LEN
   jsr display_hex
@@ -160,11 +160,11 @@ wait_for_done:
   ; Taken from here: http://www.6502.org/tutorials/compare_beyond.html
   ; Comparison is safe without locking pointer since it's increasing monatomically
   ; and we compare high bytes first
-  lda UPLOAD_P + 1               ; Compare high bytes
+  lda UPLOAD_P + 1                ; Compare high bytes
   cmp UPLOAD_STOP_AT + 1
   bcc upload_not_done
   bne upload_done
-  lda UPLOAD_P                   ; Compare low bytes
+  lda UPLOAD_P                    ; Compare low bytes
   cmp UPLOAD_STOP_AT
   bcs upload_done
 
@@ -189,9 +189,9 @@ upload_not_done:
 upload_done:
   ; Restore interrupt functionality
   sei
-  stz ACR                        ; Disable shifting
-  stz PCR                        ; Turn off CB2 interrupts
-  lda #(ICB2 | ISR)              ; Disable and reset interrupt flags
+  stz ACR                         ; Disable shifting
+  stz PCR                         ; Turn off CB2 interrupts
+  lda #(ICB2 | ISR)               ; Disable and reset interrupt flags
   sta IER
   sta IFR
   cli  
@@ -243,8 +243,8 @@ upload_done:
   bne bad_checksum
 
 ; Good checksum  
-  jsr copy_memory                ; Relocate upload to the correct location for running it
-  jmp UPLOAD_TO                  ; Jump to and run the main program
+  jsr copy_memory                 ; Relocate upload to the correct location for running it
+  jmp UPLOAD_TO                   ; Jump to and run the main program
 
 bad_checksum:
   lda #<checksum_failed_message
@@ -288,20 +288,6 @@ forever:
   bra forever
 
 
-display_string:
-  sta DISPLAY_STRING_PARAM
-  stx DISPLAY_STRING_PARAM + 1
-  ldy #0
-print_loop:
-  lda (DISPLAY_STRING_PARAM),Y
-  beq done_printing
-  jsr display_character
-  iny
-  jmp print_loop
-done_printing:
-  rts
-
-
 translate_data:
   lda CP_M_SRC_P
   sta TEMP_P
@@ -311,23 +297,24 @@ translate_data:
   ; Translate count + 2 bytes, to include checksum
   clc
   lda CP_M_LEN
-  adc #2                         ; Low byte of count
+  adc #2                          ; Low byte of count
   tax
   lda CP_M_LEN + 1
   adc #0
-  tay                            ; High byte of count
+  tay                             ; High byte of count
+
 translate_loop:
   cpy #0
   bne translate_not_done
   cpx #0
   beq translate_done
 translate_not_done:
-  stx TEMP
+  phx
   lda (TEMP_P)
   tax
   lda TRANSLATE,X
   sta (TEMP_P)
-  ldx TEMP
+  plx
 
   inc TEMP_P
   bne translate_p_increment_done
@@ -354,8 +341,8 @@ calculate_checksum:
   lda CP_M_SRC_P + 1
   sta TEMP_P + 1
 
-  ldx CP_M_LEN                   ; Low byte of count
-  ldy CP_M_LEN + 1               ; High byte of count
+  ldx CP_M_LEN                    ; Low byte of count
+  ldy CP_M_LEN + 1                ; High byte of count
 
 checksum_loop:
   cpy #0
@@ -392,11 +379,8 @@ checksum_done:
   rts
 
 
+; On exit A, X, Y are not preserved
 build_translate:
-  pha
-  phx
-  phy
-
   ldx #0
 build_translate_loop:
   txa
@@ -413,57 +397,55 @@ build_translate_shift_loop:
   inx
   bne build_translate_loop
 
-  ply
-  plx
-  pla
   rts
 
 
 ; Interrupt handler - Read in serial data
-interrupt:                                    ; 7 + 2 (avg) cycles to get into the handler
-  pha
+interrupt:                        ; 7 + 2 (avg) cycles to get into the handler
+  pha                             ; 3
 
-  lda WAITING_FOR_SHIFT                       ; 3
-  bne interrupt_shift_done                    ; 2 (not taken) 3 (taken)
+  lda WAITING_FOR_SHIFT           ; 3
+  bne interrupt_shift_done        ; 2 (not taken) 3 (taken)
 
-interrupt_serial_in_start:                    ; 15 to get to here
-  lda #ACR_SR_IN_T2                           ; 2
-  sta ACR                                     ; 4
+interrupt_serial_in_start:        ;                  - 17 cycles to get here
+  lda #ACR_SR_IN_T2               ; 2 Reenable the shift register
+  sta ACR                         ; 4
 
-  stz T2CH                                    ; 4
+  stz T2CH                        ; 4 Start timer for the initial interval before shift starts
 
-  lda SR                                      ; 4 Start shifting - 35 to get to here
+  lda SR                          ; 4 Start shifting - 31 cycles to get to here
 
-  lda #SUBSEQUENT_INTERVAL                    ; 2
-  sta T2CL                                    ; 4
+  lda #SUBSEQUENT_INTERVAL        ; 2
+  sta T2CL                        ; 4 Interval set   - 37 cycles to get here
 
-  lda #ICB2
+  lda #ICB2                       ; Disable CB2 interrupts while shift is in progress
   sta IER
 
-  inc WAITING_FOR_SHIFT
+  inc WAITING_FOR_SHIFT           ; Indicate we're waiting for completed shift
 
   pla
   rti
 
-interrupt_shift_done:
-  stz ACR                                     ; 4
+interrupt_shift_done:             ;                  - 18 cycles to get here
+  stz ACR                         ; 4 Disable the timer temporarily
 
-  lda #ICB2                                   ; 2
-  sta IFR                                     ; 4
-  lda #(IERSETCLEAR | ICB2)                   ; 2
-  sta IER                                     ; 4
+  lda #ICB2                       ; 2 Clear pending ICB2 interrupt
+  sta IFR                         ; 4
+  lda #(IERSETCLEAR | ICB2)       ; 2 Reenable CB2 interrupts
+  sta IER                         ; 4
 
-  lda #INITIAL_INTERVAL                       ; 2
-  sta T2CL                                    ; 4
+  lda #INITIAL_INTERVAL           ; 2 Pre-load initial interval to T2
+  sta T2CL                        ; 4
 
-  lda SR                                      ; 4 Clears interrupt
+  lda SR                          ; 4 Load value; clears SR interrupt as a side effect
 
-  stz WAITING_FOR_SHIFT                       ; 3
+  stz WAITING_FOR_SHIFT           ; 3 Indicate we're no longer waiting for completed shift
 
-  cli
+  cli                             ; 2 Renable interrupts so that start of shift can occur
+                                  ;                  - 49 cycles to get here
 
-  nop
-  nop
+  nop                             ; Noops provide a window for low-latency response
+  nop                             ; To the CB2 interrupt indicating shift start
   nop
   nop
   nop
@@ -473,13 +455,13 @@ interrupt_shift_done:
   nop
   nop
 
-  sta (UPLOAD_P)
-  inc UPLOAD_P
+  sta (UPLOAD_P)                  ; Now store the value that was received...
+  inc UPLOAD_P                    ; ...and increment the data pointer
   bne interrupt_upload_incremented
   inc UPLOAD_P + 1
 interrupt_upload_incremented:
 
-  pla                                         ; 3
-  rti                                         ; 6 - 49 to get out of interrupt handler
+  pla
+  rti
 
 interrupt_end:
