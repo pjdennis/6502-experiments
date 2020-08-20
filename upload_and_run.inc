@@ -13,17 +13,18 @@ INITIAL_INTERVAL       = HALF_BIT_INTERVAL * 2 - 2 - 24
 SUBSEQUENT_INTERVAL    = HALF_BIT_INTERVAL - 2
 
 ; Shared ram locations
-DISPLAY_STRING_PARAM   = $00      ; 2 bytes
-UPLOAD_P               = $02      ; 2 bytes
-UPLOAD_STOP_AT         = $04      ; 2 bytes
-TEMP_P                 = $06      ; 2 bytes
-UPLOADED_CHECKSUM      = $08      ; 2 bytes
-CHECKSUM_VALUE         = $0a      ; 2 bytes
-CP_M_DEST_P            = $0c      ; 2 bytes
-CP_M_SRC_P             = $0e      ; 2 bytes
-CP_M_LEN               = $10      ; 2 bytes
-WAITING_FOR_SHIFT      = $12
-TEMP                   = $13
+DISPLAY_STRING_PARAM       = $00  ; 2 bytes (overlapping)
+DISPLAY_HEX_INDIRECT_PARAM = $00  ; 2 bytes (overlapping)
+UPLOAD_P                   = $02  ; 2 bytes
+UPLOAD_STOP_AT             = $04  ; 2 bytes
+TEMP_P                     = $06  ; 2 bytes
+UPLOADED_CHECKSUM          = $08  ; 2 bytes
+CHECKSUM_VALUE             = $0a  ; 2 bytes
+CP_M_DEST_P                = $0c  ; 2 bytes
+CP_M_SRC_P                 = $0e  ; 2 bytes
+CP_M_LEN                   = $10  ; 2 bytes
+WAITING_FOR_SHIFT          = $12
+TEMP                       = $13
 
 TRANSLATE              = $0200
 INTERRUPT_ROUTINE      = $3f00
@@ -37,6 +38,7 @@ INTERRUPT_ROUTINE      = $3f00
 
   .include display_routines.inc
   .include display_string.inc
+  .include display_hex_indirect.inc
   .include copy_memory.inc
 
 loading_message:          asciiz 'Load 0000 / '
@@ -147,10 +149,9 @@ length_available:
   ldx #>loading_message
   jsr display_string
 
-  lda CP_M_LEN + 1                ; ...and display total size to be uploaded
-  jsr display_hex
-  lda CP_M_LEN
-  jsr display_hex
+  lda #<CP_M_LEN                  ; ...and display total size to be uploaded
+  ldx #>CP_M_LEN
+  jsr display_hex_indirect
 
 wait_for_done:
   ; Comparison - upload done if  UPLOAD_P >= UPLOAD_STOP_AT
@@ -258,28 +259,25 @@ bad_checksum:
   jsr display_character
 
   ; Display The length uploaded
-  lda CP_M_LEN + 1
-  jsr display_hex
-  lda CP_M_LEN
-  jsr display_hex
+  lda #<CP_M_LEN
+  ldx #>CP_M_LEN
+  jsr display_hex_indirect
 
   lda #' '
   jsr display_character
 
   ; Display the uploaded checksum
-  lda UPLOADED_CHECKSUM + 1
-  jsr display_hex
-  lda UPLOADED_CHECKSUM
-  jsr display_hex
+  lda #<UPLOADED_CHECKSUM
+  ldx #>UPLOADED_CHECKSUM
+  jsr display_hex_indirect
 
   lda #' '
   jsr display_character
 
   ; Display the calculated checksum
-  lda CHECKSUM_VALUE + 1
-  jsr display_hex
-  lda CHECKSUM_VALUE
-  jsr display_hex
+  lda #<CHECKSUM_VALUE
+  ldx #>CHECKSUM_VALUE
+  jsr display_hex_indirect
 
 forever:
   bra forever
