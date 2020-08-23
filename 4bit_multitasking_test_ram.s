@@ -1,12 +1,6 @@
-CLOCK_FREQ_KHZ    = 2000
-
-PORTB = $6000
-PORTA = $6001
-DDRB  = $6002
-DDRA  = $6003
+  .include base_config_v1.inc
 
 ; PORTA assignments
-BANK_MASK         = %00001111
 MORSE_LED         = %00010000
 CONTROL_BUTTON    = %00100000
 CONTROL_LED       = %01000000
@@ -14,24 +8,12 @@ FLASH_LED         = %10000000
 
 PORTA_OUT_MASK   = BANK_MASK | CONTROL_LED | MORSE_LED | FLASH_LED
 
-BANK_START        = %00000100
-BANK_STOP         = %00010000
-
 ; PORTB assignments
 T1_SQWAVE_OUT     = %10000000
-DISPLAY_DATA_MASK = %01111000
-E                 = %00000100
-RW                = %00000010
-RS                = %00000001
-
-BF                = %01000000
-DISPLAY_BITS_MASK = (DISPLAY_DATA_MASK | E | RW | RS)
 
 PORTB_OUT_MASK    = DISPLAY_BITS_MASK | T1_SQWAVE_OUT
 
-  .include display_parameters.inc
   .include musical_notes.inc
-  .include 6522.inc
 
 DELAY                  = CLOCK_FREQ_KHZ * 2  ; 1 KHz / 2 = 500 Hz
 
