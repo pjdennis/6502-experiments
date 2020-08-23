@@ -82,6 +82,12 @@ program_start:
   sta CP_M_LEN + 1
   jsr copy_memory
 
+  ; store interrupt vector into the ram location to support vector pull redirecting to ram
+  lda #<INTERRUPT_ROUTINE
+  sta RAM_IRQ_VECTOR
+  lda #>INTERRUPT_ROUTINE
+  sta RAM_IRQ_VECTOR + 1
+
   jsr build_translate
 
   stz WAITING_FOR_SHIFT
@@ -151,7 +157,7 @@ length_available:
 
   lda #<CP_M_LEN                  ; ...and display total size to be uploaded
   ldx #>CP_M_LEN
-  jsr display_hex_indirect
+  jsr display_hex_indirect_2_bytes
 
 wait_for_done:
   ; Comparison - upload done if  UPLOAD_P >= UPLOAD_STOP_AT
@@ -261,7 +267,7 @@ bad_checksum:
   ; Display The length uploaded
   lda #<CP_M_LEN
   ldx #>CP_M_LEN
-  jsr display_hex_indirect
+  jsr display_hex_indirect_2_bytes
 
   lda #' '
   jsr display_character
@@ -269,7 +275,7 @@ bad_checksum:
   ; Display the uploaded checksum
   lda #<UPLOADED_CHECKSUM
   ldx #>UPLOADED_CHECKSUM
-  jsr display_hex_indirect
+  jsr display_hex_indirect_2_bytes
 
   lda #' '
   jsr display_character
@@ -277,7 +283,7 @@ bad_checksum:
   ; Display the calculated checksum
   lda #<CHECKSUM_VALUE
   ldx #>CHECKSUM_VALUE
-  jsr display_hex_indirect
+  jsr display_hex_indirect_2_bytes
 
 forever:
   bra forever

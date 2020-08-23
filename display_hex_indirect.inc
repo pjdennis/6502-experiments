@@ -4,17 +4,17 @@
 
 
 ; On Entry A, X = Low, High bytes of pointer to 2 byte hex number
-display_hex_indirect_16_bits:
+display_hex_indirect_2_bytes:
   phy
   ldy #2
-  jsr display_hex_indirect
+  jsr display_hex_indirect_n_bytes
   ply
   rts
 
 
 ; On Entry A, X = Low, High bytes of pointer to hex number to display_2_byte_hex
 ;          Y = number of bytes to display
-display_hex_indirect:
+display_hex_indirect_n_bytes:
   sta DISPLAY_HEX_INDIRECT_PARAM
   stx DISPLAY_HEX_INDIRECT_PARAM + 1
   

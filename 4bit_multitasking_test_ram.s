@@ -106,13 +106,19 @@ program_entry:
   lda #PORTB_OUT_MASK                      ; Set pin direction on port B
   sta DDRB
 
-  ; Set up interrupt handler redirect
-  lda #$4c                                 ; jmp
-  sta INTERRUPT_ROUTINE
+  ; Set up the RAM vector pull location
   lda #<interrupt
-  sta INTERRUPT_ROUTINE + 1
+  sta $3ffe
   lda #>interrupt
-  sta INTERRUPT_ROUTINE + 2
+  sta $3fff
+
+  ; Set up interrupt handler redirect
+  ;lda #$4c                                 ; jmp
+  ;sta INTERRUPT_ROUTINE
+  ;lda #<interrupt
+  ;sta INTERRUPT_ROUTINE + 1
+  ;lda #>interrupt
+  ;sta INTERRUPT_ROUTINE + 2
 
   ; Initialize variables
   lda #(BANK_START + 1)

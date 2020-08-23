@@ -20,6 +20,8 @@ RS                = %00000001
 BF                = %01000000
 DISPLAY_BITS_MASK = (DISPLAY_DATA_MASK | E | RW | RS)
 
+RAM_IRQ_VECTOR    = $3ffe
+
 ; Include additional definitions
   .include display_parameters.inc
   .include 6522.inc
