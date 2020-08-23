@@ -1,5 +1,7 @@
 ; Requires D_S_I_P - 2 bytes in zero page
 
+  .include display_update_routines.inc
+
 D_S_I_P_L = D_S_I_P
 D_S_I_P_H = D_S_I_P + 1
 CHAROUT = display_character
