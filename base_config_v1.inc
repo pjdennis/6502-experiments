@@ -1,4 +1,4 @@
-CLOCK_FREQ_KHZ    = 2000
+CLOCK_FREQ_KHZ    = 4000
 
 PORTB             = $6000
 PORTA             = $6001

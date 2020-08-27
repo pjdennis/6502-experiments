@@ -7,7 +7,6 @@
 
 program_entry:
 ; Program code goes here
-  
+
 wait:
   bra wait
-

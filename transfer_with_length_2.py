@@ -7,7 +7,8 @@ port              = "/dev/tty.usbserial-1410"
 
 #baudrate         = 19200
 #baudrate         = 38400
-baudrate          = 57600
+#baudrate         = 57600
+baudrate          = 115200
 
 stopbits          = 1
 
