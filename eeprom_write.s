@@ -21,7 +21,7 @@ program_entry:
 
   inx
 
-  ; TODO update EEPROM data
+  ; Update EEPROM data
   lda #$aa
   sta $8000 + $5555
 

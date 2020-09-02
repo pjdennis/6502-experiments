@@ -2,6 +2,25 @@
 D_10_TH_1 = CLOCK_FREQ_KHZ / 1000 * 20 - 8
 D_10_TH_2 = CLOCK_FREQ_KHZ / 1000 * 20 - 2
 
+; On entry A = delay in 100ths of a second
+; On exit A, X, Y are preserved
+delay_hundredths:
+  pha
+  phx
+  tax
+  lda #100
+delay_hundredths_loop:
+  cpx #0
+  beq delay_hundredths_done
+  jsr delay_10_thousandths
+  dex
+  bra delay_hundredths_loop
+delay_hundredths_done:
+  plx
+  pla
+  rts
+
+
 ; On entry A = delay in 10 thousandths of a second
 ; On exit  A, X and Y are preserved
 delay_10_thousandths: ; 6 cycles* (assuming jsr to the routine)
