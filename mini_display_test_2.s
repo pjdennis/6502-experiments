@@ -11,7 +11,16 @@ SD_RST     = %10000000
 
 PORTB_SD_MASK = SD_RST
 
-D_S_I_P    = $00        ; 2 byte
+D_S_I_P    = $00        ; 2 bytes
+SCREEN_P   = $02        ; 2 bytes
+
+
+SCREEN_WIDTH = 128
+SCREEN_PAGES = 8
+SCREEN_BYTES = SCREEN_WIDTH * SCREEN_PAGES
+
+SCREEN_BUFFER = $3f00 - SCREEN_BYTES
+SCREEN_BUFFER_LAST_PAGE = SCREEN_BUFFER + SCREEN_WIDTH * (SCREEN_PAGES - 1)
 
   .org $2000
   jmp program_entry
@@ -23,6 +32,8 @@ D_S_I_P    = $00        ; 2 byte
 program_entry:
   jsr display_string_immediate
   .asciiz 'Mini display...'
+
+  jsr clear_screen_buffer
 
   lda #(SD_DATA | SD_CLK | SD_DC | SD_CSB)
   trb PORTA
@@ -111,6 +122,25 @@ delay_loop:
   lda #%00
   jsr sd_send_command
 
+  jsr send_screen_buffer
+
+screen_loop:
+  jsr draw_box_around_screen
+  jsr send_screen_buffer
+
+  lda #30
+  jsr delay_hundredths
+
+  jsr clear_screen_buffer
+  jsr send_screen_buffer
+
+  lda #20
+  jsr delay_hundredths
+
+  bra screen_loop
+
+  jmp wait
+
 display_repeat:
   lda #%00000001
 display_outer_loop:
@@ -122,7 +152,7 @@ display_outer_loop:
   jsr sd_send_command
   lda #0
   jsr sd_send_command
-  lda #127
+  lda #63
   jsr sd_send_command
 
   ; Page start and end address
@@ -130,7 +160,7 @@ display_outer_loop:
   jsr sd_send_command
   lda #0
   jsr sd_send_command
-  lda #7
+  lda #3
   jsr sd_send_command
 
   tya
@@ -252,4 +282,94 @@ sd_reset:
   lda #SD_RST
   tsb PORTB
 
+  rts
+
+
+send_screen_buffer:
+  pha
+
+  ; Column start and end address
+  lda #$21
+  jsr sd_send_command
+  lda #0
+  jsr sd_send_command
+  lda #127
+  jsr sd_send_command
+
+  ; Page start and end address
+  lda #$22
+  jsr sd_send_command
+  lda #0
+  jsr sd_send_command
+  lda #7
+  jsr sd_send_command
+
+  lda #<SCREEN_BUFFER
+  sta SCREEN_P
+  lda #>SCREEN_BUFFER
+  sta SCREEN_P + 1
+
+send_screen_buffer_loop:
+  lda (SCREEN_P)
+  jsr sd_send_data
+  inc SCREEN_P
+  bne send_screen_buffer_loop
+  inc SCREEN_P + 1
+  lda #>(SCREEN_BUFFER + SCREEN_BYTES)
+  cmp SCREEN_P + 1
+  bne send_screen_buffer_loop
+
+  pla
+  rts
+
+
+clear_screen_buffer:
+  phx
+  ldx #0
+clear_screen_buffer_loop:
+  stz SCREEN_BUFFER+$000,X
+  stz SCREEN_BUFFER+$100,X
+  stz SCREEN_BUFFER+$200,X
+  stz SCREEN_BUFFER+$300,X
+  inx
+  bne clear_screen_buffer_loop
+  plx
+  rts
+
+draw_box_around_screen:
+  pha
+  phx
+  phy
+
+  lda #<SCREEN_BUFFER
+  sta SCREEN_P
+  lda #>SCREEN_BUFFER
+  sta SCREEN_P + 1
+
+  lda #%11111111
+  ldx #8
+vertical_loop:
+  sta (SCREEN_P)
+  ldy #SCREEN_WIDTH - 1
+  sta (SCREEN_P),Y
+  iny
+  sta (SCREEN_P),Y
+  ldy #SCREEN_WIDTH * 2 - 1
+  sta (SCREEN_P),Y
+  inc SCREEN_P + 1
+  dex
+  bne vertical_loop
+
+  ldx #SCREEN_WIDTH - 2
+horizontal_loop:
+  lda #%00000001
+  sta SCREEN_BUFFER,X
+  lda #%10000000
+  sta SCREEN_BUFFER_LAST_PAGE,X
+  dex
+  bne horizontal_loop
+
+  ply
+  plx
+  pla
   rts
