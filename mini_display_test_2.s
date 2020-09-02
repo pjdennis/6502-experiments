@@ -128,13 +128,13 @@ screen_loop:
   jsr draw_box_around_screen
   jsr send_screen_buffer
 
-  lda #30
+  lda #50
   jsr delay_hundredths
 
   jsr clear_screen_buffer
   jsr send_screen_buffer
 
-  lda #20
+  lda #50
   jsr delay_hundredths
 
   bra screen_loop
@@ -287,6 +287,8 @@ sd_reset:
 
 send_screen_buffer:
   pha
+  phx
+  phy
 
   ; Column start and end address
   lda #$21
@@ -304,6 +306,9 @@ send_screen_buffer:
   lda #7
   jsr sd_send_command
 
+  lda #SD_DC ; Data
+  tsb PORTA
+
   lda #<SCREEN_BUFFER
   sta SCREEN_P
   lda #>SCREEN_BUFFER
@@ -311,7 +316,29 @@ send_screen_buffer:
 
 send_screen_buffer_loop:
   lda (SCREEN_P)
-  jsr sd_send_data
+  ldx #8
+send_screen_buffer_byte_loop:
+  asl
+  tay
+  lda #SD_DATA
+  bcs send_screen_buffer_high_bit
+  trb PORTA
+  lda #SD_CLK
+  tsb PORTA
+  trb PORTA
+  tya
+  dex
+  bne send_screen_buffer_byte_loop
+  bra send_screen_buffer_byte_done
+send_screen_buffer_high_bit:
+  tsb PORTA
+  lda #SD_CLK
+  tsb PORTA
+  trb PORTA
+  tya
+  dex
+  bne send_screen_buffer_byte_loop
+send_screen_buffer_byte_done:
   inc SCREEN_P
   bne send_screen_buffer_loop
   inc SCREEN_P + 1
@@ -319,6 +346,8 @@ send_screen_buffer_loop:
   cmp SCREEN_P + 1
   bne send_screen_buffer_loop
 
+  ply
+  plx
   pla
   rts
 
