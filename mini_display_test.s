@@ -53,11 +53,11 @@ program_entry:
   jsr sd_send_command
 
   ; Set segment remap
-  lda #$a0
+  lda #$a1
   jsr sd_send_command
 
   ; Set COM Output Scan Direction
-  lda #$c0
+  lda #$c8
   jsr sd_send_command
 
   ; Set COM Pins Hardware
@@ -135,7 +135,7 @@ display_outer_loop:
 
   tya
 
-  ldx #0
+  ldx #16
 display_loop:
   jsr sd_send_data
   jsr sd_send_data
@@ -143,10 +143,10 @@ display_loop:
   jsr sd_send_data
   dex
   bne display_loop
-;  pha
-;  lda #10
-;  jsr delay_hundredths
-;  pla
+  tay
+  lda #10
+  jsr delay_hundredths
+  tya
   asl
   bcc display_outer_loop
   bra display_repeat
