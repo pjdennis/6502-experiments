@@ -27,6 +27,7 @@ SCREEN_BUFFER_LAST_PAGE = SCREEN_BUFFER + SCREEN_WIDTH * (SCREEN_PAGES - 1)
 
   .include display_update_routines.inc
   .include display_string_immediate.inc
+  .include display_hex.inc
   .include delay_routines.inc
 
 program_entry:
@@ -122,7 +123,45 @@ delay_loop:
   lda #%00
   jsr sd_send_command
 
+
+;  jsr draw_box_around_screen
+
+
+  ldx #0
+  ldy #0
+  jsr set_pixel
+
+  ldx #10
+  ldy #0
+  jsr set_pixel
+
+  ldx #0
+  ldy #4
+  jsr set_pixel
+
+  ldx #0
+  ldy #8
+  jsr set_pixel
+
+  ldx #127
+  ldy #63
+  jsr set_pixel
+
+  ldx #20
+  ldy #10
+line_loop:
+  jsr set_pixel
+  inx
+  jsr set_pixel
+  inx
+  iny
+  cpy #40
+  bne line_loop
+
   jsr send_screen_buffer
+
+  jmp wait
+
 
 screen_loop:
   jsr draw_box_around_screen
@@ -402,3 +441,73 @@ horizontal_loop:
   plx
   pla
   rts
+
+
+PIXEL_MASKS:
+  .byte %00000001
+  .byte %00000010
+  .byte %00000100
+  .byte %00001000
+  .byte %00010000
+  .byte %00100000
+  .byte %01000000
+  .byte %10000000
+
+BANK_START_LOCATIONS_L:
+  .byte <(SCREEN_BUFFER + SCREEN_WIDTH * 0)
+  .byte <(SCREEN_BUFFER + SCREEN_WIDTH * 1)
+  .byte <(SCREEN_BUFFER + SCREEN_WIDTH * 2)
+  .byte <(SCREEN_BUFFER + SCREEN_WIDTH * 3)
+  .byte <(SCREEN_BUFFER + SCREEN_WIDTH * 4)
+  .byte <(SCREEN_BUFFER + SCREEN_WIDTH * 5)
+  .byte <(SCREEN_BUFFER + SCREEN_WIDTH * 6)
+  .byte <(SCREEN_BUFFER + SCREEN_WIDTH * 7)
+
+BANK_START_LOCATIONS_H
+  .byte >(SCREEN_BUFFER + SCREEN_WIDTH * 0)
+  .byte >(SCREEN_BUFFER + SCREEN_WIDTH * 1)
+  .byte >(SCREEN_BUFFER + SCREEN_WIDTH * 2)
+  .byte >(SCREEN_BUFFER + SCREEN_WIDTH * 3)
+  .byte >(SCREEN_BUFFER + SCREEN_WIDTH * 4)
+  .byte >(SCREEN_BUFFER + SCREEN_WIDTH * 5)
+  .byte >(SCREEN_BUFFER + SCREEN_WIDTH * 6)
+  .byte >(SCREEN_BUFFER + SCREEN_WIDTH * 7)
+
+; On Entry X = X coordinate relative to left of screen
+;          Y - Y coordinate relative to top of screen
+set_pixel:
+  pha
+  phx
+  phy
+
+  ; Y / 8 tells us which bank
+  tya
+  lsr ; Divide by 8
+  lsr
+  lsr
+
+  ; Multiply by 2 due to 
+
+  phx ; Push the X coordinate
+  tax
+
+  lda BANK_START_LOCATIONS_L,X
+  sta SCREEN_P
+
+  lda BANK_START_LOCATIONS_H,X
+  sta SCREEN_P + 1
+
+  ; Y mod 8 tells us which mask
+  tya
+  and #%00000111
+  tax
+  lda PIXEL_MASKS,X
+  ply ; Pull X coordinate into Y register
+  ora (SCREEN_P),Y
+  sta (SCREEN_P),Y
+
+  ply
+  plx
+  pla
+  rts
+
