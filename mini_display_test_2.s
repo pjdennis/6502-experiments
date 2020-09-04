@@ -14,6 +14,10 @@ PORTB_SD_MASK = SD_RST
 D_S_I_P    = $00        ; 2 bytes
 SCREEN_P   = $02        ; 2 bytes
 
+X1_STACK   = $200
+Y1_STACK   = $300
+X2_STACK   = $400
+Y2_STACK   = $500
 
 SCREEN_WIDTH = 128
 SCREEN_PAGES = 8
@@ -127,38 +131,69 @@ delay_loop:
 ;  jsr draw_box_around_screen
 
 
-  ldx #0
-  ldy #0
-  jsr set_pixel
+;  ldx #0
+;  ldy #0
+;  jsr set_pixel
 
-  ldx #10
-  ldy #0
-  jsr set_pixel
+;  ldx #10
+;  ldy #0
+;  jsr set_pixel
 
-  ldx #0
-  ldy #4
-  jsr set_pixel
+;  ldx #0
+;  ldy #4
+;  jsr set_pixel
 
-  ldx #0
-  ldy #8
-  jsr set_pixel
+;  ldx #0
+;  ldy #8
+;  jsr set_pixel
 
-  ldx #127
-  ldy #63
-  jsr set_pixel
+;  ldx #127
+;  ldy #63
+;  jsr set_pixel
 
-  ldx #20
-  ldy #10
-line_loop:
-  jsr set_pixel
-  inx
-  jsr set_pixel
-  inx
-  iny
-  cpy #40
-  bne line_loop
+;  ldx #20
+;  ldy #10
+;line_loop:
+;  jsr set_pixel
+;  inx
+;  jsr set_pixel
+;  inx
+;  iny
+;  cpy #40
+;  bne line_loop
 
   jsr send_screen_buffer
+
+  lda #DISPLAY_SECOND_LINE
+  jsr move_cursor
+
+;  ldx #0
+;  ldy #2
+;  jsr set_pixel
+
+;  ldx #2
+;  ldy #2
+;  jsr set_pixel
+
+
+  lda #0
+  sta X1_STACK
+  lda #0
+  sta Y1_STACK
+
+  lda #127
+  sta X2_STACK
+  lda #63
+  sta Y2_STACK
+
+  ldy #0
+  jsr draw_line
+
+
+  jsr send_screen_buffer
+
+  jsr display_string_immediate
+  .asciiz "Done."
 
   jmp wait
 
@@ -509,5 +544,80 @@ set_pixel:
   ply
   plx
   pla
+  rts
+
+
+; On entry, Y indexes to the current point pair
+draw_line:
+  lda X1_STACK,Y
+  cmp X2_STACK,Y
+  beq draw_line_x_match
+  inc
+  cmp X2_STACK,Y
+  beq draw_line_x_match
+  dec
+  dec
+  cmp X2_STACK,Y
+  bne draw_line_continue
+draw_line_x_match:
+  lda Y1_STACK,Y
+  cmp Y2_STACK,Y
+  beq draw_line_y_match
+  inc
+  cmp Y2_STACK,Y
+  beq draw_line_y_match
+  dec
+  dec
+  cmp Y2_STACK,Y
+  bne draw_line_continue
+draw_line_y_match:
+; Draw the points
+  phy
+  lda X1_STACK,Y
+  tax
+  lda Y1_STACK,Y
+  tay
+  jsr set_pixel
+
+  lda X2_STACK,Y
+  tax
+  lda Y2_STACK,Y
+  tay
+  jsr set_pixel
+
+  jsr send_screen_buffer
+  ply
+  rts
+draw_line_continue:
+  clc
+  lda X1_STACK,Y
+  adc X2_STACK,Y
+  lsr
+  sta X1_STACK+1,Y
+
+  clc
+  lda Y1_STACK,Y
+  adc Y2_STACK,Y
+  lsr
+  sta Y1_STACK+1,Y
+
+  lda X1_STACK,Y
+  sta X2_STACK+1,Y
+  lda Y1_STACK,Y
+  sta Y2_STACK+1,Y
+
+  iny
+  jsr draw_line
+  dey
+
+  lda X2_STACK,Y
+  sta X2_STACK+1,Y
+  lda Y2_STACK,Y
+  sta Y2_STACK+1,Y
+
+  iny
+  jsr draw_line
+  dey
+
   rts
 
