@@ -175,6 +175,7 @@ delay_loop:
 ;  ldy #2
 ;  jsr set_pixel
 
+  ldy #0
 
   lda #0
   sta X1_STACK
@@ -183,12 +184,106 @@ delay_loop:
 
   lda #127
   sta X2_STACK
-  lda #63
-  sta Y2_STACK
 
-  ldy #0
+  lda #0
+  sta Y2_STACK
   jsr draw_line
 
+  lda #8
+  sta Y2_STACK
+  jsr draw_line
+
+  lda #16
+  sta Y2_STACK
+  jsr draw_line
+
+  lda #24
+  sta Y2_STACK
+  jsr draw_line
+
+  lda #32
+  sta Y2_STACK
+  jsr draw_line
+
+  lda #40
+  sta Y2_STACK
+  jsr draw_line
+
+  lda #48
+  sta Y2_STACK
+  jsr draw_line
+
+  lda #56
+  sta Y2_STACK
+  jsr draw_line
+
+  lda #63
+  sta Y2_STACK
+  jsr draw_line
+
+  lda #120
+  sta X2_STACK
+  jsr draw_line
+
+  lda #112
+  sta X2_STACK
+  jsr draw_line
+
+  lda #104
+  sta X2_STACK
+  jsr draw_line
+
+  lda #96
+  sta X2_STACK
+  jsr draw_line
+
+  lda #88
+  sta X2_STACK
+  jsr draw_line
+
+  lda #80
+  sta X2_STACK
+  jsr draw_line
+
+  lda #72
+  sta X2_STACK
+  jsr draw_line
+
+  lda #64
+  sta X2_STACK
+  jsr draw_line
+
+  lda #56
+  sta X2_STACK
+  jsr draw_line
+
+  lda #48
+  sta X2_STACK
+  jsr draw_line
+
+  lda #40
+  sta X2_STACK
+  jsr draw_line
+
+  lda #32
+  sta X2_STACK
+  jsr draw_line
+
+  lda #24
+  sta X2_STACK
+  jsr draw_line
+
+  lda #16
+  sta X2_STACK
+  jsr draw_line
+
+  lda #8
+  sta X2_STACK
+  jsr draw_line
+
+  lda #0
+  sta X2_STACK
+  jsr draw_line
 
   jsr send_screen_buffer
 
@@ -547,46 +642,71 @@ set_pixel:
   rts
 
 
+set_quad_pixel:
+  pha
+  phx
+  phy
+
+  tya
+  asl
+  tay
+
+  txa
+  asl
+  tax
+
+  jsr set_pixel
+  inx
+  jsr set_pixel
+  iny
+  jsr set_pixel
+  dex
+  jsr set_pixel
+
+  ply
+  plx
+  pla
+  rts
+
+
 ; On entry, Y indexes to the current point pair
 draw_line:
+  clc
   lda X1_STACK,Y
-  cmp X2_STACK,Y
-  beq draw_line_x_match
-  inc
-  cmp X2_STACK,Y
-  beq draw_line_x_match
-  dec
-  dec
+  adc X2_STACK,Y
+  lsr
+  cmp X1_STACK,Y
+  beq draw_line_x_done
   cmp X2_STACK,Y
   bne draw_line_continue
-draw_line_x_match:
+draw_line_x_done:
+  clc
   lda Y1_STACK,Y
-  cmp Y2_STACK,Y
-  beq draw_line_y_match
-  inc
-  cmp Y2_STACK,Y
-  beq draw_line_y_match
-  dec
-  dec
+  adc Y2_STACK,Y
+  lsr
+  cmp Y1_STACK,Y
+  beq draw_line_y_done
   cmp Y2_STACK,Y
   bne draw_line_continue
-draw_line_y_match:
+draw_line_y_done:
 ; Draw the points
-  phy
   lda X1_STACK,Y
   tax
   lda Y1_STACK,Y
+  phy
   tay
   jsr set_pixel
+  ply
 
   lda X2_STACK,Y
   tax
   lda Y2_STACK,Y
+  phy
   tay
   jsr set_pixel
-
-  jsr send_screen_buffer
   ply
+
+;  jsr send_screen_buffer
   rts
 draw_line_continue:
   clc
