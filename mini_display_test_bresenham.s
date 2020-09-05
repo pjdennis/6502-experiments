@@ -174,15 +174,10 @@ program_entry:
   sta X1IN
   jsr draw_line
 
-early_exit:
-
   jsr send_screen_buffer
 
   jsr display_string_immediate
   .asciiz "Done."
-
-  jmp wait
-
 
 wait:
   bra wait
@@ -297,14 +292,8 @@ sd_initialize:
   lda #$af
   jsr sd_send_command
 
-;  ldx #10
-;delay_loop:
-;  lda #100
-;  jsr delay_10_thousandths
-;  dex
-;  bne delay_loop
-
-  lda #$20        ; Addressing mode
+  ; Set addressing mode
+  lda #$20
   jsr sd_send_command
   lda #%00
   jsr sd_send_command
