@@ -30,6 +30,9 @@ ERRL     = $0f
 ERRH     = $10
 E2L      = $11
 E2H      = $12
+PAT_PL   = $13
+PAT_PH   = $14
+
 
 SCREEN_WIDTH = 128
 SCREEN_PAGES = 8
@@ -45,11 +48,9 @@ SCREEN_BUFFER_LAST_PAGE = SCREEN_BUFFER + SCREEN_WIDTH * (SCREEN_PAGES - 1)
   .include display_string_immediate.inc
   .include display_hex.inc
   .include delay_routines.inc
+  .include character_patterns.inc
 
 program_entry:
-  jsr display_string_immediate
-  .asciiz 'Mini display...'
-
   lda #(SD_DATA | SD_CLK | SD_DC | SD_CSB)
   trb PORTA
   lda #PORTA_SD_MASK
@@ -64,16 +65,57 @@ program_entry:
 
   jsr clear_screen_buffer
 
-  lda #DISPLAY_SECOND_LINE
-  jsr move_cursor
+  lda #'L'
+  ldx #0
+  ldy #1
+  jsr md_print_character
 
-  jsr draw_star
-  jsr draw_box
+  lda #'o'
+  inx
+  jsr md_print_character
 
+  lda #'v'
+  inx
+  jsr md_print_character
+
+  lda #'e'
+  inx
+  jsr md_print_character
+
+  lda #'l'
+  inx
+  jsr md_print_character
+
+  lda #'y'
+  inx
+  jsr md_print_character
+ 
+  lda #'L'
+  ldx #3
+  ldy #0
+  jsr md_print_character
+
+  lda #'t'
+  ldy #2
+  jsr md_print_character
+
+  lda #'t'
+  iny
+  jsr md_print_character
+
+  lda #'e'
+  iny
+  jsr md_print_character
+
+  lda #'r'
+  iny
+  jsr md_print_character
+
+  lda #'s'
+  iny
+  jsr md_print_character
+ 
   jsr send_screen_buffer
-
-  jsr display_string_immediate
-  .asciiz "Done."
 
 wait:
   bra wait
@@ -689,3 +731,108 @@ draw_line_e2_dx_compare_ready:
 draw_line_done:
   pla
   rts
+
+
+; On entry A = character to draw
+;          X = X position of character cell
+;          Y = Y position of character cell
+md_print_character:
+  pha
+  phx
+  phy
+
+  ; Store character offset (' ' = 0) in PAT_P
+  sec
+  sbc #' '
+  sta PAT_PL
+  lda #0
+  sta PAT_PH
+
+  ; PAT_P = PAT_P * 8
+  phx
+  ldx #3
+md_print_character_loop_1:
+  lda PAT_PL
+  asl
+  sta PAT_PL
+  lda PAT_PH
+  rol
+  sta PAT_PH
+  dex
+  bne md_print_character_loop_1
+  plx
+
+  ; PAT_P = PAT_P + character_patterns
+  clc
+  lda PAT_PL
+  adc #<character_patterns
+  sta PAT_PL
+  lda PAT_PH
+  adc #>character_patterns
+  sta PAT_PH
+
+  ; SCREEN_P = BANK_START[Y]
+  lda BANK_START_LOCATIONS_L,Y
+  sta SCREEN_P
+  lda BANK_START_LOCATIONS_H,Y
+  sta SCREEN_P + 1
+
+  ; SCREEN_P = SCREEN_P + X character offset
+  txa
+  asl
+  asl
+  asl
+  clc
+  adc SCREEN_P
+  sta SCREEN_P
+  lda #0
+  adc SCREEN_P + 1
+  sta SCREEN_P + 1
+
+  lda #>character_patterns
+  jsr display_hex
+  lda #<character_patterns
+  jsr display_hex
+
+  lda #' '
+  jsr display_character
+
+  lda PAT_PH
+  jsr display_hex
+  lda PAT_PL
+  jsr display_hex
+
+  lda #' '
+  jsr display_character
+
+  lda SCREEN_P + 1
+  jsr display_hex
+  lda SCREEN_P
+  jsr display_hex
+
+  lda #DISPLAY_SECOND_LINE
+  jsr move_cursor
+
+  phy
+  ldy #0
+show_data_loop:
+  lda (PAT_PL),Y
+  jsr display_hex
+  iny
+  cpy #8
+  bne show_data_loop
+  ply
+
+  ldy #0
+md_print_character_loop_2:
+  lda (PAT_PL),Y
+  sta (SCREEN_P),Y
+  iny
+  cpy #8
+  bne md_print_character_loop_2
+
+  ply
+  plx
+  pla
+  rts
+
