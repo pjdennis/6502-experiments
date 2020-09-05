@@ -1,35 +1,35 @@
   .include base_config_v1.inc
 
-SD_DATA    = %00010000
-SD_CLK     = %00100000
-SD_DC      = %01000000
-SD_CSB     = %10000000
+SD_DATA = %00010000
+SD_CLK  = %00100000
+SD_DC   = %01000000
+SD_CSB  = %10000000
 
 PORTA_SD_MASK = SD_DATA | SD_CLK | SD_DC | SD_CSB
 
-SD_RST     = %10000000
+SD_RST  = %10000000
 
 PORTB_SD_MASK = SD_RST
 
-D_S_I_P    = $00        ; 2 bytes
-SCREEN_P   = $02        ; 2 bytes
-X0         = $04
-Y0         = $05
-X1         = $06
-Y1         = $07
-DX         = $08
-DY         = $09
-SX         = $0a
-SY         = $0b
-ERR        = $0c
-E2L        = $0d
-E2H        = $0e
+D_S_I_P  = $00        ; 2 bytes
+SCREEN_P = $02        ; 2 bytes
+X0       = $04
+Y0       = $05
+X1       = $06
+Y1       = $07
+DX       = $08
+DY       = $09
+SX       = $0a
+SY       = $0b
+ERR      = $0c
+E2L      = $0d
+E2H      = $0e
 
 SCREEN_WIDTH = 128
 SCREEN_PAGES = 8
 SCREEN_BYTES = SCREEN_WIDTH * SCREEN_PAGES
 
-SCREEN_BUFFER = $3f00 - SCREEN_BYTES
+SCREEN_BUFFER           = $3f00 - SCREEN_BYTES
 SCREEN_BUFFER_LAST_PAGE = SCREEN_BUFFER + SCREEN_WIDTH * (SCREEN_PAGES - 1)
 
   .org $2000
@@ -461,8 +461,6 @@ set_pixel:
   lsr
   lsr
 
-  ; Multiply by 2 due to 
-
   phx ; Push the X coordinate
   tax
 
@@ -565,19 +563,6 @@ draw_line_sy_ready:
   adc DY
   sta ERR
 
-
-  lda DX
-  jsr display_hex
-  lda SX
-  jsr display_hex
-  lda DY
-  jsr display_hex
-  lda SY
-  jsr display_hex
-  lda ERR
-  jsr display_hex
-
-
   ; while (true)
 draw_line_loop:
 
@@ -595,11 +580,12 @@ draw_line_loop:
   beq draw_line_done
 draw_line_not_done:
 
+  ; E2 = 2 * ERR
   lda ERR
   asl
   sta E2L
-  sbc E2L
-  eor #$ff
+  sbc E2L    ; result in $00 (carry set) or $ff (carry clear)
+  eor #$ff   ; flip bits to get the sign extension based on carry
   sta E2H
 
   ; if (E2 >= DY)
@@ -612,11 +598,10 @@ draw_line_not_done:
   ;   NUM1 <  NUM2 - BMI will branch
   ;   if E2 < DY - skip
   ;   E2 === NUM1; DY === NUM2
-  
-  lda E2L
-  cmp DY
-  lda E2H
-  sbc #0
+  lda E2L  ; NUM1L ; NUM1 - NUM2 ; E2 - DY
+  cmp DY   ; NUM2L
+  lda E2H  ; NUM1H
+  sbc #$ff ; NUM2H ; DY is guaranteed negative
   bvc draw_line_e2_dy_compare_ready
   eor #$80
 draw_line_e2_dy_compare_ready:
@@ -633,6 +618,7 @@ draw_line_e2_dy_compare_ready:
   lda X0
   adc SX
   sta X0
+
 draw_line_dy_sx_incorporated:
 
   ; if (E2 <= DX)
@@ -645,10 +631,10 @@ draw_line_dy_sx_incorporated:
   ;   NUM1 <  NUM2 - BMI will branch
   ;   if DX < E2 - skip
   ;   DX === NUM1; E2 === NUM2 
-  lda DX
-  cmp E2L
-  lda #0
-  sbc E2H
+  lda DX   ; NUM1L ; NUM1 - NUM2 ; DX - E2
+  cmp E2L  ; NUM2L
+  lda #0   ; NUM1H
+  sbc E2H  ; NUM2H
   bvc draw_line_e2_dx_compare_ready
   eor #$80
 draw_line_e2_dx_compare_ready:
@@ -670,3 +656,6 @@ draw_line_e2_dx_compare_ready:
 
 draw_line_done:
   rts
+
+forever:
+  bra forever
