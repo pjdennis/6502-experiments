@@ -34,7 +34,13 @@ PAT_PL   = $13
 PAT_PH   = $14
 TEMP_L   = $15
 TEMP_H   = $16
+TEXT_COL = $17
+TEXT_ROW = $18
+SPSPL    = $19
+SPSPH    = $1a
 
+TEXT_COLS    = 21
+TEXT_ROWS    = 8
 
 SCREEN_WIDTH = 128
 SCREEN_PAGES = 8
@@ -67,100 +73,122 @@ program_entry:
 
   jsr clear_screen_buffer
 
-  lda #'L'
-  ldx #0
-  ldy #1
-  jsr md_print_character
+  stz TEXT_COL
+  stz TEXT_ROW
 
-  lda #'o'
-  inx
-  jsr md_print_character
+  ldy #3
+print_loop:
+  lda #<message1
+  ldx #>message1
+  jsr sd_print_string
 
-  lda #'v'
-  inx
-  jsr md_print_character
+  dey
+  bne print_loop
 
-  lda #'e'
-  inx
-  jsr md_print_character
-
-  lda #'l'
-  inx
-  jsr md_print_character
-
-  lda #'y'
-  inx
-  jsr md_print_character
- 
-  lda #'L'
-  ldx #3
-  ldy #0
-  jsr md_print_character
-
-  lda #'t'
-  ldy #2
-  jsr md_print_character
-
-  lda #'t'
-  iny
-  jsr md_print_character
-
-  lda #'e'
-  iny
-  jsr md_print_character
-
-  lda #'r'
-  iny
-  jsr md_print_character
-
-  lda #'s'
-  iny
-  jsr md_print_character
- 
-  lda #60
-  sta X0IN
-  lda #10
-  sta Y0IN
-  lda #100
-  sta X1IN
-  lda #20
-  sta Y1IN
-  jsr draw_line
-
-  lda #100
-  sta X0IN
-  lda #20
-  sta Y0IN
-  lda #110
-  sta X1IN
-  lda #55
-  sta Y1IN
-  jsr draw_line
-
-  lda #110
-  sta X0IN
-  lda #55
-  sta Y0IN
-  lda #50
-  sta X1IN
-  lda #60
-  sta Y1IN
-  jsr draw_line
-
-  lda #50
-  sta X0IN
-  lda #60
-  sta Y0IN
-  lda #60
-  sta X1IN
-  lda #10
-  sta Y1IN
-  jsr draw_line
+  lda #<message2
+  ldx #>message2
+  jsr sd_print_string
 
   jsr send_screen_buffer
 
 wait:
   bra wait
+
+
+message1: .asciiz "The quick brown fox jumps over the lazy dog. "
+message2: .asciiz "Hello, big wide world!"
+
+demo_with_text:
+  lda #'L'
+  ldx #0
+  ldy #1
+  jsr sd_print_character
+
+  lda #'o'
+  inx
+  jsr sd_print_character
+
+  lda #'v'
+  inx
+  jsr sd_print_character
+
+  lda #'e'
+  inx
+  jsr sd_print_character
+
+  lda #'l'
+  inx
+  jsr sd_print_character
+
+  lda #'y'
+  inx
+  jsr sd_print_character
+ 
+  lda #'L'
+  ldx #3
+  ldy #0
+  jsr sd_print_character
+
+  lda #'t'
+  ldy #2
+  jsr sd_print_character
+
+  lda #'t'
+  iny
+  jsr sd_print_character
+
+  lda #'e'
+  iny
+  jsr sd_print_character
+
+  lda #'r'
+  iny
+  jsr sd_print_character
+
+  lda #'s'
+  iny
+  jsr sd_print_character
+ 
+  lda #60
+  sta X0IN
+  lda #10
+  sta Y0IN
+  lda #100
+  sta X1IN
+  lda #20
+  sta Y1IN
+  jsr draw_line
+
+  lda #100
+  sta X0IN
+  lda #20
+  sta Y0IN
+  lda #110
+  sta X1IN
+  lda #55
+  sta Y1IN
+  jsr draw_line
+
+  lda #110
+  sta X0IN
+  lda #55
+  sta Y0IN
+  lda #50
+  sta X1IN
+  lda #60
+  sta Y1IN
+  jsr draw_line
+
+  lda #50
+  sta X0IN
+  lda #60
+  sta Y0IN
+  lda #60
+  sta X1IN
+  lda #10
+  sta Y1IN
+  jsr draw_line
+  rts
 
 
 draw_fan:
@@ -778,7 +806,7 @@ draw_line_done:
 ; On entry A = character to draw
 ;          X = X position of character cell
 ;          Y = Y position of character cell
-md_print_character:
+sd_print_character:
   pha
   phx
   phy
@@ -882,15 +910,64 @@ show_data_loop:
   ply
 
   ldy #0
-md_print_character_loop_2:
+sd_print_character_loop_2:
   lda (PAT_PL),Y
   sta (SCREEN_P),Y
   iny
   cpy #6
-  bne md_print_character_loop_2
+  bne sd_print_character_loop_2
 
   ply
   plx
   pla
   rts
 
+
+sd_print:
+  phx
+  phy
+
+  ldx TEXT_COL 
+  ldy TEXT_ROW
+  jsr sd_print_character
+  
+  inx
+  cpx #TEXT_COLS 
+  bne sd_print_col_ok
+  ldx #0
+  iny
+  cpy #TEXT_ROWS
+  bne sd_print_row_ok
+  ldy #0
+sd_print_row_ok:
+  sty TEXT_ROW
+sd_print_col_ok:
+  stx TEXT_COL
+
+  ply
+  plx
+  rts
+
+
+; On entry A, X contain low and high bytes of string address
+; On exit A, X, Y are preserved
+sd_print_string:
+  pha
+  phx
+  phy
+
+  sta SPSPL
+  stx SPSPH
+  ldy #0
+sd_print_string_loop:
+  lda (SPSPL),Y
+  beq sd_print_string_done
+  jsr sd_print
+  iny
+  bra sd_print_string_loop
+sd_print_string_done:
+
+  ply
+  plx
+  pla
+  rts

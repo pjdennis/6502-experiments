@@ -17,7 +17,7 @@ print_loop:
   beq done_printing
   jsr display_character
   iny
-  jmp print_loop
+  bra print_loop
 done_printing:
 
   ply
