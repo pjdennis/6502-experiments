@@ -60,79 +60,7 @@ program_entry:
   lda #PORTB_SD_MASK
   tsb DDRB
 
-  jsr sd_reset
-
-  ; Set MUX Ratio
-  lda #$a8
-  jsr sd_send_command
-  lda #$3f
-  jsr sd_send_command
-
-  ; Set display offset
-  lda #$d3
-  jsr sd_send_command
-  lda #$00
-  jsr sd_send_command
-
-  ; Set display start line
-  lda #$40
-  jsr sd_send_command
-
-  ; Set segment remap
-  lda #$a1
-  jsr sd_send_command
-
-  ; Set COM Output Scan Direction
-  lda #$c8
-  jsr sd_send_command
-
-  ; Set COM Pins Hardware
-  lda #$da
-  jsr sd_send_command
-  lda #%00010010
-  jsr sd_send_command
-
-  ; Set Contrast Control
-  lda #$81
-  jsr sd_send_command
-  lda #$7f
-  jsr sd_send_command
-
-  ; Disable Entire Display On
-  lda #$a4
-  jsr sd_send_command
-
-  ; Set Normal Display
-  lda #$a6
-  jsr sd_send_command
-
-  ; Set Osc Frequency
-  lda #$d5
-  jsr sd_send_command
-  lda #$80
-  jsr sd_send_command
-
-  ; Enable charge pump regulator
-  lda #$8d
-  jsr sd_send_command
-  lda #$14
-  jsr sd_send_command
-
-  ; Display on
-  lda #$af
-  jsr sd_send_command
-
-  ldx #10
-delay_loop:
-  lda #100
-  jsr delay_10_thousandths
-  dex
-  bne delay_loop
-
-  lda #$20        ; Addressing mode
-  jsr sd_send_command
-  lda #%00
-  jsr sd_send_command
+  jsr sd_initialize
 
   jsr clear_screen_buffer
 
@@ -303,6 +231,86 @@ sd_bit_set:
   pla
   rts
 
+
+sd_initialize:
+  pha
+
+  jsr sd_reset
+
+  ; Set MUX Ratio
+  lda #$a8
+  jsr sd_send_command
+  lda #$3f
+  jsr sd_send_command
+
+  ; Set display offset
+  lda #$d3
+  jsr sd_send_command
+  lda #$00
+  jsr sd_send_command
+
+  ; Set display start line
+  lda #$40
+  jsr sd_send_command
+
+  ; Set segment remap
+  lda #$a1
+  jsr sd_send_command
+
+  ; Set COM Output Scan Direction
+  lda #$c8
+  jsr sd_send_command
+
+  ; Set COM Pins Hardware
+  lda #$da
+  jsr sd_send_command
+  lda #%00010010
+  jsr sd_send_command
+
+  ; Set Contrast Control
+  lda #$81
+  jsr sd_send_command
+  lda #$7f
+  jsr sd_send_command
+
+  ; Disable Entire Display On
+  lda #$a4
+  jsr sd_send_command
+
+  ; Set Normal Display
+  lda #$a6
+  jsr sd_send_command
+
+  ; Set Osc Frequency
+  lda #$d5
+  jsr sd_send_command
+  lda #$80
+  jsr sd_send_command
+
+  ; Enable charge pump regulator
+  lda #$8d
+  jsr sd_send_command
+  lda #$14
+  jsr sd_send_command
+
+  ; Display on
+  lda #$af
+  jsr sd_send_command
+
+;  ldx #10
+;delay_loop:
+;  lda #100
+;  jsr delay_10_thousandths
+;  dex
+;  bne delay_loop
+
+  lda #$20        ; Addressing mode
+  jsr sd_send_command
+  lda #%00
+  jsr sd_send_command
+
+  pla
+  rts
 
 sd_reset:
   lda #SD_RST
