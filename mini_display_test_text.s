@@ -115,6 +115,46 @@ program_entry:
   iny
   jsr md_print_character
  
+  lda #60
+  sta X0IN
+  lda #10
+  sta Y0IN
+  lda #100
+  sta X1IN
+  lda #20
+  sta Y1IN
+  jsr draw_line
+
+  lda #100
+  sta X0IN
+  lda #20
+  sta Y0IN
+  lda #110
+  sta X1IN
+  lda #55
+  sta Y1IN
+  jsr draw_line
+
+  lda #110
+  sta X0IN
+  lda #55
+  sta Y0IN
+  lda #50
+  sta X1IN
+  lda #60
+  sta Y1IN
+  jsr draw_line
+
+  lda #50
+  sta X0IN
+  lda #60
+  sta Y0IN
+  lda #60
+  sta X1IN
+  lda #10
+  sta Y1IN
+  jsr draw_line
+
   jsr send_screen_buffer
 
 wait:
