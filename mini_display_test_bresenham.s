@@ -13,17 +13,23 @@ PORTB_SD_MASK = SD_RST
 
 D_S_I_P  = $00        ; 2 bytes
 SCREEN_P = $02        ; 2 bytes
-X0       = $04
-Y0       = $05
-X1       = $06
-Y1       = $07
-DX       = $08
-DY       = $09
-SX       = $0a
-SY       = $0b
-ERR      = $0c
-E2L      = $0d
-E2H      = $0e
+X0IN     = $04
+Y0IN     = $05
+X1IN     = $06
+Y1IN     = $07
+X0       = $08
+Y0       = $09
+X1       = X1IN
+Y1       = Y1IN
+DX       = $0a
+DYL      = $0b
+DYH      = $0c
+SX       = $0d
+SY       = $0e
+ERRL     = $0f
+ERRH     = $10
+E2L      = $11
+E2H      = $12
 
 SCREEN_WIDTH = 128
 SCREEN_PAGES = 8
@@ -130,137 +136,117 @@ delay_loop:
 
   jsr clear_screen_buffer
 
-  jsr send_screen_buffer
-
   lda #DISPLAY_SECOND_LINE
   jsr move_cursor
 
   lda #0
-  sta X0
+  sta X0IN
   lda #0
-  sta Y0
-
-  lda #3
-  sta X1
-  lda #6
-  sta Y1
-
-  jsr draw_line
-
-  jsr send_screen_buffer
-
-  jsr display_string_immediate
-  .asciiz "Done."
-
-  jmp wait
-
-
-  lda #0
-  sta X0
-  lda #0
-  sta Y0
+  sta Y0IN
   lda #127
-  sta X1
+  sta X1IN
 
   lda #0
-  sta Y1
+  sta Y1IN
   jsr draw_line
 
   lda #8
-  sta Y1
+  sta Y1IN
   jsr draw_line
 
   lda #16
-  sta Y1
+  sta Y1IN
   jsr draw_line
 
   lda #24
-  sta Y1
+  sta Y1IN
   jsr draw_line
 
   lda #32
-  sta Y1
+  sta Y1IN
   jsr draw_line
 
   lda #40
-  sta Y1
+  sta Y1IN
   jsr draw_line
 
   lda #48
-  sta Y1
+  sta Y1IN
   jsr draw_line
 
   lda #56
-  sta Y1
+  sta Y1IN
   jsr draw_line
 
   lda #63
-  sta Y1
+  sta Y1IN
   jsr draw_line
 
   lda #120
-  sta X1
+  sta X1IN
   jsr draw_line
 
   lda #112
-  sta X1
+  sta X1IN
   jsr draw_line
 
   lda #104
-  sta X1
+  sta X1IN
   jsr draw_line
 
   lda #96
-  sta X1
+  sta X1IN
   jsr draw_line
 
   lda #88
-  sta X1
+  sta X1IN
   jsr draw_line
 
   lda #80
-  sta X1
+  sta X1IN
   jsr draw_line
 
   lda #72
-  sta X1
+  sta X1IN
   jsr draw_line
 
   lda #64
-  sta X1
+  sta X1IN
   jsr draw_line
 
   lda #56
-  sta X1
+  sta X1IN
   jsr draw_line
 
   lda #48
-  sta X1
+  sta X1IN
   jsr draw_line
 
   lda #40
-  sta X1
+  sta X1IN
   jsr draw_line
 
   lda #32
-  sta X1
+  sta X1IN
   jsr draw_line
 
   lda #24
-  sta X1
+  sta X1IN
   jsr draw_line
 
   lda #16
-  sta X1
+  sta X1IN
   jsr draw_line
 
   lda #8
-  sta X1
+  sta X1IN
   jsr draw_line
 
   lda #0
-  sta X1
+  sta X1IN
   jsr draw_line
+
+early_exit:
 
   jsr send_screen_buffer
 
@@ -512,9 +498,14 @@ set_quad_pixel:
   rts
 
 
-; On Entry X0, Y0 contain one end of the line to be drawn
+; On Entry X0IN, Y0IN contain one end of the line to be drawn
 ;          X1, Y1 contain the other end of the line to be drawn
 draw_line:
+  lda X0IN
+  sta X0
+  lda Y0IN
+  sta Y0
+
   ; DX = abs(X1 - X0)
   sec
   lda X1
@@ -543,8 +534,13 @@ draw_line_sx_ready:
   bcc draw_line_dy_ready
   eor #$ff
   adc #0 ; since carry is set this will add 1
-draw_line_dy_ready
-  sta DY
+draw_line_dy_ready:
+  sta DYL
+  asl
+  lda #0
+  adc #$ff
+  eor #$ff
+  sta DYH
 
   ; SY = Y0 < Y1 ? 1 : -1
   lda Y0
@@ -560,8 +556,11 @@ draw_line_sy_ready:
   ; ERR = DX + DY
   clc
   lda DX
-  adc DY
-  sta ERR
+  adc DYL
+  sta ERRL
+  lda #0    ; DXH
+  adc DYH
+  sta ERRH
 
   ; while (true)
 draw_line_loop:
@@ -581,11 +580,11 @@ draw_line_loop:
 draw_line_not_done:
 
   ; E2 = 2 * ERR
-  lda ERR
+  lda ERRL
   asl
   sta E2L
-  sbc E2L    ; result in $00 (carry set) or $ff (carry clear)
-  eor #$ff   ; flip bits to get the sign extension based on carry
+  lda ERRH
+  rol
   sta E2H
 
   ; if (E2 >= DY)
@@ -599,9 +598,9 @@ draw_line_not_done:
   ;   if E2 < DY - skip
   ;   E2 === NUM1; DY === NUM2
   lda E2L  ; NUM1L ; NUM1 - NUM2 ; E2 - DY
-  cmp DY   ; NUM2L
+  cmp DYL  ; NUM2L
   lda E2H  ; NUM1H
-  sbc #$ff ; NUM2H ; DY is guaranteed negative
+  sbc DYH  ; NUM2H
   bvc draw_line_e2_dy_compare_ready
   eor #$80
 draw_line_e2_dy_compare_ready:
@@ -609,9 +608,12 @@ draw_line_e2_dy_compare_ready:
 
   ; ERR += DY
   clc
-  lda ERR
-  adc DY
-  sta ERR
+  lda ERRL
+  adc DYL
+  sta ERRL
+  lda ERRH
+  adc DYH
+  sta ERRH
 
   ; X0 += SX
   clc
@@ -642,9 +644,12 @@ draw_line_e2_dx_compare_ready:
 
   ; ERR += DX
   clc
-  lda ERR
+  lda ERRL
   adc DX
-  sta ERR
+  sta ERRL
+  lda ERRH
+  adc #0
+  sta ERRH
   
   ; Y0 += SY
   clc
