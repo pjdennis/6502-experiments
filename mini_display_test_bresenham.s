@@ -68,6 +68,7 @@ program_entry:
   jsr move_cursor
 
   jsr draw_star
+  jsr draw_box
 
   jsr send_screen_buffer
 
@@ -163,6 +164,50 @@ star_loop_4:
   sec
   sbc #8
   bpl star_loop_4
+
+  rts
+
+
+draw_box:
+  lda #10
+  sta X0IN
+  lda #10
+  sta Y0IN
+  lda #116
+  sta X1IN
+  lda #10
+  sta Y1IN
+  jsr draw_line
+
+  lda #117
+  sta X0IN
+  lda #10
+  sta Y0IN
+  lda #117
+  sta X1IN
+  lda #52
+  sta Y1IN
+  jsr draw_line
+
+  lda #117
+  sta X0IN
+  lda #53
+  sta Y0IN
+  lda #11
+  sta X1IN
+  lda #53
+  sta Y1IN
+  jsr draw_line
+
+  lda #10
+  sta X0IN
+  lda #53
+  sta Y0IN
+  lda #10
+  sta X1IN
+  lda #11
+  sta Y1IN
+  jsr draw_line
 
   rts
 
