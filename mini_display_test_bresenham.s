@@ -67,112 +67,7 @@ program_entry:
   lda #DISPLAY_SECOND_LINE
   jsr move_cursor
 
-  lda #0
-  sta X0IN
-  lda #0
-  sta Y0IN
-  lda #127
-  sta X1IN
-
-  lda #0
-  sta Y1IN
-  jsr draw_line
-
-  lda #8
-  sta Y1IN
-  jsr draw_line
-
-  lda #16
-  sta Y1IN
-  jsr draw_line
-
-  lda #24
-  sta Y1IN
-  jsr draw_line
-
-  lda #32
-  sta Y1IN
-  jsr draw_line
-
-  lda #40
-  sta Y1IN
-  jsr draw_line
-
-  lda #48
-  sta Y1IN
-  jsr draw_line
-
-  lda #56
-  sta Y1IN
-  jsr draw_line
-
-  lda #63
-  sta Y1IN
-  jsr draw_line
-
-  lda #120
-  sta X1IN
-  jsr draw_line
-
-  lda #112
-  sta X1IN
-  jsr draw_line
-
-  lda #104
-  sta X1IN
-  jsr draw_line
-
-  lda #96
-  sta X1IN
-  jsr draw_line
-
-  lda #88
-  sta X1IN
-  jsr draw_line
-
-  lda #80
-  sta X1IN
-  jsr draw_line
-
-  lda #72
-  sta X1IN
-  jsr draw_line
-
-  lda #64
-  sta X1IN
-  jsr draw_line
-
-  lda #56
-  sta X1IN
-  jsr draw_line
-
-  lda #48
-  sta X1IN
-  jsr draw_line
-
-  lda #40
-  sta X1IN
-  jsr draw_line
-
-  lda #32
-  sta X1IN
-  jsr draw_line
-
-  lda #24
-  sta X1IN
-  jsr draw_line
-
-  lda #16
-  sta X1IN
-  jsr draw_line
-
-  lda #8
-  sta X1IN
-  jsr draw_line
-
-  lda #0
-  sta X1IN
-  jsr draw_line
+  jsr draw_star
 
   jsr send_screen_buffer
 
@@ -181,6 +76,95 @@ program_entry:
 
 wait:
   bra wait
+
+
+draw_fan:
+  lda #0
+  sta X0IN
+  lda #0
+  sta Y0IN
+
+  lda #127
+  sta X1IN
+
+  lda #0
+fan_loop_1:
+  sta Y1IN
+  jsr draw_line
+  clc
+  adc #8
+  cmp #64
+  bmi fan_loop_1
+
+  lda #63
+  sta Y1IN
+  jsr draw_line
+
+  lda #120
+fan_loop_2:
+  sta X1IN
+  jsr draw_line
+  sec
+  sbc #8
+  bpl fan_loop_2
+
+  rts
+
+
+draw_star:
+  lda #64
+  sta X0IN
+  lda #32
+  sta Y0IN
+
+  lda #0
+  sta Y1IN
+  lda #0
+star_loop_1:
+  sta X1IN
+  jsr draw_line
+  clc
+  adc #8
+  cmp #128
+  bmi star_loop_1
+
+  lda #127
+  sta X1IN
+  lda #0
+star_loop_2:
+  sta Y1IN
+  jsr draw_line
+  clc
+  adc #8
+  cmp #64
+  bmi star_loop_2
+
+  lda #63
+  sta X0IN
+  lda #31
+  sta Y0IN
+
+  lda #63
+  sta Y1IN
+  lda #127
+star_loop_3:
+  sta X1IN
+  jsr draw_line
+  sec
+  sbc #8
+  bpl star_loop_3
+
+  lda #0
+  sta X1IN
+  lda #63
+star_loop_4:
+  sta Y1IN
+  jsr draw_line
+  sec
+  sbc #8
+  bpl star_loop_4
+
+  rts
 
 
 sd_send_command:
@@ -498,6 +482,7 @@ set_quad_pixel:
 ; On Entry X0IN, Y0IN contain one end of the line to be drawn
 ;          X1, Y1 contain the other end of the line to be drawn
 draw_line:
+  pha
   lda X0IN
   sta X0
   lda Y0IN
@@ -657,6 +642,7 @@ draw_line_e2_dx_compare_ready:
   bra draw_line_loop  
 
 draw_line_done:
+  pla
   rts
 
 forever:
