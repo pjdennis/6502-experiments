@@ -653,33 +653,6 @@ set_pixel:
   rts
 
 
-set_quad_pixel:
-  pha
-  phx
-  phy
-
-  tya
-  asl
-  tay
-
-  txa
-  asl
-  tax
-
-  jsr set_pixel
-  inx
-  jsr set_pixel
-  iny
-  jsr set_pixel
-  dex
-  jsr set_pixel
-
-  ply
-  plx
-  pla
-  rts
-
-
 ; On Entry X0IN, Y0IN contain one end of the line to be drawn
 ;          X1, Y1 contain the other end of the line to be drawn
 draw_line:
@@ -771,15 +744,7 @@ draw_line_not_done:
   sta E2H
 
   ; if (E2 >= DY)
-  ;   A >= NUM - BPL will branch
-  ;   A < NUM  - BMI will branch
-  ;   A-NUM
-  ;   NUM1-NUM2
-  ;   A === NUM1; NUM === NUM2
-  ;   NUM1 >= NUM2 - BPL will branch
-  ;   NUM1 <  NUM2 - BMI will branch
-  ;   if E2 < DY - skip
-  ;   E2 === NUM1; DY === NUM2
+  ; Compare E2 - DY; if E2 < DY bmi will branch
   lda E2L  ; NUM1L ; NUM1 - NUM2 ; E2 - DY
   cmp DYL  ; NUM2L
   lda E2H  ; NUM1H
@@ -807,15 +772,7 @@ draw_line_e2_dy_compare_ready:
 draw_line_dy_sx_incorporated:
 
   ; if (E2 <= DX)
-  ;   A >= NUM - BPL will branch
-  ;   A < NUM  - BMI will branch
-  ;   A-NUM
-  ;   NUM1-NUM2
-  ;   A === NUM1; NUM === NUM2
-  ;   NUM1 >= NUM2 - BPL will branch
-  ;   NUM1 <  NUM2 - BMI will branch
-  ;   if DX < E2 - skip
-  ;   DX === NUM1; E2 === NUM2 
+  ; Compare DX - E2 ; if DX < E2 bmi will branch
   lda DX   ; NUM1L ; NUM1 - NUM2 ; DX - E2
   cmp E2L  ; NUM2L
   lda #0   ; NUM1H
