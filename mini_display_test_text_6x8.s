@@ -505,31 +505,31 @@ sd_initialize:
 
 sd_select:
   lda #SD_CSB
-  trb PORTA
+  trb SD_CS_PORT
   rts
 
 
 sd_unselect:
   lda #SD_CSB
-  tsb PORTA
+  tsb SD_CS_PORT
   rts
 
 
 sd_reset:
   lda #SD_RST
-  tsb PORTB
+  tsb SD_RST_PORT
 
   lda #10 ; 1 millisecond
   jsr delay_10_thousandths
 
   lda #SD_RST
-  trb PORTB
+  trb SD_RST_PORT
 
   lda #100 ; 10 milliseconds
   jsr delay_10_thousandths
 
   lda #SD_RST
-  tsb PORTB
+  tsb SD_RST_PORT
 
   rts
 
