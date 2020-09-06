@@ -1,8 +1,8 @@
   .include base_config_v1.inc
 
-SD_DATA           = %00010000
-SD_CLK            = %00100000
-SD_DC             = %01000000
+SD_DATA           = %00001000
+SD_CLK            = %00010000
+SD_DC             = %00100000
 SD_DATA_PORT_MASK = SD_DATA | SD_CLK | SD_DC
 
 SD_CSB            = %10000000
@@ -11,7 +11,7 @@ SD_CS_PORT_MASK   = SD_CSB
 SD_RST            = %10000000
 SD_RST_PORT_MASK  = SD_RST
 
-SD_DATA_PORT      = PORTA
+SD_DATA_PORT      = PORTB
 SD_CS_PORT        = PORTA
 SD_RST_PORT       = PORTB
 
