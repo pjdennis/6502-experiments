@@ -1,15 +1,19 @@
   .include base_config_v1.inc
 
-SD_DATA = %00010000
-SD_CLK  = %00100000
-SD_DC   = %01000000
-SD_CSB  = %10000000
+SD_DATA           = %00010000
+SD_CLK            = %00100000
+SD_DC             = %01000000
+SD_DATA_PORT_MASK = SD_DATA | SD_CLK | SD_DC
 
-PORTA_SD_MASK = SD_DATA | SD_CLK | SD_DC | SD_CSB
+SD_CSB            = %10000000
+SD_CS_PORT_MASK   = SD_CSB
 
-SD_RST  = %10000000
+SD_RST            = %10000000
+SD_RST_PORT_MASK  = SD_RST
 
-PORTB_SD_MASK = SD_RST
+SD_DATA_PORT      = PORTA
+SD_CS_PORT        = PORTA
+SD_RST_PORT       = PORTB
 
 D_S_I_P  = $00        ; 2 bytes
 SCREEN_P = $02        ; 2 bytes
@@ -59,20 +63,69 @@ SCREEN_BUFFER_LAST_PAGE = SCREEN_BUFFER + SCREEN_WIDTH * (SCREEN_PAGES - 1)
   .include character_patterns_6x8.inc
 
 program_entry:
-  lda #(SD_DATA | SD_CLK | SD_DC | SD_CSB)
-  trb PORTA
-  lda #PORTA_SD_MASK
-  tsb DDRA
+  ; Set data direction
+  lda #SD_DATA_PORT_MASK
+  tsb SD_DATA_PORT + DDR_OFFSET
 
-  lda #SD_RST
-  tsb PORTB
-  lda #PORTB_SD_MASK
-  tsb DDRB
+  lda #SD_CS_PORT_MASK
+  tsb SD_CS_PORT + DDR_OFFSET
+
+  lda #SD_RST_PORT_MASK
+  tsb SD_RST_PORT + DDR_OFFSET
+
+  ; Set up initial output values
+  lda SD_DATA_PORT
+  and #(~SD_DATA_PORT_MASK & $ff)
+  sta SD_DATA_PORT
+
+  lda SD_CS_PORT
+  and #(~SD_CS_PORT_MASK & $ff)
+  ora #SD_CSB
+  sta SD_CS_PORT
+
+  lda SD_RST_PORT
+  and #(~SD_RST_PORT_MASK & $ff)
+  ora #SD_RST
+  sta SD_RST_PORT
 
   jsr sd_initialize
 
+forever:
+  jsr clear_display 
+  jsr display_string_immediate
+  .asciiz "Text message..."
   jsr clear_screen_buffer
+  jsr show_text_message
+  jsr send_screen_buffer
+  lda #100
+  jsr delay_hundredths
 
+  jsr clear_display 
+  jsr display_string_immediate
+  .asciiz "Text demo..."
+  jsr clear_screen_buffer
+  jsr demo_with_text
+  jsr send_screen_buffer
+  lda #100
+  jsr delay_hundredths
+
+  jsr clear_display 
+  jsr display_string_immediate
+  .asciiz "Star..."
+  jsr clear_screen_buffer
+  jsr draw_star
+  jsr draw_box
+  jsr send_screen_buffer
+  lda #100
+  jsr delay_hundredths
+
+  bra forever
+
+
+message1: .asciiz "The quick brown fox jumps over the lazy dog. "
+message2: .asciiz "Hello, big wide world!"
+
+show_text_message:
   stz TEXT_COL
   stz TEXT_ROW
 
@@ -89,14 +142,8 @@ print_loop:
   ldx #>message2
   jsr sd_print_string
 
-  jsr send_screen_buffer
+  rts
 
-wait:
-  bra wait
-
-
-message1: .asciiz "The quick brown fox jumps over the lazy dog. "
-message2: .asciiz "Hello, big wide world!"
 
 demo_with_text:
   lda #'L'
@@ -330,7 +377,7 @@ sd_send_command:
   phy
   tay
   lda #SD_DC
-  trb PORTA
+  trb SD_DATA_PORT
   bra sd_send
 
 sd_send_data:
@@ -339,7 +386,7 @@ sd_send_data:
   phy
   tay
   lda #SD_DC
-  tsb PORTA
+  tsb SD_DATA_PORT
   bra sd_send
 
 sd_send:
@@ -351,14 +398,14 @@ sd_send_loop:
   lda #SD_DATA
   bcs sd_high_bit
 ; low bit
-  trb PORTA
+  trb SD_DATA_PORT
   bra sd_bit_set
 sd_high_bit:
-  tsb PORTA
+  tsb SD_DATA_PORT
 sd_bit_set:
   lda #SD_CLK
-  tsb PORTA
-  trb PORTA
+  tsb SD_DATA_PORT
+  trb SD_DATA_PORT
   dex
   bne sd_send_loop
 
@@ -370,6 +417,8 @@ sd_bit_set:
 
 sd_initialize:
   pha
+
+  jsr sd_select
 
   jsr sd_reset
 
@@ -439,8 +488,23 @@ sd_initialize:
   lda #%00
   jsr sd_send_command
 
+  jsr sd_unselect
+
   pla
   rts
+
+
+sd_select:
+  lda #SD_CSB
+  trb PORTA
+  rts
+
+
+sd_unselect:
+  lda #SD_CSB
+  tsb PORTA
+  rts
+
 
 sd_reset:
   lda #SD_RST
@@ -466,6 +530,8 @@ send_screen_buffer:
   phx
   phy
 
+  jsr sd_select
+
   ; Column start and end address
   lda #$21
   jsr sd_send_command
@@ -483,7 +549,7 @@ send_screen_buffer:
   jsr sd_send_command
 
   lda #SD_DC ; Data
-  tsb PORTA
+  tsb SD_DATA_PORT
 
   lda #<SCREEN_BUFFER
   sta SCREEN_P
@@ -498,19 +564,19 @@ send_screen_buffer_byte_loop:
   tay
   lda #SD_DATA
   bcs send_screen_buffer_high_bit
-  trb PORTA
+  trb SD_DATA_PORT
   lda #SD_CLK
-  tsb PORTA
-  trb PORTA
+  tsb SD_DATA_PORT
+  trb SD_DATA_PORT
   tya
   dex
   bne send_screen_buffer_byte_loop
   bra send_screen_buffer_byte_done
 send_screen_buffer_high_bit:
-  tsb PORTA
+  tsb SD_DATA_PORT
   lda #SD_CLK
-  tsb PORTA
-  trb PORTA
+  tsb SD_DATA_PORT
+  trb SD_DATA_PORT
   tya
   dex
   bne send_screen_buffer_byte_loop
@@ -521,6 +587,8 @@ send_screen_buffer_byte_done:
   lda #>(SCREEN_BUFFER + SCREEN_BYTES)
   cmp SCREEN_P + 1
   bne send_screen_buffer_loop
+
+  jsr sd_unselect
 
   ply
   plx
@@ -874,40 +942,6 @@ sd_print_character:
   lda #0
   adc SCREEN_P + 1
   sta SCREEN_P + 1
-
-  lda #>character_patterns_6x8
-  jsr display_hex
-  lda #<character_patterns_6x8
-  jsr display_hex
-
-  lda #' '
-  jsr display_character
-
-  lda PAT_PH
-  jsr display_hex
-  lda PAT_PL
-  jsr display_hex
-
-  lda #' '
-  jsr display_character
-
-  lda SCREEN_P + 1
-  jsr display_hex
-  lda SCREEN_P
-  jsr display_hex
-
-  lda #DISPLAY_SECOND_LINE
-  jsr move_cursor
-
-  phy
-  ldy #0
-show_data_loop:
-  lda (PAT_PL),Y
-  jsr display_hex
-  iny
-  cpy #6
-  bne show_data_loop
-  ply
 
   ldy #0
 sd_print_character_loop_2:

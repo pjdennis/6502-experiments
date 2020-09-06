@@ -1,4 +1,8 @@
 ; 6522 registers
+PORTB   = $6000
+PORTA   = $6001
+DDRB    = $6002
+DDRA    = $6003
 T1CL    = $6004
 T1CH    = $6005
 T1LL    = $6006
@@ -12,6 +16,7 @@ IFR     = $600D
 IER     = $600E
 PORTANH = $600F
 
+DDR_OFFSET = DDRB - PORTB
 
 ; 6522 flag masks
 IERSETCLEAR        = %10000000
