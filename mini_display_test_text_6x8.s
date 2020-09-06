@@ -119,7 +119,16 @@ forever:
   lda #100
   jsr delay_hundredths
 
-  bra forever
+  jsr clear_display 
+  jsr display_string_immediate
+  .asciiz "Fan..."
+  jsr clear_screen_buffer
+  jsr draw_fan
+  jsr send_screen_buffer
+  lda #100
+  jsr delay_hundredths
+
+  jmp forever
 
 
 message1: .asciiz "The quick brown fox jumps over the lazy dog. "
