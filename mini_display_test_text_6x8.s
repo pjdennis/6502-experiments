@@ -8,12 +8,8 @@ SD_DATA_PORT_MASK = SD_DATA | SD_CLK | SD_DC
 SD_CSB            = %10000000
 SD_CS_PORT_MASK   = SD_CSB
 
-SD_RST            = %10000000
-SD_RST_PORT_MASK  = SD_RST
-
 SD_DATA_PORT      = PORTB
 SD_CS_PORT        = PORTA
-SD_RST_PORT       = PORTB
 
 D_S_I_P  = $00        ; 2 bytes
 SCREEN_P = $02        ; 2 bytes
@@ -70,9 +66,6 @@ program_entry:
   lda #SD_CS_PORT_MASK
   tsb SD_CS_PORT + DDR_OFFSET
 
-  lda #SD_RST_PORT_MASK
-  tsb SD_RST_PORT + DDR_OFFSET
-
   ; Set up initial output values
   lda SD_DATA_PORT
   and #(~SD_DATA_PORT_MASK & $ff)
@@ -82,11 +75,6 @@ program_entry:
   and #(~SD_CS_PORT_MASK & $ff)
   ora #SD_CSB
   sta SD_CS_PORT
-
-  lda SD_RST_PORT
-  and #(~SD_RST_PORT_MASK & $ff)
-  ora #SD_RST
-  sta SD_RST_PORT
 
   jsr sd_initialize
 
@@ -429,8 +417,6 @@ sd_initialize:
 
   jsr sd_select
 
-  jsr sd_reset
-
   ; Set MUX Ratio
   lda #$a8
   jsr sd_send_command
@@ -512,25 +498,6 @@ sd_select:
 sd_unselect:
   lda #SD_CSB
   tsb SD_CS_PORT
-  rts
-
-
-sd_reset:
-  lda #SD_RST
-  tsb SD_RST_PORT
-
-  lda #10 ; 1 millisecond
-  jsr delay_10_thousandths
-
-  lda #SD_RST
-  trb SD_RST_PORT
-
-  lda #100 ; 10 milliseconds
-  jsr delay_10_thousandths
-
-  lda #SD_RST
-  tsb SD_RST_PORT
-
   rts
 
 
