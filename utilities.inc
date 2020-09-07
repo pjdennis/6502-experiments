@@ -1,11 +1,12 @@
 ; On exit A, X, Y are preserved
 lock_screen:
   pha
+lock_screen_retry:
   sei
   lda SCREEN_LOCK
   beq lock_acquired
   cli
-  bra lock_screen
+  bra lock_screen_retry
 lock_acquired:
   inc SCREEN_LOCK
   cli

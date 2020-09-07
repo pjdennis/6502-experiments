@@ -40,5 +40,3 @@ run_chase_left:
   bne run_chase_left
 
   bra run_chase
-  
-
