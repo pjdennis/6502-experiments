@@ -231,6 +231,7 @@ banks_exist:
 ;         A not preserved
 sleep_milliseconds:
   phx
+  phy
   pha ; divide millis by 2 (assuming 500 KHz interrupt rate)
   txa
   lsr
@@ -238,6 +239,7 @@ sleep_milliseconds:
   pla
   ror
   jsr sleep
+  ply
   plx
   rts
 
@@ -256,11 +258,7 @@ sleep:
   sta WAKE_AT + 1
   lda #1
   sta SLEEPING
-  cli
-sleep1:
-  lda SLEEPING
-  bne sleep1
-  rts
+  bra switch_to_next_bank
 
 
 ; Interrupt handler - switch memory banks and routines
@@ -274,6 +272,11 @@ interrupt:
   
   phx                     ; Finish saving outgoing bank registers to stack
   phy
+
+  inc TICKS_COUNTER       ; Increment the ticks counter
+  bne dont_increment_high_ticks
+  inc TICKS_COUNTER + 1
+dont_increment_high_ticks:
 
 switch_to_next_bank:
   tsx                     ; Save outgoing bank stack pointer to save location
@@ -305,15 +308,15 @@ switch_to_incoming_bank:
   lda #0
   sta SLEEPING            ; Stop sleeping
 
+  ldx STACK_POINTER_SAVE
+  txs
+  cli
+  rts
+
 not_sleeping:
   ldx STACK_POINTER_SAVE ; Restore incoming bank stack pointer from save location
   txs
 
-  inc TICKS_COUNTER       ; Increment the ticks counter
-  bne dont_increment_high_ticks
-  inc TICKS_COUNTER + 1
-dont_increment_high_ticks:
- 
   ply                    ; Restore incoming bank registers from stack
   plx
   pla
