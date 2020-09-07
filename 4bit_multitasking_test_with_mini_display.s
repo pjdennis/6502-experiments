@@ -45,6 +45,8 @@ TICKS_COUNTER          = $3b00 ; 2 bytes
 FIRST_UNUSED_BANK      = $3b02
 SCREEN_LOCK            = $3b03
 NOTE_PLAYING           = $3b04
+ALL_SLEEPING           = $3b05
+BANK_TEMP              = $3b06
 
 BUFFER_READ_POS        = $3cfd
 BUFFER_WRITE_POS       = $3cfe
@@ -114,6 +116,7 @@ program_entry:
   sta SLEEPING
   sta TICKS_COUNTER
   sta TICKS_COUNTER + 1
+  sta ALL_SLEEPING
 
   ; Initialize display
   jsr reset_and_enable_display_no_cursor
@@ -169,6 +172,8 @@ program_entry:
 
   ; For now we need at least one process with a busy loop to ensure not all proceses are sleeping
 busy_loop:
+  lda #100
+  jsr sleep_milliseconds
   bra busy_loop
 
 
@@ -278,9 +283,24 @@ interrupt:
   inc TICKS_COUNTER + 1
 dont_increment_high_ticks:
 
+  lda ALL_SLEEPING
+  beq switch_to_next_bank
+
+  pla                     ; Pull return address and status register since won't rti
+  pla
+  pla
+
+  stz ALL_SLEEPING
+  bra find_next_bank
+
 switch_to_next_bank:
   tsx                     ; Save outgoing bank stack pointer to save location
   stx STACK_POINTER_SAVE
+
+find_next_bank:
+  lda PORTA
+  and #BANK_MASK
+  sta BANK_TEMP
 
 next_bank:  
   lda PORTA               ; Increment the memory bank
@@ -303,10 +323,21 @@ switch_to_incoming_bank:
   cmp TICKS_COUNTER
   lda WAKE_AT + 1
   sbc TICKS_COUNTER + 1
-  bpl next_bank           ; Next bank if WAKE_AT > TICKS_COUNTER
+  bmi stop_sleeping       ; Stop sleeping if WAKE_AT <= TICKS_COUNTER
 
-  lda #0
-  sta SLEEPING            ; Stop sleeping
+  lda PORTA
+  and #BANK_MASK
+  cmp BANK_TEMP
+  bne next_bank
+
+  ; Everything is sleeping
+  inc ALL_SLEEPING
+  cli
+interrupt_wait_forever:
+  bra interrupt_wait_forever 
+
+stop_sleeping:
+  stz SLEEPING            ; Stop sleeping
 
   ldx STACK_POINTER_SAVE
   txs
