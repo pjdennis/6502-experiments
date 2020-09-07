@@ -14,14 +14,6 @@ SD_DC             = %00100000
 SD_CS_PORT        = PORTA
 SD_DATA_PORT      = PORTB
 
-;SD_DATA           = %00010000
-;SD_CLK            = %00100000
-;SD_DC             = %01000000
-;SD_CS_PORT        = PORTA
-;SD_DATA_PORT      = PORTA
-
-;PORTA_OUT_MASK    = BANK_MASK | CONTROL_LED | MORSE_LED | SD_DATA | SD_CLK | SD_DC | SD_CSB
-
 ; PORTB assignments
 T1_SQWAVE_OUT     = %10000000
 
@@ -196,8 +188,7 @@ banks_exist:
   ora FIRST_UNUSED_BANK
   sta PORTA
 
-  lda #0         ; Task is not sleeping
-  sta SLEEPING
+  stz SLEEPING   ; Task is not sleeping
 
   txa            ; high order address in A
   ldx #$ff       ; Initialize stack for new bank 
