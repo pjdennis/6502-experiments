@@ -484,9 +484,9 @@ send_screen_buffer:
   lda #7
   jsr sd_send_command
 
-  ; jsr sd_unselect
-  lda #SD_DC ; Data
-  tsb SD_DATA_PORT
+  jsr sd_unselect
+  ;lda #SD_DC ; Data
+  ;tsb SD_DATA_PORT
 
   lda #<SCREEN_BUFFER
   sta SCREEN_P
@@ -495,9 +495,9 @@ send_screen_buffer:
 
 send_screen_buffer_loop:
   ldx #8
-  ; jsr sd_select
-  ; lda #SD_DC ; Data
-  ; tsb SD_DATA_PORT
+  jsr sd_select
+  lda #SD_DC ; Data
+  tsb SD_DATA_PORT
   lda (SCREEN_P)
 send_screen_buffer_byte_loop:
   asl
@@ -521,7 +521,7 @@ send_screen_buffer_high_bit:
   dex
   bne send_screen_buffer_byte_loop
 send_screen_buffer_byte_done:
-  ; jsr sd_unselect
+  jsr sd_unselect
 
   inc SCREEN_P
   bne send_screen_buffer_loop
@@ -530,7 +530,7 @@ send_screen_buffer_byte_done:
   cmp SCREEN_P + 1
   bne send_screen_buffer_loop
 
-  jsr sd_unselect
+  ; jsr sd_unselect
 
   ply
   plx
