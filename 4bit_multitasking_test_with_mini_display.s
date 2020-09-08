@@ -37,8 +37,7 @@ TICKS_COUNTER          = $3b00 ; 2 bytes
 FIRST_UNUSED_BANK      = $3b02
 SCREEN_LOCK            = $3b03
 NOTE_PLAYING           = $3b04
-ALL_SLEEPING           = $3b05
-BANK_TEMP              = $3b06
+BANK_TEMP              = $3b05
 
 BUFFER_READ_POS        = $3cfd
 BUFFER_WRITE_POS       = $3cfe
@@ -107,7 +106,6 @@ program_entry:
   stz SLEEPING
   stz TICKS_COUNTER
   stz TICKS_COUNTER + 1
-  stz ALL_SLEEPING
 
   ; Initialize display
   jsr reset_and_enable_display_no_cursor
@@ -266,7 +264,7 @@ interrupt:
   sta T2CL
   lda #>DELAY
   sta T2CH                ; (Store to the high register starts the timer and clears interrupt)
-  
+
   phx                     ; Finish saving outgoing bank registers to stack
   phy
 
@@ -274,19 +272,6 @@ interrupt:
   bne interrupt_high_ticks_ok
   inc TICKS_COUNTER + 1
 interrupt_high_ticks_ok:
-
-  lda ALL_SLEEPING
-  beq switch_to_next_bank ; Branch if not all sleeping
-
-  pla                     ; Pull A, X, Y, return address and status register since won't rti
-  pla
-  pla
-  pla
-  pla
-  pla
-
-  stz ALL_SLEEPING
-  bra find_next_bank
 
 switch_to_next_bank:
   tsx                     ; Save outgoing bank stack pointer to save location
@@ -324,10 +309,19 @@ interrupt_bank_ok:
   bne next_bank
 
   ; Everything is sleeping
-  inc ALL_SLEEPING
-  cli
-interrupt_wait_forever:
-  bra interrupt_wait_forever 
+  wai
+
+  lda #<DELAY             ; (Reset 6552 timer to trigger next interrupt)
+  sta T2CL
+  lda #>DELAY
+  sta T2CH                ; (Store to the high register starts the timer and clears interrupt)
+
+  inc TICKS_COUNTER       ; Increment the ticks counter
+  bne interrupt_high_ticks_ok2
+  inc TICKS_COUNTER + 1
+interrupt_high_ticks_ok2:
+
+  bra find_next_bank
 
 stop_sleeping:
   stz SLEEPING            ; Stop sleeping
