@@ -102,22 +102,17 @@ program_entry:
   lda #(BANK_START + 1)
   sta FIRST_UNUSED_BANK
 
-  lda #0
-  sta SCREEN_LOCK
-  sta NOTE_PLAYING
-  sta SLEEPING
-  sta TICKS_COUNTER
-  sta TICKS_COUNTER + 1
-  sta ALL_SLEEPING
+  stz SCREEN_LOCK
+  stz NOTE_PLAYING
+  stz SLEEPING
+  stz TICKS_COUNTER
+  stz TICKS_COUNTER + 1
+  stz ALL_SLEEPING
 
   ; Initialize display
   jsr reset_and_enable_display_no_cursor
 
   ; Configure the additional processes
-
-  lda #<mini_display_demo
-  ldx #>mini_display_demo
-  jsr initialize_additional_process 
 
   lda #<run_counter_top_left
   ldx #>run_counter_top_left
@@ -149,6 +144,10 @@ program_entry:
 
   jsr add_morse_demo
 
+  lda #<mini_display_demo
+  ldx #>mini_display_demo
+  jsr initialize_additional_process 
+
   ; Configure timer 2 to be used for task switching
   lda #0                   ; Timer 2 one shot run mode 
   sta ACR
@@ -162,9 +161,9 @@ program_entry:
   lda #(IERSETCLEAR | IT2) ; Enable timer 2 interrupts
   sta IER
 
-  ; For now we need at least one process with a busy loop to ensure not all proceses are sleeping
 busy_loop:
-  lda #100
+  lda #<100
+  ldx #>100
   jsr sleep_milliseconds
   bra busy_loop
 
@@ -252,8 +251,7 @@ sleep:
   txa
   adc TICKS_COUNTER + 1
   sta WAKE_AT + 1
-  lda #1
-  sta SLEEPING
+  inc SLEEPING
   bra switch_to_next_bank
 
 
@@ -270,14 +268,17 @@ interrupt:
   phy
 
   inc TICKS_COUNTER       ; Increment the ticks counter
-  bne dont_increment_high_ticks
+  bne interrupt_high_ticks_ok
   inc TICKS_COUNTER + 1
-dont_increment_high_ticks:
+interrupt_high_ticks_ok:
 
   lda ALL_SLEEPING
-  beq switch_to_next_bank
+  beq switch_to_next_bank ; Branch if not all sleeping
 
-  pla                     ; Pull return address and status register since won't rti
+  pla                     ; Pull A, X, Y, return address and status register since won't rti
+  pla
+  pla
+  pla
   pla
   pla
 
@@ -294,13 +295,11 @@ find_next_bank:
   sta BANK_TEMP
 
 next_bank:  
-  lda PORTA               ; Increment the memory bank
-  and #BANK_MASK
-  inc
+  inc                     ; Increment the memory bank
   cmp FIRST_UNUSED_BANK
-  bne switch_to_incoming_bank
+  bne interrupt_bank_ok
   lda #BANK_START         ; We were on the last bank so start over at the first
-switch_to_incoming_bank:
+interrupt_bank_ok:
   tax
   lda #BANK_MASK
   trb PORTA
@@ -308,7 +307,7 @@ switch_to_incoming_bank:
   tsb PORTA               ; Switch to incoming bank
 
   lda SLEEPING
-  beq not_sleeping
+  beq not_sleeping        ; Branch if not sleeping
 
   lda WAKE_AT             ; Compare WAKE_AT - TICKS_COUNTER
   cmp TICKS_COUNTER
