@@ -6,6 +6,13 @@ lock_screen_retry:
   lda SCREEN_LOCK
   beq lock_acquired
   cli
+
+  phx
+  lda #<0
+  ldx #>0
+  jsr sleep_milliseconds
+  plx
+
   bra lock_screen_retry
 lock_acquired:
   inc SCREEN_LOCK

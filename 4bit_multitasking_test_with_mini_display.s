@@ -161,6 +161,9 @@ program_entry:
   lda #(IERSETCLEAR | IT2) ; Enable timer 2 interrupts
   sta IER
 
+  ; TEMPORARY
+  ; jmp mini_display_demo
+
 busy_loop:
   lda #<100
   ldx #>100

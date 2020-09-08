@@ -40,13 +40,6 @@ mini_display_demo:
 
 mini_display_demo_repeat:
   jsr clear_screen_buffer
-  jsr show_text_message
-  jsr send_screen_buffer
-  lda #<1000
-  ldx #>1000
-  jsr sleep_milliseconds
-
-  jsr clear_screen_buffer
   jsr demo_with_text
   jsr send_screen_buffer
   lda #<1000
@@ -56,6 +49,13 @@ mini_display_demo_repeat:
   jsr clear_screen_buffer
   jsr draw_star
   jsr draw_box
+  jsr send_screen_buffer
+  lda #<1000
+  ldx #>1000
+  jsr sleep_milliseconds
+
+  jsr clear_screen_buffer
+  jsr show_text_message
   jsr send_screen_buffer
   lda #<1000
   ldx #>1000
@@ -484,7 +484,9 @@ send_screen_buffer:
   lda #7
   jsr sd_send_command
 
-  jsr sd_unselect
+  ; jsr sd_unselect
+  lda #SD_DC ; Data
+  tsb SD_DATA_PORT
 
   lda #<SCREEN_BUFFER
   sta SCREEN_P
@@ -493,9 +495,9 @@ send_screen_buffer:
 
 send_screen_buffer_loop:
   ldx #8
-  jsr sd_select
-  lda #SD_DC ; Data
-  tsb SD_DATA_PORT
+  ; jsr sd_select
+  ; lda #SD_DC ; Data
+  ; tsb SD_DATA_PORT
   lda (SCREEN_P)
 send_screen_buffer_byte_loop:
   asl
@@ -519,7 +521,7 @@ send_screen_buffer_high_bit:
   dex
   bne send_screen_buffer_byte_loop
 send_screen_buffer_byte_done:
-  jsr sd_unselect
+  ; jsr sd_unselect
 
   inc SCREEN_P
   bne send_screen_buffer_loop
@@ -527,6 +529,8 @@ send_screen_buffer_byte_done:
   lda #>(SCREEN_BUFFER + SCREEN_BYTES)
   cmp SCREEN_P + 1
   bne send_screen_buffer_loop
+
+  jsr sd_unselect
 
   ply
   plx

@@ -66,8 +66,8 @@ buffer_lock_not_empty_wait:
   cmp BUFFER_WRITE_POS
   bne buffer_locked_not_empty
   jsr buffer_unlock
-  lda #1
-  ldx #0
+  lda #<1
+  ldx #>1
   jsr sleep_milliseconds
   bra buffer_lock_not_empty_wait
 buffer_locked_not_empty:
@@ -91,8 +91,8 @@ buffer_lock_not_full_wait:
   cmp BUFFER_READ_POS
   bpl buffer_locked_not_full
   jsr buffer_unlock
-  lda #1
-  ldx #0
+  lda #<1
+  ldx #>1
   jsr sleep_milliseconds
   bra buffer_lock_not_full_wait
 buffer_locked_not_full:
