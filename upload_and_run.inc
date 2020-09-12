@@ -1,9 +1,10 @@
   .include base_config_v1.inc
 
-;BPS_HUNDREDS          =  96      ;  9600 bps
-;BPS_HUNDREDS          = 192      ; 19200 bps
-;BPS_HUNDREDS          = 384      ; 38400 bps
-BPS_HUNDREDS           = 576      ; 57600 bps
+;BPS_HUNDREDS          =   96     ;   9600 bps
+;BPS_HUNDREDS          =  192     ;  19200 bps
+;BPS_HUNDREDS          =  384     ;  38400 bps
+;BPS_HUNDREDS          =  576     ;  57600 bps
+BPS_HUNDREDS           = 1152     ; 115200 bps
 
 HALF_BIT_INTERVAL      = CLOCK_FREQ_KHZ * 5 / BPS_HUNDREDS
 ; -2 -26 is the most that can be reduced at 57600 without causing the shift
@@ -11,6 +12,8 @@ HALF_BIT_INTERVAL      = CLOCK_FREQ_KHZ * 5 / BPS_HUNDREDS
 ; the low order latch has been reset
 INITIAL_INTERVAL       = HALF_BIT_INTERVAL * 2 - 2 - 24
 SUBSEQUENT_INTERVAL    = HALF_BIT_INTERVAL - 2
+
+SD_CSB                 = %10000000
 
 ; Shared ram locations
 DISPLAY_STRING_PARAM       = $00  ; 2 bytes (overlapping)
@@ -53,9 +56,9 @@ program_start:
   plp
 
   ; Initialize 6522 port A (memory banking control)
-  lda #BANK_START
+  lda #(BANK_START | SD_CSB)
   sta PORTA
-  lda #BANK_MASK                  ; Set pin direction on port A
+  lda #(BANK_MASK  | SD_CSB)      ; Set pin direction on port A
   sta DDRA
 
   ; Initialize 6522 port B (display control)

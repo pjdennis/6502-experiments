@@ -1,4 +1,4 @@
-CLOCK_FREQ_KHZ    = 4000
+CLOCK_FREQ_KHZ    = 5000
 
 ; PORTA assignments
 BANK_MASK         = %00001111
