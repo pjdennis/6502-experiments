@@ -311,29 +311,21 @@ void resetCPU() {
 }
 
 void performClockCycle() {
-  // Arduino:   Clock high->low
   digitalWrite(CLOCK, LOW);
-  
-  // Arduino:   Wait for T hold read
   delayFor(THoldRead);
-  
-  // Arduino:   Set data bus to input
+
+  // Disable possible outputs from prior cycle
   configureDataPins(INPUT);
   selectRamChip(false);
 
-  // Arduino:   Wait for balance of T clock (pulse width low)
   delayFor(TClockWidthLow - THoldRead);
   
-  // Arduino:   Clock low->high
   digitalWrite(CLOCK, HIGH);
   
-  // Arduino:   Read address and RD_WRB flag
   uint16_t address = readAddress();
   bool rd_wrb = digitalRead(RD_WRB);
 
-  uint8_t area = memoryArea(address);
-
-  if (area == MAP_RAM) {
+  if (memoryArea(address) == MAP_RAM) {
     if (rd_wrb) {
       selectRamChip(true);
       delayFor(TClockWidthHigh);      
@@ -349,40 +341,17 @@ void performClockCycle() {
       showState(address, data, 'w', 'R');
     }
   } else {
-    // Arduino:   If read:
     if (rd_wrb) {
-  
-      // Arduino:   Set data bus to output
       configureDataPins(OUTPUT);
-    
-      // Arduino:   Get data for address
       uint8_t data = getMemory(address);
-  
-      // Arduino:   Output data onto data bus for CPU
       writeData(data);
-  
-      // Arduino:   Wait for T clock (pulse width high)
       delayFor(TClockWidthHigh);
-    
-      // Arduino:   Output current cycle
       showState(address, data, 'r', 'S');
-
-    // Arduino:   Else (write):
     } else {
-  
-      // Arduino:   Wait for T write data setup
       delayFor(TSetupWrite);
-  
-      // Arduino:   Read in data on data bus from CPU
       uint8_t data = readData();
-  
-      // Arduino:   Store data at address
       putMemory(address, data);
-    
-      // Arduino:   Wait for balance of T clock (pulse width high)
       delayFor(TClockWidthHigh - TSetupWrite);
-
-      // Arduino:   Output current cycle
       showState(address, data, 'W', 'S');    
     }
   }
