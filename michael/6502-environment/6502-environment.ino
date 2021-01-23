@@ -291,20 +291,20 @@ void loadMemoryFromSerial() {
 
 void resetCPU() {
   pinMode(RESB, OUTPUT); // Default level is LOW
-  digitalWrite(CLOCK, 0);
+  clockLow();
   delayFor(10);
-  digitalWrite(CLOCK, 1);
+  clockHigh();
   delayFor(10);
-  digitalWrite(CLOCK, 0);
+  clockLow();
   delayFor(10);
-  digitalWrite(CLOCK, 1);
+  clockHigh();
   delayFor(10);
   pinMode(RESB, INPUT);
   Serial.println("---- CPU Reset ----");
 }
 
 void performClockCycle() {
-  digitalWrite(CLOCK, LOW);
+  clockLow();
   delayFor(THoldRead);
 
   // Disable possible outputs from prior cycle
@@ -313,7 +313,7 @@ void performClockCycle() {
 
   delayFor(TClockWidthLow - THoldRead);
   
-  digitalWrite(CLOCK, HIGH);
+  clockHigh();
   
   uint16_t address = readAddress();
   bool rd_wrb = digitalRead(RD_WRB);
