@@ -34,7 +34,7 @@ loop:
 
 
 message:
-  .asciiz "Hello, World again 0x"
+  .asciiz "Value: 0x"
 
 
 ; On entry A = byte to display in hex
