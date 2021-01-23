@@ -17,8 +17,8 @@ const uint16_t COUT_PORT = IO_START;
 const uint8_t CLOCK = 23;
 const uint8_t RD_WRB = 25;
 const uint8_t RESB = 27;
-const uint8_t RAM_CSB = 29;
-const uint8_t RAM_WEB = 31;
+const uint8_t RAM_CK_GATED_CS = 29;
+//const uint8_t UNUSED = 31;
 const uint8_t BE = 33;
 const uint8_t ADDR[] = {22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52};
 const uint8_t DATA[] = {39, 41, 43, 45, 47, 49, 51, 53};
@@ -107,16 +107,16 @@ void enableCpuBus(bool enable) {
 }
 
 void selectRamChip(bool select) {
-  digitalWrite(RAM_CSB, select ? 0 : 1);
+  digitalWrite(RAM_CK_GATED_CS, select ? 1 : 0);
 }
 
-void setRamWrite(bool write) {
-  digitalWrite(RAM_WEB, write ? 0 : 1);
+void setWrite(bool write) {
+  digitalWrite(RD_WRB, write ? 0 : 1);
 }
 
 void configureSafe() {
-  pinMode(RAM_CSB, INPUT_PULLUP);
-  pinMode(RAM_WEB, INPUT_PULLUP);
+  selectRamChip(false);
+  pinMode(RAM_CK_GATED_CS, OUTPUT);
   configureAddressPins(INPUT_PULLUP);
   configureDataPins(INPUT_PULLUP);
   pinMode(RD_WRB, INPUT_PULLUP);
@@ -128,11 +128,8 @@ void configureSafe() {
 
 void configureForArduinoToRam() {
   configureSafe();
-
   configureAddressPins(OUTPUT);
-
-  pinMode(RAM_CSB, OUTPUT); // value HIGH from INPUT_PULLUP in configureSafe()
-  pinMode(RAM_WEB, OUTPUT); // value HIGH from INPUT_PULLUP in configureSafe()
+  pinMode(RD_WRB, OUTPUT); // set to read via HIGH from INPUT_PULLUP in configureSafe()
 }
 
 void configureForCpu() {
@@ -141,24 +138,20 @@ void configureForCpu() {
   configureAddressPins(INPUT);
   configureDataPins(INPUT);
   pinMode(RD_WRB, INPUT);
-  pinMode(RAM_CSB, OUTPUT);
-  pinMode(RAM_WEB, OUTPUT);  
 }
 
 void setup() {
-  configureForArduinoToRam();
+  configureSafe();
   
   Serial.begin(115200);
   Serial.println("---- Ardino restarted ----");
 
+  configureForArduinoToRam();
   testRam();
 
-  configureForCpu();
-
   initializeData();
-
   setFullSpeed(false);
-
+  configureForCpu();
   resetCPU();
 }
 
@@ -175,20 +168,20 @@ void writeToRam(uint16_t address, uint8_t data) {
   writeAddress(address);
   configureDataPins(OUTPUT);
   writeData(data);
-  digitalWrite(RAM_WEB, 0);
-  digitalWrite(RAM_CSB, 0);
+  setWrite(true);
+  selectRamChip(true);
   delayFor(1);
-  digitalWrite(RAM_CSB, 1);
-  digitalWrite(RAM_WEB, 1);
+  selectRamChip(false);
+  setWrite(false);
   configureDataPins(INPUT_PULLUP);
 }
 
 uint8_t readFromRam(uint16_t address) {
   writeAddress(address);
-  digitalWrite(RAM_CSB, 0);
+  selectRamChip(true);
   delayFor(1);
   uint8_t data = readData();
-  digitalWrite(RAM_CSB, 1);
+  selectRamChip(false);
   return data;
 }
 
@@ -332,12 +325,10 @@ void performClockCycle() {
       uint8_t data = readData();
       showState(address, data, 'r', 'R');
     } else {
-      setRamWrite(true);
       selectRamChip(true);
       delayFor(TClockWidthHigh);
       uint8_t data = readData();
       selectRamChip(false);
-      setRamWrite(false);
       showState(address, data, 'w', 'R');
     }
   } else {
