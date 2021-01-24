@@ -163,7 +163,6 @@ void setup() {
   configureForArduinoToRam();
   testRam();
 
-  initializeData();
   setFullSpeed(false);
   configureForCpu();
   resetCPU();
@@ -238,13 +237,6 @@ void handleSerialCommand() {
       case 'r': // Perform CPU Reset
         resetCPU();
         break;
-      case 'b': // Perform CPU Boot
-        initializeData();
-        resetCPU();
-        break;
-      case 'v': // Show Version
-        Serial.println("---- Version 4 ----");
-        break;
       case 'l': // Perform Load of memory from serial
         loadMemoryFromSerial();
         break;
@@ -309,7 +301,7 @@ void loadMemoryFromSerial() {
     ROM_BUFFER[n] = data;
   }
   for (uint16_t n = 0; n < ROM_SIZE; n += 1) {
-    putRom(ROM_START + n, ROM_BUFFER[n]);
+    EEPROM[n] = ROM_BUFFER[n];
   }
   Serial.println("Data loaded.");
 }
@@ -338,42 +330,36 @@ void performClockCycle() {
   uint16_t address = readAddress();
 
   if (memoryArea(address) == MAP_RAM) {
-
+    // Clock cycle with real memory
     clockHigh();
     delayFor(TClockWidthHigh);
     maybeShowState();
-
     clockLow();
     delayFor(TClockWidthLow);
-
   } else {
     bool rd_wrb = digitalRead(RD_WRB);
     selectRamChip(false);
     if (rd_wrb) {
-
+      // Read cycle with simulated memory
       clockHigh();
       uint8_t data = getMemory(address);
       configureDataPins(OUTPUT);
       writeData(data);
       delayFor(TClockWidthHigh);
       maybeShowState();
-
       clockLow();
       delayFor(THoldRead);
       configureDataPins(INPUT);
       delayFor(TClockWidthLow - THoldRead);
-
     } else {
-
+      // Write cycle with simulated memory
       clockHigh();
       delayFor(TClockWidthHigh);
       maybeShowState();
       uint8_t data = readData();
       putMemory(address, data);
-
       clockLow();
       delayFor(TClockWidthLow);
-
     }
     selectRamChip(true);
   }
@@ -473,12 +459,6 @@ void putIo(uint16_t address, uint8_t data) {
   }
 }
 
-void putRom(uint16_t address, uint8_t data) {
-  if (memoryArea(address) == MAP_SIMULATED_EEPROM) {
-    EEPROM[address - (0x10000 - ROM_SIZE)] = data;
-  }
-}
-
 void characterOut(uint8_t data) {
   char dataChar = (char) data;
   if (shouldShowState()) {
@@ -530,27 +510,4 @@ void showState(uint16_t address, uint8_t data, char operation, char area) {
   Serial.print(output);
 
   Serial.println();
-}
-
-const uint8_t NOP    = 0xEA;
-const uint8_t TAX    = 0xAA;
-const uint8_t LDX_ZP = 0xA6;
-const uint8_t STX_ZP = 0x86;
-const uint8_t INX    = 0xE8;
-const uint8_t JMP    = 0x4C;
-
-const uint8_t N_ADDR = 0x1F;
-
-void initializeData() {
-  uint16_t address = 0;
-  putMemory(address++, LDX_ZP); putMemory(address++, N_ADDR); // LDX N_ADDR
-  putMemory(address++, INX);                                  // INX
-  putMemory(address++, STX_ZP); putMemory(address++, N_ADDR); // STX N_ADDR
-  putMemory(address++, JMP); putMemory(address++, 0); putMemory(address++, 0); //JMP 0
-
-  while (address < MEMORY_SIZE) {
-    putMemory(address++, 0);
-  }
-  
-  Serial.println("---- Memory initialized ----");
 }

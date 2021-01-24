@@ -9,7 +9,7 @@ reset:
   ldx #$ff ; Initialize stack
   txs
 
-  lda #12
+  lda #$12
   sta COUNTER
 
 loop:
@@ -20,8 +20,6 @@ loop:
   lda COUNTER
   jsr display_hex
 
-  lda #'!'
-  jsr display_character
   lda #13
   jsr display_character
   lda #10
