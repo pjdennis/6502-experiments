@@ -49,8 +49,8 @@ void setup() {
   configureForArduinoToRam();
   testRam();
 
-  setFullSpeed(false);
   configureForCpu();
+  setFullSpeed(false);
   resetCPU();
 }
 
