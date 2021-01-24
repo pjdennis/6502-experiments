@@ -217,43 +217,54 @@ void loop() {
 void handleSerialCommand() {
     int c = Serial.read();
     switch (c) {
-      case 'f':
+      case 'f': // Set Full speed
         setFullSpeed(true);
         Serial.println("Full speed selected.");
         break;
-      case 'w':
+      case 'w': // Set sloW speed
         setFullSpeed(false);
         Serial.println("Slow speed selected.");
         break;
-      case 's':
+      case 's': // Make processor Stop
         processorRunning = false;
         Serial.println("Processor stopped.");
         break;
-      case 'g':
+      case 'g': // Make processor Go
         processorRunning = true;
         Serial.println("Processor started.");
         break;
-      case 'c':
+      case 'c': // Perform a clock Cycle
         performClockCycle();
         break;
-      case 'r':
+      case 'r': // Perform CPU Reset
         resetCPU();
         break;
-      case 'b':
+      case 'b': // Perform CPU Boot
         initializeData();
         resetCPU();
         break;
-      case 'v':
+      case 'v': // Show Version
         Serial.println("---- Version 4 ----");
         break;
-      case 'l':
+      case 'l': // Perform Load of memory from serial
         loadMemoryFromSerial();
         break;
-      case 'd':
+      case 'd': // Perform memory Dump from start of memory
         dumpMemory(MEMORY_START, MEMORY_SIZE);
         break;
-      case 'm':
+      case 'm': // Perform memory dump from roM area
         dumpMemory(ROM_START, ROM_SIZE);
+        break;
+      case 'a': // Switch to real rAm
+        configureForArduinoToRam();
+        copyEepromToRam();
+        configureForCpu();
+        ramMapped = true;
+        Serial.println("Switched to real memory and copied ROM over.");
+        break;
+      case 'i': // Switch to Simulated ram
+        ramMapped = false;
+        Serial.println("Switched to simulated memory.");
         break;
     }
 }
@@ -302,6 +313,12 @@ void loadMemoryFromSerial() {
     putRom(ROM_START + n, ROM_BUFFER[n]);
   }
   Serial.println("Data loaded.");
+}
+
+void copyEepromToRam() {
+  for (uint16_t n = 0; n < ROM_SIZE; n += 1) {
+    writeToRam(ROM_START + n, EEPROM[n]);
+  }
 }
 
 void resetCPU() {
@@ -422,6 +439,11 @@ uint8_t getMemory(uint16_t address) {
     return MEMORY[address];
   } else if (area == MAP_SIMULATED_EEPROM) {
     return EEPROM[address - ROM_START];
+  } else if (area == MAP_RAM) {
+    configureForArduinoToRam();
+    uint8_t data = readFromRam(address);
+    configureForCpu();
+    return data;
   }
   return 0;
 }
@@ -432,6 +454,10 @@ void putMemory(uint16_t address, uint8_t data) {
     MEMORY[address] = data;
   } else if (area == MAP_SIMULATED_IO) {
     putIo(address, data);
+  } else if (area == MAP_RAM) {
+    configureForArduinoToRam();
+    writeToRam(address, data);
+    configureForCpu();
   }
 }
 
