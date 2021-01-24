@@ -47,7 +47,7 @@ void configureDataBus(uint8_t mode) {
   }
 }
 
-void configureSafe() {
+void configurePinsSafe() {
   selectRamChip(false);
   pinMode(RAM_CK_GATED_CS, OUTPUT);
 
@@ -67,14 +67,14 @@ void configureSafe() {
 }
 
 void configureForArduinoToRam() {
-  configureSafe();
+  configurePinsSafe();
   configureAddressBus(OUTPUT);
-  pinMode(RD_WRB, OUTPUT); // Set to read via HIGH from INPUT_PULLUP in configureSafe()
+  pinMode(RD_WRB, OUTPUT); // Set to read via HIGH from INPUT_PULLUP in configurePinsSafe()
   clockHigh(); // Allow chip to be selected
 }
 
 void configureForCpu() {
-  configureSafe();
+  configurePinsSafe();
   enableCpuBuses(true);
   configureAddressBus(INPUT);
   configureDataBus(INPUT);

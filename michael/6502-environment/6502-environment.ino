@@ -14,10 +14,6 @@ const uint8_t MAP_RAM              = 4;
 
 const uint16_t COUT_PORT = IO_START;
 
-uint8_t MEMORY[MEMORY_SIZE];
-
-uint8_t ROM_BUFFER[ROM_SIZE];
-
 const uint32_t TClockWidthLowSlow   = 100000;
 const uint32_t TClockWidthHighSlow  = 100000;
 const uint32_t TClockWidthLowFast   = 2;
@@ -32,7 +28,7 @@ bool processorRunning = false;
 bool ramMapped        = false;
 
 void setup() {
-  configureSafe();
+  configurePinsSafe();
 
   Serial.begin(115200);
   Serial.println("---- Ardino restarted ----");

@@ -1,3 +1,7 @@
+uint8_t MEMORY[MEMORY_SIZE];
+
+uint8_t ROM_BUFFER[ROM_SIZE];
+
 uint8_t memoryArea(uint16_t address) {
   if (address >= IO_START && address - IO_START < IO_SIZE) return MAP_SIMULATED_IO;
   if (ramMapped) return MAP_RAM;
