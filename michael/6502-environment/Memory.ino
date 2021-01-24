@@ -33,3 +33,23 @@ void putMemory(uint16_t address, uint8_t data) {
     configureForCpu();
   }
 }
+
+void loadMemoryFromSerial() {
+  Serial.println("Waiting for data...");
+  for (uint16_t n = 0; n < ROM_SIZE; n += 1) {
+    while (!Serial.available())
+      ;
+    uint8_t data = (uint8_t) Serial.read();
+    ROM_BUFFER[n] = data;
+  }
+  for (uint16_t n = 0; n < ROM_SIZE; n += 1) {
+    EEPROM[n] = ROM_BUFFER[n];
+  }
+  Serial.println("Data loaded.");
+}
+
+void copyEepromToRam() {
+  for (uint16_t n = 0; n < ROM_SIZE; n += 1) {
+    writeToRam(ROM_START + n, EEPROM[n]);
+  }
+}

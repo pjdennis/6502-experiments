@@ -53,86 +53,6 @@ void loop() {
   }
 }
 
-void handleSerialCommand() {
-    int c = Serial.read();
-    switch (c) {
-      case 'f': // Set Full speed
-        setFullSpeed(true);
-        Serial.println("Full speed selected.");
-        break;
-      case 'w': // Set sloW speed
-        setFullSpeed(false);
-        Serial.println("Slow speed selected.");
-        break;
-      case 's': // Make processor Stop
-        processorRunning = false;
-        Serial.println("Processor stopped.");
-        break;
-      case 'g': // Make processor Go
-        processorRunning = true;
-        Serial.println("Processor started.");
-        break;
-      case 'c': // Perform a clock Cycle
-        performClockCycle();
-        break;
-      case 'r': // Perform CPU Reset
-        resetCPU();
-        break;
-      case 'l': // Perform Load of memory from serial
-        loadMemoryFromSerial();
-        break;
-      case 'd': // Perform memory Dump from start of memory
-        dumpMemory(MEMORY_START, MEMORY_SIZE);
-        break;
-      case 'm': // Perform memory dump from roM area
-        dumpMemory(ROM_START, ROM_SIZE);
-        break;
-      case 'a': // Switch to real rAm
-        configureForArduinoToRam();
-        copyEepromToRam();
-        configureForCpu();
-        ramMapped = true;
-        Serial.println("Switched to real memory and copied ROM over.");
-        break;
-      case 'i': // Switch to Simulated ram
-        ramMapped = false;
-        Serial.println("Switched to simulated memory.");
-        break;
-    }
-}
-
-void setFullSpeed(bool full) {
-  if (full) {
-    fullSpeed = true;
-    TClockWidthLow = TClockWidthLowFast;
-    TClockWidthHigh = TClockWidthHighFast;
-  } else {
-    fullSpeed = false;
-    TClockWidthLow = TClockWidthLowSlow;
-    TClockWidthHigh = TClockWidthHighSlow;
-  }
-}
-
-void loadMemoryFromSerial() {
-  Serial.println("Waiting for data...");
-  for (uint16_t n = 0; n < ROM_SIZE; n += 1) {
-    while (!Serial.available())
-      ;
-    uint8_t data = (uint8_t) Serial.read();
-    ROM_BUFFER[n] = data;
-  }
-  for (uint16_t n = 0; n < ROM_SIZE; n += 1) {
-    EEPROM[n] = ROM_BUFFER[n];
-  }
-  Serial.println("Data loaded.");
-}
-
-void copyEepromToRam() {
-  for (uint16_t n = 0; n < ROM_SIZE; n += 1) {
-    writeToRam(ROM_START + n, EEPROM[n]);
-  }
-}
-
 void resetCPU() {
   activateReset(true);
   clockHigh();
@@ -190,5 +110,17 @@ void delayFor(uint32_t duration) {
     delay(duration / 1000);
   } else {
     delayMicroseconds(duration); 
+  }
+}
+
+void setFullSpeed(bool full) {
+  if (full) {
+    fullSpeed = true;
+    TClockWidthLow = TClockWidthLowFast;
+    TClockWidthHigh = TClockWidthHighFast;
+  } else {
+    fullSpeed = false;
+    TClockWidthLow = TClockWidthLowSlow;
+    TClockWidthHigh = TClockWidthHighSlow;
   }
 }
