@@ -14,14 +14,14 @@ const uint8_t MAP_RAM              = 4;
 
 const uint16_t COUT_PORT = IO_START;
 
-const uint8_t CLOCK = 23;
-const uint8_t RD_WRB = 25;
-const uint8_t RESB = 27;
+const uint8_t CLOCK           = 23;
+const uint8_t RD_WRB          = 25;
+const uint8_t RESB            = 27;
 const uint8_t RAM_CK_GATED_CS = 29;
-const uint8_t RDY = 31;
-const uint8_t BE = 33;
-const uint8_t ADDR[] = {22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52};
-const uint8_t DATA[] = {39, 41, 43, 45, 47, 49, 51, 53};
+const uint8_t RDY             = 31;
+const uint8_t BE              = 33;
+const uint8_t ADDR[]          = {22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52};
+const uint8_t DATA[]          = {39, 41, 43, 45, 47, 49, 51, 53};
 
 uint8_t MEMORY[MEMORY_SIZE];
 
