@@ -18,7 +18,7 @@ const uint8_t CLOCK = 23;
 const uint8_t RD_WRB = 25;
 const uint8_t RESB = 27;
 const uint8_t RAM_CK_GATED_CS = 29;
-//const uint8_t UNUSED = 31;
+const uint8_t RDY = 31;
 const uint8_t BE = 33;
 const uint8_t ADDR[] = {22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52};
 const uint8_t DATA[] = {39, 41, 43, 45, 47, 49, 51, 53};
@@ -114,15 +114,26 @@ void setWrite(bool write) {
   digitalWrite(RD_WRB, write ? 0 : 1);
 }
 
+void setReady(bool ready) {
+  digitalWrite(RDY, ready ? 1 : 0);
+}
+
 void configureSafe() {
   selectRamChip(false);
   pinMode(RAM_CK_GATED_CS, OUTPUT);
+
   configureAddressPins(INPUT_PULLUP);
   configureDataPins(INPUT_PULLUP);
   pinMode(RD_WRB, INPUT_PULLUP);
+
+  setReady(false);
+  pinMode(RDY, OUTPUT);
+
   enableCpuBus(false);
+
   clockLow();
   pinMode(CLOCK, OUTPUT);
+
   pinMode(RESB, INPUT);
 }
 
@@ -140,6 +151,7 @@ void configureForCpu() {
   configureDataPins(INPUT);
   pinMode(RD_WRB, INPUT);
   selectRamChip(true);
+  setReady(true);
 }
 
 void setup() {
@@ -290,6 +302,8 @@ void loadMemoryFromSerial() {
   }
   Serial.println("Data loaded.");
 }
+
+
 
 void resetCPU() {
   pinMode(RESB, OUTPUT); // Default level is LOW
