@@ -14,15 +14,6 @@ const uint8_t MAP_RAM              = 4;
 
 const uint16_t COUT_PORT = IO_START;
 
-const uint8_t CLOCK           = 23;
-const uint8_t RD_WRB          = 25;
-const uint8_t RESB            = 27;
-const uint8_t RAM_CK_GATED_CS = 29;
-const uint8_t RDY             = 31;
-const uint8_t BE              = 33;
-const uint8_t ADDR[]          = {22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52};
-const uint8_t DATA[]          = {39, 41, 43, 45, 47, 49, 51, 53};
-
 uint8_t MEMORY[MEMORY_SIZE];
 
 uint8_t ROM_BUFFER[ROM_SIZE];
@@ -60,102 +51,6 @@ void loop() {
   } else if (processorRunning) {
     performClockCycle();
   }
-}
-
-void clockLow() {
-  digitalWrite(CLOCK, 0);
-}
-
-void clockHigh() {
-  digitalWrite(CLOCK, 1);
-}
-
-void enableCpuBus(bool enable) {
-  digitalWrite(BE, enable ? 1 : 0);
-}
-
-void selectRamChip(bool select) {
-  digitalWrite(RAM_CK_GATED_CS, select ? 1 : 0);
-}
-
-void setWrite(bool write) {
-  digitalWrite(RD_WRB, write ? 0 : 1);
-}
-
-void setReady(bool ready) {
-  digitalWrite(RDY, ready ? 1 : 0);
-}
-
-void configureSafe() {
-  selectRamChip(false);
-  pinMode(RAM_CK_GATED_CS, OUTPUT);
-
-  configureAddressBus(INPUT_PULLUP);
-  configureDataBus(INPUT_PULLUP);
-  pinMode(RD_WRB, INPUT_PULLUP);
-
-  setReady(false);
-  pinMode(RDY, OUTPUT);
-
-  enableCpuBus(false);
-
-  clockLow();
-  pinMode(CLOCK, OUTPUT);
-
-  pinMode(RESB, INPUT);
-}
-
-void configureForArduinoToRam() {
-  configureSafe();
-  configureAddressBus(OUTPUT);
-  pinMode(RD_WRB, OUTPUT); // Set to read via HIGH from INPUT_PULLUP in configureSafe()
-  clockHigh(); // Allow chip to be selected
-}
-
-void configureForCpu() {
-  configureSafe();
-  enableCpuBus(true);
-  configureAddressBus(INPUT);
-  configureDataBus(INPUT);
-  pinMode(RD_WRB, INPUT);
-  selectRamChip(true);
-  setReady(true);
-}
-
-void testRam() {
-  writeToRam(0x0000, 0x55);
-  writeToRam(0x0001, 0x88);
-  showHex(readFromRam(0x0000));
-  writeToRam(0x0000, 0x42);
-  showHex(readFromRam(0x0001));
-  showHex(readFromRam(0x0000));
-}
-
-void writeToRam(uint16_t address, uint8_t data) {
-  writeToAddressBus(address);
-  configureDataBus(OUTPUT);
-  writeToDataBus(data);
-  setWrite(true);
-  selectRamChip(true);
-  delayFor(1);
-  selectRamChip(false);
-  setWrite(false);
-  configureDataBus(INPUT_PULLUP);
-}
-
-uint8_t readFromRam(uint16_t address) {
-  writeToAddressBus(address);
-  selectRamChip(true);
-  delayFor(1);
-  uint8_t data = readFromDataBus();
-  selectRamChip(false);
-  return data;
-}
-
-void showHex(uint8_t x) {
-  char buffer[3];
-  sprintf(buffer, "%02x", x);
-  Serial.println(buffer);
 }
 
 void handleSerialCommand() {
@@ -218,26 +113,6 @@ void setFullSpeed(bool full) {
   }
 }
 
-void dumpMemory(uint16_t start, uint16_t count) {
-  const unsigned int bytesPerLine = 32;
-  char buffer[6];
-  Serial.println("Memory dump:");
-  for (uint16_t address = start; address - start < count; address += bytesPerLine) {
-    sprintf(buffer, "%04x ", address);
-    Serial.print(buffer);
-    for (unsigned int n = 0; n < bytesPerLine; n += 1) {
-      sprintf(buffer, " %02x", getMemory(address + n));
-      Serial.print(buffer);
-    }
-    Serial.print("  ");
-    for (unsigned int n = 0; n < bytesPerLine; n += 1) {
-      char dataChar = (char) getMemory(address + n);
-      Serial.print(isPrintable(dataChar) ? dataChar : '.');
-    }
-    Serial.println();
-  }
-}
-
 void loadMemoryFromSerial() {
   Serial.println("Waiting for data...");
   for (uint16_t n = 0; n < ROM_SIZE; n += 1) {
@@ -259,7 +134,7 @@ void copyEepromToRam() {
 }
 
 void resetCPU() {
-  pinMode(RESB, OUTPUT); // Default level is LOW
+  activateReset(true);
   clockHigh();
   delayFor(10);
   clockLow();
@@ -268,7 +143,7 @@ void resetCPU() {
   delayFor(10);
   clockLow();
   delayFor(10);
-  pinMode(RESB, INPUT);
+  activateReset(false);
   Serial.println("---- CPU Reset ----");
 }
 
@@ -283,9 +158,8 @@ void performClockCycle() {
     clockLow();
     delayFor(TClockWidthLow);
   } else {
-    bool rd_wrb = digitalRead(RD_WRB);
     selectRamChip(false);
-    if (rd_wrb) {
+    if (readWriteLineIsRead()) {
       // Read cycle with simulated memory
       clockHigh();
       uint8_t data = getMemory(address);
@@ -317,143 +191,4 @@ void delayFor(uint32_t duration) {
   } else {
     delayMicroseconds(duration); 
   }
-}
-
-void configureAddressBus(uint8_t mode) {
-  for (int n = 0; n < 16; n += 1) {
-    pinMode(ADDR[n], mode);
-  }
-}
-
-void configureDataBus(uint8_t mode) {
-  for (int n = 0; n < 8; n += 1) {
-    pinMode(DATA[n], mode);
-  }
-}
-
-uint16_t readFromAddressBus() {
-  uint16_t address = 0;
-  for (int n = 0; n < 16; n += 1) {
-    int bit = digitalRead(ADDR[n]) ? 1 : 0;
-    address = (address << 1) + bit;
-  }
-  return address;
-}
-
-uint8_t readFromDataBus() {
-  uint16_t data = 0;
-  for (int n = 0; n < 8; n += 1) {
-    int bit = digitalRead(DATA[n]) ? 1 : 0;
-    data = (data << 1) + bit;
-  }
-  return data;  
-}
-
-void writeToAddressBus(uint16_t address) {
-  for (int n = 15; n >= 0; n -= 1) {
-    int bit = bitRead(address, 15 - n);
-    digitalWrite(ADDR[n], bit);
-  }
-}
-
-void writeToDataBus(uint8_t data) {
-  for (int n = 7; n >= 0; n -= 1) {
-    int bit = bitRead(data, 7 - n);
-    digitalWrite(DATA[n], bit);
-  }
-}
-
-uint8_t memoryArea(uint16_t address) {
-  if (address >= IO_START && address - IO_START < IO_SIZE) return MAP_SIMULATED_IO;
-  if (ramMapped) return MAP_RAM;
-  if (address >= MEMORY_START && address - MEMORY_START < MEMORY_SIZE) return MAP_SIMULATED_RAM;
-  if (address >= ROM_START && address - ROM_START < ROM_SIZE) return MAP_SIMULATED_EEPROM;
-  return MAP_RAM;
-}
-
-uint8_t getMemory(uint16_t address) {
-  uint8_t area = memoryArea(address);
-  if (area == MAP_SIMULATED_RAM) {
-    return MEMORY[address];
-  } else if (area == MAP_SIMULATED_EEPROM) {
-    return EEPROM[address - ROM_START];
-  } else if (area == MAP_RAM) {
-    configureForArduinoToRam();
-    uint8_t data = readFromRam(address);
-    configureForCpu();
-    return data;
-  }
-  return 0;
-}
-
-void putMemory(uint16_t address, uint8_t data) {
-  uint8_t area = memoryArea(address);
-  if (area == MAP_SIMULATED_RAM) {
-    MEMORY[address] = data;
-  } else if (area == MAP_SIMULATED_IO) {
-    putIo(address, data);
-  } else if (area == MAP_RAM) {
-    configureForArduinoToRam();
-    writeToRam(address, data);
-    configureForCpu();
-  }
-}
-
-void putIo(uint16_t address, uint8_t data) {
-  if (address = COUT_PORT) {
-    characterOut(data);
-  }
-}
-
-void characterOut(uint8_t data) {
-  char dataChar = (char) data;
-  if (shouldShowState()) {
-    char buffer[7];
-    Serial.write("CPU wrote the value: ");
-    sprintf(buffer, "%c (%02x)", isPrintable(dataChar) ? dataChar : '.', data);
-    Serial.println(buffer);
-  } else {
-    Serial.write(dataChar);
-  }
-}
-
-void maybeShowState() {
-  if (shouldShowState()) {
-      uint16_t address = readFromAddressBus();
-      uint8_t data = readFromDataBus();
-      bool rd_wrb = digitalRead(RD_WRB);
-      uint8_t area = memoryArea(address);
-
-      showState(address, data, rd_wrb ? 'r' : 'W', area == MAP_RAM ? 'R' : 'S');
-  }
-}
-
-bool shouldShowState() {
-  return !fullSpeed || !processorRunning;
-}
-
-void showState(uint16_t address, uint8_t data, char operation, char area) {
-  for (int n = 15; n >= 0; n -= 1) {
-    Serial.print(bitRead(address, n));
-  }
-
-  Serial.print("   ");
-
-  for (int n = 7; n >= 0; n -= 1) {
-    Serial.print(bitRead(data, n));
-  }
-
-  char dataChar = (char) data;
-
-  char output[22];
-  sprintf(output, "   %04x %c  %c %02x .. %c",
-    address,
-    isPrintable(dataChar) ? dataChar : ' ',
-    operation,
-    data,
-    area);
-
-  Serial.print(output);
-
-  Serial.println();
 }
