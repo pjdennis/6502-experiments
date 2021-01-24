@@ -35,7 +35,6 @@ uint32_t TClockWidthHighFast  = 2;
 uint32_t TClockWidthLow    = 2;
 uint32_t TClockWidthHigh   = 2;
 const uint32_t THoldRead   = 1;
-const uint32_t TSetupWrite = 1;
 
 bool processorRunning = false;
 bool fullSpeed;
@@ -339,6 +338,7 @@ void performClockCycle() {
   uint16_t address = readAddress();
 
   if (memoryArea(address) == MAP_RAM) {
+
     clockHigh();
     delayFor(TClockWidthHigh);
     if (shouldShowState()) {
@@ -346,35 +346,42 @@ void performClockCycle() {
       uint8_t data = readData();
       showState(address, data, rd_wrb ? 'r' : 'W', 'R');
     }
+
     clockLow();
     delayFor(TClockWidthLow);
+
   } else {
     bool rd_wrb = digitalRead(RD_WRB);
     selectRamChip(false);
     if (rd_wrb) {
+
       clockHigh();
-      configureDataPins(OUTPUT);
       uint8_t data = getMemory(address);
+      configureDataPins(OUTPUT);
       writeData(data);
       delayFor(TClockWidthHigh);
       if (shouldShowState()) {
         showState(address, data, 'r', 'S');
       }
+
       clockLow();
       delayFor(THoldRead);
       configureDataPins(INPUT);
       delayFor(TClockWidthLow - THoldRead);
+
     } else {
+
       clockHigh();
-      delayFor(TSetupWrite);
+      delayFor(TClockWidthHigh);
       uint8_t data = readData();
-      putMemory(address, data);
-      delayFor(TClockWidthHigh - TSetupWrite);
       if (shouldShowState()) {
         showState(address, data, 'W', 'S');
       }
+      putMemory(address, data);
+
       clockLow();
       delayFor(TClockWidthLow);
+
     }
     selectRamChip(true);
   }
