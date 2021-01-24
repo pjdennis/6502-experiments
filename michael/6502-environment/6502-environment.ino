@@ -90,8 +90,8 @@ void configureSafe() {
   selectRamChip(false);
   pinMode(RAM_CK_GATED_CS, OUTPUT);
 
-  configureAddressPins(INPUT_PULLUP);
-  configureDataPins(INPUT_PULLUP);
+  configureAddressBus(INPUT_PULLUP);
+  configureDataBus(INPUT_PULLUP);
   pinMode(RD_WRB, INPUT_PULLUP);
 
   setReady(false);
@@ -107,7 +107,7 @@ void configureSafe() {
 
 void configureForArduinoToRam() {
   configureSafe();
-  configureAddressPins(OUTPUT);
+  configureAddressBus(OUTPUT);
   pinMode(RD_WRB, OUTPUT); // Set to read via HIGH from INPUT_PULLUP in configureSafe()
   clockHigh(); // Allow chip to be selected
 }
@@ -115,8 +115,8 @@ void configureForArduinoToRam() {
 void configureForCpu() {
   configureSafe();
   enableCpuBus(true);
-  configureAddressPins(INPUT);
-  configureDataPins(INPUT);
+  configureAddressBus(INPUT);
+  configureDataBus(INPUT);
   pinMode(RD_WRB, INPUT);
   selectRamChip(true);
   setReady(true);
@@ -132,22 +132,22 @@ void testRam() {
 }
 
 void writeToRam(uint16_t address, uint8_t data) {
-  writeAddress(address);
-  configureDataPins(OUTPUT);
-  writeData(data);
+  writeToAddressBus(address);
+  configureDataBus(OUTPUT);
+  writeToDataBus(data);
   setWrite(true);
   selectRamChip(true);
   delayFor(1);
   selectRamChip(false);
   setWrite(false);
-  configureDataPins(INPUT_PULLUP);
+  configureDataBus(INPUT_PULLUP);
 }
 
 uint8_t readFromRam(uint16_t address) {
-  writeAddress(address);
+  writeToAddressBus(address);
   selectRamChip(true);
   delayFor(1);
-  uint8_t data = readDataBus();
+  uint8_t data = readFromDataBus();
   selectRamChip(false);
   return data;
 }
@@ -273,7 +273,7 @@ void resetCPU() {
 }
 
 void performClockCycle() {
-  uint16_t address = readAddressBus();
+  uint16_t address = readFromAddressBus();
 
   if (memoryArea(address) == MAP_RAM) {
     // Clock cycle with real memory
@@ -289,20 +289,20 @@ void performClockCycle() {
       // Read cycle with simulated memory
       clockHigh();
       uint8_t data = getMemory(address);
-      configureDataPins(OUTPUT);
-      writeData(data);
+      configureDataBus(OUTPUT);
+      writeToDataBus(data);
       delayFor(TClockWidthHigh);
       maybeShowState();
       clockLow();
       delayFor(THoldRead);
-      configureDataPins(INPUT);
+      configureDataBus(INPUT);
       delayFor(TClockWidthLow - THoldRead);
     } else {
       // Write cycle with simulated memory
       clockHigh();
       delayFor(TClockWidthHigh);
       maybeShowState();
-      uint8_t data = readDataBus();
+      uint8_t data = readFromDataBus();
       putMemory(address, data);
       clockLow();
       delayFor(TClockWidthLow);
@@ -319,19 +319,19 @@ void delayFor(uint32_t duration) {
   }
 }
 
-void configureAddressPins(uint8_t mode) {
+void configureAddressBus(uint8_t mode) {
   for (int n = 0; n < 16; n += 1) {
     pinMode(ADDR[n], mode);
   }
 }
 
-void configureDataPins(uint8_t mode) {
+void configureDataBus(uint8_t mode) {
   for (int n = 0; n < 8; n += 1) {
     pinMode(DATA[n], mode);
   }
 }
 
-uint16_t readAddressBus() {
+uint16_t readFromAddressBus() {
   uint16_t address = 0;
   for (int n = 0; n < 16; n += 1) {
     int bit = digitalRead(ADDR[n]) ? 1 : 0;
@@ -340,7 +340,7 @@ uint16_t readAddressBus() {
   return address;
 }
 
-uint8_t readDataBus() {
+uint8_t readFromDataBus() {
   uint16_t data = 0;
   for (int n = 0; n < 8; n += 1) {
     int bit = digitalRead(DATA[n]) ? 1 : 0;
@@ -349,14 +349,14 @@ uint8_t readDataBus() {
   return data;  
 }
 
-void writeAddress(uint16_t address) {
+void writeToAddressBus(uint16_t address) {
   for (int n = 15; n >= 0; n -= 1) {
     int bit = bitRead(address, 15 - n);
     digitalWrite(ADDR[n], bit);
   }
 }
 
-void writeData(uint8_t data) {
+void writeToDataBus(uint8_t data) {
   for (int n = 7; n >= 0; n -= 1) {
     int bit = bitRead(data, 7 - n);
     digitalWrite(DATA[n], bit);
@@ -419,8 +419,8 @@ void characterOut(uint8_t data) {
 
 void maybeShowState() {
   if (shouldShowState()) {
-      uint16_t address = readAddressBus();
-      uint8_t data = readDataBus();
+      uint16_t address = readFromAddressBus();
+      uint8_t data = readFromDataBus();
       bool rd_wrb = digitalRead(RD_WRB);
       uint8_t area = memoryArea(address);
 
