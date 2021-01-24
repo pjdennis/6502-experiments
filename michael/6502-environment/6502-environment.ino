@@ -121,7 +121,7 @@ void configureSafe() {
   configureDataPins(INPUT_PULLUP);
   pinMode(RD_WRB, INPUT_PULLUP);
   enableCpuBus(false);
-  clockHigh();
+  clockLow();
   pinMode(CLOCK, OUTPUT);
   pinMode(RESB, INPUT);
 }
@@ -129,7 +129,8 @@ void configureSafe() {
 void configureForArduinoToRam() {
   configureSafe();
   configureAddressPins(OUTPUT);
-  pinMode(RD_WRB, OUTPUT); // set to read via HIGH from INPUT_PULLUP in configureSafe()
+  pinMode(RD_WRB, OUTPUT); // Set to read via HIGH from INPUT_PULLUP in configureSafe()
+  clockHigh(); // Allow chip to be selected
 }
 
 void configureForCpu() {
@@ -292,28 +293,19 @@ void loadMemoryFromSerial() {
 
 void resetCPU() {
   pinMode(RESB, OUTPUT); // Default level is LOW
-  clockLow();
-  delayFor(10);
   clockHigh();
   delayFor(10);
   clockLow();
   delayFor(10);
   clockHigh();
+  delayFor(10);
+  clockLow();
   delayFor(10);
   pinMode(RESB, INPUT);
   Serial.println("---- CPU Reset ----");
 }
 
 void performClockCycle() {
-  clockLow();
-  delayFor(THoldRead);
-
-  // Disable possible outputs from prior cycle
-  configureDataPins(INPUT);
-  selectRamChip(true);
-
-  delayFor(TClockWidthLow - THoldRead);
-
   uint16_t address = readAddress();
   bool rd_wrb = digitalRead(RD_WRB);
 
@@ -322,22 +314,32 @@ void performClockCycle() {
     delayFor(TClockWidthHigh);
     uint8_t data = readData();
     showState(address, data, rd_wrb ? 'r' : 'W', 'R');
+    clockLow();
+    delayFor(TClockWidthLow);
   } else {
     selectRamChip(false);
-    clockHigh();
     if (rd_wrb) {
+      clockHigh();
       configureDataPins(OUTPUT);
       uint8_t data = getMemory(address);
       writeData(data);
       delayFor(TClockWidthHigh);
       showState(address, data, 'r', 'S');
+      clockLow();
+      delayFor(THoldRead);
+      configureDataPins(INPUT);
+      delayFor(TClockWidthLow - THoldRead);
     } else {
+      clockHigh();
       delayFor(TSetupWrite);
       uint8_t data = readData();
       putMemory(address, data);
       delayFor(TClockWidthHigh - TSetupWrite);
-      showState(address, data, 'W', 'S');    
+      showState(address, data, 'W', 'S');
+      clockLow();
+      delayFor(TClockWidthLow);
     }
+    selectRamChip(true);
   }
 }
 
