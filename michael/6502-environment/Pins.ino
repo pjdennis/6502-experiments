@@ -48,12 +48,12 @@ void configureDataBus(uint8_t mode) {
 }
 
 void configurePinsSafe() {
-  selectRamChip(false);
-  pinMode(RAM_CK_GATED_CS, OUTPUT);
-
   configureAddressBus(INPUT_PULLUP);
   configureDataBus(INPUT_PULLUP);
   pinMode(RD_WRB, INPUT_PULLUP);
+
+  selectRamChip(false);
+  pinMode(RAM_CK_GATED_CS, OUTPUT);
 
   setReady(false);
   pinMode(RDY, OUTPUT);
