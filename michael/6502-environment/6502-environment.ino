@@ -27,17 +27,17 @@ uint8_t MEMORY[MEMORY_SIZE];
 
 uint8_t ROM_BUFFER[ROM_SIZE];
 
-uint32_t TClockWidthLowSlow   = 125000;
-uint32_t TClockWidthHighSlow  = 125000;
-uint32_t TClockWidthLowFast   = 2;
-uint32_t TClockWidthHighFast  = 2;
+const uint32_t TClockWidthLowSlow   = 100000;
+const uint32_t TClockWidthHighSlow  = 100000;
+const uint32_t TClockWidthLowFast   = 2;
+const uint32_t TClockWidthHighFast  = 2;
+const uint32_t THoldRead            = 1;
 
-uint32_t TClockWidthLow    = 2;
-uint32_t TClockWidthHigh   = 2;
-const uint32_t THoldRead   = 1;
+uint32_t TClockWidthLow;
+uint32_t TClockWidthHigh;
+bool fullSpeed;
 
 bool processorRunning = false;
-bool fullSpeed;
 bool ramMapped = false;
 
 /*
@@ -341,11 +341,7 @@ void performClockCycle() {
 
     clockHigh();
     delayFor(TClockWidthHigh);
-    if (shouldShowState()) {
-      bool rd_wrb = digitalRead(RD_WRB);
-      uint8_t data = readData();
-      showState(address, data, rd_wrb ? 'r' : 'W', 'R');
-    }
+    maybeShowState();
 
     clockLow();
     delayFor(TClockWidthLow);
@@ -360,9 +356,7 @@ void performClockCycle() {
       configureDataPins(OUTPUT);
       writeData(data);
       delayFor(TClockWidthHigh);
-      if (shouldShowState()) {
-        showState(address, data, 'r', 'S');
-      }
+      maybeShowState();
 
       clockLow();
       delayFor(THoldRead);
@@ -373,10 +367,8 @@ void performClockCycle() {
 
       clockHigh();
       delayFor(TClockWidthHigh);
+      maybeShowState();
       uint8_t data = readData();
-      if (shouldShowState()) {
-        showState(address, data, 'W', 'S');
-      }
       putMemory(address, data);
 
       clockLow();
@@ -496,6 +488,17 @@ void characterOut(uint8_t data) {
     Serial.println(buffer);
   } else {
     Serial.write(dataChar);
+  }
+}
+
+void maybeShowState() {
+  if (shouldShowState()) {
+      uint16_t address = readAddress();
+      uint8_t data = readData();
+      bool rd_wrb = digitalRead(RD_WRB);
+      uint8_t area = memoryArea(address);
+
+      showState(address, data, rd_wrb ? 'r' : 'W', area == MAP_RAM ? 'R' : 'S');
   }
 }
 
