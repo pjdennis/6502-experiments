@@ -138,6 +138,7 @@ void configureForCpu() {
   configureAddressPins(INPUT);
   configureDataPins(INPUT);
   pinMode(RD_WRB, INPUT);
+  selectRamChip(true);
 }
 
 void setup() {
@@ -309,29 +310,21 @@ void performClockCycle() {
 
   // Disable possible outputs from prior cycle
   configureDataPins(INPUT);
-  selectRamChip(false);
+  selectRamChip(true);
 
   delayFor(TClockWidthLow - THoldRead);
-  
-  clockHigh();
-  
+
   uint16_t address = readAddress();
   bool rd_wrb = digitalRead(RD_WRB);
 
   if (memoryArea(address) == MAP_RAM) {
-    if (rd_wrb) {
-      selectRamChip(true);
-      delayFor(TClockWidthHigh);      
-      uint8_t data = readData();
-      showState(address, data, 'r', 'R');
-    } else {
-      selectRamChip(true);
-      delayFor(TClockWidthHigh);
-      uint8_t data = readData();
-      selectRamChip(false);
-      showState(address, data, 'w', 'R');
-    }
+    clockHigh();
+    delayFor(TClockWidthHigh);
+    uint8_t data = readData();
+    showState(address, data, rd_wrb ? 'r' : 'W', 'R');
   } else {
+    selectRamChip(false);
+    clockHigh();
     if (rd_wrb) {
       configureDataPins(OUTPUT);
       uint8_t data = getMemory(address);
