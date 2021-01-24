@@ -35,10 +35,32 @@ const uint32_t THoldRead            = 1;
 
 uint32_t TClockWidthLow;
 uint32_t TClockWidthHigh;
-bool fullSpeed;
+bool     fullSpeed;
 
 bool processorRunning = false;
-bool ramMapped = false;
+bool ramMapped        = false;
+
+void setup() {
+  configureSafe();
+
+  Serial.begin(115200);
+  Serial.println("---- Ardino restarted ----");
+
+  configureForArduinoToRam();
+  testRam();
+
+  setFullSpeed(false);
+  configureForCpu();
+  resetCPU();
+}
+
+void loop() {
+  if (Serial.available()) {
+    handleSerialCommand();
+  } else if (processorRunning) {
+    performClockCycle();
+  }
+}
 
 void clockLow() {
   digitalWrite(CLOCK, 0);
@@ -100,20 +122,6 @@ void configureForCpu() {
   setReady(true);
 }
 
-void setup() {
-  configureSafe();
-  
-  Serial.begin(115200);
-  Serial.println("---- Ardino restarted ----");
-
-  configureForArduinoToRam();
-  testRam();
-
-  setFullSpeed(false);
-  configureForCpu();
-  resetCPU();
-}
-
 void testRam() {
   writeToRam(0x0000, 0x55);
   writeToRam(0x0001, 0x88);
@@ -148,14 +156,6 @@ void showHex(uint8_t x) {
   char buffer[3];
   sprintf(buffer, "%02x", x);
   Serial.println(buffer);
-}
-
-void loop() {
-  if (Serial.available()) {
-    handleSerialCommand();
-  } else if (processorRunning) {    
-    performClockCycle();
-  }
 }
 
 void handleSerialCommand() {
