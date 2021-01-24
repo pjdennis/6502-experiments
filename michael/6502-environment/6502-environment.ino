@@ -337,16 +337,19 @@ void resetCPU() {
 
 void performClockCycle() {
   uint16_t address = readAddress();
-  bool rd_wrb = digitalRead(RD_WRB);
 
   if (memoryArea(address) == MAP_RAM) {
     clockHigh();
     delayFor(TClockWidthHigh);
-    uint8_t data = readData();
-    showState(address, data, rd_wrb ? 'r' : 'W', 'R');
+    if (shouldShowState()) {
+      bool rd_wrb = digitalRead(RD_WRB);
+      uint8_t data = readData();
+      showState(address, data, rd_wrb ? 'r' : 'W', 'R');
+    }
     clockLow();
     delayFor(TClockWidthLow);
   } else {
+    bool rd_wrb = digitalRead(RD_WRB);
     selectRamChip(false);
     if (rd_wrb) {
       clockHigh();
@@ -354,7 +357,9 @@ void performClockCycle() {
       uint8_t data = getMemory(address);
       writeData(data);
       delayFor(TClockWidthHigh);
-      showState(address, data, 'r', 'S');
+      if (shouldShowState()) {
+        showState(address, data, 'r', 'S');
+      }
       clockLow();
       delayFor(THoldRead);
       configureDataPins(INPUT);
@@ -365,7 +370,9 @@ void performClockCycle() {
       uint8_t data = readData();
       putMemory(address, data);
       delayFor(TClockWidthHigh - TSetupWrite);
-      showState(address, data, 'W', 'S');
+      if (shouldShowState()) {
+        showState(address, data, 'W', 'S');
+      }
       clockLow();
       delayFor(TClockWidthLow);
     }
@@ -485,9 +492,11 @@ void characterOut(uint8_t data) {
   }
 }
 
-void showState(uint16_t address, uint8_t data, char operation, char area) {
-  if (fullSpeed && processorRunning) return;
+bool shouldShowState() {
+  return !fullSpeed || !processorRunning;
+}
 
+void showState(uint16_t address, uint8_t data, char operation, char area) {
   for (int n = 15; n >= 0; n -= 1) {
     Serial.print(bitRead(address, n));
   }
