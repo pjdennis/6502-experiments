@@ -40,60 +40,6 @@ bool fullSpeed;
 bool processorRunning = false;
 bool ramMapped = false;
 
-/*
- * Preconditions:
- * Clock starts high
- * Arduino data pins set to input
- * 
- * Read cycle:
- * Arduino: Clock high->low
- * 6502:    T address setup passes
- * 6502:    Valid address for reading asserted; read asserted
- * Arduino: Wait for T clock (pulse width low)
- * Arduino: Clock low->high
- * 6502:    Nothing new happening
- * Arduino: Outputs data for address onto data bus
- * Arduino: Wait for T clock (pulse width high)
- * Arduino: Clock high->low                          <- start of next cycle
- * 6502:    reads in data
- * Arduino: Wait for T hold read
- * Arduino: set data pins to input
- * 
- * Write cycle:
- * Arduino: Clock high->low
- * 6502:    T address setup passes
- * 6502:    Valid address for writing asserted; write asserted
- * Arduino: Wait for T clock (pulse width low)
- * Arduino: Clock low->high
- * 6502:    T write data setup passes
- * 6502:    Outputs data for writing
- * Arduino: Wait for T write data setup
- * Arduino: Read in data for address
- * Arduino: Wait for balance of T clock (pulse width high)
- * Arduino: Clock high->low                          <- start of next cycle
- * 6502:    T hold write passes
- * 6502:    Disconnect from data bus
- * 
- * Combined algorithm:
- * 
- * Arduino: Forever:
- * Arduino:   Clock high->low
- * Arduino:   Wait for T hold read
- * Arduino:   Set data bus to input
- * Arduino:   Wait for balance of T clock (pulse width low)
- * Arduino:   Clock low->high
- * Arduino:   Read address and RD_WRB flag
- * Arduino:   If read:
- * Arduino:     Set data bus to output
- * Arduino:     Output data for address onto data bus
- * Arduino:     Wait for T clock (pulse width high)
- * Arduino:   Else (write):
- * Arduino:     Wait for T write data setup
- * Arduino:     Read in data for address
- * Arduino:     Wait for balance of T clock (pulse width high)
- * 
- */
-
 void clockLow() {
   digitalWrite(CLOCK, 0);
 }
