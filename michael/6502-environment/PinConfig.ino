@@ -15,7 +15,7 @@ void clockHigh() {
   digitalWrite(CLOCK, 1);
 }
 
-void enableCpuBus(bool enable) {
+void enableCpuBuses(bool enable) {
   digitalWrite(BE, enable ? 1 : 0);
 }
 
@@ -58,7 +58,7 @@ void configureSafe() {
   setReady(false);
   pinMode(RDY, OUTPUT);
 
-  enableCpuBus(false);
+  enableCpuBuses(false);
 
   clockLow();
   pinMode(CLOCK, OUTPUT);
@@ -75,7 +75,7 @@ void configureForArduinoToRam() {
 
 void configureForCpu() {
   configureSafe();
-  enableCpuBus(true);
+  enableCpuBuses(true);
   configureAddressBus(INPUT);
   configureDataBus(INPUT);
   pinMode(RD_WRB, INPUT);
