@@ -39,6 +39,7 @@ const uint32_t TSetupWrite = 1;
 
 bool processorRunning = false;
 bool fullSpeed;
+bool ramMapped = false;
 
 /*
  * Preconditions:
@@ -303,8 +304,6 @@ void loadMemoryFromSerial() {
   Serial.println("Data loaded.");
 }
 
-
-
 void resetCPU() {
   pinMode(RESB, OUTPUT); // Default level is LOW
   clockHigh();
@@ -410,9 +409,10 @@ void writeData(uint8_t data) {
 }
 
 uint8_t memoryArea(uint16_t address) {
+  if (address >= IO_START && address - IO_START < IO_SIZE) return MAP_SIMULATED_IO;
+  if (ramMapped) return MAP_RAM;
   if (address >= MEMORY_START && address - MEMORY_START < MEMORY_SIZE) return MAP_SIMULATED_RAM;
   if (address >= ROM_START && address - ROM_START < ROM_SIZE) return MAP_SIMULATED_EEPROM;
-  if (address >= IO_START && address - IO_START < IO_SIZE) return MAP_SIMULATED_IO;
   return MAP_RAM;
 }
 
