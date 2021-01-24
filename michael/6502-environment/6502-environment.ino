@@ -147,7 +147,7 @@ uint8_t readFromRam(uint16_t address) {
   writeAddress(address);
   selectRamChip(true);
   delayFor(1);
-  uint8_t data = readData();
+  uint8_t data = readDataBus();
   selectRamChip(false);
   return data;
 }
@@ -273,7 +273,7 @@ void resetCPU() {
 }
 
 void performClockCycle() {
-  uint16_t address = readAddress();
+  uint16_t address = readAddressBus();
 
   if (memoryArea(address) == MAP_RAM) {
     // Clock cycle with real memory
@@ -302,7 +302,7 @@ void performClockCycle() {
       clockHigh();
       delayFor(TClockWidthHigh);
       maybeShowState();
-      uint8_t data = readData();
+      uint8_t data = readDataBus();
       putMemory(address, data);
       clockLow();
       delayFor(TClockWidthLow);
@@ -331,7 +331,7 @@ void configureDataPins(uint8_t mode) {
   }
 }
 
-uint16_t readAddress() {
+uint16_t readAddressBus() {
   uint16_t address = 0;
   for (int n = 0; n < 16; n += 1) {
     int bit = digitalRead(ADDR[n]) ? 1 : 0;
@@ -340,7 +340,7 @@ uint16_t readAddress() {
   return address;
 }
 
-uint8_t readData() {
+uint8_t readDataBus() {
   uint16_t data = 0;
   for (int n = 0; n < 8; n += 1) {
     int bit = digitalRead(DATA[n]) ? 1 : 0;
@@ -419,8 +419,8 @@ void characterOut(uint8_t data) {
 
 void maybeShowState() {
   if (shouldShowState()) {
-      uint16_t address = readAddress();
-      uint8_t data = readData();
+      uint16_t address = readAddressBus();
+      uint8_t data = readDataBus();
       bool rd_wrb = digitalRead(RD_WRB);
       uint8_t area = memoryArea(address);
 
