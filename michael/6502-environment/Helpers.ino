@@ -12,13 +12,12 @@ void resetCPU() {
   Serial.println("---- CPU Reset ----");
 }
 
-void setFullSpeed(bool full) {
-  if (full) {
-    fullSpeed = true;
+void setRunMode(uint8_t mode) {
+  runMode = mode;
+  if (mode == RUN_MODE_FAST) {
     TClockWidthLow = TClockWidthLowFast;
     TClockWidthHigh = TClockWidthHighFast;
-  } else {
-    fullSpeed = false;
+  } else if (mode == RUN_MODE_SLOW) {
     TClockWidthLow = TClockWidthLowSlow;
     TClockWidthHigh = TClockWidthHighSlow;
   }

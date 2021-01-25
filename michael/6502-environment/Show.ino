@@ -10,7 +10,7 @@ void maybeShowState() {
 }
 
 bool shouldShowState() {
-  return !fullSpeed || !processorRunning;
+  return runMode == RUN_MODE_SLOW || !processorRunning;
 }
 
 void showState(uint16_t address, uint8_t data, char operation, char area) {

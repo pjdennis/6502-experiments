@@ -1,13 +1,21 @@
 void handleSerialCommand() {
     int c = Serial.read();
     switch (c) {
-      case 'f': // Set Full speed
-        setFullSpeed(true);
+      case 'f': // Set Fast speed
+        setRunMode(RUN_MODE_FAST);
         Serial.println("Full speed selected.");
         break;
       case 'w': // Set sloW speed
-        setFullSpeed(false);
+        setRunMode(RUN_MODE_SLOW);
         Serial.println("Slow speed selected.");
+        break;
+      case 'e': // Switch to frEe run mode
+        if (ramMapped) {
+          setRunMode(RUN_MODE_FREE);
+          Serial.println("Free run mode selected.");
+        } else  {
+          Serial.println("Error: ram must be mapped to enter free run mode.");
+        }
         break;
       case 's': // Make processor Stop
         processorRunning = false;
@@ -40,8 +48,12 @@ void handleSerialCommand() {
         Serial.println("Switched to real memory and copied ROM over.");
         break;
       case 'i': // Switch to Simulated ram
-        ramMapped = false;
-        Serial.println("Switched to simulated memory.");
+        if (runMode == RUN_MODE_FREE) {
+          Serial.println("Error: must not be in free run mode to switch to simulated memory.");
+        } else {
+          ramMapped = false;
+          Serial.println("Switched to simulated memory.");
+        }
         break;
     }
 }

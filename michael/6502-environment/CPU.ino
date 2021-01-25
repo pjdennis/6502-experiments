@@ -1,4 +1,12 @@
 void performClockCycle() {
+    if (runMode = RUN_MODE_FREE) {
+      performFreeClockCycle();
+    } else {
+      performManagedClockCycle();
+    }
+}
+
+void performManagedClockCycle() {
   uint16_t address = readFromAddressBus();
 
   if (memoryArea(address) == MAP_RAM) {
@@ -33,5 +41,18 @@ void performClockCycle() {
       delayFor(TClockWidthLow);
     }
     selectRamChip(true);
+  }
+}
+
+void performFreeClockCycle() {
+  clockHigh();
+  delayFor(TClockWidthFree);
+  clockLow();
+  //delayFor(TClockWidthFree);
+
+  pollCounter += 1;
+  if (pollCounter >= POLL_INTERVAL) {
+    checkForCharacter();
+    pollCounter = 0; 
   }
 }

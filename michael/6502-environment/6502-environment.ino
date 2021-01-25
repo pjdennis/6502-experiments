@@ -18,14 +18,22 @@ const uint32_t TClockWidthLowSlow   = 100000;
 const uint32_t TClockWidthHighSlow  = 100000;
 const uint32_t TClockWidthLowFast   = 2;
 const uint32_t TClockWidthHighFast  = 2;
+const uint32_t TClockWidthFree      = 1;
 const uint32_t THoldRead            = 1;
+
+const uint8_t RUN_MODE_SLOW = 1;
+const uint8_t RUN_MODE_FAST = 2;
+const uint8_t RUN_MODE_FREE = 3;
+
+const uint16_t POLL_INTERVAL = 50;
 
 uint32_t TClockWidthLow;
 uint32_t TClockWidthHigh;
-bool     fullSpeed;
+uint8_t  runMode;
 
 bool processorRunning = false;
 bool ramMapped        = false;
+uint16_t pollCounter  = 0;
 
 void setup() {
   configurePinsSafe();
@@ -37,7 +45,8 @@ void setup() {
   testRam();
 
   configureForCpu();
-  setFullSpeed(false);
+  setRunMode(RUN_MODE_SLOW);
+  initializeCharacterBuffer();
   resetCPU();
 }
 
@@ -47,4 +56,25 @@ void loop() {
   } else if (processorRunning) {
     performClockCycle();
   }
+}
+
+void checkForCharacter() {
+  configureForArduinoToRam();
+
+  uint8_t flag = readFromRam(0x0201);
+  if (flag) {
+    uint8_t data = readFromRam(0x200);
+    characterOut(data);
+    writeToRam(0x201, 0);
+  }
+
+  configureForCpu();
+}
+
+void initializeCharacterBuffer() {
+  configureForArduinoToRam();
+
+  writeToRam(0x201, 0);
+
+  configureForCpu();
 }
