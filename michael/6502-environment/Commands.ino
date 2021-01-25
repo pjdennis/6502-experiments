@@ -27,7 +27,7 @@ void handleSerialCommand() {
         Serial.println("Processor started.");
         break;
       case 'c': // Perform a clock Cycle
-        performClockCycle();
+        performManagedClockCycle();
         break;
       case 'r': // Perform CPU Reset
         resetCPU();
