@@ -45,14 +45,12 @@ void performManagedClockCycle() {
 }
 
 void performFreeClockCycle() {
-  clockHigh();
-  delayFor(TClockWidthFree);
-  clockLow();
-  //delayFor(TClockWidthFree);
-
-  pollCounter += 1;
-  if (pollCounter >= POLL_INTERVAL) {
-    checkForCharacter();
-    pollCounter = 0; 
+  for (uint16_t n = 0; n < POLL_INTERVAL; n++) {
+    clockHigh();
+    delayFor(TClockWidthFree);
+    clockLow();
+    delayFor(TClockWidthFree);
   }
+
+  checkForCharacter();
 }
