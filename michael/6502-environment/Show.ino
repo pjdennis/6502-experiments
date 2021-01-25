@@ -39,6 +39,18 @@ void showState(uint16_t address, uint8_t data, char operation, char area) {
   Serial.println();
 }
 
+void maybeCheckForCharacters() {
+  if (shouldShowState()) {
+    checkForCharacters();
+  } else {
+    pollCounter += 1;
+    if (pollCounter >= POLL_INTERVAL) {
+      checkForCharacters();
+      pollCounter = 0;
+    }
+  }
+}
+
 void dumpMemory(uint16_t start, uint16_t count) {
   const unsigned int bytesPerLine = 32;
   char buffer[6];

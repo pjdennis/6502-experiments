@@ -33,6 +33,7 @@ uint8_t  runMode;
 
 bool processorRunning = false;
 bool ramMapped        = false;
+uint16_t pollCounter  = 0;
 
 void setup() {
   configurePinsSafe();
@@ -45,8 +46,7 @@ void setup() {
 
   configureForCpu();
   setRunMode(RUN_MODE_SLOW);
-  initializeCharacterBuffer();
-  resetCPU();
+  boot();
 }
 
 void loop() {

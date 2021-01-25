@@ -1,3 +1,9 @@
+void boot() {
+  initializeCharacterBuffer();
+  Serial.println("Initialized character buffer.");
+  resetCPU();
+}
+
 void resetCPU() {
   activateReset(true);
   clockHigh();

@@ -18,6 +18,7 @@ void handleSerialCommand() {
         }
         break;
       case 's': // Make processor Stop
+        checkForCharacters();
         processorRunning = false;
         Serial.println("Processor stopped.");
         break;
@@ -46,6 +47,9 @@ void handleSerialCommand() {
         configureForCpu();
         ramMapped = true;
         Serial.println("Switched to real memory and copied ROM over.");
+        break;
+      case 'b': // Perform Boot
+        boot();
         break;
       case 'i': // Switch to Simulated ram
         if (runMode == RUN_MODE_FREE) {

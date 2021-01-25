@@ -20,29 +20,21 @@ void characterOut(uint8_t data) {
   }
 }
 
-void checkForCharacter() {
-  configureForArduinoToRam();
-
-  uint8_t writePos = readFromRam(BUFFER_WRITE_POS);
-  uint8_t readPos  = readFromRam(BUFFER_READ_POS);
+void checkForCharacters() {
+  uint8_t writePos = getMemory(BUFFER_WRITE_POS);
+  uint8_t readPos  = getMemory(BUFFER_READ_POS);
 
   if (writePos != readPos) {
     while (readPos != writePos) {
-      uint8_t data = readFromRam(CHAR_BUFFER + readPos);
+      uint8_t data = getMemory(CHAR_BUFFER + readPos);
       characterOut(data);
       readPos += 1;
     }
-    writeToRam(BUFFER_READ_POS, readPos);
+    putMemory(BUFFER_READ_POS, readPos);
   }
-
-  configureForCpu();
 }
 
 void initializeCharacterBuffer() {
-  configureForArduinoToRam();
-
-  writeToRam(BUFFER_WRITE_POS, 0);
-  writeToRam(BUFFER_READ_POS, 0);
-
-  configureForCpu();
+  putMemory(BUFFER_WRITE_POS, 0);
+  putMemory(BUFFER_READ_POS, 0);
 }

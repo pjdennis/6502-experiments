@@ -1,5 +1,5 @@
 void performClockCycle() {
-    if (runMode = RUN_MODE_FREE) {
+    if (runMode == RUN_MODE_FREE) {
       performFreeClockCycle();
     } else {
       performManagedClockCycle();
@@ -42,6 +42,7 @@ void performManagedClockCycle() {
     }
     selectRamChip(true);
   }
+  maybeCheckForCharacters();
 }
 
 void performFreeClockCycle() {
@@ -52,5 +53,5 @@ void performFreeClockCycle() {
     delayFor(TClockWidthFree);
   }
 
-  checkForCharacter();
+  checkForCharacters();
 }
