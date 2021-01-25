@@ -1,3 +1,21 @@
+void writeRamStart() {
+  configureDataBus(OUTPUT);
+  setWrite(true);
+}
+
+void writeRamStep(uint16_t address, uint8_t data) {
+  writeToAddressBus(address);
+  writeToDataBus(data);
+  selectRamChip(true);
+  selectRamChip(false);
+}
+
+void writeRamStop() {
+  setWrite(false);
+  configureDataBus(INPUT_PULLUP);
+}
+
+
 void writeToRam(uint16_t address, uint8_t data) {
   writeToAddressBus(address);
   configureDataBus(OUTPUT);

@@ -53,7 +53,13 @@ void loadMemoryFromSerial() {
 }
 
 void copyEepromToRam() {
+  configureForArduinoToRam();
+  writeRamStart();
+
   for (uint16_t n = 0; n < ROM_SIZE; n += 1) {
-    writeToRam(ROM_START + n, EEPROM[n]);
+    writeRamStep(ROM_START + n, EEPROM[n]);
   }
+
+  writeRamStop();
+  configureForCpu();
 }

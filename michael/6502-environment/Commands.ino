@@ -42,11 +42,9 @@ void handleSerialCommand() {
         dumpMemory(ROM_START, ROM_SIZE);
         break;
       case 'a': // Switch to real rAm
-        configureForArduinoToRam();
-        copyEepromToRam();
-        configureForCpu();
         ramMapped = true;
-        Serial.println("Switched to real memory and copied ROM over.");
+        copyEepromToRam();
+        Serial.println("Switched to real memory and copied ROM and MEMORY over.");
         break;
       case 'b': // Perform Boot
         boot();

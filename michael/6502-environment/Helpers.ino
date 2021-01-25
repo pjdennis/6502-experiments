@@ -1,4 +1,8 @@
 void boot() {
+  if (ramMapped) {
+    copyEepromToRam();
+    Serial.println("Copied EEPROM to RAM.");
+  }
   initializeCharacterBuffer();
   Serial.println("Initialized character buffer.");
   resetCPU();

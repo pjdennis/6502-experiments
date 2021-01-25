@@ -45,7 +45,8 @@ void setup() {
   testRam();
 
   configureForCpu();
-  setRunMode(RUN_MODE_SLOW);
+  ramMapped = true;
+  setRunMode(RUN_MODE_FREE);
   boot();
 }
 
