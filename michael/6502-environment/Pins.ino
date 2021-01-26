@@ -59,6 +59,7 @@ void configurePinsSafe() {
   pinMode(RDY, OUTPUT);
 
   enableCpuBuses(false);
+  pinMode(BE, OUTPUT);
 
   clockLow();
   pinMode(CLOCK, OUTPUT);
