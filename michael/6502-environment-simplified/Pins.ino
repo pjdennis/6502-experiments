@@ -27,6 +27,10 @@ void setReady(bool ready) {
   digitalWrite(RDY, ready ? 1 : 0);
 }
 
+// Reset has a pullup resistor and physical button that will short it to ground
+// Therfore we never output a high - simply go between input (high impedance allows
+// the pull up to pull reset high) and output low (pulls reset low; will not conflict
+// with reset button being pushed.
 void activateReset(bool reset) {
   pinMode(RESB, reset ? OUTPUT : INPUT);
 }
