@@ -35,14 +35,3 @@ void delayFor(uint32_t duration) {
     delayMicroseconds(duration);
   }
 }
-
-void waitFor(String action) {
-  Serial.print(action);
-  Serial.println(" press Enter.");
-  while (!Serial.available())
-    ;
-  Serial.read();
-  while (!Serial.available())
-    ;
-  Serial.read();
-}

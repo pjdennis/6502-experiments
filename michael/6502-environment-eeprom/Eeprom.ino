@@ -69,7 +69,6 @@ void testEeprom() {
     counter += 1;
   }
   Serial.print("Counter: "); Serial.println(counter);
-  //delayFor(1000 * 10);
   data = readFromEeprom(0xfff0);
   Serial.print("Value after:  "); showHex(data); Serial.println();
 }
