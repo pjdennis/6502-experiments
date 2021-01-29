@@ -1,8 +1,7 @@
 COUT_PORT = $7000
 
-COUNTER   = $0400
-
 DISPLAY_STRING_PARAM   = $0000
+COUNTER                = $0002
 
   .org $fc00
 reset:
@@ -32,7 +31,7 @@ loop:
 
 
 message:
-  .asciiz "Value: 0x"
+  .asciiz "Count: 0x"
 
 
 ; On entry A = byte to display in hex
