@@ -9,9 +9,9 @@ void writeToEeprom(uint16_t address, uint8_t data) {
   writeToAddressBus(address);
   configureDataBus(OUTPUT);
   writeToDataBus(data);
-  setWrite(true);
+  setWriteEeprom(true);
   delayFor(1);
-  setWrite(false);
+  setWriteEeprom(false);
   configureDataBus(INPUT);
   outputEnableEepromChip(true);
 }
@@ -22,8 +22,8 @@ void writePageToEeprom(uint16_t address, const uint8_t* pData) {
   for (int i = 0; i < 64; i++) {
     writeToAddressBus(address++);
     writeToDataBus(*pData++);
-    setWrite(true);
-    setWrite(false);
+    setWriteEeprom(true);
+    setWriteEeprom(false);
   }
   configureDataBus(INPUT);
   outputEnableEepromChip(true);

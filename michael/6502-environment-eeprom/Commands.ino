@@ -47,5 +47,11 @@ void handleSerialCommand() {
         eepromMapped = false;
         Serial.println("Switched to simulated memory.");
         break;
+      case 't': // Show state
+        maybeShowState();
+        break;
+      case 'x': // Dump Eeprom
+        dumpMemory2(ROM_START, ROM_SIZE);
+        break;
     }
 }

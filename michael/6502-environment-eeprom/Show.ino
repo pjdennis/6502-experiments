@@ -26,13 +26,14 @@ void showState(uint16_t address, uint8_t data, char operation, char area) {
 
   char dataChar = (char) data;
 
-  char output[22];
-  sprintf(output, "   %04x %c  %c %02x .. %c",
+  char output[24];
+  sprintf(output, "   %04x %c  %c %02x .. %c %c",
     address,
     isPrintable(dataChar) ? dataChar : ' ',
     operation,
     data,
-    area);
+    area,
+    probeIsHigh() ? 'H' : 'L');
 
   Serial.print(output);
 
@@ -57,4 +58,26 @@ void dumpMemory(uint16_t start, uint16_t count) {
     }
     Serial.println();
   }
+}
+
+void dumpMemory2(uint16_t start, uint16_t count) {
+  const unsigned int bytesPerLine = 32;
+  char buffer[6];
+  Serial.println("EEPROM dump:");
+  configureForArduinoToEeprom();
+  for (uint16_t address = start; address - start < count; address += bytesPerLine) {
+    sprintf(buffer, "%04x ", address);
+    Serial.print(buffer);
+    for (unsigned int n = 0; n < bytesPerLine; n += 1) {
+      sprintf(buffer, " %02x", readFromEeprom(address + n));
+      Serial.print(buffer);
+    }
+    Serial.print("  ");
+    for (unsigned int n = 0; n < bytesPerLine; n += 1) {
+      char dataChar = (char) readFromEeprom(address + n);
+      Serial.print(isPrintable(dataChar) ? dataChar : '.');
+    }
+    Serial.println();
+  }
+  configureForCpu();
 }

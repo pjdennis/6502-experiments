@@ -5,9 +5,16 @@ uint8_t ROM_BUFFER[ROM_SIZE];
 uint8_t memoryArea(uint16_t address) {
   if (address >= IO_START && address - IO_START < IO_SIZE) return MAP_SIMULATED_IO;
   if (address >= MEMORY_START && address - MEMORY_START < MEMORY_SIZE) return MAP_SIMULATED_RAM;
-  if (eepromMapped) return MAP_EEPROM;
-  if (address >= ROM_START && address - ROM_START < ROM_SIZE) return MAP_SIMULATED_EEPROM;
-  return MAP_EEPROM;
+  if (eepromMapped) {
+    if (address >= EEPROM_START && address - EEPROM_START < EEPROM_SIZE) {
+      return MAP_EEPROM;
+    }
+  } else {
+    if (address >= ROM_START && address - ROM_START < ROM_SIZE) {
+      return MAP_SIMULATED_EEPROM;
+    }
+  }
+  return MAP_NONE;
 }
 
 void clearMemory() {

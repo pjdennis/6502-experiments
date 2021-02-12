@@ -1,12 +1,17 @@
-const uint8_t CLOCK              = 23;
-const uint8_t RD_WRB             = 25;
-const uint8_t RESB               = 27;
-const uint8_t EEPROM_CK_GATED_CS = 29;
-const uint8_t RDY                = 31;
-const uint8_t BE                 = 33;
-const uint8_t EEPROM_OEB         = 35;
-const uint8_t ADDR[]             = {22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52};
-const uint8_t DATA[]             = {39, 41, 43, 45, 47, 49, 51, 53};
+const uint8_t CLOCK      = 23; // White
+const uint8_t RD_WRB     = 25; // Brown (joined with bus pins)
+const uint8_t RESB       = 27; // Yellow
+const uint8_t EEPROM_WEB = 29; // Orange
+const uint8_t RDY        = 31; // Green
+const uint8_t BE         = 33; // Purple
+const uint8_t EEPROM_OEB = 35; // Grey
+const uint8_t PROBE      = 37; // Blue
+const uint8_t ADDR[]     = {22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52};
+const uint8_t DATA[]     = {39, 41, 43, 45, 47, 49, 51, 53};
+
+bool probeIsHigh() {
+  return digitalRead(PROBE);
+}
 
 void clockLow() {
   digitalWrite(CLOCK, 0);
@@ -20,16 +25,12 @@ void enableCpuBuses(bool enable) {
   digitalWrite(BE, enable ? 1 : 0);
 }
 
-void selectEepromChip(bool select) {
-  digitalWrite(EEPROM_CK_GATED_CS, select ? 1 : 0);
-}
-
 void outputEnableEepromChip(bool enable) {
   digitalWrite(EEPROM_OEB, enable ? 0 : 1);
 }
 
-void setWrite(bool write) {
-  digitalWrite(RD_WRB, write ? 0 : 1);
+void setWriteEeprom(bool write) {
+  digitalWrite(EEPROM_WEB, write ? 0 : 1);
 }
 
 void setReady(bool ready) {
@@ -57,11 +58,11 @@ void configurePinsSafe() {
   configureDataBus(INPUT_PULLUP);
   pinMode(RD_WRB, INPUT_PULLUP);
 
-  selectEepromChip(false);
-  pinMode(EEPROM_CK_GATED_CS, OUTPUT);
-
   outputEnableEepromChip(false);
   pinMode(EEPROM_OEB, OUTPUT);
+
+  setWriteEeprom(false);
+  pinMode(EEPROM_WEB, OUTPUT);
 
   setReady(false);
   pinMode(RDY, OUTPUT);
@@ -78,9 +79,6 @@ void configurePinsSafe() {
 void configureForArduinoToEeprom() {
   configurePinsSafe();
   configureAddressBus(OUTPUT);
-  pinMode(RD_WRB, OUTPUT); // Set to read via HIGH from INPUT_PULLUP in configurePinsSafe()
-  clockHigh(); // Allow chip to be selected
-  selectEepromChip(true);
   outputEnableEepromChip(true);
 }
 
@@ -90,7 +88,6 @@ void configureForCpu() {
   configureAddressBus(INPUT);
   configureDataBus(INPUT);
   pinMode(RD_WRB, INPUT);
-  selectEepromChip(true);
   outputEnableEepromChip(true);
   setReady(true);
 }

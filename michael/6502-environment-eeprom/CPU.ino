@@ -9,7 +9,7 @@ void performClockCycle() {
     clockLow();
     delayFor(TClockWidthLow);
   } else {
-    selectEepromChip(false);
+    outputEnableEepromChip(false);
     if (readWriteLineIsRead()) {
       // Read cycle with simulated memory
       clockHigh();
@@ -32,6 +32,6 @@ void performClockCycle() {
       clockLow();
       delayFor(TClockWidthLow);
     }
-    selectEepromChip(true);
+    outputEnableEepromChip(true);
   }
 }
