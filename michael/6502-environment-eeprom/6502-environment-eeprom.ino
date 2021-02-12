@@ -19,8 +19,8 @@ const uint16_t COUT_PORT = IO_START;
 
 const uint32_t TClockWidthLowSlow   = 100000;
 const uint32_t TClockWidthHighSlow  = 100000;
-const uint32_t TClockWidthLowFast   = 50;
-const uint32_t TClockWidthHighFast  = 50;
+const uint32_t TClockWidthLowFast   = 2;
+const uint32_t TClockWidthHighFast  = 2;
 const uint32_t THoldRead            = 1;
 
 const uint8_t RUN_MODE_SLOW = 1;
@@ -50,6 +50,12 @@ void loop() {
   if (Serial.available()) {
     handleSerialCommand();
   } else if (processorRunning) {
-    performClockCycle();
+    if (runMode == RUN_MODE_FAST) {
+      for (int i = 0; i < 100; i++) {
+        performClockCycle();
+      }
+    } else {
+      performClockCycle();
+    }
   }
 }
