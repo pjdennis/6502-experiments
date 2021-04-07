@@ -7,9 +7,11 @@ PCR   = $600C
 IFR   = $600D
 IER   = $600E
 
-E  = %10000000
-RW = %01000000
-RS = %00100000
+E    = %10000000  ; Display enable
+RW   = %01000000  ; Display read/write
+RS   = %00100000  ; Display register select
+
+SOEB = %00010000  ; Shift register output enable (active low)
 
 CMD_CLEAR_DISPLAY           = %00000001
 CMD_RETURN_HOME             = %00000010
@@ -32,6 +34,10 @@ COUNTER = $0002
 reset:
   ldx #$ff ; Initialize stack
   txs
+
+  ;lda #SOEB
+  ;tsb DDRA
+  ;tsb PORTA
 
   jsr initialize_display
 
@@ -63,12 +69,30 @@ loop:
 
 interrupt:
   pha
+  phx
 
   lda #%00000001  ; Clear the CA2 interrupt
   sta IFR
 
-  inc COUNTER
+;  inc COUNTER
 
+  ldx DDRB        ; Save DDRB to X
+
+  lda #%00000000
+  sta DDRB        ; Set PORTB to input
+
+  lda #SOEB
+  trb PORTA       ; Enable shift register output
+
+  lda PORTB
+  sta COUNTER
+
+  lda #SOEB
+  tsb PORTA       ; Disable shift register output
+
+  stx DDRB        ; Restore DDRB from X
+
+  plx
   pla
   rti
 
@@ -130,8 +154,12 @@ display_character:
 
 
 initialize_display:
-  lda #(E | RW | RS) ; Set display control pins on port A to output
+  lda #(E | RW | RS | SOEB) ; Set display control pins on port A to output
   sta DDRA
+
+  lda #SOEB
+  tsb PORTA
+
   lda #%11111111 ; Set all pins on port B to output
   sta DDRB
 
