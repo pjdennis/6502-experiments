@@ -80,55 +80,52 @@ message:
 wait_for_not_busy:
   pha
   phx
-  phy
   lda #%00000000 ; Set all pins on port B to input
   sta DDRB
-  ldx #RW
-  ldy #(RW | E)  ; Set RW and E to enable reading
-  stx PORTA
+  lda #RW
+  tsb PORTA      ; Set RW for reading
 busy:
+  lda #E         ; Enable flag
   sei
-  sty PORTA
-  lda PORTB
-  stx PORTA
+  tsb PORTA
+  ldx PORTB
+  trb PORTA
   cli
+  txa
   and #%10000000
   bne busy
+  lda #RW
+  trb PORTA
   lda #%11111111 ; Set all pins on port B to output
   sta DDRB
-  ply
   plx
   pla
   rts
 
 
 display_command:
-  phx
   jsr wait_for_not_busy
   sta PORTB
-  ldx #0         ; Clear RS/RW/E bits
-  lda #E         ; Set E bit to send instruction
-  stx PORTA
+  lda #E         ; Enable bit
   sei
-  sta PORTA
-  stx PORTA
+  tsb PORTA
+  trb PORTA
   cli
-  plx
   rts
 
 
 display_character:
-  phx
   jsr wait_for_not_busy
   sta PORTB
-  ldx #RS        ; Set RS bit
-  lda #(RS | E)  ; Set RS and E bit to send instruction
-  stx PORTA
+  lda #RS        ; Register select bit
+  tsb PORTA      ; Select the data register
+  lda #E         ; Enable bit
   sei
-  sta PORTA
-  stx PORTA
+  tsb PORTA
+  trb PORTA
   cli
-  plx
+  lda #RS        ; Register select bit
+  trb PORTA      ; Select the instruction register
   rts
 
 
