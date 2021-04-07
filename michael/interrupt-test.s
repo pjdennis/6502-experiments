@@ -35,9 +35,9 @@ reset:
   ldx #$ff ; Initialize stack
   txs
 
-  ;lda #SOEB
-  ;tsb DDRA
-  ;tsb PORTA
+  lda #SOEB
+  tsb DDRA
+  tsb PORTA
 
   jsr initialize_display
 
@@ -154,11 +154,9 @@ display_character:
 
 
 initialize_display:
-  lda #(E | RW | RS | SOEB) ; Set display control pins on port A to output
-  sta DDRA
-
-  lda #SOEB
-  tsb PORTA
+  lda #(E | RW | RS) ; Set display control pins on port A to output
+  tsb DDRA
+  trb PORTA
 
   lda #%11111111 ; Set all pins on port B to output
   sta DDRB
