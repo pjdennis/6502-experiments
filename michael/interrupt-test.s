@@ -38,10 +38,10 @@ reset:
   lda #$00
   sta COUNTER
 
-  lda #%00000001
+  lda #%00000110  ; CA2 independent interrupt rising edge
   sta PCR
 
-  lda #%10000010
+  lda #%10000001  ; Enable CA2 interrupt
   sta IER
 
   cli
@@ -64,7 +64,7 @@ loop:
 interrupt:
   pha
 
-  lda #%00000010
+  lda #%00000001  ; Clear the CA2 interrupt
   sta IFR
 
   inc COUNTER
@@ -79,46 +79,56 @@ message:
 
 wait_for_not_busy:
   pha
+  phx
+  phy
   lda #%00000000 ; Set all pins on port B to input
   sta DDRB
-  lda #RW
-  sta PORTA
-  lda #(RW | E)  ; Set RW and E to enable reading
-  sta PORTA
+  ldx #RW
+  ldy #(RW | E)  ; Set RW and E to enable reading
+  stx PORTA
 busy:
+  sei
+  sty PORTA
   lda PORTB
+  stx PORTA
+  cli
   and #%10000000
   bne busy
-
-  lda #RW
-  sta PORTA
   lda #%11111111 ; Set all pins on port B to output
   sta DDRB
+  ply
+  plx
   pla
   rts
 
 
 display_command:
+  phx
   jsr wait_for_not_busy
   sta PORTB
-  lda #0         ; Clear RS/RW/E bits
-  sta PORTA
+  ldx #0         ; Clear RS/RW/E bits
   lda #E         ; Set E bit to send instruction
+  stx PORTA
+  sei
   sta PORTA
-  lda #0         ; Clear RS/RW/E bits
-  sta PORTA
+  stx PORTA
+  cli
+  plx
   rts
 
 
 display_character:
+  phx
   jsr wait_for_not_busy
   sta PORTB
-  lda #RS        ; Set RS bit
-  sta PORTA
+  ldx #RS        ; Set RS bit
   lda #(RS | E)  ; Set RS and E bit to send instruction
+  stx PORTA
+  sei
   sta PORTA
-  lda #RS        ; Set RS bit
-  sta PORTA
+  stx PORTA
+  cli
+  plx
   rts
 
 
