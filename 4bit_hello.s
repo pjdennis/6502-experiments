@@ -60,10 +60,6 @@ program_entry:
   ; Initialize display
   jsr reset_and_enable_display_no_cursor
 
-  ; Turn on the cursor
-  lda #(CMD_DISPLAY_ON_OFF_CONTROL | %110) ; Display on; cursor on; blink off
-  jsr display_command
-
   ; Show a message
   lda #<message
   ldx #>message
