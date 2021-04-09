@@ -1,5 +1,3 @@
-  .include convert_to_hex.inc
-
 ; Requires:
 ;  CONSOLE_CHARACTER_COUNT  - 1 byte
 ;  CONSOLE_TEXT             - buffer for CONSOLE_LENGTH bytes
@@ -87,19 +85,3 @@ console_show_loop_2:
   plx
   pla
   rts
-
-
-; On entry A = character to print
-; On exit X, Y are preserved
-;         A is not preserved
-console_print_hex:
-  phx
-
-  jsr convert_to_hex
-  jsr console_print_character
-  txa
-  jsr console_print_character
-
-  plx
-  rts  
-
