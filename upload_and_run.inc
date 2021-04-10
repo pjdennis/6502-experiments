@@ -203,10 +203,6 @@ upload_done:
   sta IFR
   cli  
 
-  .ifdef UPLOAD_RAM
-  ;jsr initialize_restart_handler
-  .endif
-
   jsr clear_display
 
   ; Prepare parameters for checksum calculation and memory copy

@@ -1,9 +1,4 @@
-CLOCK_FREQ_KHZ    = 2000
-
-PORTB             = $6000
-PORTA             = $6001
-DDRB              = $6002
-DDRA              = $6003
+CLOCK_FREQ_KHZ    = 5000
 
 ; PORTA assignments
 BANK_MASK         = %00001111
