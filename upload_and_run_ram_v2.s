@@ -1,5 +1,7 @@
-ORIGIN            = $2000
-UPLOAD_TO         = $3000
+ORIGIN    = $2000
+UPLOAD_TO = $3000
+
+BPS_HUNDREDS = 192 ; 19200 bps
 
   .include base_config_v2.inc
   .include upload_and_run.inc

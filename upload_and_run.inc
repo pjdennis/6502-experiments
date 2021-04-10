@@ -1,4 +1,5 @@
-BPS_HUNDREDS           =   96     ;   9600 bps
+;Requires BPS_HUNDREDS
+;BPS_HUNDREDS          =   96     ;   9600 bps
 ;BPS_HUNDREDS          =  192     ;  19200 bps
 ;BPS_HUNDREDS          =  384     ;  38400 bps
 ;BPS_HUNDREDS          =  576     ;  57600 bps
