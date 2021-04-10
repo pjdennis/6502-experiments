@@ -72,11 +72,15 @@ program_start:
   sta CP_M_LEN + 1
   jsr copy_memory
 
+  .ifdef RAM_IRQ_VECTOR
+
   ; store interrupt vector into the ram location to support vector pull redirecting to ram
   lda #<INTERRUPT_ROUTINE
   sta RAM_IRQ_VECTOR
   lda #>INTERRUPT_ROUTINE
   sta RAM_IRQ_VECTOR + 1
+
+  .endif
 
   jsr build_translate
 
