@@ -25,11 +25,18 @@ CMD_SET_DDRAM_ADDRESS       = %10000000
 DISPLAY_FIRST_LINE  = $00
 DISPLAY_SECOND_LINE = $40
 
-DISPLAY_STRING_PARAM = $0000
+DISPLAY_STRING_PARAM    = $0000 ; 2 bytes
+CONSOLE_CHARACTER_COUNT = $0002 ; 1 byte
+SIMPLE_BUFFER_WRITE_PTR = $0003 ; 1 byte
+SIMPLE_BUFFER_READ_PTR  = $0004 ; 1 byte 
 
-COUNTER = $0002
+CONSOLE_TEXT            = $0200 ; CONSOLE_LENGTH (32) bytes
+SIMPLE_BUFFER           = $0300 ; 256 bytes
 
   .org $8000
+
+  .include ../full_screen_console.inc
+  .include ../simple_buffer.inc
 
 reset:
   ldx #$ff ; Initialize stack
@@ -41,8 +48,8 @@ reset:
 
   jsr initialize_display
 
-  lda #$00
-  sta COUNTER
+  jsr console_initialize
+  jsr simple_buffer_initialize
 
   lda #%00000110  ; CA2 independent interrupt rising edge
   sta PCR
@@ -52,19 +59,18 @@ reset:
 
   cli
 
-  ; Display first message
-  lda #<message
-  ldx #>message
-  jsr display_string
-
-loop:
-  lda #(DISPLAY_FIRST_LINE + 7)
-  jsr move_cursor
-
-  lda COUNTER
-  jsr display_hex
-
-  jmp loop
+show_simple_buffer_loop:
+  jsr simple_buffer_read
+  bcs show_simple_buffer_loop
+show_simple_buffer_copy_loop:
+  jsr convert_to_hex
+  jsr console_print_character
+  txa
+  jsr console_print_character
+  jsr simple_buffer_read
+  bcc show_simple_buffer_copy_loop
+  jsr console_show
+  bra show_simple_buffer_loop
 
 
 interrupt:
@@ -73,8 +79,6 @@ interrupt:
 
   lda #%00000001  ; Clear the CA2 interrupt
   sta IFR
-
-;  inc COUNTER
 
   ldx DDRB        ; Save DDRB to X
 
@@ -85,7 +89,7 @@ interrupt:
   trb PORTA       ; Enable shift register output
 
   lda PORTB
-  sta COUNTER
+  jsr simple_buffer_write
 
   lda #SOEB
   tsb PORTA       ; Disable shift register output
