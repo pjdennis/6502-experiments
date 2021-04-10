@@ -13,4 +13,3 @@ initialize_machine:
   sta DDRB
 
   jmp program_start
-
