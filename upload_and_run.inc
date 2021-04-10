@@ -33,13 +33,12 @@ TRANSLATE              = $0200
 INTERRUPT_ROUTINE      = $3f00
 
   .org ORIGIN
-  jmp program_start
+  jmp initialize_machine
 
   ; Place code for delay_routines at start of page to ensure no page boundary crossings
   ; during timing loops
   .include delay_routines.inc
 
-  .include display_routines.inc
   .include display_string.inc
   .include display_hex_indirect.inc
   .include copy_memory.inc
@@ -54,18 +53,6 @@ program_start:
   lda #0   ; Initialize status flags
   pha
   plp
-
-  ; Initialize 6522 port A (memory banking control)
-  lda #(BANK_START | SD_CSB)
-  sta PORTA
-  lda #(BANK_MASK  | SD_CSB)      ; Set pin direction on port A
-  sta DDRA
-
-  ; Initialize 6522 port B (display control)
-  lda #0
-  sta PORTB
-  lda #DISPLAY_BITS_MASK          ; Set pin direction on port B
-  sta DDRB
 
   ; Initialize display
   jsr reset_and_enable_display_no_cursor

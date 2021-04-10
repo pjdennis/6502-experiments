@@ -1,7 +1,5 @@
 ; Requires DISPLAY_STRING_PARAM - 2 bytes for temporary storage of parameters
 
-  .include display_update_routines.inc
-
 ; On entry A, X contain low and high bytes of string address
 ; On exit A, X, Y are preserved
 display_string:

@@ -33,8 +33,8 @@ INTERRUPT_ROUTINE     = $3f00
   ; during timing loops
   .include delay_routines.inc
 
-  .include display_routines.inc
-  .include convert_to_hex.inc
+  .include display_routines_4bit.inc
+  .include display_hex.inc
 
 
 program_entry:

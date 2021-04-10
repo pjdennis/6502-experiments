@@ -50,8 +50,8 @@ BUFFER_DATA            = $3d00
   ; Place delay_routines at start of page to ensure no page boundary crossings during timing loops
   .include delay_routines.inc
 
-  .include display_routines.inc
-  .include convert_to_hex.inc
+  .include display_routines_4bit.inc
+  .include display_hex.inc
   .include musical_notes_tables.inc
   .include utilities.inc
   .include copy_memory_inline.inc

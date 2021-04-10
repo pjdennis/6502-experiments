@@ -1,5 +1,4 @@
   .include convert_to_hex.inc
-  .include display_update_routines.inc
 
 ; On entry A = byte to display in hex
 ; On exit  A, X, Y are preserved
