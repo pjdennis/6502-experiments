@@ -24,6 +24,7 @@ SIMPLE_BUFFER_READ_PTR  = $0009 ; 1 byte
 KEYBOARD_DECODE_STATE   = $000A ; 1 byte
 KEYBOARD_LATEST_META    = $000B ; 1 byte
 KEYBOARD_LATEST_CODE    = $000C ; 1 byte
+KEYBOARD_SCRATCH        = $000D ; 1 byte
 
 CONSOLE_TEXT            = $0200 ; CONSOLE_LENGTH (32) bytes
 SIMPLE_BUFFER           = $0300 ; 256 bytes
@@ -37,6 +38,12 @@ SIMPLE_BUFFER           = $0300 ; 256 bytes
   .include full_screen_console.inc
   .include simple_buffer.inc
   .include copy_memory.inc
+
+kb_seq_start:
+;                       Count   Code   Sequence
+kb_seq_pause_make:    .byte 8,  0x62,  0xe1, 0x14, 0x77, 0xe1, 0xf0, 0x14, 0xf0, 0x77
+kb_seq_prt_scr_make:  .byte 3,  0x57,  0x12, 0xe0, 0x7c
+kb_seq_prt_scr_break: .byte 4,  0x57,  0x7c, 0xe0, 0xf0, 0x12
 
 program_start:
   sei
@@ -116,7 +123,7 @@ keyboard_decode:
   tax       ; Store byte from keyboard into X register
   lda KEYBOARD_DECODE_STATE
   bit #KB_DECODE_PAUSE
-  bne kb_state_pause
+  bne kb_state_pause_make
   bit #KB_DECODE_PRT_SCR
   bne kb_state_prt_scr
   bit #KB_DECODE_BREAK
@@ -129,25 +136,30 @@ kb_state_waiting:
   beq kb_to_break
   cpx #KB_CODE_EXTENDED
   beq kb_to_extended
-  ; TODO check for start of pause sequence
+  cpx kb_seq_pause_make + 2
+  beq kb_to_pause_make
+  ; Recieve code
   stz KEYBOARD_LATEST_META
   stx KEYBOARD_LATEST_CODE
   stz KEYBOARD_DECODE_STATE
   clc
   jmp kb_decode_done
 
-kb_state_pause:
-  jmp kb_todo ; TODO
+kb_state_pause_make:
+  lda #(kb_seq_pause_make - kb_seq_start)
+  jmp kb_seq_check
 
 kb_state_prt_scr:
   bit #KB_DECODE_BREAK
   bne kb_state_prt_scr_break
   ; fall through
 kb_state_prt_scr_make:
-  jmp kb_todo ; TODO
+  lda #(kb_seq_prt_scr_make - kb_seq_start)
+  jmp kb_seq_check
 
 kb_state_prt_scr_break:
-  jmp kb_todo ; TODO
+  lda #(kb_seq_prt_scr_break - kb_seq_start)
+  jmp kb_seq_check
 
 kb_state_break:
   bit #KB_DECODE_EXTENDED
@@ -162,7 +174,8 @@ kb_state_break:
 kb_state_extended:
   cpx #KB_CODE_BREAK
   beq kb_to_extended_break
-  ; TODO check for start of print screen make sequence
+  cpx kb_seq_prt_scr_make + 2
+  beq kb_to_prt_scr_make
   lda #KB_META_EXTENDED
   sta KEYBOARD_LATEST_META
   stx KEYBOARD_LATEST_CODE
@@ -171,7 +184,8 @@ kb_state_extended:
   jmp kb_decode_done
 
 kb_state_extended_break:
-  ; TODO check for start of print screen break sequence
+  cpx kb_seq_prt_scr_break + 2
+  beq kb_to_prt_scr_break
   lda #(KB_META_BREAK | KB_META_EXTENDED)
   sta KEYBOARD_LATEST_META
   stx KEYBOARD_LATEST_CODE
@@ -197,16 +211,98 @@ kb_to_extended_break:
   sec
   jmp kb_decode_done
 
+kb_to_pause_make:
+  lda #(KB_DECODE_PAUSE | %00000001)
+  sta KEYBOARD_DECODE_STATE
+  sec
+  jmp kb_decode_done
+
+kb_to_prt_scr_make:
+  lda #(KB_DECODE_EXTENDED | KB_DECODE_PRT_SCR | %00000001)
+  sta KEYBOARD_DECODE_STATE
+  sec
+  jmp kb_decode_done
+
+kb_to_prt_scr_break:
+  lda #(KB_DECODE_EXTENDED | KB_DECODE_BREAK | KB_DECODE_PRT_SCR | %00000001)
+  sta KEYBOARD_DECODE_STATE
+  sec
+  jmp kb_decode_done
+
+; X = latest byte from keyboard
+; A = offset to start of sequence data
+kb_seq_check:
+  sta KEYBOARD_SCRATCH        ; KEYBOARD_SCRATCH <- offset to start of sequence data
+
+  ; Check latest byte against expected
+  lda KEYBOARD_DECODE_STATE
+  and #KB_DECODE_SEQUENCE
+  clc
+  adc KEYBOARD_SCRATCH
+  phx
+  tax                         ; X <- offset to byte we should check against
+  pla                         ; A <- latest byte from keyboard
+  cmp kb_seq_start + 2, X
+  bne kb_seq_error            ; If latest byte not matching expected then bail out - error  
+
+  ; If it was the last in sequence emit the code
+  ldx KEYBOARD_SCRATCH        ; X <- offset to sequence data
+  lda KEYBOARD_DECODE_STATE
+  and #KB_DECODE_SEQUENCE
+  inc
+  cmp kb_seq_start, X
+  beq kb_seq_emit             ; Emit the code
+
+  ; Otherwise update state to reflect next count and exit without emitting
+  sta KEYBOARD_SCRATCH        ; KEYBOARD_SCRATCH <- New sequence count
+  lda KEYBOARD_DECODE_STATE
+  and #~KB_DECODE_SEQUENCE
+  ora KEYBOARD_SCRATCH
+  sta KEYBOARD_DECODE_STATE
+  sec
+  jmp kb_decode_done
+
+; A = latest byte from keyboard
+kb_seq_error:
+  ; Reset state and reprocess with the current code
+  tax
+  lda #0
+  sta KEYBOARD_DECODE_STATE
+  jmp kb_state_waiting
+
+; X = offset to sequence data
+kb_seq_emit:
+  ; Store the metadata
+  lda KEYBOARD_DECODE_STATE
+  bit #KB_DECODE_BREAK
+  bne kb_seq_emit_break
+  lda #0
+  bra kb_seq_emit_store_meta
+kb_seq_emit_break:
+  lda #KB_META_BREAK
+  ; Fall through
+kb_seq_emit_store_meta:
+  sta KEYBOARD_LATEST_META
+; Store the code
+  lda kb_seq_start + 1, X
+  sta KEYBOARD_LATEST_CODE
+; Reset state and return
+  stz KEYBOARD_DECODE_STATE
+  clc
+  jmp kb_decode_done
+
+kb_decode_done:
+  plx
+  rts
+
+
+; TODO no longer used
 kb_todo:
   lda #"X"
   jsr console_print_character
   jsr console_show
 kb_todo_loop:
   bra kb_todo_loop
-
-kb_decode_done:
-  plx
-  rts
 
 
 interrupt:
