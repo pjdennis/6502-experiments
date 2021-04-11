@@ -146,11 +146,11 @@ kb_state_waiting:
   cpx kb_seq_pause_make + KB_SEQ_OFFSET_SEQ
   beq kb_to_pause_make
   lda #0
-  jmp kb_decode_emit
+  bra kb_decode_emit
 
 kb_state_pause_make:
   lda #(kb_seq_pause_make - kb_seq_start)
-  jmp kb_seq_check
+  bra kb_seq_check
 
 kb_state_prt_scr:
   bit #KB_DECODE_BREAK
@@ -158,17 +158,17 @@ kb_state_prt_scr:
   ; fall through
 kb_state_prt_scr_make:
   lda #(kb_seq_prt_scr_make - kb_seq_start)
-  jmp kb_seq_check
+  bra kb_seq_check
 
 kb_state_prt_scr_break:
   lda #(kb_seq_prt_scr_break - kb_seq_start)
-  jmp kb_seq_check
+  bra kb_seq_check
 
 kb_state_break:
   bit #KB_DECODE_EXTENDED
   bne kb_state_extended_break
   lda #KB_META_BREAK
-  jmp kb_decode_emit
+  bra kb_decode_emit
 
 kb_state_extended:
   cpx #KB_CODE_BREAK
@@ -178,41 +178,59 @@ kb_state_extended:
   lda #KB_META_EXTENDED
   ; Repeating print screen does not repeat the full sequence
   cpx #KB_CODE_REPEAT_PRT_SCR
-  bne kb_state_extended_store_result
+  bne kb_decode_emit
   lda #0
   ldx kb_seq_prt_scr_make + KB_SEQ_OFFSET_CODE
-kb_state_extended_store_result:
-  jmp kb_decode_emit
+  bra kb_decode_emit
 
 kb_state_extended_break:
   cpx kb_seq_prt_scr_break + KB_SEQ_OFFSET_SEQ
   beq kb_to_prt_scr_break
   lda #(KB_META_BREAK | KB_META_EXTENDED)
-  jmp kb_decode_emit
+  bra kb_decode_emit
 
 kb_to_break:
   lda #KB_DECODE_BREAK
-  jmp kb_decode_no_emit
+  bra kb_decode_no_emit
 
 kb_to_extended:
   lda #KB_DECODE_EXTENDED
-  jmp kb_decode_no_emit
+  bra kb_decode_no_emit
 
 kb_to_extended_break:
   lda #(KB_DECODE_EXTENDED | KB_DECODE_BREAK)
-  jmp kb_decode_no_emit
+  bra kb_decode_no_emit
 
 kb_to_pause_make:
   lda #(KB_DECODE_PAUSE | %00000001)
-  jmp kb_decode_no_emit
+  bra kb_decode_no_emit
 
 kb_to_prt_scr_make:
   lda #(KB_DECODE_EXTENDED | KB_DECODE_PRT_SCR | %00000001)
-  jmp kb_decode_no_emit
+  bra kb_decode_no_emit
 
 kb_to_prt_scr_break:
   lda #(KB_DECODE_EXTENDED | KB_DECODE_BREAK | KB_DECODE_PRT_SCR | %00000001)
-  jmp kb_decode_no_emit
+  bra kb_decode_no_emit
+
+; A = Metadata
+; X = code
+kb_decode_emit:
+  sta KEYBOARD_LATEST_META
+  stx KEYBOARD_LATEST_CODE
+  stz KEYBOARD_DECODE_STATE
+  clc
+  bra kb_decode_done
+
+; A = new decode state
+kb_decode_no_emit:
+  sta KEYBOARD_DECODE_STATE
+  sec
+  ; Fall through
+
+kb_decode_done:
+  plx
+  rts
 
 ; X = latest byte from keyboard
 ; A = offset to start of sequence data
@@ -243,7 +261,7 @@ kb_seq_check:
   lda KEYBOARD_DECODE_STATE
   and #~KB_DECODE_SEQUENCE
   ora KEYBOARD_SCRATCH
-  jmp kb_decode_no_emit
+  bra kb_decode_no_emit
 
 ; A = latest byte from keyboard
 kb_seq_error:
@@ -263,29 +281,10 @@ kb_seq_emit:
   bit #KB_DECODE_BREAK
   bne kb_seq_emit_break
   lda #0
-  jmp kb_decode_emit
+  bra kb_decode_emit
 kb_seq_emit_break:
   lda #KB_META_BREAK
-  jmp kb_decode_emit
-
-; A = Metadata
-; X = code
-kb_decode_emit:
-  sta KEYBOARD_LATEST_META
-  stx KEYBOARD_LATEST_CODE
-  stz KEYBOARD_DECODE_STATE
-  clc
-  bra kb_decode_done
-
-; A = new decode state
-kb_decode_no_emit:
-  sta KEYBOARD_DECODE_STATE
-  sec
-  ; Fall through
-
-kb_decode_done:
-  plx
-  rts
+  bra kb_decode_emit
 
 
 ; TODO no longer used
