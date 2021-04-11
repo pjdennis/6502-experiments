@@ -143,14 +143,10 @@ kb_state_waiting:
   beq kb_to_break
   cpx #KB_CODE_EXTENDED
   beq kb_to_extended
-  cpx kb_seq_pause_make + 2
+  cpx kb_seq_pause_make + KB_SEQ_OFFSET_SEQ
   beq kb_to_pause_make
-  ; Recieve code
-  stz KEYBOARD_LATEST_META
-  stx KEYBOARD_LATEST_CODE
-  stz KEYBOARD_DECODE_STATE
-  clc
-  jmp kb_decode_done
+  lda #0
+  jmp kb_decode_emit
 
 kb_state_pause_make:
   lda #(kb_seq_pause_make - kb_seq_start)
@@ -172,32 +168,24 @@ kb_state_break:
   bit #KB_DECODE_EXTENDED
   bne kb_state_extended_break
   lda #KB_META_BREAK
-  sta KEYBOARD_LATEST_META
-  stx KEYBOARD_LATEST_CODE
-  stz KEYBOARD_DECODE_STATE
-  clc
-  jmp kb_decode_done
+  jmp kb_decode_emit
 
 kb_state_extended:
   cpx #KB_CODE_BREAK
   beq kb_to_extended_break
-  cpx kb_seq_prt_scr_make + 2
+  cpx kb_seq_prt_scr_make + KB_SEQ_OFFSET_SEQ
   beq kb_to_prt_scr_make
   lda #KB_META_EXTENDED
   ; Repeating print screen does not repeat the full sequence
   cpx #KB_CODE_REPEAT_PRT_SCR
   bne kb_state_extended_store_result
   lda #0
-  ldx kb_seq_prt_scr_make + 1
+  ldx kb_seq_prt_scr_make + KB_SEQ_OFFSET_CODE
 kb_state_extended_store_result:
-  sta KEYBOARD_LATEST_META
-  stx KEYBOARD_LATEST_CODE
-  stz KEYBOARD_DECODE_STATE
-  clc
-  jmp kb_decode_done
+  jmp kb_decode_emit
 
 kb_state_extended_break:
-  cpx kb_seq_prt_scr_break + 2
+  cpx kb_seq_prt_scr_break + KB_SEQ_OFFSET_SEQ
   beq kb_to_prt_scr_break
   lda #(KB_META_BREAK | KB_META_EXTENDED)
   sta KEYBOARD_LATEST_META
@@ -285,24 +273,31 @@ kb_seq_error:
 
 ; X = offset to sequence data
 kb_seq_emit:
-  ; Store the metadata
+  ; Retrieve the code
+  lda kb_seq_start + KB_SEQ_OFFSET_CODE, X
+  tax
+  ; Retrieve the metadata
   lda KEYBOARD_DECODE_STATE
   bit #KB_DECODE_BREAK
   bne kb_seq_emit_break
   lda #0
-  bra kb_seq_emit_store_meta
+  jmp kb_decode_emit
 kb_seq_emit_break:
   lda #KB_META_BREAK
-  ; Fall through
-kb_seq_emit_store_meta:
+  jmp kb_decode_emit
+
+; A = Metadata
+; X = code
+kb_decode_emit:
   sta KEYBOARD_LATEST_META
-; Store the code
-  lda kb_seq_start + KB_SEQ_OFFSET_CODE, X
-  sta KEYBOARD_LATEST_CODE
-; Reset state and return
+  stx KEYBOARD_LATEST_CODE
   stz KEYBOARD_DECODE_STATE
   clc
-  jmp kb_decode_done
+  bra kb_decode_done
+
+kb_decode_no_emit:
+  sec
+  ; Fall through
 
 kb_decode_done:
   plx
