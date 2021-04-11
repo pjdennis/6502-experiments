@@ -63,14 +63,16 @@ kb_seq_prt_scr_make:  .byte KB_CODE_PRT_SCR, 3, $12, $e0, $7c
 kb_seq_prt_scr_break: .byte KB_CODE_PRT_SCR, 4, $7c, $e0, $f0, $12
 
 kb_normal_from:   .byte $14, $11, $77, $7c, $7b, $79, $76, $05, $06, $04, $0c, $03, $0b, $83, $0a
-                  .byte $01, $09, $78, $07, $7e, $5d, $00
+                  .byte $01, $09, $78, $07, $7e, $5d, $58, $84, $00
 
 kb_normal_to:     .byte $11, $19, $76, $7e, $84, $7c, $08, $07, $0f, $17, $1f, $27, $2f, $37, $3f
-                  .byte $47, $4f, $56, $5e, $5f, $5c
+                  .byte $47, $4f, $56, $5e, $5f, $5c, $14, $57
 
-kb_extended_from: .byte $11, $14, $70, $71, $6b, $6c, $69, $75, $72, $7d, $7a, $74, $4a, $5a, $00
+kb_extended_from: .byte $11, $14, $70, $71, $6b, $6c, $69, $75, $72, $7d, $7a, $74, $4a, $5a
+                  .byte $1f, $27, $2f, $7e, $3f, $37, $5e, $00
 
 kb_extended_to:   .byte $39, $58, $67, $64, $61, $6e, $65, $63, $60, $6f, $6d, $6a, $77, $79
+                  .byte $8b, $8c, $8d, $62, $7f, $00, $00
 
 program_start:
   sei
@@ -110,21 +112,13 @@ program_start:
   cli
 
 decode_loop:
-  jsr simple_buffer_read
-  bcs decode_loop               ; If no byte available jump back to read again
-  jsr keyboard_set3_decode
-  bcs decode_loop               ; If nothing yet decoded jump back to read again
+  jsr keyboard_get_press
+  bcs decode_loop               ; If no press available loop to continue reading
 decode_loop_2:
-  lda KEYBOARD_LATEST_META
   jsr console_print_hex
-  lda KEYBOARD_LATEST_CODE
-  jsr console_print_hex
-  jsr simple_buffer_read
-  bcs decode_show               ; If no byte available jump to show what we have
-  jsr keyboard_set3_decode
-  bcc decode_loop_2             ; If something decoded jump back to show it
-  ; Fall through
-decode_show:
+  jsr keyboard_get_press
+  bcc decode_loop_2             ; Found another press so jump back to print it
+  ; No more presses
   jsr console_show
   bra decode_loop
 
@@ -141,6 +135,30 @@ console_print_hex:
   plx
   rts
 
+
+; On entry A contains the byte from the keyboard
+; On exit Carry set if no result so far
+;         A contains key code of key press
+keyboard_get_press:
+keyboard_get_press_repeat:
+  jsr simple_buffer_read
+  bcs keyboard_get_press_done   ; No keyboard data so we are done
+  jsr keyboard_set3_decode
+  bcs keyboard_get_press_repeat ; Decoding not yet emitted code so keep reading
+  lda KEYBOARD_LATEST_META
+  bit #KB_META_BREAK
+  bne keyboard_get_press_repeat ; It's a keyboard break code so keep reading
+  ; Found a make code
+  lda KEYBOARD_LATEST_CODE
+  clc
+keyboard_get_press_done:
+  rts
+
+
+; On entry A contains the byte from the keyboard
+; On exit Carry set if no result so far
+;         KEYBOARD_LATEST_META contains metadata for latest key event
+;         KEYBOARD_LATEST_CODE contains code for latest key event
 keyboard_set3_decode:
   jsr keyboard_decode
   bcs keyboard_set3_decode_done
