@@ -14,8 +14,8 @@ KB_CODE_REPEAT_PRT_SCR  = 0x7c
 KB_CODE_PAUSE           = 0x62
 KB_CODE_PRT_SCR         = 0x57
 
-KB_META_BREAK           = %00000010
-KB_META_EXTENDED        = %00000001
+KB_META_BREAK           = %00000001
+KB_META_EXTENDED        = %00000010
 
 DISPLAY_STRING_PARAM    = $0000 ; 2 bytes
 CP_M_DEST_P             = $0002 ; 2 bytes
@@ -42,15 +42,15 @@ SIMPLE_BUFFER           = $0300 ; 256 bytes
   .include simple_buffer.inc
   .include copy_memory.inc
 
-KB_SEQ_OFFSET_COUNT = 0
-KB_SEQ_OFFSET_CODE  = 1
+KB_SEQ_OFFSET_CODE  = 0
+KB_SEQ_OFFSET_COUNT = 1
 KB_SEQ_OFFSET_SEQ   = 2
 
 kb_seq_start:
-;                       Count  Code             Sequence
-kb_seq_pause_make:    .byte 8, KB_CODE_PAUSE,   0xe1, 0x14, 0x77, 0xe1, 0xf0, 0x14, 0xf0, 0x77
-kb_seq_prt_scr_make:  .byte 3, KB_CODE_PRT_SCR, 0x12, 0xe0, 0x7c
-kb_seq_prt_scr_break: .byte 4, KB_CODE_PRT_SCR, 0x7c, 0xe0, 0xf0, 0x12
+;                           Code         Count  Sequence
+kb_seq_pause_make:    .byte KB_CODE_PAUSE,   8, 0xe1, 0x14, 0x77, 0xe1, 0xf0, 0x14, 0xf0, 0x77
+kb_seq_prt_scr_make:  .byte KB_CODE_PRT_SCR, 3, 0x12, 0xe0, 0x7c
+kb_seq_prt_scr_break: .byte KB_CODE_PRT_SCR, 4, 0x7c, 0xe0, 0xf0, 0x12
 
 program_start:
   sei
