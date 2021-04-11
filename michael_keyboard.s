@@ -23,6 +23,15 @@ KB_CODE_REPEAT_PRT_SCR  = $7c
 KB_CODE_PAUSE           = $62
 KB_CODE_PRT_SCR         = $57
 
+KB_CODE_L_SHIFT         = $12
+KB_CODE_R_SHIFT         = $59
+KB_CODE_L_CTRL          = $11
+KB_CODE_R_CTRL          = $58
+KB_CODE_L_ALT           = $19
+KB_CODE_R_ALT           = $39
+KB_CODE_L_GUI           = $8b
+KB_CODE_R_GUI           = $8c
+
 KB_META_BREAK           = %00000001
 KB_META_EXTENDED        = %00000010
 
@@ -64,15 +73,18 @@ kb_seq_prt_scr_break: .byte KB_CODE_PRT_SCR, 4, $7c, $e0, $f0, $12
 
 kb_normal_from:   .byte $14, $11, $77, $7c, $7b, $79, $76, $05, $06, $04, $0c, $03, $0b, $83, $0a
                   .byte $01, $09, $78, $07, $7e, $5d, $58, $84, $00
-
 kb_normal_to:     .byte $11, $19, $76, $7e, $84, $7c, $08, $07, $0f, $17, $1f, $27, $2f, $37, $3f
                   .byte $47, $4f, $56, $5e, $5f, $5c, $14, $57
 
 kb_extended_from: .byte $11, $14, $70, $71, $6b, $6c, $69, $75, $72, $7d, $7a, $74, $4a, $5a
                   .byte $1f, $27, $2f, $7e, $3f, $37, $5e, $00
-
 kb_extended_to:   .byte $39, $58, $67, $64, $61, $6e, $65, $63, $60, $6f, $6d, $6a, $77, $79
                   .byte $8b, $8c, $8d, $62, $7f, $00, $00
+
+kb_modifier_codes: .byte KB_CODE_L_SHIFT, KB_CODE_R_SHIFT, KB_CODE_L_CTRL, KB_CODE_R_CTRL
+                   .byte KB_CODE_L_ALT,   KB_CODE_R_ALT,   KB_CODE_L_GUI,  KB_CODE_R_GUI, $00
+kb_modifier_masks: .byte KB_MOD_L_SHIFT,  KB_MOD_R_SHIFT,  KB_MOD_L_CTRL,  KB_MOD_R_CTRL
+                   .byte KB_MOD_L_ALT,    KB_MOD_R_ALT,    KB_MOD_L_GUI,   KB_MOD_R_GUI
 
 program_start:
   sei
@@ -112,15 +124,35 @@ program_start:
   cli
 
 decode_loop:
-  jsr keyboard_get_press
-  bcs decode_loop               ; If no press available loop to continue reading
+  jsr simple_buffer_read
+  bcs decode_loop               ; If no byte available jump back to read again
+  jsr keyboard_set3_decode
+  bcs decode_loop               ; If nothing yet decoded jump back to read again
 decode_loop_2:
+  lda KEYBOARD_LATEST_META
   jsr console_print_hex
-  jsr keyboard_get_press
-  bcc decode_loop_2             ; Found another press so jump back to print it
-  ; No more presses
+  lda KEYBOARD_LATEST_CODE
+  jsr console_print_hex
+  jsr simple_buffer_read
+  bcs decode_show               ; If no byte available jump to show what we have
+  jsr keyboard_set3_decode
+  bcc decode_loop_2             ; If something decoded jump back to show it
+  ; Fall through
+decode_show:
   jsr console_show
   bra decode_loop
+
+;TODO not used
+show_presses_loop:
+  jsr keyboard_get_press
+  bcs show_presses_loop               ; If no press available loop to continue reading
+show_presses_loop_2:
+  jsr console_print_hex
+  jsr keyboard_get_press
+  bcc show_presses_loop_2             ; Found another press so jump back to print it
+  ; No more presses
+  jsr console_show
+  bra show_presses_loop
 
 
 ; On entry A = byte to print to console in hex
