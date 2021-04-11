@@ -8,11 +8,20 @@ KB_DECODE_PAUSE         = %00100000
 KB_DECODE_PRT_SCR       = %00010000
 KB_DECODE_SEQUENCE      = %00000111
 
-KB_CODE_BREAK           = 0xf0
-KB_CODE_EXTENDED        = 0xe0
-KB_CODE_REPEAT_PRT_SCR  = 0x7c
-KB_CODE_PAUSE           = 0x62
-KB_CODE_PRT_SCR         = 0x57
+KB_MOD_L_SHIFT          = %10000000
+KB_MOD_R_SHIFT          = %01000000
+KB_MOD_L_CTRL           = %00100000
+KB_MOD_R_CTRL           = %00010000
+KB_MOD_L_ALT            = %00001000
+KB_MOD_R_ALT            = %00000100
+KB_MOD_L_GUI            = %00000010
+KB_MOD_R_GUI            = %00000001
+
+KB_CODE_BREAK           = $f0
+KB_CODE_EXTENDED        = $e0
+KB_CODE_REPEAT_PRT_SCR  = $7c
+KB_CODE_PAUSE           = $62
+KB_CODE_PRT_SCR         = $57
 
 KB_META_BREAK           = %00000001
 KB_META_EXTENDED        = %00000010
@@ -25,9 +34,10 @@ CONSOLE_CHARACTER_COUNT = $0007 ; 1 byte
 SIMPLE_BUFFER_WRITE_PTR = $0008 ; 1 byte
 SIMPLE_BUFFER_READ_PTR  = $0009 ; 1 byte 
 KEYBOARD_DECODE_STATE   = $000A ; 1 byte
-KEYBOARD_LATEST_META    = $000B ; 1 byte
-KEYBOARD_LATEST_CODE    = $000C ; 1 byte
-KEYBOARD_SCRATCH        = $000D ; 1 byte
+KEYBOARD_MODIFIER_STATE = $000B ; 1 byte
+KEYBOARD_LATEST_META    = $000C ; 1 byte
+KEYBOARD_LATEST_CODE    = $000D ; 1 byte
+KEYBOARD_SCRATCH        = $000E ; 1 byte
 
 CONSOLE_TEXT            = $0200 ; CONSOLE_LENGTH (32) bytes
 SIMPLE_BUFFER           = $0300 ; 256 bytes
@@ -48,9 +58,19 @@ KB_SEQ_OFFSET_SEQ   = 2
 
 kb_seq_start:
 ;                           Code         Count  Sequence
-kb_seq_pause_make:    .byte KB_CODE_PAUSE,   8, 0xe1, 0x14, 0x77, 0xe1, 0xf0, 0x14, 0xf0, 0x77
-kb_seq_prt_scr_make:  .byte KB_CODE_PRT_SCR, 3, 0x12, 0xe0, 0x7c
-kb_seq_prt_scr_break: .byte KB_CODE_PRT_SCR, 4, 0x7c, 0xe0, 0xf0, 0x12
+kb_seq_pause_make:    .byte KB_CODE_PAUSE,   8, $e1, $14, $77, $e1, $f0, $14, $f0, $77
+kb_seq_prt_scr_make:  .byte KB_CODE_PRT_SCR, 3, $12, $e0, $7c
+kb_seq_prt_scr_break: .byte KB_CODE_PRT_SCR, 4, $7c, $e0, $f0, $12
+
+kb_normal_from:   .byte $14, $11, $77, $7c, $7b, $79, $76, $05, $06, $04, $0c, $03, $0b, $83, $0a
+                  .byte $01, $09, $78, $07, $7e, $5d, $00
+
+kb_normal_to:     .byte $11, $19, $76, $7e, $84, $7c, $08, $07, $0f, $17, $1f, $27, $2f, $37, $3f
+                  .byte $47, $4f, $56, $5e, $5f, $5c
+
+kb_extended_from: .byte $11, $14, $70, $71, $6b, $6c, $69, $75, $72, $7d, $7a, $74, $4a, $5a, $00
+
+kb_extended_to:   .byte $39, $58, $67, $64, $61, $6e, $65, $63, $60, $6f, $6d, $6a, $77, $79
 
 program_start:
   sei
@@ -79,6 +99,7 @@ program_start:
 
   ; Initialize Keyboard decode state
   stz KEYBOARD_DECODE_STATE
+  stz KEYBOARD_MODIFIER_STATE
 
   lda #%00000110  ; CA2 independent interrupt rising edge
   sta PCR
@@ -91,7 +112,7 @@ program_start:
 decode_loop:
   jsr simple_buffer_read
   bcs decode_loop               ; If no byte available jump back to read again
-  jsr keyboard_decode
+  jsr keyboard_set3_decode
   bcs decode_loop               ; If nothing yet decoded jump back to read again
 decode_loop_2:
   lda KEYBOARD_LATEST_META
@@ -100,7 +121,7 @@ decode_loop_2:
   jsr console_print_hex
   jsr simple_buffer_read
   bcs decode_show               ; If no byte available jump to show what we have
-  jsr keyboard_decode
+  jsr keyboard_set3_decode
   bcc decode_loop_2             ; If something decoded jump back to show it
   ; Fall through
 decode_show:
@@ -118,6 +139,43 @@ console_print_hex:
   txa
   jsr console_print_character
   plx
+  rts
+
+keyboard_set3_decode:
+  jsr keyboard_decode
+  bcs keyboard_set3_decode_done
+  phx
+  ldx #$ff                    ; Will be incremented at top of loop so loop starts at 0
+  lda KEYBOARD_LATEST_META
+  bit #KB_META_EXTENDED
+  bne keyboard_set3_decode_extended
+keyboard_set3_translate_normal:
+  inx
+  lda kb_normal_from, X
+  beq keyboard_set3_translate_done
+  cmp KEYBOARD_LATEST_CODE
+  bne keyboard_set3_translate_normal
+  ; Code found
+  lda kb_normal_to, X
+  sta KEYBOARD_LATEST_CODE
+  bra keyboard_set3_translate_done
+keyboard_set3_decode_extended:
+  and #~KB_META_EXTENDED
+  sta KEYBOARD_LATEST_META
+keyboard_set3_translate_extended:
+  inx
+  lda kb_extended_from, X
+  beq keyboard_set3_translate_done
+  cmp KEYBOARD_LATEST_CODE
+  bne keyboard_set3_translate_extended
+  ; Code found
+  lda kb_extended_to, X
+  sta KEYBOARD_LATEST_CODE
+  ; Fall through
+keyboard_set3_translate_done:
+  clc
+  plx
+keyboard_set3_decode_done:
   rts
 
 
