@@ -127,7 +127,7 @@ console_print_hex:
 ;         KEYBOARD_LATEST_CODE contains code for latest key event
 keyboard_decode:
   phx
-  tax       ; Store byte from keyboard into X register
+  tax                         ; X <- latest byte from keyboard
   lda KEYBOARD_DECODE_STATE
   bit #KB_DECODE_PAUSE
   bne kb_state_pause_make
@@ -188,47 +188,31 @@ kb_state_extended_break:
   cpx kb_seq_prt_scr_break + KB_SEQ_OFFSET_SEQ
   beq kb_to_prt_scr_break
   lda #(KB_META_BREAK | KB_META_EXTENDED)
-  sta KEYBOARD_LATEST_META
-  stx KEYBOARD_LATEST_CODE
-  stz KEYBOARD_DECODE_STATE
-  clc
-  jmp kb_decode_done
+  jmp kb_decode_emit
 
 kb_to_break:
   lda #KB_DECODE_BREAK
-  sta KEYBOARD_DECODE_STATE
-  sec
-  jmp kb_decode_done
+  jmp kb_decode_no_emit
 
 kb_to_extended:
   lda #KB_DECODE_EXTENDED
-  sta KEYBOARD_DECODE_STATE
-  sec
-  jmp kb_decode_done
+  jmp kb_decode_no_emit
 
 kb_to_extended_break:
   lda #(KB_DECODE_EXTENDED | KB_DECODE_BREAK)
-  sta KEYBOARD_DECODE_STATE
-  sec
-  jmp kb_decode_done
+  jmp kb_decode_no_emit
 
 kb_to_pause_make:
   lda #(KB_DECODE_PAUSE | %00000001)
-  sta KEYBOARD_DECODE_STATE
-  sec
-  jmp kb_decode_done
+  jmp kb_decode_no_emit
 
 kb_to_prt_scr_make:
   lda #(KB_DECODE_EXTENDED | KB_DECODE_PRT_SCR | %00000001)
-  sta KEYBOARD_DECODE_STATE
-  sec
-  jmp kb_decode_done
+  jmp kb_decode_no_emit
 
 kb_to_prt_scr_break:
   lda #(KB_DECODE_EXTENDED | KB_DECODE_BREAK | KB_DECODE_PRT_SCR | %00000001)
-  sta KEYBOARD_DECODE_STATE
-  sec
-  jmp kb_decode_done
+  jmp kb_decode_no_emit
 
 ; X = latest byte from keyboard
 ; A = offset to start of sequence data
@@ -259,9 +243,7 @@ kb_seq_check:
   lda KEYBOARD_DECODE_STATE
   and #~KB_DECODE_SEQUENCE
   ora KEYBOARD_SCRATCH
-  sta KEYBOARD_DECODE_STATE
-  sec
-  jmp kb_decode_done
+  jmp kb_decode_no_emit
 
 ; A = latest byte from keyboard
 kb_seq_error:
@@ -295,7 +277,9 @@ kb_decode_emit:
   clc
   bra kb_decode_done
 
+; A = new decode state
 kb_decode_no_emit:
+  sta KEYBOARD_DECODE_STATE
   sec
   ; Fall through
 
