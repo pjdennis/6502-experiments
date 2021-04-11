@@ -1,5 +1,9 @@
   .include display_parameters.inc
 
+  .ifndef DISPLAY_DO_NOT_DISABLE_INTERRUPTS
+DISPLAY_DO_NOT_DISABLE_INTERRUPTS = 0
+  .endif
+
 reset_display:
   ; TODO - maybe include the full software reset sequence
 
@@ -23,11 +27,15 @@ wait_for_not_busy:
   tsb PORTA      ; Set RW for reading
 busy:
   lda #E         ; Enable flag
-; sei
+  .ifeq DISPLAY_DO_NOT_DISABLE_INTERRUPTS
+  sei
+  .endif
   tsb PORTA
   ldx PORTB
   trb PORTA
-; cli
+  .ifeq DISPLAY_DO_NOT_DISABLE_INTERRUPTS
+  cli
+  .endif
   txa
   and #%10000000
   bne busy
@@ -47,10 +55,14 @@ display_command:
   jsr wait_for_not_busy
   sta PORTB
   lda #E         ; Enable bit
-; sei
+  .ifeq DISPLAY_DO_NOT_DISABLE_INTERRUPTS
+  sei
+  .endif
   tsb PORTA
   trb PORTA
-; cli
+  .ifeq DISPLAY_DO_NOT_DISABLE_INTERRUPTS
+  cli
+  .endif
   rts
 
 
@@ -63,10 +75,14 @@ display_character:
   lda #RS        ; Register select bit
   tsb PORTA      ; Select the data register
   lda #E         ; Enable bit
-; sei
+  .ifeq DISPLAY_DO_NOT_DISABLE_INTERRUPTS
+  sei
+  .endif
   tsb PORTA
   trb PORTA
-; cli
+  .ifeq DISPLAY_DO_NOT_DISABLE_INTERRUPTS
+  cli
+  .endif
   lda #RS        ; Register select bit
   trb PORTA      ; Select the instruction register
   rts
