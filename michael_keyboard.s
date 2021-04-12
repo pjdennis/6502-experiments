@@ -5,7 +5,6 @@ INTERRUPT_ROUTINE       = $3f00
 KB_DECODE_BREAK         = %10000000
 KB_DECODE_EXTENDED      = %01000000
 KB_DECODE_PAUSE         = %00100000
-KB_DECODE_PRT_SCR       = %00010000
 KB_DECODE_SEQUENCE      = %00000111
 
 KB_MOD_L_SHIFT          = %10000000
@@ -19,7 +18,7 @@ KB_MOD_R_GUI            = %00000001
 
 KB_CODE_BREAK           = $f0
 KB_CODE_EXTENDED        = $e0
-KB_CODE_REPEAT_PRT_SCR  = $7c
+KB_CODE_EXTENDED_IGNORE = $12
 KB_CODE_PAUSE           = $62
 KB_CODE_PRT_SCR         = $57
 
@@ -72,8 +71,6 @@ KB_SEQ_OFFSET_SEQ   = 2
 kb_seq_start:
 ;                           Code         Count  Sequence
 kb_seq_pause_make:    .byte KB_CODE_PAUSE,   8, $e1, $14, $77, $e1, $f0, $14, $f0, $77
-kb_seq_prt_scr_make:  .byte KB_CODE_PRT_SCR, 3, $12, $e0, $7c
-kb_seq_prt_scr_break: .byte KB_CODE_PRT_SCR, 4, $7c, $e0, $f0, $12
 
 kb_normal_from:   .byte $14, $11, $77, $7c, $7b, $79, $76, $05, $06, $04, $0c, $03, $0b, $83, $0a
                   .byte $01, $09, $78, $07, $7e, $5d, $58, $84, $00
@@ -81,9 +78,9 @@ kb_normal_to:     .byte $11, $19, $76, $7e, $84, $7c, $08, $07, $0f, $17, $1f, $
                   .byte $47, $4f, $56, $5e, $5f, $5c, $14, $57
 
 kb_extended_from: .byte $11, $14, $70, $71, $6b, $6c, $69, $75, $72, $7d, $7a, $74, $4a, $5a
-                  .byte $1f, $27, $2f, $7e, $3f, $37, $5e, $00
+                  .byte $1f, $27, $2f, $7e, $3f, $37, $5e, $7c, $00
 kb_extended_to:   .byte $39, $58, $67, $64, $61, $6e, $65, $63, $60, $6f, $6d, $6a, $77, $79
-                  .byte $8b, $8c, $8d, $62, $7f, $00, $00
+                  .byte $8b, $8c, $8d, $62, $7f, $00, $00, $57
 
 kb_modifier_codes: .byte KB_CODE_L_SHIFT, KB_CODE_R_SHIFT, KB_CODE_L_CTRL, KB_CODE_R_CTRL
                    .byte KB_CODE_L_ALT,   KB_CODE_R_ALT,   KB_CODE_L_GUI,  KB_CODE_R_GUI, $00
@@ -352,8 +349,6 @@ keyboard_decode:
   lda KEYBOARD_DECODE_STATE
   bit #KB_DECODE_PAUSE
   bne kb_state_pause_make
-  bit #KB_DECODE_PRT_SCR
-  bne kb_state_prt_scr
   bit #KB_DECODE_BREAK
   bne kb_state_break
   bit #KB_DECODE_EXTENDED
@@ -373,18 +368,6 @@ kb_state_pause_make:
   lda #(kb_seq_pause_make - kb_seq_start)
   bra kb_seq_check
 
-kb_state_prt_scr:
-  bit #KB_DECODE_BREAK
-  bne kb_state_prt_scr_break
-  ; fall through
-kb_state_prt_scr_make:
-  lda #(kb_seq_prt_scr_make - kb_seq_start)
-  bra kb_seq_check
-
-kb_state_prt_scr_break:
-  lda #(kb_seq_prt_scr_break - kb_seq_start)
-  bra kb_seq_check
-
 kb_state_break:
   bit #KB_DECODE_EXTENDED
   bne kb_state_extended_break
@@ -394,21 +377,18 @@ kb_state_break:
 kb_state_extended:
   cpx #KB_CODE_BREAK
   beq kb_to_extended_break
-  cpx kb_seq_prt_scr_make + KB_SEQ_OFFSET_SEQ
-  beq kb_to_prt_scr_make
   lda #KB_META_EXTENDED
-  ; Repeating print screen does not repeat the full sequence
-  cpx #KB_CODE_REPEAT_PRT_SCR
+  cpx #KB_CODE_EXTENDED_IGNORE
   bne kb_decode_emit
   lda #0
-  ldx kb_seq_prt_scr_make + KB_SEQ_OFFSET_CODE
-  bra kb_decode_emit
+  bra kb_decode_no_emit
 
 kb_state_extended_break:
-  cpx kb_seq_prt_scr_break + KB_SEQ_OFFSET_SEQ
-  beq kb_to_prt_scr_break
   lda #(KB_META_BREAK | KB_META_EXTENDED)
-  bra kb_decode_emit
+  cpx #KB_CODE_EXTENDED_IGNORE
+  bne kb_decode_emit
+  lda #0
+  bra kb_decode_no_emit
 
 kb_to_break:
   lda #KB_DECODE_BREAK
@@ -424,14 +404,6 @@ kb_to_extended_break:
 
 kb_to_pause_make:
   lda #(KB_DECODE_PAUSE | %00000001)
-  bra kb_decode_no_emit
-
-kb_to_prt_scr_make:
-  lda #(KB_DECODE_EXTENDED | KB_DECODE_PRT_SCR | %00000001)
-  bra kb_decode_no_emit
-
-kb_to_prt_scr_break:
-  lda #(KB_DECODE_EXTENDED | KB_DECODE_BREAK | KB_DECODE_PRT_SCR | %00000001)
   bra kb_decode_no_emit
 
 ; A = Metadata
