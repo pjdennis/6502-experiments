@@ -122,6 +122,8 @@ program_start:
 
   cli
 
+  jmp decode_loop
+
 simple_decode_loop:
   jsr simple_buffer_read
   bcs simple_decode_loop
@@ -250,8 +252,8 @@ keyboard_set3_translate_extended:
   sta KEYBOARD_LATEST_CODE
   ; Fall through
 keyboard_set3_translate_done:
-;  jsr keyboard_set3_modifier_track
-;  jsr keyboard_update_modifiers
+  jsr keyboard_set3_modifier_track
+  jsr keyboard_update_modifiers
   clc
   plx
 keyboard_set3_decode_done:
