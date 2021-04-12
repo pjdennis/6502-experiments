@@ -129,10 +129,20 @@ decode_loop:
   jsr keyboard_set3_decode
   bcs decode_loop               ; If nothing yet decoded jump back to read again
 decode_loop_2:
+  lda KEYBOARD_MODIFIER_STATE
+  jsr console_print_binary      ; 8 chars -  8
+  lda #" "
+  jsr console_print_character   ; 1 char  -  9
   lda KEYBOARD_LATEST_META
-  jsr console_print_hex
+  jsr console_print_hex         ; 2 chars - 11
   lda KEYBOARD_LATEST_CODE
-  jsr console_print_hex
+  jsr console_print_hex         ; 2 chars - 13
+  lda #" "
+  jsr console_print_character   ; 1 char  - 14
+  lda #" "
+  jsr console_print_character   ; 1 char  - 15
+  lda #" "
+  jsr console_print_character   ; 1 char  - 16
   jsr simple_buffer_read
   bcs decode_show               ; If no byte available jump to show what we have
   jsr keyboard_set3_decode
@@ -223,9 +233,42 @@ keyboard_set3_translate_extended:
   sta KEYBOARD_LATEST_CODE
   ; Fall through
 keyboard_set3_translate_done:
+  jsr keyboard_set3_modifier_track
   clc
   plx
 keyboard_set3_decode_done:
+  rts
+
+; On entry KEYBOARD_LATEST_META contains latest state (make/break)
+;          KEYBOARD_LATEST_CODE contains latest key code
+;          KEYBOARD_MODIFIER_STATE contains the current state of modifier keys
+; On exit  KEYBOARD_MODIFIER_STATE contains the updated state of modifier keys
+;          A, X, Y are preserverd
+keyboard_set3_modifier_track:
+  pha
+  phx
+  ldx #$ff
+keyboard_set3_modifier_loop:
+  inx
+  lda kb_modifier_codes, X
+  beq keyboard_set3_modifier_track_done
+  cmp KEYBOARD_LATEST_CODE
+  bne keyboard_set3_modifier_loop
+  ; Fall through - code found
+  lda KEYBOARD_LATEST_META
+  bit #KB_META_BREAK
+  bne keyboard_set3_modifier_track_break
+  ; Make
+  lda kb_modifier_masks, X
+  tsb KEYBOARD_MODIFIER_STATE
+  bra keyboard_set3_modifier_track_done
+keyboard_set3_modifier_track_break:
+  lda kb_modifier_masks, X
+  trb KEYBOARD_MODIFIER_STATE
+  ; Fall through - done
+keyboard_set3_modifier_track_done:
+  plx
+  pla
   rts
 
 
@@ -402,6 +445,34 @@ kb_todo:
   jsr console_show
 kb_todo_loop:
   bra kb_todo_loop
+
+
+; On entry A contains the value to display in binary
+; On exit  A, X, Y are preserved
+console_print_binary:
+  pha
+  phx
+  phy
+
+  ldx #8
+console_print_binary_loop:
+  asl
+  tay
+  bcs console_print_binary_one
+  lda #'0'
+  bra console_print_binary_continue
+console_print_binary_one:
+  lda #'1'
+console_print_binary_continue:
+  jsr console_print_character
+  tya
+  dex
+  bne console_print_binary_loop
+
+  ply
+  plx
+  pla
+  rts
 
 
 interrupt:
