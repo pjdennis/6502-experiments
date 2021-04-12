@@ -161,8 +161,17 @@ decode_loop_2:
   jsr console_print_hex         ; 2 chars - 13
   lda #" "
   jsr console_print_character   ; 1 char  - 14
+  lda KEYBOARD_LATEST_META
+  bit #KB_META_SHIFT
+  bne decode_loop_translate_upper
+; Lower
   lda KEYBOARD_LATEST_CODE
-  jsr keyboard_translate_code
+  jsr keyboard_translate_code_lower
+  bra decode_loop_translate_done
+decode_loop_translate_upper:
+  lda KEYBOARD_LATEST_CODE
+  jsr keyboard_translate_code_upper
+decode_loop_translate_done:
   cmp #0
   bne decode_loop_show_translation
   lda #" "
@@ -439,16 +448,33 @@ kb_decode_done:
 ; On entry A contains the keyboard code
 ; On exit  A contains the translated code or 0 if no translation available
 ;          X, Y are preserved
-keyboard_translate_code:
+keyboard_translate_code_lower:
   phx
   tax
-  cpx #(key_codes_end - key_codes)
-  bcs keyboard_translate_no_match
-  lda key_codes, X
-  bra keyboard_translate_code_done
-keyboard_translate_no_match:
+  cpx #(key_codes_lower_end - key_codes_lower)
+  bcs keyboard_translate_code_lower_no_match
+  lda key_codes_lower, X
+  bra keyboard_translate_code_lower_done
+keyboard_translate_code_lower_no_match:
   lda #0
-keyboard_translate_code_done:
+keyboard_translate_code_lower_done:
+  plx
+  rts
+
+
+; On entry A contains the keyboard code
+; On exit  A contains the translated code or 0 if no translation available
+;          X, Y are preserved
+keyboard_translate_code_upper:
+  phx
+  tax
+  cpx #(key_codes_upper_end - key_codes_upper)
+  bcs keyboard_translate_code_upper_no_match
+  lda key_codes_upper, X
+  bra keyboard_translate_code_upper_done
+keyboard_translate_code_upper_no_match:
+  lda #0
+keyboard_translate_code_upper_done:
   plx
   rts
 
