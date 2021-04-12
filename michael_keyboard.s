@@ -123,7 +123,15 @@ program_start:
 
   cli
 
-  jmp decode_loop
+get_char_loop:
+  jsr keyboard_get_char
+  bcs get_char_loop
+get_char_loop_2:
+  jsr console_print_character
+  jsr keyboard_get_char
+  bcc get_char_loop_2
+  jsr console_show
+  bra get_char_loop
 
 simple_decode_loop:
   jsr simple_buffer_read
@@ -212,7 +220,6 @@ simple_show_loop_2:
   bra simple_show_loop
 
 
-; On entry A contains the byte from the keyboard
 ; On exit Carry set if no result so far
 ;         A contains key code of key press
 keyboard_get_press:
@@ -228,6 +235,37 @@ keyboard_get_press_repeat:
   lda KEYBOARD_LATEST_CODE
   clc
 keyboard_get_press_done:
+  rts
+
+
+; On exit Carry set if no result so far
+;         A contains the next char
+keyboard_get_char:
+keyboard_get_char_repeat:
+  jsr simple_buffer_read
+  bcs keyboard_get_char_done
+  jsr keyboard_set3_decode
+  bcs keyboard_get_char_repeat
+  lda KEYBOARD_LATEST_META
+  bit #KB_META_BREAK
+  bne keyboard_get_char_repeat
+  bit #KB_META_SHIFT
+  bne keyboard_get_char_translate_upper
+; Lower
+  lda KEYBOARD_LATEST_CODE
+  jsr keyboard_translate_code_lower
+  bra keyboard_get_char_translate_done
+keyboard_get_char_translate_upper:
+  lda KEYBOARD_LATEST_CODE
+  jsr keyboard_translate_code_upper
+keyboard_get_char_translate_done:
+  cmp #0
+  bne keyboard_get_char_emit
+  sec
+  bra keyboard_get_char_done
+keyboard_get_char_emit:
+  clc
+keyboard_get_char_done:
   rts
 
 

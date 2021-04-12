@@ -47,7 +47,7 @@ key_codes_lower:
   .byte $66  ;  2b  f
   .byte $74  ;  2c  t
   .byte $72  ;  2d  r
-  .byte $35  ;  2e  5 % E
+  .byte $35  ;  2e  5 %
   .byte $00  ;  2f  F6
   .byte $00  ;  30
   .byte $6e  ;  31  n
@@ -193,7 +193,7 @@ key_codes_upper:
   .byte $46  ;  2b  F
   .byte $54  ;  2c  T
   .byte $52  ;  2d  R
-  .byte $00  ;  2e  5 % E
+  .byte $25  ;  2e  5 %
   .byte $00  ;  2f  F6
   .byte $00  ;  30
   .byte $4e  ;  31  N
