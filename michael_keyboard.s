@@ -49,7 +49,6 @@ KEYBOARD_DECODE_STATE   = $000B ; 1 byte
 KEYBOARD_MODIFIER_STATE = $000C ; 1 byte
 KEYBOARD_LATEST_META    = $000D ; 1 byte
 KEYBOARD_LATEST_CODE    = $000E ; 1 byte
-KEYBOARD_SCRATCH        = $000F ; 1 byte
 
 CONSOLE_TEXT            = $0200 ; CONSOLE_LENGTH (32) bytes
 SIMPLE_BUFFER           = $0300 ; 256 bytes
@@ -64,23 +63,17 @@ SIMPLE_BUFFER           = $0300 ; 256 bytes
   .include simple_buffer.inc
   .include copy_memory.inc
 
-KB_SEQ_OFFSET_CODE  = 0
-KB_SEQ_OFFSET_COUNT = 1
-KB_SEQ_OFFSET_SEQ   = 2
+kb_seq_pause       .byte $e1, $14, $77, $e1, $f0, $14, $f0, $77, $00
 
-kb_seq_start:
-;                           Code         Count  Sequence
-kb_seq_pause_make:    .byte KB_CODE_PAUSE,   8, $e1, $14, $77, $e1, $f0, $14, $f0, $77
+kb_normal_from:    .byte $14, $11, $77, $7c, $7b, $79, $76, $05, $06, $04, $0c, $03, $0b, $83, $0a
+                   .byte $01, $09, $78, $07, $7e, $5d, $58, $84, $00
+kb_normal_to:      .byte $11, $19, $76, $7e, $84, $7c, $08, $07, $0f, $17, $1f, $27, $2f, $37, $3f
+                   .byte $47, $4f, $56, $5e, $5f, $5c, $14, $57
 
-kb_normal_from:   .byte $14, $11, $77, $7c, $7b, $79, $76, $05, $06, $04, $0c, $03, $0b, $83, $0a
-                  .byte $01, $09, $78, $07, $7e, $5d, $58, $84, $00
-kb_normal_to:     .byte $11, $19, $76, $7e, $84, $7c, $08, $07, $0f, $17, $1f, $27, $2f, $37, $3f
-                  .byte $47, $4f, $56, $5e, $5f, $5c, $14, $57
-
-kb_extended_from: .byte $11, $14, $70, $71, $6b, $6c, $69, $75, $72, $7d, $7a, $74, $4a, $5a
-                  .byte $1f, $27, $2f, $7e, $3f, $37, $5e, $7c, $00
-kb_extended_to:   .byte $39, $58, $67, $64, $61, $6e, $65, $63, $60, $6f, $6d, $6a, $77, $79
-                  .byte $8b, $8c, $8d, $62, $7f, $00, $00, $57
+kb_extended_from:  .byte $11, $14, $70, $71, $6b, $6c, $69, $75, $72, $7d, $7a, $74, $4a, $5a
+                   .byte $1f, $27, $2f, $7e, $3f, $37, $5e, $7c, $00
+kb_extended_to:    .byte $39, $58, $67, $64, $61, $6e, $65, $63, $60, $6f, $6d, $6a, $77, $79
+                   .byte $8b, $8c, $8d, $62, $7f, $00, $00, $57
 
 kb_modifier_codes: .byte KB_CODE_L_SHIFT, KB_CODE_R_SHIFT, KB_CODE_L_CTRL, KB_CODE_R_CTRL
                    .byte KB_CODE_L_ALT,   KB_CODE_R_ALT,   KB_CODE_L_GUI,  KB_CODE_R_GUI, $00
@@ -200,19 +193,6 @@ simple_show_loop_2:
   bcc simple_show_loop_2
   jsr console_show
   bra simple_show_loop
-
-
-; On entry A = byte to print to console in hex
-; On exit X, Y are preserved
-;         A is not preserved
-console_print_hex:
-  phx
-  jsr convert_to_hex
-  jsr console_print_character
-  txa
-  jsr console_print_character
-  plx
-  rts
 
 
 ; On entry A contains the byte from the keyboard
@@ -348,7 +328,7 @@ keyboard_decode:
   tax                         ; X <- latest byte from keyboard
   lda KEYBOARD_DECODE_STATE
   bit #KB_DECODE_PAUSE
-  bne kb_state_pause_make
+  bne kb_state_pause
   bit #KB_DECODE_BREAK
   bne kb_state_break
   bit #KB_DECODE_EXTENDED
@@ -359,14 +339,36 @@ kb_state_waiting:
   beq kb_to_break
   cpx #KB_CODE_EXTENDED
   beq kb_to_extended
-  cpx kb_seq_pause_make + KB_SEQ_OFFSET_SEQ
-  beq kb_to_pause_make
+  cpx kb_seq_pause
+  beq kb_to_pause
   lda #0
   bra kb_decode_emit
 
-kb_state_pause_make:
-  lda #(kb_seq_pause_make - kb_seq_start)
-  bra kb_seq_check
+kb_state_pause:
+  lda KEYBOARD_DECODE_STATE
+  and #KB_DECODE_SEQUENCE
+  phx
+  tax                          ; X <- index of current code in sequence
+  pla                          ; A <- latest byte from keyboard
+  cmp kb_seq_pause, X
+  bne kb_pause_error
+  inx
+  lda kb_seq_pause, X
+  beq kb_pause_emit
+  txa
+  ora #KB_DECODE_PAUSE
+  bra kb_decode_no_emit
+kb_pause_emit:
+  lda #0
+  ldx #KB_CODE_PAUSE
+  bra kb_decode_emit
+; A = latest byte from keyboard
+kb_pause_error:
+  ; Reset state and reprocess with the current code
+  tax
+  lda #0
+  sta KEYBOARD_DECODE_STATE
+  bra kb_state_waiting
 
 kb_state_break:
   bit #KB_DECODE_EXTENDED
@@ -402,7 +404,7 @@ kb_to_extended_break:
   lda #(KB_DECODE_EXTENDED | KB_DECODE_BREAK)
   bra kb_decode_no_emit
 
-kb_to_pause_make:
+kb_to_pause:
   lda #(KB_DECODE_PAUSE | %00000001)
   bra kb_decode_no_emit
 
@@ -425,68 +427,18 @@ kb_decode_done:
   plx
   rts
 
-; X = latest byte from keyboard
-; A = offset to start of sequence data
-kb_seq_check:
-  sta KEYBOARD_SCRATCH        ; KEYBOARD_SCRATCH <- offset to start of sequence data
 
-  ; Check latest byte against expected
-  lda KEYBOARD_DECODE_STATE
-  and #KB_DECODE_SEQUENCE
-  clc
-  adc KEYBOARD_SCRATCH
+; On entry A = byte to print to console in hex
+; On exit X, Y are preserved
+;         A is not preserved
+console_print_hex:
   phx
-  tax                         ; X <- offset to byte we should check against
-  pla                         ; A <- latest byte from keyboard
-  cmp kb_seq_start + KB_SEQ_OFFSET_SEQ, X
-  bne kb_seq_error            ; If latest byte not matching expected then bail out - error  
-
-  ; If it was the last in sequence emit the code
-  ldx KEYBOARD_SCRATCH        ; X <- offset to sequence data
-  lda KEYBOARD_DECODE_STATE
-  and #KB_DECODE_SEQUENCE
-  inc
-  cmp kb_seq_start + KB_SEQ_OFFSET_COUNT, X
-  beq kb_seq_emit             ; Emit the code
-
-  ; Otherwise update state to reflect next count and exit without emitting
-  sta KEYBOARD_SCRATCH        ; KEYBOARD_SCRATCH <- New sequence count
-  lda KEYBOARD_DECODE_STATE
-  and #~KB_DECODE_SEQUENCE
-  ora KEYBOARD_SCRATCH
-  bra kb_decode_no_emit
-
-; A = latest byte from keyboard
-kb_seq_error:
-  ; Reset state and reprocess with the current code
-  tax
-  lda #0
-  sta KEYBOARD_DECODE_STATE
-  jmp kb_state_waiting
-
-; X = offset to sequence data
-kb_seq_emit:
-  ; Retrieve the code
-  lda kb_seq_start + KB_SEQ_OFFSET_CODE, X
-  tax
-  ; Retrieve the metadata
-  lda KEYBOARD_DECODE_STATE
-  bit #KB_DECODE_BREAK
-  bne kb_seq_emit_break
-  lda #0
-  bra kb_decode_emit
-kb_seq_emit_break:
-  lda #KB_META_BREAK
-  bra kb_decode_emit
-
-
-; TODO no longer used
-kb_todo:
-  lda #"X"
+  jsr convert_to_hex
   jsr console_print_character
-  jsr console_show
-kb_todo_loop:
-  bra kb_todo_loop
+  txa
+  jsr console_print_character
+  plx
+  rts
 
 
 ; On entry A contains the value to display in binary
