@@ -32,21 +32,25 @@ KB_CODE_R_ALT           = $39
 KB_CODE_L_GUI           = $8b
 KB_CODE_R_GUI           = $8c
 
-KB_META_BREAK           = %00000001
+KB_META_SHIFT           = %10000000
+KB_META_CTRL            = %01000000
+KB_META_ALT             = %00100000
+KB_META_GUI             = %00010000
 KB_META_EXTENDED        = %00000010
+KB_META_BREAK           = %00000001
 
 DISPLAY_STRING_PARAM    = $0000 ; 2 bytes
 CP_M_DEST_P             = $0002 ; 2 bytes
 CP_M_SRC_P              = $0004 ; 2 bytes
 CP_M_LEN                = $0006 ; 2 bytes
-CONSOLE_CHARACTER_COUNT = $0007 ; 1 byte
-SIMPLE_BUFFER_WRITE_PTR = $0008 ; 1 byte
-SIMPLE_BUFFER_READ_PTR  = $0009 ; 1 byte 
-KEYBOARD_DECODE_STATE   = $000A ; 1 byte
-KEYBOARD_MODIFIER_STATE = $000B ; 1 byte
-KEYBOARD_LATEST_META    = $000C ; 1 byte
-KEYBOARD_LATEST_CODE    = $000D ; 1 byte
-KEYBOARD_SCRATCH        = $000E ; 1 byte
+CONSOLE_CHARACTER_COUNT = $0008 ; 1 byte
+SIMPLE_BUFFER_WRITE_PTR = $0009 ; 1 byte
+SIMPLE_BUFFER_READ_PTR  = $000A ; 1 byte 
+KEYBOARD_DECODE_STATE   = $000B ; 1 byte
+KEYBOARD_MODIFIER_STATE = $000C ; 1 byte
+KEYBOARD_LATEST_META    = $000D ; 1 byte
+KEYBOARD_LATEST_CODE    = $000E ; 1 byte
+KEYBOARD_SCRATCH        = $000F ; 1 byte
 
 CONSOLE_TEXT            = $0200 ; CONSOLE_LENGTH (32) bytes
 SIMPLE_BUFFER           = $0300 ; 256 bytes
@@ -86,6 +90,11 @@ kb_modifier_codes: .byte KB_CODE_L_SHIFT, KB_CODE_R_SHIFT, KB_CODE_L_CTRL, KB_CO
 kb_modifier_masks: .byte KB_MOD_L_SHIFT,  KB_MOD_R_SHIFT,  KB_MOD_L_CTRL,  KB_MOD_R_CTRL
                    .byte KB_MOD_L_ALT,    KB_MOD_R_ALT,    KB_MOD_L_GUI,   KB_MOD_R_GUI
 
+kb_modifier_from:  .byte (KB_MOD_L_SHIFT | KB_MOD_R_SHIFT), (KB_MOD_L_CTRL | KB_MOD_R_CTRL)
+                   .byte (KB_MOD_L_ALT   | KB_MOD_R_ALT),   (KB_MOD_L_GUI  | KB_MOD_R_GUI), $00
+kb_modifier_to     .byte KB_META_SHIFT,                     KB_META_CTRL
+                   .byte KB_META_ALT,                       KB_META_GUI
+
 program_start:
   sei
 
@@ -122,6 +131,26 @@ program_start:
   sta IER
 
   cli
+
+simple_decode_loop:
+  jsr simple_buffer_read
+  bcs simple_decode_loop
+  jsr keyboard_set3_decode
+  bcs simple_decode_loop
+simple_decode_loop_2:
+  lda KEYBOARD_LATEST_META
+  jsr console_print_hex
+  lda KEYBOARD_LATEST_CODE
+  jsr console_print_hex
+simple_decode_loop_3:
+  jsr simple_buffer_read
+  bcs simple_decode_show
+  jsr keyboard_set3_decode
+  bcs simple_decode_loop_3
+  bra simple_decode_loop_2
+simple_decode_show:
+  jsr console_show
+  bra simple_decode_loop
 
 decode_loop:
   jsr simple_buffer_read
@@ -163,6 +192,17 @@ show_presses_loop_2:
   ; No more presses
   jsr console_show
   bra show_presses_loop
+
+;TODO not used
+simple_show_loop:
+  jsr simple_buffer_read
+  bcs simple_show_loop
+simple_show_loop_2:
+  jsr console_print_hex
+  jsr simple_buffer_read
+  bcc simple_show_loop_2
+  jsr console_show
+  bra simple_show_loop
 
 
 ; On entry A = byte to print to console in hex
@@ -233,11 +273,13 @@ keyboard_set3_translate_extended:
   sta KEYBOARD_LATEST_CODE
   ; Fall through
 keyboard_set3_translate_done:
-  jsr keyboard_set3_modifier_track
+;  jsr keyboard_set3_modifier_track
+;  jsr keyboard_update_modifiers
   clc
   plx
 keyboard_set3_decode_done:
   rts
+
 
 ; On entry KEYBOARD_LATEST_META contains latest state (make/break)
 ;          KEYBOARD_LATEST_CODE contains latest key code
@@ -267,6 +309,34 @@ keyboard_set3_modifier_track_break:
   trb KEYBOARD_MODIFIER_STATE
   ; Fall through - done
 keyboard_set3_modifier_track_done:
+  plx
+  pla
+  rts
+
+
+; On entry KEYBOARD_MODIFIER_STATE containts the current state of modifiers
+;          KEYBOARD_LATEST_META contains current meta state without modifiers
+; On exit  KEYBOARD_LATEST_META contains new meta state with modifiers
+;          A, X, Y are preserved
+keyboard_update_modifiers:
+  pha
+  phx
+  ldx #$ff
+keyboard_update_modifiers_loop:
+  inx
+  lda kb_modifier_from, X
+  beq keyboard_update_modifiers_done
+  bit KEYBOARD_MODIFIER_STATE
+  beq keyboard_update_modifiers_break
+; Make
+  lda kb_modifier_to, X
+  tsb KEYBOARD_LATEST_META
+  bra keyboard_update_modifiers_loop
+keyboard_update_modifiers_break:
+  lda kb_modifier_to, X
+  trb KEYBOARD_LATEST_META
+  bra keyboard_update_modifiers_loop
+keyboard_update_modifiers_done:
   plx
   pla
   rts
