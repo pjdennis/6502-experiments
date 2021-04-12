@@ -62,6 +62,7 @@ SIMPLE_BUFFER           = $0300 ; 256 bytes
   .include full_screen_console.inc
   .include simple_buffer.inc
   .include copy_memory.inc
+  .include key_codes.inc
 
 kb_seq_pause       .byte $e1, $14, $77, $e1, $f0, $14, $f0, $77, $00
 
@@ -160,7 +161,12 @@ decode_loop_2:
   jsr console_print_hex         ; 2 chars - 13
   lda #" "
   jsr console_print_character   ; 1 char  - 14
+  lda KEYBOARD_LATEST_CODE
+  jsr keyboard_translate_code
+  cmp #0
+  bne decode_loop_show_translation
   lda #" "
+decode_loop_show_translation:
   jsr console_print_character   ; 1 char  - 15
   lda #" "
   jsr console_print_character   ; 1 char  - 16
@@ -430,6 +436,23 @@ kb_decode_done:
   rts
 
 
+; On entry A contains the keyboard code
+; On exit  A contains the translated code or 0 if no translation available
+;          X, Y are preserved
+keyboard_translate_code:
+  phx
+  tax
+  cpx #(key_codes_end - key_codes)
+  bcs keyboard_translate_no_match
+  lda key_codes, X
+  bra keyboard_translate_code_done
+keyboard_translate_no_match:
+  lda #0
+keyboard_translate_code_done:
+  plx
+  rts
+
+
 ; On entry A = byte to print to console in hex
 ; On exit X, Y are preserved
 ;         A is not preserved
@@ -498,6 +521,3 @@ interrupt:
   pla
   rti
 interrupt_end:
-
-message:
-  .asciiz "Value: "
