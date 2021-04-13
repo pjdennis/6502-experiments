@@ -1,11 +1,12 @@
+;TODO: if code is not on the full list of codes that are understood then ignore it?
+
   .include base_config_v2.inc
 
 INTERRUPT_ROUTINE       = $3f00
 
-KB_DECODE_BREAK         = %10000000
-KB_DECODE_EXTENDED      = %01000000
-KB_DECODE_PAUSE         = %00100000
-KB_DECODE_SEQUENCE      = %00000111
+KB_DECODE_BREAK         = %00010000
+KB_DECODE_EXTENDED      = %00001000
+KB_DECODE_PAUSE_SEQ     = %00000111
 
 KB_MOD_L_SHIFT          = %10000000
 KB_MOD_R_SHIFT          = %01000000
@@ -38,24 +39,28 @@ KB_META_GUI             = %00010000
 KB_META_EXTENDED        = %00000010
 KB_META_BREAK           = %00000001
 
-DISPLAY_STRING_PARAM    = $0000 ; 2 bytes
-CP_M_DEST_P             = $0002 ; 2 bytes
-CP_M_SRC_P              = $0004 ; 2 bytes
-CP_M_LEN                = $0006 ; 2 bytes
-CONSOLE_CHARACTER_COUNT = $0008 ; 1 byte
-SIMPLE_BUFFER_WRITE_PTR = $0009 ; 1 byte
-SIMPLE_BUFFER_READ_PTR  = $000A ; 1 byte 
-KEYBOARD_DECODE_STATE   = $000B ; 1 byte
-KEYBOARD_MODIFIER_STATE = $000C ; 1 byte
-KEYBOARD_LATEST_META    = $000D ; 1 byte
-KEYBOARD_LATEST_CODE    = $000E ; 1 byte
+CP_M_DEST_P             = $0000 ; 2 bytes
+CP_M_SRC_P              = $0002 ; 2 bytes
+CP_M_LEN                = $0004 ; 2 bytes
+CONSOLE_CHARACTER_COUNT = $0006 ; 1 byte
+SIMPLE_BUFFER_WRITE_PTR = $0007 ; 1 byte
+SIMPLE_BUFFER_READ_PTR  = $0008 ; 1 byte 
+KEYBOARD_DECODE_STATE   = $0009 ; 1 byte
+KEYBOARD_MODIFIER_STATE = $000A ; 1 byte
+KEYBOARD_LATEST_META    = $000B ; 1 byte
+KEYBOARD_LATEST_CODE    = $000C ; 1 byte
 
-CONSOLE_TEXT            = $0200 ; CONSOLE_LENGTH (32) bytes
-SIMPLE_BUFFER           = $0300 ; 256 bytes
+SIMPLE_BUFFER           = $0200 ; 256 bytes
+CONSOLE_TEXT            = $0300 ; CONSOLE_LENGTH (32) bytes
 
-  .org $2000
-  jmp initialize_machine
+  .org $2000                    ; Loader loads programs to this address
+  sei                           ; Disable interrupts until we are ready. TODO is to have
+                                ; the loader disable interrupts
+  jmp initialize_machine        ; Initialize hardware and then jump to program_start
 
+  ; The initialize_machine routine in this include will set up hardware registers and then
+  ; jump to program_start. We do not call a subroutine because for some machine designs the
+  ; stack is not usable until after the hardware registers have been initialized
   .include initialize_machine_v2.inc
   .include display_routines_8bit.inc
   .include convert_to_hex.inc
@@ -64,8 +69,11 @@ SIMPLE_BUFFER           = $0300 ; 256 bytes
   .include copy_memory.inc
   .include key_codes.inc
 
+; Code sequence for the pause/break key
 kb_seq_pause       .byte $e1, $14, $77, $e1, $f0, $14, $f0, $77, $00
 
+; Translation tables to convert from PS/2 code set 2 to PS/2 code set 3. We use Code set 3
+; for convenience as it has a single byte per key with no extended prefix
 kb_normal_from:    .byte $14, $11, $77, $7c, $7b, $79, $76, $05, $06, $04, $0c, $03, $0b, $83, $0a
                    .byte $01, $09, $78, $07, $7e, $5d, $58, $84, $00
 kb_normal_to:      .byte $11, $19, $76, $7e, $84, $7c, $08, $07, $0f, $17, $1f, $27, $2f, $37, $3f
@@ -76,27 +84,35 @@ kb_extended_from:  .byte $11, $14, $70, $71, $6b, $6c, $69, $75, $72, $7d, $7a, 
 kb_extended_to:    .byte $39, $58, $67, $64, $61, $6e, $65, $63, $60, $6f, $6d, $6a, $77, $79
                    .byte $8b, $8c, $8d, $62, $7f, $00, $00, $57
 
+; Mapping from PS/2 code set 3 modifier keys to the bit mask used for tracking modifier states
 kb_modifier_codes: .byte KB_CODE_L_SHIFT, KB_CODE_R_SHIFT, KB_CODE_L_CTRL, KB_CODE_R_CTRL
                    .byte KB_CODE_L_ALT,   KB_CODE_R_ALT,   KB_CODE_L_GUI,  KB_CODE_R_GUI, $00
 kb_modifier_masks: .byte KB_MOD_L_SHIFT,  KB_MOD_R_SHIFT,  KB_MOD_L_CTRL,  KB_MOD_R_CTRL
                    .byte KB_MOD_L_ALT,    KB_MOD_R_ALT,    KB_MOD_L_GUI,   KB_MOD_R_GUI
 
+; Mapping from the modifier state masks for left/right modifier keys to the mask used to
+; indicate at least one of the keys is pressed
 kb_modifier_from:  .byte (KB_MOD_L_SHIFT | KB_MOD_R_SHIFT), (KB_MOD_L_CTRL | KB_MOD_R_CTRL)
                    .byte (KB_MOD_L_ALT   | KB_MOD_R_ALT),   (KB_MOD_L_GUI  | KB_MOD_R_GUI), $00
 kb_modifier_to     .byte KB_META_SHIFT,                     KB_META_CTRL
                    .byte KB_META_ALT,                       KB_META_GUI
 
 program_start:
-  sei
-
-  ldx #$ff ; Initialize stack
+  ; Initialize stack
+  ldx #$ff
   txs
 
+  ; Initialize functions we will use in this program
   jsr reset_and_enable_display_no_cursor
   jsr console_initialize
   jsr simple_buffer_initialize
 
-  ; relocate the interrupt handler
+  ; Initialize Keyboard decode state
+  stz KEYBOARD_DECODE_STATE
+  stz KEYBOARD_MODIFIER_STATE
+
+  ; Relocate the interrupt handler. The EEPROM has a fixed address, INTERRUPT_ROUTINE
+  ; for the interrupt routine so copy the handler there
   lda #<INTERRUPT_ROUTINE
   sta CP_M_DEST_P
   lda #>INTERRUPT_ROUTINE
@@ -111,20 +127,17 @@ program_start:
   sta CP_M_LEN + 1
   jsr copy_memory
 
-  ; Initialize Keyboard decode state
-  stz KEYBOARD_DECODE_STATE
-  stz KEYBOARD_MODIFIER_STATE
-
+  ; Set up interrupts for detecting recipt of byte from keyboard
   lda #%00000110  ; CA2 independent interrupt rising edge
   sta PCR
 
   lda #%10000001  ; Enable CA2 interrupt
   sta IER
 
+  ; Enable interrupts so we start recieving data from the keyboard
   cli
 
-  jmp simple_decode_loop
-
+; Read and display translated characters from the keyboard
 get_char_loop:
   jsr keyboard_get_char
   bcs get_char_loop
@@ -135,6 +148,7 @@ get_char_loop_2:
   jsr console_show
   bra get_char_loop
 
+;TODO not used
 simple_decode_loop:
   jsr simple_buffer_read
   bcs simple_decode_loop
@@ -155,6 +169,7 @@ simple_decode_show:
   jsr console_show
   bra simple_decode_loop
 
+;TODO not used
 decode_loop:
   jsr simple_buffer_read
   bcs decode_loop               ; If no byte available jump back to read again
@@ -232,7 +247,7 @@ keyboard_get_press_repeat:
   bcs keyboard_get_press_repeat ; Decoding not yet emitted code so keep reading
   lda KEYBOARD_LATEST_META
   bit #KB_META_BREAK
-  bne keyboard_get_press_repeat ; It's a keyboard break code so keep reading
+  bne keyboard_get_press_repeat ; Keyboard break code so keep reading
   ; Found a make code
   lda KEYBOARD_LATEST_CODE
   clc
@@ -245,72 +260,63 @@ keyboard_get_press_done:
 keyboard_get_char:
 keyboard_get_char_repeat:
   jsr simple_buffer_read
-  bcs keyboard_get_char_done
+  bcs keyboard_get_char_done    ; Exit when input buffer is empty
   jsr keyboard_set3_decode
-  bcs keyboard_get_char_repeat
+  bcs keyboard_get_char_repeat  ; Nothing decoded so far so read more
   lda KEYBOARD_LATEST_META
   bit #KB_META_BREAK
-  bne keyboard_get_char_repeat
-  bit #KB_META_SHIFT
-  bne keyboard_get_char_translate_upper
-; Lower
-  lda KEYBOARD_LATEST_CODE
-  jsr keyboard_translate_code_lower
-  bra keyboard_get_char_translate_done
-keyboard_get_char_translate_upper:
-  lda KEYBOARD_LATEST_CODE
-  jsr keyboard_translate_code_upper
-keyboard_get_char_translate_done:
+  bne keyboard_get_char_repeat  ; Decoded key up event; ignore these so read more
+  jsr keyboard_get_latest_translated_code
   cmp #0
-  bne keyboard_get_char_emit
-  sec
-  bra keyboard_get_char_done
-keyboard_get_char_emit:
+  beq keyboard_get_char_repeat  ; No translation for code; ignore these so read more
   clc
 keyboard_get_char_done:
   rts
 
 
+; On entry KEYBOARD_LATEST_META contains shift state
+;          KEYBOARD_LATEST_CODE contains current key code
+; On exit  A contains the latest character code, or 0 if no translation
+keyboard_get_latest_translated_code:
+  lda KEYBOARD_LATEST_META
+  bit #KB_META_SHIFT
+  bne keyboard_get_latest_translated_code_translate_upper
+; Lower
+  lda KEYBOARD_LATEST_CODE
+  jsr keyboard_translate_code_lower
+  bra keyboard_get_latest_translated_code_done
+keyboard_get_latest_translated_code_translate_upper:
+  lda KEYBOARD_LATEST_CODE
+  jsr keyboard_translate_code_upper
+keyboard_get_latest_translated_code_done:
+  rts
+		   
+
 ; On entry A contains the byte from the keyboard
 ; On exit Carry set if no result so far
+;         X, Y are preserved
+;         A is not preserved
 ;         KEYBOARD_LATEST_META contains metadata for latest key event
 ;         KEYBOARD_LATEST_CODE contains code for latest key event
 keyboard_set3_decode:
   jsr keyboard_decode
-  bcs keyboard_set3_decode_done
-  phx
-  ldx #$ff                    ; Will be incremented at top of loop so loop starts at 0
+  bcs keyboard_set3_decode_done ; No data so we are done
   lda KEYBOARD_LATEST_META
   bit #KB_META_EXTENDED
   bne keyboard_set3_decode_extended
-keyboard_set3_translate_normal:
-  inx
-  lda kb_normal_from, X
-  beq keyboard_set3_translate_done
-  cmp KEYBOARD_LATEST_CODE
-  bne keyboard_set3_translate_normal
-  ; Code found
-  lda kb_normal_to, X
-  sta KEYBOARD_LATEST_CODE
+  lda KEYBOARD_LATEST_CODE
+  jsr keyboard_translate_normal_to_set3
   bra keyboard_set3_translate_done
 keyboard_set3_decode_extended:
   and #~KB_META_EXTENDED
   sta KEYBOARD_LATEST_META
-keyboard_set3_translate_extended:
-  inx
-  lda kb_extended_from, X
-  beq keyboard_set3_translate_done
-  cmp KEYBOARD_LATEST_CODE
-  bne keyboard_set3_translate_extended
-  ; Code found
-  lda kb_extended_to, X
-  sta KEYBOARD_LATEST_CODE
-  ; Fall through
+  lda KEYBOARD_LATEST_CODE
+  jsr keyboard_translate_extended_to_set3
 keyboard_set3_translate_done:
+  sta KEYBOARD_LATEST_CODE
   jsr keyboard_set3_modifier_track
   jsr keyboard_update_modifiers
   clc
-  plx
 keyboard_set3_decode_done:
   rts
 
@@ -348,7 +354,7 @@ keyboard_set3_modifier_track_done:
   rts
 
 
-; On entry KEYBOARD_MODIFIER_STATE containts the current state of modifiers
+; On entry KEYBOARD_MODIFIER_STATE contains the current state of modifiers
 ;          KEYBOARD_LATEST_META contains current meta state without modifiers
 ; On exit  KEYBOARD_LATEST_META contains new meta state with modifiers
 ;          A, X, Y are preserved
@@ -376,47 +382,55 @@ keyboard_update_modifiers_done:
   rts
 
 
-; On entry A contains the byte from the keyboard
-; On exit Carry set if no result so far
-;         KEYBOARD_LATEST_META contains metadata for latest key event
-;         KEYBOARD_LATEST_CODE contains code for latest key event
+; On entry  A contains the byte from the keyboard
+;           KEYBOARD_DECODE_STATE contains the current state of the decode state machine
+; On exit   Carry set if no result so far
+;           X, Y are preserved
+;           A is not preserved
+;           KEYBOARD_LATEST_META contains metadata for latest key event
+;           KEYBOARD_LATEST_CODE contains code for latest key event
+; Variables KEYBOARD_DECODE_STATE is utlilized and then updated with the new state
 keyboard_decode:
   phx
   tax                          ; X <- latest byte from keyboard
+  ; Branch to the handler code for the current state
   lda KEYBOARD_DECODE_STATE
-  bit #KB_DECODE_PAUSE
+  bit #KB_DECODE_PAUSE_SEQ
   bne kb_state_pause
   bit #KB_DECODE_BREAK
   bne kb_state_break
   bit #KB_DECODE_EXTENDED
   bne kb_state_extended
-  ; fall through
+  ; Fall through to the initial state (waiting for first byte of sequence)
 kb_state_waiting:
   cpx #KB_CODE_BREAK
   beq kb_to_break
   cpx #KB_CODE_EXTENDED
   beq kb_to_extended
-  cpx kb_seq_pause
+  cpx kb_seq_pause              ; The first value in the pause key sequence
   beq kb_to_pause
-  lda #0
+  ; No special codes identified so current byte is a single byte sequence
+  lda #0                        ; Emit non-extended make code
   bra kb_decode_emit
 
+; ---- Handlers for the states ----
+
+; The pause state indicates we are recieving the 8 byte pause sequence
+; A = current KEYBOARD_DECODE_STATE
 kb_state_pause:
-  lda KEYBOARD_DECODE_STATE
-  and #KB_DECODE_SEQUENCE
-  phx
+  and #KB_DECODE_PAUSE_SEQ
+  phx                          ; Stack <- latest byte from keyboard
   tax                          ; X <- index of current code in sequence
   pla                          ; A <- latest byte from keyboard
   cmp kb_seq_pause, X
   bne kb_pause_error
   inx
   lda kb_seq_pause, X
-  beq kb_pause_emit
-  txa
-  ora #KB_DECODE_PAUSE
+  beq kb_pause_emit            ; Branch if we reached the last code in sequence
+  txa                          ; New pause seq index becomes new state
   bra kb_decode_no_emit
 kb_pause_emit:
-  lda #0
+  lda #0                       ; Emit pause as non-extended make code
   ldx #KB_CODE_PAUSE
   bra kb_decode_emit
 ; A = latest byte from keyboard
@@ -430,24 +444,24 @@ kb_pause_error:
 kb_state_break:
   bit #KB_DECODE_EXTENDED
   bne kb_state_extended_break
-  lda #KB_META_BREAK
+  lda #KB_META_BREAK            ; Emit non-extended break code
   bra kb_decode_emit
 
 kb_state_extended:
   cpx #KB_CODE_BREAK
   beq kb_to_extended_break
-  lda #KB_META_EXTENDED
   cpx #KB_CODE_EXTENDED_IGNORE
-  bne kb_decode_emit
-  lda #0
-  bra kb_decode_no_emit
+  beq kb_decode_ignore
+  lda #KB_META_EXTENDED
+  bra kb_decode_emit
 
 kb_state_extended_break:
-  lda #(KB_META_BREAK | KB_META_EXTENDED)
   cpx #KB_CODE_EXTENDED_IGNORE
-  bne kb_decode_emit
-  lda #0
-  bra kb_decode_no_emit
+  beq kb_decode_ignore
+  lda #(KB_META_BREAK | KB_META_EXTENDED)
+  bra kb_decode_emit
+
+; ---- State transitions ----
 
 kb_to_break:
   lda #KB_DECODE_BREAK
@@ -462,8 +476,10 @@ kb_to_extended_break:
   bra kb_decode_no_emit
 
 kb_to_pause:
-  lda #(KB_DECODE_PAUSE | %00000001)
+  lda #%00000001                ; Start pause sequence counter at 1
   bra kb_decode_no_emit
+
+; ---- Exiting the routine with result or no result ----
 
 ; A = Metadata
 ; X = code
@@ -474,6 +490,11 @@ kb_decode_emit:
   clc
   bra kb_decode_done
 
+; Ignore current code and go back to initial state
+kb_decode_ignore:
+  lda #0
+  ; Fall through
+
 ; A = new decode state
 kb_decode_no_emit:
   sta KEYBOARD_DECODE_STATE
@@ -481,6 +502,48 @@ kb_decode_no_emit:
   ; Fall through
 
 kb_decode_done:
+  plx
+  rts
+
+
+; On entry A contains the PS/2 set 2 non-extended "normal" keyboard code
+; On exit  A contains the PS/2 set 3 keyboard code
+;          X, Y are preserverd
+keyboard_translate_normal_to_set3:
+  phx
+  phy
+  ldx #$ff
+kb_translate_normal_to_set3_loop:
+  inx
+  ldy kb_normal_from, X
+  beq kb_translate_normal_to_set3_done
+  cmp kb_normal_from, X
+  bne kb_translate_normal_to_set3_loop
+  ; Code found
+  lda kb_normal_to, X
+kb_translate_normal_to_set3_done:
+  ply
+  plx
+  rts
+
+
+; On entry A contains the PS/2 set 2 extended keyboard code
+; On exit  A contains the PS/2 set 3 keyboard code
+;          X, Y are preserverd
+keyboard_translate_extended_to_set3:
+  phx
+  phy
+  ldx #$ff
+kb_translate_extended_to_set3_loop:
+  inx
+  ldy kb_extended_from, X
+  beq kb_translate_extended_to_set3_done
+  cmp kb_extended_from, X
+  bne kb_translate_extended_to_set3_loop
+  ; Code found
+  lda kb_extended_to, X
+kb_translate_extended_to_set3_done:
+  ply
   plx
   rts
 
