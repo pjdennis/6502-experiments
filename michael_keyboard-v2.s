@@ -39,6 +39,8 @@ KB_META_GUI             = %00010000
 KB_META_EXTENDED        = %00000010
 KB_META_BREAK           = %00000001
 
+ASCII_BACKSPACE         = 0x08
+
 CP_M_DEST_P             = $0000 ; 2 bytes
 CP_M_SRC_P              = $0002 ; 2 bytes
 CP_M_LEN                = $0004 ; 2 bytes
@@ -126,14 +128,12 @@ program_start:
   ; Enable interrupts so we start recieving data from the keyboard
   cli
 
-;  jmp simple_decode_loop
-
 ; Read and display translated characters from the keyboard
 get_char_loop:
   jsr keyboard_get_char
   bcs get_char_loop
 get_char_loop_2:
-  jsr console_print_character
+  jsr console_print_character_with_backspace
   jsr keyboard_get_char
   bcc get_char_loop_2
   jsr console_show
@@ -602,9 +602,20 @@ table_lookup_done:
   rts
 
 
+; On entry A = character to print to console
+; On exit  X, Y are preserved
+;          A is not preserved
+console_print_character_with_backspace:
+  cmp #ASCII_BACKSPACE
+  beq console_print_character_with_backspace_backspace
+  jmp console_print_character ; tail call
+console_print_character_with_backspace_backspace:
+  jmp console_backspace ; tail call
+
+
 ; On entry A = byte to print to console in hex
-; On exit X, Y are preserved
-;         A is not preserved
+; On exit  X, Y are preserved
+;          A is not preserved
 console_print_hex:
   phx
   jsr convert_to_hex

@@ -157,7 +157,7 @@ key_codes_lower:
   .byte $00  ;  63  Up
   .byte $00  ;  64  Delete
   .byte $00  ;  65  End
-  .byte $00  ;  66  Backspace
+  .byte $08  ;  66  Backspace                  ********** Hand edited
   .byte $00  ;  67  Insert
   .byte $00  ;  68
   .byte $31  ;  69  KP-1 / End
@@ -303,7 +303,7 @@ key_codes_upper:
   .byte $00  ;  63  Up
   .byte $00  ;  64  Delete
   .byte $00  ;  65  End
-  .byte $00  ;  66  Backspace
+  .byte $08  ;  66  Backspace                  ********** Hand edited
   .byte $00  ;  67  Insert
   .byte $00  ;  68
   .byte $00  ;  69  KP-1 / End

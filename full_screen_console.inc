@@ -57,6 +57,22 @@ console_print_add_character:
   rts
 
 
+; On exit A, X, Y are preserved
+console_backspace:
+  pha
+  phy
+  ldy CONSOLE_CHARACTER_COUNT
+  beq console_backspace_done
+  dey
+  lda #' '
+  sta CONSOLE_TEXT, Y
+  sty CONSOLE_CHARACTER_COUNT
+console_backspace_done:
+  ply
+  pla
+  rts
+
+
 ; Show console on screen
 ; On exit A, X, Y are preserved
 console_show:
