@@ -557,34 +557,38 @@ code_translate_done:
 ; On exit  A contains the translated code or 0 if no translation available
 ;          X, Y are preserved
 keyboard_translate_code_lower:
-  pha
-  lda #<key_codes_lower
-  sta TRANSLATE_TABLE
-  lda #>key_codes_lower
-  sta TRANSLATE_TABLE + 1
-  pla
-  jmp table_lookup ; tail call
+  phx
+  phy
+  ldx #<key_codes_lower
+  ldy #>key_codes_lower
+  jsr table_lookup
+  ply
+  plx
+  rts
 
 
 ; On entry A contains the keyboard code
 ; On exit  A contains the translated code or 0 if no translation available
 ;          X, Y are preserved
 keyboard_translate_code_upper:
-  pha
-  lda #<key_codes_upper
-  sta TRANSLATE_TABLE
-  lda #>key_codes_upper
-  sta TRANSLATE_TABLE + 1
-  pla
-  jmp table_lookup ; tail call
+  phx
+  phy
+  ldx #<key_codes_upper
+  ldy #>key_codes_upper
+  jsr table_lookup
+  ply
+  plx
+  rts
 
 
 ; On entry A contains the code
-;          TRANSLATE_TABLE contains the address of the tranlsation table which starts with the length
+;          X, Y contains the address of the tranlsation table which starts with the length
 ; On exit  Carry is set if no translation was found
 ;          A contains the translated code if translation found
-;          X, Y is preserved
+;          X, Y are not guaranteed to be preserved
 table_lookup:
+  stx TRANSLATE_TABLE
+  sty TRANSLATE_TABLE + 1
   cmp (TRANSLATE_TABLE)
   bcs table_lookup_no_match
   phy
