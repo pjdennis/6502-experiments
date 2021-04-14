@@ -73,59 +73,6 @@ CONSOLE_TEXT            = $0300 ; CONSOLE_LENGTH (32) bytes
 ; Code sequence for the pause/break key
 kb_seq_pause       .byte $e1, $14, $77, $e1, $f0, $14, $f0, $77, $00
 
-; Translation tables to convert from PS/2 code set 2 to PS/2 code set 3. We use Code set 3
-; for convenience as it has a single byte per key with no extended prefix
-kb_normal_translation_table:
-  .byte $14, $11
-  .byte $11, $19
-  .byte $77, $76
-  .byte $7c, $7e
-  .byte $7b, $84
-  .byte $79, $7c
-  .byte $76, $08
-  .byte $05, $07
-  .byte $06, $0f
-  .byte $04, $17
-  .byte $0c, $1f
-  .byte $03, $27
-  .byte $0b, $2f
-  .byte $83, $37
-  .byte $0a, $3f
-  .byte $01, $47
-  .byte $09, $4f
-  .byte $78, $56
-  .byte $07, $5e
-  .byte $7e, $5f
-  .byte $5d, $5c
-  .byte $58, $14
-  .byte $84, $57
-  .byte $00
-
-kb_extended_translation_table:
-  .byte $11, $39
-  .byte $14, $58
-  .byte $70, $67
-  .byte $71, $64
-  .byte $6b, $61
-  .byte $6c, $6e
-  .byte $69, $65
-  .byte $75, $63
-  .byte $72, $60
-  .byte $7d, $6f
-  .byte $7a, $6d
-  .byte $74, $6a
-  .byte $4a, $77
-  .byte $5a, $79
-  .byte $1f, $8b
-  .byte $27, $8c
-  .byte $2f, $8d
-  .byte $7e, $62
-  .byte $3f, $7f
-  .byte $37, $00
-  .byte $5e, $00
-  .byte $7c, $57
-  .byte $00
-
 ; Mapping from PS/2 code set 3 modifier keys to the bit mask used for tracking modifier states
 kb_modifier_codes: .byte KB_CODE_L_SHIFT, KB_CODE_R_SHIFT, KB_CODE_L_CTRL, KB_CODE_R_CTRL
                    .byte KB_CODE_L_ALT,   KB_CODE_R_ALT,   KB_CODE_L_GUI,  KB_CODE_R_GUI, $00
@@ -612,33 +559,44 @@ code_translate_done:
 ; On exit  A contains the translated code or 0 if no translation available
 ;          X, Y are preserved
 keyboard_translate_code_lower:
-  phx
-  tax
-  cpx #(key_codes_lower_end - key_codes_lower)
-  bcs keyboard_translate_code_lower_no_match
-  lda key_codes_lower, X
-  bra keyboard_translate_code_lower_done
-keyboard_translate_code_lower_no_match:
-  lda #0
-keyboard_translate_code_lower_done:
-  plx
-  rts
+  pha
+  lda #<key_codes_lower
+  sta TRANSLATE_TABLE
+  lda #>key_codes_lower
+  sta TRANSLATE_TABLE + 1
+  pla
+  jmp table_lookup ; tail call
 
 
 ; On entry A contains the keyboard code
 ; On exit  A contains the translated code or 0 if no translation available
 ;          X, Y are preserved
 keyboard_translate_code_upper:
-  phx
-  tax
-  cpx #(key_codes_upper_end - key_codes_upper)
-  bcs keyboard_translate_code_upper_no_match
-  lda key_codes_upper, X
-  bra keyboard_translate_code_upper_done
-keyboard_translate_code_upper_no_match:
+  pha
+  lda #<key_codes_upper
+  sta TRANSLATE_TABLE
+  lda #>key_codes_upper
+  sta TRANSLATE_TABLE + 1
+  pla
+  jmp table_lookup ; tail call
+
+
+; On entry A contains the code
+;          TRANSLATE_TABLE contains the address of the tranlsation table which starts with the length
+; On exit  A contains the translated code or original code if no translation found
+;          X, Y is preserved
+table_lookup:
+  cmp (TRANSLATE_TABLE)
+  bcs table_lookup_no_match
+  phy
+  tay
+  iny
+  lda (TRANSLATE_TABLE), Y
+  ply
+  bra table_lookup_done
+table_lookup_no_match:
   lda #0
-keyboard_translate_code_upper_done:
-  plx
+table_lookup_done:
   rts
 
 

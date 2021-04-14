@@ -1,6 +1,60 @@
+; Translation tables to convert from PS/2 code set 2 to PS/2 code set 3. We use Code set 3
+; for convenience as it has a single byte per key with no extended prefix
+kb_normal_translation_table:
+  .byte $14, $11
+  .byte $11, $19
+  .byte $77, $76
+  .byte $7c, $7e
+  .byte $7b, $84
+  .byte $79, $7c
+  .byte $76, $08
+  .byte $05, $07
+  .byte $06, $0f
+  .byte $04, $17
+  .byte $0c, $1f
+  .byte $03, $27
+  .byte $0b, $2f
+  .byte $83, $37
+  .byte $0a, $3f
+  .byte $01, $47
+  .byte $09, $4f
+  .byte $78, $56
+  .byte $07, $5e
+  .byte $7e, $5f
+  .byte $5d, $5c
+  .byte $58, $14
+  .byte $84, $57
+  .byte $00
+
+kb_extended_translation_table:
+  .byte $11, $39
+  .byte $14, $58
+  .byte $70, $67
+  .byte $71, $64
+  .byte $6b, $61
+  .byte $6c, $6e
+  .byte $69, $65
+  .byte $75, $63
+  .byte $72, $60
+  .byte $7d, $6f
+  .byte $7a, $6d
+  .byte $74, $6a
+  .byte $4a, $77
+  .byte $5a, $79
+  .byte $1f, $8b
+  .byte $27, $8c
+  .byte $2f, $8d
+  .byte $7e, $62
+  .byte $3f, $7f
+  .byte $37, $00
+  .byte $5e, $00
+  .byte $7c, $57
+  .byte $00
+
 ; Mapping from PS/2 code set 3 to ASCII
 
 key_codes_lower:
+  .byte key_codes_lower_end - key_codes_lower
   .byte $00  ;  00
   .byte $00  ;  01
   .byte $00  ;  02
@@ -146,6 +200,7 @@ key_codes_lower:
 key_codes_lower_end:
 
 key_codes_upper:
+  .byte key_codes_upper_end - key_codes_upper
   .byte $00  ;  00
   .byte $00  ;  01
   .byte $00  ;  02
