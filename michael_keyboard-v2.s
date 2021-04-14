@@ -40,6 +40,8 @@ KB_META_EXTENDED        = %00000010
 KB_META_BREAK           = %00000001
 
 ASCII_BACKSPACE         = 0x08
+ASCII_TILDE             = 0x7e
+ASCII_BACKSLASH         = 0x5c
 
 CHARACTER_TILDE         = 1
 CHARACTER_BACKSLASH     = 2
@@ -169,7 +171,7 @@ get_char_loop:
   jsr keyboard_get_char
   bcs get_char_loop
 get_char_loop_2:
-  jsr console_print_character_with_backspace
+  jsr console_print_character_with_translation
   jsr keyboard_get_char
   bcc get_char_loop_2
   jsr console_show
@@ -645,9 +647,10 @@ table_lookup_done:
 ; On entry A = character to print to console
 ; On exit  X, Y are preserved
 ;          A is not preserved
-console_print_character_with_backspace:
+console_print_character_with_translation:
   cmp #ASCII_BACKSPACE
   beq console_print_character_with_backspace_backspace
+  jsr translate_character_for_display
   jmp console_print_character ; tail call
 console_print_character_with_backspace_backspace:
   jmp console_backspace ; tail call
@@ -691,6 +694,24 @@ console_print_binary_continue:
   ply
   plx
   pla
+  rts
+
+
+; On entry A is an ASCII character
+; On exit  A is translated to the custom char code if applicable
+translate_character_for_display:
+  cmp #ASCII_TILDE
+  beq translate_character_for_display_tilde
+  cmp #ASCII_BACKSLASH
+  beq translate_character_for_display_backslash
+  bra translate_character_for_display_done
+translate_character_for_display_tilde:
+  lda #CHARACTER_TILDE
+  bra translate_character_for_display_done
+translate_character_for_display_backslash:
+  lda #CHARACTER_BACKSLASH
+  ; fall through to done
+translate_character_for_display_done:
   rts
 
 
