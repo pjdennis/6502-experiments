@@ -188,8 +188,7 @@ decode_loop_translate_upper:
   lda KEYBOARD_LATEST_CODE
   jsr keyboard_translate_code_upper
 decode_loop_translate_done:
-  cmp #0
-  bne decode_loop_show_translation
+  bcc decode_loop_show_translation
   lda #" "
 decode_loop_show_translation:
   jsr console_print_character   ; 1 char  - 15
@@ -258,16 +257,15 @@ keyboard_get_char_repeat:
   bit #KB_META_BREAK
   bne keyboard_get_char_repeat  ; Decoded key up event; ignore these so read more
   jsr keyboard_get_latest_translated_code
-  cmp #0
-  beq keyboard_get_char_repeat  ; No translation for code; ignore these so read more
-  clc
+  bcs keyboard_get_char_repeat  ; No translation for code; ignore these so read more
 keyboard_get_char_done:
   rts
 
 
 ; On entry KEYBOARD_LATEST_META contains shift state
 ;          KEYBOARD_LATEST_CODE contains current key code
-; On exit  A contains the latest character code, or 0 if no translation
+; On exit  Carry set if no translation
+;          A contains translated code if translation occurred
 keyboard_get_latest_translated_code:
   lda KEYBOARD_LATEST_META
   bit #KB_META_SHIFT
@@ -281,7 +279,7 @@ keyboard_get_latest_translated_code_translate_upper:
   jsr keyboard_translate_code_upper
 keyboard_get_latest_translated_code_done:
   rts
-		   
+
 
 ; On entry A contains the byte from the keyboard
 ; On exit Carry set if no result so far
@@ -583,7 +581,8 @@ keyboard_translate_code_upper:
 
 ; On entry A contains the code
 ;          TRANSLATE_TABLE contains the address of the tranlsation table which starts with the length
-; On exit  A contains the translated code or original code if no translation found
+; On exit  Carry is set if no translation was found
+;          A contains the translated code if translation found
 ;          X, Y is preserved
 table_lookup:
   cmp (TRANSLATE_TABLE)
@@ -593,9 +592,12 @@ table_lookup:
   iny
   lda (TRANSLATE_TABLE), Y
   ply
+  cmp #0
+  beq table_lookup_no_match
+  clc
   bra table_lookup_done
 table_lookup_no_match:
-  lda #0
+  sec
 table_lookup_done:
   rts
 
