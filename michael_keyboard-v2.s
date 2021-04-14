@@ -41,17 +41,21 @@ KB_META_BREAK           = %00000001
 
 ASCII_BACKSPACE         = 0x08
 
+CHARACTER_TILDE         = 1
+CHARACTER_BACKSLASH     = 2
+
 CP_M_DEST_P             = $0000 ; 2 bytes
 CP_M_SRC_P              = $0002 ; 2 bytes
 CP_M_LEN                = $0004 ; 2 bytes
 TRANSLATE_TABLE         = $0006 ; 2 bytes
-CONSOLE_CHARACTER_COUNT = $0008 ; 1 byte
-SIMPLE_BUFFER_WRITE_PTR = $0009 ; 1 byte
-SIMPLE_BUFFER_READ_PTR  = $000a ; 1 byte
-KEYBOARD_DECODE_STATE   = $000b ; 1 byte
-KEYBOARD_MODIFIER_STATE = $000c ; 1 byte
-KEYBOARD_LATEST_META    = $000d ; 1 byte
-KEYBOARD_LATEST_CODE    = $000e ; 1 byte
+CREATE_CHARACTER_PARAM  = $0008 ; 2 bytes
+CONSOLE_CHARACTER_COUNT = $000a ; 1 byte
+SIMPLE_BUFFER_WRITE_PTR = $000b ; 1 byte
+SIMPLE_BUFFER_READ_PTR  = $000c ; 1 byte
+KEYBOARD_DECODE_STATE   = $000d ; 1 byte
+KEYBOARD_MODIFIER_STATE = $000e ; 1 byte
+KEYBOARD_LATEST_META    = $000f ; 1 byte
+KEYBOARD_LATEST_CODE    = $0010 ; 1 byte
 
 SIMPLE_BUFFER           = $0200 ; 256 bytes
 CONSOLE_TEXT            = $0300 ; CONSOLE_LENGTH (32) bytes
@@ -71,6 +75,27 @@ CONSOLE_TEXT            = $0300 ; CONSOLE_LENGTH (32) bytes
   .include simple_buffer.inc
   .include copy_memory.inc
   .include key_codes.inc
+
+; Custom characters
+character_data_tilde:
+  .byte %00000
+  .byte %00000
+  .byte %00000
+  .byte %01101
+  .byte %10010
+  .byte %00000
+  .byte %00000
+  .byte %00000
+
+character_data_backslash:
+  .byte %00000
+  .byte %10000
+  .byte %01000
+  .byte %00100
+  .byte %00010
+  .byte %00001
+  .byte %00000
+  .byte %00000
 
 ; Code sequence for the pause/break key
 kb_seq_pause       .byte $e1, $14, $77, $e1, $f0, $14, $f0, $77, $00
@@ -97,6 +122,17 @@ program_start:
   jsr reset_and_enable_display_no_cursor
   jsr console_initialize
   jsr simple_buffer_initialize
+
+  ; Create characters
+  lda #CHARACTER_TILDE
+  ldx #<character_data_tilde
+  ldy #>character_data_tilde
+  jsr create_character
+
+  lda #CHARACTER_BACKSLASH
+  ldx #<character_data_backslash
+  ldy #>character_data_backslash
+  jsr create_character
 
   ; Initialize Keyboard decode state
   stz KEYBOARD_DECODE_STATE
@@ -655,6 +691,32 @@ console_print_binary_continue:
   ply
   plx
   pla
+  rts
+
+
+;On entry A = character number
+;         X = low byte source address
+;         Y = high byte source address
+;On exit  A, X, Y are not preserved
+create_character:
+  stx CREATE_CHARACTER_PARAM
+  sty CREATE_CHARACTER_PARAM + 1
+
+  asl
+  asl
+  asl
+  ora #CMD_SET_CGRAM_ADDRESS
+  jsr display_command
+
+  ldy #0
+create_character_loop:
+  lda (CREATE_CHARACTER_PARAM), Y
+  jsr display_character
+
+  iny
+  cpy #8
+  bne create_character_loop
+
   rts
 
 
