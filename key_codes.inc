@@ -100,7 +100,6 @@ key_codes_lower:
   .byte $00  ;  60  Down
   .byte $00  ;  61  Left
   .byte $00  ;  62  Pause
-  .byte $00  ;  62  Ctrl+Break
   .byte $00  ;  63  Up
   .byte $00  ;  64  Delete
   .byte $00  ;  65  End
@@ -246,7 +245,6 @@ key_codes_upper:
   .byte $00  ;  60  Down
   .byte $00  ;  61  Left
   .byte $00  ;  62  Pause
-  .byte $00  ;  62  Ctrl+Break
   .byte $00  ;  63  Up
   .byte $00  ;  64  Delete
   .byte $00  ;  65  End

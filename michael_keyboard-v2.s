@@ -42,13 +42,14 @@ KB_META_BREAK           = %00000001
 CP_M_DEST_P             = $0000 ; 2 bytes
 CP_M_SRC_P              = $0002 ; 2 bytes
 CP_M_LEN                = $0004 ; 2 bytes
-CONSOLE_CHARACTER_COUNT = $0006 ; 1 byte
-SIMPLE_BUFFER_WRITE_PTR = $0007 ; 1 byte
-SIMPLE_BUFFER_READ_PTR  = $0008 ; 1 byte 
-KEYBOARD_DECODE_STATE   = $0009 ; 1 byte
-KEYBOARD_MODIFIER_STATE = $000A ; 1 byte
-KEYBOARD_LATEST_META    = $000B ; 1 byte
-KEYBOARD_LATEST_CODE    = $000C ; 1 byte
+TRANSLATE_TABLE         = $0006 ; 2 bytes
+CONSOLE_CHARACTER_COUNT = $0008 ; 1 byte
+SIMPLE_BUFFER_WRITE_PTR = $0009 ; 1 byte
+SIMPLE_BUFFER_READ_PTR  = $000a ; 1 byte
+KEYBOARD_DECODE_STATE   = $000b ; 1 byte
+KEYBOARD_MODIFIER_STATE = $000c ; 1 byte
+KEYBOARD_LATEST_META    = $000d ; 1 byte
+KEYBOARD_LATEST_CODE    = $000e ; 1 byte
 
 SIMPLE_BUFFER           = $0200 ; 256 bytes
 CONSOLE_TEXT            = $0300 ; CONSOLE_LENGTH (32) bytes
@@ -74,15 +75,56 @@ kb_seq_pause       .byte $e1, $14, $77, $e1, $f0, $14, $f0, $77, $00
 
 ; Translation tables to convert from PS/2 code set 2 to PS/2 code set 3. We use Code set 3
 ; for convenience as it has a single byte per key with no extended prefix
-kb_normal_from:    .byte $14, $11, $77, $7c, $7b, $79, $76, $05, $06, $04, $0c, $03, $0b, $83, $0a
-                   .byte $01, $09, $78, $07, $7e, $5d, $58, $84, $00
-kb_normal_to:      .byte $11, $19, $76, $7e, $84, $7c, $08, $07, $0f, $17, $1f, $27, $2f, $37, $3f
-                   .byte $47, $4f, $56, $5e, $5f, $5c, $14, $57
+kb_normal_translation_table:
+  .byte $14, $11
+  .byte $11, $19
+  .byte $77, $76
+  .byte $7c, $7e
+  .byte $7b, $84
+  .byte $79, $7c
+  .byte $76, $08
+  .byte $05, $07
+  .byte $06, $0f
+  .byte $04, $17
+  .byte $0c, $1f
+  .byte $03, $27
+  .byte $0b, $2f
+  .byte $83, $37
+  .byte $0a, $3f
+  .byte $01, $47
+  .byte $09, $4f
+  .byte $78, $56
+  .byte $07, $5e
+  .byte $7e, $5f
+  .byte $5d, $5c
+  .byte $58, $14
+  .byte $84, $57
+  .byte $00
 
-kb_extended_from:  .byte $11, $14, $70, $71, $6b, $6c, $69, $75, $72, $7d, $7a, $74, $4a, $5a
-                   .byte $1f, $27, $2f, $7e, $3f, $37, $5e, $7c, $00
-kb_extended_to:    .byte $39, $58, $67, $64, $61, $6e, $65, $63, $60, $6f, $6d, $6a, $77, $79
-                   .byte $8b, $8c, $8d, $62, $7f, $00, $00, $57
+kb_extended_translation_table:
+  .byte $11, $39
+  .byte $14, $58
+  .byte $70, $67
+  .byte $71, $64
+  .byte $6b, $61
+  .byte $6c, $6e
+  .byte $69, $65
+  .byte $75, $63
+  .byte $72, $60
+  .byte $7d, $6f
+  .byte $7a, $6d
+  .byte $74, $6a
+  .byte $4a, $77
+  .byte $5a, $79
+  .byte $1f, $8b
+  .byte $27, $8c
+  .byte $2f, $8d
+  .byte $7e, $62
+  .byte $3f, $7f
+  .byte $37, $00
+  .byte $5e, $00
+  .byte $7c, $57
+  .byte $00
 
 ; Mapping from PS/2 code set 3 modifier keys to the bit mask used for tracking modifier states
 kb_modifier_codes: .byte KB_CODE_L_SHIFT, KB_CODE_R_SHIFT, KB_CODE_L_CTRL, KB_CODE_R_CTRL
@@ -136,6 +178,8 @@ program_start:
 
   ; Enable interrupts so we start recieving data from the keyboard
   cli
+
+;  jmp simple_decode_loop
 
 ; Read and display translated characters from the keyboard
 get_char_loop:
@@ -304,6 +348,7 @@ keyboard_set3_decode:
   lda KEYBOARD_LATEST_META
   bit #KB_META_EXTENDED
   bne keyboard_set3_decode_extended
+  ; Decode normal
   lda KEYBOARD_LATEST_CODE
   jsr keyboard_translate_normal_to_set3
   bra keyboard_set3_translate_done
@@ -510,39 +555,54 @@ kb_decode_done:
 ; On exit  A contains the PS/2 set 3 keyboard code
 ;          X, Y are preserverd
 keyboard_translate_normal_to_set3:
-  phx
-  phy
-  ldx #$ff
-kb_translate_normal_to_set3_loop:
-  inx
-  ldy kb_normal_from, X
-  beq kb_translate_normal_to_set3_done
-  cmp kb_normal_from, X
-  bne kb_translate_normal_to_set3_loop
-  ; Code found
-  lda kb_normal_to, X
-kb_translate_normal_to_set3_done:
-  ply
-  plx
-  rts
+  pha
+  lda #<kb_normal_translation_table
+  sta TRANSLATE_TABLE
+  lda #>kb_normal_translation_table
+  sta TRANSLATE_TABLE + 1
+  pla
+  jmp code_translate ; tail call
 
 
 ; On entry A contains the PS/2 set 2 extended keyboard code
 ; On exit  A contains the PS/2 set 3 keyboard code
 ;          X, Y are preserverd
 keyboard_translate_extended_to_set3:
+  pha
+  lda #<kb_extended_translation_table
+  sta TRANSLATE_TABLE
+  lda #>kb_extended_translation_table
+  sta TRANSLATE_TABLE + 1
+  pla
+  jmp code_translate ; tail call
+
+
+; On entry A contains the code
+;          TRANSLATE_TABLE contains the address of the tranlsation table
+; On exit  A contains the translated code or original code if no translation found
+;          X, Y are preserved
+code_translate:
   phx
   phy
-  ldx #$ff
-kb_translate_extended_to_set3_loop:
-  inx
-  ldy kb_extended_from, X
-  beq kb_translate_extended_to_set3_done
-  cmp kb_extended_from, X
-  bne kb_translate_extended_to_set3_loop
+  tax
+  ldy #0
+  bra code_translate_loop_entry
+code_translate_loop:
+  iny
+  iny
+code_translate_loop_entry:
+  lda (TRANSLATE_TABLE), Y
+  beq code_translate_not_found
+  txa
+  cmp (TRANSLATE_TABLE), Y
+  bne code_translate_loop
   ; Code found
-  lda kb_extended_to, X
-kb_translate_extended_to_set3_done:
+  iny
+  lda (TRANSLATE_TABLE), Y
+  bra code_translate_done
+code_translate_not_found:
+  txa
+code_translate_done:
   ply
   plx
   rts
