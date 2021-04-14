@@ -500,35 +500,37 @@ kb_decode_done:
 ; On exit  A contains the PS/2 set 3 keyboard code
 ;          X, Y are preserverd
 keyboard_translate_normal_to_set3:
-  pha
-  lda #<kb_normal_translation_table
-  sta TRANSLATE_TABLE
-  lda #>kb_normal_translation_table
-  sta TRANSLATE_TABLE + 1
-  pla
-  jmp code_translate ; tail call
+  phx
+  phy
+  ldx #<kb_normal_translation_table
+  ldy #>kb_normal_translation_table
+  jsr code_translate
+  ply
+  plx
+  rts
 
 
 ; On entry A contains the PS/2 set 2 extended keyboard code
 ; On exit  A contains the PS/2 set 3 keyboard code
 ;          X, Y are preserverd
 keyboard_translate_extended_to_set3:
-  pha
-  lda #<kb_extended_translation_table
-  sta TRANSLATE_TABLE
-  lda #>kb_extended_translation_table
-  sta TRANSLATE_TABLE + 1
-  pla
-  jmp code_translate ; tail call
+  phx
+  phy
+  ldx #<kb_extended_translation_table
+  ldy #>kb_extended_translation_table
+  jsr code_translate
+  ply
+  plx
+  rts
 
 
 ; On entry A contains the code
-;          TRANSLATE_TABLE contains the address of the tranlsation table
+;          X, Y contains the address of the translation table
 ; On exit  A contains the translated code or original code if no translation found
-;          X, Y are preserved
+;          X, Y are not preserved
 code_translate:
-  phx
-  phy
+  stx TRANSLATE_TABLE
+  sty TRANSLATE_TABLE + 1
   tax
   ldy #0
   bra code_translate_loop_entry
@@ -548,8 +550,6 @@ code_translate_loop_entry:
 code_translate_not_found:
   txa
 code_translate_done:
-  ply
-  plx
   rts
 
 
