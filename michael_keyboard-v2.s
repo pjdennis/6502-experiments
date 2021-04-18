@@ -54,10 +54,11 @@ CREATE_CHARACTER_PARAM  = $0008 ; 2 bytes
 CONSOLE_CHARACTER_COUNT = $000a ; 1 byte
 SIMPLE_BUFFER_WRITE_PTR = $000b ; 1 byte
 SIMPLE_BUFFER_READ_PTR  = $000c ; 1 byte
-KEYBOARD_DECODE_STATE   = $000d ; 1 byte
-KEYBOARD_MODIFIER_STATE = $000e ; 1 byte
-KEYBOARD_LATEST_META    = $000f ; 1 byte
-KEYBOARD_LATEST_CODE    = $0010 ; 1 byte
+KEYBOARD_RECEIVING      = $000d ; 1 byte
+KEYBOARD_DECODE_STATE   = $000e ; 1 byte
+KEYBOARD_MODIFIER_STATE = $000f ; 1 byte
+KEYBOARD_LATEST_META    = $0010 ; 1 byte
+KEYBOARD_LATEST_CODE    = $0011 ; 1 byte
 
 SIMPLE_BUFFER           = $0200 ; 256 bytes
 CONSOLE_TEXT            = $0300 ; CONSOLE_LENGTH (32) bytes
@@ -156,8 +157,10 @@ program_start:
   sta CP_M_LEN + 1
   jsr copy_memory
 
-  ; Set up interrupts for detecting recipt of byte from keyboard
-  lda #%00000110  ; CA2 independent interrupt rising edge
+  stz KEYBOARD_RECEIVING
+
+  ; Set up interrupts for detecting start of receipt of byte from keyboard
+  lda #PCR_CA2_IND_NEG_E
   sta PCR
 
   lda #%10000001  ; Enable CA2 interrupt
@@ -748,6 +751,12 @@ interrupt:
   lda #%00000001  ; Clear the CA2 interrupt
   sta IFR
 
+  lda KEYBOARD_RECEIVING
+  beq interrupt_start_receiving
+  lda #PCR_CA2_IND_NEG_E
+  sta PCR
+  STZ KEYBOARD_RECEIVING
+
   ldx DDRB        ; Save DDRB to X
 
   lda #%00000000
@@ -763,7 +772,15 @@ interrupt:
   tsb PORTA       ; Disable shift register output
 
   stx DDRB        ; Restore DDRB from X
+  bra interrupt_done
 
+interrupt_start_receiving:
+  lda #PCR_CA2_IND_POS_E
+  sta PCR
+  lda #1
+  sta KEYBOARD_RECEIVING
+
+interrupt_done:
   plx
   pla
   rti
