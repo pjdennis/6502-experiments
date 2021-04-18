@@ -766,6 +766,7 @@ interrupt:
   trb PORTA       ; Enable shift register output
 
   lda PORTB
+  eor #$ff
   jsr simple_buffer_write
 
   lda #SOEB
