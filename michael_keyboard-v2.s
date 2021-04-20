@@ -127,7 +127,6 @@ program_start:
   jsr console_initialize
   jsr simple_buffer_initialize
 
-
 ;  ldx #0
 ;reset_loop:
 ;  lda #100
@@ -146,19 +145,17 @@ program_start:
 ;  jsr console_print_character
 ;  jsr console_show
 ;
-;  lda #(SOEB | SOLB | PARITY)
-;  sta PORTA
-;  lda #$ff
-;  sta PORTB
-;  lda #(SOEB | PARITY)
-;  sta PORTA
-;  ; TODO: deelay_10_thousandths adds an extra 1 to the delay
-;  lda #1 ; 100 microseconds = 0.1 milliseconds = 1 1/10,000 of a second
-;  jsr delay_10_thousandths
-;  lda #(SOEB | SOLB | PARITY)
-;  sta PORTA
+  lda #(SOEB | SOLB | PARITY)
+  sta PORTA
+  lda #$ff
+  sta PORTB
+  lda #(SOEB | PARITY)
+  sta PORTA
+  lda #1 ; 100 microseconds = 0.1 milliseconds = 1 1/10,000 of a second
+  jsr delay_10_thousandths
+  lda #(SOEB | SOLB | PARITY)
+  sta PORTA
 ;  bra reset_loop
-
 
   ; Create characters
   lda #CHARACTER_TILDE
