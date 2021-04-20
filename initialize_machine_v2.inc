@@ -1,7 +1,7 @@
 initialize_machine:
 
   ; Initialize 6522 port A (display control and shift register output enable)
-  lda #(E | RW | RS | SOEB | SOLB | PARITY)
+  lda #(E | RW | RS | SOEB | SOLB | START | PARITY)
   sta DDRA
 
   ; Disable input shift register; prepare to initialize output shift register
