@@ -71,6 +71,7 @@ CONSOLE_TEXT            = $0300 ; CONSOLE_LENGTH (32) bytes
   ; The initialize_machine routine in this include will set up hardware registers and then
   ; jump to program_start. We do not call a subroutine because for some machine designs the
   ; stack is not usable until after the hardware registers have been initialized
+  .include delay_routines.inc
   .include initialize_machine_v2.inc
   .include display_routines_8bit.inc
   .include convert_to_hex.inc
@@ -125,6 +126,39 @@ program_start:
   jsr reset_and_enable_display_no_cursor
   jsr console_initialize
   jsr simple_buffer_initialize
+
+
+;  ldx #0
+;reset_loop:
+;  lda #100
+;  jsr delay_hundredths
+;
+;  cpx #0
+;  beq reset_zero
+;  inx
+;  lda #"."
+;  bra reset_one
+;reset_zero:
+;  dex
+;  lda #" "
+;reset_one:
+;
+;  jsr console_print_character
+;  jsr console_show
+;
+;  lda #(SOEB | SOLB | PARITY)
+;  sta PORTA
+;  lda #$ff
+;  sta PORTB
+;  lda #(SOEB | PARITY)
+;  sta PORTA
+;  ; TODO: deelay_10_thousandths adds an extra 1 to the delay
+;  lda #1 ; 100 microseconds = 0.1 milliseconds = 1 1/10,000 of a second
+;  jsr delay_10_thousandths
+;  lda #(SOEB | SOLB | PARITY)
+;  sta PORTA
+;  bra reset_loop
+
 
   ; Create characters
   lda #CHARACTER_TILDE
