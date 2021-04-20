@@ -17,6 +17,9 @@ KB_MOD_R_ALT            = %00000100
 KB_MOD_L_GUI            = %00000010
 KB_MOD_R_GUI            = %00000001
 
+KB_COMMAND_RESET        = $ff
+KB_COMMAND_ENABLE       = $f4
+
 KB_CODE_BREAK           = $f0
 KB_CODE_EXTENDED        = $e0
 KB_CODE_EXTENDED_IGNORE = $12
@@ -143,16 +146,26 @@ program_start:
 ;  jsr console_print_character
 ;  jsr console_show
 ;
-  lda #(SOEB | SOLB | PARITY)
+  lda #(SOEB | SOLB)
   sta PORTA
-  lda #$ff
+  lda #KB_COMMAND_ENABLE
+  jsr calculate_parity
+  bcs odd_parity
+; even parity
+  lda PARITY
+  bra parity_mask_ready
+odd_parity:
+  lda #0
+parity_mask_ready:              ; Mask is in X
+  tsb PORTA
+  lda #KB_COMMAND_ENABLE
   sta PORTB
-  lda #(SOEB | PARITY)
-  sta PORTA
+  lda #SOLB
+  trb PORTA
   lda #1 ; 100 microseconds = 0.1 milliseconds = 1 1/10,000 of a second
   jsr delay_10_thousandths
-  lda #(SOEB | SOLB | PARITY)
-  sta PORTA
+  lda #SOLB
+  tsb PORTA
   lda #(SOEB | SOLB)
   sta PORTA
 
@@ -773,6 +786,32 @@ create_character_loop:
   cpy #8
   bne create_character_loop
 
+  rts
+
+
+; On entry A = value to calculate parity for
+; On exit Carry set for odd parity or clear for even parity
+;         A, X, Y are preserved
+calculate_parity:
+  pha
+  phx
+  phy
+
+  ldy #0
+  ldx #8
+calculate_parity_loop:
+  lsr
+  bcc calculate_parity_next
+  iny
+calculate_parity_next:
+  dex
+  bne calculate_parity_loop
+  tya
+  lsr ; shift parity into carry flag
+
+  ply
+  plx
+  pla
   rts
 
 
