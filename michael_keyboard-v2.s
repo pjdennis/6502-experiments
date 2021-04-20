@@ -64,8 +64,6 @@ SIMPLE_BUFFER           = $0200 ; 256 bytes
 CONSOLE_TEXT            = $0300 ; CONSOLE_LENGTH (32) bytes
 
   .org $2000                    ; Loader loads programs to this address
-  sei                           ; Disable interrupts until we are ready. TODO is to have
-                                ; the loader disable interrupts
   jmp initialize_machine        ; Initialize hardware and then jump to program_start
 
   ; The initialize_machine routine in this include will set up hardware registers and then
@@ -155,6 +153,9 @@ program_start:
   jsr delay_10_thousandths
   lda #(SOEB | SOLB | PARITY)
   sta PORTA
+  lda #(SOEB | SOLB)
+  sta PORTA
+
 ;  bra reset_loop
 
   ; Create characters

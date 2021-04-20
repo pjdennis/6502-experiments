@@ -7,8 +7,8 @@ RS   = %00100000  ; Display register select
 
 SOEB   = %00010000  ; Input shift register output enable (active low) 
 SOLB   = %00001000  ; Output shift register load / clock low (active low)
-START  = %00000100  ; Output start bit
-PARITY = %00000010  ; Output parity - TODO multiplex with RW or RS
+START  = %01000000  ; Output start bit - multiplexed with RW
+PARITY = %00100000  ; Output parity bit - multiplexed with RS
 
 ; Include additional definitions
   .include display_parameters.inc
