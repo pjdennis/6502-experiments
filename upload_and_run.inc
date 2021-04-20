@@ -237,6 +237,7 @@ upload_done:
 
 ; Good checksum  
   jsr copy_memory                 ; Relocate upload to the correct location for running it
+  sei                             ; Disable interrupts, as they are after a reset
   jmp UPLOAD_TO                   ; Jump to and run the main program
 
 bad_checksum:
