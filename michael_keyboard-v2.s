@@ -316,35 +316,35 @@ simple_show_loop_2:
 ; On exit Carry set if no result so far
 ;         A contains key code of key press
 keyboard_get_press:
-keyboard_get_press_repeat:
+.repeat:
   jsr simple_buffer_read
-  bcs keyboard_get_press_done   ; No keyboard data so we are done
+  bcs .done                     ; No keyboard data so we are done
   jsr keyboard_set3_decode
-  bcs keyboard_get_press_repeat ; Decoding not yet emitted code so keep reading
+  bcs .repeat                   ; Decoding not yet emitted code so keep reading
   lda KEYBOARD_LATEST_META
   bit #KB_META_BREAK
-  bne keyboard_get_press_repeat ; Keyboard break code so keep reading
+  bne .repeat                   ; Keyboard break code so keep reading
   ; Found a make code
   lda KEYBOARD_LATEST_CODE
   clc
-keyboard_get_press_done:
+.done:
   rts
 
 
 ; On exit Carry set if no result so far
 ;         A contains the next char
 keyboard_get_char:
-keyboard_get_char_repeat:
+.repeat:
   jsr simple_buffer_read
-  bcs keyboard_get_char_done    ; Exit when input buffer is empty
+  bcs .done                     ; Exit when input buffer is empty
   jsr keyboard_set3_decode
-  bcs keyboard_get_char_repeat  ; Nothing decoded so far so read more
+  bcs .repeat                   ; Nothing decoded so far so read more
   lda KEYBOARD_LATEST_META
   bit #KB_META_BREAK
-  bne keyboard_get_char_repeat  ; Decoded key up event; ignore these so read more
+  bne .repeat                   ; Decoded key up event; ignore these so read more
   jsr keyboard_get_latest_translated_code
-  bcs keyboard_get_char_repeat  ; No translation for code; ignore these so read more
-keyboard_get_char_done:
+  bcs .repeat                   ; No translation for code; ignore these so read more
+.done:
   rts
 
 
@@ -355,15 +355,15 @@ keyboard_get_char_done:
 keyboard_get_latest_translated_code:
   lda KEYBOARD_LATEST_META
   bit #KB_META_SHIFT
-  bne keyboard_get_latest_translated_code_translate_upper
+  bne .translate_upper
 ; Lower
   lda KEYBOARD_LATEST_CODE
   jsr keyboard_translate_code_lower
-  bra keyboard_get_latest_translated_code_done
-keyboard_get_latest_translated_code_translate_upper:
+  bra .done
+.translate_upper:
   lda KEYBOARD_LATEST_CODE
   jsr keyboard_translate_code_upper
-keyboard_get_latest_translated_code_done:
+.done:
   rts
 
 
@@ -375,25 +375,25 @@ keyboard_get_latest_translated_code_done:
 ;         KEYBOARD_LATEST_CODE contains code for latest key event
 keyboard_set3_decode:
   jsr keyboard_decode
-  bcs keyboard_set3_decode_done ; No data so we are done
+  bcs .decode_done              ; No data so we are done
   lda KEYBOARD_LATEST_META
   bit #KB_META_EXTENDED
-  bne keyboard_set3_decode_extended
-  ; Decode normal
+  bne .decode_extended
+; Decode normal
   lda KEYBOARD_LATEST_CODE
   jsr keyboard_translate_normal_to_set3
-  bra keyboard_set3_translate_done
-keyboard_set3_decode_extended:
+  bra .translate_done
+.decode_extended:
   and #~KB_META_EXTENDED
   sta KEYBOARD_LATEST_META
   lda KEYBOARD_LATEST_CODE
   jsr keyboard_translate_extended_to_set3
-keyboard_set3_translate_done:
+.translate_done:
   sta KEYBOARD_LATEST_CODE
   jsr keyboard_set3_modifier_track
   jsr keyboard_update_modifiers
   clc
-keyboard_set3_decode_done:
+.decode_done:
   rts
 
 
@@ -406,25 +406,25 @@ keyboard_set3_modifier_track:
   pha
   phx
   ldx #$ff
-keyboard_set3_modifier_loop:
+.repeat:
   inx
   lda kb_modifier_codes, X
-  beq keyboard_set3_modifier_track_done
+  beq .done
   cmp KEYBOARD_LATEST_CODE
-  bne keyboard_set3_modifier_loop
+  bne .repeat
   ; Fall through - code found
   lda KEYBOARD_LATEST_META
   bit #KB_META_BREAK
-  bne keyboard_set3_modifier_track_break
-  ; Make
+  bne .key_break
+; Key make
   lda kb_modifier_masks, X
   tsb KEYBOARD_MODIFIER_STATE
-  bra keyboard_set3_modifier_track_done
-keyboard_set3_modifier_track_break:
+  bra .done
+.key_break:
   lda kb_modifier_masks, X
   trb KEYBOARD_MODIFIER_STATE
   ; Fall through - done
-keyboard_set3_modifier_track_done:
+.done:
   plx
   pla
   rts
@@ -438,21 +438,21 @@ keyboard_update_modifiers:
   pha
   phx
   ldx #$ff
-keyboard_update_modifiers_loop:
+.repeat:
   inx
   lda kb_modifier_from, X
-  beq keyboard_update_modifiers_done
+  beq .done
   bit KEYBOARD_MODIFIER_STATE
-  beq keyboard_update_modifiers_break
-; Make
+  beq .key_break
+; Key make
   lda kb_modifier_to, X
   tsb KEYBOARD_LATEST_META
-  bra keyboard_update_modifiers_loop
-keyboard_update_modifiers_break:
+  bra .repeat
+.key_break:
   lda kb_modifier_to, X
   trb KEYBOARD_LATEST_META
-  bra keyboard_update_modifiers_loop
-keyboard_update_modifiers_done:
+  bra .repeat
+.done:
   plx
   pla
   rts
@@ -472,112 +472,112 @@ keyboard_decode:
   ; Branch to the handler code for the current state
   lda KEYBOARD_DECODE_STATE
   bit #KB_DECODE_PAUSE_SEQ
-  bne kb_state_pause
+  bne .state_pause
   bit #KB_DECODE_BREAK
-  bne kb_state_break
+  bne .state_break
   bit #KB_DECODE_EXTENDED
-  bne kb_state_extended
+  bne .state_extended
   ; Fall through to the initial state (waiting for first byte of sequence)
-kb_state_waiting:
+.state_waiting:
   cpx #KB_CODE_BREAK
-  beq kb_to_break
+  beq .to_break
   cpx #KB_CODE_EXTENDED
-  beq kb_to_extended
-  cpx kb_seq_pause              ; The first value in the pause key sequence
-  beq kb_to_pause
+  beq .to_extended
+  cpx kb_seq_pause             ; The first value in the pause key sequence
+  beq .to_pause
   ; No special codes identified so current byte is a single byte sequence
-  lda #0                        ; Emit non-extended make code
-  bra kb_decode_emit
+  lda #0                       ; Emit non-extended make code
+  bra .emit
 
 ; ---- Handlers for the states ----
 
 ; The pause state indicates we are recieving the 8 byte pause sequence
 ; A = current KEYBOARD_DECODE_STATE
-kb_state_pause:
+.state_pause:
   and #KB_DECODE_PAUSE_SEQ
   phx                          ; Stack <- latest byte from keyboard
   tax                          ; X <- index of current code in sequence
   pla                          ; A <- latest byte from keyboard
   cmp kb_seq_pause, X
-  bne kb_pause_error
+  bne .pause_error
   inx
   lda kb_seq_pause, X
-  beq kb_pause_emit            ; Branch if we reached the last code in sequence
+  beq .pause_emit              ; Branch if we reached the last code in sequence
   txa                          ; New pause seq index becomes new state
-  bra kb_decode_no_emit
-kb_pause_emit:
+  bra .no_emit
+.pause_emit:
   lda #0                       ; Emit pause as non-extended make code
   ldx #KB_CODE_PAUSE
-  bra kb_decode_emit
+  bra .emit
 ; A = latest byte from keyboard
-kb_pause_error:
+.pause_error:
   ; Reset state and reprocess with the current code
   tax
   lda #0
   sta KEYBOARD_DECODE_STATE
-  bra kb_state_waiting
+  bra .state_waiting
 
-kb_state_break:
+.state_break:
   bit #KB_DECODE_EXTENDED
-  bne kb_state_extended_break
+  bne .state_extended_break
   lda #KB_META_BREAK            ; Emit non-extended break code
-  bra kb_decode_emit
+  bra .emit
 
-kb_state_extended:
+.state_extended:
   cpx #KB_CODE_BREAK
-  beq kb_to_extended_break
+  beq .to_extended_break
   cpx #KB_CODE_EXTENDED_IGNORE
-  beq kb_decode_ignore
+  beq .ignore
   lda #KB_META_EXTENDED
-  bra kb_decode_emit
+  bra .emit
 
-kb_state_extended_break:
+.state_extended_break:
   cpx #KB_CODE_EXTENDED_IGNORE
-  beq kb_decode_ignore
+  beq .ignore
   lda #(KB_META_BREAK | KB_META_EXTENDED)
-  bra kb_decode_emit
+  bra .emit
 
 ; ---- State transitions ----
 
-kb_to_break:
+.to_break:
   lda #KB_DECODE_BREAK
-  bra kb_decode_no_emit
+  bra .no_emit
 
-kb_to_extended:
+.to_extended:
   lda #KB_DECODE_EXTENDED
-  bra kb_decode_no_emit
+  bra .no_emit
 
-kb_to_extended_break:
+.to_extended_break:
   lda #(KB_DECODE_EXTENDED | KB_DECODE_BREAK)
-  bra kb_decode_no_emit
+  bra .no_emit
 
-kb_to_pause:
+.to_pause:
   lda #%00000001                ; Start pause sequence counter at 1
-  bra kb_decode_no_emit
+  bra .no_emit
 
 ; ---- Exiting the routine with result or no result ----
 
 ; A = Metadata
 ; X = code
-kb_decode_emit:
+.emit:
   sta KEYBOARD_LATEST_META
   stx KEYBOARD_LATEST_CODE
   stz KEYBOARD_DECODE_STATE
   clc
-  bra kb_decode_done
+  bra .done
 
 ; Ignore current code and go back to initial state
-kb_decode_ignore:
+.ignore:
   lda #0
   ; Fall through
 
 ; A = new decode state
-kb_decode_no_emit:
+.no_emit:
   sta KEYBOARD_DECODE_STATE
   sec
   ; Fall through
 
-kb_decode_done:
+.done:
   plx
   rts
 
@@ -619,29 +619,29 @@ code_translate:
   sty TRANSLATE_TABLE + 1
   tax
   ldy #0
-  bra code_translate_loop_entry
-code_translate_loop:
+  bra .repeat_entry
+.repeat:
   iny
   iny
-code_translate_loop_entry:
+.repeat_entry:
   lda (TRANSLATE_TABLE), Y
-  beq code_translate_not_found
+  beq .not_found
   txa
   cmp (TRANSLATE_TABLE), Y
-  bne code_translate_loop
+  bne .repeat
   ; Code found
   iny
   lda (TRANSLATE_TABLE), Y
-  bra code_translate_done
-code_translate_not_found:
+  bra .done
+.not_found:
   txa
-code_translate_done:
+.done:
   rts
 
 
 ; On entry A contains the keyboard code
-; On exit  A contains the translated code or 0 if no translation available
-;          X, Y are preserved
+; On exit  Carry is set if no translation was found
+;          A contains the translated code if translation found
 keyboard_translate_code_lower:
   phx
   phy
@@ -654,7 +654,8 @@ keyboard_translate_code_lower:
 
 
 ; On entry A contains the keyboard code
-; On exit  A contains the translated code or 0 if no translation available
+; On exit  Carry is set if no translation was found
+;          A contains the translated code if translation found
 ;          X, Y are preserved
 keyboard_translate_code_upper:
   phx
@@ -676,19 +677,16 @@ table_lookup:
   stx TRANSLATE_TABLE
   sty TRANSLATE_TABLE + 1
   cmp (TRANSLATE_TABLE)
-  bcs table_lookup_no_match
-  phy
+  bcs .no_match                 ; Code is past the end of the table
   tay
   iny
   lda (TRANSLATE_TABLE), Y
-  ply
-  cmp #0
-  beq table_lookup_no_match
+  beq .no_match                 ; Table entry is zero
   clc
-  bra table_lookup_done
-table_lookup_no_match:
+  bra .done
+.no_match:
   sec
-table_lookup_done:
+.done:
   rts
 
 
@@ -697,10 +695,10 @@ table_lookup_done:
 ;          A is not preserved
 console_print_character_with_translation:
   cmp #ASCII_BACKSPACE
-  beq console_print_character_with_backspace_backspace
+  beq .backspace
   jsr translate_character_for_display
   jmp console_print_character ; tail call
-console_print_character_with_backspace_backspace:
+.backspace:
   jmp console_backspace ; tail call
 
 
@@ -725,19 +723,20 @@ console_print_binary:
   phy
 
   ldx #8
-console_print_binary_loop:
+.repeat:
   asl
   tay
-  bcs console_print_binary_one
+  bcs .binary_one
+; Binary zero
   lda #'0'
-  bra console_print_binary_continue
-console_print_binary_one:
+  bra .character_ready
+.binary_one:
   lda #'1'
-console_print_binary_continue:
+.character_ready:
   jsr console_print_character
   tya
   dex
-  bne console_print_binary_loop
+  bne .repeat
 
   ply
   plx
@@ -749,17 +748,17 @@ console_print_binary_continue:
 ; On exit  A is translated to the custom char code if applicable
 translate_character_for_display:
   cmp #ASCII_TILDE
-  beq translate_character_for_display_tilde
+  beq .tilde
   cmp #ASCII_BACKSLASH
-  beq translate_character_for_display_backslash
-  bra translate_character_for_display_done
-translate_character_for_display_tilde:
+  beq .backslash
+  bra .done
+.tilde:
   lda #CHARACTER_TILDE
-  bra translate_character_for_display_done
-translate_character_for_display_backslash:
+  bra .done
+.backslash:
   lda #CHARACTER_BACKSLASH
   ; fall through to done
-translate_character_for_display_done:
+.done:
   rts
 
 
@@ -778,13 +777,13 @@ create_character:
   jsr display_command
 
   ldy #0
-create_character_loop:
+.repeat:
   lda (CREATE_CHARACTER_PARAM), Y
   jsr display_character
 
   iny
   cpy #8
-  bne create_character_loop
+  bne .repeat
 
   rts
 
@@ -799,13 +798,13 @@ calculate_parity:
 
   ldy #0
   ldx #8
-calculate_parity_loop:
+.repeat:
   lsr
-  bcc calculate_parity_next
-  iny
-calculate_parity_next:
+  bcc .parity_updated           ; Current bit is 0 - do not increment parity
+  iny                           ; Current bit is 1 - increment parity
+.parity_updated:
   dex
-  bne calculate_parity_loop
+  bne .repeat
   tya
   lsr ; shift parity into carry flag
 
@@ -823,7 +822,7 @@ interrupt:
   sta IFR
 
   lda KEYBOARD_RECEIVING
-  beq interrupt_start_receiving
+  beq .start_receiving
   lda #PCR_CA2_IND_NEG_E
   sta PCR
   STZ KEYBOARD_RECEIVING
@@ -844,15 +843,15 @@ interrupt:
   tsb PORTA       ; Disable shift register output
 
   stx DDRB        ; Restore DDRB from X
-  bra interrupt_done
+  bra .done
 
-interrupt_start_receiving:
+.start_receiving:
   lda #PCR_CA2_IND_POS_E
   sta PCR
   lda #1
   sta KEYBOARD_RECEIVING
 
-interrupt_done:
+.done:
   plx
   pla
   rti
