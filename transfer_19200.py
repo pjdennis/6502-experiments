@@ -4,8 +4,9 @@ import pause
 from datetime import datetime, timedelta
 
 #port              = "/dev/tty.usbserial-1420"
-port              = "/dev/cu.SLAB_USBtoUART"
 #port              = "/dev/cu.usbserial-0001"
+port              = "/dev/cu.SLAB_USBtoUART"
+#port              = "/dev/cu.usbserial-1420"
 
 #baudrate         = 9600
 baudrate          = 19200
