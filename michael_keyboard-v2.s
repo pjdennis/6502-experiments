@@ -210,8 +210,6 @@ wait_for_send:
   jsr console_print_hex
   jsr simple_buffer_read
   jsr console_print_hex
-  jsr simple_buffer_read
-  jsr console_print_hex
   jsr console_show
 
 ; Read and display translated characters from the keyboard
@@ -840,18 +838,24 @@ interrupt:
   lda #SOEB
   trb PORTA       ; Enable shift register output
 
+  lda SENDING_TO_KEYBOARD
+  beq .not_sending
+;Sending
+  dec SENDING_TO_KEYBOARD
+  bne .done_checking_send ; Skip first interrupt which results from pulling clock low
+;Sent
   lda PORTB
   eor #$ff
   jsr simple_buffer_write
-
-  lda SENDING_TO_KEYBOARD
-  beq .done_checking_send
-  dec SENDING_TO_KEYBOARD
-  bne .done_checking_send
-
   lda PORTA
   and #(PARITY | ACK)
   eor #(PARITY | ACK)
+  jsr simple_buffer_write
+  bra .done_checking_send
+
+.not_sending:
+  lda PORTB
+  eor #$ff
   jsr simple_buffer_write
 
 .done_checking_send:
