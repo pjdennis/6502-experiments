@@ -62,6 +62,7 @@ KEYBOARD_DECODE_STATE   = $000e ; 1 byte
 KEYBOARD_MODIFIER_STATE = $000f ; 1 byte
 KEYBOARD_LATEST_META    = $0010 ; 1 byte
 KEYBOARD_LATEST_CODE    = $0011 ; 1 byte
+SENDING_TO_KEYBOARD     = $0012 ; 1 byte
 
 SIMPLE_BUFFER           = $0200 ; 256 bytes
 CONSOLE_TEXT            = $0300 ; CONSOLE_LENGTH (32) bytes
@@ -128,49 +129,6 @@ program_start:
   jsr console_initialize
   jsr simple_buffer_initialize
 
-;  ldx #0
-;reset_loop:
-;  lda #100
-;  jsr delay_hundredths
-;
-;  cpx #0
-;  beq reset_zero
-;  inx
-;  lda #"."
-;  bra reset_one
-;reset_zero:
-;  dex
-;  lda #" "
-;reset_one:
-;
-;  jsr console_print_character
-;  jsr console_show
-;
-  lda #(SOEB | SOLB)
-  sta PORTA
-  lda #KB_COMMAND_ENABLE
-  jsr calculate_parity
-  bcs odd_parity
-; even parity
-  lda PARITY
-  bra parity_mask_ready
-odd_parity:
-  lda #0
-parity_mask_ready:              ; Mask is in X
-  tsb PORTA
-  lda #KB_COMMAND_ENABLE
-  sta PORTB
-  lda #SOLB
-  trb PORTA
-  lda #1 ; 100 microseconds = 0.1 milliseconds = 1 1/10,000 of a second
-  jsr delay_10_thousandths
-  lda #SOLB
-  tsb PORTA
-  lda #(SOEB | SOLB)
-  sta PORTA
-
-;  bra reset_loop
-
   ; Create characters
   lda #CHARACTER_TILDE
   ldx #<character_data_tilde
@@ -203,6 +161,7 @@ parity_mask_ready:              ; Mask is in X
   jsr copy_memory
 
   stz KEYBOARD_RECEIVING
+  stz SENDING_TO_KEYBOARD
 
   ; Set up interrupts for detecting start of receipt of byte from keyboard
   lda #PCR_CA2_IND_NEG_E
@@ -213,6 +172,47 @@ parity_mask_ready:              ; Mask is in X
 
   ; Enable interrupts so we start recieving data from the keyboard
   cli
+
+  ; Send command to keyboard
+  lda #2
+  sta SENDING_TO_KEYBOARD
+
+  lda #(SOEB | SOLB)
+  sta PORTA
+  ldx #KB_COMMAND_ENABLE
+  txa
+  jsr calculate_parity
+  bcs odd_parity
+; even parity
+  lda PARITY
+  bra parity_mask_ready
+odd_parity:
+  lda #0
+parity_mask_ready:              ; Mask is in A
+  tsb PORTA
+  stx PORTB
+  lda #SOLB
+  trb PORTA
+  lda #1 ; 100 microseconds = 0.1 milliseconds = 1 1/10,000 of a second
+  jsr delay_10_thousandths
+  lda #SOLB
+  tsb PORTA
+  lda #(SOEB | SOLB)
+  sta PORTA
+
+  ; Wait for send to complete
+wait_for_send:
+  lda SENDING_TO_KEYBOARD
+  bne wait_for_send
+
+  ; Read data from buffer and write to screen
+  jsr simple_buffer_read
+  jsr console_print_hex
+  jsr simple_buffer_read
+  jsr console_print_hex
+  jsr simple_buffer_read
+  jsr console_print_hex
+  jsr console_show
 
 ; Read and display translated characters from the keyboard
 get_char_loop:
@@ -844,6 +844,17 @@ interrupt:
   eor #$ff
   jsr simple_buffer_write
 
+  lda SENDING_TO_KEYBOARD
+  beq .done_checking_send
+  dec SENDING_TO_KEYBOARD
+  bne .done_checking_send
+
+  lda PORTA
+  and #(PARITY | ACK)
+  eor #(PARITY | ACK)
+  jsr simple_buffer_write
+
+.done_checking_send:
   lda #SOEB
   tsb PORTA       ; Disable shift register output
 
