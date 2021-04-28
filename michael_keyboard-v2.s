@@ -193,15 +193,15 @@ program_start:
 led_cycle_loop:
   lda #KB_LED_CAPS_LOCK
   jsr keyboard_set_leds
-  lda #25
+  lda #20
   jsr delay_hundredths
   lda #KB_LED_NUM_LOCK
   jsr keyboard_set_leds
-  lda #25
+  lda #20
   jsr delay_hundredths
   lda #KB_LED_SCROLL_LOCK
   jsr keyboard_set_leds
-  lda #25
+  lda #20
   jsr delay_hundredths
   bra led_cycle_loop
 
