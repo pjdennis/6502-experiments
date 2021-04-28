@@ -185,11 +185,6 @@ program_start:
   ; Enable interrupts so we start recieving data from the keyboard
   cli
 
-
-  jmp initialize_keyboard_and_display_keystrokes
-
-
-;TODO not used
 led_cycle_loop:
   lda #KB_LED_CAPS_LOCK
   jsr keyboard_set_leds
@@ -205,8 +200,11 @@ led_cycle_loop:
   jsr delay_hundredths
   bra led_cycle_loop
 
-;TODO not used
-send_and_show_commands:
+
+  lda #KB_LED_CAPS_LOCK
+  jsr keyboard_set_leds
+  jmp simple_show_loop
+
   lda #KB_COMMAND_SET_LEDS
   jsr keyboard_send_command
 
@@ -239,11 +237,6 @@ wait_for_acknowledge:
   jsr console_show
 
   jmp simple_show_loop
-
-
-initialize_keyboard_and_display_keystrokes:
-  lda #KB_COMMAND_ENABLE
-  jsr keyboard_send_command
 
 ; Read and display translated characters from the keyboard
 get_char_loop:
@@ -728,12 +721,10 @@ keyboard_set_leds:
   tax
   lda #KB_COMMAND_SET_LEDS
   jsr keyboard_send_command
-.wait_for_ack:
-  lda ACK_RECEIVED
-  beq .wait_for_ack
+  jsr keyboard_wait_for_ack
   txa
   jsr keyboard_send_command
-  ; Don't wait for second ACK
+;  jsr keyboard_wait_for_ack
   plx
   rts
 
@@ -753,7 +744,7 @@ keyboard_send_command:
   jsr calculate_parity
   bcs odd_parity
 ; even parity
-  lda #PARITY
+  lda PARITY
   bra parity_mask_ready
 odd_parity:
   lda #0
@@ -775,6 +766,16 @@ parity_mask_ready:              ; Mask is in A
   bne .wait_for_send
 
   plx
+  rts
+
+
+; On exit A, X, Y are preserved
+keyboard_wait_for_ack:
+  pha
+.wait:
+  lda ACK_RECEIVED
+  beq .wait
+  pla
   rts
 
 
@@ -942,16 +943,15 @@ interrupt:
   eor #(PARITY | ACK)
   sta SENT_PARITY_AND_ACK
   stz ACK_RECEIVED
+
   bra .done_checking_send
+
 .not_sending:
   lda PORTB
   eor #$ff
-  cmp #KB_COMMAND_ACK
-  beq .ack_received
-;Not ACK
   jsr simple_buffer_write
-  bra .done_checking_ack
-.ack_received:
+  cmp #KB_COMMAND_ACK
+  bne .done_checking_ack
   inc ACK_RECEIVED
 .done_checking_ack:
 .done_checking_send:
