@@ -242,6 +242,10 @@ wait_for_acknowledge:
 
 
 initialize_keyboard_and_display_keystrokes:
+  lda #">"
+  jsr console_print_character
+  jsr console_show
+
   lda #KB_COMMAND_ENABLE
   jsr keyboard_send_command
 
@@ -728,12 +732,10 @@ keyboard_set_leds:
   tax
   lda #KB_COMMAND_SET_LEDS
   jsr keyboard_send_command
-.wait_for_ack:
-  lda ACK_RECEIVED
-  beq .wait_for_ack
+  jsr keyboard_wait_for_ack
   txa
   jsr keyboard_send_command
-  ; Don't wait for second ACK
+  jsr keyboard_wait_for_ack
   plx
   rts
 
@@ -775,6 +777,16 @@ parity_mask_ready:              ; Mask is in A
   bne .wait_for_send
 
   plx
+  rts
+
+
+; On exit A, X, Y are preserved
+keyboard_wait_for_ack:
+  pha
+.wait:
+  lda ACK_RECEIVED
+  beq .wait
+  pla
   rts
 
 
