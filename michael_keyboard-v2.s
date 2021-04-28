@@ -817,6 +817,7 @@ calculate_parity:
 interrupt:
   pha
   phx
+  phy
 
   lda #%00000001  ; Clear the CA2 interrupt
   sta IFR
@@ -828,9 +829,13 @@ interrupt:
   STZ KEYBOARD_RECEIVING
 
   ldx DDRB        ; Save DDRB to X
+  ldy PORTA       ; Save current value of PORTA to Y
 
   lda #%00000000
   sta DDRB        ; Set PORTB to input
+
+  lda #(ACK | PARITY)
+  trb DDRA        ; Input from the ACK and parity bits
 
   lda #SOEB
   trb PORTA       ; Enable shift register output
@@ -842,6 +847,11 @@ interrupt:
   lda #SOEB
   tsb PORTA       ; Disable shift register output
 
+  lda #(RW | RS)
+  tsb DDRA        ; Restore display control bits to output
+
+  sty PORTA       ; Restore PORTA from Y
+
   stx DDRB        ; Restore DDRB from X
   bra .done
 
@@ -852,6 +862,7 @@ interrupt:
   sta KEYBOARD_RECEIVING
 
 .done:
+  ply
   plx
   pla
   rti

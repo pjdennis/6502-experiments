@@ -15,13 +15,14 @@ initialize_machine:
   ; Initialize output shift register
   lda #%11111111
   sta PORTB
-  lda #(SOEB | START | PARITY)
-  sta PORTA
-  lda #(SOEB | SOLB | START | PARITY)
-  sta PORTA
+  ; Toggle SOLB low then high to load data to output shift register
+  lda #SOLB
+  trb PORTA
+  tsb PORTA
 
-  lda #(SOEB | SOLB)
-  sta PORTA
+  ; Default the display bits to 0
+  lda #(RW | RS)
+  trb PORTA
 
   jmp program_start
 
