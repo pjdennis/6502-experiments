@@ -745,13 +745,15 @@ keyboard_set_leds:
 ;          A is not preserved
 keyboard_send_command:
   phx
+  phy
+  tax                           ; Save command byte in X
 
-  ldx #2
-  stx SENDING_TO_KEYBOARD
+  ldy PORTA                     ; Save PORTA value to Y
 
-  ldx #(SOEB | SOLB)
-  stx PORTA
-  tax                           ; Save the command byte in X
+  lda #(PARITY | START)
+  trb PORTA                     ; Clear parity and start bits
+
+  txa                           ; Retrieve command byte from X
   jsr calculate_parity
   bcs odd_parity
 ; even parity
@@ -763,19 +765,21 @@ parity_mask_ready:              ; Mask is in A
   tsb PORTA
   stx PORTB                     ; Command byte
   lda #SOLB
-  trb PORTA
+  trb PORTA                     ; Pull clock low
   lda #1 ; 100 microseconds = 0.1 milliseconds = 1 1/10,000 of a second
   jsr delay_10_thousandths
+  lda #2
+  sta SENDING_TO_KEYBOARD       ; Set flag to indicate we are sending
   lda #SOLB
-  tsb PORTA
-  lda #(SOEB | SOLB)
-  sta PORTA
+  tsb PORTA                     ; Allow clock to float high; latch output data
+  sty PORTA                     ; Restore PORTA
 
   ; Wait for send to complete
 .wait_for_send:
   lda SENDING_TO_KEYBOARD
   bne .wait_for_send
 
+  ply
   plx
   rts
 
