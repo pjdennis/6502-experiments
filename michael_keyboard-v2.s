@@ -88,7 +88,7 @@ CONSOLE_TEXT            = $0300 ; CONSOLE_LENGTH (32) bytes
   .include initialize_machine_v2.inc
   .include display_routines_8bit.inc
   .include convert_to_hex.inc
-  .include full_screen_console.inc
+  .include full_screen_console_flexible.inc
   .include simple_buffer.inc
   .include copy_memory.inc
   .include key_codes.inc
