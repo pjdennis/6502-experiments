@@ -2,84 +2,85 @@
 
   .include base_config_v2.inc
 
-INTERRUPT_ROUTINE       = $3f00
+INTERRUPT_ROUTINE        = $3f00
 
-KB_DECODE_BREAK         = %00010000
-KB_DECODE_EXTENDED      = %00001000
-KB_DECODE_PAUSE_SEQ     = %00000111
+KB_DECODE_BREAK          = %00010000
+KB_DECODE_EXTENDED       = %00001000
+KB_DECODE_PAUSE_SEQ      = %00000111
 
-KB_MOD_L_SHIFT          = %10000000
-KB_MOD_R_SHIFT          = %01000000
-KB_MOD_L_CTRL           = %00100000
-KB_MOD_R_CTRL           = %00010000
-KB_MOD_L_ALT            = %00001000
-KB_MOD_R_ALT            = %00000100
-KB_MOD_L_GUI            = %00000010
-KB_MOD_R_GUI            = %00000001
+KB_MOD_L_SHIFT           = %10000000
+KB_MOD_R_SHIFT           = %01000000
+KB_MOD_L_CTRL            = %00100000
+KB_MOD_R_CTRL            = %00010000
+KB_MOD_L_ALT             = %00001000
+KB_MOD_R_ALT             = %00000100
+KB_MOD_L_GUI             = %00000010
+KB_MOD_R_GUI             = %00000001
 
-KB_COMMAND_RESET        = $ff
-KB_COMMAND_ENABLE       = $f4
-KB_COMMAND_READ_ID      = $f2
-KB_COMMAND_ECHO         = $ee
-KB_COMMAND_SET_LEDS     = $ed
-KB_COMMAND_ACK          = $fa
+KB_COMMAND_SET_LEDS      = $ed
+KB_COMMAND_ECHO          = $ee
+KB_COMMAND_READ_ID       = $f2
+KB_COMMAND_SET_TYPEMATIC = $f3
+KB_COMMAND_ENABLE        = $f4
+KB_COMMAND_RESET         = $ff
+KB_COMMAND_ACK           = $fa
 
-KB_LED_SCROLL_LOCK      = %00000001
-KB_LED_NUM_LOCK         = %00000010
-KB_LED_CAPS_LOCK        = %00000100
+KB_LED_SCROLL_LOCK       = %00000001
+KB_LED_NUM_LOCK          = %00000010
+KB_LED_CAPS_LOCK         = %00000100
 
-KB_CODE_BREAK           = $f0
-KB_CODE_EXTENDED        = $e0
-KB_CODE_EXTENDED_IGNORE = $12
-KB_CODE_PAUSE           = $62
-KB_CODE_PRT_SCR         = $57
+KB_CODE_BREAK            = $f0
+KB_CODE_EXTENDED         = $e0
+KB_CODE_EXTENDED_IGNORE  = $12
+KB_CODE_PAUSE            = $62
+KB_CODE_PRT_SCR          = $57
 
-KB_CODE_L_SHIFT         = $12
-KB_CODE_R_SHIFT         = $59
-KB_CODE_L_CTRL          = $11
-KB_CODE_R_CTRL          = $58
-KB_CODE_L_ALT           = $19
-KB_CODE_R_ALT           = $39
-KB_CODE_L_GUI           = $8b
-KB_CODE_R_GUI           = $8c
+KB_CODE_L_SHIFT          = $12
+KB_CODE_R_SHIFT          = $59
+KB_CODE_L_CTRL           = $11
+KB_CODE_R_CTRL           = $58
+KB_CODE_L_ALT            = $19
+KB_CODE_R_ALT            = $39
+KB_CODE_L_GUI            = $8b
+KB_CODE_R_GUI            = $8c
 
-KB_META_SHIFT           = %10000000
-KB_META_CTRL            = %01000000
-KB_META_ALT             = %00100000
-KB_META_GUI             = %00010000
-KB_META_EXTENDED        = %00000010
-KB_META_BREAK           = %00000001
+KB_META_SHIFT            = %10000000
+KB_META_CTRL             = %01000000
+KB_META_ALT              = %00100000
+KB_META_GUI              = %00010000
+KB_META_EXTENDED         = %00000010
+KB_META_BREAK            = %00000001
 
-ASCII_BACKSPACE         = 0x08
-ASCII_TILDE             = 0x7e
-ASCII_BACKSLASH         = 0x5c
+ASCII_BACKSPACE          = 0x08
+ASCII_TILDE              = 0x7e
+ASCII_BACKSLASH          = 0x5c
 
-CHARACTER_TILDE         = 1
-CHARACTER_BACKSLASH     = 2
+CHARACTER_TILDE          = 1
+CHARACTER_BACKSLASH      = 2
 
-CP_M_DEST_P             = $0000 ; 2 bytes
-CP_M_SRC_P              = $0002 ; 2 bytes
-CP_M_LEN                = $0004 ; 2 bytes
-TRANSLATE_TABLE         = $0006 ; 2 bytes
-CREATE_CHARACTER_PARAM  = $0008 ; 2 bytes
-CONSOLE_CHARACTER_COUNT = $000a ; 1 byte
-SIMPLE_BUFFER_WRITE_PTR = $000b ; 1 byte
-SIMPLE_BUFFER_READ_PTR  = $000c ; 1 byte
-KEYBOARD_RECEIVING      = $000d ; 1 byte
-KEYBOARD_DECODE_STATE   = $000e ; 1 byte
-KEYBOARD_MODIFIER_STATE = $000f ; 1 byte
-KEYBOARD_LATEST_META    = $0010 ; 1 byte
-KEYBOARD_LATEST_CODE    = $0011 ; 1 byte
-SENDING_TO_KEYBOARD     = $0012 ; 1 byte
-SENT_BYTE               = $0013 ; 1 byte
-SENT_PARITY_AND_ACK     = $0014 ; 1 byte
-ACK_RECEIVED            = $0015 ; 1 byte
+CP_M_DEST_P              = $0000 ; 2 bytes
+CP_M_SRC_P               = $0002 ; 2 bytes
+CP_M_LEN                 = $0004 ; 2 bytes
+TRANSLATE_TABLE          = $0006 ; 2 bytes
+CREATE_CHARACTER_PARAM   = $0008 ; 2 bytes
+CONSOLE_CHARACTER_COUNT  = $000a ; 1 byte
+SIMPLE_BUFFER_WRITE_PTR  = $000b ; 1 byte
+SIMPLE_BUFFER_READ_PTR   = $000c ; 1 byte
+KEYBOARD_RECEIVING       = $000d ; 1 byte
+KEYBOARD_DECODE_STATE    = $000e ; 1 byte
+KEYBOARD_MODIFIER_STATE  = $000f ; 1 byte
+KEYBOARD_LATEST_META     = $0010 ; 1 byte
+KEYBOARD_LATEST_CODE     = $0011 ; 1 byte
+SENDING_TO_KEYBOARD      = $0012 ; 1 byte
+SENT_BYTE                = $0013 ; 1 byte
+SENT_PARITY_AND_ACK      = $0014 ; 1 byte
+ACK_RECEIVED             = $0015 ; 1 byte
 
-SIMPLE_BUFFER           = $0200 ; 256 bytes
-CONSOLE_TEXT            = $0300 ; CONSOLE_LENGTH (32) bytes
+SIMPLE_BUFFER            = $0200 ; 256 bytes
+CONSOLE_TEXT             = $0300 ; CONSOLE_LENGTH (32) bytes
 
-  .org $2000                    ; Loader loads programs to this address
-  jmp initialize_machine        ; Initialize hardware and then jump to program_start
+  .org $2000                     ; Loader loads programs to this address
+  jmp initialize_machine         ; Initialize hardware and then jump to program_start
 
   ; The initialize_machine routine in this include will set up hardware registers and then
   ; jump to program_start. We do not call a subroutine because for some machine designs the
@@ -247,6 +248,13 @@ initialize_keyboard_and_display_keystrokes:
   jsr console_show
 
   lda #KB_COMMAND_ENABLE
+  jsr keyboard_send_command
+  jsr keyboard_wait_for_ack
+
+  lda #KB_COMMAND_SET_TYPEMATIC
+  jsr keyboard_send_command
+  jsr keyboard_wait_for_ack
+  lda #0 ; Fastest rate (30 cps) + shortest delay (0.25 seconds)
   jsr keyboard_send_command
 
 ; Read and display translated characters from the keyboard
