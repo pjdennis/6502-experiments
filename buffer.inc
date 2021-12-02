@@ -53,17 +53,14 @@ buffer_read_from_non_empty:
 
 
 
-; read = 5; write = 5 => empty
-; read = 5; write = 6 => not empty
-; read = 5; write = 4 => not empty
-; read  <>  write     => not empty
+; Empty: READ_POS == WRITE_POS
 buffer_lock_not_empty:
   pha
   phx
 buffer_lock_not_empty_wait:
   jsr buffer_lock
-  lda BUFFER_READ_POS
-  cmp BUFFER_WRITE_POS
+  lda BUFFER_WRITE_POS
+  cmp BUFFER_READ_POS
   bne buffer_locked_not_empty
   jsr buffer_unlock
   lda #<1
@@ -76,20 +73,16 @@ buffer_locked_not_empty:
   rts
 
 
-; read = 5; write = 5 => not full; write - read = 0  (pl)
-; read = 5; write = 6 => not full; write - read = 1  (pl)
-; read = 5; write = 4 => full;     write - read = -1 (not pl)
-; read   >  write     => full
-; read - write;   bpl => full
-; compare read - write
+; Full:  READ_POS == WRITE_POS + 1
 buffer_lock_not_full:
   pha
   phx
 buffer_lock_not_full_wait:
   jsr buffer_lock
   lda BUFFER_WRITE_POS
+  inc
   cmp BUFFER_READ_POS
-  bpl buffer_locked_not_full
+  bne buffer_locked_not_full
   jsr buffer_unlock
   lda #<1
   ldx #>1
