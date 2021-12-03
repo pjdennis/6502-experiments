@@ -2,10 +2,10 @@
 
 DISPLAY_STRING_PARAM  = $00 ; 2 bytes
 
-number  = $0200 ; 2 bytes
-value   = $0202 ; 2 bytes
-mod10   = $0204 ; 1 byte
-message = $0205 ; 6 bytes
+number  = $0200 ; 3 bytes
+value   = $0203 ; 3 bytes
+mod10   = $0206 ; 1 byte
+message = $0207 ; 9 bytes
 
   .org $2000
   jmp program_entry
@@ -16,6 +16,7 @@ message = $0205 ; 6 bytes
 program_entry:
   stz number
   stz number + 1
+  stz number + 2
 
 outer_loop:
   jsr clear_display
@@ -27,6 +28,8 @@ loop:
   inc number
   bne loop
   inc number + 1
+  bne loop
+  inc number + 2
   bne loop
   bra outer_loop
 
@@ -41,17 +44,20 @@ show_decimal:
   sta value
   lda number + 1
   sta value + 1
+  lda number + 2
+  sta value + 2
 
 divide:
   ; Initialize the remainder to be zero
   stz mod10
   clc
 
-  ldx #16
+  ldx #24
 divloop:
   ; Rotate quotient and remainder
   rol value
   rol value + 1
+  rol value + 2
   rol mod10
 
   ; a = dividend - divisor
@@ -66,9 +72,10 @@ ignore_result:
   bne divloop
   rol value
   rol value + 1
+  rol value + 2
 
   ; Shift message
-  ldy #5
+  ldy #8
 shift_loop:
   lda message-1,Y
   sta message,Y
@@ -84,6 +91,7 @@ shift_loop:
   ; If value != 0 then continue dividing
   lda value
   ora value + 1
+  ora value + 2
   bne divide
 
   lda #<message
