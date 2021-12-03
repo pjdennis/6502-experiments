@@ -4,10 +4,9 @@ TO_DECIMAL_VALUE = TO_DECIMAL_PARAM + 0  ; 2 bytes
 TO_DECIMAL_MOD10 = TO_DECIMAL_PARAM + 2  ; 1 byte
 TO_DECIMAL_RESULT = TO_DECIMAL_MOD10 + 1 ; 6 bytes
 
-; On entry A,X = low, high bytes of value to convert
-; On exit TO_DECIMAL_RESULT contains the result string
+; On entry A, X = low, high bytes of value to convert
+; On exit A, X point to the result
 ;         Y is preserved
-;         A,X point to the result
 to_decimal:
   ; Initialize result to empty string
   stz TO_DECIMAL_RESULT

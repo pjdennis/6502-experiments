@@ -41,7 +41,7 @@ INTERRUPT_ROUTINE      = $3f00
 
   .include display_string.inc
   .include display_hex_indirect.inc
-  .include to_decimal.inc
+  .include display_decimal.inc
   .include copy_memory.inc
 
 loading_message:          asciiz 'Load 0000 / '
@@ -115,8 +115,7 @@ program_start:
 clock_freq_mhz = CLOCK_FREQ_KHZ / 1000
   lda #<clock_freq_mhz
   ldx #>clock_freq_mhz
-  jsr to_decimal
-  jsr display_string
+  jsr display_decimal
 
   lda #<mhz_message
   ldx #>mhz_message
@@ -124,8 +123,7 @@ clock_freq_mhz = CLOCK_FREQ_KHZ / 1000
 
   lda #<BPS_HUNDREDS
   ldx #>BPS_HUNDREDS
-  jsr to_decimal
-  jsr display_string
+  jsr display_decimal
 
   lda #<bps_message
   ldx #>bps_message
