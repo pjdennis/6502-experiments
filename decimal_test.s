@@ -2,9 +2,10 @@
 
 DISPLAY_STRING_PARAM  = $00 ; 2 bytes
 
-value = $0200 ; 2 bytes
-mod10 = $0202 ; 1 byte
-message = $0203 ; 6 bytes
+number  = $0200 ; 2 bytes
+value   = $0202 ; 2 bytes
+mod10   = $0204 ; 1 byte
+message = $0205 ; 6 bytes
 
   .org $2000
   jmp program_entry
@@ -13,7 +14,24 @@ message = $0203 ; 6 bytes
   .include display_string.inc
 
 program_entry:
+  stz number
+  stz number + 1
+
+outer_loop:
   jsr clear_display
+
+loop:
+  lda #DISPLAY_FIRST_LINE
+  jsr move_cursor
+  jsr show_decimal
+  inc number
+  bne loop
+  inc number + 1
+  bne loop
+  bra outer_loop
+
+
+show_decimal:
 
   ; Initialize message to empty string
   stz message
@@ -72,7 +90,4 @@ shift_loop:
   ldx #>message
   jsr display_string
 
-  stp ; Halt the CPU
-
-
-number: .word 1729
+  rts
