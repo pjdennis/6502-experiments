@@ -2,6 +2,7 @@ CLOCK_FREQ_KHZ    = 5000
 
 ; PORTA assignments
 BANK_MASK         = %00001111
+SD_CSB            = %10000000
 
 BANK_START        = %00000100
 BANK_STOP         = %00010000
