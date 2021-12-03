@@ -25,8 +25,9 @@ CHECKSUM_VALUE             = $0a  ; 2 bytes
 CP_M_DEST_P                = $0c  ; 2 bytes
 CP_M_SRC_P                 = $0e  ; 2 bytes
 CP_M_LEN                   = $10  ; 2 bytes
-WAITING_FOR_SHIFT          = $12
-TEMP                       = $13
+WAITING_FOR_SHIFT          = $12  ; 1 byte
+TEMP                       = $13  ; 1 byte
+TO_DECIMAL_PARAM           = $14  ; 9 bytes
 
 TRANSLATE              = $0200
 INTERRUPT_ROUTINE      = $3f00
@@ -40,10 +41,13 @@ INTERRUPT_ROUTINE      = $3f00
 
   .include display_string.inc
   .include display_hex_indirect.inc
+  .include to_decimal.inc
   .include copy_memory.inc
 
 loading_message:          asciiz 'Load 0000 / '
 checksum_failed_message:  asciiz 'Checksum failed!'
+mhz_message:              asciiz 'Mhz '
+bps_message:              asciiz '00bps'
 
 program_start:
   ldx #$ff ; Initialize stack
@@ -103,6 +107,28 @@ program_start:
 
   lda #<ready_message
   ldx #>ready_message
+  jsr display_string
+
+  lda #DISPLAY_SECOND_LINE
+  jsr move_cursor
+
+clock_freq_mhz = CLOCK_FREQ_KHZ / 1000
+  lda #<clock_freq_mhz
+  ldx #>clock_freq_mhz
+  jsr to_decimal
+  jsr display_string
+
+  lda #<mhz_message
+  ldx #>mhz_message
+  jsr display_string
+
+  lda #<BPS_HUNDREDS
+  ldx #>BPS_HUNDREDS
+  jsr to_decimal
+  jsr display_string
+
+  lda #<bps_message
+  ldx #>bps_message
   jsr display_string
 
 wait_for_length:
