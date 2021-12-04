@@ -16,3 +16,11 @@ move_cursor:
   ora #CMD_SET_DDRAM_ADDRESS
   jmp display_command        ; tail call
 
+
+; On exit A, X, Y preserved
+display_space:
+  pha
+  lda #' '
+  jsr display_character
+  pla
+  rts
