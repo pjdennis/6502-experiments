@@ -1,7 +1,6 @@
-DELAY = $e000
+DELAY = $0100
 
 DISPLAY_STRING_PARAM    = $00 ; 2 bytes
-TIMER_DONE              = $02 ; 1 byte
 
 TIMER_LOW               = $03 ; 1 byte
 TIMER_HIGH              = $04 ; 1 byte
@@ -9,18 +8,21 @@ TIMER_OVERRUN_LOW       = $05 ; 1 byte
 TIMER_OVERRUN_HIGH      = $06 ; 1 byte
 NEW_DELAY_LOW           = $07 ; 1 byte
 NEW_DELAY_HIGH          = $08 ; 1 byte
-INT_COUNT_LOW           = $09 ; 1 byte
-INT_COUNT_HIGH          = $0a ; 1 byte
+T2_INT_COUNT_LOW        = $09 ; 1 byte
+T2_INT_COUNT_HIGH       = $0a ; 1 byte
+T1_INT_COUNT_LOW        = $0b ; 1 byte
+T1_INT_COUNT_HIGH       = $0c ; 1 byte
 
-TIMER_LOW_COPY          = $0b ; 1 byte
-TIMER_HIGH_COPY         = $0c ; 1 byte
-TIMER_OVERRUN_LOW_COPY  = $0d ; 1 byte
-TIMER_OVERRUN_HIGH_COPY = $0e ; 1 byte
-NEW_DELAY_LOW_COPY      = $0f ; 1 byte
-NEW_DELAY_HIGH_COPY     = $10 ; 1 byte
-INT_COUNT_LOW_COPY      = $11 ; 1 byte
-INT_COUNT_HIGH_COPY     = $12 ; 1 byte
-
+TIMER_LOW_COPY          = $0d ; 1 byte
+TIMER_HIGH_COPY         = $0e ; 1 byte
+TIMER_OVERRUN_LOW_COPY  = $0f ; 1 byte
+TIMER_OVERRUN_HIGH_COPY = $10 ; 1 byte
+NEW_DELAY_LOW_COPY      = $11 ; 1 byte
+NEW_DELAY_HIGH_COPY     = $12 ; 1 byte
+T2_INT_COUNT_LOW_COPY   = $13 ; 1 byte
+T2_INT_COUNT_HIGH_COPY  = $14 ; 1 byte
+T1_INT_COUNT_LOW_COPY   = $15 ; 1 byte
+T1_INT_COUNT_HIGH_COPY  = $16 ; 1 byte
 
   .include base_config_v1.inc
 
@@ -35,36 +37,32 @@ INT_COUNT_HIGH_COPY     = $12 ; 1 byte
   ldx #>start_message
   jsr display_string
 
-  stz INT_COUNT_LOW
-  stz INT_COUNT_HIGH
-  stz TIMER_DONE
+  stz T2_INT_COUNT_LOW
+  stz T2_INT_COUNT_HIGH
+  stz T1_INT_COUNT_LOW
+  stz T1_INT_COUNT_HIGH
 
-  lda #0 ; Timer 2 one shot run mode
+  lda #(ACR_T1_CONT | ACR_T2_TIMED) ; Timer 1 continuous; timer 2 one shot run mode
   sta ACR
+
+  lda #<(DELAY - 2)
+  sta T1CL
+  lda #>(DELAY - 2)
+  sta T1CH
 
   lda #<DELAY
   sta T2CL
   lda #>DELAY
   sta T2CH
 
-  lda #(IERSETCLEAR | IT2) ; Enable timer 2 interrupts
+  lda #(IERSETCLEAR | IT1 | IT2) ; Enable timer 1 and 2 interrupts
   sta IER
 
   cli
 
 loop:
-wait:
-  sei
-  nop
-  nop
-  lda TIMER_DONE
-  cli
-  beq wait
-
   ; Copy data that is set by interrupt routines and reset timer done
   sei
-  stz TIMER_DONE
-
   lda TIMER_HIGH
   sta TIMER_HIGH_COPY
   lda TIMER_LOW
@@ -80,18 +78,30 @@ wait:
   lda NEW_DELAY_LOW
   sta NEW_DELAY_LOW_COPY
 
-  lda INT_COUNT_LOW
-  sta INT_COUNT_LOW_COPY
-  lda INT_COUNT_HIGH
-  sta INT_COUNT_HIGH_COPY
+  lda T2_INT_COUNT_LOW
+  sta T2_INT_COUNT_LOW_COPY
+  lda T2_INT_COUNT_HIGH
+  sta T2_INT_COUNT_HIGH_COPY
+
+  lda T1_INT_COUNT_LOW
+  sta T1_INT_COUNT_LOW_COPY
+  lda T1_INT_COUNT_HIGH
+  sta T1_INT_COUNT_HIGH_COPY
   cli
 
-  lda #DISPLAY_FIRST_LINE + 8
+  lda #DISPLAY_FIRST_LINE + 7
   jsr move_cursor
 
-  lda INT_COUNT_HIGH_COPY
+  lda T2_INT_COUNT_HIGH_COPY
   jsr display_hex
-  lda INT_COUNT_LOW_COPY
+  lda T2_INT_COUNT_LOW_COPY
+  jsr display_hex
+
+  jsr display_space
+
+  lda T1_INT_COUNT_HIGH_COPY
+  jsr display_hex
+  lda T1_INT_COUNT_LOW_COPY
   jsr display_hex
 
   lda #DISPLAY_SECOND_LINE + 0
@@ -120,17 +130,31 @@ wait:
 delay1:
   ldy #0
 delay2:
-  nop
-  nop
+  pha
+  pla
+  pha
+  pla
+  pha
+  pla
+  pha
+  pla
+  pha
+  pla
+  pha
+  pla
+  pha
+  pla
+  pha
+  pla
   dey
   bne delay2
   dex
   bne delay1
 
-  bra loop
+  jmp loop
 
 
-start_message: asciiz "Start.."
+start_message: asciiz "Start."
 done_message:  asciiz " Done: "
 
 
@@ -139,10 +163,12 @@ interrupt:
   phx
   phy
 
+  lda #IT2
+  bit IFR
+  beq not_timer_2
 
-READ_OFFSET = -3
-START_OFFSET = 1
-RESTART_CYCLES = 33 + READ_OFFSET + START_OFFSET
+RESTART_OFFSET = 1
+RESTART_CYCLES = 33 + RESTART_OFFSET
 
   ; Read from timer low counter which also clears the interrupt
   ldx T2CL               ; *4 cycles - value read (when?)
@@ -192,12 +218,24 @@ ADJUSTED_DELAY = DELAY - RESTART_CYCLES
   sbc TIMER_HIGH
   sta TIMER_OVERRUN_HIGH
 
-  inc INT_COUNT_LOW
-  bne inc_done
-  inc INT_COUNT_HIGH
-inc_done:
+  inc T2_INT_COUNT_LOW
+  bne inc_t2_count_done
+  inc T2_INT_COUNT_HIGH
+inc_t2_count_done:
 
-  inc TIMER_DONE
+not_timer_2:
+  lda #IT1
+  bit IFR
+  beq not_timer_1
+
+  sta IFR ; Clear T1 interrupt
+
+  inc T1_INT_COUNT_LOW
+  bne inc_t1_count_done
+  inc T1_INT_COUNT_HIGH
+inc_t1_count_done:
+
+not_timer_1:
 
   ply
   plx
