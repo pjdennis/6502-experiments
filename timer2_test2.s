@@ -1,14 +1,10 @@
-DELAY = 100
+  .include base_config_v1.inc
+
+DELAY = CLOCK_FREQ_KHZ / 10 ; 100 microseconds
 
 DISPLAY_STRING_PARAM    = $00 ; 2 bytes
-
-T2_INT_COUNT_LOW        = $09 ; 1 byte
-T2_INT_COUNT_HIGH       = $0a ; 1 byte
-
-T2_INT_COUNT_LOW_COPY   = $13 ; 1 byte
-T2_INT_COUNT_HIGH_COPY  = $14 ; 1 byte
-
-  .include base_config_v1.inc
+COUNTER                 = $02 ; 4 bytes
+COUNTER_COPY            = $06 ; 4 bytes
 
   .org $2000
 
@@ -17,12 +13,14 @@ T2_INT_COUNT_HIGH_COPY  = $14 ; 1 byte
   lda #>interrupt
   sta RAM_IRQ_VECTOR + 1
 
+  stz COUNTER + 0
+  stz COUNTER + 1
+  stz COUNTER + 2
+  stz COUNTER + 3
+
   lda #<start_message
   ldx #>start_message
   jsr display_string
-
-  stz T2_INT_COUNT_LOW
-  stz T2_INT_COUNT_HIGH
 
   lda #ACR_T2_TIMED ; Timer 2 one shot run mode
   sta ACR
@@ -40,27 +38,32 @@ T2_INT_COUNT_HIGH_COPY  = $14 ; 1 byte
 loop:
   ; Copy data that is set by interrupt routines and reset timer done
   sei
-  ldx T2_INT_COUNT_LOW
-  ldy T2_INT_COUNT_HIGH
+  lda COUNTER
+  sta COUNTER_COPY
+  lda COUNTER + 1
+  ldx COUNTER + 2
+  ldy COUNTER + 3
   cli
-
-  stx T2_INT_COUNT_LOW_COPY
-  sty T2_INT_COUNT_HIGH_COPY
+  sta COUNTER_COPY + 1
+  stx COUNTER_COPY + 2
+  sty COUNTER_COPY + 3
 
   lda #DISPLAY_FIRST_LINE + 7
   jsr move_cursor
 
-  lda T2_INT_COUNT_HIGH_COPY
+  lda COUNTER_COPY + 3
   jsr display_hex
-  lda T2_INT_COUNT_LOW_COPY
+  lda COUNTER_COPY + 2
+  jsr display_hex
+  lda COUNTER_COPY + 1
+  jsr display_hex
+  lda COUNTER_COPY + 0
   jsr display_hex
 
   ldx #0
 delay1:
   ldy #0
 delay2:
-  pha
-  pla
   dey
   bne delay2
   dex
@@ -108,10 +111,14 @@ ADJUSTED_DELAY = DELAY - RESTART_CYCLES
   adc #>ADJUSTED_DELAY   ; *2 cycles
   sta T2CH               ; *4 cycles - restart timer (when?)
 
-  inc T2_INT_COUNT_LOW
-  bne inc_t2_count_done
-  inc T2_INT_COUNT_HIGH
-inc_t2_count_done:
+  inc COUNTER
+  bne inc_counter_done
+  inc COUNTER + 1
+  bne inc_counter_done
+  inc COUNTER + 2
+  bne inc_counter_done
+  inc COUNTER + 3
+inc_counter_done:
 
   ply
   plx
