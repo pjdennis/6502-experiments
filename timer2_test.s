@@ -1,14 +1,25 @@
 DELAY = $e000
 
-DISPLAY_STRING_PARAM = $00 ; 2 bytes
-TIMER_DONE           = $02 ; 1 byte
-TIMER_LOW            = $03 ; 1 byte
-TIMER_HIGH_RAW       = $04 ; 1 byte
-TIMER_HIGH_ADJUSTED  = $05 ; 1 byte
-TIMER_OVERRUN_LOW    = $06 ; 1 byte
-TIMER_OVERRUN_HIGH   = $07 ; 1 byte
-NEW_DELAY_LOW        = $08 ; 1 byte
-NEW_DELAY_HIGH       = $09 ; 1 byte
+DISPLAY_STRING_PARAM    = $00 ; 2 bytes
+TIMER_DONE              = $02 ; 1 byte
+
+TIMER_LOW               = $03 ; 1 byte
+TIMER_HIGH              = $04 ; 1 byte
+TIMER_OVERRUN_LOW       = $05 ; 1 byte
+TIMER_OVERRUN_HIGH      = $06 ; 1 byte
+NEW_DELAY_LOW           = $07 ; 1 byte
+NEW_DELAY_HIGH          = $08 ; 1 byte
+INT_COUNT_LOW           = $09 ; 1 byte
+INT_COUNT_HIGH          = $0a ; 1 byte
+
+TIMER_LOW_COPY          = $0b ; 1 byte
+TIMER_HIGH_COPY         = $0c ; 1 byte
+TIMER_OVERRUN_LOW_COPY  = $0d ; 1 byte
+TIMER_OVERRUN_HIGH_COPY = $0e ; 1 byte
+NEW_DELAY_LOW_COPY      = $0f ; 1 byte
+NEW_DELAY_HIGH_COPY     = $10 ; 1 byte
+INT_COUNT_LOW_COPY      = $11 ; 1 byte
+INT_COUNT_HIGH_COPY     = $12 ; 1 byte
 
 
   .include base_config_v1.inc
@@ -24,6 +35,8 @@ NEW_DELAY_HIGH       = $09 ; 1 byte
   ldx #>start_message
   jsr display_string
 
+  stz INT_COUNT_LOW
+  stz INT_COUNT_HIGH
   stz TIMER_DONE
 
   lda #0 ; Timer 2 one shot run mode
@@ -39,40 +52,82 @@ NEW_DELAY_HIGH       = $09 ; 1 byte
 
   cli
 
+loop:
 wait:
+  sei
+  nop
+  nop
   lda TIMER_DONE
+  cli
   beq wait
 
-  lda #<done_message
-  ldx #>done_message
-  jsr display_string
+  ; Copy data that is set by interrupt routines and reset timer done
+  sei
+  stz TIMER_DONE
 
-  lda TIMER_HIGH_RAW
-  jsr display_hex
-
-  lda #DISPLAY_SECOND_LINE
-  jsr move_cursor
-
-  lda TIMER_HIGH_ADJUSTED
-  jsr display_hex
+  lda TIMER_HIGH
+  sta TIMER_HIGH_COPY
   lda TIMER_LOW
-  jsr display_hex
-
-  jsr display_space
+  sta TIMER_LOW_COPY
 
   lda TIMER_OVERRUN_HIGH
-  jsr display_hex
+  sta TIMER_OVERRUN_HIGH_COPY
   lda TIMER_OVERRUN_LOW
+  sta TIMER_OVERRUN_LOW_COPY
+
+  lda NEW_DELAY_HIGH
+  sta NEW_DELAY_HIGH_COPY
+  lda NEW_DELAY_LOW
+  sta NEW_DELAY_LOW_COPY
+
+  lda INT_COUNT_LOW
+  sta INT_COUNT_LOW_COPY
+  lda INT_COUNT_HIGH
+  sta INT_COUNT_HIGH_COPY
+  cli
+
+  lda #DISPLAY_FIRST_LINE + 8
+  jsr move_cursor
+
+  lda INT_COUNT_HIGH_COPY
+  jsr display_hex
+  lda INT_COUNT_LOW_COPY
+  jsr display_hex
+
+  lda #DISPLAY_SECOND_LINE + 0
+  jsr move_cursor
+
+  lda TIMER_HIGH_COPY
+  jsr display_hex
+  lda TIMER_LOW_COPY
   jsr display_hex
 
   jsr display_space
 
-  lda NEW_DELAY_HIGH
+  lda TIMER_OVERRUN_HIGH_COPY
   jsr display_hex
-  lda NEW_DELAY_LOW
+  lda TIMER_OVERRUN_LOW_COPY
   jsr display_hex
 
-  stp
+  jsr display_space
+
+  lda NEW_DELAY_HIGH_COPY
+  jsr display_hex
+  lda NEW_DELAY_LOW_COPY
+  jsr display_hex
+
+  ldx #0
+delay1:
+  ldy #0
+delay2:
+  nop
+  nop
+  dey
+  bne delay2
+  dex
+  bne delay1
+
+  bra loop
 
 
 start_message: asciiz "Start.."
@@ -84,56 +139,63 @@ interrupt:
   phx
   phy
 
-  ; When iterations = 1; TIMER_LOW reads as E4 (228 decimal)
-  ; 5 Cycles per iteration means 228 / 5 = 45
-  ; 228 - 45 * 5 = 3 so we would expect to read as FE 03 (confirmed)
-  ; 228 - 44 * 5 = 8 so we would expect to read as FF 08 (confirmed)
-  ; 44 with 2 extra noops that adds four cycles so FF 04 (confirmed)
-  ; 45 with 2 extra noops that adds four cycles so FE FF (confirmed)
 
-  nop
-  nop
+READ_OFFSET = -3
+START_OFFSET = 1
+RESTART_CYCLES = 33 + READ_OFFSET + START_OFFSET
 
-  ldy #(1 + 45)
-delay:       ; 5 cycles per iteration
-  dey        ; 2 cycles
-  bne delay  ; 3 cycles when taken
+  ; Read from timer low counter which also clears the interrupt
+  ldx T2CL               ; *4 cycles - value read (when?)
+  ldy T2CH               ; *4 cycles
 
-  lda T2CL ; Read from timer low counter which also clears the interrupt
-  ldx T2CH
-  sta TIMER_LOW
-  stx TIMER_HIGH_RAW
-
-  ; Check if timer low is in range 0..3
-  and #%11111100         ; Adjust         No Adjust
-  bne timer_no_adjust    ; 2 cycles       3 cycles
-  inx                    ; 2 cycles       -
-  bra timer_ok           ; 3 cycles       -
+  ; Adjust timer high if timer low is in range 0..3
+  txa                    ; *2 cycles
+  and #%11111100         ; *2 cycles 
+                         ;   Adjust         No Adjust
+  bne timer_no_adjust    ;   2 cycles       3 cycles
+  iny                    ;   2 cycles       -
+  bra timer_ok           ;   3 cycles       -
 timer_no_adjust:         ;
-  nop                    ; -              2 cycles
-  nop                    ; -              2 cycles
-                         ; 7 total        7 total
+  nop                    ;   -              2 cycles
+  nop                    ;   -              2 cycles
+                         ; *7 cycles total
 timer_ok:
-  stx TIMER_HIGH_ADJUSTED
+
+ADJUSTED_DELAY = DELAY - RESTART_CYCLES
+
+  clc                    ; *2 cycles
+  txa                    ; *2 cycles
+  adc #<ADJUSTED_DELAY   ; *2 cycles
+  sta T2CL               ; *4 cycles
+  tya                    ; *2 cycles
+  adc #>ADJUSTED_DELAY  ; *2 cycles
+  sta T2CH               ; *4 cycles - restart timer (when?)
+
+  ; Store timer as read
+  stx TIMER_LOW
+  sty TIMER_HIGH
+
+  ; store new delay (repetition of the calculation above)
+  clc
+  txa
+  adc #<ADJUSTED_DELAY
+  sta NEW_DELAY_LOW
+  tya
+  adc  #>ADJUSTED_DELAY
+  sta NEW_DELAY_HIGH
 
   sec
   lda #0
   sbc TIMER_LOW
   sta TIMER_OVERRUN_LOW
   lda #0
-  sbc TIMER_HIGH_ADJUSTED
+  sbc TIMER_HIGH
   sta TIMER_OVERRUN_HIGH
 
-RESTART_CYCLES = 1
-ADJUSTED_DELAY = DELAY - RESTART_CYCLES
-
-  clc
-  lda #<ADJUSTED_DELAY
-  adc TIMER_LOW
-  sta NEW_DELAY_LOW
-  lda #>ADJUSTED_DELAY
-  adc TIMER_HIGH_ADJUSTED
-  sta NEW_DELAY_HIGH
+  inc INT_COUNT_LOW
+  bne inc_done
+  inc INT_COUNT_HIGH
+inc_done:
 
   inc TIMER_DONE
 
