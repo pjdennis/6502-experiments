@@ -69,11 +69,6 @@ ADJUSTED_DELAY = DELAY - RESTART_CYCLES
   adc #>ADJUSTED_DELAY   ; *2 cycles
   sta T2CH               ; *4 cycles - restart timer (when?)
 
-;  inc T2_INT_COUNT_LOW
-;  bne inc_t2_count_done
-;  inc T2_INT_COUNT_HIGH
-;inc_t2_count_done:
-
   ply
   plx
   pla
