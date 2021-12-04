@@ -1,10 +1,19 @@
   .include base_config_v1.inc
 
-DELAY = CLOCK_FREQ_KHZ / 10 ; 100 microseconds
+JIFFY_HZ = 500
+
+DELAY = CLOCK_FREQ_KHZ / JIFFY_HZ * 1000
 
 DISPLAY_STRING_PARAM    = $00 ; 2 bytes
 COUNTER                 = $02 ; 4 bytes
 COUNTER_COPY            = $06 ; 4 bytes
+JIFFY_COUNTER           = $0a ; 2 bytes
+SECONDS_COUNTER         = $0c ; 1 byte
+MINUTES_COUNTER         = $0d ; 1 byte
+HOURS_COUNTER           = $0e ; 1 byte
+SECONDS_COUNTER_COPY    = $0f ; 1 byte
+MINUTES_COUNTER_COPY    = $10 ; 1 byte
+HOURS_COUNTER_COPY      = $11 ; 1 byte
 
   .org $2000
 
@@ -17,6 +26,15 @@ COUNTER_COPY            = $06 ; 4 bytes
   stz COUNTER + 1
   stz COUNTER + 2
   stz COUNTER + 3
+
+  stz JIFFY_COUNTER + 0
+  stz JIFFY_COUNTER + 1
+  lda #17
+  sta HOURS_COUNTER
+  lda #10
+  sta MINUTES_COUNTER
+  lda #00
+  sta SECONDS_COUNTER
 
   lda #<start_message
   ldx #>start_message
@@ -38,15 +56,21 @@ COUNTER_COPY            = $06 ; 4 bytes
 loop:
   ; Copy data that is set by interrupt routines and reset timer done
   sei
-  lda COUNTER
-  sta COUNTER_COPY
-  lda COUNTER + 1
-  ldx COUNTER + 2
-  ldy COUNTER + 3
-  cli
+  lda COUNTER      + 0
+  sta COUNTER_COPY + 0
+  lda COUNTER      + 1
   sta COUNTER_COPY + 1
-  stx COUNTER_COPY + 2
-  sty COUNTER_COPY + 3
+  lda COUNTER      + 2
+  sta COUNTER_COPY + 2
+  lda COUNTER      + 3
+  sta COUNTER_COPY + 3
+  lda SECONDS_COUNTER
+  sta SECONDS_COUNTER_COPY
+  lda MINUTES_COUNTER
+  sta MINUTES_COUNTER_COPY
+  lda HOURS_COUNTER
+  sta HOURS_COUNTER_COPY
+  cli
 
   lda #DISPLAY_FIRST_LINE + 7
   jsr move_cursor
@@ -58,6 +82,19 @@ loop:
   lda COUNTER_COPY + 1
   jsr display_hex
   lda COUNTER_COPY + 0
+  jsr display_hex
+
+  lda #DISPLAY_SECOND_LINE
+  jsr move_cursor
+  lda HOURS_COUNTER_COPY
+  jsr display_hex
+  lda #':'
+  jsr display_character
+  lda MINUTES_COUNTER_COPY
+  jsr display_hex
+  lda #':'
+  jsr display_character
+  lda SECONDS_COUNTER_COPY
   jsr display_hex
 
   ldx #0
@@ -111,7 +148,7 @@ ADJUSTED_DELAY = DELAY - RESTART_CYCLES
   adc #>ADJUSTED_DELAY   ; *2 cycles
   sta T2CH               ; *4 cycles - restart timer (when?)
 
-  inc COUNTER
+  inc COUNTER + 0
   bne inc_counter_done
   inc COUNTER + 1
   bne inc_counter_done
@@ -119,6 +156,37 @@ ADJUSTED_DELAY = DELAY - RESTART_CYCLES
   bne inc_counter_done
   inc COUNTER + 3
 inc_counter_done:
+
+  ; increment jiffies
+  inc JIFFY_COUNTER + 0
+  bne inc_jiffy_counter_done
+  inc JIFFY_COUNTER + 1
+inc_jiffy_counter_done:
+  lda JIFFY_COUNTER + 0
+  cmp #<JIFFY_HZ
+  bne increment_done
+  lda JIFFY_COUNTER + 1
+  cmp #>JIFFY_HZ
+  bne increment_done
+  stz JIFFY_COUNTER + 0
+  stz JIFFY_COUNTER + 1
+  ; increment seconds
+  inc SECONDS_COUNTER
+  cmp #60
+  bne increment_done
+  stz SECONDS_COUNTER
+  ; increment minutes
+  inc MINUTES_COUNTER
+  cmp #60
+  bne increment_done
+  stz MINUTES_COUNTER
+  ; increment hours
+  inc HOURS_COUNTER
+  cmp #24
+  bne increment_done
+  stz HOURS_COUNTER
+
+increment_done:
 
   ply
   plx
