@@ -3,7 +3,8 @@ import sys
 import pause
 from datetime import datetime, timedelta
 
-port              = "/dev/tty.usbserial-1420"
+#port              = "/dev/tty.usbserial-1420"
+port              = "/dev/tty.usbserial-1410"
 
 #baudrate         = 19200
 #baudrate         = 38400
