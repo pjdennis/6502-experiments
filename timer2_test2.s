@@ -8,13 +8,15 @@ DISPLAY_STRING_PARAM    = $00 ; 2 bytes
 TO_DECIMAL_PARAM        = $02 ; 9 bytes
 COUNTER                 = $0b ; 4 bytes
 COUNTER_COPY            = $0f ; 4 bytes
-JIFFY_COUNTER           = $13 ; 2 bytes
+JIFFY_COUNTER           = $13 ; 1 bytes
+HUNDREDTHS_COUNTER      = $14 ; 1 bytes
 SECONDS_COUNTER         = $15 ; 1 byte
 MINUTES_COUNTER         = $16 ; 1 byte
 HOURS_COUNTER           = $17 ; 1 byte
-SECONDS_COUNTER_COPY    = $18 ; 1 byte
-MINUTES_COUNTER_COPY    = $19 ; 1 byte
-HOURS_COUNTER_COPY      = $1a ; 1 byte
+HUNDREDTHS_COUNTER_COPY = $18 ; 1 byte
+SECONDS_COUNTER_COPY    = $19 ; 1 byte
+MINUTES_COUNTER_COPY    = $1a ; 1 byte
+HOURS_COUNTER_COPY      = $1b ; 1 byte
 
   .org $2000
 
@@ -28,14 +30,15 @@ HOURS_COUNTER_COPY      = $1a ; 1 byte
   stz COUNTER + 2
   stz COUNTER + 3
 
-  stz JIFFY_COUNTER + 0
-  stz JIFFY_COUNTER + 1
-  lda #18
+  stz JIFFY_COUNTER
+  lda #0
   sta HOURS_COUNTER
-  lda #04
+  lda #0
   sta MINUTES_COUNTER
-  lda #45
+  lda #0
   sta SECONDS_COUNTER
+  lda #0
+  sta HUNDREDTHS_COUNTER
 
   lda #<start_message
   ldx #>start_message
@@ -65,6 +68,8 @@ loop:
   sta COUNTER_COPY + 2
   lda COUNTER      + 3
   sta COUNTER_COPY + 3
+  lda HUNDREDTHS_COUNTER
+  sta HUNDREDTHS_COUNTER_COPY
   lda SECONDS_COUNTER
   sta SECONDS_COUNTER_COPY
   lda MINUTES_COUNTER
@@ -97,6 +102,10 @@ loop:
   lda #':'
   jsr display_character
   lda SECONDS_COUNTER_COPY
+  jsr display_time_component
+  lda #'.'
+  jsr display_character
+  lda HUNDREDTHS_COUNTER_COPY
   jsr display_time_component
 
   ldx #0
@@ -160,18 +169,17 @@ ADJUSTED_DELAY = DELAY - RESTART_CYCLES
 inc_counter_done:
 
   ; increment jiffies
-  inc JIFFY_COUNTER + 0
-  bne inc_jiffy_counter_done
-  inc JIFFY_COUNTER + 1
-inc_jiffy_counter_done:
-  lda JIFFY_COUNTER + 0
-  cmp #<JIFFY_HZ
+  inc JIFFY_COUNTER
+  lda JIFFY_COUNTER
+  cmp #<(JIFFY_HZ / 100)
   bne increment_done
-  lda JIFFY_COUNTER + 1
-  cmp #>JIFFY_HZ
+  stz JIFFY_COUNTER
+  ; increment hundredths
+  inc HUNDREDTHS_COUNTER
+  lda HUNDREDTHS_COUNTER
+  cmp #100
   bne increment_done
-  stz JIFFY_COUNTER + 0
-  stz JIFFY_COUNTER + 1
+  stz HUNDREDTHS_COUNTER
   ; increment seconds
   inc SECONDS_COUNTER
   lda SECONDS_COUNTER
