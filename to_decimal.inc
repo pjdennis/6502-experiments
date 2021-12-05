@@ -41,7 +41,7 @@ to_decimal_ignore_result:
   rol TO_DECIMAL_VALUE + 1
 
   ; Shift result
-  ldx #8
+  ldx #5
 to_decimal_shift_loop:
   lda TO_DECIMAL_RESULT-1,X
   sta TO_DECIMAL_RESULT,X
