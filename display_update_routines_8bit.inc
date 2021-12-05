@@ -1,3 +1,7 @@
+  .ifndef DISPLAY_DO_NOT_DISABLE_INTERRUPTS
+DISPLAY_DO_NOT_DISABLE_INTERRUPTS = 0
+  .endif
+
 wait_for_not_busy:
   pha
   phx

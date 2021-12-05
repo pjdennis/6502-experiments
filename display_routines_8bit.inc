@@ -1,9 +1,5 @@
   .include display_parameters.inc
 
-  .ifndef DISPLAY_DO_NOT_DISABLE_INTERRUPTS
-DISPLAY_DO_NOT_DISABLE_INTERRUPTS = 0
-  .endif
-
 reset_display:
   ; TODO - maybe include the full software reset sequence
 
