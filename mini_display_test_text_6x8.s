@@ -5,7 +5,6 @@ SD_CLK            = %00010000
 SD_DC             = %00100000
 SD_DATA_PORT_MASK = SD_DATA | SD_CLK | SD_DC
 
-SD_CSB            = %10000000
 SD_CS_PORT_MASK   = SD_CSB
 
 SD_DATA_PORT      = PORTB
@@ -52,7 +51,7 @@ SCREEN_BUFFER_LAST_PAGE = SCREEN_BUFFER + SCREEN_WIDTH * (SCREEN_PAGES - 1)
   .org $2000
   jmp program_entry
 
-  .include display_update_routines.inc
+  .include display_update_routines_4bit.inc
   .include display_string_immediate.inc
   .include display_hex.inc
   .include delay_routines.inc
