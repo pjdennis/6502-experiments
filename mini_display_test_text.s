@@ -1,14 +1,15 @@
   .include base_config_v1.inc
 
-SD_DATA = %00010000
-SD_CLK  = %00100000
-SD_DC   = %01000000
+SD_DATA = %00001000
+SD_CLK  = %00010000
+SD_DC   = %00100000
 
-PORTA_SD_MASK = SD_DATA | SD_CLK | SD_DC | SD_CSB
+SD_DATA_PORT_MASK = SD_DATA | SD_CLK | SD_DC
 
-SD_RST  = %10000000
+SD_CS_PORT_MASK   = SD_CSB
 
-PORTB_SD_MASK = SD_RST
+SD_DATA_PORT      = PORTB
+SD_CS_PORT        = PORTA
 
 D_S_I_P  = $00        ; 2 bytes
 SCREEN_P = $02        ; 2 bytes
@@ -50,15 +51,22 @@ SCREEN_BUFFER_LAST_PAGE = SCREEN_BUFFER + SCREEN_WIDTH * (SCREEN_PAGES - 1)
   .include character_patterns.inc
 
 program_entry:
-  lda #(SD_DATA | SD_CLK | SD_DC | SD_CSB)
-  trb PORTA
-  lda #PORTA_SD_MASK
-  tsb DDRA
+  ; Set data direction
+  lda #SD_DATA_PORT_MASK
+  tsb SD_DATA_PORT + DDR_OFFSET
 
-  lda #SD_RST
-  tsb PORTB
-  lda #PORTB_SD_MASK
-  tsb DDRB
+  lda #SD_CS_PORT_MASK
+  tsb SD_CS_PORT + DDR_OFFSET
+
+  ; Set up initial output values
+  lda SD_DATA_PORT
+  and #(~SD_DATA_PORT_MASK & $ff)
+  sta SD_DATA_PORT
+
+  lda SD_CS_PORT
+  and #(~SD_CS_PORT_MASK & $ff)
+  ora #SD_CSB
+  sta SD_CS_PORT
 
   jsr sd_initialize
 
@@ -299,7 +307,7 @@ sd_send_command:
   phy
   tay
   lda #SD_DC
-  trb PORTA
+  trb SD_DATA_PORT
   bra sd_send
 
 sd_send_data:
@@ -308,7 +316,7 @@ sd_send_data:
   phy
   tay
   lda #SD_DC
-  tsb PORTA
+  tsb SD_DATA_PORT
   bra sd_send
 
 sd_send:
@@ -320,14 +328,14 @@ sd_send_loop:
   lda #SD_DATA
   bcs sd_high_bit
 ; low bit
-  trb PORTA
+  trb SD_DATA_PORT
   bra sd_bit_set
 sd_high_bit:
-  tsb PORTA
+  tsb SD_DATA_PORT
 sd_bit_set:
   lda #SD_CLK
-  tsb PORTA
-  trb PORTA
+  tsb SD_DATA_PORT
+  trb SD_DATA_PORT
   dex
   bne sd_send_loop
 
@@ -340,7 +348,7 @@ sd_bit_set:
 sd_initialize:
   pha
 
-  jsr sd_reset
+  jsr sd_select
 
   ; Set MUX Ratio
   lda #$a8
@@ -408,25 +416,21 @@ sd_initialize:
   lda #%00
   jsr sd_send_command
 
+  jsr sd_unselect
+
   pla
   rts
 
-sd_reset:
-  lda #SD_RST
-  tsb PORTB
 
-  lda #10 ; 1 millisecond
-  jsr delay_10_thousandths
+sd_select:
+  lda #SD_CSB
+  trb SD_CS_PORT
+  rts
 
-  lda #SD_RST
-  trb PORTB
 
-  lda #100 ; 10 milliseconds
-  jsr delay_10_thousandths
-
-  lda #SD_RST
-  tsb PORTB
-
+sd_unselect:
+  lda #SD_CSB
+  tsb SD_CS_PORT
   rts
 
 
@@ -434,6 +438,8 @@ send_screen_buffer:
   pha
   phx
   phy
+
+  jsr sd_select
 
   ; Column start and end address
   lda #$21
@@ -452,7 +458,7 @@ send_screen_buffer:
   jsr sd_send_command
 
   lda #SD_DC ; Data
-  tsb PORTA
+  tsb SD_DATA_PORT
 
   lda #<SCREEN_BUFFER
   sta SCREEN_P
@@ -467,19 +473,19 @@ send_screen_buffer_byte_loop:
   tay
   lda #SD_DATA
   bcs send_screen_buffer_high_bit
-  trb PORTA
+  trb SD_DATA_PORT
   lda #SD_CLK
-  tsb PORTA
-  trb PORTA
+  tsb SD_DATA_PORT
+  trb SD_DATA_PORT
   tya
   dex
   bne send_screen_buffer_byte_loop
   bra send_screen_buffer_byte_done
 send_screen_buffer_high_bit:
-  tsb PORTA
+  tsb SD_DATA_PORT
   lda #SD_CLK
-  tsb PORTA
-  trb PORTA
+  tsb SD_DATA_PORT
+  trb SD_DATA_PORT
   tya
   dex
   bne send_screen_buffer_byte_loop
@@ -490,6 +496,8 @@ send_screen_buffer_byte_done:
   lda #>(SCREEN_BUFFER + SCREEN_BYTES)
   cmp SCREEN_P + 1
   bne send_screen_buffer_loop
+
+  jsr sd_unselect
 
   ply
   plx
