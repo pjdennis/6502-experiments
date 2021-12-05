@@ -130,30 +130,23 @@ morse_delay_loop:
 ; On entry A contains the character to publish
 ; On exit  A, X, Y are preserved
 morse_invoke_callback:
-  pha
   phx
-
   ldx MORSE_CHARACTER_CALLBACK
   bne morse_has_callback
   ldx MORSE_CHARACTER_CALLBACK + 1
-  beq morse_no_callback
+  beq morse_callback_exit
 morse_has_callback:
+  pha
   phy
-  ; Push return address onto stack
-  ldx #>(morse_invoke_callback_return - 1)
-  phx
-  ldx #<(morse_invoke_callback_return - 1)
-  phx
-  ; Jump to callback routing
-  ldx #0
-  jmp (MORSE_CHARACTER_CALLBACK, X)
-
-morse_invoke_callback_return:
+  jsr morse_invoke_callback_nosave
   ply
-morse_no_callback:
-  plx
   pla
+morse_callback_exit:
+  plx
   rts
+
+morse_invoke_callback_nosave:
+  jmp (MORSE_CHARACTER_CALLBACK)
 
 
 morse_letters:
