@@ -17,6 +17,7 @@ HUNDREDTHS_COUNTER_COPY = $18 ; 1 byte
 SECONDS_COUNTER_COPY    = $19 ; 1 byte
 MINUTES_COUNTER_COPY    = $1a ; 1 byte
 HOURS_COUNTER_COPY      = $1b ; 1 byte
+HUNDREDTHS_COUNTER_LAST = $1c ; 1 byte
 
   .org $2000
 
@@ -57,6 +58,9 @@ HOURS_COUNTER_COPY      = $1b ; 1 byte
 
   cli
 
+  lda #100
+  sta HUNDREDTHS_COUNTER_LAST
+
 loop:
   ; Copy data that is set by interrupt routines and reset timer done
   sei
@@ -77,6 +81,12 @@ loop:
   lda HOURS_COUNTER
   sta HOURS_COUNTER_COPY
   cli
+
+  ; Skip the update unless hundredths counter has changed
+  lda HUNDREDTHS_COUNTER_COPY
+  cmp HUNDREDTHS_COUNTER_LAST
+  beq loop
+  sta HUNDREDTHS_COUNTER_LAST
 
   lda #DISPLAY_FIRST_LINE + 7
   jsr move_cursor
@@ -107,15 +117,6 @@ loop:
   jsr display_character
   lda HUNDREDTHS_COUNTER_COPY
   jsr display_time_component
-
-  ldx #0
-delay1:
-  ldy #0
-delay2:
-  dey
-  bne delay2
-  dex
-  bne delay1
 
   jmp loop
 

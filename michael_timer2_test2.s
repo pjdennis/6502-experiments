@@ -79,7 +79,6 @@ CP_M_LEN                = $34 ; 2 bytes
   lda #100
   sta HUNDREDTHS_COUNTER_LAST
 
-
 loop:
   ; Copy data that is set by interrupt routines and reset timer done
   sei
@@ -119,7 +118,7 @@ loop:
   lda COUNTER_COPY + 0
   jsr display_hex
 
-  lda #DISPLAY_FOURTH_LINE
+  lda #DISPLAY_SECOND_LINE
 
   jsr move_cursor
   lda HOURS_COUNTER_COPY
