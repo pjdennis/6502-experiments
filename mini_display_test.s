@@ -3,7 +3,6 @@
 SD_DATA    = %00010000
 SD_CLK     = %00100000
 SD_DC      = %01000000
-SD_CSB     = %10000000
 
 PORTA_SD_MASK = SD_DATA | SD_CLK | SD_DC | SD_CSB
 
@@ -16,7 +15,7 @@ D_S_I_P    = $00        ; 2 byte
   .org $2000
   jmp program_entry
 
-  .include display_update_routines.inc
+  .include display_update_routines_4bit.inc
   .include display_string_immediate.inc
   .include delay_routines.inc
 
