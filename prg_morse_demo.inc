@@ -24,7 +24,7 @@ write_morse_buffer_repeat:
 
 
 morse_message:
-  .asciiz 'HELLO WORLD THIS IS A COMPUTER BUILT BY PHIL'
+  .asciiz 'Test 123, HELLO WORLD THIS IS A COMPUTER BUILT BY PHIL'
 
 morse_callback = buffer_write
 

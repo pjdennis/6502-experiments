@@ -52,7 +52,7 @@ morse_string_letter_done:
   bra morse_string_loop
 morse_string_done:
   ply
-  rts 
+  rts
 
 
 ; On entry A = the ASCII letter to send - 'A' through 'Z', '0 through 9' or ' '
@@ -61,10 +61,39 @@ morse_string_done:
 send_morse_letter:
   phx
   phy
+  cmp #'0'
+  bcc morse_none
+  cmp #('9' + 1)
+  bcc morse_number
+  cmp #'A'
+  bcc morse_none
+  cmp #('Z' + 1)
+  bcc morse_upper
+  cmp #'a'
+  bcc morse_none
+  cmp #('z' + 1)
+  bcc morse_lower
+morse_none:
+  lda #3
+  jsr morse_delay
+  bra morse_letter_done
+morse_number:
+  sec
+  sbc #'1'
+  tax
+  lda morse_numbers, X
+  bra morse_ready
+morse_upper:
   sec
   sbc #'A'
+  bra morse_letter
+morse_lower:
+  sec
+  sbc #'a'
+morse_letter:
   tax
   lda morse_letters, X
+morse_ready:
   tay
   and #%00000111        ; Mask the part count
   tax
