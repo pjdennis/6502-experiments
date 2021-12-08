@@ -2,29 +2,50 @@
 
 CHASE_START = DISPLAY_FIRST_LINE + 5
 CHASE_WIDTH = DISPLAY_WIDTH - 10
+CHASE_DELAY = 200
+
+;previous pos in X
+;current pos in Y
 
 run_chase:
-  ldy #CHASE_START
-run_chase_right:
   jsr lock_screen
-  tya
+  lda #CHASE_START
   jsr move_cursor
-  lda #' '
-  jsr display_character
   lda #'X'
   jsr display_character
   jsr unlock_screen
 
-  lda #<150
-  ldx #>150
+run_chase_loop:
+  ldy #CHASE_START + 1
+
+run_chase_right:
+  lda #<CHASE_DELAY
+  ldx #>CHASE_DELAY
   jsr sleep_milliseconds
 
+  jsr lock_screen
+  tya
+  jsr move_cursor
+  lda #'X'
+  jsr display_character
+  dey
+  tya
+  jsr move_cursor
+  lda #' '
+  jsr display_character
+  jsr unlock_screen
+
   iny
-  cpy #(CHASE_START + CHASE_WIDTH - 1)
+  iny
+  cpy #(CHASE_START + CHASE_WIDTH)
   bne run_chase_right
 
   ldy #(CHASE_START + CHASE_WIDTH - 2)
 run_chase_left:
+  lda #<CHASE_DELAY
+  ldx #>CHASE_DELAY
+  jsr sleep_milliseconds
+
   jsr lock_screen
   tya
   jsr move_cursor
@@ -33,13 +54,9 @@ run_chase_left:
   lda #' '
   jsr display_character
   jsr unlock_screen
-
-  lda #<150
-  ldx #>150
-  jsr sleep_milliseconds
 
   dey
   cpy #(CHASE_START - 1)
   bne run_chase_left
 
-  bra run_chase
+  bra run_chase_loop
