@@ -9,7 +9,11 @@ KB_DECODE_EXTENDED       = %00001000
 KB_DECODE_PAUSE_SEQ      = %00000111
 
 KB_CAPS_LOCK_ON          = %00000001
-KB_CAPS_LOCK_DOWN        = %00000010
+KB_SCROLL_LOCK_ON        = %00000010
+KB_NUM_LOCK_ON           = %00000100
+KB_CAPS_LOCK_DOWN        = %00001000
+KB_SCROLL_LOCK_DOWN      = %00010000
+KB_NUM_LOCK_DOWN         = %00100000
 
 KB_MOD_L_SHIFT           = %10000000
 KB_MOD_R_SHIFT           = %01000000
@@ -38,6 +42,8 @@ KB_CODE_EXTENDED_IGNORE  = $12
 KB_CODE_PAUSE            = $62
 KB_CODE_PRT_SCR          = $57
 KB_CODE_CAPS_LOCK        = $14
+KB_CODE_SCROLL_LOCK      = $5f
+KB_CODE_NUM_LOCK         = $76 
 
 KB_CODE_L_SHIFT          = $12
 KB_CODE_R_SHIFT          = $59
@@ -72,7 +78,7 @@ SIMPLE_BUFFER_WRITE_PTR  = $000b ; 1 byte
 SIMPLE_BUFFER_READ_PTR   = $000c ; 1 byte
 KEYBOARD_RECEIVING       = $000d ; 1 byte
 KEYBOARD_DECODE_STATE    = $000e ; 1 byte
-KEYBOARD_CAPS_LOCK_STATE = $000f ; 1 byte
+KEYBOARD_LOCK_STATE      = $000f ; 1 byte
 KEYBOARD_MODIFIER_STATE  = $0010 ; 1 byte
 KEYBOARD_LATEST_META     = $0011 ; 1 byte
 KEYBOARD_LATEST_CODE     = $0012 ; 1 byte
@@ -123,18 +129,23 @@ character_data_backslash:
 ; Code sequence for the pause/break key
 kb_seq_pause       .byte $e1, $14, $77, $e1, $f0, $14, $f0, $77, $00
 
+; Mapping from PS/2 code set 3 lock keys to the bit mask used for tracking lock down/up and on/off
+kb_lock_codes:      .byte KB_CODE_CAPS_LOCK, KB_CODE_SCROLL_LOCK, KB_CODE_NUM_LOCK, $00
+kb_lock_on_masks:   .byte KB_CAPS_LOCK_ON,   KB_SCROLL_LOCK_ON,   KB_NUM_LOCK_ON
+kb_lock_down_masks: .byte KB_CAPS_LOCK_DOWN, KB_SCROLL_LOCK_DOWN, KB_NUM_LOCK_DOWN
+
 ; Mapping from PS/2 code set 3 modifier keys to the bit mask used for tracking modifier states
-kb_modifier_codes: .byte KB_CODE_L_SHIFT, KB_CODE_R_SHIFT, KB_CODE_L_CTRL, KB_CODE_R_CTRL
-                   .byte KB_CODE_L_ALT,   KB_CODE_R_ALT,   KB_CODE_L_GUI,  KB_CODE_R_GUI, $00
-kb_modifier_masks: .byte KB_MOD_L_SHIFT,  KB_MOD_R_SHIFT,  KB_MOD_L_CTRL,  KB_MOD_R_CTRL
-                   .byte KB_MOD_L_ALT,    KB_MOD_R_ALT,    KB_MOD_L_GUI,   KB_MOD_R_GUI
+kb_modifier_codes:  .byte KB_CODE_L_SHIFT, KB_CODE_R_SHIFT, KB_CODE_L_CTRL, KB_CODE_R_CTRL
+                    .byte KB_CODE_L_ALT,   KB_CODE_R_ALT,   KB_CODE_L_GUI,  KB_CODE_R_GUI, $00
+kb_modifier_masks:  .byte KB_MOD_L_SHIFT,  KB_MOD_R_SHIFT,  KB_MOD_L_CTRL,  KB_MOD_R_CTRL
+                    .byte KB_MOD_L_ALT,    KB_MOD_R_ALT,    KB_MOD_L_GUI,   KB_MOD_R_GUI
 
 ; Mapping from the modifier state masks for left/right modifier keys to the mask used to
 ; indicate at least one of the keys is pressed
-kb_modifier_from:  .byte (KB_MOD_L_SHIFT | KB_MOD_R_SHIFT), (KB_MOD_L_CTRL | KB_MOD_R_CTRL)
-                   .byte (KB_MOD_L_ALT   | KB_MOD_R_ALT),   (KB_MOD_L_GUI  | KB_MOD_R_GUI), $00
-kb_modifier_to     .byte KB_META_SHIFT,                     KB_META_CTRL
-                   .byte KB_META_ALT,                       KB_META_GUI
+kb_modifier_from:   .byte (KB_MOD_L_SHIFT | KB_MOD_R_SHIFT), (KB_MOD_L_CTRL | KB_MOD_R_CTRL)
+                    .byte (KB_MOD_L_ALT   | KB_MOD_R_ALT),   (KB_MOD_L_GUI  | KB_MOD_R_GUI), $00
+kb_modifier_to      .byte KB_META_SHIFT,                     KB_META_CTRL
+                    .byte KB_META_ALT,                       KB_META_GUI
 
 program_start:
   ; Initialize stack
@@ -160,7 +171,7 @@ program_start:
   ; Initialize Keyboard decode state
   stz KEYBOARD_DECODE_STATE
   stz KEYBOARD_MODIFIER_STATE
-  stz KEYBOARD_CAPS_LOCK_STATE
+  stz KEYBOARD_LOCK_STATE
 
   ; Relocate the interrupt handler. The EEPROM has a fixed address, INTERRUPT_ROUTINE
   ; for the interrupt routine so copy the handler there
@@ -248,7 +259,7 @@ keyboard_get_latest_translated_code:
   lda KEYBOARD_LATEST_META
   bit #KB_META_SHIFT
   bne .translate_upper
-  lda KEYBOARD_CAPS_LOCK_STATE
+  lda KEYBOARD_LOCK_STATE
   bit #KB_CAPS_LOCK_ON
   bne .translate_upper
 ; Lower
@@ -295,42 +306,48 @@ keyboard_set3_decode:
 
 ; On entry KEYBOARD_LATEST_META contains latest state (make/break)
 ;          KEYBOARD_LATEST_CODE contains latest key code
-;          KEYBOARD_CAPS_LOCK_STATE contains current caps lock state (0 or 1)
-; On exit  KEYBOARD_CAPS_LOCK_STATE contains the new caps lock state
+;          KEYBOARD_LOCK_STATE contains current caps lock state (0 or 1)
+; On exit  KEYBOARD_LOCK_STATE contains the new caps lock state
 ;          A, X, Y are preserved
 keyboard_set3_caps_lock_track:
   pha
-  lda #KB_CODE_CAPS_LOCK
+  phx
+  ldx #$ff
+.repeat
+  inx
+  lda kb_lock_codes, X
+  beq .done
   cmp KEYBOARD_LATEST_CODE
-  bne .done
-  ; Caps lock detected
+  bne .repeat
+  ; Fall through - code found
   lda KEYBOARD_LATEST_META
   bit #KB_META_BREAK
   bne .key_break
-  ; Key make
-  lda KEYBOARD_CAPS_LOCK_STATE
-  bit #KB_CAPS_LOCK_DOWN
-  bne .done
-  ; Caps lock key wasn't already down
-  lda #KB_CAPS_LOCK_ON
-  eor KEYBOARD_CAPS_LOCK_STATE
-  ora #KB_CAPS_LOCK_DOWN
-  sta KEYBOARD_CAPS_LOCK_STATE
+; Key make
+  lda kb_lock_down_masks, X
+  bit KEYBOARD_LOCK_STATE
+  bne .done                     ; Nothing to do - key was already down
+  ; Key wasn't already down
+  tsb KEYBOARD_LOCK_STATE       ; Set the 'down' flag
+  lda kb_lock_on_masks, X
+  eor KEYBOARD_LOCK_STATE       ; Toggle the 'on' flag
+  sta KEYBOARD_LOCK_STATE
   jsr update_caps_lock_led
   bra .done
-.key_break
-  lda #KB_CAPS_LOCK_DOWN
-  trb KEYBOARD_CAPS_LOCK_STATE
+.key_break:
+  lda kb_lock_down_masks, X
+  trb KEYBOARD_LOCK_STATE
 .done:
+  plx
   pla
   rts
 
 
-; On entry KEYBOARD_CAPS_LOCK_STATE contains the current caps lock state
+; On entry KEYBOARD_LOCK_STATE contains the current caps lock state
 ; On exit  A, X, Y are preserved
 update_caps_lock_led:
   pha
-  lda KEYBOARD_CAPS_LOCK_STATE
+  lda KEYBOARD_LOCK_STATE
   bit #KB_CAPS_LOCK_ON
   bne .caps_lock_on
 ;caps lock off
