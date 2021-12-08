@@ -333,7 +333,7 @@ keyboard_set3_caps_lock_track:
   lda kb_lock_on_masks, X
   eor KEYBOARD_LOCK_STATE       ; Toggle the 'on' flag
   sta KEYBOARD_LOCK_STATE
-  jsr update_caps_lock_led
+  jsr update_lock_leds
   bra .done
 .key_break:
   lda kb_lock_down_masks, X
@@ -346,7 +346,7 @@ keyboard_set3_caps_lock_track:
 
 ; On entry KEYBOARD_LOCK_STATE contains the current caps lock state
 ; On exit  A, X, Y are preserved
-update_caps_lock_led:
+update_lock_leds:
   pha
   phx
   phy
