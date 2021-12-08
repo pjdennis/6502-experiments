@@ -241,7 +241,7 @@ keyboard_get_char:
 .repeat:
   jsr simple_buffer_read
   bcs .done                     ; Exit when input buffer is empty
-  jsr keyboard_set3_decode
+  jsr keyboard_decode_1
   bcs .repeat                   ; Nothing decoded so far so read more
   lda KEYBOARD_LATEST_META
   bit #KB_META_BREAK
@@ -280,25 +280,25 @@ keyboard_get_latest_translated_code:
 ;         A is not preserved
 ;         KEYBOARD_LATEST_META contains metadata for latest key event
 ;         KEYBOARD_LATEST_CODE contains code for latest key event
-keyboard_set3_decode:
-  jsr keyboard_decode
+keyboard_decode_1:
+  jsr keyboard_decode_2
   bcs .decode_done              ; No data so we are done
   lda KEYBOARD_LATEST_META
   bit #KB_META_EXTENDED
   bne .decode_extended
 ; Decode normal
   lda KEYBOARD_LATEST_CODE
-  jsr keyboard_translate_normal_to_set3
+  jsr keyboard_translate_normal
   bra .translate_done
 .decode_extended:
   and #~KB_META_EXTENDED
   sta KEYBOARD_LATEST_META
   lda KEYBOARD_LATEST_CODE
-  jsr keyboard_translate_extended_to_set3
+  jsr keyboard_translate_extended
 .translate_done:
   sta KEYBOARD_LATEST_CODE
-  jsr keyboard_set3_caps_lock_track
-  jsr keyboard_set3_modifier_track
+  jsr keyboard_caps_lock_track
+  jsr keyboard_modifier_track
   jsr keyboard_update_modifiers
   clc
 .decode_done:
@@ -310,7 +310,7 @@ keyboard_set3_decode:
 ;          KEYBOARD_LOCK_STATE contains current state of lock keys
 ; On exit  KEYBOARD_LOCK_STATE contains the new state of lock keys
 ;          A, X, Y are preserved
-keyboard_set3_caps_lock_track:
+keyboard_caps_lock_track:
   pha
   phx
   ldx #$ff
@@ -377,7 +377,7 @@ update_lock_leds:
 ;          KEYBOARD_MODIFIER_STATE contains the current state of modifier keys
 ; On exit  KEYBOARD_MODIFIER_STATE contains the updated state of modifier keys
 ;          A, X, Y are preserverd
-keyboard_set3_modifier_track:
+keyboard_modifier_track:
   pha
   phx
   ldx #$ff
@@ -440,7 +440,7 @@ keyboard_update_modifiers:
 ;           KEYBOARD_LATEST_META contains metadata for latest key event
 ;           KEYBOARD_LATEST_CODE contains code for latest key event
 ; Variables KEYBOARD_DECODE_STATE is utlilized and then updated with the new state
-keyboard_decode:
+keyboard_decode_2:
   phx
   tax                          ; X <- latest byte from keyboard
   ; Branch to the handler code for the current state
@@ -559,7 +559,7 @@ keyboard_decode:
 ; On entry A contains the PS/2 set 2 non-extended "normal" keyboard code
 ; On exit  A contains the PS/2 set 3 keyboard code
 ;          X, Y are preserverd
-keyboard_translate_normal_to_set3:
+keyboard_translate_normal:
   phx
   phy
   ldx #<kb_normal_translation_table
@@ -573,7 +573,7 @@ keyboard_translate_normal_to_set3:
 ; On entry A contains the PS/2 set 2 extended keyboard code
 ; On exit  A contains the PS/2 set 3 keyboard code
 ;          X, Y are preserverd
-keyboard_translate_extended_to_set3:
+keyboard_translate_extended:
   phx
   phy
   ldx #<kb_extended_translation_table
