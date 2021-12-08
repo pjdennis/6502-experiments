@@ -69,16 +69,14 @@ SIMPLE_BUFFER_WRITE_PTR  = $000b ; 1 byte
 SIMPLE_BUFFER_READ_PTR   = $000c ; 1 byte
 KEYBOARD_RECEIVING       = $000d ; 1 byte
 KEYBOARD_DECODE_STATE    = $000e ; 1 byte
-KEYBOARD_MODIFIER_STATE  = $000f ; 1 byte
-KEYBOARD_LATEST_META     = $0010 ; 1 byte
-KEYBOARD_LATEST_CODE     = $0011 ; 1 byte
-SENDING_TO_KEYBOARD      = $0012 ; 1 byte
-SENT_BYTE                = $0013 ; 1 byte
-SENT_PARITY_AND_ACK      = $0014 ; 1 byte
-ACK_RECEIVED             = $0015 ; 1 byte
-
-; TODO move this up next to the other keyboard state variables
-KEYBOARD_CAPS_LOCK       = $0016 ; 1 byte
+KEYBOARD_CAPS_LOCK       = $000f ; 1 byte
+KEYBOARD_MODIFIER_STATE  = $0010 ; 1 byte
+KEYBOARD_LATEST_META     = $0011 ; 1 byte
+KEYBOARD_LATEST_CODE     = $0012 ; 1 byte
+SENDING_TO_KEYBOARD      = $0013 ; 1 byte
+SENT_BYTE                = $0014 ; 1 byte
+SENT_PARITY_AND_ACK      = $0015 ; 1 byte
+ACK_RECEIVED             = $0016 ; 1 byte
 
 SIMPLE_BUFFER            = $0200 ; 256 bytes
 CONSOLE_TEXT             = $0300 ; CONSOLE_LENGTH (32) bytes
