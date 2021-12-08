@@ -307,8 +307,8 @@ keyboard_set3_decode:
 
 ; On entry KEYBOARD_LATEST_META contains latest state (make/break)
 ;          KEYBOARD_LATEST_CODE contains latest key code
-;          KEYBOARD_LOCK_STATE contains current caps lock state (0 or 1)
-; On exit  KEYBOARD_LOCK_STATE contains the new caps lock state
+;          KEYBOARD_LOCK_STATE contains current state of lock keys
+; On exit  KEYBOARD_LOCK_STATE contains the new state of lock keys
 ;          A, X, Y are preserved
 keyboard_set3_caps_lock_track:
   pha
@@ -320,18 +320,18 @@ keyboard_set3_caps_lock_track:
   beq .done
   cmp KEYBOARD_LATEST_CODE
   bne .repeat
-  ; Fall through - code found
+; Code found
   lda KEYBOARD_LATEST_META
   bit #KB_META_BREAK
   bne .key_break
 ; Key make
   lda kb_lock_down_masks, X
   bit KEYBOARD_LOCK_STATE
-  bne .done                     ; Nothing to do - key was already down
-  ; Key wasn't already down
-  tsb KEYBOARD_LOCK_STATE       ; Set the 'down' flag
+  bne .done                    ; Nothing to do - key was already down
+; Key going down
+  tsb KEYBOARD_LOCK_STATE      ; Set the 'down' flag
   lda kb_lock_on_masks, X
-  eor KEYBOARD_LOCK_STATE       ; Toggle the 'on' flag
+  eor KEYBOARD_LOCK_STATE      ; Toggle the 'on' flag
   sta KEYBOARD_LOCK_STATE
   jsr update_lock_leds
   bra .done
@@ -344,13 +344,13 @@ keyboard_set3_caps_lock_track:
   rts
 
 
-; On entry KEYBOARD_LOCK_STATE contains the current caps lock state
+; On entry KEYBOARD_LOCK_STATE contains the current state of lock keys
 ; On exit  A, X, Y are preserved
 update_lock_leds:
   pha
   phx
   phy
-  ldy #0
+  ldy #0                        ; Y stores the keyboard LED mask
   ldx #$ff
 .repeat
   inx
@@ -358,7 +358,7 @@ update_lock_leds:
   beq .set_leds
   bit KEYBOARD_LOCK_STATE
   beq .repeat
-; Led on
+; LED on
   tya
   ora kb_lock_to_led, X
   tay
@@ -387,7 +387,7 @@ keyboard_set3_modifier_track:
   beq .done
   cmp KEYBOARD_LATEST_CODE
   bne .repeat
-  ; Fall through - code found
+; Code found
   lda KEYBOARD_LATEST_META
   bit #KB_META_BREAK
   bne .key_break
@@ -398,7 +398,6 @@ keyboard_set3_modifier_track:
 .key_break:
   lda kb_modifier_masks, X
   trb KEYBOARD_MODIFIER_STATE
-  ; Fall through - done
 .done:
   plx
   pla
@@ -477,11 +476,11 @@ keyboard_decode:
   bne .pause_error
   inx
   lda kb_seq_pause, X
-  beq .pause_emit              ; Branch if we reached the last code in sequence
-  txa                          ; New pause seq index becomes new state
+  beq .pause_emit               ; Branch if we reached the last code in sequence
+  txa                           ; New pause seq index becomes new state
   bra .no_emit
 .pause_emit:
-  lda #0                       ; Emit pause as non-extended make code
+  lda #0                        ; Emit pause as non-extended make code
   ldx #KB_CODE_PAUSE
   bra .emit
 ; A = latest byte from keyboard
@@ -495,7 +494,7 @@ keyboard_decode:
 .state_break:
   bit #KB_DECODE_EXTENDED
   bne .state_extended_break
-  lda #KB_META_BREAK            ; Emit non-extended break code
+  lda #KB_META_BREAK             ; Emit non-extended break code
   bra .emit
 
 .state_extended:
@@ -527,7 +526,7 @@ keyboard_decode:
   bra .no_emit
 
 .to_pause:
-  lda #%00000001                ; Start pause sequence counter at 1
+  lda #%00000001                 ; Start pause sequence counter at 1
   bra .no_emit
 
 ; ---- Exiting the routine with result or no result ----
@@ -652,11 +651,11 @@ table_lookup:
   stx TRANSLATE_TABLE
   sty TRANSLATE_TABLE + 1
   cmp (TRANSLATE_TABLE)
-  bcs .no_match                 ; Code is past the end of the table
+  bcs .no_match                  ; Code is past the end of the table
   tay
   iny
   lda (TRANSLATE_TABLE), Y
-  beq .no_match                 ; Table entry is zero
+  beq .no_match                  ; Table entry is zero
   clc
   bra .done
 .no_match:
@@ -686,19 +685,19 @@ keyboard_set_leds:
 keyboard_send_command:
   phx
   phy
-  tax                           ; Save command byte in X
+  tax                            ; Save command byte in X
 
   lda #SOLB
-  trb PORTA                     ; Pull clock low
-  lda #1 ; 100 microseconds = 0.1 milliseconds = 1 1/10,000 of a second
+  trb PORTA                      ; Pull clock low
+  lda #1                         ; 100 microseconds = 0.1 milliseconds = 1 1/10,000 of a second
   jsr delay_10_thousandths
 
-  ldy PORTA                     ; Save PORTA value to Y
+  ldy PORTA                      ; Save PORTA value to Y
 
   lda #(PARITY | START)
-  trb PORTA                     ; Clear parity and start bits
+  trb PORTA                      ; Clear parity and start bits
 
-  txa                           ; Retrieve command byte from X
+  txa                            ; Retrieve command byte from X
   jsr calculate_parity
   bcs odd_parity
 ; even parity
@@ -706,16 +705,16 @@ keyboard_send_command:
   bra parity_mask_ready
 odd_parity:
   lda #0
-parity_mask_ready:              ; Mask is in A
+parity_mask_ready:               ; Mask is in A
   tsb PORTA
-  stx PORTB                     ; Command byte
+  stx PORTB                      ; Command byte
   lda #2
-  sta SENDING_TO_KEYBOARD       ; Set flag to indicate we are sending
+  sta SENDING_TO_KEYBOARD        ; Set flag to indicate we are sending
   lda #SOLB
-  tsb PORTA                     ; Allow clock to float high; latch output data
+  tsb PORTA                      ; Allow clock to float high; latch output data
   tya
   ora #SOLB
-  sta PORTA                     ; Restore PORTA
+  sta PORTA                      ; Restore PORTA
 
   ; Wait for send to complete
 .wait_for_send:
@@ -744,9 +743,9 @@ console_print_character_with_translation:
   cmp #ASCII_BACKSPACE
   beq .backspace
   jsr translate_character_for_display
-  jmp console_print_character ; tail call
+  jmp console_print_character    ; tail call
 .backspace:
-  jmp console_backspace ; tail call
+  jmp console_backspace          ; tail call
 
 
 ; On entry A is an ASCII character
@@ -805,8 +804,8 @@ calculate_parity:
   ldx #8
 .repeat:
   lsr
-  bcc .parity_updated           ; Current bit is 0 - do not increment parity
-  iny                           ; Current bit is 1 - increment parity
+  bcc .parity_updated            ; Current bit is 0 - do not increment parity
+  iny                            ; Current bit is 1 - increment parity
 .parity_updated:
   dex
   bne .repeat
@@ -843,19 +842,19 @@ interrupt:
   pha
 
   lda #%00000000
-  sta DDRB        ; Set PORTB to input
+  sta DDRB                       ; Set PORTB to input
 
   lda #(ACK | PARITY)
-  trb DDRA        ; Input from the ACK and parity bits
+  trb DDRA                       ; Input from the ACK and parity bits
 
   lda #SOEB
-  trb PORTA       ; Enable shift register output
+  trb PORTA                      ; Enable shift register output
 
   lda SENDING_TO_KEYBOARD
   beq .not_sending
 ;Sending
   dec SENDING_TO_KEYBOARD
-  bne .done_checking_send ; Skip first interrupt which results from pulling clock low
+  bne .done_checking_send        ; Skip first interrupt which results from pulling clock low
 ;Sent
   lda PORTB
   eor #$ff
@@ -879,7 +878,7 @@ interrupt:
 .done_checking_ack:
 .done_checking_send:
   lda #SOEB
-  tsb PORTA       ; Disable shift register output
+  tsb PORTA                      ; Disable shift register output
 
 ; Restore PORTB direction and data from stack
   pla
