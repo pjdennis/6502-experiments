@@ -1,7 +1,10 @@
 ; Chase X back and forth on the screen
 
+CHASE_START = DISPLAY_FIRST_LINE + 5
+CHASE_WIDTH = DISPLAY_WIDTH - 10
+
 run_chase:
-  ldy #(DISPLAY_FIRST_LINE + 5)
+  ldy #CHASE_START
 run_chase_right:
   jsr lock_screen
   tya
@@ -17,10 +20,10 @@ run_chase_right:
   jsr sleep_milliseconds
 
   iny
-  cpy #(DISPLAY_FIRST_LINE + 10)
+  cpy #(CHASE_START + CHASE_WIDTH - 1)
   bne run_chase_right
 
-  ldy #(DISPLAY_FIRST_LINE + 9)
+  ldy #(CHASE_START + CHASE_WIDTH - 2)
 run_chase_left:
   jsr lock_screen
   tya
@@ -36,7 +39,7 @@ run_chase_left:
   jsr sleep_milliseconds
 
   dey
-  cpy #(DISPLAY_FIRST_LINE + 4)
+  cpy #(CHASE_START - 1)
   bne run_chase_left
 
   bra run_chase

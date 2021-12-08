@@ -13,8 +13,8 @@ add_morse_demo:
 
 
 write_morse_buffer:
-  lda #(DISPLAY_SECOND_LINE + 5) ; Console position
-  ldx #6                         ; Console length
+  lda #DISPLAY_LAST_LINE + 5     ; Console position
+  ldx #DISPLAY_WIDTH - 10        ; Console length
   jsr console_initialize
 write_morse_buffer_repeat:
   jsr buffer_read

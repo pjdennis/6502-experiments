@@ -13,17 +13,17 @@ run_counter_top_left:
 
 run_counter_top_right:
   lda #(-BUSY_COUNTER_DELTA)
-  ldx #(DISPLAY_FIRST_LINE + 12)
+  ldx #(DISPLAY_FIRST_LINE + DISPLAY_WIDTH - 4)
   bra run_counter
 
 run_counter_bottom_left:
   lda #(-BUSY_COUNTER_DELTA)
-  ldx #(DISPLAY_SECOND_LINE + 0)
+  ldx #(DISPLAY_LAST_LINE + 0)
   bra run_counter
 
 run_counter_bottom_right:
   lda #BUSY_COUNTER_DELTA
-  ldx #(DISPLAY_SECOND_LINE + 12)
+  ldx #(DISPLAY_LAST_LINE + DISPLAY_WIDTH - 4)
   bra run_counter
 
 run_counter:
