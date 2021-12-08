@@ -241,7 +241,7 @@ keyboard_get_char:
 .repeat:
   jsr simple_buffer_read
   bcs .done                     ; Exit when input buffer is empty
-  jsr keyboard_decode_1
+  jsr keyboard_decode_and_translate
   bcs .repeat                   ; Nothing decoded so far so read more
   lda KEYBOARD_LATEST_META
   bit #KB_META_BREAK
@@ -280,8 +280,8 @@ keyboard_get_latest_translated_code:
 ;         A is not preserved
 ;         KEYBOARD_LATEST_META contains metadata for latest key event
 ;         KEYBOARD_LATEST_CODE contains code for latest key event
-keyboard_decode_1:
-  jsr keyboard_decode_2
+keyboard_decode_and_translate:
+  jsr keyboard_decode
   bcs .decode_done              ; No data so we are done
   lda KEYBOARD_LATEST_META
   bit #KB_META_EXTENDED
@@ -440,7 +440,7 @@ keyboard_update_modifiers:
 ;           KEYBOARD_LATEST_META contains metadata for latest key event
 ;           KEYBOARD_LATEST_CODE contains code for latest key event
 ; Variables KEYBOARD_DECODE_STATE is utlilized and then updated with the new state
-keyboard_decode_2:
+keyboard_decode:
   phx
   tax                          ; X <- latest byte from keyboard
   ; Branch to the handler code for the current state
