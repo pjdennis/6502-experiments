@@ -131,8 +131,9 @@ kb_seq_pause       .byte $e1, $14, $77, $e1, $f0, $14, $f0, $77, $00
 
 ; Mapping from PS/2 code set 3 lock keys to the bit mask used for tracking lock down/up and on/off
 kb_lock_codes:      .byte KB_CODE_CAPS_LOCK, KB_CODE_SCROLL_LOCK, KB_CODE_NUM_LOCK, $00
-kb_lock_on_masks:   .byte KB_CAPS_LOCK_ON,   KB_SCROLL_LOCK_ON,   KB_NUM_LOCK_ON
+kb_lock_on_masks:   .byte KB_CAPS_LOCK_ON,   KB_SCROLL_LOCK_ON,   KB_NUM_LOCK_ON, $00
 kb_lock_down_masks: .byte KB_CAPS_LOCK_DOWN, KB_SCROLL_LOCK_DOWN, KB_NUM_LOCK_DOWN
+kb_lock_to_led:     .byte KB_LED_CAPS_LOCK,  KB_LED_SCROLL_LOCK,  KB_LED_NUM_LOCK
 
 ; Mapping from PS/2 code set 3 modifier keys to the bit mask used for tracking modifier states
 kb_modifier_codes:  .byte KB_CODE_L_SHIFT, KB_CODE_R_SHIFT, KB_CODE_L_CTRL, KB_CODE_R_CTRL
@@ -347,16 +348,26 @@ keyboard_set3_caps_lock_track:
 ; On exit  A, X, Y are preserved
 update_caps_lock_led:
   pha
-  lda KEYBOARD_LOCK_STATE
-  bit #KB_CAPS_LOCK_ON
-  bne .caps_lock_on
-;caps lock off
-  lda #0
-  bra .set_leds
-.caps_lock_on
-  lda #KB_LED_CAPS_LOCK
+  phx
+  phy
+  ldy #0
+  ldx #$ff
+.repeat
+  inx
+  lda kb_lock_on_masks, X
+  beq .set_leds
+  bit KEYBOARD_LOCK_STATE
+  beq .repeat
+; Led on
+  tya
+  ora kb_lock_to_led, X
+  tay
+  bra .repeat
 .set_leds:
+  tya
   jsr keyboard_set_leds
+  ply
+  plx
   pla
   rts
 
