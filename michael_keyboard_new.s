@@ -34,6 +34,7 @@ KB_CODE_EXTENDED         = $e0
 KB_CODE_EXTENDED_IGNORE  = $12
 KB_CODE_PAUSE            = $62
 KB_CODE_PRT_SCR          = $57
+KB_CODE_CAPS_LOCK        = $14
 
 KB_CODE_L_SHIFT          = $12
 KB_CODE_R_SHIFT          = $59
@@ -75,6 +76,9 @@ SENDING_TO_KEYBOARD      = $0012 ; 1 byte
 SENT_BYTE                = $0013 ; 1 byte
 SENT_PARITY_AND_ACK      = $0014 ; 1 byte
 ACK_RECEIVED             = $0015 ; 1 byte
+
+; TODO move this up next to the other keyboard state variables
+KEYBOARD_CAPS_LOCK       = $0016 ; 1 byte
 
 SIMPLE_BUFFER            = $0200 ; 256 bytes
 CONSOLE_TEXT             = $0300 ; CONSOLE_LENGTH (32) bytes
@@ -155,6 +159,7 @@ program_start:
   ; Initialize Keyboard decode state
   stz KEYBOARD_DECODE_STATE
   stz KEYBOARD_MODIFIER_STATE
+  stz KEYBOARD_CAPS_LOCK
 
   ; Relocate the interrupt handler. The EEPROM has a fixed address, INTERRUPT_ROUTINE
   ; for the interrupt routine so copy the handler there
@@ -202,6 +207,9 @@ program_start:
   lda #0 ; Fastest rate (30 cps) + shortest delay (0.25 seconds)
   jsr keyboard_send_command
 
+  lda #0
+  jsr keyboard_set_leds
+
   ; Read and display translated characters from the keyboard
 get_char_loop:
   jsr keyboard_get_char
@@ -239,6 +247,8 @@ keyboard_get_latest_translated_code:
   lda KEYBOARD_LATEST_META
   bit #KB_META_SHIFT
   bne .translate_upper
+  lda KEYBOARD_CAPS_LOCK
+  bne .translate_upper
 ; Lower
   lda KEYBOARD_LATEST_CODE
   jsr keyboard_translate_code_lower
@@ -273,10 +283,52 @@ keyboard_set3_decode:
   jsr keyboard_translate_extended_to_set3
 .translate_done:
   sta KEYBOARD_LATEST_CODE
+  jsr keyboard_set3_caps_lock_track
   jsr keyboard_set3_modifier_track
   jsr keyboard_update_modifiers
   clc
 .decode_done:
+  rts
+
+
+; On entry KEYBOARD_LATEST_META contains latest state (make/break)
+;          KEYBOARD_LATEST_CODE contains latest key code
+;          KEYBOARD_CAPS_LOCK   contains current caps lock state (0 or 1)
+; On exit  KEYBOARD_CAPS_LOCK   contains the new caps lock state
+;          A, X, Y are preserved
+keyboard_set3_caps_lock_track:
+  pha
+  lda #KB_CODE_CAPS_LOCK
+  cmp KEYBOARD_LATEST_CODE
+  bne .done
+  ; Caps lock detected
+  lda KEYBOARD_LATEST_META
+  bit #KB_META_BREAK
+  bne .done
+  ; Key make
+  lda #1
+  eor KEYBOARD_CAPS_LOCK
+  sta KEYBOARD_CAPS_LOCK
+  jsr update_caps_lock_led
+.done:
+  pla
+  rts
+
+
+; On entry KEYBOARD_CAPS_LOCK contains the current caps lock state
+; On exit  A, X, Y are preserved
+update_caps_lock_led:
+  pha
+  lda KEYBOARD_CAPS_LOCK
+  bne .caps_lock_on
+;caps lock off
+  lda #0
+  bra .set_leds
+.caps_lock_on
+  lda #KB_LED_CAPS_LOCK
+.set_leds:
+  jsr keyboard_set_leds
+  pla
   rts
 
 
