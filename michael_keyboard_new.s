@@ -61,8 +61,6 @@ KB_META_GUI              = %00010000
 KB_META_EXTENDED         = %00000010
 KB_META_BREAK            = %00000001
 
-ASCII_BACKSPACE          = 0x08
-
 CP_M_DEST_P              = $0000 ; 2 bytes
 CP_M_SRC_P               = $0002 ; 2 bytes
 CP_M_LEN                 = $0004 ; 2 bytes
@@ -192,7 +190,7 @@ get_char_loop:
   jsr keyboard_get_char
   bcs get_char_loop
 get_char_loop_2:
-  jsr console_print_character_with_translation
+  jsr console_print_character
   jsr keyboard_get_char
   bcc get_char_loop_2
   jsr console_show
@@ -698,17 +696,6 @@ keyboard_wait_for_ack:
   beq .wait
   pla
   rts
-
-
-; On entry A = character to print to console
-; On exit  X, Y are preserved
-;          A is not preserved
-console_print_character_with_translation:
-  cmp #ASCII_BACKSPACE
-  beq .backspace
-  jmp console_print_character    ; tail call
-.backspace:
-  jmp console_backspace          ; tail call
 
 
 ; On entry A = value to calculate parity for

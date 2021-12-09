@@ -6,6 +6,8 @@
 
 CONSOLE_LENGTH          = CONSOLE_WIDTH * CONSOLE_HEIGHT
 
+ASCII_BACKSPACE          = 0x08
+
 console_offsets:
   .byte DISPLAY_FIRST_LINE
   .byte DISPLAY_SECOND_LINE
@@ -36,6 +38,9 @@ console_initialize_loop:
 ; On exit X, Y are preserved
 ;         A is not preserved
 console_print_character:
+  cmp #ASCII_BACKSPACE
+  beq console_backspace
+
   phx
   phy
   tax
