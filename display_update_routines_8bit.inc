@@ -50,8 +50,6 @@ display_command:
   rts
 
 
-
-
 ; On Entry A = Character to send
 ; On Exit  X, Y preserved
 ;          A not preserved
