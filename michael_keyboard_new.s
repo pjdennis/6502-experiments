@@ -560,10 +560,25 @@ keyboard_translate_extended:
   rts
 
 
+; On entry A contains the keyboard code
+; On exit  Carry is set if no translation was found
+;          A contains the translated code or original code if no translation found
+;          X, Y are preserved
+keyboard_translate_code_to_ascii:
+  phx
+  phy
+  ldx #<kb_ascii_translation_table
+  ldy #>kb_ascii_translation_table
+  jsr code_translate
+  ply
+  plx
+  rts
+
+
 ; On entry A contains the code
 ;          X, Y contains the address of the translation table
-; On exit  A contains the translated code or original code if no translation found
-;          C is set if code was not found
+; On exit  Carry is set if no translation was found
+;          A contains the translated code or original code if no translation found
 ;          X, Y are not preserved
 code_translate:
   stx TRANSLATE_TABLE
@@ -589,21 +604,6 @@ code_translate:
   txa
   sec
 .done:
-  rts
-
-
-; On entry A contains the keyboard code
-; On exit  Carry is set if no translation was found
-;          A contains the translated code if translation found
-;          X, Y are preserved
-keyboard_translate_code_to_ascii:
-  phx
-  phy
-  ldx #<kb_ascii_translation_table
-  ldy #>kb_ascii_translation_table
-  jsr code_translate
-  ply
-  plx
   rts
 
 
