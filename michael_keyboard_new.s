@@ -220,7 +220,7 @@ keyboard_get_char:
 ;          A contains translated code if translation occurred
 keyboard_get_latest_translated_code:
   lda KEYBOARD_LATEST_CODE
-  jsr keyboard_translate_code_unshifted
+  jsr keyboard_translate_code_to_ascii
   bcs .done
   phx
   tax
@@ -598,36 +598,19 @@ code_translate:
 ; On entry A contains the keyboard code
 ; On exit  Carry is set if no translation was found
 ;          A contains the translated code if translation found
-keyboard_translate_code_unshifted:
+keyboard_translate_code_to_ascii:
   phx
-  phy
-  ldx #<key_codes_unshifted
-  ldy #>key_codes_unshifted
-  jsr table_lookup
-  ply
-  plx
-  rts
-
-
-; On entry A contains the code
-;          X, Y contains the address of the tranlsation table which starts with the length
-; On exit  Carry is set if no translation was found
-;          A contains the translated code if translation found
-;          X, Y are not guaranteed to be preserved
-table_lookup:
-  stx TRANSLATE_TABLE
-  sty TRANSLATE_TABLE + 1
-  cmp (TRANSLATE_TABLE)
-  bcs .no_match                  ; Code is past the end of the table
-  tay
-  iny
-  lda (TRANSLATE_TABLE), Y
-  beq .no_match                  ; Table entry is zero
-  clc
+  cmp #(kb_code_to_ascii_lookup_table_end - kb_code_to_ascii_lookup_table)
+  bcs .no_match
+  tax
+  lda kb_code_to_ascii_lookup_table, X
+  beq .no_match
+  clc ; matched
   bra .done
 .no_match:
   sec
-.done:
+.done
+  plx
   rts
 
 

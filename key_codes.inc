@@ -80,8 +80,7 @@ kb_shift_translation_table:
 
 
 ; Mapping from PS/2 code set 3 to ASCII
-key_codes_unshifted:
-  .byte key_codes_unshifted_end - key_codes_unshifted
+kb_code_to_ascii_lookup_table:
   .byte $00  ;  00
   .byte $00  ;  01
   .byte $00  ;  02
@@ -224,5 +223,5 @@ key_codes_unshifted:
   .byte $00  ;  8b  LWin (USB: LGUI)
   .byte $00  ;  8c  RWin (USB: RGUI)
   .byte $00  ;  8d  Menu
-key_codes_unshifted_end:
+kb_code_to_ascii_lookup_table_end:
 
