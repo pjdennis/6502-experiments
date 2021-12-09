@@ -42,20 +42,6 @@ KB_LED_CAPS_LOCK         = %00000100
 KB_CODE_BREAK            = $f0
 KB_CODE_EXTENDED         = $e0
 KB_CODE_EXTENDED_IGNORE  = $12
-KB_CODE_PAUSE            = $62
-KB_CODE_PRT_SCR          = $57
-KB_CODE_CAPS_LOCK        = $14
-KB_CODE_SCROLL_LOCK      = $5f
-KB_CODE_NUM_LOCK         = $76 
-
-KB_CODE_L_SHIFT          = $12
-KB_CODE_R_SHIFT          = $59
-KB_CODE_L_CTRL           = $11
-KB_CODE_R_CTRL           = $58
-KB_CODE_L_ALT            = $19
-KB_CODE_R_ALT            = $39
-KB_CODE_L_GUI            = $8b
-KB_CODE_R_GUI            = $8c
 
 KB_META_SHIFT            = %10000000
 KB_META_CTRL             = %01000000
@@ -105,14 +91,14 @@ EXTEND_CHARACTER_SET = 1
 kb_seq_pause        .byte $e1, $14, $77, $e1, $f0, $14, $f0, $77, $00
 
 ; Mapping from PS/2 code set 3 lock keys to the bit mask used for tracking lock down/up and on/off
-kb_lock_codes:      .byte KB_CODE_CAPS_LOCK, KB_CODE_SCROLL_LOCK, KB_CODE_NUM_LOCK, $00
-kb_lock_on_masks:   .byte KB_CAPS_LOCK_ON,   KB_SCROLL_LOCK_ON,   KB_NUM_LOCK_ON, $00
+kb_lock_codes:      .byte KEY_CAPSLOCK,      KEY_SCROLLLOCK,      KEY_NUMLOCK,     $00
+kb_lock_on_masks:   .byte KB_CAPS_LOCK_ON,   KB_SCROLL_LOCK_ON,   KB_NUM_LOCK_ON,  $00
 kb_lock_down_masks: .byte KB_CAPS_LOCK_DOWN, KB_SCROLL_LOCK_DOWN, KB_NUM_LOCK_DOWN
 kb_lock_to_led:     .byte KB_LED_CAPS_LOCK,  KB_LED_SCROLL_LOCK,  KB_LED_NUM_LOCK
 
 ; Mapping from PS/2 code set 3 modifier keys to the bit mask used for tracking modifier states
-kb_modifier_codes:  .byte KB_CODE_L_SHIFT, KB_CODE_R_SHIFT, KB_CODE_L_CTRL, KB_CODE_R_CTRL
-                    .byte KB_CODE_L_ALT,   KB_CODE_R_ALT,   KB_CODE_L_GUI,  KB_CODE_R_GUI, $00
+kb_modifier_codes:  .byte KEY_LEFTSHIFT,   KEY_RIGHTSHIFT,  KEY_LEFTCTRL,   KEY_RIGHTCTRL
+                    .byte KEY_LEFTALT,     KEY_RIGHTALT,    KEY_LEFTMETA,   KEY_RIGHTMETA, $00
 kb_modifier_masks:  .byte KB_MOD_L_SHIFT,  KB_MOD_R_SHIFT,  KB_MOD_L_CTRL,  KB_MOD_R_CTRL
                     .byte KB_MOD_L_ALT,    KB_MOD_R_ALT,    KB_MOD_L_GUI,   KB_MOD_R_GUI
 
@@ -470,8 +456,8 @@ keyboard_decode:
   txa                           ; New pause seq index becomes new state
   bra .no_emit
 .pause_emit:
-  lda #0                        ; Emit pause as non-extended make code
-  ldx #KB_CODE_PAUSE
+  lda #0                        ; Emit pause as non-extended make code from set 3
+  ldx #KEY_PAUSE
   bra .emit
 ; A = latest byte from keyboard
 .pause_error:

@@ -1,3 +1,4 @@
+KEY_RESERVED   = $00
 KEY_F1         = $07
 KEY_ESC        = $08
 KEY_TAB        = $0d
@@ -108,54 +109,54 @@ KEY_MENU       = $8d
 ; Translation tables to convert from PS/2 code set 2 to PS/2 code set 3. We use Code set 3
 ; for convenience as it has a single byte per key with no extended prefix
 kb_normal_translation_table:
-  .byte $14, $11  ;  LCtrl
-  .byte $11, $19  ;  LAlt
-  .byte $77, $76  ;  NumLock
-  .byte $7c, $7e  ;  KP-*
-  .byte $7b, $84  ;  KP--
-  .byte $79, $7c  ;  KP-+
-  .byte $76, $08  ;  Esc
-  .byte $05, $07  ;  F1
-  .byte $06, $0f  ;  F2
-  .byte $04, $17  ;  F3
-  .byte $0c, $1f  ;  F4
-  .byte $03, $27  ;  F5
-  .byte $0b, $2f  ;  F6
-  .byte $83, $37  ;  F7
-  .byte $0a, $3f  ;  F8
-  .byte $01, $47  ;  F9
-  .byte $09, $4f  ;  F10
-  .byte $78, $56  ;  F11
-  .byte $07, $5e  ;  F12
-  .byte $7e, $5f  ;  ScrollLock
-  .byte $5d, $5c  ;  \ |
-  .byte $58, $14  ;  CapsLock
-  .byte $84, $57  ;  PrtScr
+  .byte $14, KEY_LEFTCTRL
+  .byte $11, KEY_LEFTALT
+  .byte $77, KEY_NUMLOCK
+  .byte $7c, KEY_KPASTERISK
+  .byte $7b, KEY_KPMINUS
+  .byte $79, KEY_KPPLUS
+  .byte $76, KEY_ESC
+  .byte $05, KEY_F1
+  .byte $06, KEY_F2
+  .byte $04, KEY_F3
+  .byte $0c, KEY_F4
+  .byte $03, KEY_F5
+  .byte $0b, KEY_F6
+  .byte $83, KEY_F7
+  .byte $0a, KEY_F8
+  .byte $01, KEY_F9
+  .byte $09, KEY_F10
+  .byte $78, KEY_F11
+  .byte $07, KEY_F12
+  .byte $7e, KEY_SCROLLLOCK
+  .byte $5d, KEY_BACKSLASH
+  .byte $58, KEY_CAPSLOCK
+  .byte $84, KEY_SYSRQ
   .byte $00
 
 kb_extended_translation_table:
-  .byte $11, $39  ;  RAlt
-  .byte $14, $58  ;  RCtrl
-  .byte $70, $67  ;  Insert
-  .byte $71, $64  ;  Delete
-  .byte $6b, $61  ;  Left
-  .byte $6c, $6e  ;  Home
-  .byte $69, $65  ;  End
-  .byte $75, $63  ;  Up
-  .byte $72, $60  ;  Down
-  .byte $7d, $6f  ;  PgUp
-  .byte $7a, $6d  ;  PgDn
-  .byte $74, $6a  ;  Right
-  .byte $4a, $77  ;  KP-/
-  .byte $5a, $79  ;  KP-Enter
-  .byte $1f, $8b  ;  LWin (USB: LGUI)
-  .byte $27, $8c  ;  RWin (USB: RGUI)
-  .byte $2f, $8d  ;  Menu
-  .byte $7e, $62  ;  Pause
-  .byte $3f, $7f  ;  Sleep
-  .byte $37, $00  ;  Power  (not mapped)
-  .byte $5e, $00  ;  Wake   (not mapped)
-  .byte $7c, $57  ;  PrtScr
+  .byte $11, KEY_RIGHTALT
+  .byte $14, KEY_RIGHTCTRL
+  .byte $70, KEY_INSERT
+  .byte $71, KEY_DELETE
+  .byte $6b, KEY_LEFT
+  .byte $6c, KEY_HOME
+  .byte $69, KEY_END
+  .byte $75, KEY_UP
+  .byte $72, KEY_DOWN
+  .byte $7d, KEY_PAGEUP
+  .byte $7a, KEY_PAGEDOWN
+  .byte $74, KEY_RIGHT
+  .byte $4a, KEY_KPSLASH
+  .byte $5a, KEY_KPENTER
+  .byte $1f, KEY_LEFTMETA
+  .byte $27, KEY_RIGHTMETA
+  .byte $2f, KEY_MENU
+  .byte $7e, KEY_PAUSE
+  .byte $3f, KEY_SLEEP
+  .byte $37, KEY_RESERVED ; Power (not mapped)
+  .byte $5e, KEY_RESERVED ; Wake  (not mapped)
+  .byte $7c, KEY_SYSRQ
   .byte $00
 
 
