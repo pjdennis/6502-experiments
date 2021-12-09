@@ -173,19 +173,15 @@ program_start:
 
   lda #KB_COMMAND_ENABLE
   jsr keyboard_send_command
-  jsr keyboard_wait_for_ack
 
   lda #KB_COMMAND_SET_TYPEMATIC
   jsr keyboard_send_command
-  jsr keyboard_wait_for_ack
 
   lda #0 ; Fastest rate (30 cps) + shortest delay (0.25 seconds)
   jsr keyboard_send_command
-  jsr keyboard_wait_for_ack
 
   lda #0
   jsr keyboard_set_leds
-  jsr keyboard_wait_for_ack
 
   ; Read and display translated characters from the keyboard
 get_char_loop:
@@ -623,10 +619,8 @@ keyboard_set_leds:
   tax
   lda #KB_COMMAND_SET_LEDS
   jsr keyboard_send_command
-  jsr keyboard_wait_for_ack
   txa
   jsr keyboard_send_command
-  jsr keyboard_wait_for_ack
   plx
   rts
 
@@ -673,18 +667,13 @@ parity_mask_ready:               ; Mask is in A
   lda SENDING_TO_KEYBOARD
   bne .wait_for_send
 
+  ; Wait for ACK
+.wait_for_ack:
+  lda ACK_RECEIVED
+  beq .wait_for_ack
+
   ply
   plx
-  rts
-
-
-; On exit A, X, Y are preserved
-keyboard_wait_for_ack:
-  pha
-.wait:
-  lda ACK_RECEIVED
-  beq .wait
-  pla
   rts
 
 
