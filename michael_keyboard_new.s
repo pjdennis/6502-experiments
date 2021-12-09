@@ -93,7 +93,6 @@ CONSOLE_TEXT             = $0300 ; CONSOLE_LENGTH (32) bytes
   .include initialize_machine_v2.inc
 EXTEND_CHARACTER_SET = 1
   .include display_routines.inc
-  .include convert_to_hex.inc
   .include full_screen_console_flexible.inc
   .include simple_buffer.inc
   .include copy_memory.inc
@@ -179,11 +178,14 @@ program_start:
   lda #KB_COMMAND_SET_TYPEMATIC
   jsr keyboard_send_command
   jsr keyboard_wait_for_ack
+
   lda #0 ; Fastest rate (30 cps) + shortest delay (0.25 seconds)
   jsr keyboard_send_command
+  jsr keyboard_wait_for_ack
 
   lda #0
   jsr keyboard_set_leds
+  jsr keyboard_wait_for_ack
 
   ; Read and display translated characters from the keyboard
 get_char_loop:
