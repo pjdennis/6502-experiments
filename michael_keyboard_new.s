@@ -563,6 +563,7 @@ keyboard_translate_extended:
 ; On entry A contains the code
 ;          X, Y contains the address of the translation table
 ; On exit  A contains the translated code or original code if no translation found
+;          C is set if code was not found
 ;          X, Y are not preserved
 code_translate:
   stx TRANSLATE_TABLE
@@ -582,9 +583,11 @@ code_translate:
   ; Code found
   iny
   lda (TRANSLATE_TABLE), Y
+  clc
   bra .done
 .not_found:
   txa
+  sec
 .done:
   rts
 
@@ -595,16 +598,11 @@ code_translate:
 ;          X, Y are preserved
 keyboard_translate_code_to_ascii:
   phx
-  cmp #(kb_code_to_ascii_lookup_table_end - kb_code_to_ascii_lookup_table)
-  bcs .no_match
-  tax
-  lda kb_code_to_ascii_lookup_table, X
-  beq .no_match
-  clc ; matched
-  bra .done
-.no_match:
-  sec
-.done
+  phy
+  ldx #<kb_ascii_translation_table
+  ldy #>kb_ascii_translation_table
+  jsr code_translate
+  ply
   plx
   rts
 
