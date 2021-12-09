@@ -62,11 +62,6 @@ KB_META_EXTENDED         = %00000010
 KB_META_BREAK            = %00000001
 
 ASCII_BACKSPACE          = 0x08
-ASCII_TILDE              = 0x7e
-ASCII_BACKSLASH          = 0x5c
-
-CHARACTER_TILDE          = 1
-CHARACTER_BACKSLASH      = 2
 
 CP_M_DEST_P              = $0000 ; 2 bytes
 CP_M_SRC_P               = $0002 ; 2 bytes
@@ -98,6 +93,7 @@ CONSOLE_TEXT             = $0300 ; CONSOLE_LENGTH (32) bytes
   ; stack is not usable until after the hardware registers have been initialized
   .include delay_routines.inc
   .include initialize_machine_v2.inc
+EXTEND_CHARACTER_SET = 1
   .include display_routines.inc
   .include convert_to_hex.inc
   .include full_screen_console_flexible.inc
@@ -105,29 +101,8 @@ CONSOLE_TEXT             = $0300 ; CONSOLE_LENGTH (32) bytes
   .include copy_memory.inc
   .include key_codes.inc
 
-; Custom characters
-character_data_tilde:
-  .byte %00000
-  .byte %00000
-  .byte %00000
-  .byte %01101
-  .byte %10010
-  .byte %00000
-  .byte %00000
-  .byte %00000
-
-character_data_backslash:
-  .byte %00000
-  .byte %10000
-  .byte %01000
-  .byte %00100
-  .byte %00010
-  .byte %00001
-  .byte %00000
-  .byte %00000
-
 ; Code sequence for the pause/break key
-kb_seq_pause       .byte $e1, $14, $77, $e1, $f0, $14, $f0, $77, $00
+kb_seq_pause        .byte $e1, $14, $77, $e1, $f0, $14, $f0, $77, $00
 
 ; Mapping from PS/2 code set 3 lock keys to the bit mask used for tracking lock down/up and on/off
 kb_lock_codes:      .byte KB_CODE_CAPS_LOCK, KB_CODE_SCROLL_LOCK, KB_CODE_NUM_LOCK, $00
@@ -157,17 +132,6 @@ program_start:
   jsr reset_and_enable_display_no_cursor
   jsr console_initialize
   jsr simple_buffer_initialize
-
-  ; Create characters
-  lda #CHARACTER_TILDE
-  ldx #<character_data_tilde
-  ldy #>character_data_tilde
-  jsr create_character
-
-  lda #CHARACTER_BACKSLASH
-  ldx #<character_data_backslash
-  ldy #>character_data_backslash
-  jsr create_character
 
   ; Initialize Keyboard decode state
   stz KEYBOARD_DECODE_STATE
@@ -742,54 +706,9 @@ keyboard_wait_for_ack:
 console_print_character_with_translation:
   cmp #ASCII_BACKSPACE
   beq .backspace
-  jsr translate_character_for_display
   jmp console_print_character    ; tail call
 .backspace:
   jmp console_backspace          ; tail call
-
-
-; On entry A is an ASCII character
-; On exit  A is translated to the custom char code if applicable
-translate_character_for_display:
-  cmp #ASCII_TILDE
-  beq .tilde
-  cmp #ASCII_BACKSLASH
-  beq .backslash
-  bra .done
-.tilde:
-  lda #CHARACTER_TILDE
-  bra .done
-.backslash:
-  lda #CHARACTER_BACKSLASH
-  ; fall through to done
-.done:
-  rts
-
-
-;On entry A = character number
-;         X = low byte source address
-;         Y = high byte source address
-;On exit  A, X, Y are not preserved
-create_character:
-  stx CREATE_CHARACTER_PARAM
-  sty CREATE_CHARACTER_PARAM + 1
-
-  asl
-  asl
-  asl
-  ora #CMD_SET_CGRAM_ADDRESS
-  jsr display_command
-
-  ldy #0
-.repeat:
-  lda (CREATE_CHARACTER_PARAM), Y
-  jsr display_character
-
-  iny
-  cpy #8
-  bne .repeat
-
-  rts
 
 
 ; On entry A = value to calculate parity for

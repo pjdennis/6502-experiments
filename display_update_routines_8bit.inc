@@ -50,10 +50,18 @@ display_command:
   rts
 
 
+
+
 ; On Entry A = Character to send
 ; On Exit  X, Y preserved
 ;          A not preserved
 display_character:
+  .ifdef EXTEND_CHARACTER_SET
+  jsr extend_character_set_translate_for_display
+  .endif
+
+; Alternate entry point bypasses translation
+display_data:
   jsr wait_for_not_busy
   sta PORTB
   lda #RS        ; Register select bit
