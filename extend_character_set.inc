@@ -1,7 +1,11 @@
 ; Requires CREATE_CHARACTER_PARAM (2 bytes in zero page)
 
+ASCII_TAB                = 0x09
 ASCII_TILDE              = 0x7e
 ASCII_BACKSLASH          = 0x5c
+
+CHARACTER_RIGHT_ARROW    = 0x7e
+
 
 ; Use the last two custom character positions
 CHARACTER_TILDE          = 6
@@ -56,6 +60,8 @@ extend_character_set_translate_for_display:
   beq .tilde
   cmp #ASCII_BACKSLASH
   beq .backslash
+  cmp #ASCII_TAB
+  beq .tab
   rts
 .tilde:
   lda #CHARACTER_TILDE
@@ -63,7 +69,9 @@ extend_character_set_translate_for_display:
 .backslash:
   lda #CHARACTER_BACKSLASH
   rts
-
+.tab
+  lda #CHARACTER_RIGHT_ARROW
+  rts
 
 ;On entry A = character number
 ;         X = low byte source address

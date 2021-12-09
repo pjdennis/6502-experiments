@@ -187,6 +187,8 @@ kb_shift_translation_table:
   .byte $00
 
 
+kb_ascii_translation_table:
+
 ; Mapping from PS/2 code set 3 to ASCII
 kb_code_to_ascii_lookup_table:
   .byte $00  ;  00
@@ -202,7 +204,7 @@ kb_code_to_ascii_lookup_table:
   .byte $00  ;  0a
   .byte $00  ;  0b
   .byte $00  ;  0c
-  .byte $00  ;  0d  Tab
+  .byte $09  ;  0d  Tab
   .byte $60  ;  0e  ` ~
   .byte $00  ;  0f  F2
   .byte $00  ;  10
