@@ -279,6 +279,12 @@ keyboard_decode_and_translate_to_set_3:
   lda KEYBOARD_LATEST_CODE
   jsr keyboard_translate_extended
 .translate_done:
+  cmp #0
+  bne .code_found
+; No translation
+  sec
+  bra .decode_done
+.code_found:
   sta KEYBOARD_LATEST_CODE
   jsr keyboard_caps_lock_track
   jsr keyboard_modifier_track
