@@ -1,54 +1,54 @@
 ; Translation tables to convert from PS/2 code set 2 to PS/2 code set 3. We use Code set 3
 ; for convenience as it has a single byte per key with no extended prefix
 kb_normal_translation_table:
-  .byte $14, $11
-  .byte $11, $19
-  .byte $77, $76
-  .byte $7c, $7e
-  .byte $7b, $84
-  .byte $79, $7c
-  .byte $76, $08
-  .byte $05, $07
-  .byte $06, $0f
-  .byte $04, $17
-  .byte $0c, $1f
-  .byte $03, $27
-  .byte $0b, $2f
-  .byte $83, $37
-  .byte $0a, $3f
-  .byte $01, $47
-  .byte $09, $4f
-  .byte $78, $56
-  .byte $07, $5e
-  .byte $7e, $5f
-  .byte $5d, $5c
-  .byte $58, $14
-  .byte $84, $57
+  .byte $14, $11  ;  LCtrl
+  .byte $11, $19  ;  LAlt
+  .byte $77, $76  ;  NumLock
+  .byte $7c, $7e  ;  KP-*
+  .byte $7b, $84  ;  KP--
+  .byte $79, $7c  ;  KP-+
+  .byte $76, $08  ;  Esc
+  .byte $05, $07  ;  F1
+  .byte $06, $0f  ;  F2
+  .byte $04, $17  ;  F3
+  .byte $0c, $1f  ;  F4
+  .byte $03, $27  ;  F5
+  .byte $0b, $2f  ;  F6
+  .byte $83, $37  ;  F7
+  .byte $0a, $3f  ;  F8
+  .byte $01, $47  ;  F9
+  .byte $09, $4f  ;  F10
+  .byte $78, $56  ;  F11
+  .byte $07, $5e  ;  F12
+  .byte $7e, $5f  ;  ScrollLock
+  .byte $5d, $5c  ;  \ |
+  .byte $58, $14  ;  CapsLock
+  .byte $84, $57  ;  PrtScr
   .byte $00
 
 kb_extended_translation_table:
-  .byte $11, $39
-  .byte $14, $58
-  .byte $70, $67
-  .byte $71, $64
-  .byte $6b, $61
-  .byte $6c, $6e
-  .byte $69, $65
-  .byte $75, $63
-  .byte $72, $60
-  .byte $7d, $6f
-  .byte $7a, $6d
-  .byte $74, $6a
-  .byte $4a, $77
-  .byte $5a, $79
-  .byte $1f, $8b
-  .byte $27, $8c
-  .byte $2f, $8d
-  .byte $7e, $62
-  .byte $3f, $7f
-  .byte $37, $00
-  .byte $5e, $00
-  .byte $7c, $57
+  .byte $11, $39  ;  RAlt
+  .byte $14, $58  ;  RCtrl
+  .byte $70, $67  ;  Insert
+  .byte $71, $64  ;  Delete
+  .byte $6b, $61  ;  Left
+  .byte $6c, $6e  ;  Home
+  .byte $69, $65  ;  End
+  .byte $75, $63  ;  Up
+  .byte $72, $60  ;  Down
+  .byte $7d, $6f  ;  PgUp
+  .byte $7a, $6d  ;  PgDn
+  .byte $74, $6a  ;  Right
+  .byte $4a, $77  ;  KP-/
+  .byte $5a, $79  ;  KP-Enter
+  .byte $1f, $8b  ;  LWin (USB: LGUI)
+  .byte $27, $8c  ;  RWin (USB: RGUI)
+  .byte $2f, $8d  ;  Menu
+  .byte $7e, $62  ;  Pause
+  .byte $3f, $7f  ;  Sleep
+  .byte $37, $00  ;  Power  (not mapped)
+  .byte $5e, $00  ;  Wake   (not mapped)
+  .byte $7c, $57  ;  PrtScr
   .byte $00
 
 

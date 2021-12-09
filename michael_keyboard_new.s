@@ -1,4 +1,7 @@
-;TODO: if code is not on the full list of codes that are understood then ignore it?
+;TODO: If code is not on the full list of codes that are understood then ignore it?
+;      12/8/21 This might be related to key codes that don't map over to set 3. Currently
+;      they will not translate to ASCII, but if we look at raw key codes they won't be
+;      filtered out
 
   .include base_config_v2.inc
 
