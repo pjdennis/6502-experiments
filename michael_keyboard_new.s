@@ -221,17 +221,29 @@ keyboard_get_char:
 keyboard_get_latest_translated_code:
   lda KEYBOARD_LATEST_META
   bit #KB_META_SHIFT
-  bne .translate_upper
+  bne .translate_shifted
   lda KEYBOARD_LOCK_STATE
   bit #KB_CAPS_LOCK_ON
-  bne .translate_upper
-; Lower
+  bne .translate_caps_lock
+; Unshifted
   lda KEYBOARD_LATEST_CODE
-  jsr keyboard_translate_code_lower
+  jsr keyboard_translate_code_unshifted
   bra .done
-.translate_upper:
+.translate_shifted:
   lda KEYBOARD_LATEST_CODE
-  jsr keyboard_translate_code_upper
+  jsr keyboard_translate_code_shifted
+  bra .done
+.translate_caps_lock:
+  lda KEYBOARD_LATEST_CODE
+  jsr keyboard_translate_code_unshifted
+  bcs .done ; no translation found
+  cmp #'a'
+  bcc .done
+  cmp #('z' + 1)
+  bcs .done
+  sec
+  sbc #('a' - 'A')
+  clc ; translation found
 .done:
   rts
 
@@ -578,11 +590,11 @@ code_translate:
 ; On entry A contains the keyboard code
 ; On exit  Carry is set if no translation was found
 ;          A contains the translated code if translation found
-keyboard_translate_code_lower:
+keyboard_translate_code_unshifted:
   phx
   phy
-  ldx #<key_codes_lower
-  ldy #>key_codes_lower
+  ldx #<key_codes_unshifted
+  ldy #>key_codes_unshifted
   jsr table_lookup
   ply
   plx
@@ -593,11 +605,11 @@ keyboard_translate_code_lower:
 ; On exit  Carry is set if no translation was found
 ;          A contains the translated code if translation found
 ;          X, Y are preserved
-keyboard_translate_code_upper:
+keyboard_translate_code_shifted:
   phx
   phy
-  ldx #<key_codes_upper
-  ldy #>key_codes_upper
+  ldx #<key_codes_shifted
+  ldy #>key_codes_shifted
   jsr table_lookup
   ply
   plx

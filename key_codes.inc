@@ -53,8 +53,8 @@ kb_extended_translation_table:
 
 ; Mapping from PS/2 code set 3 to ASCII
 
-key_codes_lower:
-  .byte key_codes_lower_end - key_codes_lower
+key_codes_unshifted:
+  .byte key_codes_unshifted_end - key_codes_unshifted
   .byte $00  ;  00
   .byte $00  ;  01
   .byte $00  ;  02
@@ -197,10 +197,10 @@ key_codes_lower:
   .byte $00  ;  8b  LWin (USB: LGUI)
   .byte $00  ;  8c  RWin (USB: RGUI)
   .byte $00  ;  8d  Menu
-key_codes_lower_end:
+key_codes_unshifted_end:
 
-key_codes_upper:
-  .byte key_codes_upper_end - key_codes_upper
+key_codes_shifted:
+  .byte key_codes_shifted_end - key_codes_shifted
   .byte $00  ;  00
   .byte $00  ;  01
   .byte $00  ;  02
@@ -343,4 +343,4 @@ key_codes_upper:
   .byte $00  ;  8b  LWin (USB: LGUI)
   .byte $00  ;  8c  RWin (USB: RGUI)
   .byte $00  ;  8d  Menu
-key_codes_upper_end:
+key_codes_shifted_end:
