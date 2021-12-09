@@ -200,6 +200,7 @@ get_char_loop_2:
 
 ; On exit Carry set if no result so far
 ;         A contains the next char
+;         X, Y are preserved
 keyboard_get_char:
 .repeat:
   jsr simple_buffer_read
