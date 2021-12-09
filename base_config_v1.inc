@@ -16,6 +16,8 @@ RS                = %00000001
 BF                = %01000000
 DISPLAY_BITS_MASK = (DISPLAY_DATA_MASK | E | RW | RS)
 
+DISPLAY_BITS = 4
+
 ;16x2 LCD
 ;DISPLAY_WIDTH     = 16
 ;CONSOLE_HEIGHT    = 2

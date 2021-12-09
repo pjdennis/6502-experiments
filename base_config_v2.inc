@@ -11,6 +11,8 @@ START  = %00100000  ; Output start bit - multiplexed with RW and ACK bit
 ACK    = %00100000  ; Input ACK bit - multiplexed with RW and output start bit
 PARITY = %01000000  ; Input and output parity bit - multiplexed with RS
 
+DISPLAY_BITS = 8
+
 ; 16x2 LCD
 DISPLAY_WIDTH     = 16
 CONSOLE_HEIGHT    = 2

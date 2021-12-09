@@ -98,7 +98,7 @@ CONSOLE_TEXT             = $0300 ; CONSOLE_LENGTH (32) bytes
   ; stack is not usable until after the hardware registers have been initialized
   .include delay_routines.inc
   .include initialize_machine_v2.inc
-  .include display_routines_8bit.inc
+  .include display_routines.inc
   .include convert_to_hex.inc
   .include full_screen_console_flexible.inc
   .include simple_buffer.inc
