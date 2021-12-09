@@ -204,12 +204,12 @@ keyboard_get_char:
 .repeat:
   jsr simple_buffer_read
   bcs .done                     ; Exit when input buffer is empty
-  jsr keyboard_decode_and_translate
+  jsr keyboard_decode_and_translate_to_set_3
   bcs .repeat                   ; Nothing decoded so far so read more
   lda KEYBOARD_LATEST_META
   bit #KB_META_BREAK
   bne .repeat                   ; Decoded key up event; ignore these so read more
-  jsr keyboard_get_latest_translated_code
+  jsr keyboard_get_latest_ascii
   bcs .repeat                   ; No translation for code; ignore these so read more
 .done:
   rts
@@ -219,7 +219,7 @@ keyboard_get_char:
 ;          KEYBOARD_LATEST_CODE contains current key code
 ; On exit  Carry set if no translation
 ;          A contains translated code if translation occurred
-keyboard_get_latest_translated_code:
+keyboard_get_latest_ascii:
   lda KEYBOARD_LATEST_CODE
   jsr keyboard_translate_code_to_ascii
   bcs .done
@@ -263,7 +263,7 @@ keyboard_get_latest_translated_code:
 ;         A is not preserved
 ;         KEYBOARD_LATEST_META contains metadata for latest key event
 ;         KEYBOARD_LATEST_CODE contains code for latest key event
-keyboard_decode_and_translate:
+keyboard_decode_and_translate_to_set_3:
   jsr keyboard_decode
   bcs .decode_done              ; No data so we are done
   lda KEYBOARD_LATEST_META
@@ -599,6 +599,7 @@ code_translate:
 ; On entry A contains the keyboard code
 ; On exit  Carry is set if no translation was found
 ;          A contains the translated code if translation found
+;          X, Y are preserved
 keyboard_translate_code_to_ascii:
   phx
   cmp #(kb_code_to_ascii_lookup_table_end - kb_code_to_ascii_lookup_table)
