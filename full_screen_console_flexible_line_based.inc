@@ -38,13 +38,15 @@ console_initialize_loop:
 ; On exit X, Y are preserved
 ;         A is not preserved
 console_print_character:
+  phy
+
   cmp #ASCII_BACKSPACE
-  beq _console_backspace
+  beq .console_backspace
 
   cmp #ASCII_NEWLINE
-  beq _console_newline
+  beq .console_newline
 
-  phy
+  ; Handle normal character (not backspace or newline)
   ldy CONSOLE_CHARACTER_COUNT
   sta CONSOLE_TEXT, Y
   inc CONSOLE_CHARACTER_COUNT
@@ -55,35 +57,27 @@ console_print_character:
 
   jsr console_scroll_up
 
-.done
-  ply
-  rts
-
-
-; On exit X, Y are preserved
-_console_backspace:
-  phy
-  ldy CONSOLE_CHARACTER_COUNT
-  beq .done                   ; Already at beginning of buffer
-.find_loop
-  dey
-  beq .found                  ; Y == 0 => Reached the beginning of the buffer
-  lda CONSOLE_TEXT, Y
-  beq .find_loop              ; Skip over 0 values
-.found
-  lda #0
-  sta CONSOLE_TEXT, Y
-  sty CONSOLE_CHARACTER_COUNT
 .done:
   ply
   rts
 
+  ; Handle backspace
+.console_backspace:
+  ldy CONSOLE_CHARACTER_COUNT
+  beq .done                   ; Already at beginning of buffer
+.find_non_zero_loop
+  dey
+  beq .found_non_zero         ; Y == 0 => Reached the beginning of the buffer
+  lda CONSOLE_TEXT, Y
+  beq .find_non_zero_loop     ; Skip over 0 values
+.found_non_zero
+  lda #0
+  sta CONSOLE_TEXT, Y
+  sty CONSOLE_CHARACTER_COUNT
+  bra .done
 
-; On entry A is the newline character
-; On exit X, Y are preserved
-;         A is not preserved
-_console_newline:
-  phy
+  ; Handle newline
+.console_newline:
   ldy CONSOLE_CHARACTER_COUNT
   sta CONSOLE_TEXT, Y
 
@@ -93,19 +87,18 @@ _console_newline:
   jsr console_scroll_up
 .scroll_ok:
   lda #CONSOLE_WIDTH
-.find_loop:
+.find_position_loop:
   cmp CONSOLE_CHARACTER_COUNT
-  beq .not_found
-  bcs .found
-.not_found
+  beq .position_not_yet_found
+  bcs .position_found
+.position_not_yet_found
   clc
   adc #CONSOLE_WIDTH
-  bra .find_loop
-.found:
+  bra .find_position_loop
+.position_found:
   sta CONSOLE_CHARACTER_COUNT
 
-  ply
-  rts
+  bra .done
 
 
 ; Show console on screen
