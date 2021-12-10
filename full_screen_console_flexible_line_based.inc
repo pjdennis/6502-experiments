@@ -7,6 +7,7 @@
 CONSOLE_LENGTH          = CONSOLE_WIDTH * CONSOLE_HEIGHT
 
 ASCII_BACKSPACE          = 0x08
+ASCII_NEWLINE            = 0x0a
 
 console_offsets:
   .byte DISPLAY_FIRST_LINE
@@ -40,6 +41,9 @@ console_initialize_loop:
 console_print_character:
   cmp #ASCII_BACKSPACE
   beq console_backspace
+
+  cmp #ASCII_NEWLINE
+  beq console_newline
 
   phy
   ldy CONSOLE_CHARACTER_COUNT
@@ -76,6 +80,28 @@ console_backspace:
   sty CONSOLE_CHARACTER_COUNT
 .done:
   ply
+  pla
+  rts
+
+; On exit A, X, Y are preserved
+console_newline:
+  pha
+
+  lda CONSOLE_CHARACTER_COUNT
+  cmp #(CONSOLE_LENGTH - CONSOLE_WIDTH)
+  bcc .scroll_ok
+  jsr console_scroll_up
+.scroll_ok:
+  lda #0
+.find_loop:
+  cmp CONSOLE_CHARACTER_COUNT
+  bcs .found
+  ; Carry is clear for the addition
+  adc #CONSOLE_WIDTH
+  bra .find_loop
+.found:
+  sta CONSOLE_CHARACTER_COUNT
+
   pla
   rts
 
