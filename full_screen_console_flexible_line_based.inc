@@ -40,10 +40,10 @@ console_initialize_loop:
 ;         A is not preserved
 console_print_character:
   cmp #ASCII_BACKSPACE
-  beq console_backspace
+  beq _console_backspace
 
   cmp #ASCII_NEWLINE
-  beq console_newline
+  beq _console_newline
 
   phy
   ldy CONSOLE_CHARACTER_COUNT
@@ -61,38 +61,39 @@ console_print_character:
   rts
 
 
-; On exit A, X, Y are preserved
-console_backspace:
-  pha
+; On exit X, Y are preserved
+_console_backspace:
   phy
   ldy CONSOLE_CHARACTER_COUNT
   beq .done                   ; Already at beginning of buffer
-  lda #0
-  dey
-  sta CONSOLE_TEXT, Y
 .find_loop
-  beq .found                  ; Y == 0 => Reached the beginning of the buffer
-  lda CONSOLE_TEXT - 1, Y
-  bne .found                  ; Reached a non-zero value
   dey
-  bra .find_loop
+  beq .found                  ; Y == 0 => Reached the beginning of the buffer
+  lda CONSOLE_TEXT, Y
+  beq .find_loop              ; Skip over 0 values
 .found
+  lda #0
+  sta CONSOLE_TEXT, Y
   sty CONSOLE_CHARACTER_COUNT
 .done:
   ply
-  pla
   rts
 
-; On exit A, X, Y are preserved
-console_newline:
-  pha
+
+; On entry A is the newline character
+; On exit X, Y are preserved
+;         A is not preserved
+_console_newline:
+  phy
+  ldy CONSOLE_CHARACTER_COUNT
+  sta CONSOLE_TEXT, Y
 
   lda CONSOLE_CHARACTER_COUNT
   cmp #(CONSOLE_LENGTH - CONSOLE_WIDTH)
   bcc .scroll_ok
   jsr console_scroll_up
 .scroll_ok:
-  lda #0
+  lda #CONSOLE_WIDTH
 .find_loop:
   cmp CONSOLE_CHARACTER_COUNT
   bcs .found
@@ -102,7 +103,7 @@ console_newline:
 .found:
   sta CONSOLE_CHARACTER_COUNT
 
-  pla
+  ply
   rts
 
 
@@ -121,8 +122,16 @@ console_show_loop_lines:
   phy
   ldy #CONSOLE_WIDTH
 console_show_loop_columns:
+  cpx CONSOLE_CHARACTER_COUNT
+  bne .show_normal
+  lda #'_'
+  bra .show_character
+.show_normal:
   lda CONSOLE_TEXT, X
+  beq .show_space
+  cmp #ASCII_NEWLINE
   bne .show_character
+.show_space:
   lda #' '
 .show_character:
   jsr display_character
