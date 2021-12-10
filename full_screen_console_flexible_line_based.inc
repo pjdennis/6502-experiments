@@ -15,7 +15,6 @@ console_offsets:
   .byte DISPLAY_FIRST_LINE + 20
   .byte DISPLAY_SECOND_LINE + 20
 
-
 ; On exit  A, X, Y are preserved
 console_initialize:
   pha
@@ -96,8 +95,10 @@ _console_newline:
   lda #CONSOLE_WIDTH
 .find_loop:
   cmp CONSOLE_CHARACTER_COUNT
+  beq .not_found
   bcs .found
-  ; Carry is clear for the addition
+.not_found
+  clc
   adc #CONSOLE_WIDTH
   bra .find_loop
 .found:
