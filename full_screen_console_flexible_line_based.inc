@@ -59,17 +59,22 @@ console_print_character:
 
 ; On exit A, X, Y are preserved
 console_backspace:
-  rts ; TODO - new implementation
-
   pha
   phy
   ldy CONSOLE_CHARACTER_COUNT
-  beq console_backspace_done
+  beq .done                   ; Already at beginning of buffer
+  lda #0
   dey
-  lda #' '
   sta CONSOLE_TEXT, Y
+.find_loop
+  beq .found                  ; Y == 0 => Reached the beginning of the buffer
+  lda CONSOLE_TEXT - 1, Y
+  bne .found                  ; Reached a non-zero value
+  dey
+  bra .find_loop
+.found
   sty CONSOLE_CHARACTER_COUNT
-console_backspace_done:
+.done:
   ply
   pla
   rts
