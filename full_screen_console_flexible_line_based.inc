@@ -38,7 +38,7 @@ console_initialize_loop:
 ; On exit X, Y are preserved
 ;         A is not preserved
 console_print_character:
-  phy
+  phx
 
   cmp #ASCII_BACKSPACE
   beq .console_backspace
@@ -47,8 +47,8 @@ console_print_character:
   beq .console_newline
 
   ; Handle normal character (not backspace or newline)
-  ldy CONSOLE_CHARACTER_COUNT
-  sta CONSOLE_TEXT, Y
+  ldx CONSOLE_CHARACTER_COUNT
+  sta CONSOLE_TEXT, X
   inc CONSOLE_CHARACTER_COUNT
 
   lda CONSOLE_CHARACTER_COUNT
@@ -58,28 +58,28 @@ console_print_character:
   jsr console_scroll_up
 
 .done:
-  ply
+  plx
   rts
 
   ; Handle backspace
 .console_backspace:
-  ldy CONSOLE_CHARACTER_COUNT
+  ldx CONSOLE_CHARACTER_COUNT
   beq .done                   ; Already at beginning of buffer
 .find_non_zero_loop
-  dey
-  beq .found_non_zero         ; Y == 0 => Reached the beginning of the buffer
-  lda CONSOLE_TEXT, Y
+  dex
+  beq .found_non_zero         ; X == 0 => Reached the beginning of the buffer
+  lda CONSOLE_TEXT, X
   beq .find_non_zero_loop     ; Skip over 0 values
 .found_non_zero
   lda #0
-  sta CONSOLE_TEXT, Y
-  sty CONSOLE_CHARACTER_COUNT
+  sta CONSOLE_TEXT, X
+  stx CONSOLE_CHARACTER_COUNT
   bra .done
 
   ; Handle newline
 .console_newline:
-  ldy CONSOLE_CHARACTER_COUNT
-  sta CONSOLE_TEXT, Y
+  ldx CONSOLE_CHARACTER_COUNT
+  sta CONSOLE_TEXT, X
 
   lda CONSOLE_CHARACTER_COUNT
   cmp #(CONSOLE_LENGTH - CONSOLE_WIDTH)
