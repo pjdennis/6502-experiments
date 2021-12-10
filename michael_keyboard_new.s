@@ -82,7 +82,7 @@ CONSOLE_TEXT             = $0300 ; CONSOLE_LENGTH (32) bytes
   .include initialize_machine_v2.inc
 EXTEND_CHARACTER_SET = 1
   .include display_routines.inc
-  .include full_screen_console_flexible.inc
+  .include full_screen_console_flexible_line_based.inc
   .include simple_buffer.inc
   .include copy_memory.inc
   .include key_codes.inc
