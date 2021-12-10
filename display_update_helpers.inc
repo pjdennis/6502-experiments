@@ -24,3 +24,21 @@ display_space:
   jsr display_character
   pla
   rts
+
+
+; On exit A, X, Y preserved
+display_cursor_off:
+  pha
+  lda #(CMD_DISPLAY_ON_OFF_CONTROL | CMD_PARAM_DISPLAY_ON) ; Display on; cursor off
+  jsr display_command
+  pla
+  rts
+
+
+; On exit A, X, Y preserved
+display_cursor_on:
+  pha
+  lda #(CMD_DISPLAY_ON_OFF_CONTROL | CMD_PARAM_DISPLAY_ON | CMD_PARAM_CURSOR_ON)
+  jsr display_command
+  pla
+  rts

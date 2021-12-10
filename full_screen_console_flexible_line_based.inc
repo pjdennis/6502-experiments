@@ -108,6 +108,8 @@ console_show:
   phx
   phy
 
+  jsr display_cursor_off
+
   ldx #0
   ldy #0
 console_show_loop_lines:
@@ -116,11 +118,6 @@ console_show_loop_lines:
   phy
   ldy #CONSOLE_WIDTH
 console_show_loop_columns:
-  cpx CONSOLE_CHARACTER_COUNT
-  bne .show_normal
-  lda #'_'
-  bra .show_character
-.show_normal:
   lda CONSOLE_TEXT, X
   beq .show_space
   cmp #ASCII_NEWLINE
@@ -136,6 +133,21 @@ console_show_loop_columns:
   iny
   cpy #CONSOLE_HEIGHT
   bne console_show_loop_lines
+
+  ldx #0
+  lda CONSOLE_CHARACTER_COUNT
+.find_loop:
+  cmp #CONSOLE_WIDTH
+  bcc .found
+  sec
+  sbc #CONSOLE_WIDTH
+  inx
+  bra .find_loop
+.found:
+  clc
+  adc console_offsets, X
+  jsr move_cursor
+  jsr display_cursor_on
 
   ply
   plx
