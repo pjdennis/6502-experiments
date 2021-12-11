@@ -217,35 +217,3 @@ _console_position_cursor:
 
   ply
   rts
-
-
-; Scroll up one line; fill in last line with nulls; adjust character count
-; On exit A, X, Y are preserved
-console_scroll_up: ; TODO
-  pha
-  phx
-
-  ldx #0
-.move_loop:
-  lda CONSOLE_TEXT + CONSOLE_WIDTH, X
-  sta CONSOLE_TEXT, X
-  inx
-  cpx #(CONSOLE_LENGTH - CONSOLE_WIDTH)
-  bne .move_loop
-.fill_loop
-  stz CONSOLE_TEXT, X
-  inx
-  cpx #CONSOLE_LENGTH
-  bne .fill_loop
-
-  lda CONSOLE_CURSOR_POSITION
-  cmp #CONSOLE_WIDTH
-  bcc .done
-  sec
-  sbc #CONSOLE_WIDTH
-  sta CONSOLE_CURSOR_POSITION
-
-.done:
-  plx
-  pla
-  rts
