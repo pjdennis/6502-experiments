@@ -55,16 +55,13 @@ console_print_character:
 .console_backspace:
   ldx CONSOLE_CURSOR_POSITION
   beq .done                   ; Already at beginning of buffer
-.find_non_zero_loop
-  dex
-  beq .found_non_zero         ; X == 0 => Reached the beginning of the buffer
+  dec CONSOLE_CURSOR_POSITION
+.backspace_loop:
   lda CONSOLE_TEXT, X
-  beq .find_non_zero_loop     ; Skip over 0 values
-.found_non_zero
-  lda #0
-  sta CONSOLE_TEXT, X
-  stx CONSOLE_CURSOR_POSITION
-  bra .done
+  sta CONSOLE_TEXT - 1, X
+  beq .done
+  inx
+  bra .backspace_loop
 
   ; Handle newline
 .console_newline:
@@ -136,7 +133,7 @@ console_show:
   ldy #CONSOLE_WIDTH
 .loop_characters:
   lda CONSOLE_TEXT, X
-  beq .end_of_text
+  beq .loop_blank_characters   ; Done with data; fill in rest with blanks
   inx
   cmp #ASCII_NEWLINE
   beq .newline
@@ -159,8 +156,21 @@ console_show:
   cpy #CONSOLE_HEIGHT
   bne .loop_lines
   bra .done   ; TODO should never get to here
-.end_of_text:
+
+.loop_blank_lines:
+  lda console_offsets, Y
+  jsr move_cursor
+  phy
+  ldy #CONSOLE_WIDTH
+.loop_blank_characters:
+  lda #' '
+  jsr display_character
+  dey
+  bne .loop_blank_characters
   ply
+  iny
+  cpy #CONSOLE_HEIGHT
+  bne .loop_blank_lines
 
 .done:
   jsr _console_position_cursor
