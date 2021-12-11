@@ -143,7 +143,14 @@ console_show:
   beq .newline
   dey
   bne .loop_characters
-.newline
+  bra .line_done
+.newline:
+  dey
+  beq .line_done
+  lda #' '
+  jsr display_character
+  bra .newline
+.line_done:
   ply
   iny
   cpy #CONSOLE_HEIGHT
