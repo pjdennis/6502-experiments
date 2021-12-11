@@ -70,7 +70,7 @@ SENT_PARITY_AND_ACK      = $0015 ; 1 byte
 ACK_RECEIVED             = $0016 ; 1 byte
 
 SIMPLE_BUFFER            = $0200 ; 256 bytes
-CONSOLE_TEXT             = $0300 ; CONSOLE_LENGTH (32) bytes
+CONSOLE_TEXT             = $0300 ; CONSOLE_LENGTH + 1 bytes
 
   .org $2000                     ; Loader loads programs to this address
   jmp initialize_machine         ; Initialize hardware and then jump to program_start

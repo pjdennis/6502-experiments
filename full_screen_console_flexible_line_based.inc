@@ -42,6 +42,8 @@ console_print_character:
   sta CONSOLE_TEXT, X
   inc CONSOLE_CURSOR_POSITION
 
+  jsr _console_shift
+
 .done:
   ply
   plx
@@ -166,7 +168,7 @@ _console_insert:
   beq .done
 .move_loop:
   inx
-  cpx #(CONSOLE_LENGTH - 1)
+  cpx #CONSOLE_LENGTH
   beq .terminate
   ldy CONSOLE_TEXT, X
   sta CONSOLE_TEXT, X
@@ -179,6 +181,75 @@ _console_insert:
   ply
   plx
   pla
+  rts
+
+
+_console_shift:
+  pha
+  phx
+  phy
+
+  ldx #0 ; Pointer into the text
+  ldy #0 ; Current line
+.loop_lines:
+  phy
+  ldy #CONSOLE_WIDTH
+.loop_characters:
+  lda CONSOLE_TEXT, X
+  beq .found_end
+  inx
+  cmp #ASCII_NEWLINE
+  beq .line_done
+  dey
+  bne .loop_characters
+.line_done:
+  ply
+  iny
+  bra .loop_lines
+.found_end:
+  tya
+  ply
+  cpy #CONSOLE_HEIGHT
+  bcc .done
+  jsr _console_delete_first_line
+.done:
+  ply
+  plx
+  pla
+  rts
+
+
+_console_delete_first_line:
+  ldx #0
+.find_loop
+  lda CONSOLE_TEXT, X
+  inx
+  cmp #ASCII_NEWLINE
+  beq .found
+  cpx #CONSOLE_WIDTH
+  bne .find_loop
+.found:
+  cpx CONSOLE_CURSOR_POSITION
+  bcc .adjust
+  stz CONSOLE_CURSOR_POSITION
+  bra .adjusted
+.adjust:
+  txa
+  ; CONSOLE_CURSOR_POSITION <- CONSOLE_CURSOR_POSITION - A
+  eor #$ff
+  sec
+  adc CONSOLE_CURSOR_POSITION
+  sta CONSOLE_CURSOR_POSITION
+.adjusted:
+  ldy #0
+.move_loop:
+  lda CONSOLE_TEXT, X
+  sta CONSOLE_TEXT, Y
+  beq .done
+  inx
+  iny
+  bra .move_loop
+.done:
   rts
 
 
