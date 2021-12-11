@@ -179,20 +179,20 @@ _console_insert:
   phy
 
   ldx CONSOLE_CURSOR_POSITION
-
   lda CONSOLE_TEXT, X
-.move_loop:
   beq .done
+.move_loop:
   inx
   cpx #(CONSOLE_LENGTH - 1)
-  beq .truncate
+  beq .terminate
   ldy CONSOLE_TEXT, X
   sta CONSOLE_TEXT, X
   tya
-  bra .move_loop
-.truncate:
+  bne .move_loop
+  inx
+.terminate:
   stz CONSOLE_TEXT, X
-.done:
+.done
   ply
   plx
   pla
