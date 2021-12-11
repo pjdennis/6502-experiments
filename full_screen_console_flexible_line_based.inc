@@ -1,10 +1,10 @@
 ; Requires:
 ;  CONSOLE_WIDTH            - constant - width of console - between 1 and 20
 ;  CONSOLE_HEIGHT           - constant - height of console between 1 and 4
-;  CONSOLE_CHARACTER_COUNT  - 1 byte
+;  CONSOLE_CURSOR_POSITION  - 1 byte
 ;  CONSOLE_TEXT             - buffer for CONSOLE_WIDTH * CONSOLE_HEIGHT bytes
 
-CONSOLE_LENGTH          = CONSOLE_WIDTH * (CONSOLE_HEIGHT - 1)
+CONSOLE_LENGTH           = CONSOLE_WIDTH * CONSOLE_HEIGHT
 
 ASCII_BACKSPACE          = 0x08
 ASCII_NEWLINE            = 0x0a
@@ -17,28 +17,8 @@ console_offsets:
 
 ; On exit  A, X, Y are preserved
 console_initialize:
-  pha
-  phx
-
-  stz CONSOLE_CHARACTER_COUNT
-  lda #0
-  ldx #0
-console_initialize_loop:
-  sta CONSOLE_TEXT, X
-  inx
-  cpx #CONSOLE_LENGTH
-  bne console_initialize_loop
-
-  ; temporary - initialize last line to dashes
-  lda #'-'
-.loop2:
-  sta CONSOLE_TEXT, X
-  inx
-  cpx #(CONSOLE_LENGTH + CONSOLE_WIDTH)
-  bne .loop2
-
-  plx
-  pla
+  stz CONSOLE_CURSOR_POSITION
+  stz CONSOLE_TEXT
   rts
 
 
@@ -52,23 +32,19 @@ console_print_character:
   cmp #ASCII_BACKSPACE
   beq .console_backspace
 
-  cmp #ASCII_NEWLINE
-  beq .console_newline
-
-  ; Handle normal character (not backspace or newline)
-  ldx CONSOLE_CHARACTER_COUNT
-  ldy CONSOLE_TEXT, X
-  beq .shift_ok
   jsr _console_insert
-.shift_ok:
-  sta CONSOLE_TEXT, X
-  inc CONSOLE_CHARACTER_COUNT
 
-  lda CONSOLE_CHARACTER_COUNT
+  ldx CONSOLE_CURSOR_POSITION
+  ldy CONSOLE_TEXT, X
+  bne .store_character
+  stz CONSOLE_TEXT + 1, X
+.store_character:
+  sta CONSOLE_TEXT, X
+  inc CONSOLE_CURSOR_POSITION
+
+  lda CONSOLE_CURSOR_POSITION
   cmp #CONSOLE_LENGTH
   bne .done
-
-  jsr console_scroll_up
 
 .done:
   ply
@@ -77,7 +53,7 @@ console_print_character:
 
   ; Handle backspace
 .console_backspace:
-  ldx CONSOLE_CHARACTER_COUNT
+  ldx CONSOLE_CURSOR_POSITION
   beq .done                   ; Already at beginning of buffer
 .find_non_zero_loop
   dex
@@ -87,22 +63,22 @@ console_print_character:
 .found_non_zero
   lda #0
   sta CONSOLE_TEXT, X
-  stx CONSOLE_CHARACTER_COUNT
+  stx CONSOLE_CURSOR_POSITION
   bra .done
 
   ; Handle newline
 .console_newline:
-  ldx CONSOLE_CHARACTER_COUNT
+  ldx CONSOLE_CURSOR_POSITION
   sta CONSOLE_TEXT, X
 
-  lda CONSOLE_CHARACTER_COUNT
+  lda CONSOLE_CURSOR_POSITION
   cmp #(CONSOLE_LENGTH - CONSOLE_WIDTH)
   bcc .scroll_ok
   jsr console_scroll_up
 .scroll_ok:
   lda #CONSOLE_WIDTH
 .find_position_loop:
-  cmp CONSOLE_CHARACTER_COUNT
+  cmp CONSOLE_CURSOR_POSITION
   beq .position_not_yet_found
   bcs .position_found
 .position_not_yet_found
@@ -110,7 +86,7 @@ console_print_character:
   adc #CONSOLE_WIDTH
   bra .find_position_loop
 .position_found:
-  sta CONSOLE_CHARACTER_COUNT
+  sta CONSOLE_CURSOR_POSITION
 
   bra .done
 
@@ -119,7 +95,7 @@ console_print_character:
 console_cursor_left:
   pha
   phx
-  ldx CONSOLE_CHARACTER_COUNT
+  ldx CONSOLE_CURSOR_POSITION
   beq .done
 .find_loop:
   dex
@@ -127,7 +103,7 @@ console_cursor_left:
   lda CONSOLE_TEXT, X
   beq .find_loop
 .found
-  stx CONSOLE_CHARACTER_COUNT
+  stx CONSOLE_CURSOR_POSITION
   jsr _console_position_cursor ; A, X are not saved
 .done:
   plx
@@ -139,17 +115,17 @@ console_cursor_left:
 console_cursor_right:
   pha
   phx
-  ldx CONSOLE_CHARACTER_COUNT
+  ldx CONSOLE_CURSOR_POSITION
   lda CONSOLE_TEXT, X
   beq .done                    ; At end of displayed text
   cmp #ASCII_NEWLINE
   beq .go_to_next_line
-  inc CONSOLE_CHARACTER_COUNT
+  inc CONSOLE_CURSOR_POSITION
   bra .moved
 .go_to_next_line:
   lda #CONSOLE_WIDTH
 .find_loop:
-  cmp CONSOLE_CHARACTER_COUNT
+  cmp CONSOLE_CURSOR_POSITION
   beq .not_yet_found
   bcs .found
 .not_yet_found:
@@ -157,7 +133,7 @@ console_cursor_right:
   adc #CONSOLE_WIDTH
   bra .find_loop
 .found:
-  sta CONSOLE_CHARACTER_COUNT
+  sta CONSOLE_CURSOR_POSITION
 .moved:
   jsr _console_position_cursor
 .done:
@@ -175,33 +151,32 @@ console_show:
 
   jsr display_cursor_off
 
-  ldx #0
-  ldy #0
-console_show_loop_lines:
+  ldx #0 ; Pointer into the text
+  ldy #0 ; Current line
+.loop_lines:
   lda console_offsets, Y
   jsr move_cursor
   phy
   ldy #CONSOLE_WIDTH
-console_show_loop_columns:
+.loop_characters:
   lda CONSOLE_TEXT, X
-  beq .show_space
-  cmp #ASCII_NEWLINE
-  bne .show_character
-; Newline
-  lda #%10100011   ; looks like newline character
-  bra .show_character
-.show_space:
-  lda #' '
-.show_character:
-  jsr display_character
+  beq .end_of_text
   inx
+  jsr _console_display_character
+  cmp #ASCII_NEWLINE
+  beq .newline
   dey
-  bne console_show_loop_columns
+  bne .loop_characters
+.newline
   ply
   iny
   cpy #CONSOLE_HEIGHT
-  bne console_show_loop_lines
+  bne .loop_lines
+  bra .done   ; TODO should never get to here
+.end_of_text:
+  ply
 
+.done:
   jsr _console_position_cursor
   jsr display_cursor_on
 
@@ -211,26 +186,36 @@ console_show_loop_columns:
   rts
 
 
+_console_display_character:
+  pha
+  cmp #ASCII_NEWLINE
+  bne .show
+  lda #%10100011   ; looks like newline character
+.show:
+  jsr display_character
+  pla
+  rts
+
+
 _console_insert:
   pha
   phx
   phy
 
-  ldy CONSOLE_CHARACTER_COUNT
+  ldx CONSOLE_CURSOR_POSITION
 
-  lda CONSOLE_TEXT, Y
+  lda CONSOLE_TEXT, X
 .move_loop:
-  iny
-  cpy #(CONSOLE_LENGTH - 1)
   beq .done
-  cmp #ASCII_NEWLINE
-  beq .newline
-  ldx CONSOLE_TEXT, Y
-  sta CONSOLE_TEXT, Y
-  txa
+  inx
+  cpx #(CONSOLE_LENGTH - 1)
+  beq .truncate
+  ldy CONSOLE_TEXT, X
+  sta CONSOLE_TEXT, X
+  tya
   bra .move_loop
-.newline:
-  sta CONSOLE_TEXT, Y
+.truncate:
+  stz CONSOLE_TEXT, X
 .done:
   ply
   plx
@@ -241,24 +226,41 @@ _console_insert:
 ; On exit Y is preserved
 ;         A, X are not preserved
 _console_position_cursor:
-  ldx #0
-  lda CONSOLE_CHARACTER_COUNT
-.find_loop:
-  cmp #CONSOLE_WIDTH
-  bcc .found
-  sec
-  sbc #CONSOLE_WIDTH
+  phy
+
+  ldx #0 ; Pointer into the text
+  ldy #0 ; Current line
+.loop_lines:
+  phy
+  ldy #0
+.loop_characters:
+  cpx CONSOLE_CURSOR_POSITION
+  beq .found_cursor
+  lda CONSOLE_TEXT, X
   inx
-  bra .find_loop
-.found:
+  cmp #ASCII_NEWLINE
+  beq .newline
+  iny
+  cpy #CONSOLE_WIDTH
+  bne .loop_characters
+.newline
+  ply
+  iny
+  bra .loop_lines
+.found_cursor:
+  tya
+  ply
   clc
-  adc console_offsets, X
-  jmp move_cursor ; Tail call
+  adc console_offsets, Y
+  jsr move_cursor
+
+  ply
+  rts
 
 
 ; Scroll up one line; fill in last line with nulls; adjust character count
 ; On exit A, X, Y are preserved
-console_scroll_up:
+console_scroll_up: ; TODO
   pha
   phx
 
@@ -275,12 +277,12 @@ console_scroll_up:
   cpx #CONSOLE_LENGTH
   bne .fill_loop
 
-  lda CONSOLE_CHARACTER_COUNT
+  lda CONSOLE_CURSOR_POSITION
   cmp #CONSOLE_WIDTH
   bcc .done
   sec
   sbc #CONSOLE_WIDTH
-  sta CONSOLE_CHARACTER_COUNT
+  sta CONSOLE_CURSOR_POSITION
 
 .done:
   plx
