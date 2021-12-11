@@ -63,30 +63,6 @@ console_print_character:
   inx
   bra .backspace_loop
 
-  ; Handle newline
-.console_newline:
-  ldx CONSOLE_CURSOR_POSITION
-  sta CONSOLE_TEXT, X
-
-  lda CONSOLE_CURSOR_POSITION
-  cmp #(CONSOLE_LENGTH - CONSOLE_WIDTH)
-  bcc .scroll_ok
-  jsr console_scroll_up
-.scroll_ok:
-  lda #CONSOLE_WIDTH
-.find_position_loop:
-  cmp CONSOLE_CURSOR_POSITION
-  beq .position_not_yet_found
-  bcs .position_found
-.position_not_yet_found
-  clc
-  adc #CONSOLE_WIDTH
-  bra .find_position_loop
-.position_found:
-  sta CONSOLE_CURSOR_POSITION
-
-  bra .done
-
 
 ; On exit A, X, Y are preserved
 console_cursor_left:
