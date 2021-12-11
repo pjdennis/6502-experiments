@@ -94,19 +94,11 @@ console_print_character:
 ; On exit A, X, Y are preserved
 console_cursor_left:
   pha
-  phx
-  ldx CONSOLE_CURSOR_POSITION
+  lda CONSOLE_CURSOR_POSITION
   beq .done
-.find_loop:
-  dex
-  beq .found
-  lda CONSOLE_TEXT, X
-  beq .find_loop
-.found
-  stx CONSOLE_CURSOR_POSITION
-  jsr _console_position_cursor ; A, X are not saved
+  dec CONSOLE_CURSOR_POSITION
+  jsr _console_position_cursor
 .done:
-  plx
   pla
   rts
 
@@ -118,27 +110,11 @@ console_cursor_right:
   ldx CONSOLE_CURSOR_POSITION
   lda CONSOLE_TEXT, X
   beq .done                    ; At end of displayed text
-  cmp #ASCII_NEWLINE
-  beq .go_to_next_line
   inc CONSOLE_CURSOR_POSITION
-  bra .moved
-.go_to_next_line:
-  lda #CONSOLE_WIDTH
-.find_loop:
-  cmp CONSOLE_CURSOR_POSITION
-  beq .not_yet_found
-  bcs .found
-.not_yet_found:
-  clc
-  adc #CONSOLE_WIDTH
-  bra .find_loop
-.found:
-  sta CONSOLE_CURSOR_POSITION
-.moved:
   jsr _console_position_cursor
 .done:
-  pla
   plx
+  pla
   rts
 
 
