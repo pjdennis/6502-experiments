@@ -4,7 +4,7 @@
 ;  CONSOLE_CHARACTER_COUNT  - 1 byte
 ;  CONSOLE_TEXT             - buffer for CONSOLE_WIDTH * CONSOLE_HEIGHT bytes
 
-CONSOLE_LENGTH          = CONSOLE_WIDTH * CONSOLE_HEIGHT
+CONSOLE_LENGTH          = CONSOLE_WIDTH * (CONSOLE_HEIGHT - 1)
 
 ASCII_BACKSPACE          = 0x08
 ASCII_NEWLINE            = 0x0a
@@ -29,6 +29,14 @@ console_initialize_loop:
   cpx #CONSOLE_LENGTH
   bne console_initialize_loop
 
+  ; temporary - initialize last line to dashes
+  lda #'-'
+.loop2:
+  sta CONSOLE_TEXT, X
+  inx
+  cpx #(CONSOLE_LENGTH + CONSOLE_WIDTH)
+  bne .loop2
+
   plx
   pla
   rts
@@ -39,6 +47,7 @@ console_initialize_loop:
 ;         A is not preserved
 console_print_character:
   phx
+  phy
 
   cmp #ASCII_BACKSPACE
   beq .console_backspace
@@ -48,6 +57,10 @@ console_print_character:
 
   ; Handle normal character (not backspace or newline)
   ldx CONSOLE_CHARACTER_COUNT
+  ldy CONSOLE_TEXT, X
+  beq .shift_ok
+  jsr _console_insert
+.shift_ok:
   sta CONSOLE_TEXT, X
   inc CONSOLE_CHARACTER_COUNT
 
@@ -58,6 +71,7 @@ console_print_character:
   jsr console_scroll_up
 
 .done:
+  ply
   plx
   rts
 
@@ -173,6 +187,9 @@ console_show_loop_columns:
   beq .show_space
   cmp #ASCII_NEWLINE
   bne .show_character
+; Newline
+  lda #%10100011   ; looks like newline character
+  bra .show_character
 .show_space:
   lda #' '
 .show_character:
@@ -188,6 +205,33 @@ console_show_loop_columns:
   jsr _console_position_cursor
   jsr display_cursor_on
 
+  ply
+  plx
+  pla
+  rts
+
+
+_console_insert:
+  pha
+  phx
+  phy
+
+  ldy CONSOLE_CHARACTER_COUNT
+
+  lda CONSOLE_TEXT, Y
+.move_loop:
+  iny
+  cpy #(CONSOLE_LENGTH - 1)
+  beq .done
+  cmp #ASCII_NEWLINE
+  beq .newline
+  ldx CONSOLE_TEXT, Y
+  sta CONSOLE_TEXT, Y
+  txa
+  bra .move_loop
+.newline:
+  sta CONSOLE_TEXT, Y
+.done:
   ply
   plx
   pla
