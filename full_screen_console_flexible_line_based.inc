@@ -42,10 +42,6 @@ console_print_character:
   sta CONSOLE_TEXT, X
   inc CONSOLE_CURSOR_POSITION
 
-  lda CONSOLE_CURSOR_POSITION
-  cmp #CONSOLE_LENGTH
-  bne .done
-
 .done:
   ply
   plx
