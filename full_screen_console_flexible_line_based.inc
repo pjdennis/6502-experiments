@@ -101,6 +101,57 @@ console_print_character:
   bra .done
 
 
+; On exit A, X, Y are preserved
+console_cursor_left:
+  pha
+  phx
+  ldx CONSOLE_CHARACTER_COUNT
+  beq .done
+.find_loop:
+  dex
+  beq .found
+  lda CONSOLE_TEXT, X
+  beq .find_loop
+.found
+  stx CONSOLE_CHARACTER_COUNT
+  jsr _console_position_cursor ; A, X are not saved
+.done:
+  plx
+  pla
+  rts
+
+
+; On exit A, X, Y are preserved
+console_cursor_right:
+  pha
+  phx
+  ldx CONSOLE_CHARACTER_COUNT
+  lda CONSOLE_TEXT, X
+  beq .done                    ; At end of displayed text
+  cmp #ASCII_NEWLINE
+  beq .go_to_next_line
+  inc CONSOLE_CHARACTER_COUNT
+  bra .moved
+.go_to_next_line:
+  lda #CONSOLE_WIDTH
+.find_loop:
+  cmp CONSOLE_CHARACTER_COUNT
+  beq .not_yet_found
+  bcs .found
+.not_yet_found:
+  clc
+  adc #CONSOLE_WIDTH
+  bra .find_loop
+.found:
+  sta CONSOLE_CHARACTER_COUNT
+.moved:
+  jsr _console_position_cursor
+.done:
+  pla
+  plx
+  rts
+
+
 ; Show console on screen
 ; On exit A, X, Y are preserved
 console_show:
@@ -134,6 +185,18 @@ console_show_loop_columns:
   cpy #CONSOLE_HEIGHT
   bne console_show_loop_lines
 
+  jsr _console_position_cursor
+  jsr display_cursor_on
+
+  ply
+  plx
+  pla
+  rts
+
+
+; On exit Y is preserved
+;         A, X are not preserved
+_console_position_cursor:
   ldx #0
   lda CONSOLE_CHARACTER_COUNT
 .find_loop:
@@ -146,13 +209,7 @@ console_show_loop_columns:
 .found:
   clc
   adc console_offsets, X
-  jsr move_cursor
-  jsr display_cursor_on
-
-  ply
-  plx
-  pla
-  rts
+  jmp move_cursor ; Tail call
 
 
 ; Scroll up one line; fill in last line with nulls; adjust character count

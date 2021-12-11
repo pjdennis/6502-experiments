@@ -198,10 +198,35 @@ keyboard_get_char:
   lda KEYBOARD_LATEST_META
   bit #KB_META_BREAK
   bne .repeat                   ; Decoded key up event; ignore these so read more
+  jsr handle_movement_keys
+  bcs .repeat                   ; Movement key handled; read more
   jsr keyboard_get_latest_ascii
   bcs .repeat                   ; No translation for code; ignore these so read more
 .done:
   rts
+
+
+; On entry KEYBOARD_LATEST_CODE contains the latest key code
+; On exit  C is set if key was handled as movement
+;          A is not preserved
+;          X, Y are preserved
+handle_movement_keys:
+  lda KEYBOARD_LATEST_CODE
+  cmp #KEY_LEFT
+  beq .key_left
+  cmp #KEY_RIGHT
+  beq .key_right
+; Not handled
+  clc
+  rts                      ; Return - not handled
+.key_left
+  jsr console_cursor_left
+  bra .handled
+.key_right
+  jsr console_cursor_right
+.handled:
+  sec
+  rts                      ; Return - handled
 
 
 ; On entry KEYBOARD_LATEST_META contains shift state
@@ -248,8 +273,8 @@ keyboard_get_latest_ascii:
 
 ; On entry A contains the byte from the keyboard
 ; On exit Carry set if no result so far
+;         A is the latest set 3 key code if found
 ;         X, Y are preserved
-;         A is not preserved
 ;         KEYBOARD_LATEST_META contains metadata for latest key event
 ;         KEYBOARD_LATEST_CODE contains code for latest key event
 keyboard_decode_and_translate_to_set_3:
