@@ -70,7 +70,9 @@ console_cursor_left:
   lda CONSOLE_CURSOR_POSITION
   beq .done
   dec CONSOLE_CURSOR_POSITION
+  phx
   jsr _console_position_cursor
+  plx
 .done:
   pla
   rts
