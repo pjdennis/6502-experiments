@@ -138,18 +138,21 @@ console_show:
   lda CONSOLE_TEXT, X
   beq .end_of_text
   inx
-  jsr _console_display_character
   cmp #ASCII_NEWLINE
   beq .newline
+  jsr display_character
   dey
   bne .loop_characters
   bra .line_done
 .newline:
+  lda #%10100011
+  jsr display_character
+.newline_loop:
   dey
   beq .line_done
   lda #' '
   jsr display_character
-  bra .newline
+  bra .newline_loop
 .line_done:
   ply
   iny
@@ -165,17 +168,6 @@ console_show:
 
   ply
   plx
-  pla
-  rts
-
-
-_console_display_character:
-  pha
-  cmp #ASCII_NEWLINE
-  bne .show
-  lda #%10100011   ; looks like newline character
-.show:
-  jsr display_character
   pla
   rts
 
