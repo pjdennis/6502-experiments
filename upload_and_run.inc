@@ -44,10 +44,10 @@ INTERRUPT_ROUTINE      = $3f00
   .include display_decimal.inc
   .include copy_memory.inc
 
-loading_message:          asciiz 'Load 0000 / '
-checksum_failed_message:  asciiz 'Checksum failed!'
-mhz_message:              asciiz 'Mhz '
-bps_message:              asciiz '00bps'
+loading_message:          .asciiz 'Load 0000 / '
+checksum_failed_message:  .asciiz 'Checksum failed!'
+mhz_message:              .asciiz 'Mhz '
+bps_message:              .asciiz '00bps'
 
 program_start:
   ldx #$ff ; Initialize stack
