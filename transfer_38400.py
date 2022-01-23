@@ -1,9 +1,17 @@
+import getopt
 import serial
 import sys
 import pause
 from datetime import datetime, timedelta
 
-port              = "/dev/tty.usbserial-1420"
+(options, args) = getopt.getopt(sys.argv[1:], shortopts="", longopts=["noreset"])
+input_file = args[0]
+noreset = ("--noreset", "") in options
+
+#port              = "/dev/tty.usbserial-1420"
+#port              = "/dev/cu.usbserial-0001"
+port              = "/dev/cu.SLAB_USBtoUART"
+#port              = "/dev/cu.usbserial-1420"
 
 #baudrate         = 9600
 #baudrate         = 19200
@@ -28,7 +36,7 @@ elif (stopbits == 2):
 else:
   raise ValueError("Stop bits must be 1 or 2") 
 
-with open(sys.argv[1], "rb") as binaryfile:
+with open(input_file, "rb") as binaryfile:
   source_data = bytearray(binaryfile.read())
 
 source_len = len(source_data)
@@ -56,9 +64,17 @@ print("Checksum:  ", hex(checksum))
 duration_of_send = timedelta(seconds = number_of_bits / baudrate * 1.02)
 
 with serial.Serial(
-  port=port,
   baudrate=baudrate,
   stopbits=stopbits_constant) as ser:
+  ser.port = port
+  ser.dtr = False
+  ser.open()
+
+  if (not noreset):
+    ser.dtr=True
+    pause.until(datetime.now() + timedelta(seconds=0.1))
+    ser.dtr=False
+    pause.until(datetime.now() + timedelta(seconds=0.2))
 
   start_time = datetime.now()
   ser.write(data)
