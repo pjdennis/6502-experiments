@@ -65,9 +65,7 @@ KEYBOARD_MODIFIER_STATE  = $0010 ; 1 byte
 KEYBOARD_LATEST_META     = $0011 ; 1 byte
 KEYBOARD_LATEST_CODE     = $0012 ; 1 byte
 SENDING_TO_KEYBOARD      = $0013 ; 1 byte
-SENT_BYTE                = $0014 ; 1 byte
-SENT_PARITY_AND_ACK      = $0015 ; 1 byte
-ACK_RECEIVED             = $0016 ; 1 byte
+ACK_RECEIVED             = $0014 ; 1 byte
 
 SIMPLE_BUFFER            = $0200 ; 256 bytes
 CONSOLE_TEXT             = $0300 ; CONSOLE_LENGTH + 1 bytes
@@ -88,6 +86,7 @@ CONSOLE_HEIGHT = DISPLAY_HEIGHT
   .include simple_buffer.inc
   .include copy_memory.inc
   .include key_codes.inc
+  .include convert_to_hex.inc
 
 ; Code sequence for the pause/break key
 kb_seq_pause        .byte $e1, $14, $77, $e1, $f0, $14, $f0, $77, $00
@@ -174,6 +173,15 @@ program_start:
   lda #0
   jsr keyboard_set_leds
 
+
+;test_loop:
+;  jsr simple_buffer_read
+;  bcs test_loop
+;  jsr console_print_hex
+;  jsr console_show
+;  bra test_loop
+
+
   ; Read and display translated characters from the keyboard
 get_char_loop:
   jsr keyboard_get_char
@@ -184,6 +192,16 @@ get_char_loop_2:
   bcc get_char_loop_2
   jsr console_show
   bra get_char_loop
+
+
+console_print_hex:
+  phx
+  jsr convert_to_hex
+  jsr console_print_character
+  txa
+  jsr console_print_character
+  plx
+  rts
 
 
 ; On exit Carry set if no result so far
@@ -654,9 +672,23 @@ keyboard_send_command:
   phx
   phy
   tax                            ; Save command byte in X
-
+.wait_for_not_receiving:
+  sei
+  lda KEYBOARD_RECEIVING
+  beq .not_receiving
+  cli
+  bra .wait_for_not_receiving
+.not_receiving:
   lda #SOLB
   trb PORTA                      ; Pull clock low
+  lda #ICA2
+.wait_for_interrupt:
+  bit IFR
+  beq .wait_for_interrupt
+  sta IFR
+  cli
+  stz PCR
+
   lda #1                         ; 100 microseconds = 0.1 milliseconds = 1 1/10,000 of a second
   jsr delay_10_thousandths
 
@@ -676,13 +708,21 @@ odd_parity:
 parity_mask_ready:               ; Mask is in A
   tsb PORTA
   stx PORTB                      ; Command byte
-  lda #2
+  lda #1
   sta SENDING_TO_KEYBOARD        ; Set flag to indicate we are sending
   lda #SOLB
   tsb PORTA                      ; Allow clock to float high; latch output data
   tya
   ora #SOLB
   sta PORTA                      ; Restore PORTA
+
+  lda #3                         ; Wait for long enough that clock line has gone high
+  jsr delay_10_thousandths
+
+  lda #PCR_CA2_IND_POS_E
+  sta PCR
+  lda #1
+  sta KEYBOARD_RECEIVING
 
   ; Wait for send to complete
 .wait_for_send:
@@ -763,13 +803,6 @@ interrupt:
   dec SENDING_TO_KEYBOARD
   bne .done_checking_send        ; Skip first interrupt which results from pulling clock low
 ;Sent
-  lda PORTB
-  eor #$ff
-  sta SENT_BYTE
-  lda PORTA
-  and #(PARITY | ACK)
-  eor #(PARITY | ACK)
-  sta SENT_PARITY_AND_ACK
   stz ACK_RECEIVED
   bra .done_checking_send
 .not_sending:
