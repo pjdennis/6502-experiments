@@ -105,6 +105,15 @@ KEY_LEFTMETA   = $8b ; Left Windows / GUI
 KEY_RIGHTMETA  = $8c ; Right Windows / GUI
 KEY_MENU       = $8d
 
+; These are made up (not part of PS/2 set 3)
+KEY_PREVIOUSSONG = $91
+KEY_PLAYPAUSE    = $92
+KEY_STOPCD       = $93
+KEY_NEXTSONG     = $94
+KEY_MUTE         = $95
+KEY_VOLUMEDOWN   = $96
+KEY_VOLUMEUP     = $97
+
 
 ; Translation tables to convert from PS/2 code set 2 to PS/2 code set 3. We use Code set 3
 ; for convenience as it has a single byte per key with no extended prefix
@@ -157,6 +166,13 @@ kb_extended_translation_table:
   .byte $37, KEY_RESERVED ; Power (not mapped)
   .byte $5e, KEY_RESERVED ; Wake  (not mapped)
   .byte $7c, KEY_SYSRQ
+  .byte $15, KEY_PREVIOUSSONG
+  .byte $34, KEY_PLAYPAUSE
+  .byte $3b, KEY_STOPCD
+  .byte $4d, KEY_NEXTSONG
+  .byte $23, KEY_MUTE
+  .byte $21, KEY_VOLUMEDOWN
+  .byte $32, KEY_VOLUMEUP
   .byte $00
 
 

@@ -156,11 +156,7 @@ program_start:
   ; Enable interrupts so we start recieving data from the keyboard
   cli
 
-  ; Initialize_keyboard_and_display_keystrokes:
-  lda #">"
-  jsr console_print_character
-  jsr console_show
-
+  ; Initialize keyboard
   lda #KB_COMMAND_ENABLE
   jsr keyboard_send_command
 
@@ -174,13 +170,36 @@ program_start:
   jsr keyboard_set_leds
 
 
-;test_loop:
-;  jsr simple_buffer_read
-;  bcs test_loop
-;  jsr console_print_hex
+;keyboard_to_console_as_hex:
+;.loop:
 ;  jsr console_show
-;  bra test_loop
+;.wait_loop:
+;  jsr simple_buffer_read
+;  bcs .wait_loop
+;  jsr console_print_hex
+;  bra .loop
 
+
+;keyboard_decoded_to_console_as_hex:
+;.loop
+;  jsr console_show
+;.repeat:
+;  jsr simple_buffer_read
+;  bcs .repeat                   ; Exit when input buffer is empty
+;  jsr keyboard_decode_and_translate_to_set_3
+;  bcs .repeat                   ; Nothing decoded so far so read more
+;  lda KEYBOARD_LATEST_META
+;  bit #KB_META_BREAK
+;  bne .repeat                   ; Decoded key up event; ignore these so read more
+;  lda KEYBOARD_LATEST_CODE
+;  jsr console_print_hex
+;  bra .loop
+
+
+  ; Show prompt
+  lda #">"
+  jsr console_print_character
+  jsr console_show
 
   ; Read and display translated characters from the keyboard
 get_char_loop:
@@ -196,10 +215,22 @@ get_char_loop_2:
 
 console_print_hex:
   phx
+  phy
+
   jsr convert_to_hex
   jsr console_print_character
   txa
   jsr console_print_character
+
+  jsr console_get_cursor_xy
+  cpx #0
+  beq .done
+
+  lda #' '
+  jsr console_print_character
+
+.done:
+  ply
   plx
   rts
 

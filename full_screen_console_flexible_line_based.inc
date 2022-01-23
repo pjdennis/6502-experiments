@@ -253,10 +253,10 @@ _console_delete_first_line:
   rts
 
 
-; On exit Y is preserved
-;         A, X are not preserved
-_console_position_cursor:
-  phy
+; On exit X, Y contain the console cursor position
+;         A is preserved
+console_get_cursor_xy:
+  pha
 
   ldx #0 ; Pointer into the text
   ldy #0 ; Current line
@@ -279,7 +279,20 @@ _console_position_cursor:
   bra .loop_lines
 .found_cursor:
   tya
+  tax
   ply
+
+  pla
+  rts
+
+
+; On exit Y is preserved
+;         A, X are not preserved
+_console_position_cursor:
+  phy
+
+  jsr console_get_cursor_xy
+  txa
   clc
   adc console_offsets, Y
   jsr move_cursor
