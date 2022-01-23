@@ -265,13 +265,29 @@ handle_movement_keys:
   beq .key_left
   cmp #KEY_RIGHT
   beq .key_right
-; Not handled
+
+  lda KEYBOARD_LOCK_STATE
+  bit #KB_NUM_LOCK_ON
+  beq .check_keypad
+
+  lda KEYBOARD_LATEST_META
+  bit #KB_META_SHIFT
+  beq .not_handled
+
+.check_keypad:
+  lda KEYBOARD_LATEST_CODE
+  cmp #KEY_KP4
+  beq .key_left
+  cmp #KEY_KP6
+  beq .key_right
+
+.not_handled:
   clc
   rts                      ; Return - not handled
-.key_left
+.key_left:
   jsr console_cursor_left
   bra .handled
-.key_right
+.key_right:
   jsr console_cursor_right
 .handled:
   sec
