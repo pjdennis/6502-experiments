@@ -196,10 +196,7 @@ program_start:
 ;  bra .loop
 
 
-  ; Show prompt
-  lda #">"
-  jsr console_print_character
-  jsr console_show
+  jsr clear_console
 
   ; Read and display translated characters from the keyboard
 get_char_loop:
@@ -211,6 +208,17 @@ get_char_loop_2:
   bcc get_char_loop_2
   jsr console_show
   bra get_char_loop
+
+
+clear_console:
+  pha
+  jsr console_clear
+  ; Show prompt
+  lda #">"
+  jsr console_print_character
+  jsr console_show
+  pla
+  rts
 
 
 console_print_hex:
@@ -247,7 +255,7 @@ keyboard_get_char:
   lda KEYBOARD_LATEST_META
   bit #KB_META_BREAK
   bne .repeat                   ; Decoded key up event; ignore these so read more
-  jsr handle_movement_keys
+  jsr handle_special_keys
   bcs .repeat                   ; Movement key handled; read more
   jsr keyboard_get_latest_ascii
   bcs .repeat                   ; No translation for code; ignore these so read more
@@ -256,15 +264,17 @@ keyboard_get_char:
 
 
 ; On entry KEYBOARD_LATEST_CODE contains the latest key code
-; On exit  C is set if key was handled as movement
+; On exit  C is set if key was handled
 ;          A is not preserved
 ;          X, Y are preserved
-handle_movement_keys:
+handle_special_keys:
   lda KEYBOARD_LATEST_CODE
   cmp #KEY_LEFT
   beq .key_left
   cmp #KEY_RIGHT
   beq .key_right
+  cmp #KEY_ESC
+  beq .key_esc
 
   lda KEYBOARD_LOCK_STATE
   bit #KB_NUM_LOCK_ON
@@ -289,6 +299,9 @@ handle_movement_keys:
   bra .handled
 .key_right:
   jsr console_cursor_right
+  bra .handled
+.key_esc:
+  jsr clear_console
 .handled:
   sec
   rts                      ; Return - handled

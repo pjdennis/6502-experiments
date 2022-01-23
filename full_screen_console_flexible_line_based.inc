@@ -17,6 +17,7 @@ console_offsets:
 
 ; On exit  A, X, Y are preserved
 console_initialize:
+console_clear:
   stz CONSOLE_CURSOR_POSITION
   stz CONSOLE_TEXT
   rts
