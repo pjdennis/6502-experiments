@@ -257,5 +257,25 @@ kb_ascii_translation_table:
   .byte KEY_BACKSPACE,  $08
   .byte $00
 
-; TODO handle keypad codes
 
+kb_kp_ascii_fixed_translation_table:
+  .byte KEY_KPSLASH,    '/'
+  .byte KEY_KPPLUS,     '+'
+  .byte KEY_KPASTERISK, '*'
+  .byte KEY_KPMINUS,    '-'
+  .byte KEY_KPENTER,    $0a
+  .byte $00
+
+kb_kp_ascii_num_translation_table:
+  .byte KEY_KP0,        '0'
+  .byte KEY_KP1,        '1'
+  .byte KEY_KP2,        '2'
+  .byte KEY_KP3,        '3'
+  .byte KEY_KP4,        '4'
+  .byte KEY_KP5,        '5'
+  .byte KEY_KP6,        '6'
+  .byte KEY_KP7,        '7'
+  .byte KEY_KP8,        '8'
+  .byte KEY_KP9,        '9'
+  .byte KEY_KPDOT,      '.'
+  .byte $00

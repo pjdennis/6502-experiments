@@ -283,10 +283,36 @@ handle_movement_keys:
 ; On exit  Carry set if no translation
 ;          A contains translated code if translation occurred
 keyboard_get_latest_ascii:
-  lda KEYBOARD_LATEST_CODE
-  jsr keyboard_translate_code_to_ascii
-  bcs .done
   phx
+  phy
+
+  lda KEYBOARD_LATEST_CODE
+  ldx #<kb_kp_ascii_fixed_translation_table
+  ldy #>kb_kp_ascii_fixed_translation_table
+  jsr code_translate
+  bcc .done
+
+  lda KEYBOARD_LOCK_STATE
+  bit #KB_NUM_LOCK_ON
+  beq .check_main_ascii
+
+  lda KEYBOARD_LATEST_META
+  bit #KB_META_SHIFT
+  bne .check_main_ascii
+
+  lda KEYBOARD_LATEST_CODE
+  ldx #<kb_kp_ascii_num_translation_table
+  ldy #>kb_kp_ascii_num_translation_table
+  jsr code_translate
+  bcc .done
+
+.check_main_ascii:
+  lda KEYBOARD_LATEST_CODE
+  ldx #<kb_ascii_translation_table
+  ldy #>kb_ascii_translation_table
+  jsr code_translate
+  bcs .done
+
   tax
   lda KEYBOARD_LATEST_META
   bit #KB_META_SHIFT
@@ -299,11 +325,9 @@ keyboard_get_latest_ascii:
   bra .translated
 .translate_shifted:
   txa
-  phy
   ldx #<kb_shift_translation_table
   ldy #>kb_shift_translation_table
   jsr code_translate
-  ply
   tax
 .translate_to_upper:
   txa
@@ -315,8 +339,9 @@ keyboard_get_latest_ascii:
   sbc #('a' - 'A')
 .translated
   clc ; translation found
-  plx
 .done:
+  ply
+  plx
   rts
 
 
@@ -630,21 +655,6 @@ keyboard_translate_extended:
   phy
   ldx #<kb_extended_translation_table
   ldy #>kb_extended_translation_table
-  jsr code_translate
-  ply
-  plx
-  rts
-
-
-; On entry A contains the keyboard code
-; On exit  Carry is set if no translation was found
-;          A contains the translated code or original code if no translation found
-;          X, Y are preserved
-keyboard_translate_code_to_ascii:
-  phx
-  phy
-  ldx #<kb_ascii_translation_table
-  ldy #>kb_ascii_translation_table
   jsr code_translate
   ply
   plx
