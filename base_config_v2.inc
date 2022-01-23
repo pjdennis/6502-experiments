@@ -7,9 +7,11 @@ RS     = %00100000  ; Display register select
 
 SOEB   = %00010000  ; Input shift register output enable (active low) 
 SOLB   = %00001000  ; Output shift register load / clock low (active low)
-START  = %00100000  ; Output start bit - multiplexed with RW and ACK bit
-ACK    = %00100000  ; Input ACK bit - multiplexed with RW and output start bit
-PARITY = %01000000  ; Input and output parity bit - multiplexed with RS
+START  = %00100000  ; Output start bit - multiplexed with RS and ACK bit
+ACK    = %00100000  ; Input ACK bit - multiplexed with RS and output start bit
+PARITY = %01000000  ; Input and output parity bit - multiplexed with RW
+
+LED    = %00000100  ; Output LED
 
 DISPLAY_BITS = 8
 
