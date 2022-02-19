@@ -194,7 +194,7 @@ kb_shift_translation_table:
   .byte '=', '+'
   .byte '[', '{'
   .byte ']', '}'
-  .byte '\', '|'
+  .byte '\\', '|'
   .byte ';', ':'
   .byte "'", '"'
   .byte ',', '<'
