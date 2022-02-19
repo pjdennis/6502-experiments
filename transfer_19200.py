@@ -54,11 +54,11 @@ data = length_bytes + source_data + checksum_bytes
 
 number_of_bits = len(data) * (1 + 8 + stopbits)
 
-print("Uploading...")
-print("Bps:       ", baudrate)
-print("Stop bits: ", stopbits)
-print("Length:    ", hex(source_len))
-print("Checksum:  ", hex(checksum))
+#print("Uploading...")
+#print("Bps:       ", baudrate)
+#print("Stop bits: ", stopbits)
+#print("Length:    ", hex(source_len))
+#print("Checksum:  ", hex(checksum))
 
 # Duration of send allowing for 2% transfer speed loss
 duration_of_send = timedelta(seconds = number_of_bits / baudrate * 1.02)
