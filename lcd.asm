@@ -1,49 +1,15 @@
-;	org $8000
-	.org $2000
-start:
-	
-	ldx #$00
-load_loop:
-	lda hello,x
-	beq store_zero
-	sta LCD_HOME,x
-	inx
-	jmp load_loop
+DISP_DATA = $6001
+DISP_DIR = $6003
+B_DATA=$6000
+B_DIR=$6002
 
-store_zero:
-	lda #$00
-	sta LCD_HOME,x
-	
-print_it:
-;	jsr port_init
-;	jsr lcd_init
-	jsr print
-
-end_loop:
-	jmp end_loop
-
-
-;DISP_DATA = $6001
-;DISP_DIR = $6003
-DISP_DATA = $6000
-DISP_DIR = $6002
-;B_DATA=$6000
-;B_DIR=$6002
-
-;E=%00010000
-;READ=%00100000
-;WRITE=%00000000
-;CMD=%00000000
-;CHAR=%01000000
-;DATA_WRITE=%11111111
-;DATA_READ=%11110000
-E=%00000100
-READ=%00000010
+E=%00010000
+READ=%00100000
 WRITE=%00000000
 CMD=%00000000
-CHAR=%00000001
+CHAR=%01000000
 DATA_WRITE=%11111111
-DATA_READ=%10000111
+DATA_READ=%11110000
 HIGHNIB = $0211
 LOWNIB = $0212
 TEMPBYTE = $0210
@@ -54,16 +20,16 @@ LCD_CLEAR=$01
 
 LCD_HOME=$0213
 
-;	org $F000
+	org $F000
 
 port_init:
 	pha
 	lda #DATA_WRITE
 	sta DISP_DIR
-;	sta B_DIR
+	sta B_DIR
 	lda #$00
 	sta DISP_DATA
-;	sta B_DATA
+	sta B_DATA
 	pla
 	rts
 	
@@ -133,16 +99,12 @@ lcd_wait_loop:
 	
 	lda DISP_DATA
 
-	lda #(READ | CMD) ; pjd
-	sta DISP_DATA     ; pjd
-
 	; the first nibble is all we care about
 	; so get them back
 	pla
 	
 	;test them to see if we are ready
-;	and %00001000
-	and #%01000000    ; pjd
+	and %00001000
 	bne lcd_wait_loop
 
 	pla
@@ -152,11 +114,11 @@ lcd_wait_loop:
 lcd_instruction:
 	pha
 	
-;	lda #$F0
-;	sta B_DATA
+	lda #$F0
+	sta B_DATA
 	
-;	pla
-;	pha
+	pla
+	pha
 	
 	jsr split
 	jsr lcd_wait
@@ -170,8 +132,7 @@ lcd_instruction:
 	ora #E
 	sta DISP_DATA
 
-;	lda #(WRITE | CMD)
-	and #~E            ; pjd
+	lda #(WRITE | CMD)
 	sta DISP_DATA
 	
 	lda LOWNIB
@@ -179,12 +140,11 @@ lcd_instruction:
 	sta DISP_DATA
 	ora #E
 	sta DISP_DATA
-;	lda #(WRITE | CMD)
-	and #~E            ; pjd
+	lda #(WRITE | CMD)
 	sta DISP_DATA
 	
-;	lda #$00
-;	sta B_DATA
+	lda #$00
+	sta B_DATA
 	
 	pla
 	rts
@@ -193,10 +153,10 @@ lcd_instruction:
 lcd_print:
 	pha
 	
-;	lda #$0F
-;	sta B_DATA
-;	pla
-;	pha
+	lda #$0F
+	sta B_DATA
+	pla
+	pha
 
 	jsr split
 	jsr lcd_wait
@@ -210,8 +170,7 @@ lcd_print:
 	ora #E
 	sta DISP_DATA
 
-;	lda #(WRITE | CHAR)
-	and #~E             ; pjd
+	lda #(WRITE | CHAR)
 	sta DISP_DATA
 	
 	lda LOWNIB
@@ -219,43 +178,26 @@ lcd_print:
 	sta DISP_DATA
 	ora #E
 	sta DISP_DATA
-;	lda #(WRITE | CHAR)
-	and #~E             ; pjd
+	lda #(WRITE | CHAR)
 	sta DISP_DATA
 	
-;	lda #$00
-;	sta B_DATA
+	lda #$00
+	sta B_DATA
 	
 	
 	pla
 	rts
 	
-;split:
-;	pha
-;	sta TEMPBYTE
-;	and #%00001111
-;	sta LOWNIB
-;	lda TEMPBYTE
-;	and #%11110000
-;	lsr
-;	lsr
-;	lsr
-;	lsr
-;	sta HIGHNIB
-;	pla
-;	
-;	rts
-	
 split:
 	pha
 	sta TEMPBYTE
 	and #%00001111
-        asl
-        asl
-        asl
 	sta LOWNIB
 	lda TEMPBYTE
 	and #%11110000
+	lsr
+	lsr
+	lsr
 	lsr
 	sta HIGHNIB
 	pla
@@ -265,4 +207,3 @@ split:
 hello:
 	asciiz "Hello World!"
 	byte $00
-
