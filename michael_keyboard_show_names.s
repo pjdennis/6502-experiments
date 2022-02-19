@@ -213,6 +213,7 @@ keyboard_decoded_to_console_as_name:
   bcs .repeat                   ; Exit when input buffer is empty
   jsr keyboard_decode_and_translate_to_set_3
   bcs .repeat                   ; Nothing decoded so far so read more
+  jsr keyboard_lock_keys_track
   lda KEYBOARD_LATEST_META
   bit #KB_META_BREAK
   bne .repeat                   ; Decoded key up event; ignore these so read more
