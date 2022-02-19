@@ -252,6 +252,7 @@ keyboard_get_char:
   bcs .done                     ; Exit when input buffer is empty
   jsr keyboard_decode_and_translate_to_set_3
   bcs .repeat                   ; Nothing decoded so far so read more
+  jsr keyboard_lock_keys_track
   lda KEYBOARD_LATEST_META
   bit #KB_META_BREAK
   bne .repeat                   ; Decoded key up event; ignore these so read more
@@ -403,7 +404,6 @@ keyboard_decode_and_translate_to_set_3:
   bra .decode_done
 .code_found:
   sta KEYBOARD_LATEST_CODE
-  jsr keyboard_caps_lock_track
   jsr keyboard_modifier_track
   jsr keyboard_update_modifiers
   clc
@@ -416,7 +416,7 @@ keyboard_decode_and_translate_to_set_3:
 ;          KEYBOARD_LOCK_STATE contains current state of lock keys
 ; On exit  KEYBOARD_LOCK_STATE contains the new state of lock keys
 ;          A, X, Y are preserved
-keyboard_caps_lock_track:
+keyboard_lock_keys_track:
   pha
   phx
   ldx #$ff
