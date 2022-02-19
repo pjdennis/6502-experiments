@@ -1,1 +1,1 @@
-{echo 'key_names:'; sed -n -E -e 's/^KEY_([0-9A-Z]+).*/  .asciiz KEY_\1, "\1"/p' < key_codes.inc; echo '  .byte 0'} > key_names.inc
+{echo 'key_names:'; sed -n -E -e 's/^(KEY_.{11})=/\1  =/' -e 's/^KEY_([0-9A-Z]+)( +).*/  .asciiz KEY_\1,\2"\1"/p' < key_codes.inc; echo '  .byte 0'} > key_names.inc
