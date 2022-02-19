@@ -134,27 +134,6 @@ program_start:
   stz KEYBOARD_MODIFIER_STATE
   stz KEYBOARD_LOCK_STATE
 
-
-  ;lda #KEY_F1
-  ;jsr print_key_name_to_console
-  ;lda #$fe
-  ;jsr print_key_name_to_console
-  ;jsr console_show
-  ;stp
-
-
-  ;lda #KEY_RESERVED
-  ;jsr name_lookup
-  ;jsr console_print_string
-  ;lda #'\n'
-  ;jsr console_print_character
-  ;lda #KEY_F1
-  ;jsr name_lookup
-  ;jsr console_print_string
-  ;jsr console_show
-  ;stp
-
-
   ; Relocate the interrupt handler. The EEPROM has a fixed address, INTERRUPT_ROUTINE
   ; for the interrupt routine so copy the handler there
   lda #<INTERRUPT_ROUTINE
@@ -820,6 +799,7 @@ print_key_name_to_console:
   rts
 
 unrecognized_key_message: .asciiz 'Unknown Code: '
+
 
 ; On entry A contains the key code
 ; On exit  A, X contains the low and high bytes of the string address
