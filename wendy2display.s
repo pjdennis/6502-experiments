@@ -220,7 +220,7 @@ DISPLAY_STRING_PARAM = $00 ; 2 bytes
   .include display_string.inc
 
 
-message: .asciiz "Hi I'm Wendy II"
+message: .asciiz "Hi! I'm Wendy 2"
 
 
 reset:
@@ -234,20 +234,27 @@ reset:
   jsr initialize_ports_for_display         ; Prepare the display
   jsr reset_and_enable_display_no_cursor
 
+
+  lda #%01000000                           ; Prepare to flash LED
+  tsb DDRB
+
+loop:
+  lda #%01000000
+  tsb PORTB
+
   lda #<message                            ; Display a message
   ldx #>message
   jsr display_string
 
-  
-  lda #%1000000                            ; Do some flashing0
-  tsb DDRB
-
-  lda #0
-
-loop:
-  sta PORTB                                ; Light is on when low
-  eor #%10000000
   jsr delay
+
+  lda #%01000000
+  trb PORTB                                ; Light is on when low
+
+  jsr clear_display
+
+  jsr delay
+
   bra loop
 
 delay:
