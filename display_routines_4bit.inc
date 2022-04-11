@@ -1,5 +1,17 @@
   .include display_parameters.inc
 
+  .ifndef DISPLAY_DATA_PORT
+DISPLAY_DATA_PORT = PORTB
+  .endif
+
+  .ifndef DISPLAY_ENABLE_PORT
+DISPLAY_ENABLE_PORT = PORTB
+  .endif
+
+  .ifndef DISPLAY_BITS
+DISPLAY_BITS = 4
+  .endif
+
 ; Reset sequence per datasheet
 reset_display:
   lda #150
