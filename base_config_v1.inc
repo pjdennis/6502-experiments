@@ -8,13 +8,16 @@ BANK_START        = %00000100
 BANK_STOP         = %00010000
 
 ; PORTB assignments
-DISPLAY_DATA_MASK = %01111000
-E                 = %00000100
-RW                = %00000010
-RS                = %00000001
+DISPLAY_DATA_PORT   = PORTB
+DISPLAY_DATA_MASK   = %01111000
+RW                  = %00000010
+RS                  = %00000001
+BF                  = %01000000
+DISPLAY_BITS_MASK   = (DISPLAY_DATA_MASK | RW | RS)
 
-BF                = %01000000
-DISPLAY_BITS_MASK = (DISPLAY_DATA_MASK | E | RW | RS)
+DISPLAY_ENABLE_PORT = PORTB
+E                   = %00000100
+
 
 DISPLAY_BITS = 4
 

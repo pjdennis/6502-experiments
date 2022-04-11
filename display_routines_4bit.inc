@@ -40,25 +40,25 @@ wait_for_not_busy_8bit:
   pha
   phx
 
-  lda #DISPLAY_DATA_MASK ; Set display data pins to input
-  trb DDRB
-  lda #RW                ; Set RW (read) flag for reading
-  tsb PORTB
+  lda #DISPLAY_DATA_MASK                   ; Set display data pins to input
+  trb DISPLAY_DATA_PORT + DDR_OFFSET
+  lda #RW                                  ; Set RW (read) flag for reading
+  tsb DISPLAY_DATA_PORT
 still_busy_8bit:
   lda #E
-  tsb PORTB              ; Set E flag to trigger read
-  ldx PORTB
-  trb PORTB              ; Clear E flag
+  tsb DISPLAY_ENABLE_PORT                  ; Set E flag to trigger read
+  ldx DISPLAY_DATA_PORT
+  trb DISPLAY_ENABLE_PORT                  ; Clear E flag
 
   txa
-  and #BF                ; Check busy flag
+  and #BF                                  ; Check busy flag
   bne still_busy_8bit
   ; Not busy
   lda #DISPLAY_BITS_MASK
-  trb PORTB              ; Clear the RW (read) flag and data bits ready for next send
+  trb DISPLAY_DATA_PORT                    ; Clear the RW (read) flag and data bits ready for next send
 
-  lda #DISPLAY_DATA_MASK 
-  tsb DDRB               ; Set display data pins to output
+  lda #DISPLAY_DATA_MASK
+  tsb DISPLAY_DATA_PORT + DDR_OFFSET       ; Set display data pins to output
 
   plx
   pla
@@ -67,21 +67,40 @@ still_busy_8bit:
 
 ; On input A = command to send
 display_command_8bit_no_wait:
-  pha  ; might not need this
+  pha                                      ; might not need this
   lda #DISPLAY_DATA_MASK
-  trb PORTB
+  trb DISPLAY_DATA_PORT
   pla
 
-  lsr             ; Shift to match display data location
+  ; Shift upper nybble to the display data location
+  .if DISPLAY_DATA_MASK == %00001111
+  lsr
+  lsr
+  lsr
+  lsr
+  .endif
+  .if DISPLAY_DATA_MASK == %00011110
+  lsr
+  lsr
+  lsr
+  .endif
+  .if DISPLAY_DATA_MASK == %00111100
+  lsr
+  lsr
+  .endif
+  .if DISPLAY_DATA_MASK == %01111000
+  lsr
+  .endif
+
   and #DISPLAY_DATA_MASK
-  tsb PORTB
+  tsb DISPLAY_DATA_PORT
 
   lda #E
-  tsb PORTB       ; Set E bit to send instruction
-  trb PORTB       ; Clear E bit
+  tsb DISPLAY_ENABLE_PORT                  ; Set E bit to send instruction
+  trb DISPLAY_ENABLE_PORT                  ; Clear E bit
 
   lda #DISPLAY_DATA_MASK
-  trb PORTB       ; Clear data ready for next send       
+  trb DISPLAY_ENABLE_PORT                  ; Clear data ready for next send       
 
   rts
 

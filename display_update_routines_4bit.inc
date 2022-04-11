@@ -3,28 +3,28 @@ wait_for_not_busy:
   phx
 
 still_busy:
-  lda #DISPLAY_DATA_MASK ; - Set display data pins on port B to input
-  trb DDRB
+  lda #DISPLAY_DATA_MASK                   ; - Set display data pins on port B to input
+  trb DISPLAY_DATA_PORT + DDR_OFFSET
 
   lda #RW
-  tsb PORTB              ; - Set RW (read) flag for reading
+  tsb DISPLAY_DATA_PORT                    ; - Set RW (read) flag for reading
 
   lda #E
-  tsb PORTB              ; - Set E flag to trigger read of first 4 bits
-  ldx PORTB              ; - Read data value from PORTB
-  trb PORTB              ; - Clear E flag
+  tsb DISPLAY_ENABLE_PORT                  ; - Set E flag to trigger read of first 4 bits
+  ldx DISPLAY_DATA_PORT                    ; - Read data value from port
+  trb DISPLAY_ENABLE_PORT                  ; - Clear E flag
 
-  tsb PORTB              ; - Set E flag to trigger read of second 4 bits
-  trb PORTB              ; - Clear E flag
+  tsb DISPLAY_ENABLE_PORT                  ; - Set E flag to trigger read of second 4 bits
+  trb DISPLAY_ENABLE_PORT                  ; - Clear E flag
 
   lda #DISPLAY_BITS_MASK
-  trb PORTB              ; - Clear the RW flag and set data bits back to 0 ready for next send
+  trb DISPLAY_DATA_PORT                    ; - Clear the RW flag and set data bits back to 0 ready for next send
 
   lda #DISPLAY_DATA_MASK
-  tsb DDRB               ; - Set display data pins on port B back to output
+  tsb DISPLAY_DATA_PORT + DDR_OFFSET       ; - Set display data pins on port B back to output
 
   txa
-  and #BF                ; Check busy flag
+  and #BF                                  ; Check busy flag
   bne still_busy
   ; Not busy
 
@@ -38,7 +38,7 @@ still_busy:
 ;          A not preserved
 display_command:
   phx
-  ldx #0                 ; RS flag not set for command
+  ldx #0                                   ; RS flag not set for command
   bra send_to_display
 
 ; On Entry A = Character to send
@@ -46,7 +46,7 @@ display_command:
 ;          A not preserved
 display_character:
   phx
-  ldx #RS                ; RS flag set for accessing display memory  
+  ldx #RS                                  ; RS flag set for accessing display memory  
   ; fall through
 
 send_to_display:
@@ -54,32 +54,69 @@ send_to_display:
   jsr wait_for_not_busy
   
   pha
-  asl                    ; Shift lower byte to display data location
+
+  ; Shift lower nybble to the display data location
+  .if DISPLAY_DATA_MASK == %11110000
   asl
   asl
+  asl
+  asl
+  .endif
+  .if DISPLAY_DATA_MASK == %01111000
+  asl
+  asl
+  asl
+  .endif
+  .if DISPLAY_DATA_MASK == %00111100
+  asl
+  asl
+  .endif
+  .if DISPLAY_DATA_MASK == %00011110
+  asl
+  .endif
+
   and #DISPLAY_DATA_MASK
-  tay                    ; Second 4 bits to send are in Y
+  tay                                      ; Second 4 bits to send are in Y
   pla
 
-  lsr                    ; Shift upper byte to display data location
-  and #DISPLAY_DATA_MASK ; First 4 bits to send are in A
+  ; Shift upper nybble to the display data location
+  .if DISPLAY_DATA_MASK == %00001111
+  lsr
+  lsr
+  lsr
+  lsr
+  .endif
+  .if DISPLAY_DATA_MASK == %00011110
+  lsr
+  lsr
+  lsr
+  .endif
+  .if DISPLAY_DATA_MASK == %00111100
+  lsr
+  lsr
+  .endif
+  .if DISPLAY_DATA_MASK == %01111000
+  lsr
+  .endif
 
-  tsb PORTB              ; - Output the command first 4 bits
-  txa                    ; - Flag for type of command to send is in X
-  tsb PORTB              ; - Set flag (RS or not) to indicate command vs character
-  lda #E                 ;
-  tsb PORTB              ; - Set E bit to send instruction
-  trb PORTB              ; - Clear E bit
-  lda #DISPLAY_DATA_MASK ;
-  trb PORTB              ; - Clear data lines ready for next send
-                         ;
-  tya                    ;
-  tsb PORTB              ; - Output the command second 4 bits
-  lda #E                 ;
-  tsb PORTB              ; - Set E bit to send instruction
-  trb PORTB              ; - Clear E bit
-  lda #DISPLAY_BITS_MASK ;
-  trb PORTB              ; - Clear data lines and command flags ready for next send
+  and #DISPLAY_DATA_MASK                   ; First 4 bits to send are in A
+
+  tsb DISPLAY_DATA_PORT                    ; - Output the command first 4 bits
+  txa                                      ; - Flag for type of command to send is in X
+  tsb DISPLAY_DATA_PORT                    ; - Set flag (RS or not) to indicate command vs character
+  lda #E
+  tsb DISPLAY_ENABLE_PORT                  ; - Set E bit to send instruction
+  trb DISPLAY_ENABLE_PORT                  ; - Clear E bit
+  lda #DISPLAY_DATA_MASK
+  trb DISPLAY_DATA_PORT                    ; - Clear data lines ready for next send
+
+  tya
+  tsb DISPLAY_DATA_PORT                    ; - Output the command second 4 bits
+  lda #E
+  tsb DISPLAY_ENABLE_PORT                  ; - Set E bit to send instruction
+  trb DISPLAY_ENABLE_PORT                  ; - Clear E bit
+  lda #DISPLAY_BITS_MASK
+  trb DISPLAY_DATA_PORT                    ; - Clear data lines and command flags ready for next send
 
   ply
   plx

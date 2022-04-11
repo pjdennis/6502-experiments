@@ -16,7 +16,7 @@ SD_DATA_PORT      = PORTB
 ; PORTB assignments
 T1_SQWAVE_OUT     = %10000000
 
-PORTB_OUT_MASK    = DISPLAY_BITS_MASK | T1_SQWAVE_OUT
+PORTB_OUT_MASK    = DISPLAY_BITS_MASK | E | T1_SQWAVE_OUT
 
   .include musical_notes.inc
 

@@ -9,7 +9,7 @@ initialize_machine:
   ; Initialize 6522 port B (display control)
   lda #0
   sta PORTB
-  lda #DISPLAY_BITS_MASK          ; Set pin direction on port B
+  lda #DISPLAY_BITS_MASK | E      ; Set pin direction on port B
   sta DDRB
 
   jmp program_start
