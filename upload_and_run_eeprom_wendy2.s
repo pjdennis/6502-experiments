@@ -1,7 +1,7 @@
 ORIGIN    = $8000
-UPLOAD_TO = $2000
+UPLOAD_TO = $4000
 
-BPS_HUNDREDS = 192 ; 19200 bps
+BPS_HUNDREDS = 384 ; 38400 bps
 
   .include base_config_wendy2.inc
   .include upload_and_run.inc
