@@ -57,6 +57,11 @@ program_start:
   pha
   plp
 
+  .ifdef SHOULD_SWITCH_TO_RAM
+  jmp switch_to_ram
+  .endif
+switch_to_ram_continue:
+
   ; Initialize display
   jsr reset_and_enable_display_no_cursor
 

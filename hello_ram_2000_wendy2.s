@@ -3,7 +3,7 @@
 DISPLAY_STRING_PARAM  = $00 ; 2 bytes
 COUNTER               = $02 ; 2 bytes
 
-  .org $2000
+  .org $4000
   jmp program_entry
 
   ; Place code for delay_routines at start of page to ensure no page boundary crossings

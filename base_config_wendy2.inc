@@ -1,7 +1,15 @@
-CLOCK_FREQ_KHZ    = 4000
+CLOCK_FREQ_KHZ      = 4000
 
 BASE_ADDRESS_6522   = $F000
 
+; Memory Banking
+BANK_PORT           = PORTB
+BANK_MASK           = %00011111
+
+BANK_START          = %00000100
+BANK_STOP           = %00100000
+
+; Display
 DISPLAY_DATA_PORT   = PORTA
 DISPLAY_DATA_MASK   = %11110000
 RW                  = %00001000
