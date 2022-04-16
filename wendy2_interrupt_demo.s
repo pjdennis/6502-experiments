@@ -55,10 +55,6 @@ program_start:
   sta IER
   cli
 
-;  lda #<message
-;  ldx #>message
-;  jsr display_string
-
 forever:
   sei
   lda COUNTER
@@ -79,9 +75,6 @@ forever:
   jsr delay_10_thousandths
 
   bra forever 
-
-
-message: asciiz 'I'
 
 
 show_irq_address:
@@ -105,5 +98,6 @@ interrupt:
   bne .done
   inc COUNTER + 1
 .done:
+
   pla
   rti
