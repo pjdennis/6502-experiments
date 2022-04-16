@@ -8,6 +8,9 @@ FIXED_RAM            = $4000
 FIXED_RAM_OFFSET     = ORIGIN - FIXED_RAM
 PROGRAM_LENGTH       = program_end - ORIGIN
 
+LED_MASK             = %01000000
+LED_PORT             = PORTB
+
 
   .include base_config_wendy2.inc
 
@@ -63,7 +66,19 @@ switch_to_ram_continue:
   ldx #>message_line_2
   jsr display_string
 
-  stp
+
+  lda #LED_MASK
+  trb LED_PORT
+  tsb LED_PORT + DDR_OFFSET
+
+.forever:
+  lda #50
+  jsr delay_hundredths
+
+  lda LED_PORT
+  EOR #LED_MASK
+  sta LED_PORT
+  bra .forever
 
 
 switch_to_ram:
