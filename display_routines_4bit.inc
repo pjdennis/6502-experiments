@@ -106,13 +106,16 @@ display_command_8bit_no_wait:
 
   and #DISPLAY_DATA_MASK
   tsb DISPLAY_DATA_PORT
-
+  nop
+  nop
   lda #E
   tsb DISPLAY_ENABLE_PORT                  ; Set E bit to send instruction
+  nop
+  nop
   trb DISPLAY_ENABLE_PORT                  ; Clear E bit
 
   lda #DISPLAY_DATA_MASK
-  trb DISPLAY_ENABLE_PORT                  ; Clear data ready for next send       
+  trb DISPLAY_DATA_PORT                    ; Clear data ready for next send
 
   rts
 

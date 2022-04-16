@@ -29,8 +29,8 @@ WAITING_FOR_SHIFT          = $12  ; 1 byte
 TEMP                       = $13  ; 1 byte
 TO_DECIMAL_PARAM           = $14  ; 9 bytes
 
-TRANSLATE              = $0200
-INTERRUPT_ROUTINE      = $3f00
+TRANSLATE                  = $0200
+INTERRUPT_ROUTINE          = $3f00
 
   .org ORIGIN
   jmp initialize_machine
@@ -57,13 +57,16 @@ program_start:
   pha
   plp
 
+
   .ifdef SHOULD_SWITCH_TO_RAM
   jmp switch_to_ram
   .endif
 switch_to_ram_continue:
 
+
   ; Initialize display
   jsr reset_and_enable_display_no_cursor
+
 
   ; relocate the interrupt handler
   lda #<INTERRUPT_ROUTINE
