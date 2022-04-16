@@ -47,7 +47,7 @@ forever:
   bra forever  
 
 
-message: asciiz 'Hello, from ram'
+message: asciiz "Hi! I'm  Wendy 2"
 
 
 display_string:
