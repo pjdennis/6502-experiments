@@ -12,30 +12,36 @@ DISPLAY_ENABLE_PORT = PORTB
 DISPLAY_BITS = 4
   .endif
 
-; Reset sequence per datasheet
+; "Initialization by instruction" sequence per datasheet
 reset_display:
-  lda #150
+  lda #150                                 ; Delay 15ms per datasheet
   jsr delay_10_thousandths
 
   lda #(CMD_FUNCTION_SET | %10000)         ; Set 8-bit mode
   jsr display_command_8bit_no_wait
 
-  lda #41
+  lda #41                                  ; Delay 4.1ms per datasheet
   jsr delay_10_thousandths
 
   lda #(CMD_FUNCTION_SET | %10000)         ; Set 8-bit mode
   jsr display_command_8bit_no_wait
 
-  lda #1
+  lda #1                                   ; Delay 100us per datasheet
   jsr delay_10_thousandths
 
   lda #(CMD_FUNCTION_SET | %10000)         ; Set 8-bit mode
   jsr display_command_8bit_no_wait
 
-  jsr wait_for_not_busy_8bit
+  lda #1                                   ; Wait for at least 37us (execution time for "Function set")
+  jsr delay_10_thousandths
 
   lda #CMD_FUNCTION_SET                    ; Set 4-bit mode
   jsr display_command_8bit_no_wait
+
+  ; Cannot check for busy immediately after setting 4 bit mode since display will not immediately
+  ; change from 8 bit to 4 bit for the purposes of reading
+  lda #1                                   ; Wait for at least 37us (execution time for "Function set")
+  jsr delay_10_thousandths
 
   lda #(CMD_FUNCTION_SET | %01000)         ; Set 4-bit mode; 2-line display; 5x8 font
   jsr display_command
@@ -45,35 +51,6 @@ reset_display:
 
   jsr clear_display
 
-  rts
-
-
-wait_for_not_busy_8bit:
-  pha
-  phx
-
-  lda #DISPLAY_DATA_MASK                   ; Set display data pins to input
-  trb DISPLAY_DATA_PORT + DDR_OFFSET
-  lda #RW                                  ; Set RW (read) flag for reading
-  tsb DISPLAY_DATA_PORT
-still_busy_8bit:
-  lda #E
-  tsb DISPLAY_ENABLE_PORT                  ; Set E flag to trigger read
-  ldx DISPLAY_DATA_PORT
-  trb DISPLAY_ENABLE_PORT                  ; Clear E flag
-
-  txa
-  and #BF                                  ; Check busy flag
-  bne still_busy_8bit
-  ; Not busy
-  lda #DISPLAY_BITS_MASK
-  trb DISPLAY_DATA_PORT                    ; Clear the RW (read) flag and data bits ready for next send
-
-  lda #DISPLAY_DATA_MASK
-  tsb DISPLAY_DATA_PORT + DDR_OFFSET       ; Set display data pins to output
-
-  plx
-  pla
   rts
 
 
@@ -106,12 +83,8 @@ display_command_8bit_no_wait:
 
   and #DISPLAY_DATA_MASK
   tsb DISPLAY_DATA_PORT
-  nop
-  nop
   lda #E
   tsb DISPLAY_ENABLE_PORT                  ; Set E bit to send instruction
-  nop
-  nop
   trb DISPLAY_ENABLE_PORT                  ; Clear E bit
 
   lda #DISPLAY_DATA_MASK
