@@ -15,12 +15,6 @@ COUNTER               = $02 ; 2 bytes
 
 
 program_entry:
-  lda #%00011111
-  trb PORTB
-  tsb PORTB + DDR_OFFSET
-  lda #%00000100
-  tsb PORTB
-
   jsr clear_display
 
   lda #<message
