@@ -1,9 +1,9 @@
-  .include base_config_wendy2.inc
+  .include base_config_wendy2b.inc
 
 DISPLAY_STRING_PARAM  = $00 ; 2 bytes
 COUNTER               = $02 ; 2 bytes
 
-  .org $4000
+  .org $2000
   jmp program_entry
 
   ; Place code for delay_routines at start of page to ensure no page boundary crossings
@@ -41,7 +41,7 @@ forever:
   bra forever  
 
 
-message: asciiz 'Hello, from ram'
+message: asciiz "Hi! I'm  Wendy 2"
 
 
 display_string:
