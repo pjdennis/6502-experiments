@@ -59,10 +59,7 @@ program_start:
   ldx #$ff ; Initialize stack
   txs
 
-  lda #0   ; Initialize status flags
-  pha
-  plp
-
+  cld      ; In case I ever use an NMOS 6502
 
   .ifdef SHOULD_SWITCH_TO_RAM
   jmp switch_to_ram
@@ -118,6 +115,8 @@ switch_to_ram_continue:
 
   lda #INITIAL_INTERVAL
   sta T2CL
+
+  cli
 
   lda #<ready_message
   ldx #>ready_message
