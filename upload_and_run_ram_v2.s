@@ -8,4 +8,4 @@ BPS_HUNDREDS = 192 ; 19200 bps
   .include initialize_machine_v2.inc
   .include display_routines_8bit.inc
 
-ready_message: asciiz 'Ready (RAM).'
+origin_message: asciiz 'RAM'

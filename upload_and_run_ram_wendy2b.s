@@ -10,7 +10,7 @@ SHOULD_SWITCH_TO_RAM = 1;
   .include initialize_machine_wendy2b.inc
   .include display_routines_4bit.inc
 
-ready_message: asciiz 'Ready (RAM).'
+origin_message: asciiz 'RAM'
 
 IRQ_VECTOR_ADDRESS    = $fffe
 

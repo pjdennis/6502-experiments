@@ -4,13 +4,15 @@
 ;BPS_HUNDREDS          =  384     ;  38400 bps
 ;BPS_HUNDREDS          =  576     ;  57600 bps
 ;BPS_HUNDREDS          = 1152     ; 115200 bps
-
+;BPS_HUNDREDS          = 2304     ; 230400 bps
 
   .if CLOCK_FREQ_KHZ > 6553
 HALF_BIT_INTERVAL      = CLOCK_FREQ_KHZ / (BPS_HUNDREDS / 5)
   .else
 HALF_BIT_INTERVAL      = CLOCK_FREQ_KHZ * 5 / BPS_HUNDREDS
   .endif
+
+CLOCK_FREQ_MHZ_DIV_100 = CLOCK_FREQ_KHZ / 10
 
 ; -2 -26 is the most that can be reduced at 57600 without causing the shift
 ; start to be delayed... presuming anything less results in T2 expiring before
@@ -33,7 +35,7 @@ CP_M_SRC_P                 = $0e  ; 2 bytes
 CP_M_LEN                   = $10  ; 2 bytes
 WAITING_FOR_SHIFT          = $12  ; 1 byte
 TEMP                       = $13  ; 1 byte
-TO_DECIMAL_PARAM           = $14  ; 9 bytes
+TO_DECIMAL_PARAM           = $14  ; 10 bytes (since we are using a decimal place)
 
 TRANSLATE                  = $0200
 INTERRUPT_ROUTINE          = $3f00
@@ -50,10 +52,11 @@ INTERRUPT_ROUTINE          = $3f00
   .include display_decimal.inc
   .include copy_memory.inc
 
+ready_message:            .asciiz 'Ready.'
 loading_message:          .asciiz 'Load 0000 / '
 checksum_failed_message:  .asciiz 'Checksum failed!'
 mhz_message:              .asciiz 'Mhz '
-bps_message:              .asciiz '00bps'
+bps_message:              .asciiz '00bps '
 
 program_start:
   ldx #$ff ; Initialize stack
@@ -118,28 +121,34 @@ switch_to_ram_continue:
 
   cli
 
-  lda #<ready_message
-  ldx #>ready_message
-  jsr display_string
-
-  lda #DISPLAY_SECOND_LINE
-  jsr move_cursor
-
-clock_freq_mhz = CLOCK_FREQ_KHZ / 1000
-  lda #<clock_freq_mhz
-  ldx #>clock_freq_mhz
-  jsr display_decimal
-
+  lda #<CLOCK_FREQ_MHZ_DIV_100
+  ldx #>CLOCK_FREQ_MHZ_DIV_100
+  ldy #2
+  jsr display_decimal_with_places
   lda #<mhz_message
   ldx #>mhz_message
   jsr display_string
 
+  lda #'('
+  jsr display_character
+  lda #<origin_message
+  ldx #>origin_message
+  jsr display_string
+  lda #')'
+  jsr display_character
+
+  lda #DISPLAY_SECOND_LINE
+  jsr move_cursor
+
   lda #<BPS_HUNDREDS
   ldx #>BPS_HUNDREDS
   jsr display_decimal
-
   lda #<bps_message
   ldx #>bps_message
+  jsr display_string
+
+  lda #<ready_message
+  ldx #>ready_message
   jsr display_string
 
 wait_for_length:

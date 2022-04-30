@@ -8,7 +8,7 @@ BPS_HUNDREDS = 1152 ; 115200 bps
   .include initialize_machine_v1.inc
   .include display_routines_4bit.inc
 
-ready_message: asciiz 'Ready.'
+origin_message: asciiz 'ROM'
 
 ; Vectors
   .org $fffc

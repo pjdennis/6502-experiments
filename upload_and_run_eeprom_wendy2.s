@@ -11,7 +11,7 @@ SHOULD_SWITCH_TO_RAM = 1;
   .include display_routines_4bit.inc
   .include copy_memory.inc
 
-ready_message: asciiz 'Ready.'
+origin_message: asciiz 'ROM*'
 
 IRQ_VECTOR_ADDRESS    = $fffe
 FIXED_RAM             = $4000
