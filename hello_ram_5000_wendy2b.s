@@ -41,7 +41,7 @@ forever:
   bra forever  
 
 
-message: asciiz "Hi! I'm  Wendy 2"
+message: asciiz "Hi! I'm Wendy 2."
 
 
 display_string:
