@@ -45,9 +45,6 @@ switch_to_ram_part_2:
   lda #BANK_START
   tsb BANK_PORT
 
-  ldx #$ff                                 ; Initialize stack
-  txs
-
   ; copy PROGRAM_LENGTH bytes from FIXED_RAM to program_start
   lda #<ORIGIN
   sta CP_M_DEST_P
