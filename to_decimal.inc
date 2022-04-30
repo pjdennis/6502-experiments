@@ -2,12 +2,32 @@
 
 TO_DECIMAL_VALUE = TO_DECIMAL_PARAM + 0  ; 2 bytes
 TO_DECIMAL_MOD10 = TO_DECIMAL_PARAM + 2  ; 1 byte
-TO_DECIMAL_RESULT = TO_DECIMAL_MOD10 + 1 ; 6 bytes
+TO_DECIMAL_RESULT = TO_DECIMAL_MOD10 + 1 ; 7 bytes
+
+TO_DECIMAL_NO_DECIMAL_PLACES = 128
 
 ; On entry A, X = low, high bytes of value to convert
 ; On exit A, X point to the result
 ;         Y is preserved
 to_decimal:
+  phy
+  ldy #0
+  jsr to_decimal_with_places
+  ply
+  rts
+
+
+; On entry A, X = low, high bytes of value to convert
+;          Y = number of decimal places
+; On exit A, X point to the result
+;         Y is not preserved
+; Warning: does not support values < 1 (decimal point won't display)
+to_decimal_with_places:
+  cpy #0
+  bne to_decimal_initialize
+  ldy #TO_DECIMAL_NO_DECIMAL_PLACES
+
+to_decimal_initialize:
   ; Initialize result to empty string
   stz TO_DECIMAL_RESULT
   
@@ -41,13 +61,29 @@ to_decimal_ignore_result:
   rol TO_DECIMAL_VALUE + 1
 
   ; Shift result
+to_decimal_shift:
   ldx #5
+  cpy #TO_DECIMAL_NO_DECIMAL_PLACES
+  beq to_decimal_shift_loop
+  inx
 to_decimal_shift_loop:
   lda TO_DECIMAL_RESULT-1,X
   sta TO_DECIMAL_RESULT,X
   dex
   bne to_decimal_shift_loop
 
+  cpy #0
+  bne to_decimal_save_result
+  lda #'.'
+  sta TO_DECIMAL_RESULT
+  dey
+  bra to_decimal_shift
+
+to_decimal_save_result:
+  cpy #TO_DECIMAL_NO_DECIMAL_PLACES
+  beq to_decimal_save_result_2
+  dey
+to_decimal_save_result_2
   ; Save value into result
   lda TO_DECIMAL_MOD10
   clc
