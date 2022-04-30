@@ -5,7 +5,13 @@
 ;BPS_HUNDREDS          =  576     ;  57600 bps
 ;BPS_HUNDREDS          = 1152     ; 115200 bps
 
+
+  .if CLOCK_FREQ_KHZ > 6553
+HALF_BIT_INTERVAL      = CLOCK_FREQ_KHZ / (BPS_HUNDREDS / 5)
+  .else
 HALF_BIT_INTERVAL      = CLOCK_FREQ_KHZ * 5 / BPS_HUNDREDS
+  .endif
+
 ; -2 -26 is the most that can be reduced at 57600 without causing the shift
 ; start to be delayed... presuming anything less results in T2 expiring before
 ; the low order latch has been reset
