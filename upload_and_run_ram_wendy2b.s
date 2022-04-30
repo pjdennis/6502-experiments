@@ -1,7 +1,7 @@
 ORIGIN               = $4000
 UPLOAD_TO            = $5000
 
-BPS_HUNDREDS         = 1152 ; 115200 bps
+BPS_HUNDREDS         = 2304 ; 230400 bps
 
 SHOULD_SWITCH_TO_RAM = 1;
 
