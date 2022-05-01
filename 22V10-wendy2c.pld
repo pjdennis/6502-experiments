@@ -1,0 +1,72 @@
+GAL22V10   ; Logic for 65C02 based computer "Wendy" with dual speed clock and memory banking
+Wendy2c    ; Max 8 characters
+
+
+;1     2    3    4    5    6    7       8       9       10  11      12
+ OSC   A15  A14  A13  A12  A11  B4      B3      B2      B1  B0      GND
+ RWRB  /WR  R14  R15  R16  R17  /ROMCS  /RAMCS  /VIACS  CK  CKhigh  VCC
+;13    14   15   16   17   18   19      20      21      22  23      24
+
+
+; Clock
+CKhigh.R = /CKhigh
+
+CK.R = CK * /CKhigh  +  /CK * CKhigh  +  /ROMCS * /CK
+
+
+; Write Enable
+WR = /RWRB * CK
+
+
+; Chip Select
+ROMCS  = /B4 * /B3 * /B2 * /B1 * /B0 * A15 *  A14 *  A13 *  A12 * A11 +
+         /B4 * /B3 * /B2 * /B1 * /B0 * A15 * /A14 +
+         /B4 * /B3 * /B2 * /B1 * /B0 * A15 *  A14 * /A13 +
+         /B4 * /B3 * /B2 * /B1 * /B0 * A15 *  A14 *  A13 * /A12
+
+VIACS  = A15 * A14 * A13 * A12 * /A11
+
+/RAMCS = /B4 * /B3 * /B2 * /B1 * /B0 * A15 *  A14 *  A13 *  A12 * A11 + ; ROM Selected
+         /B4 * /B3 * /B2 * /B1 * /B0 * A15 * /A14 +                     ; .
+         /B4 * /B3 * /B2 * /B1 * /B0 * A15 *  A14 * /A13 +              ; .
+         /B4 * /B3 * /B2 * /B1 * /B0 * A15 *  A14 *  A13 * /A12 +       ; .
+         A15 * A14 * A13 * A12 * /A11                                   ; VIA Selected
+
+
+; Address decoding
+R14 = /A15 * /A14 * /B4 * /B3 * /B2 * /B1 * /B0 + ; $0000..$3fff config $00000         => Bank $00001         ROM at $8000
+      /A15 * /A14 * /B4 * B0 +                    ; $0000..$3fff config $00001..$01111 => Bank $00001..$01111 RAM at $8000
+      /A15 * /A14 * B4 * /B3 +                    ; $0000..$3fff config $10000..$10111 => Bank $00001         RAM at $8000
+       A15 * A14                                  ; $8000..$ffff config $10000..$11111 => Bank $1X000..$1X111 RAM at $8000
+
+R15 = /A15 * /A14 * /B4 * B1 +                    ; $0000..$3fff config $00001..$01111 => Bank $00001..$01111 RAM at $8000
+      /A15 * /A14 *  B4 * B3 +                    ; $0000..$3fff config $10000..$10111 => Bank $00010         RAM at $8000
+       A15 * B4 * B0                              ; $8000..$ffff config $10000..$11111 => Bank $1X000..$1X111 RAM at $8000
+
+R16 = /A15 * /A14 * /B4 * B2 +                    ; $0000..$3fff config $00001..$01111 => Bank $00001..$01111 RAM at $8000
+       A15 * B4 * B1                              ; $8000..$ffff config $10000..$11111 => Bank $1X000..$1X111 RAM at $8000
+
+R17 = /A15 * /A14 * /B4 * B3 +                    ; $0000..$3fff config $00001..$01111 => Bank $00001..$01111 RAM at $8000
+       A15 * B4 * B2                              ; $8000..$ffff config $10000..$11111 => Bank $1X000..$1X111 RAM at $8000
+
+
+DESCRIPTION
+
+Glue logic for Ben Eater-inspired "Wendy2c" breadboard computer
+
+Inputs:
+OSC           Crystal oscillator
+A11..A15      Address lines from 65C02
+RWRB          Read signal from 65C02
+B0..B4        Bank address from the VIA
+
+Outputs:
+CK_high       High speed fixed clock half the speed of OSC
+CK            Variable speed clock. Half the speed of CK_high when ROM is
+              selected, otherwise the same speed as CK_high
+/WR           Active low write signal suitable for RAM and ROM chips
+/ROMCS        ROM chip select based on A15, A1, VP and CK
+/RAMCS        RAM chip select based on A15, A14, A1, VP and CK
+/VIACS        VIA chip select based on A15 and A14
+R14..R17      RAM address lines. Vary based on bank address B0..B4 and A12..A15
+
