@@ -151,16 +151,21 @@ test_fixed_upper_ram:
 .set_value_in_bank:
   txa
   jsr switch_to_space
-  stx TEST_FIXED_UPPER_VALUE
+  stz TEST_FIXED_UPPER_VALUE
   inx
   cpx #%11000
   bne .set_value_in_bank
 
-  ldx #%10001
+  lda #%10000
+  jsr switch_to_space
+  lda #1
+  sta TEST_FIXED_UPPER_VALUE
+
+  ldx #%10000
 .check_value_in_bank:
   txa
   jsr switch_to_space
-  lda #%10111
+  lda #1
   cmp TEST_FIXED_UPPER_VALUE
   bne .failed
   inx
@@ -170,11 +175,11 @@ test_fixed_upper_ram:
   lda #'Y'
   jsr display_character
 
-  ldx #%11001
+  ldx #%11000
 .check_value_in_bank_copy:
   txa
   jsr switch_to_space
-  lda #%10111
+  lda #1
   cmp TEST_FIXED_UPPER_VALUE
   bne .failed
   inx
