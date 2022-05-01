@@ -1,9 +1,8 @@
   .include base_config_wendy2c.inc
 
 D_S_I_P                = $00 ; 2 bytes
-COUNTER                = $02 ; 2 bytes
-TEMP                   = $04
-TEST_VALUE             = $05
+TEMP                   = $02
+TEST_VALUE             = $03
 TEST_UPPER_VALUE       = $efff
 TEST_FIXED_UPPER_VALUE = $f800
 
