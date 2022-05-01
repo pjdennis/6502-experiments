@@ -30,6 +30,7 @@ program_entry:
   jsr test_upper_banks
   jsr test_fixed_upper_ram
   jsr test_lower_bank_with_upper
+  jsr test_access_eeprom
 
   lda #DISPLAY_SECOND_LINE
   jsr move_cursor
@@ -250,6 +251,40 @@ test_lower_bank_with_upper:
   inx
   cpx #%100000
   bne .check_value_in_bank_copy
+
+  lda #'Y'
+  jsr display_character
+
+  bra .done
+
+.failed:
+  lda #'N'
+  jsr display_character
+  lda #1
+  sta tests_failed
+
+.done:
+  lda #1
+  jsr switch_to_space
+  rts
+
+
+test_access_eeprom:
+  lda #'5'
+  jsr display_character
+
+  stz $a000
+  stz $a000 + 3
+
+  lda #%10000
+  jsr switch_to_space
+  lda $a000
+  cmp #$20 ; JSR
+  bne .failed
+
+  lda $a000 + 3
+  cmp #$A9 ; LDA (immediate)
+  bne .failed
 
   lda #'Y'
   jsr display_character
