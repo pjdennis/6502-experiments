@@ -26,11 +26,11 @@ program_entry:
 
   stz tests_failed
 
-  jsr test_lower_banks
-  jsr test_upper_banks
-  jsr test_fixed_upper_ram
-  jsr test_lower_bank_with_upper
-  jsr test_access_eeprom
+  jsr test_lower_banks           ; 1
+  jsr test_upper_banks           ; 2
+  jsr test_fixed_upper_ram       ; 3
+  jsr test_lower_bank_with_upper ; 4
+  jsr test_access_eeprom         ; 5
 
   lda #DISPLAY_SECOND_LINE
   jsr move_cursor
@@ -93,6 +93,11 @@ test_upper_banks:
   lda #'2'
   jsr display_character
 
+  ldx #%10000
+  lda #%00001
+  jsr switch_to_space
+  stx TEST_UPPER_VALUE
+
   ldx #%10001
 .set_value_in_bank:
   txa
@@ -101,6 +106,12 @@ test_upper_banks:
   inx
   cpx #%11000
   bne .set_value_in_bank
+
+  ldx #%10000
+  lda #%00001
+  jsr switch_to_space
+  cpx TEST_UPPER_VALUE
+  bne .failed
 
   ldx #%10001
 .check_value_in_bank:
@@ -114,6 +125,12 @@ test_upper_banks:
 
   lda #'Y'
   jsr display_character
+
+  ldx #%10000
+  lda #%00010
+  jsr switch_to_space
+  cpx TEST_UPPER_VALUE
+  bne .failed
 
   ldx #%10001
   ldy #%11001
@@ -277,6 +294,15 @@ test_access_eeprom:
   stz $a000 + 3
 
   lda #%10000
+  jsr test_access_eeprom_2
+
+  lda #%11000
+  jsr test_access_eeprom_2
+
+  rts
+
+
+test_access_eeprom_2:
   jsr switch_to_space
   lda $a000
   cmp #$20 ; JSR
