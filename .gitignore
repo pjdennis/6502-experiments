@@ -1,8 +1,11 @@
 *.obj
 *.bin
 *.out
+*.chp
+*.fus
+*.jed
+*.pin
 vasm6502_oldstyle
 vobjdump
 *.swp
-*.jed
 .DS_Store
