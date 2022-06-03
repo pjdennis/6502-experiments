@@ -1,4 +1,8 @@
-MORSE_TIME_UNIT         = 150 ; Milliseconds
+  .ifndef MORSE_PORT
+MORSE_PORT = PORTA
+  .endif
+
+MORSE_TIME_UNIT         = 100 ; Milliseconds
 MORSE_DELAY_PENDING     = 1
 MORSE_DELAY_NOT_PENDING = 0
 
@@ -127,13 +131,13 @@ morse_letter_done:
 morse_send_part:
   pha                     ; Turn on LED
   lda #MORSE_LED
-  tsb PORTA
+  tsb MORSE_PORT
   pla
 
   jsr morse_delay         ; Delay for specified units
 
   lda #MORSE_LED          ; Turn off LED
-  trb PORTA
+  trb MORSE_PORT
 
   rts
 
