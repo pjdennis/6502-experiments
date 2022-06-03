@@ -1,12 +1,18 @@
-  .include base_config_v1.inc
+  .include base_config_wendy2c.inc
+
+LED_MASK             = %01000000
+LED_PORT             = PORTB
 
 ; PORTA assignments
 ;MORSE_LED         = %00010000
 ;CONTROL_BUTTON    = %00100000
 ;CONTROL_LED       = %01000000
 
+MORSE_LED = LED_MASK
+MORSE_PORT = LED_PORT
+
 ;PORTA_OUT_MASK    = BANK_MASK | CONTROL_LED | MORSE_LED | SD_CSB
-PORTA_OUT_MASK     = BANK_MASK
+;;PORTA_OUT_MASK     = BANK_MASK
 
 ;SD_DATA           = %00001000
 ;SD_CLK            = %00010000
@@ -18,7 +24,7 @@ PORTA_OUT_MASK     = BANK_MASK
 ;T1_SQWAVE_OUT     = %10000000
 
 ;PORTB_OUT_MASK    = DISPLAY_BITS_MASK | E | T1_SQWAVE_OUT
-PORTB_OUT_MASK     = DISPLAY_BITS_MASK | E
+;;PORTB_OUT_MASK     = DISPLAY_BITS_MASK | E
 
 ;  .include musical_notes.inc
 
@@ -34,32 +40,33 @@ CP_M_DEST_P            = $e6 ; 2 bytes
 CP_M_SRC_P             = $e8 ; 2 bytes
 
 ; Shared memory locations
-TICKS_COUNTER          = $3b00 ; 2 bytes
-FIRST_UNUSED_BANK      = $3b02
-SCREEN_LOCK            = $3b03
-;NOTE_PLAYING           = $3b04
-BANK_TEMP              = $3b05
+TICKS_COUNTER          = $7b00 ; 2 bytes
+FIRST_UNUSED_BANK      = $7b02
+SCREEN_LOCK            = $7b03
+;NOTE_PLAYING           = $7b04
+BANK_TEMP              = $7b05
 
-;BUFFER_READ_POS        = $3cfd
-;BUFFER_WRITE_POS       = $3cfe
-;BUFFER_LOCK            = $3cff
-;BUFFER_DATA            = $3d00    
+BUFFER_READ_POS        = $7cfd
+BUFFER_WRITE_POS       = $7cfe
+BUFFER_LOCK            = $7cff
+BUFFER_DATA            = $7d00
 
-  .org $2000
-  jmp program_entry
+  .org $4000
+  jmp initialize_machine
 
   ; Place delay_routines at start of page to ensure no page boundary crossings during timing loops
   .include delay_routines.inc
 
+  .include initialize_machine_wendy2c.inc
   .include display_routines_4bit.inc
   .include display_hex.inc
 ;  .include musical_notes_tables.inc
   .include utilities.inc
 ;  .include copy_memory_inline.inc
 ;  .include sound.inc
-;  .include console.inc
-;  .include buffer.inc
-;  .include morse.inc
+  .include console.inc
+  .include buffer.inc
+  .include morse.inc
 ;  .include character_patterns_6x8.inc
 
   ; Programs
@@ -69,10 +76,10 @@ BANK_TEMP              = $3b05
 ;  .include prg_ditty.inc
 ;  .include prg_print_ticks_counter.inc
 ;  .include prg_led_control.inc
-;  .include prg_morse_demo.inc
+  .include prg_morse_demo.inc
 ;  .include prg_small_display_demo.inc
 
-program_entry:
+program_start:
   ldx #$ff                                 ; Initialize stack
   txs
 
@@ -80,24 +87,22 @@ program_entry:
   pha
   plp
 
-  ; Initialize 6522 port A (memory banking control)
-;  lda #(BANK_START | SD_CSB)
+; initialize LED
+  lda #LED_MASK
+  trb LED_PORT
+  tsb LED_PORT + DDR_OFFSET
+
+; switch to first bank
+  lda #BANK_MASK
+  trb BANK_PORT
   lda #BANK_START
-  sta PORTA
-  lda #PORTA_OUT_MASK                      ; Set pin direction on port A
-  sta DDRA
+  tsb BANK_PORT
 
-  ; Initialize 6522 port B (display control)
-  lda #0
-  sta PORTB
-  lda #PORTB_OUT_MASK                      ; Set pin direction on port B
-  sta DDRB
-
-  ; Set up the RAM vector pull location
+  ; Set up interrupt handler
   lda #<interrupt
-  sta $3ffe
+  sta $fffe
   lda #>interrupt
-  sta $3fff
+  sta $ffff
 
   ; Initialize variables
   lda #(BANK_START + 1)
@@ -142,7 +147,7 @@ program_entry:
 ;  ldx #>led_control
 ;  jsr initialize_additional_process
 
-;  jsr add_morse_demo
+  jsr add_morse_demo
 
 ;  lda #<mini_display_demo
 ;  ldx #>mini_display_demo
@@ -160,9 +165,6 @@ program_entry:
 
   lda #(IERSETCLEAR | IT2) ; Enable timer 2 interrupts
   sta IER
-
-  ; TEMPORARY
-  ; jmp mini_display_demo
 
 busy_loop:
   lda #<100
@@ -185,10 +187,10 @@ banks_exist:
   tsx
   stx STACK_POINTER_SAVE
   tax            ; high order address in X
-  lda PORTA      ; Switch to first unused bank
+  lda BANK_PORT  ; Switch to first unused bank
   and #(~BANK_MASK & $ff)
   ora FIRST_UNUSED_BANK
-  sta PORTA
+  sta BANK_PORT
 
   stz SLEEPING   ; Task is not sleeping
 
@@ -209,10 +211,10 @@ banks_exist:
   tsx
   stx STACK_POINTER_SAVE
 
-  lda PORTA      ; Switch to first bank
+  lda BANK_PORT  ; Switch to first bank
   and #(~BANK_MASK & $ff)
   ora #BANK_START
-  sta PORTA
+  sta BANK_PORT
 
   ; Restore first bank stack pointer
   ldx STACK_POINTER_SAVE
@@ -280,7 +282,7 @@ switch_to_next_bank:
   stx STACK_POINTER_SAVE
 
 find_next_bank:
-  lda PORTA
+  lda BANK_PORT
   and #BANK_MASK
   sta BANK_TEMP
 
@@ -292,9 +294,9 @@ next_bank:
 interrupt_bank_ok:
   tax
   lda #BANK_MASK
-  trb PORTA
+  trb BANK_PORT
   txa
-  tsb PORTA               ; Switch to incoming bank
+  tsb BANK_PORT           ; Switch to incoming bank
 
   lda SLEEPING
   beq not_sleeping        ; Branch if not sleeping
@@ -305,7 +307,7 @@ interrupt_bank_ok:
   sbc TICKS_COUNTER + 1
   bmi stop_sleeping       ; Stop sleeping if WAKE_AT <= TICKS_COUNTER
 
-  lda PORTA
+  lda BANK_PORT
   and #BANK_MASK
   cmp BANK_TEMP
   bne next_bank
