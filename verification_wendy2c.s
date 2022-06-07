@@ -34,17 +34,19 @@ program_entry:
 
   lda #DISPLAY_SECOND_LINE
   jsr move_cursor
+
+  jsr test_all                   ; 6
  
   lda tests_failed
   bne .failed
 
   jsr display_string_immediate
-  .asciiz "Succeeded."
+  .asciiz " OK"
   stp
 
 .failed:
   jsr display_string_immediate
-  .asciiz "Failed!"
+  .asciiz " F!"
   stp
 
 
@@ -329,6 +331,195 @@ test_access_eeprom_2:
   rts
 
 
+test_all:
+  lda #'6'
+  jsr display_character
+
+; Set Values
+
+; 1..15      in lower bank 1..15   config 00001..01111 $2000
+  ldx #1
+  lda #%00001
+.fill_lower_bank:
+  jsr switch_to_space
+  stx $2000
+  inx
+  inc
+  cmp #%01111
+  bne .fill_lower_bank
+
+; 16         in lower fixed ram    config 00001        $6000
+  ldx #16
+  lda #%00001
+  jsr switch_to_space
+  stx $6000
+
+; 17         in upper bank 1 L     config 00001        $a000
+  ldx #17
+  lda #%00001
+  jsr switch_to_space
+  stx $a000
+
+; 18..24     in upper bank 2..8 L     config 10001..10111 $a000
+  ldx #18
+  lda #%10001
+.fill_upper_bank_l:
+  jsr switch_to_space
+  stx $a000
+  inx
+  inc
+  cmp #%10111
+  bne .fill_upper_bank_l
+
+; 25         in upper bank 1 H     config 00001        $e000
+  ldx #25
+  lda #%00001
+  jsr switch_to_space
+  stx $e000
+
+; 26..32     in upper bank 2..8 H  config 10001..10111 $e000
+  ldx #26
+  lda #%10001
+.fill_upper_bank_h:
+  jsr switch_to_space
+  stx $e000
+  inx
+  inc
+  cmp #%10111
+  bne .fill_upper_bank_h
+
+; Check Values
+
+; 1..15      in lower bank 1..15   config 00001..01111 $2000
+  ldx #1
+  lda #%00001
+.check_lower_bank:
+  jsr switch_to_space
+  cpx $2000
+  bne .check_lower_bank_failed
+  inx
+  inc
+  cmp #%01111
+  bne .check_lower_bank
+
+  lda #'Y'
+  jsr display_character
+  bra .check_lower_bank_done
+
+.check_lower_bank_failed:
+  lda #'N'
+  jsr display_character
+  lda #1
+  sta tests_failed
+
+.check_lower_bank_done:
+
+; 16         in lower fixed ram    config 00001        $6000
+  ldx #16
+  lda #%00001
+  jsr switch_to_space
+  cpx $6000
+  bne .check_lower_fixed_ram_failed
+
+  lda #'Y'
+  jsr display_character
+  bra .check_lower_fixed_ram_done
+
+.check_lower_fixed_ram_failed:
+  lda #'N'
+  jsr display_character
+  lda #1
+  sta tests_failed
+
+.check_lower_fixed_ram_done:
+
+; 17         in upper bank 1 L     config 00001        $a000
+  ldx #17
+  lda #%00001
+  jsr switch_to_space
+  cpx $a000
+  bne .check_upper_bank_1_l_failed
+  lda #'Y'
+  jsr display_character
+  bra .check_upper_bank_1_l_done
+
+.check_upper_bank_1_l_failed:
+  lda #'N'
+  jsr display_character
+  lda #1
+  sta tests_failed
+
+.check_upper_bank_1_l_done:
+
+; 18..24     in upper bank 2..8 L  config 10001..10111 $a000
+  ldx #18
+  lda #%10001
+.check_upper_bank_l:
+  jsr switch_to_space
+  cpx $a000
+  bne .check_upper_bank_l_failed
+  inx
+  inc
+  cmp #%10111
+  bne .check_upper_bank_l
+  lda #'Y'
+  jsr display_character
+  bra .check_upper_bank_l_done
+
+.check_upper_bank_l_failed:
+  lda #'N'
+  jsr display_character
+  lda #1
+  sta tests_failed
+
+.check_upper_bank_l_done:
+
+; 25         in upper bank 1 H     config 00001        $e000
+  ldx #25
+  lda #%00001
+  jsr switch_to_space
+  cpx $e000
+  bne .check_upper_bank_1_h_failed
+  lda #'Y'
+  jsr display_character
+  bra .check_upper_bank_1_h_done
+
+.check_upper_bank_1_h_failed:
+  lda #'N'
+  jsr display_character
+  lda #1
+  sta tests_failed
+
+.check_upper_bank_1_h_done:
+
+; 26..32     in upper bank 2..8 H  config 10001..10111 $e000
+  ldx #26
+  lda #%10001
+.check_upper_bank_h:
+  jsr switch_to_space
+  cpx $e000
+  bne .check_upper_bank_h_failed
+  inx
+  inc
+  cmp #%10111
+  bne .check_upper_bank_h
+  lda #'Y'
+  jsr display_character
+  bra .check_upper_bank_h_done
+
+.check_upper_bank_h_failed:
+  lda #'N'
+  jsr display_character
+  lda #1
+  sta tests_failed
+
+.check_upper_bank_h_done:
+
+  lda #1
+  jsr switch_to_space
+  rts
+
+
 ; On entry A contains the space to switch to
 ; on exit A, X, Y are preserved
 switch_to_space:
@@ -353,4 +544,3 @@ switch_to_space:
   pha
   lda switch_to_space_space
   rts
-
