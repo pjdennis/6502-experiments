@@ -45,7 +45,6 @@ R15 = /A15 * /A14 * /C4 * /C3 * /C2 * /C1 * /C0 ; $0000..$3fff config $00000    
     + /A15 * /A14 *  C4 * /C3                   ; $0000..$3fff config $10000..$10111 => Bank $00001         RAM at $8000
     +  A15 *  A14                               ; $8000..$ffff config $10000..$11111 => Bank $1X000..$1X111 RAM at $8000
 
-
 R16 = /A15 * /A14 * /C4 * C1                    ; $0000..$3fff config $00001..$01111 => Bank $00001..$01111 RAM at $8000
     + /A15 * /A14 *  C4 * C3                    ; $0000..$3fff config $10000..$10111 => Bank $00010         RAM at $8000
     +  A15 * /A14 *  C4 * C0                    ; $8000..$ffff config $10000..$11111 => Bank $1X000..$1X111 RAM at $8000
@@ -76,12 +75,11 @@ RWRB      Read signal from 65C02
 C0..C4    Memory configuration selection from the VIA
 
 Outputs:
-CKS       System clodk with  speed fixed at half the speed of OSC
+CKS       System clock with speed fixed at half the speed of OSC
 CK        Variable speed clock. Half the speed of CKS when ROM is
           selected, otherwise the same speed as CKS
 /WR       Active low write signal suitable for RAM and ROM chips
 /ROMCS    ROM chip select
 /RAMCS    RAM chip select
 /VIACS    VIA chip select
-R15..R18  RAM address lines. Vary based on bank address C0..C4 and A12..A15
-
+R15..R18  RAM address lines. Vary based on bank address C0..C4 and A11..A15
