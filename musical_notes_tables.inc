@@ -1,22 +1,57 @@
 notes:
+  .word NOTE_C3
+  .word NOTE_CS3
+  .word NOTE_D3
+  .word NOTE_DS3
+  .word NOTE_E3
+  .word NOTE_F3
+  .word NOTE_FS3
+  .word NOTE_G3
+  .word NOTE_GS3
+  .word NOTE_A3
+  .word NOTE_AS3
+  .word NOTE_B3
   .word NOTE_C4
   .word NOTE_CS4
   .word NOTE_D4
   .word NOTE_DS4
-  .word NOTE_E4	
-  .word NOTE_F4	
+  .word NOTE_E4
+  .word NOTE_F4
   .word NOTE_FS4
-  .word NOTE_G4	
+  .word NOTE_G4
   .word NOTE_GS4
-  .word NOTE_A4 
+  .word NOTE_A4
   .word NOTE_AS4
-  .word NOTE_B4 
+  .word NOTE_B4
   .word NOTE_C5
+  .word NOTE_CS5
+  .word NOTE_D5
+  .word NOTE_DS5
+  .word NOTE_E5
+  .word NOTE_F5
+  .word NOTE_FS5
+  .word NOTE_G5
+  .word NOTE_GS5
+  .word NOTE_A5
+  .word NOTE_AS5
+  .word NOTE_B5
+  .word NOTE_C6
+
 
 durations:
-  .word 1000 ; SEMIBREVE
-  .word  500 ; MINIM
-  .word  250 ; CROTCHET
-  .word  125 ; QUAVER
-  .word   62 ; SEMIQUAVER
-
+  .word DURATION_SEMIQUAVER
+  .word DURATION_QUAVER
+  .word DURATION_DOTTED_QUAVER
+  .word DURATION_CROTCHET
+  .word DURATION_CROTCHET_TIE_QUAVER
+  .word DURATION_DOTTED_CROTCHET
+  .word DURATION_DOUBLE_DOTTED_CROTCHET
+  .word DURATION_MINIM
+  .word DURATION_MINIM_TIE_SEMIQUAVER
+  .word DURATION_MINIM_TIE_QUAVER
+  .word DURATION_MINIM_TIE_DOTTED_QUAVER
+  .word DURATION_DOTTED_MINIM
+  .word DURATION_MINIM_TIE_CROTCHET_TIE_SEMIQUAVER
+  .word DURATION_DOUBLE_DOTTED_MINIM
+  .word DURATION_TRIPLE_DOTTED_MINIM
+  .word DURATION_SEMIBREVE 

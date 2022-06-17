@@ -21,12 +21,13 @@ MORSE_PORT = LED_PORT
 ;SD_DATA_PORT      = PORTB
 
 ; PORTB assignments
-;T1_SQWAVE_OUT     = %10000000
+T1_SQWAVE_OUT     = %10000000
+T1_SQWAVE_PORT    = PORTB
 
 ;PORTB_OUT_MASK    = DISPLAY_BITS_MASK | E | T1_SQWAVE_OUT
 ;;PORTB_OUT_MASK     = DISPLAY_BITS_MASK | E
 
-;  .include musical_notes.inc
+  .include musical_notes.inc
 
 DELAY                  = CLOCK_FREQ_KHZ * 2  ; 1 KHz / 2 = 500 Hz
 
@@ -43,7 +44,7 @@ CP_M_SRC_P             = $e8 ; 2 bytes
 TICKS_COUNTER          = $7b00 ; 2 bytes
 FIRST_UNUSED_BANK      = $7b02
 SCREEN_LOCK            = $7b03
-;NOTE_PLAYING           = $7b04
+NOTE_PLAYING           = $7b04
 BANK_TEMP              = $7b05
 
 BUFFER_READ_POS        = $7cfd
@@ -60,10 +61,10 @@ BUFFER_DATA            = $7d00
   .include initialize_machine_wendy2c.inc
   .include display_routines_4bit.inc
   .include display_hex.inc
-;  .include musical_notes_tables.inc
+  .include musical_notes_tables.inc
   .include utilities.inc
 ;  .include copy_memory_inline.inc
-;  .include sound.inc
+  .include sound.inc
   .include console.inc
   .include buffer.inc
   .include morse.inc
@@ -72,8 +73,8 @@ BUFFER_DATA            = $7d00
   ; Programs
   .include prg_counters.inc
   .include prg_chase.inc
-;  .include prg_play_song.inc
-;  .include prg_ditty.inc
+  .include prg_play_song.inc
+  .include prg_star_spangled_banner.inc
 ;  .include prg_print_ticks_counter.inc
 ;  .include prg_led_control.inc
   .include prg_morse_demo.inc
@@ -92,6 +93,11 @@ program_start:
   trb LED_PORT
   tsb LED_PORT + DDR_OFFSET
 
+; initiazlie speaker
+  lda #T1_SQWAVE_OUT
+  trb T1_SQWAVE_PORT
+  tsb T1_SQWAVE_PORT + DDR_OFFSET
+
 ; switch to first bank
   lda #BANK_MASK
   trb BANK_PORT
@@ -109,7 +115,7 @@ program_start:
   sta FIRST_UNUSED_BANK
 
   stz SCREEN_LOCK
-;  stz NOTE_PLAYING
+  stz NOTE_PLAYING
   stz SLEEPING
   stz TICKS_COUNTER
   stz TICKS_COUNTER + 1
@@ -139,9 +145,9 @@ program_start:
   ldx #>run_chase
   jsr initialize_additional_process
 
-;  lda #<play_ditty
-;  ldx #>play_ditty
-;  jsr initialize_additional_process
+  lda #<play_star_spangled_banner
+  ldx #>play_star_spangled_banner
+  jsr initialize_additional_process
 
 ;  lda #<led_control
 ;  ldx #>led_control
