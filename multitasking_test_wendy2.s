@@ -27,6 +27,7 @@ T1_SQWAVE_PORT    = PORTB
 ;PORTB_OUT_MASK    = DISPLAY_BITS_MASK | E | T1_SQWAVE_OUT
 ;;PORTB_OUT_MASK     = DISPLAY_BITS_MASK | E
 
+MUSIC_BPM = 92
   .include musical_notes.inc
 
 DELAY                  = CLOCK_FREQ_KHZ * 2  ; 1 KHz / 2 = 500 Hz

@@ -1,0 +1,21 @@
+play_repeated_notes:
+  lda #<repeated_notes
+  ldx #>repeated_notes
+  jmp play_song ; tail call
+
+repeated_notes:
+  .byte NOTE_IDX_C5,   DURATION_IDX_MINIM
+  .byte NOTE_IDX_C5,   DURATION_IDX_CROTCHET
+  .byte NOTE_IDX_C5,   DURATION_IDX_QUAVER
+  .byte NOTE_IDX_C5,   DURATION_IDX_SEMIQUAVER
+  .byte NOTE_IDX_C5,   DURATION_IDX_SEMIQUAVER
+  .byte NOTE_IDX_C5,   DURATION_IDX_CROTCHET
+
+  .byte NOTE_IDX_D5,   DURATION_IDX_MINIM
+  .byte NOTE_IDX_D5,   DURATION_IDX_CROTCHET
+  .byte NOTE_IDX_D5,   DURATION_IDX_QUAVER
+  .byte NOTE_IDX_D5,   DURATION_IDX_SEMIQUAVER
+  .byte NOTE_IDX_D5,   DURATION_IDX_SEMIQUAVER
+  .byte NOTE_IDX_D5,   DURATION_IDX_CROTCHET
+
+  .byte NOTE_IDX_NULL
