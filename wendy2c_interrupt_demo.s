@@ -1,4 +1,4 @@
-  .include base_config_wendy2.inc
+  .include base_config_wendy2c.inc
 
 IRQ_VECTOR_ADDRESS    = $fffe
 
@@ -16,7 +16,7 @@ COUNTER_COPY          = $04 ; 2 bytes
   ; during timing loops
   .include delay_routines.inc
 
-  .include initialize_machine_wendy2.inc
+  .include initialize_machine_wendy2c.inc
   .include display_routines_4bit.inc
   .include display_string.inc
   .include display_hex.inc
