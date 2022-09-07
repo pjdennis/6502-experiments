@@ -23,23 +23,20 @@ SUBSEQUENT_INTERVAL    = HALF_BIT_INTERVAL - 2
 DISPLAY_DO_NOT_DISABLE_INTERRUPTS = 1
 
 ; Shared ram locations
-  .dsect
+DISPLAY_STRING_PARAM        = $00    ;  2 bytes
+DISPLAY_HEX_INDIRECT_PARAM: = $02    ;  2 bytes
+UPLOAD_P:                   = $04    ;  2 bytes
+UPLOAD_STOP_AT:             = $06    ;  2 bytes
+TEMP_P:                     = $08    ;  2 bytes
+UPLOADED_CHECKSUM:          = $0a    ;  2 bytes
+CHECKSUM_VALUE:             = $0c    ;  2 bytes
+CP_M_DEST_P:                = $0e    ;  2 bytes
+CP_M_SRC_P:                 = $10    ;  2 bytes
+CP_M_LEN:                   = $12    ;  2 bytes
+WAITING_FOR_SHIFT:          = $14    ;  1 byte
+TEMP:                       = $15    ;  2 byte
+TO_DECIMAL_PARAM:           = $16    ; 10 bytes
 
-DISPLAY_STRING_PARAM:       wrd
-DISPLAY_HEX_INDIRECT_PARAM: wrd
-UPLOAD_P:                   wrd
-UPLOAD_STOP_AT:             wrd
-TEMP_P:                     wrd
-UPLOADED_CHECKSUM:          wrd
-CHECKSUM_VALUE:             wrd
-CP_M_DEST_P:                wrd
-CP_M_SRC_P:                 wrd
-CP_M_LEN:                   wrd
-WAITING_FOR_SHIFT:          byt
-TEMP:                       byt
-TO_DECIMAL_PARAM:           reserve 10
-
-  .dend
 
 TRANSLATE                  = $0200
 INTERRUPT_ROUTINE          = $3f00
