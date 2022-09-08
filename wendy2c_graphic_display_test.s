@@ -149,9 +149,9 @@ message: asciiz "Config:"
 
 gd_select:
   pha
-  lda #GD_CLK | GD_DC
+  lda #GD_CLK
   trb GD_PORT
-  lda #GD_MOSI
+  lda #GD_MOSI | GD_DC
   tsb GD_PORT
   lda #GD_CLK | GD_DC | GD_MOSI
   tsb GD_PORT + DDR_OFFSET
@@ -189,24 +189,19 @@ gd_reset:
 
 gd_send_command:
   pha
-  phx
-  phy
-  tay
   lda #GD_DC
   trb GD_PORT
-  bra gd_send
+  pla
+  jsr gd_send_data
+  lda #GD_DC
+  tsb GD_PORT
+  rts
 
 
 gd_send_data:
-  pha
   phx
   phy
   tay
-  lda #GD_DC
-  tsb GD_PORT
-  bra gd_send
-
-gd_send:
   ldx #8
 .loop:
   tya
@@ -225,10 +220,8 @@ gd_send:
   trb GD_PORT
   dex
   bne .loop
-
   ply
   plx
-  pla
   rts
 
 
