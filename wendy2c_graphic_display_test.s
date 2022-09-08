@@ -83,6 +83,7 @@ ILI9341_PINK        = $fc18 ; 255, 130, 198
 
 DISPLAY_STRING_PARAM  = $00 ; 2 bytes
 CMD_PTR               = $02 ; 2 bytes
+COLOR                 = $04 ; 2 bytes
 
   .org $4000
   jmp program_entry
@@ -98,8 +99,8 @@ CMD_PTR               = $02 ; 2 bytes
 program_entry:
   jsr clear_display
 
-  lda #<message
-  ldx #>message
+  lda #<config_message
+  ldx #>config_message
   jsr display_string
 
   jsr gd_select
@@ -139,13 +140,17 @@ program_entry:
   jsr show_content
   jsr gd_unselect
 
+  lda #DISPLAY_SECOND_LINE
+  jsr move_cursor
+  lda #<done_message
+  ldx #>done_message
+  jsr display_string
+
   stp
 
 
-;  lda #DISPLAY_SECOND_LINE
-;  jsr move_cursor
-
-message: asciiz "Config:"
+config_message: asciiz "Config:"
+done_message:   asciiz "Done."
 
 gd_select:
   pha
@@ -215,9 +220,12 @@ gd_send_data:
 .high_bit:
   tsb GD_PORT
 .bit_set:
-  lda #GD_CLK
-  tsb GD_PORT
-  trb GD_PORT
+;  lda #GD_CLK
+;  tsb GD_PORT
+;  trb GD_PORT
+  inc GD_PORT
+  dec GD_PORT
+
   dex
   bne .loop
   ply
@@ -266,9 +274,9 @@ show_content:
   jsr gd_send_data
   lda #0
   jsr gd_send_data
-  lda #0
+  lda #>(ILI9341_TFTWIDTH - 1)
   jsr gd_send_data
-  lda #10
+  lda #<(ILI9341_TFTWIDTH - 1)
   jsr gd_send_data
 
   lda #ILI9341_PASET
@@ -277,23 +285,58 @@ show_content:
   jsr gd_send_data
   lda #0
   jsr gd_send_data
-  lda #0
+  lda #>(ILI9341_TFTHEIGHT - 1)
   jsr gd_send_data
-  lda #10
+  lda #<(ILI9341_TFTHEIGHT - 1)
   jsr gd_send_data
 
   lda #ILI9341_RAMWR
   jsr gd_send_command
 
-  ldx #100
-.loop:
-  lda #>ILI9341_RED
-  jsr gd_send_data
+STRIPE_HEIGHT = 10
+
+  ldy #ILI9341_TFTHEIGHT / STRIPE_HEIGHT / 4
+.stripe_loop:
   lda #<ILI9341_RED
+  sta COLOR
+  lda #>ILI9341_RED
+  sta COLOR + 1
+  jsr send_stripe
+  lda #<ILI9341_WHITE
+  sta COLOR
+  lda #>ILI9341_WHITE
+  sta COLOR + 1
+  jsr send_stripe
+  lda #<ILI9341_ORANGE
+  sta COLOR
+  lda #>ILI9341_ORANGE
+  sta COLOR + 1
+  jsr send_stripe
+  lda #<ILI9341_NAVY
+  sta COLOR
+  lda #>ILI9341_NAVY
+  sta COLOR + 1
+  jsr send_stripe
+  dey
+  bne .stripe_loop  
+  rts
+
+
+send_stripe:
+  phy
+  ldy #STRIPE_HEIGHT
+.outer_loop:
+  ldx #ILI9341_TFTWIDTH
+.loop:
+  lda COLOR + 1
+  jsr gd_send_data
+  lda COLOR
   jsr gd_send_data
   dex
   bne .loop
-
+  dey
+  bne .outer_loop
+  ply
   rts
 
 
@@ -343,28 +386,6 @@ gd_initialize:
   jsr delay_hundredths
   rts
 
-
-test_command:
-  pha
-  lda #'C'
-  jsr display_character
-  pla
-  jsr display_hex
-  rts
-
-test_parameter:
-  jsr display_hex
-  rts
-
-test_delay:
-  lda #'D'
-  jsr display_character
-  rts
-
-INIT_COMMANDS_TEST:
-  .byte $42, 0
-  .byte $43, $82, $07, $08
-  .byte $00
 
 INIT_COMMANDS:
   .byte $ef, 3, $03, $80, $02
