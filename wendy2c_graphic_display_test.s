@@ -94,6 +94,7 @@ Y                     = $0a ; 2 bytes
 TEMP                  = $0c ; 2 bytes
 CHAR_DATA_PTR         = $0e ; 2 bytes
 STRING_PTR            = $10 ; 2 bytes
+PORT_VALUE            = $12 ; 1 byte
 
   .org $4000
   jmp program_entry
@@ -352,56 +353,65 @@ clear_screen:
   lda #GD_MOSI
   trb GD_PORT
 
+  lda GD_PORT
+  sta PORT_VALUE
+  ora #GD_CLK
+
 ; 256 * 240 * 20 = 320 * 240 * 16
 
-  ldx #0
+  ldx #240
 .outer_loop:
-  ldy #240
+  ldy #0
+  phx
+  ldx PORT_VALUE
 .inner_loop:
-  inc GD_PORT ; 1
-  dec GD_PORT
-  inc GD_PORT ; 2
-  dec GD_PORT
-  inc GD_PORT ; 3
-  dec GD_PORT
-  inc GD_PORT ; 4
-  dec GD_PORT
-  inc GD_PORT ; 5
-  dec GD_PORT
-  inc GD_PORT ; 6
-  dec GD_PORT
-  inc GD_PORT ; 7
-  dec GD_PORT
-  inc GD_PORT ; 8
-  dec GD_PORT
-  inc GD_PORT ; 9
-  dec GD_PORT
-  inc GD_PORT ; 10
-  dec GD_PORT
-  inc GD_PORT ; 11
-  dec GD_PORT
-  inc GD_PORT ; 12
-  dec GD_PORT
-  inc GD_PORT ; 13
-  dec GD_PORT
-  inc GD_PORT ; 14
-  dec GD_PORT
-  inc GD_PORT ; 15
-  dec GD_PORT
-  inc GD_PORT ; 16
-  dec GD_PORT
-  inc GD_PORT ; 17
-  dec GD_PORT
-  inc GD_PORT ; 18
-  dec GD_PORT
-  inc GD_PORT ; 19
-  dec GD_PORT
-  inc GD_PORT ; 20
-  dec GD_PORT
+  sta GD_PORT ; 1
+  stx GD_PORT
+  sta GD_PORT ; 2
+  stx GD_PORT
+  sta GD_PORT ; 3
+  stx GD_PORT
+  sta GD_PORT ; 4
+  stx GD_PORT
+  sta GD_PORT ; 5
+  stx GD_PORT
+  sta GD_PORT ; 6
+  stx GD_PORT
+  sta GD_PORT ; 7
+  stx GD_PORT
+  sta GD_PORT ; 8
+  stx GD_PORT
+  sta GD_PORT ; 9
+  stx GD_PORT
+  sta GD_PORT ; 10
+  stx GD_PORT
+  sta GD_PORT ; 11
+  stx GD_PORT
+  sta GD_PORT ; 12
+  stx GD_PORT
+  sta GD_PORT ; 13
+  stx GD_PORT
+  sta GD_PORT ; 14
+  stx GD_PORT
+  sta GD_PORT ; 15
+  stx GD_PORT
+  sta GD_PORT ; 16
+  stx GD_PORT
+  sta GD_PORT ; 17
+  stx GD_PORT
+  sta GD_PORT ; 18
+  stx GD_PORT
+  sta GD_PORT ; 19
+  stx GD_PORT
+  sta GD_PORT ; 20
+  stx GD_PORT
   dey
   bne .inner_loop
+  plx
   dex
-  bne .outer_loop
+  beq .done
+  jmp .outer_loop
+.done:
   rts
 
 
