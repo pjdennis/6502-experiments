@@ -758,6 +758,6 @@ INIT_COMMANDS:
   .byte ILI9341_GMCTRN1  , 15, $00, $0e, $14, $03, $11, $07 ; Set Gamma
   .byte   $31, $c1, $48, $08, $0f, $0c, $31, $36, $0f
   .byte ILI9341_SLPOUT   , $80                ; Exit Sleep
-  .byte ILI9341_DISPON   , $80                ; Display on
+  .byte ILI9341_DISPON   , 0                  ; Display on
   .byte $00                                   ; End of list
 
