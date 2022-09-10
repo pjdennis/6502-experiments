@@ -184,6 +184,7 @@ program_entry:
   sta ROW
   lda #2
   sta COL
+  lda #'W'
   jsr show_character
   jsr gd_unselect
 
@@ -315,6 +316,7 @@ gd_receive_data:
 
 
 show_character:
+  jsr set_char_data_ptr
   jsr x_y_from_row_col
 
   lda #ILI9341_CASET
@@ -362,7 +364,7 @@ show_character:
 
   ldy #0
 .col_loop:
-  lda character_patterns_6x8+6*('G'-' '),Y
+  lda (CHAR_DATA_PTR),Y
   jsr .show_column
   jsr .show_column
   iny
