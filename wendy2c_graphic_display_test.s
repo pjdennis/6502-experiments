@@ -106,7 +106,8 @@ PORT_VALUE            = $12 ; 1 byte
   .include display_routines_4bit.inc
   .include display_hex.inc
   .include display_string.inc
-  .include character_patterns_6x8.inc
+;  .include character_patterns_6x8.inc
+  .include character_patterns_12x16.inc
 
 program_entry:
   jsr clear_display
@@ -207,7 +208,7 @@ program_entry:
 
 config_message: asciiz "Config:"
 done_message:   asciiz "Done."
-hello_message:  asciiz "Hello, World! The   quick brown fox     jumps over the lazy dog.                Phil (\\/) Angel."
+hello_message:  asciiz "Hello, World! The   quick brown fox     jumps over the lazy dog.                Phil (\\/) Angel.          \\/"
 
 gd_select:
   pha
@@ -485,9 +486,9 @@ show_character:
 .col_loop:
   lda (CHAR_DATA_PTR),Y
   jsr .show_column
-  jsr .show_column
+  ;jsr .show_column
   iny
-  cpy #6
+  cpy #24 ; was 6
   bne .col_loop
  
   rts
@@ -503,20 +504,20 @@ show_character:
   jsr gd_send_data
   lda #<ILI9341_BLACK
   jsr gd_send_data
-  lda #>ILI9341_BLACK
-  jsr gd_send_data
-  lda #<ILI9341_BLACK
-  jsr gd_send_data
+;  lda #>ILI9341_BLACK
+;  jsr gd_send_data
+;  lda #<ILI9341_BLACK
+;  jsr gd_send_data
   bra .color_done
 .high_bit:
   lda #>ILI9341_BLUE
   jsr gd_send_data
   lda #<ILI9341_BLUE
   jsr gd_send_data
-  lda #>ILI9341_BLUE
-  jsr gd_send_data
-  lda #<ILI9341_BLUE
-  jsr gd_send_data
+;  lda #>ILI9341_BLUE
+;  jsr gd_send_data
+;  lda #<ILI9341_BLUE
+;  jsr gd_send_data
 .color_done:
   pla
   dex
@@ -542,16 +543,40 @@ set_char_data_ptr:
   ; calculate character offset
   sec
   sbc #' '
-  ; CHAR_DATA_PTR = character offset * 6
+  ;; CHAR_DATA_PTR = character offset * 6
+  ;sta TEMP
+  ;rol
+  ;rol
+  ;rol
+  ;and #03
+  ;sta TEMP + 1
+  ;lsr
+  ;sta CHAR_DATA_PTR + 1
+  ;lda TEMP
+  ;asl
+  ;sta CHAR_DATA_PTR
+  ;asl
+  ;;sta TEMP
+  ;clc
+  ;;lda TEMP
+  ;adc CHAR_DATA_PTR
+  ;sta CHAR_DATA_PTR
+  ;lda TEMP + 1
+  ;adc CHAR_DATA_PTR + 1
+  ;sta CHAR_DATA_PTR + 1
+
+  ; CHAR_DATA_PTR = character offset * 24 = co * 16 + co * 8
   sta TEMP
-  rol
-  rol
-  rol
-  and #03
+  lsr
+  lsr
+  lsr
+  lsr
   sta TEMP + 1
   lsr
   sta CHAR_DATA_PTR + 1
   lda TEMP
+  asl
+  asl
   asl
   sta CHAR_DATA_PTR
   asl
@@ -563,13 +588,14 @@ set_char_data_ptr:
   lda TEMP + 1
   adc CHAR_DATA_PTR + 1
   sta CHAR_DATA_PTR + 1
+
   ; Add the table base address
   clc
   lda CHAR_DATA_PTR
-  adc #<character_patterns_6x8
+  adc #<character_patterns_12x16
   sta CHAR_DATA_PTR
   lda CHAR_DATA_PTR + 1
-  adc #>character_patterns_6x8
+  adc #>character_patterns_12x16
   sta CHAR_DATA_PTR + 1
   rts
 
