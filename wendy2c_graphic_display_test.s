@@ -208,7 +208,7 @@ program_entry:
 
 config_message: asciiz "Config:"
 done_message:   asciiz "Done."
-hello_message:  asciiz "Hello, World! The   quick brown fox     jumps over the lazy dog.                Phil (\\/) Angel.          \\/"
+hello_message:  asciiz "Hello, World! The\nquick brown fox\njumps over the lazy dog.\n\n\n   Phil\n        (\\/)\n         \\/\n             Angel"
 
 gd_select:
   pha
@@ -425,15 +425,21 @@ show_string:
   .loop:
   lda (STRING_PTR)
   beq .done
+  cmp #'\n'
+  beq .newline
   jsr show_character
   jsr next_character
+.continue:
   inc STRING_PTR
   bne .loop
   inc STRING_PTR + 1
   bne .loop
 .done:
   rts
-
+.newline
+  stz COL
+  inc ROW
+  bra .continue
 
 show_character:
   jsr set_char_data_ptr
