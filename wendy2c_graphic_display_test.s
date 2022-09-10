@@ -80,10 +80,18 @@ ILI9341_ORANGE      = $fd20 ; 255, 165,   0
 ILI9341_GREENYELLOW = $afe5 ; 173, 255,  41
 ILI9341_PINK        = $fc18 ; 255, 130, 198
 
+CHAR_ROWS = 20
+CHAR_COLS = 20
+
 
 DISPLAY_STRING_PARAM  = $00 ; 2 bytes
 CMD_PTR               = $02 ; 2 bytes
 COLOR                 = $04 ; 2 bytes
+ROW                   = $06 ; 1 byte
+COL                   = $07 ; 1 byte
+X                     = $08 ; 2 bytes
+Y                     = $0a ; 2 bytes
+TEMP                  = $0c ; 2 bytes
 
   .org $4000
   jmp program_entry
@@ -95,9 +103,30 @@ COLOR                 = $04 ; 2 bytes
   .include display_routines_4bit.inc
   .include display_hex.inc
   .include display_string.inc
+  .include character_patterns_6x8.inc
 
 program_entry:
   jsr clear_display
+
+
+  lda #20
+  sta ROW
+  lda #20
+  sta COL
+  jsr x_y_from_row_col
+  lda X + 1
+  jsr display_hex
+  lda X
+  jsr display_hex
+  lda #' '
+  jsr display_character
+  lda Y + 1
+  jsr display_hex
+  lda Y
+  jsr display_hex
+
+  stp
+
 
   lda #<config_message
   ldx #>config_message
@@ -137,7 +166,12 @@ program_entry:
   jsr display_hex
 
   jsr gd_select
-  jsr show_content
+;  jsr show_content
+  lda #ILI9341_MADCTL
+  jsr gd_send_command
+  lda #%10101000    ; original $48
+  jsr gd_send_data
+  jsr show_some_text
   jsr gd_unselect
 
   lda #DISPLAY_SECOND_LINE
@@ -264,6 +298,119 @@ gd_receive_data:
   tya
   ply
   plx
+  rts
+
+
+show_some_text:
+
+
+
+  lda #ILI9341_CASET
+  jsr gd_send_command
+  lda #0
+  jsr gd_send_data
+  lda #0
+  jsr gd_send_data
+  lda #0
+  jsr gd_send_data
+  lda #15
+  jsr gd_send_data
+
+  lda #ILI9341_PASET
+  jsr gd_send_command
+  lda #0
+  jsr gd_send_data
+  lda #0
+  jsr gd_send_data
+  lda #0
+  jsr gd_send_data
+  lda #11
+  jsr gd_send_data
+
+  lda #ILI9341_RAMWR
+  jsr gd_send_command
+
+  ldx #0
+.col_loop:
+  lda character_patterns_6x8+6*('G'-' '),X
+  jsr .show_column
+  jsr .show_column
+  inx
+  cpx #6
+  bne .col_loop
+ 
+  rts
+.show_column:
+  pha
+  ldy #8
+.row_loop:
+  lsr
+  pha
+  bcs .high_bit
+; low bit
+  lda #>ILI9341_BLACK
+  jsr gd_send_data
+  lda #<ILI9341_BLACK
+  jsr gd_send_data
+  lda #>ILI9341_BLACK
+  jsr gd_send_data
+  lda #<ILI9341_BLACK
+  jsr gd_send_data
+  bra .color_done
+.high_bit:
+  lda #>ILI9341_BLUE
+  jsr gd_send_data
+  lda #<ILI9341_BLUE
+  jsr gd_send_data
+  lda #>ILI9341_BLUE
+  jsr gd_send_data
+  lda #<ILI9341_BLUE
+  jsr gd_send_data
+.color_done:
+  pla
+  dey
+  bne .row_loop
+  pla
+  rts
+
+
+x_y_from_row_col:
+  ; Y = ROW * 16
+  lda ROW
+  lsr
+  lsr
+  lsr
+  lsr
+  sta Y + 1
+  lda ROW
+  asl
+  asl
+  asl
+  asl
+  sta Y
+  ; X = COL * 12 = COL * 8 + COL * 4
+  lda COL
+  rol
+  rol
+  rol
+  rol
+  and #07
+  sta TEMP + 1
+  lsr
+  sta X + 1
+  lda COL
+  asl
+  asl
+  sta X
+  asl
+  ;sta TEMP
+  clc
+  ;lda TEMP
+  adc X
+  sta X
+  lda TEMP + 1
+  adc X + 1
+  sta X + 1
   rts
 
 
