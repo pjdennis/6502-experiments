@@ -92,6 +92,7 @@ COL                   = $07 ; 1 byte
 X                     = $08 ; 2 bytes
 Y                     = $0a ; 2 bytes
 TEMP                  = $0c ; 2 bytes
+CHAR_DATA_PTR         = $0e ; 2 bytes
 
   .org $4000
   jmp program_entry
@@ -109,23 +110,30 @@ program_entry:
   jsr clear_display
 
 
-  lda #20
-  sta ROW
-  lda #20
-  sta COL
-  jsr x_y_from_row_col
-  lda X + 1
-  jsr display_hex
-  lda X
-  jsr display_hex
-  lda #' '
-  jsr display_character
-  lda Y + 1
-  jsr display_hex
-  lda Y
-  jsr display_hex
+;  lda #20
+;  sta ROW
+;  lda #20
+;  sta COL
+;  jsr x_y_from_row_col
+;  lda X + 1
+;  jsr display_hex
+;  lda X
+;  jsr display_hex
+;  lda #' '
+;  jsr display_character
+;  lda Y + 1
+;  jsr display_hex
+;  lda Y
+;  jsr display_hex
 
-  stp
+;  lda #'~'
+;  jsr set_char_data_ptr
+;  lda CHAR_DATA_PTR + 1
+;  jsr display_hex
+;  lda CHAR_DATA_PTR
+;  jsr display_hex
+
+;  stp
 
 
   lda #<config_message
@@ -171,7 +179,12 @@ program_entry:
   jsr gd_send_command
   lda #%10101000    ; original $48
   jsr gd_send_data
-  jsr show_some_text
+
+  lda #1
+  sta ROW
+  lda #2
+  sta COL
+  jsr show_character
   jsr gd_unselect
 
   lda #DISPLAY_SECOND_LINE
@@ -301,48 +314,65 @@ gd_receive_data:
   rts
 
 
-show_some_text:
-
-
+show_character:
+  jsr x_y_from_row_col
 
   lda #ILI9341_CASET
   jsr gd_send_command
-  lda #0
+  lda Y + 1
   jsr gd_send_data
-  lda #0
+  lda Y
   jsr gd_send_data
-  lda #0
+
+  clc
+  lda Y
+  adc #15
+  sta Y
+  lda Y + 1
+  adc #0
+  sta Y + 1
+
+  lda Y + 1
   jsr gd_send_data
-  lda #15
+  lda Y
   jsr gd_send_data
 
   lda #ILI9341_PASET
   jsr gd_send_command
-  lda #0
+  lda X + 1
   jsr gd_send_data
-  lda #0
+  lda X
   jsr gd_send_data
-  lda #0
+
+  clc
+  lda X
+  adc #11
+  sta X
+  lda X + 1
+  adc #0
+  sta X + 1
+
+  lda X + 1
   jsr gd_send_data
-  lda #11
+  lda X
   jsr gd_send_data
 
   lda #ILI9341_RAMWR
   jsr gd_send_command
 
-  ldx #0
+  ldy #0
 .col_loop:
-  lda character_patterns_6x8+6*('G'-' '),X
+  lda character_patterns_6x8+6*('G'-' '),Y
   jsr .show_column
   jsr .show_column
-  inx
-  cpx #6
+  iny
+  cpy #6
   bne .col_loop
  
   rts
 .show_column:
   pha
-  ldy #8
+  ldx #8
 .row_loop:
   lsr
   pha
@@ -368,9 +398,45 @@ show_some_text:
   jsr gd_send_data
 .color_done:
   pla
-  dey
+  dex
   bne .row_loop
   pla
+  rts
+
+
+set_char_data_ptr:
+  ; calculate character offset
+  sec
+  sbc #' '
+  ; CHAR_DATA_PTR = character offset * 6
+  sta TEMP
+  rol
+  rol
+  rol
+  and #03
+  sta TEMP + 1
+  lsr
+  sta CHAR_DATA_PTR + 1
+  lda TEMP
+  asl
+  sta CHAR_DATA_PTR
+  asl
+  ;sta TEMP
+  clc
+  ;lda TEMP
+  adc CHAR_DATA_PTR
+  sta CHAR_DATA_PTR
+  lda TEMP + 1
+  adc CHAR_DATA_PTR + 1
+  sta CHAR_DATA_PTR + 1
+  ; Add the table base address
+  clc
+  lda CHAR_DATA_PTR
+  adc #<character_patterns_6x8
+  sta CHAR_DATA_PTR
+  lda CHAR_DATA_PTR + 1
+  adc #>character_patterns_6x8
+  sta CHAR_DATA_PTR + 1
   rts
 
 
