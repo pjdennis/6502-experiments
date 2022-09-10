@@ -93,6 +93,7 @@ X                     = $08 ; 2 bytes
 Y                     = $0a ; 2 bytes
 TEMP                  = $0c ; 2 bytes
 CHAR_DATA_PTR         = $0e ; 2 bytes
+STRING_PTR            = $10 ; 2 bytes
 
   .org $4000
   jmp program_entry
@@ -180,12 +181,18 @@ program_entry:
   lda #%10101000    ; original $48
   jsr gd_send_data
 
-  lda #1
+  jsr clear_screen
+
+  lda #0
   sta ROW
-  lda #2
+  lda #0
   sta COL
-  lda #'W'
-  jsr show_character
+  lda #<hello_message
+  sta STRING_PTR
+  lda #>hello_message
+  sta STRING_PTR + 1
+  jsr show_string  
+
   jsr gd_unselect
 
   lda #DISPLAY_SECOND_LINE
@@ -199,6 +206,7 @@ program_entry:
 
 config_message: asciiz "Config:"
 done_message:   asciiz "Done."
+hello_message:  asciiz "Hello, World! The   quick brown fox     jumps over the lazy dog.                Phil (\\/) Angel."
 
 gd_select:
   pha
@@ -315,6 +323,102 @@ gd_receive_data:
   rts
 
 
+clear_screen:
+  lda #ILI9341_CASET
+  jsr gd_send_command
+  lda #0
+  jsr gd_send_data
+  lda #0
+  jsr gd_send_data
+  lda #>(ILI9341_TFTHEIGHT - 1)
+  jsr gd_send_data
+  lda #<(ILI9341_TFTHEIGHT - 1)
+  jsr gd_send_data
+
+  lda #ILI9341_PASET
+  jsr gd_send_command
+  lda #0
+  jsr gd_send_data
+  lda #0
+  jsr gd_send_data
+  lda #>(ILI9341_TFTWIDTH - 1)
+  jsr gd_send_data
+  lda #<(ILI9341_TFTWIDTH - 1)
+  jsr gd_send_data
+
+  lda #ILI9341_RAMWR
+  jsr gd_send_command
+
+  lda #GD_MOSI
+  trb GD_PORT
+
+; 256 * 240 * 20 = 320 * 240 * 16
+
+  ldx #0
+.outer_loop:
+  ldy #240
+.inner_loop:
+  inc GD_PORT ; 1
+  dec GD_PORT
+  inc GD_PORT ; 2
+  dec GD_PORT
+  inc GD_PORT ; 3
+  dec GD_PORT
+  inc GD_PORT ; 4
+  dec GD_PORT
+  inc GD_PORT ; 5
+  dec GD_PORT
+  inc GD_PORT ; 6
+  dec GD_PORT
+  inc GD_PORT ; 7
+  dec GD_PORT
+  inc GD_PORT ; 8
+  dec GD_PORT
+  inc GD_PORT ; 9
+  dec GD_PORT
+  inc GD_PORT ; 10
+  dec GD_PORT
+  inc GD_PORT ; 11
+  dec GD_PORT
+  inc GD_PORT ; 12
+  dec GD_PORT
+  inc GD_PORT ; 13
+  dec GD_PORT
+  inc GD_PORT ; 14
+  dec GD_PORT
+  inc GD_PORT ; 15
+  dec GD_PORT
+  inc GD_PORT ; 16
+  dec GD_PORT
+  inc GD_PORT ; 17
+  dec GD_PORT
+  inc GD_PORT ; 18
+  dec GD_PORT
+  inc GD_PORT ; 19
+  dec GD_PORT
+  inc GD_PORT ; 20
+  dec GD_PORT
+  dey
+  bne .inner_loop
+  dex
+  bne .outer_loop
+  rts
+
+
+show_string:
+  .loop:
+  lda (STRING_PTR)
+  beq .done
+  jsr show_character
+  jsr next_character
+  inc STRING_PTR
+  bne .loop
+  inc STRING_PTR + 1
+  bne .loop
+.done:
+  rts
+
+
 show_character:
   jsr set_char_data_ptr
   jsr x_y_from_row_col
@@ -403,6 +507,19 @@ show_character:
   dex
   bne .row_loop
   pla
+  rts
+
+
+next_character:
+  lda COL
+  inc
+  cmp #CHAR_COLS
+  beq .next_row
+  sta COL
+  rts
+.next_row:
+  stz COL
+  inc ROW
   rts
 
 
