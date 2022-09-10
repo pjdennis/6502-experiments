@@ -325,6 +325,9 @@ gd_receive_data:
 
 
 clear_screen:
+  lda #ILI9341_DISPOFF
+  jsr gd_send_command
+
   lda #ILI9341_CASET
   jsr gd_send_command
   lda #0
@@ -412,6 +415,8 @@ clear_screen:
   beq .done
   jmp .outer_loop
 .done:
+  lda #ILI9341_DISPON
+  jsr gd_send_command
   rts
 
 
