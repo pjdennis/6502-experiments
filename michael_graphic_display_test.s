@@ -107,7 +107,7 @@ Y                     = $0a ; 2 bytes
 TEMP                  = $0c ; 2 bytes
 CHAR_DATA_PTR         = $0e ; 2 bytes
 STRING_PTR            = $10 ; 2 bytes
-PORT_VALUE            = $12 ; 1 byte
+BYTE                  = $12 ; 1 byte
 COUNTER               = $13 ; 2 bytes
 
   .org $2000
@@ -187,17 +187,17 @@ program_start:
   jsr gd_send_data
 
   jsr clear_screen
-;
-;  lda #0
-;  sta ROW
-;  lda #0
-;  sta COL
-;  lda #<hello_message
-;  sta STRING_PTR
-;  lda #>hello_message
-;  sta STRING_PTR + 1
-;  jsr show_string  
-;
+
+  lda #0
+  sta ROW
+  lda #0
+  sta COL
+  lda #<hello_message
+  sta STRING_PTR
+  lda #>hello_message
+  sta STRING_PTR + 1
+  jsr show_string  
+
   jsr gd_unselect
 
   lda #DISPLAY_SECOND_LINE
@@ -465,44 +465,45 @@ show_character:
   ldy #0
 .col_loop:
   lda (CHAR_DATA_PTR),Y
-  jsr .show_column
-  ;jsr .show_column
-  iny
-  cpy #24 ; was 6
-  bne .col_loop
- 
-  rts
-.show_column:
-  pha
+; show column
+  sta BYTE
   ldx #8
 .row_loop:
-  lsr
-  pha
-  bcs .high_bit
-; low bit
-  lda #>ILI9341_BLACK
-  jsr gd_send_data
-  lda #<ILI9341_BLACK
-  jsr gd_send_data
-;  lda #>ILI9341_BLACK
-;  jsr gd_send_data
-;  lda #<ILI9341_BLACK
-;  jsr gd_send_data
-  bra .color_done
-.high_bit:
+  lsr BYTE
+  bcc .low_bit
+; high bit
   lda #>ILI9341_BLUE
-  jsr gd_send_data
+;  jsr gd_send_data
+  sta PORTB
+  lda #GD_E
+  tsb GD_PORT
+  trb GD_PORT
   lda #<ILI9341_BLUE
-  jsr gd_send_data
-;  lda #>ILI9341_BLUE
 ;  jsr gd_send_data
-;  lda #<ILI9341_BLUE
+  sta PORTB
+  lda #GD_E
+  tsb GD_PORT
+  trb GD_PORT
+  bra .color_done
+.low_bit:
+  lda #>ILI9341_BLACK
 ;  jsr gd_send_data
+  sta PORTB
+  lda #GD_E
+  tsb GD_PORT
+  trb GD_PORT
+;  lda #<ILI9341_BLACK
+;;  jsr gd_send_data
+;  sta PORTB
+;  lda #GD_E
+  tsb GD_PORT
+  trb GD_PORT
 .color_done:
-  pla
   dex
   bne .row_loop
-  pla
+  iny
+  cpy #24
+  bne .col_loop
   rts
 
 
