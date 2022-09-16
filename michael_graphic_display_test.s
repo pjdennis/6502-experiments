@@ -107,8 +107,8 @@ Y                     = $0a ; 2 bytes
 TEMP                  = $0c ; 2 bytes
 CHAR_DATA_PTR         = $0e ; 2 bytes
 STRING_PTR            = $10 ; 2 bytes
-BYTE                  = $12 ; 1 byte
-COUNTER               = $13 ; 2 bytes
+COUNTER               = $12 ; 2 bytes
+BYTE                  = $14 ; 1 byte
 
   .org $2000
   jmp initialize_machine
@@ -121,7 +121,6 @@ COUNTER               = $13 ; 2 bytes
   .include display_routines.inc
   .include display_hex.inc
   .include display_string.inc
-;  .include character_patterns_6x8.inc
   .include character_patterns_12x16.inc
 
 program_start:
@@ -137,42 +136,14 @@ program_start:
 
   jsr clear_display
 
-  lda #<config_message
-  ldx #>config_message
+  lda #<start_message
+  ldx #>start_message
   jsr display_string
 
   jsr gd_select
   jsr gd_reset
   jsr gd_initialize
   jsr gd_unselect
-
-;  jsr gd_select
-;  lda #ILI9341_RDMADCTL
-;  jsr gd_send_command
-;  jsr gd_receive_data
-;  jsr gd_unselect
-;  jsr display_hex
-
-;  jsr gd_select
-;  lda #ILI9341_RDMODE 
-;  jsr gd_send_command
-;  jsr gd_receive_data
-;  jsr gd_unselect
-;  jsr display_hex
-
-;  jsr gd_select
-;  lda #ILI9341_RDSELFDIAG 
-;  jsr gd_send_command
-;  jsr gd_receive_data
-;  jsr gd_unselect
-;  jsr display_hex
-
-;  jsr gd_select
-;  lda #ILI9341_RDPIXFMT
-;  jsr gd_send_command
-;  jsr gd_receive_data
-;  jsr gd_unselect
-;  jsr display_hex
 
 ;  jsr gd_select
 ;  jsr show_content
@@ -209,7 +180,7 @@ program_start:
   stp
 
 
-config_message: asciiz "Config:"
+start_message:  asciiz "Starting..."
 done_message:   asciiz "Done."
 hello_message:  asciiz "Hello, World! The\nquick brown fox\njumps over the lazy dog.\n\n\n   Phil\n        (\\/)\n         \\/\n             Angel"
 
@@ -267,42 +238,6 @@ gd_send_data:
   lda #GD_E
   tsb GD_PORT
   trb GD_PORT
-  rts
-
-
-; On exit A = the received byte
-gd_receive_data:
-  stp
-
-  phx
-  phy
-  lda #GD_DC
-  tsb GD_PORT
-  ldy #0
-  ldx #8
-.loop
-  lda #GD_CLK
-  tsb GD_PORT
-  lda #GD_MISO
-  bit GD_PORT
-  bne .high_bit
-; low bit
-  tya
-  asl
-  bra .bit_set
-.high_bit:
-  tya
-  asl
-  inc
-.bit_set
-  tay
-  lda #GD_CLK
-  trb GD_PORT
-  dex
-  bne .loop
-  tya
-  ply
-  plx
   rts
 
 
@@ -415,6 +350,7 @@ show_string:
   inc ROW
   bra .continue
 
+
 show_character:
   jsr set_char_data_ptr
   jsr x_y_from_row_col
@@ -524,27 +460,6 @@ set_char_data_ptr:
   ; calculate character offset
   sec
   sbc #' '
-  ;; CHAR_DATA_PTR = character offset * 6
-  ;sta TEMP
-  ;rol
-  ;rol
-  ;rol
-  ;and #03
-  ;sta TEMP + 1
-  ;lsr
-  ;sta CHAR_DATA_PTR + 1
-  ;lda TEMP
-  ;asl
-  ;sta CHAR_DATA_PTR
-  ;asl
-  ;;sta TEMP
-  ;clc
-  ;;lda TEMP
-  ;adc CHAR_DATA_PTR
-  ;sta CHAR_DATA_PTR
-  ;lda TEMP + 1
-  ;adc CHAR_DATA_PTR + 1
-  ;sta CHAR_DATA_PTR + 1
 
   ; CHAR_DATA_PTR = character offset * 24 = co * 16 + co * 8
   sta TEMP
@@ -601,7 +516,7 @@ x_y_from_row_col:
   rol
   rol
   rol
-  and #07
+  and #$07
   sta TEMP + 1
   lsr
   sta X + 1
@@ -679,11 +594,10 @@ STRIPE_HEIGHT = 10
 send_stripe:
   phy
   ldy #STRIPE_HEIGHT
-.outer_loop:
+.height_loop:
   ldx #ILI9341_TFTWIDTH
-.loop:
+.width_loop:
   lda COLOR + 1
-
 ;  jsr gd_send_data
   sta PORTB
   lda #GD_E
@@ -698,9 +612,9 @@ send_stripe:
   trb GD_PORT
 
   dex
-  bne .loop
+  bne .width_loop
   dey
-  bne .outer_loop
+  bne .height_loop
   ply
   rts
 
@@ -753,29 +667,31 @@ gd_initialize:
 
 
 INIT_COMMANDS:
-  .byte $ef, 3, $03, $80, $02
-  .byte $cf, 3, $00, $c1, $30
-  .byte $ed, 4, $64, $03, $12, $81
-  .byte $e8, 3, $85, $00, $78
-  .byte $cb, 5, $39, $2c, $00, $34, $02
-  .byte $f7, 1, $20
-  .byte $ea, 2, $00, $00
-  .byte ILI9341_PWCTR1   , 1, $23             ; Power control VRH[5:0]
-  .byte ILI9341_PWCTR2   , 1, $10             ; Power control SAP[2:0];BT[3:0]
-  .byte ILI9341_VMCTR1   , 2, $3e, $28        ; VCM control
-  .byte ILI9341_VMCTR2   , 1, $86             ; VCM control2
-  .byte ILI9341_MADCTL   , 1, $48             ; Memory Access Control
-  .byte ILI9341_VSCRSADD , 1, $00             ; Vertical scroll zero
-  .byte ILI9341_PIXFMT   , 1, $55
-  .byte ILI9341_FRMCTR1  , 2, $00, $18
-  .byte ILI9341_DFUNCTR  , 3, $08, $82, $27   ; Display Function Control
-  .byte $f2, 1, $00                           ; 3Gamma Function Disable
-  .byte ILI9341_GAMMASET , 1, $01             ; Gamma curve selected
-  .byte ILI9341_GMCTRP1  , 15, $0f, $31, $2b, $0c, $0e, $08 ; Set Gamma
-  .byte   $4e, $f1, $37, $07, $10, $03, $0e, $09, $00
-  .byte ILI9341_GMCTRN1  , 15, $00, $0e, $14, $03, $11, $07 ; Set Gamma
-  .byte   $31, $c1, $48, $08, $0f, $0c, $31, $36, $0f
-  .byte ILI9341_SLPOUT   , $80                ; Exit Sleep
-  .byte ILI9341_DISPON   , 0                  ; Display on
-  .byte $00                                   ; End of list
+  .byte $ef,               3, $03, $80, $02
+  .byte $cf,               3, $00, $c1, $30
+  .byte $ed,               4, $64, $03, $12, $81
+  .byte $e8,               3, $85, $00, $78
+  .byte $cb,               5, $39, $2c, $00, $34, $02
+  .byte $f7,               1, $20
+  .byte $ea,               2, $00, $00
+  .byte ILI9341_PWCTR1,    1, $23                     ; Power control VRH[5:0]
+  .byte ILI9341_PWCTR2,    1, $10                     ; Power control SAP[2:0];BT[3:0]
+  .byte ILI9341_VMCTR1,    2, $3e, $28                ; VCM control
+  .byte ILI9341_VMCTR2,    1, $86                     ; VCM control2
+  .byte ILI9341_MADCTL,    1, $48                     ; Memory Access Control
+  .byte ILI9341_VSCRSADD,  1, $00                     ; Vertical scroll zero
+  .byte ILI9341_PIXFMT,    1, $55
+  .byte ILI9341_FRMCTR1,   2, $00, $18
+  .byte ILI9341_DFUNCTR,   3, $08, $82, $27           ; Display Function Control
+  .byte $f2,               1, $00                     ; 3Gamma Function Disable
+  .byte ILI9341_GAMMASET,  1, $01                     ; Gamma curve selected
+  .byte ILI9341_GMCTRP1,  15, $0f, $31, $2b, $0c, $0e ; Set Gamma
+  .byte                       $08, $4e, $f1, $37, $07
+  .byte                       $10, $03, $0e, $09, $00
+  .byte ILI9341_GMCTRN1,  15, $00, $0e, $14, $03, $11 ; Set Gamma
+  .byte                       $07, $31, $c1, $48, $08
+  .byte                       $0f, $0c, $31, $36, $0f
+  .byte ILI9341_SLPOUT,  $80                          ; Exit Sleep
+  .byte ILI9341_DISPON,    0                          ; Display on
+  .byte $00                                           ; End of list
 
