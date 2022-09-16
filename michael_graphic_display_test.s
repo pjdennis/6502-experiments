@@ -8,11 +8,6 @@ GD_CSB  = %00000010
 GD_RSTB = %00000100
 GD_DC   = %00100000
 
-; Dummy for the unused code
-GD_MOSI = 0
-GD_MISO = 0
-GD_CLK  = 0
-
 ILI9341_TFTWIDTH  = 240 ; ILI9341 max TFT width
 ILI9341_TFTHEIGHT = 320 ; ILI9341 max TFT height
 
