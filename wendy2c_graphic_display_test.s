@@ -148,36 +148,43 @@ program_entry:
   jsr gd_initialize
   jsr gd_unselect
 
-  jsr gd_select
-  lda #ILI9341_RDMADCTL
-  jsr gd_send_command
-  jsr gd_receive_data
-  jsr gd_unselect
-  jsr display_hex
+;  jsr gd_select
+;  lda #ILI9341_RDMADCTL
+;  jsr gd_send_command
+;  jsr gd_receive_data
+;  jsr gd_unselect
+;  jsr display_hex
+
+;  jsr gd_select
+;  lda #ILI9341_RDMODE 
+;  jsr gd_send_command
+;  jsr gd_receive_data
+;  jsr gd_unselect
+;  jsr display_hex
+
+
+;  jsr gd_select
+;  lda #ILI9341_RDSELFDIAG 
+;  jsr gd_send_command
+;  jsr gd_receive_data
+;  jsr gd_unselect
+;  jsr display_hex
+
+;  jsr gd_select
+;  lda #ILI9341_RDPIXFMT
+;  jsr gd_send_command
+;  jsr gd_receive_data
+;  jsr gd_unselect
+;  jsr display_hex
 
   jsr gd_select
-  lda #ILI9341_RDMODE 
-  jsr gd_send_command
-  jsr gd_receive_data
+  jsr show_content
   jsr gd_unselect
-  jsr display_hex
+
+  stp
 
   jsr gd_select
-  lda #ILI9341_RDSELFDIAG 
-  jsr gd_send_command
-  jsr gd_receive_data
-  jsr gd_unselect
-  jsr display_hex
-
-  jsr gd_select
-  lda #ILI9341_RDPIXFMT
-  jsr gd_send_command
-  jsr gd_receive_data
-  jsr gd_unselect
-  jsr display_hex
-
-  jsr gd_select
-;  jsr show_content
+; set screen orientation
   lda #ILI9341_MADCTL
   jsr gd_send_command
   lda #%10101000    ; original $48

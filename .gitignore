@@ -5,7 +5,7 @@
 *.fus
 *.jed
 *.pin
-vasm6502_oldstyle
+vasm6502_oldstyle*
 vobjdump
 *.swp
 .DS_Store

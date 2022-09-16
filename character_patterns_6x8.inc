@@ -1,3 +1,5 @@
+; Based on data from here: https://github.com/idispatch/raster-fonts
+
 character_patterns_6x8:
   .byte $00, $00, $00, $00, $00, $00 ;  32 $20 ' '
   .byte $00, $00, $06, $5f, $06, $00 ;  33 $21 '!'
