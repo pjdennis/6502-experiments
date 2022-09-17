@@ -49,6 +49,10 @@ reset_display:
   lda #(CMD_DISPLAY_ON_OFF_CONTROL | %000) ; Display off; cursor off; blink off 
   jsr display_command
 
+  .ifdef EXTEND_CHARACTER_SET
+  jsr extend_character_set_init
+  .endif
+
   jsr clear_display
 
   rts

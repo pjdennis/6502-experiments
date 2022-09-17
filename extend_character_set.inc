@@ -1,11 +1,14 @@
 ; Requires CREATE_CHARACTER_PARAM (2 bytes in zero page)
 
+ASCII_BACKSPACE          = 0x08
 ASCII_TAB                = 0x09
-ASCII_TILDE              = 0x7e
+ASCII_NEWLINE            = 0x0a
 ASCII_BACKSLASH          = 0x5c
+ASCII_TILDE              = 0x7e
 
 CHARACTER_RIGHT_ARROW    = 0x7e
-
+CHARACTER_LEFT_ARROW     = 0x7f
+CHARACTER_NEWLINE        = 0xa3
 
 ; Use the last two custom character positions
 CHARACTER_TILDE          = 6
@@ -56,22 +59,32 @@ extend_character_set_init:
 ; On entry A is an ASCII character
 ; On exit  A is translated to the custom char code if applicable
 extend_character_set_translate_for_display:
-  cmp #ASCII_TILDE
-  beq .tilde
-  cmp #ASCII_BACKSLASH
-  beq .backslash
+  cmp #ASCII_BACKSPACE
+  bne .check_tab
+  lda #CHARACTER_LEFT_ARROW
+  rts
+.check_tab:
   cmp #ASCII_TAB
-  beq .tab
-  rts
-.tilde:
-  lda #CHARACTER_TILDE
-  rts
-.backslash:
-  lda #CHARACTER_BACKSLASH
-  rts
-.tab
+  bne .check_newline
   lda #CHARACTER_RIGHT_ARROW
   rts
+.check_newline:
+  cmp #ASCII_NEWLINE
+  bne .check_backslash
+  lda #CHARACTER_NEWLINE
+  rts
+.check_backslash:
+  cmp #ASCII_BACKSLASH
+  bne .check_tilde
+  lda #CHARACTER_BACKSLASH
+  rts
+.check_tilde:
+  cmp #ASCII_TILDE
+  bne .done
+  lda #CHARACTER_TILDE
+.done:
+  rts
+
 
 ;On entry A = character number
 ;         X = low byte source address
@@ -97,4 +110,3 @@ extend_character_set_create_character:
   bne .repeat
 
   rts
-
