@@ -253,7 +253,7 @@ kb_ascii_translation_table:
   .byte KEY_EQUAL,      '='
   .byte KEY_RIGHTBRACE, ']'
   .byte KEY_ENTER,      $0a
-  .byte KEY_BACKSLASH,  '\'
+  .byte KEY_BACKSLASH,  '\\'
   .byte KEY_BACKSPACE,  $08
   .byte $00
 
