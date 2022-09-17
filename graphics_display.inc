@@ -336,16 +336,16 @@ gd_show_character:
   lsr GD_BYTE
   bcc .low_bit
 ; high bit
-  lda #>ILI9341_BLUE
+  lda #>ILI9341_WHITE
 ;  jsr gd_send_data
   sta PORTB
   lda #GD_E
   tsb GD_PORT
   trb GD_PORT
-  lda #<ILI9341_BLUE
-;  jsr gd_send_data
-  sta PORTB
-  lda #GD_E
+;  lda #<ILI9341_WHITE
+;;  jsr gd_send_data
+;  sta PORTB
+;  lda #GD_E
   tsb GD_PORT
   trb GD_PORT
   bra .color_done
@@ -379,8 +379,41 @@ gd_next_character:
   sta GD_COL
   rts
 .next_row:
+  lda GD_ROW
+  cmp #CHAR_ROWS - 1
+  beq .at_bottom
   stz GD_COL
   inc GD_ROW
+  rts
+.at_bottom
+  rts
+
+
+gd_previous_character:
+  lda GD_COL
+  dec
+  cmp #0xff
+  beq .previous_row
+  sta GD_COL
+  rts
+.previous_row:
+  lda GD_ROW
+  beq .at_top
+  lda #CHAR_COLS - 1
+  sta GD_COL
+  dec GD_ROW
+  rts
+.at_top:
+  rts
+
+
+gd_next_line:
+  lda GD_ROW
+  cmp #CHAR_ROWS - 1
+  beq .row_ready
+  inc GD_ROW
+.row_ready:
+  stz GD_COL
   rts
 
 

@@ -211,8 +211,21 @@ callback_char_received:
   pla
   phx
   phy
+  cmp #0x08
+  beq .backspace
+  cmp #0x0a
+  beq .newline
   jsr gd_show_character
   jsr gd_next_character
+  bra .done
+.backspace:
+  jsr gd_previous_character
+  lda #' '
+  jsr gd_show_character
+  bra .done
+.newline:
+  jsr gd_next_line
+.done:
   jsr gd_unselect
   ply
   plx
