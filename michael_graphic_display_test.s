@@ -91,19 +91,17 @@ ILI9341_PINK        = $fc18 ; 255, 130, 198
 CHAR_ROWS = 20
 CHAR_COLS = 20
 
-
-DISPLAY_STRING_PARAM  = $00 ; 2 bytes
-CMD_PTR               = $02 ; 2 bytes
-COLOR                 = $04 ; 2 bytes
-ROW                   = $06 ; 1 byte
-COL                   = $07 ; 1 byte
-X                     = $08 ; 2 bytes
-Y                     = $0a ; 2 bytes
-TEMP                  = $0c ; 2 bytes
-CHAR_DATA_PTR         = $0e ; 2 bytes
-STRING_PTR            = $10 ; 2 bytes
-COUNTER               = $12 ; 2 bytes
-BYTE                  = $14 ; 1 byte
+DISPLAY_STRING_PARAM     = $00 ; 2 bytes
+GD_CMD_PTR               = $02 ; 2 bytes
+GD_COLOR                 = $04 ; 2 bytes
+GD_ROW                   = $06 ; 1 byte
+GD_COL                   = $07 ; 1 byte
+GD_X                     = $08 ; 2 bytes
+GD_Y                     = $0a ; 2 bytes
+GD_TEMP                  = $0c ; 2 bytes
+GD_CHAR_DATA_PTR         = $0e ; 2 bytes
+GD_STRING_PTR            = $10 ; 2 bytes
+GD_BYTE                  = $12 ; 1 byte
 
   .org $2000
   jmp initialize_machine
@@ -155,13 +153,13 @@ program_start:
   jsr clear_screen
 
   lda #0
-  sta ROW
+  sta GD_ROW
   lda #0
-  sta COL
+  sta GD_COL
   lda #<hello_message
-  sta STRING_PTR
+  sta GD_STRING_PTR
   lda #>hello_message
-  sta STRING_PTR + 1
+  sta GD_STRING_PTR + 1
   jsr show_string  
 
   jsr gd_unselect
@@ -271,9 +269,9 @@ clear_screen:
 LOOP_COUNT = -9600 ; 256 * 240 * 20 = 320 * 240 * 16 = 9600 * 16 * 8
 
   lda #<LOOP_COUNT
-  sta COUNTER
+  sta GD_TEMP
   lda #>LOOP_COUNT
-  sta COUNTER + 1
+  sta GD_TEMP + 1
 
   lda GD_PORT
   and #~GD_E
@@ -315,9 +313,9 @@ LOOP_COUNT = -9600 ; 256 * 240 * 20 = 320 * 240 * 16 = 9600 * 16 * 8
   sta PORTA,Y ; 16
   stx PORTA
 
-  inc COUNTER
+  inc GD_TEMP
   bne .loop
-  inc COUNTER + 1
+  inc GD_TEMP + 1
   bne .loop
 
   lda #ILI9341_DISPON
@@ -327,22 +325,22 @@ LOOP_COUNT = -9600 ; 256 * 240 * 20 = 320 * 240 * 16 = 9600 * 16 * 8
 
 show_string:
   .loop:
-  lda (STRING_PTR)
+  lda (GD_STRING_PTR)
   beq .done
   cmp #'\n'
   beq .newline
   jsr show_character
   jsr next_character
 .continue:
-  inc STRING_PTR
+  inc GD_STRING_PTR
   bne .loop
-  inc STRING_PTR + 1
+  inc GD_STRING_PTR + 1
   bne .loop
 .done:
   rts
 .newline
-  stz COL
-  inc ROW
+  stz GD_COL
+  inc GD_ROW
   bra .continue
 
 
@@ -352,42 +350,42 @@ show_character:
 
   lda #ILI9341_CASET
   jsr gd_send_command
-  lda Y + 1
+  lda GD_Y + 1
   jsr gd_send_data
-  lda Y
+  lda GD_Y
   jsr gd_send_data
 
   clc
-  lda Y
+  lda GD_Y
   adc #15
-  sta Y
-  lda Y + 1
+  sta GD_Y
+  lda GD_Y + 1
   adc #0
-  sta Y + 1
+  sta GD_Y + 1
 
-  lda Y + 1
+  lda GD_Y + 1
   jsr gd_send_data
-  lda Y
+  lda GD_Y
   jsr gd_send_data
 
   lda #ILI9341_PASET
   jsr gd_send_command
-  lda X + 1
+  lda GD_X + 1
   jsr gd_send_data
-  lda X
+  lda GD_X
   jsr gd_send_data
 
   clc
-  lda X
+  lda GD_X
   adc #11
-  sta X
-  lda X + 1
+  sta GD_X
+  lda GD_X + 1
   adc #0
-  sta X + 1
+  sta GD_X + 1
 
-  lda X + 1
+  lda GD_X + 1
   jsr gd_send_data
-  lda X
+  lda GD_X
   jsr gd_send_data
 
   lda #ILI9341_RAMWR
@@ -395,12 +393,12 @@ show_character:
 
   ldy #0
 .col_loop:
-  lda (CHAR_DATA_PTR),Y
+  lda (GD_CHAR_DATA_PTR),Y
 ; show column
-  sta BYTE
+  sta GD_BYTE
   ldx #8
 .row_loop:
-  lsr BYTE
+  lsr GD_BYTE
   bcc .low_bit
 ; high bit
   lda #>ILI9341_BLUE
@@ -439,15 +437,15 @@ show_character:
 
 
 next_character:
-  lda COL
+  lda GD_COL
   inc
   cmp #CHAR_COLS
   beq .next_row
-  sta COL
+  sta GD_COL
   rts
 .next_row:
-  stz COL
-  inc ROW
+  stz GD_COL
+  inc GD_ROW
   rts
 
 
@@ -456,78 +454,78 @@ set_char_data_ptr:
   sec
   sbc #' '
 
-  ; CHAR_DATA_PTR = character offset * 24 = co * 16 + co * 8
-  sta TEMP
+  ; GD_CHAR_DATA_PTR = character offset * 24 = co * 16 + co * 8
+  sta GD_TEMP
   lsr
   lsr
   lsr
   lsr
-  sta TEMP + 1
+  sta GD_TEMP + 1
   lsr
-  sta CHAR_DATA_PTR + 1
-  lda TEMP
+  sta GD_CHAR_DATA_PTR + 1
+  lda GD_TEMP
   asl
   asl
   asl
-  sta CHAR_DATA_PTR
+  sta GD_CHAR_DATA_PTR
   asl
-  ;sta TEMP
+  ;sta GD_TEMP
   clc
-  ;lda TEMP
-  adc CHAR_DATA_PTR
-  sta CHAR_DATA_PTR
-  lda TEMP + 1
-  adc CHAR_DATA_PTR + 1
-  sta CHAR_DATA_PTR + 1
+  ;lda GD_TEMP
+  adc GD_CHAR_DATA_PTR
+  sta GD_CHAR_DATA_PTR
+  lda GD_TEMP + 1
+  adc GD_CHAR_DATA_PTR + 1
+  sta GD_CHAR_DATA_PTR + 1
 
   ; Add the table base address
   clc
-  lda CHAR_DATA_PTR
+  lda GD_CHAR_DATA_PTR
   adc #<character_patterns_12x16
-  sta CHAR_DATA_PTR
-  lda CHAR_DATA_PTR + 1
+  sta GD_CHAR_DATA_PTR
+  lda GD_CHAR_DATA_PTR + 1
   adc #>character_patterns_12x16
-  sta CHAR_DATA_PTR + 1
+  sta GD_CHAR_DATA_PTR + 1
   rts
 
 
 x_y_from_row_col:
-  ; Y = ROW * 16
-  lda ROW
+  ; GD_Y = GD_ROW * 16
+  lda GD_ROW
   lsr
   lsr
   lsr
   lsr
-  sta Y + 1
-  lda ROW
+  sta GD_Y + 1
+  lda GD_ROW
   asl
   asl
   asl
   asl
-  sta Y
-  ; X = COL * 12 = COL * 8 + COL * 4
-  lda COL
+  sta GD_Y
+  ; GD_X = GD_COL * 12 = GD_COL * 8 + GD_COL * 4
+  lda GD_COL
   rol
   rol
   rol
   rol
   and #$07
-  sta TEMP + 1
+  sta GD_TEMP + 1
   lsr
-  sta X + 1
-  lda COL
+  sta GD_X + 1
+  lda GD_COL
   asl
   asl
-  sta X
+  sta GD_X
   asl
-  ;sta TEMP
+  ;sta GD_TEMP
   clc
-  ;lda TEMP
-  adc X
-  sta X
-  lda TEMP + 1
-  adc X + 1
-  sta X + 1
+  ;lda GD_TEMP
+  adc GD_X
+  sta GD_X
+  lda GD_TEMP + 1
+  adc GD_X + 1
+  sta GD_X + 1
   rts
 
 
@@ -562,24 +560,24 @@ STRIPE_HEIGHT = 10
   ldy #ILI9341_TFTHEIGHT / STRIPE_HEIGHT / 4
 .stripe_loop:
   lda #<ILI9341_RED
-  sta COLOR
+  sta GD_COLOR
   lda #>ILI9341_RED
-  sta COLOR + 1
+  sta GD_COLOR + 1
   jsr send_stripe
   lda #<ILI9341_WHITE
-  sta COLOR
+  sta GD_COLOR
   lda #>ILI9341_WHITE
-  sta COLOR + 1
+  sta GD_COLOR + 1
   jsr send_stripe
   lda #<ILI9341_ORANGE
-  sta COLOR
+  sta GD_COLOR
   lda #>ILI9341_ORANGE
-  sta COLOR + 1
+  sta GD_COLOR + 1
   jsr send_stripe
   lda #<ILI9341_NAVY
-  sta COLOR
+  sta GD_COLOR
   lda #>ILI9341_NAVY
-  sta COLOR + 1
+  sta GD_COLOR + 1
   jsr send_stripe
   dey
   bne .stripe_loop  
@@ -592,14 +590,14 @@ send_stripe:
 .height_loop:
   ldx #ILI9341_TFTWIDTH
 .width_loop:
-  lda COLOR + 1
+  lda GD_COLOR + 1
 ;  jsr gd_send_data
   sta PORTB
   lda #GD_E
   tsb GD_PORT
   trb GD_PORT
 
-  lda COLOR
+  lda GD_COLOR
 ;  jsr gd_send_data
   sta PORTB
   lda #GD_E
@@ -619,9 +617,9 @@ gd_initialize:
   phx
   phy
   lda #<INIT_COMMANDS
-  sta CMD_PTR
+  sta GD_CMD_PTR
   lda #>INIT_COMMANDS
-  sta CMD_PTR + 1
+  sta GD_CMD_PTR + 1
 .loop:
   jsr .next_byte
   cmp #0
@@ -649,10 +647,10 @@ gd_initialize:
   pla
   rts
 .next_byte:
-  lda (CMD_PTR)
-  inc CMD_PTR
+  lda (GD_CMD_PTR)
+  inc GD_CMD_PTR
   bne .next_byte_over
-  inc CMD_PTR + 1
+  inc GD_CMD_PTR + 1
 .next_byte_over:
   rts
 .delay:
