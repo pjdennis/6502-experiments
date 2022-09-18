@@ -65,8 +65,9 @@ ACK_RECEIVED             = $13 ; 1 byte
 DISPLAY_STRING_PARAM     = $14 ; 2 bytes
 TEXT_PTR                 = $16 ; 2 bytes
 TEXT_PTR_NEXT            = $18 ; 2 bytes
-LINE_CHARS_REMAINING     = $1a ; 1 byte
-GD_ZERO_PAGE_BASE        = $1b ; ? bytes
+SCROLL_OFFSET            = $1a ; 2 bytes
+LINE_CHARS_REMAINING     = $1c ; 1 byte
+GD_ZERO_PAGE_BASE        = $1d ; ? bytes
 
 SIMPLE_BUFFER            = $0200 ; 256 bytes
 
@@ -115,6 +116,7 @@ program_start:
   txs
 
   jsr gd_configure
+  jsr gd_reset
   jsr gd_select
   jsr gd_initialize
   lda #ILI9341_MADCTL
@@ -128,7 +130,55 @@ program_start:
   stz GD_COL
 
   jsr gd_select
+
+;SCROLL_START = 16*19 + 15
+;  lda #ILI9341_VSCRSADD
+;  jsr gd_send_command
+;  lda #>SCROLL_START
+;  jsr gd_send_data
+;  lda #<SCROLL_START
+;  jsr gd_send_data
+
   jsr show_some_text
+
+SCROLL_MAX = ILI9341_TFTHEIGHT - 16
+  lda #<SCROLL_MAX
+  sta SCROLL_OFFSET
+  lda #>SCROLL_MAX
+  sta SCROLL_OFFSET + 1
+.scroll_loop:
+; send command
+  lda #ILI9341_VSCRSADD
+  jsr gd_send_command
+  lda SCROLL_OFFSET + 1
+  jsr gd_send_data
+  lda SCROLL_OFFSET
+  jsr gd_send_data
+  lda #50
+  jsr delay_hundredths
+; check for end
+  lda SCROLL_OFFSET
+  bne .scroll_offset_ok
+  lda SCROLL_OFFSET + 1
+  bne .scroll_offset_ok
+  lda #<SCROLL_MAX
+  sta SCROLL_OFFSET
+  lda #>SCROLL_MAX
+  sta SCROLL_OFFSET + 1
+  bra .scroll_loop
+.scroll_offset_ok:
+; decrement offset
+  sec
+  lda SCROLL_OFFSET
+  sbc #16
+  sta SCROLL_OFFSET
+  lda SCROLL_OFFSET + 1
+  sbc #0
+  sta SCROLL_OFFSET + 1
+  bra .scroll_loop
+
+; never proceeds past here
+
   jsr gd_unselect
 
   jsr reset_and_enable_display_no_cursor
@@ -271,7 +321,6 @@ show_some_text:
   beq .done
   cmp #' '
   bne .show_text
-  lda #'_'
   jsr gd_show_character
   jsr gd_next_character
   dec LINE_CHARS_REMAINING
@@ -298,9 +347,14 @@ show_some_text:
   bcc .word_fits
   beq .word_fits
 ; word does not fit
+.finish_line_loop:
+  lda #' '
+  jsr gd_show_character
+  jsr gd_next_character
+  dec LINE_CHARS_REMAINING
+  bne .finish_line_loop
   lda #GD_CHAR_COLS
   sta LINE_CHARS_REMAINING
-  jsr gd_next_line
 .word_fits:
 .show_word_loop:
   lda (TEXT_PTR)
@@ -327,11 +381,21 @@ show_some_text:
   inc TEXT_PTR + 1
   bra .skip_spaces_loop
 .done:
+  lda LINE_CHARS_REMAINING
+  cmp #GD_CHAR_COLS
+  beq .exit
+.finish_last_line_loop:
+  lda #' '
+  jsr gd_show_character
+  jsr gd_next_character
+  dec LINE_CHARS_REMAINING
+  bne .finish_last_line_loop
+.exit:
   rts
 
-;message_text: .asciiz "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."
+message_text: .asciiz "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."
 
-message_text: .asciiz "  a 1234567890123456789 b 12345678901234567890 c 123456789012345678901 d e the quick brown fox."
+;message_text: .asciiz "  a 1234567890123456789 b 12345678901234567890 c 123456789012345678901 d e the quick brown fox. 123456789"
 
 
 ; On exit Carry set if no result so far
