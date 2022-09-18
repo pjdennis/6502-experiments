@@ -328,9 +328,7 @@ callback_key_right:
 callback_key_esc:
   rts
 
-;TODO:
-;  Spaces at start of text?
-;  Word is longer than line
+
 show_some_text:
   lda #<message_text
   sta TEXT_PTR
