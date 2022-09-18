@@ -264,8 +264,22 @@ show_some_text:
   sta TEXT_PTR + 1
   lda #GD_CHAR_COLS
   sta LINE_CHARS_REMAINING
+.show_spaces_loop:
+  lda LINE_CHARS_REMAINING
+  beq .skip_remaining_spaces
+  lda (TEXT_PTR)
+  beq .done
+  cmp #' '
+  bne .show_text
+  lda #'_'
+  jsr gd_show_character
+  jsr gd_next_character
+  dec LINE_CHARS_REMAINING
+  inc TEXT_PTR
+  bne .show_spaces_loop
+  inc TEXT_PTR + 1
   bra .show_spaces_loop
-.text_loop:
+.show_text:
   lda (TEXT_PTR)
   beq .done
 ; look for end of word
@@ -299,20 +313,6 @@ show_some_text:
 .over:
   dey
   bne .show_word_loop
-.show_spaces_loop:
-  lda LINE_CHARS_REMAINING
-  beq .skip_remaining_spaces
-  lda (TEXT_PTR)
-  beq .done
-  cmp #' '
-  bne .text_loop
-  lda #'_'
-  jsr gd_show_character
-  jsr gd_next_character
-  dec LINE_CHARS_REMAINING
-  inc TEXT_PTR
-  bne .show_spaces_loop
-  inc TEXT_PTR + 1
   bra .show_spaces_loop
 .skip_remaining_spaces:
   lda #GD_CHAR_COLS
@@ -321,7 +321,7 @@ show_some_text:
   lda (TEXT_PTR)
   beq .done
   cmp #' '
-  bne .text_loop
+  bne .show_text
   inc TEXT_PTR
   bne .skip_spaces_loop
   inc TEXT_PTR + 1
