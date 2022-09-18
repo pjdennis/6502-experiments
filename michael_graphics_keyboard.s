@@ -45,25 +45,28 @@ KB_META_GUI              = %00010000
 KB_META_EXTENDED         = %00000010
 KB_META_BREAK            = %00000001
 
-CP_M_DEST_P              = $0000 ; 2 bytes
-CP_M_SRC_P               = $0002 ; 2 bytes
-CP_M_LEN                 = $0004 ; 2 bytes
+CP_M_DEST_P              = $00 ; 2 bytes
+CP_M_SRC_P               = $02 ; 2 bytes
+CP_M_LEN                 = $04 ; 2 bytes
 
-TRANSLATE_TABLE          = $0006 ; 2 bytes
-CREATE_CHARACTER_PARAM   = $0008 ; 2 bytes
-SIMPLE_BUFFER_WRITE_PTR  = $000a ; 1 byte
-SIMPLE_BUFFER_READ_PTR   = $000b ; 1 byte
-KEYBOARD_RECEIVING       = $000c ; 1 byte
-KEYBOARD_DECODE_STATE    = $000d ; 1 byte
-KEYBOARD_LOCK_STATE      = $000e ; 1 byte
-KEYBOARD_MODIFIER_STATE  = $000f ; 1 byte
-KEYBOARD_LATEST_META     = $0010 ; 1 byte
-KEYBOARD_LATEST_CODE     = $0011 ; 1 byte
-SENDING_TO_KEYBOARD      = $0012 ; 1 byte
-ACK_RECEIVED             = $0013 ; 1 byte
+TRANSLATE_TABLE          = $06 ; 2 bytes
+CREATE_CHARACTER_PARAM   = $08 ; 2 bytes
+SIMPLE_BUFFER_WRITE_PTR  = $0a ; 1 byte
+SIMPLE_BUFFER_READ_PTR   = $0b ; 1 byte
+KEYBOARD_RECEIVING       = $0c ; 1 byte
+KEYBOARD_DECODE_STATE    = $0d ; 1 byte
+KEYBOARD_LOCK_STATE      = $0e ; 1 byte
+KEYBOARD_MODIFIER_STATE  = $0f ; 1 byte
+KEYBOARD_LATEST_META     = $10 ; 1 byte
+KEYBOARD_LATEST_CODE     = $11 ; 1 byte
+SENDING_TO_KEYBOARD      = $12 ; 1 byte
+ACK_RECEIVED             = $13 ; 1 byte
 
-DISPLAY_STRING_PARAM     = $0014 ; 2 bytes
-GD_ZERO_PAGE_BASE        = $0016 ; ? bytes
+DISPLAY_STRING_PARAM     = $14 ; 2 bytes
+TEXT_PTR                 = $16 ; 2 bytes
+TEXT_PTR_NEXT            = $18 ; 2 bytes
+LINE_CHARS_REMAINING     = $1a ; 1 byte
+GD_ZERO_PAGE_BASE        = $1b ; ? bytes
 
 SIMPLE_BUFFER            = $0200 ; 256 bytes
 
@@ -123,6 +126,10 @@ program_start:
 
   stz GD_ROW
   stz GD_COL
+
+  jsr gd_select
+  jsr show_some_text
+  jsr gd_unselect
 
   jsr reset_and_enable_display_no_cursor
   lda #<start_message
@@ -246,6 +253,85 @@ callback_key_right:
 
 callback_key_esc:
   rts
+
+;TODO:
+;  Spaces at start of text?
+;  Word is longer than line
+show_some_text:
+  lda #<message_text
+  sta TEXT_PTR
+  lda #>message_text
+  sta TEXT_PTR + 1
+  lda #GD_CHAR_COLS
+  sta LINE_CHARS_REMAINING
+  bra .show_spaces_loop
+.text_loop:
+  lda (TEXT_PTR)
+  beq .done
+; look for end of word
+  ldy #1
+.word_search_loop:
+  lda (TEXT_PTR),Y
+  beq .found_word_end
+  cmp #' '
+  beq .found_word_end
+  iny
+  cpy #GD_CHAR_COLS
+  bne .word_search_loop
+.found_word_end:
+; will word fit on line?
+  cpy LINE_CHARS_REMAINING
+  bcc .word_fits
+  beq .word_fits
+; word does not fit
+  lda #GD_CHAR_COLS
+  sta LINE_CHARS_REMAINING
+  jsr gd_next_line
+.word_fits:
+.show_word_loop:
+  lda (TEXT_PTR)
+  jsr gd_show_character
+  jsr gd_next_character
+  dec LINE_CHARS_REMAINING
+  inc TEXT_PTR
+  bne .over
+  inc TEXT_PTR + 1
+.over:
+  dey
+  bne .show_word_loop
+.show_spaces_loop:
+  lda LINE_CHARS_REMAINING
+  beq .skip_remaining_spaces
+  lda (TEXT_PTR)
+  beq .done
+  cmp #' '
+  bne .text_loop
+  lda #'_'
+  jsr gd_show_character
+  jsr gd_next_character
+  dec LINE_CHARS_REMAINING
+  inc TEXT_PTR
+  bne .show_spaces_loop
+  inc TEXT_PTR + 1
+  bra .show_spaces_loop
+.skip_remaining_spaces:
+  lda #GD_CHAR_COLS
+  sta LINE_CHARS_REMAINING
+.skip_spaces_loop:
+  lda (TEXT_PTR)
+  beq .done
+  cmp #' '
+  bne .text_loop
+  inc TEXT_PTR
+  bne .skip_spaces_loop
+  inc TEXT_PTR + 1
+  bra .skip_spaces_loop
+.done:
+  rts
+
+;message_text: .asciiz "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."
+
+message_text: .asciiz "  a 1234567890123456789 b 12345678901234567890 c 123456789012345678901 d e the quick brown fox."
 
 
 ; On exit Carry set if no result so far

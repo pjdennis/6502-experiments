@@ -88,8 +88,8 @@ ILI9341_ORANGE      = $fd20 ; 255, 165,   0
 ILI9341_GREENYELLOW = $afe5 ; 173, 255,  41
 ILI9341_PINK        = $fc18 ; 255, 130, 198
 
-CHAR_ROWS = 20
-CHAR_COLS = 20
+GD_CHAR_ROWS = 20
+GD_CHAR_COLS = 20
 
 GD_CMD_PTR           = GD_ZERO_PAGE_BASE + $00 ; 2 bytes
 GD_COLOR             = GD_ZERO_PAGE_BASE + $02 ; 2 bytes
@@ -280,6 +280,8 @@ gd_show_string:
 
 
 gd_show_character:
+  phx
+  phy
   jsr set_char_data_ptr
   jsr x_y_from_row_col
 
@@ -368,19 +370,21 @@ gd_show_character:
   iny
   cpy #24
   bne .col_loop
+  ply
+  plx
   rts
 
 
 gd_next_character:
   lda GD_COL
   inc
-  cmp #CHAR_COLS
+  cmp #GD_CHAR_COLS
   beq .next_row
   sta GD_COL
   rts
 .next_row:
   lda GD_ROW
-  cmp #CHAR_ROWS - 1
+  cmp #GD_CHAR_ROWS - 1
   beq .at_bottom
   stz GD_COL
   inc GD_ROW
@@ -399,7 +403,7 @@ gd_previous_character:
 .previous_row:
   lda GD_ROW
   beq .at_top
-  lda #CHAR_COLS - 1
+  lda #GD_CHAR_COLS - 1
   sta GD_COL
   dec GD_ROW
   rts
@@ -409,7 +413,7 @@ gd_previous_character:
 
 gd_next_line:
   lda GD_ROW
-  cmp #CHAR_ROWS - 1
+  cmp #GD_CHAR_ROWS - 1
   beq .row_ready
   inc GD_ROW
 .row_ready:
