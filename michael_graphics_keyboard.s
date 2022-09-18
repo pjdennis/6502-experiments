@@ -131,53 +131,51 @@ program_start:
 
   jsr gd_select
 
-;SCROLL_START = 16*19 + 15
+;  jsr show_some_text
+
+;  stz GD_ROW
+;  jsr gd_clear_line
+;  lda #1
+
+
+;SCROLL_MAX = ILI9341_TFTHEIGHT - 16
+;  lda #<SCROLL_MAX
+;  sta SCROLL_OFFSET
+;  lda #>SCROLL_MAX
+;  sta SCROLL_OFFSET + 1
+;.scroll_loop:
+;; send command
 ;  lda #ILI9341_VSCRSADD
 ;  jsr gd_send_command
-;  lda #>SCROLL_START
+;  lda SCROLL_OFFSET + 1
 ;  jsr gd_send_data
-;  lda #<SCROLL_START
+;  lda SCROLL_OFFSET
 ;  jsr gd_send_data
+;  lda #50
+;  jsr delay_hundredths
+;; check for end
+;  lda SCROLL_OFFSET
+;  bne .scroll_offset_ok
+;  lda SCROLL_OFFSET + 1
+;  bne .scroll_offset_ok
+;  lda #<SCROLL_MAX
+;  sta SCROLL_OFFSET
+;  lda #>SCROLL_MAX
+;  sta SCROLL_OFFSET + 1
+;  bra .scroll_loop
+;.scroll_offset_ok:
+;; decrement offset
+;  sec
+;  lda SCROLL_OFFSET
+;  sbc #16
+;  sta SCROLL_OFFSET
+;  lda SCROLL_OFFSET + 1
+;  sbc #0
+;  sta SCROLL_OFFSET + 1
+;  bra .scroll_loop
 
-  jsr show_some_text
-
-SCROLL_MAX = ILI9341_TFTHEIGHT - 16
-  lda #<SCROLL_MAX
-  sta SCROLL_OFFSET
-  lda #>SCROLL_MAX
-  sta SCROLL_OFFSET + 1
-.scroll_loop:
-; send command
-  lda #ILI9341_VSCRSADD
-  jsr gd_send_command
-  lda SCROLL_OFFSET + 1
-  jsr gd_send_data
-  lda SCROLL_OFFSET
-  jsr gd_send_data
-  lda #50
-  jsr delay_hundredths
-; check for end
-  lda SCROLL_OFFSET
-  bne .scroll_offset_ok
-  lda SCROLL_OFFSET + 1
-  bne .scroll_offset_ok
-  lda #<SCROLL_MAX
-  sta SCROLL_OFFSET
-  lda #>SCROLL_MAX
-  sta SCROLL_OFFSET + 1
-  bra .scroll_loop
-.scroll_offset_ok:
-; decrement offset
-  sec
-  lda SCROLL_OFFSET
-  sbc #16
-  sta SCROLL_OFFSET
-  lda SCROLL_OFFSET + 1
-  sbc #0
-  sta SCROLL_OFFSET + 1
-  bra .scroll_loop
-
-; never proceeds past here
+  lda #GD_CHAR_ROWS - 2
+  sta GD_ROW
 
   jsr gd_unselect
 
@@ -273,6 +271,15 @@ callback_char_received:
   cmp #0x0a
   beq .newline
   jsr gd_show_character
+  lda GD_ROW
+  cmp #GD_CHAR_ROWS - 1
+  bne .not_last_char
+  lda GD_COL
+  cmp #GD_CHAR_COLS - 1
+  bne .not_last_char
+  jsr do_scroll
+  bra .done
+.not_last_char:
   jsr gd_next_character
   bra .done
 .backspace:
@@ -281,11 +288,28 @@ callback_char_received:
   jsr gd_show_character
   bra .done
 .newline:
+  lda GD_ROW
+  cmp #GD_CHAR_ROWS - 1
+  bne .not_last_line
+  jsr do_scroll
+  bra .done
+.not_last_line:  
   jsr gd_next_line
 .done:
   jsr gd_unselect
   ply
   plx
+  rts
+
+
+do_scroll:
+  stz GD_ROW
+  jsr gd_clear_line
+  lda #1
+  jsr gd_scroll_up
+  lda #GD_CHAR_ROWS - 1
+  sta GD_ROW
+  stz GD_COL
   rts
 
 

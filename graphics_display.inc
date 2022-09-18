@@ -101,7 +101,7 @@ GD_TEMP              = GD_ZERO_PAGE_BASE + $0a ; 2 bytes
 GD_CHAR_DATA_PTR     = GD_ZERO_PAGE_BASE + $0c ; 2 bytes
 GD_STRING_PTR        = GD_ZERO_PAGE_BASE + $0e ; 2 bytes
 GD_BYTE              = GD_ZERO_PAGE_BASE + $10 ; 1 byte
-
+GD_SCROLL_ROWS       = GD_ZERO_PAGE_BASE + $11 ; 1 byte
 
 gd_configure:
   lda #GD_E
@@ -169,6 +169,104 @@ gd_send_data:
   rts
 
 
+; On entry A = the amount to scroll - 0..19
+gd_scroll_up:
+  phx
+  phy
+  clc
+  adc GD_SCROLL_ROWS
+  cmp #GD_CHAR_ROWS
+  bcc .row_ok1
+  sec
+  sbc #GD_CHAR_ROWS
+.row_ok1:
+  sta GD_SCROLL_ROWS
+  beq .row_ok2
+  sec
+  lda #GD_CHAR_ROWS
+  sbc GD_SCROLL_ROWS
+.row_ok2:
+  sta GD_TEMP
+  lsr
+  lsr
+  lsr
+  lsr
+  sta GD_Y + 1
+  lda GD_TEMP
+  asl
+  asl
+  asl
+  asl
+  sta GD_Y
+; send command
+  lda #ILI9341_VSCRSADD
+  jsr gd_send_command
+  lda GD_Y + 1
+  jsr gd_send_data
+  lda GD_Y
+  jsr gd_send_data
+  ply
+  plx
+  rts
+
+
+; Input GD_ROW, GD_COL, GD_ROW2, GD_COL2
+gd_clear_line:
+  stz GD_COL
+  jsr x_y_from_row_col
+  lda #ILI9341_CASET
+  jsr gd_send_command
+  lda GD_Y + 1
+  jsr gd_send_data
+  lda GD_Y
+  jsr gd_send_data
+
+  clc
+  lda GD_Y
+  adc #<15 ; character height
+  sta GD_Y
+  lda GD_Y + 1
+  adc #>15 ; character height
+  sta GD_Y + 1
+
+  lda GD_Y + 1
+  jsr gd_send_data
+  lda GD_Y
+  jsr gd_send_data
+
+  lda #ILI9341_PASET
+  jsr gd_send_command
+  lda GD_X + 1
+  jsr gd_send_data
+  lda GD_X
+  jsr gd_send_data
+
+  clc
+  lda GD_X
+  adc #<(ILI9341_TFTWIDTH-1)
+  sta GD_X
+  lda GD_X + 1
+  adc #>(ILI9341_TFTWIDTH-1)
+  sta GD_X + 1
+
+  lda GD_X + 1
+  jsr gd_send_data
+  lda GD_X
+  jsr gd_send_data
+
+  lda #ILI9341_RAMWR
+  jsr gd_send_command
+
+CLEAR_LINE_LOOP_COUNT = -480 ; 256 * 240 * 1 = 480 * 16 * 8
+
+  lda #<CLEAR_LINE_LOOP_COUNT
+  sta GD_TEMP
+  lda #>CLEAR_LINE_LOOP_COUNT
+  sta GD_TEMP + 1
+
+  jmp send_zero_data ; tail call
+
+
 gd_clear_screen:
   lda #ILI9341_DISPOFF
   jsr gd_send_command
@@ -198,15 +296,24 @@ gd_clear_screen:
   lda #ILI9341_RAMWR
   jsr gd_send_command
 
+CLEAR_SCREEN_LOOP_COUNT = -9600 ; 256 * 240 * 20 = 320 * 240 * 16 = 9600 * 16 * 8
+
+  lda #<CLEAR_SCREEN_LOOP_COUNT
+  sta GD_TEMP
+  lda #>CLEAR_SCREEN_LOOP_COUNT
+  sta GD_TEMP + 1
+
+  jsr send_zero_data
+
+  lda #ILI9341_DISPON
+  jsr gd_send_command
+
+  rts
+
+
+send_zero_data:
   lda #0
   sta PORTB
-
-LOOP_COUNT = -9600 ; 256 * 240 * 20 = 320 * 240 * 16 = 9600 * 16 * 8
-
-  lda #<LOOP_COUNT
-  sta GD_TEMP
-  lda #>LOOP_COUNT
-  sta GD_TEMP + 1
 
   lda GD_PORT
   and #~GD_E
@@ -253,8 +360,6 @@ LOOP_COUNT = -9600 ; 256 * 240 * 20 = 320 * 240 * 16 = 9600 * 16 * 8
   inc GD_TEMP + 1
   bne .loop
 
-  lda #ILI9341_DISPON
-  jsr gd_send_command
   rts
 
 
@@ -463,13 +568,21 @@ set_char_data_ptr:
 
 x_y_from_row_col:
   ; GD_Y = GD_ROW * 16
+  clc
   lda GD_ROW
+  adc GD_SCROLL_ROWS
+  cmp #GD_CHAR_ROWS 
+  bcc .row_ok
+  sec
+  sbc #GD_CHAR_ROWS
+.row_ok:
+  sta GD_TEMP
   lsr
   lsr
   lsr
   lsr
   sta GD_Y + 1
-  lda GD_ROW
+  lda GD_TEMP
   asl
   asl
   asl
@@ -505,6 +618,7 @@ gd_initialize:
   pha
   phx
   phy
+  stz GD_SCROLL_ROWS ; TODO: maybe there's a better place to handle this kind of initialization
   lda #<INIT_COMMANDS
   sta GD_CMD_PTR
   lda #>INIT_COMMANDS
