@@ -1,10 +1,10 @@
 ; Requires CREATE_CHARACTER_PARAM (2 bytes in zero page)
 
-ASCII_BACKSPACE          = 0x08
-ASCII_TAB                = 0x09
-ASCII_NEWLINE            = 0x0a
-ASCII_BACKSLASH          = 0x5c
-ASCII_TILDE              = 0x7e
+EC_ASCII_BACKSPACE          = 0x08
+EC_ASCII_TAB                = 0x09
+EC_ASCII_NEWLINE            = 0x0a
+EC_ASCII_BACKSLASH          = 0x5c
+EC_ASCII_TILDE              = 0x7e
 
 CHARACTER_RIGHT_ARROW    = 0x7e
 CHARACTER_LEFT_ARROW     = 0x7f
@@ -59,27 +59,27 @@ extend_character_set_init:
 ; On entry A is an ASCII character
 ; On exit  A is translated to the custom char code if applicable
 extend_character_set_translate_for_display:
-  cmp #ASCII_BACKSPACE
+  cmp #EC_ASCII_BACKSPACE
   bne .check_tab
   lda #CHARACTER_LEFT_ARROW
   rts
 .check_tab:
-  cmp #ASCII_TAB
+  cmp #EC_ASCII_TAB
   bne .check_newline
   lda #CHARACTER_RIGHT_ARROW
   rts
 .check_newline:
-  cmp #ASCII_NEWLINE
+  cmp #EC_ASCII_NEWLINE
   bne .check_backslash
   lda #CHARACTER_NEWLINE
   rts
 .check_backslash:
-  cmp #ASCII_BACKSLASH
+  cmp #EC_ASCII_BACKSLASH
   bne .check_tilde
   lda #CHARACTER_BACKSLASH
   rts
 .check_tilde:
-  cmp #ASCII_TILDE
+  cmp #EC_ASCII_TILDE
   bne .done
   lda #CHARACTER_TILDE
 .done:

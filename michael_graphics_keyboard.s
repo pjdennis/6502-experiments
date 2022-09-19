@@ -365,6 +365,20 @@ callback_key_esc:
   rts
 
 
+callback_key_function:
+  ldy #0
+.loop:
+  lda .f1_text, Y
+  beq .done
+  jsr callback_char_received
+  iny
+  bra .loop
+.done:
+  rts
+
+.f1_text: .asciiz "The quick brown fox jumps over the lazy dog. "
+
+
 show_some_text:
   lda #<message_text
   sta TEXT_PTR
@@ -490,6 +504,9 @@ handle_special_keys:
   cmp #KEY_ESC
   beq .key_esc
 
+  cmp #KEY_F1
+  beq .key_function
+
   lda KEYBOARD_LOCK_STATE
   bit #KB_NUM_LOCK_ON
   beq .check_keypad
@@ -516,6 +533,9 @@ handle_special_keys:
   bra .handled
 .key_esc:
   jsr callback_key_esc
+  bra .handled
+.key_function:
+  jsr callback_key_function
 .handled:
   sec
   rts                      ; Return - handled
