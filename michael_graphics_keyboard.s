@@ -177,6 +177,9 @@ program_start:
   lda #GD_CHAR_ROWS - 2
   sta GD_ROW
 
+  lda #'_'
+  jsr gd_show_character
+
   jsr gd_unselect
 
   jsr reset_and_enable_display_no_cursor
@@ -236,7 +239,30 @@ program_start:
   jsr keyboard_set_leds
 
   ; Read and display translated characters from the keyboard
+
+  ldx #0
 get_char_loop:
+  cpx #0
+  bne .not_off
+  jsr gd_select
+  lda #' '
+  jsr gd_show_character
+  jsr gd_unselect
+.not_off:
+  cpx #25 * 2
+  bne .not_on
+  jsr gd_select
+  lda #'_'
+  jsr gd_show_character
+  jsr gd_unselect
+.not_on:
+  inx
+  cpx #50 * 2
+  bne .no_reset_count
+  ldx #0
+.no_reset_count:
+  lda #1
+  jsr delay_hundredths
   jsr keyboard_get_char
   bcs get_char_loop
 get_char_loop_2:
@@ -251,6 +277,8 @@ start_message: .asciiz "Last key press:"
 
 
 callback_char_received:
+  phx
+  phy
   pha
   lda #DISPLAY_SECOND_LINE
   jsr move_cursor
@@ -264,8 +292,6 @@ callback_char_received:
   jsr display_hex
   jsr gd_select
   pla
-  phx
-  phy
   cmp #0x08
   beq .backspace
   cmp #0x0a
@@ -283,11 +309,18 @@ callback_char_received:
   jsr gd_next_character
   bra .done
 .backspace:
-  jsr gd_previous_character
+  lda GD_ROW
+  bne .not_first_char
+  lda GD_COL
+  beq .return
+.not_first_char:
   lda #' '
   jsr gd_show_character
+  jsr gd_previous_character
   bra .done
 .newline:
+  lda #' '
+  jsr gd_show_character
   lda GD_ROW
   cmp #GD_CHAR_ROWS - 1
   bne .not_last_line
@@ -296,6 +329,9 @@ callback_char_received:
 .not_last_line:  
   jsr gd_next_line
 .done:
+  lda #'_'
+  jsr gd_show_character
+.return
   jsr gd_unselect
   ply
   plx
