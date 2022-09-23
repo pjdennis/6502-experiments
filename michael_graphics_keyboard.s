@@ -174,8 +174,8 @@ program_start:
 ;  sta SCROLL_OFFSET + 1
 ;  bra .scroll_loop
 
-  lda #GD_CHAR_ROWS - 2
-  sta GD_ROW
+;  lda #GD_CHAR_ROWS - 2
+;  sta GD_ROW
 
   lda #'_'
   jsr gd_show_character
@@ -249,7 +249,7 @@ get_char_loop:
   jsr gd_show_character
   jsr gd_unselect
 .not_off:
-  cpx #25 * 2
+  cpx #25
   bne .not_on
   jsr gd_select
   lda #'_'
@@ -257,7 +257,7 @@ get_char_loop:
   jsr gd_unselect
 .not_on:
   inx
-  cpx #50 * 2
+  cpx #50
   bne .no_reset_count
   ldx #0
 .no_reset_count:

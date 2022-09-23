@@ -1,4 +1,4 @@
-CLOCK_FREQ_KHZ    = 1000
+CLOCK_FREQ_KHZ    = 2000
 
 ; PORTA assignments
 E      = %10000000  ; Display enable
