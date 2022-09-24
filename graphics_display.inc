@@ -212,6 +212,10 @@ gd_scroll_up:
 
 ; Input GD_ROW, GD_COL, GD_ROW2, GD_COL2
 gd_clear_line:
+  pha
+  phx
+  phy
+  jsr gd_clear_character_row
   stz GD_COL
   jsr x_y_from_row_col
   lda #ILI9341_CASET
@@ -264,10 +268,18 @@ CLEAR_LINE_LOOP_COUNT = -480 ; 256 * 240 * 1 = 480 * 16 * 8
   lda #>CLEAR_LINE_LOOP_COUNT
   sta GD_TEMP + 1
 
-  jmp send_zero_data ; tail call
+  jsr send_zero_data ; tail call
+  ply
+  plx
+  pla
+  rts
 
 
 gd_clear_screen:
+  pha
+  phx
+  phy
+  jsr gd_clear_character_screen
   lda #ILI9341_DISPOFF
   jsr gd_send_command
 
@@ -308,6 +320,12 @@ CLEAR_SCREEN_LOOP_COUNT = -9600 ; 256 * 240 * 20 = 320 * 240 * 16 = 9600 * 16 * 
   lda #ILI9341_DISPON
   jsr gd_send_command
 
+  stz GD_ROW
+  stz GD_COL
+
+  ply
+  plx
+  pla
   rts
 
 
@@ -387,6 +405,8 @@ gd_show_string:
 gd_show_character:
   phx
   phy
+  jsr gd_store_character
+
   jsr set_char_data_ptr
   jsr x_y_from_row_col
 
@@ -525,6 +545,69 @@ gd_next_line:
   stz GD_COL
   rts
 
+; On entry A              contains the character to store
+;          GD_ROW, GD_COL contain the location to store the character
+; On exit  A is preserved
+;          X, Y are not preserved
+gd_store_character:
+  pha
+  ; calculate GD_TEMP = GD_ROW * GD_CHAR_COLS
+  lda GD_ROW
+  ldy #GD_CHAR_COLS
+  jsr multiply8
+  sta GD_TEMP+1
+  clc
+  lda GD_TEMP
+  adc GD_COL
+  sta GD_TEMP
+  lda GD_TEMP + 1
+  adc #0
+  sta GD_TEMP + 1
+  clc
+  lda GD_TEMP
+  adc #<GD_CHAR_BUFFER
+  sta GD_TEMP
+  lda GD_TEMP + 1
+  adc #>GD_CHAR_BUFFER
+  sta GD_TEMP + 1
+  pla
+  sta (GD_TEMP)
+  rts
+
+; On entry GD_ROW contains the row to clear
+gd_clear_character_row:
+  lda GD_ROW
+  ldy #GD_CHAR_COLS
+  jsr multiply8
+  sta GD_TEMP+1
+  clc
+  lda GD_TEMP
+  adc #<GD_CHAR_BUFFER
+  sta GD_TEMP
+  lda GD_TEMP + 1
+  adc #>GD_CHAR_BUFFER
+  sta GD_TEMP + 1
+  lda #' '
+  ldy #0
+.loop:
+  sta (GD_TEMP),Y
+  iny
+  cpy #GD_CHAR_COLS
+  bne .loop
+  rts
+
+
+gd_clear_character_screen:
+  lda #0
+.loop
+  sta GD_ROW
+  jsr gd_clear_character_row
+  lda GD_ROW
+  inc
+  cmp #GD_CHAR_ROWS
+  bne .loop
+  rts
+
 
 set_char_data_ptr:
   ; calculate character offset
@@ -611,6 +694,37 @@ x_y_from_row_col:
   lda GD_TEMP + 1
   adc GD_X + 1
   sta GD_X + 1
+  rts
+
+
+; Multiplies two 8-bit factors to produce a 16-bit product
+; in about 153 cycles.
+; @param A one factor
+; @param Y another factor
+; @return high 8 bits in A; low 8 bits in $0000
+;         Y and $0001 are trashed; X is untouched
+multiply8:
+prodlo  = GD_TEMP
+factor2 = GD_TEMP+1
+
+  ; Factor 1 is stored in the lower bits of prodlo; the low byte of
+  ; the product is stored in the upper bits.
+  lsr ; prime the carry bit for the loop
+  sta prodlo
+  sty factor2
+  lda #0
+  ldy #8
+.loop:
+  ; At the start of the loop, one bit of prodlo has already been
+  ; shifted out into the carry.
+  bcc .noadd
+  clc
+  adc factor2
+.noadd:
+  ror
+  ror prodlo  ; pull another bit out for the next iteration
+  dey         ; inc/dec don't modify carry; only shifts and adds do
+  bne .loop
   rts
 
 

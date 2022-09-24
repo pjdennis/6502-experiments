@@ -70,6 +70,7 @@ LINE_CHARS_REMAINING     = $1c ; 1 byte
 GD_ZERO_PAGE_BASE        = $1d ; ? bytes
 
 SIMPLE_BUFFER            = $0200 ; 256 bytes
+GD_CHAR_BUFFER           = $0300 ; GD_CHAR_ROWS * GD_CHAR_COLS bytes (e.g. 20 * 20 = 400)
 
   .org $2000                     ; Loader loads programs to this address
   jmp initialize_machine         ; Initialize hardware and then jump to program_start
@@ -114,6 +115,9 @@ program_start:
   ; Initialize stack
   ldx #$ff
   txs
+
+  lda #'$'
+  sta GD_CHAR_BUFFER + GD_CHAR_ROWS * GD_CHAR_COLS
 
   jsr gd_configure
   jsr gd_reset
@@ -177,12 +181,70 @@ program_start:
 ;  lda #GD_CHAR_ROWS - 2
 ;  sta GD_ROW
 
-  lda #'_'
+
+  lda #<message_text
+  sta GD_STRING_PTR
+  lda #>message_text
+  sta GD_STRING_PTR+1
+  jsr gd_show_string
+
+  jsr gd_next_line
+  jsr gd_next_line
+  
+  ldy GD_ROW
+  lda #1
+  STA GD_ROW
+  jsr gd_clear_line
+  sty GD_ROW
+
+  ldx #0
+copy_loop:
+  lda GD_CHAR_BUFFER,X
   jsr gd_show_character
+  jsr gd_next_character
+  inx
+  cpx #43
+  bne copy_loop
+
+  lda #100
+  jsr delay_hundredths
+
+
+;  lda #'_'
+;  jsr gd_show_character
 
   jsr gd_unselect
 
   jsr reset_and_enable_display_no_cursor
+
+  lda GD_CHAR_BUFFER
+  jsr .show
+  lda GD_CHAR_BUFFER + GD_CHAR_ROWS * GD_CHAR_COLS - 1
+  jsr .show
+  lda GD_CHAR_BUFFER + GD_CHAR_ROWS * GD_CHAR_COLS
+  jsr .show
+
+  jsr gd_select
+  jsr gd_clear_screen
+  jsr gd_unselect
+
+  lda GD_CHAR_BUFFER
+  jsr .show
+
+  stp
+
+.show
+  pha
+  jsr display_hex
+  lda #' '
+  jsr display_character
+  pla
+  jsr display_character
+  lda #' '
+  jsr display_character
+  rts
+
+
   lda #<start_message
   ldx #>start_message
   jsr display_string
