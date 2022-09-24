@@ -8,4 +8,5 @@
 vasm6502_oldstyle*
 vobjdump
 *.swp
+*.bak
 .DS_Store
