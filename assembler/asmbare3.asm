@@ -9,7 +9,7 @@
 
 ;  .org $2000
 
-;lnloop:
+LNLOOP ;lnloop:
   JSR F006   ; 2000  jsr read_b
   BCC 03     ; 2003  bcc lnloop1
   JMP 209F   ; 2005  jmp done ; at end of input
@@ -175,28 +175,28 @@
 
 ; Instruction table
 ;MNTAB:        20FA
-BYTE "ADC#"    00 69
-BYTE "ASLA"    00 0A
-BYTE "BCC"     00 90
-BYTE "BEQ"     00 F0
-BYTE "BNE"     00 D0
-BYTE "BRK"     00 00
-BYTE "CLC"     00 18
-BYTE "CMPZ,X"  00 D5
-BYTE "CMP#"    00 C9
-BYTE "INX"     00 E8
-BYTE "INY"     00 C8
-BYTE "JMP"     00 4C
-BYTE "JSR"     00 20
-BYTE "LDAZ"    00 A5
-BYTE "LDA#"    00 A9
-BYTE "LDA,Y"   00 B9
-BYTE "LDX#"    00 A2
-BYTE "LDY#"    00 A0
-BYTE "ORAZ"    00 05
-BYTE "RTS"     00 60
-BYTE "SBC#"    00 E9
-BYTE "SEC"     00 38
-BYTE "STAZ"    00 85
-BYTE "STAZ,X"  00 95
-BYTE 00
+  BYTE "ADC#"    00 69
+  BYTE "ASLA"    00 0A
+  BYTE "BCC"     00 90
+  BYTE "BEQ"     00 F0
+  BYTE "BNE"     00 D0
+  BYTE "BRK"     00 00
+  BYTE "CLC"     00 18
+  BYTE "CMPZ,X"  00 D5
+  BYTE "CMP#"    00 C9
+  BYTE "INX"     00 E8
+  BYTE "INY"     00 C8
+  BYTE "JMP"     00 4C
+  BYTE "JSR"     00 20
+  BYTE "LDAZ"    00 A5
+  BYTE "LDA#"    00 A9
+  BYTE "LDA,Y"   00 B9
+  BYTE "LDX#"    00 A2
+  BYTE "LDY#"    00 A0
+  BYTE "ORAZ"    00 05
+  BYTE "RTS"     00 60
+  BYTE "SBC#"    00 E9
+  BYTE "SEC"     00 38
+  BYTE "STAZ"    00 85
+  BYTE "STAZ,X"  00 95
+  BYTE 00
