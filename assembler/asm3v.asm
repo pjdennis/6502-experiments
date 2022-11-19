@@ -5,7 +5,7 @@ TEMP     = $00 ; 1 byte
 TEMP2    = $01 ; 1 byte
 TAB      = $02 ; 2 bytes
 PC       = $04 ; 2 bytes
-TOKEN    = $04 ; multiple bytes
+TOKEN    = $06 ; multiple bytes
 
 PC_START = $2000
 LF       = $0A
@@ -16,16 +16,22 @@ start:
   lda #<PC_START
   sta PC
   lda #>PC_START
-  sta PC
+  sta PC+1
   ldy #0 ; Y remains 0 (for indirect addressing)
+  jsr assemble
+  brk
+
+
+assemble:
 lnloop:
   jsr read_b
   bcc lnloop1
-  jmp done ; at end of input
+  rts ; at end of input
 lnloop1:
   cmp #';'
   bne lnloop2
-  jmp ignln ; comment: skip rest of line
+  jsr ignln ; comment: skip rest of line
+  jmp lnloop
 lnloop2:
   cmp #LF ; newline
   bne lnloop3
@@ -44,12 +50,14 @@ lnloop3a:
   bne lnloop3aa
   jmp lnloop
 lnloop3aa:
-  jmp ignln
+  jsr ignln
+  jmp lnloop
 maybemnemonic:
   jsr skipspc
   cmp #';'
   bne lnloop3b
-  jmp ignln
+  jsr ignln
+  jmp lnloop
 lnloop3b:
   cmp #LF
   bne lnloop3c
@@ -62,12 +70,12 @@ lnloop3c:
   sta TOKEN,X
   jsr emitoc
   lda TEMP
-
 tokloop:
   jsr skipspc
   cmp #';'
   bne tokloop1
-  jmp ignln ; handle comment
+  jsr ignln ; handle comment
+  jmp lnloop
 tokloop1:
   cmp #LF
   bne tokloop2
@@ -75,54 +83,40 @@ tokloop1:
 tokloop2:
   cmp #'"'
   bne tokloop3
-  jmp readqu
+  jsr emitqu
+  jmp tokloop
 tokloop3:
-; Read hex
-  jsr readhex
-  sta TEMP2
-  jsr read_b
-  cmp #' '
-  beq tokloop4
-  cmp #LF
-  beq tokloop4
-  cmp #';'
-  beq tokloop4
-  jsr readhex
-  jsr emit ; write the low byte
-  jsr read_b
-tokloop4:
-  sta TEMP
-  lda TEMP2
-  jsr emit
-  lda TEMP
+  cmp #'$'
+  bne tokloop3b
+  jsr emithex
+  jmp tokloop
+tokloop3b:
+  ; label
+  jsr emitlabel
   jmp tokloop
 
+
 ; read and emit quoted ASCII
-readqu:
+emitqu:
   jsr read_b
   cmp #'"'
-  bne readqu1
-  jmp qudone
-readqu1:
+  bne emitqu1
+  jsr read_b
+  rts
+emitqu1:
   cmp #'\\'
-  bne readqu2
+  bne emitqu2
   jsr read_b
-readqu2:
+emitqu2:
   jsr emit
-  jmp readqu
-qudone:
-  jsr read_b
-  jmp tokloop
+  jmp emitqu
 
 
 ignln:
   jsr read_b
   cmp #LF ; newline
   bne ignln
-  jmp lnloop
-
-done:
-  brk
+  rts
 
 
 readtoken:
@@ -137,6 +131,29 @@ readtokenloop:
   beq readtokendone
   jmp readtokenloop
 readtokendone:
+  rts
+
+
+emithex:
+  jsr read_b
+emithex2:
+  jsr readhex
+  sta TEMP2
+  jsr read_b
+  cmp #' '
+  beq emithex3
+  cmp #LF
+  beq emithex3
+  cmp #';'
+  beq emithex3
+  jsr readhex
+  jsr emit ; write the low byte
+  jsr read_b
+emithex3:
+  sta TEMP
+  lda TEMP2
+  jsr emit
+  lda TEMP
   rts
 
 
@@ -186,6 +203,26 @@ emitoc:
   lda (TAB),Y
   jsr emit
 emitocnotfound:
+  rts
+
+
+emitlabel:
+  jsr readtoken
+  sta TEMP
+  lda #<LBTAB
+  sta TAB
+  lda #>LBTAB
+  sta TAB+1
+  jsr findintab
+  bcc emitlabel2
+  brk ; label not found
+emitlabel2:
+  lda (TAB),Y
+  jsr emit
+  jsr inctab
+  lda (TAB),Y
+  jsr emit
+  lda TEMP
   rts
 
 
@@ -302,3 +339,5 @@ MNTAB:
 ;Labels table
 LBTAB:
   .BYTE 0
+
+  .WORD start
