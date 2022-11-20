@@ -1,13 +1,13 @@
-read_b   = $f006
-write_b  = $f009
+read     = $F006 ; Provided by emulation environment
+write_b  = $F009 ; provided by emulation environment
 
-TEMP      = $0000 ; 1 byte
-TEMP2     = $0001 ; 1 byte
-TABL      = $0002 ; 1 byte
-TABH      = $0003 ; 1 byte
-PCL       = $0004 ; 1 byte
-PCH       = $0005 ; 1 byte
-;TOKEN    = $06 ; multiple bytes
+TEMP     = $0000 ; 1 byte
+TEMP2    = $0001 ; 1 byte
+TABL     = $0002 ; 1 byte
+TABH     = $0003 ; 1 byte
+PCL      = $0004 ; 1 byte
+PCH      = $0005 ; 1 byte
+TOKEN    = $0006 ; multiple bytes
 
 PC_START = $2000
 LBTAB    = $3000
@@ -55,6 +55,7 @@ MNTAB
   DATA $00
 
 
+; Emulation environment surfaces error codes and messages
 err_labelnotfound
   BRK
   DATA $01 "Label not found" $00
@@ -70,10 +71,6 @@ err_opcodenotfound
 err_expectedhex
   BRK
   DATA $04 "Expected hex value" $00
-
-
-read
-  JMP read_b
 
 
 emit
@@ -141,7 +138,7 @@ cfe_notnewline
 readtoken
   LDX# $00
 readtokenloop
-  STAZ,X $06           ; STAZ,X TOKEN
+  STAZ,X <TOKEN
   INX
   JSR read
   JSR cmpendoftoken
@@ -150,7 +147,7 @@ readtokenloop
 rt_done
   STAZ <TEMP
   LDA# $00
-  STAZ,X $06           ; STAZ,X TOKEN
+  STAZ,X <TOKEN
   RTS
 
 
@@ -188,7 +185,7 @@ findintab              ; outer loop
 ;invariant: pointed at first char
 ; first char of mnenomic in table loaded
 fit_charloop           ; inner loop
-  CMP,Y $0006          ; CMP,Y TOKEN
+  CMP,Y TOKEN
   BNE $0F              ; BNE fit_skipcurrent ; not a match
   CMP# $00
   BNE $05              ; BNE fit_nextchar ; partial match so far
@@ -214,9 +211,9 @@ fit_nextsymbol         ; move to next symbol in table
 
 readandfindlabel
   JSR readtoken
-  LDA# $00             ; LDA# <LBTAB
+  LDA# <LBTAB
   STAZ <TABL
-  LDA# $30             ; LDA# >LBTAB
+  LDA# >LBTAB
   STAZ <TABH
   JMP findintab        ; Tail call
 
@@ -292,7 +289,7 @@ capturelabel
   JMP err_duplicatelabel
 cl_notfound
 cl_loop                ; Copy TOKEN to table
-  LDA,Y $0006          ; LDA,Y TOKEN
+  LDA,Y TOKEN
   STA(),Y <TABL
   BEQ $04              ; BEQ cl_done
   INY
@@ -482,9 +479,9 @@ start
   STAZ <PCL
   LDA# >PC_START
   STAZ <PCH
-  LDA# $00
-  STA $3000            ; STA LBTAB
   LDY# $00             ; Y remains 0 (for indirect addressing)
+  TYA                  ; A <- 0
+  STA LBTAB
   JSR assemble
   BRK
   DATA $00 ; Success
