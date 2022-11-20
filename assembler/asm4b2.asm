@@ -174,12 +174,17 @@ fit_nextsymbol         ; move to next symbol in table
   JMP findintab        ; outer loop
 
 
-capturelabel
+readandfindlabel
+  JSR readtoken
   LDA# $00             ; LDA# <LBTAB
   STAZ $02             ; STAZ TAB
   LDA# $30             ; LDA# >LBTAB
   STAZ $03             ; STAZ TAB+1
-  JSR findintab
+  JMP findintab        ; Tail call
+
+
+capturelabel
+  JSR readandfindlabel
   BCS $12              ; BCS cl_notfound
   BRK                  ; duplicate label
   DATA $01 "Duplicate label" $00
@@ -205,7 +210,6 @@ cl_done                ; Copy PC value to table
 
 
 readlabel
-  JSR readtoken
   JSR capturelabel
   LDAZ $00             ; LDAZ TEMP
   CMP# "\n"
@@ -310,12 +314,7 @@ eh_last
 
 
 emitlabel
-  JSR readtoken
-  LDA# $00             ; LDA# <LBTAB
-  STAZ $02             ; STAZ TAB
-  LDA# $30             ; LDA# >LBTAB
-  STAZ $03             ; STAZ TAB+1
-  JSR findintab
+  JSR readandfindlabel
   BCC $12              ; BCC el_found
   BRK                  ; Label not found
   DATA $03 "Label not found" $00
@@ -386,6 +385,9 @@ tokloop2
   JSR emithex
   JMP tokloop
 tokloop3
+;  CMP# "<"
+;  BNE $??
+
   ; label
   JSR emitlabel
   JMP tokloop
