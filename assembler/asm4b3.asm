@@ -2,12 +2,13 @@ read     = $F006 ; Provided by emulation environment
 write_b  = $F009 ; provided by emulation environment
 
 TEMP     = $0000 ; 1 byte
-TEMP2    = $0001 ; 1 byte
-TABL     = $0002 ; 1 byte
-TABH     = $0003 ; 1 byte
-PCL      = $0004 ; 1 byte
-PCH      = $0005 ; 1 byte
-TOKEN    = $0006 ; multiple bytes
+VALUE    = $0001 ; 1 byte
+NEXTCHAR = $0002 ; 1 byte
+TABL     = $0003 ; 1 byte
+TABH     = $0004 ; 1 byte
+PCL      = $0005 ; 1 byte
+PCH      = $0006 ; 1 byte
+TOKEN    = $0007 ; multiple bytes
 
 PC_START = $2000
 LBTAB    = $3000
@@ -83,9 +84,11 @@ emitdone
 
 
 skiprestofline
-  JSR read
   CMP# "\n"
-  BNE $F9              ; BNE skiprestofline
+  BEQ $06              ; BNE srol_done
+  JSR read
+  JMP skiprestofline
+srol_done
   RTS
 
 
@@ -115,24 +118,22 @@ cmpendoftoken
 ;         A contains next character
 checkforend
   CMP# ";"
-  BNE $05              ; BNE cfe_notsemicolon
+  BEQ $06              ; BEQ cfe_end
+  CMP# "\n"
+  BEQ $02              ; BEQ cfe_end
+  ; Not at end
+  CLC
+  RTS
+cfe_end
   JSR skiprestofline
   SEC
-  RTS
-cfe_notsemicolon
-  CMP# "\n"
-  BNE $02              ; BNE cfe_notnewline
-  SEC
-  RTS
-cfe_notnewline
-  CLC
   RTS
 
 
 ; On entry A contains first character of token
 ;          Y = 0
 ; Reads token into TOKEN (zero terminated)
-; On exit TEMP contains next character after token
+; On exit NEXTCHAR contains next character after token
 ;         Y = 0
 ;         A, X are not preserved
 readtoken
@@ -145,7 +146,7 @@ readtokenloop
   BEQ $03              ; BEQ rt_done
   JMP readtokenloop
 rt_done
-  STAZ <TEMP
+  STAZ <NEXTCHAR
   LDA# $00
   STAZ,X <TOKEN
   RTS
@@ -209,7 +210,7 @@ fit_nextsymbol         ; move to next symbol in table
   JMP findintab        ; outer loop
 
 
-; On exit TEMP contains the next character
+; On exit NEXTCHAR contains the next character
 readandfindlabel
   JSR readtoken
   LDA# <LBTAB
@@ -219,7 +220,7 @@ readandfindlabel
   JMP findintab        ; Tail call
 
 
-; On exit TEMP contains the next character
+; On exit NEXTCHAR contains the next character
 readandfindexistinglabel
   JSR readandfindlabel
   BCS $01              ; BCC rafel_notfound
@@ -261,12 +262,12 @@ readhex
 
 ; Read 2 to 4 hex characters and emit 1 or 2 bytes
 ; When 2 bytes, emit LSB then MSB
-; Uses TEMP and TEMP2
+; Uses VALUE and NEXTCHAR
 ; On exit A contains next character
 emithex
   JSR read
   JSR readhex
-  STAZ <TEMP2
+  STAZ <VALUE
   JSR read
   JSR cmpendoftoken
   BEQ $09              ; BEQ eh_last
@@ -274,20 +275,17 @@ emithex
   JSR emit             ; write the low byte
   JSR read
 eh_last
-  STAZ <TEMP           ; Save next character
-  LDAZ <TEMP2
+  STAZ <NEXTCHAR       ; Save next character
+  LDAZ <VALUE
   JSR emit
-  LDAZ <TEMP           ; Load next character
+  LDAZ <NEXTCHAR       ; Load next character
   RTS
 
 
 ;capturelabel helper
 cl_terminatetable
   ; Skip past rest of table
-  CMP# "\n"
-  BEQ $03              ; BEQ cl_done
   JSR skiprestofline
-cl_done
   ; Terminate table value
   INY
   LDA# $00
@@ -318,14 +316,14 @@ cl_hexvalue
 
 ; capturelabel helper
 cl_pctotable
-  STAZ <TEMP
+  STAZ <NEXTCHAR
   INY
   LDAZ <PCL
   STA(),Y <TABL
   INY
   LDAZ <PCH
   STA(),Y <TABL
-  LDAZ <TEMP
+  LDAZ <NEXTCHAR
   JMP cl_terminatetable
 
 ; capturelabel
@@ -341,7 +339,7 @@ cl_loop                ; Copy TOKEN to table
   INY
   JMP cl_loop
 cl_copyvalue           ; Copy value or PC value to table
-  LDAZ <TEMP
+  LDAZ <NEXTCHAR
   JSR skipspaces
   CMP# "="
   BNE $03              ; BNE cl_copypc
@@ -351,7 +349,7 @@ cl_copypc
 
 
 ; emit the opcode
-; On exit TEMP contains the next character
+; On exit NEXTCHAR contains the next character
 emitopcode
   LDA# <MNTAB
   STAZ <TABL
@@ -401,7 +399,7 @@ emitlabel
   LDA(),Y <TABL
   DEY
   JSR emit
-  LDAZ <TEMP           ; Load next character
+  LDAZ <NEXTCHAR       ; Load next character
   RTS
 
 
@@ -411,7 +409,7 @@ emitlabellsb
   ; Emit low byte
   LDA(),Y <TABL
   JSR emit
-  LDAZ <TEMP           ; Load next character
+  LDAZ <NEXTCHAR       ; Load next character
   RTS
 
 
@@ -423,7 +421,7 @@ emitlabelmsb
   LDA(),Y <TABL
   DEY
   JSR emit
-  LDAZ <TEMP           ; Load next character
+  LDAZ <NEXTCHAR       ; Load next character
   RTS
 
 
@@ -450,7 +448,7 @@ lnloop4
 ; Read mnemonic and emit opcode
   JSR readtoken
   JSR emitopcode
-  LDAZ <TEMP
+  LDAZ <NEXTCHAR
 tokloop
   JSR skipspaces
   JSR checkforend
