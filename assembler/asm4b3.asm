@@ -1,15 +1,16 @@
-;read_b   = $f006
-;write_b  = $f009
+read_b   = $f006
+write_b  = $f009
 
-;TEMP     = $00 ; 1 byte
-;TEMP2    = $01 ; 1 byte
-;TAB      = $02 ; 2 bytes
-;PC       = $04 ; 2 bytes
+TEMP      = $0000 ; 1 byte
+TEMP2     = $0001 ; 1 byte
+TABL      = $0002 ; 1 byte
+TABH      = $0003 ; 1 byte
+PCL       = $0004 ; 1 byte
+PCH       = $0005 ; 1 byte
 ;TOKEN    = $06 ; multiple bytes
 
-;PC_START = $2000
-;LBTAB    = $3000
-;LF       = $0a
+PC_START = $2000
+LBTAB    = $3000
 
 ;  .org $2000
 
@@ -54,15 +55,32 @@ MNTAB
   DATA $00
 
 
+err_labelnotfound
+  BRK
+  DATA $01 "Label not found" $00
+
+err_duplicatelabel
+  BRK
+  DATA $02 "Duplicate label" $00
+
+err_opcodenotfound
+  BRK
+  DATA $03 "Opcode not found" $00
+
+err_expectedhex
+  BRK
+  DATA $04 "Expected hex value" $00
+
+
 read
-  JMP $F006            ; JMP read_b
+  JMP read_b
 
 
 emit
-  JSR $F009            ; JSR write_b
-  INCZ $04             ; INCZ PC
+  JSR write_b
+  INCZ <PCL
   BNE $02              ; BNE emitdone
-  INCZ $05             ; INCZ PC+1
+  INCZ <PCH
 emitdone
   RTS
 
@@ -130,7 +148,7 @@ readtokenloop
   BEQ $03              ; BEQ rt_done
   JMP readtokenloop
 rt_done
-  STAZ $00             ; STAZ TEMP
+  STAZ <TEMP
   LDA# $00
   STAZ,X $06           ; STAZ,X TOKEN
   RTS
@@ -145,11 +163,11 @@ advanceintab
   TYA
   LDY# $00
   CLC
-  ADCZ $02             ; ADCZ TAB
-  STAZ $02             ; STAZ TAB
+  ADCZ <TABL
+  STAZ <TABL
   TYA                  ; A <- 0
-  ADCZ $03             ; ADCZ TAB+1
-  STAZ $03             ; STAZ TAB+1
+  ADCZ <TABH
+  STAZ <TABH
   RTS
 
 
@@ -162,7 +180,7 @@ advanceintab
 ;         Y = 0
 ;         A is not preserved
 findintab              ; outer loop
-  LDA(),Y $02          ; LDA(),Y TAB
+  LDA(),Y <TABL
   BNE $02              ; BNE findintab2
   ; not found
   SEC
@@ -180,10 +198,10 @@ fit_charloop           ; inner loop
   RTS
 fit_nextchar           ; move to next char
   INY
-  LDA(),Y $02          ; LDA(),Y TAB
+  LDA(),Y <TABL
   JMP fit_charloop     ; inner loop
 fit_skipcurrent        ; skip current symbol in table
-  LDA(),Y $02          ; LDA(),Y TAB
+  LDA(),Y <TABL
   BEQ $04              ; BEQ fit_nextsymbol ; done skipping
   INY
   JMP fit_skipcurrent
@@ -197,9 +215,9 @@ fit_nextsymbol         ; move to next symbol in table
 readandfindlabel
   JSR readtoken
   LDA# $00             ; LDA# <LBTAB
-  STAZ $02             ; STAZ TAB
+  STAZ <TABL
   LDA# $30             ; LDA# >LBTAB
-  STAZ $03             ; STAZ TAB+1
+  STAZ <TABH
   JMP findintab        ; Tail call
 
 
@@ -208,8 +226,7 @@ readandfindexistinglabel
   BCS $01              ; BCC rafel_notfound
   RTS
 rafel_notfound
-  BRK                  ; Label not found
-  DATA $03 "Label not found" $00
+  JMP err_labelnotfound
 
 
 ; On entry, A contains a hex character A-Z|0-9
@@ -236,16 +253,11 @@ readhex
   ASLA
   ASLA
   ASLA
-  STAZ $00             ; STAZ TEMP
+  STAZ <TEMP
   JSR read
   JSR convhex
-  ORAZ $00             ; ORAZ TEMP
+  ORAZ <TEMP
   RTS
-
-
-nothex
-  BRK
-  DATA $04 "Expected hex value" $00
 
 
 hextotable
@@ -253,63 +265,62 @@ hextotable
   JSR skipspaces
   CMP# "$"
   BEQ $03              ; BEQ htt_hexvalue
-  JMP nothex
+  JMP err_expectedhex
 htt_hexvalue
   INY
   INY
   JSR read
   JSR readhex
-  STA(),Y $02
+  STA(),Y <TABL
   DEY
   JSR read
   JSR readhex
-  STA(),Y $02
+  STA(),Y <TABL
   INY
   INY  
   LDA# $00
-  STA(),Y $02          ; STA(),Y TAB
+  STA(),Y <TABL
   LDY# $00
   JSR read
-  STAZ $00             ; STAZ TEMP
+  STAZ <TEMP
   RTS
 
 
 capturelabel
   JSR readandfindlabel
-  BCS $12              ; BCS cl_notfound
-  BRK                  ; duplicate label
-  DATA $01 "Duplicate label" $00
+  BCS $03              ; BCS cl_notfound
+  JMP err_duplicatelabel
 cl_notfound
 cl_loop                ; Copy TOKEN to table
   LDA,Y $0006          ; LDA,Y TOKEN
-  STA(),Y $02          ; STA(),Y TAB
+  STA(),Y <TABL
   BEQ $04              ; BEQ cl_done
   INY
   JMP cl_loop
 cl_done                ; Copy value or PC value to table
-  LDAZ $00             ; LDAZ TEMP
+  LDAZ <TEMP
   JSR skipspaces
   CMP# "="
   BNE $03              ; BNE cl_copypc
   JMP hextotable
 cl_copypc
-  STAZ $00             ; STAZ TEMP
+  STAZ <TEMP
   INY
-  LDAZ $04             ; LDAZ PC
-  STA(),Y $02          ; STA(),Y TAB
+  LDAZ <PCL
+  STA(),Y <TABL
   INY
-  LDAZ $05             ; LDAZ PC+1
-  STA(),Y $02          ; STA(),Y TAB
+  LDAZ <PCH
+  STA(),Y <TABL
   INY                  ; Terminate table value
   LDA# $00
-  STA(),Y $02          ; STA(),Y TAB
+  STA(),Y <TABL
   LDY# $00             ; restore Y register
   RTS
 
 
 readlabel
   JSR capturelabel
-  LDAZ $00             ; LDAZ TEMP
+  LDAZ <TEMP
   CMP# "\n"
   BEQ $03              ; BEQ rl_done
   JSR skiprestofline
@@ -319,21 +330,20 @@ rl_done
 
 ; emit the opcode
 emitopcode
-  LDA# $00             ; LDA# <MNTAB
-  STAZ $02             ; STAZ TAB
-  LDA# $20             ; LDA# >MNTAB
-  STAZ $03             ; STAZ TAB+1
+  LDA# <MNTAB
+  STAZ <TABL
+  LDA# >MNTAB
+  STAZ <TABH
   JSR findintab
-  BCC $13              ; BCC eo_found
-  BRK                  ; Opcode not found
-  DATA $02 "Opcode not found" $00
+  BCC $03              ; BCC eo_found
+  JMP err_opcodenotfound
 eo_found
-  LDA(),Y $02          ; LDA(),Y TAB
+  LDA(),Y <TABL
   BEQ $01              ; BEQ eo_opcode
   RTS                  ; Not opcode (DATA command)
 eo_opcode
   INY
-  LDA(),Y $02          ; LDA(),Y TAB
+  LDA(),Y <TABL
   DEY
   JSR emit
   RTS
@@ -365,7 +375,7 @@ eq_notescaped
 emithex
   JSR read
   JSR readhex
-  STAZ $01             ; STAZ TEMP2
+  STAZ <TEMP2
   JSR read
   JSR cmpendoftoken
   BEQ $09              ; BEQ eh_last
@@ -373,40 +383,40 @@ emithex
   JSR emit             ; write the low byte
   JSR read
 eh_last
-  STAZ $00             ; STAZ TEMP
-  LDAZ $01             ; LDAZ TEMP2
+  STAZ <TEMP
+  LDAZ <TEMP2
   JSR emit
-  LDAZ $00             ; LDAZ TEMP
+  LDAZ <TEMP
   RTS
 
 
 emitlabel
   JSR readandfindexistinglabel
-  LDA(),Y $02          ; LDA(),Y TAB
+  LDA(),Y <TABL
   JSR emit
   INY
-  LDA(),Y $02          ; LDA(),Y TAB
+  LDA(),Y <TABL
   DEY
   JSR emit
-  LDAZ $00             ; LDAZ TEMP
+  LDAZ <TEMP
   RTS
 
 
 emitlabellsb
   JSR readandfindexistinglabel
-  LDA(),Y $02          ; LDA(),Y TAB
+  LDA(),Y <TABL
   JSR emit
-  LDAZ $00             ; LDAZ TEMP
+  LDAZ <TEMP
   RTS
 
 
 emitlabelmsb
   JSR readandfindexistinglabel
   INY
-  LDA(),Y $02          ; LDA(),Y TAB
+  LDA(),Y <TABL
   DEY
   JSR emit
-  LDAZ $00             ; LDAZ TEMP
+  LDAZ <TEMP
   RTS
 
 
@@ -433,7 +443,7 @@ lnloop4
 ; Read mnemonic and emit opcode
   JSR readtoken
   JSR emitopcode
-  LDAZ $00             ; LDAZ TEMP
+  LDAZ <TEMP
 tokloop
   JSR skipspaces
   JSR checkforend
@@ -468,10 +478,10 @@ tokloop5
 
 
 start
-  LDA# $00             ; LDA# <PC_START
-  STAZ $04             ; STAZ PC
-  LDA# $20             ; LDA# >PC_START
-  STAZ $05             ; STAZ PC+1
+  LDA# <PC_START
+  STAZ <PCL
+  LDA# >PC_START
+  STAZ <PCH
   LDA# $00
   STA $3000            ; STA LBTAB
   LDY# $00             ; Y remains 0 (for indirect addressing)

@@ -975,6 +975,7 @@ void hookexternal(void *funcptr) {
 ////////////////////////////////////////
 
 #include <stdlib.h>
+#include <string.h>
 
 uint8_t memory[0x10000];
 
@@ -1081,16 +1082,18 @@ int main(int argc, char **argv) {
     }
 
     reset6502();
+    const int max_cycles = 4000000;
     while (!done) {
         step6502();
-        if (clockticks6502 > 2000000) {
-            fprintf(stderr, "Program did not terminate within 2,000,000 cycles\n");
+        if (clockticks6502 > max_cycles) {
+            fprintf(stderr, "Program did not terminate within %i cycles\n", max_cycles);
             fclose(output_file_ptr);
             fclose(input_file_ptr);
             return 1;
         }
         // printf("PC=%04x\n", pc);
     }
+    fprintf(stderr, "File %s with input %s executed %i cycles\n", code_filename, input_filename, clockticks6502);
 
     fclose(output_file_ptr);
     fclose(input_file_ptr);
@@ -1098,6 +1101,7 @@ int main(int argc, char **argv) {
     uint16_t location = memory[0x100 + sp + 2] + (memory[0x100 + sp + 3] << 8) - 1;
     uint8_t exitcode = memory[location];
     if (exitcode != 0) {
+        fprintf(stderr, "%s: ", code_filename);
         for (int i = 0; i != 40; i++) {
             uint8_t c = memory[location + 1 + i];
             if (c == 0) break;
@@ -1106,17 +1110,21 @@ int main(int argc, char **argv) {
         fputc('\n', stderr);
     }
 
-/*
-    FILE* dump_file_ptr = fopen("dump.bin", "wb");
+    const char* dump_file_suffix = ".dump.bin";
+    char* dump_filename = malloc(strlen(output_filename) + strlen(dump_file_suffix) + 1);
+    strcpy(dump_filename, output_filename);
+    strcpy(dump_filename + strlen(output_filename), dump_file_suffix);
+
+    FILE* dump_file_ptr = fopen(dump_filename, "wb");
     if (!dump_file_ptr) {
-        fprintf(stderr, "could not open output file: dump.bin\n");
+        fprintf(stderr, "could not open output file: %s\n", dump_filename);
+        free(dump_filename);
         return 1;
     }
 
     fwrite(memory, 1, 0x10000, dump_file_ptr);    
-
     fclose(dump_file_ptr);
-*/
+    free(dump_filename);
 
     return exitcode;
 }
