@@ -16,6 +16,7 @@
 
 ; Instruction table
 MNTAB
+;      Mnemonic          Opcode
   DATA "ADC#"    $00 $00 $69
   DATA "ADCZ"    $00 $00 $65
   DATA "ASLA"    $00 $00 $0A
@@ -49,7 +50,7 @@ MNTAB
   DATA "STAZ"    $00 $00 $85
   DATA "STAZ,X"  $00 $00 $95
   DATA "TYA"     $00 $00 $98
-  DATA "DATA"    $00 $01 $00
+  DATA "DATA"    $00 $01 $00 ; Directive
   DATA $00
 
 
@@ -66,40 +67,59 @@ emitdone
   RTS
 
 
-ignln
+skiprestofline
   JSR read
-  CMP# $0A             ; CMP# LF ; newline
-  BNE $F9              ; BNE ignln
+  CMP# "\n"
+  BNE $F9              ; BNE skiprestofline
   RTS
 
 
-skipspc
+skipspaces
   CMP# " "
-  BNE $06              ; BNE skipspc2
+  BNE $06              ; BNE ss_done
   JSR read
-  JMP skipspc
-skipspc2
+  JMP skipspaces
+ss_done
   RTS
 
 
+cmpendoftoken
+  CMP# " "
+  BNE $01
+  RTS
+  CMP# "\n"
+  BNE $01
+  RTS
+  CMP# ";"
+  RTS
+
+
+; On entry A contains first character of token
+;          Y = 0
+; Reads token into TOKEN (zero terminated)
+; On exit TEMP contains next character after token
+;         Y = 0
+;         A, X are not preserved
 readtoken
   LDX# $00
 readtokenloop
   STAZ,X $06           ; STAZ,X TOKEN
   INX
   JSR read
-  CMP# " "
-  BEQ $07              ; BEQ readtokendone ; done
-  CMP# $0A             ; CMP# LF
-  BEQ $03              ; BEQ readtokendone
+  JSR cmpendoftoken
+  BEQ $03              ; BEQ rt_done
   JMP readtokenloop
-readtokendone
+rt_done
   STAZ $00             ; STAZ TEMP
   LDA# $00
   STAZ,X $06           ; STAZ,X TOKEN
   RTS
 
 
+; On entry Y contains offset into TAB
+; On exit TAB;TAB+1 += Y
+;         Y = 0
+;         A is not preserved
 advanceintab
   INY
   TYA
@@ -113,38 +133,45 @@ advanceintab
   RTS
 
 
-findintab
-findintab1 ; outer loop
-  LDA(),Y $02
+; On entry TOKEN contains token to find
+;          TAB;TAB+1 points to table
+;          Y = 0
+; On exit C clear if found; set if not found
+;         TAB;TAB+1 points to token value if found
+;                   or to end of table if not found
+;         Y = 0
+;         A is not preserved
+findintab              ; outer loop
+  LDA(),Y $02          ; LDA(),Y TAB
   BNE $02              ; BNE findintab2
   ; not found
   SEC
   RTS
 ;invariant: pointed at first char
 ; first char of mnenomic in table loaded
-findintab2 ; inner loop
-  CMP,Y $0006
-  BNE $0F              ; BNE findintab4 ; no match
+fit_charloop           ; inner loop
+  CMP,Y $0006          ; CMP,Y TOKEN
+  BNE $0F              ; BNE fit_skipcurrent ; not a match
   CMP# $00
-  BNE $05              ; BNE findintab3
-  ; match
+  BNE $05              ; BNE fit_nextchar ; partial match so far
+  ; found a match
   JSR advanceintab
   CLC
   RTS
-findintab3
+fit_nextchar           ; move to next char
   INY
   LDA(),Y $02          ; LDA(),Y TAB
-  JMP findintab2       ; inner loop
-findintab4 ; no match
+  JMP fit_charloop     ; inner loop
+fit_skipcurrent        ; skip current symbol in table
   LDA(),Y $02          ; LDA(),Y TAB
-  BEQ $04              ; BEQ findintab5 ; done skipping
+  BEQ $04              ; BEQ fit_nextsymbol ; done skipping
   INY
-  JMP findintab4
-findintab5 ; done skipping
+  JMP fit_skipcurrent
+fit_nextsymbol         ; move to next symbol in table
   INY                  ; move past 2 data bytes
   INY
   JSR advanceintab
-  JMP findintab1       ; outer loop
+  JMP findintab        ; outer loop
 
 
 capturelabel
@@ -153,27 +180,27 @@ capturelabel
   LDA# $30             ; LDA# >LBTAB
   STAZ $03             ; STAZ TAB+1
   JSR findintab
-  BCS $12              ; BCS clnotfound
+  BCS $12              ; BCS cl_notfound
   BRK                  ; duplicate label
   DATA $01 "Duplicate label" $00
-clnotfound
-clloop
+cl_notfound
+cl_loop                ; Copy TOKEN to table
   LDA,Y $0006          ; LDA,Y TOKEN
   STA(),Y $02          ; STA(),Y TAB
-  BEQ $04              ; BEQ cldone
+  BEQ $04              ; BEQ cl_done
   INY
-  JMP clloop
-cldone
+  JMP cl_loop
+cl_done                ; Copy PC value to table
   INY
   LDAZ $04             ; LDAZ PC
   STA(),Y $02          ; STA(),Y TAB
   INY
   LDAZ $05             ; LDAZ PC+1
   STA(),Y $02          ; STA(),Y TAB
-  INY
+  INY                  ; Terminate table value
   LDA# $00
   STA(),Y $02          ; STA(),Y TAB
-  LDY# $00             ; restore
+  LDY# $00             ; restore Y register
   RTS
 
 
@@ -181,28 +208,28 @@ readlabel
   JSR readtoken
   JSR capturelabel
   LDAZ $00             ; LDAZ TEMP
-  CMP# $0A             ; CMP# LF
-  BEQ $03              ; BEQ readlabel1
-  JSR ignln
-readlabel1
+  CMP# "\n"
+  BEQ $03              ; BEQ rl_done
+  JSR skiprestofline
+rl_done
   RTS
 
 
-; Emit the opcode
-emitoc
+; emit the opcode
+emitopcode
   LDA# $00             ; LDA# <MNTAB
   STAZ $02             ; STAZ TAB
   LDA# $20             ; LDA# >MNTAB
   STAZ $03             ; STAZ TAB+1
   JSR findintab
-  BCC $13              ; BCC emitoc1
+  BCC $13              ; BCC eo_found
   BRK                  ; Opcode not found
   DATA $02 "Opcode not found" $00
-emitoc1
+eo_found
   LDA(),Y $02          ; LDA(),Y TAB
-  BEQ $01              ; BEQ emitoc2
-  RTS
-emitoc2
+  BEQ $01              ; BEQ eo_opcode
+  RTS                  ; Not opcode (DATA command)
+eo_opcode
   INY
   LDA(),Y $02          ; LDA(),Y TAB
   DEY
@@ -211,37 +238,42 @@ emitoc2
 
 
 ; read and emit quoted ASCII
-emitqu
+emitquoted
   JSR read
   CMP# "\""
-  BNE $04              ; BNE emitqu1
-  JSR read
+  BNE $04              ; BNE eq_notdone
+  JSR read             ; Done; read next char
   RTS
-emitqu1
+eq_notdone
   CMP# "\\"
-  BNE $09              ; BNE emitqu2
+  BNE $09              ; BNE eq_notescaped
   JSR read
   CMP# "n"
-  BNE $02              ; BNE emitqu2
-  LDA# $0A             ; LDA# "\n"
-emitqu2
+  BNE $02              ; BNE eq_notescaped
+  LDA# "\n"            ; Escaped "n" is linefeed
+eq_notescaped
   JSR emit
-  JMP emitqu
+  JMP emitquoted
 
 
+; On entry, A contains a hex character A-Z|0-9
+; On exit A contains the value (0-15)
 convhex
   CMP# "A"
-  BCC $06              ; BCC convhex1 ; < 'A'
-  SBC# "A"
+  BCC $06              ; BCC ch_numeric ; < 'A'
+  SBC# "A"             ; Carry already set
   CLC
   ADC# $0A             ; ADC# 10
   RTS
-convhex1
+ch_numeric
   SEC
   SBC# "0"
   RTS
 
 
+; On entry A contains first hex character
+; Reads second hex character; Uses TEMP
+; On exit A contains 2 character value (0-255)
 readhex
   JSR convhex
   ASLA
@@ -255,22 +287,21 @@ readhex
   RTS
 
 
+; Read 2 to 4 hex characters and emit 1 or 2 bytes
+; When 2 bytes, emit LSB then MSB
+; Uses TEMP and TEMP2
+; On exit A contains next character after hex
 emithex
   JSR read
-emithex2
   JSR readhex
   STAZ $01             ; STAZ TEMP2
   JSR read
-  CMP# " "
-  BEQ $11              ; BEQ emithex3
-  CMP# $0A             ; CMP# LF
-  BEQ $0D              ; BEQ emithex3
-  CMP# ";"
-  BEQ $09              ; BEQ emithex3
+  JSR cmpendoftoken
+  BEQ $09              ; BEQ eh_last
   JSR readhex
   JSR emit             ; write the low byte
   JSR read
-emithex3
+eh_last
   STAZ $00             ; STAZ TEMP
   LDAZ $01             ; LDAZ TEMP2
   JSR emit
@@ -285,10 +316,10 @@ emitlabel
   LDA# $30             ; LDA# >LBTAB
   STAZ $03             ; STAZ TAB+1
   JSR findintab
-  BCC $12              ; BCC emitlabel2
+  BCC $12              ; BCC el_found
   BRK                  ; Label not found
   DATA $03 "Label not found" $00
-emitlabel2
+el_found
   LDA(),Y $02          ; LDA(),Y TAB
   JSR emit
   INY
@@ -301,16 +332,16 @@ emitlabel2
 
 checkforend
   CMP# ";"
-  BNE $05              ; BNE checkforend1
-  JSR ignln
+  BNE $05              ; BNE cfe_notsemicolon
+  JSR skiprestofline
   SEC
   RTS
-checkforend1
-  CMP# $0A             ; CMP# LF
-  BNE $02              ; BNE checkforend2
+cfe_notsemicolon
+  CMP# "\n"
+  BNE $02              ; BNE cfe_notnewline
   SEC
   RTS
-checkforend2
+cfe_notnewline
   CLC
   RTS
 
@@ -330,24 +361,24 @@ lnloop2
   JSR readlabel
   JMP lnloop
 lnloop3
-  JSR skipspc
+  JSR skipspaces
   JSR checkforend
   BCC $03              ; BCC lnloop4
   JMP lnloop
 lnloop4
-; Read and emit mnemonic
+; Read mnemonic and emit opcode
   JSR readtoken
-  JSR emitoc
+  JSR emitopcode
   LDAZ $00             ; LDAZ TEMP
 tokloop
-  JSR skipspc
+  JSR skipspaces
   JSR checkforend
   BCC $03              ; BCC tokloop1
   JMP lnloop           ; end of line
 tokloop1
   CMP# "\""
   BNE $06              ; BNE tokloop2
-  JSR emitqu
+  JSR emitquoted
   JMP tokloop
 tokloop2
   CMP# "$"

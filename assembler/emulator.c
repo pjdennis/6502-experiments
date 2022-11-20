@@ -1062,7 +1062,7 @@ int main(int argc, char **argv) {
     memory[p++] = 0x60; //          rts
     memory[p++] = 0x38; // .at_end: sec
     memory[p++] = 0x60; //          rts
-    memory[p++] = 0x8d; // write_b  sta $f001
+    memory[p++] = 0x8d; // write_b: sta $f001
     memory[p++] = 0x01;
     memory[p++] = 0xf0;
     memory[p++] = 0x60; //          rts
@@ -1083,6 +1083,12 @@ int main(int argc, char **argv) {
     reset6502();
     while (!done) {
         step6502();
+        if (clockticks6502 > 2000000) {
+            fprintf(stderr, "Program did not terminate within 2,000,000 cycles\n");
+            fclose(output_file_ptr);
+            fclose(input_file_ptr);
+            return 1;
+        }
         // printf("PC=%04x\n", pc);
     }
 
