@@ -986,6 +986,11 @@ int done = 0;
 uint8_t read6502(uint16_t address) {
     if (address == 0xf004) {
         int b = fgetc(input_file_ptr);
+/*
+        if (b != EOF) {
+            fputc(b, stderr);
+        }
+*/
         return (b == EOF) ? 4 : b;
     }
     if (address == 0xf005) {
@@ -1036,8 +1041,8 @@ int main(int argc, char **argv) {
 ;    memory[0xfffc] = load_address & 0xff;
 ;    memory[0xfffd] = (load_address >> 8) & 0xff;
 
-     memory[0xfffc] = memory[index - 2];
-     memory[0xfffd] = memory[index - 1];
+    memory[0xfffc] = memory[index - 2];
+    memory[0xfffd] = memory[index - 1];
 
     size_t p = 0xf006;
     memory[p++] = 0x4c; //          jmp read_b
@@ -1078,11 +1083,34 @@ int main(int argc, char **argv) {
     reset6502();
     while (!done) {
         step6502();
-        //printf("PC=%04x\n", pc);
+        // printf("PC=%04x\n", pc);
     }
 
     fclose(output_file_ptr);
     fclose(input_file_ptr);
 
-    return 0;
+    uint16_t location = memory[0x100 + sp + 2] + (memory[0x100 + sp + 3] << 8) - 1;
+    uint8_t exitcode = memory[location];
+    if (exitcode != 0) {
+        for (int i = 0; i != 40; i++) {
+            uint8_t c = memory[location + 1 + i];
+            if (c == 0) break;
+            fputc(c, stderr);
+        }
+        fputc('\n', stderr);
+    }
+
+/*
+    FILE* dump_file_ptr = fopen("dump.bin", "wb");
+    if (!dump_file_ptr) {
+        fprintf(stderr, "could not open output file: dump.bin\n");
+        return 1;
+    }
+
+    fwrite(memory, 1, 0x10000, dump_file_ptr);    
+
+    fclose(dump_file_ptr);
+*/
+
+    return exitcode;
 }

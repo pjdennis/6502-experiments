@@ -6,6 +6,8 @@ START ; This is a comment
   LDX# $00 ; another comment
 LOOP
   INX ; and a comment
-  JMP LOOP
+  JMP LOOP ; Comment
 
-  WORD START
+  DATA "A\"\\B"
+  DATA $42 $43
+  DATA START

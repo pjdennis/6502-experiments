@@ -9,4 +9,6 @@ LOOP:
   inx
   jmp LOOP
 
+  .BYTE "A\"\\B"
+  .BYTE $42, $43
   .WORD START
