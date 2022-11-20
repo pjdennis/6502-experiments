@@ -260,9 +260,11 @@ readhex
   ORAZ <TEMP
   RTS
 
+
+; On entry, next character read will be first hex character
 ; On exit C set if 2 bytes read clear if 1 byte read
 grabhex
-  JSR read
+  JSR read             ; Read the "$" character
   JSR readhex
   STAZ <HEX1
   JSR read
@@ -273,6 +275,7 @@ grabhex
 gh_second
   JSR readhex
   STAZ <HEX2
+  JSR read
   SEC
   RTS
 
@@ -297,6 +300,7 @@ eh_one
 ;capturelabel helper
 cl_terminatetable
   ; Skip past rest of table
+  LDAZ <NEXTCHAR
   JSR skiprestofline
   ; Terminate table value
   INY
@@ -313,17 +317,14 @@ cl_hextotable
   BEQ $03              ; BEQ cl_hexvalue
   JMP err_expectedhex
 cl_hexvalue
+  JSR grabhex
+  STAZ <NEXTCHAR
   INY
-  INY
-  JSR read
-  JSR readhex
-  STA(),Y <TABL
-  DEY
-  JSR read
-  JSR readhex
+  LDAZ <HEX2
   STA(),Y <TABL
   INY
-  JSR read
+  LDAZ <HEX1
+  STA(),Y <TABL
   JMP cl_terminatetable
 
 ; capturelabel helper
@@ -335,7 +336,6 @@ cl_pctotable
   INY
   LDAZ <PCH
   STA(),Y <TABL
-  LDAZ <NEXTCHAR
   JMP cl_terminatetable
 
 ; capturelabel
