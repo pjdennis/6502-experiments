@@ -2,13 +2,14 @@ read     = $F006 ; Provided by emulation environment
 write_b  = $F009 ; provided by emulation environment
 
 TEMP     = $0000 ; 1 byte
-VALUE    = $0001 ; 1 byte
-NEXTCHAR = $0002 ; 1 byte
-TABL     = $0003 ; 1 byte
-TABH     = $0004 ; 1 byte
-PCL      = $0005 ; 1 byte
-PCH      = $0006 ; 1 byte
-TOKEN    = $0007 ; multiple bytes
+NEXTCHAR = $0001 ; 1 byte
+TABL     = $0002 ; 1 byte
+TABH     = $0003 ; 1 byte
+PCL      = $0004 ; 1 byte
+PCH      = $0005 ; 1 byte
+HEX1     = $0006 ; 1 byte
+HEX2     = $0007 ; 1 byte
+TOKEN    = $0008 ; multiple bytes
 
 PC_START = $2000
 LBTAB    = $3000
@@ -259,26 +260,37 @@ readhex
   ORAZ <TEMP
   RTS
 
+; On exit C set if 2 bytes read clear if 1 byte read
+grabhex
+  JSR read
+  JSR readhex
+  STAZ <HEX1
+  JSR read
+  JSR cmpendoftoken
+  BNE $02              ; BNE gh_second
+  CLC
+  RTS
+gh_second
+  JSR readhex
+  STAZ <HEX2
+  SEC
+  RTS
+
 
 ; Read 2 to 4 hex characters and emit 1 or 2 bytes
 ; When 2 bytes, emit LSB then MSB
-; Uses VALUE and NEXTCHAR
+; Uses HEX1, HEX2 and NEXTCHAR
 ; On exit A contains next character
 emithex
-  JSR read
-  JSR readhex
-  STAZ <VALUE
-  JSR read
-  JSR cmpendoftoken
-  BEQ $09              ; BEQ eh_last
-  JSR readhex
-  JSR emit             ; write the low byte
-  JSR read
-eh_last
-  STAZ <NEXTCHAR       ; Save next character
-  LDAZ <VALUE
+  JSR grabhex
+  STAZ <NEXTCHAR
+  BCC $05              ; BCS eh_one
+  LDAZ <HEX2
   JSR emit
-  LDAZ <NEXTCHAR       ; Load next character
+eh_one
+  LDAZ <HEX1
+  JSR emit
+  LDAZ <NEXTCHAR
   RTS
 
 
