@@ -15,6 +15,24 @@ LBTAB    = $3000
 ;  .org $2000
 
 
+; Emulation environment surfaces error codes and messages
+err_labelnotfound
+  BRK
+  DATA $01 "Label not found" $00
+
+err_duplicatelabel
+  BRK
+  DATA $02 "Duplicate label" $00
+
+err_opcodenotfound
+  BRK
+  DATA $03 "Opcode not found" $00
+
+err_expectedhex
+  BRK
+  DATA $04 "Expected hex value" $00
+
+
 ; Instruction table
 MNTAB
 ;      Mnemonic          Opcode
@@ -53,24 +71,6 @@ MNTAB
   DATA "TYA"     $00 $00 $98
   DATA "DATA"    $00 $01 $00 ; Directive
   DATA $00
-
-
-; Emulation environment surfaces error codes and messages
-err_labelnotfound
-  BRK
-  DATA $01 "Label not found" $00
-
-err_duplicatelabel
-  BRK
-  DATA $02 "Duplicate label" $00
-
-err_opcodenotfound
-  BRK
-  DATA $03 "Opcode not found" $00
-
-err_expectedhex
-  BRK
-  DATA $04 "Expected hex value" $00
 
 
 emit
@@ -209,6 +209,7 @@ fit_nextsymbol         ; move to next symbol in table
   JMP findintab        ; outer loop
 
 
+; On exit TEMP contains the next character
 readandfindlabel
   JSR readtoken
   LDA# <LBTAB
@@ -218,6 +219,7 @@ readandfindlabel
   JMP findintab        ; Tail call
 
 
+; On exit TEMP contains the next character
 readandfindexistinglabel
   JSR readandfindlabel
   BCS $01              ; BCC rafel_notfound
@@ -257,13 +259,50 @@ readhex
   RTS
 
 
-hextotable
+; Read 2 to 4 hex characters and emit 1 or 2 bytes
+; When 2 bytes, emit LSB then MSB
+; Uses TEMP and TEMP2
+; On exit A contains next character
+emithex
   JSR read
+  JSR readhex
+  STAZ <TEMP2
+  JSR read
+  JSR cmpendoftoken
+  BEQ $09              ; BEQ eh_last
+  JSR readhex
+  JSR emit             ; write the low byte
+  JSR read
+eh_last
+  STAZ <TEMP           ; Save next character
+  LDAZ <TEMP2
+  JSR emit
+  LDAZ <TEMP           ; Load next character
+  RTS
+
+
+;capturelabel helper
+cl_terminatetable
+  ; Skip past rest of table
+  CMP# "\n"
+  BEQ $03              ; BEQ cl_done
+  JSR skiprestofline
+cl_done
+  ; Terminate table value
+  INY
+  LDA# $00
+  STA(),Y <TABL
+  LDY# $00             ; restore Y register
+  RTS
+
+;capturelabel helper
+cl_hextotable
+  JSR read             ; Read the "=" character
   JSR skipspaces
   CMP# "$"
-  BEQ $03              ; BEQ htt_hexvalue
+  BEQ $03              ; BEQ cl_hexvalue
   JMP err_expectedhex
-htt_hexvalue
+cl_hexvalue
   INY
   INY
   JSR read
@@ -274,15 +313,22 @@ htt_hexvalue
   JSR readhex
   STA(),Y <TABL
   INY
-  INY  
-  LDA# $00
-  STA(),Y <TABL
-  LDY# $00
   JSR read
+  JMP cl_terminatetable
+
+; capturelabel helper
+cl_pctotable
   STAZ <TEMP
-  RTS
+  INY
+  LDAZ <PCL
+  STA(),Y <TABL
+  INY
+  LDAZ <PCH
+  STA(),Y <TABL
+  LDAZ <TEMP
+  JMP cl_terminatetable
 
-
+; capturelabel
 capturelabel
   JSR readandfindlabel
   BCS $03              ; BCS cl_notfound
@@ -291,41 +337,21 @@ cl_notfound
 cl_loop                ; Copy TOKEN to table
   LDA,Y TOKEN
   STA(),Y <TABL
-  BEQ $04              ; BEQ cl_done
+  BEQ $04              ; BEQ cl_copyvalue
   INY
   JMP cl_loop
-cl_done                ; Copy value or PC value to table
+cl_copyvalue           ; Copy value or PC value to table
   LDAZ <TEMP
   JSR skipspaces
   CMP# "="
   BNE $03              ; BNE cl_copypc
-  JMP hextotable
+  JMP cl_hextotable
 cl_copypc
-  STAZ <TEMP
-  INY
-  LDAZ <PCL
-  STA(),Y <TABL
-  INY
-  LDAZ <PCH
-  STA(),Y <TABL
-  INY                  ; Terminate table value
-  LDA# $00
-  STA(),Y <TABL
-  LDY# $00             ; restore Y register
-  RTS
-
-
-readlabel
-  JSR capturelabel
-  LDAZ <TEMP
-  CMP# "\n"
-  BEQ $03              ; BEQ rl_done
-  JSR skiprestofline
-rl_done
-  RTS
+  JMP cl_pctotable
 
 
 ; emit the opcode
+; On exit TEMP contains the next character
 emitopcode
   LDA# <MNTAB
   STAZ <TABL
@@ -365,55 +391,39 @@ eq_notescaped
   JMP emitquoted
 
 
-; Read 2 to 4 hex characters and emit 1 or 2 bytes
-; When 2 bytes, emit LSB then MSB
-; Uses TEMP and TEMP2
-; On exit A contains next character after hex
-emithex
-  JSR read
-  JSR readhex
-  STAZ <TEMP2
-  JSR read
-  JSR cmpendoftoken
-  BEQ $09              ; BEQ eh_last
-  JSR readhex
-  JSR emit             ; write the low byte
-  JSR read
-eh_last
-  STAZ <TEMP
-  LDAZ <TEMP2
-  JSR emit
-  LDAZ <TEMP
-  RTS
-
-
+; On exit A contains the next character
 emitlabel
   JSR readandfindexistinglabel
+  ; Emit low byte then high byte from table
   LDA(),Y <TABL
   JSR emit
   INY
   LDA(),Y <TABL
   DEY
   JSR emit
-  LDAZ <TEMP
+  LDAZ <TEMP           ; Load next character
   RTS
 
 
+; On exit A contains the next character
 emitlabellsb
   JSR readandfindexistinglabel
+  ; Emit low byte
   LDA(),Y <TABL
   JSR emit
-  LDAZ <TEMP
+  LDAZ <TEMP           ; Load next character
   RTS
 
 
+; On exit A contains the next character
 emitlabelmsb
   JSR readandfindexistinglabel
+  ; Emit high byte
   INY
   LDA(),Y <TABL
   DEY
   JSR emit
-  LDAZ <TEMP
+  LDAZ <TEMP           ; Load next character
   RTS
 
 
@@ -429,7 +439,7 @@ lnloop1
 lnloop2
   CMP# " "
   BEQ $06              ; BEQ lnloop3
-  JSR readlabel
+  JSR capturelabel
   JMP lnloop
 lnloop3
   JSR skipspaces
