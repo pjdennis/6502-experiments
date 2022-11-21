@@ -505,7 +505,6 @@ tokloop5
 ; Entry point
 start
   LDA# $00
-  TYA                  ; A <- 0
   STAZ <PCL
   STAZ <PCH
   STA LBTAB
