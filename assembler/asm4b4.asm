@@ -372,7 +372,7 @@ cl_hextotable
 
 
 ; Emit the opcode
-; On exit NEXTCHAR contains the next character
+; On exit A contains the next character
 emitopcode
   JSR readtoken
   LDA# <MNTAB
