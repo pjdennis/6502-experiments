@@ -172,9 +172,9 @@ advanceintab
 
 ; On entry TOKEN contains token to find
 ;          TAB;TAB+1 points to table
-;          Y = 0
+;          Y must equal 0
 ; On exit C clear if found; set if not found
-;         TAB;TAB+1 points to token value if found
+;         TABL;TABH points to token value if found
 ;                   or to end of table if not found
 ;         Y = 0
 ;         A is not preserved
@@ -211,9 +211,14 @@ fit_nextsymbol         ; move to next symbol in table
   JMP findintab        ; outer loop
 
 
-; On exit NEXTCHAR contains the next character
-readandfindlabel
-  JSR readtoken
+; On entry TOKEN contains a label
+;          Y must equal 0
+; On exit C clear if found; set if not found
+;         TABL;TABH points to token value if found
+;                   or to end of table if not found
+;         Y = 0
+;         A is not preserved
+findlabel
   LDA# <LBTAB
   STAZ <TABL
   LDA# >LBTAB
@@ -223,7 +228,8 @@ readandfindlabel
 
 ; On exit NEXTCHAR contains the next character
 readandfindexistinglabel
-  JSR readandfindlabel
+  JSR readtoken
+  JSR findlabel
   BCS $01              ; BCC rafel_notfound
   RTS
 rafel_notfound
@@ -263,8 +269,9 @@ readhex
 
 ; On entry, next character read will be first hex character
 ; On exit C set if 2 bytes read clear if 1 byte read
+;         A contains the next character
 grabhex
-  JSR read             ; Read the "$" character
+  JSR read             ; Read the first hex character
   JSR readhex
   STAZ <HEX1
   JSR read
@@ -297,50 +304,36 @@ eh_one
   RTS
 
 
-;capturelabel helper
-cl_terminatetable
-  ; Skip past rest of table
-  LDAZ <NEXTCHAR
-  JSR skiprestofline
-  ; Terminate table value
-  INY
-  LDA# $00
-  STA(),Y <TABL
-  LDY# $00             ; restore Y register
+; On exit C set if value read; clear otherwise
+readvalue
+  JSR skipspaces
+  CMP# "="
+  BEQ $02              ; BNE rv_value
+  CLC
   RTS
-
-;capturelabel helper
-cl_hextotable
-  JSR read             ; Read the "=" character
+rv_value
+  JSR read             ; Read the character after the "="
   JSR skipspaces
   CMP# "$"
-  BEQ $03              ; BEQ cl_hexvalue
+  BEQ $03              ; BEQ rv_hexvalue
   JMP err_expectedhex
-cl_hexvalue
-  JSR grabhex
-  STAZ <NEXTCHAR
-  INY
-  LDAZ <HEX2
-  STA(),Y <TABL
-  INY
-  LDAZ <HEX1
-  STA(),Y <TABL
-  JMP cl_terminatetable
+rv_hexvalue
+  JMP grabhex          ; Tail call
 
-; capturelabel helper
-cl_pctotable
-  STAZ <NEXTCHAR
-  INY
-  LDAZ <PCL
-  STA(),Y <TABL
-  INY
-  LDAZ <PCH
-  STA(),Y <TABL
-  JMP cl_terminatetable
+
+cl_setpc
+  BRK
+  DATA $42 "TODO" $00
 
 ; capturelabel
 capturelabel
-  JSR readandfindlabel
+  JSR readtoken
+  LDAZ <TOKEN
+  CMP# "*"
+  BNE $03              ; BNE cl_normallabel
+  JMP cl_setpc
+cl_normallabel
+  JSR findlabel
   BCS $03              ; BCS cl_notfound
   JMP err_duplicatelabel
 cl_notfound
@@ -352,12 +345,30 @@ cl_loop                ; Copy TOKEN to table
   JMP cl_loop
 cl_copyvalue           ; Copy value or PC value to table
   LDAZ <NEXTCHAR
-  JSR skipspaces
-  CMP# "="
-  BNE $03              ; BNE cl_copypc
-  JMP cl_hextotable
-cl_copypc
-  JMP cl_pctotable
+  JSR readvalue
+  STAZ <NEXTCHAR
+  BCS $08              ; BNE cl_hextotable
+  ; Store program counter
+  LDAZ <PCL
+  STAZ <HEX2
+  LDAZ <PCH
+  STAZ <HEX1
+cl_hextotable
+  INY
+  LDAZ <HEX2
+  STA(),Y <TABL
+  INY
+  LDAZ <HEX1
+  STA(),Y <TABL
+  ; Skip past rest of table
+  LDAZ <NEXTCHAR
+  JSR skiprestofline
+  ; Terminate table value
+  INY
+  LDA# $00
+  STA(),Y <TABL
+  LDY# $00             ; restore Y register
+  RTS
 
 
 ; emit the opcode
