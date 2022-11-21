@@ -380,6 +380,7 @@ cl_hextotable
 ; emit the opcode
 ; On exit NEXTCHAR contains the next character
 emitopcode
+  JSR readtoken
   LDA# <MNTAB
   STAZ <TABL
   LDA# >MNTAB
@@ -475,7 +476,6 @@ lnloop3
   JMP lnloop
 lnloop4
 ; Read mnemonic and emit opcode
-  JSR readtoken
   JSR emitopcode
   LDAZ <NEXTCHAR
 tokloop
