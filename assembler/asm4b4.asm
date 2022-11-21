@@ -18,20 +18,16 @@ LBTAB    = $3000
 
 ; Emulation environment surfaces error codes and messages
 err_labelnotfound
-  BRK
-  DATA $01 "Label not found" $00
+  BRK $01 "Label not found" $00
 
 err_duplicatelabel
-  BRK
-  DATA $02 "Duplicate label" $00
+  BRK $02 "Duplicate label" $00
 
 err_opcodenotfound
-  BRK
-  DATA $03 "Opcode not found" $00
+  BRK $03 "Opcode not found" $00
 
 err_expectedhex
-  BRK
-  DATA $04 "Expected hex value" $00
+  BRK $04 "Expected hex value" $00
 
 
 ; Instruction table
@@ -518,8 +514,7 @@ start
   STAZ <PCH
   STA LBTAB
   JSR assemble
-  BRK
-  DATA $00 ; Success
+  BRK $00              ; Success
 
 
   DATA start ; Emulation environment jumps here
