@@ -11,10 +11,9 @@ HEX1     = $0006 ; 1 byte
 HEX2     = $0007 ; 1 byte
 TOKEN    = $0008 ; multiple bytes
 
-PC_START = $2000
 LBTAB    = $3000
 
-;  .org $2000
+*        = $2000 ; .org $2000
 
 
 ; Emulation environment surfaces error codes and messages
@@ -513,12 +512,10 @@ tokloop5
 
 
 start
-  LDA# <PC_START
-  STAZ <PCL
-  LDA# >PC_START
-  STAZ <PCH
   LDY# $00             ; Y remains 0 (for indirect addressing)
   TYA                  ; A <- 0
+  STAZ <PCL
+  STAZ <PCH
   STA LBTAB
   JSR assemble
   BRK
