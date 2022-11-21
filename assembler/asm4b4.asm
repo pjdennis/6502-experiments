@@ -207,7 +207,6 @@ fit_nextsymbol         ; Move to next symbol in table
 
 
 ; On entry TOKEN contains a label
-;          Y must equal 0
 ; On exit C clear if found; set if not found
 ;         TABL;TABH points to token value if found
 ;                   or to end of table if not found
