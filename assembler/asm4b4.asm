@@ -1,5 +1,5 @@
 read     = $F006 ; Provided by emulation environment
-write_b  = $F009 ; provided by emulation environment
+write_b  = $F009 ; Provided by emulation environment
 
 TEMP     = $0000 ; 1 byte
 NEXTCHAR = $0001 ; 1 byte
@@ -73,9 +73,9 @@ MNTAB
 emit
   JSR write_b
   INCZ <PCL
-  BNE $02              ; BNE emitdone
+  BNE $02              ; BNE emit_done
   INCZ <PCH
-emitdone
+emit_done
   RTS
 
 
@@ -127,10 +127,9 @@ cfe_end
 
 
 ; On entry A contains first character of token
-;          Y = 0
 ; Reads token into TOKEN (zero terminated)
 ; On exit NEXTCHAR contains next character after token
-;         Y = 0
+;         Y is preserved
 ;         A, X are not preserved
 readtoken
   LDX# $00
@@ -149,7 +148,7 @@ rt_done
 
 
 ; On entry Y contains offset into TAB
-; On exit TAB;TAB+1 += Y
+; On exit TABL;TABH += Y + 1
 ;         Y = 0
 ;         A is not preserved
 advanceintab
@@ -166,16 +165,17 @@ advanceintab
 
 
 ; On entry TOKEN contains token to find
-;          TAB;TAB+1 points to table
-;          Y must equal 0
+;          TABL;TABH points to table
 ; On exit C clear if found; set if not found
 ;         TABL;TABH points to token value if found
 ;                   or to end of table if not found
 ;         Y = 0
 ;         A is not preserved
-findintab              ; outer loop
+findintab
+  LDY# $00
+fit_tokenloop          ; Outer loop
   LDA(),Y <TABL
-  BNE $02              ; BNE findintab2
+  BNE $02              ; BNE fit_charloop
   ; not found
   SEC
   RTS
@@ -190,24 +190,23 @@ fit_charloop           ; inner loop
   JSR advanceintab
   CLC
   RTS
-fit_nextchar           ; move to next char
+fit_nextchar           ; Move to next char
   INY
   LDA(),Y <TABL
-  JMP fit_charloop     ; inner loop
-fit_skipcurrent        ; skip current symbol in table
+  JMP fit_charloop     ; Inner loop
+fit_skipcurrent        ; Skip current symbol in table
   LDA(),Y <TABL
   BEQ $04              ; BEQ fit_nextsymbol ; done skipping
   INY
   JMP fit_skipcurrent
-fit_nextsymbol         ; move to next symbol in table
-  INY                  ; move past 2 data bytes
+fit_nextsymbol         ; Move to next symbol in table
+  INY                  ; Move past 2 data bytes
   INY
   JSR advanceintab
-  JMP findintab        ; outer loop
+  JMP fit_tokenloop    ; Outer loop
 
 
 ; On entry TOKEN contains a label
-;          Y must equal 0
 ; On exit C clear if found; set if not found
 ;         TABL;TABH points to token value if found
 ;                   or to end of table if not found
@@ -225,7 +224,7 @@ findlabel
 readandfindexistinglabel
   JSR readtoken
   JSR findlabel
-  BCS $01              ; BCC rafel_notfound
+  BCS $01              ; BCS rafel_notfound
   RTS
 rafel_notfound
   JMP err_labelnotfound
@@ -289,7 +288,7 @@ gh_second
 emithex
   JSR grabhex
   STAZ <NEXTCHAR
-  BCC $05              ; BCS eh_one
+  BCC $05              ; BCC eh_one
   LDAZ <HEX2
   JSR emit
 eh_one
@@ -298,9 +297,10 @@ eh_one
   LDAZ <NEXTCHAR
   RTS
 
-
+; On entry NEXTCHAR contains the next character
 ; On exit C set if value read; clear otherwise
 readvalue
+  LDAZ <NEXTCHAR
   JSR skipspaces
   CMP# "="
   BEQ $02              ; BNE rv_value
@@ -318,7 +318,6 @@ rv_hexvalue
 
 ; capturelabel helper
 cl_setpc
-  LDAZ <NEXTCHAR
   JSR readvalue
   JSR skiprestofline
   LDAZ <HEX2
@@ -346,10 +345,9 @@ cl_loop                ; Copy TOKEN to table
   INY
   JMP cl_loop
 cl_copyvalue           ; Copy value or PC value to table
-  LDAZ <NEXTCHAR
   JSR readvalue
   STAZ <NEXTCHAR
-  BCS $08              ; BNE cl_hextotable
+  BCS $08              ; BCS cl_hextotable
   ; Store program counter
   LDAZ <PCL
   STAZ <HEX2
@@ -369,12 +367,11 @@ cl_hextotable
   INY
   LDA# $00
   STA(),Y <TABL
-  LDY# $00             ; restore Y register
   RTS
 
 
-; emit the opcode
-; On exit NEXTCHAR contains the next character
+; Emit the opcode
+; On exit A contains the next character
 emitopcode
   JSR readtoken
   LDA# <MNTAB
@@ -386,17 +383,17 @@ emitopcode
   JMP err_opcodenotfound
 eo_found
   LDA(),Y <TABL
-  BEQ $01              ; BEQ eo_opcode
-  RTS                  ; Not opcode (DATA command)
-eo_opcode
+  BNE $06              ; BNE eo_done ; Not opcode (DATA command)
+  ; Opcode
   INY
   LDA(),Y <TABL
-  DEY
   JSR emit
+eo_done
+  LDAZ <NEXTCHAR
   RTS
 
 
-; read and emit quoted ASCII
+; Read and emit quoted ASCII
 emitquoted
   JSR read
   CMP# "\""
@@ -423,7 +420,6 @@ emitlabel
   JSR emit
   INY
   LDA(),Y <TABL
-  DEY
   JSR emit
   LDAZ <NEXTCHAR       ; Load next character
   RTS
@@ -445,17 +441,17 @@ emitlabelmsb
   ; Emit high byte
   INY
   LDA(),Y <TABL
-  DEY
   JSR emit
   LDAZ <NEXTCHAR       ; Load next character
   RTS
 
 
+; Main assembler
 assemble
 lnloop
   JSR read
   BCC $01              ; BCC lnloop1
-  RTS                  ; at end of input
+  RTS                  ; At end of input
 lnloop1
   JSR checkforend
   BCC $03              ; BCC lnloop2
@@ -473,12 +469,11 @@ lnloop3
 lnloop4
 ; Read mnemonic and emit opcode
   JSR emitopcode
-  LDAZ <NEXTCHAR
 tokloop
   JSR skipspaces
   JSR checkforend
   BCC $03              ; BCC tokloop1
-  JMP lnloop           ; end of line
+  JMP lnloop           ; End of line
 tokloop1
   CMP# "\""
   BNE $06              ; BNE tokloop2
@@ -506,10 +501,9 @@ tokloop5
   JSR emitlabel
   JMP tokloop
 
-
+; Entry point
 start
-  LDY# $00             ; Y remains 0 (for indirect addressing)
-  TYA                  ; A <- 0
+  LDA# $00
   STAZ <PCL
   STAZ <PCH
   STA LBTAB
