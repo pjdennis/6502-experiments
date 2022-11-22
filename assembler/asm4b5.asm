@@ -1,23 +1,29 @@
-read     = $F006 ; Provided by emulation environment
-write_b  = $F009 ; Provided by emulation environment
+; Provided by environment:
+;   read:    Returns next character in A
+;            C set when at end
+;            Automatically restarts input after reaching end
+;
+;   write_b: Writes A to output
+read     = $F006
+write_b  = $F009
 
-TEMP     = $0000 ; 1 byte
-NEXTCHAR = $0001 ; 1 byte
-TABL     = $0002 ; 1 byte
-TABH     = $0003 ; 1 byte
-PCL      = $0004 ; 1 byte
-PCH      = $0005 ; 1 byte
-HEX1     = $0006 ; 1 byte
-HEX2     = $0007 ; 1 byte
-PASS     = $0008 ; 1 byte $00 = pass1 $FF = pass2
-TOKEN    = $0009 ; multiple bytes
+TEMP     = $0000       ; 1 byte
+NEXTCHAR = $0001       ; 1 byte
+TABL     = $0002       ; 1 byte
+TABH     = $0003       ; 1 byte
+PCL      = $0004       ; 1 byte
+PCH      = $0005       ; 1 byte
+HEX1     = $0006       ; 1 byte
+HEX2     = $0007       ; 1 byte
+PASS     = $0008       ; 1 byte $00 = pass1 $FF = pass2
+TOKEN    = $0009       ; multiple bytes
 
-LBTAB    = $3000
+;LBTAB    = $3000
 
-*        = $2000 ; .org $2000
+*        = $2000       ; Set PC
 
 
-; Emulation environment surfaces error codes and messages
+; Environment should surface error codes and messages upon BRK
 err_labelnotfound
   BRK $01 "Label not found" $00
 
@@ -77,7 +83,7 @@ MNTAB
 
 emit
   BITZ <PASS
-  BPL ~emit_incpc
+  BPL ~emit_incpc      ; Skip writing during pass 1
   JSR write_b
 emit_incpc
   INCZ <PCL
@@ -235,17 +241,19 @@ readandfindexistinglabel
   JSR readtoken
   BITZ <PASS
   BMI ~rafel_pass2
-  LDA# $00
-  STAZ <TABL
-  STAZ <TABH
-  CLC
+  ; Pass 1
   RTS
 rafel_pass2
   JSR findlabel
-  BCS ~rafel_notfound
-  RTS
-rafel_notfound
+  BCC ~rafel_found
   JMP err_labelnotfound
+rafel_found
+  LDA(),Y <TABL
+  STAZ <HEX2
+  INY
+  LDA(),Y <TABL
+  STAZ <HEX1
+  RTS
 
 
 ; On entry, A contains a hex character A-Z|0-9
@@ -354,6 +362,7 @@ capturelabel
 cl_normallabel
   BITZ <PASS
   BPL ~cl_pass1
+  ; Pass 2 - don't capture
   LDAZ <NEXTCHAR
   JMP skiprestofline   ; Tail call
 cl_pass1
@@ -439,10 +448,9 @@ eq_notescaped
 emitlabel
   JSR readandfindexistinglabel
   ; Emit low byte then high byte from table
-  LDA(),Y <TABL
+  LDAZ <HEX2
   JSR emit
-  INY
-  LDA(),Y <TABL
+  LDAZ <HEX1
   JSR emit
   LDAZ <NEXTCHAR       ; Load next character
   RTS
@@ -452,7 +460,7 @@ emitlabel
 emitlabellsb
   JSR readandfindexistinglabel
   ; Emit low byte
-  LDA(),Y <TABL
+  LDAZ <HEX2
   JSR emit
   LDAZ <NEXTCHAR       ; Load next character
   RTS
@@ -462,16 +470,16 @@ emitlabellsb
 emitlabelmsb
   JSR readandfindexistinglabel
   ; Emit high byte
-  INY
-  LDA(),Y <TABL
+  LDAZ <HEX1
   JSR emit
   LDAZ <NEXTCHAR       ; Load next character
   RTS
 
 
 emitlabelrel
-  BITZ <PASS           ; <PASS
+  BITZ <PASS
   BMI ~elr_pass2
+  ; Pass 1
   JSR readtoken
   JSR emit
   LDAZ <NEXTCHAR
@@ -480,7 +488,7 @@ elr_pass2
   JSR readandfindexistinglabel
   ; Calculate target - PC - 1
   CLC ; for the - 1
-  LDA(),Y <TABL
+  LDAZ <HEX2
   SBCZ <PCL
   JSR emit
   LDAZ <NEXTCHAR
@@ -516,36 +524,35 @@ tokloop
   BCC ~tokloop1
   JMP lnloop           ; End of line
 tokloop1
-  CMP# "\""
+  CMP# "\""            ; Quoted string
   BNE ~tokloop2
   JSR emitquoted
   JMP tokloop
 tokloop2
-  CMP# "$"
+  CMP# "$"             ; 1 or 2 byte hex
   BNE ~tokloop3
   JSR emithex
   JMP tokloop
 tokloop3
-  CMP# "<"
+  CMP# "<"             ; LSB of variable
   BNE ~tokloop4
   JSR read
   JSR emitlabellsb
   JMP tokloop
 tokloop4
-  CMP# ">"
+  CMP# ">"             ; MSB of variable
   BNE ~tokloop5
   JSR read
   JSR emitlabelmsb
   JMP tokloop
 tokloop5
-  CMP# "~"
+  CMP# "~"             ; Relative address
   BNE ~tokloop6
   JSR read
   JSR emitlabelrel
   JMP tokloop
 tokloop6
-  ; label
-  JSR emitlabel
+  JSR emitlabel        ; 2 byte variable
   JMP tokloop
 
 ; Entry point
@@ -554,15 +561,18 @@ start
   STAZ <PCL
   STAZ <PCH
   STA LBTAB
-  STAZ <PASS
+  STAZ <PASS           ; Bit 7 = 0 (pass 1)
   JSR assemble
   LDA# $00
   STAZ <PCL
   STAZ <PCH
   LDA# $FF
-  STAZ <PASS
+  STAZ <PASS           ; Bit 7 = 1 (pass 2)
   JSR assemble
   BRK $00              ; Success
 
 
-  DATA start ; Emulation environment jumps here
+LBTAB                  ; Labels table comes after code
+
+
+  DATA start ; Emulation environment jumps to address in last 2 bytes
