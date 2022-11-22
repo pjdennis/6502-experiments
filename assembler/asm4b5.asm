@@ -17,6 +17,9 @@ LBTAB    = $3000
 *        = $2000 ; .org $2000
 
 
+  JMP foo
+foo
+
 ; Emulation environment surfaces error codes and messages
 err_labelnotfound
   BRK $01 "Label not found" $00

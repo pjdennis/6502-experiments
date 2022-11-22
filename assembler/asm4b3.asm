@@ -44,7 +44,10 @@ MNTAB
   DATA "BCC"     $00 $00 $90
   DATA "BCS"     $00 $00 $B0
   DATA "BEQ"     $00 $00 $F0
+  DATA "BITZ"    $00 $00 $24
+  DATA "BMI"     $00 $00 $30
   DATA "BNE"     $00 $00 $D0
+  DATA "BPL"     $00 $00 $10
   DATA "BRK"     $00 $00 $00
   DATA "CLC"     $00 $00 $18
   DATA "CMPZ,X"  $00 $00 $D5

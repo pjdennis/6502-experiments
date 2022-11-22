@@ -992,10 +992,12 @@ uint8_t read6502(uint16_t address) {
             fputc(b, stderr);
         }
 */
-        return (b == EOF) ? 4 : b;
-    }
-    if (address == 0xf005) {
-        return feof(input_file_ptr) ? 0xff : 0;
+        if (b == EOF) {
+            b = 4;
+            fseek(input_file_ptr, 0, SEEK_SET);
+        }
+
+        return b;
     }
     if (address == 0xfffe) {
         done = 1;
@@ -1082,7 +1084,7 @@ int main(int argc, char **argv) {
     }
 
     reset6502();
-    const int max_cycles = 4000000;
+    const int max_cycles = 6000000;
     while (!done) {
         step6502();
         if (clockticks6502 > max_cycles) {

@@ -6,7 +6,8 @@ gcc -o emulator.out emulator.c &&
   ./emulator.out asm4b.out 2000 asm4b2.asm asm4b2.out &&
   ./emulator.out asm4b2.out 2000 asm4b3.asm asm4b3.out &&
   ./emulator.out asm4b3.out 2000 asm4b4.asm asm4b4.out &&
-  ./emulator.out asm4b4.out 2000 asm4b4.asm asm4b4_2.out &&
-  diff <(hexdump -C asm4b4.out) <(hexdump -C asm4b4_2.out) &&
-  hexdump -C asm4b3_2.out &&
+  ./emulator.out asm4b4.out 2000 asm4b5.asm asm4b5.out &&
+  ./emulator.out asm4b5.out 2000 asm4b5.asm asm4b5_2.out &&
+  diff <(hexdump -C asm4b5.out) <(hexdump -C asm4b5_2.out) &&
+  hexdump -C asm4b5_2.out &&
   echo "OK"
