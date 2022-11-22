@@ -17,9 +17,6 @@ LBTAB    = $3000
 *        = $2000 ; .org $2000
 
 
-  JMP foo
-foo
-
 ; Emulation environment surfaces error codes and messages
 err_labelnotfound
   BRK $01 "Label not found" $00
@@ -67,6 +64,7 @@ MNTAB
   DATA "ORAZ"    $00 $00 $05
   DATA "RTS"     $00 $00 $60
   DATA "SBC#"    $00 $00 $E9
+  DATA "SBCZ"    $00 $00 $E5
   DATA "SEC"     $00 $00 $38
   DATA "STA"     $00 $00 $8D
   DATA "STA(),Y" $00 $00 $91
@@ -79,11 +77,11 @@ MNTAB
 
 emit
   BITZ <PASS
-  BPL $03              ; BVC emit_incpc
+  BPL ~emit_incpc
   JSR write_b
 emit_incpc
   INCZ <PCL
-  BNE $02              ; BNE emit_done
+  BNE ~emit_done
   INCZ <PCH
 emit_done
   RTS
@@ -91,7 +89,7 @@ emit_done
 
 skiprestofline
   CMP# "\n"
-  BEQ $06              ; BNE srol_done
+  BEQ ~srol_done
   JSR read
   JMP skiprestofline
 srol_done
@@ -100,7 +98,7 @@ srol_done
 
 skipspaces
   CMP# " "
-  BNE $06              ; BNE ss_done
+  BNE ~ss_done
   JSR read
   JMP skipspaces
 ss_done
@@ -109,11 +107,13 @@ ss_done
 
 cmpendoftoken
   CMP# " "
-  BNE $01
+  BNE ~ceof_notspace 
   RTS
+ceof_notspace
   CMP# "\n"
-  BNE $01
+  BNE ~ceof_notnewline
   RTS
+ceof_notnewline
   CMP# ";"
   RTS
 
@@ -124,9 +124,9 @@ cmpendoftoken
 ;         A contains next character
 checkforend
   CMP# ";"
-  BEQ $06              ; BEQ cfe_end
+  BEQ ~cfe_end
   CMP# "\n"
-  BEQ $02              ; BEQ cfe_end
+  BEQ ~cfe_end
   ; Not at end
   CLC
   RTS
@@ -148,7 +148,7 @@ readtokenloop
   INX
   JSR read
   JSR cmpendoftoken
-  BEQ $03              ; BEQ rt_done
+  BEQ ~rt_done
   JMP readtokenloop
 rt_done
   STAZ <NEXTCHAR
@@ -185,7 +185,7 @@ findintab
   LDY# $00
 fit_tokenloop          ; Outer loop
   LDA(),Y <TABL
-  BNE $02              ; BNE fit_charloop
+  BNE ~fit_charloop
   ; not found
   SEC
   RTS
@@ -193,9 +193,9 @@ fit_tokenloop          ; Outer loop
 ; first char of mnenomic in table loaded
 fit_charloop           ; inner loop
   CMP,Y TOKEN
-  BNE $0F              ; BNE fit_skipcurrent ; not a match
+  BNE ~fit_skipcurrent
   CMP# $00
-  BNE $05              ; BNE fit_nextchar ; partial match so far
+  BNE ~fit_nextchar
   ; found a match
   JSR advanceintab
   CLC
@@ -206,7 +206,7 @@ fit_nextchar           ; Move to next char
   JMP fit_charloop     ; Inner loop
 fit_skipcurrent        ; Skip current symbol in table
   LDA(),Y <TABL
-  BEQ $04              ; BEQ fit_nextsymbol ; done skipping
+  BEQ ~fit_nextsymbol
   INY
   JMP fit_skipcurrent
 fit_nextsymbol         ; Move to next symbol in table
@@ -234,7 +234,7 @@ findlabel
 readandfindexistinglabel
   JSR readtoken
   BITZ <PASS
-  BMI $08              ; rafel_pass2
+  BMI ~rafel_pass2
   LDA# $00
   STAZ <TABL
   STAZ <TABH
@@ -242,7 +242,7 @@ readandfindexistinglabel
   RTS
 rafel_pass2
   JSR findlabel
-  BCS $01              ; BCS rafel_notfound
+  BCS ~rafel_notfound
   RTS
 rafel_notfound
   JMP err_labelnotfound
@@ -252,7 +252,7 @@ rafel_notfound
 ; On exit A contains the value (0-15)
 convhex
   CMP# "A"
-  BCC $06              ; BCC ch_numeric ; < 'A'
+  BCC ~ch_numeric      ; < 'A'
   SBC# "A"             ; Carry already set
   CLC
   ADC# $0A             ; ADC# 10
@@ -288,7 +288,7 @@ grabhex
   STAZ <HEX1
   JSR read
   JSR cmpendoftoken
-  BNE $02              ; BNE gh_second
+  BNE ~gh_second
   CLC
   RTS
 gh_second
@@ -306,7 +306,7 @@ gh_second
 emithex
   JSR grabhex
   STAZ <NEXTCHAR
-  BCC $05              ; BCC eh_one
+  BCC ~eh_one
   LDAZ <HEX2
   JSR emit
 eh_one
@@ -321,14 +321,14 @@ readvalue
   LDAZ <NEXTCHAR
   JSR skipspaces
   CMP# "="
-  BEQ $02              ; BNE rv_value
+  BEQ ~rv_value
   CLC
   RTS
 rv_value
   JSR read             ; Read the character after the "="
   JSR skipspaces
   CMP# "$"
-  BEQ $03              ; BEQ rv_hexvalue
+  BEQ ~rv_hexvalue
   JMP err_expectedhex
 rv_hexvalue
   JMP grabhex          ; Tail call
@@ -349,28 +349,28 @@ capturelabel
   JSR readtoken
   LDAZ <TOKEN
   CMP# "*"
-  BNE $03              ; BNE cl_normallabel
+  BNE ~cl_normallabel
   JMP cl_setpc
 cl_normallabel
   BITZ <PASS
-  BPL $05              ; BPL cl_pass1
+  BPL ~cl_pass1
   LDAZ <NEXTCHAR
   JMP skiprestofline   ; Tail call
 cl_pass1
   JSR findlabel
-  BCS $03              ; BCS cl_notfound
+  BCS ~cl_notfound
   JMP err_duplicatelabel
 cl_notfound
 cl_loop                ; Copy TOKEN to table
   LDA,Y TOKEN
   STA(),Y <TABL
-  BEQ $04              ; BEQ cl_copyvalue
+  BEQ ~cl_copyvalue
   INY
   JMP cl_loop
 cl_copyvalue           ; Copy value or PC value to table
   JSR readvalue
   STAZ <NEXTCHAR
-  BCS $08              ; BCS cl_hextotable
+  BCS ~cl_hextotable
   ; Store program counter
   LDAZ <PCL
   STAZ <HEX2
@@ -402,11 +402,11 @@ emitopcode
   LDA# >MNTAB
   STAZ <TABH
   JSR findintab
-  BCC $03              ; BCC eo_found
+  BCC ~eo_found
   JMP err_opcodenotfound
 eo_found
   LDA(),Y <TABL
-  BNE $06              ; BNE eo_done ; Not opcode (DATA command)
+  BNE ~eo_done         ; Not opcode (DATA command)
   ; Opcode
   INY
   LDA(),Y <TABL
@@ -420,15 +420,15 @@ eo_done
 emitquoted
   JSR read
   CMP# "\""
-  BNE $04              ; BNE eq_notdone
+  BNE ~eq_notdone
   JSR read             ; Done; read next char
   RTS
 eq_notdone
   CMP# "\\"
-  BNE $09              ; BNE eq_notescaped
+  BNE ~eq_notescaped
   JSR read
   CMP# "n"
-  BNE $02              ; BNE eq_notescaped
+  BNE ~eq_notescaped
   LDA# "\n"            ; Escaped "n" is linefeed
 eq_notescaped
   JSR emit
@@ -469,25 +469,43 @@ emitlabelmsb
   RTS
 
 
+emitlabelrel
+  BITZ <PASS           ; <PASS
+  BMI ~elr_pass2
+  JSR readtoken
+  JSR emit
+  LDAZ <NEXTCHAR
+  RTS
+elr_pass2
+  JSR readandfindexistinglabel
+  ; Calculate target - PC - 1
+  CLC ; for the - 1
+  LDA(),Y <TABL
+  SBCZ <PCL
+  JSR emit
+  LDAZ <NEXTCHAR
+  RTS
+
+
 ; Main assembler
 assemble
 lnloop
   JSR read
-  BCC $01              ; BCC lnloop1
+  BCC ~lnloop1
   RTS                  ; At end of input
 lnloop1
   JSR checkforend
-  BCC $03              ; BCC lnloop2
+  BCC ~lnloop2
   JMP lnloop
 lnloop2
   CMP# " "
-  BEQ $06              ; BEQ lnloop3
+  BEQ ~lnloop3
   JSR capturelabel
   JMP lnloop
 lnloop3
   JSR skipspaces
   JSR checkforend
-  BCC $03              ; BCC lnloop4
+  BCC ~lnloop4
   JMP lnloop
 lnloop4
 ; Read mnemonic and emit opcode
@@ -495,31 +513,37 @@ lnloop4
 tokloop
   JSR skipspaces
   JSR checkforend
-  BCC $03              ; BCC tokloop1
+  BCC ~tokloop1
   JMP lnloop           ; End of line
 tokloop1
   CMP# "\""
-  BNE $06              ; BNE tokloop2
+  BNE ~tokloop2
   JSR emitquoted
   JMP tokloop
 tokloop2
   CMP# "$"
-  BNE $06              ; BNE tokloop3
+  BNE ~tokloop3
   JSR emithex
   JMP tokloop
 tokloop3
   CMP# "<"
-  BNE $09              ; BNE tokloop4
+  BNE ~tokloop4
   JSR read
   JSR emitlabellsb
   JMP tokloop
 tokloop4
   CMP# ">"
-  BNE $09              ; BNE tokloop5
+  BNE ~tokloop5
   JSR read
   JSR emitlabelmsb
   JMP tokloop
 tokloop5
+  CMP# "~"
+  BNE ~tokloop6
+  JSR read
+  JSR emitlabelrel
+  JMP tokloop
+tokloop6
   ; label
   JSR emitlabel
   JMP tokloop

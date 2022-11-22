@@ -64,6 +64,7 @@ MNTAB
   DATA "ORAZ"    $00 $00 $05
   DATA "RTS"     $00 $00 $60
   DATA "SBC#"    $00 $00 $E9
+  DATA "SBCZ"    $00 $00 $E5
   DATA "SEC"     $00 $00 $38
   DATA "STA"     $00 $00 $8D
   DATA "STA(),Y" $00 $00 $91
@@ -466,6 +467,24 @@ emitlabelmsb
   RTS
 
 
+emitlabelrel
+  BITZ <PASS           ; <PASS
+  BMI $09              ; BMI elr_pass2
+  JSR readtoken
+  JSR emit
+  LDAZ <NEXTCHAR
+  RTS
+elr_pass2
+  JSR readandfindexistinglabel
+  ; Calculate target - PC - 1
+  CLC ; for the - 1
+  LDA(),Y <TABL
+  SBCZ <PCL
+  JSR emit
+  LDAZ <NEXTCHAR
+  RTS
+
+
 ; Main assembler
 assemble
 lnloop
@@ -517,6 +536,12 @@ tokloop4
   JSR emitlabelmsb
   JMP tokloop
 tokloop5
+  CMP# "~"
+  BNE $09              ; BNE tokloop6
+  JSR read
+  JSR emitlabelrel
+  JMP tokloop
+tokloop6
   ; label
   JSR emitlabel
   JMP tokloop

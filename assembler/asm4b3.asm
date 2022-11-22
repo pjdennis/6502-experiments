@@ -68,6 +68,7 @@ MNTAB
   DATA "ORAZ"    $00 $00 $05
   DATA "RTS"     $00 $00 $60
   DATA "SBC#"    $00 $00 $E9
+  DATA "SBCZ"    $00 $00 $E5
   DATA "SEC"     $00 $00 $38
   DATA "STA"     $00 $00 $8D
   DATA "STA(),Y" $00 $00 $91
