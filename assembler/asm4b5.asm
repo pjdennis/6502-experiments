@@ -23,7 +23,7 @@ TOKEN    = $0009       ; multiple bytes
 *        = $2000       ; Set PC
 
 
-; Environment should surface error codes and messages upon BRK
+; Environment should surface error codes and messages on BRK
 err_labelnotfound
   BRK $01 "Label not found" $00
 
@@ -52,10 +52,8 @@ MNTAB
   DATA "BPL"     $00 $00 $10
   DATA "BRK"     $00 $00 $00
   DATA "CLC"     $00 $00 $18
-  DATA "CMPZ,X"  $00 $00 $D5
   DATA "CMP#"    $00 $00 $C9
   DATA "CMP,Y"   $00 $00 $D9
-  DATA "DEY"     $00 $00 $88
   DATA "INCZ"    $00 $00 $E6
   DATA "INX"     $00 $00 $E8
   DATA "INY"     $00 $00 $C8
@@ -194,7 +192,7 @@ fit_tokenloop          ; Outer loop
 ; first char of mnenomic in table loaded
 fit_charloop           ; inner loop
   CMP,Y TOKEN
-  BNE ~fit_skipcurrent
+  BNE ~fit_skipcurrent ; Current symbol not a match
   CMP# $00
   BNE ~fit_nextchar
   ; found a match
@@ -243,6 +241,7 @@ rafel_pass2
   BCC ~rafel_found
   JMP err_labelnotfound
 rafel_found
+  ; Store value of label into HEX2 and HEX1
   LDA(),Y <TABL
   STAZ <HEX2
   INY
@@ -286,19 +285,19 @@ readhex
 ; On exit C set if 2 bytes read clear if 1 byte read
 ;         A contains the next character
 grabhex
-  JSR read             ; Read the first hex character
-  JSR readhex
+  JSR read             ; Read the 1st hex character
+  JSR readhex          ; Read 2nd hex character and convert
   STAZ <HEX1
-  JSR read
+  JSR read             ; Read 3rd hex char or terminator
   JSR cmpendoftoken
   BNE ~gh_second
-  CLC
+  CLC                  ; No second byte so return C = 0
   RTS
 gh_second
-  JSR readhex
+  JSR readhex          ; Read 4th hex char and convert
   STAZ <HEX2
-  JSR read
-  SEC
+  JSR read             ; Read next char
+  SEC                  ; Second byte so return C = 1
   RTS
 
 
@@ -307,15 +306,15 @@ gh_second
 ; Uses HEX1, HEX2 and NEXTCHAR
 ; On exit A contains next character
 emithex
-  JSR grabhex
-  STAZ <NEXTCHAR
+  JSR grabhex          ; Returns C = 1 if 2 bytes read
+  STAZ <NEXTCHAR       ; Temporarily save next char
   BCC ~eh_one
   LDAZ <HEX2
   JSR emit
 eh_one
   LDAZ <HEX1
   JSR emit
-  LDAZ <NEXTCHAR
+  LDAZ <NEXTCHAR       ; Restore next char
   RTS
 
 ; On entry NEXTCHAR contains the next character
@@ -491,6 +490,9 @@ elr_pass2
 
 ; Main assembler
 assemble
+  LDA# $00
+  STAZ <PCL
+  STAZ <PCH
 lnloop
   JSR read
   BCC ~lnloop1
@@ -546,14 +548,9 @@ tokloop5
 ; Entry point
 start
   LDA# $00
-  STAZ <PCL
-  STAZ <PCH
   STA LBTAB
   STAZ <PASS           ; Bit 7 = 0 (pass 1)
   JSR assemble
-  LDA# $00
-  STAZ <PCL
-  STAZ <PCH
   LDA# $FF
   STAZ <PASS           ; Bit 7 = 1 (pass 2)
   JSR assemble
