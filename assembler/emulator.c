@@ -1076,13 +1076,16 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    output_file_ptr = fopen(output_filename, "wb");
-    if (!output_file_ptr) {
-        fprintf(stderr, "could not open output file: %s\n", output_filename);
-        fclose(input_file_ptr);
-        return 1;
+    if (strcmp(output_filename, "-") == 0) {
+        output_file_ptr = stdout;
+    } else {
+        output_file_ptr = fopen(output_filename, "wb");
+        if (!output_file_ptr) {
+            fprintf(stderr, "could not open output file: %s\n", output_filename);
+            fclose(input_file_ptr);
+            return 1;
+        }
     }
-
     reset6502();
     const int max_cycles = 6000000;
     while (!done) {
@@ -1097,7 +1100,10 @@ int main(int argc, char **argv) {
     }
     fprintf(stderr, "File %s with input %s executed %i cycles\n", code_filename, input_filename, clockticks6502);
 
-    fclose(output_file_ptr);
+    if (strcmp(output_filename, "-") != 0) {
+        fclose(output_file_ptr);
+    }
+
     fclose(input_file_ptr);
 
     uint16_t location = memory[0x100 + sp + 2] + (memory[0x100 + sp + 3] << 8) - 1;
@@ -1112,10 +1118,17 @@ int main(int argc, char **argv) {
         fputc('\n', stderr);
     }
 
+    char* dump_filename_base;
+    if (strcmp("-", output_filename) == 0) {
+        dump_filename_base = "stdout";
+    } else {
+        dump_filename_base = output_filename;
+    }
+
     const char* dump_file_suffix = ".dump.bin";
-    char* dump_filename = malloc(strlen(output_filename) + strlen(dump_file_suffix) + 1);
-    strcpy(dump_filename, output_filename);
-    strcpy(dump_filename + strlen(output_filename), dump_file_suffix);
+    char* dump_filename = malloc(strlen(dump_filename_base) + strlen(dump_file_suffix) + 1);
+    strcpy(dump_filename, dump_filename_base);
+    strcpy(dump_filename + strlen(dump_filename_base), dump_file_suffix);
 
     FILE* dump_file_ptr = fopen(dump_filename, "wb");
     if (!dump_file_ptr) {
