@@ -113,14 +113,11 @@ ss_done
 
 cmpendoftoken
   CMP# " "
-  BNE ~ceof_notspace 
-  RTS
-ceof_notspace
+  BEQ ~ceof_end
   CMP# "\n"
-  BNE ~ceof_notnewline
-  RTS
-ceof_notnewline
+  BEQ ~ceof_end
   CMP# ";"
+ceof_end
   RTS
 
 
@@ -154,9 +151,7 @@ readtokenloop
   INX
   JSR read
   JSR cmpendoftoken
-  BEQ ~rt_done
-  JMP readtokenloop
-rt_done
+  BNE ~readtokenloop
   STAZ <NEXTCHAR
   LDA# $00
   STAZ,X <TOKEN
@@ -339,18 +334,10 @@ rv_value
   BEQ ~rv_hexvalue
   JMP err_expectedhex
 rv_hexvalue
-  JMP grabhex          ; Tail call
-
-
-; capturelabel helper
-cl_setpc
-  JSR readvalue
-  JSR skiprestofline
-  LDAZ <HEX2
-  STAZ <PCL
-  LDAZ <HEX1
-  STAZ <PCH
+  JSR grabhex
+  SEC
   RTS
+
 
 ; capturelabel
 capturelabel
@@ -358,7 +345,14 @@ capturelabel
   LDAZ <TOKEN
   CMP# "*"
   BNE ~cl_normallabel
-  JMP cl_setpc
+  ; Set PC
+  JSR readvalue
+  JSR skiprestofline
+  LDAZ <HEX2
+  STAZ <PCL
+  LDAZ <HEX1
+  STAZ <PCH
+  RTS
 cl_normallabel
   BITZ <PASS
   BPL ~cl_pass1
@@ -503,55 +497,49 @@ lnloop
   RTS                  ; At end of input
 lnloop1
   JSR checkforend
-  BCC ~lnloop2
-  JMP lnloop
-lnloop2
+  BCS ~lnloop
   CMP# " "
-  BEQ ~lnloop3
+  BEQ ~lnloop2
   JSR capturelabel
   JMP lnloop
-lnloop3
+lnloop2
   JSR skipspaces
   JSR checkforend
-  BCC ~lnloop4
-  JMP lnloop
-lnloop4
-; Read mnemonic and emit opcode
+  BCS ~lnloop
+  ; Read mnemonic and emit opcode
   JSR emitopcode
 tokloop
   JSR skipspaces
   JSR checkforend
-  BCC ~tokloop1
-  JMP lnloop           ; End of line
-tokloop1
+  BCS ~lnloop          ; End of line
   CMP# "\""            ; Quoted string
-  BNE ~tokloop2
+  BNE ~tokloop1
   JSR emitquoted
   JMP tokloop
-tokloop2
+tokloop1
   CMP# "$"             ; 1 or 2 byte hex
-  BNE ~tokloop3
+  BNE ~tokloop2
   JSR emithex
   JMP tokloop
-tokloop3
+tokloop2
   CMP# "<"             ; LSB of variable
-  BNE ~tokloop4
+  BNE ~tokloop3
   JSR read
   JSR emitlabellsb
   JMP tokloop
-tokloop4
+tokloop3
   CMP# ">"             ; MSB of variable
-  BNE ~tokloop5
+  BNE ~tokloop4
   JSR read
   JSR emitlabelmsb
   JMP tokloop
-tokloop5
+tokloop4
   CMP# "~"             ; Relative address
-  BNE ~tokloop6
+  BNE ~tokloop5
   JSR read
   JSR emitlabelrel
   JMP tokloop
-tokloop6
+tokloop5
   JSR emitlabel        ; 2 byte variable
   JMP tokloop
 
