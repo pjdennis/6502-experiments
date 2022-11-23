@@ -8,15 +8,14 @@ read     = $F006
 write_b  = $F009
 
 TEMP     = $0000       ; 1 byte
-NEXTCHAR = $0001       ; 1 byte
-TABL     = $0002       ; 1 byte
-TABH     = $0003       ; 1 byte
-PCL      = $0004       ; 1 byte
-PCH      = $0005       ; 1 byte
-HEX1     = $0006       ; 1 byte
-HEX2     = $0007       ; 1 byte
-PASS     = $0008       ; 1 byte $00 = pass1 $FF = pass2
-TOKEN    = $0009       ; multiple bytes
+TABL     = $0001       ; 1 byte
+TABH     = $0002       ; 1 byte
+PCL      = $0003       ; 1 byte
+PCH      = $0004       ; 1 byte
+HEX1     = $0005       ; 1 byte
+HEX2     = $0006       ; 1 byte
+PASS     = $0007       ; 1 byte $00 = pass 1 $FF = pass 2
+TOKEN    = $0008       ; multiple bytes
 
 ;LBTAB    = $3000
 
@@ -66,6 +65,8 @@ MNTAB
   DATA "LDX#"    $00 $00 $A2
   DATA "LDY#"    $00 $00 $A0
   DATA "ORAZ"    $00 $00 $05
+  DATA "PHA"     $00 $00 $48
+  DATA "PLA"     $00 $00 $68
   DATA "RTS"     $00 $00 $60
   DATA "SBC#"    $00 $00 $E9
   DATA "SBCZ"    $00 $00 $E5
@@ -79,6 +80,8 @@ MNTAB
   DATA $00
 
 
+; On entry A contains the byte to emit
+; On exit A, X, Y are preserved
 emit
   BITZ <PASS
   BPL ~emit_incpc      ; Skip writing during pass 1
@@ -139,9 +142,9 @@ cfe_end
 
 ; On entry A contains first character of token
 ; Reads token into TOKEN (zero terminated)
-; On exit NEXTCHAR contains next character after token
+; On exit A contains next character after token
 ;         Y is preserved
-;         A, X are not preserved
+;         X is not preserved
 readtoken
   LDX# $00
 readtokenloop
@@ -150,9 +153,10 @@ readtokenloop
   JSR read
   JSR cmpendoftoken
   BNE ~readtokenloop
-  STAZ <NEXTCHAR
+  PHA                  ; Save next char
   LDA# $00
   STAZ,X <TOKEN
+  PLA                  ; Restore next char
   RTS
 
 
@@ -179,6 +183,7 @@ advanceintab
 ;         TABL;TABH points to token value if found
 ;                   or to end of table if not found
 ;         Y = 0
+;         X is preserved
 ;         A is not preserved
 findintab
   LDY# $00
@@ -229,7 +234,7 @@ findlabel
   JMP findintab        ; Tail call
 
 
-; On exit NEXTCHAR contains the next character
+; On exit A contains the next character
 readandfindexistinglabel
   JSR readtoken
   BITZ <PASS
@@ -237,8 +242,10 @@ readandfindexistinglabel
   ; Pass 1
   RTS
 rafel_pass2
+  PHA                  ; Save next char
   JSR findlabel
   BCC ~rafel_found
+  PLA                  ; Restore next char
   JMP err_labelnotfound
 rafel_found
   ; Store value of label into HEX2 and HEX1
@@ -247,6 +254,7 @@ rafel_found
   INY
   LDA(),Y <TABL
   STAZ <HEX1
+  PLA                  ; Restore next char
   RTS
 
 
@@ -303,24 +311,23 @@ gh_second
 
 ; Read 2 to 4 hex characters and emit 1 or 2 bytes
 ; When 2 bytes, emit LSB then MSB
-; Uses HEX1, HEX2 and NEXTCHAR
+; Uses HEX1, HEX2
 ; On exit A contains next character
 emithex
   JSR grabhex          ; Returns C = 1 if 2 bytes read
-  STAZ <NEXTCHAR       ; Temporarily save next char
+  PHA                  ; Save next char
   BCC ~eh_one
   LDAZ <HEX2
   JSR emit
 eh_one
   LDAZ <HEX1
   JSR emit
-  LDAZ <NEXTCHAR       ; Restore next char
+  PLA                  ; Restore next char
   RTS
 
-; On entry NEXTCHAR contains the next character
+; On entry A contains the next character
 ; On exit C set if value read; clear otherwise
 readvalue
-  LDAZ <NEXTCHAR
   JSR skipspaces
   CMP# "="
   BEQ ~rv_value
@@ -341,12 +348,16 @@ rv_hexvalue
 ; capturelabel
 capturelabel
   JSR readtoken
+  PHA                  ; Save next char
   LDAZ <TOKEN
   CMP# "*"
   BNE ~cl_normallabel
   ; Set PC
+  PLA                  ; Restore next char
   JSR readvalue
   JSR skiprestofline
+  ; No need to retain next char as caller
+  ; goes straight to next line
   LDAZ <HEX2
   STAZ <PCL
   LDAZ <HEX1
@@ -356,11 +367,12 @@ cl_normallabel
   BITZ <PASS
   BPL ~cl_pass1
   ; Pass 2 - don't capture
-  LDAZ <NEXTCHAR
+  PLA                  ; Restore next char
   JMP skiprestofline   ; Tail call
 cl_pass1
   JSR findlabel
   BCS ~cl_notfound
+  PLA                  ; Restore next char
   JMP err_duplicatelabel
 cl_notfound
 cl_loop                ; Copy TOKEN to table
@@ -370,8 +382,9 @@ cl_loop                ; Copy TOKEN to table
   INY
   JMP cl_loop
 cl_copyvalue           ; Copy value or PC value to table
+  PLA                  ; Restore next char
   JSR readvalue
-  STAZ <NEXTCHAR
+  PHA                  ; Save next char
   BCS ~cl_hextotable
   ; Store program counter
   LDAZ <PCL
@@ -386,9 +399,11 @@ cl_hextotable
   LDAZ <HEX1
   STA(),Y <TABL
   ; Skip past rest of table
-  LDAZ <NEXTCHAR
+  PLA                  ; Restore next char
   JSR skiprestofline
   ; Terminate table value
+  ; No need to retain next char as caller
+  ; goes straight to next line
   INY
   LDA# $00
   STA(),Y <TABL
@@ -399,12 +414,14 @@ cl_hextotable
 ; On exit A contains the next character
 emitopcode
   JSR readtoken
+  PHA                  ; Save next char
   LDA# <MNTAB
   STAZ <TABL
   LDA# >MNTAB
   STAZ <TABH
   JSR findintab
   BCC ~eo_found
+  PLA                  ; Restore next char
   JMP err_opcodenotfound
 eo_found
   LDA(),Y <TABL
@@ -414,7 +431,7 @@ eo_found
   LDA(),Y <TABL
   JSR emit
 eo_done
-  LDAZ <NEXTCHAR
+  PLA                  ; Restore next char
   RTS
 
 
@@ -440,32 +457,35 @@ eq_notescaped
 ; On exit A contains the next character
 emitlabel
   JSR readandfindexistinglabel
+  PHA                  ; Save next char
   ; Emit low byte then high byte from table
   LDAZ <HEX2
   JSR emit
   LDAZ <HEX1
   JSR emit
-  LDAZ <NEXTCHAR       ; Load next character
+  PLA                  ; Restore next char
   RTS
 
 
 ; On exit A contains the next character
 emitlabellsb
   JSR readandfindexistinglabel
+  PHA                  ; Save next char
   ; Emit low byte
   LDAZ <HEX2
   JSR emit
-  LDAZ <NEXTCHAR       ; Load next character
+  PLA                  ; Restore next char
   RTS
 
 
 ; On exit A contains the next character
 emitlabelmsb
   JSR readandfindexistinglabel
+  PHA                  ; Save next char
   ; Emit high byte
   LDAZ <HEX1
   JSR emit
-  LDAZ <NEXTCHAR       ; Load next character
+  PLA                  ; Restore next character
   RTS
 
 
@@ -475,16 +495,16 @@ emitlabelrel
   ; Pass 1
   JSR readtoken
   JSR emit
-  LDAZ <NEXTCHAR
   RTS
 elr_pass2
   JSR readandfindexistinglabel
+  PHA                  ; Save next char
   ; Calculate target - PC - 1
   CLC ; for the - 1
   LDAZ <HEX2
   SBCZ <PCL
   JSR emit
-  LDAZ <NEXTCHAR
+  PLA                  ; Restore next char
   RTS
 
 

@@ -62,6 +62,8 @@ MNTAB
   DATA "LDX#"    $00 $00 $A2
   DATA "LDY#"    $00 $00 $A0
   DATA "ORAZ"    $00 $00 $05
+  DATA "PHA"     $00 $00 $48
+  DATA "PLA"     $00 $00 $68
   DATA "RTS"     $00 $00 $60
   DATA "SBC#"    $00 $00 $E9
   DATA "SBCZ"    $00 $00 $E5
