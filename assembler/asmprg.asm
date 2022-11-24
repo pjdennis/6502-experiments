@@ -85,16 +85,6 @@ ct_loop
   RTS
 
 
-init_hash_tab
-  LDX# $00
-  LDA# $00
-iht_loop
-  STA,X hash_tab_l
-  STA,X hash_tab_h
-  INX
-  BNE ~iht_loop
-  
-
 init_heap
   LDA# <heap
   STAZ <memp_l
@@ -116,6 +106,16 @@ advance_heap
   RTS
 
 
+init_hash_tab
+  LDX# $00
+  LDA# $00
+iht_loop
+  STA,X hash_tab_l
+  STA,X hash_tab_h
+  INX
+  BNE ~iht_loop
+  
+
 ; On exit Z = 1 if entry is empty
 hash_entry_empty
   LDAZ <hash
@@ -127,6 +127,7 @@ hee_done
   RTS
 
 
+; Load from hash table to tab_l;tab_h
 load_hash_entry
   LDAZ <hash
   TAY
@@ -159,30 +160,26 @@ store_table_entry
   RTS
 
 
-err_token_not_found
-  BRK $02 "Token not found" $00
-
-
 ; On entry token contains the token to find
 ; Raises error if not found
 ; On exit val_l;val_h contains value
 find_in_hash
   JSR calculate_hash
   JSR hash_entry_empty
-  BNE ~fih_entry_exists
-  JMP err_token_not_found
+  BEQ ~fih_notfound
 fih_entry_exists
   JSR load_hash_entry
   JSR find_token
-  BCC ~fih_found
-  JMP err_token_not_found
-fih_found
+  BCS ~fih_notfound
+  ; Found
   LDAZ(),Y <tabp_l
   STAZ <val_l
   INY
   LDAZ(),Y <tabp_l
   STAZ <val_h
   RTS
+fih_notfound
+  BRK $02 "Token not found" $00
 
 
 ; On entry tabp_l;tabp_h point to head of list of entries
