@@ -13,6 +13,7 @@ hash_tab_l = $3000
 hash_tab_h = $3100
 heap       = $3200
 
+; Hash collisions AA/GW/YZ AB/GT/YY AG/GQ/MZ
 
 * = $2000
 
@@ -61,6 +62,16 @@ display_hex
   PLA
   AND# $0F
   JMP display_hex_char ; Tail call
+
+
+display_carry
+  BCS ~dc_carry_set
+  ; Carry clear
+  LDA# "0"
+  JMP write_b
+dc_carry_set
+  LDA# "1"
+  JMP write_b
 
 
 copy_token
@@ -125,6 +136,7 @@ load_hash_entry
   RTS
 
 
+; Store current memory pointer in hash table
 store_hash_entry
   LDAZ <hash
   TAY
@@ -135,19 +147,95 @@ store_hash_entry
   RTS
 
 
-store_token
+; Store current memory pointer in table
+store_table_entry
+  LDAZ <memp_l
+  STAZ(),Y <tabp_l
+  INY
+  LDAZ <memp_h
+  STAZ(),Y <tabp_h
+  INY
+
+
+; On entry tabp_l;tabp_h point to head of list of entries
+;          token contains the token to find
+; On exit C clear if found; set if not found
+;         tabp_l;tabp_hi\,Y points to value if found
+;         or to 'next' pointer if not found
+find_token
+ft_tokenloop
+  ; Store the current pointer
+  LDAZ <tabp_l
+  STAZ <val_l
+  LDAZ <tabp_h
+  STAZ <val_h
+  ; Advance past 'next' pointer
+  CLC
+  LDA# $02
+  ADCZ <tabp_l
+  STAZ <tabp_l
+  LDA# $00
+  ADCZ <tabp_h
+  STAZ <tabp_h
+  ; Check for matching token
   LDY# $FF
-st_loop
+ft_charloop
   INY
-  LDA,Y token
-  STAZ(),Y <memp_l
-  BNE ~st_loop
+  LDAZ(),Y <tabp_l
+  CMP,Y token
+  BNE ~ft_notmatch
+  CMP# $00
+  BNE ~ft_charloop
+  ; Match
+  INY                  ; point tab,Y to value
+  CLC
+  RTS
+ft_notmatch            ; Not a match - move to next
+  ; Check if 'next' pointer is 0
+  LDY# $00
+  LDAZ(),Y <val_l
+  BNE ~ft_notmatch1 ; not zero
   INY
+  LDAZ(),Y <val_l
+  BEQ ~ft_atend
+  ; Not at end
+  STAZ <tabp_h
+  LDA# $00
+  STAZ <tabp_l
+  JMP ft_tokenloop
+ft_notmatch1
+  STAZ <tabp_l
+  INY
+  LDAZ(),Y <val_l
+  STAZ <tabp_h
+  JMP ft_tokenloop
+ft_atend
+  ; point tabp,Y to the zero 'next' pointer
+  LDAZ <val_l
+  STAZ <tabp_l
+  LDAZ <val_h
+  STAZ <tabp_h
+  LDY# $00
+  SEC ; Carry set indicates not found
+  RTS
+
+
+store_token
+  LDY# $00
   ; Store null pointer (pointer to next)
   LDA# $00
   STAZ(),Y <memp_l
   INY
   STAZ(),Y <memp_l
+  INY
+  JSR advance_heap
+  ; Store token name
+  LDY# $FF         ; Alternative: DEY
+st_loop
+  INY
+  LDA,Y token
+  STAZ(),Y <memp_l
+  BNE ~st_loop
   INY
   ; Store value
   LDAZ <val_l
@@ -177,37 +265,82 @@ ch_done
 
 
 start
+  JSR init_hash_tab
+  JSR init_heap
+
+  LDY# $00
+  LDA# "A"
+  STA,Y token
+  INY
+  LDA# "G"
+  STA,Y token
+  INY
+  LDA# $00
+  STA,Y token
+
+  JSR calculate_hash
+  LDAZ <hash
+  TAY
+  LDA# $01
+  STA,Y hash_tab_l
+
+loop
+  LDY# $01
+  LDA,Y token
+  CMP# "Z"
+  BEQ ~loop1
+  CLC
+  ADC# $01
+  STA,Y token
+  JMP loop2
+loop1
+  LDA# "A"
+  STA,Y token
+  LDY# $00
+  LDA,Y token
+  CMP# "Z"
+  BEQ ~done
+  CLC
+  ADC# $01
+  STA,Y token
+loop2
+  JSR calculate_hash
+  LDAZ <hash
+  TAY
+  LDA,Y hash_tab_l
+  BEQ ~loop
+  ; Found
+  LDY# $00
+  LDA,Y token
+  JSR write_b
+  INY
+  LDA,Y token
+  JSR write_b
+  LDA# " "
+  JSR write_b
+  JMP loop
+done
+  LDA# "\n"
+  JSR write_b
+  BRK $00
+
   LDA# <message1
   STAZ <tabp_l
   LDA# >message1
   STAZ <tabp_h
   JSR copy_token
-
-  LDY# $00
-loop1
-  LDA,Y token
-  BEQ ~done1
-  JSR write_b
-  INY
-  JMP loop1
-done1
-
-  JSR init_hash_tab
-  JSR init_heap
-
-  JSR calculate_hash
-  LDAZ <hash
-  JSR display_hex
-  LDA# "\n"
-  JSR write_b
-
   LDA# "P"
   STAZ <val_l
   LDA# "D"
   STAZ <val_h
+  JSR store_token
 
-  JSR store_hash_entry
-  JSR store_token 
+  LDA# <heap
+  STAZ <tabp_l
+  LDA# >heap
+  STAZ <tabp_h
+  JSR find_token
+  JSR display_carry
 
   LDA# <message2
   STAZ <tabp_l
@@ -215,15 +348,59 @@ done1
   STAZ <tabp_h
   JSR copy_token
 
-  JSR calculate_hash
+  LDA# <heap
+  STAZ <tabp_l
+  LDA# >heap
+  STAZ <tabp_h
+  JSR find_token
+  JSR display_carry
+
+  ; Store current memory pointer into 'next' pointer
+  ; of the 'last' entry
+  LDAZ <memp_l
+  STAZ(),Y <tabp_l
+  INY
+  LDAZ <memp_h
+  STAZ(),Y <tabp_l
 
   LDA# "K"
   STAZ <val_l
   LDA# "M"
   STAZ <val_h
 
-  JSR store_hash_entry
-  JSR store_token 
+  JSR store_token
+
+  LDA# <heap
+  STAZ <tabp_l
+  LDA# >heap
+  STAZ <tabp_h
+  JSR find_token
+  JSR display_carry
+  LDA# "["
+  JSR write_b
+  TYA
+  JSR display_hex
+  LDA# "]"
+  JSR write_b
+
+
+  LDA# "\n"
+  JSR write_b
+
+;  LDY# $00
+;loop1
+;  LDA,Y token
+;  BEQ ~done1
+;  JSR write_b
+;  INY
+;  JMP loop1
+;done1
+
+;  JSR calculate_hash
+;  LDAZ <hash
+;  JSR display_hex
+;  LDA# "\n"
+;  JSR write_b
 
   BRK $00 ; Completed successfully
 
