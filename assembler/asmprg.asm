@@ -19,7 +19,6 @@ heap       = $3200
 
 * = $2000
 
-
 ; Contains each byte $00-$FF exactly once in random order
 scramble_tab
   DATA $01 $70 $DE $CD $50 $E6 $D2 $27 $7E $DB $15 $F0 $AF $F1 $A6 $CA
@@ -157,6 +156,7 @@ store_table_entry
   LDAZ <memp_h
   STAZ(),Y <tabp_h
   INY
+  RTS
 
 
 err_token_not_found
@@ -172,12 +172,7 @@ find_in_hash
   BNE ~fih_entry_exists
   JMP err_token_not_found
 fih_entry_exists
-  LDAZ <hash
-  TAY
-  LDA,Y hash_tab_l
-  STAZ <tabp_l
-  LDA,Y hash_tab_h
-  STAZ <tabp_h
+  JSR load_hash_entry
   JSR find_token
   BCC ~fih_found
   JMP err_token_not_found
@@ -304,29 +299,15 @@ hash_add
   JSR hash_entry_empty
   BEQ ~ha_entry_empty
   ; Find in list
-  LDAZ <hash
-  TAY
-  LDA,Y hash_tab_l
-  STAZ <tabp_l
-  LDA,Y hash_tab_h
-  STAZ <tabp_h
+  JSR load_hash_entry
   JSR find_token
   BCS ~ha_new
   BRK $01 "Token already exists" $00
 ha_new
-  LDAZ <memp_l
-  STAZ(),Y <tabp_l
-  INY
-  LDAZ <memp_h
-  STAZ(),Y <tabp_l
+  JSR store_table_entry
   JMP store_token ; Tail call
 ha_entry_empty
-  LDAZ <hash
-  TAY
-  LDAZ <memp_l
-  STA,Y hash_tab_l
-  LDAZ <memp_h
-  STA,Y hash_tab_h
+  JSR store_hash_entry
 ha_store
   JMP store_token ; Tail call
 
@@ -398,102 +379,16 @@ test_loop_done
   BRK $00
 
 
-  LDA# <message1
-  STAZ <tabp_l
-  LDA# >message1
-  STAZ <tabp_h
-  JSR copy_token
-  LDA# "P"
-  STAZ <val_l
-  LDA# "D"
-  STAZ <val_h
-  JSR store_token
-
-  LDA# <heap
-  STAZ <tabp_l
-  LDA# >heap
-  STAZ <tabp_h
-  JSR find_token
-  JSR display_carry
-
-  LDA# <message2
-  STAZ <tabp_l
-  LDA# >message2
-  STAZ <tabp_h
-  JSR copy_token
-
-  LDA# <heap
-  STAZ <tabp_l
-  LDA# >heap
-  STAZ <tabp_h
-  JSR find_token
-  JSR display_carry
-
-  ; Store current memory pointer into 'next' pointer
-  ; of the 'last' entry
-  LDAZ <memp_l
-  STAZ(),Y <tabp_l
-  INY
-  LDAZ <memp_h
-  STAZ(),Y <tabp_l
-
-  LDA# "K"
-  STAZ <val_l
-  LDA# "M"
-  STAZ <val_h
-
-  JSR store_token
-
-  LDA# <heap
-  STAZ <tabp_l
-  LDA# >heap
-  STAZ <tabp_h
-  JSR find_token
-  JSR display_carry
-  LDA# "["
-  JSR write_b
-  TYA
-  JSR display_hex
-  LDA# "]"
-  JSR write_b
-
-
-  LDA# "\n"
-  JSR write_b
-
-;  LDY# $00
-;loop1
-;  LDA,Y token
-;  BEQ ~done1
-;  JSR write_b
-;  INY
-;  JMP loop1
-;done1
-
-;  JSR calculate_hash
-;  LDAZ <hash
-;  JSR display_hex
-;  LDA# "\n"
-;  JSR write_b
-
-  BRK $00 ; Completed successfully
-
-
-message1
-  DATA "Hello, world!\n" $00
-message2
-  DATA "Once upon a time\n" $00
-
 key
   DATA "AB" $00
 
+
 test_data
-  DATA "AA" $00 $0101
-  DATA "AB" $00 $0202
-  DATA "GW" $00 $0303
-  DATA "YZ" $00 $0404
+  DATA "AA" $00 $0102
+  DATA "AB" $00 $0304
+  DATA "GW" $00 $0506
+  DATA "YZ" $00 $0708
   DATA $00
 
 
   DATA start
-
