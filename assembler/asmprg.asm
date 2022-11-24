@@ -5,9 +5,11 @@ memp_l     = $0001
 memp_h     = $0002
 tabp_l     = $0003
 tabp_h     = $0004
-val_l      = $0005
-val_h      = $0006
-token      = $0007 ; Multiple bytes
+p_l        = $0005
+p_h        = $0006
+val_l      = $0007
+val_h      = $0008
+token      = $0009 ; Multiple bytes
 
 hash_tab_l = $3000
 hash_tab_h = $3100
@@ -157,18 +159,49 @@ store_table_entry
   INY
 
 
+err_token_not_found
+  BRK $02 "Token not found" $00
+
+
+; On entry token contains the token to find
+; Raises error if not found
+; On exit val_l;val_h contains value
+find_in_hash
+  JSR calculate_hash
+  JSR hash_entry_empty
+  BNE ~fih_entry_exists
+  JMP err_token_not_found
+fih_entry_exists
+  LDAZ <hash
+  TAY
+  LDA,Y hash_tab_l
+  STAZ <tabp_l
+  LDA,Y hash_tab_h
+  STAZ <tabp_h
+  JSR find_token
+  BCC ~fih_found
+  JMP err_token_not_found
+fih_found
+  LDAZ(),Y <tabp_l
+  STAZ <val_l
+  INY
+  LDAZ(),Y <tabp_l
+  STAZ <val_h
+  RTS
+
+
 ; On entry tabp_l;tabp_h point to head of list of entries
 ;          token contains the token to find
 ; On exit C clear if found; set if not found
-;         tabp_l;tabp_hi\,Y points to value if found
+;         tabp_l;tabp_hi,Y points to value if found
 ;         or to 'next' pointer if not found
 find_token
 ft_tokenloop
   ; Store the current pointer
   LDAZ <tabp_l
-  STAZ <val_l
+  STAZ <p_l
   LDAZ <tabp_h
-  STAZ <val_h
+  STAZ <p_h
   ; Advance past 'next' pointer
   CLC
   LDA# $02
@@ -193,10 +226,10 @@ ft_charloop
 ft_notmatch            ; Not a match - move to next
   ; Check if 'next' pointer is 0
   LDY# $00
-  LDAZ(),Y <val_l
+  LDAZ(),Y <p_l
   BNE ~ft_notmatch1 ; not zero
   INY
-  LDAZ(),Y <val_l
+  LDAZ(),Y <p_l
   BEQ ~ft_atend
   ; Not at end
   STAZ <tabp_h
@@ -206,14 +239,14 @@ ft_notmatch            ; Not a match - move to next
 ft_notmatch1
   STAZ <tabp_l
   INY
-  LDAZ(),Y <val_l
+  LDAZ(),Y <p_l
   STAZ <tabp_h
   JMP ft_tokenloop
 ft_atend
   ; point tabp,Y to the zero 'next' pointer
-  LDAZ <val_l
+  LDAZ <p_l
   STAZ <tabp_l
-  LDAZ <val_h
+  LDAZ <p_h
   STAZ <tabp_h
   LDY# $00
   SEC ; Carry set indicates not found
@@ -264,65 +297,106 @@ ch_done
   RTS
 
 
-start
-  JSR init_hash_tab
-  JSR init_heap
-
-  LDY# $00
-  LDA# "A"
-  STA,Y token
-  INY
-  LDA# "G"
-  STA,Y token
-  INY
-  LDA# $00
-  STA,Y token
-
+; On entry token contains token
+;          val_l;val_h contains value
+hash_add
   JSR calculate_hash
-  LDAZ <hash
-  TAY
-  LDA# $01
-  STA,Y hash_tab_l
-
-loop
-  LDY# $01
-  LDA,Y token
-  CMP# "Z"
-  BEQ ~loop1
-  CLC
-  ADC# $01
-  STA,Y token
-  JMP loop2
-loop1
-  LDA# "A"
-  STA,Y token
-  LDY# $00
-  LDA,Y token
-  CMP# "Z"
-  BEQ ~done
-  CLC
-  ADC# $01
-  STA,Y token
-loop2
-  JSR calculate_hash
+  JSR hash_entry_empty
+  BEQ ~ha_entry_empty
+  ; Find in list
   LDAZ <hash
   TAY
   LDA,Y hash_tab_l
-  BEQ ~loop
-  ; Found
+  STAZ <tabp_l
+  LDA,Y hash_tab_h
+  STAZ <tabp_h
+  JSR find_token
+  BCS ~ha_new
+  BRK $01 "Token already exists" $00
+ha_new
+  LDAZ <memp_l
+  STAZ(),Y <tabp_l
+  INY
+  LDAZ <memp_h
+  STAZ(),Y <tabp_l
+  JMP store_token ; Tail call
+ha_entry_empty
+  LDAZ <hash
+  TAY
+  LDAZ <memp_l
+  STA,Y hash_tab_l
+  LDAZ <memp_h
+  STA,Y hash_tab_h
+ha_store
+  JMP store_token ; Tail call
+
+
+show
   LDY# $00
+show_loop
   LDA,Y token
+  BEQ ~show_loop_done
   JSR write_b
   INY
-  LDA,Y token
-  JSR write_b
+  JMP show_loop
+show_loop_done
   LDA# " "
   JSR write_b
-  JMP loop
-done
+  LDAZ <val_h
+  JSR display_hex
+  LDAZ <val_l
+  JSR display_hex
   LDA# "\n"
   JSR write_b
+  RTS
+
+
+start
+  JSR init_heap
+  JSR init_hash_tab
+
+  LDY# $00
+test_loop
+  LDX# $00
+  LDA,Y test_data
+  BEQ ~test_loop_done
+test_char_loop
+  STA,X token
+  BEQ ~test_char_loop_done
+  INY
+  INX
+  LDA,Y test_data
+  JMP test_char_loop
+test_char_loop_done
+  INY  
+  LDA,Y test_data
+  STAZ <val_l
+  INY
+  LDA,Y test_data
+  STAZ <val_h
+  INY
+  TYA
+  PHA
+
+  JSR hash_add
+
+  PLA
+  TAY
+  JMP test_loop
+test_loop_done
+
+  LDA# <key
+  STAZ <tabp_l
+  LDA# >key
+  STAZ <tabp_h
+  JSR copy_token
+
+  JSR find_in_hash
+
+  JSR show
+
   BRK $00
+
 
   LDA# <message1
   STAZ <tabp_l
@@ -409,6 +483,16 @@ message1
   DATA "Hello, world!\n" $00
 message2
   DATA "Once upon a time\n" $00
+
+key
+  DATA "AB" $00
+
+test_data
+  DATA "AA" $00 $0101
+  DATA "AB" $00 $0202
+  DATA "GW" $00 $0303
+  DATA "YZ" $00 $0404
+  DATA $00
 
 
   DATA start
