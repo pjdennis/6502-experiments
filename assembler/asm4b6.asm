@@ -120,7 +120,6 @@ init_heap
   STAZ <MEMPL
   LDA# >HEAP
   STAZ <MEMPH
-
   RTS
 
 
@@ -144,6 +143,7 @@ iht_loop
   STA,X HASHTABH
   INX
   BNE ~iht_loop
+  RTS
   
 
 calculate_hash
@@ -271,8 +271,8 @@ ft_atend
 
 
 ; On entry token contains the token to find
-; Raises error if not found
-; On exit HEX1 and HEX2 contains MSB and LSB of value
+; On exit C = 0 if found or 1 if not found
+; On exit HEX1 and HEX2 contains MSB and LSB of value if found
 find_in_hash
   JSR calculate_hash
   JSR hash_entry_empty
@@ -287,9 +287,11 @@ fih_entry_exists
   INY
   LDAZ(),Y <TABPL
   STAZ <HEX1
+  CLC
   RTS
 fih_notfound
-  BRK $02 "Token not found" $00
+  SEC
+  RTS
 
 
 ; On entry HEX1 and HEX2 contain MSB and LSB of value
@@ -325,6 +327,7 @@ st_loop
 
 ; On entry TOKEN contains token
 ;          HEX1 and HEX2 contain MSB and LSB of value
+; On exit C = 0 if added or 1 if already exists
 hash_add
   JSR calculate_hash
   JSR hash_entry_empty
@@ -332,14 +335,17 @@ hash_add
   JSR load_hash_entry
   JSR find_token
   BCS ~ha_new
-  BRK $01 "Token already exists" $00
+  SEC
+  RTS
 ha_new
   JSR store_table_entry
-  JMP store_token ; Tail call
+  JMP ha_store
 ha_entry_empty
   JSR store_hash_entry
 ha_store
-  JMP store_token ; Tail call
+  JSR store_token
+  CLC
+  RTS
 
 
 ; On entry A contains the byte to emit
@@ -492,6 +498,9 @@ readandfindexistinglabel
 rafel_pass2
   PHA                  ; Save next char
   JSR find_in_hash
+  BCC ~rafel_found
+  JMP err_labelnotfound
+rafel_found
   PLA                  ; Restore next char
   RTS
 
@@ -620,6 +629,9 @@ cl_pass1
 cl_hextotable
   JSR hash_add
   PLA                  ; Restore next char
+  BCC ~cl_added
+  JMP err_duplicatelabel
+cl_added
   JSR skiprestofline
   ; No need to retain next char as caller
   ; goes straight to next line
