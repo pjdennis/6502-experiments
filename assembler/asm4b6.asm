@@ -4,34 +4,42 @@
 ;            Automatically restarts input after reaching end
 ;
 ;   write_b: Writes A to output
-read     = $F006
-write_b  = $F009
+read      = $F006
+write_b   = $F009
 
-HASHTABL = $4000
-HASHTABH = $4100
-HEAP     = $4200
+LHASHTABL = $4000      ; Label hash table (low and high)
+LHASHTABH = $4100      ; "
+IHASHTABL = $4200      ; Instruction hash table (low and high)
+IHASHTABH = $4300      ; "
+HEAP      = $4400      ; Data heap
 
-TEMP     = $0000       ; 1 byte
-TABPL    = $0001       ; 2 byte table pointer
-TABPH    = $0002       ; "
-PCL      = $0003       ; 2 byte program counter
-PCH      = $0004       ; "
-HEX1     = $0005       ; 1 byte
-HEX2     = $0006       ; 1 byte
-PASS     = $0007       ; 1 byte $00 = pass 1 $FF = pass 2
-MEMPL    = $0008       ; 2 byte heap pointer
-MEMPH    = $0009       ; "
-PL       = $000A       ; 2 byte pointer
-PH       = $000B       ; "
-hash     = $000C       ; 1 byte hash value
-TOKEN    = $000D       ; multiple bytes
+TEMP      = $0000      ; 1 byte
+TABPL     = $0001      ; 2 byte table pointer
+TABPH     = $0002      ; "
+PCL       = $0003      ; 2 byte program counter
+PCH       = $0004      ; "
+HEX1      = $0005      ; 1 byte
+HEX2      = $0006      ; 1 byte
+PASS      = $0007      ; 1 byte $00 = pass 1 $FF = pass 2
+MEMPL     = $0008      ; 2 byte heap pointer
+MEMPH     = $0009      ; "
+PL        = $000A      ; 2 byte pointer
+PH        = $000B      ; "
+P2L       = $000C      ; 2 byte pointer
+P2H       = $000D      ; "
+hash      = $000E      ; 1 byte hash value
+HTLPL     = $000F      ; 2 byte pointer to low byte hash table
+HTLPH     = $0010      ; "
+HTHPL     = $0011      ; 2 byte pointer to high byte hash table
+HTHPH     = $0012      ; "
+TOKEN     = $0013      ; multiple bytes
 
 
 *        = $2000       ; Set PC
 
 
 ; Contains each byte $00-$FF exactly once in random order
-scramble_tab
+scramble_table
   DATA $01 $70 $DE $CD $50 $E6 $D2 $27 $7E $DB $15 $F0 $AF $F1 $A6 $CA
   DATA $31 $03 $C4 $B5 $B3 $A2 $9C $19 $AB $2C $DA $46 $E8 $0F $59 $68
   DATA $09 $69 $9B $FA $3C $E1 $41 $5E $8A $1B $93 $6D $6E $22 $71 $44
@@ -135,12 +143,74 @@ advance_heap
   RTS
 
 
-init_hash_tab
-  LDX# $00
+select_label_hash_table
+  LDA# <LHASHTABL
+  STAZ <HTLPL
+  LDA# >LHASHTABL
+  STAZ <HTLPH
+  LDA# <LHASHTABH
+  STAZ <HTHPL
+  LDA# >LHASHTABH
+  STAZ <HTHPH
+  RTS
+
+
+select_instruction_hash_table
+  LDA# <IHASHTABL
+  STAZ <HTLPL
+  LDA# >IHASHTABL
+  STAZ <HTLPH
+  LDA# <IHASHTABH
+  STAZ <HTHPL
+  LDA# >IHASHTABH
+  STAZ <HTHPH
+  RTS
+
+
+populate_instruction_hash_table
+  LDA# <MNTAB
+  STAZ <P2L
+  LDA# >MNTAB
+  STAZ <P2H
+piht_entry_loop
+  LDY# $00
+  LDAZ(),Y <P2L
+  BEQ ~piht_done
+piht_token_loop
+  STA,Y TOKEN
+  BEQ ~piht_token_loop_done
+  INY
+  LDAZ(),Y <P2L
+  JMP piht_token_loop
+piht_token_loop_done
+  INY
+  LDAZ(),Y <P2L
+  STAZ <HEX2
+  INY
+  LDAZ(),Y <P2L
+  STAZ <HEX1
+  INY
+  ; Advance
+  TYA
+  CLC
+  ADCZ <P2L
+  STAZ <P2L
+  LDA# $00
+  ADCZ <P2H
+  STAZ <P2H
+  ; Store entry
+  JSR hash_add
+  JMP piht_entry_loop
+piht_done
+  RTS
+
+
+init_hash_table
+  LDY# $00
   LDA# $00
 iht_loop
-  STA,X HASHTABL
-  STA,X HASHTABH
+  STAZ(),Y <HTLPL
+  STAZ(),Y <HTHPL
   INX
   BNE ~iht_loop
   RTS
@@ -155,7 +225,7 @@ ch_loop
   BEQ ~ch_done
   EORZ <hash
   TAY
-  LDA,Y scramble_tab
+  LDA,Y scramble_table
   STAZ <hash
   INX
   JMP ch_loop
@@ -167,9 +237,9 @@ ch_done
 hash_entry_empty
   LDAZ <hash
   TAY
-  LDA,Y HASHTABL
+  LDAZ(),Y <HTLPL
   BNE ~hee_done
-  LDA,Y HASHTABH
+  LDAZ(),Y <HTHPL
 hee_done
   RTS
 
@@ -178,9 +248,9 @@ hee_done
 load_hash_entry
   LDAZ <hash
   TAY
-  LDA,Y HASHTABL
+  LDAZ(),Y <HTLPL
   STAZ <TABPL
-  LDA,Y HASHTABH
+  LDAZ(),Y <HTHPL
   STAZ <TABPH
   RTS
 
@@ -190,9 +260,9 @@ store_hash_entry
   LDAZ <hash
   TAY
   LDAZ <MEMPL
-  STA,Y HASHTABL
+  STAZ(),Y <HTLPL
   LDAZ <MEMPH
-  STA,Y HASHTABH
+  STAZ(),Y <HTHPL
   RTS
 
 
@@ -497,6 +567,7 @@ readandfindexistinglabel
   RTS
 rafel_pass2
   PHA                  ; Save next char
+  JSR select_label_hash_table
   JSR find_in_hash
   BCC ~rafel_found
   JMP err_labelnotfound
@@ -627,6 +698,7 @@ cl_pass1
   LDAZ <PCH
   STAZ <HEX1
 cl_hextotable
+  JSR select_label_hash_table
   JSR hash_add
   PLA                  ; Restore next char
   BCC ~cl_added
@@ -643,20 +715,24 @@ cl_added
 emitopcode
   JSR readtoken
   PHA                  ; Save next char
-  LDA# <MNTAB
-  STAZ <TABPL
-  LDA# >MNTAB
-  STAZ <TABPH
-  JSR findintab
+;  LDA# <MNTAB
+;  STAZ <TABPL
+;  LDA# >MNTAB
+;  STAZ <TABPH
+;  JSR findintab
+  JSR select_instruction_hash_table
+  JSR find_in_hash  
   BCC ~eo_found
   PLA                  ; Restore next char
   JMP err_opcodenotfound
 eo_found
-  LDAZ(),Y <TABPL
+;  LDAZ(),Y <TABPL
+  LDAZ <HEX2
   BNE ~eo_done         ; Not opcode (DATA command)
   ; Opcode
-  INY
-  LDAZ(),Y <TABPL
+;  INY
+;  LDAZ(),Y <TABPL
+  LDAZ <HEX1
   JSR emit
 eo_done
   PLA                  ; Restore next char
@@ -796,7 +872,11 @@ tokloop5
 ; Entry point
 start
   JSR init_heap
-  JSR init_hash_tab
+  JSR select_label_hash_table
+  JSR init_hash_table
+  JSR select_instruction_hash_table
+  JSR init_hash_table
+  JSR populate_instruction_hash_table
   LDA# $00
   STAZ <PASS           ; Bit 7 = 0 (pass 1)
   JSR assemble
