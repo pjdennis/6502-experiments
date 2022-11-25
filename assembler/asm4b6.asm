@@ -71,6 +71,7 @@ err_opcodenotfound
 err_expectedhex
   BRK $04 "Expected hex value" $00
 
+
 ; Instruction table
 MNTAB
 ;      Mnemonic           Opcode
@@ -498,66 +499,6 @@ readtokenloop
   RTS
 
 
-; On entry Y contains offset into TAB
-; On exit TABPL;TABPH += Y + 1
-;         Y = 0
-;         A is not preserved
-advanceintab
-  INY
-  TYA
-  LDY# $00
-  CLC
-  ADCZ <TABPL
-  STAZ <TABPL
-  TYA                  ; A <- 0
-  ADCZ <TABPH
-  STAZ <TABPH
-  RTS
-
-
-; On entry TOKEN contains token to find
-;          TABPL;TABPH points to table
-; On exit C clear if found; set if not found
-;         TABPL;TABPH points to token value if found
-;                   or to end of table if not found
-;         Y = 0
-;         X is preserved
-;         A is not preserved
-findintab
-  LDY# $00
-fit_tokenloop          ; Outer loop
-  LDAZ(),Y <TABPL
-  BNE ~fit_charloop
-  ; not found
-  SEC
-  RTS
-;invariant: pointed at first char
-; first char of mnenomic in table loaded
-fit_charloop           ; inner loop
-  CMP,Y TOKEN
-  BNE ~fit_skipcurrent ; Current symbol not a match
-  CMP# $00
-  BNE ~fit_nextchar
-  ; found a match
-  JSR advanceintab
-  CLC
-  RTS
-fit_nextchar           ; Move to next char
-  INY
-  LDAZ(),Y <TABPL
-  JMP fit_charloop     ; Inner loop
-fit_skipcurrent        ; Skip current symbol in table
-  LDAZ(),Y <TABPL
-  BEQ ~fit_nextsymbol
-  INY
-  JMP fit_skipcurrent
-fit_nextsymbol         ; Move to next symbol in table
-  INY                  ; Move past 2 data bytes
-  INY
-  JSR advanceintab
-  JMP fit_tokenloop    ; Outer loop
-
-
 ; On exit A contains the next character
 readandfindexistinglabel
   JSR readtoken
@@ -643,6 +584,7 @@ eh_one
   PLA                  ; Restore next char
   RTS
 
+
 ; On entry A contains the next character
 ; On exit C set if value read; clear otherwise
 readvalue
@@ -715,23 +657,15 @@ cl_added
 emitopcode
   JSR readtoken
   PHA                  ; Save next char
-;  LDA# <MNTAB
-;  STAZ <TABPL
-;  LDA# >MNTAB
-;  STAZ <TABPH
-;  JSR findintab
   JSR select_instruction_hash_table
   JSR find_in_hash  
   BCC ~eo_found
   PLA                  ; Restore next char
   JMP err_opcodenotfound
 eo_found
-;  LDAZ(),Y <TABPL
   LDAZ <HEX2
   BNE ~eo_done         ; Not opcode (DATA command)
   ; Opcode
-;  INY
-;  LDAZ(),Y <TABPL
   LDAZ <HEX1
   JSR emit
 eo_done
