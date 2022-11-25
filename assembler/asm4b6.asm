@@ -7,9 +7,9 @@
 read     = $F006
 write_b  = $F009
 
-hash_tab_l = $4000
-hash_tab_h = $4100
-heap       = $4200
+HASHTABL = $4000
+HASHTABH = $4100
+HEAP     = $4200
 
 TEMP     = $0000       ; 1 byte
 TABPL    = $0001       ; 2 byte table pointer
@@ -116,9 +116,9 @@ MNTAB
 
 
 init_heap
-  LDA# <heap
+  LDA# <HEAP
   STAZ <MEMPL
-  LDA# >heap
+  LDA# >HEAP
   STAZ <MEMPH
 
   RTS
@@ -140,8 +140,8 @@ init_hash_tab
   LDX# $00
   LDA# $00
 iht_loop
-  STA,X hash_tab_l
-  STA,X hash_tab_h
+  STA,X HASHTABL
+  STA,X HASHTABH
   INX
   BNE ~iht_loop
   
@@ -167,9 +167,9 @@ ch_done
 hash_entry_empty
   LDAZ <hash
   TAY
-  LDA,Y hash_tab_l
+  LDA,Y HASHTABL
   BNE ~hee_done
-  LDA,Y hash_tab_h
+  LDA,Y HASHTABH
 hee_done
   RTS
 
@@ -178,9 +178,9 @@ hee_done
 load_hash_entry
   LDAZ <hash
   TAY
-  LDA,Y hash_tab_l
+  LDA,Y HASHTABL
   STAZ <TABPL
-  LDA,Y hash_tab_h
+  LDA,Y HASHTABH
   STAZ <TABPH
   RTS
 
@@ -190,9 +190,9 @@ store_hash_entry
   LDAZ <hash
   TAY
   LDAZ <MEMPL
-  STA,Y hash_tab_l
+  STA,Y HASHTABL
   LDAZ <MEMPH
-  STA,Y hash_tab_h
+  STA,Y HASHTABH
   RTS
 
 
