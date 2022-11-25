@@ -12,26 +12,20 @@ hash_tab_h = $4100
 heap       = $4200
 
 TEMP     = $0000       ; 1 byte
-TABL     = $0001       ; 1 byte
-TABH     = $0002       ; 1 byte
-PCL      = $0003       ; 1 byte
-PCH      = $0004       ; 1 byte
+TABPL    = $0001       ; 2 byte table pointer
+TABPH    = $0002       ; "
+PCL      = $0003       ; 2 byte program counter
+PCH      = $0004       ; "
 HEX1     = $0005       ; 1 byte
-val_h    = $0005
 HEX2     = $0006       ; 1 byte
-val_l    = $0006
 PASS     = $0007       ; 1 byte $00 = pass 1 $FF = pass 2
-memp_l   = $0008
-memp_h   = $0009
-p_l      = $000A
-p_h      = $000B
-hash     = $000C
-tabp_l   = $000D
-tabp_h   = $000E
-TOKEN    = $000F       ; multiple bytes
-token    = $000F
+MEMPL    = $0008       ; 2 byte heap pointer
+MEMPH    = $0009       ; "
+PL       = $000A       ; 2 byte pointer
+PH       = $000B       ; "
+hash     = $000C       ; 1 byte hash value
+TOKEN    = $000D       ; multiple bytes
 
-;LBTAB    = $3000
 
 *        = $2000       ; Set PC
 
@@ -69,7 +63,6 @@ err_opcodenotfound
 err_expectedhex
   BRK $04 "Expected hex value" $00
 
-; Blah
 ; Instruction table
 MNTAB
 ;      Mnemonic           Opcode
@@ -124,9 +117,9 @@ MNTAB
 
 init_heap
   LDA# <heap
-  STAZ <memp_l
+  STAZ <MEMPL
   LDA# >heap
-  STAZ <memp_h
+  STAZ <MEMPH
 
   RTS
 
@@ -135,11 +128,11 @@ advance_heap
   TYA
   LDY# $00
   CLC
-  ADCZ <memp_l
-  STAZ <memp_l
+  ADCZ <MEMPL
+  STAZ <MEMPL
   TYA
-  ADCZ <memp_h
-  STAZ <memp_h
+  ADCZ <MEMPH
+  STAZ <MEMPH
   RTS
 
 
@@ -158,7 +151,7 @@ calculate_hash
   STAZ <hash
   LDX# $00
 ch_loop
-  LDAZ,X <token
+  LDAZ,X <TOKEN
   BEQ ~ch_done
   EORZ <hash
   TAY
@@ -186,9 +179,9 @@ load_hash_entry
   LDAZ <hash
   TAY
   LDA,Y hash_tab_l
-  STAZ <tabp_l
+  STAZ <TABPL
   LDA,Y hash_tab_h
-  STAZ <tabp_h
+  STAZ <TABPH
   RTS
 
 
@@ -196,50 +189,50 @@ load_hash_entry
 store_hash_entry
   LDAZ <hash
   TAY
-  LDAZ <memp_l
+  LDAZ <MEMPL
   STA,Y hash_tab_l
-  LDAZ <memp_h
+  LDAZ <MEMPH
   STA,Y hash_tab_h
   RTS
 
 
 ; Store current memory pointer in table
 store_table_entry
-  LDAZ <memp_l
-  STAZ(),Y <tabp_l
+  LDAZ <MEMPL
+  STAZ(),Y <TABPL
   INY
-  LDAZ <memp_h
-  STAZ(),Y <tabp_l
+  LDAZ <MEMPH
+  STAZ(),Y <TABPL
   INY
   RTS
 
 
-; On entry tabp_l;tabp_h point to head of list of entries
-;          token contains the token to find
+; On entry TABPL;TABPH point to head of list of entries
+;          TOKEN contains the token to find
 ; On exit C clear if found; set if not found
-;         tabp_l;tabp_hi,Y points to value if found
+;         TABPL;TABPHi,Y points to value if found
 ;         or to 'next' pointer if not found
 find_token
 ft_tokenloop
   ; Store the current pointer
-  LDAZ <tabp_l
-  STAZ <p_l
-  LDAZ <tabp_h
-  STAZ <p_h
+  LDAZ <TABPL
+  STAZ <PL
+  LDAZ <TABPH
+  STAZ <PH
   ; Advance past 'next' pointer
   CLC
   LDA# $02
-  ADCZ <tabp_l
-  STAZ <tabp_l
+  ADCZ <TABPL
+  STAZ <TABPL
   LDA# $00
-  ADCZ <tabp_h
-  STAZ <tabp_h
+  ADCZ <TABPH
+  STAZ <TABPH
   ; Check for matching token
   LDY# $FF
 ft_charloop
   INY
-  LDAZ(),Y <tabp_l
-  CMP,Y token
+  LDAZ(),Y <TABPL
+  CMP,Y TOKEN
   BNE ~ft_notmatch
   CMP# $00
   BNE ~ft_charloop
@@ -250,28 +243,28 @@ ft_charloop
 ft_notmatch            ; Not a match - move to next
   ; Check if 'next' pointer is 0
   LDY# $00
-  LDAZ(),Y <p_l
+  LDAZ(),Y <PL
   BNE ~ft_notmatch1 ; not zero
   INY
-  LDAZ(),Y <p_l
+  LDAZ(),Y <PL
   BEQ ~ft_atend
   ; Not at end
-  STAZ <tabp_h
+  STAZ <TABPH
   LDA# $00
-  STAZ <tabp_l
+  STAZ <TABPL
   JMP ft_tokenloop
 ft_notmatch1
-  STAZ <tabp_l
+  STAZ <TABPL
   INY
-  LDAZ(),Y <p_l
-  STAZ <tabp_h
+  LDAZ(),Y <PL
+  STAZ <TABPH
   JMP ft_tokenloop
 ft_atend
   ; point tabp,Y to the zero 'next' pointer
-  LDAZ <p_l
-  STAZ <tabp_l
-  LDAZ <p_h
-  STAZ <tabp_h
+  LDAZ <PL
+  STAZ <TABPL
+  LDAZ <PH
+  STAZ <TABPH
   LDY# $00
   SEC ; Carry set indicates not found
   RTS
@@ -279,7 +272,7 @@ ft_atend
 
 ; On entry token contains the token to find
 ; Raises error if not found
-; On exit val_l;val_h contains value
+; On exit HEX1 and HEX2 contains MSB and LSB of value
 find_in_hash
   JSR calculate_hash
   JSR hash_entry_empty
@@ -289,45 +282,49 @@ fih_entry_exists
   JSR find_token
   BCS ~fih_notfound
   ; Found
-  LDAZ(),Y <tabp_l
-  STAZ <val_l
+  LDAZ(),Y <TABPL
+  STAZ <HEX2
   INY
-  LDAZ(),Y <tabp_l
-  STAZ <val_h
+  LDAZ(),Y <TABPL
+  STAZ <HEX1
   RTS
 fih_notfound
   BRK $02 "Token not found" $00
 
 
+; On entry HEX1 and HEX2 contain MSB and LSB of value
+;          TOKEN contains name of token
+; Stores null next pointer, token and value on heap
+; and advances heap pointer 
 store_token
   LDY# $00
   ; Store null pointer (pointer to next)
   LDA# $00
-  STAZ(),Y <memp_l
+  STAZ(),Y <MEMPL
   INY
-  STAZ(),Y <memp_l
+  STAZ(),Y <MEMPL
   INY
   JSR advance_heap
   ; Store token name
   LDY# $FF         ; Alternative: DEY
 st_loop
   INY
-  LDA,Y token
-  STAZ(),Y <memp_l
+  LDA,Y TOKEN
+  STAZ(),Y <MEMPL
   BNE ~st_loop
   INY
   ; Store value
-  LDAZ <val_l
-  STAZ(),Y <memp_l
+  LDAZ <HEX2
+  STAZ(),Y <MEMPL
   INY
-  LDAZ <val_h
-  STAZ(),Y <memp_l
+  LDAZ <HEX1
+  STAZ(),Y <MEMPL
   INY
   JMP advance_heap ; Tail call
 
 
-; On entry token contains token
-;          val_l;val_h contains value
+; On entry TOKEN contains token
+;          HEX1 and HEX2 contain MSB and LSB of value
 hash_add
   JSR calculate_hash
   JSR hash_entry_empty
@@ -426,7 +423,7 @@ readtokenloop
 
 
 ; On entry Y contains offset into TAB
-; On exit TABL;TABH += Y + 1
+; On exit TABPL;TABPH += Y + 1
 ;         Y = 0
 ;         A is not preserved
 advanceintab
@@ -434,18 +431,18 @@ advanceintab
   TYA
   LDY# $00
   CLC
-  ADCZ <TABL
-  STAZ <TABL
+  ADCZ <TABPL
+  STAZ <TABPL
   TYA                  ; A <- 0
-  ADCZ <TABH
-  STAZ <TABH
+  ADCZ <TABPH
+  STAZ <TABPH
   RTS
 
 
 ; On entry TOKEN contains token to find
-;          TABL;TABH points to table
+;          TABPL;TABPH points to table
 ; On exit C clear if found; set if not found
-;         TABL;TABH points to token value if found
+;         TABPL;TABPH points to token value if found
 ;                   or to end of table if not found
 ;         Y = 0
 ;         X is preserved
@@ -453,7 +450,7 @@ advanceintab
 findintab
   LDY# $00
 fit_tokenloop          ; Outer loop
-  LDAZ(),Y <TABL
+  LDAZ(),Y <TABPL
   BNE ~fit_charloop
   ; not found
   SEC
@@ -471,10 +468,10 @@ fit_charloop           ; inner loop
   RTS
 fit_nextchar           ; Move to next char
   INY
-  LDAZ(),Y <TABL
+  LDAZ(),Y <TABPL
   JMP fit_charloop     ; Inner loop
 fit_skipcurrent        ; Skip current symbol in table
-  LDAZ(),Y <TABL
+  LDAZ(),Y <TABPL
   BEQ ~fit_nextsymbol
   INY
   JMP fit_skipcurrent
@@ -483,20 +480,6 @@ fit_nextsymbol         ; Move to next symbol in table
   INY
   JSR advanceintab
   JMP fit_tokenloop    ; Outer loop
-
-
-; On entry TOKEN contains a label
-; On exit C clear if found; set if not found
-;         TABL;TABH points to token value if found
-;                   or to end of table if not found
-;         Y = 0
-;         A is not preserved
-findlabel
-  LDA# <LBTAB
-  STAZ <TABL
-  LDA# >LBTAB
-  STAZ <TABH
-  JMP findintab        ; Tail call
 
 
 ; On exit A contains the next character
@@ -508,17 +491,6 @@ readandfindexistinglabel
   RTS
 rafel_pass2
   PHA                  ; Save next char
-;  JSR findlabel
-;  BCC ~rafel_found
-;  PLA                  ; Restore next char
-;  JMP err_labelnotfound
-;rafel_found
-  ; Store value of label into HEX2 and HEX1
-;  LDAZ(),Y <TABL
-;  STAZ <HEX2
-;  INY
-;  LDAZ(),Y <TABL
-;  STAZ <HEX1
   JSR find_in_hash
   PLA                  ; Restore next char
   RTS
@@ -636,18 +608,6 @@ cl_normallabel
   PLA                  ; Restore next char
   JMP skiprestofline   ; Tail call
 cl_pass1
-;  JSR findlabel
-;  BCS ~cl_notfound
-;  PLA                  ; Restore next char
-;  JMP err_duplicatelabel
-;cl_notfound
-;cl_loop                ; Copy TOKEN to table
-;  LDA,Y TOKEN
-;  STAZ(),Y <TABL
-;  BEQ ~cl_copyvalue
-;  INY
-;  JMP cl_loop
-;cl_copyvalue           ; Copy value or PC value to table
   PLA                  ; Restore next char
   JSR readvalue
   PHA                  ; Save next char
@@ -658,30 +618,11 @@ cl_pass1
   LDAZ <PCH
   STAZ <HEX1
 cl_hextotable
-
-;  PHA
-;  TYA
-;  PHA
   JSR hash_add
-;  PLA
-;  TAY
-;  PLA
-
-;  INY
-;  LDAZ <HEX2
-;  STAZ(),Y <TABL
-;  INY
-;  LDAZ <HEX1
-;  STAZ(),Y <TABL
-  ; Skip past rest of line
   PLA                  ; Restore next char
   JSR skiprestofline
-  ; Terminate table value
   ; No need to retain next char as caller
   ; goes straight to next line
-;  INY
-;  LDA# $00
-;  STAZ(),Y <TABL
   RTS
 
 
@@ -691,19 +632,19 @@ emitopcode
   JSR readtoken
   PHA                  ; Save next char
   LDA# <MNTAB
-  STAZ <TABL
+  STAZ <TABPL
   LDA# >MNTAB
-  STAZ <TABH
+  STAZ <TABPH
   JSR findintab
   BCC ~eo_found
   PLA                  ; Restore next char
   JMP err_opcodenotfound
 eo_found
-  LDAZ(),Y <TABL
+  LDAZ(),Y <TABPL
   BNE ~eo_done         ; Not opcode (DATA command)
   ; Opcode
   INY
-  LDAZ(),Y <TABL
+  LDAZ(),Y <TABPL
   JSR emit
 eo_done
   PLA                  ; Restore next char
@@ -845,16 +786,12 @@ start
   JSR init_heap
   JSR init_hash_tab
   LDA# $00
-  STA LBTAB
   STAZ <PASS           ; Bit 7 = 0 (pass 1)
   JSR assemble
   LDA# $FF
   STAZ <PASS           ; Bit 7 = 1 (pass 2)
   JSR assemble
   BRK $00              ; Success
-
-
-LBTAB                  ; Labels table comes after code
 
 
   DATA start ; Emulation environment jumps to address in last 2 bytes
