@@ -36,6 +36,7 @@ MNTAB
 ;      Mnemonic           Opcode
   DATA "ADC#"     $00 $00 $69
   DATA "ADCZ"     $00 $00 $65
+  DATA "AND#"     $00 $00 $29
   DATA "ASLA"     $00 $00 $0A
   DATA "BCC"      $00 $00 $90
   DATA "BCS"      $00 $00 $B0
@@ -46,21 +47,23 @@ MNTAB
   DATA "BPL"      $00 $00 $10
   DATA "BRK"      $00 $00 $00
   DATA "CLC"      $00 $00 $18
-  DATA "CMPZ,X"   $00 $00 $D5
   DATA "CMP#"     $00 $00 $C9
   DATA "CMP,Y"    $00 $00 $D9
-  DATA "DEY"      $00 $00 $88
+  DATA "EORZ"     $00 $00 $45
   DATA "INCZ"     $00 $00 $E6
   DATA "INX"      $00 $00 $E8
   DATA "INY"      $00 $00 $C8
   DATA "JMP"      $00 $00 $4C
   DATA "JSR"      $00 $00 $20
-  DATA "LDAZ"     $00 $00 $A5
   DATA "LDA#"     $00 $00 $A9
   DATA "LDAZ(),Y" $00 $00 $B1
+  DATA "LDA,X"    $00 $00 $BD
   DATA "LDA,Y"    $00 $00 $B9
+  DATA "LDAZ"     $00 $00 $A5
+  DATA "LDAZ,X"   $00 $00 $B5
   DATA "LDX#"     $00 $00 $A2
   DATA "LDY#"     $00 $00 $A0
+  DATA "LSRA"     $00 $00 $4A
   DATA "ORAZ"     $00 $00 $05
   DATA "PHA"      $00 $00 $48
   DATA "PLA"      $00 $00 $68
@@ -70,8 +73,11 @@ MNTAB
   DATA "SEC"      $00 $00 $38
   DATA "STA"      $00 $00 $8D
   DATA "STAZ(),Y" $00 $00 $91
+  DATA "STA,X"    $00 $00 $9D
+  DATA "STA,Y"    $00 $00 $99
   DATA "STAZ"     $00 $00 $85
   DATA "STAZ,X"   $00 $00 $95
+  DATA "TAY"      $00 $00 $A8
   DATA "TYA"      $00 $00 $98
   DATA "DATA"     $00 $01 $00 ; Directive
   DATA $00
