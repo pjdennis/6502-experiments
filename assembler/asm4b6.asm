@@ -1,3 +1,6 @@
+; inst.asm prepended to provide instruction hash table
+
+
 ; Provided by environment:
 ;   read:    Returns next character in A
 ;            C set when at end
@@ -9,9 +12,7 @@ write_b   = $F009
 
 LHASHTABL = $4000      ; Label hash table (low and high)
 LHASHTABH = $4100      ; "
-IHASHTABL = $4200      ; Instruction hash table (low and high)
-IHASHTABH = $4300      ; "
-HEAP      = $4400      ; Data heap
+HEAP      = $4200      ; Data heap
 
 TEMP      = $0000      ; 1 byte
 TABPL     = $0001      ; 2 byte table pointer
@@ -25,37 +26,12 @@ MEMPL     = $0008      ; 2 byte heap pointer
 MEMPH     = $0009      ; "
 PL        = $000A      ; 2 byte pointer
 PH        = $000B      ; "
-P2L       = $000C      ; 2 byte pointer
-P2H       = $000D      ; "
-hash      = $000E      ; 1 byte hash value
-HTLPL     = $000F      ; 2 byte pointer to low byte hash table
-HTLPH     = $0010      ; "
-HTHPL     = $0011      ; 2 byte pointer to high byte hash table
-HTHPH     = $0012      ; "
-TOKEN     = $0013      ; multiple bytes
-
-
-*        = $2000       ; Set PC
-
-
-; Contains each byte $00-$FF exactly once in random order
-scramble_table
-  DATA $01 $70 $DE $CD $50 $E6 $D2 $27 $7E $DB $15 $F0 $AF $F1 $A6 $CA
-  DATA $31 $03 $C4 $B5 $B3 $A2 $9C $19 $AB $2C $DA $46 $E8 $0F $59 $68
-  DATA $09 $69 $9B $FA $3C $E1 $41 $5E $8A $1B $93 $6D $6E $22 $71 $44
-  DATA $D4 $FC $24 $E3 $08 $6C $2B $EA $85 $B1 $E4 $FF $37 $F3 $5D $18
-  DATA $25 $4E $8F $0C $9E $F9 $3D $58 $76 $81 $0A $0B $D5 $53 $2A $91
-  DATA $66 $B0 $95 $98 $AE $77 $60 $26 $80 $55 $ED $5A $14 $78 $FE $F8
-  DATA $7B $2D $34 $8E $13 $87 $89 $4B $2E $2F $BF $3B $65 $29 $47 $49
-  DATA $D1 $F6 $BD $3F $32 $CE $1F $20 $30 $36 $39 $0E $5F $04 $C0 $A8
-  DATA $A5 $BA $43 $F5 $F2 $4C $06 $C3 $D9 $DF $B9 $1D $B7 $E7 $4A $4D
-  DATA $73 $3A $C9 $C1 $DC $92 $A3 $7A $96 $BB $EC $61 $11 $E9 $6A $1A
-  DATA $42 $75 $51 $A1 $97 $C8 $17 $1C $00 $5C $72 $94 $16 $7C $D3 $84
-  DATA $5B $EF $9A $45 $FD $9F $F7 $EB $9D $8D $A4 $C2 $6F $C7 $D0 $64
-  DATA $38 $83 $D7 $BC $B6 $74 $CC $07 $AC $7F $33 $99 $3E $EE $28 $8C
-  DATA $A7 $57 $62 $1E $86 $4F $40 $D8 $B2 $CF $A9 $E2 $AA $CB $D6 $A0
-  DATA $10 $E5 $02 $35 $21 $79 $B8 $C6 $23 $0D $E0 $56 $8B $F4 $52 $12
-  DATA $7D $05 $67 $54 $63 $90 $B4 $DD $AD $C5 $6B $82 $FB $BE $48 $88
+hash      = $000C      ; 1 byte hash value
+HTLPL     = $000D      ; 2 byte pointer to low byte hash table
+HTLPH     = $000E      ; "
+HTHPL     = $000F      ; 2 byte pointer to high byte hash table
+HTHPH     = $0010      ; "
+TOKEN     = $0011      ; multiple bytes
 
 
 ; Environment should surface error codes and messages on BRK
@@ -70,58 +46,6 @@ err_opcodenotfound
 
 err_expectedhex
   BRK $04 "Expected hex value" $00
-
-
-; Instruction table
-MNTAB
-;      Mnemonic           Opcode
-  DATA "ADC#"     $00 $00 $69
-  DATA "ADCZ"     $00 $00 $65
-  DATA "AND#"     $00 $00 $29
-  DATA "ASLA"     $00 $00 $0A
-  DATA "BCC"      $00 $00 $90
-  DATA "BCS"      $00 $00 $B0
-  DATA "BEQ"      $00 $00 $F0
-  DATA "BITZ"     $00 $00 $24
-  DATA "BMI"      $00 $00 $30
-  DATA "BNE"      $00 $00 $D0
-  DATA "BPL"      $00 $00 $10
-  DATA "BRK"      $00 $00 $00
-  DATA "CLC"      $00 $00 $18
-  DATA "CMP#"     $00 $00 $C9
-  DATA "CMP,Y"    $00 $00 $D9
-  DATA "EORZ"     $00 $00 $45
-  DATA "INCZ"     $00 $00 $E6
-  DATA "INX"      $00 $00 $E8
-  DATA "INY"      $00 $00 $C8
-  DATA "JMP"      $00 $00 $4C
-  DATA "JSR"      $00 $00 $20
-  DATA "LDA#"     $00 $00 $A9
-  DATA "LDAZ(),Y" $00 $00 $B1
-  DATA "LDA,X"    $00 $00 $BD
-  DATA "LDA,Y"    $00 $00 $B9
-  DATA "LDAZ"     $00 $00 $A5
-  DATA "LDAZ,X"   $00 $00 $B5
-  DATA "LDX#"     $00 $00 $A2
-  DATA "LDY#"     $00 $00 $A0
-  DATA "LSRA"     $00 $00 $4A
-  DATA "ORAZ"     $00 $00 $05
-  DATA "PHA"      $00 $00 $48
-  DATA "PLA"      $00 $00 $68
-  DATA "RTS"      $00 $00 $60
-  DATA "SBC#"     $00 $00 $E9
-  DATA "SBCZ"     $00 $00 $E5
-  DATA "SEC"      $00 $00 $38
-  DATA "STA"      $00 $00 $8D
-  DATA "STAZ(),Y" $00 $00 $91
-  DATA "STA,X"    $00 $00 $9D
-  DATA "STA,Y"    $00 $00 $99
-  DATA "STAZ"     $00 $00 $85
-  DATA "STAZ,X"   $00 $00 $95
-  DATA "TAY"      $00 $00 $A8
-  DATA "TYA"      $00 $00 $98
-  DATA "DATA"     $00 $01 $00 ; Directive
-  DATA $00
 
 
 init_heap
@@ -165,44 +89,6 @@ select_instruction_hash_table
   STAZ <HTHPL
   LDA# >IHASHTABH
   STAZ <HTHPH
-  RTS
-
-
-populate_instruction_hash_table
-  LDA# <MNTAB
-  STAZ <P2L
-  LDA# >MNTAB
-  STAZ <P2H
-piht_entry_loop
-  LDY# $00
-  LDAZ(),Y <P2L
-  BEQ ~piht_done
-piht_token_loop
-  STA,Y TOKEN
-  BEQ ~piht_token_loop_done
-  INY
-  LDAZ(),Y <P2L
-  JMP piht_token_loop
-piht_token_loop_done
-  INY
-  LDAZ(),Y <P2L
-  STAZ <HEX2
-  INY
-  LDAZ(),Y <P2L
-  STAZ <HEX1
-  INY
-  ; Advance
-  TYA
-  CLC
-  ADCZ <P2L
-  STAZ <P2L
-  LDA# $00
-  ADCZ <P2H
-  STAZ <P2H
-  ; Store entry
-  JSR hash_add
-  JMP piht_entry_loop
-piht_done
   RTS
 
 
@@ -810,7 +696,6 @@ start
   JSR init_hash_table
   JSR select_instruction_hash_table
   JSR init_hash_table
-  JSR populate_instruction_hash_table
   LDA# $00
   STAZ <PASS           ; Bit 7 = 0 (pass 1)
   JSR assemble

@@ -399,6 +399,11 @@ display_byte
   JMP display_hex
 
 
+display_newline
+  LDA# "\n"
+  JMP write_b
+
+
 display_data_prefix
   LDA# " "
   JSR write_b
@@ -421,6 +426,40 @@ dtext_loop
   INY
   JMP dtext_loop
 dtext_done
+  RTS
+
+
+display_scramble_table
+  LDA# $00
+  STAZ <HASH
+dst_loop
+  JSR display_data_prefix
+  LDA# $00
+  STAZ <TEMP
+dst_lineloop
+  LDA# " "
+  JSR write_b
+  LDAZ <HASH
+  TAY
+  LDA,Y scramble_table
+  JSR display_byte
+  CLC
+  LDAZ <HASH
+  ADC# $01
+  STAZ <HASH  
+  LDAZ <TEMP
+  CLC
+  ADC# $01
+  STAZ <TEMP
+  CMP# $10
+  BEQ ~dst_next1
+  JMP dst_lineloop
+dst_next1
+  JSR display_newline
+  LDAZ <HASH
+  BEQ ~dst_done
+  JMP dst_loop
+dst_done
   RTS
 
 
@@ -481,8 +520,7 @@ dt_next
   BEQ ~dt_next1
   JMP dt_lineloop
 dt_next1
-  LDA# "\n"
-  JSR write_b
+  JSR display_newline
   LDAZ <HASH
   BEQ ~dt_done 
   JMP dt_loop
@@ -519,8 +557,7 @@ write_label
   INY
   LDAZ(),Y <PL
   JSR display_byte
-  LDA# "\n"
-  JSR write_b
+  JSR display_newline
   RTS 
 
 
@@ -554,8 +591,7 @@ dd_entry_loop
   ADC# $00
   STAZ <PH
   JSR display_text
-  LDA# "\n"
-  JSR write_b
+  JSR display_newline
   JSR display_data_prefix
   LDA# " "
   JSR write_b
@@ -621,33 +657,60 @@ start
   JSR select_instruction_hash_table
   JSR init_hash_table
   JSR populate_instruction_hash_table
-  
+ 
+  LDA# <msg_setpc
+  STAZ <PL
+  LDA# >msg_setpc
+  STAZ <PH
+
+  JSR display_text
+  JSR display_newline
+  JSR display_newline
+
+  LDA# <msg_scramble_table
+  STAZ <PL
+  LDA# >msg_scramble_table
+  STAZ <PH
+  JSR display_text
+  JSR display_newline
+  JSR display_scramble_table
+
+  JSR display_newline
+ 
   LDA# <msg_IHASHTABL
   STAZ <PL
   LDA# >msg_IHASHTABL
   STAZ <PH
   JSR display_text
-  LDA# "\n"
-  JSR write_b
+  JSR display_newline
   LDA# "<"
   STAZ <CHAR
   JSR display_table
+
+  JSR display_newline
 
   LDA# <msg_IHASHTABH
   STAZ <PL
   LDA# >msg_IHASHTABH
   STAZ <PH
   JSR display_text
-  LDA# "\n"
-  JSR write_b
+  JSR display_newline
   LDA# ">"
   STAZ <CHAR
   JSR display_table
+
+  JSR display_newline
 
   JSR display_data
 
   BRK $00              ; Success
 
+
+msg_setpc
+  DATA "* = $2000" $00
+
+msg_scramble_table
+  DATA "scramble_table" $00
 
 msg_data
   DATA "DATA" $00
