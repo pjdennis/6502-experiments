@@ -94,7 +94,7 @@ select_instruction_hash_table
 
 init_hash_table
   LDY# $00
-  LDA# $00
+  TYA                  ; A <- 0
 iht_loop
   STAZ(),Y <HTLPL
   STAZ(),Y <HTHPL
