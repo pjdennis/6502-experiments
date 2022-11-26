@@ -8,8 +8,8 @@ gcc -o emulator.out emulator.c &&
   ./emulator.out asm4b3.out 2000 asm4b4.asm asm4b4.out &&
   ./emulator.out asm4b4.out 2000 asm4b5.asm asm4b5.out &&
   ./emulator.out asm4b5.out 2000 instgen.asm instgen.out &&
-  ./emulator.out instgen.out 2000 /dev/null inst.asm &&
-  cat inst.asm asm4b6.asm > asm4b6c.asm.out &&
+  ./emulator.out instgen.out 2000 /dev/null inst.asm.out &&
+  cat inst.asm.out asm4b6.asm > asm4b6c.asm.out &&
   ./emulator.out asm4b5.out 2000 asm4b6c.asm.out asm4b6c.out &&
   ./emulator.out asm4b6c.out 2000 asm4b6c.asm.out asm4b6c_2.out &&
   diff <(hexdump -C asm4b6c.out) <(hexdump -C asm4b6c_2.out) &&
