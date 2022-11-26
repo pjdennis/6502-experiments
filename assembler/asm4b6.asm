@@ -26,7 +26,7 @@ MEMPL     = $0008      ; 2 byte heap pointer
 MEMPH     = $0009      ; "
 PL        = $000A      ; 2 byte pointer
 PH        = $000B      ; "
-hash      = $000C      ; 1 byte hash value
+HASH      = $000C      ; 1 byte hash value
 HTLPL     = $000D      ; 2 byte pointer to low byte hash table
 HTLPH     = $000E      ; "
 HTHPL     = $000F      ; 2 byte pointer to high byte hash table
@@ -98,22 +98,22 @@ init_hash_table
 iht_loop
   STAZ(),Y <HTLPL
   STAZ(),Y <HTHPL
-  INX
+  INY
   BNE ~iht_loop
   RTS
   
 
 calculate_hash
   LDA# $00
-  STAZ <hash
+  STAZ <HASH
   LDX# $00
 ch_loop
   LDAZ,X <TOKEN
   BEQ ~ch_done
-  EORZ <hash
+  EORZ <HASH
   TAY
   LDA,Y scramble_table
-  STAZ <hash
+  STAZ <HASH
   INX
   JMP ch_loop
 ch_done
@@ -122,7 +122,7 @@ ch_done
 
 ; On exit Z = 1 if entry is empty
 hash_entry_empty
-  LDAZ <hash
+  LDAZ <HASH
   TAY
   LDAZ(),Y <HTLPL
   BNE ~hee_done
@@ -131,9 +131,9 @@ hee_done
   RTS
 
 
-; Load from hash table to tab_l;tab_h
+; Load from hash table to TABPL;TABPH
 load_hash_entry
-  LDAZ <hash
+  LDAZ <HASH
   TAY
   LDAZ(),Y <HTLPL
   STAZ <TABPL
@@ -144,7 +144,7 @@ load_hash_entry
 
 ; Store current memory pointer in hash table
 store_hash_entry
-  LDAZ <hash
+  LDAZ <HASH
   TAY
   LDAZ <MEMPL
   STAZ(),Y <HTLPL
@@ -234,7 +234,7 @@ find_in_hash
   JSR calculate_hash
   JSR hash_entry_empty
   BEQ ~fih_notfound
-fih_entry_exists
+  ; Entry exists
   JSR load_hash_entry
   JSR find_token
   BCS ~fih_notfound
@@ -613,6 +613,7 @@ emitlabelmsb
   RTS
 
 
+; On exit A contains the next character
 emitlabelrel
   BITZ <PASS
   BMI ~elr_pass2
@@ -689,12 +690,11 @@ tokloop5
   JSR emitlabel        ; 2 byte variable
   JMP tokloop
 
+
 ; Entry point
 start
   JSR init_heap
   JSR select_label_hash_table
-  JSR init_hash_table
-  JSR select_instruction_hash_table
   JSR init_hash_table
   LDA# $00
   STAZ <PASS           ; Bit 7 = 0 (pass 1)
