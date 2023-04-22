@@ -90,6 +90,8 @@ ILI9341_PINK        = $fc18 ; 255, 130, 198
 
 GD_CHAR_ROWS = 20
 GD_CHAR_COLS = 20
+GD_CHAR_BUFFER_SIZE = GD_CHAR_ROWS * GD_CHAR_COLS
+GD_CHAR_TEMP_SIZE   = 12 * 16 / 8
 
 GD_CMD_PTR           = GD_ZERO_PAGE_BASE + $00 ; 2 bytes
 GD_COLOR             = GD_ZERO_PAGE_BASE + $02 ; 2 bytes
@@ -169,12 +171,18 @@ gd_send_data:
   rts
 
 
-; On entry A = the amount to scroll - 0..19
-gd_scroll_up:
+; On entry A = the amount to scroll: -19..19
+gd_scroll:
   phx
   phy
   clc
   adc GD_SCROLL_ROWS
+  cmp #$80
+  bcc .not_negative
+  clc
+  adc #GD_CHAR_ROWS
+  bra .row_ok1
+.not_negative:
   cmp #GD_CHAR_ROWS
   bcc .row_ok1
   sec
@@ -402,12 +410,66 @@ gd_show_string:
   bra .continue
 
 
+gd_invert_character:
+  pha
+  phx
+  phy
+  jsr gd_load_character
+  jsr set_char_data_ptr
+  jsr gd_make_inverted_char
+  lda #<GD_CHAR_TEMP
+  sta GD_CHAR_DATA_PTR
+  lda #>GD_CHAR_TEMP
+  sta GD_CHAR_DATA_PTR+1
+  jsr gd_show_character_data
+  ply
+  plx
+  pla
+  rts
+
+
+gd_cursor_character:
+  pha
+  phx
+  phy
+  jsr gd_load_character
+  jsr set_char_data_ptr
+  jsr gd_make_cursored_char
+  lda #<GD_CHAR_TEMP
+  sta GD_CHAR_DATA_PTR
+  lda #>GD_CHAR_TEMP
+  sta GD_CHAR_DATA_PTR+1
+  jsr gd_show_character_data
+  ply
+  plx
+  pla
+  rts
+
+
+gd_restore_character:
+  pha
+  phx
+  phy
+  jsr gd_load_character
+  jsr set_char_data_ptr
+  jsr gd_show_character_data
+  ply
+  plx
+  pla
+  rts
+
+
 gd_show_character:
   phx
   phy
   jsr gd_store_character
-
   jsr set_char_data_ptr
+  jsr gd_show_character_data
+  ply
+  plx
+
+
+gd_show_character_data:
   jsr x_y_from_row_col
 
   lda #ILI9341_CASET
@@ -495,8 +557,6 @@ gd_show_character:
   iny
   cpy #24
   bne .col_loop
-  ply
-  plx
   rts
 
 
@@ -545,14 +605,68 @@ gd_next_line:
   stz GD_COL
   rts
 
+
+gd_make_inverted_char:
+  ldy #0
+.loop:
+  lda (GD_CHAR_DATA_PTR),Y
+  eor #$ff
+  sta GD_CHAR_TEMP,Y
+  iny
+  cpy #GD_CHAR_TEMP_SIZE
+  bne .loop
+  rts
+
+
+gd_make_cursored_char:
+  ldy #1
+.loop1:
+  lda (GD_CHAR_DATA_PTR),Y
+  eor #$c0
+  sta GD_CHAR_TEMP,Y
+  iny
+  iny
+  cpy #GD_CHAR_TEMP_SIZE+1
+  bne .loop1
+  ldy #0
+.loop2:
+  lda (GD_CHAR_DATA_PTR),Y
+  sta GD_CHAR_TEMP,Y
+  iny
+  iny
+  cpy #GD_CHAR_TEMP_SIZE
+  bne .loop2
+  rts
+
+
+
 ; On entry A              contains the character to store
 ;          GD_ROW, GD_COL contain the location to store the character
 ; On exit  A is preserved
 ;          X, Y are not preserved
 gd_store_character:
   pha
+  jsr gd_calculate_char_buffer_position
+  pla
+  sta (GD_TEMP)
+  rts
+
+
+gd_load_character:
+  jsr gd_calculate_char_buffer_position
+  lda (GD_TEMP)
+  rts
+
+
+gd_calculate_char_buffer_position:
   ; calculate GD_TEMP = GD_ROW * GD_CHAR_COLS
   lda GD_ROW
+  adc GD_SCROLL_ROWS
+  cmp #GD_CHAR_ROWS
+  bcc .row_ok
+  sec
+  sbc #GD_CHAR_ROWS
+.row_ok:
   ldy #GD_CHAR_COLS
   jsr multiply8
   sta GD_TEMP+1
@@ -570,8 +684,6 @@ gd_store_character:
   lda GD_TEMP + 1
   adc #>GD_CHAR_BUFFER
   sta GD_TEMP + 1
-  pla
-  sta (GD_TEMP)
   rts
 
 ; On entry GD_ROW contains the row to clear

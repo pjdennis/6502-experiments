@@ -1,6 +1,9 @@
-  .include base_config_v2.inc
+;TODO: If code is not on the full list of codes that are understood then ignore it?
+;      12/8/21 This might be related to key codes that don't map over to set 3. Currently
+;      they will not translate to ASCII, but if we look at raw key codes they won't be
+;      filtered out
 
-DELAY                    = CLOCK_FREQ_KHZ * 3 ; 1KHz / 3 = 333 Hz
+  .include base_config_v2.inc
 
 INTERRUPT_ROUTINE        = $3f00
 
@@ -47,35 +50,25 @@ KB_META_GUI              = %00010000
 KB_META_EXTENDED         = %00000010
 KB_META_BREAK            = %00000001
 
-CP_M_DEST_P              = $00 ; 2 bytes
-CP_M_SRC_P               = $02 ; 2 bytes
-CP_M_LEN                 = $04 ; 2 bytes
-
-TRANSLATE_TABLE          = $06 ; 2 bytes
-CREATE_CHARACTER_PARAM   = $08 ; 2 bytes
-SIMPLE_BUFFER_WRITE_PTR  = $0a ; 1 byte
-SIMPLE_BUFFER_READ_PTR   = $0b ; 1 byte
-KEYBOARD_RECEIVING       = $0c ; 1 byte
-KEYBOARD_DECODE_STATE    = $0d ; 1 byte
-KEYBOARD_LOCK_STATE      = $0e ; 1 byte
-KEYBOARD_MODIFIER_STATE  = $0f ; 1 byte
-KEYBOARD_LATEST_META     = $10 ; 1 byte
-KEYBOARD_LATEST_CODE     = $11 ; 1 byte
-SENDING_TO_KEYBOARD      = $12 ; 1 byte
-ACK_RECEIVED             = $13 ; 1 byte
-
-DISPLAY_STRING_PARAM     = $14 ; 2 bytes
-TEXT_PTR                 = $16 ; 2 bytes
-TEXT_PTR_NEXT            = $18 ; 2 bytes
-SCROLL_OFFSET            = $1a ; 2 bytes
-LINE_CHARS_REMAINING     = $1c ; 1 byte
-TIMER_COUNT              = $1d ; 1 byte
-LIVE_COUNT               = $1e ; 1 byte
-GD_ZERO_PAGE_BASE        = $1f ; ? bytes
+CP_M_DEST_P              = $0000 ; 2 bytes
+CP_M_SRC_P               = $0002 ; 2 bytes
+CP_M_LEN                 = $0004 ; 2 bytes
+TRANSLATE_TABLE          = $0006 ; 2 bytes
+CREATE_CHARACTER_PARAM   = $0008 ; 2 bytes
+CONSOLE_CURSOR_POSITION  = $000a ; 1 byte
+SIMPLE_BUFFER_WRITE_PTR  = $000b ; 1 byte
+SIMPLE_BUFFER_READ_PTR   = $000c ; 1 byte
+KEYBOARD_RECEIVING       = $000d ; 1 byte
+KEYBOARD_DECODE_STATE    = $000e ; 1 byte
+KEYBOARD_LOCK_STATE      = $000f ; 1 byte
+KEYBOARD_MODIFIER_STATE  = $0010 ; 1 byte
+KEYBOARD_LATEST_META     = $0011 ; 1 byte
+KEYBOARD_LATEST_CODE     = $0012 ; 1 byte
+SENDING_TO_KEYBOARD      = $0013 ; 1 byte
+ACK_RECEIVED             = $0014 ; 1 byte
 
 SIMPLE_BUFFER            = $0200 ; 256 bytes
-GD_CHAR_BUFFER           = $0300 ; GD_CHAR_ROWS * GD_CHAR_COLS bytes (e.g. 20 * 20 = 400)
-GD_CHAR_TEMP             = GD_CHAR_BUFFER + GD_CHAR_BUFFER_SIZE
+CONSOLE_TEXT             = $0300 ; CONSOLE_LENGTH + 1 bytes
 
   .org $2000                     ; Loader loads programs to this address
   jmp initialize_machine         ; Initialize hardware and then jump to program_start
@@ -87,12 +80,13 @@ GD_CHAR_TEMP             = GD_CHAR_BUFFER + GD_CHAR_BUFFER_SIZE
   .include initialize_machine_v2.inc
 EXTEND_CHARACTER_SET = 1
   .include display_routines.inc
-  .include display_string.inc
+CONSOLE_WIDTH = DISPLAY_WIDTH
+CONSOLE_HEIGHT = DISPLAY_HEIGHT
+  .include full_screen_console_flexible_line_based.inc
   .include simple_buffer.inc
   .include copy_memory.inc
   .include key_codes.inc
-  .include display_hex.inc
-  .include graphics_display.inc
+  .include convert_to_hex.inc
 
 ; Code sequence for the pause/break key
 kb_seq_pause        .byte $e1, $14, $77, $e1, $f0, $14, $f0, $77, $00
@@ -121,162 +115,9 @@ program_start:
   ldx #$ff
   txs
 
-  lda #'$'
-  sta GD_CHAR_BUFFER + GD_CHAR_ROWS * GD_CHAR_COLS
-
-  jsr gd_configure
-  jsr gd_reset
-  jsr gd_select
-  jsr gd_initialize
-  lda #ILI9341_MADCTL
-  jsr gd_send_command
-  lda #%10101000    ; original $48
-  jsr gd_send_data
-  jsr gd_clear_screen
-  jsr gd_unselect
-
-  stz GD_ROW
-  stz GD_COL
-
-  jsr gd_select
-
-;  jsr show_some_text
-
-;  stz GD_ROW
-;  jsr gd_clear_line
-;  lda #1
-
-
-;SCROLL_MAX = ILI9341_TFTHEIGHT - 16
-;  lda #<SCROLL_MAX
-;  sta SCROLL_OFFSET
-;  lda #>SCROLL_MAX
-;  sta SCROLL_OFFSET + 1
-;.scroll_loop:
-;; send command
-;  lda #ILI9341_VSCRSADD
-;  jsr gd_send_command
-;  lda SCROLL_OFFSET + 1
-;  jsr gd_send_data
-;  lda SCROLL_OFFSET
-;  jsr gd_send_data
-;  lda #50
-;  jsr delay_hundredths
-;; check for end
-;  lda SCROLL_OFFSET
-;  bne .scroll_offset_ok
-;  lda SCROLL_OFFSET + 1
-;  bne .scroll_offset_ok
-;  lda #<SCROLL_MAX
-;  sta SCROLL_OFFSET
-;  lda #>SCROLL_MAX
-;  sta SCROLL_OFFSET + 1
-;  bra .scroll_loop
-;.scroll_offset_ok:
-;; decrement offset
-;  sec
-;  lda SCROLL_OFFSET
-;  sbc #16
-;  sta SCROLL_OFFSET
-;  lda SCROLL_OFFSET + 1
-;  sbc #0
-;  sta SCROLL_OFFSET + 1
-;  bra .scroll_loop
-
-;  lda #GD_CHAR_ROWS - 2
-;  sta GD_ROW
-
-  lda #'H'
-  jsr gd_show_character
-
-;  lda #<message_text
-;  sta GD_STRING_PTR
-;  lda #>message_text
-;  sta GD_STRING_PTR+1
-;  jsr gd_show_string
-
-;  lda #GD_CHAR_ROWS-1
-;  sta GD_ROW
-;  jsr gd_clear_line
-;  lda #GD_CHAR_ROWS-2
-;  sta GD_ROW
-;  jsr gd_clear_line
-;  lda #-2
-;  jsr gd_scroll
-
-;  lda #4
-;  sta GD_ROW
-;  lda #9
-;  sta GD_COL
-
-;.loop:
-;  jsr gd_cursor_character
-;  lda #25
-;  jsr delay_hundredths
-;  jsr gd_restore_character
-;  lda #25
-;  jsr delay_hundredths
-;  bra .loop
-
-;  jsr gd_next_line
-;  jsr gd_next_line
- 
-;  ldy GD_ROW
-;  lda #1
-;  STA GD_ROW
-;  jsr gd_clear_line
-;  sty GD_ROW
-
-;  ldx #0
-;copy_loop:
-;  lda GD_CHAR_BUFFER,X
-;  jsr gd_show_character
-;  jsr gd_next_character
-;  inx
-;  cpx #43
-;  bne copy_loop
-
-;  lda #100
-;  jsr delay_hundredths
-
-
-;  lda #'_'
-;  jsr gd_show_character
-
-  jsr gd_unselect
-
-;  jsr reset_and_enable_display_no_cursor
-
-;  lda GD_CHAR_BUFFER
-;  jsr .show
-;  lda GD_CHAR_BUFFER + GD_CHAR_ROWS * GD_CHAR_COLS - 1
-;  jsr .show
-;  lda GD_CHAR_BUFFER + GD_CHAR_ROWS * GD_CHAR_COLS
-;  jsr .show
-
-;  jsr gd_select
-;  jsr gd_clear_screen
-;  jsr gd_unselect
-
-;  lda GD_CHAR_BUFFER
-;  jsr .show
-
-;.show
-;  pha
-;  jsr display_hex
-;  lda #' '
-;  jsr display_character
-;  pla
-;  jsr display_character
-;  lda #' '
-;  jsr display_character
-;  rts
-
-
-;  lda #<start_message
-;  ldx #>start_message
-;  jsr display_string
-
+  ; Initialize functions we will use in this program
+  jsr reset_and_enable_display_no_cursor
+  jsr console_initialize
   jsr simple_buffer_initialize
 
   ; Initialize Keyboard decode state
@@ -309,299 +150,97 @@ program_start:
   lda #PCR_CA2_IND_NEG_E
   sta PCR
 
-;  lda #%10000001  ; Enable CA2 interrupt
-;  sta IER
-
-
-  lda #>DELAY-1
-  jsr display_hex
-  lda #<DELAY-1
-  jsr display_hex
-
-  ; Start T1 timer (for display cursor)
-  stz TIMER_COUNT
-  lda #ACR_T1_CONT
-  tsb ACR
-  lda #IERSETCLEAR | IT1
+  lda #%10000001  ; Enable CA2 interrupt
   sta IER
-  lda #<DELAY
-  sta T1CL
-  lda #>DELAY
-  sta T1CH
 
   ; Enable interrupts so we start recieving data from the keyboard
   cli
 
-  stz LIVE_COUNT
-repeat:
-  lda #DISPLAY_SECOND_LINE
-  jsr move_cursor
-  lda LIVE_COUNT
-  jsr display_hex
-  lda #' '
-  jsr display_character
-  lda TIMER_COUNT
-  jsr display_hex
-  lda #' '
-  jsr display_character
-  lda TIMER_COUNT
-  and #$80
-  bne .high
-  lda #' '
-  bra .over
-.high:
-  lda #'_'
-.over:
-  jsr display_character
-  lda #2
-  jsr delay_hundredths
-  inc LIVE_COUNT
-  bra repeat
-
-
   ; Initialize keyboard
-  lda #KB_COMMAND_ENABLE
-  jsr keyboard_send_command
+;  lda #KB_COMMAND_ENABLE
+;  jsr keyboard_send_command
 
-  lda #KB_COMMAND_SET_TYPEMATIC
-  jsr keyboard_send_command
+;  lda #KB_COMMAND_SET_TYPEMATIC
+;  jsr keyboard_send_command
 
-  lda #0 ; Fastest rate (30 cps) + shortest delay (0.25 seconds)
-  jsr keyboard_send_command
+;  lda #0 ; Fastest rate (30 cps) + shortest delay (0.25 seconds)
+;  jsr keyboard_send_command
 
-  lda #0
-  jsr keyboard_set_leds
+;  lda #0
+;  jsr keyboard_set_leds
+
+
+;keyboard_to_console_as_hex:
+;.loop:
+;  jsr console_show
+;.wait_loop:
+;  jsr simple_buffer_read
+;  bcs .wait_loop
+;  jsr console_print_hex
+;  bra .loop
+
+
+;keyboard_decoded_to_console_as_hex:
+;.loop
+;  jsr console_show
+;.repeat:
+;  jsr simple_buffer_read
+;  bcs .repeat                   ; Exit when input buffer is empty
+;  jsr keyboard_decode_and_translate_to_set_3
+;  bcs .repeat                   ; Nothing decoded so far so read more
+;  lda KEYBOARD_LATEST_META
+;  bit #KB_META_BREAK
+;  bne .repeat                   ; Decoded key up event; ignore these so read more
+;  lda KEYBOARD_LATEST_CODE
+;  jsr console_print_hex
+;  bra .loop
+
+
+  jsr clear_console
 
   ; Read and display translated characters from the keyboard
-
-  ldx #0
 get_char_loop:
-  cpx #0
-  bne .not_off
-  jsr gd_select
-  lda #' '
-  jsr gd_show_character
-  jsr gd_unselect
-.not_off:
-  cpx #25
-  bne .not_on
-  jsr gd_select
-  lda #'_'
-  jsr gd_show_character
-  jsr gd_unselect
-.not_on:
-  inx
-  cpx #50
-  bne .no_reset_count
-  ldx #0
-.no_reset_count:
-  lda #1
-  jsr delay_hundredths
   jsr keyboard_get_char
   bcs get_char_loop
 get_char_loop_2:
-  jsr callback_char_received
+  jsr console_print_character
   jsr keyboard_get_char
   bcc get_char_loop_2
-  jsr callback_no_more_chars
+  jsr console_show
   bra get_char_loop
 
 
-start_message: .asciiz "Last key press:"
+clear_console:
+  pha
+  jsr console_clear
+  ; Show prompt
+  lda #">"
+  jsr console_print_character
+  jsr console_show
+  pla
+  rts
 
 
-callback_char_received:
+console_print_hex:
   phx
   phy
-  pha
-  lda #DISPLAY_SECOND_LINE
-  jsr move_cursor
-  pla
-  pha
-  jsr display_character
+
+  jsr convert_to_hex
+  jsr console_print_character
+  txa
+  jsr console_print_character
+
+  jsr console_get_cursor_xy
+  cpx #0
+  beq .done
+
   lda #' '
-  jsr display_character
-  pla
-  pha
-  jsr display_hex
-  jsr gd_select
-  pla
-  cmp #0x08
-  beq .backspace
-  cmp #0x0a
-  beq .newline
-  jsr gd_show_character
-  lda GD_ROW
-  cmp #GD_CHAR_ROWS - 1
-  bne .not_last_char
-  lda GD_COL
-  cmp #GD_CHAR_COLS - 1
-  bne .not_last_char
-  jsr do_scroll
-  bra .done
-.not_last_char:
-  jsr gd_next_character
-  bra .done
-.backspace:
-  lda GD_ROW
-  bne .not_first_char
-  lda GD_COL
-  beq .return
-.not_first_char:
-  lda #' '
-  jsr gd_show_character
-  jsr gd_previous_character
-  bra .done
-.newline:
-  lda #' '
-  jsr gd_show_character
-  lda GD_ROW
-  cmp #GD_CHAR_ROWS - 1
-  bne .not_last_line
-  jsr do_scroll
-  bra .done
-.not_last_line:  
-  jsr gd_next_line
+  jsr console_print_character
+
 .done:
-  lda #'_'
-  jsr gd_show_character
-.return
-  jsr gd_unselect
   ply
   plx
   rts
-
-
-do_scroll:
-  stz GD_ROW
-  jsr gd_clear_line
-  lda #1
-  jsr gd_scroll
-  lda #GD_CHAR_ROWS - 1
-  sta GD_ROW
-  stz GD_COL
-  rts
-
-
-callback_no_more_chars:
-  rts
-
-
-callback_key_left:
-  rts
-
-
-callback_key_right:
-  rts
-
-
-callback_key_esc:
-  rts
-
-
-callback_key_function:
-  ldy #0
-.loop:
-  lda .f1_text, Y
-  beq .done
-  jsr callback_char_received
-  iny
-  bra .loop
-.done:
-  rts
-
-.f1_text: .asciiz "The quick brown fox jumps over the lazy dog. "
-
-
-show_some_text:
-  lda #<message_text
-  sta TEXT_PTR
-  lda #>message_text
-  sta TEXT_PTR + 1
-  lda #GD_CHAR_COLS
-  sta LINE_CHARS_REMAINING
-.show_spaces_loop:
-  lda LINE_CHARS_REMAINING
-  beq .skip_remaining_spaces
-  lda (TEXT_PTR)
-  beq .done
-  cmp #' '
-  bne .show_text
-  jsr gd_show_character
-  jsr gd_next_character
-  dec LINE_CHARS_REMAINING
-  inc TEXT_PTR
-  bne .show_spaces_loop
-  inc TEXT_PTR + 1
-  bra .show_spaces_loop
-.show_text:
-  lda (TEXT_PTR)
-  beq .done
-; look for end of word
-  ldy #1
-.word_search_loop:
-  lda (TEXT_PTR),Y
-  beq .found_word_end
-  cmp #' '
-  beq .found_word_end
-  iny
-  cpy #GD_CHAR_COLS
-  bne .word_search_loop
-.found_word_end:
-; will word fit on line?
-  cpy LINE_CHARS_REMAINING
-  bcc .word_fits
-  beq .word_fits
-; word does not fit
-.finish_line_loop:
-  lda #' '
-  jsr gd_show_character
-  jsr gd_next_character
-  dec LINE_CHARS_REMAINING
-  bne .finish_line_loop
-  lda #GD_CHAR_COLS
-  sta LINE_CHARS_REMAINING
-.word_fits:
-.show_word_loop:
-  lda (TEXT_PTR)
-  jsr gd_show_character
-  jsr gd_next_character
-  dec LINE_CHARS_REMAINING
-  inc TEXT_PTR
-  bne .over
-  inc TEXT_PTR + 1
-.over:
-  dey
-  bne .show_word_loop
-  bra .show_spaces_loop
-.skip_remaining_spaces:
-  lda #GD_CHAR_COLS
-  sta LINE_CHARS_REMAINING
-.skip_spaces_loop:
-  lda (TEXT_PTR)
-  beq .done
-  cmp #' '
-  bne .show_text
-  inc TEXT_PTR
-  bne .skip_spaces_loop
-  inc TEXT_PTR + 1
-  bra .skip_spaces_loop
-.done:
-  lda LINE_CHARS_REMAINING
-  cmp #GD_CHAR_COLS
-  beq .exit
-.finish_last_line_loop:
-  lda #' '
-  jsr gd_show_character
-  jsr gd_next_character
-  dec LINE_CHARS_REMAINING
-  bne .finish_last_line_loop
-.exit:
-  rts
-
-message_text: .asciiz "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. The quick brown fox jumps over the lazy dog. To be or not to be, that is the question. It is better to keep quiet and be thought a fool than to speak and remove all..."
-
-;message_text: .asciiz "  a 1234567890123456789 b 12345678901234567890 c 123456789012345678901 d e the quick brown fox. 123456789"
 
 
 ; On exit Carry set if no result so far
@@ -638,9 +277,6 @@ handle_special_keys:
   cmp #KEY_ESC
   beq .key_esc
 
-  cmp #KEY_F1
-  beq .key_function
-
   lda KEYBOARD_LOCK_STATE
   bit #KB_NUM_LOCK_ON
   beq .check_keypad
@@ -660,16 +296,13 @@ handle_special_keys:
   clc
   rts                      ; Return - not handled
 .key_left:
-  jsr callback_key_left
+  jsr console_cursor_left
   bra .handled
 .key_right:
-  jsr callback_key_right
+  jsr console_cursor_right
   bra .handled
 .key_esc:
-  jsr callback_key_esc
-  bra .handled
-.key_function:
-  jsr callback_key_function
+  jsr clear_console
 .handled:
   sec
   rts                      ; Return - handled
@@ -1092,6 +725,8 @@ code_translate:
 ; On entry A = LED flags to set
 ; On exit  A, X, Y are preserved
 keyboard_set_leds:
+  rts
+
   phx
   tax
   lda #KB_COMMAND_SET_LEDS
@@ -1204,13 +839,7 @@ calculate_parity:
 
 interrupt:
   pha
-  lda #IT1
-  bit IFR
-  sta IFR
-  beq .not_t1
-  inc TIMER_COUNT
-  bra .done
-.not_t1:
+
   lda #%00000001  ; Clear the CA2 interrupt
   sta IFR
 
@@ -1286,4 +915,3 @@ interrupt:
   pla
   rti
 interrupt_end:
-
