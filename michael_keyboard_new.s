@@ -86,6 +86,7 @@ CONSOLE_HEIGHT = DISPLAY_HEIGHT
   .include simple_buffer.inc
   .include copy_memory.inc
   .include key_codes.inc
+  .include keyboard_typematic.inc
   .include convert_to_hex.inc
 
 ; Code sequence for the pause/break key
@@ -163,7 +164,7 @@ program_start:
   lda #KB_COMMAND_SET_TYPEMATIC
   jsr keyboard_send_command
 
-  lda #0 ; Fastest rate (30 cps) + shortest delay (0.25 seconds)
+  lda #KEYBOARD_RATE_30_0_CPS | KEYBOARD_DELAY_0_50_S
   jsr keyboard_send_command
 
   lda #0
