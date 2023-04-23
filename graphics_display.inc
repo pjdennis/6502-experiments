@@ -558,17 +558,10 @@ x_y_from_row_col:
   sec
   sbc #GD_CHAR_ROWS
 .row_ok:
-  sta GD_TEMP
-  lsr
-  lsr
-  lsr
-  lsr
+  ldy #16
+  jsr multiply8x8
   sta GD_Y + 1
-  lda GD_TEMP
-  asl
-  asl
-  asl
-  asl
+  lda MULTIPLY_8X8_RESULT_LOW
   sta GD_Y
   ; GD_X = GD_COL * 12 = GD_COL * 8 + GD_COL * 4
   lda GD_COL
