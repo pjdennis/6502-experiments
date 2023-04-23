@@ -2,72 +2,33 @@
 
 INTERRUPT_ROUTINE        = $3f00
 
-KB_DECODE_BREAK          = %00010000
-KB_DECODE_EXTENDED       = %00001000
-KB_DECODE_PAUSE_SEQ      = %00000111
-
-KB_CAPS_LOCK_ON          = %00000001
-KB_SCROLL_LOCK_ON        = %00000010
-KB_NUM_LOCK_ON           = %00000100
-KB_CAPS_LOCK_DOWN        = %00001000
-KB_SCROLL_LOCK_DOWN      = %00010000
-KB_NUM_LOCK_DOWN         = %00100000
-
-KB_MOD_L_SHIFT           = %10000000
-KB_MOD_R_SHIFT           = %01000000
-KB_MOD_L_CTRL            = %00100000
-KB_MOD_R_CTRL            = %00010000
-KB_MOD_L_ALT             = %00001000
-KB_MOD_R_ALT             = %00000100
-KB_MOD_L_GUI             = %00000010
-KB_MOD_R_GUI             = %00000001
-
-KB_COMMAND_SET_LEDS      = $ed
-KB_COMMAND_ECHO          = $ee
-KB_COMMAND_READ_ID       = $f2
-KB_COMMAND_SET_TYPEMATIC = $f3
-KB_COMMAND_ENABLE        = $f4
-KB_COMMAND_RESET         = $ff
-KB_COMMAND_ACK           = $fa
-
-KB_LED_SCROLL_LOCK       = %00000001
-KB_LED_NUM_LOCK          = %00000010
-KB_LED_CAPS_LOCK         = %00000100
-
-KB_CODE_BREAK            = $f0
-KB_CODE_EXTENDED         = $e0
-KB_CODE_EXTENDED_IGNORE  = $12
-
-KB_META_SHIFT            = %10000000
-KB_META_CTRL             = %01000000
-KB_META_ALT              = %00100000
-KB_META_GUI              = %00010000
-KB_META_EXTENDED         = %00000010
-KB_META_BREAK            = %00000001
-
 CP_M_DEST_P              = $00 ; 2 bytes
 CP_M_SRC_P               = $02 ; 2 bytes
 CP_M_LEN                 = $04 ; 2 bytes
 
-TRANSLATE_TABLE          = $06 ; 2 bytes
-CREATE_CHARACTER_PARAM   = $08 ; 2 bytes
-SIMPLE_BUFFER_WRITE_PTR  = $0a ; 1 byte
-SIMPLE_BUFFER_READ_PTR   = $0b ; 1 byte
-KEYBOARD_RECEIVING       = $0c ; 1 byte
-KEYBOARD_DECODE_STATE    = $0d ; 1 byte
-KEYBOARD_LOCK_STATE      = $0e ; 1 byte
-KEYBOARD_MODIFIER_STATE  = $0f ; 1 byte
-KEYBOARD_LATEST_META     = $10 ; 1 byte
-KEYBOARD_LATEST_CODE     = $11 ; 1 byte
-SENDING_TO_KEYBOARD      = $12 ; 1 byte
-ACK_RECEIVED             = $13 ; 1 byte
+CREATE_CHARACTER_PARAM   = $06 ; 2 bytes
 
-DISPLAY_STRING_PARAM     = $14 ; 2 bytes
-TEXT_PTR                 = $16 ; 2 bytes
-TEXT_PTR_NEXT            = $18 ; 2 bytes
-SCROLL_OFFSET            = $1a ; 2 bytes
-LINE_CHARS_REMAINING     = $1c ; 1 byte
-GD_ZERO_PAGE_BASE        = $1d ; ? bytes
+SIMPLE_BUFFER_WRITE_PTR  = $08 ; 1 byte
+SIMPLE_BUFFER_READ_PTR   = $09 ; 1 byte
+
+DISPLAY_STRING_PARAM     = $0A ; 2 bytes
+TEXT_PTR                 = $0C ; 2 bytes
+TEXT_PTR_NEXT            = $0E ; 2 bytes
+SCROLL_OFFSET            = $10 ; 2 bytes
+LINE_CHARS_REMAINING     = $12 ; 1 byte
+GD_ZERO_PAGE_BASE        = $13 ; 18 bytes
+
+KB_ZERO_PAGE_BASE        = GD_ZERO_PAGE_BASE + 18
+
+TRANSLATE_TABLE          = KB_ZERO_PAGE_BASE + $00 ; 2 bytes
+KEYBOARD_RECEIVING       = KB_ZERO_PAGE_BASE + $02 ; 1 byte
+KEYBOARD_DECODE_STATE    = KB_ZERO_PAGE_BASE + $03 ; 1 byte
+KEYBOARD_LOCK_STATE      = KB_ZERO_PAGE_BASE + $04 ; 1 byte
+KEYBOARD_MODIFIER_STATE  = KB_ZERO_PAGE_BASE + $05 ; 1 byte
+KEYBOARD_LATEST_META     = KB_ZERO_PAGE_BASE + $06 ; 1 byte
+KEYBOARD_LATEST_CODE     = KB_ZERO_PAGE_BASE + $07 ; 1 byte
+SENDING_TO_KEYBOARD      = KB_ZERO_PAGE_BASE + $08 ; 1 byte
+ACK_RECEIVED             = KB_ZERO_PAGE_BASE + $09 ; 1 byte
 
 SIMPLE_BUFFER            = $0200 ; 256 bytes
 

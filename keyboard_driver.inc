@@ -3,6 +3,51 @@
 ; KB_BUFFER_WRITE      - function to call to write to keyboard buffer
 ; KB_BUFFER_READ       - function to call to read from keyboard buffer
 ; copy_memory and CP_M_* parameter locations
+; INTERRUPT_ROUTINE    - location to which keyboard interrupt handler is copied
+
+KB_DECODE_BREAK          = %00010000
+KB_DECODE_EXTENDED       = %00001000
+KB_DECODE_PAUSE_SEQ      = %00000111
+
+KB_CAPS_LOCK_ON          = %00000001
+KB_SCROLL_LOCK_ON        = %00000010
+KB_NUM_LOCK_ON           = %00000100
+KB_CAPS_LOCK_DOWN        = %00001000
+KB_SCROLL_LOCK_DOWN      = %00010000
+KB_NUM_LOCK_DOWN         = %00100000
+
+KB_MOD_L_SHIFT           = %10000000
+KB_MOD_R_SHIFT           = %01000000
+KB_MOD_L_CTRL            = %00100000
+KB_MOD_R_CTRL            = %00010000
+KB_MOD_L_ALT             = %00001000
+KB_MOD_R_ALT             = %00000100
+KB_MOD_L_GUI             = %00000010
+KB_MOD_R_GUI             = %00000001
+
+KB_COMMAND_SET_LEDS      = $ed
+KB_COMMAND_ECHO          = $ee
+KB_COMMAND_READ_ID       = $f2
+KB_COMMAND_SET_TYPEMATIC = $f3
+KB_COMMAND_ENABLE        = $f4
+KB_COMMAND_RESET         = $ff
+KB_COMMAND_ACK           = $fa
+
+KB_LED_SCROLL_LOCK       = %00000001
+KB_LED_NUM_LOCK          = %00000010
+KB_LED_CAPS_LOCK         = %00000100
+
+KB_CODE_BREAK            = $f0
+KB_CODE_EXTENDED         = $e0
+KB_CODE_EXTENDED_IGNORE  = $12
+
+KB_META_SHIFT            = %10000000
+KB_META_CTRL             = %01000000
+KB_META_ALT              = %00100000
+KB_META_GUI              = %00010000
+KB_META_EXTENDED         = %00000010
+KB_META_BREAK            = %00000001
+
 
 keyboard_initialize:
   jsr KB_BUFFER_INITIALIZE
