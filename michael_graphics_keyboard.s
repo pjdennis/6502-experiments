@@ -16,7 +16,10 @@ TEXT_PTR                 = $0C ; 2 bytes
 TEXT_PTR_NEXT            = $0E ; 2 bytes
 SCROLL_OFFSET            = $10 ; 2 bytes
 LINE_CHARS_REMAINING     = $12 ; 1 byte
-GD_ZERO_PAGE_BASE        = $13 ; 18 bytes
+MULTIPLY_8X8_RESULT_LOW  = $13 ; 1 byte
+MULTIPLY_8X8_TEMP        = $14 ; 1 byte
+
+GD_ZERO_PAGE_BASE        = $15 ; 18 bytes
 
 KB_ZERO_PAGE_BASE        = GD_ZERO_PAGE_STOP
 
@@ -42,6 +45,7 @@ KB_BUFFER_WRITE      = simple_buffer_write
 KB_BUFFER_READ       = simple_buffer_read
   .include keyboard_driver.inc
   .include display_hex.inc
+  .include multiply8x8.inc
   .include graphics_display.inc
 
 program_start:

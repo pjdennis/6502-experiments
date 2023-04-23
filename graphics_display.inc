@@ -533,32 +533,13 @@ set_char_data_ptr:
   sbc #' '
 
   ; GD_CHAR_DATA_PTR = character offset * 24 = co * 16 + co * 8
-  sta GD_TEMP
-  lsr
-  lsr
-  lsr
-  lsr
-  sta GD_TEMP + 1
-  lsr
-  sta GD_CHAR_DATA_PTR + 1
-  lda GD_TEMP
-  asl
-  asl
-  asl
-  sta GD_CHAR_DATA_PTR
-  asl
-  ;sta GD_TEMP
-  clc
-  ;lda GD_TEMP
-  adc GD_CHAR_DATA_PTR
-  sta GD_CHAR_DATA_PTR
-  lda GD_TEMP + 1
-  adc GD_CHAR_DATA_PTR + 1
+  ldy #24
+  jsr multiply8x8
   sta GD_CHAR_DATA_PTR + 1
 
   ; Add the table base address
   clc
-  lda GD_CHAR_DATA_PTR
+  lda MULTIPLY_8X8_RESULT_LOW
   adc #<character_patterns_12x16
   sta GD_CHAR_DATA_PTR
   lda GD_CHAR_DATA_PTR + 1
