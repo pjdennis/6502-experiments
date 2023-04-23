@@ -205,14 +205,14 @@ callback_char_received:
   bne .not_first_char
   lda GD_COL
   beq .return
-.tab:
-  lda #' '
-  bra .print
 .not_first_char:
   lda #' '
   jsr gd_show_character
   jsr gd_previous_character
   bra .done
+.tab:
+  lda #' '
+  bra .print
 .newline:
   lda #' '
   jsr gd_show_character
