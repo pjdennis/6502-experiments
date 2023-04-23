@@ -5,6 +5,10 @@
 ; copy_memory and CP_M_* parameter locations
 ; INTERRUPT_ROUTINE    - location to which keyboard interrupt handler is copied
 ; KB_ZERO_PAGE_BASE    - location in zero page for variables
+; callback_key_left    - callback when left arrow pressed
+; callback_key_right   - callback when right arrow pressed
+; callback_key_esc     - callback when Escape pressed
+; callback_key_f1      - callback when F1 pressed
 
 TRANSLATE_TABLE          = KB_ZERO_PAGE_BASE + $00 ; 2 bytes
 KEYBOARD_RECEIVING       = KB_ZERO_PAGE_BASE + $02 ; 1 byte
@@ -172,7 +176,7 @@ handle_special_keys:
   beq .key_esc
 
   cmp #KEY_F1
-  beq .key_function
+  beq .key_f1
 
   lda KEYBOARD_LOCK_STATE
   bit #KB_NUM_LOCK_ON
@@ -201,8 +205,8 @@ handle_special_keys:
 .key_esc:
   jsr callback_key_esc
   bra .handled
-.key_function:
-  jsr callback_key_function
+.key_f1:
+  jsr callback_key_f1
 .handled:
   sec
   rts                      ; Return - handled

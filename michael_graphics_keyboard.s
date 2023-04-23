@@ -37,7 +37,6 @@ EXTEND_CHARACTER_SET = 1
   .include copy_memory.inc
   .include key_codes.inc
   .include keyboard_typematic.inc
-
 KB_BUFFER_INITIALIZE = simple_buffer_initialize
 KB_BUFFER_WRITE      = simple_buffer_write
 KB_BUFFER_READ       = simple_buffer_read
@@ -251,7 +250,7 @@ callback_key_esc:
   rts
 
 
-callback_key_function:
+callback_key_f1:
   ldy #0
 .loop:
   lda .f1_text, Y
