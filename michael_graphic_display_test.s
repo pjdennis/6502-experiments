@@ -3,9 +3,6 @@
 DISPLAY_STRING_PARAM = $00 ; 2 bytes
 GD_ZERO_PAGE_BASE    = $02
 
-GD_CHAR_BUFFER           = $0300 ; GD_CHAR_ROWS * GD_CHAR_COLS bytes (e.g. 20 * 20 = 400)
-GD_CHAR_TEMP             = GD_CHAR_BUFFER + GD_CHAR_BUFFER_SIZE
-
   .org $2000
   jmp initialize_machine
 

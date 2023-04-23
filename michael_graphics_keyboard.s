@@ -1,7 +1,5 @@
   .include base_config_v2.inc
 
-DELAY                    = CLOCK_FREQ_KHZ * 3 ; 1KHz / 3 = 333 Hz
-
 INTERRUPT_ROUTINE        = $3f00
 
 KB_DECODE_BREAK          = %00010000
@@ -69,13 +67,9 @@ TEXT_PTR                 = $16 ; 2 bytes
 TEXT_PTR_NEXT            = $18 ; 2 bytes
 SCROLL_OFFSET            = $1a ; 2 bytes
 LINE_CHARS_REMAINING     = $1c ; 1 byte
-TIMER_COUNT              = $1d ; 1 byte
-LIVE_COUNT               = $1e ; 1 byte
-GD_ZERO_PAGE_BASE        = $1f ; ? bytes
+GD_ZERO_PAGE_BASE        = $1d ; ? bytes
 
 SIMPLE_BUFFER            = $0200 ; 256 bytes
-GD_CHAR_BUFFER           = $0300 ; GD_CHAR_ROWS * GD_CHAR_COLS bytes (e.g. 20 * 20 = 400)
-GD_CHAR_TEMP             = GD_CHAR_BUFFER + GD_CHAR_BUFFER_SIZE
 
   .org $2000                     ; Loader loads programs to this address
   jmp initialize_machine         ; Initialize hardware and then jump to program_start
@@ -120,9 +114,6 @@ program_start:
   ; Initialize stack
   ldx #$ff
   txs
-
-  lda #'$'
-  sta GD_CHAR_BUFFER + GD_CHAR_ROWS * GD_CHAR_COLS
 
   jsr gd_configure
   jsr gd_reset
@@ -186,96 +177,15 @@ program_start:
 ;  lda #GD_CHAR_ROWS - 2
 ;  sta GD_ROW
 
-  lda #'H'
+  lda #'_'
   jsr gd_show_character
-
-;  lda #<message_text
-;  sta GD_STRING_PTR
-;  lda #>message_text
-;  sta GD_STRING_PTR+1
-;  jsr gd_show_string
-
-;  lda #GD_CHAR_ROWS-1
-;  sta GD_ROW
-;  jsr gd_clear_line
-;  lda #GD_CHAR_ROWS-2
-;  sta GD_ROW
-;  jsr gd_clear_line
-;  lda #-2
-;  jsr gd_scroll
-
-;  lda #4
-;  sta GD_ROW
-;  lda #9
-;  sta GD_COL
-
-;.loop:
-;  jsr gd_cursor_character
-;  lda #25
-;  jsr delay_hundredths
-;  jsr gd_restore_character
-;  lda #25
-;  jsr delay_hundredths
-;  bra .loop
-
-;  jsr gd_next_line
-;  jsr gd_next_line
- 
-;  ldy GD_ROW
-;  lda #1
-;  STA GD_ROW
-;  jsr gd_clear_line
-;  sty GD_ROW
-
-;  ldx #0
-;copy_loop:
-;  lda GD_CHAR_BUFFER,X
-;  jsr gd_show_character
-;  jsr gd_next_character
-;  inx
-;  cpx #43
-;  bne copy_loop
-
-;  lda #100
-;  jsr delay_hundredths
-
-
-;  lda #'_'
-;  jsr gd_show_character
 
   jsr gd_unselect
 
-;  jsr reset_and_enable_display_no_cursor
-
-;  lda GD_CHAR_BUFFER
-;  jsr .show
-;  lda GD_CHAR_BUFFER + GD_CHAR_ROWS * GD_CHAR_COLS - 1
-;  jsr .show
-;  lda GD_CHAR_BUFFER + GD_CHAR_ROWS * GD_CHAR_COLS
-;  jsr .show
-
-;  jsr gd_select
-;  jsr gd_clear_screen
-;  jsr gd_unselect
-
-;  lda GD_CHAR_BUFFER
-;  jsr .show
-
-;.show
-;  pha
-;  jsr display_hex
-;  lda #' '
-;  jsr display_character
-;  pla
-;  jsr display_character
-;  lda #' '
-;  jsr display_character
-;  rts
-
-
-;  lda #<start_message
-;  ldx #>start_message
-;  jsr display_string
+  jsr reset_and_enable_display_no_cursor
+  lda #<start_message
+  ldx #>start_message
+  jsr display_string
 
   jsr simple_buffer_initialize
 
@@ -309,55 +219,11 @@ program_start:
   lda #PCR_CA2_IND_NEG_E
   sta PCR
 
-;  lda #%10000001  ; Enable CA2 interrupt
-;  sta IER
-
-
-  lda #>DELAY-1
-  jsr display_hex
-  lda #<DELAY-1
-  jsr display_hex
-
-  ; Start T1 timer (for display cursor)
-  stz TIMER_COUNT
-  lda #ACR_T1_CONT
-  tsb ACR
-  lda #IERSETCLEAR | IT1
+  lda #%10000001  ; Enable CA2 interrupt
   sta IER
-  lda #<DELAY
-  sta T1CL
-  lda #>DELAY
-  sta T1CH
 
   ; Enable interrupts so we start recieving data from the keyboard
   cli
-
-  stz LIVE_COUNT
-repeat:
-  lda #DISPLAY_SECOND_LINE
-  jsr move_cursor
-  lda LIVE_COUNT
-  jsr display_hex
-  lda #' '
-  jsr display_character
-  lda TIMER_COUNT
-  jsr display_hex
-  lda #' '
-  jsr display_character
-  lda TIMER_COUNT
-  and #$80
-  bne .high
-  lda #' '
-  bra .over
-.high:
-  lda #'_'
-.over:
-  jsr display_character
-  lda #2
-  jsr delay_hundredths
-  inc LIVE_COUNT
-  bra repeat
-
 
   ; Initialize keyboard
   lda #KB_COMMAND_ENABLE
@@ -476,7 +342,7 @@ do_scroll:
   stz GD_ROW
   jsr gd_clear_line
   lda #1
-  jsr gd_scroll
+  jsr gd_scroll_up
   lda #GD_CHAR_ROWS - 1
   sta GD_ROW
   stz GD_COL
@@ -599,7 +465,7 @@ show_some_text:
 .exit:
   rts
 
-message_text: .asciiz "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. The quick brown fox jumps over the lazy dog. To be or not to be, that is the question. It is better to keep quiet and be thought a fool than to speak and remove all..."
+message_text: .asciiz "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."
 
 ;message_text: .asciiz "  a 1234567890123456789 b 12345678901234567890 c 123456789012345678901 d e the quick brown fox. 123456789"
 
@@ -1204,13 +1070,7 @@ calculate_parity:
 
 interrupt:
   pha
-  lda #IT1
-  bit IFR
-  sta IFR
-  beq .not_t1
-  inc TIMER_COUNT
-  bra .done
-.not_t1:
+
   lda #%00000001  ; Clear the CA2 interrupt
   sta IFR
 
