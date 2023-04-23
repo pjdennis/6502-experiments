@@ -85,6 +85,12 @@ EXTEND_CHARACTER_SET = 1
   .include simple_buffer.inc
   .include copy_memory.inc
   .include key_codes.inc
+  .include keyboard_typematic.inc
+
+KB_BUFFER_INITIALIZE = simple_buffer_initialize
+KB_BUFFER_WRITE      = simple_buffer_write
+KB_BUFFER_READ       = simple_buffer_read
+  .include keyboard_driver.inc
   .include display_hex.inc
   .include graphics_display.inc
 
@@ -187,56 +193,7 @@ program_start:
   ldx #>start_message
   jsr display_string
 
-  jsr simple_buffer_initialize
-
-  ; Initialize Keyboard decode state
-  stz KEYBOARD_DECODE_STATE
-  stz KEYBOARD_MODIFIER_STATE
-  stz KEYBOARD_LOCK_STATE
-
-  ; Relocate the interrupt handler. The EEPROM has a fixed address, INTERRUPT_ROUTINE
-  ; for the interrupt routine so copy the handler there
-  lda #<INTERRUPT_ROUTINE
-  sta CP_M_DEST_P
-  lda #>INTERRUPT_ROUTINE
-  sta CP_M_DEST_P + 1
-  lda #<interrupt
-  sta CP_M_SRC_P
-  lda #>interrupt
-  sta CP_M_SRC_P + 1
-  lda #<(interrupt_end - interrupt)
-  sta CP_M_LEN
-  lda #>(interrupt_end - interrupt)
-  sta CP_M_LEN + 1
-  jsr copy_memory
-
-  ; Initialize flags
-  stz KEYBOARD_RECEIVING
-  stz SENDING_TO_KEYBOARD
-  stz ACK_RECEIVED
-
-  ; Set up interrupts for detecting start of receipt of byte from keyboard
-  lda #PCR_CA2_IND_NEG_E
-  sta PCR
-
-  lda #%10000001  ; Enable CA2 interrupt
-  sta IER
-
-  ; Enable interrupts so we start recieving data from the keyboard
-  cli
-
-  ; Initialize keyboard
-  lda #KB_COMMAND_ENABLE
-  jsr keyboard_send_command
-
-  lda #KB_COMMAND_SET_TYPEMATIC
-  jsr keyboard_send_command
-
-  lda #0 ; Fastest rate (30 cps) + shortest delay (0.25 seconds)
-  jsr keyboard_send_command
-
-  lda #0
-  jsr keyboard_set_leds
+  jsr keyboard_initialize
 
   ; Read and display translated characters from the keyboard
 
