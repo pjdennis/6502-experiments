@@ -187,18 +187,12 @@ gd_scroll_up:
   lda #GD_CHAR_ROWS
   sbc GD_SCROLL_ROWS
 .row_ok2:
-  sta GD_TEMP
-  lsr
-  lsr
-  lsr
-  lsr
+  ldy #16
+  jsr multiply8x8
   sta GD_Y + 1
-  lda GD_TEMP
-  asl
-  asl
-  asl
-  asl
+  lda MULTIPLY_8X8_RESULT_LOW
   sta GD_Y
+
 ; send command
   lda #ILI9341_VSCRSADD
   jsr gd_send_command
