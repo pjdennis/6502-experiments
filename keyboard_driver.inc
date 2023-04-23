@@ -4,6 +4,18 @@
 ; KB_BUFFER_READ       - function to call to read from keyboard buffer
 ; copy_memory and CP_M_* parameter locations
 ; INTERRUPT_ROUTINE    - location to which keyboard interrupt handler is copied
+; KB_ZERO_PAGE_BASE    - location in zero page for variables
+
+TRANSLATE_TABLE          = KB_ZERO_PAGE_BASE + $00 ; 2 bytes
+KEYBOARD_RECEIVING       = KB_ZERO_PAGE_BASE + $02 ; 1 byte
+KEYBOARD_DECODE_STATE    = KB_ZERO_PAGE_BASE + $03 ; 1 byte
+KEYBOARD_LOCK_STATE      = KB_ZERO_PAGE_BASE + $04 ; 1 byte
+KEYBOARD_MODIFIER_STATE  = KB_ZERO_PAGE_BASE + $05 ; 1 byte
+KEYBOARD_LATEST_META     = KB_ZERO_PAGE_BASE + $06 ; 1 byte
+KEYBOARD_LATEST_CODE     = KB_ZERO_PAGE_BASE + $07 ; 1 byte
+SENDING_TO_KEYBOARD      = KB_ZERO_PAGE_BASE + $08 ; 1 byte
+ACK_RECEIVED             = KB_ZERO_PAGE_BASE + $09 ; 1 byte
+KB_ZERO_PAGE_STOP        = KB_ZERO_PAGE_BASE + $0A
 
 KB_DECODE_BREAK          = %00010000
 KB_DECODE_EXTENDED       = %00001000

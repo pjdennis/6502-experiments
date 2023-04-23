@@ -102,6 +102,7 @@ GD_CHAR_DATA_PTR     = GD_ZERO_PAGE_BASE + $0c ; 2 bytes
 GD_STRING_PTR        = GD_ZERO_PAGE_BASE + $0e ; 2 bytes
 GD_BYTE              = GD_ZERO_PAGE_BASE + $10 ; 1 byte
 GD_SCROLL_ROWS       = GD_ZERO_PAGE_BASE + $11 ; 1 byte
+GD_ZERO_PAGE_STOP    = GD_ZERO_PAGE_BASE + $12
 
 gd_configure:
   lda #GD_E
