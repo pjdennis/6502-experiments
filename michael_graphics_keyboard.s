@@ -181,10 +181,13 @@ callback_char_received:
   jsr display_hex
   jsr gd_select
   pla
-  cmp #0x08
+  cmp #$08
   beq .backspace
-  cmp #0x0a
+  cmp #$09
+  beq .tab
+  cmp #$0a
   beq .newline
+.print
   jsr gd_show_character
   lda GD_ROW
   cmp #GD_CHAR_ROWS - 1
@@ -202,6 +205,9 @@ callback_char_received:
   bne .not_first_char
   lda GD_COL
   beq .return
+.tab:
+  lda #' '
+  bra .print
 .not_first_char:
   lda #' '
   jsr gd_show_character
