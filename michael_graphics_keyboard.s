@@ -45,28 +45,6 @@ KB_BUFFER_READ       = simple_buffer_read
   .include display_hex.inc
   .include graphics_display.inc
 
-; Code sequence for the pause/break key
-kb_seq_pause        .byte $e1, $14, $77, $e1, $f0, $14, $f0, $77, $00
-
-; Mapping from PS/2 code set 3 lock keys to the bit mask used for tracking lock down/up and on/off
-kb_lock_codes:      .byte KEY_CAPSLOCK,      KEY_SCROLLLOCK,      KEY_NUMLOCK,     $00
-kb_lock_on_masks:   .byte KB_CAPS_LOCK_ON,   KB_SCROLL_LOCK_ON,   KB_NUM_LOCK_ON,  $00
-kb_lock_down_masks: .byte KB_CAPS_LOCK_DOWN, KB_SCROLL_LOCK_DOWN, KB_NUM_LOCK_DOWN
-kb_lock_to_led:     .byte KB_LED_CAPS_LOCK,  KB_LED_SCROLL_LOCK,  KB_LED_NUM_LOCK
-
-; Mapping from PS/2 code set 3 modifier keys to the bit mask used for tracking modifier states
-kb_modifier_codes:  .byte KEY_LEFTSHIFT,   KEY_RIGHTSHIFT,  KEY_LEFTCTRL,   KEY_RIGHTCTRL
-                    .byte KEY_LEFTALT,     KEY_RIGHTALT,    KEY_LEFTMETA,   KEY_RIGHTMETA, $00
-kb_modifier_masks:  .byte KB_MOD_L_SHIFT,  KB_MOD_R_SHIFT,  KB_MOD_L_CTRL,  KB_MOD_R_CTRL
-                    .byte KB_MOD_L_ALT,    KB_MOD_R_ALT,    KB_MOD_L_GUI,   KB_MOD_R_GUI
-
-; Mapping from the modifier state masks for left/right modifier keys to the mask used to
-; indicate at least one of the keys is pressed
-kb_modifier_from:   .byte (KB_MOD_L_SHIFT | KB_MOD_R_SHIFT), (KB_MOD_L_CTRL | KB_MOD_R_CTRL)
-                    .byte (KB_MOD_L_ALT   | KB_MOD_R_ALT),   (KB_MOD_L_GUI  | KB_MOD_R_GUI), $00
-kb_modifier_to      .byte KB_META_SHIFT,                     KB_META_CTRL
-                    .byte KB_META_ALT,                       KB_META_GUI
-
 program_start:
   ; Initialize stack
   ldx #$ff
