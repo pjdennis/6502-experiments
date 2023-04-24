@@ -4,7 +4,7 @@ V  = $02
 X1 = $03
 X2 = $04
 X3 = $05
-
+COUNT = $06 ; 2 bytes
 
 TEST_LOCATION = $fe00
 
@@ -25,9 +25,11 @@ program_entry:
   stz X1
   stz X2
   stz X3
+  stz COUNT
+  stz COUNT + 1
 
   jsr display_string_immediate
-  .asciiz "Before: "
+  .asciiz "Bef: "
   ldx TEST_LOCATION
 
   txa
@@ -59,28 +61,43 @@ program_entry:
   sta X3
 
 wait_for_completion_loop:
+  inc COUNT
+  bne .count_done
+  inc COUNT + 1
+.count_done:
   lda TEST_LOCATION
   cmp V
   bne wait_for_completion_loop
 
 completed:
-
-  lda #DISPLAY_SECOND_LINE
-  jsr move_cursor
   jsr display_string_immediate
-  .asciiz " After: "
+  .asciiz " Aft: "
   lda TEST_LOCATION
   jsr display_hex
+  lda #DISPLAY_SECOND_LINE
+  jsr move_cursor
 
   lda X1
   jsr display_hex
+
+  jsr display_space
+
   lda X2
   jsr display_hex
+
+  jsr display_space
+
   lda X3
   jsr display_hex
 
-wait:
-  bra wait
+  jsr display_space
+
+  lda COUNT + 1
+  jsr display_hex
+  lda COUNT
+  jsr display_hex
+
+  stp
 
 
 disable_write_protection:
