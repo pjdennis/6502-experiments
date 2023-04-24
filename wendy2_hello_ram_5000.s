@@ -1,4 +1,4 @@
-  .include base_config_wendy2c.inc
+  .include base_config_wendy2.inc
 
 DISPLAY_STRING_PARAM  = $00 ; 2 bytes
 COUNTER               = $02 ; 2 bytes

@@ -1,4 +1,4 @@
-  .include base_config_wendy2c.inc
+  .include base_config_wendy2.inc
 
 D_S_I_P                = $00 ; 2 bytes
 TEMP                   = $02

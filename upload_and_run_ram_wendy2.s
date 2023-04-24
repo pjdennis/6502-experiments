@@ -5,9 +5,9 @@ BPS_HUNDREDS         = 1152 ; 115200 bps
 
 SHOULD_SWITCH_TO_RAM = 1;
 
-  .include base_config_wendy2c.inc
+  .include base_config_wendy2.inc
   .include upload_and_run.inc
-  .include initialize_machine_wendy2c.inc
+  .include initialize_machine_wendy2.inc
   .include display_routines_4bit.inc
 
 origin_message: asciiz 'RAM'

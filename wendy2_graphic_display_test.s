@@ -1,4 +1,4 @@
-  .include base_config_wendy2c.inc
+  .include base_config_wendy2.inc
 
 ILI9341_TFTWIDTH  = 240 ; ILI9341 max TFT width
 ILI9341_TFTHEIGHT = 320 ; ILI9341 max TFT height

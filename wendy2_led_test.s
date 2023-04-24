@@ -3,7 +3,7 @@ DISPLAY_STRING_PARAM = $00
 LED_MASK             = %01000000
 LED_PORT             = PORTB
 
-  .include base_config_wendy2c.inc
+  .include base_config_wendy2.inc
 
   .org $4000
   jmp program_entry

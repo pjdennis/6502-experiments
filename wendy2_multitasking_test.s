@@ -1,4 +1,4 @@
-  .include base_config_wendy2c.inc
+  .include base_config_wendy2.inc
 
 LED_MASK             = %01000000
 LED_PORT             = PORTB
@@ -59,7 +59,7 @@ BUFFER_DATA            = $7d00
   ; Place delay_routines at start of page to ensure no page boundary crossings during timing loops
   .include delay_routines.inc
 
-  .include initialize_machine_wendy2c.inc
+  .include initialize_machine_wendy2.inc
   .include display_routines_4bit.inc
   .include display_hex.inc
   .include musical_notes_tables.inc

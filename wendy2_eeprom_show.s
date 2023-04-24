@@ -5,7 +5,7 @@ TEST_LOCATION = $fe00
   .org $4000
   jmp program_entry
 
-  .include base_config_wendy2c.inc
+  .include base_config_wendy2.inc
   .include display_update_routines.inc
   .include display_string_immediate.inc
   .include display_hex.inc
