@@ -2,6 +2,8 @@
 
 INTERRUPT_ROUTINE        = $3f00
 
+TAB_WIDTH                = 4
+
 CP_M_DEST_P              = $00 ; 2 bytes
 CP_M_SRC_P               = $02 ; 2 bytes
 CP_M_LEN                 = $04 ; 2 bytes
@@ -187,7 +189,6 @@ callback_char_received:
   beq .tab
   cmp #$0a
   beq .newline
-.print
   jsr gd_show_character
   lda GD_ROW
   cmp #GD_CHAR_ROWS - 1
@@ -211,8 +212,8 @@ callback_char_received:
   jsr gd_previous_character
   bra .done
 .tab:
-  lda #' '
-  bra .print
+  jsr do_tab
+  bra .done
 .newline:
   lda #' '
   jsr gd_show_character
@@ -230,6 +231,32 @@ callback_char_received:
   jsr gd_unselect
   ply
   plx
+  rts
+
+
+do_tab:
+  lda #' '
+  jsr gd_show_character
+  lda #TAB_WIDTH
+.loop:
+  cmp #GD_CHAR_COLS
+  bcs .next_line
+  cmp GD_COL
+  beq .over1
+  bcs .move_cursor ; A > GD_COL
+.over1
+  clc
+  adc #TAB_WIDTH
+  bra .loop
+.next_line
+  lda GD_ROW
+  cmp #GD_CHAR_ROWS - 1
+  bne .not_last_line
+  jmp do_scroll ; tail call
+.not_last_line:
+  jmp gd_next_line ; tail call
+.move_cursor:
+  sta GD_COL
   rts
 
 
