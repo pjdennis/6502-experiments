@@ -1,11 +1,11 @@
   .include base_config_v2.inc
 
-TEXT_PTR                 = $0C ; 2 bytes
-LINE_CHARS_REMAINING     = $12 ; 1 byte
-MULTIPLY_8X8_RESULT_LOW  = $13 ; 1 byte
-MULTIPLY_8X8_TEMP        = $14 ; 1 byte
+LINE_CHARS_REMAINING     = $00 ; 1 byte
+TEXT_PTR                 = $01 ; 2 bytes
+MULTIPLY_8X8_RESULT_LOW  = $03 ; 1 byte
+MULTIPLY_8X8_TEMP        = $04 ; 1 byte
 
-GD_ZERO_PAGE_BASE        = $15 ; 18 bytes
+GD_ZERO_PAGE_BASE        = $05 ; 18 bytes
 
   .org $2000                     ; Loader loads programs to this address
   jmp initialize_machine         ; Initialize hardware and then jump to program_start
