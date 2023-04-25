@@ -1,4 +1,3 @@
-KEY_RESERVED   = $00
 KEY_F1         = $07
 KEY_ESC        = $08
 KEY_TAB        = $0d
@@ -113,6 +112,8 @@ KEY_NEXTSONG     = $94
 KEY_MUTE         = $95
 KEY_VOLUMEDOWN   = $96
 KEY_VOLUMEUP     = $97
+KEY_POWER        = $98
+KEY_WAKE         = $99
 
 
 ; Translation tables to convert from PS/2 code set 2 to PS/2 code set 3. We use Code set 3
@@ -163,8 +164,8 @@ kb_extended_translation_table:
   .byte $2f, KEY_MENU
   .byte $7e, KEY_PAUSE
   .byte $3f, KEY_SLEEP
-  .byte $37, KEY_RESERVED ; Power (not mapped)
-  .byte $5e, KEY_RESERVED ; Wake  (not mapped)
+  .byte $37, KEY_POWER
+  .byte $5e, KEY_WAKE
   .byte $7c, KEY_SYSRQ
   .byte $15, KEY_PREVIOUSSONG
   .byte $34, KEY_PLAYPAUSE
