@@ -135,8 +135,9 @@ keyboard_initialize:
   lda #KEYBOARD_RATE_30_0_CPS | KEYBOARD_DELAY_0_50_S
   jsr keyboard_send_command
 
-  lda #0
-  jsr keyboard_set_leds
+  lda #KB_NUM_LOCK_ON
+  sta KEYBOARD_LOCK_STATE
+  jsr update_lock_leds
 
   rts
 
