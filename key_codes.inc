@@ -1,3 +1,7 @@
+; Key codes can be found here: https://wiki.osdev.org/PS/2_Keyboard
+; Key names can be found here:
+;   https://manpages.ubuntu.com/manpages/focal/man7/virkeycode-linux.7.html
+
   .include ASCII.inc
 
 KP_OFFSET   = %10000000
