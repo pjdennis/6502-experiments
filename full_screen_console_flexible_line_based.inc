@@ -4,10 +4,9 @@
 ;  CONSOLE_CURSOR_POSITION  - 1 byte
 ;  CONSOLE_TEXT             - buffer for CONSOLE_WIDTH * CONSOLE_HEIGHT bytes
 
-CONSOLE_LENGTH           = CONSOLE_WIDTH * CONSOLE_HEIGHT
+  .include ASCII.inc
 
-ASCII_BACKSPACE          = 0x08
-ASCII_NEWLINE            = 0x0a
+CONSOLE_LENGTH           = CONSOLE_WIDTH * CONSOLE_HEIGHT
 
 console_offsets:
   .byte DISPLAY_FIRST_LINE

@@ -1,0 +1,4 @@
+ASCII_BACKSPACE = $08
+ASCII_TAB       = $09
+ASCII_LF        = $0a
+ASCII_NEWLINE   = $0a
