@@ -36,17 +36,6 @@ SIMPLE_BUFFER            = $0200 ; 256 bytes
   .include delay_routines.inc
   .include initialize_machine_v2.inc
 EXTEND_CHARACTER_SET = 1
-  .include display_routines.inc
-  .include display_string.inc
-  .include simple_buffer.inc
-  .include copy_memory.inc
-  .include key_codes.inc
-  .include keyboard_typematic.inc
-KB_BUFFER_INITIALIZE = simple_buffer_initialize
-KB_BUFFER_WRITE      = simple_buffer_write
-KB_BUFFER_READ       = simple_buffer_read
-  .include keyboard_driver.inc
-  .include display_hex.inc
   .include multiply8x8.inc
   .include graphics_display.inc
 
