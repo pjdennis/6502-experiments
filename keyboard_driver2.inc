@@ -242,10 +242,9 @@ keyboard_get_latest_ascii:
 
 .check_main_ascii:
   lda KEYBOARD_LATEST_CODE
-  ldx #<kb_ascii_translation_table
-  ldy #>kb_ascii_translation_table
-  jsr code_translate
-  bcs .done
+  sec
+  bit #%10000000
+  bne .done
 
   tax
   lda KEYBOARD_LATEST_META

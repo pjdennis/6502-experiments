@@ -278,68 +278,12 @@ kb_shift_translation_table:
   .byte '/', '?'
   .byte $00
 
-
-kb_ascii_translation_table:
-  .byte KEY_TAB,        $09
-  .byte KEY_GRAVE,      '`'
-  .byte KEY_Q,          'q'
-  .byte KEY_1,          '1'
-  .byte KEY_Z,          'z'
-  .byte KEY_S,          's'
-  .byte KEY_A,          'a'
-  .byte KEY_W,          'w'
-  .byte KEY_2,          '2'
-  .byte KEY_C,          'c'
-  .byte KEY_X,          'x'
-  .byte KEY_D,          'd'
-  .byte KEY_E,          'e'
-  .byte KEY_4,          '4'
-  .byte KEY_3,          '3'
-  .byte KEY_SPACE,      ' '
-  .byte KEY_V,          'v'
-  .byte KEY_F,          'f'
-  .byte KEY_T,          't'
-  .byte KEY_R,          'r'
-  .byte KEY_5,          '5'
-  .byte KEY_N,          'n'
-  .byte KEY_B,          'b'
-  .byte KEY_H,          'h'
-  .byte KEY_G,          'g'
-  .byte KEY_Y,          'y'
-  .byte KEY_6,          '6'
-  .byte KEY_M,          'm'
-  .byte KEY_J,          'j'
-  .byte KEY_U,          'u'
-  .byte KEY_7,          '7'
-  .byte KEY_8,          '8'
-  .byte KEY_COMMA,      ','
-  .byte KEY_K,          'k'
-  .byte KEY_I,          'i'
-  .byte KEY_O,          'o'
-  .byte KEY_0,          '0'
-  .byte KEY_9,          '9'
-  .byte KEY_DOT,        '.'
-  .byte KEY_SLASH,      '/'
-  .byte KEY_L,          'l'
-  .byte KEY_SEMICOLON,  ';'
-  .byte KEY_P,          'p'
-  .byte KEY_MINUS,      '-'
-  .byte KEY_APOSTROPHE, "'"
-  .byte KEY_LEFTBRACE,  '['
-  .byte KEY_EQUAL,      '='
-  .byte KEY_RIGHTBRACE, ']'
-  .byte KEY_ENTER,      $0a
-  .byte KEY_BACKSLASH,  '\\'
-  .byte KEY_BACKSPACE,  $08
-  .byte $00
-
-
 kb_kp_ascii_fixed_translation_table:
   .byte KEY_KPSLASH,    '/'
   .byte KEY_KPPLUS,     '+'
   .byte KEY_KPASTERISK, '*'
   .byte KEY_KPMINUS,    '-'
-  .byte KEY_KPENTER,    $0a
+  .byte KEY_KPENTER,    ASCII_LF
   .byte $00
 
 kb_kp_ascii_num_translation_table:
