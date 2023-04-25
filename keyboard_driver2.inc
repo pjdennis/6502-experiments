@@ -221,6 +221,11 @@ keyboard_get_latest_ascii:
   phy
 
   lda KEYBOARD_LATEST_CODE
+  and #%11000000
+  cmp #%10000000
+  bne .check_main_ascii
+
+  lda KEYBOARD_LATEST_CODE
   ldx #<kb_kp_ascii_fixed_translation_table
   ldy #>kb_kp_ascii_fixed_translation_table
   jsr code_translate
@@ -235,10 +240,9 @@ keyboard_get_latest_ascii:
   bne .check_main_ascii
 
   lda KEYBOARD_LATEST_CODE
-  ldx #<kb_kp_ascii_num_translation_table
-  ldy #>kb_kp_ascii_num_translation_table
-  jsr code_translate
-  bcc .done
+  and #%01111111
+  clc
+  bra .done
 
 .check_main_ascii:
   lda KEYBOARD_LATEST_CODE
