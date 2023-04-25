@@ -1,19 +1,5 @@
   .include base_config_v2.inc
 
-INTERRUPT_ROUTINE        = $3f00
-
-TAB_WIDTH                = 4
-
-CP_M_DEST_P              = $00 ; 2 bytes
-CP_M_SRC_P               = $02 ; 2 bytes
-CP_M_LEN                 = $04 ; 2 bytes
-
-CREATE_CHARACTER_PARAM   = $06 ; 2 bytes
-
-SIMPLE_BUFFER_WRITE_PTR  = $08 ; 1 byte
-SIMPLE_BUFFER_READ_PTR   = $09 ; 1 byte
-
-DISPLAY_STRING_PARAM     = $0A ; 2 bytes
 TEXT_PTR                 = $0C ; 2 bytes
 TEXT_PTR_NEXT            = $0E ; 2 bytes
 SCROLL_OFFSET            = $10 ; 2 bytes
@@ -35,7 +21,6 @@ SIMPLE_BUFFER            = $0200 ; 256 bytes
   ; stack is not usable until after the hardware registers have been initialized
   .include delay_routines.inc
   .include initialize_machine_v2.inc
-EXTEND_CHARACTER_SET = 1
   .include multiply8x8.inc
   .include graphics_display.inc
 
