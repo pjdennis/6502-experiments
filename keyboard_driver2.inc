@@ -226,11 +226,13 @@ keyboard_get_latest_ascii:
   bne .check_main_ascii
 
   lda KEYBOARD_LATEST_CODE
-  ldx #<kb_kp_ascii_fixed_translation_table
-  ldy #>kb_kp_ascii_fixed_translation_table
-  jsr code_translate
-  bcc .done
+  and #%01111111
+  cmp #'0'
+  bcs .check_numlock
+  cmp #'.'
+  bne .translate_kp
 
+.check_numlock:
   lda KEYBOARD_LOCK_STATE
   bit #KB_NUM_LOCK_ON
   beq .check_main_ascii
@@ -239,6 +241,7 @@ keyboard_get_latest_ascii:
   bit #KB_META_SHIFT
   bne .check_main_ascii
 
+.translate_kp:
   lda KEYBOARD_LATEST_CODE
   and #%01111111
   clc

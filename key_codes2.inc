@@ -277,11 +277,3 @@ kb_shift_translation_table:
   .byte '.', '>'
   .byte '/', '?'
   .byte $00
-
-kb_kp_ascii_fixed_translation_table:
-  .byte KEY_KPSLASH,    '/'
-  .byte KEY_KPPLUS,     '+'
-  .byte KEY_KPASTERISK, '*'
-  .byte KEY_KPMINUS,    '-'
-  .byte KEY_KPENTER,    ASCII_LF
-  .byte $00
