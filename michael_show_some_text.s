@@ -1,17 +1,11 @@
   .include base_config_v2.inc
 
 TEXT_PTR                 = $0C ; 2 bytes
-TEXT_PTR_NEXT            = $0E ; 2 bytes
-SCROLL_OFFSET            = $10 ; 2 bytes
 LINE_CHARS_REMAINING     = $12 ; 1 byte
 MULTIPLY_8X8_RESULT_LOW  = $13 ; 1 byte
 MULTIPLY_8X8_TEMP        = $14 ; 1 byte
 
 GD_ZERO_PAGE_BASE        = $15 ; 18 bytes
-
-KB_ZERO_PAGE_BASE        = GD_ZERO_PAGE_STOP
-
-SIMPLE_BUFFER            = $0200 ; 256 bytes
 
   .org $2000                     ; Loader loads programs to this address
   jmp initialize_machine         ; Initialize hardware and then jump to program_start
@@ -50,26 +44,6 @@ program_start:
   jsr gd_unselect
 
   stp
-
-
-callback_no_more_chars:
-  rts
-
-
-callback_key_left:
-  rts
-
-
-callback_key_right:
-  rts
-
-
-callback_key_esc:
-  rts
-
-
-callback_key_f1:
-  rts
 
 
 show_some_text:
