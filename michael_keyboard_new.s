@@ -59,34 +59,7 @@ program_start:
   ; Initialize functions we will use in this program
   jsr reset_and_enable_display_no_cursor
   jsr console_initialize
-
   jsr keyboard_initialize
-
-;keyboard_to_console_as_hex:
-;.loop:
-;  jsr console_show
-;.wait_loop:
-;  jsr simple_buffer_read
-;  bcs .wait_loop
-;  jsr console_print_hex
-;  bra .loop
-
-
-;keyboard_decoded_to_console_as_hex:
-;.loop
-;  jsr console_show
-;.repeat:
-;  jsr simple_buffer_read
-;  bcs .repeat                   ; Exit when input buffer is empty
-;  jsr keyboard_decode_and_translate_to_set_3
-;  bcs .repeat                   ; Nothing decoded so far so read more
-;  lda KEYBOARD_LATEST_META
-;  bit #KB_META_BREAK
-;  bne .repeat                   ; Decoded key up event; ignore these so read more
-;  lda KEYBOARD_LATEST_CODE
-;  jsr console_print_hex
-;  bra .loop
-
 
   jsr clear_console
 
