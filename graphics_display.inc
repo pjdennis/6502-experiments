@@ -111,10 +111,13 @@ gd_prepare_vertical:
 
   jsr gd_select
   jsr gd_initialize
+
+; set screen orientation
   lda #ILI9341_MADCTL
   jsr gd_send_command
   lda #%10101000    ; original $48
   jsr gd_send_data
+
   jsr gd_clear_screen
   jsr gd_unselect
 
