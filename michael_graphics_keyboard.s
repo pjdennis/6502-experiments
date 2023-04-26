@@ -114,11 +114,11 @@ callback_char_received:
   phy
   jsr display_recieved_character
   jsr gd_select
-  cmp #$08
+  cmp #ASCII_BACKSPACE
   beq .backspace
-  cmp #$09
+  cmp #ASCII_TAB
   beq .tab
-  cmp #$0a
+  cmp #ASCII_LF
   beq .newline
   jsr gd_show_character
   lda GD_ROW
