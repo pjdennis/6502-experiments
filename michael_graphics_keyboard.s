@@ -25,6 +25,8 @@ GD_ZERO_PAGE_BASE        = $15 ; 18 bytes
 
 KB_ZERO_PAGE_BASE        = GD_ZERO_PAGE_STOP
 
+TO_DECIMAL_PARAM         = KB_ZERO_PAGE_STOP
+
 SIMPLE_BUFFER            = $0200 ; 256 bytes
 
 LINE_LENGTHS             = $0300 ; GD_CHAR_COLS bytes 
@@ -51,7 +53,8 @@ KB_BUFFER_READ       = simple_buffer_read
   .include display_hex.inc
   .include multiply8x8.inc
   .include graphics_display.inc
-
+  .include display_decimal.inc
+ 
 program_start:
   ; Initialize stack
   ldx #$ff
@@ -68,6 +71,10 @@ program_start:
   lda #<start_message
   ldx #>start_message
   jsr display_string
+
+  jsr initialize_line_lengths
+
+  jsr show_some_line_lengths
 
   jsr keyboard_initialize
 
@@ -146,6 +153,7 @@ callback_char_received:
   jsr do_tab
   bra .done
 .newline:
+  jsr set_line_length
   lda #' '
   jsr gd_show_character
   lda GD_ROW
@@ -160,6 +168,7 @@ callback_char_received:
   jsr gd_show_character
 .return
   jsr gd_unselect
+  jsr show_some_line_lengths
   ply
   plx
   rts
@@ -202,6 +211,31 @@ do_scroll:
   rts
 
 
+initialize_line_lengths:
+  lda #99
+  ldx #0
+.loop:
+  sta LINE_LENGTHS,X
+  inx
+  cpx #GD_CHAR_ROWS
+  bne .loop
+
+  rts
+
+
+set_line_length:
+  pha
+  phx
+
+  ldx GD_ROW
+  lda GD_COL
+  sta LINE_LENGTHS,X
+
+  plx
+  pla
+  rts
+
+
 ; On entry A = character recieved
 ; On exit A, X, Y are preserved
 display_recieved_character:
@@ -217,6 +251,41 @@ display_recieved_character:
   jsr display_hex
   txa
   plx
+  rts
+
+
+show_some_line_lengths:
+  pha
+  phx
+  phy
+
+  lda #DISPLAY_THIRD_LINE
+  jsr move_cursor
+
+  ldy #20
+.clear_loop:
+  lda #' '
+  jsr display_character
+  dey
+  bne .clear_loop
+
+  lda #DISPLAY_THIRD_LINE
+  jsr move_cursor
+
+  ldy #0
+.show_loop:
+  lda LINE_LENGTHS,Y
+  ldx #0
+  jsr display_decimal
+  lda #' '
+  jsr display_character
+  iny
+  cpy #5
+  bne .show_loop
+
+  ply
+  plx
+  pla
   rts
 
 
