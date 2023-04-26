@@ -27,6 +27,8 @@ KB_ZERO_PAGE_BASE        = GD_ZERO_PAGE_STOP
 
 SIMPLE_BUFFER            = $0200 ; 256 bytes
 
+LINE_LENGTHS             = $0300 ; GD_CHAR_COLS bytes 
+
   .org $2000                     ; Loader loads programs to this address
   jmp initialize_machine         ; Initialize hardware and then jump to program_start
 
@@ -110,19 +112,8 @@ start_message: .asciiz "Last key press:"
 callback_char_received:
   phx
   phy
-  pha
-  lda #DISPLAY_SECOND_LINE
-  jsr move_cursor
-  pla
-  pha
-  jsr display_character
-  lda #' '
-  jsr display_character
-  pla
-  pha
-  jsr display_hex
+  jsr display_recieved_character
   jsr gd_select
-  pla
   cmp #$08
   beq .backspace
   cmp #$09
@@ -208,6 +199,24 @@ do_scroll:
   lda #GD_CHAR_ROWS - 1
   sta GD_ROW
   stz GD_COL
+  rts
+
+
+; On entry A = character recieved
+; On exit A, X, Y are preserved
+display_recieved_character:
+  phx
+  tax
+  lda #DISPLAY_SECOND_LINE
+  jsr move_cursor
+  txa
+  jsr display_character
+  lda #' '
+  jsr display_character
+  txa
+  jsr display_hex
+  txa
+  plx
   rts
 
 
