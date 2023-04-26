@@ -23,20 +23,9 @@ program_start:
   ldx #$ff
   txs
 
-  jsr gd_configure
-  jsr gd_reset
+  jsr gd_prepare_vertical
 
   jsr gd_select
-  jsr gd_initialize
-  lda #ILI9341_MADCTL
-  jsr gd_send_command
-  lda #%10101000    ; original $48
-  jsr gd_send_data
-  jsr gd_clear_screen
-
-  stz GD_ROW
-  stz GD_COL
-
   jsr show_some_text
   jsr gd_unselect
 

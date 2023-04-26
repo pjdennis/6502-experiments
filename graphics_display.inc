@@ -104,6 +104,25 @@ GD_BYTE              = GD_ZERO_PAGE_BASE + $10 ; 1 byte
 GD_SCROLL_ROWS       = GD_ZERO_PAGE_BASE + $11 ; 1 byte
 GD_ZERO_PAGE_STOP    = GD_ZERO_PAGE_BASE + $12
 
+
+gd_prepare_vertical:
+  jsr gd_configure
+  jsr gd_reset
+
+  jsr gd_select
+  jsr gd_initialize
+  lda #ILI9341_MADCTL
+  jsr gd_send_command
+  lda #%10101000    ; original $48
+  jsr gd_send_data
+  jsr gd_clear_screen
+  jsr gd_unselect
+
+  stz GD_ROW
+  stz GD_COL
+  rts
+
+
 gd_configure:
   lda #GD_E
   trb PORTA
