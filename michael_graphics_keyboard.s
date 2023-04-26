@@ -148,7 +148,7 @@ callback_char_received:
 .not_first_char:
   lda #' '
   jsr gd_show_character
-  jsr gd_previous_character
+  jsr move_position_back
   bra .done
 .tab:
   jsr do_tab
@@ -209,6 +209,31 @@ do_scroll:
   lda #GD_CHAR_ROWS - 1
   sta GD_ROW
   stz GD_COL
+  jmp scroll_line_lengths ; tail call
+
+
+move_position_back:
+  pha
+  lda GD_COL
+  beq .previous_line
+  dec
+  sta GD_COL
+  bra .done
+.previous_line:
+  phx
+  lda GD_ROW
+  dec
+  sta GD_ROW
+  tax
+  lda LINE_LENGTHS,X
+  cmp #GD_CHAR_COLS
+  bne .non_full_line
+  dec
+.non_full_line:
+  sta GD_COL
+  plx
+.done:
+  pla
   rts
 
 
@@ -221,6 +246,23 @@ initialize_line_lengths:
   cpx #GD_CHAR_ROWS
   bne .loop
 
+  rts
+
+
+scroll_line_lengths:
+  pha
+  phx
+
+  ldx #0
+.loop
+  lda LINE_LENGTHS + 1,X
+  sta LINE_LENGTHS,X
+  inx
+  cpx #GD_CHAR_ROWS - 1
+  bne .loop
+
+  plx
+  pla
   rts
 
 
