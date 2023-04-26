@@ -25,6 +25,7 @@ program_start:
 
   jsr gd_configure
   jsr gd_reset
+
   jsr gd_select
   jsr gd_initialize
   lda #ILI9341_MADCTL
@@ -32,15 +33,11 @@ program_start:
   lda #%10101000    ; original $48
   jsr gd_send_data
   jsr gd_clear_screen
-  jsr gd_unselect
 
   stz GD_ROW
   stz GD_COL
 
-  jsr gd_select
-
   jsr show_some_text
-
   jsr gd_unselect
 
   stp
