@@ -117,10 +117,14 @@ start_message: .asciiz "Last key press:"
 
 
 callback_char_received:
-  phx
-  phy
   jsr display_recieved_character
   jsr gd_select
+  jsr write_character_to_screen
+  jsr gd_unselect
+  jmp show_some_line_lengths ; tail call
+
+
+write_character_to_screen:
   cmp #ASCII_BACKSPACE
   beq .backspace
   cmp #ASCII_TAB
@@ -168,10 +172,6 @@ callback_char_received:
   lda #'_'
   jsr gd_show_character
 .return
-  jsr gd_unselect
-  jsr show_some_line_lengths
-  ply
-  plx
   rts
 
 
@@ -202,6 +202,9 @@ do_tab:
 
 
 do_scroll:
+  phx
+  phy
+
   stz GD_ROW
   jsr gd_clear_line
   lda #1
@@ -209,7 +212,11 @@ do_scroll:
   lda #GD_CHAR_ROWS - 1
   sta GD_ROW
   stz GD_COL
-  jmp scroll_line_lengths ; tail call
+  jsr scroll_line_lengths
+
+  ply
+  plx
+  rts
 
 
 move_position_back:
@@ -363,14 +370,26 @@ callback_key_esc:
 
 
 callback_key_f1:
+  pha
+  phx
+  phy
+
+  jsr gd_select
+
   ldy #0
 .loop:
   lda .f1_text, Y
   beq .done
-  jsr callback_char_received
+  jsr write_character_to_screen
   iny
   bra .loop
 .done:
+  jsr gd_unselect
+  jsr show_some_line_lengths
+
+  ply
+  plx
+  pla
   rts
 
 .f1_text: .asciiz "The quick brown fox jumps over the lazy dog. "
