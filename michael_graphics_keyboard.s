@@ -72,10 +72,6 @@ program_start:
   ldx #>start_message
   jsr display_string
 
-  jsr initialize_line_lengths
-
-  jsr show_some_line_lengths
-
   jsr keyboard_initialize
 
   ; Read and display translated characters from the keyboard
@@ -120,8 +116,7 @@ callback_char_received:
   jsr display_recieved_character
   jsr gd_select
   jsr write_character_to_screen
-  jsr gd_unselect
-  jmp show_some_line_lengths ; tail call
+  jmp gd_unselect ; tail call
 
 
 write_character_to_screen:
@@ -244,18 +239,6 @@ move_position_back:
   rts
 
 
-initialize_line_lengths:
-  lda #99
-  ldx #0
-.loop:
-  sta LINE_LENGTHS,X
-  inx
-  cpx #GD_CHAR_ROWS
-  bne .loop
-
-  rts
-
-
 scroll_line_lengths:
   pha
   phx
@@ -318,41 +301,6 @@ display_recieved_character:
   rts
 
 
-show_some_line_lengths:
-  pha
-  phx
-  phy
-
-  lda #DISPLAY_THIRD_LINE
-  jsr move_cursor
-
-  ldy #20
-.clear_loop:
-  lda #' '
-  jsr display_character
-  dey
-  bne .clear_loop
-
-  lda #DISPLAY_THIRD_LINE
-  jsr move_cursor
-
-  ldy #0
-.show_loop:
-  lda LINE_LENGTHS,Y
-  ldx #0
-  jsr display_decimal
-  lda #' '
-  jsr display_character
-  iny
-  cpy #5
-  bne .show_loop
-
-  ply
-  plx
-  pla
-  rts
-
-
 callback_no_more_chars:
   rts
 
@@ -385,7 +333,6 @@ callback_key_f1:
   bra .loop
 .done:
   jsr gd_unselect
-  jsr show_some_line_lengths
 
   ply
   plx
