@@ -128,11 +128,12 @@ callback_char_received:
   cmp #ASCII_LF
   beq .newline
   jsr gd_show_character
-  lda GD_ROW
-  cmp #GD_CHAR_ROWS - 1
-  bne .not_last_char
   lda GD_COL
   cmp #GD_CHAR_COLS - 1
+  bne .not_last_char
+  jsr set_line_length_when_wrapping
+  lda GD_ROW
+  cmp #GD_CHAR_ROWS - 1
   bne .not_last_char
   jsr do_scroll
   bra .done
@@ -229,6 +230,20 @@ set_line_length:
 
   ldx GD_ROW
   lda GD_COL
+  sta LINE_LENGTHS,X
+
+  plx
+  pla
+  rts
+
+
+set_line_length_when_wrapping:
+  pha
+  phx
+
+  ldx GD_ROW
+  lda GD_COL
+  inc
   sta LINE_LENGTHS,X
 
   plx
