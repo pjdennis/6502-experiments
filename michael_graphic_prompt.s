@@ -161,7 +161,15 @@ handle_character_from_keyboard:
 .not_first_char:
   lda #' '
   jsr gd_show_character
-  jsr move_position_back
+  lda GD_COL
+  beq .previous_line
+  dec
+  sta GD_COL
+  bra .done
+.previous_line:
+  dec GD_ROW
+  lda #GD_CHAR_COLS - 1
+  sta GD_COL
   bra .done
 .tab:
   jsr do_tab
@@ -288,22 +296,6 @@ do_scroll:
 
   ply
   plx
-  rts
-
-
-move_position_back:
-  pha
-  lda GD_COL
-  beq .previous_line
-  dec
-  sta GD_COL
-  bra .done
-.previous_line:
-  dec GD_ROW
-  lda #GD_CHAR_COLS - 1
-  sta GD_COL
-.done:
-  pla
   rts
 
 
