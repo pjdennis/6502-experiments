@@ -31,7 +31,6 @@ TO_DECIMAL_PARAM         = KB_ZERO_PAGE_STOP
 
 SIMPLE_BUFFER            = $0200 ; 256 bytes
 
-LINE_LENGTHS             = $0300 ; GD_CHAR_COLS bytes 
 
   .org $2000                     ; Loader loads programs to this address
   jmp initialize_machine         ; Initialize hardware and then jump to program_start
@@ -144,7 +143,6 @@ handle_character_from_keyboard:
   lda GD_COL
   cmp #GD_CHAR_COLS - 1
   bne .not_last_char
-  jsr set_line_length_when_wrapping
   lda GD_ROW
   cmp #GD_CHAR_ROWS - 1
   bne .not_last_char
@@ -169,7 +167,6 @@ handle_character_from_keyboard:
   jsr do_tab
   bra .done
 .newline:
-  jsr set_line_length
   lda #' '
   jsr gd_show_character
   lda GD_ROW
@@ -287,8 +284,6 @@ do_scroll:
   sta GD_ROW
   stz GD_COL
 
-  jsr scroll_line_lengths
-
   dec START_ROW
 
   ply
@@ -304,63 +299,10 @@ move_position_back:
   sta GD_COL
   bra .done
 .previous_line:
-  phx
-  lda GD_ROW
-  dec
-  sta GD_ROW
-  tax
-  lda LINE_LENGTHS,X
-  cmp #GD_CHAR_COLS
-  bne .non_full_line
-  dec
-.non_full_line:
+  dec GD_ROW
+  lda #GD_CHAR_COLS - 1
   sta GD_COL
-  plx
 .done:
-  pla
-  rts
-
-
-scroll_line_lengths:
-  pha
-  phx
-
-  ldx #0
-.loop
-  lda LINE_LENGTHS + 1,X
-  sta LINE_LENGTHS,X
-  inx
-  cpx #GD_CHAR_ROWS - 1
-  bne .loop
-
-  plx
-  pla
-  rts
-
-
-set_line_length:
-  pha
-  phx
-
-  ldx GD_ROW
-  lda GD_COL
-  sta LINE_LENGTHS,X
-
-  plx
-  pla
-  rts
-
-
-set_line_length_when_wrapping:
-  pha
-  phx
-
-  ldx GD_ROW
-  lda GD_COL
-  inc
-  sta LINE_LENGTHS,X
-
-  plx
   pla
   rts
 
