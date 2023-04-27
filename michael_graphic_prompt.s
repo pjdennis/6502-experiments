@@ -64,22 +64,8 @@ program_start:
 
   jsr gd_prepare_vertical
 
-  jsr show_some_text
-
   jsr gd_select
-
-  ; TODO in general need to handle when we're at the end of the screen - scroll
-  lda GD_COL
-  beq .at_start_of_line
-  inc GD_ROW
-  stz GD_COL
-.at_start_of_line:
-  lda GD_ROW
-  sta START_ROW
-  lda #PROMPT_CHAR
-  jsr gd_show_character
-  jsr gd_next_character
-
+  jsr show_prompt
   lda #'_'
   jsr gd_show_character
   jsr gd_unselect
@@ -91,9 +77,7 @@ program_start:
 
   jsr keyboard_initialize
 
-
   ; Read and display translated characters from the keyboard
-
   ldx #0
 get_char_loop:
   cpx #0
@@ -436,7 +420,7 @@ callback_key_f1:
   plx
   pla
   rts
-.f1_text: .asciiz "The quick brown fox\njumps over the lazy dog. "
+.f1_text: .asciiz "The quick brown fox jumps over the lazy dog. "
 
 
 show_some_text:
@@ -460,4 +444,4 @@ show_some_text:
   plx
   pla
   rts
-.text: .asciiz "The quick brown fox\njumps over the lazy\n"
+.text: .asciiz "The quick brown fox\njumps over the lazy\ndog.\n"
