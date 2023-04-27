@@ -1,5 +1,8 @@
   .include base_config_v2.inc
 
+;TODO ran into a bug that I can't recreate: scrolled past bottom; entered several
+;lines of text; backspaced and it didn't stop at the cursor start position
+
 INTERRUPT_ROUTINE        = $3f00
 
 TAB_WIDTH                = 4
@@ -63,12 +66,6 @@ program_start:
 
   jsr gd_prepare_vertical
 
-  jsr gd_select
-  jsr show_prompt
-  lda #'_'
-  jsr gd_show_character
-  jsr gd_unselect
-
   jsr reset_and_enable_display_no_cursor
   lda #<start_message
   ldx #>start_message
@@ -76,19 +73,20 @@ program_start:
 
   jsr keyboard_initialize
 
-  jsr readline
-  
-  lda #DISPLAY_SECOND_LINE
-  jsr move_cursor
-  lda #<stop_message
-  ldx #>stop_message
-  jsr display_string
+.loop:
+  jsr gd_select
+  jsr show_prompt
+  lda #'_'
+  jsr gd_show_character
+  jsr gd_unselect
 
-  stp
+  jsr readline
+  jsr execute_command
+
+  bra .loop
 
 
 start_message: .asciiz "Last key press:"
-stop_message: .asciiz "Done."
 
 
 ; Read and display translated characters from the keyboard
