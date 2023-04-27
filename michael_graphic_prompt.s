@@ -127,12 +127,24 @@ callback_char_received:
 
 
 write_character_to_screen:
+  phx
   cmp #ASCII_BACKSPACE
   beq .backspace
   cmp #ASCII_TAB
   beq .tab
   cmp #ASCII_LF
   beq .newline
+  tax
+  lda START_ROW
+  bne .normal_char
+  lda GD_ROW
+  cmp #GD_CHAR_ROWS - 1
+  bne .normal_char
+  lda GD_COL
+  cmp #GD_CHAR_COLS - 1
+  beq .return ; Have filled up the entire screen
+.normal_char:
+  txa
   jsr gd_show_character
   lda GD_COL
   cmp #GD_CHAR_COLS - 1
@@ -182,6 +194,7 @@ write_character_to_screen:
   lda #'_'
   jsr gd_show_character
 .return
+  plx
   rts
 
 
