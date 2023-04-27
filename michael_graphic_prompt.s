@@ -63,16 +63,6 @@ program_start:
 
   jsr gd_prepare_vertical
 
-  jsr initialize_command_ptr
-
-  lda #'X'
-  jsr command_buffer_add
-  lda #'Z'
-  jsr command_buffer_add
-  lda #0
-  jsr command_buffer_add
-  jsr show_command_buffer
-
   jsr gd_select
   jsr show_prompt
   lda #'_'
@@ -149,6 +139,7 @@ handle_character_from_keyboard:
   beq .return ; Have filled up the entire screen
 .normal_char:
   txa
+  jsr command_buffer_add
   jsr gd_show_character
   lda GD_COL
   cmp #GD_CHAR_COLS - 1
@@ -169,6 +160,7 @@ handle_character_from_keyboard:
   cmp #1
   beq .return
 .not_first_char:
+  jsr command_buffer_delete
   lda #' '
   jsr gd_show_character
   lda GD_COL
@@ -195,7 +187,11 @@ handle_character_from_keyboard:
 .not_last_line:  
   jsr gd_next_line
 .execute_command:
+  jsr gd_unselect
+  lda #0
+  jsr command_buffer_add
   jsr execute_command
+  jsr gd_select
   jsr show_prompt
 .done:
   lda #'_'
@@ -206,9 +202,7 @@ handle_character_from_keyboard:
 
 
 execute_command:
-  jsr gd_unselect
-  jsr show_some_text
-  jsr gd_select
+  jsr show_command_buffer
   rts
 
 
@@ -229,7 +223,9 @@ show_prompt:
   sta START_ROW
   lda #PROMPT_CHAR
   jsr gd_show_character
-  jmp gd_next_character ; tail call
+  jsr gd_next_character
+  jsr initialize_command_ptr
+  rts
 
 
 write_character_to_screen:
@@ -440,4 +436,5 @@ command_buffer_delete:
   dec COMMAND_PTR + 1
 .high_byte_good:
   dec COMMAND_PTR
+  pla
   rts
