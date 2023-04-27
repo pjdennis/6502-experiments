@@ -192,21 +192,45 @@ handle_character_from_keyboard:
   cmp #GD_CHAR_ROWS - 1
   bne .not_last_line
   jsr do_scroll
-  bra .show_prompt
+  bra .execute_command
 .not_last_line:  
   jsr gd_next_line
-.show_prompt
-  lda GD_ROW
-  sta START_ROW
-  lda #PROMPT_CHAR
-  jsr gd_show_character
-  jsr gd_next_character
+.execute_command:
+  jsr execute_command
+  jsr show_prompt
 .done:
   lda #'_'
   jsr gd_show_character
 .return
   plx
   rts
+
+
+execute_command:
+  jsr gd_unselect
+  jsr show_some_text
+  jsr gd_select
+  rts
+
+
+show_prompt:
+  lda GD_COL
+  beq .at_start_of_line
+  lda GD_ROW
+  cmp #GD_CHAR_ROWS - 1
+  bne .not_last_line
+  jsr do_scroll
+  bra .prompt
+.not_last_line
+  jsr gd_next_line
+.prompt
+  stz GD_COL
+.at_start_of_line:
+  lda GD_ROW
+  sta START_ROW
+  lda #PROMPT_CHAR
+  jsr gd_show_character
+  jmp gd_next_character ; tail call
 
 
 write_character_to_screen:
@@ -230,9 +254,6 @@ write_character_to_screen:
   jsr do_tab
   bra .done
 .newline:
-  jsr set_line_length
-  lda #' '
-  jsr gd_show_character
   lda GD_ROW
   cmp #GD_CHAR_ROWS - 1
   bne .not_last_line
@@ -439,4 +460,4 @@ show_some_text:
   plx
   pla
   rts
-.text: .asciiz "The quick brown fox\njumps over the lazy dog. "
+.text: .asciiz "The quick brown fox\njumps over the lazy\n"
