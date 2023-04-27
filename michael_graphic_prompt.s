@@ -22,15 +22,15 @@ LINE_CHARS_REMAINING     = $12 ; 1 byte
 MULTIPLY_8X8_RESULT_LOW  = $13 ; 1 byte
 MULTIPLY_8X8_TEMP        = $14 ; 1 byte
 START_ROW                = $15 ; 1 byte
+COMMAND_PTR              = $16 ; 2 bytes
 
-GD_ZERO_PAGE_BASE        = $16 ; 18 bytes
+GD_ZERO_PAGE_BASE        = $18 ; 18 bytes
 
 KB_ZERO_PAGE_BASE        = GD_ZERO_PAGE_STOP
-
 TO_DECIMAL_PARAM         = KB_ZERO_PAGE_STOP
 
 SIMPLE_BUFFER            = $0200 ; 256 bytes
-
+COMMAND_BUFFER           = $0300 ; GD_CHAR_ROWS * GD_CHAR_COLS - 1 = 399 bytes
 
   .org $2000                     ; Loader loads programs to this address
   jmp initialize_machine         ; Initialize hardware and then jump to program_start
@@ -62,6 +62,16 @@ program_start:
   txs
 
   jsr gd_prepare_vertical
+
+  jsr initialize_command_ptr
+
+  lda #'X'
+  jsr command_buffer_add
+  lda #'Z'
+  jsr command_buffer_add
+  lda #0
+  jsr command_buffer_add
+  jsr show_command_buffer
 
   jsr gd_select
   jsr show_prompt
@@ -379,3 +389,55 @@ show_some_text:
   pla
   rts
 .text: .asciiz "The quick brown fox\njumps over the lazy\ndog.\n"
+
+
+show_command_buffer:
+  pha
+  phx
+  phy
+
+  jsr gd_select
+
+  jsr initialize_command_ptr
+.loop:
+  lda (COMMAND_PTR)
+  beq .done
+  jsr write_character_to_screen
+  inc COMMAND_PTR
+  bne .loop
+  inc COMMAND_PTR + 1
+  bra .loop
+.done:
+  jsr gd_unselect
+
+  ply
+  plx
+  pla
+  rts
+
+
+initialize_command_ptr:
+  lda #<COMMAND_BUFFER
+  sta COMMAND_PTR
+  lda #>COMMAND_BUFFER
+  sta COMMAND_PTR + 1
+  rts
+
+
+command_buffer_add:
+  sta (COMMAND_PTR)
+  inc COMMAND_PTR
+  bne .done
+  inc COMMAND_PTR + 1
+.done:
+  rts
+
+
+command_buffer_delete:
+  pha
+  lda COMMAND_PTR
+  bne .high_byte_good
+  dec COMMAND_PTR + 1
+.high_byte_good:
+  dec COMMAND_PTR
+  rts
