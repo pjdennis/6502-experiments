@@ -64,11 +64,22 @@ program_start:
 
   jsr gd_prepare_vertical
 
+  jsr show_some_text
+
   jsr gd_select
+
+  ; TODO in general need to handle when we're at the end of the screen - scroll
+  lda GD_COL
+  beq .at_start_of_line
+  inc GD_ROW
+  stz GD_COL
+.at_start_of_line:
+  lda GD_ROW
+  sta START_ROW
   lda #PROMPT_CHAR
   jsr gd_show_character
   jsr gd_next_character
-  stz START_ROW
+
   lda #'_'
   jsr gd_show_character
   jsr gd_unselect
@@ -122,11 +133,11 @@ start_message: .asciiz "Last key press:"
 callback_char_received:
   jsr display_recieved_character
   jsr gd_select
-  jsr write_character_to_screen
+  jsr handle_character_from_keyboard
   jmp gd_unselect ; tail call
 
 
-write_character_to_screen:
+handle_character_from_keyboard:
   phx
   cmp #ASCII_BACKSPACE
   beq .backspace
@@ -195,6 +206,41 @@ write_character_to_screen:
   jsr gd_show_character
 .return
   plx
+  rts
+
+
+write_character_to_screen:
+  cmp #ASCII_TAB
+  beq .tab
+  cmp #ASCII_LF
+  beq .newline
+  jsr gd_show_character
+  lda GD_COL
+  cmp #GD_CHAR_COLS - 1
+  bne .not_last_char
+  lda GD_ROW
+  cmp #GD_CHAR_ROWS - 1
+  bne .not_last_char
+  jsr do_scroll
+  bra .done
+.not_last_char:
+  jsr gd_next_character
+  bra .done
+.tab:
+  jsr do_tab
+  bra .done
+.newline:
+  jsr set_line_length
+  lda #' '
+  jsr gd_show_character
+  lda GD_ROW
+  cmp #GD_CHAR_ROWS - 1
+  bne .not_last_line
+  jsr do_scroll
+  bra .done
+.not_last_line:  
+  jsr gd_next_line
+.done:
   rts
 
 
@@ -359,6 +405,30 @@ callback_key_f1:
 .loop:
   lda .f1_text, Y
   beq .done
+  jsr handle_character_from_keyboard
+  iny
+  bra .loop
+.done:
+  jsr gd_unselect
+
+  ply
+  plx
+  pla
+  rts
+.f1_text: .asciiz "The quick brown fox\njumps over the lazy dog. "
+
+
+show_some_text:
+  pha
+  phx
+  phy
+
+  jsr gd_select
+
+  ldy #0
+.loop:
+  lda .text, Y
+  beq .done
   jsr write_character_to_screen
   iny
   bra .loop
@@ -369,5 +439,4 @@ callback_key_f1:
   plx
   pla
   rts
-
-.f1_text: .asciiz "The quick brown fox jumps over the lazy dog. "
+.text: .asciiz "The quick brown fox\njumps over the lazy dog. "
