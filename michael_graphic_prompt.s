@@ -76,9 +76,25 @@ program_start:
 
   jsr keyboard_initialize
 
-  ; Read and display translated characters from the keyboard
+  jsr readline
+  
+  lda #DISPLAY_SECOND_LINE
+  jsr move_cursor
+  lda #<stop_message
+  ldx #>stop_message
+  jsr display_string
+
+  stp
+
+
+start_message: .asciiz "Last key press:"
+stop_message: .asciiz "Done."
+
+
+; Read and display translated characters from the keyboard
+readline:
   ldx #0
-get_char_loop:
+.get_char_loop:
   cpx #0
   bne .not_off
   jsr gd_select
@@ -101,23 +117,26 @@ get_char_loop:
   lda #1
   jsr delay_hundredths
   jsr keyboard_get_char
-  bcs get_char_loop
-get_char_loop_2:
+  bcs .get_char_loop
+.get_char_loop_2:
   jsr callback_char_received
+  bcs .done
   jsr keyboard_get_char
-  bcc get_char_loop_2
+  bcc .get_char_loop_2
   jsr callback_no_more_chars
-  bra get_char_loop
-
-
-start_message: .asciiz "Last key press:"
+  bra .get_char_loop
+.done
+  rts
 
 
 callback_char_received:
   jsr display_recieved_character
   jsr gd_select
   jsr handle_character_from_keyboard
-  jmp gd_unselect ; tail call
+  php ; preserve carry flag
+  jsr gd_unselect
+  plp
+  rts
 
 
 handle_character_from_keyboard:
@@ -183,20 +202,20 @@ handle_character_from_keyboard:
   cmp #GD_CHAR_ROWS - 1
   bne .not_last_line
   jsr do_scroll
-  bra .execute_command
+  bra .line_read
 .not_last_line:  
   jsr gd_next_line
-.execute_command:
-  jsr gd_unselect
+.line_read:
   lda #0
   jsr command_buffer_add
-  jsr execute_command
-  jsr gd_select
-  jsr show_prompt
+  sec
+  bra .return2
 .done:
   lda #'_'
   jsr gd_show_character
 .return
+  clc
+.return2
   plx
   rts
 
