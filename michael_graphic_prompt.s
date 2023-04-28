@@ -83,8 +83,8 @@ program_start:
   jsr gd_prepare_vertical
 
   jsr reset_and_enable_display_no_cursor
-  lda #<start_message
-  ldx #>start_message
+  lda #<.start_message
+  ldx #>.start_message
   jsr display_string
 
   jsr keyboard_initialize
@@ -101,8 +101,8 @@ program_start:
 
   bra .loop
 
+.start_message: .asciiz "Last key press:"
 
-start_message: .asciiz "Last key press:"
 
 ; On exit A contains the character read
 getchar:
