@@ -163,22 +163,26 @@ handle_character_from_keyboard:
   phx
   cmp #ASCII_BACKSPACE
   beq .backspace
-  cmp #ASCII_TAB
-  beq .tab
   cmp #ASCII_LF
   beq .newline
+; normal_char:
   tax
   lda START_ROW
-  bne .normal_char
+  bne .store_char
   lda GD_ROW
   cmp #GD_CHAR_ROWS - 1
-  bne .normal_char
+  bne .store_char
   lda GD_COL
   cmp #GD_CHAR_COLS - 1
   beq .return ; Have filled up the entire screen
-.normal_char:
+.store_char:
   txa
   jsr command_buffer_add
+  cmp #ASCII_TAB
+  bne .show_char
+; tab:
+  lda #' '
+.show_char:
   jsr gd_show_character
   lda GD_COL
   cmp #GD_CHAR_COLS - 1
@@ -211,9 +215,6 @@ handle_character_from_keyboard:
   dec GD_ROW
   lda #GD_CHAR_COLS - 1
   sta GD_COL
-  bra .done
-.tab:
-  jsr do_tab
   bra .done
 .newline:
   lda #' '
