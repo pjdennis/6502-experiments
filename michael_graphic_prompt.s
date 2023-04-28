@@ -67,6 +67,12 @@ commands:
                       .word command_echo
   .asciiz "hello"
                       .word command_hello
+  .asciiz "clear"
+                      .word command_clear
+  .asciiz "Angel"
+                      .word command_angel
+  .asciiz "angel"
+                      .word command_angel
   .byte 0
 
  
@@ -277,6 +283,19 @@ command_hello:
 .message_string: .asciiz "Hello, world!\n"
 
 
+command_angel:
+  jsr gd_select
+
+  lda #<.message_string
+  ldx #>.message_string
+  jsr write_string_to_screen
+
+  jsr gd_unselect
+  rts
+
+.message_string: .asciiz "Phil :==D Angel :)\n"
+
+
 command_echo:
   jsr gd_select
 
@@ -302,6 +321,14 @@ command_echo:
 
 .command_string: .asciiz "Enter text: "
 .message_string: .asciiz "You entered: "
+
+
+command_clear:
+  jsr gd_select
+  jsr gd_clear_screen
+  jsr gd_unselect
+  stz GD_ROW
+  rts
 
 
 show_prompt:
