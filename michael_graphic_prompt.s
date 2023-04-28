@@ -22,7 +22,7 @@ MULTIPLY_8X8_RESULT_LOW  = $0c ; 1 byte
 MULTIPLY_8X8_TEMP        = $0d ; 1 byte
 START_ROW                = $0e ; 1 byte
 START_COL                = $0f ; 1 byte
-COMMAND_PTR              = $10 ; 2 bytes
+LINE_PTR                 = $10 ; 2 bytes
 COMMAND_FUNCTION_PTR     = $12 ; 2 bytes
 TEMP_P                   = $14 ; 2 bytes
 
@@ -31,7 +31,7 @@ GD_ZERO_PAGE_BASE        = $16 ; 18 bytes
 KB_ZERO_PAGE_BASE        = GD_ZERO_PAGE_STOP
 
 SIMPLE_BUFFER            = $0200 ; 256 bytes
-COMMAND_BUFFER           = $0300 ; GD_CHAR_ROWS * GD_CHAR_COLS - 1 = 399 bytes
+LINE_BUFFER              = $0300 ; GD_CHAR_ROWS * GD_CHAR_COLS = 400 bytes including terminating 0
 
 
   .org $2000                     ; Loader loads programs to this address
@@ -108,16 +108,16 @@ start_message: .asciiz "Last key press:"
 getchar:
   phx
   phy
-  lda (COMMAND_PTR)
+  lda (LINE_PTR)
   bne .buffer_has_data
 ; No data so read some
   jsr getline
-  jsr initialize_command_ptr
-  lda (COMMAND_PTR)
+  jsr initialize_line_ptr
+  lda (LINE_PTR)
 .buffer_has_data:
-  inc COMMAND_PTR
+  inc LINE_PTR
   bne .done
-  inc COMMAND_PTR + 1
+  inc LINE_PTR + 1
 .done
   ply
   plx
@@ -130,7 +130,7 @@ getline:
   sta START_ROW
   lda GD_COL
   sta START_COL
-  jsr initialize_command_ptr
+  jsr initialize_line_ptr
   ldx #0
 .get_char_loop:
   cpx #0
@@ -195,7 +195,7 @@ handle_character_from_keyboard:
   beq .return ; Have filled up the entire screen
 .store_char:
   txa
-  jsr command_buffer_add
+  jsr line_buffer_add
   cmp #ASCII_TAB
   bne .show_char
 ; tab:
@@ -221,7 +221,7 @@ handle_character_from_keyboard:
   cmp START_COL
   beq .return
 .not_first_char:
-  jsr command_buffer_delete
+  jsr line_buffer_delete
   lda #' '
   jsr gd_show_character
   lda GD_COL
@@ -246,9 +246,9 @@ handle_character_from_keyboard:
   jsr gd_next_line
 .line_read:
   lda #ASCII_LF
-  jsr command_buffer_add
+  jsr line_buffer_add
   lda #0
-  jsr command_buffer_add
+  jsr line_buffer_add
   sec
   bra .return2
 .done:
@@ -263,15 +263,15 @@ handle_character_from_keyboard:
 
 execute_command:
   ; remove the newline from the command buffer
-  jsr command_buffer_delete ; terminating 0
-  jsr command_buffer_delete ; newline
+  jsr line_buffer_delete ; terminating 0
+  jsr line_buffer_delete ; newline
   lda #0
-  jsr command_buffer_add
+  jsr line_buffer_add
 
   jsr find_command
   bcc .not_found
-  jsr initialize_command_ptr
-  stz COMMAND_BUFFER
+  jsr initialize_line_ptr
+  stz LINE_BUFFER
   jsr jump_to_command_function
   bra .done
 
@@ -282,7 +282,7 @@ execute_command:
   ldx #>.unknown_command_string
   jsr write_string_to_screen
 
-  jsr show_command_buffer
+  jsr show_line_buffer
 
   lda #ASCII_LF
   jsr write_character_to_screen
@@ -342,7 +342,7 @@ command_echo:
   ldx #>.message_string
   jsr write_string_to_screen
 
-  jsr show_command_buffer
+  jsr show_line_buffer
 
   jsr gd_unselect
 
@@ -548,45 +548,45 @@ callback_key_f1:
 .f1_text: .asciiz "The quick brown fox jumps over the lazy dog. "
 
 
-show_command_buffer:
-  lda #<COMMAND_BUFFER
-  ldx #>COMMAND_BUFFER
+show_line_buffer:
+  lda #<LINE_BUFFER
+  ldx #>LINE_BUFFER
   jsr write_string_to_screen
   rts
 
 
-initialize_command_ptr:
-  lda #<COMMAND_BUFFER
-  sta COMMAND_PTR
-  lda #>COMMAND_BUFFER
-  sta COMMAND_PTR + 1
+initialize_line_ptr:
+  lda #<LINE_BUFFER
+  sta LINE_PTR
+  lda #>LINE_BUFFER
+  sta LINE_PTR + 1
   rts
 
 
-command_buffer_add:
-  sta (COMMAND_PTR)
-  inc COMMAND_PTR
+line_buffer_add:
+  sta (LINE_PTR)
+  inc LINE_PTR
   bne .done
-  inc COMMAND_PTR + 1
+  inc LINE_PTR + 1
 .done:
   rts
 
 
-command_buffer_delete:
+line_buffer_delete:
   pha
-  lda COMMAND_PTR
+  lda LINE_PTR
   bne .high_byte_good
-  dec COMMAND_PTR + 1
+  dec LINE_PTR + 1
 .high_byte_good:
-  dec COMMAND_PTR
+  dec LINE_PTR
   pla
   rts
 
-; On entry COMMAND_BUFFER contains the potential command
+; On entry LINE_BUFFER contains the potential command
 ; On exit COMMAND_FUNCTION_PTR contains the address of the command function if found
 ;         C is set if command found or clear if not found
 ;         A, X, Y are preserved
-; Uses COMMAND_PTR
+; Uses LINE_PTR
 find_command:
   pha
   phy
@@ -601,15 +601,15 @@ find_command:
   lda (TEMP_P)
   beq .not_found
 
-  ; At start of entry; comare with command buffer
-  lda #<COMMAND_BUFFER
-  sta COMMAND_PTR
-  lda #>COMMAND_BUFFER
-  sta COMMAND_PTR + 1
+  ; At start of line; comare with command buffer
+  lda #<LINE_BUFFER
+  sta LINE_PTR
+  lda #>LINE_BUFFER
+  sta LINE_PTR + 1
   ldy #0
   .char_loop:
   lda (TEMP_P),Y
-  cmp (COMMAND_PTR),Y
+  cmp (LINE_PTR),Y
   bne .next
   lda (TEMP_P),Y
   beq .found
