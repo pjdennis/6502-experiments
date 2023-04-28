@@ -96,7 +96,7 @@ program_start:
   jsr gd_show_character
   jsr gd_unselect
 
-  jsr readline
+  jsr getline
   jsr execute_command
 
   bra .loop
@@ -111,12 +111,7 @@ getchar:
   lda (COMMAND_PTR)
   bne .buffer_has_data
 ; No data so read some
-  jsr readline
-  jsr command_buffer_delete
-  lda #ASCII_LF
-  jsr command_buffer_add
-  lda #0
-  jsr command_buffer_add
+  jsr getline
   jsr initialize_command_ptr
   lda (COMMAND_PTR)
 .buffer_has_data:
@@ -130,7 +125,7 @@ getchar:
 
 
 ; Read and display translated characters from the keyboard
-readline:
+getline:
   lda GD_ROW
   sta START_ROW
   lda GD_COL
@@ -250,6 +245,8 @@ handle_character_from_keyboard:
 .not_last_line:  
   jsr gd_next_line
 .line_read:
+  lda #ASCII_LF
+  jsr command_buffer_add
   lda #0
   jsr command_buffer_add
   sec
@@ -265,6 +262,12 @@ handle_character_from_keyboard:
 
 
 execute_command:
+  ; remove the newline from the command buffer
+  jsr command_buffer_delete ; terminating 0
+  jsr command_buffer_delete ; newline
+  lda #0
+  jsr command_buffer_add
+
   jsr find_command
   bcc .not_found
   jsr initialize_command_ptr
@@ -331,7 +334,7 @@ command_echo:
 
   jsr gd_unselect
 
-  jsr readline
+  jsr getline
 
   jsr gd_select
 
