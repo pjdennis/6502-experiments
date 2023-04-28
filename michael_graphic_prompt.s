@@ -70,6 +70,8 @@ commands:
                       .word command_angel
   .asciiz "angel"
                       .word command_angel
+  .asciiz "getchar"
+                      .word command_getchar
   .byte 0
 
  
@@ -101,6 +103,30 @@ program_start:
 
 
 start_message: .asciiz "Last key press:"
+
+; On exit A contains the character read
+getchar:
+  phx
+  phy
+  lda (COMMAND_PTR)
+  bne .buffer_has_data
+; No data so read some
+  jsr readline
+  jsr command_buffer_delete
+  lda #ASCII_LF
+  jsr command_buffer_add
+  lda #0
+  jsr command_buffer_add
+  jsr initialize_command_ptr
+  lda (COMMAND_PTR)
+.buffer_has_data:
+  inc COMMAND_PTR
+  bne .done
+  inc COMMAND_PTR + 1
+.done
+  ply
+  plx
+  rts
 
 
 ; Read and display translated characters from the keyboard
@@ -241,6 +267,8 @@ handle_character_from_keyboard:
 execute_command:
   jsr find_command
   bcc .not_found
+  jsr initialize_command_ptr
+  stz COMMAND_BUFFER
   jsr jump_to_command_function
   bra .done
 
@@ -321,6 +349,33 @@ command_echo:
 .message_string: .asciiz "You entered: "
 
 
+command_getchar:
+  jsr gd_select
+
+  lda #<.command_string
+  ldx #>.command_string
+  jsr write_string_to_screen
+
+  jsr gd_unselect
+
+.loop:
+  jsr getchar
+  cmp #ASCII_LF
+  beq .done
+; show in hex
+  jsr gd_select
+  jsr convert_to_hex
+  jsr write_character_to_screen
+  txa
+  jsr write_character_to_screen
+  jsr gd_unselect
+  bra .loop
+.done:
+  rts
+
+.command_string: .asciiz "Enter text: "
+
+
 command_clear:
   jsr gd_select
   jsr gd_clear_screen
@@ -348,6 +403,9 @@ show_prompt:
   rts
 
 
+; On entry A contains the character to write
+; On exit X, Y are preserved
+;         A is not preserved
 write_character_to_screen:
   cmp #ASCII_TAB
   beq .tab
@@ -380,6 +438,8 @@ write_character_to_screen:
   rts
 
 
+; On exit X, Y are preserved
+;         A is not preserved
 do_tab:
   lda #' '
   jsr gd_show_character
@@ -405,7 +465,9 @@ do_tab:
   sta GD_COL
   rts
 
-
+; Scroll up by 1 line
+; On exit X, Y are preserved
+;         A is not preserved
 do_scroll:
   phx
   phy

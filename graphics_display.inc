@@ -400,7 +400,9 @@ gd_show_string:
   inc GD_ROW
   bra .continue
 
-
+; On entry A contains the character to display (in ASCII)
+; On exit X, Y are preserved
+;         A is not preserved
 gd_show_character:
   phx
   phy
@@ -497,6 +499,8 @@ gd_show_character:
   rts
 
 
+; On exit X, Y are preserved
+;         A is not preserved
 gd_next_character:
   lda GD_COL
   inc
@@ -532,7 +536,8 @@ gd_previous_character:
 .at_top:
   rts
 
-
+; On exit X, Y are preserved
+;         A is not preserved
 gd_next_line:
   lda GD_ROW
   cmp #GD_CHAR_ROWS - 1
