@@ -366,12 +366,10 @@ command_getchar:
   cmp #ASCII_LF
   beq .done
 ; show in hex
-  jsr gd_select
   jsr convert_to_hex
-  jsr write_character_to_screen
+  jsr putchar
   txa
-  jsr write_character_to_screen
-  jsr gd_unselect
+  jsr putchar
   bra .loop
 .done:
   rts
@@ -403,6 +401,16 @@ show_prompt:
   lda #PROMPT_CHAR
   jsr gd_show_character
   jsr gd_next_character
+  rts
+
+
+; On entry A contains the character to print
+; On exit X, Y are preserved
+;         A is not preserved
+putchar:
+  jsr gd_select
+  jsr write_character_to_screen
+  jsr gd_unselect
   rts
 
 
