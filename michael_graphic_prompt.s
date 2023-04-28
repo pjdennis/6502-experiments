@@ -26,15 +26,13 @@ COMMAND_PTR              = $10 ; 2 bytes
 COMMAND_FUNCTION_PTR     = $12 ; 2 bytes
 TEMP_P                   = $14 ; 2 bytes
 
-
 GD_ZERO_PAGE_BASE        = $16 ; 18 bytes
 
 KB_ZERO_PAGE_BASE        = GD_ZERO_PAGE_STOP
-TO_DECIMAL_PARAM         = KB_ZERO_PAGE_STOP
-
 
 SIMPLE_BUFFER            = $0200 ; 256 bytes
 COMMAND_BUFFER           = $0300 ; GD_CHAR_ROWS * GD_CHAR_COLS - 1 = 399 bytes
+
 
   .org $2000                     ; Loader loads programs to this address
   jmp initialize_machine         ; Initialize hardware and then jump to program_start
@@ -59,7 +57,6 @@ KB_BUFFER_READ       = simple_buffer_read
   .include multiply8x8.inc
   .include graphics_display.inc
   .include write_string_to_screen.inc
-  .include display_decimal.inc
 
 
 commands:
