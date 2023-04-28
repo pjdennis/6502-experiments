@@ -25,9 +25,10 @@ LINE_CHARS_REMAINING     = $12 ; 1 byte
 MULTIPLY_8X8_RESULT_LOW  = $13 ; 1 byte
 MULTIPLY_8X8_TEMP        = $14 ; 1 byte
 START_ROW                = $15 ; 1 byte
-COMMAND_PTR              = $16 ; 2 bytes
+START_COL                = $16 ; 1 byte
+COMMAND_PTR              = $17 ; 2 bytes
 
-GD_ZERO_PAGE_BASE        = $18 ; 18 bytes
+GD_ZERO_PAGE_BASE        = $19 ; 18 bytes
 
 KB_ZERO_PAGE_BASE        = GD_ZERO_PAGE_STOP
 TO_DECIMAL_PARAM         = KB_ZERO_PAGE_STOP
@@ -91,6 +92,10 @@ start_message: .asciiz "Last key press:"
 
 ; Read and display translated characters from the keyboard
 readline:
+  lda GD_ROW
+  sta START_ROW
+  lda GD_COL
+  sta START_COL
   ldx #0
 .get_char_loop:
   cpx #0
@@ -174,7 +179,7 @@ handle_character_from_keyboard:
   cmp START_ROW
   bne .not_first_char
   lda GD_COL
-  cmp #1
+  cmp START_COL
   beq .return
 .not_first_char:
   jsr command_buffer_delete
@@ -236,8 +241,6 @@ show_prompt:
 .prompt
   stz GD_COL
 .at_start_of_line:
-  lda GD_ROW
-  sta START_ROW
   lda #PROMPT_CHAR
   jsr gd_show_character
   jsr gd_next_character
