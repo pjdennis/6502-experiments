@@ -96,6 +96,7 @@ readline:
   sta START_ROW
   lda GD_COL
   sta START_COL
+  jsr initialize_command_ptr
   ldx #0
 .get_char_loop:
   cpx #0
@@ -224,8 +225,40 @@ handle_character_from_keyboard:
 
 
 execute_command:
+  jsr gd_select
+
+  lda #<.message_string1
+  ldx #>.message_string1
+  jsr write_string_to_screen
+
   jsr show_command_buffer
+
+  lda #ASCII_LF
+  jsr write_character_to_screen
+
+  lda #<.command_string
+  ldx #>.command_string
+  jsr write_string_to_screen
+
+  jsr gd_unselect
+
+  jsr readline
+
+  jsr gd_select
+
+  lda #<.message_string2
+  ldx #>.message_string2
+  jsr write_string_to_screen
+
+  jsr show_command_buffer
+
+  jsr gd_unselect
+
   rts
+
+.command_string: .asciiz "Enter text: "
+.message_string1: .asciiz "Command: "
+.message_string2: .asciiz "You entered: "
 
 
 show_prompt:
@@ -244,7 +277,6 @@ show_prompt:
   lda #PROMPT_CHAR
   jsr gd_show_character
   jsr gd_next_character
-  jsr initialize_command_ptr
   rts
 
 
@@ -408,26 +440,29 @@ show_some_text:
 
 
 show_command_buffer:
+  lda #<COMMAND_BUFFER
+  ldx #>COMMAND_BUFFER
+  jsr write_string_to_screen
+  rts
+
+
+; On entry A, X contain low and high bytes of string address
+; On exit A, X, Y are preserved
+write_string_to_screen:
   pha
-  phx
-  phy
 
-  jsr gd_select
-
-  jsr initialize_command_ptr
-.loop:
-  lda (COMMAND_PTR)
-  beq .done
+  sta DISPLAY_STRING_PARAM
+  stx DISPLAY_STRING_PARAM + 1
+.print_loop:
+  lda (DISPLAY_STRING_PARAM)
+  beq .done_printing
   jsr write_character_to_screen
-  inc COMMAND_PTR
-  bne .loop
-  inc COMMAND_PTR + 1
-  bra .loop
-.done:
-  jsr gd_unselect
+  inc DISPLAY_STRING_PARAM
+  bne .print_loop
+  inc DISPLAY_STRING_PARAM + 1
+  bra .print_loop
+.done_printing:
 
-  ply
-  plx
   pla
   rts
 
