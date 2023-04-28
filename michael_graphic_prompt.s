@@ -602,10 +602,7 @@ find_command:
   beq .not_found
 
   ; At start of line; comare with command buffer
-  lda #<LINE_BUFFER
-  sta LINE_PTR
-  lda #>LINE_BUFFER
-  sta LINE_PTR + 1
+  jsr initialize_line_ptr
   ldy #0
   .char_loop:
   lda (TEMP_P),Y
