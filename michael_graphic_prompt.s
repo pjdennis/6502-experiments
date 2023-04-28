@@ -17,21 +17,21 @@ CREATE_CHARACTER_PARAM   = $06 ; 2 bytes
 SIMPLE_BUFFER_WRITE_PTR  = $08 ; 1 byte
 SIMPLE_BUFFER_READ_PTR   = $09 ; 1 byte
 
-DISPLAY_STRING_PARAM     = $0A ; 2 bytes
-TEXT_PTR                 = $0C ; 2 bytes
-TEXT_PTR_NEXT            = $0E ; 2 bytes
-SCROLL_OFFSET            = $10 ; 2 bytes
-LINE_CHARS_REMAINING     = $12 ; 1 byte
-MULTIPLY_8X8_RESULT_LOW  = $13 ; 1 byte
-MULTIPLY_8X8_TEMP        = $14 ; 1 byte
-START_ROW                = $15 ; 1 byte
-START_COL                = $16 ; 1 byte
-COMMAND_PTR              = $17 ; 2 bytes
+DISPLAY_STRING_PARAM     = $0a ; 2 bytes
+MULTIPLY_8X8_RESULT_LOW  = $0c ; 1 byte
+MULTIPLY_8X8_TEMP        = $0d ; 1 byte
+START_ROW                = $0e ; 1 byte
+START_COL                = $0f ; 1 byte
+COMMAND_PTR              = $10 ; 2 bytes
+COMMAND_FUNCTION_PTR     = $12 ; 2 bytes
+TEMP_P                   = $14 ; 2 bytes
 
-GD_ZERO_PAGE_BASE        = $19 ; 18 bytes
+
+GD_ZERO_PAGE_BASE        = $16 ; 18 bytes
 
 KB_ZERO_PAGE_BASE        = GD_ZERO_PAGE_STOP
 TO_DECIMAL_PARAM         = KB_ZERO_PAGE_STOP
+
 
 SIMPLE_BUFFER            = $0200 ; 256 bytes
 COMMAND_BUFFER           = $0300 ; GD_CHAR_ROWS * GD_CHAR_COLS - 1 = 399 bytes
@@ -60,6 +60,15 @@ KB_BUFFER_READ       = simple_buffer_read
   .include graphics_display.inc
   .include write_string_to_screen.inc
   .include display_decimal.inc
+
+
+commands:
+  .asciiz "echo"
+                      .word command_echo
+  .asciiz "hello"
+                      .word command_hello
+  .byte 0
+
  
 program_start:
   ; Initialize stack
@@ -226,16 +235,50 @@ handle_character_from_keyboard:
 
 
 execute_command:
+  jsr find_command
+  bcc .not_found
+  jsr jump_to_command_function
+  bra .done
+
+.not_found:
   jsr gd_select
 
-  lda #<.message_string1
-  ldx #>.message_string1
+  lda #<.unknown_command_string
+  ldx #>.unknown_command_string
   jsr write_string_to_screen
 
   jsr show_command_buffer
 
   lda #ASCII_LF
   jsr write_character_to_screen
+
+  jsr gd_unselect
+
+.done:
+  rts
+
+.unknown_command_string: .asciiz "Unknown command: "
+
+
+jump_to_command_function:
+  jmp (COMMAND_FUNCTION_PTR)
+
+
+command_hello:
+  jsr gd_select
+
+  lda #<.message_string
+  ldx #>.message_string
+  jsr write_string_to_screen
+
+  jsr gd_unselect
+  rts
+
+.message_string: .asciiz "Hello, world!\n"
+
+
+command_echo:
+  jsr gd_select
 
   lda #<.command_string
   ldx #>.command_string
@@ -247,8 +290,8 @@ execute_command:
 
   jsr gd_select
 
-  lda #<.message_string2
-  ldx #>.message_string2
+  lda #<.message_string
+  ldx #>.message_string
   jsr write_string_to_screen
 
   jsr show_command_buffer
@@ -258,8 +301,7 @@ execute_command:
   rts
 
 .command_string: .asciiz "Enter text: "
-.message_string1: .asciiz "Command: "
-.message_string2: .asciiz "You entered: "
+.message_string: .asciiz "You entered: "
 
 
 show_prompt:
@@ -416,30 +458,6 @@ callback_key_f1:
 .f1_text: .asciiz "The quick brown fox jumps over the lazy dog. "
 
 
-show_some_text:
-  pha
-  phx
-  phy
-
-  jsr gd_select
-
-  ldy #0
-.loop:
-  lda .text, Y
-  beq .done
-  jsr write_character_to_screen
-  iny
-  bra .loop
-.done:
-  jsr gd_unselect
-
-  ply
-  plx
-  pla
-  rts
-.text: .asciiz "The quick brown fox\njumps over the lazy\ndog.\n"
-
-
 show_command_buffer:
   lda #<COMMAND_BUFFER
   ldx #>COMMAND_BUFFER
@@ -471,5 +489,79 @@ command_buffer_delete:
   dec COMMAND_PTR + 1
 .high_byte_good:
   dec COMMAND_PTR
+  pla
+  rts
+
+; On entry COMMAND_BUFFER contains the potential command
+; On exit COMMAND_FUNCTION_PTR contains the address of the command function if found
+;         C is set if command found or clear if not found
+;         A, X, Y are preserved
+; Uses COMMAND_PTR
+find_command:
+  pha
+  phy
+
+  ; TEMP_P <- address of 'commands' table
+  lda #<commands
+  sta TEMP_P
+  lda #>commands
+  sta TEMP_P + 1
+
+  .command_loop:
+  lda (TEMP_P)
+  beq .not_found
+
+  ; At start of entry; comare with command buffer
+  lda #<COMMAND_BUFFER
+  sta COMMAND_PTR
+  lda #>COMMAND_BUFFER
+  sta COMMAND_PTR + 1
+  ldy #0
+  .char_loop:
+  lda (TEMP_P),Y
+  cmp (COMMAND_PTR),Y
+  bne .next
+  lda (TEMP_P),Y
+  beq .found
+  iny
+  bra .char_loop
+
+; Found. Read address
+.found:
+  iny
+  lda (TEMP_P),Y
+  sta COMMAND_FUNCTION_PTR
+  iny
+  lda (TEMP_P),Y
+  sta COMMAND_FUNCTION_PTR + 1
+  sec
+  bra .done
+
+.next:
+  lda (TEMP_P),Y
+  beq .skip_to_next
+  iny
+  bra .next
+
+.skip_to_next: ; skip past the trailing 0 and 2 bytes of address
+  clc
+  tya
+  adc #3
+
+  ; carry assumed clear
+  adc TEMP_P
+  sta TEMP_P
+  lda #0
+  adc TEMP_P + 1
+  sta TEMP_P + 1
+
+  bra .command_loop
+
+.not_found:
+  clc
+  ; Fall through
+
+.done:
+  ply
   pla
   rts
