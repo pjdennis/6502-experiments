@@ -1,3 +1,7 @@
+; Requires:
+;   graphics_console.inc
+;   command_table.inc
+
 cr_repl:
 .loop:
   jsr gc_show_prompt
