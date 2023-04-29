@@ -584,7 +584,7 @@ x_y_from_row_col:
   sta GD_Y + 1
   lda MULTIPLY_8X8_RESULT_LOW
   sta GD_Y
-  ; GD_X = GD_COL * 12 = GD_COL * 8 + GD_COL * 4
+  ; GD_X = GD_COL * 12
   lda GD_COL
   ldy #12
   jsr multiply8x8
