@@ -131,9 +131,8 @@ compile:
 	sta count
 	sta count+1
 
-	; All programs start with memory cell initialization.
-
-; Emit Code
+	; All programs start with memory cell initialization
+	; Emit code to initialize the state of the data cells
 	lda #<initCells
 	ldx #>initCells
 	ldy #(initCellsEnd-initCells)
@@ -145,7 +144,7 @@ _while_compile:
 
 	jsr processState
 
-; Emit code
+	; Emit code to end the program
 	lda #<endProgram
 	ldx #>endProgram
 	ldy #(endProgramEnd-endProgram)
@@ -224,7 +223,7 @@ _outputCell:
 	cmp #AscDot
 	bne _inputCell
 
-; Emit Code
+	; Emit code to output the current cell to the console
 	lda #<outputCell
 	ldx #>outputCell
 	ldy #(outputCellEnd-outputCell)
@@ -238,7 +237,7 @@ _inputCell:
 	cmp #AscComma
 	bne _leftBracket
 
-; Emit Code
+	; Emit code to input from console into the current cell
 	lda #<inputCell
 	ldx #>inputCell
 	ldy #(inputCellEnd-inputCell)
@@ -256,18 +255,18 @@ _leftBracket:
 	cmp #StateCellCmp
 	beq .over1
 
-; Emit Code
-	lda #<branchForward
-	ldx #>branchForward
-	ldy #(branchForwardAfterLoad-branchForward)
+	; Emit code to load dptr
+	lda #<loadDptr
+	ldx #>loadDptr
+	ldy #(loadDptrEnd-loadDptr)
 	jsr copyCode
 
 .over1:
 
-; Emit Code
-	lda #<branchForwardAfterLoad
-	ldx #>branchForwardAfterLoad
-	ldy #(branchForwardJumpInstruction+1-branchForwardAfterLoad)
+	; Emit code to branch forward
+	lda #<branchForward
+	ldx #>branchForward
+	ldy #(branchForwardJumpInstruction+1-branchForward)
 	jsr copyCode
 
 	lda dptr+1	; push current PC for later.
@@ -301,18 +300,18 @@ _rightBracket:
 	cmp #StateCellCmp
 	beq .over1
 
-; Emit Code
-	lda #<branchBackward
-	ldx #>branchBackward
-	ldy #(branchBackwardAfterLoad-branchBackward)
+	; Emit code to load dptr
+	lda #<loadDptr
+	ldx #>loadDptr
+	ldy #(loadDptrEnd-loadDptr)
 	jsr copyCode
 
 .over1:
 
 ; Emit Code
-	lda #<branchBackwardAfterLoad
-	ldx #>branchBackwardAfterLoad
-	ldy #(branchBackwardJumpInstruction+1-branchBackwardAfterLoad)
+	lda #<branchBackward
+	ldx #>branchBackward
+	ldy #(branchBackwardJumpInstruction+1-branchBackward)
 	jsr copyCode
 
 	lda dptr	; address of next instruction into temp
@@ -389,6 +388,7 @@ _next_compile:
 	jmp _while_compile
 
 
+; processState handles finalizing the current state prior to assigning a new state
 processState:
 	lda state
 	cmp #StateDefault
@@ -451,7 +451,7 @@ _stateModCell:
 
 ; Emit Code
 	lda #<(modCellAdd+2)
-	ldx #>(modCellAdd+1)
+	ldx #>(modCellAdd+2)
 	ldy #(modCellEnd-modCellAdd-2)
 	jsr copyCode
 	
@@ -481,9 +481,7 @@ _stateModDptr:
 	jmp .done
 
 .addPosByte:
-	; add positive value < 256 to data pointer
-
-; Emit Code
+	; Emit code to add positive value < 256 to data pointer
 	lda #<addDptrPosByte
 	ldx #>addDptrPosByte
 	ldy #(addDptrPosByteAdd+1-addDptrPosByte)
@@ -739,9 +737,12 @@ inputCell:
 inputCellEnd:
 
 
-branchForward:
+loadDptr:
 	lda (dptr)
-branchForwardAfterLoad:
+loadDptrEnd:
+
+
+branchForward:
 	bne bf_over	; Branch on data cell containing zero
 branchForwardJumpInstruction:
 	jmp 0		; placeholder
@@ -749,8 +750,6 @@ bf_over:
 
 
 branchBackward:
-	lda (dptr)
-branchBackwardAfterLoad:
 	beq bb_over	; Branch on data cell containing zero
 branchBackwardJumpInstruction:
 	jmp 0		; placeholder
