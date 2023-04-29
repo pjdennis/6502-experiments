@@ -138,7 +138,7 @@ compile:
 	lda #<initCells
 	ldx #>initCells
 	ldy #(initCellsEnd-initCells)
-	jsr copyCode2
+	jsr copyCode
 
 _while_compile:
 	lda (iptr)
@@ -150,7 +150,7 @@ _while_compile:
 	lda #<endProgram
 	ldx #>endProgram
 	ldy #(endProgramEnd-endProgram)
-	jsr copyCode2
+	jsr copyCode
 
 	rts
 
@@ -229,7 +229,7 @@ _outputCell:
 	lda #<outputCell
 	ldx #>outputCell
 	ldy #(outputCellEnd-outputCell)
-	jsr copyCode2
+	jsr copyCode
 
 	lda #StateDefault
 	sta state
@@ -243,7 +243,7 @@ _inputCell:
 	lda #<inputCell
 	ldx #>inputCell
 	ldy #(inputCellEnd-inputCell)
-	jsr copyCode2
+	jsr copyCode
 
 	lda #StateDefault
 	sta state
@@ -261,7 +261,7 @@ _leftBracket:
 	lda #<branchForward
 	ldx #>branchForward
 	ldy #(branchForwardAfterLoad-branchForward)
-	jsr copyCode2
+	jsr copyCode
 
 .over1:
 
@@ -269,7 +269,7 @@ _leftBracket:
 	lda #<branchForwardAfterLoad
 	ldx #>branchForwardAfterLoad
 	ldy #(branchForwardJumpInstruction+1-branchForwardAfterLoad)
-	jsr copyCode2
+	jsr copyCode
 
 	lda dptr+1	; push current PC for later.
 	pha
@@ -306,7 +306,7 @@ _rightBracket:
 	lda #<branchBackward
 	ldx #>branchBackward
 	ldy #(branchBackwardAfterLoad-branchBackward)
-	jsr copyCode2
+	jsr copyCode
 
 .over1:
 
@@ -314,7 +314,7 @@ _rightBracket:
 	lda #<branchBackwardAfterLoad
 	ldx #>branchBackwardAfterLoad
 	ldy #(branchBackwardJumpInstruction+1-branchBackwardAfterLoad)
-	jsr copyCode2
+	jsr copyCode
 
 	lda dptr	; address of next instruction into temp
 	sta temp
@@ -374,7 +374,7 @@ _debugOut:
 	lda #<debugOut
 	ldx #>debugOut
 	ldy #(debugOutEnd-debugOut)
-	jsr copyCode2
+	jsr copyCode
 
 	lda #StateDefault
 	sta state
@@ -416,7 +416,7 @@ _stateModCell:
 	lda #<incCell
 	ldx #>incCell
 	ldy #(incCellEnd-incCell)
-	jsr copyCode2
+	jsr copyCode
 
 	jmp .done
 	
@@ -429,7 +429,7 @@ _stateModCell:
 	lda #<decCell
 	ldx #>decCell
 	ldy #(decCellEnd-decCell)
-	jsr copyCode2
+	jsr copyCode
 
 	jmp .done
 
@@ -440,7 +440,7 @@ _stateModCell:
 	lda #<modCell
 	ldx #>modCell
 	ldy #(modCellAdd+1-modCell)
-	jsr copyCode2
+	jsr copyCode
 
 	lda count
 	sta (dptr)
@@ -452,11 +452,8 @@ _stateModCell:
 
 ; Emit Code
 	lda #<(modCellAdd+2)
-	sta cptr
-	lda #>(modCellAdd+1)
-	sta cptr+1
-	lda #(modCellEnd-modCellAdd-2)
-	sta ccnt
+	ldx #>(modCellAdd+1)
+	ldy #(modCellEnd-modCellAdd-2)
 	jsr copyCode
 	
 .done:
@@ -478,11 +475,8 @@ _stateModDptr:
 
 ; Emit Code
 	lda #<incDptr
-	sta cptr
-	lda #>incDptr
-	sta cptr+1
-	lda #(incDptrEnd-incDptr)
-	sta ccnt
+	ldx #>incDptr
+	ldy #(incDptrEnd-incDptr)
 	jsr copyCode
 
 	jmp .done
@@ -492,11 +486,8 @@ _stateModDptr:
 
 ; Emit Code
 	lda #<addDptrPosByte
-	sta cptr
-	lda #>addDptrPosByte
-	sta cptr+1
-	lda #(addDptrPosByteAdd+1-addDptrPosByte)
-	sta ccnt
+	ldx #>addDptrPosByte
+	ldy #(addDptrPosByteAdd+1-addDptrPosByte)
 	jsr copyCode
 
 	lda count
@@ -509,11 +500,8 @@ _stateModDptr:
 
 ; Emit Code
 	lda #<(addDptrPosByteAdd+2)
-	sta cptr
-	lda #>(addDptrPosByteAdd+2)
-	sta cptr+1
-	lda #(addDptrPosByteEnd-addDptrPosByteAdd-2)
-	sta ccnt
+	ldx #>(addDptrPosByteAdd+2)
+	ldy #(addDptrPosByteEnd-addDptrPosByteAdd-2)
 	jsr copyCode
 
 	jmp .done
@@ -530,11 +518,8 @@ _stateModDptr:
 
 ; Emit Code
 	lda #<decDptr
-	sta cptr
-	lda #>decDptr
-	sta cptr+1
-	lda #(decDptrEnd-decDptr)
-	sta ccnt
+	ldx #>decDptr
+	ldy #(decDptrEnd-decDptr)
 	jsr copyCode
 
 	jmp .done
@@ -544,11 +529,8 @@ _stateModDptr:
 
 ; Emit Code
 	lda #<addDptrNegByte
-	sta cptr
-	lda #>addDptrNegByte
-	sta cptr+1
-	lda #(addDptrNegByteAdd+1-addDptrNegByte)
-	sta ccnt
+	ldx #>addDptrNegByte
+	ldy #(addDptrNegByteAdd+1-addDptrNegByte)
 	jsr copyCode
 
 	lda count
@@ -561,11 +543,8 @@ _stateModDptr:
 
 ; Emit Code
 	lda #<(addDptrNegByteAdd+2)
-	sta cptr
-	lda #>(addDptrNegByteAdd+2)
-	sta cptr+1
-	lda #(addDptrNegByteEnd-addDptrNegByteAdd-2)
-	sta ccnt
+	ldx #>(addDptrNegByteAdd+2)
+	ldy #(addDptrNegByteEnd-addDptrNegByteAdd-2)
 	jsr copyCode
 
 	jmp .done
@@ -575,11 +554,8 @@ _stateModDptr:
 
 ; Emit Code
 	lda #<modDptr
-	sta cptr
-	lda #>modDptr
-	sta cptr+1
-	lda #(modDptrAddLow+1-modDptr)
-	sta ccnt
+	ldx #>modDptr
+	ldy #(modDptrAddLow+1-modDptr)
 	jsr copyCode
 
 	lda count
@@ -592,11 +568,8 @@ _stateModDptr:
 
 ; Emit Code
 	lda #<(modDptrAddLow+2)
-	sta cptr
-	lda #>(modDptrAddLow+2)
-	sta cptr+1
-	lda #(modDptrAddHigh+1-modDptrAddLow-2)
-	sta ccnt
+	ldx #>(modDptrAddLow+2)
+	ldy #(modDptrAddHigh+1-modDptrAddLow-2)
 	jsr copyCode
 
 	lda count+1
@@ -609,11 +582,8 @@ _stateModDptr:
 
 ; Emit Code
 	lda #<(modDptrAddHigh+2)
-	sta cptr
-	lda #>(modDptrAddHigh+2)
-	sta cptr+1
-	lda #(modDptrEnd-modDptrAddHigh-2)
-	sta ccnt
+	ldx #>(modDptrAddHigh+2)
+	ldy #(modDptrEnd-modDptrAddHigh-2)
 	jsr copyCode
 
 .done:
@@ -625,7 +595,7 @@ _stateModDptr:
 	rts
 
 
-copyCode2:
+copyCode:
 	sta cptr
 	stx cptr+1
 	sty ccnt
@@ -646,26 +616,6 @@ copyCode2:
 	
 	rts
 
-
-copyCode:
-.loop:
-	lda (cptr)
-	sta (dptr)
-
-	inc cptr
-	bne .over1
-	inc cptr+1
-.over1:
-
-	inc dptr
-	bne .over2
-	inc dptr+1
-.over2:
-
-	dec ccnt
-	bne .loop
-	
-	rts
 
 ;
 ; These secions of code function as the threaded code to execute programs.
