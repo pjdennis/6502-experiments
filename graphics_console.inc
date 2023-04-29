@@ -52,8 +52,6 @@ gc_putchar:
 ; On exit A contains the character read
 ;         X, Y are preserved
 gc_getchar:
-  phx
-  phy
   lda (GC_LINE_PTR)
   bne .buffer_has_data
 ; No data so read some
@@ -65,8 +63,6 @@ gc_getchar:
   bne .done
   inc GC_LINE_PTR + 1
 .done
-  ply
-  plx
   rts
 
 
