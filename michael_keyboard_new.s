@@ -46,7 +46,6 @@ KB_BUFFER_READ       = simple_buffer_read
 callback_key_left    = console_cursor_left
 callback_key_right   = console_cursor_right
 callback_key_esc     = clear_console
-callback_key_f1      = do_nothing
   .include keyboard_driver.inc
   .include convert_to_hex.inc
 
@@ -105,7 +104,4 @@ console_print_hex:
 .done:
   ply
   plx
-  rts
-
-do_nothing:
   rts

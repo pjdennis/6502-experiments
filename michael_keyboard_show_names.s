@@ -48,10 +48,6 @@ CONSOLE_HEIGHT = DISPLAY_HEIGHT
 KB_BUFFER_INITIALIZE = simple_buffer_initialize
 KB_BUFFER_WRITE      = simple_buffer_write
 KB_BUFFER_READ       = simple_buffer_read
-callback_key_left    = console_cursor_left
-callback_key_right   = console_cursor_right
-callback_key_esc     = do_nothing
-callback_key_f1      = do_nothing
   .include keyboard_driver.inc
   .include convert_to_hex.inc
   .include display_string.inc
@@ -206,8 +202,4 @@ name_lookup:
   clc
 .done:
   ply
-  rts
-
-
-do_nothing:
   rts
