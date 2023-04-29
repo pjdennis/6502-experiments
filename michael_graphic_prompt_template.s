@@ -46,4 +46,5 @@ program_start:
   jsr gc_putstring
 
   stp
+
 .exit_message: .asciiz "Exited.\n"
