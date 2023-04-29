@@ -10,7 +10,7 @@ write_string_to_screen:
 .print_loop:
   lda (DISPLAY_STRING_PARAM)
   beq .done_printing
-  jsr write_character_to_screen
+  jsr gc_write_char_to_screen
   inc DISPLAY_STRING_PARAM
   bne .print_loop
   inc DISPLAY_STRING_PARAM + 1

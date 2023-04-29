@@ -96,103 +96,6 @@ program_start:
 .start_message: .asciiz "Last key press:"
 
 
-char_received:
-  .ifdef gc_callback_char_received
-  jsr gc_callback_char_received
-  .endif
-
-  jsr gd_select
-  jsr handle_character_from_keyboard
-  php ; preserve carry flag
-  jsr gd_unselect
-  plp
-  rts
-
-
-handle_character_from_keyboard:
-  phx
-  cmp #ASCII_BACKSPACE
-  beq .backspace
-  cmp #ASCII_LF
-  beq .newline
-; normal_char:
-  tax
-  lda GC_START_ROW
-  bne .store_char
-  lda GD_ROW
-  cmp #GD_CHAR_ROWS - 1
-  bne .store_char
-  lda GD_COL
-  cmp #GD_CHAR_COLS - 1
-  beq .return ; Have filled up the entire screen
-.store_char:
-  txa
-  jsr gc_line_buffer_add
-  cmp #ASCII_TAB
-  bne .show_char
-; tab:
-  lda #' '
-.show_char:
-  jsr gd_show_character
-  lda GD_COL
-  cmp #GD_CHAR_COLS - 1
-  bne .not_last_char
-  lda GD_ROW
-  cmp #GD_CHAR_ROWS - 1
-  bne .not_last_char
-  jsr do_scroll
-  bra .done
-.not_last_char:
-  jsr gd_next_character
-  bra .done
-.backspace:
-  lda GD_ROW
-  cmp GC_START_ROW
-  bne .not_first_char
-  lda GD_COL
-  cmp GC_START_COL
-  beq .return
-.not_first_char:
-  jsr gc_line_buffer_delete
-  lda #' '
-  jsr gd_show_character
-  lda GD_COL
-  beq .previous_line
-  dec
-  sta GD_COL
-  bra .done
-.previous_line:
-  dec GD_ROW
-  lda #GD_CHAR_COLS - 1
-  sta GD_COL
-  bra .done
-.newline:
-  lda #' '
-  jsr gd_show_character
-  lda GD_ROW
-  cmp #GD_CHAR_ROWS - 1
-  bne .not_last_line
-  jsr do_scroll
-  bra .line_read
-.not_last_line:  
-  jsr gd_next_line
-.line_read:
-  lda #ASCII_LF
-  jsr gc_line_buffer_add
-  lda #0
-  jsr gc_line_buffer_add
-  sec
-  bra .return2
-.done:
-  lda #'_'
-  jsr gd_show_character
-.return
-  clc
-.return2
-  plx
-  rts
-
-
 execute_command:
   ; remove the newline from the command buffer
   jsr gc_line_buffer_delete ; terminating 0
@@ -221,7 +124,7 @@ execute_command:
   jsr show_line_buffer
 
   lda #ASCII_LF
-  jsr write_character_to_screen
+  jsr gc_write_char_to_screen
 
   jsr gd_unselect
 
@@ -347,90 +250,6 @@ command_clear:
   rts
 
 
-; On entry A contains the character to write
-; On exit X, Y are preserved
-;         A is not preserved
-write_character_to_screen:
-  cmp #ASCII_TAB
-  beq .tab
-  cmp #ASCII_LF
-  beq .newline
-  jsr gd_show_character
-  lda GD_COL
-  cmp #GD_CHAR_COLS - 1
-  bne .not_last_char
-  lda GD_ROW
-  cmp #GD_CHAR_ROWS - 1
-  bne .not_last_char
-  jsr do_scroll
-  bra .done
-.not_last_char:
-  jsr gd_next_character
-  bra .done
-.tab:
-  jsr do_tab
-  bra .done
-.newline:
-  lda GD_ROW
-  cmp #GD_CHAR_ROWS - 1
-  bne .not_last_line
-  jsr do_scroll
-  bra .done
-.not_last_line:  
-  jsr gd_next_line
-.done:
-  rts
-
-
-; On exit X, Y are preserved
-;         A is not preserved
-do_tab:
-  lda #' '
-  jsr gd_show_character
-  lda #GC_TAB_WIDTH
-.loop:
-  cmp #GD_CHAR_COLS
-  bcs .next_line
-  cmp GD_COL
-  beq .over1
-  bcs .move_cursor ; A > GD_COL
-.over1
-  clc
-  adc #GC_TAB_WIDTH
-  bra .loop
-.next_line
-  lda GD_ROW
-  cmp #GD_CHAR_ROWS - 1
-  bne .not_last_line
-  jmp do_scroll ; tail call
-.not_last_line:
-  jmp gd_next_line ; tail call
-.move_cursor:
-  sta GD_COL
-  rts
-
-; Scroll up by 1 line
-; On exit X, Y are preserved
-;         A is not preserved
-do_scroll:
-  phx
-  phy
-
-  stz GD_ROW
-  jsr gd_clear_line
-  lda #1
-  jsr gd_scroll_up
-  lda #GD_CHAR_ROWS - 1
-  sta GD_ROW
-  stz GD_COL
-
-  dec GC_START_ROW
-
-  ply
-  plx
-  rts
-
-
 ; On entry A = character recieved
 ; On exit A, X, Y are preserved
 callback_char_recieved:
@@ -472,7 +291,7 @@ callback_key_f1:
 .loop:
   lda .f1_text, Y
   beq .done
-  jsr handle_character_from_keyboard
+  jsr gc_handle_char_from_keyboard
   iny
   bra .loop
 .done:

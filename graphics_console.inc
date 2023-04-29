@@ -7,7 +7,7 @@
 ; Optional:
 ;   GC_TAB_WIDTH              - tab width (default 4)
 ;   GD_PROMPT_CHAR            - prompt character (default '>')
-;   gc_callback_char_received - callback function called with A = character recieved (should preserve all registers)
+;   gc_callback_gc_char_received - callback function called with A = character recieved (should preserve all registers)
 
   .ifndef GC_TAB_WIDTH
 GC_TAB_WIDTH      = 4
@@ -40,7 +40,7 @@ gc_initialize:
 ;         A is not preserved
 gc_putchar:
   jsr gd_select
-  jsr write_character_to_screen
+  jsr gc_write_char_to_screen
   jsr gd_unselect
   rts
 
@@ -108,7 +108,7 @@ gc_getline:
   jsr keyboard_get_char
   bcs .get_char_loop
 .get_char_loop_2:
-  jsr char_received
+  jsr gc_char_received
   bcs .done
   jsr keyboard_get_char
   bcc .get_char_loop_2
@@ -130,7 +130,7 @@ gc_show_prompt:
   lda GD_ROW
   cmp #GD_CHAR_ROWS - 1
   bne .not_last_line
-  jsr do_scroll
+  jsr gc_do_scroll
   bra .prompt
 .not_last_line
   jsr gd_next_line
@@ -142,6 +142,190 @@ gc_show_prompt:
   jsr gd_next_character
   jsr gd_unselect
   pla
+  rts
+
+
+; Internal function - handle a character received
+gc_char_received:
+  .ifdef gc_callback_gc_char_received
+  jsr gc_callback_gc_char_received
+  .endif
+
+  jsr gd_select
+  jsr gc_handle_char_from_keyboard
+  php ; preserve carry flag
+  jsr gd_unselect
+  plp
+  rts
+
+
+; Handle a character from the keyboard. Can be called to simulate key presses
+; On exit TODO which registers are preserved
+gc_handle_char_from_keyboard:
+  phx
+  cmp #ASCII_BACKSPACE
+  beq .backspace
+  cmp #ASCII_LF
+  beq .newline
+; normal_char:
+  tax
+  lda GC_START_ROW
+  bne .store_char
+  lda GD_ROW
+  cmp #GD_CHAR_ROWS - 1
+  bne .store_char
+  lda GD_COL
+  cmp #GD_CHAR_COLS - 1
+  beq .return ; Have filled up the entire screen
+.store_char:
+  txa
+  jsr gc_line_buffer_add
+  cmp #ASCII_TAB
+  bne .show_char
+; tab:
+  lda #' '
+.show_char:
+  jsr gd_show_character
+  lda GD_COL
+  cmp #GD_CHAR_COLS - 1
+  bne .not_last_char
+  lda GD_ROW
+  cmp #GD_CHAR_ROWS - 1
+  bne .not_last_char
+  jsr gc_do_scroll
+  bra .done
+.not_last_char:
+  jsr gd_next_character
+  bra .done
+.backspace:
+  lda GD_ROW
+  cmp GC_START_ROW
+  bne .not_first_char
+  lda GD_COL
+  cmp GC_START_COL
+  beq .return
+.not_first_char:
+  jsr gc_line_buffer_delete
+  lda #' '
+  jsr gd_show_character
+  lda GD_COL
+  beq .previous_line
+  dec
+  sta GD_COL
+  bra .done
+.previous_line:
+  dec GD_ROW
+  lda #GD_CHAR_COLS - 1
+  sta GD_COL
+  bra .done
+.newline:
+  lda #' '
+  jsr gd_show_character
+  lda GD_ROW
+  cmp #GD_CHAR_ROWS - 1
+  bne .not_last_line
+  jsr gc_do_scroll
+  bra .line_read
+.not_last_line:  
+  jsr gd_next_line
+.line_read:
+  lda #ASCII_LF
+  jsr gc_line_buffer_add
+  lda #0
+  jsr gc_line_buffer_add
+  sec
+  bra .return2
+.done:
+  lda #'_'
+  jsr gd_show_character
+.return
+  clc
+.return2
+  plx
+  rts
+
+
+; On entry A contains the character to write
+; On exit X, Y are preserved
+;         A is not preserved
+gc_write_char_to_screen:
+  cmp #ASCII_TAB
+  beq .tab
+  cmp #ASCII_LF
+  beq .newline
+  jsr gd_show_character
+  lda GD_COL
+  cmp #GD_CHAR_COLS - 1
+  bne .not_last_char
+  lda GD_ROW
+  cmp #GD_CHAR_ROWS - 1
+  bne .not_last_char
+  jsr gc_do_scroll
+  bra .done
+.not_last_char:
+  jsr gd_next_character
+  bra .done
+.tab:
+  jsr gc_do_tab
+  bra .done
+.newline:
+  lda GD_ROW
+  cmp #GD_CHAR_ROWS - 1
+  bne .not_last_line
+  jsr gc_do_scroll
+  bra .done
+.not_last_line:  
+  jsr gd_next_line
+.done:
+  rts
+
+
+; On exit X, Y are preserved
+;         A is not preserved
+gc_do_tab:
+  lda #' '
+  jsr gd_show_character
+  lda #GC_TAB_WIDTH
+.loop:
+  cmp #GD_CHAR_COLS
+  bcs .next_line
+  cmp GD_COL
+  beq .over1
+  bcs .move_cursor ; A > GD_COL
+.over1
+  clc
+  adc #GC_TAB_WIDTH
+  bra .loop
+.next_line
+  lda GD_ROW
+  cmp #GD_CHAR_ROWS - 1
+  bne .not_last_line
+  jmp gc_do_scroll ; tail call
+.not_last_line:
+  jmp gd_next_line ; tail call
+.move_cursor:
+  sta GD_COL
+  rts
+
+; Scroll up by 1 line
+; On exit X, Y are preserved
+;         A is not preserved
+gc_do_scroll:
+  phx
+  phy
+
+  stz GD_ROW
+  jsr gd_clear_line
+  lda #1
+  jsr gd_scroll_up
+  lda #GD_CHAR_ROWS - 1
+  sta GD_ROW
+  stz GD_COL
+
+  dec GC_START_ROW
+
+  ply
+  plx
   rts
 
 
