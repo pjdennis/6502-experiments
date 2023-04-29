@@ -401,7 +401,6 @@ _next_compile:
 
 
 processState:
-.scope
 	lda state
 	cmp #StateDefault
 	bne _stateCellCmp
@@ -415,13 +414,12 @@ _stateCellCmp:
 	rts
 
 _stateModCell:
-.scope
 	cmp #StateModCell
 	bne _stateModDptr
 	
 	lda count
 	cmp #$01
-	bne _decrement
+	bne .decrement
 	; increment current cell
 
 ; Emit Code
@@ -433,11 +431,11 @@ _stateModCell:
 	sta ccnt
 	jsr copyCode
 
-	jmp _done
+	jmp .done
 	
-_decrement:
+.decrement:
 	cmp #$ff
-	bne _add
+	bne .add
 	; decrement current cell
 
 ; Emit Code
@@ -451,7 +449,7 @@ _decrement:
 
 	jmp _done
 
-_add:
+.add:
 	; add to current cell
 
 ; Emit Code
@@ -480,23 +478,21 @@ _add:
 	sta ccnt
 	jsr copyCode
 	
-_done:
+.done:
 	lda #0
 	sta count
 	lda #StateCellCmp
 	sta state
 	rts
-.scend
 
 _stateModDptr:
-.scope
 	lda count+1
-	bne _decrement
+	bne .decrement
 
 	; Choose most efficient way of modifying data pointer
 	lda count
 	cmp #$01
-	bne _addPosByte
+	bne .addPosByte
 	; increment data pointer
 
 ; Emit Code
@@ -510,7 +506,7 @@ _stateModDptr:
 
 	jmp _done
 
-_addPosByte:
+.addPosByte:
 	; add positive value < 256 to data pointer
 
 ; Emit Code
@@ -526,9 +522,9 @@ _addPosByte:
 	sta (dptr)
 
 	inc dptr
-	bne .over
+	bne .over1
 	inc dptr+1
-.over:
+.over1:
 
 ; Emit Code
 	lda #<addDptrPosByteAdd+2
@@ -541,14 +537,14 @@ _addPosByte:
 
 	jmp _done
 
-_decrement:
+.decrement:
 	lda count+1
 	cmp #$ff
-	bne _add
+	bne .add
 
 	lda count
 	cmp #$ff
-	bne _addNegByte
+	bne .addNegByte
 	; decrement data pointer
 
 ; Emit Code
@@ -562,7 +558,7 @@ _decrement:
 
 	jmp _done
 
-_addNegByte:
+.addNegByte:
 	; subract negative value >= -256 from data pointer
 
 ; Emit Code
@@ -578,9 +574,9 @@ _addNegByte:
 	sta (dptr)
 
 	inc dptr
-	bne .over
+	bne .over2
 	inc dptr+1
-over:
+.over2:
 
 ; Emit Code
 	lda #<addDptrNegByteAdd+2
@@ -591,9 +587,9 @@ over:
 	sta ccnt
 	jsr copyCode
 
-	jmp _done
+	jmp .done
 
-_add:
+.add:
 	; add signed value to data pointer
 
 ; Emit Code
@@ -609,9 +605,9 @@ _add:
 	sta (dptr)
 
 	inc dptr
-	bne .over1
+	bne .over3
 	inc dptr+1
-.over1:
+.over3:
 
 ; Emit Code
 	lda #<modDptrAddLow+2
@@ -626,9 +622,9 @@ _add:
 	sta (dptr)
 
 	inc dptr
-	bne .over2
+	bne .over4
 	inc dptr+1
-.over2:
+.over4:
 
 ; Emit Code
 	lda #<modDptrAddHigh+2
@@ -639,15 +635,14 @@ _add:
 	sta ccnt
 	jsr copyCode
 
-_done:
+.done:
 	lda #0
 	sta count
 	sta count+1
 	lda #StateDefault
 	sta state
 	rts
-.scend
-.scend
+
 
 copyCode:
 _loop:
