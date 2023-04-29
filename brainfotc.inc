@@ -290,6 +290,7 @@ _leftBracket:
 	pha
 
 	; Skip past reserved space for jump address
+	; dptr <- dptr + 2
 	clc
 	lda dptr
 	adc #2
@@ -308,7 +309,8 @@ _rightBracket:
 	cmp #AscRB
 	bne _ignoreInput
 
-	pla		; get the fixup address off the stack
+	; Get the fixup address off the stack
+	pla
 	sta fixup
 	pla
 	sta fixup+1
@@ -331,6 +333,7 @@ _rightBracket:
 	jsr copyCode
 
 	; Address of next instruction into temp
+	; temp <- dptr (word)
 	lda dptr	
 	sta temp
 	lda dptr+1
@@ -393,8 +396,11 @@ _rightBracket:
 
 ; All other characters are ignored
 _ignoreInput:
+	; fall through
+
 
 _next_compile:
+	; iptr <- iptr + 1 (word)
 	inc iptr
 	bne .over
 	inc iptr+1
