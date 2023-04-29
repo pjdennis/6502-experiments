@@ -81,11 +81,11 @@ BF_ZERO_PAGE_STOP	= BF_ZERO_PAGE_BASE + $0e
 ;
 main:
 	; Set the instruction pointer to the classic hello world program.
-	lda #<helloWorld
-	sta iptr
-	lda #>helloWorld
-	sta iptr+1
-	jsr runProgram
+	;lda #<helloWorld
+	;sta iptr
+	;lda #>helloWorld
+	;sta iptr+1
+	;jsr runProgram
 
 	; set the instruction pointer to the Sierpinski triangle program.
 	;lda #<sierpinski
@@ -100,7 +100,14 @@ main:
 	;lda #>golden
 	;sta iptr+1
 	;jsr runProgram
-	rts
+	;rts
+
+	; set the instruction pointer to the Sierpinski triangle program.
+	lda #<life
+	sta iptr
+	lda #>life
+	sta iptr+1
+	jsr runProgram
 
 
 runProgram:
@@ -836,7 +843,7 @@ fibonacci:
         .byte "[-]<[>+<-]>>[<<+>+>-]<[>+<-[>+<-[>+<-[>+<-[>+<-[>+<-"
         .byte "[>+<-[>+<-[>+<-[>[-]>+>+<<<-[>+<-]]]]]]]]]]]+>>>"
 	.byte "]<<<"
-	.byte "]",0
+	.byte "]", 0
 
 ; Shows an ASCII representation of the Sierpinski triangle
 ; (c) 2016 Daniel B. Cristofani
@@ -860,4 +867,28 @@ golden:
 	.byte "      ]+<+[-<+<+]++>>"
 	.byte "    ]<<<<[[<<]>>[-[+++<<-]+>>-]++[<<]<<<<<+>]"
 	.byte "  >[->>[[>>>[>>]+[-[->>+>>>>-[-[+++<<[-]]+>>-]++[<<]]+<<]<-]<]]>>>>>>>"
-	.byte "]"
+	.byte "]", 0
+
+; Conways game of life
+life:
+	.byte ">>>->+>+++++>(++++++++++)[[>>>+<<<-]>+++++>+>>+[<<+>>>>>+<<<-]<-]>>>>["
+	.byte "  [>>>+>+<<<<-]+++>>+[<+>>>+>+<<<-]>>[>[[>>>+<<<-]<]<<++>+>>>>>>-]<-"
+	.byte "]+++>+>[[-]<+<[>+++++++++++++++++<-]<+]>>["
+	.byte "  [+++++++++.-------->>>]+[-<<<]>>>[>>,----------[>]<]<<["
+	.byte "    <<<["
+	.byte "      >--[<->>+>-<<-]<[[>>>]+>-[+>>+>-]+[<<<]<-]>++>[<+>-]"
+	.byte "      >[[>>>]+[<<<]>>>-]+[->>>]<-[++>]>[------<]>+++[<<<]>"
+	.byte "    ]<"
+	.byte "  ]>["
+	.byte "    -[+>>+>-]+>>+>>>+>[<<<]>->+>["
+	.byte "      >[->+>+++>>++[>>>]+++<<<++<<<++[>>>]>>>]<<<[>[>>>]+>>>]"
+	.byte "      <<<<<<<[<<++<+[-<<<+]->++>>>++>>>++<<<<]<<<+[-<<<+]+>->>->>"
+	.byte "    ]<<+<<+<<<+<<-[+<+<<-]+<+["
+	.byte "      ->+>[-<-<<[<<<]>[>>[>>>]<<+<[<<<]>-]]"
+	.byte "      <[<[<[<<<]>+>>[>>>]<<-]<[<<<]]>>>->>>[>>>]+>"
+	.byte "    ]>+[-<<[-]<]-["
+	.byte "      [>>>]<[<<[<<<]>>>>>+>[>>>]<-]>>>[>[>>>]<<<<+>[<<<]>>-]>"
+	.byte "    ]<<<<<<[---<-----[-[-[<->>+++<+++++++[-]]]]<+<+]>"
+	.byte "  ]>>"
+	.byte "]", 0
+
