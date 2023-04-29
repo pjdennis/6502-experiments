@@ -357,8 +357,16 @@ gc_line_buffer_delete:
   rts
 
 
+gc_clear:
+  jsr gd_select
+  jsr gd_clear_screen
+  jsr gd_unselect
+  stz GD_ROW
+  rts
+
+
 gc_show_line_buffer:
   lda #<GC_LINE_BUFFER
   ldx #>GC_LINE_BUFFER
-  jsr write_string_to_screen
+  jsr gc_putstring
   rts

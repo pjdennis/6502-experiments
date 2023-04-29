@@ -2,8 +2,9 @@
 
 ; On entry A, X contain low and high bytes of string address
 ; On exit A, X, Y are preserved
-write_string_to_screen:
+gc_putstring:
   pha
+  jsr gd_select
 
   sta DISPLAY_STRING_PARAM
   stx DISPLAY_STRING_PARAM + 1
@@ -16,6 +17,7 @@ write_string_to_screen:
   inc DISPLAY_STRING_PARAM + 1
   bra .print_loop
 .done_printing:
+  jsr gd_unselect
 
   pla
   rts

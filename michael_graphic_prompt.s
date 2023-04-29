@@ -64,62 +64,44 @@ program_start:
 
   jsr cr_repl
 
-  jsr gd_select
   lda #<.exit_message
   ldx #>.exit_message
-  jsr write_string_to_screen
-  jsr gd_unselect
+  jsr gc_putstring
 
   stp
-.exit_message: .asciiz "Exited."
+.exit_message: .asciiz "Exited.\n"
 
 
 command_hello:
-  jsr gd_select
-
   lda #<.message_string
   ldx #>.message_string
-  jsr write_string_to_screen
-
-  jsr gd_unselect
+  jsr gc_putstring
   rts
 
 .message_string: .asciiz "Hello, world!\n"
 
 
 command_angel:
-  jsr gd_select
-
   lda #<.message_string
   ldx #>.message_string
-  jsr write_string_to_screen
-
-  jsr gd_unselect
+  jsr gc_putstring
   rts
 
 .message_string: .asciiz "Phil :==D Angel :)\n"
 
 
 command_echo:
-  jsr gd_select
-
   lda #<.command_string
   ldx #>.command_string
-  jsr write_string_to_screen
-
-  jsr gd_unselect
+  jsr gc_putstring
 
   jsr gc_getline
 
-  jsr gd_select
-
   lda #<.message_string
   ldx #>.message_string
-  jsr write_string_to_screen
+  jsr gc_putstring
 
   jsr gc_show_line_buffer
-
-  jsr gd_unselect
 
   rts
 
@@ -128,13 +110,9 @@ command_echo:
 
 
 command_getchar:
-  jsr gd_select
-
   lda #<.command_string
   ldx #>.command_string
-  jsr write_string_to_screen
-
-  jsr gd_unselect
+  jsr gc_putstring
 
 .loop:
   jsr gc_getchar
@@ -153,10 +131,7 @@ command_getchar:
 
 
 command_clear:
-  jsr gd_select
-  jsr gd_clear_screen
-  jsr gd_unselect
-  stz GD_ROW
+  jsr gc_clear
   rts
 
 

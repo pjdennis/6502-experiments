@@ -37,28 +37,24 @@ cr_execute_command:
   bne .not_exit
 ; exit
   sec
-  bra .done
+  bra .return
 
 .not_exit:
   jsr cr_jump_to_command_function
   bra .done
 
 .not_found:
-  jsr gd_select
-
   lda #<.unknown_command_string
   ldx #>.unknown_command_string
-  jsr write_string_to_screen
+  jsr gc_putstring
 
   jsr gc_show_line_buffer
 
   lda #ASCII_LF
-  jsr gc_write_char_to_screen
-
-  jsr gd_unselect
-
-  clc
+  jsr gc_putchar
 .done:
+  clc
+.return
   rts
 
 .unknown_command_string: .asciiz "Unknown command: "
