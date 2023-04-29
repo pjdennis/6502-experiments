@@ -20,9 +20,7 @@ DISPLAY_STRING_PARAM     = $0a ; 2 bytes
 MULTIPLY_8X8_RESULT_LOW  = $0c ; 1 byte
 MULTIPLY_8X8_TEMP        = $0d ; 1 byte
 
-COMMAND_FUNCTION_PTR     = $0e ; 2 bytes
-
-GD_ZERO_PAGE_BASE        = $10
+GD_ZERO_PAGE_BASE        = $0e
 
 KB_ZERO_PAGE_BASE        = GD_ZERO_PAGE_STOP
 GC_ZERO_PAGE_BASE        = KB_ZERO_PAGE_STOP
@@ -111,6 +109,8 @@ execute_command:
   jsr check_line_blank
   bcs .done
 
+  lda #<GC_LINE_BUFFER
+  ldx #>GC_LINE_BUFFER
   jsr ct_find_command
   bcc .not_found
   jsr gc_initialize_line_ptr
@@ -165,7 +165,7 @@ check_line_blank:
 
 
 jump_to_command_function:
-  jmp (COMMAND_FUNCTION_PTR)
+  jmp (CT_COMMAND_FUNCTION_PTR)
 
 
 command_hello:
@@ -303,14 +303,16 @@ show_line_buffer:
   rts
 
 
-; On entry GC_LINE_BUFFER contains the potential command
-; On exit COMMAND_FUNCTION_PTR contains the address of the command function if found
+; On entry A, X (low, high) points to the potential command
+; On exit CT_CT_COMMAND_FUNCTION_PTR contains the address of the command function if found
 ;         C is set if command found or clear if not found
-;         A, X, Y are preserved
+;         Y is preserved
+;         A, X are not preserved
 ; Uses GC_LINE_PTR
 ct_find_command:
-  pha
   phy
+  sta CT_COMMAND_PTR
+  stx CT_COMMAND_PTR + 1
 
   ; CT_TABLE_PTR <- address of 'commands' table
   lda #<CT_COMMANDS
@@ -322,12 +324,11 @@ ct_find_command:
   lda (CT_TABLE_PTR)
   beq .not_found
 
-  ; At start of line; comare with command buffer
-  jsr gc_initialize_line_ptr
+  ; Compare with potential command
   ldy #0
   .char_loop:
   lda (CT_TABLE_PTR),Y
-  cmp (GC_LINE_PTR),Y
+  cmp (CT_COMMAND_PTR),Y
   bne .next
   lda (CT_TABLE_PTR),Y
   beq .found
@@ -338,10 +339,10 @@ ct_find_command:
 .found:
   iny
   lda (CT_TABLE_PTR),Y
-  sta COMMAND_FUNCTION_PTR
+  sta CT_COMMAND_FUNCTION_PTR
   iny
   lda (CT_TABLE_PTR),Y
-  sta COMMAND_FUNCTION_PTR + 1
+  sta CT_COMMAND_FUNCTION_PTR + 1
   sec
   bra .done
 
@@ -371,5 +372,4 @@ ct_find_command:
 
 .done:
   ply
-  pla
   rts
