@@ -799,6 +799,9 @@ golden:
 	.byte "]", 0
 
 ; Conways game of life
+;
+; Adjust the number of '+' operations inside the parenthesis () to control the dimensions
+; of the board.
 life:
 	.byte ">>>->+>+++++>(++++++++++)[[>>>+<<<-]>+++++>+>>+[<<+>>>>>+<<<-]<-]>>>>["
 	.byte "  [>>>+>+<<<<-]+++>>+[<+>>>+>+<<<-]>>[>[[>>>+<<<-]<]<<++>+>>>>>>-]<-"
