@@ -608,7 +608,7 @@ copyCode:
 
 
 ;
-; These secions of code function as the threaded code to execute programs.
+; These secions of code function as templates for compiled code to execute programs.
 ;
 
 initCells:
@@ -754,6 +754,7 @@ endProgramEnd:
 
 ; Sample programs
 
+; Simple hello world program
 helloWorld:
 	.byte "++++++++"
 	.byte "[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]"
