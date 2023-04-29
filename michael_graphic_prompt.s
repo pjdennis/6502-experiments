@@ -54,10 +54,12 @@ callback_key_f1      = handle_f1
   .include display_hex.inc
   .include multiply8x8.inc
   .include graphics_display.inc
+gc_callback_char_received = sk_show_char_info
   .include graphics_console.inc
   .include write_string_to_screen.inc
   .include command_table.inc
   .include console_repl.inc
+  .include show_keys_on_screen.inc
 
 
 CT_COMMANDS:
@@ -84,17 +86,12 @@ program_start:
   jsr gd_prepare_vertical
   jsr gc_initialize
   jsr keyboard_initialize
-
   jsr reset_and_enable_display_no_cursor
-  lda #<.start_message
-  ldx #>.start_message
-  jsr display_string
+  jsr sk_init
 
   jsr cr_repl
 
   stp
-
-.start_message: .asciiz "Last key press:"
 
 
 command_hello:
@@ -180,24 +177,6 @@ command_clear:
   jsr gd_clear_screen
   jsr gd_unselect
   stz GD_ROW
-  rts
-
-
-; On entry A = character recieved
-; On exit A, X, Y are preserved
-callback_char_recieved:
-  phx
-  tax
-  lda #DISPLAY_SECOND_LINE
-  jsr move_cursor
-  txa
-  jsr display_character
-  lda #' '
-  jsr display_character
-  txa
-  jsr display_hex
-  txa
-  plx
   rts
 
 

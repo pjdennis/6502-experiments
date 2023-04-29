@@ -147,8 +147,8 @@ gc_show_prompt:
 
 ; Internal function - handle a character received
 gc_char_received:
-  .ifdef gc_callback_gc_char_received
-  jsr gc_callback_gc_char_received
+  .ifdef gc_callback_char_received
+  jsr gc_callback_char_received
   .endif
 
   jsr gd_select
