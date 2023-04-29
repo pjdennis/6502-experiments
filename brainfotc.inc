@@ -72,11 +72,10 @@ iptr			= BF_ZERO_PAGE_BASE + $02 ; 2 bytes - word to hold the instruction pointe
 temp			= BF_ZERO_PAGE_BASE + $04 ; 2 bytes - word to hold temporary pointer.
 fixup			= BF_ZERO_PAGE_BASE + $06 ; 2 bytes - word to hold popped PC to fixup forward branch.
 cptr			= BF_ZERO_PAGE_BASE + $08 ; 2 bytes - word to hold pointer for code to copy.
-ccnt			= BF_ZERO_PAGE_BASE + $0a ; 1 byte  - byte to hold count of code to copy.
-state			= BF_ZERO_PAGE_BASE + $0b ; 1 byte  - current parser state
-count			= BF_ZERO_PAGE_BASE + $0c ; 2 bytes - count cell or dptr delta
+state			= BF_ZERO_PAGE_BASE + $0a ; 1 byte  - current parser state
+count			= BF_ZERO_PAGE_BASE + $0b ; 2 bytes - count cell or dptr delta
 
-BF_ZERO_PAGE_STOP	= BF_ZERO_PAGE_BASE + $0e
+BF_ZERO_PAGE_STOP	= BF_ZERO_PAGE_BASE + $0d
 
 
 ;
@@ -598,7 +597,6 @@ _stateModDptr:
 copyCode:
 	sta cptr
 	stx cptr+1
-	sty ccnt
 .loop:
 	lda (cptr)
 	sta (dptr)
@@ -611,7 +609,7 @@ copyCode:
 	bne .over2
 	inc dptr+1
 .over2:
-	dec ccnt
+	dey
 	bne .loop
 	
 	rts
