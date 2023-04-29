@@ -594,6 +594,9 @@ _stateModDptr:
 	rts
 
 
+; Copy code to the output buffer
+; On entry A, X contains the low, high bytes pointing to the code
+;          Y contains the number of bytes of code to copy
 copyCode:
 	sta cptr
 	stx cptr+1
