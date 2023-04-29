@@ -4,6 +4,8 @@
 ;   cellsEnd          - Stop address for cells
 ;   code              - Address of 24576 bytes of code
 ;   codeEnd           - Stop address for code
+;   bf_getchar        - Get char function
+;   bf_putchar        - Put char function
 
 ; -----------------------------------------------------------------------------
 ; Implementation of the Brain F--k compiler in 6502 assembly.
@@ -57,6 +59,10 @@ StateCellCmp	= $03	; Current cell loaded for branch on Z flag
 cellsSize	= cellsEnd - cells
 codeSize 	= codeEnd - code
 
+_getch		= bf_getchar
+_putch		= bf_putchar
+
+
 ; Zero page variables
 dptr			= BF_ZERO_PAGE_BASE + $00 ; 2 bytes - word to hold the data pointer.
 iptr			= BF_ZERO_PAGE_BASE + $02 ; 2 bytes - word to hold the instruction pointer.
@@ -82,23 +88,25 @@ main:
 	jsr runProgram
 
 	; set the instruction pointer to the Sierpinski triangle program.
-	lda #<sierpinski
-	sta iptr
-	lda #>sierpinski
-	sta iptr+1
-	jsr runProgram
+	;lda #<sierpinski
+	;sta iptr
+	;lda #>sierpinski
+	;sta iptr+1
+	;jsr runProgram
 
 	; set the instruction pointer to the Golden ratio program.
-	lda #<golden
-	sta iptr
-	lda #>golden
-	sta iptr+1
-	jsr runProgram
-	brk
+	;lda #<golden
+	;sta iptr
+	;lda #>golden
+	;sta iptr+1
+	;jsr runProgram
+	rts
+
 
 runProgram:
 	jsr compile	; translate source into executable code
 	jmp code	; directly execute the code
+
 
 ; compile scans the characters and produces a machine code stream.
 compile:
@@ -136,7 +144,7 @@ _while_compile:
 	sta cptr
 	lda #>endProgram
 	sta cptr+1
-	lda #endProgramEnd-endProgram
+	lda #(endProgramEnd-endProgram)
 	sta ccnt
 	jsr copyCode
 
@@ -218,7 +226,7 @@ _outputCell:
 	sta cptr
 	lda #>outputCell
 	sta cptr+1
-	lda #outputCellEnd-outputCell
+	lda #(outputCellEnd-outputCell)
 	sta ccnt
 	jsr copyCode
 
@@ -236,7 +244,7 @@ _inputCell:
 	sta cptr
 	lda #>inputCell
 	sta cptr+1
-	lda #inputCellEnd-inputCell
+	lda #(inputCellEnd-inputCell)
 	sta ccnt
 	jsr copyCode
 
@@ -257,7 +265,7 @@ _leftBracket:
 	sta cptr
 	lda #>branchForward
 	sta cptr+1
-	lda #branchForwardAfterLoad-branchForward
+	lda #(branchForwardAfterLoad-branchForward)
 	sta ccnt
 	jsr copyCode
 
@@ -268,7 +276,7 @@ _leftBracket:
 	sta cptr
 	lda #>branchForwardAfterLoad
 	sta cptr+1
-	lda #branchForwardJumpInstructions+1-branchForwardAfterLoad
+	lda #(branchForwardJumpInstruction+1-branchForwardAfterLoad)
 	sta ccnt
 	jsr copyCode
 
@@ -308,7 +316,7 @@ _rightBracket:
 	sta cptr
 	lda #>branchBackward
 	sta cptr+1
-	lda #branchBackwardAfterLoad-branchBackward
+	lda #(branchBackwardAfterLoad-branchBackward)
 	sta ccnt
 	jsr copyCode
 
@@ -319,7 +327,7 @@ _rightBracket:
 	sta cptr
 	lda #>branchBackwardAfterLoad
 	sta cptr+1
-	lda #branchBackwardJumpInstruction+1-branchBackwardAfterLoad
+	lda #(branchBackwardJumpInstruction+1-branchBackwardAfterLoad)
 	sta ccnt
 	jsr copyCode
 
@@ -382,7 +390,7 @@ _debugOut:
 	sta cptr
 	lda #>debugOut
 	sta cptr+1
-	lda #debugOutEnd-debugOut
+	lda #(debugOutEnd-debugOut)
 	sta ccnt
 	jsr copyCode
 
@@ -427,7 +435,7 @@ _stateModCell:
 	sta cptr
 	lda #>incCell
 	sta cptr+1
-	lda #incCellEnd-incCell
+	lda #(incCellEnd-incCell)
 	sta ccnt
 	jsr copyCode
 
@@ -443,11 +451,11 @@ _stateModCell:
 	sta cptr
 	lda #>decCell
 	sta cptr+1
-	lda #decCellEnd-decCell
+	lda #(decCellEnd-decCell)
 	sta ccnt
 	jsr copyCode
 
-	jmp _done
+	jmp .done
 
 .add:
 	; add to current cell
@@ -457,7 +465,7 @@ _stateModCell:
 	sta cptr
 	lda #>modCell
 	sta cptr+1
-	lda #modCellAdd+1-modCell
+	lda #(modCellAdd+1-modCell)
 	sta ccnt
 	jsr copyCode
 
@@ -470,11 +478,11 @@ _stateModCell:
 .over:
 
 ; Emit Code
-	lda #<modCellAdd+2
+	lda #<(modCellAdd+2)
 	sta cptr
-	lda #>modCellAdd+1
+	lda #>(modCellAdd+1)
 	sta cptr+1
-	lda #modCellEnd-modCellAdd-2
+	lda #(modCellEnd-modCellAdd-2)
 	sta ccnt
 	jsr copyCode
 	
@@ -500,11 +508,11 @@ _stateModDptr:
 	sta cptr
 	lda #>incDptr
 	sta cptr+1
-	lda #incDptrEnd-incDptr
+	lda #(incDptrEnd-incDptr)
 	sta ccnt
 	jsr copyCode
 
-	jmp _done
+	jmp .done
 
 .addPosByte:
 	; add positive value < 256 to data pointer
@@ -514,7 +522,7 @@ _stateModDptr:
 	sta cptr
 	lda #>addDptrPosByte
 	sta cptr+1
-	lda #addDptrPosByteAdd+1-addDptrPosByte
+	lda #(addDptrPosByteAdd+1-addDptrPosByte)
 	sta ccnt
 	jsr copyCode
 
@@ -527,15 +535,15 @@ _stateModDptr:
 .over1:
 
 ; Emit Code
-	lda #<addDptrPosByteAdd+2
+	lda #<(addDptrPosByteAdd+2)
 	sta cptr
-	lda #>addDptrPosByteAdd+2
+	lda #>(addDptrPosByteAdd+2)
 	sta cptr+1
-	lda #addDptrPosByteEnd-addDptrPosByteAdd-2
+	lda #(addDptrPosByteEnd-addDptrPosByteAdd-2)
 	sta ccnt
 	jsr copyCode
 
-	jmp _done
+	jmp .done
 
 .decrement:
 	lda count+1
@@ -552,11 +560,11 @@ _stateModDptr:
 	sta cptr
 	lda #>decDptr
 	sta cptr+1
-	lda #decDptrEnd-decDptr
+	lda #(decDptrEnd-decDptr)
 	sta ccnt
 	jsr copyCode
 
-	jmp _done
+	jmp .done
 
 .addNegByte:
 	; subract negative value >= -256 from data pointer
@@ -566,7 +574,7 @@ _stateModDptr:
 	sta cptr
 	lda #>addDptrNegByte
 	sta cptr+1
-	lda #addDptrNegByteAdd+1-addDptrNegByte
+	lda #(addDptrNegByteAdd+1-addDptrNegByte)
 	sta ccnt
 	jsr copyCode
 
@@ -579,11 +587,11 @@ _stateModDptr:
 .over2:
 
 ; Emit Code
-	lda #<addDptrNegByteAdd+2
+	lda #<(addDptrNegByteAdd+2)
 	sta cptr
-	lda #>addDptrNegByteAdd+2
+	lda #>(addDptrNegByteAdd+2)
 	sta cptr+1
-	lda #addDptrNegByteEnd-addDptrNegByteAdd-2
+	lda #(addDptrNegByteEnd-addDptrNegByteAdd-2)
 	sta ccnt
 	jsr copyCode
 
@@ -597,7 +605,7 @@ _stateModDptr:
 	sta cptr
 	lda #>modDptr
 	sta cptr+1
-	lda #modDptrAddLow+1-modDptr
+	lda #(modDptrAddLow+1-modDptr)
 	sta ccnt
 	jsr copyCode
 
@@ -610,11 +618,11 @@ _stateModDptr:
 .over3:
 
 ; Emit Code
-	lda #<modDptrAddLow+2
+	lda #<(modDptrAddLow+2)
 	sta cptr
-	lda #>modDptrAddLow+2
+	lda #>(modDptrAddLow+2)
 	sta cptr+1
-	lda #modDptrAddHigh+1-modDptrAddLow-2
+	lda #(modDptrAddHigh+1-modDptrAddLow-2)
 	sta ccnt
 	jsr copyCode
 
@@ -627,11 +635,11 @@ _stateModDptr:
 .over4:
 
 ; Emit Code
-	lda #<modDptrAddHigh+2
+	lda #<(modDptrAddHigh+2)
 	sta cptr
-	lda #>modDptrAddHigh+2
+	lda #>(modDptrAddHigh+2)
 	sta cptr+1
-	lda #modDptrEnd-modDptrAddHigh-2
+	lda #(modDptrEnd-modDptrAddHigh-2)
 	sta ccnt
 	jsr copyCode
 
@@ -853,56 +861,3 @@ golden:
 	.byte "    ]<<<<[[<<]>>[-[+++<<-]+>>-]++[<<]<<<<<+>]"
 	.byte "  >[->>[[>>>[>>]+[-[->>+>>>>-[-[+++<<[-]]+>>-]++[<<]]+<<]<-]<]]>>>>>>>"
 	.byte "]"
-
-; conio functions unique to each platform.
-.alias _py65_putc	$f001	; Definitions for the py65mon emulator
-.alias _py65_getc	$f004
-
-_getch:
-.scope
-*	lda _py65_getc
-	beq -
-	cmp #13		; convert CR to LF so as to be compliant on Windows
-	bne +
-	lda #10
-*	rts
-.scend
-
-_putch:
-.scope
-	sta _py65_putc
-	rts
-.scend
-
-; Interrupt handler for RESET button, also boot sequence.
-; Note: This doesn't count for the restricted instruction challenge as
-; these steps are required to set the hardware to a known state.
-.scope
-resetv:
-	sei		; diable interupts, until interupt vectors are set.
-	cld		; clear decimal mode
-	ldx #$FF	; reset stack pointer
-	txs
-
-	lda #$00	; clear all three registers
-	tax
-	tay
-
-	pha		; clear all flags
-	plp
-	jmp main	; go to monitor or main program initialization.
-.scend
-
-; redirect the NMI interrupt vector here to be safe, but this 
-; should never be reached for py65mon.
-irqv:
-nmiv:
-panic:
-	brk
-
-; Interrupt vectors.
-.advance $FFFA
-
-.word nmiv		; NMI vector 
-.word resetv		; RESET vector
-.word irqv		; IRQ vector
