@@ -5,8 +5,6 @@
 
 INTERRUPT_ROUTINE        = $3f00
 
-TAB_WIDTH                = 4
-PROMPT_CHAR              = '>'
 
 CP_M_DEST_P              = $00 ; 2 bytes
 CP_M_SRC_P               = $02 ; 2 bytes
@@ -20,18 +18,18 @@ SIMPLE_BUFFER_READ_PTR   = $09 ; 1 byte
 DISPLAY_STRING_PARAM     = $0a ; 2 bytes
 MULTIPLY_8X8_RESULT_LOW  = $0c ; 1 byte
 MULTIPLY_8X8_TEMP        = $0d ; 1 byte
-START_ROW                = $0e ; 1 byte
-START_COL                = $0f ; 1 byte
-LINE_PTR                 = $10 ; 2 bytes
-COMMAND_FUNCTION_PTR     = $12 ; 2 bytes
-TEMP_P                   = $14 ; 2 bytes
 
-GD_ZERO_PAGE_BASE        = $16 ; 18 bytes
+COMMAND_FUNCTION_PTR     = $0e ; 2 bytes
+TEMP_P                   = $10 ; 2 bytes
+
+GD_ZERO_PAGE_BASE        = $12 ; 18 bytes
 
 KB_ZERO_PAGE_BASE        = GD_ZERO_PAGE_STOP
+GC_ZERO_PAGE_BASE        = KB_ZERO_PAGE_STOP
+
 
 SIMPLE_BUFFER            = $0200 ; 256 bytes
-LINE_BUFFER              = $0300 ; GD_CHAR_ROWS * GD_CHAR_COLS = 400 bytes including terminating 0
+GC_LINE_BUFFER           = $0300 ; GD_CHAR_ROWS * GD_CHAR_COLS = 400 bytes including terminating 0
 
 
   .org $2000                     ; Loader loads programs to this address
@@ -56,6 +54,7 @@ KB_BUFFER_READ       = simple_buffer_read
   .include display_hex.inc
   .include multiply8x8.inc
   .include graphics_display.inc
+  .include graphics_console.inc
   .include write_string_to_screen.inc
 
 
@@ -106,16 +105,16 @@ program_start:
 getchar:
   phx
   phy
-  lda (LINE_PTR)
+  lda (GC_LINE_PTR)
   bne .buffer_has_data
 ; No data so read some
   jsr getline
   jsr initialize_line_ptr
-  lda (LINE_PTR)
+  lda (GC_LINE_PTR)
 .buffer_has_data:
-  inc LINE_PTR
+  inc GC_LINE_PTR
   bne .done
-  inc LINE_PTR + 1
+  inc GC_LINE_PTR + 1
 .done
   ply
   plx
@@ -125,9 +124,9 @@ getchar:
 ; Read and display translated characters from the keyboard
 getline:
   lda GD_ROW
-  sta START_ROW
+  sta GC_START_ROW
   lda GD_COL
-  sta START_COL
+  sta GC_START_COL
   jsr initialize_line_ptr
   ldx #0
 .get_char_loop:
@@ -165,8 +164,8 @@ getline:
 
 
 char_received:
-  .ifdef callback_char_received
-  jsr callback_char_received
+  .ifdef gc_callback_char_received
+  jsr gc_callback_char_received
   .endif
 
   jsr gd_select
@@ -185,7 +184,7 @@ handle_character_from_keyboard:
   beq .newline
 ; normal_char:
   tax
-  lda START_ROW
+  lda GC_START_ROW
   bne .store_char
   lda GD_ROW
   cmp #GD_CHAR_ROWS - 1
@@ -215,10 +214,10 @@ handle_character_from_keyboard:
   bra .done
 .backspace:
   lda GD_ROW
-  cmp START_ROW
+  cmp GC_START_ROW
   bne .not_first_char
   lda GD_COL
-  cmp START_COL
+  cmp GC_START_COL
   beq .return
 .not_first_char:
   jsr line_buffer_delete
@@ -275,7 +274,7 @@ execute_command:
   jsr find_command
   bcc .not_found
   jsr initialize_line_ptr
-  stz LINE_BUFFER
+  stz GC_LINE_BUFFER
   jsr jump_to_command_function
   bra .done
 
@@ -305,7 +304,7 @@ execute_command:
 check_line_blank:
   jsr initialize_line_ptr
 .loop:
-  lda (LINE_PTR)
+  lda (GC_LINE_PTR)
   beq .is_blank
   cmp #' '
   beq .blank_char
@@ -315,9 +314,9 @@ check_line_blank:
   clc
   bra .done
 .blank_char
-  inc LINE_PTR
+  inc GC_LINE_PTR
   bne .loop
-  inc LINE_PTR + 1
+  inc GC_LINE_PTR + 1
   bra .loop
 .is_blank
   sec
@@ -428,7 +427,7 @@ show_prompt:
 .prompt
   stz GD_COL
 .at_start_of_line:
-  lda #PROMPT_CHAR
+  lda #GC_PROMPT_CHAR
   jsr gd_show_character
   jsr gd_next_character
   rts
@@ -484,7 +483,7 @@ write_character_to_screen:
 do_tab:
   lda #' '
   jsr gd_show_character
-  lda #TAB_WIDTH
+  lda #GC_TAB_WIDTH
 .loop:
   cmp #GD_CHAR_COLS
   bcs .next_line
@@ -493,7 +492,7 @@ do_tab:
   bcs .move_cursor ; A > GD_COL
 .over1
   clc
-  adc #TAB_WIDTH
+  adc #GC_TAB_WIDTH
   bra .loop
 .next_line
   lda GD_ROW
@@ -521,7 +520,7 @@ do_scroll:
   sta GD_ROW
   stz GD_COL
 
-  dec START_ROW
+  dec GC_START_ROW
 
   ply
   plx
@@ -583,44 +582,44 @@ callback_key_f1:
 
 
 show_line_buffer:
-  lda #<LINE_BUFFER
-  ldx #>LINE_BUFFER
+  lda #<GC_LINE_BUFFER
+  ldx #>GC_LINE_BUFFER
   jsr write_string_to_screen
   rts
 
 
 initialize_line_ptr:
-  lda #<LINE_BUFFER
-  sta LINE_PTR
-  lda #>LINE_BUFFER
-  sta LINE_PTR + 1
+  lda #<GC_LINE_BUFFER
+  sta GC_LINE_PTR
+  lda #>GC_LINE_BUFFER
+  sta GC_LINE_PTR + 1
   rts
 
 
 line_buffer_add:
-  sta (LINE_PTR)
-  inc LINE_PTR
+  sta (GC_LINE_PTR)
+  inc GC_LINE_PTR
   bne .done
-  inc LINE_PTR + 1
+  inc GC_LINE_PTR + 1
 .done:
   rts
 
 
 line_buffer_delete:
   pha
-  lda LINE_PTR
+  lda GC_LINE_PTR
   bne .high_byte_good
-  dec LINE_PTR + 1
+  dec GC_LINE_PTR + 1
 .high_byte_good:
-  dec LINE_PTR
+  dec GC_LINE_PTR
   pla
   rts
 
-; On entry LINE_BUFFER contains the potential command
+; On entry GC_LINE_BUFFER contains the potential command
 ; On exit COMMAND_FUNCTION_PTR contains the address of the command function if found
 ;         C is set if command found or clear if not found
 ;         A, X, Y are preserved
-; Uses LINE_PTR
+; Uses GC_LINE_PTR
 find_command:
   pha
   phy
@@ -640,7 +639,7 @@ find_command:
   ldy #0
   .char_loop:
   lda (TEMP_P),Y
-  cmp (LINE_PTR),Y
+  cmp (GC_LINE_PTR),Y
   bne .next
   lda (TEMP_P),Y
   beq .found
