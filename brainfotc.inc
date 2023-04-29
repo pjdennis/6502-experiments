@@ -83,37 +83,37 @@ BF_ZERO_PAGE_STOP	= BF_ZERO_PAGE_BASE + $0e
 ; Functions
 ;
 main:
-	; Set the instruction pointer to the classic hello world program.
+	; The classic hello world program.
 	;lda #<helloWorld
-	;sta iptr
-	;lda #>helloWorld
-	;sta iptr+1
+	;ldx #>helloWorld
 	;jsr runProgram
 
-	; set the instruction pointer to the Sierpinski triangle program.
+	; The Sierpinski triangle program.
 	;lda #<sierpinski
-	;sta iptr
-	;lda #>sierpinski
-	;sta iptr+1
+	;ldx #>sierpinski
 	;jsr runProgram
 
-	; set the instruction pointer to the Golden ratio program.
+	; The Golden ratio program.
 	;lda #<golden
-	;sta iptr
-	;lda #>golden
-	;sta iptr+1
+	;ldx #>golden
 	;jsr runProgram
-	;rts
 
-	; set the instruction pointer to the Conway game of life program.
+	; The fibonacci program.
+	;lda #<fibonacci
+	;ldx #>fibonacci
+	;jsr runProgram
+
+	; The Conway game of life program.
 	lda #<life
-	sta iptr
-	lda #>life
-	sta iptr+1
+	ldx #>life
 	jsr runProgram
+
+	rts
 
 
 runProgram:
+	sta iptr
+	stx iptr+1
 	jsr compile	; translate source into executable code
 	jmp code	; directly execute the code
 
