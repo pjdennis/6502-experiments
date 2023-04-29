@@ -7,24 +7,10 @@ INTERRUPT_ROUTINE        = $3f00
 
 
 ; Zero page allocations
-CP_M_DEST_P              = $00 ; 2 bytes
-CP_M_SRC_P               = $02 ; 2 bytes
-CP_M_LEN                 = $04 ; 2 bytes
+GCF_ZERO_PAGE_BASE       = $00
 
-CREATE_CHARACTER_PARAM   = $06 ; 2 bytes
+CREATE_CHARACTER_PARAM   = GCF_ZERO_PAGE_STOP ; 2 bytes
 
-SIMPLE_BUFFER_WRITE_PTR  = $08 ; 1 byte
-SIMPLE_BUFFER_READ_PTR   = $09 ; 1 byte
-
-DISPLAY_STRING_PARAM     = $0a ; 2 bytes
-MULTIPLY_8X8_RESULT_LOW  = $0c ; 1 byte
-MULTIPLY_8X8_TEMP        = $0d ; 1 byte
-
-GD_ZERO_PAGE_BASE        = $0e
-
-KB_ZERO_PAGE_BASE        = GD_ZERO_PAGE_STOP
-GC_ZERO_PAGE_BASE        = KB_ZERO_PAGE_STOP
-CT_ZERO_PAGE_BASE        = GC_ZERO_PAGE_STOP
 
 ; Other memory allocations
 SIMPLE_BUFFER            = $0200 ; 256 bytes
@@ -39,42 +25,29 @@ GC_LINE_BUFFER           = $0300 ; GD_CHAR_ROWS * GD_CHAR_COLS = 400 bytes inclu
   ; stack is not usable until after the hardware registers have been initialized
   .include delay_routines.inc
   .include initialize_machine_v2.inc
+callback_key_f1           = handle_f1
+gc_callback_char_received = sk_show_char_info
+  .include graphics_console_full.inc
+  .include show_keys_on_screen.inc
 EXTEND_CHARACTER_SET = 1
   .include display_routines.inc
   .include display_string.inc
-  .include simple_buffer.inc
-  .include copy_memory.inc
-  .include key_codes.inc
-  .include keyboard_typematic.inc
-KB_BUFFER_INITIALIZE = simple_buffer_initialize
-KB_BUFFER_WRITE      = simple_buffer_write
-KB_BUFFER_READ       = simple_buffer_read
-callback_key_f1      = handle_f1
-  .include keyboard_driver.inc
   .include display_hex.inc
-  .include multiply8x8.inc
-  .include graphics_display.inc
-gc_callback_char_received = sk_show_char_info
-  .include graphics_console.inc
-  .include write_string_to_screen.inc
-  .include command_table.inc
-  .include console_repl.inc
-  .include show_keys_on_screen.inc
 
 
 CT_COMMANDS:
-  .asciiz "echo"
-                      .word command_echo
   .asciiz "hello"
                       .word command_hello
-  .asciiz "clear"
-                      .word command_clear
   .asciiz "Angel"
                       .word command_angel
   .asciiz "angel"
                       .word command_angel
+  .asciiz "echo"
+                      .word command_echo
   .asciiz "getchar"
                       .word command_getchar
+  .asciiz "clear"
+                      .word command_clear
   .byte 0
 
  
