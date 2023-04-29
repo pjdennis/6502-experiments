@@ -165,12 +165,12 @@ gc_char_received:
 ; On exit TODO which registers are preserved
 gc_handle_char_from_keyboard:
   phx
+  tax
   cmp #ASCII_BACKSPACE
   beq .backspace
   cmp #ASCII_LF
   beq .newline
 ; normal_char:
-  tax
   lda GC_START_ROW
   bne .store_char
   lda GD_ROW
@@ -211,18 +211,11 @@ gc_handle_char_from_keyboard:
   sta GD_COL
   bra .done
 .newline:
-  lda #' '
+  lda #' ' ; Erase cursor
   jsr gd_show_character
-  lda GD_ROW
-  cmp #GD_CHAR_ROWS - 1
-  bne .not_last_line
-  jsr gc_do_scroll
-  bra .line_read
-.not_last_line:  
-  jsr gd_next_line
-.line_read:
-  lda #ASCII_LF
+  txa
   jsr gc_line_buffer_add
+  jsr gc_write_char_to_screen
   lda #0
   jsr gc_line_buffer_add
   sec
