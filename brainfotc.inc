@@ -471,10 +471,10 @@ _stateModCell:
 
 ; dptr has been modified. Emit code to update based on count (word)
 _stateModDptr:
+	; Choose the most efficient way of modifying dptr
 	lda count+1
 	bne .decrement
 
-	; Choose most efficient way of modifying dptr
 	lda count
 	cmp #$01
 	bne .addPosByte
@@ -488,7 +488,7 @@ _stateModDptr:
 	jmp .done
 
 .addPosByte:
-	; Emit code to add positive value < 256 to dptr (part 1)
+	; Emit code to add count as a positive value < 256 to dptr (part 1)
 	lda #<addDptrPosByte
 	ldx #>addDptrPosByte
 	ldy #(addDptrPosByteAdd+1-addDptrPosByte)
@@ -497,7 +497,7 @@ _stateModDptr:
 	lda count
 	jsr emitByte
 
-	; Emit code to add positive value < 256 to dptr (part 2)
+	; Emit code to add count as a positive value < 256 to dptr (part 2)
 	lda #<(addDptrPosByteAdd+2)
 	ldx #>(addDptrPosByteAdd+2)
 	ldy #(addDptrPosByteEnd-addDptrPosByteAdd-2)
@@ -508,7 +508,7 @@ _stateModDptr:
 .decrement:
 	lda count+1
 	cmp #$ff
-	bne .add
+	bne .addWord
 
 	lda count
 	cmp #$ff
@@ -523,7 +523,7 @@ _stateModDptr:
 	jmp .done
 
 .addNegByte:
-	; Emit code to add negative value >= -256 to dptr (part 1)
+	; Emit code to add count as a negative value >= -256 to dptr (part 1)
 	lda #<addDptrNegByte
 	ldx #>addDptrNegByte
 	ldy #(addDptrNegByteAdd+1-addDptrNegByte)
@@ -532,7 +532,7 @@ _stateModDptr:
 	lda count
 	jsr emitByte
 
-	; Emit code to add negative value >= -256 to dptr (part 2)
+	; Emit code to add count as a negative value >= -256 to dptr (part 2)
 	lda #<(addDptrNegByteAdd+2)
 	ldx #>(addDptrNegByteAdd+2)
 	ldy #(addDptrNegByteEnd-addDptrNegByteAdd-2)
@@ -540,8 +540,8 @@ _stateModDptr:
 
 	jmp .done
 
-.add:
-	; Emit code to add signed value to dptr (part 1)
+.addWord:
+	; Emit code to add count as a signed word to dptr (part 1)
 	lda #<modDptr
 	ldx #>modDptr
 	ldy #(modDptrAddLow+1-modDptr)
@@ -550,7 +550,7 @@ _stateModDptr:
 	lda count
 	jsr emitByte
 
-	; Emit code to add signed value to dptr (part 2)
+	; Emit code to add count as a signed word to dptr (part 2)
 	lda #<(modDptrAddLow+2)
 	ldx #>(modDptrAddLow+2)
 	ldy #(modDptrAddHigh+1-modDptrAddLow-2)
@@ -559,7 +559,7 @@ _stateModDptr:
 	lda count+1
 	jsr emitByte
 
-	; Emit code to add signed value to dptr (part 3)
+	; Emit code to add count as a signed word to dptr (part 3)
 	lda #<(modDptrAddHigh+2)
 	ldx #>(modDptrAddHigh+2)
 	ldy #(modDptrEnd-modDptrAddHigh-2)
