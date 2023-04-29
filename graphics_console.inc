@@ -22,3 +22,39 @@ GC_START_COL      = GC_ZERO_PAGE_BASE + $01 ; 1 byte
 GC_LINE_PTR       = GC_ZERO_PAGE_BASE + $02 ; 2 bytes
 
 GC_ZERO_PAGE_STOP = GC_ZERO_PAGE_BASE + $04
+
+
+; On exit A, X, Y are preserved
+gc_initialize:
+  jsr gc_initialize_line_ptr
+  stz GC_LINE_BUFFER
+  rts
+
+
+gc_initialize_line_ptr:
+  lda #<GC_LINE_BUFFER
+  sta GC_LINE_PTR
+  lda #>GC_LINE_BUFFER
+  sta GC_LINE_PTR + 1
+  rts
+
+
+gc_line_buffer_add:
+  sta (GC_LINE_PTR)
+  inc GC_LINE_PTR
+  bne .done
+  inc GC_LINE_PTR + 1
+.done:
+  rts
+
+
+gc_line_buffer_delete:
+  pha
+  lda GC_LINE_PTR
+  bne .high_byte_good
+  dec GC_LINE_PTR + 1
+.high_byte_good:
+  dec GC_LINE_PTR
+  pla
+  rts
+

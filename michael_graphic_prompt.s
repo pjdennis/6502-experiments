@@ -5,7 +5,6 @@
 
 INTERRUPT_ROUTINE        = $3f00
 
-
 CP_M_DEST_P              = $00 ; 2 bytes
 CP_M_SRC_P               = $02 ; 2 bytes
 CP_M_LEN                 = $04 ; 2 bytes
@@ -109,7 +108,7 @@ getchar:
   bne .buffer_has_data
 ; No data so read some
   jsr getline
-  jsr initialize_line_ptr
+  jsr gc_initialize_line_ptr
   lda (GC_LINE_PTR)
 .buffer_has_data:
   inc GC_LINE_PTR
@@ -127,7 +126,7 @@ getline:
   sta GC_START_ROW
   lda GD_COL
   sta GC_START_COL
-  jsr initialize_line_ptr
+  jsr gc_initialize_line_ptr
   ldx #0
 .get_char_loop:
   cpx #0
@@ -194,7 +193,7 @@ handle_character_from_keyboard:
   beq .return ; Have filled up the entire screen
 .store_char:
   txa
-  jsr line_buffer_add
+  jsr gc_line_buffer_add
   cmp #ASCII_TAB
   bne .show_char
 ; tab:
@@ -220,7 +219,7 @@ handle_character_from_keyboard:
   cmp GC_START_COL
   beq .return
 .not_first_char:
-  jsr line_buffer_delete
+  jsr gc_line_buffer_delete
   lda #' '
   jsr gd_show_character
   lda GD_COL
@@ -245,9 +244,9 @@ handle_character_from_keyboard:
   jsr gd_next_line
 .line_read:
   lda #ASCII_LF
-  jsr line_buffer_add
+  jsr gc_line_buffer_add
   lda #0
-  jsr line_buffer_add
+  jsr gc_line_buffer_add
   sec
   bra .return2
 .done:
@@ -262,10 +261,10 @@ handle_character_from_keyboard:
 
 execute_command:
   ; remove the newline from the command buffer
-  jsr line_buffer_delete ; terminating 0
-  jsr line_buffer_delete ; newline
+  jsr gc_line_buffer_delete ; terminating 0
+  jsr gc_line_buffer_delete ; newline
   lda #0
-  jsr line_buffer_add
+  jsr gc_line_buffer_add
 
   ; check for empty command line
   jsr check_line_blank
@@ -273,7 +272,7 @@ execute_command:
 
   jsr find_command
   bcc .not_found
-  jsr initialize_line_ptr
+  jsr gc_initialize_line_ptr
   stz GC_LINE_BUFFER
   jsr jump_to_command_function
   bra .done
@@ -302,7 +301,7 @@ execute_command:
 ;         X, Y are preserved
 ;         A is not preserved
 check_line_blank:
-  jsr initialize_line_ptr
+  jsr gc_initialize_line_ptr
 .loop:
   lda (GC_LINE_PTR)
   beq .is_blank
@@ -588,33 +587,6 @@ show_line_buffer:
   rts
 
 
-initialize_line_ptr:
-  lda #<GC_LINE_BUFFER
-  sta GC_LINE_PTR
-  lda #>GC_LINE_BUFFER
-  sta GC_LINE_PTR + 1
-  rts
-
-
-line_buffer_add:
-  sta (GC_LINE_PTR)
-  inc GC_LINE_PTR
-  bne .done
-  inc GC_LINE_PTR + 1
-.done:
-  rts
-
-
-line_buffer_delete:
-  pha
-  lda GC_LINE_PTR
-  bne .high_byte_good
-  dec GC_LINE_PTR + 1
-.high_byte_good:
-  dec GC_LINE_PTR
-  pla
-  rts
-
 ; On entry GC_LINE_BUFFER contains the potential command
 ; On exit COMMAND_FUNCTION_PTR contains the address of the command function if found
 ;         C is set if command found or clear if not found
@@ -635,7 +607,7 @@ find_command:
   beq .not_found
 
   ; At start of line; comare with command buffer
-  jsr initialize_line_ptr
+  jsr gc_initialize_line_ptr
   ldy #0
   .char_loop:
   lda (TEMP_P),Y
