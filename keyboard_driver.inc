@@ -66,6 +66,8 @@ KB_META_GUI              = %00010000
 KB_META_EXTENDED         = %00000010
 KB_META_BREAK            = %00000001
 
+  .include key_translation_tables.inc
+
 ; Code sequence for the pause/break key
 kb_seq_pause        .byte $e1, $14, $77, $e1, $f0, $14, $f0, $77, $00
 
