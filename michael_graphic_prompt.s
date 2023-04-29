@@ -155,18 +155,20 @@ getline:
   jsr keyboard_get_char
   bcs .get_char_loop
 .get_char_loop_2:
-  jsr callback_char_received
+  jsr char_received
   bcs .done
   jsr keyboard_get_char
   bcc .get_char_loop_2
-  jsr callback_no_more_chars
   bra .get_char_loop
 .done
   rts
 
 
-callback_char_received:
-  jsr display_recieved_character
+char_received:
+  .ifdef callback_char_received
+  jsr callback_char_received
+  .endif
+
   jsr gd_select
   jsr handle_character_from_keyboard
   php ; preserve carry flag
@@ -528,7 +530,7 @@ do_scroll:
 
 ; On entry A = character recieved
 ; On exit A, X, Y are preserved
-display_recieved_character:
+callback_char_recieved:
   phx
   tax
   lda #DISPLAY_SECOND_LINE
@@ -541,10 +543,6 @@ display_recieved_character:
   jsr display_hex
   txa
   plx
-  rts
-
-
-callback_no_more_chars:
   rts
 
 
