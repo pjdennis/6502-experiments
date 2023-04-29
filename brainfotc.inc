@@ -43,7 +43,6 @@
 ; Character set (ASCII)
 AscLT		= $3C	; Character aliases for brain f commands.
 AscGT		= $3E
-AscQues		= $3F
 AscPlus		= $2B
 AscComma	= $2C
 AscMinus	= $2D
@@ -149,10 +148,12 @@ _while_compile:
 
 	rts
 
+
+; Increment current cell '+'
 _incCell:
 	cmp #AscPlus
 	bne _decCell
-	
+
 	lda state
 	cmp #StateModCell
 	beq .over
@@ -163,6 +164,8 @@ _incCell:
 	inc count
 	jmp _next_compile
 
+
+; Decrement current cell '-'
 _decCell:
 	cmp #AscMinus
 	bne _decDptr
@@ -176,6 +179,8 @@ _decCell:
 	dec count
 	jmp _next_compile
 
+
+; Decrement dptr '<'
 _decDptr:
 	cmp #AscLT
 	bne _incDptr
@@ -194,6 +199,8 @@ _decDptr:
 	dec count
 	jmp _next_compile
 
+
+; Increment dptr '>'
 _incDptr:
 	cmp #AscGT
 	bne _outputCell
@@ -211,6 +218,8 @@ _incDptr:
 .over2:
 	jmp _next_compile
 
+
+; Output current cell '.'
 _outputCell:
 	; no longer collecting increments so emit any pending code
 	pha
@@ -230,6 +239,8 @@ _outputCell:
 	sta state
 	jmp _next_compile
 
+
+; Input current cell ','
 _inputCell:
 	cmp #AscComma
 	bne _leftBracket
@@ -244,6 +255,8 @@ _inputCell:
 	sta state
 	jmp _next_compile
 
+
+; Start loop '['
 _leftBracket:
 	cmp #AscLB
 	bne _rightBracket
@@ -281,9 +294,11 @@ _leftBracket:
 	sta state
 	jmp _next_compile
 
+
+; End loop ']'
 _rightBracket:
 	cmp #AscRB
-	bne _debugOut
+	bne _ignoreInput
 
 	pla		; get the fixup address off the stack
 	sta fixup
@@ -292,14 +307,14 @@ _rightBracket:
 
 	lda state
 	cmp #StateCellCmp
-	beq .currentCellTestedForZero
+	beq .over1	; current cell already compared to 0
 
 	; Emit code to load dptr
 	lda #<loadDptr
 	ldx #>loadDptr
 	ldy #(loadDptrEnd-loadDptr)
 	jsr copyCode
-.currentCellTestedForZero:
+.over1:
 	; Emit code to branch backward
 	lda #<branchBackward
 	ldx #>branchBackward
@@ -361,22 +376,9 @@ _rightBracket:
 	sta state
 	jmp _next_compile
 
-_debugOut:
-	cmp #AscQues
-	bne _ignoreInput
 
-
-; Emit Code
-	lda #<debugOut
-	ldx #>debugOut
-	ldy #(debugOutEnd-debugOut)
-	jsr copyCode
-
-	lda #StateDefault
-	sta state
-	jmp _next_compile
-
-_ignoreInput:		; all other characters are ignored
+; All other characters are ignored
+_ignoreInput:		
 
 _next_compile:
 	inc iptr
@@ -752,11 +754,6 @@ branchBackward:
 branchBackwardJumpInstruction:
 	jmp 0		; placeholder
 bb_over:
-
-
-debugOut:
-	brk		; unimplemented for now
-debugOutEnd:
 
 
 endProgram:
