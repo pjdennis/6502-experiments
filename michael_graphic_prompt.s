@@ -21,13 +21,12 @@ MULTIPLY_8X8_RESULT_LOW  = $0c ; 1 byte
 MULTIPLY_8X8_TEMP        = $0d ; 1 byte
 
 COMMAND_FUNCTION_PTR     = $0e ; 2 bytes
-TEMP_P                   = $10 ; 2 bytes
 
-GD_ZERO_PAGE_BASE        = $12 ; 18 bytes
+GD_ZERO_PAGE_BASE        = $10
 
 KB_ZERO_PAGE_BASE        = GD_ZERO_PAGE_STOP
 GC_ZERO_PAGE_BASE        = KB_ZERO_PAGE_STOP
-
+CT_ZERO_PAGE_BASE        = GC_ZERO_PAGE_STOP
 
 ; Other memory allocations
 SIMPLE_BUFFER            = $0200 ; 256 bytes
@@ -59,9 +58,10 @@ callback_key_f1      = handle_f1
   .include graphics_display.inc
   .include graphics_console.inc
   .include write_string_to_screen.inc
+  .include command_table.inc
 
 
-commands:
+CT_COMMANDS:
   .asciiz "echo"
                       .word command_echo
   .asciiz "hello"
@@ -111,7 +111,7 @@ execute_command:
   jsr check_line_blank
   bcs .done
 
-  jsr find_command
+  jsr ct_find_command
   bcc .not_found
   jsr gc_initialize_line_ptr
   stz GC_LINE_BUFFER
@@ -308,28 +308,28 @@ show_line_buffer:
 ;         C is set if command found or clear if not found
 ;         A, X, Y are preserved
 ; Uses GC_LINE_PTR
-find_command:
+ct_find_command:
   pha
   phy
 
-  ; TEMP_P <- address of 'commands' table
-  lda #<commands
-  sta TEMP_P
-  lda #>commands
-  sta TEMP_P + 1
+  ; CT_TABLE_PTR <- address of 'commands' table
+  lda #<CT_COMMANDS
+  sta CT_TABLE_PTR
+  lda #>CT_COMMANDS
+  sta CT_TABLE_PTR + 1
 
   .command_loop:
-  lda (TEMP_P)
+  lda (CT_TABLE_PTR)
   beq .not_found
 
   ; At start of line; comare with command buffer
   jsr gc_initialize_line_ptr
   ldy #0
   .char_loop:
-  lda (TEMP_P),Y
+  lda (CT_TABLE_PTR),Y
   cmp (GC_LINE_PTR),Y
   bne .next
-  lda (TEMP_P),Y
+  lda (CT_TABLE_PTR),Y
   beq .found
   iny
   bra .char_loop
@@ -337,16 +337,16 @@ find_command:
 ; Found. Read address
 .found:
   iny
-  lda (TEMP_P),Y
+  lda (CT_TABLE_PTR),Y
   sta COMMAND_FUNCTION_PTR
   iny
-  lda (TEMP_P),Y
+  lda (CT_TABLE_PTR),Y
   sta COMMAND_FUNCTION_PTR + 1
   sec
   bra .done
 
 .next:
-  lda (TEMP_P),Y
+  lda (CT_TABLE_PTR),Y
   beq .skip_to_next
   iny
   bra .next
@@ -357,11 +357,11 @@ find_command:
   adc #3
 
   ; carry assumed clear
-  adc TEMP_P
-  sta TEMP_P
+  adc CT_TABLE_PTR
+  sta CT_TABLE_PTR
   lda #0
-  adc TEMP_P + 1
-  sta TEMP_P + 1
+  adc CT_TABLE_PTR + 1
+  sta CT_TABLE_PTR + 1
 
   bra .command_loop
 
