@@ -39,9 +39,6 @@
 ; Phil Dennis <pjdennis@gmail.com>
 ; -----------------------------------------------------------------------------
 
-;
-; Aliases
-;
 
 ; Character set (ASCII)
 AscLT		= $3C	; Character aliases for brain f commands.
