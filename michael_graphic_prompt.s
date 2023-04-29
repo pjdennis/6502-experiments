@@ -92,74 +92,12 @@ program_start:
   jsr show_prompt
   jsr gd_unselect
 
-  jsr getline
+  jsr gc_getline
   jsr execute_command
 
   bra .loop
 
 .start_message: .asciiz "Last key press:"
-
-
-; On exit A contains the character read
-getchar:
-  phx
-  phy
-  lda (GC_LINE_PTR)
-  bne .buffer_has_data
-; No data so read some
-  jsr getline
-  jsr gc_initialize_line_ptr
-  lda (GC_LINE_PTR)
-.buffer_has_data:
-  inc GC_LINE_PTR
-  bne .done
-  inc GC_LINE_PTR + 1
-.done
-  ply
-  plx
-  rts
-
-
-; Read and display translated characters from the keyboard
-getline:
-  lda GD_ROW
-  sta GC_START_ROW
-  lda GD_COL
-  sta GC_START_COL
-  jsr gc_initialize_line_ptr
-  ldx #0
-.get_char_loop:
-  cpx #0
-  bne .not_off
-  jsr gd_select
-  lda #' '
-  jsr gd_show_character
-  jsr gd_unselect
-.not_off:
-  cpx #25
-  bne .not_on
-  jsr gd_select
-  lda #'_'
-  jsr gd_show_character
-  jsr gd_unselect
-.not_on:
-  inx
-  cpx #50
-  bne .no_reset_count
-  ldx #0
-.no_reset_count:
-  lda #1
-  jsr delay_hundredths
-  jsr keyboard_get_char
-  bcs .get_char_loop
-.get_char_loop_2:
-  jsr char_received
-  bcs .done
-  jsr keyboard_get_char
-  bcc .get_char_loop_2
-  bra .get_char_loop
-.done
-  rts
 
 
 char_received:
@@ -362,7 +300,7 @@ command_echo:
 
   jsr gd_unselect
 
-  jsr getline
+  jsr gc_getline
 
   jsr gd_select
 
@@ -390,14 +328,14 @@ command_getchar:
   jsr gd_unselect
 
 .loop:
-  jsr getchar
+  jsr gc_getchar
   cmp #ASCII_LF
   beq .done
 ; show in hex
   jsr convert_to_hex
-  jsr putchar
+  jsr gc_putchar
   txa
-  jsr putchar
+  jsr gc_putchar
   bra .loop
 .done:
   rts
@@ -429,16 +367,6 @@ show_prompt:
   lda #GC_PROMPT_CHAR
   jsr gd_show_character
   jsr gd_next_character
-  rts
-
-
-; On entry A contains the character to print
-; On exit X, Y are preserved
-;         A is not preserved
-putchar:
-  jsr gd_select
-  jsr write_character_to_screen
-  jsr gd_unselect
   rts
 
 
