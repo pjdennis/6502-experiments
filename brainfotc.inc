@@ -74,43 +74,6 @@
 
 .text
 
-;
-; Macros
-;
-
-.macro decw
-        lda _1
-        bne _over
-        dec _1+1
-_over:  dec _1
-.macend
-
-.macro incw
-        inc _1
-        bne _over
-        inc _1+1
-_over:
-.macend
-
-.macro addwbi		; add word and byte immediate
-	clc
-	lda _1
-	adc #_2
-	sta _1
-	bcc _over
-	inc _1+1
-_over:
-.macend
-
-.macro emitCode
-	lda #<_1
-	sta cptr
-	lda #>_1
-	sta cptr+1
-	lda #_2 - _1
-	sta ccnt
-	jsr copyCode
-.macend
 
 .org $8000
 .outfile "brainfotc.rom"
@@ -162,13 +125,30 @@ compile:
 	sta count+1
 
 	; All programs start with memory cell initialization.
-	`emitCode initCells,initCellsEnd
+
+; Emit Code
+	lda #<initCells
+	sta cptr
+	lda #>initCells
+	sta cptr+1
+	lda #initCellsEnd-initCells
+	sta ccnt
+	jsr copyCode
 
 _while:	lda (iptr)
 	bne _incCell
 
 	jsr processState
-	`emitCode endProgram,endProgramEnd
+
+; Emit code
+	lda #<endProgram
+	sta cptr
+	lda #>endProgram
+	sta cptr+1
+	lda #endProgramEnd-endProgram
+	sta ccnt
+	jsr copyCode
+
 	rts
 
 _incCell:
@@ -202,11 +182,16 @@ _decDptr:
 
 	lda state
 	cmp #StateModDptr
-	beq +
+	beq .decrement
 	jsr processState
 	lda #StateModDptr
 	sta state
-*	`decw count
+.decrement:
+	lda count
+	bne .over
+	dec count+1
+.over:
+	dec count
 	jmp _next
 
 _incDptr:
@@ -215,11 +200,15 @@ _incDptr:
 
 	lda state
 	cmp #StateModDptr
-	beq +
+	beq .increment
 	jsr processState
 	lda #StateModDptr
 	sta state
-*	`incw count
+.increment:
+	inc count
+	bne .over
+	inc count+1
+.over:
 	jmp _next
 
 _outputCell:
@@ -231,7 +220,15 @@ _outputCell:
 	cmp #AscDot
 	bne _inputCell
 
-	`emitCode outputCell,outputCellEnd
+; Emit Code
+	lda #<outputCell
+	sta cptr
+	lda #>outputCell
+	sta cptr+1
+	lda #outputCellEnd-outputCell
+	sta ccnt
+	jsr copyCode
+
 	lda #StateDefault
 	sta state
 	jmp _next
@@ -240,7 +237,16 @@ _inputCell:
 	cmp #AscComma
 	bne _leftBracket
 
-	`emitCode inputCell,inputCellEnd
+
+; Emit Code
+	lda #<inputCell
+	sta cptr
+	lda #>inputCell
+	sta cptr+1
+	lda #inputCellEnd-inputCell
+	sta ccnt
+	jsr copyCode
+
 	lda #StateDefault
 	sta state
 	jmp _next
@@ -251,15 +257,41 @@ _leftBracket:
 	
 	lda state
 	cmp #StateCellCmp
-	beq +
-	`emitCode branchForward,branchForwardAfterLoad
-*	`emitCode branchForwardAfterLoad,branchForwardJumpInstruction+1
+	beq .over
+
+; Emit Code
+	lda #<branchForward
+	sta cptr
+	lda #>branchForward
+	sta cptr+1
+	lda #branchForwardAfterLoad-branchForward
+	sta ccnt
+	jsr copyCode
+
+.over:
+
+; Emit Code
+	lda #<branchForwardAfterLoad
+	sta cptr
+	lda #>branchForwardAfterLoad
+	sta cptr+1
+	lda #branchForwardJumpInstructions+1-branchForwardAfterLoad
+	sta ccnt
+	jsr copyCode
+
 	lda dptr+1	; push current PC for later.
 	pha
 	lda dptr
 	pha
-	
-	`addwbi dptr, 2	; skip past reserved space for jump address
+
+; skip past reserved space for jump address
+	clc
+	lda dptr
+	adc #2
+	sta dptr
+	bcc .over
+	inc dptr+1
+.over:
 
 	lda #StateCellCmp
 	sta state
@@ -276,29 +308,72 @@ _rightBracket:
 
 	lda state
 	cmp #StateCellCmp
-	beq +
-	`emitCode branchBackward,branchBackwardAfterLoad
-*	`emitCode branchBackwardAfterLoad,branchBackwardJumpInstruction+1
+	beq .over
+
+; Emit Code
+	lda #<branchBackward
+	sta cptr
+	lda #>branchBackward
+	sta cptr+1
+	lda #branchBackwardAfterLoad-branchBackward
+	sta ccnt
+	jsr copyCode
+
+.over:
+
+; Emit Code
+	lda #<branchBackwardAfterLoad
+	sta cptr
+	lda #>branchBackwardAfterLoad
+	sta cptr+1
+	lda #branchBackwardJumpInstruction+1-branchBackwardAfterLoad
+	sta ccnt
+	jsr copyCode
 
 	lda dptr	; address of next instruction into temp
 	sta temp
 	lda dptr+1
 	sta temp+1
-	`addwbi temp,2
+
+	clc
+	lda temp
+	adc #2
+	sta temp
+	bcc .over
+	inc temp+1
+.over:
 	
 	lda temp	; fixup jump address for left bracket
 	sta (fixup)
-	`incw fixup
+
+	inc fixup
+	bne .over1
+	inc fixup+1
+.over1:
+
 	lda temp+1
 	sta (fixup)
-	`incw fixup
+
+	inc fixup
+	bne .over2
+	inc fixup+1
+.over2:
 
 	lda fixup	; store backwards jump address
 	sta (dptr)
-	`incw dptr
+
+	inc dptr
+	bne .over3
+	inc dptr+1
+.over3:
+
 	lda fixup+1
 	sta (dptr)
-	`incw dptr
+
+	inc dptr
+	bne .over4
+	inc dptr+1
+.over4:	
 
 	lda #StateCellCmp
 	sta state
@@ -308,14 +383,27 @@ _debugOut:
 	cmp #AscQues
 	bne _ignoreInput
 
-	`emitCode debugOut,debugOutEnd
+
+; Emit Code
+	lda #<debugOut
+	sta cptr
+	lda #>debugOut
+	sta cptr+1
+	lda #debugOutEnd-debugOut
+	sta ccnt
+	jsr copyCode
+
 	lda #StateDefault
 	sta state
 	jmp _next
 
 _ignoreInput:		; all other characters are ignored
 
-_next:	`incw iptr
+_next:
+	inc iptr
+	bne .over
+	inc iptr+1
+.over:
 	jmp _while
 .scend
 
@@ -342,23 +430,62 @@ _stateModCell:
 	cmp #$01
 	bne _decrement
 	; increment current cell
-	`emitCode incCell,incCellEnd
+
+; Emit Code
+	lda #<incCell
+	sta cptr
+	lda #>incCell
+	sta cptr+1
+	lda #incCellEnd-incCell
+	sta ccnt
+	jsr copyCode
+
 	jmp _done
 	
 _decrement:
 	cmp #$ff
 	bne _add
 	; decrement current cell
-	`emitCode decCell,decCellEnd
+
+; Emit Code
+	lda #<decCell
+	sta cptr
+	lda #>decCell
+	sta cptr+1
+	lda #decCellEnd-decCell
+	sta ccnt
+	jsr copyCode
+
 	jmp _done
 
 _add:
 	; add to current cell
-	`emitCode modCell, modCellAdd+1
+
+; Emit Code
+	lda #<modCell
+	sta cptr
+	lda #>modCell
+	sta cptr+1
+	lda #modCellAdd+1-modCell
+	sta ccnt
+	jsr copyCode
+
 	lda count
 	sta (dptr)
-	`incw dptr
-	`emitCode modCellAdd+2,modCellEnd
+
+	inc dptr
+	bne .over
+	inc dptr+1
+.over:
+
+; Emit Code
+	lda #<modCellAdd+2
+	sta cptr
+	lda #>modCellAdd+1
+	sta cptr+1
+	lda #modCellEnd-modCellAdd-2
+	sta ccnt
+	jsr copyCode
 	
 _done:
 	lda #0
@@ -378,16 +505,47 @@ _stateModDptr:
 	cmp #$01
 	bne _addPosByte
 	; increment data pointer
-	`emitCode incDptr,incDptrEnd
+
+; Emit Code
+	lda #<incDptr
+	sta cptr
+	lda #>incDptr
+	sta cptr+1
+	lda #incDptrEnd-incDptr
+	sta ccnt
+	jsr copyCode
+
 	jmp _done
 
 _addPosByte:
 	; add positive value < 256 to data pointer
-	`emitCode addDptrPosByte,addDptrPosByteAdd+1
+
+; Emit Code
+	lda #<addDptrPosByte
+	sta cptr
+	lda #>addDptrPosByte
+	sta cptr+1
+	lda #addDptrPosByteAdd+1-addDptrPosByte
+	sta ccnt
+	jsr copyCode
+
 	lda count
 	sta (dptr)
-	`incw dptr
-	`emitCode addDptrPosByteAdd+2,addDptrPosByteEnd
+
+	inc dptr
+	bne .over
+	inc dptr+1
+.over:
+
+; Emit Code
+	lda #<addDptrPosByteAdd+2
+	sta cptr
+	lda #>addDptrPosByteAdd+2
+	sta cptr+1
+	lda #addDptrPosByteEnd-addDptrPosByteAdd-2
+	sta ccnt
+	jsr copyCode
+
 	jmp _done
 
 _decrement:
@@ -399,29 +557,94 @@ _decrement:
 	cmp #$ff
 	bne _addNegByte
 	; decrement data pointer
-	`emitCode decDptr,decDptrEnd
+
+; Emit Code
+	lda #<decDptr
+	sta cptr
+	lda #>decDptr
+	sta cptr+1
+	lda #decDptrEnd-decDptr
+	sta ccnt
+	jsr copyCode
+
 	jmp _done
 
 _addNegByte:
 	; subract negative value >= -256 from data pointer
-	`emitCode addDptrNegByte,addDptrNegByteAdd+1
+
+; Emit Code
+	lda #<addDptrNegByte
+	sta cptr
+	lda #>addDptrNegByte
+	sta cptr+1
+	lda #addDptrNegByteAdd+1-addDptrNegByte
+	sta ccnt
+	jsr copyCode
+
 	lda count
 	sta (dptr)
-	`incw dptr
-	`emitCode addDptrNegByteAdd+2,addDptrNegByteEnd
+
+	inc dptr
+	bne .over
+	inc dptr+1
+over:
+
+; Emit Code
+	lda #<addDptrNegByteAdd+2
+	sta cptr
+	lda #>addDptrNegByteAdd+2
+	sta cptr+1
+	lda #addDptrNegByteEnd-addDptrNegByteAdd-2
+	sta ccnt
+	jsr copyCode
+
 	jmp _done
 
 _add:
 	; add signed value to data pointer
-	`emitCode modDptr,modDptrAddLow+1
+
+; Emit Code
+	lda #<modDptr
+	sta cptr
+	lda #>modDptr
+	sta cptr+1
+	lda #modDptrAddLow+1-modDptr
+	sta ccnt
+	jsr copyCode
+
 	lda count
 	sta (dptr)
-	`incw dptr
-	`emitCode modDptrAddLow+2,modDptrAddHigh+1
+
+	inc dptr
+	bne .over1
+	inc dptr+1
+.over1:
+
+; Emit Code
+	lda #<modDptrAddLow+2
+	sta cptr
+	lda #>modDptrAddLow+2
+	sta cptr+1
+	lda #modDptrAddHigh+1-modDptrAddLow-2
+	sta ccnt
+	jsr copyCode
+
 	lda count+1
 	sta (dptr)
-	`incw dptr
-	`emitCode modDptrAddHigh+2,modDptrEnd
+
+	inc dptr
+	bne .over2
+	inc dptr+1
+.over2:
+
+; Emit Code
+	lda #<modDptrAddHigh+2
+	sta cptr
+	lda #>modDptrAddHigh+2
+	sta cptr+1
+	lda #modDptrEnd-modDptrAddHigh-2
+	sta ccnt
+	jsr copyCode
 
 _done:
 	lda #0
@@ -437,8 +660,17 @@ copyCode:
 _loop:
 	lda (cptr)
 	sta (dptr)
-	`incw cptr
-	`incw dptr
+
+	inc cptr
+	bne .over1
+	inc cptr+1
+.over1:
+
+	inc dptr
+	bne .over2
+	inc dptr+1
+.over2:
+
 	dec ccnt
 	bne _loop
 	
@@ -457,7 +689,12 @@ initCells:
 _loop:
 	lda #$00
 	sta (dptr)
-	`incw dptr
+
+	inc dptr
+	bne .over
+	inc dptr+1
+.over:
+
 	lda dptr+1
 	cmp #>cellsEnd
 	bne _loop
@@ -491,11 +728,18 @@ modCellAdd:
 modCellEnd:
 
 decDptr:
-	`decw dptr
+	lda dptr
+	bne .over
+	dec dptr+1
+.over:
+	dec dptr
 decDptrEnd:
 
 incDptr:
-	`incw dptr
+	inc dptr
+	bne .over
+	inc dptr+1
+.over:
 incDptrEnd:
 
 addDptrNegByte:
