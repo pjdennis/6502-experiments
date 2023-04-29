@@ -699,7 +699,9 @@ initCells:
 	bne .over
 	inc dptr+1
 .over:
-
+	lda dptr
+	cmp #<cellsEnd
+	bne .loop
 	lda dptr+1
 	cmp #>cellsEnd
 	bne .loop
