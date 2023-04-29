@@ -43,8 +43,7 @@ gc_initialize:
 gc_putchar:
   jsr gd_select
   jsr gc_write_char_to_screen
-  jsr gd_unselect
-  rts
+  jmp gd_unselect ; tail call
 
 
 ; Get a character from the graphics console
@@ -347,5 +346,4 @@ gc_clear:
 gc_show_line_buffer:
   lda #<GC_LINE_BUFFER
   ldx #>GC_LINE_BUFFER
-  jsr gc_putstring
-  rts
+  jmp gc_putstring ; tail call

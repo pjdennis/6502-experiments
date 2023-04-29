@@ -323,9 +323,7 @@ CLEAR_SCREEN_LOOP_COUNT = -9600 ; 320 * 240 * 2 (bytes) = 9600 * 16 (inline send
   jsr send_zero_data
 
   lda #ILI9341_DISPON
-  jsr gd_send_command
-
-  rts
+  jmp gd_send_command ; tail call
 
 
 send_zero_data:
