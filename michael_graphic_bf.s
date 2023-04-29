@@ -50,10 +50,9 @@ program_start:
 
   jsr main
 
-
-;  lda #<.exit_message
-;  ldx #>.exit_message
-;  jsr gc_putstring
+  lda #<.exit_message
+  ldx #>.exit_message
+  jsr gc_putstring
 
   stp
 

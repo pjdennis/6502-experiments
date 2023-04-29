@@ -105,7 +105,7 @@ main:
 	;jsr runProgram
 	;rts
 
-	; set the instruction pointer to the Sierpinski triangle program.
+	; set the instruction pointer to the Conway game of life program.
 	lda #<life
 	sta iptr
 	lda #>life
