@@ -113,6 +113,7 @@ execute_command:
   ldx #>GC_LINE_BUFFER
   jsr ct_find_command
   bcc .not_found
+
   jsr gc_initialize_line_ptr
   stz GC_LINE_BUFFER
   jsr jump_to_command_function
