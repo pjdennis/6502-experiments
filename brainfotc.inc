@@ -148,11 +148,11 @@ _incCell:
 	
 	lda state
 	cmp #StateModCell
-	beq .over
+	beq .over1
 	jsr processState
 	lda #StateModCell
 	sta state
-.over:
+.over1:
 	inc count
 	jmp _next
 
@@ -161,11 +161,11 @@ _decCell:
 	bne _decDptr
 
 	cmp #StateModCell
-	beq .over
+	beq .over2
 	jsr processState
 	lda #StateModCell
 	sta state
-.over:
+.over2:
 	dec count
 	jmp _next
 
@@ -175,15 +175,15 @@ _decDptr:
 
 	lda state
 	cmp #StateModDptr
-	beq .decrement
+	beq .over3
 	jsr processState
 	lda #StateModDptr
 	sta state
-.decrement:
+.over3:
 	lda count
-	bne .over
+	bne .over4
 	dec count+1
-.over:
+.over4:
 	dec count
 	jmp _next
 
@@ -193,15 +193,15 @@ _incDptr:
 
 	lda state
 	cmp #StateModDptr
-	beq .increment
+	beq .over5
 	jsr processState
 	lda #StateModDptr
 	sta state
-.increment:
+.over5:
 	inc count
-	bne .over
+	bne .over6
 	inc count+1
-.over:
+.over6:
 	jmp _next
 
 _outputCell:
@@ -250,7 +250,7 @@ _leftBracket:
 	
 	lda state
 	cmp #StateCellCmp
-	beq .over
+	beq .over7
 
 ; Emit Code
 	lda #<branchForward
@@ -261,7 +261,7 @@ _leftBracket:
 	sta ccnt
 	jsr copyCode
 
-.over:
+.over7:
 
 ; Emit Code
 	lda #<branchForwardAfterLoad
@@ -282,9 +282,9 @@ _leftBracket:
 	lda dptr
 	adc #2
 	sta dptr
-	bcc .over
+	bcc .over8
 	inc dptr+1
-.over:
+.over8:
 
 	lda #StateCellCmp
 	sta state
@@ -301,7 +301,7 @@ _rightBracket:
 
 	lda state
 	cmp #StateCellCmp
-	beq .over
+	beq .over9
 
 ; Emit Code
 	lda #<branchBackward
@@ -312,7 +312,7 @@ _rightBracket:
 	sta ccnt
 	jsr copyCode
 
-.over:
+.over9:
 
 ; Emit Code
 	lda #<branchBackwardAfterLoad
@@ -332,41 +332,41 @@ _rightBracket:
 	lda temp
 	adc #2
 	sta temp
-	bcc .over
+	bcc .over10
 	inc temp+1
-.over:
+.over10:
 	
 	lda temp	; fixup jump address for left bracket
 	sta (fixup)
 
 	inc fixup
-	bne .over1
+	bne .over11
 	inc fixup+1
-.over1:
+.over11:
 
 	lda temp+1
 	sta (fixup)
 
 	inc fixup
-	bne .over2
+	bne .over12
 	inc fixup+1
-.over2:
+.over12:
 
 	lda fixup	; store backwards jump address
 	sta (dptr)
 
 	inc dptr
-	bne .over3
+	bne .over13
 	inc dptr+1
-.over3:
+.over13:
 
 	lda fixup+1
 	sta (dptr)
 
 	inc dptr
-	bne .over4
+	bne .over14
 	inc dptr+1
-.over4:	
+.over14:	
 
 	lda #StateCellCmp
 	sta state
@@ -394,9 +394,9 @@ _ignoreInput:		; all other characters are ignored
 
 _next:
 	inc iptr
-	bne .over
+	bne .over15
 	inc iptr+1
-.over:
+.over15:
 	jmp _while
 .scend
 
