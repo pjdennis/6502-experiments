@@ -58,3 +58,6 @@ program_start:
   stp
 
 .exit_message: .asciiz "Exited.\n"
+
+.end_of_program:
+  .assert INTERRUPT_ROUTINE >= .end_of_program, "Program is too long"
