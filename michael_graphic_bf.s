@@ -34,8 +34,16 @@ codeEnd                  = $2000
 
 
 CT_COMMANDS:
-  .asciiz "exit"
-                      .word 0
+  .asciiz "hello"
+                          .word do_hello
+  .asciiz "sierpinski"
+                          .word do_sierpinski
+  .asciiz "golden"
+                          .word do_golden
+  .asciiz "fibonacci"
+                          .word do_fibonacci
+  .asciiz "life"
+                          .word do_life
   .byte 0
 
  
@@ -46,17 +54,10 @@ program_start:
 
   jsr gcf_init
 
-;  jsr cr_repl
+  jsr do_life
 
-  jsr main
+  jmp cr_repl
 
-  lda #<.exit_message
-  ldx #>.exit_message
-  jsr gc_putstring
-
-  stp
-
-.exit_message: .asciiz "Exited.\n"
 
 .end_of_program:
   .assert INTERRUPT_ROUTINE >= .end_of_program, "Program is too long"

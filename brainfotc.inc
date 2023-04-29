@@ -77,33 +77,35 @@ BF_ZERO_PAGE_STOP	= BF_ZERO_PAGE_BASE + $0d
 ;
 ; Functions
 ;
-main:
+do_hello:
 	; The classic hello world program.
-	;lda #<helloWorld
-	;ldx #>helloWorld
-	;jsr runProgram
+	lda #<helloWorld
+	ldx #>helloWorld
+	jmp runProgram
 
+do_sierpinski:
 	; The Sierpinski triangle program.
-	;lda #<sierpinski
-	;ldx #>sierpinski
-	;jsr runProgram
+	lda #<sierpinski
+	ldx #>sierpinski
+	jmp runProgram
 
+do_golden:
 	; The Golden ratio program.
-	;lda #<golden
-	;ldx #>golden
-	;jsr runProgram
+	lda #<golden
+	ldx #>golden
+	jmp runProgram
 
+do_fibonacci:
 	; The fibonacci program.
-	;lda #<fibonacci
-	;ldx #>fibonacci
-	;jsr runProgram
+	lda #<fibonacci
+	ldx #>fibonacci
+	jmp runProgram
 
+do_life:
 	; The Conway game of life program.
 	lda #<life
 	ldx #>life
-	jsr runProgram
-
-	rts
+	jmp runProgram
 
 
 runProgram:
