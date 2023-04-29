@@ -1,6 +1,16 @@
 ; Key codes can be found here: https://wiki.osdev.org/PS/2_Keyboard
 ; Key names can be found here:
 ;   https://manpages.ubuntu.com/manpages/focal/man7/virkeycode-linux.7.html
+;
+; The codes defined in this file are based on ASCII, extended to cover
+; all keys that can be typed on a PS/2 keyboard. The following features
+; of the code set are available:
+; * When the 2 most significant bits of the code are 10, the code is from
+;   the numeric keypad and the lower 6 bits match the ASCII of the characters
+; * When the 2 most significant bits of the code are 11, the code is a
+;   non-ASCII code, with the decimal values of the lower 6 bits starting at
+;   1 through 12 for F1 through F12. Other keys are assigned in this same
+;   range starting after the code for F12
 
   .include ASCII.inc
 
