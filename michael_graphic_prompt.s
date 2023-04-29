@@ -5,6 +5,8 @@
 
 INTERRUPT_ROUTINE        = $3f00
 
+
+; Zero page allocations
 CP_M_DEST_P              = $00 ; 2 bytes
 CP_M_SRC_P               = $02 ; 2 bytes
 CP_M_LEN                 = $04 ; 2 bytes
@@ -27,6 +29,7 @@ KB_ZERO_PAGE_BASE        = GD_ZERO_PAGE_STOP
 GC_ZERO_PAGE_BASE        = KB_ZERO_PAGE_STOP
 
 
+; Other memory allocations
 SIMPLE_BUFFER            = $0200 ; 256 bytes
 GC_LINE_BUFFER           = $0300 ; GD_CHAR_ROWS * GD_CHAR_COLS = 400 bytes including terminating 0
 
