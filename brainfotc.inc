@@ -349,7 +349,7 @@ _rightBracket:
 .over2:
 
 	; Fixup jump address for left bracket
-	; Store low byte
+	; Store low byte to fixup address
 	lda temp
 	sta (fixup)
 
@@ -359,7 +359,7 @@ _rightBracket:
 	inc fixup+1
 .over3:
 
-	; Store high byte
+	; Store high byte to fixup address
 	lda temp+1
 	sta (fixup)
 
@@ -371,23 +371,11 @@ _rightBracket:
 
 	; Store low byte
 	lda fixup	; store backwards jump address
-	sta (dptr)
-
-	; dptr <- dptr + 1 (word)
-	inc dptr
-	bne .over5
-	inc dptr+1
-.over5:
+	jsr emitByte
 
 	; Store high byte
 	lda fixup+1
-	sta (dptr)
-
-	; dptr <- dptr + 1 (word)
-	inc dptr
-	bne .over6
-	inc dptr+1
-.over6:
+	jsr emitByte
 
 	lda #StateCellCmp
 	sta state
@@ -462,13 +450,7 @@ _stateModCell:
 	jsr copyCode
 
 	lda count
-	sta (dptr)
-
-	; dptr <- dptr + 1 (word)
-	inc dptr
-	bne .over
-	inc dptr+1
-.over:
+	jsr emitByte
 
 	; Emit code to add (positive or negative value) to current cell (part 2)
 	lda #<(modCellAdd+2)
@@ -511,13 +493,7 @@ _stateModDptr:
 	jsr copyCode
 
 	lda count
-	sta (dptr)
-
-	; dptr <- dptr + 1 (word)
-	inc dptr
-	bne .over1
-	inc dptr+1
-.over1:
+	jsr emitByte
 
 	; Emit code to add positive value < 256 to dptr (part 2)
 	lda #<(addDptrPosByteAdd+2)
@@ -552,13 +528,7 @@ _stateModDptr:
 	jsr copyCode
 
 	lda count
-	sta (dptr)
-
-	; dptr <- dptr + 1
-	inc dptr
-	bne .over2
-	inc dptr+1
-.over2:
+	jsr emitByte
 
 	; Emit code to add negative value >= -256 to dptr (part 2)
 	lda #<(addDptrNegByteAdd+2)
@@ -576,13 +546,7 @@ _stateModDptr:
 	jsr copyCode
 
 	lda count
-	sta (dptr)
-
-	; dptr <- dptr + 1
-	inc dptr
-	bne .over3
-	inc dptr+1
-.over3:
+	jsr emitByte
 
 	; Emit code to add signed value to dptr (part 2)
 	lda #<(modDptrAddLow+2)
@@ -591,13 +555,7 @@ _stateModDptr:
 	jsr copyCode
 
 	lda count+1
-	sta (dptr)
-
-	; dptr <- dptr + 1
-	inc dptr
-	bne .over4
-	inc dptr+1
-.over4:
+	jsr emitByte
 
 	; Emit code to add signed value to dptr (part 3)
 	lda #<(modDptrAddHigh+2)
@@ -615,6 +573,19 @@ _stateModDptr:
 	rts
 
 
+; On entry A contains the byte to emit (store at the dptr address)
+; On exit dptr has been incremented
+emitByte:
+	sta (dptr)
+
+	; dptr <- dptr + 1 (word)
+	inc dptr
+	bne .over
+	inc dptr+1
+.over:
+	rts
+
+
 ; Copy code to the output buffer
 ; On entry A, X contains the low, high bytes pointing to the code
 ;          Y contains the number of bytes of code to copy
@@ -623,16 +594,13 @@ copyCode:
 	stx cptr+1
 .loop:
 	lda (cptr)
-	sta (dptr)
+	jsr emitByte
 
 	inc cptr
-	bne .over1
+	bne .over
 	inc cptr+1
-.over1:
-	inc dptr
-	bne .over2
-	inc dptr+1
-.over2:
+.over:
+
 	dey
 	bne .loop
 	
