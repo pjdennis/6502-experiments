@@ -187,17 +187,7 @@ gc_handle_char_from_keyboard:
 ; tab:
   lda #' '
 .show_char:
-  jsr gd_show_character
-  lda GD_COL
-  cmp #GD_CHAR_COLS - 1
-  bne .not_last_char
-  lda GD_ROW
-  cmp #GD_CHAR_ROWS - 1
-  bne .not_last_char
-  jsr gc_do_scroll
-  bra .done
-.not_last_char:
-  jsr gd_next_character
+  jsr gc_write_char_to_screen
   bra .done
 .backspace:
   lda GD_ROW
