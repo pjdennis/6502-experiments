@@ -355,3 +355,10 @@ gc_line_buffer_delete:
   dec GC_LINE_PTR
   pla
   rts
+
+
+gc_show_line_buffer:
+  lda #<GC_LINE_BUFFER
+  ldx #>GC_LINE_BUFFER
+  jsr write_string_to_screen
+  rts
