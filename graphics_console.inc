@@ -290,6 +290,7 @@ gc_do_tab:
   sta GD_COL
   rts
 
+
 ; Scroll up by 1 line
 ; On exit X, Y are preserved
 ;         A is not preserved
