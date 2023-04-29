@@ -1,3 +1,10 @@
+; Requires:
+;   BF_ZERO_PAGE_BASE - location for zero page variables
+;   cells             - Address of 1024 bytes of cells
+;   cellsEnd          - Stop address for cells
+;   code              - Address of 24576 bytes of code
+;   codeEnd           - Stop address for code
+
 ; -----------------------------------------------------------------------------
 ; Implementation of the Brain F--k compiler in 6502 assembly.
 ;
@@ -32,52 +39,36 @@
 ;
 
 ; Character set (ASCII)
-.alias AscLT	$3C	; Character aliases for brain f commands.
-.alias AscGT	$3E
-.alias AscQues	$3F
-.alias AscPlus	$2B
-.alias AscComma $2C
-.alias AscMinus	$2D
-.alias AscDot	$2E
-.alias AscLB	$5B
-.alias AscRB	$5D
+AscLT		= $3C	; Character aliases for brain f commands.
+AscGT		= $3E
+AscQues		= $3F
+AscPlus		= $2B
+AscComma	= $2C
+AscMinus	= $2D
+AscDot		= $2E
+AscLB		= $5B
+AscRB		= $5D
 
-.alias StateDefault	$00	; Nothing pending
-.alias StateModCell	$01	; Collecting cell increments into delta
-.alias StateModDptr	$02	; Collecting pointer increments into delta
-.alias StateCellCmp	$03	; Current cell loaded for branch on Z flag
+StateDefault	= $00	; Nothing pending
+StateModCell	= $01	; Collecting cell increments into delta
+StateModDptr	= $02	; Collecting pointer increments into delta
+StateCellCmp	= $03	; Current cell loaded for branch on Z flag
 
-.alias cellsSize [cellsEnd - cells]
-.alias codeSize [codeEnd - code]
+cellsSize	= cellsEnd - cells
+codeSize 	= codeEnd - code
 
-;
-; Data segments
-;
-.data ZPDATA
-.org $0080		; we'll need to use ZP addressing
-.space dptr 2		; word to hold the data pointer.
-.space iptr 2		; word to hold the instruction pointer.
-.space temp 2		; word to hold temporary pointer.
-.space fixup 2		; word to hold popped PC to fixup forward branch.
-.space cptr 2		; word to hold pointer for code to copy.
-.space ccnt 1		; byte to hold count of code to copy.
-.space state 1		; current parser state
-.space count 2		; count cell or dptr delta
+; Zero page variables
+dptr			= BF_ZERO_PAGE_BASE + $00 ; 2 bytes - word to hold the data pointer.
+iptr			= BF_ZERO_PAGE_BASE + $02 ; 2 bytes - word to hold the instruction pointer.
+temp			= BF_ZERO_PAGE_BASE + $04 ; 2 bytes - word to hold temporary pointer.
+fixup			= BF_ZERO_PAGE_BASE + $06 ; 2 bytes - word to hold popped PC to fixup forward branch.
+cptr			= BF_ZERO_PAGE_BASE + $08 ; 2 bytes - word to hold pointer for code to copy.
+ccnt			= BF_ZERO_PAGE_BASE + $0a ; 1 byte  - byte to hold count of code to copy.
+state			= BF_ZERO_PAGE_BASE + $0b ; 1 byte  - current parser state
+count			= BF_ZERO_PAGE_BASE + $0c ; 2 bytes - count cell or dptr delta
 
-.data BSS
-.org $0300		; page 3 is used for uninitialized data.
-.space cells 1024	; cells is currently 1K
-.space cellsEnd 0
+BF_ZERO_PAGE_STOP	= BF_ZERO_PAGE_BASE + $0e
 
-.space code 24576	; code buffer is currently 24K
-.space codeEnd 0
-
-.text
-
-
-.org $8000
-.outfile "brainfotc.rom"
-.advance $8000
 
 ;
 ; Functions
