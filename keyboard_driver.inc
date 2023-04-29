@@ -71,13 +71,13 @@ KB_META_BREAK            = %00000001
 ; Code sequence for the pause/break key
 kb_seq_pause        .byte $e1, $14, $77, $e1, $f0, $14, $f0, $77, $00
 
-; Mapping from PS/2 code set 3 lock keys to the bit mask used for tracking lock down/up and on/off
+; Mapping from lock keys to the bit mask used for tracking lock down/up and on/off
 kb_lock_codes:      .byte KEY_CAPSLOCK,      KEY_SCROLLLOCK,      KEY_NUMLOCK,     $00
 kb_lock_on_masks:   .byte KB_CAPS_LOCK_ON,   KB_SCROLL_LOCK_ON,   KB_NUM_LOCK_ON,  $00
 kb_lock_down_masks: .byte KB_CAPS_LOCK_DOWN, KB_SCROLL_LOCK_DOWN, KB_NUM_LOCK_DOWN
 kb_lock_to_led:     .byte KB_LED_CAPS_LOCK,  KB_LED_SCROLL_LOCK,  KB_LED_NUM_LOCK
 
-; Mapping from PS/2 code set 3 modifier keys to the bit mask used for tracking modifier states
+; Mapping from modifier keys to the bit mask used for tracking modifier states
 kb_modifier_codes:  .byte KEY_LEFTSHIFT,   KEY_RIGHTSHIFT,  KEY_LEFTCTRL,   KEY_RIGHTCTRL
                     .byte KEY_LEFTALT,     KEY_RIGHTALT,    KEY_LEFTMETA,   KEY_RIGHTMETA, $00
 kb_modifier_masks:  .byte KB_MOD_L_SHIFT,  KB_MOD_R_SHIFT,  KB_MOD_L_CTRL,  KB_MOD_R_CTRL
@@ -153,7 +153,7 @@ keyboard_get_char:
 .repeat:
   jsr KB_BUFFER_READ
   bcs .done                     ; Exit when input buffer is empty
-  jsr keyboard_decode_and_translate_to_set_3
+  jsr keyboard_decode_and_translate
   bcs .repeat                   ; Nothing decoded so far so read more
   jsr keyboard_lock_keys_track
   lda KEYBOARD_LATEST_META
@@ -305,11 +305,11 @@ keyboard_get_latest_ascii:
 
 ; On entry A contains the byte from the keyboard
 ; On exit Carry set if no result so far
-;         A is the latest set 3 key code if found
+;         A is the latest translated key code if found
 ;         X, Y are preserved
 ;         KEYBOARD_LATEST_META contains metadata for latest key event
 ;         KEYBOARD_LATEST_CODE contains code for latest key event
-keyboard_decode_and_translate_to_set_3:
+keyboard_decode_and_translate:
   jsr keyboard_decode
   bcs .decode_done              ; No data so we are done
   lda KEYBOARD_LATEST_META
@@ -514,7 +514,7 @@ keyboard_decode:
   txa                           ; New pause seq index becomes new state
   bra .no_emit
 .pause_emit:
-  lda #0                        ; Emit pause as non-extended make code from set 3
+  lda #0                        ; Emit pause as non-extended make code
   ldx #KEY_PAUSE
   bra .emit
 ; A = latest byte from keyboard
@@ -591,7 +591,7 @@ keyboard_decode:
 
 
 ; On entry A contains the PS/2 set 2 non-extended "normal" keyboard code
-; On exit  A contains the PS/2 set 3 keyboard code
+; On exit  A contains the translated keyboard code
 ;          X, Y are preserverd
 keyboard_translate_normal:
   phx
@@ -605,7 +605,7 @@ keyboard_translate_normal:
 
 
 ; On entry A contains the PS/2 set 2 extended keyboard code
-; On exit  A contains the PS/2 set 3 keyboard code
+; On exit  A contains the translated keyboard code
 ;          X, Y are preserverd
 keyboard_translate_extended:
   phx
