@@ -257,9 +257,7 @@ _leftBracket:
 	ldx #>loadDptr
 	ldy #(loadDptrEnd-loadDptr)
 	jsr copyCode
-
 .over1:
-
 	; Emit code to branch forward
 	lda #<branchForward
 	ldx #>branchForward
@@ -271,7 +269,7 @@ _leftBracket:
 	lda dptr
 	pha
 
-; skip past reserved space for jump address
+	; Skip past reserved space for jump address
 	clc
 	lda dptr
 	adc #2
@@ -279,7 +277,6 @@ _leftBracket:
 	bcc .over2
 	inc dptr+1
 .over2:
-
 	lda #StateCellCmp
 	sta state
 	jmp _next_compile
@@ -295,27 +292,27 @@ _rightBracket:
 
 	lda state
 	cmp #StateCellCmp
-	beq .over1
+	beq .currentCellTestedForZero
 
 	; Emit code to load dptr
 	lda #<loadDptr
 	ldx #>loadDptr
 	ldy #(loadDptrEnd-loadDptr)
 	jsr copyCode
-
-.over1:
-
-; Emit Code
+.currentCellTestedForZero:
+	; Emit code to branch backward
 	lda #<branchBackward
 	ldx #>branchBackward
 	ldy #(branchBackwardJumpInstruction+1-branchBackward)
 	jsr copyCode
 
-	lda dptr	; address of next instruction into temp
+	; Address of next instruction into temp
+	lda dptr	
 	sta temp
 	lda dptr+1
 	sta temp+1
 
+	; temp <- temp + 2 (word)
 	clc
 	lda temp
 	adc #2
@@ -323,39 +320,43 @@ _rightBracket:
 	bcc .over2
 	inc temp+1
 .over2:
-	
-	lda temp	; fixup jump address for left bracket
+	; Fixup jump address for left bracket
+	; Store low byte
+	lda temp
 	sta (fixup)
 
+	; fixup <- fixup + 1 (word)
 	inc fixup
 	bne .over3
 	inc fixup+1
 .over3:
-
+	; Store high byte
 	lda temp+1
 	sta (fixup)
 
+	; fixup <- fixup + 1 (word)
 	inc fixup
 	bne .over4
 	inc fixup+1
 .over4:
-
+	; Store low byte
 	lda fixup	; store backwards jump address
 	sta (dptr)
 
+	; dptr <- dptr + 1 (word)
 	inc dptr
 	bne .over5
 	inc dptr+1
 .over5:
-
+	; Store high byte
 	lda fixup+1
 	sta (dptr)
 
+	; dptr <- dptr + 1 (word)
 	inc dptr
 	bne .over6
 	inc dptr+1
 .over6:
-
 	lda #StateCellCmp
 	sta state
 	jmp _next_compile
