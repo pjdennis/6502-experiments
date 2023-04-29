@@ -16,9 +16,9 @@ bf_putchar               = gc_putchar
 SIMPLE_BUFFER            = $0200 ; 256 bytes
 GC_LINE_BUFFER           = $0300 ; GD_CHAR_ROWS * GD_CHAR_COLS = 400 bytes including terminating 0
 
-cells                    = $0500
-cellsEnd                 = $0900
-code                     = $0900
+cells                    = GC_LINE_BUFFER_STOP
+cellsEnd                 = cells + 1024
+code                     = cellsEnd
 codeEnd                  = $2000 
 
   .org $2000                     ; Loader loads programs to this address
