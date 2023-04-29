@@ -246,7 +246,7 @@ gd_clear_line:
   adc #>15 ; character height
   sta GD_Y + 1
 
-  lda GD_Y + 1
+;  lda GD_Y + 1
   jsr gd_send_data
   lda GD_Y
   jsr gd_send_data
@@ -266,7 +266,7 @@ gd_clear_line:
   adc #>(ILI9341_TFTWIDTH-1)
   sta GD_X + 1
 
-  lda GD_X + 1
+;  lda GD_X + 1
   jsr gd_send_data
   lda GD_X
   jsr gd_send_data
@@ -553,7 +553,7 @@ set_char_data_ptr:
   sec
   sbc #' '
 
-  ; GD_CHAR_DATA_PTR = character offset * 24 = co * 16 + co * 8
+  ; GD_CHAR_DATA_PTR = character offset * 24
   ldy #24
   jsr multiply8x8
   sta GD_CHAR_DATA_PTR + 1
