@@ -102,7 +102,6 @@ runProgram:
 
 ; compile scans the characters and produces a machine code stream.
 compile:
-.scope
 	lda #<code	; use dptr as the index into the code
 	sta dptr
 	lda #>code
@@ -126,7 +125,8 @@ compile:
 	sta ccnt
 	jsr copyCode
 
-_while:	lda (iptr)
+_while_compile:
+	lda (iptr)
 	bne _incCell
 
 	jsr processState
@@ -148,26 +148,26 @@ _incCell:
 	
 	lda state
 	cmp #StateModCell
-	beq .over1
+	beq .over
 	jsr processState
 	lda #StateModCell
 	sta state
-.over1:
+.over:
 	inc count
-	jmp _next
+	jmp _next_compile
 
 _decCell:
 	cmp #AscMinus
 	bne _decDptr
 
 	cmp #StateModCell
-	beq .over2
+	beq .over
 	jsr processState
 	lda #StateModCell
 	sta state
-.over2:
+.over:
 	dec count
-	jmp _next
+	jmp _next_compile
 
 _decDptr:
 	cmp #AscLT
@@ -175,17 +175,17 @@ _decDptr:
 
 	lda state
 	cmp #StateModDptr
-	beq .over3
+	beq .over1
 	jsr processState
 	lda #StateModDptr
 	sta state
-.over3:
+.over1:
 	lda count
-	bne .over4
+	bne .over2
 	dec count+1
-.over4:
+.over2:
 	dec count
-	jmp _next
+	jmp _next_compile
 
 _incDptr:
 	cmp #AscGT
@@ -193,16 +193,16 @@ _incDptr:
 
 	lda state
 	cmp #StateModDptr
-	beq .over5
+	beq .over1
 	jsr processState
 	lda #StateModDptr
 	sta state
-.over5:
+.over1:
 	inc count
-	bne .over6
+	bne .over2
 	inc count+1
-.over6:
-	jmp _next
+.over2:
+	jmp _next_compile
 
 _outputCell:
 	; no longer collecting increments so emit any pending code
@@ -224,7 +224,7 @@ _outputCell:
 
 	lda #StateDefault
 	sta state
-	jmp _next
+	jmp _next_compile
 
 _inputCell:
 	cmp #AscComma
@@ -242,7 +242,7 @@ _inputCell:
 
 	lda #StateDefault
 	sta state
-	jmp _next
+	jmp _next_compile
 
 _leftBracket:
 	cmp #AscLB
@@ -250,7 +250,7 @@ _leftBracket:
 	
 	lda state
 	cmp #StateCellCmp
-	beq .over7
+	beq .over1
 
 ; Emit Code
 	lda #<branchForward
@@ -261,7 +261,7 @@ _leftBracket:
 	sta ccnt
 	jsr copyCode
 
-.over7:
+.over1:
 
 ; Emit Code
 	lda #<branchForwardAfterLoad
@@ -282,13 +282,13 @@ _leftBracket:
 	lda dptr
 	adc #2
 	sta dptr
-	bcc .over8
+	bcc .over2
 	inc dptr+1
-.over8:
+.over2:
 
 	lda #StateCellCmp
 	sta state
-	jmp _next
+	jmp _next_compile
 
 _rightBracket:
 	cmp #AscRB
@@ -301,7 +301,7 @@ _rightBracket:
 
 	lda state
 	cmp #StateCellCmp
-	beq .over9
+	beq .over1
 
 ; Emit Code
 	lda #<branchBackward
@@ -312,7 +312,7 @@ _rightBracket:
 	sta ccnt
 	jsr copyCode
 
-.over9:
+.over1:
 
 ; Emit Code
 	lda #<branchBackwardAfterLoad
@@ -332,45 +332,45 @@ _rightBracket:
 	lda temp
 	adc #2
 	sta temp
-	bcc .over10
+	bcc .over2
 	inc temp+1
-.over10:
+.over2:
 	
 	lda temp	; fixup jump address for left bracket
 	sta (fixup)
 
 	inc fixup
-	bne .over11
+	bne .over3
 	inc fixup+1
-.over11:
+.over3:
 
 	lda temp+1
 	sta (fixup)
 
 	inc fixup
-	bne .over12
+	bne .over4
 	inc fixup+1
-.over12:
+.over4:
 
 	lda fixup	; store backwards jump address
 	sta (dptr)
 
 	inc dptr
-	bne .over13
+	bne .over5
 	inc dptr+1
-.over13:
+.over5:
 
 	lda fixup+1
 	sta (dptr)
 
 	inc dptr
-	bne .over14
+	bne .over6
 	inc dptr+1
-.over14:	
+.over6:
 
 	lda #StateCellCmp
 	sta state
-	jmp _next
+	jmp _next_compile
 
 _debugOut:
 	cmp #AscQues
@@ -388,17 +388,17 @@ _debugOut:
 
 	lda #StateDefault
 	sta state
-	jmp _next
+	jmp _next_compile
 
 _ignoreInput:		; all other characters are ignored
 
-_next:
+_next_compile:
 	inc iptr
-	bne .over15
+	bne .over
 	inc iptr+1
-.over15:
-	jmp _while
-.scend
+.over:
+	jmp _while_compile
+
 
 processState:
 .scope
