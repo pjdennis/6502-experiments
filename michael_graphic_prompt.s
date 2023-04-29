@@ -268,6 +268,10 @@ execute_command:
   lda #0
   jsr line_buffer_add
 
+  ; check for empty command line
+  jsr check_line_blank
+  bcs .done
+
   jsr find_command
   bcc .not_found
   jsr initialize_line_ptr
@@ -293,6 +297,32 @@ execute_command:
   rts
 
 .unknown_command_string: .asciiz "Unknown command: "
+
+
+; On exit C set if line is blank, clear otherwise
+;         X, Y are preserved
+;         A is not preserved
+check_line_blank:
+  jsr initialize_line_ptr
+.loop:
+  lda (LINE_PTR)
+  beq .is_blank
+  cmp #' '
+  beq .blank_char
+  cmp #ASCII_TAB
+  beq .blank_char
+; non-blank character
+  clc
+  bra .done
+.blank_char
+  inc LINE_PTR
+  bne .loop
+  inc LINE_PTR + 1
+  bra .loop
+.is_blank
+  sec
+.done
+  rts
 
 
 jump_to_command_function:
