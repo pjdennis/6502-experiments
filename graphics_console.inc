@@ -348,6 +348,7 @@ gc_clear:
   jsr gd_clear_screen
   jsr gd_unselect
   stz GD_ROW
+  stz GD_COL
   rts
 
 
