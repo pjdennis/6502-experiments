@@ -160,6 +160,7 @@ _incCell:
 	jsr processState
 	lda #StateModCell
 	sta state
+
 .over:
 	inc count
 	jmp _next_compile
@@ -175,6 +176,7 @@ _decCell:
 	jsr processState
 	lda #StateModCell
 	sta state
+
 .over:
 	dec count
 	jmp _next_compile
@@ -191,11 +193,13 @@ _decDptr:
 	jsr processState
 	lda #StateModDptr
 	sta state
+
 .over1:
 	lda count
 	bne .over2
 	dec count+1
 .over2:
+
 	dec count
 	jmp _next_compile
 
@@ -211,11 +215,13 @@ _incDptr:
 	jsr processState
 	lda #StateModDptr
 	sta state
+
 .over1:
 	inc count
 	bne .over2
 	inc count+1
 .over2:
+
 	jmp _next_compile
 
 
@@ -270,6 +276,7 @@ _leftBracket:
 	ldx #>loadDptr
 	ldy #(loadDptrEnd-loadDptr)
 	jsr copyCode
+
 .over1:
 	; Emit code to branch forward
 	lda #<branchForward
@@ -290,6 +297,7 @@ _leftBracket:
 	bcc .over2
 	inc dptr+1
 .over2:
+
 	lda #StateCellCmp
 	sta state
 	jmp _next_compile
@@ -314,6 +322,7 @@ _rightBracket:
 	ldx #>loadDptr
 	ldy #(loadDptrEnd-loadDptr)
 	jsr copyCode
+
 .over1:
 	; Emit code to branch backward
 	lda #<branchBackward
@@ -335,6 +344,7 @@ _rightBracket:
 	bcc .over2
 	inc temp+1
 .over2:
+
 	; Fixup jump address for left bracket
 	; Store low byte
 	lda temp
@@ -345,6 +355,7 @@ _rightBracket:
 	bne .over3
 	inc fixup+1
 .over3:
+
 	; Store high byte
 	lda temp+1
 	sta (fixup)
@@ -354,6 +365,7 @@ _rightBracket:
 	bne .over4
 	inc fixup+1
 .over4:
+
 	; Store low byte
 	lda fixup	; store backwards jump address
 	sta (dptr)
@@ -363,6 +375,7 @@ _rightBracket:
 	bne .over5
 	inc dptr+1
 .over5:
+
 	; Store high byte
 	lda fixup+1
 	sta (dptr)
@@ -372,13 +385,14 @@ _rightBracket:
 	bne .over6
 	inc dptr+1
 .over6:
+
 	lda #StateCellCmp
 	sta state
 	jmp _next_compile
 
 
 ; All other characters are ignored
-_ignoreInput:		
+_ignoreInput:
 
 _next_compile:
 	inc iptr
@@ -396,12 +410,16 @@ processState:
 
 	rts
 
+
+; Current cell has been compared to 0. No further action needed
 _stateCellCmp:
 	cmp #StateCellCmp
 	bne _stateModCell
 
 	rts
 
+
+; Current cell has been modified. Emit code to do the modification
 _stateModCell:
 	cmp #StateModCell
 	bne _stateModDptr
@@ -409,9 +427,8 @@ _stateModCell:
 	lda count
 	cmp #$01
 	bne .decrement
-	; increment current cell
 
-; Emit Code
+	; Emit code to increment current cell
 	lda #<incCell
 	ldx #>incCell
 	ldy #(incCellEnd-incCell)
@@ -422,9 +439,8 @@ _stateModCell:
 .decrement:
 	cmp #$ff
 	bne .add
-	; decrement current cell
 
-; Emit Code
+	; Emit code to decrement current cell
 	lda #<decCell
 	ldx #>decCell
 	ldy #(decCellEnd-decCell)
@@ -433,9 +449,7 @@ _stateModCell:
 	jmp .done
 
 .add:
-	; add to current cell
-
-; Emit Code
+	; Emit code to add (positive or negative value) to current cell (part 1)
 	lda #<modCell
 	ldx #>modCell
 	ldy #(modCellAdd+1-modCell)
@@ -444,35 +458,38 @@ _stateModCell:
 	lda count
 	sta (dptr)
 
+	; dptr <- dptr + 1 (word)
 	inc dptr
 	bne .over
 	inc dptr+1
 .over:
 
-; Emit Code
+	; Emit code to add (positive or negative value) to current cell (part 2)
 	lda #<(modCellAdd+2)
 	ldx #>(modCellAdd+2)
 	ldy #(modCellEnd-modCellAdd-2)
 	jsr copyCode
 	
 .done:
+	; Reset count
 	lda #0
 	sta count
 	lda #StateCellCmp
 	sta state
 	rts
 
+
+; dptr has been modified. Emit code to update based on count (word)
 _stateModDptr:
 	lda count+1
 	bne .decrement
 
-	; Choose most efficient way of modifying data pointer
+	; Choose most efficient way of modifying dptr
 	lda count
 	cmp #$01
 	bne .addPosByte
-	; increment data pointer
 
-; Emit Code
+	; count == 1: emit code to increment dptr
 	lda #<incDptr
 	ldx #>incDptr
 	ldy #(incDptrEnd-incDptr)
@@ -481,7 +498,7 @@ _stateModDptr:
 	jmp .done
 
 .addPosByte:
-	; Emit code to add positive value < 256 to data pointer
+	; Emit code to add positive value < 256 to dptr (part 1)
 	lda #<addDptrPosByte
 	ldx #>addDptrPosByte
 	ldy #(addDptrPosByteAdd+1-addDptrPosByte)
@@ -490,12 +507,13 @@ _stateModDptr:
 	lda count
 	sta (dptr)
 
+	; dptr <- dptr + 1 (word)
 	inc dptr
 	bne .over1
 	inc dptr+1
 .over1:
 
-; Emit Code
+	; Emit code to add positive value < 256 to dptr (part 2)
 	lda #<(addDptrPosByteAdd+2)
 	ldx #>(addDptrPosByteAdd+2)
 	ldy #(addDptrPosByteEnd-addDptrPosByteAdd-2)
@@ -511,9 +529,8 @@ _stateModDptr:
 	lda count
 	cmp #$ff
 	bne .addNegByte
-	; decrement data pointer
 
-; Emit Code
+	; Emit code to decrement dptr
 	lda #<decDptr
 	ldx #>decDptr
 	ldy #(decDptrEnd-decDptr)
@@ -522,9 +539,7 @@ _stateModDptr:
 	jmp .done
 
 .addNegByte:
-	; subract negative value >= -256 from data pointer
-
-; Emit Code
+	; Emit code to add negative value >= -256 to dptr (part 1)
 	lda #<addDptrNegByte
 	ldx #>addDptrNegByte
 	ldy #(addDptrNegByteAdd+1-addDptrNegByte)
@@ -533,12 +548,13 @@ _stateModDptr:
 	lda count
 	sta (dptr)
 
+	; dptr <- dptr + 1
 	inc dptr
 	bne .over2
 	inc dptr+1
 .over2:
 
-; Emit Code
+	; Emit code to add negative value >= -256 to dptr (part 2)
 	lda #<(addDptrNegByteAdd+2)
 	ldx #>(addDptrNegByteAdd+2)
 	ldy #(addDptrNegByteEnd-addDptrNegByteAdd-2)
@@ -547,9 +563,7 @@ _stateModDptr:
 	jmp .done
 
 .add:
-	; add signed value to data pointer
-
-; Emit Code
+	; Emit code to add signed value to dptr (part 1)
 	lda #<modDptr
 	ldx #>modDptr
 	ldy #(modDptrAddLow+1-modDptr)
@@ -558,12 +572,13 @@ _stateModDptr:
 	lda count
 	sta (dptr)
 
+	; dptr <- dptr + 1
 	inc dptr
 	bne .over3
 	inc dptr+1
 .over3:
 
-; Emit Code
+	; Emit code to add signed value to dptr (part 2)
 	lda #<(modDptrAddLow+2)
 	ldx #>(modDptrAddLow+2)
 	ldy #(modDptrAddHigh+1-modDptrAddLow-2)
@@ -572,18 +587,20 @@ _stateModDptr:
 	lda count+1
 	sta (dptr)
 
+	; dptr <- dptr + 1
 	inc dptr
 	bne .over4
 	inc dptr+1
 .over4:
 
-; Emit Code
+	; Emit code to add signed value to dptr (part 3)
 	lda #<(modDptrAddHigh+2)
 	ldx #>(modDptrAddHigh+2)
 	ldy #(modDptrEnd-modDptrAddHigh-2)
 	jsr copyCode
 
 .done:
+	; Reset count
 	lda #0
 	sta count
 	sta count+1
