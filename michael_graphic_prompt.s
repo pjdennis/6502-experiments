@@ -28,11 +28,11 @@ GC_LINE_BUFFER           = $0300 ; GD_CHAR_ROWS * GD_CHAR_COLS = 400 bytes inclu
 callback_key_f1           = handle_f1
 gc_callback_char_received = sk_show_char_info
   .include graphics_console_full.inc
-  .include show_keys_on_screen.inc
 EXTEND_CHARACTER_SET = 1
   .include display_routines.inc
   .include display_string.inc
   .include display_hex.inc
+  .include show_keys_on_screen.inc
 
 
 CT_COMMANDS:
