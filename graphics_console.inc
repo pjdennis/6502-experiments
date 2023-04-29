@@ -77,7 +77,6 @@ gc_getchar:
 gc_getline:
   pha
   phx
-  phy
 
   lda GD_ROW
   sta GC_START_ROW
@@ -116,7 +115,6 @@ gc_getline:
   bcc .get_char_loop_2
   bra .get_char_loop
 .done
-  ply
   plx
   pla
   rts
@@ -148,6 +146,8 @@ gc_show_prompt:
 
 
 ; Internal function - handle a character received
+; On exit X, Y are preserved
+;         A is not preserved
 gc_char_received:
   .ifdef gc_callback_char_received
   jsr gc_callback_char_received
@@ -162,7 +162,9 @@ gc_char_received:
 
 
 ; Handle a character from the keyboard. Can be called to simulate key presses
-; On exit TODO which registers are preserved
+; On exit C is set if line was read, clear otherwise
+;         X, Y are preserved
+;         A is not preserved
 gc_handle_char_from_keyboard:
   phx
   tax
@@ -322,6 +324,8 @@ gc_initialize_line_ptr:
   rts
 
 
+; On entry A contains the character to add
+; On exit A, X, Y are preserverd
 gc_line_buffer_add:
   sta (GC_LINE_PTR)
   inc GC_LINE_PTR
