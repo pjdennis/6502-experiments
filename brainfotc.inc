@@ -157,11 +157,12 @@ _incCell:
 	
 	lda state
 	cmp #StateModCell
-	beq +
+	beq .over
 	jsr processState
 	lda #StateModCell
 	sta state
-*	inc count
+.over:
+	inc count
 	jmp _next
 
 _decCell:
@@ -169,11 +170,12 @@ _decCell:
 	bne _decDptr
 
 	cmp #StateModCell
-	beq +
+	beq .over
 	jsr processState
 	lda #StateModCell
 	sta state
-*	dec count
+.over:
+	dec count
 	jmp _next
 
 _decDptr:
@@ -748,9 +750,9 @@ addDptrNegByte:
 addDptrNegByteAdd:
 	adc #0		;placeholder
 	sta dptr
-	bcs +
+	bcs .over
 	dec dptr+1
-*
+.over:
 addDptrNegByteEnd:
 
 addDptrPosByte:
@@ -759,9 +761,9 @@ addDptrPosByte:
 addDptrPosByteAdd:
 	adc #0		; placeholder
 	sta dptr
-	bcc +
+	bcc .over
 	inc dptr+1
-*
+.over:
 addDptrPosByteEnd:
 
 modDptr:
@@ -789,18 +791,18 @@ inputCellEnd:
 branchForward:
 	lda (dptr)
 branchForwardAfterLoad:
-	bne +		; Branch on data cell containing zero
+	bne bf_over	; Branch on data cell containing zero
 branchForwardJumpInstruction:
 	jmp 0		; placeholder
-*
+bf_over:
 
 branchBackward:
 	lda (dptr)
 branchBackwardAfterLoad:
-	beq +		; Branch on data cell containing zero
+	beq bb_over	; Branch on data cell containing zero
 branchBackwardJumpInstruction:
 	jmp 0		; placeholder
-*
+bb_over:
 
 debugOut:
 	brk		; unimplemented for now
