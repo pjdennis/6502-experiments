@@ -198,15 +198,7 @@ gc_handle_char_from_keyboard:
   jsr gc_line_buffer_delete
   lda #' '
   jsr gd_show_character
-  lda GD_COL
-  beq .previous_line
-  dec
-  sta GD_COL
-  bra .done
-.previous_line:
-  dec GD_ROW
-  lda #GD_CHAR_COLS - 1
-  sta GD_COL
+  jsr gd_previous_character
   bra .done
 .newline:
   lda #' ' ; Erase cursor
