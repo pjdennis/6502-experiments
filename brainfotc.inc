@@ -136,12 +136,9 @@ compile:
 
 ; Emit Code
 	lda #<initCells
-	sta cptr
-	lda #>initCells
-	sta cptr+1
-	lda #initCellsEnd-initCells
-	sta ccnt
-	jsr copyCode
+	ldx #>initCells
+	ldy #(initCellsEnd-initCells)
+	jsr copyCode2
 
 _while_compile:
 	lda (iptr)
@@ -151,12 +148,9 @@ _while_compile:
 
 ; Emit code
 	lda #<endProgram
-	sta cptr
-	lda #>endProgram
-	sta cptr+1
-	lda #(endProgramEnd-endProgram)
-	sta ccnt
-	jsr copyCode
+	ldx #>endProgram
+	ldy #(endProgramEnd-endProgram)
+	jsr copyCode2
 
 	rts
 
@@ -233,12 +227,9 @@ _outputCell:
 
 ; Emit Code
 	lda #<outputCell
-	sta cptr
-	lda #>outputCell
-	sta cptr+1
-	lda #(outputCellEnd-outputCell)
-	sta ccnt
-	jsr copyCode
+	ldx #>outputCell
+	ldy #(outputCellEnd-outputCell)
+	jsr copyCode2
 
 	lda #StateDefault
 	sta state
@@ -248,15 +239,11 @@ _inputCell:
 	cmp #AscComma
 	bne _leftBracket
 
-
 ; Emit Code
 	lda #<inputCell
-	sta cptr
-	lda #>inputCell
-	sta cptr+1
-	lda #(inputCellEnd-inputCell)
-	sta ccnt
-	jsr copyCode
+	ldx #>inputCell
+	ldy #(inputCellEnd-inputCell)
+	jsr copyCode2
 
 	lda #StateDefault
 	sta state
@@ -272,23 +259,17 @@ _leftBracket:
 
 ; Emit Code
 	lda #<branchForward
-	sta cptr
-	lda #>branchForward
-	sta cptr+1
-	lda #(branchForwardAfterLoad-branchForward)
-	sta ccnt
-	jsr copyCode
+	ldx #>branchForward
+	ldy #(branchForwardAfterLoad-branchForward)
+	jsr copyCode2
 
 .over1:
 
 ; Emit Code
 	lda #<branchForwardAfterLoad
-	sta cptr
-	lda #>branchForwardAfterLoad
-	sta cptr+1
-	lda #(branchForwardJumpInstruction+1-branchForwardAfterLoad)
-	sta ccnt
-	jsr copyCode
+	ldx #>branchForwardAfterLoad
+	ldy #(branchForwardJumpInstruction+1-branchForwardAfterLoad)
+	jsr copyCode2
 
 	lda dptr+1	; push current PC for later.
 	pha
@@ -323,23 +304,17 @@ _rightBracket:
 
 ; Emit Code
 	lda #<branchBackward
-	sta cptr
-	lda #>branchBackward
-	sta cptr+1
-	lda #(branchBackwardAfterLoad-branchBackward)
-	sta ccnt
-	jsr copyCode
+	ldx #>branchBackward
+	ldy #(branchBackwardAfterLoad-branchBackward)
+	jsr copyCode2
 
 .over1:
 
 ; Emit Code
 	lda #<branchBackwardAfterLoad
-	sta cptr
-	lda #>branchBackwardAfterLoad
-	sta cptr+1
-	lda #(branchBackwardJumpInstruction+1-branchBackwardAfterLoad)
-	sta ccnt
-	jsr copyCode
+	ldx #>branchBackwardAfterLoad
+	ldy #(branchBackwardJumpInstruction+1-branchBackwardAfterLoad)
+	jsr copyCode2
 
 	lda dptr	; address of next instruction into temp
 	sta temp
@@ -397,12 +372,9 @@ _debugOut:
 
 ; Emit Code
 	lda #<debugOut
-	sta cptr
-	lda #>debugOut
-	sta cptr+1
-	lda #(debugOutEnd-debugOut)
-	sta ccnt
-	jsr copyCode
+	ldx #>debugOut
+	ldy #(debugOutEnd-debugOut)
+	jsr copyCode2
 
 	lda #StateDefault
 	sta state
@@ -442,12 +414,9 @@ _stateModCell:
 
 ; Emit Code
 	lda #<incCell
-	sta cptr
-	lda #>incCell
-	sta cptr+1
-	lda #(incCellEnd-incCell)
-	sta ccnt
-	jsr copyCode
+	ldx #>incCell
+	ldy #(incCellEnd-incCell)
+	jsr copyCode2
 
 	jmp .done
 	
@@ -458,12 +427,9 @@ _stateModCell:
 
 ; Emit Code
 	lda #<decCell
-	sta cptr
-	lda #>decCell
-	sta cptr+1
-	lda #(decCellEnd-decCell)
-	sta ccnt
-	jsr copyCode
+	ldx #>decCell
+	ldy #(decCellEnd-decCell)
+	jsr copyCode2
 
 	jmp .done
 
@@ -472,12 +438,9 @@ _stateModCell:
 
 ; Emit Code
 	lda #<modCell
-	sta cptr
-	lda #>modCell
-	sta cptr+1
-	lda #(modCellAdd+1-modCell)
-	sta ccnt
-	jsr copyCode
+	ldx #>modCell
+	ldy #(modCellAdd+1-modCell)
+	jsr copyCode2
 
 	lda count
 	sta (dptr)
@@ -659,6 +622,28 @@ _stateModDptr:
 	sta count+1
 	lda #StateDefault
 	sta state
+	rts
+
+
+copyCode2:
+	sta cptr
+	stx cptr+1
+	sty ccnt
+.loop:
+	lda (cptr)
+	sta (dptr)
+
+	inc cptr
+	bne .over1
+	inc cptr+1
+.over1:
+	inc dptr
+	bne .over2
+	inc dptr+1
+.over2:
+	dec ccnt
+	bne .loop
+	
 	rts
 
 
