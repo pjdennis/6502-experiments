@@ -542,27 +542,27 @@ _stateModDptr:
 
 .addWord:
 	; Emit code to add count as a signed word to dptr (part 1)
-	lda #<modDptr
-	ldx #>modDptr
-	ldy #(modDptrAddLow+1-modDptr)
+	lda #<addDptrWord
+	ldx #>addDptrWord
+	ldy #(addDptrWordAddLow+1-addDptrWord)
 	jsr copyCode
 
 	lda count
 	jsr emitByte
 
 	; Emit code to add count as a signed word to dptr (part 2)
-	lda #<(modDptrAddLow+2)
-	ldx #>(modDptrAddLow+2)
-	ldy #(modDptrAddHigh+1-modDptrAddLow-2)
+	lda #<(addDptrWordAddLow+2)
+	ldx #>(addDptrWordAddLow+2)
+	ldy #(addDptrWordAddHigh+1-addDptrWordAddLow-2)
 	jsr copyCode
 
 	lda count+1
 	jsr emitByte
 
 	; Emit code to add count as a signed word to dptr (part 3)
-	lda #<(modDptrAddHigh+2)
-	ldx #>(modDptrAddHigh+2)
-	ldy #(modDptrEnd-modDptrAddHigh-2)
+	lda #<(addDptrWordAddHigh+2)
+	ldx #>(addDptrWordAddHigh+2)
+	ldy #(addDptrWordEnd-addDptrWordAddHigh-2)
 	jsr copyCode
 
 .done:
@@ -705,17 +705,17 @@ addDptrPosByteAdd:
 addDptrPosByteEnd:
 
 
-modDptr:
+addDptrWord:
 	clc
 	lda dptr
-modDptrAddLow:
+addDptrWordAddLow:
 	adc #0		; placeholder
 	sta dptr
 	lda dptr+1
-modDptrAddHigh:
+addDptrWordAddHigh:
 	adc #0		; placeholder
 	sta dptr+1
-modDptrEnd:
+addDptrWordEnd:
 
 
 outputCell:
