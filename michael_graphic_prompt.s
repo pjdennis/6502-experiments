@@ -52,6 +52,7 @@ EXTEND_CHARACTER_SET = 1
 KB_BUFFER_INITIALIZE = simple_buffer_initialize
 KB_BUFFER_WRITE      = simple_buffer_write
 KB_BUFFER_READ       = simple_buffer_read
+callback_key_f1      = handle_f1
   .include keyboard_driver.inc
   .include display_hex.inc
   .include multiply8x8.inc
@@ -271,19 +272,7 @@ callback_char_recieved:
   rts
 
 
-callback_key_left:
-  rts
-
-
-callback_key_right:
-  rts
-
-
-callback_key_esc:
-  rts
-
-
-callback_key_f1:
+handle_f1:
   pha
   phx
   phy

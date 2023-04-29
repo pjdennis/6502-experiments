@@ -1,14 +1,16 @@
 ; Requires:
-; KB_BUFFER_INITIALIZE - funciton to initialize the keyboard buffer
-; KB_BUFFER_WRITE      - function to call to write to keyboard buffer
-; KB_BUFFER_READ       - function to call to read from keyboard buffer
-; copy_memory and CP_M_* parameter locations
-; INTERRUPT_ROUTINE    - location to which keyboard interrupt handler is copied
-; KB_ZERO_PAGE_BASE    - location in zero page for variables
-; callback_key_left    - callback when left arrow pressed
-; callback_key_right   - callback when right arrow pressed
-; callback_key_esc     - callback when Escape pressed
-; callback_key_f1      - callback when F1 pressed
+;   KB_BUFFER_INITIALIZE - funciton to initialize the keyboard buffer
+;   KB_BUFFER_WRITE      - function to call to write to keyboard buffer
+;   KB_BUFFER_READ       - function to call to read from keyboard buffer
+;   copy_memory and CP_M_* parameter locations
+;   INTERRUPT_ROUTINE    - location to which keyboard interrupt handler is copied
+;   KB_ZERO_PAGE_BASE    - location in zero page for variables
+;
+; Optional:
+;   callback_key_left    - callback when left arrow pressed
+;   callback_key_right   - callback when right arrow pressed
+;   callback_key_esc     - callback when Escape pressed
+;   callback_key_f1      - callback when F1 pressed
 
 TRANSLATE_TABLE          = KB_ZERO_PAGE_BASE + $00 ; 2 bytes
 KEYBOARD_RECEIVING       = KB_ZERO_PAGE_BASE + $02 ; 1 byte
@@ -197,17 +199,30 @@ handle_special_keys:
 .not_handled:
   clc
   rts                      ; Return - not handled
+
 .key_left:
+  .ifdef callback_key_left
   jsr callback_key_left
+  .endif
   bra .handled
+
 .key_right:
+  .ifdef callback_key_right
   jsr callback_key_right
+  .endif
   bra .handled
+
 .key_esc:
+  .ifdef callback_key_esc
   jsr callback_key_esc
+  .endif
   bra .handled
+
 .key_f1:
+  .ifdef callback_key_f1
   jsr callback_key_f1
+  .endif
+
 .handled:
   sec
   rts                      ; Return - handled
