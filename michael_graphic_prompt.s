@@ -92,8 +92,6 @@ program_start:
 .loop:
   jsr gd_select
   jsr show_prompt
-  lda #'_'
-  jsr gd_show_character
   jsr gd_unselect
 
   jsr getline
