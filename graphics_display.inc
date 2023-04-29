@@ -274,7 +274,7 @@ gd_clear_line:
   lda #ILI9341_RAMWR
   jsr gd_send_command
 
-CLEAR_LINE_LOOP_COUNT = -480 ; 256 * 240 * 1 = 480 * 16 * 8
+CLEAR_LINE_LOOP_COUNT = -480 ; 240 * (320 / 20) * 2 = 480 * 16
 
   lda #<CLEAR_LINE_LOOP_COUNT
   sta GD_TEMP
@@ -313,7 +313,7 @@ gd_clear_screen:
   lda #ILI9341_RAMWR
   jsr gd_send_command
 
-CLEAR_SCREEN_LOOP_COUNT = -9600 ; 256 * 240 * 20 = 320 * 240 * 16 = 9600 * 16 * 8
+CLEAR_SCREEN_LOOP_COUNT = -9600 ; 320 * 240 * 2 (bytes) = 9600 * 16 (inline sends)
 
   lda #<CLEAR_SCREEN_LOOP_COUNT
   sta GD_TEMP
