@@ -7,9 +7,11 @@ cr_repl:
   jsr gc_show_prompt
   jsr gc_getline
   jsr cr_execute_command
-  bra .loop
+  bcc .loop
+  rts
 
 
+; On exit C set if 'exit' command was encountered
 cr_execute_command:
   ; remove the newline from the command buffer
   jsr gc_line_buffer_delete ; terminating 0
@@ -28,6 +30,16 @@ cr_execute_command:
 
   jsr gc_initialize_line_ptr
   stz GC_LINE_BUFFER
+
+  lda CT_COMMAND_FUNCTION_PTR
+  bne .not_exit
+  lda CT_COMMAND_FUNCTION_PTR + 1
+  bne .not_exit
+; exit
+  sec
+  bra .done
+
+.not_exit:
   jsr cr_jump_to_command_function
   bra .done
 
@@ -45,6 +57,7 @@ cr_execute_command:
 
   jsr gd_unselect
 
+  clc
 .done:
   rts
 

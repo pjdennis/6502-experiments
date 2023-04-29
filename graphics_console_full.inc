@@ -44,3 +44,9 @@ KB_BUFFER_READ       = simple_buffer_read
   .include command_table.inc
   .include console_repl.inc
 
+
+gcf_init:
+  jsr gd_prepare_vertical
+  jsr gc_initialize
+  jsr keyboard_initialize
+  rts

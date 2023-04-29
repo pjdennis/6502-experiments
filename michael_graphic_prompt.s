@@ -48,6 +48,8 @@ CT_COMMANDS:
                       .word command_getchar
   .asciiz "clear"
                       .word command_clear
+  .asciiz "exit"
+                      .word 0
   .byte 0
 
  
@@ -56,15 +58,20 @@ program_start:
   ldx #$ff
   txs
 
-  jsr gd_prepare_vertical
-  jsr gc_initialize
-  jsr keyboard_initialize
+  jsr gcf_init
   jsr reset_and_enable_display_no_cursor
   jsr sk_init
 
   jsr cr_repl
 
+  jsr gd_select
+  lda #<.exit_message
+  ldx #>.exit_message
+  jsr write_string_to_screen
+  jsr gd_unselect
+
   stp
+.exit_message: .asciiz "Exited."
 
 
 command_hello:
