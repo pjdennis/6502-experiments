@@ -88,13 +88,9 @@ program_start:
   jsr display_string
 
 .loop:
-  jsr gd_select
-  jsr show_prompt
-  jsr gd_unselect
-
+  jsr gc_show_prompt
   jsr gc_getline
   jsr execute_command
-
   bra .loop
 
 .start_message: .asciiz "Last key press:"
@@ -348,25 +344,6 @@ command_clear:
   jsr gd_clear_screen
   jsr gd_unselect
   stz GD_ROW
-  rts
-
-
-show_prompt:
-  lda GD_COL
-  beq .at_start_of_line
-  lda GD_ROW
-  cmp #GD_CHAR_ROWS - 1
-  bne .not_last_line
-  jsr do_scroll
-  bra .prompt
-.not_last_line
-  jsr gd_next_line
-.prompt
-  stz GD_COL
-.at_start_of_line:
-  lda #GC_PROMPT_CHAR
-  jsr gd_show_character
-  jsr gd_next_character
   rts
 
 

@@ -120,6 +120,31 @@ gc_getline:
   rts
 
 
+; Show the prompt on the graphics console
+; On exit A, X, Y are preserved
+gc_show_prompt:
+  pha
+  jsr gd_select
+  lda GD_COL
+  beq .at_start_of_line
+  lda GD_ROW
+  cmp #GD_CHAR_ROWS - 1
+  bne .not_last_line
+  jsr do_scroll
+  bra .prompt
+.not_last_line
+  jsr gd_next_line
+.prompt
+  stz GD_COL
+.at_start_of_line:
+  lda #GC_PROMPT_CHAR
+  jsr gd_show_character
+  jsr gd_next_character
+  jsr gd_unselect
+  pla
+  rts
+
+
 gc_initialize_line_ptr:
   lda #<GC_LINE_BUFFER
   sta GC_LINE_PTR
