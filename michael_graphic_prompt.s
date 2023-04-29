@@ -79,13 +79,13 @@ program_start:
   txs
 
   jsr gd_prepare_vertical
+  jsr gc_initialize
+  jsr keyboard_initialize
 
   jsr reset_and_enable_display_no_cursor
   lda #<.start_message
   ldx #>.start_message
   jsr display_string
-
-  jsr keyboard_initialize
 
 .loop:
   jsr gd_select
