@@ -645,7 +645,7 @@ _stateModDptr:
 
 
 copyCode:
-_loop:
+.loop:
 	lda (cptr)
 	sta (dptr)
 
@@ -660,7 +660,7 @@ _loop:
 .over2:
 
 	dec ccnt
-	bne _loop
+	bne .loop
 	
 	rts
 
@@ -673,8 +673,7 @@ initCells:
 	sta dptr
 	lda #>cells
 	sta dptr+1
-.scope
-_loop:
+.loop:
 	lda #$00
 	sta (dptr)
 
@@ -685,15 +684,15 @@ _loop:
 
 	lda dptr+1
 	cmp #>cellsEnd
-	bne _loop
+	bne .loop
 
 	; set the dptr back to the start of the cells.
 	lda #<cells
 	sta dptr
 	lda #>cells
 	sta dptr+1
-.scend
 initCellsEnd:
+
 
 incCell:
 	lda (dptr)
@@ -701,11 +700,13 @@ incCell:
 	sta (dptr)
 incCellEnd:
 
+
 decCell:
 	lda (dptr)
 	dec
 	sta (dptr)
 decCellEnd:
+
 
 modCell:
 	clc
@@ -715,6 +716,7 @@ modCellAdd:
 	sta (dptr)
 modCellEnd:
 
+
 decDptr:
 	lda dptr
 	bne .over
@@ -723,12 +725,14 @@ decDptr:
 	dec dptr
 decDptrEnd:
 
+
 incDptr:
 	inc dptr
 	bne .over
 	inc dptr+1
 .over:
 incDptrEnd:
+
 
 addDptrNegByte:
 	clc
@@ -741,6 +745,7 @@ addDptrNegByteAdd:
 .over:
 addDptrNegByteEnd:
 
+
 addDptrPosByte:
 	clc
 	lda dptr
@@ -751,6 +756,7 @@ addDptrPosByteAdd:
 	inc dptr+1
 .over:
 addDptrPosByteEnd:
+
 
 modDptr:
 	clc
@@ -764,15 +770,18 @@ modDptrAddHigh:
 	sta dptr+1
 modDptrEnd:
 
+
 outputCell:
 	lda (dptr)
 	jsr _putch
 outputCellEnd:
 
+
 inputCell:
 	jsr _getch
 	sta (dptr)
 inputCellEnd:
+
 
 branchForward:
 	lda (dptr)
@@ -782,6 +791,7 @@ branchForwardJumpInstruction:
 	jmp 0		; placeholder
 bf_over:
 
+
 branchBackward:
 	lda (dptr)
 branchBackwardAfterLoad:
@@ -790,13 +800,18 @@ branchBackwardJumpInstruction:
 	jmp 0		; placeholder
 bb_over:
 
+
 debugOut:
 	brk		; unimplemented for now
 debugOutEnd:
 
+
 endProgram:
 	rts		; return to calling program.
 endProgramEnd:
+
+
+; Sample programs
 
 helloWorld:
 	.byte "++++++++"
