@@ -63,6 +63,27 @@ program_start:
 
   jsr gd_prepare_vertical
 
+
+  ; Temporary - test cursor
+  lda #'y'
+  jsr gd_select
+  jsr gd_show_character
+  jsr gd_unselect
+
+  lda #$ff
+  sta GDC_INVERT
+.loop:
+  jsr gd_select
+  jsr gdc_show_cursor
+  jsr gd_unselect
+  lda #25
+  jsr delay_hundredths
+  lda #$ff
+  eor GDC_INVERT
+  sta GDC_INVERT
+  bra .loop
+
+
   jsr gd_select
   lda #'_'
   jsr gd_show_character
