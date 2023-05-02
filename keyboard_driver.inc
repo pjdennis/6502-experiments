@@ -9,6 +9,8 @@
 ; Optional:
 ;   callback_key_left    - callback when left arrow pressed
 ;   callback_key_right   - callback when right arrow pressed
+;   callback_key_up      - callback when up arrow pressed
+;   callback_key_down    - callback when down arrow pressed
 ;   callback_key_esc     - callback when Escape pressed
 ;   callback_key_f1      - callback when F1 pressed
 
@@ -177,15 +179,36 @@ keyboard_get_char:
 ;          X, Y are preserved
 handle_special_keys:
   lda KEYBOARD_LATEST_CODE
+
+  .ifdef callback_key_left
   cmp #KEY_LEFT
   beq .key_left
+  .endif
+
+  .ifdef callback_key_right
   cmp #KEY_RIGHT
   beq .key_right
+  .endif
+
+  .ifdef callback_key_up
+  cmp #KEY_UP
+  beq .key_up
+  .endif
+
+  .ifdef callback_key_down
+  cmp #KEY_DOWN
+  beq .key_down
+  .endif
+
+  .ifdef callback_key_esc
   cmp #KEY_ESC
   beq .key_esc
+  .endif
 
+  .ifdef callback_key_f1
   cmp #KEY_F1
   beq .key_f1
+  .endif
 
   lda KEYBOARD_LOCK_STATE
   bit #KB_NUM_LOCK_ON
@@ -215,6 +238,18 @@ handle_special_keys:
 .key_right:
   .ifdef callback_key_right
   jsr callback_key_right
+  .endif
+  bra .handled
+
+.key_up:
+  .ifdef callback_key_up
+  jsr callback_key_up
+  .endif
+  bra .handled
+
+.key_down:
+  .ifdef callback_key_down
+  jsr callback_key_down
   .endif
   bra .handled
 

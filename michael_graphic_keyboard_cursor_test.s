@@ -52,6 +52,8 @@ KB_BUFFER_WRITE      = simple_buffer_write
 KB_BUFFER_READ       = simple_buffer_read
 callback_key_left    = handle_left
 callback_key_right   = handle_right
+callback_key_up      = handle_up
+callback_key_down    = handle_down
 callback_key_f1      = handle_f1
 ;KEYBOARD_RATE_AND_DELAY = KEYBOARD_RATE_4_3_CPS | KEYBOARD_DELAY_0_50_S
   .include keyboard_driver.inc
@@ -347,6 +349,41 @@ handle_right:
   jsr gd_select
   jsr cursor_temp_off
   jsr gd_next_character
+  jsr cursor_temp_restore
+  jsr gd_unselect
+  stz FLASH_COUNTER
+  pla
+  rts
+
+
+handle_up:
+  pha
+  jsr gd_select
+  jsr cursor_temp_off
+
+  lda GD_ROW
+  beq .skip
+  dec GD_ROW
+.skip:
+
+  jsr cursor_temp_restore
+  jsr gd_unselect
+  stz FLASH_COUNTER
+  pla
+  rts
+
+
+handle_down:
+  pha
+  jsr gd_select
+  jsr cursor_temp_off
+
+  lda GD_ROW
+  cmp #(GD_CHAR_ROWS - 1)
+  beq .skip
+  inc GD_ROW
+.skip:
+
   jsr cursor_temp_restore
   jsr gd_unselect
   stz FLASH_COUNTER
