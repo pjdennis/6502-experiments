@@ -12,6 +12,10 @@
 ;   callback_key_esc     - callback when Escape pressed
 ;   callback_key_f1      - callback when F1 pressed
 
+  .ifndef KEYBOARD_RATE_AND_DELAY
+KEYBOARD_RATE_AND_DELAY = KEYBOARD_RATE_30_0_CPS | KEYBOARD_DELAY_0_50_S
+  .endif
+
 TRANSLATE_TABLE          = KB_ZERO_PAGE_BASE + $00 ; 2 bytes
 KEYBOARD_RECEIVING       = KB_ZERO_PAGE_BASE + $02 ; 1 byte
 KEYBOARD_DECODE_STATE    = KB_ZERO_PAGE_BASE + $03 ; 1 byte
@@ -136,7 +140,7 @@ keyboard_initialize:
   lda #KB_COMMAND_SET_TYPEMATIC
   jsr keyboard_send_command
 
-  lda #KEYBOARD_RATE_30_0_CPS | KEYBOARD_DELAY_0_50_S
+  lda #KEYBOARD_RATE_AND_DELAY
   jsr keyboard_send_command
 
   lda #KB_NUM_LOCK_ON

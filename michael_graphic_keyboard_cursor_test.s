@@ -51,6 +51,7 @@ KB_BUFFER_READ       = simple_buffer_read
 callback_key_left    = handle_left
 callback_key_right   = handle_right
 callback_key_f1      = handle_f1
+KEYBOARD_RATE_AND_DELAY = KEYBOARD_RATE_4_3_CPS | KEYBOARD_DELAY_0_50_S
   .include keyboard_driver.inc
   .include display_hex.inc
   .include multiply8x8.inc
@@ -106,6 +107,7 @@ get_char_loop_2:
   jsr keyboard_get_char
   bcc get_char_loop_2
   jsr callback_no_more_chars
+  ldx #0
   bra get_char_loop
 
 
