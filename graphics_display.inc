@@ -229,6 +229,10 @@ gd_scroll_up:
 
 ; Input GD_ROW, GD_COL, GD_ROW2, GD_COL2
 gd_clear_line:
+  .ifdef gdc_clear_line
+  jsr gdc_clear_line
+  .endif
+
   stz GD_COL
   jsr x_y_from_row_col
   lda #ILI9341_CASET
@@ -285,6 +289,10 @@ CLEAR_LINE_LOOP_COUNT = -480 ; 240 * (320 / 20) * 2 = 480 * 16
 
 
 gd_clear_screen:
+  .ifdef gdc_char_buffer_clear
+  jsr gdc_char_buffer_clear
+  .endif
+
   lda #ILI9341_DISPOFF
   jsr gd_send_command
 
@@ -398,12 +406,18 @@ gd_show_string:
   inc GD_ROW
   bra .continue
 
+
 ; On entry A contains the character to display (in ASCII)
 ; On exit X, Y are preserved
 ;         A is not preserved
 gd_show_character:
   phx
   phy
+
+  .ifdef gdc_char_store
+  jsr gdc_char_store
+  .endif
+
   jsr set_char_data_ptr
   jsr x_y_from_row_col
 
