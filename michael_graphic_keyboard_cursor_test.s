@@ -21,7 +21,9 @@ LINE_CHARS_REMAINING     = $12 ; 1 byte
 MULTIPLY_8X8_RESULT_LOW  = $13 ; 1 byte
 MULTIPLY_8X8_TEMP        = $14 ; 1 byte
 
-GD_ZERO_PAGE_BASE        = $15 ; 18 bytes
+FLASH_COUNTER            = $15
+
+GD_ZERO_PAGE_BASE        = $16 ; 18 bytes
 GDC_ZERO_PAGE_BASE       = GD_ZERO_PAGE_STOP
 KB_ZERO_PAGE_BASE        = GDC_ZERO_PAGE_STOP
 TO_DECIMAL_PARAM         = KB_ZERO_PAGE_STOP
@@ -51,7 +53,7 @@ KB_BUFFER_READ       = simple_buffer_read
 callback_key_left    = handle_left
 callback_key_right   = handle_right
 callback_key_f1      = handle_f1
-KEYBOARD_RATE_AND_DELAY = KEYBOARD_RATE_4_3_CPS | KEYBOARD_DELAY_0_50_S
+;KEYBOARD_RATE_AND_DELAY = KEYBOARD_RATE_4_3_CPS | KEYBOARD_DELAY_0_50_S
   .include keyboard_driver.inc
   .include display_hex.inc
   .include multiply8x8.inc
@@ -80,9 +82,9 @@ program_start:
 
   ; Read and display translated characters from the keyboard
 
-  ldx #0
+  stz FLASH_COUNTER
 get_char_loop:
-  cpx #0
+  lda FLASH_COUNTER
   bne .not_invert
   jsr gd_select
   jsr gdc_show_cursor
@@ -93,10 +95,11 @@ get_char_loop:
   jsr gd_unselect
   jsr display_screen_buffer
 .not_invert:
-  inx
-  cpx #25
+  inc FLASH_COUNTER
+  lda FLASH_COUNTER
+  cmp #25
   bne .no_reset_count
-  ldx #0
+  stz FLASH_COUNTER
 .no_reset_count:
   lda #1
   jsr delay_hundredths
@@ -107,7 +110,7 @@ get_char_loop_2:
   jsr keyboard_get_char
   bcc get_char_loop_2
   jsr callback_no_more_chars
-  ldx #0
+  stz FLASH_COUNTER
   bra get_char_loop
 
 
@@ -369,6 +372,7 @@ handle_left:
   jsr gd_previous_character
   jsr cursor_temp_restore
   jsr gd_unselect
+  stz FLASH_COUNTER
   pla
   rts
 
@@ -380,6 +384,7 @@ handle_right:
   jsr gd_next_character
   jsr cursor_temp_restore
   jsr gd_unselect
+  stz FLASH_COUNTER
   pla
   rts
 
