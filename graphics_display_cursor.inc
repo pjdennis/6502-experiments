@@ -78,7 +78,7 @@ gdc_show_cursor:
   sta GD_Y
   bcc .y_ready
   inc GD_Y + 1
-.y_ready
+.y_ready:
 
   ; Load the character at GD_ROW, GD_COL
   jsr gdc_char_ptr_from_row_col
