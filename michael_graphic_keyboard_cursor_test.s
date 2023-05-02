@@ -1,3 +1,5 @@
+; TODO: Line lengths not updating if using cursor to move and then typing
+
   .include base_config_v2.inc
 
 INTERRUPT_ROUTINE        = $3f00
