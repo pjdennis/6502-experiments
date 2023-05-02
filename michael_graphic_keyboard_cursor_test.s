@@ -106,10 +106,8 @@ program_start:
   ldx #0
 get_char_loop:
   cpx #0
-  bne .not_off
+  bne .not_invert
   jsr gd_select
-;  lda #' '
-;  jsr gd_show_character
   jsr gdc_show_cursor
   lda #$ff
   eor GDC_INVERT
@@ -117,22 +115,9 @@ get_char_loop:
 
   jsr gd_unselect
   jsr display_screen_buffer
-.not_off:
-  cpx #25
-  bne .not_on
-  jsr gd_select
-;  lda #'_'
-;  jsr gd_show_character
-  jsr gdc_show_cursor
-  lda #$ff
-  eor GDC_INVERT
-  sta GDC_INVERT
-
-  jsr gd_unselect
-  jsr display_screen_buffer
-.not_on:
+.not_invert:
   inx
-  cpx #50
+  cpx #25
   bne .no_reset_count
   ldx #0
 .no_reset_count:
@@ -203,11 +188,8 @@ write_character_to_screen:
   lda GD_ROW
   bne .not_first_char
   lda GD_COL
-  beq .return
+  beq .done
 .not_first_char:
-;  lda #' '
-;  jsr gd_show_character
-;  jsr move_position_back
   jsr move_position_back
   lda #' '
   jsr gd_show_character
@@ -227,9 +209,6 @@ write_character_to_screen:
 .not_last_line:  
   jsr gd_next_line
 .done:
-;  lda #'_'
-;  jsr gd_show_character
-.return
   rts
 
 
