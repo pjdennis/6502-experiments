@@ -48,6 +48,8 @@ EXTEND_CHARACTER_SET = 1
 KB_BUFFER_INITIALIZE = simple_buffer_initialize
 KB_BUFFER_WRITE      = simple_buffer_write
 KB_BUFFER_READ       = simple_buffer_read
+callback_key_left    = handle_left
+callback_key_right   = handle_right
 callback_key_f1      = handle_f1
   .include keyboard_driver.inc
   .include display_hex.inc
@@ -139,26 +141,9 @@ start_message: .asciiz "Last key press:"
 callback_char_received:
   jsr display_recieved_character
   jsr gd_select
-
-  pha
-  lda GDC_INVERT
-  bne .skip1   ; INVERT == $ff means cursor is not on
-  stz GDC_INVERT
-  jsr gdc_show_cursor
-  lda #$ff
-  sta GDC_INVERT
-.skip1:
-  pla
-
+  jsr cursor_temp_off
   jsr write_character_to_screen
-
-  pha
-  lda GDC_INVERT
-  bne .skip2
-  jsr gdc_show_cursor
-.skip2:
-  pla
-
+  jsr cursor_temp_restore
   jsr gd_unselect
   jsr display_screen_buffer
   rts
@@ -375,6 +360,51 @@ display_screen_buffer:
 
 
 callback_no_more_chars:
+  rts
+
+
+cursor_temp_off:
+  pha
+  lda GDC_INVERT
+  bne .skip   ; INVERT == $ff means cursor is not on
+  stz GDC_INVERT
+  jsr gdc_show_cursor
+  lda #$ff
+  sta GDC_INVERT
+.skip:
+  pla
+  rts
+
+
+cursor_temp_restore:
+  pha
+  lda GDC_INVERT
+  bne .skip2
+  jsr gdc_show_cursor
+.skip2:
+  pla
+  rts
+
+
+handle_left:
+  pha
+  jsr gd_select
+  jsr cursor_temp_off
+  jsr gd_previous_character
+  jsr cursor_temp_restore
+  jsr gd_unselect
+  pla
+  rts
+
+
+handle_right:
+  pha
+  jsr gd_select
+  jsr cursor_temp_off
+  jsr gd_next_character
+  jsr cursor_temp_restore
+  jsr gd_unselect
+  pla
   rts
 
 
