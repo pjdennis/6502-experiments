@@ -71,8 +71,6 @@ program_start:
   lda #$ff
   sta GDC_INVERT
 
-  jsr display_screen_buffer
-
   jsr reset_and_enable_display_no_cursor
   lda #<start_message
   ldx #>start_message
@@ -93,7 +91,6 @@ get_char_loop:
   sta GDC_INVERT
 
   jsr gd_unselect
-  jsr display_screen_buffer
 .not_invert:
   inc FLASH_COUNTER
   lda FLASH_COUNTER
@@ -124,7 +121,6 @@ callback_char_received:
   jsr write_character_to_screen
   jsr cursor_temp_restore
   jsr gd_unselect
-  jsr display_screen_buffer
   rts
 
 
@@ -304,37 +300,6 @@ display_recieved_character:
   jsr display_hex
   txa
   plx
-  rts
-
-
-display_screen_buffer:
-  pha
-  phx
-
-  ; show the first row
-  lda #DISPLAY_THIRD_LINE
-  jsr move_cursor
-  ldx #0
-.loop1:
-  lda GDC_CHAR_BUFFER,X
-  jsr display_character
-  inx
-  cpx #GD_CHAR_COLS
-  bne .loop1
-
-  ; show the second row
-  lda #DISPLAY_FOURTH_LINE
-  jsr move_cursor
-  ldx #0
-.loop2:
-  lda GDC_CHAR_BUFFER+GD_CHAR_COLS,X
-  jsr display_character
-  inx
-  cpx #GD_CHAR_COLS
-  bne .loop2
-
-  plx
-  pla
   rts
 
 
