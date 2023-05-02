@@ -65,29 +65,32 @@ program_start:
 
 
   ; Temporary - test cursor
-  lda #'y'
-  jsr gd_select
-  jsr gd_show_character
-  jsr gd_unselect
+;  lda #'y'
+;  jsr gd_select
+;  jsr gd_show_character
+;  jsr gd_unselect
+;
+;  lda #$ff
+;  sta GDC_INVERT
+;.loop:
+;  jsr gd_select
+;  jsr gdc_show_cursor
+;  jsr gd_unselect
+;  lda #25
+;  jsr delay_hundredths
+;  lda #$ff
+;  eor GDC_INVERT
+;  sta GDC_INVERT
+;  bra .loop
+
+
+;  jsr gd_select
+;  lda #'_'
+;  jsr gd_show_character
+;  jsr gd_unselect
 
   lda #$ff
   sta GDC_INVERT
-.loop:
-  jsr gd_select
-  jsr gdc_show_cursor
-  jsr gd_unselect
-  lda #25
-  jsr delay_hundredths
-  lda #$ff
-  eor GDC_INVERT
-  sta GDC_INVERT
-  bra .loop
-
-
-  jsr gd_select
-  lda #'_'
-  jsr gd_show_character
-  jsr gd_unselect
 
   jsr display_screen_buffer
 
@@ -105,16 +108,26 @@ get_char_loop:
   cpx #0
   bne .not_off
   jsr gd_select
-  lda #' '
-  jsr gd_show_character
+;  lda #' '
+;  jsr gd_show_character
+  jsr gdc_show_cursor
+  lda #$ff
+  eor GDC_INVERT
+  sta GDC_INVERT
+
   jsr gd_unselect
   jsr display_screen_buffer
 .not_off:
   cpx #25
   bne .not_on
   jsr gd_select
-  lda #'_'
-  jsr gd_show_character
+;  lda #'_'
+;  jsr gd_show_character
+  jsr gdc_show_cursor
+  lda #$ff
+  eor GDC_INVERT
+  sta GDC_INVERT
+
   jsr gd_unselect
   jsr display_screen_buffer
 .not_on:
@@ -141,7 +154,26 @@ start_message: .asciiz "Last key press:"
 callback_char_received:
   jsr display_recieved_character
   jsr gd_select
+
+  pha
+  lda GDC_INVERT
+  bne .skip1   ; INVERT == $ff means cursor is not on
+  stz GDC_INVERT
+  jsr gdc_show_cursor
+  lda #$ff
+  sta GDC_INVERT
+.skip1:
+  pla
+
   jsr write_character_to_screen
+
+  pha
+  lda GDC_INVERT
+  bne .skip2
+  jsr gdc_show_cursor
+.skip2:
+  pla
+
   jsr gd_unselect
   jsr display_screen_buffer
   rts
@@ -173,9 +205,12 @@ write_character_to_screen:
   lda GD_COL
   beq .return
 .not_first_char:
+;  lda #' '
+;  jsr gd_show_character
+;  jsr move_position_back
+  jsr move_position_back
   lda #' '
   jsr gd_show_character
-  jsr move_position_back
   bra .done
 .tab:
   jsr do_tab
@@ -192,8 +227,8 @@ write_character_to_screen:
 .not_last_line:  
   jsr gd_next_line
 .done:
-  lda #'_'
-  jsr gd_show_character
+;  lda #'_'
+;  jsr gd_show_character
 .return
   rts
 
