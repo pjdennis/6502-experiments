@@ -161,8 +161,6 @@ write_character_to_screen:
   bra .done
 .newline:
   jsr set_line_length
-  lda #' '
-  jsr gd_show_character
   lda GD_ROW
   cmp #GD_CHAR_ROWS - 1
   bne .not_last_line
