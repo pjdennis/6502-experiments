@@ -5,6 +5,7 @@
 INTERRUPT_ROUTINE        = $3f00
 
 TAB_WIDTH                = 4
+CURSOR_FLASH_DELAY       = 25  ; hundredths of a second
 
 CP_M_DEST_P              = $00 ; 2 bytes
 CP_M_SRC_P               = $02 ; 2 bytes
@@ -72,8 +73,8 @@ program_start:
 
   jsr gd_prepare_vertical
 
-  lda #$ff
-  sta GDC_INVERT
+  jsr cursor_on
+  stz FLASH_COUNTER
 
   jsr reset_and_enable_display_no_cursor
   lda #<start_message
@@ -84,24 +85,16 @@ program_start:
 
   ; Read and display translated characters from the keyboard
 
-  stz FLASH_COUNTER
 get_char_loop:
   lda FLASH_COUNTER
+  cmp #CURSOR_FLASH_DELAY
   bne .not_invert
   jsr gd_select
-  jsr gdc_show_cursor
-  lda #$ff
-  eor GDC_INVERT
-  sta GDC_INVERT
-
+  jsr cursor_invert
   jsr gd_unselect
+  stz FLASH_COUNTER
 .not_invert:
   inc FLASH_COUNTER
-  lda FLASH_COUNTER
-  cmp #25
-  bne .no_reset_count
-  stz FLASH_COUNTER
-.no_reset_count:
   lda #1
   jsr delay_hundredths
   jsr keyboard_get_char
@@ -110,8 +103,6 @@ get_char_loop_2:
   jsr callback_char_received
   jsr keyboard_get_char
   bcc get_char_loop_2
-  jsr callback_no_more_chars
-  stz FLASH_COUNTER
   bra get_char_loop
 
 
@@ -121,10 +112,11 @@ start_message: .asciiz "Last key press:"
 callback_char_received:
   jsr display_recieved_character
   jsr gd_select
-  jsr cursor_temp_off
+  jsr cursor_off
   jsr write_character_to_screen
-  jsr cursor_temp_restore
+  jsr cursor_on
   jsr gd_unselect
+  stz FLASH_COUNTER
   rts
 
 
@@ -305,29 +297,29 @@ display_recieved_character:
   rts
 
 
-callback_no_more_chars:
-  rts
-
-
-cursor_temp_off:
+cursor_on:
   pha
-  lda GDC_INVERT
-  bne .skip   ; INVERT == $ff means cursor is not on
-  stz GDC_INVERT
-  jsr gdc_show_cursor
   lda #$ff
   sta GDC_INVERT
-.skip:
+  jsr gdc_show_cursor
   pla
   rts
 
 
-cursor_temp_restore:
+cursor_off:
+  pha
+  stz GDC_INVERT
+  jsr gdc_show_cursor
+  pla
+  rts
+
+
+cursor_invert:
   pha
   lda GDC_INVERT
-  bne .skip2
+  eor #$ff
+  sta GDC_INVERT
   jsr gdc_show_cursor
-.skip2:
   pla
   rts
 
@@ -335,9 +327,9 @@ cursor_temp_restore:
 handle_left:
   pha
   jsr gd_select
-  jsr cursor_temp_off
+  jsr cursor_off
   jsr gd_previous_character
-  jsr cursor_temp_restore
+  jsr cursor_on
   jsr gd_unselect
   stz FLASH_COUNTER
   pla
@@ -347,9 +339,9 @@ handle_left:
 handle_right:
   pha
   jsr gd_select
-  jsr cursor_temp_off
+  jsr cursor_off
   jsr gd_next_character
-  jsr cursor_temp_restore
+  jsr cursor_on
   jsr gd_unselect
   stz FLASH_COUNTER
   pla
@@ -359,14 +351,14 @@ handle_right:
 handle_up:
   pha
   jsr gd_select
-  jsr cursor_temp_off
+  jsr cursor_off
 
   lda GD_ROW
   beq .skip
   dec GD_ROW
 .skip:
 
-  jsr cursor_temp_restore
+  jsr cursor_on
   jsr gd_unselect
   stz FLASH_COUNTER
   pla
@@ -376,7 +368,7 @@ handle_up:
 handle_down:
   pha
   jsr gd_select
-  jsr cursor_temp_off
+  jsr cursor_off
 
   lda GD_ROW
   cmp #(GD_CHAR_ROWS - 1)
@@ -384,7 +376,7 @@ handle_down:
   inc GD_ROW
 .skip:
 
-  jsr cursor_temp_restore
+  jsr cursor_on
   jsr gd_unselect
   stz FLASH_COUNTER
   pla
