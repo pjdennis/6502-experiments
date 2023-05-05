@@ -58,8 +58,8 @@ StateCellCmp	= $03	; Current cell loaded for branch on Z flag
 cellsSize	= cellsEnd - cells
 codeSize 	= codeEnd - code
 
-_getch		= bf_getchar
-_putch		= bf_putchar
+_bf_getch		= bf_getchar
+_bf_putch		= bf_putchar
 
 
 ; Zero page variables
@@ -85,13 +85,13 @@ BF_ZERO_PAGE_STOP	= BF_ZERO_PAGE_BASE + $0d
 	lda #<(\start)
 	ldx #>(\start)
 	ldy #(\end)-(\start)
-	jsr copyCode
+	jsr bf_copyCode
  	.endm
 
 
-	.macro emitByteFromMemoryUsingA,address
+	.macro bf_emitByteFromMemoryUsingA,address
 	lda \address
-	jsr emitByte
+	jsr bf_emitByte
 	.endm
 
 
@@ -146,9 +146,9 @@ bf_compile:
 	; Emit code to initialize the state of the data cells
 	emitCode initCells,initCellsEnd
 
-_whileCompile:
+_bf_whileCompile:
 	lda (iptr)
-	bne _incCell
+	bne _bf_incCell
 	jsr processState
 	; Emit code to end the program
 	emitCode endProgram,endProgramEnd
@@ -156,9 +156,9 @@ _whileCompile:
 
 
 ; Increment current cell '+'
-_incCell:
+_bf_incCell:
 	cmp #AscPlus
-	bne _decCell
+	bne _bf_decCell
 
 	lda state
 	cmp #StateModCell
@@ -168,13 +168,13 @@ _incCell:
 	sta state
 .modifyingCell:
 	inc count
-	jmp _nextCompile
+	jmp _bf_nextCompile
 
 
 ; Decrement current cell '-'
-_decCell:
+_bf_decCell:
 	cmp #AscMinus
-	bne _decDptr
+	bne _bf_decDptr
 
 	cmp #StateModCell
 	beq .modifyingCell
@@ -183,13 +183,13 @@ _decCell:
 	sta state
 .modifyingCell:
 	dec count
-	jmp _nextCompile
+	jmp _bf_nextCompile
 
 
 ; Decrement dptr '<'
-_decDptr:
+_bf_decDptr:
 	cmp #AscLT
-	bne _incDptr
+	bne _bf_incDptr
 
 	lda state
 	cmp #StateModDptr
@@ -199,13 +199,13 @@ _decDptr:
 	sta state
 .modifyingDptr:
 	dec16usingA count
-	jmp _nextCompile
+	jmp _bf_nextCompile
 
 
 ; Increment dptr '>'
-_incDptr:
+_bf_incDptr:
 	cmp #AscGT
-	bne _outputCell
+	bne _bf_outputCell
 
 	lda state
 	cmp #StateModDptr
@@ -215,43 +215,43 @@ _incDptr:
 	sta state
 .modifyingDptr:
 	inc16 count
-	jmp _nextCompile
+	jmp _bf_nextCompile
 
 
 ; Output current cell '.'
-_outputCell:
+_bf_outputCell:
 	; no longer collecting increments so emit any pending code
 	pha
 	jsr processState
 	pla
 
 	cmp #AscDot
-	bne _inputCell
+	bne _bf_inputCell
 
 	; Emit code to output the current cell to the console
 	emitCode outputCell,outputCellEnd
 	lda #StateDefault
 	sta state
-	jmp _nextCompile
+	jmp _bf_nextCompile
 
 
 ; Input current cell ','
-_inputCell:
+_bf_inputCell:
 	cmp #AscComma
-	bne _leftBracket
+	bne _bf_leftBracket
 
 	; Emit code to input from console into the current cell
 	emitCode inputCell,inputCellEnd
 
 	lda #StateDefault
 	sta state
-	jmp _nextCompile
+	jmp _bf_nextCompile
 
 
 ; Start loop '['
-_leftBracket:
+_bf_leftBracket:
 	cmp #AscLB
-	bne _rightBracket
+	bne _bf_rightBracket
 	
 	lda state
 	cmp #StateCellCmp
@@ -268,13 +268,13 @@ _leftBracket:
 	add8iTo16usingA dptr,2
 	lda #StateCellCmp
 	sta state
-	jmp _nextCompile
+	jmp _bf_nextCompile
 
 
 ; End loop ']'
-_rightBracket:
+_bf_rightBracket:
 	cmp #AscRB
-	bne _ignoreInput
+	bne _bf_ignoreInput
 
 	; Get the fixup address off the stack
 	pop16usingA fixup
@@ -301,42 +301,42 @@ _rightBracket:
 	sta (fixup)
 	inc16 fixup
 	; Emit backwards jump address
-	emitByteFromMemoryUsingA fixup
-	emitByteFromMemoryUsingA fixup+1
+	bf_emitByteFromMemoryUsingA fixup
+	bf_emitByteFromMemoryUsingA fixup+1
 	lda #StateCellCmp
 	sta state
-	jmp _nextCompile
+	jmp _bf_nextCompile
 
 
 ; All other characters are ignored
-_ignoreInput:
+_bf_ignoreInput:
 	; fall through
 
 
-_nextCompile:
+_bf_nextCompile:
 	inc16 iptr
-	jmp _whileCompile
+	jmp _bf_whileCompile
 
 
 ; processState handles finalizing the current state prior to assigning a new state
 processState:
 	lda state
 	cmp #StateDefault
-	bne _stateCellCmp
+	bne _bf_stateCellCmp
 	rts
 
 
 ; Current cell has been compared to 0. No further action needed
-_stateCellCmp:
+_bf_stateCellCmp:
 	cmp #StateCellCmp
-	bne _stateModCell
+	bne _bf_stateModCell
 	rts
 
 
 ; Current cell has been modified. Emit code to do the modification
-_stateModCell:
+_bf_stateModCell:
 	cmp #StateModCell
-	bne _stateModDptr
+	bne _bf_stateModDptr
 	
 	lda count
 	cmp #$01
@@ -353,7 +353,7 @@ _stateModCell:
 .add:
 	; Emit code to add (positive or negative value) to current cell
 	emitCode modCell,modCellAdd+1
-	emitByteFromMemoryUsingA count
+	bf_emitByteFromMemoryUsingA count
 	emitCode modCellAdd+2,modCellEnd
 .done:
 	; Reset count
@@ -364,7 +364,7 @@ _stateModCell:
 
 
 ; dptr has been modified. Emit code to update based on count (word)
-_stateModDptr:
+_bf_stateModDptr:
 	; Choose the most efficient way of modifying dptr
 	lda count+1
 	bne .decrement
@@ -377,7 +377,7 @@ _stateModDptr:
 .addPosByte:
 	; Emit code to add count as a positive value < 256 to dptr
 	emitCode addDptrPosByte,addDptrPosByteAdd+1
-	emitByteFromMemoryUsingA count
+	bf_emitByteFromMemoryUsingA count
 	emitCode addDptrPosByteAdd+2,addDptrPosByteEnd
 	jmp .done
 .decrement:
@@ -393,15 +393,15 @@ _stateModDptr:
 .addNegByte:
 	; Emit code to add count as a negative value >= -256 to dptr
 	emitCode addDptrNegByte,addDptrNegByteAdd+1
-	emitByteFromMemoryUsingA count
+	bf_emitByteFromMemoryUsingA count
 	emitCode addDptrNegByteAdd+2,addDptrNegByteEnd
 	jmp .done
 .addWord:
 	; Emit code to add count as a signed word to dptr
 	emitCode addDptrWord,addDptrWordAddLow+1
-	emitByteFromMemoryUsingA count
+	bf_emitByteFromMemoryUsingA count
 	emitCode addDptrWordAddLow+2,addDptrWordAddHigh+1
-	emitByteFromMemoryUsingA count+1
+	bf_emitByteFromMemoryUsingA count+1
 	emitCode addDptrWordAddHigh+2,addDptrWordEnd
 .done:
 	; Reset count
@@ -413,7 +413,7 @@ _stateModDptr:
 
 ; On entry A contains the byte to emit (store at the dptr address)
 ; On exit dptr has been incremented
-emitByte:
+bf_emitByte:
 	sta (dptr)
 	inc16 dptr
 	rts
@@ -422,12 +422,12 @@ emitByte:
 ; Copy code to the output buffer
 ; On entry A, X contains the low, high bytes pointing to the code
 ;          Y contains the number of bytes of code to copy
-copyCode:
+bf_copyCode:
 	sta cptr
 	stx cptr+1
 .loop:
 	lda (cptr)
-	jsr emitByte
+	jsr bf_emitByte
 	inc16 cptr
 	dey
 	bne .loop
@@ -533,12 +533,12 @@ addDptrWordEnd:
 
 outputCell:
 	lda (dptr)
-	jsr _putch
+	jsr _bf_putch
 outputCellEnd:
 
 
 inputCell:
-	jsr _getch
+	jsr _bf_getch
 	sta (dptr)
 inputCellEnd:
 
