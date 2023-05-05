@@ -95,10 +95,10 @@ BF_ZERO_PAGE_STOP	= BF_ZERO_PAGE_BASE + $0d
 	.endm
 
 
-	.macro runBfProgram,codeAddress
+	.macro bf_compile_and_run,codeAddress
 	lda #<(\codeAddress)
 	ldx #>(\codeAddress)
-	jmp runProgram
+	jmp bf_do_compile_and_run
 	.endm
 
 
@@ -107,34 +107,35 @@ BF_ZERO_PAGE_STOP	= BF_ZERO_PAGE_BASE + $0d
 ;
 doHello:
 	; The classic hello world program.
-	runBfProgram helloWorld
+	bf_compile_and_run helloWorld
 
 doSierpinski:
 	; The Sierpinski triangle program.
-	runBfProgram sierpinski
+	bf_compile_and_run sierpinski
 
 doGolden:
 	; The Golden ratio program.
-	runBfProgram golden
+	bf_compile_and_run golden
 
 doFibonacci:
 	; The fibonacci program.
-	runBfProgram fibonacci
+	bf_compile_and_run fibonacci
 
 doLife:
 	; The Conway game of life program.
-	runBfProgram life
+	bf_compile_and_run life
 
 
-runProgram:
+; On entry A, X contains the address of the bf program
+bf_do_compile_and_run:
 	sta iptr
 	stx iptr+1
-	jsr compile	; translate source into executable code
-	jmp code	; directly execute the code
+	jsr bf_compile	; translate source into executable code
+	jmp code	; directly execute the code (tail call)
 
 
 ; compile scans the characters and produces a machine code stream.
-compile:
+bf_compile:
 	; use dptr as the index into the code
 	sti16usingA dptr,code
 	; Initialize parser state
