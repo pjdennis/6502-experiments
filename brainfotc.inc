@@ -100,6 +100,15 @@ BF_ZERO_PAGE_STOP	= BF_ZERO_PAGE_BASE + $0d
 	.endm
 
 
+	.macro dec16usingA,address
+	lda \address
+	bne .\@
+	dec \address+1
+	.\@:
+	dec \address
+	.endm
+
+
 ;
 ; Functions
 ;
@@ -207,12 +216,8 @@ _decDptr:
 	sta state
 
 .over1:
-	lda count
-	bne .over2
-	dec count+1
-.over2:
+	dec16usingA count
 
-	dec count
 	jmp _nextCompile
 
 
@@ -272,12 +277,12 @@ _leftBracket:
 	
 	lda state
 	cmp #StateCellCmp
-	beq .over1
+	beq .currentCellHasBeenComparedToZero
 
 	; Emit code to load dptr
 	emitCode loadDptr,loadDptrEnd
 
-.over1:
+.currentCellHasBeenComparedToZero:
 	; Emit code to branch forward
 	emitCode branchForward,branchForwardJumpInstruction+1
 
@@ -314,12 +319,12 @@ _rightBracket:
 
 	lda state
 	cmp #StateCellCmp
-	beq .over1	; current cell already compared to 0
+	beq .currentCellHasBeenComparedToZero
 
 	; Emit code to load dptr
 	emitCode loadDptr,loadDptrEnd
 
-.over1:
+.currentCellHasBeenComparedToZero:
 	; Emit code to branch backward
 	emitCode branchBackward,branchBackwardJumpInstruction+1
 
@@ -592,11 +597,7 @@ modCellEnd:
 
 
 decDptr:
-	lda dptr
-	bne .over
-	dec dptr+1
-.over:
-	dec dptr
+	dec16usingA dptr
 decDptrEnd:
 
 
