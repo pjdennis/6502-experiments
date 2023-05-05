@@ -144,14 +144,14 @@ bf_compile:
 	stz16 bf_count
 	; All programs start with memory cell initialization
 	; Emit code to initialize the state of the data cells
-	bf_emitCode initCells,initCellsEnd
+	bf_emitCode bf_initCells,bf_initCellsEnd
 
 _bf_whileCompile:
 	lda (bf_iptr)
 	bne _bf_incCell
 	jsr processState
 	; Emit code to end the program
-	bf_emitCode endProgram,endProgramEnd
+	bf_emitCode bf_endProgram,bf_endProgramEnd
 	rts
 
 
@@ -229,7 +229,7 @@ _bf_outputCell:
 	bne _bf_inputCell
 
 	; Emit code to output the current cell to the console
-	bf_emitCode outputCell,outputCellEnd
+	bf_emitCode bf_outputCell,bf_outputCellEnd
 	lda #bf_StateDefault
 	sta bf_state
 	jmp _bf_nextCompile
@@ -241,7 +241,7 @@ _bf_inputCell:
 	bne _bf_leftBracket
 
 	; Emit code to input from console into the current cell
-	bf_emitCode inputCell,inputCellEnd
+	bf_emitCode bf_inputCell,bf_inputCellEnd
 
 	lda #bf_StateDefault
 	sta bf_state
@@ -257,10 +257,10 @@ _bf_leftBracket:
 	cmp #bf_StateCellCmp
 	beq .currentCellHasBeenComparedToZero
 	; Emit code to load bf_dptr
-	bf_emitCode loadDptr,loadDptrEnd
+	bf_emitCode bf_loadDptr,bf_loadDptrEnd
 .currentCellHasBeenComparedToZero:
 	; Emit code to branch forward
-	bf_emitCode branchForward,branchForwardJumpInstruction+1
+	bf_emitCode bf_branchForward,bf_branchForwardJumpInstruction+1
 	; push current PC for later.
 	push16usingA bf_dptr
 	; Skip past reserved space for jump address
@@ -282,10 +282,10 @@ _bf_rightBracket:
 	cmp #bf_StateCellCmp
 	beq .currentCellHasBeenComparedToZero
 	; Emit code to load bf_dptr
-	bf_emitCode loadDptr,loadDptrEnd
+	bf_emitCode bf_loadDptr,bf_loadDptrEnd
 .currentCellHasBeenComparedToZero:
 	; Emit code to branch backward
-	bf_emitCode branchBackward,branchBackwardJumpInstruction+1
+	bf_emitCode bf_branchBackward,bf_branchBackwardJumpInstruction+1
 	; Address of next instruction into bf_temp
 	; bf_temp <- bf_dptr (word)
 	copy16usingA bf_temp,bf_dptr
@@ -322,39 +322,39 @@ _bf_nextCompile:
 processState:
 	lda bf_state
 	cmp #bf_StateDefault
-	bne _bf_bf_stateCellCmp
+	bne _bf_stateCellCmp
 	rts
 
 
 ; Current cell has been compared to 0. No further action needed
-_bf_bf_stateCellCmp:
+_bf_stateCellCmp:
 	cmp #bf_StateCellCmp
-	bne _bf_bf_stateModCell
+	bne _bf_stateModCell
 	rts
 
 
 ; Current cell has been modified. Emit code to do the modification
-_bf_bf_stateModCell:
+_bf_stateModCell:
 	cmp #bf_StateModCell
-	bne _bf_bf_stateModDptr
+	bne _bf_stateModDptr
 	
 	lda bf_count
 	cmp #$01
 	bne .decrement
 	; Emit code to increment current cell
-	bf_emitCode incCell,incCellEnd
+	bf_emitCode bf_incCell,bf_incCellEnd
 	jmp .done
 .decrement:
 	cmp #$ff
 	bne .add
 	; Emit code to decrement current cell
-	bf_emitCode decCell,decCellEnd
+	bf_emitCode bf_decCell,bf_decCellEnd
 	jmp .done
 .add:
 	; Emit code to add (positive or negative value) to current cell
-	bf_emitCode modCell,modCellAdd+1
+	bf_emitCode bf_modCell,bf_modCellAdd+1
 	bf_emitByteFromMemoryUsingA bf_count
-	bf_emitCode modCellAdd+2,modCellEnd
+	bf_emitCode bf_modCellAdd+2,bf_modCellEnd
 .done:
 	; Reset bf_count
 	stz bf_count
@@ -364,7 +364,7 @@ _bf_bf_stateModCell:
 
 
 ; bf_dptr has been modified. Emit code to update based on bf_count (word)
-_bf_bf_stateModDptr:
+_bf_stateModDptr:
 	; Choose the most efficient way of modifying bf_dptr
 	lda bf_count+1
 	bne .decrement
@@ -372,13 +372,13 @@ _bf_bf_stateModDptr:
 	cmp #$01
 	bne .addPosByte
 	; bf_count == 1: emit code to increment bf_dptr
-	bf_emitCode incDptr,incDptrEnd
+	bf_emitCode bf_incDptr,bf_incDptrEnd
 	jmp .done
 .addPosByte:
 	; Emit code to add bf_count as a positive value < 256 to bf_dptr
-	bf_emitCode addDptrPosByte,addDptrPosByteAdd+1
+	bf_emitCode bf_addDptrPosByte,bf_addDptrPosByteAdd+1
 	bf_emitByteFromMemoryUsingA bf_count
-	bf_emitCode addDptrPosByteAdd+2,addDptrPosByteEnd
+	bf_emitCode bf_addDptrPosByteAdd+2,bf_addDptrPosByteEnd
 	jmp .done
 .decrement:
 	lda bf_count+1
@@ -388,21 +388,21 @@ _bf_bf_stateModDptr:
 	cmp #$ff
 	bne .addNegByte
 	; Emit code to decrement bf_dptr
-	bf_emitCode decDptr,decDptrEnd
+	bf_emitCode bf_decDptr,bf_decDptrEnd
 	jmp .done
 .addNegByte:
 	; Emit code to add bf_count as a negative value >= -256 to bf_dptr
-	bf_emitCode addDptrNegByte,addDptrNegByteAdd+1
+	bf_emitCode bf_addDptrNegByte,bf_addDptrNegByteAdd+1
 	bf_emitByteFromMemoryUsingA bf_count
-	bf_emitCode addDptrNegByteAdd+2,addDptrNegByteEnd
+	bf_emitCode bf_addDptrNegByteAdd+2,bf_addDptrNegByteEnd
 	jmp .done
 .addWord:
 	; Emit code to add bf_count as a signed word to bf_dptr
-	bf_emitCode addDptrWord,addDptrWordAddLow+1
+	bf_emitCode bf_addDptrWord,bf_addDptrWordAddLow+1
 	bf_emitByteFromMemoryUsingA bf_count
-	bf_emitCode addDptrWordAddLow+2,addDptrWordAddHigh+1
+	bf_emitCode bf_addDptrWordAddLow+2,bf_addDptrWordAddHigh+1
 	bf_emitByteFromMemoryUsingA bf_count+1
-	bf_emitCode addDptrWordAddHigh+2,addDptrWordEnd
+	bf_emitCode bf_addDptrWordAddHigh+2,bf_addDptrWordEnd
 .done:
 	; Reset bf_count
 	stz16 bf_count
@@ -438,7 +438,7 @@ bf_copyCode:
 ; These secions of code function as templates for compiled code to execute programs.
 ;
 
-initCells:
+bf_initCells:
 	lda #<bf_cells
 	sta bf_dptr
 	lda #>bf_cells
@@ -458,113 +458,113 @@ initCells:
 	sta bf_dptr
 	lda #>bf_cells
 	sta bf_dptr+1
-initCellsEnd:
+bf_initCellsEnd:
 
 
-incCell:
+bf_incCell:
 	lda (bf_dptr)
 	inc
 	sta (bf_dptr)
-incCellEnd:
+bf_incCellEnd:
 
 
-decCell:
+bf_decCell:
 	lda (bf_dptr)
 	dec
 	sta (bf_dptr)
-decCellEnd:
+bf_decCellEnd:
 
 
-modCell:
+bf_modCell:
 	clc
 	lda (bf_dptr)
-modCellAdd:
+bf_modCellAdd:
 	adc #0		; placeholder
 	sta (bf_dptr)
-modCellEnd:
+bf_modCellEnd:
 
 
-decDptr:
+bf_decDptr:
 	dec16usingA bf_dptr
-decDptrEnd:
+bf_decDptrEnd:
 
 
-incDptr:
+bf_incDptr:
 	inc16 bf_dptr
-incDptrEnd:
+bf_incDptrEnd:
 
 
-addDptrNegByte:
+bf_addDptrNegByte:
 	clc
 	lda bf_dptr
-addDptrNegByteAdd:
+bf_addDptrNegByteAdd:
 	adc #0		;placeholder
 	sta bf_dptr
 	bcs .over
 	dec bf_dptr+1
 .over:
-addDptrNegByteEnd:
+bf_addDptrNegByteEnd:
 
 
-addDptrPosByte:
+bf_addDptrPosByte:
 	clc
 	lda bf_dptr
-addDptrPosByteAdd:
+bf_addDptrPosByteAdd:
 	adc #0		; placeholder
 	sta bf_dptr
 	bcc .over
 	inc bf_dptr+1
 .over:
-addDptrPosByteEnd:
+bf_addDptrPosByteEnd:
 
 
-addDptrWord:
+bf_addDptrWord:
 	clc
 	lda bf_dptr
-addDptrWordAddLow:
+bf_addDptrWordAddLow:
 	adc #0		; placeholder
 	sta bf_dptr
 	lda bf_dptr+1
-addDptrWordAddHigh:
+bf_addDptrWordAddHigh:
 	adc #0		; placeholder
 	sta bf_dptr+1
-addDptrWordEnd:
+bf_addDptrWordEnd:
 
 
-outputCell:
+bf_outputCell:
 	lda (bf_dptr)
 	jsr _bf_putch
-outputCellEnd:
+bf_outputCellEnd:
 
 
-inputCell:
+bf_inputCell:
 	jsr _bf_getch
 	sta (bf_dptr)
-inputCellEnd:
+bf_inputCellEnd:
 
 
-loadDptr:
+bf_loadDptr:
 	lda (bf_dptr)
-loadDptrEnd:
+bf_loadDptrEnd:
 
 
-branchForward:
-	bne bf_over	; Branch on data cell containing zero
-branchForwardJumpInstruction:
-	jmp 0		; placeholder
-bf_over:
+bf_branchForward:
+	bne bf_branchForward_over	; Branch on data cell containing zero
+bf_branchForwardJumpInstruction:
+	jmp 0				; placeholder
+bf_branchForward_over:
 
 
-branchBackward:
-	beq bb_over	; Branch on data cell containing zero
-branchBackwardJumpInstruction:
-	jmp 0		; placeholder
-bb_over:
+bf_branchBackward:
+	beq bf_branchBackward_over	; Branch on data cell containing zero
+bf_branchBackwardJumpInstruction:
+	jmp 0				; placeholder
+bf_branchBackward_over:
 
 
-endProgram:
+bf_endProgram:
 	rts		; return to calling program.
-endProgramEnd:
+bf_endProgramEnd:
 
 
 ;
