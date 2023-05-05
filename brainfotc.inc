@@ -142,6 +142,22 @@ BF_ZERO_PAGE_STOP	= BF_ZERO_PAGE_BASE + $0d
 	.endm
 
 
+	.macro push16usingA,address
+	lda \address+1
+	pha
+	lda \address
+	pha
+	.endm
+
+
+	.macro pop16usingA,address
+	pla
+	sta \address
+	pla
+	sta \address+1
+	.endm
+
+
 ;
 ; Functions
 ;
@@ -175,14 +191,12 @@ runProgram:
 
 ; compile scans the characters and produces a machine code stream.
 compile:
-	sti16usingA dptr,code ; use dptr as the index into the code
-	
+	; use dptr as the index into the code
+	sti16usingA dptr,code
 	; Initialize parser state
 	lda #StateDefault
 	sta state
-
 	stz16 count
-
 	; All programs start with memory cell initialization
 	; Emit code to initialize the state of the data cells
 	emitCode initCells,initCellsEnd
@@ -190,12 +204,9 @@ compile:
 _whileCompile:
 	lda (iptr)
 	bne _incCell
-
 	jsr processState
-
 	; Emit code to end the program
 	emitCode endProgram,endProgramEnd
-
 	rts
 
 
@@ -206,12 +217,11 @@ _incCell:
 
 	lda state
 	cmp #StateModCell
-	beq .over
+	beq .modifyingCell
 	jsr processState
 	lda #StateModCell
 	sta state
-
-.over:
+.modifyingCell:
 	inc count
 	jmp _nextCompile
 
@@ -222,12 +232,11 @@ _decCell:
 	bne _decDptr
 
 	cmp #StateModCell
-	beq .over
+	beq .modifyingCell
 	jsr processState
 	lda #StateModCell
 	sta state
-
-.over:
+.modifyingCell:
 	dec count
 	jmp _nextCompile
 
@@ -239,14 +248,12 @@ _decDptr:
 
 	lda state
 	cmp #StateModDptr
-	beq .over1
+	beq .modifyingDptr
 	jsr processState
 	lda #StateModDptr
 	sta state
-
-.over1:
+.modifyingDptr:
 	dec16usingA count
-
 	jmp _nextCompile
 
 
@@ -257,14 +264,12 @@ _incDptr:
 
 	lda state
 	cmp #StateModDptr
-	beq .over1
+	beq .modifyingDptr
 	jsr processState
 	lda #StateModDptr
 	sta state
-
-.over1:
+.modifyingDptr:
 	inc16 count
-
 	jmp _nextCompile
 
 
@@ -280,7 +285,6 @@ _outputCell:
 
 	; Emit code to output the current cell to the console
 	emitCode outputCell,outputCellEnd
-
 	lda #StateDefault
 	sta state
 	jmp _nextCompile
@@ -307,23 +311,16 @@ _leftBracket:
 	lda state
 	cmp #StateCellCmp
 	beq .currentCellHasBeenComparedToZero
-
 	; Emit code to load dptr
 	emitCode loadDptr,loadDptrEnd
-
 .currentCellHasBeenComparedToZero:
 	; Emit code to branch forward
 	emitCode branchForward,branchForwardJumpInstruction+1
-
-	lda dptr+1	; push current PC for later.
-	pha
-	lda dptr
-	pha
-
+	; push current PC for later.
+	push16usingA dptr
 	; Skip past reserved space for jump address
 	; dptr <- dptr + 2
 	add8iTo16usingA dptr,2
-
 	lda #StateCellCmp
 	sta state
 	jmp _nextCompile
@@ -335,50 +332,35 @@ _rightBracket:
 	bne _ignoreInput
 
 	; Get the fixup address off the stack
-	pla
-	sta fixup
-	pla
-	sta fixup+1
-
+	pop16usingA fixup
 	lda state
 	cmp #StateCellCmp
 	beq .currentCellHasBeenComparedToZero
-
 	; Emit code to load dptr
 	emitCode loadDptr,loadDptrEnd
-
 .currentCellHasBeenComparedToZero:
 	; Emit code to branch backward
 	emitCode branchBackward,branchBackwardJumpInstruction+1
-
 	; Address of next instruction into temp
 	; temp <- dptr (word)
 	copy16usingA temp,dptr
-
 	; temp <- temp + 2 (word)
 	add8iTo16usingA temp,2
-
 	; Fixup jump address for left bracket
 	; Store low byte to fixup address
 	lda temp
 	sta (fixup)
-
 	inc16 fixup
-
 	; Store high byte to fixup address
 	lda temp+1
 	sta (fixup)
-
 	inc16 fixup
-
 	; Store low byte
 	lda fixup	; store backwards jump address
 	jsr emitByte
-
 	; Store high byte
 	lda fixup+1
 	jsr emitByte
-
 	lda #StateCellCmp
 	sta state
 	jmp _nextCompile
@@ -391,7 +373,6 @@ _ignoreInput:
 
 _nextCompile:
 	inc16 iptr
-
 	jmp _whileCompile
 
 
@@ -400,7 +381,6 @@ processState:
 	lda state
 	cmp #StateDefault
 	bne _stateCellCmp
-
 	rts
 
 
@@ -408,7 +388,6 @@ processState:
 _stateCellCmp:
 	cmp #StateCellCmp
 	bne _stateModCell
-
 	rts
 
 
@@ -420,31 +399,22 @@ _stateModCell:
 	lda count
 	cmp #$01
 	bne .decrement
-
 	; Emit code to increment current cell
 	emitCode incCell,incCellEnd
-
 	jmp .done
-	
 .decrement:
 	cmp #$ff
 	bne .add
-
 	; Emit code to decrement current cell
 	emitCode decCell,decCellEnd
-
 	jmp .done
-
 .add:
 	; Emit code to add (positive or negative value) to current cell (part 1)
 	emitCode modCell,modCellAdd+1
-
 	lda count
 	jsr emitByte
-
 	; Emit code to add (positive or negative value) to current cell (part 2)
 	emitCode modCellAdd+2,modCellEnd
-	
 .done:
 	; Reset count
 	stz count
@@ -458,75 +428,52 @@ _stateModDptr:
 	; Choose the most efficient way of modifying dptr
 	lda count+1
 	bne .decrement
-
 	lda count
 	cmp #$01
 	bne .addPosByte
-
 	; count == 1: emit code to increment dptr
 	emitCode incDptr,incDptrEnd
-
 	jmp .done
-
 .addPosByte:
 	; Emit code to add count as a positive value < 256 to dptr (part 1)
 	emitCode addDptrPosByte,addDptrPosByteAdd+1
-
 	lda count
 	jsr emitByte
-
 	; Emit code to add count as a positive value < 256 to dptr (part 2)
 	emitCode addDptrPosByteAdd+2,addDptrPosByteEnd
-
 	jmp .done
-
 .decrement:
 	lda count+1
 	cmp #$ff
 	bne .addWord
-
 	lda count
 	cmp #$ff
 	bne .addNegByte
-
 	; Emit code to decrement dptr
 	emitCode decDptr,decDptrEnd
-
 	jmp .done
-
 .addNegByte:
 	; Emit code to add count as a negative value >= -256 to dptr (part 1)
 	emitCode addDptrNegByte,addDptrNegByteAdd+1
-
 	lda count
 	jsr emitByte
-
 	; Emit code to add count as a negative value >= -256 to dptr (part 2)
 	emitCode addDptrNegByteAdd+2,addDptrNegByteEnd
-
 	jmp .done
-
 .addWord:
 	; Emit code to add count as a signed word to dptr (part 1)
 	emitCode addDptrWord,addDptrWordAddLow+1
-
 	lda count
 	jsr emitByte
-
 	; Emit code to add count as a signed word to dptr (part 2)
 	emitCode addDptrWordAddLow+2,addDptrWordAddHigh+1
-
 	lda count+1
 	jsr emitByte
-
 	; Emit code to add count as a signed word to dptr (part 3)
 	emitCode addDptrWordAddHigh+2,addDptrWordEnd
-
 .done:
 	; Reset count
-	lda #0
-	sta count
-	sta count+1
+	stz16 count
 	lda #StateDefault
 	sta state
 	rts
@@ -552,7 +499,6 @@ copyCode:
 	inc16 cptr
 	dey
 	bne .loop
-	
 	rts
 
 
@@ -568,16 +514,13 @@ initCells:
 .loop:
 	lda #$00
 	sta (dptr)
-
 	inc16 dptr
-
 	lda dptr
 	cmp #<cellsEnd
 	bne .loop
 	lda dptr+1
 	cmp #>cellsEnd
 	bne .loop
-
 	; set the dptr back to the start of the cells.
 	lda #<cells
 	sta dptr
@@ -692,7 +635,9 @@ endProgram:
 endProgramEnd:
 
 
+;
 ; Sample programs
+;
 
 ; Simple hello world program
 helloWorld:
@@ -701,6 +646,7 @@ helloWorld:
 	.byte ">>.>---.+++++++..+++.>>.<-.<.+++."
 	.byte "------.--------.>>+.>++."
 	.byte 0
+
 
 ; Fibonacci number generator by Daniel B Cristofani
 ; This program doesn't terminate; you will have to kill it.
@@ -712,6 +658,7 @@ fibonacci:
 	.byte "]<<<"
 	.byte "]", 0
 
+
 ; Shows an ASCII representation of the Sierpinski triangle
 ; (c) 2016 Daniel B. Cristofani
 sierpinski:
@@ -720,6 +667,7 @@ sierpinski:
 	.byte "->[+[-]+>++>>>-<<]<[<]>>++++++[<<+++++>>-]+<<++.[-]<<"
 	.byte "]>.>+[>>]>+"
 	.byte "]", 0
+
 
 ; Compute the "golden ratio". Because this number is infinitely long,
 ; this program doesn't terminate on its own. You will have to kill it.
@@ -735,6 +683,7 @@ golden:
 	.byte "    ]<<<<[[<<]>>[-[+++<<-]+>>-]++[<<]<<<<<+>]"
 	.byte "  >[->>[[>>>[>>]+[-[->>+>>>>-[-[+++<<[-]]+>>-]++[<<]]+<<]<-]<]]>>>>>>>"
 	.byte "]", 0
+
 
 ; Conways game of life
 ;
