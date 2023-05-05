@@ -104,8 +104,19 @@ BF_ZERO_PAGE_STOP	= BF_ZERO_PAGE_BASE + $0d
 	lda \address
 	bne .\@
 	dec \address+1
-	.\@:
+.\@:
 	dec \address
+	.endm
+
+
+	.macro add8iTo16usingA,address,value
+	clc
+	lda \address
+	adc #(\value)
+	sta \address
+	bcc .\@
+	inc \address+1
+.\@:
 	.endm
 
 
@@ -293,13 +304,7 @@ _leftBracket:
 
 	; Skip past reserved space for jump address
 	; dptr <- dptr + 2
-	clc
-	lda dptr
-	adc #2
-	sta dptr
-	bcc .over2
-	inc dptr+1
-.over2:
+	add8iTo16usingA dptr,2
 
 	lda #StateCellCmp
 	sta state
