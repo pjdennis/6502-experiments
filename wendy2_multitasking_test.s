@@ -83,6 +83,14 @@ BUFFER_DATA            = $7d00
   .include prg_morse_demo.inc
 ;  .include prg_small_display_demo.inc
 
+
+  .macro add_program,address
+  lda #<\address
+  ldx #>\address
+  jsr initialize_additional_process
+  .endm
+
+
 program_start:
   ldx #$ff                                 ; Initialize stack
   txs
@@ -127,42 +135,16 @@ program_start:
   jsr reset_and_enable_display_no_cursor
 
   ; Configure the additional processes
-
-  lda #<run_counter_top_left
-  ldx #>run_counter_top_left
-  jsr initialize_additional_process
-
-  lda #<run_counter_top_right
-  ldx #>run_counter_top_right
-  jsr initialize_additional_process
-
-  lda #<run_counter_bottom_left
-  ldx #>run_counter_bottom_left
-  jsr initialize_additional_process
-
-  lda #<run_counter_bottom_right
-  ldx #>run_counter_bottom_right
-  jsr initialize_additional_process
-
-  lda #<run_chase
-  ldx #>run_chase
-  jsr initialize_additional_process
-
-  lda #<play_star_spangled_banner
-  ldx #>play_star_spangled_banner
-;  lda #<play_ditty
-;  ldx #>play_ditty
-  jsr initialize_additional_process
-
-;  lda #<led_control
-;  ldx #>led_control
-;  jsr initialize_additional_process
-
+  add_program run_counter_top_left
+  add_program run_counter_top_right
+  add_program run_counter_bottom_left
+  add_program run_counter_bottom_right
+  add_program run_chase
+  add_program play_star_spangled_banner
+; add_program play_ditty
+; add_program led_control
   jsr add_morse_demo
-
-;  lda #<mini_display_demo
-;  ldx #>mini_display_demo
-;  jsr initialize_additional_process 
+; add_program mini_display_demo
 
   ; Configure timer 2 to be used for task switching
   lda #0                   ; Timer 2 one shot run mode 
