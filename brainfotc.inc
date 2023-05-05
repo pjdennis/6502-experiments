@@ -50,10 +50,10 @@ AscDot		= $2E
 AscLB		= $5B
 AscRB		= $5D
 
-StateDefault	= $00	; Nothing pending
-StateModCell	= $01	; Collecting cell increments into delta
-StateModDptr	= $02	; Collecting pointer increments into delta
-StateCellCmp	= $03	; Current cell loaded for branch on Z flag
+bf_StateDefault	= $00	; Nothing pending
+bf_StateModCell	= $01	; Collecting cell increments into delta
+bf_StateModDptr	= $02	; Collecting pointer increments into delta
+bf_StateCellCmp	= $03	; Current cell loaded for branch on Z flag
 
 bf_cellsSize	= bf_cellsEnd - bf_cells
 bf_codeSize 	= bf_codeEnd - bf_code
@@ -139,7 +139,7 @@ bf_compile:
 	; use bf_dptr as the index into the code
 	sti16usingA bf_dptr,bf_code
 	; Initialize parser state
-	lda #StateDefault
+	lda #bf_StateDefault
 	sta bf_state
 	stz16 bf_count
 	; All programs start with memory cell initialization
@@ -161,10 +161,10 @@ _bf_incCell:
 	bne _bf_decCell
 
 	lda bf_state
-	cmp #StateModCell
+	cmp #bf_StateModCell
 	beq .modifyingCell
 	jsr processState
-	lda #StateModCell
+	lda #bf_StateModCell
 	sta bf_state
 .modifyingCell:
 	inc bf_count
@@ -176,10 +176,10 @@ _bf_decCell:
 	cmp #AscMinus
 	bne _bf_decDptr
 
-	cmp #StateModCell
+	cmp #bf_StateModCell
 	beq .modifyingCell
 	jsr processState
-	lda #StateModCell
+	lda #bf_StateModCell
 	sta bf_state
 .modifyingCell:
 	dec bf_count
@@ -192,10 +192,10 @@ _bf_decDptr:
 	bne _bf_incDptr
 
 	lda bf_state
-	cmp #StateModDptr
+	cmp #bf_StateModDptr
 	beq .modifyingDptr
 	jsr processState
-	lda #StateModDptr
+	lda #bf_StateModDptr
 	sta bf_state
 .modifyingDptr:
 	dec16usingA bf_count
@@ -208,10 +208,10 @@ _bf_incDptr:
 	bne _bf_outputCell
 
 	lda bf_state
-	cmp #StateModDptr
+	cmp #bf_StateModDptr
 	beq .modifyingDptr
 	jsr processState
-	lda #StateModDptr
+	lda #bf_StateModDptr
 	sta bf_state
 .modifyingDptr:
 	inc16 bf_count
@@ -230,7 +230,7 @@ _bf_outputCell:
 
 	; Emit code to output the current cell to the console
 	emitCode outputCell,outputCellEnd
-	lda #StateDefault
+	lda #bf_StateDefault
 	sta bf_state
 	jmp _bf_nextCompile
 
@@ -243,7 +243,7 @@ _bf_inputCell:
 	; Emit code to input from console into the current cell
 	emitCode inputCell,inputCellEnd
 
-	lda #StateDefault
+	lda #bf_StateDefault
 	sta bf_state
 	jmp _bf_nextCompile
 
@@ -254,7 +254,7 @@ _bf_leftBracket:
 	bne _bf_rightBracket
 	
 	lda bf_state
-	cmp #StateCellCmp
+	cmp #bf_StateCellCmp
 	beq .currentCellHasBeenComparedToZero
 	; Emit code to load bf_dptr
 	emitCode loadDptr,loadDptrEnd
@@ -266,7 +266,7 @@ _bf_leftBracket:
 	; Skip past reserved space for jump address
 	; bf_dptr <- bf_dptr + 2
 	add8iTo16usingA bf_dptr,2
-	lda #StateCellCmp
+	lda #bf_StateCellCmp
 	sta bf_state
 	jmp _bf_nextCompile
 
@@ -279,7 +279,7 @@ _bf_rightBracket:
 	; Get the fixup address off the stack
 	pop16usingA bf_fixup
 	lda bf_state
-	cmp #StateCellCmp
+	cmp #bf_StateCellCmp
 	beq .currentCellHasBeenComparedToZero
 	; Emit code to load bf_dptr
 	emitCode loadDptr,loadDptrEnd
@@ -303,7 +303,7 @@ _bf_rightBracket:
 	; Emit backwards jump address
 	bf_emitByteFromMemoryUsingA bf_fixup
 	bf_emitByteFromMemoryUsingA bf_fixup+1
-	lda #StateCellCmp
+	lda #bf_StateCellCmp
 	sta bf_state
 	jmp _bf_nextCompile
 
@@ -321,21 +321,21 @@ _bf_nextCompile:
 ; processState handles finalizing the current state prior to assigning a new state
 processState:
 	lda bf_state
-	cmp #StateDefault
+	cmp #bf_StateDefault
 	bne _bf_bf_stateCellCmp
 	rts
 
 
 ; Current cell has been compared to 0. No further action needed
 _bf_bf_stateCellCmp:
-	cmp #StateCellCmp
+	cmp #bf_StateCellCmp
 	bne _bf_bf_stateModCell
 	rts
 
 
 ; Current cell has been modified. Emit code to do the modification
 _bf_bf_stateModCell:
-	cmp #StateModCell
+	cmp #bf_StateModCell
 	bne _bf_bf_stateModDptr
 	
 	lda bf_count
@@ -358,7 +358,7 @@ _bf_bf_stateModCell:
 .done:
 	; Reset bf_count
 	stz bf_count
-	lda #StateCellCmp
+	lda #bf_StateCellCmp
 	sta bf_state
 	rts
 
@@ -406,7 +406,7 @@ _bf_bf_stateModDptr:
 .done:
 	; Reset bf_count
 	stz16 bf_count
-	lda #StateDefault
+	lda #bf_StateDefault
 	sta bf_state
 	rts
 
