@@ -84,6 +84,7 @@ BUFFER_DATA            = $7d00
 ;  .include prg_small_display_demo.inc
   .include macros.inc
 
+
   .macro add_program,address
   lda #<\address
   ldx #>\address
@@ -265,26 +266,23 @@ interrupt:
   phx                     ; Finish saving outgoing bank registers to stack
   phy
 
-  inc TICKS_COUNTER       ; Increment the ticks counter
-  bne .high_ticks_ok
-  inc TICKS_COUNTER + 1
-.high_ticks_ok:
+  inc16 TICKS_COUNTER     ; Increment the ticks counter
 
 switch_to_next_bank:
   tsx                     ; Save outgoing bank stack pointer to save location
   stx STACK_POINTER_SAVE
 
-find_next_bank:
+.find_next_bank:
   lda BANK_PORT
   and #BANK_MASK
   sta BANK_TEMP
 
-next_bank:  
+.next_bank:
   inc                     ; Increment the memory bank
   cmp FIRST_UNUSED_BANK
-  bne interrupt_bank_ok
+  bne .bank_ok
   lda #BANK_START         ; We were on the last bank so start over at the first
-interrupt_bank_ok:
+.bank_ok:
   tax
   lda #BANK_MASK
   trb BANK_PORT
@@ -292,18 +290,18 @@ interrupt_bank_ok:
   tsb BANK_PORT           ; Switch to incoming bank
 
   lda SLEEPING
-  beq not_sleeping        ; Branch if not sleeping
+  beq .not_sleeping       ; Branch if not sleeping
 
   lda WAKE_AT             ; Compare WAKE_AT - TICKS_COUNTER
   cmp TICKS_COUNTER
   lda WAKE_AT + 1
   sbc TICKS_COUNTER + 1
-  bmi stop_sleeping       ; Stop sleeping if WAKE_AT <= TICKS_COUNTER
+  bmi .stop_sleeping      ; Stop sleeping if WAKE_AT <= TICKS_COUNTER
 
   lda BANK_PORT
   and #BANK_MASK
   cmp BANK_TEMP
-  bne next_bank
+  bne .next_bank
 
   ; Everything is sleeping
   wai
@@ -314,9 +312,9 @@ interrupt_bank_ok:
   sta T2CH                ; (Store to the high register starts the timer and clears interrupt)
 
   inc16 TICKS_COUNTER     ; Increment the ticks counter
-  bra find_next_bank
+  bra .find_next_bank
 
-stop_sleeping:
+.stop_sleeping:
   stz SLEEPING            ; Stop sleeping
 
   ldx STACK_POINTER_SAVE
@@ -324,7 +322,7 @@ stop_sleeping:
   cli
   rts
 
-not_sleeping:
+.not_sleeping:
   ldx STACK_POINTER_SAVE ; Restore incoming bank stack pointer from save location
   txs
 
