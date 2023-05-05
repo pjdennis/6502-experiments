@@ -10,6 +10,12 @@ CT_COMMAND_FUNCTION_PTR = CT_ZERO_PAGE_BASE + $04 ; 2 bytes
 CT_ZERO_PAGE_STOP       = CT_ZERO_PAGE_BASE + $06
 
 
+  .macro ct_entry,command,address
+  .asciiz \command
+  .word \address
+  .endm
+
+
 ; On entry A, X (low, high) points to the potential command
 ; On exit CT_CT_COMMAND_FUNCTION_PTR contains the address of the command function if found
 ;         C is set if command found or clear if not found

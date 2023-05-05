@@ -33,22 +33,110 @@ bf_codeEnd               = $2000
   .include brainfotc.inc
 
 
+;
+; Sample programs
+;
+
+; Simple hello world program
+helloWorld:
+	.byte "++++++++"
+	.byte "[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]"
+	.byte ">>.>---.+++++++..+++.>>.<-.<.+++."
+	.byte "------.--------.>>+.>++."
+	.byte 0
 
 
+; Fibonacci number generator by Daniel B Cristofani
+; This program doesn't terminate; you will have to kill it.
+fibonacci:
+	.byte ">++++++++++>+>+["
+	.byte "[+++++[>++++++++<-]>.<++++++[>--------<-]+<<<]>.>>["
+        .byte "[-]<[>+<-]>>[<<+>+>-]<[>+<-[>+<-[>+<-[>+<-[>+<-[>+<-"
+        .byte "[>+<-[>+<-[>+<-[>[-]>+>+<<<-[>+<-]]]]]]]]]]]+>>>"
+	.byte "]<<<"
+	.byte "]", 0
 
+
+; Shows an ASCII representation of the Sierpinski triangle
+; (c) 2016 Daniel B. Cristofani
+sierpinski:
+	.byte "++++++++[>+>++++<<-]>++>>+<[-[>>+<<-]+>>]>+["
+	.byte "-<<<["
+	.byte "->[+[-]+>++>>>-<<]<[<]>>++++++[<<+++++>>-]+<<++.[-]<<"
+	.byte "]>.>+[>>]>+"
+	.byte "]", 0
+
+
+; Compute the "golden ratio". Because this number is infinitely long,
+; this program doesn't terminate on its own. You will have to kill it.
+golden:
+	.byte "+>>>>>>>++>+>+>+>++<["
+	.byte "  +["
+	.byte "    --[++>>--]->--["
+	.byte "      +["
+	.byte "        +<+[-<<+]++<<[-[->-[>>-]++<[<<]++<<-]+<<]>>>>-<<<<"
+	.byte "          <++<-<<++++++[<++++++++>-]<.---<[->.[-]+++++>]>[[-]>>]"
+	.byte "          ]+>>--"
+	.byte "      ]+<+[-<+<+]++>>"
+	.byte "    ]<<<<[[<<]>>[-[+++<<-]+>>-]++[<<]<<<<<+>]"
+	.byte "  >[->>[[>>>[>>]+[-[->>+>>>>-[-[+++<<[-]]+>>-]++[<<]]+<<]<-]<]]>>>>>>>"
+	.byte "]", 0
+
+
+; Conways game of life
+;
+; Adjust the number of '+' operations inside the parenthesis () to control the dimensions
+; of the board.
+life:
+	.byte ">>>->+>+++++>(++++++++++)[[>>>+<<<-]>+++++>+>>+[<<+>>>>>+<<<-]<-]>>>>["
+	.byte "  [>>>+>+<<<<-]+++>>+[<+>>>+>+<<<-]>>[>[[>>>+<<<-]<]<<++>+>>>>>>-]<-"
+	.byte "]+++>+>[[-]<+<[>+++++++++++++++++<-]<+]>>["
+	.byte "  [+++++++++.-------->>>]+[-<<<]>>>[>>,----------[>]<]<<["
+	.byte "    <<<["
+	.byte "      >--[<->>+>-<<-]<[[>>>]+>-[+>>+>-]+[<<<]<-]>++>[<+>-]"
+	.byte "      >[[>>>]+[<<<]>>>-]+[->>>]<-[++>]>[------<]>+++[<<<]>"
+	.byte "    ]<"
+	.byte "  ]>["
+	.byte "    -[+>>+>-]+>>+>>>+>[<<<]>->+>["
+	.byte "      >[->+>+++>>++[>>>]+++<<<++<<<++[>>>]>>>]<<<[>[>>>]+>>>]"
+	.byte "      <<<<<<<[<<++<+[-<<<+]->++>>>++>>>++<<<<]<<<+[-<<<+]+>->>->>"
+	.byte "    ]<<+<<+<<<+<<-[+<+<<-]+<+["
+	.byte "      ->+>[-<-<<[<<<]>[>>[>>>]<<+<[<<<]>-]]"
+	.byte "      <[<[<[<<<]>+>>[>>>]<<-]<[<<<]]>>>->>>[>>>]+>"
+	.byte "    ]>+[-<<[-]<]-["
+	.byte "      [>>>]<[<<[<<<]>>>>>+>[>>>]<-]>>>[>[>>>]<<<<+>[<<<]>>-]>"
+	.byte "    ]<<<<<<[---<-----[-[-[<->>+++<+++++++[-]]]]<+<+]>"
+	.byte "  ]>>"
+	.byte "]", 0
+
+
+doHello:
+	; The classic hello world program.
+	bf_compile_and_run helloWorld
+
+doSierpinski:
+	; The Sierpinski triangle program.
+	bf_compile_and_run sierpinski
+
+doGolden:
+	; The Golden ratio program.
+	bf_compile_and_run golden
+
+doFibonacci:
+	; The fibonacci program.
+	bf_compile_and_run fibonacci
+
+doLife:
+	; The Conway game of life program.
+	bf_compile_and_run life
 
 
 CT_COMMANDS:
-  .asciiz "hello"
-                          .word doHello
-  .asciiz "sierpinski"
-                          .word doSierpinski
-  .asciiz "golden"
-                          .word doGolden
-  .asciiz "fibonacci"
-                          .word doFibonacci
-  .asciiz "life"
-                          .word doLife
+  ct_entry "hello",      doHello
+  ct_entry "sierpinski", doSierpinski
+  ct_entry "golden",     doGolden
+  ct_entry "fibonacci",  doFibonacci
+  ct_entry "life",       doLife
   .byte 0
 
  
@@ -58,11 +146,8 @@ program_start:
   txs
 
   jsr gcf_init
-
   jsr doLife
-
   jmp cr_repl
-
 
 .end_of_program:
   .assert INTERRUPT_ROUTINE >= .end_of_program, "Program is too long"
