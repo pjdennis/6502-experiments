@@ -58,8 +58,8 @@ bf_StateCellCmp	= $03	; Current cell loaded for branch on Z flag
 bf_cellsSize	= bf_cellsEnd - bf_cells
 bf_codeSize 	= bf_codeEnd - bf_code
 
-_bf_getch		= bf_getchar
-_bf_putch		= bf_putchar
+_bf_getch	= bf_getchar
+_bf_putch	= bf_putchar
 
 
 ; Zero page variables
