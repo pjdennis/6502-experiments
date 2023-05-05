@@ -120,6 +120,28 @@ BF_ZERO_PAGE_STOP	= BF_ZERO_PAGE_BASE + $0d
 	.endm
 
 
+	.macro copy16usingA,destination,source
+	lda \source
+	sta \destination
+	lda \source+1
+	sta \destination+1
+	.endm
+
+
+	.macro stz16,address
+	stz \address
+	stz \address+1
+	.endm
+
+
+	.macro sti16usingA,address,value
+	lda #<(\value)
+	sta \address
+	lda #>(\value)
+	sta \address+1
+	.endm
+
+
 ;
 ; Functions
 ;
@@ -153,17 +175,13 @@ runProgram:
 
 ; compile scans the characters and produces a machine code stream.
 compile:
-	lda #<code	; use dptr as the index into the code
-	sta dptr
-	lda #>code
-	sta dptr+1
+	sti16usingA dptr,code ; use dptr as the index into the code
 	
 	; Initialize parser state
 	lda #StateDefault
 	sta state
-	lda #0
-	sta count
-	sta count+1
+
+	stz16 count
 
 	; All programs start with memory cell initialization
 	; Emit code to initialize the state of the data cells
@@ -335,19 +353,10 @@ _rightBracket:
 
 	; Address of next instruction into temp
 	; temp <- dptr (word)
-	lda dptr	
-	sta temp
-	lda dptr+1
-	sta temp+1
+	copy16usingA temp,dptr
 
 	; temp <- temp + 2 (word)
-	clc
-	lda temp
-	adc #2
-	sta temp
-	bcc .over2
-	inc temp+1
-.over2:
+	add8iTo16usingA temp,2
 
 	; Fixup jump address for left bracket
 	; Store low byte to fixup address
@@ -438,8 +447,7 @@ _stateModCell:
 	
 .done:
 	; Reset count
-	lda #0
-	sta count
+	stz count
 	lda #StateCellCmp
 	sta state
 	rts
