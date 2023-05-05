@@ -74,46 +74,46 @@ count			= BF_ZERO_PAGE_BASE + $0b ; 2 bytes - count cell or dptr delta
 BF_ZERO_PAGE_STOP	= BF_ZERO_PAGE_BASE + $0d
 
 
-  .macro emitCode,start,end
+;
+; Macros
+;
+ 	.macro emitCode,start,end
 	lda #<(\start)
 	ldx #>(\start)
 	ldy #(\end)-(\start)
 	jsr copyCode
-  .endm
+ 	.endm
+
+
+	.macro runBfProgram,codeAddress
+	lda #<(\codeAddress)
+	ldx #>(\codeAddress)
+	jmp runProgram
+	.endm
 
 
 ;
 ; Functions
 ;
-do_hello:
+doHello:
 	; The classic hello world program.
-	lda #<helloWorld
-	ldx #>helloWorld
-	jmp runProgram
+	runBfProgram helloWorld
 
-do_sierpinski:
+doSierpinski:
 	; The Sierpinski triangle program.
-	lda #<sierpinski
-	ldx #>sierpinski
-	jmp runProgram
+	runBfProgram sierpinski
 
-do_golden:
+doGolden:
 	; The Golden ratio program.
-	lda #<golden
-	ldx #>golden
-	jmp runProgram
+	runBfProgram golden
 
-do_fibonacci:
+doFibonacci:
 	; The fibonacci program.
-	lda #<fibonacci
-	ldx #>fibonacci
-	jmp runProgram
+	runBfProgram fibonacci
 
-do_life:
+doLife:
 	; The Conway game of life program.
-	lda #<life
-	ldx #>life
-	jmp runProgram
+	runBfProgram life
 
 
 runProgram:

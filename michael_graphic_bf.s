@@ -35,15 +35,15 @@ codeEnd                  = $2000
 
 CT_COMMANDS:
   .asciiz "hello"
-                          .word do_hello
+                          .word doHello
   .asciiz "sierpinski"
-                          .word do_sierpinski
+                          .word doSierpinski
   .asciiz "golden"
-                          .word do_golden
+                          .word doGolden
   .asciiz "fibonacci"
-                          .word do_fibonacci
+                          .word doFibonacci
   .asciiz "life"
-                          .word do_life
+                          .word doLife
   .byte 0
 
  
@@ -54,7 +54,7 @@ program_start:
 
   jsr gcf_init
 
-  jsr do_life
+  jsr doLife
 
   jmp cr_repl
 
