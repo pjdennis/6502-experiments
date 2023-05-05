@@ -16,10 +16,10 @@ bf_putchar               = gc_putchar
 SIMPLE_BUFFER            = $0200 ; 256 bytes
 GC_LINE_BUFFER           = $0300 ; GD_CHAR_ROWS * GD_CHAR_COLS = 400 bytes including terminating 0
 
-cells                    = GC_LINE_BUFFER_STOP
-cellsEnd                 = cells + 1024
-code                     = cellsEnd
-codeEnd                  = $2000 
+bf_cells                 = GC_LINE_BUFFER_STOP
+bf_cellsEnd              = bf_cells + 1024
+bf_code                  = bf_cellsEnd
+bf_codeEnd               = $2000
 
   .org $2000                     ; Loader loads programs to this address
   jmp initialize_machine         ; Initialize hardware and then jump to program_start
@@ -31,6 +31,11 @@ codeEnd                  = $2000
   .include initialize_machine_v2.inc
   .include graphics_console_full.inc
   .include brainfotc.inc
+
+
+
+
+
 
 
 CT_COMMANDS:
