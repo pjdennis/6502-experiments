@@ -41,14 +41,14 @@
 
 
 ; Character set (ASCII)
-AscLT		= $3C	; Character aliases for brain f commands.
-AscGT		= $3E
-AscPlus		= $2B
-AscComma	= $2C
-AscMinus	= $2D
-AscDot		= $2E
-AscLB		= $5B
-AscRB		= $5D
+bf_AscLT	= $3C	; Character aliases for brain f commands.
+bf_AscGT	= $3E
+bf_AscPlus	= $2B
+bf_AscComma	= $2C
+bf_AscMinus	= $2D
+bf_AscDot	= $2E
+bf_AscLB	= $5B
+bf_AscRB	= $5D
 
 bf_StateDefault	= $00	; Nothing pending
 bf_StateModCell	= $01	; Collecting cell increments into delta
@@ -157,7 +157,7 @@ _bf_whileCompile:
 
 ; Increment current cell '+'
 _bf_incCell:
-	cmp #AscPlus
+	cmp #bf_AscPlus
 	bne _bf_decCell
 
 	lda bf_state
@@ -173,7 +173,7 @@ _bf_incCell:
 
 ; Decrement current cell '-'
 _bf_decCell:
-	cmp #AscMinus
+	cmp #bf_AscMinus
 	bne _bf_decDptr
 
 	cmp #bf_StateModCell
@@ -188,7 +188,7 @@ _bf_decCell:
 
 ; Decrement bf_dptr '<'
 _bf_decDptr:
-	cmp #AscLT
+	cmp #bf_AscLT
 	bne _bf_incDptr
 
 	lda bf_state
@@ -204,7 +204,7 @@ _bf_decDptr:
 
 ; Increment bf_dptr '>'
 _bf_incDptr:
-	cmp #AscGT
+	cmp #bf_AscGT
 	bne _bf_outputCell
 
 	lda bf_state
@@ -225,7 +225,7 @@ _bf_outputCell:
 	jsr processState
 	pla
 
-	cmp #AscDot
+	cmp #bf_AscDot
 	bne _bf_inputCell
 
 	; Emit code to output the current cell to the console
@@ -237,7 +237,7 @@ _bf_outputCell:
 
 ; Input current cell ','
 _bf_inputCell:
-	cmp #AscComma
+	cmp #bf_AscComma
 	bne _bf_leftBracket
 
 	; Emit code to input from console into the current cell
@@ -250,7 +250,7 @@ _bf_inputCell:
 
 ; Start loop '['
 _bf_leftBracket:
-	cmp #AscLB
+	cmp #bf_AscLB
 	bne _bf_rightBracket
 	
 	lda bf_state
@@ -273,7 +273,7 @@ _bf_leftBracket:
 
 ; End loop ']'
 _bf_rightBracket:
-	cmp #AscRB
+	cmp #bf_AscRB
 	bne _bf_ignoreInput
 
 	; Get the fixup address off the stack
