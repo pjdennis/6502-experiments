@@ -28,6 +28,7 @@ T1_SQWAVE_PORT    = PORTB
 ;;PORTB_OUT_MASK     = DISPLAY_BITS_MASK | E
 
 MUSIC_BPM = 92
+;MUSIC_BPM = 240 ; for ditty
   .include musical_notes.inc
 
 DELAY                  = CLOCK_FREQ_KHZ * 2  ; 1 KHz / 2 = 500 Hz
@@ -76,6 +77,7 @@ BUFFER_DATA            = $7d00
   .include prg_chase.inc
   .include prg_play_song.inc
   .include prg_star_spangled_banner.inc
+;  .include prg_ditty.inc
 ;  .include prg_print_ticks_counter.inc
 ;  .include prg_led_control.inc
   .include prg_morse_demo.inc
@@ -148,6 +150,8 @@ program_start:
 
   lda #<play_star_spangled_banner
   ldx #>play_star_spangled_banner
+;  lda #<play_ditty
+;  ldx #>play_ditty
   jsr initialize_additional_process
 
 ;  lda #<led_control
