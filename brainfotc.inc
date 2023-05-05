@@ -92,6 +92,14 @@ BF_ZERO_PAGE_STOP	= BF_ZERO_PAGE_BASE + $0d
 	.endm
 
 
+	.macro inc16,address
+	inc \address
+	bne .\@
+	inc \address+1
+	.\@:
+	.endm
+
+
 ;
 ; Functions
 ;
@@ -221,10 +229,7 @@ _incDptr:
 	sta state
 
 .over1:
-	inc count
-	bne .over2
-	inc count+1
-.over2:
+	inc16 count
 
 	jmp _nextCompile
 
@@ -339,21 +344,13 @@ _rightBracket:
 	lda temp
 	sta (fixup)
 
-	; fixup <- fixup + 1 (word)
-	inc fixup
-	bne .over3
-	inc fixup+1
-.over3:
+	inc16 fixup
 
 	; Store high byte to fixup address
 	lda temp+1
 	sta (fixup)
 
-	; fixup <- fixup + 1 (word)
-	inc fixup
-	bne .over4
-	inc fixup+1
-.over4:
+	inc16 fixup
 
 	; Store low byte
 	lda fixup	; store backwards jump address
@@ -374,11 +371,8 @@ _ignoreInput:
 
 
 _nextCompile:
-	; iptr <- iptr + 1 (word)
-	inc iptr
-	bne .over
-	inc iptr+1
-.over:
+	inc16 iptr
+
 	jmp _whileCompile
 
 
@@ -524,12 +518,7 @@ _stateModDptr:
 ; On exit dptr has been incremented
 emitByte:
 	sta (dptr)
-
-	; dptr <- dptr + 1 (word)
-	inc dptr
-	bne .over
-	inc dptr+1
-.over:
+	inc16 dptr
 	rts
 
 
@@ -542,12 +531,7 @@ copyCode:
 .loop:
 	lda (cptr)
 	jsr emitByte
-
-	inc cptr
-	bne .over
-	inc cptr+1
-.over:
-
+	inc16 cptr
 	dey
 	bne .loop
 	
@@ -567,10 +551,8 @@ initCells:
 	lda #$00
 	sta (dptr)
 
-	inc dptr
-	bne .over
-	inc dptr+1
-.over:
+	inc16 dptr
+
 	lda dptr
 	cmp #<cellsEnd
 	bne .loop
@@ -619,10 +601,7 @@ decDptrEnd:
 
 
 incDptr:
-	inc dptr
-	bne .over
-	inc dptr+1
-.over:
+	inc16 dptr
 incDptrEnd:
 
 
