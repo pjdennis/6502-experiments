@@ -74,7 +74,7 @@ count			= BF_ZERO_PAGE_BASE + $0b ; 2 bytes - count cell or dptr delta
 BF_ZERO_PAGE_STOP	= BF_ZERO_PAGE_BASE + $0d
 
 
-  .macro emit_code,start,end
+  .macro emitCode,start,end
 	lda #<(\start)
 	ldx #>(\start)
 	ldy #(\end)-(\start)
@@ -139,16 +139,16 @@ compile:
 
 	; All programs start with memory cell initialization
 	; Emit code to initialize the state of the data cells
-	emit_code initCells,initCellsEnd
+	emitCode initCells,initCellsEnd
 
-_while_compile:
+_whileCompile:
 	lda (iptr)
 	bne _incCell
 
 	jsr processState
 
 	; Emit code to end the program
-	emit_code endProgram,endProgramEnd
+	emitCode endProgram,endProgramEnd
 
 	rts
 
@@ -167,7 +167,7 @@ _incCell:
 
 .over:
 	inc count
-	jmp _next_compile
+	jmp _nextCompile
 
 
 ; Decrement current cell '-'
@@ -183,7 +183,7 @@ _decCell:
 
 .over:
 	dec count
-	jmp _next_compile
+	jmp _nextCompile
 
 
 ; Decrement dptr '<'
@@ -205,7 +205,7 @@ _decDptr:
 .over2:
 
 	dec count
-	jmp _next_compile
+	jmp _nextCompile
 
 
 ; Increment dptr '>'
@@ -226,7 +226,7 @@ _incDptr:
 	inc count+1
 .over2:
 
-	jmp _next_compile
+	jmp _nextCompile
 
 
 ; Output current cell '.'
@@ -240,11 +240,11 @@ _outputCell:
 	bne _inputCell
 
 	; Emit code to output the current cell to the console
-	emit_code outputCell, outputCellEnd
+	emitCode outputCell,outputCellEnd
 
 	lda #StateDefault
 	sta state
-	jmp _next_compile
+	jmp _nextCompile
 
 
 ; Input current cell ','
@@ -253,14 +253,11 @@ _inputCell:
 	bne _leftBracket
 
 	; Emit code to input from console into the current cell
-	lda #<inputCell
-	ldx #>inputCell
-	ldy #(inputCellEnd-inputCell)
-	jsr copyCode
+	emitCode inputCell,inputCellEnd
 
 	lda #StateDefault
 	sta state
-	jmp _next_compile
+	jmp _nextCompile
 
 
 ; Start loop '['
@@ -273,17 +270,11 @@ _leftBracket:
 	beq .over1
 
 	; Emit code to load dptr
-	lda #<loadDptr
-	ldx #>loadDptr
-	ldy #(loadDptrEnd-loadDptr)
-	jsr copyCode
+	emitCode loadDptr,loadDptrEnd
 
 .over1:
 	; Emit code to branch forward
-	lda #<branchForward
-	ldx #>branchForward
-	ldy #(branchForwardJumpInstruction+1-branchForward)
-	jsr copyCode
+	emitCode branchForward,branchForwardJumpInstruction+1
 
 	lda dptr+1	; push current PC for later.
 	pha
@@ -302,7 +293,7 @@ _leftBracket:
 
 	lda #StateCellCmp
 	sta state
-	jmp _next_compile
+	jmp _nextCompile
 
 
 ; End loop ']'
@@ -321,17 +312,11 @@ _rightBracket:
 	beq .over1	; current cell already compared to 0
 
 	; Emit code to load dptr
-	lda #<loadDptr
-	ldx #>loadDptr
-	ldy #(loadDptrEnd-loadDptr)
-	jsr copyCode
+	emitCode loadDptr,loadDptrEnd
 
 .over1:
 	; Emit code to branch backward
-	lda #<branchBackward
-	ldx #>branchBackward
-	ldy #(branchBackwardJumpInstruction+1-branchBackward)
-	jsr copyCode
+	emitCode branchBackward,branchBackwardJumpInstruction+1
 
 	; Address of next instruction into temp
 	; temp <- dptr (word)
@@ -380,7 +365,7 @@ _rightBracket:
 
 	lda #StateCellCmp
 	sta state
-	jmp _next_compile
+	jmp _nextCompile
 
 
 ; All other characters are ignored
@@ -388,13 +373,13 @@ _ignoreInput:
 	; fall through
 
 
-_next_compile:
+_nextCompile:
 	; iptr <- iptr + 1 (word)
 	inc iptr
 	bne .over
 	inc iptr+1
 .over:
-	jmp _while_compile
+	jmp _whileCompile
 
 
 ; processState handles finalizing the current state prior to assigning a new state
@@ -424,10 +409,7 @@ _stateModCell:
 	bne .decrement
 
 	; Emit code to increment current cell
-	lda #<incCell
-	ldx #>incCell
-	ldy #(incCellEnd-incCell)
-	jsr copyCode
+	emitCode incCell,incCellEnd
 
 	jmp .done
 	
@@ -436,25 +418,19 @@ _stateModCell:
 	bne .add
 
 	; Emit code to decrement current cell
-	lda #<decCell
-	ldx #>decCell
-	ldy #(decCellEnd-decCell)
-	jsr copyCode
+	emitCode decCell,decCellEnd
 
 	jmp .done
 
 .add:
 	; Emit code to add (positive or negative value) to current cell (part 1)
-	lda #<modCell
-	ldx #>modCell
-	ldy #(modCellAdd+1-modCell)
-	jsr copyCode
+	emitCode modCell,modCellAdd+1
 
 	lda count
 	jsr emitByte
 
 	; Emit code to add (positive or negative value) to current cell (part 2)
-	emit_code modCellAdd+2,modCellEnd
+	emitCode modCellAdd+2,modCellEnd
 	
 .done:
 	; Reset count
@@ -476,28 +452,19 @@ _stateModDptr:
 	bne .addPosByte
 
 	; count == 1: emit code to increment dptr
-	lda #<incDptr
-	ldx #>incDptr
-	ldy #(incDptrEnd-incDptr)
-	jsr copyCode
+	emitCode incDptr,incDptrEnd
 
 	jmp .done
 
 .addPosByte:
 	; Emit code to add count as a positive value < 256 to dptr (part 1)
-	lda #<addDptrPosByte
-	ldx #>addDptrPosByte
-	ldy #(addDptrPosByteAdd+1-addDptrPosByte)
-	jsr copyCode
+	emitCode addDptrPosByte,addDptrPosByteAdd+1
 
 	lda count
 	jsr emitByte
 
 	; Emit code to add count as a positive value < 256 to dptr (part 2)
-	lda #<(addDptrPosByteAdd+2)
-	ldx #>(addDptrPosByteAdd+2)
-	ldy #(addDptrPosByteEnd-addDptrPosByteAdd-2)
-	jsr copyCode
+	emitCode addDptrPosByteAdd+2,addDptrPosByteEnd
 
 	jmp .done
 
@@ -511,55 +478,37 @@ _stateModDptr:
 	bne .addNegByte
 
 	; Emit code to decrement dptr
-	lda #<decDptr
-	ldx #>decDptr
-	ldy #(decDptrEnd-decDptr)
-	jsr copyCode
+	emitCode decDptr,decDptrEnd
 
 	jmp .done
 
 .addNegByte:
 	; Emit code to add count as a negative value >= -256 to dptr (part 1)
-	lda #<addDptrNegByte
-	ldx #>addDptrNegByte
-	ldy #(addDptrNegByteAdd+1-addDptrNegByte)
-	jsr copyCode
+	emitCode addDptrNegByte,addDptrNegByteAdd+1
 
 	lda count
 	jsr emitByte
 
 	; Emit code to add count as a negative value >= -256 to dptr (part 2)
-	lda #<(addDptrNegByteAdd+2)
-	ldx #>(addDptrNegByteAdd+2)
-	ldy #(addDptrNegByteEnd-addDptrNegByteAdd-2)
-	jsr copyCode
+	emitCode addDptrNegByteAdd+2,addDptrNegByteEnd
 
 	jmp .done
 
 .addWord:
 	; Emit code to add count as a signed word to dptr (part 1)
-	lda #<addDptrWord
-	ldx #>addDptrWord
-	ldy #(addDptrWordAddLow+1-addDptrWord)
-	jsr copyCode
+	emitCode addDptrWord,addDptrWordAddLow+1
 
 	lda count
 	jsr emitByte
 
 	; Emit code to add count as a signed word to dptr (part 2)
-	lda #<(addDptrWordAddLow+2)
-	ldx #>(addDptrWordAddLow+2)
-	ldy #(addDptrWordAddHigh+1-addDptrWordAddLow-2)
-	jsr copyCode
+	emitCode addDptrWordAddLow+2,addDptrWordAddHigh+1
 
 	lda count+1
 	jsr emitByte
 
 	; Emit code to add count as a signed word to dptr (part 3)
-	lda #<(addDptrWordAddHigh+2)
-	ldx #>(addDptrWordAddHigh+2)
-	ldy #(addDptrWordEnd-addDptrWordAddHigh-2)
-	jsr copyCode
+	emitCode addDptrWordAddHigh+2,addDptrWordEnd
 
 .done:
 	; Reset count
