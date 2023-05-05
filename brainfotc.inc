@@ -74,6 +74,14 @@ count			= BF_ZERO_PAGE_BASE + $0b ; 2 bytes - count cell or dptr delta
 BF_ZERO_PAGE_STOP	= BF_ZERO_PAGE_BASE + $0d
 
 
+  .macro emit_code,start,end
+	lda #<(\start)
+	ldx #>(\start)
+	ldy #(\end)-(\start)
+	jsr copyCode
+  .endm
+
+
 ;
 ; Functions
 ;
@@ -131,10 +139,7 @@ compile:
 
 	; All programs start with memory cell initialization
 	; Emit code to initialize the state of the data cells
-	lda #<initCells
-	ldx #>initCells
-	ldy #(initCellsEnd-initCells)
-	jsr copyCode
+	emit_code initCells,initCellsEnd
 
 _while_compile:
 	lda (iptr)
@@ -143,10 +148,7 @@ _while_compile:
 	jsr processState
 
 	; Emit code to end the program
-	lda #<endProgram
-	ldx #>endProgram
-	ldy #(endProgramEnd-endProgram)
-	jsr copyCode
+	emit_code endProgram,endProgramEnd
 
 	rts
 
@@ -238,10 +240,7 @@ _outputCell:
 	bne _inputCell
 
 	; Emit code to output the current cell to the console
-	lda #<outputCell
-	ldx #>outputCell
-	ldy #(outputCellEnd-outputCell)
-	jsr copyCode
+	emit_code outputCell, outputCellEnd
 
 	lda #StateDefault
 	sta state
@@ -455,10 +454,7 @@ _stateModCell:
 	jsr emitByte
 
 	; Emit code to add (positive or negative value) to current cell (part 2)
-	lda #<(modCellAdd+2)
-	ldx #>(modCellAdd+2)
-	ldy #(modCellEnd-modCellAdd-2)
-	jsr copyCode
+	emit_code modCellAdd+2,modCellEnd
 	
 .done:
 	; Reset count
