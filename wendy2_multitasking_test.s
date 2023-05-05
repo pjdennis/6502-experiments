@@ -82,7 +82,7 @@ BUFFER_DATA            = $7d00
 ;  .include prg_led_control.inc
   .include prg_morse_demo.inc
 ;  .include prg_small_display_demo.inc
-
+  .include macros.inc
 
   .macro add_program,address
   lda #<\address
@@ -159,11 +159,11 @@ program_start:
   lda #(IERSETCLEAR | IT2) ; Enable timer 2 interrupts
   sta IER
 
-busy_loop:
+.busy_loop:
   lda #<100
   ldx #>100
   jsr sleep_milliseconds
-  bra busy_loop
+  bra .busy_loop
 
 
 ; Set up stack, etc. so that additional process will start running on next interrupt
@@ -173,9 +173,9 @@ initialize_additional_process:
   tay            ; low order address in Y
   lda FIRST_UNUSED_BANK
   cmp #BANK_STOP
-  bne banks_exist
+  bne .banks_exist
   rts            ; Silently ignore attempts to add too many processes
-banks_exist:
+.banks_exist:
   txa            ; Save first bank stack pointer to save location
   tsx
   stx STACK_POINTER_SAVE
@@ -266,9 +266,9 @@ interrupt:
   phy
 
   inc TICKS_COUNTER       ; Increment the ticks counter
-  bne interrupt_high_ticks_ok
+  bne .high_ticks_ok
   inc TICKS_COUNTER + 1
-interrupt_high_ticks_ok:
+.high_ticks_ok:
 
 switch_to_next_bank:
   tsx                     ; Save outgoing bank stack pointer to save location
@@ -313,11 +313,7 @@ interrupt_bank_ok:
   lda #>DELAY
   sta T2CH                ; (Store to the high register starts the timer and clears interrupt)
 
-  inc TICKS_COUNTER       ; Increment the ticks counter
-  bne interrupt_high_ticks_ok2
-  inc TICKS_COUNTER + 1
-interrupt_high_ticks_ok2:
-
+  inc16 TICKS_COUNTER     ; Increment the ticks counter
   bra find_next_bank
 
 stop_sleeping:
