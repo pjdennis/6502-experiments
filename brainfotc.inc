@@ -89,6 +89,12 @@ BF_ZERO_PAGE_STOP	= BF_ZERO_PAGE_BASE + $0d
  	.endm
 
 
+	.macro emitByteFromMemoryUsingA,address
+	lda \address
+	jsr emitByte
+	.endm
+
+
 	.macro runBfProgram,codeAddress
 	lda #<(\codeAddress)
 	ldx #>(\codeAddress)
@@ -293,12 +299,9 @@ _rightBracket:
 	lda temp+1
 	sta (fixup)
 	inc16 fixup
-	; Store low byte
-	lda fixup	; store backwards jump address
-	jsr emitByte
-	; Store high byte
-	lda fixup+1
-	jsr emitByte
+	; Emit backwards jump address
+	emitByteFromMemoryUsingA fixup
+	emitByteFromMemoryUsingA fixup+1
 	lda #StateCellCmp
 	sta state
 	jmp _nextCompile
@@ -347,11 +350,9 @@ _stateModCell:
 	emitCode decCell,decCellEnd
 	jmp .done
 .add:
-	; Emit code to add (positive or negative value) to current cell (part 1)
+	; Emit code to add (positive or negative value) to current cell
 	emitCode modCell,modCellAdd+1
-	lda count
-	jsr emitByte
-	; Emit code to add (positive or negative value) to current cell (part 2)
+	emitByteFromMemoryUsingA count
 	emitCode modCellAdd+2,modCellEnd
 .done:
 	; Reset count
@@ -373,11 +374,9 @@ _stateModDptr:
 	emitCode incDptr,incDptrEnd
 	jmp .done
 .addPosByte:
-	; Emit code to add count as a positive value < 256 to dptr (part 1)
+	; Emit code to add count as a positive value < 256 to dptr
 	emitCode addDptrPosByte,addDptrPosByteAdd+1
-	lda count
-	jsr emitByte
-	; Emit code to add count as a positive value < 256 to dptr (part 2)
+	emitByteFromMemoryUsingA count
 	emitCode addDptrPosByteAdd+2,addDptrPosByteEnd
 	jmp .done
 .decrement:
@@ -391,23 +390,17 @@ _stateModDptr:
 	emitCode decDptr,decDptrEnd
 	jmp .done
 .addNegByte:
-	; Emit code to add count as a negative value >= -256 to dptr (part 1)
+	; Emit code to add count as a negative value >= -256 to dptr
 	emitCode addDptrNegByte,addDptrNegByteAdd+1
-	lda count
-	jsr emitByte
-	; Emit code to add count as a negative value >= -256 to dptr (part 2)
+	emitByteFromMemoryUsingA count
 	emitCode addDptrNegByteAdd+2,addDptrNegByteEnd
 	jmp .done
 .addWord:
-	; Emit code to add count as a signed word to dptr (part 1)
+	; Emit code to add count as a signed word to dptr
 	emitCode addDptrWord,addDptrWordAddLow+1
-	lda count
-	jsr emitByte
-	; Emit code to add count as a signed word to dptr (part 2)
+	emitByteFromMemoryUsingA count
 	emitCode addDptrWordAddLow+2,addDptrWordAddHigh+1
-	lda count+1
-	jsr emitByte
-	; Emit code to add count as a signed word to dptr (part 3)
+	emitByteFromMemoryUsingA count+1
 	emitCode addDptrWordAddHigh+2,addDptrWordEnd
 .done:
 	; Reset count
