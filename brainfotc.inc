@@ -81,7 +81,7 @@ BF_ZERO_PAGE_STOP	= BF_ZERO_PAGE_BASE + $0d
 	.include macros.inc
 
 
- 	.macro emitCode,start,end
+ 	.macro bf_emitCode,start,end
 	lda #<(\start)
 	ldx #>(\start)
 	ldy #(\end)-(\start)
@@ -144,14 +144,14 @@ bf_compile:
 	stz16 bf_count
 	; All programs start with memory cell initialization
 	; Emit code to initialize the state of the data cells
-	emitCode initCells,initCellsEnd
+	bf_emitCode initCells,initCellsEnd
 
 _bf_whileCompile:
 	lda (bf_iptr)
 	bne _bf_incCell
 	jsr processState
 	; Emit code to end the program
-	emitCode endProgram,endProgramEnd
+	bf_emitCode endProgram,endProgramEnd
 	rts
 
 
@@ -229,7 +229,7 @@ _bf_outputCell:
 	bne _bf_inputCell
 
 	; Emit code to output the current cell to the console
-	emitCode outputCell,outputCellEnd
+	bf_emitCode outputCell,outputCellEnd
 	lda #bf_StateDefault
 	sta bf_state
 	jmp _bf_nextCompile
@@ -241,7 +241,7 @@ _bf_inputCell:
 	bne _bf_leftBracket
 
 	; Emit code to input from console into the current cell
-	emitCode inputCell,inputCellEnd
+	bf_emitCode inputCell,inputCellEnd
 
 	lda #bf_StateDefault
 	sta bf_state
@@ -257,10 +257,10 @@ _bf_leftBracket:
 	cmp #bf_StateCellCmp
 	beq .currentCellHasBeenComparedToZero
 	; Emit code to load bf_dptr
-	emitCode loadDptr,loadDptrEnd
+	bf_emitCode loadDptr,loadDptrEnd
 .currentCellHasBeenComparedToZero:
 	; Emit code to branch forward
-	emitCode branchForward,branchForwardJumpInstruction+1
+	bf_emitCode branchForward,branchForwardJumpInstruction+1
 	; push current PC for later.
 	push16usingA bf_dptr
 	; Skip past reserved space for jump address
@@ -282,10 +282,10 @@ _bf_rightBracket:
 	cmp #bf_StateCellCmp
 	beq .currentCellHasBeenComparedToZero
 	; Emit code to load bf_dptr
-	emitCode loadDptr,loadDptrEnd
+	bf_emitCode loadDptr,loadDptrEnd
 .currentCellHasBeenComparedToZero:
 	; Emit code to branch backward
-	emitCode branchBackward,branchBackwardJumpInstruction+1
+	bf_emitCode branchBackward,branchBackwardJumpInstruction+1
 	; Address of next instruction into bf_temp
 	; bf_temp <- bf_dptr (word)
 	copy16usingA bf_temp,bf_dptr
@@ -342,19 +342,19 @@ _bf_bf_stateModCell:
 	cmp #$01
 	bne .decrement
 	; Emit code to increment current cell
-	emitCode incCell,incCellEnd
+	bf_emitCode incCell,incCellEnd
 	jmp .done
 .decrement:
 	cmp #$ff
 	bne .add
 	; Emit code to decrement current cell
-	emitCode decCell,decCellEnd
+	bf_emitCode decCell,decCellEnd
 	jmp .done
 .add:
 	; Emit code to add (positive or negative value) to current cell
-	emitCode modCell,modCellAdd+1
+	bf_emitCode modCell,modCellAdd+1
 	bf_emitByteFromMemoryUsingA bf_count
-	emitCode modCellAdd+2,modCellEnd
+	bf_emitCode modCellAdd+2,modCellEnd
 .done:
 	; Reset bf_count
 	stz bf_count
@@ -372,13 +372,13 @@ _bf_bf_stateModDptr:
 	cmp #$01
 	bne .addPosByte
 	; bf_count == 1: emit code to increment bf_dptr
-	emitCode incDptr,incDptrEnd
+	bf_emitCode incDptr,incDptrEnd
 	jmp .done
 .addPosByte:
 	; Emit code to add bf_count as a positive value < 256 to bf_dptr
-	emitCode addDptrPosByte,addDptrPosByteAdd+1
+	bf_emitCode addDptrPosByte,addDptrPosByteAdd+1
 	bf_emitByteFromMemoryUsingA bf_count
-	emitCode addDptrPosByteAdd+2,addDptrPosByteEnd
+	bf_emitCode addDptrPosByteAdd+2,addDptrPosByteEnd
 	jmp .done
 .decrement:
 	lda bf_count+1
@@ -388,21 +388,21 @@ _bf_bf_stateModDptr:
 	cmp #$ff
 	bne .addNegByte
 	; Emit code to decrement bf_dptr
-	emitCode decDptr,decDptrEnd
+	bf_emitCode decDptr,decDptrEnd
 	jmp .done
 .addNegByte:
 	; Emit code to add bf_count as a negative value >= -256 to bf_dptr
-	emitCode addDptrNegByte,addDptrNegByteAdd+1
+	bf_emitCode addDptrNegByte,addDptrNegByteAdd+1
 	bf_emitByteFromMemoryUsingA bf_count
-	emitCode addDptrNegByteAdd+2,addDptrNegByteEnd
+	bf_emitCode addDptrNegByteAdd+2,addDptrNegByteEnd
 	jmp .done
 .addWord:
 	; Emit code to add bf_count as a signed word to bf_dptr
-	emitCode addDptrWord,addDptrWordAddLow+1
+	bf_emitCode addDptrWord,addDptrWordAddLow+1
 	bf_emitByteFromMemoryUsingA bf_count
-	emitCode addDptrWordAddLow+2,addDptrWordAddHigh+1
+	bf_emitCode addDptrWordAddLow+2,addDptrWordAddHigh+1
 	bf_emitByteFromMemoryUsingA bf_count+1
-	emitCode addDptrWordAddHigh+2,addDptrWordEnd
+	bf_emitCode addDptrWordAddHigh+2,addDptrWordEnd
 .done:
 	; Reset bf_count
 	stz16 bf_count
