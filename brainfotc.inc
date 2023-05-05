@@ -149,7 +149,7 @@ bf_compile:
 _bf_whileCompile:
 	lda (bf_iptr)
 	bne _bf_incCell
-	jsr processState
+	jsr bf_processState
 	; Emit code to end the program
 	bf_emitCode bf_endProgram,bf_endProgramEnd
 	rts
@@ -163,7 +163,7 @@ _bf_incCell:
 	lda bf_state
 	cmp #bf_StateModCell
 	beq .modifyingCell
-	jsr processState
+	jsr bf_processState
 	lda #bf_StateModCell
 	sta bf_state
 .modifyingCell:
@@ -178,7 +178,7 @@ _bf_decCell:
 
 	cmp #bf_StateModCell
 	beq .modifyingCell
-	jsr processState
+	jsr bf_processState
 	lda #bf_StateModCell
 	sta bf_state
 .modifyingCell:
@@ -194,7 +194,7 @@ _bf_decDptr:
 	lda bf_state
 	cmp #bf_StateModDptr
 	beq .modifyingDptr
-	jsr processState
+	jsr bf_processState
 	lda #bf_StateModDptr
 	sta bf_state
 .modifyingDptr:
@@ -210,7 +210,7 @@ _bf_incDptr:
 	lda bf_state
 	cmp #bf_StateModDptr
 	beq .modifyingDptr
-	jsr processState
+	jsr bf_processState
 	lda #bf_StateModDptr
 	sta bf_state
 .modifyingDptr:
@@ -222,7 +222,7 @@ _bf_incDptr:
 _bf_outputCell:
 	; no longer collecting increments so emit any pending code
 	pha
-	jsr processState
+	jsr bf_processState
 	pla
 
 	cmp #bf_AscDot
@@ -318,8 +318,8 @@ _bf_nextCompile:
 	jmp _bf_whileCompile
 
 
-; processState handles finalizing the current state prior to assigning a new state
-processState:
+; bf_processState handles finalizing the current state prior to assigning a new state
+bf_processState:
 	lda bf_state
 	cmp #bf_StateDefault
 	bne _bf_stateCellCmp
