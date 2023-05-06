@@ -1,4 +1,31 @@
+CHAR_6x8   = 0
+CHAR_12x16 = 1
+
+CHAR_RESOLUTION=CHAR_12x16
+
+  .if CHAR_RESOLUTION == CHAR_6x8
+
+  .include character_patterns_6x8.inc
+character_patterns = character_patterns_6x8
+GD_CHAR_WIDTH  = 6
+GD_CHAR_HEIGHT = 8
+GD_CHAR_ROWS   = 40
+GD_CHAR_COLS   = 40
+GDC_CURSOR_HEIGHT = 1
+
+  .endif
+
+  .if CHAR_RESOLUTION == CHAR_12x16
+
   .include character_patterns_12x16.inc
+character_patterns = character_patterns_12x16
+GD_CHAR_WIDTH  = 12
+GD_CHAR_HEIGHT = 16
+GD_CHAR_ROWS   = 20
+GD_CHAR_COLS   = 20
+GDC_CURSOR_HEIGHT = 2
+  .endif
+
   .include macros.inc
   .include graphics_macros.inc
 
@@ -10,12 +37,6 @@ GD_E    = %00000001
 GD_CSB  = %00000010
 GD_RSTB = %00000100
 GD_DC   = %00100000
-
-GD_CHAR_WIDTH  = 12
-GD_CHAR_HEIGHT = 16
-
-GD_CHAR_ROWS   = 20
-GD_CHAR_COLS   = 20
 
 GD_CHAR_BYTES = GD_CHAR_WIDTH * GD_CHAR_HEIGHT / 8
 
@@ -468,10 +489,10 @@ set_char_data_ptr:
   ; Add the table base address
   clc
   lda MULTIPLY_8X8_RESULT_LOW
-  adc #<character_patterns_12x16
+  adc #<character_patterns
   sta GD_CHAR_DATA_PTR
   lda GD_CHAR_DATA_PTR + 1
-  adc #>character_patterns_12x16
+  adc #>character_patterns
   sta GD_CHAR_DATA_PTR + 1
   rts
 

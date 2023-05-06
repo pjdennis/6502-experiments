@@ -1,13 +1,12 @@
 ; Requires
 ;   GDC_ZERO_PAGE_BASE
 ;   GDC_CHAR_BUFFER - buffer will store GD_CHAR_ROWS * GD_CHAR_COLS screen characters
+;   GDC_CURSOR_HEIGHT - height of the cursor
 ;   graphics_display.inc
 ;   multiply8x8.inc
 
   .include macros.inc
   .include graphics_macros.inc
-
-GDC_CURSOR_HEIGHT  = 1
 
 GDC_CHAR_PTR       = GDC_ZERO_PAGE_BASE + $00 ; 2 bytes
 GDC_INVERT         = GDC_ZERO_PAGE_BASE + $02 ; 1 byte
@@ -99,10 +98,11 @@ gdc_show_cursor:
 
   gd_send_command_immediate ILI9341_RAMWR
 
+  add8iTo16usingA GD_CHAR_DATA_PTR,GD_CHAR_HEIGHT/8-1
+
   ldy #0
-.BASE = GD_CHAR_DATA_PTR+(GD_CHAR_HEIGHT/8)-1
 .col_loop:
-  lda (.BASE),Y
+  lda (GD_CHAR_DATA_PTR),Y
   eor GDC_INVERT
   ldx #(8-GDC_CURSOR_HEIGHT)
 .skip_loop:
