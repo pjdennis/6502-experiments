@@ -35,6 +35,36 @@ bf_codeEnd               = $2000
   .include bf_compiler.inc
 
 
+CT_COMMANDS:
+  ct_entry "hello",      doHello
+  ct_entry "sierpinski", doSierpinski
+  ct_entry "golden",     doGolden
+  ct_entry "fibonacci",  doFibonacci
+  ct_entry "life",       doLife
+  .byte 0
+
+ 
+doHello:
+	; The classic hello world program.
+	bf_compile_and_run helloWorld
+
+doSierpinski:
+	; The Sierpinski triangle program.
+	bf_compile_and_run sierpinski
+
+doGolden:
+	; The Golden ratio program.
+	bf_compile_and_run golden
+
+doFibonacci:
+	; The fibonacci program.
+	bf_compile_and_run fibonacci
+
+doLife:
+	; The Conway game of life program.
+	bf_compile_and_run life
+
+
 ;
 ; Sample programs
 ;
@@ -112,36 +142,6 @@ life:
 	.byte "]", 0
 
 
-doHello:
-	; The classic hello world program.
-	bf_compile_and_run helloWorld
-
-doSierpinski:
-	; The Sierpinski triangle program.
-	bf_compile_and_run sierpinski
-
-doGolden:
-	; The Golden ratio program.
-	bf_compile_and_run golden
-
-doFibonacci:
-	; The fibonacci program.
-	bf_compile_and_run fibonacci
-
-doLife:
-	; The Conway game of life program.
-	bf_compile_and_run life
-
-
-CT_COMMANDS:
-  ct_entry "hello",      doHello
-  ct_entry "sierpinski", doSierpinski
-  ct_entry "golden",     doGolden
-  ct_entry "fibonacci",  doFibonacci
-  ct_entry "life",       doLife
-  .byte 0
-
- 
 program_start:
   ; Initialize stack
   ldx #$ff
