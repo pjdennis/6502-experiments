@@ -267,29 +267,18 @@ gd_clear_line:
 
   gd_send_word GD_Y
 
-  lda #ILI9341_PASET
-  jsr gd_send_command
+  gd_send_command_immediate ILI9341_PASET
   gd_send_word GD_X
 
-  clc
-  lda GD_X
-  adc #<(ILI9341_TFTWIDTH-1)
-  sta GD_X
-  lda GD_X + 1
-  adc #>(ILI9341_TFTWIDTH-1)
-  sta GD_X + 1
+  add16iTo16usingA GD_X, ILI9341_TFTWIDTH-1 ; line width
 
   gd_send_word GD_X
 
-  lda #ILI9341_RAMWR
-  jsr gd_send_command
+  gd_send_command_immediate ILI9341_RAMWR
 
 CLEAR_LINE_LOOP_COUNT = -480 ; 240 * (320 / 20) * 2 = 480 * 16
 
-  lda #<CLEAR_LINE_LOOP_COUNT
-  sta GD_TEMP
-  lda #>CLEAR_LINE_LOOP_COUNT
-  sta GD_TEMP + 1
+  sti16usingA GD_TEMP, CLEAR_LINE_LOOP_COUNT
 
   jmp send_zero_data ; tail call
 
@@ -313,15 +302,13 @@ gd_clear_screen:
 
 CLEAR_SCREEN_LOOP_COUNT = -9600 ; 320 * 240 * 2 (bytes) = 9600 * 16 (inline sends)
 
-  lda #<CLEAR_SCREEN_LOOP_COUNT
-  sta GD_TEMP
-  lda #>CLEAR_SCREEN_LOOP_COUNT
-  sta GD_TEMP + 1
+  sti16usingA GD_TEMP, CLEAR_SCREEN_LOOP_COUNT
 
   jsr send_zero_data
 
-  lda #ILI9341_DISPON
-  jmp gd_send_command ; tail call
+  gd_send_command_immediate ILI9341_DISPON
+
+  rts
 
 
 send_zero_data:
