@@ -31,26 +31,26 @@ copy_memory:
   ; for copying memory (or moving down from a higher to lower address)
   ldy #0
   ldx CP_M_LEN + 1
-  beq copy_memory_remainder
-copy_memory_page_loop:           ; move a page at a time
+  beq .remainder
+.page_loop:           ; move a page at a time
   lda (CP_M_SRC_P),Y
   sta (CP_M_DEST_P),Y
   iny
-  bne copy_memory_page_loop
+  bne .page_loop
   inc CP_M_SRC_P + 1
   inc CP_M_DEST_P + 1
   dex
-  bne copy_memory_page_loop
-copy_memory_remainder:
+  bne .page_loop
+.remainder:
   ldx CP_M_LEN
-copy_memory_remainder_loop:      ; move the remaining bytes
+.remainder_loop:      ; move the remaining bytes
   lda (CP_M_SRC_P),Y
   sta (CP_M_DEST_P),Y
   iny
   dex
-  bne copy_memory_remainder_loop
+  bne .remainder_loop
 
-copy_memory_done:
+;done
   ply
   plx
   pla
