@@ -80,6 +80,14 @@ ILI9341_GMCTRP1 = $e0 ; Positive Gamma Correction
 ILI9341_GMCTRN1 = $e1 ; Negative Gamma Correction
 ;ILI9341_PWCTR6 = $fc
 
+; Parameter definitions for the ILI9341_MADCTL command
+ILI9341_MADCTL_MY  = %10000000 ; Starts from bottom when set, top otherwise
+ILI9341_MADCTL_MX  = %01000000 ; Starts from right of screen when set, left otherwise
+ILI9341_MADCTL_MV  = %00100000 ; Orientation vertical when set, horizontal otherwise
+ILI9341_MADCTL_ML  = %00010000 ; Affects vertical scrolling orientation
+ILI9341_MADCTL_BGR = %00001000 ; LCD pixel color order is BGR when set, RGB otherwise
+ILI9341_MADCTL_MH  = %00000100 ; Affects horizontal refresh direction
+
 ; Color definitions
 ILI9341_BLACK       = $0000 ;   0,   0,   0
 ILI9341_NAVY        = $000f ;   0,   0, 123
@@ -166,7 +174,8 @@ gd_prepare_vertical:
 
 ; set screen orientation
   gd_send_command_immediate ILI9341_MADCTL
-  gd_send_data_immediate %10101000          ; original $48
+; Original value was ILI9341_MADCTL_MX | ILI9341_MADCTL_BGR
+  gd_send_data_immediate ILI9341_MADCTL_MY | ILI9341_MADCTL_MV | ILI9341_MADCTL_BGR
 
   jsr gd_clear_screen
   jsr gd_unselect
