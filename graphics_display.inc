@@ -134,6 +134,19 @@ GD_ZERO_PAGE_STOP    = GD_ZERO_PAGE_BASE + $12
   .endm
 
 
+  .macro gd_send_x2,value
+  lda #(\value)
+; jsr gd_send_data
+  sta PORTB
+  lda #GD_E
+  tsb GD_PORT
+  trb GD_PORT
+; lda <value>
+; jsr gd_send_data
+  tsb GD_PORT
+  trb GD_PORT
+  .endm
+
 gd_prepare_vertical:
   jsr gd_configure
   jsr gd_reset
@@ -398,85 +411,30 @@ gd_show_character:
   jsr set_char_data_ptr
   jsr x_y_from_row_col
 
-  lda #ILI9341_CASET
-  jsr gd_send_command
-  lda GD_Y + 1
-  jsr gd_send_data
-  lda GD_Y
-  jsr gd_send_data
+  gd_send_command_immediate ILI9341_CASET
+  gd_send_word GD_Y
+  add8iTo16usingA GD_Y, 15 
+  gd_send_word GD_Y
 
-  clc
-  lda GD_Y
-  adc #15
-  sta GD_Y
-  lda GD_Y + 1
-  adc #0
-  sta GD_Y + 1
+  gd_send_command_immediate ILI9341_PASET
+  gd_send_word GD_X
+  add8iTo16usingA GD_X, 11
+  gd_send_word GD_X
 
-  lda GD_Y + 1
-  jsr gd_send_data
-  lda GD_Y
-  jsr gd_send_data
-
-  lda #ILI9341_PASET
-  jsr gd_send_command
-  lda GD_X + 1
-  jsr gd_send_data
-  lda GD_X
-  jsr gd_send_data
-
-  clc
-  lda GD_X
-  adc #11
-  sta GD_X
-  lda GD_X + 1
-  adc #0
-  sta GD_X + 1
-
-  lda GD_X + 1
-  jsr gd_send_data
-  lda GD_X
-  jsr gd_send_data
-
-  lda #ILI9341_RAMWR
-  jsr gd_send_command
+  gd_send_command_immediate ILI9341_RAMWR
 
   ldy #0
 .col_loop:
   lda (GD_CHAR_DATA_PTR),Y
-; show column
   sta GD_BYTE
   ldx #8
 .row_loop:
   lsr GD_BYTE
   bcc .low_bit
-; high bit
-  lda #>ILI9341_WHITE
-;  jsr gd_send_data
-  sta PORTB
-  lda #GD_E
-  tsb GD_PORT
-  trb GD_PORT
-;  lda #<ILI9341_WHITE
-;;  jsr gd_send_data
-;  sta PORTB
-;  lda #GD_E
-  tsb GD_PORT
-  trb GD_PORT
+  gd_send_x2 >ILI9341_WHITE ; relies on high and low bits being the same
   bra .color_done
 .low_bit:
-  lda #>ILI9341_BLACK
-;  jsr gd_send_data
-  sta PORTB
-  lda #GD_E
-  tsb GD_PORT
-  trb GD_PORT
-;  lda #<ILI9341_BLACK
-;;  jsr gd_send_data
-;  sta PORTB
-;  lda #GD_E
-  tsb GD_PORT
-  trb GD_PORT
+  gd_send_x2 >ILI9341_BLACK ; relies on high and low bits being the same
 .color_done:
   dex
   bne .row_loop
@@ -511,7 +469,7 @@ gd_next_character:
 gd_previous_character:
   lda GD_COL
   dec
-  cmp #0xff
+  cmp #$ff
   beq .previous_row
   sta GD_COL
   rts
