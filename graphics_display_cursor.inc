@@ -7,7 +7,7 @@
   .include macros.inc
   .include graphics_macros.inc
 
-GDC_CURSOR_HEIGHT  = 2
+GDC_CURSOR_HEIGHT  = 1
 
 GDC_CHAR_PTR       = GDC_ZERO_PAGE_BASE + $00 ; 2 bytes
 GDC_INVERT         = GDC_ZERO_PAGE_BASE + $02 ; 1 byte
@@ -101,13 +101,20 @@ gdc_show_cursor:
 
   ldy #0
 .col_loop:
+  clc
+  tya
+  adc #(GD_CHAR_HEIGHT/8-1)
+  tay
+
   lda (GD_CHAR_DATA_PTR),Y
   eor GDC_INVERT
-  rol
-  rol
-  rol
+  ldx #(8-GDC_CURSOR_HEIGHT)
+.skip_loop:
+  lsr
+  dex
+  bne .skip_loop
   sta GD_BYTE
-  ldx #2
+  ldx #GDC_CURSOR_HEIGHT
 .row_loop:
   lsr GD_BYTE
   bcc .low_bit
@@ -119,7 +126,7 @@ gdc_show_cursor:
   dex
   bne .row_loop
   iny
-  cpy #GD_CHAR_BYTES
+  cpy #(GD_CHAR_BYTES+(GD_CHAR_HEIGHT/8-1))
   bne .col_loop
 
   ply
