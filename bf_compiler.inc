@@ -33,8 +33,9 @@
 ;
 ; Derived from prior version by Martin Heermance <mheermance@gmail.com>
 ;
-; Updated to compile using vasm and without macros (as they're broken on my
-; current vasm version: 1.8f
+; Prior filename: brainfotc.asm
+;
+; Updated to compile using vasm
 ;
 ; Phil Dennis <pjdennis@gmail.com>
 ; -----------------------------------------------------------------------------

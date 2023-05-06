@@ -1,5 +1,7 @@
   .include base_config_v2.inc
 
+GC_PROMPT_CHAR = '$'
+
 ;TODO ran into a bug that I can't recreate: scrolled past bottom; entered several
 ;lines of text; backspaced and it didn't stop at the cursor start position
 
@@ -30,7 +32,7 @@ bf_codeEnd               = $2000
   .include delay_routines.inc
   .include initialize_machine_v2.inc
   .include graphics_console_full.inc
-  .include brainfotc.inc
+  .include bf_compiler.inc
 
 
 ;
