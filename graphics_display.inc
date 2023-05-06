@@ -105,6 +105,14 @@ GD_SCROLL_ROWS       = GD_ZERO_PAGE_BASE + $11 ; 1 byte
 GD_ZERO_PAGE_STOP    = GD_ZERO_PAGE_BASE + $12
 
 
+  .macro gd_send_word,address
+  lda \address+1
+  jsr gd_send_data
+  lda \address
+  jsr gd_send_data
+  .endm
+
+
 gd_prepare_vertical:
   jsr gd_configure
   jsr gd_reset
@@ -218,10 +226,7 @@ gd_scroll_up:
 ; send command
   lda #ILI9341_VSCRSADD
   jsr gd_send_command
-  lda GD_Y + 1
-  jsr gd_send_data
-  lda GD_Y
-  jsr gd_send_data
+  gd_send_word GD_Y
   ply
   plx
   rts
@@ -237,10 +242,7 @@ gd_clear_line:
   jsr x_y_from_row_col
   lda #ILI9341_CASET
   jsr gd_send_command
-  lda GD_Y + 1
-  jsr gd_send_data
-  lda GD_Y
-  jsr gd_send_data
+  gd_send_word GD_Y
 
   clc
   lda GD_Y
@@ -250,10 +252,7 @@ gd_clear_line:
   adc #>15 ; character height
   sta GD_Y + 1
 
-;  lda GD_Y + 1
-  jsr gd_send_data
-  lda GD_Y
-  jsr gd_send_data
+  gd_send_word GD_Y
 
   lda #ILI9341_PASET
   jsr gd_send_command
