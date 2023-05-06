@@ -1,4 +1,5 @@
   .include character_patterns_12x16.inc
+  .include macros.inc
 
 ; PORT A
 GD_PORT = PORTA
@@ -127,6 +128,12 @@ GD_ZERO_PAGE_STOP    = GD_ZERO_PAGE_BASE + $12
   .endm
 
 
+  .macro gd_send_data_immediate,value
+  lda #(\value)
+  jsr gd_send_data
+  .endm
+
+
 gd_prepare_vertical:
   jsr gd_configure
   jsr gd_reset
@@ -135,10 +142,8 @@ gd_prepare_vertical:
   jsr gd_initialize
 
 ; set screen orientation
-  lda #ILI9341_MADCTL
-  jsr gd_send_command
-  lda #%10101000    ; original $48
-  jsr gd_send_data
+  gd_send_command_immediate ILI9341_MADCTL
+  gd_send_data_immediate %10101000          ; original $48
 
   jsr gd_clear_screen
   jsr gd_unselect
@@ -238,9 +243,9 @@ gd_scroll_up:
   sta GD_Y
 
 ; send command
-  lda #ILI9341_VSCRSADD
-  jsr gd_send_command
+  gd_send_command_immediate ILI9341_VSCRSADD
   gd_send_word GD_Y
+
   ply
   plx
   rts
@@ -254,17 +259,11 @@ gd_clear_line:
 
   stz GD_COL
   jsr x_y_from_row_col
-  lda #ILI9341_CASET
-  jsr gd_send_command
+  gd_send_command_immediate ILI9341_CASET
   gd_send_word GD_Y
 
-  clc
-  lda GD_Y
-  adc #<15 ; character height
-  sta GD_Y
-  lda GD_Y + 1
-  adc #>15 ; character height
-  sta GD_Y + 1
+
+  add16iTo16usingA GD_Y, 15 ; character height
 
   gd_send_word GD_Y
 
