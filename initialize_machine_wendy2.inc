@@ -16,8 +16,8 @@ initialize_machine:
   tsb DISPLAY_ENABLE_PORT + DDR_OFFSET
 
   ; Graphic Display
-  lda #GD_CSB | GD_RSTB
-  tsb GD_PORT
-  tsb GD_PORT + DDR_OFFSET
+  ; lda #GD_CSB | GD_RSTB
+  ; tsb GD_PORT
+  ; tsb GD_PORT + DDR_OFFSET
 
   jmp program_start

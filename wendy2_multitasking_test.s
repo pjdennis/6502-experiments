@@ -1,35 +1,21 @@
   .include base_config_wendy2.inc
 
-LED_MASK             = %01000000
-LED_PORT             = PORTB
+MUSIC_BPM = 92
+;MUSIC_BPM = 240 ; for ditty
 
-MORSE_LED = LED_MASK
-MORSE_PORT = LED_PORT
-
+; PORTA assignments
 CONTROL_BUTTON      = %00000010
 CONTROL_BUTTON_PORT = PORTA
+
 CONTROL_LED         = %00000100
 CONTROL_LED_PORT    = PORTA
 
-;PORTA_OUT_MASK    = BANK_MASK | CONTROL_LED | MORSE_LED | SD_CSB
-;;PORTA_OUT_MASK     = BANK_MASK
-
-;SD_DATA           = %00001000
-;SD_CLK            = %00010000
-;SD_DC             = %00100000
-;SD_CS_PORT        = PORTA
-;SD_DATA_PORT      = PORTB
-
 ; PORTB assignments
+MORSE_LED         = %01000000
+MORSE_PORT        = PORTB
+
 T1_SQWAVE_OUT     = %10000000
 T1_SQWAVE_PORT    = PORTB
-
-;PORTB_OUT_MASK    = DISPLAY_BITS_MASK | E | T1_SQWAVE_OUT
-;;PORTB_OUT_MASK     = DISPLAY_BITS_MASK | E
-
-MUSIC_BPM = 92
-;MUSIC_BPM = 240 ; for ditty
-  .include musical_notes.inc
 
 DELAY                  = CLOCK_FREQ_KHZ * 2  ; 1 KHz / 2 = 500 Hz
 
@@ -65,23 +51,21 @@ BUFFER_DATA            = $7d00
   .include display_hex.inc
   .include musical_notes_tables.inc
   .include utilities.inc
-;  .include copy_memory_inline.inc
   .include sound.inc
   .include console.inc
   .include buffer.inc
   .include morse.inc
-;  .include character_patterns_6x8.inc
 
   ; Programs
   .include prg_counters.inc
   .include prg_chase.inc
   .include prg_play_song.inc
+  .include musical_notes.inc
   .include prg_star_spangled_banner.inc
 ;  .include prg_ditty.inc
 ;  .include prg_print_ticks_counter.inc
   .include prg_led_control.inc
   .include prg_morse_demo.inc
-;  .include prg_small_display_demo.inc
   .include macros.inc
 
 
@@ -101,9 +85,9 @@ program_start:
   plp
 
 ; initialize LED
-  lda #LED_MASK
-  trb LED_PORT
-  tsb LED_PORT + DDR_OFFSET
+  lda #MORSE_LED
+  trb MORSE_PORT
+  tsb MORSE_PORT + DDR_OFFSET
 
 ; initialize LED control
   lda #CONTROL_LED
