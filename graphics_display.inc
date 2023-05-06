@@ -113,6 +113,20 @@ GD_ZERO_PAGE_STOP    = GD_ZERO_PAGE_BASE + $12
   .endm
 
 
+  .macro gd_send_word_immediate,value
+  lda #>(\value)
+  jsr gd_send_data
+  lda #<(\value)
+  jsr gd_send_data
+  .endm
+
+
+  .macro gd_send_command_immediate,value
+  lda #(\value)
+  jsr gd_send_command
+  .endm
+
+
 gd_prepare_vertical:
   jsr gd_configure
   jsr gd_reset
@@ -256,10 +270,7 @@ gd_clear_line:
 
   lda #ILI9341_PASET
   jsr gd_send_command
-  lda GD_X + 1
-  jsr gd_send_data
-  lda GD_X
-  jsr gd_send_data
+  gd_send_word GD_X
 
   clc
   lda GD_X
@@ -269,10 +280,7 @@ gd_clear_line:
   adc #>(ILI9341_TFTWIDTH-1)
   sta GD_X + 1
 
-;  lda GD_X + 1
-  jsr gd_send_data
-  lda GD_X
-  jsr gd_send_data
+  gd_send_word GD_X
 
   lda #ILI9341_RAMWR
   jsr gd_send_command
@@ -292,33 +300,17 @@ gd_clear_screen:
   jsr gdc_char_buffer_clear
   .endif
 
-  lda #ILI9341_DISPOFF
-  jsr gd_send_command
+  gd_send_command_immediate ILI9341_DISPOFF
 
-  lda #ILI9341_CASET
-  jsr gd_send_command
-  lda #0
-  jsr gd_send_data
-  lda #0
-  jsr gd_send_data
-  lda #>(ILI9341_TFTHEIGHT - 1)
-  jsr gd_send_data
-  lda #<(ILI9341_TFTHEIGHT - 1)
-  jsr gd_send_data
+  gd_send_command_immediate ILI9341_CASET
+  gd_send_word_immediate 0
+  gd_send_word_immediate ILI9341_TFTHEIGHT - 1
 
-  lda #ILI9341_PASET
-  jsr gd_send_command
-  lda #0
-  jsr gd_send_data
-  lda #0
-  jsr gd_send_data
-  lda #>(ILI9341_TFTWIDTH - 1)
-  jsr gd_send_data
-  lda #<(ILI9341_TFTWIDTH - 1)
-  jsr gd_send_data
+  gd_send_command_immediate ILI9341_PASET
+  gd_send_word_immediate 0
+  gd_send_word_immediate ILI9341_TFTWIDTH - 1
 
-  lda #ILI9341_RAMWR
-  jsr gd_send_command
+  gd_send_command_immediate ILI9341_RAMWR
 
 CLEAR_SCREEN_LOOP_COUNT = -9600 ; 320 * 240 * 2 (bytes) = 9600 * 16 (inline sends)
 
