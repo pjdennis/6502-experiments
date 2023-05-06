@@ -4,6 +4,11 @@
 ;   graphics_display.inc
 ;   multiply8x8.inc
 
+  .include macros.inc
+  .include graphics_macros.inc
+
+GDC_CURSOR_HEIGHT  = 2
+
 GDC_CHAR_PTR       = GDC_ZERO_PAGE_BASE + $00 ; 2 bytes
 GDC_INVERT         = GDC_ZERO_PAGE_BASE + $02 ; 1 byte
 
@@ -72,13 +77,8 @@ gdc_show_cursor:
 
   ; Set X and Y to top left of cursor
   jsr x_y_from_row_col
-  clc
-  lda GD_Y
-  adc #(16 - 2) ; Character height - cursor height
-  sta GD_Y
-  bcc .y_ready
-  inc GD_Y + 1
-.y_ready:
+
+  add8iTo16usingA GD_Y, GD_CHAR_HEIGHT - GDC_CURSOR_HEIGHT
 
   ; Load the character at GD_ROW, GD_COL
   jsr gdc_char_ptr_from_row_col
@@ -96,7 +96,7 @@ gdc_show_cursor:
 
   clc
   lda GD_Y
-  adc #1
+  adc #(GDC_CURSOR_HEIGHT - 1)
   sta GD_Y
   lda GD_Y + 1
   adc #0
@@ -116,7 +116,7 @@ gdc_show_cursor:
 
   clc
   lda GD_X
-  adc #11
+  adc #(GD_CHAR_WIDTH - 1)
   sta GD_X
   lda GD_X + 1
   adc #0
@@ -127,10 +127,9 @@ gdc_show_cursor:
   lda GD_X
   jsr gd_send_data
 
-  lda #ILI9341_RAMWR
-  jsr gd_send_command
+  gd_send_command_immediate ILI9341_RAMWR
 
-  ldy #1
+  ldy #0
 .col_loop:
   lda (GD_CHAR_DATA_PTR),Y
   eor GDC_INVERT
@@ -142,47 +141,21 @@ gdc_show_cursor:
 .row_loop:
   lsr GD_BYTE
   bcc .low_bit
-; high bit
-  lda #>ILI9341_WHITE
-;  jsr gd_send_data
-  sta PORTB
-  lda #GD_E
-  tsb GD_PORT
-  trb GD_PORT
-;  lda #<ILI9341_WHITE
-;;  jsr gd_send_data
-;  sta PORTB
-;  lda #GD_E
-  tsb GD_PORT
-  trb GD_PORT
+  gd_send_x2 >ILI9341_WHITE
   bra .color_done
 .low_bit:
-  lda #>ILI9341_BLACK
-;  jsr gd_send_data
-  sta PORTB
-  lda #GD_E
-  tsb GD_PORT
-  trb GD_PORT
-;  lda #<ILI9341_BLACK
-;;  jsr gd_send_data
-;  sta PORTB
-;  lda #GD_E
-  tsb GD_PORT
-  trb GD_PORT
+  gd_send_x2 >ILI9341_BLACK
 .color_done:
   dex
   bne .row_loop
   iny
-  iny
-  cpy #25
+  cpy #GD_CHAR_BYTES
   bne .col_loop
 
   ply
   plx
   pla
   rts
-
-
 
 
 ; On exit A, X, Y are preserved

@@ -1,5 +1,6 @@
-  .include character_patterns_12x16.inc
+  .include character_patterns_6x8.inc
   .include macros.inc
+  .include graphics_macros.inc
 
 
 ; PORT A
@@ -10,11 +11,11 @@ GD_CSB  = %00000010
 GD_RSTB = %00000100
 GD_DC   = %00100000
 
-GD_CHAR_WIDTH  = 12
-GD_CHAR_HEIGHT = 16
+GD_CHAR_WIDTH  = 6
+GD_CHAR_HEIGHT = 8
 
-GD_CHAR_ROWS   = 20
-GD_CHAR_COLS   = 20
+GD_CHAR_ROWS   = 40
+GD_CHAR_COLS   = 40
 
 GD_CHAR_BYTES = GD_CHAR_WIDTH * GD_CHAR_HEIGHT / 8
 
@@ -121,48 +122,6 @@ GD_STRING_PTR        = GD_ZERO_PAGE_BASE + $0e ; 2 bytes
 GD_BYTE              = GD_ZERO_PAGE_BASE + $10 ; 1 byte
 GD_SCROLL_ROWS       = GD_ZERO_PAGE_BASE + $11 ; 1 byte
 GD_ZERO_PAGE_STOP    = GD_ZERO_PAGE_BASE + $12
-
-
-  .macro gd_send_word,address
-  lda \address+1
-  jsr gd_send_data
-  lda \address
-  jsr gd_send_data
-  .endm
-
-
-  .macro gd_send_word_immediate,value
-  lda #>(\value)
-  jsr gd_send_data
-  lda #<(\value)
-  jsr gd_send_data
-  .endm
-
-
-  .macro gd_send_command_immediate,value
-  lda #(\value)
-  jsr gd_send_command
-  .endm
-
-
-  .macro gd_send_data_immediate,value
-  lda #(\value)
-  jsr gd_send_data
-  .endm
-
-
-  .macro gd_send_x2,value
-  lda #(\value)
-; jsr gd_send_data
-  sta PORTB
-  lda #GD_E
-  tsb GD_PORT
-  trb GD_PORT
-; lda <value>
-; jsr gd_send_data
-  tsb GD_PORT
-  trb GD_PORT
-  .endm
 
 
 gd_prepare_vertical:
@@ -509,10 +468,10 @@ set_char_data_ptr:
   ; Add the table base address
   clc
   lda MULTIPLY_8X8_RESULT_LOW
-  adc #<character_patterns_12x16
+  adc #<character_patterns_6x8
   sta GD_CHAR_DATA_PTR
   lda GD_CHAR_DATA_PTR + 1
-  adc #>character_patterns_12x16
+  adc #>character_patterns_6x8
   sta GD_CHAR_DATA_PTR + 1
   rts
 
