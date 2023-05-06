@@ -100,13 +100,9 @@ gdc_show_cursor:
   gd_send_command_immediate ILI9341_RAMWR
 
   ldy #0
+.BASE = GD_CHAR_DATA_PTR+(GD_CHAR_HEIGHT/8)-1
 .col_loop:
-  clc
-  tya
-  adc #(GD_CHAR_HEIGHT/8-1)
-  tay
-
-  lda (GD_CHAR_DATA_PTR),Y
+  lda (.BASE),Y
   eor GDC_INVERT
   ldx #(8-GDC_CURSOR_HEIGHT)
 .skip_loop:
@@ -125,8 +121,11 @@ gdc_show_cursor:
 .color_done:
   dex
   bne .row_loop
-  iny
-  cpy #(GD_CHAR_BYTES+(GD_CHAR_HEIGHT/8-1))
+  clc
+  tya
+  adc #(GD_CHAR_HEIGHT/8)
+  tay
+  cmp #GD_CHAR_BYTES
   bne .col_loop
 
   ply
