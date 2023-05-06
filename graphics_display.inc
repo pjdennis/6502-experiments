@@ -509,7 +509,7 @@ set_char_data_ptr:
 
 
 x_y_from_row_col:
-  ; GD_Y = GD_ROW * 16
+  ; GD_Y = GD_ROW * GD_CHAR_HEIGHT
   clc
   lda GD_ROW
   adc GD_SCROLL_ROWS
@@ -518,14 +518,14 @@ x_y_from_row_col:
   sec
   sbc #GD_CHAR_ROWS
 .row_ok:
-  ldy #16
+  ldy #GD_CHAR_HEIGHT
   jsr multiply8x8
   sta GD_Y + 1
   lda MULTIPLY_8X8_RESULT_LOW
   sta GD_Y
-  ; GD_X = GD_COL * 12
+  ; GD_X = GD_COL * GD_CHAR_WIDTH
   lda GD_COL
-  ldy #12
+  ldy #GD_CHAR_WIDTH
   jsr multiply8x8
   sta GD_X + 1
   lda MULTIPLY_8X8_RESULT_LOW
