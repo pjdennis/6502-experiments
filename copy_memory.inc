@@ -1,3 +1,20 @@
+  .macro invoke_copy_memory,destination,source,source_end
+  lda #<(\destination)
+  sta CP_M_DEST_P
+  lda #>(\destination)
+  sta CP_M_DEST_P + 1
+  lda #<(\source)
+  sta CP_M_SRC_P
+  lda #>(\source)
+  sta CP_M_SRC_P + 1
+  lda #<((\source_end) - (\source))
+  sta CP_M_LEN
+  lda #>((\source_end) - (\source))
+  sta CP_M_LEN + 1
+  jsr copy_memory
+  .endm
+
+
 ; On entry
 ;   CP_M_DEST_P - 2 bytes in Zero page containing destination pointer
 ;   CP_M_SRC_P  - 2 bytes in Zero page containing source pointer

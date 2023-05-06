@@ -106,19 +106,7 @@ keyboard_initialize:
 
   ; Relocate the interrupt handler. The EEPROM has a fixed address, INTERRUPT_ROUTINE
   ; for the interrupt routine so copy the handler there
-  lda #<INTERRUPT_ROUTINE
-  sta CP_M_DEST_P
-  lda #>INTERRUPT_ROUTINE
-  sta CP_M_DEST_P + 1
-  lda #<interrupt
-  sta CP_M_SRC_P
-  lda #>interrupt
-  sta CP_M_SRC_P + 1
-  lda #<(interrupt_end - interrupt)
-  sta CP_M_LEN
-  lda #>(interrupt_end - interrupt)
-  sta CP_M_LEN + 1
-  jsr copy_memory
+  invoke_copy_memory INTERRUPT_ROUTINE,interrupt,interrupt_end
 
   ; Initialize flags
   stz KEYBOARD_RECEIVING
