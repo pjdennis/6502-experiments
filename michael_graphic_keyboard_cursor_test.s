@@ -127,18 +127,26 @@ write_character_to_screen:
   beq .tab
   cmp #ASCII_LF
   beq .newline
+; Normal character
   jsr gd_show_character
+  inc GD_COL
+  jsr set_line_length
   lda GD_COL
-  cmp #GD_CHAR_COLS - 1
+  cmp #GD_CHAR_COLS
   bne .not_last_char
-  jsr set_line_length_when_wrapping
   lda GD_ROW
   cmp #GD_CHAR_ROWS - 1
   bne .not_last_char
   jsr do_scroll
   bra .done
 .not_last_char:
-  jsr gd_next_character
+  lda GD_COL
+  cmp #GD_CHAR_COLS
+  bne .done
+; at last character on line
+  stz GD_COL
+  inc GD_ROW
+  jsr set_line_length
   bra .done
 .backspace:
   lda GD_ROW
@@ -160,8 +168,9 @@ write_character_to_screen:
   bne .not_last_line
   jsr do_scroll
   bra .done
-.not_last_line:  
+.not_last_line:
   jsr gd_next_line
+  jsr set_line_length
 .done:
   rts
 
@@ -265,20 +274,6 @@ set_line_length:
   rts
 
 
-set_line_length_when_wrapping:
-  pha
-  phx
-
-  ldx GD_ROW
-  lda GD_COL
-  inc
-  sta LINE_LENGTHS,X
-
-  plx
-  pla
-  rts
-
-
 ; On entry A = character recieved
 ; On exit A, X, Y are preserved
 display_recieved_character:
@@ -356,6 +351,7 @@ handle_up:
   lda GD_ROW
   beq .skip
   dec GD_ROW
+  jsr force_col_to_length
 .skip:
 
   jsr cursor_on
@@ -374,6 +370,7 @@ handle_down:
   cmp #(GD_CHAR_ROWS - 1)
   beq .skip
   inc GD_ROW
+  jsr force_col_to_length
 .skip:
 
   jsr cursor_on
@@ -381,6 +378,26 @@ handle_down:
   stz FLASH_COUNTER
   pla
   rts
+
+
+; Limit cursor column to the length of the current line
+; Adjusts GD_COL based on the length of line at GD_ROW
+; On exit X, Y are preserved
+;         A is not preserved
+force_col_to_length:
+  phx
+
+  ldx GD_ROW
+  lda LINE_LENGTHS,X
+  cmp GD_COL
+  bcs .done
+  sta GD_COL
+.done
+
+  plx
+  rts
+
+
 
 
 handle_f1:
