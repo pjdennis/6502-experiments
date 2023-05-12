@@ -23,10 +23,10 @@ SCROLL_OFFSET            = $10 ; 2 bytes
 LINE_CHARS_REMAINING     = $12 ; 1 byte
 MULTIPLY_8X8_RESULT_LOW  = $13 ; 1 byte
 MULTIPLY_8X8_TEMP        = $14 ; 1 byte
+FLASH_COUNTER            = $15 ; 1 byte
+MAX_ROW                  = $16 ; 1 byte
 
-FLASH_COUNTER            = $15
-
-GD_ZERO_PAGE_BASE        = $16 ; 18 bytes
+GD_ZERO_PAGE_BASE        = $17
 GDC_ZERO_PAGE_BASE       = GD_ZERO_PAGE_STOP
 KB_ZERO_PAGE_BASE        = GDC_ZERO_PAGE_STOP
 TO_DECIMAL_PARAM         = KB_ZERO_PAGE_STOP
@@ -75,6 +75,7 @@ program_start:
 
   jsr cursor_on
   stz FLASH_COUNTER
+  stz MAX_ROW
 
   jsr reset_and_enable_display_no_cursor
   lda #<start_message
@@ -138,6 +139,7 @@ write_character_to_screen:
   cmp #GD_CHAR_ROWS - 1
   bne .not_last_char
   jsr do_scroll
+  jsr set_line_length
   bra .done
 .not_last_char:
   lda GD_COL
@@ -155,6 +157,7 @@ write_character_to_screen:
   beq .done
 .not_first_char:
   jsr move_position_back
+  jsr set_line_length
   lda #' '
   jsr gd_show_character
   bra .done
