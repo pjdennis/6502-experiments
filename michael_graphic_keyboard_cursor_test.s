@@ -188,6 +188,7 @@ write_character_to_screen:
 
 
 do_tab:
+  ; TODO remove next 2 lines?
   lda #' '
   jsr gd_show_character
   lda #TAB_WIDTH
@@ -202,14 +203,22 @@ do_tab:
   adc #TAB_WIDTH
   bra .loop
 .next_line
+  lda #GD_CHAR_COLS
+  sta GD_COL
+  jsr set_line_length
   lda GD_ROW
   cmp #GD_CHAR_ROWS - 1
   bne .not_last_line
-  jmp do_scroll ; tail call
+  jsr do_scroll
+  jsr set_line_length
+  rts
 .not_last_line:
-  jmp gd_next_line ; tail call
+  jsr gd_next_line
+  jsr set_line_length
+  rts
 .move_cursor:
   sta GD_COL
+  jsr set_line_length
   rts
 
 
