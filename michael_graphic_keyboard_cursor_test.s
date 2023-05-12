@@ -1,5 +1,3 @@
-; TODO: Line lengths not updating if using cursor to move and then typing
-
   .include base_config_v2.inc
 
 INTERRUPT_ROUTINE        = $3f00
@@ -188,9 +186,6 @@ write_character_to_screen:
 
 
 do_tab:
-  ; TODO remove next 2 lines?
-  lda #' '
-  jsr gd_show_character
   lda #TAB_WIDTH
 .loop:
   cmp #GD_CHAR_COLS
