@@ -72,6 +72,7 @@ program_start:
   txs
 
   jsr gd_prepare_vertical
+  jsr set_line_length
 
   jsr cursor_on
   stz FLASH_COUNTER
@@ -111,7 +112,7 @@ start_message: .asciiz "Last key press:"
 
 
 callback_char_received:
-  jsr display_recieved_character
+  jsr display_received_character
   jsr gd_select
   jsr cursor_off
   jsr write_character_to_screen
@@ -175,6 +176,12 @@ write_character_to_screen:
   jsr gd_next_line
   jsr set_line_length
 .done:
+; Set max row
+  lda GD_ROW
+  cmp MAX_ROW
+  bcc .return
+  sta MAX_ROW
+.return
   rts
 
 
@@ -230,6 +237,7 @@ move_position_back:
   sta GD_COL
   bra .done
 .previous_line:
+  dec MAX_ROW
   phx
   lda GD_ROW
   dec
@@ -277,9 +285,9 @@ set_line_length:
   rts
 
 
-; On entry A = character recieved
+; On entry A = character received
 ; On exit A, X, Y are preserved
-display_recieved_character:
+display_received_character:
   phx
   tax
   lda #DISPLAY_SECOND_LINE
@@ -347,7 +355,7 @@ handle_right:
   cmp GD_COL
   bcs .done
   lda GD_ROW
-  cmp #(GD_CHAR_ROWS - 1)
+  cmp MAX_ROW
   beq .at_end
   inc GD_ROW
   stz GD_COL
@@ -388,7 +396,7 @@ handle_down:
   jsr cursor_off
 
   lda GD_ROW
-  cmp #(GD_CHAR_ROWS - 1)
+  cmp MAX_ROW
   beq .skip
   inc GD_ROW
   jsr force_col_to_length
