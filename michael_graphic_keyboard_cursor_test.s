@@ -339,14 +339,21 @@ display_line_length:
 
   lda #(DISPLAY_SECOND_LINE + 10)
   jsr move_cursor
+  ldaxi .spaces
+  jsr display_string
+  lda #(DISPLAY_SECOND_LINE + 10)
+  jsr move_cursor
 
   ldx GD_ROW
-  lda LINE_LENGTHS,X
-  jsr display_hex
+  lda LINE_LENGTHS,X ; low byte of value to display
+  ldx #0             ; high byte of value to display
+  jsr display_decimal
 
   plx
   pla
   rts
+
+.spaces: .asciiz "   "
 
 
 cursor_on:
