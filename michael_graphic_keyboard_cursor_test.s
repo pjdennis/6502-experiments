@@ -81,6 +81,8 @@ program_start:
   ldx #>start_message
   jsr display_string
 
+  jsr display_line_length
+
   jsr keyboard_initialize
 
   ; Read and display translated characters from the keyboard
@@ -116,6 +118,7 @@ callback_char_received:
   jsr write_character_to_screen
   jsr cursor_on
   jsr gd_unselect
+  jsr display_line_length
   stz FLASH_COUNTER
   rts
 
@@ -324,6 +327,22 @@ display_received_character:
   rts
 
 
+display_line_length:
+  pha
+  phx
+
+  lda #DISPLAY_THIRD_LINE
+  jsr move_cursor
+
+  ldx GD_ROW
+  lda LINE_LENGTHS,X
+  jsr display_hex
+
+  plx
+  pla
+  rts
+
+
 cursor_on:
   pha
   lda #$ff
@@ -359,6 +378,7 @@ handle_left:
   jsr force_col_to_length
   jsr cursor_on
   jsr gd_unselect
+  jsr display_line_length
   stz FLASH_COUNTER
   pla
   rts
@@ -388,6 +408,7 @@ handle_right:
 
   jsr cursor_on
   jsr gd_unselect
+  jsr display_line_length
   stz FLASH_COUNTER
   pla
   rts
@@ -406,6 +427,7 @@ handle_up:
 
   jsr cursor_on
   jsr gd_unselect
+  jsr display_line_length
   stz FLASH_COUNTER
   pla
   rts
@@ -425,6 +447,7 @@ handle_down:
 
   jsr cursor_on
   jsr gd_unselect
+  jsr display_line_length
   stz FLASH_COUNTER
   pla
   rts
