@@ -123,6 +123,7 @@ callback_char_received:
 
 
 write_character_to_screen:
+  jsr move_to_end
   cmp #ASCII_BACKSPACE
   beq .backspace
   cmp #ASCII_TAB
@@ -171,6 +172,7 @@ write_character_to_screen:
   cmp #GD_CHAR_ROWS - 1
   bne .not_last_line
   jsr do_scroll
+  jsr set_line_length
   bra .done
 .not_last_line:
   jsr gd_next_line
@@ -279,6 +281,21 @@ set_line_length:
   ldx GD_ROW
   lda GD_COL
   sta LINE_LENGTHS,X
+
+  plx
+  pla
+  rts
+
+
+move_to_end:
+  pha
+  phx
+
+  lda MAX_ROW
+  sta GD_ROW
+  tax
+  lda LINE_LENGTHS,X
+  sta GD_COL
 
   plx
   pla
