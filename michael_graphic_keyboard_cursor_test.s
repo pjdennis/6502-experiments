@@ -1,4 +1,5 @@
   .include base_config_v2.inc
+  .include macros.inc
 
 INTERRUPT_ROUTINE        = $3f00
 
@@ -77,8 +78,12 @@ program_start:
   stz MAX_ROW
 
   jsr reset_and_enable_display_no_cursor
-  lda #<start_message
-  ldx #>start_message
+
+  ldaxi last_key_message
+  jsr display_string
+  lda #DISPLAY_SECOND_LINE
+  jsr move_cursor
+  ldaxi line_length_message
   jsr display_string
 
   jsr display_line_length
@@ -108,7 +113,8 @@ get_char_loop_2:
   bra get_char_loop
 
 
-start_message: .asciiz "Last key press:"
+last_key_message:    .asciiz "Last key:"
+line_length_message: .asciiz "Line len:"
 
 
 callback_char_received:
@@ -314,7 +320,7 @@ move_to_end:
 display_received_character:
   phx
   tax
-  lda #DISPLAY_SECOND_LINE
+  lda #(DISPLAY_FIRST_LINE + 10)
   jsr move_cursor
   txa
   jsr display_character
@@ -331,7 +337,7 @@ display_line_length:
   pha
   phx
 
-  lda #DISPLAY_THIRD_LINE
+  lda #(DISPLAY_SECOND_LINE + 10)
   jsr move_cursor
 
   ldx GD_ROW

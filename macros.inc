@@ -75,3 +75,9 @@
   pla
   sta \address+1
   .endm
+
+
+  .macro ldaxi,value
+  lda #<(\value)
+  ldx #>(\value)
+  .endm
