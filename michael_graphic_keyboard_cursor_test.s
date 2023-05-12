@@ -324,6 +324,7 @@ handle_left:
   jsr gd_select
   jsr cursor_off
   jsr gd_previous_character
+  jsr force_col_to_length
   jsr cursor_on
   jsr gd_unselect
   stz FLASH_COUNTER
@@ -336,6 +337,23 @@ handle_right:
   jsr gd_select
   jsr cursor_off
   jsr gd_next_character
+
+  phx
+  ldx GD_ROW
+  lda LINE_LENGTHS,X
+  cmp GD_COL
+  bcs .done
+  lda GD_ROW
+  cmp #(GD_CHAR_ROWS - 1)
+  beq .at_end
+  inc GD_ROW
+  stz GD_COL
+  bra .done
+.at_end:
+  jsr force_col_to_length
+.done:
+  plx
+
   jsr cursor_on
   jsr gd_unselect
   stz FLASH_COUNTER
