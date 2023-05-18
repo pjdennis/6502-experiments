@@ -115,7 +115,7 @@ advanceintab
 
 findintab
 findintab1 ; outer loop
-  LDA(),Y $02
+  LDA(),Y $02          ; LDA(),Y TAB
   BNE $02              ; BNE findintab2
   ; not found
   SEC
@@ -123,7 +123,7 @@ findintab1 ; outer loop
 ;invariant: pointed at first char
 ; first char of mnenomic in table loaded
 findintab2 ; inner loop
-  CMP,Y $0006
+  CMP,Y $0006          ; CMP,Y TOKEN
   BNE $0F              ; BNE findintab4 ; no match
   CMP# $00
   BNE $05              ; BNE findintab3

@@ -1009,6 +1009,9 @@ void write6502(uint16_t address, uint8_t value) {
     if (address == 0xf001) {
         fputc(value, output_file_ptr);
         return;
+    } else if (address == 0xf002) {
+        fputc(value, stderr);
+        return;
     }
     memory[address] = value;
 }
@@ -1049,10 +1052,13 @@ int main(int argc, char **argv) {
 
     size_t p = 0xf006;
     memory[p++] = 0x4c; //          jmp read_b
-    memory[p++] = 0x0c;
+    memory[p++] = 0x0f;
     memory[p++] = 0xf0;
     memory[p++] = 0x4c; //          jmp write_b
-    memory[p++] = 0x17;
+    memory[p++] = 0x1a;
+    memory[p++] = 0xf0;
+    memory[p++] = 0x4c; //          jmp write_d
+    memory[p++] = 0x1e;
     memory[p++] = 0xf0;
     memory[p++] = 0xad; // read_b:  lda $f004
     memory[p++] = 0x04;
@@ -1067,6 +1073,10 @@ int main(int argc, char **argv) {
     memory[p++] = 0x60; //          rts
     memory[p++] = 0x8d; // write_b: sta $f001
     memory[p++] = 0x01;
+    memory[p++] = 0xf0;
+    memory[p++] = 0x60; //          rts
+    memory[p++] = 0x8d; // write_d: sta $f002
+    memory[p++] = 0x02;
     memory[p++] = 0xf0;
     memory[p++] = 0x60; //          rts
 
@@ -1086,19 +1096,22 @@ int main(int argc, char **argv) {
             return 1;
         }
     }
+
     reset6502();
     const int max_cycles = 20000000;
     while (!done) {
         step6502();
         if (clockticks6502 > max_cycles) {
-            fprintf(stderr, "Program did not terminate within %i cycles\n", max_cycles);
+            fprintf(stderr, "File %s with input %s did not terminate within %i cycles\n",
+                    code_filename, input_filename, max_cycles);
             fclose(output_file_ptr);
             fclose(input_file_ptr);
             return 1;
         }
         // printf("PC=%04x\n", pc);
     }
-    fprintf(stderr, "File %s with input %s executed %i cycles\n", code_filename, input_filename, clockticks6502);
+    fprintf(stderr, "File %s with input %s executed %i cycles\n",
+            code_filename, input_filename, clockticks6502);
 
     if (strcmp(output_filename, "-") != 0) {
         fclose(output_file_ptr);
@@ -1109,7 +1122,7 @@ int main(int argc, char **argv) {
     uint16_t location = memory[0x100 + sp + 2] + (memory[0x100 + sp + 3] << 8) - 1;
     uint8_t exitcode = memory[location];
     if (exitcode != 0) {
-        fprintf(stderr, "%s: ", code_filename);
+        fprintf(stderr, "Error: ");
         for (int i = 0; i != 40; i++) {
             uint8_t c = memory[location + 1 + i];
             if (c == 0) break;

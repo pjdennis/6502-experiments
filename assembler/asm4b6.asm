@@ -2,13 +2,14 @@
 
 
 ; Provided by environment:
-;   read:    Returns next character in A
+;   read_b:  Returns next character in A
 ;            C set when at end
 ;            Automatically restarts input after reaching end
 ;
 ;   write_b: Writes A to output
-read      = $F006
+read_b    = $F006
 write_b   = $F009
+write_d   = $F00C
 
 LHASHTABL = $4000      ; Label hash table (low and high)
 LHASHTABH = $4100      ; "
@@ -33,7 +34,6 @@ HTHPL     = $000F      ; 2 byte pointer to high byte hash table
 HTHPH     = $0010      ; "
 TOKEN     = $0011      ; multiple bytes
 
-
 ; Environment should surface error codes and messages on BRK
 err_labelnotfound
   BRK $01 "Label not found" $00
@@ -46,6 +46,9 @@ err_opcodenotfound
 
 err_expectedhex
   BRK $04 "Expected hex value" $00
+
+err_branchoutofrange
+  BRK $05 "Branch out of range" $00
 
 
 init_heap
@@ -322,7 +325,7 @@ emit_done
 skiprestofline
   CMP# "\n"
   BEQ ~srol_done
-  JSR read
+  JSR read_b
   JMP skiprestofline
 srol_done
   RTS
@@ -331,7 +334,7 @@ srol_done
 skipspaces
   CMP# " "
   BNE ~ss_done
-  JSR read
+  JSR read_b
   JMP skipspaces
 ss_done
   RTS
@@ -375,7 +378,7 @@ readtoken
 readtokenloop
   STAZ,X <TOKEN
   INX
-  JSR read
+  JSR read_b
   JSR cmpendoftoken
   BNE ~readtokenloop
   PHA                  ; Save next char
@@ -428,7 +431,7 @@ readhex
   ASLA
   ASLA
   STAZ <TEMP
-  JSR read
+  JSR read_b
   JSR convhex
   ORAZ <TEMP
   RTS
@@ -438,10 +441,10 @@ readhex
 ; On exit C set if 2 bytes read clear if 1 byte read
 ;         A contains the next character
 grabhex
-  JSR read             ; Read the 1st hex character
+  JSR read_b           ; Read the 1st hex character
   JSR readhex          ; Read 2nd hex character and convert
   STAZ <HEX1
-  JSR read             ; Read 3rd hex char or terminator
+  JSR read_b           ; Read 3rd hex char or terminator
   JSR cmpendoftoken
   BNE ~gh_second
   CLC                  ; No second byte so return C = 0
@@ -449,7 +452,7 @@ grabhex
 gh_second
   JSR readhex          ; Read 4th hex char and convert
   STAZ <HEX2
-  JSR read             ; Read next char
+  JSR read_b           ; Read next char
   SEC                  ; Second byte so return C = 1
   RTS
 
@@ -480,7 +483,7 @@ readvalue
   CLC
   RTS
 rv_value
-  JSR read             ; Read the character after the "="
+  JSR read_b           ; Read the character after the "="
   JSR skipspaces
   CMP# "$"
   BEQ ~rv_hexvalue
@@ -561,15 +564,15 @@ eo_done
 
 ; Read and emit quoted ASCII
 emitquoted
-  JSR read
+  JSR read_b
   CMP# "\""
   BNE ~eq_notdone
-  JSR read             ; Done; read next char
+  JSR read_b           ; Done; read next char
   RTS
 eq_notdone
   CMP# "\\"
   BNE ~eq_notescaped
-  JSR read
+  JSR read_b
   CMP# "n"
   BNE ~eq_notescaped
   LDA# "\n"            ; Escaped "n" is linefeed
@@ -624,11 +627,57 @@ emitlabelrel
 elr_pass2
   JSR readandfindexistinglabel
   PHA                  ; Save next char
-  ; Calculate target - PC - 1
-  CLC ; for the - 1
+
+  CLC
   LDAZ <HEX2
   SBCZ <PCL
+  STAZ <HEX2
+  LDAZ <HEX1
+  SBCZ <PCH
+  STAZ <HEX1
+
+  JSR display_hex
+  LDAZ <HEX2
+  JSR display_hex
+  LDA# " "
+  JSR write_d
+
+  LDAZ <HEX1
+  CMP# $00
+  BEQ ~elr_forward
+  CMP# $FF
+  BEQ ~elr_backward
+  JMP err_branchoutofrange
+
+elr_forward
+  LDAZ <HEX2
+  AND# $80
+  BEQ ~elr_ok
+  JMP err_branchoutofrange
+
+elr_backward
+  LDAZ <HEX2
+  AND# $80
+  BNE ~elr_ok
+  JMP err_branchoutofrange
+
+elr_ok
+  LDAZ <HEX2
+
+
+  ; Calculate target - PC - 1
+;  CLC ; for the - 1
+;  LDAZ <HEX2
+;  SBCZ <PCL
+
+
   JSR emit
+
+  JSR display_hex
+  LDA# "\n"
+  JSR write_d
+
+
   PLA                  ; Restore next char
   RTS
 
@@ -639,7 +688,7 @@ assemble
   STAZ <PCL
   STAZ <PCH
 lnloop
-  JSR read
+  JSR read_b
   BCC ~lnloop1
   RTS                  ; At end of input
 lnloop1
@@ -671,19 +720,19 @@ tokloop1
 tokloop2
   CMP# "<"             ; LSB of variable
   BNE ~tokloop3
-  JSR read
+  JSR read_b
   JSR emitlabellsb
   JMP tokloop
 tokloop3
   CMP# ">"             ; MSB of variable
   BNE ~tokloop4
-  JSR read
+  JSR read_b
   JSR emitlabelmsb
   JMP tokloop
 tokloop4
   CMP# "~"             ; Relative address
   BNE ~tokloop5
-  JSR read
+  JSR read_b
   JSR emitlabelrel
   JMP tokloop
 tokloop5
@@ -691,8 +740,39 @@ tokloop5
   JMP tokloop
 
 
+display_hex_char
+  CMP# $0A
+  BCS ~display_hex_char_low
+  ; Carry alrady clear
+  ADC# "0"
+  JMP write_d          ; Tail call
+display_hex_char_low
+  ; C already set
+  SBC# $0A ; Subtract 10
+  CLC
+  ADC# "A"
+  JMP write_d ; Tail call
+
+
+display_hex
+  PHA
+  LSRA
+  LSRA
+  LSRA
+  LSRA
+  JSR display_hex_char
+  PLA
+  AND# $0F
+  JMP display_hex_char ; Tail call
+
+
 ; Entry point
 start
+;  LDA# $42
+;  JSR display_hex
+;  LDA# "\n"
+;  JSR write_d
+
   JSR init_heap
   JSR select_label_hash_table
   JSR init_hash_table
