@@ -9,7 +9,6 @@
 ;   write_b: Writes A to output
 read_b    = $F006
 write_b   = $F009
-write_d   = $F00C
 
 LHASHTABL = $4000      ; Label hash table (low and high)
 LHASHTABH = $4100      ; "
@@ -628,21 +627,14 @@ elr_pass2
   JSR readandfindexistinglabel
   PHA                  ; Save next char
 
-  CLC
+  ; Calculate target - PC - 1
+  CLC ; for the - 1
   LDAZ <HEX2
   SBCZ <PCL
   STAZ <HEX2
   LDAZ <HEX1
   SBCZ <PCH
-  STAZ <HEX1
 
-  JSR display_hex
-  LDAZ <HEX2
-  JSR display_hex
-  LDA# " "
-  JSR write_d
-
-  LDAZ <HEX1
   CMP# $00
   BEQ ~elr_forward
   CMP# $FF
@@ -663,21 +655,7 @@ elr_backward
 
 elr_ok
   LDAZ <HEX2
-
-
-  ; Calculate target - PC - 1
-;  CLC ; for the - 1
-;  LDAZ <HEX2
-;  SBCZ <PCL
-
-
   JSR emit
-
-  JSR display_hex
-  LDA# "\n"
-  JSR write_d
-
-
   PLA                  ; Restore next char
   RTS
 
@@ -740,39 +718,8 @@ tokloop5
   JMP tokloop
 
 
-display_hex_char
-  CMP# $0A
-  BCS ~display_hex_char_low
-  ; Carry alrady clear
-  ADC# "0"
-  JMP write_d          ; Tail call
-display_hex_char_low
-  ; C already set
-  SBC# $0A ; Subtract 10
-  CLC
-  ADC# "A"
-  JMP write_d ; Tail call
-
-
-display_hex
-  PHA
-  LSRA
-  LSRA
-  LSRA
-  LSRA
-  JSR display_hex_char
-  PLA
-  AND# $0F
-  JMP display_hex_char ; Tail call
-
-
 ; Entry point
 start
-;  LDA# $42
-;  JSR display_hex
-;  LDA# "\n"
-;  JSR write_d
-
   JSR init_heap
   JSR select_label_hash_table
   JSR init_hash_table

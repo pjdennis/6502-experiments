@@ -1,6 +1,8 @@
 M = $F000
+near_start = $0010
+near_end   = $FFE0
 
-  LDA# $00
+  BCC ~near_end
 
   BCC ~over
 
@@ -59,3 +61,6 @@ back
 over
   LDA# $00
   BCC ~back
+
+* = $FFE0
+  BCC ~near_start

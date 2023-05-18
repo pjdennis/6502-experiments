@@ -13,6 +13,6 @@ gcc -o emulator.out emulator.c &&
   ./emulator.out asm4b5.out 2000 asm4b6c.asm.out asm4b6c.out &&
   ./emulator.out asm4b6c.out 2000 asm4b6c.asm.out asm4b6c_2.out &&
   diff <(hexdump -C asm4b6c.out) <(hexdump -C asm4b6c_2.out) &&
-  ./emulator.out asm4b6c_2.out 2000 branch-test-forward-out-of-range.asm branch-test.out &&
+  ./emulator.out asm4b6c_2.out 2000 branch-test.asm branch-test.out &&
   hexdump -C branch-test.out &&
   echo "Did not fail"
