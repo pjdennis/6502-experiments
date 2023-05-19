@@ -1,4 +1,5 @@
 #!/bin/bash
+trap exit SIGINT
 clear && ./runbranchtest.sh
 echo "Waiting for file change..."
 
