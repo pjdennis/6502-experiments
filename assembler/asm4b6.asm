@@ -606,6 +606,11 @@ emitlabellsb
 
 
 ; On exit A contains the next character
+emitlabelbyte
+  JMP emitlabellsb
+
+
+; On exit A contains the next character
 emitlabelmsb
   JSR readandfindexistinglabel
   PHA                  ; Save next char
@@ -723,6 +728,12 @@ tokloop5
   JSR emitlabelrel
   JMP tokloop
 tokloop6
+  AND# $04
+  BEQ ~tokloop7
+  PLA
+  JSR emitlabelbyte
+  JMP tokloop
+tokloop7
   PLA
   JSR emitlabel        ; 2 byte variable
   JMP tokloop

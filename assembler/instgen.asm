@@ -57,49 +57,49 @@ scramble_table
 ; Instruction table
 MNTAB
 ;      Mnemonic           Opcode
-  DATA "ADC#"     $00 $00 $69
-  DATA "ADCZ"     $00 $00 $65
-  DATA "AND#"     $00 $00 $29
+  DATA "ADC#"     $00 $04 $69
+  DATA "ADCZ"     $00 $04 $65
+  DATA "AND#"     $00 $04 $29
   DATA "ASLA"     $00 $00 $0A
   DATA "BCC"      $00 $02 $90
   DATA "BCS"      $00 $02 $B0
   DATA "BEQ"      $00 $02 $F0
-  DATA "BITZ"     $00 $00 $24
+  DATA "BITZ"     $00 $04 $24
   DATA "BMI"      $00 $02 $30
   DATA "BNE"      $00 $02 $D0
   DATA "BPL"      $00 $02 $10
   DATA "BRK"      $00 $00 $00
   DATA "CLC"      $00 $00 $18
-  DATA "CMP#"     $00 $00 $C9
+  DATA "CMP#"     $00 $04 $C9
   DATA "CMP,Y"    $00 $00 $D9
-  DATA "EORZ"     $00 $00 $45
-  DATA "INCZ"     $00 $00 $E6
+  DATA "EORZ"     $00 $04 $45
+  DATA "INCZ"     $00 $04 $E6
   DATA "INX"      $00 $00 $E8
   DATA "INY"      $00 $00 $C8
   DATA "JMP"      $00 $00 $4C
   DATA "JSR"      $00 $00 $20
-  DATA "LDA#"     $00 $00 $A9
-  DATA "LDAZ(),Y" $00 $00 $B1
+  DATA "LDA#"     $00 $04 $A9
+  DATA "LDAZ(),Y" $00 $04 $B1
   DATA "LDA,X"    $00 $00 $BD
   DATA "LDA,Y"    $00 $00 $B9
-  DATA "LDAZ"     $00 $00 $A5
-  DATA "LDAZ,X"   $00 $00 $B5
-  DATA "LDX#"     $00 $00 $A2
-  DATA "LDY#"     $00 $00 $A0
+  DATA "LDAZ"     $00 $04 $A5
+  DATA "LDAZ,X"   $00 $04 $B5
+  DATA "LDX#"     $00 $04 $A2
+  DATA "LDY#"     $00 $04 $A0
   DATA "LSRA"     $00 $00 $4A
-  DATA "ORAZ"     $00 $00 $05
+  DATA "ORAZ"     $00 $04 $05
   DATA "PHA"      $00 $00 $48
   DATA "PLA"      $00 $00 $68
   DATA "RTS"      $00 $00 $60
-  DATA "SBC#"     $00 $00 $E9
-  DATA "SBCZ"     $00 $00 $E5
+  DATA "SBC#"     $00 $04 $E9
+  DATA "SBCZ"     $00 $04 $E5
   DATA "SEC"      $00 $00 $38
   DATA "STA"      $00 $00 $8D
-  DATA "STAZ(),Y" $00 $00 $91
+  DATA "STAZ(),Y" $00 $04 $91
   DATA "STA,X"    $00 $00 $9D
   DATA "STA,Y"    $00 $00 $99
-  DATA "STAZ"     $00 $00 $85
-  DATA "STAZ,X"   $00 $00 $95
+  DATA "STAZ"     $00 $04 $85
+  DATA "STAZ,X"   $00 $04 $95
   DATA "TAY"      $00 $00 $A8
   DATA "TYA"      $00 $00 $98
   DATA "DATA"     $00 $01 $00 ; Directive
