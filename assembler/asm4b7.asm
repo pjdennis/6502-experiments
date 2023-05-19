@@ -203,7 +203,7 @@ ft_notmatch            ; Not a match - move to next
   ; Check if 'next' pointer is 0
   LDY# $00
   LDAZ(),Y <PL
-  BNE ft_notmatch1 ; not zero
+  BNE ft_notmatch1     ; not zero
   INY
   LDAZ(),Y <PL
   BEQ ft_atend
@@ -267,7 +267,7 @@ store_token
   INY
   JSR advance_heap
   ; Store token name
-  LDY# $FF         ; Alternative: DEY
+  LDY# $FF             ; Alternative: DEY
 st_loop
   INY
   LDA,Y TOKEN
@@ -281,7 +281,7 @@ st_loop
   LDAZ <HEX1
   STAZ(),Y <MEMPL
   INY
-  JMP advance_heap ; Tail call
+  JMP advance_heap     ; Tail call
 
 
 ; On entry TOKEN contains token
@@ -311,7 +311,7 @@ ha_store
 ; On exit A, X, Y are preserved
 emit
   BITZ <PASS
-  BPL emit_incpc      ; Skip writing during pass 1
+  BPL emit_incpc       ; Skip writing during pass 1
   JSR write_b
 emit_incpc
   INCZ <PCL
@@ -409,7 +409,7 @@ rafel_found
 ; On exit A contains the value (0-15)
 convhex
   CMP# "A"
-  BCC ch_numeric      ; < 'A'
+  BCC ch_numeric       ; < 'A'
   SBC# "A"             ; Carry already set
   CLC
   ADC# $0A             ; ADC# 10
@@ -553,7 +553,7 @@ emitopcode
 eo_found
   LDAZ <HEX2
   AND# $01
-  BNE eo_done         ; Not opcode (DATA command)
+  BNE eo_done          ; Not opcode (DATA command)
   ; Opcode
   LDAZ <HEX1
   JSR emit
@@ -686,7 +686,7 @@ lnloop2
 tokloop
   JSR skipspaces
   JSR checkforend
-  BCS lnloop          ; End of line
+  BCS lnloop           ; End of line
   CMP# "\""            ; Quoted string
   BNE tokloop1
   JSR emitquoted
