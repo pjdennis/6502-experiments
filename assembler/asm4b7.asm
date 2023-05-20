@@ -33,11 +33,6 @@ HTHPL     = $000F      ; 2 byte pointer to high byte hash table
 HTHPH     = $0010      ; "
 TOKEN     = $0011      ; multiple bytes
 
-FOO       = $00FF
-
-  DATA "XXXX"
-  LDA# FOO
-  DATA "YYYY"
 
 ; Environment should surface error codes and messages on BRK
 err_labelnotfound
@@ -622,18 +617,8 @@ emitlabelbyte
   BPL elb_ok           ; Skip validation on pass 1
   LDAZ HEX1
   BEQ elb_ok
-
-  LDA# "["
-  JSR write_d
-  LDAZ HEX1
-  JSR display_hex
-  LDA# "]"
-  JSR write_d
-  LDA# "\n"
-  JSR write_d
-
-   PLA
-   JMP err_valueoutofrange
+  PLA
+  JMP err_valueoutofrange
 elb_ok
   ; Emit low byte
   LDAZ HEX2
@@ -778,39 +763,6 @@ start
   STAZ PASS           ; Bit 7 = 1 (pass 2)
   JSR assemble
   BRK $00              ; Success
-
-
-write_d   = $F00C
-
-display_hex_char
-  CMP# $0A
-  BCS display_hex_char_low
-  ; Carry alrady clear
-  ADC# "0"
-  JMP write_d          ; Tail call
-display_hex_char_low
-  ; C already set
-  SBC# $0A ; Subtract 10
-  CLC
-  ADC# "A"
-  JMP write_d ; Tail call
-
-
-display_hex
-  PHA
-  LSRA
-  LSRA
-  LSRA
-  LSRA
-  JSR display_hex_char
-  PLA
-  AND# $0F
-  JMP display_hex_char ; Tail call
-
-
-
-
-
 
 
   DATA start ; Emulation environment jumps to address in last 2 bytes
