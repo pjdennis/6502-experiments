@@ -344,6 +344,9 @@ emit_done
   RTS
 
 
+; Read and discard characters up to the end of the current line
+; On entry A contains the next character
+; On exit A contains "\n"
 skiprestofline
   CMP# "\n"
   BEQ srol_done
@@ -353,6 +356,9 @@ srol_done
   RTS
 
 
+; Read and discard space characters
+; On entry A contains the next character
+; On exit A contains the next character following the last space
 skipspaces
   CMP# " "
   BNE ss_done
@@ -362,6 +368,8 @@ ss_done
   RTS
 
 
+; On entry A contains the next character
+; On exit Z is set if current character terminates the current token, unset otherwise
 cmpendoftoken
   CMP# " "
   BEQ ceof_end
@@ -390,8 +398,8 @@ cfe_end
   RTS
 
 
-; On entry A contains first character of token
 ; Reads token into TOKEN (zero terminated)
+; On entry A contains first character of token
 ; On exit A contains next character after token
 ;         Y is preserved
 ;         X is not preserved
