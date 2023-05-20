@@ -61,9 +61,9 @@ err_valueoutofrange
 
 init_heap
   LDA# <HEAP
-  STAZ <MEMPL
+  STAZ MEMPL
   LDA# >HEAP
-  STAZ <MEMPH
+  STAZ MEMPH
   RTS
 
 
@@ -71,35 +71,35 @@ advance_heap
   TYA
   LDY# $00
   CLC
-  ADCZ <MEMPL
-  STAZ <MEMPL
+  ADCZ MEMPL
+  STAZ MEMPL
   TYA
-  ADCZ <MEMPH
-  STAZ <MEMPH
+  ADCZ MEMPH
+  STAZ MEMPH
   RTS
 
 
 select_label_hash_table
   LDA# <LHASHTABL
-  STAZ <HTLPL
+  STAZ HTLPL
   LDA# >LHASHTABL
-  STAZ <HTLPH
+  STAZ HTLPH
   LDA# <LHASHTABH
-  STAZ <HTHPL
+  STAZ HTHPL
   LDA# >LHASHTABH
-  STAZ <HTHPH
+  STAZ HTHPH
   RTS
 
 
 select_instruction_hash_table
   LDA# <IHASHTABL
-  STAZ <HTLPL
+  STAZ HTLPL
   LDA# >IHASHTABL
-  STAZ <HTLPH
+  STAZ HTLPH
   LDA# <IHASHTABH
-  STAZ <HTHPL
+  STAZ HTHPL
   LDA# >IHASHTABH
-  STAZ <HTHPH
+  STAZ HTHPH
   RTS
 
 
@@ -107,8 +107,8 @@ init_hash_table
   LDY# $00
   TYA                  ; A <- 0
 iht_loop
-  STAZ(),Y <HTLPL
-  STAZ(),Y <HTHPL
+  STAZ(),Y HTLPL
+  STAZ(),Y HTHPL
   INY
   BNE iht_loop
   RTS
@@ -116,15 +116,15 @@ iht_loop
 
 calculate_hash
   LDA# $00
-  STAZ <HASH
+  STAZ HASH
   LDX# $00
 ch_loop
-  LDAZ,X <TOKEN
+  LDAZ,X TOKEN
   BEQ ch_done
-  EORZ <HASH
+  EORZ HASH
   TAY
   LDA,Y scramble_table
-  STAZ <HASH
+  STAZ HASH
   INX
   JMP ch_loop
 ch_done
@@ -133,44 +133,44 @@ ch_done
 
 ; On exit Z = 1 if entry is empty
 hash_entry_empty
-  LDAZ <HASH
+  LDAZ HASH
   TAY
-  LDAZ(),Y <HTLPL
+  LDAZ(),Y HTLPL
   BNE hee_done
-  LDAZ(),Y <HTHPL
+  LDAZ(),Y HTHPL
 hee_done
   RTS
 
 
 ; Load from hash table to TABPL;TABPH
 load_hash_entry
-  LDAZ <HASH
+  LDAZ HASH
   TAY
-  LDAZ(),Y <HTLPL
-  STAZ <TABPL
-  LDAZ(),Y <HTHPL
-  STAZ <TABPH
+  LDAZ(),Y HTLPL
+  STAZ TABPL
+  LDAZ(),Y HTHPL
+  STAZ TABPH
   RTS
 
 
 ; Store current memory pointer in hash table
 store_hash_entry
-  LDAZ <HASH
+  LDAZ HASH
   TAY
-  LDAZ <MEMPL
-  STAZ(),Y <HTLPL
-  LDAZ <MEMPH
-  STAZ(),Y <HTHPL
+  LDAZ MEMPL
+  STAZ(),Y HTLPL
+  LDAZ MEMPH
+  STAZ(),Y HTHPL
   RTS
 
 
 ; Store current memory pointer in table
 store_table_entry
-  LDAZ <MEMPL
-  STAZ(),Y <TABPL
+  LDAZ MEMPL
+  STAZ(),Y TABPL
   INY
-  LDAZ <MEMPH
-  STAZ(),Y <TABPL
+  LDAZ MEMPH
+  STAZ(),Y TABPL
   INY
   RTS
 
@@ -183,23 +183,23 @@ store_table_entry
 find_token
 ft_tokenloop
   ; Store the current pointer
-  LDAZ <TABPL
-  STAZ <PL
-  LDAZ <TABPH
-  STAZ <PH
+  LDAZ TABPL
+  STAZ PL
+  LDAZ TABPH
+  STAZ PH
   ; Advance past 'next' pointer
   CLC
   LDA# $02
-  ADCZ <TABPL
-  STAZ <TABPL
+  ADCZ TABPL
+  STAZ TABPL
   LDA# $00
-  ADCZ <TABPH
-  STAZ <TABPH
+  ADCZ TABPH
+  STAZ TABPH
   ; Check for matching token
   LDY# $FF
 ft_charloop
   INY
-  LDAZ(),Y <TABPL
+  LDAZ(),Y TABPL
   CMP,Y TOKEN
   BNE ft_notmatch
   CMP# $00
@@ -211,28 +211,28 @@ ft_charloop
 ft_notmatch            ; Not a match - move to next
   ; Check if 'next' pointer is 0
   LDY# $00
-  LDAZ(),Y <PL
+  LDAZ(),Y PL
   BNE ft_notmatch1     ; not zero
   INY
-  LDAZ(),Y <PL
+  LDAZ(),Y PL
   BEQ ft_atend
   ; Not at end
-  STAZ <TABPH
+  STAZ TABPH
   LDA# $00
-  STAZ <TABPL
+  STAZ TABPL
   JMP ft_tokenloop
 ft_notmatch1
-  STAZ <TABPL
+  STAZ TABPL
   INY
-  LDAZ(),Y <PL
-  STAZ <TABPH
+  LDAZ(),Y PL
+  STAZ TABPH
   JMP ft_tokenloop
 ft_atend
   ; point tabp,Y to the zero 'next' pointer
-  LDAZ <PL
-  STAZ <TABPL
-  LDAZ <PH
-  STAZ <TABPH
+  LDAZ PL
+  STAZ TABPL
+  LDAZ PH
+  STAZ TABPH
   LDY# $00
   SEC ; Carry set indicates not found
   RTS
@@ -250,11 +250,11 @@ find_in_hash
   JSR find_token
   BCS fih_notfound
   ; Found
-  LDAZ(),Y <TABPL
-  STAZ <HEX2
+  LDAZ(),Y TABPL
+  STAZ HEX2
   INY
-  LDAZ(),Y <TABPL
-  STAZ <HEX1
+  LDAZ(),Y TABPL
+  STAZ HEX1
   CLC
   RTS
 fih_notfound
@@ -270,9 +270,9 @@ store_token
   LDY# $00
   ; Store null pointer (pointer to next)
   LDA# $00
-  STAZ(),Y <MEMPL
+  STAZ(),Y MEMPL
   INY
-  STAZ(),Y <MEMPL
+  STAZ(),Y MEMPL
   INY
   JSR advance_heap
   ; Store token name
@@ -280,15 +280,15 @@ store_token
 st_loop
   INY
   LDA,Y TOKEN
-  STAZ(),Y <MEMPL
+  STAZ(),Y MEMPL
   BNE st_loop
   INY
   ; Store value
-  LDAZ <HEX2
-  STAZ(),Y <MEMPL
+  LDAZ HEX2
+  STAZ(),Y MEMPL
   INY
-  LDAZ <HEX1
-  STAZ(),Y <MEMPL
+  LDAZ HEX1
+  STAZ(),Y MEMPL
   INY
   JMP advance_heap     ; Tail call
 
@@ -319,13 +319,13 @@ ha_store
 ; On entry A contains the byte to emit
 ; On exit A, X, Y are preserved
 emit
-  BITZ <PASS
+  BITZ PASS
   BPL emit_incpc       ; Skip writing during pass 1
   JSR write_b
 emit_incpc
-  INCZ <PCL
+  INCZ PCL
   BNE emit_done
-  INCZ <PCH
+  INCZ PCH
 emit_done
   RTS
 
@@ -384,14 +384,14 @@ cfe_end
 readtoken
   LDX# $00
 readtokenloop
-  STAZ,X <TOKEN
+  STAZ,X TOKEN
   INX
   JSR read_b
   JSR cmpendoftoken
   BNE readtokenloop
   PHA                  ; Save next char
   LDA# $00
-  STAZ,X <TOKEN
+  STAZ,X TOKEN
   PLA                  ; Restore next char
   RTS
 
@@ -399,7 +399,7 @@ readtokenloop
 ; On exit A contains the next character
 readandfindexistinglabel
   JSR readtoken
-  BITZ <PASS
+  BITZ PASS
   BMI rafel_pass2
   ; Pass 1
   RTS
@@ -438,10 +438,10 @@ readhex
   ASLA
   ASLA
   ASLA
-  STAZ <TEMP
+  STAZ TEMP
   JSR read_b
   JSR convhex
-  ORAZ <TEMP
+  ORAZ TEMP
   RTS
 
 
@@ -451,7 +451,7 @@ readhex
 grabhex
   JSR read_b           ; Read the 1st hex character
   JSR readhex          ; Read 2nd hex character and convert
-  STAZ <HEX1
+  STAZ HEX1
   JSR read_b           ; Read 3rd hex char or terminator
   JSR cmpendoftoken
   BNE gh_second
@@ -459,7 +459,7 @@ grabhex
   RTS
 gh_second
   JSR readhex          ; Read 4th hex char and convert
-  STAZ <HEX2
+  STAZ HEX2
   JSR read_b           ; Read next char
   SEC                  ; Second byte so return C = 1
   RTS
@@ -473,10 +473,10 @@ emithex
   JSR grabhex          ; Returns C = 1 if 2 bytes read
   PHA                  ; Save next char
   BCC eh_one
-  LDAZ <HEX2
+  LDAZ HEX2
   JSR emit
 eh_one
-  LDAZ <HEX1
+  LDAZ HEX1
   JSR emit
   PLA                  ; Restore next char
   RTS
@@ -506,7 +506,7 @@ rv_hexvalue
 capturelabel
   JSR readtoken
   PHA                  ; Save next char
-  LDAZ <TOKEN
+  LDAZ TOKEN
   CMP# "*"
   BNE cl_normallabel
   ; Set PC
@@ -515,13 +515,13 @@ capturelabel
   JSR skiprestofline
   ; No need to retain next char as caller
   ; goes straight to next line
-  LDAZ <HEX2
-  STAZ <PCL
-  LDAZ <HEX1
-  STAZ <PCH
+  LDAZ HEX2
+  STAZ PCL
+  LDAZ HEX1
+  STAZ PCH
   RTS
 cl_normallabel
-  BITZ <PASS
+  BITZ PASS
   BPL cl_pass1
   ; Pass 2 - don't capture
   PLA                  ; Restore next char
@@ -532,10 +532,10 @@ cl_pass1
   PHA                  ; Save next char
   BCS cl_hextotable
   ; Store program counter
-  LDAZ <PCL
-  STAZ <HEX2
-  LDAZ <PCH
-  STAZ <HEX1
+  LDAZ PCL
+  STAZ HEX2
+  LDAZ PCH
+  STAZ HEX1
 cl_hextotable
   JSR select_label_hash_table
   JSR hash_add
@@ -560,11 +560,11 @@ emitopcode
   PLA                  ; Restore next char
   JMP err_opcodenotfound
 eo_found
-  LDAZ <HEX2
+  LDAZ HEX2
   AND# $01
   BNE eo_done          ; Not opcode (DATA command)
   ; Opcode
-  LDAZ <HEX1
+  LDAZ HEX1
   JSR emit
 eo_done
   PLA                  ; Restore next char
@@ -595,9 +595,9 @@ emitlabel
   JSR readandfindexistinglabel
   PHA                  ; Save next char
   ; Emit low byte then high byte from table
-  LDAZ <HEX2
+  LDAZ HEX2
   JSR emit
-  LDAZ <HEX1
+  LDAZ HEX1
   JSR emit
   PLA                  ; Restore next char
   RTS
@@ -608,7 +608,7 @@ emitlabellsb
   JSR readandfindexistinglabel
   PHA                  ; Save next char
   ; Emit low byte
-  LDAZ <HEX2
+  LDAZ HEX2
   JSR emit
   PLA                  ; Restore next char
   RTS
@@ -618,14 +618,14 @@ emitlabellsb
 emitlabelbyte
   JSR readandfindexistinglabel
   PHA                  ; Save next char
-  BITZ <PASS
+  BITZ PASS
   BPL elb_ok           ; Skip validation on pass 1
-  LDAZ <HEX1
+  LDAZ HEX1
   BEQ elb_ok
 
   LDA# "["
   JSR write_d
-  LDAZ <HEX1
+  LDAZ HEX1
   JSR display_hex
   LDA# "]"
   JSR write_d
@@ -636,7 +636,7 @@ emitlabelbyte
    JMP err_valueoutofrange
 elb_ok
   ; Emit low byte
-  LDAZ <HEX2
+  LDAZ HEX2
   JSR emit
   PLA                  ; Restore next char
   RTS 
@@ -647,7 +647,7 @@ emitlabelmsb
   JSR readandfindexistinglabel
   PHA                  ; Save next char
   ; Emit high byte
-  LDAZ <HEX1
+  LDAZ HEX1
   JSR emit
   PLA                  ; Restore next character
   RTS
@@ -655,7 +655,7 @@ emitlabelmsb
 
 ; On exit A contains the next character
 emitlabelrel
-  BITZ <PASS
+  BITZ PASS
   BMI elr_pass2
   ; Pass 1
   JSR readtoken
@@ -667,11 +667,11 @@ elr_pass2
 
   ; Calculate target - PC - 1
   CLC ; for the - 1
-  LDAZ <HEX2
-  SBCZ <PCL
-  STAZ <HEX2
-  LDAZ <HEX1
-  SBCZ <PCH
+  LDAZ HEX2
+  SBCZ PCL
+  STAZ HEX2
+  LDAZ HEX1
+  SBCZ PCH
 
   CMP# $00
   BEQ elr_forward
@@ -680,19 +680,19 @@ elr_pass2
   JMP err_branchoutofrange
 
 elr_forward
-  LDAZ <HEX2
+  LDAZ HEX2
   AND# $80
   BEQ elr_ok
   JMP err_branchoutofrange
 
 elr_backward
-  LDAZ <HEX2
+  LDAZ HEX2
   AND# $80
   BNE elr_ok
   JMP err_branchoutofrange
 
 elr_ok
-  LDAZ <HEX2
+  LDAZ HEX2
   JSR emit
   PLA                  ; Restore next char
   RTS
@@ -701,8 +701,8 @@ elr_ok
 ; Main assembler
 assemble
   LDA# $00
-  STAZ <PCL
-  STAZ <PCH
+  STAZ PCL
+  STAZ PCH
 lnloop
   JSR read_b
   BCC lnloop1
@@ -747,14 +747,14 @@ tokloop3
   JMP tokloop
 tokloop4
   PHA
-  LDAZ <HEX2
+  LDAZ HEX2
   AND# $02
   BEQ tokloop5
   PLA
   JSR emitlabelrel
   JMP tokloop
 tokloop5
-  LDAZ <HEX2
+  LDAZ HEX2
   AND# $04
   BEQ tokloop6
   PLA
@@ -772,10 +772,10 @@ start
   JSR select_label_hash_table
   JSR init_hash_table
   LDA# $00
-  STAZ <PASS           ; Bit 7 = 0 (pass 1)
+  STAZ PASS           ; Bit 7 = 0 (pass 1)
   JSR assemble
   LDA# $FF
-  STAZ <PASS           ; Bit 7 = 1 (pass 2)
+  STAZ PASS           ; Bit 7 = 1 (pass 2)
   JSR assemble
   BRK $00              ; Success
 
