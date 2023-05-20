@@ -489,6 +489,14 @@ rv_value
   JMP err_expectedhex
 rv_hexvalue
   JSR grabhex
+  BCS ~rv_ok
+  PHA
+  LDAZ <HEX1
+  STAZ <HEX2
+  LDA# $00
+  STAZ <HEX1
+  PLA
+rv_ok
   SEC
   RTS
 

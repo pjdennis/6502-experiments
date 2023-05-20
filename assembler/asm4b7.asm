@@ -14,24 +14,24 @@ LHASHTABL = $4000      ; Label hash table (low and high)
 LHASHTABH = $4100      ; "
 HEAP      = $4200      ; Data heap
 
-TEMP      = $0000      ; 1 byte
-TABPL     = $0001      ; 2 byte table pointer
-TABPH     = $0002      ; "
-PCL       = $0003      ; 2 byte program counter
-PCH       = $0004      ; "
-HEX1      = $0005      ; 1 byte
-HEX2      = $0006      ; 1 byte
-PASS      = $0007      ; 1 byte $00 = pass 1 $FF = pass 2
-MEMPL     = $0008      ; 2 byte heap pointer
-MEMPH     = $0009      ; "
-PL        = $000A      ; 2 byte pointer
-PH        = $000B      ; "
-HASH      = $000C      ; 1 byte hash value
-HTLPL     = $000D      ; 2 byte pointer to low byte hash table
-HTLPH     = $000E      ; "
-HTHPL     = $000F      ; 2 byte pointer to high byte hash table
-HTHPH     = $0010      ; "
-TOKEN     = $0011      ; multiple bytes
+TEMP      = $00        ; 1 byte
+TABPL     = $01        ; 2 byte table pointer
+TABPH     = $02        ; "
+PCL       = $03        ; 2 byte program counter
+PCH       = $04        ; "
+HEX1      = $05        ; 1 byte
+HEX2      = $06        ; 1 byte
+PASS      = $07        ; 1 byte $00 = pass 1 $FF = pass 2
+MEMPL     = $08        ; 2 byte heap pointer
+MEMPH     = $09        ; "
+PL        = $0A        ; 2 byte pointer
+PH        = $0B        ; "
+HASH      = $0C        ; 1 byte hash value
+HTLPL     = $0D        ; 2 byte pointer to low byte hash table
+HTLPH     = $0E        ; "
+HTHPL     = $0F        ; 2 byte pointer to high byte hash table
+HTHPH     = $10        ; "
+TOKEN     = $11        ; multiple bytes
 
 
 ; Environment should surface error codes and messages on BRK
@@ -504,6 +504,14 @@ rv_value
   JMP err_expectedhex
 rv_hexvalue
   JSR grabhex
+  BCS rv_ok
+  PHA
+  LDAZ HEX1
+  STAZ HEX2
+  LDA# $00
+  STAZ HEX1
+  PLA
+rv_ok
   SEC
   RTS
 
