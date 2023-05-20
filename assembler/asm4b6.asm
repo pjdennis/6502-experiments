@@ -728,6 +728,7 @@ tokloop5
   JSR emitlabelrel
   JMP tokloop
 tokloop6
+  LDAZ <HEX2
   AND# $04
   BEQ ~tokloop7
   PLA
