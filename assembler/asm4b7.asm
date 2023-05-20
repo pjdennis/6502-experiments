@@ -640,15 +640,10 @@ emitlabelmsb
 
 ; On exit A contains the next character
 emitlabelrel
-  BITZ PASS
-  BMI elr_pass2
-  ; Pass 1
-  JSR readtoken
-  JSR emit
-  RTS
-elr_pass2
   JSR readandfindexistinglabel
   PHA                  ; Save next char
+  BITZ PASS
+  BPL elr_ok           ; Skip calculations and validations on pass 1
 
   ; Calculate target - PC - 1
   CLC ; for the - 1
