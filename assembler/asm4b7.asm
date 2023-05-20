@@ -65,6 +65,11 @@ init_heap
   RTS
 
 
+; On entry Y contains the amount to advance
+; On exit MEMPL;MEMPH is incremented by Y
+;         Y = 0
+;         X is preserved
+;         A is not preserved
 advance_heap
   TYA
   LDY# $00
@@ -112,6 +117,9 @@ iht_loop
   RTS
   
 
+; On entry TOKEN contains the token to calculate hash from
+; On exit HASH contains the calculated hash value
+;         A, X, Y are not preserved
 calculate_hash
   LDA# $00
   STAZ HASH
@@ -130,7 +138,10 @@ ch_done
   RTS
 
 
-; On exit Z = 1 if entry is empty
+; On entry HASH contains the hash value
+; On exit Z set if entry is empty, clear otherwise
+;         X is preserved
+;         A, Y are not preserved
 hash_entry_empty
   LDAZ HASH
   TAY
@@ -142,6 +153,10 @@ hee_done
 
 
 ; Load from hash table to TABPL;TABPH
+; On entry HASH contains the hash value
+; On exit TABPL;TABPH countains pointer corresponding to the hash value
+;         X is preserved
+;         A, Y are not preserved
 load_hash_entry
   LDAZ HASH
   TAY
@@ -177,7 +192,7 @@ store_table_entry
 ; On entry TABPL;TABPH point to head of list of entries
 ;          TOKEN contains the token to find
 ; On exit C clear if found; set if not found
-;         TABPL;TABPHi,Y points to value if found
+;         TABPL;TABPH,Y points to value if found
 ;         or to 'next' pointer if not found
 find_token
 ft_tokenloop
