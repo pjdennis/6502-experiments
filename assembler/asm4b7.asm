@@ -11,8 +11,8 @@ read_b    = $F006
 write_b   = $F009
 
 LHASHTABL = $4000      ; Label hash table (low and high)
-LHASHTABH = $4100      ; "
-HEAP      = $4200      ; Data heap
+LHASHTABH = $4080      ; "
+HEAP      = $4100      ; Data heap
 
 TEMP      = $00        ; 1 byte
 TABPL     = $01        ; 2 byte table pointer
@@ -119,6 +119,7 @@ calculate_hash
 ch_loop
   LDAZ,X TOKEN
   BEQ ch_done
+  AND# $7F
   EORZ HASH
   TAY
   LDA,Y scramble_table
