@@ -276,10 +276,10 @@ fih_notfound
   RTS
 
 
-; On entry HEX1 and HEX2 contain MSB and LSB of value
-;          TOKEN contains name of token
 ; Stores null next pointer, token and value on heap
 ; and advances heap pointer 
+; On entry HEX1 and HEX2 contain MSB and LSB of value
+;          TOKEN contains name of token
 store_token
   LDY# $00
   ; Store null pointer (pointer to next)
