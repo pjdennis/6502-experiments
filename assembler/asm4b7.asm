@@ -53,6 +53,9 @@ err_branchoutofrange
 err_valueoutofrange
   BRK $06 "Value out of range" $00
 
+err_invalidhex
+  BRK $07 "Invalid hex" $00
+
 
 init_heap
   LDA# <HEAP
@@ -415,12 +418,20 @@ convhex
   CMP# "A"
   BCC ch_numeric       ; < 'A'
   SBC# "A"             ; Carry already set
+  CMP# $06
+  BCC ch_ok1
+  JMP err_invalidhex
+ch_ok1
   CLC
   ADC# $0A             ; ADC# 10
   RTS
 ch_numeric
   SEC
   SBC# "0"
+  CMP# $0A
+  BCC ch_ok2
+  JMP err_invalidhex
+ch_ok2
   RTS
 
 
