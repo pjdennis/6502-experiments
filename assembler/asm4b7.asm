@@ -613,10 +613,7 @@ eo_done
 emitquoted
   JSR read_b
   CMP# "\""
-  BNE eq_notdone
-  JSR read_b           ; Done; read next char
-  RTS
-eq_notdone
+  BEQ eq_done
   CMP# "\\"
   BNE eq_notescaped
   JSR read_b
@@ -626,6 +623,9 @@ eq_notdone
 eq_notescaped
   JSR emit
   JMP emitquoted
+eq_done
+  JSR read_b           ; Done; read next char
+  RTS
 
 
 ; On exit A contains the next character
