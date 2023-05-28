@@ -1,5 +1,9 @@
 all: emulator.out sidebyside.out asm4v.out
 
+clean:
+	rm -f *.out
+	rm -f *.bin
+
 emulator.out: emulator.c
 	gcc -o emulator.out emulator.c
 
