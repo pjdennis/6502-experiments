@@ -31,7 +31,12 @@ HTLPL     = $0D        ; 2 byte pointer to low byte hash table
 HTLPH     = $0E        ; "
 HTHPL     = $0F        ; 2 byte pointer to high byte hash table
 HTHPH     = $10        ; "
-TOKEN     = $11        ; multiple bytes
+INST_FLAG = $11        ; flags associated with instruction
+TOKEN     = $12        ; multiple bytes
+
+INST_PSUEDO   = $01
+INST_RELATIVE = $02
+INST_BYTE     = $04
 
 
 ; Environment should surface error codes and messages on BRK
@@ -255,6 +260,7 @@ ft_atend
 ; On entry token contains the token to find
 ; On exit C = 0 if found or 1 if not found
 ; On exit HEX1 and HEX2 contains MSB and LSB of value if found
+;         A, X, Y are not preserverd
 find_in_hash
   JSR calculate_hash
   JSR hash_entry_empty
@@ -310,6 +316,7 @@ st_loop
 ; On entry TOKEN contains token
 ;          HEX1 and HEX2 contain MSB and LSB of value
 ; On exit C = 0 if added or 1 if already exists
+;         A, X, Y are not preserved
 hash_add
   JSR calculate_hash
   JSR hash_entry_empty
@@ -411,10 +418,10 @@ readtokenloop
   JSR read_b
   JSR cmpendoftoken
   BNE readtokenloop
-  PHA                  ; Save next char
+  TAY                  ; Save next char
   LDA# $00
   STAZ,X TOKEN
-  PLA                  ; Restore next char
+  TYA                  ; Restore next char
   RTS
 
 
@@ -501,14 +508,14 @@ gh_second
 ; On exit A contains next character
 emithex
   JSR grabhex          ; Returns C = 1 if 2 bytes read
-  PHA                  ; Save next char
+  TAY                  ; Save next char
   BCC eh_one
   LDAZ HEX2
   JSR emit
 eh_one
   LDAZ HEX1
   JSR emit
-  PLA                  ; Restore next char
+  TYA                  ; Restore next char
   RTS
 
 
@@ -529,12 +536,12 @@ rv_value
 rv_hexvalue
   JSR grabhex
   BCS rv_ok
-  PHA
+  TAY                  ; Save next char
   LDAZ HEX1
   STAZ HEX2
   LDA# $00
   STAZ HEX1
-  PLA
+  TYA                  ; Restore next char
 rv_ok
   SEC
   RTS
@@ -543,12 +550,12 @@ rv_ok
 ; capturelabel
 capturelabel
   JSR readtoken
-  PHA                  ; Save next char
+  TAY                  ; Save next char
   LDAZ TOKEN
   CMP# "*"
   BNE cl_normallabel
   ; Set PC
-  PLA                  ; Restore next char
+  TYA                  ; Restore next char
   JSR readvalue
   JSR skiprestofline
   ; No need to retain next char as caller
@@ -562,10 +569,10 @@ cl_normallabel
   BITZ PASS
   BPL cl_pass1
   ; Pass 2 - don't capture
-  PLA                  ; Restore next char
+  TYA                  ; Restore next char
   JMP skiprestofline   ; Tail call
 cl_pass1
-  PLA                  ; Restore next char
+  TYA                  ; Restore next char
   JSR readvalue
   PHA                  ; Save next char
   BCS cl_hextotable
@@ -599,7 +606,8 @@ emitopcode
   JMP err_opcodenotfound
 eo_found
   LDAZ HEX2
-  AND# $01
+  STAZ INST_FLAG
+  AND# INST_PSUEDO
   BNE eo_done          ; Not opcode (DATA command)
   ; Opcode
   LDAZ HEX1
@@ -631,60 +639,59 @@ eq_done
 ; On exit A contains the next character
 emitlabel
   JSR readandfindexistinglabel
-  PHA                  ; Save next char
+  TAY                  ; Save next char
   ; Emit low byte then high byte from table
   LDAZ HEX2
   JSR emit
   LDAZ HEX1
   JSR emit
-  PLA                  ; Restore next char
+  TYA                  ; Restore next char
   RTS
 
 
 ; On exit A contains the next character
 emitlabellsb
   JSR readandfindexistinglabel
-  PHA                  ; Save next char
+  TAY                  ; Save next char
   ; Emit low byte
   LDAZ HEX2
   JSR emit
-  PLA                  ; Restore next char
+  TYA                  ; Restore next char
   RTS
 
 
 ; On exit A contains the next character
 emitlabelbyte
   JSR readandfindexistinglabel
-  PHA                  ; Save next char
+  TAY                  ; Save next char
   BITZ PASS
   BPL elb_ok           ; Skip validation on pass 1
   LDAZ HEX1
   BEQ elb_ok
-  PLA
   JMP err_valueoutofrange
 elb_ok
   ; Emit low byte
   LDAZ HEX2
   JSR emit
-  PLA                  ; Restore next char
+  TYA                  ; Restore next char
   RTS 
 
 
 ; On exit A contains the next character
 emitlabelmsb
   JSR readandfindexistinglabel
-  PHA                  ; Save next char
+  TAY                  ; Save next char
   ; Emit high byte
   LDAZ HEX1
   JSR emit
-  PLA                  ; Restore next character
+  TYA                  ; Restore next character
   RTS
 
 
 ; On exit A contains the next character
 emitlabelrel
   JSR readandfindexistinglabel
-  PHA                  ; Save next char
+  TAY                  ; Save next char
   BITZ PASS
   BPL elr_ok           ; Skip calculations and validations on pass 1
 
@@ -717,7 +724,7 @@ elr_backward
 elr_ok
   LDAZ HEX2
   JSR emit
-  PLA                  ; Restore next char
+  TYA                  ; Restore next char
   RTS
 
 
@@ -743,7 +750,13 @@ lnloop2
   BCS lnloop
   ; Read mnemonic and emit opcode
   JSR emitopcode
+  JMP tokstart
 tokloop
+  TAY                  ; Save next char
+  LDA# $00
+  STAZ INST_FLAG       ; Reset instruction flags after first iteration
+  TYA                  ; Restore next char
+tokstart
   JSR skipspaces
   JSR checkforend
   BCS lnloop           ; End of line
@@ -769,22 +782,22 @@ tokloop3
   JSR emitlabelmsb
   JMP tokloop
 tokloop4
-  PHA
-  LDAZ HEX2
-  AND# $02
+  TAY                  ; Save next char
+  LDAZ INST_FLAG
+  AND# INST_RELATIVE
   BEQ tokloop5
-  PLA
+  TYA                  ; Restore next char
   JSR emitlabelrel
   JMP tokloop
 tokloop5
-  LDAZ HEX2
-  AND# $04
+  LDAZ INST_FLAG
+  AND# INST_BYTE
   BEQ tokloop6
-  PLA
+  TYA                  ; Restore next char
   JSR emitlabelbyte
   JMP tokloop
 tokloop6
-  PLA
+  TYA                  ; Restore next char
   JSR emitlabel        ; 2 byte variable
   JMP tokloop
 
