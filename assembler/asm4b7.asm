@@ -173,6 +173,10 @@ load_hash_entry
 
 
 ; Store current memory pointer in hash table
+; On entry HASH contains the hash code to store under
+;          MEMPL;MEMPH contains the pointer to store in the hash table
+; On exit X is preserved
+;         A, Y are not preserved
 store_hash_entry
   LDAZ HASH
   TAY
@@ -184,6 +188,11 @@ store_hash_entry
 
 
 ; Store current memory pointer in table
+; On entry TABPL;TABPH,Y points to location to store pointer
+;          MEMPL;NENPL contains the pointer to store
+; On exit TABPL;TABPH,Y points to the location following the stored pointer
+;         X is preserved
+;         A is not preserved
 store_table_entry
   LDAZ MEMPL
   STAZ(),Y TABPL
@@ -286,6 +295,10 @@ fih_notfound
 ; and advances heap pointer 
 ; On entry HEX1 and HEX2 contain MSB and LSB of value
 ;          TOKEN contains name of token
+; On exit MEMPL;MEMPH points to the next free heap location
+;         Y = 0
+;         X is preserved
+;         A is not preserved
 store_token
   LDY# $00
   ; Store null pointer (pointer to next)
@@ -313,6 +326,7 @@ st_loop
   JMP advance_heap     ; Tail call
 
 
+; Add TOKEN mapped to HEX2;HEX1 to hash table
 ; On entry TOKEN contains token
 ;          HEX1 and HEX2 contain MSB and LSB of value
 ; On exit C = 0 if added or 1 if already exists
@@ -337,6 +351,7 @@ ha_store
   RTS
 
 
+; Emit value (pass 2 only) and increment PC
 ; On entry A contains the byte to emit
 ; On exit A, X, Y are preserved
 emit
@@ -354,6 +369,7 @@ emit_done
 ; Read and discard characters up to the end of the current line
 ; On entry A contains the next character
 ; On exit A contains "\n"
+;         X, Y are preserved
 skiprestofline
   CMP# "\n"
   BEQ srol_done
@@ -366,6 +382,7 @@ srol_done
 ; Read and discard space characters
 ; On entry A contains the next character
 ; On exit A contains the next character following the last space
+;         X, Y are preserved
 skipspaces
   CMP# " "
   BNE ss_done
@@ -375,8 +392,10 @@ ss_done
   RTS
 
 
+; Check whether the next character (in A) is NOT a token character
 ; On entry A contains the next character
 ; On exit Z is set if current character terminates the current token, unset otherwise
+;         A, X, Y are preserved
 cmpendoftoken
   CMP# " "
   BEQ ceof_end
@@ -391,16 +410,18 @@ ceof_end
 ; On entry A contains next character
 ; On exit C set if end of line, clear otherwise
 ;         A contains next character
+;         X, Y are preserved
 checkforend
   CMP# ";"
   BEQ cfe_end
   CMP# "\n"
-  BEQ cfe_end
+  BEQ cfe_done
   ; Not at end
   CLC
   RTS
 cfe_end
   JSR skiprestofline
+cfe_done
   SEC
   RTS
 
@@ -425,7 +446,12 @@ readtokenloop
   RTS
 
 
-; On exit A contains the next character
+; Read a label, look up in the current hash table and return the associated value
+; On entry A contains the first character of the label
+; On exit HEX1 and HEX2 contains the MSB and LSB of the hash table value
+;         A contains the next character following the token
+;         X, Y are not preserved
+; Raises 'Label not found' error if label is not found in hash table
 readandfindexistinglabel
   JSR readtoken
   BITZ PASS
@@ -443,8 +469,11 @@ rafel_found
   RTS
 
 
+; Convert hex character to associated value
 ; On entry, A contains a hex character A-Z|0-9
 ; On exit A contains the value (0-15)
+;         X, Y are preserved
+; Raises 'Invalid hex' error if input is not a valid hex character
 convhex
   CMP# "A"
   BCC ch_numeric       ; < 'A'
@@ -466,9 +495,12 @@ ch_ok2
   RTS
 
 
+; Reads 1 byte (2 character) hex value
 ; On entry A contains first hex character
-; Reads second hex character; Uses TEMP
 ; On exit A contains 2 character value (0-255)
+;         X, Y are preserved
+;         TEMP is not preserved
+; Raises 'Invalid hex' error if encountering non-hex characters
 readhex
   JSR convhex
   ASLA
@@ -482,9 +514,12 @@ readhex
   RTS
 
 
+; Reads 1 or 2 byte (2 or 4 character) hex value
 ; On entry, next character read will be first hex character
 ; On exit C set if 2 bytes read clear if 1 byte read
 ;         A contains the next character
+;         X, Y are preserved
+; Rasises 'Invalid hex' error if encountering non-hex characters
 grabhex
   JSR read_b           ; Read the 1st hex character
   JSR readhex          ; Read 2nd hex character and convert
@@ -519,13 +554,19 @@ eh_one
   RTS
 
 
+; Attempt to read an assigned value
 ; On entry A contains the next character
 ; On exit C set if value read; clear otherwise
+;         HEX2 and HEX1 contain the LSB and MSB of the value read
+;         A contains the next character
+;         X, Y are preserved
+; Raises 'Expected hex' error if value was not identified as hex (via '$')
+;        'Bad hex' error if non-hex characters were encountered
 readvalue
   JSR skipspaces
   CMP# "="
   BEQ rv_value
-  CLC
+  CLC                  ; Did not find valud so return C = 0
   RTS
 rv_value
   JSR read_b           ; Read the character after the "="
@@ -535,7 +576,8 @@ rv_value
   JMP err_expectedhex
 rv_hexvalue
   JSR grabhex
-  BCS rv_ok
+  BCS rv_ok            ; 2 bytes were read
+  ; 1 byte was read - shift into LSB position (HEX2)
   TAY                  ; Save next char
   LDAZ HEX1
   STAZ HEX2
@@ -547,7 +589,15 @@ rv_ok
   RTS
 
 
-; capturelabel
+; Reads a label, and optionally an assigned value. The label is stored in the current hash table
+; mapped to the assigned value (if provided) otherwise the current PC value. The special label '*'
+; is not stored in the has table but instead requires an assigned value which sets PC
+; On entry A contains the first character of the label
+; On exit the hash table or PC is updated accordingly
+;         A, X, Y are not preserved
+; Raises 'Duplicate label' error if label has already been encountered
+;        'Expected hex' error if assigned value was not identified as hex (via '$')
+;        'Bad hex' error if non-hex characters were encountered 
 capturelabel
   JSR readtoken
   TAY                  ; Save next char
@@ -594,8 +644,11 @@ cl_added
   RTS
 
 
-; Emit the opcode
+; Read and emit an opcode
+; On entry A contains the first character of the opcode
 ; On exit A contains the next character
+;         X, Y are not preserved
+; Raises 'Opcode not found' error if opcode is not found
 emitopcode
   JSR readtoken
   PHA                  ; Save next char
@@ -618,6 +671,9 @@ eo_done
 
 
 ; Read and emit quoted ASCII
+; On entry next character read will be the first character within quotes
+; On exit A contains the next character after the closing quote
+;         X, Y are preserved
 emitquoted
   JSR read_b
   CMP# "\""
@@ -636,7 +692,11 @@ eq_done
   RTS
 
 
+; Read and emit a 2 byte label value
+; On entry A countains the first character of the label
 ; On exit A contains the next character
+;         X, Y are not preserved
+; Raises 'Label not found' error if label is not found
 emitlabel
   JSR readandfindexistinglabel
   TAY                  ; Save next char
@@ -649,18 +709,12 @@ emitlabel
   RTS
 
 
+; Read and emit a 1 byte label value
+; On entry A countains the first character of the label
 ; On exit A contains the next character
-emitlabellsb
-  JSR readandfindexistinglabel
-  TAY                  ; Save next char
-  ; Emit low byte
-  LDAZ HEX2
-  JSR emit
-  TYA                  ; Restore next char
-  RTS
-
-
-; On exit A contains the next character
+;         X, Y are not preserved
+; Raises 'Label not found' error if label is not found
+;        'Value of of range' error if value is > 255 (> 1 byte)
 emitlabelbyte
   JSR readandfindexistinglabel
   TAY                  ; Save next char
@@ -677,7 +731,26 @@ elb_ok
   RTS 
 
 
+; Read and emit the least significant byte of a label value
+; On entry A countains the first character of the label
 ; On exit A contains the next character
+;         X, Y are not preserved
+; Raises 'Label not found' error if label is not found
+emitlabellsb
+  JSR readandfindexistinglabel
+  TAY                  ; Save next char
+  ; Emit low byte
+  LDAZ HEX2
+  JSR emit
+  TYA                  ; Restore next char
+  RTS
+
+
+; Read and emit the most significant byte of a label value
+; On entry A countains the first character of the label
+; On exit A contains the next character
+;         X, Y are not preserved
+; Raises 'Label not found' error if label is not found
 emitlabelmsb
   JSR readandfindexistinglabel
   TAY                  ; Save next char
@@ -688,7 +761,12 @@ emitlabelmsb
   RTS
 
 
+; Read and emit a label value relative to PC
+; On entry A countains the first character of the label
 ; On exit A contains the next character
+;         X, Y are not preserved
+; Raises 'Label not found' error if label is not found
+;        'Branch out of range' error if distance from value to PC exceeds 1 signed byte
 emitlabelrel
   JSR readandfindexistinglabel
   TAY                  ; Save next char
@@ -728,7 +806,11 @@ elr_ok
   RTS
 
 
-; Main assembler
+; Read from input, assemble code and write to output
+; On entry PASS indicates the current pass:
+;            bit 7 clear = pass 1
+;            bit 7 set = pass 2
+; On exit A, X, Y are not preserved
 assemble
   LDA# $00
   STAZ PCL
