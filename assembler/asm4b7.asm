@@ -61,6 +61,12 @@ err_valueoutofrange
 err_invalidhex
   BRK $07 "Invalid hex" $00
 
+err_pc_value_expected
+  BRK $08 "PC value expected" $00
+
+err_closing_quote_not_found
+  BRK $09 "Closing quote not found" $00
+
 
 init_heap
   LDA# <HEAP
@@ -595,9 +601,10 @@ rv_ok
 ; On entry A contains the first character of the label
 ; On exit the hash table or PC is updated accordingly
 ;         A, X, Y are not preserved
-; Raises 'Duplicate label' error if label has already been encountered
+; Raises 'PC value expected' if no value provided when setting PC via '*'
+;        'Duplicate label' error if label has already been encountered
 ;        'Expected hex' error if assigned value was not identified as hex (via '$')
-;        'Bad hex' error if non-hex characters were encountered 
+;        'Bad hex' error if non-hex characters were encountered
 capturelabel
   JSR readtoken
   TAY                  ; Save next char
@@ -607,6 +614,9 @@ capturelabel
   ; Set PC
   TYA                  ; Restore next char
   JSR readvalue
+  BCS cl_pc_value_read
+  JMP err_pc_value_expected
+cl_pc_value_read
   JSR skiprestofline
   ; No need to retain next char as caller
   ; goes straight to next line
@@ -676,11 +686,15 @@ eo_done
 ;         X, Y are preserved
 emitquoted
   JSR read_b
+  CMP# "\n"
+  BEQ eq_err_closing_quote
   CMP# "\""
   BEQ eq_done
   CMP# "\\"
   BNE eq_notescaped
   JSR read_b
+  CMP# "\n"
+  BEQ eq_err_closing_quote
   CMP# "n"
   BNE eq_notescaped
   LDA# "\n"            ; Escaped "n" is linefeed
@@ -690,6 +704,8 @@ eq_notescaped
 eq_done
   JSR read_b           ; Done; read next char
   RTS
+eq_err_closing_quote
+  JMP err_closing_quote_not_found
 
 
 ; Read and emit a 2 byte label value

@@ -14,5 +14,11 @@ make --quiet &&
   ./emulator.out asm4b6c.out 2000 asm4b7c.asm.out asm4b7c.out &&
   ./emulator.out asm4b7c.out 2000 asm4b7c.asm.out asm4b7c_2.out &&
   diff <(hexdump -C asm4b7c.out) <(hexdump -C asm4b7c_2.out) &&
-  hexdump -C asm4b7c_2.out | ./sidebyside.out &&
-  echo "OK" || echo "!!!Failed!!!"
+  hexdump -C asm4b7c_2.out | ./sidebyside.out
+
+if [ $? -eq 0 ]; then
+  echo "OK"
+  ./emulator.out asm4b7c.out 2000 test.asm test.asm.out && echo "Assembled" || echo "Did not assemble"
+else
+  echo "!!!Failed!!!"
+fi
