@@ -695,14 +695,14 @@ eq_loop
   CMP# "\""
   BEQ eq_done
   CMP# "\\"
-  BNE eq_notescaped
+  BNE eq_not_escaped
   JSR read_b
   CMP# "\n"
   BEQ eq_err_closing_quote
   CMP# "n"
-  BNE eq_notescaped
+  BNE eq_not_escaped
   LDA# "\n"            ; Escaped "n" is linefeed
-eq_notescaped
+eq_not_escaped
   JSR emit
   JSR read_b
   JMP eq_loop
