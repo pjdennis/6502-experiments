@@ -686,6 +686,7 @@ eo_done
 ; On entry next character read will be the first character within quotes
 ; On exit A contains the next character after the closing quote
 ;         X, Y are preserved
+; Raises 'Closing quote not found' error if closing quote not found on current line
 emit_quoted
 eq_loop
   JSR read_b
