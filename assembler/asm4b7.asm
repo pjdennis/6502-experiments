@@ -376,11 +376,12 @@ emit_done
 ; On entry A contains the next character
 ; On exit A contains "\n"
 ;         X, Y are preserved
-skiprestofline
+skip_rest_of_line
+srol_loop
   CMP# "\n"
   BEQ srol_done
   JSR read_b
-  JMP skiprestofline
+  JMP srol_loop
 srol_done
   RTS
 
@@ -389,11 +390,12 @@ srol_done
 ; On entry A contains the next character
 ; On exit A contains the next character following the last space
 ;         X, Y are preserved
-skipspaces
+skip_spaces
+ss_loop
   CMP# " "
   BNE ss_done
   JSR read_b
-  JMP skipspaces
+  JMP ss_loop
 ss_done
   RTS
 
@@ -402,7 +404,7 @@ ss_done
 ; On entry A contains the next character
 ; On exit Z is set if current character terminates the current token, unset otherwise
 ;         A, X, Y are preserved
-cmpendoftoken
+compare_end_of_token
   CMP# " "
   BEQ ceof_end
   CMP# "\n"
@@ -417,17 +419,17 @@ ceof_end
 ; On exit C set if end of line, clear otherwise
 ;         A contains next character
 ;         X, Y are preserved
-checkforend
+check_for_end_of_line
   CMP# ";"
-  BEQ cfe_end
+  BEQ cfeol_end
   CMP# "\n"
-  BEQ cfe_done
+  BEQ cfeol_done
   ; Not at end
   CLC
   RTS
-cfe_end
-  JSR skiprestofline
-cfe_done
+cfeol_end
+  JSR skip_rest_of_line
+cfeol_done
   SEC
   RTS
 
@@ -437,14 +439,14 @@ cfe_done
 ; On exit A contains next character after token
 ;         Y is preserved
 ;         X is not preserved
-readtoken
+read_token
   LDX# $00
-readtokenloop
+rt_loop
   STAZ,X TOKEN
   INX
   JSR read_b
-  JSR cmpendoftoken
-  BNE readtokenloop
+  JSR compare_end_of_token
+  BNE rt_loop
   TAY                  ; Save next char
   LDA# $00
   STAZ,X TOKEN
@@ -458,8 +460,8 @@ readtokenloop
 ;         A contains the next character following the token
 ;         X, Y are not preserved
 ; Raises 'Label not found' error if label is not found in hash table
-readandfindexistinglabel
-  JSR readtoken
+read_and_find_existing_label
+  JSR read_token
   BITZ PASS
   BMI rafel_pass2
   ; Pass 1
@@ -480,24 +482,24 @@ rafel_found
 ; On exit A contains the value (0-15)
 ;         X, Y are preserved
 ; Raises 'Invalid hex' error if input is not a valid hex character
-convhex
+convert_hex_character
   CMP# "A"
-  BCC ch_numeric       ; < 'A'
+  BCC chc_numeric       ; < 'A'
   SBC# "A"             ; Carry already set
   CMP# $06
-  BCC ch_ok1
+  BCC chc_ok1
   JMP err_invalidhex
-ch_ok1
+chc_ok1
   CLC
   ADC# $0A             ; ADC# 10
   RTS
-ch_numeric
+chc_numeric
   SEC
   SBC# "0"
   CMP# $0A
-  BCC ch_ok2
+  BCC chc_ok2
   JMP err_invalidhex
-ch_ok2
+chc_ok2
   RTS
 
 
@@ -507,15 +509,15 @@ ch_ok2
 ;         X, Y are preserved
 ;         TEMP is not preserved
 ; Raises 'Invalid hex' error if encountering non-hex characters
-readhex
-  JSR convhex
+read_hex_byte
+  JSR convert_hex_character
   ASLA
   ASLA
   ASLA
   ASLA
   STAZ TEMP
   JSR read_b
-  JSR convhex
+  JSR convert_hex_character
   ORAZ TEMP
   RTS
 
@@ -526,17 +528,17 @@ readhex
 ;         A contains the next character
 ;         X, Y are preserved
 ; Rasises 'Invalid hex' error if encountering non-hex characters
-grabhex
+read_hex_byte_or_word
   JSR read_b           ; Read the 1st hex character
-  JSR readhex          ; Read 2nd hex character and convert
+  JSR read_hex_byte    ; Read 2nd hex character and convert
   STAZ HEX1
   JSR read_b           ; Read 3rd hex char or terminator
-  JSR cmpendoftoken
-  BNE gh_second
+  JSR compare_end_of_token
+  BNE rhbow_second
   CLC                  ; No second byte so return C = 0
   RTS
-gh_second
-  JSR readhex          ; Read 4th hex char and convert
+rhbow_second
+  JSR read_hex_byte    ; Read 4th hex char and convert
   STAZ HEX2
   JSR read_b           ; Read next char
   SEC                  ; Second byte so return C = 1
@@ -547,16 +549,16 @@ gh_second
 ; When 2 bytes, emit LSB then MSB
 ; Uses HEX1, HEX2
 ; On exit A contains next character
-emithex
-  JSR grabhex          ; Returns C = 1 if 2 bytes read
-  TAY                  ; Save next char
+emit_hex
+  JSR read_hex_byte_or_word ; Returns C = 1 if 2 bytes read
+  TAY                       ; Save next char
   BCC eh_one
   LDAZ HEX2
   JSR emit
 eh_one
   LDAZ HEX1
   JSR emit
-  TYA                  ; Restore next char
+  TYA                       ; Restore next char
   RTS
 
 
@@ -568,20 +570,20 @@ eh_one
 ;         X, Y are preserved
 ; Raises 'Expected hex' error if value was not identified as hex (via '$')
 ;        'Bad hex' error if non-hex characters were encountered
-readvalue
-  JSR skipspaces
+read_value
+  JSR skip_spaces
   CMP# "="
   BEQ rv_value
   CLC                  ; Did not find valud so return C = 0
   RTS
 rv_value
   JSR read_b           ; Read the character after the "="
-  JSR skipspaces
+  JSR skip_spaces
   CMP# "$"
   BEQ rv_hexvalue
   JMP err_expectedhex
 rv_hexvalue
-  JSR grabhex
+  JSR read_hex_byte_or_word
   BCS rv_ok            ; 2 bytes were read
   ; 1 byte was read - shift into LSB position (HEX2)
   TAY                  ; Save next char
@@ -605,19 +607,19 @@ rv_ok
 ;        'Duplicate label' error if label has already been encountered
 ;        'Expected hex' error if assigned value was not identified as hex (via '$')
 ;        'Bad hex' error if non-hex characters were encountered
-capturelabel
-  JSR readtoken
-  TAY                  ; Save next char
+capture_label
+  JSR read_token
+  TAY                   ; Save next char
   LDAZ TOKEN
   CMP# "*"
   BNE cl_normallabel
   ; Set PC
-  TYA                  ; Restore next char
-  JSR readvalue
+  TYA                   ; Restore next char
+  JSR read_value
   BCS cl_pc_value_read
   JMP err_pc_value_expected
 cl_pc_value_read
-  JSR skiprestofline
+  JSR skip_rest_of_line
   ; No need to retain next char as caller
   ; goes straight to next line
   LDAZ HEX2
@@ -629,12 +631,12 @@ cl_normallabel
   BITZ PASS
   BPL cl_pass1
   ; Pass 2 - don't capture
-  TYA                  ; Restore next char
-  JMP skiprestofline   ; Tail call
+  TYA                   ; Restore next char
+  JMP skip_rest_of_line ; Tail call
 cl_pass1
-  TYA                  ; Restore next char
-  JSR readvalue
-  PHA                  ; Save next char
+  TYA                   ; Restore next char
+  JSR read_value
+  PHA                   ; Save next char
   BCS cl_hextotable
   ; Store program counter
   LDAZ PCL
@@ -644,11 +646,11 @@ cl_pass1
 cl_hextotable
   JSR select_label_hash_table
   JSR hash_add
-  PLA                  ; Restore next char
+  PLA                   ; Restore next char
   BCC cl_added
   JMP err_duplicatelabel
 cl_added
-  JSR skiprestofline
+  JSR skip_rest_of_line
   ; No need to retain next char as caller
   ; goes straight to next line
   RTS
@@ -659,8 +661,8 @@ cl_added
 ; On exit A contains the next character
 ;         X, Y are not preserved
 ; Raises 'Opcode not found' error if opcode is not found
-emitopcode
-  JSR readtoken
+emit_opcode
+  JSR read_token
   PHA                  ; Save next char
   JSR select_instruction_hash_table
   JSR find_in_hash  
@@ -684,7 +686,8 @@ eo_done
 ; On entry next character read will be the first character within quotes
 ; On exit A contains the next character after the closing quote
 ;         X, Y are preserved
-emitquoted
+emit_quoted
+eq_loop
   JSR read_b
   CMP# "\n"
   BEQ eq_err_closing_quote
@@ -700,7 +703,7 @@ emitquoted
   LDA# "\n"            ; Escaped "n" is linefeed
 eq_notescaped
   JSR emit
-  JMP emitquoted
+  JMP eq_loop
 eq_done
   JSR read_b           ; Done; read next char
   RTS
@@ -713,8 +716,8 @@ eq_err_closing_quote
 ; On exit A contains the next character
 ;         X, Y are not preserved
 ; Raises 'Label not found' error if label is not found
-emitlabel
-  JSR readandfindexistinglabel
+emit_label
+  JSR read_and_find_existing_label
   TAY                  ; Save next char
   ; Emit low byte then high byte from table
   LDAZ HEX2
@@ -731,8 +734,8 @@ emitlabel
 ;         X, Y are not preserved
 ; Raises 'Label not found' error if label is not found
 ;        'Value of of range' error if value is > 255 (> 1 byte)
-emitlabelbyte
-  JSR readandfindexistinglabel
+emit_label_byte
+  JSR read_and_find_existing_label
   TAY                  ; Save next char
   BITZ PASS
   BPL elb_ok           ; Skip validation on pass 1
@@ -752,8 +755,8 @@ elb_ok
 ; On exit A contains the next character
 ;         X, Y are not preserved
 ; Raises 'Label not found' error if label is not found
-emitlabellsb
-  JSR readandfindexistinglabel
+emit_label_lsb
+  JSR read_and_find_existing_label
   TAY                  ; Save next char
   ; Emit low byte
   LDAZ HEX2
@@ -767,8 +770,8 @@ emitlabellsb
 ; On exit A contains the next character
 ;         X, Y are not preserved
 ; Raises 'Label not found' error if label is not found
-emitlabelmsb
-  JSR readandfindexistinglabel
+emit_label_msb
+  JSR read_and_find_existing_label
   TAY                  ; Save next char
   ; Emit high byte
   LDAZ HEX1
@@ -783,8 +786,8 @@ emitlabelmsb
 ;         X, Y are not preserved
 ; Raises 'Label not found' error if label is not found
 ;        'Branch out of range' error if distance from value to PC exceeds 1 signed byte
-emitlabelrel
-  JSR readandfindexistinglabel
+emit_label_relative
+  JSR read_and_find_existing_label
   TAY                  ; Save next char
   BITZ PASS
   BPL elr_ok           ; Skip calculations and validations on pass 1
@@ -836,18 +839,18 @@ lnloop
   BCC lnloop1
   RTS                  ; At end of input
 lnloop1
-  JSR checkforend
+  JSR check_for_end_of_line
   BCS lnloop
   CMP# " "
   BEQ lnloop2
-  JSR capturelabel
+  JSR capture_label
   JMP lnloop
 lnloop2
-  JSR skipspaces
-  JSR checkforend
+  JSR skip_spaces
+  JSR check_for_end_of_line
   BCS lnloop
   ; Read mnemonic and emit opcode
-  JSR emitopcode
+  JSR emit_opcode
   JMP tokstart
 tokloop
   TAY                  ; Save next char
@@ -855,29 +858,29 @@ tokloop
   STAZ INST_FLAG       ; Reset instruction flags after first iteration
   TYA                  ; Restore next char
 tokstart
-  JSR skipspaces
-  JSR checkforend
+  JSR skip_spaces
+  JSR check_for_end_of_line
   BCS lnloop           ; End of line
   CMP# "\""            ; Quoted string
   BNE tokloop1
-  JSR emitquoted
+  JSR emit_quoted
   JMP tokloop
 tokloop1
   CMP# "$"             ; 1 or 2 byte hex
   BNE tokloop2
-  JSR emithex
+  JSR emit_hex
   JMP tokloop
 tokloop2
   CMP# "<"             ; LSB of variable
   BNE tokloop3
   JSR read_b
-  JSR emitlabellsb
+  JSR emit_label_lsb
   JMP tokloop
 tokloop3
   CMP# ">"             ; MSB of variable
   BNE tokloop4
   JSR read_b
-  JSR emitlabelmsb
+  JSR emit_label_msb
   JMP tokloop
 tokloop4
   TAY                  ; Save next char
@@ -885,18 +888,18 @@ tokloop4
   AND# INST_RELATIVE
   BEQ tokloop5
   TYA                  ; Restore next char
-  JSR emitlabelrel
+  JSR emit_label_relative
   JMP tokloop
 tokloop5
   LDAZ INST_FLAG
   AND# INST_BYTE
   BEQ tokloop6
   TYA                  ; Restore next char
-  JSR emitlabelbyte
+  JSR emit_label_byte
   JMP tokloop
 tokloop6
   TYA                  ; Restore next char
-  JSR emitlabel        ; 2 byte variable
+  JSR emit_label        ; 2 byte variable
   JMP tokloop
 
 
