@@ -523,13 +523,12 @@ read_hex_byte
 
 
 ; Reads 1 or 2 byte (2 or 4 character) hex value
-; On entry, next character read will be first hex character
+; On entry, A contains the first hex character
 ; On exit C set if 2 bytes read clear if 1 byte read
 ;         A contains the next character
 ;         X, Y are preserved
 ; Rasises 'Invalid hex' error if encountering non-hex characters
 read_hex_byte_or_word
-  JSR read_b           ; Read the 1st hex character
   JSR read_hex_byte    ; Read 2nd hex character and convert
   STAZ HEX1
   JSR read_b           ; Read 3rd hex char or terminator
@@ -548,6 +547,7 @@ rhbow_second
 ; Read 2 to 4 hex characters and emit 1 or 2 bytes
 ; When 2 bytes, emit LSB then MSB
 ; Uses HEX1, HEX2
+; On entry A contains the first hex character
 ; On exit A contains next character
 emit_hex
   JSR read_hex_byte_or_word ; Returns C = 1 if 2 bytes read
@@ -583,6 +583,7 @@ rv_value
   BEQ rv_hexvalue
   JMP err_expectedhex
 rv_hexvalue
+  JSR read_b
   JSR read_hex_byte_or_word
   BCS rv_ok            ; 2 bytes were read
   ; 1 byte was read - shift into LSB position (HEX2)
@@ -683,13 +684,12 @@ eo_done
 
 
 ; Read and emit quoted ASCII
-; On entry next character read will be the first character within quotes
+; On entry A countains the first character within quotes
 ; On exit A contains the next character after the closing quote
 ;         X, Y are preserved
 ; Raises 'Closing quote not found' error if closing quote not found on current line
 emit_quoted
 eq_loop
-  JSR read_b
   CMP# "\n"
   BEQ eq_err_closing_quote
   CMP# "\""
@@ -704,6 +704,7 @@ eq_loop
   LDA# "\n"            ; Escaped "n" is linefeed
 eq_notescaped
   JSR emit
+  JSR read_b
   JMP eq_loop
 eq_done
   JSR read_b           ; Done; read next char
@@ -864,11 +865,13 @@ tokstart
   BCS lnloop           ; End of line
   CMP# "\""            ; Quoted string
   BNE tokloop1
+  JSR read_b
   JSR emit_quoted
   JMP tokloop
 tokloop1
   CMP# "$"             ; 1 or 2 byte hex
   BNE tokloop2
+  JSR read_b
   JSR emit_hex
   JMP tokloop
 tokloop2
@@ -900,7 +903,7 @@ tokloop5
   JMP tokloop
 tokloop6
   TYA                  ; Restore next char
-  JSR emit_label        ; 2 byte variable
+  JSR emit_label       ; 2 byte variable
   JMP tokloop
 
 
