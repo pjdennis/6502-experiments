@@ -10,3 +10,4 @@ vobjdump
 *.swp
 *.bak
 .DS_Store
+setup.sh
