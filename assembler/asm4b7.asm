@@ -215,7 +215,7 @@ store_table_entry
 ;         TABPL;TABPH,Y points to value if found
 ;         or to 'next' pointer if not found
 find_token
-ft_tokenloop
+ft_token_loop
   ; Store the current pointer
   LDAZ TABPL
   STAZ PL
@@ -231,37 +231,37 @@ ft_tokenloop
   STAZ TABPH
   ; Check for matching token
   LDY# $FF
-ft_charloop
+fg_char_loop
   INY
   LDAZ(),Y TABPL
   CMP,Y TOKEN
-  BNE ft_notmatch
+  BNE ft_token_is_non_match
   CMP# $00
-  BNE ft_charloop
+  BNE fg_char_loop
   ; Match
   INY                  ; point tab,Y to value
   CLC
   RTS
-ft_notmatch            ; Not a match - move to next
+ft_token_is_non_match  ; Not a match - move to next
   ; Check if 'next' pointer is 0
   LDY# $00
   LDAZ(),Y PL
   BNE ft_notmatch1     ; not zero
   INY
   LDAZ(),Y PL
-  BEQ ft_atend
+  BEQ ft_at_end
   ; Not at end
   STAZ TABPH
   LDA# $00
   STAZ TABPL
-  JMP ft_tokenloop
+  JMP ft_token_loop
 ft_notmatch1
   STAZ TABPL
   INY
   LDAZ(),Y PL
   STAZ TABPH
-  JMP ft_tokenloop
-ft_atend
+  JMP ft_token_loop
+ft_at_end
   ; point tabp,Y to the zero 'next' pointer
   LDAZ PL
   STAZ TABPL
