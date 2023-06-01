@@ -246,16 +246,13 @@ ft_token_is_non_match  ; Not a match - move to next
   ; Check if 'next' pointer is 0
   LDY# $00
   LDAZ(),Y PL
-  BNE ft_notmatch1     ; not zero
+  BNE ft_not_at_end
   INY
   LDAZ(),Y PL
   BEQ ft_at_end
-  ; Not at end
-  STAZ TABPH
-  LDA# $00
-  STAZ TABPL
-  JMP ft_token_loop
-ft_notmatch1
+ft_not_at_end
+  LDY# $00
+  LDAZ(),Y PL
   STAZ TABPL
   INY
   LDAZ(),Y PL
