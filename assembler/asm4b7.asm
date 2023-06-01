@@ -40,25 +40,25 @@ INST_BYTE     = $04
 
 
 ; Environment should surface error codes and messages on BRK
-err_labelnotfound
+err_label_not_found
   BRK $01 "Label not found" $00
 
-err_duplicatelabel
+err_duplicate_label
   BRK $02 "Duplicate label" $00
 
-err_opcodenotfound
+err_opcode_not_found
   BRK $03 "Opcode not found" $00
 
-err_expectedhex
+err_expected_hex
   BRK $04 "Expected hex value" $00
 
-err_branchoutofrange
+err_branch_out_of_range
   BRK $05 "Branch out of range" $00
 
-err_valueoutofrange
+err_value_out_of_range
   BRK $06 "Value out of range" $00
 
-err_invalidhex
+err_invalid_hex
   BRK $07 "Invalid hex" $00
 
 err_pc_value_expected
@@ -471,7 +471,7 @@ rafel_pass2
   JSR select_label_hash_table
   JSR find_in_hash
   BCC rafel_found
-  JMP err_labelnotfound
+  JMP err_label_not_found
 rafel_found
   PLA                  ; Restore next char
   RTS
@@ -488,7 +488,7 @@ convert_hex_character
   SBC# "A"             ; Carry already set
   CMP# $06
   BCC chc_ok1
-  JMP err_invalidhex
+  JMP err_invalid_hex
 chc_ok1
   CLC
   ADC# $0A             ; ADC# 10
@@ -498,7 +498,7 @@ chc_numeric
   SBC# "0"
   CMP# $0A
   BCC chc_ok2
-  JMP err_invalidhex
+  JMP err_invalid_hex
 chc_ok2
   RTS
 
@@ -581,7 +581,7 @@ rv_value
   JSR skip_spaces
   CMP# "$"
   BEQ rv_hexvalue
-  JMP err_expectedhex
+  JMP err_expected_hex
 rv_hexvalue
   JSR read_b
   JSR read_hex_byte_or_word
@@ -649,7 +649,7 @@ cl_hextotable
   JSR hash_add
   PLA                   ; Restore next char
   BCC cl_added
-  JMP err_duplicatelabel
+  JMP err_duplicate_label
 cl_added
   JSR skip_rest_of_line
   ; No need to retain next char as caller
@@ -669,7 +669,7 @@ emit_opcode
   JSR find_in_hash  
   BCC eo_found
   PLA                  ; Restore next char
-  JMP err_opcodenotfound
+  JMP err_opcode_not_found
 eo_found
   LDAZ HEX2
   STAZ INST_FLAG
@@ -743,7 +743,7 @@ emit_label_byte
   BPL elb_ok           ; Skip validation on pass 1
   LDAZ HEX1
   BEQ elb_ok
-  JMP err_valueoutofrange
+  JMP err_value_out_of_range
 elb_ok
   ; Emit low byte
   LDAZ HEX2
@@ -806,19 +806,19 @@ emit_label_relative
   BEQ elr_forward
   CMP# $FF
   BEQ elr_backward
-  JMP err_branchoutofrange
+  JMP err_branch_out_of_range
 
 elr_forward
   LDAZ HEX2
   AND# $80
   BEQ elr_ok
-  JMP err_branchoutofrange
+  JMP err_branch_out_of_range
 
 elr_backward
   LDAZ HEX2
   AND# $80
   BNE elr_ok
-  JMP err_branchoutofrange
+  JMP err_branch_out_of_range
 
 elr_ok
   LDAZ HEX2
