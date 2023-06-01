@@ -276,11 +276,11 @@ ft_at_end
 find_in_hash
   JSR calculate_hash
   JSR hash_entry_empty
-  BEQ fih_notfound
+  BEQ fih_not_found
   ; Entry exists
   JSR load_hash_entry
   JSR find_token
-  BCS fih_notfound
+  BCS fih_not_found
   ; Found
   LDAZ(),Y TABPL
   STAZ HEX2
@@ -289,7 +289,7 @@ find_in_hash
   STAZ HEX1
   CLC
   RTS
-fih_notfound
+fih_not_found
   SEC
   RTS
 
@@ -610,7 +610,7 @@ capture_label
   TAY                   ; Save next char
   LDAZ TOKEN
   CMP# "*"
-  BNE cl_normallabel
+  BNE cl_normal_label
   ; Set PC
   TYA                   ; Restore next char
   JSR read_value
@@ -625,23 +625,23 @@ cl_pc_value_read
   LDAZ HEX1
   STAZ PCH
   RTS
-cl_normallabel
+cl_normal_label
   BITZ PASS
-  BPL cl_pass1
+  BPL cl_pass_1
   ; Pass 2 - don't capture
   TYA                   ; Restore next char
   JMP skip_rest_of_line ; Tail call
-cl_pass1
+cl_pass_1
   TYA                   ; Restore next char
   JSR read_value
   PHA                   ; Save next char
-  BCS cl_hextotable
+  BCS cl_hex_to_table
   ; Store program counter
   LDAZ PCL
   STAZ HEX2
   LDAZ PCH
   STAZ HEX1
-cl_hextotable
+cl_hex_to_table
   JSR select_label_hash_table
   JSR hash_add
   PLA                   ; Restore next char
@@ -829,79 +829,79 @@ elr_ok
 ;            bit 7 clear = pass 1
 ;            bit 7 set = pass 2
 ; On exit A, X, Y are not preserved
-assemble
+assemble_code
   LDA# $00
   STAZ PCL
   STAZ PCH
-lnloop
+ac_line_loop
   JSR read_b
-  BCC lnloop1
+  BCC ac_character_read
   RTS                  ; At end of input
-lnloop1
+ac_character_read
   JSR check_for_end_of_line
-  BCS lnloop
+  BCS ac_line_loop
   CMP# " "
-  BEQ lnloop2
+  BEQ ac_line_starts_with_space
   JSR capture_label
-  JMP lnloop
-lnloop2
+  JMP ac_line_loop
+ac_line_starts_with_space
   JSR skip_spaces
   JSR check_for_end_of_line
-  BCS lnloop
+  BCS ac_line_loop
   ; Read mnemonic and emit opcode
   JSR emit_opcode
-  JMP tokstart
-tokloop
+  JMP ac_parameters_loop_entry
+ac_parameters_loop
   TAY                  ; Save next char
   LDA# $00
   STAZ INST_FLAG       ; Reset instruction flags after first iteration
   TYA                  ; Restore next char
-tokstart
+ac_parameters_loop_entry
   JSR skip_spaces
   JSR check_for_end_of_line
-  BCS lnloop           ; End of line
+  BCS ac_line_loop     ; End of line
   CMP# "\""            ; Quoted string
-  BNE tokloop1
+  BNE ac_check_for_hex
   JSR read_b
   JSR emit_quoted
-  JMP tokloop
-tokloop1
+  JMP ac_parameters_loop
+ac_check_for_hex
   CMP# "$"             ; 1 or 2 byte hex
-  BNE tokloop2
+  BNE ac_check_for_lsb
   JSR read_b
   JSR emit_hex
-  JMP tokloop
-tokloop2
+  JMP ac_parameters_loop
+ac_check_for_lsb
   CMP# "<"             ; LSB of variable
-  BNE tokloop3
+  BNE ac_check_for_msb
   JSR read_b
   JSR emit_label_lsb
-  JMP tokloop
-tokloop3
+  JMP ac_parameters_loop
+ac_check_for_msb
   CMP# ">"             ; MSB of variable
-  BNE tokloop4
+  BNE ac_check_for_relative
   JSR read_b
   JSR emit_label_msb
-  JMP tokloop
-tokloop4
+  JMP ac_parameters_loop
+ac_check_for_relative
   TAY                  ; Save next char
   LDAZ INST_FLAG
   AND# INST_RELATIVE
-  BEQ tokloop5
+  BEQ ac_check_for_byte
   TYA                  ; Restore next char
   JSR emit_label_relative
-  JMP tokloop
-tokloop5
+  JMP ac_parameters_loop
+ac_check_for_byte
   LDAZ INST_FLAG
   AND# INST_BYTE
-  BEQ tokloop6
+  BEQ ac_label
   TYA                  ; Restore next char
   JSR emit_label_byte
-  JMP tokloop
-tokloop6
+  JMP ac_parameters_loop
+ac_label
   TYA                  ; Restore next char
   JSR emit_label       ; 2 byte variable
-  JMP tokloop
+  JMP ac_parameters_loop
 
 
 ; Entry point
@@ -911,10 +911,10 @@ start
   JSR init_hash_table
   LDA# $00
   STAZ PASS           ; Bit 7 = 0 (pass 1)
-  JSR assemble
+  JSR assemble_code
   LDA# $FF
   STAZ PASS           ; Bit 7 = 1 (pass 2)
-  JSR assemble
+  JSR assemble_code
   BRK $00              ; Success
 
 
