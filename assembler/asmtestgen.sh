@@ -12,13 +12,17 @@ make --quiet &&
   ./emulator.out asm4b5.out 2000 asm4b6c.asm.out asm4b6c.out &&
   cat inst.asm.out asm4b7.asm > asm4b7c.asm.out &&
   ./emulator.out asm4b6c.out 2000 asm4b7c.asm.out asm4b7c.out &&
-  ./emulator.out asm4b7c.out 2000 asm4b7c.asm.out asm4b7c_2.out &&
-  diff <(hexdump -C asm4b7c.out) <(hexdump -C asm4b7c_2.out) &&
-  hexdump -C asm4b7c_2.out | ./sidebyside.out
+  cat inst.asm.out asm4b8.asm > asm4b8c.asm.out &&
+  ./emulator.out asm4b7c.out 2000 asm4b8c.asm.out asm4b8c.out &&
+  ./emulator.out asm4b8c.out 2000 asm4b8c.asm.out asm4b8c_2.out &&
+  diff <(hexdump -C asm4b8c.out) <(hexdump -C asm4b8c_2.out) &&
+  hexdump -C asm4b8c_2.out | ./sidebyside.out
 
 if [ $? -eq 0 ]; then
   echo "OK"
-  ./emulator.out asm4b7c.out 2000 test.asm test.asm.out && echo "Assembled" || echo "Did not assemble"
+  ./emulator.out asm4b7c.out 2000 test.asm test.asm.out &&
+  hexdump -C test.asm.out &&
+  echo "Assembled" || echo "Did not assemble"
 else
   echo "!!!Failed!!!"
 fi

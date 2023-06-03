@@ -966,4 +966,6 @@ start
   BRK $00              ; Success
 
 
-  DATA start ; Emulation environment jumps to address in last 2 bytes
+* = $FFFC
+  DATA start ; Reset vector
+  DATA $0000 ; Interrupt vector

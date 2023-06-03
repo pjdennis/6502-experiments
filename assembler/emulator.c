@@ -1044,11 +1044,10 @@ int main(int argc, char **argv) {
     }
     fclose(code_file_ptr);
 
-;    memory[0xfffc] = load_address & 0xff;
-;    memory[0xfffd] = (load_address >> 8) & 0xff;
-
-    memory[0xfffc] = memory[index - 2];
-    memory[0xfffd] = memory[index - 1];
+    if (index < 0xfffe) {
+      memory[0xfffd] = memory[index - 1];
+      memory[0xfffc] = memory[index - 2];
+    }
 
     size_t p = 0xf006;
     memory[p++] = 0x4c; //          jmp read_b
