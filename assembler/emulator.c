@@ -988,12 +988,8 @@ int exitcode_set = -1;
 uint8_t read6502(uint16_t address) {
     if (address == 0xf004) {
         int b = fgetc(input_file_ptr);
-/*
-        if (b != EOF) {
-            fputc(b, stderr);
-        }
-*/
-        if (b == EOF) {
+
+	if (b == EOF) {
             b = 4;
             fseek(input_file_ptr, 0, SEEK_SET);
         }
