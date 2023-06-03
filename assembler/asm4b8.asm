@@ -9,6 +9,8 @@
 ;   write_b: Writes A to output
 read_b    = $F006
 write_b   = $F009
+write_d   = $F00C
+exit      = $F00F
 
 LHASHTABL = $4000      ; Label hash table (low and high)
 LHASHTABH = $4080      ; "
@@ -963,9 +965,98 @@ start
   LDA# $FF
   STAZ PASS           ; Bit 7 = 1 (pass 2)
   JSR assemble_code
-  BRK $00              ; Success
+  BRK $00             ; Success
 
+
+interrupt
+  TSX
+  SEC
+  LDA,X $0102
+  SBC# $01
+  STAZ TABPL
+  LDA,X $0103
+  SBC# $00
+  STAZ TABPH
+
+  LDY# $00
+  LDAZ(),Y TABPL
+  BEQ i_done
+
+  STAZ TEMP
+
+  LDA# <msg_error
+  STAZ TABPL
+  LDA# >msg_error
+  STAZ TABPH
+  JSR show_message
+
+  LDAZ TEMP
+  JSR show_hex
+
+  LDA# ":"
+  JSR write_d
+  LDA# " "
+  JSR write_d
+
+  LDA,X $0102
+  STAZ TABPL
+  LDA,X $0103
+  STAZ TABPH
+  JSR show_message
+
+  LDA# "\n"
+  JSR write_d
+
+  LDAZ TEMP
+i_done
+  JMP exit
+
+
+; Show message to the error output
+; On entry TABPL;TABPH points to the zero-terminated message
+; On exit A, Z are preserved
+;         Y is not preserved
+show_message
+  LDY# $00
+sm_loop
+  LDAZ(),Y TABPL
+  BEQ sm_done
+  JSR write_d
+  INY
+  JMP sm_loop
+sm_done
+  RTS
+
+
+show_hex_char
+  CMP# $0A
+  BCS shc_low
+  ; Carry alrady clear
+  ADC# "0"
+  JMP write_d          ; Tail call
+shc_low
+  ; C already set
+  SBC# $0A ; Subtract 10
+  CLC
+  ADC# "A"
+  JMP write_d ; Tail call
+
+
+show_hex
+  PHA
+  LSRA
+  LSRA
+  LSRA
+  LSRA
+  JSR show_hex_char
+  PLA
+  AND# $0F
+  JMP show_hex_char ; Tail call
+
+
+msg_error
+  DATA "Error $"
 
 * = $FFFC
-  DATA start ; Reset vector
-  DATA $0000 ; Interrupt vector
+  DATA start          ; Reset vector
+  DATA interrupt      ; Interrupt vector

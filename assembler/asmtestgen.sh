@@ -20,7 +20,7 @@ make --quiet &&
 
 if [ $? -eq 0 ]; then
   echo "OK"
-  ./emulator.out asm4b7c.out 2000 test.asm test.asm.out &&
+  ./emulator.out asm4b8c.out 2000 test.asm test.asm.out &&
   hexdump -C test.asm.out &&
   echo "Assembled" || echo "Did not assemble"
 else

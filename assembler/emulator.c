@@ -983,6 +983,7 @@ FILE* input_file_ptr;
 FILE* output_file_ptr;
 
 int done = 0;
+int exitcode_set = -1;
 
 uint8_t read6502(uint16_t address) {
     if (address == 0xf004) {
@@ -999,7 +1000,7 @@ uint8_t read6502(uint16_t address) {
 
         return b;
     }
-    if (address == 0xfffe) {
+    if (address == 0xfffe && memory[0xfffe] == 0 && memory[0xffff] == 0) {
         done = 1;
     }
     return memory[address];
@@ -1012,7 +1013,12 @@ void write6502(uint16_t address, uint8_t value) {
     } else if (address == 0xf002) {
         fputc(value, stderr);
         return;
+    } else if (address == 0xf003) {
+        exitcode_set = value;
+        done = 1;
+	return;
     }
+
     memory[address] = value;
 }
 
@@ -1050,34 +1056,40 @@ int main(int argc, char **argv) {
     }
 
     size_t p = 0xf006;
-    memory[p++] = 0x4c; //          jmp read_b
-    memory[p++] = 0x0f;
-    memory[p++] = 0xf0;
-    memory[p++] = 0x4c; //          jmp write_b
-    memory[p++] = 0x1a;
-    memory[p++] = 0xf0;
-    memory[p++] = 0x4c; //          jmp write_d
-    memory[p++] = 0x1e;
-    memory[p++] = 0xf0;
-    memory[p++] = 0xad; // read_b:  lda $f004
-    memory[p++] = 0x04;
-    memory[p++] = 0xf0;
-    memory[p++] = 0xc9; //          cmp #4
-    memory[p++] = 0x04;
-    memory[p++] = 0xf0; //          beq .at_end
-    memory[p++] = 0x02;
-    memory[p++] = 0x18; //          clc
-    memory[p++] = 0x60; //          rts
-    memory[p++] = 0x38; // .at_end: sec
-    memory[p++] = 0x60; //          rts
-    memory[p++] = 0x8d; // write_b: sta $f001
-    memory[p++] = 0x01;
-    memory[p++] = 0xf0;
-    memory[p++] = 0x60; //          rts
-    memory[p++] = 0x8d; // write_d: sta $f002
-    memory[p++] = 0x02;
-    memory[p++] = 0xf0;
-    memory[p++] = 0x60; //          rts
+    memory[p++] = 0x4c; // f006          jmp read_b
+    memory[p++] = 0x12; // f007
+    memory[p++] = 0xf0; // f008
+    memory[p++] = 0x4c; // f009          jmp write_b
+    memory[p++] = 0x1d; // f00a
+    memory[p++] = 0xf0; // f00b
+    memory[p++] = 0x4c; // f00c          jmp write_d
+    memory[p++] = 0x21; // f00d
+    memory[p++] = 0xf0; // f00e
+    memory[p++] = 0x4c; // f00f          jmp exit
+    memory[p++] = 0x25; // f010
+    memory[p++] = 0xf0; // f011
+    memory[p++] = 0xad; // f012 read_b:  lda $f004
+    memory[p++] = 0x04; // f013
+    memory[p++] = 0xf0; // f014
+    memory[p++] = 0xc9; // f015          cmp #4
+    memory[p++] = 0x04; // f016
+    memory[p++] = 0xf0; // f017          beq .at_end
+    memory[p++] = 0x02; // f018
+    memory[p++] = 0x18; // f019          clc
+    memory[p++] = 0x60; // f01a          rts
+    memory[p++] = 0x38; // f01b .at_end: sec
+    memory[p++] = 0x60; // f01c          rts
+    memory[p++] = 0x8d; // f01d write_b: sta $f001
+    memory[p++] = 0x01; // f01e
+    memory[p++] = 0xf0; // f01f
+    memory[p++] = 0x60; // f020          rts
+    memory[p++] = 0x8d; // f021 write_d: sta $f002
+    memory[p++] = 0x02; // f022
+    memory[p++] = 0xf0; // f023
+    memory[p++] = 0x60; // f024          rts
+    memory[p++] = 0x8d; // f025 exit:    sta $f003
+    memory[p++] = 0x03; // f026
+    memory[p++] = 0xf0; // f027
 
     input_file_ptr = fopen(input_filename, "rb");
     if (!input_file_ptr) {
@@ -1118,16 +1130,21 @@ int main(int argc, char **argv) {
 
     fclose(input_file_ptr);
 
-    uint16_t location = memory[0x100 + sp + 2] + (memory[0x100 + sp + 3] << 8) - 1;
-    uint8_t exitcode = memory[location];
-    if (exitcode != 0) {
-        fprintf(stderr, "Error: ");
-        for (int i = 0; i != 40; i++) {
-            uint8_t c = memory[location + 1 + i];
-            if (c == 0) break;
-            fputc(c, stderr);
+    uint8_t exitcode;
+    if (exitcode_set != -1) {
+        exitcode = exitcode_set;
+    } else {
+        uint16_t location = memory[0x100 + sp + 2] + (memory[0x100 + sp + 3] << 8) - 1;
+        exitcode = memory[location];
+        if (exitcode != 0) {
+            fprintf(stderr, "Error: ");
+            for (int i = 0; i != 40; i++) {
+                uint8_t c = memory[location + 1 + i];
+                if (c == 0) break;
+                fputc(c, stderr);
+            }
+            fputc('\n', stderr);
         }
-        fputc('\n', stderr);
     }
 
     char* dump_filename_base;
