@@ -37,7 +37,15 @@ INST_FLAG = $11        ; flags associated with instruction
 STARTED   = $12        ; flag to indicate output has started
 CURLINEL  = $13        ; Current line (L)
 CURLINEH  = $14        ; Current line (H)
-TOKEN     = $15        ; multiple bytes
+
+TO_DECIMAL_VALUE_L          = $15 ; 1 byte
+TO_DECIMAL_VALUE_H          = $16 ; 1 byte
+TO_DECIMAL_MOD10            = $17 ; 1 byte
+TO_DECIMAL_RESULT_MINUS_ONE = $17
+TO_DECIMAL_RESULT           = $18 ; 6 bytes
+
+TOKEN     = $1E        ; multiple bytes
+
 
 INST_PSUEDO   = $01
 INST_RELATIVE = $02
@@ -882,11 +890,17 @@ assemble_code
   LDA# $00
   STAZ PCL
   STAZ PCH
+  STAZ CURLINEL
+  STAZ CURLINEH
 ac_line_loop
   JSR read_b
   BCC ac_character_read
   RTS                  ; At end of input
 ac_character_read
+  INCZ CURLINEL
+  BNE ac_line_incremented
+  INCZ CURLINEH
+ac_line_incremented
   JSR check_for_end_of_line
   BCS ac_line_loop
   CMP# " "
@@ -968,6 +982,7 @@ start
   BRK $00             ; Success
 
 
+; Interrupt handler, entered upon BRK
 interrupt
   TSX
   SEC
@@ -991,13 +1006,29 @@ interrupt
   JSR show_message
 
   LDAZ TEMP
-  JSR show_hex
+  STAZ TO_DECIMAL_VALUE_L
+  LDA# $00
+  STAZ TO_DECIMAL_VALUE_H
+  JSR show_decimal
+
+  LDA# <msg_error_line
+  STAZ TABPL
+  LDA# >msg_error_line
+  STAZ TABPH
+  JSR show_message
+
+  LDAZ CURLINEL
+  STAZ TO_DECIMAL_VALUE_L
+  LDAZ CURLINEH
+  STAZ TO_DECIMAL_VALUE_H
+  JSR show_decimal
 
   LDA# ":"
   JSR write_d
   LDA# " "
   JSR write_d
 
+  TSX
   LDA,X $0102
   STAZ TABPL
   LDA,X $0103
@@ -1010,6 +1041,11 @@ interrupt
   LDAZ TEMP
 i_done
   JMP exit
+
+msg_error
+  DATA "Error " $00
+msg_error_line
+  DATA " at line " $00
 
 
 ; Show message to the error output
@@ -1028,34 +1064,77 @@ sm_done
   RTS
 
 
-show_hex_char
-  CMP# $0A
-  BCS shc_low
-  ; Carry alrady clear
-  ADC# "0"
-  JMP write_d          ; Tail call
-shc_low
-  ; C already set
-  SBC# $0A ; Subtract 10
+; Show a decimal value to the error ouptut
+; On entry TO_DECIMAL_VALUE_L;TO_DECIMAL_VALUE_H contains the value to show
+; On exit Y is preserved
+;         A, X are not preserved
+;         Decimal number string stored at TO_DECIMAL_RESULT
+show_decimal
+  JSR to_decimal
+  LDA# <TO_DECIMAL_RESULT
+  STAZ TABPL
+  LDA# >TO_DECIMAL_RESULT
+  STAZ TABPH
+  JMP show_message ; tail call
+
+
+; On entry TO_DECIMAL_VALUE_L;TO_DECIMAL_VALUE_H contains the value to convert
+; On exit TO_DECIMAL_RESULT contains the result
+;         Y is preserved
+;         A, X are not preserved
+to_decimal
+  ; Initialize result to empty string
+  LDA# $00
+  STAZ TO_DECIMAL_RESULT
+
+to_decimal_divide
+  ; Initialize the remainder to be zero
+  LDA# $00
+  STAZ TO_DECIMAL_MOD10
   CLC
-  ADC# "A"
-  JMP write_d ; Tail call
 
+  LDX# $10
+to_decimal_divloop
+  ; Rotate quotient and remainder
+  ROLZ TO_DECIMAL_VALUE_L
+  ROLZ TO_DECIMAL_VALUE_H
+  ROLZ TO_DECIMAL_MOD10
 
-show_hex
-  PHA
-  LSRA
-  LSRA
-  LSRA
-  LSRA
-  JSR show_hex_char
-  PLA
-  AND# $0F
-  JMP show_hex_char ; Tail call
+  ; a = dividend - divisor
+  SEC
+  LDAZ TO_DECIMAL_MOD10
+  SBC# $0A ; 10
+  BCC to_decimal_ignore_result ; Branch if dividend < divisor
+  STAZ TO_DECIMAL_MOD10
 
+to_decimal_ignore_result
+  DEX
+  BNE to_decimal_divloop
+  ROLZ TO_DECIMAL_VALUE_L
+  ROLZ TO_DECIMAL_VALUE_H
 
-msg_error
-  DATA "Error $"
+  ; Shift result
+to_decimal_shift
+  LDX# $06
+to_decimal_shift_loop
+  LDAZ,X TO_DECIMAL_RESULT_MINUS_ONE
+  STAZ,X TO_DECIMAL_RESULT
+  DEX
+  BNE to_decimal_shift_loop
+
+  ; Save value into result
+  LDAZ TO_DECIMAL_MOD10
+  CLC
+  ADC# "0"
+  STAZ TO_DECIMAL_RESULT
+
+  ; If value != 0 then continue dividing
+  LDAZ TO_DECIMAL_VALUE_L
+  ORAZ TO_DECIMAL_VALUE_H
+  BNE to_decimal_divide
+
+  RTS
+
 
 * = $FFFC
   DATA start          ; Reset vector

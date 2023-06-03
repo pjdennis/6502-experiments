@@ -66,6 +66,7 @@ MNTAB
   DATA "CMP#"     $00 $04 $C9
   DATA "CMP,Y"    $00 $00 $D9
   DATA "DECZ"     $00 $04 $C6
+  DATA "DEX"      $00 $00 $CA
   DATA "EORZ"     $00 $04 $45
   DATA "INCZ"     $00 $04 $E6
   DATA "INX"      $00 $00 $E8
@@ -84,6 +85,7 @@ MNTAB
   DATA "ORAZ"     $00 $04 $05
   DATA "PHA"      $00 $00 $48
   DATA "PLA"      $00 $00 $68
+  DATA "ROLZ"     $00 $04 $26
   DATA "RTS"      $00 $00 $60
   DATA "SBC#"     $00 $04 $E9
   DATA "SBCZ"     $00 $04 $E5
