@@ -16,13 +16,14 @@ make --quiet &&
   ./emulator.out asm4b7c.out 2000 asm4b8c.asm.out asm4b8c.out &&
   cat inst.asm.out asm4b9.asm > asm4b9c.asm.out &&
   ./emulator.out asm4b8c.out 2000 asm4b9c.asm.out asm4b9c.out &&
-  ./emulator.out asm4b9c.out 2000 asm4b9c.asm.out asm4b9c_2.out &&
-  diff <(hexdump -C asm4b9c.out) <(hexdump -C asm4b9c_2.out) &&
-  hexdump -C asm4b9c_2.out | ./sidebyside.out
+  ./emulator.out asm4b9c.out 2000 asm4b10.asm asm4b10.out &&
+  ./emulator.out asm4b10.out 2000 asm4b10.asm asm4b10_2.out &&
+  diff <(hexdump -C asm4b10.out) <(hexdump -C asm4b10_2.out) &&
+  hexdump -C asm4b10_2.out | ./sidebyside.out
 
 if [ $? -eq 0 ]; then
   echo "OK"
-  ./emulator.out asm4b9c.out 2000 test.asm test.out &&
+  ./emulator.out asm4b10.out 2000 test.asm test.out &&
   hexdump -C test.out &&
   echo "Assembled"
   if [ $? -eq 0 ]; then
