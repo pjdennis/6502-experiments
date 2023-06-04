@@ -83,8 +83,11 @@ err_closing_quote_not_found
 err_cannot_move_pc_backwards
   BRK $0A "Cannot move PC backwards" $00
 
-err_debug
-  BRK $0B "Debug!" $00
+err_unknown_directive
+  BRK $0B "Unknown directive" $00
+
+err_filename_expected
+  BRK $0C "Filename expected" $00
 
 init_heap
   LDA# <HEAP
@@ -227,6 +230,24 @@ store_table_entry
   RTS
 
 
+; On entry TOKEN contains the token to compare with
+;          TABPL;TABPH points to the value to compare with
+; On exit Z set if equal, unset otherwise
+;         Y points to terminating 0 if equal
+compare_token
+  LDY# $FF
+ct_loop
+  INY
+  LDAZ(),Y TABPL
+  CMP,Y TOKEN
+  BNE ct_done
+  CMP# $00
+  BNE ct_loop
+  ; Match
+ct_done
+  RTS
+
+
 ; On entry TABPL;TABPH point to head of list of entries
 ;          TOKEN contains the token to find
 ; On exit C clear if found; set if not found
@@ -248,14 +269,8 @@ ft_token_loop
   ADCZ TABPH
   STAZ TABPH
   ; Check for matching token
-  LDY# $FF
-fg_char_loop
-  INY
-  LDAZ(),Y TABPL
-  CMP,Y TOKEN
+  JSR compare_token
   BNE ft_token_is_non_match
-  CMP# $00
-  BNE fg_char_loop
   ; Match
   INY                  ; point tab,Y to value
   CLC
@@ -460,11 +475,13 @@ cfeol_done
 read_token
   LDX# $00
 rt_loop
+  JSR compare_end_of_token
+  BEQ rt_done
   STAZ,X TOKEN
   INX
   JSR read_b
-  JSR compare_end_of_token
-  BNE rt_loop
+  JMP rt_loop
+rt_done
   TAY                  ; Save next char
   LDA# $00
   STAZ,X TOKEN
@@ -881,6 +898,49 @@ elr_ok
   RTS
 
 
+; On entry, A contains the first character of the directive
+process_directive
+  JSR read_token
+  PHA                          ; Save next char
+  LDA# <directive_include
+  STAZ TABPL
+  LDA# >directive_include
+  STAZ TABPH
+  JSR compare_token
+  BEQ pd_include
+  PLA                          ; Restore next char
+  JMP err_unknown_directive
+pd_include
+  PLA                          ; Restore next char
+  JSR skip_spaces
+  JSR check_for_end_of_line
+  BCC pd_get_name
+  JMP err_filename_expected
+pd_get_name
+  JSR read_token
+  PHA
+
+  LDA# "["
+  JSR write_d
+
+  LDA# <TOKEN
+  STAZ TABPL
+  LDA# >TOKEN
+  STAZ TABPH
+  JSR show_message
+
+  LDA# "]"
+  JSR write_d
+  LDA# "\n"
+  JSR write_d
+
+  PLA
+  JMP skip_rest_of_line  ; tail call
+
+directive_include
+  DATA "include" $00
+
+
 ; Read from input, assemble code and write to output
 ; On entry PASS indicates the current pass:
 ;            bit 7 clear = pass 1
@@ -911,6 +971,13 @@ ac_line_starts_with_space
   JSR skip_spaces
   JSR check_for_end_of_line
   BCS ac_line_loop
+  CMP# "."
+  BNE ac_opcode
+; Directive
+  JSR read_b
+  JSR process_directive
+  JMP ac_line_loop
+ac_opcode
   ; Read mnemonic and emit opcode
   JSR emit_opcode
   JMP ac_parameters_loop_entry

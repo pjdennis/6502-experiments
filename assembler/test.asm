@@ -20,6 +20,8 @@ FILE_HANDLE = $00
 
 * = $1000
 
+  .include foo.txt
+
 
 start
   LDA# <filename
