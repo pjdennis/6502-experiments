@@ -418,41 +418,6 @@ dtext_done
   RTS
 
 
-display_scramble_table
-  LDA# $00
-  STAZ <HASH
-dst_loop
-  JSR display_data_prefix
-  LDA# $00
-  STAZ <TEMP
-dst_lineloop
-  LDA# " "
-  JSR write_b
-  LDAZ <HASH
-  TAY
-  LDA,Y scramble_table
-  JSR display_byte
-  CLC
-  LDAZ <HASH
-  ADC# $01
-  STAZ <HASH  
-  LDAZ <TEMP
-  CLC
-  ADC# $01
-  STAZ <TEMP
-  CMP# $10
-  BEQ dst_next1
-  JMP dst_lineloop
-dst_next1
-  JSR display_newline
-  LDAZ <HASH
-  CMP# $80
-  BEQ dst_done
-  JMP dst_loop
-dst_done
-  RTS
-
-
 display_table
   LDA# $00
   STAZ <HASH
@@ -644,30 +609,13 @@ dd_done
 
 ; Entry point
 start
+; Initialization
   JSR init_heap
   JSR select_instruction_hash_table
   JSR init_hash_table
   JSR populate_instruction_hash_table
- 
-  LDA# <msg_setpc
-  STAZ <PL
-  LDA# >msg_setpc
-  STAZ <PH
 
-  JSR display_text
-  JSR display_newline
-  JSR display_newline
-
-  LDA# <msg_scramble_table
-  STAZ <PL
-  LDA# >msg_scramble_table
-  STAZ <PH
-  JSR display_text
-  JSR display_newline
-  JSR display_scramble_table
-
-  JSR display_newline
- 
+; Show the instruction hash table - high
   LDA# <msg_IHASHTABL
   STAZ <PL
   LDA# >msg_IHASHTABL
@@ -680,6 +628,7 @@ start
 
   JSR display_newline
 
+; Show the instruction hash table - low
   LDA# <msg_IHASHTABH
   STAZ <PL
   LDA# >msg_IHASHTABH
@@ -692,16 +641,11 @@ start
 
   JSR display_newline
 
+; Show the heap data
   JSR display_data
 
   BRK $00              ; Success
 
-
-msg_setpc
-  DATA "* = $2000" $00
-
-msg_scramble_table
-  DATA "scramble_table" $00
 
 msg_data
   DATA "DATA" $00

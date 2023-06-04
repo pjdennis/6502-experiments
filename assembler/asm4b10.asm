@@ -54,7 +54,11 @@ INST_RELATIVE = $02
 INST_BYTE     = $04
 
 
+* = $2000
+
+
 ; instruction hash table, etc.
+  .include common10.asm
   .include inst10.asm.out
 
 

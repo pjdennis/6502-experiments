@@ -1111,6 +1111,13 @@ int main(int argc, char **argv) {
     long index = load_address;
     int b;
     while ((b = fgetc(code_file_ptr)) != EOF) {
+        if (index > 0xffff) {
+            fprintf(stderr,
+                    "Code file %s will not fit in memory at the specified load address\n",
+		    code_filename);
+            fclose(code_file_ptr);
+            return 1;
+        }
         memory[index++] = b;
     }
     fclose(code_file_ptr);
