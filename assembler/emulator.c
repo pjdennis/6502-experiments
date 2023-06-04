@@ -977,7 +977,7 @@ void hookexternal(void *funcptr) {
 #include <stdlib.h>
 #include <string.h>
 
-uint8_t memory[0x10000];
+uint8_t memory[0x10001];
 
 FILE* files[255];
 
@@ -1096,7 +1096,7 @@ int main(int argc, char **argv) {
 
     files_init();
 
-    for (size_t x = 0; x != 0x10000; x++) {
+    for (size_t x = 0; x != 0x10001; x++) {
         memory[x] = 0;
     }
 
