@@ -1,22 +1,18 @@
-
 ; Provided by environment:
-;   read_char:  Returns next character in A
-;            C set when at end
-;            Automatically restarts input after reaching end
-;
-;   write_b: Writes A to output
-read_b    = $F006
-write_b   = $F009
-write_d   = $F00C
-exit      = $F00F
-open      = $F012
-close     = $F015
-read      = $F018
+read_b    = $F006 ; Returns next char in A; C set when at end
+write_b   = $F009 ; Writes char to stdout
+write_d   = $F00C ; Writes char to stderr
+exit      = $F00F ; Exits the program; exit code in A
+open      = $F012 ; Opens file with name at A;X. Returns handle in A
+close     = $F015 ; Closes file with handle in A
+read      = $F018 ; Reads from file with handle in A
+
 
 LHASHTABL  = $4000      ; Label hash table (low and high)
 LHASHTABH  = $4080      ; "
 HEAP       = $4100      ; Data heap
 FILE_STACK = $EFFF
+
 
 TEMP      = $00        ; 1 byte
 TABPL     = $01        ; 2 byte table pointer
@@ -52,13 +48,14 @@ FILE_STACK_H = $20
 TOKEN        = $21        ; multiple bytes
 
 
+; Constants
 INST_PSUEDO   = $01
 INST_RELATIVE = $02
 INST_BYTE     = $04
 
 
 ; instruction hash table, etc.
-  .include inst.asm.out
+  .include inst10.asm.out
 
 
 ; Environment should surface error codes and messages on BRK
@@ -108,6 +105,7 @@ rc_at_end
   JSR file_stack_empty
   BEQ rc_done
   JSR pop_file_stack
+  JMP read_char          ; Recursive tail call
 rc_done
   RTS
 

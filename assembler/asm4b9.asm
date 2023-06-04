@@ -106,6 +106,7 @@ rc_at_end
   JSR file_stack_empty
   BEQ rc_done
   JSR pop_file_stack
+  JMP read_char ; recursive tail call
 rc_done
   RTS
 
