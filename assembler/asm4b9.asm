@@ -2,7 +2,7 @@
 
 
 ; Provided by environment:
-;   read_b:  Returns next character in A
+;   read_char:  Returns next character in A
 ;            C set when at end
 ;            Automatically restarts input after reaching end
 ;
@@ -11,6 +11,9 @@ read_b    = $F006
 write_b   = $F009
 write_d   = $F00C
 exit      = $F00F
+open      = $F012
+close     = $F015
+read      = $F018
 
 LHASHTABL = $4000      ; Label hash table (low and high)
 LHASHTABH = $4080      ; "
@@ -44,7 +47,9 @@ TO_DECIMAL_MOD10            = $17 ; 1 byte
 TO_DECIMAL_RESULT_MINUS_ONE = $17
 TO_DECIMAL_RESULT           = $18 ; 6 bytes
 
-TOKEN     = $1E        ; multiple bytes
+CURR_FILE = $1E
+
+TOKEN     = $1F        ; multiple bytes
 
 
 INST_PSUEDO   = $01
@@ -88,6 +93,12 @@ err_unknown_directive
 
 err_filename_expected
   BRK $0C "Filename expected" $00
+
+
+read_char
+  LDAZ CURR_FILE
+  JMP read          ; Tail call
+
 
 init_heap
   LDA# <HEAP
@@ -413,7 +424,7 @@ skip_rest_of_line
 srol_loop
   CMP# "\n"
   BEQ srol_done
-  JSR read_b
+  JSR read_char
   JMP srol_loop
 srol_done
   RTS
@@ -427,7 +438,7 @@ skip_spaces
 ss_loop
   CMP# " "
   BNE ss_done
-  JSR read_b
+  JSR read_char
   JMP ss_loop
 ss_done
   RTS
@@ -479,7 +490,7 @@ rt_loop
   BEQ rt_done
   STAZ,X TOKEN
   INX
-  JSR read_b
+  JSR read_char
   JMP rt_loop
 rt_done
   TAY                  ; Save next char
@@ -551,7 +562,7 @@ read_hex_byte
   ASLA
   ASLA
   STAZ TEMP
-  JSR read_b
+  JSR read_char
   JSR convert_hex_character
   ORAZ TEMP
   RTS
@@ -566,7 +577,7 @@ read_hex_byte
 read_hex_byte_or_word
   JSR read_hex_byte    ; Read 2nd hex character and convert
   STAZ HEX1
-  JSR read_b           ; Read 3rd hex char or terminator
+  JSR read_char        ; Read 3rd hex char or terminator
   JSR compare_end_of_token
   BNE rhbow_second
   CLC                  ; No second byte so return C = 0
@@ -574,7 +585,7 @@ read_hex_byte_or_word
 rhbow_second
   JSR read_hex_byte    ; Read 4th hex char and convert
   STAZ HEX2
-  JSR read_b           ; Read next char
+  JSR read_char        ; Read next char
   SEC                  ; Second byte so return C = 1
   RTS
 
@@ -612,13 +623,13 @@ read_value
   CLC                  ; Did not find valud so return C = 0
   RTS
 rv_value
-  JSR read_b           ; Read the character after the "="
+  JSR read_char        ; Read the character after the "="
   JSR skip_spaces
   CMP# "$"
   BEQ rv_hexvalue
   JMP err_expected_hex
 rv_hexvalue
-  JSR read_b
+  JSR read_char
   JSR read_hex_byte_or_word
   BCS rv_ok            ; 2 bytes were read
   ; 1 byte was read - shift into LSB position (HEX2)
@@ -767,7 +778,7 @@ eq_loop
   BEQ eq_done
   CMP# "\\"
   BNE eq_not_escaped
-  JSR read_b
+  JSR read_char
   CMP# "\n"
   BEQ eq_err_closing_quote
   CMP# "n"
@@ -775,10 +786,10 @@ eq_loop
   LDA# "\n"            ; Escaped "n" is linefeed
 eq_not_escaped
   JSR emit
-  JSR read_b
+  JSR read_char
   JMP eq_loop
 eq_done
-  JSR read_b           ; Done; read next char
+  JSR read_char        ; Done; read next char
   RTS
 eq_err_closing_quote
   JMP err_closing_quote_not_found
@@ -953,7 +964,7 @@ assemble_code
   STAZ CURLINEL
   STAZ CURLINEH
 ac_line_loop
-  JSR read_b
+  JSR read_char
   BCC ac_character_read
   RTS                  ; At end of input
 ac_character_read
@@ -974,7 +985,7 @@ ac_line_starts_with_space
   CMP# "."
   BNE ac_opcode
 ; Directive
-  JSR read_b
+  JSR read_char
   JSR process_directive
   JMP ac_line_loop
 ac_opcode
@@ -992,25 +1003,25 @@ ac_parameters_loop_entry
   BCS ac_line_loop     ; End of line
   CMP# "\""            ; Quoted string
   BNE ac_check_for_hex
-  JSR read_b
+  JSR read_char
   JSR emit_quoted
   JMP ac_parameters_loop
 ac_check_for_hex
   CMP# "$"             ; 1 or 2 byte hex
   BNE ac_check_for_lsb
-  JSR read_b
+  JSR read_char
   JSR emit_hex
   JMP ac_parameters_loop
 ac_check_for_lsb
   CMP# "<"             ; LSB of variable
   BNE ac_check_for_msb
-  JSR read_b
+  JSR read_char
   JSR emit_label_lsb
   JMP ac_parameters_loop
 ac_check_for_msb
   CMP# ">"             ; MSB of variable
   BNE ac_check_for_relative
-  JSR read_b
+  JSR read_char
   JSR emit_label_msb
   JMP ac_parameters_loop
 ac_check_for_relative
@@ -1039,6 +1050,8 @@ start
   JSR init_heap
   JSR select_label_hash_table
   JSR init_hash_table
+  LDA# $01            ; stdin
+  STAZ CURR_FILE
   LDA# $00
   STAZ STARTED
   STAZ PASS           ; Bit 7 = 0 (pass 1)

@@ -987,16 +987,17 @@ FILE* output_file_ptr;
 int done = 0;
 int exitcode_set = -1;
 
-void files_init() {
-    for (size_t x = 0; x != 255; x++) {
+void files_init(FILE* input_file) {
+    files[0] = input_file;
+    for (size_t x = 1; x != 255; x++) {
         files[x] = NULL;
     }
 }
 
 uint8_t file_open(const char* name) {
     uint8_t x;
-    for (x = 0; x != 255; x++) {
-        if (files[x] == 0) {
+    for (x = 1; x != 255; x++) {
+        if (files[x] == NULL) {
             FILE* file = fopen(name, "rb");
             if (!file) {
                 fprintf(stderr, "could not open file: %s\n", name);
@@ -1019,6 +1020,10 @@ FILE* file_handle(uint8_t file) {
 }
 
 void file_close(uint8_t file) {
+    if (file <= 1) {
+        fprintf(stderr, "Cannot close standard file %i\n", (int) file);
+        exit(1);
+    }
     fclose(file_handle(file));
     files[file - 1] = NULL;
 }
@@ -1028,7 +1033,7 @@ int file_read(uint8_t file) {
 }
 
 void files_destroy() {
-    for (size_t x = 0; x != 255; x++) {
+    for (size_t x = 1; x != 255; x++) {
         if (files[x] != NULL) {
 	    fprintf(stderr, "File %i was not closed\n", (int) (x + 1));
             fclose(files[x]);
@@ -1042,12 +1047,10 @@ void files_destroy() {
 uint8_t read6502(uint16_t address) {
     if (address == 0xf004) {                       // read_b
         int b = fgetc(input_file_ptr);
-
 	if (b == EOF) {
             b = 4;
             fseek(input_file_ptr, 0, SEEK_SET);
         }
-
         return b;
     } else if (address == 0xf005) {                // open
         uint16_t address = a | (x << 8);
@@ -1056,6 +1059,7 @@ uint8_t read6502(uint16_t address) {
 	int b = file_read(a);
         if (b == EOF) {
             b = 4;
+            fseek(file_handle(a), 0, SEEK_SET);
         }
         return b;
     } else if (address == 0xfffe && memory[0xfffe] == 0 && memory[0xffff] == 0) {
@@ -1093,8 +1097,6 @@ int main(int argc, char **argv) {
     long load_address = strtol(argv[2], NULL, 16);
     char* input_filename = argv[3];
     char* output_filename = argv[4];
-
-    files_init();
 
     for (size_t x = 0; x != 0x10001; x++) {
         memory[x] = 0;
@@ -1198,6 +1200,8 @@ int main(int argc, char **argv) {
             return 1;
         }
     }
+
+    files_init(input_file_ptr);
 
     reset6502();
     const int max_cycles = 20000000;
