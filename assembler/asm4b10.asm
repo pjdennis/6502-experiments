@@ -218,31 +218,6 @@ rc_pop_loop
   RTS
 
 
-init_heap
-  LDA# <HEAP
-  STAZ MEMPL
-  LDA# >HEAP
-  STAZ MEMPH
-  RTS
-
-
-; On entry Y contains the amount to advance
-; On exit MEMPL;MEMPH is incremented by Y
-;         Y = 0
-;         X is preserved
-;         A is not preserved
-advance_heap
-  TYA
-  LDY# $00
-  CLC
-  ADCZ MEMPL
-  STAZ MEMPL
-  TYA
-  ADCZ MEMPH
-  STAZ MEMPH
-  RTS
-
-
 select_label_hash_table
   LDA# <LHASHTABL
   STAZ HTLPL
@@ -252,94 +227,6 @@ select_label_hash_table
   STAZ HTHPL
   LDA# >LHASHTABH
   STAZ HTHPH
-  RTS
-
-
-select_instruction_hash_table
-  LDA# <IHASHTABL
-  STAZ HTLPL
-  LDA# >IHASHTABL
-  STAZ HTLPH
-  LDA# <IHASHTABH
-  STAZ HTHPL
-  LDA# >IHASHTABH
-  STAZ HTHPH
-  RTS
-
-
-init_hash_table
-  LDY# $00
-  TYA                  ; A <- 0
-iht_loop
-  STAZ(),Y HTLPL
-  STAZ(),Y HTHPL
-  INY
-  BNE iht_loop
-  RTS
-
-
-; On entry TOKEN contains the token to calculate hash from
-; On exit HASH contains the calculated hash value
-;         A, X, Y are not preserved
-calculate_hash
-  LDA# $00
-  STAZ HASH
-  LDX# $00
-ch_loop
-  LDAZ,X TOKEN
-  BEQ ch_done
-  AND# $7F
-  EORZ HASH
-  TAY
-  LDA,Y scramble_table
-  STAZ HASH
-  INX
-  JMP ch_loop
-ch_done
-  RTS
-
-
-; On entry HASH contains the hash value
-; On exit Z set if entry is empty, clear otherwise
-;         X is preserved
-;         A, Y are not preserved
-hash_entry_empty
-  LDAZ HASH
-  TAY
-  LDAZ(),Y HTLPL
-  BNE hee_done
-  LDAZ(),Y HTHPL
-hee_done
-  RTS
-
-
-; Load from hash table to TABPL;TABPH
-; On entry HASH contains the hash value
-; On exit TABPL;TABPH countains pointer corresponding to the hash value
-;         X is preserved
-;         A, Y are not preserved
-load_hash_entry
-  LDAZ HASH
-  TAY
-  LDAZ(),Y HTLPL
-  STAZ TABPL
-  LDAZ(),Y HTHPL
-  STAZ TABPH
-  RTS
-
-
-; Store current memory pointer in hash table
-; On entry HASH contains the hash code to store under
-;          MEMPL;MEMPH contains the pointer to store in the hash table
-; On exit X is preserved
-;         A, Y are not preserved
-store_hash_entry
-  LDAZ HASH
-  TAY
-  LDAZ MEMPL
-  STAZ(),Y HTLPL
-  LDAZ MEMPH
-  STAZ(),Y HTHPL
   RTS
 
 

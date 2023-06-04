@@ -95,38 +95,6 @@ MNTAB
   DATA $00
 
 
-init_heap
-  LDA# <HEAP
-  STAZ <MEMPL
-  LDA# >HEAP
-  STAZ <MEMPH
-  RTS
-
-
-advance_heap
-  TYA
-  LDY# $00
-  CLC
-  ADCZ <MEMPL
-  STAZ <MEMPL
-  TYA
-  ADCZ <MEMPH
-  STAZ <MEMPH
-  RTS
-
-
-select_instruction_hash_table
-  LDA# <IHASHTABL
-  STAZ <HTLPL
-  LDA# >IHASHTABL
-  STAZ <HTLPH
-  LDA# <IHASHTABH
-  STAZ <HTHPL
-  LDA# >IHASHTABH
-  STAZ <HTHPH
-  RTS
-
-
 populate_instruction_hash_table
   LDA# <MNTAB
   STAZ <P2L
@@ -162,67 +130,6 @@ piht_token_loop_done
   JSR hash_add
   JMP piht_entry_loop
 piht_done
-  RTS
-
-
-init_hash_table
-  LDY# $00
-  LDA# $00
-iht_loop
-  STAZ(),Y <HTLPL
-  STAZ(),Y <HTHPL
-  INX
-  BNE iht_loop
-  RTS
-  
-
-calculate_hash
-  LDA# $00
-  STAZ <HASH
-  LDX# $00
-ch_loop
-  LDAZ,X <TOKEN
-  BEQ ch_done
-  EORZ <HASH
-  TAY
-  LDA,Y scramble_table
-  STAZ <HASH
-  INX
-  JMP ch_loop
-ch_done
-  RTS
-
-
-; On exit Z = 1 if entry is empty
-hash_entry_empty
-  LDAZ <HASH
-  TAY
-  LDAZ(),Y <HTLPL
-  BNE hee_done
-  LDAZ(),Y <HTHPL
-hee_done
-  RTS
-
-
-; Load from hash table to tab_l;tab_h
-load_hash_entry
-  LDAZ <HASH
-  TAY
-  LDAZ(),Y <HTLPL
-  STAZ <TABPL
-  LDAZ(),Y <HTHPL
-  STAZ <TABPH
-  RTS
-
-
-; Store current memory pointer in hash table
-store_hash_entry
-  LDAZ <HASH
-  TAY
-  LDAZ <MEMPL
-  STAZ(),Y <HTLPL
-  LDAZ <MEMPH
-  STAZ(),Y <HTHPL
   RTS
 
 
