@@ -105,30 +105,7 @@ read_char
 rc_at_end
   JSR file_stack_empty
   BEQ rc_done
-; Close currnet file and restore from filestack
-  LDAZ CURR_FILE
-  JSR close
-  LDY# $00
-  LDAZ(),Y FILE_STACK_L
-  STAZ CURR_FILE
-  INY
-  LDAZ(),Y FILE_STACK_L
-  STAZ CURLINEL
-  INY
-  LDAZ(),Y FILE_STACK_L
-  STAZ CURLINEH
-rc_pop_loop
-  INY
-  LDAZ(),Y FILE_STACK_L
-  BNE rc_pop_loop
-; Adjust stack pointer
-  TYA
-  SEC  ; +1
-  ADCZ FILE_STACK_L
-  STAZ FILE_STACK_L
-  LDA# $00
-  ADCZ FILE_STACK_H
-  STAZ FILE_STACK_H
+  JSR pop_file_stack
 rc_done
   RTS
 
@@ -196,7 +173,44 @@ pfs_copy_loop            ; Copy up to 127 characters
   LDA CURLINEH
   STAZ(),Y FILE_STACK_L
   INY
+; Reset line number and open new file
+  LDA# $00
+  STAZ CURLINEL
+  STAZ CURLINEH
+  LDA# <TOKEN
+  LDX# >TOKEN
+  JSR open
+  STAZ CURR_FILE
 
+  RTS
+
+; On exit CURR_FILE contains the previous file handle
+;         CURLINEL;CURLINEH contains the previous line number
+pop_file_stack
+; Close currnet file and restore from filestack
+  LDAZ CURR_FILE
+  JSR close
+  LDY# $00
+  LDAZ(),Y FILE_STACK_L
+  STAZ CURR_FILE
+  INY
+  LDAZ(),Y FILE_STACK_L
+  STAZ CURLINEL
+  INY
+  LDAZ(),Y FILE_STACK_L
+  STAZ CURLINEH
+rc_pop_loop
+  INY
+  LDAZ(),Y FILE_STACK_L
+  BNE rc_pop_loop
+; Adjust stack pointer
+  TYA
+  SEC  ; +1
+  ADCZ FILE_STACK_L
+  STAZ FILE_STACK_L
+  LDA# $00
+  ADCZ FILE_STACK_H
+  STAZ FILE_STACK_H
   RTS
 
 
@@ -1030,30 +1044,7 @@ pd_include
 pd_get_name
   JSR read_token
   JSR skip_rest_of_line
-
-  LDA# "["
-  JSR write_d
-
-  LDA# <TOKEN
-  STAZ TABPL
-  LDA# >TOKEN
-  STAZ TABPH
-  JSR show_message
-
-  LDA# "]"
-  JSR write_d
-  LDA# "\n"
-  JSR write_d
-
   JSR push_file_stack
-  LDA# $00
-  STAZ CURLINEL
-  STAZ CURLINEH
-  LDA# <TOKEN
-  LDX# >TOKEN
-  JSR open
-  STAZ CURR_FILE
-
   RTS
 
 directive_include
@@ -1173,6 +1164,7 @@ start
 
 ; Interrupt handler, entered upon BRK
 interrupt
+; Retrieve pointer to error code
   TSX
   SEC
   LDA,X $0102
@@ -1181,52 +1173,71 @@ interrupt
   LDA,X $0103
   SBC# $00
   STAZ TABPH
-
+; Retrieve error code and skip diagnostics if no error
   LDY# $00
   LDAZ(),Y TABPL
   BEQ i_done
-
+; Save error code
   STAZ TEMP
-
+; Print the "Error " message
   LDA# <msg_error
   STAZ TABPL
   LDA# >msg_error
   STAZ TABPH
   JSR show_message
-
+; Print the error code in decimal
   LDAZ TEMP
   STAZ TO_DECIMAL_VALUE_L
   LDA# $00
   STAZ TO_DECIMAL_VALUE_H
   JSR show_decimal
-
+; Print the current file if any
+  JSR file_stack_empty
+  BEQ i_file_done
+; Print the " in file " message
+  LDA# <msg_error_file
+  STAZ TABPL
+  LDA# >msg_error_file
+  STAZ TABPH
+  JSR show_message
+; Print the filename
+  CLC
+  LDAZ FILE_STACK_L
+  ADC# $03
+  STAZ TABPL
+  LDAZ FILE_STACK_H
+  ADC# $00
+  STAZ TABPH
+  JSR show_message
+i_file_done
+; Print the " at line " messaage
   LDA# <msg_error_line
   STAZ TABPL
   LDA# >msg_error_line
   STAZ TABPH
   JSR show_message
-
+; Print the current line in decimal
   LDAZ CURLINEL
   STAZ TO_DECIMAL_VALUE_L
   LDAZ CURLINEH
   STAZ TO_DECIMAL_VALUE_H
   JSR show_decimal
-
+; Print the ": " message
   LDA# ":"
   JSR write_d
   LDA# " "
   JSR write_d
-
+; Retrieve pointer to the error message and show it
   TSX
   LDA,X $0102
   STAZ TABPL
   LDA,X $0103
   STAZ TABPH
   JSR show_message
-
+; Print the final newline
   LDA# "\n"
   JSR write_d
-
+; Load the error code so that it is returned
   LDAZ TEMP
 i_done
   JMP exit
@@ -1235,6 +1246,8 @@ msg_error
   DATA "Error " $00
 msg_error_line
   DATA " at line " $00
+msg_error_file
+  DATA " in file " $00
 
 
 ; Show message to the error output
