@@ -1,37 +1,24 @@
 write_b = $F009
+
 write_d = $F00C
-
-r_open   = $F005
-r_read   = $EFFF
-w_close  = $F000
-
-FILE_HANDLE = $00
-
-* = $1000
 
 ; On entry A;X points to zero terminated filename
 ; On exit A contains the file handle
-open
-  LDA r_open
-  RTS
+open    = $F012
+
+; On entry A contains the file handle to close
+close   = $F015
 
 ; On entry A contains the file handle
 ; On exit A contains a character read from the file
 ;         C set if at end, clear otherwise
-read
-  LDA r_read
-  CMP# $04
-  BEQ r_at_end
-  CLC
-  RTS
-r_at_end
-  SEC
-  RTS
+read    = $F018
 
-; On entry A contains the file handle to close
-close
-  STA w_close
-  RTS
+
+FILE_HANDLE = $00
+
+
+* = $1000
 
 
 start
