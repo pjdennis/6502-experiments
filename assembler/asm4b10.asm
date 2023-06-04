@@ -8,12 +8,14 @@ close     = $F015 ; Closes file with handle in A
 read      = $F018 ; Reads from file with handle in A
 
 
+; Addresses
 LHASHTABL  = $1F00      ; Label hash table (low and high)
 LHASHTABH  = $1F80      ; "
-*          = $2000
-FILE_STACK = $EFFF
+*          = $2000      ; Code generates here
+FILE_STACK = $EFFF      ; File stack will grow down from 1 below here
 
 
+; Zero page locations
 TEMP      = $00        ; 1 byte
 TABPL     = $01        ; 2 byte table pointer
 TABPH     = $02        ; "
@@ -54,12 +56,12 @@ INST_RELATIVE = $02
 INST_BYTE     = $04
 
 
-; instruction hash table, etc.
+; Instruction hash table, etc.
   .include common10.asm
   .include inst10.asm.out
 
 
-; Environment should surface error codes and messages on BRK
+; Error messages
 err_label_not_found
   BRK $01 "Label not found" $00
 
@@ -184,6 +186,7 @@ pfs_copy_loop            ; Copy up to 127 characters
   STAZ CURR_FILE
 
   RTS
+
 
 ; On exit CURR_FILE contains the previous file handle
 ;         CURLINEL;CURLINEH contains the previous line number
@@ -540,7 +543,7 @@ up_done
 
 ; Reads a label, and optionally an assigned value. The label is stored in the current hash table
 ; mapped to the assigned value (if provided) otherwise the current PC value. The special label '*'
-; is not stored in the has table but instead requires an assigned value which sets PC
+; is not stored in the hash table but instead requires an assigned value which sets PC
 ; On entry A contains the first character of the label
 ; On exit the hash table or PC is updated accordingly
 ;         A, X, Y are not preserved
