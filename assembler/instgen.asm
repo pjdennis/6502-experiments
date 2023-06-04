@@ -65,6 +65,7 @@ MNTAB
   DATA "CMPZ"     $00 $04 $C5
   DATA "CMP#"     $00 $04 $C9
   DATA "CMP,Y"    $00 $00 $D9
+  DATA "CPY#"     $00 $04 $C0
   DATA "DECZ"     $00 $04 $C6
   DATA "DEX"      $00 $00 $CA
   DATA "EORZ"     $00 $04 $45

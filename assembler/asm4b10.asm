@@ -8,9 +8,9 @@ close     = $F015 ; Closes file with handle in A
 read      = $F018 ; Reads from file with handle in A
 
 
-LHASHTABL  = $4000      ; Label hash table (low and high)
-LHASHTABH  = $4080      ; "
-HEAP       = $4100      ; Data heap
+LHASHTABL  = $1F00      ; Label hash table (low and high)
+LHASHTABH  = $1F80      ; "
+*          = $2000
 FILE_STACK = $EFFF
 
 
@@ -52,9 +52,6 @@ TOKEN        = $21        ; multiple bytes
 INST_PSUEDO   = $01
 INST_RELATIVE = $02
 INST_BYTE     = $04
-
-
-* = $2000
 
 
 ; instruction hash table, etc.
@@ -1079,6 +1076,9 @@ to_decimal_shift_loop
   BNE to_decimal_divide
 
   RTS
+
+
+HEAP                  ; Heap goes after the program code
 
 
 * = $FFFC

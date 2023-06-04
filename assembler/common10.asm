@@ -54,6 +54,7 @@ iht_loop
   STAZ(),Y HTLPL
   STAZ(),Y HTHPL
   INY
+  CPY# $80
   BNE iht_loop
   RTS
 
