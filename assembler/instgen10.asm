@@ -1,12 +1,3 @@
-; Provided by environment:
-;   read:    Returns next character in A
-;            C set when at end
-;            Automatically restarts input after reaching end
-;
-;   write_b: Writes A to output
-read      = $F006
-write_b   = $F009
-
 IHASHTABL = $4200      ; Instruction hash table (low and high)
 IHASHTABH = $4300      ; "
 HEAP      = $4400      ; Data heap
