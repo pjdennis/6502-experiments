@@ -141,7 +141,7 @@ pfs_len_loop
   SBC# $00
   STAZ FILE_STACK_H
   LDY# $FF
-pfs_copy_loop            ; Copy up to 127 characters
+pfs_copy_loop
   INY
   LDA,Y TOKEN
   STAZ(),Y FILE_STACK_L
