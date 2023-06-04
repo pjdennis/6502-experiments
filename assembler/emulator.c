@@ -979,14 +979,68 @@ void hookexternal(void *funcptr) {
 
 uint8_t memory[0x10000];
 
+FILE* files[255];
+
 FILE* input_file_ptr;
 FILE* output_file_ptr;
 
 int done = 0;
 int exitcode_set = -1;
 
+void files_init() {
+    for (size_t x = 0; x != 255; x++) {
+        files[x] = NULL;
+    }
+}
+
+uint8_t file_open(const char* name) {
+    uint8_t x;
+    for (x = 0; x != 255; x++) {
+        if (files[x] == 0) {
+            FILE* file = fopen(name, "rb");
+            if (!file) {
+                fprintf(stderr, "could not open file: %s\n", name);
+		exit(1);
+            }
+	    files[x] = file;
+	    return x + 1;
+        }
+    }
+    fprintf(stderr, "could not open file: %s: too many files open\n", name);
+    exit(1);
+}
+
+FILE* file_handle(uint8_t file) {
+    if (files[file - 1] == NULL) {
+        fprintf(stderr, "file %i is not open\n", (int) file);
+	exit(1);
+    }
+    return files[file - 1];
+}
+
+void file_close(uint8_t file) {
+    fclose(file_handle(file));
+    files[file - 1] = NULL;
+}
+
+int file_read(uint8_t file) {
+    return fgetc(file_handle(file));
+}
+
+void files_destroy() {
+    for (size_t x = 0; x != 255; x++) {
+        if (files[x] != NULL) {
+	    fprintf(stderr, "File %i was not closed\n", (int) (x + 1));
+            fclose(files[x]);
+	    files[x] = NULL;
+        }
+    }
+}
+
+
+
 uint8_t read6502(uint16_t address) {
-    if (address == 0xf004) {
+    if (address == 0xf004) {                       // read_b
         int b = fgetc(input_file_ptr);
 
 	if (b == EOF) {
@@ -995,21 +1049,32 @@ uint8_t read6502(uint16_t address) {
         }
 
         return b;
-    }
-    if (address == 0xfffe && memory[0xfffe] == 0 && memory[0xffff] == 0) {
+    } else if (address == 0xf005) {                // open
+        uint16_t address = a | (x << 8);
+        return file_open((const char*) (memory + address));
+    } else if (address == 0xefff) {                // read
+	int b = file_read(a);
+        if (b == EOF) {
+            b = 4;
+        }
+        return b;
+    } else if (address == 0xfffe && memory[0xfffe] == 0 && memory[0xffff] == 0) {
         done = 1;
     }
     return memory[address];
 }
 
 void write6502(uint16_t address, uint8_t value) {
-    if (address == 0xf001) {
+    if (address == 0xf001) {                       // write_b
         fputc(value, output_file_ptr);
         return;
-    } else if (address == 0xf002) {
+    } else if (address == 0xf002) {                // write_d
         fputc(value, stderr);
         return;
-    } else if (address == 0xf003) {
+    } else if (address == 0xf000) {                // close
+        file_close(value);
+	return;
+    } else if (address == 0xf003) {                // exit
         exitcode_set = value;
         done = 1;
 	return;
@@ -1028,6 +1093,8 @@ int main(int argc, char **argv) {
     long load_address = strtol(argv[2], NULL, 16);
     char* input_filename = argv[3];
     char* output_filename = argv[4];
+
+    files_init();
 
     for (size_t x = 0; x != 0x10000; x++) {
         memory[x] = 0;
@@ -1165,6 +1232,8 @@ int main(int argc, char **argv) {
     fwrite(memory, 1, 0x10000, dump_file_ptr);    
     fclose(dump_file_ptr);
     free(dump_filename);
+
+    files_destroy();
 
     return exitcode;
 }
