@@ -16,6 +16,8 @@ make --quiet &&
   ./emulator.out asm4b7c.out 2000 asm4b8c.asm.out asm4b8c.out &&
   cat inst.asm.out asm4b9.asm > asm4b9c.asm.out &&
   ./emulator.out asm4b8c.out 2000 asm4b9c.asm.out asm4b9c.out &&
+  ./emulator.out asm4b9c.out 2000 instgen10.asm instgen10.out &&
+  ./emulator.out instgen10.out 2000 /dev/null inst10.asm.out &&
   ./emulator.out asm4b9c.out 2000 asm4b10.asm asm4b10.out &&
   ./emulator.out asm4b10.out 2000 asm4b10.asm asm4b10_2.out &&
   diff <(hexdump -C asm4b10.out) <(hexdump -C asm4b10_2.out) &&
