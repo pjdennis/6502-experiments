@@ -20,8 +20,6 @@ FILE_HANDLE = $00
 
 * = $1000
 
-  .include foo.txt
-
 
 start
   LDA# <filename
@@ -37,11 +35,9 @@ loop
 done
   LDAZ FILE_HANDLE
   JSR close
+
   BRK $00
 
-
-filename
-  DATA "test.txt" $00
-
+  .include test_inc.asm
 
   DATA start

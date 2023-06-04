@@ -15,9 +15,10 @@ open      = $F012
 close     = $F015
 read      = $F018
 
-LHASHTABL = $4000      ; Label hash table (low and high)
-LHASHTABH = $4080      ; "
-HEAP      = $4100      ; Data heap
+LHASHTABL  = $4000      ; Label hash table (low and high)
+LHASHTABH  = $4080      ; "
+HEAP       = $4100      ; Data heap
+FILE_STACK = $EFFF
 
 TEMP      = $00        ; 1 byte
 TABPL     = $01        ; 2 byte table pointer
@@ -47,9 +48,10 @@ TO_DECIMAL_MOD10            = $17 ; 1 byte
 TO_DECIMAL_RESULT_MINUS_ONE = $17
 TO_DECIMAL_RESULT           = $18 ; 6 bytes
 
-CURR_FILE = $1E
-
-TOKEN     = $1F        ; multiple bytes
+CURR_FILE    = $1E
+FILE_STACK_L = $1F
+FILE_STACK_H = $20
+TOKEN        = $21        ; multiple bytes
 
 
 INST_PSUEDO   = $01
@@ -97,7 +99,105 @@ err_filename_expected
 
 read_char
   LDAZ CURR_FILE
-  JMP read          ; Tail call
+  JSR read
+  BCS rc_at_end
+  RTS
+rc_at_end
+  JSR file_stack_empty
+  BEQ rc_done
+; Close currnet file and restore from filestack
+  LDAZ CURR_FILE
+  JSR close
+  LDY# $00
+  LDAZ(),Y FILE_STACK_L
+  STAZ CURR_FILE
+  INY
+  LDAZ(),Y FILE_STACK_L
+  STAZ CURLINEL
+  INY
+  LDAZ(),Y FILE_STACK_L
+  STAZ CURLINEH
+rc_pop_loop
+  INY
+  LDAZ(),Y FILE_STACK_L
+  BNE rc_pop_loop
+; Adjust stack pointer
+  TYA
+  SEC  ; +1
+  ADCZ FILE_STACK_L
+  STAZ FILE_STACK_L
+  LDA# $00
+  ADCZ FILE_STACK_H
+  STAZ FILE_STACK_H
+rc_done
+  RTS
+
+
+init_file_stack
+  LDA# <FILE_STACK
+  STAZ FILE_STACK_L
+  LDA# >FILE_STACK
+  STAZ FILE_STACK_H
+  RTS
+
+
+; On exit Z is set if file stack empty, clear otherwise
+file_stack_empty
+  LDAZ FILE_STACK_L
+  CMP# <FILE_STACK
+  BNE fse_done
+  LDAZ FILE_STACK_H
+  CMP# >FILE_STACK
+fse_done
+  RTS
+
+
+; On entry TOKEN contains the file name
+;          CURLINEL;CURLINEH contains the current line number
+;          CURR_FILE contains the current file handle
+push_file_stack
+  LDY# $FF
+pfs_len_loop
+  INY
+  LDA,Y TOKEN
+  BNE pfs_len_loop
+  TYA
+  STAZ TEMP
+  CLC    ; -1
+  LDAZ FILE_STACK_L
+  SBCZ TEMP
+  STAZ FILE_STACK_L
+  LDAZ FILE_STACK_H
+  SBC# $00
+  STAZ FILE_STACK_H
+  LDY# $FF
+pfs_copy_loop            ; Copy up to 127 characters
+  INY
+  LDA,Y TOKEN
+  STAZ(),Y FILE_STACK_L
+  BNE pfs_copy_loop
+  ; Adjust pointer for line number and file handle
+  SEC
+  LDAZ FILE_STACK_L
+  SBC# $03
+  STAZ FILE_STACK_L
+  LDAZ FILE_STACK_H
+  SBC# $00
+  STAZ FILE_STACK_H
+  ; Store file handle
+  LDY# $00
+  LDA CURR_FILE
+  STAZ(),Y FILE_STACK_L
+  INY
+  ; Store line number
+  LDA CURLINEL
+  STAZ(),Y FILE_STACK_L
+  INY
+  LDA CURLINEH
+  STAZ(),Y FILE_STACK_L
+  INY
+
+  RTS
 
 
 init_heap
@@ -929,7 +1029,7 @@ pd_include
   JMP err_filename_expected
 pd_get_name
   JSR read_token
-  PHA
+  JSR skip_rest_of_line
 
   LDA# "["
   JSR write_d
@@ -945,8 +1045,16 @@ pd_get_name
   LDA# "\n"
   JSR write_d
 
-  PLA
-  JMP skip_rest_of_line  ; tail call
+  JSR push_file_stack
+  LDA# $00
+  STAZ CURLINEL
+  STAZ CURLINEH
+  LDA# <TOKEN
+  LDX# >TOKEN
+  JSR open
+  STAZ CURR_FILE
+
+  RTS
 
 directive_include
   DATA "include" $00
@@ -1050,6 +1158,7 @@ start
   JSR init_heap
   JSR select_label_hash_table
   JSR init_hash_table
+  JSR init_file_stack
   LDA# $01            ; stdin
   STAZ CURR_FILE
   LDA# $00
