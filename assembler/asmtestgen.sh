@@ -29,7 +29,7 @@ if [ $? -eq 0 ]; then
   hexdump -C test.out &&
   echo "Assembled"
   if [ $? -eq 0 ]; then
-    ./emulator.out test.out 1000 /dev/null - arg1 arg2
+    ./emulator.out test.out 1000 /dev/null - arg1 "arg 2"
   else
     echo "Did not assemble"
   fi

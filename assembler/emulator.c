@@ -1210,11 +1210,20 @@ int main(int argc, char **argv) {
     p = argvh_start + arg_count;
 
     memory[0xfb] = arg_count; // argument count
-    memory[0xfc] = argvl_start & 0xff;
-    memory[0xfd] = argvl_start >> 8;
-    memory[0xfe] = argvh_start & 0xff;
-    memory[0xff] = argvh_start >> 8;
+    if (arg_count > 0) {
+        memory[0xfc] = argvl_start & 0xff;
+        memory[0xfd] = argvl_start >> 8;
+        memory[0xfe] = argvh_start & 0xff;
+        memory[0xff] = argvh_start >> 8;
+    }
 
+    for (int arg = 0; arg != arg_count; arg++) {
+        memory[argvl_start + arg] = p & 0xff;
+        memory[argvh_start + arg] = p >> 8;
+        const char* s = argv[5 + arg];
+        while ((memory[p++] = *s++))
+            ;
+    }
 
     input_file_ptr = fopen(input_filename, "rb");
     if (!input_file_ptr) {

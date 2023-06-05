@@ -47,25 +47,36 @@ done
 arg_loop
   CPYZ argc
   BEQ arg_loop_done
+
+  ; Show "  arg "
   LDA# <argument_message_prefix
   STAZ TABPL
   LDA# >argument_message_prefix
   STAZ TABPH
   JSR show_message
 
+  ; Show argument number
   TYA
   STAZ TO_DECIMAL_VALUE_L
   LDA# $00
   STAZ TO_DECIMAL_VALUE_H
   JSR show_decimal
 
+  ; Show ": "
   LDA# <argument_message_suffix
   STAZ TABPL
   LDA# >argument_message_suffix
   STAZ TABPH
   JSR show_message
 
+  ; Show argument value
+  LDAZ(),Y argvl
+  STAZ TABPL
+  LDAZ(),Y argvh
+  STAZ TABPH
+  JSR show_message
 
+  ; Show "\n"
   LDA# "\n"
   JSR write_d
 
@@ -73,7 +84,6 @@ arg_loop
   JMP arg_loop
 
 arg_loop_done
-
 
   BRK $00
 
