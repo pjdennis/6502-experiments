@@ -16,7 +16,7 @@ P2H       = $000A      ; "
 HASH      = $000B      ; 1 byte hash value
 CHAR      = $000C      ; 1 byte character value
 HTLPL     = $000D      ; 2 byte pointer to low byte hash table
-HTLPH     = $000D      ; "
+HTLPH     = $000E      ; "
 HTHPL     = $000F      ; 2 byte pointer to high byte hash table
 HTHPH     = $0010      ; "
 TOKEN     = $0011      ; multiple bytes
@@ -25,6 +25,7 @@ TOKEN     = $0011      ; multiple bytes
 *         = $2000       ; Set PC
 
 
+  .include environment.asm
   .include common10.asm
 
 
@@ -47,9 +48,11 @@ MNTAB
   DATA "CMPZ"     $00 $04 $C5
   DATA "CMP#"     $00 $04 $C9
   DATA "CMP,Y"    $00 $00 $D9
+  DATA "CPYZ"     $00 $04 $C4
   DATA "CPY#"     $00 $04 $C0
   DATA "DECZ"     $00 $04 $C6
   DATA "DEX"      $00 $00 $CA
+  DATA "DEY"      $00 $00 $88
   DATA "EORZ"     $00 $04 $45
   DATA "INCZ"     $00 $04 $E6
   DATA "INX"      $00 $00 $E8

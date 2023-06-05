@@ -47,6 +47,7 @@ INST_BYTE     = $04
 
 
 ; Instruction hash table, etc.
+  .include environment.asm
   .include common10.asm
   .include inst10.asm.out
 
@@ -985,8 +986,8 @@ msg_error_file
 
 ; Show message to the error output
 ; On entry TABPL;TABPH points to the zero-terminated message
-; On exit A, Z are preserved
-;         Y is not preserved
+; On exit X is preserved
+;         A, Y are not preserved
 show_message
   LDY# $00
 sm_loop

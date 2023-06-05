@@ -1047,7 +1047,7 @@ void files_destroy() {
 uint8_t read6502(uint16_t address) {
     if (address == 0xf004) {                       // read_b
         int b = fgetc(input_file_ptr);
-	if (b == EOF) {
+        if (b == EOF) {
             b = 4;
             fseek(input_file_ptr, 0, SEEK_SET);
         }
@@ -1056,7 +1056,7 @@ uint8_t read6502(uint16_t address) {
         uint16_t address = a | (x << 8);
         return file_open((const char*) (memory + address));
     } else if (address == 0xefff) {                // read
-	int b = file_read(a);
+        int b = file_read(a);
         if (b == EOF) {
             b = 4;
             fseek(file_handle(a), 0, SEEK_SET);
@@ -1064,7 +1064,20 @@ uint8_t read6502(uint16_t address) {
         return b;
     } else if (address == 0xfffe && memory[0xfffe] == 0 && memory[0xffff] == 0) {
         done = 1;
-    }
+    }/* else if (address == 0xfe) {
+        fprintf(stderr, "Accessed address %04x with PC=%04x\n", (int) address, (int) pc);
+
+        FILE* dump_file_ptr = fopen("dump.out", "wb");
+        if (!dump_file_ptr) {
+            fprintf(stderr, "could not open output file: dump.out\n");
+            return 1;
+        }
+
+        fwrite(memory, 1, 0x10000, dump_file_ptr);
+        fclose(dump_file_ptr);
+
+        exit(1);
+    }*/
     return memory[address];
 }
 
@@ -1088,8 +1101,8 @@ void write6502(uint16_t address, uint8_t value) {
 }
 
 int main(int argc, char **argv) {
-    if (argc != 5) {
-        fprintf(stderr, "usage emulator <code file> <hex load address> <input file> <output file>\n");
+    if (argc < 5) {
+        fprintf(stderr, "usage emulator <code file> <hex load address> <input file> <output file> [<arguments>]\n");
         return 1;
     }
 
@@ -1190,6 +1203,18 @@ int main(int argc, char **argv) {
     memory[p++] = 0x60; // f041          rts
     memory[p++] = 0x38; // f042 .at_end: sec
     memory[p++] = 0x60; // f043          rts
+
+    int arg_count = argc - 5;
+    int argvl_start = p;
+    int argvh_start = p + arg_count;
+    p = argvh_start + arg_count;
+
+    memory[0xfb] = arg_count; // argument count
+    memory[0xfc] = argvl_start & 0xff;
+    memory[0xfd] = argvl_start >> 8;
+    memory[0xfe] = argvh_start & 0xff;
+    memory[0xff] = argvh_start >> 8;
+
 
     input_file_ptr = fopen(input_filename, "rb");
     if (!input_file_ptr) {
