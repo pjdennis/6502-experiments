@@ -997,11 +997,11 @@ void files_init(FILE* input_file) {
     }
 }
 
-uint8_t file_open(const char* name) {
+uint8_t file_open_with_mode(const char* name, const char* mode) {
     uint8_t x;
     for (x = 1; x != 255; x++) {
         if (files[x] == NULL) {
-            FILE* file = fopen(name, "rb");
+            FILE* file = fopen(name, mode);
             if (!file) {
                 fprintf(stderr, "could not open file: %s\n", name);
 		exit(1);
@@ -1012,6 +1012,14 @@ uint8_t file_open(const char* name) {
     }
     fprintf(stderr, "could not open file: %s: too many files open\n", name);
     exit(1);
+}
+
+uint8_t file_open(const char* name) {
+    return file_open_with_mode(name, "rb");
+}
+
+uint8_t file_open_for_write(const char* name) {
+    return file_open_with_mode(name, "wb"); 
 }
 
 FILE* file_handle(uint8_t file) {
@@ -1033,6 +1041,10 @@ void file_close(uint8_t file) {
 
 int file_read(uint8_t file) {
     return fgetc(file_handle(file));
+}
+
+int file_write(uint8_t file, uint8_t value) {
+    return fputc(value, file_handle(file));
 }
 
 void files_destroy() {
@@ -1058,6 +1070,9 @@ uint8_t read6502(uint16_t address) {
     } else if (address == 0xf005) {                // open
         uint16_t address = a | (x << 8);
         return file_open((const char*) (memory + address));
+    } else if (address == 0xfe83) {                // openout
+        uint16_t address = a | (x << 8);
+        return file_open_for_write((const char*) (memory + address));
     } else if (address == 0xefff) {                // read
         int b = file_read(a);
         if (b == EOF) {
@@ -1112,6 +1127,9 @@ void write6502(uint16_t address, uint8_t value) {
         exitcode_set = value;
         done = 1;
 	return;
+    } else if (address == 0xfe84) {                // write
+        file_write(x, value);
+        return;
     }
 
     memory[address] = value;

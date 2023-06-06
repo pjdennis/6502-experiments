@@ -8,3 +8,13 @@ close     = $F015 ; Closes file with handle in A
 read      = $F018 ; Reads from file with handle in A
 argc      = $F01B ; Returns argument count in A
 argv      = $F01E ; Returns argument A in A;X
+;openout   = $F021
+;write     = $F024
+
+openout
+  LDA $FE83
+  RTS
+
+write
+  STA $FE84
+  RTS

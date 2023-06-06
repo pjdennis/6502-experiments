@@ -87,7 +87,23 @@ arg_loop
 
 arg_loop_done
 
+  LDA# <output_filename
+  LDX# >output_filename
+  JSR openout
+  STAZ FILE_HANDLE
+
+  LDA# "X"
+  LDX FILE_HANDLE
+  JSR write
+
+
+  LDAZ FILE_HANDLE
+  JSR close
+
   BRK $00
+
+output_filename
+  DATA "test_output.out" $00
 
 arguments_message
   DATA " arguments\n" $00

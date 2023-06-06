@@ -111,6 +111,11 @@ rc_done
   RTS
 
 
+//TODO write to file
+write_byte
+  JMP write_b
+
+
 init_file_stack
   LDA# <FILE_STACK
   STAZ FILE_STACK_L
@@ -259,7 +264,7 @@ fih_not_found
 emit
   BITZ PASS
   BPL emit_incpc       ; Skip writing during pass 1
-  JSR write_b
+  JSR write_byte
   BITZ STARTED
   BMI emit_incpc
   DECZ STARTED
@@ -524,7 +529,7 @@ up_loop
   BEQ up_done
 up_loop_not_done
   LDA# $00
-  JSR write_b
+  JSR write_byte
   INCZ PCL
   BNE up_loop
   INCZ PCH
