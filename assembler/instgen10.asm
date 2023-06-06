@@ -48,6 +48,7 @@ MNTAB
   DATA "CMPZ"     $00 $04 $C5
   DATA "CMP#"     $00 $04 $C9
   DATA "CMP,Y"    $00 $00 $D9
+  DATA "CPXZ"     $00 $04 $E4
   DATA "CPYZ"     $00 $04 $C4
   DATA "CPY#"     $00 $04 $C0
   DATA "DECZ"     $00 $04 $C6
@@ -60,6 +61,8 @@ MNTAB
   DATA "JMP"      $00 $00 $4C
   DATA "JSR"      $00 $00 $20
   DATA "LDA"      $00 $00 $AD
+  DATA "LDX"      $00 $00 $AE
+  DATA "LDY"      $00 $00 $AC
   DATA "LDA#"     $00 $04 $A9
   DATA "LDAZ(),Y" $00 $04 $B1
   DATA "LDA,X"    $00 $00 $BD
@@ -83,8 +86,12 @@ MNTAB
   DATA "STA,Y"    $00 $00 $99
   DATA "STAZ"     $00 $04 $85
   DATA "STAZ,X"   $00 $04 $95
+  DATA "STXZ"     $00 $04 $86
+  DATA "STYZ"     $00 $04 $84
+  DATA "TAX"      $00 $00 $AA
   DATA "TAY"      $00 $00 $A8
   DATA "TSX"      $00 $00 $BA
+  DATA "TXA"      $00 $00 $8A
   DATA "TYA"      $00 $00 $98
   DATA "DATA"     $00 $01 $00 ; Directive
   DATA $00

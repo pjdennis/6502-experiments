@@ -1,18 +1,19 @@
-  .include environment.asm
-
-
 FILE_HANDLE                 = $00
 TABPL                       = $01 ; 2 byte table pointer
 TABPH                       = $02 ; "
+ARGC                        = $03
 
-TO_DECIMAL_VALUE_L          = $03 ; 1 byte
-TO_DECIMAL_VALUE_H          = $04 ; 1 byte
-TO_DECIMAL_MOD10            = $05 ; 1 byte
-TO_DECIMAL_RESULT_MINUS_ONE = $05
-TO_DECIMAL_RESULT           = $06 ; 6 bytes
+TO_DECIMAL_VALUE_L          = $04 ; 1 byte
+TO_DECIMAL_VALUE_H          = $05 ; 1 byte
+TO_DECIMAL_MOD10            = $06 ; 1 byte
+TO_DECIMAL_RESULT_MINUS_ONE = $06
+TO_DECIMAL_RESULT           = $07 ; 6 bytes
 
 
 * = $1000
+
+
+  .include environment.asm
 
 
 start
@@ -31,7 +32,8 @@ done
   JSR close
 
 ; Show arguments
-  LDAZ argc
+  JSR argc
+  STAZ ARGC
   STAZ TO_DECIMAL_VALUE_L
   LDA# $00
   STAZ TO_DECIMAL_VALUE_H
@@ -45,7 +47,7 @@ done
 
   LDY# $00
 arg_loop
-  CPYZ argc
+  CPYZ ARGC
   BEQ arg_loop_done
 
   ; Show "  arg "
@@ -70,10 +72,10 @@ arg_loop
   JSR show_message
 
   ; Show argument value
-  LDAZ(),Y argvl
+  TYA
+  JSR argv
   STAZ TABPL
-  LDAZ(),Y argvh
-  STAZ TABPH
+  STXZ TABPH
   JSR show_message
 
   ; Show "\n"
@@ -123,15 +125,20 @@ sm_done
 
 ; Show a decimal value to the error ouptut
 ; On entry TO_DECIMAL_VALUE_L;TO_DECIMAL_VALUE_H contains the value to show
-; On exit Y is preserved
-;         A, X are not preserved
+; On exit A, X, Y are preserved
 ;         Decimal number string stored at TO_DECIMAL_RESULT
 show_decimal
+  PHA
+  TXA
+  PHA
   JSR to_decimal
   LDA# <TO_DECIMAL_RESULT
   STAZ TABPL
   LDA# >TO_DECIMAL_RESULT
   STAZ TABPH
+  PLA
+  TAX
+  PLA
   JMP show_message ; tail call
 
 

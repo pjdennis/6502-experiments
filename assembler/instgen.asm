@@ -75,6 +75,8 @@ MNTAB
   DATA "JMP"      $00 $00 $4C
   DATA "JSR"      $00 $00 $20
   DATA "LDA"      $00 $00 $AD
+  DATA "LDX"      $00 $00 $AE
+  DATA "LDY"      $00 $00 $AC
   DATA "LDA#"     $00 $04 $A9
   DATA "LDAZ(),Y" $00 $04 $B1
   DATA "LDA,X"    $00 $00 $BD

@@ -984,6 +984,9 @@ FILE* files[255];
 FILE* input_file_ptr;
 FILE* output_file_ptr;
 
+int arg_count;
+uint16_t* arg_addresses;
+
 int done = 0;
 int exitcode_set = -1;
 
@@ -1062,6 +1065,20 @@ uint8_t read6502(uint16_t address) {
             fseek(file_handle(a), 0, SEEK_SET);
         }
         return b;
+    } else if (address == 0xfe80) { // argc
+        return arg_count;
+    } else if (address == 0xfe81) { // argvl
+        if (a >= arg_count) {
+            fprintf(stderr, "Argument %i does not exist\n", (int) a);
+            exit(1);
+        }
+        return arg_addresses[a] & 0xff;
+    } else if (address == 0xfe82) { // argvh
+        if (a >= arg_count) {
+            fprintf(stderr, "Argument %i does not exist\n", (int) a);
+            exit(1);
+        }
+        return arg_addresses[a] >> 8;
     } else if (address == 0xfffe && memory[0xfffe] == 0 && memory[0xffff] == 0) {
         done = 1;
     }/* else if (address == 0xfe) {
@@ -1142,88 +1159,84 @@ int main(int argc, char **argv) {
 
     size_t p = 0xf006;
     memory[p++] = 0x4c; // f006          jmp read_b
-    memory[p++] = 0x1b; // f007
+    memory[p++] = 0x21; // f007
     memory[p++] = 0xf0; // f008
     memory[p++] = 0x4c; // f009          jmp write_b
-    memory[p++] = 0x26; // f00a
+    memory[p++] = 0x2c; // f00a
     memory[p++] = 0xf0; // f00b
     memory[p++] = 0x4c; // f00c          jmp write_d
-    memory[p++] = 0x2a; // f00d
+    memory[p++] = 0x30; // f00d
     memory[p++] = 0xf0; // f00e
     memory[p++] = 0x4c; // f00f          jmp exit
-    memory[p++] = 0x2e; // f010
+    memory[p++] = 0x34; // f010
     memory[p++] = 0xf0; // f011
     memory[p++] = 0x4c; // f012          jmp open
-    memory[p++] = 0x31; // f013
+    memory[p++] = 0x37; // f013
     memory[p++] = 0xf0; // f014
     memory[p++] = 0x4c; // f015          jmp close
-    memory[p++] = 0x35; // f016
+    memory[p++] = 0x3b; // f016
     memory[p++] = 0xf0; // f017
     memory[p++] = 0x4c; // f018          jmp read
-    memory[p++] = 0x39; // f019
+    memory[p++] = 0x3f; // f019
     memory[p++] = 0xf0; // f01a
-    memory[p++] = 0xad; // f01b read_b:  lda $f004
-    memory[p++] = 0x04; // f01c
+    memory[p++] = 0x4c; // f01b          jmp argc
+    memory[p++] = 0x4a; // f01c
     memory[p++] = 0xf0; // f01d
-    memory[p++] = 0xc9; // f01e          cmp #4
-    memory[p++] = 0x04; // f01f
-    memory[p++] = 0xf0; // f020          beq .at_end
-    memory[p++] = 0x02; // f021
-    memory[p++] = 0x18; // f022          clc
-    memory[p++] = 0x60; // f023          rts
-    memory[p++] = 0x38; // f024 .at_end: sec
-    memory[p++] = 0x60; // f025          rts
-    memory[p++] = 0x8d; // f026 write_b: sta $f001
-    memory[p++] = 0x01; // f027
-    memory[p++] = 0xf0; // f028
+    memory[p++] = 0x4c; // f01e          jmp argv
+    memory[p++] = 0x4e; // f01f
+    memory[p++] = 0xf0; // f020
+    memory[p++] = 0xad; // f021 read_b:  lda $f004
+    memory[p++] = 0x04; // f022
+    memory[p++] = 0xf0; // f023
+    memory[p++] = 0xc9; // f024          cmp #4
+    memory[p++] = 0x04; // f025
+    memory[p++] = 0xf0; // f026          beq .at_end
+    memory[p++] = 0x02; // f027
+    memory[p++] = 0x18; // f028          clc
     memory[p++] = 0x60; // f029          rts
-    memory[p++] = 0x8d; // f02a write_d: sta $f002
-    memory[p++] = 0x02; // f02b
-    memory[p++] = 0xf0; // f02c
-    memory[p++] = 0x60; // f02d          rts
-    memory[p++] = 0x8d; // f02e exit:    sta $f003
-    memory[p++] = 0x03; // f02f
-    memory[p++] = 0xf0; // f030
-    memory[p++] = 0xad; // f031 open:    lda $f005
-    memory[p++] = 0x05; // f032
-    memory[p++] = 0xf0; // f033
-    memory[p++] = 0x60; // f034          rts
-    memory[p++] = 0x8d; // f035 close:   sta $f000
-    memory[p++] = 0x00; // f036
-    memory[p++] = 0xf0; // f037
-    memory[p++] = 0x60; // f038          rts
-    memory[p++] = 0xad; // f039 read:    lda $efff
-    memory[p++] = 0xff; // f03a
-    memory[p++] = 0xef; // f03b
-    memory[p++] = 0xc9; // f03c          cmp #4
-    memory[p++] = 0x04; // f03d
-    memory[p++] = 0xf0; // f03e          beq .at_end
-    memory[p++] = 0x02; // f03f
-    memory[p++] = 0x18; // f040          clc
-    memory[p++] = 0x60; // f041          rts
-    memory[p++] = 0x38; // f042 .at_end: sec
-    memory[p++] = 0x60; // f043          rts
-
-    int arg_count = argc - 5;
-    int argvl_start = p;
-    int argvh_start = p + arg_count;
-    p = argvh_start + arg_count;
-
-    memory[0xfb] = arg_count; // argument count
-    if (arg_count > 0) {
-        memory[0xfc] = argvl_start & 0xff;
-        memory[0xfd] = argvl_start >> 8;
-        memory[0xfe] = argvh_start & 0xff;
-        memory[0xff] = argvh_start >> 8;
-    }
-
-    for (int arg = 0; arg != arg_count; arg++) {
-        memory[argvl_start + arg] = p & 0xff;
-        memory[argvh_start + arg] = p >> 8;
-        const char* s = argv[5 + arg];
-        while ((memory[p++] = *s++))
-            ;
-    }
+    memory[p++] = 0x38; // f02a .at_end: sec
+    memory[p++] = 0x60; // f02b          rts
+    memory[p++] = 0x8d; // f02c write_b: sta $f001
+    memory[p++] = 0x01; // f02d
+    memory[p++] = 0xf0; // f02e
+    memory[p++] = 0x60; // f02f          rts
+    memory[p++] = 0x8d; // f030 write_d: sta $f002
+    memory[p++] = 0x02; // f031
+    memory[p++] = 0xf0; // f032
+    memory[p++] = 0x60; // f033          rts
+    memory[p++] = 0x8d; // f034 exit:    sta $f003
+    memory[p++] = 0x03; // f035
+    memory[p++] = 0xf0; // f036
+    memory[p++] = 0xad; // f037 open:    lda $f005
+    memory[p++] = 0x05; // f038
+    memory[p++] = 0xf0; // f039
+    memory[p++] = 0x60; // f03a          rts
+    memory[p++] = 0x8d; // f03b close:   sta $f000
+    memory[p++] = 0x00; // f03c
+    memory[p++] = 0xf0; // f03d
+    memory[p++] = 0x60; // f03e          rts
+    memory[p++] = 0xad; // f03f read:    lda $efff
+    memory[p++] = 0xff; // f040
+    memory[p++] = 0xef; // f041
+    memory[p++] = 0xc9; // f042          cmp #4
+    memory[p++] = 0x04; // f043
+    memory[p++] = 0xf0; // f044          beq .at_end
+    memory[p++] = 0x02; // f045
+    memory[p++] = 0x18; // f046          clc
+    memory[p++] = 0x60; // f047          rts
+    memory[p++] = 0x38; // f048 .at_end: sec
+    memory[p++] = 0x60; // f049          rts
+    memory[p++] = 0xad; // f04a argc:    lda $fe80
+    memory[p++] = 0x80; // f04b
+    memory[p++] = 0xfe; // f04c
+    memory[p++] = 0x60; // f04d          rts
+    memory[p++] = 0xae; // f04e argv:    ldx $fe82
+    memory[p++] = 0x82; // f04f
+    memory[p++] = 0xfe; // f050
+    memory[p++] = 0xad; // f051          lda $fe81
+    memory[p++] = 0x81; // f052
+    memory[p++] = 0xfe; // f053
+    memory[p++] = 0x60; // f054          rts
 
     input_file_ptr = fopen(input_filename, "rb");
     if (!input_file_ptr) {
@@ -1244,6 +1257,15 @@ int main(int argc, char **argv) {
 
     files_init(input_file_ptr);
 
+    arg_count = argc - 5;
+    arg_addresses = malloc(arg_count * sizeof(uint16_t));
+    for (int arg = 0; arg != arg_count; arg++) {
+        arg_addresses[arg] = p;
+        const char* s = argv[5 + arg];
+        while ((memory[p++] = *s++))
+            ;
+    }
+
     reset6502();
     const int max_cycles = 20000000;
     while (!done) {
@@ -1251,6 +1273,7 @@ int main(int argc, char **argv) {
         if (clockticks6502 > max_cycles) {
             fprintf(stderr, "File %s with input %s did not terminate within %i cycles\n",
                     code_filename, input_filename, max_cycles);
+            free(arg_addresses);
             fclose(output_file_ptr);
             fclose(input_file_ptr);
             return 1;
@@ -1259,6 +1282,10 @@ int main(int argc, char **argv) {
     }
     fprintf(stderr, "File %s with input %s executed %i cycles\n",
             code_filename, input_filename, clockticks6502);
+
+    free(arg_addresses);
+
+    files_destroy();
 
     if (strcmp(output_filename, "-") != 0) {
         fclose(output_file_ptr);
@@ -1305,8 +1332,6 @@ int main(int argc, char **argv) {
     fwrite(memory, 1, 0x10000, dump_file_ptr);    
     fclose(dump_file_ptr);
     free(dump_filename);
-
-    files_destroy();
 
     return exitcode;
 }
