@@ -89,6 +89,9 @@ err_unknown_directive
 err_filename_expected
   BRK $0C "Filename expected" $00
 
+err_usage
+  BRK $0D "Usage <assebler> <input> <output>" $00
+
 
 read_char
   LDAZ CURR_FILE
@@ -99,7 +102,11 @@ rc_at_end
   JSR file_stack_empty
   BEQ rc_done
   JSR pop_file_stack
+  LDAZ CURR_FILE
+  BEQ rc_set_carry
   JMP read_char          ; Recursive tail call
+rc_set_carry
+  SEC
 rc_done
   RTS
 
@@ -878,21 +885,44 @@ ac_label
   JMP ac_parameters_loop
 
 
+open_input
+  LDA# $00
+  JSR argv
+  STAZ TABPL
+  STXZ TABPH
+  LDY# $FF
+oi_loop
+  INY
+  LDAZ(),Y TABPL
+  STA,Y TOKEN
+  BNE oi_loop
+  JMP push_file_stack ; tail call
+
+
 ; Entry point
 start
+  JSR argc
+  CMP# $02
+  BEQ s_args_ok
+  JMP err_usage
+s_args_ok
   JSR init_heap
   JSR select_label_hash_table
   JSR init_hash_table
   JSR init_file_stack
-  LDA# $01            ; stdin
-  STAZ CURR_FILE
+
   LDA# $00
   STAZ STARTED
+  STAZ CURR_FILE
   STAZ PASS           ; Bit 7 = 0 (pass 1)
+  JSR open_input
   JSR assemble_code
+
   LDA# $FF
   STAZ PASS           ; Bit 7 = 1 (pass 2)
+  JSR open_input
   JSR assemble_code
+
   BRK $00             ; Success
 
 
