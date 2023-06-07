@@ -38,7 +38,9 @@ CURR_FILE    = $1E
 FILE_STACK_L = $1F
 FILE_STACK_H = $20
 IN_ZEROPAGE  = $21
-TOKEN        = $22        ; multiple bytes
+PC_SAVEL     = $22
+PC_SAVEH     = $23
+TOKEN        = $24        ; multiple bytes
 
 
 ; Constants
@@ -109,6 +111,14 @@ rc_at_end
 rc_set_carry
   SEC
 rc_done
+  RTS
+
+
+do_write
+  BITZ IN_ZEROPAGE
+  BMI dw_skip
+  JMP write              ; Tail call
+dw_skip
   RTS
 
 
@@ -266,7 +276,7 @@ fih_not_found
 emit
   BITZ PASS
   BPL emit_incpc       ; Skip writing during pass 1
-  JSR write
+  JSR do_write
   BITZ STARTED
   BMI emit_incpc
   DECZ STARTED
@@ -533,7 +543,7 @@ up_loop
   BEQ up_loop_done
 up_loop_not_done
   LDA# $00
-  JSR write
+  JSR do_write
   INCZ PCL
   BNE up_loop
   INCZ PCH
@@ -808,6 +818,13 @@ process_directive
   STAZ TABPH
   JSR compare_token
   BEQ pd_zeropage
+  ; Check for 'code'
+  LDA# <directive_code
+  STAZ TABPL
+  LDA# >directive_code
+  STAZ TABPH
+  JSR compare_token
+  BEQ pd_code
   ; Directive not recognized
   PLA                          ; Restore next char
   JMP err_unknown_directive
@@ -823,21 +840,37 @@ pd_get_name
   JSR push_file_stack
   RTS
 pd_zeropage
-;  LDA# $FF
-;  STAZ IN_ZEROPAGE
+  LDA# $FF
+  STAZ IN_ZEROPAGE
+  LDAZ PCL
+  STAZ PC_SAVEL
+  LDAZ PCH
+  STAZ PC_SAVEH
   LDA# $00
   STAZ PCL
   STAZ PCH
   PLA                          ; Restore next char
   JSR skip_rest_of_line
   RTS
-
+pd_code
+  LDA# $00
+  STAZ IN_ZEROPAGE
+  LDAZ PC_SAVEL
+  STAZ PCL
+  LDAZ PC_SAVEH
+  STA PCH
+  PLA                          ; Restore next char
+  JSR skip_rest_of_line
+  RTS
 
 directive_include
   DATA "include" $00
 
 directive_zeropage
   DATA "zeropage" $00
+
+directive_code
+  DATA "code" $00
 
 
 ; Read from input, assemble code and write to output

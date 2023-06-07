@@ -120,6 +120,22 @@ sm_done
   RTS
 
 
+  .zeropage
+
+FILE_HANDLE                 DATA $00 ; 1 byte
+TABPL                       DATA $00 ; 2 byte table pointer
+TABPH                       DATA $00 ; "
+ARGC                        DATA $00 ; 1 byte
+
+TO_DECIMAL_VALUE_L          DATA $00 ; 1 byte
+TO_DECIMAL_VALUE_H          DATA $00 ; 1 byte
+TO_DECIMAL_RESULT_MINUS_ONE
+TO_DECIMAL_MOD10            DATA $00 ; 1 byte
+TO_DECIMAL_RESULT           DATA $00 $00 $00 $00 $00 $00 ; 6 bytes
+
+  .code
+
+
 ; Show a decimal value to the error ouptut
 ; On entry TO_DECIMAL_VALUE_L;TO_DECIMAL_VALUE_H contains the value to show
 ; On exit A, X, Y are preserved
@@ -196,20 +212,5 @@ to_decimal_shift_loop
 
   RTS
 
-
-  DATA start
-
-  .zeropage
-
-FILE_HANDLE                 DATA $00 ; 1 byte
-TABPL                       DATA $00 ; 2 byte table pointer
-TABPH                       DATA $00 ; "
-ARGC                        DATA $00 ; 1 byte
-
-TO_DECIMAL_VALUE_L          DATA $00 ; 1 byte
-TO_DECIMAL_VALUE_H          DATA $00 ; 1 byte
-TO_DECIMAL_RESULT_MINUS_ONE
-TO_DECIMAL_MOD10            DATA $00 ; 1 byte
-TO_DECIMAL_RESULT           DATA $00 $00 $00 $00 $00 $00 ; 6 bytes
 
   DATA start
