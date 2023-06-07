@@ -91,6 +91,14 @@ arg_loop_done
   LDAZ FILE_HANDLE
   JSR close
 
+  LDA# FILE_HANDLE
+  STAZ TO_DECIMAL_VALUE_L
+  LDA# $00
+  STAZ TO_DECIMAL_VALUE_H
+  JSR show_decimal
+  LDA# "\n"
+  JSR write_d
+
   BRK $00
 
 output_filename          DATA "test_output.out" $00
@@ -103,6 +111,8 @@ argument_message_suffix  DATA ": " $00
 
 
   .zeropage
+
+* = $01
 
 FILE_HANDLE                 DATA $00 ; 1 byte
 TABPL                       DATA $00 ; 2 byte table pointer
