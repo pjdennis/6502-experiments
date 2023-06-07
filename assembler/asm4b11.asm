@@ -271,9 +271,6 @@ emit
   BITZ IN_ZEROPAGE
   BMI emit_incpc       ; Skip writing when in zero page section
   JSR write
-  BITZ STARTED
-  BMI emit_incpc
-  DECZ STARTED
 emit_incpc
   INCZ PCL
   BNE emit_done
@@ -519,7 +516,10 @@ rv_ok
 ; Raises 'Cannot move PC backwards' error if attempting to move PC backwards
 update_pc
   BITZ STARTED
-  BPL up_no_fill
+  BMI up_started
+  DECZ STARTED
+  JMP up_no_fill
+up_started
   LDAZ HEX1             ; High byte
   CMPZ PCH
   BCC up_less
@@ -528,6 +528,8 @@ update_pc
   CMPZ PCL
   BCC up_less
 up_notless
+  BITZ PASS
+  BPL up_no_fill        ; skip writing during pass 1
   BITZ IN_ZEROPAGE
   BMI up_no_fill
 up_loop
@@ -893,6 +895,7 @@ directive_code
 ; On exit A, X, Y are not preserved
 assemble_code
   LDA# $00
+  STAZ STARTED
   STAZ IN_ZEROPAGE
   STAZ PCL
   STAZ PCH
@@ -1015,7 +1018,6 @@ s_args_ok
   JSR init_file_stack
 
   LDA# $00
-  STAZ STARTED
   STAZ CURR_FILE
   STAZ PASS           ; Bit 7 = 0 (pass 1)
   JSR open_input
