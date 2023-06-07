@@ -524,20 +524,25 @@ update_pc
   CMPZ PCL
   BCC up_less
 up_notless
+  STXZ TEMP             ; Prepare for writing
+  LDXZ OUT_FILE         ; "
 up_loop
   LDAZ HEX1
   CMPZ PCH
   BNE up_loop_not_done
   LDAZ HEX2
   CMPZ PCL
-  BEQ up_done
+  BEQ up_loop_done
 up_loop_not_done
   LDA# $00
-  JSR write_byte
+  JSR write
   INCZ PCL
   BNE up_loop
   INCZ PCH
   JMP up_loop
+up_loop_done
+  LDXZ TEMP             ; Done writing
+  RTS
 up_less
   JMP err_cannot_move_pc_backwards
 up_no_fill
