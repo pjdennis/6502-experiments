@@ -800,6 +800,26 @@ elr_ok
   RTS
 
 
+; Swap PCL;PCH with PC_SAVEL;PC_SAVEH
+; On exit A, X, Y are preserved
+swap_pc_with_save
+  ; Swap PC L with save location
+  LDAZ PCL
+  PHA
+  LDAZ PC_SAVEL
+  STAZ PCL
+  PLA
+  STAZ PC_SAVEL
+  ; Swap PC H with save location
+  LDAZ PCH
+  PHA
+  LDAZ PC_SAVEH
+  STAZ PCH
+  PLA
+  STAZ PC_SAVEH
+  RTS
+
+
 ; On entry, A contains the first character of the directive
 process_directive
   JSR read_token
@@ -842,23 +862,14 @@ pd_get_name
 pd_zeropage
   LDA# $FF
   STAZ IN_ZEROPAGE
-  LDAZ PCL
-  STAZ PC_SAVEL
-  LDAZ PCH
-  STAZ PC_SAVEH
-  LDA# $00
-  STAZ PCL
-  STAZ PCH
+  JSR swap_pc_with_save
   PLA                          ; Restore next char
   JSR skip_rest_of_line
   RTS
 pd_code
   LDA# $00
   STAZ IN_ZEROPAGE
-  LDAZ PC_SAVEL
-  STAZ PCL
-  LDAZ PC_SAVEH
-  STA PCH
+  JSR swap_pc_with_save
   PLA                          ; Restore next char
   JSR skip_rest_of_line
   RTS
@@ -880,8 +891,11 @@ directive_code
 ; On exit A, X, Y are not preserved
 assemble_code
   LDA# $00
+  STAZ IN_ZEROPAGE
   STAZ PCL
   STAZ PCH
+  STAZ PC_SAVEL
+  STAZ PC_SAVEH
   STAZ CURLINEL
   STAZ CURLINEH
 ac_line_loop
@@ -999,7 +1013,6 @@ s_args_ok
   JSR init_file_stack
 
   LDA# $00
-  STAZ IN_ZEROPAGE
   STAZ STARTED
   STAZ CURR_FILE
   STAZ PASS           ; Bit 7 = 0 (pass 1)

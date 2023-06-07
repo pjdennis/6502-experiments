@@ -9,6 +9,10 @@ start
   LDX# >filename
   JSR open
   STAZ FILE_HANDLE
+
+  LDA# $09
+  STAZ TO_DECIMAL_VALUE_L
+
 loop
   LDAZ FILE_HANDLE
   JSR read
@@ -84,7 +88,6 @@ arg_loop_done
   LDX FILE_HANDLE
   JSR write
 
-
   LDAZ FILE_HANDLE
   JSR close
 
@@ -97,6 +100,16 @@ argument_message_suffix  DATA ": " $00
 
 
   .include test_inc.asm
+
+
+  .zeropage
+
+FILE_HANDLE                 DATA $00 ; 1 byte
+TABPL                       DATA $00 ; 2 byte table pointer
+TABPH                       DATA $00 ; "
+ARGC                        DATA $00 ; 1 byte
+
+  .code
 
 
 ; Show message to the error output
@@ -121,11 +134,6 @@ sm_done
 
 
   .zeropage
-
-FILE_HANDLE                 DATA $00 ; 1 byte
-TABPL                       DATA $00 ; 2 byte table pointer
-TABPH                       DATA $00 ; "
-ARGC                        DATA $00 ; 1 byte
 
 TO_DECIMAL_VALUE_L          DATA $00 ; 1 byte
 TO_DECIMAL_VALUE_H          DATA $00 ; 1 byte
