@@ -342,8 +342,8 @@ cfeol_done
 ; Reads token into TOKEN (zero terminated)
 ; On entry A contains first character of token
 ; On exit A contains next character after token
-;         Y is preserved
-;         X is not preserved
+;         X is preserved
+;         Y is not preserved
 read_token
   STXZ TEMP
   LDX# $00
