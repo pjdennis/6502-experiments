@@ -69,6 +69,8 @@ MNTAB
   DATA "LDA,Y"    $00 $00 $B9
   DATA "LDAZ"     $00 $04 $A5
   DATA "LDAZ,X"   $00 $04 $B5
+  DATA "LDXZ"     $00 $04 $A6
+  DATA "LDYZ"     $00 $04 $A4
   DATA "LDX#"     $00 $04 $A2
   DATA "LDY#"     $00 $04 $A0
   DATA "LSRA"     $00 $00 $4A

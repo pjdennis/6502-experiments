@@ -1328,11 +1328,9 @@ int main(int argc, char **argv) {
         }
     }
 
-    char* dump_filename_base;
-    if (strcmp("-", output_filename) == 0) {
+    char* dump_filename_base = argv[argc - 1];
+    if (strcmp("-", dump_filename_base) == 0) {
         dump_filename_base = "stdout";
-    } else {
-        dump_filename_base = output_filename;
     }
 
     const char* dump_file_suffix = ".dump.bin";

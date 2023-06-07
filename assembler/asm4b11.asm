@@ -34,10 +34,11 @@ TO_DECIMAL_MOD10            = $17 ; 1 byte
 TO_DECIMAL_RESULT_MINUS_ONE = $17
 TO_DECIMAL_RESULT           = $18 ; 6 bytes
 
-CURR_FILE    = $1E
-FILE_STACK_L = $1F
-FILE_STACK_H = $20
-TOKEN        = $21        ; multiple bytes
+OUT_FILE     = $1E
+CURR_FILE    = $1F
+FILE_STACK_L = $20
+FILE_STACK_H = $21
+TOKEN        = $22        ; multiple bytes
 
 
 ; Constants
@@ -111,9 +112,12 @@ rc_done
   RTS
 
 
-//TODO write to file
 write_byte
-  JMP write_b
+  STXZ TEMP
+  LDXZ OUT_FILE
+  JSR write
+  LDXZ TEMP
+  RTS
 
 
 init_file_stack
@@ -544,6 +548,7 @@ up_no_fill
 up_done
   RTS
 
+
 ; Reads a label, and optionally an assigned value. The label is stored in the current hash table
 ; mapped to the assigned value (if provided) otherwise the current PC value. The special label '*'
 ; is not stored in the hash table but instead requires an assigned value which sets PC
@@ -921,12 +926,23 @@ s_args_ok
   STAZ CURR_FILE
   STAZ PASS           ; Bit 7 = 0 (pass 1)
   JSR open_input
+
+  ; Open output file
+  LDA# $01
+  JSR argv
+  JSR openout
+  STAZ OUT_FILE
+
   JSR assemble_code
 
   LDA# $FF
   STAZ PASS           ; Bit 7 = 1 (pass 2)
   JSR open_input
   JSR assemble_code
+
+  ; Close output file
+  LDAZ OUT_FILE
+  JSR close
 
   BRK $00             ; Success
 
