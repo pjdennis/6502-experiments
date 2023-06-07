@@ -1197,6 +1197,10 @@ int main(int argc, char **argv) {
     save_address(addr_argc);
     memory[p++] = 0x4c; // f01e     jmp argv
     save_address(addr_argv);
+    memory[p++] = 0x4c; // f021     jmp openout
+    save_address(addr_openout);
+    memory[p++] = 0x4c; // f024     jmp write
+    save_address(addr_write);
     fill_address(addr_read_b);
     memory[p++] = 0xad; // read_b:  lda $f004
     memory[p++] = 0x04; //
@@ -1256,6 +1260,16 @@ int main(int argc, char **argv) {
     memory[p++] = 0xfe; //
     memory[p++] = 0xad; //          lda $fe81
     memory[p++] = 0x81; //
+    memory[p++] = 0xfe; //
+    memory[p++] = 0x60; //          rts
+    fill_address(addr_openout);
+    memory[p++] = 0xad; // openout: lda $fe83
+    memory[p++] = 0x83; //
+    memory[p++] = 0xfe; //
+    memory[p++] = 0x60; //          rts
+    fill_address(addr_write);
+    memory[p++] = 0x8d; // write:   sta $fe84
+    memory[p++] = 0x84; //
     memory[p++] = 0xfe; //
     memory[p++] = 0x60; //          rts
 
