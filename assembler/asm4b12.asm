@@ -4,44 +4,46 @@ LHASHTABH  = $1F80      ; "
 *          = $2000      ; Code generates here
 FILE_STACK = $F000      ; File stack will grow down from 1 below here
 
+  .zeropage
 
 ; Zero page locations
-TEMP      = $00        ; 1 byte
-TABPL     = $01        ; 2 byte table pointer
-TABPH     = $02        ; "
-PCL       = $03        ; 2 byte program counter
-PCH       = $04        ; "
-HEX1      = $05        ; 1 byte
-HEX2      = $06        ; 1 byte
-PASS      = $07        ; 1 byte $00 = pass 1 $FF = pass 2
-MEMPL     = $08        ; 2 byte heap pointer
-MEMPH     = $09        ; "
-PL        = $0A        ; 2 byte pointer
-PH        = $0B        ; "
-HASH      = $0C        ; 1 byte hash value
-HTLPL     = $0D        ; 2 byte pointer to low byte hash table
-HTLPH     = $0E        ; "
-HTHPL     = $0F        ; 2 byte pointer to high byte hash table
-HTHPH     = $10        ; "
-INST_FLAG = $11        ; flags associated with instruction
-STARTED   = $12        ; flag to indicate output has started
-CURLINEL  = $13        ; Current line (L)
-CURLINEH  = $14        ; Current line (H)
+TEMP      DATA $00     ; 1 byte
+TABPL     DATA $00     ; 2 byte table pointer
+TABPH     DATA $00     ; "
+PCL       DATA $00     ; 2 byte program counter
+PCH       DATA $00     ; "
+HEX1      DATA $00     ; 1 byte
+HEX2      DATA $00     ; 1 byte
+PASS      DATA $00     ; 1 byte $00 = pass 1 $FF = pass 2
+MEMPL     DATA $00     ; 2 byte heap pointer
+MEMPH     DATA $00     ; "
+PL        DATA $00     ; 2 byte pointer
+PH        DATA $00     ; "
+HASH      DATA $00     ; 1 byte hash value
+HTLPL     DATA $00     ; 2 byte pointer to low byte hash table
+HTLPH     DATA $00     ; "
+HTHPL     DATA $00     ; 2 byte pointer to high byte hash table
+HTHPH     DATA $00     ; "
+INST_FLAG DATA $00     ; flags associated with instruction
+STARTED   DATA $00     ; flag to indicate output has started
+CURLINEL  DATA $00     ; Current line (L)
+CURLINEH  DATA $00     ; Current line (H)
 
-TO_DECIMAL_VALUE_L          = $15 ; 1 byte
-TO_DECIMAL_VALUE_H          = $16 ; 1 byte
-TO_DECIMAL_MOD10            = $17 ; 1 byte
-TO_DECIMAL_RESULT_MINUS_ONE = $17
-TO_DECIMAL_RESULT           = $18 ; 6 bytes
+TO_DECIMAL_VALUE_L          DATA $00 ; 1 byte
+TO_DECIMAL_VALUE_H          DATA $00 ; 1 byte
+TO_DECIMAL_MOD10            DATA $00 ; 1 byte
+TO_DECIMAL_RESULT_MINUS_ONE DATA $00
+TO_DECIMAL_RESULT           DATA $00 ; 6 bytes
 
-CURR_FILE    = $1E
-FILE_STACK_L = $1F
-FILE_STACK_H = $20
-IN_ZEROPAGE  = $21
-PC_SAVEL     = $22
-PC_SAVEH     = $23
-TOKEN        = $24        ; multiple bytes
+CURR_FILE    DATA $00
+FILE_STACK_L DATA $00
+FILE_STACK_H DATA $00
+IN_ZEROPAGE  DATA $00
+PC_SAVEL     DATA $00
+PC_SAVEH     DATA $00
+TOKEN                  ; multiple bytes - should be last
 
+  .code
 
 ; Constants
 INST_PSUEDO   = $01
