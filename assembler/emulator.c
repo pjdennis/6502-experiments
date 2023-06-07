@@ -1206,9 +1206,9 @@ int main(int argc, char **argv) {
     memory[p++] = 0xad; // read_b:  lda $f004
     emit_address(0xf004);
     memory[p++] = 0xc9; //          cmp #4
-    memory[p++] = 0x04; //
+    memory[p++] = 0x04;
     memory[p++] = 0xf0; //          beq .at_end
-    memory[p++] = 0x02; //
+    memory[p++] = 0x02;
     memory[p++] = 0x18; //          clc
     memory[p++] = 0x60; //          rts
     memory[p++] = 0x38; // .at_end: sec
@@ -1236,9 +1236,9 @@ int main(int argc, char **argv) {
     memory[p++] = 0xad; // read:    lda $efff
     emit_address(0xefff);
     memory[p++] = 0xc9; //          cmp #4
-    memory[p++] = 0x04; //
+    memory[p++] = 0x04;
     memory[p++] = 0xf0; //          beq .at_end
-    memory[p++] = 0x02; //
+    memory[p++] = 0x02;
     memory[p++] = 0x18; //          clc
     memory[p++] = 0x60; //          rts
     memory[p++] = 0x38; // .at_end: sec
