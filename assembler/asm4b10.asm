@@ -2,7 +2,7 @@
 LHASHTABL  = $1F00      ; Label hash table (low and high)
 LHASHTABH  = $1F80      ; "
 *          = $2000      ; Code generates here
-FILE_STACK = $EFFF      ; File stack will grow down from 1 below here
+FILE_STACK = $F000      ; File stack will grow down from 1 below here
 
 
 ; Zero page locations
@@ -531,6 +531,7 @@ up_no_fill
   STAZ PCH
 up_done
   RTS
+
 
 ; Reads a label, and optionally an assigned value. The label is stored in the current hash table
 ; mapped to the assigned value (if provided) otherwise the current PC value. The special label '*'

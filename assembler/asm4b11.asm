@@ -2,7 +2,7 @@
 LHASHTABL  = $1F00      ; Label hash table (low and high)
 LHASHTABH  = $1F80      ; "
 *          = $2000      ; Code generates here
-FILE_STACK = $EFFF      ; File stack will grow down from 1 below here
+FILE_STACK = $F000      ; File stack will grow down from 1 below here
 
 
 ; Zero page locations

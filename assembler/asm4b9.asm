@@ -18,7 +18,7 @@ read      = $F018
 LHASHTABL  = $4000      ; Label hash table (low and high)
 LHASHTABH  = $4080      ; "
 HEAP       = $4100      ; Data heap
-FILE_STACK = $EFFF
+FILE_STACK = $F000      ; File stack will grow down from 1 below here
 
 TEMP      = $00        ; 1 byte
 TABPL     = $01        ; 2 byte table pointer
@@ -184,6 +184,7 @@ pfs_copy_loop            ; Copy up to 127 characters
   STAZ CURR_FILE
 
   RTS
+
 
 ; On exit CURR_FILE contains the previous file handle
 ;         CURLINEL;CURLINEH contains the previous line number
@@ -798,6 +799,7 @@ up_no_fill
   STAZ PCH
 up_done
   RTS
+
 
 ; Reads a label, and optionally an assigned value. The label is stored in the current hash table
 ; mapped to the assigned value (if provided) otherwise the current PC value. The special label '*'

@@ -983,7 +983,7 @@ void hookexternal(void *funcptr) {
 #define port_exit    0xf003
 #define port_open    0xf005
 #define port_close   0xf000
-#define port_read    0xefff
+#define port_read    0xfe85
 #define port_argc    0xfe80
 #define port_argv_l  0xfe81
 #define port_argv_h  0xfe82
