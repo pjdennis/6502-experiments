@@ -1137,6 +1137,7 @@ void write6502(uint16_t address, uint8_t value) {
 
 #define save_address(v) uint16_t v = p; p += 2
 #define fill_address(v) memory[v] = p & 0xff; memory[v+1] = p >> 8;
+#define emit_address(v) memory[p++] = v & 0xff; memory[p++] = v >> 8;
 
 int main(int argc, char **argv) {
     if (argc < 5) {
@@ -1203,8 +1204,7 @@ int main(int argc, char **argv) {
     save_address(addr_write);
     fill_address(addr_read_b);
     memory[p++] = 0xad; // read_b:  lda $f004
-    memory[p++] = 0x04; //
-    memory[p++] = 0xf0; //
+    emit_address(0xf004);
     memory[p++] = 0xc9; //          cmp #4
     memory[p++] = 0x04; //
     memory[p++] = 0xf0; //          beq .at_end
@@ -1215,32 +1215,26 @@ int main(int argc, char **argv) {
     memory[p++] = 0x60; //          rts
     fill_address(addr_write_b);
     memory[p++] = 0x8d; // write_b: sta $f001
-    memory[p++] = 0x01; //
-    memory[p++] = 0xf0; //
+    emit_address(0xf001);
     memory[p++] = 0x60; //          rts
     fill_address(addr_write_d);
     memory[p++] = 0x8d; // write_d: sta $f002
-    memory[p++] = 0x02; //
-    memory[p++] = 0xf0; //
+    emit_address(0xf002);
     memory[p++] = 0x60; //          rts
     fill_address(addr_exit);
     memory[p++] = 0x8d; // exit:    sta $f003
-    memory[p++] = 0x03; //
-    memory[p++] = 0xf0; //
+    emit_address(0xf003);
     fill_address(addr_open);
     memory[p++] = 0xad; // open:    lda $f005
-    memory[p++] = 0x05; //
-    memory[p++] = 0xf0; //
+    emit_address(0xf005);
     memory[p++] = 0x60; //          rts
     fill_address(addr_close);
     memory[p++] = 0x8d; // close:   sta $f000
-    memory[p++] = 0x00; //
-    memory[p++] = 0xf0; //
+    emit_address(0xf000);
     memory[p++] = 0x60; //          rts
     fill_address(addr_read);
     memory[p++] = 0xad; // read:    lda $efff
-    memory[p++] = 0xff; //
-    memory[p++] = 0xef; //
+    emit_address(0xefff);
     memory[p++] = 0xc9; //          cmp #4
     memory[p++] = 0x04; //
     memory[p++] = 0xf0; //          beq .at_end
@@ -1251,26 +1245,21 @@ int main(int argc, char **argv) {
     memory[p++] = 0x60; //          rts
     fill_address(addr_argc);
     memory[p++] = 0xad; // argc:    lda $fe80
-    memory[p++] = 0x80; //
-    memory[p++] = 0xfe; //
+    emit_address(0xfe80);
     memory[p++] = 0x60; //          rts
     fill_address(addr_argv);
     memory[p++] = 0xae; // argv:    ldx $fe82
-    memory[p++] = 0x82; //
-    memory[p++] = 0xfe; //
+    emit_address(0xfe82);
     memory[p++] = 0xad; //          lda $fe81
-    memory[p++] = 0x81; //
-    memory[p++] = 0xfe; //
+    emit_address(0xfe81);
     memory[p++] = 0x60; //          rts
     fill_address(addr_openout);
     memory[p++] = 0xad; // openout: lda $fe83
-    memory[p++] = 0x83; //
-    memory[p++] = 0xfe; //
+    emit_address(0xfe83);
     memory[p++] = 0x60; //          rts
     fill_address(addr_write);
     memory[p++] = 0x8d; // write:   sta $fe84
-    memory[p++] = 0x84; //
-    memory[p++] = 0xfe; //
+    emit_address(0xfe84);
     memory[p++] = 0x60; //          rts
 
     input_file_ptr = fopen(input_filename, "rb");
