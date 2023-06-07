@@ -977,6 +977,19 @@ void hookexternal(void *funcptr) {
 #include <stdlib.h>
 #include <string.h>
 
+#define port_read_b  0xf004
+#define port_write_b 0xf001
+#define port_write_d 0xf002
+#define port_exit    0xf003
+#define port_open    0xf005
+#define port_close   0xf000
+#define port_read    0xefff
+#define port_argc    0xfe80
+#define port_argv_l  0xfe81
+#define port_argv_h  0xfe82
+#define port_openout 0xfe83
+#define port_write   0xfe84
+
 uint8_t memory[0x10001];
 
 FILE* files[255];
@@ -1058,35 +1071,35 @@ void files_destroy() {
 }
 
 uint8_t read6502(uint16_t address) {
-    if (address == 0xf004) {                       // read_b
+    if (address == port_read_b) {                    // read_b
         int b = fgetc(input_file_ptr);
         if (b == EOF) {
             b = 4;
             fseek(input_file_ptr, 0, SEEK_SET);
         }
         return b;
-    } else if (address == 0xf005) {                // open
+    } else if (address == port_open) {               // open
         uint16_t address = a | (x << 8);
         return file_open((const char*) (memory + address));
-    } else if (address == 0xfe83) {                // openout
+    } else if (address == port_openout) {            // openout
         uint16_t address = a | (x << 8);
         return file_open_for_write((const char*) (memory + address));
-    } else if (address == 0xefff) {                // read
+    } else if (address == port_read) {               // read
         int b = file_read(a);
         if (b == EOF) {
             b = 4;
             fseek(file_handle(a), 0, SEEK_SET);
         }
         return b;
-    } else if (address == 0xfe80) { // argc
+    } else if (address == port_argc) {               // argc
         return arg_count;
-    } else if (address == 0xfe81) { // argvl
+    } else if (address == port_argv_l) {             // argvl
         if (a >= arg_count) {
             fprintf(stderr, "Argument %i does not exist\n", (int) a);
             exit(1);
         }
         return arg_addresses[a] & 0xff;
-    } else if (address == 0xfe82) { // argvh
+    } else if (address == port_argv_h) {             // argvh
         if (a >= arg_count) {
             fprintf(stderr, "Argument %i does not exist\n", (int) a);
             exit(1);
@@ -1112,20 +1125,20 @@ uint8_t read6502(uint16_t address) {
 }
 
 void write6502(uint16_t address, uint8_t value) {
-    if (address == 0xf001) {                       // write_b
+    if (address == port_write_b) {                   // write_b
         fputc(value, output_file_ptr);
         return;
-    } else if (address == 0xf002) {                // write_d
+    } else if (address == port_write_d) {            // write_d
         fputc(value, stderr);
         return;
-    } else if (address == 0xf000) {                // close
+    } else if (address == port_close) {              // close
         file_close(value);
 	return;
-    } else if (address == 0xf003) {                // exit
+    } else if (address == port_exit) {               // exit
         exitcode_set = value;
         done = 1;
 	return;
-    } else if (address == 0xfe84) {                // write
+    } else if (address == port_write) {              // write
         file_write(x, value);
         return;
     }
@@ -1212,7 +1225,7 @@ int main(int argc, char **argv) {
     save_address(addr_write);
     fill_address(addr_read_b);
     emit_byte(inst_lda);        // read_b:  lda $f004
-    emit_address(0xf004);
+    emit_address(port_read_b);
     emit_byte(inst_cmpi);       //          cmp #4
     emit_byte(0x04);
     emit_byte(inst_beq);        //          beq .at_end
@@ -1223,26 +1236,26 @@ int main(int argc, char **argv) {
     emit_byte(inst_rts);        //          rts
     fill_address(addr_write_b);
     emit_byte(inst_sta);        // write_b: sta $f001
-    emit_address(0xf001);
+    emit_address(port_write_b);
     emit_byte(inst_rts);        //          rts
     fill_address(addr_write_d);
     emit_byte(inst_sta);        // write_d: sta $f002
-    emit_address(0xf002);
+    emit_address(port_write_d);
     emit_byte(inst_rts);        //          rts
     fill_address(addr_exit);
     emit_byte(inst_sta);        // exit:    sta $f003
-    emit_address(0xf003);
+    emit_address(port_exit);
     fill_address(addr_open);
     emit_byte(inst_lda);        // open:    lda $f005
-    emit_address(0xf005);
+    emit_address(port_open);
     emit_byte(inst_rts);        //          rts
     fill_address(addr_close);
     emit_byte(inst_sta);        // close:   sta $f000
-    emit_address(0xf000);
+    emit_address(port_close);
     emit_byte(inst_rts);        //          rts
     fill_address(addr_read);
     emit_byte(inst_lda);        // read:    lda $efff
-    emit_address(0xefff);
+    emit_address(port_read);
     emit_byte(inst_cmpi);       //          cmp #4
     emit_byte(0x04);
     emit_byte(inst_beq);        //          beq .at_end
@@ -1253,21 +1266,21 @@ int main(int argc, char **argv) {
     emit_byte(inst_rts);        //          rts
     fill_address(addr_argc);
     emit_byte(inst_lda);        // argc:    lda $fe80
-    emit_address(0xfe80);
+    emit_address(port_argc);
     emit_byte(inst_rts);        //          rts
     fill_address(addr_argv);
     emit_byte(inst_ldx);        // argv:    ldx $fe82
-    emit_address(0xfe82);
+    emit_address(port_argv_h);
     emit_byte(inst_lda);        //          lda $fe81
-    emit_address(0xfe81);
+    emit_address(port_argv_l);
     emit_byte(inst_rts);        //          rts
     fill_address(addr_openout);
     emit_byte(inst_lda);        // openout: lda $fe83
-    emit_address(0xfe83);
+    emit_address(port_openout);
     emit_byte(inst_rts);        //          rts
     fill_address(addr_write);
     emit_byte(inst_sta);        // write:   sta $fe84
-    emit_address(0xfe84);
+    emit_address(port_write);
     emit_byte(inst_rts);        //          rts
 
     input_file_ptr = fopen(input_filename, "rb");
