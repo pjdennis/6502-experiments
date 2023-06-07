@@ -1057,8 +1057,6 @@ void files_destroy() {
     }
 }
 
-
-
 uint8_t read6502(uint16_t address) {
     if (address == 0xf004) {                       // read_b
         int b = fgetc(input_file_ptr);
@@ -1139,6 +1137,15 @@ void write6502(uint16_t address, uint8_t value) {
 #define fill_address(v) memory[v] = p & 0xff; memory[v+1] = p >> 8;
 #define emit_byte(b) memory[p++] = b;
 #define emit_address(v) emit_byte(v & 0xff); emit_byte(v >> 8);
+#define inst_jmp 0x4c
+#define inst_lda 0xad
+#define inst_beq 0xf0
+#define inst_clc 0x18
+#define inst_rts 0x60
+#define inst_sec 0x38
+#define inst_sta 0x8d
+#define inst_cmpi 0xc9
+#define inst_ldx 0xae
 
 int main(int argc, char **argv) {
     if (argc < 5) {
@@ -1181,87 +1188,87 @@ int main(int argc, char **argv) {
     }
 
     size_t p = 0xf006;
-    emit_byte(0x4c); // f006     jmp read_b
+    emit_byte(inst_jmp);        // f006     jmp read_b
     save_address(addr_read_b);
-    emit_byte(0x4c); // f009     jmp write_b
+    emit_byte(inst_jmp);        // f009     jmp write_b
     save_address(addr_write_b);
-    emit_byte(0x4c); // f00c     jmp write_d
+    emit_byte(inst_jmp);        // f00c     jmp write_d
     save_address(addr_write_d);
-    emit_byte(0x4c); // f00f     jmp exit
+    emit_byte(inst_jmp);        // f00f     jmp exit
     save_address(addr_exit);
-    emit_byte(0x4c); // f012     jmp open
+    emit_byte(inst_jmp);        // f012     jmp open
     save_address(addr_open);
-    emit_byte(0x4c); // f015     jmp close
+    emit_byte(inst_jmp);        // f015     jmp close
     save_address(addr_close);
-    emit_byte(0x4c); // f018     jmp read
+    emit_byte(inst_jmp);        // f018     jmp read
     save_address(addr_read);
-    emit_byte(0x4c); // f01b     jmp argc
+    emit_byte(inst_jmp);        // f01b     jmp argc
     save_address(addr_argc);
-    emit_byte(0x4c); // f01e     jmp argv
+    emit_byte(inst_jmp);        // f01e     jmp argv
     save_address(addr_argv);
-    emit_byte(0x4c); // f021     jmp openout
+    emit_byte(inst_jmp);        // f021     jmp openout
     save_address(addr_openout);
-    emit_byte(0x4c); // f024     jmp write
+    emit_byte(inst_jmp);        // f024     jmp write
     save_address(addr_write);
     fill_address(addr_read_b);
-    emit_byte(0xad); // read_b:  lda $f004
+    emit_byte(inst_lda);        // read_b:  lda $f004
     emit_address(0xf004);
-    emit_byte(0xc9); //          cmp #4
+    emit_byte(inst_cmpi);       //          cmp #4
     emit_byte(0x04);
-    emit_byte(0xf0); //          beq .at_end
+    emit_byte(inst_beq);        //          beq .at_end
     emit_byte(0x02);
-    emit_byte(0x18); //          clc
-    emit_byte(0x60); //          rts
-    emit_byte(0x38); // .at_end: sec
-    emit_byte(0x60); //          rts
+    emit_byte(inst_clc);        //          clc
+    emit_byte(inst_rts);        //          rts
+    emit_byte(inst_sec);        // .at_end: sec
+    emit_byte(inst_rts);        //          rts
     fill_address(addr_write_b);
-    emit_byte(0x8d); // write_b: sta $f001
+    emit_byte(inst_sta);        // write_b: sta $f001
     emit_address(0xf001);
-    emit_byte(0x60); //          rts
+    emit_byte(inst_rts);        //          rts
     fill_address(addr_write_d);
-    emit_byte(0x8d); // write_d: sta $f002
+    emit_byte(inst_sta);        // write_d: sta $f002
     emit_address(0xf002);
-    emit_byte(0x60); //          rts
+    emit_byte(inst_rts);        //          rts
     fill_address(addr_exit);
-    emit_byte(0x8d); // exit:    sta $f003
+    emit_byte(inst_sta);        // exit:    sta $f003
     emit_address(0xf003);
     fill_address(addr_open);
-    emit_byte(0xad); // open:    lda $f005
+    emit_byte(inst_lda);        // open:    lda $f005
     emit_address(0xf005);
-    emit_byte(0x60); //          rts
+    emit_byte(inst_rts);        //          rts
     fill_address(addr_close);
-    emit_byte(0x8d); // close:   sta $f000
+    emit_byte(inst_sta);        // close:   sta $f000
     emit_address(0xf000);
-    emit_byte(0x60); //          rts
+    emit_byte(inst_rts);        //          rts
     fill_address(addr_read);
-    emit_byte(0xad); // read:    lda $efff
+    emit_byte(inst_lda);        // read:    lda $efff
     emit_address(0xefff);
-    emit_byte(0xc9); //          cmp #4
+    emit_byte(inst_cmpi);       //          cmp #4
     emit_byte(0x04);
-    emit_byte(0xf0); //          beq .at_end
+    emit_byte(inst_beq);        //          beq .at_end
     emit_byte(0x02);
-    emit_byte(0x18); //          clc
-    emit_byte(0x60); //          rts
-    emit_byte(0x38); // .at_end: sec
-    emit_byte(0x60); //          rts
+    emit_byte(inst_clc);        //          clc
+    emit_byte(inst_rts);        //          rts
+    emit_byte(inst_sec);        // .at_end: sec
+    emit_byte(inst_rts);        //          rts
     fill_address(addr_argc);
-    emit_byte(0xad); // argc:    lda $fe80
+    emit_byte(inst_lda);        // argc:    lda $fe80
     emit_address(0xfe80);
-    emit_byte(0x60); //          rts
+    emit_byte(inst_rts);        //          rts
     fill_address(addr_argv);
-    emit_byte(0xae); // argv:    ldx $fe82
+    emit_byte(inst_ldx);        // argv:    ldx $fe82
     emit_address(0xfe82);
-    emit_byte(0xad); //          lda $fe81
+    emit_byte(inst_lda);        //          lda $fe81
     emit_address(0xfe81);
-    emit_byte(0x60); //          rts
+    emit_byte(inst_rts);        //          rts
     fill_address(addr_openout);
-    emit_byte(0xad); // openout: lda $fe83
+    emit_byte(inst_lda);        // openout: lda $fe83
     emit_address(0xfe83);
-    emit_byte(0x60); //          rts
+    emit_byte(inst_rts);        //          rts
     fill_address(addr_write);
-    emit_byte(0x8d); // write:   sta $fe84
+    emit_byte(inst_sta);        // write:   sta $fe84
     emit_address(0xfe84);
-    emit_byte(0x60); //          rts
+    emit_byte(inst_rts);        //          rts
 
     input_file_ptr = fopen(input_filename, "rb");
     if (!input_file_ptr) {
