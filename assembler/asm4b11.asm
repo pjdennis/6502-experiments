@@ -114,14 +114,6 @@ rc_done
   RTS
 
 
-do_write
-  BITZ IN_ZEROPAGE
-  BMI dw_skip
-  JMP write              ; Tail call
-dw_skip
-  RTS
-
-
 init_file_stack
   LDA# <FILE_STACK
   STAZ FILE_STACK_L
@@ -276,7 +268,9 @@ fih_not_found
 emit
   BITZ PASS
   BPL emit_incpc       ; Skip writing during pass 1
-  JSR do_write
+  BITZ IN_ZEROPAGE
+  BMI emit_incpc       ; Skip writing when in zero page section
+  JSR write
   BITZ STARTED
   BMI emit_incpc
   DECZ STARTED
@@ -534,6 +528,8 @@ update_pc
   CMPZ PCL
   BCC up_less
 up_notless
+  BITZ IN_ZEROPAGE
+  BMI up_no_fill
 up_loop
   LDAZ HEX1
   CMPZ PCH
@@ -543,7 +539,7 @@ up_loop
   BEQ up_loop_done
 up_loop_not_done
   LDA# $00
-  JSR do_write
+  JSR write
   INCZ PCL
   BNE up_loop
   INCZ PCH
