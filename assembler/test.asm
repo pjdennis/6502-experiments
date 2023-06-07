@@ -1,15 +1,3 @@
-FILE_HANDLE                 = $00
-TABPL                       = $01 ; 2 byte table pointer
-TABPH                       = $02 ; "
-ARGC                        = $03
-
-TO_DECIMAL_VALUE_L          = $04 ; 1 byte
-TO_DECIMAL_VALUE_H          = $05 ; 1 byte
-TO_DECIMAL_MOD10            = $06 ; 1 byte
-TO_DECIMAL_RESULT_MINUS_ONE = $06
-TO_DECIMAL_RESULT           = $07 ; 6 bytes
-
-
 * = $1000
 
 
@@ -208,5 +196,20 @@ to_decimal_shift_loop
 
   RTS
 
+
+  DATA start
+
+  .zeropage
+
+FILE_HANDLE                 DATA $00 ; 1 byte
+TABPL                       DATA $00 ; 2 byte table pointer
+TABPH                       DATA $00 ; "
+ARGC                        DATA $00 ; 1 byte
+
+TO_DECIMAL_VALUE_L          DATA $00 ; 1 byte
+TO_DECIMAL_VALUE_H          DATA $00 ; 1 byte
+TO_DECIMAL_RESULT_MINUS_ONE
+TO_DECIMAL_MOD10            DATA $00 ; 1 byte
+TO_DECIMAL_RESULT           DATA $00 $00 $00 $00 $00 $00 ; 6 bytes
 
   DATA start

@@ -37,7 +37,8 @@ TO_DECIMAL_RESULT           = $18 ; 6 bytes
 CURR_FILE    = $1E
 FILE_STACK_L = $1F
 FILE_STACK_H = $20
-TOKEN        = $21        ; multiple bytes
+IN_ZEROPAGE  = $21
+TOKEN        = $22        ; multiple bytes
 
 
 ; Constants
@@ -793,12 +794,21 @@ elr_ok
 process_directive
   JSR read_token
   PHA                          ; Save next char
+  ; Check for 'include'
   LDA# <directive_include
   STAZ TABPL
   LDA# >directive_include
   STAZ TABPH
   JSR compare_token
   BEQ pd_include
+  ; Check for 'zeropage'
+  LDA# <directive_zeropage
+  STAZ TABPL
+  LDA# >directive_zeropage
+  STAZ TABPH
+  JSR compare_token
+  BEQ pd_zeropage
+  ; Directive not recognized
   PLA                          ; Restore next char
   JMP err_unknown_directive
 pd_include
@@ -812,9 +822,22 @@ pd_get_name
   JSR skip_rest_of_line
   JSR push_file_stack
   RTS
+pd_zeropage
+;  LDA# $FF
+;  STAZ IN_ZEROPAGE
+  LDA# $00
+  STAZ PCL
+  STAZ PCH
+  PLA                          ; Restore next char
+  JSR skip_rest_of_line
+  RTS
+
 
 directive_include
   DATA "include" $00
+
+directive_zeropage
+  DATA "zeropage" $00
 
 
 ; Read from input, assemble code and write to output
@@ -943,6 +966,7 @@ s_args_ok
   JSR init_file_stack
 
   LDA# $00
+  STAZ IN_ZEROPAGE
   STAZ STARTED
   STAZ CURR_FILE
   STAZ PASS           ; Bit 7 = 0 (pass 1)
