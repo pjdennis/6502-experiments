@@ -1081,14 +1081,14 @@ to_decimal
   LDA# $00
   STAZ TO_DECIMAL_RESULT
 
-to_decimal_divide
+td_divide
   ; Initialize the remainder to be zero
   LDA# $00
   STAZ TO_DECIMAL_MOD10
   CLC
 
   LDX# $10
-to_decimal_divloop
+td_divloop
   ; Rotate quotient and remainder
   ROLZ TO_DECIMAL_VALUE_L
   ROLZ TO_DECIMAL_VALUE_H
@@ -1098,23 +1098,23 @@ to_decimal_divloop
   SEC
   LDAZ TO_DECIMAL_MOD10
   SBC# $0A ; 10
-  BCC to_decimal_ignore_result ; Branch if dividend < divisor
+  BCC td_ignore_result ; Branch if dividend < divisor
   STAZ TO_DECIMAL_MOD10
 
-to_decimal_ignore_result
+td_ignore_result
   DEX
-  BNE to_decimal_divloop
+  BNE td_divloop
   ROLZ TO_DECIMAL_VALUE_L
   ROLZ TO_DECIMAL_VALUE_H
 
   ; Shift result
-to_decimal_shift
+td_shift
   LDX# $06
-to_decimal_shift_loop
+td_shift_loop
   LDAZ,X TO_DECIMAL_RESULT_MINUS_ONE
   STAZ,X TO_DECIMAL_RESULT
   DEX
-  BNE to_decimal_shift_loop
+  BNE td_shift_loop
 
   ; Save value into result
   LDAZ TO_DECIMAL_MOD10
@@ -1125,7 +1125,7 @@ to_decimal_shift_loop
   ; If value != 0 then continue dividing
   LDAZ TO_DECIMAL_VALUE_L
   ORAZ TO_DECIMAL_VALUE_H
-  BNE to_decimal_divide
+  BNE td_divide
 
   PLA
   TAX
