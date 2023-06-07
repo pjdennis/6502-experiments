@@ -860,16 +860,22 @@ pd_get_name
   JSR push_file_stack
   RTS
 pd_zeropage
+  BITZ IN_ZEROPAGE
+  BMI pd_in_zeropage
   LDA# $FF
   STAZ IN_ZEROPAGE
   JSR swap_pc_with_save
+pd_in_zeropage
   PLA                          ; Restore next char
   JSR skip_rest_of_line
   RTS
 pd_code
+  BITZ IN_ZEROPAGE
+  BPL pd_in_code
   LDA# $00
   STAZ IN_ZEROPAGE
   JSR swap_pc_with_save
+pd_in_code
   PLA                          ; Restore next char
   JSR skip_rest_of_line
   RTS

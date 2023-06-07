@@ -111,6 +111,7 @@ argument_message_suffix  DATA ": " $00
 
 
   .zeropage
+  .zeropage
 
 * = $01
 
@@ -119,6 +120,7 @@ TABPL                       DATA $00 ; 2 byte table pointer
 TABPH                       DATA $00 ; "
 ARGC                        DATA $00 ; 1 byte
 
+  .code
   .code
 
 
