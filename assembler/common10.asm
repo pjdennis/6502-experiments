@@ -61,8 +61,11 @@ iht_loop
 
 ; On entry TOKEN contains the token to calculate hash from
 ; On exit HASH contains the calculated hash value
-;         A, X, Y are not preserved
+;         X is preserved
+;         A, Y are not preserved
 calculate_hash
+  TXA
+  PHA
   LDA# $00
   STAZ HASH
   LDX# $00
@@ -77,6 +80,8 @@ ch_loop
   INX
   JMP ch_loop
 ch_done
+  PLA
+  TAX
   RTS
 
 

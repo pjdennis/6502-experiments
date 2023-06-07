@@ -34,11 +34,10 @@ TO_DECIMAL_MOD10            = $17 ; 1 byte
 TO_DECIMAL_RESULT_MINUS_ONE = $17
 TO_DECIMAL_RESULT           = $18 ; 6 bytes
 
-OUT_FILE     = $1E
-CURR_FILE    = $1F
-FILE_STACK_L = $20
-FILE_STACK_H = $21
-TOKEN        = $22        ; multiple bytes
+CURR_FILE    = $1E
+FILE_STACK_L = $1F
+FILE_STACK_H = $20
+TOKEN        = $21        ; multiple bytes
 
 
 ; Constants
@@ -112,14 +111,6 @@ rc_done
   RTS
 
 
-write_byte
-  STXZ TEMP
-  LDXZ OUT_FILE
-  JSR write
-  LDXZ TEMP
-  RTS
-
-
 init_file_stack
   LDA# <FILE_STACK
   STAZ FILE_STACK_L
@@ -142,6 +133,7 @@ fse_done
 ; On entry TOKEN contains the file name
 ;          CURLINEL;CURLINEH contains the current line number
 ;          CURR_FILE contains the current file handle
+; On exit X is preserved
 push_file_stack
   LDY# $FF
 pfs_len_loop
@@ -187,10 +179,15 @@ pfs_copy_loop
   LDA# $00
   STAZ CURLINEL
   STAZ CURLINEH
+
+  TXA
+  PHA
   LDA# <TOKEN
   LDX# >TOKEN
   JSR open
   STAZ CURR_FILE
+  PLA
+  TAX
 
   RTS
 
@@ -268,7 +265,7 @@ fih_not_found
 emit
   BITZ PASS
   BPL emit_incpc       ; Skip writing during pass 1
-  JSR write_byte
+  JSR write
   BITZ STARTED
   BMI emit_incpc
   DECZ STARTED
@@ -348,6 +345,7 @@ cfeol_done
 ;         Y is preserved
 ;         X is not preserved
 read_token
+  STXZ TEMP
   LDX# $00
 rt_loop
   JSR compare_end_of_token
@@ -361,6 +359,7 @@ rt_done
   LDA# $00
   STAZ,X TOKEN
   TYA                  ; Restore next char
+  LDXZ TEMP
   RTS
 
 
@@ -524,8 +523,6 @@ update_pc
   CMPZ PCL
   BCC up_less
 up_notless
-  STXZ TEMP             ; Prepare for writing
-  LDXZ OUT_FILE         ; "
 up_loop
   LDAZ HEX1
   CMPZ PCH
@@ -541,7 +538,6 @@ up_loop_not_done
   INCZ PCH
   JMP up_loop
 up_loop_done
-  LDXZ TEMP             ; Done writing
   RTS
 up_less
   JMP err_cannot_move_pc_backwards
@@ -901,10 +897,14 @@ ac_label
 
 
 open_input
+  TXA
+  PHA
   LDA# $00
   JSR argv
   STAZ TABPL
   STXZ TABPH
+  PLA
+  TAX
   LDY# $FF
 oi_loop
   INY
@@ -936,7 +936,7 @@ s_args_ok
   LDA# $01
   JSR argv
   JSR openout
-  STAZ OUT_FILE
+  TAX
 
   JSR assemble_code
 
@@ -946,7 +946,7 @@ s_args_ok
   JSR assemble_code
 
   ; Close output file
-  LDAZ OUT_FILE
+  TXA
   JSR close
 
   BRK $00             ; Success
@@ -1058,8 +1058,8 @@ sm_done
 
 ; Show a decimal value to the error ouptut
 ; On entry TO_DECIMAL_VALUE_L;TO_DECIMAL_VALUE_H contains the value to show
-; On exit Y is preserved
-;         A, X are not preserved
+; On exit X, Y are preserved
+;         A is not preserved
 ;         Decimal number string stored at TO_DECIMAL_RESULT
 show_decimal
   JSR to_decimal
@@ -1072,9 +1072,11 @@ show_decimal
 
 ; On entry TO_DECIMAL_VALUE_L;TO_DECIMAL_VALUE_H contains the value to convert
 ; On exit TO_DECIMAL_RESULT contains the result
-;         Y is preserved
-;         A, X are not preserved
+;         X, Y are preserved
+;         A is not preserved
 to_decimal
+  TXA
+  PHA
   ; Initialize result to empty string
   LDA# $00
   STAZ TO_DECIMAL_RESULT
@@ -1124,6 +1126,9 @@ to_decimal_shift_loop
   LDAZ TO_DECIMAL_VALUE_L
   ORAZ TO_DECIMAL_VALUE_H
   BNE to_decimal_divide
+
+  PLA
+  TAX
 
   RTS
 

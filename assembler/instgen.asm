@@ -100,8 +100,10 @@ MNTAB
   DATA "STA,Y"    $00 $00 $99
   DATA "STAZ"     $00 $04 $85
   DATA "STAZ,X"   $00 $04 $95
+  DATA "TAX"      $00 $00 $AA
   DATA "TAY"      $00 $00 $A8
   DATA "TSX"      $00 $00 $BA
+  DATA "TXA"      $00 $00 $8A
   DATA "TYA"      $00 $00 $98
   DATA "DATA"     $00 $01 $00 ; Directive
   DATA $00
