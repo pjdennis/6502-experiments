@@ -483,7 +483,7 @@ read_value
   JSR skip_spaces
   CMP# "="
   BEQ rv_value
-  CLC                  ; Did not find valud so return C = 0
+  CLC                  ; Did not find value so return C = 0
   RTS
 rv_value
   JSR read_char        ; Read the character after the "="
@@ -555,6 +555,7 @@ up_done
 ; is not stored in the hash table but instead requires an assigned value which sets PC
 ; On entry A contains the first character of the label
 ; On exit the hash table or PC is updated accordingly
+;         C is set if line fully processed, clear otherwise
 ;         A, X, Y are not preserved
 ; Raises 'PC value expected' if no value provided when setting PC via '*'
 ;        'Duplicate label' error if label has already been encountered
@@ -562,12 +563,12 @@ up_done
 ;        'Bad hex' error if non-hex characters were encountered
 capture_label
   JSR read_token
-  TAY                   ; Save next char
+  TAY                       ; Save next char
   LDAZ TOKEN
   CMP# "*"
   BNE cl_normal_label
   ; Set PC
-  TYA                   ; Restore next char
+  TYA                       ; Restore next char
   JSR read_value
   BCS cl_pc_value_read
   JMP err_pc_value_expected
@@ -575,35 +576,48 @@ cl_pc_value_read
   JSR skip_rest_of_line
   ; No need to retain next char as caller
   ; goes straight to next line
-  JMP update_pc         ; Tail call
+  JSR update_pc
+  SEC                       ; Indicate line is fully processed
+  RTS
 cl_normal_label
   BITZ PASS
   BPL cl_pass_1
   ; Pass 2 - don't capture
-  TYA                   ; Restore next char
-  JMP skip_rest_of_line ; Tail call
-cl_pass_1
-  TYA                   ; Restore next char
+  TYA                       ; Restore next char
   JSR read_value
-  PHA                   ; Save next char
+  BCS cl_skip_and_return_processed
+  JMP cl_skip_spaces_and_return_processed_flag
+cl_pass_1
+  TYA                       ; Restore next char
+  JSR read_value
+  PHA                       ; Save next char
   BCS cl_hex_to_table
   ; Store program counter
   LDAZ PCL
   STAZ HEX2
   LDAZ PCH
   STAZ HEX1
+  JSR select_label_hash_table
+  JSR hash_add
+  PLA                       ; Restore next char
+  BCS cl_duplicate_label
+cl_skip_spaces_and_return_processed_flag
+  JSR skip_spaces
+  JMP check_for_end_of_line ; Tail call - returns with C set if at end of line
 cl_hex_to_table
   JSR select_label_hash_table
   JSR hash_add
-  PLA                   ; Restore next char
-  BCC cl_added
-  JMP err_duplicate_label
-cl_added
+  PLA                       ; Restore next char
+  BCS cl_duplicate_label
+cl_skip_and_return_processed
   JSR skip_rest_of_line
+  SEC                       ; Indicate line is fully processed
   ; No need to retain next char as caller
   ; goes straight to next line
   RTS
 
+cl_duplicate_label
+  JMP err_duplicate_label
 
 ; Read and emit an opcode
 ; On entry A contains the first character of the opcode
@@ -828,11 +842,13 @@ ac_line_incremented
   CMP# " "
   BEQ ac_line_starts_with_space
   JSR capture_label
+  BCC ac_check_for_opcode
   JMP ac_line_loop
 ac_line_starts_with_space
   JSR skip_spaces
   JSR check_for_end_of_line
   BCS ac_line_loop
+ac_check_for_opcode
   CMP# "."
   BNE ac_opcode
 ; Directive

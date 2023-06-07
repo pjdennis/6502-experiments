@@ -102,17 +102,10 @@ arg_loop_done
 
   BRK $00
 
-output_filename
-  DATA "test_output.out" $00
-
-arguments_message
-  DATA " arguments\n" $00
-
-argument_message_prefix
-  DATA "  arg " $00
-
-argument_message_suffix
-  DATA ": " $00
+output_filename          DATA "test_output.out" $00
+arguments_message        DATA " arguments\n" $00
+argument_message_prefix  DATA "  arg " $00
+argument_message_suffix  DATA ": " $00
 
 
   .include test_inc.asm
