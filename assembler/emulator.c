@@ -324,16 +324,16 @@ static void adc() {
     penaltyop = 1;
     value = getvalue();
     result = (uint16_t)a + value + (uint16_t)(status & FLAG_CARRY);
-   
+
     carrycalc(result);
     zerocalc(result);
     overflowcalc(result, a, value);
     signcalc(result);
-    
+
     #ifndef NES_CPU
     if (status & FLAG_DECIMAL) {
         clearcarry();
-        
+
         if ((a & 0x0F) > 0x09) {
             a += 0x06;
         }
@@ -341,11 +341,11 @@ static void adc() {
             a += 0x60;
             setcarry();
         }
-        
+
         clockticks6502++;
     }
     #endif
-   
+
     saveaccum(result);
 }
 
@@ -353,10 +353,10 @@ static void and() {
     penaltyop = 1;
     value = getvalue();
     result = (uint16_t)a & value;
-   
+
     zerocalc(result);
     signcalc(result);
-   
+
     saveaccum(result);
 }
 
@@ -367,7 +367,7 @@ static void asl() {
     carrycalc(result);
     zerocalc(result);
     signcalc(result);
-   
+
     putvalue(result);
 }
 
@@ -401,7 +401,7 @@ static void beq() {
 static void bit() {
     value = getvalue();
     result = (uint16_t)a & value;
-   
+
     zerocalc(result);
     status = (status & 0x3F) | (uint8_t)(value & 0xC0);
 }
@@ -479,7 +479,7 @@ static void cmp() {
     penaltyop = 1;
     value = getvalue();
     result = (uint16_t)a - value;
-   
+
     if (a >= (uint8_t)(value & 0x00FF)) setcarry();
         else clearcarry();
     if (a == (uint8_t)(value & 0x00FF)) setzero();
@@ -490,7 +490,7 @@ static void cmp() {
 static void cpx() {
     value = getvalue();
     result = (uint16_t)x - value;
-   
+
     if (x >= (uint8_t)(value & 0x00FF)) setcarry();
         else clearcarry();
     if (x == (uint8_t)(value & 0x00FF)) setzero();
@@ -501,7 +501,7 @@ static void cpx() {
 static void cpy() {
     value = getvalue();
     result = (uint16_t)y - value;
-   
+
     if (y >= (uint8_t)(value & 0x00FF)) setcarry();
         else clearcarry();
     if (y == (uint8_t)(value & 0x00FF)) setzero();
@@ -512,23 +512,23 @@ static void cpy() {
 static void dec() {
     value = getvalue();
     result = value - 1;
-   
+
     zerocalc(result);
     signcalc(result);
-   
+
     putvalue(result);
 }
 
 static void dex() {
     x--;
-   
+
     zerocalc(x);
     signcalc(x);
 }
 
 static void dey() {
     y--;
-   
+
     zerocalc(y);
     signcalc(y);
 }
@@ -537,33 +537,33 @@ static void eor() {
     penaltyop = 1;
     value = getvalue();
     result = (uint16_t)a ^ value;
-   
+
     zerocalc(result);
     signcalc(result);
-   
+
     saveaccum(result);
 }
 
 static void inc() {
     value = getvalue();
     result = value + 1;
-   
+
     zerocalc(result);
     signcalc(result);
-   
+
     putvalue(result);
 }
 
 static void inx() {
     x++;
-   
+
     zerocalc(x);
     signcalc(x);
 }
 
 static void iny() {
     y++;
-   
+
     zerocalc(y);
     signcalc(y);
 }
@@ -581,7 +581,7 @@ static void lda() {
     penaltyop = 1;
     value = getvalue();
     a = (uint8_t)(value & 0x00FF);
-   
+
     zerocalc(a);
     signcalc(a);
 }
@@ -590,7 +590,7 @@ static void ldx() {
     penaltyop = 1;
     value = getvalue();
     x = (uint8_t)(value & 0x00FF);
-   
+
     zerocalc(x);
     signcalc(x);
 }
@@ -599,7 +599,7 @@ static void ldy() {
     penaltyop = 1;
     value = getvalue();
     y = (uint8_t)(value & 0x00FF);
-   
+
     zerocalc(y);
     signcalc(y);
 }
@@ -607,12 +607,12 @@ static void ldy() {
 static void lsr() {
     value = getvalue();
     result = value >> 1;
-   
+
     if (value & 1) setcarry();
         else clearcarry();
     zerocalc(result);
     signcalc(result);
-   
+
     putvalue(result);
 }
 
@@ -633,10 +633,10 @@ static void ora() {
     penaltyop = 1;
     value = getvalue();
     result = (uint16_t)a | value;
-   
+
     zerocalc(result);
     signcalc(result);
-   
+
     saveaccum(result);
 }
 
@@ -650,7 +650,7 @@ static void php() {
 
 static void pla() {
     a = pull8();
-   
+
     zerocalc(a);
     signcalc(a);
 }
@@ -662,23 +662,23 @@ static void plp() {
 static void rol() {
     value = getvalue();
     result = (value << 1) | (status & FLAG_CARRY);
-   
+
     carrycalc(result);
     zerocalc(result);
     signcalc(result);
-   
+
     putvalue(result);
 }
 
 static void ror() {
     value = getvalue();
     result = (value >> 1) | ((status & FLAG_CARRY) << 7);
-   
+
     if (value & 1) setcarry();
         else clearcarry();
     zerocalc(result);
     signcalc(result);
-   
+
     putvalue(result);
 }
 
@@ -697,7 +697,7 @@ static void sbc() {
     penaltyop = 1;
     value = getvalue() ^ 0x00FF;
     result = (uint16_t)a + value + (uint16_t)(status & FLAG_CARRY);
-   
+
     carrycalc(result);
     zerocalc(result);
     overflowcalc(result, a, value);
@@ -706,7 +706,7 @@ static void sbc() {
     #ifndef NES_CPU
     if (status & FLAG_DECIMAL) {
         clearcarry();
-        
+
         a -= 0x66;
         if ((a & 0x0F) > 0x09) {
             a += 0x06;
@@ -715,11 +715,11 @@ static void sbc() {
             a += 0x60;
             setcarry();
         }
-        
+
         clockticks6502++;
     }
     #endif
-   
+
     saveaccum(result);
 }
 
@@ -749,28 +749,28 @@ static void sty() {
 
 static void tax() {
     x = a;
-   
+
     zerocalc(x);
     signcalc(x);
 }
 
 static void tay() {
     y = a;
-   
+
     zerocalc(y);
     signcalc(y);
 }
 
 static void tsx() {
     x = sp;
-   
+
     zerocalc(x);
     signcalc(x);
 }
 
 static void txa() {
     a = x;
-   
+
     zerocalc(a);
     signcalc(a);
 }
@@ -781,7 +781,7 @@ static void txs() {
 
 static void tya() {
     a = y;
-   
+
     zerocalc(a);
     signcalc(a);
 }
@@ -927,7 +927,7 @@ void (*loopexternal)();
 
 void exec6502(uint32_t tickcount) {
     clockgoal6502 += tickcount;
-   
+
     while (clockticks6502 < clockgoal6502) {
         opcode = read6502(pc++);
         status |= FLAG_CONSTANT;
@@ -1019,7 +1019,7 @@ uint8_t file_open(const char* name) {
 }
 
 uint8_t file_open_for_write(const char* name) {
-    return file_open_with_mode(name, "wb"); 
+    return file_open_with_mode(name, "wb");
 }
 
 FILE* file_handle(uint8_t file) {
@@ -1135,6 +1135,9 @@ void write6502(uint16_t address, uint8_t value) {
     memory[address] = value;
 }
 
+#define save_address(v) uint16_t v = p; p += 2
+#define fill_address(v) memory[v] = p & 0xff; memory[v+1] = p >> 8;
+
 int main(int argc, char **argv) {
     if (argc < 5) {
         fprintf(stderr, "usage emulator <code file> <hex load address> <input file> <output file> [<arguments>]\n");
@@ -1176,85 +1179,85 @@ int main(int argc, char **argv) {
     }
 
     size_t p = 0xf006;
-    memory[p++] = 0x4c; // f006          jmp read_b
-    memory[p++] = 0x21; // f007
-    memory[p++] = 0xf0; // f008
-    memory[p++] = 0x4c; // f009          jmp write_b
-    memory[p++] = 0x2c; // f00a
-    memory[p++] = 0xf0; // f00b
-    memory[p++] = 0x4c; // f00c          jmp write_d
-    memory[p++] = 0x30; // f00d
-    memory[p++] = 0xf0; // f00e
-    memory[p++] = 0x4c; // f00f          jmp exit
-    memory[p++] = 0x34; // f010
-    memory[p++] = 0xf0; // f011
-    memory[p++] = 0x4c; // f012          jmp open
-    memory[p++] = 0x37; // f013
-    memory[p++] = 0xf0; // f014
-    memory[p++] = 0x4c; // f015          jmp close
-    memory[p++] = 0x3b; // f016
-    memory[p++] = 0xf0; // f017
-    memory[p++] = 0x4c; // f018          jmp read
-    memory[p++] = 0x3f; // f019
-    memory[p++] = 0xf0; // f01a
-    memory[p++] = 0x4c; // f01b          jmp argc
-    memory[p++] = 0x4a; // f01c
-    memory[p++] = 0xf0; // f01d
-    memory[p++] = 0x4c; // f01e          jmp argv
-    memory[p++] = 0x4e; // f01f
-    memory[p++] = 0xf0; // f020
-    memory[p++] = 0xad; // f021 read_b:  lda $f004
-    memory[p++] = 0x04; // f022
-    memory[p++] = 0xf0; // f023
-    memory[p++] = 0xc9; // f024          cmp #4
-    memory[p++] = 0x04; // f025
-    memory[p++] = 0xf0; // f026          beq .at_end
-    memory[p++] = 0x02; // f027
-    memory[p++] = 0x18; // f028          clc
-    memory[p++] = 0x60; // f029          rts
-    memory[p++] = 0x38; // f02a .at_end: sec
-    memory[p++] = 0x60; // f02b          rts
-    memory[p++] = 0x8d; // f02c write_b: sta $f001
-    memory[p++] = 0x01; // f02d
-    memory[p++] = 0xf0; // f02e
-    memory[p++] = 0x60; // f02f          rts
-    memory[p++] = 0x8d; // f030 write_d: sta $f002
-    memory[p++] = 0x02; // f031
-    memory[p++] = 0xf0; // f032
-    memory[p++] = 0x60; // f033          rts
-    memory[p++] = 0x8d; // f034 exit:    sta $f003
-    memory[p++] = 0x03; // f035
-    memory[p++] = 0xf0; // f036
-    memory[p++] = 0xad; // f037 open:    lda $f005
-    memory[p++] = 0x05; // f038
-    memory[p++] = 0xf0; // f039
-    memory[p++] = 0x60; // f03a          rts
-    memory[p++] = 0x8d; // f03b close:   sta $f000
-    memory[p++] = 0x00; // f03c
-    memory[p++] = 0xf0; // f03d
-    memory[p++] = 0x60; // f03e          rts
-    memory[p++] = 0xad; // f03f read:    lda $efff
-    memory[p++] = 0xff; // f040
-    memory[p++] = 0xef; // f041
-    memory[p++] = 0xc9; // f042          cmp #4
-    memory[p++] = 0x04; // f043
-    memory[p++] = 0xf0; // f044          beq .at_end
-    memory[p++] = 0x02; // f045
-    memory[p++] = 0x18; // f046          clc
-    memory[p++] = 0x60; // f047          rts
-    memory[p++] = 0x38; // f048 .at_end: sec
-    memory[p++] = 0x60; // f049          rts
-    memory[p++] = 0xad; // f04a argc:    lda $fe80
-    memory[p++] = 0x80; // f04b
-    memory[p++] = 0xfe; // f04c
-    memory[p++] = 0x60; // f04d          rts
-    memory[p++] = 0xae; // f04e argv:    ldx $fe82
-    memory[p++] = 0x82; // f04f
-    memory[p++] = 0xfe; // f050
-    memory[p++] = 0xad; // f051          lda $fe81
-    memory[p++] = 0x81; // f052
-    memory[p++] = 0xfe; // f053
-    memory[p++] = 0x60; // f054          rts
+    memory[p++] = 0x4c; // f006     jmp read_b
+    save_address(addr_read_b);
+    memory[p++] = 0x4c; // f009     jmp write_b
+    save_address(addr_write_b);
+    memory[p++] = 0x4c; // f00c     jmp write_d
+    save_address(addr_write_d);
+    memory[p++] = 0x4c; // f00f     jmp exit
+    save_address(addr_exit);
+    memory[p++] = 0x4c; // f012     jmp open
+    save_address(addr_open);
+    memory[p++] = 0x4c; // f015     jmp close
+    save_address(addr_close);
+    memory[p++] = 0x4c; // f018     jmp read
+    save_address(addr_read);
+    memory[p++] = 0x4c; // f01b     jmp argc
+    save_address(addr_argc);
+    memory[p++] = 0x4c; // f01e     jmp argv
+    save_address(addr_argv);
+    fill_address(addr_read_b);
+    memory[p++] = 0xad; // read_b:  lda $f004
+    memory[p++] = 0x04; //
+    memory[p++] = 0xf0; //
+    memory[p++] = 0xc9; //          cmp #4
+    memory[p++] = 0x04; //
+    memory[p++] = 0xf0; //          beq .at_end
+    memory[p++] = 0x02; //
+    memory[p++] = 0x18; //          clc
+    memory[p++] = 0x60; //          rts
+    memory[p++] = 0x38; // .at_end: sec
+    memory[p++] = 0x60; //          rts
+    fill_address(addr_write_b);
+    memory[p++] = 0x8d; // write_b: sta $f001
+    memory[p++] = 0x01; //
+    memory[p++] = 0xf0; //
+    memory[p++] = 0x60; //          rts
+    fill_address(addr_write_d);
+    memory[p++] = 0x8d; // write_d: sta $f002
+    memory[p++] = 0x02; //
+    memory[p++] = 0xf0; //
+    memory[p++] = 0x60; //          rts
+    fill_address(addr_exit);
+    memory[p++] = 0x8d; // exit:    sta $f003
+    memory[p++] = 0x03; //
+    memory[p++] = 0xf0; //
+    fill_address(addr_open);
+    memory[p++] = 0xad; // open:    lda $f005
+    memory[p++] = 0x05; //
+    memory[p++] = 0xf0; //
+    memory[p++] = 0x60; //          rts
+    fill_address(addr_close);
+    memory[p++] = 0x8d; // close:   sta $f000
+    memory[p++] = 0x00; //
+    memory[p++] = 0xf0; //
+    memory[p++] = 0x60; //          rts
+    fill_address(addr_read);
+    memory[p++] = 0xad; // read:    lda $efff
+    memory[p++] = 0xff; //
+    memory[p++] = 0xef; //
+    memory[p++] = 0xc9; //          cmp #4
+    memory[p++] = 0x04; //
+    memory[p++] = 0xf0; //          beq .at_end
+    memory[p++] = 0x02; //
+    memory[p++] = 0x18; //          clc
+    memory[p++] = 0x60; //          rts
+    memory[p++] = 0x38; // .at_end: sec
+    memory[p++] = 0x60; //          rts
+    fill_address(addr_argc);
+    memory[p++] = 0xad; // argc:    lda $fe80
+    memory[p++] = 0x80; //
+    memory[p++] = 0xfe; //
+    memory[p++] = 0x60; //          rts
+    fill_address(addr_argv);
+    memory[p++] = 0xae; // argv:    ldx $fe82
+    memory[p++] = 0x82; //
+    memory[p++] = 0xfe; //
+    memory[p++] = 0xad; //          lda $fe81
+    memory[p++] = 0x81; //
+    memory[p++] = 0xfe; //
+    memory[p++] = 0x60; //          rts
 
     input_file_ptr = fopen(input_filename, "rb");
     if (!input_file_ptr) {
@@ -1345,7 +1348,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    fwrite(memory, 1, 0x10000, dump_file_ptr);    
+    fwrite(memory, 1, 0x10000, dump_file_ptr);
     fclose(dump_file_ptr);
     free(dump_filename);
 
