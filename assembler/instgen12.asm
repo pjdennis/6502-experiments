@@ -100,35 +100,35 @@ MNTAB
 
 populate_instruction_hash_table
   LDA# <MNTAB
-  STAZ <P2L
+  STAZ P2L
   LDA# >MNTAB
-  STAZ <P2H
+  STAZ P2H
 piht_entry_loop
   LDY# $00
-  LDAZ(),Y <P2L
+  LDAZ(),Y P2L
   BEQ piht_done
 piht_token_loop
   STA,Y TOKEN
   BEQ piht_token_loop_done
   INY
-  LDAZ(),Y <P2L
+  LDAZ(),Y P2L
   JMP piht_token_loop
 piht_token_loop_done
   INY
-  LDAZ(),Y <P2L
-  STAZ <HEX2
+  LDAZ(),Y P2L
+  STAZ HEX2
   INY
-  LDAZ(),Y <P2L
-  STAZ <HEX1
+  LDAZ(),Y P2L
+  STAZ HEX1
   INY
   ; Advance
   TYA
   CLC
-  ADCZ <P2L
-  STAZ <P2L
+  ADCZ P2L
+  STAZ P2L
   LDA# $00
-  ADCZ <P2H
-  STAZ <P2H
+  ADCZ P2H
+  STAZ P2H
   ; Store entry
   JSR hash_add
   JMP piht_entry_loop
@@ -180,9 +180,9 @@ display_data_prefix
   JSR write_b
   JSR write_b
   LDA# <msg_data
-  STAZ <PL
+  STAZ PL
   LDA# >msg_data
-  STAZ <PH
+  STAZ PH
   JMP display_text
 
 
@@ -191,7 +191,7 @@ display_data_prefix
 display_text
   LDY# $00
 dtext_loop
-  LDAZ(),Y <PL
+  LDAZ(),Y PL
   BEQ dtext_done
   JSR write_b
   INY
@@ -202,13 +202,13 @@ dtext_done
 
 display_table
   LDA# $00
-  STAZ <HASH
+  STAZ HASH
 dt_loop
   ; Display line start
   JSR display_data_prefix
   ; Display line
   LDA# $00
-  STAZ <TEMP
+  STAZ TEMP
 dt_lineloop
   LDA# " "
   JSR write_b
@@ -220,45 +220,45 @@ dt_lineloop
   JMP dt_next
 dt_not_empty
   ; Display byte selector < or >
-  LDAZ <CHAR
+  LDAZ CHAR
   JSR write_b
   ; Display instruction label prefix
   LDA# <msg_instprefix
-  STAZ <PL
+  STAZ PL
   LDA# >msg_instprefix
-  STAZ <PH
+  STAZ PH
   JSR display_text
   ; Display hash entry
-  LDAZ <HASH
+  LDAZ HASH
   TAY
   ; Load pointer to hash entry
-  LDAZ(),Y <HTLPL
-  STAZ <TABPL
-  LDAZ(),Y <HTHPL
-  STAZ <TABPH
+  LDAZ(),Y HTLPL
+  STAZ TABPL
+  LDAZ(),Y HTHPL
+  STAZ TABPH
   CLC
-  LDAZ <TABPL
+  LDAZ TABPL
   ADC# $02
-  STAZ <PL
-  LDAZ <TABPH
+  STAZ PL
+  LDAZ TABPH
   ADC# $00
-  STAZ <PH
+  STAZ PH
   JSR display_text
 dt_next
-  LDAZ <HASH
+  LDAZ HASH
   CLC
   ADC# $01
-  STAZ <HASH
-  LDAZ <TEMP
+  STAZ HASH
+  LDAZ TEMP
   CLC
   ADC# $01
-  STAZ <TEMP
+  STAZ TEMP
   CMP# $08
   BEQ dt_next1
   JMP dt_lineloop
 dt_next1
   JSR display_newline
-  LDAZ <HASH
+  LDAZ HASH
   CMP# $80
   BEQ dt_done 
   JMP dt_loop
@@ -272,12 +272,12 @@ write_label
   LDA# "\""
   JSR write_b
   CLC
-  LDAZ <TABPL
+  LDAZ TABPL
   ADC# $02
-  STAZ <PL
-  LDAZ <TABPH
+  STAZ PL
+  LDAZ TABPH
   ADC# $00
-  STAZ <PH
+  STAZ PH
   JSR display_text
   LDA# "\""
   JSR write_b
@@ -288,12 +288,12 @@ write_label
   LDA# " "
   JSR write_b
   INY
-  LDAZ(),Y <PL
+  LDAZ(),Y PL
   JSR display_byte
   LDA# " "
   JSR write_b
   INY
-  LDAZ(),Y <PL
+  LDAZ(),Y PL
   JSR display_byte
   JSR display_newline
   RTS 
@@ -301,33 +301,33 @@ write_label
 
 display_data
   LDA# $00
-  STAZ <HASH
+  STAZ HASH
 dd_loop
   JSR hash_entry_empty
   BNE dd_not_empty
   JMP dd_next
 dd_not_empty
   ; Load pointer to hash entry
-  LDAZ <HASH
+  LDAZ HASH
   TAY
-  LDAZ(),Y <HTLPL
-  STAZ <TABPL
-  LDAZ(),Y <HTHPL
-  STAZ <TABPH
+  LDAZ(),Y HTLPL
+  STAZ TABPL
+  LDAZ(),Y HTHPL
+  STAZ TABPH
 dd_entry_loop
   ; Display instruction label prefix
   LDA# <msg_instprefix
-  STAZ <PL
+  STAZ PL
   LDA# >msg_instprefix
-  STAZ <PH
+  STAZ PH
   JSR display_text
   CLC
-  LDAZ <TABPL
+  LDAZ TABPL
   ADC# $02
-  STAZ <PL
-  LDAZ <TABPH
+  STAZ PL
+  LDAZ TABPH
   ADC# $00
-  STAZ <PH
+  STAZ PH
   JSR display_text
   JSR display_newline
   JSR display_data_prefix
@@ -335,10 +335,10 @@ dd_entry_loop
   JSR write_b
   ; Display next pointer
   LDY# $00
-  LDAZ(),Y <TABPL
+  LDAZ(),Y TABPL
   BNE dd_not_zero
   INY
-  LDAZ(),Y <TABPL
+  LDAZ(),Y TABPL
   BNE dd_not_zero
   ; Zero
   LDA# "$"
@@ -352,37 +352,37 @@ dd_entry_loop
   JMP dd_next
 dd_not_zero
   LDA# <msg_instprefix
-  STAZ <PL
+  STAZ PL
   LDA# >msg_instprefix
-  STAZ <PH
+  STAZ PH
   JSR display_text
   CLC
   LDY# $00
-  LDAZ(),Y <TABPL
+  LDAZ(),Y TABPL
   ADC# $02
-  STAZ <PL
+  STAZ PL
   INY
-  LDAZ(),Y <TABPL
+  LDAZ(),Y TABPL
   ADC# $00
-  STAZ <PH
+  STAZ PH
   JSR display_text
   JSR write_label
   LDY# $00
-  LDAZ(),Y <TABPL
-  STAZ <PL
+  LDAZ(),Y TABPL
+  STAZ PL
   INY
-  LDAZ(),Y <TABPL
-  STAZ <PH
-  LDAZ <PL
-  STAZ <TABPL
-  LDAZ <PH
-  STAZ <TABPH
+  LDAZ(),Y TABPL
+  STAZ PH
+  LDAZ PL
+  STAZ TABPL
+  LDAZ PH
+  STAZ TABPH
   JMP dd_entry_loop
 dd_next
-  LDAZ <HASH
+  LDAZ HASH
   CLC
   ADC# $01
-  STAZ <HASH
+  STAZ HASH
   CMP# $80
   BEQ dd_done
   JMP dd_loop
@@ -400,26 +400,26 @@ start
 
 ; Show the instruction hash table - high
   LDA# <msg_IHASHTABL
-  STAZ <PL
+  STAZ PL
   LDA# >msg_IHASHTABL
-  STAZ <PH
+  STAZ PH
   JSR display_text
   JSR display_newline
   LDA# "<"
-  STAZ <CHAR
+  STAZ CHAR
   JSR display_table
 
   JSR display_newline
 
 ; Show the instruction hash table - low
   LDA# <msg_IHASHTABH
-  STAZ <PL
+  STAZ PL
   LDA# >msg_IHASHTABH
-  STAZ <PH
+  STAZ PH
   JSR display_text
   JSR display_newline
   LDA# ">"
-  STAZ <CHAR
+  STAZ CHAR
   JSR display_table
 
   JSR display_newline
