@@ -6,7 +6,8 @@
 
 IHASHTABL = $4200 ; Instruction hash table (low and high)
 IHASHTABH = $4300 ; "
-HEAP      = $4400 ; Data heap
+TOKEN     = $4400
+HEAP      = $4500 ; Data heap
 
 
   .zeropage
@@ -23,7 +24,6 @@ PH        DATA $00     ; "
 P2L       DATA $00     ; 2 byte pointer
 P2H       DATA $00     ; "
 CHAR      DATA $00     ; 1 byte character value
-TOKEN                  ; multiple bytes - should be last
 
   .code
 

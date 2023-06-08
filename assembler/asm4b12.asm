@@ -1,4 +1,5 @@
 ; Addresses
+TOKEN      = $1E00      ; Buffer for the current token being read
 LHASHTABL  = $1F00      ; Label hash table (low and high)
 LHASHTABH  = $1F80      ; "
 *          = $2000      ; Code generates here
@@ -38,9 +39,9 @@ FILE_STACK_H DATA $00
 IN_ZEROPAGE  DATA $00
 PC_SAVEL     DATA $00
 PC_SAVEH     DATA $00
-TOKEN                  ; multiple bytes - should be last
 
   .code
+
 
 ; Constants
 INST_PSUEDO   = $01
@@ -345,14 +346,14 @@ read_token
 rt_loop
   JSR compare_end_of_token
   BEQ rt_done
-  STAZ,X TOKEN
+  STA,X TOKEN
   INX
   JSR read_char
   JMP rt_loop
 rt_done
   TAY                  ; Save next char
   LDA# $00
-  STAZ,X TOKEN
+  STA,X TOKEN
   TYA                  ; Restore next char
   LDXZ TEMP
   RTS
@@ -566,7 +567,7 @@ up_done
 capture_label
   JSR read_token
   TAY                       ; Save next char
-  LDAZ TOKEN
+  LDA TOKEN
   CMP# "*"
   BNE cl_normal_label
   ; Set PC

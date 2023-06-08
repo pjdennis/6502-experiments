@@ -49,7 +49,7 @@ calculate_hash
   STAZ HASH
   LDX# $00
 ch_loop
-  LDAZ,X TOKEN
+  LDA,X TOKEN
   BEQ ch_done
   AND# $7F
   EORZ HASH
