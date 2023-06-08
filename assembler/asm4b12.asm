@@ -4,6 +4,14 @@ LHASHTABH  = $1F80      ; "
 *          = $2000      ; Code generates here
 FILE_STACK = $F000      ; File stack will grow down from 1 below here
 
+
+; Include files
+  .include environment.asm
+  .include common12.asm
+  .include inst12.asm.out
+  .include to_decimal.asm
+
+
   .zeropage
 
 ; Zero page locations
@@ -29,12 +37,6 @@ STARTED   DATA $00     ; flag to indicate output has started
 CURLINEL  DATA $00     ; Current line (L)
 CURLINEH  DATA $00     ; Current line (H)
 
-TO_DECIMAL_VALUE_L          DATA $00 ; 1 byte
-TO_DECIMAL_VALUE_H          DATA $00 ; 1 byte
-TO_DECIMAL_MOD10            DATA $00 ; 1 byte
-TO_DECIMAL_RESULT_MINUS_ONE DATA $00
-TO_DECIMAL_RESULT           DATA $00 ; 6 bytes
-
 CURR_FILE    DATA $00
 FILE_STACK_L DATA $00
 FILE_STACK_H DATA $00
@@ -49,12 +51,6 @@ TOKEN                  ; multiple bytes - should be last
 INST_PSUEDO   = $01
 INST_RELATIVE = $02
 INST_BYTE     = $04
-
-
-; Instruction hash table, etc.
-  .include environment.asm
-  .include common12.asm
-  .include inst12.asm.out
 
 
 ; Error messages
@@ -1160,69 +1156,6 @@ show_decimal
   LDA# >TO_DECIMAL_RESULT
   STAZ TABPH
   JMP show_message ; tail call
-
-
-; On entry TO_DECIMAL_VALUE_L;TO_DECIMAL_VALUE_H contains the value to convert
-; On exit TO_DECIMAL_RESULT contains the result
-;         X, Y are preserved
-;         A is not preserved
-to_decimal
-  TXA
-  PHA
-  ; Initialize result to empty string
-  LDA# $00
-  STAZ TO_DECIMAL_RESULT
-
-td_divide
-  ; Initialize the remainder to be zero
-  LDA# $00
-  STAZ TO_DECIMAL_MOD10
-  CLC
-
-  LDX# $10
-td_divloop
-  ; Rotate quotient and remainder
-  ROLZ TO_DECIMAL_VALUE_L
-  ROLZ TO_DECIMAL_VALUE_H
-  ROLZ TO_DECIMAL_MOD10
-
-  ; a = dividend - divisor
-  SEC
-  LDAZ TO_DECIMAL_MOD10
-  SBC# $0A ; 10
-  BCC td_ignore_result ; Branch if dividend < divisor
-  STAZ TO_DECIMAL_MOD10
-
-td_ignore_result
-  DEX
-  BNE td_divloop
-  ROLZ TO_DECIMAL_VALUE_L
-  ROLZ TO_DECIMAL_VALUE_H
-
-  ; Shift result
-td_shift
-  LDX# $06
-td_shift_loop
-  LDAZ,X TO_DECIMAL_RESULT_MINUS_ONE
-  STAZ,X TO_DECIMAL_RESULT
-  DEX
-  BNE td_shift_loop
-
-  ; Save value into result
-  LDAZ TO_DECIMAL_MOD10
-  CLC
-  ADC# "0"
-  STAZ TO_DECIMAL_RESULT
-
-  ; If value != 0 then continue dividing
-  LDAZ TO_DECIMAL_VALUE_L
-  ORAZ TO_DECIMAL_VALUE_H
-  BNE td_divide
-
-  PLA
-  TAX
-
-  RTS
 
 
 HEAP                  ; Heap goes after the program code
