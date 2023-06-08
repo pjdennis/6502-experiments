@@ -1146,6 +1146,12 @@ void write6502(uint16_t address, uint8_t value) {
     memory[address] = value;
 }
 
+void show_commandline(int argc, char**argv) {
+    for (int i = 1; i < argc; i++) {
+        fprintf(stderr, "%s ", argv[i]);
+    }
+}
+
 #define save_address(v) uint16_t v = p; p += 2
 #define fill_address(v) memory[v] = p & 0xff; memory[v+1] = p >> 8;
 #define emit_byte(b) memory[p++] = b;
@@ -1316,8 +1322,8 @@ int main(int argc, char **argv) {
     while (!done) {
         step6502();
         if (clockticks6502 > max_cycles) {
-            fprintf(stderr, "File %s with input %s did not terminate within %i cycles\n",
-                    code_filename, input_filename, max_cycles);
+            show_commandline(argc, argv);
+            fprintf(stderr, "did not terminate within %i cycles\n", max_cycles);
             free(arg_addresses);
             fclose(output_file_ptr);
             fclose(input_file_ptr);
@@ -1325,8 +1331,8 @@ int main(int argc, char **argv) {
         }
         // printf("PC=%04x\n", pc);
     }
-    fprintf(stderr, "File %s with input %s executed %i cycles\n",
-            code_filename, input_filename, clockticks6502);
+    show_commandline(argc, argv);
+    fprintf(stderr, "executed %i cycles\n", clockticks6502);
 
     free(arg_addresses);
 
