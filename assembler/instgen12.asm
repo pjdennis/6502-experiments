@@ -1,13 +1,13 @@
-*         = $2000       ; Set PC
+; Addresses
+TOKEN      = $1E00      ; Buffer for the current token being read
+IHASHTABL  = $1F00      ; Instruction hash table (low and high)
+IHASHTABH  = $1F80      ; "
+*          = $2000      ; Code generates here
 
+
+; Include files
   .include environment.asm
   .include common12.asm
-
-
-IHASHTABL = $4200 ; Instruction hash table (low and high)
-IHASHTABH = $4300 ; "
-TOKEN     = $4400
-HEAP      = $4500 ; Data heap
 
 
   .zeropage
@@ -383,6 +383,7 @@ dd_next
   CLC
   ADC# $01
   STAZ <HASH
+  CMP# $80
   BEQ dd_done
   JMP dd_loop
 dd_done
@@ -440,6 +441,9 @@ msg_IHASHTABL
 
 msg_IHASHTABH
   DATA "IHASHTABH" $00
+
+
+HEAP                  ; Heap goes after the program code
 
 
   DATA start ; Emulation environment jumps to address in last 2 bytes
