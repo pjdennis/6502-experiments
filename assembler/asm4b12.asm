@@ -27,11 +27,6 @@ MEMPL     DATA $00     ; 2 byte heap pointer
 MEMPH     DATA $00     ; "
 PL        DATA $00     ; 2 byte pointer
 PH        DATA $00     ; "
-HASH      DATA $00     ; 1 byte hash value
-HTLPL     DATA $00     ; 2 byte pointer to low byte hash table
-HTLPH     DATA $00     ; "
-HTHPL     DATA $00     ; 2 byte pointer to high byte hash table
-HTHPH     DATA $00     ; "
 INST_FLAG DATA $00     ; flags associated with instruction
 STARTED   DATA $00     ; flag to indicate output has started
 CURLINEL  DATA $00     ; Current line (L)

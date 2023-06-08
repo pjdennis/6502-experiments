@@ -1,32 +1,31 @@
-IHASHTABL = $4200      ; Instruction hash table (low and high)
-IHASHTABH = $4300      ; "
-HEAP      = $4400      ; Data heap
-
-TEMP      = $0000      ; 1 byte temporary value
-TABPL     = $0001      ; 2 byte table pointer
-TABPH     = $0002      ; "
-HEX1      = $0003      ; 1 byte
-HEX2      = $0004      ; 1 byte
-MEMPL     = $0005      ; 2 byte heap pointer
-MEMPH     = $0006      ; "
-PL        = $0007      ; 2 byte pointer
-PH        = $0008      ; "
-P2L       = $0009      ; 2 byte pointer
-P2H       = $000A      ; "
-HASH      = $000B      ; 1 byte hash value
-CHAR      = $000C      ; 1 byte character value
-HTLPL     = $000D      ; 2 byte pointer to low byte hash table
-HTLPH     = $000E      ; "
-HTHPL     = $000F      ; 2 byte pointer to high byte hash table
-HTHPH     = $0010      ; "
-TOKEN     = $0011      ; multiple bytes
-
-
 *         = $2000       ; Set PC
-
 
   .include environment.asm
   .include common12.asm
+
+
+IHASHTABL = $4200 ; Instruction hash table (low and high)
+IHASHTABH = $4300 ; "
+HEAP      = $4400 ; Data heap
+
+
+  .zeropage
+
+TEMP      DATA $00     ; 1 byte temporary value
+TABPL     DATA $00     ; 2 byte table pointer
+TABPH     DATA $00     ; "
+HEX1      DATA $00     ; 1 byte
+HEX2      DATA $00     ; 1 byte
+MEMPL     DATA $00     ; 2 byte heap pointer
+MEMPH     DATA $00     ; "
+PL        DATA $00     ; 2 byte pointer
+PH        DATA $00     ; "
+P2L       DATA $00     ; 2 byte pointer
+P2H       DATA $00     ; "
+CHAR      DATA $00     ; 1 byte character value
+TOKEN                  ; multiple bytes - should be last
+
+  .code
 
 
 ; Instruction table
