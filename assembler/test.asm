@@ -124,6 +124,10 @@ ARGC                        DATA $00 ; 1 byte
   .code
 
 
+MY_LABEL
+ANOTHER = MY_LABEL  ; Comment
+
+
 ; Show message to the error output
 ; On entry TABPL;TABPH points to the zero-terminated message
 ; On exit A, X, Y are preserved

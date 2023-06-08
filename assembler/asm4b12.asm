@@ -59,9 +59,6 @@ err_duplicate_label
 err_opcode_not_found
   BRK $03 "Opcode not found" $00
 
-err_expected_hex
-  BRK $04 "Expected hex value" $00
-
 err_branch_out_of_range
   BRK $05 "Branch out of range" $00
 
@@ -472,7 +469,8 @@ eh_one
 ; On exit C set if value read; clear otherwise
 ;         HEX2 and HEX1 contain the LSB and MSB of the value read
 ;         A contains the next character
-;         X, Y are preserved
+;         X is preserved
+;         Y is not preserved
 ; Raises 'Expected hex' error if value was not identified as hex (via '$')
 ;        'Bad hex' error if non-hex characters were encountered
 read_value
@@ -485,9 +483,14 @@ rv_value
   JSR read_char        ; Read the character after the "="
   JSR skip_spaces
   CMP# "$"
-  BEQ rv_hexvalue
-  JMP err_expected_hex
-rv_hexvalue
+  BEQ rv_hex_value
+  TXA
+  PHA
+  JSR read_and_find_existing_label
+  PLA
+  TAX
+  JMP rv_ok
+rv_hex_value
   JSR read_char
   JSR read_hex_byte_or_word
   BCS rv_ok            ; 2 bytes were read
