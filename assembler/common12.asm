@@ -1,4 +1,4 @@
-HT_KEY = $1E00
+HT_KEY = TOKEN
   .include hash_table.asm
 
 

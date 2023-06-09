@@ -99,6 +99,14 @@ arg_loop_done
   LDA# "\n"
   JSR write_d
 
+  LDA# <MY_LABEL
+  STAZ TO_DECIMAL_VALUE_L
+  LDA# >MY_LABEL
+  STAZ TO_DECIMAL_VALUE_H
+  JSR show_decimal
+  LDA# "\n"
+  JSR write_d
+
   LDA# <ANOTHER
   STAZ TO_DECIMAL_VALUE_L
   LDA# >ANOTHER
@@ -133,6 +141,9 @@ ARGC                        DATA $00 ; 1 byte
 
 
 MY_LABEL = $1234
+
+  LDA# $FE
+
 ANOTHER = MY_LABEL  ; Comment
 
 

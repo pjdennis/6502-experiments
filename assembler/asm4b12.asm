@@ -367,15 +367,15 @@ rt_done
 ; Raises 'Label not found' error if label is not found in hash table
 read_and_find_existing_label
   JSR read_token
-  BITZ PASS
-  BMI rafel_pass2
-  ; Pass 1
-  RTS
-rafel_pass2
   PHA                  ; Save next char
   JSR select_label_hash_table
   JSR find_in_hash
   BCC rafel_found
+  BITZ PASS
+  BMI rafel_pass2
+  PLA                  ; Restore next char
+  RTS
+rafel_pass2
   JMP err_label_not_found
 rafel_found
   PLA                  ; Restore next char
