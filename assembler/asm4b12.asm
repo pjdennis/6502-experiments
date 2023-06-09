@@ -7,19 +7,10 @@ LHASHTABH  = $1F80      ; "
 FILE_STACK = $F000      ; File stack will grow down from 1 below here
 
 
-; Include files
-  .include environment.asm
-  .include common12.asm
-  .include inst12.asm.out
-  .include to_decimal.asm
-
-
   .zeropage
 
 ; Zero page locations
 TEMP      DATA $00     ; 1 byte
-TABPL     DATA $00     ; 2 byte table pointer
-TABPH     DATA $00     ; "
 PCL       DATA $00     ; 2 byte program counter
 PCH       DATA $00     ; "
 HEX1      DATA $00     ; 1 byte
@@ -27,8 +18,6 @@ HEX2      DATA $00     ; 1 byte
 PASS      DATA $00     ; 1 byte $00 = pass 1 $FF = pass 2
 MEMPL     DATA $00     ; 2 byte heap pointer
 MEMPH     DATA $00     ; "
-PL        DATA $00     ; 2 byte pointer
-PH        DATA $00     ; "
 INST_FLAG DATA $00     ; flags associated with instruction
 STARTED   DATA $00     ; flag to indicate output has started
 CURLINEL  DATA $00     ; Current line (L)
@@ -42,6 +31,13 @@ PC_SAVEL     DATA $00
 PC_SAVEH     DATA $00
 
   .code
+
+
+; Include files
+  .include environment.asm
+  .include common12.asm
+  .include inst12.asm.out
+  .include to_decimal.asm
 
 
 ; Constants
@@ -373,6 +369,9 @@ read_and_find_existing_label
   BCC rafel_found
   BITZ PASS
   BMI rafel_pass2
+  LDA# $00
+  STAZ HEX1
+  STAZ HEX2
   PLA                  ; Restore next char
   RTS
 rafel_pass2

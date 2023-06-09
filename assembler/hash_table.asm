@@ -1,4 +1,10 @@
-; Requires HT_KEY - the address of the key used for hash table operations
+; Requiresi:
+;   HT_KEY       - the address of the key used for hash table operations
+;   HT_VL;HT_VH  - zero page locations containing value in hash table
+;   MEMPL;MEMPH  - addres of heap to store table entries
+;   advance_heap - function to advance the heap
+
+
   .zeropage
 
 HASH      DATA $00     ; 1 byte hash value
@@ -6,8 +12,13 @@ HTLPL     DATA $00     ; 2 byte pointer to low byte hash table
 HTLPH     DATA $00     ; "
 HTHPL     DATA $00     ; 2 byte pointer to high byte hash table
 HTHPH     DATA $00     ; "
+TABPL     DATA $00     ; 2 byte table pointer
+TABPH     DATA $00     ; "
+HTPL      DATA $00     ; 2 byte temporary pointer
+HTPH      DATA $00     ; "
 
   .code
+
 
 ; Contains each byte $00-$FF exactly once in random order
 scramble_table
@@ -61,4 +72,200 @@ ch_loop
 ch_done
   PLA
   TAX
+  RTS
+
+
+; On entry HASH contains the hash value
+; On exit Z set if entry is empty, clear otherwise
+;         X is preserved
+;         A, Y are not preserved
+hash_entry_empty
+  LDAZ HASH
+  TAY
+  LDAZ(),Y HTLPL
+  BNE hee_done
+  LDAZ(),Y HTHPL
+hee_done
+  RTS
+
+
+; Load from hash table to TABPL;TABPH
+; On entry HASH contains the hash value
+; On exit TABPL;TABPH countains pointer corresponding to the hash value
+;         X is preserved
+;         A, Y are not preserved
+load_hash_entry
+  LDAZ HASH
+  TAY
+  LDAZ(),Y HTLPL
+  STAZ TABPL
+  LDAZ(),Y HTHPL
+  STAZ TABPH
+  RTS
+
+
+; Store current memory pointer in hash table
+; On entry HASH contains the hash code to store under
+;          MEMPL;MEMPH contains the pointer to store in the hash table
+; On exit X is preserved
+;         A, Y are not preserved
+store_hash_entry
+  LDAZ HASH
+  TAY
+  LDAZ MEMPL
+  STAZ(),Y HTLPL
+  LDAZ MEMPH
+  STAZ(),Y HTHPL
+  RTS
+
+
+; Store current memory pointer in table
+; On entry TABPL;TABPH,Y points to location to store pointer
+;          MEMPL;NENPL contains the pointer to store
+; On exit TABPL;TABPH,Y points to the location following the stored pointer
+;         X is preserved
+;         A is not preserved
+store_table_entry
+  LDAZ MEMPL
+  STAZ(),Y TABPL
+  INY
+  LDAZ MEMPH
+  STAZ(),Y TABPL
+  INY
+  RTS
+
+
+; On entry HT_KEY contains the token to compare with
+;          TABPL;TABPH points to the value to compare with
+; On exit Z set if equal, unset otherwise
+;         Y points to terminating 0 if equal
+;         X is preserved
+;         A is not preserved
+compare_token
+  LDY# $FF
+ct_loop
+  INY
+  LDAZ(),Y TABPL
+  CMP,Y HT_KEY
+  BNE ct_done
+  CMP# $00
+  BNE ct_loop
+  ; Match
+ct_done
+  RTS
+
+
+; On entry TABPL;TABPH point to head of list of entries
+;          HT_KEY contains the token to find
+; On exit C clear if found; set if not found
+;         TABPL;TABPH,Y points to value if found
+;         or to 'next' pointer if not found
+;         X is preserved
+;         A, Y are not preserved
+find_token
+ft_token_loop
+  ; Store the current pointer
+  LDAZ TABPL
+  STAZ HTPL
+  LDAZ TABPH
+  STAZ HTPH
+  ; Advance past 'next' pointer
+  CLC
+  LDA# $02
+  ADCZ TABPL
+  STAZ TABPL
+  LDA# $00
+  ADCZ TABPH
+  STAZ TABPH
+  ; Check for matching token
+  JSR compare_token
+  BNE ft_token_is_non_match
+  ; Match
+  INY                  ; point tab,Y to value
+  CLC
+  RTS
+ft_token_is_non_match  ; Not a match - move to next
+  ; Check if 'next' pointer is 0
+  LDY# $00
+  LDAZ(),Y HTPL
+  BNE ft_not_at_end
+  INY
+  LDAZ(),Y HTPL
+  BEQ ft_at_end
+ft_not_at_end
+  LDY# $00
+  LDAZ(),Y HTPL
+  STAZ TABPL
+  INY
+  LDAZ(),Y HTPL
+  STAZ TABPH
+  JMP ft_token_loop
+ft_at_end
+  ; point tabp,Y to the zero 'next' pointer
+  LDAZ HTPL
+  STAZ TABPL
+  LDAZ HTPH
+  STAZ TABPH
+  LDY# $00
+  SEC ; Carry set indicates not found
+  RTS
+
+
+; Stores null next pointer, key and value on heap
+; and advances heap pointer
+; On entry HT_VL;HT_VH contains the value to store
+;          HT_KEY contains key to store
+; On exit MEMPL;MEMPH points to the next free heap location
+;         Y = 0
+;         X is preserved
+;         A is not preserved
+store_token
+  LDY# $00
+  ; Store null pointer (pointer to next)
+  LDA# $00
+  STAZ(),Y MEMPL
+  INY
+  STAZ(),Y MEMPL
+  INY
+  JSR advance_heap
+  ; Store token name
+  LDY# $FF             ; Alternative: DEY
+st_loop
+  INY
+  LDA,Y HT_KEY
+  STAZ(),Y MEMPL
+  BNE st_loop
+  INY
+  ; Store value
+  LDAZ HT_VL
+  STAZ(),Y MEMPL
+  INY
+  LDAZ HT_VH
+  STAZ(),Y MEMPL
+  INY
+  JMP advance_heap     ; Tail call
+
+
+; Add HT_KEY mapped to HT_VL;HT_VH to hash table
+; On entry HT_KEY contains key
+;          HT_VL;HT_VH constains the value
+; On exit C = 0 if added or 1 if already exists
+;         A, X, Y are not preserved
+hash_add
+  JSR calculate_hash
+  JSR hash_entry_empty
+  BEQ ha_entry_empty
+  JSR load_hash_entry
+  JSR find_token
+  BCS ha_new
+  SEC
+  RTS
+ha_new
+  JSR store_table_entry
+  JMP ha_store
+ha_entry_empty
+  JSR store_hash_entry
+ha_store
+  JSR store_token
+  CLC
   RTS

@@ -5,16 +5,9 @@ IHASHTABH  = $1F80      ; "
 *          = $2000      ; Code generates here
 
 
-; Include files
-  .include environment.asm
-  .include common12.asm
-
-
   .zeropage
 
 TEMP      DATA $00     ; 1 byte temporary value
-TABPL     DATA $00     ; 2 byte table pointer
-TABPH     DATA $00     ; "
 HEX1      DATA $00     ; 1 byte
 HEX2      DATA $00     ; 1 byte
 MEMPL     DATA $00     ; 2 byte heap pointer
@@ -26,6 +19,11 @@ P2H       DATA $00     ; "
 CHAR      DATA $00     ; 1 byte character value
 
   .code
+
+
+; Include files
+  .include environment.asm
+  .include common12.asm
 
 
 ; Instruction table
