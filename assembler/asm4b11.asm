@@ -1,4 +1,5 @@
 ; Addresses
+TOKEN2     = $1E00
 LHASHTABL  = $1F00      ; Label hash table (low and high)
 LHASHTABH  = $1F80      ; "
 *          = $2000      ; Code generates here
@@ -41,7 +42,6 @@ IN_ZEROPAGE  = $21
 PC_SAVEL     = $22
 PC_SAVEH     = $23
 TOKEN        = $24        ; multiple bytes
-
 
 ; Constants
 INST_PSUEDO   = $01
@@ -470,6 +470,36 @@ eh_one
   RTS
 
 
+; Save the current token
+; On exit X is preserved
+;         A, Y are not preserved
+save_token
+  PHA
+  LDY# $FF
+st_loop2
+  INY
+  LDA,Y TOKEN
+  STA,Y TOKEN2
+  BNE st_loop2
+  PLA
+  RTS
+
+
+; Restore the current token
+; On exit X is preserved
+;         A, Y are not preserved
+restore_token
+  PHA
+  LDY# $FF
+rt_loop2
+  INY
+  LDA,Y TOKEN2
+  STA,Y TOKEN
+  BNE rt_loop2
+  PLA
+  RTS
+
+
 ; Attempt to read an assigned value
 ; On entry A contains the next character
 ; On exit C set if value read; clear otherwise
@@ -490,11 +520,9 @@ rv_value
   JSR skip_spaces
   CMP# "$"
   BEQ rv_hex_value
-  TXA
-  PHA
+  JSR save_token
   JSR read_and_find_existing_label
-  PLA
-  TAX
+  JSR restore_token
   JMP rv_ok
 rv_hex_value
   JSR read_char
