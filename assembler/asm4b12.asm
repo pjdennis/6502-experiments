@@ -253,7 +253,7 @@ rafel_found
 ; Raises 'Invalid hex' error if input is not a valid hex character
 convert_hex_character
   CMP# "A"
-  BCC chc_numeric       ; < 'A'
+  BCC chc_numeric      ; < 'A'
   SBC# "A"             ; Carry already set
   CMP# $06
   BCC chc_ok1
@@ -412,16 +412,16 @@ update_pc
   DECZ STARTED
   JMP up_no_fill
 up_started
-  LDAZ HEX1             ; High byte
+  LDAZ HEX1            ; High byte
   CMPZ PCH
   BCC up_less
   BNE up_notless
-  LDAZ HEX2             ; Low byte
+  LDAZ HEX2            ; Low byte
   CMPZ PCL
   BCC up_less
 up_notless
   BITZ PASS
-  BPL up_no_fill        ; skip writing during pass 1
+  BPL up_no_fill       ; skip writing during pass 1
   BITZ IN_ZEROPAGE
   BMI up_no_fill
 up_loop
@@ -714,7 +714,7 @@ swap_pc_with_save
 ; On entry, A contains the first character of the directive
 process_directive
   JSR read_token
-  PHA                          ; Save next char
+  PHA                  ; Save next char
   ; Check for 'include'
   LDA# <directive_include
   STAZ TABPL
@@ -737,10 +737,10 @@ process_directive
   JSR compare_token
   BEQ pd_code
   ; Directive not recognized
-  PLA                          ; Restore next char
+  PLA                  ; Restore next char
   JMP err_unknown_directive
 pd_include
-  PLA                          ; Restore next char
+  PLA                  ; Restore next char
   JSR skip_spaces
   JSR check_for_end_of_line
   BCC pd_get_name
@@ -757,7 +757,7 @@ pd_zeropage
   STAZ IN_ZEROPAGE
   JSR swap_pc_with_save
 pd_in_zeropage
-  PLA                          ; Restore next char
+  PLA                  ; Restore next char
   JSR skip_rest_of_line
   RTS
 pd_code
@@ -767,7 +767,7 @@ pd_code
   STAZ IN_ZEROPAGE
   JSR swap_pc_with_save
 pd_in_code
-  PLA                          ; Restore next char
+  PLA                  ; Restore next char
   JSR skip_rest_of_line
   RTS
 
@@ -912,7 +912,7 @@ s_args_ok
 
   LDA# $00
   STAZ CURR_FILE
-  STAZ PASS           ; Bit 7 = 0 (pass 1)
+  STAZ PASS            ; Bit 7 = 0 (pass 1)
   JSR open_input
 
   ; Open output file
@@ -924,7 +924,7 @@ s_args_ok
   JSR assemble_code
 
   LDA# $FF
-  STAZ PASS           ; Bit 7 = 1 (pass 2)
+  STAZ PASS            ; Bit 7 = 1 (pass 2)
   JSR open_input
   JSR assemble_code
 
@@ -932,7 +932,7 @@ s_args_ok
   TXA
   JSR close
 
-  BRK $00             ; Success
+  BRK $00              ; Success
 
 
 ; Interrupt handler, entered upon BRK
@@ -1053,9 +1053,9 @@ show_decimal
   JMP show_message ; tail call
 
 
-HEAP                  ; Heap goes after the program code
+HEAP                   ; Heap goes after the program code
 
 
 * = $FFFC
-  DATA start          ; Reset vector
-  DATA interrupt      ; Interrupt vector
+  DATA start           ; Reset vector
+  DATA interrupt       ; Interrupt vector
