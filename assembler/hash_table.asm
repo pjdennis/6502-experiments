@@ -75,6 +75,32 @@ ch_done
   RTS
 
 
+; On entry HT_KEY contains the key to find
+; On exit C = 0 if found or 1 if not found
+; On exit HT_VL;HT_VH contains the value if found
+;         X is preserved
+;         A, Y are not preserverd
+find_in_hash
+  JSR calculate_hash
+  JSR hash_entry_empty
+  BEQ fih_not_found
+  ; Entry exists
+  JSR load_hash_entry
+  JSR find_token
+  BCS fih_not_found
+  ; Found
+  LDAZ(),Y TABPL
+  STAZ HT_VL
+  INY
+  LDAZ(),Y TABPL
+  STAZ HT_VH
+  CLC
+  RTS
+fih_not_found
+  SEC
+  RTS
+
+
 ; On entry HASH contains the hash value
 ; On exit Z set if entry is empty, clear otherwise
 ;         X is preserved

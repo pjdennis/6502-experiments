@@ -225,32 +225,6 @@ select_label_hash_table
   RTS
 
 
-; On entry token contains the token to find
-; On exit C = 0 if found or 1 if not found
-; On exit HEX1 and HEX2 contains MSB and LSB of value if found
-;         X is preserved
-;         A, Y are not preserverd
-find_in_hash
-  JSR calculate_hash
-  JSR hash_entry_empty
-  BEQ fih_not_found
-  ; Entry exists
-  JSR load_hash_entry
-  JSR find_token
-  BCS fih_not_found
-  ; Found
-  LDAZ(),Y TABPL
-  STAZ HEX2
-  INY
-  LDAZ(),Y TABPL
-  STAZ HEX1
-  CLC
-  RTS
-fih_not_found
-  SEC
-  RTS
-
-
 ; Emit value (pass 2 only) and increment PC
 ; On entry A contains the byte to emit
 ; On exit A, X, Y are preserved
@@ -654,6 +628,7 @@ cl_skip_and_return_processed
 
 cl_duplicate_label
   JMP err_duplicate_label
+
 
 ; Read and emit an opcode
 ; On entry A contains the first character of the opcode
