@@ -10,33 +10,35 @@ FILE_STACK = $F000      ; File stack will grow down from 1 below here
   .zeropage
 
 ; Zero page locations
-TEMP      DATA $00     ; 1 byte
-PCL       DATA $00     ; 2 byte program counter
-PCH       DATA $00     ; "
-HEX1      DATA $00     ; 1 byte
-HEX2      DATA $00     ; 1 byte
-PASS      DATA $00     ; 1 byte $00 = pass 1 $FF = pass 2
-MEMPL     DATA $00     ; 2 byte heap pointer
-MEMPH     DATA $00     ; "
-INST_FLAG DATA $00     ; flags associated with instruction
-STARTED   DATA $00     ; flag to indicate output has started
-CURLINEL  DATA $00     ; Current line (L)
-CURLINEH  DATA $00     ; Current line (H)
-
-CURR_FILE    DATA $00
-FILE_STACK_L DATA $00
-FILE_STACK_H DATA $00
-IN_ZEROPAGE  DATA $00
-PC_SAVEL     DATA $00
-PC_SAVEH     DATA $00
+TEMP        DATA $00 ; 1 byte
+PCL         DATA $00 ; 2 byte program counter
+PCH         DATA $00 ; "
+HEX1        DATA $00 ; 1 byte
+HEX2        DATA $00 ; 1 byte
+PASS        DATA $00 ; 1 byte $00 = pass 1 $FF = pass 2
+MEMPL       DATA $00 ; 2 byte heap pointer
+MEMPH       DATA $00 ; "
+INST_FLAG   DATA $00 ; flags associated with instruction
+STARTED     DATA $00 ; flag to indicate output has started
+CURR_FILE   DATA $00 ; current file handle
+CURLINEL    DATA $00 ; Current line (L)
+CURLINEH    DATA $00 ; Current line (H)
+IN_ZEROPAGE DATA $00 ; Flag indicating if in zero page section
+PC_SAVEL    DATA $00 ; Save location for PC when switching sections
+PC_SAVEH    DATA $00 ; "
 
   .code
 
 
 ; Include files
+  .include inst12.asm.out   ; This goes first since the tables should start on a page boundary
   .include environment.asm
   .include common12.asm
-  .include inst12.asm.out
+FS_FILENAME   = TOKEN
+FS_CURR_FILE  = CURR_FILE
+FS_CURR_LINEL = CURLINEL
+FS_CURR_LINEH = CURLINEH
+  .include file_stack.asm
   .include to_decimal.asm
 
 
@@ -99,117 +101,6 @@ rc_at_end
 rc_set_carry
   SEC
 rc_done
-  RTS
-
-
-init_file_stack
-  LDA# <FILE_STACK
-  STAZ FILE_STACK_L
-  LDA# >FILE_STACK
-  STAZ FILE_STACK_H
-  RTS
-
-
-; On exit Z is set if file stack empty, clear otherwise
-file_stack_empty
-  LDAZ FILE_STACK_L
-  CMP# <FILE_STACK
-  BNE fse_done
-  LDAZ FILE_STACK_H
-  CMP# >FILE_STACK
-fse_done
-  RTS
-
-
-; On entry TOKEN contains the file name
-;          CURLINEL;CURLINEH contains the current line number
-;          CURR_FILE contains the current file handle
-; On exit X is preserved
-push_file_stack
-  LDY# $FF
-pfs_len_loop
-  INY
-  LDA,Y TOKEN
-  BNE pfs_len_loop
-  TYA
-  STAZ TEMP
-  CLC    ; -1
-  LDAZ FILE_STACK_L
-  SBCZ TEMP
-  STAZ FILE_STACK_L
-  LDAZ FILE_STACK_H
-  SBC# $00
-  STAZ FILE_STACK_H
-  LDY# $FF
-pfs_copy_loop
-  INY
-  LDA,Y TOKEN
-  STAZ(),Y FILE_STACK_L
-  BNE pfs_copy_loop
-  ; Adjust pointer for line number and file handle
-  SEC
-  LDAZ FILE_STACK_L
-  SBC# $03
-  STAZ FILE_STACK_L
-  LDAZ FILE_STACK_H
-  SBC# $00
-  STAZ FILE_STACK_H
-  ; Store file handle
-  LDY# $00
-  LDA CURR_FILE
-  STAZ(),Y FILE_STACK_L
-  INY
-  ; Store line number
-  LDA CURLINEL
-  STAZ(),Y FILE_STACK_L
-  INY
-  LDA CURLINEH
-  STAZ(),Y FILE_STACK_L
-  INY
-; Reset line number and open new file
-  LDA# $00
-  STAZ CURLINEL
-  STAZ CURLINEH
-
-  TXA
-  PHA
-  LDA# <TOKEN
-  LDX# >TOKEN
-  JSR open
-  STAZ CURR_FILE
-  PLA
-  TAX
-
-  RTS
-
-
-; On exit CURR_FILE contains the previous file handle
-;         CURLINEL;CURLINEH contains the previous line number
-pop_file_stack
-; Close currnet file and restore from filestack
-  LDAZ CURR_FILE
-  JSR close
-  LDY# $00
-  LDAZ(),Y FILE_STACK_L
-  STAZ CURR_FILE
-  INY
-  LDAZ(),Y FILE_STACK_L
-  STAZ CURLINEL
-  INY
-  LDAZ(),Y FILE_STACK_L
-  STAZ CURLINEH
-rc_pop_loop
-  INY
-  LDAZ(),Y FILE_STACK_L
-  BNE rc_pop_loop
-; Adjust stack pointer
-  TYA
-  SEC  ; +1
-  ADCZ FILE_STACK_L
-  STAZ FILE_STACK_L
-  LDA# $00
-  ADCZ FILE_STACK_H
-  STAZ FILE_STACK_H
   RTS
 
 
