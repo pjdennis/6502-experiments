@@ -1,3 +1,4 @@
+HT_KEY = $1E00
   .include hash_table.asm
 
 
@@ -35,32 +36,6 @@ select_instruction_hash_table
   STAZ HTHPL
   LDA# >IHASHTABH
   STAZ HTHPH
-  RTS
-
-
-; On entry TOKEN contains the token to calculate hash from
-; On exit HASH contains the calculated hash value
-;         X is preserved
-;         A, Y are not preserved
-calculate_hash
-  TXA
-  PHA
-  LDA# $00
-  STAZ HASH
-  LDX# $00
-ch_loop
-  LDA,X TOKEN
-  BEQ ch_done
-  AND# $7F
-  EORZ HASH
-  TAY
-  LDA,Y scramble_table
-  STAZ HASH
-  INX
-  JMP ch_loop
-ch_done
-  PLA
-  TAX
   RTS
 
 
@@ -128,6 +103,8 @@ store_table_entry
 ;          TABPL;TABPH points to the value to compare with
 ; On exit Z set if equal, unset otherwise
 ;         Y points to terminating 0 if equal
+;         X is preserved
+;         A is not preserved
 compare_token
   LDY# $FF
 ct_loop
@@ -147,6 +124,8 @@ ct_done
 ; On exit C clear if found; set if not found
 ;         TABPL;TABPH,Y points to value if found
 ;         or to 'next' pointer if not found
+;         X is preserved
+;         A, Y are not preserved
 find_token
 ft_token_loop
   ; Store the current pointer

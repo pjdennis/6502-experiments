@@ -1,3 +1,4 @@
+; Requires HT_KEY - the address of the key used for hash table operations
   .zeropage
 
 HASH      DATA $00     ; 1 byte hash value
@@ -34,4 +35,30 @@ iht_loop
   INY
   CPY# $80
   BNE iht_loop
+  RTS
+
+
+; On entry HT_KEY contains the token to calculate hash from
+; On exit HASH contains the calculated hash value
+;         X is preserved
+;         A, Y are not preserved
+calculate_hash
+  TXA
+  PHA
+  LDA# $00
+  STAZ HASH
+  LDX# $00
+ch_loop
+  LDA,X HT_KEY
+  BEQ ch_done
+  AND# $7F
+  EORZ HASH
+  TAY
+  LDA,Y scramble_table
+  STAZ HASH
+  INX
+  JMP ch_loop
+ch_done
+  PLA
+  TAX
   RTS

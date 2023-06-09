@@ -2,9 +2,9 @@
 
 TO_DECIMAL_VALUE_L          DATA $00 ; 1 byte
 TO_DECIMAL_VALUE_H          DATA $00 ; 1 byte
-TO_DECIMAL_MOD10            DATA $00 ; 1 byte
-TO_DECIMAL_RESULT_MINUS_ONE DATA $00
-TO_DECIMAL_RESULT           DATA $00 ; 6 bytes
+TO_DECIMAL_MOD10
+TO_DECIMAL_RESULT_MINUS_ONE DATA $00 ; 1 byte
+TO_DECIMAL_RESULT           DATA $00 $00 $00 $00 $00 $00 ; 6 bytes
 
   .code
 
@@ -48,7 +48,7 @@ td_ignore_result
 
   ; Shift result
 td_shift
-  LDX# $06
+  LDX# $05
 td_shift_loop
   LDAZ,X TO_DECIMAL_RESULT_MINUS_ONE
   STAZ,X TO_DECIMAL_RESULT

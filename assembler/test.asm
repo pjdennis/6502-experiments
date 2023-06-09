@@ -99,6 +99,14 @@ arg_loop_done
   LDA# "\n"
   JSR write_d
 
+  LDA# <ANOTHER
+  STAZ TO_DECIMAL_VALUE_L
+  LDA# >ANOTHER
+  STAZ TO_DECIMAL_VALUE_H
+  JSR show_decimal
+  LDA# "\n"
+  JSR write_d
+
   BRK $00
 
 output_filename          DATA "test_output.out" $00
@@ -124,7 +132,7 @@ ARGC                        DATA $00 ; 1 byte
   .code
 
 
-MY_LABEL
+MY_LABEL = $1234
 ANOTHER = MY_LABEL  ; Comment
 
 

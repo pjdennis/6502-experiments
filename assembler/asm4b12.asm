@@ -1,4 +1,5 @@
 ; Addresses
+TOKEN2     = $1D00
 TOKEN      = $1E00      ; Buffer for the current token being read
 LHASHTABL  = $1F00      ; Label hash table (low and high)
 LHASHTABH  = $1F80      ; "
@@ -231,7 +232,8 @@ select_label_hash_table
 ; On entry token contains the token to find
 ; On exit C = 0 if found or 1 if not found
 ; On exit HEX1 and HEX2 contains MSB and LSB of value if found
-;         A, X, Y are not preserverd
+;         X is preserved
+;         A, Y are not preserverd
 find_in_hash
   JSR calculate_hash
   JSR hash_entry_empty
@@ -360,7 +362,8 @@ rt_done
 ; On entry A contains the first character of the label
 ; On exit HEX1 and HEX2 contains the MSB and LSB of the hash table value
 ;         A contains the next character following the token
-;         X, Y are not preserved
+;         X is preserved
+;       , Y is not preserved
 ; Raises 'Label not found' error if label is not found in hash table
 read_and_find_existing_label
   JSR read_token
@@ -464,6 +467,36 @@ eh_one
   RTS
 
 
+; Save the current token
+; On exit X is preserved
+;         A, Y are not preserved
+save_token
+  PHA
+  LDY# $FF
+st_loop2
+  INY
+  LDA,Y TOKEN
+  STA,Y TOKEN2
+  BNE st_loop2
+  PLA
+  RTS
+
+
+; Restore the current token
+; On exit X is preserved
+;         A, Y are not preserved
+restore_token
+  PHA
+  LDY# $FF
+rt_loop2
+  INY
+  LDA,Y TOKEN2
+  STA,Y TOKEN
+  BNE rt_loop2
+  PLA
+  RTS
+
+
 ; Attempt to read an assigned value
 ; On entry A contains the next character
 ; On exit C set if value read; clear otherwise
@@ -484,11 +517,9 @@ rv_value
   JSR skip_spaces
   CMP# "$"
   BEQ rv_hex_value
-  TXA
-  PHA
+  JSR save_token
   JSR read_and_find_existing_label
-  PLA
-  TAX
+  JSR restore_token
   JMP rv_ok
 rv_hex_value
   JSR read_char
