@@ -9,26 +9,27 @@
 
   .zeropage
 
-FILE_STACK_L DATA $00
-FILE_STACK_H DATA $00
+FS_PL   DATA $00 ; Pointer to the current location in the file stack
+FS_PH   DATA $00 ; "
+FS_TEMP DATA $00 ; Temporary location for use in calculations
 
   .code
 
 
-init_file_stack
+file_stack_init
   LDA# <FILE_STACK
-  STAZ FILE_STACK_L
+  STAZ FS_PL
   LDA# >FILE_STACK
-  STAZ FILE_STACK_H
+  STAZ FS_PH
   RTS
 
 
 ; On exit Z is set if file stack empty, clear otherwise
 file_stack_empty
-  LDAZ FILE_STACK_L
+  LDAZ FS_PL
   CMP# <FILE_STACK
   BNE fse_done
-  LDAZ FILE_STACK_H
+  LDAZ FS_PH
   CMP# >FILE_STACK
 fse_done
   RTS
@@ -45,39 +46,39 @@ pfs_len_loop
   LDA,Y FS_FILENAME
   BNE pfs_len_loop
   TYA
-  STAZ TEMP
+  STAZ FS_TEMP
   CLC    ; -1
-  LDAZ FILE_STACK_L
-  SBCZ TEMP
-  STAZ FILE_STACK_L
-  LDAZ FILE_STACK_H
+  LDAZ FS_PL
+  SBCZ FS_TEMP
+  STAZ FS_PL
+  LDAZ FS_PH
   SBC# $00
-  STAZ FILE_STACK_H
+  STAZ FS_PH
   LDY# $FF
 pfs_copy_loop
   INY
   LDA,Y FS_FILENAME
-  STAZ(),Y FILE_STACK_L
+  STAZ(),Y FS_PL
   BNE pfs_copy_loop
   ; Adjust pointer for line number and file handle
   SEC
-  LDAZ FILE_STACK_L
+  LDAZ FS_PL
   SBC# $03
-  STAZ FILE_STACK_L
-  LDAZ FILE_STACK_H
+  STAZ FS_PL
+  LDAZ FS_PH
   SBC# $00
-  STAZ FILE_STACK_H
+  STAZ FS_PH
   ; Store file handle
   LDY# $00
   LDA FS_CURR_FILE
-  STAZ(),Y FILE_STACK_L
+  STAZ(),Y FS_PL
   INY
   ; Store line number
   LDA FS_CURR_LINEL
-  STAZ(),Y FILE_STACK_L
+  STAZ(),Y FS_PL
   INY
   LDA FS_CURR_LINEH
-  STAZ(),Y FILE_STACK_L
+  STAZ(),Y FS_PL
   INY
 ; Reset line number and open new file
   LDA# $00
@@ -103,24 +104,24 @@ pop_file_stack
   LDAZ FS_CURR_FILE
   JSR close
   LDY# $00
-  LDAZ(),Y FILE_STACK_L
+  LDAZ(),Y FS_PL
   STAZ FS_CURR_FILE
   INY
-  LDAZ(),Y FILE_STACK_L
+  LDAZ(),Y FS_PL
   STAZ FS_CURR_LINEL
   INY
-  LDAZ(),Y FILE_STACK_L
+  LDAZ(),Y FS_PL
   STAZ FS_CURR_LINEH
 rc_pop_loop
   INY
-  LDAZ(),Y FILE_STACK_L
+  LDAZ(),Y FS_PL
   BNE rc_pop_loop
 ; Adjust stack pointer
   TYA
   SEC  ; +1
-  ADCZ FILE_STACK_L
-  STAZ FILE_STACK_L
+  ADCZ FS_PL
+  STAZ FS_PL
   LDA# $00
-  ADCZ FILE_STACK_H
-  STAZ FILE_STACK_H
+  ADCZ FS_PH
+  STAZ FS_PH
   RTS

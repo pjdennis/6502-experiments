@@ -908,7 +908,7 @@ s_args_ok
   JSR init_heap
   JSR select_label_hash_table
   JSR init_hash_table
-  JSR init_file_stack
+  JSR file_stack_init
 
   LDA# $00
   STAZ CURR_FILE
@@ -975,10 +975,10 @@ interrupt
   JSR show_message
 ; Print the filename
   CLC
-  LDAZ FILE_STACK_L
+  LDAZ FS_PL
   ADC# $03
   STAZ TABPL
-  LDAZ FILE_STACK_H
+  LDAZ FS_PH
   ADC# $00
   STAZ TABPH
   JSR show_message
