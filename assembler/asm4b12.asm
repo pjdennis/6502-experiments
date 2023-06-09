@@ -337,11 +337,11 @@ eh_one
 save_token
   PHA
   LDY# $FF
-st_loop2
+st2_loop
   INY
   LDA,Y TOKEN
   STA,Y TOKEN2
-  BNE st_loop2
+  BNE st2_loop
   PLA
   RTS
 
@@ -352,11 +352,11 @@ st_loop2
 restore_token
   PHA
   LDY# $FF
-rt_loop2
+rt2_loop
   INY
   LDA,Y TOKEN2
   STA,Y TOKEN
-  BNE rt_loop2
+  BNE rt2_loop
   PLA
   RTS
 
