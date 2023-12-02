@@ -104,9 +104,11 @@ keyboard_initialize:
   stz KEYBOARD_MODIFIER_STATE
   stz KEYBOARD_LOCK_STATE
 
+  .ifndef KB_NO_INTERRUPT_HANDLER
   ; Relocate the interrupt handler. The EEPROM has a fixed address, INTERRUPT_ROUTINE
   ; for the interrupt routine so copy the handler there
   invoke_copy_memory INTERRUPT_ROUTINE,interrupt,interrupt_end
+  .endif
 
   ; Initialize flags
   stz KEYBOARD_RECEIVING
@@ -790,10 +792,22 @@ calculate_parity:
   rts
 
 
+  .ifndef KB_NO_INTERRUPT_HANDLER
 interrupt:
   pha
+  jsr handle_keyboard_interrupt
+  pla
+  rti
+interrupt_end:
+  .endif
 
+
+handle_keyboard_interrupt:
   lda #%00000001  ; Clear the CA2 interrupt
+  bit IFR
+  bne .is_keyboard
+  rts
+.is_keyboard:
   sta IFR
 
   lda KEYBOARD_RECEIVING
@@ -865,8 +879,4 @@ interrupt:
   sta KEYBOARD_RECEIVING
 
 .done:
-  pla
-  rti
-interrupt_end:
-
-
+  rts
