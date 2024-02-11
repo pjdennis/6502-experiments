@@ -1,7 +1,8 @@
 CLOCK_FREQ_KHZ          = 2000
 INTERRUPT_VECTOR_TARGET = $0800 ; Interrupt vector in EEPROM points to this address
+                                ; Prior value: $3f00
 PROGRAM_LOAD_ADDRESS    = $0900 ; EEPROM load code loads to this address
-
+                                ; Prior value: $2000
 ; PORTA assignments
 E      = %10000000  ; Display enable
 RW     = %01000000  ; Display read/write

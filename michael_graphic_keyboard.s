@@ -1,6 +1,6 @@
   .include base_config_v2.inc
 
-INTERRUPT_ROUTINE        = $3f00
+INTERRUPT_ROUTINE        = INTERRUPT_VECTOR_TARGET
 
 TAB_WIDTH                = 4
 
@@ -31,7 +31,7 @@ SIMPLE_BUFFER            = $0200 ; 256 bytes
 
 LINE_LENGTHS             = $0300 ; GD_CHAR_COLS bytes 
 
-  .org $2000                     ; Loader loads programs to this address
+  .org PROGRAM_LOAD_ADDRESS      ; Loader loads programs to this address
   jmp initialize_machine         ; Initialize hardware and then jump to program_start
 
   ; The initialize_machine routine in this include will set up hardware registers and then

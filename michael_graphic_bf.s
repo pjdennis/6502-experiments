@@ -5,7 +5,7 @@ GC_PROMPT_CHAR = '$'
 ;TODO ran into a bug that I can't recreate: scrolled past bottom; entered several
 ;lines of text; backspaced and it didn't stop at the cursor start position
 
-INTERRUPT_ROUTINE        = $3f00
+INTERRUPT_ROUTINE        = INTERRUPT_VECTOR_TARGET
 
 ; Zero page allocations
 GCF_ZERO_PAGE_BASE       = $00
@@ -15,15 +15,32 @@ bf_getchar               = gc_getchar
 bf_putchar               = gc_putchar
 
 ; Other memory allocations
-SIMPLE_BUFFER            = $0200 ; 256 bytes
-GC_LINE_BUFFER           = $0300 ; GD_CHAR_ROWS * GD_CHAR_COLS = 400 bytes including terminating 0
+; These are from the non-BBC  Michael version where code loaded at $2000
+;SIMPLE_BUFFER            = $0200 ; 256 bytes
+;GC_LINE_BUFFER           = $3f00 ; GD_CHAR_ROWS * GD_CHAR_COLS = 400 bytes including terminating 0
 
-bf_cells                 = GC_LINE_BUFFER_STOP
-bf_cellsEnd              = bf_cells + 1024
-bf_code                  = bf_cellsEnd
-bf_codeEnd               = $2000
+;bf_cells                 = GC_LINE_BUFFER_STOP
+;bf_cellsEnd              = bf_cells + 1024
+;bf_code                  = bf_cellsEnd
+;bf_codeEnd               = $2000
 
-  .org $2000                     ; Loader loads programs to this address
+; Memory map (BBC version of Michael)
+; $0200-$03ff - graphics line buffer (400 bytes)
+; $0400-$07ff - bf cells
+; $0800-$08ff - interrupt handler
+; $0900-$26ff - program
+; $2700-$3eff - bf compiled code ($1800 bytes)
+; $3f00-$3fff - simple buffer (keyboard)
+
+GC_LINE_BUFFER            = $0200
+bf_cells                  = $0400
+bf_code                   = $2700
+SIMPLE_BUFFER             = $3f00
+
+bf_cellsEnd               = bf_cells + 1024
+bf_codeEnd                = $7f00
+
+  .org PROGRAM_LOAD_ADDRESS      ; Loader loads programs to this address
   jmp initialize_machine         ; Initialize hardware and then jump to program_start
 
   ; The initialize_machine routine in this include will set up hardware registers and then
@@ -148,9 +165,11 @@ program_start:
   txs
 
   jsr gcf_init
+
   jsr doLife
   jmp cr_repl
 
 
 .end_of_program:
-  .assert INTERRUPT_ROUTINE >= .end_of_program, "Program is too long"
+;  .assert INTERRUPT_ROUTINE >= .end_of_program, "Program is too long"
+  .assert bf_code >= .end_of_program, "Program is too long"
