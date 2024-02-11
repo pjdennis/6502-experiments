@@ -39,7 +39,9 @@ TO_DECIMAL_PARAM           = $16    ; 10 bytes
 
 
 TRANSLATE                  = $0200
+  .ifndef INTERRUPT_ROUTINE
 INTERRUPT_ROUTINE          = $3f00
+  .endif
 
   .org ORIGIN
   jmp initialize_machine
