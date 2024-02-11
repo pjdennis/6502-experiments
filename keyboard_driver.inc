@@ -354,12 +354,8 @@ keyboard_decode_and_translate:
   lda KEYBOARD_LATEST_CODE
   jsr keyboard_translate_extended
 .translate_done:
-  cmp #0
-  bne .code_found
-; No translation
-  sec
-  bra .decode_done
-.code_found:
+  bcs .decode_done ; No translation
+; Code found
   sta KEYBOARD_LATEST_CODE
   jsr keyboard_modifier_track
   jsr keyboard_update_modifiers
@@ -620,7 +616,8 @@ keyboard_decode:
 
 
 ; On entry A contains the PS/2 set 2 non-extended "normal" keyboard code
-; On exit  A contains the translated keyboard code
+; On exit  Carry is set if no translation was found
+;          A contains the translated code or original code if no translation found
 ;          X, Y are preserverd
 keyboard_translate_normal:
   phx
@@ -634,7 +631,8 @@ keyboard_translate_normal:
 
 
 ; On entry A contains the PS/2 set 2 extended keyboard code
-; On exit  A contains the translated keyboard code
+; On exit  Carry is set if no translation was found
+;          A contains the translated code or original code if no translation found
 ;          X, Y are preserverd
 keyboard_translate_extended:
   phx
