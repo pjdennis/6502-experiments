@@ -5,7 +5,8 @@
 
   .include base_config_v2.inc
 
-INTERRUPT_ROUTINE        = $3f00
+;INTERRUPT_ROUTINE        = $3f00
+INTERRUPT_ROUTINE        = INTERRUPT_VECTOR_TARGET
 
 CP_M_DEST_P              = $00 ; 2 bytes
 CP_M_SRC_P               = $02 ; 2 bytes
@@ -28,7 +29,7 @@ KB_ZERO_PAGE_BASE        = $10
 SIMPLE_BUFFER            = $0200 ; 256 bytes
 CONSOLE_TEXT             = $0300 ; CONSOLE_LENGTH + 1 bytes
 
-  .org $2000                     ; Loader loads programs to this address
+  .org PROGRAM_LOAD_ADDRESS      ; Loader loads programs to this address
   jmp initialize_machine         ; Initialize hardware and then jump to program_start
 
   ; The initialize_machine routine in this include will set up hardware registers and then
@@ -64,13 +65,21 @@ program_start:
   jsr console_initialize
   jsr keyboard_initialize
 
+  ; Print ready message
+  lda #<ready_message
+  ldx #>ready_message
+  jsr display_string
+  jsr console_print_string
+  lda #'\n'
+  jsr console_print_character
+
 ; Decode and write key codes and names to console
 .loop
   jsr console_show
 .repeat:
   jsr simple_buffer_read
   bcs .repeat                   ; Exit when input buffer is empty
-  jsr keyboard_decode_and_translate_to_set_3
+  jsr keyboard_decode_and_translate
   bcs .repeat                   ; Nothing decoded so far so read more
   jsr keyboard_lock_keys_track
   lda KEYBOARD_LATEST_META
@@ -79,6 +88,8 @@ program_start:
   lda KEYBOARD_LATEST_CODE
   jsr print_key_name_to_console
   bra .loop
+
+ready_message: .asciiz 'Ready'
 
 
 console_print_hex:

@@ -63,8 +63,8 @@ KB_LED_CAPS_LOCK         = %00000100
 
 KB_CODE_BREAK            = $f0
 KB_CODE_EXTENDED         = $e0
-KB_CODE_EXTENDED_IGNORE  = $12
-
+KB_CODE_EXTENDED_IGNORE  = $12       ; Part of the print screen codes. Also part of the codes generated
+                                     ; by stand-alone navigation keys such as home, when numlock is on.
 KB_META_SHIFT            = %10000000
 KB_META_CTRL             = %01000000
 KB_META_ALT              = %00100000
