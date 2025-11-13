@@ -674,18 +674,15 @@ emit_label_relative
 
 elr_forward
   LDAZ HEX2
-  AND# $80
-  BEQ elr_ok
+  BPL elr_ok
   JMP err_branch_out_of_range
 
 elr_backward
   LDAZ HEX2
-  AND# $80
-  BNE elr_ok
+  BMI elr_ok
   JMP err_branch_out_of_range
 
 elr_ok
-  LDAZ HEX2
   JSR emit
   TYA                  ; Restore next char
   RTS
