@@ -872,6 +872,9 @@ ac_label
   JMP ac_parameters_loop
 
 
+; Opens the file with name from the first command line argument, pushing
+; to the file stack
+; On exit X is preserved
 open_input
   TXA
   PHA
@@ -966,12 +969,9 @@ interrupt
   STAZ TABPH
   JSR show_message
 ; Print the filename
-  CLC
   LDAZ FS_PL
-  ADC# $03
   STAZ TABPL
   LDAZ FS_PH
-  ADC# $00
   STAZ TABPH
   JSR show_message
 i_file_done

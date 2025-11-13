@@ -6,6 +6,10 @@
 ;   FS_CURR_LINEH - "
 ;   open, close   - functions to open and close a file
 
+; The file stack grows downwards. Each entry includes (from low to high address)
+; File name of current file (0-terminated)
+; File handle of previous file (1 byte)
+; Line number of previous file (2 bytes)
 
   .zeropage
 
@@ -35,19 +39,26 @@ fse_done
   RTS
 
 
-; On entry FS_FILENAME contains the file name
-;          FS_CURR_LINEL;FS_CURR_LINEH contains the current line number
+; On entry FS_FILENAME contains the file name of the new file to open
+;            and push on stack
+;          FS_CURR_LINEL;FS_CURR_LINEH contains the current line
+;            number of the current file
 ;          FS_CURR_FILE contains the current file handle
 ; On exit X is preserved
 push_file_stack
   LDY# $FF
 pfs_len_loop
+; A <- len(FS_FILENAME) 
   INY
   LDA,Y FS_FILENAME
   BNE pfs_len_loop
+; Decrease file stack pointer by len(FS_FILENAME) + 4
+; (null terminator + handle + 2-byte line number)
   TYA
+  CLC
+  ADC# $04
   STAZ FS_TEMP
-  CLC    ; -1
+  SEC
   LDAZ FS_PL
   SBCZ FS_TEMP
   STAZ FS_PL
@@ -60,16 +71,8 @@ pfs_copy_loop
   LDA,Y FS_FILENAME
   STAZ(),Y FS_PL
   BNE pfs_copy_loop
-  ; Adjust pointer for line number and file handle
-  SEC
-  LDAZ FS_PL
-  SBC# $03
-  STAZ FS_PL
-  LDAZ FS_PH
-  SBC# $00
-  STAZ FS_PH
   ; Store file handle
-  LDY# $00
+  INY
   LDA FS_CURR_FILE
   STAZ(),Y FS_PL
   INY
@@ -103,19 +106,23 @@ pop_file_stack
 ; Close currnet file and restore from filestack
   LDAZ FS_CURR_FILE
   JSR close
-  LDY# $00
+; Pop the filename
+  LDY# $FF
+rc_pop_loop
+  INY
+  LDAZ(),Y FS_PL
+  BNE rc_pop_loop
+; Pop the file handle
+  INY
   LDAZ(),Y FS_PL
   STAZ FS_CURR_FILE
+; Pop the line number
   INY
   LDAZ(),Y FS_PL
   STAZ FS_CURR_LINEL
   INY
   LDAZ(),Y FS_PL
   STAZ FS_CURR_LINEH
-rc_pop_loop
-  INY
-  LDAZ(),Y FS_PL
-  BNE rc_pop_loop
 ; Adjust stack pointer
   TYA
   SEC  ; +1
