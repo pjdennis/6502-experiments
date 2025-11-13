@@ -8,12 +8,12 @@
   .zeropage
 
 HASH      DATA $00     ; 1 byte hash value
-HTLPL     DATA $00     ; 2 byte pointer to hash table
-HTLPH     DATA $00     ; "
+HTPL      DATA $00     ; 2 byte pointer to hash table
+HTPH      DATA $00     ; "
 TABPL     DATA $00     ; 2 byte table pointer
 TABPH     DATA $00     ; "
-HTPL      DATA $00     ; 2 byte temporary pointer
-HTPH      DATA $00     ; "
+HTTPL     DATA $00     ; 2 byte temporary pointer
+HTTPH     DATA $00     ; "
 
   .code
 
@@ -31,7 +31,7 @@ scramble_table
 
 
 ; Initialize a hash table
-; On entry HTLPL;HTLPH point to the hash table
+; On entry HTPL;HTPH point to the hash table
 ; On exit hash entries are initialized to 0 (empty table)
 ;         X is preserved
 ;         A, Y are not preserved
@@ -39,7 +39,7 @@ init_hash_table
   LDY# $00
   TYA                  ; A <- 0
 iht_loop
-  STAZ(),Y HTLPL
+  STAZ(),Y HTPL
   INY
   BNE iht_loop
   RTS
@@ -104,13 +104,13 @@ fih_not_found
 hash_entry_empty
   LDAZ HASH
   TAY
-  LDAZ(),Y HTLPL
+  LDAZ(),Y HTPL
   BNE hee_done
   CLC
   LDAZ HASH
   ADC# $80
   TAY
-  LDAZ(),Y HTLPL
+  LDAZ(),Y HTPL
 hee_done
   RTS
 
@@ -123,13 +123,13 @@ hee_done
 load_hash_entry
   LDAZ HASH
   TAY
-  LDAZ(),Y HTLPL
+  LDAZ(),Y HTPL
   STAZ TABPL
   CLC
   LDAZ HASH
   ADC# $80
   TAY
-  LDAZ(),Y HTLPL
+  LDAZ(),Y HTPL
   STAZ TABPH
   RTS
 
@@ -143,13 +143,13 @@ store_hash_entry
   LDAZ HASH
   TAY
   LDAZ MEMPL
-  STAZ(),Y HTLPL
+  STAZ(),Y HTPL
   CLC
   LDAZ HASH
   ADC# $80
   TAY
   LDAZ MEMPH
-  STAZ(),Y HTLPL
+  STAZ(),Y HTPL
   RTS
 
 
@@ -200,9 +200,9 @@ find_token
 ft_token_loop
   ; Store the current pointer
   LDAZ TABPL
-  STAZ HTPL
+  STAZ HTTPL
   LDAZ TABPH
-  STAZ HTPH
+  STAZ HTTPH
   ; Advance past 'next' pointer
   CLC
   LDA# $02
@@ -221,24 +221,24 @@ ft_token_loop
 ft_token_is_non_match  ; Not a match - move to next
   ; Check if 'next' pointer is 0
   LDY# $00
-  LDAZ(),Y HTPL
+  LDAZ(),Y HTTPL
   BNE ft_not_at_end
   INY
-  LDAZ(),Y HTPL
+  LDAZ(),Y HTTPL
   BEQ ft_at_end
 ft_not_at_end
   LDY# $00
-  LDAZ(),Y HTPL
+  LDAZ(),Y HTTPL
   STAZ TABPL
   INY
-  LDAZ(),Y HTPL
+  LDAZ(),Y HTTPL
   STAZ TABPH
   JMP ft_token_loop
 ft_at_end
   ; point tabp,Y to the zero 'next' pointer
-  LDAZ HTPL
+  LDAZ HTTPL
   STAZ TABPL
-  LDAZ HTPH
+  LDAZ HTTPH
   STAZ TABPH
   LDY# $00
   SEC ; Carry set indicates not found

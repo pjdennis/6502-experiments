@@ -1,6 +1,6 @@
 ; Addresses
 TOKEN      = $1E00      ; Buffer for the current token being read
-IHASHTABL  = $1F00      ; Instruction hash table
+IHASHTAB   = $1F00      ; Instruction hash table
 *          = $2000      ; Code generates here
 
 
@@ -393,9 +393,9 @@ start
   JSR display_newline
 
 ; Show low address bytes
-  LDA# <msg_IHASHTABL
+  LDA# <msg_IHASHTAB
   STAZ PL
-  LDA# >msg_IHASHTABL
+  LDA# >msg_IHASHTAB
   STAZ PH
   JSR display_text
   JSR display_newline
@@ -442,8 +442,8 @@ msg_data
 msg_instprefix
   DATA "i_" $00
 
-msg_IHASHTABL
-  DATA "IHASHTABL" $00
+msg_IHASHTAB
+  DATA "IHASHTAB" $00
 
 msg_hash_table_comment
   DATA "; Instructions hash table" $00

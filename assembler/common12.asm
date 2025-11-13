@@ -30,8 +30,8 @@ advance_heap
 
 
 select_instruction_hash_table
-  LDA# <IHASHTABL
-  STAZ HTLPL
-  LDA# >IHASHTABL
-  STAZ HTLPH
+  LDA# <IHASHTAB
+  STAZ HTPL
+  LDA# >IHASHTAB
+  STAZ HTPH
   RTS
