@@ -8,10 +8,8 @@
   .zeropage
 
 HASH      DATA $00     ; 1 byte hash value
-HTLPL     DATA $00     ; 2 byte pointer to low byte hash table
+HTLPL     DATA $00     ; 2 byte pointer to hash table
 HTLPH     DATA $00     ; "
-HTHPL     DATA $00     ; 2 byte pointer to high byte hash table
-HTHPH     DATA $00     ; "
 TABPL     DATA $00     ; 2 byte table pointer
 TABPH     DATA $00     ; "
 HTPL      DATA $00     ; 2 byte temporary pointer
@@ -33,7 +31,7 @@ scramble_table
 
 
 ; Initialize a hash table
-; On entry HTLPL;HTLPH, HTHPL;HTHOH point to the hash table
+; On entry HTLPL;HTLPH point to the hash table
 ; On exit hash entries are initialized to 0 (empty table)
 ;         X is preserved
 ;         A, Y are not preserved
@@ -42,9 +40,7 @@ init_hash_table
   TYA                  ; A <- 0
 iht_loop
   STAZ(),Y HTLPL
-  STAZ(),Y HTHPL
   INY
-  CPY# $80
   BNE iht_loop
   RTS
 
@@ -110,7 +106,11 @@ hash_entry_empty
   TAY
   LDAZ(),Y HTLPL
   BNE hee_done
-  LDAZ(),Y HTHPL
+  CLC
+  LDAZ HASH
+  ADC# $80
+  TAY
+  LDAZ(),Y HTLPL
 hee_done
   RTS
 
@@ -125,7 +125,11 @@ load_hash_entry
   TAY
   LDAZ(),Y HTLPL
   STAZ TABPL
-  LDAZ(),Y HTHPL
+  CLC
+  LDAZ HASH
+  ADC# $80
+  TAY
+  LDAZ(),Y HTLPL
   STAZ TABPH
   RTS
 
@@ -140,8 +144,12 @@ store_hash_entry
   TAY
   LDAZ MEMPL
   STAZ(),Y HTLPL
+  CLC
+  LDAZ HASH
+  ADC# $80
+  TAY
   LDAZ MEMPH
-  STAZ(),Y HTHPL
+  STAZ(),Y HTLPL
   RTS
 
 

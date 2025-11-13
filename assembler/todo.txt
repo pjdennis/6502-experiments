@@ -1,0 +1,3 @@
+rename LHASHTABL to LHASHTAB (asm4b12.asm, instgen12.asm)
+rename HTLPL and HTLPH to HTPL and HTPH (rename existing temp ptr values also)
+

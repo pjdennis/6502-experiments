@@ -34,8 +34,4 @@ select_instruction_hash_table
   STAZ HTLPL
   LDA# >IHASHTABL
   STAZ HTLPH
-  LDA# <IHASHTABH
-  STAZ HTHPL
-  LDA# >IHASHTABH
-  STAZ HTHPH
   RTS

@@ -1,7 +1,6 @@
 ; Addresses
 TOKEN      = $1E00      ; Buffer for the current token being read
-IHASHTABL  = $1F00      ; Instruction hash table (low and high)
-IHASHTABH  = $1F80      ; "
+IHASHTABL  = $1F00      ; Instruction hash table
 *          = $2000      ; Code generates here
 
 
@@ -227,13 +226,7 @@ dt_not_empty
   STAZ PH
   JSR display_text
   ; Display hash entry
-  LDAZ HASH
-  TAY
-  ; Load pointer to hash entry
-  LDAZ(),Y HTLPL
-  STAZ TABPL
-  LDAZ(),Y HTHPL
-  STAZ TABPH
+  JSR load_hash_entry
   CLC
   LDAZ TABPL
   ADC# $02
@@ -306,12 +299,7 @@ dd_loop
   JMP dd_next
 dd_not_empty
   ; Load pointer to hash entry
-  LDAZ HASH
-  TAY
-  LDAZ(),Y HTLPL
-  STAZ TABPL
-  LDAZ(),Y HTHPL
-  STAZ TABPH
+  JSR load_hash_entry
 dd_entry_loop
   ; Display instruction label prefix
   LDA# <msg_instprefix
@@ -396,33 +384,53 @@ start
   JSR init_hash_table
   JSR populate_instruction_hash_table
 
-; Show the instruction hash table - high
+; Show the instructions hash table
+  LDA# <msg_hash_table_comment
+  STAZ PL
+  LDA# >msg_hash_table_comment
+  STAZ PH
+  JSR display_text
+  JSR display_newline
+
+; Show low address bytes
   LDA# <msg_IHASHTABL
   STAZ PL
   LDA# >msg_IHASHTABL
   STAZ PH
   JSR display_text
   JSR display_newline
+  LDA# <msg_low_bytes_comment
+  STAZ PL
+  LDA# >msg_low_bytes_comment
+  STAZ PH
+  JSR display_text
+  JSR display_newline
   LDA# "<"
   STAZ CHAR
   JSR display_table
-
   JSR display_newline
 
-; Show the instruction hash table - low
-  LDA# <msg_IHASHTABH
+; Show high address bytes
+  LDA# <msg_high_bytes_comment
   STAZ PL
-  LDA# >msg_IHASHTABH
+  LDA# >msg_high_bytes_comment
   STAZ PH
   JSR display_text
   JSR display_newline
   LDA# ">"
   STAZ CHAR
   JSR display_table
-
+  JSR display_newline
   JSR display_newline
 
+
 ; Show the heap data
+  LDA# <msg_heap_comment
+  STAZ PL
+  LDA# >msg_heap_comment
+  STAZ PH
+  JSR display_text
+  JSR display_newline
   JSR display_data
 
   BRK $00              ; Success
@@ -437,8 +445,17 @@ msg_instprefix
 msg_IHASHTABL
   DATA "IHASHTABL" $00
 
-msg_IHASHTABH
-  DATA "IHASHTABH" $00
+msg_hash_table_comment
+  DATA "; Instructions hash table" $00
+
+msg_low_bytes_comment
+  DATA "  ; Low address bytes" $00
+
+msg_high_bytes_comment
+  DATA "  ; High address bytes" $00
+
+msg_heap_comment
+  DATA "; Instructions heap data" $00
 
 
 HEAP                  ; Heap goes after the program code

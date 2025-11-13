@@ -1,8 +1,7 @@
 ; Addresses
 TOKEN2     = $1D00
 TOKEN      = $1E00      ; Buffer for the current token being read
-LHASHTABL  = $1F00      ; Label hash table (low and high)
-LHASHTABH  = $1F80      ; "
+LHASHTABL  = $1F00      ; Label hash table
 *          = $2000      ; Code generates here
 FILE_STACK = $F000      ; File stack will grow down from 1 below here
 
@@ -109,10 +108,6 @@ select_label_hash_table
   STAZ HTLPL
   LDA# >LHASHTABL
   STAZ HTLPH
-  LDA# <LHASHTABH
-  STAZ HTHPL
-  LDA# >LHASHTABH
-  STAZ HTHPH
   RTS
 
 
