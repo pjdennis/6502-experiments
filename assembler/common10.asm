@@ -1,4 +1,4 @@
-; Contains each byte $00-$FF exactly once in random order
+; Contains each byte $00-$7F exactly once in random order
 scramble_table
   DATA $01 $20 $33 $1B $1C $16 $29 $1F $3A $75 $62 $42 $68 $79 $00 $52
   DATA $32 $0B $22 $77 $72 $71 $10 $59 $06 $4D $17 $37 $40 $0C $66 $21
