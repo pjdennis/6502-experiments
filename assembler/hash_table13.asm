@@ -66,9 +66,7 @@ ch_loop
   INX
   JMP ch_loop
 ch_done
-  LDAZ HASH
-  ASLA
-  STAZ HASH
+  ASLZ HASH
   PLA
   TAX
   RTS
