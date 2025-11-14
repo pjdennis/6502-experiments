@@ -363,8 +363,7 @@ rt2_loop
 ;         A contains the next character
 ;         X is preserved
 ;         Y is not preserved
-; Raises 'Expected hex' error if value was not identified as hex (via '$')
-;        'Bad hex' error if non-hex characters were encountered
+; Raises 'Bad hex' error if non-hex characters were encountered
 read_value
   JSR skip_spaces
   CMP# "="
@@ -455,7 +454,6 @@ up_done
 ;         A, X, Y are not preserved
 ; Raises 'PC value expected' if no value provided when setting PC via '*'
 ;        'Duplicate label' error if label has already been encountered
-;        'Expected hex' error if assigned value was not identified as hex (via '$')
 ;        'Bad hex' error if non-hex characters were encountered
 capture_label
   JSR read_token
@@ -777,7 +775,9 @@ directive_code
 ; On entry PASS indicates the current pass:
 ;            bit 7 clear = pass 1
 ;            bit 7 set = pass 2
-; On exit A, X, Y are not preserved
+;          X contains the file handle of the output file
+; On exit X is preserved
+;         A, Y are not preserved
 assemble_code
   LDA# $00
   STAZ STARTED
