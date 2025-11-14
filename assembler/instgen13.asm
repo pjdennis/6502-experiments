@@ -389,6 +389,12 @@ start
   STAZ PH
   JSR display_text
   JSR display_newline
+  LDA# <msg_IHASHTAB
+  STAZ PL
+  LDA# >msg_IHASHTAB
+  STAZ PH
+  JSR display_text
+  JSR display_newline
   JSR display_table
   JSR display_newline
 
