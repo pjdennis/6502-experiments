@@ -1,6 +1,9 @@
 #!/bin/bash
 
-make --quiet &&
+shopt -s extglob
+
+rm -f !(emulator|sidebyside).out &&
+  make --quiet &&
   ./emulator.out asm4v.out 2000 asm4b.asm asm4b.out &&
   ./emulator.out asm4b.out 2000 asm4b2.asm asm4b2.out &&
   ./emulator.out asm4b2.out 2000 asm4b3.asm asm4b3.out &&
