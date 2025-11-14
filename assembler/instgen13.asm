@@ -31,6 +31,7 @@ MNTAB
   DATA "ADCZ"     $00 $04 $65
   DATA "AND#"     $00 $04 $29
   DATA "ASLA"     $00 $00 $0A
+  DATA "ASLZ"     $00 $04 $06
   DATA "BCC"      $00 $02 $90
   DATA "BCS"      $00 $02 $B0
   DATA "BEQ"      $00 $02 $F0
