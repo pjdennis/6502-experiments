@@ -84,23 +84,32 @@ err_filename_expected
 err_usage
   BRK $0D "Usage <assebler> <input> <output>" $00
 
+err_no_file
+  BRK $0E "Attempt to read with no file open" $00
 
+
+; Read next character from file stack
+; On entry CURR_FILE contains the current file handle
+;          FILE_STACK is not empty
+; On exit A contains the character read
+;         C is set if at end of all file data
+;         CURR_FILE is potentially updated with a new file handle
 read_char
   LDAZ CURR_FILE
+  BEQ rc_no_file
   JSR read
-  BCS rc_at_end
+  BCS rc_at_end_file
   RTS
-rc_at_end
-  JSR file_stack_empty
-  BEQ rc_done
+rc_at_end_file
   JSR pop_file_stack
   LDAZ CURR_FILE
-  BEQ rc_set_carry
+  BEQ rc_at_end_all
   JMP read_char          ; Recursive tail call
-rc_set_carry
+rc_at_end_all
   SEC
-rc_done
   RTS
+rc_no_file
+  JMP err_no_file
 
 
 select_label_hash_table
@@ -113,7 +122,10 @@ select_label_hash_table
 
 ; Emit value (pass 2 only) and increment PC
 ; On entry A contains the byte to emit
+;          X contains the file handle to write to
 ; On exit A, X, Y are preserved
+; TODO: Consolidate the PASS and IN_ZEROPAGE flags so that emit can
+;       do a single check instead of two for suppression of output
 emit
   BITZ PASS
   BPL emit_incpc       ; Skip writing during pass 1
@@ -219,26 +231,24 @@ rt_done
 ; On exit HEX1 and HEX2 contains the MSB and LSB of the hash table value
 ;         A contains the next character following the token
 ;         X is preserved
-;       , Y is not preserved
+;         Y is not preserved
 ; Raises 'Label not found' error if label is not found in hash table
 read_and_find_existing_label
   JSR read_token
   PHA                  ; Save next char
   JSR select_label_hash_table
   JSR find_in_hash
-  BCC rafel_found
+  PLA                  ; Restore next char
+  BCC rafel_done       ; Label found
   BITZ PASS
   BMI rafel_pass2
-  LDA# $00
-  STAZ HEX1
-  STAZ HEX2
-  PLA                  ; Restore next char
+  LDY# $00
+  STYZ HEX1
+  STYZ HEX2
+rafel_done
   RTS
 rafel_pass2
   JMP err_label_not_found
-rafel_found
-  PLA                  ; Restore next char
-  RTS
 
 
 ; Convert hex character to associated value
@@ -384,12 +394,10 @@ rv_hex_value
   JSR read_hex_byte_or_word
   BCS rv_ok            ; 2 bytes were read
   ; 1 byte was read - shift into LSB position (HEX2)
-  TAY                  ; Save next char
-  LDAZ HEX1
-  STAZ HEX2
-  LDA# $00
-  STAZ HEX1
-  TYA                  ; Restore next char
+  LDYZ HEX1
+  STYZ HEX2
+  LDY# $00
+  STYZ HEX1
 rv_ok
   SEC
   RTS
