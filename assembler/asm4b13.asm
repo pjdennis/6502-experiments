@@ -226,7 +226,7 @@ rt_done
   RTS
 
 
-; Read a label, look up in the current hash table and return the associated value
+; Read a label, look up in the label hash table and return the associated value
 ; On entry A contains the first character of the label
 ; On exit HEX1 and HEX2 contains the MSB and LSB of the hash table value
 ;         A contains the next character following the token
@@ -534,7 +534,6 @@ emit_opcode
   JSR select_instruction_hash_table
   JSR find_in_hash
   BCC eo_found
-  PLA                  ; Restore next char
   JMP err_opcode_not_found
 eo_found
   LDAZ HEX2
