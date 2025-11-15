@@ -337,8 +337,8 @@ eh_one
 
 
 ; Save the current token
-; On exit X is preserved
-;         A, Y are not preserved
+; On exit A, X are preserved
+;         Y is not preserved
 save_token
   PHA
   LDY# $FF
@@ -352,8 +352,8 @@ st2_loop
 
 
 ; Restore the current token
-; On exit X is preserved
-;         A, Y are not preserved
+; On exit A, X are is preserved
+;         Y is not preserved
 restore_token
   PHA
   LDY# $FF
@@ -388,17 +388,18 @@ rv_value
   JSR save_token
   JSR read_and_find_existing_label
   JSR restore_token
-  JMP rv_ok
+  SEC
+  RTS
 rv_hex_value
   JSR read_char
   JSR read_hex_byte_or_word
-  BCS rv_ok            ; 2 bytes were read
+  BCS rv_done          ; 2 bytes were read
   ; 1 byte was read - shift into LSB position (HEX2)
   LDYZ HEX1
   STYZ HEX2
   LDY# $00
   STYZ HEX1
-rv_ok
+rv_done
   SEC
   RTS
 
@@ -409,6 +410,8 @@ rv_ok
 ; On exit
 ; Raises 'Cannot move PC backwards' error if attempting to move PC backwards
 update_pc
+  BITZ IN_ZEROPAGE
+  BMI up_no_fill
   BITZ STARTED
   BMI up_started
   DECZ STARTED
@@ -424,8 +427,6 @@ up_started
 up_notless
   BITZ PASS
   BPL up_no_fill       ; skip writing during pass 1
-  BITZ IN_ZEROPAGE
-  BMI up_no_fill
 up_loop
   LDAZ HEX1
   CMPZ PCH
