@@ -26,7 +26,6 @@ rm -f !(emulator|sidebyside).out &&
   ./emulator.out asm4b11.out 2000 /dev/null /dev/null instgen12.asm instgen12.out &&
   ./emulator.out instgen12.out 2000 /dev/null inst12.asm.out &&
   ./emulator.out asm4b11.out 2000 /dev/null /dev/null asm4b12.asm asm4b12.out &&
-  ./emulator.out asm4b12.out 2000 /dev/null /dev/null asm4b12.asm asm4b12_2.out &&
   ./emulator.out asm4b12.out 2000 /dev/null /dev/null instgen13.asm instgen13.out &&
   ./emulator.out instgen13.out 2000 /dev/null inst13.asm.out &&
   ./emulator.out asm4b12.out 2000 /dev/null /dev/null asm4b13.asm asm4b13.out &&
