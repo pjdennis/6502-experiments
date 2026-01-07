@@ -128,6 +128,7 @@ piht_token_loop_done
   STAZ P2H
   ; Store entry
   JSR hash_add
+  JSR store_hash_value
   JMP piht_entry_loop
 piht_done
   RTS

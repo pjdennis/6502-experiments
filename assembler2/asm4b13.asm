@@ -502,16 +502,18 @@ cl_pass_1
   STAZ HEX1
   JSR select_label_hash_table
   JSR hash_add
-  PLA                       ; Restore next char
   BCS cl_duplicate_label
+  JSR store_hash_value
+  PLA                       ; Restore next char
 cl_skip_spaces_and_return_processed_flag
   JSR skip_spaces
   JMP check_for_end_of_line ; Tail call - returns with C set if at end of line
 cl_hex_to_table
   JSR select_label_hash_table
   JSR hash_add
-  PLA                       ; Restore next char
   BCS cl_duplicate_label
+  JSR store_hash_value
+  PLA                       ; Restore next char
 cl_skip_and_return_processed
   JSR skip_rest_of_line
   SEC                       ; Indicate line is fully processed
