@@ -30,7 +30,7 @@ PC_SAVEH    DATA $00 ; "
 
 
 ; Include files
-  .include inst13.asm.out   ; This goes first since the tables should start on a page boundary
+  .include inst14.asm.out   ; This goes first since the tables should start on a page boundary
   .include environment.asm
   .include common14.asm
 FS_FILENAME   = TOKEN
