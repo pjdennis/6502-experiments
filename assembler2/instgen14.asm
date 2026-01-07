@@ -416,7 +416,7 @@ msg_data
   DATA "DATA" $00
 
 msg_instprefix
-  DATA "i_" $00
+  DATA "." $00
 
 msg_IHASHTAB
   DATA "IHASHTAB" $00
