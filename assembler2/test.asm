@@ -115,6 +115,27 @@ arg_loop_done
   LDA# "\n"
   JSR write_d
 
+; Test local labels - two globals with same local label names
+test_local_1
+.value = $11               ; test_local_1.value = $11 (17 decimal)
+  LDA# <.value
+  STAZ TO_DECIMAL_VALUE_L
+  LDA# >.value
+  STAZ TO_DECIMAL_VALUE_H
+  JSR show_decimal
+  LDA# "\n"
+  JSR write_d
+
+test_local_2
+.value = $22               ; test_local_2.value = $22 (34 decimal)
+  LDA# <.value
+  STAZ TO_DECIMAL_VALUE_L
+  LDA# >.value
+  STAZ TO_DECIMAL_VALUE_H
+  JSR show_decimal
+  LDA# "\n"
+  JSR write_d
+
   BRK $00
 
 output_filename          DATA "test_output.out" $00

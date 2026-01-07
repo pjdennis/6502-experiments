@@ -32,13 +32,13 @@ PC_SAVEH    DATA $00 ; "
 ; Include files
   .include inst13.asm.out   ; This goes first since the tables should start on a page boundary
   .include environment.asm
-  .include common13.asm
+  .include common14.asm
 FS_FILENAME   = TOKEN
 FS_CURR_FILE  = CURR_FILE
 FS_CURR_LINEL = CURLINEL
 FS_CURR_LINEH = CURLINEH
-  .include file_stack.asm
-  .include to_decimal.asm
+  .include file_stack14.asm
+  .include to_decimal14.asm
 
 
 ; Constants
@@ -99,19 +99,19 @@ err_no_global_for_local
 ;         CURR_FILE is potentially updated with a new file handle
 read_char
   LDAZ CURR_FILE
-  BEQ rc_no_file
+  BEQ .no_file
   JSR read
-  BCS rc_at_end_file
+  BCS .at_end_file
   RTS
-rc_at_end_file
+.at_end_file
   JSR pop_file_stack
   LDAZ CURR_FILE
-  BEQ rc_at_end_all
+  BEQ .at_end_all
   JMP read_char          ; Recursive tail call
-rc_at_end_all
+.at_end_all
   SEC
   RTS
-rc_no_file
+.no_file
   JMP err_no_file
 
 
@@ -131,15 +131,15 @@ select_label_hash_table
 ;       do a single check instead of two for suppression of output
 emit
   BITZ PASS
-  BPL emit_incpc       ; Skip writing during pass 1
+  BPL .incpc           ; Skip writing during pass 1
   BITZ IN_ZEROPAGE
-  BMI emit_incpc       ; Skip writing when in zero page section
+  BMI .incpc           ; Skip writing when in zero page section
   JSR write
-emit_incpc
+.incpc
   INCZ PCL
-  BNE emit_done
+  BNE .done
   INCZ PCH
-emit_done
+.done
   RTS
 
 
@@ -148,12 +148,12 @@ emit_done
 ; On exit A contains "\n"
 ;         X, Y are preserved
 skip_rest_of_line
-srol_loop
+.loop
   CMP# "\n"
-  BEQ srol_done
+  BEQ .done
   JSR read_char
-  JMP srol_loop
-srol_done
+  JMP .loop
+.done
   RTS
 
 
@@ -162,12 +162,12 @@ srol_done
 ; On exit A contains the next character following the last space
 ;         X, Y are preserved
 skip_spaces
-ss_loop
+.loop
   CMP# " "
-  BNE ss_done
+  BNE .done
   JSR read_char
-  JMP ss_loop
-ss_done
+  JMP .loop
+.done
   RTS
 
 
@@ -177,11 +177,11 @@ ss_done
 ;         A, X, Y are preserved
 compare_end_of_token
   CMP# " "
-  BEQ ceof_end
+  BEQ .end
   CMP# "\n"
-  BEQ ceof_end
+  BEQ .end
   CMP# ";"
-ceof_end
+.end
   RTS
 
 
@@ -192,15 +192,15 @@ ceof_end
 ;         X, Y are preserved
 check_for_end_of_line
   CMP# ";"
-  BEQ cfeol_end
+  BEQ .end
   CMP# "\n"
-  BEQ cfeol_done
+  BEQ .done
   ; Not at end
   CLC
   RTS
-cfeol_end
+.end
   JSR skip_rest_of_line
-cfeol_done
+.done
   SEC
   RTS
 
@@ -213,14 +213,14 @@ cfeol_done
 read_token
   STXZ TEMP
   LDX# $00
-rt_loop
+.loop
   JSR compare_end_of_token
-  BEQ rt_done
+  BEQ .done
   STA,X TOKEN
   INX
   JSR read_char
-  JMP rt_loop
-rt_done
+  JMP .loop
+.done
   TAY                  ; Save next char
   LDA# $00
   STA,X TOKEN
@@ -238,32 +238,32 @@ rt_done
 expand_local_label
   LDA TOKEN
   CMP# "."
-  BNE ell_not_local
+  BNE .not_local
   ; Check if CURR_GLOBAL is empty
   LDA CURR_GLOBAL
-  BNE ell_have_global
+  BNE .have_global
   JMP err_no_global_for_local
-ell_have_global
+.have_global
   TXA
   PHA                  ; Save X (file handle)
   ; Find length of CURR_GLOBAL (store in TEMP)
   LDY# $00
-ell_gloop
+.gloop
   LDA,Y CURR_GLOBAL
-  BEQ ell_have_glen
+  BEQ .have_glen
   INY
-  JMP ell_gloop
-ell_have_glen
+  JMP .gloop
+.have_glen
   ; Y = length of CURR_GLOBAL
   STYZ TEMP
   ; Find length of TOKEN including null
   LDY# $00
-ell_tloop
+.tloop
   LDA,Y TOKEN
-  BEQ ell_have_tlen
+  BEQ .have_tlen
   INY
-  JMP ell_tloop
-ell_have_tlen
+  JMP .tloop
+.have_tlen
   INY                  ; Include null terminator: Y = tLen
   ; Calculate starting indices for shift
   DEY                  ; Y = tLen - 1 (last source index)
@@ -272,27 +272,27 @@ ell_have_tlen
   ADCZ TEMP            ; A = tLen - 1 + gLen = last dest index
   TAX                  ; X = last dest index
   ; Shift TOKEN right by copying from end to start
-ell_shift
+.shift
   LDA,Y TOKEN
   STA,X TOKEN
   DEY
   DEX
   CPY# $FF
-  BNE ell_shift
+  BNE .shift
   ; Copy CURR_GLOBAL to start of TOKEN
   LDY# $00
-ell_copy_loop
+.copy_loop
   LDA,Y CURR_GLOBAL
-  BEQ ell_copy_done    ; Stop at null (don't copy null)
+  BEQ .copy_done       ; Stop at null (don't copy null)
   STA,Y TOKEN
   INY
-  JMP ell_copy_loop
-ell_copy_done
+  JMP .copy_loop
+.copy_done
   PLA
   TAX                  ; Restore X (file handle)
   SEC                  ; C=1 means was local
   RTS
-ell_not_local
+.not_local
   CLC                  ; C=0 means was global
   RTS
 
@@ -305,13 +305,13 @@ ell_not_local
 ;         X is preserved
 update_global_label
   LDY# $00
-ugl_loop
+.loop
   LDA,Y TOKEN
   STA,Y CURR_GLOBAL
-  BEQ ugl_done         ; Stop after copying null
+  BEQ .done            ; Stop after copying null
   INY
-  JMP ugl_loop
-ugl_done
+  JMP .loop
+.done
   RTS
 
 
@@ -329,15 +329,15 @@ read_and_find_existing_label
   JSR select_label_hash_table
   JSR find_in_hash
   PLA                  ; Restore next char
-  BCC rafel_done       ; Label found
+  BCC .done            ; Label found
   BITZ PASS
-  BMI rafel_pass2
+  BMI .pass2
   LDY# $00
   STYZ HEX1
   STYZ HEX2
-rafel_done
+.done
   RTS
-rafel_pass2
+.pass2
   JMP err_label_not_found
 
 
@@ -348,22 +348,22 @@ rafel_pass2
 ; Raises 'Invalid hex' error if input is not a valid hex character
 convert_hex_character
   CMP# "A"
-  BCC chc_numeric      ; < 'A'
+  BCC .numeric         ; < 'A'
   SBC# "A"             ; Carry already set
   CMP# $06
-  BCC chc_ok1
+  BCC .alpha_ok
   JMP err_invalid_hex
-chc_ok1
+.alpha_ok
   CLC
   ADC# $0A             ; ADC# 10
   RTS
-chc_numeric
+.numeric
   SEC
   SBC# "0"
   CMP# $0A
-  BCC chc_ok2
+  BCC .numeric_ok
   JMP err_invalid_hex
-chc_ok2
+.numeric_ok
   RTS
 
 
@@ -397,10 +397,10 @@ read_hex_byte_or_word
   STAZ HEX1
   JSR read_char        ; Read 3rd hex char or terminator
   JSR compare_end_of_token
-  BNE rhbow_second
+  BNE .second
   CLC                  ; No second byte so return C = 0
   RTS
-rhbow_second
+.second
   JSR read_hex_byte    ; Read 4th hex char and convert
   STAZ HEX2
   JSR read_char        ; Read next char
@@ -416,10 +416,10 @@ rhbow_second
 emit_hex
   JSR read_hex_byte_or_word ; Returns C = 1 if 2 bytes read
   TAY                       ; Save next char
-  BCC eh_one
+  BCC .one
   LDAZ HEX2
   JSR emit
-eh_one
+.one
   LDAZ HEX1
   JSR emit
   TYA                       ; Restore next char
@@ -437,27 +437,27 @@ eh_one
 read_value
   JSR skip_spaces
   CMP# "="
-  BEQ rv_value
+  BEQ .value
   CLC                  ; Did not find value so return C = 0
   RTS
-rv_value
+.value
   JSR read_char        ; Read the character after the "="
   JSR skip_spaces
   CMP# "$"
-  BEQ rv_hex_value
+  BEQ .hex_value
   JSR read_and_find_existing_label
   SEC
   RTS
-rv_hex_value
+.hex_value
   JSR read_char
   JSR read_hex_byte_or_word
-  BCS rv_done          ; 2 bytes were read
+  BCS .done            ; 2 bytes were read
   ; 1 byte was read - shift into LSB position (HEX2)
   LDYZ HEX1
   STYZ HEX2
   LDY# $00
   STYZ HEX1
-rv_done
+.done
   SEC
   RTS
 
@@ -469,46 +469,46 @@ rv_done
 ; Raises 'Cannot move PC backwards' error if attempting to move PC backwards
 update_pc
   BITZ IN_ZEROPAGE
-  BMI up_no_fill
+  BMI .no_fill
   BITZ STARTED
-  BMI up_started
+  BMI .started
   DECZ STARTED
-  JMP up_no_fill
-up_started
+  JMP .no_fill
+.started
   LDAZ HEX1            ; High byte
   CMPZ PCH
-  BCC up_less
-  BNE up_notless
+  BCC .less
+  BNE .notless
   LDAZ HEX2            ; Low byte
   CMPZ PCL
-  BCC up_less
-up_notless
+  BCC .less
+.notless
   BITZ PASS
-  BPL up_no_fill       ; skip writing during pass 1
-up_loop
+  BPL .no_fill         ; skip writing during pass 1
+.loop
   LDAZ HEX1
   CMPZ PCH
-  BNE up_loop_not_done
+  BNE .loop_not_done
   LDAZ HEX2
   CMPZ PCL
-  BEQ up_loop_done
-up_loop_not_done
+  BEQ .loop_done
+.loop_not_done
   LDA# $00
   JSR write
   INCZ PCL
-  BNE up_loop
+  BNE .loop
   INCZ PCH
-  JMP up_loop
-up_loop_done
+  JMP .loop
+.loop_done
   RTS
-up_less
+.less
   JMP err_cannot_move_pc_backwards
-up_no_fill
+.no_fill
   LDAZ HEX2
   STAZ PCL
   LDAZ HEX1
   STAZ PCH
-up_done
+.done
   RTS
 
 
@@ -527,34 +527,34 @@ capture_label
   TAY                       ; Save next char
   LDA TOKEN
   CMP# "*"
-  BNE cl_normal_label
+  BNE .normal_label
   ; Set PC
   TYA                       ; Restore next char
   JSR read_value
-  BCS cl_pc_value_read
+  BCS .pc_value_read
   JMP err_pc_value_expected
-cl_pc_value_read
+.pc_value_read
   JSR skip_rest_of_line
   ; No need to retain next char as caller
   ; goes straight to next line
   JSR update_pc
   SEC                       ; Indicate line is fully processed
   RTS
-cl_normal_label
+.normal_label
   BITZ PASS
-  BPL cl_pass_1
+  BPL .pass_1
   ; Pass 2 - don't capture label, but must track globals for local label scoping
   TYA
   PHA                       ; Save next char
   ; Check if this is a local label
   LDA TOKEN
   CMP# "."
-  BNE cl_not_local_2
+  BNE .not_local_2
   LDA# $FF                  ; Was local
-  BNE cl_save_local_2       ; Always branches
-cl_not_local_2
+  BNE .save_local_2         ; Always branches
+.not_local_2
   LDA# $00                  ; Was not local
-cl_save_local_2
+.save_local_2
   PHA                       ; Save local flag
   ; Expand local label if needed (for proper error checking)
   JSR expand_local_label
@@ -564,43 +564,43 @@ cl_save_local_2
   ; Now continue with value reading
   PLA                       ; Restore next char
   JSR read_value
-  BCS cl_has_equals_2       ; If = found, branch
+  BCS .has_equals_2         ; If = found, branch
   ; No = found - update global label if this was not a local label
   PHA                       ; Save next char
   LDAZ TEMP
-  BNE cl_was_local_2        ; If local flag != 0, skip update
+  BNE .was_local_2          ; If local flag != 0, skip update
   JSR update_global_label
-cl_was_local_2
+.was_local_2
   PLA                       ; Restore next char
-  JMP cl_skip_spaces_and_return_processed_flag
-cl_has_equals_2
-  JMP cl_skip_and_return_processed
-cl_pass_1
+  JMP .skip_spaces_and_return_processed_flag
+.has_equals_2
+  JMP .skip_and_return_processed
+.pass_1
   TYA
   PHA                       ; Save next char
   ; Check if this is a local label and save result
   LDA TOKEN
   CMP# "."
-  BNE cl_not_local_1
+  BNE .not_local_1
   LDA# $FF                  ; Was local
-  BNE cl_save_local_flag    ; Always branches
-cl_not_local_1
+  BNE .save_local_flag      ; Always branches
+.not_local_1
   LDA# $00                  ; Was not local
-cl_save_local_flag
+.save_local_flag
   PHA                       ; Save local flag
   ; Expand local label if needed
   JSR expand_local_label
   ; Add key to hash table first (before read_value may overwrite TOKEN)
   JSR select_label_hash_table
   JSR hash_add
-  BCS cl_duplicate_label
+  BCS .duplicate_label
   ; Pop local flag, save in TEMP for later
   PLA
   STAZ TEMP
   ; Now read the value (TOKEN can be overwritten)
   PLA                       ; Restore next char
   JSR read_value
-  BCS cl_has_equals         ; If = found, branch
+  BCS .has_equals           ; If = found, branch
   ; No = found, use program counter
   PHA                       ; Save next char (before A is overwritten)
   LDAZ PCL
@@ -610,27 +610,27 @@ cl_save_local_flag
   JSR store_hash_value
   ; Update global label if this was not a local label
   LDAZ TEMP
-  BNE cl_was_local_1        ; If local flag != 0, skip update
+  BNE .was_local_1          ; If local flag != 0, skip update
   JSR update_global_label
-cl_was_local_1
+.was_local_1
   PLA                       ; Restore next char
-  JMP cl_skip_spaces_and_return_processed_flag
-cl_has_equals
+  JMP .skip_spaces_and_return_processed_flag
+.has_equals
   PHA                       ; Save next char
   JSR store_hash_value
   PLA                       ; Restore next char
-  JMP cl_skip_and_return_processed
-cl_skip_spaces_and_return_processed_flag
+  JMP .skip_and_return_processed
+.skip_spaces_and_return_processed_flag
   JSR skip_spaces
   JMP check_for_end_of_line ; Tail call - returns with C set if at end of line
-cl_skip_and_return_processed
+.skip_and_return_processed
   JSR skip_rest_of_line
   SEC                       ; Indicate line is fully processed
   ; No need to retain next char as caller
   ; goes straight to next line
   RTS
 
-cl_duplicate_label
+.duplicate_label
   JMP err_duplicate_label
 
 
@@ -644,17 +644,17 @@ emit_opcode
   PHA                  ; Save next char
   JSR select_instruction_hash_table
   JSR find_in_hash
-  BCC eo_found
+  BCC .found
   JMP err_opcode_not_found
-eo_found
+.found
   LDAZ HEX2
   STAZ INST_FLAG
   AND# INST_PSUEDO
-  BNE eo_done          ; Not opcode (DATA command)
+  BNE .done            ; Not opcode (DATA command)
   ; Opcode
   LDAZ HEX1
   JSR emit
-eo_done
+.done
   PLA                  ; Restore next char
   RTS
 
@@ -665,27 +665,27 @@ eo_done
 ;         X, Y are preserved
 ; Raises 'Closing quote not found' error if closing quote not found on current line
 emit_quoted
-eq_loop
+.loop
   CMP# "\n"
-  BEQ eq_err_closing_quote
+  BEQ .err_closing_quote
   CMP# "\""
-  BEQ eq_done
+  BEQ .done
   CMP# "\\"
-  BNE eq_not_escaped
+  BNE .not_escaped
   JSR read_char
   CMP# "\n"
-  BEQ eq_err_closing_quote
+  BEQ .err_closing_quote
   CMP# "n"
-  BNE eq_not_escaped
+  BNE .not_escaped
   LDA# "\n"            ; Escaped "n" is linefeed
-eq_not_escaped
+.not_escaped
   JSR emit
   JSR read_char
-  JMP eq_loop
-eq_done
+  JMP .loop
+.done
   JSR read_char        ; Done; read next char
   RTS
-eq_err_closing_quote
+.err_closing_quote
   JMP err_closing_quote_not_found
 
 
@@ -716,11 +716,11 @@ emit_label_byte
   JSR read_and_find_existing_label
   TAY                  ; Save next char
   BITZ PASS
-  BPL elb_ok           ; Skip validation on pass 1
+  BPL .ok              ; Skip validation on pass 1
   LDAZ HEX1
-  BEQ elb_ok
+  BEQ .ok
   JMP err_value_out_of_range
-elb_ok
+.ok
   ; Emit low byte
   LDAZ HEX2
   JSR emit
@@ -768,7 +768,7 @@ emit_label_relative
   JSR read_and_find_existing_label
   TAY                  ; Save next char
   BITZ PASS
-  BPL elr_ok           ; Skip calculations and validations on pass 1
+  BPL .ok              ; Skip calculations and validations on pass 1
 
   ; Calculate target - PC - 1
   CLC ; for the - 1
@@ -779,22 +779,22 @@ emit_label_relative
   SBCZ PCH
 
   CMP# $00
-  BEQ elr_forward
+  BEQ .forward
   CMP# $FF
-  BEQ elr_backward
+  BEQ .backward
   JMP err_branch_out_of_range
 
-elr_forward
+.forward
   LDAZ HEX2
-  BPL elr_ok
+  BPL .ok
   JMP err_branch_out_of_range
 
-elr_backward
+.backward
   LDAZ HEX2
-  BMI elr_ok
+  BMI .ok
   JMP err_branch_out_of_range
 
-elr_ok
+.ok
   JSR emit
   TYA                  ; Restore next char
   RTS
@@ -830,52 +830,52 @@ process_directive
   LDA# >directive_include
   STAZ TABPH
   JSR compare_token
-  BEQ pd_include
+  BEQ .include
   ; Check for 'zeropage'
   LDA# <directive_zeropage
   STAZ TABPL
   LDA# >directive_zeropage
   STAZ TABPH
   JSR compare_token
-  BEQ pd_zeropage
+  BEQ .zeropage
   ; Check for 'code'
   LDA# <directive_code
   STAZ TABPL
   LDA# >directive_code
   STAZ TABPH
   JSR compare_token
-  BEQ pd_code
+  BEQ .code
   ; Directive not recognized
   PLA                  ; Restore next char
   JMP err_unknown_directive
-pd_include
+.include
   PLA                  ; Restore next char
   JSR skip_spaces
   JSR check_for_end_of_line
-  BCC pd_get_name
+  BCC .get_name
   JMP err_filename_expected
-pd_get_name
+.get_name
   JSR read_token
   JSR skip_rest_of_line
   JSR push_file_stack
   RTS
-pd_zeropage
+.zeropage
   BITZ IN_ZEROPAGE
-  BMI pd_in_zeropage
+  BMI .in_zeropage
   LDA# $FF
   STAZ IN_ZEROPAGE
   JSR swap_pc_with_save
-pd_in_zeropage
+.in_zeropage
   PLA                  ; Restore next char
   JSR skip_rest_of_line
   RTS
-pd_code
+.code
   BITZ IN_ZEROPAGE
-  BPL pd_in_code
+  BPL .in_code
   LDA# $00
   STAZ IN_ZEROPAGE
   JSR swap_pc_with_save
-pd_in_code
+.in_code
   PLA                  ; Restore next char
   JSR skip_rest_of_line
   RTS
@@ -908,88 +908,88 @@ assemble_code
   STAZ CURLINEL
   STAZ CURLINEH
   STA CURR_GLOBAL      ; Clear current global label for local label scoping
-ac_line_loop
+.line_loop
   JSR read_char
-  BCC ac_character_read
+  BCC .character_read
   RTS                  ; At end of input
-ac_character_read
+.character_read
   INCZ CURLINEL
-  BNE ac_line_incremented
+  BNE .line_incremented
   INCZ CURLINEH
-ac_line_incremented
+.line_incremented
   JSR check_for_end_of_line
-  BCS ac_line_loop
+  BCS .line_loop
   CMP# " "
-  BEQ ac_line_starts_with_space
+  BEQ .line_starts_with_space
   JSR capture_label
-  BCC ac_check_for_opcode
-  JMP ac_line_loop
-ac_line_starts_with_space
+  BCC .check_for_opcode
+  JMP .line_loop
+.line_starts_with_space
   JSR skip_spaces
   JSR check_for_end_of_line
-  BCS ac_line_loop
-ac_check_for_opcode
+  BCS .line_loop
+.check_for_opcode
   CMP# "."
-  BNE ac_opcode
+  BNE .opcode
 ; Directive
   JSR read_char
   JSR process_directive
-  JMP ac_line_loop
-ac_opcode
+  JMP .line_loop
+.opcode
   ; Read mnemonic and emit opcode
   JSR emit_opcode
-  JMP ac_parameters_loop_entry
-ac_parameters_loop
+  JMP .parameters_loop_entry
+.parameters_loop
   TAY                  ; Save next char
   LDA# $00
   STAZ INST_FLAG       ; Reset instruction flags after first iteration
   TYA                  ; Restore next char
-ac_parameters_loop_entry
+.parameters_loop_entry
   JSR skip_spaces
   JSR check_for_end_of_line
-  BCS ac_line_loop     ; End of line
+  BCS .line_loop       ; End of line
   CMP# "\""            ; Quoted string
-  BNE ac_check_for_hex
+  BNE .check_for_hex
   JSR read_char
   JSR emit_quoted
-  JMP ac_parameters_loop
-ac_check_for_hex
+  JMP .parameters_loop
+.check_for_hex
   CMP# "$"             ; 1 or 2 byte hex
-  BNE ac_check_for_lsb
+  BNE .check_for_lsb
   JSR read_char
   JSR emit_hex
-  JMP ac_parameters_loop
-ac_check_for_lsb
+  JMP .parameters_loop
+.check_for_lsb
   CMP# "<"             ; LSB of variable
-  BNE ac_check_for_msb
+  BNE .check_for_msb
   JSR read_char
   JSR emit_label_lsb
-  JMP ac_parameters_loop
-ac_check_for_msb
+  JMP .parameters_loop
+.check_for_msb
   CMP# ">"             ; MSB of variable
-  BNE ac_check_for_relative
+  BNE .check_for_relative
   JSR read_char
   JSR emit_label_msb
-  JMP ac_parameters_loop
-ac_check_for_relative
+  JMP .parameters_loop
+.check_for_relative
   TAY                  ; Save next char
   LDAZ INST_FLAG
   AND# INST_RELATIVE
-  BEQ ac_check_for_byte
+  BEQ .check_for_byte
   TYA                  ; Restore next char
   JSR emit_label_relative
-  JMP ac_parameters_loop
-ac_check_for_byte
+  JMP .parameters_loop
+.check_for_byte
   LDAZ INST_FLAG
   AND# INST_BYTE
-  BEQ ac_label
+  BEQ .label
   TYA                  ; Restore next char
   JSR emit_label_byte
-  JMP ac_parameters_loop
-ac_label
+  JMP .parameters_loop
+.label
   TYA                  ; Restore next char
   JSR emit_label       ; 2 byte variable
-  JMP ac_parameters_loop
+  JMP .parameters_loop
 
 
 ; Opens the file with name from the first command line argument, pushing
@@ -1005,11 +1005,11 @@ open_input
   PLA
   TAX
   LDY# $FF
-oi_loop
+.loop
   INY
   LDAZ(),Y TABPL
   STA,Y TOKEN
-  BNE oi_loop
+  BNE .loop
   JMP push_file_stack ; tail call
 
 
@@ -1017,9 +1017,9 @@ oi_loop
 start
   JSR argc
   CMP# $02
-  BEQ s_args_ok
+  BEQ .args_ok
   JMP err_usage
-s_args_ok
+.args_ok
   JSR init_heap
   JSR select_label_hash_table
   JSR init_hash_table
@@ -1064,7 +1064,7 @@ interrupt
 ; Retrieve error code and skip diagnostics if no error
   LDY# $00
   LDAZ(),Y TABPL
-  BEQ i_done
+  BEQ .done
 ; Save error code
   STAZ TEMP
 ; Print the "Error " message
@@ -1081,7 +1081,7 @@ interrupt
   JSR show_decimal
 ; Print the current file if any
   JSR file_stack_empty
-  BEQ i_file_done
+  BEQ .file_done
 ; Print the " in file " message
   LDA# <msg_error_file
   STAZ TABPL
@@ -1094,7 +1094,7 @@ interrupt
   LDAZ FS_PH
   STAZ TABPH
   JSR show_message
-i_file_done
+.file_done
 ; Print the " at line " messaage
   LDA# <msg_error_line
   STAZ TABPL
@@ -1124,7 +1124,7 @@ i_file_done
   JSR write_d
 ; Load the error code so that it is returned
   LDAZ TEMP
-i_done
+.done
   JMP exit
 
 msg_error
@@ -1141,13 +1141,13 @@ msg_error_file
 ;         A, Y are not preserved
 show_message
   LDY# $00
-sm_loop
+.loop
   LDAZ(),Y TABPL
-  BEQ sm_done
+  BEQ .done
   JSR write_d
   INY
-  JMP sm_loop
-sm_done
+  JMP .loop
+.done
   RTS
 
 
