@@ -36,8 +36,8 @@ External vasm assembles `asm4v.asm` → `asm4v.out`, which then assembles progre
 ### Memory Layout (asm4b13)
 
 - `$0000-$00FF`: Zero page variables (see `.zeropage` section)
-- `$1E00`: TOKEN buffer (current token being read)
-- `$1F00`: Label hash table
+- `$1D00`: TOKEN buffer (current token being read)
+- `$1E00`: Label hash table
 - `$2000+`: Generated code
 - `$F000`: File stack (grows downward)
 
