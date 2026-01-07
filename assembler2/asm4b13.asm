@@ -24,8 +24,6 @@ CURLINEH    DATA $00 ; Current line (H)
 IN_ZEROPAGE DATA $00 ; Flag indicating if in zero page section
 PC_SAVEL    DATA $00 ; Save location for PC when switching sections
 PC_SAVEH    DATA $00 ; "
-MEM_SAVEL   DATA $00 ; Save location for heap pointer during label capture
-MEM_SAVEH   DATA $00 ; "
 
   .code
 
@@ -466,11 +464,6 @@ cl_pass_1
   JSR select_label_hash_table
   JSR hash_add
   BCS cl_duplicate_label
-  ; Save heap pointer (points to where value should be stored)
-  LDAZ MEMPL
-  STAZ MEM_SAVEL
-  LDAZ MEMPH
-  STAZ MEM_SAVEH
   ; Now read the value (TOKEN can be overwritten)
   PLA                       ; Restore next char
   JSR read_value
@@ -481,21 +474,14 @@ cl_pass_1
   STAZ HEX2
   LDAZ PCH
   STAZ HEX1
-  JSR cl_store_value
+  JSR store_hash_value
   PLA                       ; Restore next char
   JMP cl_skip_spaces_and_return_processed_flag
 cl_has_equals
   PHA                       ; Save next char
-  JSR cl_store_value
+  JSR store_hash_value
   PLA                       ; Restore next char
   JMP cl_skip_and_return_processed
-cl_store_value
-  ; Restore heap pointer and store value
-  LDAZ MEM_SAVEL
-  STAZ MEMPL
-  LDAZ MEM_SAVEH
-  STAZ MEMPH
-  JMP store_hash_value      ; Tail call
 cl_skip_spaces_and_return_processed_flag
   JSR skip_spaces
   JMP check_for_end_of_line ; Tail call - returns with C set if at end of line
