@@ -1,6 +1,6 @@
 ; Addresses
-TOKEN      = $1E00      ; Buffer for the current token being read
-LHASHTAB   = $1F00      ; Label hash table
+TOKEN      = $1D00      ; Buffer for the current token being read
+LHASHTAB   = $1E00      ; Label hash table
 *          = $2000      ; Code generates here
 FILE_STACK = $F000      ; File stack will grow down from 1 below here
 
