@@ -603,21 +603,25 @@ capture_label
   JSR select_label_hash_table
   JSR hash_add
   BCS .duplicate_label
-  ; Pop saved MEMPL and compute token address (saved_MEMPL + 2)
+  ; Pop saved MEMPL to temporaries
   PLA                       ; MEMPH
-  STAZ CURR_GLOBAL_HEAP_H   ; Store high byte (will add carry if needed)
+  STAZ HTTPH
   PLA                       ; MEMPL
-  CLC
-  ADC# $02                  ; Token starts 2 bytes after entry start (past next pointer)
-  STAZ CURR_GLOBAL_HEAP_L
-  LDA# $00
-  ADCZ CURR_GLOBAL_HEAP_H
-  STAZ CURR_GLOBAL_HEAP_H
-  ; Note: For local labels, we computed this but won't use it (existing CURR_GLOBAL_HEAP
-  ; was already used by store_token). For global labels, this is the new value.
-  ; Pop local flag, save in TEMP for later
+  STAZ HTTPL
+  ; Pop local flag
   PLA
   STAZ TEMP
+  ; Only update CURR_GLOBAL_HEAP for global labels (local labels reuse existing pointer)
+  BNE .skip_heap_update     ; If local flag != 0, skip
+  ; Compute token address (saved_MEMPL + 2) for global labels
+  CLC
+  LDAZ HTTPL
+  ADC# $02                  ; Token starts 2 bytes after entry start (past next pointer)
+  STAZ CURR_GLOBAL_HEAP_L
+  LDAZ HTTPH
+  ADC# $00
+  STAZ CURR_GLOBAL_HEAP_H
+.skip_heap_update
   ; Now read the value (TOKEN can be overwritten)
   PLA                       ; Restore next char
   JSR read_value

@@ -170,19 +170,98 @@ store_table_entry
 ;          TABPL;TABPH points to the value to compare with
 ; On exit Z set if equal, unset otherwise
 ;         Y points to terminating 0 if equal
-;         X is preserved
+;         X is preserved (saved/restored - X is globally the file handle)
 ;         A is not preserved
+; Handles both normal strings and $01 escape format:
+;   $01 <addr_lo> <addr_hi> <rest_of_string>
+; where addr points to a prefix string to prepend
 compare_token
-  LDY# $FF
+  ; Save X (file handle) and HTTPL/HTTPH (used by find_token after we return)
+  TXA
+  PHA
+  LDAZ HTTPL
+  PHA
+  LDAZ HTTPH
+  PHA
+  ; Copy TABPL to working pointer HTTPL (we advance HTTPL, leave TABPL unchanged)
+  LDAZ TABPL
+  STAZ HTTPL
+  LDAZ TABPH
+  STAZ HTTPH
+  ; X = HT_KEY index
+  LDX# $00
 .loop
-  INY
-  LDAZ(),Y TABPL
-  CMP,Y HT_KEY
-  BNE .done
+  LDY# $00
+  LDAZ(),Y HTTPL        ; Get byte from stored token
+  CMP# $01
+  BEQ .handle_escape
+  ; Normal compare
+  CMP,X HT_KEY          ; Compare with HT_KEY[X]
+  BNE .done_nomatch
   CMP# $00
+  BEQ .done_match
+  ; Advance both pointers
+  INX                   ; HT_KEY index++
+  INCZ HTTPL            ; Stored pointer++
   BNE .loop
-  ; Match
-.done
+  INCZ HTTPH
+  JMP .loop
+
+.handle_escape
+  ; Read reference address from HTTPL[1,2]
+  INY
+  LDAZ(),Y HTTPL
+  STAZ CT_REFPL
+  INY
+  LDAZ(),Y HTTPL
+  STAZ CT_REFPH
+  ; Advance HTTPL past escape header (3 bytes: $01 + 2 addr bytes)
+  CLC
+  LDAZ HTTPL
+  ADC# $03
+  STAZ HTTPL
+  LDAZ HTTPH
+  ADC# $00
+  STAZ HTTPH
+  ; Compare reference string with HT_KEY
+  LDY# $00
+.ref_loop
+  LDAZ(),Y CT_REFPL     ; Get byte from reference
+  BEQ .ref_done         ; Null = end of reference, continue with stored
+  CMP,X HT_KEY          ; Compare with HT_KEY[X]
+  BNE .done_nomatch
+  INX                   ; Advance HT_KEY index
+  INY                   ; Advance reference index
+  JMP .ref_loop
+
+.ref_done
+  JMP .loop             ; Continue comparing rest of stored token
+
+.done_match
+  ; Calculate Y = HTTPL - TABPL (offset to null terminator)
+  SEC
+  LDAZ HTTPL
+  SBCZ TABPL
+  TAY
+  ; Restore HTTPL/HTTPH and X
+  PLA
+  STAZ HTTPH
+  PLA
+  STAZ HTTPL
+  PLA
+  TAX
+  LDA# $00              ; Set Z flag (match)
+  RTS
+
+.done_nomatch
+  ; Restore HTTPL/HTTPH and X
+  PLA
+  STAZ HTTPH
+  PLA
+  STAZ HTTPL
+  PLA
+  TAX
+  LDA# $01              ; Clear Z flag (no match)
   RTS
 
 
@@ -245,9 +324,11 @@ find_token
 ; Stores null next pointer and key on heap
 ; and advances heap pointer
 ; On entry HT_KEY contains key to store
+;          IS_LOCAL_LABEL: if non-zero, stores $01 escape format
+;          CURR_GLOBAL_HEAP_L/H: pointer to global label (for local labels)
 ; On exit MEMPL;MEMPH points to where value should be stored
 ;         Y = 0
-;         X is preserved
+;         X is preserved (saved/restored - X is globally the file handle)
 ;         A is not preserved
 store_token
   LDY# $00
@@ -258,7 +339,50 @@ store_token
   STAZ(),Y MEMPL
   INY
   JSR advance_heap
-  ; Store token name
+  ; Check if this is a local label
+  LDAZ IS_LOCAL_LABEL
+  BEQ .store_normal
+  ; Store $01 escape format: $01 <addr_lo> <addr_hi> <local_part>
+  ; Save X (file handle) since we need it to find '.'
+  TXA
+  PHA
+  LDY# $00
+  LDA# $01              ; Escape byte
+  STAZ(),Y MEMPL
+  INY
+  LDAZ CURR_GLOBAL_HEAP_L
+  STAZ(),Y MEMPL
+  INY
+  LDAZ CURR_GLOBAL_HEAP_H
+  STAZ(),Y MEMPL
+  INY
+  JSR advance_heap      ; Advance past escape header (3 bytes)
+  ; Find '.' in HT_KEY
+  LDX# $00
+.find_dot
+  LDA,X HT_KEY
+  CMP# "."
+  BEQ .found_dot
+  INX
+  BNE .find_dot
+.found_dot
+  ; Copy from '.' onwards (including null terminator)
+  LDY# $00
+.copy_local
+  LDA,X HT_KEY
+  STAZ(),Y MEMPL
+  BEQ .done_local
+  INY
+  INX
+  BNE .copy_local
+.done_local
+  INY
+  PLA
+  TAX                   ; Restore X (file handle)
+  JMP advance_heap      ; Tail call
+
+.store_normal
+  ; Store full token name (original format)
   LDY# $FF
 .loop
   INY
@@ -266,7 +390,7 @@ store_token
   STAZ(),Y MEMPL
   BNE .loop
   INY
-  JMP advance_heap     ; Tail call
+  JMP advance_heap      ; Tail call
 
 
 ; Add HT_KEY to hash table
