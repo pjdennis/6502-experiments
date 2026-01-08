@@ -43,6 +43,7 @@ MNTAB
   DATA "CLC"      $00 $00 $18
   DATA "CMPZ"     $00 $04 $C5
   DATA "CMP#"     $00 $04 $C9
+  DATA "CMP,X"    $00 $00 $DD
   DATA "CMP,Y"    $00 $00 $D9
   DATA "CPXZ"     $00 $04 $E4
   DATA "CPYZ"     $00 $04 $C4

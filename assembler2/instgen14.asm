@@ -15,6 +15,8 @@ PL        DATA $00     ; 2 byte pointer
 PH        DATA $00     ; "
 P2L       DATA $00     ; 2 byte pointer
 P2H       DATA $00     ; "
+CURR_GLOBAL_HEAP_L DATA $00 ; Required by hash_table14.asm (unused here)
+CURR_GLOBAL_HEAP_H DATA $00 ; "
 
 
   .code
@@ -43,6 +45,7 @@ MNTAB
   DATA "CLC"      $00 $00 $18
   DATA "CMPZ"     $00 $04 $C5
   DATA "CMP#"     $00 $04 $C9
+  DATA "CMP,X"    $00 $00 $DD
   DATA "CMP,Y"    $00 $00 $D9
   DATA "CPXZ"     $00 $04 $E4
   DATA "CPYZ"     $00 $04 $C4
@@ -379,6 +382,8 @@ display_data
 ; Entry point
 start
 ; Initialization
+  LDA# $00
+  STAZ IS_LOCAL_LABEL    ; Clear flag before using hash table
   JSR init_heap
   JSR select_instruction_hash_table
   JSR init_hash_table

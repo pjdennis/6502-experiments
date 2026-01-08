@@ -1,8 +1,9 @@
-; Requiresi:
+; Requires:
 ;   HT_KEY       - the address of the key used for hash table operations
 ;   HT_VL;HT_VH  - zero page locations containing value in hash table
 ;   MEMPL;MEMPH  - addres of heap to store table entries
 ;   advance_heap - function to advance the heap
+;   CURR_GLOBAL_HEAP_L;CURR_GLOBAL_HEAP_H - heap address of current global label (for local labels)
 
 
   .zeropage
@@ -14,6 +15,10 @@ TABPL     DATA $00     ; 2 byte table pointer
 TABPH     DATA $00     ; "
 HTTPL     DATA $00     ; 2 byte temporary pointer
 HTTPH     DATA $00     ; "
+IS_LOCAL_LABEL DATA $00 ; Flag: non-zero if storing local label
+CT_REFPL  DATA $00     ; compare_token: reference string pointer
+CT_REFPH  DATA $00     ; "
+CT_SAVE_Y DATA $00     ; compare_token: saved Y position
 
   .code
 
@@ -254,7 +259,7 @@ store_token
   INY
   JSR advance_heap
   ; Store token name
-  LDY# $FF             ; Alternative: DEY
+  LDY# $FF
 .loop
   INY
   LDA,Y HT_KEY

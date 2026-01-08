@@ -25,6 +25,8 @@ CURLINEH    DATA $00 ; Current line (H)
 IN_ZEROPAGE DATA $00 ; Flag indicating if in zero page section
 PC_SAVEL    DATA $00 ; Save location for PC when switching sections
 PC_SAVEH    DATA $00 ; "
+CURR_GLOBAL_HEAP_L DATA $00 ; Heap address of current global label string
+CURR_GLOBAL_HEAP_H DATA $00 ; "
 
   .code
 
@@ -583,17 +585,36 @@ capture_label
   CMP# "."
   BNE .not_local_1
   LDA# $FF                  ; Was local
+  STAZ IS_LOCAL_LABEL       ; Set flag for store_token
   BNE .save_local_flag      ; Always branches
 .not_local_1
   LDA# $00                  ; Was not local
+  STAZ IS_LOCAL_LABEL       ; Clear flag for store_token
 .save_local_flag
   PHA                       ; Save local flag
   ; Expand local label if needed
   JSR expand_local_label
+  ; Save MEMPL before hash_add (to calculate token address for global labels)
+  LDAZ MEMPL
+  PHA
+  LDAZ MEMPH
+  PHA
   ; Add key to hash table first (before read_value may overwrite TOKEN)
   JSR select_label_hash_table
   JSR hash_add
   BCS .duplicate_label
+  ; Pop saved MEMPL and compute token address (saved_MEMPL + 2)
+  PLA                       ; MEMPH
+  STAZ CURR_GLOBAL_HEAP_H   ; Store high byte (will add carry if needed)
+  PLA                       ; MEMPL
+  CLC
+  ADC# $02                  ; Token starts 2 bytes after entry start (past next pointer)
+  STAZ CURR_GLOBAL_HEAP_L
+  LDA# $00
+  ADCZ CURR_GLOBAL_HEAP_H
+  STAZ CURR_GLOBAL_HEAP_H
+  ; Note: For local labels, we computed this but won't use it (existing CURR_GLOBAL_HEAP
+  ; was already used by store_token). For global labels, this is the new value.
   ; Pop local flag, save in TEMP for later
   PLA
   STAZ TEMP
@@ -907,6 +928,9 @@ assemble_code
   STAZ PC_SAVEH
   STAZ CURLINEL
   STAZ CURLINEH
+  STAZ CURR_GLOBAL_HEAP_L ; Initialize global heap pointer
+  STAZ CURR_GLOBAL_HEAP_H ; "
+  STAZ IS_LOCAL_LABEL  ; Initialize local label flag
   STA CURR_GLOBAL      ; Clear current global label for local label scoping
 .line_loop
   JSR read_char
