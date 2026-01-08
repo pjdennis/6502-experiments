@@ -27,6 +27,7 @@ PC_SAVEL    DATA $00 ; Save location for PC when switching sections
 PC_SAVEH    DATA $00 ; "
 CURR_GLOBAL_HEAP_L DATA $00 ; Heap address of current global label string
 CURR_GLOBAL_HEAP_H DATA $00 ; "
+DEBUG_FLAG  DATA $00 ; Non-zero if debug output enabled
 
   .code
 
@@ -84,10 +85,13 @@ err_filename_expected
   BRK $0C "Filename expected" $00
 
 err_usage
-  BRK $0D "Usage <assebler> <input> <output>" $00
+  BRK $0D "Usage <assembler> <input> <output> [debug]" $00
 
 err_no_file
   BRK $0E "Attempt to read with no file open" $00
+
+err_invalid_debug_arg
+  BRK $10 "Invalid third argument (expected 'debug')" $00
 
 err_no_global_for_local
   BRK $0F "No global label for local" $00
@@ -1041,12 +1045,56 @@ open_input
   JMP push_file_stack ; tail call
 
 
+; Check if string at TABPL;TABPH equals "debug"
+; On exit C = 0 if equal, C = 1 if not equal
+;         A, Y are not preserved
+check_debug_string
+  LDY# $00
+.loop
+  LDAZ(),Y TABPL
+  CMP,Y str_debug
+  BNE .not_equal
+  CMP# $00
+  BEQ .equal
+  INY
+  JMP .loop
+.equal
+  CLC
+  RTS
+.not_equal
+  SEC
+  RTS
+
+str_debug
+  DATA "debug" $00
+
+
 ; Entry point
 start
+  ; Initialize debug flag to 0
+  LDA# $00
+  STAZ DEBUG_FLAG
+  ; Check argument count (must be 2 or 3)
   JSR argc
   CMP# $02
   BEQ .args_ok
+  CMP# $03
+  BEQ .check_debug_arg
   JMP err_usage
+.check_debug_arg
+  ; Third argument present - must be "debug"
+  LDA# $02
+  JSR argv
+  STAZ TABPL
+  STXZ TABPH
+  JSR check_debug_string
+  BCS .invalid_debug_arg
+  ; Valid "debug" argument - set flag
+  LDA# $FF
+  STAZ DEBUG_FLAG
+  JMP .args_ok
+.invalid_debug_arg
+  JMP err_invalid_debug_arg
 .args_ok
   JSR init_heap
   JSR select_label_hash_table
@@ -1074,6 +1122,30 @@ start
   ; Close output file
   TXA
   JSR close
+
+  ; Print heap usage if debug flag is set
+  LDAZ DEBUG_FLAG
+  BEQ .skip_debug_output
+  LDA# <msg_heap_used
+  STAZ TABPL
+  LDA# >msg_heap_used
+  STAZ TABPH
+  JSR show_message
+  ; Calculate heap used: MEMPL - HEAP
+  SEC
+  LDAZ MEMPL
+  SBC# <HEAP
+  STAZ TO_DECIMAL_VALUE_L
+  LDAZ MEMPH
+  SBC# >HEAP
+  STAZ TO_DECIMAL_VALUE_H
+  JSR show_decimal
+  LDA# <msg_bytes
+  STAZ TABPL
+  LDA# >msg_bytes
+  STAZ TABPH
+  JSR show_message
+.skip_debug_output
 
   BRK $00              ; Success
 
@@ -1161,6 +1233,10 @@ msg_error_line
   DATA " at line " $00
 msg_error_file
   DATA " in file " $00
+msg_heap_used
+  DATA "Heap used: " $00
+msg_bytes
+  DATA " bytes\n" $00
 
 
 ; Show message to the error output
