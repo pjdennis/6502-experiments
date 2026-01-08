@@ -1,5 +1,4 @@
 ; Addresses
-CURR_GLOBAL = $1C00     ; Buffer for current global label name (for local label scoping)
 TOKEN      = $1D00      ; Buffer for the current token being read
 LHASHTAB   = $1E00      ; Label hash table
 *          = $2000      ; Code generates here
@@ -249,8 +248,9 @@ check_local_label
   ; Local label - set flag
   LDA# $FF
   STAZ IS_LOCAL_LABEL
-  ; Check if CURR_GLOBAL is empty (error check)
-  LDA CURR_GLOBAL
+  ; Check if CURR_GLOBAL_HEAP is set (error check)
+  LDAZ CURR_GLOBAL_HEAP_L
+  ORAZ CURR_GLOBAL_HEAP_H
   BNE .have_global
   JMP err_no_global_for_local
 .have_global
@@ -260,24 +260,6 @@ check_local_label
   LDA# $00
   STAZ IS_LOCAL_LABEL
   CLC                  ; C=0 means was global
-  RTS
-
-
-; Copy TOKEN to CURR_GLOBAL
-; Used after defining a global (non-local, non-assignment) label
-; On entry TOKEN contains the label name
-; On exit CURR_GLOBAL contains a copy of TOKEN
-;         A, Y not preserved
-;         X is preserved
-update_global_label
-  LDY# $00
-.loop
-  LDA,Y TOKEN
-  STA,Y CURR_GLOBAL
-  BEQ .done            ; Stop after copying null
-  INY
-  JMP .loop
-.done
   RTS
 
 
@@ -532,16 +514,15 @@ capture_label
   ; Pass 2 - don't capture label, but must track globals for local label scoping
   TYA
   PHA                       ; Save next char
-  JSR check_local_label     ; Sets IS_LOCAL_LABEL, checks CURR_GLOBAL for locals
+  JSR check_local_label     ; Sets IS_LOCAL_LABEL, validates scope for locals
   ; Now continue with value reading
   PLA                       ; Restore next char
   JSR read_value
   BCS .has_equals_2         ; If = found, branch
-  ; No = found - update global label if this was not a local label
+  ; No = found - update global heap if this was not a local label
   PHA                       ; Save next char
   LDAZ IS_LOCAL_LABEL
   BNE .was_local_2          ; If local flag != 0, skip update
-  JSR update_global_label
   JSR update_global_heap_from_lookup  ; Set CURR_GLOBAL_HEAP for local label lookups
 .was_local_2
   PLA                       ; Restore next char
@@ -551,7 +532,7 @@ capture_label
 .pass_1
   TYA
   PHA                       ; Save next char
-  JSR check_local_label     ; Sets IS_LOCAL_LABEL, checks CURR_GLOBAL for locals
+  JSR check_local_label     ; Sets IS_LOCAL_LABEL, validates scope for locals
   ; Save MEMPL before hash_add (to calculate token address for global labels)
   LDAZ MEMPL
   PHA
@@ -589,10 +570,9 @@ capture_label
   LDAZ PCH
   STAZ HEX1
   JSR store_hash_value
-  ; Update global label if this was not a local label
+  ; Commit cached hash if this was not a local label
   LDAZ IS_LOCAL_LABEL
   BNE .was_local_1          ; If local flag != 0, skip update
-  JSR update_global_label
   JSR commit_cached_hash    ; Commit hash for local label lookups
 .was_local_1
   PLA                       ; Restore next char
@@ -889,10 +869,9 @@ assemble_code
   STAZ PC_SAVEH
   STAZ CURLINEL
   STAZ CURLINEH
-  STAZ CURR_GLOBAL_HEAP_L ; Initialize global heap pointer
+  STAZ CURR_GLOBAL_HEAP_L ; Initialize global heap pointer (0 = no global yet)
   STAZ CURR_GLOBAL_HEAP_H ; "
   STAZ IS_LOCAL_LABEL  ; Initialize local label flag
-  STA CURR_GLOBAL      ; Clear current global label for local label scoping
 .line_loop
   JSR read_char
   BCC .character_read
