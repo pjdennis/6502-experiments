@@ -9,6 +9,8 @@
   .zeropage
 
 HASH      DATA $00     ; 1 byte hash value
+HASH_PRE_ASL DATA $00  ; Pre-ASL hash value (temporary, not committed)
+CACHED_HASH DATA $00   ; Pre-ASL hash of current global (for local labels)
 HTPL      DATA $00     ; 2 byte pointer to hash table
 HTPH      DATA $00     ; "
 TABPL     DATA $00     ; 2 byte table pointer
@@ -16,9 +18,6 @@ TABPH     DATA $00     ; "
 HTTPL     DATA $00     ; 2 byte temporary pointer
 HTTPH     DATA $00     ; "
 IS_LOCAL_LABEL DATA $00 ; Flag: non-zero if storing local label
-CT_REFPL  DATA $00     ; compare_token: reference string pointer
-CT_REFPH  DATA $00     ; "
-CT_SAVE_Y DATA $00     ; compare_token: saved Y position
 
   .code
 
@@ -50,17 +49,75 @@ init_hash_table
   RTS
 
 
+; Calculate hash for global labels
 ; On entry HT_KEY contains the token to calculate hash from
-; On exit HASH contains the calculated hash value
+; On exit HASH contains the calculated hash value (post-ASL)
+;         HASH_PRE_ASL contains pre-ASL value (NOT committed to CACHED_HASH)
 ;         X is preserved
 ;         A, Y are not preserved
+; Note: Caller must call commit_cached_hash to update CACHED_HASH if needed
 calculate_hash
   TXA
   PHA
   LDA# $00
   STAZ HASH
   LDX# $00
-.loop
+  JSR hash_loop
+  LDAZ HASH
+  STAZ HASH_PRE_ASL       ; Save pre-ASL value (not committed)
+  ASLZ HASH
+  PLA
+  TAX
+  RTS
+
+; Commit the pre-ASL hash to CACHED_HASH
+; Call this when updating CURR_GLOBAL for non-assignment global labels
+; On exit A is not preserved
+;         X, Y are preserved
+commit_cached_hash
+  LDAZ HASH_PRE_ASL
+  STAZ CACHED_HASH
+  RTS
+
+; Calculate hash for local labels
+; Continues from CACHED_HASH, hashes HT_KEY (which will contain just ".bar")
+; On exit HASH contains the calculated hash value (post-ASL)
+;         X is preserved
+;         A, Y are not preserved
+calculate_hash_local
+  TXA
+  PHA
+  LDAZ CACHED_HASH
+  STAZ HASH
+  LDX# $00
+  JSR hash_loop
+  ASLZ HASH
+  PLA
+  TAX
+  RTS
+
+; Calculate hash for instructions (does NOT modify CACHED_HASH)
+; On entry HT_KEY contains the token to calculate hash from
+; On exit HASH contains the calculated hash value (post-ASL)
+;         CACHED_HASH is NOT modified
+;         X is preserved
+;         A, Y are not preserved
+calculate_hash_instruction
+  TXA
+  PHA
+  LDA# $00
+  STAZ HASH
+  LDX# $00
+  JSR hash_loop
+  ASLZ HASH
+  PLA
+  TAX
+  RTS
+
+; Shared hash loop - X = start index, HASH = initial value
+; On exit: HASH = pre-ASL result, X at null terminator
+; Private by convention (used only by calculate_hash and calculate_hash_local)
+hash_loop
   LDA,X HT_KEY
   BEQ .done
   AND# $7F
@@ -69,21 +126,38 @@ calculate_hash
   LDA,Y scramble_table
   STAZ HASH
   INX
-  JMP .loop
+  JMP hash_loop
 .done
-  ASLZ HASH
-  PLA
-  TAX
   RTS
 
 
 ; On entry HT_KEY contains the key to find
+;          IS_LOCAL_LABEL: if non-zero, uses cached hash from global
 ; On exit C = 0 if found or 1 if not found
 ; On exit HT_VL;HT_VH contains the value if found
 ;         X is preserved
 ;         A, Y are not preserverd
 find_in_hash
+  LDAZ IS_LOCAL_LABEL
+  BEQ .use_global_hash
+  JSR calculate_hash_local
+  JMP .hash_done
+.use_global_hash
   JSR calculate_hash
+.hash_done
+  JMP find_in_hash_common
+
+; Find in hash table for instructions (does not modify CACHED_HASH)
+; On entry HT_KEY contains the key to find
+; On exit C = 0 if found or 1 if not found
+; On exit HT_VL;HT_VH contains the value if found
+;         X is preserved
+;         A, Y are not preserverd
+find_in_hash_instruction
+  JSR calculate_hash_instruction
+  ; Fall through to common code
+
+find_in_hash_common
   JSR hash_entry_empty
   BEQ .not_found
   ; Entry exists
@@ -168,13 +242,15 @@ store_table_entry
 
 ; On entry HT_KEY contains the token to compare with
 ;          TABPL;TABPH points to the value to compare with
+;          IS_LOCAL_LABEL: if non-zero, we're searching for a local label
+;          CURR_GLOBAL_HEAP_L/H: current scope (for local label verification)
 ; On exit Z set if equal, unset otherwise
 ;         Y points to terminating 0 if equal
 ;         X is preserved (saved/restored - X is globally the file handle)
 ;         A is not preserved
 ; Handles both normal strings and $01 escape format:
-;   $01 <addr_lo> <addr_hi> <rest_of_string>
-; where addr points to a prefix string to prepend
+;   $01 <addr_lo> <addr_hi> ".local" $00
+; For escape format, verifies scope pointer matches before comparing
 compare_token
   ; Save X (file handle) and HTTPL/HTTPH (used by find_token after we return)
   TXA
@@ -188,34 +264,25 @@ compare_token
   STAZ HTTPL
   LDAZ TABPH
   STAZ HTTPH
-  ; X = HT_KEY index
-  LDX# $00
-.loop
-  LDY# $00
-  LDAZ(),Y HTTPL        ; Get byte from stored token
-  CMP# $01
-  BEQ .handle_escape
-  ; Normal compare
-  CMP,X HT_KEY          ; Compare with HT_KEY[X]
-  BNE .done_nomatch
-  CMP# $00
-  BEQ .done_match
-  ; Advance both pointers
-  INX                   ; HT_KEY index++
-  INCZ HTTPL            ; Stored pointer++
-  BNE .loop
-  INCZ HTTPH
-  JMP .loop
 
-.handle_escape
-  ; Read reference address from HTTPL[1,2]
+  ; Check if stored token is escape format
+  LDY# $00
+  LDAZ(),Y HTTPL
+  CMP# $01
+  BNE .compare_global_format
+
+  ; === Escape format ($01 <ptr_lo> <ptr_hi> ".bar" $00) ===
+  ; Verify scope pointer matches CURR_GLOBAL_HEAP
   INY
   LDAZ(),Y HTTPL
-  STAZ CT_REFPL
+  CMPZ CURR_GLOBAL_HEAP_L
+  BNE .done_nomatch
   INY
   LDAZ(),Y HTTPL
-  STAZ CT_REFPH
-  ; Advance HTTPL past escape header (3 bytes: $01 + 2 addr bytes)
+  CMPZ CURR_GLOBAL_HEAP_H
+  BNE .done_nomatch
+
+  ; Scope matches - advance past header, compare local part
   CLC
   LDAZ HTTPL
   ADC# $03
@@ -223,26 +290,43 @@ compare_token
   LDAZ HTTPH
   ADC# $00
   STAZ HTTPH
-  ; Compare reference string with HT_KEY
-  LDY# $00
-.ref_loop
-  LDAZ(),Y CT_REFPL     ; Get byte from reference
-  BEQ .ref_done         ; Null = end of reference, continue with stored
-  CMP,X HT_KEY          ; Compare with HT_KEY[X]
-  BNE .done_nomatch
-  INX                   ; Advance HT_KEY index
-  INY                   ; Advance reference index
-  JMP .ref_loop
+  JMP .compare_loop_setup
 
-.ref_done
-  JMP .loop             ; Continue comparing rest of stored token
+.compare_global_format
+  ; === Global format (direct string) ===
+  ; If we're searching for a local label, global format can't match
+  LDAZ IS_LOCAL_LABEL
+  BNE .done_nomatch
+  ; Fall through to compare
+
+.compare_loop_setup
+  LDX# $00              ; HT_KEY index
+  LDY# $00              ; HTTPL index
+
+.compare_loop
+  LDAZ(),Y HTTPL
+  CMP,X HT_KEY
+  BNE .done_nomatch
+  CMP# $00
+  BEQ .done_match
+  INX
+  INY
+  BNE .compare_loop
 
 .done_match
-  ; Calculate Y = HTTPL - TABPL (offset to null terminator)
+  ; Calculate Y = offset from TABPL to null terminator
+  ; Y currently points to null in local string
+  ; total offset = (HTTPL - TABPL) + Y
+  TYA
+  PHA                       ; Save Y on stack
   SEC
   LDAZ HTTPL
-  SBCZ TABPL
-  TAY
+  SBCZ TABPL                ; A = header size (0 or 3)
+  STAZ HTTPH                ; temp store (will be restored from stack below)
+  PLA                       ; A = saved Y
+  CLC
+  ADCZ HTTPH                ; A = header + Y
+  TAY                       ; Y = offset to null terminator from TABPL
   ; Restore HTTPL/HTTPH and X
   PLA
   STAZ HTTPH
@@ -325,10 +409,11 @@ find_token
 ; and advances heap pointer
 ; On entry HT_KEY contains key to store
 ;          IS_LOCAL_LABEL: if non-zero, stores $01 escape format
+;            (HT_KEY should already contain just ".bar" for local labels)
 ;          CURR_GLOBAL_HEAP_L/H: pointer to global label (for local labels)
 ; On exit MEMPL;MEMPH points to where value should be stored
 ;         Y = 0
-;         X is preserved (saved/restored - X is globally the file handle)
+;         X is preserved
 ;         A is not preserved
 store_token
   LDY# $00
@@ -343,9 +428,7 @@ store_token
   LDAZ IS_LOCAL_LABEL
   BEQ .store_normal
   ; Store $01 escape format: $01 <addr_lo> <addr_hi> <local_part>
-  ; Save X (file handle) since we need it to find '.'
-  TXA
-  PHA
+  ; HT_KEY already contains just ".bar" - no scanning needed
   LDY# $00
   LDA# $01              ; Escape byte
   STAZ(),Y MEMPL
@@ -357,28 +440,14 @@ store_token
   STAZ(),Y MEMPL
   INY
   JSR advance_heap      ; Advance past escape header (3 bytes)
-  ; Find '.' in HT_KEY
-  LDX# $00
-.find_dot
-  LDA,X HT_KEY
-  CMP# "."
-  BEQ .found_dot
-  INX
-  BNE .find_dot
-.found_dot
-  ; Copy from '.' onwards (including null terminator)
-  LDY# $00
+  ; Copy HT_KEY directly (already just ".bar")
+  LDY# $FF
 .copy_local
-  LDA,X HT_KEY
+  INY
+  LDA,Y HT_KEY
   STAZ(),Y MEMPL
-  BEQ .done_local
-  INY
-  INX
   BNE .copy_local
-.done_local
   INY
-  PLA
-  TAX                   ; Restore X (file handle)
   JMP advance_heap      ; Tail call
 
 .store_normal
@@ -395,12 +464,19 @@ store_token
 
 ; Add HT_KEY to hash table
 ; On entry HT_KEY contains key
+;          IS_LOCAL_LABEL: if non-zero, uses cached hash from global
 ; On exit C = 0 if added or 1 if already exists
 ;         If C = 0, MEMPL;MEMPH points to where value should be stored
 ;         Caller must store value and call advance_heap
 ;         A, X, Y are not preserved
 hash_add
+  LDAZ IS_LOCAL_LABEL
+  BEQ .use_global_hash
+  JSR calculate_hash_local
+  JMP .hash_done
+.use_global_hash
   JSR calculate_hash
+.hash_done
   JSR hash_entry_empty
   BEQ .entry_empty
   JSR load_hash_entry

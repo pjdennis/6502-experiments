@@ -235,70 +235,30 @@ read_token
   RTS
 
 
-; Expands local labels by prepending current global label
+; Check if token is a local label and set IS_LOCAL_LABEL flag
 ; On entry TOKEN contains the token (may start with '.')
-; On exit If TOKEN started with '.', TOKEN now contains CURR_GLOBAL + original TOKEN
+; On exit IS_LOCAL_LABEL set appropriately ($FF if local, $00 if global)
 ;         C = 1 if was local label, C = 0 if was global
-;         A, Y not preserved
-;         X is preserved
-expand_local_label
+;         TOKEN is NOT modified (no expansion)
+;         A not preserved
+;         X, Y are preserved
+check_local_label
   LDA TOKEN
   CMP# "."
   BNE .not_local
-  ; Check if CURR_GLOBAL is empty
+  ; Local label - set flag
+  LDA# $FF
+  STAZ IS_LOCAL_LABEL
+  ; Check if CURR_GLOBAL is empty (error check)
   LDA CURR_GLOBAL
   BNE .have_global
   JMP err_no_global_for_local
 .have_global
-  TXA
-  PHA                  ; Save X (file handle)
-  ; Find length of CURR_GLOBAL (store in TEMP)
-  LDY# $00
-.gloop
-  LDA,Y CURR_GLOBAL
-  BEQ .have_glen
-  INY
-  JMP .gloop
-.have_glen
-  ; Y = length of CURR_GLOBAL
-  STYZ TEMP
-  ; Find length of TOKEN including null
-  LDY# $00
-.tloop
-  LDA,Y TOKEN
-  BEQ .have_tlen
-  INY
-  JMP .tloop
-.have_tlen
-  INY                  ; Include null terminator: Y = tLen
-  ; Calculate starting indices for shift
-  DEY                  ; Y = tLen - 1 (last source index)
-  TYA
-  CLC
-  ADCZ TEMP            ; A = tLen - 1 + gLen = last dest index
-  TAX                  ; X = last dest index
-  ; Shift TOKEN right by copying from end to start
-.shift
-  LDA,Y TOKEN
-  STA,X TOKEN
-  DEY
-  DEX
-  CPY# $FF
-  BNE .shift
-  ; Copy CURR_GLOBAL to start of TOKEN
-  LDY# $00
-.copy_loop
-  LDA,Y CURR_GLOBAL
-  BEQ .copy_done       ; Stop at null (don't copy null)
-  STA,Y TOKEN
-  INY
-  JMP .copy_loop
-.copy_done
-  PLA
-  TAX                  ; Restore X (file handle)
   SEC                  ; C=1 means was local
   RTS
 .not_local
+  LDA# $00
+  STAZ IS_LOCAL_LABEL
   CLC                  ; C=0 means was global
   RTS
 
@@ -321,6 +281,26 @@ update_global_label
   RTS
 
 
+; Update CURR_GLOBAL_HEAP by looking up TOKEN in hash table
+; Used in pass 2 to set the heap pointer for local label scope matching
+; On entry TOKEN contains the global label name
+;          IS_LOCAL_LABEL = 0 (global label)
+; On exit CURR_GLOBAL_HEAP_L/H points to the token string on heap
+;         CACHED_HASH is set (needed for subsequent local label lookups)
+;         A, Y not preserved
+;         X is preserved
+update_global_heap_from_lookup
+  JSR select_label_hash_table
+  JSR find_in_hash       ; TABPL now points to token string
+  JSR commit_cached_hash ; Commit hash since this is a non-assignment global
+  ; After find_in_hash, TABPL points to token string (entry_start + 2)
+  LDAZ TABPL
+  STAZ CURR_GLOBAL_HEAP_L
+  LDAZ TABPH
+  STAZ CURR_GLOBAL_HEAP_H
+  RTS
+
+
 ; Read a label, look up in the label hash table and return the associated value
 ; On entry A contains the first character of the label
 ; On exit HEX1 and HEX2 contains the MSB and LSB of the hash table value
@@ -331,7 +311,7 @@ update_global_label
 read_and_find_existing_label
   JSR read_token
   PHA                  ; Save next char
-  JSR expand_local_label
+  JSR check_local_label
   JSR select_label_hash_table
   JSR find_in_hash
   PLA                  ; Restore next char
@@ -552,30 +532,17 @@ capture_label
   ; Pass 2 - don't capture label, but must track globals for local label scoping
   TYA
   PHA                       ; Save next char
-  ; Check if this is a local label
-  LDA TOKEN
-  CMP# "."
-  BNE .not_local_2
-  LDA# $FF                  ; Was local
-  BNE .save_local_2         ; Always branches
-.not_local_2
-  LDA# $00                  ; Was not local
-.save_local_2
-  PHA                       ; Save local flag
-  ; Expand local label if needed (for proper error checking)
-  JSR expand_local_label
-  ; Pop local flag, save in TEMP for later
-  PLA
-  STAZ TEMP
+  JSR check_local_label     ; Sets IS_LOCAL_LABEL, checks CURR_GLOBAL for locals
   ; Now continue with value reading
   PLA                       ; Restore next char
   JSR read_value
   BCS .has_equals_2         ; If = found, branch
   ; No = found - update global label if this was not a local label
   PHA                       ; Save next char
-  LDAZ TEMP
+  LDAZ IS_LOCAL_LABEL
   BNE .was_local_2          ; If local flag != 0, skip update
   JSR update_global_label
+  JSR update_global_heap_from_lookup  ; Set CURR_GLOBAL_HEAP for local label lookups
 .was_local_2
   PLA                       ; Restore next char
   JMP .skip_spaces_and_return_processed_flag
@@ -584,20 +551,7 @@ capture_label
 .pass_1
   TYA
   PHA                       ; Save next char
-  ; Check if this is a local label and save result
-  LDA TOKEN
-  CMP# "."
-  BNE .not_local_1
-  LDA# $FF                  ; Was local
-  STAZ IS_LOCAL_LABEL       ; Set flag for store_token
-  BNE .save_local_flag      ; Always branches
-.not_local_1
-  LDA# $00                  ; Was not local
-  STAZ IS_LOCAL_LABEL       ; Clear flag for store_token
-.save_local_flag
-  PHA                       ; Save local flag
-  ; Expand local label if needed
-  JSR expand_local_label
+  JSR check_local_label     ; Sets IS_LOCAL_LABEL, checks CURR_GLOBAL for locals
   ; Save MEMPL before hash_add (to calculate token address for global labels)
   LDAZ MEMPL
   PHA
@@ -612,10 +566,8 @@ capture_label
   STAZ HTTPH
   PLA                       ; MEMPL
   STAZ HTTPL
-  ; Pop local flag
-  PLA
-  STAZ TEMP
   ; Only update CURR_GLOBAL_HEAP for global labels (local labels reuse existing pointer)
+  LDAZ IS_LOCAL_LABEL
   BNE .skip_heap_update     ; If local flag != 0, skip
   ; Compute token address (saved_MEMPL + 2) for global labels
   CLC
@@ -638,9 +590,10 @@ capture_label
   STAZ HEX1
   JSR store_hash_value
   ; Update global label if this was not a local label
-  LDAZ TEMP
+  LDAZ IS_LOCAL_LABEL
   BNE .was_local_1          ; If local flag != 0, skip update
   JSR update_global_label
+  JSR commit_cached_hash    ; Commit hash for local label lookups
 .was_local_1
   PLA                       ; Restore next char
   JMP .skip_spaces_and_return_processed_flag
@@ -672,7 +625,7 @@ emit_opcode
   JSR read_token
   PHA                  ; Save next char
   JSR select_instruction_hash_table
-  JSR find_in_hash
+  JSR find_in_hash_instruction
   BCC .found
   JMP err_opcode_not_found
 .found
