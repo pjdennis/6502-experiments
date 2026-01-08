@@ -895,6 +895,8 @@ oi_loop
 
 ; Entry point
 start
+  ; Initialize file stack early so interrupt handler works correctly
+  JSR file_stack_init
   JSR argc
   CMP# $02
   BEQ s_args_ok
@@ -903,7 +905,6 @@ s_args_ok
   JSR init_heap
   JSR select_label_hash_table
   JSR init_hash_table
-  JSR file_stack_init
 
   LDA# $00
   STAZ CURR_FILE
@@ -959,9 +960,9 @@ interrupt
   LDA# $00
   STAZ TO_DECIMAL_VALUE_H
   JSR show_decimal
-; Print the current file if any
+; Print the current file and line if any file is open
   JSR file_stack_empty
-  BEQ i_file_done
+  BEQ i_location_done
 ; Print the " in file " message
   LDA# <msg_error_file
   STAZ TABPL
@@ -974,7 +975,6 @@ interrupt
   LDAZ FS_PH
   STAZ TABPH
   JSR show_message
-i_file_done
 ; Print the " at line " messaage
   LDA# <msg_error_line
   STAZ TABPL
@@ -987,6 +987,7 @@ i_file_done
   LDAZ CURLINEH
   STAZ TO_DECIMAL_VALUE_H
   JSR show_decimal
+i_location_done
 ; Print the ": " message
   LDA# ":"
   JSR write_d
