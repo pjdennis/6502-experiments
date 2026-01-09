@@ -135,16 +135,16 @@ select_label_hash_table
 ; TODO: Consolidate the PASS and IN_ZEROPAGE flags so that emit can
 ;       do a single check instead of two for suppression of output
 emit
-  BITZ PASS
-  BPL .incpc           ; Skip writing during pass 1
-  BITZ IN_ZEROPAGE
-  BMI .incpc           ; Skip writing when in zero page section
-  JSR write
-.incpc
   INCZ PCL
-  BNE .done
+  BNE .incremented
   INCZ PCH
-.done
+.incremented
+  BITZ PASS
+  BPL .skip            ; Skip writing during pass 1
+  BITZ IN_ZEROPAGE
+  BMI .skip            ; Skip writing when in zero page section
+  JMP write            ; Tail call
+.skip
   RTS
 
 
