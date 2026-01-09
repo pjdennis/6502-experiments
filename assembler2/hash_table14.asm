@@ -425,12 +425,16 @@ store_token
   STAZ(),Y MEMPL
   INY
   JSR advance_heap
+  ; Save the pointer to the key
+  LDA MEMPL
+  STA TABPL
+  LDA MEMPH
+  STA TABPH
   ; Check if this is a local label
   LDAZ IS_LOCAL_LABEL
   BEQ .copy_token       ; If global, skip escape header
   ; Store $01 escape format: $01 <addr_lo> <addr_hi> <local_part>
   ; HT_KEY already contains just ".bar" - no scanning needed
-  LDY# $00
   LDA# $01              ; Escape byte
   STAZ(),Y MEMPL
   INY

@@ -237,7 +237,6 @@ read_token
 ; Check if token is a local label and set IS_LOCAL_LABEL flag
 ; On entry TOKEN contains the token (may start with '.')
 ; On exit IS_LOCAL_LABEL set appropriately ($FF if local, $00 if global)
-;         C = 1 if was local label, C = 0 if was global
 ;         TOKEN is NOT modified (no expansion)
 ;         A not preserved
 ;         X, Y are preserved
@@ -245,21 +244,18 @@ check_local_label
   LDA TOKEN
   CMP# "."
   BNE .not_local
-  ; Local label - set flag
-  LDA# $FF
-  STAZ IS_LOCAL_LABEL
-  ; Check if CURR_GLOBAL_HEAP is set (error check)
+  ; Local label - Check if CURR_GLOBAL_HEAP is set (error check)
   LDAZ CURR_GLOBAL_HEAP_L
   ORAZ CURR_GLOBAL_HEAP_H
   BNE .have_global
   JMP err_no_global_for_local
 .have_global
-  SEC                  ; C=1 means was local
+  LDA# $FF
+  STAZ IS_LOCAL_LABEL
   RTS
 .not_local
   LDA# $00
   STAZ IS_LOCAL_LABEL
-  CLC                  ; C=0 means was global
   RTS
 
 
@@ -394,28 +390,35 @@ emit_hex
   RTS
 
 
-; Attempt to read an assigned value
+; Check for the existance of an assigned value (read the equals sign)
 ; On entry A contains the next character
-; On exit C set if value read; clear otherwise
-;         HEX2 and HEX1 contain the LSB and MSB of the value read
+; On exit C set if value exists; clear otherwise
 ;         A contains the next character
-;         X is preserved
-;         Y is not preserved
-; Raises 'Bad hex' error if non-hex characters were encountered
-read_value
+;         X, Y are preserved
+check_for_value
   JSR skip_spaces
   CMP# "="
   BEQ .value
   CLC                  ; Did not find value so return C = 0
   RTS
 .value
+  SEC                  ; Found value so return C = 1
+  RTS
+
+
+; Read a value
+; On entry A contains the next character
+; On exit HEX2 and HEX1 contain the LSB and MSB of the value read
+;         A contains the next character
+;         X is preserved
+;         Y is not preserved
+; Raises 'Bad hex' error if non-hex characters were encountered
+read_value
   JSR read_char        ; Read the character after the "="
   JSR skip_spaces
   CMP# "$"
   BEQ .hex_value
-  JSR read_and_find_existing_label
-  SEC
-  RTS
+  JMP read_and_find_existing_label ; tail call
 .hex_value
   JSR read_char
   JSR read_hex_byte_or_word
@@ -426,7 +429,6 @@ read_value
   LDY# $00
   STYZ HEX1
 .done
-  SEC
   RTS
 
 
@@ -498,10 +500,11 @@ capture_label
   BNE .normal_label
   ; Set PC
   TYA                       ; Restore next char
-  JSR read_value
-  BCS .pc_value_read
+  JSR check_for_value
+  BCS .pc_value_present
   JMP err_pc_value_expected
-.pc_value_read
+.pc_value_present
+  JSR read_value
   JSR skip_rest_of_line
   ; No need to retain next char as caller
   ; goes straight to next line
@@ -517,7 +520,7 @@ capture_label
   JSR check_local_label     ; Sets IS_LOCAL_LABEL, validates scope for locals
   ; Now continue with value reading
   PLA                       ; Restore next char
-  JSR read_value
+  JSR check_for_value
   BCS .has_equals_2         ; If = found, branch
   ; No = found - update global heap if this was not a local label
   PHA                       ; Save next char
@@ -528,52 +531,42 @@ capture_label
   PLA                       ; Restore next char
   JMP .skip_spaces_and_return_processed_flag
 .has_equals_2
+  JSR read_value
   JMP .skip_and_return_processed
 .pass_1
   TYA
   PHA                       ; Save next char
   JSR check_local_label     ; Sets IS_LOCAL_LABEL, validates scope for locals
-  ; Save MEMPL before hash_add (to calculate token address for global labels)
-  LDAZ MEMPL
-  PHA
-  LDAZ MEMPH
-  PHA
   ; Add key to hash table first (before read_value may overwrite TOKEN)
   JSR select_label_hash_table
   JSR hash_add
   BCS .duplicate_label
-  ; Pop saved MEMPL to temporaries (needed for CURR_GLOBAL_HEAP calculation)
-  PLA                       ; MEMPH
-  STAZ HTTPH
-  PLA                       ; MEMPL
-  STAZ HTTPL
   ; Now read the value (TOKEN can be overwritten, but HTTPL/HTTPH preserved if no =)
   PLA                       ; Restore next char
-  JSR read_value
+  JSR check_for_value
   BCS .has_equals           ; If = found, branch
-  ; No = found, use program counter
+  ; No = found, save global label and use program counter
   PHA                       ; Save next char (before A is overwritten)
+  ; Update CURR_GLOBAL_HEAP and commit hash for non-local labels
+  LDAZ IS_LOCAL_LABEL
+  BNE .was_local_1          ; If local flag != 0, skip
+  ; Store the address of the current global label
+  LDAZ TABPL
+  STAZ CURR_GLOBAL_HEAP_L
+  LDAZ TABPH
+  STAZ CURR_GLOBAL_HEAP_H
+  JSR commit_cached_hash    ; Commit hash for local label lookups
+.was_local_1
+  ; Store current program counter as the hash value
   LDAZ PCL
   STAZ HEX2
   LDAZ PCH
   STAZ HEX1
   JSR store_hash_value
-  ; Update CURR_GLOBAL_HEAP and commit hash for non-local labels
-  LDAZ IS_LOCAL_LABEL
-  BNE .was_local_1          ; If local flag != 0, skip
-  ; Compute token address (saved_MEMPL + 2) for global labels
-  CLC
-  LDAZ HTTPL
-  ADC# $02                  ; Token starts 2 bytes after entry start (past next pointer)
-  STAZ CURR_GLOBAL_HEAP_L
-  LDAZ HTTPH
-  ADC# $00
-  STAZ CURR_GLOBAL_HEAP_H
-  JSR commit_cached_hash    ; Commit hash for local label lookups
-.was_local_1
   PLA                       ; Restore next char
   JMP .skip_spaces_and_return_processed_flag
 .has_equals
+  JSR read_value            ; Read the value after the equals
   PHA                       ; Save next char
   JSR store_hash_value
   PLA                       ; Restore next char
