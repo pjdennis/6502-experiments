@@ -57,17 +57,12 @@ init_hash_table
 ;         A, Y are not preserved
 ; Note: Caller must call commit_cached_hash to update CACHED_HASH if needed
 calculate_hash
-  TXA
-  PHA
   LDA# $00
   STAZ HASH
-  LDX# $00
   JSR hash_loop
   LDAZ HASH
   STAZ HASH_PRE_ASL       ; Save pre-ASL value (not committed)
   ASLZ HASH
-  PLA
-  TAX
   RTS
 
 ; Commit the pre-ASL hash to CACHED_HASH
@@ -85,15 +80,10 @@ commit_cached_hash
 ;         X is preserved
 ;         A, Y are not preserved
 calculate_hash_local
-  TXA
-  PHA
   LDAZ CACHED_HASH
   STAZ HASH
-  LDX# $00
   JSR hash_loop
   ASLZ HASH
-  PLA
-  TAX
   RTS
 
 ; Calculate hash for instructions (does NOT modify CACHED_HASH)
@@ -103,21 +93,20 @@ calculate_hash_local
 ;         X is preserved
 ;         A, Y are not preserved
 calculate_hash_instruction
-  TXA
-  PHA
   LDA# $00
   STAZ HASH
-  LDX# $00
   JSR hash_loop
   ASLZ HASH
-  PLA
-  TAX
   RTS
 
 ; Shared hash loop - X = start index, HASH = initial value
 ; On exit: HASH = pre-ASL result, X at null terminator
 ; Private by convention (used only by calculate_hash and calculate_hash_local)
 hash_loop
+  TXA
+  PHA
+  LDX# $00
+.loop
   LDA,X HT_KEY
   BEQ .done
   AND# $7F
@@ -126,8 +115,10 @@ hash_loop
   LDA,Y scramble_table
   STAZ HASH
   INX
-  JMP hash_loop
+  BNE .loop
 .done
+  PLA
+  TAX
   RTS
 
 
