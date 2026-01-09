@@ -542,24 +542,12 @@ capture_label
   JSR select_label_hash_table
   JSR hash_add
   BCS .duplicate_label
-  ; Pop saved MEMPL to temporaries
+  ; Pop saved MEMPL to temporaries (needed for CURR_GLOBAL_HEAP calculation)
   PLA                       ; MEMPH
   STAZ HTTPH
   PLA                       ; MEMPL
   STAZ HTTPL
-  ; Only update CURR_GLOBAL_HEAP for global labels (local labels reuse existing pointer)
-  LDAZ IS_LOCAL_LABEL
-  BNE .skip_heap_update     ; If local flag != 0, skip
-  ; Compute token address (saved_MEMPL + 2) for global labels
-  CLC
-  LDAZ HTTPL
-  ADC# $02                  ; Token starts 2 bytes after entry start (past next pointer)
-  STAZ CURR_GLOBAL_HEAP_L
-  LDAZ HTTPH
-  ADC# $00
-  STAZ CURR_GLOBAL_HEAP_H
-.skip_heap_update
-  ; Now read the value (TOKEN can be overwritten)
+  ; Now read the value (TOKEN can be overwritten, but HTTPL/HTTPH preserved if no =)
   PLA                       ; Restore next char
   JSR read_value
   BCS .has_equals           ; If = found, branch
@@ -570,9 +558,17 @@ capture_label
   LDAZ PCH
   STAZ HEX1
   JSR store_hash_value
-  ; Commit cached hash if this was not a local label
+  ; Update CURR_GLOBAL_HEAP and commit hash for non-local labels
   LDAZ IS_LOCAL_LABEL
-  BNE .was_local_1          ; If local flag != 0, skip update
+  BNE .was_local_1          ; If local flag != 0, skip
+  ; Compute token address (saved_MEMPL + 2) for global labels
+  CLC
+  LDAZ HTTPL
+  ADC# $02                  ; Token starts 2 bytes after entry start (past next pointer)
+  STAZ CURR_GLOBAL_HEAP_L
+  LDAZ HTTPH
+  ADC# $00
+  STAZ CURR_GLOBAL_HEAP_H
   JSR commit_cached_hash    ; Commit hash for local label lookups
 .was_local_1
   PLA                       ; Restore next char

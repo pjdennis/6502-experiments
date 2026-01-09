@@ -426,7 +426,7 @@ store_token
   JSR advance_heap
   ; Check if this is a local label
   LDAZ IS_LOCAL_LABEL
-  BEQ .store_normal
+  BEQ .copy_token       ; If global, skip escape header
   ; Store $01 escape format: $01 <addr_lo> <addr_hi> <local_part>
   ; HT_KEY already contains just ".bar" - no scanning needed
   LDY# $00
@@ -440,18 +440,9 @@ store_token
   STAZ(),Y MEMPL
   INY
   JSR advance_heap      ; Advance past escape header (3 bytes)
-  ; Copy HT_KEY directly (already just ".bar")
-  LDY# $FF
-.copy_local
-  INY
-  LDA,Y HT_KEY
-  STAZ(),Y MEMPL
-  BNE .copy_local
-  INY
-  JMP advance_heap      ; Tail call
-
-.store_normal
-  ; Store full token name (original format)
+  ; Fall through to copy HT_KEY
+.copy_token
+  ; Copy token string to heap
   LDY# $FF
 .loop
   INY
