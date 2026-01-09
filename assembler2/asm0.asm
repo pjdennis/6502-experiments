@@ -53,7 +53,7 @@ DATA $20 $2F $20  ; 2049: JSR skip_sp
 DATA $C9 $0A      ; 204C: CMP# $0A (newline)
 DATA $F0 $B0      ; 204E: BEQ $2000
 DATA $C9 $3B      ; 2050: CMP# ';' (comment)
-DATA $F0 $AC      ; 2052: BEQ $2000
+DATA $F0 $BC      ; 2052: BEQ skip_comment ($2010)
 DATA $C9 $24      ; 2054: CMP# '$'
 DATA $D0 $A8      ; 2056: BNE $2000 (error)
 ; parse $XX
