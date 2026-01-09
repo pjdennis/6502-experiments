@@ -2,9 +2,10 @@
 
 shopt -s extglob
 
-rm -f !(emulator|sidebyside).out &&
+rm -f !(emulator|sidebyside|asm0c|asm0).out &&
   make --quiet &&
-  ./emulator.out asm4v.out 2000 asm4b.asm asm4b.out &&
+  ./emulator.out asm0.out 2000 asm1.asm asm1.out &&
+  ./emulator.out asm1.out 2000 asm4b.asm asm4b.out &&
   ./emulator.out asm4b.out 2000 asm4b2.asm asm4b2.out &&
   ./emulator.out asm4b2.out 2000 asm4b3.asm asm4b3.out &&
   ./emulator.out asm4b3.out 2000 asm4b4.asm asm4b4.out &&
