@@ -242,110 +242,69 @@ store_table_entry
 
 ; On entry HT_KEY contains the token to compare with
 ;          TABPL;TABPH points to the value to compare with
-;          IS_LOCAL_LABEL: if non-zero, we're searching for a local label
 ;          CURR_GLOBAL_HEAP_L/H: current scope (for local label verification)
 ; On exit Z set if equal, unset otherwise
 ;         Y points to terminating 0 if equal
-;         X is preserved (saved/restored - X is globally the file handle)
+;         X is preserved
 ;         A is not preserved
 ; Handles both normal strings and $01 escape format:
 ;   $01 <addr_lo> <addr_hi> ".local" $00
 ; For escape format, verifies scope pointer matches before comparing
 compare_token
-  ; Save X (file handle) and HTTPL/HTTPH (used by find_token after we return)
-  TXA
-  PHA
-  LDAZ HTTPL
-  PHA
-  LDAZ HTTPH
-  PHA
-  ; Copy TABPL to working pointer HTTPL (we advance HTTPL, leave TABPL unchanged)
-  LDAZ TABPL
-  STAZ HTTPL
-  LDAZ TABPH
-  STAZ HTTPH
-
-  ; Check if stored token is escape format
+  ; Quick check: is stored token in escape format?
   LDY# $00
-  LDAZ(),Y HTTPL
+  LDAZ(),Y TABPL
   CMP# $01
-  BNE .compare_global_format
+  BEQ .handle_escape
 
+  ; === Fast path (no escape) - simple string comparison ===
+  DEY                       ; Y = $FF
+.simple_loop
+  INY
+  LDAZ(),Y TABPL
+  CMP,Y HT_KEY
+  BNE .simple_done
+  CMP# $00
+  BNE .simple_loop
+.simple_done
+  RTS
+
+.handle_escape
   ; === Escape format ($01 <ptr_lo> <ptr_hi> ".bar" $00) ===
   ; Verify scope pointer matches CURR_GLOBAL_HEAP
   INY
-  LDAZ(),Y HTTPL
+  LDAZ(),Y TABPL
   CMPZ CURR_GLOBAL_HEAP_L
-  BNE .done_nomatch
+  BNE .escape_nomatch
   INY
-  LDAZ(),Y HTTPL
+  LDAZ(),Y TABPL
   CMPZ CURR_GLOBAL_HEAP_H
-  BNE .done_nomatch
-
-  ; Scope matches - advance past header, compare local part
-  CLC
-  LDAZ HTTPL
-  ADC# $03
-  STAZ HTTPL
-  LDAZ HTTPH
-  ADC# $00
-  STAZ HTTPH
-  JMP .compare_loop_setup
-
-.compare_global_format
-  ; === Global format (direct string) ===
-  ; If we're searching for a local label, global format can't match
-  LDAZ IS_LOCAL_LABEL
-  BNE .done_nomatch
-  ; Fall through to compare
-
-.compare_loop_setup
-  LDX# $00              ; HT_KEY index
-  LDY# $00              ; HTTPL index
-
-.compare_loop
-  LDAZ(),Y HTTPL
+  BNE .escape_nomatch
+  ; Scope matches - compare local part (Y=2, need Y=3 to skip header)
+  ; Use X for HT_KEY index, save/restore since X is file handle
+  TXA
+  PHA
+  LDX# $00
+  INY                       ; Y = 3 (past $01 <lo> <hi>)
+.escape_loop
+  LDAZ(),Y TABPL
   CMP,X HT_KEY
-  BNE .done_nomatch
+  BNE .escape_nomatch_restore
   CMP# $00
-  BEQ .done_match
+  BEQ .escape_match
   INX
   INY
-  BNE .compare_loop
-
-.done_match
-  ; Calculate Y = offset from TABPL to null terminator
-  ; Y currently points to null in local string
-  ; total offset = (HTTPL - TABPL) + Y
-  TYA
-  PHA                       ; Save Y on stack
-  SEC
-  LDAZ HTTPL
-  SBCZ TABPL                ; A = header size (0 or 3)
-  STAZ HTTPH                ; temp store (will be restored from stack below)
-  PLA                       ; A = saved Y
-  CLC
-  ADCZ HTTPH                ; A = header + Y
-  TAY                       ; Y = offset to null terminator from TABPL
-  ; Restore HTTPL/HTTPH and X
-  PLA
-  STAZ HTTPH
-  PLA
-  STAZ HTTPL
+  BNE .escape_loop
+.escape_match
   PLA
   TAX
-  LDA# $00              ; Set Z flag (match)
+  LDA# $00                  ; Z=1 (match)
   RTS
-
-.done_nomatch
-  ; Restore HTTPL/HTTPH and X
-  PLA
-  STAZ HTTPH
-  PLA
-  STAZ HTTPL
+.escape_nomatch_restore
   PLA
   TAX
-  LDA# $01              ; Clear Z flag (no match)
+.escape_nomatch
+  LDA# $01                  ; Z=0 (no match)
   RTS
 
 
