@@ -134,17 +134,17 @@ hash_loop
 ; On entry HT_KEY contains the key to find
 ;          IS_LOCAL_LABEL: if non-zero, uses cached hash from global
 ; On exit C = 0 if found or 1 if not found
-; On exit HT_VL;HT_VH contains the value if found
+; On exit TABPL;TABPH points to the key if found
+;         HT_VL;HT_VH contains the value if found
 ;         X is preserved
 ;         A, Y are not preserverd
 find_in_hash
   LDAZ IS_LOCAL_LABEL
   BEQ .use_global_hash
   JSR calculate_hash_local
-  JMP .hash_done
+  JMP find_in_hash_common
 .use_global_hash
   JSR calculate_hash
-.hash_done
   JMP find_in_hash_common
 
 ; Find in hash table for instructions (does not modify CACHED_HASH)
@@ -352,6 +352,7 @@ compare_token
 ; On entry TABPL;TABPH point to head of list of entries
 ;          HT_KEY contains the token to find
 ; On exit C clear if found; set if not found
+;         TABPL;TABPH points to the key if found
 ;         TABPL;TABPH,Y points to value if found
 ;         or to 'next' pointer if not found
 ;         X is preserved
