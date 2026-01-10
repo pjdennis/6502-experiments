@@ -67,3 +67,17 @@ The assembler uses a non-standard 6502 syntax:
 - `LDAZ` for zero page addressing
 - `STAZ(),Y` for indirect indexed
 - `LDA,X` / `LDA,Y` for indexed absolute
+
+## Migration Patterns
+
+Lessons learned from syntax migrations (e.g., DATA → .data):
+
+1. **Global replacements need context awareness** - Avoid blind find/replace when identifiers share common substrings (e.g., `DATA` vs `MODE_DATA`). Check for compound identifiers before replacing.
+
+2. **File copying requires systematic include updates** - When creating a new version (asm18→asm19), all include references across all copied files need updating (asm, instgen, common, errors, fwdref, file_stack, hash_table, to_decimal).
+
+3. **Phased migration works well** - Add new feature alongside old, verify everything works, then remove old. This provides safety checkpoints at each phase.
+
+4. **Self-hosting is powerful verification** - The assembler assembling itself catches subtle issues that unit tests might miss. Always run the full build chain after changes.
+
+5. **Test suite retention is valuable** - Keep the old test suite (e.g., asm18_tests.txt) as reference even when removing obsolete tests from the new one (asm19_tests.txt).
