@@ -15,12 +15,13 @@ PL        DATA $00     ; 2 byte pointer
 PH        DATA $00     ; "
 P2L       DATA $00     ; 2 byte pointer
 P2H       DATA $00     ; "
-
+CHAR      DATA $00     ; 1 byte character value
 
   .code
 
+
 ; Include files
-  .include environment.asm
+  .include environment11.asm
   .include common13.asm
 
 
@@ -43,7 +44,6 @@ MNTAB
   DATA "CLC"      $00 $00 $18
   DATA "CMPZ"     $00 $04 $C5
   DATA "CMP#"     $00 $04 $C9
-  DATA "CMP,X"    $00 $00 $DD
   DATA "CMP,Y"    $00 $00 $D9
   DATA "CPXZ"     $00 $04 $E4
   DATA "CPYZ"     $00 $04 $C4
@@ -129,7 +129,6 @@ piht_token_loop_done
   STAZ P2H
   ; Store entry
   JSR hash_add
-  JSR store_hash_value
   JMP piht_entry_loop
 piht_done
   RTS
@@ -214,14 +213,13 @@ dt_lineloop
   JSR hash_entry_empty
   BNE dt_not_empty
   ; empty
-  LDA# "$"
-  JSR write_b
   LDA# $00
-  JSR display_hex
-  LDA# $00
-  JSR display_hex
+  JSR display_byte
   JMP dt_next
 dt_not_empty
+  ; Display byte selector < or >
+  LDAZ CHAR
+  JSR write_b
   ; Display instruction label prefix
   LDA# <msg_instprefix
   STAZ PL
@@ -241,7 +239,7 @@ dt_not_empty
 dt_next
   LDAZ HASH
   CLC
-  ADC# $02
+  ADC# $01
   STAZ HASH
   LDAZ TEMP
   CLC
@@ -253,6 +251,7 @@ dt_next
 dt_next1
   JSR display_newline
   LDAZ HASH
+  CMP# $80
   BEQ dt_done 
   JMP dt_loop
 dt_done
@@ -369,8 +368,9 @@ dd_not_zero
 dd_next
   LDAZ HASH
   CLC
-  ADC# $02
+  ADC# $01
   STAZ HASH
+  CMP# $80
   BEQ dd_done
   JMP dd_loop
 dd_done
@@ -392,16 +392,40 @@ start
   STAZ PH
   JSR display_text
   JSR display_newline
+
+; Show low address bytes
   LDA# <msg_IHASHTAB
   STAZ PL
   LDA# >msg_IHASHTAB
   STAZ PH
   JSR display_text
   JSR display_newline
+  LDA# <msg_low_bytes_comment
+  STAZ PL
+  LDA# >msg_low_bytes_comment
+  STAZ PH
+  JSR display_text
+  JSR display_newline
+  LDA# "<"
+  STAZ CHAR
   JSR display_table
   JSR display_newline
 
-; Show the instructions heap data
+; Show high address bytes
+  LDA# <msg_high_bytes_comment
+  STAZ PL
+  LDA# >msg_high_bytes_comment
+  STAZ PH
+  JSR display_text
+  JSR display_newline
+  LDA# ">"
+  STAZ CHAR
+  JSR display_table
+  JSR display_newline
+  JSR display_newline
+
+
+; Show the heap data
   LDA# <msg_heap_comment
   STAZ PL
   LDA# >msg_heap_comment
@@ -423,7 +447,13 @@ msg_IHASHTAB
   DATA "IHASHTAB" $00
 
 msg_hash_table_comment
-  DATA "; Instructions hash table (pointers)" $00
+  DATA "; Instructions hash table" $00
+
+msg_low_bytes_comment
+  DATA "  ; Low address bytes" $00
+
+msg_high_bytes_comment
+  DATA "  ; High address bytes" $00
 
 msg_heap_comment
   DATA "; Instructions heap data" $00

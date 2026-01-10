@@ -66,7 +66,6 @@ ch_loop
   INX
   JMP ch_loop
 ch_done
-  ASLZ HASH
   PLA
   TAX
   RTS
@@ -107,7 +106,10 @@ hash_entry_empty
   TAY
   LDAZ(),Y HTPL
   BNE hee_done
-  INY
+  CLC
+  LDAZ HASH
+  ADC# $80
+  TAY
   LDAZ(),Y HTPL
 hee_done
   RTS
@@ -123,7 +125,10 @@ load_hash_entry
   TAY
   LDAZ(),Y HTPL
   STAZ TABPL
-  INY
+  CLC
+  LDAZ HASH
+  ADC# $80
+  TAY
   LDAZ(),Y HTPL
   STAZ TABPH
   RTS
@@ -139,7 +144,10 @@ store_hash_entry
   TAY
   LDAZ MEMPL
   STAZ(),Y HTPL
-  INY
+  CLC
+  LDAZ HASH
+  ADC# $80
+  TAY
   LDAZ MEMPH
   STAZ(),Y HTPL
   RTS
@@ -237,10 +245,11 @@ ft_at_end
   RTS
 
 
-; Stores null next pointer and key on heap
+; Stores null next pointer, key and value on heap
 ; and advances heap pointer
-; On entry HT_KEY contains key to store
-; On exit MEMPL;MEMPH points to where value should be stored
+; On entry HT_VL;HT_VH contains the value to store
+;          HT_KEY contains key to store
+; On exit MEMPL;MEMPH points to the next free heap location
 ;         Y = 0
 ;         X is preserved
 ;         A is not preserved
@@ -261,14 +270,20 @@ st_loop
   STAZ(),Y MEMPL
   BNE st_loop
   INY
+  ; Store value
+  LDAZ HT_VL
+  STAZ(),Y MEMPL
+  INY
+  LDAZ HT_VH
+  STAZ(),Y MEMPL
+  INY
   JMP advance_heap     ; Tail call
 
 
-; Add HT_KEY to hash table
+; Add HT_KEY mapped to HT_VL;HT_VH to hash table
 ; On entry HT_KEY contains key
+;          HT_VL;HT_VH constains the value
 ; On exit C = 0 if added or 1 if already exists
-;         If C = 0, MEMPL;MEMPH points to where value should be stored
-;         Caller must store value and call advance_heap
 ;         A, X, Y are not preserved
 hash_add
   JSR calculate_hash

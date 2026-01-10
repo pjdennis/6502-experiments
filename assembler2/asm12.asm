@@ -50,9 +50,9 @@ INST_BYTE     = $04
 
 
 ; Instruction hash table, etc.
-  .include environment.asm
-  .include common10.asm
-  .include inst10.asm.out
+  .include environment11.asm
+  .include common11.asm
+  .include inst11.asm.out
 
 
 ; Error messages

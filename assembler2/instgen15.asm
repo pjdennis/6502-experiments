@@ -15,14 +15,15 @@ PL        DATA $00     ; 2 byte pointer
 PH        DATA $00     ; "
 P2L       DATA $00     ; 2 byte pointer
 P2H       DATA $00     ; "
-CHAR      DATA $00     ; 1 byte character value
+CURR_GLOBAL_HEAP_L DATA $00 ; Required by hash_table15.asm (unused here)
+CURR_GLOBAL_HEAP_H DATA $00 ; "
+
 
   .code
 
-
 ; Include files
-  .include environment.asm
-  .include common12.asm
+  .include environment11.asm
+  .include common15.asm
 
 
 ; Instruction table
@@ -44,6 +45,7 @@ MNTAB
   DATA "CLC"      $00 $00 $18
   DATA "CMPZ"     $00 $04 $C5
   DATA "CMP#"     $00 $04 $C9
+  DATA "CMP,X"    $00 $00 $DD
   DATA "CMP,Y"    $00 $00 $D9
   DATA "CPXZ"     $00 $04 $E4
   DATA "CPYZ"     $00 $04 $C4
@@ -101,17 +103,17 @@ populate_instruction_hash_table
   STAZ P2L
   LDA# >MNTAB
   STAZ P2H
-piht_entry_loop
+.entry_loop
   LDY# $00
   LDAZ(),Y P2L
-  BEQ piht_done
-piht_token_loop
+  BEQ .done
+.token_loop
   STA,Y TOKEN
-  BEQ piht_token_loop_done
+  BEQ .token_loop_done
   INY
   LDAZ(),Y P2L
-  JMP piht_token_loop
-piht_token_loop_done
+  JMP .token_loop
+.token_loop_done
   INY
   LDAZ(),Y P2L
   STAZ HEX2
@@ -129,18 +131,19 @@ piht_token_loop_done
   STAZ P2H
   ; Store entry
   JSR hash_add
-  JMP piht_entry_loop
-piht_done
+  JSR store_hash_value
+  JMP .entry_loop
+.done
   RTS
 
 
 display_hex_char
   CMP# $0A
-  BCS display_hex_char_low
+  BCS .low
   ; Carry alrady clear
   ADC# "0"
   JMP write_b          ; Tail call
-display_hex_char_low
+.low
   ; C already set
   SBC# $0A ; Subtract 10
   CLC
@@ -188,38 +191,39 @@ display_data_prefix
 ; On exit Y points to the terminating 0
 display_text
   LDY# $00
-dtext_loop
+.loop
   LDAZ(),Y PL
-  BEQ dtext_done
+  BEQ .done
   JSR write_b
   INY
-  JMP dtext_loop
-dtext_done
+  JMP .loop
+.done
   RTS
 
 
 display_table
   LDA# $00
   STAZ HASH
-dt_loop
+.loop
   ; Display line start
   JSR display_data_prefix
   ; Display line
   LDA# $00
   STAZ TEMP
-dt_lineloop
+.lineloop
   LDA# " "
   JSR write_b
   JSR hash_entry_empty
-  BNE dt_not_empty
+  BNE .not_empty
   ; empty
-  LDA# $00
-  JSR display_byte
-  JMP dt_next
-dt_not_empty
-  ; Display byte selector < or >
-  LDAZ CHAR
+  LDA# "$"
   JSR write_b
+  LDA# $00
+  JSR display_hex
+  LDA# $00
+  JSR display_hex
+  JMP .next
+.not_empty
   ; Display instruction label prefix
   LDA# <msg_instprefix
   STAZ PL
@@ -236,25 +240,24 @@ dt_not_empty
   ADC# $00
   STAZ PH
   JSR display_text
-dt_next
+.next
   LDAZ HASH
   CLC
-  ADC# $01
+  ADC# $02
   STAZ HASH
   LDAZ TEMP
   CLC
   ADC# $01
   STAZ TEMP
   CMP# $08
-  BEQ dt_next1
-  JMP dt_lineloop
-dt_next1
+  BEQ .next1
+  JMP .lineloop
+.next1
   JSR display_newline
   LDAZ HASH
-  CMP# $80
-  BEQ dt_done 
-  JMP dt_loop
-dt_done
+  BEQ .done
+  JMP .loop
+.done
   RTS
 
 
@@ -288,20 +291,20 @@ write_label
   LDAZ(),Y PL
   JSR display_byte
   JSR display_newline
-  RTS 
+  RTS
 
 
 display_data
   LDA# $00
   STAZ HASH
-dd_loop
+.loop
   JSR hash_entry_empty
-  BNE dd_not_empty
-  JMP dd_next
-dd_not_empty
+  BNE .not_empty
+  JMP .next
+.not_empty
   ; Load pointer to hash entry
   JSR load_hash_entry
-dd_entry_loop
+.entry_loop
   ; Display instruction label prefix
   LDA# <msg_instprefix
   STAZ PL
@@ -323,10 +326,10 @@ dd_entry_loop
   ; Display next pointer
   LDY# $00
   LDAZ(),Y TABPL
-  BNE dd_not_zero
+  BNE .not_zero
   INY
   LDAZ(),Y TABPL
-  BNE dd_not_zero
+  BNE .not_zero
   ; Zero
   LDA# "$"
   JSR write_b
@@ -336,8 +339,8 @@ dd_entry_loop
   JSR write_b
   JSR write_b
   JSR write_label
-  JMP dd_next
-dd_not_zero
+  JMP .next
+.not_zero
   LDA# <msg_instprefix
   STAZ PL
   LDA# >msg_instprefix
@@ -364,22 +367,23 @@ dd_not_zero
   STAZ TABPL
   LDAZ PH
   STAZ TABPH
-  JMP dd_entry_loop
-dd_next
+  JMP .entry_loop
+.next
   LDAZ HASH
   CLC
-  ADC# $01
+  ADC# $02
   STAZ HASH
-  CMP# $80
-  BEQ dd_done
-  JMP dd_loop
-dd_done
+  BEQ .done
+  JMP .loop
+.done
   RTS
 
 
 ; Entry point
 start
 ; Initialization
+  LDA# $00
+  STAZ IS_LOCAL_LABEL    ; Clear flag before using hash table
   JSR init_heap
   JSR select_instruction_hash_table
   JSR init_hash_table
@@ -392,40 +396,16 @@ start
   STAZ PH
   JSR display_text
   JSR display_newline
-
-; Show low address bytes
   LDA# <msg_IHASHTAB
   STAZ PL
   LDA# >msg_IHASHTAB
   STAZ PH
   JSR display_text
   JSR display_newline
-  LDA# <msg_low_bytes_comment
-  STAZ PL
-  LDA# >msg_low_bytes_comment
-  STAZ PH
-  JSR display_text
-  JSR display_newline
-  LDA# "<"
-  STAZ CHAR
   JSR display_table
   JSR display_newline
 
-; Show high address bytes
-  LDA# <msg_high_bytes_comment
-  STAZ PL
-  LDA# >msg_high_bytes_comment
-  STAZ PH
-  JSR display_text
-  JSR display_newline
-  LDA# ">"
-  STAZ CHAR
-  JSR display_table
-  JSR display_newline
-  JSR display_newline
-
-
-; Show the heap data
+; Show the instructions heap data
   LDA# <msg_heap_comment
   STAZ PL
   LDA# >msg_heap_comment
@@ -441,19 +421,13 @@ msg_data
   DATA "DATA" $00
 
 msg_instprefix
-  DATA "i_" $00
+  DATA "." $00
 
 msg_IHASHTAB
   DATA "IHASHTAB" $00
 
 msg_hash_table_comment
-  DATA "; Instructions hash table" $00
-
-msg_low_bytes_comment
-  DATA "  ; Low address bytes" $00
-
-msg_high_bytes_comment
-  DATA "  ; High address bytes" $00
+  DATA "; Instructions hash table (pointers)" $00
 
 msg_heap_comment
   DATA "; Instructions heap data" $00

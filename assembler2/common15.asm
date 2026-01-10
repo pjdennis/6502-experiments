@@ -1,7 +1,7 @@
 HT_KEY = TOKEN
 HT_VL  = HEX2
 HT_VH  = HEX1
-  .include hash_table14.asm
+  .include hash_table15.asm
 
 
 init_heap
@@ -48,6 +48,8 @@ store_hash_value
 
 
 select_instruction_hash_table
+  LDA# $00
+  STAZ IS_LOCAL_LABEL       ; Clear local label flag for instruction lookup
   LDA# <IHASHTAB
   STAZ HTPL
   LDA# >IHASHTAB
