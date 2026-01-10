@@ -197,17 +197,18 @@ jump_target
   NOP
   JMP (jmp_vector)     ; Should use address of jmp_vector (backward ref)
 
-; === Test character literals in immediate mode ===
-  LDA #"A"             ; Should be A9 41
-  LDX #"Z"             ; Should be A2 5A
-  LDY #"0"             ; Should be A0 30
-  CMP #" "             ; Should be C9 20
-  CPX #"!"             ; Should be E0 21
+; === Test character literals in immediate mode (single quotes) ===
+  LDA #'A'             ; Should be A9 41
+  LDX #'Z'             ; Should be A2 5A
+  LDY #'0'             ; Should be A0 30
+  CMP #' '             ; Should be C9 20
+  CPX #'!'             ; Should be E0 21
 
 ; === Test escape sequences ===
-  LDA #"\n"            ; Should be A9 0A (linefeed)
-  LDX #"\\"            ; Should be A2 5C (backslash)
-  LDY #"\""            ; Should be A0 22 (double quote)
+  LDA #'\n'            ; Should be A9 0A (linefeed)
+  LDX #'\\'            ; Should be A2 5C (backslash)
+  LDY #'\''            ; Should be A0 27 (single quote)
+  ADC #'\"'            ; Should be 69 22 (double quote, optional escape)
 
 ; === Test constants in immediate mode ===
 TEST_CONST = $42

@@ -1161,38 +1161,43 @@ parse_operand_and_emit
   PLA
   RTS
 .imm_check_char
-  CMP# "\""
+  CMP# "'"
   BNE .imm_label
-  ; #"x" - character literal (must be exactly 1 char)
+  ; #'x' - character literal (must be exactly 1 char)
   JSR read_char        ; Skip opening quote
-  CMP# "\""
-  BEQ .imm_char_empty  ; Empty string - error
+  CMP# "'"
+  BEQ .imm_char_empty  ; Empty literal - error
   CMP# "\\"
   BEQ .imm_char_escape
   ; Regular character
   STAZ OPERAND_L
   JMP .imm_char_check_close
 .imm_char_escape
-  ; Escape sequence
+  ; Escape sequence: \n \\ \' \"
   JSR read_char
   CMP# "n"
   BNE .imm_esc_not_n
-  LDA# $0A             ; Newline
+  LDA# "\n"            ; Newline
   JMP .imm_esc_done
 .imm_esc_not_n
   CMP# "\\"
   BNE .imm_esc_not_bs
-  LDA# $5C             ; Backslash
+  LDA# "\\"            ; Backslash
   JMP .imm_esc_done
 .imm_esc_not_bs
+  CMP# "'"
+  BNE .imm_esc_not_sq
+  LDA# "'"             ; Single quote
+  JMP .imm_esc_done
+.imm_esc_not_sq
   CMP# "\""
   BNE .imm_esc_invalid
-  LDA# $22             ; Double quote
+  LDA# "\""            ; Double quote (optional escape)
 .imm_esc_done
   STAZ OPERAND_L
 .imm_char_check_close
   JSR read_char        ; Should be closing quote
-  CMP# "\""
+  CMP# "'"
   BNE .imm_char_too_long
   LDA# $00
   STAZ OPERAND_H
