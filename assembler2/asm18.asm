@@ -1053,8 +1053,15 @@ parse_operand_and_emit
 
 .implied_mode
   PHA                  ; Save next char (newline or semicolon)
+  ; Try accumulator mode first
+  LDA #MODE_ACC
+  STA ADDR_MODE
+  JSR find_opcode_for_mode
+  BCC .use_accumulator  ; C=0 means opcode found
+  ; No accumulator mode - use implied
   LDA #MODE_NONE
   STA ADDR_MODE
+.use_accumulator
   LDA #$00
   STA OPERAND_L
   STA OPERAND_H

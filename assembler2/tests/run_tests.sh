@@ -1,17 +1,19 @@
 #!/bin/bash
 #
-# Test runner for asm19 assembler
-# Usage: ./run_tests.sh [test_name]
-#   If test_name is provided, only runs that specific test
+# Test runner for assembler
+# Usage: ./run_tests.sh [test_file] [assembler] [test_name]
+#   test_file: Path to test file (default: tests/asm19_tests.txt)
+#   assembler: Path to assembler (default: out/asm19.out)
+#   test_name: If provided, only runs that specific test
 #
 
 # Don't use set -e as arithmetic expressions can return non-zero
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ASSEMBLER2_DIR="$(dirname "$SCRIPT_DIR")"
-TEST_FILE="$SCRIPT_DIR/asm19_tests.txt"
+TEST_FILE="${1:-$SCRIPT_DIR/asm19_tests.txt}"
+ASSEMBLER="${2:-$ASSEMBLER2_DIR/out/asm19.out}"
 EMULATOR="$ASSEMBLER2_DIR/emulator.out"
-ASSEMBLER="$ASSEMBLER2_DIR/out/asm19.out"
 
 # Colors for output
 RED='\033[0;31m'
@@ -25,7 +27,7 @@ FAILED=0
 SKIPPED=0
 
 # Filter for single test
-FILTER="${1:-}"
+FILTER="${3:-}"
 
 # Temp files
 TMP_ASM=$(mktemp /tmp/test_XXXXXX.asm)
@@ -247,8 +249,10 @@ parse_and_run_tests() {
 
 # Main
 echo "========================================"
-echo "asm19 Assembler Test Suite"
+echo "Assembler Test Suite"
 echo "========================================"
+echo ""
+echo "Running tests from $(basename "$TEST_FILE")"
 echo ""
 
 parse_and_run_tests

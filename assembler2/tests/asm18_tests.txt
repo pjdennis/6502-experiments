@@ -540,3 +540,31 @@ INPUT:
 2: label
 3:   .data label
 EXPECT_HEX: 00 02
+
+---
+NAME: accumulator_mode_new_syntax
+INPUT:
+1: * = $0200
+2:   ASL
+3:   LSR
+4:   ROL
+5:   ROR
+EXPECT_HEX: 0a 4a 2a 6a
+
+---
+NAME: accumulator_mode_old_syntax
+INPUT:
+1: * = $0200
+2:   ASL A
+3:   LSR A
+4:   ROL A
+5:   ROR A
+EXPECT_HEX: 0a 4a 2a 6a
+
+---
+NAME: implied_mode_still_works
+INPUT:
+1: * = $0200
+2:   NOP
+3:   RTS
+EXPECT_HEX: ea 60
