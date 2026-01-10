@@ -1198,54 +1198,30 @@ parse_operand_and_emit
   ; ($xx,X) - indirect indexed X (1-byte operand)
   ; ($xxxx) - indirect absolute for JMP (2-byte operand)
   JSR read_char        ; Skip (
+  ; Validate operand start
   CMP #'$'
-  BNE .ind_label
-  JSR read_char
-  JSR read_hex_byte_or_word
-  ; C = 1 if 2 bytes, C = 0 if 1 byte
-  ; A contains next char after hex value
-  BCC .ind_hex_one_byte
-  ; 2 byte value - store operand and set flag
-  PHA                  ; Save next char
-  LDA HEX2
-  STA OPERAND_L
-  LDA HEX1
-  STA OPERAND_H
-  LDA #$FF             ; Flag: 2-byte operand
-  STA TEMP
-  PLA                  ; Restore next char
-  JMP .indirect_check_suffix
-.ind_hex_one_byte
-  ; 1 byte value
-  PHA                  ; Save next char
-  LDA HEX1
-  STA OPERAND_L
-  LDA #$00
-  STA OPERAND_H
-  STA TEMP            ; Flag: 1-byte operand (0)
-  PLA                  ; Restore next char
-  JMP .indirect_check_suffix
-.ind_label
+  BEQ .ind_parse
+  CMP #'<'
+  BEQ .ind_parse
+  CMP #'>'
+  BEQ .ind_parse
   JSR is_label_start_char
-  BNE .ind_label_invalid
-  JSR read_and_find_existing_label
+  BNE .ind_invalid
+.ind_parse
+  JSR parse_value      ; Returns next char in A, OPERAND_L/H set
   PHA                  ; Save next char
-  LDA HEX2
-  STA OPERAND_L
-  LDA HEX1
-  STA OPERAND_H
-  ; For labels, check if high byte is non-zero to determine size
-  ORA HEX1            ; A = HEX1
-  BNE .ind_label_2byte
-  LDA #$00             ; Flag: 1-byte (ZP label)
-  JMP .ind_label_done
-.ind_label_2byte
-  LDA #$FF             ; Flag: 2-byte (ABS label)
-.ind_label_done
+  ; Determine if 1-byte or 2-byte based on high byte
+  LDA OPERAND_H
+  BEQ .ind_one_byte
+  LDA #$FF             ; Flag: 2-byte operand
+  JMP .ind_size_done
+.ind_one_byte
+  LDA #$00             ; Flag: 1-byte operand
+.ind_size_done
   STA TEMP
   PLA                  ; Restore next char
   JMP .indirect_check_suffix
-.ind_label_invalid
+.ind_invalid
   JMP err_invalid_operand
 .indirect_check_suffix
   ; A contains next char (should be ) or ,)
