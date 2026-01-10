@@ -148,6 +148,34 @@ skip_spaces
   RTS
 
 
+; Check if character is a valid label start character
+; Valid: A-Z, a-z, _, .
+; On entry A contains the character to check
+; On exit Z = 1 if valid label start, Z = 0 if invalid
+;         A, X are preserved
+;         Y is not preserved
+is_label_start_char
+  CMP #'.'
+  BEQ .done
+  CMP #'_'
+  BEQ .done
+  LDY #$00             ; Y=0 means invalid (default)
+  CMP #'A'
+  BCC .check_result
+  CMP #$5B             ; 'Z'+1
+  BCC .mark_valid
+  CMP #'a'
+  BCC .check_result
+  CMP #$7B             ; 'z'+1
+  BCS .check_result
+.mark_valid
+  INY                  ; Y=1 means valid
+.check_result
+  CPY #$01             ; Z=1 if valid, Z=0 if invalid
+.done
+  RTS
+
+
 ; Check whether the next character (in A) is NOT a token character
 ; On entry A contains the next character
 ; On exit Z is set if current character terminates the current token, unset otherwise
@@ -1159,21 +1187,8 @@ parse_operand_and_emit
 .imm_char_invalid
   JMP err_invalid_char_literal
 .imm_label
-  ; Validate that A contains a valid label start character
-  ; Valid: A-Z, a-z, _, .
-  CMP #'.'
-  BEQ .imm_label_ok
-  CMP #'_'
-  BEQ .imm_label_ok
-  CMP #'A'
-  BCC .imm_label_invalid  ; < 'A'
-  CMP #$5B              ; 'Z'+1
-  BCC .imm_label_ok       ; 'A' to 'Z'
-  CMP #'a'
-  BCC .imm_label_invalid  ; Between 'Z' and 'a'
-  CMP #$7B              ; 'z'+1
-  BCS .imm_label_invalid  ; > 'z'
-.imm_label_ok
+  JSR is_label_start_char
+  BNE .imm_label_invalid
   JSR read_and_find_existing_label
   PHA                  ; Save next char
   LDA HEX2            ; Low byte of label value
@@ -1218,21 +1233,8 @@ parse_operand_and_emit
   PLA                  ; Restore next char
   JMP .indirect_check_suffix
 .ind_label
-  ; Validate that A contains a valid label start character
-  ; Valid: A-Z, a-z, _, .
-  CMP #'.'
-  BEQ .ind_label_ok
-  CMP #'_'
-  BEQ .ind_label_ok
-  CMP #'A'
-  BCC .ind_label_invalid  ; < 'A'
-  CMP #$5B              ; 'Z'+1
-  BCC .ind_label_ok       ; 'A' to 'Z'
-  CMP #'a'
-  BCC .ind_label_invalid  ; Between 'Z' and 'a'
-  CMP #$7B              ; 'z'+1
-  BCS .ind_label_invalid  ; > 'z'
-.ind_label_ok
+  JSR is_label_start_char
+  BNE .ind_label_invalid
   JSR read_and_find_existing_label
   PHA                  ; Save next char
   LDA HEX2
