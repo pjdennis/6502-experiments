@@ -1483,36 +1483,9 @@ parse_operand_and_emit
   RTS
 
 .is_label
-  ; Read the label token
-  JSR read_token
+  ; Parse the label value
+  JSR parse_value      ; Returns C=1 for bare label, OPERAND_L/H set, IS_FWDREF set
   PHA                  ; Save next char
-  ; Look up the token
-  JSR check_local_label
-  JSR select_label_hash_table
-  JSR find_in_hash
-  BCC .label_lookup_done
-  ; Label not found - check pass
-  BIT PASS
-  BMI .label_not_found_pass2
-  ; Pass 1 - forward reference: use zero values
-  LDY #$FF
-  STY IS_FWDREF            ; Mark as forward reference
-  LDY #$00
-  STY HEX1
-  STY HEX2
-  JMP .label_continue
-.label_not_found_pass2
-  JMP err_label_not_found
-.label_lookup_done
-  ; Label found - clear forward ref flag
-  LDA #$00
-  STA IS_FWDREF
-.label_continue
-  ; Common path for both forward refs and found labels
-  LDA HEX2
-  STA OPERAND_L
-  LDA HEX1
-  STA OPERAND_H
   ; Check if this is a branch instruction
   JSR check_if_branch
   BCC .label_is_branch
