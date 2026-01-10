@@ -49,22 +49,6 @@ CURR_GLOBAL_HEAP_H .data $00 ; "
   .include common19.asm
 
 
-; Mode constants (for documentation)
-MODE_NONE = $00
-MODE_ACC  = $01
-MODE_IMM  = $02
-MODE_ZP   = $03
-MODE_ZPX  = $04
-MODE_ZPY  = $05
-MODE_ABS  = $06
-MODE_ABSX = $07
-MODE_ABSY = $08
-MODE_INDX = $09
-MODE_INDY = $0A
-MODE_REL  = $0B
-MODE_IND  = $0C
-
-
 ; Instruction table with mode:opcode pairs
 ; Format: "MNEMONIC" $00 [mode opcode]... $FF
 MNTAB
