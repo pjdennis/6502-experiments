@@ -1,6 +1,9 @@
 # Plan: Consolidate Operand Value Parsing
 
-## Status: ON HOLD - Side quest in progress
+## Status: READY - Accumulator syntax migration complete
+
+The accumulator syntax side quest is complete (commits fe7035c, e8e2e8d, 59cfac4).
+Ready to proceed with operand consolidation.
 
 ---
 
