@@ -894,6 +894,13 @@ process_directive
   STA TABPH
   JSR compare_token
   BEQ .code
+  ; Check for 'data'
+  LDA #<directive_data
+  STA TABPL
+  LDA #>directive_data
+  STA TABPH
+  JSR compare_token
+  BEQ .data
   ; Directive not recognized
   PLA                  ; Restore next char
   JMP err_unknown_directive
@@ -927,6 +934,9 @@ process_directive
   PLA                  ; Restore next char
   JSR skip_rest_of_line
   RTS
+.data
+  PLA                  ; Restore next char
+  JMP data_parameters_loop_entry
 
 directive_include
   DATA "include" $00
@@ -936,6 +946,9 @@ directive_zeropage
 
 directive_code
   DATA "code" $00
+
+directive_data
+  DATA "data" $00
 
 
 ; Read from input, assemble code and write to output
