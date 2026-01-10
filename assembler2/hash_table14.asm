@@ -9,7 +9,6 @@
   .zeropage
 
 HASH      DATA $00     ; 1 byte hash value
-HASH_PRE_ASL DATA $00  ; Pre-ASL hash value (temporary, not committed)
 CACHED_HASH DATA $00   ; Pre-ASL hash of current global (for local labels)
 HTPL      DATA $00     ; 2 byte pointer to hash table
 HTPH      DATA $00     ; "
@@ -59,18 +58,16 @@ init_hash_table
 calculate_hash
   LDA# $00
   STAZ HASH
-  JSR hash_loop
-  LDAZ HASH
-  STAZ HASH_PRE_ASL       ; Save pre-ASL value (not committed)
-  ASLZ HASH
-  RTS
+  JMP hash_loop ; Tail call
+
 
 ; Commit the pre-ASL hash to CACHED_HASH
 ; Call this when updating CURR_GLOBAL for non-assignment global labels
 ; On exit A is not preserved
 ;         X, Y are preserved
 commit_cached_hash
-  LDAZ HASH_PRE_ASL
+  LDAZ HASH
+  LSRA
   STAZ CACHED_HASH
   RTS
 
@@ -82,9 +79,8 @@ commit_cached_hash
 calculate_hash_local
   LDAZ CACHED_HASH
   STAZ HASH
-  JSR hash_loop
-  ASLZ HASH
-  RTS
+  JMP hash_loop ; Tail call
+
 
 ; Calculate hash for instructions (does NOT modify CACHED_HASH)
 ; On entry HT_KEY contains the token to calculate hash from
@@ -95,9 +91,8 @@ calculate_hash_local
 calculate_hash_instruction
   LDA# $00
   STAZ HASH
-  JSR hash_loop
-  ASLZ HASH
-  RTS
+  ; fall through to common code
+
 
 ; Shared hash loop - X = start index, HASH = initial value
 ; On exit: HASH = pre-ASL result, X at null terminator
@@ -117,6 +112,7 @@ hash_loop
   INX
   BNE .loop
 .done
+  ASLZ HASH
   PLA
   TAX
   RTS
@@ -138,6 +134,7 @@ find_in_hash
   JSR calculate_hash
   JMP find_in_hash_common
 
+
 ; Find in hash table for instructions (does not modify CACHED_HASH)
 ; On entry HT_KEY contains the key to find
 ; On exit C = 0 if found or 1 if not found
@@ -147,6 +144,7 @@ find_in_hash
 find_in_hash_instruction
   JSR calculate_hash_instruction
   ; Fall through to common code
+
 
 find_in_hash_common
   JSR hash_entry_empty
