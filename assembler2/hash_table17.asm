@@ -39,10 +39,10 @@ scramble_table
 ;         X is preserved
 ;         A, Y are not preserved
 init_hash_table
-  LDY# $00
+  LDY #$00
   TYA                  ; A <- 0
 .loop
-  STAZ(),Y HTPL
+  STA (HTPL),Y
   INY
   BNE .loop
   RTS
@@ -56,8 +56,8 @@ init_hash_table
 ;         A, Y are not preserved
 ; Note: Caller must call commit_cached_hash to update CACHED_HASH if needed
 calculate_hash
-  LDA# $00
-  STAZ HASH
+  LDA #$00
+  STA HASH
   JMP hash_loop ; Tail call
 
 
@@ -66,9 +66,9 @@ calculate_hash
 ; On exit A is not preserved
 ;         X, Y are preserved
 commit_cached_hash
-  LDAZ HASH
-  LSRA
-  STAZ CACHED_HASH
+  LDA HASH
+  LSR A
+  STA CACHED_HASH
   RTS
 
 ; Calculate hash for local labels
@@ -77,8 +77,8 @@ commit_cached_hash
 ;         X is preserved
 ;         A, Y are not preserved
 calculate_hash_local
-  LDAZ CACHED_HASH
-  STAZ HASH
+  LDA CACHED_HASH
+  STA HASH
   JMP hash_loop ; Tail call
 
 
@@ -89,8 +89,8 @@ calculate_hash_local
 ;         X is preserved
 ;         A, Y are not preserved
 calculate_hash_instruction
-  LDA# $00
-  STAZ HASH
+  LDA #$00
+  STA HASH
   ; fall through to common code
 
 
@@ -100,19 +100,19 @@ calculate_hash_instruction
 hash_loop
   TXA
   PHA
-  LDX# $00
+  LDX #$00
 .loop
-  LDA,X HT_KEY
+  LDA HT_KEY,X
   BEQ .done
-  AND# $7F
-  EORZ HASH
+  AND #$7F
+  EOR HASH
   TAY
-  LDA,Y scramble_table
-  STAZ HASH
+  LDA scramble_table,Y
+  STA HASH
   INX
   BNE .loop
 .done
-  ASLZ HASH
+  ASL HASH
   PLA
   TAX
   RTS
@@ -126,7 +126,7 @@ hash_loop
 ;         X is preserved
 ;         A, Y are not preserverd
 find_in_hash
-  LDAZ IS_LOCAL_LABEL
+  LDA IS_LOCAL_LABEL
   BEQ .use_global_hash
   JSR calculate_hash_local
   JMP find_in_hash_common
@@ -154,11 +154,11 @@ find_in_hash_common
   JSR find_token
   BCS .not_found
   ; Found
-  LDAZ(),Y TABPL
-  STAZ HT_VL
+  LDA (TABPL),Y
+  STA HT_VL
   INY
-  LDAZ(),Y TABPL
-  STAZ HT_VH
+  LDA (TABPL),Y
+  STA HT_VH
   CLC
   RTS
 .not_found
@@ -171,12 +171,12 @@ find_in_hash_common
 ;         X is preserved
 ;         A, Y are not preserved
 hash_entry_empty
-  LDAZ HASH
+  LDA HASH
   TAY
-  LDAZ(),Y HTPL
+  LDA (HTPL),Y
   BNE .done
   INY
-  LDAZ(),Y HTPL
+  LDA (HTPL),Y
 .done
   RTS
 
@@ -187,13 +187,13 @@ hash_entry_empty
 ;         X is preserved
 ;         A, Y are not preserved
 load_hash_entry
-  LDAZ HASH
+  LDA HASH
   TAY
-  LDAZ(),Y HTPL
-  STAZ TABPL
+  LDA (HTPL),Y
+  STA TABPL
   INY
-  LDAZ(),Y HTPL
-  STAZ TABPH
+  LDA (HTPL),Y
+  STA TABPH
   RTS
 
 
@@ -203,13 +203,13 @@ load_hash_entry
 ; On exit X is preserved
 ;         A, Y are not preserved
 store_hash_entry
-  LDAZ HASH
+  LDA HASH
   TAY
-  LDAZ MEMPL
-  STAZ(),Y HTPL
+  LDA MEMPL
+  STA (HTPL),Y
   INY
-  LDAZ MEMPH
-  STAZ(),Y HTPL
+  LDA MEMPH
+  STA (HTPL),Y
   RTS
 
 
@@ -220,11 +220,11 @@ store_hash_entry
 ;         X is preserved
 ;         A is not preserved
 store_table_entry
-  LDAZ MEMPL
-  STAZ(),Y TABPL
+  LDA MEMPL
+  STA (TABPL),Y
   INY
-  LDAZ MEMPH
-  STAZ(),Y TABPL
+  LDA MEMPH
+  STA (TABPL),Y
   INY
   RTS
 
@@ -241,19 +241,19 @@ store_table_entry
 ; For escape format, verifies scope pointer matches before comparing
 compare_token
   ; Quick check: is stored token in escape format?
-  LDY# $00
-  LDAZ(),Y TABPL
-  CMP# $01
+  LDY #$00
+  LDA (TABPL),Y
+  CMP #$01
   BEQ .handle_escape
 
   ; === Fast path (no escape) - simple string comparison ===
   DEY                       ; Y = $FF
 .simple_loop
   INY
-  LDAZ(),Y TABPL
-  CMP,Y HT_KEY
+  LDA (TABPL),Y
+  CMP HT_KEY,Y
   BNE .simple_done
-  CMP# $00
+  CMP #$00
   BNE .simple_loop
 .simple_done
   RTS
@@ -262,24 +262,24 @@ compare_token
   ; === Escape format ($01 <ptr_lo> <ptr_hi> ".bar" $00) ===
   ; Verify scope pointer matches CURR_GLOBAL_HEAP
   INY
-  LDAZ(),Y TABPL
-  CMPZ CURR_GLOBAL_HEAP_L
+  LDA (TABPL),Y
+  CMP CURR_GLOBAL_HEAP_L
   BNE .escape_nomatch
   INY
-  LDAZ(),Y TABPL
-  CMPZ CURR_GLOBAL_HEAP_H
+  LDA (TABPL),Y
+  CMP CURR_GLOBAL_HEAP_H
   BNE .escape_nomatch
   ; Scope matches - compare local part (Y=2, need Y=3 to skip header)
   ; Use X for HT_KEY index, save/restore since X is file handle
   TXA
   PHA
-  LDX# $00
+  LDX #$00
   INY                       ; Y = 3 (past $01 <lo> <hi>)
 .escape_loop
-  LDAZ(),Y TABPL
-  CMP,X HT_KEY
+  LDA (TABPL),Y
+  CMP HT_KEY,X
   BNE .escape_nomatch_restore
-  CMP# $00
+  CMP #$00
   BEQ .escape_match
   INX
   INY
@@ -287,13 +287,13 @@ compare_token
 .escape_match
   PLA
   TAX
-  LDA# $00                  ; Z=1 (match)
+  LDA #$00                  ; Z=1 (match)
   RTS
 .escape_nomatch_restore
   PLA
   TAX
 .escape_nomatch
-  LDA# $01                  ; Z=0 (no match)
+  LDA #$01                  ; Z=0 (no match)
   RTS
 
 
@@ -308,18 +308,18 @@ compare_token
 find_token
 .token_loop
   ; Store the current pointer
-  LDAZ TABPL
-  STAZ HTTPL
-  LDAZ TABPH
-  STAZ HTTPH
+  LDA TABPL
+  STA HTTPL
+  LDA TABPH
+  STA HTTPH
   ; Advance past 'next' pointer
   CLC
-  LDA# $02
-  ADCZ TABPL
-  STAZ TABPL
-  LDA# $00
-  ADCZ TABPH
-  STAZ TABPH
+  LDA #$02
+  ADC TABPL
+  STA TABPL
+  LDA #$00
+  ADC TABPH
+  STA TABPH
   ; Check for matching token
   JSR compare_token
   BNE .token_is_non_match
@@ -329,27 +329,27 @@ find_token
   RTS
 .token_is_non_match    ; Not a match - move to next
   ; Check if 'next' pointer is 0
-  LDY# $00
-  LDAZ(),Y HTTPL
+  LDY #$00
+  LDA (HTTPL),Y
   BNE .not_at_end
   INY
-  LDAZ(),Y HTTPL
+  LDA (HTTPL),Y
   BEQ .at_end
 .not_at_end
-  LDY# $00
-  LDAZ(),Y HTTPL
-  STAZ TABPL
+  LDY #$00
+  LDA (HTTPL),Y
+  STA TABPL
   INY
-  LDAZ(),Y HTTPL
-  STAZ TABPH
+  LDA (HTTPL),Y
+  STA TABPH
   JMP .token_loop
 .at_end
   ; point tabp,Y to the zero 'next' pointer
-  LDAZ HTTPL
-  STAZ TABPL
-  LDAZ HTTPH
-  STAZ TABPH
-  LDY# $00
+  LDA HTTPL
+  STA TABPL
+  LDA HTTPH
+  STA TABPH
+  LDY #$00
   SEC ; Carry set indicates not found
   RTS
 
@@ -365,42 +365,42 @@ find_token
 ;         X is preserved
 ;         A is not preserved
 store_token
-  LDY# $00
+  LDY #$00
   ; Store null pointer (pointer to next)
-  LDA# $00
-  STAZ(),Y MEMPL
+  LDA #$00
+  STA (MEMPL),Y
   INY
-  STAZ(),Y MEMPL
+  STA (MEMPL),Y
   INY
   JSR advance_heap
   ; Save the pointer to the key
-  LDAZ MEMPL
-  STAZ TABPL
-  LDAZ MEMPH
-  STAZ TABPH
+  LDA MEMPL
+  STA TABPL
+  LDA MEMPH
+  STA TABPH
   ; Check if this is a local label
-  LDAZ IS_LOCAL_LABEL
+  LDA IS_LOCAL_LABEL
   BEQ .copy_token       ; If global, skip escape header
   ; Store $01 escape format: $01 <addr_lo> <addr_hi> <local_part>
   ; HT_KEY already contains just ".bar" - no scanning needed
-  LDA# $01              ; Escape byte
-  STAZ(),Y MEMPL
+  LDA #$01              ; Escape byte
+  STA (MEMPL),Y
   INY
-  LDAZ CURR_GLOBAL_HEAP_L
-  STAZ(),Y MEMPL
+  LDA CURR_GLOBAL_HEAP_L
+  STA (MEMPL),Y
   INY
-  LDAZ CURR_GLOBAL_HEAP_H
-  STAZ(),Y MEMPL
+  LDA CURR_GLOBAL_HEAP_H
+  STA (MEMPL),Y
   INY
   JSR advance_heap      ; Advance past escape header (3 bytes)
   ; Fall through to copy HT_KEY
 .copy_token
   ; Copy token string to heap
-  LDY# $FF
+  LDY #$FF
 .loop
   INY
-  LDA,Y HT_KEY
-  STAZ(),Y MEMPL
+  LDA HT_KEY,Y
+  STA (MEMPL),Y
   BNE .loop
   INY
   JMP advance_heap      ; Tail call
@@ -414,7 +414,7 @@ store_token
 ;         Caller must store value and call advance_heap
 ;         A, X, Y are not preserved
 hash_add
-  LDAZ IS_LOCAL_LABEL
+  LDA IS_LOCAL_LABEL
   BEQ .use_global_hash
   JSR calculate_hash_local
   JMP .hash_done
