@@ -1,8 +1,10 @@
 ; Addresses
-TOKEN      = $1D00      ; Buffer for the current token being read
-LHASHTAB   = $1E00      ; Label hash table
-*          = $2000      ; Code generates here
-FILE_STACK = $F000      ; File stack will grow down from 1 below here
+FWDREF_LIST  = $0200    ; Forward reference list (512 bytes, $0200-$03FF)
+FWDREF_LIMIT = $03FE    ; Max pointer before add (room for entry + terminator)
+TOKEN        = $1D00    ; Buffer for the current token being read
+LHASHTAB     = $1E00    ; Label hash table
+*            = $2000    ; Code generates here
+FILE_STACK   = $F000    ; File stack will grow down from 1 below here
 
 
   .zeropage
@@ -141,14 +143,14 @@ err_invalid_char_literal
 
 
 ; Forward reference list management
-; List is stored at $0200-$03FF, terminated by $FFFF
+; List is stored at FWDREF_LIST, terminated by $FFFF
 ; Each entry is 2 bytes (PC low, PC high) of an instruction with forward ref
 
 ; Initialize forward reference list pointer (call at start of pass 1)
 init_fwdref_list
-  LDA #$00
+  LDA #<FWDREF_LIST
   STA FWDREF_L
-  LDA #$02
+  LDA #>FWDREF_LIST
   STA FWDREF_H
   RTS
 
@@ -166,28 +168,26 @@ finalize_fwdref_list
 
 ; Reset forward reference pointer (call at start of pass 2)
 reset_fwdref_ptr
-  LDA #$00
+  LDA #<FWDREF_LIST
   STA FWDREF_L
-  LDA #$02
+  LDA #>FWDREF_LIST
   STA FWDREF_H
   RTS
 
 
 ; Add current PC to forward reference list (call in pass 1 when label not found)
-; List is $0200-$03FF (512 bytes), need 2 for entry + 2 for terminator
 ; On exit: Y is not preserved, A is not preserved
 ;          X is preserved
 add_forward_ref
-  ; Check if there's room (max pointer before add: $03FC)
+  ; Check if there's room (pointer must be < FWDREF_LIMIT)
   LDA FWDREF_H
-  CMP #$04
-  BCS .too_many           ; >= $0400, definitely too many
-  CMP #$03
-  BCC .ok                 ; < $0300, definitely ok
-  ; High byte is $03, check low byte
+  CMP #>FWDREF_LIMIT
+  BCC .ok                 ; High byte < limit high, definitely ok
+  BNE .too_many           ; High byte > limit high, definitely too many
+  ; High byte equals limit high, check low byte
   LDA FWDREF_L
-  CMP #$FE
-  BCS .too_many           ; >= $03FE, no room for entry + terminator
+  CMP #<FWDREF_LIMIT
+  BCS .too_many           ; >= FWDREF_LIMIT, no room for entry + terminator
 .ok
   ; Store PC at current list position
   LDY #$00
