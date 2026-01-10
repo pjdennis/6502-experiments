@@ -10,7 +10,7 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ASSEMBLER2_DIR="$(dirname "$SCRIPT_DIR")"
 TEST_FILE="$SCRIPT_DIR/asm18_tests.txt"
-EMULATOR="$ASSEMBLER2_DIR/out/emulator.out"
+EMULATOR="$ASSEMBLER2_DIR/emulator.out"
 ASSEMBLER="$ASSEMBLER2_DIR/out/asm18.out"
 
 # Colors for output

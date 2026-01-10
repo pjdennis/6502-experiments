@@ -1147,13 +1147,9 @@ parse_operand_and_emit
   JMP .imm_esc_done
 .imm_esc_not_bs
   CMP #'\''
-  BNE .imm_esc_not_sq
+  BNE .imm_esc_invalid
   LDA #'\''             ; Single quote
   JMP .imm_esc_done
-.imm_esc_not_sq
-  CMP #'"'
-  BNE .imm_esc_invalid
-  LDA #'"'            ; Double quote (optional escape)
 .imm_esc_done
   STA OPERAND_L
 .imm_char_check_close
