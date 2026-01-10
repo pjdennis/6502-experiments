@@ -2,7 +2,8 @@ all: emulator.out sidebyside.out asm0c.out asm00.out
 
 clean:
 	rm -f *.out
-	rm -f *.bin
+	rm -f out/*.out out/*.asm.out
+	rm -f dump/*.bin
 
 emulator.out: emulator.c
 	gcc -O2 -march=native -flto -DNDEBUG -o emulator.out emulator.c

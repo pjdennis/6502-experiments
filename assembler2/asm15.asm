@@ -32,7 +32,7 @@ DEBUG_FLAG  DATA $00 ; Non-zero if debug output enabled
 
 
 ; Include files
-  .include inst15.asm.out   ; This goes first since the tables should start on a page boundary
+  .include out/inst15.asm.out   ; This goes first since the tables should start on a page boundary
   .include environment11.asm
   .include common15.asm
 FS_FILENAME   = TOKEN

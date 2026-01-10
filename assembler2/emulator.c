@@ -1366,10 +1366,16 @@ int main(int argc, char **argv) {
         dump_filename_base = "stdout";
     }
 
+    // Extract basename (remove directory prefix)
+    char* basename = strrchr(dump_filename_base, '/');
+    basename = basename ? basename + 1 : dump_filename_base;
+
+    const char* dump_dir = "dump/";
     const char* dump_file_suffix = ".dump.bin";
-    char* dump_filename = malloc(strlen(dump_filename_base) + strlen(dump_file_suffix) + 1);
-    strcpy(dump_filename, dump_filename_base);
-    strcpy(dump_filename + strlen(dump_filename_base), dump_file_suffix);
+    char* dump_filename = malloc(strlen(dump_dir) + strlen(basename) + strlen(dump_file_suffix) + 1);
+    strcpy(dump_filename, dump_dir);
+    strcat(dump_filename, basename);
+    strcat(dump_filename, dump_file_suffix);
 
     FILE* dump_file_ptr = fopen(dump_filename, "wb");
     if (!dump_file_ptr) {
