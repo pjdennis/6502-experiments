@@ -20,3 +20,12 @@
 
 ## Performance
 - [ ] Profile the assembler - See where cycles are being spent and optimize hot paths
+
+## Fixes
+- [ ] Is the ,X and ,Y being properly handled for labels not found during the forward pass?
+
+- [X] Try claude doctor or npm i -g @anthropic-ai/claude-code
+
+- [ ] Move addressing mode constants to a common include file e.g. common.asm
+
+- [ ] Diagnostics to print # of forward references of max, zero page usage, and maybe bytes of code generated

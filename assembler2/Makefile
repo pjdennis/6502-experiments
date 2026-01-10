@@ -9,12 +9,12 @@ clean:
 
 emulator.out: emulator.c
 	@mkdir -p out
-	gcc -O2 -march=native -flto -DNDEBUG -o out/emulator.out emulator.c
+	gcc -O2 -march=native -flto -DNDEBUG -o emulator.out emulator.c
 
 asm0c.out: asm0c.c
 	@mkdir -p out
-	gcc -O2 -o out/asm0c.out asm0c.c
+	gcc -O2 -o asm0c.out asm0c.c
 
 sidebyside.out: sidebyside.cpp
 	@mkdir -p out
-	g++ -O2 -march=native -flto -DNDEBUG -o out/sidebyside.out sidebyside.cpp
+	g++ -O2 -march=native -flto -DNDEBUG -o sidebyside.out sidebyside.cpp
