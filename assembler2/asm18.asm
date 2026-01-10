@@ -1134,7 +1134,7 @@ parse_operand_and_emit
   STA OPERAND_L
   JMP .imm_char_check_close
 .imm_char_escape
-  ; Escape sequence: \n \\ \' \"
+  ; Escape sequence: \n \\ \'
   JSR read_char
   CMP #'n'
   BNE .imm_esc_not_n
