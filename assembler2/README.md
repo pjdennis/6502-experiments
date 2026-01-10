@@ -75,18 +75,17 @@ asm00.out -----> asm01.out -----> asm02.out ---> ... ---> asm06.out
 
 ```
 assembler2/
-├── out/                    # Generated outputs
+├── out/                    # Generated outputs and tools
+│   ├── emulator.out        # 6502 emulator
+│   ├── sidebyside.out      # Hexdump display utility
+│   ├── asm0c.out           # C bootstrap assembler
+│   ├── asm00.out           # Level 0 assembler
 │   ├── asm01.out ... asm15.out
 │   ├── inst07.asm.out ... inst15.asm.out
 │   └── ...
 ├── dump/                   # Memory dumps from emulator
 │   └── *.dump.bin
 ├── legacy/                 # Old/unused assembler versions
-│
-├── emulator.out            # 6502 emulator (tool)
-├── sidebyside.out          # Hexdump display utility (tool)
-├── asm0c.out               # C bootstrap assembler (tool)
-├── asm00.out               # Level 0 assembler (tool)
 │
 ├── asm00.asm - asm15.asm   # Assembler source chain
 ├── instgen07.asm - instgen15.asm  # Instruction table generators
@@ -133,8 +132,8 @@ If the assembler can correctly assemble itself and produce an identical binary, 
 After a successful build, `test.asm` is assembled and executed:
 
 ```bash
-./emulator.out out/asm15_2.out 2000 /dev/null /dev/null test.asm out/test.out
-./emulator.out out/test.out 1000 /dev/null - arg1 "arg 2"
+out/emulator.out out/asm15_2.out 2000 /dev/null /dev/null test.asm out/test.out
+out/emulator.out out/test.out 1000 /dev/null - arg1 "arg 2"
 ```
 
 ## Emulator Interface

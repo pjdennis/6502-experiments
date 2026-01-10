@@ -1,19 +1,21 @@
-all: emulator.out sidebyside.out asm0c.out asm00.out
+all: out/emulator.out out/sidebyside.out out/asm0c.out out/asm00.out
 
 clean:
-	rm -f *.out
 	rm -f out/*.out out/*.asm.out
 	rm -f dump/*.bin
 
-emulator.out: emulator.c
-	gcc -O2 -march=native -flto -DNDEBUG -o emulator.out emulator.c
+out/emulator.out: emulator.c
+	@mkdir -p out
+	gcc -O2 -march=native -flto -DNDEBUG -o out/emulator.out emulator.c
 
-asm0c.out: asm0c.c
-	gcc -O2 -o asm0c.out asm0c.c
+out/asm0c.out: asm0c.c
+	@mkdir -p out
+	gcc -O2 -o out/asm0c.out asm0c.c
 
-asm00.out: asm00.asm asm0c.out
-	./asm0c.out asm00.asm asm00.out
+out/asm00.out: asm00.asm out/asm0c.out
+	@mkdir -p out
+	out/asm0c.out asm00.asm out/asm00.out
 
-sidebyside.out: sidebyside.cpp
-	g++ -O2 -march=native -flto -DNDEBUG -o sidebyside.out sidebyside.cpp
-
+out/sidebyside.out: sidebyside.cpp
+	@mkdir -p out
+	g++ -O2 -march=native -flto -DNDEBUG -o out/sidebyside.out sidebyside.cpp
