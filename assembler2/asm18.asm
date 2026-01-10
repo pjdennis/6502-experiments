@@ -1111,7 +1111,7 @@ parse_operand_and_emit
   JSR read_char        ; Skip >
   JSR read_and_find_existing_label
   PHA                  ; Save next char
-  LDA HEX1            ; High byte
+  LDA HEX1             ; High byte
   STA OPERAND_L
   LDA #$00
   STA OPERAND_H
@@ -1123,11 +1123,11 @@ parse_operand_and_emit
   ; #'x' - character literal (must be exactly 1 char)
   JSR read_char        ; Skip opening quote
   CMP #'\''
-  BEQ .imm_char_empty  ; Empty literal - error
+  BEQ .imm_char_invalid ; Empty literal - error
   CMP #'\\'
   BEQ .imm_char_escape
   CMP #'\n'
-  BEQ .imm_char_too_long  ; Newline without closing quote - error
+  BEQ .imm_char_invalid  ; Newline without closing quote - error
   ; Regular character
   STA OPERAND_L
   JMP .imm_char_check_close
@@ -1144,23 +1144,19 @@ parse_operand_and_emit
   JMP .imm_esc_done
 .imm_esc_not_bs
   CMP #'\''
-  BNE .imm_esc_invalid
+  BNE .imm_char_invalid
 .imm_esc_done
   STA OPERAND_L
 .imm_char_check_close
   JSR read_char        ; Should be closing quote
   CMP #'\''
-  BNE .imm_char_too_long
+  BNE .imm_char_invalid
   LDA #$00
   STA OPERAND_H
   ; Read next char for garbage check
   JSR read_char
   JMP emit_instruction ; Tail call
-.imm_char_empty
-  JMP err_invalid_char_literal
-.imm_char_too_long
-  JMP err_invalid_char_literal
-.imm_esc_invalid
+.imm_char_invalid
   JMP err_invalid_char_literal
 .imm_label
   ; Validate that A contains a valid label start character
