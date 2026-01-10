@@ -547,3 +547,192 @@ INPUT:
 EXPECT_ERROR: 1
 EXPECT_LINE: 2
 EXPECT_MSG: Label not found
+---
+NAME: fwdref_backward_zp_capable_small
+INPUT:
+1: * = $0200
+2: small = $12
+3:   LDA small
+EXPECT_HEX: a5 12
+
+---
+NAME: fwdref_backward_zp_capable_boundary_ff
+INPUT:
+1: * = $0200
+2: boundary = $FF
+3:   LDA boundary
+EXPECT_HEX: a5 ff
+
+---
+NAME: fwdref_backward_zp_capable_boundary_100
+INPUT:
+1: * = $0200
+2: over = $0100
+3:   LDA over
+EXPECT_HEX: ad 00 01
+
+---
+NAME: fwdref_backward_zp_capable_large
+INPUT:
+1: * = $0200
+2: large = $1234
+3:   LDA large
+EXPECT_HEX: ad 34 12
+
+---
+NAME: fwdref_forward_zp_capable_small
+INPUT:
+1: * = $0200
+2:   LDA target
+3: target = $12
+EXPECT_HEX: ad 12 00
+
+---
+NAME: fwdref_forward_zp_capable_boundary_ff
+INPUT:
+1: * = $0200
+2:   LDA target
+3: target = $FF
+EXPECT_HEX: ad ff 00
+
+---
+NAME: fwdref_forward_zp_capable_boundary_100
+INPUT:
+1: * = $0200
+2:   LDA target
+3: target = $0100
+EXPECT_HEX: ad 00 01
+
+---
+NAME: fwdref_forward_zp_capable_large
+INPUT:
+1: * = $0200
+2:   LDA target
+3: target = $1234
+EXPECT_HEX: ad 34 12
+
+---
+NAME: fwdref_backward_zpx_capable_small
+INPUT:
+1: * = $0200
+2: small = $12
+3:   LDA small,X
+EXPECT_HEX: b5 12
+
+---
+NAME: fwdref_backward_zpx_capable_large
+INPUT:
+1: * = $0200
+2: large = $1234
+3:   LDA large,X
+EXPECT_HEX: bd 34 12
+
+---
+NAME: fwdref_forward_zpx_capable_small
+INPUT:
+1: * = $0200
+2:   LDA target,X
+3: target = $12
+EXPECT_HEX: bd 12 00
+
+---
+NAME: fwdref_forward_zpx_capable_large
+INPUT:
+1: * = $0200
+2:   LDA target,X
+3: target = $1234
+EXPECT_HEX: bd 34 12
+
+---
+NAME: fwdref_backward_zpy_capable_small
+INPUT:
+1: * = $0200
+2: small = $12
+3:   LDX small,Y
+EXPECT_HEX: b6 12
+
+---
+NAME: fwdref_backward_zpy_capable_large
+INPUT:
+1: * = $0200
+2: large = $1234
+3:   LDX large,Y
+EXPECT_HEX: be 34 12
+
+---
+NAME: fwdref_forward_zpy_capable_small
+INPUT:
+1: * = $0200
+2:   LDX target,Y
+3: target = $12
+EXPECT_HEX: be 12 00
+
+---
+NAME: fwdref_forward_zpy_capable_large
+INPUT:
+1: * = $0200
+2:   LDX target,Y
+3: target = $1234
+EXPECT_HEX: be 34 12
+
+---
+NAME: fwdref_multiple_forward_refs
+INPUT:
+1: * = $0200
+2:   LDA target1
+3:   LDA target2
+4: target1 = $12
+5:   LDA target1
+6: target2 = $34
+7:   LDA target2
+EXPECT_HEX: ad 12 00 ad 34 00 a5 12 a5 34
+
+---
+NAME: fwdref_code_label_small
+INPUT:
+1: * = $0200
+2:   JMP target
+3:   NOP
+4: target
+5:   RTS
+EXPECT_HEX: 4c 04 02 ea 60
+
+---
+NAME: fwdref_code_label_forward_ref
+INPUT:
+1: * = $0200
+2:   LDA target
+3:   NOP
+4: target
+5:   RTS
+EXPECT_HEX: ad 04 02 ea 60
+
+---
+NAME: fwdref_code_label_backward_ref
+INPUT:
+1: * = $0200
+2: target
+3:   NOP
+4:   LDA target
+EXPECT_HEX: ea ad 00 02
+
+---
+NAME: fwdref_mixed_small_and_large
+INPUT:
+1: * = $0200
+2: zp = $50
+3: abs = $0300
+4:   LDA zp
+5:   LDA abs
+6:   LDA zp,X
+7:   LDA abs,X
+EXPECT_HEX: a5 50 ad 00 03 b5 50 bd 00 03
+
+---
+NAME: fwdref_forward_then_backward
+INPUT:
+1: * = $0200
+2:   LDA target
+3: target = $42
+4:   LDA target
+EXPECT_HEX: ad 42 00 a5 42
