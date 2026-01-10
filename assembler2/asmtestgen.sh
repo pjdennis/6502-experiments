@@ -42,23 +42,20 @@ cat out/inst07.asm.out asm10.asm > out/asm10c.asm.out
 ./emulator.out out/asm16.out 2000 /dev/null /dev/null test16.asm out/test16.out
 ./emulator.out out/asm16.out 2000 /dev/null /dev/null asm17.asm out/asm17.out
 diff <(hexdump -C out/asm16.out) <(hexdump -C out/asm17.out)
-./emulator.out out/asm17.out 2000 /dev/null /dev/null asm17.asm out/asm17_2.out
-diff <(hexdump -C out/asm17.out) <(hexdump -C out/asm17_2.out)
 ./emulator.out out/asm17.out 2000 /dev/null /dev/null instgen18.asm out/instgen18.out
 ./emulator.out out/instgen18.out 2000 /dev/null out/inst18.asm.out
 diff out/inst16.asm.out out/inst18.asm.out
 ./emulator.out out/asm17.out 2000 /dev/null /dev/null asm18.asm out/asm18.out
-./emulator.out out/asm18.out 2000 /dev/null /dev/null asm18.asm out/asm18_2.out
-diff <(hexdump -C out/asm18.out) <(hexdump -C out/asm18_2.out)
-# hexdump -C out/asm18_2.out | ./sidebyside.out
 ./emulator.out out/asm18.out 2000 /dev/null /dev/null instgen19.asm out/instgen19.out
 ./emulator.out out/instgen19.out 2000 /dev/null out/inst19.asm.out
 ./emulator.out out/asm18.out 2000 /dev/null /dev/null asm19.asm out/asm19.out
 ./emulator.out out/asm19.out 2000 /dev/null /dev/null asm19.asm out/asm19_2.out
 diff <(hexdump -C out/asm19.out) <(hexdump -C out/asm19_2.out)
 
+# hexdump -C out/asm19_2.out | ./sidebyside.out
+
 echo "OK"
-./emulator.out out/asm18_2.out 2000 /dev/null /dev/null test17.asm out/test.out
-# hexdump -C out/test.out
+./emulator.out out/asm19_2.out 2000 /dev/null /dev/null test19.asm out/test19.out
+# hexdump -C out/test19.out
 echo "Assembled"
-./emulator.out out/test.out 1000 /dev/null - arg1 "arg 2"
+./emulator.out out/test19.out 1000 /dev/null - arg1 "arg 2"
