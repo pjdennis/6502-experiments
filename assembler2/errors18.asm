@@ -88,6 +88,10 @@ err_invalid_operand
   BRK
   DATA $14 "Invalid operand" $00
 
+err_unexpected_text
+  BRK
+  DATA $15 "Unexpected text after operand" $00
+
 
 ; Interrupt handler - processes BRK for error display
 interrupt

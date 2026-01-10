@@ -1080,8 +1080,12 @@ parse_operand_and_emit
   STA OPERAND_L
   LDA #$00
   STA OPERAND_H
+  JSR read_char        ; Read char after hex value
+  JSR compare_end_of_token
+  BEQ .imm_hex_ok
+  JMP err_unexpected_text
+.imm_hex_ok
   JSR emit_instruction
-  ; Return to check for more params (shouldn't be any for IMM)
   RTS
 .imm_check_lsb
   CMP #'<'
@@ -1089,13 +1093,15 @@ parse_operand_and_emit
   ; #<label - low byte of label
   JSR read_char        ; Skip <
   JSR read_and_find_existing_label
-  PHA
+  JSR compare_end_of_token
+  BEQ .imm_lsb_ok
+  JMP err_unexpected_text
+.imm_lsb_ok
   LDA HEX2            ; Low byte
   STA OPERAND_L
   LDA #$00
   STA OPERAND_H
   JSR emit_instruction
-  PLA
   RTS
 .imm_check_msb
   CMP #'>'
@@ -1103,13 +1109,15 @@ parse_operand_and_emit
   ; #>label - high byte of label
   JSR read_char        ; Skip >
   JSR read_and_find_existing_label
-  PHA
+  JSR compare_end_of_token
+  BEQ .imm_msb_ok
+  JMP err_unexpected_text
+.imm_msb_ok
   LDA HEX1            ; High byte
   STA OPERAND_L
   LDA #$00
   STA OPERAND_H
   JSR emit_instruction
-  PLA
   RTS
 .imm_check_char
   CMP #'\''
@@ -1150,10 +1158,20 @@ parse_operand_and_emit
   JSR read_char        ; Should be closing quote
   CMP #'\''
   BNE .imm_char_too_long
+  ; Validate next char is end of line
+  JSR read_char
+  CMP #' '
+  BNE .imm_char_no_space
+  JSR skip_spaces
+.imm_char_no_space
+  JSR check_for_end_of_line
+  BCC .imm_char_garbage
   LDA #$00
   STA OPERAND_H
   JSR emit_instruction
   RTS
+.imm_char_garbage
+  JMP err_unexpected_text
 .imm_char_empty
   JMP err_invalid_char_literal
 .imm_char_too_long
@@ -1182,8 +1200,12 @@ parse_operand_and_emit
   STA OPERAND_L
   LDA #$00
   STA OPERAND_H       ; Immediate only uses low byte
+  PLA                  ; Restore next char
+  JSR compare_end_of_token
+  BEQ .imm_label_eot_ok
+  JMP err_unexpected_text
+.imm_label_eot_ok
   JSR emit_instruction
-  PLA                  ; Restore next char (not used, but for consistency)
   RTS
 .imm_label_invalid
   JMP err_invalid_operand
@@ -1329,6 +1351,16 @@ parse_operand_and_emit
   STA ADDR_MODE
   JMP emit_instruction ; Tail call - no extra read needed
 .zp_no_index
+  ; Validate we're at end of operand - must be end of line
+  CMP #' '
+  BNE .zp_no_space
+  ; Space - skip spaces and check for end of line
+  JSR skip_spaces
+.zp_no_space
+  JSR check_for_end_of_line
+  BCS .zp_no_index_ok
+  JMP err_unexpected_text
+.zp_no_index_ok
   ; Check if this is a branch instruction (MODE_REL)
   JSR check_if_branch
   BCC .is_branch_zp
@@ -1362,6 +1394,16 @@ parse_operand_and_emit
   STA ADDR_MODE
   JMP emit_instruction ; Tail call - no extra read needed
 .abs_no_index
+  ; Validate we're at end of operand - must be end of line
+  CMP #' '
+  BNE .abs_no_space
+  ; Space - skip spaces and check for end of line
+  JSR skip_spaces
+.abs_no_space
+  JSR check_for_end_of_line
+  BCS .abs_no_index_ok
+  JMP err_unexpected_text
+.abs_no_index_ok
   ; Check if this is a branch instruction (MODE_REL)
   JSR check_if_branch
   BCC .is_branch_abs
