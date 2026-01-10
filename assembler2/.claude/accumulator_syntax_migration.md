@@ -1,6 +1,20 @@
 # Plan: Migrate Accumulator Addressing Syntax
 
-## Status: IN PROGRESS
+## Status: COMPLETE
+
+## Summary
+
+Successfully migrated accumulator addressing syntax from `ASL A` to `ASL` (no operand).
+
+**Commits:**
+- fe7035c: Phase 1 - asm18 supports both syntaxes
+- e8e2e8d: Phase 2 - asm19 source uses new syntax, parser supports both
+- 59cfac4: Phase 3 - asm19 removes old syntax support
+
+**Results:**
+- Cleaner parsing with no ambiguity between accumulator mode and label lookup
+- asm18: 62 tests pass (supports both syntaxes for backward compatibility)
+- asm19: 59 tests pass (new syntax only)
 
 ## Goal
 Remove the "A" operand requirement for accumulator mode instructions (ASL, LSR, ROL, ROR).
