@@ -1017,9 +1017,8 @@ parse_operand_and_emit
   BNE .not_msb
   JMP .msb_operand
 .not_msb
-  ; Must be a label or accumulator mode
-  ; Read the token first, then check if it's exactly "A"
-  JMP .label_or_acc_operand
+  ; Must be a label
+  JMP .is_label
 
 .implied_mode
   PHA                  ; Save next char (newline or semicolon)
@@ -1032,17 +1031,6 @@ parse_operand_and_emit
   LDA #MODE_NONE
   STA ADDR_MODE
 .use_accumulator
-  LDA #$00
-  STA OPERAND_L
-  STA OPERAND_H
-  PLA                  ; Restore next char for garbage check
-  JMP emit_instruction ; Tail call
-
-.accumulator_mode
-  ; ASL, LSR, ROL, ROR
-  ; Next char is on stack (from .label_or_acc_operand)
-  LDA #MODE_ACC
-  STA ADDR_MODE
   LDA #$00
   STA OPERAND_L
   STA OPERAND_H
@@ -1400,25 +1388,11 @@ parse_operand_and_emit
   PLA
   RTS
 
-.label_or_acc_operand
-  ; Could be accumulator mode (just "A") or a label
-  ; Read the token first
+.is_label
+  ; Read the label token
   JSR read_token
   PHA                  ; Save next char
-  ; Check if token is exactly "A" (accumulator mode)
-  ; Use Y for indexed addressing (X holds output file handle globally)
-  LDY #$00
-  LDA TOKEN,Y
-  CMP #'A'
-  BNE .is_label        ; First char not A, must be label
-  INY
-  LDA TOKEN,Y
-  BNE .is_label        ; Second char not null, must be label like "ABSOLUTE"
-  ; Token is exactly "A" - accumulator mode
-  ; Next char is still on stack for garbage check
-  JMP .accumulator_mode
-.is_label
-  ; Look up the token we already read (TOKEN already contains it)
+  ; Look up the token
   JSR check_local_label
   JSR select_label_hash_table
   JSR find_in_hash
