@@ -1,12 +1,11 @@
 # 6502 Assembler Bootstrap Chain
 
-A self-hosting 6502 assembler built through progressive bootstrapping. The final assembler can assemble its own source code, verified by comparing the output of two successive self-assemblies.
+A fully self-hosting 6502 assembler built through progressive bootstrapping, with no external assembler dependencies. The bootstrap starts from a minimal C program and builds up to a full-featured assembler that can assemble its own source code.
 
 ## Prerequisites
 
-- GCC (for compiling the emulator)
+- GCC (for compiling the emulator and bootstrap assembler)
 - G++ (for compiling the sidebyside utility)
-- vasm6502_oldstyle (external 6502 assembler for initial bootstrap)
 - fswatch (optional, for watch mode)
 
 ## Quick Start
@@ -20,131 +19,168 @@ make
 ./gogen.sh
 ```
 
-## Build Process Overview
+## Bootstrap Chain Overview
 
-The build process bootstraps through progressively more capable assembler versions:
+The assembler bootstraps through 16 progressively more capable versions:
 
 ```
-vasm (external)
-    │
-    ▼
-asm4v.out ─────► asm4b.out ─► asm4b2.out ─► ... ─► asm4b5.out
-                                                        │
-                              ┌─────────────────────────┘
-                              ▼
-                        instgen.out ─► inst.asm.out
-                              │              │
-                              │   ┌──────────┘
-                              ▼   ▼
-                        asm4b6c.out ─► ... ─► asm4b9c.out
-                                                   │
-                         ┌─────────────────────────┤
-                         ▼                         ▼
-                   instgen10.out            asm4b10.out ─► asm4b11.out
-                         │                              │
-                         ▼                              │
-                   inst10.asm.out ◄─────────────────────┤
-                   (.included by asm4b10, asm4b11)      │
-                                                        ▼
-                         ┌─────────────────────── instgen12.out
-                         ▼                              │
-                   inst12.asm.out ◄─────────────────────┘
-                         │
-                         ▼
-                   asm4b12.out
-                         │
-                         ├─────────────────────► instgen13.out
-                         │                              │
-                         │                              ▼
-                         │                        inst13.asm.out
-                         │                              │
-                         ▼                              │
-                   asm4b13.out ◄────────────────────────┘
-                         │
-                         ▼
-                   asm4b13_2.out (self-assembled)
-                         │
-                         ▼
-                   Verification: asm4b13.out == asm4b13_2.out
+asm0c.c (C bootstrap)
+    |
+    v
+asm00.out -----> asm01.out -----> asm02.out ---> ... ---> asm06.out
+(DATA-only)    (asm02 in DATA)  (first "real"           (supports
+                                 assembler)              .include)
+                                                            |
+                        +-----------------------------------+
+                        |
+                        v
+                  instgen07.out ---> out/inst07.asm.out
+                        |                    |
+                        +--------------------+
+                        v
+                  asm07.out ---> asm08.out ---> asm09.out ---> asm10.out
+                  (inst07 concatenated with source)
+                        |
+                        v
+                  instgen11.out ---> out/inst11.asm.out
+                        |                    |
+                        +--------------------+
+                        v
+                  asm11.out ---> asm12.out (uses .include for inst11)
+                        |
+                        v
+                  [continues through asm13, asm14, asm15]
+                        |
+                        v
+                  asm15.out (final, self-hosting)
+                        |
+                        v
+                  asm15_2.out (self-assembled)
+                        |
+                        v
+                  Verification: asm15.out == asm15_2.out
 ```
 
-## File Organization
+### Bootstrap Levels
 
-### Build Scripts
+| Level | File | Key Features |
+|-------|------|--------------|
+| 0 | asm00.asm | Minimal DATA-only syntax, assembled by C program |
+| 1 | asm01.asm | asm02 translated to DATA format |
+| 2-6 | asm02-06.asm | Progressive feature additions |
+| 7-10 | asm07-10.asm | Require generated instruction tables (concatenated) |
+| 11-12 | asm11-12.asm | Use `.include` for instruction tables |
+| 13-15 | asm13-15.asm | Full-featured with local labels, hash tables, etc. |
+
+## Directory Structure
+
+```
+assembler2/
+├── out/                    # Generated outputs
+│   ├── asm01.out ... asm15.out
+│   ├── inst07.asm.out ... inst15.asm.out
+│   └── ...
+├── dump/                   # Memory dumps from emulator
+│   └── *.dump.bin
+├── legacy/                 # Old/unused assembler versions
+│
+├── emulator.out            # 6502 emulator (tool)
+├── sidebyside.out          # Hexdump display utility (tool)
+├── asm0c.out               # C bootstrap assembler (tool)
+├── asm00.out               # Level 0 assembler (tool)
+│
+├── asm00.asm - asm15.asm   # Assembler source chain
+├── instgen07.asm - instgen15.asm  # Instruction table generators
+├── common11.asm - common15.asm    # Shared code
+├── hash_table13.asm - hash_table15.asm
+├── environment11.asm
+├── file_stack13.asm, file_stack15.asm
+├── to_decimal13.asm, to_decimal15.asm
+│
+├── test.asm                # Test program
+├── Makefile
+├── asmtestgen.sh           # Main build script
+└── gogen.sh                # Watch mode wrapper
+```
+
+## Build Scripts
+
 | File | Description |
 |------|-------------|
-| `Makefile` | Builds emulator, sidebyside utility, and initial bootstrap (asm4v.out) |
-| `asmtestgen.sh` | Main build script - runs the full bootstrap chain |
-| `gogen.sh` | Watch mode wrapper - rebuilds on source changes |
+| `Makefile` | Builds emulator, sidebyside, C bootstrap (asm0c), and level-0 assembler (asm00) |
+| `asmtestgen.sh` | Runs the full bootstrap chain from asm00 through asm15 |
+| `gogen.sh` | Watch mode - rebuilds on source file changes |
 
-### Tools (C/C++ Source)
+## Tools
+
 | File | Description |
 |------|-------------|
 | `emulator.c` | 6502 emulator that runs the assemblers |
-| `sidebyside.cpp` | Utility for displaying hexdump output |
-
-### Assembler Source Files
-| File | Description |
-|------|-------------|
-| `asm4v.asm` | Initial bootstrap assembler (assembled by vasm) |
-| `asm4b.asm` - `asm4b5.asm` | Progressive assembler versions |
-| `asm4b6.asm` - `asm4b9.asm` | Versions requiring inst.asm.out (concatenated) |
-| `asm4b10.asm` - `asm4b11.asm` | Versions with `.include` support (include inst10.asm.out) |
-| `asm4b12.asm` | Includes inst12.asm.out |
-| `asm4b13.asm` | Final assembler (includes inst13.asm.out) |
-
-### Instruction Generators
-| File | Description |
-|------|-------------|
-| `instgen.asm` | Generates inst.asm.out (instruction hash table) |
-| `instgen10.asm` | Generates inst10.asm.out |
-| `instgen12.asm` | Generates inst12.asm.out |
-| `instgen13.asm` | Generates inst13.asm.out |
-
-### Shared/Include Files
-| File | Description |
-|------|-------------|
-| `environment.asm` | Environment definitions |
-| `common10.asm`, `common12.asm`, `common13.asm` | Shared code for respective versions |
-| `hash_table.asm`, `hash_table13.asm` | Hash table implementations |
-| `file_stack.asm` | File stack for includes |
-| `to_decimal.asm` | Decimal conversion routines |
-
-### Generated Intermediate Files
-| File | Generated By | Used By |
-|------|--------------|---------|
-| `inst.asm.out` | instgen.out | Concatenated with asm4b6-9.asm |
-| `inst10.asm.out` | instgen10.out | `.include`d by asm4b10.asm, asm4b11.asm |
-| `inst12.asm.out` | instgen12.out | `.include`d by asm4b12.asm |
-| `inst13.asm.out` | instgen13.out | `.include`d by asm4b13.asm |
-| `asm4b*c.asm.out` | cat (concatenation) | Combined source for asm4b6-9 |
+| `asm0c.c` | Minimal C assembler for bootstrapping (DATA-only syntax) |
+| `sidebyside.cpp` | Utility for displaying hexdump output side-by-side |
 
 ## Verification
 
 The build verifies correctness by:
 
-1. Assembling `asm4b13.asm` with `asm4b12.out` to produce `asm4b13.out`
-2. Assembling `asm4b13.asm` with `asm4b13.out` (self-assembly) to produce `asm4b13_2.out`
+1. Assembling `asm15.asm` with `out/asm14.out` to produce `out/asm15.out`
+2. Assembling `asm15.asm` with `out/asm15.out` (self-assembly) to produce `out/asm15_2.out`
 3. Comparing the two outputs - they must be identical
 
 If the assembler can correctly assemble itself and produce an identical binary, the bootstrap is successful.
 
 ## Testing
 
-After a successful build, `test.asm` is assembled and executed to verify the final assembler works correctly:
+After a successful build, `test.asm` is assembled and executed:
 
 ```bash
-./emulator.out asm4b13_2.out 2000 /dev/null /dev/null test.asm test.out
-./emulator.out test.out 1000 /dev/null - arg1 "arg 2"
+./emulator.out out/asm15_2.out 2000 /dev/null /dev/null test.asm out/test.out
+./emulator.out out/test.out 1000 /dev/null - arg1 "arg 2"
 ```
 
 ## Emulator Interface
 
-The emulator provides these memory-mapped I/O addresses:
+The emulator provides these memory-mapped I/O routines (via JSR):
 
 | Address | Function |
 |---------|----------|
-| `$F006` | Read byte from input |
+| `$F006` | Read byte from current input file (C=1 on EOF) |
 | `$F009` | Write byte to output |
-| `$F00C` | Write byte to error output |
-| ... | (additional I/O as needed by later versions) |
+| `$F00C` | Write byte to stderr |
+| `$F00F` | Exit program (exit code in A) |
+| `$F012` | Open file for reading (filename in A/X, returns handle in A) |
+| `$F015` | Close file (handle in A) |
+| `$F018` | Read byte from file handle (handle in A, C=1 on EOF) |
+| `$F01B` | Get argument count |
+| `$F01E` | Get argument string (index in A, returns pointer in A/X) |
+| `$F021` | Open file for writing |
+| `$F024` | Write byte to file handle |
+
+## Assembler Syntax (asm15)
+
+```asm
+; Comments start with semicolon
+LABEL = $1234           ; Constant assignment
+*     = $2000           ; Set program counter
+
+.zeropage               ; Switch to zero page section
+.code                   ; Switch to code section
+.include filename.asm   ; Include another file
+
+label                   ; Global label
+.local                  ; Local label (scoped to previous global)
+
+  LDA# $42              ; Immediate
+  LDAZ $00              ; Zero page
+  LDA $1234             ; Absolute
+  LDA,X                 ; Absolute,X
+  LDA,Y                 ; Absolute,Y
+  LDAZ,X                ; Zero page,X
+  LDA(),Y               ; Indirect,Y
+
+  DATA $01 $02 $03      ; Raw bytes
+  DATA "string"         ; ASCII string
+  DATA <label >label    ; Low/high byte of address
+
+  BRK $01 "error" $00   ; BRK with inline error message
+```
