@@ -47,7 +47,6 @@ FS_CURR_FILE  = CURR_FILE
 FS_CURR_LINEL = CURLINEL
 FS_CURR_LINEH = CURLINEH
   .include file_stack18.asm
-  .include to_decimal18.asm
   .include errors18.asm
   .include fwdref18.asm
 
@@ -1762,20 +1761,6 @@ msg_heap_used
   DATA "Heap used: " $00
 msg_bytes
   DATA " bytes\n" $00
-
-
-; Show a decimal value to the error output
-; On entry TO_DECIMAL_VALUE_L;TO_DECIMAL_VALUE_H contains the value to show
-; On exit X, Y are preserved
-;         A is not preserved
-;         Decimal number string stored at TO_DECIMAL_RESULT
-show_decimal
-  JSR to_decimal
-  LDA #<TO_DECIMAL_RESULT
-  STA TABPL
-  LDA #>TO_DECIMAL_RESULT
-  STA TABPH
-  JMP show_message ; tail call
 
 
 HEAP                   ; Heap goes after the program code

@@ -3,13 +3,13 @@
 ; Requires:
 ;   TEMP                 - zero page location for temporary storage
 ;   TABPL;TABPH          - zero page locations for table pointer
-;   TO_DECIMAL_VALUE_L;TO_DECIMAL_VALUE_H - zero page locations for decimal value
 ;   CURLINEL;CURLINEH    - zero page locations for current line number
 ;   FS_PL;FS_PH          - zero page locations for file stack pointer
-;   show_decimal         - function to display decimal value
 ;   file_stack_empty     - function to check if file stack is empty
 ;   write_d              - function to write character to stderr
 ;   exit                 - function to exit program
+
+  .include to_decimal18.asm
 
 ; Error labels - each triggers BRK with inline error code and message
 err_label_not_found
@@ -179,6 +179,20 @@ msg_error_line
   DATA " at line " $00
 msg_error_file
   DATA " in file " $00
+
+
+; Show a decimal value to the error output
+; On entry TO_DECIMAL_VALUE_L;TO_DECIMAL_VALUE_H contains the value to show
+; On exit X, Y are preserved
+;         A is not preserved
+;         Decimal number string stored at TO_DECIMAL_RESULT
+show_decimal
+  JSR to_decimal
+  LDA #<TO_DECIMAL_RESULT
+  STA TABPL
+  LDA #>TO_DECIMAL_RESULT
+  STA TABPH
+  JMP show_message ; tail call
 
 
 ; Show message to the error output
