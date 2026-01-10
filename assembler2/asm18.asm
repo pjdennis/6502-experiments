@@ -200,7 +200,7 @@ read_token
   STA TOKEN,X
   INX
   JSR read_char
-  JMP .loop
+  BCC .loop
 .done
   TAY                  ; Save next char
   LDA #$00
@@ -744,12 +744,12 @@ emit_quoted
 .not_escaped
   JSR emit
   JSR read_char
-  JMP .loop
+  BCC .loop
+.err_closing_quote
+  JMP err_closing_quote_not_found
 .done
   JSR read_char        ; Done; read next char
   RTS
-.err_closing_quote
-  JMP err_closing_quote_not_found
 
 
 ; Read and emit a 2 byte label value
