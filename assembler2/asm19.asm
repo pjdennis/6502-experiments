@@ -10,30 +10,30 @@ FILE_STACK   = $F000    ; File stack will grow down from 1 below here
   .zeropage
 
 ; Zero page locations
-TEMP        DATA $00 ; 1 byte
-PCL         DATA $00 ; 2 byte program counter
-PCH         DATA $00 ; "
-HEX1        DATA $00 ; 1 byte
-HEX2        DATA $00 ; 1 byte
-PASS        DATA $00 ; 1 byte $00 = pass 1 $FF = pass 2
-MEMPL       DATA $00 ; 2 byte heap pointer
-MEMPH       DATA $00 ; "
-STARTED     DATA $00 ; flag to indicate output has started
-CURR_FILE   DATA $00 ; current file handle
-CURLINEL    DATA $00 ; Current line (L)
-CURLINEH    DATA $00 ; Current line (H)
-IN_ZEROPAGE DATA $00 ; Flag indicating if in zero page section
-PC_SAVEL    DATA $00 ; Save location for PC when switching sections
-PC_SAVEH    DATA $00 ; "
-CURR_GLOBAL_HEAP_L DATA $00 ; Heap address of current global label string
-CURR_GLOBAL_HEAP_H DATA $00 ; "
-DEBUG_FLAG  DATA $00 ; Non-zero if debug output enabled
-ADDR_MODE   DATA $00 ; Current addressing mode
-INST_PTR_L  DATA $00 ; Pointer to instruction mode table entry
-INST_PTR_H  DATA $00 ; "
-OPERAND_L   DATA $00 ; Operand value (low byte)
-OPERAND_H   DATA $00 ; Operand value (high byte)
-IS_FWDREF   DATA $00 ; $FF if current label is forward ref (pass 1 only)
+TEMP        .data $00 ; 1 byte
+PCL         .data $00 ; 2 byte program counter
+PCH         .data $00 ; "
+HEX1        .data $00 ; 1 byte
+HEX2        .data $00 ; 1 byte
+PASS        .data $00 ; 1 byte $00 = pass 1 $FF = pass 2
+MEMPL       .data $00 ; 2 byte heap pointer
+MEMPH       .data $00 ; "
+STARTED     .data $00 ; flag to indicate output has started
+CURR_FILE   .data $00 ; current file handle
+CURLINEL    .data $00 ; Current line (L)
+CURLINEH    .data $00 ; Current line (H)
+IN_ZEROPAGE .data $00 ; Flag indicating if in zero page section
+PC_SAVEL    .data $00 ; Save location for PC when switching sections
+PC_SAVEH    .data $00 ; "
+CURR_GLOBAL_HEAP_L .data $00 ; Heap address of current global label string
+CURR_GLOBAL_HEAP_H .data $00 ; "
+DEBUG_FLAG  .data $00 ; Non-zero if debug output enabled
+ADDR_MODE   .data $00 ; Current addressing mode
+INST_PTR_L  .data $00 ; Pointer to instruction mode table entry
+INST_PTR_H  .data $00 ; "
+OPERAND_L   .data $00 ; Operand value (low byte)
+OPERAND_H   .data $00 ; Operand value (high byte)
+IS_FWDREF   .data $00 ; $FF if current label is forward ref (pass 1 only)
 
   .code
 
@@ -939,16 +939,16 @@ process_directive
   JMP data_parameters_loop_entry
 
 directive_include
-  DATA "include" $00
+  .data "include" $00
 
 directive_zeropage
-  DATA "zeropage" $00
+  .data "zeropage" $00
 
 directive_code
-  DATA "code" $00
+  .data "code" $00
 
 directive_data
-  DATA "data" $00
+  .data "data" $00
 
 
 ; Read from input, assemble code and write to output
@@ -1681,7 +1681,7 @@ check_debug_string
   RTS
 
 str_debug
-  DATA "debug" $00
+  .data "debug" $00
 
 
 ; Entry point
@@ -1767,18 +1767,18 @@ start
 .skip_debug_output
 
   BRK
-  DATA $00             ; Success code
+  .data $00             ; Success code
 
 
 msg_heap_used
-  DATA "Heap used: " $00
+  .data "Heap used: " $00
 msg_bytes
-  DATA " bytes\n" $00
+  .data " bytes\n" $00
 
 
 HEAP                   ; Heap goes after the program code
 
 
 * = $FFFC
-  DATA start           ; Reset vector
-  DATA interrupt       ; Interrupt vector
+  .data start           ; Reset vector
+  .data interrupt       ; Interrupt vector

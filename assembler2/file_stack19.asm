@@ -13,9 +13,9 @@
 
   .zeropage
 
-FS_PL   DATA $00 ; Pointer to the current location in the file stack
-FS_PH   DATA $00 ; "
-FS_TEMP DATA $00 ; Temporary location for use in calculations
+FS_PL   .data $00 ; Pointer to the current location in the file stack
+FS_PH   .data $00 ; "
+FS_TEMP .data $00 ; Temporary location for use in calculations
 
   .code
 
