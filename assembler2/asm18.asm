@@ -166,12 +166,13 @@ compare_end_of_token
   RTS
 
 
-; Checks for end of line and skips past if at end
+; Skips spaces and checks for end of line and skips past if at end
 ; On entry A contains next character
 ; On exit C set if end of line, clear otherwise
 ;         A contains next character
 ;         X, Y are preserved
 check_for_end_of_line
+  JSR skip_spaces
   CMP #';'
   BEQ .end
   CMP #'\n'
@@ -548,7 +549,6 @@ capture_label
   PLA                       ; Restore next char
   JMP .skip_and_return_processed
 .skip_spaces_and_return_processed_flag
-  JSR skip_spaces
   JMP check_for_end_of_line ; Tail call - returns with C set if at end of line
 .skip_and_return_processed
   JSR skip_rest_of_line
@@ -913,7 +913,6 @@ process_directive
   JMP err_unknown_directive
 .include
   PLA                  ; Restore next char
-  JSR skip_spaces
   JSR check_for_end_of_line
   BCC .get_name
   JMP err_filename_expected
@@ -982,15 +981,14 @@ assemble_code
   BNE .line_incremented
   INC CURLINEH
 .line_incremented
-  JSR check_for_end_of_line
-  BCS .line_loop
   CMP #' '
   BEQ .line_starts_with_space
+  JSR check_for_end_of_line
+  BCS .line_loop
   JSR capture_label
   BCC .check_for_opcode
   JMP .line_loop
 .line_starts_with_space
-  JSR skip_spaces
   JSR check_for_end_of_line
   BCS .line_loop
 .check_for_opcode
@@ -1008,7 +1006,6 @@ assemble_code
   JSR parse_operand_and_emit
   ; A contains next char after operand - check for garbage
   ; Skip trailing spaces, then check for end of line (handles comments)
-  JSR skip_spaces
   JSR check_for_end_of_line
   BCS .line_loop
   JMP err_unexpected_text
@@ -1020,7 +1017,6 @@ assemble_code
 ; On exit flow continues to .line_loop
 ;         A, X, Y are not preserved
 parse_operand_and_emit
-  JSR skip_spaces
   JSR check_for_end_of_line
   BCS .implied_mode    ; No operand = implied mode
   ; Check for DATA pseudo-instruction
@@ -1687,7 +1683,6 @@ check_for_data_pseudo
 ; DATA pseudo-instruction parameter loop
 data_parameters_loop
 data_parameters_loop_entry
-  JSR skip_spaces
   JSR check_for_end_of_line
   BCS .data_done
   CMP #'"'            ; Quoted string
