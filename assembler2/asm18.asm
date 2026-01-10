@@ -1161,6 +1161,21 @@ parse_operand_and_emit
 .imm_esc_invalid
   JMP err_invalid_char_literal
 .imm_label
+  ; Validate that A contains a valid label start character
+  ; Valid: A-Z, a-z, _, .
+  CMP #'.'
+  BEQ .imm_label_ok
+  CMP #'_'
+  BEQ .imm_label_ok
+  CMP #'A'
+  BCC .imm_label_invalid  ; < 'A'
+  CMP #$5B              ; 'Z'+1
+  BCC .imm_label_ok       ; 'A' to 'Z'
+  CMP #'a'
+  BCC .imm_label_invalid  ; Between 'Z' and 'a'
+  CMP #$7B              ; 'z'+1
+  BCS .imm_label_invalid  ; > 'z'
+.imm_label_ok
   JSR read_and_find_existing_label
   PHA                  ; Save next char
   LDA HEX2            ; Low byte of label value
@@ -1170,6 +1185,8 @@ parse_operand_and_emit
   JSR emit_instruction
   PLA                  ; Restore next char (not used, but for consistency)
   RTS
+.imm_label_invalid
+  JMP err_invalid_operand
 
 .indirect_mode
   ; ($xx),Y - indirect indexed Y (1-byte operand)
@@ -1204,6 +1221,21 @@ parse_operand_and_emit
   PLA                  ; Restore next char
   JMP .indirect_check_suffix
 .ind_label
+  ; Validate that A contains a valid label start character
+  ; Valid: A-Z, a-z, _, .
+  CMP #'.'
+  BEQ .ind_label_ok
+  CMP #'_'
+  BEQ .ind_label_ok
+  CMP #'A'
+  BCC .ind_label_invalid  ; < 'A'
+  CMP #$5B              ; 'Z'+1
+  BCC .ind_label_ok       ; 'A' to 'Z'
+  CMP #'a'
+  BCC .ind_label_invalid  ; Between 'Z' and 'a'
+  CMP #$7B              ; 'z'+1
+  BCS .ind_label_invalid  ; > 'z'
+.ind_label_ok
   JSR read_and_find_existing_label
   PHA                  ; Save next char
   LDA HEX2
@@ -1220,6 +1252,9 @@ parse_operand_and_emit
 .ind_label_done
   STA TEMP
   PLA                  ; Restore next char
+  JMP .indirect_check_suffix
+.ind_label_invalid
+  JMP err_invalid_operand
 .indirect_check_suffix
   ; A contains next char (should be ) or ,)
   CMP #','

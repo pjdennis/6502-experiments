@@ -84,6 +84,10 @@ err_invalid_char_literal
   BRK
   DATA $12 "Invalid character literal" $00
 
+err_invalid_operand
+  BRK
+  DATA $14 "Invalid operand" $00
+
 
 ; Interrupt handler - processes BRK for error display
 interrupt
