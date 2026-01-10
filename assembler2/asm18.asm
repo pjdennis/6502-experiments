@@ -1128,6 +1128,8 @@ parse_operand_and_emit
   BEQ .imm_char_empty  ; Empty literal - error
   CMP #'\\'
   BEQ .imm_char_escape
+  CMP #'\n'
+  BEQ .imm_char_too_long  ; Newline without closing quote - error
   ; Regular character
   STA OPERAND_L
   JMP .imm_char_check_close

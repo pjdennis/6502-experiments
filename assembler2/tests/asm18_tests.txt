@@ -408,6 +408,15 @@ EXPECT_LINE: 2
 EXPECT_MSG: Invalid character literal
 
 ---
+NAME: invalid_char_literal_missing_quote
+INPUT:
+1: * = $0200
+2:   LDA #'
+EXPECT_ERROR: 18
+EXPECT_LINE: 2
+EXPECT_MSG: Invalid character literal
+
+---
 NAME: invalid_char_literal_toolong
 INPUT:
 1: * = $0200
