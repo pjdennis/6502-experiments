@@ -138,44 +138,48 @@ parse_value
   ; Return C=1 (SEC before RTS)
   ...
 .hex
-  JSR read_char
-  JSR read_hex_byte_or_word  ; Existing function - reuse it!
+  JSR read_char        ; Skip $
+  JSR read_hex_byte_or_word  ; Returns next char in A
   BCC .one_byte
   ; Two bytes
+  PHA                  ; Save next char
   LDA HEX2
   STA OPERAND_L
   LDA HEX1
   STA OPERAND_H
-  JSR read_char
-  CLC  ; Signal not bare label
+  PLA                  ; Restore next char
+  CLC                  ; Signal not bare label
   RTS
 .one_byte
+  PHA                  ; Save next char
   LDA HEX1
   STA OPERAND_L
   LDA #$00
   STA OPERAND_H
-  JSR read_char
-  CLC  ; Signal not bare label
+  PLA                  ; Restore next char
+  CLC                  ; Signal not bare label
   RTS
 .low_byte
-  JSR read_char
-  JSR read_and_find_existing_label  ; Existing function - reuse it!
-  LDA HEX2  ; Low byte
+  JSR read_char        ; Skip <
+  JSR read_and_find_existing_label  ; Returns next char in A
+  PHA                  ; Save next char
+  LDA HEX2             ; Low byte
   STA OPERAND_L
   LDA #$00
   STA OPERAND_H
-  JSR read_char
-  CLC  ; Signal not bare label
+  PLA                  ; Restore next char
+  CLC                  ; Signal not bare label
   RTS
 .high_byte
-  JSR read_char
-  JSR read_and_find_existing_label  ; Existing function - reuse it!
-  LDA HEX1  ; High byte
+  JSR read_char        ; Skip >
+  JSR read_and_find_existing_label  ; Returns next char in A
+  PHA                  ; Save next char
+  LDA HEX1             ; High byte
   STA OPERAND_L
   LDA #$00
   STA OPERAND_H
-  JSR read_char
-  CLC  ; Signal not bare label
+  PLA                  ; Restore next char
+  CLC                  ; Signal not bare label
   RTS
 ```
 
