@@ -12,7 +12,6 @@ A fully self-hosting 6502 assembler built through progressive bootstrapping, wit
 
 ```bash
 # Build and run the full bootstrap chain
-make
 ./asmtestgen.sh
 
 # Watch mode (rebuilds on file changes)
