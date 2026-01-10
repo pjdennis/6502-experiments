@@ -849,48 +849,6 @@ emit_label_msb
   RTS
 
 
-; Read and emit a label value relative to PC
-; On entry A contains the first character of the label
-; On exit A contains the next character
-;         X, Y are not preserved
-; Raises 'Label not found' error if label is not found
-;        'Branch out of range' error if distance from value to PC exceeds 1 signed byte
-emit_label_relative
-  JSR read_and_find_existing_label
-  TAY                  ; Save next char
-  BIT PASS
-  BPL .ok              ; Skip calculations and validations on pass 1
-
-  ; Calculate target - PC - 1
-  CLC ; for the - 1
-  LDA HEX2
-  SBC PCL
-  STA HEX2
-  LDA HEX1
-  SBC PCH
-
-  CMP #$00
-  BEQ .forward
-  CMP #$FF
-  BEQ .backward
-  JMP err_branch_out_of_range
-
-.forward
-  LDA HEX2
-  BPL .ok
-  JMP err_branch_out_of_range
-
-.backward
-  LDA HEX2
-  BMI .ok
-  JMP err_branch_out_of_range
-
-.ok
-  JSR emit
-  TYA                  ; Restore next char
-  RTS
-
-
 ; Swap PCL;PCH with PC_SAVEL;PC_SAVEH
 ; On exit A, X, Y are preserved
 swap_pc_with_save
