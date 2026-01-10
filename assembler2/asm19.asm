@@ -1269,26 +1269,18 @@ parse_operand_and_emit
 
 .hex_operand
   ; $xx or $xxxx, possibly with ,X or ,Y suffix
-  JSR read_char        ; Skip $
-  JSR read_hex_byte_or_word
-  ; C = 1 if 2 bytes, C = 0 if 1 byte
+  JSR parse_value      ; Returns next char in A, OPERAND_L/H set
+  ; Check if 1-byte or 2-byte based on high byte
   PHA                  ; Save next char
-  BCC .hex_one_byte
-  ; 2 byte value - check for indexed modes
-  LDA HEX2
-  STA OPERAND_L
-  LDA HEX1
-  STA OPERAND_H
-  PLA                  ; Restore next char
-  JMP .check_index_suffix_abs
-.hex_one_byte
-  ; 1 byte value - could be zero page or absolute (check index suffix)
-  LDA HEX1
-  STA OPERAND_L
-  LDA #$00
-  STA OPERAND_H
+  LDA OPERAND_H
+  BNE .hex_is_abs      ; High byte != 0, must be absolute
+  ; 1 byte value - could be zero page
   PLA                  ; Restore next char
   JMP .check_index_suffix_zp
+.hex_is_abs
+  ; 2 byte value - must be absolute
+  PLA                  ; Restore next char
+  JMP .check_index_suffix_abs
 
 .check_index_suffix_zp
   ; Check for ,X or ,Y on zero page value
@@ -1384,33 +1376,17 @@ parse_operand_and_emit
 
 .lsb_operand
   ; <label - emit low byte of label
-  JSR read_char        ; Skip <
   LDA #MODE_IMM
   STA ADDR_MODE
-  JSR read_and_find_existing_label
-  PHA
-  LDA HEX2
-  STA OPERAND_L
-  LDA #$00
-  STA OPERAND_H
-  JSR emit_instruction
-  PLA
-  RTS
+  JSR parse_value      ; Returns next char in A, OPERAND_L/H set
+  JMP emit_instruction ; Tail call
 
 .msb_operand
   ; >label - emit high byte of label
-  JSR read_char        ; Skip >
   LDA #MODE_IMM
   STA ADDR_MODE
-  JSR read_and_find_existing_label
-  PHA
-  LDA HEX1
-  STA OPERAND_L
-  LDA #$00
-  STA OPERAND_H
-  JSR emit_instruction
-  PLA
-  RTS
+  JSR parse_value      ; Returns next char in A, OPERAND_L/H set
+  JMP emit_instruction ; Tail call
 
 .is_label
   ; Parse the label value
