@@ -43,6 +43,9 @@ rm -f out/*.out out/*.asm.out &&
   diff <(hexdump -C out/asm16.out) <(hexdump -C out/asm17.out) &&
   ./emulator.out out/asm17.out 2000 /dev/null /dev/null asm17.asm out/asm17_2.out &&
   diff <(hexdump -C out/asm17.out) <(hexdump -C out/asm17_2.out) &&
+  ./emulator.out out/asm17.out 2000 /dev/null /dev/null instgen18.asm out/instgen18.out &&
+  ./emulator.out out/instgen18.out 2000 /dev/null out/inst18.asm.out &&
+  diff out/inst16.asm.out out/inst18.asm.out &&
   ./emulator.out out/asm17.out 2000 /dev/null /dev/null asm18.asm out/asm18.out &&
   ./emulator.out out/asm18.out 2000 /dev/null /dev/null asm18.asm out/asm18_2.out &&
   diff <(hexdump -C out/asm18.out) <(hexdump -C out/asm18_2.out) &&
