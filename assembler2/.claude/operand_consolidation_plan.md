@@ -1,9 +1,23 @@
 # Plan: Consolidate Operand Value Parsing
 
-## Status: READY - Accumulator syntax migration complete
+## Status: COMPLETE
 
-The accumulator syntax side quest is complete (commits fe7035c, e8e2e8d, 59cfac4).
-Ready to proceed with operand consolidation.
+Successfully consolidated all operand value parsing into a single `parse_value` function.
+
+**Commits:**
+- eab0eb9: Add parse_value function
+- 65562d6: Use parse_value for label-based addressing
+- cae5890: Use parse_value for immediate mode
+- 6658d50: Use parse_value for indirect modes
+- a7a020a: Use parse_value for hex/lsb/msb operands
+- 1d7136c: Add comprehensive forward reference tests (22 tests)
+
+**Results:**
+- Single unified function handles all value forms
+- Code reduction: -75 lines (169 removed, 94 added)
+- Test coverage: 59 → 81 tests (added 22 forward ref tests)
+- All tests pass, self-hosting verified
+- Forward reference logic preserved exactly
 
 ---
 
