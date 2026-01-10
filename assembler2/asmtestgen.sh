@@ -36,7 +36,11 @@ rm -f out/*.out out/*.asm.out &&
   out/emulator.out out/asm14.out 2000 /dev/null /dev/null asm15.asm out/asm15.out &&
   out/emulator.out out/asm15.out 2000 /dev/null /dev/null asm15.asm out/asm15_2.out &&
   diff <(hexdump -C out/asm15.out) <(hexdump -C out/asm15_2.out) &&
-  hexdump -C out/asm15_2.out | out/sidebyside.out
+  hexdump -C out/asm15_2.out | out/sidebyside.out &&
+  out/emulator.out out/asm15.out 2000 /dev/null /dev/null instgen16.asm out/instgen16.out &&
+  out/emulator.out out/instgen16.out 2000 /dev/null out/inst16.asm.out &&
+  out/emulator.out out/asm15.out 2000 /dev/null /dev/null asm16.asm out/asm16.out &&
+  out/emulator.out out/asm16.out 2000 /dev/null /dev/null test16.asm out/test16.out
 
 if [ $? -eq 0 ]; then
   echo "OK"
