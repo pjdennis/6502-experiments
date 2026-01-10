@@ -159,27 +159,27 @@ The emulator provides these memory-mapped I/O routines (via JSR):
 
 ```asm
 ; Comments start with semicolon
-LABEL = $1234           ; Constant assignment
-*     = $2000           ; Set program counter
+LABEL = $1234            ; Constant assignment
+*     = $2000            ; Set program counter
 
-.zeropage               ; Switch to zero page section
-.code                   ; Switch to code section
-.include filename.asm   ; Include another file
+  .zeropage              ; Switch to zero page section
+  .code                  ; Switch to code section
+  .include filename.asm  ; Include another file
 
-label                   ; Global label
-.local                  ; Local label (scoped to previous global)
+label                    ; Global label
+.local                   ; Local label (scoped to previous global)
 
-  LDA# $42              ; Immediate
-  LDAZ $00              ; Zero page
-  LDA $1234             ; Absolute
-  LDA,X                 ; Absolute,X
-  LDA,Y                 ; Absolute,Y
-  LDAZ,X                ; Zero page,X
-  LDA(),Y               ; Indirect,Y
+  LDA# $42               ; Immediate
+  LDAZ $00               ; Zero page
+  LDA $1234              ; Absolute
+  LDA,X                  ; Absolute,X
+  LDA,Y                  ; Absolute,Y
+  LDAZ,X                 ; Zero page,X
+  LDA(),Y                ; Indirect,Y
 
-  DATA $01 $02 $03      ; Raw bytes
-  DATA "string"         ; ASCII string
-  DATA <label >label    ; Low/high byte of address
+  DATA $01 $02 $03       ; Raw bytes
+  DATA "string"          ; ASCII string
+  DATA <label >label     ; Low/high byte of address
 
-  BRK $01 "error" $00   ; BRK with inline error message
+  BRK $01 "error" $00    ; BRK with inline error message
 ```
