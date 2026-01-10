@@ -767,7 +767,7 @@ emit_instruction
 
 
 ; Read and emit quoted ASCII
-; On entry A countains the first character within quotes
+; On entry A contains the first character within quotes
 ; On exit A contains the next character after the closing quote
 ;         X, Y are preserved
 ; Raises 'Closing quote not found' error if closing quote not found on current line
@@ -797,7 +797,7 @@ emit_quoted
 
 
 ; Read and emit a 2 byte label value
-; On entry A countains the first character of the label
+; On entry A contains the first character of the label
 ; On exit A contains the next character
 ;         X, Y are not preserved
 ; Raises 'Label not found' error if label is not found
@@ -814,7 +814,7 @@ emit_label
 
 
 ; Read and emit a 1 byte label value
-; On entry A countains the first character of the label
+; On entry A contains the first character of the label
 ; On exit A contains the next character
 ;         X, Y are not preserved
 ; Raises 'Label not found' error if label is not found
@@ -836,7 +836,7 @@ emit_label_byte
 
 
 ; Read and emit the least significant byte of a label value
-; On entry A countains the first character of the label
+; On entry A contains the first character of the label
 ; On exit A contains the next character
 ;         X, Y are not preserved
 ; Raises 'Label not found' error if label is not found
@@ -851,7 +851,7 @@ emit_label_lsb
 
 
 ; Read and emit the most significant byte of a label value
-; On entry A countains the first character of the label
+; On entry A contains the first character of the label
 ; On exit A contains the next character
 ;         X, Y are not preserved
 ; Raises 'Label not found' error if label is not found
@@ -866,7 +866,7 @@ emit_label_msb
 
 
 ; Read and emit a label value relative to PC
-; On entry A countains the first character of the label
+; On entry A contains the first character of the label
 ; On exit A contains the next character
 ;         X, Y are not preserved
 ; Raises 'Label not found' error if label is not found
@@ -1746,7 +1746,7 @@ interrupt
   LDAZ FS_PH
   STAZ TABPH
   JSR show_message
-; Print the " at line " messaage
+; Print the " at line " message
   LDA# <msg_error_line
   STAZ TABPL
   LDA# >msg_error_line
@@ -1807,7 +1807,7 @@ show_message
   RTS
 
 
-; Show a decimal value to the error ouptut
+; Show a decimal value to the error output
 ; On entry TO_DECIMAL_VALUE_L;TO_DECIMAL_VALUE_H contains the value to show
 ; On exit X, Y are preserved
 ;         A is not preserved
