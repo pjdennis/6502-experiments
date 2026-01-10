@@ -17,8 +17,10 @@ FWDREF_H    .data $00 ; Pointer to forward reference list (high)
 
 
 ; Initialize forward reference list pointer (call at start of pass 1)
-init_fwdref_list
 ; Reset forward reference pointer (call at start of pass 2)
+; On exit: A is not preserved
+;          X, Y are preserved
+init_fwdref_list
 reset_fwdref_ptr
   LDA #<FWDREF_LIST
   STA FWDREF_L
@@ -29,6 +31,8 @@ reset_fwdref_ptr
 
 ; Finalize forward reference list (call at end of pass 1)
 ; Writes $FFFF terminator at current pointer position
+; On exit: A, Y are not preserved
+;          X is preserved
 finalize_fwdref_list
   LDY #$00
   LDA #$FF
@@ -39,8 +43,9 @@ finalize_fwdref_list
 
 
 ; Add current PC to forward reference list (call in pass 1 when label not found)
-; On exit: Y is not preserved, A is not preserved
+; On exit: A, Y are not preserved
 ;          X is preserved
+;          Jumps to err_too_many_forward_refs if list is full
 add_forward_ref
   ; Check if there's room (pointer must be < FWDREF_LIMIT)
   LDA FWDREF_H
@@ -75,8 +80,8 @@ add_forward_ref
 ; Check if current PC is in forward reference list (call in pass 2)
 ; On exit: C=1 if PC matches current list entry (use absolute mode)
 ;          C=0 if no match (use normal ZP detection)
-;          If match, pointer is advanced to next entry
-;          Y is not preserved, A is not preserved
+;          If C=1, pointer is advanced to next entry
+;          A, Y are not preserved
 ;          X is preserved
 check_forward_ref
   LDY #$00
