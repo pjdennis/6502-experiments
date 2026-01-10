@@ -289,9 +289,9 @@ NAME: trailing_expr_imm_hex
 INPUT:
 1: * = $0200
 2:   LDA #$42+1
-EXPECT_ERROR: 21
+EXPECT_ERROR: 7
 EXPECT_LINE: 2
-EXPECT_MSG: Unexpected text after operand
+EXPECT_MSG: Invalid hex
 
 ---
 NAME: unclosed_indirect
@@ -394,6 +394,15 @@ INPUT:
 3:   LDA #VALUE
 EXPECT_ERROR: 6
 EXPECT_LINE: 3
+EXPECT_MSG: Value out of range
+
+---
+NAME: immediate_value_out_of_range
+INPUT:
+1: * = $0200
+2:   LDA #$1234 ; Comment
+EXPECT_ERROR: 6
+EXPECT_LINE: 2
 EXPECT_MSG: Value out of range
 
 ---

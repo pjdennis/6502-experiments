@@ -1050,11 +1050,24 @@ parse_operand_and_emit
   CMP #'$'
   BNE .imm_check_lsb
   JSR read_char
-  JSR read_hex_byte
+  JSR read_hex_byte_or_word
+  BCC .imm_hex_one_byte
+  ; 2 byte value - store operand
+  PHA                  ; Save next char
+  LDA HEX2
+  STA OPERAND_L
+  LDA HEX1
+  STA OPERAND_H
+  JMP .imm_operand_set
+.imm_hex_one_byte
+  ; 1 byte value
+  PHA                  ; Save next char
+  LDA HEX1
   STA OPERAND_L
   LDA #$00
   STA OPERAND_H
-  JSR read_char        ; Read char after hex value (for garbage check)
+.imm_operand_set
+  PLA                        ; Restore next char for garbage check
   JMP emit_instruction ; Tail call
 .imm_check_lsb
   CMP #'<'
