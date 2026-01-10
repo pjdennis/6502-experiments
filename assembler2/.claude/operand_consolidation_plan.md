@@ -110,33 +110,22 @@ The C flag tells caller whether to call `handle_fwdref_mode`.
 
 ---
 
-## Phase 2: Add Comprehensive Test Coverage (30 min)
+## Phase 2: Implement `parse_value` and Refactor Incrementally (1.5-2 hours)
 
-Add tests for currently restricted combinations that will now be allowed:
+**Strategy:** Implement the function, then refactor one addressing mode at a time. Test and commit after each mode.
 
-### New Positive Tests
-- [ ] `LDA label` (absolute with label, currently works)
-- [ ] `LDA <label` (force ZP with label)
-- [ ] `LDA >label` (high byte in absolute)
-- [ ] `LDA $1234,X` (absolute indexed with word)
-- [ ] `LDA label,X` (absolute indexed with label)
-- [ ] `LDA ($1234)` (indirect absolute - JMP only)
-- [ ] `STA ($12),Y` (indirect indexed with hex)
-- [ ] Forward reference variations
+### Step 1: Implement `parse_value` function (30 min)
 
-### New Negative Tests
-- [ ] `LDA #$1234` (immediate with word - already added)
-- [ ] `LDA $1234` where value is used as ZP (catches at emit)
-- [ ] `LDA ($1234),Y` (indirect indexed needs ZP, emit should catch)
-
----
-
-## Phase 3: Design and Implement `parse_value` (30 min)
-
-### Function Structure
-
+**Function Structure:**
 ```asm
 parse_value
+  ; On entry: A contains first character
+  ; On exit:  A contains next character
+  ;           OPERAND_L, OPERAND_H contain parsed value
+  ;           IS_FWDREF set if bare label was forward ref (pass 1 only)
+  ;           C=1 if bare label, C=0 otherwise
+  ;           X, Y preserved
+
   CMP #'$'
   BEQ .hex
   CMP #'<'
@@ -144,59 +133,120 @@ parse_value
   CMP #'>'
   BEQ .high_byte
   ; Otherwise: bare label - needs forward ref tracking
-  ; Save TOKEN state, read token, lookup in hash
-  ; Set IS_FWDREF based on result
-  ; Return C=1
+  ; Reuse logic from .is_label (lines 1391-1425)
+  ; Set IS_FWDREF based on lookup result
+  ; Return C=1 (SEC before RTS)
   ...
 .hex
   JSR read_char
-  JSR read_hex_byte_or_word
-  ; Store in OPERAND_L/H
-  ; Return C=0
-  ...
+  JSR read_hex_byte_or_word  ; Existing function - reuse it!
+  BCC .one_byte
+  ; Two bytes
+  LDA HEX2
+  STA OPERAND_L
+  LDA HEX1
+  STA OPERAND_H
+  JSR read_char
+  CLC  ; Signal not bare label
+  RTS
+.one_byte
+  LDA HEX1
+  STA OPERAND_L
+  LDA #$00
+  STA OPERAND_H
+  JSR read_char
+  CLC  ; Signal not bare label
+  RTS
 .low_byte
   JSR read_char
-  JSR read_and_find_existing_label
-  ; Store HEX2 in OPERAND_L, $00 in OPERAND_H
-  ; Return C=0
-  ...
+  JSR read_and_find_existing_label  ; Existing function - reuse it!
+  LDA HEX2  ; Low byte
+  STA OPERAND_L
+  LDA #$00
+  STA OPERAND_H
+  JSR read_char
+  CLC  ; Signal not bare label
+  RTS
 .high_byte
   JSR read_char
-  JSR read_and_find_existing_label
-  ; Store HEX1 in OPERAND_L, $00 in OPERAND_H
-  ; Return C=0
-  ...
+  JSR read_and_find_existing_label  ; Existing function - reuse it!
+  LDA HEX1  ; High byte
+  STA OPERAND_L
+  LDA #$00
+  STA OPERAND_H
+  JSR read_char
+  CLC  ; Signal not bare label
+  RTS
 ```
 
+**Testing:** Add basic test cases to verify function works in isolation (if possible) or with simplest addressing mode.
+
+**Commit:** "Add parse_value function for operand consolidation"
+
+### Step 2: Refactor Addressing Modes (1-1.5 hours)
+
+Refactor one mode at a time. After each:
+1. Run `./asmtestgen.sh` to verify build
+2. Run `./tests/run_tests.sh` to verify tests
+3. Commit with message: "Use parse_value for [mode] addressing"
+
+**Order:**
+
+1. **Absolute Mode** (non-indexed) - simplest case
+   - Find current parsing code (around line 1477+)
+   - Replace with `JSR parse_value`
+   - Handle C flag: if C=1 and value <= $FF and ZP exists → call `handle_fwdref_mode`
+   - Test and commit
+
+2. **Immediate Mode** (except char literals)
+   - Current code: lines 1040-1092
+   - Replace hex and label parsing with `JSR parse_value`
+   - Keep char literal handling as-is (lines 1093+)
+   - C flag can be ignored (no ZP selection for immediate)
+   - Test and commit
+
+3. **Absolute Indexed** (,X and ,Y)
+   - Current code: around lines 1437-1475
+   - Replace value parsing with `JSR parse_value`
+   - Handle C flag for ZPX/ZPY vs ABSX/ABSY selection
+   - Test and commit (can be one commit for both X and Y, or separate)
+
+4. **Indirect Modes** (($zp),Y and ($zp,X))
+   - Replace value parsing with `JSR parse_value`
+   - These always need ZP; emit will catch if value > $FF
+   - Test and commit
+
+5. **Branch/Relative Mode**
+   - Currently uses `.is_label` directly
+   - Can likely use `JSR parse_value` (C=1 expected)
+   - Test and commit
+
+6. **.data directive** (optional - might already work)
+   - Currently has separate logic (lines 1552+)
+   - Could potentially use `parse_value` for consistency
+   - Test and commit if changed
+
 ---
 
-## Phase 4: Incremental Refactoring (2 hours)
+## Phase 3: Cleanup (15 min)
 
-Refactor one addressing mode at a time, testing after each:
-
-1. Absolute Mode (non-indexed) - simplest case
-2. Immediate Mode (except char literals)
-3. Absolute Indexed (X and Y)
-4. Zero Page Modes
-5. Indirect Modes
-6. Branch/Relative Mode
-
----
-
-## Phase 5: Cleanup (20 min)
-
-- Remove dead code
+- Remove dead code (old inline parsing logic that's been replaced)
 - Update comments
-- Final testing
+- Final full build and test verification
+- Update this plan to COMPLETE status
+- Commit: "Cleanup after operand consolidation"
 
 ---
 
 ## Success Criteria
 1. Single `parse_value` function handles all value parsing
-2. Uniform syntax: `$12`, `$1234`, `label`, `<label`, `>label` work everywhere
-3. Validation happens at emit time
-4. Forward reference handling preserved
-5. All tests pass
+2. Uniform syntax: `$12`, `$1234`, `label`, `<label`, `>label` work everywhere (context-appropriate)
+3. Validation happens at emit time (not parse time)
+4. Forward reference handling preserved exactly as before
+5. All 59 tests pass
 6. ~100-200 lines of duplicate code removed
+7. 6-8 commits total (1 for parse_value, 1-6 for addressing modes, 1 for cleanup)
 
-## Estimated Time: 3-4 hours
+## Estimated Time: 2-2.5 hours
+
+(Previous estimate was 3-4 hours. Based on accumulator syntax migration taking ~30% of estimated time, this might complete faster, but keeping conservative estimate since this is more complex.)
