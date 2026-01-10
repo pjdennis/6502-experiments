@@ -1279,7 +1279,9 @@ parse_operand_and_emit
   ; A contains next char (should be ) or ,)
   CMP #','
   BEQ .indirect_x
-  ; Assume ), check for ,Y or just )
+  ; Must be )
+  CMP #')'
+  BNE .ind_err_operand
   JSR read_char        ; Read char after )
   CMP #','
   BNE .ind_no_suffix
@@ -1306,6 +1308,8 @@ parse_operand_and_emit
   JMP emit_instruction ; Tail call
 .ind_err
   JMP err_invalid_addressing_mode
+.ind_err_operand
+  JMP err_invalid_operand
 
 .hex_operand
   ; $xx or $xxxx, possibly with ,X or ,Y suffix

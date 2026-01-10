@@ -315,13 +315,22 @@ EXPECT_LINE: 2
 EXPECT_MSG: Unexpected text after operand
 
 ---
-NAME: trailing_expr_abs_hex
+NAME: unclosed_indirect
 INPUT:
 1: * = $0200
-2:   LDA $1234+1
-EXPECT_ERROR: 21
+2:   JMP ($1234
+EXPECT_ERROR: 20
 EXPECT_LINE: 2
-EXPECT_MSG: Unexpected text after operand
+EXPECT_MSG: Invalid operand
+
+---
+NAME: incorrectly_closed_indirect
+INPUT:
+1: * = $0200
+2:   JMP ($1234]
+EXPECT_ERROR: 20
+EXPECT_LINE: 2
+EXPECT_MSG: Invalid operand
 
 ---
 NAME: trailing_garbage_abs
