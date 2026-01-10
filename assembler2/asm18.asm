@@ -1085,8 +1085,7 @@ parse_operand_and_emit
   BEQ .imm_hex_ok
   JMP err_unexpected_text
 .imm_hex_ok
-  JSR emit_instruction
-  RTS
+  JMP emit_instruction ; Tail call
 .imm_check_lsb
   CMP #'<'
   BNE .imm_check_msb
@@ -1101,8 +1100,7 @@ parse_operand_and_emit
   STA OPERAND_L
   LDA #$00
   STA OPERAND_H
-  JSR emit_instruction
-  RTS
+  JMP emit_instruction ; Tail call
 .imm_check_msb
   CMP #'>'
   BNE .imm_check_char
@@ -1117,8 +1115,7 @@ parse_operand_and_emit
   STA OPERAND_L
   LDA #$00
   STA OPERAND_H
-  JSR emit_instruction
-  RTS
+  JMP emit_instruction ; Tail call
 .imm_check_char
   CMP #'\''
   BNE .imm_label
@@ -1166,8 +1163,7 @@ parse_operand_and_emit
   BCC .imm_char_garbage
   LDA #$00
   STA OPERAND_H
-  JSR emit_instruction
-  RTS
+  JMP emit_instruction ; Tail call
 .imm_char_garbage
   JMP err_unexpected_text
 .imm_char_empty
@@ -1203,8 +1199,7 @@ parse_operand_and_emit
   BEQ .imm_label_eot_ok
   JMP err_unexpected_text
 .imm_label_eot_ok
-  JSR emit_instruction
-  RTS
+  JMP emit_instruction ; Tail call
 .imm_label_invalid
   JMP err_invalid_operand
 
@@ -1369,13 +1364,11 @@ parse_operand_and_emit
   ; Not a branch - use zero page mode
   LDA #MODE_ZP
   STA ADDR_MODE
-  JSR emit_instruction
-  RTS
+  JMP emit_instruction ; Tail call
 .is_branch_zp
   LDA #MODE_REL
   STA ADDR_MODE
-  JSR emit_instruction
-  RTS
+  JMP emit_instruction ; Tail call
 
 .check_index_suffix_abs
   ; Check for ,X or ,Y on absolute value
@@ -1412,13 +1405,11 @@ parse_operand_and_emit
   ; Not a branch - use absolute mode
   LDA #MODE_ABS
   STA ADDR_MODE
-  JSR emit_instruction
-  RTS
+  JMP emit_instruction ; Tail call
 .is_branch_abs
   LDA #MODE_REL
   STA ADDR_MODE
-  JSR emit_instruction
-  RTS
+  JMP emit_instruction ; Tail call
 
 .lsb_operand
   ; <label - emit low byte of label
@@ -1515,7 +1506,7 @@ parse_operand_and_emit
 .fwdref_absx_emit
   LDA #MODE_ABSX
   STA ADDR_MODE
-  JMP emit_instruction
+  JMP emit_instruction ; Tail call
 .fwdref_absy
   ; Only add to forward ref list if instruction supports ZPY (needs disambiguation)
   LDA #MODE_ZPY
@@ -1526,7 +1517,7 @@ parse_operand_and_emit
 .fwdref_absy_emit
   LDA #MODE_ABSY
   STA ADDR_MODE
-  JMP emit_instruction
+  JMP emit_instruction    ; Tail call
 .fwdref_abs_no_index
   ; Only add to forward ref list if instruction supports ZP (needs disambiguation)
   LDA #MODE_ZP
@@ -1537,8 +1528,7 @@ parse_operand_and_emit
 .fwdref_abs_emit
   LDA #MODE_ABS
   STA ADDR_MODE
-  JSR emit_instruction
-  RTS
+  JMP emit_instruction    ; Tail call
 .label_found
   ; HEX1:HEX2 now contains the label value
 .label_continue
@@ -1573,11 +1563,11 @@ parse_operand_and_emit
   ; ZPX possible - check if this was a forward ref in pass 1
   JSR check_forward_ref
   BCS .label_absx_use_abs   ; Was forward ref, use ABSX
-  JMP emit_instruction      ; Use ZPX
+  JMP emit_instruction      ; Use ZPX ; Tail call
 .label_absx_use_abs
   LDA #MODE_ABSX
   STA ADDR_MODE
-  JMP emit_instruction
+  JMP emit_instruction      ; Tail call
 .label_absy
   ; Check if ZPY mode is possible (operand in ZP, instruction supports ZPY)
   LDA OPERAND_H
@@ -1589,11 +1579,11 @@ parse_operand_and_emit
   ; ZPY possible - check if this was a forward ref in pass 1
   JSR check_forward_ref
   BCS .label_absy_use_abs   ; Was forward ref, use ABSY
-  JMP emit_instruction      ; Use ZPY
+  JMP emit_instruction      ; Use ZPY ; Tail call
 .label_absy_use_abs
   LDA #MODE_ABSY
   STA ADDR_MODE
-  JMP emit_instruction
+  JMP emit_instruction      ; Tail call
 .label_abs_no_index
   ; Check if ZP mode is possible (operand in ZP, instruction supports ZP)
   LDA OPERAND_H
@@ -1605,13 +1595,11 @@ parse_operand_and_emit
   ; ZP possible - check if this was a forward ref in pass 1
   JSR check_forward_ref
   BCS .label_use_abs        ; Was forward ref, use ABS
-  JSR emit_instruction      ; Use ZP
-  RTS
+  JMP emit_instruction      ; Tail call
 .label_use_abs
   LDA #MODE_ABS
   STA ADDR_MODE
-  JSR emit_instruction
-  RTS
+  JMP emit_instruction      ; Tail call
 .label_is_branch
   LDA #MODE_REL
   STA ADDR_MODE
