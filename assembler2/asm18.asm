@@ -129,7 +129,7 @@ skip_rest_of_line
   CMP #'\n'
   BEQ .done
   JSR read_char
-  JMP .loop
+  BCC .loop
 .done
   RTS
 
@@ -143,7 +143,7 @@ skip_spaces
   CMP #' '
   BNE .done
   JSR read_char
-  JMP .loop
+  BCC .loop
 .done
   RTS
 
