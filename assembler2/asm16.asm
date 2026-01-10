@@ -708,9 +708,9 @@ emit_instruction
   CMP# MODE_ZPY
   BEQ .one_byte
   CMP# MODE_INDX
-  BEQ .one_byte
+  BEQ .one_byte_zp_only
   CMP# MODE_INDY
-  BEQ .one_byte
+  BEQ .one_byte_zp_only
   ; 2-byte operand (absolute modes)
   LDAZ OPERAND_L
   JSR emit
@@ -718,10 +718,18 @@ emit_instruction
   JSR emit
 .done
   RTS
+.one_byte_zp_only
+  ; ZP-only addressing modes (INDX, INDY) - validate operand <= $FF
+  BITZ PASS
+  BPL .one_byte          ; Skip validation on pass 1
+  LDAZ OPERAND_H
+  BNE .zp_only_error
 .one_byte
   LDAZ OPERAND_L
   JSR emit
   RTS
+.zp_only_error
+  JMP err_value_out_of_range
 .emit_relative
   ; Calculate relative offset: target - PC - 1
   BITZ PASS
@@ -1107,12 +1115,12 @@ parse_operand_and_emit
   JMP emit_instruction ; Tail call
 
 .immediate_mode
-  ; #$xx or #label
+  ; #$xx or #<label or #>label or #label
   LDA# MODE_IMM
   STAZ ADDR_MODE
   JSR read_char        ; Skip #
   CMP# "$"
-  BNE .imm_label
+  BNE .imm_check_lsb
   JSR read_char
   JSR read_hex_byte
   STAZ OPERAND_L
@@ -1120,6 +1128,34 @@ parse_operand_and_emit
   STAZ OPERAND_H
   JSR emit_instruction
   ; Return to check for more params (shouldn't be any for IMM)
+  RTS
+.imm_check_lsb
+  CMP# "<"
+  BNE .imm_check_msb
+  ; #<label - low byte of label
+  JSR read_char        ; Skip <
+  JSR read_and_find_existing_label
+  PHA
+  LDAZ HEX2            ; Low byte
+  STAZ OPERAND_L
+  LDA# $00
+  STAZ OPERAND_H
+  JSR emit_instruction
+  PLA
+  RTS
+.imm_check_msb
+  CMP# ">"
+  BNE .imm_label
+  ; #>label - high byte of label
+  JSR read_char        ; Skip >
+  JSR read_and_find_existing_label
+  PHA
+  LDAZ HEX1            ; High byte
+  STAZ OPERAND_L
+  LDA# $00
+  STAZ OPERAND_H
+  JSR emit_instruction
+  PLA
   RTS
 .imm_label
   JSR read_and_find_existing_label

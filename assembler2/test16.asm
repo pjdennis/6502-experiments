@@ -153,6 +153,10 @@ ABSOLUTE
   LDA forward_abs      ; Must be 3 bytes (AD xx xx)
   STA forward_abs      ; Must be 3 bytes (8D xx xx)
 
+; Indirect modes with forward reference to ZP label
+  LDA (forward_zp),Y   ; Forward ref to ZP - uses 1-byte operand on pass 1
+  STA (forward_zp,X)   ; Forward ref to ZP - uses 1-byte operand on pass 1
+
   .zeropage
 forward_zp
   DATA $00             ; Forward reference target in zero page
@@ -169,6 +173,29 @@ forward_abs
 ; === Test JMP indirect ===
   JMP ($1234)          ; Should be 6C 34 12 (JMP indirect)
   JMP ($ABCD)          ; Should be 6C CD AB
+
+; === Test label-based addressing modes ===
+; These tests verify that labels work correctly in all addressing modes
+
+; Immediate mode with label LSB/MSB operators
+  LDA #<forward_abs    ; Low byte of label
+  LDX #>forward_abs    ; High byte of label
+  LDY #<zp_var1        ; Low byte of ZP label (should be small value)
+
+; Indirect Y mode with ZP label (backward reference)
+  LDA (zp_var1),Y      ; Should use value of zp_var1 as ZP address
+  STA (zp_var2),Y
+
+; Indirect X mode with ZP label (backward reference)
+  LDA (zp_var1,X)
+  STA (zp_var2,X)
+
+; JMP indirect with backward reference label
+jmp_vector
+  DATA <jump_target >jump_target  ; Vector pointing to jump_target
+jump_target
+  NOP
+  JMP (jmp_vector)     ; Should use address of jmp_vector (backward ref)
 
 ; Padding to make output visible
   DATA $00 $00
