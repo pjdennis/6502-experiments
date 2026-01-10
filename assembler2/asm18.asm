@@ -33,8 +33,6 @@ INST_PTR_L  DATA $00 ; Pointer to instruction mode table entry
 INST_PTR_H  DATA $00 ; "
 OPERAND_L   DATA $00 ; Operand value (low byte)
 OPERAND_H   DATA $00 ; Operand value (high byte)
-FWDREF_L    DATA $00 ; Pointer to forward reference list (low)
-FWDREF_H    DATA $00 ; Pointer to forward reference list (high)
 
   .code
 
@@ -49,6 +47,8 @@ FS_CURR_LINEL = CURLINEL
 FS_CURR_LINEH = CURLINEH
   .include file_stack18.asm
   .include to_decimal18.asm
+  .include errors18.asm
+  .include fwdref18.asm
 
 
 ; Addressing mode constants (must match instgen16.asm)
@@ -66,177 +66,6 @@ MODE_INDY = $0A   ; Indirect, Y - ($zp),Y
 MODE_REL  = $0B   ; Relative (branches)
 MODE_IND  = $0C   ; Indirect - JMP ($xxxx)
 MODE_DATA = $FE   ; Pseudo-instruction (DATA)
-
-
-; Error messages
-err_label_not_found
-  BRK
-  DATA $01 "Label not found" $00
-
-err_duplicate_label
-  BRK
-  DATA $02 "Duplicate label" $00
-
-err_opcode_not_found
-  BRK
-  DATA $03 "Opcode not found" $00
-
-err_branch_out_of_range
-  BRK
-  DATA $05 "Branch out of range" $00
-
-err_value_out_of_range
-  BRK
-  DATA $06 "Value out of range" $00
-
-err_invalid_hex
-  BRK
-  DATA $07 "Invalid hex" $00
-
-err_pc_value_expected
-  BRK
-  DATA $08 "PC value expected" $00
-
-err_closing_quote_not_found
-  BRK
-  DATA $09 "Closing quote not found" $00
-
-err_cannot_move_pc_backwards
-  BRK
-  DATA $0A "Cannot move PC backwards" $00
-
-err_unknown_directive
-  BRK
-  DATA $0B "Unknown directive" $00
-
-err_filename_expected
-  BRK
-  DATA $0C "Filename expected" $00
-
-err_too_many_forward_refs
-  BRK
-  DATA $13 "Too many forward references" $00
-
-err_usage
-  BRK
-  DATA $0D "Usage <assembler> <input> <output> [debug]" $00
-
-err_no_file
-  BRK
-  DATA $0E "Attempt to read with no file open" $00
-
-err_invalid_debug_arg
-  BRK
-  DATA $10 "Invalid third argument (expected 'debug')" $00
-
-err_no_global_for_local
-  BRK
-  DATA $0F "No global label for local" $00
-
-err_invalid_addressing_mode
-  BRK
-  DATA $11 "Invalid addressing mode for instruction" $00
-
-err_invalid_char_literal
-  BRK
-  DATA $12 "Invalid character literal" $00
-
-
-; Forward reference list management
-; List is stored at FWDREF_LIST, terminated by $FFFF
-; Each entry is 2 bytes (PC low, PC high) of an instruction with forward ref
-
-; Initialize forward reference list pointer (call at start of pass 1)
-init_fwdref_list
-  LDA #<FWDREF_LIST
-  STA FWDREF_L
-  LDA #>FWDREF_LIST
-  STA FWDREF_H
-  RTS
-
-
-; Finalize forward reference list (call at end of pass 1)
-; Writes $FFFF terminator at current pointer position
-finalize_fwdref_list
-  LDY #$00
-  LDA #$FF
-  STA (FWDREF_L),Y
-  INY
-  STA (FWDREF_L),Y
-  RTS
-
-
-; Reset forward reference pointer (call at start of pass 2)
-reset_fwdref_ptr
-  LDA #<FWDREF_LIST
-  STA FWDREF_L
-  LDA #>FWDREF_LIST
-  STA FWDREF_H
-  RTS
-
-
-; Add current PC to forward reference list (call in pass 1 when label not found)
-; On exit: Y is not preserved, A is not preserved
-;          X is preserved
-add_forward_ref
-  ; Check if there's room (pointer must be < FWDREF_LIMIT)
-  LDA FWDREF_H
-  CMP #>FWDREF_LIMIT
-  BCC .ok                 ; High byte < limit high, definitely ok
-  BNE .too_many           ; High byte > limit high, definitely too many
-  ; High byte equals limit high, check low byte
-  LDA FWDREF_L
-  CMP #<FWDREF_LIMIT
-  BCS .too_many           ; >= FWDREF_LIMIT, no room for entry + terminator
-.ok
-  ; Store PC at current list position
-  LDY #$00
-  LDA PCL
-  STA (FWDREF_L),Y
-  INY
-  LDA PCH
-  STA (FWDREF_L),Y
-  ; Advance pointer by 2
-  CLC
-  LDA FWDREF_L
-  ADC #$02
-  STA FWDREF_L
-  LDA FWDREF_H
-  ADC #$00
-  STA FWDREF_H
-  RTS
-.too_many
-  JMP err_too_many_forward_refs
-
-
-; Check if current PC is in forward reference list (call in pass 2)
-; On exit: C=1 if PC matches current list entry (use absolute mode)
-;          C=0 if no match (use normal ZP detection)
-;          If match, pointer is advanced to next entry
-;          Y is not preserved, A is not preserved
-;          X is preserved
-check_forward_ref
-  LDY #$00
-  LDA (FWDREF_L),Y
-  CMP PCL
-  BNE .no_match
-  INY
-  LDA (FWDREF_L),Y
-  CMP PCH
-  BNE .no_match
-  ; Match - advance pointer and return C=1
-  CLC
-  LDA FWDREF_L
-  ADC #$02
-  STA FWDREF_L
-  LDA FWDREF_H
-  ADC #$00
-  STA FWDREF_H
-  SEC
-  RTS
-.no_match
-  CLC
-  RTS
 
 
 ; Read next character from file stack
@@ -1918,112 +1747,10 @@ start
   DATA $00             ; Success code
 
 
-; Interrupt handler, entered upon BRK
-interrupt
-; Retrieve pointer to error code
-  TSX
-  INX
-  INX
-  SEC
-  LDA $0100,X
-  SBC #$01
-  STA TABPL
-  INX
-  LDA $0100,X
-  SBC #$00
-  STA TABPH
-; Retrieve error code and skip diagnostics if no error
-  LDY #$00
-  LDA (TABPL),Y
-  BEQ .done
-; Save error code
-  STA TEMP
-; Print the "Error " message
-  LDA #<msg_error
-  STA TABPL
-  LDA #>msg_error
-  STA TABPH
-  JSR show_message
-; Print the error code in decimal
-  LDA TEMP
-  STA TO_DECIMAL_VALUE_L
-  LDA #$00
-  STA TO_DECIMAL_VALUE_H
-  JSR show_decimal
-; Print the current file and line if any file is open
-  JSR file_stack_empty
-  BEQ .location_done
-; Print the " in file " message
-  LDA #<msg_error_file
-  STA TABPL
-  LDA #>msg_error_file
-  STA TABPH
-  JSR show_message
-; Print the filename
-  LDA FS_PL
-  STA TABPL
-  LDA FS_PH
-  STA TABPH
-  JSR show_message
-; Print the " at line " message
-  LDA #<msg_error_line
-  STA TABPL
-  LDA #>msg_error_line
-  STA TABPH
-  JSR show_message
-; Print the current line in decimal
-  LDA CURLINEL
-  STA TO_DECIMAL_VALUE_L
-  LDA CURLINEH
-  STA TO_DECIMAL_VALUE_H
-  JSR show_decimal
-.location_done
-; Print the ": " message
-  LDA #':'
-  JSR write_d
-  LDA #' '
-  JSR write_d
-; Retrieve pointer to the error message and show it
-  TSX
-  LDA $0102,X
-  STA TABPL
-  LDA $0103,X
-  STA TABPH
-  JSR show_message
-; Print the final newline
-  LDA #'\n'
-  JSR write_d
-; Load the error code so that it is returned
-  LDA TEMP
-.done
-  JMP exit
-
-msg_error
-  DATA "Error " $00
-msg_error_line
-  DATA " at line " $00
-msg_error_file
-  DATA " in file " $00
 msg_heap_used
   DATA "Heap used: " $00
 msg_bytes
   DATA " bytes\n" $00
-
-
-; Show message to the error output
-; On entry TABPL;TABPH points to the zero-terminated message
-; On exit X is preserved
-;         A, Y are not preserved
-show_message
-  LDY #$00
-.loop
-  LDA (TABPL),Y
-  BEQ .done
-  JSR write_d
-  INY
-  JMP .loop
-.done
-  RTS
 
 
 ; Show a decimal value to the error output
