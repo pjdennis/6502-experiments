@@ -34,17 +34,19 @@ rm -f out/*.out out/*.asm.out &&
   out/emulator.out out/asm14.out 2000 /dev/null /dev/null instgen15.asm out/instgen15.out &&
   out/emulator.out out/instgen15.out 2000 /dev/null out/inst15.asm.out &&
   out/emulator.out out/asm14.out 2000 /dev/null /dev/null asm15.asm out/asm15.out &&
-  out/emulator.out out/asm15.out 2000 /dev/null /dev/null asm15.asm out/asm15_2.out &&
-  diff <(hexdump -C out/asm15.out) <(hexdump -C out/asm15_2.out) &&
-  hexdump -C out/asm15_2.out | out/sidebyside.out &&
   out/emulator.out out/asm15.out 2000 /dev/null /dev/null instgen16.asm out/instgen16.out &&
   out/emulator.out out/instgen16.out 2000 /dev/null out/inst16.asm.out &&
   out/emulator.out out/asm15.out 2000 /dev/null /dev/null asm16.asm out/asm16.out &&
-  out/emulator.out out/asm16.out 2000 /dev/null /dev/null test16.asm out/test16.out
+  out/emulator.out out/asm16.out 2000 /dev/null /dev/null test16.asm out/test16.out &&
+  out/emulator.out out/asm16.out 2000 /dev/null /dev/null asm17.asm out/asm17.out &&
+  diff <(hexdump -C out/asm16.out) <(hexdump -C out/asm17.out) &&
+  out/emulator.out out/asm17.out 2000 /dev/null /dev/null asm17.asm out/asm17_2.out &&
+  diff <(hexdump -C out/asm17.out) <(hexdump -C out/asm17_2.out) &&
+  hexdump -C out/asm17_2.out | out/sidebyside.out
 
 if [ $? -eq 0 ]; then
   echo "OK"
-  out/emulator.out out/asm15_2.out 2000 /dev/null /dev/null test.asm out/test.out &&
+  out/emulator.out out/asm17_2.out 2000 /dev/null /dev/null test17.asm out/test.out &&
   hexdump -C out/test.out &&
   echo "Assembled"
   if [ $? -eq 0 ]; then
