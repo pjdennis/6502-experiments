@@ -11,7 +11,21 @@
 ;   LDA ($12,X)   ; indirect indexed X
 ;   ASL A         ; accumulator
 
+; === Define zero page variables first (for backward reference tests) ===
+  .zeropage
+zp_var1
+  DATA $00             ; Zero page variable at known address
+zp_var2
+  DATA $00             ; Another ZP variable
+
+  .code
 * = $2000
+
+; === Test backward reference to known zero page label ===
+; Since the label is defined BEFORE use, the assembler knows it's < $100
+; Current implementation: always uses absolute for labels (conservative)
+  LDA zp_var1          ; Could be 2 bytes (A5 xx) but currently 3 bytes (AD xx xx)
+  STA zp_var2          ; Could be 2 bytes (85 xx) but currently 3 bytes (8D xx xx)
 
 ; === Test implied mode instructions ===
 start
@@ -130,6 +144,27 @@ branch_target
 ABSOLUTE
   JMP ABSOLUTE         ; Should use absolute mode, not accumulator!
   LDA #$AA
+
+; === Test forward references ===
+; Forward reference to label < $100 - must use absolute (3 bytes) on both passes
+  LDA forward_zp       ; Must be 3 bytes (AD xx xx), not 2 bytes (A5 xx)
+  STA forward_zp       ; Must be 3 bytes (8D xx xx), not 2 bytes (85 xx)
+; Forward reference to label >= $100
+  LDA forward_abs      ; Must be 3 bytes (AD xx xx)
+  STA forward_abs      ; Must be 3 bytes (8D xx xx)
+
+  .zeropage
+forward_zp
+  DATA $00             ; Forward reference target in zero page
+
+  .code
+forward_abs
+  NOP                  ; This label is at an address >= $100
+
+; === Test indexed label addressing ===
+; Note: This tests the bug mentioned in asm16.asm comments
+  LDA forward_abs,X    ; Should be BD xx xx (absolute indexed X)
+  STA forward_abs,Y    ; Should be 99 xx xx (absolute indexed Y)
 
 ; Padding to make output visible
   DATA $00 $00

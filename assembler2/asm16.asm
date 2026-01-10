@@ -1339,47 +1339,36 @@ parse_operand_and_emit
   ; Check if this is a branch instruction
   JSR check_if_branch
   BCC .label_is_branch
-  ; Not a branch - check value size for ZP vs ABS
-  ; If high byte is 0 and not a forward reference, use ZP
-  LDAZ OPERAND_H
-  BNE .label_absolute
-  ; High byte is 0 - could use zero page
-  ; But for forward references during pass 1, we don't know the value
-  ; Use conservative approach: always use absolute for labels
-  ; (This is safe but less efficient)
+  ; Not a branch - check for indexed mode BEFORE emitting
+  ; Labels always use absolute addressing (conservative for forward refs)
+  PLA                  ; Restore next char (might be comma)
+  CMP# ","
+  BNE .label_abs_no_index
+  ; Has index suffix - read X or Y
+  JSR read_char
+  CMP# "X"
+  BEQ .label_absx
+  CMP# "Y"
+  BEQ .label_absy
+  JMP err_invalid_addressing_mode
+.label_absx
+  LDA# MODE_ABSX
+  STAZ ADDR_MODE
+  JMP emit_instruction ; Tail call
+.label_absy
+  LDA# MODE_ABSY
+  STAZ ADDR_MODE
+  JMP emit_instruction ; Tail call
+.label_abs_no_index
   LDA# MODE_ABS
   STAZ ADDR_MODE
   JSR emit_instruction
-  PLA                  ; Restore next char
-  JMP .check_label_index
-.label_absolute
-  LDA# MODE_ABS
-  STAZ ADDR_MODE
-  JSR emit_instruction
-  PLA
-  JMP .check_label_index
+  RTS
 .label_is_branch
   LDA# MODE_REL
   STAZ ADDR_MODE
   JSR emit_instruction
-  PLA
-  RTS
-.check_label_index
-  ; Check for ,X or ,Y suffix
-  CMP# ","
-  BNE .label_done
-  JSR read_char
-  ; Note: We already emitted with ABS mode, but we need to re-emit with indexed
-  ; This is a bug - we need to check index BEFORE emitting
-  ; For now, just skip past the index register
-  CMP# "X"
-  BEQ .skip_index
-  CMP# "Y"
-  BEQ .skip_index
-  JMP err_invalid_addressing_mode
-.skip_index
-  JSR read_char
-.label_done
+  PLA                  ; Discard next char
   RTS
 
 
