@@ -197,5 +197,28 @@ jump_target
   NOP
   JMP (jmp_vector)     ; Should use address of jmp_vector (backward ref)
 
+; === Test character literals in immediate mode ===
+  LDA #"A"             ; Should be A9 41
+  LDX #"Z"             ; Should be A2 5A
+  LDY #"0"             ; Should be A0 30
+  CMP #" "             ; Should be C9 20
+  CPX #"!"             ; Should be E0 21
+
+; === Test escape sequences ===
+  LDA #"\n"            ; Should be A9 0A (linefeed)
+  LDX #"\\"            ; Should be A2 5C (backslash)
+  LDY #"\""            ; Should be A0 22 (double quote)
+
+; === Test constants in immediate mode ===
+TEST_CONST = $42
+TEST_MODE  = $02       ; Same value as MODE_IMM in asm16.asm
+TEST_ADDR  = $1D00     ; Same value as TOKEN in asm16.asm
+  LDA #TEST_CONST      ; Should be A9 42
+  LDX #TEST_MODE       ; Should be A2 02
+
+; === Test constants as memory operand ===
+  LDA TEST_ADDR        ; Should be AD 00 1D
+  STA TEST_ADDR        ; Should be 8D 00 1D
+
 ; Padding to make output visible
   DATA $00 $00
