@@ -18,6 +18,8 @@ FWDREF_H    .data $00 ; Pointer to forward reference list (high)
 
 ; Initialize forward reference list pointer (call at start of pass 1)
 init_fwdref_list
+; Reset forward reference pointer (call at start of pass 2)
+reset_fwdref_ptr
   LDA #<FWDREF_LIST
   STA FWDREF_L
   LDA #>FWDREF_LIST
@@ -33,15 +35,6 @@ finalize_fwdref_list
   STA (FWDREF_L),Y
   INY
   STA (FWDREF_L),Y
-  RTS
-
-
-; Reset forward reference pointer (call at start of pass 2)
-reset_fwdref_ptr
-  LDA #<FWDREF_LIST
-  STA FWDREF_L
-  LDA #>FWDREF_LIST
-  STA FWDREF_H
   RTS
 
 
