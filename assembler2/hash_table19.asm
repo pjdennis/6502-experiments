@@ -67,7 +67,7 @@ calculate_hash
 ;         X, Y are preserved
 commit_cached_hash
   LDA HASH
-  LSR A
+  LSR
   STA CACHED_HASH
   RTS
 

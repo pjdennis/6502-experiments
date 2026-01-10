@@ -327,10 +327,10 @@ convert_hex_character
 ; Raises 'Invalid hex' error if encountering non-hex characters
 read_hex_byte
   JSR convert_hex_character
-  ASL A
-  ASL A
-  ASL A
-  ASL A
+  ASL
+  ASL
+  ASL
+  ASL
   STA TEMP
   JSR read_char
   JSR convert_hex_character
@@ -1023,8 +1023,15 @@ parse_operand_and_emit
 
 .implied_mode
   PHA                  ; Save next char (newline or semicolon)
+  ; Try accumulator mode first
+  LDA #MODE_ACC
+  STA ADDR_MODE
+  JSR find_opcode_for_mode
+  BCC .use_accumulator  ; C=0 means opcode found
+  ; No accumulator mode - use implied
   LDA #MODE_NONE
   STA ADDR_MODE
+.use_accumulator
   LDA #$00
   STA OPERAND_L
   STA OPERAND_H
@@ -1032,7 +1039,7 @@ parse_operand_and_emit
   JMP emit_instruction ; Tail call
 
 .accumulator_mode
-  ; ASL A, LSR A, ROL A, ROR A
+  ; ASL, LSR, ROL, ROR
   ; Next char is on stack (from .label_or_acc_operand)
   LDA #MODE_ACC
   STA ADDR_MODE

@@ -292,10 +292,10 @@ display_hex_char
 
 display_hex
   PHA
-  LSR A
-  LSR A
-  LSR A
-  LSR A
+  LSR
+  LSR
+  LSR
+  LSR
   JSR display_hex_char
   PLA
   AND #$0F
