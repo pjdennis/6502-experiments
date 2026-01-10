@@ -14,13 +14,16 @@ A fully self-hosting 6502 assembler built through progressive bootstrapping, wit
 # Build and run the full bootstrap chain
 ./asmtestgen.sh
 
+# Run the test suite
+./tests/run_tests.sh
+
 # Watch mode (rebuilds on file changes)
 ./gogen.sh
 ```
 
 ## Bootstrap Chain Overview
 
-The assembler bootstraps through 16 progressively more capable versions:
+The assembler bootstraps through 20 progressively more capable versions:
 
 ```
 asm0c.c (C bootstrap)
@@ -42,22 +45,24 @@ asm00.out -----> asm01.out -----> asm02.out ---> ... ---> asm06.out
                         |
                         v
                   instgen11.out ---> out/inst11.asm.out
-                        |                    |
-                        +--------------------+
+                        |
                         v
                   asm11.out ---> asm12.out (uses .include for inst11)
                         |
                         v
-                  [continues through asm13, asm14, asm15]
+                  [continues through asm13-18, adding features]
                         |
                         v
-                  asm15.out (final, self-hosting)
+                  asm18.out (assembles asm19)
                         |
                         v
-                  asm15_2.out (self-assembled)
+                  asm19.out (final, self-hosting)
                         |
                         v
-                  Verification: asm15.out == asm15_2.out
+                  asm19_2.out (self-assembled)
+                        |
+                        v
+                  Verification: asm19.out == asm19_2.out
 ```
 
 ### Bootstrap Levels
@@ -70,33 +75,40 @@ asm00.out -----> asm01.out -----> asm02.out ---> ... ---> asm06.out
 | 7-10 | asm07-10.asm | Require generated instruction tables (concatenated) |
 | 11-12 | asm11-12.asm | Use `.include` for instruction tables |
 | 13-15 | asm13-15.asm | Full-featured with local labels, hash tables, etc. |
+| 16 | asm16.asm | Enhanced error reporting with line numbers |
+| 17 | asm17.asm | Refactored (identical output to asm16) |
+| 18 | asm18.asm | Added `.data` directive alongside DATA |
+| 19 | asm19.asm | Uses `.data` exclusively, removes DATA pseudo-op |
 
 ## Directory Structure
 
 ```
 assembler2/
 ├── out/                    # Generated outputs
-│   ├── asm00.out           # Level 0 assembler
-│   ├── asm01.out ... asm15.out
-│   ├── inst07.asm.out ... inst15.asm.out
+│   ├── asm00.out - asm19.out
+│   ├── inst07.asm.out - inst19.asm.out
 │   └── ...
 ├── dump/                   # Memory dumps from emulator
-│   └── *.dump.bin
 ├── legacy/                 # Old/unused assembler versions
+├── tests/                  # Test suite
+│   ├── run_tests.sh        # Test runner script
+│   ├── asm18_tests.txt     # Tests for asm18 (reference)
+│   └── asm19_tests.txt     # Tests for asm19 (current)
 │
 ├── emulator.out            # 6502 emulator
 ├── sidebyside.out          # Hexdump display utility
 ├── asm0c.out               # C bootstrap assembler
 │
-├── asm00.asm - asm15.asm   # Assembler source chain
-├── instgen07.asm - instgen15.asm  # Instruction table generators
-├── common11.asm - common15.asm    # Shared code
-├── hash_table13.asm - hash_table15.asm
-├── environment11.asm
-├── file_stack13.asm, file_stack15.asm
-├── to_decimal13.asm, to_decimal15.asm
+├── asm00.asm - asm19.asm   # Assembler source chain
+├── instgen07.asm - instgen19.asm  # Instruction table generators
+├── common*.asm             # Shared code between asm and instgen
+├── hash_table*.asm         # Hash table implementation
+├── errors*.asm             # Error message definitions
+├── fwdref*.asm             # Forward reference handling
+├── file_stack*.asm         # Include file stack management
+├── to_decimal*.asm         # Decimal conversion utilities
 │
-├── test.asm                # Test program
+├── test19.asm              # Test program
 ├── Makefile
 ├── asmtestgen.sh           # Main build script
 └── gogen.sh                # Watch mode wrapper
@@ -107,7 +119,7 @@ assembler2/
 | File | Description |
 |------|-------------|
 | `Makefile` | Builds emulator, sidebyside, C bootstrap (asm0c), and level-0 assembler (asm00) |
-| `asmtestgen.sh` | Runs the full bootstrap chain from asm00 through asm15 |
+| `asmtestgen.sh` | Runs the full bootstrap chain from asm00 through asm19 |
 | `gogen.sh` | Watch mode - rebuilds on source file changes |
 
 ## Tools
@@ -122,19 +134,35 @@ assembler2/
 
 The build verifies correctness by:
 
-1. Assembling `asm15.asm` with `out/asm14.out` to produce `out/asm15.out`
-2. Assembling `asm15.asm` with `out/asm15.out` (self-assembly) to produce `out/asm15_2.out`
+1. Assembling `asm19.asm` with `out/asm18.out` to produce `out/asm19.out`
+2. Assembling `asm19.asm` with `out/asm19.out` (self-assembly) to produce `out/asm19_2.out`
 3. Comparing the two outputs - they must be identical
 
 If the assembler can correctly assemble itself and produce an identical binary, the bootstrap is successful.
 
 ## Testing
 
-After a successful build, `test.asm` is assembled and executed:
+### Test Suite
+
+The project includes a comprehensive test suite:
 
 ```bash
-out/emulator.out out/asm15_2.out 2000 /dev/null /dev/null test.asm out/test.out
-out/emulator.out out/test.out 1000 /dev/null - arg1 "arg 2"
+# Run all tests
+./tests/run_tests.sh
+
+# Run specific test file
+./tests/run_tests.sh tests/asm19_tests.txt
+```
+
+Tests verify both positive cases (correct assembly output) and negative cases (proper error detection).
+
+### Integration Test
+
+After a successful build, `test19.asm` is assembled and executed:
+
+```bash
+./emulator.out out/asm19_2.out 2000 /dev/null /dev/null test19.asm out/test19.out
+./emulator.out out/test19.out 1000 /dev/null - arg1 "arg 2"
 ```
 
 ## Emulator Interface
@@ -155,7 +183,7 @@ The emulator provides these memory-mapped I/O routines (via JSR):
 | `$F021` | Open file for writing |
 | `$F024` | Write byte to file handle |
 
-## Assembler Syntax (asm15)
+## Assembler Syntax (asm19)
 
 ```asm
 ; Comments start with semicolon
@@ -169,17 +197,28 @@ LABEL = $1234            ; Constant assignment
 label                    ; Global label
 .local                   ; Local label (scoped to previous global)
 
-  LDA# $42               ; Immediate
-  LDAZ $00               ; Zero page
+  LDA #$42               ; Immediate
+  LDA $00                ; Zero page
   LDA $1234              ; Absolute
-  LDA,X                  ; Absolute,X
-  LDA,Y                  ; Absolute,Y
-  LDAZ,X                 ; Zero page,X
-  LDA(),Y                ; Indirect,Y
+  LDA $1234,X            ; Absolute,X
+  LDA $1234,Y            ; Absolute,Y
+  LDA $00,X              ; Zero page,X
+  LDA ($00),Y            ; Indirect,Y
+  LDA ($00,X)            ; Indirect,X
 
-  DATA $01 $02 $03       ; Raw bytes
-  DATA "string"          ; ASCII string
-  DATA <label >label     ; Low/high byte of address
+  .data $01 $02 $03      ; Raw bytes
+  .data "string"         ; ASCII string
+  .data <label >label    ; Low/high byte of address
+  .data label            ; 16-bit address (little-endian)
 
   BRK $01 "error" $00    ; BRK with inline error message
 ```
+
+### Syntax Evolution
+
+The assembler syntax has evolved through the bootstrap chain:
+
+- **asm00-06**: Non-standard syntax (`LDA#`, `LDAZ`, `STAZ(),Y`)
+- **asm07+**: Standard 6502 syntax (`LDA #$42`, `LDA ($00),Y`)
+- **asm18**: Added `.data` directive alongside `DATA` pseudo-op
+- **asm19**: Uses `.data` exclusively (removed `DATA` pseudo-op)
