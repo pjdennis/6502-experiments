@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Test runner for asm18 assembler
+# Test runner for asm19 assembler
 # Usage: ./run_tests.sh [test_name]
 #   If test_name is provided, only runs that specific test
 #
@@ -9,9 +9,9 @@
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ASSEMBLER2_DIR="$(dirname "$SCRIPT_DIR")"
-TEST_FILE="$SCRIPT_DIR/asm18_tests.txt"
+TEST_FILE="$SCRIPT_DIR/asm19_tests.txt"
 EMULATOR="$ASSEMBLER2_DIR/emulator.out"
-ASSEMBLER="$ASSEMBLER2_DIR/out/asm18.out"
+ASSEMBLER="$ASSEMBLER2_DIR/out/asm19.out"
 
 # Colors for output
 RED='\033[0;31m'
@@ -247,7 +247,7 @@ parse_and_run_tests() {
 
 # Main
 echo "========================================"
-echo "asm18 Assembler Test Suite"
+echo "asm19 Assembler Test Suite"
 echo "========================================"
 echo ""
 

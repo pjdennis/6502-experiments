@@ -51,6 +51,11 @@ diff out/inst16.asm.out out/inst18.asm.out
 ./emulator.out out/asm18.out 2000 /dev/null /dev/null asm18.asm out/asm18_2.out
 diff <(hexdump -C out/asm18.out) <(hexdump -C out/asm18_2.out)
 # hexdump -C out/asm18_2.out | ./sidebyside.out
+./emulator.out out/asm18.out 2000 /dev/null /dev/null instgen19.asm out/instgen19.out
+./emulator.out out/instgen19.out 2000 /dev/null out/inst19.asm.out
+./emulator.out out/asm18.out 2000 /dev/null /dev/null asm19.asm out/asm19.out
+./emulator.out out/asm19.out 2000 /dev/null /dev/null asm19.asm out/asm19_2.out
+diff <(hexdump -C out/asm19.out) <(hexdump -C out/asm19_2.out)
 
 echo "OK"
 ./emulator.out out/asm18_2.out 2000 /dev/null /dev/null test17.asm out/test.out
