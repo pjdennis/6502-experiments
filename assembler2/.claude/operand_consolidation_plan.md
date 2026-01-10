@@ -9,6 +9,8 @@ Ready to proceed with operand consolidation.
 
 ## Phase 1 Findings: Forward Reference Handling in asm19
 
+**Line numbers current as of commit 59cfac4 (after accumulator syntax removal)**
+
 ### Current Forward Reference Mechanism
 
 #### Key Functions
@@ -19,19 +21,20 @@ Ready to proceed with operand consolidation.
    - If label not found in pass 2: jumps to err_label_not_found
    - **Does NOT set IS_FWDREF flag**
 
-2. **`.is_label` section** (line 1413+)
+2. **`.is_label` section** (lines 1391-1425)
    - Used when parsing bare labels (no < or > prefix)
-   - Reads token into TOKEN buffer
-   - Looks up label in hash table
+   - Reads token with `JSR read_token` (line 1393)
+   - Looks up label via `check_local_label` + `select_label_hash_table` + `find_in_hash` (lines 1396-1398)
    - If not found in pass 1:
-     - Sets IS_FWDREF = $FF
-     - Sets HEX1=HEX2=$00
+     - Sets IS_FWDREF = $FF (line 1405)
+     - Sets HEX1=HEX2=$00 (lines 1407-1408)
    - If found:
-     - Sets IS_FWDREF = $00
+     - Sets IS_FWDREF = $00 (line 1415)
+   - Stores result in OPERAND_L/H (lines 1418-1421)
    - **This is the ONLY place IS_FWDREF is set**
 
-3. **`handle_fwdref_mode`** (line 1552)
-   - Called ONLY for ZP/ZPX/ZPY mode selection
+3. **`handle_fwdref_mode`** (line 1533)
+   - Called ONLY for ZP/ZPX/ZPY mode selection (lines 1447, 1467, 1487)
    - In pass 1 with forward ref: calls add_forward_ref, returns C=1 (use ABS)
    - In pass 2: calls check_forward_ref to see if PC is in list
    - Purpose: Forces absolute addressing for forward refs (can't know if <= $FF in pass 1)
@@ -40,21 +43,21 @@ Ready to proceed with operand consolidation.
 
 **Forward refs are ONLY tracked for bare labels in ZP-capable contexts:**
 
-- `label` (non-indexed) - lines 1498-1514
+- `label` (non-indexed) - around lines 1477-1495; calls handle_fwdref_mode at line 1487
   - If value <= $FF and ZP mode exists and not forward ref → use ZP
   - Otherwise → use ABS
 
-- `label,X` (X-indexed) - lines 1456-1474
+- `label,X` (X-indexed) - around lines 1437-1455; calls handle_fwdref_mode at line 1447
   - If value <= $FF and ZPX mode exists and not forward ref → use ZPX
   - Otherwise → use ABSX
 
-- `label,Y` (Y-indexed) - lines 1476-1494
+- `label,Y` (Y-indexed) - around lines 1457-1475; calls handle_fwdref_mode at line 1467
   - If value <= $FF and ZPY mode exists and not forward ref → use ABSY
   - Otherwise → use ABSY
 
 **Forward refs are NOT tracked for:**
-- `#<label`, `#>label` - immediate mode (lines 1073-1097)
-- `<label`, `>label` - .data directive (lines 1587-1596)
+- `#<label`, `#>label` - immediate mode (lines 1067-1092)
+- `<label`, `>label` - .data directive (lines 1567-1578)
 - Any context where operators explicitly extract byte
 
 #### Why Operators Bypass Tracking
