@@ -1,5 +1,5 @@
-; instgen18.asm - Instruction table generator for new conventional syntax
-; Written in new syntax (assembled by asm17/asm18)
+; instgen19.asm - Instruction table generator for new conventional syntax
+; Written in new syntax (assembled by asm18)
 ;
 ; New table format: each instruction has mode:opcode pairs
 ;   [mnemonic string] $00 [mode1 opcode1] [mode2 opcode2] ... $FF
@@ -18,7 +18,6 @@
 ;   MODE_INDY = $0A  ; Indirect, Y - ($zp),Y
 ;   MODE_REL  = $0B  ; Relative (branches)
 ;   MODE_IND  = $0C  ; Indirect - JMP ($xxxx)
-;   MODE_DATA = $FE  ; Pseudo-instruction (DATA)
 ;   $FF = terminator (end of mode list)
 
 ; Addresses
@@ -64,7 +63,6 @@ MODE_INDX = $09
 MODE_INDY = $0A
 MODE_REL  = $0B
 MODE_IND  = $0C
-MODE_DATA = $FE
 
 
 ; Instruction table with mode:opcode pairs
@@ -220,10 +218,6 @@ MNTAB
   .data "RTI" $00  <MODE_NONE $40
   .data            $FF
   .data "RTS" $00  <MODE_NONE $60
-  .data            $FF
-
-  ; Pseudo-instruction
-  .data "DATA" $00 <MODE_DATA $00
   .data            $FF
 
   ; End of table

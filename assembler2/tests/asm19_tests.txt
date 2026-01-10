@@ -176,27 +176,6 @@ INPUT:
 EXPECT_HEX: 20 04 02 60 ea 60
 
 ---
-NAME: data_bytes
-INPUT:
-1: * = $0200
-2:   DATA $01 $02 $03
-EXPECT_HEX: 01 02 03
-
----
-NAME: data_string
-INPUT:
-1: * = $0200
-2:   DATA "Hi" $00
-EXPECT_HEX: 48 69 00
-
----
-NAME: data_mixed
-INPUT:
-1: * = $0200
-2:   DATA $01 "AB" $02
-EXPECT_HEX: 01 41 42 02
-
----
 NAME: local_labels
 INPUT:
 1: * = $0200
@@ -420,7 +399,7 @@ EXPECT_MSG: Invalid hex
 NAME: closing_quote_not_found
 INPUT:
 1: * = $0200
-2:   DATA "unterminated
+2:   .data "unterminated
 EXPECT_ERROR: 9
 EXPECT_LINE: 2
 EXPECT_MSG: Closing quote not found

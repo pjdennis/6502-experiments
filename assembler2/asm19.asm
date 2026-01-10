@@ -65,7 +65,6 @@ MODE_INDX = $09   ; Indirect, X - ($zp,X)
 MODE_INDY = $0A   ; Indirect, Y - ($zp),Y
 MODE_REL  = $0B   ; Relative (branches)
 MODE_IND  = $0C   ; Indirect - JMP ($xxxx)
-MODE_DATA = $FE   ; Pseudo-instruction (DATA)
 
 
 ; Read next character from file stack
@@ -665,10 +664,6 @@ find_opcode_for_mode
 emit_instruction
   ; Preserve A (next char after operand) for garbage checking by caller
   PHA
-  ; Check for DATA pseudo-instruction (MODE_DATA)
-  LDA ADDR_MODE
-  CMP #MODE_DATA
-  BEQ .done            ; DATA pseudo handled separately in parameters loop
   ; Find opcode for this addressing mode
   JSR find_opcode_for_mode
   BCS .invalid_mode
@@ -1018,14 +1013,6 @@ assemble_code
 parse_operand_and_emit
   JSR check_for_end_of_line
   BCS .implied_mode    ; No operand = implied mode
-  ; Check for DATA pseudo-instruction
-  STA TEMP            ; Save next char
-  JSR check_for_data_pseudo
-  BCS .not_data
-  LDA TEMP            ; Restore next char for DATA processing
-  JMP .data_mode
-.not_data
-  LDA TEMP            ; Restore next char
   ; Check operand format to determine mode
   CMP #'#'
   BNE .not_imm
@@ -1060,10 +1047,6 @@ parse_operand_and_emit
   STA OPERAND_H
   PLA                  ; Restore next char for garbage check
   JMP emit_instruction ; Tail call
-
-.data_mode
-  ; A contains next character for DATA processing
-  JMP data_parameters_loop_entry
 
 .accumulator_mode
   ; ASL A, LSR A, ROL A, ROR A
@@ -1563,22 +1546,6 @@ check_if_branch
   RTS
 
 
-; Check if instruction is DATA pseudo
-; On entry INST_PTR_L:INST_PTR_H points to mode:opcode data
-; On exit C = 0 if DATA, C = 1 if not DATA
-;         A, Y not preserved, X preserved
-check_for_data_pseudo
-  LDY #$00
-  LDA (INST_PTR_L),Y
-  CMP #MODE_DATA
-  BEQ .is_data
-  SEC
-  RTS
-.is_data
-  CLC
-  RTS
-
-
 ; Handle forward reference for ZP/ABS mode selection
 ; Determines whether to use ZP or ABS mode based on forward ref status
 ; On entry: IS_FWDREF set if this is a forward reference (pass 1)
@@ -1604,7 +1571,7 @@ handle_fwdref_mode
   RTS
 
 
-; DATA pseudo-instruction parameter loop
+; .data directive parameter loop
 data_parameters_loop
 data_parameters_loop_entry
   JSR check_for_end_of_line
