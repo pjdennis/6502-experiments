@@ -1132,61 +1132,28 @@ parse_operand_and_emit
   JMP emit_instruction ; Tail call
 
 .immediate_mode
-  ; #$xx or #<label or #>label or #label
+  ; #$xx or #<label or #>label or #label or #'x'
   LDA #MODE_IMM
   STA ADDR_MODE
   JSR read_char        ; Skip #
-  CMP #'$'
-  BNE .imm_check_lsb
-  JSR read_char
-  JSR read_hex_byte_or_word
-  BCC .imm_hex_one_byte
-  ; 2 byte value - store operand
-  PHA                  ; Save next char
-  LDA HEX2
-  STA OPERAND_L
-  LDA HEX1
-  STA OPERAND_H
-  JMP .imm_operand_set
-.imm_hex_one_byte
-  ; 1 byte value
-  PHA                  ; Save next char
-  LDA HEX1
-  STA OPERAND_L
-  LDA #$00
-  STA OPERAND_H
-.imm_operand_set
-  PLA                        ; Restore next char for garbage check
-  JMP emit_instruction ; Tail call
-.imm_check_lsb
-  CMP #'<'
-  BNE .imm_check_msb
-  ; #<label - low byte of label
-  JSR read_char        ; Skip <
-  JSR read_and_find_existing_label
-  PHA                  ; Save next char
-  LDA HEX2            ; Low byte
-  STA OPERAND_L
-  LDA #$00
-  STA OPERAND_H
-  PLA                  ; Restore next char for garbage check
-  JMP emit_instruction ; Tail call
-.imm_check_msb
-  CMP #'>'
-  BNE .imm_check_char
-  ; #>label - high byte of label
-  JSR read_char        ; Skip >
-  JSR read_and_find_existing_label
-  PHA                  ; Save next char
-  LDA HEX1             ; High byte
-  STA OPERAND_L
-  LDA #$00
-  STA OPERAND_H
-  PLA                  ; Restore next char for garbage check
-  JMP emit_instruction ; Tail call
-.imm_check_char
   CMP #'\''
-  BNE .imm_label
+  BEQ .imm_char_literal
+  ; Validate operand start: must be $, <, >, or valid label start
+  CMP #'$'
+  BEQ .imm_parse
+  CMP #'<'
+  BEQ .imm_parse
+  CMP #'>'
+  BEQ .imm_parse
+  JSR is_label_start_char
+  BNE .imm_invalid
+.imm_parse
+  ; Use parse_value for all non-character operands
+  JSR parse_value      ; Returns next char in A, OPERAND_L/H set
+  JMP emit_instruction ; Tail call
+.imm_invalid
+  JMP err_invalid_operand
+.imm_char_literal
   ; #'x' - character literal (must be exactly 1 char)
   JSR read_char        ; Skip opening quote
   CMP #'\''
@@ -1225,19 +1192,6 @@ parse_operand_and_emit
   JMP emit_instruction ; Tail call
 .imm_char_invalid
   JMP err_invalid_char_literal
-.imm_label
-  JSR is_label_start_char
-  BNE .imm_label_invalid
-  JSR read_and_find_existing_label
-  PHA                  ; Save next char
-  LDA HEX2            ; Low byte of label value
-  STA OPERAND_L
-  LDA HEX1
-  STA OPERAND_H       ; High byte of label value will be validated as 0 later
-  PLA                  ; Restore next char for garbage check
-  JMP emit_instruction ; Tail call
-.imm_label_invalid
-  JMP err_invalid_operand
 
 .indirect_mode
   ; ($xx),Y - indirect indexed Y (1-byte operand)
