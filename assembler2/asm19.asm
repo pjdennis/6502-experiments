@@ -420,6 +420,100 @@ read_value
   RTS
 
 
+; Parse a value: $12, $1234, label, <label, or >label
+; On entry A contains first character
+; On exit  A contains next character
+;          OPERAND_L, OPERAND_H contain parsed value
+;          IS_FWDREF set if bare label was forward ref (pass 1 only)
+;          C=1 if bare label, C=0 otherwise
+;          X, Y preserved
+parse_value
+  CMP #'$'
+  BEQ .hex
+  CMP #'<'
+  BEQ .low_byte
+  CMP #'>'
+  BEQ .high_byte
+  ; Otherwise: bare label - needs forward ref tracking
+  ; Reuse logic from .is_label (lines 1391-1425)
+  JSR read_token
+  PHA                  ; Save next char
+  ; Look up the token
+  JSR check_local_label
+  JSR select_label_hash_table
+  JSR find_in_hash
+  BCC .label_found
+  ; Label not found - check pass
+  BIT PASS
+  BMI .label_not_found_pass2
+  ; Pass 1 - forward reference: use zero values
+  LDY #$FF
+  STY IS_FWDREF        ; Mark as forward reference
+  LDY #$00
+  STY HEX1
+  STY HEX2
+  JMP .label_store
+.label_not_found_pass2
+  JMP err_label_not_found
+.label_found
+  ; Label found - clear forward ref flag
+  LDA #$00
+  STA IS_FWDREF
+.label_store
+  ; Store in OPERAND_L/H
+  LDA HEX2
+  STA OPERAND_L
+  LDA HEX1
+  STA OPERAND_H
+  PLA                  ; Restore next char
+  SEC                  ; Signal bare label
+  RTS
+.hex
+  JSR read_char        ; Skip $
+  JSR read_hex_byte_or_word  ; Returns next char in A
+  BCC .one_byte
+  ; Two bytes
+  PHA                  ; Save next char
+  LDA HEX2
+  STA OPERAND_L
+  LDA HEX1
+  STA OPERAND_H
+  PLA                  ; Restore next char
+  CLC                  ; Signal not bare label
+  RTS
+.one_byte
+  PHA                  ; Save next char
+  LDA HEX1
+  STA OPERAND_L
+  LDA #$00
+  STA OPERAND_H
+  PLA                  ; Restore next char
+  CLC                  ; Signal not bare label
+  RTS
+.low_byte
+  JSR read_char        ; Skip <
+  JSR read_and_find_existing_label  ; Returns next char in A
+  PHA                  ; Save next char
+  LDA HEX2             ; Low byte
+  STA OPERAND_L
+  LDA #$00
+  STA OPERAND_H
+  PLA                  ; Restore next char
+  CLC                  ; Signal not bare label
+  RTS
+.high_byte
+  JSR read_char        ; Skip >
+  JSR read_and_find_existing_label  ; Returns next char in A
+  PHA                  ; Save next char
+  LDA HEX1             ; High byte
+  STA OPERAND_L
+  LDA #$00
+  STA OPERAND_H
+  PLA                  ; Restore next char
+  CLC                  ; Signal not bare label
+  RTS
+
+
 ; Fast forward the program counter
 ; On entry PCL;PCH contains the current program counter
 ;          HEX2;HEX1 contains the new PC value
