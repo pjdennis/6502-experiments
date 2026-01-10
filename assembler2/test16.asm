@@ -166,5 +166,9 @@ forward_abs
   LDA forward_abs,X    ; Should be BD xx xx (absolute indexed X)
   STA forward_abs,Y    ; Should be 99 xx xx (absolute indexed Y)
 
+; === Test JMP indirect ===
+  JMP ($1234)          ; Should be 6C 34 12 (JMP indirect)
+  JMP ($ABCD)          ; Should be 6C CD AB
+
 ; Padding to make output visible
   DATA $00 $00

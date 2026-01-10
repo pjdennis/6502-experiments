@@ -16,6 +16,7 @@
 ;   MODE_INDX = $09  ; Indirect, X - ($zp,X)
 ;   MODE_INDY = $0A  ; Indirect, Y - ($zp),Y
 ;   MODE_REL  = $0B  ; Relative (branches)
+;   MODE_IND  = $0C  ; Indirect - JMP ($xxxx)
 ;   MODE_DATA = $FE  ; Pseudo-instruction (DATA)
 ;   $FF = terminator (end of mode list)
 
@@ -61,6 +62,7 @@ MODE_ABSY = $08
 MODE_INDX = $09
 MODE_INDY = $0A
 MODE_REL  = $0B
+MODE_IND  = $0C
 MODE_DATA = $FE
 
 
@@ -117,7 +119,7 @@ MNTAB
   DATA "BVS" $00 $0B $70 $FF
 
   ; Jump instructions
-  DATA "JMP" $00 $06 $4C $FF
+  DATA "JMP" $00 $06 $4C $0C $6C $FF
   DATA "JSR" $00 $06 $20 $FF
 
   ; Stack instructions

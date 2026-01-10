@@ -60,6 +60,7 @@ MODE_ABSY = $08   ; Absolute, Y
 MODE_INDX = $09   ; Indirect, X - ($zp,X)
 MODE_INDY = $0A   ; Indirect, Y - ($zp),Y
 MODE_REL  = $0B   ; Relative (branches)
+MODE_IND  = $0C   ; Indirect - JMP ($xxxx)
 MODE_DATA = $FE   ; Pseudo-instruction (DATA)
 
 
@@ -205,6 +206,8 @@ compare_end_of_token
   CMP# ";"
   BEQ .end
   CMP# ","             ; Comma terminates token for indexed modes
+  BEQ .end
+  CMP# ")"             ; Close paren terminates for indirect modes
 .end
   RTS
 
@@ -1130,30 +1133,62 @@ parse_operand_and_emit
   RTS
 
 .indirect_mode
-  ; ($xx),Y or ($xx,X)
+  ; ($xx),Y - indirect indexed Y (1-byte operand)
+  ; ($xx,X) - indirect indexed X (1-byte operand)
+  ; ($xxxx) - indirect absolute for JMP (2-byte operand)
   JSR read_char        ; Skip (
   CMP# "$"
   BNE .ind_label
   JSR read_char
-  JSR read_hex_byte
-  STAZ OPERAND_L
-  LDA# $00
-  STAZ OPERAND_H
-  JMP .indirect_check_suffix
-.ind_label
-  JSR read_and_find_existing_label
+  JSR read_hex_byte_or_word
+  ; C = 1 if 2 bytes, C = 0 if 1 byte
+  ; A contains next char after hex value
+  BCC .ind_hex_one_byte
+  ; 2 byte value - store operand and set flag
+  PHA                  ; Save next char
   LDAZ HEX2
   STAZ OPERAND_L
   LDAZ HEX1
   STAZ OPERAND_H
+  LDA# $FF             ; Flag: 2-byte operand
+  STAZ TEMP
+  PLA                  ; Restore next char
+  JMP .indirect_check_suffix
+.ind_hex_one_byte
+  ; 1 byte value
+  PHA                  ; Save next char
+  LDAZ HEX1
+  STAZ OPERAND_L
+  LDA# $00
+  STAZ OPERAND_H
+  STAZ TEMP            ; Flag: 1-byte operand (0)
+  PLA                  ; Restore next char
+  JMP .indirect_check_suffix
+.ind_label
+  JSR read_and_find_existing_label
+  PHA                  ; Save next char
+  LDAZ HEX2
+  STAZ OPERAND_L
+  LDAZ HEX1
+  STAZ OPERAND_H
+  ; For labels, check if high byte is non-zero to determine size
+  ORAZ HEX1            ; A = HEX1
+  BNE .ind_label_2byte
+  LDA# $00             ; Flag: 1-byte (ZP label)
+  JMP .ind_label_done
+.ind_label_2byte
+  LDA# $FF             ; Flag: 2-byte (ABS label)
+.ind_label_done
+  STAZ TEMP
+  PLA                  ; Restore next char
 .indirect_check_suffix
-  JSR read_char        ; Should be ) or ,
+  ; A contains next char (should be ) or ,)
   CMP# ","
   BEQ .indirect_x
-  ; Assume ), check for ,Y
-  JSR read_char        ; Should be ,
+  ; Assume ), check for ,Y or just )
+  JSR read_char        ; Read char after )
   CMP# ","
-  BNE .ind_done_no_index
+  BNE .ind_no_suffix
   JSR read_char        ; Should be Y
   CMP# "Y"
   BNE .ind_err
@@ -1170,9 +1205,11 @@ parse_operand_and_emit
   LDA# MODE_INDX
   STAZ ADDR_MODE
   JMP emit_instruction ; Tail call - no extra read needed
-.ind_done_no_index
-  ; Just ($xx) - JMP indirect not supported in this simple version
-  JMP err_invalid_addressing_mode
+.ind_no_suffix
+  ; Just ($xxxx) - JMP indirect mode (must be 2-byte operand)
+  LDA# MODE_IND
+  STAZ ADDR_MODE
+  JMP emit_instruction ; Tail call
 .ind_err
   JMP err_invalid_addressing_mode
 
