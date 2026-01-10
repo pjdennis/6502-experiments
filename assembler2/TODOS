@@ -2,16 +2,15 @@
 
 ## Housekeeping
 - [ ] Add .gitignore - Exclude out/, dump/, and tool .out files from version control
-- [ ] Consolidate helper files - The numbered variants (common11/13/14/15, hash_table13/14/15, etc.) might have minor differences that could be consolidated with conditional assembly or parameterization
 
 ## Assembler Features
 - [ ] Macro support - Define reusable code patterns
 - [ ] Conditional assembly - .ifdef, .ifndef, .if directives
-- [ ] More instructions - Check if any 6502 opcodes are missing from the instruction tables
+- [X] More instructions - Check if any 6502 opcodes are missing from the instruction tables
 - [ ] Better error messages - Include source line content in error output, not just line numbers
 
 ## Testing & Quality
-- [ ] Test suite - Automated tests for assembler features, edge cases (branch range limits, etc.)
+- [X] Test suite - Automated tests for assembler features, edge cases (branch range limits, etc.)
 - [ ] Regression testing - Compare outputs against known-good binaries automatically
 
 ## Tooling
@@ -26,6 +25,6 @@
 
 - [X] Try claude doctor or npm i -g @anthropic-ai/claude-code
 
-- [ ] Move addressing mode constants to a common include file e.g. common.asm
+- [X] Move addressing mode constants to a common include file e.g. common.asm
 
 - [ ] Diagnostics to print # of forward references of max, zero page usage, and maybe bytes of code generated
