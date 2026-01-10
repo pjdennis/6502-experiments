@@ -1151,16 +1151,10 @@ parse_operand_and_emit
   JSR read_char        ; Should be closing quote
   CMP #'\''
   BNE .imm_char_too_long
-  ; Read next char for garbage check
-  JSR read_char
-  CMP #' '
-  BNE .imm_char_no_space
-  JSR skip_spaces      ; A = first non-space char
-.imm_char_no_space
-  PHA                  ; Save next char
   LDA #$00
   STA OPERAND_H
-  PLA                  ; Restore next char for garbage check
+  ; Read next char for garbage check
+  JSR read_char
   JMP emit_instruction ; Tail call
 .imm_char_empty
   JMP err_invalid_char_literal
