@@ -1136,18 +1136,15 @@ parse_operand_and_emit
   JSR read_char
   CMP #'n'
   BNE .imm_esc_not_n
-  LDA #'\n'            ; Newline
+  LDA #'\n'
   JMP .imm_esc_done
 .imm_esc_not_n
   CMP #'\\'
   BNE .imm_esc_not_bs
-  LDA #'\\'            ; Backslash
   JMP .imm_esc_done
 .imm_esc_not_bs
   CMP #'\''
   BNE .imm_esc_invalid
-  LDA #'\''             ; Single quote
-  JMP .imm_esc_done
 .imm_esc_done
   STA OPERAND_L
 .imm_char_check_close
