@@ -33,6 +33,7 @@ INST_PTR_L  DATA $00 ; Pointer to instruction mode table entry
 INST_PTR_H  DATA $00 ; "
 OPERAND_L   DATA $00 ; Operand value (low byte)
 OPERAND_H   DATA $00 ; Operand value (high byte)
+IS_FWDREF   DATA $00 ; $FF if current label is forward ref (pass 1 only)
 
   .code
 
@@ -1423,85 +1424,25 @@ parse_operand_and_emit
   JSR check_local_label
   JSR select_label_hash_table
   JSR find_in_hash
-  BCC .label_found
+  BCC .label_lookup_done
   ; Label not found - check pass
   BIT PASS
   BMI .label_not_found_pass2
-  ; Pass 1 - forward reference: use zero values, check if branch
+  ; Pass 1 - forward reference: use zero values
+  LDY #$FF
+  STY IS_FWDREF            ; Mark as forward reference
   LDY #$00
   STY HEX1
   STY HEX2
-  JMP .label_forward_ref
+  JMP .label_continue
 .label_not_found_pass2
   JMP err_label_not_found
-.label_forward_ref
-  ; Pass 1 forward reference - HEX1/HEX2 are 0, always use absolute mode
-  LDA HEX2
-  STA OPERAND_L
-  LDA HEX1
-  STA OPERAND_H
-  ; Check if this is a branch instruction
-  JSR check_if_branch
-  BCS .fwdref_not_branch
-  JMP .label_is_branch   ; Branches use relative mode regardless
-.fwdref_not_branch
-  ; Not a branch - check for indexed mode
-  PLA                    ; Restore next char (might be comma)
-  CMP #','
-  BNE .fwdref_abs_no_index
-  ; Has index suffix - read X or Y
-  JSR read_char
-  CMP #'X'
-  BEQ .fwdref_absx
-  CMP #'Y'
-  BEQ .fwdref_absy
-  JMP err_invalid_addressing_mode
-.fwdref_absx
-  JSR read_char          ; Read char after X for garbage check
-  PHA
-  ; Only add to forward ref list if instruction supports ZPX (needs disambiguation)
-  LDA #MODE_ZPX
-  STA ADDR_MODE
-  JSR find_opcode_for_mode
-  BCS .fwdref_absx_emit   ; No ZPX mode, skip list
-  JSR add_forward_ref
-.fwdref_absx_emit
-  LDA #MODE_ABSX
-  STA ADDR_MODE
-  PLA                     ; Restore next char for garbage check
-  JMP emit_instruction ; Tail call
-.fwdref_absy
-  JSR read_char          ; Read char after Y for garbage check
-  PHA
-  ; Only add to forward ref list if instruction supports ZPY (needs disambiguation)
-  LDA #MODE_ZPY
-  STA ADDR_MODE
-  JSR find_opcode_for_mode
-  BCS .fwdref_absy_emit   ; No ZPY mode, skip list
-  JSR add_forward_ref
-.fwdref_absy_emit
-  LDA #MODE_ABSY
-  STA ADDR_MODE
-  PLA                     ; Restore next char for garbage check
-  JMP emit_instruction    ; Tail call
-.fwdref_abs_no_index
-  ; A contains next char for garbage check - save it
-  PHA
-  ; Only add to forward ref list if instruction supports ZP (needs disambiguation)
-  LDA #MODE_ZP
-  STA ADDR_MODE
-  JSR find_opcode_for_mode
-  BCS .fwdref_abs_emit    ; No ZP mode, skip list
-  JSR add_forward_ref
-.fwdref_abs_emit
-  LDA #MODE_ABS
-  STA ADDR_MODE
-  PLA                     ; Restore next char for garbage check
-  JMP emit_instruction    ; Tail call
-.label_found
-  ; HEX1:HEX2 now contains the label value
+.label_lookup_done
+  ; Label found - clear forward ref flag
+  LDA #$00
+  STA IS_FWDREF
 .label_continue
-  ; Next char is still on stack from earlier PHA
+  ; Common path for both forward refs and found labels
   LDA HEX2
   STA OPERAND_L
   LDA HEX1
@@ -1509,83 +1450,82 @@ parse_operand_and_emit
   ; Check if this is a branch instruction
   JSR check_if_branch
   BCC .label_is_branch
-  ; Not a branch - check for indexed mode BEFORE emitting
-  ; Labels always use absolute addressing (conservative for forward refs)
+  ; Not a branch - check for indexed mode
   PLA                  ; Restore next char (might be comma)
   CMP #','
-  BNE .label_abs_no_index
+  BNE .label_no_index
   ; Has index suffix - read X or Y
   JSR read_char
   CMP #'X'
-  BEQ .label_absx
+  BEQ .label_x_index
   CMP #'Y'
-  BEQ .label_absy
+  BEQ .label_y_index
   JMP err_invalid_addressing_mode
-.label_absx
+.label_x_index
   JSR read_char            ; Read char after X for garbage check
   PHA
-  ; Check if ZPX mode is possible (operand in ZP, instruction supports ZPX)
+  ; Check if ZPX mode is possible
   LDA OPERAND_H
-  BNE .label_absx_use_abs   ; High byte != 0, must use ABSX
+  BNE .label_use_absx       ; High byte != 0, must use ABSX
   LDA #MODE_ZPX
   STA ADDR_MODE
   JSR find_opcode_for_mode
-  BCS .label_absx_use_abs   ; No ZPX mode, use ABSX
-  ; ZPX possible - check if this was a forward ref in pass 1
-  JSR check_forward_ref
-  BCS .label_absx_use_abs   ; Was forward ref, use ABSX
+  BCS .label_use_absx       ; No ZPX mode, use ABSX
+  ; ZPX mode possible - check forward ref
+  JSR handle_fwdref_mode
+  BCS .label_use_absx       ; Forward ref, use ABSX
   PLA                       ; Restore next char for garbage check
-  JMP emit_instruction      ; Use ZPX ; Tail call
-.label_absx_use_abs
+  JMP emit_instruction      ; Use ZPX
+.label_use_absx
   LDA #MODE_ABSX
   STA ADDR_MODE
   PLA                       ; Restore next char for garbage check
-  JMP emit_instruction      ; Tail call
-.label_absy
+  JMP emit_instruction
+.label_y_index
   JSR read_char            ; Read char after Y for garbage check
   PHA
-  ; Check if ZPY mode is possible (operand in ZP, instruction supports ZPY)
+  ; Check if ZPY mode is possible
   LDA OPERAND_H
-  BNE .label_absy_use_abs   ; High byte != 0, must use ABSY
+  BNE .label_use_absy       ; High byte != 0, must use ABSY
   LDA #MODE_ZPY
   STA ADDR_MODE
   JSR find_opcode_for_mode
-  BCS .label_absy_use_abs   ; No ZPY mode, use ABSY
-  ; ZPY possible - check if this was a forward ref in pass 1
-  JSR check_forward_ref
-  BCS .label_absy_use_abs   ; Was forward ref, use ABSY
+  BCS .label_use_absy       ; No ZPY mode, use ABSY
+  ; ZPY mode possible - check forward ref
+  JSR handle_fwdref_mode
+  BCS .label_use_absy       ; Forward ref, use ABSY
   PLA                       ; Restore next char for garbage check
-  JMP emit_instruction      ; Use ZPY ; Tail call
-.label_absy_use_abs
+  JMP emit_instruction      ; Use ZPY
+.label_use_absy
   LDA #MODE_ABSY
   STA ADDR_MODE
   PLA                       ; Restore next char for garbage check
-  JMP emit_instruction      ; Tail call
-.label_abs_no_index
+  JMP emit_instruction
+.label_no_index
   ; A contains next char for garbage check - save it
   PHA
-  ; Check if ZP mode is possible (operand in ZP, instruction supports ZP)
+  ; Check if ZP mode is possible
   LDA OPERAND_H
   BNE .label_use_abs        ; High byte != 0, must use ABS
   LDA #MODE_ZP
   STA ADDR_MODE
   JSR find_opcode_for_mode
   BCS .label_use_abs        ; No ZP mode, use ABS
-  ; ZP possible - check if this was a forward ref in pass 1
-  JSR check_forward_ref
-  BCS .label_use_abs        ; Was forward ref, use ABS
+  ; ZP mode possible - check forward ref
+  JSR handle_fwdref_mode
+  BCS .label_use_abs        ; Forward ref, use ABS
   PLA                       ; Restore next char for garbage check
-  JMP emit_instruction      ; Tail call
+  JMP emit_instruction      ; Use ZP
 .label_use_abs
   LDA #MODE_ABS
   STA ADDR_MODE
   PLA                       ; Restore next char for garbage check
-  JMP emit_instruction      ; Tail call
+  JMP emit_instruction
 .label_is_branch
   LDA #MODE_REL
   STA ADDR_MODE
   PLA                  ; Restore next char for garbage check
-  JMP emit_instruction ; Tail call
+  JMP emit_instruction
 
 
 ; Check if current instruction is a branch (supports MODE_REL)
@@ -1623,6 +1563,31 @@ check_for_data_pseudo
   SEC
   RTS
 .is_data
+  CLC
+  RTS
+
+
+; Handle forward reference for ZP/ABS mode selection
+; Determines whether to use ZP or ABS mode based on forward ref status
+; On entry: IS_FWDREF set if this is a forward reference (pass 1)
+;           PASS indicates current pass
+; On exit: C=1 if must use ABS mode (forward ref), C=0 if can use ZP
+;          In pass 1 with forward ref: adds PC to forward ref list
+;          A, Y not preserved, X preserved
+handle_fwdref_mode
+  BIT PASS
+  BMI .pass2
+  ; Pass 1 - check if this is a forward reference
+  BIT IS_FWDREF
+  BPL .can_use_zp          ; Not a forward ref, can use ZP
+  ; Forward ref in pass 1 - add to list, return C=1 (use ABS)
+  JSR add_forward_ref
+  SEC
+  RTS
+.pass2
+  ; Pass 2 - check the forward ref list
+  JMP check_forward_ref    ; Returns C=1 if in list, C=0 if not
+.can_use_zp
   CLC
   RTS
 
