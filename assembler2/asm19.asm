@@ -567,7 +567,6 @@ capture_label
   ; No need to retain next char as caller
   ; goes straight to next line
   RTS
-
 .duplicate_label
   JMP err_duplicate_label
 
@@ -671,9 +670,9 @@ emit_instruction
   CMP #MODE_ZPY
   BEQ .one_byte
   CMP #MODE_INDX
-  BEQ .one_byte_zp_only
+  BEQ .one_byte
   CMP #MODE_INDY
-  BEQ .one_byte_zp_only
+  BEQ .one_byte
   ; 2-byte operand (absolute modes)
   LDA OPERAND_L
   JSR emit
@@ -682,18 +681,18 @@ emit_instruction
 .done
   PLA
   RTS
-.one_byte_zp_only
-  ; ZP-only addressing modes (INDX, INDY) - validate operand <= $FF
-  BIT PASS
-  BPL .one_byte          ; Skip validation on pass 1
-  LDA OPERAND_H
-  BNE .zp_only_error
 .one_byte
+  ; Validate operand <= $FF
+  BIT PASS
+  BPL .one_byte_ok       ; Skip validation on pass 1
+  LDA OPERAND_H
+  BNE .one_byte_error
+.one_byte_ok
   LDA OPERAND_L
   JSR emit
   PLA
   RTS
-.zp_only_error
+.one_byte_error
   JMP err_value_out_of_range
 .emit_relative
   ; Calculate relative offset: target - PC - 1
@@ -1131,8 +1130,8 @@ parse_operand_and_emit
   PHA                  ; Save next char
   LDA HEX2            ; Low byte of label value
   STA OPERAND_L
-  LDA #$00
-  STA OPERAND_H       ; Immediate only uses low byte
+  LDA HEX1
+  STA OPERAND_H       ; High byte of label value will be validated as 0 later
   PLA                  ; Restore next char for garbage check
   JMP emit_instruction ; Tail call
 .imm_label_invalid

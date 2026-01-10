@@ -387,6 +387,16 @@ EXPECT_LINE: 2
 EXPECT_MSG: Branch out of range
 
 ---
+NAME: immediate_label_value_out_of_range
+INPUT:
+1: * = $0200
+2: VALUE = $1234
+3:   LDA #VALUE
+EXPECT_ERROR: 6
+EXPECT_LINE: 3
+EXPECT_MSG: Value out of range
+
+---
 NAME: invalid_hex
 INPUT:
 1: * = $0200
