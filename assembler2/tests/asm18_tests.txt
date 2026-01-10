@@ -47,6 +47,15 @@ INPUT:
 EXPECT_HEX: a9 0a a2 5c a0 27
 
 ---
+NAME: immediate_char_special
+INPUT:
+1: * = $0200
+2:   LDA #' '
+3:   LDX #';'
+4:   LDY #','
+EXPECT_HEX: a9 20 a2 3b a0 2c
+
+---
 NAME: immediate_label
 INPUT:
 1: * = $0200
