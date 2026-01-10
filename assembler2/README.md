@@ -75,10 +75,7 @@ asm00.out -----> asm01.out -----> asm02.out ---> ... ---> asm06.out
 
 ```
 assembler2/
-├── out/                    # Generated outputs and tools
-│   ├── emulator.out        # 6502 emulator
-│   ├── sidebyside.out      # Hexdump display utility
-│   ├── asm0c.out           # C bootstrap assembler
+├── out/                    # Generated outputs
 │   ├── asm00.out           # Level 0 assembler
 │   ├── asm01.out ... asm15.out
 │   ├── inst07.asm.out ... inst15.asm.out
@@ -86,6 +83,10 @@ assembler2/
 ├── dump/                   # Memory dumps from emulator
 │   └── *.dump.bin
 ├── legacy/                 # Old/unused assembler versions
+│
+├── emulator.out            # 6502 emulator
+├── sidebyside.out          # Hexdump display utility
+├── asm0c.out               # C bootstrap assembler
 │
 ├── asm00.asm - asm15.asm   # Assembler source chain
 ├── instgen07.asm - instgen15.asm  # Instruction table generators
