@@ -510,8 +510,7 @@ parse_char_literal
   LDA #$00
   STA OPERAND_H
   ; Read next char for garbage check
-  JSR read_char
-  RTS
+  JMP read_char        ; Tail call
 .char_invalid
   JMP err_invalid_char_literal
 
