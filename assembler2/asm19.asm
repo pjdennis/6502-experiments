@@ -36,6 +36,10 @@ OPERAND_H = HEX1     ; Operand value (high byte) - alias for HEX1
 IS_FWDREF   .data $00 ; $FF if current label is forward ref (pass 1 only)
 FWDREF_PASS1_L .data $00 ; Forward ref pointer after pass 1 (low byte)
 FWDREF_PASS1_H .data $00 ; Forward ref pointer after pass 1 (high byte)
+EXPR_ACCU_L .data $00 ; Expression accumulator low byte
+EXPR_ACCU_H .data $00 ; Expression accumulator high byte
+EXPR_FWDREF .data $00 ; Accumulated forward ref flag
+EXPR_CARRY  .data $00 ; Saved carry from first term
 
   .code
 
@@ -489,6 +493,97 @@ parse_term
   PLA                  ; Restore next char
   CLC                  ; Signal not bare label
   RTS
+
+
+; Parse expression: term [+|- term]*
+; On entry: A contains first character
+; On exit: A contains next character
+;          OPERAND_L/H contain result
+;          IS_FWDREF set if any term is forward ref
+;          C flag preserved from first term
+parse_expression
+  JSR parse_term       ; Parse first term
+  PHP                  ; Save carry flag
+  PLA
+  STA EXPR_CARRY       ; Store carry for later
+
+  ; Save IS_FWDREF from first term
+  LDA IS_FWDREF
+  STA EXPR_FWDREF
+
+.loop
+  ; A contains next character
+  CMP #'+'
+  BEQ .add_op
+  CMP #'-'
+  BEQ .sub_op
+
+  ; No more operators - restore and return
+  PHA                  ; Save next char
+  LDA EXPR_FWDREF
+  STA IS_FWDREF
+  LDA EXPR_CARRY
+  LSR                  ; Shift bit 0 into carry
+  PLA                  ; Restore next char
+  RTS
+
+.add_op
+  ; Save current accumulator
+  LDA OPERAND_L
+  STA EXPR_ACCU_L
+  LDA OPERAND_H
+  STA EXPR_ACCU_H
+
+  ; Parse next term (skip '+' first)
+  JSR read_char        ; Skip '+'
+  JSR parse_term
+  PHA                  ; Save next char
+
+  ; Accumulate forward ref flag
+  LDA IS_FWDREF
+  ORA EXPR_FWDREF
+  STA EXPR_FWDREF
+
+  ; Add: accumulator + OPERAND → OPERAND
+  LDA EXPR_ACCU_L
+  CLC
+  ADC OPERAND_L
+  STA OPERAND_L
+  LDA EXPR_ACCU_H
+  ADC OPERAND_H
+  STA OPERAND_H
+
+  PLA                  ; Restore next char
+  JMP .loop
+
+.sub_op
+  ; Save current accumulator
+  LDA OPERAND_L
+  STA EXPR_ACCU_L
+  LDA OPERAND_H
+  STA EXPR_ACCU_H
+
+  ; Parse next term (skip '-' first)
+  JSR read_char        ; Skip '-'
+  JSR parse_term
+  PHA                  ; Save next char
+
+  ; Accumulate forward ref flag
+  LDA IS_FWDREF
+  ORA EXPR_FWDREF
+  STA EXPR_FWDREF
+
+  ; Subtract: accumulator - OPERAND → OPERAND
+  LDA EXPR_ACCU_L
+  SEC
+  SBC OPERAND_L
+  STA OPERAND_L
+  LDA EXPR_ACCU_H
+  SBC OPERAND_H
+  STA OPERAND_H
+
+  PLA                  ; Restore next char
+  JMP .loop
 
 
 ; ============================================================================
