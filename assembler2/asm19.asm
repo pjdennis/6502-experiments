@@ -390,7 +390,8 @@ read_value
 ;          OPERAND_L, OPERAND_H contain parsed value
 ;          IS_FWDREF set if bare label was forward ref (pass 1 only)
 ;          C=1 if bare label, C=0 otherwise
-;          X, Y preserved
+;          X is preserved
+;          Y is not preserved
 parse_value
   CMP #'$'
   BEQ .hex
@@ -416,7 +417,7 @@ parse_value
   LDY #$00
   STY HEX1
   STY HEX2
-  JMP .label_store
+  BEQ .label_store     ; Always taken
 .label_not_found_pass2
   JMP err_label_not_found
 .label_found
@@ -480,7 +481,7 @@ update_pc
   BIT STARTED
   BMI .started
   DEC STARTED
-  JMP .no_fill
+  BNE .no_fill        ; Always taken
 .started
   LDA HEX1            ; High byte
   CMP PCH
@@ -491,7 +492,7 @@ update_pc
   BCC .less
 .notless
   BIT PASS
-  BPL .no_fill         ; skip writing during pass 1
+  BPL .no_fill        ; skip writing during pass 1
 .loop
   LDA HEX1
   CMP PCH
@@ -505,7 +506,7 @@ update_pc
   INC PCL
   BNE .loop
   INC PCH
-  JMP .loop
+  BNE .loop           ; Always taken
 .loop_done
   RTS
 .less
@@ -641,7 +642,7 @@ lookup_mnemonic
   LDA (TABPL),Y
   BEQ .end_of_mnemonic
   INY
-  JMP .skip_mnemonic
+  BNE .skip_mnemonic      ; Always taken
 .end_of_mnemonic
   ; Y points at null terminator, mode data starts at Y+1
   INY
@@ -669,13 +670,13 @@ find_opcode_for_mode
 .loop
   LDA (INST_PTR_L),Y  ; Get mode byte
   CMP #$FF
-  BEQ .not_found       ; End of list, mode not found
+  BEQ .not_found      ; End of list, mode not found
   CMP ADDR_MODE
   BEQ .found
   ; Not this mode, skip to next pair
   INY
   INY
-  JMP .loop
+  BNE .loop           ; Always taken
 .found
   INY
   LDA (INST_PTR_L),Y  ; Get opcode byte
@@ -947,7 +948,7 @@ assemble_code
   BCS .line_loop
   JSR capture_label
   BCC .check_for_opcode
-  JMP .line_loop
+  BCS .line_loop            ; Always taken
 .line_starts_with_space
   JSR check_for_end_of_line
   BCS .line_loop
@@ -1179,9 +1180,8 @@ parse_operand_and_emit
   LDA #MODE_ZPX
   STA ADDR_MODE
   JSR find_opcode_for_mode
-  BCC .label_x_consume_fwdref ; Has ZPX mode, may need to consume fwdref
-  JMP .label_use_absx         ; No ZPX mode, just use ABSX
-.label_x_consume_fwdref
+  BCS .label_use_absx         ; No ZPX mode, just use ABSX
+  ; Has ZPX mode, may need to consume fwdref
   BIT PASS
   BPL .label_use_absx         ; Pass 1, just use ABSX
   ; Pass 2 - consume forward ref entry if present
@@ -1212,9 +1212,8 @@ parse_operand_and_emit
   LDA #MODE_ZPY
   STA ADDR_MODE
   JSR find_opcode_for_mode
-  BCC .label_y_consume_fwdref ; Has ZPY mode, may need to consume fwdref
-  JMP .label_use_absy         ; No ZPY mode, just use ABSY
-.label_y_consume_fwdref
+  BCS .label_use_absy         ; No ZPY mode, just use ABSY
+  ; Has ZPY mode, may need to consume fwdref
   BIT PASS
   BPL .label_use_absy         ; Pass 1, just use ABSX
   ; Pass 2 - consume forward ref entry if present
