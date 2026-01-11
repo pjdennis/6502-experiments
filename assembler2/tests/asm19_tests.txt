@@ -988,3 +988,17 @@ INPUT:
 3:   JMP (vector)
 EXPECT_HEX: 6c 34 12
 EXPECT_FWDREF: 0
+
+---
+NAME: char_in_indirect
+INPUT:
+1: * = $0200
+2:   LDA ('a',X)
+EXPECT_HEX: a1 61
+
+---
+NAME: char_in_data
+INPUT:
+1: * = $0200
+2:   .data 'A' 'B' 'C'
+EXPECT_HEX: 41 42 43

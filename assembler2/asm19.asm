@@ -408,6 +408,8 @@ emit_hex
 parse_value
   CMP #'$'
   BEQ .hex
+  CMP #'\''
+  BEQ .char_literal
   CMP #'<'
   BEQ .low_byte
   CMP #'>'
@@ -458,6 +460,12 @@ parse_value
   STA OPERAND_H
   PLA                  ; Restore next char
   CLC                  ; Signal not bare label
+  RTS
+.char_literal
+  JSR parse_char_literal
+  ; Result in OPERAND_L, OPERAND_H=$00
+  ; Next char already in A (parse_char_literal ends with JMP read_char)
+  CLC                  ; Character literal = C=0 (like byte selector)
   RTS
 .low_byte
   JSR read_char        ; Skip <
@@ -986,14 +994,7 @@ parse_operand_and_emit
   LDA #MODE_IMM
   STA ADDR_MODE
   JSR read_char        ; Skip #
-  CMP #'\''
-  BEQ .imm_char_literal
-  ; Not a character literal - parse as value ($xx, <label, >label, or label)
   JSR parse_value      ; Returns next char in A, OPERAND_L/H set
-  JMP emit_instruction ; Tail call
-.imm_char_literal
-  ; #'x' - character literal (must be exactly 1 char)
-  JSR parse_char_literal
   JMP emit_instruction ; Tail call
 
 .indirect_mode
