@@ -374,7 +374,7 @@ check_for_value
 read_value
   JSR read_char        ; Read the character after the "="
   JSR skip_spaces
-  JSR parse_value      ; Returns value in OPERAND_L/H (aliased to HEX2/HEX1)
+  JSR parse_term      ; Returns value in OPERAND_L/H (aliased to HEX2/HEX1)
   ; No copy needed - OPERAND_L/H are aliased to HEX2/HEX1
   RTS
 
@@ -397,7 +397,7 @@ emit_hex
   RTS
 
 
-; Parse a value: $12, $1234, label, <label, or >label
+; Parse a term (single value): $12, $1234, 'x', label, <label, or >label
 ; On entry A contains first character
 ; On exit  A contains next character
 ;          OPERAND_L, OPERAND_H contain parsed value
@@ -405,7 +405,7 @@ emit_hex
 ;          C=1 if bare label, C=0 otherwise
 ;          X is preserved
 ;          Y is not preserved
-parse_value
+parse_term
   CMP #'$'
   BEQ .hex
   CMP #'\''
@@ -976,7 +976,7 @@ parse_operand_and_emit
   JMP .indirect_mode
 .not_ind
   ; Everything else: $xx, $xxxx, or label
-  ; All handled uniformly by parse_value + mode selection
+  ; All handled uniformly by parse_term + mode selection
   JMP .value_operand
 
 .implied_mode
@@ -994,7 +994,7 @@ parse_operand_and_emit
   LDA #MODE_IMM
   STA ADDR_MODE
   JSR read_char        ; Skip #
-  JSR parse_value      ; Returns next char in A, OPERAND_L/H set
+  JSR parse_term      ; Returns next char in A, OPERAND_L/H set
   JMP emit_instruction ; Tail call
 
 .indirect_mode
@@ -1003,7 +1003,7 @@ parse_operand_and_emit
   ; ($xxxx) - indirect absolute for JMP (2-byte operand)
   JSR read_char        ; Skip (
   ; Parse value ($xx, <label, >label, or label)
-  JSR parse_value      ; Returns next char in A, OPERAND_L/H set
+  JSR parse_term      ; Returns next char in A, OPERAND_L/H set
   ; Check suffix to determine addressing mode
   ; A contains next char (should be ) or ,)
   CMP #','
@@ -1047,7 +1047,7 @@ parse_operand_and_emit
 .value_operand
   ; Parse value: $xx, $xxxx, or label
   ; All handled uniformly with appropriate mode selection
-  JSR parse_value      ; Returns C=1 for bare label, OPERAND_L/H set, IS_FWDREF set
+  JSR parse_term      ; Returns C=1 for bare label, OPERAND_L/H set, IS_FWDREF set
   PHA                  ; Save next char
   ; Check if this is a branch instruction
   JSR check_if_branch
@@ -1255,8 +1255,8 @@ data_parameters_loop_entry
   JMP data_parameters_loop
 .data_check_label
   ; <label, >label, or bare label
-  ; All handled by parse_value, use carry to determine 1 vs 2 bytes
-  JSR parse_value      ; Returns C=1 for bare label, C=0 for </>
+  ; All handled by parse_term, use carry to determine 1 vs 2 bytes
+  JSR parse_term      ; Returns C=1 for bare label, C=0 for </>
   BCS .data_emit_two_bytes
   ; C=0: <label or >label - emit 1 byte from OPERAND_L
   TAY                  ; Save next char
