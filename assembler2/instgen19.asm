@@ -117,16 +117,16 @@ MNTAB
   .data            $FF
 
   ; Shift/Rotate
-  .data "ASL" $00  <MODE_ACC  $0A  <MODE_ZP   $06  <MODE_ZPX  $16
+  .data "ASL" $00  <MODE_NONE $0A  <MODE_ZP   $06  <MODE_ZPX  $16
   .data            <MODE_ABS  $0E  <MODE_ABSX $1E
   .data            $FF
-  .data "LSR" $00  <MODE_ACC  $4A  <MODE_ZP   $46  <MODE_ZPX  $56
+  .data "LSR" $00  <MODE_NONE $4A  <MODE_ZP   $46  <MODE_ZPX  $56
   .data            <MODE_ABS  $4E  <MODE_ABSX $5E
   .data            $FF
-  .data "ROL" $00  <MODE_ACC  $2A  <MODE_ZP   $26  <MODE_ZPX  $36
+  .data "ROL" $00  <MODE_NONE $2A  <MODE_ZP   $26  <MODE_ZPX  $36
   .data            <MODE_ABS  $2E  <MODE_ABSX $3E
   .data            $FF
-  .data "ROR" $00  <MODE_ACC  $6A  <MODE_ZP   $66  <MODE_ZPX  $76
+  .data "ROR" $00  <MODE_NONE $6A  <MODE_ZP   $66  <MODE_ZPX  $76
   .data            <MODE_ABS  $6E  <MODE_ABSX $7E
   .data            $FF
 
