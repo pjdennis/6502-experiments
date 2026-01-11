@@ -540,6 +540,24 @@ INPUT:
 EXPECT_HEX: 00 02
 
 ---
+NAME: directive_data_forward_ref
+INPUT:
+1: * = $0200
+2:   .data forward_label
+3: forward_label = $1234
+EXPECT_HEX: 34 12
+EXPECT_FWDREF: 0
+
+---
+NAME: directive_data_mixed_label_forms
+INPUT:
+1: * = $0200
+2: label = $ABCD
+3:   .data <label >label label
+EXPECT_HEX: cd ab cd ab
+EXPECT_FWDREF: 0
+
+---
 NAME: accumulator_old_syntax_now_label
 INPUT:
 1: * = $0200

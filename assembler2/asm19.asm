@@ -826,73 +826,7 @@ emit_quoted
   RTS
 
 
-; Read and emit a 2 byte label value
-; On entry A contains the first character of the label
-; On exit A contains the next character
-;         X, Y are not preserved
-; Raises 'Label not found' error if label is not found
-emit_label
-  JSR read_and_find_existing_label
-  TAY                  ; Save next char
-  ; Emit low byte then high byte from table
-  LDA HEX2
-  JSR emit
-  LDA HEX1
-  JSR emit
-  TYA                  ; Restore next char
-  RTS
-
-
-; Read and emit a 1 byte label value
-; On entry A contains the first character of the label
-; On exit A contains the next character
-;         X, Y are not preserved
-; Raises 'Label not found' error if label is not found
-;        'Value of of range' error if value is > 255 (> 1 byte)
-emit_label_byte
-  JSR read_and_find_existing_label
-  TAY                  ; Save next char
-  BIT PASS
-  BPL .ok              ; Skip validation on pass 1
-  LDA HEX1
-  BEQ .ok
-  JMP err_value_out_of_range
-.ok
-  ; Emit low byte
-  LDA HEX2
-  JSR emit
-  TYA                  ; Restore next char
-  RTS
-
-
-; Read and emit the least significant byte of a label value
-; On entry A contains the first character of the label
-; On exit A contains the next character
-;         X, Y are not preserved
-; Raises 'Label not found' error if label is not found
-emit_label_lsb
-  JSR read_and_find_existing_label
-  TAY                  ; Save next char
-  ; Emit low byte
-  LDA HEX2
-  JSR emit
-  TYA                  ; Restore next char
-  RTS
-
-
-; Read and emit the most significant byte of a label value
-; On entry A contains the first character of the label
-; On exit A contains the next character
-;         X, Y are not preserved
-; Raises 'Label not found' error if label is not found
-emit_label_msb
-  JSR read_and_find_existing_label
-  TAY                  ; Save next char
-  ; Emit high byte
-  LDA HEX1
-  JSR emit
-  TYA                  ; Restore next character
-  RTS
+; (emit_label, emit_label_lsb, emit_label_msb removed - consolidated into parse_value)
 
 
 ; Swap PCL;PCH with PC_SAVEL;PC_SAVEH
@@ -1409,24 +1343,29 @@ data_parameters_loop_entry
   JMP data_parameters_loop
 .data_check_hex
   CMP #'$'             ; Hex value
-  BNE .data_check_lsb
+  BNE .data_check_label
   JSR read_char
   JSR emit_hex
   JMP data_parameters_loop
-.data_check_lsb
-  CMP #'<'             ; LSB of label
-  BNE .data_check_msb
-  JSR read_char
-  JSR emit_label_lsb
+.data_check_label
+  ; <label, >label, or bare label
+  ; All handled by parse_value, use carry to determine 1 vs 2 bytes
+  JSR parse_value      ; Returns C=1 for bare label, C=0 for </>
+  BCS .data_emit_two_bytes
+  ; C=0: <label or >label - emit 1 byte from OPERAND_L
+  TAY                  ; Save next char
+  LDA OPERAND_L
+  JSR emit
+  TYA                  ; Restore next char
   JMP data_parameters_loop
-.data_check_msb
-  CMP #'>'             ; MSB of label
-  BNE .data_label
-  JSR read_char
-  JSR emit_label_msb
-  JMP data_parameters_loop
-.data_label
-  JSR emit_label       ; Full 2-byte label value
+.data_emit_two_bytes
+  ; C=1: bare label - emit 2 bytes (LSB, MSB)
+  TAY                  ; Save next char
+  LDA OPERAND_L        ; Emit low byte
+  JSR emit
+  LDA OPERAND_H        ; Emit high byte
+  JSR emit
+  TYA                  ; Restore next char
   JMP data_parameters_loop
 .data_done
   RTS
