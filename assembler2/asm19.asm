@@ -493,13 +493,12 @@ parse_char_literal
   JSR read_char
   CMP #'n'
   BNE .esc_not_n
-  LDA #'\n'
-  JMP .esc_done
+  LDA #'\n'            ; Only \n needs value substitution
+  BNE .esc_done        ; Always taken (\n = $0A != 0)
 .esc_not_n
+  ; For \\ and \', character is already in A
   CMP #'\\'
-  BNE .esc_not_bs
-  JMP .esc_done
-.esc_not_bs
+  BEQ .esc_done
   CMP #'\''
   BNE .char_invalid
 .esc_done
