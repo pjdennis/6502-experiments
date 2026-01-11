@@ -603,15 +603,15 @@ EXPECT_FWDREF: 0
 ---
 NAME: assignment_byte_select_multiple
 INPUT:
-1: * = $0200
-2: val1 = $1234
-3: val2 = $5678
-4: low1 = <val1
-5: high1 = >val1
-6: low2 = <val2
-7: high2 = >val2
-8:   LDA #low1
-9:   LDX #high1
+01: * = $0200
+02: val1 = $1234
+03: val2 = $5678
+04: low1 = <val1
+05: high1 = >val1
+06: low2 = <val2
+07: high2 = >val2
+08:   LDA #low1
+09:   LDX #high1
 10:   LDY #low2
 11:   .data high2
 EXPECT_HEX: a9 34 a2 12 a0 78 56 00
