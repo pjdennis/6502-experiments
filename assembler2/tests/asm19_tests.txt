@@ -558,6 +558,77 @@ EXPECT_HEX: cd ab cd ab
 EXPECT_FWDREF: 0
 
 ---
+NAME: assignment_low_byte_select
+INPUT:
+1: * = $0200
+2: source = $ABCD
+3: low = <source
+4:   LDA #low
+EXPECT_HEX: a9 cd
+EXPECT_FWDREF: 0
+
+---
+NAME: assignment_high_byte_select
+INPUT:
+1: * = $0200
+2: source = $ABCD
+3: high = >source
+4:   LDA #high
+EXPECT_HEX: a9 ab
+EXPECT_FWDREF: 0
+
+---
+NAME: assignment_byte_select_both
+INPUT:
+1: * = $0200
+2: source = $1234
+3: low = <source
+4: high = >source
+5:   LDA #low
+6:   LDX #high
+EXPECT_HEX: a9 34 a2 12
+EXPECT_FWDREF: 0
+
+---
+NAME: assignment_byte_select_chain
+INPUT:
+1: * = $0200
+2: source = $ABCD
+3: low = <source
+4: copy = low
+5:   LDA #copy
+EXPECT_HEX: a9 cd
+EXPECT_FWDREF: 0
+
+---
+NAME: assignment_byte_select_multiple
+INPUT:
+1: * = $0200
+2: val1 = $1234
+3: val2 = $5678
+4: low1 = <val1
+5: high1 = >val1
+6: low2 = <val2
+7: high2 = >val2
+8:   LDA #low1
+9:   LDX #high1
+10:   LDY #low2
+11:   .data high2
+EXPECT_HEX: a9 34 a2 12 a0 78 56 00
+EXPECT_FWDREF: 0
+
+---
+NAME: assignment_byte_select_in_data
+INPUT:
+1: * = $0200
+2: source = $ABCD
+3: low = <source
+4: high = >source
+5:   .data low high
+EXPECT_HEX: cd 00 ab 00
+EXPECT_FWDREF: 0
+
+---
 NAME: accumulator_old_syntax_now_label
 INPUT:
 1: * = $0200

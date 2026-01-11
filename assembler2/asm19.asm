@@ -375,22 +375,18 @@ check_for_value
 ;         X is preserved
 ;         Y is not preserved
 ; Raises 'Bad hex' error if non-hex characters were encountered
+; Supports: $xx, $xxxx, label, <label, >label
 read_value
   JSR read_char        ; Read the character after the "="
   JSR skip_spaces
-  CMP #'$'
-  BEQ .hex_value
-  JMP read_and_find_existing_label ; tail call
-.hex_value
-  JSR read_char
-  JSR read_hex_byte_or_word
-  BCS .done            ; 2 bytes were read
-  ; 1 byte was read - shift into LSB position (HEX2)
-  LDY HEX1
-  STY HEX2
-  LDY #$00
-  STY HEX1
-.done
+  JSR parse_value      ; Returns value in OPERAND_L/H, next char in A
+  ; Copy to HEX1/HEX2 for compatibility with existing code
+  TAY                  ; Save next char
+  LDA OPERAND_L
+  STA HEX2
+  LDA OPERAND_H
+  STA HEX1
+  TYA                  ; Restore next char
   RTS
 
 
