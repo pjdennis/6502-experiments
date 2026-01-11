@@ -103,9 +103,6 @@ convert_hex_character
   RTS
 
 
-; (emit_label, emit_label_lsb, emit_label_msb removed - consolidated into parse_value)
-
-
 ; Swap PCL;PCH with PC_SAVEL;PC_SAVEH
 ; On exit A, X, Y are preserved
 swap_pc_with_save
