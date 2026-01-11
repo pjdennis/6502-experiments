@@ -132,7 +132,7 @@ INPUT:
 EXPECT_HEX: 0a 4a 2a 6a
 
 ---
-NAME: branch_forward
+NAME: branch_forward_simple
 INPUT:
 1: * = $0200
 2:   BEQ skip
@@ -142,13 +142,79 @@ INPUT:
 EXPECT_HEX: f0 01 ea 60
 
 ---
-NAME: branch_backward
+NAME: branch_forward_max
+INPUT:
+1: * = $0200
+2:   BEQ target
+3:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+4:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+5:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+6:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+7:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+8:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+9:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+10:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+11: target
+12:   RTS
+EXPECT_HEX: f0 7f ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea 60
+
+---
+NAME: branch_forward_just_past_max
+INPUT:
+1: * = $0200
+2:   BEQ target
+3: * = $0282
+4: target
+5:   RTS
+EXPECT_ERROR: 5
+EXPECT_LINE: 2
+EXPECT_MSG: Branch out of range
+
+---
+NAME: branch_backward_simple
 INPUT:
 1: * = $0200
 2: loop
 3:   NOP
 4:   BNE loop
 EXPECT_HEX: ea d0 fd
+
+---
+NAME: branch_backward_max
+INPUT:
+1: * = $0182
+2: target
+3:   NOP
+4:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+5:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+6:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+7:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+8:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+9:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+10:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+11:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+12:   BNE target
+EXPECT_HEX: ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea d0 80
+
+---
+NAME: branch_backward_just_past_max
+INPUT:
+1: * = $0181
+2: target
+3:   NOP
+4: * = $0200
+5:   BNE target
+EXPECT_ERROR: 5
+EXPECT_LINE: 5
+EXPECT_MSG: Branch out of range
+
+---
+NAME: branch_to_self
+INPUT:
+1: * = $0200
+2: loop
+3:   BNE loop
+EXPECT_HEX: d0 fe
 
 ---
 NAME: jmp_absolute
@@ -364,18 +430,6 @@ INPUT:
 EXPECT_ERROR: 3
 EXPECT_LINE: 2
 EXPECT_MSG: Opcode not found
-
----
-NAME: branch_out_of_range_forward
-INPUT:
-1: * = $0200
-2:   BEQ target
-3: * = $0300
-4: target
-5:   RTS
-EXPECT_ERROR: 5
-EXPECT_LINE: 2
-EXPECT_MSG: Branch out of range
 
 ---
 NAME: immediate_label_value_out_of_range
