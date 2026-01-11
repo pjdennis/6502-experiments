@@ -92,6 +92,10 @@ err_unexpected_text
   BRK
   .data $15 "Unexpected text after operand" $00
 
+err_fwdref_tracking
+  BRK
+  .data $16 "Internal error - reference tracking" $00
+
 
 ; Interrupt handler - processes BRK for error display
 interrupt

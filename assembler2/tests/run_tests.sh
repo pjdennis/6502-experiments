@@ -62,8 +62,13 @@ strip_line_prefix() {
 run_assembler() {
     local input="$1"
     echo "$input" | strip_line_prefix > "$TMP_ASM"
-    "$EMULATOR" "$ASSEMBLER" 2000 /dev/null /dev/null "$TMP_ASM" "$TMP_BIN" 2>"$TMP_ERR"
+    "$EMULATOR" "$ASSEMBLER" 2000 /dev/null /dev/null "$TMP_ASM" "$TMP_BIN" debug 2>"$TMP_ERR"
     return $?
+}
+
+# Extract forward reference count from stderr
+get_fwdref_count() {
+    grep "Forward references forced to absolute:" "$TMP_ERR" | sed -n 's/.*: \([0-9]*\)$/\1/p'
 }
 
 # Get hex dump of binary output
@@ -81,6 +86,7 @@ run_positive_test() {
     local name="$1"
     local input="$2"
     local expected_hex="$3"
+    local expected_fwdref="$4"
 
     if [[ -n "$FILTER" && "$name" != "$FILTER" ]]; then
         return 0
@@ -92,14 +98,31 @@ run_positive_test() {
         local actual_hex=$(get_hex)
         local norm_expected=$(normalize_hex "$expected_hex")
         local norm_actual=$(normalize_hex "$actual_hex")
+        local failed=0
+        local details=""
 
-        if [[ "$norm_expected" == "$norm_actual" ]]; then
+        if [[ "$norm_expected" != "$norm_actual" ]]; then
+            details="${details}    Expected hex: $norm_expected\n"
+            details="${details}    Actual hex:   $norm_actual\n"
+            failed=1
+        fi
+
+        # Check forward reference count if expected
+        if [[ -n "$expected_fwdref" ]]; then
+            local actual_fwdref=$(get_fwdref_count)
+            if [[ "$actual_fwdref" != "$expected_fwdref" ]]; then
+                details="${details}    Expected fwdref count: $expected_fwdref\n"
+                details="${details}    Actual fwdref count:   $actual_fwdref\n"
+                failed=1
+            fi
+        fi
+
+        if [[ $failed -eq 0 ]]; then
             echo -e "${GREEN}PASS${NC}"
             ((PASSED++))
         else
             echo -e "${RED}FAIL${NC}"
-            echo "    Expected: $norm_expected"
-            echo "    Actual:   $norm_actual"
+            echo -e "$details" | sed 's/\\n/\n/g'
             ((FAILED++))
         fi
     else
@@ -170,6 +193,7 @@ parse_and_run_tests() {
     local name=""
     local input=""
     local expect_hex=""
+    local expect_fwdref=""
     local expect_error=""
     local expect_line=""
     local expect_msg=""
@@ -191,7 +215,7 @@ parse_and_run_tests() {
             # Run previous test if we have one
             if [[ -n "$name" ]]; then
                 if [[ -n "$expect_hex" ]]; then
-                    run_positive_test "$name" "$input" "$expect_hex"
+                    run_positive_test "$name" "$input" "$expect_hex" "$expect_fwdref"
                 elif [[ -n "$expect_error" ]]; then
                     run_negative_test "$name" "$input" "$expect_error" "$expect_line" "$expect_msg"
                 fi
@@ -200,6 +224,7 @@ parse_and_run_tests() {
             name=""
             input=""
             expect_hex=""
+            expect_fwdref=""
             expect_error=""
             expect_line=""
             expect_msg=""
@@ -217,6 +242,9 @@ parse_and_run_tests() {
             input=""
         elif [[ "$line" =~ ^EXPECT_HEX:[[:space:]]*(.*) ]]; then
             expect_hex="${BASH_REMATCH[1]}"
+            in_input=0
+        elif [[ "$line" =~ ^EXPECT_FWDREF:[[:space:]]*(.*) ]]; then
+            expect_fwdref="${BASH_REMATCH[1]}"
             in_input=0
         elif [[ "$line" =~ ^EXPECT_ERROR:[[:space:]]*(.*) ]]; then
             expect_error="${BASH_REMATCH[1]}"
@@ -240,7 +268,7 @@ parse_and_run_tests() {
     # Run final test
     if [[ -n "$name" ]]; then
         if [[ -n "$expect_hex" ]]; then
-            run_positive_test "$name" "$input" "$expect_hex"
+            run_positive_test "$name" "$input" "$expect_hex" "$expect_fwdref"
         elif [[ -n "$expect_error" ]]; then
             run_negative_test "$name" "$input" "$expect_error" "$expect_line" "$expect_msg"
         fi

@@ -28,3 +28,6 @@
 - [X] Move addressing mode constants to a common include file e.g. common.asm
 
 - [ ] Diagnostics to print # of forward references of max, zero page usage, and maybe bytes of code generated
+
+- [ ] Maybe remove checks from immediate mode -> .imm_invalid - or else move checks to the parse function for all to share
+

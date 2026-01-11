@@ -34,6 +34,8 @@ INST_PTR_H  .data $00 ; "
 OPERAND_L   .data $00 ; Operand value (low byte)
 OPERAND_H   .data $00 ; Operand value (high byte)
 IS_FWDREF   .data $00 ; $FF if current label is forward ref (pass 1 only)
+FWDREF_PASS1_L .data $00 ; Forward ref pointer after pass 1 (low byte)
+FWDREF_PASS1_H .data $00 ; Forward ref pointer after pass 1 (high byte)
 
   .code
 
@@ -1394,7 +1396,9 @@ parse_operand_and_emit
   PHA                  ; Save next char
   ; Check if this is a branch instruction
   JSR check_if_branch
-  BCC .label_is_branch
+  BCS .not_branch
+  JMP .label_is_branch
+.not_branch
   ; Not a branch - check for indexed mode
   PLA                  ; Restore next char (might be comma)
   CMP #','
@@ -1411,7 +1415,7 @@ parse_operand_and_emit
   PHA
   ; Check if ZPX mode is possible
   LDA OPERAND_H
-  BNE .label_use_absx       ; High byte != 0, must use ABSX
+  BNE .label_x_check_abs    ; High byte != 0, but may need to check fwdref list
   LDA #MODE_ZPX
   STA ADDR_MODE
   JSR find_opcode_for_mode
@@ -1421,6 +1425,19 @@ parse_operand_and_emit
   BCS .label_use_absx       ; Forward ref, use ABSX
   PLA                       ; Restore next char for garbage check
   JMP emit_instruction      ; Use ZPX
+.label_x_check_abs
+  ; Value > $FF, must use ABSX, but check if instruction has ZPX mode
+  ; If it does, need to consume forward ref entry in pass 2
+  LDA #MODE_ZPX
+  STA ADDR_MODE
+  JSR find_opcode_for_mode
+  BCC .label_x_consume_fwdref ; Has ZPX mode, may need to consume fwdref
+  JMP .label_use_absx         ; No ZPX mode, just use ABSX
+.label_x_consume_fwdref
+  BIT PASS
+  BPL .label_use_absx         ; Pass 1, just use ABSX
+  ; Pass 2 - consume forward ref entry if present
+  JSR check_forward_ref       ; Advances pointer if PC matches
 .label_use_absx
   LDA #MODE_ABSX
   STA ADDR_MODE
@@ -1431,7 +1448,7 @@ parse_operand_and_emit
   PHA
   ; Check if ZPY mode is possible
   LDA OPERAND_H
-  BNE .label_use_absy       ; High byte != 0, must use ABSY
+  BNE .label_y_check_abs    ; High byte != 0, but may need to check fwdref list
   LDA #MODE_ZPY
   STA ADDR_MODE
   JSR find_opcode_for_mode
@@ -1441,6 +1458,19 @@ parse_operand_and_emit
   BCS .label_use_absy       ; Forward ref, use ABSY
   PLA                       ; Restore next char for garbage check
   JMP emit_instruction      ; Use ZPY
+.label_y_check_abs
+  ; Value > $FF, must use ABSY, but check if instruction has ZPY mode
+  ; If it does, need to consume forward ref entry in pass 2
+  LDA #MODE_ZPY
+  STA ADDR_MODE
+  JSR find_opcode_for_mode
+  BCC .label_y_consume_fwdref ; Has ZPY mode, may need to consume fwdref
+  JMP .label_use_absy         ; No ZPY mode, just use ABSY
+.label_y_consume_fwdref
+  BIT PASS
+  BPL .label_use_absy         ; Pass 1, just use ABSX
+  ; Pass 2 - consume forward ref entry if present
+  JSR check_forward_ref       ; Advances pointer if PC matches
 .label_use_absy
   LDA #MODE_ABSY
   STA ADDR_MODE
@@ -1451,7 +1481,7 @@ parse_operand_and_emit
   PHA
   ; Check if ZP mode is possible
   LDA OPERAND_H
-  BNE .label_use_abs        ; High byte != 0, must use ABS
+  BNE .label_check_abs      ; High byte != 0, but may need to check fwdref list
   LDA #MODE_ZP
   STA ADDR_MODE
   JSR find_opcode_for_mode
@@ -1461,6 +1491,19 @@ parse_operand_and_emit
   BCS .label_use_abs        ; Forward ref, use ABS
   PLA                       ; Restore next char for garbage check
   JMP emit_instruction      ; Use ZP
+.label_check_abs
+  ; Value > $FF, must use ABS, but check if instruction has ZP mode
+  ; If it does, need to consume forward ref entry in pass 2
+  LDA #MODE_ZP
+  STA ADDR_MODE
+  JSR find_opcode_for_mode
+  BCC .label_consume_fwdref ; Has ZP mode, may need to consume fwdref
+  JMP .label_use_abs        ; No ZP mode, just use ABS
+.label_consume_fwdref
+  BIT PASS
+  BPL .label_use_abs        ; Pass 1, just use ABS
+  ; Pass 2 - consume forward ref entry if present
+  JSR check_forward_ref     ; Advances pointer if PC matches
 .label_use_abs
   LDA #MODE_ABS
   STA ADDR_MODE
@@ -1648,12 +1691,28 @@ start
 
   JSR assemble_code
   JSR finalize_fwdref_list
+  ; Capture forward ref pointer after pass 1
+  LDA FWDREF_L
+  STA FWDREF_PASS1_L
+  LDA FWDREF_H
+  STA FWDREF_PASS1_H
 
   LDA #$FF
   STA PASS            ; Bit 7 = 1 (pass 2)
   JSR reset_fwdref_ptr
   JSR open_input
   JSR assemble_code
+  ; Verify forward ref pointer matches pass 1
+  LDA FWDREF_L
+  CMP FWDREF_PASS1_L
+  BNE .fwdref_error
+  LDA FWDREF_H
+  CMP FWDREF_PASS1_H
+  BNE .fwdref_error
+  JMP .fwdref_ok
+.fwdref_error
+  JMP err_fwdref_tracking
+.fwdref_ok
 
   ; Close output file
   TXA
@@ -1681,6 +1740,26 @@ start
   LDA #>msg_bytes
   STA TABPH
   JSR show_message
+  ; Print forward reference count
+  LDA #<msg_fwdref_count
+  STA TABPL
+  LDA #>msg_fwdref_count
+  STA TABPH
+  JSR show_message
+  ; Calculate forward ref count: (FWDREF_PASS1 - FWDREF_LIST) / 2
+  SEC
+  LDA FWDREF_PASS1_L
+  SBC #<FWDREF_LIST
+  STA TO_DECIMAL_VALUE_L
+  LDA FWDREF_PASS1_H
+  SBC #>FWDREF_LIST
+  STA TO_DECIMAL_VALUE_H
+  ; Divide by 2 (16-bit right shift)
+  LSR TO_DECIMAL_VALUE_H
+  ROR TO_DECIMAL_VALUE_L
+  JSR show_decimal
+  LDA #'\n'
+  JSR write_d
 .skip_debug_output
 
   BRK
@@ -1691,6 +1770,8 @@ msg_heap_used
   .data "Heap used: " $00
 msg_bytes
   .data " bytes\n" $00
+msg_fwdref_count
+  .data "Forward references forced to absolute: " $00
 
 
 HEAP                   ; Heap goes after the program code
