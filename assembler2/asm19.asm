@@ -470,6 +470,53 @@ parse_value
   RTS
 
 
+; Parse character literal: 'x' or escape sequences
+; On entry: A contains the opening quote character '
+; On exit: A contains next character (for garbage checking)
+;          OPERAND_L contains character value
+;          OPERAND_H contains $00
+;          X preserved, Y not preserved
+; Raises 'Invalid character literal' error on malformed input
+parse_char_literal
+  JSR read_char        ; Skip opening quote
+  CMP #'\''
+  BEQ .char_invalid    ; Empty literal - error
+  CMP #'\\'
+  BEQ .char_escape
+  CMP #'\n'
+  BEQ .char_invalid    ; Newline without closing quote - error
+  ; Regular character
+  STA OPERAND_L
+  JMP .char_check_close
+.char_escape
+  ; Escape sequence: \n \\ \'
+  JSR read_char
+  CMP #'n'
+  BNE .esc_not_n
+  LDA #'\n'
+  JMP .esc_done
+.esc_not_n
+  CMP #'\\'
+  BNE .esc_not_bs
+  JMP .esc_done
+.esc_not_bs
+  CMP #'\''
+  BNE .char_invalid
+.esc_done
+  STA OPERAND_L
+.char_check_close
+  JSR read_char        ; Should be closing quote
+  CMP #'\''
+  BNE .char_invalid
+  LDA #$00
+  STA OPERAND_H
+  ; Read next char for garbage check
+  JSR read_char
+  RTS
+.char_invalid
+  JMP err_invalid_char_literal
+
+
 ; Fast forward the program counter
 ; On entry PCL;PCH contains the current program counter
 ;          HEX2;HEX1 contains the new PC value
@@ -989,15 +1036,6 @@ parse_operand_and_emit
   BNE .not_ind
   JMP .indirect_mode
 .not_ind
-  ; Check for < or > which force immediate mode
-  CMP #'<'
-  BNE .not_lsb
-  JMP .lsb_or_msb_operand
-.not_lsb
-  CMP #'>'
-  BNE .not_msb
-  JMP .lsb_or_msb_operand
-.not_msb
   ; Everything else: $xx, $xxxx, or label
   ; All handled uniformly by parse_value + mode selection
   JMP .value_operand
@@ -1031,43 +1069,8 @@ parse_operand_and_emit
   JMP emit_instruction ; Tail call
 .imm_char_literal
   ; #'x' - character literal (must be exactly 1 char)
-  JSR read_char        ; Skip opening quote
-  CMP #'\''
-  BEQ .imm_char_invalid ; Empty literal - error
-  CMP #'\\'
-  BEQ .imm_char_escape
-  CMP #'\n'
-  BEQ .imm_char_invalid  ; Newline without closing quote - error
-  ; Regular character
-  STA OPERAND_L
-  JMP .imm_char_check_close
-.imm_char_escape
-  ; Escape sequence: \n \\ \'
-  JSR read_char
-  CMP #'n'
-  BNE .imm_esc_not_n
-  LDA #'\n'
-  JMP .imm_esc_done
-.imm_esc_not_n
-  CMP #'\\'
-  BNE .imm_esc_not_bs
-  JMP .imm_esc_done
-.imm_esc_not_bs
-  CMP #'\''
-  BNE .imm_char_invalid
-.imm_esc_done
-  STA OPERAND_L
-.imm_char_check_close
-  JSR read_char        ; Should be closing quote
-  CMP #'\''
-  BNE .imm_char_invalid
-  LDA #$00
-  STA OPERAND_H
-  ; Read next char for garbage check
-  JSR read_char
+  JSR parse_char_literal
   JMP emit_instruction ; Tail call
-.imm_char_invalid
-  JMP err_invalid_char_literal
 
 .indirect_mode
   ; ($xx),Y - indirect indexed Y (1-byte operand)
@@ -1130,13 +1133,6 @@ parse_operand_and_emit
   JMP err_invalid_addressing_mode
 .ind_err_operand
   JMP err_invalid_operand
-
-.lsb_or_msb_operand
-  ; <label or >label - emit low/high byte as immediate value
-  LDA #MODE_IMM
-  STA ADDR_MODE
-  JSR parse_value      ; Returns next char in A, OPERAND_L/H set
-  JMP emit_instruction ; Tail call
 
 .value_operand
   ; Parse value: $xx, $xxxx, or label
