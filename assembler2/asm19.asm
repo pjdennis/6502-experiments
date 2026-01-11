@@ -13,8 +13,8 @@ FILE_STACK   = $F000    ; File stack will grow down from 1 below here
 TEMP        .data $00 ; 1 byte
 PCL         .data $00 ; 2 byte program counter
 PCH         .data $00 ; "
-HEX1        .data $00 ; 1 byte
-HEX2        .data $00 ; 1 byte
+HEX1        .data $00 ; 1 byte (high byte - also aliased as OPERAND_H)
+HEX2        .data $00 ; 1 byte (low byte - also aliased as OPERAND_L)
 PASS        .data $00 ; 1 byte $00 = pass 1 $FF = pass 2
 MEMPL       .data $00 ; 2 byte heap pointer
 MEMPH       .data $00 ; "
@@ -31,8 +31,8 @@ DEBUG_FLAG  .data $00 ; Non-zero if debug output enabled
 ADDR_MODE   .data $00 ; Current addressing mode
 INST_PTR_L  .data $00 ; Pointer to instruction mode table entry
 INST_PTR_H  .data $00 ; "
-OPERAND_L   .data $00 ; Operand value (low byte)
-OPERAND_H   .data $00 ; Operand value (high byte)
+OPERAND_L = HEX2     ; Operand value (low byte) - alias for HEX2
+OPERAND_H = HEX1     ; Operand value (high byte) - alias for HEX1
 IS_FWDREF   .data $00 ; $FF if current label is forward ref (pass 1 only)
 FWDREF_PASS1_L .data $00 ; Forward ref pointer after pass 1 (low byte)
 FWDREF_PASS1_H .data $00 ; Forward ref pointer after pass 1 (high byte)
@@ -379,14 +379,8 @@ check_for_value
 read_value
   JSR read_char        ; Read the character after the "="
   JSR skip_spaces
-  JSR parse_value      ; Returns value in OPERAND_L/H, next char in A
-  ; Copy to HEX1/HEX2 for compatibility with existing code
-  TAY                  ; Save next char
-  LDA OPERAND_L
-  STA HEX2
-  LDA OPERAND_H
-  STA HEX1
-  TYA                  ; Restore next char
+  JSR parse_value      ; Returns value in OPERAND_L/H (aliased to HEX2/HEX1)
+  ; No copy needed - OPERAND_L/H are aliased to HEX2/HEX1
   RTS
 
 
@@ -430,28 +424,19 @@ parse_value
   LDA #$00
   STA IS_FWDREF
 .label_store
-  ; Store in OPERAND_L/H
-  LDA HEX2
-  STA OPERAND_L
-  LDA HEX1
-  STA OPERAND_H
+  ; OPERAND_L/H already set (aliased to HEX2/HEX1)
   PLA                  ; Restore next char
   SEC                  ; Signal bare label
   RTS
 .hex
   JSR read_char        ; Skip $
-  JSR read_hex_byte_or_word  ; Returns next char in A
+  JSR read_hex_byte_or_word  ; Returns next char in A, stores in HEX1/HEX2
   BCC .one_byte
-  ; Two bytes
-  PHA                  ; Save next char
-  LDA HEX2
-  STA OPERAND_L
-  LDA HEX1
-  STA OPERAND_H
-  PLA                  ; Restore next char
+  ; Two bytes - OPERAND_L/H already set (aliased to HEX2/HEX1)
   CLC                  ; Signal not bare label
   RTS
 .one_byte
+  ; One byte in HEX1 - need to move to OPERAND_L and zero OPERAND_H
   PHA                  ; Save next char
   LDA HEX1
   STA OPERAND_L
@@ -462,10 +447,9 @@ parse_value
   RTS
 .low_byte
   JSR read_char        ; Skip <
-  JSR read_and_find_existing_label  ; Returns next char in A
+  JSR read_and_find_existing_label  ; Returns next char in A, stores in HEX2/HEX1
+  ; Low byte already in OPERAND_L (HEX2), just zero OPERAND_H
   PHA                  ; Save next char
-  LDA HEX2             ; Low byte
-  STA OPERAND_L
   LDA #$00
   STA OPERAND_H
   PLA                  ; Restore next char
@@ -473,9 +457,10 @@ parse_value
   RTS
 .high_byte
   JSR read_char        ; Skip >
-  JSR read_and_find_existing_label  ; Returns next char in A
+  JSR read_and_find_existing_label  ; Returns next char in A, stores in HEX2/HEX1
+  ; High byte in HEX1 - move to OPERAND_L and zero OPERAND_H
   PHA                  ; Save next char
-  LDA HEX1             ; High byte
+  LDA HEX1
   STA OPERAND_L
   LDA #$00
   STA OPERAND_H
