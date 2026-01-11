@@ -1073,20 +1073,18 @@ parse_operand_and_emit
   BNE .not_ind
   JMP .indirect_mode
 .not_ind
-  CMP #'$'
-  BNE .not_hex
-  JMP .hex_operand
-.not_hex
+  ; Check for < or > which force immediate mode
   CMP #'<'
   BNE .not_lsb
-  JMP .lsb_operand
+  JMP .lsb_or_msb_operand
 .not_lsb
   CMP #'>'
   BNE .not_msb
-  JMP .msb_operand
+  JMP .lsb_or_msb_operand
 .not_msb
-  ; Must be a label
-  JMP .is_label
+  ; Everything else: $xx, $xxxx, or label
+  ; All handled uniformly by parse_value + mode selection
+  JMP .value_operand
 
 .implied_mode
   PHA                  ; Save next char (newline or semicolon)
@@ -1217,129 +1215,16 @@ parse_operand_and_emit
 .ind_err_operand
   JMP err_invalid_operand
 
-.hex_operand
-  ; $xx or $xxxx, possibly with ,X or ,Y suffix
-  JSR parse_value      ; Returns next char in A, OPERAND_L/H set
-  ; Check if 1-byte or 2-byte based on high byte
-  PHA                  ; Save next char
-  LDA OPERAND_H
-  BNE .hex_is_abs      ; High byte != 0, must be absolute
-  ; 1 byte value - could be zero page
-  PLA                  ; Restore next char
-  JMP .check_index_suffix_zp
-.hex_is_abs
-  ; 2 byte value - must be absolute
-  PLA                  ; Restore next char
-  JMP .check_index_suffix_abs
-
-.check_index_suffix_zp
-  ; Check for ,X or ,Y on zero page value
-  CMP #','
-  BNE .zp_no_index
-  JSR read_char        ; X or Y
-  CMP #'X'
-  BEQ .zpx
-  CMP #'Y'
-  BEQ .zpy
-  JMP err_invalid_addressing_mode
-.zpx
-  JSR read_char        ; Read char after X for garbage check
-  PHA
-  LDA #MODE_ZPX
-  STA ADDR_MODE
-  PLA
-  JMP emit_instruction ; Tail call
-.zpy
-  JSR read_char        ; Read char after Y for garbage check
-  PHA
-  LDA #MODE_ZPY
-  STA ADDR_MODE
-  PLA
-  JMP emit_instruction ; Tail call
-.zp_no_index
-  ; Skip any trailing spaces
-  CMP #' '
-  BNE .zp_no_space
-  JSR skip_spaces      ; A = first non-space char
-.zp_no_space
-  ; A contains next char for garbage check
-  PHA                  ; Save next char
-  ; Check if this is a branch instruction (MODE_REL)
-  JSR check_if_branch
-  BCC .is_branch_zp
-  ; Not a branch - use zero page mode
-  LDA #MODE_ZP
-  STA ADDR_MODE
-  PLA                  ; Restore next char for garbage check
-  JMP emit_instruction ; Tail call
-.is_branch_zp
-  LDA #MODE_REL
-  STA ADDR_MODE
-  PLA                  ; Restore next char for garbage check
-  JMP emit_instruction ; Tail call
-
-.check_index_suffix_abs
-  ; Check for ,X or ,Y on absolute value
-  CMP #','
-  BNE .abs_no_index
-  JSR read_char        ; X or Y
-  CMP #'X'
-  BEQ .absx
-  CMP #'Y'
-  BEQ .absy
-  JMP err_invalid_addressing_mode
-.absx
-  JSR read_char        ; Read char after X for garbage check
-  PHA
-  LDA #MODE_ABSX
-  STA ADDR_MODE
-  PLA
-  JMP emit_instruction ; Tail call
-.absy
-  JSR read_char        ; Read char after Y for garbage check
-  PHA
-  LDA #MODE_ABSY
-  STA ADDR_MODE
-  PLA
-  JMP emit_instruction ; Tail call
-.abs_no_index
-  ; Skip any trailing spaces
-  CMP #' '
-  BNE .abs_no_space
-  JSR skip_spaces      ; A = first non-space char
-.abs_no_space
-  ; A contains next char for garbage check
-  PHA                  ; Save next char
-  ; Check if this is a branch instruction (MODE_REL)
-  JSR check_if_branch
-  BCC .is_branch_abs
-  ; Not a branch - use absolute mode
-  LDA #MODE_ABS
-  STA ADDR_MODE
-  PLA                  ; Restore next char for garbage check
-  JMP emit_instruction ; Tail call
-.is_branch_abs
-  LDA #MODE_REL
-  STA ADDR_MODE
-  PLA                  ; Restore next char for garbage check
-  JMP emit_instruction ; Tail call
-
-.lsb_operand
-  ; <label - emit low byte of label
+.lsb_or_msb_operand
+  ; <label or >label - emit low/high byte as immediate value
   LDA #MODE_IMM
   STA ADDR_MODE
   JSR parse_value      ; Returns next char in A, OPERAND_L/H set
   JMP emit_instruction ; Tail call
 
-.msb_operand
-  ; >label - emit high byte of label
-  LDA #MODE_IMM
-  STA ADDR_MODE
-  JSR parse_value      ; Returns next char in A, OPERAND_L/H set
-  JMP emit_instruction ; Tail call
-
-.is_label
-  ; Parse the label value
+.value_operand
+  ; Parse value: $xx, $xxxx, or label
+  ; All handled uniformly with appropriate mode selection
   JSR parse_value      ; Returns C=1 for bare label, OPERAND_L/H set, IS_FWDREF set
   PHA                  ; Save next char
   ; Check if this is a branch instruction
