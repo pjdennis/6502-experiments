@@ -1162,30 +1162,20 @@ parse_operand_and_emit
 .label_x_index
   JSR read_char            ; Read char after X for garbage check
   PHA
-  ; Check if ZPX mode is possible
-  LDA OPERAND_H
-  BNE .label_x_check_abs    ; High byte != 0, but may need to check fwdref list
+  ; Check if ZPX mode is available
   LDA #MODE_ZPX
   STA ADDR_MODE
   JSR find_opcode_for_mode
   BCS .label_use_absx       ; No ZPX mode, use ABSX
-  ; ZPX mode possible - check forward ref
+  ; Check if ABSX mode is forced due to forward reference
   JSR handle_fwdref_mode
-  BCS .label_use_absx       ; Forward ref, use ABSX
-  PLA                       ; Restore next char for garbage check
-  JMP emit_instruction      ; Use ZPX
-.label_x_check_abs
-  ; Value > $FF, must use ABSX, but check if instruction has ZPX mode
-  ; If it does, need to consume forward ref entry in pass 2
-  LDA #MODE_ZPX
-  STA ADDR_MODE
-  JSR find_opcode_for_mode
-  BCS .label_use_absx         ; No ZPX mode, just use ABSX
-  ; Has ZPX mode, may need to consume fwdref
-  BIT PASS
-  BPL .label_use_absx         ; Pass 1, just use ABSX
-  ; Pass 2 - consume forward ref entry if present
-  JSR check_forward_ref       ; Advances pointer if PC matches
+  BCS .label_use_absx
+  ; Check if ABSX mode is required due to value >= $100
+  LDA OPERAND_H
+  BNE .label_use_absx
+  ; Use ZPX mode
+  PLA
+  JMP emit_instruction
 .label_use_absx
   LDA #MODE_ABSX
   STA ADDR_MODE
@@ -1194,30 +1184,20 @@ parse_operand_and_emit
 .label_y_index
   JSR read_char            ; Read char after Y for garbage check
   PHA
-  ; Check if ZPY mode is possible
-  LDA OPERAND_H
-  BNE .label_y_check_abs    ; High byte != 0, but may need to check fwdref list
+  ; Check if ZPY mode is available
   LDA #MODE_ZPY
   STA ADDR_MODE
   JSR find_opcode_for_mode
   BCS .label_use_absy       ; No ZPY mode, use ABSY
-  ; ZPY mode possible - check forward ref
+  ; Check if ABSY mode is forced due to forward reference
   JSR handle_fwdref_mode
-  BCS .label_use_absy       ; Forward ref, use ABSY
-  PLA                       ; Restore next char for garbage check
-  JMP emit_instruction      ; Use ZPY
-.label_y_check_abs
-  ; Value > $FF, must use ABSY, but check if instruction has ZPY mode
-  ; If it does, need to consume forward ref entry in pass 2
-  LDA #MODE_ZPY
-  STA ADDR_MODE
-  JSR find_opcode_for_mode
-  BCS .label_use_absy         ; No ZPY mode, just use ABSY
-  ; Has ZPY mode, may need to consume fwdref
-  BIT PASS
-  BPL .label_use_absy         ; Pass 1, just use ABSX
-  ; Pass 2 - consume forward ref entry if present
-  JSR check_forward_ref       ; Advances pointer if PC matches
+  BCS .label_use_absy
+  ; Check if ABSY mode is required due to value >= $100
+  LDA OPERAND_H
+  BNE .label_use_absy
+  ; Use ZPY mode
+  PLA
+  JMP emit_instruction
 .label_use_absy
   LDA #MODE_ABSY
   STA ADDR_MODE
