@@ -122,7 +122,7 @@ INPUT:
 EXPECT_HEX: a1 42 81 10
 
 ---
-NAME: accumulator_mode
+NAME: shift_rotate_implied
 INPUT:
 1: * = $0200
 2:   ASL
@@ -629,7 +629,7 @@ EXPECT_HEX: cd 00 ab 00
 EXPECT_FWDREF: 0
 
 ---
-NAME: accumulator_old_syntax_now_label
+NAME: shift_with_operand_treats_as_label
 INPUT:
 1: * = $0200
 2:   ASL A
