@@ -133,34 +133,6 @@ skip_spaces
   RTS
 
 
-; Check if character is a valid label start character
-; Valid: A-Z, a-z, _, .
-; On entry A contains the character to check
-; On exit Z = 1 if valid label start, Z = 0 if invalid
-;         A, X are preserved
-;         Y is not preserved
-is_label_start_char
-  CMP #'.'
-  BEQ .done
-  CMP #'_'
-  BEQ .done
-  LDY #$00             ; Y=0 means invalid (default)
-  CMP #'A'
-  BCC .check_result
-  CMP #$5B             ; 'Z'+1
-  BCC .mark_valid
-  CMP #'a'
-  BCC .check_result
-  CMP #$7B             ; 'z'+1
-  BCS .check_result
-.mark_valid
-  INY                  ; Y=1 means valid
-.check_result
-  CPY #$01             ; Z=1 if valid, Z=0 if invalid
-.done
-  RTS
-
-
 ; Check whether the next character (in A) is NOT a token character
 ; On entry A contains the next character
 ; On exit Z is set if current character terminates the current token, unset otherwise
@@ -1140,21 +1112,9 @@ parse_operand_and_emit
   JSR read_char        ; Skip #
   CMP #'\''
   BEQ .imm_char_literal
-  ; Validate operand start: must be $, <, >, or valid label start
-  CMP #'$'
-  BEQ .imm_parse
-  CMP #'<'
-  BEQ .imm_parse
-  CMP #'>'
-  BEQ .imm_parse
-  JSR is_label_start_char
-  BNE .imm_invalid
-.imm_parse
-  ; Use parse_value for all non-character operands
+  ; Not a character literal - parse as value ($xx, <label, >label, or label)
   JSR parse_value      ; Returns next char in A, OPERAND_L/H set
   JMP emit_instruction ; Tail call
-.imm_invalid
-  JMP err_invalid_operand
 .imm_char_literal
   ; #'x' - character literal (must be exactly 1 char)
   JSR read_char        ; Skip opening quote
@@ -1200,16 +1160,7 @@ parse_operand_and_emit
   ; ($xx,X) - indirect indexed X (1-byte operand)
   ; ($xxxx) - indirect absolute for JMP (2-byte operand)
   JSR read_char        ; Skip (
-  ; Validate operand start
-  CMP #'$'
-  BEQ .ind_parse
-  CMP #'<'
-  BEQ .ind_parse
-  CMP #'>'
-  BEQ .ind_parse
-  JSR is_label_start_char
-  BNE .ind_invalid
-.ind_parse
+  ; Parse value ($xx, <label, >label, or label)
   JSR parse_value      ; Returns next char in A, OPERAND_L/H set
   PHA                  ; Save next char
   ; Determine if 1-byte or 2-byte based on high byte
@@ -1222,9 +1173,6 @@ parse_operand_and_emit
 .ind_size_done
   STA TEMP
   PLA                  ; Restore next char
-  JMP .indirect_check_suffix
-.ind_invalid
-  JMP err_invalid_operand
 .indirect_check_suffix
   ; A contains next char (should be ) or ,)
   CMP #','

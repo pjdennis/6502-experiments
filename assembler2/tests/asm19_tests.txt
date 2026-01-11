@@ -244,45 +244,45 @@ NAME: invalid_operand_double_quote
 INPUT:
 1: * = $0200
 2:   LDA #"A"
-EXPECT_ERROR: 20
+EXPECT_ERROR: 1
 EXPECT_LINE: 2
-EXPECT_MSG: Invalid operand
+EXPECT_MSG: Label not found
 
 ---
 NAME: invalid_operand_empty_immediate
 INPUT:
 1: * = $0200
 2:   LDA #
-EXPECT_ERROR: 20
+EXPECT_ERROR: 1
 EXPECT_LINE: 2
-EXPECT_MSG: Invalid operand
+EXPECT_MSG: Label not found
 
 ---
 NAME: invalid_operand_empty_indirect
 INPUT:
 1: * = $0200
 2:   LDA (,X)
-EXPECT_ERROR: 20
+EXPECT_ERROR: 1
 EXPECT_LINE: 2
-EXPECT_MSG: Invalid operand
+EXPECT_MSG: Label not found
 
 ---
 NAME: invalid_operand_numeric
 INPUT:
 1: * = $0200
 2:   LDA #123
-EXPECT_ERROR: 20
+EXPECT_ERROR: 1
 EXPECT_LINE: 2
-EXPECT_MSG: Invalid operand
+EXPECT_MSG: Label not found
 
 ---
 NAME: invalid_operand_at_symbol
 INPUT:
 1: * = $0200
 2:   LDA #@foo
-EXPECT_ERROR: 20
+EXPECT_ERROR: 1
 EXPECT_LINE: 2
-EXPECT_MSG: Invalid operand
+EXPECT_MSG: Label not found
 
 ---
 NAME: trailing_expr_imm_hex
@@ -498,9 +498,9 @@ INPUT:
 3:   NOP
 4:   NOP
 5:   LDA #"bad"
-EXPECT_ERROR: 20
+EXPECT_ERROR: 1
 EXPECT_LINE: 5
-EXPECT_MSG: Invalid operand
+EXPECT_MSG: Label not found
 
 ---
 NAME: directive_data_bytes
