@@ -1162,68 +1162,47 @@ parse_operand_and_emit
 .label_x_index
   JSR read_char            ; Read char after X for garbage check
   PHA
-  ; Check if ZPX mode is available
   LDA #MODE_ZPX
   STA ADDR_MODE
-  JSR find_opcode_for_mode
-  BCS .label_use_absx       ; No ZPX mode, use ABSX
-  ; Check if ABSX mode is forced due to forward reference
-  JSR handle_fwdref_mode
-  BCS .label_use_absx
-  ; Check if ABSX mode is required due to value >= $100
-  LDA OPERAND_H
-  BNE .label_use_absx
+  JSR handle_fwdref_mode   ; Checks mode availability, value size, forward refs
+  BCS .label_use_absx      ; Must use ABSX
   ; Use ZPX mode
   PLA
   JMP emit_instruction
 .label_use_absx
   LDA #MODE_ABSX
   STA ADDR_MODE
-  PLA                       ; Restore next char for garbage check
+  PLA
   JMP emit_instruction
 .label_y_index
   JSR read_char            ; Read char after Y for garbage check
   PHA
-  ; Check if ZPY mode is available
   LDA #MODE_ZPY
   STA ADDR_MODE
-  JSR find_opcode_for_mode
-  BCS .label_use_absy       ; No ZPY mode, use ABSY
-  ; Check if ABSY mode is forced due to forward reference
-  JSR handle_fwdref_mode
-  BCS .label_use_absy
-  ; Check if ABSY mode is required due to value >= $100
-  LDA OPERAND_H
-  BNE .label_use_absy
+  JSR handle_fwdref_mode   ; Checks mode availability, value size, forward refs
+  BCS .label_use_absy      ; Must use ABSY
   ; Use ZPY mode
   PLA
   JMP emit_instruction
 .label_use_absy
   LDA #MODE_ABSY
   STA ADDR_MODE
-  PLA                       ; Restore next char for garbage check
+  PLA
   JMP emit_instruction
 .label_no_index
   ; A contains next char for garbage check - save it
   PHA
-  ; Check if ZP mode is available
   LDA #MODE_ZP
   STA ADDR_MODE
-  JSR find_opcode_for_mode
-  BCS .label_use_abs        ; No ZP mode, use ABS
-  ; Check if ABS mode is forced due to forward reference
-  JSR handle_fwdref_mode
-  BCS .label_use_abs
-  ; Check if ABS mode is required due to value >= $100
-  LDA OPERAND_H
-  BNE .label_use_abs
+  JSR handle_fwdref_mode   ; Checks mode availability, value size, forward refs
+  BCS .label_use_abs       ; Must use ABS
   ; Use ZP mode
   PLA
   JMP emit_instruction
 .label_use_abs
   LDA #MODE_ABS
   STA ADDR_MODE
-  PLA                       ; Restore next char for garbage check
+  PLA
   JMP emit_instruction
 
 .label_is_branch
@@ -1256,28 +1235,44 @@ check_if_branch
   RTS
 
 
-; Handle forward reference for ZP/ABS mode selection
-; Determines whether to use ZP or ABS mode based on forward ref status
-; On entry: IS_FWDREF set if this is a forward reference (pass 1)
+; Determine whether to use ZP or ABS addressing mode
+; Checks mode availability, value size, and forward reference forcing
+; On entry: ADDR_MODE set to ZP variant (MODE_ZP, MODE_ZPX, or MODE_ZPY)
+;           INST_PTR_L/H points to instruction's mode:opcode data
+;           OPERAND_H contains high byte of operand value
+;           IS_FWDREF set if operand is forward reference (pass 1)
 ;           PASS indicates current pass
-; On exit: C=1 if must use ABS mode (forward ref), C=0 if can use ZP
+; On exit: C=1 if must use ABS variant, C=0 if can use ZP variant
 ;          In pass 1 with forward ref: adds PC to forward ref list
+;          In pass 2: consumes forward ref list entry if present
 ;          A, Y not preserved, X preserved
 handle_fwdref_mode
+  JSR find_opcode_for_mode
+  BCS .use_abs             ; No ZP mode available, must use ABS
+  ; Check forward reference forcing (must be done before value check
+  ; to properly consume forward ref entries in pass 2)
   BIT PASS
   BMI .pass2
   ; Pass 1 - check if this is a forward reference
   BIT IS_FWDREF
-  BPL .can_use_zp          ; Not a forward ref, can use ZP
+  BPL .check_value         ; Not a forward ref, check value size
   ; Forward ref in pass 1 - add to list, return C=1 (use ABS)
   JSR add_forward_ref
   SEC
   RTS
 .pass2
   ; Pass 2 - check the forward ref list
-  JMP check_forward_ref    ; Returns C=1 if in list, C=0 if not
-.can_use_zp
+  JSR check_forward_ref    ; Returns C=1 if in list, C=0 if not
+  BCS .use_abs             ; Was in list (forced to ABS), return C=1
+.check_value
+  ; Check if value requires absolute addressing (>= $100)
+  LDA OPERAND_H
+  BNE .use_abs             ; Value >= $100, must use ABS
+  ; Can use ZP
   CLC
+  RTS
+.use_abs
+  SEC
   RTS
 
 
