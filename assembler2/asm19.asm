@@ -1226,36 +1226,26 @@ parse_operand_and_emit
 .label_no_index
   ; A contains next char for garbage check - save it
   PHA
-  ; Check if ZP mode is possible
-  LDA OPERAND_H
-  BNE .label_check_abs      ; High byte != 0, but may need to check fwdref list
+  ; Check if ZP mode is available
   LDA #MODE_ZP
   STA ADDR_MODE
   JSR find_opcode_for_mode
   BCS .label_use_abs        ; No ZP mode, use ABS
-  ; ZP mode possible - check forward ref
+  ; Check if ABS mode is forced due to forward reference
   JSR handle_fwdref_mode
-  BCS .label_use_abs        ; Forward ref, use ABS
-  PLA                       ; Restore next char for garbage check
-  JMP emit_instruction      ; Use ZP
-.label_check_abs
-  ; Value > $FF, must use ABS, but check if instruction has ZP mode
-  ; If it does, need to consume forward ref entry in pass 2
-  LDA #MODE_ZP
-  STA ADDR_MODE
-  JSR find_opcode_for_mode
-  BCC .label_consume_fwdref ; Has ZP mode, may need to consume fwdref
-  JMP .label_use_abs        ; No ZP mode, just use ABS
-.label_consume_fwdref
-  BIT PASS
-  BPL .label_use_abs        ; Pass 1, just use ABS
-  ; Pass 2 - consume forward ref entry if present
-  JSR check_forward_ref     ; Advances pointer if PC matches
+  BCS .label_use_abs
+  ; Check if ABS mode is required due to value >= $100
+  LDA OPERAND_H
+  BNE .label_use_abs
+  ; Use ZP mode
+  PLA
+  JMP emit_instruction
 .label_use_abs
   LDA #MODE_ABS
   STA ADDR_MODE
   PLA                       ; Restore next char for garbage check
   JMP emit_instruction
+
 .label_is_branch
   LDA #MODE_REL
   STA ADDR_MODE
