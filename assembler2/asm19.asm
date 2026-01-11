@@ -1077,18 +1077,7 @@ parse_operand_and_emit
   JSR read_char        ; Skip (
   ; Parse value ($xx, <label, >label, or label)
   JSR parse_value      ; Returns next char in A, OPERAND_L/H set
-  PHA                  ; Save next char
-  ; Determine if 1-byte or 2-byte based on high byte
-  LDA OPERAND_H
-  BEQ .ind_one_byte
-  LDA #$FF             ; Flag: 2-byte operand
-  JMP .ind_size_done
-.ind_one_byte
-  LDA #$00             ; Flag: 1-byte operand
-.ind_size_done
-  STA TEMP
-  PLA                  ; Restore next char
-.indirect_check_suffix
+  ; Check suffix to determine addressing mode
   ; A contains next char (should be ) or ,)
   CMP #','
   BEQ .indirect_x
@@ -1101,11 +1090,9 @@ parse_operand_and_emit
   JSR read_char        ; Should be Y
   CMP #'Y'
   BNE .ind_err
-  JSR read_char        ; Read char after Y for garbage check
-  PHA
   LDA #MODE_INDY
   STA ADDR_MODE
-  PLA
+  JSR read_char        ; Read char after Y for garbage check
   JMP emit_instruction ; Tail call
 .indirect_x
   JSR read_char        ; Should be X
@@ -1114,11 +1101,9 @@ parse_operand_and_emit
   JSR read_char        ; Should be )
   CMP #')'
   BNE .ind_err
-  JSR read_char        ; Read char after ) for garbage check
-  PHA
   LDA #MODE_INDX
   STA ADDR_MODE
-  PLA
+  JSR read_char        ; Read char after ) for garbage check
   JMP emit_instruction ; Tail call
 .ind_no_suffix
   ; Just ($xxxx) - JMP indirect mode (must be 2-byte operand)
