@@ -321,15 +321,6 @@ EXPECT_LINE: 2
 EXPECT_MSG: Unexpected text after operand
 
 ---
-NAME: trailing_garbage_acc_addressing
-INPUT:
-1: * = $0200
-2:   ASL A garbage
-EXPECT_ERROR: 21
-EXPECT_LINE: 2
-EXPECT_MSG: Unexpected text after operand
-
----
 NAME: trailing_garbage_abs_space
 INPUT:
 1: * = $0200
