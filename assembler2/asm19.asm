@@ -53,85 +53,11 @@ FS_CURR_LINEH = CURLINEH
   .include fwdref19.asm
 
 
-; Read next character from file stack
-; On entry CURR_FILE contains the current file handle
-;          FILE_STACK is not empty
-; On exit A contains the character read
-;         C is set if at end of all file data
-;         CURR_FILE is potentially updated with a new file handle
-read_char
-  LDA CURR_FILE
-  BEQ .no_file
-  JSR read
-  BCS .at_end_file
-  RTS
-.at_end_file
-  JSR pop_file_stack
-  LDA CURR_FILE
-  BEQ .at_end_all
-  JMP read_char          ; Recursive tail call
-.at_end_all
-  SEC
-  RTS
-.no_file
-  JMP err_no_file
 
-
-select_label_hash_table
-  LDA #<LHASHTAB
-  STA HTPL
-  LDA #>LHASHTAB
-  STA HTPH
-  RTS
-
-
-; Emit value (pass 2 only) and increment PC
-; On entry A contains the byte to emit
-;          X contains the file handle to write to
-; On exit A, X, Y are preserved
-; TODO: Consolidate the PASS and IN_ZEROPAGE flags so that emit can
-;       do a single check instead of two for suppression of output
-emit
-  INC PCL
-  BNE .incremented
-  INC PCH
-.incremented
-  BIT PASS
-  BPL .skip            ; Skip writing during pass 1
-  BIT IN_ZEROPAGE
-  BMI .skip            ; Skip writing when in zero page section
-  JMP write            ; Tail call
-.skip
-  RTS
-
-
-; Read and discard characters up to the end of the current line
-; On entry A contains the next character
-; On exit A contains "\n"
-;         X, Y are preserved
-skip_rest_of_line
-.loop
-  CMP #'\n'
-  BEQ .done
-  JSR read_char
-  BCC .loop
-.done
-  RTS
-
-
-; Read and discard space characters
-; On entry A contains the next character
-; On exit A contains the next character following the last space
-;         X, Y are preserved
-skip_spaces
-.loop
-  CMP #' '
-  BNE .done
-  JSR read_char
-  BCC .loop
-.done
-  RTS
-
+; ============================================================================
+; TIER 1: PRIMITIVES
+; Basic operations with no dependencies on other functions
+; ============================================================================
 
 ; Check whether the next character (in A) is NOT a token character
 ; On entry A contains the next character
@@ -149,122 +75,6 @@ compare_end_of_token
   CMP #')'             ; Close paren terminates for indirect modes
 .end
   RTS
-
-
-; Skips spaces and checks for end of line and skips past if at end
-; On entry A contains next character
-; On exit C set if end of line, clear otherwise
-;         A contains next character
-;         X, Y are preserved
-check_for_end_of_line
-  JSR skip_spaces
-  CMP #';'
-  BEQ .end
-  CMP #'\n'
-  BEQ .done
-  ; Not at end
-  CLC
-  RTS
-.end
-  JSR skip_rest_of_line
-.done
-  SEC
-  RTS
-
-
-; Reads token into TOKEN (zero terminated)
-; On entry A contains first character of token
-; On exit A contains next character after token
-;         X is preserved
-;         Y is not preserved
-read_token
-  STX TEMP
-  LDX #$00
-.loop
-  JSR compare_end_of_token
-  BEQ .done
-  STA TOKEN,X
-  INX
-  JSR read_char
-  BCC .loop
-.done
-  TAY                  ; Save next char
-  LDA #$00
-  STA TOKEN,X
-  TYA                  ; Restore next char
-  LDX TEMP
-  RTS
-
-
-; Check if token is a local label and set IS_LOCAL_LABEL flag
-; On entry TOKEN contains the token (may start with '.')
-; On exit IS_LOCAL_LABEL set appropriately ($FF if local, $00 if global)
-;         TOKEN is NOT modified (no expansion)
-;         A not preserved
-;         X, Y are preserved
-check_local_label
-  LDA TOKEN
-  CMP #'.'
-  BNE .not_local
-  ; Local label - Check if CURR_GLOBAL_HEAP is set (error check)
-  LDA CURR_GLOBAL_HEAP_L
-  ORA CURR_GLOBAL_HEAP_H
-  BNE .have_global
-  JMP err_no_global_for_local
-.have_global
-  LDA #$FF
-  STA IS_LOCAL_LABEL
-  RTS
-.not_local
-  LDA #$00
-  STA IS_LOCAL_LABEL
-  RTS
-
-
-; Update CURR_GLOBAL_HEAP by looking up TOKEN in hash table
-; Used in pass 2 to set the heap pointer for local label scope matching
-; On entry TOKEN contains the global label name
-;          IS_LOCAL_LABEL = 0 (global label)
-; On exit CURR_GLOBAL_HEAP_L/H points to the token string on heap
-;         CACHED_HASH is set (needed for subsequent local label lookups)
-;         A, Y not preserved
-;         X is preserved
-update_global_heap_from_lookup
-  JSR select_label_hash_table
-  JSR find_in_hash       ; TABPL now points to token string
-  JSR commit_cached_hash ; Commit hash since this is a non-assignment global
-  ; After find_in_hash, TABPL points to token string (entry_start + 2)
-  LDA TABPL
-  STA CURR_GLOBAL_HEAP_L
-  LDA TABPH
-  STA CURR_GLOBAL_HEAP_H
-  RTS
-
-
-; Read a label, look up in the label hash table and return the associated value
-; On entry A contains the first character of the label
-; On exit HEX1 and HEX2 contains the MSB and LSB of the hash table value
-;         A contains the next character following the token
-;         X is preserved
-;         Y is not preserved
-; Raises 'Label not found' error if label is not found in hash table
-read_and_find_existing_label
-  JSR read_token
-  PHA                  ; Save next char
-  JSR check_local_label
-  JSR select_label_hash_table
-  JSR find_in_hash
-  PLA                  ; Restore next char
-  BCC .done            ; Label found
-  BIT PASS
-  BMI .pass2
-  LDY #$00
-  STY HEX1
-  STY HEX2
-.done
-  RTS
-.pass2
-  JMP err_label_not_found
 
 
 ; Convert hex character to associated value
@@ -292,6 +102,112 @@ convert_hex_character
 .numeric_ok
   RTS
 
+
+; (emit_label, emit_label_lsb, emit_label_msb removed - consolidated into parse_value)
+
+
+; Swap PCL;PCH with PC_SAVEL;PC_SAVEH
+; On exit A, X, Y are preserved
+swap_pc_with_save
+  ; Swap PC L with save location
+  LDA PCL
+  PHA
+  LDA PC_SAVEL
+  STA PCL
+  PLA
+  STA PC_SAVEL
+  ; Swap PC H with save location
+  LDA PCH
+  PHA
+  LDA PC_SAVEH
+  STA PCH
+  PLA
+  STA PC_SAVEH
+  RTS
+
+
+; ============================================================================
+; TIER 2: CHARACTER I/O & SKIPPING
+; File reading and character classification
+; ============================================================================
+
+; Read next character from file stack
+; On entry CURR_FILE contains the current file handle
+;          FILE_STACK is not empty
+; On exit A contains the character read
+;         C is set if at end of all file data
+;         CURR_FILE is potentially updated with a new file handle
+read_char
+  LDA CURR_FILE
+  BEQ .no_file
+  JSR read
+  BCS .at_end_file
+  RTS
+.at_end_file
+  JSR pop_file_stack
+  LDA CURR_FILE
+  BEQ .at_end_all
+  JMP read_char          ; Recursive tail call
+.at_end_all
+  SEC
+  RTS
+.no_file
+  JMP err_no_file
+
+
+; Read and discard space characters
+; On entry A contains the next character
+; On exit A contains the next character following the last space
+;         X, Y are preserved
+skip_spaces
+.loop
+  CMP #' '
+  BNE .done
+  JSR read_char
+  BCC .loop
+.done
+  RTS
+
+
+; Read and discard characters up to the end of the current line
+; On entry A contains the next character
+; On exit A contains "\n"
+;         X, Y are preserved
+skip_rest_of_line
+.loop
+  CMP #'\n'
+  BEQ .done
+  JSR read_char
+  BCC .loop
+.done
+  RTS
+
+
+; Skips spaces and checks for end of line and skips past if at end
+; On entry A contains next character
+; On exit C set if end of line, clear otherwise
+;         A contains next character
+;         X, Y are preserved
+check_for_end_of_line
+  JSR skip_spaces
+  CMP #';'
+  BEQ .end
+  CMP #'\n'
+  BEQ .done
+  ; Not at end
+  CLC
+  RTS
+.end
+  JSR skip_rest_of_line
+.done
+  SEC
+  RTS
+
+
+; ============================================================================
+; TIER 3: TOKEN & HEX READING
+; Token and hexadecimal value parsing
+; ============================================================================
 
 ; Reads 1 byte (2 character) hex value
 ; On entry A contains first hex character
@@ -334,22 +250,104 @@ read_hex_byte_or_word
   RTS
 
 
-; Read 2 to 4 hex characters and emit 1 or 2 bytes
-; When 2 bytes, emit LSB then MSB
-; Uses HEX1, HEX2
-; On entry A contains the first hex character
-; On exit A contains next character
-emit_hex
-  JSR read_hex_byte_or_word ; Returns C = 1 if 2 bytes read
-  TAY                       ; Save next char
-  BCC .one
-  LDA HEX2
-  JSR emit
-.one
-  LDA HEX1
-  JSR emit
-  TYA                       ; Restore next char
+; Reads token into TOKEN (zero terminated)
+; On entry A contains first character of token
+; On exit A contains next character after token
+;         X is preserved
+;         Y is not preserved
+read_token
+  STX TEMP
+  LDX #$00
+.loop
+  JSR compare_end_of_token
+  BEQ .done
+  STA TOKEN,X
+  INX
+  JSR read_char
+  BCC .loop
+.done
+  TAY                  ; Save next char
+  LDA #$00
+  STA TOKEN,X
+  TYA                  ; Restore next char
+  LDX TEMP
   RTS
+
+
+; ============================================================================
+; TIER 4: VALUE PARSING
+; Parse values: hex, labels, character literals
+; ============================================================================
+
+; Parse character literal: 'x' or escape sequences
+; On entry: A contains the opening quote character '
+; On exit: A contains next character (for garbage checking)
+;          OPERAND_L contains character value
+;          OPERAND_H contains $00
+;          X preserved, Y not preserved
+; Raises 'Invalid character literal' error on malformed input
+parse_char_literal
+  JSR read_char        ; Skip opening quote
+  CMP #'\''
+  BEQ .char_invalid    ; Empty literal - error
+  CMP #'\\'
+  BEQ .char_escape
+  CMP #'\n'
+  BEQ .char_invalid    ; Newline without closing quote - error
+  ; Regular character
+  STA OPERAND_L
+  JMP .char_check_close
+.char_escape
+  ; Escape sequence: \n \\ \'
+  JSR read_char
+  CMP #'n'
+  BNE .esc_not_n
+  LDA #'\n'            ; Only \n needs value substitution
+  BNE .esc_done        ; Always taken (\n = $0A != 0)
+.esc_not_n
+  ; For \\ and \', character is already in A
+  CMP #'\\'
+  BEQ .esc_done
+  CMP #'\''
+  BNE .char_invalid
+.esc_done
+  STA OPERAND_L
+.char_check_close
+  JSR read_char        ; Should be closing quote
+  CMP #'\''
+  BNE .char_invalid
+  LDA #$00
+  STA OPERAND_H
+  ; Read next char for garbage check
+  JMP read_char        ; Tail call
+.char_invalid
+  JMP err_invalid_char_literal
+
+
+; Read a label, look up in the label hash table and return the associated value
+; On entry A contains the first character of the label
+; On exit HEX1 and HEX2 contains the MSB and LSB of the hash table value
+;         A contains the next character following the token
+;         X is preserved
+;         Y is not preserved
+; Raises 'Label not found' error if label is not found in hash table
+read_and_find_existing_label
+  JSR read_token
+  PHA                  ; Save next char
+  JSR check_local_label
+  JSR select_label_hash_table
+  JSR find_in_hash
+  PLA                  ; Restore next char
+  BCC .done            ; Label found
+  BIT PASS
+  BMI .pass2
+  LDY #$00
+  STY HEX1
+  STY HEX2
+.done
+  RTS
+.pass2
+  JMP err_label_not_found
 
 
 ; Check for the existance of an assigned value (read the equals sign)
@@ -381,6 +379,24 @@ read_value
   JSR skip_spaces
   JSR parse_value      ; Returns value in OPERAND_L/H (aliased to HEX2/HEX1)
   ; No copy needed - OPERAND_L/H are aliased to HEX2/HEX1
+  RTS
+
+
+; Read 2 to 4 hex characters and emit 1 or 2 bytes
+; When 2 bytes, emit LSB then MSB
+; Uses HEX1, HEX2
+; On entry A contains the first hex character
+; On exit A contains next character
+emit_hex
+  JSR read_hex_byte_or_word ; Returns C = 1 if 2 bytes read
+  TAY                       ; Save next char
+  BCC .one
+  LDA HEX2
+  JSR emit
+.one
+  LDA HEX1
+  JSR emit
+  TYA                       ; Restore next char
   RTS
 
 
@@ -470,98 +486,61 @@ parse_value
   RTS
 
 
-; Parse character literal: 'x' or escape sequences
-; On entry: A contains the opening quote character '
-; On exit: A contains next character (for garbage checking)
-;          OPERAND_L contains character value
-;          OPERAND_H contains $00
-;          X preserved, Y not preserved
-; Raises 'Invalid character literal' error on malformed input
-parse_char_literal
-  JSR read_char        ; Skip opening quote
-  CMP #'\''
-  BEQ .char_invalid    ; Empty literal - error
-  CMP #'\\'
-  BEQ .char_escape
-  CMP #'\n'
-  BEQ .char_invalid    ; Newline without closing quote - error
-  ; Regular character
-  STA OPERAND_L
-  JMP .char_check_close
-.char_escape
-  ; Escape sequence: \n \\ \'
-  JSR read_char
-  CMP #'n'
-  BNE .esc_not_n
-  LDA #'\n'            ; Only \n needs value substitution
-  BNE .esc_done        ; Always taken (\n = $0A != 0)
-.esc_not_n
-  ; For \\ and \', character is already in A
-  CMP #'\\'
-  BEQ .esc_done
-  CMP #'\''
-  BNE .char_invalid
-.esc_done
-  STA OPERAND_L
-.char_check_close
-  JSR read_char        ; Should be closing quote
-  CMP #'\''
-  BNE .char_invalid
-  LDA #$00
-  STA OPERAND_H
-  ; Read next char for garbage check
-  JMP read_char        ; Tail call
-.char_invalid
-  JMP err_invalid_char_literal
+; ============================================================================
+; TIER 5: LABEL MANAGEMENT & HASH TABLE
+; Label classification, lookup, and definition
+; ============================================================================
 
-
-; Fast forward the program counter
-; On entry PCL;PCH contains the current program counter
-;          HEX2;HEX1 contains the new PC value
-; On exit
-; Raises 'Cannot move PC backwards' error if attempting to move PC backwards
-update_pc
-  BIT IN_ZEROPAGE
-  BMI .no_fill
-  BIT STARTED
-  BMI .started
-  DEC STARTED
-  BNE .no_fill        ; Always taken
-.started
-  LDA HEX1            ; High byte
-  CMP PCH
-  BCC .less
-  BNE .notless
-  LDA HEX2            ; Low byte
-  CMP PCL
-  BCC .less
-.notless
-  BIT PASS
-  BPL .no_fill        ; skip writing during pass 1
-.loop
-  LDA HEX1
-  CMP PCH
-  BNE .loop_not_done
-  LDA HEX2
-  CMP PCL
-  BEQ .loop_done
-.loop_not_done
-  LDA #$00
-  JSR write
-  INC PCL
-  BNE .loop
-  INC PCH
-  BNE .loop           ; Always taken
-.loop_done
+; Check if token is a local label and set IS_LOCAL_LABEL flag
+; On entry TOKEN contains the token (may start with '.')
+; On exit IS_LOCAL_LABEL set appropriately ($FF if local, $00 if global)
+;         TOKEN is NOT modified (no expansion)
+;         A not preserved
+;         X, Y are preserved
+check_local_label
+  LDA TOKEN
+  CMP #'.'
+  BNE .not_local
+  ; Local label - Check if CURR_GLOBAL_HEAP is set (error check)
+  LDA CURR_GLOBAL_HEAP_L
+  ORA CURR_GLOBAL_HEAP_H
+  BNE .have_global
+  JMP err_no_global_for_local
+.have_global
+  LDA #$FF
+  STA IS_LOCAL_LABEL
   RTS
-.less
-  JMP err_cannot_move_pc_backwards
-.no_fill
-  LDA HEX2
-  STA PCL
-  LDA HEX1
-  STA PCH
-.done
+.not_local
+  LDA #$00
+  STA IS_LOCAL_LABEL
+  RTS
+
+
+select_label_hash_table
+  LDA #<LHASHTAB
+  STA HTPL
+  LDA #>LHASHTAB
+  STA HTPH
+  RTS
+
+
+; Update CURR_GLOBAL_HEAP by looking up TOKEN in hash table
+; Used in pass 2 to set the heap pointer for local label scope matching
+; On entry TOKEN contains the global label name
+;          IS_LOCAL_LABEL = 0 (global label)
+; On exit CURR_GLOBAL_HEAP_L/H points to the token string on heap
+;         CACHED_HASH is set (needed for subsequent local label lookups)
+;         A, Y not preserved
+;         X is preserved
+update_global_heap_from_lookup
+  JSR select_label_hash_table
+  JSR find_in_hash       ; TABPL now points to token string
+  JSR commit_cached_hash ; Commit hash since this is a non-assignment global
+  ; After find_in_hash, TABPL points to token string (entry_start + 2)
+  LDA TABPL
+  STA CURR_GLOBAL_HEAP_L
+  LDA TABPH
+  STA CURR_GLOBAL_HEAP_H
   RTS
 
 
@@ -666,6 +645,86 @@ capture_label
   JMP err_duplicate_label
 
 
+; ============================================================================
+; TIER 6: PC MANAGEMENT
+; Program counter manipulation and byte emission
+; ============================================================================
+
+; Emit value (pass 2 only) and increment PC
+; On entry A contains the byte to emit
+;          X contains the file handle to write to
+; On exit A, X, Y are preserved
+; TODO: Consolidate the PASS and IN_ZEROPAGE flags so that emit can
+;       do a single check instead of two for suppression of output
+emit
+  INC PCL
+  BNE .incremented
+  INC PCH
+.incremented
+  BIT PASS
+  BPL .skip            ; Skip writing during pass 1
+  BIT IN_ZEROPAGE
+  BMI .skip            ; Skip writing when in zero page section
+  JMP write            ; Tail call
+.skip
+  RTS
+
+
+; Fast forward the program counter
+; On entry PCL;PCH contains the current program counter
+;          HEX2;HEX1 contains the new PC value
+; On exit
+; Raises 'Cannot move PC backwards' error if attempting to move PC backwards
+update_pc
+  BIT IN_ZEROPAGE
+  BMI .no_fill
+  BIT STARTED
+  BMI .started
+  DEC STARTED
+  BNE .no_fill        ; Always taken
+.started
+  LDA HEX1            ; High byte
+  CMP PCH
+  BCC .less
+  BNE .notless
+  LDA HEX2            ; Low byte
+  CMP PCL
+  BCC .less
+.notless
+  BIT PASS
+  BPL .no_fill        ; skip writing during pass 1
+.loop
+  LDA HEX1
+  CMP PCH
+  BNE .loop_not_done
+  LDA HEX2
+  CMP PCL
+  BEQ .loop_done
+.loop_not_done
+  LDA #$00
+  JSR write
+  INC PCL
+  BNE .loop
+  INC PCH
+  BNE .loop           ; Always taken
+.loop_done
+  RTS
+.less
+  JMP err_cannot_move_pc_backwards
+.no_fill
+  LDA HEX2
+  STA PCL
+  LDA HEX1
+  STA PCH
+.done
+  RTS
+
+
+; ============================================================================
+; TIER 7: INSTRUCTION LOOKUP & OPCODE
+; Mnemonic lookup and opcode finding
+; ============================================================================
+
 ; Look up mnemonic and save pointer to mode:opcode data
 ; On entry A contains the first character of the mnemonic
 ; On exit A contains the next character
@@ -731,6 +790,34 @@ find_opcode_for_mode
   SEC
   RTS
 
+
+; Check if current instruction is a branch (supports MODE_REL)
+; On entry INST_PTR_L:INST_PTR_H points to mode:opcode data
+; On exit C = 0 if branch, C = 1 if not branch
+;         A, Y not preserved, X preserved
+check_if_branch
+  LDY #$00
+.loop
+  LDA (INST_PTR_L),Y
+  CMP #$FF
+  BEQ .not_branch
+  CMP #MODE_REL
+  BEQ .is_branch
+  INY
+  INY
+  JMP .loop
+.is_branch
+  CLC
+  RTS
+.not_branch
+  SEC
+  RTS
+
+
+; ============================================================================
+; TIER 8: INSTRUCTION EMISSION
+; Emit instructions with operands
+; ============================================================================
 
 ; Emit instruction based on addressing mode
 ; On entry INST_PTR_L:INST_PTR_H points to mode:opcode data
@@ -823,199 +910,50 @@ emit_instruction
   JMP err_invalid_addressing_mode
 
 
-; Read and emit quoted ASCII
-; On entry A contains the first character within quotes
-; On exit A contains the next character after the closing quote
-;         X, Y are preserved
-; Raises 'Closing quote not found' error if closing quote not found on current line
-emit_quoted
-.loop
-  CMP #'\n'
-  BEQ .err_closing_quote
-  CMP #'"'
-  BEQ .done
-  CMP #'\\'
-  BNE .not_escaped
-  JSR read_char
-  CMP #'\n'
-  BEQ .err_closing_quote
-  CMP #'n'
-  BNE .not_escaped
-  LDA #'\n'            ; Escaped "n" is linefeed
-.not_escaped
-  JSR emit
-  JSR read_char
-  BCC .loop
-.err_closing_quote
-  JMP err_closing_quote_not_found
-.done
-  JSR read_char        ; Done; read next char
+; Checks mode availability, value size, and forward reference forcing
+; On entry: ADDR_MODE set to ZP variant (MODE_ZP, MODE_ZPX, or MODE_ZPY)
+;           INST_PTR_L/H points to instruction's mode:opcode data
+;           OPERAND_H contains high byte of operand value
+;           IS_FWDREF set if operand is forward reference (pass 1)
+;           PASS indicates current pass
+; On exit: C=1 if must use ABS variant, C=0 if can use ZP variant
+;          In pass 1 with forward ref: adds PC to forward ref list
+;          In pass 2: consumes forward ref list entry if present
+;          A, Y not preserved, X preserved
+handle_fwdref_mode
+  JSR find_opcode_for_mode
+  BCS .use_abs             ; No ZP mode available, must use ABS
+  ; Check forward reference forcing (must be done before value check
+  ; to properly consume forward ref entries in pass 2)
+  BIT PASS
+  BMI .pass2
+  ; Pass 1 - check if this is a forward reference
+  BIT IS_FWDREF
+  BPL .check_value         ; Not a forward ref, check value size
+  ; Forward ref in pass 1 - add to list, return C=1 (use ABS)
+  JSR add_forward_ref
+  SEC
+  RTS
+.pass2
+  ; Pass 2 - check the forward ref list
+  JSR check_forward_ref    ; Returns C=1 if in list, C=0 if not
+  BCS .use_abs             ; Was in list (forced to ABS), return C=1
+.check_value
+  ; Check if value requires absolute addressing (>= $100)
+  LDA OPERAND_H
+  BNE .use_abs             ; Value >= $100, must use ABS
+  ; Can use ZP
+  CLC
+  RTS
+.use_abs
+  SEC
   RTS
 
 
-; (emit_label, emit_label_lsb, emit_label_msb removed - consolidated into parse_value)
-
-
-; Swap PCL;PCH with PC_SAVEL;PC_SAVEH
-; On exit A, X, Y are preserved
-swap_pc_with_save
-  ; Swap PC L with save location
-  LDA PCL
-  PHA
-  LDA PC_SAVEL
-  STA PCL
-  PLA
-  STA PC_SAVEL
-  ; Swap PC H with save location
-  LDA PCH
-  PHA
-  LDA PC_SAVEH
-  STA PCH
-  PLA
-  STA PC_SAVEH
-  RTS
-
-
-; On entry, A contains the first character of the directive
-process_directive
-  JSR read_token
-  PHA                  ; Save next char
-  ; Check for 'include'
-  LDA #<directive_include
-  STA TABPL
-  LDA #>directive_include
-  STA TABPH
-  JSR compare_token
-  BEQ .include
-  ; Check for 'zeropage'
-  LDA #<directive_zeropage
-  STA TABPL
-  LDA #>directive_zeropage
-  STA TABPH
-  JSR compare_token
-  BEQ .zeropage
-  ; Check for 'code'
-  LDA #<directive_code
-  STA TABPL
-  LDA #>directive_code
-  STA TABPH
-  JSR compare_token
-  BEQ .code
-  ; Check for 'data'
-  LDA #<directive_data
-  STA TABPL
-  LDA #>directive_data
-  STA TABPH
-  JSR compare_token
-  BEQ .data
-  ; Directive not recognized
-  PLA                  ; Restore next char
-  JMP err_unknown_directive
-.include
-  PLA                  ; Restore next char
-  JSR check_for_end_of_line
-  BCC .get_name
-  JMP err_filename_expected
-.get_name
-  JSR read_token
-  JSR skip_rest_of_line
-  JSR push_file_stack
-  RTS
-.zeropage
-  BIT IN_ZEROPAGE
-  BMI .in_zeropage
-  LDA #$FF
-  STA IN_ZEROPAGE
-  JSR swap_pc_with_save
-.in_zeropage
-  PLA                  ; Restore next char
-  JSR skip_rest_of_line
-  RTS
-.code
-  BIT IN_ZEROPAGE
-  BPL .in_code
-  LDA #$00
-  STA IN_ZEROPAGE
-  JSR swap_pc_with_save
-.in_code
-  PLA                  ; Restore next char
-  JSR skip_rest_of_line
-  RTS
-.data
-  PLA                  ; Restore next char
-  JMP data_parameters_loop_entry
-
-directive_include
-  .data "include" $00
-
-directive_zeropage
-  .data "zeropage" $00
-
-directive_code
-  .data "code" $00
-
-directive_data
-  .data "data" $00
-
-
-; Read from input, assemble code and write to output
-; On entry PASS indicates the current pass:
-;            bit 7 clear = pass 1
-;            bit 7 set = pass 2
-;          X contains the file handle of the output file
-; On exit X is preserved
-;         A, Y are not preserved
-assemble_code
-  LDA #$00
-  STA STARTED
-  STA IN_ZEROPAGE
-  STA PCL
-  STA PCH
-  STA PC_SAVEL
-  STA PC_SAVEH
-  STA CURLINEL
-  STA CURLINEH
-  STA CURR_GLOBAL_HEAP_L ; Initialize global heap pointer (0 = no global yet)
-  STA CURR_GLOBAL_HEAP_H ; "
-  STA IS_LOCAL_LABEL  ; Initialize local label flag
-.line_loop
-  JSR read_char
-  BCC .character_read
-  RTS                  ; At end of input
-.character_read
-  INC CURLINEL
-  BNE .line_incremented
-  INC CURLINEH
-.line_incremented
-  CMP #' '
-  BEQ .line_starts_with_space
-  JSR check_for_end_of_line
-  BCS .line_loop
-  JSR capture_label
-  BCC .check_for_opcode
-  BCS .line_loop            ; Always taken
-.line_starts_with_space
-  JSR check_for_end_of_line
-  BCS .line_loop
-.check_for_opcode
-  CMP #'.'
-  BNE .opcode
-; Directive
-  JSR read_char
-  JSR process_directive
-  JMP .line_loop
-.opcode
-  ; Read mnemonic and look up in instruction table
-  JSR lookup_mnemonic
-  ; A contains next char after mnemonic
-  ; Parse operand to determine addressing mode
-  JSR parse_operand_and_emit
-  ; A contains next char after operand - check for garbage
-  ; Skip trailing spaces, then check for end of line (handles comments)
-  JSR check_for_end_of_line
-  BCS .line_loop
-  JMP err_unexpected_text
-
+; ============================================================================
+; TIER 9: OPERAND PARSING & EMISSION
+; Parse operands and emit complete instructions
+; ============================================================================
 
 ; Parse operand and emit instruction
 ; On entry A contains the next character after mnemonic
@@ -1191,71 +1129,126 @@ parse_operand_and_emit
   JMP emit_instruction
 
 
-; Check if current instruction is a branch (supports MODE_REL)
-; On entry INST_PTR_L:INST_PTR_H points to mode:opcode data
-; On exit C = 0 if branch, C = 1 if not branch
-;         A, Y not preserved, X preserved
-check_if_branch
-  LDY #$00
+; Read and emit quoted ASCII
+; On entry A contains the first character within quotes
+; On exit A contains the next character after the closing quote
+;         X, Y are preserved
+; Raises 'Closing quote not found' error if closing quote not found on current line
+emit_quoted
 .loop
-  LDA (INST_PTR_L),Y
-  CMP #$FF
-  BEQ .not_branch
-  CMP #MODE_REL
-  BEQ .is_branch
-  INY
-  INY
-  JMP .loop
-.is_branch
-  CLC
-  RTS
-.not_branch
-  SEC
-  RTS
-
-
-; Determine whether to use ZP or ABS addressing mode
-; Checks mode availability, value size, and forward reference forcing
-; On entry: ADDR_MODE set to ZP variant (MODE_ZP, MODE_ZPX, or MODE_ZPY)
-;           INST_PTR_L/H points to instruction's mode:opcode data
-;           OPERAND_H contains high byte of operand value
-;           IS_FWDREF set if operand is forward reference (pass 1)
-;           PASS indicates current pass
-; On exit: C=1 if must use ABS variant, C=0 if can use ZP variant
-;          In pass 1 with forward ref: adds PC to forward ref list
-;          In pass 2: consumes forward ref list entry if present
-;          A, Y not preserved, X preserved
-handle_fwdref_mode
-  JSR find_opcode_for_mode
-  BCS .use_abs             ; No ZP mode available, must use ABS
-  ; Check forward reference forcing (must be done before value check
-  ; to properly consume forward ref entries in pass 2)
-  BIT PASS
-  BMI .pass2
-  ; Pass 1 - check if this is a forward reference
-  BIT IS_FWDREF
-  BPL .check_value         ; Not a forward ref, check value size
-  ; Forward ref in pass 1 - add to list, return C=1 (use ABS)
-  JSR add_forward_ref
-  SEC
-  RTS
-.pass2
-  ; Pass 2 - check the forward ref list
-  JSR check_forward_ref    ; Returns C=1 if in list, C=0 if not
-  BCS .use_abs             ; Was in list (forced to ABS), return C=1
-.check_value
-  ; Check if value requires absolute addressing (>= $100)
-  LDA OPERAND_H
-  BNE .use_abs             ; Value >= $100, must use ABS
-  ; Can use ZP
-  CLC
-  RTS
-.use_abs
-  SEC
+  CMP #'\n'
+  BEQ .err_closing_quote
+  CMP #'"'
+  BEQ .done
+  CMP #'\\'
+  BNE .not_escaped
+  JSR read_char
+  CMP #'\n'
+  BEQ .err_closing_quote
+  CMP #'n'
+  BNE .not_escaped
+  LDA #'\n'            ; Escaped "n" is linefeed
+.not_escaped
+  JSR emit
+  JSR read_char
+  BCC .loop
+.err_closing_quote
+  JMP err_closing_quote_not_found
+.done
+  JSR read_char        ; Done; read next char
   RTS
 
 
-; .data directive parameter loop
+; ============================================================================
+; TIER 10: DIRECTIVE PROCESSING
+; Handle assembler directives (.include, .data, etc.)
+; ============================================================================
+
+; On entry, A contains the first character of the directive
+process_directive
+  JSR read_token
+  PHA                  ; Save next char
+  ; Check for 'include'
+  LDA #<directive_include
+  STA TABPL
+  LDA #>directive_include
+  STA TABPH
+  JSR compare_token
+  BEQ .include
+  ; Check for 'zeropage'
+  LDA #<directive_zeropage
+  STA TABPL
+  LDA #>directive_zeropage
+  STA TABPH
+  JSR compare_token
+  BEQ .zeropage
+  ; Check for 'code'
+  LDA #<directive_code
+  STA TABPL
+  LDA #>directive_code
+  STA TABPH
+  JSR compare_token
+  BEQ .code
+  ; Check for 'data'
+  LDA #<directive_data
+  STA TABPL
+  LDA #>directive_data
+  STA TABPH
+  JSR compare_token
+  BEQ .data
+  ; Directive not recognized
+  PLA                  ; Restore next char
+  JMP err_unknown_directive
+.include
+  PLA                  ; Restore next char
+  JSR check_for_end_of_line
+  BCC .get_name
+  JMP err_filename_expected
+.get_name
+  JSR read_token
+  JSR skip_rest_of_line
+  JSR push_file_stack
+  RTS
+.zeropage
+  BIT IN_ZEROPAGE
+  BMI .in_zeropage
+  LDA #$FF
+  STA IN_ZEROPAGE
+  JSR swap_pc_with_save
+.in_zeropage
+  PLA                  ; Restore next char
+  JSR skip_rest_of_line
+  RTS
+.code
+  BIT IN_ZEROPAGE
+  BPL .in_code
+  LDA #$00
+  STA IN_ZEROPAGE
+  JSR swap_pc_with_save
+.in_code
+  PLA                  ; Restore next char
+  JSR skip_rest_of_line
+  RTS
+.data
+  PLA                  ; Restore next char
+  JMP data_parameters_loop_entry
+
+
+directive_include
+  .data "include" $00
+
+directive_zeropage
+  .data "zeropage" $00
+
+directive_code
+  .data "code" $00
+
+directive_data
+  .data "data" $00
+
+
+
+
 data_parameters_loop
 data_parameters_loop_entry
   JSR check_for_end_of_line
@@ -1294,6 +1287,75 @@ data_parameters_loop_entry
 .data_done
   RTS
 
+
+; ============================================================================
+; TIER 11: ASSEMBLY ORCHESTRATION
+; Main assembly loop
+; ============================================================================
+
+; Read from input, assemble code and write to output
+; On entry PASS indicates the current pass:
+;            bit 7 clear = pass 1
+;            bit 7 set = pass 2
+;          X contains the file handle of the output file
+; On exit X is preserved
+;         A, Y are not preserved
+assemble_code
+  LDA #$00
+  STA STARTED
+  STA IN_ZEROPAGE
+  STA PCL
+  STA PCH
+  STA PC_SAVEL
+  STA PC_SAVEH
+  STA CURLINEL
+  STA CURLINEH
+  STA CURR_GLOBAL_HEAP_L ; Initialize global heap pointer (0 = no global yet)
+  STA CURR_GLOBAL_HEAP_H ; "
+  STA IS_LOCAL_LABEL  ; Initialize local label flag
+.line_loop
+  JSR read_char
+  BCC .character_read
+  RTS                  ; At end of input
+.character_read
+  INC CURLINEL
+  BNE .line_incremented
+  INC CURLINEH
+.line_incremented
+  CMP #' '
+  BEQ .line_starts_with_space
+  JSR check_for_end_of_line
+  BCS .line_loop
+  JSR capture_label
+  BCC .check_for_opcode
+  BCS .line_loop            ; Always taken
+.line_starts_with_space
+  JSR check_for_end_of_line
+  BCS .line_loop
+.check_for_opcode
+  CMP #'.'
+  BNE .opcode
+; Directive
+  JSR read_char
+  JSR process_directive
+  JMP .line_loop
+.opcode
+  ; Read mnemonic and look up in instruction table
+  JSR lookup_mnemonic
+  ; A contains next char after mnemonic
+  ; Parse operand to determine addressing mode
+  JSR parse_operand_and_emit
+  ; A contains next char after operand - check for garbage
+  ; Skip trailing spaces, then check for end of line (handles comments)
+  JSR check_for_end_of_line
+  BCS .line_loop
+  JMP err_unexpected_text
+
+
+; ============================================================================
+; TIER 12: INITIALIZATION & I/O
+; Program initialization and file operations
+; ============================================================================
 
 ; Opens the file with name from the first command line argument, pushing
 ; to the file stack
@@ -1339,6 +1401,11 @@ check_debug_string
 str_debug
   .data "debug" $00
 
+
+; ============================================================================
+; TIER 13: ENTRY POINT
+; Program entry and main control flow
+; ============================================================================
 
 ; Entry point
 start
