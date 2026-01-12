@@ -1244,8 +1244,20 @@ INPUT:
 1: * = $0200
 2:   .ifdef undefined_label
 3:   LDA #$01
-4:   .endif
-5:   LDA #$02
+4:   .data $1234
+5:   .endif
+6:   LDA #$02
+EXPECT_HEX: a9 02
+
+---
+NAME: ifdef_error_in_skipped_code
+INPUT:
+1: * = $0200
+2:   .ifdef undefined_label
+3:   LDA #$01
+4:   LDA undefined_label
+5:   .endif
+6:   LDA #$02
 EXPECT_HEX: a9 02
 
 ---
