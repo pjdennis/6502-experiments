@@ -62,6 +62,27 @@ echo "OK"
 diff <(hexdump -C out/asm20.out) <(hexdump -C out/asm20_2.out)
 
 echo "OK"
+
+# asm21 - with conditional debug support
+./emulator.out out/asm20.out 2000 /dev/null /dev/null instgen21.asm out/instgen21.out
+./emulator.out out/instgen21.out 2000 /dev/null out/inst21.asm.out
+# Build without debug (smaller binary)
+./emulator.out out/asm20.out 2000 /dev/null /dev/null asm21.asm out/asm21.out
+# Build with debug support
+./emulator.out out/asm20.out 2000 /dev/null /dev/null asm21.asm out/asm21_debug.out define:enable_debug
+# Self-assembly test (without debug - smaller)
+./emulator.out out/asm21.out 2000 /dev/null /dev/null asm21.asm out/asm21_2.out
+diff <(hexdump -C out/asm21.out) <(hexdump -C out/asm21_2.out)
+# Self-assembly test (with debug)
+./emulator.out out/asm21_debug.out 2000 /dev/null /dev/null asm21.asm out/asm21_debug_2.out define:enable_debug
+diff <(hexdump -C out/asm21_debug.out) <(hexdump -C out/asm21_debug_2.out)
+
+echo "OK"
+
+# Show size difference
+echo "Size comparison:"
+ls -la out/asm21.out out/asm21_debug.out | awk '{print $5, $9}'
+
 ./emulator.out out/asm19_2.out 2000 /dev/null /dev/null test19.asm out/test19.out
 # hexdump -C out/test19.out
 echo "Assembled"
