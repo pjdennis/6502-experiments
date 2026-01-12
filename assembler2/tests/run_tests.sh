@@ -59,10 +59,12 @@ strip_line_prefix() {
 }
 
 # Run the assembler and capture output
+# Args: input [extra_args...]
 run_assembler() {
     local input="$1"
+    shift
     echo "$input" | strip_line_prefix > "$TMP_ASM"
-    "$EMULATOR" "$ASSEMBLER" 2000 /dev/null /dev/null "$TMP_ASM" "$TMP_BIN" debug 2>"$TMP_ERR"
+    "$EMULATOR" "$ASSEMBLER" 2000 /dev/null /dev/null "$TMP_ASM" "$TMP_BIN" debug "$@" 2>"$TMP_ERR"
     return $?
 }
 
@@ -87,6 +89,7 @@ run_positive_test() {
     local input="$2"
     local expected_hex="$3"
     local expected_fwdref="$4"
+    local extra_args="$5"
 
     if [[ -n "$FILTER" && "$name" != "$FILTER" ]]; then
         return 0
@@ -94,7 +97,7 @@ run_positive_test() {
 
     printf "  %-40s " "$name"
 
-    if run_assembler "$input"; then
+    if run_assembler "$input" $extra_args; then
         local actual_hex=$(get_hex)
         local norm_expected=$(normalize_hex "$expected_hex")
         local norm_actual=$(normalize_hex "$actual_hex")
@@ -139,6 +142,7 @@ run_negative_test() {
     local expected_error="$3"
     local expected_line="$4"
     local expected_msg="$5"
+    local extra_args="$6"
 
     if [[ -n "$FILTER" && "$name" != "$FILTER" ]]; then
         return 0
@@ -146,7 +150,7 @@ run_negative_test() {
 
     printf "  %-40s " "$name"
 
-    if run_assembler "$input"; then
+    if run_assembler "$input" $extra_args; then
         echo -e "${RED}FAIL${NC} (expected error, got success)"
         ((FAILED++))
         return
@@ -197,6 +201,7 @@ parse_and_run_tests() {
     local expect_error=""
     local expect_line=""
     local expect_msg=""
+    local extra_args=""
     local in_input=0
     local section=""
 
@@ -215,9 +220,9 @@ parse_and_run_tests() {
             # Run previous test if we have one
             if [[ -n "$name" ]]; then
                 if [[ -n "$expect_hex" ]]; then
-                    run_positive_test "$name" "$input" "$expect_hex" "$expect_fwdref"
+                    run_positive_test "$name" "$input" "$expect_hex" "$expect_fwdref" "$extra_args"
                 elif [[ -n "$expect_error" ]]; then
-                    run_negative_test "$name" "$input" "$expect_error" "$expect_line" "$expect_msg"
+                    run_negative_test "$name" "$input" "$expect_error" "$expect_line" "$expect_msg" "$extra_args"
                 fi
             fi
             # Reset for next test
@@ -228,6 +233,7 @@ parse_and_run_tests() {
             expect_error=""
             expect_line=""
             expect_msg=""
+            extra_args=""
             in_input=0
             in_test=1
             continue
@@ -255,6 +261,9 @@ parse_and_run_tests() {
         elif [[ "$line" =~ ^EXPECT_MSG:[[:space:]]*(.*) ]]; then
             expect_msg="${BASH_REMATCH[1]}"
             in_input=0
+        elif [[ "$line" =~ ^ARGS:[[:space:]]*(.*) ]]; then
+            extra_args="${BASH_REMATCH[1]}"
+            in_input=0
         elif [[ $in_input -eq 1 ]]; then
             # Accumulate input lines
             if [[ -n "$input" ]]; then
@@ -268,9 +277,9 @@ parse_and_run_tests() {
     # Run final test
     if [[ -n "$name" ]]; then
         if [[ -n "$expect_hex" ]]; then
-            run_positive_test "$name" "$input" "$expect_hex" "$expect_fwdref"
+            run_positive_test "$name" "$input" "$expect_hex" "$expect_fwdref" "$extra_args"
         elif [[ -n "$expect_error" ]]; then
-            run_negative_test "$name" "$input" "$expect_error" "$expect_line" "$expect_msg"
+            run_negative_test "$name" "$input" "$expect_error" "$expect_line" "$expect_msg" "$extra_args"
         fi
     fi
 }

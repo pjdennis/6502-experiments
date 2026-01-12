@@ -1362,3 +1362,52 @@ INPUT:
 14:   LDA #$05
 15:   .endif
 EXPECT_HEX: a9 01 a9 02 a9 03 a9 04 a9 05
+
+---
+NAME: define_from_cmdline
+ARGS: define:test_symbol
+INPUT:
+1: * = $0200
+2:   .ifdef test_symbol
+3:   LDA #$42
+4:   .endif
+5:   LDA #$01
+EXPECT_HEX: a9 42 a9 01
+
+---
+NAME: define_cmdline_without_define
+INPUT:
+1: * = $0200
+2:   .ifdef test_symbol
+3:   LDA #$42
+4:   .endif
+5:   LDA #$01
+EXPECT_HEX: a9 01
+
+---
+NAME: define_multiple_from_cmdline
+ARGS: define:sym1 define:sym2
+INPUT:
+1: * = $0200
+2:   .ifdef sym1
+3:   LDA #$01
+4:   .endif
+5:   .ifdef sym2
+6:   LDA #$02
+7:   .endif
+8:   LDA #$FF
+EXPECT_HEX: a9 01 a9 02 a9 ff
+
+---
+NAME: define_partial_match
+ARGS: define:sym
+INPUT:
+1: * = $0200
+2:   .ifdef sym1
+3:   LDA #$01
+4:   .endif
+5:   .ifdef sym
+6:   LDA #$02
+7:   .endif
+8:   LDA #$FF
+EXPECT_HEX: a9 02 a9 ff
