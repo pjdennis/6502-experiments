@@ -41,7 +41,6 @@ IS_FWDREF   .data $00 ; $FF if current label is forward ref (pass 1 only)
 EXPR_ACCU_L .data $00 ; Expression accumulator low byte
 EXPR_ACCU_H .data $00 ; Expression accumulator high byte
 EXPR_FWDREF .data $00 ; Accumulated forward ref flag
-SHIFT_COUNT .data $00 ; Temporary for shift loop count
 COND_DEPTH  .data $00 ; Conditional assembly nesting depth
 SKIP_DEPTH  .data $00 ; Depth where skipping started (0 = not skipping)
 ARG_COUNT   .data $00 ; Total command line argument count
@@ -637,7 +636,7 @@ parse_expression
   LDA OPERAND_L
   CMP #$10
   BCS .left_shift_zero     ; Low byte >= 16 means shift >= 16
-  STA SHIFT_COUNT
+  TAY                      ; Transfer shift count to Y
 
   ; Restore value to shift from EXPR_ACCU
   LDA EXPR_ACCU_L
@@ -647,11 +646,10 @@ parse_expression
 
   ; Perform left shift
 .left_shift_loop
-  LDA SHIFT_COUNT
-  BEQ .left_shift_done
+  DEY
+  BMI .left_shift_done
   ASL OPERAND_L
   ROL OPERAND_H
-  DEC SHIFT_COUNT
   JMP .left_shift_loop
 
 .left_shift_zero
@@ -685,7 +683,7 @@ parse_expression
   LDA OPERAND_L
   CMP #$10
   BCS .right_shift_zero    ; Low byte >= 16 means shift >= 16
-  STA SHIFT_COUNT
+  TAY                      ; Transfer shift count to Y
 
   ; Restore value to shift from EXPR_ACCU
   LDA EXPR_ACCU_L
@@ -695,11 +693,10 @@ parse_expression
 
   ; Perform right shift (logical/unsigned)
 .right_shift_loop
-  LDA SHIFT_COUNT
-  BEQ .right_shift_done
+  DEY
+  BMI .right_shift_done
   LSR OPERAND_H
   ROR OPERAND_L
-  DEC SHIFT_COUNT
   JMP .right_shift_loop
 
 .right_shift_zero
