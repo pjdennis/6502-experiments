@@ -91,6 +91,8 @@ compare_end_of_token
   CMP #'<'             ; Less-than terminates for shift operators
   BEQ .end
   CMP #'>'             ; Greater-than terminates for shift operators
+  BEQ .end
+  CMP #':'             ; Colon terminates for optional label suffix
 .end
   RTS
 
@@ -779,6 +781,11 @@ update_global_heap_from_lookup
 ;        'Bad hex' error if non-hex characters were encountered
 capture_label
   JSR read_token            ; Next char in NEXT_CHAR
+  LDA NEXT_CHAR             ; Check if terminated by colon
+  CMP #':'
+  BNE .no_colon
+  JSR read_char             ; Skip past colon, update NEXT_CHAR
+.no_colon
   LDA TOKEN
   CMP #'*'
   BNE .normal_label

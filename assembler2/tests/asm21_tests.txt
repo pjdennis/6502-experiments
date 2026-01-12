@@ -1532,3 +1532,69 @@ INPUT:
 1: * = $0200
 2:   LDA #$FF>>>$0100
 EXPECT_HEX: a9 7f
+
+---
+NAME: label_with_colon_basic
+INPUT:
+1: * = $0200
+2: start:
+3:   NOP
+4:   JMP start
+EXPECT_HEX: ea 4c 00 02
+
+---
+NAME: label_with_colon_assignment
+INPUT:
+1: * = $0200
+2: addr: = $1234
+3:   LDA addr
+EXPECT_HEX: ad 34 12
+
+---
+NAME: label_with_colon_same_line_instruction
+INPUT:
+1: * = $0200
+2: loop: NOP
+3:   BEQ loop
+EXPECT_HEX: ea f0 fd
+
+---
+NAME: label_with_colon_same_line_data
+INPUT:
+1: * = $0200
+2: data: .data $42
+3:   LDA data
+EXPECT_HEX: 42 ad 00 02
+
+---
+NAME: local_label_with_colon
+INPUT:
+1: * = $0200
+2: global:
+3: .local:
+4:   NOP
+5:   BEQ .local
+EXPECT_HEX: ea f0 fd
+
+---
+NAME: local_label_with_colon_same_line
+INPUT:
+1: * = $0200
+2: global
+3: .loop: NOP
+4:   BEQ .loop
+EXPECT_HEX: ea f0 fd
+
+---
+NAME: mixed_colon_no_colon_labels
+INPUT:
+1: * = $0200
+2: label1:
+3:   NOP
+4: label2
+5:   NOP
+6: label3: NOP
+7:   JMP label1
+8:   JMP label2
+9:   JMP label3
+EXPECT_HEX: ea ea ea 4c 00 02 4c 01 02 4c 02 02
