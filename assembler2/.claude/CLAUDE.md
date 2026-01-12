@@ -15,11 +15,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 make
 ```
 
-The build succeeds when `asm4b13.out == asm4b13_2.out` (self-assembly verification). The current latest assembler is asm20.
+The build succeeds when `asm20.out == asm20_2.out` (self-assembly verification).
 
 ## Architecture
 
-This is a self-hosting 6502 assembler built through progressive bootstrapping. The final assembler (`asm4b13.asm`) can assemble its own source code.
+This is a self-hosting 6502 assembler built through progressive bootstrapping. The current assembler (`asm20.asm`) can assemble its own source code.
 
 ### Bootstrap Chain
 
@@ -33,7 +33,7 @@ External vasm assembles `asm4v.asm` → `asm4v.out`, which then assembles progre
 
 - **Two-pass assembly**: Pass 1 collects labels, Pass 2 resolves references and emits code.
 
-### Memory Layout (asm4b13)
+### Memory Layout (asm20)
 
 - `$0000-$00FF`: Zero page variables (see `.zeropage` section)
 - `$1D00`: TOKEN buffer (current token being read)
@@ -44,8 +44,8 @@ External vasm assembles `asm4v.asm` → `asm4v.out`, which then assembles progre
 ### Shared Code Pattern
 
 Common code is factored into include files:
-- `common13.asm`: Shared between `asm4b13.asm` and `instgen13.asm`
-- `hash_table13.asm`: Hash table implementation (included by common13)
+- `common20.asm`: Shared between `asm20.asm` and `instgen20.asm`
+- `hash_table20.asm`: Hash table implementation (included by common20)
 
 The hash table requires caller to define `HT_KEY`, `HT_VL`, `HT_VH` before including.
 
@@ -98,6 +98,42 @@ Starting with asm19, the assembler supports simple expression evaluation with `+
 **Forward References:**
 - If any term in an expression is a forward reference, the entire expression is treated as a forward reference
 - The assembler resolves the complete expression in pass 2
+
+### Conditional Assembly (asm20+)
+
+Starting with asm20, the assembler supports conditional assembly directives:
+
+**Directives:**
+- `.ifdef label` - Begin conditional block if label is defined
+- `.endif` - End conditional block
+
+**Usage:**
+```asm
+DEBUG = $01          ; Define a label
+
+.ifdef DEBUG
+  LDA #$42           ; This code is assembled
+.endif
+
+.ifdef UNDEFINED
+  LDA #$FF           ; This code is skipped
+.endif
+```
+
+**Nesting:**
+- Conditional blocks can be nested arbitrarily deep
+- Each `.ifdef` must have a matching `.endif`
+- When a condition is false, nested conditionals are still parsed (for `.endif` matching) but their content is skipped
+
+**Command Line Defines:**
+- Labels can be pre-defined via command line: `define:label`
+- Multiple defines are supported: `./asm20.out in out define:DEBUG define:FEATURE1`
+- Pre-defined labels have value `$0001`
+
+**Errors:**
+- Error 23: `.endif without .ifdef` - Unmatched `.endif`
+- Error 24: `Unclosed .ifdef` - Missing `.endif` at end of file
+- Error 25: `Label expected` - `.ifdef` without a label name
 
 ## Migration Patterns
 
