@@ -68,9 +68,9 @@ err_no_file
   BRK
   .data $0E "Attempt to read with no file open" $00
 
-err_invalid_debug_arg
+err_invalid_arg
   BRK
-  .data $10 "Invalid third argument (expected 'debug')" $00
+  .data $10 "Invalid argument" $00
 
 err_no_global_for_local
   BRK

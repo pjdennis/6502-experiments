@@ -42,6 +42,8 @@ EXPR_FWDREF .data $00 ; Accumulated forward ref flag
 EXPR_CARRY  .data $00 ; Saved carry from first term
 COND_DEPTH  .data $00 ; Conditional assembly nesting depth
 SKIP_DEPTH  .data $00 ; Depth where skipping started (0 = not skipping)
+ARG_COUNT   .data $00 ; Total command line argument count
+ARG_INDEX   .data $00 ; Current argument index being processed
 
   .code
 
@@ -1614,6 +1616,55 @@ check_debug_string
 str_debug
   .data "debug" $00
 
+str_define
+  .data "define:" $00
+
+
+; Check if string at TABPL;TABPH starts with "define:"
+; On exit C = 0 if prefix matches (TABPL;TABPH updated to point past prefix)
+;         C = 1 if no match
+;         A, Y are not preserved
+check_define_prefix
+  LDY #$00
+.loop
+  LDA str_define,Y
+  BEQ .matched         ; End of prefix string - matched!
+  CMP (TABPL),Y
+  BNE .not_matched
+  INY
+  JMP .loop
+.matched
+  ; Advance TABPL;TABPH past the prefix
+  TYA
+  CLC
+  ADC TABPL
+  STA TABPL
+  BCC .no_carry
+  INC TABPH
+.no_carry
+  CLC
+  RTS
+.not_matched
+  SEC
+  RTS
+
+
+; Copy null-terminated string from TABPL;TABPH to TOKEN
+; On exit: Y contains length (excluding null terminator)
+;          A is not preserved
+copy_string_to_token
+  LDY #$00
+.loop
+  LDA (TABPL),Y
+  BEQ .done
+  STA TOKEN,Y
+  INY
+  JMP .loop
+.done
+  LDA #$00
+  STA TOKEN,Y          ; Null-terminate
+  RTS
+
 
 ; ============================================================================
 ; TIER 13: ENTRY POINT
@@ -1627,32 +1678,52 @@ start
   ; Initialize debug flag to 0
   LDA #$00
   STA DEBUG_FLAG
-  ; Check argument count (must be 2 or 3)
+  ; Check argument count (must be at least 2)
   JSR argc
   CMP #$02
-  BEQ .args_ok
-  CMP #$03
-  BEQ .check_debug_arg
-  JMP err_usage
-.check_debug_arg
-  ; Third argument present - must be "debug"
-  LDA #$02
-  JSR argv
-  STA TABPL
-  STX TABPH
-  JSR check_debug_string
-  BCS .invalid_debug_arg
-  ; Valid "debug" argument - set flag
-  LDA #$FF
-  STA DEBUG_FLAG
-  JMP .args_ok
-.invalid_debug_arg
-  JMP err_invalid_debug_arg
-.args_ok
+  BCC .err_usage         ; Less than 2 args
+  STA ARG_COUNT          ; Save total arg count
+  ; Initialize heap and hash table early for define: args
   JSR init_heap
   JSR select_label_hash_table
   JSR init_hash_table
-
+  ; Process arguments 2 onwards (arg 0 = input, arg 1 = output)
+  LDA #$02
+  STA ARG_INDEX
+.arg_loop
+  LDA ARG_INDEX
+  CMP ARG_COUNT
+  BCS .args_done         ; Processed all args
+  JSR argv               ; Get arg[ARG_INDEX]
+  STA TABPL
+  STX TABPH
+  ; Check for "debug"
+  JSR check_debug_string
+  BCC .found_debug
+  ; Check for "define:" prefix
+  JSR check_define_prefix
+  BCC .found_define
+  ; Unknown argument
+  JMP err_invalid_arg
+.found_debug
+  LDA #$FF
+  STA DEBUG_FLAG
+  BNE .next_arg          ; Always branches
+.found_define
+  ; TABPL;TABPH now points past "define:" to label name
+  JSR copy_string_to_token
+  LDA #$01
+  STA HEX2               ; Value = $0001
+  LDA #$00
+  STA HEX1
+  STA IS_LOCAL_LABEL     ; Not a local label
+  JSR hash_add
+.next_arg
+  INC ARG_INDEX
+  JMP .arg_loop
+.err_usage
+  JMP err_usage
+.args_done
   LDA #$00
   STA CURR_FILE
   STA PASS            ; Bit 7 = 0 (pass 1)
