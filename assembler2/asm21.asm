@@ -41,7 +41,6 @@ IS_FWDREF   .data $00 ; $FF if current label is forward ref (pass 1 only)
 EXPR_ACCU_L .data $00 ; Expression accumulator low byte
 EXPR_ACCU_H .data $00 ; Expression accumulator high byte
 EXPR_FWDREF .data $00 ; Accumulated forward ref flag
-EXPR_CARRY  .data $00 ; Saved carry from first term
 SHIFT_COUNT .data $00 ; Temporary for shift loop count
 COND_DEPTH  .data $00 ; Conditional assembly nesting depth
 SKIP_DEPTH  .data $00 ; Depth where skipping started (0 = not skipping)
@@ -382,21 +381,6 @@ read_value
   RTS
 
 
-; Read 2 to 4 hex characters and emit 1 or 2 bytes
-; When 2 bytes, emit LSB then MSB
-; Uses HEX1, HEX2
-; On entry A contains the first hex character
-emit_hex
-  JSR read_hex_byte_or_word ; Returns C = 1 if 2 bytes read
-  BCC .one
-  LDA HEX2
-  JSR emit
-.one
-  LDA HEX1
-  JSR emit
-  RTS
-
-
 ; Parse a term (single value): $12, $1234, 'x', label, <label, or >label
 ; On entry A contains first character
 ; On exit  NEXT_CHAR contains next character
@@ -536,18 +520,16 @@ parse_term_with_selector
   RTS
 
 
-; Parse expression: term [+|- term]*
+; Parse expression: term [+|-|<<|>> term]*
 ; On entry: A contains first character
 ; On exit: NEXT_CHAR contains next character
 ;          OPERAND_L/H contain result
 ;          IS_FWDREF set if any term is forward ref
-;          C flag preserved from first term
+;          C=1 if 2-byte value (bare label or $xxxx), C=0 if 1-byte ($xx, 'c')
+;          (Carry from first term - used by .data to decide emit size)
 parse_expression
   JSR parse_term       ; Parse first term, next char in NEXT_CHAR
-  ; Save carry flag
-  PHP
-  PLA
-  STA EXPR_CARRY       ; Store carry for later
+  PHP ; Save carry flag
 
   ; Save IS_FWDREF from first term
   LDA IS_FWDREF
@@ -567,8 +549,7 @@ parse_expression
   ; No more operators - restore and return
   LDA EXPR_FWDREF
   STA IS_FWDREF
-  LDA EXPR_CARRY
-  LSR                  ; Shift bit 0 into carry
+  PLP ; Restore carry flag from first term
   RTS
 
 .add_op
