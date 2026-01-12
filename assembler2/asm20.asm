@@ -1,10 +1,10 @@
 ; Addresses
-FWDREF_LIST  = $0200    ; Forward reference list (512 bytes, $0200-$03FF)
-FWDREF_LIMIT = FWDREF_LIST+$01FE  ; Max pointer before add (room for entry + terminator)
-TOKEN        = $1D00    ; Buffer for the current token being read
-LHASHTAB     = TOKEN+$0100  ; Label hash table
-*            = $2000    ; Code generates here
-FILE_STACK   = $F000    ; File stack will grow down from 1 below here
+FWDREF_LIST  = $0200             ; Forward reference list (512 bytes, $0200-$03FF)
+FWDREF_LIMIT = FWDREF_LIST+$0200 ; Limit for forward reference list data
+TOKEN        = $1D00             ; Buffer for the current token being read
+LHASHTAB     = TOKEN+$0100       ; Label hash table
+*            = $2000             ; Code generates here
+FILE_STACK   = $F000             ; File stack will grow down from 1 below here
 
 
   .zeropage
@@ -92,23 +92,22 @@ compare_end_of_token
 ; Raises 'Invalid hex' error if input is not a valid hex character
 convert_hex_character
   CMP #'A'
-  BCC .numeric         ; < 'A'
-  SBC #'A'             ; Carry already set
-  CMP #'F'-'A'+$01     ; Check if A-F (value 0-5 maps to hex A-F)
-  BCC .alpha_ok
-  JMP err_invalid_hex
-.alpha_ok
-  CLC
-  ADC #'9'-'0'+$01     ; Add 10 (value after '9')
-  RTS
-.numeric
+  BCS .alpha           ; >= 'A'
+  ; Numeric path: '0'-'9' → 0-9
   SEC
   SBC #'0'
-  CMP #'9'-'0'+$01     ; Check if 0-9 (value 0-9)
-  BCC .numeric_ok
-  JMP err_invalid_hex
-.numeric_ok
+  CMP #'9'-'0'+$01     ; Check if result 0-9
+  BCS .error           ; >= 10, invalid
   RTS
+.alpha
+  ; Alpha path: 'A'-'F' → 10-15
+  SBC #'A'             ; Carry already set from CMP
+  CMP #'F'-'A'+$01     ; Check if result 0-5
+  BCS .error           ; >= 6, invalid
+  ADC #'9'-'0'+$01     ; Add 10 (carry clear from CMP)
+  RTS
+.error
+  JMP err_invalid_hex
 
 
 ; Swap PCL;PCH with PC_SAVEL;PC_SAVEH
