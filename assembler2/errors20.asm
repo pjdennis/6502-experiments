@@ -9,7 +9,7 @@
 ;   write_d              - function to write character to stderr
 ;   exit                 - function to exit program
 
-  .include to_decimal19.asm
+  .include to_decimal20.asm
 
 ; Error labels - each triggers BRK with inline error code and message
 err_label_not_found
