@@ -129,18 +129,28 @@ find_in_hash
   LDA IS_LOCAL_LABEL
   BEQ .use_global_hash
   JSR calculate_hash_local
-  JMP find_in_hash_common
+  JMP .lookup_value
 .use_global_hash
   JSR calculate_hash
-  JMP find_in_hash_common
+.lookup_value
+  JSR find_in_hash_common
+  BCS .done ; Not found
+  LDA (TABPL),Y
+  STA HT_VL
+  INY
+  LDA (TABPL),Y
+  STA HT_VH
+.done
+  RTS
 
 
 ; Find in hash table for instructions (does not modify CACHED_HASH)
 ; On entry HT_KEY contains the key to find
 ; On exit C = 0 if found or 1 if not found
-; On exit HT_VL;HT_VH contains the value if found
+; On exit TABPL:TABPH points to the found key
+;         TABPL:TABPH+Y points to the associated value
 ;         X is preserved
-;         A, Y are not preserverd
+;         A, is not preserverd
 find_in_hash_instruction
   JSR calculate_hash_instruction
   ; Fall through to common code
@@ -152,14 +162,6 @@ find_in_hash_common
   ; Entry exists
   JSR load_hash_entry
   JSR find_token
-  BCS .not_found
-  ; Found
-  LDA (TABPL),Y
-  STA HT_VL
-  INY
-  LDA (TABPL),Y
-  STA HT_VH
-  CLC
   RTS
 .not_found
   SEC

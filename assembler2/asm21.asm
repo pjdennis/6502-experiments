@@ -950,17 +950,7 @@ lookup_mnemonic
   BCC .found
   JMP err_opcode_not_found
 .found
-  ; TABPL:TABPH points to mnemonic string (entry + 2)
-  ; Skip past mnemonic to get to mode:opcode data
-  LDY #$00
-.skip_mnemonic
-  LDA (TABPL),Y
-  BEQ .end_of_mnemonic
-  INY
-  BNE .skip_mnemonic      ; Always taken
-.end_of_mnemonic
-  ; Y points at null terminator, mode data starts at Y+1
-  INY
+  ; TABPL:TABPH+Y points to mode:opcode data
   ; Calculate INST_PTR = TABPL + Y
   TYA
   CLC
