@@ -205,8 +205,6 @@ skip_rest_of_line
 ;         X, Y are preserved
 check_for_end_of_line
   JSR skip_spaces
-  ; Check for EOF (A=0 when all files exhausted)
-  BEQ .done
   CMP #';'
   BEQ .end
   CMP #'\n'
@@ -1402,7 +1400,7 @@ process_ifdef
   INC COND_DEPTH       ; Always increment depth
   ; Check if already skipping
   LDA SKIP_DEPTH
-  BNE .pi_already_skip ; Already skipping, don't evaluate condition
+  BNE .pi_skip_rest    ; Already skipping, don't evaluate condition
   ; Not skipping - evaluate condition
   PLA                  ; Restore input char
   JSR check_for_end_of_line
@@ -1416,20 +1414,12 @@ process_ifdef
   STA IS_LOCAL_LABEL
   JSR select_label_hash_table
   JSR find_in_hash
-  PLA                  ; Restore char after token
-  BCS .pi_label_not_found
-  ; Label exists - continue assembling
-  JMP .pi_skip_rest
-.pi_label_not_found
+  BCC .pi_skip_rest    ; Label found - continue assembling
   ; Label doesn't exist - start skipping
-  PHA                  ; Save char after token again
   LDA COND_DEPTH
   STA SKIP_DEPTH
-  PLA                  ; Restore char after token
-  JMP .pi_skip_rest
-.pi_already_skip
-  PLA                  ; Restore input char (for skip_rest_of_line)
 .pi_skip_rest
+  PLA                  ; Restore char
   JSR skip_rest_of_line
   RTS
 
@@ -1519,7 +1509,7 @@ assemble_code
   BCS .line_loop
 .skip_check_directive
   CMP #'.'
-  BNE .skip_rest_of_line
+  BNE .skip_line
   ; It's a directive - only process ifdef/endif
   JSR read_char
   JSR read_token
@@ -1540,6 +1530,7 @@ assemble_code
   BEQ .skip_endif
   ; Other directive - skip it
   PLA
+.skip_line
   JSR skip_rest_of_line
   JMP .line_loop
 .skip_ifdef
@@ -1550,21 +1541,18 @@ assemble_code
   PLA
   JSR process_endif
   JMP .line_loop
-.skip_rest_of_line
-  JSR skip_rest_of_line
-  JMP .line_loop
   ; --- Normal mode ---
 .not_skipping
   CMP #' '
   BEQ .line_starts_with_space
   JSR check_for_end_of_line
-  BCS .back_to_line_loop2
+  BCS .back_to_line_loop
   JSR capture_label
   BCC .check_for_opcode
-  BCS .back_to_line_loop2   ; Always taken
+  BCS .back_to_line_loop   ; Always taken
 .line_starts_with_space
   JSR check_for_end_of_line
-  BCS .back_to_line_loop2
+  BCS .back_to_line_loop
 .check_for_opcode
   CMP #'.'
   BNE .opcode
@@ -1583,7 +1571,6 @@ assemble_code
   JSR check_for_end_of_line
   BCS .back_to_line_loop
   JMP err_unexpected_text
-.back_to_line_loop2
 .back_to_line_loop
   JMP .line_loop
 
