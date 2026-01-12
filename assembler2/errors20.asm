@@ -96,6 +96,18 @@ err_fwdref_tracking
   BRK
   .data $16 "Internal error - reference tracking" $00
 
+err_endif_without_ifdef
+  BRK
+  .data $17 ".endif without .ifdef" $00
+
+err_unclosed_ifdef
+  BRK
+  .data $18 "Unclosed .ifdef" $00
+
+err_label_expected
+  BRK
+  .data $19 "Label expected" $00
+
 
 ; Interrupt handler - processes BRK for error display
 interrupt

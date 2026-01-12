@@ -1223,3 +1223,130 @@ INPUT:
 2:   LDA #$10++$20
 EXPECT_ERROR: 1
 EXPECT_LINE: 2
+
+# ============================================================================
+# CONDITIONAL ASSEMBLY TESTS
+# ============================================================================
+
+---
+NAME: ifdef_defined
+INPUT:
+1: * = $0200
+2: foo = $42
+3:   .ifdef foo
+4:   LDA #$01
+5:   .endif
+EXPECT_HEX: a9 01
+
+---
+NAME: ifdef_undefined
+INPUT:
+1: * = $0200
+2:   .ifdef undefined_label
+3:   LDA #$01
+4:   .endif
+5:   LDA #$02
+EXPECT_HEX: a9 02
+
+---
+NAME: ifdef_multiple_lines
+INPUT:
+1: * = $0200
+2: foo = $42
+3:   .ifdef foo
+4:   LDA #$01
+5:   LDA #$02
+6:   LDA #$03
+7:   .endif
+EXPECT_HEX: a9 01 a9 02 a9 03
+
+---
+NAME: ifdef_skips_labels
+INPUT:
+1: * = $0200
+2:   .ifdef undefined
+3: label = $42
+4:   .endif
+5:   LDA #label
+EXPECT_ERROR: 1
+EXPECT_LINE: 5
+
+---
+NAME: endif_without_ifdef
+INPUT:
+1: * = $0200
+2:   .endif
+EXPECT_ERROR: 23
+EXPECT_LINE: 2
+
+---
+NAME: unclosed_ifdef
+INPUT:
+1: * = $0200
+2:   .ifdef foo
+3:   LDA #$01
+EXPECT_ERROR: 24
+
+---
+NAME: ifdef_nested_both_true
+INPUT:
+01: * = $0200
+02: outer = $01
+03: inner = $02
+04:   .ifdef outer
+05:   LDA #$01
+06:     .ifdef inner
+07:     LDA #$02
+08:     .endif
+09:   LDA #$03
+10:   .endif
+EXPECT_HEX: a9 01 a9 02 a9 03
+
+---
+NAME: ifdef_nested_outer_false
+INPUT:
+01: * = $0200
+02: inner = $02
+03:   .ifdef undefined_outer
+04:   LDA #$01
+05:     .ifdef inner
+06:     LDA #$02
+07:     .endif
+08:   LDA #$03
+09:   .endif
+10:   LDA #$04
+EXPECT_HEX: a9 04
+
+---
+NAME: ifdef_nested_inner_false
+INPUT:
+1: * = $0200
+2: outer = $01
+3:   .ifdef outer
+4:   LDA #$01
+5:     .ifdef undefined_inner
+6:     LDA #$02
+7:     .endif
+8:   LDA #$03
+9:   .endif
+EXPECT_HEX: a9 01 a9 03
+
+---
+NAME: ifdef_deeply_nested
+INPUT:
+01: * = $0200
+02: a = $01
+03: b = $02
+04: c = $03
+05:   .ifdef a
+06:   LDA #$01
+07:     .ifdef b
+08:     LDA #$02
+09:       .ifdef c
+10:       LDA #$03
+11:       .endif
+12:     LDA #$04
+13:     .endif
+14:   LDA #$05
+15:   .endif
+EXPECT_HEX: a9 01 a9 02 a9 03 a9 04 a9 05

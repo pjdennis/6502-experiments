@@ -40,6 +40,8 @@ EXPR_ACCU_L .data $00 ; Expression accumulator low byte
 EXPR_ACCU_H .data $00 ; Expression accumulator high byte
 EXPR_FWDREF .data $00 ; Accumulated forward ref flag
 EXPR_CARRY  .data $00 ; Saved carry from first term
+COND_DEPTH  .data $00 ; Conditional assembly nesting depth
+SKIP_DEPTH  .data $00 ; Depth where skipping started (0 = not skipping)
 
   .code
 
@@ -82,6 +84,15 @@ compare_end_of_token
   BEQ .end
   CMP #'-'             ; Minus terminates for expressions
 .end
+  RTS
+
+
+; Skip characters until token terminator
+; On exit: A contains terminating character
+skip_token
+  JSR read_char
+  JSR compare_end_of_token
+  BNE skip_token
   RTS
 
 
@@ -194,6 +205,8 @@ skip_rest_of_line
 ;         X, Y are preserved
 check_for_end_of_line
   JSR skip_spaces
+  ; Check for EOF (A=0 when all files exhausted)
+  BEQ .done
   CMP #';'
   BEQ .end
   CMP #'\n'
@@ -1273,6 +1286,20 @@ process_directive
   STA TABPH
   JSR compare_token
   BEQ .data
+  ; Check for 'ifdef'
+  LDA #<directive_ifdef
+  STA TABPL
+  LDA #>directive_ifdef
+  STA TABPH
+  JSR compare_token
+  BEQ .ifdef
+  ; Check for 'endif'
+  LDA #<directive_endif
+  STA TABPL
+  LDA #>directive_endif
+  STA TABPH
+  JSR compare_token
+  BEQ .endif
   ; Directive not recognized
   PLA                  ; Restore next char
   JMP err_unknown_directive
@@ -1309,6 +1336,12 @@ process_directive
 .data
   PLA                  ; Restore next char
   JMP data_parameters_loop_entry
+.ifdef
+  PLA                  ; Restore next char
+  JMP process_ifdef
+.endif
+  PLA                  ; Restore next char
+  JMP process_endif
 
 
 directive_include
@@ -1323,7 +1356,11 @@ directive_code
 directive_data
   .data "data" $00
 
+directive_ifdef
+  .data "ifdef" $00
 
+directive_endif
+  .data "endif" $00
 
 
 data_parameters_loop
@@ -1358,6 +1395,70 @@ data_parameters_loop_entry
   RTS
 
 
+; Process .ifdef directive
+; On entry: A contains char after directive name
+process_ifdef
+  PHA                  ; Save input char
+  INC COND_DEPTH       ; Always increment depth
+  ; Check if already skipping
+  LDA SKIP_DEPTH
+  BNE .pi_already_skip ; Already skipping, don't evaluate condition
+  ; Not skipping - evaluate condition
+  PLA                  ; Restore input char
+  JSR check_for_end_of_line
+  BCC .pi_has_label    ; Label present
+  JMP err_label_expected  ; Missing label
+.pi_has_label
+  JSR read_token       ; Read label name into TOKEN
+  PHA                  ; Save char after token
+  ; Look up label in symbol table (don't use local label handling for .ifdef)
+  LDA #$00
+  STA IS_LOCAL_LABEL
+  JSR select_label_hash_table
+  JSR find_in_hash
+  PLA                  ; Restore char after token
+  BCS .pi_label_not_found
+  ; Label exists - continue assembling
+  JMP .pi_skip_rest
+.pi_label_not_found
+  ; Label doesn't exist - start skipping
+  PHA                  ; Save char after token again
+  LDA COND_DEPTH
+  STA SKIP_DEPTH
+  PLA                  ; Restore char after token
+  JMP .pi_skip_rest
+.pi_already_skip
+  PLA                  ; Restore input char (for skip_rest_of_line)
+.pi_skip_rest
+  JSR skip_rest_of_line
+  RTS
+
+
+; Process .endif directive
+; On entry: A contains char after directive name
+process_endif
+  PHA                  ; Save char after directive
+  LDA COND_DEPTH
+  BNE .pe_has_ifdef    ; In a conditional block
+  JMP err_endif_without_ifdef
+.pe_has_ifdef
+  DEC COND_DEPTH
+  ; Check if this ends our skip block
+  LDA SKIP_DEPTH
+  BEQ .pe_done         ; Not skipping, just decrement depth
+  ; Currently skipping - check if we should stop
+  LDA COND_DEPTH
+  CMP SKIP_DEPTH
+  BCS .pe_done         ; Still in nested block (COND_DEPTH >= SKIP_DEPTH)
+  ; COND_DEPTH < SKIP_DEPTH, stop skipping
+  LDA #$00
+  STA SKIP_DEPTH
+.pe_done
+  PLA                  ; Restore char after directive
+  JSR skip_rest_of_line
+  RTS
+
+
 ; ============================================================================
 ; TIER 11: ASSEMBLY ORCHESTRATION
 ; Main assembly loop
@@ -1383,25 +1484,87 @@ assemble_code
   STA CURR_GLOBAL_HEAP_L ; Initialize global heap pointer (0 = no global yet)
   STA CURR_GLOBAL_HEAP_H ; "
   STA IS_LOCAL_LABEL  ; Initialize local label flag
+  STA COND_DEPTH      ; Clear conditional depth
+  STA SKIP_DEPTH      ; Clear skip depth
 .line_loop
   JSR read_char
   BCC .character_read
-  RTS                  ; At end of input
+  ; End of input - check for unclosed conditional
+  LDA COND_DEPTH
+  BEQ .no_unclosed_ifdef
+  JMP err_unclosed_ifdef
+.no_unclosed_ifdef
+  RTS
 .character_read
   INC CURLINEL
   BNE .line_incremented
   INC CURLINEH
 .line_incremented
+  ; Check if we're skipping (conditional assembly)
+  LDY SKIP_DEPTH
+  BEQ .not_skipping
+  ; --- Skipping mode: only process .ifdef/.endif ---
+  CMP #' '
+  BNE .skip_not_space
+  ; Line starts with space - skip spaces to find directive
+  JSR check_for_end_of_line
+  BCS .line_loop
+  JMP .skip_check_directive
+.skip_not_space
+  JSR check_for_end_of_line
+  BCS .line_loop
+  ; Line starts with non-space - skip label, check for directive
+  JSR skip_token
+  JSR check_for_end_of_line
+  BCS .line_loop
+.skip_check_directive
+  CMP #'.'
+  BNE .skip_rest_of_line
+  ; It's a directive - only process ifdef/endif
+  JSR read_char
+  JSR read_token
+  PHA                  ; Save next char
+  ; Check for ifdef
+  LDA #<directive_ifdef
+  STA TABPL
+  LDA #>directive_ifdef
+  STA TABPH
+  JSR compare_token
+  BEQ .skip_ifdef
+  ; Check for endif
+  LDA #<directive_endif
+  STA TABPL
+  LDA #>directive_endif
+  STA TABPH
+  JSR compare_token
+  BEQ .skip_endif
+  ; Other directive - skip it
+  PLA
+  JSR skip_rest_of_line
+  JMP .line_loop
+.skip_ifdef
+  PLA
+  JSR process_ifdef
+  JMP .line_loop
+.skip_endif
+  PLA
+  JSR process_endif
+  JMP .line_loop
+.skip_rest_of_line
+  JSR skip_rest_of_line
+  JMP .line_loop
+  ; --- Normal mode ---
+.not_skipping
   CMP #' '
   BEQ .line_starts_with_space
   JSR check_for_end_of_line
-  BCS .line_loop
+  BCS .back_to_line_loop2
   JSR capture_label
   BCC .check_for_opcode
-  BCS .line_loop            ; Always taken
+  BCS .back_to_line_loop2   ; Always taken
 .line_starts_with_space
   JSR check_for_end_of_line
-  BCS .line_loop
+  BCS .back_to_line_loop2
 .check_for_opcode
   CMP #'.'
   BNE .opcode
@@ -1418,8 +1581,11 @@ assemble_code
   ; A contains next char after operand - check for garbage
   ; Skip trailing spaces, then check for end of line (handles comments)
   JSR check_for_end_of_line
-  BCS .line_loop
+  BCS .back_to_line_loop
   JMP err_unexpected_text
+.back_to_line_loop2
+.back_to_line_loop
+  JMP .line_loop
 
 
 ; ============================================================================
