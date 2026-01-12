@@ -1026,3 +1026,35 @@ INPUT:
 1: * = $0200
 2:   LDA #'Z'-'A'
 EXPECT_HEX: a9 19
+
+---
+NAME: expr_low_byte_add
+INPUT:
+1: * = $0200
+2: val = $ABCD
+3:   LDA #<val+$10
+EXPECT_HEX: a9 dd
+
+---
+NAME: expr_high_byte_add
+INPUT:
+1: * = $0200
+2: val = $ABCD
+3:   LDA #>val+$0100
+EXPECT_HEX: a9 ac
+
+---
+NAME: expr_low_byte_label_only
+INPUT:
+1: * = $0200
+2: val = $ABCD
+3:   LDA #<val
+EXPECT_HEX: a9 cd
+
+---
+NAME: expr_high_byte_label_only
+INPUT:
+1: * = $0200
+2: val = $ABCD
+3:   LDA #>val
+EXPECT_HEX: a9 ab

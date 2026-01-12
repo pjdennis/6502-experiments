@@ -329,32 +329,6 @@ parse_char_literal
   JMP err_invalid_char_literal
 
 
-; Read a label, look up in the label hash table and return the associated value
-; On entry A contains the first character of the label
-; On exit HEX1 and HEX2 contains the MSB and LSB of the hash table value
-;         A contains the next character following the token
-;         X is preserved
-;         Y is not preserved
-; Raises 'Label not found' error if label is not found in hash table
-read_and_find_existing_label
-  JSR read_token
-  PHA                  ; Save next char
-  JSR check_local_label
-  JSR select_label_hash_table
-  JSR find_in_hash
-  PLA                  ; Restore next char
-  BCC .done            ; Label found
-  BIT PASS
-  BMI .pass2
-  LDY #$00
-  STY HEX1
-  STY HEX2
-.done
-  RTS
-.pass2
-  JMP err_label_not_found
-
-
 ; Check for the existance of an assigned value (read the equals sign)
 ; On entry A contains the next character
 ; On exit C set if value exists; clear otherwise
@@ -418,10 +392,6 @@ parse_term
   BEQ .hex
   CMP #'\''
   BEQ .char_literal
-  CMP #'<'
-  BEQ .low_byte
-  CMP #'>'
-  BEQ .high_byte
   ; Otherwise: bare label - needs forward ref tracking
   ; Reuse logic from .is_label (lines 1391-1425)
   JSR read_token
@@ -475,40 +445,46 @@ parse_term
   ; Next char already in A (parse_char_literal ends with JMP read_char)
   CLC                  ; Character literal = C=0 (like byte selector)
   RTS
-.low_byte
-  JSR read_char        ; Skip <
-  JSR read_and_find_existing_label  ; Returns next char in A, stores in HEX2/HEX1
-  ; Low byte already in OPERAND_L (HEX2), just zero OPERAND_H
-  PHA                  ; Save next char
-  LDA #$00
-  STA OPERAND_H
-  PLA                  ; Restore next char
-  CLC                  ; Signal not bare label
-  RTS
-.high_byte
-  JSR read_char        ; Skip >
-  JSR read_and_find_existing_label  ; Returns next char in A, stores in HEX2/HEX1
-  ; High byte in HEX1 - move to OPERAND_L and zero OPERAND_H
-  PHA                  ; Save next char
-  LDA HEX1
-  STA OPERAND_L
-  LDA #$00
-  STA OPERAND_H
-  PLA                  ; Restore next char
-  CLC                  ; Signal not bare label
-  RTS
 
 
 ; Parse a value (expression with optional byte selector prefix)
 ; On entry: A contains first character
 ; On exit: A contains next character
 ;          OPERAND_L/H contain result
-;          IS_FWDREF set if expression contains forward ref
-;          C=1 if first term was bare label, C=0 otherwise
+;          IS_FWDREF set if expression contains forward ref (NOT set for byte selectors)
+;          C=1 if first term was bare label (and no byte selector), C=0 otherwise
 parse_value
-  ; For now, just delegate to parse_expression
-  ; Byte selector handling will be added in Phase 3
+  CMP #'<'
+  BEQ .low_byte_selector
+  CMP #'>'
+  BEQ .high_byte_selector
   JMP parse_expression
+
+.low_byte_selector
+  JSR read_char        ; Skip '<'
+  JSR parse_expression
+  PHA                  ; Save next char
+  ; Apply low byte: keep OPERAND_L, zero OPERAND_H
+  LDA #$00
+  STA OPERAND_H
+  STA IS_FWDREF        ; Byte selectors don't set fwdref (always 1 byte result)
+  PLA
+  CLC                  ; Byte selector = C=0 (not bare label)
+  RTS
+
+.high_byte_selector
+  JSR read_char        ; Skip '>'
+  JSR parse_expression
+  PHA                  ; Save next char
+  ; Apply high byte: move OPERAND_H to OPERAND_L, zero OPERAND_H
+  LDA OPERAND_H
+  STA OPERAND_L
+  LDA #$00
+  STA OPERAND_H
+  STA IS_FWDREF        ; Byte selectors don't set fwdref (always 1 byte result)
+  PLA
+  CLC                  ; Byte selector = C=0 (not bare label)
+  RTS
 
 
 ; Parse expression: term [+|- term]*
