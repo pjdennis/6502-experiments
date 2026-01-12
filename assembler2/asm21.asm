@@ -395,7 +395,6 @@ parse_term
   CMP #'\''
   BEQ .char_literal
   ; Otherwise: bare label - needs forward ref tracking
-  ; Reuse logic from .is_label (lines 1391-1425)
   JSR read_token       ; Next char now in NEXT_CHAR
   ; Look up the token
   JSR check_local_label
@@ -420,7 +419,7 @@ parse_term
   STA IS_FWDREF
 .label_store
   ; OPERAND_L/H already set (aliased to HEX2/HEX1)
-  SEC                  ; Signal bare label
+  SEC                  ; Signal 2-byte value (from bare label)
   RTS
 .hex
   JSR read_char        ; Skip $
@@ -431,18 +430,16 @@ parse_term
   RTS
 .one_byte
   ; One byte in HEX1 - need to move to OPERAND_L and zero OPERAND_H
-  ; Next char already in NEXT_CHAR from read_hex_byte_or_word
   LDA HEX1
   STA OPERAND_L
   LDA #$00
   STA OPERAND_H
-  CLC                  ; Signal not bare label
+  CLC                  ; Signal 1-byte value (2 hex digits)
   RTS
 .char_literal
   JSR parse_char_literal
   ; Result in OPERAND_L, OPERAND_H=$00
-  ; Next char already in A (parse_char_literal ends with JMP read_char)
-  CLC                  ; Character literal = C=0 (like byte selector)
+  CLC                  ; Signal 1-byte value (character)
   RTS
 
 
@@ -451,7 +448,7 @@ parse_term
 ; On exit: NEXT_CHAR contains next character
 ;          OPERAND_L/H contain result
 ;          IS_FWDREF set if expression contains forward ref (NOT set for byte selectors)
-;          C=1 if first term was bare label (and no byte selector), C=0 otherwise
+;          C=0 if first term is a single byte or C=1 if first term is two bytes
 parse_value
   CMP #'<'
   BEQ .low_byte_selector
@@ -466,7 +463,7 @@ parse_value
   LDA #$00
   STA OPERAND_H
   STA IS_FWDREF        ; Byte selectors don't set fwdref (always 1 byte result)
-  CLC                  ; Byte selector = C=0 (not bare label)
+  CLC                  ; Byte selector = C=0 (1 byte)
   RTS
 
 .high_byte_selector
@@ -478,7 +475,7 @@ parse_value
   LDA #$00
   STA OPERAND_H
   STA IS_FWDREF        ; Byte selectors don't set fwdref (always 1 byte result)
-  CLC                  ; Byte selector = C=0 (not bare label)
+  CLC                  ; Byte selector = C=0 (1 byte)
   RTS
 
 
