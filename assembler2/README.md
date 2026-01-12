@@ -219,6 +219,8 @@ label                    ; Global label
 
   LDA #$42               ; Immediate
   LDA #$10+$20           ; Expression in immediate
+  LDA #$01<<$04          ; Left shift: $01 << 4 = $10
+  LDA #$80>>$02          ; Right shift: $80 >> 2 = $20
   LDA #'Z'-'A'           ; Character arithmetic
   LDA $00                ; Zero page
   LDA $1234              ; Absolute
@@ -267,4 +269,4 @@ The assembler syntax has evolved through the bootstrap chain:
 - **asm18**: Added `.data` directive alongside `DATA` pseudo-op
 - **asm19**: Uses `.data` exclusively (removed `DATA` pseudo-op), expression evaluation
 - **asm20**: Conditional assembly (`.ifdef`/`.endif`), `define:label` command line args
-- **asm21**: Uses conditional compilation for optional debug support
+- **asm21**: Shift operators (`<<`, `>>`), conditional compilation for optional debug support

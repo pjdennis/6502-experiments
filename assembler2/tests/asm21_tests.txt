@@ -1411,3 +1411,116 @@ INPUT:
 7:   .endif
 8:   LDA #$FF
 EXPECT_HEX: a9 02 a9 ff
+
+---
+NAME: shift_left_basic
+INPUT:
+1: * = $0200
+2:   LDA #$01<<$04
+EXPECT_HEX: a9 10
+
+---
+NAME: shift_right_basic
+INPUT:
+1: * = $0200
+2:   LDA #$80>>$04
+EXPECT_HEX: a9 08
+
+---
+NAME: shift_left_2_byte_count
+INPUT:
+1: * = $0200
+2:   LDA #$01<<$0104
+EXPECT_HEX: a9 00
+
+---
+NAME: shift_right_2_byte_count
+INPUT:
+1: * = $0200
+2:   LDA #$80>>$0104
+EXPECT_HEX: a9 00
+
+---
+NAME: shift_left_16bit
+INPUT:
+1: * = $0200
+2: val = $0234<<$02
+3:   LDA #<val
+4:   LDA #>val
+EXPECT_HEX: a9 d0 a9 08
+
+---
+NAME: shift_right_16bit
+INPUT:
+1: * = $0200
+2: val = $8000>>$01
+3:   LDA #<val
+4:   LDA #>val
+EXPECT_HEX: a9 00 a9 40
+
+---
+NAME: shift_with_label
+INPUT:
+1: * = $0200
+2: base = $0100
+3:   LDA base>>$04
+EXPECT_HEX: a5 10
+
+---
+NAME: shift_chain
+INPUT:
+1: * = $0200
+2:   LDA #$01<<$04>>$02
+EXPECT_HEX: a9 04
+
+---
+NAME: shift_with_add
+INPUT:
+1: * = $0200
+2:   LDA #$01<<$04+$02
+EXPECT_HEX: a9 12
+
+---
+NAME: shift_zero
+INPUT:
+1: * = $0200
+2:   LDA #$42<<$00
+EXPECT_HEX: a9 42
+
+---
+NAME: err_single_less_than
+INPUT:
+1: * = $0200
+2:   LDA #$10<$02
+EXPECT_ERROR: 26
+EXPECT_LINE: 2
+
+---
+NAME: shift_left_with_low_byte
+INPUT:
+1: * = $0200
+2:   LDA #$01<<<$1204
+EXPECT_HEX: a9 10
+
+---
+NAME: shift_left_with_high_byte
+INPUT:
+1: * = $0200
+2:   LDA #$01<<>$0400
+EXPECT_HEX: a9 10
+
+---
+NAME: shift_right_with_low_byte
+INPUT:
+1: * = $0200
+2: val = $8000>><$0001
+3:   LDA #<val
+4:   LDA #>val
+EXPECT_HEX: a9 00 a9 40
+
+---
+NAME: shift_right_with_high_byte
+INPUT:
+1: * = $0200
+2:   LDA #$FF>>>$0100
+EXPECT_HEX: a9 7f

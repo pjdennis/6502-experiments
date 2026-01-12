@@ -29,6 +29,8 @@ CURR_GLOBAL_HEAP_L .data $00 ; Heap address of current global label string
 CURR_GLOBAL_HEAP_H .data $00 ; "
   .ifdef enable_debug
 DEBUG_FLAG  .data $00 ; Non-zero if debug output enabled
+FWDREF_PASS1_L .data $00 ; Forward ref pointer after pass 1 (low byte)
+FWDREF_PASS1_H .data $00 ; Forward ref pointer after pass 1 (high byte)
   .endif
 ADDR_MODE   .data $00 ; Current addressing mode
 INST_PTR_L  .data $00 ; Pointer to instruction mode table entry
@@ -36,14 +38,11 @@ INST_PTR_H  .data $00 ; "
 OPERAND_L = HEX2     ; Operand value (low byte) - alias for HEX2
 OPERAND_H = HEX1     ; Operand value (high byte) - alias for HEX1
 IS_FWDREF   .data $00 ; $FF if current label is forward ref (pass 1 only)
-  .ifdef enable_debug
-FWDREF_PASS1_L .data $00 ; Forward ref pointer after pass 1 (low byte)
-FWDREF_PASS1_H .data $00 ; Forward ref pointer after pass 1 (high byte)
-  .endif
 EXPR_ACCU_L .data $00 ; Expression accumulator low byte
 EXPR_ACCU_H .data $00 ; Expression accumulator high byte
 EXPR_FWDREF .data $00 ; Accumulated forward ref flag
 EXPR_CARRY  .data $00 ; Saved carry from first term
+SHIFT_COUNT .data $00 ; Temporary for shift loop count
 COND_DEPTH  .data $00 ; Conditional assembly nesting depth
 SKIP_DEPTH  .data $00 ; Depth where skipping started (0 = not skipping)
 ARG_COUNT   .data $00 ; Total command line argument count
@@ -89,6 +88,10 @@ compare_end_of_token
   CMP #'+'             ; Plus terminates for expressions
   BEQ .end
   CMP #'-'             ; Minus terminates for expressions
+  BEQ .end
+  CMP #'<'             ; Less-than terminates for shift operators
+  BEQ .end
+  CMP #'>'             ; Greater-than terminates for shift operators
 .end
   RTS
 
@@ -503,6 +506,48 @@ parse_value
   RTS
 
 
+; Parse term with optional byte selector prefix
+; Unlike parse_value, does NOT handle chained operators - only byte selectors
+; Used for shift counts to ensure left-to-right evaluation of shifts
+; On entry: A contains first character
+; On exit: A contains next character
+;          OPERAND_L/H contain result
+;          IS_FWDREF set if term is forward ref (NOT set for byte selectors)
+;          C=1 if bare label, C=0 otherwise
+parse_term_with_selector
+  CMP #'<'
+  BEQ .tws_low_byte
+  CMP #'>'
+  BEQ .tws_high_byte
+  JMP parse_term
+
+.tws_low_byte
+  JSR read_char        ; Skip '<'
+  JSR parse_term
+  PHA                  ; Save next char
+  ; Apply low byte: keep OPERAND_L, zero OPERAND_H
+  LDA #$00
+  STA OPERAND_H
+  STA IS_FWDREF        ; Byte selectors don't set fwdref
+  PLA
+  CLC
+  RTS
+
+.tws_high_byte
+  JSR read_char        ; Skip '>'
+  JSR parse_term
+  PHA                  ; Save next char
+  ; Apply high byte: move OPERAND_H to OPERAND_L, zero OPERAND_H
+  LDA OPERAND_H
+  STA OPERAND_L
+  LDA #$00
+  STA OPERAND_H
+  STA IS_FWDREF        ; Byte selectors don't set fwdref
+  PLA
+  CLC
+  RTS
+
+
 ; Parse expression: term [+|- term]*
 ; On entry: A contains first character
 ; On exit: A contains next character
@@ -527,6 +572,10 @@ parse_expression
   BEQ .add_op
   CMP #'-'
   BEQ .sub_op
+  CMP #'<'
+  BEQ .check_left_shift
+  CMP #'>'
+  BEQ .check_right_shift
 
   ; No more operators - restore and return
   PHA                  ; Save next char
@@ -591,6 +640,106 @@ parse_expression
   LDA EXPR_ACCU_H
   SBC OPERAND_H
   STA OPERAND_H
+
+  PLA                  ; Restore next char
+  JMP .loop
+
+.check_left_shift
+  ; Read next char to confirm second '<'
+  JSR read_char
+  CMP #'<'
+  BEQ .left_shift_op
+  JMP err_expected_shift    ; Single '<' in middle of expression is error
+
+.check_right_shift
+  ; Read next char to confirm second '>'
+  JSR read_char
+  CMP #'>'
+  BEQ .right_shift_op
+  JMP err_expected_shift    ; Single '>' in middle of expression is error
+
+.left_shift_op
+  ; Save current operand on stack (parse_value may clobber EXPR_ACCU)
+  LDA OPERAND_L
+  PHA
+  LDA OPERAND_H
+  PHA
+
+  ; Parse shift count (use parse_value to support byte selectors like <<<)
+  JSR read_char        ; Read char after second '<'
+  JSR parse_term_with_selector  ; Allows <label or >label as shift count
+  PHA                  ; Save next char
+
+  ; Accumulate forward ref flag
+  LDA IS_FWDREF
+  ORA EXPR_FWDREF
+  STA EXPR_FWDREF
+
+  ; Shift count is in OPERAND_L (assuming <256 shifts)
+  LDA OPERAND_L
+  STA SHIFT_COUNT
+  ; Restore value to shift from stack
+  PLA                  ; Saved next char
+  TAY                  ; Move to Y temporarily
+  PLA
+  STA OPERAND_H
+  PLA
+  STA OPERAND_L
+  TYA
+  PHA                  ; Restore next char to stack for later PLA
+
+  ; Perform left shift
+.left_shift_loop
+  LDA SHIFT_COUNT
+  BEQ .left_shift_done
+  ASL OPERAND_L
+  ROL OPERAND_H
+  DEC SHIFT_COUNT
+  JMP .left_shift_loop
+.left_shift_done
+
+  PLA                  ; Restore next char
+  JMP .loop
+
+.right_shift_op
+  ; Save current operand on stack (parse_value may clobber EXPR_ACCU)
+  LDA OPERAND_L
+  PHA
+  LDA OPERAND_H
+  PHA
+
+  ; Parse shift count (use parse_value to support byte selectors like >>>)
+  JSR read_char        ; Read char after second '>'
+  JSR parse_term_with_selector  ; Allows <label or >label as shift count
+  PHA                  ; Save next char
+
+  ; Accumulate forward ref flag
+  LDA IS_FWDREF
+  ORA EXPR_FWDREF
+  STA EXPR_FWDREF
+
+  ; Shift count is in OPERAND_L
+  LDA OPERAND_L
+  STA SHIFT_COUNT
+  ; Restore value to shift from stack
+  PLA                  ; Saved next char
+  TAY                  ; Move to Y temporarily
+  PLA
+  STA OPERAND_H
+  PLA
+  STA OPERAND_L
+  TYA
+  PHA                  ; Restore next char to stack for later PLA
+
+  ; Perform right shift (logical/unsigned)
+.right_shift_loop
+  LDA SHIFT_COUNT
+  BEQ .right_shift_done
+  LSR OPERAND_H
+  ROR OPERAND_L
+  DEC SHIFT_COUNT
+  JMP .right_shift_loop
+.right_shift_done
 
   PLA                  ; Restore next char
   JMP .loop
@@ -1750,6 +1899,7 @@ start
 
   JSR assemble_code
   JSR finalize_fwdref_list
+
   .ifdef enable_debug
   ; Capture forward ref pointer after pass 1
   LDA FWDREF_L
@@ -1763,6 +1913,7 @@ start
   JSR reset_fwdref_ptr
   JSR open_input
   JSR assemble_code
+
   .ifdef enable_debug
   ; Verify forward ref pointer matches pass 1
   LDA FWDREF_L

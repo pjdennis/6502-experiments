@@ -110,6 +110,10 @@ err_label_expected
   BRK
   .data $19 "Label expected" $00
 
+err_expected_shift
+  BRK
+  .data $1A "Expected << or >>" $00
+
 
 ; Interrupt handler - processes BRK for error display
 interrupt
