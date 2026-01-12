@@ -280,7 +280,7 @@ read_hex_byte_or_word
 
 ; Reads token into TOKEN (zero terminated)
 ; On entry A contains first character of token
-; On exit A contains next character after token
+; On exit NEXT_CHAR contains next character after token
 ;         X is preserved
 ;         Y is not preserved
 read_token
@@ -296,7 +296,6 @@ read_token
 .done
   LDA #$00
   STA TOKEN,X
-  LDA NEXT_CHAR        ; Restore next char
   LDX TEMP
   RTS
 
@@ -387,7 +386,6 @@ read_value
 ; When 2 bytes, emit LSB then MSB
 ; Uses HEX1, HEX2
 ; On entry A contains the first hex character
-; On exit A contains next character
 emit_hex
   JSR read_hex_byte_or_word ; Returns C = 1 if 2 bytes read
   BCC .one
@@ -396,13 +394,12 @@ emit_hex
 .one
   LDA HEX1
   JSR emit
-  LDA NEXT_CHAR             ; Restore next char
   RTS
 
 
 ; Parse a term (single value): $12, $1234, 'x', label, <label, or >label
 ; On entry A contains first character
-; On exit  A contains next character
+; On exit  NEXT_CHAR contains next character
 ;          OPERAND_L, OPERAND_H contain parsed value
 ;          IS_FWDREF set if bare label was forward ref (pass 1 only)
 ;          C=1 if bare label, C=0 otherwise
@@ -439,7 +436,6 @@ parse_term
   STA IS_FWDREF
 .label_store
   ; OPERAND_L/H already set (aliased to HEX2/HEX1)
-  LDA NEXT_CHAR
   SEC                  ; Signal bare label
   RTS
 .hex
@@ -456,7 +452,6 @@ parse_term
   STA OPERAND_L
   LDA #$00
   STA OPERAND_H
-  LDA NEXT_CHAR
   CLC                  ; Signal not bare label
   RTS
 .char_literal
@@ -469,7 +464,7 @@ parse_term
 
 ; Parse a value (expression with optional byte selector prefix)
 ; On entry: A contains first character
-; On exit: A contains next character
+; On exit: NEXT_CHAR contains next character
 ;          OPERAND_L/H contain result
 ;          IS_FWDREF set if expression contains forward ref (NOT set for byte selectors)
 ;          C=1 if first term was bare label (and no byte selector), C=0 otherwise
@@ -487,7 +482,6 @@ parse_value
   LDA #$00
   STA OPERAND_H
   STA IS_FWDREF        ; Byte selectors don't set fwdref (always 1 byte result)
-  LDA NEXT_CHAR
   CLC                  ; Byte selector = C=0 (not bare label)
   RTS
 
@@ -500,7 +494,6 @@ parse_value
   LDA #$00
   STA OPERAND_H
   STA IS_FWDREF        ; Byte selectors don't set fwdref (always 1 byte result)
-  LDA NEXT_CHAR
   CLC                  ; Byte selector = C=0 (not bare label)
   RTS
 
@@ -509,7 +502,7 @@ parse_value
 ; Unlike parse_value, does NOT handle chained operators - only byte selectors
 ; Used for shift counts to ensure left-to-right evaluation of shifts
 ; On entry: A contains first character
-; On exit: A contains next character
+; On exit: NEXT_CHAR contains next character
 ;          OPERAND_L/H contain result
 ;          IS_FWDREF set if term is forward ref (NOT set for byte selectors)
 ;          C=1 if bare label, C=0 otherwise
@@ -527,7 +520,6 @@ parse_term_with_selector
   LDA #$00
   STA OPERAND_H
   STA IS_FWDREF        ; Byte selectors don't set fwdref
-  LDA NEXT_CHAR
   CLC
   RTS
 
@@ -540,14 +532,13 @@ parse_term_with_selector
   LDA #$00
   STA OPERAND_H
   STA IS_FWDREF        ; Byte selectors don't set fwdref
-  LDA NEXT_CHAR
   CLC
   RTS
 
 
 ; Parse expression: term [+|- term]*
 ; On entry: A contains first character
-; On exit: A contains next character
+; On exit: NEXT_CHAR contains next character
 ;          OPERAND_L/H contain result
 ;          IS_FWDREF set if any term is forward ref
 ;          C flag preserved from first term
@@ -579,7 +570,6 @@ parse_expression
   STA IS_FWDREF
   LDA EXPR_CARRY
   LSR                  ; Shift bit 0 into carry
-  LDA NEXT_CHAR        ; Next char back in A
   RTS
 
 .add_op
@@ -985,7 +975,7 @@ update_pc
 
 ; Look up mnemonic and save pointer to mode:opcode data
 ; On entry A contains the first character of the mnemonic
-; On exit A contains the next character
+; On exit NEXT_CHAR contains the next character
 ;         INST_PTR_L:INST_PTR_H points to mode:opcode data (past mnemonic)
 ;         X, Y are not preserved
 ; Raises 'Opcode not found' error if mnemonic is not found
@@ -1015,7 +1005,6 @@ lookup_mnemonic
   LDA #$00
   ADC TABPH
   STA INST_PTR_H
-  LDA NEXT_CHAR
   RTS
 
 
@@ -1249,9 +1238,9 @@ parse_operand_and_emit
   ; ($xxxx) - indirect absolute for JMP (2-byte operand)
   JSR read_char        ; Skip (
   ; Parse value ($xx, <label, >label, or label)
-  JSR parse_value      ; Returns next char in A, OPERAND_L/H set
+  JSR parse_value      ; OPERAND_L/H set, next char in NEXT_CHAR
   ; Check suffix to determine addressing mode
-  ; A contains next char (should be ) or ,)
+  LDA NEXT_CHAR        ; Load next char (should be ) or ,)
   CMP #','
   BEQ .indirect_x
   ; Must be )
