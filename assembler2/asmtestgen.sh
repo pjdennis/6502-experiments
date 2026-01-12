@@ -88,7 +88,7 @@ echo "  asm21.out (no debug):   $SIZE1 bytes"
 echo "  asm21_debug.out:        $SIZE2 bytes"
 echo "  Savings:                $((SIZE2 - SIZE1)) bytes"
 
-./emulator.out out/asm19_2.out 2000 /dev/null /dev/null test19.asm out/test19.out
+./emulator.out out/asm21_debug.out 2000 /dev/null /dev/null test19.asm out/test19.out
 # hexdump -C out/test19.out
 echo "Assembled"
 ./emulator.out out/test19.out 1000 /dev/null - arg1 "arg 2"
