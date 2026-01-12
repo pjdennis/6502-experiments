@@ -47,6 +47,7 @@ COND_DEPTH  .data $00 ; Conditional assembly nesting depth
 SKIP_DEPTH  .data $00 ; Depth where skipping started (0 = not skipping)
 ARG_COUNT   .data $00 ; Total command line argument count
 ARG_INDEX   .data $00 ; Current argument index being processed
+NEXT_CHAR   .data $00 ; Last character read by read_char
 
   .code
 
@@ -166,6 +167,7 @@ read_char
   BEQ .no_file
   JSR read
   BCS .at_end_file
+  STA NEXT_CHAR
   RTS
 .at_end_file
   JSR pop_file_stack
@@ -413,8 +415,7 @@ parse_term
   BEQ .char_literal
   ; Otherwise: bare label - needs forward ref tracking
   ; Reuse logic from .is_label (lines 1391-1425)
-  JSR read_token
-  PHA                  ; Save next char
+  JSR read_token       ; Next char now in NEXT_CHAR
   ; Look up the token
   JSR check_local_label
   JSR select_label_hash_table
@@ -438,7 +439,7 @@ parse_term
   STA IS_FWDREF
 .label_store
   ; OPERAND_L/H already set (aliased to HEX2/HEX1)
-  PLA                  ; Restore next char
+  LDA NEXT_CHAR
   SEC                  ; Signal bare label
   RTS
 .hex
@@ -450,12 +451,12 @@ parse_term
   RTS
 .one_byte
   ; One byte in HEX1 - need to move to OPERAND_L and zero OPERAND_H
-  PHA                  ; Save next char
+  ; Next char already in NEXT_CHAR from read_hex_byte_or_word
   LDA HEX1
   STA OPERAND_L
   LDA #$00
   STA OPERAND_H
-  PLA                  ; Restore next char
+  LDA NEXT_CHAR
   CLC                  ; Signal not bare label
   RTS
 .char_literal
@@ -481,27 +482,25 @@ parse_value
 
 .low_byte_selector
   JSR read_char        ; Skip '<'
-  JSR parse_expression
-  PHA                  ; Save next char
+  JSR parse_expression ; Next char now in NEXT_CHAR
   ; Apply low byte: keep OPERAND_L, zero OPERAND_H
   LDA #$00
   STA OPERAND_H
   STA IS_FWDREF        ; Byte selectors don't set fwdref (always 1 byte result)
-  PLA
+  LDA NEXT_CHAR
   CLC                  ; Byte selector = C=0 (not bare label)
   RTS
 
 .high_byte_selector
   JSR read_char        ; Skip '>'
-  JSR parse_expression
-  PHA                  ; Save next char
+  JSR parse_expression ; Next char now in NEXT_CHAR
   ; Apply high byte: move OPERAND_H to OPERAND_L, zero OPERAND_H
   LDA OPERAND_H
   STA OPERAND_L
   LDA #$00
   STA OPERAND_H
   STA IS_FWDREF        ; Byte selectors don't set fwdref (always 1 byte result)
-  PLA
+  LDA NEXT_CHAR
   CLC                  ; Byte selector = C=0 (not bare label)
   RTS
 
@@ -523,27 +522,25 @@ parse_term_with_selector
 
 .tws_low_byte
   JSR read_char        ; Skip '<'
-  JSR parse_term
-  PHA                  ; Save next char
+  JSR parse_term       ; Next char now in NEXT_CHAR
   ; Apply low byte: keep OPERAND_L, zero OPERAND_H
   LDA #$00
   STA OPERAND_H
   STA IS_FWDREF        ; Byte selectors don't set fwdref
-  PLA
+  LDA NEXT_CHAR
   CLC
   RTS
 
 .tws_high_byte
   JSR read_char        ; Skip '>'
-  JSR parse_term
-  PHA                  ; Save next char
+  JSR parse_term       ; Next char now in NEXT_CHAR
   ; Apply high byte: move OPERAND_H to OPERAND_L, zero OPERAND_H
   LDA OPERAND_H
   STA OPERAND_L
   LDA #$00
   STA OPERAND_H
   STA IS_FWDREF        ; Byte selectors don't set fwdref
-  PLA
+  LDA NEXT_CHAR
   CLC
   RTS
 
@@ -555,9 +552,9 @@ parse_term_with_selector
 ;          IS_FWDREF set if any term is forward ref
 ;          C flag preserved from first term
 parse_expression
-  JSR parse_term       ; Parse first term
-  PHA                  ; Save next char (from parse_term)
-  PHP                  ; Save carry flag
+  JSR parse_term       ; Parse first term, next char in NEXT_CHAR
+  ; Save carry flag
+  PHP
   PLA
   STA EXPR_CARRY       ; Store carry for later
 
@@ -565,7 +562,7 @@ parse_expression
   LDA IS_FWDREF
   STA EXPR_FWDREF
 
-  PLA                  ; Restore next char
+  LDA NEXT_CHAR        ; Load next char for loop
 .loop
   ; A contains next character
   CMP #'+'
@@ -578,12 +575,11 @@ parse_expression
   BEQ .check_right_shift
 
   ; No more operators - restore and return
-  PHA                  ; Save next char
   LDA EXPR_FWDREF
   STA IS_FWDREF
   LDA EXPR_CARRY
   LSR                  ; Shift bit 0 into carry
-  PLA                  ; Restore next char
+  LDA NEXT_CHAR        ; Next char back in A
   RTS
 
 .add_op
@@ -595,8 +591,7 @@ parse_expression
 
   ; Parse next term (skip '+' first)
   JSR read_char        ; Skip '+'
-  JSR parse_term_with_selector
-  PHA                  ; Save next char
+  JSR parse_term_with_selector  ; Next char in NEXT_CHAR
 
   ; Accumulate forward ref flag
   LDA IS_FWDREF
@@ -612,7 +607,7 @@ parse_expression
   ADC OPERAND_H
   STA OPERAND_H
 
-  PLA                  ; Restore next char
+  LDA NEXT_CHAR
   JMP .loop
 
 .sub_op
@@ -624,8 +619,7 @@ parse_expression
 
   ; Parse next term (skip '-' first)
   JSR read_char        ; Skip '-'
-  JSR parse_term_with_selector
-  PHA                  ; Save next char
+  JSR parse_term_with_selector  ; Next char in NEXT_CHAR
 
   ; Accumulate forward ref flag
   LDA IS_FWDREF
@@ -641,7 +635,7 @@ parse_expression
   SBC OPERAND_H
   STA OPERAND_H
 
-  PLA                  ; Restore next char
+  LDA NEXT_CHAR
   JMP .loop
 
 .check_left_shift
@@ -659,16 +653,15 @@ parse_expression
   JMP err_expected_shift    ; Single '>' in middle of expression is error
 
 .left_shift_op
-  ; Save current operand on stack (parse_value may clobber EXPR_ACCU)
+  ; Save current operand on stack (parse_term_with_selector may clobber EXPR_ACCU)
   LDA OPERAND_L
   PHA
   LDA OPERAND_H
   PHA
 
-  ; Parse shift count (use parse_value to support byte selectors like <<<)
+  ; Parse shift count (use parse_term_with_selector to support byte selectors like <<<)
   JSR read_char        ; Read char after second '<'
-  JSR parse_term_with_selector  ; Allows <label or >label as shift count
-  PHA                  ; Save next char
+  JSR parse_term_with_selector  ; Next char in NEXT_CHAR
 
   ; Accumulate forward ref flag
   LDA IS_FWDREF
@@ -684,14 +677,10 @@ parse_expression
   STA SHIFT_COUNT
 
   ; Restore value to shift from stack
-  PLA                  ; Saved next char
-  TAY                  ; Move to Y temporarily
   PLA
   STA OPERAND_H
   PLA
   STA OPERAND_L
-  TYA
-  PHA                  ; Restore next char to stack for later PLA
 
   ; Perform left shift
 .left_shift_loop
@@ -701,36 +690,29 @@ parse_expression
   ROL OPERAND_H
   DEC SHIFT_COUNT
   JMP .left_shift_loop
-  JMP .left_shift_done     ; (not reached, but clearer)
 
 .left_shift_zero
   ; Shift >= 16, result is 0. Clean up stack.
-  PLA                  ; Saved next char
-  TAY
   PLA                  ; Discard saved OPERAND_H
   PLA                  ; Discard saved OPERAND_L
   LDA #$00
   STA OPERAND_L
   STA OPERAND_H
-  TYA
-  PHA                  ; Restore next char
 
 .left_shift_done
-
-  PLA                  ; Restore next char
+  LDA NEXT_CHAR
   JMP .loop
 
 .right_shift_op
-  ; Save current operand on stack (parse_value may clobber EXPR_ACCU)
+  ; Save current operand on stack (parse_term_with_selector may clobber EXPR_ACCU)
   LDA OPERAND_L
   PHA
   LDA OPERAND_H
   PHA
 
-  ; Parse shift count (use parse_value to support byte selectors like >>>)
+  ; Parse shift count (use parse_term_with_selector to support byte selectors like >>>)
   JSR read_char        ; Read char after second '>'
-  JSR parse_term_with_selector  ; Allows <label or >label as shift count
-  PHA                  ; Save next char
+  JSR parse_term_with_selector  ; Next char in NEXT_CHAR
 
   ; Accumulate forward ref flag
   LDA IS_FWDREF
@@ -746,14 +728,10 @@ parse_expression
   STA SHIFT_COUNT
 
   ; Restore value to shift from stack
-  PLA                  ; Saved next char
-  TAY                  ; Move to Y temporarily
   PLA
   STA OPERAND_H
   PLA
   STA OPERAND_L
-  TYA
-  PHA                  ; Restore next char to stack for later PLA
 
   ; Perform right shift (logical/unsigned)
 .right_shift_loop
@@ -763,23 +741,17 @@ parse_expression
   ROR OPERAND_L
   DEC SHIFT_COUNT
   JMP .right_shift_loop
-  JMP .right_shift_done    ; (not reached, but clearer)
 
 .right_shift_zero
   ; Shift >= 16, result is 0. Clean up stack.
-  PLA                  ; Saved next char
-  TAY
   PLA                  ; Discard saved OPERAND_H
   PLA                  ; Discard saved OPERAND_L
   LDA #$00
   STA OPERAND_L
   STA OPERAND_H
-  TYA
-  PHA                  ; Restore next char
 
 .right_shift_done
-
-  PLA                  ; Restore next char
+  LDA NEXT_CHAR
   JMP .loop
 
 
@@ -852,13 +824,12 @@ update_global_heap_from_lookup
 ;        'Duplicate label' error if label has already been encountered
 ;        'Bad hex' error if non-hex characters were encountered
 capture_label
-  JSR read_token
-  TAY                       ; Save next char
+  JSR read_token            ; Next char in NEXT_CHAR
   LDA TOKEN
   CMP #'*'
   BNE .normal_label
   ; Set PC
-  TYA                       ; Restore next char
+  LDA NEXT_CHAR
   JSR check_for_value
   BCS .pc_value_present
   JMP err_pc_value_expected
@@ -874,38 +845,35 @@ capture_label
   BIT PASS
   BPL .pass_1
   ; Pass 2 - don't capture label, but must track globals for local label scoping
-  TYA
-  PHA                       ; Save next char
+  ; NEXT_CHAR has the next char from read_token
   JSR check_local_label     ; Sets IS_LOCAL_LABEL, validates scope for locals
   ; Now continue with value reading
-  PLA                       ; Restore next char
+  LDA NEXT_CHAR
   JSR check_for_value
   BCS .has_equals_2         ; If = found, branch
   ; No = found - update global heap if this was not a local label
-  PHA                       ; Save next char
+  ; check_for_value updated NEXT_CHAR if it called read_char
   LDA IS_LOCAL_LABEL
   BNE .was_local_2          ; If local flag != 0, skip update
   JSR update_global_heap_from_lookup  ; Set CURR_GLOBAL_HEAP for local label lookups
 .was_local_2
-  PLA                       ; Restore next char
+  LDA NEXT_CHAR
   JMP .skip_spaces_and_return_processed_flag
 .has_equals_2
   JSR read_value
   JMP .skip_and_return_processed
 .pass_1
-  TYA
-  PHA                       ; Save next char
+  ; NEXT_CHAR has the next char from read_token
   JSR check_local_label     ; Sets IS_LOCAL_LABEL, validates scope for locals
   ; Add key to hash table first (before read_value may overwrite TOKEN)
   JSR select_label_hash_table
   JSR hash_add
   BCS .duplicate_label
   ; Now read the value (TOKEN can be overwritten, but HTTPL/HTTPH preserved if no =)
-  PLA                       ; Restore next char
+  LDA NEXT_CHAR
   JSR check_for_value
   BCS .has_equals           ; If = found, branch
   ; No = found, save global label and use program counter
-  PHA                       ; Save next char (before A is overwritten)
   ; Update CURR_GLOBAL_HEAP and commit hash for non-local labels
   LDA IS_LOCAL_LABEL
   BNE .was_local_1          ; If local flag != 0, skip
@@ -922,13 +890,12 @@ capture_label
   LDA PCH
   STA HEX1
   JSR store_hash_value
-  PLA                       ; Restore next char
+  LDA NEXT_CHAR
   JMP .skip_spaces_and_return_processed_flag
 .has_equals
-  JSR read_value            ; Read the value after the equals
-  PHA                       ; Save next char
+  JSR read_value            ; Read the value after the equals, next char in NEXT_CHAR
   JSR store_hash_value
-  PLA                       ; Restore next char
+  LDA NEXT_CHAR
   JMP .skip_and_return_processed
 .skip_spaces_and_return_processed_flag
   JMP check_for_end_of_line ; Tail call - returns with C set if at end of line
@@ -1029,8 +996,7 @@ update_pc
 ;         X, Y are not preserved
 ; Raises 'Opcode not found' error if mnemonic is not found
 lookup_mnemonic
-  JSR read_token
-  PHA                  ; Save next char
+  JSR read_token       ; Next char in NEXT_CHAR
   JSR select_instruction_hash_table
   JSR find_in_hash_instruction
   BCC .found
@@ -1055,7 +1021,7 @@ lookup_mnemonic
   LDA #$00
   ADC TABPH
   STA INST_PTR_H
-  PLA                  ; Restore next char
+  LDA NEXT_CHAR
   RTS
 
 
@@ -1272,13 +1238,13 @@ parse_operand_and_emit
   JMP .value_operand
 
 .implied_mode
-  PHA                  ; Save next char (newline or semicolon)
+  ; Next char in NEXT_CHAR (newline or semicolon)
   LDA #MODE_NONE
   STA ADDR_MODE
   LDA #$00
   STA OPERAND_L
   STA OPERAND_H
-  PLA                  ; Restore next char for garbage check
+  LDA NEXT_CHAR        ; Restore next char for garbage check
   JMP emit_instruction ; Tail call
 
 .immediate_mode
@@ -1326,10 +1292,10 @@ parse_operand_and_emit
   JMP emit_instruction ; Tail call
 .ind_no_suffix
   ; Just ($xxxx) - JMP indirect mode (must be 2-byte operand)
-  PHA                  ; Save next char (after ))
+  ; Next char in NEXT_CHAR (after ))
   LDA #MODE_IND
   STA ADDR_MODE
-  PLA                  ; Restore next char for garbage check
+  LDA NEXT_CHAR        ; Restore next char for garbage check
   JMP emit_instruction ; Tail call
 .ind_err
   JMP err_invalid_addressing_mode
@@ -1339,15 +1305,14 @@ parse_operand_and_emit
 .value_operand
   ; Parse value: $xx, $xxxx, or label
   ; All handled uniformly with appropriate mode selection
-  JSR parse_value      ; Returns C=1 for bare label, OPERAND_L/H set, IS_FWDREF set
-  PHA                  ; Save next char
+  JSR parse_value      ; Returns C=1 for bare label, OPERAND_L/H set, IS_FWDREF set, next char in NEXT_CHAR
   ; Check if this is a branch instruction
   JSR check_if_branch
   BCS .not_branch
   JMP .label_is_branch
 .not_branch
   ; Not a branch - check for indexed mode
-  PLA                  ; Restore next char (might be comma)
+  LDA NEXT_CHAR        ; Next char (might be comma)
   CMP #','
   BNE .label_no_index
   ; Has index suffix - read X or Y
@@ -1358,55 +1323,52 @@ parse_operand_and_emit
   BEQ .label_y_index
   JMP err_invalid_addressing_mode
 .label_x_index
-  JSR read_char            ; Read char after X for garbage check
-  PHA
+  JSR read_char            ; Read char after X for garbage check, stores in NEXT_CHAR
   LDA #MODE_ZPX
   STA ADDR_MODE
   JSR handle_fwdref_mode   ; Checks mode availability, value size, forward refs
   BCS .label_use_absx      ; Must use ABSX
   ; Use ZPX mode
-  PLA
+  LDA NEXT_CHAR
   JMP emit_instruction
 .label_use_absx
   LDA #MODE_ABSX
   STA ADDR_MODE
-  PLA
+  LDA NEXT_CHAR
   JMP emit_instruction
 .label_y_index
-  JSR read_char            ; Read char after Y for garbage check
-  PHA
+  JSR read_char            ; Read char after Y for garbage check, stores in NEXT_CHAR
   LDA #MODE_ZPY
   STA ADDR_MODE
   JSR handle_fwdref_mode   ; Checks mode availability, value size, forward refs
   BCS .label_use_absy      ; Must use ABSY
   ; Use ZPY mode
-  PLA
+  LDA NEXT_CHAR
   JMP emit_instruction
 .label_use_absy
   LDA #MODE_ABSY
   STA ADDR_MODE
-  PLA
+  LDA NEXT_CHAR
   JMP emit_instruction
 .label_no_index
-  ; A contains next char for garbage check - save it
-  PHA
+  ; A contains next char for garbage check (also in NEXT_CHAR)
   LDA #MODE_ZP
   STA ADDR_MODE
   JSR handle_fwdref_mode   ; Checks mode availability, value size, forward refs
   BCS .label_use_abs       ; Must use ABS
   ; Use ZP mode
-  PLA
+  LDA NEXT_CHAR
   JMP emit_instruction
 .label_use_abs
   LDA #MODE_ABS
   STA ADDR_MODE
-  PLA
+  LDA NEXT_CHAR
   JMP emit_instruction
 
 .label_is_branch
   LDA #MODE_REL
   STA ADDR_MODE
-  PLA                  ; Restore next char for garbage check
+  LDA NEXT_CHAR        ; Restore next char for garbage check
   JMP emit_instruction
 
 
@@ -1447,8 +1409,7 @@ emit_quoted
 
 ; On entry, A contains the first character of the directive
 process_directive
-  JSR read_token
-  PHA                  ; Save next char
+  JSR read_token       ; Next char in NEXT_CHAR
   ; Check for 'include'
   LDA #<directive_include
   STA TABPL
@@ -1477,14 +1438,14 @@ process_directive
   STA TABPH
   JSR compare_token
   BEQ .data
-  PLA
+  LDA NEXT_CHAR
   JSR process_conditional_directive ; Returns with C=0 if processed
   BCS .directive_not_found
   RTS
 .directive_not_found
   JMP err_unknown_directive
 .include
-  PLA                  ; Restore next char
+  LDA NEXT_CHAR
   JSR check_for_end_of_line
   BCC .get_name
   JMP err_filename_expected
@@ -1500,7 +1461,7 @@ process_directive
   STA IN_ZEROPAGE
   JSR swap_pc_with_save
 .in_zeropage
-  PLA                  ; Restore next char
+  LDA NEXT_CHAR
   JSR skip_rest_of_line
   RTS
 .code
@@ -1510,18 +1471,18 @@ process_directive
   STA IN_ZEROPAGE
   JSR swap_pc_with_save
 .in_code
-  PLA                  ; Restore next char
+  LDA NEXT_CHAR
   JSR skip_rest_of_line
   RTS
 .data
-  PLA                  ; Restore next char
+  LDA NEXT_CHAR
   JMP data_parameters_loop_entry
 
 
 ; On exit C=0 if processed; C=1 if not processed
 ;         A is not preserved
+; Input char in A and NEXT_CHAR
 process_conditional_directive
-  PHA
   ; Check for 'ifdef'
   LDA #<directive_ifdef
   STA TABPL
@@ -1536,16 +1497,15 @@ process_conditional_directive
   STA TABPH
   JSR compare_token
   BEQ .endif
-  PLA              ; Restore stack balance
   SEC ; Not processed
   RTS
 .ifdef
-  PLA
+  LDA NEXT_CHAR
   JSR process_ifdef
   CLC
   RTS
 .endif
-  PLA
+  LDA NEXT_CHAR
   JSR process_endif
   CLC
   RTS
@@ -1581,22 +1541,20 @@ data_parameters_loop_entry
   JMP data_parameters_loop
 .data_value
   ; Parse value: handles $hex, 'char', label, <expr, >expr, and expressions
-  JSR parse_value      ; Returns C=1 for bare label, C=0 otherwise
+  JSR parse_value      ; Returns C=1 for bare label, C=0 otherwise, next char in NEXT_CHAR
   BCS .data_emit_two_bytes
   ; C=0: expression/hex/'char'/</>  - emit 1 byte from OPERAND_L
-  TAY                  ; Save next char
   LDA OPERAND_L
   JSR emit
-  TYA                  ; Restore next char
+  LDA NEXT_CHAR
   JMP data_parameters_loop
 .data_emit_two_bytes
   ; C=1: bare label - emit 2 bytes (LSB, MSB)
-  TAY                  ; Save next char
   LDA OPERAND_L        ; Emit low byte
   JSR emit
   LDA OPERAND_H        ; Emit high byte
   JSR emit
-  TYA                  ; Restore next char
+  LDA NEXT_CHAR
   JMP data_parameters_loop
 .data_done
   RTS
@@ -1605,19 +1563,18 @@ data_parameters_loop_entry
 ; Process .ifdef directive
 ; On entry: A contains char after directive name
 process_ifdef
-  PHA                  ; Save input char
+  ; Input char in A and NEXT_CHAR
   INC COND_DEPTH       ; Always increment depth
   ; Check if already skipping
   LDA SKIP_DEPTH
   BNE .pi_skip_rest    ; Already skipping, don't evaluate condition
   ; Not skipping - evaluate condition
-  PLA                  ; Restore input char
+  LDA NEXT_CHAR
   JSR check_for_end_of_line
   BCC .pi_has_label    ; Label present
   JMP err_label_expected  ; Missing label
 .pi_has_label
-  JSR read_token       ; Read label name into TOKEN
-  PHA                  ; Save char after token
+  JSR read_token       ; Read label name into TOKEN, next char in NEXT_CHAR
   ; Look up label in symbol table (don't use local label handling for .ifdef)
   LDA #$00
   STA IS_LOCAL_LABEL
@@ -1628,14 +1585,13 @@ process_ifdef
   LDA COND_DEPTH
   STA SKIP_DEPTH
 .pi_skip_rest
-  PLA                  ; Restore char
+  LDA NEXT_CHAR
   JMP skip_rest_of_line ; Tail call
 
 
 ; Process .endif directive
-; On entry: A contains char after directive name
+; On entry: A contains char after directive name (also in NEXT_CHAR)
 process_endif
-  PHA                  ; Save char after directive
   LDA COND_DEPTH
   BNE .pe_has_ifdef    ; In a conditional block
   JMP err_endif_without_ifdef
@@ -1652,7 +1608,7 @@ process_endif
   LDA #$00
   STA SKIP_DEPTH
 .pe_done
-  PLA                  ; Restore char after directive
+  LDA NEXT_CHAR
   JMP skip_rest_of_line ; Tail call
 
 
