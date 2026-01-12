@@ -1058,3 +1058,74 @@ INPUT:
 2: val = $ABCD
 3:   LDA #>val
 EXPECT_HEX: a9 ab
+
+---
+NAME: expr_label_add_abs
+INPUT:
+1: * = $0200
+2: base = $1000
+3:   LDA base+$10
+EXPECT_HEX: ad 10 10
+
+---
+NAME: expr_assignment
+INPUT:
+1: * = $0200
+2: val = $40+$02
+3:   LDA #val
+EXPECT_HEX: a9 42
+
+---
+NAME: expr_fwdref_add
+INPUT:
+1: * = $0200
+2:   LDA target+$01
+3: target = $42
+EXPECT_HEX: ad 43 00
+EXPECT_FWDREF: 1
+
+---
+NAME: expr_data_add
+INPUT:
+1: * = $0200
+2: base = $10
+3:   .data base+$20
+EXPECT_HEX: 30 00
+
+---
+NAME: expr_indirect_indexed_add
+INPUT:
+1: * = $0200
+2: ptr = $40
+3:   LDA (ptr+$02),Y
+EXPECT_HEX: b1 42
+
+---
+NAME: expr_char_difference
+INPUT:
+1: * = $0200
+2:   LDA #'z'-'a'
+EXPECT_HEX: a9 19
+
+---
+NAME: expr_char_plus_offset
+INPUT:
+1: * = $0200
+2:   LDA #'A'+$05
+EXPECT_HEX: a9 46
+
+---
+NAME: expr_trailing_operator
+INPUT:
+1: * = $0200
+2:   LDA #$10+
+EXPECT_ERROR: 1
+EXPECT_LINE: 2
+
+---
+NAME: expr_double_operator
+INPUT:
+1: * = $0200
+2:   LDA #$10++$20
+EXPECT_ERROR: 1
+EXPECT_LINE: 2
