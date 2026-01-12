@@ -1123,6 +1123,70 @@ INPUT:
 EXPECT_HEX: 42
 
 ---
+NAME: data_hex_2digit
+INPUT:
+1: * = $0200
+2:   .data $00 $FF $42
+EXPECT_HEX: 00 ff 42
+
+---
+NAME: data_hex_4digit
+INPUT:
+1: * = $0200
+2:   .data $0000 $0100 $FFFF
+EXPECT_HEX: 00 00 00 01 ff ff
+
+---
+NAME: data_hex_4digit_single
+INPUT:
+1: * = $0200
+2:   .data $1234
+EXPECT_HEX: 34 12
+
+---
+NAME: data_expr_2digit_start
+INPUT:
+1: * = $0200
+2:   .data $10+$20
+EXPECT_HEX: 30
+
+---
+NAME: data_expr_4digit_start
+INPUT:
+1: * = $0200
+2:   .data $0010+$0020
+EXPECT_HEX: 30 00
+
+---
+NAME: data_expr_4digit_zero
+INPUT:
+1: * = $0200
+2:   .data $0000+$42
+EXPECT_HEX: 42 00
+
+---
+NAME: data_expr_overflow_truncate
+INPUT:
+1: * = $0200
+2:   .data $FF+$01
+EXPECT_HEX: 00
+
+---
+NAME: data_expr_overflow_4digit_workaround
+INPUT:
+1: * = $0200
+2:   .data $0000+$FF+$01
+EXPECT_HEX: 00 01
+
+---
+NAME: data_mixed_sizes
+INPUT:
+1: * = $0200
+2: label = $1234
+3:   .data $42 $ABCD label 'X'
+EXPECT_HEX: 42 cd ab 34 12 58
+
+---
 NAME: expr_indirect_indexed_add
 INPUT:
 1: * = $0200

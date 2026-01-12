@@ -426,8 +426,8 @@ parse_term
   JSR read_char        ; Skip $
   JSR read_hex_byte_or_word  ; Returns next char in A, stores in HEX1/HEX2
   BCC .one_byte
-  ; Two bytes - OPERAND_L/H already set (aliased to HEX2/HEX1)
-  CLC                  ; Signal not bare label
+  ; Two bytes (4 hex digits) - OPERAND_L/H already set (aliased to HEX2/HEX1)
+  SEC                  ; Signal 2-byte value (4 hex digits)
   RTS
 .one_byte
   ; One byte in HEX1 - need to move to OPERAND_L and zero OPERAND_H
