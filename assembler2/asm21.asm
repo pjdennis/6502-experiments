@@ -553,9 +553,8 @@ parse_expression
   LDA IS_FWDREF
   STA EXPR_FWDREF
 
-  LDA NEXT_CHAR        ; Load next char for loop
 .loop
-  ; A contains next character
+  LDA NEXT_CHAR
   CMP #'+'
   BEQ .add_op
   CMP #'-'
@@ -596,8 +595,6 @@ parse_expression
   LDA EXPR_ACCU_H
   ADC OPERAND_H
   STA OPERAND_H
-
-  LDA NEXT_CHAR
   JMP .loop
 
 .sub_op
@@ -624,8 +621,6 @@ parse_expression
   LDA EXPR_ACCU_H
   SBC OPERAND_H
   STA OPERAND_H
-
-  LDA NEXT_CHAR
   JMP .loop
 
 .check_left_shift
@@ -690,7 +685,6 @@ parse_expression
   STA OPERAND_H
 
 .left_shift_done
-  LDA NEXT_CHAR
   JMP .loop
 
 .right_shift_op
@@ -741,7 +735,6 @@ parse_expression
   STA OPERAND_H
 
 .right_shift_done
-  LDA NEXT_CHAR
   JMP .loop
 
 
