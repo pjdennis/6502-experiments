@@ -1284,22 +1284,11 @@ process_directive
   STA TABPH
   JSR compare_token
   BEQ .data
-  ; Check for 'ifdef'
-  LDA #<directive_ifdef
-  STA TABPL
-  LDA #>directive_ifdef
-  STA TABPH
-  JSR compare_token
-  BEQ .ifdef
-  ; Check for 'endif'
-  LDA #<directive_endif
-  STA TABPL
-  LDA #>directive_endif
-  STA TABPH
-  JSR compare_token
-  BEQ .endif
-  ; Directive not recognized
-  PLA                  ; Restore next char
+  PLA
+  JSR process_conditional_directive ; Returns with C=0 if processed
+  BCS .directive_not_found
+  RTS
+.directive_not_found
   JMP err_unknown_directive
 .include
   PLA                  ; Restore next char
@@ -1334,12 +1323,39 @@ process_directive
 .data
   PLA                  ; Restore next char
   JMP data_parameters_loop_entry
+
+
+; On exit C=0 if processed; C=1 if not processed
+;         A is not preserved
+process_conditional_directive
+  PHA
+  ; Check for 'ifdef'
+  LDA #<directive_ifdef
+  STA TABPL
+  LDA #>directive_ifdef
+  STA TABPH
+  JSR compare_token
+  BEQ .ifdef
+  ; Check for 'endif'
+  LDA #<directive_endif
+  STA TABPL
+  LDA #>directive_endif
+  STA TABPH
+  JSR compare_token
+  BEQ .endif
+  PLA              ; Restore stack balance
+  SEC ; Not processed
+  RTS
 .ifdef
-  PLA                  ; Restore next char
-  JMP process_ifdef
+  PLA
+  JSR process_ifdef
+  CLC
+  RTS
 .endif
-  PLA                  ; Restore next char
-  JMP process_endif
+  PLA
+  JSR process_endif
+  CLC
+  RTS
 
 
 directive_include
@@ -1420,8 +1436,7 @@ process_ifdef
   STA SKIP_DEPTH
 .pi_skip_rest
   PLA                  ; Restore char
-  JSR skip_rest_of_line
-  RTS
+  JMP skip_rest_of_line ; Tail call
 
 
 ; Process .endif directive
@@ -1445,8 +1460,7 @@ process_endif
   STA SKIP_DEPTH
 .pe_done
   PLA                  ; Restore char after directive
-  JSR skip_rest_of_line
-  RTS
+  JMP skip_rest_of_line ; Tail call
 
 
 ; ============================================================================
@@ -1513,35 +1527,11 @@ assemble_code
   ; It's a directive - only process ifdef/endif
   JSR read_char
   JSR read_token
-  PHA                  ; Save next char
-  ; Check for ifdef
-  LDA #<directive_ifdef
-  STA TABPL
-  LDA #>directive_ifdef
-  STA TABPH
-  JSR compare_token
-  BEQ .skip_ifdef
-  ; Check for endif
-  LDA #<directive_endif
-  STA TABPL
-  LDA #>directive_endif
-  STA TABPH
-  JSR compare_token
-  BEQ .skip_endif
-  ; Other directive - skip it
-  PLA
+  JSR process_conditional_directive
+  BCC .back_to_line_loop ; directive processed; already skipped line
 .skip_line
   JSR skip_rest_of_line
   JMP .line_loop
-.skip_ifdef
-  PLA
-  JSR process_ifdef
-  JMP .line_loop
-.skip_endif
-  PLA
-  JSR process_endif
-  JMP .line_loop
-  ; --- Normal mode ---
 .not_skipping
   CMP #' '
   BEQ .line_starts_with_space
