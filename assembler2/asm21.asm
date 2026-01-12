@@ -182,10 +182,11 @@ read_char
 
 
 ; Read and discard space characters
-; On entry A contains the next character
+; On entry NEXT_CHAR contains the next character
 ; On exit A contains the next character following the last space
 ;         X, Y are preserved
 skip_spaces
+  LDA NEXT_CHAR
 .loop
   CMP #' '
   BNE .done
@@ -196,10 +197,11 @@ skip_spaces
 
 
 ; Read and discard characters up to the end of the current line
-; On entry A contains the next character
+; On entry NEXT_CHAR contains the next character
 ; On exit A contains "\n"
 ;         X, Y are preserved
 skip_rest_of_line
+  LDA NEXT_CHAR
 .loop
   CMP #'\n'
   BEQ .done
@@ -210,7 +212,7 @@ skip_rest_of_line
 
 
 ; Skips spaces and checks for end of line and skips past if at end
-; On entry A contains next character
+; On entry NEXT_CHAR contains next character
 ; On exit C set if end of line, clear otherwise
 ;         A contains next character
 ;         X, Y are preserved
@@ -292,10 +294,9 @@ read_token
   JSR read_char
   BCC .loop
 .done
-  TAY                  ; Save next char
   LDA #$00
   STA TOKEN,X
-  TYA                  ; Restore next char
+  LDA NEXT_CHAR        ; Restore next char
   LDX TEMP
   RTS
 
@@ -351,7 +352,7 @@ parse_char_literal
 
 
 ; Check for the existance of an assigned value (read the equals sign)
-; On entry A contains the next character
+; On entry NEXT_CHAR contains the next character
 ; On exit C set if value exists; clear otherwise
 ;         A contains the next character
 ;         X, Y are preserved
@@ -389,14 +390,13 @@ read_value
 ; On exit A contains next character
 emit_hex
   JSR read_hex_byte_or_word ; Returns C = 1 if 2 bytes read
-  TAY                       ; Save next char
   BCC .one
   LDA HEX2
   JSR emit
 .one
   LDA HEX1
   JSR emit
-  TYA                       ; Restore next char
+  LDA NEXT_CHAR             ; Restore next char
   RTS
 
 
@@ -829,7 +829,6 @@ capture_label
   CMP #'*'
   BNE .normal_label
   ; Set PC
-  LDA NEXT_CHAR
   JSR check_for_value
   BCS .pc_value_present
   JMP err_pc_value_expected
@@ -848,7 +847,6 @@ capture_label
   ; NEXT_CHAR has the next char from read_token
   JSR check_local_label     ; Sets IS_LOCAL_LABEL, validates scope for locals
   ; Now continue with value reading
-  LDA NEXT_CHAR
   JSR check_for_value
   BCS .has_equals_2         ; If = found, branch
   ; No = found - update global heap if this was not a local label
@@ -857,7 +855,6 @@ capture_label
   BNE .was_local_2          ; If local flag != 0, skip update
   JSR update_global_heap_from_lookup  ; Set CURR_GLOBAL_HEAP for local label lookups
 .was_local_2
-  LDA NEXT_CHAR
   JMP .skip_spaces_and_return_processed_flag
 .has_equals_2
   JSR read_value
@@ -870,7 +867,6 @@ capture_label
   JSR hash_add
   BCS .duplicate_label
   ; Now read the value (TOKEN can be overwritten, but HTTPL/HTTPH preserved if no =)
-  LDA NEXT_CHAR
   JSR check_for_value
   BCS .has_equals           ; If = found, branch
   ; No = found, save global label and use program counter
@@ -890,12 +886,10 @@ capture_label
   LDA PCH
   STA HEX1
   JSR store_hash_value
-  LDA NEXT_CHAR
   JMP .skip_spaces_and_return_processed_flag
 .has_equals
   JSR read_value            ; Read the value after the equals, next char in NEXT_CHAR
   JSR store_hash_value
-  LDA NEXT_CHAR
   JMP .skip_and_return_processed
 .skip_spaces_and_return_processed_flag
   JMP check_for_end_of_line ; Tail call - returns with C set if at end of line
@@ -1090,8 +1084,6 @@ check_if_branch
 ;         A, Y are not preserved
 ; Raises error if addressing mode is not valid for this instruction
 emit_instruction
-  ; Preserve A (next char after operand) for garbage checking by caller
-  PHA
   ; Find opcode for this addressing mode
   JSR find_opcode_for_mode
   BCS .invalid_mode
@@ -1122,7 +1114,6 @@ emit_instruction
   LDA OPERAND_H
   JSR emit
 .done
-  PLA
   RTS
 .one_byte
   ; Validate operand <= $FF
@@ -1133,7 +1124,6 @@ emit_instruction
 .one_byte_ok
   LDA OPERAND_L
   JSR emit
-  PLA
   RTS
 .one_byte_error
   JMP err_value_out_of_range
@@ -1165,7 +1155,6 @@ emit_instruction
   LDA OPERAND_L
 .emit_relative_ok
   JSR emit
-  PLA
   RTS
 .invalid_mode
   JMP err_invalid_addressing_mode
@@ -1244,7 +1233,6 @@ parse_operand_and_emit
   LDA #$00
   STA OPERAND_L
   STA OPERAND_H
-  LDA NEXT_CHAR        ; Restore next char for garbage check
   JMP emit_instruction ; Tail call
 
 .immediate_mode
@@ -1295,7 +1283,6 @@ parse_operand_and_emit
   ; Next char in NEXT_CHAR (after ))
   LDA #MODE_IND
   STA ADDR_MODE
-  LDA NEXT_CHAR        ; Restore next char for garbage check
   JMP emit_instruction ; Tail call
 .ind_err
   JMP err_invalid_addressing_mode
@@ -1329,12 +1316,10 @@ parse_operand_and_emit
   JSR handle_fwdref_mode   ; Checks mode availability, value size, forward refs
   BCS .label_use_absx      ; Must use ABSX
   ; Use ZPX mode
-  LDA NEXT_CHAR
   JMP emit_instruction
 .label_use_absx
   LDA #MODE_ABSX
   STA ADDR_MODE
-  LDA NEXT_CHAR
   JMP emit_instruction
 .label_y_index
   JSR read_char            ; Read char after Y for garbage check, stores in NEXT_CHAR
@@ -1343,32 +1328,27 @@ parse_operand_and_emit
   JSR handle_fwdref_mode   ; Checks mode availability, value size, forward refs
   BCS .label_use_absy      ; Must use ABSY
   ; Use ZPY mode
-  LDA NEXT_CHAR
   JMP emit_instruction
 .label_use_absy
   LDA #MODE_ABSY
   STA ADDR_MODE
-  LDA NEXT_CHAR
   JMP emit_instruction
 .label_no_index
-  ; A contains next char for garbage check (also in NEXT_CHAR)
+  ; Next char in NEXT_CHAR
   LDA #MODE_ZP
   STA ADDR_MODE
   JSR handle_fwdref_mode   ; Checks mode availability, value size, forward refs
   BCS .label_use_abs       ; Must use ABS
   ; Use ZP mode
-  LDA NEXT_CHAR
   JMP emit_instruction
 .label_use_abs
   LDA #MODE_ABS
   STA ADDR_MODE
-  LDA NEXT_CHAR
   JMP emit_instruction
 
 .label_is_branch
   LDA #MODE_REL
   STA ADDR_MODE
-  LDA NEXT_CHAR        ; Restore next char for garbage check
   JMP emit_instruction
 
 
@@ -1438,14 +1418,12 @@ process_directive
   STA TABPH
   JSR compare_token
   BEQ .data
-  LDA NEXT_CHAR
   JSR process_conditional_directive ; Returns with C=0 if processed
   BCS .directive_not_found
   RTS
 .directive_not_found
   JMP err_unknown_directive
 .include
-  LDA NEXT_CHAR
   JSR check_for_end_of_line
   BCC .get_name
   JMP err_filename_expected
@@ -1461,7 +1439,6 @@ process_directive
   STA IN_ZEROPAGE
   JSR swap_pc_with_save
 .in_zeropage
-  LDA NEXT_CHAR
   JSR skip_rest_of_line
   RTS
 .code
@@ -1471,17 +1448,14 @@ process_directive
   STA IN_ZEROPAGE
   JSR swap_pc_with_save
 .in_code
-  LDA NEXT_CHAR
   JSR skip_rest_of_line
   RTS
 .data
-  LDA NEXT_CHAR
   JMP data_parameters_loop_entry
 
 
 ; On exit C=0 if processed; C=1 if not processed
 ;         A is not preserved
-; Input char in A and NEXT_CHAR
 process_conditional_directive
   ; Check for 'ifdef'
   LDA #<directive_ifdef
@@ -1500,12 +1474,10 @@ process_conditional_directive
   SEC ; Not processed
   RTS
 .ifdef
-  LDA NEXT_CHAR
   JSR process_ifdef
   CLC
   RTS
 .endif
-  LDA NEXT_CHAR
   JSR process_endif
   CLC
   RTS
@@ -1546,7 +1518,6 @@ data_parameters_loop_entry
   ; C=0: expression/hex/'char'/</>  - emit 1 byte from OPERAND_L
   LDA OPERAND_L
   JSR emit
-  LDA NEXT_CHAR
   JMP data_parameters_loop
 .data_emit_two_bytes
   ; C=1: bare label - emit 2 bytes (LSB, MSB)
@@ -1554,22 +1525,18 @@ data_parameters_loop_entry
   JSR emit
   LDA OPERAND_H        ; Emit high byte
   JSR emit
-  LDA NEXT_CHAR
   JMP data_parameters_loop
 .data_done
   RTS
 
 
 ; Process .ifdef directive
-; On entry: A contains char after directive name
 process_ifdef
-  ; Input char in A and NEXT_CHAR
   INC COND_DEPTH       ; Always increment depth
   ; Check if already skipping
   LDA SKIP_DEPTH
   BNE .pi_skip_rest    ; Already skipping, don't evaluate condition
   ; Not skipping - evaluate condition
-  LDA NEXT_CHAR
   JSR check_for_end_of_line
   BCC .pi_has_label    ; Label present
   JMP err_label_expected  ; Missing label
@@ -1585,12 +1552,10 @@ process_ifdef
   LDA COND_DEPTH
   STA SKIP_DEPTH
 .pi_skip_rest
-  LDA NEXT_CHAR
   JMP skip_rest_of_line ; Tail call
 
 
 ; Process .endif directive
-; On entry: A contains char after directive name (also in NEXT_CHAR)
 process_endif
   LDA COND_DEPTH
   BNE .pe_has_ifdef    ; In a conditional block
@@ -1608,7 +1573,6 @@ process_endif
   LDA #$00
   STA SKIP_DEPTH
 .pe_done
-  LDA NEXT_CHAR
   JMP skip_rest_of_line ; Tail call
 
 
