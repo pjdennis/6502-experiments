@@ -354,10 +354,8 @@ EXPECT_MSG: Label not found
 NAME: trailing_expr_imm_hex
 INPUT:
 1: * = $0200
-2:   LDA #$42+1
-EXPECT_ERROR: 7
-EXPECT_LINE: 2
-EXPECT_MSG: Invalid hex
+2:   LDA #$42+$01
+EXPECT_HEX: a9 43
 
 ---
 NAME: unclosed_indirect
@@ -399,10 +397,8 @@ EXPECT_MSG: Unexpected text after operand
 NAME: trailing_expr_char
 INPUT:
 1: * = $0200
-2:   LDA #'A'+1
-EXPECT_ERROR: 21
-EXPECT_LINE: 2
-EXPECT_MSG: Unexpected text after operand
+2:   LDA #'A'+$01
+EXPECT_HEX: a9 42
 
 ---
 NAME: trailing_garbage_zp
@@ -1002,3 +998,31 @@ INPUT:
 1: * = $0200
 2:   .data 'A' 'B' 'C'
 EXPECT_HEX: 41 42 43
+
+---
+NAME: expr_imm_hex_add
+INPUT:
+1: * = $0200
+2:   LDA #$10+$20
+EXPECT_HEX: a9 30
+
+---
+NAME: expr_imm_hex_subtract
+INPUT:
+1: * = $0200
+2:   LDA #$40-$10
+EXPECT_HEX: a9 30
+
+---
+NAME: expr_imm_chain
+INPUT:
+1: * = $0200
+2:   LDA #$50+$10-$20
+EXPECT_HEX: a9 40
+
+---
+NAME: expr_char_arithmetic
+INPUT:
+1: * = $0200
+2:   LDA #'Z'-'A'
+EXPECT_HEX: a9 19
