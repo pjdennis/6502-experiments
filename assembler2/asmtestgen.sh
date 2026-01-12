@@ -79,9 +79,14 @@ diff <(hexdump -C out/asm21_debug.out) <(hexdump -C out/asm21_debug_2.out)
 
 echo "OK"
 
-# Show size difference
-echo "Size comparison:"
-ls -la out/asm21.out out/asm21_debug.out | awk '{print $5, $9}'
+# Show actual code size difference
+# File covers $2000-$FFFF, vectors at end. Scan backwards from just before vectors.
+echo "Code size comparison:"
+SIZE1=$(perl -e 'open(F,"<","out/asm21.out");binmode(F);read(F,$d,0xE000);for($i=0xDFFB;$i>=0;$i--){last if ord(substr($d,$i,1))!=0}print $i+1')
+SIZE2=$(perl -e 'open(F,"<","out/asm21_debug.out");binmode(F);read(F,$d,0xE000);for($i=0xDFFB;$i>=0;$i--){last if ord(substr($d,$i,1))!=0}print $i+1')
+echo "  asm21.out (no debug):   $SIZE1 bytes"
+echo "  asm21_debug.out:        $SIZE2 bytes"
+echo "  Savings:                $((SIZE2 - SIZE1)) bytes"
 
 ./emulator.out out/asm19_2.out 2000 /dev/null /dev/null test19.asm out/test19.out
 # hexdump -C out/test19.out
