@@ -1093,6 +1093,36 @@ INPUT:
 EXPECT_HEX: 30 00
 
 ---
+NAME: expr_data_hex_const
+INPUT:
+1: * = $0200
+2:   .data $10+$20
+EXPECT_HEX: 30
+
+---
+NAME: expr_data_byte_selector
+INPUT:
+1: * = $0200
+2: addr = $ABCD
+3:   .data <addr+$10
+EXPECT_HEX: dd
+
+---
+NAME: expr_data_multiple_values
+INPUT:
+1: * = $0200
+2: base = $10
+3:   .data $05+$01 base+$10 $20-$05
+EXPECT_HEX: 06 20 00 1b
+
+---
+NAME: expr_data_char_expression
+INPUT:
+1: * = $0200
+2:   .data 'A'+$01
+EXPECT_HEX: 42
+
+---
 NAME: expr_indirect_indexed_add
 INPUT:
 1: * = $0200

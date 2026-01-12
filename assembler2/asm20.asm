@@ -1332,22 +1332,15 @@ data_parameters_loop_entry
   JSR check_for_end_of_line
   BCS .data_done
   CMP #'"'            ; Quoted string
-  BNE .data_check_hex
+  BNE .data_value
   JSR read_char
   JSR emit_quoted
   JMP data_parameters_loop
-.data_check_hex
-  CMP #'$'             ; Hex value
-  BNE .data_check_label
-  JSR read_char
-  JSR emit_hex
-  JMP data_parameters_loop
-.data_check_label
-  ; <label, >label, or bare label
-  ; All handled by parse_term, use carry to determine 1 vs 2 bytes
-  JSR parse_value      ; Returns C=1 for bare label, C=0 for </>
+.data_value
+  ; Parse value: handles $hex, 'char', label, <expr, >expr, and expressions
+  JSR parse_value      ; Returns C=1 for bare label, C=0 otherwise
   BCS .data_emit_two_bytes
-  ; C=0: <label or >label - emit 1 byte from OPERAND_L
+  ; C=0: expression/hex/'char'/</>  - emit 1 byte from OPERAND_L
   TAY                  ; Save next char
   LDA OPERAND_L
   JSR emit
