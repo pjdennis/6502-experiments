@@ -23,7 +23,7 @@ A fully self-hosting 6502 assembler built through progressive bootstrapping, wit
 
 ## Bootstrap Chain Overview
 
-The assembler bootstraps through 20 progressively more capable versions:
+The assembler bootstraps through 21 progressively more capable versions:
 
 ```
 asm0c.c (C bootstrap)
@@ -56,13 +56,16 @@ asm00.out -----> asm01.out -----> asm02.out ---> ... ---> asm06.out
                   asm18.out (assembles asm19)
                         |
                         v
-                  asm19.out (final, self-hosting)
+                  asm19.out (expression evaluation, assembles asm20)
                         |
                         v
-                  asm19_2.out (self-assembled)
+                  asm20.out (latest, self-hosting)
                         |
                         v
-                  Verification: asm19.out == asm19_2.out
+                  asm20_2.out (self-assembled)
+                        |
+                        v
+                  Verification: asm20.out == asm20_2.out
 ```
 
 ### Bootstrap Levels
@@ -79,28 +82,30 @@ asm00.out -----> asm01.out -----> asm02.out ---> ... ---> asm06.out
 | 17 | asm17.asm | Refactored (identical output to asm16) |
 | 18 | asm18.asm | Added `.data` directive alongside DATA |
 | 19 | asm19.asm | Uses `.data` exclusively, removes DATA pseudo-op |
+| 20 | asm20.asm | Expression evaluation with `+` and `-` operators |
 
 ## Directory Structure
 
 ```
 assembler2/
 ├── out/                    # Generated outputs
-│   ├── asm00.out - asm19.out
-│   ├── inst07.asm.out - inst19.asm.out
+│   ├── asm00.out - asm20.out
+│   ├── inst07.asm.out - inst20.asm.out
 │   └── ...
 ├── dump/                   # Memory dumps from emulator
 ├── legacy/                 # Old/unused assembler versions
 ├── tests/                  # Test suite
 │   ├── run_tests.sh        # Test runner script
 │   ├── asm18_tests.txt     # Tests for asm18 (reference)
-│   └── asm19_tests.txt     # Tests for asm19 (current)
+│   ├── asm19_tests.txt     # Tests for asm19 (reference)
+│   └── asm20_tests.txt     # Tests for asm20 (current)
 │
 ├── emulator.out            # 6502 emulator
 ├── sidebyside.out          # Hexdump display utility
 ├── asm0c.out               # C bootstrap assembler
 │
-├── asm00.asm - asm19.asm   # Assembler source chain
-├── instgen07.asm - instgen19.asm  # Instruction table generators
+├── asm00.asm - asm20.asm   # Assembler source chain
+├── instgen07.asm - instgen20.asm  # Instruction table generators
 ├── common*.asm             # Shared code between asm and instgen
 ├── hash_table*.asm         # Hash table implementation
 ├── errors*.asm             # Error message definitions
@@ -119,7 +124,7 @@ assembler2/
 | File | Description |
 |------|-------------|
 | `Makefile` | Builds emulator, sidebyside, C bootstrap (asm0c), and level-0 assembler (asm00) |
-| `asmtestgen.sh` | Runs the full bootstrap chain from asm00 through asm19 |
+| `asmtestgen.sh` | Runs the full bootstrap chain from asm00 through asm20 |
 | `gogen.sh` | Watch mode - rebuilds on source file changes |
 
 ## Tools
@@ -134,8 +139,8 @@ assembler2/
 
 The build verifies correctness by:
 
-1. Assembling `asm19.asm` with `out/asm18.out` to produce `out/asm19.out`
-2. Assembling `asm19.asm` with `out/asm19.out` (self-assembly) to produce `out/asm19_2.out`
+1. Assembling `asm20.asm` with `out/asm19_2.out` to produce `out/asm20.out`
+2. Assembling `asm20.asm` with `out/asm20.out` (self-assembly) to produce `out/asm20_2.out`
 3. Comparing the two outputs - they must be identical
 
 If the assembler can correctly assemble itself and produce an identical binary, the bootstrap is successful.
@@ -151,7 +156,7 @@ The project includes a comprehensive test suite:
 ./tests/run_tests.sh
 
 # Run specific test file
-./tests/run_tests.sh tests/asm19_tests.txt
+./tests/run_tests.sh tests/asm20_tests.txt
 ```
 
 Tests verify both positive cases (correct assembly output) and negative cases (proper error detection).
@@ -161,7 +166,7 @@ Tests verify both positive cases (correct assembly output) and negative cases (p
 After a successful build, `test19.asm` is assembled and executed:
 
 ```bash
-./emulator.out out/asm19_2.out 2000 /dev/null /dev/null test19.asm out/test19.out
+./emulator.out out/asm20_2.out 2000 /dev/null /dev/null test19.asm out/test19.out
 ./emulator.out out/test19.out 1000 /dev/null - arg1 "arg 2"
 ```
 
@@ -183,7 +188,7 @@ The emulator provides these memory-mapped I/O routines (via JSR):
 | `$F021` | Open file for writing |
 | `$F024` | Write byte to file handle |
 
-## Assembler Syntax (asm19)
+## Assembler Syntax (asm20)
 
 ```asm
 ; Comments start with semicolon
@@ -198,17 +203,23 @@ label                    ; Global label
 .local                   ; Local label (scoped to previous global)
 
   LDA #$42               ; Immediate
+  LDA #$10+$20           ; Expression in immediate (asm20+)
+  LDA #'Z'-'A'           ; Character arithmetic (asm20+)
   LDA $00                ; Zero page
   LDA $1234              ; Absolute
+  LDA base+$10           ; Expression in address (asm20+)
   LDA $1234,X            ; Absolute,X
   LDA $1234,Y            ; Absolute,Y
   LDA $00,X              ; Zero page,X
+  LDA (ptr+$02,X)        ; Expression in indexed indirect (asm20+)
   LDA ($00),Y            ; Indirect,Y
   LDA ($00,X)            ; Indirect,X
 
   .data $01 $02 $03      ; Raw bytes
   .data "string"         ; ASCII string
+  .data value+$05        ; Expression in data (asm20+)
   .data <label >label    ; Low/high byte of address
+  .data <addr+$10        ; Byte selector on expression (asm20+)
   .data label            ; 16-bit address (little-endian)
 
   BRK $01 "error" $00    ; BRK with inline error message
@@ -222,3 +233,4 @@ The assembler syntax has evolved through the bootstrap chain:
 - **asm07+**: Standard 6502 syntax (`LDA #$42`, `LDA ($00),Y`)
 - **asm18**: Added `.data` directive alongside `DATA` pseudo-op
 - **asm19**: Uses `.data` exclusively (removed `DATA` pseudo-op)
+- **asm20**: Expression evaluation with `+` and `-` operators (left-to-right evaluation)
