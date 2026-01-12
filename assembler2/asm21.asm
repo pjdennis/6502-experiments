@@ -616,11 +616,11 @@ parse_expression
   JMP err_expected_shift    ; Single '>' in middle of expression is error
 
 .left_shift_op
-  ; Save current operand on stack (parse_term_with_selector may clobber EXPR_ACCU)
+  ; Save current operand to EXPR_ACCU
   LDA OPERAND_L
-  PHA
+  STA EXPR_ACCU_L
   LDA OPERAND_H
-  PHA
+  STA EXPR_ACCU_H
 
   ; Parse shift count (use parse_term_with_selector to support byte selectors like <<<)
   JSR read_char        ; Read char after second '<'
@@ -639,11 +639,11 @@ parse_expression
   BCS .left_shift_zero     ; Low byte >= 16 means shift >= 16
   STA SHIFT_COUNT
 
-  ; Restore value to shift from stack
-  PLA
-  STA OPERAND_H
-  PLA
+  ; Restore value to shift from EXPR_ACCU
+  LDA EXPR_ACCU_L
   STA OPERAND_L
+  LDA EXPR_ACCU_H
+  STA OPERAND_H
 
   ; Perform left shift
 .left_shift_loop
@@ -655,9 +655,7 @@ parse_expression
   JMP .left_shift_loop
 
 .left_shift_zero
-  ; Shift >= 16, result is 0. Clean up stack.
-  PLA                  ; Discard saved OPERAND_H
-  PLA                  ; Discard saved OPERAND_L
+  ; Shift >= 16, result is 0
   LDA #$00
   STA OPERAND_L
   STA OPERAND_H
@@ -666,11 +664,11 @@ parse_expression
   JMP .loop
 
 .right_shift_op
-  ; Save current operand on stack (parse_term_with_selector may clobber EXPR_ACCU)
+  ; Save current operand to EXPR_ACCU
   LDA OPERAND_L
-  PHA
+  STA EXPR_ACCU_L
   LDA OPERAND_H
-  PHA
+  STA EXPR_ACCU_H
 
   ; Parse shift count (use parse_term_with_selector to support byte selectors like >>>)
   JSR read_char        ; Read char after second '>'
@@ -689,11 +687,11 @@ parse_expression
   BCS .right_shift_zero    ; Low byte >= 16 means shift >= 16
   STA SHIFT_COUNT
 
-  ; Restore value to shift from stack
-  PLA
-  STA OPERAND_H
-  PLA
+  ; Restore value to shift from EXPR_ACCU
+  LDA EXPR_ACCU_L
   STA OPERAND_L
+  LDA EXPR_ACCU_H
+  STA OPERAND_H
 
   ; Perform right shift (logical/unsigned)
 .right_shift_loop
@@ -705,9 +703,7 @@ parse_expression
   JMP .right_shift_loop
 
 .right_shift_zero
-  ; Shift >= 16, result is 0. Clean up stack.
-  PLA                  ; Discard saved OPERAND_H
-  PLA                  ; Discard saved OPERAND_L
+  ; Shift >= 16, result is 0
   LDA #$00
   STA OPERAND_L
   STA OPERAND_H
