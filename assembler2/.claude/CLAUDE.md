@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 make
 ```
 
-The build succeeds when `asm4b13.out == asm4b13_2.out` (self-assembly verification).
+The build succeeds when `asm4b13.out == asm4b13_2.out` (self-assembly verification). The current latest assembler is asm20.
 
 ## Architecture
 
@@ -67,6 +67,37 @@ The assembler uses a non-standard 6502 syntax:
 - `LDAZ` for zero page addressing
 - `STAZ(),Y` for indirect indexed
 - `LDA,X` / `LDA,Y` for indexed absolute
+
+### Expression Evaluation (asm19+)
+
+Starting with asm19, the assembler supports simple expression evaluation with `+` and `-` operators:
+
+**Syntax:**
+- `LDA #$10+$20` - Arithmetic in immediate mode
+- `foo = bar+$01` - Expressions in label assignments
+- `.data value+$05` - Expressions in data directives
+- `LDA (ptr+$02,X)` - Expressions in address operands
+- `LDA #'Z'-'A'` - Character constant arithmetic
+
+**Operator Precedence:**
+- Evaluation is strictly **left-to-right**
+- No operator precedence: `$10+$20-$05` evaluates as `($10+$20)-$05`
+- No parentheses for grouping (except for addressing modes)
+
+**Byte Selectors:**
+- `<` (low byte) and `>` (high byte) apply to the **entire expression result**
+- `LDA #<addr+$10` means `<(addr+$10)`, not `(<addr)+$10`
+- Byte selectors work with any expression: `LDA #>'A'+$100`
+
+**Value Types:**
+- Hex constants: `$10`, `$ABCD`
+- Character literals: `'A'`, `'\n'`, `'\''`
+- Labels: `foo`, `bar`
+- All three types can be mixed in expressions
+
+**Forward References:**
+- If any term in an expression is a forward reference, the entire expression is treated as a forward reference
+- The assembler resolves the complete expression in pass 2
 
 ## Migration Patterns
 
