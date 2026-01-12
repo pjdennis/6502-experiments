@@ -1036,6 +1036,14 @@ INPUT:
 EXPECT_HEX: a9 dd
 
 ---
+NAME: expr_low_byte_add_after
+INPUT:
+1: * = $0200
+2: val = $ABCD
+3:   LDA #$10+<val
+EXPECT_HEX: a9 dd
+
+---
 NAME: expr_high_byte_add
 INPUT:
 1: * = $0200

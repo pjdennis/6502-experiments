@@ -2,8 +2,8 @@
 #
 # Test runner for assembler
 # Usage: ./run_tests.sh [test_file] [assembler] [test_name]
-#   test_file: Path to test file (default: tests/asm19_tests.txt)
-#   assembler: Path to assembler (default: out/asm19.out)
+#   test_file: Path to test file (default: tests/asm21_tests.txt)
+#   assembler: Path to assembler (default: out/asm21_debug.out)
 #   test_name: If provided, only runs that specific test
 #
 
@@ -11,8 +11,8 @@
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ASSEMBLER2_DIR="$(dirname "$SCRIPT_DIR")"
-TEST_FILE="${1:-$SCRIPT_DIR/asm19_tests.txt}"
-ASSEMBLER="${2:-$ASSEMBLER2_DIR/out/asm19.out}"
+TEST_FILE="${1:-$SCRIPT_DIR/asm21_tests.txt}"
+ASSEMBLER="${2:-$ASSEMBLER2_DIR/out/asm21_debug.out}"
 EMULATOR="$ASSEMBLER2_DIR/emulator.out"
 
 # Colors for output

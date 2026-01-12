@@ -595,7 +595,7 @@ parse_expression
 
   ; Parse next term (skip '+' first)
   JSR read_char        ; Skip '+'
-  JSR parse_term
+  JSR parse_term_with_selector
   PHA                  ; Save next char
 
   ; Accumulate forward ref flag
@@ -624,7 +624,7 @@ parse_expression
 
   ; Parse next term (skip '-' first)
   JSR read_char        ; Skip '-'
-  JSR parse_term
+  JSR parse_term_with_selector
   PHA                  ; Save next char
 
   ; Accumulate forward ref flag
@@ -675,9 +675,14 @@ parse_expression
   ORA EXPR_FWDREF
   STA EXPR_FWDREF
 
-  ; Shift count is in OPERAND_L (assuming <256 shifts)
+  ; Check if shift count >= 16 (result will be 0)
+  LDA OPERAND_H
+  BNE .left_shift_zero     ; High byte != 0 means shift >= 256
   LDA OPERAND_L
+  CMP #$10
+  BCS .left_shift_zero     ; Low byte >= 16 means shift >= 16
   STA SHIFT_COUNT
+
   ; Restore value to shift from stack
   PLA                  ; Saved next char
   TAY                  ; Move to Y temporarily
@@ -696,6 +701,20 @@ parse_expression
   ROL OPERAND_H
   DEC SHIFT_COUNT
   JMP .left_shift_loop
+  JMP .left_shift_done     ; (not reached, but clearer)
+
+.left_shift_zero
+  ; Shift >= 16, result is 0. Clean up stack.
+  PLA                  ; Saved next char
+  TAY
+  PLA                  ; Discard saved OPERAND_H
+  PLA                  ; Discard saved OPERAND_L
+  LDA #$00
+  STA OPERAND_L
+  STA OPERAND_H
+  TYA
+  PHA                  ; Restore next char
+
 .left_shift_done
 
   PLA                  ; Restore next char
@@ -718,9 +737,14 @@ parse_expression
   ORA EXPR_FWDREF
   STA EXPR_FWDREF
 
-  ; Shift count is in OPERAND_L
+  ; Check if shift count >= 16 (result will be 0)
+  LDA OPERAND_H
+  BNE .right_shift_zero    ; High byte != 0 means shift >= 256
   LDA OPERAND_L
+  CMP #$10
+  BCS .right_shift_zero    ; Low byte >= 16 means shift >= 16
   STA SHIFT_COUNT
+
   ; Restore value to shift from stack
   PLA                  ; Saved next char
   TAY                  ; Move to Y temporarily
@@ -739,6 +763,20 @@ parse_expression
   ROR OPERAND_L
   DEC SHIFT_COUNT
   JMP .right_shift_loop
+  JMP .right_shift_done    ; (not reached, but clearer)
+
+.right_shift_zero
+  ; Shift >= 16, result is 0. Clean up stack.
+  PLA                  ; Saved next char
+  TAY
+  PLA                  ; Discard saved OPERAND_H
+  PLA                  ; Discard saved OPERAND_L
+  LDA #$00
+  STA OPERAND_L
+  STA OPERAND_H
+  TYA
+  PHA                  ; Restore next char
+
 .right_shift_done
 
   PLA                  ; Restore next char
