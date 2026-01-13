@@ -246,9 +246,6 @@ parse_and_run_tests() {
     local in_input=0
     local in_stderr=0
 
-    echo "Running tests from $TEST_FILE"
-    echo ""
-
     while IFS= read -r line || [[ -n "$line" ]]; do
         # Skip comments and empty lines outside of multi-line sections
         if [[ $in_input -eq 0 && $in_stderr -eq 0 ]]; then
