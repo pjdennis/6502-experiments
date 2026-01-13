@@ -156,7 +156,8 @@ run_negative_test() {
         return
     fi
 
-    local error_output=$(cat "$TMP_ERR" | head -1)
+    # Get the error line (skip command line at top)
+    local error_output=$(grep "^Error " "$TMP_ERR" | head -1)
 
     # Parse error output: "Error N in file ... at line L: message"
     local actual_error=$(echo "$error_output" | sed -n 's/^Error \([0-9]*\).*/\1/p')
@@ -213,8 +214,8 @@ run_stderr_test() {
     fi
 
     # Get actual stderr, filtering out emulator status lines and stripping trailing whitespace
-    # Emulator status lines start with the path or contain "cycles" or "was not closed"
-    local actual_stderr=$(cat "$TMP_ERR" | grep -v "^out/" | grep -v "cycles$" | grep -v "was not closed$" | sed 's/[[:space:]]*$//')
+    # Emulator status lines: command line, cycle counts, file warnings, exit codes
+    local actual_stderr=$(cat "$TMP_ERR" | grep -v "^out/" | grep -v "^/" | grep -v "cycles$" | grep -v "was not closed$" | grep -v "^Exit code" | sed 's/[[:space:]]*$//')
     # Replace {{MAIN_FILE}} placeholder with actual temp file path and strip trailing whitespace
     local norm_expected=$(echo "$expected_stderr" | sed "s|{{MAIN_FILE}}|$TMP_ASM|g" | sed 's/[[:space:]]*$//')
 

@@ -1002,6 +1002,7 @@ uint16_t* arg_addresses;
 
 int done = 0;
 int exitcode_set = -1;
+int error_output_started = 0;  // Track if emulated program wrote to stderr
 
 void files_init(FILE* input_file) {
     files[0] = input_file;
@@ -1129,6 +1130,10 @@ void write6502(uint16_t address, uint8_t value) {
         fputc(value, output_file_ptr);
         return;
     } else if (address == port_write_d) {            // write_d
+        if (!error_output_started) {
+            fputc('\n', stderr);  // End command line before first error output
+            error_output_started = 1;
+        }
         fputc(value, stderr);
         return;
     } else if (address == port_close) {              // close
@@ -1317,13 +1322,13 @@ int main(int argc, char **argv) {
             ;
     }
 
+    show_commandline(argc, argv);  // Print command line before emulation (no newline yet)
     reset6502();
     const int max_cycles = 50000000;
     while (!done) {
         step6502();
         if (clockticks6502 > max_cycles) {
-            show_commandline(argc, argv);
-            fprintf(stderr, "did not terminate within %i cycles\n", max_cycles);
+            fprintf(stderr, "\ndid not terminate within %i cycles\n", max_cycles);
             free(arg_addresses);
             fclose(output_file_ptr);
             fclose(input_file_ptr);
@@ -1331,8 +1336,6 @@ int main(int argc, char **argv) {
         }
         // printf("PC=%04x\n", pc);
     }
-    show_commandline(argc, argv);
-    fprintf(stderr, "executed %i cycles\n", clockticks6502);
 
     free(arg_addresses);
 
@@ -1351,6 +1354,10 @@ int main(int argc, char **argv) {
         uint16_t location = memory[0x100 + sp + 2] + (memory[0x100 + sp + 3] << 8) - 1;
         exitcode = memory[location];
         if (exitcode != 0) {
+            if (!error_output_started) {
+                fputc('\n', stderr);
+                error_output_started = 1;
+            }
             fprintf(stderr, "Error: ");
             for (int i = 0; i != 40; i++) {
                 uint8_t c = memory[location + 1 + i];
@@ -1359,6 +1366,13 @@ int main(int argc, char **argv) {
             }
             fputc('\n', stderr);
         }
+    }
+
+    // Print final status line
+    if (error_output_started || exitcode != 0) {
+        fprintf(stderr, "Exit code %d; Executed %i cycles\n", exitcode, clockticks6502);
+    } else {
+        fprintf(stderr, "executed %i cycles\n", clockticks6502);
     }
 
     char* dump_filename_base = argv[argc - 1];
