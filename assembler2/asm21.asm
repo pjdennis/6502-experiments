@@ -1703,51 +1703,22 @@ process_endmacro
 ;           ($FE, body_ptr_L, body_ptr_H, param_count, params...)
 ; On exit: Memory source pushed, jumps to .line_loop
 expand_macro
-  ; Get body_ptr from MACRO_DEF_PTR+1 into TABPL/TABPH (temp storage)
+  ; Get body_ptr from MACRO_DEF_PTR+1 into temp storage
+  ; Body is zero-terminated so we only need start pointer
   LDY #$01
   LDA (MACRO_DEF_PTR_L),Y
   STA TABPL             ; Body start low
   INY
   LDA (MACRO_DEF_PTR_L),Y
   STA TABPH             ; Body start high
-  ; Find body end (scan for $00 terminator) into HEX1/HEX2 (temp storage)
-  LDY #$00
-.em_find_end
-  LDA (TABPL),Y
-  BEQ .em_found_end
-  INY
-  BNE .em_find_end
-  ; Crossed page boundary
-  INC TABPH
-  JMP .em_find_end
-.em_found_end
-  ; TABPL+Y points to $00, so end = TABPL+Y
-  TYA
-  CLC
-  ADC TABPL
-  STA HEX2              ; Body end low
-  LDA #$00
-  ADC TABPH
-  STA HEX1              ; Body end high
-  ; Restore TABPL/TABPH to body start (TABPH may have been incremented)
-  LDY #$01
-  LDA (MACRO_DEF_PTR_L),Y
-  STA TABPL
-  INY
-  LDA (MACRO_DEF_PTR_L),Y
-  STA TABPH
   ; Push memory source - saves current state BEFORE we set new pointers
   ; FS_FILENAME = TOKEN, and read_token already null-terminated the name
   JSR push_memory_source
-  ; Now set up new memory source pointers
+  ; Now set up new memory source pointer
   LDA TABPL
   STA FS_MEM_PTR_L
   LDA TABPH
   STA FS_MEM_PTR_H
-  LDA HEX2
-  STA FS_MEM_END_L
-  LDA HEX1
-  STA FS_MEM_END_H
   JMP asm_line_loop
 
 

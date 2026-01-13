@@ -522,6 +522,9 @@ check_memory_or_include:
   INY
   JMP .copy_content
 .content_done:
+  ; Add null terminator after content (Y = length)
+  LDA #$00
+  STA TOKEN_MEM,Y
   ; Copy "MEMORY" to TOKEN (which is FS_FILENAME)
   LDY #$00
 .copy_name:
@@ -531,20 +534,12 @@ check_memory_or_include:
   INY
   JMP .copy_name
 .name_done:
-  ; Set memory pointers to TOKEN_MEM (where content now lives)
+  ; Set memory pointer to TOKEN_MEM (content is now zero-terminated)
   LDA #<TOKEN_MEM
   STA FS_MEM_PTR_L
   LDA #>TOKEN_MEM
   STA FS_MEM_PTR_H
-  ; Calculate end = TOKEN_MEM + content_length
-  LDA TEMP
-  CLC
-  ADC #<TOKEN_MEM
-  STA FS_MEM_END_L
-  LDA #>TOKEN_MEM
-  ADC #$00
-  STA FS_MEM_END_H
-  ; Push memory source (FS_FILENAME has name, pointers are set)
+  ; Push memory source (FS_FILENAME has name, pointer is set)
   JSR push_memory_source
   ; Initialize line to 1 for memory source
   LDA #$01
