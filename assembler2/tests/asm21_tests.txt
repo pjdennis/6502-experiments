@@ -1672,37 +1672,40 @@ Error 1 in file tests/include/nested_error2.asm at line 3: Label not found
 # MACRO TESTS
 # ============================================================================
 
-# Phase 1A: Basic parsing tests (macro invocation not yet working)
+# Phase 1B: Body capture tests (body stored, not assembled)
 
 ---
 NAME: macro_def_parses
-DESCRIPTION: Macro definition parses without error (body still assembled in Phase 1A)
+DESCRIPTION: Macro definition parses without error (body captured, not assembled)
 INPUT:
 1: * = $0200
 2:   .macro MYMACRO
 3:   NOP
 4:   .endmacro
-EXPECT_HEX: ea
+5:   INX
+EXPECT_HEX: e8
 
 ---
 NAME: macro_def_with_params
-DESCRIPTION: Macro with parameters parses without error
+DESCRIPTION: Macro with parameters parses without error (body captured)
 INPUT:
 1: * = $0200
 2:   .macro INC16 addr
 3:   NOP
 4:   .endmacro
-EXPECT_HEX: ea
+5:   INY
+EXPECT_HEX: c8
 
 ---
 NAME: macro_def_multi_params
-DESCRIPTION: Macro with multiple parameters parses without error
+DESCRIPTION: Macro with multiple parameters parses without error (body captured)
 INPUT:
 1: * = $0200
 2:   .macro COPY src dst count
 3:   NOP
 4:   .endmacro
-EXPECT_HEX: ea
+5:   DEX
+EXPECT_HEX: ca
 
 ---
 NAME: macro_def_empty_body
@@ -1765,7 +1768,7 @@ EXPECT_LINE: 4
 
 ---
 NAME: macro_simple
-SKIP: macro invocation not implemented yet (Phase 2)
+DESCRIPTION: Simple macro invocation
 INPUT:
 1: * = $0200
 2:   .macro nop2
@@ -1774,3 +1777,45 @@ INPUT:
 5:   .endmacro
 6:   nop2
 EXPECT_HEX: ea ea
+
+---
+NAME: macro_multiple_invocations
+DESCRIPTION: Multiple invocations of same macro
+INPUT:
+1: * = $0200
+2:   .macro MYMACRO
+3:   NOP
+4:   .endmacro
+5:   MYMACRO
+6:   INX
+7:   MYMACRO
+8:   INY
+EXPECT_HEX: ea e8 ea c8
+
+---
+NAME: macro_with_code_around
+DESCRIPTION: Macro used between other code
+INPUT:
+1: * = $0200
+2:   INX
+3:   .macro MYMACRO
+4:   NOP
+5:   .endmacro
+6:   MYMACRO
+7:   INY
+EXPECT_HEX: e8 ea c8
+
+---
+NAME: macro_nested
+DESCRIPTION: One macro calling another
+INPUT:
+1: * = $0200
+2:   .macro inner
+3:   NOP
+4:   .endmacro
+5:   .macro outer
+6:   inner
+7:   INX
+8:   .endmacro
+9:   outer
+EXPECT_HEX: ea e8

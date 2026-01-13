@@ -943,7 +943,25 @@ lookup_mnemonic
   BCC .found
   JMP err_opcode_not_found
 .found
-  ; TABPL:TABPH+Y points to mode:opcode data
+  ; TABPL:TABPH+Y points to mode:opcode data or macro sentinel
+  ; Check for macro sentinel ($FE)
+  LDA (TABPL),Y
+  CMP #$FE
+  BNE .is_instruction
+  ; It's a macro - compute pointer to macro data, then skip line and expand
+  ; MACRO_DEF_PTR = TABPL + Y (points to $FE, body_ptr is at +1)
+  TYA
+  CLC
+  ADC TABPL
+  STA MACRO_DEF_PTR_L
+  LDA #$00
+  ADC TABPH
+  STA MACRO_DEF_PTR_H
+  JSR skip_rest_of_line
+  PLA                   ; Pop return address (we're not returning)
+  PLA
+  JMP expand_macro
+.is_instruction
   ; Calculate INST_PTR = TABPL + Y
   TYA
   CLC
@@ -1680,6 +1698,151 @@ process_endmacro
   JMP skip_rest_of_line
 
 
+; Expand a macro invocation
+; On entry: MACRO_DEF_PTR points to the $FE sentinel in macro entry
+;           ($FE, body_ptr_L, body_ptr_H, param_count, params...)
+; On exit: Memory source pushed, jumps to .line_loop
+expand_macro
+  ; Get body_ptr from MACRO_DEF_PTR+1 into TABPL/TABPH (temp storage)
+  LDY #$01
+  LDA (MACRO_DEF_PTR_L),Y
+  STA TABPL             ; Body start low
+  INY
+  LDA (MACRO_DEF_PTR_L),Y
+  STA TABPH             ; Body start high
+  ; Find body end (scan for $00 terminator) into HEX1/HEX2 (temp storage)
+  LDY #$00
+.em_find_end
+  LDA (TABPL),Y
+  BEQ .em_found_end
+  INY
+  BNE .em_find_end
+  ; Crossed page boundary
+  INC TABPH
+  JMP .em_find_end
+.em_found_end
+  ; TABPL+Y points to $00, so end = TABPL+Y
+  TYA
+  CLC
+  ADC TABPL
+  STA HEX2              ; Body end low
+  LDA #$00
+  ADC TABPH
+  STA HEX1              ; Body end high
+  ; Restore TABPL/TABPH to body start (TABPH may have been incremented)
+  LDY #$01
+  LDA (MACRO_DEF_PTR_L),Y
+  STA TABPL
+  INY
+  LDA (MACRO_DEF_PTR_L),Y
+  STA TABPH
+  ; Push memory source - saves current state BEFORE we set new pointers
+  ; FS_FILENAME = TOKEN, and read_token already null-terminated the name
+  JSR push_memory_source
+  ; Now set up new memory source pointers
+  LDA TABPL
+  STA FS_MEM_PTR_L
+  LDA TABPH
+  STA FS_MEM_PTR_H
+  LDA HEX2
+  STA FS_MEM_END_L
+  LDA HEX1
+  STA FS_MEM_END_H
+  JMP asm_line_loop
+
+
+; Capture a line during macro definition
+; On entry: A contains first character of line
+; On exit: Line copied to heap (with $0A), or .endmacro processed
+;          Returns to caller (who should JMP .line_loop)
+;
+; Strategy: Copy whole line to heap, then check if it was .endmacro.
+; If so, undo the copy and process .endmacro normally.
+capture_macro_line
+  ; Save first char (in A from read_char) and X (output file handle)
+  PHA
+  TXA
+  PHA
+  ; Save heap position in case we need to undo (for .endmacro)
+  ; Use MACRO_DEF_PTR since we're not using it during capture
+  LDA MEMPL
+  STA MACRO_DEF_PTR_L
+  LDA MEMPH
+  STA MACRO_DEF_PTR_H
+  ; Restore first char (X saved below A on stack)
+  TSX
+  LDA $0102,X
+  ; Copy whole line to heap including $0A
+.cml_copy_loop
+  LDY #$00
+  STA (MEMPL),Y
+  CMP #$0A
+  BEQ .cml_line_done
+  INY
+  JSR advance_heap
+  JSR read_char
+  BCC .cml_copy_loop
+  ; EOF during macro - error
+  JMP err_unclosed_macro
+.cml_line_done
+  INY
+  JSR advance_heap     ; Advance past $0A
+  ; Now check if this line was .endmacro
+  LDA MACRO_DEF_PTR_L
+  STA TABPL
+  LDA MACRO_DEF_PTR_H
+  STA TABPH
+  ; Skip leading spaces
+  LDY #$00
+.cml_skip_space
+  LDA (TABPL),Y
+  CMP #' '
+  BNE .cml_check_dot
+  INY
+  BNE .cml_skip_space
+.cml_check_dot
+  CMP #'.'
+  BNE .cml_keep_line
+  ; Check if it's "endmacro" (case sensitive)
+  INY
+  LDX #$00
+.cml_cmp_loop
+  LDA directive_endmacro,X
+  BEQ .cml_check_end     ; End of "endmacro" string
+  CMP (TABPL),Y
+  BNE .cml_keep_line
+  INY
+  INX
+  BNE .cml_cmp_loop
+.cml_check_end
+  ; Matched "endmacro" - verify next char is space, $0A, or similar
+  LDA (TABPL),Y
+  CMP #' '
+  BEQ .cml_found_endmacro
+  CMP #$0A
+  BEQ .cml_found_endmacro
+  CMP #';'               ; Comment
+  BEQ .cml_found_endmacro
+  JMP .cml_keep_line     ; Not end of token - keep as macro body
+.cml_found_endmacro
+  ; Restore heap to undo the copy
+  LDA MACRO_DEF_PTR_L
+  STA MEMPL
+  LDA MACRO_DEF_PTR_H
+  STA MEMPH
+  ; Restore X (output file handle) - pop saved X and A
+  PLA
+  TAX
+  PLA                 ; Discard saved A
+  JMP process_endmacro
+.cml_keep_line
+  ; Restore X (output file handle)
+  PLA
+  TAX
+  PLA                 ; Discard saved A
+  RTS
+
+
 ; ============================================================================
 ; TIER 11: ASSEMBLY ORCHESTRATION
 ; Main assembly loop
@@ -1708,6 +1871,7 @@ assemble_code
   STA COND_DEPTH      ; Clear conditional depth
   STA SKIP_DEPTH      ; Clear skip depth
   STA IN_MACRO_DEF    ; Clear macro definition flag
+asm_line_loop                 ; Global entry for macro expansion
 .line_loop
   JSR read_char
   BCC .character_read
@@ -1727,6 +1891,12 @@ assemble_code
   BNE .line_incremented
   INC CURLINEH
 .line_incremented
+  ; Check if we're capturing macro body
+  LDY IN_MACRO_DEF
+  BEQ .not_capturing_macro
+  JSR capture_macro_line
+  JMP .line_loop
+.not_capturing_macro
   ; Check if we're skipping (conditional assembly)
   LDY SKIP_DEPTH
   BEQ .not_skipping
