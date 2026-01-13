@@ -2018,3 +2018,27 @@ INPUT:
 EXPECT_ERROR: 34
 EXPECT_LINE: 5
 EXPECT_MSG: Too many macro arguments
+
+---
+NAME: macro_param_fwdref_arg
+DESCRIPTION: Macro argument can be a forward reference label
+INPUT:
+1: * = $0200
+2:   .macro load_addr addr
+3:   LDA addr
+4:   .endmacro
+5:   load_addr target
+6: target
+EXPECT_HEX: ad 03 02
+
+---
+NAME: macro_param_label_arg
+DESCRIPTION: Macro argument can be a defined label
+INPUT:
+1: * = $0200
+2: target
+3:   .macro load_addr addr
+4:   LDA addr
+5:   .endmacro
+6:   load_addr target
+EXPECT_HEX: ad 00 02

@@ -1802,14 +1802,18 @@ expand_macro
   LDY #$00
   LDA (MACRO_DEF_PTR_L),Y
   BEQ .em_params_done
-  ; Copy parameter name to TOKEN
+  ; Save pointer to param name (parse_expression may overwrite TOKEN)
+  LDA MACRO_DEF_PTR_L
+  PHA
+  LDA MACRO_DEF_PTR_H
+  PHA
+  ; Find length of param name and advance MACRO_DEF_PTR past it
   LDY #$FF
-.em_copy_param
+.em_skip_param
   INY
   LDA (MACRO_DEF_PTR_L),Y
-  STA TOKEN,Y
-  BNE .em_copy_param
-  ; Y now has length of param name (not including null)
+  BNE .em_skip_param
+  ; Y = length of param name (not including null)
   ; Advance MACRO_DEF_PTR past the null terminator
   TYA
   SEC                   ; +1 for null
@@ -1820,7 +1824,7 @@ expand_macro
   STA MACRO_DEF_PTR_H
   ; Check for argument in input
   JSR check_for_end_of_line
-  BCS .em_too_few
+  BCS .em_too_few_pop   ; Need to pop saved pointer before error
   ; Parse argument expression (result in OPERAND_L/H, IS_FWDREF set)
   JSR parse_expression
   ; Add parameter to scope (unless forward ref in pass 1)
@@ -1829,8 +1833,22 @@ expand_macro
   BIT PASS
   BMI .em_add_param     ; Pass 2: always add (resolved now)
   ; Pass 1 with forward ref: don't add to scope, let it become fwdref in body
+  PLA                   ; Discard saved param pointer
+  PLA
   JMP .em_param_loop
 .em_add_param
+  ; Restore param name pointer and copy to TOKEN
+  ; (parse_expression may have overwritten TOKEN with a label name)
+  PLA
+  STA TABPH             ; Temporarily use TABPL/H for param name pointer
+  PLA
+  STA TABPL
+  LDY #$FF
+.em_copy_param
+  INY
+  LDA (TABPL),Y
+  STA TOKEN,Y
+  BNE .em_copy_param
   ; Add parameter to local scope
   ; Parameter acts as a local label in the expansion scope
   LDA #$FF
@@ -1845,6 +1863,10 @@ expand_macro
   STA HEX1
   JSR store_hash_value
   JMP .em_param_loop
+.em_too_few_pop
+  PLA                   ; Discard saved param pointer before error
+  PLA
+  JMP .em_too_few
 .em_params_done
   ; Check for extra arguments (should be at end of line now)
   JSR check_for_end_of_line
