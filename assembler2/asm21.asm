@@ -1568,7 +1568,7 @@ process_endif
 
 ; Process .macro directive
 ; Syntax: .macro NAME [param1 param2 ...]
-; Creates entry in IHASHTAB: [name $00][$FE][body_ptr_L][body_ptr_H][param_count][params...]
+; Creates entry in IHASHTAB: [name $00][$FE][body_ptr_L][body_ptr_H][params...][\0]
 process_macro
   ; Skip spaces and read macro name
   JSR check_for_end_of_line
@@ -1824,7 +1824,7 @@ expand_macro
   STA MACRO_DEF_PTR_H
   ; Check for argument in input
   JSR check_for_end_of_line
-  BCS .em_too_few_pop   ; Need to pop saved pointer before error
+  BCS .em_too_few
   ; Parse argument expression (result in OPERAND_L/H, IS_FWDREF set)
   JSR parse_expression
   ; Add parameter to scope (unless forward ref in pass 1)
@@ -1863,17 +1863,13 @@ expand_macro
   STA HEX1
   JSR store_hash_value
   JMP .em_param_loop
-.em_too_few_pop
-  PLA                   ; Discard saved param pointer before error
-  PLA
-  JMP .em_too_few
+.em_too_few
+  JMP err_too_few_arguments
 .em_params_done
   ; Check for extra arguments (should be at end of line now)
   JSR check_for_end_of_line
   BCC .em_too_many
-  ; Skip rest of line (may already be done by check_for_end_of_line)
-  JSR skip_rest_of_line
-  ; NOW push memory source and set up pointers
+  ; Push memory source and set up pointers
   ; FS_FILENAME = TOKEN - note: was overwritten by param names, but that's okay for now
   JSR push_memory_source
   ; Restore body pointer from 6502 stack and set up memory source pointer
@@ -1882,8 +1878,6 @@ expand_macro
   PLA                   ; Body start low
   STA FS_MEM_PTR_L
   JMP asm_line_loop
-.em_too_few
-  JMP err_too_few_arguments
 .em_too_many
   JMP err_too_many_arguments
 
@@ -1909,11 +1903,11 @@ capture_macro_line
   ; Restore first char (X saved below A on stack)
   TSX
   LDA $0102,X
-  ; Copy whole line to heap including $0A
+  ; Copy whole line to heap including newline
 .cml_copy_loop
   LDY #$00
   STA (MEMPL),Y
-  CMP #$0A
+  CMP #'\n'
   BEQ .cml_line_done
   INY
   JSR advance_heap
@@ -1923,7 +1917,7 @@ capture_macro_line
   JMP err_unclosed_macro
 .cml_line_done
   INY
-  JSR advance_heap     ; Advance past $0A
+  JSR advance_heap     ; Advance past newline
   ; Now check if this line was .endmacro
   LDA MACRO_DEF_PTR_L
   STA TABPL
@@ -1956,11 +1950,11 @@ capture_macro_line
   LDA (TABPL),Y
   CMP #' '
   BEQ .cml_found_endmacro
-  CMP #$0A
+  CMP #'\n'
   BEQ .cml_found_endmacro
   CMP #';'               ; Comment
   BEQ .cml_found_endmacro
-  JMP .cml_keep_line     ; Not end of token - keep as macro body
+  BNE .cml_keep_line     ; Not end of token - keep as macro body
 .cml_found_endmacro
   ; Restore heap to undo the copy
   LDA MACRO_DEF_PTR_L
