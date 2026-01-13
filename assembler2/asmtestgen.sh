@@ -92,3 +92,6 @@ echo "  Savings:                $((SIZE2 - SIZE1)) bytes"
 # hexdump -C out/test19.out
 echo "Assembled"
 ./emulator.out out/test19.out 1000 /dev/null - arg1 "arg 2"
+
+# Build file stack test program
+./emulator.out out/asm21_debug.out 2000 /dev/null /dev/null tests/file_stack_test.asm out/file_stack_test.out
