@@ -156,7 +156,7 @@ interrupt
   LDA #>msg_error_file
   STA TABPH
   JSR show_message
-; Print the filename
+; Print the filename (at FS_PL)
   LDA FS_PL
   STA TABPL
   LDA FS_PH
@@ -187,6 +187,11 @@ interrupt
   LDA $0103,X
   STA TABPH
   JSR show_message
+; Print include traceback (if any files open)
+  JSR file_stack_empty
+  BEQ .traceback_done
+  JSR show_include_traceback
+.traceback_done
 ; Print the final newline
   LDA #'\n'
   JSR write_d
@@ -231,3 +236,91 @@ show_message
   JMP .loop
 .done
   RTS
+
+
+; Show include traceback - walks file stack to show include chain
+; On entry FS_PL;FS_PH points to current file stack entry
+; On exit A, X, Y not preserved
+;         TABPL;TABPH not preserved
+show_include_traceback
+  ; Use TABPL;TABPH as walking pointer, start at current entry
+  LDA FS_PL
+  STA TABPL
+  LDA FS_PH
+  STA TABPH
+.traceback_loop
+  ; Skip past filename to find the null terminator
+  LDY #$00
+.find_null
+  LDA (TABPL),Y
+  BEQ .found_null
+  INY
+  BNE .find_null        ; Always taken (filenames < 256 chars)
+.found_null
+  ; Y points at null. Handle at Y+1, line_L at Y+2, line_H at Y+3
+  ; Save the parent line number for later printing
+  INY
+  INY                   ; Y now at line_L
+  LDA (TABPL),Y
+  STA TO_DECIMAL_VALUE_L
+  INY                   ; Y now at line_H
+  LDA (TABPL),Y
+  STA TO_DECIMAL_VALUE_H
+  INY                   ; Y now past the entry
+  ; Calculate next entry address: TABPL + Y
+  TYA
+  CLC
+  ADC TABPL
+  STA TABPL
+  LDA #$00
+  ADC TABPH
+  STA TABPH
+  ; Check if we've reached or passed the top of the stack (no more entries)
+  ; FILE_STACK is $F000, so if TABPH >= $F0 we're done
+  LDA TABPH
+  CMP #>FILE_STACK
+  BCS .traceback_done   ; TABPH >= high byte of FILE_STACK, done
+.have_parent
+  ; Print newline and "  included from "
+  LDA #'\n'
+  JSR write_d
+  ; Save TABPL;TABPH (walking pointer) on stack
+  LDA TABPL
+  PHA
+  LDA TABPH
+  PHA
+  ; Print "  included from " message
+  LDA #<msg_included_from
+  STA TABPL
+  LDA #>msg_included_from
+  STA TABPH
+  JSR show_message
+  ; Restore walking pointer
+  PLA
+  STA TABPH
+  PLA
+  STA TABPL
+  ; Print parent filename (at TABPL)
+  ; Save TABPL again since show_message destroys it
+  LDA TABPL
+  PHA
+  LDA TABPH
+  PHA
+  JSR show_message
+  ; Print ":"
+  LDA #':'
+  JSR write_d
+  ; Print the saved parent line number (show_decimal destroys TABPL)
+  JSR show_decimal
+  ; Restore walking pointer after show_decimal
+  PLA
+  STA TABPH
+  PLA
+  STA TABPL
+  ; Continue to next level
+  JMP .traceback_loop
+.traceback_done
+  RTS
+
+msg_included_from
+  .data "  included from " $00

@@ -191,6 +191,46 @@ run_negative_test() {
     fi
 }
 
+# Run a stderr test (expects assembly failure with specific full stderr output)
+# Use this for testing error traceback format and other multi-line diagnostics
+# Supports {{MAIN_FILE}} placeholder which is replaced with the temp file path
+run_stderr_test() {
+    local name="$1"
+    local input="$2"
+    local expected_stderr="$3"
+    local extra_args="$4"
+
+    if [[ -n "$FILTER" && "$name" != "$FILTER" ]]; then
+        return 0
+    fi
+
+    printf "  %-40s " "$name"
+
+    if run_assembler "$input" $extra_args; then
+        echo -e "${RED}FAIL${NC} (expected error, got success)"
+        ((FAILED++))
+        return
+    fi
+
+    # Get actual stderr, filtering out emulator status lines and stripping trailing whitespace
+    # Emulator status lines start with the path or contain "cycles" or "was not closed"
+    local actual_stderr=$(cat "$TMP_ERR" | grep -v "^out/" | grep -v "cycles$" | grep -v "was not closed$" | sed 's/[[:space:]]*$//')
+    # Replace {{MAIN_FILE}} placeholder with actual temp file path and strip trailing whitespace
+    local norm_expected=$(echo "$expected_stderr" | sed "s|{{MAIN_FILE}}|$TMP_ASM|g" | sed 's/[[:space:]]*$//')
+
+    if [[ "$actual_stderr" == "$norm_expected" ]]; then
+        echo -e "${GREEN}PASS${NC}"
+        ((PASSED++))
+    else
+        echo -e "${RED}FAIL${NC}"
+        echo "    Expected stderr:"
+        echo "$norm_expected" | sed 's/^/      /'
+        echo "    Actual stderr:"
+        echo "$actual_stderr" | sed 's/^/      /'
+        ((FAILED++))
+    fi
+}
+
 # Parse and run tests from test file
 parse_and_run_tests() {
     local in_test=0
@@ -201,16 +241,17 @@ parse_and_run_tests() {
     local expect_error=""
     local expect_line=""
     local expect_msg=""
+    local expect_stderr=""
     local extra_args=""
     local in_input=0
-    local section=""
+    local in_stderr=0
 
     echo "Running tests from $TEST_FILE"
     echo ""
 
     while IFS= read -r line || [[ -n "$line" ]]; do
-        # Skip comments and empty lines outside of INPUT
-        if [[ $in_input -eq 0 ]]; then
+        # Skip comments and empty lines outside of multi-line sections
+        if [[ $in_input -eq 0 && $in_stderr -eq 0 ]]; then
             [[ "$line" =~ ^[[:space:]]*# ]] && continue
             [[ -z "$line" ]] && continue
         fi
@@ -221,6 +262,8 @@ parse_and_run_tests() {
             if [[ -n "$name" ]]; then
                 if [[ -n "$expect_hex" ]]; then
                     run_positive_test "$name" "$input" "$expect_hex" "$expect_fwdref" "$extra_args"
+                elif [[ -n "$expect_stderr" ]]; then
+                    run_stderr_test "$name" "$input" "$expect_stderr" "$extra_args"
                 elif [[ -n "$expect_error" ]]; then
                     run_negative_test "$name" "$input" "$expect_error" "$expect_line" "$expect_msg" "$extra_args"
                 fi
@@ -233,8 +276,10 @@ parse_and_run_tests() {
             expect_error=""
             expect_line=""
             expect_msg=""
+            expect_stderr=""
             extra_args=""
             in_input=0
+            in_stderr=0
             in_test=1
             continue
         fi
@@ -243,33 +288,52 @@ parse_and_run_tests() {
         if [[ "$line" =~ ^NAME:[[:space:]]*(.*) ]]; then
             name="${BASH_REMATCH[1]}"
             in_input=0
+            in_stderr=0
         elif [[ "$line" =~ ^INPUT: ]]; then
             in_input=1
+            in_stderr=0
             input=""
+        elif [[ "$line" =~ ^EXPECT_STDERR: ]]; then
+            in_stderr=1
+            in_input=0
+            expect_stderr=""
         elif [[ "$line" =~ ^EXPECT_HEX:[[:space:]]*(.*) ]]; then
             expect_hex="${BASH_REMATCH[1]}"
             in_input=0
+            in_stderr=0
         elif [[ "$line" =~ ^EXPECT_FWDREF:[[:space:]]*(.*) ]]; then
             expect_fwdref="${BASH_REMATCH[1]}"
             in_input=0
+            in_stderr=0
         elif [[ "$line" =~ ^EXPECT_ERROR:[[:space:]]*(.*) ]]; then
             expect_error="${BASH_REMATCH[1]}"
             in_input=0
+            in_stderr=0
         elif [[ "$line" =~ ^EXPECT_LINE:[[:space:]]*(.*) ]]; then
             expect_line="${BASH_REMATCH[1]}"
             in_input=0
+            in_stderr=0
         elif [[ "$line" =~ ^EXPECT_MSG:[[:space:]]*(.*) ]]; then
             expect_msg="${BASH_REMATCH[1]}"
             in_input=0
+            in_stderr=0
         elif [[ "$line" =~ ^ARGS:[[:space:]]*(.*) ]]; then
             extra_args="${BASH_REMATCH[1]}"
             in_input=0
+            in_stderr=0
         elif [[ $in_input -eq 1 ]]; then
             # Accumulate input lines
             if [[ -n "$input" ]]; then
                 input="${input}"$'\n'"${line}"
             else
                 input="${line}"
+            fi
+        elif [[ $in_stderr -eq 1 ]]; then
+            # Accumulate expected stderr lines
+            if [[ -n "$expect_stderr" ]]; then
+                expect_stderr="${expect_stderr}"$'\n'"${line}"
+            else
+                expect_stderr="${line}"
             fi
         fi
     done < "$TEST_FILE"
@@ -278,6 +342,8 @@ parse_and_run_tests() {
     if [[ -n "$name" ]]; then
         if [[ -n "$expect_hex" ]]; then
             run_positive_test "$name" "$input" "$expect_hex" "$expect_fwdref" "$extra_args"
+        elif [[ -n "$expect_stderr" ]]; then
+            run_stderr_test "$name" "$input" "$expect_stderr" "$extra_args"
         elif [[ -n "$expect_error" ]]; then
             run_negative_test "$name" "$input" "$expect_error" "$expect_line" "$expect_msg" "$extra_args"
         fi
