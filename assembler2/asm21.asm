@@ -1785,10 +1785,8 @@ expand_macro
   INY
   LDA (MACRO_DEF_PTR_L),Y
   PHA                   ; Save body start high
-  ; Push label scope BEFORE parsing arguments (need it for hash calculation)
-  ; Don't push memory source yet - we need to read arguments from file source
-  JSR push_label_scope
-  ; Parse arguments and populate parameters
+  ; DON'T push label scope yet - we need parent's scope to look up arguments
+  ; Parse arguments first, storing values on heap temporarily
   ; MACRO_DEF_PTR+3 points to first parameter name (or empty string if none)
   LDA MACRO_DEF_PTR_L
   CLC
@@ -1797,23 +1795,28 @@ expand_macro
   LDA MACRO_DEF_PTR_H
   ADC #$00
   STA MACRO_DEF_PTR_H
-.em_param_loop
-  ; Check if we're at end of parameter list (empty string)
-  LDY #$00
-  LDA (MACRO_DEF_PTR_L),Y
-  BEQ .em_params_done
-  ; Save pointer to param name (parse_expression may overwrite TOKEN)
+  ; Save start of params (MACRO_DEF_PTR) and values area (MEMPL)
   LDA MACRO_DEF_PTR_L
   PHA
   LDA MACRO_DEF_PTR_H
   PHA
-  ; Find length of param name and advance MACRO_DEF_PTR past it
+  LDA MEMPL
+  PHA
+  LDA MEMPH
+  PHA
+  ; Count parameters and parse arguments, storing values on heap
+  ; Each entry: [value_L][value_H][is_fwdref] = 3 bytes
+.em_parse_loop
+  ; Check if we're at end of parameter list (empty string)
+  LDY #$00
+  LDA (MACRO_DEF_PTR_L),Y
+  BEQ .em_parse_done
+  ; Skip past parameter name
   LDY #$FF
 .em_skip_param
   INY
   LDA (MACRO_DEF_PTR_L),Y
   BNE .em_skip_param
-  ; Y = length of param name (not including null)
   ; Advance MACRO_DEF_PTR past the null terminator
   TYA
   SEC                   ; +1 for null
@@ -1824,60 +1827,134 @@ expand_macro
   STA MACRO_DEF_PTR_H
   ; Check for argument in input
   JSR check_for_end_of_line
-  BCS .em_too_few
-  ; Parse argument expression (result in OPERAND_L/H, IS_FWDREF set)
+  BCC .em_have_arg
+  JMP .em_too_few
+.em_have_arg
+  ; Parse argument expression (using PARENT's scope for lookups)
   JSR parse_expression
-  ; Add parameter to scope (unless forward ref in pass 1)
+  ; Store value and fwdref flag on heap
+  LDY #$00
+  LDA OPERAND_L
+  STA (MEMPL),Y
+  INY
+  LDA OPERAND_H
+  STA (MEMPL),Y
+  INY
   LDA IS_FWDREF
-  BEQ .em_add_param
-  BIT PASS
-  BMI .em_add_param     ; Pass 2: always add (resolved now)
-  ; Pass 1 with forward ref: don't add to scope, let it become fwdref in body
-  PLA                   ; Discard saved param pointer
+  STA (MEMPL),Y
+  ; Advance heap by 3
+  CLC
+  LDA MEMPL
+  ADC #$03
+  STA MEMPL
+  LDA MEMPH
+  ADC #$00
+  STA MEMPH
+  JMP .em_parse_loop
+.em_parse_done
+  ; Check for extra arguments (should be at end of line now)
+  JSR check_for_end_of_line
+  BCS .em_args_ok
+  JMP .em_too_many
+.em_args_ok
+  ; NOW push label scope for the child macro
+  JSR push_label_scope
+  ; Stack: [body_L][body_H][params_L][params_H][vals_L][vals_H] (vals on top)
+  ; Pop values start to TABPL/TABPH for reading stored values
   PLA
-  JMP .em_param_loop
-.em_add_param
-  ; Restore param name pointer and copy to TOKEN
-  ; (parse_expression may have overwritten TOKEN with a label name)
+  STA TABPH             ; Values area high
   PLA
-  STA TABPH             ; Temporarily use TABPL/H for param name pointer
+  STA TABPL             ; Values area low
+  ; Pop params start to MACRO_DEF_PTR
   PLA
-  STA TABPL
+  STA MACRO_DEF_PTR_H
+  PLA
+  STA MACRO_DEF_PTR_L
+  ; Stack now: [body_L][body_H]
+  ; Now iterate through params and add to hash with stored values
+.em_add_loop
+  ; Check if at end of parameter list
+  LDY #$00
+  LDA (MACRO_DEF_PTR_L),Y
+  BEQ .em_add_done
+  ; Copy param name to TOKEN
   LDY #$FF
 .em_copy_param
   INY
-  LDA (TABPL),Y
+  LDA (MACRO_DEF_PTR_L),Y
   STA TOKEN,Y
   BNE .em_copy_param
+  ; Advance MACRO_DEF_PTR past param name
+  TYA
+  SEC
+  ADC MACRO_DEF_PTR_L
+  STA MACRO_DEF_PTR_L
+  LDA #$00
+  ADC MACRO_DEF_PTR_H
+  STA MACRO_DEF_PTR_H
+  ; Load value and fwdref from TABPL area
+  LDY #$00
+  LDA (TABPL),Y
+  STA OPERAND_L
+  INY
+  LDA (TABPL),Y
+  STA OPERAND_H
+  INY
+  LDA (TABPL),Y
+  STA IS_FWDREF
+  ; Advance TABPL by 3
+  CLC
+  LDA TABPL
+  ADC #$03
+  STA TABPL
+  LDA TABPH
+  ADC #$00
+  STA TABPH
+  ; Skip adding if forward ref in pass 1
+  LDA IS_FWDREF
+  BEQ .em_do_add
+  BIT PASS
+  BMI .em_do_add        ; Pass 2: always add
+  JMP .em_add_loop      ; Pass 1 fwdref: skip
+.em_do_add
+  ; Save TABPL/TABPH on stack (hash functions clobber them)
+  LDA TABPL
+  PHA
+  LDA TABPH
+  PHA
   ; Add parameter to local scope
-  ; Parameter acts as a local label in the expansion scope
   LDA #$FF
-  STA IS_LOCAL_LABEL    ; Parameters are local to expansion scope
+  STA IS_LOCAL_LABEL
   JSR select_label_hash_table
   JSR hash_add
-  BCS .em_param_loop    ; C=1: already exists (added in pass 1), skip to next
-  ; Store value (OPERAND_L/H) in hash entry
+  BCS .em_hash_done     ; Already exists (pass 1), skip store
+  ; Store value
   LDA OPERAND_L
   STA HEX2
   LDA OPERAND_H
   STA HEX1
   JSR store_hash_value
-  JMP .em_param_loop
-.em_too_few
-  JMP err_too_few_arguments
-.em_params_done
-  ; Check for extra arguments (should be at end of line now)
-  JSR check_for_end_of_line
-  BCC .em_too_many
+.em_hash_done
+  ; Restore TABPL/TABPH and loop
+  PLA
+  STA TABPH
+  PLA
+  STA TABPL
+  JMP .em_add_loop
+.em_add_done
+  ; Restore heap pointer (discard temp values)
+  ; TABPL now points past all values - we don't need to restore MEMPL
+  ; since the values were temporary and we're done with them
   ; Push memory source and set up pointers
-  ; FS_FILENAME = TOKEN - note: was overwritten by param names, but that's okay for now
   JSR push_memory_source
-  ; Restore body pointer from 6502 stack and set up memory source pointer
+  ; Restore body pointer from 6502 stack
   PLA                   ; Body start high
   STA FS_MEM_PTR_H
   PLA                   ; Body start low
   STA FS_MEM_PTR_L
   JMP asm_line_loop
+.em_too_few
+  JMP err_too_few_arguments
 .em_too_many
   JMP err_too_many_arguments
 

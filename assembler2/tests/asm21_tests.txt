@@ -2042,3 +2042,55 @@ INPUT:
 5:   .endmacro
 6:   load_addr target
 EXPECT_HEX: ad 00 02
+
+---
+NAME: macro_nested_param_passing
+DESCRIPTION: Nested macros can pass parameters down
+INPUT:
+1: * = $0200
+2:   .macro inner val
+3:   LDA #val
+4:   .endmacro
+5:   .macro outer x
+6:   inner x
+7:   INX
+8:   .endmacro
+9:   outer $42
+EXPECT_HEX: a9 42 e8
+
+---
+NAME: macro_nested_param_multiple_levels
+DESCRIPTION: Parameters pass through multiple nesting levels
+INPUT:
+1: * = $0200
+2:   .macro level3 v
+3:   STA v
+4:   .endmacro
+5:   .macro level2 v
+6:   level3 v
+7:   .endmacro
+8:   .macro level1 v
+9:   level2 v
+10:   .endmacro
+11:   level1 $80
+EXPECT_HEX: 85 80
+
+---
+NAME: macro_nested_local_labels_isolated
+DESCRIPTION: Local labels in nested macros remain isolated
+INPUT:
+1: * = $0200
+2:   .macro inner
+3:   BNE .skip
+4:   NOP
+5: .skip
+6:   INX
+7:   .endmacro
+8:   .macro outer
+9:   BEQ .skip
+10:   inner
+11: .skip
+12:   INY
+13:   .endmacro
+14:   outer
+EXPECT_HEX: f0 04 d0 01 ea e8 c8
