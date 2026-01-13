@@ -167,6 +167,13 @@ interrupt
   BEQ .done
 ; Save error code
   STA TEMP
+; Close the ouptut file if open
+  LDA CURR_OUT_FILE
+  BEQ .output_not_open
+  JSR close
+  LDA #$00
+  STA CURR_OUT_FILE
+.output_not_open
 ; Print the "Error " message
   LDA #<msg_error
   STA TABPL

@@ -25,6 +25,7 @@ STARTED     .data $00 ; flag to indicate output has started
 CURR_FILE   .data $00 ; current file handle
 CURLINEL    .data $00 ; Current line (L)
 CURLINEH    .data $00 ; Current line (H)
+CURR_OUT_FILE .data $00 ; Current output file (for closing on error)
 IN_ZEROPAGE .data $00 ; Flag indicating if in zero page section
 PC_SAVEL    .data $00 ; Save location for PC when switching sections
 PC_SAVEH    .data $00 ; "
@@ -2236,15 +2237,17 @@ copy_string_to_token
 
 ; Entry point
 start
+  ; Initialize output file handle to 0
+  LDA #$00
+  STA CURR_OUT_FILE
+  .ifdef enable_debug
+  ; Initialize debug flag to 0
+  STA DEBUG_FLAG
+  .endif
   ; Initialize file stack early so interrupt handler works correctly
   JSR file_stack_init
   ; Initialize scope stack for macro expansions
   JSR init_scope_stack
-  .ifdef enable_debug
-  ; Initialize debug flag to 0
-  LDA #$00
-  STA DEBUG_FLAG
-  .endif
   ; Check argument count (must be at least 2)
   JSR argc
   CMP #$02
@@ -2305,6 +2308,7 @@ start
   LDA #$01
   JSR argv
   JSR openout
+  STA CURR_OUT_FILE
   TAX
 
   JSR assemble_code
@@ -2342,6 +2346,8 @@ start
   ; Close output file
   TXA
   JSR close
+  LDA #$00
+  STA CURR_OUT_FILE
 
   .ifdef enable_debug
   ; Print heap usage if debug flag is set
