@@ -782,28 +782,15 @@ update_global_heap_from_lookup
 ;        'Duplicate label' error if label has already been encountered
 ;        'Bad hex' error if non-hex characters were encountered
 capture_label
+  CMP #'*'
+  BEQ .set_pc
   JSR read_token            ; Next char in NEXT_CHAR
   LDA NEXT_CHAR             ; Check if terminated by colon
   CMP #':'
   BNE .no_colon
   JSR read_char             ; Skip past colon, update NEXT_CHAR
 .no_colon
-  LDA TOKEN
-  CMP #'*'
-  BNE .normal_label
-  ; Set PC
-  JSR check_for_value
-  BCS .pc_value_present
-  JMP err_pc_value_expected
-.pc_value_present
-  JSR read_value
-  JSR skip_rest_of_line
-  ; No need to retain next char as caller
-  ; goes straight to next line
-  JSR update_pc
-  SEC                       ; Indicate line is fully processed
-  RTS
-.normal_label
+  ; Normal label
   BIT PASS
   BPL .pass_1
   ; Pass 2 - don't capture label, but must track globals for local label scoping
@@ -819,6 +806,18 @@ capture_label
   JSR update_global_heap_from_lookup  ; Set CURR_GLOBAL_HEAP for local label lookups
 .was_local_2
   JMP .skip_spaces_and_return_processed_flag
+.set_pc
+  ; Set PC
+  JSR read_char             ; Skip the *
+  JSR check_for_value
+  BCS .pc_value_present
+  JMP err_pc_value_expected
+.pc_value_present
+  JSR read_value
+  JSR skip_rest_of_line
+  JSR update_pc
+  SEC                       ; Indicate line is fully processed
+  RTS
 .has_equals_2
   JSR read_value
   JMP .skip_and_return_processed
