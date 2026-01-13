@@ -51,7 +51,6 @@ NEXT_CHAR   .data $00 ; Last character read by read_char
 IN_MACRO_DEF    .data $00 ; Flag: currently capturing macro body ($FF = capturing)
 MACRO_DEF_PTR_L .data $00 ; Heap pointer where macro body is being stored
 MACRO_DEF_PTR_H .data $00 ; "
-MACRO_PARAM_COUNT .data $00 ; Number of parameters in current macro definition
 
   .code
 
@@ -1607,7 +1606,7 @@ process_macro
   STA (MEMPL),Y
   INY
   JSR advance_heap
-  ; Save location for body_ptr (will fill in at .endmacro)
+  ; Save location for body_ptr (will fill in after params are parsed)
   LDA MEMPL
   STA MACRO_DEF_PTR_L
   LDA MEMPH
@@ -1615,16 +1614,7 @@ process_macro
   ; Advance past body_ptr space (2 bytes)
   LDY #$02
   JSR advance_heap
-  ; Initialize param_count to 0
-  LDA #$00
-  STA MACRO_PARAM_COUNT
-  ; Store param_count placeholder on heap (will update later)
-  LDY #$00
-  LDA #$00
-  STA (MEMPL),Y
-  INY
-  JSR advance_heap
-  ; Now parse parameters (if any)
+  ; Parse parameters (if any) - stored as zero-terminated list
 .pm_param_loop
   JSR check_for_end_of_line
   BCS .pm_params_done  ; End of line, no more params
@@ -1639,23 +1629,15 @@ process_macro
   BNE .pm_copy_param
   INY
   JSR advance_heap
-  ; Increment param count
-  INC MACRO_PARAM_COUNT
   JMP .pm_param_loop
 .pm_params_done
-  ; Update param_count on heap (at MACRO_DEF_PTR + 2)
-  LDA MACRO_DEF_PTR_L
-  CLC
-  ADC #$02
-  STA TABPL
-  LDA MACRO_DEF_PTR_H
-  ADC #$00
-  STA TABPH
+  ; Write empty string terminator for parameter list
   LDY #$00
-  LDA MACRO_PARAM_COUNT
-  STA (TABPL),Y
+  LDA #$00
+  STA (MEMPL),Y
+  INY
+  JSR advance_heap
   ; Write body_ptr (current MEMPL) into the saved location
-  ; MACRO_DEF_PTR still points to where body_ptr should be stored
   LDA MACRO_DEF_PTR_L
   STA TABPL
   LDA MACRO_DEF_PTR_H
@@ -1667,7 +1649,6 @@ process_macro
   LDA MEMPH
   STA (TABPL),Y
   ; Update MACRO_DEF_PTR to point where body will be stored
-  ; (current MEMPL is right after params - body capture starts here)
   LDA MEMPL
   STA MACRO_DEF_PTR_L
   LDA MEMPH
