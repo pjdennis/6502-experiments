@@ -2113,6 +2113,66 @@ INPUT:
 EXPECT_HEX: 85 80
 
 ---
+NAME: macro_nested_param_backward_refernce_zp
+DESCRIPTION: Parameters pass through multiple nesting levels
+INPUT:
+01: * = $0200
+02: value = $12
+03:   .macro level2 v2
+04:   LDA v2            ; Expect zero page addressing
+05:   .endmacro
+06:   .macro level1 v1
+07:   level2 v1
+08:   .endmacro
+09:   level1 value
+EXPECT_HEX: a5 12
+
+---
+NAME: macro_nested_param_backward_refernce_abs
+DESCRIPTION: Parameters pass through multiple nesting levels
+INPUT:
+01: * = $0200
+02: value = $1234
+03:   .macro level2 v2
+04:   LDA v2            ; Expect absolute addressing
+05:   .endmacro
+06:   .macro level1 v1
+07:   level2 v1
+08:   .endmacro
+09:   level1 value
+EXPECT_HEX: ad 34 12
+
+---
+NAME: macro_nested_param_forward_refernce_1_byte
+DESCRIPTION: Parameters pass through multiple nesting levels
+INPUT:
+01: * = $0200
+02:   .macro level2 v2
+03:   LDA v2            ; Expect absolute addressing
+04:   .endmacro
+05:   .macro level1 v1
+06:   level2 v1
+07:   .endmacro
+08:   level1 value
+09: value = $12
+EXPECT_HEX: ad 12 00
+
+---
+NAME: macro_nested_param_forward_refernce_2_byte
+DESCRIPTION: Parameters pass through multiple nesting levels
+INPUT:
+01: * = $0200
+02:   .macro level2 v2
+03:   LDA v2            ; Expect absolute addressing
+04:   .endmacro
+05:   .macro level1 v1
+06:   level2 v1
+07:   .endmacro
+08:   level1 value
+09: value = $1234
+EXPECT_HEX: ad 34 12
+
+---
 NAME: macro_nested_local_labels_isolated
 DESCRIPTION: Local labels in nested macros remain isolated
 INPUT:
