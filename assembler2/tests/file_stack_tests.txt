@@ -344,7 +344,7 @@ FILE main.txt:
 3: After
 EXPECT_STDOUT:
 Before
-main.txt:2
+file:main.txt:2
 
 # Note: After @traceback pops the stack, reading continues but finds EOF
 # so "After" is never printed
@@ -363,8 +363,8 @@ FILE inner.txt:
 EXPECT_STDOUT:
 Main start
 Inner start
-inner.txt:2
-main.txt:2
+file:inner.txt:2
+file:main.txt:2
 
 ---
 NAME: trace_deep
@@ -384,9 +384,9 @@ EXPECT_STDOUT:
 Outer1
 Middle1
 Inner
-inner.txt:2
-middle.txt:2
-main.txt:2
+file:inner.txt:2
+file:middle.txt:2
+file:main.txt:2
 
 ---
 NAME: trace_with_memory
@@ -396,12 +396,34 @@ FILE main.txt:
 2: @memory MEM_CONTENT
 3: @traceback
 4: After trace
-FILE other.txt:
-1: Other
 EXPECT_STDOUT:
 File start
 MEM_CONTENT
-main.txt:3
+file:main.txt:2
+
+# Note: Line shows 2 (where @memory was) because after memory exhausts,
+# we restore the line from when memory was pushed
+
+---
+NAME: trace_alternating
+MODE: memory
+FILE main.txt:
+1: Main line 1
+2: @include inner.txt
+3: Main line 3
+FILE inner.txt:
+1: Inner line 1
+2: @memory @traceback
+3: Inner line 3
+EXPECT_STDOUT:
+Main line 1
+Inner line 1
+memory:MEMORY:1
+file:inner.txt:2
+file:main.txt:2
+
+# This tests file -> file -> memory stack with traceback showing all types
+# The @traceback is inside the memory content, so it triggers while memory source is active
 
 # ============================================================================
 # NESTED FILES WITH MEMORY - Test alternating stack types

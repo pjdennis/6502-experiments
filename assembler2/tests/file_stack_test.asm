@@ -11,6 +11,7 @@
 
 FILE_STACK = $F000
 TOKEN      = $1D00
+TOKEN_MEM  = $1D80  ; Offset in TOKEN buffer for memory content
 
   .zeropage
 
@@ -506,23 +507,50 @@ check_memory_or_include:
   RTS
 .setup_memory_source:
   ; Set up memory source pointers
-  ; FS_MEM_PTR points to start of TOKEN (already set up)
-  ; FS_MEM_END points to end of content
-  ; TOKEN is at $1D00, content length is in X
-  LDA #<TOKEN
+  ; TOKEN contains the content, X = length
+  ; Problem: FS_FILENAME = TOKEN, so we can't put name there without losing content
+  ; Solution: Copy content to TOKEN+$80, then put name in TOKEN
+  ; Save X (content length)
+  STX TEMP
+  ; Copy content from TOKEN to TOKEN_MEM
+  LDY #$00
+.copy_content:
+  CPY TEMP
+  BEQ .content_done
+  LDA TOKEN,Y
+  STA TOKEN_MEM,Y
+  INY
+  JMP .copy_content
+.content_done:
+  ; Copy "MEMORY" to TOKEN (which is FS_FILENAME)
+  LDY #$00
+.copy_name:
+  LDA str_memory_source,Y
+  STA TOKEN,Y
+  BEQ .name_done
+  INY
+  JMP .copy_name
+.name_done:
+  ; Set memory pointers to TOKEN_MEM (where content now lives)
+  LDA #<TOKEN_MEM
   STA FS_MEM_PTR_L
-  LDA #>TOKEN
+  LDA #>TOKEN_MEM
   STA FS_MEM_PTR_H
-  ; Calculate end = TOKEN + X
-  TXA
+  ; Calculate end = TOKEN_MEM + content_length
+  LDA TEMP
   CLC
-  ADC #<TOKEN
+  ADC #<TOKEN_MEM
   STA FS_MEM_END_L
-  LDA #>TOKEN
+  LDA #>TOKEN_MEM
   ADC #$00
   STA FS_MEM_END_H
-  ; Push memory source
+  ; Push memory source (FS_FILENAME has name, pointers are set)
   JSR push_memory_source
+  ; Initialize line to 1 for memory source
+  LDA #$01
+  STA CURLINEL
+  LDA #$00
+  STA CURLINEH
   LDA #$01
   STA AT_LINE_START
   CLC
@@ -684,13 +712,17 @@ memory_rest:
   .data "emory"
 traceback_rest:
   .data "raceback"
+str_memory_source:
+  .data "MEMORY" $00
 
 ; Read memory content until newline into TOKEN
 ; Returns length in X (includes trailing newline)
+; Note: Uses read_char (not read_char_track_line) to avoid incrementing
+; line number - the line should be saved BEFORE reading the content
 read_memory_content:
   LDX #$00
 .loop:
-  JSR read_char_track_line
+  JSR read_char
   BCS .add_newline    ; EOF - add newline and done
   CMP #$0A
   BEQ .add_newline    ; Newline - add it and done
@@ -748,14 +780,50 @@ print_str_active:
   JMP print_str
 
 ; Print traceback of file stack - pops all entries, closes files
-; Output format: "filename:line\n" for each entry in stack
+; Output format: "type:name:line\n" for each entry in stack
+; where type is "file" or "memory"
 ; Loop: check if empty → print current → pop → repeat
 print_traceback:
+  ; Preserve X (output file handle)
+  TXA
+  PHA
 .loop:
-  ; Check if stack is empty (no files)
+  ; Check if stack is empty (no sources)
   JSR file_stack_empty
   BEQ .done
-  ; Print filename (FS_PL points to current entry's name)
+  ; Find curr_type by scanning past the name
+  ; FS_PL points to: name\0 | curr_type | ...
+  LDA FS_PL
+  STA TABPL
+  LDA FS_PH
+  STA TABPH
+  LDY #$00
+.find_null:
+  LDA (TABPL),Y
+  BEQ .found_null
+  INY
+  JMP .find_null
+.found_null:
+  ; Y points at null, curr_type is at Y+1
+  INY
+  LDA (TABPL),Y
+  BNE .print_memory_type
+  ; curr_type = 0: print "file:"
+  LDA #<str_type_file
+  STA TABPL
+  LDA #>str_type_file
+  STA TABPH
+  JSR print_str
+  JMP .print_name
+.print_memory_type:
+  ; curr_type = 1: print "memory:"
+  LDA #<str_type_memory
+  STA TABPL
+  LDA #>str_type_memory
+  STA TABPH
+  JSR print_str
+.print_name:
+  ; Print name (FS_PL points to current entry's name)
   LDA FS_PL
   STA TABPL
   LDA FS_PH
@@ -778,7 +846,15 @@ print_traceback:
   ; Continue to next
   JMP .loop
 .done:
+  ; Restore X
+  PLA
+  TAX
   RTS
+
+str_type_file:
+  .data "file:" $00
+str_type_memory:
+  .data "memory:" $00
 
 ; Print just the basename from a path at TABPL/H (skips everything before last '/')
 print_basename:

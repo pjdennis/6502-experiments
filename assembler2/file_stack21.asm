@@ -11,19 +11,20 @@
 ;   FS_ERR_NO_FILE - error handler for read_char when no file is open
 ;                    If not defined, read_char returns SEC like normal EOF
 
-; The file stack grows downwards. Each entry includes (from low to high address):
+; The file stack grows downwards. Unified frame format (from low to high address):
 ;
-; For file sources (FS_SRC_TYPE = 0):
-;   File name of current file (0-terminated)
-;   File handle of previous file (1 byte)
-;   Line number of previous file (2 bytes)
+;   name\0         - Source name (null-terminated)
+;   curr_type      - Type of THIS source: 0=file, 1=memory
+;   prev_type      - Type we're RETURNING to: 0=file, 1=memory
+;   prev_line_L    - Line number in parent (low byte)
+;   prev_line_H    - Line number in parent (high byte)
+;   <prev_data>    - Depends on prev_type:
+;                    If prev_type=0 (file):   prev_handle (1 byte)
+;                    If prev_type=1 (memory): prev_ptr_L, prev_ptr_H, prev_end_L, prev_end_H (4 bytes)
 ;
-; For memory sources (FS_SRC_TYPE = 1):
-;   Single null byte (empty "filename" marker)
-;   Previous FS_SRC_TYPE (1 byte)
-;   Previous FS_MEM_PTR (2 bytes)
-;   Previous FS_MEM_END (2 bytes)
-;   Previous line number (2 bytes)
+; Frame sizes: name_len + 1 (null) + 1 (curr) + 1 (prev) + 2 (line) + prev_data
+;   = name_len + 6 if returning to file
+;   = name_len + 9 if returning to memory
 
   .zeropage
 
@@ -69,18 +70,26 @@ file_stack_empty
 ;          FS_CURR_FILE contains the current file handle
 ; On exit X is preserved
 push_file_stack
+  TXA
+  PHA                   ; Save X at the very start
+  ; Calculate name length
   LDY #$FF
 .len_loop
-; A <- len(FS_FILENAME)
   INY
   LDA FS_FILENAME,Y
   BNE .len_loop
-; Decrease file stack pointer by len(FS_FILENAME) + 4
-; (null terminator + handle + 2-byte line number)
+  ; Y = name length (without null)
+  ; Calculate frame size: name_len + 1 (null) + 1 (curr) + 1 (prev) + 2 (line) + prev_data
+  ; prev_data is 1 byte if prev_type=0 (file), 4 bytes if prev_type=1 (memory)
   TYA
   CLC
-  ADC #$04
+  ADC #$06              ; Base: name + null + curr_type + prev_type + line + handle
+  LDX FS_SRC_TYPE
+  BEQ .size_done
+  ADC #$03              ; Add 3 more for memory (4 bytes total - 1 already counted)
+.size_done
   STA FS_TEMP
+  ; Decrease stack pointer by frame size
   SEC
   LDA FS_PL
   SBC FS_TEMP
@@ -88,176 +97,227 @@ push_file_stack
   LDA FS_PH
   SBC #$00
   STA FS_PH
+  ; Copy filename to stack
   LDY #$FF
 .copy_loop
   INY
   LDA FS_FILENAME,Y
   STA (FS_PL),Y
   BNE .copy_loop
-  ; Store file handle
+  ; Store curr_type (0 = file)
   INY
-  LDA FS_CURR_FILE
+  LDA #$00
   STA (FS_PL),Y
+  ; Store prev_type
   INY
-  ; Store line number
+  LDA FS_SRC_TYPE
+  STA (FS_PL),Y
+  PHA                   ; Save prev_type for later
+  ; Store prev_line
+  INY
   LDA FS_CURR_LINEL
   STA (FS_PL),Y
   INY
   LDA FS_CURR_LINEH
   STA (FS_PL),Y
+  ; Store prev_data based on prev_type
+  PLA                   ; Restore prev_type
+  BNE .save_memory_state
+  ; prev_type=0: save file handle
   INY
-; Reset line number and open new file
-  LDA #$00
-  STA FS_SRC_TYPE     ; File source
-  STA FS_CURR_LINEL
-  STA FS_CURR_LINEH
-
-  TXA
-  PHA
-  LDA #<FS_FILENAME
-  LDX #>FS_FILENAME
-  JSR open
-  STA FS_CURR_FILE
-  PLA
-  TAX
-
-  RTS
-
-
-; Push a memory source onto the stack
-; On entry: FS_MEM_PTR_L/H = start of memory buffer to read
-;           FS_MEM_END_L/H = end of memory buffer (one past last byte)
-; On exit: X is preserved, reading will continue from memory buffer
-;
-; Stack frame format for memory source:
-;   Null byte (empty filename marker)
-;   Previous source type (1 byte)
-;   Previous mem ptr L/H (2 bytes)
-;   Previous mem end L/H (2 bytes)
-;   Previous line number L/H (2 bytes)
-; Total: 8 bytes (fixed)
-push_memory_source
-  ; Decrease file stack pointer by 8
-  SEC
-  LDA FS_PL
-  SBC #$08
-  STA FS_PL
-  LDA FS_PH
-  SBC #$00
-  STA FS_PH
-  ; Store null byte (empty filename marker)
-  LDY #$00
-  LDA #$00
+  LDA FS_CURR_FILE
   STA (FS_PL),Y
-  ; Store previous source type
-  INY
-  LDA FS_SRC_TYPE
-  STA (FS_PL),Y
-  ; Store previous mem ptr
+  JMP .open_new_file
+.save_memory_state
+  ; prev_type=1: save memory pointers
   INY
   LDA FS_MEM_PTR_L
   STA (FS_PL),Y
   INY
   LDA FS_MEM_PTR_H
   STA (FS_PL),Y
-  ; Store previous mem end
   INY
   LDA FS_MEM_END_L
   STA (FS_PL),Y
   INY
   LDA FS_MEM_END_H
   STA (FS_PL),Y
-  ; Store previous line number
+.open_new_file
+  ; Reset state and open new file
+  LDA #$00
+  STA FS_SRC_TYPE       ; Now a file source
+  STA FS_CURR_LINEL
+  STA FS_CURR_LINEH
+  LDA #<FS_FILENAME
+  LDX #>FS_FILENAME
+  JSR open
+  STA FS_CURR_FILE
+  PLA
+  TAX                   ; Restore X (saved at start of function)
+  RTS
+
+
+; Push a memory source onto the stack
+; On entry: FS_FILENAME = name for this memory source (e.g., "MACRO" or empty)
+;           FS_MEM_PTR_L/H = start of memory buffer to read
+;           FS_MEM_END_L/H = end of memory buffer (one past last byte)
+; On exit: X is preserved, reading will continue from memory buffer
+;
+; Uses unified frame format (see header)
+push_memory_source
+  TXA
+  PHA                   ; Save X at the very start
+  ; Calculate name length
+  LDY #$FF
+.len_loop
+  INY
+  LDA FS_FILENAME,Y
+  BNE .len_loop
+  ; Y = name length (without null)
+  ; Calculate frame size: name_len + 1 (null) + 1 (curr) + 1 (prev) + 2 (line) + prev_data
+  TYA
+  CLC
+  ADC #$06              ; Base: name + null + curr_type + prev_type + line + handle
+  LDX FS_SRC_TYPE
+  BEQ .size_done
+  ADC #$03              ; Add 3 more for memory (4 bytes total - 1 already counted)
+.size_done
+  STA FS_TEMP
+  ; Decrease stack pointer by frame size
+  SEC
+  LDA FS_PL
+  SBC FS_TEMP
+  STA FS_PL
+  LDA FS_PH
+  SBC #$00
+  STA FS_PH
+  ; Copy name to stack
+  LDY #$FF
+.copy_loop
+  INY
+  LDA FS_FILENAME,Y
+  STA (FS_PL),Y
+  BNE .copy_loop
+  ; Store curr_type (1 = memory)
+  INY
+  LDA #$01
+  STA (FS_PL),Y
+  ; Store prev_type
+  INY
+  LDA FS_SRC_TYPE
+  STA (FS_PL),Y
+  PHA                   ; Save prev_type for later
+  ; Store prev_line
   INY
   LDA FS_CURR_LINEL
   STA (FS_PL),Y
   INY
   LDA FS_CURR_LINEH
   STA (FS_PL),Y
+  ; Store prev_data based on prev_type
+  PLA                   ; Restore prev_type
+  BNE .save_memory_state
+  ; prev_type=0: save file handle
+  INY
+  LDA FS_CURR_FILE
+  STA (FS_PL),Y
+  JMP .setup_memory
+.save_memory_state
+  ; prev_type=1: save memory pointers
+  INY
+  LDA FS_MEM_PTR_L
+  STA (FS_PL),Y
+  INY
+  LDA FS_MEM_PTR_H
+  STA (FS_PL),Y
+  INY
+  LDA FS_MEM_END_L
+  STA (FS_PL),Y
+  INY
+  LDA FS_MEM_END_H
+  STA (FS_PL),Y
+.setup_memory
   ; Set up new memory source (pointers already set by caller)
   LDA #$01
-  STA FS_SRC_TYPE     ; Memory source
+  STA FS_SRC_TYPE       ; Memory source
   LDA #$00
   STA FS_CURR_LINEL
   STA FS_CURR_LINEH
+  PLA
+  TAX                   ; Restore X (saved at start of function)
   RTS
 
 
-; On exit FS_CURR_FILE contains the previous file handle
-;         FS_CURR_LINEL;FS_CURR_LINEH contains the previous line number
-pop_file_stack
-; Close current file and restore from filestack
-  LDA FS_CURR_FILE
-  JSR close
-; Pop the filename
+; Unified pop function - handles both file and memory sources
+; On exit: Previous state restored (FS_CURR_FILE or FS_MEM_PTR/END)
+;          FS_SRC_TYPE restored to prev_type
+;          FS_CURR_LINEL/H restored to prev_line
+pop_source
+  ; Skip past name to find null terminator
   LDY #$FF
-.pop_loop
+.skip_name
   INY
   LDA (FS_PL),Y
-  BNE .pop_loop
-; Pop the file handle
+  BNE .skip_name
+  ; Y points at null, curr_type is at Y+1
+  INY
+  LDA (FS_PL),Y
+  BEQ .was_file_source
+  ; curr_type=1: was memory source, nothing to close
+  JMP .restore_prev
+.was_file_source
+  ; curr_type=0: close the current file
+  LDA FS_CURR_FILE
+  JSR close
+.restore_prev
+  ; Read prev_type
+  INY
+  LDA (FS_PL),Y
+  STA FS_SRC_TYPE       ; Restore source type
+  PHA                   ; Save for later
+  ; Read prev_line
+  INY
+  LDA (FS_PL),Y
+  STA FS_CURR_LINEL
+  INY
+  LDA (FS_PL),Y
+  STA FS_CURR_LINEH
+  ; Restore prev_data based on prev_type
+  PLA
+  BNE .restore_memory
+  ; prev_type=0: restore file handle
   INY
   LDA (FS_PL),Y
   STA FS_CURR_FILE
-; Pop the line number
-  INY
-  LDA (FS_PL),Y
-  STA FS_CURR_LINEL
-  INY
-  LDA (FS_PL),Y
-  STA FS_CURR_LINEH
-; Adjust stack pointer
-  TYA
-  SEC  ; +1
-  ADC FS_PL
-  STA FS_PL
-  LDA #$00
-  ADC FS_PH
-  STA FS_PH
-  ; Restore to file source type
-  LDA #$00
-  STA FS_SRC_TYPE
-  RTS
-
-
-; Pop a memory source and restore previous state
-pop_memory_source
-  ; Skip null byte
-  LDY #$00
-  ; Restore previous source type
-  INY
-  LDA (FS_PL),Y
-  STA FS_SRC_TYPE
-  ; Restore mem ptr
+  JMP .adjust_stack
+.restore_memory
+  ; prev_type=1: restore memory pointers
   INY
   LDA (FS_PL),Y
   STA FS_MEM_PTR_L
   INY
   LDA (FS_PL),Y
   STA FS_MEM_PTR_H
-  ; Restore mem end
   INY
   LDA (FS_PL),Y
   STA FS_MEM_END_L
   INY
   LDA (FS_PL),Y
   STA FS_MEM_END_H
-  ; Restore line number
-  INY
-  LDA (FS_PL),Y
-  STA FS_CURR_LINEL
-  INY
-  LDA (FS_PL),Y
-  STA FS_CURR_LINEH
-  ; Adjust stack pointer (add 8)
-  CLC
-  LDA FS_PL
-  ADC #$08
+.adjust_stack
+  ; Y points to last byte read, add Y+1 to stack pointer
+  TYA
+  SEC                   ; +1
+  ADC FS_PL
   STA FS_PL
-  LDA FS_PH
-  ADC #$00
+  LDA #$00
+  ADC FS_PH
   STA FS_PH
   RTS
+
+; Legacy names for compatibility
+pop_file_stack = pop_source
+pop_memory_source = pop_source
 
 
 ; Read character from current source (file or memory)
@@ -271,10 +331,12 @@ file_stack_read_char
   BEQ .no_source
   JSR read
   BCC .got_char
-  ; EOF on current file - pop stack and try previous file
-  JSR pop_file_stack
-  LDA FS_CURR_FILE
+  ; EOF on current file - pop and try previous source
+  JSR pop_source
+  ; Check if stack is empty
+  JSR file_stack_empty
   BEQ .all_done
+  ; Continue reading from previous source (could be file or memory)
   JMP file_stack_read_char
 .read_memory
   ; Type 1 = memory source
@@ -301,8 +363,12 @@ file_stack_read_char
   CLC
   RTS
 .mem_exhausted
-  ; Memory source exhausted - pop and continue
-  JSR pop_memory_source
+  ; Memory source exhausted - pop and try previous source
+  JSR pop_source
+  ; Check if stack is empty
+  JSR file_stack_empty
+  BEQ .all_done
+  ; Continue reading from previous source
   JMP file_stack_read_char
 .no_source
   .ifdef FS_ERR_NO_FILE
