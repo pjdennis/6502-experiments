@@ -277,6 +277,16 @@ INPUT:
 EXPECT_HEX: ad 34 12 8d 34 12
 
 ---
+NAME: assignment_no_space
+INPUT:
+1: *=$0200
+2: addr=$1234
+3:   LDA addr
+4: *=$0200+$04
+5:   NOP
+EXPECT_HEX: ad 34 12 00 ea
+
+---
 NAME: comment_after_instruction
 INPUT:
 1: * = $0200
@@ -1205,11 +1215,38 @@ INPUT:
 EXPECT_HEX: b1 42
 
 ---
-NAME: expr_char_difference
+NAME: expr_assign_to_label
 INPUT:
 1: * = $0200
-2:   LDA #'z'-'a'
-EXPECT_HEX: a9 19
+2: value = $01+$02
+3:   LDA #value
+EXPECT_HEX: a9 03
+
+---
+NAME: expr_assign_label_expr_to_label
+INPUT:
+1: * = $0200
+2: value1 = $02
+3: value2 = value1+$03
+4:   LDA #value2
+EXPECT_HEX: a9 05
+
+---
+NAME: expr_assign_label_expr_to_pc
+INPUT:
+1: value = $0200
+2: * = value
+3:   NOP
+4: * = value+$02
+5:   NOP
+EXPECT_HEX: ea 00 ea
+
+---
+NAME: expr_char_plus_offset
+INPUT:
+1: * = $0200
+2:   LDA #'A'+$05
+EXPECT_HEX: a9 46
 
 ---
 NAME: expr_char_plus_offset

@@ -104,6 +104,8 @@ compare_end_of_token
   CMP #'>'             ; Greater-than terminates for shift operators
   BEQ .end
   CMP #':'             ; Colon terminates for optional label suffix
+  BEQ .end
+  CMP #'='             ; Equals terminates for label assignments
 .end
   RTS
 
