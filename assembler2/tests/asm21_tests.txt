@@ -1672,14 +1672,105 @@ Error 1 in file tests/include/nested_error2.asm at line 3: Label not found
 # MACRO TESTS
 # ============================================================================
 
+# Phase 1A: Basic parsing tests (macro invocation not yet working)
+
+---
+NAME: macro_def_parses
+DESCRIPTION: Macro definition parses without error (body still assembled in Phase 1A)
+INPUT:
+1: * = $0200
+2:   .macro MYMACRO
+3:   NOP
+4:   .endmacro
+EXPECT_HEX: ea
+
+---
+NAME: macro_def_with_params
+DESCRIPTION: Macro with parameters parses without error
+INPUT:
+1: * = $0200
+2:   .macro INC16 addr
+3:   NOP
+4:   .endmacro
+EXPECT_HEX: ea
+
+---
+NAME: macro_def_multi_params
+DESCRIPTION: Macro with multiple parameters parses without error
+INPUT:
+1: * = $0200
+2:   .macro COPY src dst count
+3:   NOP
+4:   .endmacro
+EXPECT_HEX: ea
+
+---
+NAME: macro_def_empty_body
+DESCRIPTION: Macro with empty body parses without error
+INPUT:
+1: * = $0200
+2:   .macro EMPTY
+3:   .endmacro
+4:   NOP
+EXPECT_HEX: ea
+
+---
+NAME: macro_endmacro_without_macro
+DESCRIPTION: Error on .endmacro without .macro
+INPUT:
+1: * = $0200
+2:   .endmacro
+EXPECT_ERROR: 30
+EXPECT_LINE: 2
+
+---
+NAME: macro_unclosed
+DESCRIPTION: Error on unclosed macro definition (no line - detected at EOF)
+INPUT:
+1: * = $0200
+2:   .macro MYMACRO
+3:   NOP
+EXPECT_ERROR: 31
+
+---
+NAME: macro_name_expected
+DESCRIPTION: Error when macro name is missing
+INPUT:
+1: * = $0200
+2:   .macro
+EXPECT_ERROR: 27
+EXPECT_LINE: 2
+
+---
+NAME: macro_shadows_instruction
+DESCRIPTION: Error when macro name shadows an instruction
+INPUT:
+1: * = $0200
+2:   .macro NOP
+3:   .endmacro
+EXPECT_ERROR: 28
+EXPECT_LINE: 2
+
+---
+NAME: macro_duplicate
+DESCRIPTION: Error on duplicate macro definition
+INPUT:
+1: * = $0200
+2:   .macro MYMACRO
+3:   .endmacro
+4:   .macro MYMACRO
+5:   .endmacro
+EXPECT_ERROR: 29
+EXPECT_LINE: 4
+
 ---
 NAME: macro_simple
-SKIP: macros not implemented yet
+SKIP: macro invocation not implemented yet (Phase 2)
 INPUT:
 1: * = $0200
 2:   .macro nop2
 3:   NOP
 4:   NOP
-5:   .endm
+5:   .endmacro
 6:   nop2
 EXPECT_HEX: ea ea

@@ -46,6 +46,10 @@ SKIP_DEPTH  .data $00 ; Depth where skipping started (0 = not skipping)
 ARG_COUNT   .data $00 ; Total command line argument count
 ARG_INDEX   .data $00 ; Current argument index being processed
 NEXT_CHAR   .data $00 ; Last character read by read_char
+IN_MACRO_DEF    .data $00 ; Flag: currently capturing macro body ($FF = capturing)
+MACRO_DEF_PTR_L .data $00 ; Heap pointer where macro body is being stored
+MACRO_DEF_PTR_H .data $00 ; "
+MACRO_PARAM_COUNT .data $00 ; Number of parameters in current macro definition
 
   .code
 
@@ -1349,10 +1353,28 @@ process_directive
   JSR compare_token
   BEQ .data
   JSR process_conditional_directive ; Returns with C=0 if processed
-  BCS .directive_not_found
-  RTS
-.directive_not_found
+  BCC .directive_done
+  ; Check for 'macro'
+  LDA #<directive_macro
+  STA TABPL
+  LDA #>directive_macro
+  STA TABPH
+  JSR compare_token
+  BEQ .macro
+  ; Check for 'endmacro'
+  LDA #<directive_endmacro
+  STA TABPL
+  LDA #>directive_endmacro
+  STA TABPH
+  JSR compare_token
+  BEQ .endmacro
   JMP err_unknown_directive
+.directive_done
+  RTS
+.macro
+  JMP process_macro
+.endmacro
+  JMP process_endmacro
 .include
   JSR check_for_end_of_line
   BCC .get_name
@@ -1431,6 +1453,12 @@ directive_ifdef
 directive_endif
   .data "endif" $00
 
+directive_macro
+  .data "macro" $00
+
+directive_endmacro
+  .data "endmacro" $00
+
 
 data_parameters_loop
 data_parameters_loop_entry
@@ -1506,6 +1534,150 @@ process_endif
   JMP skip_rest_of_line ; Tail call
 
 
+; Process .macro directive
+; Syntax: .macro NAME [param1 param2 ...]
+; Creates entry in IHASHTAB: [name $00][$FE][body_ptr_L][body_ptr_H][param_count][params...]
+process_macro
+  ; Skip spaces and read macro name
+  JSR check_for_end_of_line
+  BCC .pm_has_name
+  JMP err_macro_name_expected
+.pm_has_name
+  JSR read_token       ; Macro name now in TOKEN, next char in NEXT_CHAR
+  ; Check for instruction collision or duplicate macro
+  JSR select_instruction_hash_table
+  JSR find_in_hash_instruction
+  BCS .pm_name_ok      ; C=1 means not found, good
+  ; Found something - is it an instruction or existing macro?
+  ; Check first byte of value - $FE means macro, else instruction
+  LDA (TABPL),Y
+  CMP #$FE
+  BEQ .pm_is_macro
+  JMP err_macro_shadows_instruction
+.pm_is_macro
+  ; It's a macro - in pass 2 this is expected, just skip to capturing
+  BIT PASS
+  BMI .pm_pass2_skip_add
+  JMP err_duplicate_macro
+.pm_pass2_skip_add
+  ; Pass 2: skip adding, just set flag and skip line
+  ; The macro body will be re-captured (but discarded in Phase 1B capture mode)
+  LDA #$FF
+  STA IN_MACRO_DEF
+  JMP skip_rest_of_line
+.pm_name_ok
+  ; Add macro entry to instruction hash table
+  ; HASH is still set from find_in_hash_instruction
+  ; Use similar logic to hash_add but for instruction table
+  JSR hash_entry_empty
+  BEQ .pm_hash_empty
+  ; Entry exists - find end of chain
+  JSR load_hash_entry
+  JSR find_token
+  ; TABPL;TABPH,Y points to 'next' pointer at end of chain
+  JSR store_table_entry  ; Store MEMPL at end of chain
+  JMP .pm_store_entry
+.pm_hash_empty
+  JSR store_hash_entry   ; Store MEMPL in hash table
+.pm_store_entry
+  JSR store_token        ; Stores name on heap, MEMPL now points to value location
+  ; Store $FE sentinel
+  LDY #$00
+  LDA #$FE
+  STA (MEMPL),Y
+  INY
+  JSR advance_heap
+  ; Save location for body_ptr (will fill in at .endmacro)
+  LDA MEMPL
+  STA MACRO_DEF_PTR_L
+  LDA MEMPH
+  STA MACRO_DEF_PTR_H
+  ; Advance past body_ptr space (2 bytes)
+  LDY #$02
+  JSR advance_heap
+  ; Initialize param_count to 0
+  LDA #$00
+  STA MACRO_PARAM_COUNT
+  ; Store param_count placeholder on heap (will update later)
+  LDY #$00
+  LDA #$00
+  STA (MEMPL),Y
+  INY
+  JSR advance_heap
+  ; Now parse parameters (if any)
+.pm_param_loop
+  JSR check_for_end_of_line
+  BCS .pm_params_done  ; End of line, no more params
+  ; Read parameter name
+  JSR read_token       ; Param name in TOKEN, next char in NEXT_CHAR
+  ; Store parameter name on heap (null-terminated)
+  LDY #$FF
+.pm_copy_param
+  INY
+  LDA TOKEN,Y
+  STA (MEMPL),Y
+  BNE .pm_copy_param
+  INY
+  JSR advance_heap
+  ; Increment param count
+  INC MACRO_PARAM_COUNT
+  JMP .pm_param_loop
+.pm_params_done
+  ; Update param_count on heap (at MACRO_DEF_PTR + 2)
+  LDA MACRO_DEF_PTR_L
+  CLC
+  ADC #$02
+  STA TABPL
+  LDA MACRO_DEF_PTR_H
+  ADC #$00
+  STA TABPH
+  LDY #$00
+  LDA MACRO_PARAM_COUNT
+  STA (TABPL),Y
+  ; Write body_ptr (current MEMPL) into the saved location
+  ; MACRO_DEF_PTR still points to where body_ptr should be stored
+  LDA MACRO_DEF_PTR_L
+  STA TABPL
+  LDA MACRO_DEF_PTR_H
+  STA TABPH
+  LDY #$00
+  LDA MEMPL
+  STA (TABPL),Y
+  INY
+  LDA MEMPH
+  STA (TABPL),Y
+  ; Update MACRO_DEF_PTR to point where body will be stored
+  ; (current MEMPL is right after params - body capture starts here)
+  LDA MEMPL
+  STA MACRO_DEF_PTR_L
+  LDA MEMPH
+  STA MACRO_DEF_PTR_H
+  ; Set IN_MACRO_DEF flag to start capturing
+  LDA #$FF
+  STA IN_MACRO_DEF
+  ; Skip rest of line (already done by check_for_end_of_line)
+  RTS
+
+
+; Process .endmacro directive
+process_endmacro
+  ; Check if we're in a macro definition
+  LDA IN_MACRO_DEF
+  BNE .pem_in_macro
+  JMP err_endmacro_without_macro
+.pem_in_macro
+  ; Write $00 terminator to body (body_ptr was already set in process_macro)
+  LDY #$00
+  LDA #$00
+  STA (MEMPL),Y
+  INY
+  JSR advance_heap
+  ; Clear the capturing flag
+  LDA #$00
+  STA IN_MACRO_DEF
+  JMP skip_rest_of_line
+
+
 ; ============================================================================
 ; TIER 11: ASSEMBLY ORCHESTRATION
 ; Main assembly loop
@@ -1533,6 +1705,7 @@ assemble_code
   STA IS_LOCAL_LABEL  ; Initialize local label flag
   STA COND_DEPTH      ; Clear conditional depth
   STA SKIP_DEPTH      ; Clear skip depth
+  STA IN_MACRO_DEF    ; Clear macro definition flag
 .line_loop
   JSR read_char
   BCC .character_read
@@ -1541,6 +1714,11 @@ assemble_code
   BEQ .no_unclosed_ifdef
   JMP err_unclosed_ifdef
 .no_unclosed_ifdef
+  ; Check for unclosed macro definition
+  LDA IN_MACRO_DEF
+  BEQ .no_unclosed_macro
+  JMP err_unclosed_macro
+.no_unclosed_macro
   RTS
 .character_read
   INC CURLINEL

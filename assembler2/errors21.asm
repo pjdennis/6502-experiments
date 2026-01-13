@@ -114,6 +114,26 @@ err_expected_shift
   BRK
   .data $1A "Expected << or >>" $00
 
+err_macro_name_expected
+  BRK
+  .data $1B "Macro name expected" $00
+
+err_macro_shadows_instruction
+  BRK
+  .data $1C "Macro name shadows instruction" $00
+
+err_duplicate_macro
+  BRK
+  .data $1D "Duplicate macro definition" $00
+
+err_endmacro_without_macro
+  BRK
+  .data $1E ".endmacro without .macro" $00
+
+err_unclosed_macro
+  BRK
+  .data $1F "Unclosed .macro" $00
+
 
 ; Interrupt handler - processes BRK for error display
 interrupt
