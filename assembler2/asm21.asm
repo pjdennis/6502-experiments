@@ -1799,6 +1799,7 @@ start
   LDA #$FF
   STA PASS            ; Bit 7 = 1 (pass 2)
   JSR reset_fwdref_ptr
+  JSR reset_expansion_id  ; Reset so pass 2 uses same scope IDs as pass 1
   JSR open_input
   JSR assemble_code
 

@@ -17,6 +17,8 @@ TABPH     .data $00     ; "
 HTTPL     .data $00     ; 2 byte temporary pointer
 HTTPH     .data $00     ; "
 IS_LOCAL_LABEL .data $00 ; Flag: non-zero if storing local label
+EXPANSION_ID_L .data $00 ; 2-byte expansion counter for macro scopes
+EXPANSION_ID_H .data $00 ; "
 
   .code
 
@@ -438,4 +440,111 @@ hash_add
 .store
   JSR store_token
   CLC
+  RTS
+
+
+; ============================================================================
+; Label Scope Management (for macro expansions)
+; ============================================================================
+;
+; Each macro expansion gets a unique scope for local labels. The scope is
+; identified by EXPANSION_ID, which acts as a synthetic "global label pointer"
+; for local label scoping. Since expansion IDs are small integers (1, 2, 3...),
+; they won't conflict with real heap addresses.
+;
+; Scope state saved on 6502 stack: CURR_GLOBAL_HEAP_L/H, CACHED_HASH (3 bytes)
+
+
+; Initialize expansion ID counter (call once at program start)
+; On exit: EXPANSION_ID_L/H = 0
+;          A clobbered, X/Y preserved
+init_expansion_id
+  LDA #$00
+  STA EXPANSION_ID_L
+  STA EXPANSION_ID_H
+  RTS
+
+
+; Reset expansion ID to 0 (call between assembler passes)
+; This ensures pass 2 uses the same scope IDs as pass 1
+; On exit: EXPANSION_ID_L/H = 0
+;          A clobbered, X/Y preserved
+reset_expansion_id
+  LDA #$00
+  STA EXPANSION_ID_L
+  STA EXPANSION_ID_H
+  RTS
+
+
+; Push current label scope and create new macro expansion scope
+; Saves CURR_GLOBAL_HEAP_L/H and CACHED_HASH, increments EXPANSION_ID,
+; sets up synthetic scope using expansion ID.
+;
+; On exit: New scope active (CURR_GLOBAL_HEAP = EXPANSION_ID, CACHED_HASH set)
+;          Previous scope saved on 6502 stack (caller's return address adjusted)
+;          A clobbered, X/Y preserved
+;
+; Note: Uses 6502 stack for scope storage. The 3 bytes of scope state are
+; pushed UNDER the return address so RTS works correctly.
+push_label_scope
+  ; Pop return address
+  PLA
+  STA HTTPL             ; Use HTTPL/H as temp for return address
+  PLA
+  STA HTTPH
+  ; Push scope state (will be under return address)
+  LDA CACHED_HASH
+  PHA
+  LDA CURR_GLOBAL_HEAP_H
+  PHA
+  LDA CURR_GLOBAL_HEAP_L
+  PHA
+  ; Push return address back
+  LDA HTTPH
+  PHA
+  LDA HTTPL
+  PHA
+  ; Increment expansion ID
+  INC EXPANSION_ID_L
+  BNE .no_carry
+  INC EXPANSION_ID_H
+.no_carry
+  ; Set CURR_GLOBAL_HEAP to expansion ID (synthetic scope pointer)
+  ; Using low byte only since expansion IDs won't exceed 255 in practice,
+  ; but we store both bytes for correctness
+  LDA EXPANSION_ID_L
+  STA CURR_GLOBAL_HEAP_L
+  LDA EXPANSION_ID_H
+  STA CURR_GLOBAL_HEAP_H
+  ; Calculate CACHED_HASH from expansion ID
+  ; Use low byte XORed through scramble table for reasonable distribution
+  LDA EXPANSION_ID_L
+  AND #$7F
+  TAY
+  LDA scramble_table,Y
+  STA CACHED_HASH
+  RTS
+
+
+; Pop label scope, restoring previous CURR_GLOBAL_HEAP and CACHED_HASH
+; On exit: Previous scope restored from 6502 stack
+;          A clobbered, X/Y preserved
+pop_label_scope
+  ; Pop return address
+  PLA
+  STA HTTPL
+  PLA
+  STA HTTPH
+  ; Pop scope state
+  PLA
+  STA CURR_GLOBAL_HEAP_L
+  PLA
+  STA CURR_GLOBAL_HEAP_H
+  PLA
+  STA CACHED_HASH
+  ; Push return address back
+  LDA HTTPH
+  PHA
+  LDA HTTPL
+  PHA
   RTS
