@@ -195,7 +195,14 @@ pop_source
   INY
   LDA (FS_PL),Y
   BEQ .was_file_source
-  ; curr_type=1: was memory source, nothing to close
+  ; curr_type=1: was memory source - pop label scope if hook defined
+  .ifdef FS_POP_MEMORY_HOOK
+  TYA
+  PHA                   ; Save Y (frame offset) before hook
+  JSR FS_POP_MEMORY_HOOK
+  PLA
+  TAY                   ; Restore Y
+  .endif
   JMP .restore_prev
 .was_file_source
   ; curr_type=0: close the current file

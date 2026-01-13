@@ -65,6 +65,7 @@ FS_CURR_LINEL  = CURLINEL
 FS_CURR_LINEH  = CURLINEH
 FS_NEXT_CHAR   = NEXT_CHAR
 FS_ERR_NO_FILE = err_no_file
+FS_POP_MEMORY_HOOK = pop_label_scope
   .include file_stack21.asm
 read_char = file_stack_read_char
   .include errors21.asm
@@ -1679,11 +1680,90 @@ process_endmacro
   JMP skip_rest_of_line
 
 
+; Check if macro in TOKEN is already being expanded (recursion check)
+; Walks the file stack looking for memory sources with matching name
+; On entry: TOKEN contains the macro name to check
+; On exit: Returns normally if no recursion, jumps to err_recursive_macro if found
+;          Uses TABPL/TABPH as walk pointer, A/Y clobbered, X preserved
+check_macro_recursion
+  ; Start walking from current stack position
+  LDA FS_PL
+  STA TABPL
+  LDA FS_PH
+  STA TABPH
+.cmr_loop
+  ; Check if we've reached the top of stack (FILE_STACK)
+  LDA TABPH
+  CMP #>FILE_STACK
+  BCC .cmr_check_frame      ; TABPH < FILE_STACK high byte, more frames
+  BNE .cmr_done             ; TABPH > FILE_STACK high byte, done
+  ; High bytes equal, check low bytes
+  LDA TABPL
+  CMP #<FILE_STACK
+  BCS .cmr_done             ; TABPL >= FILE_STACK low byte, done
+.cmr_check_frame
+  ; Find null terminator of name in current frame
+  LDY #$FF
+.cmr_find_null
+  INY
+  LDA (TABPL),Y
+  BNE .cmr_find_null
+  ; Y now points to null, curr_type is at Y+1
+  INY
+  LDA (TABPL),Y
+  BEQ .cmr_skip             ; curr_type=0 (file), skip this frame
+  ; curr_type=1 (memory source) - compare name to TOKEN
+  STY TEMP                  ; Save Y (offset to curr_type) for frame size calc
+  LDY #$00
+.cmr_cmp_loop
+  LDA (TABPL),Y
+  CMP TOKEN,Y
+  BNE .cmr_no_match
+  ORA TOKEN,Y               ; Both zero?
+  BEQ .cmr_found_recursion  ; Yes - exact match
+  INY
+  BNE .cmr_cmp_loop
+.cmr_no_match
+  ; Names don't match, restore Y and skip this frame
+  LDY TEMP
+.cmr_skip
+  ; Calculate frame size and advance to next frame
+  ; Y currently points to curr_type
+  ; Frame: name\0 + curr_type + prev_type + line_L + line_H + prev_data
+  ; prev_data is 1 byte if prev_type=0, 2 bytes if prev_type=1
+  INY                       ; Y now at prev_type
+  LDA (TABPL),Y
+  PHA                       ; Save prev_type
+  INY                       ; Y now at line_L
+  INY                       ; Y now at line_H
+  INY                       ; Y now at prev_data start
+  PLA                       ; Get prev_type
+  BEQ .cmr_prev_file
+  INY                       ; Memory: 2 bytes of prev_data
+.cmr_prev_file
+  ; Y now points one past end of frame (next frame = TABPL + Y + 1)
+  TYA
+  SEC                       ; Add 1
+  ADC TABPL
+  STA TABPL
+  LDA #$00
+  ADC TABPH
+  STA TABPH
+  JMP .cmr_loop
+.cmr_found_recursion
+  JMP err_recursive_macro
+.cmr_done
+  RTS
+
+
 ; Expand a macro invocation
 ; On entry: MACRO_DEF_PTR points to the $FE sentinel in macro entry
 ;           ($FE, body_ptr_L, body_ptr_H, param_count, params...)
+;           TOKEN contains the macro name
 ; On exit: Memory source pushed, jumps to .line_loop
 expand_macro
+  ; Check for recursive macro invocation
+  JSR check_macro_recursion
   ; Get body_ptr from MACRO_DEF_PTR+1 into temp storage
   ; Body is zero-terminated so we only need start pointer
   LDY #$01
@@ -1695,6 +1775,8 @@ expand_macro
   ; Push memory source - saves current state BEFORE we set new pointers
   ; FS_FILENAME = TOKEN, and read_token already null-terminated the name
   JSR push_memory_source
+  ; Push label scope for local labels within this macro expansion
+  JSR push_label_scope
   ; Now set up new memory source pointer
   LDA TABPL
   STA FS_MEM_PTR_L

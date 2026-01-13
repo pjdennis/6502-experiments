@@ -134,6 +134,10 @@ err_unclosed_macro
   BRK
   .data $1F "Unclosed .macro" $00
 
+err_recursive_macro
+  BRK
+  .data $20 "Recursive macro invocation" $00
+
 
 ; Interrupt handler - processes BRK for error display
 interrupt

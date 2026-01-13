@@ -45,3 +45,5 @@
 - [ ] Maybe remove checks from immediate mode -> .imm_invalid - or else move checks to the parse function for all to share
 
 - [ ] .include tests should verify the full traceback - each filename and line number; extend the test runner.
+
+- [ ] Enance .cml_copy_loop to avoid advancing the heap until Y hits FF (or maybe goes negative for quicker checking). (in the assembler code)

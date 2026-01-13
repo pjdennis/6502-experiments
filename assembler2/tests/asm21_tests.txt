@@ -1819,3 +1819,78 @@ INPUT:
 8:   .endmacro
 9:   outer
 EXPECT_HEX: ea e8
+
+---
+NAME: macro_local_label
+DESCRIPTION: Macro with local label and backward branch
+INPUT:
+1: * = $0200
+2:   .macro countdown
+3: .loop
+4:   DEX
+5:   BNE .loop
+6:   .endmacro
+7:   countdown
+EXPECT_HEX: ca d0 fd
+
+---
+NAME: macro_local_label_multiple_invocations
+DESCRIPTION: Each macro invocation has independent local labels
+INPUT:
+1: * = $0200
+2:   .macro test
+3: .done
+4:   NOP
+5:   BEQ .done
+6:   .endmacro
+7:   test
+8:   test
+EXPECT_HEX: ea f0 fd ea f0 fd
+
+---
+NAME: macro_local_no_conflict_with_caller
+DESCRIPTION: Local label in macro doesn't conflict with same name in caller
+INPUT:
+1: * = $0200
+2: foo
+3: .x
+4:   NOP
+5:   .macro bar
+6: .x
+7:   INX
+8:   BEQ .x
+9:   .endmacro
+10:   bar
+11:   BNE .x
+EXPECT_HEX: ea e8 f0 fd d0 fa
+
+---
+NAME: macro_recursive_direct
+DESCRIPTION: Direct recursive macro invocation causes error
+INPUT:
+1: * = $0200
+2:   .macro recurse
+3:   NOP
+4:   recurse
+5:   .endmacro
+6:   recurse
+EXPECT_ERROR: 32
+EXPECT_LINE: 2
+EXPECT_MSG: Recursive macro invocation
+
+---
+NAME: macro_recursive_indirect
+DESCRIPTION: Indirect recursive macro invocation causes error
+INPUT:
+1: * = $0200
+2:   .macro macA
+3:   macB
+4:   .endmacro
+5:   .macro macB
+6:   macA
+7:   .endmacro
+8:   macA
+EXPECT_ERROR: 32
+EXPECT_LINE: 1
+EXPECT_MSG: Recursive macro invocation
+
