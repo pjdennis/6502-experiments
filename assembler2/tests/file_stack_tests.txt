@@ -255,3 +255,77 @@ EXPECT_STDOUT:
 chars:6
 lines:3
 stack:empty
+
+# ============================================================================
+# MEMORY MODE - Memory source testing
+# ============================================================================
+# Tests @memory <content> which pushes content as a memory source
+# When memory source is exhausted, reading continues from the file
+
+---
+NAME: memory_simple
+MODE: memory
+FILE input.txt:
+1: Before
+2: @memory INLINE
+3: After
+EXPECT_STDOUT:
+Before
+INLINE
+After
+
+---
+NAME: memory_multichar
+MODE: memory
+FILE input.txt:
+1: A
+2: @memory XYZ123
+3: B
+EXPECT_STDOUT:
+A
+XYZ123
+B
+
+---
+NAME: memory_empty
+MODE: memory
+FILE input.txt:
+1: Start
+2: @memory
+3: End
+EXPECT_STDOUT:
+Start
+
+End
+
+---
+NAME: memory_multiple
+MODE: memory
+FILE input.txt:
+1: A
+2: @memory ONE
+3: B
+4: @memory TWO
+5: C
+EXPECT_STDOUT:
+A
+ONE
+B
+TWO
+C
+
+---
+NAME: memory_with_file_include
+MODE: memory
+FILE main.txt:
+1: File
+2: @memory MEM
+3: @include other.txt
+4: Done
+FILE other.txt:
+1: Included
+EXPECT_STDOUT:
+File
+MEM
+Included
+Done

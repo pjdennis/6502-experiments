@@ -123,8 +123,8 @@ sub run_test {
     for my $filename (keys %{$test->{files}}) {
         my $content = $test->{files}{$filename};
         # Don't strip trailing newline - files naturally end with newlines
-        # Transform @include directives to use absolute paths (only for nested mode)
-        if ($test->{mode} eq 'nested') {
+        # Transform @include directives to use absolute paths (for nested and memory modes)
+        if ($test->{mode} eq 'nested' || $test->{mode} eq 'memory') {
             $content =~ s/\@include\s+(\S+)/\@include $tmpdir\/$1/g;
         }
 

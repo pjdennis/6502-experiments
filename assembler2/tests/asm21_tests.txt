@@ -1665,3 +1665,21 @@ EXPECT_STDERR:
 Error 1 in file tests/include/nested_error2.asm at line 3: Label not found
   included from tests/include/nested_error1.asm:4
   included from {{MAIN_FILE}}:2
+
+---
+
+# ============================================================================
+# MACRO TESTS
+# ============================================================================
+
+---
+NAME: macro_simple
+SKIP: macros not implemented yet
+INPUT:
+1: * = $0200
+2:   .macro nop2
+3:   NOP
+4:   NOP
+5:   .endm
+6:   nop2
+EXPECT_HEX: ea ea

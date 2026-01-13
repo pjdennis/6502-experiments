@@ -243,6 +243,7 @@ parse_and_run_tests() {
     local expect_msg=""
     local expect_stderr=""
     local extra_args=""
+    local skip=""
     local in_input=0
     local in_stderr=0
 
@@ -257,7 +258,14 @@ parse_and_run_tests() {
         if [[ "$line" == "---" ]]; then
             # Run previous test if we have one
             if [[ -n "$name" ]]; then
-                if [[ -n "$expect_hex" ]]; then
+                if [[ -n "$skip" ]]; then
+                    # Skip this test
+                    if [[ -z "$FILTER" || "$name" == "$FILTER" ]]; then
+                        printf "  %-40s " "$name"
+                        echo -e "${YELLOW}SKIP${NC} ($skip)"
+                        ((SKIPPED++))
+                    fi
+                elif [[ -n "$expect_hex" ]]; then
                     run_positive_test "$name" "$input" "$expect_hex" "$expect_fwdref" "$extra_args"
                 elif [[ -n "$expect_stderr" ]]; then
                     run_stderr_test "$name" "$input" "$expect_stderr" "$extra_args"
@@ -275,6 +283,7 @@ parse_and_run_tests() {
             expect_msg=""
             expect_stderr=""
             extra_args=""
+            skip=""
             in_input=0
             in_stderr=0
             in_test=1
@@ -318,6 +327,10 @@ parse_and_run_tests() {
             extra_args="${BASH_REMATCH[1]}"
             in_input=0
             in_stderr=0
+        elif [[ "$line" =~ ^SKIP:[[:space:]]*(.*) ]]; then
+            skip="${BASH_REMATCH[1]}"
+            in_input=0
+            in_stderr=0
         elif [[ $in_input -eq 1 ]]; then
             # Accumulate input lines
             if [[ -n "$input" ]]; then
@@ -337,7 +350,14 @@ parse_and_run_tests() {
 
     # Run final test
     if [[ -n "$name" ]]; then
-        if [[ -n "$expect_hex" ]]; then
+        if [[ -n "$skip" ]]; then
+            # Skip this test
+            if [[ -z "$FILTER" || "$name" == "$FILTER" ]]; then
+                printf "  %-40s " "$name"
+                echo -e "${YELLOW}SKIP${NC} ($skip)"
+                ((SKIPPED++))
+            fi
+        elif [[ -n "$expect_hex" ]]; then
             run_positive_test "$name" "$input" "$expect_hex" "$expect_fwdref" "$extra_args"
         elif [[ -n "$expect_stderr" ]]; then
             run_stderr_test "$name" "$input" "$expect_stderr" "$extra_args"
@@ -359,7 +379,11 @@ parse_and_run_tests
 
 echo ""
 echo "========================================"
-echo -e "Results: ${GREEN}$PASSED passed${NC}, ${RED}$FAILED failed${NC}"
+if [[ $SKIPPED -gt 0 ]]; then
+    echo -e "Results: ${GREEN}$PASSED passed${NC}, ${RED}$FAILED failed${NC}, ${YELLOW}$SKIPPED skipped${NC}"
+else
+    echo -e "Results: ${GREEN}$PASSED passed${NC}, ${RED}$FAILED failed${NC}"
+fi
 echo "========================================"
 
 if [[ $FAILED -gt 0 ]]; then

@@ -5,6 +5,7 @@
 ;   lines  - Read file, output "N:content" for each line
 ;   nested - Handle @include markers, echo all content
 ;   info   - Read file, output statistics
+;   memory - Handle @memory and @include markers, test memory sources
 
 * = $0200
 
@@ -20,7 +21,7 @@ CURLINEH    .data $00   ; Current line number (high)
 NEXT_CHAR   .data $00   ; Last character read
 
 ; Test state
-TEST_MODE   .data $00   ; 0=echo, 1=lines, 2=nested, 3=info
+TEST_MODE   .data $00   ; 0=echo, 1=lines, 2=nested, 3=info, 4=memory
 CHAR_COUNT_L .data $00  ; Character count (low)
 CHAR_COUNT_H .data $00  ; Character count (high)
 LINE_COUNT_L .data $00  ; Line count (low)
@@ -40,8 +41,6 @@ TABPL       .data $00
 TABPH       .data $00
 
   .code
-
-  JMP main
 
   .include environment11.asm
 
@@ -80,11 +79,15 @@ main:
   BEQ .go_nested
   CMP #$03
   BEQ .go_info
+  CMP #$04
+  BEQ .go_memory
   JMP error_usage
 .go_nested:
   JMP mode_nested
 .go_info:
   JMP mode_info
+.go_memory:
+  JMP mode_memory
 
 ; ============================================================================
 ; MODE: echo - Simply read and echo each character
@@ -313,6 +316,307 @@ mode_info:
   JMP exit
 
 ; ============================================================================
+; MODE: memory - Handle @memory and @include markers
+; ============================================================================
+mode_memory:
+.loop:
+  JSR read_char_track_line
+  BCS .done
+  ; Check for '@' at start of line
+  CMP #'@'
+  BNE .not_marker
+  LDA AT_LINE_START
+  BEQ .not_marker
+  ; Might be @include or @memory - check
+  JSR check_memory_or_include
+  BCC .loop           ; Was a marker, continue reading
+  JMP .loop           ; Not a marker, but already output - continue
+.not_marker:
+  JSR write_b
+  ; Track line start
+  CMP #$0A
+  BNE .not_newline
+  LDA #$01
+  STA AT_LINE_START
+  JMP .loop
+.not_newline:
+  LDA #$00
+  STA AT_LINE_START
+  JMP .loop
+.done:
+  LDA #$00
+  JMP exit
+
+; Check if we're at "@include " or "@memory " and handle it
+; On entry: just read '@'
+; On exit: C=0 if was a marker (handled), C=1 if not (already output '@')
+check_memory_or_include:
+  ; Read next char to see if it's 'i' (include) or 'm' (memory)
+  JSR read_char_track_line
+  BCS .not_marker_eof
+  CMP #'i'
+  BEQ .check_include
+  CMP #'m'
+  BEQ .go_check_memory
+  JMP .not_a_marker
+.go_check_memory:
+  JMP .check_memory
+.not_a_marker:
+  ; Not a marker - output '@' and this char
+  PHA
+  LDA #'@'
+  JSR write_b
+  PLA
+  JSR write_b
+  CMP #$0A
+  BNE .not_marker_not_newline
+  LDA #$01
+  STA AT_LINE_START
+  SEC
+  RTS
+.not_marker_not_newline:
+  LDA #$00
+  STA AT_LINE_START
+  SEC
+  RTS
+.not_marker_eof:
+  LDA #'@'
+  JSR write_b
+  SEC
+  RTS
+
+.check_include:
+  ; Check for "nclude " (we already matched 'i')
+  LDX #$00
+.include_loop:
+  JSR read_char_track_line
+  BCS .not_include_eof
+  CMP include_rest,X
+  BNE .not_include_char
+  INX
+  CPX #$07            ; Length of "nclude "
+  BNE .include_loop
+  ; It's @include - read filename into TOKEN
+  JSR read_include_filename
+  JSR push_file_stack
+  LDA #$01
+  STA AT_LINE_START
+  CLC
+  RTS
+.not_include_char:
+  ; Not @include - output "@i" and matched portion, then this char
+  PHA
+  LDA #'@'
+  JSR write_b
+  LDA #'i'
+  JSR write_b
+  TXA
+  BEQ .include_output_current
+  LDY #$00
+.include_output_matched:
+  LDA include_rest,Y
+  JSR write_b
+  INY
+  DEX
+  BNE .include_output_matched
+.include_output_current:
+  PLA
+  JSR write_b
+  CMP #$0A
+  BNE .include_not_newline
+  LDA #$01
+  STA AT_LINE_START
+  SEC
+  RTS
+.include_not_newline:
+  LDA #$00
+  STA AT_LINE_START
+  SEC
+  RTS
+.not_include_eof:
+  ; EOF - output "@i" and matched portion
+  LDA #'@'
+  JSR write_b
+  LDA #'i'
+  JSR write_b
+  TXA
+  BEQ .include_eof_done
+  LDY #$00
+.include_eof_output:
+  LDA include_rest,Y
+  JSR write_b
+  INY
+  DEX
+  BNE .include_eof_output
+.include_eof_done:
+  SEC
+  RTS
+
+.check_memory:
+  ; Check for "emory" then space or newline (we already matched 'm')
+  LDX #$00
+.memory_loop:
+  JSR read_char_track_line
+  BCS .go_not_memory_eof
+  CMP memory_rest,X
+  BNE .go_check_memory_terminator
+  JMP .memory_loop_continue
+.go_not_memory_eof:
+  JMP .not_memory_eof
+.go_check_memory_terminator:
+  JMP .check_memory_terminator
+.memory_loop_continue:
+  INX
+  CPX #$05            ; Length of "emory" (without trailing space)
+  BNE .memory_loop
+  ; Got "emory", now check for space or newline
+  JSR read_char_track_line
+  BCS .memory_empty   ; EOF after @memory = empty content
+  CMP #' '
+  BEQ .memory_with_content
+  CMP #$0A
+  BEQ .memory_empty   ; Newline after @memory = empty content
+  ; Not space or newline - not a valid @memory marker
+  JMP .not_memory_after_emory
+.memory_with_content:
+  ; It's @memory with content - read into TOKEN until newline
+  JSR read_memory_content
+  JMP .setup_memory_source
+.memory_empty:
+  ; It's @memory with no content - don't push anything
+  LDA #$01
+  STA AT_LINE_START
+  CLC
+  RTS
+.setup_memory_source:
+  ; Set up memory source pointers
+  ; FS_MEM_PTR points to start of TOKEN (already set up)
+  ; FS_MEM_END points to end of content
+  ; TOKEN is at $1D00, content length is in X
+  LDA #<TOKEN
+  STA FS_MEM_PTR_L
+  LDA #>TOKEN
+  STA FS_MEM_PTR_H
+  ; Calculate end = TOKEN + X
+  TXA
+  CLC
+  ADC #<TOKEN
+  STA FS_MEM_END_L
+  LDA #>TOKEN
+  ADC #$00
+  STA FS_MEM_END_H
+  ; Push memory source
+  JSR push_memory_source
+  LDA #$01
+  STA AT_LINE_START
+  CLC
+  RTS
+.check_memory_terminator:
+  ; Not @memory - output "@m" and matched portion, then this char
+  PHA
+  LDA #'@'
+  JSR write_b
+  LDA #'m'
+  JSR write_b
+  TXA
+  BEQ .memory_output_current
+  LDY #$00
+.memory_output_matched:
+  LDA memory_rest,Y
+  JSR write_b
+  INY
+  DEX
+  BNE .memory_output_matched
+.memory_output_current:
+  PLA
+  JSR write_b
+  CMP #$0A
+  BNE .memory_not_newline
+  LDA #$01
+  STA AT_LINE_START
+  SEC
+  RTS
+.memory_not_newline:
+  LDA #$00
+  STA AT_LINE_START
+  SEC
+  RTS
+.not_memory_after_emory:
+  ; Got @memory but followed by non-space/non-newline char
+  ; Output "@memory" and this char
+  PHA
+  LDA #'@'
+  JSR write_b
+  LDA #'m'
+  JSR write_b
+  LDY #$00
+.output_emory:
+  LDA memory_rest,Y
+  JSR write_b
+  INY
+  CPY #$05
+  BNE .output_emory
+  PLA
+  JSR write_b
+  CMP #$0A
+  BNE .after_emory_not_newline
+  LDA #$01
+  STA AT_LINE_START
+  SEC
+  RTS
+.after_emory_not_newline:
+  LDA #$00
+  STA AT_LINE_START
+  SEC
+  RTS
+.not_memory_eof:
+  ; EOF - output "@m" and matched portion
+  LDA #'@'
+  JSR write_b
+  LDA #'m'
+  JSR write_b
+  TXA
+  BEQ .memory_eof_done
+  LDY #$00
+.memory_eof_output:
+  LDA memory_rest,Y
+  JSR write_b
+  INY
+  DEX
+  BNE .memory_eof_output
+.memory_eof_done:
+  SEC
+  RTS
+
+include_rest:
+  .data "nclude "
+memory_rest:
+  .data "emory"
+
+; Read memory content until newline into TOKEN
+; Returns length in X (includes trailing newline)
+read_memory_content:
+  LDX #$00
+.loop:
+  JSR read_char_track_line
+  BCS .add_newline    ; EOF - add newline and done
+  CMP #$0A
+  BEQ .add_newline    ; Newline - add it and done
+  CMP #$0D            ; Also handle CR
+  BEQ .skip_cr
+  STA TOKEN,X
+  INX
+  JMP .loop
+.skip_cr:
+  JMP .loop
+.add_newline:
+  LDA #$0A
+  STA TOKEN,X
+  INX
+.done:
+  RTS
+
+; ============================================================================
 ; String printing utilities
 ; ============================================================================
 
@@ -530,6 +834,8 @@ parse_mode:
   BEQ .check_nested
   CMP #'i'
   BEQ .check_info
+  CMP #'m'
+  BEQ .check_memory
   SEC
   RTS
 .check_echo:
@@ -549,6 +855,11 @@ parse_mode:
   RTS
 .check_info:
   LDA #$03
+  STA TEST_MODE
+  CLC
+  RTS
+.check_memory:
+  LDA #$04
   STA TEST_MODE
   CLC
   RTS
@@ -578,10 +889,7 @@ print_str_err:
 
 msg_usage:
   .data "Usage: file_stack_test <mode> <file>" $0A
-  .data "Modes: echo, lines, nested, info" $0A $00
+  .data "Modes: echo, lines, nested, info, memory" $0A $00
 
-start = $0200
-
-* = $FFFC
-  .data start           ; Reset vector
-  .data start           ; Interrupt vector (unused)
+; Emulator convention - start address is the last 2 bytes of the file
+  .data main
