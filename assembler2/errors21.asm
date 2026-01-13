@@ -138,6 +138,14 @@ err_recursive_macro
   BRK
   .data $20 "Recursive macro invocation" $00
 
+err_too_few_arguments
+  BRK
+  .data $21 "Too few macro arguments" $00
+
+err_too_many_arguments
+  BRK
+  .data $22 "Too many macro arguments" $00
+
 
 ; Interrupt handler - processes BRK for error display
 interrupt

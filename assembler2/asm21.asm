@@ -388,6 +388,18 @@ parse_term
   JSR select_label_hash_table
   JSR find_in_hash
   BCC .label_found
+  ; Not found - if non-local and in macro expansion, try local hash (for parameters)
+  LDA IS_LOCAL_LABEL
+  BNE .really_not_found      ; Already tried local hash
+  LDA EXPANSION_ID_L
+  ORA EXPANSION_ID_H
+  BEQ .really_not_found      ; Not in macro expansion
+  ; In macro expansion - try local hash (parameters are stored with local hash)
+  LDA #$FF
+  STA IS_LOCAL_LABEL
+  JSR find_in_hash
+  BCC .label_found
+.really_not_found
   ; Label not found - check pass
   BIT PASS
   BMI .label_not_found_pass2
@@ -948,7 +960,7 @@ lookup_mnemonic
   LDA (TABPL),Y
   CMP #$FE
   BNE .is_instruction
-  ; It's a macro - compute pointer to macro data, then skip line and expand
+  ; It's a macro - compute pointer to macro data and expand
   ; MACRO_DEF_PTR = TABPL + Y (points to $FE, body_ptr is at +1)
   TYA
   CLC
@@ -957,7 +969,7 @@ lookup_mnemonic
   LDA #$00
   ADC TABPH
   STA MACRO_DEF_PTR_H
-  JSR skip_rest_of_line
+  ; Don't skip rest of line - expand_macro will parse arguments
   PLA                   ; Pop return address (we're not returning)
   PLA
   JMP expand_macro
@@ -1758,31 +1770,100 @@ check_macro_recursion
 
 ; Expand a macro invocation
 ; On entry: MACRO_DEF_PTR points to the $FE sentinel in macro entry
-;           ($FE, body_ptr_L, body_ptr_H, param_count, params...)
+;           ($FE, body_ptr_L, body_ptr_H, param1\0, param2\0, ..., \0)
 ;           TOKEN contains the macro name
-; On exit: Memory source pushed, jumps to .line_loop
+;           NEXT_CHAR contains character after macro name
+; On exit: Memory source pushed, jumps to asm_line_loop
 expand_macro
   ; Check for recursive macro invocation
   JSR check_macro_recursion
-  ; Get body_ptr from MACRO_DEF_PTR+1 into temp storage
-  ; Body is zero-terminated so we only need start pointer
+  ; Get body_ptr from MACRO_DEF_PTR+1 and save on 6502 stack
+  ; (Can't use TABPL/TABPH since hash_add clobbers them)
   LDY #$01
   LDA (MACRO_DEF_PTR_L),Y
-  STA TABPL             ; Body start low
+  PHA                   ; Save body start low
   INY
   LDA (MACRO_DEF_PTR_L),Y
-  STA TABPH             ; Body start high
-  ; Push memory source - saves current state BEFORE we set new pointers
-  ; FS_FILENAME = TOKEN, and read_token already null-terminated the name
-  JSR push_memory_source
-  ; Push label scope for local labels within this macro expansion
+  PHA                   ; Save body start high
+  ; Push label scope BEFORE parsing arguments (need it for hash calculation)
+  ; Don't push memory source yet - we need to read arguments from file source
   JSR push_label_scope
-  ; Now set up new memory source pointer
-  LDA TABPL
-  STA FS_MEM_PTR_L
-  LDA TABPH
+  ; Parse arguments and populate parameters
+  ; MACRO_DEF_PTR+3 points to first parameter name (or empty string if none)
+  LDA MACRO_DEF_PTR_L
+  CLC
+  ADC #$03
+  STA MACRO_DEF_PTR_L
+  LDA MACRO_DEF_PTR_H
+  ADC #$00
+  STA MACRO_DEF_PTR_H
+.em_param_loop
+  ; Check if we're at end of parameter list (empty string)
+  LDY #$00
+  LDA (MACRO_DEF_PTR_L),Y
+  BEQ .em_params_done
+  ; Copy parameter name to TOKEN
+  LDY #$FF
+.em_copy_param
+  INY
+  LDA (MACRO_DEF_PTR_L),Y
+  STA TOKEN,Y
+  BNE .em_copy_param
+  ; Y now has length of param name (not including null)
+  ; Advance MACRO_DEF_PTR past the null terminator
+  TYA
+  SEC                   ; +1 for null
+  ADC MACRO_DEF_PTR_L
+  STA MACRO_DEF_PTR_L
+  LDA #$00
+  ADC MACRO_DEF_PTR_H
+  STA MACRO_DEF_PTR_H
+  ; Check for argument in input
+  JSR check_for_end_of_line
+  BCS .em_too_few
+  ; Parse argument expression (result in OPERAND_L/H, IS_FWDREF set)
+  JSR parse_expression
+  ; Add parameter to scope (unless forward ref in pass 1)
+  LDA IS_FWDREF
+  BEQ .em_add_param
+  BIT PASS
+  BMI .em_add_param     ; Pass 2: always add (resolved now)
+  ; Pass 1 with forward ref: don't add to scope, let it become fwdref in body
+  JMP .em_param_loop
+.em_add_param
+  ; Add parameter to local scope
+  ; Parameter acts as a local label in the expansion scope
+  LDA #$FF
+  STA IS_LOCAL_LABEL    ; Parameters are local to expansion scope
+  JSR select_label_hash_table
+  JSR hash_add
+  BCS .em_param_loop    ; C=1: already exists (added in pass 1), skip to next
+  ; Store value (OPERAND_L/H) in hash entry
+  LDA OPERAND_L
+  STA HEX2
+  LDA OPERAND_H
+  STA HEX1
+  JSR store_hash_value
+  JMP .em_param_loop
+.em_params_done
+  ; Check for extra arguments (should be at end of line now)
+  JSR check_for_end_of_line
+  BCC .em_too_many
+  ; Skip rest of line (may already be done by check_for_end_of_line)
+  JSR skip_rest_of_line
+  ; NOW push memory source and set up pointers
+  ; FS_FILENAME = TOKEN - note: was overwritten by param names, but that's okay for now
+  JSR push_memory_source
+  ; Restore body pointer from 6502 stack and set up memory source pointer
+  PLA                   ; Body start high
   STA FS_MEM_PTR_H
+  PLA                   ; Body start low
+  STA FS_MEM_PTR_L
   JMP asm_line_loop
+.em_too_few
+  JMP err_too_few_arguments
+.em_too_many
+  JMP err_too_many_arguments
 
 
 ; Capture a line during macro definition

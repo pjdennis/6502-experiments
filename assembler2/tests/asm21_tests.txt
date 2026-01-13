@@ -1894,3 +1894,127 @@ EXPECT_ERROR: 32
 EXPECT_LINE: 1
 EXPECT_MSG: Recursive macro invocation
 
+
+---
+NAME: macro_param_single
+DESCRIPTION: Macro with single parameter
+INPUT:
+1: * = $0200
+2:   .macro inc_zp addr
+3:   INC addr
+4:   .endmacro
+5:   inc_zp $50
+EXPECT_HEX: e6 50
+
+---
+NAME: macro_param_multiple
+DESCRIPTION: Macro with multiple parameters
+INPUT:
+1: * = $0200
+2:   .macro store_pair val dst
+3:   LDA #val
+4:   STA dst
+5:   .endmacro
+6:   store_pair $42 $80
+EXPECT_HEX: a9 42 85 80
+
+---
+NAME: macro_param_expression
+DESCRIPTION: Macro argument can be an expression
+INPUT:
+1: * = $0200
+2:   .macro load_addr val
+3:   LDA #val
+4:   .endmacro
+5:   load_addr $10+$20
+EXPECT_HEX: a9 30
+
+---
+NAME: macro_param_used_twice
+DESCRIPTION: Parameter used multiple times in body
+INPUT:
+1: * = $0200
+2:   .macro double_inc addr
+3:   INC addr
+4:   INC addr
+5:   .endmacro
+6:   double_inc $30
+EXPECT_HEX: e6 30 e6 30
+
+---
+NAME: macro_param_in_expression
+DESCRIPTION: Parameter used in expression within macro body
+INPUT:
+1: * = $0200
+2:   .macro ldpair base
+3:   LDA base
+4:   LDX base+$01
+5:   .endmacro
+6:   ldpair $40
+EXPECT_HEX: a5 40 a6 41
+
+---
+NAME: macro_param_multiple_invocations
+DESCRIPTION: Multiple invocations with different parameter values
+INPUT:
+1: * = $0200
+2:   .macro inc_loc addr
+3:   INC addr
+4:   .endmacro
+5:   inc_loc $10
+6:   inc_loc $20
+7:   inc_loc $30
+EXPECT_HEX: e6 10 e6 20 e6 30
+
+---
+NAME: macro_param_and_local_label
+DESCRIPTION: Macro with both parameters and local labels
+INPUT:
+1: * = $0200
+2:   .macro countdown start
+3:   LDX #start
+4: .loop
+5:   DEX
+6:   BNE .loop
+7:   .endmacro
+8:   countdown $05
+EXPECT_HEX: a2 05 ca d0 fd
+
+---
+NAME: macro_param_too_few
+DESCRIPTION: Error when fewer arguments than parameters
+INPUT:
+1: * = $0200
+2:   .macro twoparams a b
+3:   NOP
+4:   .endmacro
+5:   twoparams $10
+EXPECT_ERROR: 33
+EXPECT_LINE: 5
+EXPECT_MSG: Too few macro arguments
+
+---
+NAME: macro_param_too_many
+DESCRIPTION: Error when more arguments than parameters
+INPUT:
+1: * = $0200
+2:   .macro oneparam a
+3:   NOP
+4:   .endmacro
+5:   oneparam $10 $20
+EXPECT_ERROR: 34
+EXPECT_LINE: 5
+EXPECT_MSG: Too many macro arguments
+
+---
+NAME: macro_param_noparam_extra_arg
+DESCRIPTION: Error when no-param macro gets arguments
+INPUT:
+1: * = $0200
+2:   .macro noparam
+3:   NOP
+4:   .endmacro
+5:   noparam $10
+EXPECT_ERROR: 34
+EXPECT_LINE: 5
+EXPECT_MSG: Too many macro arguments
