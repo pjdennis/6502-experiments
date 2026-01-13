@@ -477,9 +477,6 @@ init_scope_stack
   STA EXPANSION_ID_H
   RTS
 
-; Legacy alias
-init_expansion_id = init_scope_stack
-
 
 ; Reset scope stack and expansion ID to initial state (call between passes)
 ; This ensures pass 2 uses the same scope IDs as pass 1
@@ -495,9 +492,6 @@ reset_scope_stack
   STA EXPANSION_ID_L
   STA EXPANSION_ID_H
   RTS
-
-; Legacy alias
-reset_expansion_id = reset_scope_stack
 
 
 ; Push current label scope and create new macro expansion scope
