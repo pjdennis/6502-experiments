@@ -1,12 +1,13 @@
 ; Addresses
-FWDREF_LIST  = $0200             ; Forward reference list (512 bytes, $0200-$03FF)
-FWDREF_LIMIT = FWDREF_LIST+$0200 ; Limit for forward reference list data
-SCOPE_STACK  = $0400             ; Label scope stack for macro expansions (256 bytes, $0400-$04FF)
-SCOPE_LIMIT  = SCOPE_STACK+$0100 ; Limit for scope stack
-TOKEN        = $1D00             ; Buffer for the current token being read
-LHASHTAB     = TOKEN+$0100       ; Label hash table
-*            = $2000             ; Code generates here
-FILE_STACK   = $F000             ; File stack will grow down from 1 below here
+FWDREF_LIST   = $0200             ; Forward reference list (512 bytes, $0200-$03FF)
+FWDREF_LIMIT  = FWDREF_LIST+$0200 ; Limit for forward reference list data
+SCOPE_STACK   = $0400             ; Label scope stack for macro expansions (256 bytes, $0400-$04FF)
+SCOPE_LIMIT   = SCOPE_STACK+$0100 ; Limit for scope stack
+MACRO_ARG_BUF = $0500             ; Temp buffer for macro args during expansion (256 bytes)
+TOKEN         = $0600             ; Buffer for the current token being read
+LHASHTAB      = $0700             ; Label hash table
+*             = $2000             ; Code generates here
+FILE_STACK    = $F000             ; File stack will grow down from 1 below here
 
 
   .zeropage
@@ -29,16 +30,11 @@ PC_SAVEL    .data $00 ; Save location for PC when switching sections
 PC_SAVEH    .data $00 ; "
 CURR_GLOBAL_HEAP_L .data $00 ; Heap address of current global label string
 CURR_GLOBAL_HEAP_H .data $00 ; "
-  .ifdef enable_debug
-DEBUG_FLAG  .data $00 ; Non-zero if debug output enabled
-FWDREF_PASS1_L .data $00 ; Forward ref pointer after pass 1 (low byte)
-FWDREF_PASS1_H .data $00 ; Forward ref pointer after pass 1 (high byte)
-  .endif
 ADDR_MODE   .data $00 ; Current addressing mode
 INST_PTR_L  .data $00 ; Pointer to instruction mode table entry
 INST_PTR_H  .data $00 ; "
-OPERAND_L = HEX2     ; Operand value (low byte) - alias for HEX2
-OPERAND_H = HEX1     ; Operand value (high byte) - alias for HEX1
+OPERAND_L = HEX2      ; Operand value (low byte) - alias for HEX2
+OPERAND_H = HEX1      ; Operand value (high byte) - alias for HEX1
 IS_FWDREF   .data $00 ; $FF if current label is forward ref (pass 1 only)
 EXPR_ACCU_L .data $00 ; Expression accumulator low byte
 EXPR_ACCU_H .data $00 ; Expression accumulator high byte
@@ -52,8 +48,14 @@ IN_MACRO_DEF    .data $00 ; Flag: currently capturing macro body ($FF = capturin
 MACRO_DEF_PTR_L .data $00 ; Heap pointer where macro body is being stored
 MACRO_DEF_PTR_H .data $00 ; "
 
-  .code
+  .ifdef enable_debug
+DEBUG_FLAG  .data $00 ; Non-zero if debug output enabled
+FWDREF_PASS1_L .data $00 ; Forward ref pointer after pass 1 (low byte)
+FWDREF_PASS1_H .data $00 ; Forward ref pointer after pass 1 (high byte)
+  .endif
 
+
+  .code
 
 ; Include files
   .include out/inst21.asm.out   ; This goes first since the tables should start on a page boundary
@@ -1777,8 +1779,10 @@ check_macro_recursion
 expand_macro
   ; Check for recursive macro invocation
   JSR check_macro_recursion
+  ; Save X (output file handle) - we'll use X as index into MACRO_ARG_BUF
+  TXA
+  PHA
   ; Get body_ptr from MACRO_DEF_PTR+1 and save on 6502 stack
-  ; (Can't use TABPL/TABPH since hash_add clobbers them)
   LDY #$01
   LDA (MACRO_DEF_PTR_L),Y
   PHA                   ; Save body start low
@@ -1786,7 +1790,7 @@ expand_macro
   LDA (MACRO_DEF_PTR_L),Y
   PHA                   ; Save body start high
   ; DON'T push label scope yet - we need parent's scope to look up arguments
-  ; Parse arguments first, storing values on heap temporarily
+  ; Parse arguments first, storing values in fixed buffer
   ; MACRO_DEF_PTR+3 points to first parameter name (or empty string if none)
   LDA MACRO_DEF_PTR_L
   CLC
@@ -1795,20 +1799,17 @@ expand_macro
   LDA MACRO_DEF_PTR_H
   ADC #$00
   STA MACRO_DEF_PTR_H
-  ; Save start of params (MACRO_DEF_PTR) and values area (MEMPL)
+  ; Save start of params (MACRO_DEF_PTR)
   LDA MACRO_DEF_PTR_L
   PHA
   LDA MACRO_DEF_PTR_H
   PHA
-  LDA MEMPL
-  PHA
-  LDA MEMPH
-  PHA
-  ; Count parameters and parse arguments, storing values on heap
+  ; X = index into MACRO_ARG_BUF for storing values
   ; Each entry: [value_L][value_H][is_fwdref] = 3 bytes
-  LDY #$00
+  LDX #$00
 .em_parse_loop
   ; Check if we're at end of parameter list (empty string)
+  LDY #$00
   LDA (MACRO_DEF_PTR_L),Y
   BEQ .em_parse_done
   ; Skip past parameter name
@@ -1832,38 +1833,30 @@ expand_macro
 .em_have_arg
   ; Parse argument expression (using PARENT's scope for lookups)
   JSR parse_expression
-  ; Store value and fwdref flag on heap
-  LDY #$00
+  ; Store value and fwdref flag in fixed buffer
   LDA OPERAND_L
-  STA (MEMPL),Y
-  INY
+  STA MACRO_ARG_BUF,X
+  INX
   LDA OPERAND_H
-  STA (MEMPL),Y
-  INY
+  STA MACRO_ARG_BUF,X
+  INX
   LDA IS_FWDREF
-  STA (MEMPL),Y
-  INY
-  JSR advance_heap
+  STA MACRO_ARG_BUF,X
+  INX
   JMP .em_parse_loop
 .em_parse_done
   ; Check for extra arguments (should be at end of line now)
   JSR check_for_end_of_line
   BCC .em_too_many
-.em_args_ok
   ; NOW push label scope for the child macro
   JSR push_label_scope
-  ; Stack: [body_L][body_H][params_L][params_H][vals_L][vals_H] (vals on top)
-  ; Pop values start to TABPL/TABPH for reading stored values
-  PLA
-  STA TABPH             ; Values area high
-  PLA
-  STA TABPL             ; Values area low
   ; Pop params start to MACRO_DEF_PTR
   PLA
   STA MACRO_DEF_PTR_H
   PLA
   STA MACRO_DEF_PTR_L
-  ; Stack now: [body_L][body_H]
+  ; Reset X to read values from start of buffer
+  LDX #$00
   ; Now iterate through params and add to hash with stored values
 .em_add_loop
   ; Check if at end of parameter list
@@ -1885,55 +1878,33 @@ expand_macro
   LDA #$00
   ADC MACRO_DEF_PTR_H
   STA MACRO_DEF_PTR_H
-  ; Load value and fwdref from TABPL area
-  LDY #$00
-  LDA (TABPL),Y
+  ; Load value and fwdref from buffer
+  LDA MACRO_ARG_BUF,X
   STA OPERAND_L
-  INY
-  LDA (TABPL),Y
+  INX
+  LDA MACRO_ARG_BUF,X
   STA OPERAND_H
-  INY
-  LDA (TABPL),Y
+  INX
+  LDA MACRO_ARG_BUF,X
   STA IS_FWDREF
-  ; Advance TABPL by 3
-  CLC
-  LDA TABPL
-  ADC #$03
-  STA TABPL
-  LDA TABPH
-  ADC #$00
-  STA TABPH
+  INX
   ; Skip adding if forward ref in pass 1
   LDA IS_FWDREF
   BEQ .em_do_add
   BIT PASS
   BMI .em_do_add        ; Pass 2: always add
-  BPL .em_add_loop      ; Pass 1 fwdref: skip
+  JMP .em_add_loop      ; Pass 1 fwdref: skip
 .em_do_add
-  ; Save TABPL/TABPH on stack (hash functions clobber them)
-  LDA TABPL
-  PHA
-  LDA TABPH
-  PHA
   ; Add parameter to local scope
   LDA #$FF
   STA IS_LOCAL_LABEL
   JSR select_label_hash_table
   JSR hash_add
-  BCS .em_hash_done     ; Already exists (pass 1), skip store
+  BCS .em_add_loop      ; Already exists (pass 1), skip store
   ; Store value (OPERAND_L/H aliased to HEX2/HEX1)
   JSR store_hash_value
-.em_hash_done
-  ; Restore TABPL/TABPH and loop
-  PLA
-  STA TABPH
-  PLA
-  STA TABPL
   JMP .em_add_loop
 .em_add_done
-  ; Restore heap pointer (discard temp values)
-  ; TABPL now points past all values - we don't need to restore MEMPL
-  ; since the values were temporary and we're done with them
   ; Push memory source and set up pointers
   JSR push_memory_source
   ; Restore body pointer from 6502 stack
@@ -1941,6 +1912,9 @@ expand_macro
   STA FS_MEM_PTR_H
   PLA                   ; Body start low
   STA FS_MEM_PTR_L
+  ; Restore X (output file handle)
+  PLA
+  TAX
   JMP asm_line_loop
 .em_too_many
   JMP err_too_many_arguments
