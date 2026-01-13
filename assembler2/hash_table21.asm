@@ -512,10 +512,19 @@ push_label_scope
   INY
   LDA CACHED_HASH
   STA (SCOPE_PTR_L),Y
-  ; Advance scope pointer by 3 bytes
+  .ifdef MACRO_ENTRY_L
+  ; Save macro entry address for recursion detection
+  INY
+  LDA MACRO_ENTRY_L
+  STA (SCOPE_PTR_L),Y
+  INY
+  LDA MACRO_ENTRY_H
+  STA (SCOPE_PTR_L),Y
+  .endif
+  ; Advance scope pointer by 5 bytes
   CLC
   LDA SCOPE_PTR_L
-  ADC #$03
+  ADC #$05
   STA SCOPE_PTR_L
   LDA SCOPE_PTR_H
   ADC #$00
@@ -544,10 +553,10 @@ push_label_scope
 ; On exit: Previous scope restored from scope stack
 ;          A, Y clobbered, X preserved
 pop_label_scope
-  ; Move scope pointer back by 3 bytes
+  ; Move scope pointer back by 5 bytes
   SEC
   LDA SCOPE_PTR_L
-  SBC #$03
+  SBC #$05
   STA SCOPE_PTR_L
   LDA SCOPE_PTR_H
   SBC #$00

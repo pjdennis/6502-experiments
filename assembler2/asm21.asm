@@ -48,6 +48,8 @@ NEXT_CHAR   .data $00 ; Last character read by read_char
 IN_MACRO_DEF    .data $00 ; Flag: currently capturing macro body ($FF = capturing)
 MACRO_DEF_PTR_L .data $00 ; Heap pointer where macro body is being stored
 MACRO_DEF_PTR_H .data $00 ; "
+MACRO_ENTRY_L   .data $00 ; Original macro hash entry address (for recursion check)
+MACRO_ENTRY_H   .data $00 ; "
 
   .ifdef enable_debug
 DEBUG_FLAG  .data $00 ; Non-zero if debug output enabled
@@ -1696,78 +1698,46 @@ process_endmacro
   JMP skip_rest_of_line
 
 
-; Check if macro in TOKEN is already being expanded (recursion check)
-; Walks the file stack looking for memory sources with matching name
-; On entry: TOKEN contains the macro name to check
+; Check if macro is already being expanded (recursion check)
+; Walks the scope stack comparing 2-byte macro entry addresses
+; On entry: MACRO_ENTRY_L/H contains the macro's hash table entry address
 ; On exit: Returns normally if no recursion, jumps to err_recursive_macro if found
 ;          Uses TABPL/TABPH as walk pointer, A/Y clobbered, X preserved
 check_macro_recursion
-  ; Start walking from current stack position
-  LDA FS_PL
+  ; Walk scope stack from bottom to current position
+  LDA #<SCOPE_STACK
   STA TABPL
-  LDA FS_PH
+  LDA #>SCOPE_STACK
   STA TABPH
 .cmr_loop
-  ; Check if we've reached the top of stack (FILE_STACK)
-  LDA TABPH
-  CMP #>FILE_STACK
-  BCC .cmr_check_frame      ; TABPH < FILE_STACK high byte, more frames
-  BNE .cmr_done             ; TABPH > FILE_STACK high byte, done
-  ; High bytes equal, check low bytes
+  ; Check if we've reached current scope pointer
   LDA TABPL
-  CMP #<FILE_STACK
-  BCS .cmr_done             ; TABPL >= FILE_STACK low byte, done
-.cmr_check_frame
-  ; Find null terminator of name in current frame
-  LDY #$FF
-.cmr_find_null
+  CMP SCOPE_PTR_L
+  BNE .cmr_check_entry
+  LDA TABPH
+  CMP SCOPE_PTR_H
+  BEQ .cmr_done             ; Reached current position, no recursion
+.cmr_check_entry
+  ; Compare macro address at offset +3 with MACRO_ENTRY
+  LDY #$03
+  LDA (TABPL),Y
+  CMP MACRO_ENTRY_L
+  BNE .cmr_next
   INY
   LDA (TABPL),Y
-  BNE .cmr_find_null
-  ; Y now points to null, curr_type is at Y+1
-  INY
-  LDA (TABPL),Y
-  BEQ .cmr_skip             ; curr_type=0 (file), skip this frame
-  ; curr_type=1 (memory source) - compare name to TOKEN
-  STY TEMP                  ; Save Y (offset to curr_type) for frame size calc
-  LDY #$00
-.cmr_cmp_loop
-  LDA (TABPL),Y
-  CMP TOKEN,Y
-  BNE .cmr_no_match
-  ORA TOKEN,Y               ; Both zero?
-  BEQ .cmr_found_recursion  ; Yes - exact match
-  INY
-  BNE .cmr_cmp_loop
-.cmr_no_match
-  ; Names don't match, restore Y and skip this frame
-  LDY TEMP
-.cmr_skip
-  ; Calculate frame size and advance to next frame
-  ; Y currently points to curr_type
-  ; Frame: name\0 + curr_type + prev_type + line_L + line_H + prev_data
-  ; prev_data is 1 byte if prev_type=0, 2 bytes if prev_type=1
-  INY                       ; Y now at prev_type
-  LDA (TABPL),Y
-  PHA                       ; Save prev_type
-  INY                       ; Y now at line_L
-  INY                       ; Y now at line_H
-  INY                       ; Y now at prev_data start
-  PLA                       ; Get prev_type
-  BEQ .cmr_prev_file
-  INY                       ; Memory: 2 bytes of prev_data
-.cmr_prev_file
-  ; Y now points one past end of frame (next frame = TABPL + Y + 1)
-  TYA
-  SEC                       ; Add 1
-  ADC TABPL
-  STA TABPL
-  LDA #$00
-  ADC TABPH
-  STA TABPH
-  JMP .cmr_loop
-.cmr_found_recursion
+  CMP MACRO_ENTRY_H
+  BNE .cmr_next
+  ; Match found - recursion detected
   JMP err_recursive_macro
+.cmr_next
+  ; Advance to next entry (+5 bytes)
+  LDA TABPL
+  CLC
+  ADC #$05
+  STA TABPL
+  BCC .cmr_loop
+  INC TABPH
+  JMP .cmr_loop
 .cmr_done
   RTS
 
@@ -1779,6 +1749,11 @@ check_macro_recursion
 ;           NEXT_CHAR contains character after macro name
 ; On exit: Memory source pushed, jumps to asm_line_loop
 expand_macro
+  ; Save original macro entry address before MACRO_DEF_PTR is modified
+  LDA MACRO_DEF_PTR_L
+  STA MACRO_ENTRY_L
+  LDA MACRO_DEF_PTR_H
+  STA MACRO_ENTRY_H
   ; Check for recursive macro invocation
   JSR check_macro_recursion
   ; Save X (output file handle) - we'll use X as index into MACRO_ARG_BUF
