@@ -63,15 +63,14 @@ file_stack_empty
   RTS
 
 
-; On entry FS_FILENAME contains the file name of the new file to open
-;            and push on stack
-;          FS_CURR_LINEL;FS_CURR_LINEH contains the current line
-;            number of the current file
-;          FS_CURR_FILE contains the current file handle
-; On exit X is preserved
-push_file_stack
-  TXA
-  PHA                   ; Save X at the very start
+; Internal: Build a stack frame for a new source
+; On entry: A = curr_type (0=file, 1=memory)
+;           FS_FILENAME contains the source name
+; On exit: Frame built with name, curr_type, prev_type, prev_line, prev_data
+;          FS_CURR_LINEL/H reset to 0
+;          A, X, Y clobbered
+push_source_frame
+  PHA                   ; Save curr_type for later
   ; Calculate name length
   LDY #$FF
 .len_loop
@@ -97,16 +96,16 @@ push_file_stack
   LDA FS_PH
   SBC #$00
   STA FS_PH
-  ; Copy filename to stack
+  ; Copy name to stack
   LDY #$FF
 .copy_loop
   INY
   LDA FS_FILENAME,Y
   STA (FS_PL),Y
   BNE .copy_loop
-  ; Store curr_type (0 = file)
+  ; Store curr_type (saved on 6502 stack)
   INY
-  LDA #$00
+  PLA                   ; Get curr_type
   STA (FS_PL),Y
   ; Store prev_type
   INY
@@ -127,7 +126,7 @@ push_file_stack
   INY
   LDA FS_CURR_FILE
   STA (FS_PL),Y
-  JMP .open_new_file
+  JMP .reset_line
 .save_memory_state
   ; prev_type=1: save memory pointers
   INY
@@ -142,18 +141,33 @@ push_file_stack
   INY
   LDA FS_MEM_END_H
   STA (FS_PL),Y
-.open_new_file
-  ; Reset state and open new file
+.reset_line
+  ; Reset line number for new source
   LDA #$00
-  STA FS_SRC_TYPE       ; Now a file source
   STA FS_CURR_LINEL
   STA FS_CURR_LINEH
+  RTS
+
+
+; Push a file source onto the stack
+; On entry: FS_FILENAME contains the file name to open
+;           FS_CURR_LINEL;FS_CURR_LINEH contains the current line number
+;           FS_CURR_FILE contains the current file handle
+; On exit: X is preserved, new file is open and ready to read
+push_file_stack
+  TXA
+  PHA                   ; Save X
+  LDA #$00              ; curr_type = file
+  JSR push_source_frame
+  ; Open new file
+  LDA #$00
+  STA FS_SRC_TYPE       ; Now a file source
   LDA #<FS_FILENAME
   LDX #>FS_FILENAME
   JSR open
   STA FS_CURR_FILE
   PLA
-  TAX                   ; Restore X (saved at start of function)
+  TAX                   ; Restore X
   RTS
 
 
@@ -162,89 +176,16 @@ push_file_stack
 ;           FS_MEM_PTR_L/H = start of memory buffer to read
 ;           FS_MEM_END_L/H = end of memory buffer (one past last byte)
 ; On exit: X is preserved, reading will continue from memory buffer
-;
-; Uses unified frame format (see header)
 push_memory_source
   TXA
-  PHA                   ; Save X at the very start
-  ; Calculate name length
-  LDY #$FF
-.len_loop
-  INY
-  LDA FS_FILENAME,Y
-  BNE .len_loop
-  ; Y = name length (without null)
-  ; Calculate frame size: name_len + 1 (null) + 1 (curr) + 1 (prev) + 2 (line) + prev_data
-  TYA
-  CLC
-  ADC #$06              ; Base: name + null + curr_type + prev_type + line + handle
-  LDX FS_SRC_TYPE
-  BEQ .size_done
-  ADC #$03              ; Add 3 more for memory (4 bytes total - 1 already counted)
-.size_done
-  STA FS_TEMP
-  ; Decrease stack pointer by frame size
-  SEC
-  LDA FS_PL
-  SBC FS_TEMP
-  STA FS_PL
-  LDA FS_PH
-  SBC #$00
-  STA FS_PH
-  ; Copy name to stack
-  LDY #$FF
-.copy_loop
-  INY
-  LDA FS_FILENAME,Y
-  STA (FS_PL),Y
-  BNE .copy_loop
-  ; Store curr_type (1 = memory)
-  INY
+  PHA                   ; Save X
+  LDA #$01              ; curr_type = memory
+  JSR push_source_frame
+  ; Set up memory source (pointers already set by caller)
   LDA #$01
-  STA (FS_PL),Y
-  ; Store prev_type
-  INY
-  LDA FS_SRC_TYPE
-  STA (FS_PL),Y
-  PHA                   ; Save prev_type for later
-  ; Store prev_line
-  INY
-  LDA FS_CURR_LINEL
-  STA (FS_PL),Y
-  INY
-  LDA FS_CURR_LINEH
-  STA (FS_PL),Y
-  ; Store prev_data based on prev_type
-  PLA                   ; Restore prev_type
-  BNE .save_memory_state
-  ; prev_type=0: save file handle
-  INY
-  LDA FS_CURR_FILE
-  STA (FS_PL),Y
-  JMP .setup_memory
-.save_memory_state
-  ; prev_type=1: save memory pointers
-  INY
-  LDA FS_MEM_PTR_L
-  STA (FS_PL),Y
-  INY
-  LDA FS_MEM_PTR_H
-  STA (FS_PL),Y
-  INY
-  LDA FS_MEM_END_L
-  STA (FS_PL),Y
-  INY
-  LDA FS_MEM_END_H
-  STA (FS_PL),Y
-.setup_memory
-  ; Set up new memory source (pointers already set by caller)
-  LDA #$01
-  STA FS_SRC_TYPE       ; Memory source
-  LDA #$00
-  STA FS_CURR_LINEL
-  STA FS_CURR_LINEH
+  STA FS_SRC_TYPE       ; Now a memory source
   PLA
-  TAX                   ; Restore X (saved at start of function)
+  TAX                   ; Restore X
   RTS
 
 
