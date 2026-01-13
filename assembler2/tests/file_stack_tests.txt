@@ -1,0 +1,257 @@
+# File Stack Component Tests
+#
+# Format:
+#   NAME: test identifier
+#   MODE: echo|lines|nested|info
+#   FILE <filename>: (multi-line content, "N: " prefix stripped)
+#   EXPECT_STDOUT: (multi-line expected output)
+#   EXPECT_STDERR: (multi-line expected stderr, for error tests)
+#
+# The first FILE defined is the main input file.
+# For nested mode, use @include <filename> to include other files.
+
+# ============================================================================
+# ECHO MODE - Basic character reading
+# ============================================================================
+
+---
+NAME: echo_simple
+MODE: echo
+FILE input.txt:
+1: Hello
+EXPECT_STDOUT:
+Hello
+
+---
+NAME: echo_multiline
+MODE: echo
+FILE input.txt:
+1: Line1
+2: Line2
+3: Line3
+EXPECT_STDOUT:
+Line1
+Line2
+Line3
+
+---
+NAME: echo_empty
+MODE: echo
+FILE input.txt:
+EXPECT_STDOUT:
+
+---
+NAME: echo_single_char
+MODE: echo
+FILE input.txt:
+1: X
+EXPECT_STDOUT:
+X
+
+---
+NAME: echo_no_trailing_newline
+MODE: echo
+FILE input.txt:
+1: NoNewline
+EXPECT_STDOUT:
+NoNewline
+
+# ============================================================================
+# LINES MODE - Line number tracking
+# ============================================================================
+
+---
+NAME: lines_single
+MODE: lines
+FILE input.txt:
+1: Hello
+EXPECT_STDOUT:
+1:Hello
+
+---
+NAME: lines_multiline
+MODE: lines
+FILE input.txt:
+1: First
+2: Second
+3: Third
+EXPECT_STDOUT:
+1:First
+2:Second
+3:Third
+
+---
+NAME: lines_empty_lines
+MODE: lines
+FILE input.txt:
+1: A
+2:
+3: B
+EXPECT_STDOUT:
+1:A
+2:
+3:B
+
+# ============================================================================
+# NESTED MODE - Include handling
+# ============================================================================
+
+---
+NAME: nested_no_includes
+MODE: nested
+FILE input.txt:
+1: Just text
+2: No includes
+EXPECT_STDOUT:
+Just text
+No includes
+
+---
+NAME: nested_simple
+MODE: nested
+FILE main.txt:
+1: Before
+2: @include inner.txt
+3: After
+FILE inner.txt:
+1: Inside
+EXPECT_STDOUT:
+Before
+Inside
+After
+
+---
+NAME: nested_multiple_includes
+MODE: nested
+FILE main.txt:
+1: A
+2: @include one.txt
+3: B
+4: @include two.txt
+5: C
+FILE one.txt:
+1: ONE
+FILE two.txt:
+1: TWO
+EXPECT_STDOUT:
+A
+ONE
+B
+TWO
+C
+
+---
+NAME: nested_deep
+MODE: nested
+FILE main.txt:
+1: Outer1
+2: @include middle.txt
+3: Outer2
+FILE middle.txt:
+1: Middle1
+2: @include inner.txt
+3: Middle2
+FILE inner.txt:
+1: Inner
+EXPECT_STDOUT:
+Outer1
+Middle1
+Inner
+Middle2
+Outer2
+
+---
+NAME: nested_at_not_include
+MODE: nested
+FILE input.txt:
+1: @other text
+2: Done
+EXPECT_STDOUT:
+@other text
+Done
+
+---
+NAME: nested_include_multiline
+MODE: nested
+FILE main.txt:
+1: Start
+2: @include multi.txt
+3: End
+FILE multi.txt:
+1: Line1
+2: Line2
+3: Line3
+EXPECT_STDOUT:
+Start
+Line1
+Line2
+Line3
+End
+
+# ============================================================================
+# NESTED MODE WITH LINE TRACKING
+# ============================================================================
+
+---
+NAME: nested_lines_simple
+MODE: lines
+FILE main.txt:
+1: A
+2: @include inner.txt
+3: B
+FILE inner.txt:
+1: X
+2: Y
+EXPECT_STDOUT:
+1:A
+2:@include inner.txt
+3:B
+
+# Note: In lines mode, @include is not processed - it's literal text
+# This tests that modes are independent
+
+# ============================================================================
+# INFO MODE - Statistics
+# ============================================================================
+
+---
+NAME: info_simple
+MODE: info
+FILE input.txt:
+1: Hello
+EXPECT_STDOUT:
+chars:6
+lines:1
+stack:empty
+
+---
+NAME: info_with_newline
+MODE: info
+FILE input.txt:
+1: Hello
+2: World
+EXPECT_STDOUT:
+chars:12
+lines:2
+stack:empty
+
+---
+NAME: info_empty
+MODE: info
+FILE input.txt:
+EXPECT_STDOUT:
+chars:0
+lines:0
+stack:empty
+
+---
+NAME: info_multiline
+MODE: info
+FILE input.txt:
+1: A
+2: B
+3: C
+EXPECT_STDOUT:
+chars:6
+lines:3
+stack:empty
