@@ -1318,7 +1318,7 @@ int main(int argc, char **argv) {
     }
 
     reset6502();
-    const int max_cycles = 25000000;
+    const int max_cycles = 50000000;
     while (!done) {
         step6502();
         if (clockticks6502 > max_cycles) {
