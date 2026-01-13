@@ -48,7 +48,7 @@
 
 - [ ] Enance .cml_copy_loop to avoid advancing the heap until Y hits FF (or maybe goes negative for quicker checking). (in the assembler code)
 
-- [ ] Look into why errors apparently aren't yet closing all the files despite changes we made
+- [X] Look into why errors apparently aren't yet closing all the files despite changes we made
 
 - [X] Check/Implement support for:
 value1=$01
