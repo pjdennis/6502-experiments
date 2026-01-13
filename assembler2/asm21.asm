@@ -64,6 +64,7 @@ FWDREF_PASS1_H .data $00 ; Forward ref pointer after pass 1 (high byte)
   .include out/inst21.asm.out   ; This goes first since the tables should start on a page boundary
   .include environment11.asm
   .include common21.asm
+  .include label_scope21.asm
 FS_FILENAME    = TOKEN
 FS_CURR_FILE   = CURR_FILE
 FS_CURR_LINEL  = CURLINEL

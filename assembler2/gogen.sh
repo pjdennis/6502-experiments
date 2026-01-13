@@ -18,7 +18,7 @@ do
         asm18.asm instgen18.asm common18.asm hash_table18.asm file_stack18.asm to_decimal18.asm errors18.asm fwdref18.asm \
         asm19.asm instgen19.asm common19.asm hash_table19.asm file_stack19.asm to_decimal19.asm errors19.asm fwdref19.asm \
         asm20.asm instgen20.asm common20.asm hash_table20.asm file_stack20.asm to_decimal20.asm errors20.asm fwdref20.asm \
-        asm21.asm instgen21.asm common21.asm hash_table21.asm file_stack21.asm to_decimal21.asm errors21.asm fwdref21.asm \
+        asm21.asm instgen21.asm common21.asm hash_table21.asm file_stack21.asm to_decimal21.asm errors21.asm fwdref21.asm label_scope21.asm \
         test19.asm test_inc19.asm \
 	tests/run_tests.sh tests/asm19_tests.txt tests/asm20_tests.txt tests/asm21_tests.txt \
         tests/file_stack_test.asm tests/file_stack_tests.txt tests/run_file_stack_tests.pl
