@@ -1,6 +1,8 @@
 ; Addresses
 FWDREF_LIST  = $0200             ; Forward reference list (512 bytes, $0200-$03FF)
 FWDREF_LIMIT = FWDREF_LIST+$0200 ; Limit for forward reference list data
+SCOPE_STACK  = $0400             ; Label scope stack for macro expansions (256 bytes, $0400-$04FF)
+SCOPE_LIMIT  = SCOPE_STACK+$0100 ; Limit for scope stack
 TOKEN        = $1D00             ; Buffer for the current token being read
 LHASHTAB     = TOKEN+$0100       ; Label hash table
 *            = $2000             ; Code generates here
@@ -1896,6 +1898,8 @@ copy_string_to_token
 start
   ; Initialize file stack early so interrupt handler works correctly
   JSR file_stack_init
+  ; Initialize scope stack for macro expansions
+  JSR init_scope_stack
   .ifdef enable_debug
   ; Initialize debug flag to 0
   LDA #$00
