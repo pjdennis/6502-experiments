@@ -329,3 +329,100 @@ File
 MEM
 Included
 Done
+
+# ============================================================================
+# TRACEBACK MODE - Stack traceback testing
+# ============================================================================
+# Tests @traceback which prints the file stack and pops all entries
+
+---
+NAME: trace_simple
+MODE: memory
+FILE main.txt:
+1: Before
+2: @traceback
+3: After
+EXPECT_STDOUT:
+Before
+main.txt:2
+
+# Note: After @traceback pops the stack, reading continues but finds EOF
+# so "After" is never printed
+
+---
+NAME: trace_nested
+MODE: memory
+FILE main.txt:
+1: Main start
+2: @include inner.txt
+3: Main end
+FILE inner.txt:
+1: Inner start
+2: @traceback
+3: Inner end
+EXPECT_STDOUT:
+Main start
+Inner start
+inner.txt:2
+main.txt:2
+
+---
+NAME: trace_deep
+MODE: memory
+FILE main.txt:
+1: Outer1
+2: @include middle.txt
+3: Outer2
+FILE middle.txt:
+1: Middle1
+2: @include inner.txt
+3: Middle2
+FILE inner.txt:
+1: Inner
+2: @traceback
+EXPECT_STDOUT:
+Outer1
+Middle1
+Inner
+inner.txt:2
+middle.txt:2
+main.txt:2
+
+---
+NAME: trace_with_memory
+MODE: memory
+FILE main.txt:
+1: File start
+2: @memory MEM_CONTENT
+3: @traceback
+4: After trace
+FILE other.txt:
+1: Other
+EXPECT_STDOUT:
+File start
+MEM_CONTENT
+main.txt:3
+
+# ============================================================================
+# NESTED FILES WITH MEMORY - Test alternating stack types
+# ============================================================================
+
+---
+NAME: memory_nested_with_file
+MODE: memory
+FILE main.txt:
+1: File
+2: @include other.txt
+3: Done
+FILE other.txt:
+1: Other start
+2: @memory INLINE_TEXT
+3: Other end
+EXPECT_STDOUT:
+File
+Other start
+INLINE_TEXT
+Other end
+Done
+
+# Tests that we can have file -> file -> memory -> file chain on the stack

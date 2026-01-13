@@ -189,6 +189,11 @@ check_include_marker:
   ; It's @include - read filename into TOKEN
   JSR read_include_filename
   JSR push_file_stack
+  ; Initialize line to 1 for included file
+  LDA #$01
+  STA CURLINEL
+  LDA #$00
+  STA CURLINEH
   LDA #$01
   STA AT_LINE_START
   CLC
@@ -244,10 +249,12 @@ include_marker:
   .data "include "
 
 ; Read filename until newline into TOKEN
+; Note: Uses read_char (not read_char_track_line) to avoid incrementing
+; line number - the line should be saved BEFORE reading the filename
 read_include_filename:
   LDX #$00
 .loop:
-  JSR read_char_track_line
+  JSR read_char
   BCS .done
   CMP #$0A
   BEQ .done
@@ -347,20 +354,24 @@ mode_memory:
   LDA #$00
   JMP exit
 
-; Check if we're at "@include " or "@memory " and handle it
+; Check if we're at "@include ", "@memory ", or "@traceback" and handle it
 ; On entry: just read '@'
 ; On exit: C=0 if was a marker (handled), C=1 if not (already output '@')
 check_memory_or_include:
-  ; Read next char to see if it's 'i' (include) or 'm' (memory)
+  ; Read next char to see if it's 'i' (include), 'm' (memory), or 't' (traceback)
   JSR read_char_track_line
   BCS .not_marker_eof
   CMP #'i'
   BEQ .check_include
   CMP #'m'
   BEQ .go_check_memory
+  CMP #'t'
+  BEQ .go_check_traceback
   JMP .not_a_marker
 .go_check_memory:
   JMP .check_memory
+.go_check_traceback:
+  JMP .check_traceback
 .not_a_marker:
   ; Not a marker - output '@' and this char
   PHA
@@ -399,6 +410,11 @@ check_memory_or_include:
   ; It's @include - read filename into TOKEN
   JSR read_include_filename
   JSR push_file_stack
+  ; Initialize line to 1 for included file
+  LDA #$01
+  STA CURLINEL
+  LDA #$00
+  STA CURLINEH
   LDA #$01
   STA AT_LINE_START
   CLC
@@ -588,10 +604,86 @@ check_memory_or_include:
   SEC
   RTS
 
+.check_traceback:
+  ; Check for "raceback" (we already matched 't')
+  LDX #$00
+.traceback_loop:
+  JSR read_char_track_line
+  BCS .not_traceback_eof
+  CMP traceback_rest,X
+  BNE .not_traceback_char
+  INX
+  CPX #$08            ; Length of "raceback"
+  BNE .traceback_loop
+  ; It's @traceback - skip to end of line (consume any trailing content)
+  ; Use read_char to avoid incrementing line number
+.skip_to_eol:
+  JSR read_char
+  BCS .do_traceback
+  CMP #$0A
+  BNE .skip_to_eol
+.do_traceback:
+  ; Print the traceback (pops all stack entries, closes files)
+  JSR print_traceback
+  LDA #$01
+  STA AT_LINE_START
+  CLC
+  RTS
+.not_traceback_char:
+  ; Not @traceback - output "@t" and matched portion, then this char
+  PHA
+  LDA #'@'
+  JSR write_b
+  LDA #'t'
+  JSR write_b
+  TXA
+  BEQ .traceback_output_current
+  LDY #$00
+.traceback_output_matched:
+  LDA traceback_rest,Y
+  JSR write_b
+  INY
+  DEX
+  BNE .traceback_output_matched
+.traceback_output_current:
+  PLA
+  JSR write_b
+  CMP #$0A
+  BNE .traceback_not_newline
+  LDA #$01
+  STA AT_LINE_START
+  SEC
+  RTS
+.traceback_not_newline:
+  LDA #$00
+  STA AT_LINE_START
+  SEC
+  RTS
+.not_traceback_eof:
+  ; EOF - output "@t" and matched portion
+  LDA #'@'
+  JSR write_b
+  LDA #'t'
+  JSR write_b
+  TXA
+  BEQ .traceback_eof_done
+  LDY #$00
+.traceback_eof_output:
+  LDA traceback_rest,Y
+  JSR write_b
+  INY
+  DEX
+  BNE .traceback_eof_output
+.traceback_eof_done:
+  SEC
+  RTS
+
 include_rest:
   .data "nclude "
 memory_rest:
   .data "emory"
+traceback_rest:
+  .data "raceback"
 
 ; Read memory content until newline into TOKEN
 ; Returns length in X (includes trailing newline)
@@ -654,6 +746,69 @@ print_str_active:
   LDA #>str_active
   STA TABPH
   JMP print_str
+
+; Print traceback of file stack - pops all entries, closes files
+; Output format: "filename:line\n" for each entry in stack
+; Loop: check if empty → print current → pop → repeat
+print_traceback:
+.loop:
+  ; Check if stack is empty (no files)
+  JSR file_stack_empty
+  BEQ .done
+  ; Print filename (FS_PL points to current entry's name)
+  LDA FS_PL
+  STA TABPL
+  LDA FS_PH
+  STA TABPH
+  JSR print_basename
+  ; Print ":"
+  LDA #':'
+  JSR write_b
+  ; Print line number
+  LDA CURLINEL
+  STA NUM_L
+  LDA CURLINEH
+  STA NUM_H
+  JSR print_num
+  ; Print newline
+  LDA #$0A
+  JSR write_b
+  ; Pop current entry (closes file, restores parent's handle and line)
+  JSR pop_file_stack
+  ; Continue to next
+  JMP .loop
+.done:
+  RTS
+
+; Print just the basename from a path at TABPL/H (skips everything before last '/')
+print_basename:
+  ; Find the last '/' in the string
+  LDY #$00
+  STY TEMP              ; TEMP = index of char after last '/'
+.scan:
+  LDA (TABPL),Y
+  BEQ .print_it         ; End of string
+  CMP #'/'
+  BNE .not_slash
+  ; Found '/', remember position after it
+  TYA
+  CLC
+  ADC #$01
+  STA TEMP
+.not_slash:
+  INY
+  JMP .scan
+.print_it:
+  ; Print from TEMP to end
+  LDY TEMP
+.print_loop:
+  LDA (TABPL),Y
+  BEQ .print_done
+  JSR write_b
+  INY
+  JMP .print_loop
+.print_done:
+  RTS
 
 print_str:
   LDY #$00
