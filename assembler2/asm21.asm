@@ -1806,9 +1806,9 @@ expand_macro
   PHA
   ; Count parameters and parse arguments, storing values on heap
   ; Each entry: [value_L][value_H][is_fwdref] = 3 bytes
+  LDY #$00
 .em_parse_loop
   ; Check if we're at end of parameter list (empty string)
-  LDY #$00
   LDA (MACRO_DEF_PTR_L),Y
   BEQ .em_parse_done
   ; Skip past parameter name
@@ -1828,7 +1828,7 @@ expand_macro
   ; Check for argument in input
   JSR check_for_end_of_line
   BCC .em_have_arg
-  JMP .em_too_few
+  JMP err_too_few_arguments
 .em_have_arg
   ; Parse argument expression (using PARENT's scope for lookups)
   JSR parse_expression
@@ -1842,20 +1842,13 @@ expand_macro
   INY
   LDA IS_FWDREF
   STA (MEMPL),Y
-  ; Advance heap by 3
-  CLC
-  LDA MEMPL
-  ADC #$03
-  STA MEMPL
-  LDA MEMPH
-  ADC #$00
-  STA MEMPH
+  INY
+  JSR advance_heap
   JMP .em_parse_loop
 .em_parse_done
   ; Check for extra arguments (should be at end of line now)
   JSR check_for_end_of_line
-  BCS .em_args_ok
-  JMP .em_too_many
+  BCC .em_too_many
 .em_args_ok
   ; NOW push label scope for the child macro
   JSR push_label_scope
@@ -1915,7 +1908,7 @@ expand_macro
   BEQ .em_do_add
   BIT PASS
   BMI .em_do_add        ; Pass 2: always add
-  JMP .em_add_loop      ; Pass 1 fwdref: skip
+  BPL .em_add_loop      ; Pass 1 fwdref: skip
 .em_do_add
   ; Save TABPL/TABPH on stack (hash functions clobber them)
   LDA TABPL
@@ -1928,11 +1921,7 @@ expand_macro
   JSR select_label_hash_table
   JSR hash_add
   BCS .em_hash_done     ; Already exists (pass 1), skip store
-  ; Store value
-  LDA OPERAND_L
-  STA HEX2
-  LDA OPERAND_H
-  STA HEX1
+  ; Store value (OPERAND_L/H aliased to HEX2/HEX1)
   JSR store_hash_value
 .em_hash_done
   ; Restore TABPL/TABPH and loop
@@ -1953,8 +1942,6 @@ expand_macro
   PLA                   ; Body start low
   STA FS_MEM_PTR_L
   JMP asm_line_loop
-.em_too_few
-  JMP err_too_few_arguments
 .em_too_many
   JMP err_too_many_arguments
 
