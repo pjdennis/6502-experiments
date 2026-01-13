@@ -5,6 +5,19 @@
 
 ## Assembler Features
 - [ ] Macro support - Define reusable code patterns
+
+  .macro ADD16 x, y, result
+
+  LDA x
+  ADC y
+  STA result
+  LDA x+$01
+  ADC y+$01
+  STA x+$01
+  
+  .endmacro
+
+
 - [ ] Conditional assembly - .ifdef, .ifndef, .if directives
 - [X] More instructions - Check if any 6502 opcodes are missing from the instruction tables
 - [ ] Better error messages - Include source line content in error output, not just line numbers
@@ -31,3 +44,4 @@
 
 - [ ] Maybe remove checks from immediate mode -> .imm_invalid - or else move checks to the parse function for all to share
 
+- [ ] .include tests should verify the full traceback - each filename and line number; extend the test runner.

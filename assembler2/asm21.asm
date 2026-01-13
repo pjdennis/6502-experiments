@@ -54,11 +54,14 @@ NEXT_CHAR   .data $00 ; Last character read by read_char
   .include out/inst21.asm.out   ; This goes first since the tables should start on a page boundary
   .include environment11.asm
   .include common21.asm
-FS_FILENAME   = TOKEN
-FS_CURR_FILE  = CURR_FILE
-FS_CURR_LINEL = CURLINEL
-FS_CURR_LINEH = CURLINEH
+FS_FILENAME    = TOKEN
+FS_CURR_FILE   = CURR_FILE
+FS_CURR_LINEL  = CURLINEL
+FS_CURR_LINEH  = CURLINEH
+FS_NEXT_CHAR   = NEXT_CHAR
+FS_ERR_NO_FILE = err_no_file
   .include file_stack21.asm
+read_char = file_stack_read_char
   .include errors21.asm
   .include fwdref21.asm
 
@@ -156,30 +159,7 @@ swap_pc_with_save
 ; File reading and character classification
 ; ============================================================================
 
-; Read next character from file stack
-; On entry CURR_FILE contains the current file handle
-;          FILE_STACK is not empty
-; On exit A contains the character read
-;         C is set if at end of all file data
-;         CURR_FILE is potentially updated with a new file handle
-read_char
-  LDA CURR_FILE
-  BEQ .no_file
-  JSR read
-  BCS .at_end_file
-  STA NEXT_CHAR
-  RTS
-.at_end_file
-  JSR pop_file_stack
-  LDA CURR_FILE
-  BEQ .at_end_all
-  JMP read_char          ; Recursive tail call
-.at_end_all
-  SEC
-  RTS
-.no_file
-  JMP err_no_file
-
+; read_char is provided by file_stack21.asm
 
 ; Read and discard space characters
 ; On entry NEXT_CHAR contains the next character

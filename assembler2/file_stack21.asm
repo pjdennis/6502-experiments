@@ -1,10 +1,15 @@
 ; Requires:
 ;   FILE_STACK    - 1 past the highest address from which the stack grows down
-;   FS_FILENAME   - filename
+;   FS_FILENAME   - filename buffer
 ;   FS_CURR_FILE  - zero page location of the current file handle
-;   FS_CURR_LINEL - zero page location of the current line
-;   FS_CURR_LINEH - "
-;   open, close   - functions to open and close a file
+;   FS_CURR_LINEL - zero page location of the current line number (low byte)
+;   FS_CURR_LINEH - zero page location of the current line number (high byte)
+;   FS_NEXT_CHAR  - zero page location to store last character read
+;   open, close, read - file I/O functions
+;
+; Optional:
+;   FS_ERR_NO_FILE - error handler for read_char when no file is open
+;                    If not defined, read_char returns SEC like normal EOF
 
 ; The file stack grows downwards. Each entry includes (from low to high address)
 ; File name of current file (0-terminated)
@@ -131,4 +136,30 @@ pop_file_stack
   LDA #$00
   ADC FS_PH
   STA FS_PH
+  RTS
+
+
+; Read character from file stack
+; On exit: A = character (also stored in FS_NEXT_CHAR)
+;          C = 0 if char read, C = 1 if all files exhausted
+file_stack_read_char
+  LDA FS_CURR_FILE
+  BEQ .no_file
+  JSR read
+  BCC .got_char
+  ; EOF on current file - pop stack and try previous file
+  JSR pop_file_stack
+  LDA FS_CURR_FILE
+  BEQ .all_done
+  JMP file_stack_read_char
+.got_char
+  STA FS_NEXT_CHAR
+  CLC
+  RTS
+.no_file
+  .ifdef FS_ERR_NO_FILE
+  JMP FS_ERR_NO_FILE
+  .endif
+.all_done
+  SEC
   RTS

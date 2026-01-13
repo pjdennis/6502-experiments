@@ -50,7 +50,9 @@ FS_FILENAME   = TOKEN
 FS_CURR_FILE  = CURR_FILE
 FS_CURR_LINEL = CURLINEL
 FS_CURR_LINEH = CURLINEH
+FS_NEXT_CHAR  = NEXT_CHAR
   .include file_stack21.asm
+read_char = file_stack_read_char
 
 
 main:
@@ -111,7 +113,7 @@ mode_lines:
   STA NUM_H
 .do_read:
   ; Read first, then decide if we need line prefix
-  JSR read_char
+  JSR read_char_track_line
   BCS .done
   ; Check if at start of line - output prefix before the char
   LDX AT_LINE_START
@@ -140,7 +142,7 @@ mode_lines:
 ; ============================================================================
 mode_nested:
 .loop:
-  JSR read_char
+  JSR read_char_track_line
   BCS .done
   ; Check for '@' at start of line
   CMP #'@'
@@ -174,7 +176,7 @@ check_include_marker:
   ; Read and check "include "
   LDX #$00
 .check_loop:
-  JSR read_char
+  JSR read_char_track_line
   BCS .not_include_eof
   CMP include_marker,X
   BNE .not_include_char
@@ -242,7 +244,7 @@ include_marker:
 read_include_filename:
   LDX #$00
 .loop:
-  JSR read_char
+  JSR read_char_track_line
   BCS .done
   CMP #$0A
   BEQ .done
@@ -451,33 +453,23 @@ print_digit:
   RTS
 
 ; ============================================================================
-; Read character from file stack
+; Read character with line tracking (wrapper around file_stack's read_char)
 ; On exit: A = character, C = 0 if char read, C = 1 if all done
 ;          CURLINEL/H updated on newline
 ; ============================================================================
-read_char:
-  LDA CURR_FILE
-  BEQ .no_file
-  JSR read
-  BCC .got_char
-  ; EOF on current file - pop stack
-  JSR pop_file_stack
-  JSR file_stack_empty
-  BEQ .all_done
-  JMP read_char       ; Try again from previous file
-.got_char:
-  STA NEXT_CHAR
+read_char_track_line:
+  JSR read_char
+  BCS .done
+  ; Track line numbers (preserve A and C=0)
   CMP #$0A
-  BNE .not_newline
+  BNE .success
   INC CURLINEL
-  BNE .not_newline
+  BNE .success
   INC CURLINEH
-.not_newline:
-  CLC
-  RTS
-.no_file:
-.all_done:
-  SEC
+.success:
+  LDA NEXT_CHAR       ; Restore A (CMP changed flags)
+  CLC                 ; Ensure C=0 for success
+.done:
   RTS
 
 ; ============================================================================
