@@ -101,10 +101,7 @@ push_label_scope
   ADC #$00
   STA SCOPE_PTR_H
   ; Increment expansion ID
-  INC EXPANSION_ID_L
-  BNE .no_carry
-  INC EXPANSION_ID_H
-.no_carry
+  INC16 EXPANSION_ID_L
   ; Set CURR_GLOBAL_HEAP to expansion ID (synthetic scope pointer)
   LDA EXPANSION_ID_L
   STA CURR_GLOBAL_HEAP_L

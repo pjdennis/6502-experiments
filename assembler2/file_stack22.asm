@@ -278,9 +278,7 @@ file_stack_read_char
   LDA (FS_MEM_PTR_L),Y
   BEQ .mem_exhausted     ; $00 = end of memory source
   ; Increment memory pointer
-  INC FS_MEM_PTR_L
-  BNE .got_char
-  INC FS_MEM_PTR_H
+  INC16 FS_MEM_PTR_L
 .got_char
   STA FS_NEXT_CHAR
   CLC

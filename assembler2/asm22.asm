@@ -64,6 +64,7 @@ FWDREF_PASS1_H .data $00 ; Forward ref pointer after pass 1 (high byte)
   .include out/inst22.asm.out   ; This goes first since the tables should start on a page boundary
   .include environment11.asm
   .include common22.asm
+  .include macros22.asm
   .include label_scope22.asm
 FS_FILENAME    = TOKEN
 FS_CURR_FILE   = CURR_FILE
@@ -768,10 +769,7 @@ update_global_heap_from_lookup
   JSR find_in_hash       ; TABPL now points to token string
   JSR commit_cached_hash ; Commit hash since this is a non-assignment global
   ; After find_in_hash, TABPL points to token string (entry_start + 2)
-  LDA TABPL
-  STA CURR_GLOBAL_HEAP_L
-  LDA TABPH
-  STA CURR_GLOBAL_HEAP_H
+  CP16 TABPL CURR_GLOBAL_HEAP_L
   RTS
 
 
@@ -840,10 +838,7 @@ capture_label
   LDA IS_LOCAL_LABEL
   BNE .was_local_1          ; If local flag != 0, skip
   ; Store the address of the current global label
-  LDA TABPL
-  STA CURR_GLOBAL_HEAP_L
-  LDA TABPH
-  STA CURR_GLOBAL_HEAP_H
+  CP16 TABPL CURR_GLOBAL_HEAP_L
   JSR commit_cached_hash    ; Commit hash for local label lookups
 .was_local_1
   ; Store current program counter as the hash value
@@ -881,10 +876,7 @@ capture_label
 ; TODO: Consolidate the PASS and IN_ZEROPAGE flags so that emit can
 ;       do a single check instead of two for suppression of output
 emit
-  INC PCL
-  BNE .incremented
-  INC PCH
-.incremented
+  INC16 PCL
   BIT PASS
   BPL .skip            ; Skip writing during pass 1
   BIT IN_ZEROPAGE
@@ -1751,10 +1743,7 @@ check_macro_recursion
 ; On exit: Memory source pushed, jumps to asm_line_loop
 expand_macro
   ; Save original macro entry address before MACRO_DEF_PTR is modified
-  LDA MACRO_DEF_PTR_L
-  STA MACRO_ENTRY_L
-  LDA MACRO_DEF_PTR_H
-  STA MACRO_ENTRY_H
+  CP16 MACRO_DEF_PTR_L MACRO_ENTRY_L
   ; Check for recursive macro invocation
   JSR check_macro_recursion
   ; Save X (output file handle) - we'll use X as index into MACRO_ARG_BUF
