@@ -1,17 +1,19 @@
 ; Addressing mode constants
-MODE_NONE = $00   ; Implied (no operand)
-MODE_ACC  = $01   ; Accumulator
-MODE_IMM  = $02   ; Immediate
-MODE_ZP   = $03   ; Zero page
-MODE_ZPX  = $04   ; Zero page, X
-MODE_ZPY  = $05   ; Zero page, Y
-MODE_ABS  = $06   ; Absolute
-MODE_ABSX = $07   ; Absolute, X
-MODE_ABSY = $08   ; Absolute, Y
-MODE_INDX = $09   ; Indirect, X - ($zp,X)
-MODE_INDY = $0A   ; Indirect, Y - ($zp),Y
-MODE_REL  = $0B   ; Relative (branches)
-MODE_IND  = $0C   ; Indirect - JMP ($xxxx)
+MODE_NONE  = $00   ; Implied (no operand)
+MODE_ACC   = $01   ; Accumulator
+MODE_IMM   = $02   ; Immediate
+MODE_ZP    = $03   ; Zero page
+MODE_ZPX   = $04   ; Zero page, X
+MODE_ZPY   = $05   ; Zero page, Y
+MODE_ABS   = $06   ; Absolute
+MODE_ABSX  = $07   ; Absolute, X
+MODE_ABSY  = $08   ; Absolute, Y
+MODE_INDX  = $09   ; Indirect, X - ($zp,X)
+MODE_INDY  = $0A   ; Indirect, Y - ($zp),Y
+MODE_REL   = $0B   ; Relative (branches)
+MODE_IND   = $0C   ; Indirect - JMP ($xxxx)
+MODE_MACRO = $FE   ; Sentinel marker to indicate macro 
+MODE_END   = $FF   ; Terminates the list of modes
 
 HT_KEY = TOKEN
 HT_V16 = HEX16

@@ -893,12 +893,12 @@ lookup_mnemonic
   JMP err_opcode_not_found
 .found
   ; TABP16 + Y points to mode:opcode data or macro sentinel
-  ; Check for macro sentinel ($FE)
+  ; Check for macro sentinel (MODE_MACRO)
   LDA (TABP16),Y
-  CMP #$FE
+  CMP #MODE_MACRO
   BNE .is_instruction
   ; It's a macro - compute pointer to macro data and expand
-  ; MACRO_DEF_PTR = TABP16 + Y (points to $FE, body_ptr is at +1)
+  ; MACRO_DEF_PTR = TABP16 + Y (points to MODE_MACRO, body_ptr is at +1)
   TYA
   CLC
   ADDA16 TABP16 MACRO_DEF_PTR16
@@ -925,7 +925,7 @@ find_opcode_for_mode
   LDY #$00
 .loop
   LDA (INST_PTR16),Y  ; Get mode byte
-  CMP #$FF
+  CMP #MODE_END
   BEQ .not_found      ; End of list, mode not found
   CMP ADDR_MODE
   BEQ .found
@@ -1472,7 +1472,7 @@ process_endif
 
 ; Process .macro directive
 ; Syntax: .macro NAME [param1 param2 ...]
-; Creates entry in IHASHTAB: [name $00][$FE][body_ptr_L][body_ptr_H][params...][\0]
+; Creates entry in IHASHTAB: [name $00][MODE_MACRO][body_ptr_L][body_ptr_H][params...][\0]
 process_macro
   ; Skip spaces and read macro name
   JSR check_for_end_of_line
@@ -1485,9 +1485,9 @@ process_macro
   JSR find_in_hash_instruction
   BCS .pm_name_ok      ; C=1 means not found, good
   ; Found something - is it an instruction or existing macro?
-  ; Check first byte of value - $FE means macro, else instruction
+  ; Check first byte of value - MODE_MACRO means macro, else instruction
   LDA (TABP16),Y
-  CMP #$FE
+  CMP #MODE_MACRO
   BEQ .pm_is_macro
   JMP err_macro_shadows_instruction
 .pm_is_macro
@@ -1517,9 +1517,9 @@ process_macro
   JSR store_hash_entry   ; Store MEMP16 in hash table
 .pm_store_entry
   JSR store_token        ; Stores name on heap, MEMP16 now points to value location
-  ; Store $FE sentinel
+  ; Store MODE_MACRO sentinel
   LDY #$00
-  APPEND_HEAPI $FE
+  APPEND_HEAPI MODE_MACRO
   JSR advance_heap
   ; Save location for body_ptr (will fill in after params are parsed)
   CP16 MEMP16 MACRO_DEF_PTR16
@@ -1623,8 +1623,8 @@ check_macro_recursion
 
 
 ; Expand a macro invocation
-; On entry: MACRO_DEF_PTR points to the $FE sentinel in macro entry
-;           ($FE, body_ptr_L, body_ptr_H, param1\0, param2\0, ..., \0)
+; On entry: MACRO_DEF_PTR points to the MODE_MACRO sentinel in macro entry
+;           (MODE_MACRO, body_ptr_L, body_ptr_H, param1\0, param2\0, ..., \0)
 ;           TOKEN contains the macro name
 ;           NEXT_CHAR contains character after macro name
 ; On exit: Memory source pushed, jumps to asm_line_loop
