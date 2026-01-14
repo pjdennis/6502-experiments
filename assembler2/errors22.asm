@@ -4,7 +4,7 @@
 ;   TEMP                 - zero page location for temporary storage
 ;   TABP16               - zero page location for table pointer
 ;   CURR_LINE16          - zero page location for current line number
-;   FS_PL;FS_PH          - zero page locations for file stack pointer
+;   FS_P16               - zero page locations for file stack pointer
 ;   file_stack_empty     - function to check if file stack is empty
 ;   write_d              - function to write character to stderr
 ;   exit                 - function to exit program
@@ -164,7 +164,9 @@ interrupt
 ; Retrieve error code and skip diagnostics if no error
   LDY #$00
   LDA (TABP16),Y
-  BEQ .done
+  BNE .error
+  JMP exit ; Done
+.error
 ; Save error code
   STA TEMP
 ; Close the ouptut file if open
@@ -179,9 +181,9 @@ interrupt
   JSR show_message
 ; Print the error code in decimal
   LDA TEMP
-  STA TO_DECIMAL_VALUE_L
+  STA TO_DECIMAL_VALUE16
   LDA #$00
-  STA TO_DECIMAL_VALUE_H
+  STA TO_DECIMAL_VALUE16+$01
   JSR show_decimal
 ; Print the current file and line if any file is open
   JSR file_stack_empty
@@ -196,7 +198,7 @@ interrupt
   SET16 msg_error_line TABP16
   JSR show_message
 ; Print the current line in decimal
-  CP16 CURR_LINE16 TO_DECIMAL_VALUE_L
+  CP16 CURR_LINE16 TO_DECIMAL_VALUE16
   JSR show_decimal
 .location_done
 ; Print the ": " message
@@ -221,8 +223,7 @@ interrupt
   JSR write_d
 ; Load the error code so that it is returned
   LDA TEMP
-.done
-  JMP exit
+  JMP exit ; Done
 
 msg_error
   .data "Error " $00
@@ -284,7 +285,7 @@ show_include_traceback
   LDA #':'
   JSR write_d
   ; Print line number (CURR_LINE16 has line where include was)
-  CP16 CURR_LINE16 TO_DECIMAL_VALUE_L
+  CP16 CURR_LINE16 TO_DECIMAL_VALUE16
   JSR show_decimal
   ; Continue to next parent
   JMP .loop

@@ -1,15 +1,13 @@
   .zeropage
 
-TO_DECIMAL_VALUE_L          .data $00 ; 1 byte
-TO_DECIMAL_VALUE_H          .data $00 ; 1 byte
-TO_DECIMAL_MOD10
-TO_DECIMAL_RESULT_MINUS_ONE .data $00 ; 1 byte
+TO_DECIMAL_VALUE16          .data $0000 ; 2 bytes
+TO_DECIMAL_MOD10            .data $00   ; 1 byte
 TO_DECIMAL_RESULT           .data $00 $00 $00 $00 $00 $00 ; 6 bytes
 
   .code
 
 
-; On entry TO_DECIMAL_VALUE_L;TO_DECIMAL_VALUE_H contains the value to convert
+; On entry TO_DECIMAL_VALUE16 contains the value to convert
 ; On exit TO_DECIMAL_RESULT contains the result
 ;         X, Y are preserved
 ;         A is not preserved
@@ -29,8 +27,8 @@ to_decimal
   LDX #$10
 .divloop
   ; Rotate quotient and remainder
-  ROL TO_DECIMAL_VALUE_L
-  ROL TO_DECIMAL_VALUE_H
+  ROL TO_DECIMAL_VALUE16
+  ROL TO_DECIMAL_VALUE16+$01
   ROL TO_DECIMAL_MOD10
 
   ; a = dividend - divisor
@@ -43,14 +41,14 @@ to_decimal
 .ignore_result
   DEX
   BNE .divloop
-  ROL TO_DECIMAL_VALUE_L
-  ROL TO_DECIMAL_VALUE_H
+  ROL TO_DECIMAL_VALUE16
+  ROL TO_DECIMAL_VALUE16+$01
 
   ; Shift result
 .shift
   LDX #$05
 .shift_loop
-  LDA TO_DECIMAL_RESULT_MINUS_ONE,X
+  LDA TO_DECIMAL_RESULT-$01,X
   STA TO_DECIMAL_RESULT,X
   DEX
   BNE .shift_loop
@@ -62,8 +60,8 @@ to_decimal
   STA TO_DECIMAL_RESULT
 
   ; If value != 0 then continue dividing
-  LDA TO_DECIMAL_VALUE_L
-  ORA TO_DECIMAL_VALUE_H
+  LDA TO_DECIMAL_VALUE16
+  ORA TO_DECIMAL_VALUE16+$01
   BNE .divide
 
   PLA

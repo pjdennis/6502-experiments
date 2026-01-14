@@ -21,10 +21,10 @@
 ;   $FF = terminator (end of mode list)
 
 ; Addresses
-TOKEN      = $1E00      ; Buffer for the current token being read
-IHASHTAB   = $1F00      ; Instruction hash table
+TOKEN       = $1E00     ; Buffer for the current token being read
+IHASHTAB    = $1F00     ; Instruction hash table
 SCOPE_STACK = $0400     ; Scope stack (needed by hash_table21.asm, not used by instgen)
-*          = $2000      ; Code generates here
+*           = $2000     ; Code generates here
 
 
   .zeropage

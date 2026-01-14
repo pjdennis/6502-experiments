@@ -2165,12 +2165,7 @@ start
   JSR show_message
   ; Calculate heap used: MEMP16 - HEAP
   SEC
-  LDA MEMP16
-  SBC #<HEAP
-  STA TO_DECIMAL_VALUE_L
-  LDA MEMP16+$01
-  SBC #>HEAP
-  STA TO_DECIMAL_VALUE_H
+  SUBI16 MEMP16 HEAP TO_DECIMAL_VALUE16
   JSR show_decimal
   SET16 msg_bytes TABP16
   JSR show_message
@@ -2179,9 +2174,9 @@ start
   JSR show_message
   ; Calculate forward ref count: (PASS_1_FWDREF16 - FWDREF_LIST) / 2
   SEC
-  SUBI16 PASS_1_FWDREF16 FWDREF_LIST TO_DECIMAL_VALUE_L
+  SUBI16 PASS_1_FWDREF16 FWDREF_LIST TO_DECIMAL_VALUE16
   ; Divide by 2 (16-bit right shift)
-  LSR16 TO_DECIMAL_VALUE_L
+  LSR16 TO_DECIMAL_VALUE16
   JSR show_decimal
   LDA #'\n'
   JSR write_d
