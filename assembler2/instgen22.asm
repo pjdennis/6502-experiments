@@ -203,50 +203,83 @@ MNTAB
   .data $00
 
 
+; Populate instruction hash table from MNTAB
+;
+; MNTAB format (each entry):
+;   "MNEMONIC" $00 [mode1 opcode1] [mode2 opcode2] ... $FF
+;   - Null-terminated mnemonic string
+;   - Pairs of (addressing_mode, opcode) bytes
+;   - $FF terminator marks end of mode list
+;   - $00 as first byte marks end of entire table
+;
+; Hash table entry format (on heap after hash_add):
+;   [next_ptr_lo] [next_ptr_hi] [mnemonic $00] [mode opcode]... $FF
+;   - hash_add stores next_ptr and mnemonic
+;   - This routine appends the mode:opcode pairs and $FF terminator
+;
+; Register usage:
+;   P2_16 = pointer to current entry in MNTAB (source)
+;   MEMP16 = heap pointer (destination), managed by hash_add/advance_heap
+;   Y = offset into current MNTAB entry
+;
 populate_instruction_hash_table
-  SET16 MNTAB P2_16
+  SET16 MNTAB P2_16           ; P2_16 points to start of instruction table
+
 .entry_loop
+  ; Check for end of table ($00 as first byte of entry)
   LDY #$00
   LDA (P2_16),Y
   BEQ .done
-  ; Copy mnemonic to TOKEN
+
+  ; --- Phase 1: Copy mnemonic string to TOKEN buffer ---
+  ; hash_add expects the key (mnemonic) in TOKEN
 .token_loop
-  STA TOKEN,Y
-  BEQ .token_loop_done
+  STA TOKEN,Y                 ; Copy byte to TOKEN
+  BEQ .token_loop_done        ; Exit when null terminator copied
   INY
   LDA (P2_16),Y
   JMP .token_loop
 .token_loop_done
-  ; Y now points at null terminator
-  ; Save Y for later (start of mode data is at Y+1)
+  ; Y now points at null terminator in source
+  ; Mode data starts at Y+1
+
+  ; --- Phase 2: Add mnemonic to hash table ---
+  ; hash_add:
+  ;   - Calculates hash from TOKEN
+  ;   - Allocates heap entry: [next_ptr $0000] [mnemonic $00]
+  ;   - Returns with MEMP16 pointing to where value data should go
   INY
-  STY TEMP        ; Save offset to mode data
-  ; Add entry to hash table (this copies the mnemonic to heap)
+  STY TEMP                    ; Save source offset to mode data
   JSR hash_add
-  ; Now copy all mode:opcode pairs to the heap
-  LDY TEMP        ; Restore offset to mode data
+
+  ; --- Phase 3: Copy mode:opcode pairs to heap ---
+  ; Problem: both (P2_16),Y and (MEMP16),Y need Y for indirect indexed mode
+  ; Solution: store_byte_to_heap saves Y, stores with Y=0, restores Y
+  LDY TEMP                    ; Restore source offset to mode data
+
 .copy_modes
-  LDA (P2_16),Y     ; Get mode byte
+  LDA (P2_16),Y               ; Load mode byte from source
   CMP #$FF
   BEQ .copy_done
-  ; Store mode byte
-  JSR store_byte_to_heap
+  JSR store_byte_to_heap      ; Store mode byte to heap, preserves Y
   INY
-  ; Store opcode byte
-  LDA (P2_16),Y
-  JSR store_byte_to_heap
+  LDA (P2_16),Y               ; Load opcode byte from source
+  JSR store_byte_to_heap      ; Store opcode byte to heap, preserves Y
   INY
   JMP .copy_modes
+
 .copy_done
-  ; Store the $FF terminator
+  ; Store $FF terminator
   LDA #$FF
   JSR store_byte_to_heap
-  INY              ; Skip past $FF in source
-  ; Advance P2_16 to next entry
+  INY                         ; Advance Y past $FF in source
+
+  ; Advance P2_16 to next entry (add Y = total bytes consumed from this entry)
   TYA
   CLC
   ADDA16 P2_16 P2_16
   JMP .entry_loop
+
 .done
   RTS
 
@@ -255,12 +288,12 @@ populate_instruction_hash_table
 ; On entry: A = byte to store
 ; On exit: Y is preserved, A is not preserved
 store_byte_to_heap
-  STY TEMP2       ; Save Y
+  STY TEMP2                   ; Save Y (source index)
   LDY #$00
-  STA (MEMP16),Y   ; Store byte at (MEMP16)
+  STA (MEMP16),Y              ; Store byte at heap pointer
   LDY #$01
-  JSR advance_heap ; Advance heap by 1
-  LDY TEMP2       ; Restore Y
+  JSR advance_heap            ; Advance heap by 1 byte
+  LDY TEMP2                   ; Restore Y (source index)
   RTS
 
 
