@@ -369,15 +369,9 @@ store_token
   BEQ .copy_token       ; If global, skip escape header
   ; Store $01 escape format: $01 <scope_lo> <scope_hi> <local_part>
   ; HT_KEY already contains just ".bar" - no scanning needed
-  LDA #$01              ; Escape byte
-  STA (MEMP16),Y
-  INY
-  LDA LABEL_SCOPE16
-  STA (MEMP16),Y
-  INY
-  LDA LABEL_SCOPE16+$01
-  STA (MEMP16),Y
-  INY
+  APPEND_HEAPI $01      ; Escape byte
+  APPEND_HEAP LABEL_SCOPE16
+  APPEND_HEAP LABEL_SCOPE16+$01
   JSR advance_heap      ; Advance past escape header (3 bytes)
   ; Fall through to copy HT_KEY
 .copy_token

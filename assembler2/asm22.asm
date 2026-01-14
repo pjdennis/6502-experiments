@@ -1519,9 +1519,7 @@ process_macro
   JSR store_token        ; Stores name on heap, MEMP16 now points to value location
   ; Store $FE sentinel
   LDY #$00
-  LDA #$FE
-  STA (MEMP16),Y
-  INY
+  APPEND_HEAPI $FE
   JSR advance_heap
   ; Save location for body_ptr (will fill in after params are parsed)
   CP16 MEMP16 MACRO_DEF_PTR16
@@ -1547,9 +1545,7 @@ process_macro
 .pm_params_done
   ; Write empty string terminator for parameter list
   LDY #$00
-  LDA #$00
-  STA (MEMP16),Y
-  INY
+  APPEND_HEAPI $00
   JSR advance_heap
   ; Write body_ptr (current MEMP16) into the saved location
   CP16 MACRO_DEF_PTR16 TABP16
@@ -1577,9 +1573,7 @@ process_endmacro
 .pem_in_macro
   ; Write $00 terminator to body (body_ptr was already set in process_macro)
   LDY #$00
-  LDA #$00
-  STA (MEMP16),Y
-  INY
+  APPEND_HEAPI $00
   JSR advance_heap
   ; Clear the capturing flag
   LDA #$00
@@ -1776,16 +1770,15 @@ capture_macro_line
 .cml_copy_loop
   LDY #$00
   STA (MEMP16),Y
+  INY
   CMP #'\n'
   BEQ .cml_line_done
-  INY
   JSR advance_heap
   JSR read_char
   BCC .cml_copy_loop
   ; EOF during macro - error
   JMP err_unclosed_macro
 .cml_line_done
-  INY
   JSR advance_heap     ; Advance past newline
   ; Now check if this line was .endmacro
   CP16 MACRO_DEF_PTR16 TABP16

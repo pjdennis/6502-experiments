@@ -24,6 +24,22 @@ MEMP16          .data $0000 ; 2 byte heap pointer
   .code
 
 
+  ; Append the value at ptr to the heap and increment Y
+  ; Clobbers A
+  .macro APPEND_HEAP ptr
+  LDA ptr
+  STA (MEMP16),Y
+  INY
+  .endmacro
+
+  ; Append val to the heap and increment Y
+  .macro APPEND_HEAPI val
+  LDA #val
+  STA (MEMP16),Y
+  INY
+  .endmacro
+
+
   .include hash_table22.asm
 
 
