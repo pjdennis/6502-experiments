@@ -1711,7 +1711,7 @@ expand_macro
   ; Advance MACRO_DEF_PTR past param name
   TYA
   SEC
-  ADDA16 MACRO_DEF_PTR16 MACRO_DEF_PTR16
+  ADDA16 MACRO_DEF_PTR16 MACRO_DEF_PTR16 ; MACRO_DEF_PTR + A -> MACRO_DEF_PTR
   ; Load value and fwdref from buffer
   LDA MACRO_ARG_BUF,X
   STA OPERAND16
@@ -1727,7 +1727,7 @@ expand_macro
   BEQ .em_do_add
   BIT PASS
   BMI .em_do_add        ; Pass 2: always add
-  JMP .em_add_loop      ; Pass 1 fwdref: skip
+  BPL .em_add_loop      ; Pass 1 fwdref: skip
 .em_do_add
   ; Add parameter to local scope
   LDA #$FF
@@ -1764,16 +1764,14 @@ expand_macro
 ; Strategy: Copy whole line to heap, then check if it was .endmacro.
 ; If so, undo the copy and process .endmacro normally.
 capture_macro_line
-  ; Save first char (in A from read_char) and X (output file handle)
-  PHA
+  ; Save X (output file handle)
   TXA
   PHA
   ; Save heap position in case we need to undo (for .endmacro)
   ; Use MACRO_DEF_PTR since we're not using it during capture
   CP16 MEMP16 MACRO_DEF_PTR16
-  ; Restore first char (X saved below A on stack)
-  TSX
-  LDA $0102,X
+  ; Restore first char
+  LDA NEXT_CHAR
   ; Copy whole line to heap including newline
 .cml_copy_loop
   LDY #$00
@@ -1826,16 +1824,14 @@ capture_macro_line
 .cml_found_endmacro
   ; Restore heap to undo the copy
   CP16 MACRO_DEF_PTR16 MEMP16
-  ; Restore X (output file handle) - pop saved X and A
+  ; Restore X (output file handle)
   PLA
   TAX
-  PLA                 ; Discard saved A
-  JMP process_endmacro
+  JMP process_endmacro   ; Tail call
 .cml_keep_line
   ; Restore X (output file handle)
   PLA
   TAX
-  PLA                 ; Discard saved A
   RTS
 
 
