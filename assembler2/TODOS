@@ -57,11 +57,9 @@ value2=value1  ; Needs to be assigned during pass 1
 
 - [ ] Get rid of the XX_L/H name pairs - replace with XX16
 
-- [ ] Use Y register in swap_pc_with_save?
+- [X] Use Y register in swap_pc_with_save?
 
-- [ ] Introduce macros for 16 bit arithmetic, e.g. in emit_instruction
-
-- [ ] Consolidate parse_term_with_selector and parse_value
+- [X] Introduce macros for 16 bit arithmetic, e.g. in emit_instruction
 
 - [ ] Strip comments when capturing macro definitions
 
