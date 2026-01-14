@@ -1,11 +1,11 @@
 ; Forward reference list management
 ; List is stored at FWDREF_LIST, terminated by $FFFF
-; Each entry is 2 bytes (PC low, PC high) of an instruction with forward ref
+; Each entry is 2 bytes (PC16) of an instruction with forward ref
 ;
 ; Requires:
 ;   FWDREF_LIST  - start address of forward reference list
 ;   FWDREF_LIMIT - max pointer value before adding (room for entry + terminator)
-;   PCL;PCH      - zero page locations containing program counter
+;   PC16         - zero page location containing program counter
 ;   err_too_many_forward_refs - error handler for list overflow
 
   .zeropage
@@ -56,10 +56,10 @@ add_forward_ref
 .ok
   ; Store PC at current list position
   LDY #$00
-  LDA PCL
+  LDA PC16
   STA (FWDREF_L),Y
   INY
-  LDA PCH
+  LDA PC16+$01
   STA (FWDREF_L),Y
   ; Advance pointer by 2
   CLC
@@ -83,11 +83,11 @@ add_forward_ref
 check_forward_ref
   LDY #$00
   LDA (FWDREF_L),Y
-  CMP PCL
+  CMP PC16
   BNE .no_match
   INY
   LDA (FWDREF_L),Y
-  CMP PCH
+  CMP PC16+$01
   BNE .no_match
   ; Match - advance pointer and return C=1
   CLC

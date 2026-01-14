@@ -56,3 +56,7 @@ value2=value1  ; Needs to be assigned during pass 1
   LDA value2   ; Should use zero page addressing
 
 - [ ] Get rid of the XX_L/H name pairs - replace with XX16
+
+- [ ] Use Y register in swap_pc_with_save?
+
+- [ ] Introduce macros for 16 bit arithmetic, e.g. in emit_instruction

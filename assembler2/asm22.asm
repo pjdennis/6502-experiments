@@ -13,42 +13,40 @@ FILE_STACK    = $F000             ; File stack will grow down from 1 below here
   .zeropage
 
 ; Zero page locations
-TEMP        .data $00 ; 1 byte
-PCL         .data $00 ; 2 byte program counter
-PCH         .data $00 ; "
-HEX2        .data $00 ; 1 byte (low byte - also aliased as OPERAND_L)
-HEX1        .data $00 ; 1 byte (high byte - also aliased as OPERAND_H)
-OPERAND_L = HEX2      ; Operand value (low byte) - alias for HEX2
-OPERAND_H = HEX1      ; Operand value (high byte) - alias for HEX1
-PASS        .data $00 ; 1 byte $00 = pass 1 $FF = pass 2
-MEMPL       .data $00 ; 2 byte heap pointer
-MEMPH       .data $00 ; "
-STARTED     .data $00 ; flag to indicate output has started
-CURR_FILE   .data $00 ; current file handle
-CURLINEL    .data $00 ; Current line (L)
-CURLINEH    .data $00 ; Current line (H)
-CURR_OUT_FILE .data $00 ; Current output file (for closing on error)
-IN_ZEROPAGE .data $00 ; Flag indicating if in zero page section
-PC_SAVEL    .data $00 ; Save location for PC when switching sections
-PC_SAVEH    .data $00 ; "
+TEMP            .data $00   ; 1 byte
+PC16            .data $0000 ; 2 byte program counter
+HEX2            .data $00   ; 1 byte (low byte - also aliased as OPERAND_L)
+HEX1            .data $00   ; 1 byte (high byte - also aliased as OPERAND_H)
+OPERAND_L = HEX2            ; Operand value (low byte) - alias for HEX2
+OPERAND_H = HEX1            ; Operand value (high byte) - alias for HEX1
+PASS            .data $00   ; 1 byte $00 = pass 1 $FF = pass 2
+MEMPL           .data $00   ; 2 byte heap pointer
+MEMPH           .data $00   ; "
+STARTED         .data $00   ; flag to indicate output has started
+CURR_FILE       .data $00   ; current file handle
+CURLINEL        .data $00   ; Current line (L)
+CURLINEH        .data $00   ; Current line (H)
+CURR_OUT_FILE   .data $00 ; Current output file (for closing on error)
+IN_ZEROPAGE     .data $00   ; Flag indicating if in zero page section
+PC_SAVE16       .data $0000 ; Save location for PC when switching sections
 CURR_GLOBAL_HEAP_L .data $00 ; Heap address of current global label string
 CURR_GLOBAL_HEAP_H .data $00 ; "
-ADDR_MODE   .data $00 ; Current addressing mode
-INST_PTR_L  .data $00 ; Pointer to instruction mode table entry
-INST_PTR_H  .data $00 ; "
-IS_FWDREF   .data $00 ; $FF if current label is forward ref (pass 1 only)
-EXPR_ACCU_L .data $00 ; Expression accumulator low byte
-EXPR_ACCU_H .data $00 ; Expression accumulator high byte
-EXPR_FWDREF .data $00 ; Accumulated forward ref flag
-COND_DEPTH  .data $00 ; Conditional assembly nesting depth
-SKIP_DEPTH  .data $00 ; Depth where skipping started (0 = not skipping)
-ARG_COUNT   .data $00 ; Total command line argument count
-ARG_INDEX   .data $00 ; Current argument index being processed
-NEXT_CHAR   .data $00 ; Last character read by read_char
-IN_MACRO_DEF    .data $00 ; Flag: currently capturing macro body ($FF = capturing)
-MACRO_DEF_PTR_L .data $00 ; Heap pointer where macro body is being stored
-MACRO_DEF_PTR_H .data $00 ; "
-MACRO_ENTRY16  .data $0000 ; Original macro hash entry address (for recursion check)
+ADDR_MODE       .data $00   ; Current addressing mode
+INST_PTR_L      .data $00   ; Pointer to instruction mode table entry
+INST_PTR_H      .data $00   ; "
+IS_FWDREF       .data $00   ; $FF if current label is forward ref (pass 1 only)
+EXPR_ACCU_L     .data $00   ; Expression accumulator low byte
+EXPR_ACCU_H     .data $00   ; Expression accumulator high byte
+EXPR_FWDREF     .data $00   ; Accumulated forward ref flag
+COND_DEPTH      .data $00   ; Conditional assembly nesting depth
+SKIP_DEPTH      .data $00   ; Depth where skipping started (0 = not skipping)
+ARG_COUNT       .data $00   ; Total command line argument count
+ARG_INDEX       .data $00   ; Current argument index being processed
+NEXT_CHAR       .data $00   ; Last character read by read_char
+IN_MACRO_DEF    .data $00   ; Flag: currently capturing macro body ($FF = capturing)
+MACRO_DEF_PTR_L .data $00   ; Heap pointer where macro body is being stored
+MACRO_DEF_PTR_H .data $00   ; "
+MACRO_ENTRY16   .data $0000 ; Original macro hash entry address (for recursion check)
 
   .ifdef enable_debug
 DEBUG_FLAG  .data $00 ; Non-zero if debug output enabled
@@ -148,23 +146,24 @@ convert_hex_character
   JMP err_invalid_hex
 
 
-; Swap PCL;PCH with PC_SAVEL;PC_SAVEH
-; On exit A, X, Y are preserved
+; Swap PC16 with PC_SAVE16
+; On exit A is not preserved
+;         X, Y are preserved
 swap_pc_with_save
-  ; Swap PC L with save location
-  LDA PCL
+  ; Swap PC16 low byte with save location
+  LDA PC16
   PHA
-  LDA PC_SAVEL
-  STA PCL
+  LDA PC_SAVE16
+  STA PC16
   PLA
-  STA PC_SAVEL
-  ; Swap PC H with save location
-  LDA PCH
+  STA PC_SAVE16
+  ; Swap PC16 high byte with save location
+  LDA PC16+$01
   PHA
-  LDA PC_SAVEH
-  STA PCH
+  LDA PC_SAVE16+$01
+  STA PC16+$01
   PLA
-  STA PC_SAVEH
+  STA PC_SAVE16+$01
   RTS
 
 
@@ -819,11 +818,8 @@ capture_label
   CP16 TABPL CURR_GLOBAL_HEAP_L
   JSR commit_cached_hash    ; Commit hash for local label lookups
 .was_local_1
-  ; Store current program counter as the hash value
-  LDA PCL
-  STA HEX2
-  LDA PCH
-  STA HEX1
+  ; Store current program counter as the hash value into HEX2:HEX1
+  CP16 PC16 HEX2
   JSR store_hash_value
   JMP .skip_spaces_and_return_processed_flag
 .has_equals
@@ -854,7 +850,7 @@ capture_label
 ; TODO: Consolidate the PASS and IN_ZEROPAGE flags so that emit can
 ;       do a single check instead of two for suppression of output
 emit
-  INC16 PCL
+  INC16 PC16
   BIT PASS
   BPL .skip            ; Skip writing during pass 1
   BIT IN_ZEROPAGE
@@ -865,7 +861,7 @@ emit
 
 
 ; Fast forward the program counter
-; On entry PCL;PCH contains the current program counter
+; On entry PC16 contains the current program counter
 ;          HEX2;HEX1 contains the new PC value
 ; On exit
 ; Raises 'Cannot move PC backwards' error if attempting to move PC backwards
@@ -878,38 +874,35 @@ update_pc
   BNE .no_fill        ; Always taken
 .started
   LDA HEX1            ; High byte
-  CMP PCH
+  CMP PC16+$01
   BCC .less
   BNE .notless
   LDA HEX2            ; Low byte
-  CMP PCL
+  CMP PC16
   BCC .less
 .notless
   BIT PASS
   BPL .no_fill        ; skip writing during pass 1
 .loop
   LDA HEX1
-  CMP PCH
+  CMP PC16+$01
   BNE .loop_not_done
   LDA HEX2
-  CMP PCL
+  CMP PC16
   BEQ .loop_done
 .loop_not_done
   LDA #$00
   JSR write
-  INC PCL
+  INC PC16
   BNE .loop
-  INC PCH
+  INC PC16+$01
   BNE .loop           ; Always taken
 .loop_done
   RTS
 .less
   JMP err_cannot_move_pc_backwards
 .no_fill
-  LDA HEX2
-  STA PCL
-  LDA HEX1
-  STA PCH
+  CP16 HEX2 PC16
 .done
   RTS
 
@@ -1076,10 +1069,10 @@ emit_instruction
   BPL .emit_relative_pass1  ; Skip validation on pass 1
   CLC                  ; For the - 1
   LDA OPERAND_L
-  SBC PCL
+  SBC PC16
   STA OPERAND_L
   LDA OPERAND_H
-  SBC PCH
+  SBC PC16+$01
   ; Check if within range
   CMP #$00
   BEQ .forward
@@ -1946,10 +1939,10 @@ assemble_code
   LDA #$00
   STA STARTED
   STA IN_ZEROPAGE
-  STA PCL
-  STA PCH
-  STA PC_SAVEL
-  STA PC_SAVEH
+  STA PC16
+  STA PC16+$01
+  STA PC_SAVE16
+  STA PC_SAVE16+$01
   STA CURLINEL
   STA CURLINEH
   STA CURR_GLOBAL_HEAP_L ; Initialize global heap pointer (0 = no global yet)
