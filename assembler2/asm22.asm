@@ -39,13 +39,12 @@ MACRO_DEF_PTR16 .data $0000 ; Heap pointer where macro body is being stored
 MACRO_ENTRY16   .data $0000 ; Original macro hash entry address (for recursion check)
 
   .ifdef enable_debug
-DEBUG_FLAG  .data $00 ; Non-zero if debug output enabled
-FWDREF_PASS1_L .data $00 ; Forward ref pointer after pass 1 (low byte)
-FWDREF_PASS1_H .data $00 ; Forward ref pointer after pass 1 (high byte)
+DEBUG_FLAG      .data $00   ; Non-zero if debug output enabled
+PASS_1_FWDREF16 .data $0000 ; Forward ref pointer after pass 1
   .endif
 
-
   .code
+
 
 ; Include files
   .include out/inst22.asm.out   ; This goes first since the tables should start on a page boundary
@@ -2149,10 +2148,7 @@ start
 
   .ifdef enable_debug
   ; Capture forward ref pointer after pass 1
-  LDA FWDREF_L
-  STA FWDREF_PASS1_L
-  LDA FWDREF_H
-  STA FWDREF_PASS1_H
+  CP16 FWDREF_L PASS_1_FWDREF16
   .endif
 
   LDA #$FF
@@ -2165,10 +2161,10 @@ start
   .ifdef enable_debug
   ; Verify forward ref pointer matches pass 1
   LDA FWDREF_L
-  CMP FWDREF_PASS1_L
+  CMP PASS_1_FWDREF16
   BNE .fwdref_error
   LDA FWDREF_H
-  CMP FWDREF_PASS1_H
+  CMP PASS_1_FWDREF16+$01
   BNE .fwdref_error
   JMP .fwdref_ok
 .fwdref_error
@@ -2202,17 +2198,11 @@ start
   ; Print forward reference count
   SET16 msg_fwdref_count TABPL
   JSR show_message
-  ; Calculate forward ref count: (FWDREF_PASS1 - FWDREF_LIST) / 2
+  ; Calculate forward ref count: (PASS_1_FWDREF16 - FWDREF_LIST) / 2
   SEC
-  LDA FWDREF_PASS1_L
-  SBC #<FWDREF_LIST
-  STA TO_DECIMAL_VALUE_L
-  LDA FWDREF_PASS1_H
-  SBC #>FWDREF_LIST
-  STA TO_DECIMAL_VALUE_H
+  SUBI16 PASS_1_FWDREF16 FWDREF_LIST TO_DECIMAL_VALUE_L
   ; Divide by 2 (16-bit right shift)
-  LSR TO_DECIMAL_VALUE_H
-  ROR TO_DECIMAL_VALUE_L
+  LSR16 TO_DECIMAL_VALUE_L
   JSR show_decimal
   LDA #'\n'
   JSR write_d

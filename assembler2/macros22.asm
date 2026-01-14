@@ -50,6 +50,18 @@
   .endmacro
 
 
+; SUBI16 ptr1 val ptr2 - subracts val from value at ptr1, storing result at ptr2
+; Clobbers A
+  .macro SUBI16 ptr1 val ptr2
+  LDA ptr1
+  SBC #<val
+  STA ptr2
+  LDA ptr1+$01
+  SBC #>val
+  STA ptr2+$01
+  .endmacro
+
+
 ; ASL16 ptr - Shift 16 bit value at ptr left
 ; Clobbers A
   .macro ASL16 ptr
