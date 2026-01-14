@@ -190,7 +190,7 @@ interrupt
   SET16 msg_error_file TABP16
   JSR show_message
 ; Print the filename (at FS_PL)
-  CP16 FS_PL TABP16
+  CP16 FS_P16 TABP16
   JSR show_message
 ; Print the " at line " message
   SET16 msg_error_line TABP16
@@ -278,7 +278,7 @@ show_include_traceback
   SET16 msg_included_from TABP16
   JSR show_message
   ; Print filename (FS_PL points to parent entry's name)
-  CP16 FS_PL TABP16
+  CP16 FS_P16 TABP16
   JSR show_message
   ; Print ":"
   LDA #':'

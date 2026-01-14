@@ -73,6 +73,21 @@
   .endmacro
 
 
+; CMPI16 ptr val Compares val to value at ptr, setting flags accordingly
+; After calling:
+;   BEQ/BNE work for equality
+;   BCC branches if value at ptr1 < val
+; Clobbers A
+  .macro CMPI16 ptr val
+  LDA ptr+$01
+  CMP #>val
+  BNE .done
+  LDA ptr
+  CMP #<val
+.done
+  .endmacro
+
+
 ; ASL16 ptr - Shift 16 bit value at ptr left
 ; Clobbers A
   .macro ASL16 ptr

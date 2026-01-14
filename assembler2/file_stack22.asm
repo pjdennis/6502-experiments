@@ -24,9 +24,8 @@
 
   .zeropage
 
-FS_PL   .data $00 ; Pointer to the current location in the file stack
-FS_PH   .data $00 ; "
-FS_TEMP .data $00 ; Temporary location for use in calculations
+FS_P16        .data $0000 ; Pointer to the current location in the file stack
+FS_TEMP       .data $00   ; Temporary location for use in calculations
 
 ; Memory source support (zero-terminated buffers)
 FS_SRC_TYPE   .data $00 ; Source type: 0=file, 1=memory
@@ -37,7 +36,7 @@ FS_MEM_PTR_H  .data $00 ; Current read position in memory (high)
 
 
 file_stack_init
-  SET16 FILE_STACK FS_PL
+  SET16 FILE_STACK FS_P16
   LDA #$00
   STA FS_SRC_TYPE
   RTS
@@ -45,12 +44,7 @@ file_stack_init
 
 ; On exit Z is set if file stack empty, clear otherwise
 file_stack_empty
-  LDA FS_PL
-  CMP #<FILE_STACK
-  BNE .done
-  LDA FS_PH
-  CMP #>FILE_STACK
-.done
+  CMPI16 FS_P16 FILE_STACK
   RTS
 
 
@@ -81,51 +75,51 @@ push_source_frame
   STA FS_TEMP
   ; Decrease stack pointer by frame size
   SEC
-  LDA FS_PL
+  LDA FS_P16
   SBC FS_TEMP
-  STA FS_PL
-  LDA FS_PH
+  STA FS_P16
+  LDA FS_P16+$01
   SBC #$00
-  STA FS_PH
+  STA FS_P16+$01
   ; Copy name to stack
   LDY #$FF
 .copy_loop
   INY
   LDA FS_FILENAME,Y
-  STA (FS_PL),Y
+  STA (FS_P16),Y
   BNE .copy_loop
   ; Store curr_type (saved on 6502 stack)
   INY
   PLA                   ; Get curr_type
-  STA (FS_PL),Y
+  STA (FS_P16),Y
   ; Store prev_type
   INY
   LDA FS_SRC_TYPE
-  STA (FS_PL),Y
+  STA (FS_P16),Y
   PHA                   ; Save prev_type for later
   ; Store prev_line
   INY
   LDA FS_CURR_LINE16
-  STA (FS_PL),Y
+  STA (FS_P16),Y
   INY
   LDA FS_CURR_LINE16+$01
-  STA (FS_PL),Y
+  STA (FS_P16),Y
   ; Store prev_data based on prev_type
   PLA                   ; Restore prev_type
   BNE .save_memory_state
   ; prev_type=0: save file handle
   INY
   LDA FS_CURR_FILE
-  STA (FS_PL),Y
+  STA (FS_P16),Y
   JMP .reset_line
 .save_memory_state
   ; prev_type=1: save memory pointer (zero-terminated, no end needed)
   INY
   LDA FS_MEM_PTR_L
-  STA (FS_PL),Y
+  STA (FS_P16),Y
   INY
   LDA FS_MEM_PTR_H
-  STA (FS_PL),Y
+  STA (FS_P16),Y
 .reset_line
   ; Reset line number for new source
   LDA #$00
@@ -181,11 +175,11 @@ pop_source
   LDY #$FF
 .skip_name
   INY
-  LDA (FS_PL),Y
+  LDA (FS_P16),Y
   BNE .skip_name
   ; Y points at null, curr_type is at Y+1
   INY
-  LDA (FS_PL),Y
+  LDA (FS_P16),Y
   BEQ .was_file_source
   ; curr_type=1: was memory source - pop label scope if hook defined
   .ifdef FS_POP_MEMORY_HOOK
@@ -203,41 +197,37 @@ pop_source
 .restore_prev
   ; Read prev_type
   INY
-  LDA (FS_PL),Y
+  LDA (FS_P16),Y
   STA FS_SRC_TYPE       ; Restore source type
   PHA                   ; Save for later
   ; Read prev_line
   INY
-  LDA (FS_PL),Y
+  LDA (FS_P16),Y
   STA FS_CURR_LINE16
   INY
-  LDA (FS_PL),Y
+  LDA (FS_P16),Y
   STA FS_CURR_LINE16+$01
   ; Restore prev_data based on prev_type
   PLA
   BNE .restore_memory
   ; prev_type=0: restore file handle
   INY
-  LDA (FS_PL),Y
+  LDA (FS_P16),Y
   STA FS_CURR_FILE
   JMP .adjust_stack
 .restore_memory
   ; prev_type=1: restore memory pointer (zero-terminated, no end needed)
   INY
-  LDA (FS_PL),Y
+  LDA (FS_P16),Y
   STA FS_MEM_PTR_L
   INY
-  LDA (FS_PL),Y
+  LDA (FS_P16),Y
   STA FS_MEM_PTR_H
 .adjust_stack
   ; Y points to last byte read, add Y+1 to stack pointer
   TYA
   SEC                   ; +1
-  ADC FS_PL
-  STA FS_PL
-  LDA #$00
-  ADC FS_PH
-  STA FS_PH
+  ADDA16 FS_P16 FS_P16 
   RTS
 
 ; Legacy names for compatibility
