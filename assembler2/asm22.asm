@@ -64,7 +64,6 @@ read_char = file_stack_read_char
   .include fwdref22.asm
 
 
-
 ; ============================================================================
 ; TIER 1: PRIMITIVES
 ; Basic operations with no dependencies on other functions

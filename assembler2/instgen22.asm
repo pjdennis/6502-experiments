@@ -32,10 +32,8 @@ SCOPE_STACK = $0400     ; Scope stack (needed by hash_table21.asm, not used by i
 TEMP      .data $00     ; 1 byte temporary value
 TEMP2     .data $00     ; 1 byte temporary value (for Y save)
 HEX16     .data $00     ; 2 bytes
-PL        .data $00     ; 2 byte pointer
-PH        .data $00     ; "
-P2L       .data $00     ; 2 byte pointer
-P2H       .data $00     ; "
+P16       .data $0000   ; 2 byte pointer
+P2_16     .data $0000   ; 2 byte pointer
 
   .code
 
@@ -206,20 +204,17 @@ MNTAB
 
 
 populate_instruction_hash_table
-  LDA #<MNTAB
-  STA P2L
-  LDA #>MNTAB
-  STA P2H
+  SET16 MNTAB P2_16
 .entry_loop
   LDY #$00
-  LDA (P2L),Y
+  LDA (P2_16),Y
   BEQ .done
   ; Copy mnemonic to TOKEN
 .token_loop
   STA TOKEN,Y
   BEQ .token_loop_done
   INY
-  LDA (P2L),Y
+  LDA (P2_16),Y
   JMP .token_loop
 .token_loop_done
   ; Y now points at null terminator
@@ -231,14 +226,14 @@ populate_instruction_hash_table
   ; Now copy all mode:opcode pairs to the heap
   LDY TEMP        ; Restore offset to mode data
 .copy_modes
-  LDA (P2L),Y     ; Get mode byte
+  LDA (P2_16),Y     ; Get mode byte
   CMP #$FF
   BEQ .copy_done
   ; Store mode byte
   JSR store_byte_to_heap
   INY
   ; Store opcode byte
-  LDA (P2L),Y
+  LDA (P2_16),Y
   JSR store_byte_to_heap
   INY
   JMP .copy_modes
@@ -247,14 +242,14 @@ populate_instruction_hash_table
   LDA #$FF
   JSR store_byte_to_heap
   INY              ; Skip past $FF in source
-  ; Advance P2L:P2H to next entry
+  ; Advance P2_16 to next entry
   TYA
   CLC
-  ADC P2L
-  STA P2L
+  ADC P2_16
+  STA P2_16
   LDA #$00
-  ADC P2H
-  STA P2H
+  ADC P2_16+$01
+  STA P2_16+$01
   JMP .entry_loop
 .done
   RTS
@@ -316,19 +311,16 @@ display_data_prefix
   LDA #' '
   JSR write_b
   JSR write_b
-  LDA #<msg_data
-  STA PL
-  LDA #>msg_data
-  STA PH
+  SET16 msg_data P16
   JMP display_text
 
 
-; On entry PL;PH points to the text
+; On entry P16 points to the text
 ; On exit Y points to the terminating 0
 display_text
   LDY #$00
 .loop
-  LDA (PL),Y
+  LDA (P16),Y
   BEQ .done
   JSR write_b
   INY
@@ -361,20 +353,12 @@ display_table
   JMP .next
 .not_empty
   ; Display instruction label prefix
-  LDA #<msg_instprefix
-  STA PL
-  LDA #>msg_instprefix
-  STA PH
+  SET16 msg_instprefix P16
   JSR display_text
   ; Display hash entry
   JSR load_hash_entry
   CLC
-  LDA TABP16
-  ADC #$02
-  STA PL
-  LDA TABP16+$01
-  ADC #$00
-  STA PH
+  ADDI16 TABP16 $02 P16
   JSR display_text
 .next
   LDA HASH
@@ -403,14 +387,9 @@ write_label_and_modes
   JSR write_b
   LDA #'"'
   JSR write_b
-  ; Set PL:PH to point to mnemonic (TABP16+2)
+  ; Set P16 to point to mnemonic (TABP16 + 2)
   CLC
-  LDA TABP16
-  ADC #$02
-  STA PL
-  LDA TABP16+$01
-  ADC #$00
-  STA PH
+  ADDI16 TABP16 $02 P16
   ; Display mnemonic text
   JSR display_text
   ; Y now points to null terminator in mnemonic
@@ -424,7 +403,7 @@ write_label_and_modes
   ; Y still valid from display_text, pointing at null
   INY                  ; Skip past null terminator to first mode byte
 .mode_loop
-  LDA (PL),Y
+  LDA (P16),Y
   CMP #$FF
   BEQ .mode_done
   PHA                  ; Save mode byte
@@ -435,7 +414,7 @@ write_label_and_modes
   INY
   LDA #' '
   JSR write_b
-  LDA (PL),Y           ; Opcode byte
+  LDA (P16),Y           ; Opcode byte
   JSR display_byte
   INY
   JMP .mode_loop
@@ -463,18 +442,10 @@ display_data
   JSR load_hash_entry
 .entry_loop
   ; Display instruction label prefix
-  LDA #<msg_instprefix
-  STA PL
-  LDA #>msg_instprefix
-  STA PH
+  SET16 msg_instprefix P16
   JSR display_text
   CLC
-  LDA TABP16
-  ADC #$02
-  STA PL
-  LDA TABP16+$01
-  ADC #$00
-  STA PH
+  ADDI16 TABP16 $02 P16
   JSR display_text
   JSR display_newline
   JSR display_data_prefix
@@ -499,32 +470,26 @@ display_data
   JMP .next
 .not_zero
   ; Has collision chain - display pointer to next entry
-  LDA #<msg_instprefix
-  STA PL
-  LDA #>msg_instprefix
-  STA PH
+  SET16 msg_instprefix P16
   JSR display_text
   CLC
   LDY #$00
   LDA (TABP16),Y
   ADC #$02
-  STA PL
+  STA P16
   INY
   LDA (TABP16),Y
   ADC #$00
-  STA PH
+  STA P16+$01
   JSR display_text
   JSR write_label_and_modes
   LDY #$00
   LDA (TABP16),Y
-  STA PL
+  STA P16
   INY
   LDA (TABP16),Y
-  STA PH
-  LDA PL
-  STA TABP16
-  LDA PH
-  STA TABP16+$01
+  STA P16+$01
+  CP16 P16 TABP16
   JMP .entry_loop
 .next
   LDA HASH
@@ -548,26 +513,17 @@ start
   JSR populate_instruction_hash_table
 
 ; Show the instructions hash table
-  LDA #<msg_hash_table_comment
-  STA PL
-  LDA #>msg_hash_table_comment
-  STA PH
+  SET16 msg_hash_table_comment P16
   JSR display_text
   JSR display_newline
-  LDA #<msg_IHASHTAB
-  STA PL
-  LDA #>msg_IHASHTAB
-  STA PH
+  SET16 msg_IHASHTAB P16
   JSR display_text
   JSR display_newline
   JSR display_table
   JSR display_newline
 
 ; Show the instructions heap data
-  LDA #<msg_heap_comment
-  STA PL
-  LDA #>msg_heap_comment
-  STA PH
+  SET16 msg_heap_comment P16
   JSR display_text
   JSR display_newline
   JSR display_data

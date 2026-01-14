@@ -80,3 +80,5 @@ value2=value1  ; Needs to be assigned during pass 1
   INY
 
 - [ ] Introduce a macro for that pattern of adding A to a 16 bit variable storing the result in another 16 bit variable
+
+- [ ] Cleanup write_label_and_modes in instgen
