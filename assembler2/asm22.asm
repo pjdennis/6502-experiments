@@ -52,16 +52,16 @@ PASS_1_FWDREF16 .data $0000 ; Forward ref pointer after pass 1
   .include macros22.asm
   .include common22.asm
   .include label_scope22.asm
-FS_FILENAME    = TOKEN
-FS_CURR_FILE   = CURR_FILE
-FS_CURR_LINE16 = CURR_LINE16
-FS_NEXT_CHAR   = NEXT_CHAR
-FS_ERR_NO_FILE = err_no_file
-FS_POP_MEMORY_HOOK = pop_label_scope
-  .include file_stack22.asm
-read_char = file_stack_read_char
   .include errors22.asm
   .include fwdref22.asm
+FS_FILENAME        = TOKEN
+FS_CURR_FILE       = CURR_FILE
+FS_CURR_LINE16     = CURR_LINE16
+FS_NEXT_CHAR       = NEXT_CHAR
+FS_ERR_NO_FILE     = err_no_file
+FS_POP_MEMORY_HOOK = pop_label_scope
+  .include file_stack22.asm
+read_char          = file_stack_read_char
 
 
 ; ============================================================================

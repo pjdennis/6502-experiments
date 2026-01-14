@@ -4,11 +4,8 @@
 ;   FS_CURR_FILE   - zero page location of the current file handle
 ;   FS_CURR_LINE16 - zero page location of the current line number
 ;   FS_NEXT_CHAR   - zero page location to store last character read
-;   open, close, read - file I/O functions
-;
-; Optional:
 ;   FS_ERR_NO_FILE - error handler for read_char when no file is open
-;                    If not defined, read_char returns SEC like normal EOF
+;   open, close, read - file I/O functions
 
 ; The file stack grows downwards. Unified frame format (from low to high address):
 ;
@@ -289,9 +286,7 @@ file_stack_read_char
   ; Continue reading from previous source
   JMP file_stack_read_char
 .no_source
-  .ifdef FS_ERR_NO_FILE
   JMP FS_ERR_NO_FILE
-  .endif
 .all_done
   SEC
   RTS
