@@ -692,7 +692,7 @@ check_local_label
 
 
 select_label_hash_table
-  SET16 LHASHTAB HTPL
+  SET16 LHASHTAB HTP16
   RTS
 
 
@@ -706,10 +706,10 @@ select_label_hash_table
 ;         X is preserved
 update_label_scope_from_lookup
   JSR select_label_hash_table
-  JSR find_in_hash       ; TABPL now points to token string
+  JSR find_in_hash       ; TABP16 now points to token string
   JSR commit_cached_hash ; Commit hash since this is a non-assignment global
-  ; After find_in_hash, TABPL points to token string (entry_start + 2)
-  CP16 TABPL LABEL_SCOPE16
+  ; After find_in_hash, TABP16 points to token string (entry_start + 2)
+  CP16 TABP16 LABEL_SCOPE16
   RTS
 
 
@@ -778,7 +778,7 @@ capture_label
   LDA IS_LOCAL_LABEL
   BNE .was_local_1          ; If local flag != 0, skip
   ; Store the address of the current global label
-  CP16 TABPL LABEL_SCOPE16
+  CP16 TABP16 LABEL_SCOPE16
   JSR commit_cached_hash    ; Commit hash for local label lookups
 .was_local_1
   ; Store current program counter as the hash value into HEX16
@@ -888,32 +888,32 @@ lookup_mnemonic
   BCC .found
   JMP err_opcode_not_found
 .found
-  ; TABPL:TABPH+Y points to mode:opcode data or macro sentinel
+  ; TABP16 + Y points to mode:opcode data or macro sentinel
   ; Check for macro sentinel ($FE)
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   CMP #$FE
   BNE .is_instruction
   ; It's a macro - compute pointer to macro data and expand
-  ; MACRO_DEF_PTR = TABPL + Y (points to $FE, body_ptr is at +1)
+  ; MACRO_DEF_PTR = TABP16 + Y (points to $FE, body_ptr is at +1)
   TYA
   CLC
-  ADC TABPL
+  ADC TABP16
   STA MACRO_DEF_PTR16
   LDA #$00
-  ADC TABPH
+  ADC TABP16+$01
   STA MACRO_DEF_PTR16+$01
   ; Don't skip rest of line - expand_macro will parse arguments
   PLA                   ; Pop return address (we're not returning)
   PLA
   JMP expand_macro
 .is_instruction
-  ; Calculate INST_PTR = TABPL + Y
+  ; Calculate INST_PTR = TABP16 + Y
   TYA
   CLC
-  ADC TABPL
+  ADC TABP16
   STA INST_PTR16
   LDA #$00
-  ADC TABPH
+  ADC TABP16+$01
   STA INST_PTR16+$01
   RTS
 
@@ -1289,29 +1289,29 @@ emit_quoted
 process_directive
   JSR read_token       ; Next char in NEXT_CHAR
   ; Check for 'include'
-  SET16 directive_include TABPL
+  SET16 directive_include TABP16
   JSR compare_token
   BEQ .include
   ; Check for 'zeropage'
-  SET16 directive_zeropage TABPL
+  SET16 directive_zeropage TABP16
   JSR compare_token
   BEQ .zeropage
   ; Check for 'code'
-  SET16 directive_code TABPL
+  SET16 directive_code TABP16
   JSR compare_token
   BEQ .code
   ; Check for 'data'
-  SET16 directive_data TABPL
+  SET16 directive_data TABP16
   JSR compare_token
   BEQ .data
   JSR process_conditional_directive ; Returns with C=0 if processed
   BCC .directive_done
   ; Check for 'macro'
-  SET16 directive_macro TABPL
+  SET16 directive_macro TABP16
   JSR compare_token
   BEQ .macro
   ; Check for 'endmacro'
-  SET16 directive_endmacro TABPL
+  SET16 directive_endmacro TABP16
   JSR compare_token
   BEQ .endmacro
   JMP err_unknown_directive
@@ -1356,11 +1356,11 @@ process_directive
 ;         A is not preserved
 process_conditional_directive
   ; Check for 'ifdef'
-  SET16 directive_ifdef TABPL
+  SET16 directive_ifdef TABP16
   JSR compare_token
   BEQ .ifdef
   ; Check for 'endif'
-  SET16 directive_endif TABPL
+  SET16 directive_endif TABP16
   JSR compare_token
   BEQ .endif
   SEC ; Not processed
@@ -1490,7 +1490,7 @@ process_macro
   BCS .pm_name_ok      ; C=1 means not found, good
   ; Found something - is it an instruction or existing macro?
   ; Check first byte of value - $FE means macro, else instruction
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   CMP #$FE
   BEQ .pm_is_macro
   JMP err_macro_shadows_instruction
@@ -1514,7 +1514,7 @@ process_macro
   ; Entry exists - find end of chain
   JSR load_hash_entry
   JSR find_token
-  ; TABPL;TABPH,Y points to 'next' pointer at end of chain
+  ; TABP16 + Y points to 'next' pointer at end of chain
   JSR store_table_entry  ; Store MEMP16 at end of chain
   JMP .pm_store_entry
 .pm_hash_empty
@@ -1556,13 +1556,13 @@ process_macro
   INY
   JSR advance_heap
   ; Write body_ptr (current MEMP16) into the saved location
-  CP16 MACRO_DEF_PTR16 TABPL
+  CP16 MACRO_DEF_PTR16 TABP16
   LDY #$00
   LDA MEMP16
-  STA (TABPL),Y
+  STA (TABP16),Y
   INY
   LDA MEMP16+$01
-  STA (TABPL),Y
+  STA (TABP16),Y
   ; Update MACRO_DEF_PTR to point where body will be stored
   CP16 MEMP16 MACRO_DEF_PTR16
   ; Set IN_MACRO_DEF flag to start capturing
@@ -1595,38 +1595,38 @@ process_endmacro
 ; Walks the scope stack comparing 2-byte macro entry addresses
 ; On entry: MACRO_ENTRY16 contains the macro's hash table entry address
 ; On exit: Returns normally if no recursion, jumps to err_recursive_macro if found
-;          Uses TABPL/TABPH as walk pointer, A/Y clobbered, X preserved
+;          Uses TABP16 as walk pointer, A/Y clobbered, X preserved
 check_macro_recursion
   ; Walk scope stack from bottom to current position
-  SET16 SCOPE_STACK TABPL
+  SET16 SCOPE_STACK TABP16
 .cmr_loop
   ; Check if we've reached current scope pointer
-  LDA TABPL
+  LDA TABP16
   CMP SCOPE_PTR_L
   BNE .cmr_check_entry
-  LDA TABPH
+  LDA TABP16+$01
   CMP SCOPE_PTR_H
   BEQ .cmr_done             ; Reached current position, no recursion
 .cmr_check_entry
   ; Compare macro address at offset +3 with MACRO_ENTRY16
   LDY #$03
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   CMP MACRO_ENTRY16
   BNE .cmr_next
   INY
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   CMP MACRO_ENTRY16+$01
   BNE .cmr_next
   ; Match found - recursion detected
   JMP err_recursive_macro
 .cmr_next
   ; Advance to next entry (+5 bytes)
-  LDA TABPL
+  LDA TABP16
   CLC
   ADC #$05
-  STA TABPL
+  STA TABP16
   BCC .cmr_loop
-  INC TABPH
+  INC TABP16+$01
   JMP .cmr_loop
 .cmr_done
   RTS
@@ -1807,11 +1807,11 @@ capture_macro_line
   INY
   JSR advance_heap     ; Advance past newline
   ; Now check if this line was .endmacro
-  CP16 MACRO_DEF_PTR16 TABPL
+  CP16 MACRO_DEF_PTR16 TABP16
   ; Skip leading spaces
   LDY #$00
 .cml_skip_space
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   CMP #' '
   BNE .cml_check_dot
   INY
@@ -1825,14 +1825,14 @@ capture_macro_line
 .cml_cmp_loop
   LDA directive_endmacro,X
   BEQ .cml_check_end     ; End of "endmacro" string
-  CMP (TABPL),Y
+  CMP (TABP16),Y
   BNE .cml_keep_line
   INY
   INX
   BNE .cml_cmp_loop
 .cml_check_end
   ; Matched "endmacro" - verify next char is space, $0A, or similar
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   CMP #' '
   BEQ .cml_found_endmacro
   CMP #'\n'
@@ -1977,27 +1977,27 @@ open_input
   PHA
   LDA #$00
   JSR argv
-  STA TABPL
-  STX TABPH
+  STA TABP16
+  STX TABP16+$01
   PLA
   TAX
   LDY #$FF
 .loop
   INY
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   STA TOKEN,Y
   BNE .loop
   JMP push_file_stack ; tail call
 
 
   .ifdef enable_debug
-; Check if string at TABPL;TABPH equals "debug"
+; Check if string at TABP16 equals "debug"
 ; On exit C = 0 if equal, C = 1 if not equal
 ;         A, Y are not preserved
 check_debug_string
   LDY #$00
 .loop
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   CMP str_debug,Y
   BNE .not_equal
   CMP #$00
@@ -2019,8 +2019,8 @@ str_define
   .data "define:" $00
 
 
-; Check if string at TABPL;TABPH starts with "define:"
-; On exit C = 0 if prefix matches (TABPL;TABPH updated to point past prefix)
+; Check if string at TABP16 starts with "define:"
+; On exit C = 0 if prefix matches (TABP16 updated to point past prefix)
 ;         C = 1 if no match
 ;         A, Y are not preserved
 check_define_prefix
@@ -2028,18 +2028,18 @@ check_define_prefix
 .loop
   LDA str_define,Y
   BEQ .matched         ; End of prefix string - matched!
-  CMP (TABPL),Y
+  CMP (TABP16),Y
   BNE .not_matched
   INY
   JMP .loop
 .matched
-  ; Advance TABPL;TABPH past the prefix
+  ; Advance TABP16 past the prefix
   TYA
   CLC
-  ADC TABPL
-  STA TABPL
+  ADC TABP16
+  STA TABP16
   BCC .no_carry
-  INC TABPH
+  INC TABP16+$01
 .no_carry
   CLC
   RTS
@@ -2048,13 +2048,13 @@ check_define_prefix
   RTS
 
 
-; Copy null-terminated string from TABPL;TABPH to TOKEN
+; Copy null-terminated string from TABP16 to TOKEN
 ; On exit: Y contains length (excluding null terminator)
 ;          A is not preserved
 copy_string_to_token
   LDY #$00
 .loop
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   BEQ .done
   STA TOKEN,Y
   INY
@@ -2100,8 +2100,8 @@ start
   CMP ARG_COUNT
   BCS .args_done         ; Processed all args
   JSR argv               ; Get arg[ARG_INDEX]
-  STA TABPL
-  STX TABPH
+  STA TABP16
+  STX TABP16+$01
   .ifdef enable_debug
   ; Check for "debug"
   JSR check_debug_string
@@ -2119,7 +2119,7 @@ start
   BNE .next_arg          ; Always branches
   .endif
 .found_define
-  ; TABPL;TABPH now points past "define:" to label name
+  ; TABP16 now points past "define:" to label name
   JSR copy_string_to_token
   SET16 $0001 HEX16      ; Set A to $00 as a side effect
   STA IS_LOCAL_LABEL     ; Not a local label. Set to $00
@@ -2182,7 +2182,7 @@ start
   ; Print heap usage if debug flag is set
   LDA DEBUG_FLAG
   BEQ .skip_debug_output
-  SET16 msg_heap_used TABPL
+  SET16 msg_heap_used TABP16
   JSR show_message
   ; Calculate heap used: MEMP16 - HEAP
   SEC
@@ -2193,10 +2193,10 @@ start
   SBC #>HEAP
   STA TO_DECIMAL_VALUE_H
   JSR show_decimal
-  SET16 msg_bytes TABPL
+  SET16 msg_bytes TABP16
   JSR show_message
   ; Print forward reference count
-  SET16 msg_fwdref_count TABPL
+  SET16 msg_fwdref_count TABP16
   JSR show_message
   ; Calculate forward ref count: (PASS_1_FWDREF16 - FWDREF_LIST) / 2
   SEC

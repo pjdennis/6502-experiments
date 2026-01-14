@@ -71,5 +71,5 @@ store_hash_value
 select_instruction_hash_table
   LDA #$00
   STA IS_LOCAL_LABEL       ; Clear local label flag for instruction lookup
-  SET16 IHASHTAB HTPL
+  SET16 IHASHTAB HTP16
   RTS

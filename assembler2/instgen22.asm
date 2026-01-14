@@ -369,10 +369,10 @@ display_table
   ; Display hash entry
   JSR load_hash_entry
   CLC
-  LDA TABPL
+  LDA TABP16
   ADC #$02
   STA PL
-  LDA TABPH
+  LDA TABP16+$01
   ADC #$00
   STA PH
   JSR display_text
@@ -403,12 +403,12 @@ write_label_and_modes
   JSR write_b
   LDA #'"'
   JSR write_b
-  ; Set PL:PH to point to mnemonic (TABPL+2)
+  ; Set PL:PH to point to mnemonic (TABP16+2)
   CLC
-  LDA TABPL
+  LDA TABP16
   ADC #$02
   STA PL
-  LDA TABPH
+  LDA TABP16+$01
   ADC #$00
   STA PH
   ; Display mnemonic text
@@ -469,10 +469,10 @@ display_data
   STA PH
   JSR display_text
   CLC
-  LDA TABPL
+  LDA TABP16
   ADC #$02
   STA PL
-  LDA TABPH
+  LDA TABP16+$01
   ADC #$00
   STA PH
   JSR display_text
@@ -482,10 +482,10 @@ display_data
   JSR write_b
   ; Display next pointer
   LDY #$00
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   BNE .not_zero
   INY
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   BNE .not_zero
   ; Zero - no collision chain
   LDA #'$'
@@ -506,25 +506,25 @@ display_data
   JSR display_text
   CLC
   LDY #$00
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   ADC #$02
   STA PL
   INY
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   ADC #$00
   STA PH
   JSR display_text
   JSR write_label_and_modes
   LDY #$00
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   STA PL
   INY
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   STA PH
   LDA PL
-  STA TABPL
+  STA TABP16
   LDA PH
-  STA TABPH
+  STA TABP16+$01
   JMP .entry_loop
 .next
   LDA HASH

@@ -2,7 +2,7 @@
 ;
 ; Requires:
 ;   TEMP                 - zero page location for temporary storage
-;   TABPL;TABPH          - zero page locations for table pointer
+;   TABP16               - zero page location for table pointer
 ;   CURR_LINE16          - zero page location for current line number
 ;   FS_PL;FS_PH          - zero page locations for file stack pointer
 ;   file_stack_empty     - function to check if file stack is empty
@@ -156,14 +156,14 @@ interrupt
   SEC
   LDA $0100,X
   SBC #$01
-  STA TABPL
+  STA TABP16
   INX
   LDA $0100,X
   SBC #$00
-  STA TABPH
+  STA TABP16+$01
 ; Retrieve error code and skip diagnostics if no error
   LDY #$00
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   BEQ .done
 ; Save error code
   STA TEMP
@@ -175,7 +175,7 @@ interrupt
   STA CURR_OUT_FILE
 .output_not_open
 ; Print the "Error " message
-  SET16 msg_error TABPL
+  SET16 msg_error TABP16
   JSR show_message
 ; Print the error code in decimal
   LDA TEMP
@@ -187,13 +187,13 @@ interrupt
   JSR file_stack_empty
   BEQ .location_done
 ; Print the " in file " message
-  SET16 msg_error_file TABPL
+  SET16 msg_error_file TABP16
   JSR show_message
 ; Print the filename (at FS_PL)
-  CP16 FS_PL TABPL
+  CP16 FS_PL TABP16
   JSR show_message
 ; Print the " at line " message
-  SET16 msg_error_line TABPL
+  SET16 msg_error_line TABP16
   JSR show_message
 ; Print the current line in decimal
   CP16 CURR_LINE16 TO_DECIMAL_VALUE_L
@@ -207,9 +207,9 @@ interrupt
 ; Retrieve pointer to the error message and show it
   TSX
   LDA $0102,X
-  STA TABPL
+  STA TABP16
   LDA $0103,X
-  STA TABPH
+  STA TABP16+$01
   JSR show_message
 ; Print include traceback (if any files open)
   JSR file_stack_empty
@@ -239,18 +239,18 @@ msg_error_file
 ;         Decimal number string stored at TO_DECIMAL_RESULT
 show_decimal
   JSR to_decimal
-  SET16 TO_DECIMAL_RESULT TABPL
+  SET16 TO_DECIMAL_RESULT TABP16
   JMP show_message ; tail call
 
 
 ; Show message to the error output
-; On entry TABPL;TABPH points to the zero-terminated message
+; On entry TABP16 points to the zero-terminated message
 ; On exit X is preserved
 ;         A, Y are not preserved
 show_message
   LDY #$00
 .loop
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   BEQ .done
   JSR write_d
   INY
@@ -262,7 +262,7 @@ show_message
 ; Show include traceback - uses file stack API to walk include chain
 ; On entry FS_PL;FS_PH points to current file stack entry
 ; On exit A, X, Y not preserved
-;         TABPL;TABPH not preserved
+;         TABP16;TABP16+$01 not preserved
 ;         All files in stack are closed
 show_include_traceback
 .loop
@@ -275,10 +275,10 @@ show_include_traceback
   LDA #'\n'
   JSR write_d
   ; Print "  included from " message
-  SET16 msg_included_from TABPL
+  SET16 msg_included_from TABP16
   JSR show_message
   ; Print filename (FS_PL points to parent entry's name)
-  CP16 FS_PL TABPL
+  CP16 FS_PL TABP16
   JSR show_message
   ; Print ":"
   LDA #':'

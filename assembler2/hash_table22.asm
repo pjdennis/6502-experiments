@@ -10,12 +10,9 @@
 
 HASH           .data $00   ; 1 byte hash value
 CACHED_HASH    .data $00   ; Pre-ASL hash of current global (for local labels)
-HTPL           .data $00   ; 2 byte pointer to hash table
-HTPH           .data $00   ; "
-TABPL          .data $00   ; 2 byte table pointer
-TABPH          .data $00   ; "
-HTTPL          .data $00   ; 2 byte temporary pointer
-HTTPH          .data $00   ; "
+HTP16          .data $0000 ; 2 byte pointer to hash table
+TABP16         .data $0000 ; 2 byte table pointer
+HTTP16         .data $0000 ; 2 byte temporary pointer
 LABEL_SCOPE16  .data $0000 ; Current scope for local label resolution
 IS_LOCAL_LABEL .data $00   ; Flag: non-zero if storing local label
 
@@ -35,7 +32,7 @@ scramble_table
 
 
 ; Initialize a hash table
-; On entry HTPL;HTPH point to the hash table
+; On entry HTP16 point to the hash table
 ; On exit hash entries are initialized to 0 (empty table)
 ;         X is preserved
 ;         A, Y are not preserved
@@ -43,7 +40,7 @@ init_hash_table
   LDY #$00
   TYA                  ; A <- 0
 .loop
-  STA (HTPL),Y
+  STA (HTP16),Y
   INY
   BNE .loop
   RTS
@@ -122,7 +119,7 @@ hash_loop
 ; On entry HT_KEY contains the key to find
 ;          IS_LOCAL_LABEL: if non-zero, uses cached hash from global
 ; On exit C = 0 if found or 1 if not found
-; On exit TABPL;TABPH points to the key if found
+; On exit TABP16 points to the key if found
 ;         HT_VL;HT_VH contains the value if found
 ;         X is preserved
 ;         A, Y are not preserverd
@@ -136,10 +133,10 @@ find_in_hash
 .lookup_value
   JSR find_in_hash_common
   BCS .done ; Not found
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   STA HT_VL
   INY
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   STA HT_VH
 .done
   RTS
@@ -148,8 +145,8 @@ find_in_hash
 ; Find in hash table for instructions (does not modify CACHED_HASH)
 ; On entry HT_KEY contains the key to find
 ; On exit C = 0 if found or 1 if not found
-; On exit TABPL:TABPH points to the found key
-;         TABPL:TABPH+Y points to the associated value
+; On exit TABP16 points to the found key
+;         TABP16 + Y points to the associated value
 ;         X is preserved
 ;         A, is not preserverd
 find_in_hash_instruction
@@ -176,27 +173,27 @@ find_in_hash_common
 hash_entry_empty
   LDA HASH
   TAY
-  LDA (HTPL),Y
+  LDA (HTP16),Y
   BNE .done
   INY
-  LDA (HTPL),Y
+  LDA (HTP16),Y
 .done
   RTS
 
 
-; Load from hash table to TABPL;TABPH
+; Load from hash table to TABP16
 ; On entry HASH contains the hash value
-; On exit TABPL;TABPH countains pointer corresponding to the hash value
+; On exit TABP16 contains pointer corresponding to the hash value
 ;         X is preserved
 ;         A, Y are not preserved
 load_hash_entry
   LDA HASH
   TAY
-  LDA (HTPL),Y
-  STA TABPL
+  LDA (HTP16),Y
+  STA TABP16
   INY
-  LDA (HTPL),Y
-  STA TABPH
+  LDA (HTP16),Y
+  STA TABP16+$01
   RTS
 
 
@@ -209,31 +206,31 @@ store_hash_entry
   LDA HASH
   TAY
   LDA MEMP16
-  STA (HTPL),Y
+  STA (HTP16),Y
   INY
   LDA MEMP16+$01
-  STA (HTPL),Y
+  STA (HTP16),Y
   RTS
 
 
 ; Store current memory pointer in table
-; On entry TABPL;TABPH,Y points to location to store pointer
+; On entry TABP16 + Y points to location to store pointer
 ;          MEMP16 contains the pointer to store
-; On exit TABPL;TABPH,Y points to the location following the stored pointer
+; On exit TABP16 + Y points to the location following the stored pointer
 ;         X is preserved
 ;         A is not preserved
 store_table_entry
   LDA MEMP16
-  STA (TABPL),Y
+  STA (TABP16),Y
   INY
   LDA MEMP16+$01
-  STA (TABPL),Y
+  STA (TABP16),Y
   INY
   RTS
 
 
 ; On entry HT_KEY contains the token to compare with
-;          TABPL;TABPH points to the value to compare with
+;          TABP16 points to the value to compare with
 ;          LABEL_SCOPE16: current scope (for local label verification)
 ; On exit Z set if equal, unset otherwise
 ;         Y points to terminating 0 if equal
@@ -245,7 +242,7 @@ store_table_entry
 compare_token
   ; Quick check: is stored token in escape format?
   LDY #$00
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   CMP #$01
   BEQ .handle_escape
 
@@ -253,7 +250,7 @@ compare_token
   DEY                       ; Y = $FF
 .simple_loop
   INY
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   CMP HT_KEY,Y
   BNE .simple_done
   CMP #$00
@@ -265,11 +262,11 @@ compare_token
   ; === Escape format ($01 <ptr_lo> <ptr_hi> ".bar" $00) ===
   ; Verify scope pointer matches LABEL_SCOPE16
   INY
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   CMP LABEL_SCOPE16
   BNE .escape_nomatch
   INY
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   CMP LABEL_SCOPE16+$01
   BNE .escape_nomatch
   ; Scope matches - compare local part (Y=2, need Y=3 to skip header)
@@ -279,7 +276,7 @@ compare_token
   LDX #$00
   INY                       ; Y = 3 (past $01 <lo> <hi>)
 .escape_loop
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   CMP HT_KEY,X
   BNE .escape_nomatch_restore
   CMP #$00
@@ -300,29 +297,25 @@ compare_token
   RTS
 
 
-; On entry TABPL;TABPH point to head of list of entries
+; On entry TABP16 points to head of list of entries
 ;          HT_KEY contains the token to find
 ; On exit C clear if found; set if not found
-;         TABPL;TABPH points to the key if found
-;         TABPL;TABPH,Y points to value if found
-;         or to 'next' pointer if not found
+;         TABP16 points to the key if found
+;         TABP16 + Y points to value if found or to 'next' pointer if not found
 ;         X is preserved
 ;         A, Y are not preserved
 find_token
 .token_loop
   ; Store the current pointer
-  LDA TABPL
-  STA HTTPL
-  LDA TABPH
-  STA HTTPH
+  CP16 TABP16 HTTP16
   ; Advance past 'next' pointer
   CLC
   LDA #$02
-  ADC TABPL
-  STA TABPL
+  ADC TABP16
+  STA TABP16
   LDA #$00
-  ADC TABPH
-  STA TABPH
+  ADC TABP16+$01
+  STA TABP16+$01
   ; Check for matching token
   JSR compare_token
   BNE .token_is_non_match
@@ -333,25 +326,22 @@ find_token
 .token_is_non_match    ; Not a match - move to next
   ; Check if 'next' pointer is 0
   LDY #$00
-  LDA (HTTPL),Y
+  LDA (HTTP16),Y
   BNE .not_at_end
   INY
-  LDA (HTTPL),Y
+  LDA (HTTP16),Y
   BEQ .at_end
 .not_at_end
   LDY #$00
-  LDA (HTTPL),Y
-  STA TABPL
+  LDA (HTTP16),Y
+  STA TABP16
   INY
-  LDA (HTTPL),Y
-  STA TABPH
+  LDA (HTTP16),Y
+  STA TABP16+$01
   JMP .token_loop
 .at_end
   ; point tabp,Y to the zero 'next' pointer
-  LDA HTTPL
-  STA TABPL
-  LDA HTTPH
-  STA TABPH
+  CP16 HTTP16 TABP16
   LDY #$00
   SEC ; Carry set indicates not found
   RTS
@@ -377,7 +367,7 @@ store_token
   INY
   JSR advance_heap
   ; Save the pointer to the key
-  CP16 MEMP16 TABPL
+  CP16 MEMP16 TABP16
   ; Check if this is a local label
   LDA IS_LOCAL_LABEL
   BEQ .copy_token       ; If global, skip escape header
