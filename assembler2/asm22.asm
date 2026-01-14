@@ -24,8 +24,6 @@ CURR_LINE16     .data $0000 ; Current line number
 CURR_OUT_FILE   .data $00   ; Current output file (for closing on error)
 IN_ZEROPAGE     .data $00   ; Flag indicating if in zero page section
 PC_SAVE16       .data $0000 ; Save location for PC when switching sections
-CURR_GLOBAL_HEAP_L .data $00 ; Heap address of current global label string
-CURR_GLOBAL_HEAP_H .data $00 ; "
 ADDR_MODE       .data $00   ; Current addressing mode
 INST_PTR_L      .data $00   ; Pointer to instruction mode table entry
 INST_PTR_H      .data $00   ; "
@@ -682,9 +680,9 @@ check_local_label
   LDA TOKEN
   CMP #'.'
   BNE .not_local
-  ; Local label - Check if CURR_GLOBAL_HEAP is set (error check)
-  LDA CURR_GLOBAL_HEAP_L
-  ORA CURR_GLOBAL_HEAP_H
+  ; Local label - Check if LABEL_SCOPE16 is set (error check)
+  LDA LABEL_SCOPE16
+  ORA LABEL_SCOPE16+$01
   BNE .have_global
   JMP err_no_global_for_local
 .have_global
@@ -702,20 +700,20 @@ select_label_hash_table
   RTS
 
 
-; Update CURR_GLOBAL_HEAP by looking up TOKEN in hash table
-; Used in pass 2 to set the heap pointer for local label scope matching
+; Update LABEL_SCOPE16 by looking up TOKEN in hash table
+; Used in pass 2 to set the scope for local label matching
 ; On entry TOKEN contains the global label name
 ;          IS_LOCAL_LABEL = 0 (global label)
-; On exit CURR_GLOBAL_HEAP_L/H points to the token string on heap
+; On exit LABEL_SCOPE16 points to the token string on heap
 ;         CACHED_HASH is set (needed for subsequent local label lookups)
 ;         A, Y not preserved
 ;         X is preserved
-update_global_heap_from_lookup
+update_label_scope_from_lookup
   JSR select_label_hash_table
   JSR find_in_hash       ; TABPL now points to token string
   JSR commit_cached_hash ; Commit hash since this is a non-assignment global
   ; After find_in_hash, TABPL points to token string (entry_start + 2)
-  CP16 TABPL CURR_GLOBAL_HEAP_L
+  CP16 TABPL LABEL_SCOPE16
   RTS
 
 
@@ -751,7 +749,7 @@ capture_label
   ; check_for_value updated NEXT_CHAR if it called read_char
   LDA IS_LOCAL_LABEL
   BNE .was_local_2          ; If local flag != 0, skip update
-  JSR update_global_heap_from_lookup  ; Set CURR_GLOBAL_HEAP for local label lookups
+  JSR update_label_scope_from_lookup  ; Set LABEL_SCOPE16 for local label lookups
 .was_local_2
   JMP .skip_spaces_and_return_processed_flag
 .set_pc
@@ -780,11 +778,11 @@ capture_label
   JSR check_for_value
   BCS .has_equals           ; If = found, branch
   ; No = found, save global label and use program counter
-  ; Update CURR_GLOBAL_HEAP and commit hash for non-local labels
+  ; Update LABEL_SCOPE16 and commit hash for non-local labels
   LDA IS_LOCAL_LABEL
   BNE .was_local_1          ; If local flag != 0, skip
   ; Store the address of the current global label
-  CP16 TABPL CURR_GLOBAL_HEAP_L
+  CP16 TABPL LABEL_SCOPE16
   JSR commit_cached_hash    ; Commit hash for local label lookups
 .was_local_1
   ; Store current program counter as the hash value into HEX16
@@ -1898,8 +1896,7 @@ assemble_code
   STA_LH16 PC16
   STA_LH16 PC_SAVE16
   STA_LH16 CURR_LINE16
-  STA CURR_GLOBAL_HEAP_L ; Initialize global heap pointer (0 = no global yet)
-  STA CURR_GLOBAL_HEAP_H ; "
+  STA_LH16 LABEL_SCOPE16 ; Initialize scope (0 = no global yet)
   STA IS_LOCAL_LABEL  ; Initialize local label flag
   STA COND_DEPTH      ; Clear conditional depth
   STA SKIP_DEPTH      ; Clear skip depth

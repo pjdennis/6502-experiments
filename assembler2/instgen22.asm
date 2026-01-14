@@ -36,11 +36,9 @@ PL        .data $00     ; 2 byte pointer
 PH        .data $00     ; "
 P2L       .data $00     ; 2 byte pointer
 P2H       .data $00     ; "
-CURR_GLOBAL_HEAP_L .data $00 ; Required by hash_table (unused here)
-CURR_GLOBAL_HEAP_H .data $00 ; "
-
 
   .code
+
 
 ; Include files
   .include environment11.asm

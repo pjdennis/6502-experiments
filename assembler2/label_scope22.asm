@@ -7,8 +7,7 @@
 ;
 ; Scope state is saved on a dedicated scope stack (SCOPE_STACK in memory),
 ; NOT the 6502 stack. Each entry is 5 bytes:
-;   - CURR_GLOBAL_HEAP_L
-;   - CURR_GLOBAL_HEAP_H
+;   - LABEL_SCOPE16 (2 bytes)
 ;   - CACHED_HASH
 ;   - MACRO_ENTRY16 (macro hash table address for recursion detection)
 ;
@@ -18,8 +17,8 @@
 ;   SCOPE_STACK          - base address of scope stack
 ;   MACRO_ENTRY16        - macro hash table entry address (set before push)
 ;
-; Requires (from hash_table21.asm):
-;   CURR_GLOBAL_HEAP_L/H - current global label heap address
+; Requires (from hash_table22.asm):
+;   LABEL_SCOPE16        - current scope for local label resolution
 ;   CACHED_HASH          - pre-computed hash for current scope
 ;   scramble_table       - hash scrambling table
 
@@ -60,20 +59,20 @@ reset_scope_stack
 
 
 ; Push current label scope and create new macro expansion scope
-; Saves CURR_GLOBAL_HEAP_L/H, CACHED_HASH, and MACRO_ENTRY16 to scope stack,
+; Saves LABEL_SCOPE16, CACHED_HASH, and MACRO_ENTRY16 to scope stack,
 ; increments EXPANSION_ID, sets up synthetic scope using expansion ID.
 ;
 ; On entry: MACRO_ENTRY16 contains the macro's hash table entry address
-; On exit: New scope active (CURR_GLOBAL_HEAP = EXPANSION_ID, CACHED_HASH set)
+; On exit: New scope active (LABEL_SCOPE16 = EXPANSION_ID, CACHED_HASH set)
 ;          Previous scope saved on scope stack
 ;          A, Y clobbered, X preserved
 push_label_scope
   ; Save current scope state to scope stack
   LDY #$00
-  LDA CURR_GLOBAL_HEAP_L
+  LDA LABEL_SCOPE16
   STA (SCOPE_PTR_L),Y
   INY
-  LDA CURR_GLOBAL_HEAP_H
+  LDA LABEL_SCOPE16+$01
   STA (SCOPE_PTR_L),Y
   INY
   LDA CACHED_HASH
@@ -95,11 +94,8 @@ push_label_scope
   STA SCOPE_PTR_H
   ; Increment expansion ID
   INC16 EXPANSION_ID_L
-  ; Set CURR_GLOBAL_HEAP to expansion ID (synthetic scope pointer)
-  LDA EXPANSION_ID_L
-  STA CURR_GLOBAL_HEAP_L
-  LDA EXPANSION_ID_H
-  STA CURR_GLOBAL_HEAP_H
+  ; Set LABEL_SCOPE16 to expansion ID (synthetic scope pointer)
+  CP16 EXPANSION_ID_L LABEL_SCOPE16
   ; Calculate CACHED_HASH from expansion ID
   ; Use low byte through scramble table for reasonable distribution
   LDA EXPANSION_ID_L
@@ -110,7 +106,7 @@ push_label_scope
   RTS
 
 
-; Pop label scope, restoring previous CURR_GLOBAL_HEAP and CACHED_HASH
+; Pop label scope, restoring previous LABEL_SCOPE16 and CACHED_HASH
 ; On exit: Previous scope restored from scope stack
 ;          A, Y clobbered, X preserved
 pop_label_scope
@@ -125,10 +121,10 @@ pop_label_scope
   ; Restore scope state from scope stack
   LDY #$00
   LDA (SCOPE_PTR_L),Y
-  STA CURR_GLOBAL_HEAP_L
+  STA LABEL_SCOPE16
   INY
   LDA (SCOPE_PTR_L),Y
-  STA CURR_GLOBAL_HEAP_H
+  STA LABEL_SCOPE16+$01
   INY
   LDA (SCOPE_PTR_L),Y
   STA CACHED_HASH

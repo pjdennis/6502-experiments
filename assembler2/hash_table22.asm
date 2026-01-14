@@ -3,20 +3,21 @@
 ;   HT_VL;HT_VH  - zero page locations containing value in hash table
 ;   MEMP16       - addres of heap to store table entries
 ;   advance_heap - function to advance the heap
-;   CURR_GLOBAL_HEAP_L;CURR_GLOBAL_HEAP_H - heap address of current global label (for local labels)
+;   LABEL_SCOPE16    - current scope for local label resolution
 
 
   .zeropage
 
-HASH      .data $00     ; 1 byte hash value
-CACHED_HASH .data $00   ; Pre-ASL hash of current global (for local labels)
-HTPL      .data $00     ; 2 byte pointer to hash table
-HTPH      .data $00     ; "
-TABPL     .data $00     ; 2 byte table pointer
-TABPH     .data $00     ; "
-HTTPL     .data $00     ; 2 byte temporary pointer
-HTTPH     .data $00     ; "
-IS_LOCAL_LABEL .data $00 ; Flag: non-zero if storing local label
+HASH           .data $00   ; 1 byte hash value
+CACHED_HASH    .data $00   ; Pre-ASL hash of current global (for local labels)
+HTPL           .data $00   ; 2 byte pointer to hash table
+HTPH           .data $00   ; "
+TABPL          .data $00   ; 2 byte table pointer
+TABPH          .data $00   ; "
+HTTPL          .data $00   ; 2 byte temporary pointer
+HTTPH          .data $00   ; "
+LABEL_SCOPE16  .data $0000 ; Current scope for local label resolution
+IS_LOCAL_LABEL .data $00   ; Flag: non-zero if storing local label
 
   .code
 
@@ -233,7 +234,7 @@ store_table_entry
 
 ; On entry HT_KEY contains the token to compare with
 ;          TABPL;TABPH points to the value to compare with
-;          CURR_GLOBAL_HEAP_L/H: current scope (for local label verification)
+;          LABEL_SCOPE16: current scope (for local label verification)
 ; On exit Z set if equal, unset otherwise
 ;         Y points to terminating 0 if equal
 ;         X is preserved
@@ -262,14 +263,14 @@ compare_token
 
 .handle_escape
   ; === Escape format ($01 <ptr_lo> <ptr_hi> ".bar" $00) ===
-  ; Verify scope pointer matches CURR_GLOBAL_HEAP
+  ; Verify scope pointer matches LABEL_SCOPE16
   INY
   LDA (TABPL),Y
-  CMP CURR_GLOBAL_HEAP_L
+  CMP LABEL_SCOPE16
   BNE .escape_nomatch
   INY
   LDA (TABPL),Y
-  CMP CURR_GLOBAL_HEAP_H
+  CMP LABEL_SCOPE16+$01
   BNE .escape_nomatch
   ; Scope matches - compare local part (Y=2, need Y=3 to skip header)
   ; Use X for HT_KEY index, save/restore since X is file handle
@@ -361,7 +362,7 @@ find_token
 ; On entry HT_KEY contains key to store
 ;          IS_LOCAL_LABEL: if non-zero, stores $01 escape format
 ;            (HT_KEY should already contain just ".bar" for local labels)
-;          CURR_GLOBAL_HEAP_L/H: pointer to global label (for local labels)
+;          LABEL_SCOPE16: current scope (for local labels)
 ; On exit MEMP16 points to where value should be stored
 ;         Y = 0
 ;         X is preserved
@@ -380,15 +381,15 @@ store_token
   ; Check if this is a local label
   LDA IS_LOCAL_LABEL
   BEQ .copy_token       ; If global, skip escape header
-  ; Store $01 escape format: $01 <addr_lo> <addr_hi> <local_part>
+  ; Store $01 escape format: $01 <scope_lo> <scope_hi> <local_part>
   ; HT_KEY already contains just ".bar" - no scanning needed
   LDA #$01              ; Escape byte
   STA (MEMP16),Y
   INY
-  LDA CURR_GLOBAL_HEAP_L
+  LDA LABEL_SCOPE16
   STA (MEMP16),Y
   INY
-  LDA CURR_GLOBAL_HEAP_H
+  LDA LABEL_SCOPE16+$01
   STA (MEMP16),Y
   INY
   JSR advance_heap      ; Advance past escape header (3 bytes)
