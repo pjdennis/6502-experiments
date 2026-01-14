@@ -86,12 +86,7 @@ push_label_scope
   STA (SCOPE_PTR_L),Y
   ; Advance scope pointer by 5 bytes
   CLC
-  LDA SCOPE_PTR_L
-  ADC #$05
-  STA SCOPE_PTR_L
-  LDA SCOPE_PTR_H
-  ADC #$00
-  STA SCOPE_PTR_H
+  ADDI16 SCOPE_PTR_L $05 SCOPE_PTR_L
   ; Increment expansion ID
   INC16 EXPANSION_ID_L
   ; Set LABEL_SCOPE16 to expansion ID (synthetic scope pointer)
@@ -112,12 +107,7 @@ push_label_scope
 pop_label_scope
   ; Move scope pointer back by 5 bytes
   SEC
-  LDA SCOPE_PTR_L
-  SBC #$05
-  STA SCOPE_PTR_L
-  LDA SCOPE_PTR_H
-  SBC #$00
-  STA SCOPE_PTR_H
+  SUBI16 SCOPE_PTR_L $05 SCOPE_PTR_L
   ; Restore scope state from scope stack
   LDY #$00
   LDA (SCOPE_PTR_L),Y

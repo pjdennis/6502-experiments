@@ -63,12 +63,7 @@ add_forward_ref
   STA (FWDREF_L),Y
   ; Advance pointer by 2
   CLC
-  LDA FWDREF_L
-  ADC #$02
-  STA FWDREF_L
-  LDA FWDREF_H
-  ADC #$00
-  STA FWDREF_H
+  ADDI16 FWDREF_L $02 FWDREF_L
   RTS
 .too_many
   JMP err_too_many_forward_refs
@@ -91,12 +86,7 @@ check_forward_ref
   BNE .no_match
   ; Match - advance pointer and return C=1
   CLC
-  LDA FWDREF_L
-  ADC #$02
-  STA FWDREF_L
-  LDA FWDREF_H
-  ADC #$00
-  STA FWDREF_H
+  ADDI16 FWDREF_L $02 FWDREF_L
   SEC
   RTS
 .no_match
