@@ -35,8 +35,7 @@ ARG_COUNT       .data $00   ; Total command line argument count
 ARG_INDEX       .data $00   ; Current argument index being processed
 NEXT_CHAR       .data $00   ; Last character read by read_char
 IN_MACRO_DEF    .data $00   ; Flag: currently capturing macro body ($FF = capturing)
-MACRO_DEF_PTR_L .data $00   ; Heap pointer where macro body is being stored
-MACRO_DEF_PTR_H .data $00   ; "
+MACRO_DEF_PTR16 .data $0000 ; Heap pointer where macro body is being stored
 MACRO_ENTRY16   .data $0000 ; Original macro hash entry address (for recursion check)
 
   .ifdef enable_debug
@@ -900,10 +899,10 @@ lookup_mnemonic
   TYA
   CLC
   ADC TABPL
-  STA MACRO_DEF_PTR_L
+  STA MACRO_DEF_PTR16
   LDA #$00
   ADC TABPH
-  STA MACRO_DEF_PTR_H
+  STA MACRO_DEF_PTR16+$01
   ; Don't skip rest of line - expand_macro will parse arguments
   PLA                   ; Pop return address (we're not returning)
   PLA
@@ -1530,7 +1529,7 @@ process_macro
   INY
   JSR advance_heap
   ; Save location for body_ptr (will fill in after params are parsed)
-  CP16 MEMP16 MACRO_DEF_PTR_L
+  CP16 MEMP16 MACRO_DEF_PTR16
   ; Advance past body_ptr space (2 bytes)
   LDY #$02
   JSR advance_heap
@@ -1558,10 +1557,7 @@ process_macro
   INY
   JSR advance_heap
   ; Write body_ptr (current MEMP16) into the saved location
-  LDA MACRO_DEF_PTR_L
-  STA TABPL
-  LDA MACRO_DEF_PTR_H
-  STA TABPH
+  CP16 MACRO_DEF_PTR16 TABPL
   LDY #$00
   LDA MEMP16
   STA (TABPL),Y
@@ -1569,7 +1565,7 @@ process_macro
   LDA MEMP16+$01
   STA (TABPL),Y
   ; Update MACRO_DEF_PTR to point where body will be stored
-  CP16 MEMP16 MACRO_DEF_PTR_L
+  CP16 MEMP16 MACRO_DEF_PTR16
   ; Set IN_MACRO_DEF flag to start capturing
   LDA #$FF
   STA IN_MACRO_DEF
@@ -1645,7 +1641,7 @@ check_macro_recursion
 ; On exit: Memory source pushed, jumps to asm_line_loop
 expand_macro
   ; Save original macro entry address before MACRO_DEF_PTR is modified
-  CP16 MACRO_DEF_PTR_L MACRO_ENTRY16
+  CP16 MACRO_DEF_PTR16 MACRO_ENTRY16
   ; Check for recursive macro invocation
   JSR check_macro_recursion
   ; Save X (output file handle) - we'll use X as index into MACRO_ARG_BUF
@@ -1653,48 +1649,40 @@ expand_macro
   PHA
   ; Get body_ptr from MACRO_DEF_PTR+1 and save on 6502 stack
   LDY #$01
-  LDA (MACRO_DEF_PTR_L),Y
+  LDA (MACRO_DEF_PTR16),Y
   PHA                   ; Save body start low
   INY
-  LDA (MACRO_DEF_PTR_L),Y
+  LDA (MACRO_DEF_PTR16),Y
   PHA                   ; Save body start high
   ; DON'T push label scope yet - we need parent's scope to look up arguments
   ; Parse arguments first, storing values in fixed buffer
   ; MACRO_DEF_PTR+3 points to first parameter name (or empty string if none)
-  LDA MACRO_DEF_PTR_L
   CLC
-  ADC #$03
-  STA MACRO_DEF_PTR_L
-  LDA MACRO_DEF_PTR_H
-  ADC #$00
-  STA MACRO_DEF_PTR_H
+  ADDI16 MACRO_DEF_PTR16 $0003 MACRO_DEF_PTR16
   ; Save start of params (MACRO_DEF_PTR)
-  LDA MACRO_DEF_PTR_L
-  PHA
-  LDA MACRO_DEF_PTR_H
-  PHA
+  PUSH16 MACRO_DEF_PTR16
   ; X = index into MACRO_ARG_BUF for storing values
   ; Each entry: [value_L][value_H][is_fwdref] = 3 bytes
   LDX #$00
 .em_parse_loop
   ; Check if we're at end of parameter list (empty string)
   LDY #$00
-  LDA (MACRO_DEF_PTR_L),Y
+  LDA (MACRO_DEF_PTR16),Y
   BEQ .em_parse_done
   ; Skip past parameter name
   LDY #$FF
 .em_skip_param
   INY
-  LDA (MACRO_DEF_PTR_L),Y
+  LDA (MACRO_DEF_PTR16),Y
   BNE .em_skip_param
   ; Advance MACRO_DEF_PTR past the null terminator
   TYA
   SEC                   ; +1 for null
-  ADC MACRO_DEF_PTR_L
-  STA MACRO_DEF_PTR_L
+  ADC MACRO_DEF_PTR16
+  STA MACRO_DEF_PTR16
   LDA #$00
-  ADC MACRO_DEF_PTR_H
-  STA MACRO_DEF_PTR_H
+  ADC MACRO_DEF_PTR16+$01
+  STA MACRO_DEF_PTR16+$01
   ; Check for argument in input
   JSR check_for_end_of_line
   BCC .em_have_arg
@@ -1720,33 +1708,30 @@ expand_macro
   ; NOW push label scope for the child macro
   JSR push_label_scope
   ; Pop params start to MACRO_DEF_PTR
-  PLA
-  STA MACRO_DEF_PTR_H
-  PLA
-  STA MACRO_DEF_PTR_L
+  POP16 MACRO_DEF_PTR16
   ; Reset X to read values from start of buffer
   LDX #$00
   ; Now iterate through params and add to hash with stored values
 .em_add_loop
   ; Check if at end of parameter list
   LDY #$00
-  LDA (MACRO_DEF_PTR_L),Y
+  LDA (MACRO_DEF_PTR16),Y
   BEQ .em_add_done
   ; Copy param name to TOKEN
   LDY #$FF
 .em_copy_param
   INY
-  LDA (MACRO_DEF_PTR_L),Y
+  LDA (MACRO_DEF_PTR16),Y
   STA TOKEN,Y
   BNE .em_copy_param
   ; Advance MACRO_DEF_PTR past param name
   TYA
   SEC
-  ADC MACRO_DEF_PTR_L
-  STA MACRO_DEF_PTR_L
+  ADC MACRO_DEF_PTR16
+  STA MACRO_DEF_PTR16
   LDA #$00
-  ADC MACRO_DEF_PTR_H
-  STA MACRO_DEF_PTR_H
+  ADC MACRO_DEF_PTR16+$01
+  STA MACRO_DEF_PTR16+$01
   ; Load value and fwdref from buffer
   LDA MACRO_ARG_BUF,X
   STA OPERAND16
@@ -1803,7 +1788,7 @@ capture_macro_line
   PHA
   ; Save heap position in case we need to undo (for .endmacro)
   ; Use MACRO_DEF_PTR since we're not using it during capture
-  CP16 MEMP16 MACRO_DEF_PTR_L
+  CP16 MEMP16 MACRO_DEF_PTR16
   ; Restore first char (X saved below A on stack)
   TSX
   LDA $0102,X
@@ -1823,10 +1808,7 @@ capture_macro_line
   INY
   JSR advance_heap     ; Advance past newline
   ; Now check if this line was .endmacro
-  LDA MACRO_DEF_PTR_L
-  STA TABPL
-  LDA MACRO_DEF_PTR_H
-  STA TABPH
+  CP16 MACRO_DEF_PTR16 TABPL
   ; Skip leading spaces
   LDY #$00
 .cml_skip_space
@@ -1861,7 +1843,7 @@ capture_macro_line
   BNE .cml_keep_line     ; Not end of token - keep as macro body
 .cml_found_endmacro
   ; Restore heap to undo the copy
-  CP16 MACRO_DEF_PTR_L MEMP16
+  CP16 MACRO_DEF_PTR16 MEMP16
   ; Restore X (output file handle) - pop saved X and A
   PLA
   TAX

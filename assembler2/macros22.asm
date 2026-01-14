@@ -16,6 +16,7 @@
 
 ; ADD16 val1 val2 - Add two 16 bit values val1 and val2, storing result in val2
 ; Clobbers A
+; TODO add a third parameter to specify result location
   .macro ADD16 val1 val2
   LDA val1
   ADC val2
@@ -26,15 +27,27 @@
   .endmacro
 
 
-; SUB16_2 val1 val2 - Subtracs two 16 bit values val1 and val2, storing val1 - val2 in val2
+; ADDI16 addr1 val addr2 - Adds val to  variable at addr1, storing the result at addr2
 ; Clobbers A
-  .macro SUB16_2 val1 val2
-  LDA val1
-  SBC val2
-  STA val2
-  LDA val1+$01
-  SBC val2+$01
-  STA val2+$01
+  .macro ADDI16 addr1 val addr2
+  LDA addr1
+  ADC #<val
+  STA addr2
+  LDA addr1+$01
+  ADC #>val
+  STA addr2+$01
+  .endmacro
+
+
+; SUB16_2 val1 val2 - Subtracts the variable at addr2 from that at addr1, storing the result at addr2
+; Clobbers A
+  .macro SUB16_2 addr1 addr2
+  LDA addr1
+  SBC addr2
+  STA addr2
+  LDA addr1+$01
+  SBC addr2+$01
+  STA addr2+$01
   .endmacro
 
 
@@ -80,4 +93,24 @@
   .macro STA_LH16 addr
   STA addr
   STA addr+$01
+  .endmacro
+
+
+; PUSH16 addr - Push the value at addr to the stack
+; Clobbers A
+  .macro PUSH16 addr
+  LDA addr
+  PHA
+  LDA addr+$01
+  PHA
+  .endmacro
+
+
+; POP16 addr - Pops the value at addr from the stack
+; Clobbers A
+  .macro POP16 addr
+  PLA
+  STA addr+$01
+  PLA
+  STA addr
   .endmacro
