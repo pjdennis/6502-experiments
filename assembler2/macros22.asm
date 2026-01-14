@@ -14,6 +14,46 @@
   .endmacro
 
 
+; ADD16 val1 val2 - Add two 16 bit values val1 and val2, storing result in val2
+; Clobbers A
+  .macro ADD16 val1 val2
+  LDA val1
+  ADC val2
+  STA val2
+  LDA val1+$01
+  ADC val2+$01
+  STA val2+$01
+  .endmacro
+
+
+; SUB16_2 val1 val2 - Subtracs two 16 bit values val1 and val2, storing val1 - val2 in val2
+; Clobbers A
+  .macro SUB16_2 val1 val2
+  LDA val1
+  SBC val2
+  STA val2
+  LDA val1+$01
+  SBC val2+$01
+  STA val2+$01
+  .endmacro
+
+
+; ASL16 ptr - Shift 16 bit value left
+; Clobbers A
+  .macro ASL16 val
+  ASL val
+  ROL val+$01
+  .endmacro
+
+
+; LSR16 ptr - Shift 16 bit value right
+; Clobbers A
+  .macro LSR16 val
+  LSR val+$01
+  ROR val
+  .endmacro
+
+
 ; CP16 src dst - Copy 16-bit value from src to dst
 ; Clobbers A
   .macro CP16 src dst
@@ -31,4 +71,13 @@
   STA ptr
   LDA #>value
   STA ptr+$01
+  .endmacro
+
+
+; STA_LH16 addr - Store A into the low and high bytes of addr
+; Most useful for A = $00 or A = $FF
+; Preserves A, X, Y
+  .macro STA_LH16 addr
+  STA addr
+  STA addr+$01
   .endmacro

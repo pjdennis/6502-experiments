@@ -16,16 +16,25 @@ MODE_IND  = $0C   ; Indirect - JMP ($xxxx)
 HT_KEY = TOKEN
 HT_VL  = HEX16
 HT_VH  = HEX16+$01
+
+
+  .zeropage
+
+MEMP16          .data $0000 ; 2 byte heap pointer
+
+  .code
+
+
   .include hash_table22.asm
 
 
 init_heap
-  SET16 HEAP MEMPL
+  SET16 HEAP MEMP16
   RTS
 
 
 ; On entry Y contains the amount to advance
-; On exit MEMPL;MEMPH is incremented by Y
+; On exit MEMP16 is incremented by Y
 ;         Y = 0
 ;         X is preserved
 ;         A is not preserved
@@ -33,28 +42,28 @@ advance_heap
   TYA
   LDY #$00
   CLC
-  ADC MEMPL
-  STA MEMPL
+  ADC MEMP16
+  STA MEMP16
   TYA
-  ADC MEMPH
-  STA MEMPH
+  ADC MEMP16+$01
+  STA MEMP16+$01
   RTS
 
 
 ; Store hash value at current heap location and advance heap
 ; On entry HT_VL;HT_VH contains the value to store
-;          MEMPL;MEMPH points to where value should be stored
-; On exit MEMPL;MEMPH advanced past the value
+;          MEMP16 points to where value should be stored
+; On exit MEMP16 advanced past the value
 ;         Y = 0
 ;         X is preserved
 ;         A is not preserved
 store_hash_value
   LDY #$00
   LDA HT_VL
-  STA (MEMPL),Y
+  STA (MEMP16),Y
   INY
   LDA HT_VH
-  STA (MEMPL),Y
+  STA (MEMP16),Y
   INY
   JMP advance_heap     ; Tail call
 

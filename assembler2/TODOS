@@ -60,3 +60,21 @@ value2=value1  ; Needs to be assigned during pass 1
 - [ ] Use Y register in swap_pc_with_save?
 
 - [ ] Introduce macros for 16 bit arithmetic, e.g. in emit_instruction
+
+- [ ] Consolidate parse_term_with_selector and parse_value
+
+- [ ] Strip comments when capturing macro definitions
+
+- [ ] Capture these patterns as macros (from expand_macro):
+  LDA OPERAND16
+  STA MACRO_ARG_BUF,X
+  INX
+
+  LDA MACRO_ARG_BUF,X
+  STA OPERAND16
+  INX
+
+- [ ] Capture these patterns as macros (from store_token in hash table):
+  LDA CURR_GLOBAL_HEAP_L
+  STA (MEMP16),Y
+  INY

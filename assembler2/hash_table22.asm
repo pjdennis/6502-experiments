@@ -1,7 +1,7 @@
 ; Requires:
 ;   HT_KEY       - the address of the key used for hash table operations
 ;   HT_VL;HT_VH  - zero page locations containing value in hash table
-;   MEMPL;MEMPH  - addres of heap to store table entries
+;   MEMP16       - addres of heap to store table entries
 ;   advance_heap - function to advance the heap
 ;   CURR_GLOBAL_HEAP_L;CURR_GLOBAL_HEAP_H - heap address of current global label (for local labels)
 
@@ -201,31 +201,31 @@ load_hash_entry
 
 ; Store current memory pointer in hash table
 ; On entry HASH contains the hash code to store under
-;          MEMPL;MEMPH contains the pointer to store in the hash table
+;          MEMP16 contains the pointer to store in the hash table
 ; On exit X is preserved
 ;         A, Y are not preserved
 store_hash_entry
   LDA HASH
   TAY
-  LDA MEMPL
+  LDA MEMP16
   STA (HTPL),Y
   INY
-  LDA MEMPH
+  LDA MEMP16+$01
   STA (HTPL),Y
   RTS
 
 
 ; Store current memory pointer in table
 ; On entry TABPL;TABPH,Y points to location to store pointer
-;          MEMPL;NENPL contains the pointer to store
+;          MEMP16 contains the pointer to store
 ; On exit TABPL;TABPH,Y points to the location following the stored pointer
 ;         X is preserved
 ;         A is not preserved
 store_table_entry
-  LDA MEMPL
+  LDA MEMP16
   STA (TABPL),Y
   INY
-  LDA MEMPH
+  LDA MEMP16+$01
   STA (TABPL),Y
   INY
   RTS
@@ -362,7 +362,7 @@ find_token
 ;          IS_LOCAL_LABEL: if non-zero, stores $01 escape format
 ;            (HT_KEY should already contain just ".bar" for local labels)
 ;          CURR_GLOBAL_HEAP_L/H: pointer to global label (for local labels)
-; On exit MEMPL;MEMPH points to where value should be stored
+; On exit MEMP16 points to where value should be stored
 ;         Y = 0
 ;         X is preserved
 ;         A is not preserved
@@ -370,29 +370,26 @@ store_token
   LDY #$00
   ; Store null pointer (pointer to next)
   LDA #$00
-  STA (MEMPL),Y
+  STA (MEMP16),Y
   INY
-  STA (MEMPL),Y
+  STA (MEMP16),Y
   INY
   JSR advance_heap
   ; Save the pointer to the key
-  LDA MEMPL
-  STA TABPL
-  LDA MEMPH
-  STA TABPH
+  CP16 MEMP16 TABPL
   ; Check if this is a local label
   LDA IS_LOCAL_LABEL
   BEQ .copy_token       ; If global, skip escape header
   ; Store $01 escape format: $01 <addr_lo> <addr_hi> <local_part>
   ; HT_KEY already contains just ".bar" - no scanning needed
   LDA #$01              ; Escape byte
-  STA (MEMPL),Y
+  STA (MEMP16),Y
   INY
   LDA CURR_GLOBAL_HEAP_L
-  STA (MEMPL),Y
+  STA (MEMP16),Y
   INY
   LDA CURR_GLOBAL_HEAP_H
-  STA (MEMPL),Y
+  STA (MEMP16),Y
   INY
   JSR advance_heap      ; Advance past escape header (3 bytes)
   ; Fall through to copy HT_KEY
@@ -402,7 +399,7 @@ store_token
 .loop
   INY
   LDA HT_KEY,Y
-  STA (MEMPL),Y
+  STA (MEMP16),Y
   BNE .loop
   INY
   JMP advance_heap      ; Tail call
@@ -412,7 +409,7 @@ store_token
 ; On entry HT_KEY contains key
 ;          IS_LOCAL_LABEL: if non-zero, uses cached hash from global
 ; On exit C = 0 if added or 1 if already exists
-;         If C = 0, MEMPL;MEMPH points to where value should be stored
+;         If C = 0, MEMP16 points to where value should be stored
 ;         Caller must store value and call advance_heap
 ;         A, X, Y are not preserved
 hash_add

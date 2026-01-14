@@ -32,8 +32,6 @@ SCOPE_STACK = $0400     ; Scope stack (needed by hash_table21.asm, not used by i
 TEMP      .data $00     ; 1 byte temporary value
 TEMP2     .data $00     ; 1 byte temporary value (for Y save)
 HEX16     .data $00     ; 2 bytes
-MEMPL     .data $00     ; 2 byte heap pointer
-MEMPH     .data $00     ; "
 PL        .data $00     ; 2 byte pointer
 PH        .data $00     ; "
 P2L       .data $00     ; 2 byte pointer
@@ -270,7 +268,7 @@ populate_instruction_hash_table
 store_byte_to_heap
   STY TEMP2       ; Save Y
   LDY #$00
-  STA (MEMPL),Y   ; Store byte at (MEMPL)
+  STA (MEMP16),Y   ; Store byte at (MEMP16)
   LDY #$01
   JSR advance_heap ; Advance heap by 1
   LDY TEMP2       ; Restore Y

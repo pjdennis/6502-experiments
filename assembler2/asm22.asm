@@ -15,12 +15,9 @@ FILE_STACK    = $F000             ; File stack will grow down from 1 below here
 ; Zero page locations
 TEMP            .data $00   ; 1 byte
 PC16            .data $0000 ; 2 byte program counter
-HEX16           .data $0000 ; 2 byte hex value, also aliased as OPERAND_L/H)
-OPERAND_L = HEX16           ; Operand value (low byte) - alias for HEX16
-OPERAND_H = HEX16+$01       ; Operand value (high byte) - alias for HEX16+$01
+HEX16           .data $0000 ; 2 byte hex value, also aliased as OPERAND16)
+OPERAND16 = HEX16           ; Operand value - alias for HEX16
 PASS            .data $00   ; 1 byte $00 = pass 1 $FF = pass 2
-MEMPL           .data $00   ; 2 byte heap pointer
-MEMPH           .data $00   ; "
 STARTED         .data $00   ; flag to indicate output has started
 CURR_FILE       .data $00   ; current file handle
 CURLINEL        .data $00   ; Current line (L)
@@ -301,9 +298,9 @@ read_token
 ; Parse character literal: 'x' or escape sequences
 ; On entry: A contains the opening quote character '
 ; On exit: A contains next character (for garbage checking)
-;          OPERAND_L contains character value
-;          OPERAND_H contains $00
-;          X preserved, Y not preserved
+;          OPERAND16 contains character value
+;          X is preserved
+;          Y is not preserved
 ; Raises 'Invalid character literal' error on malformed input
 parse_char_literal
   JSR read_char        ; Skip opening quote
@@ -314,7 +311,7 @@ parse_char_literal
   CMP #'\n'
   BEQ .char_invalid    ; Newline without closing quote - error
   ; Regular character
-  STA OPERAND_L
+  STA OPERAND16
   JMP .char_check_close
 .char_escape
   ; Escape sequence: \n \\ \'
@@ -330,13 +327,13 @@ parse_char_literal
   CMP #'\''
   BNE .char_invalid
 .esc_done
-  STA OPERAND_L
+  STA OPERAND16
 .char_check_close
   JSR read_char        ; Should be closing quote
   CMP #'\''
   BNE .char_invalid
   LDA #$00
-  STA OPERAND_H
+  STA OPERAND16+$01
   ; Read next char for garbage check
   JMP read_char        ; Tail call
 .char_invalid
@@ -370,15 +367,15 @@ check_for_value
 read_value
   JSR read_char        ; Read the character after the "="
   JSR skip_spaces
-  JSR parse_value      ; Returns value in OPERAND_L/H (aliased to HEX16)
-  ; No copy needed - OPERAND_L/H are aliased to HEX16
+  JSR parse_value      ; Returns value in OPERAND16 (aliased to HEX16)
+  ; No copy needed - OPERAND16 is aliased to HEX16
   RTS
 
 
 ; Parse a term (single value): $12, $1234, 'x', label, <label, or >label
 ; On entry A contains first character
 ; On exit  NEXT_CHAR contains next character
-;          OPERAND_L, OPERAND_H contain parsed value
+;          OPERAND16 contains parsed value
 ;          IS_FWDREF set if bare label was forward ref (pass 1 only)
 ;          C=1 if bare label, C=0 otherwise
 ;          X is preserved
@@ -424,7 +421,7 @@ parse_term
   LDA #$00
   STA IS_FWDREF
 .label_store
-  ; OPERAND_L/H already set (aliased to HEX16)
+  ; OPERAND16 already set (aliased to HEX16)
   SEC                  ; Signal 2-byte value (from bare label)
   RTS
 .hex
@@ -432,7 +429,7 @@ parse_term
   JMP read_hex_byte_or_word  ; Tail call; Stores in HEX16
 .char_literal
   JSR parse_char_literal
-  ; Result in OPERAND_L, OPERAND_H=$00
+  ; Result in OPERAND16
   CLC                  ; Signal 1-byte value (character)
   RTS
 
@@ -440,7 +437,7 @@ parse_term
 ; Parse a value (expression with optional byte selector prefix)
 ; On entry: A contains first character
 ; On exit: NEXT_CHAR contains next character
-;          OPERAND_L/H contain result
+;          OPERAND16 contains result
 ;          IS_FWDREF set if expression contains forward ref (NOT set for byte selectors)
 ;          C=0 if first term is a single byte or C=1 if first term is two bytes
 parse_value
@@ -453,9 +450,9 @@ parse_value
 .low_byte_selector
   JSR read_char        ; Skip '<'
   JSR parse_expression ; Next char now in NEXT_CHAR
-  ; Apply low byte: keep OPERAND_L, zero OPERAND_H
+  ; Apply low byte: keep OPERAND16, zero OPERAND16+$01
   LDA #$00
-  STA OPERAND_H
+  STA OPERAND16+$01
   STA IS_FWDREF        ; Byte selectors don't set fwdref (always 1 byte result)
   CLC                  ; Byte selector = C=0 (1 byte)
   RTS
@@ -463,11 +460,11 @@ parse_value
 .high_byte_selector
   JSR read_char        ; Skip '>'
   JSR parse_expression ; Next char now in NEXT_CHAR
-  ; Apply high byte: move OPERAND_H to OPERAND_L, zero OPERAND_H
-  LDA OPERAND_H
-  STA OPERAND_L
+  ; Apply high byte: shift OPERAND16 right by 8 bits
+  LDA OPERAND16+$01
+  STA OPERAND16
   LDA #$00
-  STA OPERAND_H
+  STA OPERAND16+$01
   STA IS_FWDREF        ; Byte selectors don't set fwdref (always 1 byte result)
   CLC                  ; Byte selector = C=0 (1 byte)
   RTS
@@ -478,7 +475,7 @@ parse_value
 ; Used for shift counts to ensure left-to-right evaluation of shifts
 ; On entry: A contains first character
 ; On exit: NEXT_CHAR contains next character
-;          OPERAND_L/H contain result
+;          OPERAND16 contains result
 ;          IS_FWDREF set if term is forward ref (NOT set for byte selectors)
 ;          C=1 if bare label, C=0 otherwise
 parse_term_with_selector
@@ -491,9 +488,9 @@ parse_term_with_selector
 .tws_low_byte
   JSR read_char        ; Skip '<'
   JSR parse_term       ; Next char now in NEXT_CHAR
-  ; Apply low byte: keep OPERAND_L, zero OPERAND_H
+  ; Apply low byte: keep OPERAND16, zero OPERAND16+$01
   LDA #$00
-  STA OPERAND_H
+  STA OPERAND16+$01
   STA IS_FWDREF        ; Byte selectors don't set fwdref
   CLC
   RTS
@@ -501,11 +498,11 @@ parse_term_with_selector
 .tws_high_byte
   JSR read_char        ; Skip '>'
   JSR parse_term       ; Next char now in NEXT_CHAR
-  ; Apply high byte: move OPERAND_H to OPERAND_L, zero OPERAND_H
-  LDA OPERAND_H
-  STA OPERAND_L
+  ; Apply high byte: shift OPERAND16 right by 8 bits
+  LDA OPERAND16+$01
+  STA OPERAND16
   LDA #$00
-  STA OPERAND_H
+  STA OPERAND16+$01
   STA IS_FWDREF        ; Byte selectors don't set fwdref
   CLC
   RTS
@@ -514,7 +511,7 @@ parse_term_with_selector
 ; Parse expression: term [+|-|<<|>> term]*
 ; On entry: A contains first character
 ; On exit: NEXT_CHAR contains next character
-;          OPERAND_L/H contain result
+;          OPERAND16 contains result
 ;          IS_FWDREF set if any term is forward ref
 ;          C=1 if 2-byte value (bare label or $xxxx), C=0 if 1-byte ($xx, 'c')
 ;          (Carry from first term - used by .data to decide emit size)
@@ -545,7 +542,7 @@ parse_expression
 
 .add_op
   ; Save current accumulator
-  CP16 OPERAND_L EXPR_ACCU_L
+  CP16 OPERAND16 EXPR_ACCU_L
 
   ; Parse next term (skip '+' first)
   JSR read_char        ; Skip '+'
@@ -557,18 +554,13 @@ parse_expression
   STA EXPR_FWDREF
 
   ; Add: accumulator + OPERAND → OPERAND
-  LDA EXPR_ACCU_L
   CLC
-  ADC OPERAND_L
-  STA OPERAND_L
-  LDA EXPR_ACCU_H
-  ADC OPERAND_H
-  STA OPERAND_H
+  ADD16 EXPR_ACCU_L OPERAND16
   JMP .loop
 
 .sub_op
   ; Save current accumulator
-  CP16 OPERAND_L EXPR_ACCU_L
+  CP16 OPERAND16 EXPR_ACCU_L
 
   ; Parse next term (skip '-' first)
   JSR read_char        ; Skip '-'
@@ -580,13 +572,8 @@ parse_expression
   STA EXPR_FWDREF
 
   ; Subtract: accumulator - OPERAND → OPERAND
-  LDA EXPR_ACCU_L
   SEC
-  SBC OPERAND_L
-  STA OPERAND_L
-  LDA EXPR_ACCU_H
-  SBC OPERAND_H
-  STA OPERAND_H
+  SUB16_2 EXPR_ACCU_L OPERAND16
   JMP .loop
 
 .check_left_shift
@@ -605,7 +592,7 @@ parse_expression
 
 .left_shift_op
   ; Save current operand to EXPR_ACCU
-  CP16 OPERAND_L EXPR_ACCU_L
+  CP16 OPERAND16 EXPR_ACCU_L
 
   ; Parse shift count (use parse_term_with_selector to support byte selectors like <<<)
   JSR read_char        ; Read char after second '<'
@@ -617,36 +604,34 @@ parse_expression
   STA EXPR_FWDREF
 
   ; Check if shift count >= 16 (result will be 0)
-  LDA OPERAND_H
+  LDA OPERAND16+$01
   BNE .left_shift_zero     ; High byte != 0 means shift >= 256
-  LDA OPERAND_L
+  LDA OPERAND16
   CMP #$10
   BCS .left_shift_zero     ; Low byte >= 16 means shift >= 16
   TAY                      ; Transfer shift count to Y
 
   ; Restore value to shift from EXPR_ACCU
-  CP16 EXPR_ACCU_L OPERAND_L
+  CP16 EXPR_ACCU_L OPERAND16
 
   ; Perform left shift
 .left_shift_loop
   DEY
   BMI .left_shift_done
-  ASL OPERAND_L
-  ROL OPERAND_H
+  ASL16 OPERAND16
   JMP .left_shift_loop
 
 .left_shift_zero
   ; Shift >= 16, result is 0
   LDA #$00
-  STA OPERAND_L
-  STA OPERAND_H
+  STA_LH16 OPERAND16
 
 .left_shift_done
   JMP .loop
 
 .right_shift_op
   ; Save current operand to EXPR_ACCU
-  CP16 OPERAND_L EXPR_ACCU_L
+  CP16 OPERAND16 EXPR_ACCU_L
 
   ; Parse shift count (use parse_term_with_selector to support byte selectors like >>>)
   JSR read_char        ; Read char after second '>'
@@ -658,29 +643,27 @@ parse_expression
   STA EXPR_FWDREF
 
   ; Check if shift count >= 16 (result will be 0)
-  LDA OPERAND_H
+  LDA OPERAND16+$01
   BNE .right_shift_zero    ; High byte != 0 means shift >= 256
-  LDA OPERAND_L
+  LDA OPERAND16
   CMP #$10
   BCS .right_shift_zero    ; Low byte >= 16 means shift >= 16
   TAY                      ; Transfer shift count to Y
 
   ; Restore value to shift from EXPR_ACCU
-  CP16 EXPR_ACCU_L OPERAND_L
+  CP16 EXPR_ACCU_L OPERAND16
 
   ; Perform right shift (logical/unsigned)
 .right_shift_loop
   DEY
   BMI .right_shift_done
-  LSR OPERAND_H
-  ROR OPERAND_L
+  LSR16 OPERAND16
   JMP .right_shift_loop
 
 .right_shift_zero
   ; Shift >= 16, result is 0
   LDA #$00
-  STA OPERAND_L
-  STA OPERAND_H
+  STA_LH16 OPERAND16
 
 .right_shift_done
   JMP .loop
@@ -1003,7 +986,7 @@ check_if_branch
 ; Emit instruction based on addressing mode
 ; On entry INST_PTR_L:INST_PTR_H points to mode:opcode data
 ;          ADDR_MODE contains the addressing mode
-;          OPERAND_L:OPERAND_H contains operand value (if applicable)
+;          OPERAND16 contains operand value (if applicable)
 ; On exit X is preserved
 ;         A, Y are not preserved
 ; Raises error if addressing mode is not valid for this instruction
@@ -1033,9 +1016,9 @@ emit_instruction
   CMP #MODE_INDY
   BEQ .one_byte
   ; 2-byte operand (absolute modes)
-  LDA OPERAND_L
+  LDA OPERAND16
   JSR emit
-  LDA OPERAND_H
+  LDA OPERAND16+$01
   JSR emit
 .done
   RTS
@@ -1043,10 +1026,10 @@ emit_instruction
   ; Validate operand <= $FF
   BIT PASS
   BPL .one_byte_ok       ; Skip validation on pass 1
-  LDA OPERAND_H
+  LDA OPERAND16+$01
   BNE .one_byte_error
 .one_byte_ok
-  LDA OPERAND_L
+  LDA OPERAND16
   JSR emit
   RTS
 .one_byte_error
@@ -1056,10 +1039,10 @@ emit_instruction
   BIT PASS
   BPL .emit_relative_pass1  ; Skip validation on pass 1
   CLC                  ; For the - 1
-  LDA OPERAND_L
+  LDA OPERAND16
   SBC PC16
-  STA OPERAND_L
-  LDA OPERAND_H
+  STA OPERAND16
+  LDA OPERAND16+$01
   SBC PC16+$01
   ; Check if within range
   CMP #$00
@@ -1068,15 +1051,15 @@ emit_instruction
   BEQ .backward
   JMP err_branch_out_of_range
 .forward
-  LDA OPERAND_L
+  LDA OPERAND16
   BPL .emit_relative_ok
   JMP err_branch_out_of_range
 .backward
-  LDA OPERAND_L
+  LDA OPERAND16
   BMI .emit_relative_ok
   JMP err_branch_out_of_range
 .emit_relative_pass1
-  LDA OPERAND_L
+  LDA OPERAND16
 .emit_relative_ok
   JSR emit
   RTS
@@ -1087,7 +1070,7 @@ emit_instruction
 ; Checks mode availability, value size, and forward reference forcing
 ; On entry: ADDR_MODE set to ZP variant (MODE_ZP, MODE_ZPX, or MODE_ZPY)
 ;           INST_PTR_L/H points to instruction's mode:opcode data
-;           OPERAND_H contains high byte of operand value
+;           OPERAND16 contains the operand value
 ;           IS_FWDREF set if operand is forward reference (pass 1)
 ;           PASS indicates current pass
 ; On exit: C=1 if must use ABS variant, C=0 if can use ZP variant
@@ -1114,7 +1097,7 @@ handle_fwdref_mode
   BCS .use_abs             ; Was in list (forced to ABS), return C=1
 .check_value
   ; Check if value requires absolute addressing (>= $100)
-  LDA OPERAND_H
+  LDA OPERAND16+$01
   BNE .use_abs             ; Value >= $100, must use ABS
   ; Can use ZP
   CLC
@@ -1155,8 +1138,7 @@ parse_operand_and_emit
   LDA #MODE_NONE
   STA ADDR_MODE
   LDA #$00
-  STA OPERAND_L
-  STA OPERAND_H
+  STA_LH16 OPERAND16
   JMP emit_instruction ; Tail call
 
 .immediate_mode
@@ -1164,7 +1146,7 @@ parse_operand_and_emit
   LDA #MODE_IMM
   STA ADDR_MODE
   JSR read_char        ; Skip #
-  JSR parse_value      ; Returns next char in A, OPERAND_L/H set
+  JSR parse_value      ; Returns next char in A, OPERAND16 set
   JMP emit_instruction ; Tail call
 
 .indirect_mode
@@ -1173,7 +1155,7 @@ parse_operand_and_emit
   ; ($xxxx) - indirect absolute for JMP (2-byte operand)
   JSR read_char        ; Skip (
   ; Parse value ($xx, <label, >label, or label)
-  JSR parse_value      ; OPERAND_L/H set, next char in NEXT_CHAR
+  JSR parse_value      ; OPERAND16 set, next char in NEXT_CHAR
   ; Check suffix to determine addressing mode
   LDA NEXT_CHAR        ; Load next char (should be ) or ,)
   CMP #','
@@ -1216,7 +1198,7 @@ parse_operand_and_emit
 .value_operand
   ; Parse value: $xx, $xxxx, or label
   ; All handled uniformly with appropriate mode selection
-  JSR parse_value      ; Returns C=1 for bare label, OPERAND_L/H set, IS_FWDREF set, next char in NEXT_CHAR
+  JSR parse_value      ; Returns C=1 for bare label, OPERAND16 set, IS_FWDREF set, next char in NEXT_CHAR
   ; Check if this is a branch instruction
   JSR check_if_branch
   BCS .not_branch
@@ -1439,15 +1421,15 @@ data_parameters_loop_entry
   ; Parse value: handles $hex, 'char', label, <expr, >expr, and expressions
   JSR parse_value      ; Returns C=1 for bare label, C=0 otherwise, next char in NEXT_CHAR
   BCS .data_emit_two_bytes
-  ; C=0: expression/hex/'char'/</>  - emit 1 byte from OPERAND_L
-  LDA OPERAND_L
+  ; C=0: expression/hex/'char'/</>  - emit 1 byte from OPERAND16
+  LDA OPERAND16
   JSR emit
   JMP data_parameters_loop
 .data_emit_two_bytes
   ; C=1: bare label - emit 2 bytes (LSB, MSB)
-  LDA OPERAND_L        ; Emit low byte
+  LDA OPERAND16        ; Emit low byte
   JSR emit
-  LDA OPERAND_H        ; Emit high byte
+  LDA OPERAND16+$01    ; Emit high byte
   JSR emit
   JMP data_parameters_loop
 .data_done
@@ -1541,23 +1523,20 @@ process_macro
   JSR load_hash_entry
   JSR find_token
   ; TABPL;TABPH,Y points to 'next' pointer at end of chain
-  JSR store_table_entry  ; Store MEMPL at end of chain
+  JSR store_table_entry  ; Store MEMP16 at end of chain
   JMP .pm_store_entry
 .pm_hash_empty
-  JSR store_hash_entry   ; Store MEMPL in hash table
+  JSR store_hash_entry   ; Store MEMP16 in hash table
 .pm_store_entry
-  JSR store_token        ; Stores name on heap, MEMPL now points to value location
+  JSR store_token        ; Stores name on heap, MEMP16 now points to value location
   ; Store $FE sentinel
   LDY #$00
   LDA #$FE
-  STA (MEMPL),Y
+  STA (MEMP16),Y
   INY
   JSR advance_heap
   ; Save location for body_ptr (will fill in after params are parsed)
-  LDA MEMPL
-  STA MACRO_DEF_PTR_L
-  LDA MEMPH
-  STA MACRO_DEF_PTR_H
+  CP16 MEMP16 MACRO_DEF_PTR_L
   ; Advance past body_ptr space (2 bytes)
   LDY #$02
   JSR advance_heap
@@ -1572,7 +1551,7 @@ process_macro
 .pm_copy_param
   INY
   LDA TOKEN,Y
-  STA (MEMPL),Y
+  STA (MEMP16),Y
   BNE .pm_copy_param
   INY
   JSR advance_heap
@@ -1581,25 +1560,22 @@ process_macro
   ; Write empty string terminator for parameter list
   LDY #$00
   LDA #$00
-  STA (MEMPL),Y
+  STA (MEMP16),Y
   INY
   JSR advance_heap
-  ; Write body_ptr (current MEMPL) into the saved location
+  ; Write body_ptr (current MEMP16) into the saved location
   LDA MACRO_DEF_PTR_L
   STA TABPL
   LDA MACRO_DEF_PTR_H
   STA TABPH
   LDY #$00
-  LDA MEMPL
+  LDA MEMP16
   STA (TABPL),Y
   INY
-  LDA MEMPH
+  LDA MEMP16+$01
   STA (TABPL),Y
   ; Update MACRO_DEF_PTR to point where body will be stored
-  LDA MEMPL
-  STA MACRO_DEF_PTR_L
-  LDA MEMPH
-  STA MACRO_DEF_PTR_H
+  CP16 MEMP16 MACRO_DEF_PTR_L
   ; Set IN_MACRO_DEF flag to start capturing
   LDA #$FF
   STA IN_MACRO_DEF
@@ -1617,7 +1593,7 @@ process_endmacro
   ; Write $00 terminator to body (body_ptr was already set in process_macro)
   LDY #$00
   LDA #$00
-  STA (MEMPL),Y
+  STA (MEMP16),Y
   INY
   JSR advance_heap
   ; Clear the capturing flag
@@ -1733,10 +1709,10 @@ expand_macro
   ; Parse argument expression (using PARENT's scope for lookups)
   JSR parse_expression
   ; Store value and fwdref flag in fixed buffer
-  LDA OPERAND_L
+  LDA OPERAND16
   STA MACRO_ARG_BUF,X
   INX
-  LDA OPERAND_H
+  LDA OPERAND16+$01
   STA MACRO_ARG_BUF,X
   INX
   LDA IS_FWDREF
@@ -1779,10 +1755,10 @@ expand_macro
   STA MACRO_DEF_PTR_H
   ; Load value and fwdref from buffer
   LDA MACRO_ARG_BUF,X
-  STA OPERAND_L
+  STA OPERAND16
   INX
   LDA MACRO_ARG_BUF,X
-  STA OPERAND_H
+  STA OPERAND16+$01
   INX
   LDA MACRO_ARG_BUF,X
   STA IS_FWDREF
@@ -1800,7 +1776,7 @@ expand_macro
   JSR select_label_hash_table
   JSR hash_add
   BCS .em_add_loop      ; Already exists (pass 1), skip store
-  ; Store value (OPERAND_L/H aliased to HEX16)
+  ; Store value (OPERAND16 aliased to HEX16)
   JSR store_hash_value
   JMP .em_add_loop
 .em_add_done
@@ -1833,17 +1809,14 @@ capture_macro_line
   PHA
   ; Save heap position in case we need to undo (for .endmacro)
   ; Use MACRO_DEF_PTR since we're not using it during capture
-  LDA MEMPL
-  STA MACRO_DEF_PTR_L
-  LDA MEMPH
-  STA MACRO_DEF_PTR_H
+  CP16 MEMP16 MACRO_DEF_PTR_L
   ; Restore first char (X saved below A on stack)
   TSX
   LDA $0102,X
   ; Copy whole line to heap including newline
 .cml_copy_loop
   LDY #$00
-  STA (MEMPL),Y
+  STA (MEMP16),Y
   CMP #'\n'
   BEQ .cml_line_done
   INY
@@ -1894,10 +1867,7 @@ capture_macro_line
   BNE .cml_keep_line     ; Not end of token - keep as macro body
 .cml_found_endmacro
   ; Restore heap to undo the copy
-  LDA MACRO_DEF_PTR_L
-  STA MEMPL
-  LDA MACRO_DEF_PTR_H
-  STA MEMPH
+  CP16 MACRO_DEF_PTR_L MEMP16
   ; Restore X (output file handle) - pop saved X and A
   PLA
   TAX
@@ -2249,12 +2219,12 @@ start
   BEQ .skip_debug_output
   SET16 msg_heap_used TABPL
   JSR show_message
-  ; Calculate heap used: MEMPL - HEAP
+  ; Calculate heap used: MEMP16 - HEAP
   SEC
-  LDA MEMPL
+  LDA MEMP16
   SBC #<HEAP
   STA TO_DECIMAL_VALUE_L
-  LDA MEMPH
+  LDA MEMP16+$01
   SBC #>HEAP
   STA TO_DECIMAL_VALUE_H
   JSR show_decimal
