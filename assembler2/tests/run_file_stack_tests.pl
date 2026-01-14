@@ -237,7 +237,7 @@ sub check_prereqs {
         die "Error: Emulator not found at $EMULATOR\nRun the build first.\n";
     }
     unless (-f $TEST_PROG) {
-        die "Error: Test program not found at $TEST_PROG\nRun: ./emulator.out out/asm21_debug.out 2000 /dev/null /dev/null tests/file_stack_test.asm out/file_stack_test.out\n";
+        die "Error: Test program not found at $TEST_PROG\nRun: ./emulator.out out/asm22_debug.out 2000 /dev/null /dev/null tests/file_stack_test.asm out/file_stack_test.out\n";
     }
     unless (-f $TEST_FILE) {
         die "Error: Test file not found at $TEST_FILE\n";

@@ -70,28 +70,36 @@ echo "OK"
 ./emulator.out out/asm20.out 2000 /dev/null /dev/null asm21.asm out/asm21.out
 # Build with debug support
 ./emulator.out out/asm20.out 2000 /dev/null /dev/null asm21.asm out/asm21_debug.out define:enable_debug
+
+# asm22 - macros in assembler implementation
+./emulator.out out/asm21.out 2000 /dev/null /dev/null instgen22.asm out/instgen22.out
+./emulator.out out/instgen22.out 2000 /dev/null out/inst22.asm.out
+# Build without debug (smaller binary)
+./emulator.out out/asm21.out 2000 /dev/null /dev/null asm22.asm out/asm22.out
+# Build with debug support
+./emulator.out out/asm21.out 2000 /dev/null /dev/null asm22.asm out/asm22_debug.out define:enable_debug
 # Self-assembly test (without debug - smaller)
-./emulator.out out/asm21.out 2000 /dev/null /dev/null asm21.asm out/asm21_2.out
-diff <(hexdump -C out/asm21.out) <(hexdump -C out/asm21_2.out)
+./emulator.out out/asm22.out 2000 /dev/null /dev/null asm22.asm out/asm22_2.out
+diff <(hexdump -C out/asm22.out) <(hexdump -C out/asm22_2.out)
 # Self-assembly test (with debug)
-./emulator.out out/asm21_debug.out 2000 /dev/null /dev/null asm21.asm out/asm21_debug_2.out define:enable_debug
-diff <(hexdump -C out/asm21_debug.out) <(hexdump -C out/asm21_debug_2.out)
+./emulator.out out/asm22_debug.out 2000 /dev/null /dev/null asm22.asm out/asm22_debug_2.out define:enable_debug
+diff <(hexdump -C out/asm22_debug.out) <(hexdump -C out/asm22_debug_2.out)
 
 echo "OK"
 
 # Show actual code size difference
 # File covers $2000-$FFFF, vectors at end. Scan backwards from just before vectors.
 echo "Code size comparison:"
-SIZE1=$(perl -e 'open(F,"<","out/asm21.out");binmode(F);read(F,$d,0xE000);for($i=0xDFFB;$i>=0;$i--){last if ord(substr($d,$i,1))!=0}print $i+1')
-SIZE2=$(perl -e 'open(F,"<","out/asm21_debug.out");binmode(F);read(F,$d,0xE000);for($i=0xDFFB;$i>=0;$i--){last if ord(substr($d,$i,1))!=0}print $i+1')
-echo "  asm21.out (no debug):   $SIZE1 bytes"
-echo "  asm21_debug.out:        $SIZE2 bytes"
+SIZE1=$(perl -e 'open(F,"<","out/asm22.out");binmode(F);read(F,$d,0xE000);for($i=0xDFFB;$i>=0;$i--){last if ord(substr($d,$i,1))!=0}print $i+1')
+SIZE2=$(perl -e 'open(F,"<","out/asm22_debug.out");binmode(F);read(F,$d,0xE000);for($i=0xDFFB;$i>=0;$i--){last if ord(substr($d,$i,1))!=0}print $i+1')
+echo "  asm22.out (no debug):   $SIZE1 bytes"
+echo "  asm22_debug.out:        $SIZE2 bytes"
 echo "  Savings:                $((SIZE2 - SIZE1)) bytes"
 
-./emulator.out out/asm21_debug.out 2000 /dev/null /dev/null test19.asm out/test19.out
+./emulator.out out/asm22_debug.out 2000 /dev/null /dev/null test19.asm out/test19.out
 # hexdump -C out/test19.out
 echo "Assembled"
 ./emulator.out out/test19.out 1000 /dev/null - arg1 "arg 2"
 
 # Build file stack test program
-./emulator.out out/asm21_debug.out 2000 /dev/null /dev/null tests/file_stack_test.asm out/file_stack_test.out
+./emulator.out out/asm22_debug.out 2000 /dev/null /dev/null tests/file_stack_test.asm out/file_stack_test.out
