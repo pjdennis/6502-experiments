@@ -1,6 +1,6 @@
 ; Requires:
 ;   HT_KEY       - the address of the key used for hash table operations
-;   HT_VL;HT_VH  - zero page locations containing value in hash table
+;   HT_V16       - zero page locations containing value in hash table
 ;   MEMP16       - addres of heap to store table entries
 ;   advance_heap - function to advance the heap
 ;   LABEL_SCOPE16    - current scope for local label resolution
@@ -120,7 +120,7 @@ hash_loop
 ;          IS_LOCAL_LABEL: if non-zero, uses cached hash from global
 ; On exit C = 0 if found or 1 if not found
 ; On exit TABP16 points to the key if found
-;         HT_VL;HT_VH contains the value if found
+;         HT_V16 contains the value if found
 ;         X is preserved
 ;         A, Y are not preserverd
 find_in_hash
@@ -134,10 +134,10 @@ find_in_hash
   JSR find_in_hash_common
   BCS .done ; Not found
   LDA (TABP16),Y
-  STA HT_VL
+  STA HT_V16
   INY
   LDA (TABP16),Y
-  STA HT_VH
+  STA HT_V16+$01
 .done
   RTS
 

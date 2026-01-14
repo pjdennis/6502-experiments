@@ -14,8 +14,7 @@ MODE_REL  = $0B   ; Relative (branches)
 MODE_IND  = $0C   ; Indirect - JMP ($xxxx)
 
 HT_KEY = TOKEN
-HT_VL  = HEX16
-HT_VH  = HEX16+$01
+HT_V16 = HEX16
 
 
   .zeropage
@@ -51,7 +50,7 @@ advance_heap
 
 
 ; Store hash value at current heap location and advance heap
-; On entry HT_VL;HT_VH contains the value to store
+; On entry HT_V16 contains the value to store
 ;          MEMP16 points to where value should be stored
 ; On exit MEMP16 advanced past the value
 ;         Y = 0
@@ -59,10 +58,10 @@ advance_heap
 ;         A is not preserved
 store_hash_value
   LDY #$00
-  LDA HT_VL
+  LDA HT_V16
   STA (MEMP16),Y
   INY
-  LDA HT_VH
+  LDA HT_V16+$01
   STA (MEMP16),Y
   INY
   JMP advance_heap     ; Tail call
