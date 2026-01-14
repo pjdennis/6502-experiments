@@ -191,7 +191,7 @@ interrupt
 ; Print the " in file " message
   SET16 msg_error_file TABP16
   JSR show_message
-; Print the filename (at FS_PL)
+; Print the filename (at FS_P16)
   CP16 FS_P16 TABP16
   JSR show_message
 ; Print the " at line " message
@@ -234,7 +234,7 @@ msg_error_file
 
 
 ; Show a decimal value to the error output
-; On entry TO_DECIMAL_VALUE_L;TO_DECIMAL_VALUE_H contains the value to show
+; On entry TO_DECIMAL_VALUE16 contains the value to show
 ; On exit X, Y are preserved
 ;         A is not preserved
 ;         Decimal number string stored at TO_DECIMAL_RESULT
@@ -261,7 +261,7 @@ show_message
 
 
 ; Show include traceback - uses file stack API to walk include chain
-; On entry FS_PL;FS_PH points to current file stack entry
+; On entry FS_P16 points to current file stack entry
 ; On exit A, X, Y not preserved
 ;         TABP16;TABP16+$01 not preserved
 ;         All files in stack are closed
@@ -278,7 +278,7 @@ show_include_traceback
   ; Print "  included from " message
   SET16 msg_included_from TABP16
   JSR show_message
-  ; Print filename (FS_PL points to parent entry's name)
+  ; Print filename (FS_P16 points to parent entry's name)
   CP16 FS_P16 TABP16
   JSR show_message
   ; Print ":"
