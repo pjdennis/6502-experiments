@@ -1642,13 +1642,6 @@ expand_macro
   ; Save X (output file handle) - we'll use X as index into MACRO_ARG_BUF
   TXA
   PHA
-  ; Get body_ptr from MACRO_DEF_PTR+1 and save on 6502 stack
-  LDY #$01
-  LDA (MACRO_DEF_PTR16),Y
-  PHA                   ; Save body start low
-  INY
-  LDA (MACRO_DEF_PTR16),Y
-  PHA                   ; Save body start high
   ; DON'T push label scope yet - we need parent's scope to look up arguments
   ; Parse arguments first, storing values in fixed buffer
   ; MACRO_DEF_PTR+3 points to first parameter name (or empty string if none)
@@ -1748,8 +1741,13 @@ expand_macro
 .em_add_done
   ; Push memory source and set up pointers
   JSR push_memory_source
-  ; Restore body pointer from 6502 stack
-  POP16 FS_MEM_PTR16    ; Body start
+  ; Set memory pointer to body_ptr from macro definition
+  LDY #$01
+  LDA (MACRO_ENTRY16),Y
+  STA FS_MEM_PTR16      ; Set body start low
+  INY
+  LDA (MACRO_ENTRY16),Y
+  STA FS_MEM_PTR16+$01  ; Set body start high
   ; Restore X (output file handle)
   PLA
   TAX
