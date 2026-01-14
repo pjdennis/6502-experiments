@@ -30,7 +30,6 @@ SCOPE_STACK = $0400     ; Scope stack (needed by hash_table21.asm, not used by i
   .zeropage
 
 TEMP      .data $00     ; 1 byte temporary value
-TEMP2     .data $00     ; 1 byte temporary value (for Y save)
 HEX16     .data $00     ; 2 bytes
 P16       .data $0000   ; 2 byte pointer
 P2_16     .data $0000   ; 2 byte pointer
@@ -243,57 +242,49 @@ populate_instruction_hash_table
   ; Y now points at null terminator in source
   ; Mode data starts at Y+1
 
+  ; Advance P2_16 to point to the mode data - P2_16 + Y + 1 -> P2_16
+  TYA
+  SEC                         ; Add 1
+  ADDA16 P2_16 P2_16
+
   ; --- Phase 2: Add mnemonic to hash table ---
   ; hash_add:
   ;   - Calculates hash from TOKEN
   ;   - Allocates heap entry: [next_ptr $0000] [mnemonic $00]
   ;   - Returns with MEMP16 pointing to where value data should go
-  INY
-  STY TEMP                    ; Save source offset to mode data
   JSR hash_add
 
   ; --- Phase 3: Copy mode:opcode pairs to heap ---
   ; Problem: both (P2_16),Y and (MEMP16),Y need Y for indirect indexed mode
-  ; Solution: store_byte_to_heap saves Y, stores with Y=0, restores Y
-  LDY TEMP                    ; Restore source offset to mode data
+  ; Solution: solved above by advancing P2_16 such that its required Y offset matches that required by the heap (i.e. starting at 0)
+  LDY #$00                    ; Set initial source offset to mode data and to heap
 
 .copy_modes
   LDA (P2_16),Y               ; Load mode byte from source
   CMP #$FF
   BEQ .copy_done
-  JSR store_byte_to_heap      ; Store mode byte to heap, preserves Y
+  STA (MEMP16),Y
   INY
   LDA (P2_16),Y               ; Load opcode byte from source
-  JSR store_byte_to_heap      ; Store opcode byte to heap, preserves Y
+  STA (MEMP16),Y
   INY
   JMP .copy_modes
 
 .copy_done
   ; Store $FF terminator
-  LDA #$FF
-  JSR store_byte_to_heap
-  INY                         ; Advance Y past $FF in source
+  APPEND_HEAPI $FF
 
   ; Advance P2_16 to next entry (add Y = total bytes consumed from this entry)
   TYA
   CLC
-  ADDA16 P2_16 P2_16
+  ADDA16 P2_16 P2_16          ; P2_16 + Y -> P2_16
+
+  ; Advance the heap
+  JSR advance_heap
+
   JMP .entry_loop
 
 .done
-  RTS
-
-
-; Store byte A to heap and advance heap pointer
-; On entry: A = byte to store
-; On exit: Y is preserved, A is not preserved
-store_byte_to_heap
-  STY TEMP2                   ; Save Y (source index)
-  LDY #$00
-  STA (MEMP16),Y              ; Store byte at heap pointer
-  LDY #$01
-  JSR advance_heap            ; Advance heap by 1 byte
-  LDY TEMP2                   ; Restore Y (source index)
   RTS
 
 
