@@ -16,8 +16,10 @@ FILE_STACK    = $F000             ; File stack will grow down from 1 below here
 TEMP        .data $00 ; 1 byte
 PCL         .data $00 ; 2 byte program counter
 PCH         .data $00 ; "
-HEX1        .data $00 ; 1 byte (high byte - also aliased as OPERAND_H)
 HEX2        .data $00 ; 1 byte (low byte - also aliased as OPERAND_L)
+HEX1        .data $00 ; 1 byte (high byte - also aliased as OPERAND_H)
+OPERAND_L = HEX2      ; Operand value (low byte) - alias for HEX2
+OPERAND_H = HEX1      ; Operand value (high byte) - alias for HEX1
 PASS        .data $00 ; 1 byte $00 = pass 1 $FF = pass 2
 MEMPL       .data $00 ; 2 byte heap pointer
 MEMPH       .data $00 ; "
@@ -34,8 +36,6 @@ CURR_GLOBAL_HEAP_H .data $00 ; "
 ADDR_MODE   .data $00 ; Current addressing mode
 INST_PTR_L  .data $00 ; Pointer to instruction mode table entry
 INST_PTR_H  .data $00 ; "
-OPERAND_L = HEX2      ; Operand value (low byte) - alias for HEX2
-OPERAND_H = HEX1      ; Operand value (high byte) - alias for HEX1
 IS_FWDREF   .data $00 ; $FF if current label is forward ref (pass 1 only)
 EXPR_ACCU_L .data $00 ; Expression accumulator low byte
 EXPR_ACCU_H .data $00 ; Expression accumulator high byte
@@ -559,10 +559,7 @@ parse_expression
 
 .add_op
   ; Save current accumulator
-  LDA OPERAND_L
-  STA EXPR_ACCU_L
-  LDA OPERAND_H
-  STA EXPR_ACCU_H
+  CP16 OPERAND_L EXPR_ACCU_L
 
   ; Parse next term (skip '+' first)
   JSR read_char        ; Skip '+'
@@ -585,10 +582,7 @@ parse_expression
 
 .sub_op
   ; Save current accumulator
-  LDA OPERAND_L
-  STA EXPR_ACCU_L
-  LDA OPERAND_H
-  STA EXPR_ACCU_H
+  CP16 OPERAND_L EXPR_ACCU_L
 
   ; Parse next term (skip '-' first)
   JSR read_char        ; Skip '-'
@@ -625,10 +619,7 @@ parse_expression
 
 .left_shift_op
   ; Save current operand to EXPR_ACCU
-  LDA OPERAND_L
-  STA EXPR_ACCU_L
-  LDA OPERAND_H
-  STA EXPR_ACCU_H
+  CP16 OPERAND_L EXPR_ACCU_L
 
   ; Parse shift count (use parse_term_with_selector to support byte selectors like <<<)
   JSR read_char        ; Read char after second '<'
@@ -648,10 +639,7 @@ parse_expression
   TAY                      ; Transfer shift count to Y
 
   ; Restore value to shift from EXPR_ACCU
-  LDA EXPR_ACCU_L
-  STA OPERAND_L
-  LDA EXPR_ACCU_H
-  STA OPERAND_H
+  CP16 EXPR_ACCU_L OPERAND_L
 
   ; Perform left shift
 .left_shift_loop
@@ -672,10 +660,7 @@ parse_expression
 
 .right_shift_op
   ; Save current operand to EXPR_ACCU
-  LDA OPERAND_L
-  STA EXPR_ACCU_L
-  LDA OPERAND_H
-  STA EXPR_ACCU_H
+  CP16 OPERAND_L EXPR_ACCU_L
 
   ; Parse shift count (use parse_term_with_selector to support byte selectors like >>>)
   JSR read_char        ; Read char after second '>'
@@ -695,10 +680,7 @@ parse_expression
   TAY                      ; Transfer shift count to Y
 
   ; Restore value to shift from EXPR_ACCU
-  LDA EXPR_ACCU_L
-  STA OPERAND_L
-  LDA EXPR_ACCU_H
-  STA OPERAND_H
+  CP16 EXPR_ACCU_L OPERAND_L
 
   ; Perform right shift (logical/unsigned)
 .right_shift_loop
