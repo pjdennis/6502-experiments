@@ -311,11 +311,7 @@ find_token
   ; Advance past 'next' pointer
   CLC
   LDA #$02
-  ADC TABP16
-  STA TABP16
-  LDA #$00
-  ADC TABP16+$01
-  STA TABP16+$01
+  ADDA16 TABP16 TABP16
   ; Check for matching token
   JSR compare_token
   BNE .token_is_non_match

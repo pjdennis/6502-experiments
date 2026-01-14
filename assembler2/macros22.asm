@@ -26,6 +26,17 @@
   .endmacro
 
 
+; ADDA16 ptr1 ptr2 - Adds A to value at ptr1, storing result at ptr2
+; Clobbers A
+  .macro ADDA16 ptr1 ptr2
+  ADC ptr1
+  STA ptr2
+  LDA #$00
+  ADC ptr1+$01
+  STA ptr2+$01
+  .endmacro
+
+
 ; ADDI16 ptr1 val ptr2 - Adds val to value at ptr1, storing result at ptr2
 ; Clobbers A
   .macro ADDI16 ptr1 val ptr2

@@ -896,11 +896,7 @@ lookup_mnemonic
   ; MACRO_DEF_PTR = TABP16 + Y (points to $FE, body_ptr is at +1)
   TYA
   CLC
-  ADC TABP16
-  STA MACRO_DEF_PTR16
-  LDA #$00
-  ADC TABP16+$01
-  STA MACRO_DEF_PTR16+$01
+  ADDA16 TABP16 MACRO_DEF_PTR16
   ; Don't skip rest of line - expand_macro will parse arguments
   PLA                   ; Pop return address (we're not returning)
   PLA
@@ -909,11 +905,7 @@ lookup_mnemonic
   ; Calculate INST_PTR = TABP16 + Y
   TYA
   CLC
-  ADC TABP16
-  STA INST_PTR16
-  LDA #$00
-  ADC TABP16+$01
-  STA INST_PTR16+$01
+  ADDA16 TABP16 INST_PTR16
   RTS
 
 
@@ -1676,11 +1668,7 @@ expand_macro
   ; Advance MACRO_DEF_PTR past the null terminator
   TYA
   SEC                   ; +1 for null
-  ADC MACRO_DEF_PTR16
-  STA MACRO_DEF_PTR16
-  LDA #$00
-  ADC MACRO_DEF_PTR16+$01
-  STA MACRO_DEF_PTR16+$01
+  ADDA16 MACRO_DEF_PTR16 MACRO_DEF_PTR16
   ; Check for argument in input
   JSR check_for_end_of_line
   BCC .em_have_arg
@@ -1725,11 +1713,7 @@ expand_macro
   ; Advance MACRO_DEF_PTR past param name
   TYA
   SEC
-  ADC MACRO_DEF_PTR16
-  STA MACRO_DEF_PTR16
-  LDA #$00
-  ADC MACRO_DEF_PTR16+$01
-  STA MACRO_DEF_PTR16+$01
+  ADDA16 MACRO_DEF_PTR16 MACRO_DEF_PTR16
   ; Load value and fwdref from buffer
   LDA MACRO_ARG_BUF,X
   STA OPERAND16

@@ -245,11 +245,7 @@ populate_instruction_hash_table
   ; Advance P2_16 to next entry
   TYA
   CLC
-  ADC P2_16
-  STA P2_16
-  LDA #$00
-  ADC P2_16+$01
-  STA P2_16+$01
+  ADDA16 P2_16 P2_16
   JMP .entry_loop
 .done
   RTS
