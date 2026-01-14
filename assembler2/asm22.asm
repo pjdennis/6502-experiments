@@ -548,7 +548,7 @@ parse_expression
 
   ; Add: accumulator + OPERAND → OPERAND
   CLC
-  ADD16 EXPR_ACCU16 OPERAND16
+  ADD16 EXPR_ACCU16 OPERAND16 OPERAND16
   JMP .loop
 
 .sub_op
@@ -566,7 +566,7 @@ parse_expression
 
   ; Subtract: accumulator - OPERAND → OPERAND
   SEC
-  SUB16_2 EXPR_ACCU16 OPERAND16
+  SUB16 EXPR_ACCU16 OPERAND16 OPERAND16
   JMP .loop
 
 .check_left_shift
