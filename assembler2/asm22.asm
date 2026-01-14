@@ -20,9 +20,8 @@ OPERAND16 = HEX16           ; Operand value - alias for HEX16
 PASS            .data $00   ; 1 byte $00 = pass 1 $FF = pass 2
 STARTED         .data $00   ; flag to indicate output has started
 CURR_FILE       .data $00   ; current file handle
-CURLINEL        .data $00   ; Current line (L)
-CURLINEH        .data $00   ; Current line (H)
-CURR_OUT_FILE   .data $00 ; Current output file (for closing on error)
+CURR_LINE16     .data $0000 ; Current line number
+CURR_OUT_FILE   .data $00   ; Current output file (for closing on error)
 IN_ZEROPAGE     .data $00   ; Flag indicating if in zero page section
 PC_SAVE16       .data $0000 ; Save location for PC when switching sections
 CURR_GLOBAL_HEAP_L .data $00 ; Heap address of current global label string
@@ -61,8 +60,7 @@ FWDREF_PASS1_H .data $00 ; Forward ref pointer after pass 1 (high byte)
   .include label_scope22.asm
 FS_FILENAME    = TOKEN
 FS_CURR_FILE   = CURR_FILE
-FS_CURR_LINEL  = CURLINEL
-FS_CURR_LINEH  = CURLINEH
+FS_CURR_LINE16 = CURR_LINE16
 FS_NEXT_CHAR   = NEXT_CHAR
 FS_ERR_NO_FILE = err_no_file
 FS_POP_MEMORY_HOOK = pop_label_scope
@@ -1897,12 +1895,9 @@ assemble_code
   LDA #$00
   STA STARTED
   STA IN_ZEROPAGE
-  STA PC16
-  STA PC16+$01
-  STA PC_SAVE16
-  STA PC_SAVE16+$01
-  STA CURLINEL
-  STA CURLINEH
+  STA_LH16 PC16
+  STA_LH16 PC_SAVE16
+  STA_LH16 CURR_LINE16
   STA CURR_GLOBAL_HEAP_L ; Initialize global heap pointer (0 = no global yet)
   STA CURR_GLOBAL_HEAP_H ; "
   STA IS_LOCAL_LABEL  ; Initialize local label flag
@@ -1925,10 +1920,7 @@ asm_line_loop                 ; Global entry for macro expansion
 .no_unclosed_macro
   RTS
 .character_read
-  INC CURLINEL
-  BNE .line_incremented
-  INC CURLINEH
-.line_incremented
+  INC16 CURR_LINE16
   ; Check if we're capturing macro body
   LDY IN_MACRO_DEF
   BEQ .not_capturing_macro

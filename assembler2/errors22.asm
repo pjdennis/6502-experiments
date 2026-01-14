@@ -3,7 +3,7 @@
 ; Requires:
 ;   TEMP                 - zero page location for temporary storage
 ;   TABPL;TABPH          - zero page locations for table pointer
-;   CURLINEL;CURLINEH    - zero page locations for current line number
+;   CURR_LINE16          - zero page location for current line number
 ;   FS_PL;FS_PH          - zero page locations for file stack pointer
 ;   file_stack_empty     - function to check if file stack is empty
 ;   write_d              - function to write character to stderr
@@ -196,10 +196,7 @@ interrupt
   SET16 msg_error_line TABPL
   JSR show_message
 ; Print the current line in decimal
-  LDA CURLINEL
-  STA TO_DECIMAL_VALUE_L
-  LDA CURLINEH
-  STA TO_DECIMAL_VALUE_H
+  CP16 CURR_LINE16 TO_DECIMAL_VALUE_L
   JSR show_decimal
 .location_done
 ; Print the ": " message
@@ -286,11 +283,8 @@ show_include_traceback
   ; Print ":"
   LDA #':'
   JSR write_d
-  ; Print line number (FS_CURR_LINEL/H has line where include was)
-  LDA FS_CURR_LINEL
-  STA TO_DECIMAL_VALUE_L
-  LDA FS_CURR_LINEH
-  STA TO_DECIMAL_VALUE_H
+  ; Print line number (CURR_LINE16 has line where include was)
+  CP16 CURR_LINE16 TO_DECIMAL_VALUE_L
   JSR show_decimal
   ; Continue to next parent
   JMP .loop

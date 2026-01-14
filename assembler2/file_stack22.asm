@@ -1,10 +1,9 @@
 ; Requires:
-;   FILE_STACK    - 1 past the highest address from which the stack grows down
-;   FS_FILENAME   - filename buffer
-;   FS_CURR_FILE  - zero page location of the current file handle
-;   FS_CURR_LINEL - zero page location of the current line number (low byte)
-;   FS_CURR_LINEH - zero page location of the current line number (high byte)
-;   FS_NEXT_CHAR  - zero page location to store last character read
+;   FILE_STACK     - 1 past the highest address from which the stack grows down
+;   FS_FILENAME    - filename buffer
+;   FS_CURR_FILE   - zero page location of the current file handle
+;   FS_CURR_LINE16 - zero page location of the current line number
+;   FS_NEXT_CHAR   - zero page location to store last character read
 ;   open, close, read - file I/O functions
 ;
 ; Optional:
@@ -62,7 +61,7 @@ file_stack_empty
 ; On entry: A = curr_type (0=file, 1=memory)
 ;           FS_FILENAME contains the source name
 ; On exit: Frame built with name, curr_type, prev_type, prev_line, prev_data
-;          FS_CURR_LINEL/H reset to 0
+;          FS_CURR_LINE16 reset to 0
 ;          A, X, Y clobbered
 push_source_frame
   PHA                   ; Save curr_type for later
@@ -109,10 +108,10 @@ push_source_frame
   PHA                   ; Save prev_type for later
   ; Store prev_line
   INY
-  LDA FS_CURR_LINEL
+  LDA FS_CURR_LINE16
   STA (FS_PL),Y
   INY
-  LDA FS_CURR_LINEH
+  LDA FS_CURR_LINE16+$01
   STA (FS_PL),Y
   ; Store prev_data based on prev_type
   PLA                   ; Restore prev_type
@@ -133,14 +132,13 @@ push_source_frame
 .reset_line
   ; Reset line number for new source
   LDA #$00
-  STA FS_CURR_LINEL
-  STA FS_CURR_LINEH
+  STA_LH16 FS_CURR_LINE16
   RTS
 
 
 ; Push a file source onto the stack
 ; On entry: FS_FILENAME contains the file name to open
-;           FS_CURR_LINEL;FS_CURR_LINEH contains the current line number
+;           FS_CURR_LINE16 contains the current line number
 ;           FS_CURR_FILE contains the current file handle
 ; On exit: X is preserved, new file is open and ready to read
 push_file_stack
@@ -180,7 +178,7 @@ push_memory_source
 ; Unified pop function - handles both file and memory sources
 ; On exit: Previous state restored (FS_CURR_FILE or FS_MEM_PTR)
 ;          FS_SRC_TYPE restored to prev_type
-;          FS_CURR_LINEL/H restored to prev_line
+;          FS_CURR_LINE16 restored to prev_line
 pop_source
   ; Skip past name to find null terminator
   LDY #$FF
@@ -214,10 +212,10 @@ pop_source
   ; Read prev_line
   INY
   LDA (FS_PL),Y
-  STA FS_CURR_LINEL
+  STA FS_CURR_LINE16
   INY
   LDA (FS_PL),Y
-  STA FS_CURR_LINEH
+  STA FS_CURR_LINE16+$01
   ; Restore prev_data based on prev_type
   PLA
   BNE .restore_memory
