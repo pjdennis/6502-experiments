@@ -2018,6 +2018,30 @@ INPUT:
 EXPECT_HEX: a2 05 ca d0 fd
 
 ---
+NAME: macro_reference_global_label
+DESCRIPTION: Macros can reference global labels
+INPUT:
+1: * = $0200
+2: val = $42
+3:   .macro mac
+4:   LDA #val
+5:   .endmacro
+6:   mac
+EXPECT_HEX: a9 42
+
+---
+NAME: macro_global_label_param_name_conflict
+DESCRIPTION: Global labels hide macro parameters (may not want this behavior)
+INPUT:
+1: * = $0200
+2: val = $42
+3:   .macro mac val
+4:   LDA #val
+5:   .endmacro
+6:   mac $43
+EXPECT_HEX: a9 42
+
+---
 NAME: macro_param_too_few
 DESCRIPTION: Error when fewer arguments than parameters
 INPUT:
