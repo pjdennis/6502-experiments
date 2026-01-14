@@ -73,10 +73,25 @@
   .endmacro
 
 
+; CMP16 ptr1 ptr2 Compares value at ptr1 to val at ptr2, setting flags accordingly
+; After calling:
+;   BEQ/BNE work for equality
+;   BCC branches if value at ptr1 < value at ptr2
+; Clobbers A
+  .macro CMP16 ptr1 ptr2
+  LDA ptr1+$01
+  CMP ptr2+$01
+  BNE .done
+  LDA ptr1
+  CMP ptr2
+.done
+  .endmacro
+
+
 ; CMPI16 ptr val Compares val to value at ptr, setting flags accordingly
 ; After calling:
 ;   BEQ/BNE work for equality
-;   BCC branches if value at ptr1 < val
+;   BCC branches if value at ptr < val
 ; Clobbers A
   .macro CMPI16 ptr val
   LDA ptr+$01

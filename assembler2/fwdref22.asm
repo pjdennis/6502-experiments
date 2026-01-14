@@ -10,8 +10,7 @@
 
   .zeropage
 
-FWDREF_L    .data $00 ; Pointer to forward reference list (low)
-FWDREF_H    .data $00 ; Pointer to forward reference list (high)
+FWDREF16    .data $0000 ; Pointer to forward reference list
 
   .code
 
@@ -22,7 +21,7 @@ FWDREF_H    .data $00 ; Pointer to forward reference list (high)
 ;          X, Y are preserved
 init_fwdref_list
 reset_fwdref_ptr
-  SET16 FWDREF_LIST FWDREF_L
+  SET16 FWDREF_LIST FWDREF16
   RTS
 
 
@@ -33,9 +32,9 @@ reset_fwdref_ptr
 finalize_fwdref_list
   LDY #$00
   LDA #$FF
-  STA (FWDREF_L),Y
+  STA (FWDREF16),Y
   INY
-  STA (FWDREF_L),Y
+  STA (FWDREF16),Y
   RTS
 
 
@@ -45,25 +44,25 @@ finalize_fwdref_list
 ;          Jumps to err_too_many_forward_refs if list is full
 add_forward_ref
   ; Check if there's room (pointer must be < FWDREF_LIMIT - 2) to allow for terminator
-  LDA FWDREF_H
+  LDA FWDREF16+$01
   CMP #>FWDREF_LIMIT-$02
   BCC .ok                 ; High byte < limit high, definitely ok
   BNE .too_many           ; High byte > limit high, definitely too many
   ; High byte equals limit high, check low byte
-  LDA FWDREF_L
+  LDA FWDREF16
   CMP #<FWDREF_LIMIT-$02
   BCS .too_many           ; >= FWDREF_LIMIT, no room for entry + terminator
 .ok
   ; Store PC at current list position
   LDY #$00
   LDA PC16
-  STA (FWDREF_L),Y
+  STA (FWDREF16),Y
   INY
   LDA PC16+$01
-  STA (FWDREF_L),Y
+  STA (FWDREF16),Y
   ; Advance pointer by 2
   CLC
-  ADDI16 FWDREF_L $02 FWDREF_L
+  ADDI16 FWDREF16 $02 FWDREF16
   RTS
 .too_many
   JMP err_too_many_forward_refs
@@ -77,16 +76,16 @@ add_forward_ref
 ;          X is preserved
 check_forward_ref
   LDY #$00
-  LDA (FWDREF_L),Y
+  LDA (FWDREF16),Y
   CMP PC16
   BNE .no_match
   INY
-  LDA (FWDREF_L),Y
+  LDA (FWDREF16),Y
   CMP PC16+$01
   BNE .no_match
   ; Match - advance pointer and return C=1
   CLC
-  ADDI16 FWDREF_L $02 FWDREF_L
+  ADDI16 FWDREF16 $02 FWDREF16
   SEC
   RTS
 .no_match

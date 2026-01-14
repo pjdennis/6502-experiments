@@ -2131,7 +2131,7 @@ start
 
   .ifdef enable_debug
   ; Capture forward ref pointer after pass 1
-  CP16 FWDREF_L PASS_1_FWDREF16
+  CP16 FWDREF16 PASS_1_FWDREF16
   .endif
 
   LDA #$FF
@@ -2143,13 +2143,9 @@ start
 
   .ifdef enable_debug
   ; Verify forward ref pointer matches pass 1
-  LDA FWDREF_L
-  CMP PASS_1_FWDREF16
+  CMP16 FWDREF16 PASS_1_FWDREF16 
   BNE .fwdref_error
-  LDA FWDREF_H
-  CMP PASS_1_FWDREF16+$01
-  BNE .fwdref_error
-  JMP .fwdref_ok
+  BEQ .fwdref_ok
 .fwdref_error
   JMP err_fwdref_tracking
 .fwdref_ok
