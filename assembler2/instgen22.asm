@@ -59,10 +59,8 @@ MNTAB
   .data "STA" $00  <MODE_ZP   $85  <MODE_ZPX  $95  <MODE_ABS  $8D  <MODE_ABSX $9D
   .data            <MODE_ABSY $99  <MODE_INDX $81  <MODE_INDY $91
   .data            $FF
-  .data "STX" $00  <MODE_ZP   $86  <MODE_ZPY  $96  <MODE_ABS  $8E
-  .data            $FF
-  .data "STY" $00  <MODE_ZP   $84  <MODE_ZPX  $94  <MODE_ABS  $8C
-  .data            $FF
+  .data "STX" $00  <MODE_ZP   $86  <MODE_ZPY  $96  <MODE_ABS  $8E  $FF
+  .data "STY" $00  <MODE_ZP   $84  <MODE_ZPX  $94  <MODE_ABS  $8C  $FF
 
   ; Arithmetic instructions
   .data "ADC" $00  <MODE_IMM  $69  <MODE_ZP   $65  <MODE_ZPX  $75  <MODE_ABS  $6D
@@ -87,116 +85,76 @@ MNTAB
   .data "CMP" $00  <MODE_IMM  $C9  <MODE_ZP   $C5  <MODE_ZPX  $D5  <MODE_ABS  $CD
   .data            <MODE_ABSX $DD  <MODE_ABSY $D9  <MODE_INDX $C1  <MODE_INDY $D1
   .data            $FF
-  .data "CPX" $00  <MODE_IMM  $E0  <MODE_ZP   $E4  <MODE_ABS  $EC
-  .data            $FF
-  .data "CPY" $00  <MODE_IMM  $C0  <MODE_ZP   $C4  <MODE_ABS  $CC
-  .data            $FF
+  .data "CPX" $00  <MODE_IMM  $E0  <MODE_ZP   $E4  <MODE_ABS  $EC  $FF
+  .data "CPY" $00  <MODE_IMM  $C0  <MODE_ZP   $C4  <MODE_ABS  $CC  $FF
 
   ; Bit test
-  .data "BIT" $00  <MODE_ZP   $24  <MODE_ABS  $2C
-  .data            $FF
+  .data "BIT" $00  <MODE_ZP   $24  <MODE_ABS  $2C  $FF
 
   ; Increment/Decrement
-  .data "INC" $00  <MODE_ZP   $E6  <MODE_ZPX  $F6  <MODE_ABS  $EE  <MODE_ABSX $FE
-  .data            $FF
-  .data "DEC" $00  <MODE_ZP   $C6  <MODE_ZPX  $D6  <MODE_ABS  $CE  <MODE_ABSX $DE
-  .data            $FF
-  .data "INX" $00  <MODE_NONE $E8
-  .data            $FF
-  .data "INY" $00  <MODE_NONE $C8
-  .data            $FF
-  .data "DEX" $00  <MODE_NONE $CA
-  .data            $FF
-  .data "DEY" $00  <MODE_NONE $88
-  .data            $FF
+  .data "INC" $00  <MODE_ZP   $E6  <MODE_ZPX  $F6  <MODE_ABS  $EE  <MODE_ABSX $FE  $FF
+  .data "DEC" $00  <MODE_ZP   $C6  <MODE_ZPX  $D6  <MODE_ABS  $CE  <MODE_ABSX $DE  $FF
+  .data "INX" $00  <MODE_NONE $E8  $FF
+  .data "INY" $00  <MODE_NONE $C8  $FF
+  .data "DEX" $00  <MODE_NONE $CA  $FF
+  .data "DEY" $00  <MODE_NONE $88  $FF
 
   ; Shift/Rotate
-  .data "ASL" $00  <MODE_NONE $0A  <MODE_ZP   $06  <MODE_ZPX  $16
-  .data            <MODE_ABS  $0E  <MODE_ABSX $1E
+  .data "ASL" $00  <MODE_NONE $0A  <MODE_ZP   $06  <MODE_ZPX  $16  <MODE_ABS  $0E
+  .data            <MODE_ABSX $1E
   .data            $FF
-  .data "LSR" $00  <MODE_NONE $4A  <MODE_ZP   $46  <MODE_ZPX  $56
-  .data            <MODE_ABS  $4E  <MODE_ABSX $5E
+  .data "LSR" $00  <MODE_NONE $4A  <MODE_ZP   $46  <MODE_ZPX  $56  <MODE_ABS  $4E
+  .data            <MODE_ABSX $5E
   .data            $FF
-  .data "ROL" $00  <MODE_NONE $2A  <MODE_ZP   $26  <MODE_ZPX  $36
-  .data            <MODE_ABS  $2E  <MODE_ABSX $3E
+  .data "ROL" $00  <MODE_NONE $2A  <MODE_ZP   $26  <MODE_ZPX  $36  <MODE_ABS  $2E
+  .data            <MODE_ABSX $3E
   .data            $FF
-  .data "ROR" $00  <MODE_NONE $6A  <MODE_ZP   $66  <MODE_ZPX  $76
-  .data            <MODE_ABS  $6E  <MODE_ABSX $7E
+  .data "ROR" $00  <MODE_NONE $6A  <MODE_ZP   $66  <MODE_ZPX  $76  <MODE_ABS  $6E
+  .data            <MODE_ABSX $7E
   .data            $FF
 
   ; Branch instructions
-  .data "BCC" $00  <MODE_REL  $90
-  .data            $FF
-  .data "BCS" $00  <MODE_REL  $B0
-  .data            $FF
-  .data "BEQ" $00  <MODE_REL  $F0
-  .data            $FF
-  .data "BMI" $00  <MODE_REL  $30
-  .data            $FF
-  .data "BNE" $00  <MODE_REL  $D0
-  .data            $FF
-  .data "BPL" $00  <MODE_REL  $10
-  .data            $FF
-  .data "BVC" $00  <MODE_REL  $50
-  .data            $FF
-  .data "BVS" $00  <MODE_REL  $70
-  .data            $FF
+  .data "BCC" $00  <MODE_REL  $90  $FF
+  .data "BCS" $00  <MODE_REL  $B0  $FF
+  .data "BEQ" $00  <MODE_REL  $F0  $FF
+  .data "BMI" $00  <MODE_REL  $30  $FF
+  .data "BNE" $00  <MODE_REL  $D0  $FF
+  .data "BPL" $00  <MODE_REL  $10  $FF
+  .data "BVC" $00  <MODE_REL  $50  $FF
+  .data "BVS" $00  <MODE_REL  $70  $FF
 
   ; Jump instructions
-  .data "JMP" $00  <MODE_ABS  $4C  <MODE_IND  $6C
-  .data            $FF
-  .data "JSR" $00  <MODE_ABS  $20
-  .data            $FF
+  .data "JMP" $00  <MODE_ABS  $4C  <MODE_IND  $6C  $FF
+  .data "JSR" $00  <MODE_ABS  $20  $FF
 
   ; Stack instructions
-  .data "PHA" $00  <MODE_NONE $48
-  .data            $FF
-  .data "PHP" $00  <MODE_NONE $08
-  .data            $FF
-  .data "PLA" $00  <MODE_NONE $68
-  .data            $FF
-  .data "PLP" $00  <MODE_NONE $28
-  .data            $FF
+  .data "PHA" $00  <MODE_NONE $48  $FF
+  .data "PHP" $00  <MODE_NONE $08  $FF
+  .data "PLA" $00  <MODE_NONE $68  $FF
+  .data "PLP" $00  <MODE_NONE $28  $FF
 
   ; Transfer instructions
-  .data "TAX" $00  <MODE_NONE $AA
-  .data            $FF
-  .data "TAY" $00  <MODE_NONE $A8
-  .data            $FF
-  .data "TSX" $00  <MODE_NONE $BA
-  .data            $FF
-  .data "TXA" $00  <MODE_NONE $8A
-  .data            $FF
-  .data "TXS" $00  <MODE_NONE $9A
-  .data            $FF
-  .data "TYA" $00  <MODE_NONE $98
-  .data            $FF
+  .data "TAX" $00  <MODE_NONE $AA  $FF
+  .data "TAY" $00  <MODE_NONE $A8  $FF
+  .data "TSX" $00  <MODE_NONE $BA  $FF
+  .data "TXA" $00  <MODE_NONE $8A  $FF
+  .data "TXS" $00  <MODE_NONE $9A  $FF
+  .data "TYA" $00  <MODE_NONE $98  $FF
 
   ; Flag instructions
-  .data "CLC" $00  <MODE_NONE $18
-  .data            $FF
-  .data "CLD" $00  <MODE_NONE $D8
-  .data            $FF
-  .data "CLI" $00  <MODE_NONE $58
-  .data            $FF
-  .data "CLV" $00  <MODE_NONE $B8
-  .data            $FF
-  .data "SEC" $00  <MODE_NONE $38
-  .data            $FF
-  .data "SED" $00  <MODE_NONE $F8
-  .data            $FF
-  .data "SEI" $00  <MODE_NONE $78
-  .data            $FF
+  .data "CLC" $00  <MODE_NONE $18  $FF
+  .data "CLD" $00  <MODE_NONE $D8  $FF
+  .data "CLI" $00  <MODE_NONE $58  $FF
+  .data "CLV" $00  <MODE_NONE $B8  $FF
+  .data "SEC" $00  <MODE_NONE $38  $FF
+  .data "SED" $00  <MODE_NONE $F8  $FF
+  .data "SEI" $00  <MODE_NONE $78  $FF
 
   ; Other
-  .data "BRK" $00  <MODE_NONE $00
-  .data            $FF
-  .data "NOP" $00  <MODE_NONE $EA
-  .data            $FF
-  .data "RTI" $00  <MODE_NONE $40
-  .data            $FF
-  .data "RTS" $00  <MODE_NONE $60
-  .data            $FF
+  .data "BRK" $00  <MODE_NONE $00  $FF
+  .data "NOP" $00  <MODE_NONE $EA  $FF
+  .data "RTI" $00  <MODE_NONE $40  $FF
+  .data "RTS" $00  <MODE_NONE $60  $FF
 
   ; End of table
   .data $00
