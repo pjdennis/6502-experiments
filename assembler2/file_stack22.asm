@@ -28,9 +28,8 @@ FS_P16        .data $0000 ; Pointer to the current location in the file stack
 FS_TEMP       .data $00   ; Temporary location for use in calculations
 
 ; Memory source support (zero-terminated buffers)
-FS_SRC_TYPE   .data $00 ; Source type: 0=file, 1=memory
-FS_MEM_PTR_L  .data $00 ; Current read position in memory (low)
-FS_MEM_PTR_H  .data $00 ; Current read position in memory (high)
+FS_SRC_TYPE   .data $00   ; Source type: 0=file, 1=memory
+FS_MEM_PTR16  .data $0000 ; Current read position in memory
 
   .code
 
@@ -115,10 +114,10 @@ push_source_frame
 .save_memory_state
   ; prev_type=1: save memory pointer (zero-terminated, no end needed)
   INY
-  LDA FS_MEM_PTR_L
+  LDA FS_MEM_PTR16
   STA (FS_P16),Y
   INY
-  LDA FS_MEM_PTR_H
+  LDA FS_MEM_PTR16+$01
   STA (FS_P16),Y
 .reset_line
   ; Reset line number for new source
@@ -151,7 +150,7 @@ push_file_stack
 
 ; Push a memory source onto the stack
 ; On entry: FS_FILENAME = name for this memory source (e.g., macro name)
-;           FS_MEM_PTR_L/H = start of zero-terminated memory buffer
+;           FS_MEM_PTR16 = start of zero-terminated memory buffer
 ; On exit: X is preserved, reading will continue from memory buffer
 push_memory_source
   TXA
@@ -219,10 +218,10 @@ pop_source
   ; prev_type=1: restore memory pointer (zero-terminated, no end needed)
   INY
   LDA (FS_P16),Y
-  STA FS_MEM_PTR_L
+  STA FS_MEM_PTR16
   INY
   LDA (FS_P16),Y
-  STA FS_MEM_PTR_H
+  STA FS_MEM_PTR16+$01
 .adjust_stack
   ; Y points to last byte read, add Y+1 to stack pointer
   TYA
@@ -259,10 +258,10 @@ file_stack_read_char
   ; Type 1 = memory source (zero-terminated)
   ; Read byte from memory pointer
   LDY #$00
-  LDA (FS_MEM_PTR_L),Y
+  LDA (FS_MEM_PTR16),Y
   BEQ .mem_exhausted     ; $00 = end of memory source
   ; Increment memory pointer
-  INC16 FS_MEM_PTR_L
+  INC16 FS_MEM_PTR16
 .got_char
   STA FS_NEXT_CHAR
   CLC

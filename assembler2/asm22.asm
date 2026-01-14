@@ -1749,10 +1749,7 @@ expand_macro
   ; Push memory source and set up pointers
   JSR push_memory_source
   ; Restore body pointer from 6502 stack
-  PLA                   ; Body start high
-  STA FS_MEM_PTR_H
-  PLA                   ; Body start low
-  STA FS_MEM_PTR_L
+  POP16 FS_MEM_PTR16    ; Body start
   ; Restore X (output file handle)
   PLA
   TAX
