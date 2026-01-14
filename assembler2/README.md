@@ -270,3 +270,144 @@ The assembler syntax has evolved through the bootstrap chain:
 - **asm19**: Uses `.data` exclusively (removed `DATA` pseudo-op), expression evaluation
 - **asm20**: Conditional assembly (`.ifdef`/`.endif`), `define:label` command line args
 - **asm21**: Shift operators (`<<`, `>>`), conditional compilation for optional debug support
+
+## Adding a New Bootstrap Step
+
+When adding new features that require a new assembler version (e.g., asm21 → asm22), follow these steps:
+
+### 1. Copy Source Files
+
+Copy all assembler source files to the new version number:
+
+```bash
+# Main assembler and instruction generator
+cp asm21.asm asm22.asm
+cp instgen21.asm instgen22.asm
+
+# Support files
+cp common21.asm common22.asm
+cp hash_table21.asm hash_table22.asm
+cp file_stack21.asm file_stack22.asm
+cp errors21.asm errors22.asm
+cp fwdref21.asm fwdref22.asm
+cp to_decimal21.asm to_decimal22.asm
+cp label_scope21.asm label_scope22.asm
+
+# Test file
+cp tests/asm21_tests.txt tests/asm22_tests.txt
+```
+
+### 2. Update Include References
+
+In each copied file, update version numbers in `.include` statements:
+
+**asm22.asm:**
+```asm
+  .include out/inst22.asm.out
+  .include common22.asm
+  .include label_scope22.asm
+  .include file_stack22.asm
+  .include errors22.asm
+  .include fwdref22.asm
+```
+
+**common22.asm:**
+```asm
+  .include hash_table22.asm
+  .include to_decimal22.asm
+```
+
+**instgen22.asm:**
+```asm
+  .include common22.asm
+```
+
+### 3. Update asmtestgen.sh
+
+Add the new assembler build steps and update self-hosting:
+
+```bash
+# Add after asm21 section:
+
+# Build asm22 instruction table generator and instruction table
+run_asm out/asm21.out instgen22.asm out/instgen22.out
+run out/instgen22.out 2000 /dev/null out/inst22.asm.out
+
+# Build asm22 (without and with debug)
+run_asm out/asm21.out asm22.asm out/asm22.out
+run_asm out/asm21.out asm22.asm out/asm22_debug.out define:enable_debug
+
+# Self-hosting check for asm22
+run_asm out/asm22.out asm22.asm out/asm22_2.out
+run_asm out/asm22_debug.out asm22.asm out/asm22_debug_2.out define:enable_debug
+diff out/asm22.out out/asm22_2.out && echo "OK" || { echo "MISMATCH"; exit 1; }
+diff out/asm22_debug.out out/asm22_debug_2.out && echo "OK" || { echo "MISMATCH"; exit 1; }
+```
+
+**Remove the self-hosting check for asm21** (only the latest version needs self-hosting verification).
+
+**Update the test program assembly** at the end to use the new assembler:
+```bash
+run_asm out/asm22_debug.out test19.asm out/test19.out
+```
+
+**Update the file_stack_test assembly** to use the new assembler:
+```bash
+run_asm out/asm22_debug.out tests/file_stack_test.asm out/file_stack_test.out
+```
+
+### 4. Update Test Runners
+
+**tests/run_tests.sh** - Update defaults:
+```bash
+TEST_FILE="${1:-$SCRIPT_DIR/asm22_tests.txt}"
+ASSEMBLER="${2:-$ASSEMBLER2_DIR/out/asm22_debug.out}"
+```
+
+**tests/run_file_stack_tests.pl** - Update assembler path:
+```perl
+my $assembler = $ENV{ASSEMBLER} // "out/asm22_debug.out";
+```
+
+### 5. Update gogen.sh
+
+Add the new files to the watch list:
+```bash
+asm22.asm instgen22.asm common22.asm hash_table22.asm file_stack22.asm \
+to_decimal22.asm errors22.asm fwdref22.asm label_scope22.asm \
+tests/asm22_tests.txt \
+```
+
+### 6. Build and Verify
+
+```bash
+# Run full build chain
+./asmtestgen.sh
+
+# Verify self-hosting succeeded (look for "OK" after diff)
+
+# Run all test suites
+tests/run_tests.sh
+tests/run_file_stack_tests.pl
+```
+
+### 7. Update Documentation
+
+Update this README:
+- Add the new version to the Bootstrap Chain Overview diagram
+- Add an entry to the Bootstrap Levels table
+- Update the Syntax Evolution section if new syntax was added
+- Update version numbers throughout (e.g., "asm21" → "asm22")
+
+### Checklist
+
+- [ ] All source files copied with new version number
+- [ ] All `.include` references updated in copied files
+- [ ] asmtestgen.sh updated (build steps, self-hosting, test program)
+- [ ] Previous version's self-hosting check removed
+- [ ] tests/run_tests.sh defaults updated
+- [ ] tests/run_file_stack_tests.pl assembler path updated
+- [ ] gogen.sh watch list updated
+- [ ] Build chain passes (`./asmtestgen.sh`)
+- [ ] All tests pass (`tests/run_tests.sh`, `tests/run_file_stack_tests.pl`)
+- [ ] README.md updated
