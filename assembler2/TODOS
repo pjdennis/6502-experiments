@@ -54,3 +54,5 @@
 value1=$01
 value2=value1  ; Needs to be assigned during pass 1
   LDA value2   ; Should use zero page addressing
+
+- [ ] Get rid of the XX_L/H name pairs - replace with XX16

@@ -10,14 +10,13 @@
 ;   - CURR_GLOBAL_HEAP_L
 ;   - CURR_GLOBAL_HEAP_H
 ;   - CACHED_HASH
-;   - MACRO_ENTRY_L (macro hash table address for recursion detection)
-;   - MACRO_ENTRY_H
+;   - MACRO_ENTRY16 (macro hash table address for recursion detection)
 ;
 ; The scope stack grows upward from SCOPE_STACK.
 ;
 ; Requires (from caller):
 ;   SCOPE_STACK          - base address of scope stack
-;   MACRO_ENTRY_L/H      - macro hash table entry address (set before push)
+;   MACRO_ENTRY16        - macro hash table entry address (set before push)
 ;
 ; Requires (from hash_table21.asm):
 ;   CURR_GLOBAL_HEAP_L/H - current global label heap address
@@ -61,10 +60,10 @@ reset_scope_stack
 
 
 ; Push current label scope and create new macro expansion scope
-; Saves CURR_GLOBAL_HEAP_L/H, CACHED_HASH, and MACRO_ENTRY_L/H to scope stack,
+; Saves CURR_GLOBAL_HEAP_L/H, CACHED_HASH, and MACRO_ENTRY16 to scope stack,
 ; increments EXPANSION_ID, sets up synthetic scope using expansion ID.
 ;
-; On entry: MACRO_ENTRY_L/H contains the macro's hash table entry address
+; On entry: MACRO_ENTRY16 contains the macro's hash table entry address
 ; On exit: New scope active (CURR_GLOBAL_HEAP = EXPANSION_ID, CACHED_HASH set)
 ;          Previous scope saved on scope stack
 ;          A, Y clobbered, X preserved
@@ -81,10 +80,10 @@ push_label_scope
   STA (SCOPE_PTR_L),Y
   ; Save macro entry address for recursion detection
   INY
-  LDA MACRO_ENTRY_L
+  LDA MACRO_ENTRY16
   STA (SCOPE_PTR_L),Y
   INY
-  LDA MACRO_ENTRY_H
+  LDA MACRO_ENTRY16+$01
   STA (SCOPE_PTR_L),Y
   ; Advance scope pointer by 5 bytes
   CLC

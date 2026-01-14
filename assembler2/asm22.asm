@@ -48,8 +48,7 @@ NEXT_CHAR   .data $00 ; Last character read by read_char
 IN_MACRO_DEF    .data $00 ; Flag: currently capturing macro body ($FF = capturing)
 MACRO_DEF_PTR_L .data $00 ; Heap pointer where macro body is being stored
 MACRO_DEF_PTR_H .data $00 ; "
-MACRO_ENTRY_L   .data $00 ; Original macro hash entry address (for recursion check)
-MACRO_ENTRY_H   .data $00 ; "
+MACRO_ENTRY16  .data $0000 ; Original macro hash entry address (for recursion check)
 
   .ifdef enable_debug
 DEBUG_FLAG  .data $00 ; Non-zero if debug output enabled
@@ -1648,7 +1647,7 @@ process_endmacro
 
 ; Check if macro is already being expanded (recursion check)
 ; Walks the scope stack comparing 2-byte macro entry addresses
-; On entry: MACRO_ENTRY_L/H contains the macro's hash table entry address
+; On entry: MACRO_ENTRY16 contains the macro's hash table entry address
 ; On exit: Returns normally if no recursion, jumps to err_recursive_macro if found
 ;          Uses TABPL/TABPH as walk pointer, A/Y clobbered, X preserved
 check_macro_recursion
@@ -1663,14 +1662,14 @@ check_macro_recursion
   CMP SCOPE_PTR_H
   BEQ .cmr_done             ; Reached current position, no recursion
 .cmr_check_entry
-  ; Compare macro address at offset +3 with MACRO_ENTRY
+  ; Compare macro address at offset +3 with MACRO_ENTRY16
   LDY #$03
   LDA (TABPL),Y
-  CMP MACRO_ENTRY_L
+  CMP MACRO_ENTRY16
   BNE .cmr_next
   INY
   LDA (TABPL),Y
-  CMP MACRO_ENTRY_H
+  CMP MACRO_ENTRY16+$01
   BNE .cmr_next
   ; Match found - recursion detected
   JMP err_recursive_macro
@@ -1695,7 +1694,7 @@ check_macro_recursion
 ; On exit: Memory source pushed, jumps to asm_line_loop
 expand_macro
   ; Save original macro entry address before MACRO_DEF_PTR is modified
-  CP16 MACRO_DEF_PTR_L MACRO_ENTRY_L
+  CP16 MACRO_DEF_PTR_L MACRO_ENTRY16
   ; Check for recursive macro invocation
   JSR check_macro_recursion
   ; Save X (output file handle) - we'll use X as index into MACRO_ARG_BUF
