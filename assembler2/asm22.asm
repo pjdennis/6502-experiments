@@ -147,22 +147,18 @@ convert_hex_character
 
 
 ; Swap PC16 with PC_SAVE16
-; On exit A is not preserved
-;         X, Y are preserved
+; On exit A, Y are not preserved
+;         X is preserved
 swap_pc_with_save
   ; Swap PC16 low byte with save location
   LDA PC16
-  PHA
-  LDA PC_SAVE16
-  STA PC16
-  PLA
+  LDY PC_SAVE16
+  STY PC16
   STA PC_SAVE16
   ; Swap PC16 high byte with save location
   LDA PC16+$01
-  PHA
-  LDA PC_SAVE16+$01
-  STA PC16+$01
-  PLA
+  LDY PC_SAVE16+$01
+  STY PC16+$01
   STA PC_SAVE16+$01
   RTS
 
