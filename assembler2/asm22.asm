@@ -25,8 +25,7 @@ CURR_OUT_FILE   .data $00   ; Current output file (for closing on error)
 IN_ZEROPAGE     .data $00   ; Flag indicating if in zero page section
 PC_SAVE16       .data $0000 ; Save location for PC when switching sections
 ADDR_MODE       .data $00   ; Current addressing mode
-INST_PTR_L      .data $00   ; Pointer to instruction mode table entry
-INST_PTR_H      .data $00   ; "
+INST_PTR16      .data $0000 ; Pointer to instruction mode table entry
 IS_FWDREF       .data $00   ; $FF if current label is forward ref (pass 1 only)
 EXPR_ACCU_L     .data $00   ; Expression accumulator low byte
 EXPR_ACCU_H     .data $00   ; Expression accumulator high byte
@@ -882,7 +881,7 @@ update_pc
 ; Look up mnemonic and save pointer to mode:opcode data
 ; On entry A contains the first character of the mnemonic
 ; On exit NEXT_CHAR contains the next character
-;         INST_PTR_L:INST_PTR_H points to mode:opcode data (past mnemonic)
+;         INST_PTR16 points to mode:opcode data (past mnemonic)
 ;         X, Y are not preserved
 ; Raises 'Opcode not found' error if mnemonic is not found
 lookup_mnemonic
@@ -915,15 +914,15 @@ lookup_mnemonic
   TYA
   CLC
   ADC TABPL
-  STA INST_PTR_L
+  STA INST_PTR16
   LDA #$00
   ADC TABPH
-  STA INST_PTR_H
+  STA INST_PTR16+$01
   RTS
 
 
 ; Find opcode for addressing mode in mode:opcode list
-; On entry INST_PTR_L:INST_PTR_H points to mode:opcode data
+; On entry INST_PTR16 points to mode:opcode data
 ;          ADDR_MODE contains the addressing mode to find
 ; On exit C = 0 if found, A contains opcode
 ;         C = 1 if not found
@@ -932,7 +931,7 @@ lookup_mnemonic
 find_opcode_for_mode
   LDY #$00
 .loop
-  LDA (INST_PTR_L),Y  ; Get mode byte
+  LDA (INST_PTR16),Y  ; Get mode byte
   CMP #$FF
   BEQ .not_found      ; End of list, mode not found
   CMP ADDR_MODE
@@ -943,7 +942,7 @@ find_opcode_for_mode
   BNE .loop           ; Always taken
 .found
   INY
-  LDA (INST_PTR_L),Y  ; Get opcode byte
+  LDA (INST_PTR16),Y  ; Get opcode byte
   CLC
   RTS
 .not_found
@@ -952,13 +951,13 @@ find_opcode_for_mode
 
 
 ; Check if current instruction is a branch (supports MODE_REL)
-; On entry INST_PTR_L:INST_PTR_H points to mode:opcode data
+; On entry INST_PTR16 points to mode:opcode data
 ; On exit C = 0 if branch, C = 1 if not branch
 ;         A, Y not preserved, X preserved
 check_if_branch
   LDY #$00
 .loop
-  LDA (INST_PTR_L),Y
+  LDA (INST_PTR16),Y
   CMP #$FF
   BEQ .not_branch
   CMP #MODE_REL
@@ -980,7 +979,7 @@ check_if_branch
 ; ============================================================================
 
 ; Emit instruction based on addressing mode
-; On entry INST_PTR_L:INST_PTR_H points to mode:opcode data
+; On entry INST_PTR16 points to mode:opcode data
 ;          ADDR_MODE contains the addressing mode
 ;          OPERAND16 contains operand value (if applicable)
 ; On exit X is preserved
@@ -1065,7 +1064,7 @@ emit_instruction
 
 ; Checks mode availability, value size, and forward reference forcing
 ; On entry: ADDR_MODE set to ZP variant (MODE_ZP, MODE_ZPX, or MODE_ZPY)
-;           INST_PTR_L/H points to instruction's mode:opcode data
+;           INST_PTR16 points to instruction's mode:opcode data
 ;           OPERAND16 contains the operand value
 ;           IS_FWDREF set if operand is forward reference (pass 1)
 ;           PASS indicates current pass
@@ -1110,7 +1109,7 @@ handle_fwdref_mode
 
 ; Parse operand and emit instruction
 ; On entry A contains the next character after mnemonic
-;          INST_PTR_L:INST_PTR_H points to mode:opcode data
+;          INST_PTR16 points to mode:opcode data
 ; On exit flow continues to .line_loop
 ;         A, X, Y are not preserved
 parse_operand_and_emit
