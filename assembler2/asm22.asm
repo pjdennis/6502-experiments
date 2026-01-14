@@ -15,10 +15,9 @@ FILE_STACK    = $F000             ; File stack will grow down from 1 below here
 ; Zero page locations
 TEMP            .data $00   ; 1 byte
 PC16            .data $0000 ; 2 byte program counter
-HEX2            .data $00   ; 1 byte (low byte - also aliased as OPERAND_L)
-HEX1            .data $00   ; 1 byte (high byte - also aliased as OPERAND_H)
-OPERAND_L = HEX2            ; Operand value (low byte) - alias for HEX2
-OPERAND_H = HEX1            ; Operand value (high byte) - alias for HEX1
+HEX16           .data $0000 ; 2 byte hex value, also aliased as OPERAND_L/H)
+OPERAND_L = HEX16           ; Operand value (low byte) - alias for HEX16
+OPERAND_H = HEX16+$01       ; Operand value (high byte) - alias for HEX16+$01
 PASS            .data $00   ; 1 byte $00 = pass 1 $FF = pass 2
 MEMPL           .data $00   ; 2 byte heap pointer
 MEMPH           .data $00   ; "
@@ -247,21 +246,26 @@ read_hex_byte
 
 ; Reads 1 or 2 byte (2 or 4 character) hex value
 ; On entry, A contains the first hex character
-; On exit C set if 2 bytes read clear if 1 byte read
-;         A contains the next character
+; On exit HEX16 contains the read value
+;         C set if 2 bytes read clear if 1 byte read
 ;         X, Y are preserved
+;         A is ot preserved
 ; Rasises 'Invalid hex' error if encountering non-hex characters
 read_hex_byte_or_word
   JSR read_hex_byte    ; Read 2nd hex character and convert
-  STA HEX1
+  STA HEX16+$01
   JSR read_char        ; Read 3rd hex char or terminator
   JSR compare_end_of_token
   BNE .second
-  CLC                  ; No second byte so return C = 0
+  LDA HEX16+$01        ; No second byte so move result and return C = 0
+  STA HEX16
+  LDA #$00
+  STA HEX16+$01
+  CLC
   RTS
 .second
   JSR read_hex_byte    ; Read 4th hex char and convert
-  STA HEX2
+  STA HEX16
   JSR read_char        ; Read next char
   SEC                  ; Second byte so return C = 1
   RTS
@@ -357,7 +361,7 @@ check_for_value
 
 ; Read a value
 ; On entry A contains the next character
-; On exit HEX2 and HEX1 contain the LSB and MSB of the value read
+; On exit HEX16 contains the LSB and MSB of the value read
 ;         A contains the next character
 ;         X is preserved
 ;         Y is not preserved
@@ -366,8 +370,8 @@ check_for_value
 read_value
   JSR read_char        ; Read the character after the "="
   JSR skip_spaces
-  JSR parse_value      ; Returns value in OPERAND_L/H (aliased to HEX2/HEX1)
-  ; No copy needed - OPERAND_L/H are aliased to HEX2/HEX1
+  JSR parse_value      ; Returns value in OPERAND_L/H (aliased to HEX16)
+  ; No copy needed - OPERAND_L/H are aliased to HEX16
   RTS
 
 
@@ -410,8 +414,8 @@ parse_term
   LDY #$FF
   STY IS_FWDREF        ; Mark as forward reference
   LDY #$00
-  STY HEX1
-  STY HEX2
+  STY HEX16
+  STY HEX16+$01
   BEQ .label_store     ; Always taken
 .label_not_found_pass2
   JMP err_label_not_found
@@ -420,24 +424,12 @@ parse_term
   LDA #$00
   STA IS_FWDREF
 .label_store
-  ; OPERAND_L/H already set (aliased to HEX2/HEX1)
+  ; OPERAND_L/H already set (aliased to HEX16)
   SEC                  ; Signal 2-byte value (from bare label)
   RTS
 .hex
   JSR read_char        ; Skip $
-  JSR read_hex_byte_or_word  ; Returns next char in A, stores in HEX1/HEX2
-  BCC .one_byte
-  ; Two bytes (4 hex digits) - OPERAND_L/H already set (aliased to HEX2/HEX1)
-  SEC                  ; Signal 2-byte value (4 hex digits)
-  RTS
-.one_byte
-  ; One byte in HEX1 - need to move to OPERAND_L and zero OPERAND_H
-  LDA HEX1
-  STA OPERAND_L
-  LDA #$00
-  STA OPERAND_H
-  CLC                  ; Signal 1-byte value (2 hex digits)
-  RTS
+  JMP read_hex_byte_or_word  ; Tail call; Stores in HEX16
 .char_literal
   JSR parse_char_literal
   ; Result in OPERAND_L, OPERAND_H=$00
@@ -814,8 +806,8 @@ capture_label
   CP16 TABPL CURR_GLOBAL_HEAP_L
   JSR commit_cached_hash    ; Commit hash for local label lookups
 .was_local_1
-  ; Store current program counter as the hash value into HEX2:HEX1
-  CP16 PC16 HEX2
+  ; Store current program counter as the hash value into HEX16
+  CP16 PC16 HEX16
   JSR store_hash_value
   JMP .skip_spaces_and_return_processed_flag
 .has_equals
@@ -858,7 +850,7 @@ emit
 
 ; Fast forward the program counter
 ; On entry PC16 contains the current program counter
-;          HEX2;HEX1 contains the new PC value
+;          HEX16 contains the new PC value
 ; On exit
 ; Raises 'Cannot move PC backwards' error if attempting to move PC backwards
 update_pc
@@ -869,21 +861,21 @@ update_pc
   DEC STARTED
   BNE .no_fill        ; Always taken
 .started
-  LDA HEX1            ; High byte
+  LDA HEX16+$01       ; High byte
   CMP PC16+$01
   BCC .less
   BNE .notless
-  LDA HEX2            ; Low byte
+  LDA HEX16           ; Low byte
   CMP PC16
   BCC .less
 .notless
   BIT PASS
   BPL .no_fill        ; skip writing during pass 1
 .loop
-  LDA HEX1
+  LDA HEX16+$01
   CMP PC16+$01
   BNE .loop_not_done
-  LDA HEX2
+  LDA HEX16
   CMP PC16
   BEQ .loop_done
 .loop_not_done
@@ -898,7 +890,7 @@ update_pc
 .less
   JMP err_cannot_move_pc_backwards
 .no_fill
-  CP16 HEX2 PC16
+  CP16 HEX16 PC16
 .done
   RTS
 
@@ -1808,7 +1800,7 @@ expand_macro
   JSR select_label_hash_table
   JSR hash_add
   BCS .em_add_loop      ; Already exists (pass 1), skip store
-  ; Store value (OPERAND_L/H aliased to HEX2/HEX1)
+  ; Store value (OPERAND_L/H aliased to HEX16)
   JSR store_hash_value
   JMP .em_add_loop
 .em_add_done
@@ -2191,11 +2183,8 @@ start
 .found_define
   ; TABPL;TABPH now points past "define:" to label name
   JSR copy_string_to_token
-  LDA #$01
-  STA HEX2               ; Value = $0001
-  LDA #$00
-  STA HEX1
-  STA IS_LOCAL_LABEL     ; Not a local label
+  SET16 $0001 HEX16      ; Set A to $00 as a side effect
+  STA IS_LOCAL_LABEL     ; Not a local label. Set to $00
   JSR hash_add
 .next_arg
   INC ARG_INDEX

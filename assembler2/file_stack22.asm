@@ -253,6 +253,8 @@ pop_memory_source = pop_source
 ; Read character from current source (file or memory)
 ; On exit: A = character (also stored in FS_NEXT_CHAR)
 ;          C = 0 if char read, C = 1 if all sources exhausted
+;          X is preserved
+;          Y is not preserverd
 file_stack_read_char
   LDA FS_SRC_TYPE
   BNE .read_memory

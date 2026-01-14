@@ -24,11 +24,11 @@
   .endmacro
 
 
-; SET16 addr ptr - Load 16-bit immediate address into ptr/ptr+$01
+; SET16 addr ptr - Load 16-bit immediate value into ptr/ptr+$01
 ; Clobbers A
-  .macro SET16 addr ptr
-  LDA #<addr
+  .macro SET16 value ptr
+  LDA #<value
   STA ptr
-  LDA #>addr
+  LDA #>value
   STA ptr+$01
   .endmacro

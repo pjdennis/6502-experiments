@@ -14,8 +14,8 @@ MODE_REL  = $0B   ; Relative (branches)
 MODE_IND  = $0C   ; Indirect - JMP ($xxxx)
 
 HT_KEY = TOKEN
-HT_VL  = HEX2
-HT_VH  = HEX1
+HT_VL  = HEX16
+HT_VH  = HEX16+$01
   .include hash_table22.asm
 
 

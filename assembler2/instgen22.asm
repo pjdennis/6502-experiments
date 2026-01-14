@@ -31,8 +31,7 @@ SCOPE_STACK = $0400     ; Scope stack (needed by hash_table21.asm, not used by i
 
 TEMP      .data $00     ; 1 byte temporary value
 TEMP2     .data $00     ; 1 byte temporary value (for Y save)
-HEX1      .data $00     ; 1 byte
-HEX2      .data $00     ; 1 byte
+HEX16     .data $00     ; 2 bytes
 MEMPL     .data $00     ; 2 byte heap pointer
 MEMPH     .data $00     ; "
 PL        .data $00     ; 2 byte pointer
