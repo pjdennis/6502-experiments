@@ -27,8 +27,7 @@ PC_SAVE16       .data $0000 ; Save location for PC when switching sections
 ADDR_MODE       .data $00   ; Current addressing mode
 INST_PTR16      .data $0000 ; Pointer to instruction mode table entry
 IS_FWDREF       .data $00   ; $FF if current label is forward ref (pass 1 only)
-EXPR_ACCU_L     .data $00   ; Expression accumulator low byte
-EXPR_ACCU_H     .data $00   ; Expression accumulator high byte
+EXPR_ACCU16     .data $0000 ; Expression accumulator
 EXPR_FWDREF     .data $00   ; Accumulated forward ref flag
 COND_DEPTH      .data $00   ; Conditional assembly nesting depth
 SKIP_DEPTH      .data $00   ; Depth where skipping started (0 = not skipping)
@@ -537,7 +536,7 @@ parse_expression
 
 .add_op
   ; Save current accumulator
-  CP16 OPERAND16 EXPR_ACCU_L
+  CP16 OPERAND16 EXPR_ACCU16
 
   ; Parse next term (skip '+' first)
   JSR read_char        ; Skip '+'
@@ -550,12 +549,12 @@ parse_expression
 
   ; Add: accumulator + OPERAND → OPERAND
   CLC
-  ADD16 EXPR_ACCU_L OPERAND16
+  ADD16 EXPR_ACCU16 OPERAND16
   JMP .loop
 
 .sub_op
   ; Save current accumulator
-  CP16 OPERAND16 EXPR_ACCU_L
+  CP16 OPERAND16 EXPR_ACCU16
 
   ; Parse next term (skip '-' first)
   JSR read_char        ; Skip '-'
@@ -568,7 +567,7 @@ parse_expression
 
   ; Subtract: accumulator - OPERAND → OPERAND
   SEC
-  SUB16_2 EXPR_ACCU_L OPERAND16
+  SUB16_2 EXPR_ACCU16 OPERAND16
   JMP .loop
 
 .check_left_shift
@@ -587,7 +586,7 @@ parse_expression
 
 .left_shift_op
   ; Save current operand to EXPR_ACCU
-  CP16 OPERAND16 EXPR_ACCU_L
+  CP16 OPERAND16 EXPR_ACCU16
 
   ; Parse shift count (use parse_term_with_selector to support byte selectors like <<<)
   JSR read_char        ; Read char after second '<'
@@ -607,7 +606,7 @@ parse_expression
   TAY                      ; Transfer shift count to Y
 
   ; Restore value to shift from EXPR_ACCU
-  CP16 EXPR_ACCU_L OPERAND16
+  CP16 EXPR_ACCU16 OPERAND16
 
   ; Perform left shift
 .left_shift_loop
@@ -626,7 +625,7 @@ parse_expression
 
 .right_shift_op
   ; Save current operand to EXPR_ACCU
-  CP16 OPERAND16 EXPR_ACCU_L
+  CP16 OPERAND16 EXPR_ACCU16
 
   ; Parse shift count (use parse_term_with_selector to support byte selectors like >>>)
   JSR read_char        ; Read char after second '>'
@@ -646,7 +645,7 @@ parse_expression
   TAY                      ; Transfer shift count to Y
 
   ; Restore value to shift from EXPR_ACCU
-  CP16 EXPR_ACCU_L OPERAND16
+  CP16 EXPR_ACCU16 OPERAND16
 
   ; Perform right shift (logical/unsigned)
 .right_shift_loop
