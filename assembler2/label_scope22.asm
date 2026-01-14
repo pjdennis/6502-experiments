@@ -40,10 +40,7 @@ SCOPE_PTR_H    .data $00 ; "
 ;          EXPANSION_ID_L/H = 0
 ;          A clobbered, X/Y preserved
 init_scope_stack
-  LDA #<SCOPE_STACK
-  STA SCOPE_PTR_L
-  LDA #>SCOPE_STACK
-  STA SCOPE_PTR_H
+  SET16 SCOPE_STACK SCOPE_PTR_L
   LDA #$00
   STA EXPANSION_ID_L
   STA EXPANSION_ID_H
@@ -56,10 +53,7 @@ init_scope_stack
 ;          EXPANSION_ID_L/H = 0
 ;          A clobbered, X/Y preserved
 reset_scope_stack
-  LDA #<SCOPE_STACK
-  STA SCOPE_PTR_L
-  LDA #>SCOPE_STACK
-  STA SCOPE_PTR_H
+  SET16 SCOPE_STACK SCOPE_PTR_L
   LDA #$00
   STA EXPANSION_ID_L
   STA EXPANSION_ID_H

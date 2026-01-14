@@ -22,10 +22,7 @@ FWDREF_H    .data $00 ; Pointer to forward reference list (high)
 ;          X, Y are preserved
 init_fwdref_list
 reset_fwdref_ptr
-  LDA #<FWDREF_LIST
-  STA FWDREF_L
-  LDA #>FWDREF_LIST
-  STA FWDREF_H
+  SET16 FWDREF_LIST FWDREF_L
   RTS
 
 

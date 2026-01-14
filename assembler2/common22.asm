@@ -20,10 +20,7 @@ HT_VH  = HEX1
 
 
 init_heap
-  LDA #<HEAP
-  STA MEMPL
-  LDA #>HEAP
-  STA MEMPH
+  SET16 HEAP MEMPL
   RTS
 
 
@@ -65,8 +62,5 @@ store_hash_value
 select_instruction_hash_table
   LDA #$00
   STA IS_LOCAL_LABEL       ; Clear local label flag for instruction lookup
-  LDA #<IHASHTAB
-  STA HTPL
-  LDA #>IHASHTAB
-  STA HTPH
+  SET16 IHASHTAB HTPL
   RTS

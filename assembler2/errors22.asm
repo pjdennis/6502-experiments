@@ -175,10 +175,7 @@ interrupt
   STA CURR_OUT_FILE
 .output_not_open
 ; Print the "Error " message
-  LDA #<msg_error
-  STA TABPL
-  LDA #>msg_error
-  STA TABPH
+  SET16 msg_error TABPL
   JSR show_message
 ; Print the error code in decimal
   LDA TEMP
@@ -190,22 +187,13 @@ interrupt
   JSR file_stack_empty
   BEQ .location_done
 ; Print the " in file " message
-  LDA #<msg_error_file
-  STA TABPL
-  LDA #>msg_error_file
-  STA TABPH
+  SET16 msg_error_file TABPL
   JSR show_message
 ; Print the filename (at FS_PL)
-  LDA FS_PL
-  STA TABPL
-  LDA FS_PH
-  STA TABPH
+  CP16 FS_PL TABPL
   JSR show_message
 ; Print the " at line " message
-  LDA #<msg_error_line
-  STA TABPL
-  LDA #>msg_error_line
-  STA TABPH
+  SET16 msg_error_line TABPL
   JSR show_message
 ; Print the current line in decimal
   LDA CURLINEL
@@ -254,10 +242,7 @@ msg_error_file
 ;         Decimal number string stored at TO_DECIMAL_RESULT
 show_decimal
   JSR to_decimal
-  LDA #<TO_DECIMAL_RESULT
-  STA TABPL
-  LDA #>TO_DECIMAL_RESULT
-  STA TABPH
+  SET16 TO_DECIMAL_RESULT TABPL
   JMP show_message ; tail call
 
 
@@ -293,16 +278,10 @@ show_include_traceback
   LDA #'\n'
   JSR write_d
   ; Print "  included from " message
-  LDA #<msg_included_from
-  STA TABPL
-  LDA #>msg_included_from
-  STA TABPH
+  SET16 msg_included_from TABPL
   JSR show_message
   ; Print filename (FS_PL points to parent entry's name)
-  LDA FS_PL
-  STA TABPL
-  LDA FS_PH
-  STA TABPH
+  CP16 FS_PL TABPL
   JSR show_message
   ; Print ":"
   LDA #':'

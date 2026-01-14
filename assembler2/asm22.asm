@@ -63,8 +63,8 @@ FWDREF_PASS1_H .data $00 ; Forward ref pointer after pass 1 (high byte)
 ; Include files
   .include out/inst22.asm.out   ; This goes first since the tables should start on a page boundary
   .include environment11.asm
-  .include common22.asm
   .include macros22.asm
+  .include common22.asm
   .include label_scope22.asm
 FS_FILENAME    = TOKEN
 FS_CURR_FILE   = CURR_FILE
@@ -731,10 +731,7 @@ check_local_label
 
 
 select_label_hash_table
-  LDA #<LHASHTAB
-  STA HTPL
-  LDA #>LHASHTAB
-  STA HTPH
+  SET16 LHASHTAB HTPL
   RTS
 
 
@@ -1338,47 +1335,29 @@ emit_quoted
 process_directive
   JSR read_token       ; Next char in NEXT_CHAR
   ; Check for 'include'
-  LDA #<directive_include
-  STA TABPL
-  LDA #>directive_include
-  STA TABPH
+  SET16 directive_include TABPL
   JSR compare_token
   BEQ .include
   ; Check for 'zeropage'
-  LDA #<directive_zeropage
-  STA TABPL
-  LDA #>directive_zeropage
-  STA TABPH
+  SET16 directive_zeropage TABPL
   JSR compare_token
   BEQ .zeropage
   ; Check for 'code'
-  LDA #<directive_code
-  STA TABPL
-  LDA #>directive_code
-  STA TABPH
+  SET16 directive_code TABPL
   JSR compare_token
   BEQ .code
   ; Check for 'data'
-  LDA #<directive_data
-  STA TABPL
-  LDA #>directive_data
-  STA TABPH
+  SET16 directive_data TABPL
   JSR compare_token
   BEQ .data
   JSR process_conditional_directive ; Returns with C=0 if processed
   BCC .directive_done
   ; Check for 'macro'
-  LDA #<directive_macro
-  STA TABPL
-  LDA #>directive_macro
-  STA TABPH
+  SET16 directive_macro TABPL
   JSR compare_token
   BEQ .macro
   ; Check for 'endmacro'
-  LDA #<directive_endmacro
-  STA TABPL
-  LDA #>directive_endmacro
-  STA TABPH
+  SET16 directive_endmacro TABPL
   JSR compare_token
   BEQ .endmacro
   JMP err_unknown_directive
@@ -1423,17 +1402,11 @@ process_directive
 ;         A is not preserved
 process_conditional_directive
   ; Check for 'ifdef'
-  LDA #<directive_ifdef
-  STA TABPL
-  LDA #>directive_ifdef
-  STA TABPH
+  SET16 directive_ifdef TABPL
   JSR compare_token
   BEQ .ifdef
   ; Check for 'endif'
-  LDA #<directive_endif
-  STA TABPL
-  LDA #>directive_endif
-  STA TABPH
+  SET16 directive_endif TABPL
   JSR compare_token
   BEQ .endif
   SEC ; Not processed
@@ -1680,10 +1653,7 @@ process_endmacro
 ;          Uses TABPL/TABPH as walk pointer, A/Y clobbered, X preserved
 check_macro_recursion
   ; Walk scope stack from bottom to current position
-  LDA #<SCOPE_STACK
-  STA TABPL
-  LDA #>SCOPE_STACK
-  STA TABPH
+  SET16 SCOPE_STACK TABPL
 .cmr_loop
   ; Check if we've reached current scope pointer
   LDA TABPL
@@ -2300,10 +2270,7 @@ start
   ; Print heap usage if debug flag is set
   LDA DEBUG_FLAG
   BEQ .skip_debug_output
-  LDA #<msg_heap_used
-  STA TABPL
-  LDA #>msg_heap_used
-  STA TABPH
+  SET16 msg_heap_used TABPL
   JSR show_message
   ; Calculate heap used: MEMPL - HEAP
   SEC
@@ -2314,16 +2281,10 @@ start
   SBC #>HEAP
   STA TO_DECIMAL_VALUE_H
   JSR show_decimal
-  LDA #<msg_bytes
-  STA TABPL
-  LDA #>msg_bytes
-  STA TABPH
+  SET16 msg_bytes TABPL
   JSR show_message
   ; Print forward reference count
-  LDA #<msg_fwdref_count
-  STA TABPL
-  LDA #>msg_fwdref_count
-  STA TABPH
+  SET16 msg_fwdref_count TABPL
   JSR show_message
   ; Calculate forward ref count: (FWDREF_PASS1 - FWDREF_LIST) / 2
   SEC

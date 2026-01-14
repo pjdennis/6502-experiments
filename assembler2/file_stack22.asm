@@ -41,10 +41,7 @@ FS_MEM_PTR_H  .data $00 ; Current read position in memory (high)
 
 
 file_stack_init
-  LDA #<FILE_STACK
-  STA FS_PL
-  LDA #>FILE_STACK
-  STA FS_PH
+  SET16 FILE_STACK FS_PL
   LDA #$00
   STA FS_SRC_TYPE
   RTS
