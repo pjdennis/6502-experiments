@@ -380,21 +380,26 @@ parse_term
   JSR read_token       ; Next char now in NEXT_CHAR
   ; Look up the token
   JSR check_local_label
+  ; If in macro expansion with non-local label, try local hash first
+  ; (parameters shadow globals with the same name)
+  LDA IS_LOCAL_LABEL
+  BNE .do_lookup           ; Already a .local label, use normal path
+  LDA EXPANSION_ID_L
+  ORA EXPANSION_ID_H
+  BEQ .do_lookup           ; Not in macro, use normal path
+  ; In macro with non-local label - try local hash first for parameters
+  LDA #$FF
+  STA IS_LOCAL_LABEL
+  JSR select_label_hash_table
+  JSR find_in_hash
+  BCC .label_found         ; Found as parameter
+  ; Not a parameter - restore to global lookup
+  LDA #$00
+  STA IS_LOCAL_LABEL
+.do_lookup
   JSR select_label_hash_table
   JSR find_in_hash
   BCC .label_found
-  ; Not found - if non-local and in macro expansion, try local hash (for parameters)
-  LDA IS_LOCAL_LABEL
-  BNE .really_not_found      ; Already tried local hash
-  LDA EXPANSION_ID_L
-  ORA EXPANSION_ID_H
-  BEQ .really_not_found      ; Not in macro expansion
-  ; In macro expansion - try local hash (parameters are stored with local hash)
-  LDA #$FF
-  STA IS_LOCAL_LABEL
-  JSR find_in_hash
-  BCC .label_found
-.really_not_found
   ; Label not found - check pass
   BIT PASS
   BMI .label_not_found_pass2

@@ -2031,7 +2031,7 @@ EXPECT_HEX: a9 42
 
 ---
 NAME: macro_global_label_param_name_conflict
-DESCRIPTION: Global labels hide macro parameters (may not want this behavior)
+DESCRIPTION: Macro parameters should hide global labels
 INPUT:
 1: * = $0200
 2: val = $42
@@ -2039,7 +2039,7 @@ INPUT:
 4:   LDA #val
 5:   .endmacro
 6:   mac $43
-EXPECT_HEX: a9 42
+EXPECT_HEX: a9 43
 
 ---
 NAME: macro_param_too_few
