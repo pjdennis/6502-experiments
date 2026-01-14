@@ -1,4 +1,4 @@
-# Test suite for asm21 assembler
+# Test suite for asm22 assembler
 # Format:
 #   --- separates test cases
 #   NAME: test identifier
@@ -583,6 +583,14 @@ INPUT:
 2: label
 3:   .data <label >label
 EXPECT_HEX: 00 02
+
+---
+NAME: directive_data_label_word_small
+INPUT:
+1: * = $0200
+2: label = $03
+3:   .data label
+EXPECT_HEX: 03 00
 
 ---
 NAME: directive_data_label_word
