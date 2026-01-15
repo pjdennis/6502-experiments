@@ -1,3 +1,58 @@
+; ============================================================================
+; ASM22 - Self-Hosting 6502 Assembler
+; ============================================================================
+;
+; ARCHITECTURE
+;   Two-pass assembler with hash tables for labels/instructions/macros.
+;   Pass 1: Collect labels and macro definitions, mark forward references.
+;   Pass 2: Resolve all references and emit code.
+;
+; MEMORY LAYOUT
+;   $0000-$00FF   Zero page variables
+;   $0200-$03FF   Forward reference list (512 bytes)
+;   $0400-$04FF   Label scope stack for macro expansions (256 bytes)
+;   $0500-$05FF   Macro argument buffer (256 bytes)
+;   $0600         TOKEN buffer (current token being parsed)
+;   $0700         LHASHTAB - Label hash table
+;   $2000+        Generated code, then heap (grows upward via MEMP16)
+;   $F000         FILE_STACK - Include/memory source stack (grows downward via FS_P16)
+;
+; REGISTER CONVENTIONS
+;   X - Output file handle (preserved across most function calls)
+;   Y - General purpose indexing (often clobbered)
+;   A - Accumulator (generally clobbered unless documented otherwise)
+;
+; KEY GLOBAL STATE
+;   NEXT_CHAR     Lookahead character (last byte read by read_char)
+;   TOKEN         Buffer holding current token being parsed
+;   PASS          $00 = pass 1, $FF = pass 2
+;   PC16          Current program counter (where code is being generated)
+;   MEMP16        Heap pointer (grows upward from end of generated code)
+;   FS_P16        File stack pointer (grows downward from FILE_STACK)
+;
+; PARSING MODEL
+;   read_char advances input, stores result in both A and NEXT_CHAR
+;   Token reading uses TOKEN buffer, writes null terminator
+;   Single-character lookahead via NEXT_CHAR for parsing decisions
+;
+; MACRO SYSTEM
+;   Macro definitions stored on heap with body and parameter names
+;   Macro expansions use synthetic scope IDs (EXPANSION_ID16) for local labels
+;   Parameters shadow global labels with same name during expansion
+;   Recursion detected by walking scope stack (SCOPE_PTR16)
+;
+; MEMORY PROTECTION
+;   Heap (MEMP16) and file stack (FS_P16) collision is detected
+;   256-byte safety buffer maintained for indexed addressing (Y register 0-255)
+;   err_out_of_memory raised when heap and stack would collide
+;
+; CODE ORGANIZATION
+;   Functions organized in tiers by dependency level
+;   Include files provide subsystems: hash tables, file stack, errors, etc.
+;   Shared code with instgen22.asm via common22.asm
+;
+; ============================================================================
+
 ; Addresses
 FWDREF_LIST   = $0200             ; Forward reference list (512 bytes, $0200-$03FF)
 FWDREF_LIMIT  = FWDREF_LIST+$0200 ; Limit for forward reference list data
