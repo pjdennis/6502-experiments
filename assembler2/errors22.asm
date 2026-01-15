@@ -140,6 +140,10 @@ err_out_of_memory
   BRK
   .data $23 "Out of memory" $00
 
+err_macro_nesting_too_deep
+  BRK
+  .data $24 "Macro nesting too deep" $00
+
   .ifdef enable_debug
 err_fwdref_tracking
   BRK

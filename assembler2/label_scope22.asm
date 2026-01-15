@@ -30,6 +30,20 @@ SCOPE_PTR16    .data $0000 ; Pointer to next free slot in scope stack
 
   .code
 
+; Scope stack limit calculation:
+;   SCOPE_STACK base: $0400
+;   SCOPE_STACK top:  $04FF (256 bytes)
+;   Entry size:       5 bytes (LABEL_SCOPE16 + CACHED_HASH + MACRO_ENTRY16)
+;   Max entries:      256 / 5 = 51 entries (1 byte wasted)
+;
+;   Entry 51 starts at: $0400 + (50 * 5) = $04FA
+;   Entry 51 ends at: $04FE (writes $04FA-$04FE)
+;   After entry 51: SCOPE_PTR16 = $04FF
+;
+;   Entry 52 would start at $04FF, write $04FF-$0503, overflowing to MACRO_ARG_BUF!
+;   Therefore: SCOPE_PTR16 must be < $04FF before writing 5 bytes
+LABEL_SCOPE_LIMIT = SCOPE_STACK+$FF
+
 
 ; Initialize scope stack and expansion ID counter (call once at program start)
 ; On exit: SCOPE_PTR16 points to SCOPE_STACK (empty stack)
@@ -68,6 +82,24 @@ reset_scope_stack
 ;          Previous scope saved on scope stack
 ;          A, Y clobbered, X preserved
 push_label_scope
+  ; SCOPE_STACK bounds check
+  ; Check: If SCOPE_PTR16 >= LABEL_SCOPE_LIMIT ($04FF), writing 5 bytes
+  ; would overflow into MACRO_ARG_BUF at $0500
+  LDA SCOPE_PTR16+$01      ; Get high byte
+  CMP #$04
+  BCC .scope_ok            ; High byte < $04: definitely safe
+  BEQ .check_low           ; High byte = $04: need to check low byte
+  ; High byte > $04 (i.e., $05+): overflow
+  JMP .scope_overflow
+
+.check_low
+  ; High byte is $04, check low byte
+  LDA SCOPE_PTR16          ; Get low byte
+  CMP #$FF
+  BCS .scope_overflow      ; Low byte >= $FF: overflow (at $04FF or beyond)
+
+.scope_ok
+  ; SCOPE_PTR16 < $04FF: safe to write 5 bytes
   .macro APPEND_TO_SCOPE ptr
   LDA ptr
   STA (SCOPE_PTR16),Y
@@ -96,6 +128,9 @@ push_label_scope
   LDA scramble_table,Y
   STA CACHED_HASH
   RTS
+
+.scope_overflow
+  JMP err_macro_nesting_too_deep
 
 
 ; Pop label scope, restoring previous LABEL_SCOPE16 and CACHED_HASH
