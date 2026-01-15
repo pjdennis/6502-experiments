@@ -25,36 +25,30 @@
 
   .zeropage
 
-EXPANSION_ID_L .data $00 ; 2-byte expansion counter for macro scopes
-EXPANSION_ID_H .data $00 ; "
-SCOPE_PTR_L    .data $00 ; Pointer to next free slot in scope stack
-SCOPE_PTR_H    .data $00 ; "
+EXPANSION_ID16 .data $0000 ; 2-byte expansion counter for macro scopes
+SCOPE_PTR16    .data $0000 ; Pointer to next free slot in scope stack
 
   .code
 
 
 ; Initialize scope stack and expansion ID counter (call once at program start)
-; On exit: SCOPE_PTR points to SCOPE_STACK (empty stack)
-;          EXPANSION_ID_L/H = 0
+; On exit: SCOPE_PTR16 points to SCOPE_STACK (empty stack)
+;          EXPANSION_ID16 = 0
 ;          A clobbered, X/Y preserved
 init_scope_stack
-  SET16 SCOPE_STACK SCOPE_PTR_L
-  LDA #$00
-  STA EXPANSION_ID_L
-  STA EXPANSION_ID_H
+  SET16 SCOPE_STACK SCOPE_PTR16
+  SET16 $00 EXPANSION_ID16
   RTS
 
 
 ; Reset scope stack and expansion ID to initial state (call between passes)
 ; This ensures pass 2 uses the same scope IDs as pass 1
-; On exit: SCOPE_PTR points to SCOPE_STACK (empty stack)
-;          EXPANSION_ID_L/H = 0
+; On exit: SCOPE_PTR16 points to SCOPE_STACK (empty stack)
+;          EXPANSION_ID16 = 0
 ;          A clobbered, X/Y preserved
 reset_scope_stack
-  SET16 SCOPE_STACK SCOPE_PTR_L
-  LDA #$00
-  STA EXPANSION_ID_L
-  STA EXPANSION_ID_H
+  SET16 SCOPE_STACK SCOPE_PTR16
+  SET16 $00 EXPANSION_ID16
   RTS
 
 
@@ -70,30 +64,30 @@ push_label_scope
   ; Save current scope state to scope stack
   LDY #$00
   LDA LABEL_SCOPE16
-  STA (SCOPE_PTR_L),Y
+  STA (SCOPE_PTR16),Y
   INY
   LDA LABEL_SCOPE16+$01
-  STA (SCOPE_PTR_L),Y
+  STA (SCOPE_PTR16),Y
   INY
   LDA CACHED_HASH
-  STA (SCOPE_PTR_L),Y
+  STA (SCOPE_PTR16),Y
   ; Save macro entry address for recursion detection
   INY
   LDA MACRO_ENTRY16
-  STA (SCOPE_PTR_L),Y
+  STA (SCOPE_PTR16),Y
   INY
   LDA MACRO_ENTRY16+$01
-  STA (SCOPE_PTR_L),Y
+  STA (SCOPE_PTR16),Y
   ; Advance scope pointer by 5 bytes
   CLC
-  ADDI16 SCOPE_PTR_L $05 SCOPE_PTR_L
+  ADDI16 SCOPE_PTR16 $05 SCOPE_PTR16
   ; Increment expansion ID
-  INC16 EXPANSION_ID_L
+  INC16 EXPANSION_ID16
   ; Set LABEL_SCOPE16 to expansion ID (synthetic scope pointer)
-  CP16 EXPANSION_ID_L LABEL_SCOPE16
+  CP16 EXPANSION_ID16 LABEL_SCOPE16
   ; Calculate CACHED_HASH from expansion ID
   ; Use low byte through scramble table for reasonable distribution
-  LDA EXPANSION_ID_L
+  LDA EXPANSION_ID16
   AND #$7F
   TAY
   LDA scramble_table,Y
@@ -107,15 +101,15 @@ push_label_scope
 pop_label_scope
   ; Move scope pointer back by 5 bytes
   SEC
-  SUBI16 SCOPE_PTR_L $05 SCOPE_PTR_L
+  SUBI16 SCOPE_PTR16 $05 SCOPE_PTR16
   ; Restore scope state from scope stack
   LDY #$00
-  LDA (SCOPE_PTR_L),Y
+  LDA (SCOPE_PTR16),Y
   STA LABEL_SCOPE16
   INY
-  LDA (SCOPE_PTR_L),Y
+  LDA (SCOPE_PTR16),Y
   STA LABEL_SCOPE16+$01
   INY
-  LDA (SCOPE_PTR_L),Y
+  LDA (SCOPE_PTR16),Y
   STA CACHED_HASH
   RTS

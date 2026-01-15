@@ -21,23 +21,18 @@ NEXT_CHAR      .data $00    ; Last character read
 
 ; Test state
 TEST_MODE     .data $00     ; 0=echo, 1=lines, 2=nested, 3=info, 4=memory
-CHAR_COUNT_L  .data $00     ; Character count (low)
-CHAR_COUNT_H  .data $00     ; Character count (high)
-LINE_COUNT_L  .data $00     ; Line count (low)
-LINE_COUNT_H  .data $00     ; Line count (high)
+CHAR_COUNT16  .data $0000   ; Character count
+LINE_COUNT16  .data $0000   ; Line count
 AT_LINE_START .data $00     ; Flag: at start of line (for lines mode)
 
 ; For decimal printing
-NUM_L         .data $00
-NUM_H         .data $00
-DIVISOR_L     .data $00
-DIVISOR_H     .data $00
+NUM16         .data $0000
+DIVISOR16     .data $0000
 PRINT_ZERO    .data $00     ; Flag to print leading zeros
 
 ; Temporary
 TEMP        .data $00
-TABPL       .data $00
-TABPH       .data $00
+TABP16      .data $0000
 
   .code
 
@@ -67,11 +62,8 @@ main:
 
 .args_ok:
   ; Initialize counters
-  LDA #$00
-  STA CHAR_COUNT_L
-  STA CHAR_COUNT_H
-  STA LINE_COUNT_L
-  STA LINE_COUNT_H
+  SET16 $00 CHAR_COUNT16
+  SET16 $00 LINE_COUNT16
   LDA #$01
   STA AT_LINE_START
 
@@ -115,7 +107,7 @@ mode_lines:
   ; If at line start, save line number BEFORE read_char can increment it
   LDA AT_LINE_START
   BEQ .do_read
-  CP16 CURLINE16 NUM_L
+  CP16 CURLINE16 NUM16
 .do_read:
   ; Read first, then decide if we need line prefix
   JSR read_char_track_line
@@ -277,33 +269,22 @@ mode_info:
   JSR read_char
   BCS .done
   ; Count characters
-  INC CHAR_COUNT_L
-  BNE .no_carry
-  INC CHAR_COUNT_H
-.no_carry:
+  INC16 CHAR_COUNT16
   ; Count newlines
   CMP #$0A
   BNE .loop
-  INC LINE_COUNT_L
-  BNE .loop
-  INC LINE_COUNT_H
+  INC16 LINE_COUNT16
   JMP .loop
 .done:
   ; Output "chars:N"
   JSR print_str_chars
-  LDA CHAR_COUNT_L
-  STA NUM_L
-  LDA CHAR_COUNT_H
-  STA NUM_H
+  CP16 CHAR_COUNT16 NUM16
   JSR print_num
   LDA #$0A
   JSR write_b
   ; Output "lines:N"
   JSR print_str_lines
-  LDA LINE_COUNT_L
-  STA NUM_L
-  LDA LINE_COUNT_H
-  STA NUM_H
+  CP16 LINE_COUNT16 NUM16
   JSR print_num
   LDA #$0A
   JSR write_b
@@ -729,38 +710,23 @@ read_memory_content:
 ; ============================================================================
 
 print_str_chars:
-  LDA #<str_chars
-  STA TABPL
-  LDA #>str_chars
-  STA TABPH
+  SET16 str_chars TABP16
   JMP print_str
 
 print_str_lines:
-  LDA #<str_lines
-  STA TABPL
-  LDA #>str_lines
-  STA TABPH
+  SET16 str_lines TABP16
   JMP print_str
 
 print_str_stack:
-  LDA #<str_stack
-  STA TABPL
-  LDA #>str_stack
-  STA TABPH
+  SET16 str_stack TABP16
   JMP print_str
 
 print_str_empty:
-  LDA #<str_empty
-  STA TABPL
-  LDA #>str_empty
-  STA TABPH
+  SET16 str_empty TABP16
   JMP print_str
 
 print_str_active:
-  LDA #<str_active
-  STA TABPL
-  LDA #>str_active
-  STA TABPH
+  SET16 str_active TABP16
   JMP print_str
 
 ; Print traceback of file stack - pops all entries, closes files
@@ -777,41 +743,35 @@ print_traceback:
   BEQ .done
   ; Find curr_type by scanning past the name
   ; FS_P16 points to: name\0 | curr_type | ...
-  CP16 FS_P16 TABPL
+  CP16 FS_P16 TABP16
   LDY #$00
 .find_null:
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   BEQ .found_null
   INY
   JMP .find_null
 .found_null:
   ; Y points at null, curr_type is at Y+1
   INY
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   BNE .print_memory_type
   ; curr_type = 0: print "file:"
-  LDA #<str_type_file
-  STA TABPL
-  LDA #>str_type_file
-  STA TABPH
+  SET16 str_type_file TABP16
   JSR print_str
   JMP .print_name
 .print_memory_type:
   ; curr_type = 1: print "memory:"
-  LDA #<str_type_memory
-  STA TABPL
-  LDA #>str_type_memory
-  STA TABPH
+  SET16 str_type_memory TABP16
   JSR print_str
 .print_name:
   ; Print name (FS_PL points to current entry's name)
-  CP16 FS_P16 TABPL
+  CP16 FS_P16 TABP16
   JSR print_basename
   ; Print ":"
   LDA #':'
   JSR write_b
   ; Print line number
-  CP16 CURLINE16 NUM_L
+  CP16 CURLINE16 NUM16
   JSR print_num
   ; Print newline
   LDA #$0A
@@ -831,13 +791,13 @@ str_type_file:
 str_type_memory:
   .data "memory:" $00
 
-; Print just the basename from a path at TABPL/H (skips everything before last '/')
+; Print just the basename from a path at TABP16 (skips everything before last '/')
 print_basename:
   ; Find the last '/' in the string
   LDY #$00
   STY TEMP              ; TEMP = index of char after last '/'
 .scan:
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   BEQ .print_it         ; End of string
   CMP #'/'
   BNE .not_slash
@@ -853,7 +813,7 @@ print_basename:
   ; Print from TEMP to end
   LDY TEMP
 .print_loop:
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   BEQ .print_done
   JSR write_b
   INY
@@ -864,7 +824,7 @@ print_basename:
 print_str:
   LDY #$00
 .loop:
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   BEQ .done
   JSR write_b
   INY
@@ -884,37 +844,25 @@ str_active:
   .data "active" $00
 
 ; ============================================================================
-; Simple decimal print for 16-bit number in NUM_L/NUM_H
+; Simple decimal print for 16-bit number in NUM16
 ; ============================================================================
 print_num:
   LDA #$00
   STA PRINT_ZERO      ; Don't print leading zeros yet
   ; Try 10000 ($2710)
-  LDA #$10
-  STA DIVISOR_L
-  LDA #$27
-  STA DIVISOR_H
+  SET16 $2710 DIVISOR16
   JSR print_digit
   ; Try 1000 ($03E8)
-  LDA #$E8
-  STA DIVISOR_L
-  LDA #$03
-  STA DIVISOR_H
+  SET16 $03E8 DIVISOR16
   JSR print_digit
   ; Try 100 ($64)
-  LDA #$64
-  STA DIVISOR_L
-  LDA #$00
-  STA DIVISOR_H
+  SET16 $0064 DIVISOR16
   JSR print_digit
   ; Try 10 ($0A)
-  LDA #$0A
-  STA DIVISOR_L
-  LDA #$00
-  STA DIVISOR_H
+  SET16 $000A DIVISOR16
   JSR print_digit
   ; Always print ones digit
-  LDA NUM_L
+  LDA NUM16
   CLC
   ADC #'0'
   JSR write_b
@@ -926,23 +874,23 @@ print_digit:
   LDX #$00            ; Digit counter
 .sub_loop:
   ; Check if NUM >= DIVISOR
-  LDA NUM_H
-  CMP DIVISOR_H
-  BCC .done_sub       ; NUM_H < DIVISOR_H, done
-  BNE .do_sub         ; NUM_H > DIVISOR_H, subtract
+  LDA NUM16+$01
+  CMP DIVISOR16+$01
+  BCC .done_sub       ; NUM16_H < DIVISOR16_H, done
+  BNE .do_sub         ; NUM16_H > DIVISOR16_H, subtract
   ; High bytes equal, check low
-  LDA NUM_L
-  CMP DIVISOR_L
+  LDA NUM16
+  CMP DIVISOR16
   BCC .done_sub       ; NUM < DIVISOR, done
 .do_sub:
   ; NUM -= DIVISOR
   SEC
-  LDA NUM_L
-  SBC DIVISOR_L
-  STA NUM_L
-  LDA NUM_H
-  SBC DIVISOR_H
-  STA NUM_H
+  LDA NUM16
+  SBC DIVISOR16
+  STA NUM16
+  LDA NUM16+$01
+  SBC DIVISOR16+$01
+  STA NUM16+$01
   INX
   JMP .sub_loop
 .done_sub:
@@ -993,20 +941,22 @@ parse_args:
   ; Get mode argument (argv[0])
   LDA #$00
   JSR argv
-  STA TABPL
-  STX TABPH
+  ; A/X contains pointer to arg string
+  STA TABP16
+  STX TABP16+$01
   JSR parse_mode
   BCS .error
 
   ; Get filename argument (argv[1])
   LDA #$01
   JSR argv
-  STA TABPL
-  STX TABPH
+  ; A/X contains pointer to arg string
+  STA TABP16
+  STX TABP16+$01
   ; Copy to TOKEN
   LDY #$00
 .copy_filename:
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   STA TOKEN,Y
   BEQ .filename_done
   INY
@@ -1022,11 +972,11 @@ parse_args:
   SEC
   RTS
 
-; Parse mode string at TABPL/H
+; Parse mode string at TABP16/H
 ; Sets TEST_MODE, returns C=0 on success
 parse_mode:
   LDY #$00
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   CMP #'e'
   BEQ .check_echo
   CMP #'l'
@@ -1069,10 +1019,7 @@ parse_mode:
 ; Error handling
 ; ============================================================================
 error_usage:
-  LDA #<msg_usage
-  STA TABPL
-  LDA #>msg_usage
-  STA TABPH
+  SET16 msg_usage TABP16
   JSR print_str_err
   LDA #$01
   JMP exit
@@ -1080,7 +1027,7 @@ error_usage:
 print_str_err:
   LDY #$00
 .loop:
-  LDA (TABPL),Y
+  LDA (TABP16),Y
   BEQ .done
   JSR write_d
   INY

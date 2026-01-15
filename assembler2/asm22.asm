@@ -385,8 +385,8 @@ parse_term
   ; (parameters shadow globals with the same name)
   LDA IS_LOCAL_LABEL
   BNE .do_lookup           ; Already a .local label, use normal path
-  LDA EXPANSION_ID_L
-  ORA EXPANSION_ID_H
+  LDA EXPANSION_ID16
+  ORA EXPANSION_ID16+$01
   BEQ .do_lookup           ; Not in macro, use normal path
   ; In macro with non-local label - try local hash first for parameters
   LDA #$FF
@@ -1593,10 +1593,10 @@ check_macro_recursion
 .cmr_loop
   ; Check if we've reached current scope pointer
   LDA TABP16
-  CMP SCOPE_PTR_L
+  CMP SCOPE_PTR16
   BNE .cmr_check_entry
   LDA TABP16+$01
-  CMP SCOPE_PTR_H
+  CMP SCOPE_PTR16+$01
   BEQ .cmr_done             ; Reached current position, no recursion
 .cmr_check_entry
   ; Compare macro address at offset +3 with MACRO_ENTRY16
