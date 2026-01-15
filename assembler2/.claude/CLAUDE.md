@@ -15,43 +15,47 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 make
 ```
 
-The build succeeds when `asm20.out == asm20_2.out` (self-assembly verification).
+The build succeeds when `asm22.out == asm22_2.out` (self-assembly verification).
 
 ## Architecture
 
-This is a self-hosting 6502 assembler built through progressive bootstrapping. The current assembler (`asm20.asm`) can assemble its own source code.
+This is a self-hosting 6502 assembler built through progressive bootstrapping. The current assembler (`asm22.asm`) can assemble its own source code.
 
 ### Bootstrap Chain
 
-External vasm assembles `asm4v.asm` → `asm4v.out`, which then assembles progressively more capable versions (`asm4b.asm` → `asm4b2.asm` → ... → `asm4b13.asm`). Each version adds features needed by the next.
+A C bootstrap assembler assembles the initial versions, which then assemble progressively more capable versions (asm00 → asm01 → ... → asm22). Each version adds features needed by the next.
 
 ### Key Components
 
 - **Instruction generators** (`instgen*.asm`): Generate `inst*.asm.out` files containing pre-computed instruction hash tables. These are `.include`d by the assemblers to avoid runtime initialization.
 
-- **Hash tables**: Used for both label lookup (`LHASHTAB` at $1F00) and instruction lookup (`IHASHTAB`). Hash entries are stored on a heap (`MEMPL/MEMPH`).
+- **Hash tables**: Used for both label lookup (`LHASHTAB` at $1F00) and instruction lookup (`IHASHTAB`). Hash entries are stored on a heap (`MEMP16`).
+
+- **Macros**: Definitions are stored on the heap with parameter names. Invocations substitute arguments for parameters during expansion.
 
 - **Two-pass assembly**: Pass 1 collects labels, Pass 2 resolves references and emits code.
 
-### Memory Layout (asm20)
+### Memory Layout (asm22)
 
 - `$0000-$00FF`: Zero page variables (see `.zeropage` section)
 - `$1D00`: TOKEN buffer (current token being read)
 - `$1E00`: Label hash table
-- `$2000+`: Generated code
+- `$2000+`: Generated code, then heap (grows upward from HEAP)
 - `$F000`: File stack (grows downward)
+
+The heap (`MEMP16`) grows upward storing hash entries, macro definitions, and forward references. The file stack (`FS_P16`) grows downward storing include file contexts. Memory protection checks ensure they don't collide, maintaining a 256-byte safety buffer for indexed addressing.
 
 ### Shared Code Pattern
 
 Common code is factored into include files:
-- `common20.asm`: Shared between `asm20.asm` and `instgen20.asm`
-- `hash_table20.asm`: Hash table implementation (included by common20)
+- `common22.asm`: Shared between `asm22.asm` and `instgen22.asm`
+- `hash_table22.asm`: Hash table implementation (included by common22)
 
-The hash table requires caller to define `HT_KEY`, `HT_VL`, `HT_VH` before including.
+The hash table requires caller to define `HT_KEY` and `HT_V16` before including.
 
 ### Zero Page Conventions
 
-Variables are allocated via `DATA $00` in `.zeropage` section. Two-byte pointers use adjacent locations with L/H suffix (e.g., `MEMPL`/`MEMPH`).
+Variables are allocated via `.data $00` in `.zeropage` section. Two-byte pointers use adjacent locations with a `16` suffix (e.g., `MEMP16`, `FS_P16`).
 
 ## Emulator Interface
 
@@ -62,18 +66,22 @@ The C emulator (`emulator.c`) provides memory-mapped I/O. Key addresses:
 
 ## Syntax Notes
 
-The assembler uses a non-standard 6502 syntax:
-- `LDA#` instead of `LDA #` (immediate mode)
-- `LDAZ` for zero page addressing
-- `STAZ(),Y` for indirect indexed
-- `LDA,X` / `LDA,Y` for indexed absolute
+The current assembler (asm22) uses standard 6502 syntax:
+- `LDA #$42` for immediate mode
+- `LDA $00` for zero page (automatic detection based on value)
+- `LDA ($00),Y` for indirect indexed
+- `LDA $1234,X` for indexed absolute
+
+Early bootstrap levels (asm00-06) used non-standard syntax (`LDA#`, `LDAZ`, etc.) but asm07+ uses standard syntax.
 
 ### Expression Evaluation (asm19+)
 
-Starting with asm19, the assembler supports simple expression evaluation with `+` and `-` operators:
+Starting with asm19, the assembler supports expression evaluation with `+`, `-`, `<<`, and `>>` operators:
 
 **Syntax:**
 - `LDA #$10+$20` - Arithmetic in immediate mode
+- `LDA #$01<<$04` - Left shift: $01 << 4 = $10
+- `LDA #$80>>$02` - Right shift: $80 >> 2 = $20
 - `foo = bar+$01` - Expressions in label assignments
 - `.data value+$05` - Expressions in data directives
 - `LDA (ptr+$02,X)` - Expressions in address operands
@@ -127,13 +135,44 @@ DEBUG = $01          ; Define a label
 
 **Command Line Defines:**
 - Labels can be pre-defined via command line: `define:label`
-- Multiple defines are supported: `./asm20.out in out define:DEBUG define:FEATURE1`
+- Multiple defines are supported: `./asm22.out in out define:DEBUG define:FEATURE1`
 - Pre-defined labels have value `$0001`
 
 **Errors:**
-- Error 23: `.endif without .ifdef` - Unmatched `.endif`
-- Error 24: `Unclosed .ifdef` - Missing `.endif` at end of file
-- Error 25: `Label expected` - `.ifdef` without a label name
+- Error 20: `.endif without .ifdef` - Unmatched `.endif`
+- Error 21: `Unclosed .ifdef` - Missing `.endif` at end of file
+- Error 1B: `Label expected` - `.ifdef` without a label name
+
+### Macros (asm22+)
+
+Starting with asm22, the assembler supports macros with parameters:
+
+**Defining Macros:**
+```asm
+  .macro SET16 val ptr     ; Define macro with parameters
+  LDA #<val
+  STA ptr
+  LDA #>val
+  STA ptr+$01
+  .endmacro
+```
+
+**Invoking Macros:**
+```asm
+  SET16 $1234 $10          ; Expands with val=$1234, ptr=$10
+```
+
+**Features:**
+- Parameters are simple text substitution
+- Local labels (`.label`) in macros are scoped to each invocation
+- Macros can use expressions: `ptr+$01` expands correctly
+- Up to 8 parameters per macro
+
+**Errors:**
+- Error 1E: `Unclosed macro` - Missing `.endmacro`
+- Error 1F: `Macro not found` - Undefined macro invocation
+- Error 20: `Expected macro name` - `.macro` without name
+- Error 22: `Too many macro arguments` - More than 8 parameters
 
 ## Migration Patterns
 
@@ -141,10 +180,10 @@ Lessons learned from syntax migrations (e.g., DATA → .data):
 
 1. **Global replacements need context awareness** - Avoid blind find/replace when identifiers share common substrings (e.g., `DATA` vs `MODE_DATA`). Check for compound identifiers before replacing.
 
-2. **File copying requires systematic include updates** - When creating a new version (asm18→asm19), all include references across all copied files need updating (asm, instgen, common, errors, fwdref, file_stack, hash_table, to_decimal).
+2. **File copying requires systematic include updates** - When creating a new version (asm21→asm22), all include references across all copied files need updating (asm, instgen, common, errors, fwdref, file_stack, hash_table, to_decimal, label_scope).
 
 3. **Phased migration works well** - Add new feature alongside old, verify everything works, then remove old. This provides safety checkpoints at each phase.
 
 4. **Self-hosting is powerful verification** - The assembler assembling itself catches subtle issues that unit tests might miss. Always run the full build chain after changes.
 
-5. **Test suite retention is valuable** - Keep the old test suite (e.g., asm18_tests.txt) as reference even when removing obsolete tests from the new one (asm19_tests.txt).
+5. **Test suite retention is valuable** - Keep the old test suite (e.g., asm21_tests.txt) as reference even when removing obsolete tests from the new one (asm22_tests.txt).
