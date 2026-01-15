@@ -25,7 +25,7 @@
 
 FS_CURR_FILE  .data $00   ; The current file handle
 FS_P16        .data $0000 ; Pointer to the current location in the file stack
-FS_TEMP       .data $00   ; Temporary location for use in calculations
+FS_TEMP16     .data $0000 ; Temporary location for use in calculations
 
 ; Memory source support (zero-terminated buffers)
 FS_SRC_TYPE   .data $00   ; Source type: 0=file, 1=memory
@@ -72,15 +72,21 @@ push_source_frame
   BEQ .size_done
   ADC #$01              ; Add 1 more for memory (2 bytes ptr - 1 already counted)
 .size_done
-  STA FS_TEMP
+  STA FS_TEMP16
   ; Decrease stack pointer by frame size
   SEC
   LDA FS_P16
-  SBC FS_TEMP
-  STA FS_P16
+  SBC FS_TEMP16
+  STA FS_TEMP16
   LDA FS_P16+$01
   SBC #$00
-  STA FS_P16+$01
+  STA FS_TEMP16+$01
+
+  ;TODO Perform out of memory check based on the value in FS_TEMP16. We do this before modifying FS_P16 so as
+  ; to allow the traceback from an out of memory error to proceed cleanly
+
+  ; Commit new stack pointer
+  CP16 FS_TEMP16 FS_P16
   ; Copy name to stack
   LDY #$FF
 .copy_loop
