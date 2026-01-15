@@ -84,7 +84,7 @@ value2=value1  ; Needs to be assigned during pass 1
   STA OPERAND16
   INX
 
-- [ ] Capture these patterns as macros (from store_token in hash table):
+- [X] Capture these patterns as macros (from store_token in hash table):
   LDA CURR_GLOBAL_HEAP_L
   STA (MEMP16),Y
   INY
@@ -93,6 +93,37 @@ value2=value1  ; Needs to be assigned during pass 1
 
 - [ ] Cleanup write_label_and_modes in instgen
 
-- [] Enhance the assembler to suport an optional value for "define" arguments - i.e. "define:LABEL=$1234" or alternatively "define:LABEL=$56".
+- [ ] Enhance the assembler to suport an optional value for "define" arguments - i.e. "define:LABEL=$1234" or alternatively "define:LABEL=$56".
 Should try to reuse existing hex parsing code, e.g. by turning the command line argument into a memory source on the file stack
+
+- [ ] Other enhancments
+
+Please provide some suggestions for what could be added next to this assembler
+
+● Here are some suggestions, roughly ordered by complexity:
+
+  Low complexity:
+  - .ifndef directive - complement to .ifdef, straightforward addition
+  - .else for conditionals - more expressive conditional assembly
+  - .fill count, value - emit N copies of a byte, useful for padding/alignment
+  - .align N - align PC to N-byte boundary (emits padding)
+
+  Medium complexity:
+  - More expression operators - *, /, &, |, ^ for bit manipulation
+  - .incbin "file" - include raw binary data, useful for embedding graphics/data
+  - .repeat N / .endrepeat - unroll loops at assembly time
+  - Anonymous labels (+, -, or :) - for short forward/backward branches without naming
+
+  Higher complexity:
+  - Expression parentheses - LDA #(foo+bar)*2 with proper precedence
+  - Segment support - .code, .data, .bss sections with separate address spaces
+  - Listing output - generate human-readable assembly listing with addresses/hex
+  - Symbol export - output symbol table for use with debuggers/monitors
+
+  Architectural additions:
+  - Warning system - non-fatal diagnostics (e.g., "branch could be optimized")
+  - .assert expression, "message" - compile-time assertions for defensive coding
+  - Scope blocks - { } or .scope/.endscope for explicit label namespacing
+
+  What interests you? The .else/.ifndef would be natural extensions of existing conditional infrastructure. The .repeat would exercise the macro/memory-source machinery in a new way.
 
