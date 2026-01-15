@@ -56,10 +56,11 @@
 ; Addresses
 FWDREF_LIST   = $0200             ; Forward reference list (512 bytes, $0200-$03FF)
 FWDREF_LIMIT  = FWDREF_LIST+$0200 ; Limit for forward reference list data
-SCOPE_STACK   = $0400             ; Label scope stack for macro expansions (256 bytes, $0400-$04FF)
-SCOPE_LIMIT   = SCOPE_STACK+$0100 ; Limit for scope stack
-MACRO_ARG_BUF = $0500             ; Temp buffer for macro args during expansion (256 bytes)
-TOKEN         = $0600             ; Buffer for the current token being read
+SCOPE_STACK      = $0400             ; Label scope stack for macro expansions (256 bytes, $0400-$04FF)
+SCOPE_LIMIT      = SCOPE_STACK+$0100 ; Limit for scope stack
+MACRO_ARG_BUF    = $0500             ; Temp buffer for macro args during expansion (256 bytes)
+MACRO_ARG_ENTRY_SIZE = $03           ; Size of each macro argument entry (value_L, value_H, is_fwdref)
+TOKEN            = $0600             ; Buffer for the current token being read
 LHASHTAB      = $0700             ; Label hash table
 *             = $2000             ; Code generates here
 FILE_STACK    = $F000             ; File stack will grow down from 1 below here
@@ -1724,6 +1725,14 @@ expand_macro
 .em_have_arg
   ; Parse argument expression (using PARENT's scope for lookups)
   JSR parse_expression
+  ; MACRO_ARG_BUF bounds check
+  ; Check if X <= TOKEN-MACRO_ARG_BUF-MACRO_ARG_ENTRY_SIZE (room for one more entry)
+  CPX #TOKEN-MACRO_ARG_BUF-MACRO_ARG_ENTRY_SIZE
+  BCC .arg_ok         ; X < limit: safe
+  BEQ .arg_ok         ; X = limit: safe (last entry)
+.arg_overflow
+  JMP err_too_many_macro_arguments
+.arg_ok
   ; Store value and fwdref flag in fixed buffer
   LDA OPERAND16
   STA MACRO_ARG_BUF,X

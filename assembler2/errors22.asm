@@ -144,6 +144,10 @@ err_macro_nesting_too_deep
   BRK
   .data $24 "Macro nesting too deep" $00
 
+err_too_many_macro_arguments
+  BRK
+  .data $25 "Too many macro arguments" $00
+
   .ifdef enable_debug
 err_fwdref_tracking
   BRK
