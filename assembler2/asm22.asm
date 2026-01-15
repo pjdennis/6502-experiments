@@ -1768,19 +1768,23 @@ capture_macro_line
   ; Restore first char
   LDA NEXT_CHAR
   ; Copy whole line to heap including newline
-.cml_copy_loop
+  ; Optimization: only call advance_heap when Y reaches 128 or at line end
   LDY #$00
+.cml_copy_loop
   STA (MEMP16),Y
-  INY
   CMP #'\n'
   BEQ .cml_line_done
-  JSR advance_heap
+  INY
+  BPL .cml_read_next   ; Y still 0-127
+  JSR advance_heap     ; Y hit 128, commit and Y resets to 0
+.cml_read_next
   JSR read_char
   BCC .cml_copy_loop
   ; EOF during macro - error
   JMP err_unclosed_macro
 .cml_line_done
-  JSR advance_heap     ; Advance past newline
+  INY                  ; Include newline in count
+  JSR advance_heap     ; Commit remaining bytes
   ; Now check if this line was .endmacro
   CP16 MACRO_DEF_PTR16 TABP16
   ; Skip leading spaces
