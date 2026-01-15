@@ -42,11 +42,11 @@
 
 - [X] Diagnostics to print # of forward references (in debug mode), track and verify consistency across passes
 
-- [ ] Maybe remove checks from immediate mode -> .imm_invalid - or else move checks to the parse function for all to share
+- [X] Maybe remove checks from immediate mode -> .imm_invalid - or else move checks to the parse function for all to share
 
 - [ ] .include tests should verify the full traceback - each filename and line number; extend the test runner.
 
-- [ ] Enance .cml_copy_loop to avoid advancing the heap until Y hits FF (or maybe goes negative for quicker checking). (in the assembler code)
+- [X] Enance .cml_copy_loop to avoid advancing the heap until Y hits FF (or maybe goes negative for quicker checking). (in the assembler code)
 
 - [X] Look into why errors apparently aren't yet closing all the files despite changes we made
 
@@ -55,7 +55,7 @@ value1=$01
 value2=value1  ; Needs to be assigned during pass 1
   LDA value2   ; Should use zero page addressing
 
-- [ ] Get rid of the XX_L/H name pairs - replace with XX16
+- [X] Get rid of the XX_L/H name pairs - replace with XX16
 
  Variables still using L/H convention:
 
