@@ -7,9 +7,9 @@
 ;
 ; Scope state is saved on a dedicated scope stack (SCOPE_STACK in memory),
 ; NOT the 6502 stack. Each entry is 5 bytes:
-;   - LABEL_SCOPE16 (2 bytes)
-;   - CACHED_HASH
-;   - MACRO_ENTRY16 (macro hash table address for recursion detection)
+;   - LABEL_SCOPE16 (2 bytes) - restored on pop
+;   - CACHED_HASH (1 byte) - restored on pop
+;   - MACRO_ENTRY16 (2 bytes) - saved but NOT restored (used for recursion detection)
 ;
 ; The scope stack grows upward from SCOPE_STACK.
 ;
@@ -56,6 +56,13 @@ reset_scope_stack
 ; Saves LABEL_SCOPE16, CACHED_HASH, and MACRO_ENTRY16 to scope stack,
 ; increments EXPANSION_ID, sets up synthetic scope using expansion ID.
 ;
+; EXPANSION_ID16 is a monotonic counter (NOT saved/restored) to ensure each
+; macro expansion gets a unique ID, preventing collisions in sibling expansions.
+;
+; MACRO_ENTRY16 is saved for recursion detection, but NOT restored on pop since
+; it's only needed during initial setup (reading body pointer). After setup,
+; the macro body is in the memory source and params are in the hash table.
+;
 ; On entry: MACRO_ENTRY16 contains the macro's hash table entry address
 ; On exit: New scope active (LABEL_SCOPE16 = EXPANSION_ID, CACHED_HASH set)
 ;          Previous scope saved on scope stack
@@ -92,6 +99,11 @@ push_label_scope
 
 
 ; Pop label scope, restoring previous LABEL_SCOPE16 and CACHED_HASH
+;
+; Note: EXPANSION_ID16 is NOT restored (it's a monotonic counter, not stack-based)
+; Note: MACRO_ENTRY16 is NOT restored (only needed during setup, stays on stack
+;       for recursion detection via check_macro_recursion)
+;
 ; On exit: Previous scope restored from scope stack
 ;          A, Y clobbered, X preserved
 pop_label_scope
