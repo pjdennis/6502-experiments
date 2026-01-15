@@ -19,7 +19,6 @@ HEX16           .data $0000 ; 2 byte hex value, also aliased as OPERAND16)
 OPERAND16 = HEX16           ; Operand value - alias for HEX16
 PASS            .data $00   ; 1 byte $00 = pass 1 $FF = pass 2
 STARTED         .data $00   ; flag to indicate output has started
-CURR_FILE       .data $00   ; current file handle
 CURR_LINE16     .data $0000 ; Current line number
 CURR_OUT_FILE   .data $00   ; Current output file (for closing on error)
 IN_ZEROPAGE     .data $00   ; Flag indicating if in zero page section
@@ -55,10 +54,11 @@ PASS_1_FWDREF16 .data $0000 ; Forward ref pointer after pass 1
   .include errors22.asm
   .include fwdref22.asm
 FS_FILENAME        = TOKEN
-FS_CURR_FILE       = CURR_FILE
 FS_CURR_LINE16     = CURR_LINE16
 FS_NEXT_CHAR       = NEXT_CHAR
+  .ifdef enable_debug
 FS_ERR_NO_FILE     = err_no_file
+  .endif
 FS_POP_MEMORY_HOOK = pop_label_scope
   .include file_stack22.asm
 read_char          = file_stack_read_char
@@ -2103,7 +2103,6 @@ start
   JMP err_usage
 .args_done
   LDA #$00
-  STA CURR_FILE
   STA PASS            ; Bit 7 = 0 (pass 1)
   JSR init_fwdref_list
   JSR open_input

@@ -64,10 +64,6 @@ err_usage
   BRK
   .data $0D "Usage <assembler> <input> <output> [debug]" $00
 
-err_no_file
-  BRK
-  .data $0E "Attempt to read with no file open" $00
-
 err_invalid_arg
   BRK
   .data $10 "Invalid argument" $00
@@ -91,12 +87,6 @@ err_invalid_operand
 err_unexpected_text
   BRK
   .data $15 "Unexpected text after operand" $00
-
-  .ifdef enable_debug
-err_fwdref_tracking
-  BRK
-  .data $16 "Internal error - reference tracking" $00
-  .endif
 
 err_endif_without_ifdef
   BRK
@@ -145,6 +135,16 @@ err_too_few_arguments
 err_too_many_arguments
   BRK
   .data $22 "Too many macro arguments" $00
+
+  .ifdef enable_debug
+err_fwdref_tracking
+  BRK
+  .data $16 "Internal error - reference tracking" $00
+
+err_no_file
+  BRK
+  .data $0E "Attempt to read with no file open" $00
+  .endif
 
 
 ; Interrupt handler - processes BRK for error display

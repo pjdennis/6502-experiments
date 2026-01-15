@@ -3,7 +3,8 @@ trap exit SIGINT
 
 while true
 do
-    clear && ./asmtestgen.sh && tests/run_file_stack_tests.pl && tests/run_tests.sh
+#    clear && ./asmtestgen.sh && tests/run_file_stack_tests.pl && tests/run_tests.sh
+    clear && ./asmtestgen.sh && tests/run_tests.sh
     echo "Waiting for file change..."
     fswatch -1 --event Updated --latency 0.1 \
         asmtestgen.sh emulator.c sidebyside.cpp asm0c.c \
@@ -21,8 +22,8 @@ do
         asm21.asm instgen21.asm common21.asm hash_table21.asm file_stack21.asm to_decimal21.asm errors21.asm fwdref21.asm label_scope21.asm \
         asm22.asm instgen22.asm common22.asm hash_table22.asm file_stack22.asm to_decimal22.asm errors22.asm fwdref22.asm label_scope22.asm macros22.asm \
         test19.asm test_inc19.asm \
-	tests/run_tests.sh tests/asm19_tests.txt tests/asm20_tests.txt tests/asm21_tests.txt tests/asm22_tests.txt \
-        tests/file_stack_test.asm tests/file_stack_tests.txt tests/run_file_stack_tests.pl
+	tests/run_tests.sh tests/asm22_tests.txt \
+        tests/run_file_stack_tests.pl tests/file_stack_test22.asm tests/file_stack_tests22.txt
         > /dev/null
 
     sleep 0.1

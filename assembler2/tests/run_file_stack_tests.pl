@@ -11,9 +11,9 @@ use Cwd qw(abs_path);
 
 my $SCRIPT_DIR = dirname(abs_path(__FILE__));
 my $BASE_DIR = dirname($SCRIPT_DIR);
-my $TEST_PROG = "$BASE_DIR/out/file_stack_test.out";
+my $TEST_PROG = "$BASE_DIR/out/file_stack_test22.out";
 my $EMULATOR = "$BASE_DIR/emulator.out";
-my $TEST_FILE = $ARGV[0] // "$SCRIPT_DIR/file_stack_tests.txt";
+my $TEST_FILE = $ARGV[0] // "$SCRIPT_DIR/file_stack_tests22.txt";
 my $FILTER = $ARGV[1] // '';
 
 my ($passed, $failed, $skipped) = (0, 0, 0);

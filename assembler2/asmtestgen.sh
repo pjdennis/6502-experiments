@@ -72,7 +72,10 @@ echo "OK"
 ./emulator.out out/asm20.out 2000 /dev/null /dev/null asm21.asm out/asm21_debug.out define:enable_debug
 
 # asm22 - macros in assembler implementation
-./emulator.out out/asm21.out 2000 /dev/null /dev/null instgen22.asm out/instgen22.out
+# Build file stack test program
+./emulator.out out/asm21_debug.out 2000 /dev/null /dev/null tests/file_stack_test22.asm out/file_stack_test22.out
+# Build the assembler
+./emulator.out out/asm21_debug.out 2000 /dev/null /dev/null instgen22.asm out/instgen22.out
 ./emulator.out out/instgen22.out 2000 /dev/null out/inst22.asm.out
 # Build without debug (smaller binary)
 ./emulator.out out/asm21.out 2000 /dev/null /dev/null asm22.asm out/asm22.out
@@ -100,6 +103,3 @@ echo "  Savings:                $((SIZE2 - SIZE1)) bytes"
 # hexdump -C out/test19.out
 echo "Assembled"
 ./emulator.out out/test19.out 1000 /dev/null - arg1 "arg 2"
-
-# Build file stack test program
-./emulator.out out/asm22_debug.out 2000 /dev/null /dev/null tests/file_stack_test.asm out/file_stack_test.out

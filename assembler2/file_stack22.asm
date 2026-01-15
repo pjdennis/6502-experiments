@@ -1,7 +1,6 @@
 ; Requires:
 ;   FILE_STACK     - 1 past the highest address from which the stack grows down
 ;   FS_FILENAME    - filename buffer
-;   FS_CURR_FILE   - zero page location of the current file handle
 ;   FS_CURR_LINE16 - zero page location of the current line number
 ;   FS_NEXT_CHAR   - zero page location to store last character read
 ;   FS_ERR_NO_FILE - error handler for read_char when no file is open
@@ -24,6 +23,7 @@
 
   .zeropage
 
+FS_CURR_FILE  .data $00   ; The current file handle
 FS_P16        .data $0000 ; Pointer to the current location in the file stack
 FS_TEMP       .data $00   ; Temporary location for use in calculations
 
@@ -38,6 +38,7 @@ file_stack_init
   SET16 FILE_STACK FS_P16
   LDA #$00
   STA FS_SRC_TYPE
+  STA FS_CURR_FILE
   RTS
 
 
@@ -231,7 +232,6 @@ pop_source
 
 ; Legacy names for compatibility
 pop_file_stack = pop_source
-pop_memory_source = pop_source
 
 
 ; Read character from current source (file or memory)
@@ -244,38 +244,38 @@ file_stack_read_char
   BNE .read_memory
   ; Type 0 = file source
   LDA FS_CURR_FILE
+  .ifdef enable_debug 
   BEQ .no_source
+  .endif
   JSR read
-  BCC .got_char
-  ; EOF on current file - pop and try previous source
-  JSR pop_source
-  ; Check if stack is empty
-  JSR file_stack_empty
-  BEQ .all_done
-  ; Continue reading from previous source (could be file or memory)
-  JMP file_stack_read_char
+  BCS .source_exhausted
+  ; Got character
+  STA FS_NEXT_CHAR
+  CLC
+  RTS
 .read_memory
   ; Type 1 = memory source (zero-terminated)
   ; Read byte from memory pointer
   LDY #$00
   LDA (FS_MEM_PTR16),Y
-  BEQ .mem_exhausted     ; $00 = end of memory source
+  BEQ .source_exhausted     ; $00 = end of memory source
   ; Increment memory pointer
-  INC16 FS_MEM_PTR16
-.got_char
+  INC16 FS_MEM_PTR16     ; Preserves A
   STA FS_NEXT_CHAR
   CLC
   RTS
-.mem_exhausted
-  ; Memory source exhausted - pop and try previous source
+.source_exhausted
+  ; Source exhausted - pop and try previous source
   JSR pop_source
   ; Check if stack is empty
   JSR file_stack_empty
   BEQ .all_done
   ; Continue reading from previous source
   JMP file_stack_read_char
+  .ifdef enable_debug
 .no_source
   JMP FS_ERR_NO_FILE
+  .endif
 .all_done
   SEC
   RTS
