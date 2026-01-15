@@ -327,6 +327,9 @@ read_token
 .loop
   JSR compare_end_of_token
   BEQ .done
+  ; TOKEN buffer bounds check (conservative 128-char limit)
+  CPX #$80
+  BCS .token_overflow
   STA TOKEN,X
   INX
   JSR read_char
@@ -336,6 +339,8 @@ read_token
   STA TOKEN,X
   LDX TEMP
   RTS
+.token_overflow
+  JMP err_token_too_long
 
 
 ; ============================================================================

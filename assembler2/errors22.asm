@@ -148,6 +148,10 @@ err_too_many_macro_arguments
   BRK
   .data $25 "Too many macro arguments" $00
 
+err_token_too_long
+  BRK
+  .data $26 "Token too long" $00
+
   .ifdef enable_debug
 err_fwdref_tracking
   BRK
