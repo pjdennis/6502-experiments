@@ -405,7 +405,7 @@ check_for_value
 
 ; Read a value
 ; On entry A contains the next character
-; On exit HEX16 contains the LSB and MSB of the value read
+; On exit HEX16 contains the value read
 ;         A contains the next character
 ;         X is preserved
 ;         Y is not preserved
@@ -532,12 +532,12 @@ parse_value
 ;          C=1 if bare label, C=0 otherwise
 parse_term_with_selector
   CMP #'<'
-  BEQ .tws_low_byte
+  BEQ .low_byte_selector
   CMP #'>'
-  BEQ .tws_high_byte
+  BEQ .high_byte_selector
   JMP parse_term
 
-.tws_low_byte
+.low_byte_selector
   JSR read_char        ; Skip '<'
   JSR parse_term       ; Next char now in NEXT_CHAR
   ; Apply low byte: keep OPERAND16, zero OPERAND16+$01
@@ -547,7 +547,7 @@ parse_term_with_selector
   CLC
   RTS
 
-.tws_high_byte
+.high_byte_selector
   JSR read_char        ; Skip '>'
   JSR parse_term       ; Next char now in NEXT_CHAR
   ; Apply high byte: shift OPERAND16 right by 8 bits
