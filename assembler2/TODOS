@@ -93,3 +93,6 @@ value2=value1  ; Needs to be assigned during pass 1
 
 - [ ] Cleanup write_label_and_modes in instgen
 
+- [] Enhance the assembler to suport an optional value for "define" arguments - i.e. "define:LABEL=$1234" or alternatively "define:LABEL=$56".
+Should try to reuse existing hex parsing code, e.g. by turning the command line argument into a memory source on the file stack
+
