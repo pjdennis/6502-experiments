@@ -61,24 +61,20 @@ reset_scope_stack
 ;          Previous scope saved on scope stack
 ;          A, Y clobbered, X preserved
 push_label_scope
+  .macro APPEND_TO_SCOPE ptr
+  LDA ptr
+  STA (SCOPE_PTR16),Y
+  INY
+  .endmacro
   ; Save current scope state to scope stack
   LDY #$00
-  LDA LABEL_SCOPE16
-  STA (SCOPE_PTR16),Y
-  INY
-  LDA LABEL_SCOPE16+$01
-  STA (SCOPE_PTR16),Y
-  INY
-  LDA CACHED_HASH
-  STA (SCOPE_PTR16),Y
+  APPEND_TO_SCOPE LABEL_SCOPE16
+  APPEND_TO_SCOPE LABEL_SCOPE16+$01
+  APPEND_TO_SCOPE CACHED_HASH
   ; Save macro entry address for recursion detection
-  INY
-  LDA MACRO_ENTRY16
-  STA (SCOPE_PTR16),Y
-  INY
-  LDA MACRO_ENTRY16+$01
-  STA (SCOPE_PTR16),Y
-  ; Advance scope pointer by 5 bytes
+  APPEND_TO_SCOPE MACRO_ENTRY16
+  APPEND_TO_SCOPE MACRO_ENTRY16+$01
+  ; Advance scope pointer by 5 bytes for the 5 entries added above
   CLC
   ADDI16 SCOPE_PTR16 $05 SCOPE_PTR16
   ; Increment expansion ID
