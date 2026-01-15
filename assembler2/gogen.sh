@@ -3,8 +3,7 @@ trap exit SIGINT
 
 while true
 do
-#    clear && ./asmtestgen.sh && tests/run_file_stack_tests.pl && tests/run_tests.sh
-    clear && ./asmtestgen.sh && tests/run_tests.sh
+    clear && ./asmtestgen.sh && tests/run_file_stack_tests.pl && tests/run_tests.sh
     echo "Waiting for file change..."
     fswatch -1 --event Updated --latency 0.1 \
         asmtestgen.sh emulator.c sidebyside.cpp asm0c.c \

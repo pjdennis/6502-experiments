@@ -523,11 +523,12 @@ check_memory_or_include:
   JMP .copy_name
 .name_done:
   ; Set memory pointer to TOKEN_MEM (content is now zero-terminated)
-  CP16 TOKEN_MEM FS_MEM_PTR16
+  SET16 TOKEN_MEM FS_MEM_PTR16
   ; Push memory source (FS_FILENAME has name, pointer is set)
   JSR push_memory_source
-  ; Initialize line to 1 for memory source
-  SET16 $01 CURLINE16 ; Returns with A = 0
+  ; Initialize line to 1 for memory source, at start of line
+  SET16 $01 CURLINE16
+  LDA #$01
   STA AT_LINE_START
   CLC
   RTS
