@@ -82,8 +82,8 @@ push_source_frame
   SBC #$00
   STA FS_TEMP16+$01
 
-  ;TODO Perform out of memory check based on the value in FS_TEMP16. We do this before modifying FS_P16 so as
-  ; to allow the traceback from an out of memory error to proceed cleanly
+  ; Check for collision with heap before committing
+  CHECK_FOR_OUT_OF_MEMORY FS_TEMP16
 
   ; Commit new stack pointer
   CP16 FS_TEMP16 FS_P16

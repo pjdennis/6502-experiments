@@ -40,6 +40,7 @@ MACRO_ENTRY16   .data $0000 ; Original macro hash entry address (for recursion c
   .ifdef enable_debug
 DEBUG_FLAG      .data $00   ; Non-zero if debug output enabled
 PASS_1_FWDREF16 .data $0000 ; Forward ref pointer after pass 1
+SMALL_HEAP_FLAG .data $00   ; Non-zero if small_heap argument was passed
   .endif
 
   .code
@@ -1985,6 +1986,29 @@ check_debug_string
 
 str_debug
   .data "debug" $00
+
+; Check if string at TABP16 equals "small_heap"
+; On exit C = 0 if equal, C = 1 if not equal
+;         A, Y are not preserved
+check_small_heap_string
+  LDY #$00
+.loop2
+  LDA (TABP16),Y
+  CMP str_small_heap,Y
+  BNE .not_equal2
+  CMP #$00
+  BEQ .equal2
+  INY
+  JMP .loop2
+.equal2
+  CLC
+  RTS
+.not_equal2
+  SEC
+  RTS
+
+str_small_heap
+  .data "small_heap" $00
   .endif
 
 str_define
@@ -2048,8 +2072,9 @@ start
   LDA #$00
   STA CURR_OUT_FILE
   .ifdef enable_debug
-  ; Initialize debug flag to 0
+  ; Initialize debug flags to 0
   STA DEBUG_FLAG
+  STA SMALL_HEAP_FLAG
   .endif
   ; Initialize file stack early so interrupt handler works correctly
   JSR file_stack_init
@@ -2078,6 +2103,9 @@ start
   ; Check for "debug"
   JSR check_debug_string
   BCC .found_debug
+  ; Check for "small_heap"
+  JSR check_small_heap_string
+  BCC .found_small_heap
   .endif
   ; Check for "define:" prefix
   JSR check_define_prefix
@@ -2089,6 +2117,12 @@ start
   LDA #$FF
   STA DEBUG_FLAG
   BNE .next_arg          ; Always branches
+.found_small_heap
+  LDA #$FF
+  STA SMALL_HEAP_FLAG
+  ; Reinitialize heap with small size
+  JSR init_heap
+  JMP .next_arg
   .endif
 .found_define
   ; TABP16 now points past "define:" to label name

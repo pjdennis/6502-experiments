@@ -48,6 +48,13 @@ TABPH       .data $00
 FS_FILENAME   = TOKEN
 FS_CURR_LINE16 = CURLINE16
 FS_NEXT_CHAR  = NEXT_CHAR
+
+; CHECK_FOR_OUT_OF_MEMORY - Macro placeholder for use by file stack
+  .macro CHECK_FOR_OUT_OF_MEMORY fs_ptr
+  ; Do nothing, for the purposes of the file stack test.
+  ; TODO: Consider writing to debug output when it's called, and extend tests to confirm
+  .endmacro
+
   .include file_stack22.asm
 read_char = file_stack_read_char
 

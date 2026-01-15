@@ -2223,3 +2223,100 @@ INPUT:
 13:   .endmacro
 14:   outer
 EXPECT_HEX: f0 04 d0 01 ea e8 c8
+
+---
+NAME: heap_overflow_many_labels
+DESCRIPTION: Out of memory when heap exhausted with small heap
+ARGS: small_heap
+INPUT:
+1: * = $0200
+2: a00 = $01
+3: a01 = $01
+4: a02 = $01
+5: a03 = $01
+6: a04 = $01
+7: a05 = $01
+8: a06 = $01
+9: a07 = $01
+10: a08 = $01
+11: a09 = $01
+12: a10 = $01
+13: a11 = $01
+14: a12 = $01
+15: a13 = $01
+16: a14 = $01
+17: a15 = $01
+18: a16 = $01
+19: a17 = $01
+20: a18 = $01
+21: a19 = $01
+22: a20 = $01
+23: a21 = $01
+24: a22 = $01
+25: a23 = $01
+26: a24 = $01
+27: a25 = $01
+28: a26 = $01
+29: a27 = $01
+30: a28 = $01
+31: a29 = $01
+32:   NOP
+EXPECT_ERROR: 35
+EXPECT_MSG: Out of memory
+
+---
+NAME: file_stack_overflow_deep_include
+DESCRIPTION: Out of memory when file stack exhausted with small heap
+ARGS: small_heap
+INPUT:
+1: * = $0200
+2:   .include tests/overflow/d01.asm
+EXPECT_ERROR: 35
+EXPECT_MSG: Out of memory
+
+---
+NAME: heap_normal_many_labels
+DESCRIPTION: Many labels work without small heap
+INPUT:
+1: * = $0200
+2: a00 = $01
+3: a01 = $01
+4: a02 = $01
+5: a03 = $01
+6: a04 = $01
+7: a05 = $01
+8: a06 = $01
+9: a07 = $01
+10: a08 = $01
+11: a09 = $01
+12: a10 = $01
+13: a11 = $01
+14: a12 = $01
+15: a13 = $01
+16: a14 = $01
+17: a15 = $01
+18: a16 = $01
+19: a17 = $01
+20: a18 = $01
+21: a19 = $01
+22: a20 = $01
+23: a21 = $01
+24: a22 = $01
+25: a23 = $01
+26: a24 = $01
+27: a25 = $01
+28: a26 = $01
+29: a27 = $01
+30: a28 = $01
+31: a29 = $01
+32:   LDA #a00
+EXPECT_HEX: a9 01
+
+---
+NAME: file_stack_normal_deep_include
+DESCRIPTION: Deep include works without small heap
+INPUT:
+1: * = $0200
+2:   .include tests/overflow/d01.asm
+3:   RTS
+EXPECT_HEX: ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea 60

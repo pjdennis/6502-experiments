@@ -25,6 +25,7 @@
 TOKEN       = $1E00     ; Buffer for the current token being read
 IHASHTAB    = $1F00     ; Instruction hash table
 SCOPE_STACK = $0400     ; Scope stack (needed by hash_table21.asm, not used by instgen)
+FILE_STACK  = $F000     ; File stack (needed by advance_heap check)
 *           = $2000     ; Code generates here
 
 
@@ -34,6 +35,7 @@ TEMP      .data $00     ; 1 byte temporary value
 HEX16     .data $00     ; 2 bytes
 P16       .data $0000   ; 2 byte pointer
 P2_16     .data $0000   ; 2 byte pointer
+FS_P16    .data $0000   ; File stack pointer - needed by advance_heap check
 
   .code
 
@@ -487,6 +489,7 @@ start
   LDA #$00
   STA IS_LOCAL_LABEL    ; Clear flag before using hash table
   JSR init_heap
+  SET16 FILE_STACK FS_P16  ; Initialize so heap overflow check works
   JSR select_instruction_hash_table
   JSR init_hash_table
   JSR populate_instruction_hash_table
@@ -525,6 +528,11 @@ msg_hash_table_comment
 
 msg_heap_comment
   .data "; Instructions heap data" $00
+
+; Error handler needed by advance_heap's overflow check
+err_out_of_memory
+  BRK
+  .data $23 "Out of memory" $00
 
 
 HEAP                  ; Heap goes after the program code

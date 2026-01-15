@@ -45,7 +45,40 @@ MEMP16          .data $0000 ; 2 byte heap pointer
   .include hash_table22.asm
 
 
+; CHECK_FOR_OUT_OF_MEMORY - Verify heap/stack don't collide
+; Macro performs the check, to minimize function call overhead
+; On entry: fs_ptr = file stack pointer to check against MEMP16
+; Raises err_out_of_memory if fs_ptr - MEMP16 < 256
+; On exit: A not preserved, X and Y preserved
+  .macro CHECK_FOR_OUT_OF_MEMORY fs_ptr
+  ; Quick check: if ptr_H - MEMP16_H > 1, we have >= 512 bytes free
+  LDA fs_ptr+$01
+  SEC
+  SBC MEMP16+$01        ; A = high byte difference
+  CMP #$02
+  BCS .oom_ok           ; >= 2 means >= 512 bytes, definitely safe
+  ; High bytes are close (differ by 0 or 1) - do precise check
+  ; Check: ptr - MEMP16 >= 256 (high byte of difference must be non-zero)
+  LDA fs_ptr
+  SEC
+  SBC MEMP16            ; Low byte of difference (result discarded, need borrow)
+  LDA fs_ptr+$01
+  SBC MEMP16+$01        ; A = high byte of (ptr - MEMP16)
+  BNE .oom_ok           ; Non-zero means >= 256 bytes free
+  JMP err_out_of_memory
+.oom_ok
+  .endmacro
+
+
 init_heap
+  .ifdef enable_debug
+  LDA SMALL_HEAP_FLAG
+  BEQ .normal_heap
+  ; Small heap for testing: only ~256 bytes available
+  SET16 FILE_STACK-$0100 MEMP16
+  RTS
+.normal_heap
+  .endif
   SET16 HEAP MEMP16
   RTS
 
@@ -64,6 +97,8 @@ advance_heap
   TYA
   ADC MEMP16+$01
   STA MEMP16+$01
+  ; Check for collision with file stack
+  CHECK_FOR_OUT_OF_MEMORY FS_P16
   RTS
 
 

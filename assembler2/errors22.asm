@@ -136,6 +136,10 @@ err_too_many_arguments
   BRK
   .data $22 "Too many macro arguments" $00
 
+err_out_of_memory
+  BRK
+  .data $23 "Out of memory" $00
+
   .ifdef enable_debug
 err_fwdref_tracking
   BRK
