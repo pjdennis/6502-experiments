@@ -1750,8 +1750,8 @@ expand_macro
   ; Parse argument expression (using PARENT's scope for lookups)
   JSR parse_expression
   ; MACRO_ARG_BUF bounds check
-  ; Check if X < TOKEN-MACRO_ARG_BUF-.ARG_SIZE+$01 (room for one more entry)
-  CPX #TOKEN-MACRO_ARG_BUF-.ARG_SIZE+$01
+  ; Check if X < MACRO_ARG_BUF_LIMIT-MACRO_ARG_BUF-.ARG_SIZE+$01 (room for one more entry)
+  CPX #MACRO_ARG_BUF_LIMIT-MACRO_ARG_BUF-.ARG_SIZE+$01
   BCC .arg_ok         ; X < limit: safe
 .arg_overflow
   JMP err_too_many_macro_arguments
