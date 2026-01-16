@@ -1722,8 +1722,8 @@ expand_macro
   PHA
   ; DON'T push label scope yet - we need parent's scope to look up arguments
   ; Parse arguments first, storing values in fixed buffer
-  ; Save start of params (MACRO_DEF_PTR)
-  PUSH16 MACRO_DEF_PTR16
+
+  ; ----- Phase 1: Capture argument values -----
   ; X = index into MACRO_ARG_BUF for storing values
   ; Each entry: [value_L][value_H][is_fwdref] = 3 bytes
   LDX #$00
@@ -1773,9 +1773,11 @@ expand_macro
   BCC .em_too_many
   ; NOW push label scope for the child macro
   JSR push_label_scope
-  ; Pop params start to MACRO_DEF_PTR
-  POP16 MACRO_DEF_PTR16
-  ; Reset X to read values from start of buffer
+
+  ; ----- Phase 2: Populate child macro scope with parameter values -----
+  ; Restore params start to MACRO_DEF_PTR
+  CP16 MACRO_ENTRY16 MACRO_DEF_PTR16
+  ; Reset X to read values from start of macro arg buffer
   LDX #$00
   ; Now iterate through params and add to hash with stored values
 .em_add_loop
@@ -1792,8 +1794,8 @@ expand_macro
   BNE .em_copy_param
   ; Advance MACRO_DEF_PTR past param name
   TYA
-  SEC
-  ADDA16 MACRO_DEF_PTR16 MACRO_DEF_PTR16 ; MACRO_DEF_PTR + A -> MACRO_DEF_PTR
+  SEC ; +1 for null terminator
+  ADDA16 MACRO_DEF_PTR16 MACRO_DEF_PTR16 ; MACRO_DEF_PTR + A + 1 -> MACRO_DEF_PTR
   ; Load value and fwdref from buffer
   LDA MACRO_ARG_BUF,X
   STA OPERAND16
