@@ -4,7 +4,7 @@
 - [ ] Add .gitignore - Exclude out/, dump/, and tool .out files from version control
 
 ## Assembler Features
-- [ ] Macro support - Define reusable code patterns
+- [X] Macro support - Define reusable code patterns
 
   .macro ADD16 x, y, result
 
@@ -44,7 +44,7 @@
 
 - [X] Maybe remove checks from immediate mode -> .imm_invalid - or else move checks to the parse function for all to share
 
-- [ ] .include tests should verify the full traceback - each filename and line number; extend the test runner.
+- [X] .include tests should verify the full traceback - each filename and line number; extend the test runner.
 
 - [X] Enance .cml_copy_loop to avoid advancing the heap until Y hits FF (or maybe goes negative for quicker checking). (in the assembler code)
 
@@ -56,18 +56,6 @@ value2=value1  ; Needs to be assigned during pass 1
   LDA value2   ; Should use zero page addressing
 
 - [X] Get rid of the XX_L/H name pairs - replace with XX16
-
- Variables still using L/H convention:
-
-  label_scope22.asm:
-  - EXPANSION_ID_L / EXPANSION_ID_H (lines 28-29)
-  - SCOPE_PTR_L / SCOPE_PTR_H (lines 30-31)
-
-  tests/file_stack_test.asm:
-  - CHAR_COUNT_L / CHAR_COUNT_H (lines 26-27)
-  - LINE_COUNT_L / LINE_COUNT_H (lines 28-29)
-  - NUM_L / NUM_H (lines 33-34)
-  - DIVISOR_L / DIVISOR_H (lines 35-36)
 
 - [X] Use Y register in swap_pc_with_save?
 
