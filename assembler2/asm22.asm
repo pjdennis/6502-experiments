@@ -1609,13 +1609,12 @@ process_macro
   APPEND_HEAPI $00
   JSR advance_heap
   ; Write body_ptr (current MEMP16) into the saved location
-  CP16 MACRO_DEF_PTR16 TABP16
   LDY #$00
   LDA MEMP16
-  STA (TABP16),Y
+  STA (MACRO_DEF_PTR16),Y
   INY
   LDA MEMP16+$01
-  STA (TABP16),Y
+  STA (MACRO_DEF_PTR16),Y
   ; Update MACRO_DEF_PTR to point where body will be stored
   CP16 MEMP16 MACRO_DEF_PTR16
   ; Set IN_MACRO_DEF flag to start capturing
@@ -1793,8 +1792,8 @@ expand_macro
   LDA IS_FWDREF
   BEQ .em_do_add
   BIT PASS
-  BMI .em_do_add        ; Pass 2: always add
   BPL .em_add_loop      ; Pass 1 fwdref: skip
+  ; Pass 2: always add
 .em_do_add
   ; Add parameter to local scope
   LDA #$FF
