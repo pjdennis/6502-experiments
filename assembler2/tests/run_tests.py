@@ -404,12 +404,7 @@ class TestRunner:
         expected_stderr = expected_stderr.strip()
 
         if actual_stderr != expected_stderr:
-            details.append("Expected stderr:")
-            for line in expected_stderr.split("\n"):
-                details.append(f"  {line}")
-            details.append("Actual stderr:")
-            for line in actual_stderr.split("\n"):
-                details.append(f"  {line}")
+            self._add_comparison(details, "stderr", expected_stderr, actual_stderr)
 
         if details:
             return TestOutcome(TestResult.FAIL, details)
@@ -481,17 +476,11 @@ class TestRunner:
 
             if expected_stdout or actual_stdout:
                 if actual_stdout != expected_stdout:
-                    details.append("Expected stdout:")
-                    details.append(self._indent(expected_stdout))
-                    details.append("Actual stdout:")
-                    details.append(self._indent(actual_stdout))
+                    self._add_comparison(details, "stdout", expected_stdout, actual_stdout)
 
             if expected_stderr or actual_stderr:
                 if actual_stderr != expected_stderr:
-                    details.append("Expected stderr:")
-                    details.append(self._indent(expected_stderr))
-                    details.append("Actual stderr:")
-                    details.append(self._indent(actual_stderr))
+                    self._add_comparison(details, "stderr", expected_stderr, actual_stderr)
 
             if details:
                 return TestOutcome(TestResult.FAIL, details)
@@ -508,11 +497,22 @@ class TestRunner:
         lines = [line.rstrip() for line in text.split("\n")]
         return "\n".join(lines).rstrip()
 
-    def _indent(self, text: str) -> str:
-        """Indent text for display."""
+    def _add_comparison(
+        self, details: list[str], label: str, expected: str, actual: str
+    ):
+        """Add expected vs actual comparison to details list."""
+        details.append(f"Expected {label}:")
+        self._add_indented(details, expected)
+        details.append(f"Actual {label}:")
+        self._add_indented(details, actual)
+
+    def _add_indented(self, details: list[str], text: str):
+        """Add indented text lines to details list."""
         if not text:
-            return "  (empty)"
-        return "\n".join(f"  {line}" for line in text.split("\n"))
+            details.append("  (empty)")
+            return
+        for line in text.split("\n"):
+            details.append(f"  {line}")
 
     def print_result(self, name: str, outcome: TestOutcome):
         """Print test result."""
