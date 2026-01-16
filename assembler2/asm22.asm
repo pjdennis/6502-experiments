@@ -327,11 +327,10 @@ read_token
 .loop
   JSR compare_end_of_token
   BEQ .done
-  ; TOKEN buffer bounds check (conservative 128-char limit)
-  CPX #$80
-  BCS .token_overflow
+  ; TOKEN buffer bounds check (conservative 127-char limit)
   STA TOKEN,X
   INX
+  BMI .token_overflow
   JSR read_char
   BCC .loop
 .done
