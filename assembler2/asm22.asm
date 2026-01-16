@@ -62,6 +62,7 @@ MACRO_ARG_BUF    = $0500             ; Temp buffer for macro args during expansi
 MACRO_ARG_ENTRY_SIZE = $03           ; Size of each macro argument entry (value_L, value_H, is_fwdref)
 TOKEN            = $0600             ; Buffer for the current token being read
 LHASHTAB      = $0700             ; Label hash table
+IFDEF_DECISIONS  = $0800             ; Buffer for .ifdef decisions (256 bytes)
 *             = $2000             ; Code generates here
 FILE_STACK    = $F000             ; File stack will grow down from 1 below here
 
@@ -92,6 +93,7 @@ NEXT_CHAR       .data $00   ; Last character read by read_char
 IN_MACRO_DEF    .data $00   ; Flag: currently capturing macro body ($FF = capturing)
 MACRO_DEF_PTR16 .data $0000 ; Heap pointer where macro body is being stored
 MACRO_ENTRY16   .data $0000 ; Original macro hash entry address (for recursion check)
+IFDEF_INDEX     .data $00   ; Current index into IFDEF_DECISIONS buffer
 
   .ifdef enable_debug
 DEBUG_FLAG      .data $00   ; Non-zero if debug output enabled
@@ -1486,28 +1488,59 @@ data_parameters_loop_entry
 
 
 ; Process .ifdef directive
+; Records decision in pass 1, replays in pass 2 for consistency with forward refs
 process_ifdef
-  INC COND_DEPTH       ; Always increment depth
-  ; Check if already skipping
+  INC COND_DEPTH
   LDA SKIP_DEPTH
-  BNE .pi_skip_rest    ; Already skipping, don't evaluate condition
-  ; Not skipping - evaluate condition
+  BNE .pi_already_skipping ; Already skipping, don't record or evaluate
+  ; Evaluate condition
   JSR check_for_end_of_line
-  BCC .pi_has_label    ; Label present
-  JMP err_label_expected  ; Missing label
+  BCC .pi_has_label
+  JMP err_label_expected
 .pi_has_label
-  JSR read_token       ; Read label name into TOKEN, next char in NEXT_CHAR
-  ; Look up label in symbol table (don't use local label handling for .ifdef)
+  JSR read_token           ; Expects next char in A
+  ; Save X (global output file handle)
+  TXA
+  PHA
+  ; Check for pass 2 - no need to look up label in pass 2
+  BIT PASS
+  BMI .pi_pass2
+  ; --- Pass 1: Evaluate and store decision ---
+  LDX IFDEF_INDEX
+  ; Increment and check for overflow (wrap from 255 to 0 = buffer full)
+  INC IFDEF_INDEX
+  BEQ .pi_overflow         ; If wrapped to 0, we've used all 256 slots
   LDA #$00
   STA IS_LOCAL_LABEL
   JSR select_label_hash_table
-  JSR find_in_hash
-  BCC .pi_skip_rest    ; Label found - continue assembling
-  ; Label doesn't exist - start skipping
+  JSR find_in_hash         ; C=0 if found, C=1 if not found
+  ; Save result: A = $FF if found (assemble), $00 if not found (skip)
+  LDA #$00                 ; Default: not defined (skip)
+  BCS .pi_save_result      ; C=1 means not found
+  LDA #$FF                 ; Found: defined (assemble)
+.pi_save_result
+  STA IFDEF_DECISIONS,X
+  ; Branch based on decision value
+  BEQ .pi_start_skip       ; Not defined ($00) - start skipping
+  BNE .pi_done             ; Defined ($FF) - continue (no skip)
+  ; --- Pass 2: Replay stored decision ---
+.pi_pass2
+  LDX IFDEF_INDEX
+  INC IFDEF_INDEX
+  LDA IFDEF_DECISIONS,X
+  BEQ .pi_start_skip
+  BNE .pi_done
+.pi_start_skip
   LDA COND_DEPTH
   STA SKIP_DEPTH
-.pi_skip_rest
-  JMP skip_rest_of_line ; Tail call
+.pi_done
+  ; Restore X (global output file handle)
+  PLA
+  TAX
+.pi_already_skipping
+  JMP skip_rest_of_line
+.pi_overflow
+  JMP err_too_many_ifdefs
 
 
 ; Process .endif directive
@@ -1960,6 +1993,7 @@ assemble_code
   STA COND_DEPTH      ; Clear conditional depth
   STA SKIP_DEPTH      ; Clear skip depth
   STA IN_MACRO_DEF    ; Clear macro definition flag
+  STA IFDEF_INDEX     ; Clear .ifdef decision index
 asm_line_loop                 ; Global entry for macro expansion
 .line_loop
   JSR read_char

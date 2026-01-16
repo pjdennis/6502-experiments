@@ -152,6 +152,10 @@ err_token_too_long
   BRK
   .data $26 "Token too long" $00
 
+err_too_many_ifdefs
+  BRK
+  .data $27 "Too many .ifdef directives" $00
+
   .ifdef enable_debug
 err_fwdref_tracking
   BRK

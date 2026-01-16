@@ -2392,3 +2392,66 @@ INPUT:
 EXPECT_ERROR: 38
 EXPECT_LINE: 2
 EXPECT_MSG: Token too long
+
+---
+NAME: ifdef_forward_reference_consistency
+DESCRIPTION: .ifdef with forward-defined label behaves consistently
+INPUT:
+1: * = $0200
+2:   .ifdef LATER
+3:   LDA #$42
+4:   .endif
+5: LATER = $01
+6:   NOP
+EXPECT_HEX: ea
+
+---
+NAME: ifdef_nested_forward_reference
+DESCRIPTION: Nested .ifdef with forward reference in inner block
+INPUT:
+1: * = $0200
+2: OUTER = $01
+3:   .ifdef OUTER
+4:     .ifdef INNER_LATER
+5:     LDA #$42
+6:     .endif
+7:   NOP
+8:   .endif
+9: INNER_LATER = $01
+10:   RTS
+EXPECT_HEX: ea 60
+
+---
+NAME: ifdef_decisions_at_limit
+DESCRIPTION: 255 .ifdef directives exactly at buffer limit (7x32 + 31 = 255)
+INPUT:
+1: * = $0200
+2:   .include tests/ifdefs/ifdef32.asm
+3:   .include tests/ifdefs/ifdef32.asm
+4:   .include tests/ifdefs/ifdef32.asm
+5:   .include tests/ifdefs/ifdef32.asm
+6:   .include tests/ifdefs/ifdef32.asm
+7:   .include tests/ifdefs/ifdef32.asm
+8:   .include tests/ifdefs/ifdef32.asm
+9:   .include tests/ifdefs/ifdef31.asm
+10:   NOP
+EXPECT_HEX: ea
+
+---
+NAME: ifdef_decisions_overflow
+DESCRIPTION: 256 .ifdef directives overflows 255-entry buffer (7x32 + 31 + 1 = 256)
+INPUT:
+1: * = $0200
+2:   .include tests/ifdefs/ifdef32.asm
+3:   .include tests/ifdefs/ifdef32.asm
+4:   .include tests/ifdefs/ifdef32.asm
+5:   .include tests/ifdefs/ifdef32.asm
+6:   .include tests/ifdefs/ifdef32.asm
+7:   .include tests/ifdefs/ifdef32.asm
+8:   .include tests/ifdefs/ifdef32.asm
+9:   .include tests/ifdefs/ifdef31.asm
+10:   .ifdef ONE_MORE
+11:   .endif
+EXPECT_ERROR: 39
+EXPECT_LINE: 10
+EXPECT_MSG: Too many .ifdef
