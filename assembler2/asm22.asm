@@ -1912,8 +1912,6 @@ capture_macro_line
   ; === Pass 2: Skip without copying to heap ===
   ; Just detect .endmacro to clear IN_MACRO_DEF flag
 .cml_pass2
-  TXA
-  PHA
   LDA NEXT_CHAR
 .cml_p2_scan
   CMP #' '
@@ -1933,14 +1931,10 @@ capture_macro_line
   JSR compare_token
   BNE .cml_p2_skip             ; Not .endmacro
   ; Found .endmacro
-  PLA
-  TAX
   JMP process_endmacro         ; Tail call
 .cml_p2_skip
   JSR skip_rest_of_line
 .cml_p2_done
-  PLA
-  TAX
   RTS
 
 
