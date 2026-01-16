@@ -2422,6 +2422,22 @@ INPUT:
 EXPECT_HEX: ea 60
 
 ---
+NAME: ifdef_in_macro_evaluated_at_expansion
+DESCRIPTION: .ifdef in macro body evaluated at expansion time, not definition time
+INPUT:
+1: * = $0200
+2:   .macro CONDITIONAL
+3:   .ifdef FLAG
+4:   LDA #$42
+5:   .endif
+6:   NOP
+7:   .endmacro
+8:   CONDITIONAL
+9: FLAG = $01
+10:   CONDITIONAL
+EXPECT_HEX: ea a9 42 ea
+
+---
 NAME: ifdef_decisions_at_limit
 DESCRIPTION: 255 .ifdef directives exactly at buffer limit (7x32 + 31 = 255)
 INPUT:
