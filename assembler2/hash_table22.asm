@@ -46,19 +46,6 @@ init_hash_table
   RTS
 
 
-; Calculate hash for global labels
-; On entry HT_KEY contains the token to calculate hash from
-; On exit HASH contains the calculated hash value (post-ASL)
-;         HASH_PRE_ASL contains pre-ASL value (NOT committed to CACHED_HASH)
-;         X is preserved
-;         A, Y are not preserved
-; Note: Caller must call commit_cached_hash to update CACHED_HASH if needed
-calculate_hash
-  LDA #$00
-  STA HASH
-  JMP hash_loop ; Tail call
-
-
 ; Commit the pre-ASL hash to CACHED_HASH
 ; Call this when updating CURR_GLOBAL for non-assignment global labels
 ; On exit A is not preserved
@@ -80,13 +67,12 @@ calculate_hash_local
   JMP hash_loop ; Tail call
 
 
-; Calculate hash for instructions (does NOT modify CACHED_HASH)
+; Calculate hash for global labels or instructions (does NOT use CACHED_HASH)
 ; On entry HT_KEY contains the token to calculate hash from
 ; On exit HASH contains the calculated hash value (post-ASL)
-;         CACHED_HASH is NOT modified
 ;         X is preserved
 ;         A, Y are not preserved
-calculate_hash_instruction
+calculate_hash
   LDA #$00
   STA HASH
   ; fall through to common code
@@ -150,7 +136,7 @@ find_in_hash
 ;         X is preserved
 ;         A, is not preserverd
 find_in_hash_instruction
-  JSR calculate_hash_instruction
+  JSR calculate_hash
   ; Fall through to common code
 
 
@@ -390,8 +376,9 @@ store_token
 ; On entry HT_KEY contains key
 ;          IS_LOCAL_LABEL: if non-zero, uses cached hash from global
 ; On exit C = 0 if added or 1 if already exists
-;         If C = 0, MEMP16 points to where value should be stored
+;         If C = 0 (added), MEMP16 points to where value should be stored
 ;         Caller must store value and call advance_heap
+;         IF C = 1 (exists), TABP16 points to the key and TABP16 + Y points to the value
 ;         A, X, Y are not preserved
 hash_add
   LDA IS_LOCAL_LABEL
