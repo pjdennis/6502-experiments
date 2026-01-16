@@ -961,7 +961,7 @@ lookup_mnemonic
   CMP #MODE_MACRO
   BNE .is_instruction
   ; It's a macro - compute pointer to macro data and expand
-  ; MACRO_DEF_PTR = TABP16 + Y (points to MODE_MACRO, body_ptr is at +1)
+  ; MACRO_DEF_PTR = TABP16 + Y (points to MODE_MACRO, args are at +1)
   TYA
   CLC
   ADDA16 TABP16 MACRO_DEF_PTR16
@@ -1615,12 +1615,6 @@ process_macro
   LDY #$00
   APPEND_HEAPI MODE_MACRO
   JSR advance_heap
-  ; Save location for body_ptr (will fill in after params are parsed)
-  CP16 MEMP16 MACRO_DEF_PTR16
-  ; Advance past body_ptr space (2 bytes)
-  LDY #$02
-  JSR advance_heap
-  ; Parse parameters (if any) - stored as zero-terminated list
 .pm_param_loop
   JSR check_for_end_of_line
   BCS .pm_params_done  ; End of line, no more params
@@ -1641,13 +1635,6 @@ process_macro
   LDY #$00
   APPEND_HEAPI $00
   JSR advance_heap
-  ; Write body_ptr (current MEMP16) into the saved location
-  LDY #$00
-  LDA MEMP16
-  STA (MACRO_DEF_PTR16),Y
-  INY
-  LDA MEMP16+$01
-  STA (MACRO_DEF_PTR16),Y
   ; Update MACRO_DEF_PTR to point where body will be stored
   CP16 MEMP16 MACRO_DEF_PTR16
   ; Set IN_MACRO_DEF flag to start capturing
@@ -1721,7 +1708,7 @@ check_macro_recursion
 
 ; Expand a macro invocation
 ; On entry: MACRO_DEF_PTR points to the MODE_MACRO sentinel in macro entry
-;           (MODE_MACRO, body_ptr_L, body_ptr_H, param1\0, param2\0, ..., \0)
+;           (MODE_MACRO, param1\0, param2\0, ..., \0, body\0)
 ;           TOKEN contains the macro name
 ;           NEXT_CHAR contains character after macro name
 ; On exit: Memory source pushed, jumps to asm_line_loop
@@ -1736,10 +1723,10 @@ expand_macro
   PHA
   ; DON'T push label scope yet - we need parent's scope to look up arguments
   ; Parse arguments first, storing values in fixed buffer
-  ; MACRO_DEF_PTR+3 (sentinel + 2 byte body pointer) points to first parameter name
+  ; MACRO_DEF_PTR+1 (sentinel) points to first parameter name
   ; (or empty string if none)
   CLC
-  ADDI16 MACRO_DEF_PTR16 $03 MACRO_DEF_PTR16
+  ADDI16 MACRO_DEF_PTR16 $01 MACRO_DEF_PTR16
   ; Save start of params (MACRO_DEF_PTR)
   PUSH16 MACRO_DEF_PTR16
   ; X = index into MACRO_ARG_BUF for storing values
