@@ -1,0 +1,625 @@
+#!/usr/bin/env python3
+"""
+Unified test runner for 6502 assembler project.
+
+Supports two test types:
+  - assembler: Tests the assembler (asm22) with assembly source input
+  - file_stack: Tests the file stack component with file I/O operations
+
+Usage:
+    ./run_tests.py [options] [test_file...]
+
+Options:
+    -f, --filter PATTERN   Only run tests matching PATTERN
+    -v, --verbose          Show detailed output for passing tests
+    -h, --help             Show this help message
+
+If no test files specified, runs the default test suites.
+"""
+
+import argparse
+import os
+import re
+import subprocess
+import sys
+import tempfile
+from dataclasses import dataclass, field
+from enum import Enum
+from pathlib import Path
+from typing import Optional
+
+
+class TestType(Enum):
+    ASSEMBLER = "assembler"
+    FILE_STACK = "file_stack"
+
+
+class TestResult(Enum):
+    PASS = "pass"
+    FAIL = "fail"
+    SKIP = "skip"
+
+
+# ANSI colors
+class Colors:
+    RED = "\033[0;31m"
+    GREEN = "\033[0;32m"
+    YELLOW = "\033[0;33m"
+    NC = "\033[0m"  # No Color
+
+    @classmethod
+    def disable(cls):
+        cls.RED = cls.GREEN = cls.YELLOW = cls.NC = ""
+
+
+@dataclass
+class Test:
+    name: str = ""
+    description: str = ""
+    test_type: Optional[TestType] = None
+    mode: str = ""  # For file_stack tests
+    input_text: str = ""  # For assembler tests (INPUT field)
+    files: dict = field(default_factory=dict)  # For file_stack tests
+    main_file: str = ""  # First file defined
+    expect_hex: str = ""
+    expect_fwdref: str = ""
+    expect_stdout: str = ""
+    expect_stderr: str = ""
+    expect_error: str = ""
+    expect_line: str = ""
+    expect_msg: str = ""
+    args: str = ""
+    skip: str = ""
+
+
+@dataclass
+class TestOutcome:
+    result: TestResult
+    details: list = field(default_factory=list)
+
+
+class TestRunner:
+    def __init__(self, base_dir: Path, verbose: bool = False):
+        self.base_dir = base_dir
+        self.verbose = verbose
+        self.emulator = base_dir / "emulator.out"
+        self.assembler = base_dir / "out" / "asm22_debug.out"
+        self.file_stack_test = base_dir / "out" / "file_stack_test22.out"
+
+        self.passed = 0
+        self.failed = 0
+        self.skipped = 0
+
+    def check_prerequisites(self, test_type: TestType) -> bool:
+        """Check that required executables exist."""
+        if not self.emulator.exists():
+            print(f"Error: Emulator not found at {self.emulator}")
+            print("Run the build first")
+            return False
+
+        if test_type == TestType.ASSEMBLER:
+            if not self.assembler.exists():
+                print(f"Error: Assembler not found at {self.assembler}")
+                print("Run the build first")
+                return False
+        elif test_type == TestType.FILE_STACK:
+            if not self.file_stack_test.exists():
+                print(f"Error: File stack test program not found at {self.file_stack_test}")
+                print("Run the build first")
+                return False
+
+        return True
+
+    def parse_test_file(self, filepath: Path) -> list[Test]:
+        """Parse a test file and return list of Test objects."""
+        tests = []
+        current = Test()
+        section = ""  # Current multi-line section: 'input', 'file', 'stdout', 'stderr'
+        section_name = ""  # For FILE sections, the filename
+
+        with open(filepath) as f:
+            for line in f:
+                line = line.rstrip("\n")
+
+                # Skip comments and blank lines outside sections
+                if section == "":
+                    if re.match(r"^\s*#", line) or re.match(r"^\s*$", line):
+                        continue
+
+                # Test separator
+                if line == "---":
+                    if current.name:
+                        self._finalize_test(current)
+                        tests.append(current)
+                    current = Test()
+                    section = ""
+                    continue
+
+                # Parse fields
+                if m := re.match(r"^NAME:\s*(.*)", line):
+                    current.name = m.group(1)
+                    section = ""
+                elif m := re.match(r"^DESCRIPTION:\s*(.*)", line):
+                    current.description = m.group(1)
+                    section = ""
+                elif m := re.match(r"^TYPE:\s*(.*)", line):
+                    current.test_type = TestType(m.group(1))
+                    section = ""
+                elif m := re.match(r"^MODE:\s*(.*)", line):
+                    current.mode = m.group(1)
+                    section = ""
+                elif re.match(r"^INPUT:", line):
+                    section = "input"
+                    current.input_text = ""
+                elif m := re.match(r"^FILE\s+(\S+):", line):
+                    section = "file"
+                    section_name = m.group(1)
+                    current.files[section_name] = ""
+                    if not current.main_file:
+                        current.main_file = section_name
+                elif re.match(r"^EXPECT_STDOUT:", line):
+                    section = "stdout"
+                    current.expect_stdout = ""
+                elif re.match(r"^EXPECT_STDERR:", line):
+                    section = "stderr"
+                    current.expect_stderr = ""
+                elif m := re.match(r"^EXPECT_HEX:\s*(.*)", line):
+                    current.expect_hex = m.group(1)
+                    section = ""
+                elif m := re.match(r"^EXPECT_FWDREF:\s*(.*)", line):
+                    current.expect_fwdref = m.group(1)
+                    section = ""
+                elif m := re.match(r"^EXPECT_ERROR:\s*(.*)", line):
+                    current.expect_error = m.group(1)
+                    section = ""
+                elif m := re.match(r"^EXPECT_LINE:\s*(.*)", line):
+                    current.expect_line = m.group(1)
+                    section = ""
+                elif m := re.match(r"^EXPECT_MSG:\s*(.*)", line):
+                    current.expect_msg = m.group(1)
+                    section = ""
+                elif m := re.match(r"^ARGS:\s*(.*)", line):
+                    current.args = m.group(1)
+                    section = ""
+                elif m := re.match(r"^SKIP:\s*(.*)", line):
+                    current.skip = m.group(1)
+                    section = ""
+                elif section == "input":
+                    # Strip line number prefix: "N: " or "N:"
+                    line = re.sub(r"^\d+:\s?", "", line)
+                    if current.input_text:
+                        current.input_text += "\n"
+                    current.input_text += line
+                elif section == "file":
+                    # Strip line number prefix
+                    line = re.sub(r"^\d+:\s?", "", line)
+                    current.files[section_name] += line + "\n"
+                elif section == "stdout":
+                    # Skip comment and blank lines in expected output sections
+                    if re.match(r"^\s*#", line) or re.match(r"^\s*$", line):
+                        continue
+                    if current.expect_stdout:
+                        current.expect_stdout += "\n"
+                    current.expect_stdout += line
+                elif section == "stderr":
+                    # Skip comment and blank lines in expected output sections
+                    if re.match(r"^\s*#", line) or re.match(r"^\s*$", line):
+                        continue
+                    if current.expect_stderr:
+                        current.expect_stderr += "\n"
+                    current.expect_stderr += line
+
+        # Don't forget the last test
+        if current.name:
+            self._finalize_test(current)
+            tests.append(current)
+
+        return tests
+
+    def _finalize_test(self, test: Test):
+        """Infer test type if not explicitly set."""
+        if test.test_type is None:
+            if test.mode or test.files:
+                test.test_type = TestType.FILE_STACK
+            else:
+                test.test_type = TestType.ASSEMBLER
+
+    def run_test(self, test: Test, filter_pattern: str = "") -> Optional[TestOutcome]:
+        """Run a single test and return the outcome."""
+        # Apply filter
+        if filter_pattern and filter_pattern not in test.name:
+            return None
+
+        # Handle skipped tests
+        if test.skip:
+            return TestOutcome(TestResult.SKIP, [test.skip])
+
+        if test.test_type == TestType.ASSEMBLER:
+            return self._run_assembler_test(test)
+        elif test.test_type == TestType.FILE_STACK:
+            return self._run_file_stack_test(test)
+        else:
+            return TestOutcome(TestResult.SKIP, ["Unknown test type"])
+
+    def _run_assembler_test(self, test: Test) -> TestOutcome:
+        """Run an assembler test."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            asm_file = tmpdir / "test.asm"
+            bin_file = tmpdir / "test.bin"
+            err_file = tmpdir / "test.err"
+
+            # Write input file
+            asm_file.write_text(test.input_text + "\n")
+
+            # Build command
+            cmd = [
+                str(self.emulator),
+                str(self.assembler),
+                "2000",
+                "/dev/null",
+                "/dev/null",
+                str(asm_file),
+                str(bin_file),
+                "debug",
+            ]
+
+            # Add extra args
+            if test.args:
+                cmd.extend(test.args.split())
+
+            # Run assembler
+            with open(err_file, "w") as err_fh:
+                result = subprocess.run(cmd, stderr=err_fh, capture_output=False)
+
+            exit_code = result.returncode
+            stderr_text = err_file.read_text()
+
+            # Determine if this is a positive or negative test
+            if test.expect_hex:
+                return self._check_positive_assembler_test(test, bin_file, stderr_text, exit_code)
+            elif test.expect_error:
+                return self._check_negative_assembler_test(test, stderr_text, exit_code, asm_file)
+            elif test.expect_stderr:
+                return self._check_stderr_test(test, stderr_text, exit_code, asm_file)
+            else:
+                return TestOutcome(TestResult.SKIP, ["No expectation defined"])
+
+    def _check_positive_assembler_test(
+        self, test: Test, bin_file: Path, stderr_text: str, exit_code: int
+    ) -> TestOutcome:
+        """Check a positive assembler test (expects success)."""
+        details = []
+
+        if exit_code != 0:
+            details.append("Unexpected error:")
+            for line in stderr_text.strip().split("\n"):
+                if line.startswith("Error "):
+                    details.append(f"  {line}")
+            return TestOutcome(TestResult.FAIL, details)
+
+        # Check hex output
+        if bin_file.exists():
+            actual_hex = bin_file.read_bytes().hex()
+            actual_hex = " ".join(actual_hex[i : i + 2] for i in range(0, len(actual_hex), 2))
+        else:
+            actual_hex = ""
+
+        expected_hex = self._normalize_hex(test.expect_hex)
+        actual_hex = self._normalize_hex(actual_hex)
+
+        if expected_hex != actual_hex:
+            details.append(f"Expected hex: {expected_hex}")
+            details.append(f"Actual hex:   {actual_hex}")
+
+        # Check forward reference count if specified
+        if test.expect_fwdref:
+            actual_fwdref = ""
+            for line in stderr_text.split("\n"):
+                if "Forward references forced to absolute:" in line:
+                    m = re.search(r": (\d+)$", line)
+                    if m:
+                        actual_fwdref = m.group(1)
+                    break
+
+            if actual_fwdref != test.expect_fwdref:
+                details.append(f"Expected fwdref count: {test.expect_fwdref}")
+                details.append(f"Actual fwdref count:   {actual_fwdref}")
+
+        if details:
+            return TestOutcome(TestResult.FAIL, details)
+        return TestOutcome(TestResult.PASS)
+
+    def _check_negative_assembler_test(
+        self, test: Test, stderr_text: str, exit_code: int, asm_file: Path
+    ) -> TestOutcome:
+        """Check a negative assembler test (expects failure)."""
+        details = []
+
+        if exit_code == 0:
+            details.append("Expected error, got success")
+            return TestOutcome(TestResult.FAIL, details)
+
+        # Parse error output
+        actual_error = ""
+        actual_line = ""
+        actual_msg = ""
+
+        for line in stderr_text.split("\n"):
+            if line.startswith("Error "):
+                m = re.match(r"Error (\d+)", line)
+                if m:
+                    actual_error = m.group(1)
+                m = re.search(r"at line (\d+)", line)
+                if m:
+                    actual_line = m.group(1)
+                m = re.search(r": ([^:]+)$", line)
+                if m:
+                    actual_msg = m.group(1)
+                break
+
+        if actual_error != test.expect_error:
+            details.append(f"Error code: expected {test.expect_error}, got {actual_error}")
+
+        if test.expect_line and actual_line != test.expect_line:
+            details.append(f"Line: expected {test.expect_line}, got {actual_line}")
+
+        if test.expect_msg and test.expect_msg not in actual_msg:
+            details.append(f"Message: expected '{test.expect_msg}', got '{actual_msg}'")
+
+        if details:
+            return TestOutcome(TestResult.FAIL, details)
+        return TestOutcome(TestResult.PASS)
+
+    def _check_stderr_test(
+        self, test: Test, stderr_text: str, exit_code: int, asm_file: Path
+    ) -> TestOutcome:
+        """Check a test that expects specific stderr output."""
+        details = []
+
+        if exit_code == 0:
+            details.append("Expected error, got success")
+            return TestOutcome(TestResult.FAIL, details)
+
+        # Filter emulator noise from stderr
+        actual_lines = []
+        for line in stderr_text.split("\n"):
+            # Skip emulator status lines
+            if re.match(r"^out/", line):
+                continue
+            if re.match(r"^/", line):
+                continue
+            if "cycles" in line:
+                continue
+            if "was not closed" in line:
+                continue
+            if line.startswith("Exit code"):
+                continue
+            actual_lines.append(line.rstrip())
+
+        actual_stderr = "\n".join(actual_lines).strip()
+
+        # Replace placeholder with actual file path
+        expected_stderr = test.expect_stderr.replace("{{MAIN_FILE}}", str(asm_file))
+        expected_stderr = expected_stderr.strip()
+
+        if actual_stderr != expected_stderr:
+            details.append("Expected stderr:")
+            for line in expected_stderr.split("\n"):
+                details.append(f"  {line}")
+            details.append("Actual stderr:")
+            for line in actual_stderr.split("\n"):
+                details.append(f"  {line}")
+
+        if details:
+            return TestOutcome(TestResult.FAIL, details)
+        return TestOutcome(TestResult.PASS)
+
+    def _run_file_stack_test(self, test: Test) -> TestOutcome:
+        """Run a file stack test."""
+        if not test.mode or not test.main_file:
+            return TestOutcome(TestResult.SKIP, ["Missing mode or file"])
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+
+            # Write input files
+            for filename, content in test.files.items():
+                # Transform @include directives for nested/memory modes
+                if test.mode in ("nested", "memory"):
+                    content = re.sub(
+                        r"@include\s+(\S+)", rf"@include {tmpdir}/\1", content
+                    )
+
+                filepath = tmpdir / filename
+                filepath.parent.mkdir(parents=True, exist_ok=True)
+                filepath.write_text(content)
+
+            main_file = tmpdir / test.main_file
+            stdout_file = tmpdir / "stdout"
+            stderr_file = tmpdir / "stderr"
+
+            # Run test program
+            cmd = [
+                str(self.emulator),
+                str(self.file_stack_test),
+                "200",
+                "/dev/null",
+                str(stdout_file),
+                test.mode,
+                str(main_file),
+            ]
+
+            with open(stderr_file, "w") as err_fh:
+                subprocess.run(cmd, stderr=err_fh)
+
+            # Read outputs
+            actual_stdout = stdout_file.read_text() if stdout_file.exists() else ""
+            actual_stderr = stderr_file.read_text() if stderr_file.exists() else ""
+
+            # Filter emulator noise from stderr
+            stderr_lines = []
+            for line in actual_stderr.split("\n"):
+                if re.search(r"executed \d+ cycles", line):
+                    continue
+                if "was not closed" in line:
+                    continue
+                if re.match(r"^out/", line):
+                    continue
+                if re.match(r".*\.out \d+ /dev/null", line):
+                    continue
+                stderr_lines.append(line)
+            actual_stderr = "\n".join(stderr_lines)
+
+            # Normalize outputs
+            actual_stdout = self._normalize_text(actual_stdout)
+            actual_stderr = self._normalize_text(actual_stderr)
+            expected_stdout = self._normalize_text(test.expect_stdout)
+            expected_stderr = self._normalize_text(test.expect_stderr)
+
+            details = []
+
+            if expected_stdout or actual_stdout:
+                if actual_stdout != expected_stdout:
+                    details.append("Expected stdout:")
+                    details.append(self._indent(expected_stdout))
+                    details.append("Actual stdout:")
+                    details.append(self._indent(actual_stdout))
+
+            if expected_stderr or actual_stderr:
+                if actual_stderr != expected_stderr:
+                    details.append("Expected stderr:")
+                    details.append(self._indent(expected_stderr))
+                    details.append("Actual stderr:")
+                    details.append(self._indent(actual_stderr))
+
+            if details:
+                return TestOutcome(TestResult.FAIL, details)
+            return TestOutcome(TestResult.PASS)
+
+    def _normalize_hex(self, hex_str: str) -> str:
+        """Normalize hex string: lowercase, single spaces."""
+        return " ".join(hex_str.lower().split())
+
+    def _normalize_text(self, text: str) -> str:
+        """Normalize text: strip trailing whitespace from lines and end."""
+        if not text:
+            return ""
+        lines = [line.rstrip() for line in text.split("\n")]
+        return "\n".join(lines).rstrip()
+
+    def _indent(self, text: str) -> str:
+        """Indent text for display."""
+        if not text:
+            return "  (empty)"
+        return "\n".join(f"  {line}" for line in text.split("\n"))
+
+    def print_result(self, name: str, outcome: TestOutcome):
+        """Print test result."""
+        printf_name = f"  {name:<40} "
+
+        if outcome.result == TestResult.PASS:
+            print(f"{printf_name}{Colors.GREEN}PASS{Colors.NC}")
+            self.passed += 1
+        elif outcome.result == TestResult.FAIL:
+            print(f"{printf_name}{Colors.RED}FAIL{Colors.NC}")
+            for detail in outcome.details:
+                print(f"    {detail}")
+            self.failed += 1
+        elif outcome.result == TestResult.SKIP:
+            reason = outcome.details[0] if outcome.details else ""
+            print(f"{printf_name}{Colors.YELLOW}SKIP{Colors.NC} ({reason})")
+            self.skipped += 1
+
+    def run_test_file(self, filepath: Path, filter_pattern: str = ""):
+        """Run all tests in a file."""
+        tests = self.parse_test_file(filepath)
+
+        # Check prerequisites for test types in this file
+        test_types = set(t.test_type for t in tests if t.test_type)
+        for tt in test_types:
+            if not self.check_prerequisites(tt):
+                return
+
+        print(f"Running tests from {filepath.name}")
+        print()
+
+        for test in tests:
+            outcome = self.run_test(test, filter_pattern)
+            if outcome:
+                self.print_result(test.name, outcome)
+
+    def print_summary(self):
+        """Print final summary."""
+        print()
+        print("=" * 40)
+        parts = [f"{Colors.GREEN}{self.passed} passed{Colors.NC}"]
+        parts.append(f"{Colors.RED}{self.failed} failed{Colors.NC}")
+        if self.skipped:
+            parts.append(f"{Colors.YELLOW}{self.skipped} skipped{Colors.NC}")
+        print(f"Results: {', '.join(parts)}")
+        print("=" * 40)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Unified test runner for 6502 assembler project"
+    )
+    parser.add_argument(
+        "test_files",
+        nargs="*",
+        help="Test files to run (default: asm22_tests.txt and file_stack_tests22.txt)",
+    )
+    parser.add_argument(
+        "-f", "--filter", default="", help="Only run tests matching this pattern"
+    )
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Verbose output"
+    )
+    parser.add_argument(
+        "--no-color", action="store_true", help="Disable colored output"
+    )
+
+    args = parser.parse_args()
+
+    if args.no_color:
+        Colors.disable()
+
+    # Determine base directory
+    script_dir = Path(__file__).parent.resolve()
+    base_dir = script_dir.parent
+
+    runner = TestRunner(base_dir, verbose=args.verbose)
+
+    print("=" * 40)
+    print("Test Suite")
+    print("=" * 40)
+    print()
+
+    # Default test files if none specified
+    if not args.test_files:
+        args.test_files = [
+            str(script_dir / "file_stack_tests22.txt"),
+            str(script_dir / "asm22_tests.txt"),
+        ]
+
+    for test_file in args.test_files:
+        filepath = Path(test_file)
+        if not filepath.is_absolute():
+            # Try relative to current dir first, then script dir
+            if not filepath.exists():
+                filepath = script_dir / test_file
+        if not filepath.exists():
+            print(f"Error: Test file not found: {test_file}")
+            continue
+
+        runner.run_test_file(filepath, args.filter)
+        print()
+
+    runner.print_summary()
+
+    sys.exit(1 if runner.failed > 0 else 0)
+
+
+if __name__ == "__main__":
+    main()
