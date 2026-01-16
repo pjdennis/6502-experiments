@@ -1558,8 +1558,8 @@ process_macro
   BMI .pm_pass2_skip_add
   JMP err_duplicate_macro
 .pm_pass2_skip_add
-  ; Pass 2: skip adding, just set flag and skip line
-  ; The macro body will be re-captured (but discarded in Phase 1B capture mode)
+  ; Pass 2: skip adding, just set flag to enable body skipping
+  ; (body was already captured in pass 1)
   LDA #$FF
   STA IN_MACRO_DEF
   JMP skip_rest_of_line
@@ -1633,10 +1633,14 @@ process_endmacro
   BNE .pem_in_macro
   JMP err_endmacro_without_macro
 .pem_in_macro
-  ; Write $00 terminator to body (body_ptr was already set in process_macro)
+  ; In pass 2, skip heap write (body was already captured in pass 1)
+  BIT PASS
+  BMI .pem_clear_flag
+  ; Pass 1: Write $00 terminator to body
   LDY #$00
   APPEND_HEAPI $00
   JSR advance_heap
+.pem_clear_flag
   ; Clear the capturing flag
   LDA #$00
   STA IN_MACRO_DEF
@@ -1827,7 +1831,11 @@ expand_macro
 ;
 ; Strategy: Copy whole line to heap, then check if it was .endmacro.
 ; If so, undo the copy and process .endmacro normally.
+; In pass 2, skip heap copy - just scan for .endmacro detection.
 capture_macro_line
+  BIT PASS
+  BMI .cml_pass2
+  ; === Pass 1: Copy to heap ===
   ; Save X (output file handle)
   TXA
   PHA
@@ -1897,6 +1905,40 @@ capture_macro_line
   JMP process_endmacro   ; Tail call
 .cml_keep_line
   ; Restore X (output file handle)
+  PLA
+  TAX
+  RTS
+
+  ; === Pass 2: Skip without copying to heap ===
+  ; Just detect .endmacro to clear IN_MACRO_DEF flag
+.cml_pass2
+  TXA
+  PHA
+  LDA NEXT_CHAR
+.cml_p2_scan
+  CMP #' '
+  BNE .cml_p2_not_space
+  JSR read_char
+  BCC .cml_p2_scan
+  JMP err_unclosed_macro       ; EOF in macro
+.cml_p2_not_space
+  CMP #'\n'
+  BEQ .cml_p2_done             ; Empty/blank line
+  CMP #'.'
+  BNE .cml_p2_skip             ; Not a directive
+  ; Check if directive is .endmacro
+  JSR read_char                ; Read char after '.'
+  JSR read_token               ; Read directive name into TOKEN
+  SET16 directive_endmacro TABP16
+  JSR compare_token
+  BNE .cml_p2_skip             ; Not .endmacro
+  ; Found .endmacro
+  PLA
+  TAX
+  JMP process_endmacro         ; Tail call
+.cml_p2_skip
+  JSR skip_rest_of_line
+.cml_p2_done
   PLA
   TAX
   RTS
