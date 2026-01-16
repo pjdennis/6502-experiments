@@ -2267,9 +2267,8 @@ start
   .ifdef enable_debug
   ; Verify forward ref pointer matches pass 1
   CMP16 FWDREF16 PASS_1_FWDREF16 
-  BNE .fwdref_error
   BEQ .fwdref_ok
-.fwdref_error
+  ; Mismatch in ref counts
   JMP err_fwdref_tracking
 .fwdref_ok
   .endif
