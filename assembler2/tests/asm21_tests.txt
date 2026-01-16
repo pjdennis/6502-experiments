@@ -184,15 +184,15 @@ EXPECT_HEX: ea d0 fd
 ---
 NAME: branch_backward_max
 INPUT:
-01: * = $0182
-02: target
-03:   NOP
-04:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
-05:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
-06:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
-07:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
-08:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
-09:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 1: * = $0182
+ 2: target
+ 3:   NOP
+ 4:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 5:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 6:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 7:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 8:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 9:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
 10:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
 11:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
 12:   BNE target
@@ -2113,7 +2113,7 @@ INPUT:
 EXPECT_HEX: 85 80
 
 ---
-NAME: macro_nested_param_backward_refernce_zp
+NAME: macro_nested_param_backward_ref_zp
 DESCRIPTION: Parameters pass through multiple nesting levels
 INPUT:
 01: * = $0200
@@ -2128,7 +2128,7 @@ INPUT:
 EXPECT_HEX: a5 12
 
 ---
-NAME: macro_nested_param_backward_refernce_abs
+NAME: macro_nested_param_backward_ref_abs
 DESCRIPTION: Parameters pass through multiple nesting levels
 INPUT:
 01: * = $0200
@@ -2143,7 +2143,7 @@ INPUT:
 EXPECT_HEX: ad 34 12
 
 ---
-NAME: macro_nested_param_forward_refernce_1_byte
+NAME: macro_nested_param_forward_ref_1_byte
 DESCRIPTION: Parameters pass through multiple nesting levels
 INPUT:
 01: * = $0200
@@ -2158,7 +2158,7 @@ INPUT:
 EXPECT_HEX: ad 12 00
 
 ---
-NAME: macro_nested_param_forward_refernce_2_byte
+NAME: macro_nested_param_forward_ref_2_byte
 DESCRIPTION: Parameters pass through multiple nesting levels
 INPUT:
 01: * = $0200

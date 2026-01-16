@@ -185,14 +185,14 @@ class TestRunner:
                     current.skip = m.group(1)
                     section = ""
                 elif section == "input":
-                    # Strip line number prefix: "N: " or "N:"
-                    line = re.sub(r"^\d+:\s?", "", line)
+                    # Strip line number prefix: optional spaces, digits, colon, required space
+                    line = re.sub(r"^\s*\d+: ", "", line)
                     if current.input_text:
                         current.input_text += "\n"
                     current.input_text += line
                 elif section == "file":
-                    # Strip line number prefix
-                    line = re.sub(r"^\d+:\s?", "", line)
+                    # Strip line number prefix: optional spaces, digits, colon, required space
+                    line = re.sub(r"^\s*\d+: ", "", line)
                     current.files[section_name] += line + "\n"
                 elif section == "stdout":
                     # Skip comment and blank lines in expected output sections

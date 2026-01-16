@@ -18,7 +18,7 @@
 NAME: echo_simple
 MODE: echo
 FILE input.txt:
-1: Hello
+ 1: Hello
 EXPECT_STDOUT:
 Hello
 
@@ -26,9 +26,9 @@ Hello
 NAME: echo_multiline
 MODE: echo
 FILE input.txt:
-1: Line1
-2: Line2
-3: Line3
+ 1: Line1
+ 2: Line2
+ 3: Line3
 EXPECT_STDOUT:
 Line1
 Line2
@@ -44,7 +44,7 @@ EXPECT_STDOUT:
 NAME: echo_single_char
 MODE: echo
 FILE input.txt:
-1: X
+ 1: X
 EXPECT_STDOUT:
 X
 
@@ -52,7 +52,7 @@ X
 NAME: echo_no_trailing_newline
 MODE: echo
 FILE input.txt:
-1: NoNewline
+ 1: NoNewline
 EXPECT_STDOUT:
 NoNewline
 
@@ -64,7 +64,7 @@ NoNewline
 NAME: lines_single
 MODE: lines
 FILE input.txt:
-1: Hello
+ 1: Hello
 EXPECT_STDOUT:
 1:Hello
 
@@ -72,9 +72,9 @@ EXPECT_STDOUT:
 NAME: lines_multiline
 MODE: lines
 FILE input.txt:
-1: First
-2: Second
-3: Third
+ 1: First
+ 2: Second
+ 3: Third
 EXPECT_STDOUT:
 1:First
 2:Second
@@ -84,9 +84,9 @@ EXPECT_STDOUT:
 NAME: lines_empty_lines
 MODE: lines
 FILE input.txt:
-1: A
-2:
-3: B
+ 1: A
+ 2: 
+ 3: B
 EXPECT_STDOUT:
 1:A
 2:
@@ -100,8 +100,8 @@ EXPECT_STDOUT:
 NAME: nested_no_includes
 MODE: nested
 FILE input.txt:
-1: Just text
-2: No includes
+ 1: Just text
+ 2: No includes
 EXPECT_STDOUT:
 Just text
 No includes
@@ -110,11 +110,11 @@ No includes
 NAME: nested_simple
 MODE: nested
 FILE main.txt:
-1: Before
-2: @include inner.txt
-3: After
+ 1: Before
+ 2: @include inner.txt
+ 3: After
 FILE inner.txt:
-1: Inside
+ 1: Inside
 EXPECT_STDOUT:
 Before
 Inside
@@ -124,15 +124,15 @@ After
 NAME: nested_multiple_includes
 MODE: nested
 FILE main.txt:
-1: A
-2: @include one.txt
-3: B
-4: @include two.txt
-5: C
+ 1: A
+ 2: @include one.txt
+ 3: B
+ 4: @include two.txt
+ 5: C
 FILE one.txt:
-1: ONE
+ 1: ONE
 FILE two.txt:
-1: TWO
+ 1: TWO
 EXPECT_STDOUT:
 A
 ONE
@@ -144,15 +144,15 @@ C
 NAME: nested_deep
 MODE: nested
 FILE main.txt:
-1: Outer1
-2: @include middle.txt
-3: Outer2
+ 1: Outer1
+ 2: @include middle.txt
+ 3: Outer2
 FILE middle.txt:
-1: Middle1
-2: @include inner.txt
-3: Middle2
+ 1: Middle1
+ 2: @include inner.txt
+ 3: Middle2
 FILE inner.txt:
-1: Inner
+ 1: Inner
 EXPECT_STDOUT:
 Outer1
 Middle1
@@ -164,8 +164,8 @@ Outer2
 NAME: nested_at_not_include
 MODE: nested
 FILE input.txt:
-1: @other text
-2: Done
+ 1: @other text
+ 2: Done
 EXPECT_STDOUT:
 @other text
 Done
@@ -174,13 +174,13 @@ Done
 NAME: nested_include_multiline
 MODE: nested
 FILE main.txt:
-1: Start
-2: @include multi.txt
-3: End
+ 1: Start
+ 2: @include multi.txt
+ 3: End
 FILE multi.txt:
-1: Line1
-2: Line2
-3: Line3
+ 1: Line1
+ 2: Line2
+ 3: Line3
 EXPECT_STDOUT:
 Start
 Line1
@@ -196,12 +196,12 @@ End
 NAME: nested_lines_simple
 MODE: lines
 FILE main.txt:
-1: A
-2: @include inner.txt
-3: B
+ 1: A
+ 2: @include inner.txt
+ 3: B
 FILE inner.txt:
-1: X
-2: Y
+ 1: X
+ 2: Y
 EXPECT_STDOUT:
 1:A
 2:@include inner.txt
@@ -218,7 +218,7 @@ EXPECT_STDOUT:
 NAME: info_simple
 MODE: info
 FILE input.txt:
-1: Hello
+ 1: Hello
 EXPECT_STDOUT:
 chars:6
 lines:1
@@ -228,8 +228,8 @@ stack:empty
 NAME: info_with_newline
 MODE: info
 FILE input.txt:
-1: Hello
-2: World
+ 1: Hello
+ 2: World
 EXPECT_STDOUT:
 chars:12
 lines:2
@@ -248,9 +248,9 @@ stack:empty
 NAME: info_multiline
 MODE: info
 FILE input.txt:
-1: A
-2: B
-3: C
+ 1: A
+ 2: B
+ 3: C
 EXPECT_STDOUT:
 chars:6
 lines:3
@@ -266,9 +266,9 @@ stack:empty
 NAME: memory_simple
 MODE: memory
 FILE input.txt:
-1: Before
-2: @memory INLINE
-3: After
+ 1: Before
+ 2: @memory INLINE
+ 3: After
 EXPECT_STDOUT:
 Before
 INLINE
@@ -278,9 +278,9 @@ After
 NAME: memory_multichar
 MODE: memory
 FILE input.txt:
-1: A
-2: @memory XYZ123
-3: B
+ 1: A
+ 2: @memory XYZ123
+ 3: B
 EXPECT_STDOUT:
 A
 XYZ123
@@ -290,9 +290,9 @@ B
 NAME: memory_empty
 MODE: memory
 FILE input.txt:
-1: Start
-2: @memory
-3: End
+ 1: Start
+ 2: @memory
+ 3: End
 EXPECT_STDOUT:
 Start
 
@@ -302,11 +302,11 @@ End
 NAME: memory_multiple
 MODE: memory
 FILE input.txt:
-1: A
-2: @memory ONE
-3: B
-4: @memory TWO
-5: C
+ 1: A
+ 2: @memory ONE
+ 3: B
+ 4: @memory TWO
+ 5: C
 EXPECT_STDOUT:
 A
 ONE
@@ -318,12 +318,12 @@ C
 NAME: memory_with_file_include
 MODE: memory
 FILE main.txt:
-1: File
-2: @memory MEM
-3: @include other.txt
-4: Done
+ 1: File
+ 2: @memory MEM
+ 3: @include other.txt
+ 4: Done
 FILE other.txt:
-1: Included
+ 1: Included
 EXPECT_STDOUT:
 File
 MEM
@@ -339,9 +339,9 @@ Done
 NAME: trace_simple
 MODE: memory
 FILE main.txt:
-1: Before
-2: @traceback
-3: After
+ 1: Before
+ 2: @traceback
+ 3: After
 EXPECT_STDOUT:
 Before
 file:main.txt:2
@@ -353,13 +353,13 @@ file:main.txt:2
 NAME: trace_nested
 MODE: memory
 FILE main.txt:
-1: Main start
-2: @include inner.txt
-3: Main end
+ 1: Main start
+ 2: @include inner.txt
+ 3: Main end
 FILE inner.txt:
-1: Inner start
-2: @traceback
-3: Inner end
+ 1: Inner start
+ 2: @traceback
+ 3: Inner end
 EXPECT_STDOUT:
 Main start
 Inner start
@@ -370,16 +370,16 @@ file:main.txt:2
 NAME: trace_deep
 MODE: memory
 FILE main.txt:
-1: Outer1
-2: @include middle.txt
-3: Outer2
+ 1: Outer1
+ 2: @include middle.txt
+ 3: Outer2
 FILE middle.txt:
-1: Middle1
-2: @include inner.txt
-3: Middle2
+ 1: Middle1
+ 2: @include inner.txt
+ 3: Middle2
 FILE inner.txt:
-1: Inner
-2: @traceback
+ 1: Inner
+ 2: @traceback
 EXPECT_STDOUT:
 Outer1
 Middle1
@@ -392,10 +392,10 @@ file:main.txt:2
 NAME: trace_with_memory
 MODE: memory
 FILE main.txt:
-1: File start
-2: @memory MEM_CONTENT
-3: @traceback
-4: After trace
+ 1: File start
+ 2: @memory MEM_CONTENT
+ 3: @traceback
+ 4: After trace
 EXPECT_STDOUT:
 File start
 MEM_CONTENT
@@ -408,13 +408,13 @@ file:main.txt:2
 NAME: trace_alternating
 MODE: memory
 FILE main.txt:
-1: Main line 1
-2: @include inner.txt
-3: Main line 3
+ 1: Main line 1
+ 2: @include inner.txt
+ 3: Main line 3
 FILE inner.txt:
-1: Inner line 1
-2: @memory @traceback
-3: Inner line 3
+ 1: Inner line 1
+ 2: @memory @traceback
+ 3: Inner line 3
 EXPECT_STDOUT:
 Main line 1
 Inner line 1
@@ -433,13 +433,13 @@ file:main.txt:2
 NAME: memory_nested_with_file
 MODE: memory
 FILE main.txt:
-1: File
-2: @include other.txt
-3: Done
+ 1: File
+ 2: @include other.txt
+ 3: Done
 FILE other.txt:
-1: Other start
-2: @memory INLINE_TEXT
-3: Other end
+ 1: Other start
+ 2: @memory INLINE_TEXT
+ 3: Other end
 EXPECT_STDOUT:
 File
 Other start
