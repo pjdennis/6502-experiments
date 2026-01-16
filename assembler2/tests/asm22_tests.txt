@@ -146,15 +146,15 @@ EXPECT_HEX: f0 01 ea 60
 ---
 NAME: branch_forward_max
 INPUT:
-01: * = $0200
-02:   BEQ target
-03:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
-04:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
-05:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
-06:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
-07:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
-08:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
-09:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 1: * = $0200
+ 2:   BEQ target
+ 3:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 4:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 5:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 6:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 7:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 8:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 9:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
 10:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
 11: target
 12:   RTS
@@ -184,15 +184,15 @@ EXPECT_HEX: ea d0 fd
 ---
 NAME: branch_backward_max
 INPUT:
-01: * = $0182
-02: target
-03:   NOP
-04:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
-05:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
-06:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
-07:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
-08:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
-09:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 1: * = $0182
+ 2: target
+ 3:   NOP
+ 4:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 5:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 6:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 7:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 8:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 9:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
 10:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
 11:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
 12:   BNE target
@@ -664,15 +664,15 @@ EXPECT_FWDREF: 0
 ---
 NAME: assignment_byte_select_multiple
 INPUT:
-01: * = $0200
-02: val1 = $1234
-03: val2 = $5678
-04: low1 = <val1
-05: high1 = >val1
-06: low2 = <val2
-07: high2 = >val2
-08:   LDA #low1
-09:   LDX #high1
+ 1: * = $0200
+ 2: val1 = $1234
+ 3: val2 = $5678
+ 4: low1 = <val1
+ 5: high1 = >val1
+ 6: low2 = <val2
+ 7: high2 = >val2
+ 8:   LDA #low1
+ 9:   LDX #high1
 10:   LDY #low2
 11:   .data high2
 EXPECT_HEX: a9 34 a2 12 a0 78 56 00
@@ -1357,30 +1357,30 @@ EXPECT_ERROR: 24
 ---
 NAME: ifdef_nested_both_true
 INPUT:
-01: * = $0200
-02: outer = $01
-03: inner = $02
-04:   .ifdef outer
-05:   LDA #$01
-06:     .ifdef inner
-07:     LDA #$02
-08:     .endif
-09:   LDA #$03
+ 1: * = $0200
+ 2: outer = $01
+ 3: inner = $02
+ 4:   .ifdef outer
+ 5:   LDA #$01
+ 6:     .ifdef inner
+ 7:     LDA #$02
+ 8:     .endif
+ 9:   LDA #$03
 10:   .endif
 EXPECT_HEX: a9 01 a9 02 a9 03
 
 ---
 NAME: ifdef_nested_outer_false
 INPUT:
-01: * = $0200
-02: inner = $02
-03:   .ifdef undefined_outer
-04:   LDA #$01
-05:     .ifdef inner
-06:     LDA #$02
-07:     .endif
-08:   LDA #$03
-09:   .endif
+ 1: * = $0200
+ 2: inner = $02
+ 3:   .ifdef undefined_outer
+ 4:   LDA #$01
+ 5:     .ifdef inner
+ 6:     LDA #$02
+ 7:     .endif
+ 8:   LDA #$03
+ 9:   .endif
 10:   LDA #$04
 EXPECT_HEX: a9 04
 
@@ -1401,15 +1401,15 @@ EXPECT_HEX: a9 01 a9 03
 ---
 NAME: ifdef_deeply_nested
 INPUT:
-01: * = $0200
-02: a = $01
-03: b = $02
-04: c = $03
-05:   .ifdef a
-06:   LDA #$01
-07:     .ifdef b
-08:     LDA #$02
-09:       .ifdef c
+ 1: * = $0200
+ 2: a = $01
+ 3: b = $02
+ 4: c = $03
+ 5:   .ifdef a
+ 6:   LDA #$01
+ 7:     .ifdef b
+ 8:     LDA #$02
+ 9:       .ifdef c
 10:       LDA #$03
 11:       .endif
 12:     LDA #$04
@@ -2145,63 +2145,63 @@ INPUT:
 EXPECT_HEX: 85 80
 
 ---
-NAME: macro_nested_param_backward_refernce_zp
+NAME: macro_nested_param_backward_ref_zp
 DESCRIPTION: Parameters pass through multiple nesting levels
 INPUT:
-01: * = $0200
-02: value = $12
-03:   .macro level2 v2
-04:   LDA v2            ; Expect zero page addressing
-05:   .endmacro
-06:   .macro level1 v1
-07:   level2 v1
-08:   .endmacro
-09:   level1 value
+ 1: * = $0200
+ 2: value = $12
+ 3:   .macro level2 v2
+ 4:   LDA v2            ; Expect zero page addressing
+ 5:   .endmacro
+ 6:   .macro level1 v1
+ 7:   level2 v1
+ 8:   .endmacro
+ 9:   level1 value
 EXPECT_HEX: a5 12
 
 ---
-NAME: macro_nested_param_backward_refernce_abs
+NAME: macro_nested_param_backward_ref_abs
 DESCRIPTION: Parameters pass through multiple nesting levels
 INPUT:
-01: * = $0200
-02: value = $1234
-03:   .macro level2 v2
-04:   LDA v2            ; Expect absolute addressing
-05:   .endmacro
-06:   .macro level1 v1
-07:   level2 v1
-08:   .endmacro
-09:   level1 value
+ 1: * = $0200
+ 2: value = $1234
+ 3:   .macro level2 v2
+ 4:   LDA v2            ; Expect absolute addressing
+ 5:   .endmacro
+ 6:   .macro level1 v1
+ 7:   level2 v1
+ 8:   .endmacro
+ 9:   level1 value
 EXPECT_HEX: ad 34 12
 
 ---
-NAME: macro_nested_param_forward_refernce_1_byte
+NAME: macro_nested_param_forward_ref_1_byte
 DESCRIPTION: Parameters pass through multiple nesting levels
 INPUT:
-01: * = $0200
-02:   .macro level2 v2
-03:   LDA v2            ; Expect absolute addressing
-04:   .endmacro
-05:   .macro level1 v1
-06:   level2 v1
-07:   .endmacro
-08:   level1 value
-09: value = $12
+ 1: * = $0200
+ 2:   .macro level2 v2
+ 3:   LDA v2            ; Expect absolute addressing
+ 4:   .endmacro
+ 5:   .macro level1 v1
+ 6:   level2 v1
+ 7:   .endmacro
+ 8:   level1 value
+ 9: value = $12
 EXPECT_HEX: ad 12 00
 
 ---
-NAME: macro_nested_param_forward_refernce_2_byte
+NAME: macro_nested_param_forward_ref_2_byte
 DESCRIPTION: Parameters pass through multiple nesting levels
 INPUT:
-01: * = $0200
-02:   .macro level2 v2
-03:   LDA v2            ; Expect absolute addressing
-04:   .endmacro
-05:   .macro level1 v1
-06:   level2 v1
-07:   .endmacro
-08:   level1 value
-09: value = $1234
+ 1: * = $0200
+ 2:   .macro level2 v2
+ 3:   LDA v2            ; Expect absolute addressing
+ 4:   .endmacro
+ 5:   .macro level1 v1
+ 6:   level2 v1
+ 7:   .endmacro
+ 8:   level1 value
+ 9: value = $1234
 EXPECT_HEX: ad 34 12
 
 ---
