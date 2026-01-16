@@ -662,10 +662,10 @@ parse_expression
 
   ; Check if shift count >= 16 (result will be 0)
   LDA OPERAND16+$01
-  BNE .left_shift_zero     ; High byte != 0 means shift >= 256
+  BNE .shift_zero     ; High byte != 0 means shift >= 256
   LDA OPERAND16
   CMP #$10
-  BCS .left_shift_zero     ; Low byte >= 16 means shift >= 16
+  BCS .shift_zero     ; Low byte >= 16 means shift >= 16
   TAY                      ; Transfer shift count to Y
 
   ; Restore value to shift from EXPR_ACCU
@@ -674,17 +674,9 @@ parse_expression
   ; Perform left shift
 .left_shift_loop
   DEY
-  BMI .left_shift_done
+  BMI .shift_done
   ASL16 OPERAND16
   JMP .left_shift_loop
-
-.left_shift_zero
-  ; Shift >= 16, result is 0
-  LDA #$00
-  STA_LH16 OPERAND16
-
-.left_shift_done
-  JMP .loop
 
 .right_shift_op
   ; Save current operand to EXPR_ACCU
@@ -701,10 +693,10 @@ parse_expression
 
   ; Check if shift count >= 16 (result will be 0)
   LDA OPERAND16+$01
-  BNE .right_shift_zero    ; High byte != 0 means shift >= 256
+  BNE .shift_zero    ; High byte != 0 means shift >= 256
   LDA OPERAND16
   CMP #$10
-  BCS .right_shift_zero    ; Low byte >= 16 means shift >= 16
+  BCS .shift_zero    ; Low byte >= 16 means shift >= 16
   TAY                      ; Transfer shift count to Y
 
   ; Restore value to shift from EXPR_ACCU
@@ -713,16 +705,16 @@ parse_expression
   ; Perform right shift (logical/unsigned)
 .right_shift_loop
   DEY
-  BMI .right_shift_done
+  BMI .shift_done
   LSR16 OPERAND16
   JMP .right_shift_loop
 
-.right_shift_zero
+.shift_zero
   ; Shift >= 16, result is 0
   LDA #$00
   STA_LH16 OPERAND16
 
-.right_shift_done
+.shift_done
   JMP .loop
 
 
