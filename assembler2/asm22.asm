@@ -1736,9 +1736,10 @@ expand_macro
   PHA
   ; DON'T push label scope yet - we need parent's scope to look up arguments
   ; Parse arguments first, storing values in fixed buffer
-  ; MACRO_DEF_PTR+3 points to first parameter name (or empty string if none)
+  ; MACRO_DEF_PTR+3 (sentinel + 2 byte body pointer) points to first parameter name
+  ; (or empty string if none)
   CLC
-  ADDI16 MACRO_DEF_PTR16 $0003 MACRO_DEF_PTR16
+  ADDI16 MACRO_DEF_PTR16 $03 MACRO_DEF_PTR16
   ; Save start of params (MACRO_DEF_PTR)
   PUSH16 MACRO_DEF_PTR16
   ; X = index into MACRO_ARG_BUF for storing values
@@ -1841,12 +1842,9 @@ expand_macro
   ; Push memory source and set up pointers
   JSR push_memory_source
   ; Set memory pointer to body_ptr from macro definition
-  LDY #$01
-  LDA (MACRO_ENTRY16),Y
-  STA FS_MEM_PTR16      ; Set body start low
-  INY
-  LDA (MACRO_ENTRY16),Y
-  STA FS_MEM_PTR16+$01  ; Set body start high
+  ; Add one to MACR_DEF_PTR16 to skip 0 terminator and save to memory source
+  CLC
+  ADDI16 MACRO_DEF_PTR16 $01 FS_MEM_PTR16
   ; Restore X (output file handle)
   PLA
   TAX
