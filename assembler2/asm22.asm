@@ -961,9 +961,9 @@ lookup_mnemonic
   CMP #MODE_MACRO
   BNE .is_instruction
   ; It's a macro - compute pointer to macro data and expand
-  ; MACRO_DEF_PTR = TABP16 + Y (points to MODE_MACRO, args are at +1)
+  ; MACRO_DEF_PTR = TABP16 + Y + 1 (skip past MODE_MACRO to point at args)
   TYA
-  CLC
+  SEC ; +1
   ADDA16 TABP16 MACRO_DEF_PTR16
   ; Don't skip rest of line - expand_macro will parse arguments
   PLA                   ; Pop return address (we're not returning)
@@ -1707,10 +1707,9 @@ check_macro_recursion
 
 
 ; Expand a macro invocation
-; On entry: MACRO_DEF_PTR points to the MODE_MACRO sentinel in macro entry
-;           (MODE_MACRO, param1\0, param2\0, ..., \0, body\0)
+; On entry: MACRO_DEF_PTR points to the  macro entry
+;           (param1\0, param2\0, ..., \0, body\0)
 ;           TOKEN contains the macro name
-;           NEXT_CHAR contains character after macro name
 ; On exit: Memory source pushed, jumps to asm_line_loop
 expand_macro
 .ARG_SIZE = $03 ; Size of each macro argument (value_L, value_H, is_fwdref)
@@ -1723,10 +1722,6 @@ expand_macro
   PHA
   ; DON'T push label scope yet - we need parent's scope to look up arguments
   ; Parse arguments first, storing values in fixed buffer
-  ; MACRO_DEF_PTR+1 (sentinel) points to first parameter name
-  ; (or empty string if none)
-  CLC
-  ADDI16 MACRO_DEF_PTR16 $01 MACRO_DEF_PTR16
   ; Save start of params (MACRO_DEF_PTR)
   PUSH16 MACRO_DEF_PTR16
   ; X = index into MACRO_ARG_BUF for storing values
