@@ -15,10 +15,6 @@ TOKEN_MEM  = $1D80  ; Offset in TOKEN buffer for memory content
 
   .zeropage
 
-; File state
-CURLINE16      .data $0000  ; Current line number
-NEXT_CHAR      .data $00    ; Last character read
-
 ; Test state
 TEST_MODE     .data $00     ; 0=echo, 1=lines, 2=nested, 3=info, 4=memory
 CHAR_COUNT16  .data $0000   ; Character count
@@ -41,8 +37,6 @@ TABP16      .data $0000
 
 ; File stack configuration
 FS_FILENAME   = TOKEN
-FS_CURR_LINE16 = CURLINE16
-FS_NEXT_CHAR  = NEXT_CHAR
 
 ; CHECK_FOR_OUT_OF_MEMORY - Macro placeholder for use by file stack
   .macro CHECK_FOR_OUT_OF_MEMORY fs_ptr
@@ -52,6 +46,8 @@ FS_NEXT_CHAR  = NEXT_CHAR
 
   .include file_stack22.asm
 read_char = file_stack_read_char
+CURLINE16 = FS_CURR_LINE16
+NEXT_CHAR = FS_NEXT_CHAR
 
 
 main:

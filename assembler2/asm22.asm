@@ -76,7 +76,6 @@ HEX16           .data $0000 ; 2 byte hex value, also aliased as OPERAND16)
 OPERAND16 = HEX16           ; Operand value - alias for HEX16
 PASS            .data $00   ; 1 byte $00 = pass 1 $FF = pass 2
 STARTED         .data $00   ; flag to indicate output has started
-CURR_LINE16     .data $0000 ; Current line number
 CURR_OUT_FILE   .data $00   ; Current output file (for closing on error)
 IN_ZEROPAGE     .data $00   ; Flag indicating if in zero page section
 PC_SAVE16       .data $0000 ; Save location for PC when switching sections
@@ -89,7 +88,6 @@ COND_DEPTH      .data $00   ; Conditional assembly nesting depth
 SKIP_DEPTH      .data $00   ; Depth where skipping started (0 = not skipping)
 ARG_COUNT       .data $00   ; Total command line argument count
 ARG_INDEX       .data $00   ; Current argument index being processed
-NEXT_CHAR       .data $00   ; Last character read by read_char
 IN_MACRO_DEF    .data $00   ; Flag: currently capturing macro body ($FF = capturing)
 MACRO_DEF_PTR16 .data $0000 ; Heap pointer where macro body is being stored
 MACRO_ENTRY16   .data $0000 ; Original macro hash entry address (for recursion check)
@@ -113,14 +111,14 @@ SMALL_HEAP_FLAG .data $00   ; Non-zero if small_heap argument was passed
   .include errors22.asm
   .include fwdref22.asm
 FS_FILENAME        = TOKEN
-FS_CURR_LINE16     = CURR_LINE16
-FS_NEXT_CHAR       = NEXT_CHAR
+FS_POP_MEMORY_HOOK = pop_label_scope
   .ifdef enable_debug
 FS_ERR_NO_FILE     = err_no_file
   .endif
-FS_POP_MEMORY_HOOK = pop_label_scope
   .include file_stack22.asm
 read_char          = file_stack_read_char
+NEXT_CHAR          = FS_NEXT_CHAR
+CURR_LINE16        = FS_CURR_LINE16
 
 
 ; ============================================================================

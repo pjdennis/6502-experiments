@@ -1,8 +1,6 @@
 ; Requires:
 ;   FILE_STACK     - 1 past the highest address from which the stack grows down
 ;   FS_FILENAME    - filename buffer
-;   FS_CURR_LINE16 - zero page location of the current line number
-;   FS_NEXT_CHAR   - zero page location to store last character read
 ;   FS_ERR_NO_FILE - error handler for read_char when no file is open
 ;   open, close, read - file I/O functions
 
@@ -23,9 +21,11 @@
 
   .zeropage
 
-FS_CURR_FILE  .data $00   ; The current file handle
-FS_P16        .data $0000 ; Pointer to the current location in the file stack
-FS_TEMP16     .data $0000 ; Temporary location for use in calculations
+FS_NEXT_CHAR   .data $00   ; The last character read
+FS_CURR_FILE   .data $00   ; The current file handle
+FS_CURR_LINE16 .data $0000 ; The current line number
+FS_P16         .data $0000 ; Pointer to the current location in the file stack
+FS_TEMP16      .data $0000 ; Temporary location for use in calculations
 
 ; Memory source support (zero-terminated buffers)
 FS_SRC_TYPE   .data $00   ; Source type: 0=file, 1=memory
