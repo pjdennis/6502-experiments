@@ -371,7 +371,6 @@ store_token
   INY
   JMP advance_heap      ; Tail call
 
-
 ; Add HT_KEY to hash table
 ; On entry HT_KEY contains key
 ;          IS_LOCAL_LABEL: if non-zero, uses cached hash from global
@@ -380,7 +379,11 @@ store_token
 ;         Caller must store value and call advance_heap
 ;         IF C = 1 (exists), TABP16 points to the key and TABP16 + Y points to the value
 ;         A, X, Y are not preserved
-hash_add
+hash_add_instruction ; Do not consider local lable
+  JSR calculate_hash
+  JMP hash_add_common
+
+hash_add ; Hash calculation based on local label or not
   LDA IS_LOCAL_LABEL
   BEQ .use_global_hash
   JSR calculate_hash_local
@@ -388,6 +391,10 @@ hash_add
 .use_global_hash
   JSR calculate_hash
 .hash_done
+; Fall through to common code
+
+
+hash_add_common
   JSR hash_entry_empty
   BEQ .entry_empty
   JSR load_hash_entry

@@ -1576,9 +1576,10 @@ process_macro
   JSR read_token       ; Macro name now in TOKEN, next char in NEXT_CHAR
   ; Check for instruction collision or duplicate macro
   JSR select_instruction_hash_table
-  JSR find_in_hash_instruction
-  BCS .pm_name_ok      ; C=1 means not found, good
-  ; Found something - is it an instruction or existing macro?
+  ; Optimistically attempt to add macro to the instruction hash table
+  JSR hash_add_instruction
+  BCC .pm_name_ok      ; C=0 means new, so move on to storing value
+  ; Name was already present in hash table - is it an instruction or existing macro?
   ; Check first byte of value - MODE_MACRO means macro, else instruction
   LDA (TABP16),Y
   CMP #MODE_MACRO
@@ -1596,21 +1597,8 @@ process_macro
   STA IN_MACRO_DEF
   JMP skip_rest_of_line
 .pm_name_ok
-  ; Add macro entry to instruction hash table
-  ; HASH is still set from find_in_hash_instruction
-  ; Use similar logic to hash_add but for instruction table
-  JSR hash_entry_empty
-  BEQ .pm_hash_empty
-  ; Entry exists - find end of chain
-  JSR load_hash_entry
-  JSR find_token
-  ; TABP16 + Y points to 'next' pointer at end of chain
-  JSR store_table_entry  ; Store MEMP16 at end of chain
-  JMP .pm_store_entry
-.pm_hash_empty
-  JSR store_hash_entry   ; Store MEMP16 in hash table
-.pm_store_entry
-  JSR store_token        ; Stores name on heap, MEMP16 now points to value location
+  ; Add macro entry value
+  ; MEMP16 points to location at which to store the value
   ; Store MODE_MACRO sentinel
   LDY #$00
   APPEND_HEAPI MODE_MACRO
