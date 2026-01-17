@@ -85,7 +85,7 @@ NAME: lines_empty_lines
 MODE: lines
 FILE input.txt:
 1: A
-2:
+2: 
 3: B
 EXPECT_STDOUT:
 1:A

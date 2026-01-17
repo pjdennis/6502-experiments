@@ -21,11 +21,6 @@ CHAR_COUNT16  .data $0000   ; Character count
 LINE_COUNT16  .data $0000   ; Line count
 AT_LINE_START .data $00     ; Flag: at start of line (for lines mode)
 
-; For decimal printing
-NUM16         .data $0000
-DIVISOR16     .data $0000
-PRINT_ZERO    .data $00     ; Flag to print leading zeros
-
 ; Temporary
 TEMP        .data $00
 TABP16      .data $0000
@@ -34,6 +29,7 @@ TABP16      .data $0000
 
   .include environment11.asm
   .include macros22.asm
+  .include to_decimal22.asm
 
 ; File stack configuration
 FS_FILENAME   = TOKEN
@@ -103,7 +99,7 @@ mode_lines:
   ; If at line start, save line number BEFORE read_char can increment it
   LDA AT_LINE_START
   BEQ .do_read
-  CP16 CURLINE16 NUM16
+  CP16 CURLINE16 TO_DECIMAL_VALUE16
 .do_read:
   ; Read first, then decide if we need line prefix
   JSR read_char_track_line
@@ -113,7 +109,7 @@ mode_lines:
   BEQ .not_start
   ; Save char, print saved line number, restore char
   PHA
-  JSR print_num
+  JSR print_decimal
   LDA #':'
   JSR write_b
   LDA #$00
@@ -274,14 +270,14 @@ mode_info:
 .done:
   ; Output "chars:N"
   JSR print_str_chars
-  CP16 CHAR_COUNT16 NUM16
-  JSR print_num
+  CP16 CHAR_COUNT16 TO_DECIMAL_VALUE16
+  JSR print_decimal
   LDA #$0A
   JSR write_b
   ; Output "lines:N"
   JSR print_str_lines
-  CP16 LINE_COUNT16 NUM16
-  JSR print_num
+  CP16 LINE_COUNT16 TO_DECIMAL_VALUE16
+  JSR print_decimal
   LDA #$0A
   JSR write_b
   ; Output "stack:empty" or "stack:active"
@@ -767,8 +763,8 @@ print_traceback:
   LDA #':'
   JSR write_b
   ; Print line number
-  CP16 CURLINE16 NUM16
-  JSR print_num
+  CP16 CURLINE16 TO_DECIMAL_VALUE16
+  JSR print_decimal
   ; Print newline
   LDA #$0A
   JSR write_b
@@ -840,70 +836,18 @@ str_active:
   .data "active" $00
 
 ; ============================================================================
-; Simple decimal print for 16-bit number in NUM16
+; Print 16-bit decimal number (converts TO_DECIMAL_VALUE16 and prints it)
 ; ============================================================================
-print_num:
-  LDA #$00
-  STA PRINT_ZERO      ; Don't print leading zeros yet
-  ; Try 10000 ($2710)
-  SET16 $2710 DIVISOR16
-  JSR print_digit
-  ; Try 1000 ($03E8)
-  SET16 $03E8 DIVISOR16
-  JSR print_digit
-  ; Try 100 ($64)
-  SET16 $0064 DIVISOR16
-  JSR print_digit
-  ; Try 10 ($0A)
-  SET16 $000A DIVISOR16
-  JSR print_digit
-  ; Always print ones digit
-  LDA NUM16
-  CLC
-  ADC #'0'
+print_decimal:
+  JSR to_decimal
+  LDY #$00
+.loop:
+  LDA TO_DECIMAL_RESULT,Y
+  BEQ .done
   JSR write_b
-  RTS
-
-; Print one decimal digit by repeated subtraction
-; Divides NUM by DIVISOR, prints digit, leaves remainder in NUM
-print_digit:
-  LDX #$00            ; Digit counter
-.sub_loop:
-  ; Check if NUM >= DIVISOR
-  LDA NUM16+$01
-  CMP DIVISOR16+$01
-  BCC .done_sub       ; NUM16_H < DIVISOR16_H, done
-  BNE .do_sub         ; NUM16_H > DIVISOR16_H, subtract
-  ; High bytes equal, check low
-  LDA NUM16
-  CMP DIVISOR16
-  BCC .done_sub       ; NUM < DIVISOR, done
-.do_sub:
-  ; NUM -= DIVISOR
-  SEC
-  LDA NUM16
-  SBC DIVISOR16
-  STA NUM16
-  LDA NUM16+$01
-  SBC DIVISOR16+$01
-  STA NUM16+$01
-  INX
-  JMP .sub_loop
-.done_sub:
-  ; X = digit value
-  TXA
-  BNE .print_it
-  ; Digit is 0 - only print if we've printed something
-  LDA PRINT_ZERO
-  BEQ .skip_it
-.print_it:
-  TXA
-  CLC
-  ADC #'0'
-  JSR write_b
-  LDA #$01
-  STA PRINT_ZERO      ; Now print zeros
-.skip_it:
+  INY
+  BNE .loop           ; Always taken (string < 256 chars)
+.done:
   RTS
 
 ; ============================================================================
