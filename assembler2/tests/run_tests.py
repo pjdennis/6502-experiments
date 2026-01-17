@@ -554,7 +554,8 @@ class TestRunner:
         print()
         print("=" * 40)
         parts = [f"{Colors.GREEN}{self.passed} passed{Colors.NC}"]
-        parts.append(f"{Colors.RED}{self.failed} failed{Colors.NC}")
+        if self.failed:
+            parts.append(f"{Colors.RED}{self.failed} failed{Colors.NC}")
         if self.skipped:
             parts.append(f"{Colors.YELLOW}{self.skipped} skipped{Colors.NC}")
         print(f"Results: {', '.join(parts)}")
