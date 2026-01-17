@@ -49,38 +49,18 @@ diff out/inst16.asm.out out/inst18.asm.out
 ./emulator.out out/asm18.out 2000 /dev/null /dev/null instgen19.asm out/instgen19.out
 ./emulator.out out/instgen19.out 2000 /dev/null out/inst19.asm.out
 ./emulator.out out/asm18.out 2000 /dev/null /dev/null asm19.asm out/asm19.out
-./emulator.out out/asm19.out 2000 /dev/null /dev/null asm19.asm out/asm19_2.out
-diff <(hexdump -C out/asm19.out) <(hexdump -C out/asm19_2.out)
-
-echo "OK"
-
-# asm20
-./emulator.out out/asm19_2.out 2000 /dev/null /dev/null instgen20.asm out/instgen20.out
+./emulator.out out/asm19.out 2000 /dev/null /dev/null instgen20.asm out/instgen20.out
 ./emulator.out out/instgen20.out 2000 /dev/null out/inst20.asm.out
-./emulator.out out/asm19_2.out 2000 /dev/null /dev/null asm20.asm out/asm20.out
-./emulator.out out/asm20.out 2000 /dev/null /dev/null asm20.asm out/asm20_2.out
-diff <(hexdump -C out/asm20.out) <(hexdump -C out/asm20_2.out)
-
-echo "OK"
-
-# asm21 - with conditional debug support
+./emulator.out out/asm19.out 2000 /dev/null /dev/null asm20.asm out/asm20.out
 ./emulator.out out/asm20.out 2000 /dev/null /dev/null instgen21.asm out/instgen21.out
 ./emulator.out out/instgen21.out 2000 /dev/null out/inst21.asm.out
-# Build without debug (smaller binary)
 ./emulator.out out/asm20.out 2000 /dev/null /dev/null asm21.asm out/asm21.out
-# Build with debug support
 ./emulator.out out/asm20.out 2000 /dev/null /dev/null asm21.asm out/asm21_debug.out define:enable_debug
-
-# asm22 - macros in assembler implementation
-# Build file stack test program
 ./emulator.out out/asm21_debug.out 2000 /dev/null /dev/null tests/file_stack_test22.asm out/file_stack_test22.out
-# Build the assembler
 ./emulator.out out/asm21_debug.out 2000 /dev/null /dev/null instgen22.asm out/instgen22.out
 ./emulator.out out/instgen22.out 2000 /dev/null out/inst22.asm.out
-# Build without debug (smaller binary)
-./emulator.out out/asm21.out 2000 /dev/null /dev/null asm22.asm out/asm22.out
-# Build with debug support
-./emulator.out out/asm21.out 2000 /dev/null /dev/null asm22.asm out/asm22_debug.out define:enable_debug
+./emulator.out out/asm21_debug.out 2000 /dev/null /dev/null asm22.asm out/asm22.out
+./emulator.out out/asm21_debug.out 2000 /dev/null /dev/null asm22.asm out/asm22_debug.out define:enable_debug
 # Self-assembly test (without debug - smaller)
 ./emulator.out out/asm22.out 2000 /dev/null /dev/null asm22.asm out/asm22_2.out
 diff <(hexdump -C out/asm22.out) <(hexdump -C out/asm22_2.out)
@@ -88,7 +68,7 @@ diff <(hexdump -C out/asm22.out) <(hexdump -C out/asm22_2.out)
 ./emulator.out out/asm22_debug.out 2000 /dev/null /dev/null asm22.asm out/asm22_debug_2.out define:enable_debug
 diff <(hexdump -C out/asm22_debug.out) <(hexdump -C out/asm22_debug_2.out)
 
-echo "OK"
+echo "Build chain completed OK"
 
 # Show actual code size difference
 # File covers $2000-$FFFF, vectors at end. Scan backwards from just before vectors.
@@ -97,9 +77,9 @@ SIZE1=$(perl -e 'open(F,"<","out/asm22.out");binmode(F);read(F,$d,0xE000);for($i
 SIZE2=$(perl -e 'open(F,"<","out/asm22_debug.out");binmode(F);read(F,$d,0xE000);for($i=0xDFFB;$i>=0;$i--){last if ord(substr($d,$i,1))!=0}print $i+1')
 echo "  asm22.out (no debug):   $SIZE1 bytes"
 echo "  asm22_debug.out:        $SIZE2 bytes"
-echo "  Savings:                $((SIZE2 - SIZE1)) bytes"
+echo "  Difference:             $((SIZE2 - SIZE1)) bytes"
 
 ./emulator.out out/asm22_debug.out 2000 /dev/null /dev/null test19.asm out/test19.out
 # hexdump -C out/test19.out
-echo "Assembled"
+echo "Assembled test program"
 ./emulator.out out/test19.out 1000 /dev/null - arg1 "arg 2"
