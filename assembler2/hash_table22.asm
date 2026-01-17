@@ -248,6 +248,11 @@ compare_token
 
 .handle_escape
   ; === Escape format (<type> <scope_lo> <scope_hi> ".bar" $00) ===
+  ; First verify type byte matches current LABEL_TYPE
+  ; (prevents LOCAL-type entries matching MACRO-type lookups and vice versa)
+  ; A already contains the type byte from detection check
+  CMP LABEL_TYPE
+  BNE .escape_nomatch    ; Type mismatch - no match
   ; Verify scope pointer matches LABEL_SCOPE16
   INY
   LDA (TABP16),Y
