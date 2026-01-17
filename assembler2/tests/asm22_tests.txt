@@ -2471,3 +2471,53 @@ INPUT:
 EXPECT_ERROR: 39
 EXPECT_LINE: 10
 EXPECT_MSG: Too many .ifdef
+
+---
+NAME: local_macro_scope_independence
+DESCRIPTION: Local label .foo under global is independent from .foo in macro
+INPUT:
+ 1: * = $0200
+ 2: global
+ 3: .foo
+ 4:   LDA #$01
+ 5:   .macro TESTMACRO
+ 6:   LDA #$02
+ 7: .foo
+ 8:   LDA #$03
+ 9:   .endmacro
+10:   JMP .foo     ; Should jump to global's .foo at $0200
+11:   TESTMACRO
+EXPECT_HEX: a9 01 4c 00 02 a9 02 a9 03
+
+---
+NAME: macro_local_multiple_invocations_independent
+DESCRIPTION: Each macro invocation has independent local labels
+INPUT:
+ 1: * = $0200
+ 2:   .macro BRANCH_TEST
+ 3:   BEQ .skip
+ 4:   LDA #$FF
+ 5: .skip
+ 6:   NOP
+ 7:   .endmacro
+ 8:   BRANCH_TEST   ; First invocation
+ 9:   BRANCH_TEST   ; Second invocation - should have own .skip
+EXPECT_HEX: f0 02 a9 ff ea f0 02 a9 ff ea
+
+---
+NAME: nested_macro_local_shadowing
+DESCRIPTION: Inner macro local label shadows outer macro local label
+INPUT:
+ 1: * = $0200
+ 2:   .macro INNER
+ 3: .label
+ 4:   LDA #$02
+ 5:   .endmacro
+ 6:   .macro OUTER
+ 7: .label
+ 8:   LDA #$01
+ 9:   INNER
+10:   JMP .label    ; Should jump to OUTER's .label, not INNER's
+11:   .endmacro
+12:   OUTER
+EXPECT_HEX: a9 01 a9 02 4c 00 02
