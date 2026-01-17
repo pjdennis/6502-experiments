@@ -87,7 +87,6 @@ EXPR_FWDREF     .data $00   ; Accumulated forward ref flag
 COND_DEPTH      .data $00   ; Conditional assembly nesting depth
 SKIP_DEPTH      .data $00   ; Depth where skipping started (0 = not skipping)
 ARG_COUNT       .data $00   ; Total command line argument count
-ARG_INDEX       .data $00   ; Current argument index being processed
 IN_MACRO_DEF    .data $00   ; Flag: currently capturing macro body ($FF = capturing)
 MACRO_DEF_PTR16 .data $0000 ; Heap pointer where macro body is being stored
 MACRO_ENTRY16   .data $0000 ; Original macro hash entry address (for recursion check)
@@ -2121,10 +2120,14 @@ ARG_PTR16     .data $0000 ; Pointer into COMMAND_LINE_ARGS table
 
 ; Match command line argument against table
 ; On entry TABP16 points to the argument string
-; On exit C = 0 if match found (JUMP_TARGET16 set, TABP16 updated for partial)
+; Calls the handler if match found (with TAB16 pointed to remainder of argument for partial)
+; On exit C = 0 if match found
 ;         C = 1 if no match
-;         A, Y are not preserved
+;         X, Y are preserved
+;         A is not preserved
 match_command_line_arg
+  TYA
+  PHA
   SET16 COMMAND_LINE_ARGS ARG_PTR16
 .try_entry
   ; Check for end of table (first byte = 0)
@@ -2166,12 +2169,14 @@ match_command_line_arg
   INY
   LDA (ARG_PTR16),Y
   STA JUMP_TARGET16+$01
+  JSR do_jump            ; Call handler
   CLC                    ; Match found
+  PLA                    ; Restore Y
+  TAY
   RTS
 .next_entry
   ; Advance ARG_PTR16 to next entry
   ; Find null terminator
-  LDY #$00
 .find_null
   LDA (ARG_PTR16),Y
   BEQ .found_null
@@ -2182,13 +2187,12 @@ match_command_line_arg
   TYA
   CLC
   ADC #$04
-  ADC ARG_PTR16
-  STA ARG_PTR16
-  BCC .try_entry
-  INC ARG_PTR16+$01
+  ADDA16 ARG_PTR16 ARG_PTR16
   JMP .try_entry
 .no_match
   SEC
+  PLA                    ; Restore Y
+  TAY
   RTS
 
 ; Execute handler via indirect jump
@@ -2243,24 +2247,20 @@ start
   JSR select_label_hash_table
   JSR init_hash_table
   ; Process arguments 2 onwards (arg 0 = input, arg 1 = output)
-  LDA #$02
-  STA ARG_INDEX
+  LDY #$02               ; Argument index
 .arg_loop
-  LDA ARG_INDEX
-  CMP ARG_COUNT
+  CPY ARG_COUNT
   BCS .args_done         ; Processed all args
-  JSR argv               ; Get arg[ARG_INDEX]
+  TYA                    ; Argument index
+  JSR argv               ; Get arg[Argument index]
   STA TABP16
   STX TABP16+$01
   JSR match_command_line_arg
-  BCS .unknown_arg       ; No match found
-  JSR do_jump            ; Call handler
-  JMP .next_arg
-.unknown_arg
+  BCS .invalid_argument  ; Match not found
+  INY                    ; Move to next argument
+  BNE .arg_loop          ; Always taken. TODO: if this wraps raise a too many arguments error
+.invalid_argument
   JMP err_invalid_arg
-.next_arg
-  INC ARG_INDEX
-  JMP .arg_loop
 .err_usage
   JMP err_usage
 .args_done
@@ -2328,6 +2328,7 @@ start
 .skip_debug_output
   .endif
 
+  ; All done, successfully
   BRK
   .data $00             ; Success code
 
