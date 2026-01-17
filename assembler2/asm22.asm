@@ -1890,17 +1890,11 @@ capture_macro_line
   INX
   BNE .cml_cmp_loop
 .cml_check_end
-  ; Matched "endmacro" - verify next char is space, $0A, or similar
+  ; Matched "endmacro" - verify next char is not a token character
   LDA (TABP16),Y
-  CMP #' '
-  BEQ .cml_found_endmacro
-  CMP #'\n'
-  BEQ .cml_found_endmacro
-  CMP #';'               ; Comment
-  BEQ .cml_found_endmacro
+  JSR compare_end_of_token
   BNE .cml_not_endmacro  ; Not end of token - keep as macro body
-.cml_found_endmacro
-  ; Restore heap to undo the copy
+  ; Found .endmacro. Restore heap to undo the copy
   CP16 MACRO_DEF_PTR16 MEMP16
   PLA                    ; Discard the saved Y register
   ; Restore X (output file handle)
@@ -1921,17 +1915,11 @@ capture_macro_line
   INX
   BNE .cml_cmp_macro
 .cml_check_macro_end
-  ; Matched "macro" - verify next char is space, newline, or comment
+  ; Matched "macro" - verify next char is not a token character
   LDA (TABP16),Y
-  CMP #' '
-  BEQ .cml_found_macro
-  CMP #'\n'
-  BEQ .cml_found_macro
-  CMP #';'
-  BEQ .cml_found_macro
+  JSR compare_end_of_token
   BNE .cml_keep_line     ; Not end of token, not .macro
-.cml_found_macro
-  ; Nested macro definition - error
+  ; Found nested macro definition - error
   JMP err_nested_macro_definition
 .cml_keep_line
   ; Restore X (output file handle)
