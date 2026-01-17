@@ -2073,85 +2073,128 @@ open_input
   JMP push_file_stack ; tail call
 
 
+MATCH_PARTIAL = $00
+MATCH_FULL    = $01
+
+COMMAND_LINE_ARGS
   .ifdef enable_debug
-; Check if string at TABP16 equals "debug"
-; On exit C = 0 if equal, C = 1 if not equal
-;         A, Y are not preserved
-check_debug_string
-  LDY #$00
-.loop
-  LDA (TABP16),Y
-  CMP str_debug,Y
-  BNE .not_equal
-  CMP #$00
-  BEQ .equal
-  INY
-  JMP .loop
-.equal
-  CLC
-  RTS
-.not_equal
-  SEC
+  .data "debug"      $00 <MATCH_FULL    handle_debug
+  .data "small_heap" $00 <MATCH_FULL    handle_small_heap
+  .endif
+  .data "define:"    $00 <MATCH_PARTIAL handle_define
+  .data $00 ; End of list
+
+
+  .ifdef enable_debug
+
+; Handle the 'debug' command line argument
+handle_debug
+  LDA #$FF
+  STA DEBUG_FLAG
   RTS
 
-str_debug
-  .data "debug" $00
+; Handle the 'small_heap' command line argument
+handle_small_heap
+  LDA #$FF
+  STA SMALL_HEAP_FLAG
+  JMP init_heap          ; Tail call
 
-; Check if string at TABP16 equals "small_heap"
-; On exit C = 0 if equal, C = 1 if not equal
-;         A, Y are not preserved
-check_small_heap_string
-  LDY #$00
-.loop2
-  LDA (TABP16),Y
-  CMP str_small_heap,Y
-  BNE .not_equal2
-  CMP #$00
-  BEQ .equal2
-  INY
-  JMP .loop2
-.equal2
-  CLC
-  RTS
-.not_equal2
-  SEC
-  RTS
-
-str_small_heap
-  .data "small_heap" $00
   .endif
 
-str_define
-  .data "define:" $00
+; Handle the 'define:' command line argument
+; On entry TABP16 points past "define:" to label name
+handle_define
+  JSR copy_string_to_token
+  SET16 $0001 HEX16
+  LDA #LABEL_TYPE_GLOBAL
+  STA LABEL_TYPE
+  JMP hash_add           ; Tail call
 
 
-; Check if string at TABP16 starts with "define:"
-; On exit C = 0 if prefix matches (TABP16 updated to point past prefix)
+  .zeropage
+
+JUMP_TARGET16 .data $0000 ; Target for indirect jumps
+ARG_PTR16     .data $0000 ; Pointer into COMMAND_LINE_ARGS table
+
+  .code
+
+
+; Match command line argument against table
+; On entry TABP16 points to the argument string
+; On exit C = 0 if match found (JUMP_TARGET16 set, TABP16 updated for partial)
 ;         C = 1 if no match
 ;         A, Y are not preserved
-check_define_prefix
+match_command_line_arg
+  SET16 COMMAND_LINE_ARGS ARG_PTR16
+.try_entry
+  ; Check for end of table (first byte = 0)
   LDY #$00
-.loop
-  LDA str_define,Y
-  BEQ .matched         ; End of prefix string - matched!
+  LDA (ARG_PTR16),Y
+  BEQ .no_match
+  ; Compare strings
+.compare_loop
+  LDA (ARG_PTR16),Y
+  BEQ .string_end        ; End of table string
   CMP (TABP16),Y
-  BNE .not_matched
+  BNE .next_entry        ; Mismatch, try next
   INY
-  JMP .loop
-.matched
-  ; Advance TABP16 past the prefix
+  BNE .compare_loop      ; Always taken
+.string_end
+  ; Table string ended - check match type
+  ; Y = length of matched string (points to null terminator)
+  INY                    ; Skip null terminator
+  LDA (ARG_PTR16),Y      ; Load match type
+  BNE .check_full_match  ; MATCH_FULL (non-zero)
+  ; MATCH_PARTIAL - prefix matched, advance TABP16
+  DEY                    ; Back up to the match position
+  TYA                    ; Y is pointing at the text following the match
+  CLC
+  ADDA16 TABP16 TABP16
+  INY                    ; Skip forwards to the handler position
+  JMP .load_handler
+.check_full_match
+  ; MATCH_FULL - argument string must also end here
+  DEY                    ; Undo the INY to check at same position as null
+  LDA (TABP16),Y
+  BNE .next_entry        ; Arg string continues, not a match
+  INY                    ; Skip past the match type
+.load_handler
+  ; Load handler address (Y points to match type byte)
+  INY                    ; Skip match type
+  LDA (ARG_PTR16),Y
+  STA JUMP_TARGET16
+  INY
+  LDA (ARG_PTR16),Y
+  STA JUMP_TARGET16+$01
+  CLC                    ; Match found
+  RTS
+.next_entry
+  ; Advance ARG_PTR16 to next entry
+  ; Find null terminator
+  LDY #$00
+.find_null
+  LDA (ARG_PTR16),Y
+  BEQ .found_null
+  INY
+  BNE .find_null
+.found_null
+  ; Y points to null, skip null + match_type + 2-byte address = 4 more bytes
   TYA
   CLC
-  ADC TABP16
-  STA TABP16
-  BCC .no_carry
-  INC TABP16+$01
-.no_carry
-  CLC
-  RTS
-.not_matched
+  ADC #$04
+  ADC ARG_PTR16
+  STA ARG_PTR16
+  BCC .try_entry
+  INC ARG_PTR16+$01
+  JMP .try_entry
+.no_match
   SEC
   RTS
+
+; Execute handler via indirect jump
+; On entry JUMP_TARGET16 contains the handler address
+do_jump
+  JMP (JUMP_TARGET16)
 
 
 ; Copy null-terminated string from TABP16 to TOKEN
@@ -2209,38 +2252,12 @@ start
   JSR argv               ; Get arg[ARG_INDEX]
   STA TABP16
   STX TABP16+$01
-  .ifdef enable_debug
-  ; Check for "debug"
-  JSR check_debug_string
-  BCC .found_debug
-  ; Check for "small_heap"
-  JSR check_small_heap_string
-  BCC .found_small_heap
-  .endif
-  ; Check for "define:" prefix
-  JSR check_define_prefix
-  BCC .found_define
-  ; Unknown argument
-  JMP err_invalid_arg
-  .ifdef enable_debug
-.found_debug
-  LDA #$FF
-  STA DEBUG_FLAG
-  BNE .next_arg          ; Always branches
-.found_small_heap
-  LDA #$FF
-  STA SMALL_HEAP_FLAG
-  ; Reinitialize heap with small size
-  JSR init_heap
+  JSR match_command_line_arg
+  BCS .unknown_arg       ; No match found
+  JSR do_jump            ; Call handler
   JMP .next_arg
-  .endif
-.found_define
-  ; TABP16 now points past "define:" to label name
-  JSR copy_string_to_token
-  SET16 $0001 HEX16
-  LDA #LABEL_TYPE_GLOBAL
-  STA LABEL_TYPE
-  JSR hash_add
+.unknown_arg
+  JMP err_invalid_arg
 .next_arg
   INC ARG_INDEX
   JMP .arg_loop
