@@ -168,7 +168,7 @@ INPUT:
  3: * = $0282
  4: target
  5:   RTS
-EXPECT_ERROR: 5
+EXPECT_ERROR: 8
 EXPECT_LINE: 2
 EXPECT_MSG: Branch out of range
 
@@ -206,7 +206,7 @@ INPUT:
  3:   NOP
  4: * = $0200
  5:   BNE target
-EXPECT_ERROR: 5
+EXPECT_ERROR: 8
 EXPECT_LINE: 5
 EXPECT_MSG: Branch out of range
 
@@ -374,7 +374,7 @@ NAME: unclosed_indirect
 INPUT:
  1: * = $0200
  2:   JMP ($1234
-EXPECT_ERROR: 20
+EXPECT_ERROR: 9
 EXPECT_LINE: 2
 EXPECT_MSG: Invalid operand
 
@@ -383,7 +383,7 @@ NAME: incorrectly_closed_indirect
 INPUT:
  1: * = $0200
  2:   JMP ($1234]
-EXPECT_ERROR: 20
+EXPECT_ERROR: 9
 EXPECT_LINE: 2
 EXPECT_MSG: Invalid operand
 
@@ -392,7 +392,7 @@ NAME: trailing_garbage_abs
 INPUT:
  1: * = $0200
  2:   LDA $1234garbage
-EXPECT_ERROR: 21
+EXPECT_ERROR: 10
 EXPECT_LINE: 2
 EXPECT_MSG: Unexpected text after operand
 
@@ -401,7 +401,7 @@ NAME: trailing_garbage_abs_space
 INPUT:
  1: * = $0200
  2:   LDA $1234 garbage
-EXPECT_ERROR: 21
+EXPECT_ERROR: 10
 EXPECT_LINE: 2
 EXPECT_MSG: Unexpected text after operand
 
@@ -417,7 +417,7 @@ NAME: trailing_garbage_zp
 INPUT:
  1: * = $0200
  2:   LDA $42 +1
-EXPECT_ERROR: 21
+EXPECT_ERROR: 10
 EXPECT_LINE: 2
 EXPECT_MSG: Unexpected text after operand
 
@@ -435,7 +435,7 @@ NAME: opcode_not_found
 INPUT:
  1: * = $0200
  2:   BADOP
-EXPECT_ERROR: 3
+EXPECT_ERROR: 5
 EXPECT_LINE: 2
 EXPECT_MSG: Opcode not found
 
@@ -472,7 +472,7 @@ NAME: closing_quote_not_found
 INPUT:
  1: * = $0200
  2:   .data "unterminated
-EXPECT_ERROR: 9
+EXPECT_ERROR: 18
 EXPECT_LINE: 2
 EXPECT_MSG: Closing quote not found
 
@@ -481,7 +481,7 @@ NAME: invalid_char_literal_empty
 INPUT:
  1: * = $0200
  2:   LDA #''
-EXPECT_ERROR: 18
+EXPECT_ERROR: 12
 EXPECT_LINE: 2
 EXPECT_MSG: Invalid character literal
 
@@ -490,7 +490,7 @@ NAME: invalid_char_literal_missing_quote
 INPUT:
  1: * = $0200
  2:   LDA #'
-EXPECT_ERROR: 18
+EXPECT_ERROR: 12
 EXPECT_LINE: 2
 EXPECT_MSG: Invalid character literal
 
@@ -499,7 +499,7 @@ NAME: invalid_char_literal_toolong
 INPUT:
  1: * = $0200
  2:   LDA #'AB'
-EXPECT_ERROR: 18
+EXPECT_ERROR: 12
 EXPECT_LINE: 2
 EXPECT_MSG: Invalid character literal
 
@@ -517,7 +517,7 @@ NAME: invalid_addressing_mode
 INPUT:
  1: * = $0200
  2:   STA #$42
-EXPECT_ERROR: 17
+EXPECT_ERROR: 13
 EXPECT_LINE: 2
 EXPECT_MSG: Invalid addressing mode
 
@@ -527,7 +527,7 @@ INPUT:
  1: * = $0200
  2: .local
  3:   NOP
-EXPECT_ERROR: 15
+EXPECT_ERROR: 3
 EXPECT_LINE: 2
 EXPECT_MSG: No global label for local
 
@@ -1270,6 +1270,7 @@ INPUT:
  2:   LDA #$10+
 EXPECT_ERROR: 1
 EXPECT_LINE: 2
+EXPECT_MSG: Label not found
 
 ---
 NAME: expr_double_operator
@@ -1278,6 +1279,7 @@ INPUT:
  2:   LDA #$10++$20
 EXPECT_ERROR: 1
 EXPECT_LINE: 2
+EXPECT_MSG: Label not found
 
 # ============================================================================
 # CONDITIONAL ASSEMBLY TESTS
@@ -1337,14 +1339,16 @@ INPUT:
  5:   LDA #label
 EXPECT_ERROR: 1
 EXPECT_LINE: 5
+EXPECT_MSG: Label not found
 
 ---
 NAME: endif_without_ifdef
 INPUT:
  1: * = $0200
  2:   .endif
-EXPECT_ERROR: 23
+EXPECT_ERROR: 19
 EXPECT_LINE: 2
+EXPECT_MSG: .endif without .ifdef
 
 ---
 NAME: unclosed_ifdef
@@ -1352,7 +1356,8 @@ INPUT:
  1: * = $0200
  2:   .ifdef foo
  3:   LDA #$01
-EXPECT_ERROR: 24
+EXPECT_ERROR: 20
+EXPECT_MSG: Unclosed .ifdef
 
 ---
 NAME: ifdef_nested_both_true
@@ -1547,8 +1552,9 @@ NAME: err_single_less_than
 INPUT:
  1: * = $0200
  2:   LDA #$10<$02
-EXPECT_ERROR: 26
+EXPECT_ERROR: 11
 EXPECT_LINE: 2
+EXPECT_MSG: Expected << or >>
 
 ---
 NAME: shift_left_with_low_byte
@@ -1768,7 +1774,7 @@ DESCRIPTION: Error on .endmacro without .macro
 INPUT:
  1: * = $0200
  2:   .endmacro
-EXPECT_ERROR: 30
+EXPECT_ERROR: 25
 EXPECT_MSG: .endmacro without .macro
 EXPECT_LINE: 2
 
@@ -1779,7 +1785,8 @@ INPUT:
  1: * = $0200
  2:   .macro MYMACRO
  3:   NOP
-EXPECT_ERROR: 31
+EXPECT_ERROR: 26
+EXPECT_MSG: Unclosed .macro
 
 ---
 NAME: macro_nested_definition
@@ -1796,7 +1803,7 @@ INPUT:
  9:   INY
 10:   OUTER
 11:   LSR
-EXPECT_ERROR: 255
+EXPECT_ERROR: 27
 EXPECT_LINE: 4
 EXPECT_MSG: Nested macro definition
 
@@ -1806,8 +1813,9 @@ DESCRIPTION: Error when macro name is missing
 INPUT:
  1: * = $0200
  2:   .macro
-EXPECT_ERROR: 27
+EXPECT_ERROR: 22
 EXPECT_LINE: 2
+EXPECT_MSG: Macro name expected
 
 ---
 NAME: macro_shadows_instruction
@@ -1816,8 +1824,9 @@ INPUT:
  1: * = $0200
  2:   .macro NOP
  3:   .endmacro
-EXPECT_ERROR: 28
+EXPECT_ERROR: 23
 EXPECT_LINE: 2
+EXPECT_MSG: Macro name shadows instruction
 
 ---
 NAME: macro_duplicate
@@ -1828,8 +1837,9 @@ INPUT:
  3:   .endmacro
  4:   .macro MYMACRO
  5:   .endmacro
-EXPECT_ERROR: 29
+EXPECT_ERROR: 24
 EXPECT_LINE: 4
+EXPECT_MSG: Duplicate macro definition
 
 ---
 NAME: macro_simple
@@ -1939,7 +1949,7 @@ INPUT:
  4:   recurse
  5:   .endmacro
  6:   recurse
-EXPECT_ERROR: 32
+EXPECT_ERROR: 28
 EXPECT_LINE: 2
 EXPECT_MSG: Recursive macro invocation
 
@@ -1955,7 +1965,7 @@ INPUT:
  6:   macA
  7:   .endmacro
  8:   macA
-EXPECT_ERROR: 32
+EXPECT_ERROR: 28
 EXPECT_LINE: 1
 EXPECT_MSG: Recursive macro invocation
 
@@ -2078,7 +2088,7 @@ INPUT:
  3:   NOP
  4:   .endmacro
  5:   twoparams $10
-EXPECT_ERROR: 33
+EXPECT_ERROR: 29
 EXPECT_LINE: 5
 EXPECT_MSG: Too few macro arguments
 
@@ -2091,7 +2101,7 @@ INPUT:
  3:   NOP
  4:   .endmacro
  5:   oneparam $10 $20
-EXPECT_ERROR: 34
+EXPECT_ERROR: 30
 EXPECT_LINE: 5
 EXPECT_MSG: Too many macro arguments
 
@@ -2104,7 +2114,7 @@ INPUT:
  3:   NOP
  4:   .endmacro
  5:   noparam $10
-EXPECT_ERROR: 34
+EXPECT_ERROR: 30
 EXPECT_LINE: 5
 EXPECT_MSG: Too many macro arguments
 
@@ -2281,7 +2291,7 @@ INPUT:
 30: a28 = $01
 31: a29 = $01
 32:   NOP
-EXPECT_ERROR: 35
+EXPECT_ERROR: 32
 EXPECT_MSG: Out of memory
 
 ---
@@ -2291,7 +2301,7 @@ ARGS: small_heap
 INPUT:
  1: * = $0200
  2:   .include tests/overflow/d01.asm
-EXPECT_ERROR: 35
+EXPECT_ERROR: 32
 EXPECT_MSG: Out of memory
 
 ---
@@ -2366,7 +2376,7 @@ DESCRIPTION: 52 nested macros overflow scope stack
 INPUT:
  1: * = $0200
  2:   .include tests/scope/s52.asm
-EXPECT_ERROR: 36
+EXPECT_ERROR: 31
 EXPECT_LINE: 5
 EXPECT_MSG: Macro nesting too deep
 
@@ -2390,7 +2400,7 @@ INPUT:
  3:   LDA #a00
  4:   .endmacro
  5:   BIG86 $00 $01 $02 $03 $04 $05 $06 $07 $08 $09 $0A $0B $0C $0D $0E $0F $10 $11 $12 $13 $14 $15 $16 $17 $18 $19 $1A $1B $1C $1D $1E $1F $20 $21 $22 $23 $24 $25 $26 $27 $28 $29 $2A $2B $2C $2D $2E $2F $30 $31 $32 $33 $34 $35 $36 $37 $38 $39 $3A $3B $3C $3D $3E $3F $40 $41 $42 $43 $44 $45 $46 $47 $48 $49 $4A $4B $4C $4D $4E $4F $50 $51 $52 $53 $54 $55
-EXPECT_ERROR: 37
+EXPECT_ERROR: 30
 EXPECT_LINE: 5
 EXPECT_MSG: Too many macro arguments
 
@@ -2409,7 +2419,7 @@ DESCRIPTION: 128 character token overflows buffer
 INPUT:
  1: * = $0200
  2: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB = $42
-EXPECT_ERROR: 38
+EXPECT_ERROR: 33
 EXPECT_LINE: 2
 EXPECT_MSG: Token too long
 
@@ -2488,7 +2498,7 @@ INPUT:
  9:   .include tests/ifdefs/ifdef31.asm
 10:   .ifdef ONE_MORE
 11:   .endif
-EXPECT_ERROR: 39
+EXPECT_ERROR: 21
 EXPECT_LINE: 10
 EXPECT_MSG: Too many .ifdef
 
@@ -2550,4 +2560,6 @@ INPUT:
  5:   .code
  6: * = $0200
  7:   NOP
-EXPECT_ERROR: 40
+EXPECT_ERROR: 35
+EXPECT_LINE: 4
+EXPECT_MSG: Zero page overflow

@@ -11,7 +11,11 @@
 
   .include to_decimal22.asm
 
-; Error labels - each triggers BRK with inline error code and message
+; ============================================================================
+; ERROR HANDLERS - Grouped by category with sequential error codes
+; ============================================================================
+
+; --- Label errors ($01-$04) ---
 err_label_not_found
   BRK
   .data $01 "Label not found" $00
@@ -20,14 +24,20 @@ err_duplicate_label
   BRK
   .data $02 "Duplicate label" $00
 
+err_no_global_for_local
+  BRK
+  .data $03 "No global label for local" $00
+
+err_label_expected
+  BRK
+  .data $04 "Label expected" $00
+
+; --- Symbol/Opcode errors ($05) ---
 err_opcode_not_found
   BRK
-  .data $03 "Opcode not found" $00
+  .data $05 "Opcode not found" $00
 
-err_branch_out_of_range
-  BRK
-  .data $05 "Branch out of range" $00
-
+; --- Value/Expression errors ($06-$0C) ---
 err_value_out_of_range
   BRK
   .data $06 "Value out of range" $00
@@ -36,142 +46,141 @@ err_invalid_hex
   BRK
   .data $07 "Invalid hex" $00
 
-err_pc_value_expected
+err_branch_out_of_range
   BRK
-  .data $08 "PC value expected" $00
-
-err_closing_quote_not_found
-  BRK
-  .data $09 "Closing quote not found" $00
-
-err_cannot_move_pc_backwards
-  BRK
-  .data $0A "Cannot move PC backwards" $00
-
-err_unknown_directive
-  BRK
-  .data $0B "Unknown directive" $00
-
-err_filename_expected
-  BRK
-  .data $0C "Filename expected" $00
-
-err_too_many_forward_refs
-  BRK
-  .data $13 "Too many forward references" $00
-
-err_usage
-  BRK
-  .data $0D "Usage <assembler> <input> <output> [debug]" $00
-
-err_invalid_arg
-  BRK
-  .data $10 "Invalid argument" $00
-
-err_no_global_for_local
-  BRK
-  .data $0F "No global label for local" $00
-
-err_invalid_addressing_mode
-  BRK
-  .data $11 "Invalid addressing mode for instruction" $00
-
-err_invalid_char_literal
-  BRK
-  .data $12 "Invalid character literal" $00
+  .data $08 "Branch out of range" $00
 
 err_invalid_operand
   BRK
-  .data $14 "Invalid operand" $00
+  .data $09 "Invalid operand" $00
 
 err_unexpected_text
   BRK
-  .data $15 "Unexpected text after operand" $00
-
-err_endif_without_ifdef
-  BRK
-  .data $17 ".endif without .ifdef" $00
-
-err_unclosed_ifdef
-  BRK
-  .data $18 "Unclosed .ifdef" $00
-
-err_label_expected
-  BRK
-  .data $19 "Label expected" $00
+  .data $0A "Unexpected text after operand" $00
 
 err_expected_shift
   BRK
-  .data $1A "Expected << or >>" $00
+  .data $0B "Expected << or >>" $00
 
-err_macro_name_expected
+err_invalid_char_literal
   BRK
-  .data $1B "Macro name expected" $00
+  .data $0C "Invalid character literal" $00
 
-err_macro_shadows_instruction
+err_invalid_addressing_mode
   BRK
-  .data $1C "Macro name shadows instruction" $00
+  .data $0D "Invalid addressing mode" $00
 
-err_duplicate_macro
+; --- Directive errors ($0E-$12) ---
+err_unknown_directive
   BRK
-  .data $1D "Duplicate macro definition" $00
+  .data $0E "Unknown directive" $00
 
-err_endmacro_without_macro
+err_pc_value_expected
   BRK
-  .data $1E ".endmacro without .macro" $00
+  .data $0F "PC value expected" $00
 
-err_unclosed_macro
+err_cannot_move_pc_backwards
   BRK
-  .data $1F "Unclosed .macro" $00
+  .data $10 "Cannot move PC backwards" $00
 
-err_nested_macro_definition
+err_filename_expected
   BRK
-  .data $FF "Nested macro definition" $00
+  .data $11 "Filename expected" $00
 
-err_recursive_macro
+err_closing_quote_not_found
   BRK
-  .data $20 "Recursive macro invocation" $00
+  .data $12 "Closing quote not found" $00
 
-err_too_few_arguments
+; --- Conditional assembly errors ($13-$15) ---
+err_endif_without_ifdef
   BRK
-  .data $21 "Too few macro arguments" $00
+  .data $13 ".endif without .ifdef" $00
 
-err_too_many_arguments
+err_unclosed_ifdef
   BRK
-  .data $22 "Too many macro arguments" $00
-
-err_out_of_memory
-  BRK
-  .data $23 "Out of memory" $00
-
-err_macro_nesting_too_deep
-  BRK
-  .data $24 "Macro nesting too deep" $00
-
-err_too_many_macro_arguments
-  BRK
-  .data $25 "Too many macro arguments" $00
-
-err_token_too_long
-  BRK
-  .data $26 "Token too long" $00
+  .data $14 "Unclosed .ifdef" $00
 
 err_too_many_ifdefs
   BRK
-  .data $27 "Too many .ifdef directives" $00
+  .data $15 "Too many .ifdef directives" $00
 
+; --- Macro errors ($16-$1F) ---
+err_macro_name_expected
+  BRK
+  .data $16 "Macro name expected" $00
+
+err_macro_shadows_instruction
+  BRK
+  .data $17 "Macro name shadows instruction" $00
+
+err_duplicate_macro
+  BRK
+  .data $18 "Duplicate macro definition" $00
+
+err_endmacro_without_macro
+  BRK
+  .data $19 ".endmacro without .macro" $00
+
+err_unclosed_macro
+  BRK
+  .data $1A "Unclosed .macro" $00
+
+err_nested_macro_definition
+  BRK
+  .data $1B "Nested macro definition" $00
+
+err_recursive_macro
+  BRK
+  .data $1C "Recursive macro invocation" $00
+
+err_too_few_arguments
+  BRK
+  .data $1D "Too few macro arguments" $00
+
+err_too_many_arguments
+  BRK
+  .data $1E "Too many macro arguments" $00
+
+err_macro_nesting_too_deep
+  BRK
+  .data $1F "Macro nesting too deep" $00
+
+; --- Resource limit errors ($20-$22) ---
+err_out_of_memory
+  BRK
+  .data $20 "Out of memory" $00
+
+err_token_too_long
+  BRK
+  .data $21 "Token too long" $00
+
+err_too_many_forward_refs
+  BRK
+  .data $22 "Too many forward references" $00
+
+; --- Memory section errors ($23) ---
 err_zeropage_overflow
   BRK
-  .data $28 "Zero page overflow" $00
+  .data $23 "Zero page overflow" $00
 
-  .ifdef enable_debug
-err_fwdref_tracking
+; --- Command line/usage errors ($F0-$F1) ---
+err_usage
   BRK
-  .data $16 "Internal error - reference tracking" $00
+  .data $F0 "Usage: <assembler> <input> <output> [debug]" $00
 
+err_invalid_arg
+  BRK
+  .data $F1 "Invalid argument" $00
+
+; --- Debug/internal errors ($FE-$FF, debug build only) ---
+  .ifdef enable_debug
 err_no_file
   BRK
-  .data $0E "Attempt to read with no file open" $00
+  .data $FE "Attempt to read with no file open" $00
+
+err_fwdref_tracking
+  BRK
+  .data $FF "Internal error - reference tracking" $00
   .endif
 
 

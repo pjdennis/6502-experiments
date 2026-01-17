@@ -1740,7 +1740,7 @@ expand_macro
   CPX #MACRO_ARG_BUF_LIMIT-MACRO_ARG_BUF-.ARG_SIZE+$01
   BCC .arg_ok         ; X < limit: safe
 .arg_overflow
-  JMP err_too_many_macro_arguments
+  JMP err_too_many_arguments
 .arg_ok
   ; Store fwdref flag and value in fixed buffer
   LDA IS_FWDREF
