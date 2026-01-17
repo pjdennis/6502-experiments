@@ -2260,11 +2260,11 @@ NAME: macro_capture
 ARGS: show_captured_macros
 SKIP: Work in progress
 INPUT:
- 1: * = $0200
- 2:   .macro test a b
- 3:   LDA #$12  ;  Comment with trailing spaces  
- 4:   .endmacro
- 5:   NOP
+ 1: [* = $0200]
+ 2: [  .macro test a b]
+ 3: [  LDA #$12  ;  Comment with trailing spaces  ]
+ 4: [  .endmacro]
+ 5: [  NOP]
 EXPECT_STDERR:
 [  LDA #$12  ;  Comment with trailing spaces  ]
 

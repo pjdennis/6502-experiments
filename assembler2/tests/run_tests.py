@@ -59,6 +59,7 @@ class Test:
     test_type: Optional[TestType] = None
     mode: str = ""  # For file_stack tests
     input_text: str = ""  # For assembler tests (INPUT field)
+    input_text_bracketed: bool = False  # True if [line] format was used for INPUT
     files: dict = field(default_factory=dict)  # For file_stack tests
     main_file: str = ""  # First file defined
     expect_hex: str = ""
@@ -188,6 +189,10 @@ class TestRunner:
                 elif section == "input":
                     # Strip line number prefix: optional spaces, digits, colon, required space
                     line = re.sub(r"^\s*\d+: ", "", line)
+                    # Check for bracketed format: [content]
+                    line, is_bracketed = self._parse_bracketed_line(line)
+                    if is_bracketed:
+                        current.input_text_bracketed = True
                     if current.input_text:
                         current.input_text += "\n"
                     current.input_text += line
@@ -207,9 +212,9 @@ class TestRunner:
                     if re.match(r"^\s*#", line) or re.match(r"^\s*$", line):
                         continue
                     # Check for bracketed format: [content]
-                    if line.startswith("[") and line.endswith("]"):
+                    line, is_bracketed = self._parse_bracketed_line(line)
+                    if is_bracketed:
                         current.expect_stderr_bracketed = True
-                        line = line[1:-1]  # Strip the brackets
                     if current.expect_stderr:
                         current.expect_stderr += "\n"
                     current.expect_stderr += line
@@ -220,6 +225,15 @@ class TestRunner:
             tests.append(current)
 
         return tests
+
+    def _parse_bracketed_line(self, line: str) -> tuple[str, bool]:
+        """Parse a line that may use [content] bracket format for whitespace preservation.
+
+        Returns (content, is_bracketed) where content has brackets stripped if present.
+        """
+        if line.startswith("[") and line.endswith("]"):
+            return line[1:-1], True
+        return line, False
 
     def _finalize_test(self, test: Test):
         """Infer test type if not explicitly set."""
