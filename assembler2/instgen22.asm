@@ -485,7 +485,7 @@ display_data
 ; Entry point
 start
 ; Initialization
-  LDA #$00
+  LDA #LABEL_TYPE_GLOBAL
   STA LABEL_TYPE    ; Clear flag before using hash table
   JSR init_heap
   SET16 FILE_STACK FS_P16  ; Initialize so heap overflow check works

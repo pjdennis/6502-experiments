@@ -66,10 +66,6 @@ IFDEF_DECISIONS = $0800  ; Buffer for .ifdef decisions (256 bytes)
 *               = $2000  ; Code generates here
 FILE_STACK      = $F000  ; File stack will grow down from 1 below here
 
-; Label type constants (for LABEL_TYPE variable)
-LABEL_TYPE_GLOBAL = $00   ; Global label (no escape format)
-LABEL_TYPE_LOCAL  = $01   ; Local label under global scope (heap address)
-LABEL_TYPE_MACRO  = $02   ; Macro-local label (expansion ID)
 
   .zeropage
 
@@ -1504,7 +1500,7 @@ process_ifdef
   ; Increment and check for overflow (wrap from 255 to 0 = buffer full)
   INC IFDEF_INDEX
   BEQ .pi_overflow         ; If wrapped to 0, we've used all 256 slots
-  LDA #$00
+  LDA #LABEL_TYPE_GLOBAL
   STA LABEL_TYPE
   JSR select_label_hash_table
   JSR find_in_hash         ; C=0 if found, C=1 if not found
@@ -2232,8 +2228,9 @@ start
 .found_define
   ; TABP16 now points past "define:" to label name
   JSR copy_string_to_token
-  SET16 $0001 HEX16      ; Set A to $00 as a side effect
-  STA LABEL_TYPE     ; Not a local label. Set to $00
+  SET16 $0001 HEX16
+  LDA #LABEL_TYPE_GLOBAL
+  STA LABEL_TYPE
   JSR hash_add
 .next_arg
   INC ARG_INDEX

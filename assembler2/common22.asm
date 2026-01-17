@@ -12,8 +12,13 @@ MODE_INDX  = $09   ; Indirect, X - ($zp,X)
 MODE_INDY  = $0A   ; Indirect, Y - ($zp),Y
 MODE_REL   = $0B   ; Relative (branches)
 MODE_IND   = $0C   ; Indirect - JMP ($xxxx)
-MODE_MACRO = $FE   ; Sentinel marker to indicate macro 
+MODE_MACRO = $FE   ; Sentinel marker to indicate macro
 MODE_END   = $FF   ; Terminates the list of modes
+
+; Label type constants (for LABEL_TYPE variable in hash table operations)
+LABEL_TYPE_GLOBAL = $00   ; Global label (no escape format)
+LABEL_TYPE_LOCAL  = $01   ; Local label under global scope (heap address)
+LABEL_TYPE_MACRO  = $02   ; Macro-local label (expansion ID)
 
 HT_KEY = TOKEN
 HT_V16 = HEX16
@@ -121,7 +126,7 @@ store_hash_value
 
 
 select_instruction_hash_table
-  LDA #$00
+  LDA #LABEL_TYPE_GLOBAL
   STA LABEL_TYPE       ; Clear local label flag for instruction lookup
   SET16 IHASHTAB HTP16
   RTS
