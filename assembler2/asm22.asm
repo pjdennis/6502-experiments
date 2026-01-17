@@ -881,14 +881,24 @@ capture_label
 ; TODO: Consolidate the PASS and IN_ZEROPAGE flags so that emit can
 ;       do a single check instead of two for suppression of output
 emit
+  BIT IN_ZEROPAGE
+  BMI .in_zeropage     ; If in zero page, handle separately
+  ; Not in zero page - proceed with normal emit logic
   INC16 PC16
   BIT PASS
   BPL .skip            ; Skip writing during pass 1
-  BIT IN_ZEROPAGE
-  BMI .skip            ; Skip writing when in zero page section
   JMP write            ; Tail call
 .skip
   RTS
+.in_zeropage
+  ; In zero page - check for overflow BEFORE incrementing
+  ; If high byte already non-zero, we've already overflowed past $FF
+  LDA PC16+$01
+  BNE .overflow
+  INC16 PC16           ; Safe to increment
+  RTS                  ; No writing in zeropage
+.overflow
+  JMP err_zeropage_overflow
 
 
 ; Fast forward the program counter

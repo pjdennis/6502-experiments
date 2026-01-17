@@ -2521,3 +2521,28 @@ INPUT:
 11:   .endmacro
 12:   OUTER
 EXPECT_HEX: a9 01 a9 02 4c 00 02
+
+---
+NAME: zeropage_last_byte
+DESCRIPTION: Can allocate the last zero page byte at $FF
+INPUT:
+ 1:   .zeropage
+ 2: * = $FF
+ 3: last .data $00
+ 4:   .code
+ 5: * = $0200
+ 6:   LDA last
+EXPECT_HEX: a5 ff
+
+---
+NAME: zeropage_overflow
+DESCRIPTION: Zero page section overflow triggers error
+INPUT:
+ 1:   .zeropage
+ 2: * = $FF
+ 3: foo .data $00
+ 4: bar .data $00
+ 5:   .code
+ 6: * = $0200
+ 7:   NOP
+EXPECT_ERROR: 40

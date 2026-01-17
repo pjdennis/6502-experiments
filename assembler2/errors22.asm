@@ -156,6 +156,10 @@ err_too_many_ifdefs
   BRK
   .data $27 "Too many .ifdef directives" $00
 
+err_zeropage_overflow
+  BRK
+  .data $28 "Zero page overflow" $00
+
   .ifdef enable_debug
 err_fwdref_tracking
   BRK
