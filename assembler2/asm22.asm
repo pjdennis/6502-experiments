@@ -1876,42 +1876,16 @@ capture_macro_line
 .cml_check_dot
   CMP #'.'
   BNE .cml_keep_line
-  ; It's a directive - check for .macro first (nested definition error)
+  ; It's a directive - check for .endmacro first (the usual case)
   INY                    ; Y now points past '.'
   TYA
-  PHA                    ; Save Y for later .endmacro check
-  LDX #$00
-.cml_cmp_macro
-  LDA directive_macro,X
-  BEQ .cml_check_macro_end  ; End of "macro" string
-  CMP (TABP16),Y
-  BNE .cml_not_macro
-  INY
-  INX
-  BNE .cml_cmp_macro
-.cml_check_macro_end
-  ; Matched "macro" - verify next char is space, newline, or comment
-  LDA (TABP16),Y
-  CMP #' '
-  BEQ .cml_found_macro
-  CMP #'\n'
-  BEQ .cml_found_macro
-  CMP #';'
-  BEQ .cml_found_macro
-  BNE .cml_not_macro     ; Not end of token, not .macro
-.cml_found_macro
-  ; Nested macro definition - error
-  JMP err_nested_macro_definition
-.cml_not_macro
-  ; Not .macro - check if it's .endmacro
-  PLA                    ; Restore Y position after '.'
-  TAY
+  PHA                    ; Save Y for later .macro check
   LDX #$00
 .cml_cmp_loop
   LDA directive_endmacro,X
   BEQ .cml_check_end     ; End of "endmacro" string
   CMP (TABP16),Y
-  BNE .cml_keep_line
+  BNE .cml_not_endmacro
   INY
   INX
   BNE .cml_cmp_loop
@@ -1924,14 +1898,41 @@ capture_macro_line
   BEQ .cml_found_endmacro
   CMP #';'               ; Comment
   BEQ .cml_found_endmacro
-  BNE .cml_keep_line     ; Not end of token - keep as macro body
+  BNE .cml_not_endmacro  ; Not end of token - keep as macro body
 .cml_found_endmacro
   ; Restore heap to undo the copy
   CP16 MACRO_DEF_PTR16 MEMP16
+  PLA                    ; Discard the saved Y register
   ; Restore X (output file handle)
   PLA
   TAX
   JMP process_endmacro   ; Tail call
+.cml_not_endmacro
+  ; Not .endmacro - check if it's .macro (nested definition)
+  PLA                    ; Restore Y position after '.'
+  TAY
+  LDX #$00
+.cml_cmp_macro
+  LDA directive_macro,X
+  BEQ .cml_check_macro_end  ; End of "macro" string
+  CMP (TABP16),Y
+  BNE .cml_keep_line
+  INY
+  INX
+  BNE .cml_cmp_macro
+.cml_check_macro_end
+  ; Matched "macro" - verify next char is space, newline, or comment
+  LDA (TABP16),Y
+  CMP #' '
+  BEQ .cml_found_macro
+  CMP #'\n'
+  BEQ .cml_found_macro
+  CMP #';'
+  BEQ .cml_found_macro
+  BNE .cml_keep_line     ; Not end of token, not .macro
+.cml_found_macro
+  ; Nested macro definition - error
+  JMP err_nested_macro_definition
 .cml_keep_line
   ; Restore X (output file handle)
   PLA
