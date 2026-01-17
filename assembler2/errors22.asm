@@ -187,14 +187,11 @@ err_no_file
 interrupt
 ; Retrieve pointer to error code
   TSX
-  INX
-  INX
   SEC
-  LDA $0100,X
+  LDA $0102,X
   SBC #$01
   STA TABP16
-  INX
-  LDA $0100,X
+  LDA $0103,X
   SBC #$00
   STA TABP16+$01
 ; Retrieve error code and skip diagnostics if no error
