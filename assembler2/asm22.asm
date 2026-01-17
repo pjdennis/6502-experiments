@@ -914,24 +914,13 @@ update_pc
   DEC STARTED
   BNE .no_fill        ; Always taken
 .started
-  LDA HEX16+$01       ; High byte
-  CMP PC16+$01
-  BCC .less
-  BNE .notless
-  LDA HEX16           ; Low byte
-  CMP PC16
-  BCC .less
-.notless
+  CMP16 HEX16 PC16
+  BCC .less           ; HEX16 < PC16: error
   BIT PASS
   BPL .no_fill        ; skip writing during pass 1
 .loop
-  LDA HEX16+$01
-  CMP PC16+$01
-  BNE .loop_not_done
-  LDA HEX16
-  CMP PC16
+  CMP16 HEX16 PC16
   BEQ .loop_done
-.loop_not_done
   LDA #$00
   JSR write
   INC PC16
@@ -1678,13 +1667,8 @@ check_macro_recursion
   SET16 SCOPE_STACK TABP16
 .cmr_loop
   ; Check if we've reached current scope pointer
-  LDA TABP16
-  CMP SCOPE_PTR16
-  BNE .cmr_check_entry
-  LDA TABP16+$01
-  CMP SCOPE_PTR16+$01
+  CMP16 TABP16 SCOPE_PTR16
   BEQ .cmr_done             ; Reached current position, no recursion
-.cmr_check_entry
   ; Compare macro address at offset +3 with MACRO_ENTRY16
   LDY #$03
   LDA (TABP16),Y

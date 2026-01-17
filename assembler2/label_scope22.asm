@@ -76,19 +76,10 @@ reset_scope_stack
 push_label_scope
   ; SCOPE_STACK bounds check
   ; Check if SCOPE_PTR16 <= SCOPE_LIMIT-SCOPE_ENTRY_SIZE (room for one more entry)
-  ; Compare high byte
-  LDA SCOPE_PTR16+$01
-  CMP #>SCOPE_LIMIT-SCOPE_ENTRY_SIZE
-  BCC .scope_ok       ; High byte < limit: safe
-  BEQ .check_low      ; High byte = limit: check low byte
-.scope_overflow
+  CMPI16 SCOPE_PTR16 SCOPE_LIMIT-SCOPE_ENTRY_SIZE
+  BCC .scope_ok       ; Less than limit: safe
+  BEQ .scope_ok       ; Equal to limit: safe
   JMP err_macro_nesting_too_deep
-.check_low
-  ; Compare low byte
-  LDA SCOPE_PTR16
-  CMP #<SCOPE_LIMIT-SCOPE_ENTRY_SIZE
-  BCC .scope_ok       ; Low byte < limit: safe
-  BNE .scope_overflow ; Low byte > limit: overflow
 .scope_ok
   .macro APPEND_TO_SCOPE ptr
   LDA ptr
