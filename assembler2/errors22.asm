@@ -167,6 +167,22 @@ err_no_file
   .endif
 
 
+  .macro SHOW_MESSAGEI addr
+  SET16 addr TABP16
+  JSR show_message
+  .endmacro
+
+  .macro SHOW_MESSAGE ptr
+  CP16 ptr TABP16
+  JSR show_message
+  .endmacro
+
+  .macro SHOW_CHAR val
+  LDA #val
+  JSR write_d
+  .endmacro
+
+
 ; Interrupt handler - processes BRK for error display
 interrupt
 ; Retrieve pointer to error code
@@ -197,8 +213,7 @@ interrupt
   STA CURR_OUT_FILE
 .output_not_open
 ; Print the "Error " message
-  SET16 msg_error TABP16
-  JSR show_message
+  SHOW_MESSAGEI msg_error
 ; Print the error code in decimal
   LDA TEMP
   STA TO_DECIMAL_VALUE16
@@ -209,23 +224,18 @@ interrupt
   JSR file_stack_empty
   BEQ .location_done
 ; Print the " in file " message
-  SET16 msg_error_file TABP16
-  JSR show_message
+  SHOW_MESSAGEI msg_error_file
 ; Print the filename (at FS_P16)
-  CP16 FS_P16 TABP16
-  JSR show_message
+  SHOW_MESSAGE FS_P16
 ; Print the " at line " message
-  SET16 msg_error_line TABP16
-  JSR show_message
+  SHOW_MESSAGEI msg_error_line
 ; Print the current line in decimal
   CP16 CURR_LINE16 TO_DECIMAL_VALUE16
   JSR show_decimal
 .location_done
 ; Print the ": " message
-  LDA #':'
-  JSR write_d
-  LDA #' '
-  JSR write_d
+  SHOW_CHAR ':'
+  SHOW_CHAR ' '
 ; Retrieve pointer to the error message and show it
   TSX
   LDA $0102,X
@@ -239,8 +249,7 @@ interrupt
   JSR show_include_traceback
 .traceback_done
 ; Print the final newline
-  LDA #'\n'
-  JSR write_d
+  SHOW_CHAR '\n'
 ; Load the error code so that it is returned
   LDA TEMP
   JMP exit ; Done
@@ -293,17 +302,13 @@ show_include_traceback
   JSR file_stack_empty
   BEQ .done
   ; Print newline
-  LDA #'\n'
-  JSR write_d
+  SHOW_CHAR '\n'
   ; Print "  included from " message
-  SET16 msg_included_from TABP16
-  JSR show_message
+  SHOW_MESSAGEI msg_included_from
   ; Print filename (FS_P16 points to parent entry's name)
-  CP16 FS_P16 TABP16
-  JSR show_message
+  SHOW_MESSAGE FS_P16
   ; Print ":"
-  LDA #':'
-  JSR write_d
+  SHOW_CHAR ':'
   ; Print line number (CURR_LINE16 has line where include was)
   CP16 CURR_LINE16 TO_DECIMAL_VALUE16
   JSR show_decimal

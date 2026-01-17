@@ -2283,25 +2283,21 @@ start
   ; Print heap usage if debug flag is set
   LDA DEBUG_FLAG
   BEQ .skip_debug_output
-  SET16 msg_heap_used TABP16
-  JSR show_message
+  SHOW_MESSAGEI msg_heap_used
   ; Calculate heap used: MEMP16 - HEAP
   SEC
   SUBI16 MEMP16 HEAP TO_DECIMAL_VALUE16
   JSR show_decimal
-  SET16 msg_bytes TABP16
-  JSR show_message
+  SHOW_MESSAGEI msg_bytes
   ; Print forward reference count
-  SET16 msg_fwdref_count TABP16
-  JSR show_message
+  SHOW_MESSAGEI msg_fwdref_count
   ; Calculate forward ref count: (PASS_1_FWDREF16 - FWDREF_LIST) / 2
   SEC
   SUBI16 PASS_1_FWDREF16 FWDREF_LIST TO_DECIMAL_VALUE16
   ; Divide by 2 (16-bit right shift)
   LSR16 TO_DECIMAL_VALUE16
   JSR show_decimal
-  LDA #'\n'
-  JSR write_d
+  SHOW_CHAR '\n'
 .skip_debug_output
   .endif
 
