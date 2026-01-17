@@ -1782,6 +1782,25 @@ INPUT:
 EXPECT_ERROR: 31
 
 ---
+NAME: macro_nested_definition
+DESCRIPTION: A nested macro definition generates an error
+INPUT:
+ 1: * = $0200
+ 2:   .macro OUTER
+ 3:   NOP
+ 4:   .macro INNER
+ 5:   INX
+ 6:   .endmacro    ; End if inner
+ 7:   INNER
+ 8:   .endmacro    ; End of outer
+ 9:   INY
+10:   OUTER
+11:   LSR
+EXPECT_ERROR: 255
+EXPECT_LINE: 4
+EXPECT_MSG: Nested macro definition
+
+---
 NAME: macro_name_expected
 DESCRIPTION: Error when macro name is missing
 INPUT:

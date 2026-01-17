@@ -1833,7 +1833,9 @@ expand_macro
 ; In pass 2, skip heap copy - just scan for .endmacro detection.
 capture_macro_line
   BIT PASS
-  BMI .cml_pass2
+  BPL .cml_pass1
+  JMP .cml_pass2
+.cml_pass1
   ; === Pass 1: Copy to heap ===
   ; Save X (output file handle)
   TXA
@@ -1874,8 +1876,36 @@ capture_macro_line
 .cml_check_dot
   CMP #'.'
   BNE .cml_keep_line
-  ; Check if it's "endmacro" (case sensitive)
+  ; It's a directive - check for .macro first (nested definition error)
+  INY                    ; Y now points past '.'
+  TYA
+  PHA                    ; Save Y for later .endmacro check
+  LDX #$00
+.cml_cmp_macro
+  LDA directive_macro,X
+  BEQ .cml_check_macro_end  ; End of "macro" string
+  CMP (TABP16),Y
+  BNE .cml_not_macro
   INY
+  INX
+  BNE .cml_cmp_macro
+.cml_check_macro_end
+  ; Matched "macro" - verify next char is space, newline, or comment
+  LDA (TABP16),Y
+  CMP #' '
+  BEQ .cml_found_macro
+  CMP #'\n'
+  BEQ .cml_found_macro
+  CMP #';'
+  BEQ .cml_found_macro
+  BNE .cml_not_macro     ; Not end of token, not .macro
+.cml_found_macro
+  ; Nested macro definition - error
+  JMP err_nested_macro_definition
+.cml_not_macro
+  ; Not .macro - check if it's .endmacro
+  PLA                    ; Restore Y position after '.'
+  TAY
   LDX #$00
 .cml_cmp_loop
   LDA directive_endmacro,X

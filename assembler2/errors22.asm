@@ -124,6 +124,10 @@ err_unclosed_macro
   BRK
   .data $1F "Unclosed .macro" $00
 
+err_nested_macro_definition
+  BRK
+  .data $FF "Nested macro definition" $00
+
 err_recursive_macro
   BRK
   .data $20 "Recursive macro invocation" $00
