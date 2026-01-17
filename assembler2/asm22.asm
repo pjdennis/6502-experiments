@@ -1354,6 +1354,10 @@ emit_quoted
 ; On entry, A contains the first character of the directive
 process_directive
   JSR read_token       ; Next char in NEXT_CHAR
+  ; Reset LABEL_TYPE for directive string comparisons
+  ; (compare_token checks LABEL_TYPE, must be GLOBAL for non-escape strings)
+  LDA #LABEL_TYPE_GLOBAL
+  STA LABEL_TYPE
   ; Check for 'include'
   SET16 directive_include TABP16
   JSR compare_token

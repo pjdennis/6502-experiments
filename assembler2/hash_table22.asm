@@ -234,7 +234,11 @@ compare_token
   CMP #$20
   BCC .handle_escape    ; First byte < $20 means escape format
 
-  ; === Fast path (no escape) - simple string comparison ===
+  ; === Non-escape entry (global label) ===
+  ; If we're looking for LOCAL/MACRO type, this global can't match
+  LDA LABEL_TYPE
+  BNE .escape_nomatch       ; Looking for scoped label, but entry is global
+  ; Global lookup - simple string comparison
   DEY                       ; Y = $FF
 .simple_loop
   INY
