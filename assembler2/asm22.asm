@@ -1703,7 +1703,7 @@ expand_macro
 
   ; ----- Phase 1: Capture argument values -----
   ; X = index into MACRO_ARG_BUF for storing values
-  ; Each entry: [value_L][value_H][is_fwdref] = 3 bytes
+  ; Each entry: [is_fwdref][value_L][value_H] = 3 bytes
   LDX #$00
 .em_parse_loop
   ; Check if we're at end of parameter list (empty string)
@@ -1734,14 +1734,14 @@ expand_macro
 .arg_overflow
   JMP err_too_many_macro_arguments
 .arg_ok
-  ; Store value and fwdref flag in fixed buffer
+  ; Store fwdref flag and value in fixed buffer
+  LDA IS_FWDREF
+  STA MACRO_ARG_BUF,X
+  INX
   LDA OPERAND16
   STA MACRO_ARG_BUF,X
   INX
   LDA OPERAND16+$01
-  STA MACRO_ARG_BUF,X
-  INX
-  LDA IS_FWDREF
   STA MACRO_ARG_BUF,X
   INX
   JMP .em_parse_loop
@@ -1774,15 +1774,15 @@ expand_macro
   TYA
   SEC ; +1 for null terminator
   ADDA16 MACRO_DEF_PTR16 MACRO_DEF_PTR16 ; MACRO_DEF_PTR + A + 1 -> MACRO_DEF_PTR
-  ; Load value and fwdref from buffer
+  ; Load fwdref and value from buffer
+  LDA MACRO_ARG_BUF,X
+  STA IS_FWDREF
+  INX
   LDA MACRO_ARG_BUF,X
   STA OPERAND16
   INX
   LDA MACRO_ARG_BUF,X
   STA OPERAND16+$01
-  INX
-  LDA MACRO_ARG_BUF,X
-  STA IS_FWDREF
   INX
   ; Skip adding if forward ref in pass 1
   LDA IS_FWDREF
