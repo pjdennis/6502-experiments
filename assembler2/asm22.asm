@@ -96,6 +96,7 @@ IFDEF_INDEX     .data $00   ; Current index into IFDEF_DECISIONS buffer
 DEBUG_FLAG      .data $00   ; Non-zero if debug output enabled
 PASS_1_FWDREF16 .data $0000 ; Forward ref pointer after pass 1
 SMALL_HEAP_FLAG .data $00   ; Non-zero if small_heap argument was passed
+SHOW_MACROS     .data $00   ; Non-zero if captured macro definitions should be printed
   .endif
 
   .code
@@ -2096,10 +2097,11 @@ MATCH_FULL    = $01
 
 COMMAND_LINE_ARGS
   .ifdef enable_debug
-  .data "debug"      $00 <MATCH_FULL    handle_debug
-  .data "small_heap" $00 <MATCH_FULL    handle_small_heap
+  .data "debug"                $00 <MATCH_FULL    handle_debug
+  .data "small_heap"           $00 <MATCH_FULL    handle_small_heap
+  .data "show_captured_macros" $00 <MATCH_FULL    handle_show_captured_macros
   .endif
-  .data "define:"    $00 <MATCH_PARTIAL handle_define
+  .data "define:"              $00 <MATCH_PARTIAL handle_define
   .data $00 ; End of list
 
 
@@ -2117,6 +2119,10 @@ handle_small_heap
   STA SMALL_HEAP_FLAG
   JMP init_heap          ; Tail call
 
+; Handle the 'show_captured_macros' command line argument
+handle_show_captured_macros
+  LDA #$FF
+  STA SHOW_MACROS
   .endif
 
 ; Handle the 'define:' command line argument
@@ -2251,6 +2257,7 @@ start
   ; Initialize debug flags to 0
   STA DEBUG_FLAG
   STA SMALL_HEAP_FLAG
+  STA SHOW_MACROS
   .endif
   ; Initialize file stack early so interrupt handler works correctly
   JSR file_stack_init

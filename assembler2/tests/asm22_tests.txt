@@ -2,6 +2,8 @@
 # Format:
 #   --- separates test cases
 #   NAME: test identifier
+#   DESCRIPTION: description of the test
+#   ARGS: additional arguments to provide to the assembler
 #   INPUT: assembly source (line number prefix "N: " is stripped)
 #   EXPECT_HEX: expected binary output as hex bytes (positive test)
 #   EXPECT_FWDREF: expected forward reference count (optional)
@@ -1425,7 +1427,7 @@ EXPECT_HEX: a9 01 a9 02 a9 03 a9 04 a9 05
 
 ---
 NAME: define_from_cmdline
-ARGS: define:test_symbol
+ARGS: debug define:test_symbol
 INPUT:
  1: * = $0200
  2:   .ifdef test_symbol
@@ -1446,7 +1448,7 @@ EXPECT_HEX: a9 01
 
 ---
 NAME: define_multiple_from_cmdline
-ARGS: define:sym1 define:sym2
+ARGS: debug define:sym1 define:sym2
 INPUT:
  1: * = $0200
  2:   .ifdef sym1
@@ -1460,7 +1462,7 @@ EXPECT_HEX: a9 01 a9 02 a9 ff
 
 ---
 NAME: define_partial_match
-ARGS: define:sym
+ARGS: debug define:sym
 INPUT:
  1: * = $0200
  2:   .ifdef sym1
@@ -1969,7 +1971,6 @@ EXPECT_ERROR: 28
 EXPECT_LINE: 1
 EXPECT_MSG: Recursive macro invocation
 
-
 ---
 NAME: macro_param_single
 DESCRIPTION: Macro with single parameter
@@ -2255,9 +2256,22 @@ INPUT:
 EXPECT_HEX: f0 04 d0 01 ea e8 c8
 
 ---
+NAME: macro_capture
+ARGS: show_captured_macros
+SKIP: Work in progress
+INPUT:
+ 1: * = $0200
+ 2:   .macro test a b
+ 3:   LDA #$12  ;  Comment with trailing spaces  
+ 4:   .endmacro
+ 5:   NOP
+EXPECT_STDERR:
+[  LDA #$12  ;  Comment with trailing spaces  ]
+
+---
 NAME: heap_overflow_many_labels
 DESCRIPTION: Out of memory when heap exhausted with small heap
-ARGS: small_heap
+ARGS: debug small_heap
 INPUT:
  1: * = $0200
  2: a00 = $01
@@ -2297,7 +2311,7 @@ EXPECT_MSG: Out of memory
 ---
 NAME: file_stack_overflow_deep_include
 DESCRIPTION: Out of memory when file stack exhausted with small heap
-ARGS: small_heap
+ARGS: debug small_heap
 INPUT:
  1: * = $0200
  2:   .include tests/overflow/d01.asm

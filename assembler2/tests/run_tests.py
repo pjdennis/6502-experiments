@@ -266,12 +266,13 @@ class TestRunner:
                 "/dev/null",
                 str(asm_file),
                 str(bin_file),
-                "debug",
             ]
 
-            # Add extra args
+            # Add args (ARGS overrides the default "debug" argument)
             if test.args:
                 cmd.extend(test.args.split())
+            else:
+                cmd.append("debug")
 
             # Run assembler
             with open(err_file, "w") as err_fh:
@@ -282,7 +283,7 @@ class TestRunner:
 
             # Determine if this is a positive or negative test
             if test.expect_hex:
-                return self._check_positive_assembler_test(test, bin_file, stderr_text, exit_code)
+                return self._check_positive_assembler_test(test, bin_file, stderr_text, exit_code, asm_file)
             elif test.expect_error:
                 return self._check_negative_assembler_test(test, stderr_text, exit_code, asm_file)
             elif test.expect_stderr:
@@ -291,7 +292,7 @@ class TestRunner:
                 return TestOutcome(TestResult.SKIP, ["No expectation defined"])
 
     def _check_positive_assembler_test(
-        self, test: Test, bin_file: Path, stderr_text: str, exit_code: int
+        self, test: Test, bin_file: Path, stderr_text: str, exit_code: int, asm_file: Path
     ) -> TestOutcome:
         """Check a positive assembler test (expects success)."""
         details = []
@@ -330,6 +331,10 @@ class TestRunner:
             if actual_fwdref != test.expect_fwdref:
                 details.append(f"Expected fwdref count: {test.expect_fwdref}")
                 details.append(f"Actual fwdref count:   {actual_fwdref}")
+
+        # Check stderr if specified
+        if test.expect_stderr:
+            self._check_stderr(test, stderr_text, asm_file, details)
 
         if details:
             return TestOutcome(TestResult.FAIL, details)
@@ -372,21 +377,16 @@ class TestRunner:
         if test.expect_msg and test.expect_msg not in actual_msg:
             details.append(f"Message: expected '{test.expect_msg}', got '{actual_msg}'")
 
+        # Check full stderr if specified
+        if test.expect_stderr:
+            self._check_stderr(test, stderr_text, asm_file, details)
+
         if details:
             return TestOutcome(TestResult.FAIL, details)
         return TestOutcome(TestResult.PASS)
 
-    def _check_stderr_test(
-        self, test: Test, stderr_text: str, exit_code: int, asm_file: Path
-    ) -> TestOutcome:
-        """Check a test that expects specific stderr output."""
-        details = []
-
-        if exit_code == 0:
-            details.append("Expected error, got success")
-            return TestOutcome(TestResult.FAIL, details)
-
-        # Filter emulator noise from stderr
+    def _filter_stderr(self, stderr_text: str) -> str:
+        """Filter emulator noise from stderr and return cleaned text."""
         actual_lines = []
         for line in stderr_text.split("\n"):
             # Skip emulator status lines
@@ -400,18 +400,31 @@ class TestRunner:
                 continue
             if line.startswith("Exit code"):
                 continue
-            actual_lines.append(line.rstrip())
+            actual_lines.append(line)
+        # Strip trailing empty lines but preserve whitespace within lines
+        while actual_lines and actual_lines[-1] == "":
+            actual_lines.pop()
+        return "\n".join(actual_lines)
 
-        actual_stderr = "\n".join(actual_lines).strip()
+    def _check_stderr(
+        self, test: Test, stderr_text: str, asm_file: Path, details: list[str]
+    ):
+        """Check stderr output matches expected. Appends failures to details list."""
+        actual_stderr = self._filter_stderr(stderr_text)
 
         # Replace placeholder with actual file path
         expected_stderr = test.expect_stderr.replace("{{MAIN_FILE}}", str(asm_file))
-        expected_stderr = expected_stderr.strip()
 
         if actual_stderr != expected_stderr:
             self._add_comparison(details, "stderr", expected_stderr, actual_stderr,
                                  bracketed=test.expect_stderr_bracketed)
 
+    def _check_stderr_test(
+        self, test: Test, stderr_text: str, exit_code: int, asm_file: Path
+    ) -> TestOutcome:
+        """Check a test that only specifies expected stderr output (no hex or error code)."""
+        details = []
+        self._check_stderr(test, stderr_text, asm_file, details)
         if details:
             return TestOutcome(TestResult.FAIL, details)
         return TestOutcome(TestResult.PASS)
