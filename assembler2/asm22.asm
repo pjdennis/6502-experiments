@@ -66,6 +66,10 @@ IFDEF_DECISIONS = $0800  ; Buffer for .ifdef decisions (256 bytes)
 *               = $2000  ; Code generates here
 FILE_STACK      = $F000  ; File stack will grow down from 1 below here
 
+; Label type constants (for LABEL_TYPE variable)
+LABEL_TYPE_GLOBAL = $00   ; Global label (no escape format)
+LABEL_TYPE_LOCAL  = $01   ; Local label under global scope (heap address)
+LABEL_TYPE_MACRO  = $02   ; Macro-local label (expansion ID)
 
   .zeropage
 
@@ -443,20 +447,20 @@ parse_term
   JSR check_local_label
   ; If in macro expansion with non-local label, try local hash first
   ; (parameters shadow globals with the same name)
-  LDA IS_LOCAL_LABEL
+  LDA LABEL_TYPE
   BNE .do_lookup           ; Already a .local label, use normal path
   LDA EXPANSION_ID16
   ORA EXPANSION_ID16+$01
   BEQ .do_lookup           ; Not in macro, use normal path
   ; In macro with non-local label - try local hash first for parameters
-  LDA #$FF
-  STA IS_LOCAL_LABEL
+  LDA #LABEL_TYPE_LOCAL
+  STA LABEL_TYPE
   JSR select_label_hash_table
   JSR find_in_hash
   BCC .label_found         ; Found as parameter
   ; Not a parameter - restore to global lookup
-  LDA #$00
-  STA IS_LOCAL_LABEL
+  LDA #LABEL_TYPE_GLOBAL
+  STA LABEL_TYPE
 .do_lookup
   JSR select_label_hash_table
   JSR find_in_hash
@@ -723,9 +727,9 @@ parse_expression
 ; Label classification, lookup, and definition
 ; ============================================================================
 
-; Check if token is a local label and set IS_LOCAL_LABEL flag
+; Check if token is a local label and set LABEL_TYPE flag
 ; On entry TOKEN contains the token (may start with '.')
-; On exit IS_LOCAL_LABEL set appropriately ($FF if local, $00 if global)
+; On exit LABEL_TYPE set (LABEL_TYPE_LOCAL if local, LABEL_TYPE_GLOBAL if global)
 ;         TOKEN is NOT modified (no expansion)
 ;         A not preserved
 ;         X, Y are preserved
@@ -739,12 +743,12 @@ check_local_label
   BNE .have_global
   JMP err_no_global_for_local
 .have_global
-  LDA #$FF
-  STA IS_LOCAL_LABEL
+  LDA #LABEL_TYPE_LOCAL
+  STA LABEL_TYPE
   RTS
 .not_local
-  LDA #$00
-  STA IS_LOCAL_LABEL
+  LDA #LABEL_TYPE_GLOBAL
+  STA LABEL_TYPE
   RTS
 
 
@@ -756,7 +760,7 @@ select_label_hash_table
 ; Update LABEL_SCOPE16 by looking up TOKEN in hash table
 ; Used in pass 2 to set the scope for local label matching
 ; On entry TOKEN contains the global label name
-;          IS_LOCAL_LABEL = 0 (global label)
+;          LABEL_TYPE = 0 (global label)
 ; On exit LABEL_SCOPE16 points to the token string on heap
 ;         CACHED_HASH is set (needed for subsequent local label lookups)
 ;         A, Y not preserved
@@ -794,13 +798,13 @@ capture_label
   BPL .pass_1
   ; Pass 2 - don't capture label, but must track globals for local label scoping
   ; NEXT_CHAR has the next char from read_token
-  JSR check_local_label     ; Sets IS_LOCAL_LABEL, validates scope for locals
+  JSR check_local_label     ; Sets LABEL_TYPE, validates scope for locals
   ; Now continue with value reading
   JSR check_for_value
   BCS .has_equals_2         ; If = found, branch
   ; No = found - update global heap if this was not a local label
   ; check_for_value updated NEXT_CHAR if it called read_char
-  LDA IS_LOCAL_LABEL
+  LDA LABEL_TYPE
   BNE .was_local_2          ; If local flag != 0, skip update
   JSR update_label_scope_from_lookup  ; Set LABEL_SCOPE16 for local label lookups
 .was_local_2
@@ -822,7 +826,7 @@ capture_label
   JMP .skip_and_return_processed
 .pass_1
   ; NEXT_CHAR has the next char from read_token
-  JSR check_local_label     ; Sets IS_LOCAL_LABEL, validates scope for locals
+  JSR check_local_label     ; Sets LABEL_TYPE, validates scope for locals
   ; Add key to hash table first (before read_value may overwrite TOKEN)
   JSR select_label_hash_table
   JSR hash_add
@@ -832,7 +836,7 @@ capture_label
   BCS .has_equals           ; If = found, branch
   ; No = found, save global label and use program counter
   ; Update LABEL_SCOPE16 and commit hash for non-local labels
-  LDA IS_LOCAL_LABEL
+  LDA LABEL_TYPE
   BNE .was_local_1          ; If local flag != 0, skip
   ; Store the address of the current global label
   CP16 TABP16 LABEL_SCOPE16
@@ -1501,7 +1505,7 @@ process_ifdef
   INC IFDEF_INDEX
   BEQ .pi_overflow         ; If wrapped to 0, we've used all 256 slots
   LDA #$00
-  STA IS_LOCAL_LABEL
+  STA LABEL_TYPE
   JSR select_label_hash_table
   JSR find_in_hash         ; C=0 if found, C=1 if not found
   ; Save result: A = $FF if found (assemble), $00 if not found (skip)
@@ -1792,8 +1796,8 @@ expand_macro
   ; Pass 2: always add
 .em_do_add
   ; Add parameter to local scope
-  LDA #$FF
-  STA IS_LOCAL_LABEL
+  LDA #LABEL_TYPE_LOCAL
+  STA LABEL_TYPE
   JSR select_label_hash_table
   JSR hash_add
   BCS .em_add_loop      ; Already exists (pass 1), skip store
@@ -1949,7 +1953,7 @@ assemble_code
   STA_LH16 PC_SAVE16
   STA_LH16 CURR_LINE16
   STA_LH16 LABEL_SCOPE16 ; Initialize scope (0 = no global yet)
-  STA IS_LOCAL_LABEL  ; Initialize local label flag
+  STA LABEL_TYPE  ; Initialize local label flag
   STA COND_DEPTH      ; Clear conditional depth
   STA SKIP_DEPTH      ; Clear skip depth
   STA IN_MACRO_DEF    ; Clear macro definition flag
@@ -2229,7 +2233,7 @@ start
   ; TABP16 now points past "define:" to label name
   JSR copy_string_to_token
   SET16 $0001 HEX16      ; Set A to $00 as a side effect
-  STA IS_LOCAL_LABEL     ; Not a local label. Set to $00
+  STA LABEL_TYPE     ; Not a local label. Set to $00
   JSR hash_add
 .next_arg
   INC ARG_INDEX

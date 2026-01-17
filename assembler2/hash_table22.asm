@@ -14,7 +14,7 @@ HTP16          .data $0000 ; 2 byte pointer to hash table
 TABP16         .data $0000 ; 2 byte table pointer
 HTTP16         .data $0000 ; 2 byte temporary pointer
 LABEL_SCOPE16  .data $0000 ; Current scope for local label resolution
-IS_LOCAL_LABEL .data $00   ; Flag: non-zero if storing local label
+LABEL_TYPE .data $00   ; Flag: non-zero if storing local label
 
   .code
 
@@ -103,14 +103,14 @@ hash_loop
 
 
 ; On entry HT_KEY contains the key to find
-;          IS_LOCAL_LABEL: if non-zero, uses cached hash from global
+;          LABEL_TYPE: if non-zero, uses cached hash from global
 ; On exit C = 0 if found or 1 if not found
 ; On exit TABP16 points to the key if found
 ;         HT_V16 contains the value if found
 ;         X is preserved
 ;         A, Y are not preserverd
 find_in_hash
-  LDA IS_LOCAL_LABEL
+  LDA LABEL_TYPE
   BEQ .use_global_hash
   JSR calculate_hash_local
   JMP .lookup_value
@@ -222,8 +222,8 @@ store_table_entry
 ;         Y points to terminating 0 if equal
 ;         X is preserved
 ;         A is not preserved
-; Handles both normal strings and $01 escape format:
-;   $01 <addr_lo> <addr_hi> ".local" $00
+; Handles both normal strings and escape format:
+;   <type> <scope_lo> <scope_hi> ".local" $00
 ; For escape format, verifies scope pointer matches before comparing
 compare_token
   ; Quick check: is stored token in escape format?
@@ -245,7 +245,7 @@ compare_token
   RTS
 
 .handle_escape
-  ; === Escape format ($01 <ptr_lo> <ptr_hi> ".bar" $00) ===
+  ; === Escape format (<type> <scope_lo> <scope_hi> ".bar" $00) ===
   ; Verify scope pointer matches LABEL_SCOPE16
   INY
   LDA (TABP16),Y
@@ -332,7 +332,7 @@ find_token
 ; Stores null next pointer and key on heap
 ; and advances heap pointer
 ; On entry HT_KEY contains key to store
-;          IS_LOCAL_LABEL: if non-zero, stores $01 escape format
+;          LABEL_TYPE: if non-zero, stores $01 escape format
 ;            (HT_KEY should already contain just ".bar" for local labels)
 ;          LABEL_SCOPE16: current scope (for local labels)
 ; On exit MEMP16 points to where value should be stored
@@ -351,11 +351,11 @@ store_token
   ; Save the pointer to the key
   CP16 MEMP16 TABP16
   ; Check if this is a local label
-  LDA IS_LOCAL_LABEL
+  LDA LABEL_TYPE
   BEQ .copy_token       ; If global, skip escape header
-  ; Store $01 escape format: $01 <scope_lo> <scope_hi> <local_part>
+  ; Store escape format: <type> <scope_lo> <scope_hi> <local_part>
   ; HT_KEY already contains just ".bar" - no scanning needed
-  APPEND_HEAPI $01      ; Escape byte
+  APPEND_HEAP LABEL_TYPE ; Escape byte (type)
   APPEND_HEAP LABEL_SCOPE16
   APPEND_HEAP LABEL_SCOPE16+$01
   JSR advance_heap      ; Advance past escape header (3 bytes)
@@ -373,7 +373,7 @@ store_token
 
 ; Add HT_KEY to hash table
 ; On entry HT_KEY contains key
-;          IS_LOCAL_LABEL: if non-zero, uses cached hash from global
+;          LABEL_TYPE: if non-zero, uses cached hash from global
 ; On exit C = 0 if added or 1 if already exists
 ;         If C = 0 (added), MEMP16 points to where value should be stored
 ;         Caller must store value and call advance_heap
@@ -384,7 +384,7 @@ hash_add_instruction ; Do not consider local lable
   JMP hash_add_common
 
 hash_add ; Hash calculation based on local label or not
-  LDA IS_LOCAL_LABEL
+  LDA LABEL_TYPE
   BEQ .use_global_hash
   JSR calculate_hash_local
   JMP .hash_done
