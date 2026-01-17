@@ -28,28 +28,33 @@ SCOPE_ENTRY_SIZE = $05
 
 EXPANSION_ID16 .data $0000 ; 2-byte expansion counter for macro scopes
 SCOPE_PTR16    .data $0000 ; Pointer to next free slot in scope stack
+SCOPE_DEPTH    .data $00   ; Current nesting depth (0 = not in macro)
 
   .code
 
 
 ; Initialize scope stack and expansion ID counter (call once at program start)
 ; On exit: SCOPE_PTR16 points to SCOPE_STACK (empty stack)
-;          EXPANSION_ID16 = 0
+;          EXPANSION_ID16 = 0, SCOPE_DEPTH = 0
 ;          A clobbered, X/Y preserved
 init_scope_stack
   SET16 SCOPE_STACK SCOPE_PTR16
   SET16 $00 EXPANSION_ID16
+  LDA #$00
+  STA SCOPE_DEPTH
   RTS
 
 
 ; Reset scope stack and expansion ID to initial state (call between passes)
 ; This ensures pass 2 uses the same scope IDs as pass 1
 ; On exit: SCOPE_PTR16 points to SCOPE_STACK (empty stack)
-;          EXPANSION_ID16 = 0
+;          EXPANSION_ID16 = 0, SCOPE_DEPTH = 0
 ;          A clobbered, X/Y preserved
 reset_scope_stack
   SET16 SCOPE_STACK SCOPE_PTR16
   SET16 $00 EXPANSION_ID16
+  LDA #$00
+  STA SCOPE_DEPTH
   RTS
 
 
@@ -112,6 +117,8 @@ push_label_scope
   TAY
   LDA scramble_table,Y
   STA CACHED_HASH
+  ; Increment scope depth
+  INC SCOPE_DEPTH
   RTS
 
 
@@ -137,4 +144,6 @@ pop_label_scope
   INY
   LDA (SCOPE_PTR16),Y
   STA CACHED_HASH
+  ; Decrement scope depth
+  DEC SCOPE_DEPTH
   RTS

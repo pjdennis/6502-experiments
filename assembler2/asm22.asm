@@ -445,8 +445,7 @@ parse_term
   ; (parameters shadow globals with the same name)
   LDA LABEL_TYPE
   BNE .do_lookup           ; Already a .local label, use normal path
-  LDA EXPANSION_ID16
-  ORA EXPANSION_ID16+$01
+  LDA SCOPE_DEPTH
   BEQ .do_lookup           ; Not in macro, use normal path
   ; In macro with non-local label - try macro-local hash first for parameters
   LDA #LABEL_TYPE_MACRO
@@ -742,13 +741,8 @@ check_local_label
   BNE .have_scope
   JMP err_no_global_for_local
 .have_scope
-  ; Determine if in macro context by checking if scope stack is non-empty
-  ; If SCOPE_PTR16 != SCOPE_STACK, we're in a macro
-  LDA SCOPE_PTR16+$01
-  CMP #>SCOPE_STACK
-  BNE .in_macro
-  LDA SCOPE_PTR16
-  CMP #<SCOPE_STACK
+  ; Determine if in macro context by checking scope depth
+  LDA SCOPE_DEPTH
   BNE .in_macro
   ; Not in macro - use LOCAL type
   LDA #LABEL_TYPE_LOCAL
