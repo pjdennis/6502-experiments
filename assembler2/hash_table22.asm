@@ -227,10 +227,12 @@ store_table_entry
 ; For escape format, verifies scope pointer matches before comparing
 compare_token
   ; Quick check: is stored token in escape format?
+  ; Escape format starts with type byte ($01=LOCAL, $02=MACRO)
+  ; Valid label names start with printable chars >= $20
   LDY #$00
   LDA (TABP16),Y
-  CMP #$01
-  BEQ .handle_escape
+  CMP #$20
+  BCC .handle_escape    ; First byte < $20 means escape format
 
   ; === Fast path (no escape) - simple string comparison ===
   DEY                       ; Y = $FF

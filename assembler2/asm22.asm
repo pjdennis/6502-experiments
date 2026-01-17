@@ -448,8 +448,8 @@ parse_term
   LDA EXPANSION_ID16
   ORA EXPANSION_ID16+$01
   BEQ .do_lookup           ; Not in macro, use normal path
-  ; In macro with non-local label - try local hash first for parameters
-  LDA #LABEL_TYPE_LOCAL
+  ; In macro with non-local label - try macro-local hash first for parameters
+  LDA #LABEL_TYPE_MACRO
   STA LABEL_TYPE
   JSR select_label_hash_table
   JSR find_in_hash
@@ -725,7 +725,10 @@ parse_expression
 
 ; Check if token is a local label and set LABEL_TYPE flag
 ; On entry TOKEN contains the token (may start with '.')
-; On exit LABEL_TYPE set (LABEL_TYPE_LOCAL if local, LABEL_TYPE_GLOBAL if global)
+; On exit LABEL_TYPE set appropriately:
+;         - LABEL_TYPE_GLOBAL if global label
+;         - LABEL_TYPE_LOCAL if local label under global (outside macro)
+;         - LABEL_TYPE_MACRO if local label in macro expansion
 ;         TOKEN is NOT modified (no expansion)
 ;         A not preserved
 ;         X, Y are preserved
@@ -736,10 +739,24 @@ check_local_label
   ; Local label - Check if LABEL_SCOPE16 is set (error check)
   LDA LABEL_SCOPE16
   ORA LABEL_SCOPE16+$01
-  BNE .have_global
+  BNE .have_scope
   JMP err_no_global_for_local
-.have_global
+.have_scope
+  ; Determine if in macro context by checking if scope stack is non-empty
+  ; If SCOPE_PTR16 != SCOPE_STACK, we're in a macro
+  LDA SCOPE_PTR16+$01
+  CMP #>SCOPE_STACK
+  BNE .in_macro
+  LDA SCOPE_PTR16
+  CMP #<SCOPE_STACK
+  BNE .in_macro
+  ; Not in macro - use LOCAL type
   LDA #LABEL_TYPE_LOCAL
+  STA LABEL_TYPE
+  RTS
+.in_macro
+  ; In macro expansion - use MACRO type
+  LDA #LABEL_TYPE_MACRO
   STA LABEL_TYPE
   RTS
 .not_local
@@ -1791,8 +1808,8 @@ expand_macro
   BPL .em_add_loop      ; Pass 1 fwdref: skip
   ; Pass 2: always add
 .em_do_add
-  ; Add parameter to local scope
-  LDA #LABEL_TYPE_LOCAL
+  ; Add parameter to macro-local scope
+  LDA #LABEL_TYPE_MACRO
   STA LABEL_TYPE
   JSR select_label_hash_table
   JSR hash_add
