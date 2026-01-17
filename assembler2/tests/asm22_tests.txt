@@ -1698,8 +1698,8 @@ INPUT:
  1: * = $0200
  2:   .include tests/include/error_inside.asm
 EXPECT_STDERR:
-Error 1 in file tests/include/error_inside.asm at line 3: Label not found
-  included from {{MAIN_FILE}}:2
+[Error 1 in file tests/include/error_inside.asm at line 3: Label not found]
+[  included from {{MAIN_FILE}}:2]
 
 ---
 NAME: include_error_nested

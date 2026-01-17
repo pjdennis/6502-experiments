@@ -65,6 +65,7 @@ class Test:
     expect_fwdref: str = ""
     expect_stdout: str = ""
     expect_stderr: str = ""
+    expect_stderr_bracketed: bool = False  # True if [line] format was used
     expect_error: str = ""
     expect_line: str = ""
     expect_msg: str = ""
@@ -205,6 +206,10 @@ class TestRunner:
                     # Skip comment and blank lines in expected output sections
                     if re.match(r"^\s*#", line) or re.match(r"^\s*$", line):
                         continue
+                    # Check for bracketed format: [content]
+                    if line.startswith("[") and line.endswith("]"):
+                        current.expect_stderr_bracketed = True
+                        line = line[1:-1]  # Strip the brackets
                     if current.expect_stderr:
                         current.expect_stderr += "\n"
                     current.expect_stderr += line
@@ -404,7 +409,8 @@ class TestRunner:
         expected_stderr = expected_stderr.strip()
 
         if actual_stderr != expected_stderr:
-            self._add_comparison(details, "stderr", expected_stderr, actual_stderr)
+            self._add_comparison(details, "stderr", expected_stderr, actual_stderr,
+                                 bracketed=test.expect_stderr_bracketed)
 
         if details:
             return TestOutcome(TestResult.FAIL, details)
@@ -498,21 +504,25 @@ class TestRunner:
         return "\n".join(lines).rstrip()
 
     def _add_comparison(
-        self, details: list[str], label: str, expected: str, actual: str
+        self, details: list[str], label: str, expected: str, actual: str,
+        bracketed: bool = False
     ):
         """Add expected vs actual comparison to details list."""
         details.append(f"Expected {label}:")
-        self._add_indented(details, expected)
+        self._add_indented(details, expected, bracketed=bracketed)
         details.append(f"Actual {label}:")
-        self._add_indented(details, actual)
+        self._add_indented(details, actual, bracketed=bracketed)
 
-    def _add_indented(self, details: list[str], text: str):
+    def _add_indented(self, details: list[str], text: str, bracketed: bool = False):
         """Add indented text lines to details list."""
         if not text:
             details.append("  (empty)")
             return
         for line in text.split("\n"):
-            details.append(f"  {line}")
+            if bracketed:
+                details.append(f"  [{line}]")
+            else:
+                details.append(f"  {line}")
 
     def print_result(self, name: str, outcome: TestOutcome):
         """Print test result."""
