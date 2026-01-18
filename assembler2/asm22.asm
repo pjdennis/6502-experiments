@@ -1857,10 +1857,10 @@ capture_macro_line
   TXA
   PHA                    ; Save output file handle
   CP16 MEMP16 MACRO_DEF_PTR16  ; Save heap pos for potential undo
-  LDX #$00               ; Flags: bit0=last_space
+  LDX #$00               ; Space indicator - $01 if last char was a space, $00 otherwise
   LDY #$00               ; Output index
   LDA NEXT_CHAR
-  JMP .cml_process
+  BNE .cml_process       ; Always taken
 .cml_next
   JSR read_char
   BCS .cml_eof_error
@@ -1879,38 +1879,28 @@ capture_macro_line
   JMP .cml_newline
 .cml_not_semi
   CMP #'"'
-  BNE .cml_not_quote
-  JMP .cml_string_lit
-.cml_not_quote
-  CMP #'\''              ; Single quote
+  BEQ .cml_string_lit
+  CMP #'\''
   BEQ .cml_char_lit
   CMP #' '
-  BNE .cml_regular
-  TXA
-  LSR                    ; Check bit 0 (last_space) -> carry
-  BCS .cml_next          ; Skip consecutive space
-  TXA
-  ORA #$01               ; Set last_space
-  TAX
-  LDA #' '
-  BNE .cml_output        ; Always taken
-.cml_regular
-  TXA
-  AND #$FE               ; Clear last_space
-  TAX
-  LDA NEXT_CHAR
+  BEQ .cml_space
+  ; Regular character
+  LDX #$00               ; Clear last space indicator
 .cml_output
   APPEND_HEAPA_ADVANCE
   JMP .cml_next
 .cml_eof_error
   JMP err_unclosed_macro
+.cml_space
+  ; Space, so check for consecutives
+  CPX #$01               ; Check if last character was a space
+  BEQ .cml_next          ; Last char was a space so skip this one
+  INX                    ; Set indicator that last character was a space
+  BNE .cml_output        ; Always taken
 .cml_string_lit
   ; Output string definition from opening " through closing "
-  TXA
-  AND #$FE                 ; Clear last_space
-  TAX
-  LDA #'"'                 ; Restore opening quote and capture it
-  APPEND_HEAPA
+  LDX #$00                 ; Clear last_space
+  APPEND_HEAPA             ; Capture the opening quote
 .cml_string_lit_loop
   JSR read_char            ; Read the next char and capture it
   BCS .cml_eof_error
@@ -1934,11 +1924,8 @@ capture_macro_line
   JMP .cml_next
 .cml_char_lit
   ; Output char definition from opening ' through closing '
-  TXA
-  AND #$FE               ; Clear last_space
-  TAX
-  LDA #'\''              ; Restore opening quote
-  APPEND_HEAPA
+  LDX #$00               ; Clear last_space
+  APPEND_HEAPA           ; Capture the opening quote
   JSR read_char          ; Read the next char and write it
   BCS .cml_eof_error
   APPEND_HEAPA
@@ -1953,15 +1940,10 @@ capture_macro_line
   BCS .cml_eof_error
   ; It should be a closing single quote
   CMP #'\''
-  BEQ .cml_char_valid
+  BEQ .cml_output
   JMP err_invalid_char_literal
-.cml_char_valid
-  ; Output the closing single quote
-  APPEND_HEAPA_ADVANCE
-  JMP .cml_next
 .cml_newline
-  LDA #'\n'
-  APPEND_HEAPA
+  APPEND_HEAPA           ; Capture the newline
   JSR advance_heap
   ; Now check if this line was .endmacro
   CP16 MACRO_DEF_PTR16 TABP16
