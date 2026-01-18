@@ -98,7 +98,6 @@ PASS_1_FWDREF16 .data $0000 ; Forward ref pointer after pass 1
 SMALL_HEAP_FLAG .data $00   ; Non-zero if small_heap argument was passed
 SHOW_MACROS     .data $00   ; Non-zero if captured macro definitions should be printed
 MACRO_NAME_PTR16   .data $0000 ; Pointer to macro name (for show_captured_macros)
-MACRO_BODY_START16 .data $0000 ; Start of macro body on heap (for show_captured_macros)
   .endif
 
   .code
@@ -1635,9 +1634,6 @@ process_macro
   JSR advance_heap
   ; Update MACRO_DEF_PTR to point where body will be stored
   CP16 MEMP16 MACRO_DEF_PTR16
-  .ifdef enable_debug
-  CP16 MEMP16 MACRO_BODY_START16
-  .endif
   ; Set IN_MACRO_DEF flag to start capturing
   LDA #$FF
   STA IN_MACRO_DEF
@@ -2299,11 +2295,14 @@ show_macros
   LDY #$00
   BEQ .show_params         ; Always taken
 .show_params_done
+  ; Advance past the trailing null
+  TYA
+  SEC ; +1
+  ADDA16 TABP16 TABP16
+  LDY #$00
   LDA #'\n'
   JSR write_d
   ; Output macro body
-  CP16 MACRO_BODY_START16 TABP16
-  LDY #$00
 .show_body
   LDA (TABP16),Y
   BEQ .show_done
