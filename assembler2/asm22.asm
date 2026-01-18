@@ -2266,21 +2266,15 @@ copy_string_to_token
   .ifdef enable_debug
 
 show_macros
-  ; Save X (output file handle)
-  TXA
-  PHA
   ; Output "Macro: "
   SHOW_MESSAGEI .macro_prefix
-  LDY #$00
   ; Output macro name
   CP16 MACRO_NAME_PTR16 TABP16
   JSR show_message
   ; Skip past the trailing null and MODE_MACRO byte
   INY
-  TYA
-  SEC ; +1
-  ADDA16 TABP16 TABP16
-  LDY #$00
+  INY
+  JSR .advance_tabp
 .show_params
   ; Output each param preceded by space
   LDA (TABP16),Y
@@ -2289,35 +2283,25 @@ show_macros
   JSR write_d
   JSR show_message
   ; Skip past null terminator
-  TYA
-  SEC
-  ADDA16 TABP16 TABP16
-  LDY #$00
-  BEQ .show_params         ; Always taken
+  INY
+  JSR .advance_tabp
+  JMP .show_params
 .show_params_done
   ; Advance past the trailing null
-  TYA
-  SEC ; +1
-  ADDA16 TABP16 TABP16
-  LDY #$00
+  INY
+  JSR .advance_tabp
   LDA #'\n'
   JSR write_d
   ; Output macro body
-.show_body
-  LDA (TABP16),Y
-  BEQ .show_done
-  JSR write_d
-  INY
-  BNE .show_body
-  INC TABP16+$01
-  JMP .show_body
+  JMP show_message         ; Tail call
+.advance_tabp
+  TYA
+  CLC
+  ADDA16 TABP16 TABP16
+  LDY #$00
+  RTS
 .macro_prefix
   .data "Macro: " $00
-.show_done
-  ; Restore X (output file handle)
-  PLA
-  TAX
-  RTS
 
   .endif
 

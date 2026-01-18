@@ -299,7 +299,9 @@ show_message
   BEQ .done
   JSR write_d
   INY
-  JMP .loop
+  BNE .loop
+  INC TABP16+$01
+  BNE .loop        ; Always taken
 .done
   RTS
 
