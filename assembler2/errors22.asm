@@ -289,8 +289,9 @@ show_decimal
 
 ; Show message to the error output
 ; On entry TABP16 points to the zero-terminated message
-; On exit X is preserved
-;         A, Y are not preserved
+; On exit (TABP16),Y points to the zero terminator
+;         X is preserved
+;         A is not preserved
 show_message
   LDY #$00
 .loop

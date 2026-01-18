@@ -92,6 +92,23 @@ class TestRunner:
         self.failed = 0
         self.skipped = 0
 
+    def _read_text_safe(self, filepath: Path) -> str:
+        """Read a file, converting non-UTF8 bytes to [0xNN] format."""
+        data = filepath.read_bytes()
+        result = []
+        for byte in data:
+            if byte == 0x0A:  # newline
+                result.append('\n')
+            elif byte == 0x0D:  # carriage return
+                result.append('\r')
+            elif byte == 0x09:  # tab
+                result.append('\t')
+            elif 0x20 <= byte <= 0x7E:  # printable ASCII
+                result.append(chr(byte))
+            else:
+                result.append(f'[0x{byte:02X}]')
+        return ''.join(result)
+
     def check_prerequisites(self, test_type: TestType) -> bool:
         """Check that required executables exist."""
         if not self.emulator.exists():
@@ -293,7 +310,7 @@ class TestRunner:
                 result = subprocess.run(cmd, stderr=err_fh, capture_output=False)
 
             exit_code = result.returncode
-            stderr_text = err_file.read_text()
+            stderr_text = self._read_text_safe(err_file)
 
             # Determine if this is a positive or negative test
             if test.expect_hex:
@@ -482,8 +499,8 @@ class TestRunner:
                 subprocess.run(cmd, stderr=err_fh)
 
             # Read outputs
-            actual_stdout = stdout_file.read_text() if stdout_file.exists() else ""
-            actual_stderr = stderr_file.read_text() if stderr_file.exists() else ""
+            actual_stdout = self._read_text_safe(stdout_file) if stdout_file.exists() else ""
+            actual_stderr = self._read_text_safe(stderr_file) if stderr_file.exists() else ""
 
             # Filter emulator noise from stderr
             stderr_lines = []

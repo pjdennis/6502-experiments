@@ -1665,75 +1665,7 @@ process_endmacro
   .ifdef enable_debug
   LDA SHOW_MACROS
   BEQ .not_showing_macros
-  ; Save X (output file handle)
-  TXA
-  PHA
-  ; Output "Macro: "
-  LDX #$00
-.show_prefix
-  LDA .macro_prefix,X
-  BEQ .show_name
-  JSR write_d
-  INX
-  BNE .show_prefix
-.show_name
-  ; Output macro name
-  CP16 MACRO_NAME_PTR16 TABP16
-  JSR .output_string
-  ; Skip null terminator and MODE_MACRO byte
-  LDY #$02
-  JSR .advance_tabp16
-.show_params
-  ; Output each param preceded by space
-  LDA (TABP16),Y
-  BEQ .show_params_done    ; Empty string = end of params
-  LDA #' '
-  JSR write_d
-  JSR .output_string
-  ; Skip past null terminator
-  INY
-  JSR .advance_tabp16
-  JMP .show_params
-.show_params_done
-  LDA #'\n'
-  JSR write_d
-  ; Output macro body
-  CP16 MACRO_BODY_START16 TABP16
-  LDY #$00
-.show_body
-  LDA (TABP16),Y
-  BEQ .show_done
-  JSR write_d
-  INY
-  BNE .show_body
-  INC TABP16+$01
-  JMP .show_body
-  ; Helper: output null-terminated string at TABP16+Y, leave Y past null
-.output_string
-  LDA (TABP16),Y
-  BEQ .advance_tabp16
-  JSR write_d
-  INY
-  BNE .output_string
-  INC TABP16+$01
-  JMP .output_string
-.advance_tabp16
-  ; Add Y to TABP16 and reset Y to 0
-  TYA
-  CLC
-  ADC TABP16
-  STA TABP16
-  BCC .at_done
-  INC TABP16+$01
-.at_done
-  LDY #$00
-  RTS
-.macro_prefix
-  .data "Macro: " $00
-.show_done
-  ; Restore X (output file handle)
-  PLA
-  TAX
+  JSR show_macros
 .not_showing_macros
   .endif
 
@@ -2331,7 +2263,68 @@ copy_string_to_token
 
 
 ; ============================================================================
-; TIER 13: ENTRY POINT
+; TIER 13: DEUBUG and TEST support
+; Support for debugging and testing
+; ============================================================================
+
+  .ifdef enable_debug
+
+show_macros
+  ; Save X (output file handle)
+  TXA
+  PHA
+  ; Output "Macro: "
+  SHOW_MESSAGEI .macro_prefix
+  LDY #$00
+  ; Output macro name
+  CP16 MACRO_NAME_PTR16 TABP16
+  JSR show_message
+  ; Skip past the trailing null and MODE_MACRO byte
+  INY
+  TYA
+  SEC ; +1
+  ADDA16 TABP16 TABP16
+  LDY #$00
+.show_params
+  ; Output each param preceded by space
+  LDA (TABP16),Y
+  BEQ .show_params_done    ; Empty string = end of params
+  LDA #' '
+  JSR write_d
+  JSR show_message
+  ; Skip past null terminator
+  TYA
+  SEC
+  ADDA16 TABP16 TABP16
+  LDY #$00
+  BEQ .show_params         ; Always taken
+.show_params_done
+  LDA #'\n'
+  JSR write_d
+  ; Output macro body
+  CP16 MACRO_BODY_START16 TABP16
+  LDY #$00
+.show_body
+  LDA (TABP16),Y
+  BEQ .show_done
+  JSR write_d
+  INY
+  BNE .show_body
+  INC TABP16+$01
+  JMP .show_body
+.macro_prefix
+  .data "Macro: " $00
+.show_done
+  ; Restore X (output file handle)
+  PLA
+  TAX
+  RTS
+
+  .endif
+
+
+; ============================================================================
+; TIER 14: ENTRY POINT
 ; Program entry and main control flow
 ; ============================================================================
 
