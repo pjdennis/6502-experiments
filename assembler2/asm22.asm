@@ -70,27 +70,27 @@ FILE_STACK      = $F000  ; File stack will grow down from 1 below here
   .zeropage
 
 ; Zero page locations
-TEMP            .data $00   ; 1 byte
-PC16            .data $0000 ; 2 byte program counter
-HEX16           .data $0000 ; 2 byte hex value, also aliased as OPERAND16)
-OPERAND16 = HEX16           ; Operand value - alias for HEX16
-PASS            .data $00   ; 1 byte $00 = pass 1 $FF = pass 2
-STARTED         .data $00   ; flag to indicate output has started
-CURR_OUT_FILE   .data $00   ; Current output file (for closing on error)
-IN_ZEROPAGE     .data $00   ; Flag indicating if in zero page section
-PC_SAVE16       .data $0000 ; Save location for PC when switching sections
-ADDR_MODE       .data $00   ; Current addressing mode
-INST_PTR16      .data $0000 ; Pointer to instruction mode table entry
-IS_FWDREF       .data $00   ; $FF if current label is forward ref (pass 1 only)
-EXPR_ACCU16     .data $0000 ; Expression accumulator
-EXPR_FWDREF     .data $00   ; Accumulated forward ref flag
-COND_DEPTH      .data $00   ; Conditional assembly nesting depth
-SKIP_DEPTH      .data $00   ; Depth where skipping started (0 = not skipping)
-ARG_COUNT       .data $00   ; Total command line argument count
-IN_MACRO_DEF    .data $00   ; Flag: currently capturing macro body ($FF = capturing)
-MACRO_DEF_PTR16 .data $0000 ; Heap pointer where macro body is being stored
-MACRO_ENTRY16   .data $0000 ; Original macro hash entry address (for recursion check)
-IFDEF_INDEX     .data $00   ; Current index into IFDEF_DECISIONS buffer
+TEMP            .data $00    ; 1 byte
+PC16            .data $0000  ; 2 byte program counter
+HEX16           .data $0000  ; 2 byte hex value, also aliased as OPERAND16
+OPERAND16 = HEX16            ; Operand value - alias for HEX16
+PASS            .data $00    ; 1 byte $00 = pass 1 $FF = pass 2
+STARTED         .data $00    ; flag to indicate output has started
+CURR_OUT_FILE   .data $00    ; Current output file (for closing on error)
+IN_ZEROPAGE     .data $00    ; Flag indicating if in zero page section
+PC_SAVE16       .data $0000  ; Save location for PC when switching sections
+ADDR_MODE       .data $00    ; Current addressing mode
+INST_PTR16      .data $0000  ; Pointer to instruction mode table entry, aliased as MACRO_DEF_PTR16
+MACRO_DEF_PTR16 = INST_PTR16 ; Heap pointer where macro body is being stored, aliased to INST_PTR16
+IS_FWDREF       .data $00    ; $FF if current label is forward ref (pass 1 only)
+EXPR_ACCU16     .data $0000  ; Expression accumulator
+EXPR_FWDREF     .data $00    ; Accumulated forward ref flag
+COND_DEPTH      .data $00    ; Conditional assembly nesting depth
+SKIP_DEPTH      .data $00    ; Depth where skipping started (0 = not skipping)
+ARG_COUNT       .data $00    ; Total command line argument count
+IN_MACRO_DEF    .data $00    ; Flag: currently capturing macro body ($FF = capturing)
+MACRO_ENTRY16   .data $0000  ; Original macro hash entry address (for recursion check)
+IFDEF_INDEX     .data $00    ; Current index into IFDEF_DECISIONS buffer
 
   .ifdef enable_debug
 DEBUG_FLAG      .data $00   ; Non-zero if debug output enabled
@@ -2126,9 +2126,9 @@ asm_line_loop            ; Global entry for macro expansion
   JMP .line_loop
 .opcode
   ; Read mnemonic and look up in instruction table
-  JSR lookup_mnemonic
+  JSR lookup_mnemonic      ; Returns with C=0 for mnemonic or C=1 for macro
+  ; A contains next char after mnemonic or macro name
   BCS .macro
-  ; A contains next char after mnemonic
   ; Parse operand to determine addressing mode
   JSR parse_operand_and_emit
   ; A contains next char after operand - check for garbage
