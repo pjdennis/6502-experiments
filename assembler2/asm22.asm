@@ -1849,9 +1849,9 @@ expand_macro
 ; In pass 2, skip heap copy - just scan for .endmacro detection.
 capture_macro_line
   BIT PASS
-  BPL .cml_pass1
-  JMP .cml_pass2
-.cml_pass1
+  BPL .pass1
+  JMP .pass2
+.pass1
   ; === Pass 1: Copy to heap with compression ===
   ; Comments stripped, consecutive spaces collapsed (except in strings)
   TXA
@@ -1860,150 +1860,150 @@ capture_macro_line
   LDX #$00               ; Space indicator - $01 if last char was a space, $00 otherwise
   LDY #$00               ; Output index
   LDA NEXT_CHAR
-  BNE .cml_process       ; Always taken
-.cml_next
+  BNE .process           ; Always taken
+.next
   JSR read_char
-  BCS .cml_eof_error
-.cml_process
+  BCS .eof_error
+.process
   CMP #'\n'
-  BNE .cml_not_newline
-  JMP .cml_newline
-.cml_not_newline
+  BNE .not_newline
+  JMP .newline
+.not_newline
   CMP #';'
-  BNE .cml_not_semi
-.cml_skip_comment
+  BNE .not_semi
+.skip_comment
   JSR read_char
-  BCS .cml_eof_error
+  BCS .eof_error
   CMP #'\n'
-  BNE .cml_skip_comment
-  JMP .cml_newline
-.cml_not_semi
+  BNE .skip_comment
+  JMP .newline
+.not_semi
   CMP #'"'
-  BEQ .cml_string_lit
+  BEQ .string_lit
   CMP #'\''
-  BEQ .cml_char_lit
+  BEQ .char_lit
   CMP #' '
-  BEQ .cml_space
+  BEQ .space
   ; Regular character
   LDX #$00               ; Clear last space indicator
-.cml_output
+.output
   APPEND_HEAPA_ADVANCE
-  JMP .cml_next
-.cml_eof_error
+  JMP .next
+.eof_error
   JMP err_unclosed_macro
-.cml_space
+.space
   ; Space, so check for consecutives
-  CPX #$01               ; Check if last character was a space
-  BEQ .cml_next          ; Last char was a space so skip this one
-  INX                    ; Set indicator that last character was a space
-  BNE .cml_output        ; Always taken
-.cml_string_lit
+  CPX #$01                 ; Check if last character was a space
+  BEQ .next                ; Last char was a space so skip this one
+  INX                      ; Set indicator that last character was a space
+  BNE .output              ; Always taken
+.string_lit
   ; Output string definition from opening " through closing "
   LDX #$00                 ; Clear last_space
   APPEND_HEAPA             ; Capture the opening quote
-.cml_string_lit_loop
+.string_lit_loop
   JSR read_char            ; Read the next char and capture it
-  BCS .cml_eof_error
+  BCS .eof_error
   APPEND_HEAPA
   ; Conditionally advance heap while preserving next character
-  BPL .cml_string_lit_no_advance
+  BPL .string_lit_no_advance
   JSR advance_heap
   LDA NEXT_CHAR
-.cml_string_lit_no_advance
+.string_lit_no_advance
   CMP #'\\'                ; Was it the escape character?
-  BNE .cml_string_lit_not_escape
+  BNE .string_lit_not_escape
   ; Escape character so read and capture the next char too
   JSR read_char
-  BCS .cml_eof_error
+  BCS .eof_error
   APPEND_HEAPA
-  BNE .cml_string_lit_loop ; Always taken
-.cml_string_lit_not_escape
+  BNE .string_lit_loop     ; Always taken
+.string_lit_not_escape
   CMP #'"'                 ; Was it the terminating string character?
-  BNE .cml_string_lit_loop ; No so process the next character
+  BNE .string_lit_loop     ; No so process the next character
   ; Terminator character so we are done with the string
-  JMP .cml_next
-.cml_char_lit
+  JMP .next
+.char_lit
   ; Output char definition from opening ' through closing '
-  LDX #$00               ; Clear last_space
-  APPEND_HEAPA           ; Capture the opening quote
-  JSR read_char          ; Read the next char and write it
-  BCS .cml_eof_error
+  LDX #$00                 ; Clear last_space
+  APPEND_HEAPA             ; Capture the opening quote
+  JSR read_char            ; Read the next char and write it
+  BCS .eof_error
   APPEND_HEAPA
-  CMP #'\\'              ; Was it the escape character?
-  BNE .cml_char_lit_not_escape
+  CMP #'\\'                ; Was it the escape character?
+  BNE .char_lit_not_escape
   ; Escape character so read and write the next char too
   JSR read_char
-  BCS .cml_eof_error
+  BCS .eof_error
   APPEND_HEAPA
-.cml_char_lit_not_escape
-  JSR read_char          ; Read the next character
-  BCS .cml_eof_error
+.char_lit_not_escape
+  JSR read_char            ; Read the next character
+  BCS .eof_error
   ; It should be a closing single quote
   CMP #'\''
-  BEQ .cml_output
+  BEQ .output
   JMP err_invalid_char_literal
-.cml_newline
-  APPEND_HEAPA           ; Capture the newline
+.newline
+  APPEND_HEAPA             ; Capture the newline
   JSR advance_heap
   ; Now check if this line was .endmacro
   CP16 MACRO_DEF_PTR16 TABP16
   ; Skip leading spaces
   LDY #$00
-.cml_skip_space
+.skip_space
   LDA (TABP16),Y
   CMP #' '
-  BNE .cml_check_dot
+  BNE .check_dot
   INY
-  BNE .cml_skip_space
-.cml_check_dot
+  BNE .skip_space
+.check_dot
   CMP #'.'
-  BNE .cml_keep_line
+  BNE .keep_line
   ; It's a directive - check for .endmacro first (the usual case)
-  INY                    ; Y now points past '.'
+  INY                      ; Y now points past '.'
   TYA
-  PHA                    ; Save Y for later .macro check
+  PHA                      ; Save Y for later .macro check
   LDX #$00
-.cml_cmp_loop
+.cmp_loop
   LDA directive_endmacro,X
-  BEQ .cml_check_end     ; End of "endmacro" string
+  BEQ .check_end           ; End of "endmacro" string
   CMP (TABP16),Y
-  BNE .cml_not_endmacro
+  BNE .not_endmacro
   INY
   INX
-  BNE .cml_cmp_loop
-.cml_check_end
+  BNE .cmp_loop
+.check_end
   ; Matched "endmacro" - verify next char is not a token character
   LDA (TABP16),Y
   JSR compare_end_of_token
-  BNE .cml_not_endmacro  ; Not end of token - keep as macro body
+  BNE .not_endmacro        ; Not end of token - keep as macro body
   ; Found .endmacro. Restore heap to undo the copy
   CP16 MACRO_DEF_PTR16 MEMP16
-  PLA                    ; Discard the saved Y register
+  PLA                      ; Discard the saved Y register
   ; Restore X (output file handle)
   PLA
   TAX
-  JMP process_endmacro   ; Tail call
-.cml_not_endmacro
+  JMP process_endmacro     ; Tail call
+.not_endmacro
   ; Not .endmacro - check if it's .macro (nested definition)
-  PLA                    ; Restore Y position after '.'
+  PLA                      ; Restore Y position after '.'
   TAY
   LDX #$00
-.cml_cmp_macro
+.cmp_macro
   LDA directive_macro,X
-  BEQ .cml_check_macro_end  ; End of "macro" string
+  BEQ .check_macro_end     ; End of "macro" string
   CMP (TABP16),Y
-  BNE .cml_keep_line
+  BNE .keep_line
   INY
   INX
-  BNE .cml_cmp_macro
-.cml_check_macro_end
+  BNE .cmp_macro
+.check_macro_end
   ; Matched "macro" - verify next char is not a token character
   LDA (TABP16),Y
   JSR compare_end_of_token
-  BNE .cml_keep_line     ; Not end of token, not .macro
+  BNE .keep_line           ; Not end of token, not .macro
   ; Found nested macro definition - error
   JMP err_nested_macro_definition
-.cml_keep_line
+.keep_line
   ; Restore X (output file handle)
   PLA
   TAX
@@ -2011,30 +2011,30 @@ capture_macro_line
 
   ; === Pass 2: Skip without copying to heap ===
   ; Just detect .endmacro to clear IN_MACRO_DEF flag
-.cml_pass2
+.pass2
   LDA NEXT_CHAR
-.cml_p2_scan
+.p2_scan
   CMP #' '
-  BNE .cml_p2_not_space
+  BNE .p2_not_space
   JSR read_char
-  BCC .cml_p2_scan
-  JMP err_unclosed_macro       ; EOF in macro
-.cml_p2_not_space
+  BCC .p2_scan
+  JMP err_unclosed_macro   ; EOF in macro
+.p2_not_space
   CMP #'\n'
-  BEQ .cml_p2_done             ; Empty/blank line
+  BEQ .p2_done             ; Empty/blank line
   CMP #'.'
-  BNE .cml_p2_skip             ; Not a directive
+  BNE .p2_skip             ; Not a directive
   ; Check if directive is .endmacro
-  JSR read_char                ; Read char after '.'
-  JSR read_token               ; Read directive name into TOKEN
+  JSR read_char            ; Read char after '.'
+  JSR read_token           ; Read directive name into TOKEN
   SET16 directive_endmacro TABP16
   JSR compare_token
-  BNE .cml_p2_skip             ; Not .endmacro
+  BNE .p2_skip             ; Not .endmacro
   ; Found .endmacro
-  JMP process_endmacro         ; Tail call
-.cml_p2_skip
+  JMP process_endmacro     ; Tail call
+.p2_skip
   JSR skip_rest_of_line
-.cml_p2_done
+.p2_done
   RTS
 
 
