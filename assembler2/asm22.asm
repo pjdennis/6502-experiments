@@ -1151,31 +1151,26 @@ parse_operand_and_emit
   BCS .implied_mode    ; No operand = implied mode
   ; Check operand format to determine mode
   CMP #'#'
-  BNE .not_imm
-  JMP .immediate_mode
-.not_imm
+  BEQ .immediate_mode
   CMP #'('
-  BNE .not_ind
-  JMP .indirect_mode
-.not_ind
+  BEQ .indirect_mode
   ; Everything else: $xx, $xxxx, or label
   ; All handled uniformly by parse_term + mode selection
-  JMP .value_operand
+  JMP .other_mode
 
 .implied_mode
   ; Next char in NEXT_CHAR (newline or semicolon)
+  STA_LH16 OPERAND16
   LDA #MODE_NONE
   STA ADDR_MODE
-  LDA #$00
-  STA_LH16 OPERAND16
   JMP emit_instruction ; Tail call
 
 .immediate_mode
   ; #$xx or #<label or #>label or #label or #'x'
+  JSR read_char        ; Skip #
+  JSR parse_value      ; OPERAND16 set
   LDA #MODE_IMM
   STA ADDR_MODE
-  JSR read_char        ; Skip #
-  JSR parse_value      ; Returns next char in A, OPERAND16 set
   JMP emit_instruction ; Tail call
 
 .indirect_mode
@@ -1188,103 +1183,110 @@ parse_operand_and_emit
   ; Check suffix to determine addressing mode
   LDA NEXT_CHAR        ; Load next char (should be ) or ,)
   CMP #','
-  BEQ .indirect_x
+  BEQ .ind_x_mode
   ; Must be )
   CMP #')'
   BNE .ind_err_operand
   JSR read_char        ; Read char after )
   CMP #','
-  BNE .ind_no_suffix
+  BNE .ind_mode
   JSR read_char        ; Should be Y
   CMP #'Y'
   BNE .ind_err
+; ind_y_mode
+  JSR read_char        ; Read char after Y for garbage check
   LDA #MODE_INDY
   STA ADDR_MODE
-  JSR read_char        ; Read char after Y for garbage check
   JMP emit_instruction ; Tail call
-.indirect_x
+
+.ind_x_mode
   JSR read_char        ; Should be X
   CMP #'X'
   BNE .ind_err
   JSR read_char        ; Should be )
   CMP #')'
   BNE .ind_err
+  JSR read_char        ; Read char after ) for garbage check
   LDA #MODE_INDX
   STA ADDR_MODE
-  JSR read_char        ; Read char after ) for garbage check
   JMP emit_instruction ; Tail call
-.ind_no_suffix
+
+.ind_mode
   ; Just ($xxxx) - JMP indirect mode (must be 2-byte operand)
   ; Next char in NEXT_CHAR (after ))
   LDA #MODE_IND
   STA ADDR_MODE
   JMP emit_instruction ; Tail call
+
 .ind_err
   JMP err_invalid_addressing_mode
 .ind_err_operand
   JMP err_invalid_operand
 
-.value_operand
+.other_mode
   ; Parse value: $xx, $xxxx, or label
   ; All handled uniformly with appropriate mode selection
   JSR parse_value      ; Returns C=1 for bare label, OPERAND16 set, IS_FWDREF set, next char in NEXT_CHAR
   ; Check if this is a branch instruction
   LDA #MODE_REL
   STA ADDR_MODE
-  JSR find_opcode_for_mode ; Set C=0 if found
-  BCS .not_branch
-  JMP .label_is_branch
-.not_branch
+  JSR find_opcode_for_mode ; Set C=0 if found (relative implies branch)
+  BCC .relative_mode
   ; Not a branch - check for indexed mode
   LDA NEXT_CHAR        ; Next char (might be comma)
   CMP #','
-  BNE .label_no_index
+  BNE .non_index_mode
   ; Has index suffix - read X or Y
   JSR read_char
   CMP #'X'
-  BEQ .label_x_index
+  BEQ .x_index_mode
   CMP #'Y'
-  BEQ .label_y_index
+  BEQ .y_index_mode
   JMP err_invalid_addressing_mode
-.label_x_index
-  JSR read_char            ; Read char after X for garbage check, stores in NEXT_CHAR
-  LDA #MODE_ZPX
-  STA ADDR_MODE
-  JSR handle_fwdref_mode   ; Checks mode availability, value size, forward refs
-  BCS .label_use_absx      ; Must use ABSX
-  ; Use ZPX mode
+
+.relative_mode
+  ; MODE_REL already stored to ADDR_MODE
   JMP emit_instruction
-.label_use_absx
-  LDA #MODE_ABSX
-  STA ADDR_MODE
-  JMP emit_instruction
-.label_y_index
-  JSR read_char            ; Read char after Y for garbage check, stores in NEXT_CHAR
-  LDA #MODE_ZPY
-  STA ADDR_MODE
-  JSR handle_fwdref_mode   ; Checks mode availability, value size, forward refs
-  BCS .label_use_absy      ; Must use ABSY
-  ; Use ZPY mode
-  JMP emit_instruction
-.label_use_absy
-  LDA #MODE_ABSY
-  STA ADDR_MODE
-  JMP emit_instruction
-.label_no_index
+
+.non_index_mode
   ; Next char in NEXT_CHAR
   LDA #MODE_ZP
   STA ADDR_MODE
   JSR handle_fwdref_mode   ; Checks mode availability, value size, forward refs
-  BCS .label_use_abs       ; Must use ABS
+  BCS .abs_mode            ; Must use ABS
   ; Use ZP mode
   JMP emit_instruction
-.label_use_abs
+
+.abs_mode
   LDA #MODE_ABS
   STA ADDR_MODE
   JMP emit_instruction
 
-.label_is_branch
-  LDA #MODE_REL
+.x_index_mode
+  JSR read_char            ; Read char after X for garbage check, stores in NEXT_CHAR
+  LDA #MODE_ZPX
+  STA ADDR_MODE
+  JSR handle_fwdref_mode   ; Checks mode availability, value size, forward refs
+  BCS .absx_index_mode     ; Must use ABSX
+  ; Use ZPX mode
+  JMP emit_instruction
+
+.absx_index_mode
+  LDA #MODE_ABSX
+  STA ADDR_MODE
+  JMP emit_instruction
+
+.y_index_mode
+  JSR read_char            ; Read char after Y for garbage check, stores in NEXT_CHAR
+  LDA #MODE_ZPY
+  STA ADDR_MODE
+  JSR handle_fwdref_mode   ; Checks mode availability, value size, forward refs
+  BCS .absy_index_mode     ; Must use ABSY
+  ; Use ZPY mode
+  JMP emit_instruction
+
+.absy_index_mode
+  LDA #MODE_ABSY
   STA ADDR_MODE
   JMP emit_instruction
 
