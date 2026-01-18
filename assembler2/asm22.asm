@@ -1384,7 +1384,7 @@ process_directive
 .macro
   JMP process_macro
 .endmacro
-  JMP process_endmacro
+  JMP err_endmacro_without_macro
 .include
   JSR check_for_end_of_line
   BCC .get_name
@@ -1641,18 +1641,8 @@ process_macro
   RTS
 
 
-; Process .endmacro directive
+; Process .endmacro directive (pass 1)
 process_endmacro
-  ; Check if we're in a macro definition
-  LDA IN_MACRO_DEF
-  BNE .pem_in_macro
-  JMP err_endmacro_without_macro
-.pem_in_macro
-  ; In pass 2, skip heap write (body was already captured in pass 1)
-  BIT PASS
-  BPL .pem_pass1
-  JMP .pem_clear_flag
-.pem_pass1
   ; Pass 1: Write $00 terminator to body
   LDY #$00
   APPEND_HEAPI $00
@@ -1665,7 +1655,6 @@ process_endmacro
 .not_showing_macros
   .endif
 
-.pem_clear_flag
   ; Clear the capturing flag
   LDA #$00
   STA IN_MACRO_DEF
@@ -2040,9 +2029,11 @@ capture_macro_line
   TAX
   JMP skip_rest_of_line    ; Tail call
 .p2_found_endmacro
+  LDA #$00                 ; Clear the capturing flag
+  STA IN_MACRO_DEF
   PLA                      ; Restore X (output file handle)
   TAX
-  JMP process_endmacro     ; Tail call
+  JMP skip_rest_of_line    ; Tail call
 .p2_done
   PLA                      ; Restore X (output file handle)
   TAX
