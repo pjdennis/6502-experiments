@@ -1857,7 +1857,7 @@ capture_macro_line
   TXA
   PHA                    ; Save output file handle
   CP16 MEMP16 MACRO_DEF_PTR16  ; Save heap pos for potential undo
-  LDX #$00               ; Flags: bit0=last_space, bit7=in_string
+  LDX #$00               ; Flags: bit0=last_space
   LDY #$00               ; Output index
   LDA NEXT_CHAR
   JMP .cml_process
@@ -1871,26 +1871,17 @@ capture_macro_line
 .cml_not_newline
   CMP #';'
   BNE .cml_not_semi
-  CPX #$80
-  BCS .cml_output        ; In string - output semicolon
 .cml_skip_comment
   JSR read_char
   BCS .cml_eof_error
   CMP #'\n'
   BNE .cml_skip_comment
-  BEQ .cml_newline       ; Always taken
+  JMP .cml_newline
 .cml_not_semi
   CMP #'"'
   BNE .cml_not_quote
-  TXA
-  EOR #$80               ; Toggle in_string
-  AND #$FE               ; Clear last_space
-  TAX
-  LDA NEXT_CHAR
-  BNE .cml_output        ; Always taken
+  JMP .cml_string_lit
 .cml_not_quote
-  CPX #$80
-  BCS .cml_output        ; In string - output verbatim
   CMP #'\''              ; Single quote
   BEQ .cml_char_lit
   CMP #' '
@@ -1909,57 +1900,54 @@ capture_macro_line
   TAX
   LDA NEXT_CHAR
 .cml_output
-  STA (MEMP16),Y
-  INY
-  BPL .cml_next
-  JSR advance_heap
+  APPEND_HEAPA_ADVANCE
   JMP .cml_next
 .cml_eof_error
   JMP err_unclosed_macro
-
-
-;.cml_string_lit
-;  ; Output chars from opening " through closing "
-;  TXA
-;  AND #$FE               ; Clear last_space
-;  TAX
-;  LDA #'"'               ; Restore opening quote
-;.cml_string_lit_out
-;  STA (MEMP16),Y
-;  INY
-;  BPL .cml_string_lit_read
-;  JSR advance_heap
-;.cml_string_lit_read
-;  JSR read_char
-;  BCS .cml_eof_error
-;  CMP #'"'               ; Closing  quote?
-;  BNE .cml_string_lit_out  ; No - output and continue
-;  ; Output closing quote and done
-;  STA (MEMP16),Y
-;  INY
-;  BPL .cml_next
-;  JSR advance_heap
-;  JMP .cml_next
-
+.cml_string_lit
+  ; Output string definition from opening " through closing "
+  TXA
+  AND #$FE                 ; Clear last_space
+  TAX
+  LDA #'"'                 ; Restore opening quote and capture it
+  APPEND_HEAPA
+.cml_string_lit_loop
+  JSR read_char            ; Read the next char and capture it
+  BCS .cml_eof_error
+  APPEND_HEAPA
+  ; Conditionally advance heap while preserving next character
+  BPL .cml_string_lit_no_advance
+  JSR advance_heap
+  LDA NEXT_CHAR
+.cml_string_lit_no_advance
+  CMP #'\\'                ; Was it the escape character?
+  BNE .cml_string_lit_not_escape
+  ; Escape character so read and capture the next char too
+  JSR read_char
+  BCS .cml_eof_error
+  APPEND_HEAPA
+  BNE .cml_string_lit_loop ; Always taken
+.cml_string_lit_not_escape
+  CMP #'"'                 ; Was it the terminating string character?
+  BNE .cml_string_lit_loop ; No so process the next character
+  ; Terminator character so we are done with the string
+  JMP .cml_next
 .cml_char_lit
   ; Output char definition from opening ' through closing '
   TXA
   AND #$FE               ; Clear last_space
   TAX
   LDA #'\''              ; Restore opening quote
-  STA (MEMP16),Y         ; Write the opening quote
-  INY
+  APPEND_HEAPA
   JSR read_char          ; Read the next char and write it
   BCS .cml_eof_error
-  STA (MEMP16),Y
-  INY
+  APPEND_HEAPA
   CMP #'\\'              ; Was it the escape character?
   BNE .cml_char_lit_not_escape
   ; Escape character so read and write the next char too
   JSR read_char
   BCS .cml_eof_error
-  STA (MEMP16),Y
-  INY
+  APPEND_HEAPA
 .cml_char_lit_not_escape
   JSR read_char          ; Read the next character
   BCS .cml_eof_error
@@ -1969,16 +1957,11 @@ capture_macro_line
   JMP err_invalid_char_literal
 .cml_char_valid
   ; Output the closing single quote
-  STA (MEMP16),Y
-  INY
-  BPL .cml_char_valid_no_advance
-  JSR advance_heap
-.cml_char_valid_no_advance
+  APPEND_HEAPA_ADVANCE
   JMP .cml_next
 .cml_newline
   LDA #'\n'
-  STA (MEMP16),Y
-  INY
+  APPEND_HEAPA
   JSR advance_heap
   ; Now check if this line was .endmacro
   CP16 MACRO_DEF_PTR16 TABP16

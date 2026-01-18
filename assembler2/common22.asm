@@ -31,12 +31,25 @@ MEMP16          .data $0000 ; 2 byte heap pointer
   .code
 
 
+  ; Append A to heap and increment Y
+  .macro APPEND_HEAPA
+  STA (MEMP16),Y
+  INY
+  .endmacro
+
   ; Append the value at ptr to the heap and increment Y
   ; Clobbers A
   .macro APPEND_HEAP ptr
   LDA ptr
-  STA (MEMP16),Y
-  INY
+  APPEND_HEAPA
+  .endmacro
+
+  ; Append A to heap and increment Y. Advance heap if 128 entries pending
+  .macro APPEND_HEAPA_ADVANCE
+  APPEND_HEAPA
+  BPL .done
+  JSR advance_heap
+.done
   .endmacro
 
   ; Append val to the heap and increment Y
