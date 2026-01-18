@@ -1932,15 +1932,15 @@ capture_macro_line
   TYA
   PHA                      ; Save Y for later .macro check
   LDX #$00
-.cmp_loop
+.cmp_endmacro_loop
   LDA directive_endmacro,X
-  BEQ .check_end           ; End of "endmacro" string
+  BEQ .cmp_endmacro_end    ; End of "endmacro" string
   CMP (TABP16),Y
   BNE .not_endmacro
   INY
   INX
-  BNE .cmp_loop
-.check_end
+  BNE .cmp_endmacro_loop
+.cmp_endmacro_end
   ; Matched "endmacro" - verify next char is not a token character
   LDA (TABP16),Y
   JSR compare_end_of_token
@@ -1973,13 +1973,13 @@ capture_macro_line
   LDX #$00
 .cmp_macro
   LDA directive_macro,X
-  BEQ .check_macro_end     ; End of "macro" string
+  BEQ .cmp_macro_end       ; End of "macro" string
   CMP (TABP16),Y
   BNE .keep_line
   INY
   INX
   BNE .cmp_macro
-.check_macro_end
+.cmp_macro_end
   ; Matched "macro" - verify next char is not a token character
   LDA (TABP16),Y
   JSR compare_end_of_token
