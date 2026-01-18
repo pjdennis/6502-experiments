@@ -945,8 +945,9 @@ update_pc
 
 ; Look up mnemonic and save pointer to mode:opcode data
 ; On entry A contains the first character of the mnemonic
-; On exit NEXT_CHAR contains the next character
-;         INST_PTR16 points to mode:opcode data (past mnemonic)
+; On exit C = 0 if mnemonic or 1 if macro
+;         NEXT_CHAR contains the next character
+;         If C = 0: INST_PTR16 points to mode:opcode data (past mnemonic)
 ;         X, Y are not preserved
 ; Raises 'Opcode not found' error if mnemonic is not found
 lookup_mnemonic
@@ -966,15 +967,14 @@ lookup_mnemonic
   TYA
   SEC ; +1
   ADDA16 TABP16 MACRO_DEF_PTR16
-  ; Don't skip rest of line - expand_macro will parse arguments
-  PLA                   ; Pop return address (we're not returning)
-  PLA
-  JMP expand_macro
+  SEC                   ; Found macro usage
+  RTS
 .is_instruction
   ; Calculate INST_PTR = TABP16 + Y
   TYA
   CLC
   ADDA16 TABP16 INST_PTR16
+  CLC                   ; Found mnemonic
   RTS
 
 
@@ -1681,7 +1681,7 @@ check_macro_recursion
 ; On entry: MACRO_DEF_PTR points to the  macro entry
 ;           (param1\0, param2\0, ..., \0, body\0)
 ;           TOKEN contains the macro name
-; On exit: Memory source pushed, jumps to asm_line_loop
+; On exit: Memory source pushed
 expand_macro
 .ARG_SIZE = $03 ; Size of each macro argument (value_L, value_H, is_fwdref)
   ; Save original macro entry address before MACRO_DEF_PTR is modified
@@ -1803,7 +1803,7 @@ expand_macro
   ; Restore X (output file handle)
   PLA
   TAX
-  JMP asm_line_loop
+  RTS
 .em_too_many
   JMP err_too_many_arguments
 
@@ -2050,12 +2050,12 @@ assemble_code
   STA_LH16 PC_SAVE16
   STA_LH16 CURR_LINE16
   STA_LH16 LABEL_SCOPE16 ; Initialize scope (0 = no global yet)
-  STA LABEL_TYPE  ; Initialize local label flag
-  STA COND_DEPTH      ; Clear conditional depth
-  STA SKIP_DEPTH      ; Clear skip depth
-  STA IN_MACRO_DEF    ; Clear macro definition flag
-  STA IFDEF_INDEX     ; Clear .ifdef decision index
-asm_line_loop                 ; Global entry for macro expansion
+  STA LABEL_TYPE         ; Initialize local label flag
+  STA COND_DEPTH         ; Clear conditional depth
+  STA SKIP_DEPTH         ; Clear skip depth
+  STA IN_MACRO_DEF       ; Clear macro definition flag
+  STA IFDEF_INDEX        ; Clear .ifdef decision index
+asm_line_loop            ; Global entry for macro expansion
 .line_loop
   JSR read_char
   BCC .character_read
@@ -2127,6 +2127,7 @@ asm_line_loop                 ; Global entry for macro expansion
 .opcode
   ; Read mnemonic and look up in instruction table
   JSR lookup_mnemonic
+  BCS .macro
   ; A contains next char after mnemonic
   ; Parse operand to determine addressing mode
   JSR parse_operand_and_emit
@@ -2135,6 +2136,8 @@ asm_line_loop                 ; Global entry for macro expansion
   JSR check_for_end_of_line
   BCS .back_to_line_loop
   JMP err_unexpected_text
+.macro
+  JSR expand_macro
 .back_to_line_loop
   JMP .line_loop
 
