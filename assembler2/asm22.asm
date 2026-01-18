@@ -1808,6 +1808,22 @@ expand_macro
   JMP err_too_many_arguments
 
 
+; On entry HEX16 and TABP16 point to the lhs and rhs strings to compare
+; On exit Z set if rhs starts with lhs
+;         X is preserved
+;         A, Y are not preserved 
+string_starts_with
+  LDY #$FF
+.loop
+  INY
+  LDA (HEX16),Y
+  BEQ .done
+  CMP (TABP16),Y
+  BEQ .loop
+.done
+  RTS
+
+
 ; Capture a line during macro definition
 ; On entry: A contains first character of line
 ; On exit: Line copied to heap (with $0A), or .endmacro processed
@@ -1927,27 +1943,20 @@ capture_macro_line
 .check_dot
   CMP #'.'
   BNE .keep_line
-  ; It's a directive - check for .endmacro first (the usual case)
-  INY                      ; Y now points past '.'
+  ; It's a directive
   TYA
-  PHA                      ; Save Y for later .macro check
-  LDX #$00
-.cmp_endmacro_loop
-  LDA directive_endmacro,X
-  BEQ .cmp_endmacro_end    ; End of "endmacro" string
-  CMP (TABP16),Y
+  SEC                      ; +1
+  ADDA16 TABP16 TABP16     ; Advance TABP16 to point to the start of the directive
+  ; Check for .endmacro first (the usual case)
+  SET16 directive_endmacro HEX16
+  JSR string_starts_with
   BNE .not_endmacro
-  INY
-  INX
-  BNE .cmp_endmacro_loop
-.cmp_endmacro_end
   ; Matched "endmacro" - verify next char is not a token character
   LDA (TABP16),Y
   JSR compare_end_of_token
   BNE .not_endmacro        ; Not end of token - keep as macro body
   ; Found .endmacro. Restore heap to undo the copy
   CP16 MACRO_DEF_PTR16 MEMP16
-  PLA                      ; Discard the saved Y register
   ; At end of macro definition. Write $00 terminator to body
   LDY #$00
   APPEND_HEAPI $00
@@ -1968,18 +1977,9 @@ capture_macro_line
   JMP skip_rest_of_line    ; Tail call
 .not_endmacro
   ; Not .endmacro - check if it's .macro (nested definition)
-  PLA                      ; Restore Y position after '.'
-  TAY
-  LDX #$00
-.cmp_macro
-  LDA directive_macro,X
-  BEQ .cmp_macro_end       ; End of "macro" string
-  CMP (TABP16),Y
+  SET16 directive_macro HEX16
+  JSR string_starts_with
   BNE .keep_line
-  INY
-  INX
-  BNE .cmp_macro
-.cmp_macro_end
   ; Matched "macro" - verify next char is not a token character
   LDA (TABP16),Y
   JSR compare_end_of_token
