@@ -1007,29 +1007,6 @@ find_opcode_for_mode
   RTS
 
 
-; Check if current instruction is a branch (supports MODE_REL)
-; On entry INST_PTR16 points to mode:opcode data
-; On exit C = 0 if branch, C = 1 if not branch
-;         A, Y not preserved, X preserved
-check_if_branch
-  LDY #$00
-.loop
-  LDA (INST_PTR16),Y
-  CMP #$FF
-  BEQ .not_branch
-  CMP #MODE_REL
-  BEQ .is_branch
-  INY
-  INY
-  JMP .loop
-.is_branch
-  CLC
-  RTS
-.not_branch
-  SEC
-  RTS
-
-
 ; ============================================================================
 ; TIER 8: INSTRUCTION EMISSION
 ; Emit instructions with operands
@@ -1252,7 +1229,9 @@ parse_operand_and_emit
   ; All handled uniformly with appropriate mode selection
   JSR parse_value      ; Returns C=1 for bare label, OPERAND16 set, IS_FWDREF set, next char in NEXT_CHAR
   ; Check if this is a branch instruction
-  JSR check_if_branch
+  LDA #MODE_REL
+  STA ADDR_MODE
+  JSR find_opcode_for_mode ; Set C=0 if found
   BCS .not_branch
   JMP .label_is_branch
 .not_branch
