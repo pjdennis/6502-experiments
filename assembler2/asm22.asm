@@ -1880,12 +1880,11 @@ capture_macro_line
 .cml_not_semi
   CMP #'"'
   BNE .cml_not_quote
-  PHA
   TXA
   EOR #$80               ; Toggle in_string
   AND #$FE               ; Clear last_space
   TAX
-  PLA
+  LDA NEXT_CHAR
   BNE .cml_output        ; Always taken
 .cml_not_quote
   CPX #$80
@@ -1903,24 +1902,22 @@ capture_macro_line
   LDA #' '
   BNE .cml_output        ; Always taken
 .cml_regular
-  PHA
   TXA
   AND #$FE               ; Clear last_space
   TAX
-  PLA
+  LDA NEXT_CHAR
 .cml_output
   STA (MEMP16),Y
   INY
   BPL .cml_next
   JSR advance_heap
-  BMI .cml_next          ; Always taken (Y is now 0)
+  JMP .cml_next
 .cml_char_lit
   ; Output chars from opening ' through closing '
-  PHA                    ; Save opening quote
   TXA
   AND #$FE               ; Clear last_space
   TAX
-  PLA                    ; Restore opening quote
+  LDA #'\''              ; Restore opening quote
 .cml_char_lit_out
   STA (MEMP16),Y
   INY
