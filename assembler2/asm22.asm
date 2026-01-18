@@ -1144,26 +1144,17 @@ handle_fwdref_mode
 ; Parse operand and emit instruction
 ; On entry A contains the next character after mnemonic
 ;          INST_PTR16 points to mode:opcode data
-; On exit flow continues to .line_loop
+; On exit OPERAND16 contains the operand value
+;         ADDR_MODE contains the addressing mode
 ;         A, X, Y are not preserved
-parse_operand_and_emit
+parse_operand
   JSR check_for_end_of_line
   BCS .implied_mode    ; No operand = implied mode
   ; Check operand format to determine mode
-  CMP #'#'
-  BEQ .immediate_mode
   CMP #'('
   BEQ .indirect_mode
-  ; Everything else: $xx, $xxxx, or label
-  ; All handled uniformly by parse_term + mode selection
-  JMP .other_mode
-
-.implied_mode
-  ; Next char in NEXT_CHAR (newline or semicolon)
-  STA_LH16 OPERAND16
-  LDA #MODE_NONE
-  STA ADDR_MODE
-  JMP emit_instruction ; Tail call
+  CMP #'#'
+  BNE .other_mode      ; Everything else: $xx $xxxx or label
 
 .immediate_mode
   ; #$xx or #<label or #>label or #label or #'x'
@@ -1171,7 +1162,13 @@ parse_operand_and_emit
   JSR parse_value      ; OPERAND16 set
   LDA #MODE_IMM
   STA ADDR_MODE
-  JMP emit_instruction ; Tail call
+  RTS
+
+.implied_mode
+  STA_LH16 OPERAND16
+  LDA #MODE_NONE
+  STA ADDR_MODE
+  RTS
 
 .indirect_mode
   ; ($xx),Y - indirect indexed Y (1-byte operand)
@@ -1197,7 +1194,7 @@ parse_operand_and_emit
   JSR read_char        ; Read char after Y for garbage check
   LDA #MODE_INDY
   STA ADDR_MODE
-  JMP emit_instruction ; Tail call
+  RTS
 
 .ind_x_mode
   JSR read_char        ; Should be X
@@ -1209,14 +1206,14 @@ parse_operand_and_emit
   JSR read_char        ; Read char after ) for garbage check
   LDA #MODE_INDX
   STA ADDR_MODE
-  JMP emit_instruction ; Tail call
+  RTS
 
 .ind_mode
   ; Just ($xxxx) - JMP indirect mode (must be 2-byte operand)
   ; Next char in NEXT_CHAR (after ))
   LDA #MODE_IND
   STA ADDR_MODE
-  JMP emit_instruction ; Tail call
+  RTS
 
 .ind_err
   JMP err_invalid_addressing_mode
@@ -1246,7 +1243,7 @@ parse_operand_and_emit
 
 .relative_mode
   ; MODE_REL already stored to ADDR_MODE
-  JMP emit_instruction
+  RTS
 
 .non_index_mode
   ; Next char in NEXT_CHAR
@@ -1255,12 +1252,12 @@ parse_operand_and_emit
   JSR handle_fwdref_mode   ; Checks mode availability, value size, forward refs
   BCS .abs_mode            ; Must use ABS
   ; Use ZP mode
-  JMP emit_instruction
+  RTS
 
 .abs_mode
   LDA #MODE_ABS
   STA ADDR_MODE
-  JMP emit_instruction
+  RTS
 
 .x_index_mode
   JSR read_char            ; Read char after X for garbage check, stores in NEXT_CHAR
@@ -1269,12 +1266,12 @@ parse_operand_and_emit
   JSR handle_fwdref_mode   ; Checks mode availability, value size, forward refs
   BCS .absx_index_mode     ; Must use ABSX
   ; Use ZPX mode
-  JMP emit_instruction
+  RTS
 
 .absx_index_mode
   LDA #MODE_ABSX
   STA ADDR_MODE
-  JMP emit_instruction
+  RTS
 
 .y_index_mode
   JSR read_char            ; Read char after Y for garbage check, stores in NEXT_CHAR
@@ -1283,12 +1280,12 @@ parse_operand_and_emit
   JSR handle_fwdref_mode   ; Checks mode availability, value size, forward refs
   BCS .absy_index_mode     ; Must use ABSY
   ; Use ZPY mode
-  JMP emit_instruction
+  RTS
 
 .absy_index_mode
   LDA #MODE_ABSY
   STA ADDR_MODE
-  JMP emit_instruction
+  RTS
 
 
 ; Read and emit quoted ASCII
@@ -2110,8 +2107,10 @@ asm_line_loop            ; Global entry for macro expansion
   JSR lookup_mnemonic      ; Returns with C=0 for mnemonic or C=1 for macro
   ; A contains next char after mnemonic or macro name
   BCS .macro
-  ; Parse operand to determine addressing mode
-  JSR parse_operand_and_emit
+  ; Parse operand to capture value and determine addressing mode
+  JSR parse_operand
+  ; Emit the instruction
+  JSR emit_instruction 
   ; A contains next char after operand - check for garbage
   ; Skip trailing spaces, then check for end of line (handles comments)
   JSR check_for_end_of_line
