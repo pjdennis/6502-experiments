@@ -1848,17 +1848,17 @@ expand_macro
 ; If so, undo the copy and process .endmacro normally.
 ; In pass 2, skip heap copy - just scan for .endmacro detection.
 capture_macro_line
+  TXA                    ; Save output file handle
+  PHA
   BIT PASS
   BPL .pass1
   JMP .pass2
 .pass1
   ; === Pass 1: Copy to heap with compression ===
   ; Comments stripped, consecutive spaces collapsed (except in strings)
-  TXA
-  PHA                    ; Save output file handle
   CP16 MEMP16 MACRO_DEF_PTR16  ; Save heap pos for potential undo
   LDX #$00               ; Space indicator - $01 if last char was a space, $00 otherwise
-  LDY #$00               ; Output index
+  LDY #$00               ; Capture index
   LDA NEXT_CHAR
   BNE .process           ; Always taken
 .next
@@ -1886,7 +1886,7 @@ capture_macro_line
   BEQ .space
   ; Regular character
   LDX #$00               ; Clear last space indicator
-.output
+.capture
   APPEND_HEAPA_ADVANCE
   JMP .next
 .eof_error
@@ -1896,7 +1896,7 @@ capture_macro_line
   CPX #$01                 ; Check if last character was a space
   BEQ .next                ; Last char was a space so skip this one
   INX                      ; Set indicator that last character was a space
-  BNE .output              ; Always taken
+  BNE .capture             ; Always taken
 .string_lit
   ; Output string definition from opening " through closing "
   LDX #$00                 ; Clear last_space
@@ -1931,7 +1931,7 @@ capture_macro_line
   APPEND_HEAPA
   CMP #'\\'                ; Was it the escape character?
   BNE .char_lit_not_escape
-  ; Escape character so read and write the next char too
+  ; Escape character so read and capture the next char too
   JSR read_char
   BCS .eof_error
   APPEND_HEAPA
@@ -1940,12 +1940,12 @@ capture_macro_line
   BCS .eof_error
   ; It should be a closing single quote
   CMP #'\''
-  BEQ .output
+  BEQ .capture
   JMP err_invalid_char_literal
 .newline
   APPEND_HEAPA             ; Capture the newline
   JSR advance_heap
-  ; Now check if this line was .endmacro
+  ; Now check if this line was .endmacro or .macro
   CP16 MACRO_DEF_PTR16 TABP16
   ; Skip leading spaces
   LDY #$00
@@ -2027,14 +2027,25 @@ capture_macro_line
   ; Check if directive is .endmacro
   JSR read_char            ; Read char after '.'
   JSR read_token           ; Read directive name into TOKEN
-  SET16 directive_endmacro TABP16
-  JSR compare_token
-  BNE .p2_skip             ; Not .endmacro
-  ; Found .endmacro
-  JMP process_endmacro     ; Tail call
+  LDX #$FF
+.p2_compare
+  INX
+  LDA directive_endmacro,X
+  BEQ .p2_found_endmacro
+  CMP TOKEN,X
+  BEQ .p2_compare
+  ; .endmacro not found
 .p2_skip
-  JSR skip_rest_of_line
+  PLA                      ; Restore X (output file handle)
+  TAX
+  JMP skip_rest_of_line    ; Tail call
+.p2_found_endmacro
+  PLA                      ; Restore X (output file handle)
+  TAX
+  JMP process_endmacro     ; Tail call
 .p2_done
+  PLA                      ; Restore X (output file handle)
+  TAX
   RTS
 
 
