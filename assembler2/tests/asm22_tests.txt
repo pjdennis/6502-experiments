@@ -2265,7 +2265,7 @@ INPUT:
  3: [  LDA  #$12  ;  Comment with trailing spaces  ]
  4: []
  5: [my_label]
- 6: [  .data  $01  ';'  "String with semicolon; and double  space in it ''"  ; Comment  ]
+ 6: [  .data  $01  ';' '\''  "String with semicolon; and double  space in it ''"  ; Comment  ]
  7: [  LDA #' ']
  8: [  .endmacro]
  9: [  NOP]
@@ -2274,7 +2274,7 @@ EXPECT_STDERR:
 [ LDA #$12 ]
 []
 [my_label]
-[ .data $01 ';' "String with semicolon; and double  space in it ''" ]
+[ .data $01 ';' '\'' "String with semicolon; and double  space in it ''" ]
 [ LDA #' ']
 
 ---

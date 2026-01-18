@@ -1866,7 +1866,9 @@ capture_macro_line
   BCS .cml_eof_error
 .cml_process
   CMP #'\n'
-  BEQ .cml_newline
+  BNE .cml_not_newline
+  JMP .cml_newline
+.cml_not_newline
   CMP #';'
   BNE .cml_not_semi
   CPX #$80
@@ -1912,30 +1914,67 @@ capture_macro_line
   BPL .cml_next
   JSR advance_heap
   JMP .cml_next
+.cml_eof_error
+  JMP err_unclosed_macro
+
+
+;.cml_string_lit
+;  ; Output chars from opening " through closing "
+;  TXA
+;  AND #$FE               ; Clear last_space
+;  TAX
+;  LDA #'"'               ; Restore opening quote
+;.cml_string_lit_out
+;  STA (MEMP16),Y
+;  INY
+;  BPL .cml_string_lit_read
+;  JSR advance_heap
+;.cml_string_lit_read
+;  JSR read_char
+;  BCS .cml_eof_error
+;  CMP #'"'               ; Closing  quote?
+;  BNE .cml_string_lit_out  ; No - output and continue
+;  ; Output closing quote and done
+;  STA (MEMP16),Y
+;  INY
+;  BPL .cml_next
+;  JSR advance_heap
+;  JMP .cml_next
+
 .cml_char_lit
-  ; Output chars from opening ' through closing '
+  ; Output char definition from opening ' through closing '
   TXA
   AND #$FE               ; Clear last_space
   TAX
   LDA #'\''              ; Restore opening quote
-.cml_char_lit_out
+  STA (MEMP16),Y         ; Write the opening quote
+  INY
+  JSR read_char          ; Read the next char and write it
+  BCS .cml_eof_error
   STA (MEMP16),Y
   INY
-  BPL .cml_char_lit_read
-  JSR advance_heap
-.cml_char_lit_read
+  CMP #'\\'              ; Was it the escape character?
+  BNE .cml_char_lit_not_escape
+  ; Escape character so read and write the next char too
   JSR read_char
   BCS .cml_eof_error
-  CMP #'\''              ; Closing single quote?
-  BNE .cml_char_lit_out  ; No - output and continue
-  ; Output closing quote and done
   STA (MEMP16),Y
   INY
-  BPL .cml_next
+.cml_char_lit_not_escape
+  JSR read_char          ; Read the next character
+  BCS .cml_eof_error
+  ; It should be a closing single quote
+  CMP #'\''
+  BEQ .cml_char_valid
+  JMP err_invalid_char_literal
+.cml_char_valid
+  ; Output the closing single quote
+  STA (MEMP16),Y
+  INY
+  BPL .cml_char_valid_no_advance
   JSR advance_heap
+.cml_char_valid_no_advance
   JMP .cml_next
-.cml_eof_error
-  JMP err_unclosed_macro
 .cml_newline
   LDA #'\n'
   STA (MEMP16),Y
