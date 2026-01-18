@@ -2256,17 +2256,26 @@ INPUT:
 EXPECT_HEX: f0 04 d0 01 ea e8 c8
 
 ---
-NAME: macro_capture
+NAME: macro_capture_is_compressed
+DESCRIPTION: When capturing macros, comments are removed and consecutive spaces replaced with one space unless significant
 ARGS: show_captured_macros
 INPUT:
  1: [* = $0200]
- 2: [  .macro test a b]
- 3: [  LDA #$12  ;  Comment with trailing spaces  ]
- 4: [  .endmacro]
- 5: [  NOP]
+ 2: [  .macro test a b ]
+ 3: [  LDA  #$12  ;  Comment with trailing spaces  ]
+ 4: []
+ 5: [my_label]
+ 6: [  .data  $01  ';'  "String with semicolon; and double  space in it"  ; Comment  ]
+ 7: [  LDA #' ']
+ 8: [  .endmacro]
+ 9: [  NOP]
 EXPECT_STDERR:
 [Macro: test a b]
-[  LDA #$12  ;  Comment with trailing spaces  ]
+[ LDA #$12 ]
+[]
+[my_label]
+[ .data $01 ';' "String with semicolon; and double  space in it" ]
+[ LDA #' ']
 
 ---
 NAME: heap_overflow_many_labels

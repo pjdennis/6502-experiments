@@ -1852,33 +1852,98 @@ capture_macro_line
   BPL .cml_pass1
   JMP .cml_pass2
 .cml_pass1
-  ; === Pass 1: Copy to heap ===
-  ; Save X (output file handle)
+  ; === Pass 1: Copy to heap with compression ===
+  ; Comments stripped, consecutive spaces collapsed (except in strings)
   TXA
-  PHA
-  ; Save heap position in case we need to undo (for .endmacro)
-  ; Use MACRO_DEF_PTR since we're not using it during capture
-  CP16 MEMP16 MACRO_DEF_PTR16
-  ; Restore first char
+  PHA                    ; Save output file handle
+  CP16 MEMP16 MACRO_DEF_PTR16  ; Save heap pos for potential undo
+  LDX #$00               ; Flags: bit0=last_space, bit7=in_string
+  LDY #$00               ; Output index
   LDA NEXT_CHAR
-  ; Copy whole line to heap including newline
-  ; Optimization: only call advance_heap when Y reaches 128 or at line end
-  LDY #$00
-.cml_copy_loop
-  STA (MEMP16),Y
-  CMP #'\n'
-  BEQ .cml_line_done
-  INY
-  BPL .cml_read_next   ; Y still 0-127
-  JSR advance_heap     ; Y hit 128, commit and Y resets to 0
-.cml_read_next
+  JMP .cml_process
+.cml_next
   JSR read_char
-  BCC .cml_copy_loop
-  ; EOF during macro - error
+  BCS .cml_eof_error
+.cml_process
+  CMP #'\n'
+  BEQ .cml_newline
+  CMP #';'
+  BNE .cml_not_semi
+  CPX #$80
+  BCS .cml_output        ; In string - output semicolon
+.cml_skip_comment
+  JSR read_char
+  BCS .cml_eof_error
+  CMP #'\n'
+  BNE .cml_skip_comment
+  BEQ .cml_newline       ; Always taken
+.cml_not_semi
+  CMP #'"'
+  BNE .cml_not_quote
+  PHA
+  TXA
+  EOR #$80               ; Toggle in_string
+  AND #$FE               ; Clear last_space
+  TAX
+  PLA
+  BNE .cml_output        ; Always taken
+.cml_not_quote
+  CPX #$80
+  BCS .cml_output        ; In string - output verbatim
+  CMP #'\''              ; Single quote
+  BEQ .cml_char_lit
+  CMP #' '
+  BNE .cml_regular
+  TXA
+  LSR                    ; Check bit 0 (last_space) -> carry
+  BCS .cml_next          ; Skip consecutive space
+  TXA
+  ORA #$01               ; Set last_space
+  TAX
+  LDA #' '
+  BNE .cml_output        ; Always taken
+.cml_regular
+  PHA
+  TXA
+  AND #$FE               ; Clear last_space
+  TAX
+  PLA
+.cml_output
+  STA (MEMP16),Y
+  INY
+  BPL .cml_next
+  JSR advance_heap
+  BMI .cml_next          ; Always taken (Y is now 0)
+.cml_char_lit
+  ; Output chars from opening ' through closing '
+  PHA                    ; Save opening quote
+  TXA
+  AND #$FE               ; Clear last_space
+  TAX
+  PLA                    ; Restore opening quote
+.cml_char_lit_out
+  STA (MEMP16),Y
+  INY
+  BPL .cml_char_lit_read
+  JSR advance_heap
+.cml_char_lit_read
+  JSR read_char
+  BCS .cml_eof_error
+  CMP #'\''              ; Closing single quote?
+  BNE .cml_char_lit_out  ; No - output and continue
+  ; Output closing quote and done
+  STA (MEMP16),Y
+  INY
+  BPL .cml_next
+  JSR advance_heap
+  JMP .cml_next
+.cml_eof_error
   JMP err_unclosed_macro
-.cml_line_done
-  INY                  ; Include newline in count
-  JSR advance_heap     ; Commit remaining bytes
+.cml_newline
+  LDA #'\n'
+  STA (MEMP16),Y
+  INY
+  JSR advance_heap
   ; Now check if this line was .endmacro
   CP16 MACRO_DEF_PTR16 TABP16
   ; Skip leading spaces
