@@ -2004,7 +2004,7 @@ capture_macro_line
   JMP err_unclosed_macro   ; EOF in macro
 .p2_not_space
   CMP #'\n'
-  BEQ .p2_done             ; Empty/blank line
+  BEQ .keep_line           ; Empty/blank line
   CMP #'.'
   BNE .p2_skip             ; Not a directive
   ; Check if directive is .endmacro
@@ -2028,10 +2028,6 @@ capture_macro_line
   PLA                      ; Restore X (output file handle)
   TAX
   JMP skip_rest_of_line    ; Tail call
-.p2_done
-  PLA                      ; Restore X (output file handle)
-  TAX
-  RTS
 
 
 ; ============================================================================
