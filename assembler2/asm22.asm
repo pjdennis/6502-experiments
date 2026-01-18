@@ -1641,26 +1641,6 @@ process_macro
   RTS
 
 
-; Process .endmacro directive (pass 1)
-process_endmacro
-  ; Pass 1: Write $00 terminator to body
-  LDY #$00
-  APPEND_HEAPI $00
-  JSR advance_heap
-
-  .ifdef enable_debug
-  LDA SHOW_MACROS
-  BEQ .not_showing_macros
-  JSR show_macros
-.not_showing_macros
-  .endif
-
-  ; Clear the capturing flag
-  LDA #$00
-  STA IN_MACRO_DEF
-  JMP skip_rest_of_line
-
-
 ; Check if macro is already being expanded (recursion check)
 ; Walks the scope stack comparing 2-byte macro entry addresses
 ; On entry: MACRO_ENTRY16 contains the macro's hash table entry address
@@ -1968,10 +1948,24 @@ capture_macro_line
   ; Found .endmacro. Restore heap to undo the copy
   CP16 MACRO_DEF_PTR16 MEMP16
   PLA                      ; Discard the saved Y register
+  ; At end of macro definition. Write $00 terminator to body
+  LDY #$00
+  APPEND_HEAPI $00
+  JSR advance_heap
+  ; The debug version of the assembler supports displaying the captured macro
+  .ifdef enable_debug
+  LDA SHOW_MACROS
+  BEQ .not_showing_macros
+  JSR show_macros
+.not_showing_macros
+  .endif
+  ; Clear the capturing flag
+  LDA #$00
+  STA IN_MACRO_DEF
   ; Restore X (output file handle)
   PLA
   TAX
-  JMP process_endmacro     ; Tail call
+  JMP skip_rest_of_line    ; Tail call
 .not_endmacro
   ; Not .endmacro - check if it's .macro (nested definition)
   PLA                      ; Restore Y position after '.'
