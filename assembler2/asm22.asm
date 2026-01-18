@@ -97,6 +97,8 @@ DEBUG_FLAG      .data $00   ; Non-zero if debug output enabled
 PASS_1_FWDREF16 .data $0000 ; Forward ref pointer after pass 1
 SMALL_HEAP_FLAG .data $00   ; Non-zero if small_heap argument was passed
 SHOW_MACROS     .data $00   ; Non-zero if captured macro definitions should be printed
+MACRO_NAME_PTR16   .data $0000 ; Pointer to macro name (for show_captured_macros)
+MACRO_BODY_START16 .data $0000 ; Start of macro body on heap (for show_captured_macros)
   .endif
 
   .code
@@ -1603,6 +1605,10 @@ process_macro
 .pm_name_ok
   ; Add macro entry value
   ; MEMP16 points to location at which to store the value
+  ; TABP16 points to the macro name on heap
+  .ifdef enable_debug
+  CP16 TABP16 MACRO_NAME_PTR16
+  .endif
   ; Store MODE_MACRO sentinel
   LDY #$00
   APPEND_HEAPI MODE_MACRO
@@ -1629,6 +1635,9 @@ process_macro
   JSR advance_heap
   ; Update MACRO_DEF_PTR to point where body will be stored
   CP16 MEMP16 MACRO_DEF_PTR16
+  .ifdef enable_debug
+  CP16 MEMP16 MACRO_BODY_START16
+  .endif
   ; Set IN_MACRO_DEF flag to start capturing
   LDA #$FF
   STA IN_MACRO_DEF
@@ -1645,11 +1654,89 @@ process_endmacro
 .pem_in_macro
   ; In pass 2, skip heap write (body was already captured in pass 1)
   BIT PASS
-  BMI .pem_clear_flag
+  BPL .pem_pass1
+  JMP .pem_clear_flag
+.pem_pass1
   ; Pass 1: Write $00 terminator to body
   LDY #$00
   APPEND_HEAPI $00
   JSR advance_heap
+
+  .ifdef enable_debug
+  LDA SHOW_MACROS
+  BEQ .not_showing_macros
+  ; Save X (output file handle)
+  TXA
+  PHA
+  ; Output "Macro: "
+  LDX #$00
+.show_prefix
+  LDA .macro_prefix,X
+  BEQ .show_name
+  JSR write_d
+  INX
+  BNE .show_prefix
+.show_name
+  ; Output macro name
+  CP16 MACRO_NAME_PTR16 TABP16
+  JSR .output_string
+  ; Skip null terminator and MODE_MACRO byte
+  LDY #$02
+  JSR .advance_tabp16
+.show_params
+  ; Output each param preceded by space
+  LDA (TABP16),Y
+  BEQ .show_params_done    ; Empty string = end of params
+  LDA #' '
+  JSR write_d
+  JSR .output_string
+  ; Skip past null terminator
+  INY
+  JSR .advance_tabp16
+  JMP .show_params
+.show_params_done
+  LDA #'\n'
+  JSR write_d
+  ; Output macro body
+  CP16 MACRO_BODY_START16 TABP16
+  LDY #$00
+.show_body
+  LDA (TABP16),Y
+  BEQ .show_done
+  JSR write_d
+  INY
+  BNE .show_body
+  INC TABP16+$01
+  JMP .show_body
+  ; Helper: output null-terminated string at TABP16+Y, leave Y past null
+.output_string
+  LDA (TABP16),Y
+  BEQ .advance_tabp16
+  JSR write_d
+  INY
+  BNE .output_string
+  INC TABP16+$01
+  JMP .output_string
+.advance_tabp16
+  ; Add Y to TABP16 and reset Y to 0
+  TYA
+  CLC
+  ADC TABP16
+  STA TABP16
+  BCC .at_done
+  INC TABP16+$01
+.at_done
+  LDY #$00
+  RTS
+.macro_prefix
+  .data "Macro: " $00
+.show_done
+  ; Restore X (output file handle)
+  PLA
+  TAX
+.not_showing_macros
+  .endif
+
 .pem_clear_flag
   ; Clear the capturing flag
   LDA #$00

@@ -2258,7 +2258,6 @@ EXPECT_HEX: f0 04 d0 01 ea e8 c8
 ---
 NAME: macro_capture
 ARGS: show_captured_macros
-SKIP: Work in progress
 INPUT:
  1: [* = $0200]
  2: [  .macro test a b]
@@ -2266,6 +2265,7 @@ INPUT:
  4: [  .endmacro]
  5: [  NOP]
 EXPECT_STDERR:
+[Macro: test a b]
 [  LDA #$12  ;  Comment with trailing spaces  ]
 
 ---
