@@ -1,4 +1,4 @@
-; instgen19.asm - Instruction table generator for new conventional syntax
+; Instruction table generator for new conventional syntax
 ; Written in new syntax (assembled by asm18)
 ;
 ; New table format: each instruction has mode:opcode pairs
@@ -6,18 +6,17 @@
 ;
 ; Mode encoding:
 ;   MODE_NONE  = $00  ; Implied (no operand)
-;   MODE_ACC   = $01  ; Accumulator
-;   MODE_IMM   = $02  ; Immediate
-;   MODE_ZP    = $03  ; Zero page
-;   MODE_ZPX   = $04  ; Zero page, X
-;   MODE_ZPY   = $05  ; Zero page, Y
-;   MODE_ABS   = $06  ; Absolute
-;   MODE_ABSX  = $07  ; Absolute, X
-;   MODE_ABSY  = $08  ; Absolute, Y
-;   MODE_INDX  = $09  ; Indirect, X - ($zp,X)
-;   MODE_INDY  = $0A  ; Indirect, Y - ($zp),Y
-;   MODE_REL   = $0B  ; Relative (branches)
-;   MODE_IND   = $0C  ; Indirect - JMP ($xxxx)
+;   MODE_IMM   = $01  ; Immediate
+;   MODE_ZP    = $02  ; Zero page
+;   MODE_ZPX   = $03  ; Zero page, X
+;   MODE_ZPY   = $04  ; Zero page, Y
+;   MODE_ABS   = $05  ; Absolute
+;   MODE_ABSX  = $06  ; Absolute, X
+;   MODE_ABSY  = $07  ; Absolute, Y
+;   MODE_INDX  = $08  ; Indirect, X - ($zp,X)
+;   MODE_INDY  = $09  ; Indirect, Y - ($zp),Y
+;   MODE_REL   = $0A  ; Relative (branches)
+;   MODE_IND   = $0B  ; Indirect - JMP ($xxxx)
 ;   MODE_MACRO = $FE  ; Sentinel marker to indicate macro
 ;   MODE_END   = $FF  ; Terminator (end of mode list)
 
@@ -401,11 +400,8 @@ write_label_and_modes
 .mode_done
   LDA #' '
   JSR write_b
-  LDA #'$'
-  JSR write_b
-  LDA #'F'
-  JSR write_b
-  JSR write_b
+  LDA #MODE_END
+  JSR display_byte
   JSR display_newline
   RTS
 

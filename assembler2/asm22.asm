@@ -1032,18 +1032,8 @@ emit_instruction
   CMP #MODE_REL
   BEQ .emit_relative   ; Relative needs special handling
   ; Check if 1-byte or 2-byte operand
-  CMP #MODE_IMM
-  BEQ .one_byte
-  CMP #MODE_ZP
-  BEQ .one_byte
-  CMP #MODE_ZPX
-  BEQ .one_byte
-  CMP #MODE_ZPY
-  BEQ .one_byte
-  CMP #MODE_INDX
-  BEQ .one_byte
-  CMP #MODE_INDY
-  BEQ .one_byte
+  AND #OPERAND_BYTES_1
+  BNE .one_byte
   ; 2-byte operand (absolute modes)
   LDA OPERAND16
   JSR emit
