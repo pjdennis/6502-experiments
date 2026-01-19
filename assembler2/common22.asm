@@ -116,9 +116,9 @@ advance_heap
   CLC
   ADC MEMP16
   STA MEMP16
-  TYA
-  ADC MEMP16+$01
-  STA MEMP16+$01
+  BCC .done
+  INC MEMP16+$01
+.done
   ; Check for collision with file stack
   CHECK_FOR_OUT_OF_MEMORY FS_P16
   RTS
