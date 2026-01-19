@@ -335,27 +335,27 @@ NAME: invalid_operand_double_quote
 INPUT:
  1: * = $0200
  2:   LDA #"A"
-EXPECT_ERROR: 1
+EXPECT_ERROR: 4
 EXPECT_LINE: 2
-EXPECT_MSG: Label not found
+EXPECT_MSG: Label expected
 
 ---
 NAME: invalid_operand_empty_immediate
 INPUT:
  1: * = $0200
  2:   LDA #
-EXPECT_ERROR: 1
+EXPECT_ERROR: 4
 EXPECT_LINE: 2
-EXPECT_MSG: Label not found
+EXPECT_MSG: Label expected
 
 ---
 NAME: invalid_operand_empty_indirect
 INPUT:
  1: * = $0200
  2:   LDA (,X)
-EXPECT_ERROR: 1
+EXPECT_ERROR: 4
 EXPECT_LINE: 2
-EXPECT_MSG: Label not found
+EXPECT_MSG: Label expected
 
 ---
 NAME: invalid_operand_numeric
@@ -371,9 +371,9 @@ NAME: invalid_operand_at_symbol
 INPUT:
  1: * = $0200
  2:   LDA #@foo
-EXPECT_ERROR: 1
+EXPECT_ERROR: 4
 EXPECT_LINE: 2
-EXPECT_MSG: Label not found
+EXPECT_MSG: Label expected
 
 ---
 NAME: trailing_expr_imm_hex
@@ -563,10 +563,11 @@ INPUT:
  2:   NOP
  3:   NOP
  4:   NOP
- 5:   LDA #"bad"
-EXPECT_ERROR: 1
-EXPECT_LINE: 5
-EXPECT_MSG: Label not found
+ 5:   NOP
+ 6:   FOO ; Invalid opcode
+EXPECT_ERROR: 5
+EXPECT_LINE: 6
+EXPECT_MSG: Opcode not found
 
 ---
 NAME: directive_data_bytes
@@ -630,6 +631,15 @@ INPUT:
  3:   .data <label >label label
 EXPECT_HEX: cd ab cd ab
 EXPECT_FWDREF: 0
+
+---
+NAME: directive_data_invalid
+INPUT:
+ 1: * = $0200
+ 2:   .data $00 @ $01
+EXPECT_ERROR: 4
+EXPECT_LINE: 2
+EXPECT_MSG: Label expected
 
 ---
 NAME: assignment_low_byte_select
@@ -1281,18 +1291,18 @@ NAME: expr_trailing_operator
 INPUT:
  1: * = $0200
  2:   LDA #$10+
-EXPECT_ERROR: 1
+EXPECT_ERROR: 4
 EXPECT_LINE: 2
-EXPECT_MSG: Label not found
+EXPECT_MSG: Label expected
 
 ---
 NAME: expr_double_operator
 INPUT:
  1: * = $0200
  2:   LDA #$10++$20
-EXPECT_ERROR: 1
+EXPECT_ERROR: 4
 EXPECT_LINE: 2
-EXPECT_MSG: Label not found
+EXPECT_MSG: Label expected
 
 # ============================================================================
 # CONDITIONAL ASSEMBLY TESTS

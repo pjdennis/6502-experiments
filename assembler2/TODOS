@@ -115,5 +115,7 @@ Please provide some suggestions for what could be added next to this assembler
 
   What interests you? The .else/.ifndef would be natural extensions of existing conditional infrastructure. The .repeat would exercise the macro/memory-source machinery in a new way.
 
-  - Should not silently accept expressions with spaces and ignore values -
+- [ ] Should not silently accept expressions with spaces and ignore values -
 x = a + b    currently means x = a
+
+- [ ] The error when parsing values and a label is expected, currently says invalid opcode - this would not be so appropriate for a .data directive or value assignment
