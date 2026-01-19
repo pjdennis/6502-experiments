@@ -21,7 +21,7 @@
 
   .zeropage
 
-FS_NEXT_CHAR   .data $00   ; The last character read
+FS_CURR_CHAR   .data $00   ; The last character read
 FS_CURR_FILE   .data $00   ; The current file handle
 FS_CURR_LINE16 .data $0000 ; The current line number
 FS_P16         .data $0000 ; Pointer to the current location in the file stack
@@ -241,7 +241,7 @@ pop_file_stack = pop_source
 
 
 ; Read character from current source (file or memory)
-; On exit: A = character (also stored in FS_NEXT_CHAR)
+; On exit: A = character (also stored in FS_CURR_CHAR)
 ;          C = 0 if char read, C = 1 if all sources exhausted
 ;          X is preserved
 ;          Y is not preserverd
@@ -256,7 +256,7 @@ file_stack_read_char
   JSR read
   BCS .source_exhausted
   ; Got character
-  STA FS_NEXT_CHAR
+  STA FS_CURR_CHAR
   CLC
   RTS
 .read_memory
@@ -267,7 +267,7 @@ file_stack_read_char
   BEQ .source_exhausted     ; $00 = end of memory source
   ; Increment memory pointer
   INC16 FS_MEM_PTR16     ; Preserves A
-  STA FS_NEXT_CHAR
+  STA FS_CURR_CHAR
   CLC
   RTS
 .source_exhausted

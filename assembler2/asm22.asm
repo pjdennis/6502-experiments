@@ -23,7 +23,7 @@
 ;   A - Accumulator (generally clobbered unless documented otherwise)
 ;
 ; KEY GLOBAL STATE
-;   NEXT_CHAR     Lookahead character (last byte read by read_char)
+;   CURR_CHAR     Current character (last byte read by read_char)
 ;   TOKEN         Buffer holding current token being parsed
 ;   PASS          $00 = pass 1, $FF = pass 2
 ;   PC16          Current program counter (where code is being generated)
@@ -31,9 +31,9 @@
 ;   FS_P16        File stack pointer (grows downward from FILE_STACK)
 ;
 ; PARSING MODEL
-;   read_char advances input, stores result in both A and NEXT_CHAR
+;   read_char advances input, stores result in both A and CURR_CHAR
 ;   Token reading uses TOKEN buffer, writes null terminator
-;   Single-character lookahead via NEXT_CHAR for parsing decisions
+;   Single-character lookahead via CURR_CHAR for parsing decisions
 ;
 ; MACRO SYSTEM
 ;   Macro definitions stored on heap with body and parameter names
@@ -118,7 +118,7 @@ FS_ERR_NO_FILE     = err_no_file
   .endif
   .include file_stack22.asm
 read_char          = file_stack_read_char
-NEXT_CHAR          = FS_NEXT_CHAR
+CURR_CHAR          = FS_CURR_CHAR
 CURR_LINE16        = FS_CURR_LINE16
 
 
@@ -127,8 +127,8 @@ CURR_LINE16        = FS_CURR_LINE16
 ; Basic operations with no dependencies on other functions
 ; ============================================================================
 
-; Check whether the next character (in A) is NOT a token character
-; On entry A contains the next character
+; Check whether the current character (in A) is NOT a token character
+; On entry A contains the current character
 ; On exit Z is set if current character terminates the current token, unset otherwise
 ;         A, X, Y are preserved
 compare_end_of_token
@@ -215,11 +215,11 @@ swap_pc_with_save
 ; read_char is provided by file_stack22.asm
 
 ; Read and discard space characters
-; On entry NEXT_CHAR contains the next character
-; On exit A contains the next character following the last space
+; On entry CURR_CHAR contains the current character
+; On exit A contains the current character following the last space
 ;         X, Y are preserved
 skip_spaces
-  LDA NEXT_CHAR
+  LDA CURR_CHAR
 .loop
   CMP #' '
   BNE .done
@@ -230,11 +230,11 @@ skip_spaces
 
 
 ; Read and discard characters up to the end of the current line
-; On entry NEXT_CHAR contains the next character
+; On entry CURR_CHAR contains the current character
 ; On exit A contains "\n"
 ;         X, Y are preserved
 skip_rest_of_line
-  LDA NEXT_CHAR
+  LDA CURR_CHAR
 .loop
   CMP #'\n'
   BEQ .done
@@ -245,9 +245,9 @@ skip_rest_of_line
 
 
 ; Skips spaces and checks for end of line and skips past if at end
-; On entry NEXT_CHAR contains next character
+; On entry CURR_CHAR contains current character
 ; On exit C set if end of line, clear otherwise
-;         A contains next character
+;         A contains current character
 ;         X, Y are preserved
 check_for_end_of_line
   JSR skip_spaces
@@ -311,14 +311,14 @@ read_hex_byte_or_word
 .second
   JSR read_hex_byte    ; Read 4th hex char and convert
   STA HEX16
-  JSR read_char        ; Read next char
+  JSR read_char        ; Read char
   SEC                  ; Second byte so return C = 1
   RTS
 
 
 ; Reads token into TOKEN (zero terminated)
 ; On entry A contains first character of token
-; On exit NEXT_CHAR contains next character after token
+; On exit CURR_CHAR contains current character after token
 ;         X is preserved
 ;         Y is not preserved
 read_token
@@ -349,7 +349,7 @@ read_token
 
 ; Parse character literal: 'x' or escape sequences
 ; On entry: A contains the opening quote character '
-; On exit: A contains next character (for garbage checking)
+; On exit: A contains current character (for garbage checking)
 ;          OPERAND16 contains character value
 ;          X is preserved
 ;          Y is not preserved
@@ -386,16 +386,16 @@ parse_char_literal
   BNE .char_invalid
   LDA #$00
   STA OPERAND16+$01
-  ; Read next char for garbage check
+  ; Read char for garbage check
   JMP read_char        ; Tail call
 .char_invalid
   JMP err_invalid_char_literal
 
 
 ; Check for the existance of an assigned value (read the equals sign)
-; On entry NEXT_CHAR contains the next character
+; On entry CURR_CHAR contains the current character
 ; On exit C set if value exists; clear otherwise
-;         A contains the next character
+;         A contains the current character
 ;         X, Y are preserved
 check_for_value
   JSR skip_spaces
@@ -409,9 +409,9 @@ check_for_value
 
 
 ; Read a value
-; On entry A contains the next character
+; On entry A contains the current character
 ; On exit HEX16 contains the value read
-;         A contains the next character
+;         A contains the current character
 ;         X is preserved
 ;         Y is not preserved
 ; Raises 'Bad hex' error if non-hex characters were encountered
@@ -426,7 +426,7 @@ read_value
 
 ; Parse a term (single value): $12, $1234, 'x', label, <label, or >label
 ; On entry A contains first character
-; On exit  NEXT_CHAR contains next character
+; On exit  CURR_CHAR contains current character
 ;          OPERAND16 contains parsed value
 ;          IS_FWDREF set if bare label was forward ref (pass 1 only)
 ;          C=1 if bare label, C=0 otherwise
@@ -438,7 +438,7 @@ parse_term
   CMP #'\''
   BEQ .char_literal
   ; Otherwise: bare label - needs forward ref tracking
-  JSR read_token       ; Next char now in NEXT_CHAR
+  JSR read_token       ; Current char now in CURR_CHAR
   ; Look up the token
   JSR check_local_label
   ; If in macro expansion with non-local label, try local hash first
@@ -492,7 +492,7 @@ parse_term
 
 ; Parse a value (expression with optional byte selector prefix)
 ; On entry: A contains first character
-; On exit: NEXT_CHAR contains next character
+; On exit: CURR_CHAR contains current character
 ;          OPERAND16 contains result
 ;          IS_FWDREF set if expression contains forward ref (NOT set for byte selectors)
 ;          C=0 if first term is a single byte or C=1 if first term is two bytes
@@ -505,7 +505,7 @@ parse_value
 
 .low_byte_selector
   JSR read_char        ; Skip '<'
-  JSR parse_expression ; Next char now in NEXT_CHAR
+  JSR parse_expression ; Current char now in CURR_CHAR
   ; Apply low byte: keep OPERAND16, zero OPERAND16+$01
   LDA #$00
   STA OPERAND16+$01
@@ -515,7 +515,7 @@ parse_value
 
 .high_byte_selector
   JSR read_char        ; Skip '>'
-  JSR parse_expression ; Next char now in NEXT_CHAR
+  JSR parse_expression ; Current char now in CURR_CHAR
   ; Apply high byte: shift OPERAND16 right by 8 bits
   LDA OPERAND16+$01
   STA OPERAND16
@@ -530,7 +530,7 @@ parse_value
 ; Unlike parse_value, does NOT handle chained operators - only byte selectors
 ; Used for shift counts to ensure left-to-right evaluation of shifts
 ; On entry: A contains first character
-; On exit: NEXT_CHAR contains next character
+; On exit: CURR_CHAR contains current character
 ;          OPERAND16 contains result
 ;          IS_FWDREF set if term is forward ref (NOT set for byte selectors)
 ;          C=1 if bare label, C=0 otherwise
@@ -543,7 +543,7 @@ parse_term_with_selector
 
 .low_byte_selector
   JSR read_char        ; Skip '<'
-  JSR parse_term       ; Next char now in NEXT_CHAR
+  JSR parse_term       ; Current char now in CURR_CHAR
   ; Apply low byte: keep OPERAND16, zero OPERAND16+$01
   LDA #$00
   STA OPERAND16+$01
@@ -553,7 +553,7 @@ parse_term_with_selector
 
 .high_byte_selector
   JSR read_char        ; Skip '>'
-  JSR parse_term       ; Next char now in NEXT_CHAR
+  JSR parse_term       ; Current char now in CURR_CHAR
   ; Apply high byte: shift OPERAND16 right by 8 bits
   LDA OPERAND16+$01
   STA OPERAND16
@@ -566,13 +566,13 @@ parse_term_with_selector
 
 ; Parse expression: term [+|-|<<|>> term]*
 ; On entry: A contains first character
-; On exit: NEXT_CHAR contains next character
+; On exit: CURR_CHAR contains current character
 ;          OPERAND16 contains result
 ;          IS_FWDREF set if any term is forward ref
 ;          C=1 if 2-byte value (bare label or $xxxx), C=0 if 1-byte ($xx, 'c')
 ;          (Carry from first term - used by .data to decide emit size)
 parse_expression
-  JSR parse_term       ; Parse first term, next char in NEXT_CHAR
+  JSR parse_term       ; Parse first term, current char in CURR_CHAR
   PHP ; Save carry flag
 
   ; Save IS_FWDREF from first term
@@ -580,7 +580,7 @@ parse_expression
   STA EXPR_FWDREF
 
 .loop
-  LDA NEXT_CHAR
+  LDA CURR_CHAR
   CMP #'+'
   BEQ .add_op
   CMP #'-'
@@ -602,7 +602,7 @@ parse_expression
 
   ; Parse next term (skip '+' first)
   JSR read_char        ; Skip '+'
-  JSR parse_term_with_selector  ; Next char in NEXT_CHAR
+  JSR parse_term_with_selector  ; Current char in CURR_CHAR
 
   ; Accumulate forward ref flag
   LDA IS_FWDREF
@@ -620,7 +620,7 @@ parse_expression
 
   ; Parse next term (skip '-' first)
   JSR read_char        ; Skip '-'
-  JSR parse_term_with_selector  ; Next char in NEXT_CHAR
+  JSR parse_term_with_selector  ; Current char in CURR_CHAR
 
   ; Accumulate forward ref flag
   LDA IS_FWDREF
@@ -633,14 +633,14 @@ parse_expression
   JMP .loop
 
 .check_left_shift
-  ; Read next char to confirm second '<'
+  ; Read char to confirm second '<'
   JSR read_char
   CMP #'<'
   BEQ .left_shift_op
   JMP err_expected_shift    ; Single '<' in middle of expression is error
 
 .check_right_shift
-  ; Read next char to confirm second '>'
+  ; Read char to confirm second '>'
   JSR read_char
   CMP #'>'
   BEQ .right_shift_op
@@ -652,7 +652,7 @@ parse_expression
 
   ; Parse shift count (use parse_term_with_selector to support byte selectors like <<<)
   JSR read_char        ; Read char after second '<'
-  JSR parse_term_with_selector  ; Next char in NEXT_CHAR
+  JSR parse_term_with_selector  ; Current char in CURR_CHAR
 
   ; Accumulate forward ref flag
   LDA IS_FWDREF
@@ -683,7 +683,7 @@ parse_expression
 
   ; Parse shift count (use parse_term_with_selector to support byte selectors like >>>)
   JSR read_char        ; Read char after second '>'
-  JSR parse_term_with_selector  ; Next char in NEXT_CHAR
+  JSR parse_term_with_selector  ; Current char in CURR_CHAR
 
   ; Accumulate forward ref flag
   LDA IS_FWDREF
@@ -794,23 +794,23 @@ update_label_scope_from_lookup
 capture_label
   CMP #'*'
   BEQ .set_pc
-  JSR read_token            ; Next char in NEXT_CHAR
-  LDA NEXT_CHAR             ; Check if terminated by colon
+  JSR read_token            ; Current char in CURR_CHAR
+  LDA CURR_CHAR             ; Check if terminated by colon
   CMP #':'
   BNE .no_colon
-  JSR read_char             ; Skip past colon, update NEXT_CHAR
+  JSR read_char             ; Skip past colon, update CURR_CHAR
 .no_colon
   ; Normal label
   BIT PASS
   BPL .pass_1
   ; Pass 2 - don't capture label, but must track globals for local label scoping
-  ; NEXT_CHAR has the next char from read_token
+  ; CURR_CHAR has the current char from read_token
   JSR check_local_label     ; Sets LABEL_TYPE, validates scope for locals
   ; Now continue with value reading
   JSR check_for_value
   BCS .has_equals_2         ; If = found, branch
   ; No = found - update global heap if this was not a local label
-  ; check_for_value updated NEXT_CHAR if it called read_char
+  ; check_for_value updated CURR_CHAR if it called read_char
   LDA LABEL_TYPE
   BNE .was_local_2          ; If local flag != 0, skip update
   JSR update_label_scope_from_lookup  ; Set LABEL_SCOPE16 for local label lookups
@@ -832,7 +832,7 @@ capture_label
   JSR read_value
   JMP .skip_and_return_processed
 .pass_1
-  ; NEXT_CHAR has the next char from read_token
+  ; CURR_CHAR has the current char from read_token
   JSR check_local_label     ; Sets LABEL_TYPE, validates scope for locals
   ; Add key to hash table first (before read_value may overwrite TOKEN)
   JSR select_label_hash_table
@@ -854,7 +854,7 @@ capture_label
   JSR store_hash_value
   JMP .skip_spaces_and_return_processed_flag
 .has_equals
-  JSR read_value            ; Read the value after the equals, next char in NEXT_CHAR
+  JSR read_value            ; Read the value after the equals, current char in CURR_CHAR
   JSR store_hash_value
   JMP .skip_and_return_processed
 .skip_spaces_and_return_processed_flag
@@ -862,7 +862,7 @@ capture_label
 .skip_and_return_processed
   JSR skip_rest_of_line
   SEC                       ; Indicate line is fully processed
-  ; No need to retain next char as caller
+  ; No need to retain current char as caller
   ; goes straight to next line
   RTS
 .duplicate_label
@@ -945,12 +945,12 @@ update_pc
 ; Look up mnemonic and save pointer to mode:opcode data
 ; On entry A contains the first character of the mnemonic
 ; On exit C = 0 if mnemonic or 1 if macro
-;         NEXT_CHAR contains the next character
+;         CURR_CHAR contains the current character
 ;         If C = 0: INST_PTR16 points to mode:opcode data (past mnemonic)
 ;         X, Y are not preserved
 ; Raises 'Opcode not found' error if mnemonic is not found
 lookup_mnemonic
-  JSR read_token       ; Next char in NEXT_CHAR
+  JSR read_token       ; Current char in CURR_CHAR
   JSR select_instruction_hash_table
   JSR find_in_hash_instruction
   BCC .found
@@ -1131,7 +1131,7 @@ handle_fwdref_mode
 ; ============================================================================
 
 ; Parse operand and emit instruction
-; On entry A contains the next character after mnemonic
+; On entry A contains the current character after mnemonic
 ;          INST_PTR16 points to mode:opcode data
 ; On exit OPERAND16 contains the operand value
 ;         ADDR_MODE contains the addressing mode
@@ -1165,9 +1165,9 @@ parse_operand
   ; ($xxxx) - indirect absolute for JMP (2-byte operand)
   JSR read_char        ; Skip (
   ; Parse value ($xx, <label, >label, or label)
-  JSR parse_value      ; OPERAND16 set, next char in NEXT_CHAR
+  JSR parse_value      ; OPERAND16 set, current char in CURR_CHAR
   ; Check suffix to determine addressing mode
-  LDA NEXT_CHAR        ; Load next char (should be ) or ,)
+  LDA CURR_CHAR        ; Load current char (should be ) or ,)
   CMP #','
   BEQ .ind_x_mode
   ; Must be )
@@ -1199,7 +1199,7 @@ parse_operand
 
 .ind_mode
   ; Just ($xxxx) - JMP indirect mode (must be 2-byte operand)
-  ; Next char in NEXT_CHAR (after ))
+  ; Current char in CURR_CHAR (after ))
   LDA #MODE_IND
   STA ADDR_MODE
   RTS
@@ -1212,14 +1212,14 @@ parse_operand
 .other_mode
   ; Parse value: $xx, $xxxx, or label
   ; All handled uniformly with appropriate mode selection
-  JSR parse_value      ; Returns C=1 for bare label, OPERAND16 set, IS_FWDREF set, next char in NEXT_CHAR
+  JSR parse_value      ; Returns C=1 for bare label, OPERAND16 set, IS_FWDREF set, current char in CURR_CHAR
   ; Check if this is a branch instruction
   LDA #MODE_REL
   STA ADDR_MODE
   JSR find_opcode_for_mode ; Set C=0 if found (relative implies branch)
   BCC .relative_mode
   ; Not a branch - check for indexed mode
-  LDA NEXT_CHAR        ; Next char (might be comma)
+  LDA CURR_CHAR        ; Current char (might be comma)
   CMP #','
   BNE .non_index_mode
   ; Has index suffix - read X or Y
@@ -1235,7 +1235,7 @@ parse_operand
   RTS
 
 .non_index_mode
-  ; Next char in NEXT_CHAR
+  ; Current char in CURR_CHAR
   LDA #MODE_ZP
   STA ADDR_MODE
   JSR handle_fwdref_mode   ; Checks mode availability, value size, forward refs
@@ -1249,7 +1249,7 @@ parse_operand
   RTS
 
 .x_index_mode
-  JSR read_char            ; Read char after X for garbage check, stores in NEXT_CHAR
+  JSR read_char            ; Read char after X for garbage check, stores in CURR_CHAR
   LDA #MODE_ZPX
   STA ADDR_MODE
   JSR handle_fwdref_mode   ; Checks mode availability, value size, forward refs
@@ -1263,7 +1263,7 @@ parse_operand
   RTS
 
 .y_index_mode
-  JSR read_char            ; Read char after Y for garbage check, stores in NEXT_CHAR
+  JSR read_char            ; Read char after Y for garbage check, stores in CURR_CHAR
   LDA #MODE_ZPY
   STA ADDR_MODE
   JSR handle_fwdref_mode   ; Checks mode availability, value size, forward refs
@@ -1279,7 +1279,7 @@ parse_operand
 
 ; Read and emit quoted ASCII
 ; On entry A contains the first character within quotes
-; On exit A contains the next character after the closing quote
+; On exit A contains the current character after the closing quote
 ;         X, Y are preserved
 ; Raises 'Closing quote not found' error if closing quote not found on current line
 emit_quoted
@@ -1303,7 +1303,7 @@ emit_quoted
 .err_closing_quote
   JMP err_closing_quote_not_found
 .done
-  JSR read_char        ; Done; read next char
+  JSR read_char        ; Done; read char
   RTS
 
 
@@ -1314,7 +1314,7 @@ emit_quoted
 
 ; On entry, A contains the first character of the directive
 process_directive
-  JSR read_token       ; Next char in NEXT_CHAR
+  JSR read_token       ; Current char in CURR_CHAR
   ; Reset LABEL_TYPE for directive string comparisons
   ; (compare_token checks LABEL_TYPE, must be GLOBAL for non-escape strings)
   LDA #LABEL_TYPE_GLOBAL
@@ -1442,7 +1442,7 @@ data_parameters_loop_entry
   JMP data_parameters_loop
 .data_value
   ; Parse value: handles $hex, 'char', label, <expr, >expr, and expressions
-  JSR parse_value      ; Returns C=1 for bare label, C=0 otherwise, next char in NEXT_CHAR
+  JSR parse_value      ; Returns C=1 for bare label, C=0 otherwise, current char in CURR_CHAR
   BCS .data_emit_two_bytes
   ; C=0: expression/hex/'char'/</>  - emit 1 byte from OPERAND16
   LDA OPERAND16
@@ -1470,7 +1470,7 @@ process_ifdef
   BCC .pi_has_label
   JMP err_label_expected
 .pi_has_label
-  JSR read_token           ; Expects next char in A
+  JSR read_token           ; Expects current char in A
   ; Save X (global output file handle)
   TXA
   PHA
@@ -1545,7 +1545,7 @@ process_macro
   BCC .pm_has_name
   JMP err_macro_name_expected
 .pm_has_name
-  JSR read_token       ; Macro name now in TOKEN, next char in NEXT_CHAR
+  JSR read_token       ; Macro name now in TOKEN, current char in CURR_CHAR
   ; Check for instruction collision or duplicate macro
   JSR select_instruction_hash_table
   ; Optimistically attempt to add macro to the instruction hash table
@@ -1583,7 +1583,7 @@ process_macro
   JSR check_for_end_of_line
   BCS .pm_params_done  ; End of line, no more params
   ; Read parameter name
-  JSR read_token       ; Param name in TOKEN, next char in NEXT_CHAR
+  JSR read_token       ; Param name in TOKEN, current char in CURR_CHAR
   ; Store parameter name on heap (null-terminated)
   LDY #$FF
 .pm_copy_param
@@ -1811,7 +1811,7 @@ capture_macro_line
   CP16 MEMP16 MACRO_DEF_PTR16  ; Save heap pos for potential undo
   LDX #$00               ; Space indicator - $01 if last char was a space, $00 otherwise
   LDY #$00               ; Capture index
-  LDA NEXT_CHAR
+  LDA CURR_CHAR
   BNE .process           ; Always taken
 .next
   JSR read_char
@@ -1854,13 +1854,13 @@ capture_macro_line
   LDX #$00                 ; Clear last_space
   APPEND_HEAPA             ; Capture the opening quote
 .string_lit_loop
-  JSR read_char            ; Read the next char and capture it
+  JSR read_char            ; Read the current char and capture it
   BCS .eof_error
   APPEND_HEAPA
-  ; Conditionally advance heap while preserving next character
+  ; Conditionally advance heap while preserving current character
   BPL .string_lit_no_advance
   JSR advance_heap
-  LDA NEXT_CHAR
+  LDA CURR_CHAR
 .string_lit_no_advance
   CMP #'\\'                ; Was it the escape character?
   BNE .string_lit_not_escape
@@ -1918,7 +1918,7 @@ capture_macro_line
   SET16 directive_endmacro HEX16
   JSR string_starts_with
   BNE .not_endmacro
-  ; Matched "endmacro" - verify next char is not a token character
+  ; Matched "endmacro" - verify current char is not a token character
   LDA (TABP16),Y
   JSR compare_end_of_token
   BNE .not_endmacro        ; Not end of token - keep as macro body
@@ -1947,7 +1947,7 @@ capture_macro_line
   SET16 directive_macro HEX16
   JSR string_starts_with
   BNE .keep_line
-  ; Matched "macro" - verify next char is not a token character
+  ; Matched "macro" - verify current char is not a token character
   LDA (TABP16),Y
   JSR compare_end_of_token
   BNE .keep_line           ; Not end of token, not .macro
@@ -1962,7 +1962,7 @@ capture_macro_line
   ; === Pass 2: Skip without copying to heap ===
   ; Just detect .endmacro to clear IN_MACRO_DEF flag
 .pass2
-  LDA NEXT_CHAR
+  LDA CURR_CHAR
 .p2_scan
   CMP #' '
   BNE .p2_not_space
@@ -2094,13 +2094,13 @@ asm_line_loop            ; Global entry for macro expansion
 .opcode
   ; Read mnemonic and look up in instruction table
   JSR lookup_mnemonic      ; Returns with C=0 for mnemonic or C=1 for macro
-  ; A contains next char after mnemonic or macro name
+  ; A contains current char after mnemonic or macro name
   BCS .macro
   ; Parse operand to capture value and determine addressing mode
   JSR parse_operand
   ; Emit the instruction
   JSR emit_instruction 
-  ; A contains next char after operand - check for garbage
+  ; A contains current char after operand - check for garbage
   ; Skip trailing spaces, then check for end of line (handles comments)
   JSR check_for_end_of_line
   BCS .back_to_line_loop

@@ -43,7 +43,7 @@ FS_FILENAME   = TOKEN
   .include file_stack22.asm
 read_char = file_stack_read_char
 CURLINE16 = FS_CURR_LINE16
-NEXT_CHAR = FS_NEXT_CHAR
+CURR_CHAR = FS_CURR_CHAR
 
 
 main:
@@ -330,7 +330,7 @@ mode_memory:
 ; On entry: just read '@'
 ; On exit: C=0 if was a marker (handled), C=1 if not (already output '@')
 check_memory_or_include:
-  ; Read next char to see if it's 'i' (include), 'm' (memory), or 't' (traceback)
+  ; Read char to see if it's 'i' (include), 'm' (memory), or 't' (traceback)
   JSR read_char_track_line
   BCS .not_marker_eof
   CMP #'i'
@@ -863,7 +863,7 @@ read_char_track_line:
   BNE .success
   INC16 CURLINE16
 .success:
-  LDA NEXT_CHAR       ; Restore A (CMP changed flags)
+  LDA CURR_CHAR       ; Restore A (CMP changed flags)
   CLC                 ; Ensure C=0 for success
 .done:
   RTS
