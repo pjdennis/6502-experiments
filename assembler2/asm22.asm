@@ -129,35 +129,33 @@ CURR_LINE16        = FS_CURR_LINE16
 
 ; Check whether the current character (in A) is NOT a token character
 ; On entry A contains the current character
-; On exit C is set if current character terminates the current token, unset otherwise
+; On exit C=0 if current character terminates the current token; C=1 otherwise
 ;         A, X, Y are preserved
 compare_end_of_token
-  ; Check if A is a valid token character (0-9, A-Z, _, a-z)
+  ; Check if A is a valid token character (., 0-9, A-Z, _, a-z)
   ; Returns C=0 if token char (not end), C=1 if not token char (end of token)
   ; Preserves A, X, Y
-  CMP #'.'              ; TODO make it so this is not a token character (capture local labels without the period)
-  BEQ .not_end_cc
-  CMP #'0'
-  BCC .end              ; < '0'
-  CMP #'9'+$01          ; First char after '9'
-  BCC .not_end          ; '0'-'9'
-  CMP #'A'
-  BCC .end              ; < 'A'
-  CMP #'Z'+$01          ; First char after 'Z'
-  BCC .not_end          ; 'A'-'Z'
-  CMP #'_'
-  BEQ .not_end_cc       ; '_'
+  CMP #'z'+$01
+  BCS .end              ; > 'z'
   CMP #'a'
-  BCC .end              ; < 'a'
-  CMP #'z'+$01          ; First char after 'z'
-  BCC .not_end          ; 'a'-'z'
+  BCS .not_end          ; 'a'-'z'
+  CMP #'_'
+  BEQ .not_end          ; '_'
+  CMP #'Z'+$01
+  BCS .end              ; > 'Z'
+  CMP #'A'
+  BCS .not_end          ; 'A'-'Z'
+  CMP #'9'+$01
+  BCS .end              ; > '9'
+  CMP #'0'
+  BCS .not_end          ; '0'-'9'
+  CMP #'.'              ; TODO make it so this is not a token character (capture local labels without the period)
+  BEQ .not_end
 .end
-  SEC
-  RTS                   ; Returns with C=1 -> end of token
-.not_end_cc
   CLC
+  RTS                   ; Returns with C=0 -> end of token
 .not_end
-  RTS                   ; Returns with C=0 -> not end of token
+  RTS                   ; Returns with C=1 -> not end of token (set from CMP)
 
 
 ; Skip characters until token terminator
@@ -165,7 +163,7 @@ compare_end_of_token
 skip_token
   JSR read_char
   JSR compare_end_of_token
-  BCC skip_token
+  BCS skip_token
   RTS
 
 
@@ -304,7 +302,7 @@ read_hex_byte_or_word
   STA HEX16+$01
   JSR read_char        ; Read 3rd hex char or terminator
   JSR compare_end_of_token
-  BCC .second
+  BCS .second
   LDA HEX16+$01        ; No second byte so move result and return C = 0
   STA HEX16
   LDA #$00
@@ -329,7 +327,7 @@ read_token
   LDX #$00
 .loop
   JSR compare_end_of_token
-  BCS .done
+  BCC .done
   ; TOKEN buffer bounds check (conservative 127-char limit)
   STA TOKEN,X
   INX
@@ -470,7 +468,7 @@ parse_term
   BEQ .char_literal
   ; Otherwise: bare label - needs forward ref tracking
   JSR compare_end_of_token
-  BCC .token_present
+  BCS .token_present
   JMP err_label_expected
 .token_present
   JSR read_token       ; Current char now in CURR_CHAR
@@ -1956,7 +1954,7 @@ capture_macro_line
   ; Matched "endmacro" - verify current char is not a token character
   LDA (TABP16),Y
   JSR compare_end_of_token
-  BCC .not_endmacro        ; Not end of token - keep as macro body
+  BCS .not_endmacro        ; Not end of token - keep as macro body
   ; Found .endmacro. Restore heap to undo the copy
   CP16 MACRO_DEF_PTR16 MEMP16
   ; At end of macro definition. Write $00 terminator to body
@@ -1985,7 +1983,7 @@ capture_macro_line
   ; Matched "macro" - verify current char is not a token character
   LDA (TABP16),Y
   JSR compare_end_of_token
-  BCC .keep_line           ; Not end of token, not .macro
+  BCS .keep_line           ; Not end of token, not .macro
   ; Found nested macro definition - error
   JMP err_nested_macro_definition
 .keep_line
