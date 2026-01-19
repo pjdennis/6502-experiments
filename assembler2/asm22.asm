@@ -1571,7 +1571,7 @@ process_endif
 
 ; Process .macro directive
 ; Syntax: .macro NAME [param1 param2 ...]
-; Creates entry in IHASHTAB: [name $00][MODE_MACRO][body_ptr_L][body_ptr_H][params...][\0]
+; Creates entry in IHASHTAB: [name $00][MODE_MACRO][params...][$00][body $00]
 process_macro
   ; Skip spaces and read macro name
   JSR check_for_end_of_line
