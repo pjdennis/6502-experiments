@@ -175,8 +175,7 @@ convert_hex_character
   CMP #'A'
   BCS .alpha           ; >= 'A'
   ; Numeric path: '0'-'9' → 0-9
-  SEC
-  SBC #'0'
+  SBC #'0'-$01         ; Subtract 1 since carry is clear from CMP
   CMP #'9'-'0'+$01     ; Check if result 0-9
   BCS .error           ; >= 10, invalid
   RTS
