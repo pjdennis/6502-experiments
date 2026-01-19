@@ -1,7 +1,7 @@
 ; Addressing mode operand number of bytes
-OPERAND_BYTES_0 = $00
-OPERAND_BYTES_1 = $10
-OPERAND_BYTES_2 = $20
+OPERAND_BYTES_0 = $10
+OPERAND_BYTES_1 = $20
+OPERAND_BYTES_2 = $40
 
 ; Addressing mode constants
 MODE_NONE  = $00+OPERAND_BYTES_0 ; Implied (no operand)
