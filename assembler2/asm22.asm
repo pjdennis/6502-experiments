@@ -1497,75 +1497,75 @@ data_parameters_loop_entry
 process_ifdef
   INC COND_DEPTH
   LDA SKIP_DEPTH
-  BNE .pi_already_skipping ; Already skipping, don't record or evaluate
+  BNE .already_skipping    ; Already skipping, don't record or evaluate
   ; Evaluate condition
   JSR check_for_end_of_line
-  BCC .pi_has_label
+  BCC .has_label
   JMP err_label_expected
-.pi_has_label
+.has_label
   JSR read_token           ; Expects current char in A
   ; Save X (global output file handle)
   TXA
   PHA
   ; Check for pass 2 - no need to look up label in pass 2
   BIT PASS
-  BMI .pi_pass2
+  BMI .pass2
   ; --- Pass 1: Evaluate and store decision ---
   LDX IFDEF_INDEX
   ; Increment and check for overflow (wrap from 255 to 0 = buffer full)
   INC IFDEF_INDEX
-  BEQ .pi_overflow         ; If wrapped to 0, we've used all 256 slots
+  BEQ .overflow            ; If wrapped to 0, we've used all 256 slots
   LDA #LABEL_TYPE_GLOBAL
   STA LABEL_TYPE
   JSR select_label_hash_table
   JSR find_in_hash         ; C=0 if found, C=1 if not found
   ; Save result: A = $FF if found (assemble), $00 if not found (skip)
   LDA #$00                 ; Default: not defined (skip)
-  BCS .pi_save_result      ; C=1 means not found
+  BCS .save_result         ; C=1 means not found
   LDA #$FF                 ; Found: defined (assemble)
-.pi_save_result
+.save_result
   STA IFDEF_DECISIONS,X
   ; Branch based on decision value
-  BEQ .pi_start_skip       ; Not defined ($00) - start skipping
-  BNE .pi_done             ; Defined ($FF) - continue (no skip)
+  BEQ .start_skip          ; Not defined ($00) - start skipping
+  BNE .done                ; Defined ($FF) - continue (no skip)
   ; --- Pass 2: Replay stored decision ---
-.pi_pass2
+.pass2
   LDX IFDEF_INDEX
   INC IFDEF_INDEX
   LDA IFDEF_DECISIONS,X
-  BEQ .pi_start_skip
-  BNE .pi_done
-.pi_start_skip
+  BEQ .start_skip
+  BNE .done
+.start_skip
   LDA COND_DEPTH
   STA SKIP_DEPTH
-.pi_done
+.done
   ; Restore X (global output file handle)
   PLA
   TAX
-.pi_already_skipping
+.already_skipping
   JMP skip_rest_of_line
-.pi_overflow
+.overflow
   JMP err_too_many_ifdefs
 
 
 ; Process .endif directive
 process_endif
   LDA COND_DEPTH
-  BNE .pe_has_ifdef    ; In a conditional block
+  BNE .has_ifdef       ; In a conditional block
   JMP err_endif_without_ifdef
-.pe_has_ifdef
+.has_ifdef
   DEC COND_DEPTH
   ; Check if this ends our skip block
   LDA SKIP_DEPTH
-  BEQ .pe_done         ; Not skipping, just decrement depth
+  BEQ .done            ; Not skipping, just decrement depth
   ; Currently skipping - check if we should stop
   LDA COND_DEPTH
   CMP SKIP_DEPTH
-  BCS .pe_done         ; Still in nested block (COND_DEPTH >= SKIP_DEPTH)
+  BCS .done            ; Still in nested block (COND_DEPTH >= SKIP_DEPTH)
   ; COND_DEPTH < SKIP_DEPTH, stop skipping
   LDA #$00
   STA SKIP_DEPTH
-.pe_done
+.done
   JMP skip_rest_of_line ; Tail call
 
 
@@ -1575,33 +1575,33 @@ process_endif
 process_macro
   ; Skip spaces and read macro name
   JSR check_for_end_of_line
-  BCC .pm_has_name
+  BCC .has_name
   JMP err_macro_name_expected
-.pm_has_name
+.has_name
   JSR read_token       ; Macro name now in TOKEN, current char in CURR_CHAR
   ; Check for instruction collision or duplicate macro
   JSR select_instruction_hash_table
   ; Optimistically attempt to add macro to the instruction hash table
   JSR hash_add_instruction
-  BCC .pm_name_ok      ; C=0 means new, so move on to storing value
+  BCC .name_ok         ; C=0 means new, so move on to storing value
   ; Name was already present in hash table - is it an instruction or existing macro?
   ; Check first byte of value - MODE_MACRO means macro, else instruction
   LDA (TABP16),Y
   CMP #MODE_MACRO
-  BEQ .pm_is_macro
+  BEQ .is_macro
   JMP err_macro_shadows_instruction
-.pm_is_macro
+.is_macro
   ; It's a macro - in pass 2 this is expected, just skip to capturing
   BIT PASS
-  BMI .pm_pass2_skip_add
+  BMI .pass2_skip_add
   JMP err_duplicate_macro
-.pm_pass2_skip_add
+.pass2_skip_add
   ; Pass 2: skip adding, just set flag to enable body skipping
   ; (body was already captured in pass 1)
   LDA #$FF
   STA IN_MACRO_DEF
   JMP skip_rest_of_line
-.pm_name_ok
+.name_ok
   ; Add macro entry value
   ; MEMP16 points to location at which to store the value
   ; TABP16 points to the macro name on heap
@@ -1612,22 +1612,22 @@ process_macro
   LDY #$00
   APPEND_HEAPI MODE_MACRO
   JSR advance_heap
-.pm_param_loop
+.param_loop
   JSR check_for_end_of_line
-  BCS .pm_params_done  ; End of line, no more params
+  BCS .params_done     ; End of line, no more params
   ; Read parameter name
   JSR read_token       ; Param name in TOKEN, current char in CURR_CHAR
   ; Store parameter name on heap (null-terminated)
   LDY #$FF
-.pm_copy_param
+.copy_param
   INY
   LDA TOKEN,Y
   STA (MEMP16),Y
-  BNE .pm_copy_param
+  BNE .copy_param
   INY
   JSR advance_heap
-  JMP .pm_param_loop
-.pm_params_done
+  JMP .param_loop
+.params_done
   ; Write empty string terminator for parameter list
   LDY #$00
   APPEND_HEAPI $00
@@ -1649,31 +1649,31 @@ process_macro
 check_macro_recursion
   ; Walk scope stack from bottom to current position
   SET16 SCOPE_STACK TABP16
-.cmr_loop
+.loop
   ; Check if we've reached current scope pointer
   CMP16 TABP16 SCOPE_PTR16
-  BEQ .cmr_done             ; Reached current position, no recursion
+  BEQ .done                 ; Reached current position, no recursion
   ; Compare macro address at offset +3 with MACRO_ENTRY16
   LDY #$03
   LDA (TABP16),Y
   CMP MACRO_ENTRY16
-  BNE .cmr_next
+  BNE .next
   INY
   LDA (TABP16),Y
   CMP MACRO_ENTRY16+$01
-  BNE .cmr_next
+  BNE .next
   ; Match found - recursion detected
   JMP err_recursive_macro
-.cmr_next
+.next
   ; Advance to next entry (+5 bytes)
   LDA TABP16
   CLC
   ADC #$05
   STA TABP16
-  BCC .cmr_loop
+  BCC .loop
   INC TABP16+$01
-  JMP .cmr_loop
-.cmr_done
+  JMP .loop
+.done
   RTS
 
 
@@ -1698,26 +1698,26 @@ expand_macro
   ; X = index into MACRO_ARG_BUF for storing values
   ; Each entry: [is_fwdref][value_L][value_H] = 3 bytes
   LDX #$00
-.em_parse_loop
+.parse_loop
   ; Check if we're at end of parameter list (empty string)
   LDY #$00
   LDA (MACRO_DEF_PTR16),Y
-  BEQ .em_parse_done
+  BEQ .parse_done
   ; Skip past parameter name
   LDY #$FF
-.em_skip_param
+.skip_param
   INY
   LDA (MACRO_DEF_PTR16),Y
-  BNE .em_skip_param
+  BNE .skip_param
   ; Advance MACRO_DEF_PTR past the null terminator
   TYA
   SEC                   ; +1 for null
   ADDA16 MACRO_DEF_PTR16 MACRO_DEF_PTR16
   ; Check for argument in input
   JSR check_for_end_of_line
-  BCC .em_have_arg
+  BCC .have_arg
   JMP err_too_few_arguments
-.em_have_arg
+.have_arg
   ; Parse argument expression (using PARENT's scope for lookups)
   JSR parse_expression
   ; MACRO_ARG_BUF bounds check
@@ -1737,11 +1737,11 @@ expand_macro
   LDA OPERAND16+$01
   STA MACRO_ARG_BUF,X
   INX
-  JMP .em_parse_loop
-.em_parse_done
+  JMP .parse_loop
+.parse_done
   ; Check for extra arguments (should be at end of line now)
   JSR check_for_end_of_line
-  BCC .em_too_many
+  BCC .too_many
   ; NOW push label scope for the child macro
   JSR push_label_scope
 
@@ -1751,18 +1751,18 @@ expand_macro
   ; Reset X to read values from start of macro arg buffer
   LDX #$00
   ; Now iterate through params and add to hash with stored values
-.em_add_loop
+.add_loop
   ; Check if at end of parameter list
   LDY #$00
   LDA (MACRO_DEF_PTR16),Y
-  BEQ .em_add_done
+  BEQ .add_done
   ; Copy param name to TOKEN
   LDY #$FF
-.em_copy_param
+.copy_param
   INY
   LDA (MACRO_DEF_PTR16),Y
   STA TOKEN,Y
-  BNE .em_copy_param
+  BNE .copy_param
   ; Advance MACRO_DEF_PTR past param name
   TYA
   SEC ; +1 for null terminator
@@ -1779,21 +1779,21 @@ expand_macro
   INX
   ; Skip adding if forward ref in pass 1
   LDA IS_FWDREF
-  BEQ .em_do_add
+  BEQ .do_add
   BIT PASS
-  BPL .em_add_loop      ; Pass 1 fwdref: skip
+  BPL .add_loop         ; Pass 1 fwdref: skip
   ; Pass 2: always add
-.em_do_add
+.do_add
   ; Add parameter to macro-local scope
   LDA #LABEL_TYPE_MACRO
   STA LABEL_TYPE
   JSR select_label_hash_table
   JSR hash_add
-  BCS .em_add_loop      ; Already exists (pass 1), skip store
+  BCS .add_loop         ; Already exists (pass 1), skip store
   ; Store value (OPERAND16 aliased to HEX16)
   JSR store_hash_value
-  JMP .em_add_loop
-.em_add_done
+  JMP .add_loop
+.add_done
   ; Push memory source and set up pointers
   JSR push_memory_source
   ; Set memory pointer to body_ptr from macro definition
@@ -1804,7 +1804,7 @@ expand_macro
   PLA
   TAX
   RTS
-.em_too_many
+.too_many
   JMP err_too_many_arguments
 
 
@@ -2055,7 +2055,6 @@ assemble_code
   STA SKIP_DEPTH         ; Clear skip depth
   STA IN_MACRO_DEF       ; Clear macro definition flag
   STA IFDEF_INDEX        ; Clear .ifdef decision index
-asm_line_loop            ; Global entry for macro expansion
 .line_loop
   JSR read_char
   BCC .character_read
