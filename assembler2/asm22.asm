@@ -59,11 +59,11 @@ FWDREF_LIMIT    = FWDREF_LIST+$0200 ; Limit for forward reference list data
 SCOPE_STACK     = $0400  ; Label scope stack for macro expansions (256 bytes, $0400-$04FF)
 SCOPE_LIMIT     = SCOPE_STACK+$0100 ; Limit for scope stack
 MACRO_ARG_BUF   = $0500  ; Temp buffer for macro args during expansion (256 bytes)
-MACRO_ARG_BUF_LIMIT = MACRO_ARG_BUF+$0100 ; Limit for macro arg buffer
+MACRO_ARG_LIMIT = MACRO_ARG_BUF+$0100 ; Limit for macro arg buffer
 TOKEN           = $0600  ; Buffer for the current token being read
 LHASHTAB        = $0700  ; Label hash table
 IFDEF_DECISIONS = $0800  ; Buffer for .ifdef decisions (256 bytes)
-*               = $2000  ; Code generates here
+*               = $2000  ; Code generates here follwed by HEAP
 FILE_STACK      = $F000  ; File stack will grow down from 1 below here
 
 
@@ -93,11 +93,11 @@ MACRO_ENTRY16   .data $0000  ; Original macro hash entry address (for recursion 
 IFDEF_INDEX     .data $00    ; Current index into IFDEF_DECISIONS buffer
 
   .ifdef enable_debug
-DEBUG_FLAG      .data $00   ; Non-zero if debug output enabled
-PASS_1_FWDREF16 .data $0000 ; Forward ref pointer after pass 1
-SMALL_HEAP_FLAG .data $00   ; Non-zero if small_heap argument was passed
-SHOW_MACROS     .data $00   ; Non-zero if captured macro definitions should be printed
-MACRO_NAME_PTR16   .data $0000 ; Pointer to macro name (for show_captured_macros)
+DEBUG_FLAG      .data $00    ; Non-zero if debug output enabled
+PASS_1_FWDREF16 .data $0000  ; Forward ref pointer after pass 1
+SMALL_HEAP_FLAG .data $00    ; Non-zero if small_heap argument was passed
+SHOW_MACROS     .data $00    ; Non-zero if captured macro definitions should be printed
+MACRO_PTR16     .data $0000  ; Pointer to macro name (for show_captured_macros)
   .endif
 
   .code
@@ -1574,7 +1574,7 @@ process_macro
   ; MEMP16 points to location at which to store the value
   ; TABP16 points to the macro name on heap
   .ifdef enable_debug
-  CP16 TABP16 MACRO_NAME_PTR16
+  CP16 TABP16 MACRO_PTR16
   .endif
   ; Store MODE_MACRO sentinel
   LDY #$00
@@ -1689,8 +1689,8 @@ expand_macro
   ; Parse argument expression (using PARENT's scope for lookups)
   JSR parse_expression
   ; MACRO_ARG_BUF bounds check
-  ; Check if X < MACRO_ARG_BUF_LIMIT-MACRO_ARG_BUF-.ARG_SIZE+$01 (room for one more entry)
-  CPX #MACRO_ARG_BUF_LIMIT-MACRO_ARG_BUF-.ARG_SIZE+$01
+  ; Check if X < MACRO_ARG_LIMIT-MACRO_ARG_BUF-.ARG_SIZE+$01 (room for one more entry)
+  CPX #MACRO_ARG_LIMIT-MACRO_ARG_BUF-.ARG_SIZE+$01
   BCC .arg_ok         ; X < limit: safe
 .arg_overflow
   JMP err_too_many_arguments
@@ -2300,7 +2300,7 @@ show_macros
   ; Output "Macro: "
   SHOW_MESSAGEI .macro_prefix
   ; Output macro name
-  CP16 MACRO_NAME_PTR16 TABP16
+  CP16 MACRO_PTR16 TABP16
   JSR show_message
   ; Skip past the trailing null and MODE_MACRO byte
   INY
