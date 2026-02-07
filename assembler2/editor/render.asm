@@ -83,28 +83,7 @@ render_screen
   LDX RENDER_LINE16+$01
   JSR buf_get_line_ptr
 
-  ; Print characters up to SCREEN_COLS-1 or newline
-  LDA #$00
-  STA RENDER_COL
-  LDY #$00
-.char_loop
-  LDA (BUF_PTR16),Y
-  CMP #$0A
-  BEQ .line_done
-  CMP #$20
-  BCC .skip_control   ; Don't print control chars
-  JSR write_b
-  JMP .char_next
-.skip_control
-  LDA #' '           ; Replace control chars with space
-  JSR write_b
-.char_next
-  INY
-  INC RENDER_COL
-  LDA RENDER_COL
-  CMP SCREEN_COLS
-  BCC .char_loop     ; Continue if column < screen width
-.line_done
+  JSR render_line_chars
   JMP .clear_eol
 
 .past_eof
@@ -245,33 +224,38 @@ render_current_line
   LDX FILE_LINE16+$01
   JSR buf_get_line_ptr
 
-  ; Print characters
-  LDA #$00
-  STA RENDER_COL
-  LDY #$00
-.cl_char_loop
-  LDA (BUF_PTR16),Y
-  CMP #$0A
-  BEQ .cl_done
-  CMP #$20
-  BCC .cl_skip_ctrl
-  JSR write_b
-  JMP .cl_next
-.cl_skip_ctrl
-  LDA #' '
-  JSR write_b
-.cl_next
-  INY
-  INC RENDER_COL
-  LDA RENDER_COL
-  CMP SCREEN_COLS
-  BCC .cl_char_loop
-.cl_done
+  JSR render_line_chars
   JSR ansi_clear_line
 
   JSR render_position_cursor
   JSR ansi_cursor_show
   JSR con_flush
+  RTS
+
+; Print line characters from BUF_PTR16 up to SCREEN_COLS or newline
+; Replaces control chars with spaces. Clobbers A, Y.
+render_line_chars
+  LDA #$00
+  STA RENDER_COL
+  LDY #$00
+.rlc_loop
+  LDA (BUF_PTR16),Y
+  CMP #$0A
+  BEQ .rlc_done
+  CMP #$20
+  BCC .rlc_ctrl
+  JSR write_b
+  JMP .rlc_next
+.rlc_ctrl
+  LDA #' '
+  JSR write_b
+.rlc_next
+  INY
+  INC RENDER_COL
+  LDA RENDER_COL
+  CMP SCREEN_COLS
+  BCC .rlc_loop
+.rlc_done
   RTS
 
 ; === String constants ===
