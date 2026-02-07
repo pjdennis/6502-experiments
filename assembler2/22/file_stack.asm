@@ -2,6 +2,7 @@
 ;   FILE_STACK     - 1 past the highest address from which the stack grows down
 ;   FS_FILENAME    - filename buffer
 ;   FS_ERR_NO_FILE - error handler for read_char when no file is open
+;   err_file_not_found - error handler for when open returns 0
 ;   open, close, read - file I/O functions
 
 ; The file stack grows downwards. Unified frame format (from low to high address):
@@ -149,6 +150,11 @@ push_file_stack
   LDA #<FS_FILENAME
   LDX #>FS_FILENAME
   JSR open
+  CMP #$00
+  BNE .file_ok
+  STA FS_CURR_FILE       ; Store 0 so traceback won't close parent's handle
+  JMP err_file_not_found
+.file_ok
   STA FS_CURR_FILE
   PLA
   TAX                   ; Restore X
@@ -197,8 +203,9 @@ pop_source
   .endif
   JMP .restore_prev
 .was_file_source
-  ; curr_type=0: close the current file
+  ; curr_type=0: close the current file (if open)
   LDA FS_CURR_FILE
+  BEQ .restore_prev     ; Handle 0 = no file to close
   JSR close
 .restore_prev
   ; Read prev_type
