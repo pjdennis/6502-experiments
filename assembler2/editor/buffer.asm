@@ -35,7 +35,7 @@ buf_init
   SET16 TEXT_BUF BUF_END16
   ; Add a newline to have at least one line
   LDY #$00
-  LDA #$0A
+  LDA #'\n'
   STA (BUF_END16),Y
   INC16 BUF_END16
   ; Build line table
@@ -84,20 +84,20 @@ buf_load_file
   ; Check if last byte is newline
   LDY #$00
   LDA (BUF_PTR16),Y
-  CMP #$0A
+  CMP #'\n'
   BEQ .has_newline
   ; Need to add a newline
   LDA BUF_TEMP
   BNE .overwrite_last
   ; Not truncated - append trailing newline
-  LDA #$0A
+  LDA #'\n'
   LDY #$00
   STA (BUF_END16),Y
   INC16 BUF_END16
   JMP .has_newline
 .overwrite_last
   ; Truncated - overwrite last byte to stay within buffer limit
-  LDA #$0A
+  LDA #'\n'
   LDY #$00
   STA (BUF_PTR16),Y
 .has_newline
@@ -111,7 +111,7 @@ buf_load_file
   BNE .not_empty
   ; Empty buffer
   LDY #$00
-  LDA #$0A
+  LDA #'\n'
   STA (BUF_END16),Y
   INC16 BUF_END16
 .not_empty
@@ -192,7 +192,7 @@ buf_get_line_len
   LDY #$00
 .len_loop
   LDA (BUF_PTR16),Y
-  CMP #$0A
+  CMP #'\n'
   BEQ .len_done
   INY
   BNE .len_loop
@@ -322,7 +322,7 @@ buf_delete_char
 ; Insert newline at BUF_PTR16 (splits current line)
 ; Returns carry set = buffer full, carry clear = success
 buf_insert_newline
-  LDA #$0A
+  LDA #'\n'
   JSR buf_insert_char
   BCS .full
   JSR buf_rebuild_lines
@@ -350,7 +350,7 @@ buf_delete_line
   LDY #$00
 .find_newline
   LDA (BUF_PTR16),Y
-  CMP #$0A
+  CMP #'\n'
   BEQ .found_newline
   INY
   BNE .find_newline
@@ -402,7 +402,7 @@ buf_delete_line
   CMP #>TEXT_BUF
   BNE .del_not_empty
   LDY #$00
-  LDA #$0A
+  LDA #'\n'
   STA (BUF_END16),Y
   INC16 BUF_END16
 .del_not_empty
@@ -441,7 +441,7 @@ buf_rebuild_lines
   LDA (BUF_PTR16),Y
   INC16 BUF_PTR16
 
-  CMP #$0A
+  CMP #'\n'
   BNE .scan_loop
 
   ; Found a newline - check if there's more text after it

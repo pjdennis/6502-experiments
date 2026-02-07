@@ -120,6 +120,7 @@ read_char          = file_stack_read_char
 CURR_CHAR          = FS_CURR_CHAR
 CURR_LINE16        = FS_CURR_LINE16
   .include errors.asm
+  .include from_decimal.asm
 
 
 ; ============================================================================
@@ -479,6 +480,12 @@ parse_term
   BEQ .char_literal
   CMP #'.'
   BEQ .local_ref
+  ; Check for decimal digit
+  CMP #'0'
+  BCC .not_decimal       ; < '0'
+  CMP #'9'+$01
+  BCC .decimal           ; >= '0' and <= '9'
+.not_decimal
   ; Global label path
   JSR compare_end_of_token
   BCS .token_present
@@ -534,6 +541,10 @@ parse_term
   JSR parse_char_literal
   ; Result in OPERAND16
   CLC                  ; Signal 1-byte value (character)
+  RTS
+.decimal
+  JSR from_decimal     ; Result in FROM_DECIMAL16, carry set per value size
+  CP16 FROM_DECIMAL16 OPERAND16 ; Copy result; LDA/STA preserves carry
   RTS
 
 

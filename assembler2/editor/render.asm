@@ -232,9 +232,9 @@ render_line_chars
   LDY #$00
 .rlc_loop
   LDA (BUF_PTR16),Y
-  CMP #$0A
+  CMP #'\n'
   BEQ .rlc_done
-  CMP #$20
+  CMP #' '
   BCC .rlc_ctrl
   JSR write_b
   JMP .rlc_next

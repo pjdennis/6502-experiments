@@ -41,7 +41,7 @@ command_handle
   BEQ .cmd_backspace
 
   ; Printable character?
-  CMP #$20
+  CMP #' '
   BCC .cmd_read_loop
   CMP #$7F
   BCS .cmd_read_loop
