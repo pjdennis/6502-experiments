@@ -2729,3 +2729,24 @@ EXPECT_STDERR:
 Error 1 in macro HELPER at line 1: Label not found
   expanded from tests/include/error_in_macro.asm:5
   included from {{MAIN_FILE}}:2
+
+---
+NAME: assignment_trailing_expression
+DESCRIPTION: Spaces in assignment expression should not silently ignore trailing content
+INPUT:
+ 1: * = $0200
+ 2: a = $10
+ 3: x = a + $20
+EXPECT_ERROR: 10
+EXPECT_LINE: 3
+EXPECT_MSG: Unexpected text after operand
+
+---
+NAME: pc_assignment_trailing_expression
+DESCRIPTION: Spaces in PC assignment expression should not silently ignore trailing content
+INPUT:
+ 1: val = $0200
+ 2: * = val + $10
+EXPECT_ERROR: 10
+EXPECT_LINE: 2
+EXPECT_MSG: Unexpected text after operand

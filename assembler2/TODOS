@@ -17,7 +17,7 @@
 - [ ] `.repeat N` / `.endrepeat` - unroll loops at assembly time
 - [ ] Anonymous labels (`+`, `-`) - for short forward/backward branches without naming
 - [ ] Enhance `define:` to support optional values - e.g. `define:LABEL=$1234`
-- [ ] Should not silently accept expressions with spaces and ignore values - `x = a + b` currently means `x = a`
+- [X] Should not silently accept expressions with spaces and ignore values - `x = a + b` currently means `x = a`
 - [ ] Improve error message when parsing values - currently says "invalid opcode" which is misleading for `.data` or assignments
 
 ## Code Quality
@@ -30,7 +30,7 @@
 - [ ] Cleanup `write_label_and_modes` in instgen
 
 ## Testing & Quality
-- [X] Test suite - Automated tests for assembler features and edge cases (286 tests)
+- [X] Test suite - Automated tests for assembler features and edge cases (288 tests)
 - [ ] Regression testing - Compare outputs against known-good binaries automatically
 
 ## Tooling

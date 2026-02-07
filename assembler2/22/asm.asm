@@ -853,13 +853,14 @@ capture_label
   JMP err_pc_value_expected
 .pc_value_present
   JSR read_value
-  JSR skip_rest_of_line
+  JSR check_for_end_of_line
+  BCC .err_unexpected_text
   JSR update_pc
   SEC                       ; Indicate line is fully processed
   RTS
 .has_equals_2
   JSR read_value
-  JMP .skip_and_return_processed
+  JMP .return_processed
 .pass_1
   ; LABEL_TYPE already set
   ; Add key to hash table first (before read_value may overwrite TOKEN)
@@ -884,15 +885,15 @@ capture_label
 .has_equals
   JSR read_value            ; Read the value after the equals, current char in CURR_CHAR
   JSR store_hash_value
-  JMP .skip_and_return_processed
+.return_processed
+  JSR check_for_end_of_line
+  BCC .err_unexpected_text  ; Unexpected content after value
+  ; C=1 already set by check_for_end_of_line (line fully processed)
+  RTS
 .skip_spaces_and_return_processed_flag
   JMP check_for_end_of_line ; Tail call - returns with C set if at end of line
-.skip_and_return_processed
-  JSR skip_rest_of_line
-  SEC                       ; Indicate line is fully processed
-  ; No need to retain current char as caller
-  ; goes straight to next line
-  RTS
+.err_unexpected_text
+  JMP err_unexpected_text
 .duplicate_label
   JMP err_duplicate_label
 
