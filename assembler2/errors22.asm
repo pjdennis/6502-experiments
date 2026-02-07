@@ -5,7 +5,9 @@
 ;   TABP16               - zero page location for table pointer
 ;   CURR_LINE16          - zero page location for current line number
 ;   FS_P16               - zero page locations for file stack pointer
+;   FS_SRC_TYPE          - zero page location for source type (0=file, 1=memory)
 ;   file_stack_empty     - function to check if file stack is empty
+;   pop_file_stack       - function to pop file stack entry
 ;   write_d              - function to write character to stderr
 ;   exit                 - function to exit program
 
