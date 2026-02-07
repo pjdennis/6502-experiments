@@ -84,11 +84,16 @@ insert_char
 
   LDA BUF_TEMP
   JSR buf_insert_char
+  BCS .insert_char_full
   JSR buf_rebuild_lines
 
   INC CURSOR_COL
   LDA #$FF
   STA MODIFIED
+  RTS
+.insert_char_full
+  SET16 str_buffer_full STR_PTR16
+  JSR show_status_message
   RTS
 
 ; Insert newline at cursor (split line)
@@ -105,6 +110,7 @@ insert_newline
   STA BUF_PTR16+$01
 
   JSR buf_insert_newline
+  BCS .insert_newline_full
 
   ; Move to start of next line
   INC16 FILE_LINE16
@@ -124,6 +130,10 @@ insert_newline
 .done
   LDA #$FF
   STA MODIFIED
+  RTS
+.insert_newline_full
+  SET16 str_buffer_full STR_PTR16
+  JSR show_status_message
   RTS
 
 ; Handle backspace in insert mode

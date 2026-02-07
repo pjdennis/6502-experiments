@@ -70,6 +70,11 @@ normal_handle_key
   JMP normal_g_key
 .not_g
 
+  ; Skip editing keys in read-only mode
+  LDA READONLY
+  BNE .readonly_skip
+  LDA BUF_TEMP         ; Reload key
+
   ; Editing keys
   CMP #'x'
   BNE .not_x
@@ -103,6 +108,9 @@ normal_handle_key
   BNE .not_O
   JMP normal_open_above
 .not_O
+
+.readonly_skip
+  LDA BUF_TEMP         ; Reload key
 
   ; Command mode
   CMP #':'
@@ -412,6 +420,7 @@ normal_open_below
 
   LDA #$0A
   JSR buf_insert_char
+  BCS .open_below_full
   JSR buf_rebuild_lines
 
   INC16 FILE_LINE16
@@ -435,6 +444,12 @@ normal_open_below
   LDA #$00
   STA LAST_KEY
   RTS
+.open_below_full
+  SET16 str_buffer_full STR_PTR16
+  JSR show_status_message
+  LDA #$00
+  STA LAST_KEY
+  RTS
 
 normal_open_above
   LDA FILE_LINE16
@@ -443,6 +458,7 @@ normal_open_above
 
   LDA #$0A
   JSR buf_insert_char
+  BCS .open_above_full
   JSR buf_rebuild_lines
 
   LDA #$00
@@ -451,6 +467,12 @@ normal_open_above
   STA MODE
   LDA #$FF
   STA MODIFIED
+  LDA #$00
+  STA LAST_KEY
+  RTS
+.open_above_full
+  SET16 str_buffer_full STR_PTR16
+  JSR show_status_message
   LDA #$00
   STA LAST_KEY
   RTS

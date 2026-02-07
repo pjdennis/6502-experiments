@@ -36,11 +36,12 @@ class EditorTestRunner:
         self.assembler = base_dir / "22" / "out" / "asm.out"
         self.editor_asm = base_dir / "editor" / "editor.asm"
         self.editor_bin = base_dir / "editor" / "out" / "editor.out"
+        self.editor_debug_bin = base_dir / "editor" / "out" / "editor_debug.out"
         self.passed = 0
         self.failed = 0
 
-    def build_editor(self):
-        """Assemble the editor if needed."""
+    def _assemble_editor(self, output_bin, extra_args=None):
+        """Assemble the editor with optional extra assembler arguments."""
         if not self.emulator.exists():
             print(f"Error: Emulator not found at {self.emulator}")
             return False
@@ -48,19 +49,27 @@ class EditorTestRunner:
             print(f"Error: Assembler not found at {self.assembler}")
             return False
 
-        # Always rebuild to get latest
-        self.editor_bin.parent.mkdir(exist_ok=True)
-        result = subprocess.run(
-            [str(self.emulator), str(self.assembler), "2000",
-             "/dev/null", "/dev/null",
-             str(self.editor_asm), str(self.editor_bin)],
-            capture_output=True, text=True
-        )
+        output_bin.parent.mkdir(exist_ok=True)
+        cmd = [str(self.emulator), str(self.assembler), "2000",
+               "/dev/null", "/dev/null",
+               str(self.editor_asm), str(output_bin)]
+        if extra_args:
+            cmd.extend(extra_args)
+        result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
-            print(f"Error: Failed to assemble editor:")
+            print(f"Error: Failed to assemble editor ({output_bin.name}):")
             print(result.stderr)
             return False
         return True
+
+    def build_editor(self):
+        """Assemble the editor."""
+        return self._assemble_editor(self.editor_bin)
+
+    def build_debug_editor(self):
+        """Assemble the debug editor (with enable_debug defined)."""
+        return self._assemble_editor(self.editor_debug_bin,
+                                     ["define:enable_debug"])
 
     def run_editor(self, input_file: str, keys: bytes, tmpdir: Path) -> tuple:
         """Run the editor with given keystroke sequence.
@@ -192,6 +201,77 @@ class EditorTestRunner:
             try:
                 exit_code, saved, ansi = self.run_editor(
                     str(edit_file), keys, tmpdir
+                )
+            except subprocess.TimeoutExpired:
+                self._fail(name, "Timed out (infinite loop?)")
+                return
+            except Exception as e:
+                self._fail(name, f"Error: {e}")
+                return
+
+            if exit_code != expect_exit:
+                self._fail(name, f"Expected exit code {expect_exit}, got {exit_code}")
+                return
+
+            if expected_content is not None:
+                if saved != expected_content:
+                    self._fail(name,
+                        f"Content mismatch:\n"
+                        f"  Expected: {expected_content!r}\n"
+                        f"  Actual:   {saved!r}")
+                    return
+
+            if expect_unmodified:
+                if saved != initial_content:
+                    self._fail(name, f"File was modified when it shouldn't have been")
+                    return
+
+            self._pass(name)
+
+    def run_editor_debug(self, input_file: str, keys: bytes,
+                         tmpdir: Path, extra_args: list = None) -> tuple:
+        """Run the debug editor with given keystroke sequence and extra args.
+
+        Returns (exit_code, saved_content, ansi_output).
+        """
+        keys_file = tmpdir / "keys.bin"
+        output_file = tmpdir / "output.txt"
+        keys_file.write_bytes(keys)
+
+        cmd = [str(self.emulator), str(self.editor_debug_bin), "0400",
+               str(keys_file), str(output_file), input_file]
+        if extra_args:
+            cmd.extend(extra_args)
+
+        result = subprocess.run(
+            cmd, capture_output=True, timeout=10
+        )
+
+        saved = ""
+        if Path(input_file).exists():
+            saved = Path(input_file).read_text()
+
+        ansi = output_file.read_text() if output_file.exists() else ""
+
+        return result.returncode, saved, ansi
+
+    def run_test_debug(self, name: str, initial_content: str, keys: bytes,
+                       extra_args: list = None,
+                       expected_content: str = None, expect_exit: int = 0,
+                       expect_unmodified: bool = False):
+        """Run a test using the debug editor with extra arguments."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            edit_file = tmpdir / "test.txt"
+
+            if initial_content is not None:
+                edit_file.write_text(initial_content)
+            else:
+                edit_file.write_text("")
+
+            try:
+                exit_code, saved, ansi = self.run_editor_debug(
+                    str(edit_file), keys, tmpdir, extra_args
                 )
             except subprocess.TimeoutExpired:
                 self._fail(name, "Timed out (infinite loop?)")
@@ -600,6 +680,104 @@ class EditorTestRunner:
             b"iHello\x1b:wq\r",
             expected_content="Hello\n"
         )
+
+        print()
+        print("Bounds checking (debug build):")
+        print()
+
+        if not self.build_debug_editor():
+            print("  Skipping bounds checking tests (debug build failed)")
+        else:
+            # Read-only mode: file exceeds buffer, editing keys blocked
+            # bufsize:21 limits buffer to $2000-$20FF (256 bytes)
+            # File has 300 bytes so it will be truncated
+            # Truncation warning consumes one keypress (the 'x')
+            # Then 'x' should be ignored (readonly), :q exits
+            large_content = "A" * 299 + "\n"  # 300 bytes > 256
+            self.run_test_debug(
+                "Truncated file enters read-only mode",
+                large_content,
+                # 'x' dismissed truncation warning, 'x' ignored (RO), :q quits
+                b"xx:q\r",
+                extra_args=["bufsize:21"],
+                expect_unmodified=True
+            )
+
+            # Read-only mode: :w is blocked
+            # Truncation warning consumes 'x', then :w shows RO message,
+            # 'x' dismisses that, :q! quits
+            self.run_test_debug(
+                "Read-only mode blocks :w",
+                large_content,
+                b"x:w\rx:q!\r",
+                extra_args=["bufsize:21"],
+                expect_unmodified=True
+            )
+
+            # Read-only mode: :wq is blocked
+            self.run_test_debug(
+                "Read-only mode blocks :wq",
+                large_content,
+                b"x:wq\rx:q!\r",
+                extra_args=["bufsize:21"],
+                expect_unmodified=True
+            )
+
+            # Read-only mode: :q exits cleanly
+            self.run_test_debug(
+                "Read-only mode allows :q",
+                large_content,
+                b"x:q\r",
+                extra_args=["bufsize:21"],
+                expect_unmodified=True
+            )
+
+            # Read-only mode: i key is blocked (no insert mode)
+            self.run_test_debug(
+                "Read-only mode blocks i",
+                large_content,
+                b"x:q\r",   # 'x' dismisses warning, :q quits
+                extra_args=["bufsize:21"],
+                expect_unmodified=True
+            )
+
+            # Buffer full during editing: insert char fails
+            # bufsize:21 = 256 bytes buffer. File with 250 bytes leaves ~6 free
+            # After loading, type characters until full
+            near_full = "B" * 249 + "\n"  # 250 bytes, ~6 bytes free
+            self.run_test_debug(
+                "Buffer full refuses insert char",
+                near_full,
+                # Enter insert mode, type 7 chars (6 succeed, 7th triggers full)
+                # 'z' dismisses "Buffer full" message
+                # ESC back to normal, :q! quits
+                b"iAAAAAA" + b"A" + b"z\x1b:q!\r",
+                extra_args=["bufsize:21"],
+                expect_unmodified=True
+            )
+
+            # Buffer full during editing: newline insert fails
+            # File with 254 bytes leaves ~2 free
+            almost_full = "C" * 253 + "\n"  # 254 bytes, ~2 bytes free
+            self.run_test_debug(
+                "Buffer full refuses newline insert",
+                almost_full,
+                # Insert mode, type 'A' (succeeds, 1 byte free),
+                # then Enter (needs 1 byte for newline - should succeed or fail)
+                # Actually with 2 bytes free: 'A' uses 1, Enter uses 1 = exactly full
+                # Try one more char to trigger full
+                b"iAA" + b"z\x1b:q!\r",
+                extra_args=["bufsize:21"],
+                expect_unmodified=True
+            )
+
+            # Normal editing works with debug build (no bufsize override)
+            self.run_test_debug(
+                "Debug build normal editing works",
+                "Hello\n",
+                b"x:wq\r",
+                expected_content="ello\n"
+            )
 
         print()
         print("=" * 60)

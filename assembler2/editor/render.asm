@@ -19,6 +19,7 @@ SCREEN_COLS   .data $00   ; Terminal width
 FILE_LINE16   .data $0000 ; Current file line (0-based, = VIEW_TOP16 + CURSOR_ROW)
 MODE          .data $00   ; Current mode: MODE_NORMAL, MODE_INSERT, MODE_COMMAND
 MODIFIED      .data $00   ; File modified flag ($00 = no, $FF = yes)
+READONLY      .data $00   ; Read-only mode ($00 = no, $FF = yes)
 RENDER_ROW    .data $00   ; Current row being rendered
 RENDER_LINE16 .data $0000 ; Current file line being rendered
 RENDER_COL    .data $00   ; Column counter during rendering
@@ -149,6 +150,21 @@ render_status_line
   CPY #$20         ; Cap filename at 32 chars
   BCC .fname_loop
 .fname_done
+
+  ; Print read-only indicator
+  LDA READONLY
+  BEQ .not_readonly
+  LDA #' '
+  JSR write_b
+  LDA #'['
+  JSR write_b
+  LDA #'R'
+  JSR write_b
+  LDA #'O'
+  JSR write_b
+  LDA #']'
+  JSR write_b
+.not_readonly
 
   ; Print modified flag
   LDA MODIFIED

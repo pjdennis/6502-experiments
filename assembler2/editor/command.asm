@@ -142,6 +142,12 @@ command_parse
   RTS
 
 .check_w
+  LDA READONLY
+  BEQ .not_readonly_w
+  SET16 str_readonly STR_PTR16
+  JSR show_status_message
+  RTS
+.not_readonly_w
   LDA CMD_BUF+$01
   BEQ .do_write       ; Just ":w"
   CMP #'q'
@@ -344,7 +350,19 @@ command_write_file
   ; Brief pause to show message - wait for next redraw
   RTS
 
+; Show a status message and wait for keypress
+; STR_PTR16 must be set to the message string before calling
+show_status_message
+  JSR command_show_prompt
+  JSR write_string
+  JSR con_flush
+  JSR input_read_byte
+  RTS
+
 ; === String constants ===
 str_unknown_cmd .data "Unknown command" $00
 str_no_write    .data "No write since last change (use :q! to override)" $00
 str_written     .data "written" $00
+str_buffer_full .data "Buffer full" $00
+str_readonly    .data "Read-only (file truncated)" $00
+str_truncated   .data "WARNING: File too large - read only" $00

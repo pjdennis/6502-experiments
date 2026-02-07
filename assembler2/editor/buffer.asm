@@ -25,6 +25,7 @@ BUF_DST16     .data $0000 ; Destination pointer for block moves
 BUF_LEN16     .data $0000 ; Length/count for block moves
 BUF_TEMP      .data $00   ; Temp byte for buffer operations
 FILE_HANDLE   .data $00   ; File handle for load/save
+BUF_LIMIT     .data $00   ; High byte of buffer limit (default >TEXT_LIMIT)
 
   .code
 
@@ -44,9 +45,12 @@ buf_init
 ; Load file into buffer
 ; File handle in A (already opened)
 ; On return: buffer contains file contents, line table built
+; Carry set = file was truncated, carry clear = fully loaded
 buf_load_file
   STA FILE_HANDLE
   SET16 TEXT_BUF BUF_END16
+  LDA #$00
+  STA BUF_TEMP            ; Clear truncation flag
 
 .read_loop
   LDA FILE_HANDLE
@@ -58,9 +62,11 @@ buf_load_file
   INC16 BUF_END16
   ; Check for buffer overflow
   LDA BUF_END16+$01
-  CMP #>TEXT_LIMIT
+  CMP BUF_LIMIT
   BCC .read_loop
-  ; Buffer full - stop reading
+  ; Buffer full - file was truncated
+  LDA #$FF
+  STA BUF_TEMP
   JMP .read_done
 
 .read_loop_2
@@ -102,6 +108,12 @@ buf_load_file
 .not_empty
 
   JSR buf_rebuild_lines
+  LDA BUF_TEMP
+  BEQ .return_ok
+  SEC                    ; Truncated
+  RTS
+.return_ok
+  CLC                    ; Not truncated
   RTS
 
 ; Save buffer to file
@@ -186,8 +198,16 @@ buf_get_line_len
 ; A = character to insert
 ; BUF_PTR16 = position to insert at
 ; Shifts all following bytes right by 1
+; Returns carry set = buffer full, carry clear = success
 buf_insert_char
   STA BUF_TEMP
+  ; Check if buffer is at capacity
+  LDA BUF_END16+$01
+  CMP BUF_LIMIT
+  BCC .has_room
+  SEC              ; Buffer full
+  RTS
+.has_room
 
   ; Move bytes from BUF_END16-1 down to BUF_PTR16, shifting right by 1
   ; Source = BUF_END16-1, dest = BUF_END16, count = BUF_END16-BUF_PTR16
@@ -242,6 +262,7 @@ buf_insert_char
   ; Increment buffer end
   INC16 BUF_END16
 
+  CLC              ; Success
   RTS
 
 ; Delete character at BUF_PTR16
@@ -290,10 +311,14 @@ buf_delete_char
   RTS
 
 ; Insert newline at BUF_PTR16 (splits current line)
+; Returns carry set = buffer full, carry clear = success
 buf_insert_newline
   LDA #$0A
   JSR buf_insert_char
+  BCS .full
   JSR buf_rebuild_lines
+  CLC
+.full
   RTS
 
 ; Delete entire line N (N in A/X, low/high)
