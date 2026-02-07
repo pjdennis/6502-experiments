@@ -126,20 +126,8 @@ command_parse
   BCC .goto_line
 
 .unknown
-  ; Show error message
-  JSR command_show_prompt
-  LDX #$00
-.print_unknown
-  LDA str_unknown_cmd,X
-  BEQ .unknown_done
-  JSR write_b
-  INX
-  BNE .print_unknown
-.unknown_done
-  JSR con_flush
-  ; Wait for a key then return
-  JSR input_read_byte
-  RTS
+  SET16 str_unknown_cmd STR_PTR16
+  JMP show_status_message
 
 .check_w
   LDA READONLY
@@ -179,18 +167,8 @@ command_parse
   LDA MODIFIED
   BEQ .quit_ok
   ; Show warning
-  JSR command_show_prompt
-  LDX #$00
-.print_warn
-  LDA str_no_write,X
-  BEQ .warn_done
-  JSR write_b
-  INX
-  BNE .print_warn
-.warn_done
-  JSR con_flush
-  JSR input_read_byte
-  RTS
+  SET16 str_no_write STR_PTR16
+  JMP show_status_message
 
 .quit_ok
   LDA #$FF
