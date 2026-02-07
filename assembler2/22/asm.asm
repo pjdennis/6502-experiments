@@ -1801,20 +1801,25 @@ expand_macro
   JMP err_too_many_arguments
 
 
-; On entry HEX16 and TABP16 point to the lhs and rhs strings to compare
-; On exit Z set if rhs starts with lhs
+; On entry HEX16 points to the token to match
+;          TABP16 points to the string to match against
+; On exit C clear if token matches
 ;         X is preserved
 ;         A, Y are not preserved 
-string_starts_with
+match_token
   LDY #$FF
 .loop
   INY
   LDA (HEX16),Y
-  BEQ .done
+  BEQ .match
   CMP (TABP16),Y
   BEQ .loop
-.done
+; not match - return with carry set
+  SEC
   RTS
+.match
+  LDA (TABP16),Y
+  JMP compare_end_of_token ; Tail call - returns with C = 0 if end of token, i.e. match found
 
 
 ; Capture a line during macro definition
@@ -1942,12 +1947,8 @@ capture_macro_line
   ADCA16 TABP16 TABP16     ; Advance TABP16 to point to the start of the directive
   ; Check for .endmacro first (the usual case)
   SET16 directive_endmacro HEX16
-  JSR string_starts_with
-  BNE .not_endmacro
-  ; Matched "endmacro" - verify current char is not a token character
-  LDA (TABP16),Y
-  JSR compare_end_of_token
-  BCS .not_endmacro        ; Not end of token - keep as macro body
+  JSR match_token
+  BCS .not_endmacro        ; Not a match - keep as macro body
   ; Found .endmacro. Restore heap to undo the copy
   CP16 MACRO_DEF_PTR16 MEMP16
   ; At end of macro definition. Write $00 terminator to body
@@ -1971,12 +1972,8 @@ capture_macro_line
 .not_endmacro
   ; Not .endmacro - check if it's .macro (nested definition)
   SET16 directive_macro HEX16
-  JSR string_starts_with
-  BNE .keep_line
-  ; Matched "macro" - verify current char is not a token character
-  LDA (TABP16),Y
-  JSR compare_end_of_token
-  BCS .keep_line           ; Not end of token, not .macro
+  JSR match_token
+  BCS .keep_line           ; Not a match, not .macro
   ; Found nested macro definition - error
   JMP err_nested_macro_definition
 .keep_line
