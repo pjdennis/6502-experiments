@@ -85,6 +85,64 @@ class EditorTestRunner:
 
         return result.returncode, saved, ansi
 
+    def run_editor_console(self, input_file: str, keys: bytes, tmpdir: Path) -> tuple:
+        """Run the editor with console-mode arg layout.
+
+        Uses --console as input_file arg, with the file to edit as the
+        first program argument (no output_file parameter).
+        Stdin is redirected from a keys file to simulate keystrokes.
+
+        Returns (exit_code, saved_content).
+        """
+        keys_file = tmpdir / "keys.bin"
+        keys_file.write_bytes(keys)
+
+        with open(keys_file, "rb") as stdin_file:
+            result = subprocess.run(
+                [str(self.emulator), str(self.editor_bin), "0400",
+                 "--console", input_file],
+                stdin=stdin_file, capture_output=True, timeout=10
+            )
+
+        saved = ""
+        if Path(input_file).exists():
+            saved = Path(input_file).read_text()
+
+        return result.returncode, saved
+
+    def run_test_console(self, name: str, initial_content: str, keys: bytes,
+                         expected_content: str = None, expect_exit: int = 0):
+        """Run an editor test using console-mode argument layout."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            edit_file = tmpdir / "test.txt"
+            edit_file.write_text(initial_content)
+
+            try:
+                exit_code, saved = self.run_editor_console(
+                    str(edit_file), keys, tmpdir
+                )
+            except subprocess.TimeoutExpired:
+                self._fail(name, "Timed out (infinite loop?)")
+                return
+            except Exception as e:
+                self._fail(name, f"Error: {e}")
+                return
+
+            if exit_code != expect_exit:
+                self._fail(name, f"Expected exit code {expect_exit}, got {exit_code}")
+                return
+
+            if expected_content is not None:
+                if saved != expected_content:
+                    self._fail(name,
+                        f"Content mismatch:\n"
+                        f"  Expected: {expected_content!r}\n"
+                        f"  Actual:   {saved!r}")
+                    return
+
+            self._pass(name)
+
     def run_test(self, name: str, initial_content: str, keys: bytes,
                  expected_content: str = None, expect_exit: int = 0,
                  expect_unmodified: bool = False):
@@ -473,6 +531,22 @@ class EditorTestRunner:
             "AB\n",
             b"li\r\r\x1b:wq\r",
             expected_content="A\n\nB\n"
+        )
+
+        print()
+        print("Console mode argument handling:")
+        print()
+
+        # Test 41: Console mode saves to correct filename
+        # In console mode, the emulator should not require an output_file
+        # parameter. The file to edit is passed as a program argument.
+        # We delete a char and save, to verify the change was written
+        # to the correct file (not "[No Name]").
+        self.run_test_console(
+            "Console mode :wq saves to correct file",
+            "Hello\n",
+            b"x:wq\r",
+            expected_content="ello\n"
         )
 
         print()

@@ -1259,19 +1259,21 @@ void show_commandline(int argc, char**argv) {
 #define inst_ldx 0xae
 
 int main(int argc, char **argv) {
-    if (argc < 5) {
+    if (argc >= 4 && strcmp(argv[3], "--console") == 0) {
+        console_mode = 1;
+    }
+
+    int min_args = console_mode ? 4 : 5;
+    if (argc < min_args) {
         fprintf(stderr, "usage emulator <code file> <hex load address> <input file> <output file> [<arguments>]\n");
+        fprintf(stderr, "       emulator <code file> <hex load address> --console [<arguments>]\n");
         return 1;
     }
 
     char* code_filename = argv[1];
     long load_address = strtol(argv[2], NULL, 16);
     char* input_filename = argv[3];
-    char* output_filename = argv[4];
-
-    if (strcmp(input_filename, "--console") == 0) {
-        console_mode = 1;
-    }
+    char* output_filename = console_mode ? NULL : argv[4];
 
     for (size_t x = 0; x != 0x10001; x++) {
         memory[x] = 0;
@@ -1441,11 +1443,12 @@ int main(int argc, char **argv) {
 
     files_init(input_file_ptr);
 
-    arg_count = argc - 5;
+    int arg_base = console_mode ? 4 : 5;
+    arg_count = argc - arg_base;
     arg_addresses = malloc(arg_count * sizeof(uint16_t));
     for (int arg = 0; arg != arg_count; arg++) {
         arg_addresses[arg] = p;
-        const char* s = argv[5 + arg];
+        const char* s = argv[arg_base + arg];
         while (memory[p++] = *s++)
             ;
     }
