@@ -405,7 +405,7 @@ class TestRunner:
         if test.expect_line and actual_line != test.expect_line:
             details.append(f"Line: expected {test.expect_line}, got {actual_line}")
 
-        if test.expect_msg and test.expect_msg not in actual_msg:
+        if test.expect_msg and test.expect_msg != actual_msg:
             details.append(f"Message: expected '{test.expect_msg}', got '{actual_msg}'")
 
         # Check full stderr if specified

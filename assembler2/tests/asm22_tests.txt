@@ -9,7 +9,7 @@
 #   EXPECT_FWDREF: expected forward reference count (optional)
 #   EXPECT_ERROR: expected error code (negative test - first line only)
 #   EXPECT_LINE: expected line number for error
-#   EXPECT_MSG: expected error message substring
+#   EXPECT_MSG: expected error message (exact match)
 #   EXPECT_STDERR: multi-line expected stderr output (for traceback tests)
 
 # ============================================================================
@@ -2553,7 +2553,7 @@ INPUT:
 11:   .endif
 EXPECT_ERROR: 21
 EXPECT_LINE: 10
-EXPECT_MSG: Too many .ifdef
+EXPECT_MSG: Too many .ifdef directives
 
 ---
 NAME: local_macro_scope_independence
