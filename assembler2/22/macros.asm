@@ -14,6 +14,17 @@
   .endmacro
 
 
+; DEC16 ptr - Decrement 16-bit value at ptr/ptr+$01
+; Preserves X, Y
+  .macro DEC16 ptr
+  LDA ptr
+  BNE .skip
+  DEC ptr+$01
+.skip
+  DEC ptr
+  .endmacro
+
+
 ; ADC16 ptr1 ptr2 ptr3 - Add two 16 bit values at ptr1 and ptr2, storing result at ptr3
 ; Clobbers A
   .macro ADC16 ptr1 ptr2 ptr3
