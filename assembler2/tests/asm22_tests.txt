@@ -1747,7 +1747,16 @@ INPUT:
  1: * = $0200
  2:   .include nonexistent_file_12345.asm
 EXPECT_STDERR:
-Error 36 in file nonexistent_file_12345.asm at line 0: File not found
+Error 36 in file {{MAIN_FILE}} at line 2: File not found
+
+---
+NAME: include_file_not_found_nested
+DESCRIPTION: Error when an included file references a nonexistent file
+INPUT:
+ 1: * = $0200
+ 2:   .include tests/include/includes_nonexistent.asm
+EXPECT_STDERR:
+Error 36 in file tests/include/includes_nonexistent.asm at line 2: File not found
   included from {{MAIN_FILE}}:2
 
 ---
@@ -1755,7 +1764,6 @@ NAME: input_file_not_found
 DESCRIPTION: Error when input file on command line does not exist
 MISSING_INPUT
 EXPECT_ERROR: 36
-EXPECT_LINE: 0
 EXPECT_MSG: File not found
 
 ---

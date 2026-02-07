@@ -152,7 +152,8 @@ push_file_stack
   JSR open
   CMP #$00
   BNE .file_ok
-  STA FS_CURR_FILE       ; Store 0 so traceback won't close parent's handle
+  STA FS_CURR_FILE       ; Store 0 so pop_source won't close parent's handle
+  JSR pop_source         ; Pop frame, restoring parent context for error reporting
   JMP err_file_not_found
 .file_ok
   STA FS_CURR_FILE
