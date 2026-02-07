@@ -15,11 +15,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 make
 ```
 
-The build succeeds when `22/out/asm22.out == 22/out/asm22_2.out` (self-assembly verification).
+The build succeeds when `22/out/asm.out == 22/out/asm_2.out` (self-assembly verification).
 
 ## Architecture
 
-This is a self-hosting 6502 assembler built through progressive bootstrapping. The current assembler (`22/asm22.asm`) can assemble its own source code.
+This is a self-hosting 6502 assembler built through progressive bootstrapping. The current assembler (`22/asm.asm`) can assemble its own source code.
 
 ### Bootstrap Chain
 
@@ -27,11 +27,11 @@ A C bootstrap assembler assembles the initial versions, which then assemble prog
 
 ### Build Output Structure
 
-Each version builds into its own `NN/out/` directory (e.g., `22/out/asm22.out`). The root `out/` directory is used only for test outputs. The emulator auto-creates its `dump/` directory, so no symlinks or pre-creation are needed. `make clean` removes all per-version `out/` and `dump/` directories.
+Each version builds into its own `NN/out/` directory (e.g., `22/out/asm.out`). The root `out/` directory is used only for test outputs. The emulator auto-creates its `dump/` directory, so no symlinks or pre-creation are needed. `make clean` removes all per-version `out/` and `dump/` directories.
 
 ### Key Components
 
-- **Instruction generators** (`NN/instgenNN.asm`): Generate `NN/out/instNN.asm.out` files containing pre-computed instruction hash tables. These are `.include`d (as `out/instNN.asm.out` relative to the version directory) by the assemblers to avoid runtime initialization.
+- **Instruction generators** (`NN/instgen.asm`): Generate `NN/out/inst.asm.out` files containing pre-computed instruction hash tables. These are `.include`d (as `out/inst.asm.out` relative to the version directory) by the assemblers to avoid runtime initialization.
 
 - **Hash tables**: Used for both label lookup (`LHASHTAB` at $1F00) and instruction lookup (`IHASHTAB`). Hash entries are stored on a heap (`MEMP16`).
 
@@ -52,8 +52,8 @@ The heap (`MEMP16`) grows upward storing hash entries, macro definitions, and fo
 ### Shared Code Pattern
 
 Common code is factored into include files within each version directory:
-- `22/common22.asm`: Shared between `22/asm22.asm` and `22/instgen22.asm`
-- `22/hash_table22.asm`: Hash table implementation (included by common22)
+- `22/common.asm`: Shared between `22/asm.asm` and `22/instgen.asm`
+- `22/hash_table.asm`: Hash table implementation (included by common)
 
 The hash table requires caller to define `HT_KEY` and `HT_V16` before including.
 
@@ -139,7 +139,7 @@ DEBUG = $01          ; Define a label
 
 **Command Line Defines:**
 - Labels can be pre-defined via command line: `define:label`
-- Multiple defines are supported: `./asm22.out in out define:DEBUG define:FEATURE1`
+- Multiple defines are supported: `./asm.out in out define:DEBUG define:FEATURE1`
 - Pre-defined labels have value `$0001`
 
 **Errors:**
@@ -184,7 +184,7 @@ Lessons learned from syntax migrations (e.g., DATA → .data):
 
 1. **Global replacements need context awareness** - Avoid blind find/replace when identifiers share common substrings (e.g., `DATA` vs `MODE_DATA`). Check for compound identifiers before replacing.
 
-2. **File copying requires systematic include updates** - When creating a new version (asm21→asm22), copy the entire version directory and update all include references and version suffixes in filenames (asm, instgen, common, errors, fwdref, file_stack, hash_table, to_decimal, label_scope, environment, macros).
+2. **File copying requires systematic include updates** - When creating a new version, copy the entire version directory. Source filenames no longer have version suffixes, so only build script references need updating.
 
 3. **Phased migration works well** - Add new feature alongside old, verify everything works, then remove old. This provides safety checkpoints at each phase.
 

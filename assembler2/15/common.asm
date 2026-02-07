@@ -1,0 +1,57 @@
+HT_KEY = TOKEN
+HT_VL  = HEX2
+HT_VH  = HEX1
+  .include hash_table.asm
+
+
+init_heap
+  LDA# <HEAP
+  STAZ MEMPL
+  LDA# >HEAP
+  STAZ MEMPH
+  RTS
+
+
+; On entry Y contains the amount to advance
+; On exit MEMPL;MEMPH is incremented by Y
+;         Y = 0
+;         X is preserved
+;         A is not preserved
+advance_heap
+  TYA
+  LDY# $00
+  CLC
+  ADCZ MEMPL
+  STAZ MEMPL
+  TYA
+  ADCZ MEMPH
+  STAZ MEMPH
+  RTS
+
+
+; Store hash value at current heap location and advance heap
+; On entry HT_VL;HT_VH contains the value to store
+;          MEMPL;MEMPH points to where value should be stored
+; On exit MEMPL;MEMPH advanced past the value
+;         Y = 0
+;         X is preserved
+;         A is not preserved
+store_hash_value
+  LDY# $00
+  LDAZ HT_VL
+  STAZ(),Y MEMPL
+  INY
+  LDAZ HT_VH
+  STAZ(),Y MEMPL
+  INY
+  JMP advance_heap     ; Tail call
+
+
+select_instruction_hash_table
+  LDA# $00
+  STAZ IS_LOCAL_LABEL       ; Clear local label flag for instruction lookup
+  LDA# <IHASHTAB
+  STAZ HTPL
+  LDA# >IHASHTAB
+  STAZ HTPH
+  RTS
