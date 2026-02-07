@@ -1188,7 +1188,7 @@ uint8_t read6502(uint16_t address) {
         if (console_mode) {
             return con_byte_ready() ? 0xFF : 0x00;
         } else {
-            return 0xFF;
+            return 0xFF;  // In file mode, always ready
         }
     } else if (address == 0xfffe && memory[0xfffe] == 0 && memory[0xffff] == 0) {
         done = 1;

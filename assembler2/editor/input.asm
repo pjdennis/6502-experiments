@@ -18,8 +18,31 @@ KEY_TAB   = $09
   .zeropage
 INPUT_TEMP  .data $00   ; Temp for input processing
 SPIN_COUNT  .data $00   ; Spin loop counter for escape detection
+PUSHBACK    .data $00   ; Pushback byte ($00 = none)
+HAS_PUSHBACK .data $00  ; $FF if pushback has a byte
 
   .code
+
+; Read one byte from input, with pushback support
+; Returns byte in A
+input_read_byte
+  LDA HAS_PUSHBACK
+  BEQ .no_pushback
+  LDA #$00
+  STA HAS_PUSHBACK
+  LDA PUSHBACK
+  RTS
+.no_pushback
+  JSR con_read
+  RTS
+
+; Push back one byte into the input stream
+; A = byte to push back
+input_unread
+  STA PUSHBACK
+  LDA #$FF
+  STA HAS_PUSHBACK
+  RTS
 
 ; Read one key from console, handling escape sequences
 ; Returns key code in A
@@ -28,7 +51,7 @@ SPIN_COUNT  .data $00   ; Spin loop counter for escape detection
 ; Backspace ($7F or $08) normalized to KEY_BS ($08)
 ; Clobbers X, Y
 read_key
-  JSR con_read
+  JSR input_read_byte
 
   ; Normalize backspace: $7F -> $08
   CMP #$7F
@@ -39,7 +62,11 @@ read_key
 
   ; Check for ESC
   CMP #$1B
-  BNE .done
+  BNE .not_esc
+  JMP .is_esc
+.not_esc
+  JMP .done
+.is_esc
 
   ; Got ESC - check if more bytes follow (escape sequence)
   ; Spin loop to wait briefly for next byte
@@ -57,11 +84,11 @@ read_key
 
 .got_more
   ; Read the next byte - should be '['
-  JSR con_read
+  JSR input_read_byte
   CMP #'['
   BNE .not_csi
   ; CSI sequence - read the final byte
-  JSR con_read
+  JSR input_read_byte
   STA INPUT_TEMP
 
   ; Check for arrow keys: A=up, B=down, C=right, D=left
@@ -90,7 +117,7 @@ read_key
   BCS .unknown_csi
   ; It's a digit 1-6, read the next char expecting ~
   STA INPUT_TEMP
-  JSR con_read
+  JSR input_read_byte
   CMP #'~'
   BNE .unknown_eat ; unknown sequence, discard
   LDA INPUT_TEMP
@@ -135,8 +162,12 @@ read_key
 .not_tilde
 .unknown_csi
 .unknown_eat
-.not_csi
   ; Unknown escape sequence - return ESC
+  LDA #KEY_ESC
+  RTS
+.not_csi
+  ; Byte after ESC was not '[' - push it back and return bare ESC
+  JSR input_unread
   LDA #KEY_ESC
   RTS
 
