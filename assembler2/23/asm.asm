@@ -265,6 +265,20 @@ check_for_end_of_line
   RTS
 
 
+; Skip an optional comma separator between list items.
+; On entry CURR_CHAR contains current character
+; On exit A contains current character
+;         X, Y are preserved
+skip_optional_comma
+  JSR skip_spaces
+  CMP #','
+  BNE .done
+  JSR read_char
+  JSR skip_spaces
+.done
+  RTS
+
+
 ; ============================================================================
 ; TIER 3: TOKEN & HEX READING
 ; Token and hexadecimal value parsing
@@ -1503,6 +1517,7 @@ data_parameters_loop_entry
   BNE .data_value
   JSR read_char
   JSR emit_quoted
+  JSR skip_optional_comma
   JMP data_parameters_loop
 .data_value
   ; Parse value: handles $hex, 'char', label, <expr, >expr, and expressions
@@ -1513,6 +1528,7 @@ data_parameters_loop_entry
   ; C=0: expression/hex/'char'/</>  - emit 1 byte from OPERAND16
   LDA OPERAND16
   JSR emit
+  JSR skip_optional_comma
   JMP data_parameters_loop
 .data_emit_two_bytes
   ; C=1: bare label - emit 2 bytes (LSB, MSB)
@@ -1520,6 +1536,7 @@ data_parameters_loop_entry
   JSR emit
   LDA OPERAND16+$01    ; Emit high byte
   JSR emit
+  JSR skip_optional_comma
   JMP data_parameters_loop
 .data_done
   RTS
@@ -1659,6 +1676,7 @@ process_macro
   BNE .copy_param
   INY
   JSR advance_heap
+  JSR skip_optional_comma
   JMP .param_loop
 .params_done
   ; Write empty string terminator for parameter list
@@ -1754,6 +1772,7 @@ expand_macro
 .have_arg
   ; Parse argument expression (using PARENT's scope for lookups)
   JSR parse_expression
+  JSR skip_optional_comma
   ; MACRO_ARG_BUF bounds check
   ; Check if X < MACRO_ARG_LIMIT-MACRO_ARG_BUF-.ARG_SIZE+$01 (room for one more entry)
   CPX #MACRO_ARG_LIMIT-MACRO_ARG_BUF-.ARG_SIZE+$01
