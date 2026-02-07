@@ -32,6 +32,14 @@ FNAME_BUF   = $0200   ; Filename buffer (256 bytes)
 
   .include editor/environment.asm
   .include 22/macros.asm
+
+; PRINT_STR addr - Print null-terminated string at addr
+; Clobbers A, Y
+  .macro PRINT_STR addr
+  SET16 addr STR_PTR16
+  JSR write_string
+  .endmacro
+
   .include 22/to_decimal.asm
   .include editor/terminal.asm
   .include editor/input.asm
