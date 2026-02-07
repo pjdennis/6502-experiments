@@ -316,20 +316,15 @@ find_token
   CLC
   RTS
 .token_is_non_match    ; Not a match - move to next
-  ; Check if 'next' pointer is 0
-  LDY #$00
-  LDA (HTTP16),Y
-  BNE .not_at_end
-  INY
-  LDA (HTTP16),Y
-  BEQ .at_end
-.not_at_end
+  ; Load 'next' pointer and check if null
   LDY #$00
   LDA (HTTP16),Y
   STA TABP16
   INY
   LDA (HTTP16),Y
   STA TABP16+$01
+  ORA TABP16
+  BEQ .at_end
   JMP .token_loop
 .at_end
   ; point tabp,Y to the zero 'next' pointer
