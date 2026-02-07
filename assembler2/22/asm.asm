@@ -1403,6 +1403,10 @@ process_directive
   SET16 directive_data TABP16
   JSR compare_token
   BEQ .data
+  ; Check for 'byte'
+  SET16 directive_byte TABP16
+  JSR compare_token
+  BEQ .byte
   JSR process_conditional_directive ; Returns with C=0 if processed
   BCC .directive_done
   ; Check for 'macro'
@@ -1447,6 +1451,9 @@ process_directive
 .data
   LDA #$00
   JMP set_data_mode
+.byte
+  LDA #$01
+  JMP set_data_mode
 
 
 ; On exit C=0 if processed; C=1 if not processed
@@ -1484,6 +1491,9 @@ directive_code
 directive_data
   .data "data" $00
 
+directive_byte
+  .data "byte" $00
+
 directive_ifdef
   .data "ifdef" $00
 
@@ -1508,20 +1518,28 @@ data_parameters_loop
   JSR emit_quoted
   JMP data_parameters_loop
 .data_value
-  ; Parse value: handles $hex, 'char', label, <expr, >expr, and expressions
-  ; Bare labels always emit 2 bytes (even if value fits in 1 byte) because
-  ; forward references aren't resolved until pass 2, so size must be consistent.
-  JSR parse_value      ; Returns C=1 for bare label, C=0 otherwise, current char in CURR_CHAR
+  JSR parse_value        ; C=1 for 2-byte, C=0 for 1-byte
+  LDA DATA_MODE          ; LDA does NOT affect carry
+  BNE .forced_width      ; Non-zero = forced width mode
+  ; Mode 0 (.data): use carry from parse_value
   BCS .data_emit_two_bytes
-  ; C=0: expression/hex/'char'/</>  - emit 1 byte from OPERAND16
+.data_emit_one_byte
   LDA OPERAND16
   JSR emit
   JMP data_parameters_loop
+.forced_width
+  ; Mode 1 (.byte): validate + emit 1 byte
+  BIT PASS
+  BPL .data_emit_one_byte   ; Skip validation on pass 1
+  LDA OPERAND16+$01
+  BNE .data_byte_err
+  BEQ .data_emit_one_byte   ; Always taken
+.data_byte_err
+  JMP err_value_out_of_range
 .data_emit_two_bytes
-  ; C=1: bare label - emit 2 bytes (LSB, MSB)
-  LDA OPERAND16        ; Emit low byte
+  LDA OPERAND16          ; Emit low byte
   JSR emit
-  LDA OPERAND16+$01    ; Emit high byte
+  LDA OPERAND16+$01      ; Emit high byte
   JSR emit
   JMP data_parameters_loop
 .data_done
