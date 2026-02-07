@@ -782,8 +782,8 @@ check_local_label
   STA LABEL_TYPE
   RTS
 .in_macro
-  ; In macro expansion - use MACRO type
-  LDA #LABEL_TYPE_MACRO
+  ; In macro expansion - use MACRO_LOCAL type
+  LDA #LABEL_TYPE_MACRO_LOCAL
   STA LABEL_TYPE
   RTS
 .not_local
