@@ -241,7 +241,7 @@ class EditorTestRunner:
         print("Basic operations:")
         print()
 
-        # Test 1: Open and quit without saving
+        # Open and quit without saving
         self.run_test(
             "Open file and :q!",
             "Hello\n",
@@ -249,7 +249,7 @@ class EditorTestRunner:
             expect_unmodified=True
         )
 
-        # Test 2: Open and quit unmodified file with :q
+        # Open and quit unmodified file with :q
         self.run_test(
             "Quit unmodified file with :q",
             "Hello\n",
@@ -257,7 +257,7 @@ class EditorTestRunner:
             expect_unmodified=True
         )
 
-        # Test 3: Save and quit
+        # Save and quit
         self.run_test(
             "Open file and :wq (no changes)",
             "Hello\n",
@@ -265,7 +265,7 @@ class EditorTestRunner:
             expected_content="Hello\n"
         )
 
-        # Test 4: Delete character with x
+        # Delete character with x
         self.run_test(
             "Delete first char with x",
             "Hello\n",
@@ -273,7 +273,7 @@ class EditorTestRunner:
             expected_content="ello\n"
         )
 
-        # Test 5: Delete character in middle
+        # Delete character in middle
         self.run_test(
             "Delete char at column 2 with llx",
             "Hello\n",
@@ -281,7 +281,7 @@ class EditorTestRunner:
             expected_content="Helo\n"
         )
 
-        # Test 6: Insert character
+        # Insert character
         self.run_test(
             "Insert character with iX",
             "Hello\n",
@@ -289,7 +289,7 @@ class EditorTestRunner:
             expected_content="XHello\n"
         )
 
-        # Test 7: Insert in middle
+        # Insert in middle
         self.run_test(
             "Insert at column 2 with lliX",
             "Hello\n",
@@ -297,7 +297,7 @@ class EditorTestRunner:
             expected_content="HeXllo\n"
         )
 
-        # Test 8: Append with a
+        # Append with a
         self.run_test(
             "Append with a at start",
             "Hello\n",
@@ -305,7 +305,7 @@ class EditorTestRunner:
             expected_content="HXello\n"
         )
 
-        # Test 8b: Append with A
+        # Append with A
         self.run_test(
             "Append with A at start",
             "Hello\n",
@@ -313,7 +313,7 @@ class EditorTestRunner:
             expected_content="HelloX\n"
         )
 
-        # Test 9: Open line below
+        # Open line below
         self.run_test(
             "Open line below with o",
             "Hello\nWorld\n",
@@ -321,7 +321,7 @@ class EditorTestRunner:
             expected_content="Hello\nNew\nWorld\n"
         )
 
-        # Test 10: Open line above
+        # Open line above
         self.run_test(
             "Open line above with O",
             "Hello\nWorld\n",
@@ -329,7 +329,7 @@ class EditorTestRunner:
             expected_content="Hello\nNew\nWorld\n"
         )
 
-        # Test 11: Delete line with dd
+        # Delete line with dd
         self.run_test(
             "Delete first line with dd",
             "Hello\nWorld\n",
@@ -337,7 +337,7 @@ class EditorTestRunner:
             expected_content="World\n"
         )
 
-        # Test 12: Delete second line
+        # Delete second line
         self.run_test(
             "Delete second line with jdd",
             "Hello\nWorld\nFoo\n",
@@ -345,7 +345,7 @@ class EditorTestRunner:
             expected_content="Hello\nFoo\n"
         )
 
-        # Test 13: Move down and edit
+        # Move down and edit
         self.run_test(
             "Move down and delete char",
             "Hello\nWorld\n",
@@ -353,7 +353,7 @@ class EditorTestRunner:
             expected_content="Hello\norld\n"
         )
 
-        # Test 14: Go to end of line
+        # Go to end of line
         self.run_test(
             "Go to end of line and delete",
             "Hello\n",
@@ -361,7 +361,7 @@ class EditorTestRunner:
             expected_content="Hell\n"
         )
 
-        # Test 15: Go to start of line
+        # Go to start of line
         self.run_test(
             "Move right then 0 goes back to start",
             "Hello\n",
@@ -369,7 +369,7 @@ class EditorTestRunner:
             expected_content="ello\n"
         )
 
-        # Test 16: Insert newline (Enter)
+        # Insert newline (Enter)
         self.run_test(
             "Split line with Enter in insert mode",
             "Hello\n",
@@ -377,7 +377,7 @@ class EditorTestRunner:
             expected_content="He\nWorldllo\n"
         )
 
-        # Test 17: Backspace in insert mode
+        # Backspace in insert mode
         self.run_test(
             "Backspace deletes previous char",
             "Hello\n",
@@ -385,7 +385,7 @@ class EditorTestRunner:
             expected_content="Helo\n"
         )
 
-        # Test 18: :w saves without quitting, then :q quits
+        # :w saves without quitting, then :q quits
         # Actually, :w then EOT will exit due to EOT handling
         self.run_test(
             "Write with :w preserves content",
@@ -394,7 +394,7 @@ class EditorTestRunner:
             expected_content="ello\n"
         )
 
-        # Test 19: G goes to last line
+        # G goes to last line
         self.run_test(
             "G goes to last line and x deletes",
             "Line1\nLine2\nLine3\n",
@@ -402,7 +402,7 @@ class EditorTestRunner:
             expected_content="Line1\nLine2\nine3\n"
         )
 
-        # Test 20: gg goes to first line
+        # gg goes to first line
         self.run_test(
             "jjgg goes back to first line",
             "Line1\nLine2\nLine3\n",
@@ -410,7 +410,7 @@ class EditorTestRunner:
             expected_content="ine1\nLine2\nLine3\n"
         )
 
-        # Test 21: Backspace at start joins lines
+        # Backspace at start joins lines
         self.run_test(
             "Backspace at col 0 joins with previous line",
             "Hello\nWorld\n",
@@ -418,7 +418,7 @@ class EditorTestRunner:
             expected_content="HelloWorld\n"
         )
 
-        # Test 22: Empty file
+        # Empty file
         self.run_test(
             "Open empty file and add text",
             "",
@@ -426,7 +426,7 @@ class EditorTestRunner:
             expected_content="Hello\n"
         )
 
-        # Test 23: Go to line number
+        # Go to line number
         self.run_test(
             "Go to line 3 and delete",
             "One\nTwo\nThree\nFour\n",
@@ -434,7 +434,7 @@ class EditorTestRunner:
             expected_content="One\nTwo\nhree\nFour\n"
         )
 
-        # Test 24: Delete only line leaves empty file
+        # Delete only line leaves empty file
         self.run_test(
             "Delete only line leaves newline",
             "Only\n",
@@ -442,7 +442,7 @@ class EditorTestRunner:
             expected_content="\n"
         )
 
-        # Test 25: Multiple inserts
+        # Multiple inserts
         self.run_test(
             "Insert multiple characters",
             "AB\n",
@@ -450,7 +450,7 @@ class EditorTestRunner:
             expected_content="AXYZB\n"
         )
 
-        # Test 26: Delete and retype
+        # Delete and retype
         self.run_test(
             "Delete char then insert replacement",
             "Hello\n",
@@ -458,7 +458,7 @@ class EditorTestRunner:
             expected_content="Jello\n"
         )
 
-        # Test 27: File without trailing newline
+        # File without trailing newline
         self.run_test(
             "File without trailing newline",
             "Hello",
@@ -466,7 +466,7 @@ class EditorTestRunner:
             expected_content="Hello\n"
         )
 
-        # Test 28: Multiple dd operations
+        # Multiple dd operations
         self.run_test(
             "Delete two lines with dd dd",
             "A\nB\nC\n",
@@ -474,7 +474,7 @@ class EditorTestRunner:
             expected_content="C\n"
         )
 
-        # Test 29: Append at end of line
+        # Append at end of line
         self.run_test(
             "Append at end of line with $a",
             "Hello\n",
@@ -482,7 +482,7 @@ class EditorTestRunner:
             expected_content="HelloX\n"
         )
 
-        # Test 30: Cursor clamps when moving from long to short line
+        # Cursor clamps when moving from long to short line
         self.run_test(
             "Cursor clamps on move to shorter line",
             "LongLine\nAB\n",
@@ -490,7 +490,7 @@ class EditorTestRunner:
             expected_content="LongLine\nA\n"
         )
 
-        # Test 31: h at column 0 stays at 0
+        # h at column 0 stays at 0
         self.run_test(
             "h at column 0 stays put",
             "Hello\n",
@@ -498,7 +498,7 @@ class EditorTestRunner:
             expected_content="ello\n"
         )
 
-        # Test 32: j at last line stays put
+        # j at last line stays put
         self.run_test(
             "j at last line stays put",
             "Only\n",
@@ -506,7 +506,7 @@ class EditorTestRunner:
             expected_content="nly\n"
         )
 
-        # Test 33: k at first line stays put
+        # k at first line stays put
         self.run_test(
             "k at first line stays put",
             "Only\n",
@@ -514,7 +514,7 @@ class EditorTestRunner:
             expected_content="nly\n"
         )
 
-        # Test 34: :q on modified file preserves content
+        # :q on modified file preserves content
         # x modifies, :q warns, :q! then force quits
         # The file should still have the original content
         # (x deletes but :q doesn't save, :q! quits without saving)
@@ -525,7 +525,7 @@ class EditorTestRunner:
             expect_unmodified=True
         )
 
-        # Test 35: l at end of line stays put
+        # l at end of line stays put
         self.run_test(
             "l at end of line stays put",
             "Hi\n",
@@ -533,7 +533,7 @@ class EditorTestRunner:
             expected_content="H\n"
         )
 
-        # Test 36: Open above on first line
+        # Open above on first line
         self.run_test(
             "Open above on first line with O",
             "Hello\n",
@@ -541,7 +541,7 @@ class EditorTestRunner:
             expected_content="New\nHello\n"
         )
 
-        # Test 37: Delete all lines then add text
+        # Delete all lines then add text
         self.run_test(
             "Delete all lines then insert",
             "A\nB\n",
@@ -549,7 +549,7 @@ class EditorTestRunner:
             expected_content="New\n"
         )
 
-        # Test 38: Append on empty line
+        # Append on empty line
         self.run_test(
             "Append on empty line",
             "\n",
@@ -557,7 +557,7 @@ class EditorTestRunner:
             expected_content="Hi\n"
         )
 
-        # Test 39: ESC in insert mode moves cursor back
+        # ESC in insert mode moves cursor back
         # Insert 'AB' at start, ESC, then x should delete B (cursor moves back)
         self.run_test(
             "ESC in insert moves cursor back one",
@@ -566,7 +566,7 @@ class EditorTestRunner:
             expected_content="ACD\n"
         )
 
-        # Test 40: Multiple Enter in insert mode
+        # Multiple Enter in insert mode
         self.run_test(
             "Multiple Enter creates multiple lines",
             "AB\n",
@@ -578,7 +578,7 @@ class EditorTestRunner:
         print("Console mode argument handling:")
         print()
 
-        # Test 41: Console mode saves to correct filename
+        # Console mode saves to correct filename
         # In console mode, the emulator should not require an output_file
         # parameter. The file to edit is passed as a program argument.
         # We delete a char and save, to verify the change was written
@@ -594,7 +594,7 @@ class EditorTestRunner:
         print("New file creation:")
         print()
 
-        # Test 42: Edit a non-existent file creates it on save
+        # Edit a non-existent file creates it on save
         self.run_test_new_file(
             "Create new file with :wq",
             b"iHello\x1b:wq\r",
