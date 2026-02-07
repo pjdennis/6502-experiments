@@ -60,7 +60,7 @@ make --quiet
   ../emulator.out ../15/out/asm15.out 2000 /dev/null /dev/null asm16.asm out/asm16.out)
 ./emulator.out 16/out/asm16.out 2000 /dev/null /dev/null test16.asm out/test16.out
 (cd 17 && mkdir -p out &&
-  ../emulator.out ../15/out/asm15.out 2000 /dev/null /dev/null instgen17.asm out/instgen17.out &&
+  ../emulator.out ../16/out/asm16.out 2000 /dev/null /dev/null instgen17.asm out/instgen17.out &&
   ../emulator.out out/instgen17.out 2000 /dev/null out/inst17.asm.out &&
   ../emulator.out ../16/out/asm16.out 2000 /dev/null /dev/null asm17.asm out/asm17.out)
 diff <(hexdump -C 16/out/asm16.out) <(hexdump -C 17/out/asm17.out)
