@@ -2684,8 +2684,8 @@ INPUT:
  4:   .endmacro
  5:   MYMACRO
 EXPECT_STDERR:
-Error 1 in file MYMACRO at line 1: Label not found
-  included from {{MAIN_FILE}}:5
+Error 1 in macro MYMACRO at line 1: Label not found
+  expanded from {{MAIN_FILE}}:5
 
 ---
 NAME: macro_error_nested_macros
@@ -2700,9 +2700,9 @@ INPUT:
  7:   .endmacro
  8:   OUTER
 EXPECT_STDERR:
-Error 1 in file INNER at line 1: Label not found
-  included from OUTER:1
-  included from {{MAIN_FILE}}:8
+Error 1 in macro INNER at line 1: Label not found
+  expanded from macro OUTER:1
+  expanded from {{MAIN_FILE}}:8
 
 ---
 NAME: macro_error_include_from_macro
@@ -2716,8 +2716,8 @@ INPUT:
  6:   WITHMACRO
 EXPECT_STDERR:
 Error 1 in file tests/include/error_inside.asm at line 3: Label not found
-  included from WITHMACRO:2
-  included from {{MAIN_FILE}}:6
+  included from macro WITHMACRO:2
+  expanded from {{MAIN_FILE}}:6
 
 ---
 NAME: macro_error_in_included_file_macro
@@ -2726,6 +2726,6 @@ INPUT:
  1: * = $0200
  2:   .include tests/include/error_in_macro.asm
 EXPECT_STDERR:
-Error 1 in file HELPER at line 1: Label not found
-  included from tests/include/error_in_macro.asm:5
+Error 1 in macro HELPER at line 1: Label not found
+  expanded from tests/include/error_in_macro.asm:5
   included from {{MAIN_FILE}}:2

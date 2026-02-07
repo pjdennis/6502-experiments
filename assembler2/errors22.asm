@@ -237,8 +237,14 @@ interrupt
 ; Print the current file and line if any file is open
   JSR file_stack_empty
   BEQ .location_done
-; Print the " in file " message
+; Print " in file " or " in macro " based on source type
+  LDA FS_SRC_TYPE
+  BNE .in_macro
   SHOW_MESSAGEI msg_error_file
+  JMP .show_source_name
+.in_macro
+  SHOW_MESSAGEI msg_error_macro
+.show_source_name
 ; Print the filename (at FS_P16)
   SHOW_MESSAGE FS_P16
 ; Print the " at line " message
@@ -306,23 +312,39 @@ show_message
   RTS
 
 
-; Show include traceback - uses file stack API to walk include chain
+; Show traceback - uses file stack API to walk include/expansion chain
 ; On entry FS_P16 points to current file stack entry
 ; On exit A, X, Y not preserved
 ;         TABP16;TABP16+$01 not preserved
 ;         All files in stack are closed
 show_include_traceback
 .loop
+  ; Save child source type before popping
+  LDA FS_SRC_TYPE
+  PHA
   ; Pop current entry (closes file, restores parent's handle and line)
   JSR pop_file_stack
   ; Check if stack is now empty (no more parents)
   JSR file_stack_empty
-  BEQ .done
+  BEQ .done_cleanup
   ; Print newline
   SHOW_CHAR '\n'
-  ; Print "  included from " message
+  ; Print verb based on child type (saved on stack)
+  PLA
+  BEQ .verb_included
+  ; Child was macro → "expanded from"
+  SHOW_MESSAGEI msg_expanded_from
+  JMP .show_parent
+.verb_included
+  ; Child was file → "included from"
   SHOW_MESSAGEI msg_included_from
-  ; Print filename (FS_P16 points to parent entry's name)
+.show_parent
+  ; Check parent type for "macro " prefix
+  LDA FS_SRC_TYPE
+  BEQ .parent_is_file
+  SHOW_MESSAGEI msg_macro_prefix
+.parent_is_file
+  ; Print name (FS_P16 points to parent entry's name)
   SHOW_MESSAGE FS_P16
   ; Print ":"
   SHOW_CHAR ':'
@@ -331,8 +353,16 @@ show_include_traceback
   JSR show_decimal
   ; Continue to next parent
   JMP .loop
+.done_cleanup
+  PLA                    ; Clean up saved child type from stack
 .done
   RTS
 
+msg_error_macro
+  .data " in macro " $00
 msg_included_from
   .data "  included from " $00
+msg_expanded_from
+  .data "  expanded from " $00
+msg_macro_prefix
+  .data "macro " $00
