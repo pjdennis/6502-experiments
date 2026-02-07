@@ -15,7 +15,7 @@ A fully self-hosting 6502 assembler built through progressive bootstrapping, wit
 ./asmtestgen.sh
 
 # Run the test suite
-./tests/run_tests.py
+./run_tests.py
 
 # Watch mode (rebuilds on file changes)
 ./gogen.sh
@@ -114,12 +114,13 @@ assembler2/
 │   ├── macros.asm          # Macro support (22)
 │   └── out/                # Build outputs (asm.out, instgen.out, inst.asm.out)
 │
-├── tests/                  # Test suite
-│   ├── run_tests.py        # Test runner
+├── run_tests.py            # Test runner
+├── 22/tests/               # Latest test suite
 │   ├── asm22_tests.txt     # Tests for asm22 (current, 256 tests)
 │   ├── file_stack_tests22.txt  # File stack tests (30 tests)
 │   ├── file_stack_test22.asm   # File stack test harness
-│   └── ...                 # Test data files and older test suites
+│   └── ...                 # Any version-specific test data
+├── tests/                  # Legacy test data and older test suites
 │
 ├── legacy/                 # Old/unused files
 ├── out/                    # Root-level test outputs
@@ -174,10 +175,10 @@ The project includes a comprehensive test suite (286 tests):
 
 ```bash
 # Run all tests
-./tests/run_tests.py
+./run_tests.py
 
 # Run with verbose output
-./tests/run_tests.py -v
+./run_tests.py -v
 ```
 
 Tests verify both positive cases (correct assembly output) and negative cases (proper error detection).
@@ -302,7 +303,8 @@ When adding new features that require a new assembler version (e.g., asm22 to as
 
 ```bash
 cp -r 22/ 23/
-cp tests/asm22_tests.txt tests/asm23_tests.txt
+mkdir -p 23/tests
+cp 22/tests/asm22_tests.txt 23/tests/asm23_tests.txt
 ```
 
 Since source files no longer have version suffixes, the `.include` directives inside the copied files need no changes.
@@ -328,7 +330,7 @@ Remove the self-hosting check for asm22 (only the latest version needs it).
 
 ### 3. Update Other Files
 
-- **tests/run_tests.py** - Update assembler path to `23/out/asm_debug.out`
+- **run_tests.py** - Update assembler path to `23/out/asm_debug.out`
 - **gogen.sh** - Add new version's files to the watch list
 - **asmtestgen.sh** - Update test program and file_stack_test to use new assembler
 
@@ -336,7 +338,7 @@ Remove the self-hosting check for asm22 (only the latest version needs it).
 
 ```bash
 ./asmtestgen.sh       # Full build chain
-./tests/run_tests.py  # Test suite
+./run_tests.py  # Test suite
 ```
 
 ### Checklist
@@ -344,7 +346,7 @@ Remove the self-hosting check for asm22 (only the latest version needs it).
 - [ ] Version directory created with all source files
 - [ ] `asmtestgen.sh` updated (build steps, self-hosting, test program)
 - [ ] Previous version's self-hosting check removed
-- [ ] `tests/run_tests.py` assembler path updated
+- [ ] `run_tests.py` assembler path updated
 - [ ] `gogen.sh` watch list updated
 - [ ] Build chain passes
 - [ ] All tests pass

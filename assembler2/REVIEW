@@ -44,7 +44,7 @@
 
   1. Potential Bug: Incorrect Test File Reference
 
-  Location: tests/asm22_tests.txt:1
+  Location: 22/tests/asm22_tests.txt:1
 
   The test file comment says "Test suite for asm21 assembler" but this is for asm22. This suggests the file was copied from asm21 without updating the header comment.
 

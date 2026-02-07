@@ -630,7 +630,7 @@ def main():
     parser.add_argument(
         "test_files",
         nargs="*",
-        help="Test files to run (default: asm22_tests.txt and file_stack_tests22.txt)",
+        help="Test files to run (default: 22/tests/asm22_tests.txt and 22/tests/file_stack_tests22.txt)",
     )
     parser.add_argument(
         "-f", "--filter", default="", help="Only run tests matching this pattern"
@@ -650,9 +650,9 @@ def main():
     if args.no_color:
         Colors.disable()
 
-    # Determine base directory
+    # Determine base directory (repo root)
     script_dir = Path(__file__).parent.resolve()
-    base_dir = script_dir.parent
+    base_dir = script_dir
 
     runner = TestRunner(base_dir, verbose=args.verbose, quiet=args.quiet)
 
@@ -663,9 +663,10 @@ def main():
 
     # Default test files if none specified
     if not args.test_files:
+        latest_tests_dir = script_dir / "22" / "tests"
         args.test_files = [
-            str(script_dir / "file_stack_tests22.txt"),
-            str(script_dir / "asm22_tests.txt"),
+            str(latest_tests_dir / "file_stack_tests22.txt"),
+            str(latest_tests_dir / "asm22_tests.txt"),
         ]
 
     for test_file in args.test_files:
