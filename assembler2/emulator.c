@@ -106,6 +106,25 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <termios.h>
+#include <sys/ioctl.h>
+#include <sys/select.h>
+
+// unistd.h conflicts with the 6502 brk() opcode handler, so
+// we declare only the specific functions we need
+extern int read(int fd, void *buf, unsigned long count);
+extern int tcgetattr(int fd, struct termios *termios_p);
+extern int tcsetattr(int fd, int optional_actions, const struct termios *termios_p);
+extern int ioctl(int fd, unsigned long request, ...);
+extern int select(int nfds, fd_set *readfds, fd_set *writefds,
+                  fd_set *exceptfds, struct timeval *timeout);
+extern int atexit(void (*function)(void));
+
+#define STDIN_FILENO  0
+#define STDOUT_FILENO 1
 
 //6502 defines
 #define UNDOCUMENTED //when this is defined, undocumented opcodes are handled.
@@ -974,9 +993,6 @@ void hookexternal(void *funcptr) {
 
 ////////////////////////////////////////
 
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
 
 #define port_read_b  0xf004
 #define port_write_b 0xf001
@@ -990,6 +1006,11 @@ void hookexternal(void *funcptr) {
 #define port_argv_h  0xfe82
 #define port_openout 0xfe83
 #define port_write   0xfe84
+#define port_con_read  0xfe90
+#define port_con_flush 0xfe91
+#define port_term_rows 0xfe92
+#define port_term_cols 0xfe93
+#define port_con_ready 0xfe94
 
 uint8_t memory[0x10001];
 
@@ -1004,6 +1025,44 @@ uint16_t* arg_addresses;
 int done = 0;
 int exitcode_set = -1;
 int error_output_started = 0;  // Track if emulated program wrote to stderr
+int console_mode = 0;
+struct termios orig_termios;
+
+void restore_terminal() {
+    if (console_mode) {
+        tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
+    }
+}
+
+void setup_console() {
+    tcgetattr(STDIN_FILENO, &orig_termios);
+    atexit(restore_terminal);
+    struct termios raw = orig_termios;
+    cfmakeraw(&raw);
+    raw.c_lflag |= ISIG;  // Keep Ctrl+C working for safety
+    raw.c_cc[VMIN] = 1;
+    raw.c_cc[VTIME] = 0;
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+}
+
+int con_byte_ready() {
+    fd_set fds;
+    struct timeval tv = {0, 0};
+    FD_ZERO(&fds);
+    FD_SET(STDIN_FILENO, &fds);
+    return select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv) > 0;
+}
+
+void get_terminal_size(int *rows, int *cols) {
+    struct winsize ws;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_row > 0) {
+        *rows = ws.ws_row;
+        *cols = ws.ws_col;
+    } else {
+        *rows = 24;
+        *cols = 80;
+    }
+}
 
 void files_init(FILE* input_file) {
     files[0] = input_file;
@@ -1107,6 +1166,30 @@ uint8_t read6502(uint16_t address) {
             exit(1);
         }
         return arg_addresses[a] >> 8;
+    } else if (address == port_con_read) {             // con_read
+        if (console_mode) {
+            uint8_t ch;
+            if (read(STDIN_FILENO, &ch, 1) == 1) return ch;
+            return 0;
+        } else {
+            int b = fgetc(input_file_ptr);
+            if (b == EOF) return 4;
+            return b;
+        }
+    } else if (address == port_term_rows) {           // term_rows
+        int rows, cols;
+        get_terminal_size(&rows, &cols);
+        return (uint8_t)rows;
+    } else if (address == port_term_cols) {           // term_cols
+        int rows, cols;
+        get_terminal_size(&rows, &cols);
+        return (uint8_t)cols;
+    } else if (address == port_con_ready) {           // con_ready
+        if (console_mode) {
+            return con_byte_ready() ? 0xFF : 0x00;
+        } else {
+            return 0xFF;
+        }
     } else if (address == 0xfffe && memory[0xfffe] == 0 && memory[0xffff] == 0) {
         done = 1;
     }/* else if (address == 0xfe) {
@@ -1147,6 +1230,9 @@ void write6502(uint16_t address, uint8_t value) {
     } else if (address == port_write) {              // write
         file_write(x, value);
         return;
+    } else if (address == port_con_flush) {          // con_flush
+        fflush(stdout);
+        return;
     }
 
     memory[address] = value;
@@ -1182,6 +1268,10 @@ int main(int argc, char **argv) {
     long load_address = strtol(argv[2], NULL, 16);
     char* input_filename = argv[3];
     char* output_filename = argv[4];
+
+    if (strcmp(input_filename, "--console") == 0) {
+        console_mode = 1;
+    }
 
     for (size_t x = 0; x != 0x10001; x++) {
         memory[x] = 0;
@@ -1235,6 +1325,16 @@ int main(int argc, char **argv) {
     save_address(addr_openout);
     emit_byte(inst_jmp);        // f024     jmp write
     save_address(addr_write);
+    emit_byte(inst_jmp);        // f027     jmp con_read
+    save_address(addr_con_read);
+    emit_byte(inst_jmp);        // f02a     jmp con_flush
+    save_address(addr_con_flush);
+    emit_byte(inst_jmp);        // f02d     jmp con_ready
+    save_address(addr_con_ready);
+    emit_byte(inst_jmp);        // f030     jmp term_rows
+    save_address(addr_term_rows);
+    emit_byte(inst_jmp);        // f033     jmp term_cols
+    save_address(addr_term_cols);
     fill_address(addr_read_b);
     emit_byte(inst_lda);        // read_b:  lda $f004
     emit_address(port_read_b);
@@ -1294,20 +1394,47 @@ int main(int argc, char **argv) {
     emit_byte(inst_sta);        // write:   sta $fe84
     emit_address(port_write);
     emit_byte(inst_rts);        //          rts
+    fill_address(addr_con_read);
+    emit_byte(inst_lda);        // con_read: lda $fe90
+    emit_address(port_con_read);
+    emit_byte(inst_rts);        //           rts
+    fill_address(addr_con_flush);
+    emit_byte(inst_sta);        // con_flush: sta $fe91
+    emit_address(port_con_flush);
+    emit_byte(inst_rts);        //            rts
+    fill_address(addr_con_ready);
+    emit_byte(inst_lda);        // con_ready: lda $fe94
+    emit_address(port_con_ready);
+    emit_byte(inst_rts);        //            rts
+    fill_address(addr_term_rows);
+    emit_byte(inst_lda);        // term_rows: lda $fe92
+    emit_address(port_term_rows);
+    emit_byte(inst_rts);        //            rts
+    fill_address(addr_term_cols);
+    emit_byte(inst_lda);        // term_cols: lda $fe93
+    emit_address(port_term_cols);
+    emit_byte(inst_rts);        //            rts
 
-    input_file_ptr = fopen(input_filename, "rb");
-    if (!input_file_ptr) {
-        fprintf(stderr, "could not open input file: %s\n", input_filename);
-        return 1;
+    if (console_mode) {
+        input_file_ptr = stdin;
+        setup_console();
+    } else {
+        input_file_ptr = fopen(input_filename, "rb");
+        if (!input_file_ptr) {
+            fprintf(stderr, "could not open input file: %s\n", input_filename);
+            return 1;
+        }
     }
 
-    if (strcmp(output_filename, "-") == 0) {
+    if (console_mode) {
+        output_file_ptr = stdout;
+    } else if (strcmp(output_filename, "-") == 0) {
         output_file_ptr = stdout;
     } else {
         output_file_ptr = fopen(output_filename, "wb");
         if (!output_file_ptr) {
             fprintf(stderr, "could not open output file: %s\n", output_filename);
-            fclose(input_file_ptr);
+            if (!console_mode) fclose(input_file_ptr);
             return 1;
         }
     }
@@ -1323,30 +1450,33 @@ int main(int argc, char **argv) {
             ;
     }
 
-    show_commandline(argc, argv);  // Print command line before emulation (no newline yet)
+    if (!console_mode) {
+        show_commandline(argc, argv);  // Print command line before emulation (no newline yet)
+    }
     reset6502();
     const int max_cycles = 50000000;
     while (!done) {
         step6502();
-        if (clockticks6502 > max_cycles) {
+        if (!console_mode && clockticks6502 > max_cycles) {
             fprintf(stderr, "\ndid not terminate within %i cycles\n", max_cycles);
             free(arg_addresses);
             fclose(output_file_ptr);
             fclose(input_file_ptr);
             return 1;
         }
-        // printf("PC=%04x\n", pc);
     }
 
     free(arg_addresses);
 
     files_destroy();
 
-    if (strcmp(output_filename, "-") != 0) {
+    if (!console_mode && strcmp(output_filename, "-") != 0) {
         fclose(output_file_ptr);
     }
 
-    fclose(input_file_ptr);
+    if (!console_mode) {
+        fclose(input_file_ptr);
+    }
 
     uint8_t exitcode;
     if (exitcode_set != -1) {
@@ -1369,11 +1499,17 @@ int main(int argc, char **argv) {
         }
     }
 
-    // Print final status line
-    if (error_output_started || exitcode != 0) {
-        fprintf(stderr, "Exit code %d; Executed %i cycles\n", exitcode, clockticks6502);
-    } else {
-        fprintf(stderr, "executed %i cycles\n", clockticks6502);
+    // Print final status line (skip in console mode)
+    if (!console_mode) {
+        if (error_output_started || exitcode != 0) {
+            fprintf(stderr, "Exit code %d; Executed %i cycles\n", exitcode, clockticks6502);
+        } else {
+            fprintf(stderr, "executed %i cycles\n", clockticks6502);
+        }
+    }
+
+    if (console_mode) {
+        return exitcode;
     }
 
     char* dump_filename_base = argv[argc - 1];
