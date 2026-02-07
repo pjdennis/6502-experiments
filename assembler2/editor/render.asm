@@ -154,38 +154,17 @@ render_status_line
   ; Print read-only indicator
   LDA READONLY
   BEQ .not_readonly
-  LDA #' '
-  JSR write_b
-  LDA #'['
-  JSR write_b
-  LDA #'R'
-  JSR write_b
-  LDA #'O'
-  JSR write_b
-  LDA #']'
-  JSR write_b
+  PRINT_STR str_ro_indicator
 .not_readonly
 
   ; Print modified flag
   LDA MODIFIED
   BEQ .not_modified
-  LDA #' '
-  JSR write_b
-  LDA #'['
-  JSR write_b
-  LDA #'+'
-  JSR write_b
-  LDA #']'
-  JSR write_b
+  PRINT_STR str_mod_indicator
 .not_modified
 
   ; Print separator
-  LDA #' '
-  JSR write_b
-  LDA #'-'
-  JSR write_b
-  LDA #' '
-  JSR write_b
+  PRINT_STR str_separator
 
   ; Print mode
   LDA MODE
@@ -198,12 +177,7 @@ render_status_line
   JSR write_string
 
   ; Print separator and line/col
-  LDA #' '
-  JSR write_b
-  LDA #'-'
-  JSR write_b
-  LDA #' '
-  JSR write_b
+  PRINT_STR str_separator
 
   ; Line number (1-based)
   CLC
@@ -301,7 +275,10 @@ render_current_line
   RTS
 
 ; === String constants ===
-str_normal  .data "NORMAL" $00
-str_insert  .data "INSERT" $00
-str_command .data "COMMAND" $00
-mode_strings .data str_normal str_insert str_command
+str_normal        .data "NORMAL" $00
+str_insert        .data "INSERT" $00
+str_command       .data "COMMAND" $00
+mode_strings      .data str_normal str_insert str_command
+str_ro_indicator  .data " [RO]" $00
+str_mod_indicator .data " [+]" $00
+str_separator     .data " - " $00
