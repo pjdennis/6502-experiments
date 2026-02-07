@@ -3271,3 +3271,82 @@ INPUT:
  1: * = $0200
  2:   .word 1000
 EXPECT_HEX: e8 03
+
+# ============================================================================
+# .ASCIIZ DIRECTIVE TESTS
+# ============================================================================
+
+---
+NAME: asciiz_string
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz "Hello"
+EXPECT_HEX: 48 65 6c 6c 6f 00
+
+---
+NAME: asciiz_empty_string
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz ""
+EXPECT_HEX: 00
+
+---
+NAME: asciiz_single_byte
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz $42
+EXPECT_HEX: 42 00
+
+---
+NAME: asciiz_mixed
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz 42 "Text"
+EXPECT_HEX: 2a 54 65 78 74 00
+
+---
+NAME: asciiz_multiple_bytes
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz $01 $02 $03
+EXPECT_HEX: 01 02 03 00
+
+---
+NAME: asciiz_char_literals
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz 'H' 'i'
+EXPECT_HEX: 48 69 00
+
+---
+NAME: asciiz_forward_ref
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz val
+ 3: val = $42
+EXPECT_HEX: 42 00
+
+---
+NAME: asciiz_escape_seq
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz "A\nB"
+EXPECT_HEX: 41 0a 42 00
+
+---
+NAME: asciiz_error_word_value
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz $1234
+EXPECT_ERROR: 6
+EXPECT_LINE: 2
+EXPECT_MSG: Value out of range
+
+---
+NAME: asciiz_error_decimal_256
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz 256
+EXPECT_ERROR: 6
+EXPECT_LINE: 2
+EXPECT_MSG: Value out of range

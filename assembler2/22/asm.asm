@@ -1411,6 +1411,10 @@ process_directive
   SET16 directive_word TABP16
   JSR compare_token
   BEQ .word
+  ; Check for 'asciiz'
+  SET16 directive_asciiz TABP16
+  JSR compare_token
+  BEQ .asciiz
   JSR process_conditional_directive ; Returns with C=0 if processed
   BCC .directive_done
   ; Check for 'macro'
@@ -1461,6 +1465,9 @@ process_directive
 .word
   LDA #$02
   JMP set_data_mode
+.asciiz
+  LDA #$03
+  JMP set_data_mode
 
 
 ; On exit C=0 if processed; C=1 if not processed
@@ -1503,6 +1510,9 @@ directive_byte
 
 directive_word
   .data "word" $00
+
+directive_asciiz
+  .data "asciiz" $00
 
 directive_ifdef
   .data "ifdef" $00
@@ -1555,6 +1565,12 @@ data_parameters_loop
   JSR emit
   JMP data_parameters_loop
 .data_done
+  LDA DATA_MODE
+  CMP #$03
+  BNE .data_rts
+  LDA #$00
+  JMP emit           ; Tail call: emit null terminator
+.data_rts
   RTS
 
 
