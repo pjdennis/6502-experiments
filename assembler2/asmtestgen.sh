@@ -17,22 +17,22 @@ make --quiet
 ./emulator.out out/instgen07.out 2000 /dev/null out/inst07.asm.out
 cat out/inst07.asm.out 07/asm07.asm > out/asm07c.asm.out
 ./emulator.out out/asm06.out 2000 out/asm07c.asm.out out/asm07c.out
-./emulator.out out/asm06.out 2000 08/instgen07.asm out/instgen08.out
+./emulator.out out/asm06.out 2000 08/instgen08.asm out/instgen08.out
 ./emulator.out out/instgen08.out 2000 /dev/null out/inst08.asm.out
 cat out/inst08.asm.out 08/asm08.asm > out/asm08c.asm.out
 ./emulator.out out/asm07c.out 2000 out/asm08c.asm.out out/asm08c.out
-./emulator.out out/asm06.out 2000 09/instgen07.asm out/instgen09.out
+./emulator.out out/asm06.out 2000 09/instgen09.asm out/instgen09.out
 ./emulator.out out/instgen09.out 2000 /dev/null out/inst09.asm.out
 cat out/inst09.asm.out 09/asm09.asm > out/asm09c.asm.out
 ./emulator.out out/asm08c.out 2000 out/asm09c.asm.out out/asm09c.out
-./emulator.out out/asm06.out 2000 10/instgen07.asm out/instgen10.out
+./emulator.out out/asm06.out 2000 10/instgen10.asm out/instgen10.out
 ./emulator.out out/instgen10.out 2000 /dev/null out/inst10.asm.out
 cat out/inst10.asm.out 10/asm10.asm > out/asm10c.asm.out
 ./emulator.out out/asm09c.out 2000 out/asm10c.asm.out out/asm10c.out
 (cd 11 && ../emulator.out ../out/asm10c.out 2000 instgen11.asm ../out/instgen11.out)
 ./emulator.out out/instgen11.out 2000 /dev/null out/inst11.asm.out
 (cd 11 && ../emulator.out ../out/asm10c.out 2000 asm11.asm ../out/asm11.out)
-(cd 12 && ../emulator.out ../out/asm11.out 2000 instgen11.asm ../out/instgen12.out)
+(cd 12 && ../emulator.out ../out/asm11.out 2000 instgen12.asm ../out/instgen12.out)
 ./emulator.out out/instgen12.out 2000 /dev/null out/inst12.asm.out
 (cd 12 && ../emulator.out ../out/asm11.out 2000 asm12.asm ../out/asm12.out)
 (cd 13 && ../emulator.out ../out/asm12.out 2000 /dev/null /dev/null instgen13.asm ../out/instgen13.out)
@@ -48,7 +48,7 @@ cat out/inst10.asm.out 10/asm10.asm > out/asm10c.asm.out
 ./emulator.out out/instgen16.out 2000 /dev/null out/inst16.asm.out
 (cd 16 && ../emulator.out ../out/asm15.out 2000 /dev/null /dev/null asm16.asm ../out/asm16.out)
 ./emulator.out out/asm16.out 2000 /dev/null /dev/null test16.asm out/test16.out
-(cd 17 && ../emulator.out ../out/asm15.out 2000 /dev/null /dev/null instgen16.asm ../out/instgen17.out)
+(cd 17 && ../emulator.out ../out/asm15.out 2000 /dev/null /dev/null instgen17.asm ../out/instgen17.out)
 ./emulator.out out/instgen17.out 2000 /dev/null out/inst17.asm.out
 (cd 17 && ../emulator.out ../out/asm16.out 2000 /dev/null /dev/null asm17.asm ../out/asm17.out)
 diff <(hexdump -C out/asm16.out) <(hexdump -C out/asm17.out)

@@ -25,8 +25,8 @@ TOKEN     = $0011      ; multiple bytes
 *         = $2000       ; Set PC
 
 
-  .include environment11.asm
-  .include common11.asm
+  .include environment12.asm
+  .include common12.asm
 
 
 ; Instruction table

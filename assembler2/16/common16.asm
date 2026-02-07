@@ -1,7 +1,7 @@
 HT_KEY = TOKEN
 HT_VL  = HEX2
 HT_VH  = HEX1
-  .include hash_table15.asm
+  .include hash_table16.asm
 
 
 init_heap

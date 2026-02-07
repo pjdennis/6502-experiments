@@ -45,8 +45,8 @@ CURR_GLOBAL_HEAP_H DATA $00 ; "
   .code
 
 ; Include files
-  .include environment11.asm
-  .include common15.asm
+  .include environment16.asm
+  .include common16.asm
 
 
 ; Mode constants (for documentation)

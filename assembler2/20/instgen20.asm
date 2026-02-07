@@ -45,7 +45,7 @@ CURR_GLOBAL_HEAP_H .data $00 ; "
   .code
 
 ; Include files
-  .include environment11.asm
+  .include environment20.asm
   .include common20.asm
 
 

@@ -37,14 +37,14 @@ OPERAND_H   DATA $00 ; Operand value (high byte)
 
 ; Include files
   .include ../out/inst16.asm.out   ; This goes first since the tables should start on a page boundary
-  .include environment11.asm
-  .include common15.asm
+  .include environment16.asm
+  .include common16.asm
 FS_FILENAME   = TOKEN
 FS_CURR_FILE  = CURR_FILE
 FS_CURR_LINEL = CURLINEL
 FS_CURR_LINEH = CURLINEH
-  .include file_stack15.asm
-  .include to_decimal15.asm
+  .include file_stack16.asm
+  .include to_decimal16.asm
 
 
 ; Addressing mode constants (must match instgen16.asm)

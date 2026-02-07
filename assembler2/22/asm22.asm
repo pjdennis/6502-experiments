@@ -105,7 +105,7 @@ MACRO_PTR16     .data $0000  ; Pointer to macro name (for show_captured_macros)
 
 ; Include files
   .include ../out/inst22.asm.out   ; This goes first since the tables should start on a page boundary
-  .include environment11.asm
+  .include environment22.asm
   .include macros22.asm
   .include common22.asm
   .include label_scope22.asm
