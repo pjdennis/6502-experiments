@@ -3172,3 +3172,102 @@ INPUT:
 EXPECT_ERROR: 6
 EXPECT_LINE: 2
 EXPECT_MSG: Value out of range
+
+# ============================================================================
+# .WORD DIRECTIVE TESTS
+# ============================================================================
+
+---
+NAME: word_basic
+INPUT:
+ 1: * = $0200
+ 2:   .word $1234
+EXPECT_HEX: 34 12
+
+---
+NAME: word_small_value
+INPUT:
+ 1: * = $0200
+ 2:   .word $42
+EXPECT_HEX: 42 00
+
+---
+NAME: word_multiple
+INPUT:
+ 1: * = $0200
+ 2:   .word $12 $0056
+EXPECT_HEX: 12 00 56 00
+
+---
+NAME: word_label
+INPUT:
+ 1: * = $0200
+ 2: label = $ABCD
+ 3:   .word label
+EXPECT_HEX: cd ab
+
+---
+NAME: word_label_small
+INPUT:
+ 1: * = $0200
+ 2: val = $03
+ 3:   .word val
+EXPECT_HEX: 03 00
+
+---
+NAME: word_forward_ref
+INPUT:
+ 1: * = $0200
+ 2:   .word target
+ 3: target = $ABCD
+EXPECT_HEX: cd ab
+
+---
+NAME: word_zero
+INPUT:
+ 1: * = $0200
+ 2:   .word $00
+EXPECT_HEX: 00 00
+
+---
+NAME: word_ffff
+INPUT:
+ 1: * = $0200
+ 2:   .word $FFFF
+EXPECT_HEX: ff ff
+
+---
+NAME: word_string_mixed
+INPUT:
+ 1: * = $0200
+ 2:   .word $1234 "ABC" $5678
+EXPECT_HEX: 34 12 41 42 43 78 56
+
+---
+NAME: word_expression
+INPUT:
+ 1: * = $0200
+ 2:   .word $10+$20
+EXPECT_HEX: 30 00
+
+---
+NAME: word_byte_selectors
+INPUT:
+ 1: * = $0200
+ 2: addr = $ABCD
+ 3:   .word <addr >addr
+EXPECT_HEX: cd 00 ab 00
+
+---
+NAME: word_char_literal
+INPUT:
+ 1: * = $0200
+ 2:   .word 'A'
+EXPECT_HEX: 41 00
+
+---
+NAME: word_decimal
+INPUT:
+ 1: * = $0200
+ 2:   .word 1000
+EXPECT_HEX: e8 03

@@ -1407,6 +1407,10 @@ process_directive
   SET16 directive_byte TABP16
   JSR compare_token
   BEQ .byte
+  ; Check for 'word'
+  SET16 directive_word TABP16
+  JSR compare_token
+  BEQ .word
   JSR process_conditional_directive ; Returns with C=0 if processed
   BCC .directive_done
   ; Check for 'macro'
@@ -1454,6 +1458,9 @@ process_directive
 .byte
   LDA #$01
   JMP set_data_mode
+.word
+  LDA #$02
+  JMP set_data_mode
 
 
 ; On exit C=0 if processed; C=1 if not processed
@@ -1494,6 +1501,9 @@ directive_data
 directive_byte
   .data "byte" $00
 
+directive_word
+  .data "word" $00
+
 directive_ifdef
   .data "ifdef" $00
 
@@ -1528,7 +1538,9 @@ data_parameters_loop
   JSR emit
   JMP data_parameters_loop
 .forced_width
-  ; Mode 1 (.byte): validate + emit 1 byte
+  CMP #$02
+  BEQ .data_emit_two_bytes  ; Mode 2 (.word): force 2 bytes
+  ; Mode 1 (.byte) or Mode 3 (.asciiz): validate + emit 1 byte
   BIT PASS
   BPL .data_emit_one_byte   ; Skip validation on pass 1
   LDA OPERAND16+$01
