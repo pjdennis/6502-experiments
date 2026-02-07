@@ -6,7 +6,7 @@ do
     clear && ./asmtestgen.sh && tests/run_tests.py
     echo "Waiting for file change..."
     fswatch -1 --event Updated --latency 0.1 \
-        asmtestgen.sh emulator.c sidebyside.cpp asm0c.c \
+        asmtestgen.sh emulator.c sidebyside.cpp 00/asm.c \
         00/asm.asm 01/asm.asm 02/asm.asm 03/asm.asm 04/asm.asm 05/asm.asm 06/asm.asm \
         07/asm.asm 07/instgen.asm 08/asm.asm 08/instgen.asm 09/asm.asm 09/instgen.asm 10/asm.asm 10/instgen.asm \
         11/asm.asm 11/instgen.asm 11/environment.asm 11/common.asm \

@@ -8,7 +8,7 @@ rm -f out/*.out out/*.asm.out
 rm -rf {00..99}/out
 make --quiet
 echo "--- Version 00 ---"
-(cd 00 && mkdir -p out && ../asm0c.out asm.asm out/asm.out)
+(cd 00 && out/asm_c.out asm.asm out/asm.out)
 echo "--- Version 01 ---"
 (cd 01 && mkdir -p out && ../emulator.out ../00/out/asm.out 2000 asm.asm out/asm.out)
 echo "--- Version 02 ---"
