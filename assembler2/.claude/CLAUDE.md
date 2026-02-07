@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 make
 ```
 
-The build succeeds when `asm22.out == asm22_2.out` (self-assembly verification).
+The build succeeds when `22/out/asm22.out == 22/out/asm22_2.out` (self-assembly verification).
 
 ## Architecture
 
@@ -25,9 +25,13 @@ This is a self-hosting 6502 assembler built through progressive bootstrapping. T
 
 A C bootstrap assembler assembles the initial versions, which then assemble progressively more capable versions (asm00 → asm01 → ... → asm22). Each version adds features needed by the next. Each version lives in its own subdirectory (`00/` through `22/`) with all its source files.
 
+### Build Output Structure
+
+Each version builds into its own `NN/out/` directory (e.g., `22/out/asm22.out`). The root `out/` directory is used only for test outputs. The emulator auto-creates its `dump/` directory, so no symlinks or pre-creation are needed. `make clean` removes all per-version `out/` and `dump/` directories.
+
 ### Key Components
 
-- **Instruction generators** (`NN/instgenNN.asm`): Generate `inst*.asm.out` files containing pre-computed instruction hash tables. These are `.include`d by the assemblers to avoid runtime initialization.
+- **Instruction generators** (`NN/instgenNN.asm`): Generate `NN/out/instNN.asm.out` files containing pre-computed instruction hash tables. These are `.include`d (as `out/instNN.asm.out` relative to the version directory) by the assemblers to avoid runtime initialization.
 
 - **Hash tables**: Used for both label lookup (`LHASHTAB` at $1F00) and instruction lookup (`IHASHTAB`). Hash entries are stored on a heap (`MEMP16`).
 
