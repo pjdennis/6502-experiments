@@ -36,7 +36,7 @@ OPERAND_H   DATA $00 ; Operand value (high byte)
 
 
 ; Include files
-  .include ../out/inst16.asm.out   ; This goes first since the tables should start on a page boundary
+  .include out/inst16.asm.out   ; This goes first since the tables should start on a page boundary
   .include environment16.asm
   .include common16.asm
 FS_FILENAME   = TOKEN

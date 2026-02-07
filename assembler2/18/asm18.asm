@@ -39,7 +39,7 @@ IS_FWDREF   DATA $00 ; $FF if current label is forward ref (pass 1 only)
 
 
 ; Include files
-  .include ../out/inst18.asm.out   ; This goes first since the tables should start on a page boundary
+  .include out/inst18.asm.out   ; This goes first since the tables should start on a page boundary
   .include environment18.asm
   .include common18.asm
 FS_FILENAME   = TOKEN

@@ -85,7 +85,7 @@ class TestRunner:
         self.base_dir = base_dir
         self.verbose = verbose
         self.emulator = base_dir / "emulator.out"
-        self.assembler = base_dir / "out" / "asm22_debug.out"
+        self.assembler = base_dir / "22" / "out" / "asm22_debug.out"
         self.file_stack_test = base_dir / "out" / "file_stack_test22.out"
 
         self.passed = 0

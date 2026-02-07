@@ -976,6 +976,7 @@ void hookexternal(void *funcptr) {
 
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #define port_read_b  0xf004
 #define port_write_b 0xf001
@@ -1391,6 +1392,7 @@ int main(int argc, char **argv) {
     strcat(dump_filename, basename);
     strcat(dump_filename, dump_file_suffix);
 
+    mkdir("dump", 0755);
     FILE* dump_file_ptr = fopen(dump_filename, "wb");
     if (!dump_file_ptr) {
         fprintf(stderr, "could not open output file: %s\n", dump_filename);

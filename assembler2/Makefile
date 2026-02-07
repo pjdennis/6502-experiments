@@ -6,6 +6,7 @@ clean:
 	rm -f sidebyside.out
 	rm -f out/*.out
 	rm -f dump/*.bin
+	for d in [0-9][0-9]; do rm -rf "$$d/out" "$$d/dump"; done
 
 emulator.out: emulator.c
 	@mkdir -p out

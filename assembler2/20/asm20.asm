@@ -49,7 +49,7 @@ ARG_INDEX   .data $00 ; Current argument index being processed
 
 
 ; Include files
-  .include ../out/inst20.asm.out   ; This goes first since the tables should start on a page boundary
+  .include out/inst20.asm.out   ; This goes first since the tables should start on a page boundary
   .include environment20.asm
   .include common20.asm
 FS_FILENAME   = TOKEN
