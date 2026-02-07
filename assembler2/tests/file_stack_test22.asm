@@ -27,9 +27,9 @@ TABP16      .data $0000
 
   .code
 
-  .include environment11.asm
-  .include macros22.asm
-  .include to_decimal22.asm
+  .include 22/environment11.asm
+  .include 22/macros22.asm
+  .include 22/to_decimal22.asm
 
 ; File stack configuration
 FS_FILENAME   = TOKEN
@@ -40,7 +40,7 @@ FS_FILENAME   = TOKEN
   ; TODO: Consider writing to debug output when it's called, and extend tests to confirm
   .endmacro
 
-  .include file_stack22.asm
+  .include 22/file_stack22.asm
 read_char = file_stack_read_char
 CURLINE16 = FS_CURR_LINE16
 CURR_CHAR = FS_CURR_CHAR

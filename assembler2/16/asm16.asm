@@ -16,7 +16,6 @@ HEX2        DATA $00 ; 1 byte
 PASS        DATA $00 ; 1 byte $00 = pass 1 $FF = pass 2
 MEMPL       DATA $00 ; 2 byte heap pointer
 MEMPH       DATA $00 ; "
-INST_FLAG   DATA $00 ; flags associated with instruction
 STARTED     DATA $00 ; flag to indicate output has started
 CURR_FILE   DATA $00 ; current file handle
 CURLINEL    DATA $00 ; Current line (L)
@@ -27,12 +26,17 @@ PC_SAVEH    DATA $00 ; "
 CURR_GLOBAL_HEAP_L DATA $00 ; Heap address of current global label string
 CURR_GLOBAL_HEAP_H DATA $00 ; "
 DEBUG_FLAG  DATA $00 ; Non-zero if debug output enabled
+ADDR_MODE   DATA $00 ; Current addressing mode
+INST_PTR_L  DATA $00 ; Pointer to instruction mode table entry
+INST_PTR_H  DATA $00 ; "
+OPERAND_L   DATA $00 ; Operand value (low byte)
+OPERAND_H   DATA $00 ; Operand value (high byte)
 
   .code
 
 
 ; Include files
-  .include out/inst15.asm.out   ; This goes first since the tables should start on a page boundary
+  .include ../out/inst16.asm.out   ; This goes first since the tables should start on a page boundary
   .include environment11.asm
   .include common15.asm
 FS_FILENAME   = TOKEN
@@ -43,10 +47,21 @@ FS_CURR_LINEH = CURLINEH
   .include to_decimal15.asm
 
 
-; Constants
-INST_PSUEDO   = $01
-INST_RELATIVE = $02
-INST_BYTE     = $04
+; Addressing mode constants (must match instgen16.asm)
+MODE_NONE = $00   ; Implied (no operand)
+MODE_ACC  = $01   ; Accumulator
+MODE_IMM  = $02   ; Immediate
+MODE_ZP   = $03   ; Zero page
+MODE_ZPX  = $04   ; Zero page, X
+MODE_ZPY  = $05   ; Zero page, Y
+MODE_ABS  = $06   ; Absolute
+MODE_ABSX = $07   ; Absolute, X
+MODE_ABSY = $08   ; Absolute, Y
+MODE_INDX = $09   ; Indirect, X - ($zp,X)
+MODE_INDY = $0A   ; Indirect, Y - ($zp),Y
+MODE_REL  = $0B   ; Relative (branches)
+MODE_IND  = $0C   ; Indirect - JMP ($xxxx)
+MODE_DATA = $FE   ; Pseudo-instruction (DATA)
 
 
 ; Error messages
@@ -94,6 +109,12 @@ err_invalid_debug_arg
 
 err_no_global_for_local
   BRK $0F "No global label for local" $00
+
+err_invalid_addressing_mode
+  BRK $11 "Invalid addressing mode for instruction" $00
+
+err_invalid_char_literal
+  BRK $12 "Invalid character literal" $00
 
 
 ; Read next character from file stack
@@ -186,6 +207,10 @@ compare_end_of_token
   CMP# "\n"
   BEQ .end
   CMP# ";"
+  BEQ .end
+  CMP# ","             ; Comma terminates token for indexed modes
+  BEQ .end
+  CMP# ")"             ; Close paren terminates for indirect modes
 .end
   RTS
 
@@ -585,12 +610,13 @@ capture_label
   JMP err_duplicate_label
 
 
-; Read and emit an opcode
-; On entry A contains the first character of the opcode
+; Look up mnemonic and save pointer to mode:opcode data
+; On entry A contains the first character of the mnemonic
 ; On exit A contains the next character
+;         INST_PTR_L:INST_PTR_H points to mode:opcode data (past mnemonic)
 ;         X, Y are not preserved
-; Raises 'Opcode not found' error if opcode is not found
-emit_opcode
+; Raises 'Opcode not found' error if mnemonic is not found
+lookup_mnemonic
   JSR read_token
   PHA                  ; Save next char
   JSR select_instruction_hash_table
@@ -598,20 +624,157 @@ emit_opcode
   BCC .found
   JMP err_opcode_not_found
 .found
-  LDAZ HEX2
-  STAZ INST_FLAG
-  AND# INST_PSUEDO
-  BNE .done            ; Not opcode (DATA command)
-  ; Opcode
-  LDAZ HEX1
-  JSR emit
-.done
+  ; TABPL:TABPH points to mnemonic string (entry + 2)
+  ; Skip past mnemonic to get to mode:opcode data
+  LDY# $00
+.skip_mnemonic
+  LDAZ(),Y TABPL
+  BEQ .end_of_mnemonic
+  INY
+  JMP .skip_mnemonic
+.end_of_mnemonic
+  ; Y points at null terminator, mode data starts at Y+1
+  INY
+  ; Calculate INST_PTR = TABPL + Y
+  TYA
+  CLC
+  ADCZ TABPL
+  STAZ INST_PTR_L
+  LDA# $00
+  ADCZ TABPH
+  STAZ INST_PTR_H
   PLA                  ; Restore next char
   RTS
 
 
+; Find opcode for addressing mode in mode:opcode list
+; On entry INST_PTR_L:INST_PTR_H points to mode:opcode data
+;          ADDR_MODE contains the addressing mode to find
+; On exit C = 0 if found, A contains opcode
+;         C = 1 if not found
+;         X is preserved
+;         Y is not preserved
+find_opcode_for_mode
+  LDY# $00
+.loop
+  LDAZ(),Y INST_PTR_L  ; Get mode byte
+  CMP# $FF
+  BEQ .not_found       ; End of list, mode not found
+  CMPZ ADDR_MODE
+  BEQ .found
+  ; Not this mode, skip to next pair
+  INY
+  INY
+  JMP .loop
+.found
+  INY
+  LDAZ(),Y INST_PTR_L  ; Get opcode byte
+  CLC
+  RTS
+.not_found
+  SEC
+  RTS
+
+
+; Emit instruction based on addressing mode
+; On entry INST_PTR_L:INST_PTR_H points to mode:opcode data
+;          ADDR_MODE contains the addressing mode
+;          OPERAND_L:OPERAND_H contains operand value (if applicable)
+;          A contains the next character after operand (preserved for caller)
+; On exit X is preserved
+;         A contains the next character (preserved from entry)
+;         Y is not preserved
+; Raises error if addressing mode is not valid for this instruction
+emit_instruction
+  ; Preserve A (next char after operand) for caller
+  PHA
+  ; Check for DATA pseudo-instruction (MODE_DATA)
+  LDAZ ADDR_MODE
+  CMP# MODE_DATA
+  BEQ .done            ; DATA pseudo handled separately in parameters loop
+  ; Find opcode for this addressing mode
+  JSR find_opcode_for_mode
+  BCS .invalid_mode
+  ; Emit the opcode
+  JSR emit
+  ; Now emit operand(s) based on mode
+  LDAZ ADDR_MODE
+  CMP# MODE_NONE
+  BEQ .done            ; No operand for implied mode
+  CMP# MODE_ACC
+  BEQ .done            ; No operand for accumulator mode
+  CMP# MODE_REL
+  BEQ .emit_relative   ; Relative needs special handling
+  ; Check if 1-byte or 2-byte operand
+  CMP# MODE_IMM
+  BEQ .one_byte
+  CMP# MODE_ZP
+  BEQ .one_byte
+  CMP# MODE_ZPX
+  BEQ .one_byte
+  CMP# MODE_ZPY
+  BEQ .one_byte
+  CMP# MODE_INDX
+  BEQ .one_byte_zp_only
+  CMP# MODE_INDY
+  BEQ .one_byte_zp_only
+  ; 2-byte operand (absolute modes)
+  LDAZ OPERAND_L
+  JSR emit
+  LDAZ OPERAND_H
+  JSR emit
+.done
+  PLA
+  RTS
+.one_byte_zp_only
+  ; ZP-only addressing modes (INDX, INDY) - validate operand <= $FF
+  BITZ PASS
+  BPL .one_byte          ; Skip validation on pass 1
+  LDAZ OPERAND_H
+  BNE .zp_only_error
+.one_byte
+  LDAZ OPERAND_L
+  JSR emit
+  PLA
+  RTS
+.zp_only_error
+  JMP err_value_out_of_range
+.emit_relative
+  ; Calculate relative offset: target - PC - 1
+  BITZ PASS
+  BPL .emit_relative_pass1  ; Skip validation on pass 1
+  CLC                  ; For the - 1
+  LDAZ OPERAND_L
+  SBCZ PCL
+  STAZ OPERAND_L
+  LDAZ OPERAND_H
+  SBCZ PCH
+  ; Check if within range
+  CMP# $00
+  BEQ .forward
+  CMP# $FF
+  BEQ .backward
+  JMP err_branch_out_of_range
+.forward
+  LDAZ OPERAND_L
+  BPL .emit_relative_ok
+  JMP err_branch_out_of_range
+.backward
+  LDAZ OPERAND_L
+  BMI .emit_relative_ok
+  JMP err_branch_out_of_range
+.emit_relative_pass1
+  LDAZ OPERAND_L
+.emit_relative_ok
+  JSR emit
+  PLA
+  RTS
+.invalid_mode
+  JMP err_invalid_addressing_mode
+
+
 ; Read and emit quoted ASCII
-; On entry A countains the first character within quotes
+; On entry A contains the first character within quotes
 ; On exit A contains the next character after the closing quote
 ;         X, Y are preserved
 ; Raises 'Closing quote not found' error if closing quote not found on current line
@@ -641,7 +804,7 @@ emit_quoted
 
 
 ; Read and emit a 2 byte label value
-; On entry A countains the first character of the label
+; On entry A contains the first character of the label
 ; On exit A contains the next character
 ;         X, Y are not preserved
 ; Raises 'Label not found' error if label is not found
@@ -658,7 +821,7 @@ emit_label
 
 
 ; Read and emit a 1 byte label value
-; On entry A countains the first character of the label
+; On entry A contains the first character of the label
 ; On exit A contains the next character
 ;         X, Y are not preserved
 ; Raises 'Label not found' error if label is not found
@@ -680,7 +843,7 @@ emit_label_byte
 
 
 ; Read and emit the least significant byte of a label value
-; On entry A countains the first character of the label
+; On entry A contains the first character of the label
 ; On exit A contains the next character
 ;         X, Y are not preserved
 ; Raises 'Label not found' error if label is not found
@@ -695,7 +858,7 @@ emit_label_lsb
 
 
 ; Read and emit the most significant byte of a label value
-; On entry A countains the first character of the label
+; On entry A contains the first character of the label
 ; On exit A contains the next character
 ;         X, Y are not preserved
 ; Raises 'Label not found' error if label is not found
@@ -710,7 +873,7 @@ emit_label_msb
 
 
 ; Read and emit a label value relative to PC
-; On entry A countains the first character of the label
+; On entry A contains the first character of the label
 ; On exit A contains the next character
 ;         X, Y are not preserved
 ; Raises 'Label not found' error if label is not found
@@ -889,60 +1052,597 @@ assemble_code
   JSR process_directive
   JMP .line_loop
 .opcode
-  ; Read mnemonic and emit opcode
-  JSR emit_opcode
-  JMP .parameters_loop_entry
-.parameters_loop
-  TAY                  ; Save next char
-  LDA# $00
-  STAZ INST_FLAG       ; Reset instruction flags after first iteration
-  TYA                  ; Restore next char
-.parameters_loop_entry
+  ; Read mnemonic and look up in instruction table
+  JSR lookup_mnemonic
+  ; A contains next char after mnemonic
+  ; Parse operand to determine addressing mode
+  JSR parse_operand_and_emit
+  ; A contains next char after operand - skip to end of line
   JSR skip_spaces
   JSR check_for_end_of_line
-  BCS .line_loop       ; End of line
+  JMP .line_loop
+
+
+; Parse operand and emit instruction
+; On entry A contains the next character after mnemonic
+;          INST_PTR_L:INST_PTR_H points to mode:opcode data
+; On exit A contains the next character after operand
+;         X, Y are not preserved
+parse_operand_and_emit
+  JSR skip_spaces
+  JSR check_for_end_of_line
+  BCS .implied_mode    ; No operand = implied mode
+  ; Check for DATA pseudo-instruction
+  STAZ TEMP            ; Save next char
+  JSR check_for_data_pseudo
+  BCS .not_data
+  LDAZ TEMP            ; Restore next char for DATA processing
+  JMP .data_mode
+.not_data
+  LDAZ TEMP            ; Restore next char
+  ; Check operand format to determine mode
+  CMP# "#"
+  BNE .not_imm
+  JMP .immediate_mode
+.not_imm
+  CMP# "("
+  BNE .not_ind
+  JMP .indirect_mode
+.not_ind
+  CMP# "$"
+  BNE .not_hex
+  JMP .hex_operand
+.not_hex
+  CMP# "<"
+  BNE .not_lsb
+  JMP .lsb_operand
+.not_lsb
+  CMP# ">"
+  BNE .not_msb
+  JMP .msb_operand
+.not_msb
+  ; Must be a label or accumulator mode
+  ; Read the token first, then check if it's exactly "A"
+  JMP .label_or_acc_operand
+
+.implied_mode
+  PHA                  ; Save next char (newline or semicolon)
+  LDA# MODE_NONE
+  STAZ ADDR_MODE
+  LDA# $00
+  STAZ OPERAND_L
+  STAZ OPERAND_H
+  PLA                  ; Restore next char
+  JMP emit_instruction ; Tail call
+
+.data_mode
+  ; A contains next character for DATA processing
+  JMP data_parameters_loop_entry
+
+.accumulator_mode
+  ; ASL A, LSR A, ROL A, ROR A
+  ; Next char is on stack (from .label_or_acc_operand)
+  LDA# MODE_ACC
+  STAZ ADDR_MODE
+  LDA# $00
+  STAZ OPERAND_L
+  STAZ OPERAND_H
+  PLA                  ; Restore next char for garbage check
+  JMP emit_instruction ; Tail call
+
+.immediate_mode
+  ; #$xx or #<label or #>label or #label
+  LDA# MODE_IMM
+  STAZ ADDR_MODE
+  JSR read_char        ; Skip #
+  CMP# "$"
+  BNE .imm_check_lsb
+  JSR read_char
+  JSR read_hex_byte
+  STAZ OPERAND_L
+  LDA# $00
+  STAZ OPERAND_H
+  JSR read_char        ; Read char after hex value (for garbage check)
+  JMP emit_instruction ; Tail call
+.imm_check_lsb
+  CMP# "<"
+  BNE .imm_check_msb
+  ; #<label - low byte of label
+  JSR read_char        ; Skip <
+  JSR read_and_find_existing_label
+  PHA                  ; Save next char
+  LDAZ HEX2            ; Low byte
+  STAZ OPERAND_L
+  LDA# $00
+  STAZ OPERAND_H
+  PLA                  ; Restore next char
+  JMP emit_instruction ; Tail call
+.imm_check_msb
+  CMP# ">"
+  BNE .imm_check_char
+  ; #>label - high byte of label
+  JSR read_char        ; Skip >
+  JSR read_and_find_existing_label
+  PHA                  ; Save next char
+  LDAZ HEX1            ; High byte
+  STAZ OPERAND_L
+  LDA# $00
+  STAZ OPERAND_H
+  PLA                  ; Restore next char
+  JMP emit_instruction ; Tail call
+.imm_check_char
+  CMP# "'"
+  BNE .imm_label
+  ; #'x' - character literal (must be exactly 1 char)
+  JSR read_char        ; Skip opening quote
+  CMP# "'"
+  BEQ .imm_char_empty  ; Empty literal - error
+  CMP# "\\"
+  BEQ .imm_char_escape
+  ; Regular character
+  STAZ OPERAND_L
+  JMP .imm_char_check_close
+.imm_char_escape
+  ; Escape sequence: \n \\ \' \"
+  JSR read_char
+  CMP# "n"
+  BNE .imm_esc_not_n
+  LDA# "\n"            ; Newline
+  JMP .imm_esc_done
+.imm_esc_not_n
+  CMP# "\\"
+  BNE .imm_esc_not_bs
+  LDA# "\\"            ; Backslash
+  JMP .imm_esc_done
+.imm_esc_not_bs
+  CMP# "'"
+  BNE .imm_esc_not_sq
+  LDA# "'"             ; Single quote
+  JMP .imm_esc_done
+.imm_esc_not_sq
+  CMP# "\""
+  BNE .imm_esc_invalid
+  LDA# "\""            ; Double quote (optional escape)
+.imm_esc_done
+  STAZ OPERAND_L
+.imm_char_check_close
+  JSR read_char        ; Should be closing quote
+  CMP# "'"
+  BNE .imm_char_too_long
+  LDA# $00
+  STAZ OPERAND_H
+  JSR read_char        ; Read next char for garbage check
+  JMP emit_instruction ; Tail call
+.imm_char_empty
+  JMP err_invalid_char_literal
+.imm_char_too_long
+  JMP err_invalid_char_literal
+.imm_esc_invalid
+  JMP err_invalid_char_literal
+.imm_label
+  JSR read_and_find_existing_label
+  PHA                  ; Save next char
+  LDAZ HEX2            ; Low byte of label value
+  STAZ OPERAND_L
+  LDA# $00
+  STAZ OPERAND_H       ; Immediate only uses low byte
+  PLA                  ; Restore next char for garbage check
+  JMP emit_instruction ; Tail call
+
+.indirect_mode
+  ; ($xx),Y - indirect indexed Y (1-byte operand)
+  ; ($xx,X) - indirect indexed X (1-byte operand)
+  ; ($xxxx) - indirect absolute for JMP (2-byte operand)
+  JSR read_char        ; Skip (
+  CMP# "$"
+  BNE .ind_label
+  JSR read_char
+  JSR read_hex_byte_or_word
+  ; C = 1 if 2 bytes, C = 0 if 1 byte
+  ; A contains next char after hex value
+  BCC .ind_hex_one_byte
+  ; 2 byte value - store operand and set flag
+  PHA                  ; Save next char
+  LDAZ HEX2
+  STAZ OPERAND_L
+  LDAZ HEX1
+  STAZ OPERAND_H
+  LDA# $FF             ; Flag: 2-byte operand
+  STAZ TEMP
+  PLA                  ; Restore next char
+  JMP .indirect_check_suffix
+.ind_hex_one_byte
+  ; 1 byte value
+  PHA                  ; Save next char
+  LDAZ HEX1
+  STAZ OPERAND_L
+  LDA# $00
+  STAZ OPERAND_H
+  STAZ TEMP            ; Flag: 1-byte operand (0)
+  PLA                  ; Restore next char
+  JMP .indirect_check_suffix
+.ind_label
+  JSR read_and_find_existing_label
+  PHA                  ; Save next char
+  LDAZ HEX2
+  STAZ OPERAND_L
+  LDAZ HEX1
+  STAZ OPERAND_H
+  ; For labels, check if high byte is non-zero to determine size
+  ORAZ HEX1            ; A = HEX1
+  BNE .ind_label_2byte
+  LDA# $00             ; Flag: 1-byte (ZP label)
+  JMP .ind_label_done
+.ind_label_2byte
+  LDA# $FF             ; Flag: 2-byte (ABS label)
+.ind_label_done
+  STAZ TEMP
+  PLA                  ; Restore next char
+.indirect_check_suffix
+  ; A contains next char (should be ) or ,)
+  CMP# ","
+  BEQ .indirect_x
+  ; Assume ), check for ,Y or just )
+  JSR read_char        ; Read char after )
+  CMP# ","
+  BNE .ind_no_suffix
+  JSR read_char        ; Should be Y
+  CMP# "Y"
+  BNE .ind_err
+  JSR read_char        ; Read char after Y for garbage check
+  PHA
+  LDA# MODE_INDY
+  STAZ ADDR_MODE
+  PLA
+  JMP emit_instruction ; Tail call
+.indirect_x
+  JSR read_char        ; Should be X
+  CMP# "X"
+  BNE .ind_err
+  JSR read_char        ; Should be )
+  CMP# ")"
+  BNE .ind_err
+  JSR read_char        ; Read char after ) for garbage check
+  PHA
+  LDA# MODE_INDX
+  STAZ ADDR_MODE
+  PLA
+  JMP emit_instruction ; Tail call
+.ind_no_suffix
+  ; Just ($xxxx) - JMP indirect mode (must be 2-byte operand)
+  ; A already contains next char (after ))
+  PHA                  ; Save next char
+  LDA# MODE_IND
+  STAZ ADDR_MODE
+  PLA                  ; Restore next char for garbage check
+  JMP emit_instruction ; Tail call
+.ind_err
+  JMP err_invalid_addressing_mode
+
+.hex_operand
+  ; $xx or $xxxx, possibly with ,X or ,Y suffix
+  JSR read_char        ; Skip $
+  JSR read_hex_byte_or_word
+  ; C = 1 if 2 bytes, C = 0 if 1 byte
+  PHA                  ; Save next char
+  BCC .hex_one_byte
+  ; 2 byte value - check for indexed modes
+  LDAZ HEX2
+  STAZ OPERAND_L
+  LDAZ HEX1
+  STAZ OPERAND_H
+  PLA                  ; Restore next char
+  JMP .check_index_suffix_abs
+.hex_one_byte
+  ; 1 byte value - could be zero page or absolute (check index suffix)
+  LDAZ HEX1
+  STAZ OPERAND_L
+  LDA# $00
+  STAZ OPERAND_H
+  PLA                  ; Restore next char
+  JMP .check_index_suffix_zp
+
+.check_index_suffix_zp
+  ; Check for ,X or ,Y on zero page value
+  CMP# ","
+  BNE .zp_no_index
+  JSR read_char        ; X or Y
+  CMP# "X"
+  BEQ .zpx
+  CMP# "Y"
+  BEQ .zpy
+  JMP err_invalid_addressing_mode
+.zpx
+  JSR read_char        ; Read char after X for garbage check
+  PHA
+  LDA# MODE_ZPX
+  STAZ ADDR_MODE
+  PLA
+  JMP emit_instruction ; Tail call
+.zpy
+  JSR read_char        ; Read char after Y for garbage check
+  PHA
+  LDA# MODE_ZPY
+  STAZ ADDR_MODE
+  PLA
+  JMP emit_instruction ; Tail call
+.zp_no_index
+  ; A contains next char for garbage check
+  PHA                  ; Save next char
+  ; Check if this is a branch instruction (MODE_REL)
+  JSR check_if_branch
+  BCC .is_branch_zp
+  ; Not a branch - use zero page mode
+  LDA# MODE_ZP
+  STAZ ADDR_MODE
+  PLA                  ; Restore next char for garbage check
+  JMP emit_instruction ; Tail call
+.is_branch_zp
+  LDA# MODE_REL
+  STAZ ADDR_MODE
+  PLA                  ; Restore next char for garbage check
+  JMP emit_instruction ; Tail call
+
+.check_index_suffix_abs
+  ; Check for ,X or ,Y on absolute value
+  CMP# ","
+  BNE .abs_no_index
+  JSR read_char        ; X or Y
+  CMP# "X"
+  BEQ .absx
+  CMP# "Y"
+  BEQ .absy
+  JMP err_invalid_addressing_mode
+.absx
+  JSR read_char        ; Read char after X for garbage check
+  PHA
+  LDA# MODE_ABSX
+  STAZ ADDR_MODE
+  PLA
+  JMP emit_instruction ; Tail call
+.absy
+  JSR read_char        ; Read char after Y for garbage check
+  PHA
+  LDA# MODE_ABSY
+  STAZ ADDR_MODE
+  PLA
+  JMP emit_instruction ; Tail call
+.abs_no_index
+  ; A contains next char for garbage check
+  PHA                  ; Save next char
+  ; Check if this is a branch instruction (MODE_REL)
+  JSR check_if_branch
+  BCC .is_branch_abs
+  ; Not a branch - use absolute mode
+  LDA# MODE_ABS
+  STAZ ADDR_MODE
+  PLA                  ; Restore next char for garbage check
+  JMP emit_instruction ; Tail call
+.is_branch_abs
+  LDA# MODE_REL
+  STAZ ADDR_MODE
+  PLA                  ; Restore next char for garbage check
+  JMP emit_instruction ; Tail call
+
+.lsb_operand
+  ; <label - emit low byte of label
+  JSR read_char        ; Skip <
+  LDA# MODE_IMM
+  STAZ ADDR_MODE
+  JSR read_and_find_existing_label
+  PHA                  ; Save next char
+  LDAZ HEX2
+  STAZ OPERAND_L
+  LDA# $00
+  STAZ OPERAND_H
+  PLA                  ; Restore next char for garbage check
+  JMP emit_instruction ; Tail call
+
+.msb_operand
+  ; >label - emit high byte of label
+  JSR read_char        ; Skip >
+  LDA# MODE_IMM
+  STAZ ADDR_MODE
+  JSR read_and_find_existing_label
+  PHA                  ; Save next char
+  LDAZ HEX1
+  STAZ OPERAND_L
+  LDA# $00
+  STAZ OPERAND_H
+  PLA                  ; Restore next char for garbage check
+  JMP emit_instruction ; Tail call
+
+.label_or_acc_operand
+  ; Could be accumulator mode (just "A") or a label
+  ; Read the token first
+  JSR read_token
+  PHA                  ; Save next char
+  ; Check if token is exactly "A" (accumulator mode)
+  ; Use Y for indexed addressing (X holds output file handle globally)
+  LDY# $00
+  LDA,Y TOKEN
+  CMP# "A"
+  BNE .is_label        ; First char not A, must be label
+  INY
+  LDA,Y TOKEN
+  BNE .is_label        ; Second char not null, must be label like "ABSOLUTE"
+  ; Token is exactly "A" - accumulator mode
+  ; Next char stays on stack for .accumulator_mode
+  JMP .accumulator_mode
+.is_label
+  ; Look up the token we already read (TOKEN already contains it)
+  JSR check_local_label
+  JSR select_label_hash_table
+  JSR find_in_hash
+  BCC .label_found
+  ; Label not found - check pass
+  BITZ PASS
+  BMI .label_not_found_pass2
+  ; Pass 1 - use zero values
+  LDY# $00
+  STYZ HEX1
+  STYZ HEX2
+  JMP .label_continue
+.label_not_found_pass2
+  JMP err_label_not_found
+.label_found
+  ; HEX1:HEX2 now contains the label value
+.label_continue
+  ; Next char is still on stack from earlier PHA
+  LDAZ HEX2
+  STAZ OPERAND_L
+  LDAZ HEX1
+  STAZ OPERAND_H
+  ; Check if this is a branch instruction
+  JSR check_if_branch
+  BCC .label_is_branch
+  ; Not a branch - check for indexed mode BEFORE emitting
+  ; Labels always use absolute addressing (conservative for forward refs)
+  PLA                  ; Restore next char (might be comma)
+  CMP# ","
+  BNE .label_abs_no_index
+  ; Has index suffix - read X or Y
+  JSR read_char
+  CMP# "X"
+  BEQ .label_absx
+  CMP# "Y"
+  BEQ .label_absy
+  JMP err_invalid_addressing_mode
+.label_absx
+  JSR read_char        ; Read char after X for garbage check
+  PHA
+  ; Check if label value is in zero page
+  LDAZ OPERAND_H
+  BNE .label_absx_use_abs
+  ; Try zero page X mode
+  LDA# MODE_ZPX
+  STAZ ADDR_MODE
+  JSR find_opcode_for_mode
+  BCS .label_absx_use_abs
+  PLA                  ; Restore next char for garbage check
+  JMP emit_instruction ; Tail call
+.label_absx_use_abs
+  LDA# MODE_ABSX
+  STAZ ADDR_MODE
+  PLA                  ; Restore next char for garbage check
+  JMP emit_instruction ; Tail call
+.label_absy
+  JSR read_char        ; Read char after Y for garbage check
+  PHA
+  ; Check if label value is in zero page
+  LDAZ OPERAND_H
+  BNE .label_absy_use_abs
+  ; Try zero page Y mode
+  LDA# MODE_ZPY
+  STAZ ADDR_MODE
+  JSR find_opcode_for_mode
+  BCS .label_absy_use_abs
+  PLA                  ; Restore next char for garbage check
+  JMP emit_instruction ; Tail call
+.label_absy_use_abs
+  LDA# MODE_ABSY
+  STAZ ADDR_MODE
+  PLA                  ; Restore next char for garbage check
+  JMP emit_instruction ; Tail call
+.label_abs_no_index
+  ; A contains next char for garbage check
+  PHA                  ; Save next char
+  ; Check if label value is in zero page (high byte = 0)
+  LDAZ OPERAND_H
+  BNE .label_use_abs
+  ; High byte is 0 - try zero page mode
+  LDA# MODE_ZP
+  STAZ ADDR_MODE
+  JSR find_opcode_for_mode
+  BCS .label_use_abs       ; Mode not supported, use absolute
+  PLA                  ; Restore next char for garbage check
+  JMP emit_instruction ; Tail call
+.label_use_abs
+  LDA# MODE_ABS
+  STAZ ADDR_MODE
+  PLA                  ; Restore next char for garbage check
+  JMP emit_instruction ; Tail call
+.label_is_branch
+  ; Next char is still on stack
+  LDA# MODE_REL
+  STAZ ADDR_MODE
+  PLA                  ; Restore next char for garbage check
+  JMP emit_instruction ; Tail call
+
+
+; Check if current instruction is a branch (supports MODE_REL)
+; On entry INST_PTR_L:INST_PTR_H points to mode:opcode data
+; On exit C = 0 if branch, C = 1 if not branch
+;         A, Y not preserved, X preserved
+check_if_branch
+  LDY# $00
+.loop
+  LDAZ(),Y INST_PTR_L
+  CMP# $FF
+  BEQ .not_branch
+  CMP# MODE_REL
+  BEQ .is_branch
+  INY
+  INY
+  JMP .loop
+.is_branch
+  CLC
+  RTS
+.not_branch
+  SEC
+  RTS
+
+
+; Check if instruction is DATA pseudo
+; On entry INST_PTR_L:INST_PTR_H points to mode:opcode data
+; On exit C = 0 if DATA, C = 1 if not DATA
+;         A, Y not preserved, X preserved
+check_for_data_pseudo
+  LDY# $00
+  LDAZ(),Y INST_PTR_L
+  CMP# MODE_DATA
+  BEQ .is_data
+  SEC
+  RTS
+.is_data
+  CLC
+  RTS
+
+
+; DATA pseudo-instruction parameter loop
+data_parameters_loop
+data_parameters_loop_entry
+  JSR skip_spaces
+  JSR check_for_end_of_line
+  BCS .data_done
   CMP# "\""            ; Quoted string
-  BNE .check_for_hex
+  BNE .data_check_hex
   JSR read_char
   JSR emit_quoted
-  JMP .parameters_loop
-.check_for_hex
-  CMP# "$"             ; 1 or 2 byte hex
-  BNE .check_for_lsb
+  JMP data_parameters_loop
+.data_check_hex
+  CMP# "$"             ; Hex value
+  BNE .data_check_lsb
   JSR read_char
   JSR emit_hex
-  JMP .parameters_loop
-.check_for_lsb
-  CMP# "<"             ; LSB of variable
-  BNE .check_for_msb
+  JMP data_parameters_loop
+.data_check_lsb
+  CMP# "<"             ; LSB of label
+  BNE .data_check_msb
   JSR read_char
   JSR emit_label_lsb
-  JMP .parameters_loop
-.check_for_msb
-  CMP# ">"             ; MSB of variable
-  BNE .check_for_relative
+  JMP data_parameters_loop
+.data_check_msb
+  CMP# ">"             ; MSB of label
+  BNE .data_label
   JSR read_char
   JSR emit_label_msb
-  JMP .parameters_loop
-.check_for_relative
-  TAY                  ; Save next char
-  LDAZ INST_FLAG
-  AND# INST_RELATIVE
-  BEQ .check_for_byte
-  TYA                  ; Restore next char
-  JSR emit_label_relative
-  JMP .parameters_loop
-.check_for_byte
-  LDAZ INST_FLAG
-  AND# INST_BYTE
-  BEQ .label
-  TYA                  ; Restore next char
-  JSR emit_label_byte
-  JMP .parameters_loop
-.label
-  TYA                  ; Restore next char
-  JSR emit_label       ; 2 byte variable
-  JMP .parameters_loop
+  JMP data_parameters_loop
+.data_label
+  JSR emit_label       ; Full 2-byte label value
+  JMP data_parameters_loop
+.data_done
+  RTS
 
 
 ; Opens the file with name from the first command line argument, pushing
@@ -1119,7 +1819,7 @@ interrupt
   LDAZ FS_PH
   STAZ TABPH
   JSR show_message
-; Print the " at line " messaage
+; Print the " at line " message
   LDA# <msg_error_line
   STAZ TABPL
   LDA# >msg_error_line
@@ -1180,7 +1880,7 @@ show_message
   RTS
 
 
-; Show a decimal value to the error ouptut
+; Show a decimal value to the error output
 ; On entry TO_DECIMAL_VALUE_L;TO_DECIMAL_VALUE_H contains the value to show
 ; On exit X, Y are preserved
 ;         A is not preserved

@@ -1,58 +1,51 @@
 ; Addresses
-TOKEN2     = $1E00
-LHASHTABL  = $1F00      ; Label hash table (low and high)
-LHASHTABH  = $1F80      ; "
+CURR_GLOBAL = $1C00     ; Buffer for current global label name (for local label scoping)
+TOKEN      = $1D00      ; Buffer for the current token being read
+LHASHTAB   = $1E00      ; Label hash table
 *          = $2000      ; Code generates here
 FILE_STACK = $F000      ; File stack will grow down from 1 below here
 
 
+  .zeropage
+
 ; Zero page locations
-TEMP      = $00        ; 1 byte
-TABPL     = $01        ; 2 byte table pointer
-TABPH     = $02        ; "
-PCL       = $03        ; 2 byte program counter
-PCH       = $04        ; "
-HEX1      = $05        ; 1 byte
-HEX2      = $06        ; 1 byte
-PASS      = $07        ; 1 byte $00 = pass 1 $FF = pass 2
-MEMPL     = $08        ; 2 byte heap pointer
-MEMPH     = $09        ; "
-PL        = $0A        ; 2 byte pointer
-PH        = $0B        ; "
-HASH      = $0C        ; 1 byte hash value
-HTLPL     = $0D        ; 2 byte pointer to low byte hash table
-HTLPH     = $0E        ; "
-HTHPL     = $0F        ; 2 byte pointer to high byte hash table
-HTHPH     = $10        ; "
-INST_FLAG = $11        ; flags associated with instruction
-STARTED   = $12        ; flag to indicate output has started
-CURLINEL  = $13        ; Current line (L)
-CURLINEH  = $14        ; Current line (H)
+TEMP        DATA $00 ; 1 byte
+PCL         DATA $00 ; 2 byte program counter
+PCH         DATA $00 ; "
+HEX1        DATA $00 ; 1 byte
+HEX2        DATA $00 ; 1 byte
+PASS        DATA $00 ; 1 byte $00 = pass 1 $FF = pass 2
+MEMPL       DATA $00 ; 2 byte heap pointer
+MEMPH       DATA $00 ; "
+INST_FLAG   DATA $00 ; flags associated with instruction
+STARTED     DATA $00 ; flag to indicate output has started
+CURR_FILE   DATA $00 ; current file handle
+CURLINEL    DATA $00 ; Current line (L)
+CURLINEH    DATA $00 ; Current line (H)
+IN_ZEROPAGE DATA $00 ; Flag indicating if in zero page section
+PC_SAVEL    DATA $00 ; Save location for PC when switching sections
+PC_SAVEH    DATA $00 ; "
+DEBUG_FLAG  DATA $00 ; Non-zero if debug output enabled
 
-TO_DECIMAL_VALUE_L          = $15 ; 1 byte
-TO_DECIMAL_VALUE_H          = $16 ; 1 byte
-TO_DECIMAL_MOD10            = $17 ; 1 byte
-TO_DECIMAL_RESULT_MINUS_ONE = $17
-TO_DECIMAL_RESULT           = $18 ; 6 bytes
+  .code
 
-CURR_FILE    = $1E
-FILE_STACK_L = $1F
-FILE_STACK_H = $20
-IN_ZEROPAGE  = $21
-PC_SAVEL     = $22
-PC_SAVEH     = $23
-TOKEN        = $24        ; multiple bytes
+
+; Include files
+  .include ../out/inst14.asm.out   ; This goes first since the tables should start on a page boundary
+  .include environment11.asm
+  .include common14.asm
+FS_FILENAME   = TOKEN
+FS_CURR_FILE  = CURR_FILE
+FS_CURR_LINEL = CURLINEL
+FS_CURR_LINEH = CURLINEH
+  .include file_stack13.asm
+  .include to_decimal13.asm
+
 
 ; Constants
 INST_PSUEDO   = $01
 INST_RELATIVE = $02
 INST_BYTE     = $04
-
-
-; Instruction hash table, etc.
-  .include environment11.asm
-  .include common11.asm
-  .include out/inst11.asm.out
 
 
 ; Error messages
@@ -90,178 +83,56 @@ err_filename_expected
   BRK $0C "Filename expected" $00
 
 err_usage
-  BRK $0D "Usage <assebler> <input> <output>" $00
+  BRK $0D "Usage <assembler> <input> <output> [debug]" $00
+
+err_no_file
+  BRK $0E "Attempt to read with no file open" $00
+
+err_invalid_debug_arg
+  BRK $10 "Invalid third argument (expected 'debug')" $00
+
+err_no_global_for_local
+  BRK $0F "No global label for local" $00
 
 
+; Read next character from file stack
+; On entry CURR_FILE contains the current file handle
+;          FILE_STACK is not empty
+; On exit A contains the character read
+;         C is set if at end of all file data
+;         CURR_FILE is potentially updated with a new file handle
 read_char
   LDAZ CURR_FILE
+  BEQ rc_no_file
   JSR read
-  BCS rc_at_end
+  BCS rc_at_end_file
   RTS
-rc_at_end
-  JSR file_stack_empty
-  BEQ rc_done
+rc_at_end_file
   JSR pop_file_stack
   LDAZ CURR_FILE
-  BEQ rc_set_carry
+  BEQ rc_at_end_all
   JMP read_char          ; Recursive tail call
-rc_set_carry
+rc_at_end_all
   SEC
-rc_done
   RTS
-
-
-init_file_stack
-  LDA# <FILE_STACK
-  STAZ FILE_STACK_L
-  LDA# >FILE_STACK
-  STAZ FILE_STACK_H
-  RTS
-
-
-; On exit Z is set if file stack empty, clear otherwise
-file_stack_empty
-  LDAZ FILE_STACK_L
-  CMP# <FILE_STACK
-  BNE fse_done
-  LDAZ FILE_STACK_H
-  CMP# >FILE_STACK
-fse_done
-  RTS
-
-
-; On entry TOKEN contains the file name
-;          CURLINEL;CURLINEH contains the current line number
-;          CURR_FILE contains the current file handle
-; On exit X is preserved
-push_file_stack
-  LDY# $FF
-pfs_len_loop
-  INY
-  LDA,Y TOKEN
-  BNE pfs_len_loop
-  TYA
-  STAZ TEMP
-  CLC    ; -1
-  LDAZ FILE_STACK_L
-  SBCZ TEMP
-  STAZ FILE_STACK_L
-  LDAZ FILE_STACK_H
-  SBC# $00
-  STAZ FILE_STACK_H
-  LDY# $FF
-pfs_copy_loop
-  INY
-  LDA,Y TOKEN
-  STAZ(),Y FILE_STACK_L
-  BNE pfs_copy_loop
-  ; Adjust pointer for line number and file handle
-  SEC
-  LDAZ FILE_STACK_L
-  SBC# $03
-  STAZ FILE_STACK_L
-  LDAZ FILE_STACK_H
-  SBC# $00
-  STAZ FILE_STACK_H
-  ; Store file handle
-  LDY# $00
-  LDA CURR_FILE
-  STAZ(),Y FILE_STACK_L
-  INY
-  ; Store line number
-  LDA CURLINEL
-  STAZ(),Y FILE_STACK_L
-  INY
-  LDA CURLINEH
-  STAZ(),Y FILE_STACK_L
-  INY
-; Reset line number and open new file
-  LDA# $00
-  STAZ CURLINEL
-  STAZ CURLINEH
-
-  TXA
-  PHA
-  LDA# <TOKEN
-  LDX# >TOKEN
-  JSR open
-  STAZ CURR_FILE
-  PLA
-  TAX
-
-  RTS
-
-
-; On exit CURR_FILE contains the previous file handle
-;         CURLINEL;CURLINEH contains the previous line number
-pop_file_stack
-; Close currnet file and restore from filestack
-  LDAZ CURR_FILE
-  JSR close
-  LDY# $00
-  LDAZ(),Y FILE_STACK_L
-  STAZ CURR_FILE
-  INY
-  LDAZ(),Y FILE_STACK_L
-  STAZ CURLINEL
-  INY
-  LDAZ(),Y FILE_STACK_L
-  STAZ CURLINEH
-rc_pop_loop
-  INY
-  LDAZ(),Y FILE_STACK_L
-  BNE rc_pop_loop
-; Adjust stack pointer
-  TYA
-  SEC  ; +1
-  ADCZ FILE_STACK_L
-  STAZ FILE_STACK_L
-  LDA# $00
-  ADCZ FILE_STACK_H
-  STAZ FILE_STACK_H
-  RTS
+rc_no_file
+  JMP err_no_file
 
 
 select_label_hash_table
-  LDA# <LHASHTABL
-  STAZ HTLPL
-  LDA# >LHASHTABL
-  STAZ HTLPH
-  LDA# <LHASHTABH
-  STAZ HTHPL
-  LDA# >LHASHTABH
-  STAZ HTHPH
-  RTS
-
-
-; On entry token contains the token to find
-; On exit C = 0 if found or 1 if not found
-; On exit HEX1 and HEX2 contains MSB and LSB of value if found
-;         A, X, Y are not preserverd
-find_in_hash
-  JSR calculate_hash
-  JSR hash_entry_empty
-  BEQ fih_not_found
-  ; Entry exists
-  JSR load_hash_entry
-  JSR find_token
-  BCS fih_not_found
-  ; Found
-  LDAZ(),Y TABPL
-  STAZ HEX2
-  INY
-  LDAZ(),Y TABPL
-  STAZ HEX1
-  CLC
-  RTS
-fih_not_found
-  SEC
+  LDA# <LHASHTAB
+  STAZ HTPL
+  LDA# >LHASHTAB
+  STAZ HTPH
   RTS
 
 
 ; Emit value (pass 2 only) and increment PC
 ; On entry A contains the byte to emit
+;          X contains the file handle to write to
 ; On exit A, X, Y are preserved
+; TODO: Consolidate the PASS and IN_ZEROPAGE flags so that emit can
+;       do a single check instead of two for suppression of output
 emit
   BITZ PASS
   BPL emit_incpc       ; Skip writing during pass 1
@@ -349,41 +220,129 @@ read_token
 rt_loop
   JSR compare_end_of_token
   BEQ rt_done
-  STAZ,X TOKEN
+  STA,X TOKEN
   INX
   JSR read_char
   JMP rt_loop
 rt_done
   TAY                  ; Save next char
   LDA# $00
-  STAZ,X TOKEN
+  STA,X TOKEN
   TYA                  ; Restore next char
   LDXZ TEMP
   RTS
 
 
-; Read a label, look up in the current hash table and return the associated value
+; Expands local labels by prepending current global label
+; On entry TOKEN contains the token (may start with '.')
+; On exit If TOKEN started with '.', TOKEN now contains CURR_GLOBAL + original TOKEN
+;         C = 1 if was local label, C = 0 if was global
+;         A, Y not preserved
+;         X is preserved
+expand_local_label
+  LDA TOKEN
+  CMP# "."
+  BNE ell_not_local
+  ; Check if CURR_GLOBAL is empty
+  LDA CURR_GLOBAL
+  BNE ell_have_global
+  JMP err_no_global_for_local
+ell_have_global
+  TXA
+  PHA                  ; Save X (file handle)
+  ; Find length of CURR_GLOBAL (store in TEMP)
+  LDY# $00
+ell_gloop
+  LDA,Y CURR_GLOBAL
+  BEQ ell_have_glen
+  INY
+  JMP ell_gloop
+ell_have_glen
+  ; Y = length of CURR_GLOBAL
+  STYZ TEMP
+  ; Find length of TOKEN including null
+  LDY# $00
+ell_tloop
+  LDA,Y TOKEN
+  BEQ ell_have_tlen
+  INY
+  JMP ell_tloop
+ell_have_tlen
+  INY                  ; Include null terminator: Y = tLen
+  ; Calculate starting indices for shift
+  DEY                  ; Y = tLen - 1 (last source index)
+  TYA
+  CLC
+  ADCZ TEMP            ; A = tLen - 1 + gLen = last dest index
+  TAX                  ; X = last dest index
+  ; Shift TOKEN right by copying from end to start
+ell_shift
+  LDA,Y TOKEN
+  STA,X TOKEN
+  DEY
+  DEX
+  CPY# $FF
+  BNE ell_shift
+  ; Copy CURR_GLOBAL to start of TOKEN
+  LDY# $00
+ell_copy_loop
+  LDA,Y CURR_GLOBAL
+  BEQ ell_copy_done    ; Stop at null (don't copy null)
+  STA,Y TOKEN
+  INY
+  JMP ell_copy_loop
+ell_copy_done
+  PLA
+  TAX                  ; Restore X (file handle)
+  SEC                  ; C=1 means was local
+  RTS
+ell_not_local
+  CLC                  ; C=0 means was global
+  RTS
+
+
+; Copy TOKEN to CURR_GLOBAL
+; Used after defining a global (non-local, non-assignment) label
+; On entry TOKEN contains the label name
+; On exit CURR_GLOBAL contains a copy of TOKEN
+;         A, Y not preserved
+;         X is preserved
+update_global_label
+  LDY# $00
+ugl_loop
+  LDA,Y TOKEN
+  STA,Y CURR_GLOBAL
+  BEQ ugl_done         ; Stop after copying null
+  INY
+  JMP ugl_loop
+ugl_done
+  RTS
+
+
+; Read a label, look up in the label hash table and return the associated value
 ; On entry A contains the first character of the label
 ; On exit HEX1 and HEX2 contains the MSB and LSB of the hash table value
 ;         A contains the next character following the token
 ;         X is preserved
-;       , Y is not preserved
+;         Y is not preserved
 ; Raises 'Label not found' error if label is not found in hash table
 read_and_find_existing_label
   JSR read_token
   PHA                  ; Save next char
+  JSR expand_local_label
   JSR select_label_hash_table
   JSR find_in_hash
-  BCC rafel_found
+  PLA                  ; Restore next char
+  BCC rafel_done       ; Label found
   BITZ PASS
   BMI rafel_pass2
-  PLA                  ; Restore next char
+  LDY# $00
+  STYZ HEX1
+  STYZ HEX2
+rafel_done
   RTS
 rafel_pass2
   JMP err_label_not_found
-rafel_found
-  PLA                  ; Restore next char
-  RTS
 
 
 ; Convert hex character to associated value
@@ -393,7 +352,7 @@ rafel_found
 ; Raises 'Invalid hex' error if input is not a valid hex character
 convert_hex_character
   CMP# "A"
-  BCC chc_numeric       ; < 'A'
+  BCC chc_numeric      ; < 'A'
   SBC# "A"             ; Carry already set
   CMP# $06
   BCC chc_ok1
@@ -471,36 +430,6 @@ eh_one
   RTS
 
 
-; Save the current token
-; On exit X is preserved
-;         A, Y are not preserved
-save_token
-  PHA
-  LDY# $FF
-st_loop2
-  INY
-  LDA,Y TOKEN
-  STA,Y TOKEN2
-  BNE st_loop2
-  PLA
-  RTS
-
-
-; Restore the current token
-; On exit X is preserved
-;         A, Y are not preserved
-restore_token
-  PHA
-  LDY# $FF
-rt_loop2
-  INY
-  LDA,Y TOKEN2
-  STA,Y TOKEN
-  BNE rt_loop2
-  PLA
-  RTS
-
-
 ; Attempt to read an assigned value
 ; On entry A contains the next character
 ; On exit C set if value read; clear otherwise
@@ -508,8 +437,7 @@ rt_loop2
 ;         A contains the next character
 ;         X is preserved
 ;         Y is not preserved
-; Raises 'Expected hex' error if value was not identified as hex (via '$')
-;        'Bad hex' error if non-hex characters were encountered
+; Raises 'Bad hex' error if non-hex characters were encountered
 read_value
   JSR skip_spaces
   CMP# "="
@@ -521,22 +449,19 @@ rv_value
   JSR skip_spaces
   CMP# "$"
   BEQ rv_hex_value
-  JSR save_token
   JSR read_and_find_existing_label
-  JSR restore_token
-  JMP rv_ok
+  SEC
+  RTS
 rv_hex_value
   JSR read_char
   JSR read_hex_byte_or_word
-  BCS rv_ok            ; 2 bytes were read
+  BCS rv_done          ; 2 bytes were read
   ; 1 byte was read - shift into LSB position (HEX2)
-  TAY                  ; Save next char
-  LDAZ HEX1
-  STAZ HEX2
-  LDA# $00
-  STAZ HEX1
-  TYA                  ; Restore next char
-rv_ok
+  LDYZ HEX1
+  STYZ HEX2
+  LDY# $00
+  STYZ HEX1
+rv_done
   SEC
   RTS
 
@@ -547,23 +472,23 @@ rv_ok
 ; On exit
 ; Raises 'Cannot move PC backwards' error if attempting to move PC backwards
 update_pc
+  BITZ IN_ZEROPAGE
+  BMI up_no_fill
   BITZ STARTED
   BMI up_started
   DECZ STARTED
   JMP up_no_fill
 up_started
-  LDAZ HEX1             ; High byte
+  LDAZ HEX1            ; High byte
   CMPZ PCH
   BCC up_less
   BNE up_notless
-  LDAZ HEX2             ; Low byte
+  LDAZ HEX2            ; Low byte
   CMPZ PCL
   BCC up_less
 up_notless
   BITZ PASS
-  BPL up_no_fill        ; skip writing during pass 1
-  BITZ IN_ZEROPAGE
-  BMI up_no_fill
+  BPL up_no_fill       ; skip writing during pass 1
 up_loop
   LDAZ HEX1
   CMPZ PCH
@@ -600,12 +525,11 @@ up_done
 ;         A, X, Y are not preserved
 ; Raises 'PC value expected' if no value provided when setting PC via '*'
 ;        'Duplicate label' error if label has already been encountered
-;        'Expected hex' error if assigned value was not identified as hex (via '$')
 ;        'Bad hex' error if non-hex characters were encountered
 capture_label
   JSR read_token
   TAY                       ; Save next char
-  LDAZ TOKEN
+  LDA TOKEN
   CMP# "*"
   BNE cl_normal_label
   ; Set PC
@@ -623,33 +547,86 @@ cl_pc_value_read
 cl_normal_label
   BITZ PASS
   BPL cl_pass_1
-  ; Pass 2 - don't capture
-  TYA                       ; Restore next char
-  JSR read_value
-  BCS cl_skip_and_return_processed
-  JMP cl_skip_spaces_and_return_processed_flag
-cl_pass_1
-  TYA                       ; Restore next char
-  JSR read_value
+  ; Pass 2 - don't capture label, but must track globals for local label scoping
+  TYA
   PHA                       ; Save next char
-  BCS cl_hex_to_table
-  ; Store program counter
+  ; Check if this is a local label
+  LDA TOKEN
+  CMP# "."
+  BNE cl_not_local_2
+  LDA# $FF                  ; Was local
+  BNE cl_save_local_2       ; Always branches
+cl_not_local_2
+  LDA# $00                  ; Was not local
+cl_save_local_2
+  PHA                       ; Save local flag
+  ; Expand local label if needed (for proper error checking)
+  JSR expand_local_label
+  ; Pop local flag, save in TEMP for later
+  PLA
+  STAZ TEMP
+  ; Now continue with value reading
+  PLA                       ; Restore next char
+  JSR read_value
+  BCS cl_has_equals_2       ; If = found, branch
+  ; No = found - update global label if this was not a local label
+  PHA                       ; Save next char
+  LDAZ TEMP
+  BNE cl_was_local_2        ; If local flag != 0, skip update
+  JSR update_global_label
+cl_was_local_2
+  PLA                       ; Restore next char
+  JMP cl_skip_spaces_and_return_processed_flag
+cl_has_equals_2
+  JMP cl_skip_and_return_processed
+cl_pass_1
+  TYA
+  PHA                       ; Save next char
+  ; Check if this is a local label and save result
+  LDA TOKEN
+  CMP# "."
+  BNE cl_not_local_1
+  LDA# $FF                  ; Was local
+  BNE cl_save_local_flag    ; Always branches
+cl_not_local_1
+  LDA# $00                  ; Was not local
+cl_save_local_flag
+  PHA                       ; Save local flag
+  ; Expand local label if needed
+  JSR expand_local_label
+  ; Add key to hash table first (before read_value may overwrite TOKEN)
+  JSR select_label_hash_table
+  JSR hash_add
+  BCS cl_duplicate_label
+  ; Pop local flag, save in TEMP for later
+  PLA
+  STAZ TEMP
+  ; Now read the value (TOKEN can be overwritten)
+  PLA                       ; Restore next char
+  JSR read_value
+  BCS cl_has_equals         ; If = found, branch
+  ; No = found, use program counter
+  PHA                       ; Save next char (before A is overwritten)
   LDAZ PCL
   STAZ HEX2
   LDAZ PCH
   STAZ HEX1
-  JSR select_label_hash_table
-  JSR hash_add
+  JSR store_hash_value
+  ; Update global label if this was not a local label
+  LDAZ TEMP
+  BNE cl_was_local_1        ; If local flag != 0, skip update
+  JSR update_global_label
+cl_was_local_1
   PLA                       ; Restore next char
-  BCS cl_duplicate_label
+  JMP cl_skip_spaces_and_return_processed_flag
+cl_has_equals
+  PHA                       ; Save next char
+  JSR store_hash_value
+  PLA                       ; Restore next char
+  JMP cl_skip_and_return_processed
 cl_skip_spaces_and_return_processed_flag
   JSR skip_spaces
   JMP check_for_end_of_line ; Tail call - returns with C set if at end of line
-cl_hex_to_table
-  JSR select_label_hash_table
-  JSR hash_add
-  PLA                       ; Restore next char
-  BCS cl_duplicate_label
 cl_skip_and_return_processed
   JSR skip_rest_of_line
   SEC                       ; Indicate line is fully processed
@@ -659,6 +636,7 @@ cl_skip_and_return_processed
 
 cl_duplicate_label
   JMP err_duplicate_label
+
 
 ; Read and emit an opcode
 ; On entry A contains the first character of the opcode
@@ -671,7 +649,6 @@ emit_opcode
   JSR select_instruction_hash_table
   JSR find_in_hash
   BCC eo_found
-  PLA                  ; Restore next char
   JMP err_opcode_not_found
 eo_found
   LDAZ HEX2
@@ -813,18 +790,15 @@ emit_label_relative
 
 elr_forward
   LDAZ HEX2
-  AND# $80
-  BEQ elr_ok
+  BPL elr_ok
   JMP err_branch_out_of_range
 
 elr_backward
   LDAZ HEX2
-  AND# $80
-  BNE elr_ok
+  BMI elr_ok
   JMP err_branch_out_of_range
 
 elr_ok
-  LDAZ HEX2
   JSR emit
   TYA                  ; Restore next char
   RTS
@@ -853,7 +827,7 @@ swap_pc_with_save
 ; On entry, A contains the first character of the directive
 process_directive
   JSR read_token
-  PHA                          ; Save next char
+  PHA                  ; Save next char
   ; Check for 'include'
   LDA# <directive_include
   STAZ TABPL
@@ -876,10 +850,10 @@ process_directive
   JSR compare_token
   BEQ pd_code
   ; Directive not recognized
-  PLA                          ; Restore next char
+  PLA                  ; Restore next char
   JMP err_unknown_directive
 pd_include
-  PLA                          ; Restore next char
+  PLA                  ; Restore next char
   JSR skip_spaces
   JSR check_for_end_of_line
   BCC pd_get_name
@@ -896,7 +870,7 @@ pd_zeropage
   STAZ IN_ZEROPAGE
   JSR swap_pc_with_save
 pd_in_zeropage
-  PLA                          ; Restore next char
+  PLA                  ; Restore next char
   JSR skip_rest_of_line
   RTS
 pd_code
@@ -906,7 +880,7 @@ pd_code
   STAZ IN_ZEROPAGE
   JSR swap_pc_with_save
 pd_in_code
-  PLA                          ; Restore next char
+  PLA                  ; Restore next char
   JSR skip_rest_of_line
   RTS
 
@@ -924,7 +898,9 @@ directive_code
 ; On entry PASS indicates the current pass:
 ;            bit 7 clear = pass 1
 ;            bit 7 set = pass 2
-; On exit A, X, Y are not preserved
+;          X contains the file handle of the output file
+; On exit X is preserved
+;         A, Y are not preserved
 assemble_code
   LDA# $00
   STAZ STARTED
@@ -935,6 +911,7 @@ assemble_code
   STAZ PC_SAVEH
   STAZ CURLINEL
   STAZ CURLINEH
+  STA CURR_GLOBAL      ; Clear current global label for local label scoping
 ac_line_loop
   JSR read_char
   BCC ac_character_read
@@ -1019,6 +996,9 @@ ac_label
   JMP ac_parameters_loop
 
 
+; Opens the file with name from the first command line argument, pushing
+; to the file stack
+; On exit X is preserved
 open_input
   TXA
   PHA
@@ -1037,21 +1017,66 @@ oi_loop
   JMP push_file_stack ; tail call
 
 
+; Check if string at TABPL;TABPH equals "debug"
+; On exit C = 0 if equal, C = 1 if not equal
+;         A, Y are not preserved
+check_debug_string
+  LDY# $00
+cds_loop
+  LDAZ(),Y TABPL
+  CMP,Y str_debug
+  BNE cds_not_equal
+  CMP# $00
+  BEQ cds_equal
+  INY
+  JMP cds_loop
+cds_equal
+  CLC
+  RTS
+cds_not_equal
+  SEC
+  RTS
+
+str_debug
+  DATA "debug" $00
+
+
 ; Entry point
 start
+  ; Initialize file stack early so interrupt handler works correctly
+  JSR file_stack_init
+  ; Initialize debug flag to 0
+  LDA# $00
+  STAZ DEBUG_FLAG
+  ; Check argument count (must be 2 or 3)
   JSR argc
   CMP# $02
   BEQ s_args_ok
+  CMP# $03
+  BEQ s_check_debug_arg
   JMP err_usage
+s_check_debug_arg
+  ; Third argument present - must be "debug"
+  LDA# $02
+  JSR argv
+  STAZ TABPL
+  STXZ TABPH
+  JSR check_debug_string
+  BCS s_invalid_debug_arg
+  ; Valid "debug" argument - set flag
+  LDA# $FF
+  STAZ DEBUG_FLAG
+  JMP s_args_ok
+s_invalid_debug_arg
+  JMP err_invalid_debug_arg
 s_args_ok
   JSR init_heap
   JSR select_label_hash_table
   JSR init_hash_table
-  JSR init_file_stack
 
   LDA# $00
   STAZ CURR_FILE
-  STAZ PASS           ; Bit 7 = 0 (pass 1)
+  STAZ PASS            ; Bit 7 = 0 (pass 1)
   JSR open_input
 
   ; Open output file
@@ -1063,7 +1088,7 @@ s_args_ok
   JSR assemble_code
 
   LDA# $FF
-  STAZ PASS           ; Bit 7 = 1 (pass 2)
+  STAZ PASS            ; Bit 7 = 1 (pass 2)
   JSR open_input
   JSR assemble_code
 
@@ -1071,7 +1096,31 @@ s_args_ok
   TXA
   JSR close
 
-  BRK $00             ; Success
+  ; Print heap usage if debug flag is set
+  LDAZ DEBUG_FLAG
+  BEQ s_skip_debug_output
+  LDA# <msg_heap_used
+  STAZ TABPL
+  LDA# >msg_heap_used
+  STAZ TABPH
+  JSR show_message
+  ; Calculate heap used: MEMPL - HEAP
+  SEC
+  LDAZ MEMPL
+  SBC# <HEAP
+  STAZ TO_DECIMAL_VALUE_L
+  LDAZ MEMPH
+  SBC# >HEAP
+  STAZ TO_DECIMAL_VALUE_H
+  JSR show_decimal
+  LDA# <msg_bytes
+  STAZ TABPL
+  LDA# >msg_bytes
+  STAZ TABPH
+  JSR show_message
+s_skip_debug_output
+
+  BRK $00              ; Success
 
 
 ; Interrupt handler, entered upon BRK
@@ -1103,9 +1152,9 @@ interrupt
   LDA# $00
   STAZ TO_DECIMAL_VALUE_H
   JSR show_decimal
-; Print the current file if any
+; Print the current file and line if any file is open
   JSR file_stack_empty
-  BEQ i_file_done
+  BEQ i_location_done
 ; Print the " in file " message
   LDA# <msg_error_file
   STAZ TABPL
@@ -1113,15 +1162,11 @@ interrupt
   STAZ TABPH
   JSR show_message
 ; Print the filename
-  CLC
-  LDAZ FILE_STACK_L
-  ADC# $03
+  LDAZ FS_PL
   STAZ TABPL
-  LDAZ FILE_STACK_H
-  ADC# $00
+  LDAZ FS_PH
   STAZ TABPH
   JSR show_message
-i_file_done
 ; Print the " at line " messaage
   LDA# <msg_error_line
   STAZ TABPL
@@ -1134,6 +1179,7 @@ i_file_done
   LDAZ CURLINEH
   STAZ TO_DECIMAL_VALUE_H
   JSR show_decimal
+i_location_done
 ; Print the ": " message
   LDA# ":"
   JSR write_d
@@ -1160,6 +1206,10 @@ msg_error_line
   DATA " at line " $00
 msg_error_file
   DATA " in file " $00
+msg_heap_used
+  DATA "Heap used: " $00
+msg_bytes
+  DATA " bytes\n" $00
 
 
 ; Show message to the error output
@@ -1192,72 +1242,9 @@ show_decimal
   JMP show_message ; tail call
 
 
-; On entry TO_DECIMAL_VALUE_L;TO_DECIMAL_VALUE_H contains the value to convert
-; On exit TO_DECIMAL_RESULT contains the result
-;         X, Y are preserved
-;         A is not preserved
-to_decimal
-  TXA
-  PHA
-  ; Initialize result to empty string
-  LDA# $00
-  STAZ TO_DECIMAL_RESULT
-
-td_divide
-  ; Initialize the remainder to be zero
-  LDA# $00
-  STAZ TO_DECIMAL_MOD10
-  CLC
-
-  LDX# $10
-td_divloop
-  ; Rotate quotient and remainder
-  ROLZ TO_DECIMAL_VALUE_L
-  ROLZ TO_DECIMAL_VALUE_H
-  ROLZ TO_DECIMAL_MOD10
-
-  ; a = dividend - divisor
-  SEC
-  LDAZ TO_DECIMAL_MOD10
-  SBC# $0A ; 10
-  BCC td_ignore_result ; Branch if dividend < divisor
-  STAZ TO_DECIMAL_MOD10
-
-td_ignore_result
-  DEX
-  BNE td_divloop
-  ROLZ TO_DECIMAL_VALUE_L
-  ROLZ TO_DECIMAL_VALUE_H
-
-  ; Shift result
-td_shift
-  LDX# $06
-td_shift_loop
-  LDAZ,X TO_DECIMAL_RESULT_MINUS_ONE
-  STAZ,X TO_DECIMAL_RESULT
-  DEX
-  BNE td_shift_loop
-
-  ; Save value into result
-  LDAZ TO_DECIMAL_MOD10
-  CLC
-  ADC# "0"
-  STAZ TO_DECIMAL_RESULT
-
-  ; If value != 0 then continue dividing
-  LDAZ TO_DECIMAL_VALUE_L
-  ORAZ TO_DECIMAL_VALUE_H
-  BNE td_divide
-
-  PLA
-  TAX
-
-  RTS
-
-
-HEAP                  ; Heap goes after the program code
+HEAP                   ; Heap goes after the program code
 
 
 * = $FFFC
-  DATA start          ; Reset vector
-  DATA interrupt      ; Interrupt vector
+  DATA start           ; Reset vector
+  DATA interrupt       ; Interrupt vector
