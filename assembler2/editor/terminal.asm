@@ -48,13 +48,11 @@ ansi_move_cursor
   JSR write_b
   RTS
 
-; Clear entire current line
+; Clear from cursor to end of current line
 ansi_clear_line
   LDA #$1B
   JSR write_b
   LDA #'['
-  JSR write_b
-  LDA #'2'
   JSR write_b
   LDA #'K'
   JSR write_b

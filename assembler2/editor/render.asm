@@ -59,7 +59,6 @@ render_screen
   LDA #$01
   STA ANSI_COL
   JSR ansi_move_cursor
-  JSR ansi_clear_line
 
   ; Check if this is the status line row (last row)
   LDA RENDER_ROW
@@ -105,12 +104,15 @@ render_screen
   CMP SCREEN_COLS
   BCC .char_loop     ; Continue if column < screen width
 .line_done
-  JMP .next_row
+  JMP .clear_eol
 
 .past_eof
   ; Draw tilde for lines past end of file
   LDA #'~'
   JSR write_b
+
+.clear_eol
+  JSR ansi_clear_line
 
 .next_row
   INC RENDER_ROW
@@ -136,7 +138,6 @@ render_status_line
   STA ANSI_COL
   JSR ansi_move_cursor
   JSR ansi_reverse_video
-  JSR ansi_clear_line
 
   ; Print filename
   LDY #$00
@@ -254,7 +255,8 @@ render_status_line
   BNE .print_total
 .total_done
 
-  ; Pad rest of line with spaces and restore normal video
+  ; Clear rest of status line and restore normal video
+  JSR ansi_clear_line
   JSR ansi_normal_video
   RTS
 
@@ -283,7 +285,6 @@ render_current_line
   LDA #$01
   STA ANSI_COL
   JSR ansi_move_cursor
-  JSR ansi_clear_line
 
   ; Get current line pointer
   LDA FILE_LINE16
@@ -312,6 +313,7 @@ render_current_line
   CMP SCREEN_COLS
   BCC .cl_char_loop
 .cl_done
+  JSR ansi_clear_line
 
   JSR render_position_cursor
   JSR ansi_cursor_show
