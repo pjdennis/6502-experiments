@@ -393,13 +393,28 @@ parse_char_literal
   STA OPERAND16
   JMP .char_check_close
 .char_escape
-  ; Escape sequence: \n \\ \'
+  ; Escape sequence: \b \t \n \r \\ \'
   JSR read_char
   CMP #'n'
   BNE .esc_not_n
   LDA #'\n'            ; Only \n needs value substitution
   BNE .esc_done        ; Always taken (\n = $0A != 0)
 .esc_not_n
+  CMP #'b'
+  BNE .esc_not_b
+  LDA #$08             ; Backspace
+  BNE .esc_done        ; Always taken ($08 != 0)
+.esc_not_b
+  CMP #'t'
+  BNE .esc_not_t
+  LDA #$09             ; Tab
+  BNE .esc_done        ; Always taken ($09 != 0)
+.esc_not_t
+  CMP #'r'
+  BNE .esc_not_r
+  LDA #$0D             ; Carriage return
+  BNE .esc_done        ; Always taken ($0D != 0)
+.esc_not_r
   ; For \\ and \', character is already in A
   CMP #'\\'
   BEQ .esc_done
@@ -1321,8 +1336,24 @@ emit_quoted
   CMP #'\n'
   BEQ .err_closing_quote
   CMP #'n'
-  BNE .not_escaped
+  BNE .esc_check_b
   LDA #'\n'            ; Escaped "n" is linefeed
+  BNE .escaped_done    ; Always taken
+.esc_check_b
+  CMP #'b'
+  BNE .esc_check_t
+  LDA #$08             ; Escaped "b" is backspace
+  BNE .escaped_done    ; Always taken
+.esc_check_t
+  CMP #'t'
+  BNE .esc_check_r
+  LDA #$09             ; Escaped "t" is tab
+  BNE .escaped_done    ; Always taken
+.esc_check_r
+  CMP #'r'
+  BNE .not_escaped
+  LDA #$0D             ; Escaped "r" is carriage return
+.escaped_done
 .not_escaped
   JSR emit
   JSR read_char
