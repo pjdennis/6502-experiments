@@ -142,21 +142,21 @@ push_source_frame
 push_file_stack
   TXA
   PHA                   ; Save X
-  LDA #$00              ; curr_type = file
-  JSR push_source_frame
-  ; Open new file
-  LDA #$00
-  STA FS_SRC_TYPE       ; Now a file source
+  ; Open file before pushing frame so error reports parent context
   LDA #<FS_FILENAME
   LDX #>FS_FILENAME
   JSR open
   CMP #$00
   BNE .file_ok
-  STA FS_CURR_FILE       ; Store 0 so pop_source won't close parent's handle
-  JSR pop_source         ; Pop frame, restoring parent context for error reporting
   JMP err_file_not_found
 .file_ok
-  STA FS_CURR_FILE
+  PHA                   ; Save new file handle
+  LDA #$00              ; curr_type = file
+  JSR push_source_frame
+  LDA #$00
+  STA FS_SRC_TYPE       ; Now a file source
+  PLA
+  STA FS_CURR_FILE      ; Set new file handle
   PLA
   TAX                   ; Restore X
   RTS
