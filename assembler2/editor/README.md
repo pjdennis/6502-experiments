@@ -14,7 +14,7 @@ console/ANSI mode.
 - `insert.asm`: insert-mode edits (printables, Enter, Backspace, ESC).
 - `command.asm`: command-line mode (`:w`, `:q`, `:wq`, `:q!`, `:NNN`).
 - `terminal.asm`: ANSI helpers + small console output helpers.
-- `environment.asm`: emulator I/O port definitions.
+- `23/environment.asm`: emulator I/O port definitions (shared with assembler).
 
 ## Control flow
 1. `editor_main` (in `editor.asm`) parses argv, opens file if present, and
@@ -53,7 +53,7 @@ console/ANSI mode.
 - Status messages (`show_status_message`) wait for a keypress to dismiss.
 
 ## Testing
-- `tests/editor_tests.py` assembles the editor (`22/out/asm.out`) and runs
+- `tests/editor_tests.py` assembles the editor (`23/out/asm.out`) and runs
   it under `emulator.out`, feeding keystroke byte streams and verifying
   saved file contents.
 - Debug tests build `editor_debug.out` with `define:enable_debug` and use
@@ -71,7 +71,7 @@ console/ANSI mode.
 - Normal-mode edit keys should be gated by `READONLY`.
 
 ## Build/run
-- Assemble (release): `./emulator.out 22/out/asm.out 2000 /dev/null /dev/null editor/editor.asm editor/out/editor.out`
-- Assemble (debug): `./emulator.out 22/out/asm.out 2000 /dev/null /dev/null editor/editor.asm editor/out/editor_debug.out define:enable_debug`
+- Assemble (release): `./emulator.out 23/out/asm.out 2000 /dev/null /dev/null editor/editor.asm editor/out/editor.out`
+- Assemble (debug): `./emulator.out 23/out/asm.out 2000 /dev/null /dev/null editor/editor.asm editor/out/editor_debug.out define:enable_debug`
 - Run (console): `./emulator.out editor/out/editor.out 0400 --console <file>`
 - Shortcut: `./editor.sh <file>`

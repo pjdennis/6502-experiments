@@ -30,8 +30,8 @@ FNAME_BUF   = $0200   ; Filename buffer (256 bytes)
 
   JMP editor_main
 
-  .include editor/environment.asm
-  .include 22/macros.asm
+  .include 23/environment.asm
+  .include 23/macros.asm
 
 ; PRINT_STR addr - Print null-terminated string at addr
 ; Clobbers A, Y
@@ -40,7 +40,7 @@ FNAME_BUF   = $0200   ; Filename buffer (256 bytes)
   JSR write_string
   .endmacro
 
-  .include 22/to_decimal.asm
+  .include 23/to_decimal.asm
   .include editor/terminal.asm
   .include editor/input.asm
   .include editor/buffer.asm
