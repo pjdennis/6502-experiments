@@ -489,10 +489,7 @@ parse_term
   STA LABEL_TYPE
   JMP .do_lookup
 .local_ref
-  ; Local label reference - skip dot, read name without dot
-  JSR read_char              ; Skip '.'
-  JSR read_token
-  JSR set_local_label_type   ; Sets LABEL_TYPE to LOCAL or MACRO_LOCAL
+  JSR read_local_label
 .do_lookup
   JSR select_label_hash_table
   JSR find_in_hash
@@ -759,13 +756,15 @@ parse_expression
 ; Label classification, lookup, and definition
 ; ============================================================================
 
-; Set LABEL_TYPE for a local label (dot already consumed, TOKEN has name)
-; Validates that a scope exists, then sets LABEL_TYPE to LOCAL or MACRO_LOCAL
-; On entry TOKEN contains the local label name (without leading dot)
+; Read a local label (dot already detected but not consumed)
+; Skips dot, reads name into TOKEN, validates scope, sets LABEL_TYPE
 ; On exit LABEL_TYPE set to LABEL_TYPE_LOCAL or LABEL_TYPE_MACRO_LOCAL
+;         CURR_CHAR contains character after token
 ;         A not preserved
-;         X, Y are preserved
-set_local_label_type
+;         X preserved, Y not preserved
+read_local_label
+  JSR read_char             ; Skip '.'
+  JSR read_token            ; Read name into TOKEN
   LDA LABEL_SCOPE16
   ORA LABEL_SCOPE16+$01
   BNE .have_scope
@@ -822,10 +821,7 @@ capture_label
   BEQ .set_pc
   CMP #'.'
   BNE .not_local
-  ; Local label - skip dot, read name without dot
-  JSR read_char             ; Skip '.'
-  JSR read_token
-  JSR set_local_label_type  ; Validates scope, sets LOCAL or MACRO_LOCAL
+  JSR read_local_label
   JMP .after_type_set
 .not_local
   JSR read_token            ; Current char in CURR_CHAR
