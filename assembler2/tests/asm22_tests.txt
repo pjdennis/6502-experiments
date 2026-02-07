@@ -2616,3 +2616,16 @@ INPUT:
 EXPECT_ERROR: 35
 EXPECT_LINE: 4
 EXPECT_MSG: Zero page overflow
+
+---
+NAME: macro_param_and_local_same_name
+DESCRIPTION: Macro parameter and local label with same base name coexist
+INPUT:
+ 1: * = $0200
+ 2:   .macro TEST foo
+ 3: .foo
+ 4:   LDA #foo
+ 5:   BEQ .foo
+ 6:   .endmacro
+ 7:   TEST $42
+EXPECT_HEX: a9 42 f0 fc
