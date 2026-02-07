@@ -91,6 +91,7 @@ ARG_COUNT       .data $00    ; Total command line argument count
 IN_MACRO_DEF    .data $00    ; Flag: currently capturing macro body ($FF = capturing)
 MACRO_ENTRY16   .data $0000  ; Original macro hash entry address (for recursion check)
 IFDEF_INDEX     .data $00    ; Current index into IFDEF_DECISIONS buffer
+DATA_MODE       .data $00    ; Data directive mode: 0=.data 1=.byte 2=.word 3=.asciiz
 
   .ifdef enable_debug
 DEBUG_FLAG      .data $00    ; Non-zero if debug output enabled
@@ -1444,7 +1445,8 @@ process_directive
 .in_code
   JMP skip_rest_of_line  ; Tail call
 .data
-  JMP data_parameters_loop_entry
+  LDA #$00
+  JMP set_data_mode
 
 
 ; On exit C=0 if processed; C=1 if not processed
@@ -1495,8 +1497,9 @@ directive_endmacro
   .data "endmacro" $00
 
 
+set_data_mode
+  STA DATA_MODE
 data_parameters_loop
-data_parameters_loop_entry
   JSR check_for_end_of_line
   BCS .data_done
   CMP #'"'            ; Quoted string
