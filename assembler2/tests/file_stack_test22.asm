@@ -40,6 +40,11 @@ FS_FILENAME   = TOKEN
   ; TODO: Consider writing to debug output when it's called, and extend tests to confirm
   .endmacro
 
+; Error handler for file-not-found (required by file_stack.asm)
+err_file_not_found
+  BRK
+  .data $24 "File not found" $00
+
   .include 22/file_stack.asm
 read_char = file_stack_read_char
 CURLINE16 = FS_CURR_LINE16

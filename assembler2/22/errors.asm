@@ -165,6 +165,11 @@ err_zeropage_overflow
   BRK
   .data $23 "Zero page overflow" $00
 
+; --- File I/O errors ($24) ---
+err_file_not_found
+  BRK
+  .data $24 "File not found" $00
+
 ; --- Command line/usage errors ($F0-$F1) ---
 err_usage
   BRK

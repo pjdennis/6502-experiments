@@ -72,6 +72,7 @@ class Test:
     expect_msg: str = ""
     args: str = ""
     skip: str = ""
+    missing_input: bool = False
 
 
 @dataclass
@@ -203,6 +204,9 @@ class TestRunner:
                 elif m := re.match(r"^SKIP:\s*(.*)", line):
                     current.skip = m.group(1)
                     section = ""
+                elif re.match(r"^MISSING_INPUT$", line):
+                    current.missing_input = True
+                    section = ""
                 elif section == "input":
                     # Strip line number prefix: optional spaces, digits, colon, required space
                     line = re.sub(r"^\s*\d+: ", "", line)
@@ -285,8 +289,9 @@ class TestRunner:
             bin_file = tmpdir / "test.bin"
             err_file = tmpdir / "test.err"
 
-            # Write input file
-            asm_file.write_text(test.input_text + "\n")
+            # Write input file (unless testing missing input file)
+            if not test.missing_input:
+                asm_file.write_text(test.input_text + "\n")
 
             # Build command
             cmd = [
