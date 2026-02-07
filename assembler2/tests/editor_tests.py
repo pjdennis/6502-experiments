@@ -29,9 +29,10 @@ class Colors:
 
 
 class EditorTestRunner:
-    def __init__(self, base_dir: Path, verbose: bool = False):
+    def __init__(self, base_dir: Path, verbose: bool = False, quiet: bool = False):
         self.base_dir = base_dir
         self.verbose = verbose
+        self.quiet = quiet
         self.emulator = base_dir / "emulator.out"
         self.assembler = base_dir / "22" / "out" / "asm.out"
         self.editor_asm = base_dir / "editor" / "editor.asm"
@@ -300,7 +301,8 @@ class EditorTestRunner:
             self._pass(name)
 
     def _pass(self, name):
-        print(f"  {name:<50} {Colors.GREEN}PASS{Colors.NC}")
+        if not self.quiet:
+            print(f"  {name:<50} {Colors.GREEN}PASS{Colors.NC}")
         self.passed += 1
 
     def _fail(self, name, details):
@@ -792,6 +794,8 @@ class EditorTestRunner:
 def main():
     parser = argparse.ArgumentParser(description="Editor test runner")
     parser.add_argument("-v", "--verbose", action="store_true")
+    parser.add_argument("-q", "--quiet", action="store_true",
+                        help="Only show failures and summary")
     parser.add_argument("--no-color", action="store_true")
     args = parser.parse_args()
 
@@ -801,7 +805,7 @@ def main():
     script_dir = Path(__file__).parent.resolve()
     base_dir = script_dir.parent
 
-    runner = EditorTestRunner(base_dir, verbose=args.verbose)
+    runner = EditorTestRunner(base_dir, verbose=args.verbose, quiet=args.quiet)
     runner.run_all_tests()
 
     sys.exit(1 if runner.failed > 0 else 0)
