@@ -4,6 +4,8 @@
 
 * = $0400
 
+  JMP main
+
   .include environment.asm
 
   .zeropage
@@ -210,3 +212,6 @@ print_byte_dec
 size_msg  .data "Terminal size: " $00
 instr_msg .data "Press keys to see codes, 'q' to quit" $00
 key_msg   .data "Key: $" $00
+
+; Entry point address
+  .data main

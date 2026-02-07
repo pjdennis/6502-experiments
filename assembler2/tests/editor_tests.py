@@ -335,6 +335,146 @@ class EditorTestRunner:
             expected_content="One\nTwo\nhree\nFour\n"
         )
 
+        # Test 24: Delete only line leaves empty file
+        self.run_test(
+            "Delete only line leaves newline",
+            "Only\n",
+            b"dd:wq\r",
+            expected_content="\n"
+        )
+
+        # Test 25: Multiple inserts
+        self.run_test(
+            "Insert multiple characters",
+            "AB\n",
+            b"liXYZ\x1b:wq\r",
+            expected_content="AXYZB\n"
+        )
+
+        # Test 26: Delete and retype
+        self.run_test(
+            "Delete char then insert replacement",
+            "Hello\n",
+            b"xiJ\x1b:wq\r",
+            expected_content="Jello\n"
+        )
+
+        # Test 27: File without trailing newline
+        self.run_test(
+            "File without trailing newline",
+            "Hello",
+            b":wq\r",
+            expected_content="Hello\n"
+        )
+
+        # Test 28: Multiple dd operations
+        self.run_test(
+            "Delete two lines with dd dd",
+            "A\nB\nC\n",
+            b"dddd:wq\r",
+            expected_content="C\n"
+        )
+
+        # Test 29: Append at end of line
+        self.run_test(
+            "Append at end of line with $a",
+            "Hello\n",
+            b"$aX\x1b:wq\r",
+            expected_content="HelloX\n"
+        )
+
+        # Test 30: Cursor clamps when moving from long to short line
+        self.run_test(
+            "Cursor clamps on move to shorter line",
+            "LongLine\nAB\n",
+            b"$jx:wq\r",
+            expected_content="LongLine\nA\n"
+        )
+
+        # Test 31: h at column 0 stays at 0
+        self.run_test(
+            "h at column 0 stays put",
+            "Hello\n",
+            b"hx:wq\r",
+            expected_content="ello\n"
+        )
+
+        # Test 32: j at last line stays put
+        self.run_test(
+            "j at last line stays put",
+            "Only\n",
+            b"jx:wq\r",
+            expected_content="nly\n"
+        )
+
+        # Test 33: k at first line stays put
+        self.run_test(
+            "k at first line stays put",
+            "Only\n",
+            b"kx:wq\r",
+            expected_content="nly\n"
+        )
+
+        # Test 34: :q on modified file preserves content
+        # x modifies, :q warns, :q! then force quits
+        # The file should still have the original content
+        # (x deletes but :q doesn't save, :q! quits without saving)
+        self.run_test(
+            ":q on modified file refuses to quit",
+            "Hello\n",
+            b"x:q\r:q!\r",
+            expect_unmodified=True
+        )
+
+        # Test 35: l at end of line stays put
+        self.run_test(
+            "l at end of line stays put",
+            "Hi\n",
+            b"lllx:wq\r",
+            expected_content="H\n"
+        )
+
+        # Test 36: Open above on first line
+        self.run_test(
+            "Open above on first line with O",
+            "Hello\n",
+            b"ONew\x1b:wq\r",
+            expected_content="New\nHello\n"
+        )
+
+        # Test 37: Delete all lines then add text
+        self.run_test(
+            "Delete all lines then insert",
+            "A\nB\n",
+            b"dddd" + b"iNew\x1b:wq\r",
+            expected_content="New\n"
+        )
+
+        # Test 38: Append on empty line
+        self.run_test(
+            "Append on empty line",
+            "\n",
+            b"aHi\x1b:wq\r",
+            expected_content="Hi\n"
+        )
+
+        # Test 39: ESC in insert mode moves cursor back
+        # Insert 'AB' at start, ESC, then x should delete B (cursor moves back)
+        self.run_test(
+            "ESC in insert moves cursor back one",
+            "CD\n",
+            b"iAB\x1bx:wq\r",
+            expected_content="ACD\n"
+        )
+
+        # Test 40: Multiple Enter in insert mode
+        self.run_test(
+            "Multiple Enter creates multiple lines",
+            "AB\n",
+            b"li\r\r\x1b:wq\r",
+            expected_content="A\n\nB\n"
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed
