@@ -105,35 +105,41 @@ echo "--- Version 21 ---"
   ../emulator.out out/instgen.out 2000 /dev/null out/inst.asm.out &&
   ../emulator.out ../20/out/asm.out 2000 /dev/null /dev/null asm.asm out/asm.out &&
   ../emulator.out ../20/out/asm.out 2000 /dev/null /dev/null asm.asm out/asm_debug.out define:enable_debug)
-echo "--- File stack test ---"
-./emulator.out 21/out/asm_debug.out 2000 /dev/null /dev/null 22/tests/file_stack_test.asm out/file_stack_test.out
 echo "--- Version 22 ---"
 (cd 22 && mkdir -p out &&
   ../emulator.out ../21/out/asm_debug.out 2000 /dev/null /dev/null instgen.asm out/instgen.out &&
   ../emulator.out out/instgen.out 2000 /dev/null out/inst.asm.out &&
   ../emulator.out ../21/out/asm_debug.out 2000 /dev/null /dev/null asm.asm out/asm.out &&
   ../emulator.out ../21/out/asm_debug.out 2000 /dev/null /dev/null asm.asm out/asm_debug.out define:enable_debug)
+echo "--- Version 23 ---"
+(cd 23 && mkdir -p out &&
+  ../emulator.out ../22/out/asm_debug.out 2000 /dev/null /dev/null instgen.asm out/instgen.out &&
+  ../emulator.out out/instgen.out 2000 /dev/null out/inst.asm.out &&
+  ../emulator.out ../22/out/asm_debug.out 2000 /dev/null /dev/null asm.asm out/asm.out &&
+  ../emulator.out ../22/out/asm_debug.out 2000 /dev/null /dev/null asm.asm out/asm_debug.out define:enable_debug)
+echo "--- File stack test ---"
+./emulator.out 23/out/asm_debug.out 2000 /dev/null /dev/null 23/tests/file_stack_test.asm out/file_stack_test.out
 echo "--- Self-assembly test ---"
 # Self-assembly test (without debug - smaller)
-(cd 22 && ../emulator.out out/asm.out 2000 /dev/null /dev/null asm.asm out/asm_2.out)
-diff <(hexdump -C 22/out/asm.out) <(hexdump -C 22/out/asm_2.out)
+(cd 23 && ../emulator.out out/asm.out 2000 /dev/null /dev/null asm.asm out/asm_2.out)
+diff <(hexdump -C 23/out/asm.out) <(hexdump -C 23/out/asm_2.out)
 # Self-assembly test (with debug)
-(cd 22 && ../emulator.out out/asm_debug.out 2000 /dev/null /dev/null asm.asm out/asm_debug_2.out define:enable_debug)
-diff <(hexdump -C 22/out/asm_debug.out) <(hexdump -C 22/out/asm_debug_2.out)
+(cd 23 && ../emulator.out out/asm_debug.out 2000 /dev/null /dev/null asm.asm out/asm_debug_2.out define:enable_debug)
+diff <(hexdump -C 23/out/asm_debug.out) <(hexdump -C 23/out/asm_debug_2.out)
 
 echo "Build chain completed OK"
 
 # Show actual code size difference
 # File covers $2000-$FFFF, vectors at end. Scan backwards from just before vectors.
 echo "Code size comparison:"
-SIZE1=$(perl -e 'open(F,"<","22/out/asm.out");binmode(F);read(F,$d,0xE000);for($i=0xDFFB;$i>=0;$i--){last if ord(substr($d,$i,1))!=0}print $i+1')
-SIZE2=$(perl -e 'open(F,"<","22/out/asm_debug.out");binmode(F);read(F,$d,0xE000);for($i=0xDFFB;$i>=0;$i--){last if ord(substr($d,$i,1))!=0}print $i+1')
+SIZE1=$(perl -e 'open(F,"<","23/out/asm.out");binmode(F);read(F,$d,0xE000);for($i=0xDFFB;$i>=0;$i--){last if ord(substr($d,$i,1))!=0}print $i+1')
+SIZE2=$(perl -e 'open(F,"<","23/out/asm_debug.out");binmode(F);read(F,$d,0xE000);for($i=0xDFFB;$i>=0;$i--){last if ord(substr($d,$i,1))!=0}print $i+1')
 echo "  asm.out (no debug):     $SIZE1 bytes"
 echo "  asm_debug.out:          $SIZE2 bytes"
 echo "  Difference:             $((SIZE2 - SIZE1)) bytes"
 
-echo "--- Test asm22 ---"
-./emulator.out 22/out/asm_debug.out 2000 /dev/null /dev/null test19.asm out/test19.out
+echo "--- Test asm23 ---"
+./emulator.out 23/out/asm_debug.out 2000 /dev/null /dev/null test19.asm out/test19.out
 # hexdump -C out/test19.out
 echo "Assembled test program"
 ./emulator.out out/test19.out 1000 /dev/null - arg1 "arg 2"

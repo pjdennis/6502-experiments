@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Optional
 
 
-ASM_VERSION = "22"
+ASM_VERSION = "23"
 
 
 class TestType(Enum):

@@ -68,7 +68,10 @@ The assembler bootstraps through 23 progressively more capable versions:
                  22/out/asm.out (macros with parameters, memory protection)
                        |
                        v
-                 22/out/asm_2.out (self-assembled)
+                 23/out/asm.out (baseline copy of asm22)
+                       |
+                       v
+                 23/out/asm_2.out (self-assembled)
                        |
                        v
                  Verification: asm.out == asm_2.out
@@ -91,6 +94,7 @@ The assembler bootstraps through 23 progressively more capable versions:
 | 20 | 20/ | Conditional assembly (`.ifdef`/`.endif`), `define:label` command line |
 | 21 | 21/ | Shift operators (`<<`/`>>`), conditional debug compilation |
 | 22 | 22/ | Macros (`.macro`/`.endmacro`) with parameters, heap/stack overflow protection |
+| 23 | 23/ | Baseline copy of asm22 (no new features yet) |
 
 ## Directory Structure
 
@@ -100,7 +104,7 @@ assembler2/
 │   ├── asm.c               # C bootstrap assembler
 │   ├── asm.asm             # First assembler source
 │   └── out/                # Build outputs (asm_c.out, asm.out)
-├── 01/-22/                 # Assembler versions 1-22
+├── 01/-23/                 # Assembler versions 1-23
 │   ├── asm.asm             # Assembler source
 │   ├── instgen.asm         # Instruction table generator (07+)
 │   ├── common.asm          # Shared code (11+)
@@ -111,12 +115,12 @@ assembler2/
 │   ├── errors.asm          # Error messages (18+)
 │   ├── fwdref.asm          # Forward reference handling (18+)
 │   ├── label_scope.asm     # Label scope management (21+)
-│   ├── macros.asm          # Macro support (22)
+│   ├── macros.asm          # Macro support (22+)
 │   └── out/                # Build outputs (asm.out, instgen.out, inst.asm.out)
 │
 ├── run_tests.py            # Test runner
-├── 22/tests/               # Latest test suite
-│   ├── asm_tests.txt     # Tests for asm22 (current, 256 tests)
+├── 23/tests/               # Latest test suite
+│   ├── asm_tests.txt     # Tests for asm23 (current, 256 tests)
 │   ├── file_stack_tests.txt  # File stack tests (30 tests)
 │   ├── file_stack_test.asm   # File stack test harness
 │   └── ...                 # Any version-specific test data
@@ -137,7 +141,7 @@ assembler2/
 | File | Description |
 |------|-------------|
 | `Makefile` | Builds emulator, sidebyside, and C bootstrap (`00/out/asm_c.out`) |
-| `asmtestgen.sh` | Runs the full bootstrap chain from version 00 through 22 |
+| `asmtestgen.sh` | Runs the full bootstrap chain from version 00 through 23 |
 | `gogen.sh` | Watch mode - rebuilds on source file changes |
 
 ## Tools
@@ -152,9 +156,9 @@ assembler2/
 
 The build verifies correctness by:
 
-1. Assembling `22/asm.asm` with `21/out/asm_debug.out` to produce `22/out/asm.out` (without debug)
-2. Assembling `22/asm.asm` with `21/out/asm_debug.out` to produce `22/out/asm_debug.out` (with debug)
-3. Self-assembling `22/asm.asm` with both variants to produce `22/out/asm_2.out` and `22/out/asm_debug_2.out`
+1. Assembling `23/asm.asm` with `22/out/asm_debug.out` to produce `23/out/asm.out` (without debug)
+2. Assembling `23/asm.asm` with `22/out/asm_debug.out` to produce `23/out/asm_debug.out` (with debug)
+3. Self-assembling `23/asm.asm` with both variants to produce `23/out/asm_2.out` and `23/out/asm_debug_2.out`
 4. Comparing outputs - each variant must self-assemble identically
 
 If the assembler can correctly assemble itself and produce identical binaries, the bootstrap is successful.
@@ -188,7 +192,7 @@ Tests verify both positive cases (correct assembly output) and negative cases (p
 After a successful build, `test19.asm` is assembled and executed:
 
 ```bash
-./emulator.out 22/out/asm_debug.out 2000 /dev/null /dev/null test19.asm out/test19.out
+./emulator.out 23/out/asm_debug.out 2000 /dev/null /dev/null test19.asm out/test19.out
 ./emulator.out out/test19.out 1000 /dev/null - arg1 "arg 2"
 ```
 
@@ -210,7 +214,7 @@ The emulator provides these memory-mapped I/O routines (via JSR):
 | `$F021` | Open file for writing |
 | `$F024` | Write byte to file handle |
 
-## Assembler Syntax (asm22)
+## Assembler Syntax (asm23)
 
 ```asm
 ; Comments start with semicolon
@@ -271,16 +275,16 @@ label                    ; Global label
 
 ```bash
 # Basic usage (run via emulator)
-./emulator.out 22/out/asm.out 2000 /dev/null /dev/null input.asm output.bin
+./emulator.out 23/out/asm.out 2000 /dev/null /dev/null input.asm output.bin
 
 # With debug output
-./emulator.out 22/out/asm_debug.out 2000 /dev/null /dev/null input.asm output.bin debug
+./emulator.out 23/out/asm_debug.out 2000 /dev/null /dev/null input.asm output.bin debug
 
 # Pre-define symbols for conditional assembly
-./emulator.out 22/out/asm.out 2000 /dev/null /dev/null input.asm output.bin define:SYMBOL1 define:SYMBOL2
+./emulator.out 23/out/asm.out 2000 /dev/null /dev/null input.asm output.bin define:SYMBOL1 define:SYMBOL2
 
 # Enable small heap for testing (debug build only)
-./emulator.out 22/out/asm_debug.out 2000 /dev/null /dev/null input.asm output.bin small_heap
+./emulator.out 23/out/asm_debug.out 2000 /dev/null /dev/null input.asm output.bin small_heap
 ```
 
 ### Syntax Evolution
@@ -294,10 +298,11 @@ The assembler syntax has evolved through the bootstrap chain:
 - **asm20**: Conditional assembly (`.ifdef`/`.endif`), `define:label` command line args
 - **asm21**: Shift operators (`<<`, `>>`), conditional compilation for optional debug support
 - **asm22**: Macros (`.macro`/`.endmacro`) with parameters, heap/stack overflow protection
+- **asm23**: Baseline copy of asm22 (no new features yet)
 
 ## Adding a New Bootstrap Step
 
-To create version NN+1 from the current version NN (e.g., 22 → 23):
+To create version NN+1 from the current version NN (e.g., 23 → 24):
 
 ### 1. Create New Version Directory
 
