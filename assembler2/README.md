@@ -297,57 +297,24 @@ The assembler syntax has evolved through the bootstrap chain:
 
 ## Adding a New Bootstrap Step
 
-When adding new features that require a new assembler version (e.g., asm22 to asm23):
+To create version NN+1 from the current version NN (e.g., 22 → 23):
 
 ### 1. Create New Version Directory
 
-```bash
-cp -r 22/ 23/
-mkdir -p 23/tests
-cp 22/tests/asm_tests.txt 23/tests/asm23_tests.txt
-```
+Copy the entire version directory: `cp -r NN/ NN+1/`. Source files and tests use relative paths with no version suffixes, so nothing inside the copied directory needs changing.
 
-Since source files no longer have version suffixes, the `.include` directives inside the copied files need no changes.
+### 2. Update Build and Test Infrastructure
 
-### 2. Update asmtestgen.sh
+All references to the version number are centralized in a few files:
 
-Add the new assembler build steps and update self-hosting:
+- **`asmtestgen.sh`**: Add build steps for NN+1 (follow the pattern of the NN block). Move the self-hosting check and code size comparison from NN to NN+1. Update the file_stack_test and test program lines to use the new assembler.
+- **`run_tests.py`**: Change `ASM_VERSION` constant from `"NN"` to `"NN+1"`.
+- **`gogen.sh`**: Add a line for NN+1's source files to the fswatch list. Include any new `.asm` files introduced in this version.
+- **`README.md`**: Update the bootstrap chain diagram, bootstrap levels table, and code size example.
 
-```bash
-# Build asm23 instruction table generator and instruction table
-(cd 23 && mkdir -p out &&
-  ../emulator.out ../22/out/asm_debug.out 2000 /dev/null /dev/null instgen.asm out/instgen.out &&
-  ../emulator.out out/instgen.out 2000 /dev/null out/inst.asm.out &&
-  ../emulator.out ../22/out/asm_debug.out 2000 /dev/null /dev/null asm.asm out/asm.out &&
-  ../emulator.out ../22/out/asm_debug.out 2000 /dev/null /dev/null asm.asm out/asm_debug.out define:enable_debug)
-
-# Self-hosting check
-(cd 23 && ../emulator.out out/asm.out 2000 /dev/null /dev/null asm.asm out/asm_2.out)
-diff <(hexdump -C 23/out/asm.out) <(hexdump -C 23/out/asm_2.out)
-```
-
-Remove the self-hosting check for asm22 (only the latest version needs it).
-
-### 3. Update Other Files
-
-- **run_tests.py** - Update assembler path to `23/out/asm_debug.out`
-- **gogen.sh** - Add new version's files to the watch list
-- **asmtestgen.sh** - Update test program and file_stack_test to use new assembler
-
-### 4. Build and Verify
+### 3. Build and Verify
 
 ```bash
-./asmtestgen.sh       # Full build chain
-./run_tests.py  # Test suite
+./asmtestgen.sh    # Full bootstrap chain + self-assembly verification
+./run_tests.py     # Test suite
 ```
-
-### Checklist
-
-- [ ] Version directory created with all source files
-- [ ] `asmtestgen.sh` updated (build steps, self-hosting, test program)
-- [ ] Previous version's self-hosting check removed
-- [ ] `run_tests.py` assembler path updated
-- [ ] `gogen.sh` watch list updated
-- [ ] Build chain passes
-- [ ] All tests pass
-- [ ] README.md updated
