@@ -219,25 +219,13 @@ insert_backspace
   JSR buf_rebuild_lines
 
   ; Move to previous line
-  SEC
-  LDA FILE_LINE16
-  SBC #$01
-  STA FILE_LINE16
-  LDA FILE_LINE16+$01
-  SBC #$00
-  STA FILE_LINE16+$01
+  DEC16 FILE_LINE16
 
   ; Adjust cursor row
   LDA CURSOR_ROW
   BNE .dec_row
   ; Need to scroll up
-  SEC
-  LDA VIEW_TOP16
-  SBC #$01
-  STA VIEW_TOP16
-  LDA VIEW_TOP16+$01
-  SBC #$00
-  STA VIEW_TOP16+$01
+  DEC16 VIEW_TOP16
   JMP .joined
 .dec_row
   DEC CURSOR_ROW
