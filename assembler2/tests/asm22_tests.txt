@@ -2573,6 +2573,20 @@ INPUT:
 EXPECT_HEX: a9 01 4c 00 02 a9 02 a9 03
 
 ---
+NAME: macro_local_does_not_collide_with_global
+DESCRIPTION: .foo in macro resolves to macro-local, not global foo
+INPUT:
+ 1: * = $0200
+ 2: foo = $01
+ 3:   .macro TEST
+ 4: .foo
+ 5:   LDA #foo
+ 6:   BEQ .foo
+ 7:   .endmacro
+ 8:   TEST
+EXPECT_HEX: a9 01 f0 fc
+
+---
 NAME: nested_macro_local_shadowing
 DESCRIPTION: Inner macro local label shadows outer macro local label
 INPUT:
