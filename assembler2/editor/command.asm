@@ -33,7 +33,7 @@ command_handle
   BEQ .cmd_cancel
   CMP #KEY_ENTER
   BEQ .cmd_execute
-  CMP #$0D
+  CMP #'\r'
   BEQ .cmd_execute
   CMP #KEY_BS
   BEQ .cmd_backspace
@@ -63,11 +63,11 @@ command_handle
   BEQ .cmd_cancel     ; Nothing to delete, cancel
   DEC CMD_IDX
   ; Erase character on screen: backspace, space, backspace
-  LDA #$08
+  LDA #'\b'
   JSR write_b
   LDA #' '
   JSR write_b
-  LDA #$08
+  LDA #'\b'
   JSR write_b
   JSR con_flush
   JMP .cmd_read_loop

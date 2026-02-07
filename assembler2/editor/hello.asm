@@ -35,7 +35,7 @@ main
   JSR term_cols
   JSR print_byte_dec
 
-  LDA #$0A
+  LDA #'\n'
   JSR write_b
 
   ; Print instructions
@@ -48,7 +48,7 @@ main
   BNE .print_instr
 
 .flush_and_loop
-  LDA #$0A
+  LDA #'\n'
   JSR write_b
   JSR con_flush
 
@@ -80,7 +80,7 @@ main
 
   ; Print char if printable
   LDA TEMP_VAL
-  CMP #$20
+  CMP #' '
   BCC .not_printable
   CMP #$7F
   BCS .not_printable
@@ -92,9 +92,9 @@ main
 .after_char
   LDA #')'
   JSR write_b
-  LDA #$0D
+  LDA #'\r'
   JSR write_b
-  LDA #$0A
+  LDA #'\n'
   JSR write_b
   JSR con_flush
   JMP .key_loop
