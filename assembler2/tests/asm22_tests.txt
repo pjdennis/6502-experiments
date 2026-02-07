@@ -2669,3 +2669,63 @@ INPUT:
  7:   WITH_INCLUDE
  8:   RTS
 EXPECT_HEX: ea ea e8 ea ea 60
+
+# ============================================================================
+# MACRO ERROR REPORTING TESTS
+# ============================================================================
+
+---
+NAME: macro_error_in_body
+DESCRIPTION: Error in macro body reports source as macro, not file
+INPUT:
+ 1: * = $0200
+ 2:   .macro MYMACRO
+ 3:   LDA undefined
+ 4:   .endmacro
+ 5:   MYMACRO
+EXPECT_STDERR:
+Error 1 in file MYMACRO at line 1: Label not found
+  included from {{MAIN_FILE}}:5
+
+---
+NAME: macro_error_nested_macros
+DESCRIPTION: Error in nested macro shows macro traceback chain
+INPUT:
+ 1: * = $0200
+ 2:   .macro INNER
+ 3:   LDA undefined
+ 4:   .endmacro
+ 5:   .macro OUTER
+ 6:   INNER
+ 7:   .endmacro
+ 8:   OUTER
+EXPECT_STDERR:
+Error 1 in file INNER at line 1: Label not found
+  included from OUTER:1
+  included from {{MAIN_FILE}}:8
+
+---
+NAME: macro_error_include_from_macro
+DESCRIPTION: Error in file included from macro shows mixed traceback
+INPUT:
+ 1: * = $0200
+ 2:   .macro WITHMACRO
+ 3:   NOP
+ 4:   .include tests/include/error_inside.asm
+ 5:   .endmacro
+ 6:   WITHMACRO
+EXPECT_STDERR:
+Error 1 in file tests/include/error_inside.asm at line 3: Label not found
+  included from WITHMACRO:2
+  included from {{MAIN_FILE}}:6
+
+---
+NAME: macro_error_in_included_file_macro
+DESCRIPTION: Error in macro defined and invoked inside an included file
+INPUT:
+ 1: * = $0200
+ 2:   .include tests/include/error_in_macro.asm
+EXPECT_STDERR:
+Error 1 in file HELPER at line 1: Label not found
+  included from tests/include/error_in_macro.asm:5
+  included from {{MAIN_FILE}}:2
