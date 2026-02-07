@@ -112,6 +112,7 @@
 #include <termios.h>
 #include <sys/ioctl.h>
 #include <sys/select.h>
+#include <time.h>
 
 // unistd.h conflicts with the 6502 brk() opcode handler, so
 // we declare only the specific functions we need
@@ -122,6 +123,8 @@ extern int ioctl(int fd, unsigned long request, ...);
 extern int select(int nfds, fd_set *readfds, fd_set *writefds,
                   fd_set *exceptfds, struct timeval *timeout);
 extern int atexit(void (*function)(void));
+extern int nanosleep(const struct timespec *req, struct timespec *rem);
+extern int clock_gettime(clockid_t clk_id, struct timespec *tp);
 
 #define STDIN_FILENO  0
 #define STDOUT_FILENO 1
@@ -1026,6 +1029,7 @@ int done = 0;
 int exitcode_set = -1;
 int error_output_started = 0;  // Track if emulated program wrote to stderr
 int console_mode = 0;
+double target_mhz = 0.0;
 struct termios orig_termios;
 
 void restore_terminal() {
@@ -1262,10 +1266,25 @@ int main(int argc, char **argv) {
         console_mode = 1;
     }
 
+    int arg_base = console_mode ? 4 : 5;
+
+    if (console_mode && argc > 4 && strcmp(argv[4], "--mhz") == 0) {
+        if (argc < 6) {
+            fprintf(stderr, "error: --mhz requires a value\n");
+            return 1;
+        }
+        target_mhz = strtod(argv[5], NULL);
+        if (target_mhz <= 0.0) {
+            fprintf(stderr, "error: --mhz value must be positive\n");
+            return 1;
+        }
+        arg_base = 6;
+    }
+
     int min_args = console_mode ? 4 : 5;
     if (argc < min_args) {
         fprintf(stderr, "usage emulator <code file> <hex load address> <input file> <output file> [<arguments>]\n");
-        fprintf(stderr, "       emulator <code file> <hex load address> --console [<arguments>]\n");
+        fprintf(stderr, "       emulator <code file> <hex load address> --console [--mhz <speed>] [<arguments>]\n");
         return 1;
     }
 
@@ -1442,7 +1461,6 @@ int main(int argc, char **argv) {
 
     files_init(input_file_ptr);
 
-    int arg_base = console_mode ? 4 : 5;
     arg_count = argc - arg_base;
     arg_addresses = malloc(arg_count * sizeof(uint16_t));
     for (int arg = 0; arg != arg_count; arg++) {
@@ -1456,9 +1474,33 @@ int main(int argc, char **argv) {
         show_commandline(argc, argv);  // Print command line before emulation (no newline yet)
     }
     reset6502();
+
+    struct timespec start_time;
+    uint32_t next_throttle_check = 10000;
+    if (target_mhz > 0) {
+        clock_gettime(CLOCK_MONOTONIC, &start_time);
+    }
+
     const int max_cycles = 50000000;
     while (!done) {
         step6502();
+
+        if (target_mhz > 0 && clockticks6502 >= next_throttle_check) {
+            next_throttle_check = clockticks6502 + 10000;
+            double emulated_us = (double)clockticks6502 / target_mhz;
+            struct timespec now;
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            double wall_us = (now.tv_sec - start_time.tv_sec) * 1e6
+                           + (now.tv_nsec - start_time.tv_nsec) / 1e3;
+            double ahead_us = emulated_us - wall_us;
+            if (ahead_us > 100.0) {
+                struct timespec delay;
+                delay.tv_sec = 0;
+                delay.tv_nsec = (long)(ahead_us * 1000.0);
+                nanosleep(&delay, NULL);
+            }
+        }
+
         if (!console_mode && clockticks6502 > max_cycles) {
             fprintf(stderr, "\ndid not terminate within %i cycles\n", max_cycles);
             free(arg_addresses);
