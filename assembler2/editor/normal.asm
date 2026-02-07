@@ -230,6 +230,33 @@ normal_page_down
   SBC #$01
   STA BUF_TEMP       ; BUF_TEMP = page_size
 
+  ; target_line = FILE_LINE16 + page_size, clamped to LINE_COUNT16 - 1
+  CLC
+  LDA FILE_LINE16
+  ADC BUF_TEMP
+  STA BUF_PTR16
+  LDA FILE_LINE16+$01
+  ADC #$00
+  STA BUF_PTR16+$01
+
+  ; Clamp target to LINE_COUNT16 - 1
+  LDA BUF_PTR16+$01
+  CMP LINE_COUNT16+$01
+  BCC .pgdn_target_ok
+  BNE .pgdn_clamp_target
+  LDA BUF_PTR16
+  CMP LINE_COUNT16
+  BCC .pgdn_target_ok
+.pgdn_clamp_target
+  SEC
+  LDA LINE_COUNT16
+  SBC #$01
+  STA BUF_PTR16
+  LDA LINE_COUNT16+$01
+  SBC #$00
+  STA BUF_PTR16+$01
+.pgdn_target_ok
+
   ; VIEW_TOP16 += page_size
   CLC
   LDA VIEW_TOP16
@@ -252,40 +279,25 @@ normal_page_down
   ; If VIEW_TOP16 > max, clamp it
   CPY VIEW_TOP16+$01
   BCC .pgdn_clamp_view
-  BNE .pgdn_view_ok
+  BNE .pgdn_set_row
   CPX VIEW_TOP16
-  BCS .pgdn_view_ok
+  BCS .pgdn_set_row
 .pgdn_clamp_view
   STX VIEW_TOP16
   STY VIEW_TOP16+$01
-  JMP .pgdn_view_ok
+  JMP .pgdn_set_row
 
 .pgdn_view_zero
   LDA #$00
   STA_LH16 VIEW_TOP16
 
-.pgdn_view_ok
-  ; Clamp CURSOR_ROW so FILE_LINE16 doesn't exceed last line
-  ; max_cursor_row = LINE_COUNT16 - 1 - VIEW_TOP16
+.pgdn_set_row
+  ; CURSOR_ROW = target_line - VIEW_TOP16
   SEC
-  LDA LINE_COUNT16
-  SBC #$01
-  SEC
+  LDA BUF_PTR16
   SBC VIEW_TOP16
-  STA BUF_TEMP
-  LDA LINE_COUNT16+$01
-  SBC #$00
-  SBC VIEW_TOP16+$01
-  ; If high byte > 0, CURSOR_ROW is fine (can't exceed 255)
-  BNE .pgdn_clamp_col
-  LDA CURSOR_ROW
-  CMP BUF_TEMP
-  BCC .pgdn_clamp_col
-  BEQ .pgdn_clamp_col
-  LDA BUF_TEMP
   STA CURSOR_ROW
 
-.pgdn_clamp_col
   JSR clamp_cursor_col
   LDA #$00
   STA LAST_KEY
@@ -298,21 +310,33 @@ normal_page_up
   SBC #$01
   STA BUF_TEMP       ; BUF_TEMP = page_size
 
-  ; If VIEW_TOP16 >= page_size, subtract
+  ; target_line = FILE_LINE16 - page_size, clamped to 0
+  SEC
+  LDA FILE_LINE16
+  SBC BUF_TEMP
+  STA BUF_PTR16
+  LDA FILE_LINE16+$01
+  SBC #$00
+  STA BUF_PTR16+$01
+  BCS .pgup_target_ok
+  ; Underflow - clamp to 0
+  LDA #$00
+  STA_LH16 BUF_PTR16
+.pgup_target_ok
+
+  ; VIEW_TOP16 -= page_size, clamped to 0
   LDA VIEW_TOP16+$01
   BNE .pgup_can_sub  ; High byte > 0, definitely >= page_size
   LDA VIEW_TOP16
   CMP BUF_TEMP
   BCS .pgup_can_sub
 
-  ; VIEW_TOP16 < page_size: set VIEW_TOP16 = 0, CURSOR_ROW = 0
+  ; VIEW_TOP16 < page_size: set VIEW_TOP16 = 0
   LDA #$00
   STA_LH16 VIEW_TOP16
-  STA CURSOR_ROW
-  JMP .pgup_clamp_col
+  JMP .pgup_set_row
 
 .pgup_can_sub
-  ; VIEW_TOP16 -= page_size
   SEC
   LDA VIEW_TOP16
   SBC BUF_TEMP
@@ -321,25 +345,13 @@ normal_page_up
   SBC #$00
   STA VIEW_TOP16+$01
 
-  ; Clamp CURSOR_ROW so FILE_LINE16 doesn't exceed last line
+.pgup_set_row
+  ; CURSOR_ROW = target_line - VIEW_TOP16
   SEC
-  LDA LINE_COUNT16
-  SBC #$01
-  SEC
+  LDA BUF_PTR16
   SBC VIEW_TOP16
-  STA BUF_TEMP
-  LDA LINE_COUNT16+$01
-  SBC #$00
-  SBC VIEW_TOP16+$01
-  BNE .pgup_clamp_col ; High byte > 0, row is fine
-  LDA CURSOR_ROW
-  CMP BUF_TEMP
-  BCC .pgup_clamp_col
-  BEQ .pgup_clamp_col
-  LDA BUF_TEMP
   STA CURSOR_ROW
 
-.pgup_clamp_col
   JSR clamp_cursor_col
   LDA #$00
   STA LAST_KEY
