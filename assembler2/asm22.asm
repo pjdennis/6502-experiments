@@ -446,9 +446,7 @@ check_for_value
 read_value
   JSR read_char        ; Read the character after the "="
   JSR skip_spaces
-  JSR parse_value      ; Returns value in OPERAND16 (aliased to HEX16)
-  ; No copy needed - OPERAND16 is aliased to HEX16
-  RTS
+  JMP parse_value      ; Tail call; Returns value in OPERAND16 (aliased to HEX16)
 
 
 ; Parse a term (single value): $12, $1234, 'x', label, <label, or >label
@@ -1067,7 +1065,7 @@ emit_instruction
   LDA OPERAND16
   JSR emit
   LDA OPERAND16+$01
-  JSR emit
+  JMP emit               ; Tail call
 .done
   RTS
 .one_byte
@@ -1331,8 +1329,7 @@ emit_quoted
 .err_closing_quote
   JMP err_closing_quote_not_found
 .done
-  JSR read_char        ; Done; read char
-  RTS
+  JMP read_char        ; Tail call; read char after closing quote
 
 
 ; ============================================================================
