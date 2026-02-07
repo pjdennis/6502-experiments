@@ -41,6 +41,22 @@ insert_handle_key
   BNE .not_right
   JMP insert_move_right
 .not_right
+  CMP #KEY_PGDN
+  BNE .not_pgdn
+  JMP insert_page_down
+.not_pgdn
+  CMP #KEY_PGUP
+  BNE .not_pgup
+  JMP insert_page_up
+.not_pgup
+  CMP #$06           ; Ctrl-F
+  BNE .not_ctrl_f
+  JMP insert_page_down
+.not_ctrl_f
+  CMP #$02           ; Ctrl-B
+  BNE .not_ctrl_b
+  JMP insert_page_up
+.not_ctrl_b
 
   ; Printable character?
   CMP #' '
@@ -243,6 +259,16 @@ insert_move_up
 
 insert_move_down
   JSR normal_move_down
+  JSR clamp_cursor_col_insert
+  RTS
+
+insert_page_down
+  JSR normal_page_down
+  JSR clamp_cursor_col_insert
+  RTS
+
+insert_page_up
+  JSR normal_page_up
   JSR clamp_cursor_col_insert
   RTS
 

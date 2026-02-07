@@ -61,6 +61,22 @@ normal_handle_key
   BNE .not_end
   JMP normal_line_end
 .not_end
+  CMP #KEY_PGDN
+  BNE .not_pgdn
+  JMP normal_page_down
+.not_pgdn
+  CMP #KEY_PGUP
+  BNE .not_pgup
+  JMP normal_page_up
+.not_pgup
+  CMP #$06           ; Ctrl-F
+  BNE .not_ctrl_f
+  JMP normal_page_down
+.not_ctrl_f
+  CMP #$02           ; Ctrl-B
+  BNE .not_ctrl_b
+  JMP normal_page_up
+.not_ctrl_b
   CMP #'G'
   BNE .not_G
   JMP normal_goto_last
@@ -203,6 +219,128 @@ normal_move_up
 .clamp_col
   JSR clamp_cursor_col
 .done
+  LDA #$00
+  STA LAST_KEY
+  RTS
+
+normal_page_down
+  ; page_size = SCREEN_ROWS - 1 (content rows excluding status bar)
+  LDA SCREEN_ROWS
+  SEC
+  SBC #$01
+  STA BUF_TEMP       ; BUF_TEMP = page_size
+
+  ; VIEW_TOP16 += page_size
+  CLC
+  LDA VIEW_TOP16
+  ADC BUF_TEMP
+  STA VIEW_TOP16
+  LDA VIEW_TOP16+$01
+  ADC #$00
+  STA VIEW_TOP16+$01
+
+  ; Clamp VIEW_TOP16 to max(0, LINE_COUNT - page_size)
+  SEC
+  LDA LINE_COUNT16
+  SBC BUF_TEMP
+  TAX                ; X = low byte of max view top
+  LDA LINE_COUNT16+$01
+  SBC #$00
+  BCC .pgdn_view_zero  ; LINE_COUNT < page_size, set VIEW_TOP=0
+  TAY                ; Y = high byte of max view top
+
+  ; If VIEW_TOP16 > max, clamp it
+  CPY VIEW_TOP16+$01
+  BCC .pgdn_clamp_view
+  BNE .pgdn_view_ok
+  CPX VIEW_TOP16
+  BCS .pgdn_view_ok
+.pgdn_clamp_view
+  STX VIEW_TOP16
+  STY VIEW_TOP16+$01
+  JMP .pgdn_view_ok
+
+.pgdn_view_zero
+  LDA #$00
+  STA_LH16 VIEW_TOP16
+
+.pgdn_view_ok
+  ; Clamp CURSOR_ROW so FILE_LINE16 doesn't exceed last line
+  ; max_cursor_row = LINE_COUNT16 - 1 - VIEW_TOP16
+  SEC
+  LDA LINE_COUNT16
+  SBC #$01
+  SEC
+  SBC VIEW_TOP16
+  STA BUF_TEMP
+  LDA LINE_COUNT16+$01
+  SBC #$00
+  SBC VIEW_TOP16+$01
+  ; If high byte > 0, CURSOR_ROW is fine (can't exceed 255)
+  BNE .pgdn_clamp_col
+  LDA CURSOR_ROW
+  CMP BUF_TEMP
+  BCC .pgdn_clamp_col
+  BEQ .pgdn_clamp_col
+  LDA BUF_TEMP
+  STA CURSOR_ROW
+
+.pgdn_clamp_col
+  JSR clamp_cursor_col
+  LDA #$00
+  STA LAST_KEY
+  RTS
+
+normal_page_up
+  ; page_size = SCREEN_ROWS - 1
+  LDA SCREEN_ROWS
+  SEC
+  SBC #$01
+  STA BUF_TEMP       ; BUF_TEMP = page_size
+
+  ; If VIEW_TOP16 >= page_size, subtract
+  LDA VIEW_TOP16+$01
+  BNE .pgup_can_sub  ; High byte > 0, definitely >= page_size
+  LDA VIEW_TOP16
+  CMP BUF_TEMP
+  BCS .pgup_can_sub
+
+  ; VIEW_TOP16 < page_size: set VIEW_TOP16 = 0, CURSOR_ROW = 0
+  LDA #$00
+  STA_LH16 VIEW_TOP16
+  STA CURSOR_ROW
+  JMP .pgup_clamp_col
+
+.pgup_can_sub
+  ; VIEW_TOP16 -= page_size
+  SEC
+  LDA VIEW_TOP16
+  SBC BUF_TEMP
+  STA VIEW_TOP16
+  LDA VIEW_TOP16+$01
+  SBC #$00
+  STA VIEW_TOP16+$01
+
+  ; Clamp CURSOR_ROW so FILE_LINE16 doesn't exceed last line
+  SEC
+  LDA LINE_COUNT16
+  SBC #$01
+  SEC
+  SBC VIEW_TOP16
+  STA BUF_TEMP
+  LDA LINE_COUNT16+$01
+  SBC #$00
+  SBC VIEW_TOP16+$01
+  BNE .pgup_clamp_col ; High byte > 0, row is fine
+  LDA CURSOR_ROW
+  CMP BUF_TEMP
+  BCC .pgup_clamp_col
+  BEQ .pgup_clamp_col
+  LDA BUF_TEMP
+  STA CURSOR_ROW
+
+.pgup_clamp_col
+  JSR clamp_cursor_col
   LDA #$00
   STA LAST_KEY
   RTS
