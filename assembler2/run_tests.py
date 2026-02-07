@@ -3,7 +3,7 @@
 Unified test runner for 6502 assembler project.
 
 Supports two test types:
-  - assembler: Tests the assembler (asm22) with assembly source input
+  - assembler: Tests the current assembler with assembly source input
   - file_stack: Tests the file stack component with file I/O operations
 
 Usage:
@@ -27,6 +27,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Optional
+
+
+ASM_VERSION = "22"
 
 
 class TestType(Enum):
@@ -87,8 +90,8 @@ class TestRunner:
         self.verbose = verbose
         self.quiet = quiet
         self.emulator = base_dir / "emulator.out"
-        self.assembler = base_dir / "22" / "out" / "asm_debug.out"
-        self.file_stack_test = base_dir / "out" / "file_stack_test22.out"
+        self.assembler = base_dir / ASM_VERSION / "out" / "asm_debug.out"
+        self.file_stack_test = base_dir / "out" / f"file_stack_test{ASM_VERSION}.out"
 
         self.passed = 0
         self.failed = 0
@@ -630,7 +633,7 @@ def main():
     parser.add_argument(
         "test_files",
         nargs="*",
-        help="Test files to run (default: 22/tests/asm22_tests.txt and 22/tests/file_stack_tests22.txt)",
+        help="Test files to run (default: <asm_version>/tests/asm<asm_version>_tests.txt and <asm_version>/tests/file_stack_tests<asm_version>.txt)",
     )
     parser.add_argument(
         "-f", "--filter", default="", help="Only run tests matching this pattern"
@@ -663,10 +666,10 @@ def main():
 
     # Default test files if none specified
     if not args.test_files:
-        latest_tests_dir = script_dir / "22" / "tests"
+        latest_tests_dir = script_dir / ASM_VERSION / "tests"
         args.test_files = [
-            str(latest_tests_dir / "file_stack_tests22.txt"),
-            str(latest_tests_dir / "asm22_tests.txt"),
+            str(latest_tests_dir / f"file_stack_tests{ASM_VERSION}.txt"),
+            str(latest_tests_dir / f"asm{ASM_VERSION}_tests.txt"),
         ]
 
     for test_file in args.test_files:
