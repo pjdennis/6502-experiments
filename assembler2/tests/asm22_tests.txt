@@ -2643,3 +2643,29 @@ INPUT:
  6:   .endmacro
  7:   TEST $42
 EXPECT_HEX: a9 42 f0 fc
+
+---
+NAME: macro_include_basic
+DESCRIPTION: Macro body can .include a file
+INPUT:
+ 1: * = $0200
+ 2:   .macro WITH_INCLUDE
+ 3:   .include tests/include/from_macro.asm
+ 4:   .endmacro
+ 5:   WITH_INCLUDE
+ 6:   RTS
+EXPECT_HEX: ea ea 60
+
+---
+NAME: macro_include_multiple
+DESCRIPTION: Same macro with .include expanded twice produces correct output
+INPUT:
+ 1: * = $0200
+ 2:   .macro WITH_INCLUDE
+ 3:   .include tests/include/from_macro.asm
+ 4:   .endmacro
+ 5:   WITH_INCLUDE
+ 6:   INX
+ 7:   WITH_INCLUDE
+ 8:   RTS
+EXPECT_HEX: ea ea e8 ea ea 60
