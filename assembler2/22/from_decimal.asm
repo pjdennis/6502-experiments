@@ -47,12 +47,8 @@ from_decimal
   SEC
   SBC #'0'              ; Convert ASCII digit to value 0-9
   CLC
-  ADC FROM_DECIMAL16
-  STA FROM_DECIMAL16
-  BCC .no_carry
-  INC FROM_DECIMAL16+$01
-  BEQ .overflow         ; High byte wrapped from $FF to $00 = overflow
-.no_carry
+  ADCA16 FROM_DECIMAL16 FROM_DECIMAL16
+  BCS .overflow
   ; Read next character
   JSR read_char
   ; Check if it's a digit
