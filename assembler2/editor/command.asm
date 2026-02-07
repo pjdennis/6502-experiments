@@ -337,14 +337,7 @@ command_write_file
   JSR write_b
 
   ; Print " written"
-  LDX #$00
-.print_written
-  LDA str_written,X
-  BEQ .written_done
-  JSR write_b
-  INX
-  BNE .print_written
-.written_done
+  PRINT_STR str_written
 
   JSR con_flush
   ; Brief pause to show message - wait for next redraw

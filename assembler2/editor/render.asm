@@ -189,35 +189,13 @@ render_status_line
 
   ; Print mode
   LDA MODE
-  CMP #MODE_INSERT
-  BEQ .mode_insert
-  CMP #MODE_COMMAND
-  BEQ .mode_command
-  ; Normal mode
-  LDX #$00
-.print_normal
-  LDA str_normal,X
-  BEQ .mode_done
-  JSR write_b
-  INX
-  BNE .print_normal
-.mode_insert
-  LDX #$00
-.print_insert
-  LDA str_insert,X
-  BEQ .mode_done
-  JSR write_b
-  INX
-  BNE .print_insert
-.mode_command
-  LDX #$00
-.print_command
-  LDA str_command,X
-  BEQ .mode_done
-  JSR write_b
-  INX
-  BNE .print_command
-.mode_done
+  ASL
+  TAX
+  LDA mode_strings,X
+  STA STR_PTR16
+  LDA mode_strings+$01,X
+  STA STR_PTR16+$01
+  JSR write_string
 
   ; Print separator and line/col
   LDA #' '
@@ -236,14 +214,7 @@ render_status_line
   ADC #$00
   STA TO_DECIMAL_VALUE16+$01
   JSR to_decimal
-  LDX #$00
-.print_line
-  LDA TO_DECIMAL_RESULT,X
-  BEQ .line_num_done
-  JSR write_b
-  INX
-  BNE .print_line
-.line_num_done
+  PRINT_STR TO_DECIMAL_RESULT
 
   LDA #','
   JSR write_b
@@ -262,14 +233,7 @@ render_status_line
 
   CP16 LINE_COUNT16 TO_DECIMAL_VALUE16
   JSR to_decimal
-  LDX #$00
-.print_total
-  LDA TO_DECIMAL_RESULT,X
-  BEQ .total_done
-  JSR write_b
-  INX
-  BNE .print_total
-.total_done
+  PRINT_STR TO_DECIMAL_RESULT
 
   ; Clear rest of status line and restore normal video
   JSR ansi_clear_line
@@ -340,3 +304,4 @@ render_current_line
 str_normal  .data "NORMAL" $00
 str_insert  .data "INSERT" $00
 str_command .data "COMMAND" $00
+mode_strings .data str_normal str_insert str_command
