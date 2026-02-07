@@ -86,11 +86,20 @@ buf_load_file
   LDA (BUF_PTR16),Y
   CMP #$0A
   BEQ .has_newline
-  ; Add trailing newline
+  ; Need to add a newline
+  LDA BUF_TEMP
+  BNE .overwrite_last
+  ; Not truncated - append trailing newline
   LDA #$0A
   LDY #$00
   STA (BUF_END16),Y
   INC16 BUF_END16
+  JMP .has_newline
+.overwrite_last
+  ; Truncated - overwrite last byte to stay within buffer limit
+  LDA #$0A
+  LDY #$00
+  STA (BUF_PTR16),Y
 .has_newline
 
   ; If buffer is empty (nothing read), add a newline for one empty line
