@@ -9,35 +9,35 @@ ANSI_TEMP    .data $00   ; Temp byte for decimal output
 
   .code
 
-; Clear entire screen and move cursor to home position
-ansi_clear_screen
+; Output ESC[ prefix
+; Clobbers A
+ansi_csi
   LDA #$1B
   JSR write_b
   LDA #'['
-  JSR write_b
-  LDA #'2'
-  JSR write_b
-  LDA #'J'
-  JSR write_b
+  JMP write_b
+
+; Output ESC[ followed by null-terminated string at STR_PTR16
+; Clobbers A, Y
+ansi_write_seq
+  JSR ansi_csi
+  JMP write_string
+
+; Clear entire screen and move cursor to home position
+ansi_clear_screen
+  SET16 ansi_seq_clear STR_PTR16
+  JSR ansi_write_seq
   ; fall through to ansi_cursor_home
 
 ; Move cursor to position 1,1
 ansi_cursor_home
-  LDA #$1B
-  JSR write_b
-  LDA #'['
-  JSR write_b
-  LDA #'H'
-  JSR write_b
-  RTS
+  SET16 ansi_seq_home STR_PTR16
+  JMP ansi_write_seq
 
 ; Move cursor to ANSI_ROW, ANSI_COL (both 1-based)
 ; Clobbers A, Y
 ansi_move_cursor
-  LDA #$1B
-  JSR write_b
-  LDA #'['
-  JSR write_b
+  JSR ansi_csi
   LDA ANSI_ROW
   JSR write_byte_dec
   LDA #';'
@@ -45,74 +45,41 @@ ansi_move_cursor
   LDA ANSI_COL
   JSR write_byte_dec
   LDA #'H'
-  JSR write_b
-  RTS
+  JMP write_b
 
 ; Clear from cursor to end of current line
 ansi_clear_line
-  LDA #$1B
-  JSR write_b
-  LDA #'['
-  JSR write_b
-  LDA #'K'
-  JSR write_b
-  RTS
+  SET16 ansi_seq_clreol STR_PTR16
+  JMP ansi_write_seq
 
 ; Show cursor
 ansi_cursor_show
-  LDA #$1B
-  JSR write_b
-  LDA #'['
-  JSR write_b
-  LDA #'?'
-  JSR write_b
-  LDA #'2'
-  JSR write_b
-  LDA #'5'
-  JSR write_b
-  LDA #'h'
-  JSR write_b
-  RTS
+  SET16 ansi_seq_show STR_PTR16
+  JMP ansi_write_seq
 
 ; Hide cursor
 ansi_cursor_hide
-  LDA #$1B
-  JSR write_b
-  LDA #'['
-  JSR write_b
-  LDA #'?'
-  JSR write_b
-  LDA #'2'
-  JSR write_b
-  LDA #'5'
-  JSR write_b
-  LDA #'l'
-  JSR write_b
-  RTS
+  SET16 ansi_seq_hide STR_PTR16
+  JMP ansi_write_seq
 
 ; Enable reverse video
 ansi_reverse_video
-  LDA #$1B
-  JSR write_b
-  LDA #'['
-  JSR write_b
-  LDA #'7'
-  JSR write_b
-  LDA #'m'
-  JSR write_b
-  RTS
+  SET16 ansi_seq_rev STR_PTR16
+  JMP ansi_write_seq
 
 ; Reset to normal video
 ansi_normal_video
-  LDA #$1B
-  JSR write_b
-  LDA #'['
-  JSR write_b
-  LDA #'0'
-  JSR write_b
-  LDA #'m'
-  JSR write_b
-  RTS
+  SET16 ansi_seq_norm STR_PTR16
+  JMP ansi_write_seq
+
+; ANSI sequence string constants
+ansi_seq_clear  .data "2J" $00
+ansi_seq_home   .data "H" $00
+ansi_seq_clreol .data "K" $00
+ansi_seq_show   .data "?25h" $00
+ansi_seq_hide   .data "?25l" $00
+ansi_seq_rev    .data "7m" $00
+ansi_seq_norm   .data "0m" $00
 
 ; Write null-terminated string pointed to by STR_PTR16
 ; Clobbers A, Y
