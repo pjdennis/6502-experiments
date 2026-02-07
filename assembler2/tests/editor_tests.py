@@ -143,6 +143,39 @@ class EditorTestRunner:
 
             self._pass(name)
 
+    def run_test_new_file(self, name: str, keys: bytes,
+                          expected_content: str = None, expect_exit: int = 0):
+        """Run an editor test on a file that does not exist yet."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            edit_file = tmpdir / "newfile.txt"
+            # Do NOT create the file - it should not exist
+
+            try:
+                exit_code, saved, ansi = self.run_editor(
+                    str(edit_file), keys, tmpdir
+                )
+            except subprocess.TimeoutExpired:
+                self._fail(name, "Timed out (infinite loop?)")
+                return
+            except Exception as e:
+                self._fail(name, f"Error: {e}")
+                return
+
+            if exit_code != expect_exit:
+                self._fail(name, f"Expected exit code {expect_exit}, got {exit_code}")
+                return
+
+            if expected_content is not None:
+                if saved != expected_content:
+                    self._fail(name,
+                        f"Content mismatch:\n"
+                        f"  Expected: {expected_content!r}\n"
+                        f"  Actual:   {saved!r}")
+                    return
+
+            self._pass(name)
+
     def run_test(self, name: str, initial_content: str, keys: bytes,
                  expected_content: str = None, expect_exit: int = 0,
                  expect_unmodified: bool = False):
@@ -547,6 +580,17 @@ class EditorTestRunner:
             "Hello\n",
             b"x:wq\r",
             expected_content="ello\n"
+        )
+
+        print()
+        print("New file creation:")
+        print()
+
+        # Test 42: Edit a non-existent file creates it on save
+        self.run_test_new_file(
+            "Create new file with :wq",
+            b"iHello\x1b:wq\r",
+            expected_content="Hello\n"
         )
 
         print()

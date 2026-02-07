@@ -69,20 +69,24 @@ editor_main
 .fname_copied
   SET16 FNAME_BUF FNAME_PTR16
 
-  ; Try to open the file for reading
+  ; Try to open the file for reading (returns 0 if not found)
   LDA BUF_PTR16
   LDX BUF_PTR16+$01
   JSR open
-  STA FILE_HANDLE
+  CMP #$00
+  BEQ .new_file
 
-  ; Load file into buffer
+  ; File exists - load it
+  STA FILE_HANDLE
   LDA FILE_HANDLE
   JSR buf_load_file
-
-  ; Close the input file
   LDA FILE_HANDLE
   JSR close
+  JMP .init_display
 
+.new_file
+  ; File doesn't exist - start with empty buffer
+  JSR buf_init
   JMP .init_display
 
 .no_file

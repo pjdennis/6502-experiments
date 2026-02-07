@@ -1077,8 +1077,7 @@ uint8_t file_open_with_mode(const char* name, const char* mode) {
         if (files[x] == NULL) {
             FILE* file = fopen(name, mode);
             if (!file) {
-                fprintf(stderr, "could not open file: %s\n", name);
-		exit(1);
+                return 0;
             }
 	    files[x] = file;
 	    return x + 1;
@@ -1097,7 +1096,7 @@ uint8_t file_open_for_write(const char* name) {
 }
 
 FILE* file_handle(uint8_t file) {
-    if (files[file - 1] == NULL) {
+    if (file == 0 || files[file - 1] == NULL) {
         fprintf(stderr, "file %i is not open\n", (int) file);
 	exit(1);
     }
