@@ -139,7 +139,7 @@ test_local_2
   BRK
   DATA $00
 
-output_filename          DATA "test_output.out" $00
+output_filename          DATA "out/test_output.out" $00
 arguments_message        DATA " arguments\n" $00
 argument_message_prefix  DATA "  arg " $00
 argument_message_suffix  DATA ": " $00
