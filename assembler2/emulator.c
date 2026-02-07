@@ -1262,36 +1262,55 @@ void show_commandline(int argc, char**argv) {
 #define inst_ldx 0xae
 
 int main(int argc, char **argv) {
-    if (argc >= 4 && strcmp(argv[3], "--console") == 0) {
-        console_mode = 1;
-    }
-
-    int arg_base = console_mode ? 4 : 5;
-
-    if (console_mode && argc > 4 && strcmp(argv[4], "--mhz") == 0) {
-        if (argc < 6) {
-            fprintf(stderr, "error: --mhz requires a value\n");
-            return 1;
-        }
-        target_mhz = strtod(argv[5], NULL);
-        if (target_mhz <= 0.0) {
-            fprintf(stderr, "error: --mhz value must be positive\n");
-            return 1;
-        }
-        arg_base = 6;
-    }
-
-    int min_args = console_mode ? 4 : 5;
-    if (argc < min_args) {
-        fprintf(stderr, "usage emulator <code file> <hex load address> <input file> <output file> [<arguments>]\n");
+    if (argc < 3) {
+        fprintf(stderr, "usage: emulator <code file> <hex load address> <input file> <output file> [<arguments>]\n");
         fprintf(stderr, "       emulator <code file> <hex load address> --console [--mhz <speed>] [<arguments>]\n");
         return 1;
     }
 
     char* code_filename = argv[1];
     long load_address = strtol(argv[2], NULL, 16);
-    char* input_filename = argv[3];
-    char* output_filename = console_mode ? NULL : argv[4];
+
+    int i = 3;
+    while (i < argc && strncmp(argv[i], "--", 2) == 0) {
+        if (strcmp(argv[i], "--console") == 0) {
+            console_mode = 1;
+            i++;
+        } else if (strcmp(argv[i], "--mhz") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "error: --mhz requires a value\n");
+                return 1;
+            }
+            target_mhz = strtod(argv[i + 1], NULL);
+            if (target_mhz <= 0.0) {
+                fprintf(stderr, "error: --mhz value must be positive\n");
+                return 1;
+            }
+            i += 2;
+        } else {
+            fprintf(stderr, "error: unknown option %s\n", argv[i]);
+            return 1;
+        }
+    }
+
+    int arg_base;
+    char* input_filename;
+    char* output_filename;
+
+    if (console_mode) {
+        input_filename = NULL;
+        output_filename = NULL;
+        arg_base = i;
+    } else {
+        if (i + 2 > argc) {
+            fprintf(stderr, "usage: emulator <code file> <hex load address> <input file> <output file> [<arguments>]\n");
+            fprintf(stderr, "       emulator <code file> <hex load address> --console [--mhz <speed>] [<arguments>]\n");
+            return 1;
+        }
+        input_filename = argv[i];
+        output_filename = argv[i + 1];
+        arg_base = i + 2;
+    }
 
     for (size_t x = 0; x != 0x10001; x++) {
         memory[x] = 0;
