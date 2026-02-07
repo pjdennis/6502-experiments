@@ -244,7 +244,7 @@ pop_file_stack = pop_source
 ; On exit: A = character (also stored in FS_CURR_CHAR)
 ;          C = 0 if char read, C = 1 if all sources exhausted
 ;          X is preserved
-;          Y is not preserverd
+;          Y is not preserved
 file_stack_read_char
   LDA FS_SRC_TYPE
   BNE .read_memory

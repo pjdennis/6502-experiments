@@ -293,8 +293,8 @@ read_hex_byte
 ; On exit HEX16 contains the read value
 ;         C set if 2 bytes read clear if 1 byte read
 ;         X, Y are preserved
-;         A is ot preserved
-; Rasises 'Invalid hex' error if encountering non-hex characters
+;         A is not preserved
+; Raises 'Invalid hex' error if encountering non-hex characters
 read_hex_byte_or_word
   JSR read_hex_byte    ; Read 2nd hex character and convert
   STA HEX16+$01
@@ -1464,6 +1464,8 @@ data_parameters_loop_entry
   JMP data_parameters_loop
 .data_value
   ; Parse value: handles $hex, 'char', label, <expr, >expr, and expressions
+  ; Bare labels always emit 2 bytes (even if value fits in 1 byte) because
+  ; forward references aren't resolved until pass 2, so size must be consistent.
   JSR parse_value      ; Returns C=1 for bare label, C=0 otherwise, current char in CURR_CHAR
   BCS .data_emit_two_bytes
   ; C=0: expression/hex/'char'/</>  - emit 1 byte from OPERAND16
@@ -1673,6 +1675,7 @@ check_macro_recursion
 ; On exit: Memory source pushed
 expand_macro
 .ARG_SIZE = $03 ; Size of each macro argument (value_L, value_H, is_fwdref)
+                ; Max arguments = 256 / .ARG_SIZE = 85
   ; Save original macro entry address before MACRO_DEF_PTR is modified
   CP16 MACRO_DEF_PTR16 MACRO_ENTRY16
   ; Check for recursive macro invocation
