@@ -82,9 +82,10 @@ class TestOutcome:
 
 
 class TestRunner:
-    def __init__(self, base_dir: Path, verbose: bool = False):
+    def __init__(self, base_dir: Path, verbose: bool = False, quiet: bool = False):
         self.base_dir = base_dir
         self.verbose = verbose
+        self.quiet = quiet
         self.emulator = base_dir / "emulator.out"
         self.assembler = base_dir / "22" / "out" / "asm_debug.out"
         self.file_stack_test = base_dir / "out" / "file_stack_test22.out"
@@ -578,7 +579,8 @@ class TestRunner:
         printf_name = f"  {name:<40} "
 
         if outcome.result == TestResult.PASS:
-            print(f"{printf_name}{Colors.GREEN}PASS{Colors.NC}")
+            if not self.quiet:
+                print(f"{printf_name}{Colors.GREEN}PASS{Colors.NC}")
             self.passed += 1
         elif outcome.result == TestResult.FAIL:
             print(f"{printf_name}{Colors.RED}FAIL{Colors.NC}")
@@ -637,6 +639,9 @@ def main():
         "-v", "--verbose", action="store_true", help="Verbose output"
     )
     parser.add_argument(
+        "-q", "--quiet", action="store_true", help="Only show failures and summary"
+    )
+    parser.add_argument(
         "--no-color", action="store_true", help="Disable colored output"
     )
 
@@ -649,7 +654,7 @@ def main():
     script_dir = Path(__file__).parent.resolve()
     base_dir = script_dir.parent
 
-    runner = TestRunner(base_dir, verbose=args.verbose)
+    runner = TestRunner(base_dir, verbose=args.verbose, quiet=args.quiet)
 
     print("=" * 40)
     print("Test Suite")
