@@ -392,7 +392,7 @@ normal_open_below
   LDY #$00
 .find_nl
   LDA (BUF_PTR16),Y
-  CMP #$0A
+  CMP #'\n'
   BEQ .found_nl
   INY
   BNE .find_nl
@@ -406,7 +406,7 @@ normal_open_below
   ADC BUF_PTR16+$01
   STA BUF_PTR16+$01
 
-  LDA #$0A
+  LDA #'\n'
   JSR buf_insert_char
   BCS .open_below_full
   JSR buf_rebuild_lines
@@ -444,7 +444,7 @@ normal_open_above
   LDX FILE_LINE16+$01
   JSR buf_get_line_ptr
 
-  LDA #$0A
+  LDA #'\n'
   JSR buf_insert_char
   BCS .open_above_full
   JSR buf_rebuild_lines

@@ -43,7 +43,7 @@ insert_handle_key
 .not_right
 
   ; Printable character?
-  CMP #$20
+  CMP #' '
   BCC .ignore
   CMP #$7F
   BCS .ignore
@@ -202,7 +202,7 @@ insert_backspace
   LDY #$00
 .find_nl
   LDA (BUF_PTR16),Y
-  CMP #$0A
+  CMP #'\n'
   BEQ .found_nl
   INY
   BNE .find_nl
