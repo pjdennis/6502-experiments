@@ -305,6 +305,14 @@ class EditorTestRunner:
             expected_content="HXello\n"
         )
 
+        # Test 8b: Append with A
+        self.run_test(
+            "Append with A at start",
+            "Hello\n",
+            b"AX\x1b:wq\r",
+            expected_content="HelloX\n"
+        )
+
         # Test 9: Open line below
         self.run_test(
             "Open line below with o",

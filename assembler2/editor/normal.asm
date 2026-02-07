@@ -91,6 +91,10 @@ normal_handle_key
   BNE .not_a
   JMP normal_enter_insert_after
 .not_a
+  CMP #'A'
+  BNE .not_A
+  JMP normal_enter_insert_eol
+.not_A
   CMP #'o'
   BNE .not_o
   JMP normal_open_below
@@ -369,6 +373,15 @@ normal_enter_insert_after
   BCC .enter
   INC CURSOR_COL
 .enter
+  LDA #MODE_INSERT
+  STA MODE
+  LDA #$00
+  STA LAST_KEY
+  RTS
+
+normal_enter_insert_eol
+  JSR get_current_line_len
+  STA CURSOR_COL
   LDA #MODE_INSERT
   STA MODE
   LDA #$00
