@@ -132,7 +132,7 @@ CURR_LINE16        = FS_CURR_LINE16
 ; On exit C=0 if current character terminates the current token; C=1 otherwise
 ;         A, X, Y are preserved
 compare_end_of_token
-  ; Check if A is a valid token character (., 0-9, A-Z, _, a-z)
+  ; Check if A is a valid token character (0-9, A-Z, _, a-z)
   ; Returns C=0 if token char (not end), C=1 if not token char (end of token)
   ; Preserves A, X, Y
   CMP #'z'+$01
@@ -149,8 +149,6 @@ compare_end_of_token
   BCS .end              ; > '9'
   CMP #'0'
   BCS .not_end          ; '0'-'9'
-  CMP #'.'              ; TODO make it so this is not a token character (capture local labels without the period)
-  BEQ .not_end
 .end
   CLC
   RTS                   ; Returns with C=0 -> end of token
@@ -466,18 +464,18 @@ parse_term
   BEQ .hex
   CMP #'\''
   BEQ .char_literal
-  ; Otherwise: bare label - needs forward ref tracking
+  CMP #'.'
+  BEQ .local_ref
+  ; Global label path
   JSR compare_end_of_token
   BCS .token_present
   JMP err_label_expected
 .token_present
   JSR read_token       ; Current char now in CURR_CHAR
-  ; Look up the token
-  JSR check_local_label
-  ; If in macro expansion with non-local label, try local hash first
+  LDA #LABEL_TYPE_GLOBAL
+  STA LABEL_TYPE
+  ; If in macro expansion, try macro-local hash first for parameters
   ; (parameters shadow globals with the same name)
-  LDA LABEL_TYPE
-  BNE .do_lookup           ; Already a .local label, use normal path
   LDA SCOPE_DEPTH
   BEQ .do_lookup           ; Not in macro, use normal path
   ; In macro with non-local label - try macro-local hash first for parameters
@@ -489,6 +487,12 @@ parse_term
   ; Not a parameter - restore to global lookup
   LDA #LABEL_TYPE_GLOBAL
   STA LABEL_TYPE
+  JMP .do_lookup
+.local_ref
+  ; Local label reference - skip dot, read name without dot
+  JSR read_char              ; Skip '.'
+  JSR read_token
+  JSR set_local_label_type   ; Sets LABEL_TYPE to LOCAL or MACRO_LOCAL
 .do_lookup
   JSR select_label_hash_table
   JSR find_in_hash
@@ -755,20 +759,13 @@ parse_expression
 ; Label classification, lookup, and definition
 ; ============================================================================
 
-; Check if token is a local label and set LABEL_TYPE flag
-; On entry TOKEN contains the token (may start with '.')
-; On exit LABEL_TYPE set appropriately:
-;         - LABEL_TYPE_GLOBAL if global label
-;         - LABEL_TYPE_LOCAL if local label under global (outside macro)
-;         - LABEL_TYPE_MACRO if local label in macro expansion
-;         TOKEN is NOT modified (no expansion)
+; Set LABEL_TYPE for a local label (dot already consumed, TOKEN has name)
+; Validates that a scope exists, then sets LABEL_TYPE to LOCAL or MACRO_LOCAL
+; On entry TOKEN contains the local label name (without leading dot)
+; On exit LABEL_TYPE set to LABEL_TYPE_LOCAL or LABEL_TYPE_MACRO_LOCAL
 ;         A not preserved
 ;         X, Y are preserved
-check_local_label
-  LDA TOKEN
-  CMP #'.'
-  BNE .not_local
-  ; Local label - Check if LABEL_SCOPE16 is set (error check)
+set_local_label_type
   LDA LABEL_SCOPE16
   ORA LABEL_SCOPE16+$01
   BNE .have_scope
@@ -784,10 +781,6 @@ check_local_label
 .in_macro
   ; In macro expansion - use MACRO_LOCAL type
   LDA #LABEL_TYPE_MACRO_LOCAL
-  STA LABEL_TYPE
-  RTS
-.not_local
-  LDA #LABEL_TYPE_GLOBAL
   STA LABEL_TYPE
   RTS
 
@@ -827,7 +820,18 @@ update_label_scope_from_lookup
 capture_label
   CMP #'*'
   BEQ .set_pc
+  CMP #'.'
+  BNE .not_local
+  ; Local label - skip dot, read name without dot
+  JSR read_char             ; Skip '.'
+  JSR read_token
+  JSR set_local_label_type  ; Validates scope, sets LOCAL or MACRO_LOCAL
+  JMP .after_type_set
+.not_local
   JSR read_token            ; Current char in CURR_CHAR
+  LDA #LABEL_TYPE_GLOBAL
+  STA LABEL_TYPE
+.after_type_set
   LDA CURR_CHAR             ; Check if terminated by colon
   CMP #':'
   BNE .no_colon
@@ -837,9 +841,7 @@ capture_label
   BIT PASS
   BPL .pass_1
   ; Pass 2 - don't capture label, but must track globals for local label scoping
-  ; CURR_CHAR has the current char from read_token
-  JSR check_local_label     ; Sets LABEL_TYPE, validates scope for locals
-  ; Now continue with value reading
+  ; LABEL_TYPE already set
   JSR check_for_value
   BCS .has_equals_2         ; If = found, branch
   ; No = found - update global heap if this was not a local label
@@ -865,8 +867,7 @@ capture_label
   JSR read_value
   JMP .skip_and_return_processed
 .pass_1
-  ; CURR_CHAR has the current char from read_token
-  JSR check_local_label     ; Sets LABEL_TYPE, validates scope for locals
+  ; LABEL_TYPE already set
   ; Add key to hash table first (before read_value may overwrite TOKEN)
   JSR select_label_hash_table
   JSR hash_add

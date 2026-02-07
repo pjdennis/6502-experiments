@@ -57,7 +57,7 @@ commit_cached_hash
   RTS
 
 ; Calculate hash for local labels
-; Continues from CACHED_HASH, hashes HT_KEY (which will contain just ".bar")
+; Continues from CACHED_HASH, hashes HT_KEY (which contains "bar" without dot)
 ; On exit HASH contains the calculated hash value (post-ASL)
 ;         X is preserved
 ;         A, Y are not preserved
@@ -223,7 +223,7 @@ store_table_entry
 ;         X is preserved
 ;         A is not preserved
 ; Handles both normal strings and escape format:
-;   <type> <scope_lo> <scope_hi> ".local" $00
+;   <type> <scope_lo> <scope_hi> "local" $00
 ; For escape format, verifies scope pointer matches before comparing
 compare_token
   ; Quick check: is stored token in escape format?
@@ -251,7 +251,7 @@ compare_token
   RTS
 
 .handle_escape
-  ; === Escape format (<type> <scope_lo> <scope_hi> ".bar" $00) ===
+  ; === Escape format (<type> <scope_lo> <scope_hi> "bar" $00) ===
   ; First verify type byte matches current LABEL_TYPE
   ; (prevents LOCAL-type entries matching MACRO-type lookups and vice versa)
   ; A already contains the type byte from detection check
@@ -343,8 +343,8 @@ find_token
 ; Stores null next pointer and key on heap
 ; and advances heap pointer
 ; On entry HT_KEY contains key to store
-;          LABEL_TYPE: if non-zero, stores $01 escape format
-;            (HT_KEY should already contain just ".bar" for local labels)
+;          LABEL_TYPE: if non-zero, stores escape format
+;            (HT_KEY contains "bar" without dot for local labels)
 ;          LABEL_SCOPE16: current scope (for local labels)
 ; On exit MEMP16 points to where value should be stored
 ;         Y = 0
@@ -365,7 +365,7 @@ store_token
   LDA LABEL_TYPE
   BEQ .copy_token       ; If global, skip escape header
   ; Store escape format: <type> <scope_lo> <scope_hi> <local_part>
-  ; HT_KEY already contains just ".bar" - no scanning needed
+  ; HT_KEY contains "bar" without dot - no scanning needed
   APPEND_HEAP LABEL_TYPE ; Escape byte (type)
   APPEND_HEAP LABEL_SCOPE16
   APPEND_HEAP LABEL_SCOPE16+$01
