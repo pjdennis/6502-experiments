@@ -376,19 +376,21 @@ store_token
   INY
   JMP advance_heap      ; Tail call
 
+; Add HT_KEY to hash table (always global - for instructions and macros)
+; On exit same as hash_add
+hash_add_instruction
+  JSR calculate_hash
+  JMP hash_add_common
+
 ; Add HT_KEY to hash table
 ; On entry HT_KEY contains key
 ;          LABEL_TYPE: if non-zero, uses cached hash from global
 ; On exit C = 0 if added or 1 if already exists
 ;         If C = 0 (added), MEMP16 points to where value should be stored
 ;         Caller must store value and call advance_heap
-;         IF C = 1 (exists), TABP16 points to the key and TABP16 + Y points to the value
+;         If C = 1 (exists), TABP16 points to the key and TABP16 + Y points to the value
 ;         A, X, Y are not preserved
-hash_add_instruction ; Do not consider local lable
-  JSR calculate_hash
-  JMP hash_add_common
-
-hash_add ; Hash calculation based on local label or not
+hash_add
   LDA LABEL_TYPE
   BEQ .use_global_hash
   JSR calculate_hash_local
