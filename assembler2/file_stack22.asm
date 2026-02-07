@@ -233,7 +233,7 @@ pop_source
   ; Y points to last byte read, add Y+1 to stack pointer
   TYA
   SEC                   ; +1
-  ADDA16 FS_P16 FS_P16 
+  ADCA16 FS_P16 FS_P16 
   RTS
 
 ; Legacy names for compatibility

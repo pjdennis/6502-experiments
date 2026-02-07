@@ -96,7 +96,7 @@ push_label_scope
   APPEND_TO_SCOPE MACRO_ENTRY16+$01
   ; Advance scope pointer by 5 bytes for the 5 entries added above
   CLC
-  ADDI16 SCOPE_PTR16 $05 SCOPE_PTR16
+  ADCI16 SCOPE_PTR16 $05 SCOPE_PTR16
   ; Increment expansion ID
   INC16 EXPANSION_ID16
   ; Set LABEL_SCOPE16 to expansion ID (synthetic scope pointer)
@@ -124,7 +124,7 @@ push_label_scope
 pop_label_scope
   ; Move scope pointer back by 5 bytes
   SEC
-  SUBI16 SCOPE_PTR16 $05 SCOPE_PTR16
+  SBCI16 SCOPE_PTR16 $05 SCOPE_PTR16
   ; Restore scope state from scope stack
   LDY #$00
   LDA (SCOPE_PTR16),Y

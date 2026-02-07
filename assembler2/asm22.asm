@@ -643,7 +643,7 @@ parse_expression
 
   ; Add: accumulator + OPERAND → OPERAND
   CLC
-  ADD16 EXPR_ACCU16 OPERAND16 OPERAND16
+  ADC16 EXPR_ACCU16 OPERAND16 OPERAND16
   JMP .loop
 
 .sub_op
@@ -661,7 +661,7 @@ parse_expression
 
   ; Subtract: accumulator - OPERAND → OPERAND
   SEC
-  SUB16 EXPR_ACCU16 OPERAND16 OPERAND16
+  SBC16 EXPR_ACCU16 OPERAND16 OPERAND16
   JMP .loop
 
 .check_left_shift
@@ -993,14 +993,14 @@ lookup_mnemonic
   ; MACRO_DEF_PTR = TABP16 + Y + 1 (skip past MODE_MACRO to point at args)
   TYA
   SEC ; +1
-  ADDA16 TABP16 MACRO_DEF_PTR16
+  ADCA16 TABP16 MACRO_DEF_PTR16
   SEC                   ; Found macro usage
   RTS
 .is_instruction
   ; Calculate INST_PTR = TABP16 + Y
   TYA
   CLC
-  ADDA16 TABP16 INST_PTR16
+  ADCA16 TABP16 INST_PTR16
   CLC                   ; Found mnemonic
   RTS
 
@@ -1701,7 +1701,7 @@ expand_macro
   ; Advance MACRO_DEF_PTR past the null terminator
   TYA
   SEC                   ; +1 for null
-  ADDA16 MACRO_DEF_PTR16 MACRO_DEF_PTR16
+  ADCA16 MACRO_DEF_PTR16 MACRO_DEF_PTR16
   ; Check for argument in input
   JSR check_for_end_of_line
   BCC .have_arg
@@ -1755,7 +1755,7 @@ expand_macro
   ; Advance MACRO_DEF_PTR past param name
   TYA
   SEC ; +1 for null terminator
-  ADDA16 MACRO_DEF_PTR16 MACRO_DEF_PTR16 ; MACRO_DEF_PTR + A + 1 -> MACRO_DEF_PTR
+  ADCA16 MACRO_DEF_PTR16 MACRO_DEF_PTR16 ; MACRO_DEF_PTR + A + 1 -> MACRO_DEF_PTR
   ; Load fwdref and value from buffer
   LDA MACRO_ARG_BUF,X
   STA IS_FWDREF
@@ -1788,7 +1788,7 @@ expand_macro
   ; Set memory pointer to body_ptr from macro definition
   ; Add one to MACR_DEF_PTR16 to skip 0 terminator and save to memory source
   CLC
-  ADDI16 MACRO_DEF_PTR16 $01 FS_MEM_PTR16
+  ADCI16 MACRO_DEF_PTR16 $01 FS_MEM_PTR16
   ; Restore X (output file handle)
   PLA
   TAX
@@ -1935,7 +1935,7 @@ capture_macro_line
   ; It's a directive
   TYA
   SEC                      ; +1
-  ADDA16 TABP16 TABP16     ; Advance TABP16 to point to the start of the directive
+  ADCA16 TABP16 TABP16     ; Advance TABP16 to point to the start of the directive
   ; Check for .endmacro first (the usual case)
   SET16 directive_endmacro HEX16
   JSR string_starts_with
@@ -2243,7 +2243,7 @@ match_command_line_arg
   DEY                    ; Back up to the match position
   TYA                    ; Y is pointing at the text following the match
   CLC
-  ADDA16 TABP16 TABP16
+  ADCA16 TABP16 TABP16
   INY                    ; Skip forwards to the handler position
   JMP .load_handler
 .check_full_match
@@ -2278,7 +2278,7 @@ match_command_line_arg
   TYA
   CLC
   ADC #$04
-  ADDA16 ARG_PTR16 ARG_PTR16
+  ADCA16 ARG_PTR16 ARG_PTR16
   JMP .try_entry
 .no_match
   SEC
@@ -2348,7 +2348,7 @@ show_macros
 .advance_tabp
   TYA
   CLC
-  ADDA16 TABP16 TABP16
+  ADCA16 TABP16 TABP16
   LDY #$00
   RTS
 .macro_prefix
@@ -2453,14 +2453,14 @@ start
   SHOW_MESSAGEI msg_heap_used
   ; Calculate heap used: MEMP16 - HEAP
   SEC
-  SUBI16 MEMP16 HEAP TO_DECIMAL_VALUE16
+  SBCI16 MEMP16 HEAP TO_DECIMAL_VALUE16
   JSR show_decimal
   SHOW_MESSAGEI msg_bytes
   ; Print forward reference count
   SHOW_MESSAGEI msg_fwdref_count
   ; Calculate forward ref count: (PASS_1_FWDREF16 - FWDREF_LIST) / 2
   SEC
-  SUBI16 PASS_1_FWDREF16 FWDREF_LIST TO_DECIMAL_VALUE16
+  SBCI16 PASS_1_FWDREF16 FWDREF_LIST TO_DECIMAL_VALUE16
   ; Divide by 2 (16-bit right shift)
   LSR16 TO_DECIMAL_VALUE16
   JSR show_decimal

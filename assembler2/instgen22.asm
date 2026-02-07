@@ -204,7 +204,7 @@ populate_instruction_hash_table
   ; Advance P2_16 to point to the mode data - P2_16 + Y + 1 -> P2_16
   TYA
   SEC                         ; Add 1
-  ADDA16 P2_16 P2_16
+  ADCA16 P2_16 P2_16
 
   ; --- Phase 2: Add mnemonic to hash table ---
   ; hash_add:
@@ -236,7 +236,7 @@ populate_instruction_hash_table
   ; Advance P2_16 to next entry (add Y = total bytes consumed from this entry)
   TYA
   CLC
-  ADDA16 P2_16 P2_16          ; P2_16 + Y -> P2_16
+  ADCA16 P2_16 P2_16          ; P2_16 + Y -> P2_16
 
   ; Advance the heap
   JSR advance_heap
@@ -337,7 +337,7 @@ display_table
   ; Display hash entry
   JSR load_hash_entry
   CLC
-  ADDI16 TABP16 $02 P16
+  ADCI16 TABP16 $02 P16
   JSR display_text
 .next
   LDA HASH
@@ -368,7 +368,7 @@ write_label_and_modes
   JSR write_b
   ; Set P16 to point to mnemonic (TABP16 + 2)
   CLC
-  ADDI16 TABP16 $02 P16
+  ADCI16 TABP16 $02 P16
   ; Display mnemonic text
   JSR display_text
   ; Y now points to null terminator in mnemonic
@@ -421,7 +421,7 @@ display_data
   SET16 msg_instprefix P16
   JSR display_text
   CLC
-  ADDI16 TABP16 $02 P16
+  ADCI16 TABP16 $02 P16
   JSR display_text
   JSR display_newline
   JSR display_data_prefix
