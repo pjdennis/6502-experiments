@@ -22,7 +22,7 @@ do
         21/asm.asm 21/instgen.asm 21/environment.asm 21/common.asm 21/hash_table.asm 21/file_stack.asm 21/to_decimal.asm 21/errors.asm 21/fwdref.asm 21/label_scope.asm \
         22/asm.asm 22/instgen.asm 22/environment.asm 22/common.asm 22/hash_table.asm 22/file_stack.asm 22/to_decimal.asm 22/errors.asm 22/fwdref.asm 22/label_scope.asm 22/macros.asm \
         test19.asm test_inc19.asm \
-	run_tests.py 22/tests/file_stack_test22.asm 22/tests/file_stack_tests22.txt 22/tests/asm22_tests.txt
+	run_tests.py 22/tests/file_stack_test.asm 22/tests/file_stack_tests.txt 22/tests/asm_tests.txt
         > /dev/null
 
     sleep 0.1

@@ -106,7 +106,7 @@ echo "--- Version 21 ---"
   ../emulator.out ../20/out/asm.out 2000 /dev/null /dev/null asm.asm out/asm.out &&
   ../emulator.out ../20/out/asm.out 2000 /dev/null /dev/null asm.asm out/asm_debug.out define:enable_debug)
 echo "--- File stack test ---"
-./emulator.out 21/out/asm_debug.out 2000 /dev/null /dev/null 22/tests/file_stack_test22.asm out/file_stack_test22.out
+./emulator.out 21/out/asm_debug.out 2000 /dev/null /dev/null 22/tests/file_stack_test.asm out/file_stack_test.out
 echo "--- Version 22 ---"
 (cd 22 && mkdir -p out &&
   ../emulator.out ../21/out/asm_debug.out 2000 /dev/null /dev/null instgen.asm out/instgen.out &&

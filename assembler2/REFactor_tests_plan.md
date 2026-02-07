@@ -10,9 +10,9 @@
 
 ## Target layout (initial)
 - `run_tests.py` (moved to repo root)
-- `22/tests/asm22_tests.txt`
-- `22/tests/file_stack_tests22.txt`
-- `22/tests/file_stack_test22.asm`
+- `22/tests/asm_tests.txt`
+- `22/tests/file_stack_tests.txt`
+- `22/tests/file_stack_test.asm`
 - `tests/` folder remains only for legacy content (if anything), or becomes empty.
 
 ## Step-by-step plan
@@ -24,19 +24,19 @@
   - `README.md`
 
 ### 2) Move latest test suite into `22/tests/`
-- `git mv tests/asm22_tests.txt 22/tests/asm22_tests.txt`
-- `git mv tests/file_stack_tests22.txt 22/tests/file_stack_tests22.txt`
-- `git mv tests/file_stack_test22.asm 22/tests/file_stack_test22.asm`
+- `git mv tests/asm_tests.txt 22/tests/asm_tests.txt`
+- `git mv tests/file_stack_tests.txt 22/tests/file_stack_tests.txt`
+- `git mv tests/file_stack_test.asm 22/tests/file_stack_test.asm`
 
 ### 3) Update the test runner paths (hard-coded latest is OK)
 - In `run_tests.py`, update:
-  - Default test file list to `22/tests/asm22_tests.txt` and `22/tests/file_stack_tests22.txt`
-  - File stack test program source to `22/tests/file_stack_test22.asm` (if referenced)
+  - Default test file list to `22/tests/asm_tests.txt` and `22/tests/file_stack_tests.txt`
+  - File stack test program source to `22/tests/file_stack_test.asm` (if referenced)
   - Any path assumptions about `tests/` directory
 
 ### 4) Update build and watch scripts
 - `asmtestgen.sh`
-  - File stack build: update path to `22/tests/file_stack_test22.asm`
+  - File stack build: update path to `22/tests/file_stack_test.asm`
 - `gogen.sh`
   - Replace `tests/run_tests.py` with `run_tests.py`
   - Update watch list for `22/tests/*` paths

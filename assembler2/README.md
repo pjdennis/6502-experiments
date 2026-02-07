@@ -116,9 +116,9 @@ assembler2/
 │
 ├── run_tests.py            # Test runner
 ├── 22/tests/               # Latest test suite
-│   ├── asm22_tests.txt     # Tests for asm22 (current, 256 tests)
-│   ├── file_stack_tests22.txt  # File stack tests (30 tests)
-│   ├── file_stack_test22.asm   # File stack test harness
+│   ├── asm_tests.txt     # Tests for asm22 (current, 256 tests)
+│   ├── file_stack_tests.txt  # File stack tests (30 tests)
+│   ├── file_stack_test.asm   # File stack test harness
 │   └── ...                 # Any version-specific test data
 ├── tests/                  # Legacy test data and older test suites
 │
@@ -304,7 +304,7 @@ When adding new features that require a new assembler version (e.g., asm22 to as
 ```bash
 cp -r 22/ 23/
 mkdir -p 23/tests
-cp 22/tests/asm22_tests.txt 23/tests/asm23_tests.txt
+cp 22/tests/asm_tests.txt 23/tests/asm23_tests.txt
 ```
 
 Since source files no longer have version suffixes, the `.include` directives inside the copied files need no changes.

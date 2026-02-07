@@ -91,7 +91,7 @@ class TestRunner:
         self.quiet = quiet
         self.emulator = base_dir / "emulator.out"
         self.assembler = base_dir / ASM_VERSION / "out" / "asm_debug.out"
-        self.file_stack_test = base_dir / "out" / f"file_stack_test{ASM_VERSION}.out"
+        self.file_stack_test = base_dir / "out" / "file_stack_test.out"
 
         self.passed = 0
         self.failed = 0
@@ -633,7 +633,7 @@ def main():
     parser.add_argument(
         "test_files",
         nargs="*",
-        help="Test files to run (default: <asm_version>/tests/asm<asm_version>_tests.txt and <asm_version>/tests/file_stack_tests<asm_version>.txt)",
+        help="Test files to run (default: <asm_version>/tests/asm_tests.txt and <asm_version>/tests/file_stack_tests.txt)",
     )
     parser.add_argument(
         "-f", "--filter", default="", help="Only run tests matching this pattern"
@@ -668,8 +668,8 @@ def main():
     if not args.test_files:
         latest_tests_dir = script_dir / ASM_VERSION / "tests"
         args.test_files = [
-            str(latest_tests_dir / f"file_stack_tests{ASM_VERSION}.txt"),
-            str(latest_tests_dir / f"asm{ASM_VERSION}_tests.txt"),
+            str(latest_tests_dir / "file_stack_tests.txt"),
+            str(latest_tests_dir / "asm_tests.txt"),
         ]
 
     for test_file in args.test_files:
