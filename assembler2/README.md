@@ -249,6 +249,7 @@ label                    ; Global label
   .data <label >label    ; Low/high byte of address
   .data <addr+$10        ; Byte selector on expression
   .data label            ; 16-bit address (little-endian)
+  ; Commas are optional in .data lists
 
   BRK $01 "error" $00    ; BRK with inline error message
 
@@ -269,6 +270,7 @@ label                    ; Global label
   .endmacro
 
   ADDPTR $10 $05         ; Invoke macro (substitutes ptr=$10, val=$05)
+  ; Commas are optional in macro parameter/argument lists
 ```
 
 ### Command Line
