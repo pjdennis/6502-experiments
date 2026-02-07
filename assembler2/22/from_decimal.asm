@@ -24,32 +24,23 @@ FROM_DECIMAL_TMP16      .data $0000 ; 2-byte temp for multiply-by-10
 from_decimal
   ; Initialize accumulator to 0
   LDA #$00
-  STA FROM_DECIMAL16
-  STA FROM_DECIMAL16+$01
+  STA_LH16 FROM_DECIMAL16
 .loop
   ; Multiply FROM_DECIMAL16 by 10 using: temp=val; val<<=2; val+=temp; val<<=1
   ; Step 1: temp = val
   CP16 FROM_DECIMAL16 FROM_DECIMAL_TMP16
   ; Step 2: val <<= 1
-  ASL FROM_DECIMAL16
-  ROL FROM_DECIMAL16+$01
+  ASL16 FROM_DECIMAL16
   BCS .overflow
   ; Step 3: val <<= 1 (now val = original * 4)
-  ASL FROM_DECIMAL16
-  ROL FROM_DECIMAL16+$01
+  ASL16 FROM_DECIMAL16
   BCS .overflow
   ; Step 4: val += temp (now val = original * 4 + original = original * 5)
   CLC
-  LDA FROM_DECIMAL16
-  ADC FROM_DECIMAL_TMP16
-  STA FROM_DECIMAL16
-  LDA FROM_DECIMAL16+$01
-  ADC FROM_DECIMAL_TMP16+$01
-  STA FROM_DECIMAL16+$01
+  ADC16 FROM_DECIMAL16 FROM_DECIMAL_TMP16 FROM_DECIMAL16
   BCS .overflow
   ; Step 5: val <<= 1 (now val = original * 10)
-  ASL FROM_DECIMAL16
-  ROL FROM_DECIMAL16+$01
+  ASL16 FROM_DECIMAL16
   BCS .overflow
   ; Add current digit to accumulator
   LDA CURR_CHAR
