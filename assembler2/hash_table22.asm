@@ -145,8 +145,7 @@ find_in_hash_common
   BEQ .not_found
   ; Entry exists
   JSR load_hash_entry
-  JSR find_token
-  RTS
+  JMP find_token          ; Tail call
 .not_found
   SEC
   RTS

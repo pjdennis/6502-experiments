@@ -1078,8 +1078,7 @@ emit_instruction
   BNE .one_byte_error
 .one_byte_ok
   LDA OPERAND16
-  JSR emit
-  RTS
+  JMP emit                ; Tail call
 .one_byte_error
   JMP err_value_out_of_range
 .emit_relative
@@ -1109,8 +1108,7 @@ emit_instruction
 .emit_relative_pass1
   LDA OPERAND16
 .emit_relative_ok
-  JSR emit
-  RTS
+  JMP emit                ; Tail call
 .invalid_mode
   JMP err_invalid_addressing_mode
 
@@ -1389,8 +1387,7 @@ process_directive
 .get_name
   JSR read_filename
   JSR skip_rest_of_line
-  JSR push_file_stack
-  RTS
+  JMP push_file_stack    ; Tail call
 .zeropage
   BIT IN_ZEROPAGE
   BMI .in_zeropage
@@ -1398,8 +1395,7 @@ process_directive
   STA IN_ZEROPAGE
   JSR swap_pc_with_save
 .in_zeropage
-  JSR skip_rest_of_line
-  RTS
+  JMP skip_rest_of_line  ; Tail call
 .code
   BIT IN_ZEROPAGE
   BPL .in_code
@@ -1407,8 +1403,7 @@ process_directive
   STA IN_ZEROPAGE
   JSR swap_pc_with_save
 .in_code
-  JSR skip_rest_of_line
-  RTS
+  JMP skip_rest_of_line  ; Tail call
 .data
   JMP data_parameters_loop_entry
 
