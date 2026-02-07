@@ -605,7 +605,11 @@ class TestRunner:
             if not self.check_prerequisites(tt):
                 return
 
-        print(f"Running tests from {filepath.name}")
+        try:
+            display_path = filepath.relative_to(self.base_dir)
+        except ValueError:
+            display_path = filepath
+        print(f"Running tests from {display_path}")
         print()
 
         for test in tests:
