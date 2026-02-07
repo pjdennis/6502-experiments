@@ -775,11 +775,11 @@ read_local_label
   BNE .in_macro
   ; Not in macro - use LOCAL type
   LDA #LABEL_TYPE_LOCAL
-  STA LABEL_TYPE
-  RTS
+  BNE .store               ; Always taken (LABEL_TYPE_LOCAL != 0)
 .in_macro
   ; In macro expansion - use MACRO_LOCAL type
   LDA #LABEL_TYPE_MACRO_LOCAL
+.store
   STA LABEL_TYPE
   RTS
 
