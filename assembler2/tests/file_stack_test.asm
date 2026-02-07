@@ -43,7 +43,7 @@ TABPH       .data $00
 
   .code
 
-  .include environment11.asm
+  .include 21/environment21.asm
 
 ; File stack configuration
 FS_FILENAME   = TOKEN
@@ -51,7 +51,7 @@ FS_CURR_FILE  = CURR_FILE
 FS_CURR_LINEL = CURLINEL
 FS_CURR_LINEH = CURLINEH
 FS_NEXT_CHAR  = NEXT_CHAR
-  .include file_stack21.asm
+  .include 21/file_stack21.asm
 read_char = file_stack_read_char
 
 
