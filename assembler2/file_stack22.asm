@@ -257,7 +257,7 @@ file_stack_read_char
   BCS .source_exhausted
   ; Got character
   STA FS_CURR_CHAR
-  CLC
+  ; Carry is clear
   RTS
 .read_memory
   ; Type 1 = memory source (zero-terminated)
@@ -275,13 +275,12 @@ file_stack_read_char
   JSR pop_source
   ; Check if stack is empty
   JSR file_stack_empty
-  BEQ .all_done
   ; Continue reading from previous source
-  JMP file_stack_read_char
+  BNE file_stack_read_char
+.all_done
+  SEC
+  RTS
   .ifdef enable_debug
 .no_source
   JMP FS_ERR_NO_FILE
   .endif
-.all_done
-  SEC
-  RTS
