@@ -12,7 +12,7 @@ TEXT_BUF    = $2000  ; Start of text buffer
 TEXT_LIMIT  = $C000  ; End of text buffer space
 LINE_TBL    = $C000  ; Line pointer table (2 bytes per entry)
 LINE_LIMIT  = $E000  ; End of line table (supports up to 4096 entries = 2048 lines, but
-                      ; practically limited by available text space)
+                     ; practically limited by available text space)
 MAX_LINES   = $03FF  ; Maximum line count (1023), 0-indexed
 
   .zeropage
