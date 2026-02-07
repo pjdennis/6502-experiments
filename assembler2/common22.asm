@@ -96,8 +96,8 @@ init_heap
   .ifdef enable_debug
   LDA SMALL_HEAP_FLAG
   BEQ .normal_heap
-  ; Small heap for testing: only ~256 bytes available
-  SET16 FILE_STACK-$0100 MEMP16
+  ; Small heap for testing: only ~384 bytes available
+  SET16 FILE_STACK-$0180 MEMP16
   RTS
 .normal_heap
   .endif

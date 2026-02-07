@@ -2299,6 +2299,15 @@ EXPECT_STDERR:
 [ LDA #' ']
 
 ---
+NAME: small_heap_simple_include
+DESCRIPTION: Small heap allows basic include with label allocation
+ARGS: debug small_heap
+INPUT:
+ 1: * = $0200
+ 2:   .include tests/overflow/d20.asm
+EXPECT_HEX: ea
+
+---
 NAME: heap_overflow_many_labels
 DESCRIPTION: Out of memory when heap exhausted with small heap
 ARGS: debug small_heap
