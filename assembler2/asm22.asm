@@ -109,7 +109,6 @@ MACRO_PTR16     .data $0000  ; Pointer to macro name (for show_captured_macros)
   .include macros22.asm
   .include common22.asm
   .include label_scope22.asm
-  .include errors22.asm
   .include fwdref22.asm
 FS_FILENAME        = TOKEN
 FS_POP_MEMORY_HOOK = pop_label_scope
@@ -120,6 +119,7 @@ FS_ERR_NO_FILE     = err_no_file
 read_char          = file_stack_read_char
 CURR_CHAR          = FS_CURR_CHAR
 CURR_LINE16        = FS_CURR_LINE16
+  .include errors22.asm
 
 
 ; ============================================================================
