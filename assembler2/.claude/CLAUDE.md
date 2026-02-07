@@ -19,15 +19,15 @@ The build succeeds when `asm22.out == asm22_2.out` (self-assembly verification).
 
 ## Architecture
 
-This is a self-hosting 6502 assembler built through progressive bootstrapping. The current assembler (`asm22.asm`) can assemble its own source code.
+This is a self-hosting 6502 assembler built through progressive bootstrapping. The current assembler (`22/asm22.asm`) can assemble its own source code.
 
 ### Bootstrap Chain
 
-A C bootstrap assembler assembles the initial versions, which then assemble progressively more capable versions (asm00 → asm01 → ... → asm22). Each version adds features needed by the next.
+A C bootstrap assembler assembles the initial versions, which then assemble progressively more capable versions (asm00 → asm01 → ... → asm22). Each version adds features needed by the next. Each version lives in its own subdirectory (`00/` through `22/`) with all its source files.
 
 ### Key Components
 
-- **Instruction generators** (`instgen*.asm`): Generate `inst*.asm.out` files containing pre-computed instruction hash tables. These are `.include`d by the assemblers to avoid runtime initialization.
+- **Instruction generators** (`NN/instgenNN.asm`): Generate `inst*.asm.out` files containing pre-computed instruction hash tables. These are `.include`d by the assemblers to avoid runtime initialization.
 
 - **Hash tables**: Used for both label lookup (`LHASHTAB` at $1F00) and instruction lookup (`IHASHTAB`). Hash entries are stored on a heap (`MEMP16`).
 
@@ -47,9 +47,9 @@ The heap (`MEMP16`) grows upward storing hash entries, macro definitions, and fo
 
 ### Shared Code Pattern
 
-Common code is factored into include files:
-- `common22.asm`: Shared between `asm22.asm` and `instgen22.asm`
-- `hash_table22.asm`: Hash table implementation (included by common22)
+Common code is factored into include files within each version directory:
+- `22/common22.asm`: Shared between `22/asm22.asm` and `22/instgen22.asm`
+- `22/hash_table22.asm`: Hash table implementation (included by common22)
 
 The hash table requires caller to define `HT_KEY` and `HT_V16` before including.
 
@@ -180,7 +180,7 @@ Lessons learned from syntax migrations (e.g., DATA → .data):
 
 1. **Global replacements need context awareness** - Avoid blind find/replace when identifiers share common substrings (e.g., `DATA` vs `MODE_DATA`). Check for compound identifiers before replacing.
 
-2. **File copying requires systematic include updates** - When creating a new version (asm21→asm22), all include references across all copied files need updating (asm, instgen, common, errors, fwdref, file_stack, hash_table, to_decimal, label_scope).
+2. **File copying requires systematic include updates** - When creating a new version (asm21→asm22), copy the entire version directory and update all include references and version suffixes in filenames (asm, instgen, common, errors, fwdref, file_stack, hash_table, to_decimal, label_scope, environment, macros).
 
 3. **Phased migration works well** - Add new feature alongside old, verify everything works, then remove old. This provides safety checkpoints at each phase.
 
