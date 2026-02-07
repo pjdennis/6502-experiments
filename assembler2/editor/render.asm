@@ -120,15 +120,7 @@ render_status_line
   JSR ansi_reverse_video
 
   ; Print filename
-  LDY #$00
-.fname_loop
-  LDA (FNAME_PTR16),Y
-  BEQ .fname_done
-  JSR write_b
-  INY
-  CPY #$20         ; Cap filename at 32 chars
-  BCC .fname_loop
-.fname_done
+  JSR write_fname
 
   ; Print read-only indicator
   LDA READONLY

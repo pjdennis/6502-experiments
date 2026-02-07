@@ -300,15 +300,7 @@ command_write_file
   JSR command_show_prompt
   LDA #'"'
   JSR write_b
-  LDY #$00
-.print_fname
-  LDA (FNAME_PTR16),Y
-  BEQ .fname_done
-  JSR write_b
-  INY
-  CPY #$20
-  BCC .print_fname
-.fname_done
+  JSR write_fname
   LDA #'"'
   JSR write_b
   LDA #' '

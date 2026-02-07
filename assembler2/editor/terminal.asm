@@ -94,6 +94,20 @@ write_string
 .done
   RTS
 
+; Write filename from (FNAME_PTR16), up to 32 chars
+; Clobbers A, Y
+write_fname
+  LDY #$00
+.loop
+  LDA (FNAME_PTR16),Y
+  BEQ .done
+  JSR write_b
+  INY
+  CPY #$20
+  BCC .loop
+.done
+  RTS
+
 ; Write A (0-255) as decimal digits, no leading zeros
 ; Clobbers A, X, Y
 write_byte_dec
