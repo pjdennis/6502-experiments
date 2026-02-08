@@ -22,15 +22,15 @@
 
   .zeropage
 
-FS_CURR_CHAR:   .data $00   ; The last character read
-FS_CURR_FILE:   .data $00   ; The current file handle
-FS_CURR_LINE16: .data $0000 ; The current line number
-FS_P16:         .data $0000 ; Pointer to the current location in the file stack
-FS_TEMP16:      .data $0000 ; Temporary location for use in calculations
+FS_CURR_CHAR:   .byte 0     ; The last character read
+FS_CURR_FILE:   .byte 0     ; The current file handle
+FS_CURR_LINE16: .word 0     ; The current line number
+FS_P16:         .word 0     ; Pointer to the current location in the file stack
+FS_TEMP16:      .word 0     ; Temporary location for use in calculations
 
 ; Memory source support (zero-terminated buffers)
-FS_SRC_TYPE:   .data $00   ; Source type: 0=file, 1=memory
-FS_MEM_PTR16:  .data $0000 ; Current read position in memory
+FS_SRC_TYPE:   .byte 0     ; Source type: 0=file, 1=memory
+FS_MEM_PTR16:  .word 0     ; Current read position in memory
 
   .code
 

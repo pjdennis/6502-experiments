@@ -29,11 +29,11 @@ FILE_STACK  = $F000     ; File stack (needed by advance_heap check)
 
   .zeropage
 
-TEMP:      .data $00     ; 1 byte temporary value
-HEX16:     .data $00     ; 2 bytes
-P16:       .data $0000   ; 2 byte pointer
-P2_16:     .data $0000   ; 2 byte pointer
-FS_P16:    .data $0000   ; File stack pointer - needed by advance_heap check
+TEMP:      .byte 0       ; 1 byte temporary value
+HEX16:     .byte 0       ; 2 bytes
+P16:       .word 0       ; 2 byte pointer
+P2_16:     .word 0       ; 2 byte pointer
+FS_P16:    .word 0       ; File stack pointer - needed by advance_heap check
 
   .code
 

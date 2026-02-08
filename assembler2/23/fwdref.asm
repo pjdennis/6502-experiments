@@ -10,7 +10,7 @@
 
   .zeropage
 
-FWDREF16:    .data $0000 ; Pointer to forward reference list
+FWDREF16:    .word 0     ; Pointer to forward reference list
 
   .code
 

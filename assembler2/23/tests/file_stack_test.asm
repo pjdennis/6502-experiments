@@ -16,14 +16,14 @@ TOKEN_MEM  = $1D80  ; Offset in TOKEN buffer for memory content
   .zeropage
 
 ; Test state
-TEST_MODE:     .data $00     ; 0=echo, 1=lines, 2=nested, 3=info, 4=memory
-CHAR_COUNT16:  .data $0000   ; Character count
-LINE_COUNT16:  .data $0000   ; Line count
-AT_LINE_START: .data $00     ; Flag: at start of line (for lines mode)
+TEST_MODE:     .byte 0       ; 0=echo, 1=lines, 2=nested, 3=info, 4=memory
+CHAR_COUNT16:  .word 0       ; Character count
+LINE_COUNT16:  .word 0       ; Line count
+AT_LINE_START: .byte 0       ; Flag: at start of line (for lines mode)
 
 ; Temporary
-TEMP:        .data $00
-TABP16:      .data $0000
+TEMP:        .byte 0
+TABP16:      .word 0
 
   .code
 

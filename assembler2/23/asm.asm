@@ -70,35 +70,35 @@ FILE_STACK      = $F000  ; File stack will grow down from 1 below here
   .zeropage
 
 ; Zero page locations
-TEMP:            .data $00    ; 1 byte
-PC16:            .data $0000  ; 2 byte program counter
-HEX16:           .data $0000  ; 2 byte hex value, also aliased as OPERAND16
+TEMP:            .byte 0      ; 1 byte
+PC16:            .word 0      ; 2 byte program counter
+HEX16:           .word 0      ; 2 byte hex value, also aliased as OPERAND16
 OPERAND16 = HEX16            ; Operand value - alias for HEX16
-PASS:            .data $00    ; 1 byte $00 = pass 1 $FF = pass 2
-STARTED:         .data $00    ; flag to indicate output has started
-CURR_OUT_FILE:   .data $00    ; Current output file (for closing on error)
-IN_ZEROPAGE:     .data $00    ; Flag indicating if in zero page section
-PC_SAVE16:       .data $0000  ; Save location for PC when switching sections
-ADDR_MODE:       .data $00    ; Current addressing mode
-INST_PTR16:      .data $0000  ; Pointer to instruction mode table entry, aliased as MACRO_DEF_PTR16
+PASS:            .byte 0      ; 1 byte $00 = pass 1 $FF = pass 2
+STARTED:         .byte 0      ; flag to indicate output has started
+CURR_OUT_FILE:   .byte 0      ; Current output file (for closing on error)
+IN_ZEROPAGE:     .byte 0      ; Flag indicating if in zero page section
+PC_SAVE16:       .word 0      ; Save location for PC when switching sections
+ADDR_MODE:       .byte 0      ; Current addressing mode
+INST_PTR16:      .word 0      ; Pointer to instruction mode table entry, aliased as MACRO_DEF_PTR16
 MACRO_DEF_PTR16 = INST_PTR16 ; Heap pointer where macro body is being stored, aliased to INST_PTR16
-IS_FWDREF:       .data $00    ; $FF if current label is forward ref (pass 1 only)
-EXPR_ACCU16:     .data $0000  ; Expression accumulator
-EXPR_FWDREF:     .data $00    ; Accumulated forward ref flag
-COND_DEPTH:      .data $00    ; Conditional assembly nesting depth
-SKIP_DEPTH:      .data $00    ; Depth where skipping started (0 = not skipping)
-ARG_COUNT:       .data $00    ; Total command line argument count
-IN_MACRO_DEF:    .data $00    ; Flag: currently capturing macro body ($FF = capturing)
-MACRO_ENTRY16:   .data $0000  ; Original macro hash entry address (for recursion check)
-IFDEF_INDEX:     .data $00    ; Current index into IFDEF_DECISIONS buffer
-DATA_MODE:       .data $00    ; Data directive mode: 0=.data 1=.byte 2=.word 3=.asciiz
+IS_FWDREF:       .byte 0      ; $FF if current label is forward ref (pass 1 only)
+EXPR_ACCU16:     .word 0      ; Expression accumulator
+EXPR_FWDREF:     .byte 0      ; Accumulated forward ref flag
+COND_DEPTH:      .byte 0      ; Conditional assembly nesting depth
+SKIP_DEPTH:      .byte 0      ; Depth where skipping started (0 = not skipping)
+ARG_COUNT:       .byte 0      ; Total command line argument count
+IN_MACRO_DEF:    .byte 0      ; Flag: currently capturing macro body ($FF = capturing)
+MACRO_ENTRY16:   .word 0      ; Original macro hash entry address (for recursion check)
+IFDEF_INDEX:     .byte 0      ; Current index into IFDEF_DECISIONS buffer
+DATA_MODE:       .byte 0      ; Data directive mode: 0=.data 1=.byte 2=.word 3=.asciiz
 
   .ifdef enable_debug
-DEBUG_FLAG:      .data $00    ; Non-zero if debug output enabled
-PASS_1_FWDREF16: .data $0000  ; Forward ref pointer after pass 1
-SMALL_HEAP_FLAG: .data $00    ; Non-zero if small_heap argument was passed
-SHOW_MACROS:     .data $00    ; Non-zero if captured macro definitions should be printed
-MACRO_PTR16:     .data $0000  ; Pointer to macro name (for show_captured_macros)
+DEBUG_FLAG:      .byte 0      ; Non-zero if debug output enabled
+PASS_1_FWDREF16: .word 0      ; Forward ref pointer after pass 1
+SMALL_HEAP_FLAG: .byte 0      ; Non-zero if small_heap argument was passed
+SHOW_MACROS:     .byte 0      ; Non-zero if captured macro definitions should be printed
+MACRO_PTR16:     .word 0      ; Pointer to macro name (for show_captured_macros)
   .endif
 
   .code
@@ -2339,8 +2339,8 @@ handle_define:
 
   .zeropage
 
-JUMP_TARGET16: .data $0000 ; Target for indirect jumps
-ARG_PTR16:     .data $0000 ; Pointer into COMMAND_LINE_ARGS table
+JUMP_TARGET16: .word 0     ; Target for indirect jumps
+ARG_PTR16:     .word 0     ; Pointer into COMMAND_LINE_ARGS table
 
   .code
 

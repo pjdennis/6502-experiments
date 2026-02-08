@@ -31,7 +31,7 @@ HT_V16 = HEX16
 
   .zeropage
 
-MEMP16:          .data $0000 ; 2 byte heap pointer
+MEMP16:          .word 0     ; 2 byte heap pointer
 
   .code
 
