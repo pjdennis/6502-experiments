@@ -22,10 +22,10 @@ MODE_MACRO = 14                   ; Sentinel marker to indicate macro
 MODE_END   = 15                   ; Terminates the list of modes
 
 ; Label type constants (for LABEL_TYPE variable in hash table operations)
-LABEL_TYPE_GLOBAL = $00   ; Global label (no escape format)
-LABEL_TYPE_LOCAL  = $01   ; Local label under global scope (heap address)
-LABEL_TYPE_MACRO  = $02   ; Macro parameter (expansion ID)
-LABEL_TYPE_MACRO_LOCAL = $03 ; Macro-local label (expansion ID)
+LABEL_TYPE_GLOBAL = 0   ; Global label (no escape format)
+LABEL_TYPE_LOCAL  = 1   ; Local label under global scope (heap address)
+LABEL_TYPE_MACRO  = 2   ; Macro parameter (expansion ID)
+LABEL_TYPE_MACRO_LOCAL = 3 ; Macro-local label (expansion ID)
 
 HT_KEY = TOKEN
 HT_V16 = HEX16

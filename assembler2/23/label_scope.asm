@@ -22,7 +22,7 @@
 ;   CACHED_HASH          - pre-computed hash for current scope
 ;   scramble_table       - hash scrambling table
 
-SCOPE_ENTRY_SIZE = $05
+SCOPE_ENTRY_SIZE = 5
 
   .zeropage
 

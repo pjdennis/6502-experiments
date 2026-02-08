@@ -1807,7 +1807,7 @@ check_macro_recursion:
 ;           TOKEN contains the macro name
 ; On exit: Memory source pushed
 expand_macro:
-.ARG_SIZE = $03 ; Size of each macro argument (value_L, value_H, is_fwdref)
+.ARG_SIZE = 3 ; Size of each macro argument (value_L, value_H, is_fwdref)
                 ; Max arguments = 256 / .ARG_SIZE = 85
   ; Save original macro entry address before MACRO_DEF_PTR is modified
   CP16 MACRO_DEF_PTR16, MACRO_ENTRY16
@@ -2294,8 +2294,8 @@ open_input:
   JMP push_file_stack ; tail call
 
 
-MATCH_PARTIAL = $00
-MATCH_FULL    = $01
+MATCH_PARTIAL = 0
+MATCH_FULL    = 1
 
 COMMAND_LINE_ARGS:
   .ifdef enable_debug
