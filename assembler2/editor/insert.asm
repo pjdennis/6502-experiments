@@ -209,6 +209,7 @@ insert_backspace:
   JSR buf_delete_char
   JSR buf_adjust_lines_dec
   DEC CURSOR_COL
+  JSR backspace_batch_pending
   LDA #1
   STA RENDER_FLAG
   JSR ensure_cursor_visible
@@ -298,6 +299,41 @@ insert_move_right:
   INC CURSOR_COL
   JSR ensure_cursor_visible
 .done:
+  RTS
+
+; Batch-delete pending backspace keys
+; Called after first backspace has been processed and CURSOR_COL decremented.
+; Counts buffered backspace keys, capped at CURSOR_COL (can't go past col 0).
+backspace_batch_pending:
+  LDA CURSOR_COL
+  BEQ .bs_batch_done        ; Already at col 0, nothing to batch
+
+  ; Count pending backspace keys
+  LDA #KEY_BS
+  STA BUF_TEMP
+  JSR count_pending_key      ; Returns count in X
+  CPX #0
+  BEQ .bs_batch_done
+
+  ; Cap at CURSOR_COL (can't delete past beginning of line)
+  CPX CURSOR_COL
+  BCC .bs_cap_ok
+  LDX CURSOR_COL
+.bs_cap_ok:
+  STX BUF_DELTA
+
+  ; Point BUF_PTR16 to first char to delete (CURSOR_COL - BUF_DELTA)
+  SEC
+  LDA CURSOR_COL
+  SBC BUF_DELTA
+  STA CURSOR_COL
+  JSR get_cursor_buf_ptr
+
+  ; Delete BUF_DELTA chars at BUF_PTR16
+  JSR buf_delete_chars
+  JSR buf_adjust_lines_dec
+
+.bs_batch_done:
   RTS
 
 ; Clamp cursor for insert mode (can be one past end of line content)

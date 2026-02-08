@@ -1367,8 +1367,8 @@ class EditorTestRunner:
 
         # Backspace from wrap boundary back to previous row
         # Start with 41 chars (wraps to row 1 with 1 char). $a enters at col 41.
-        # Frame sequence: 0=init, 1=$, 2=a, 3=BS(col40), 4=BS(col39), 5=ESC
-        # At frame 4: CURSOR_COL=39, must be row 0 col 39 (crossed back)
+        # Frame sequence: 0=init, 1=$, 2=a, 3=BS+batch_BS(col39), 4=ESC(col38)
+        # At frame 3: CURSOR_COL=39, must be row 0 col 39 (crossed back via batch)
         self.run_test_screen(
             "Backspace across wrap boundary",
             "A" * 41 + "\n",
@@ -1378,7 +1378,7 @@ class EditorTestRunner:
                 (0, "A" * 39),
             ],
             expect_cursor_at_frame=[
-                (4, (0, 39)),
+                (3, (0, 39)),
             ]
         )
 
@@ -1622,6 +1622,95 @@ class EditorTestRunner:
             "AB\n",
             b"liHello World\x1b:wq\r",
             expected_content="AHello WorldB\n"
+        )
+
+        # ============================================================
+        # Batch delete tests
+        # When multiple backspace or x keys are buffered, they should
+        # be deleted in a single operation with one render.
+        # ============================================================
+        print()
+        print("Batch delete:")
+        print()
+
+        # Render optimization: batch backspace reduces content redraws
+        # Frame 0: initial render (True)
+        # Frame 1: l (False - cursor only)
+        # Frame 2: l (False - cursor only)
+        # Frame 3: l (False - cursor only)
+        # Frame 4: i enters insert mode (True - status bar)
+        # Frame 5: first BS deletes, then 2 more batched (True)
+        # Frame 6: ESC exits insert (False - cursor only)
+        self.run_test_screen(
+            "Render opt: batch backspace reduces redraws",
+            "Hello\n",
+            b"llli\x08\x08\x08\x1b:q!\r",
+            expect_content_redraws=[True, False, False, False, True, True, False],
+        )
+
+        # Batch backspace correctness
+        # A appends after last char (col 6), 4 BS deletes F,E,D,C -> "AB\n"
+        self.run_test(
+            "Batch backspace mid-line",
+            "ABCDEF\n",
+            b"A\x08\x08\x08\x08\x1b:wq\r",
+            expected_content="AB\n"
+        )
+
+        # Batch backspace stops at column 0
+        # l moves to col 1, i enters insert at col 1, 3 BS: first deletes A,
+        # then at col 0 batching must stop (no join-lines in batch)
+        self.run_test(
+            "Batch backspace stops at column 0",
+            "AB\n",
+            b"li\x08\x08\x08\x1b:wq\r",
+            expected_content="B\n"
+        )
+
+        # Batch backspace stops at non-backspace key
+        # A appends at end (col 5), 2 BS deletes E,D, then X inserts -> "ABCX\n"
+        self.run_test(
+            "Batch backspace stops at non-BS key",
+            "ABCDE\n",
+            b"A\x08\x08X\x1b:wq\r",
+            expected_content="ABCX\n"
+        )
+
+        # Render optimization: batch x reduces content redraws
+        # Without batching: xxx -> frames [init, x, x, x] = 4 frames
+        # With batching: frames [init, x+batch_xx] = 2 frames
+        # Frame 0: initial render (True)
+        # Frame 1: first x + batch xx (True)
+        # Then j triggers a cursor-only frame (False) proving no more x frames
+        self.run_test_screen(
+            "Render opt: batch x reduces redraws",
+            "Hello\nWorld\n",
+            b"xxxj:q!\r",
+            expect_content_redraws=[True, True, False],
+        )
+
+        # Batch x correctness
+        self.run_test(
+            "Batch x mid-line",
+            "ABCDEF\n",
+            b"lxxx:wq\r",
+            expected_content="AEF\n"
+        )
+
+        # Batch x stops at end of line
+        self.run_test(
+            "Batch x stops at end of line",
+            "AB\n",
+            b"xxxx:wq\r",
+            expected_content="\n"
+        )
+
+        # Batch x stops at non-x key
+        self.run_test(
+            "Batch x stops at non-x key",
+            "ABCDE\n",
+            b"xxl:wq\r",
+            expected_content="CDE\n"
         )
 
         print()

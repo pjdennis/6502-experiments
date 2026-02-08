@@ -55,6 +55,37 @@ input_ready:
   LDA #$FF
   RTS
 
+; Count pending input bytes matching BUF_TEMP (or $7F for backspace)
+; Input: BUF_TEMP = byte to match (if $08, also matches $7F)
+; Returns: X = count of matching bytes (0 to BATCH_MAX)
+; Non-matching byte is pushed back
+count_pending_key:
+  LDX #0
+.count_loop:
+  JSR input_ready
+  CMP #$FF
+  BNE .count_done
+  JSR input_read_byte
+  CMP BUF_TEMP
+  BEQ .count_match
+  ; For backspace ($08), also match $7F
+  LDY BUF_TEMP
+  CPY #KEY_BS
+  BNE .count_no_match
+  CMP #$7F
+  BEQ .count_match
+.count_no_match:
+  ; Push back the non-matching byte
+  JSR input_unread
+  JMP .count_done
+.count_match:
+  INX
+  CPX #BATCH_MAX
+  BEQ .count_done
+  JMP .count_loop
+.count_done:
+  RTS
+
 ; Read one key from console, handling escape sequences
 ; Returns key code in A
 ; Arrow keys: KEY_UP ($80), KEY_DOWN ($81), KEY_LEFT ($82), KEY_RIGHT ($83)

@@ -398,6 +398,7 @@ normal_delete_char:
 
   JSR buf_delete_char
   JSR buf_adjust_lines_dec
+  JSR x_batch_pending
   LDA #1
   STA RENDER_FLAG
   LDA #$FF
@@ -406,6 +407,40 @@ normal_delete_char:
 .done:
   LDA #0
   STA LAST_KEY
+  RTS
+
+; Batch-delete pending 'x' keys in normal mode
+; Called after first x delete. LINE_LEN has original length.
+; Remaining deleteable chars = LINE_LEN - 1 - CURSOR_COL
+x_batch_pending:
+  ; Calculate max additional deletes
+  LDA LINE_LEN
+  SEC
+  SBC #1
+  SBC CURSOR_COL
+  BEQ .x_batch_done         ; No more chars to delete
+  STA LINE_LEN              ; Reuse as cap
+
+  ; Count pending 'x' keys
+  LDA #'x'
+  STA BUF_TEMP
+  JSR count_pending_key      ; Returns count in X
+  CPX #0
+  BEQ .x_batch_done
+
+  ; Cap at remaining deleteable chars
+  CPX LINE_LEN
+  BCC .x_cap_ok
+  LDX LINE_LEN
+.x_cap_ok:
+  STX BUF_DELTA
+
+  ; Delete BUF_DELTA more chars at cursor position
+  JSR get_cursor_buf_ptr
+  JSR buf_delete_chars
+  JSR buf_adjust_lines_dec
+
+.x_batch_done:
   RTS
 
 normal_d_key:
