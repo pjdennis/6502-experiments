@@ -1844,20 +1844,22 @@ class EditorTestRunner:
             expected_content="Hello\n"
         )
 
-        # Batch join-lines must not over-delete past a non-empty line.
-        # "AB\n\n\nCD\n" = lines AB, (empty), (empty), CD.
-        # Cursor on CD (line 3, col 0). 4 BS keys should:
-        #   1-2: delete the 2 empty lines (batch scan)
-        #   3: join CD onto AB → "ABCD", cursor at col 2 (end of AB)
-        #   4: within-line delete → "ACD", cursor at col 1
-        # Bug: backward \n scan treats AB's trailing \n as another empty
-        # line, consuming 3 BS in the scan. CURSOR_COL stays 0, and the
-        # 4th BS can't do anything → "ABCD" instead of "ACD".
+        # Batch join-lines must not skip over a non-empty line.
+        # "\n\nAB\n\n\nCD\n" = (empty)*2, AB, (empty)*2, CD.
+        # Cursor on line 4 (empty), 4 BS keys.
+        # Correct: delete 2 empty lines (3,4), join with AB (cursor
+        # at col 2), then within-line delete 2 chars → "\n\n\nCD\n".
+        # Bug: backward \n scan treats AB's trailing \n as another
+        # empty line, skipping over AB entirely. The scan deletes
+        # AB's \n + line 3's \n, leaving cursor at col 0 on AB.
+        # Then the next batch join deletes empty lines above AB.
+        # Result: "AB\nCD\n" (blank lines above AB deleted instead
+        # of AB's content).
         self.run_test(
-            "Batch join does not over-delete past non-empty",
-            "AB\n\n\nCD\n",
-            b"jjji\x08\x08\x08\x08\x1b:wq\r",
-            expected_content="ACD\n"
+            "Batch join does not skip over non-empty line",
+            "\n\nAB\n\n\nCD\n",
+            b"jjjji\x08\x08\x08\x08\x1b:wq\r",
+            expected_content="\n\n\nCD\n"
         )
 
         print()
