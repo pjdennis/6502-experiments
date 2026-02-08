@@ -279,8 +279,7 @@ command_parse:
 ; Write (save) the file
 command_write_file:
   ; Open file for writing
-  LDA FNAME_PTR16
-  LDX FNAME_PTR16 + 1
+  LDAX16 FNAME_PTR16
   JSR openout
   STA FILE_HANDLE
 
@@ -317,15 +316,9 @@ command_write_file:
 ; STR_PTR16 must be set to the message string before calling
 show_status_message:
   ; Save message pointer (command_show_prompt clobbers STR_PTR16)
-  LDA STR_PTR16 + 1
-  PHA
-  LDA STR_PTR16
-  PHA
+  PUSH16 STR_PTR16
   JSR command_show_prompt
-  PLA
-  STA STR_PTR16
-  PLA
-  STA STR_PTR16 + 1
+  POP16 STR_PTR16
   JSR write_string
   JSR con_flush
   JSR input_read_byte

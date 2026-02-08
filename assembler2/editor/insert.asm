@@ -89,8 +89,7 @@ insert_char:
   STA BUF_TEMP
 
   ; Get pointer to current position in buffer
-  LDA FILE_LINE16
-  LDX FILE_LINE16 + 1
+  LDAX16 FILE_LINE16
   JSR buf_get_line_ptr
   CLC
   LDA BUF_PTR16
@@ -118,8 +117,7 @@ insert_char:
 
 ; Insert newline at cursor (split line)
 insert_newline:
-  LDA FILE_LINE16
-  LDX FILE_LINE16 + 1
+  LDAX16 FILE_LINE16
   JSR buf_get_line_ptr
   CLC
   LDA BUF_PTR16
@@ -163,8 +161,7 @@ insert_backspace:
   BEQ .join_lines
 
   ; Delete character before cursor
-  LDA FILE_LINE16
-  LDX FILE_LINE16 + 1
+  LDAX16 FILE_LINE16
   JSR buf_get_line_ptr
   CLC
   LDA BUF_PTR16

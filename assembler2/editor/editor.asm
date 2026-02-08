@@ -68,8 +68,7 @@ editor_main:
   LDA #0
   JSR argv
   ; A;X = pointer to filename string, copy to FNAME_BUF and set FNAME_PTR16
-  STA BUF_PTR16
-  STX BUF_PTR16 + 1
+  STAX16 BUF_PTR16
   LDY #0
 .copy_fname:
   LDA (BUF_PTR16),Y
@@ -86,8 +85,7 @@ editor_main:
   .endif
 
   ; Try to open the file for reading (returns 0 if not found)
-  LDA FNAME_PTR16
-  LDX FNAME_PTR16 + 1
+  LDAX16 FNAME_PTR16
   JSR open
   CMP #0
   BEQ .new_file
@@ -227,8 +225,7 @@ parse_debug_args:
   CMP DBG_ARG_COUNT
   BCS .args_done        ; No more arguments
   JSR argv
-  STA BUF_PTR16
-  STX BUF_PTR16 + 1
+  STAX16 BUF_PTR16
 
   ; Check for "bufsize:" prefix (8 chars)
   LDY #0

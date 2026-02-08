@@ -80,8 +80,7 @@ render_screen:
 
 .line_exists:
   ; Render this line
-  LDA RENDER_LINE16
-  LDX RENDER_LINE16 + 1
+  LDAX16 RENDER_LINE16
   JSR buf_get_line_ptr
 
   JSR render_line_chars
@@ -213,8 +212,7 @@ render_current_line:
   JSR ansi_move_cursor
 
   ; Get current line pointer
-  LDA FILE_LINE16
-  LDX FILE_LINE16 + 1
+  LDAX16 FILE_LINE16
   JSR buf_get_line_ptr
 
   JSR render_line_chars
@@ -237,8 +235,7 @@ render_current_line_and_status:
   STA ANSI_COL
   JSR ansi_move_cursor
 
-  LDA FILE_LINE16
-  LDX FILE_LINE16 + 1
+  LDAX16 FILE_LINE16
   JSR buf_get_line_ptr
 
   JSR render_line_chars

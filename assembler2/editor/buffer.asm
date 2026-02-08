@@ -162,8 +162,7 @@ buf_line_count:
 ; Clobbers A, Y
 buf_get_line_ptr:
   ; Line table index = N * 2
-  STA BUF_PTR16
-  STX BUF_PTR16 + 1
+  STAX16 BUF_PTR16
   ASL16 BUF_PTR16
   ; Add LINE_TBL base
   CLC

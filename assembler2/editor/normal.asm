@@ -452,8 +452,7 @@ normal_delete_char:
   BEQ .done
   STA LINE_LEN
 
-  LDA FILE_LINE16
-  LDX FILE_LINE16 + 1
+  LDAX16 FILE_LINE16
   JSR buf_get_line_ptr
   CLC
   LDA BUF_PTR16
@@ -485,8 +484,7 @@ normal_d_key:
   BNE .set_d
 
   ; dd: delete current line
-  LDA FILE_LINE16
-  LDX FILE_LINE16 + 1
+  LDAX16 FILE_LINE16
   JSR buf_delete_line
   LDA #$FF
   STA MODIFIED
@@ -549,8 +547,7 @@ normal_enter_insert_eol:
   RTS
 
 normal_open_below:
-  LDA FILE_LINE16
-  LDX FILE_LINE16 + 1
+  LDAX16 FILE_LINE16
   JSR buf_get_line_ptr
 
   LDY #0
@@ -604,8 +601,7 @@ normal_open_below:
   RTS
 
 normal_open_above:
-  LDA FILE_LINE16
-  LDX FILE_LINE16 + 1
+  LDAX16 FILE_LINE16
   JSR buf_get_line_ptr
 
   LDA #'\n'
@@ -639,8 +635,7 @@ normal_enter_command:
 ; --- Utilities ---
 
 get_current_line_len:
-  LDA FILE_LINE16
-  LDX FILE_LINE16 + 1
+  LDAX16 FILE_LINE16
   JSR buf_get_line_len
   RTS
 
