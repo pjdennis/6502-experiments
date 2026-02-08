@@ -197,23 +197,6 @@ convert_hex_character:
   JMP err_invalid_hex
 
 
-; Swap PC16 with PC_SAVE16
-; On exit A, Y are not preserved
-;         X is preserved
-swap_pc_with_save:
-  ; Swap PC16 low byte with save location
-  LDA PC16
-  LDY PC_SAVE16
-  STY PC16
-  STA PC_SAVE16
-  ; Swap PC16 high byte with save location
-  LDA PC16+$01
-  LDY PC_SAVE16+$01
-  STY PC16+$01
-  STA PC_SAVE16+$01
-  RTS
-
-
 ; ============================================================================
 ; TIER 2: CHARACTER I/O & SKIPPING
 ; File reading and character classification
@@ -1394,6 +1377,24 @@ emit_quoted:
 ; TIER 10: DIRECTIVE PROCESSING
 ; Handle assembler directives (.include, .data, etc.)
 ; ============================================================================
+
+; Swap PC16 with PC_SAVE16
+; Used by .zeropage/.code directive handlers
+; On exit A, Y are not preserved
+;         X is preserved
+swap_pc_with_save:
+  ; Swap PC16 low byte with save location
+  LDA PC16
+  LDY PC_SAVE16
+  STY PC16
+  STA PC_SAVE16
+  ; Swap PC16 high byte with save location
+  LDA PC16+$01
+  LDY PC_SAVE16+$01
+  STY PC16+$01
+  STA PC_SAVE16+$01
+  RTS
+
 
 ; On entry, A contains the first character of the directive
 process_directive:
