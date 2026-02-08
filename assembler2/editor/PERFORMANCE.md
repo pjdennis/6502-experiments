@@ -33,6 +33,19 @@ stop the batch and are pushed back for normal processing.
 This reduces N buffered keystrokes from `N * (shift + adjust + render)` to
 `1 * (shift + adjust + render) + 1 * (shift_N + adjust_N)`.
 
+### Batch delete when keys are buffered
+
+After deleting a character (backspace in insert mode, x in normal mode),
+`count_pending_key` (shared in input.asm) checks for additional buffered
+matching keys. Pending deletes are counted and executed with a single
+`buf_shift_left` via `buf_delete_chars`, with one `buf_adjust_lines_dec`
+call for the batch.
+
+Backspace batching stops at column 0 (join-lines requires full
+`buf_rebuild_lines` and is not batched). x batching stops when no
+deleteable characters remain on the line. `count_pending_key` handles
+both $08 and $7F for backspace matching.
+
 ## Future Work
 
 ### Step 4: Gap buffer
