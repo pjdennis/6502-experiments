@@ -91,6 +91,7 @@ ARG_COUNT:       .data $00    ; Total command line argument count
 IN_MACRO_DEF:    .data $00    ; Flag: currently capturing macro body ($FF = capturing)
 MACRO_ENTRY16:   .data $0000  ; Original macro hash entry address (for recursion check)
 IFDEF_INDEX:     .data $00    ; Current index into IFDEF_DECISIONS buffer
+DATA_MODE:       .data $00    ; Data directive mode: 0=.data 1=.byte 2=.word 3=.asciiz
 
   .ifdef enable_debug
 DEBUG_FLAG:      .data $00    ; Non-zero if debug output enabled
@@ -1428,6 +1429,18 @@ process_directive:
   SET16 directive_data TABP16
   JSR compare_token
   BEQ .data
+  ; Check for 'byte'
+  SET16 directive_byte TABP16
+  JSR compare_token
+  BEQ .byte
+  ; Check for 'word'
+  SET16 directive_word TABP16
+  JSR compare_token
+  BEQ .word
+  ; Check for 'asciiz'
+  SET16 directive_asciiz TABP16
+  JSR compare_token
+  BEQ .asciiz
   JSR process_conditional_directive ; Returns with C=0 if processed
   BCC .directive_done
   ; Check for 'macro'
@@ -1441,11 +1454,11 @@ process_directive:
   JMP err_unknown_directive
 .directive_done:
   RTS
-.macro
+.macro:
   JMP process_macro
-.endmacro
+.endmacro:
   JMP err_endmacro_without_macro
-.include
+.include:
   JSR check_for_end_of_line
   BCC .get_name
   JMP err_filename_expected
@@ -1453,7 +1466,7 @@ process_directive:
   JSR read_filename
   JSR skip_rest_of_line
   JMP push_file_stack    ; Tail call
-.zeropage
+.zeropage:
   BIT IN_ZEROPAGE
   BMI .in_zeropage
   LDA #$FF
@@ -1461,7 +1474,7 @@ process_directive:
   JSR swap_pc_with_save
 .in_zeropage:
   JMP skip_rest_of_line  ; Tail call
-.code
+.code:
   BIT IN_ZEROPAGE
   BPL .in_code
   LDA #$00
@@ -1469,8 +1482,18 @@ process_directive:
   JSR swap_pc_with_save
 .in_code:
   JMP skip_rest_of_line  ; Tail call
-.data
-  JMP data_parameters_loop_entry
+.data:
+  LDA #$00
+  JMP set_data_mode
+.byte:
+  LDA #$01
+  JMP set_data_mode
+.word:
+  LDA #$02
+  JMP set_data_mode
+.asciiz:
+  LDA #$03
+  JMP set_data_mode
 
 
 ; On exit C=0 if processed; C=1 if not processed
@@ -1486,11 +1509,11 @@ process_conditional_directive:
   BEQ .endif
   SEC ; Not processed
   RTS
-.ifdef
+.ifdef:
   JSR process_ifdef
   CLC
   RTS
-.endif
+.endif:
   JSR process_endif
   CLC
   RTS
@@ -1508,6 +1531,15 @@ directive_code:
 directive_data:
   .data "data" $00
 
+directive_byte:
+  .data "byte" $00
+
+directive_word:
+  .data "word" $00
+
+directive_asciiz:
+  .data "asciiz" $00
+
 directive_ifdef:
   .data "ifdef" $00
 
@@ -1521,8 +1553,9 @@ directive_endmacro:
   .data "endmacro" $00
 
 
+set_data_mode:
+  STA DATA_MODE
 data_parameters_loop:
-data_parameters_loop_entry:
   JSR check_for_end_of_line
   BCS .data_done
   CMP #'"'            ; Quoted string
@@ -1532,25 +1565,41 @@ data_parameters_loop_entry:
   JSR skip_optional_comma
   JMP data_parameters_loop
 .data_value:
-  ; Parse value: handles $hex, 'char', label, <expr, >expr, and expressions
-  ; Bare labels always emit 2 bytes (even if value fits in 1 byte) because
-  ; forward references aren't resolved until pass 2, so size must be consistent.
-  JSR parse_value      ; Returns C=1 for bare label, C=0 otherwise, current char in CURR_CHAR
+  JSR parse_value        ; C=1 for 2-byte, C=0 for 1-byte
+  LDA DATA_MODE          ; LDA does NOT affect carry
+  BNE .forced_width      ; Non-zero = forced width mode
+  ; Mode 0 (.data): use carry from parse_value
   BCS .data_emit_two_bytes
-  ; C=0: expression/hex/'char'/</>  - emit 1 byte from OPERAND16
+.data_emit_one_byte:
   LDA OPERAND16
   JSR emit
   JSR skip_optional_comma
   JMP data_parameters_loop
+.forced_width:
+  CMP #$02
+  BEQ .data_emit_two_bytes  ; Mode 2 (.word): force 2 bytes
+  ; Mode 1 (.byte) or Mode 3 (.asciiz): validate + emit 1 byte
+  BIT PASS
+  BPL .data_emit_one_byte   ; Skip validation on pass 1
+  LDA OPERAND16+$01
+  BNE .data_byte_err
+  BEQ .data_emit_one_byte   ; Always taken
+.data_byte_err:
+  JMP err_value_out_of_range
 .data_emit_two_bytes:
-  ; C=1: bare label - emit 2 bytes (LSB, MSB)
-  LDA OPERAND16        ; Emit low byte
+  LDA OPERAND16          ; Emit low byte
   JSR emit
-  LDA OPERAND16+$01    ; Emit high byte
+  LDA OPERAND16+$01      ; Emit high byte
   JSR emit
   JSR skip_optional_comma
   JMP data_parameters_loop
 .data_done:
+  LDA DATA_MODE
+  CMP #$03
+  BNE .data_rts
+  LDA #$00
+  JMP emit           ; Tail call: emit null terminator
+.data_rts:
   RTS
 
 
@@ -2202,7 +2251,7 @@ assemble_code:
   JSR check_for_end_of_line
   BCS .back_to_line_loop
   JMP err_unexpected_text
-.macro
+.macro:
   JSR expand_macro
 .back_to_line_loop:
   JMP .line_loop
