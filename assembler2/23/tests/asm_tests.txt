@@ -600,6 +600,13 @@ INPUT:
 EXPECT_HEX: 01 02 03
 
 ---
+NAME: directive_data_trailig_comma
+INPUT:
+ 1: * = $0200
+ 2:   .data $01, $02, $03,
+EXPECT_HEX: 01 02 03
+
+---
 NAME: directive_data_mixed_separators
 INPUT:
  1: * = $0200
@@ -2082,6 +2089,30 @@ INPUT:
  5:   .endmacro
  6:   store_pair $42, $80
 EXPECT_HEX: a9 42 85 80
+
+---
+NAME: macro_param_commas_spaces_trailing
+DESCRIPTION: Macro with comma-separated params and args
+INPUT:
+ 1: * = $0200
+ 2:   .macro store_pair val , dst ,
+ 3:   LDA #val
+ 4:   STA dst
+ 5:   .endmacro
+ 6:   store_pair $42 , $80,
+EXPECT_HEX: a9 42 85 80
+
+---
+NAME: macro_param_commas_no_params
+DESCRIPTION: Macro with comma-separated params and args
+INPUT:
+ 1: * = $0200
+ 2:   .macro store_value ,
+ 3:   LDA #$12
+ 4:   STA $13
+ 5:   .endmacro
+ 6:   store_value ,
+EXPECT_HEX: a9 12 85 13
 
 ---
 NAME: macro_param_expression
