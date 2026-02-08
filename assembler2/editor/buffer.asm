@@ -233,6 +233,7 @@ buf_insert_char:
   SBC #1
   TAY                    ; Y = low byte of last source byte
   LDA BUF_END16 + 1
+  SBC #0                  ; propagate borrow from low byte
   STA BUF_SRC16 + 1      ; high byte = page
   LDA #0
   STA BUF_SRC16           ; BUF_SRC16 = page-aligned base
