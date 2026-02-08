@@ -343,21 +343,35 @@ buf_shift_right:
 ; Delete character at BUF_PTR16
 ; Shifts all following bytes left by 1
 buf_delete_char:
-  ; Page-at-a-time shift left by 1, copying forwards.
-  ; Source = BUF_PTR16 + 1, copies forward to BUF_END16.
-  ; BUF_SRC16 = page-aligned base of current source page
-  ; BUF_DST16 = BUF_SRC16 - 1 (so LDA (SRC),Y / STA (DST),Y shifts left by 1)
+  LDA #1
+  STA BUF_DELTA
+  JMP buf_shift_left
 
-  ; Check if nothing to move (delete at end)
+; Delete BUF_DELTA characters starting at BUF_PTR16
+; Input: BUF_PTR16 = position, BUF_DELTA = count
+; Shifts all following bytes left by BUF_DELTA, updates BUF_END16
+buf_delete_chars:
+  ; Fall through to buf_shift_left
+
+; Shift buffer left by BUF_DELTA bytes at BUF_PTR16
+; Input: BUF_PTR16 = delete point, BUF_DELTA = shift amount
+; Updates BUF_END16 on completion
+buf_shift_left:
+  ; Page-at-a-time shift left by BUF_DELTA, copying forwards.
+  ; Source = BUF_PTR16 + BUF_DELTA, copies forward to BUF_END16.
+  ; BUF_SRC16 = page-aligned base of current source page
+  ; BUF_DST16 = BUF_SRC16 - BUF_DELTA (so LDA (SRC),Y / STA (DST),Y shifts left)
+
+  ; Compute source start = BUF_PTR16 + BUF_DELTA
   CLC
   LDA BUF_PTR16
-  ADC #1
+  ADC BUF_DELTA
   STA BUF_SRC16
   LDA BUF_PTR16 + 1
   ADC #0
   STA BUF_SRC16 + 1
 
-  ; Compare source start with BUF_END16
+  ; Check if nothing to move (source >= BUF_END16)
   LDA BUF_SRC16 + 1
   CMP BUF_END16 + 1
   BCC .del_need_shift
@@ -367,7 +381,7 @@ buf_delete_char:
   BCS .del_shift_done
 .del_need_shift:
 
-  ; Set up BUF_SRC16 = page base of first source byte (BUF_PTR16+1)
+  ; Set up BUF_SRC16 = page base of first source byte
   ; Y = low byte of first source byte
   LDA BUF_SRC16
   TAY                    ; Y = low byte of first source byte
@@ -376,19 +390,16 @@ buf_delete_char:
   LDA #0
   STA BUF_SRC16           ; BUF_SRC16 = page-aligned base
 
-  ; BUF_DST16 = BUF_SRC16 - 1 (shifting left by 1)
-  ; If Y > 0: BUF_DST16 = same page base, but low byte = $FF would work...
-  ; Actually: BUF_DST16 needs to be BUF_SRC16 - 1 for the (ptr),Y trick to work
-  ; (DST),Y = BUF_SRC16 - 1 + Y = source - 1 = correct destination
+  ; BUF_DST16 = BUF_SRC16 - BUF_DELTA
+  ; (DST),Y = page_base - BUF_DELTA + Y = source - BUF_DELTA = correct destination
   SEC
   LDA BUF_SRC16
-  SBC #1
+  SBC BUF_DELTA
   STA BUF_DST16
   LDA BUF_SRC16 + 1
   SBC #0
   STA BUF_DST16 + 1
 
-  ; Determine last Y for this page: either $FF or limited by BUF_END16
   ; Check if BUF_END16 is on the same page
   LDA BUF_SRC16 + 1
   CMP BUF_END16 + 1
@@ -428,8 +439,14 @@ buf_delete_char:
   JMP .del_last_page
 
 .del_shift_done:
-  ; Decrement buffer end
-  DEC16 BUF_END16
+  ; Update buffer end: subtract BUF_DELTA
+  SEC
+  LDA BUF_END16
+  SBC BUF_DELTA
+  STA BUF_END16
+  LDA BUF_END16 + 1
+  SBC #0
+  STA BUF_END16 + 1
 
   RTS
 
@@ -691,7 +708,7 @@ buf_adjust_lines_dec:
   LDY #0
   SEC
   LDA (BUF_PTR16),Y
-  SBC #1
+  SBC BUF_DELTA
   STA (BUF_PTR16),Y
   BCS .dec_no_borrow2
   INY
