@@ -153,10 +153,10 @@ argument_message_suffix  .byte ": ", $00
 
 * = $01
 
-FILE_HANDLE                 .byte $00 ; 1 byte
-TABPL                       .byte $00 ; 2 byte table pointer
-TABPH                       .byte $00 ; "
-ARGC                        .byte $00 ; 1 byte
+FILE_HANDLE                 .byte     ; 1 byte
+TABPL                       .byte     ; 2 byte table pointer
+TABPH                       .byte     ; "
+ARGC                        .byte     ; 1 byte
 
   .code
   .code
@@ -192,11 +192,11 @@ sm_done
 
   .zeropage
 
-TO_DECIMAL_VALUE_L          .byte $00 ; 1 byte
-TO_DECIMAL_VALUE_H          .byte $00 ; 1 byte
+TO_DECIMAL_VALUE_L          .byte     ; 1 byte
+TO_DECIMAL_VALUE_H          .byte     ; 1 byte
 TO_DECIMAL_RESULT_MINUS_ONE
-TO_DECIMAL_MOD10            .byte $00 ; 1 byte
-TO_DECIMAL_RESULT           .byte $00, $00, $00, $00, $00, $00 ; 6 bytes
+TO_DECIMAL_MOD10            .byte     ; 1 byte
+TO_DECIMAL_RESULT           .reserve 6 ; 6 bytes
 
   .code
 

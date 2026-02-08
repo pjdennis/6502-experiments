@@ -2853,7 +2853,7 @@ DESCRIPTION: Can allocate the last zero page byte at $FF
 INPUT:
  1:   .zeropage
  2: * = $FF
- 3: last: .byte 0
+ 3: last: .byte
  4:   .code
  5: * = $0200
  6:   LDA last
@@ -2865,8 +2865,8 @@ DESCRIPTION: Zero page section overflow triggers error
 INPUT:
  1:   .zeropage
  2: * = $FF
- 3: foo: .byte 0
- 4: bar: .byte 0
+ 3: foo: .byte
+ 4: bar: .byte
  5:   .code
  6: * = $0200
  7:   NOP
@@ -3659,21 +3659,43 @@ INPUT:
 EXPECT_HEX: a5 00 a5 02
 
 ---
-NAME: zeropage_mixed_no_operand
-DESCRIPTION: Mix of operand-less and with-operand .byte/.word in .zeropage
+NAME: zeropage_byte_operand_error
+DESCRIPTION: .byte with operand in .zeropage triggers error
 INPUT:
  1:   .zeropage
- 2: a: .byte
- 3: b: .word
- 4: c: .byte 0
- 5: d: .word 0
- 6:   .code
- 7: * = $0200
- 8:   LDA a
- 9:   LDA b
-10:   LDA c
-11:   LDA d
-EXPECT_HEX: a5 00 a5 01 a5 03 a5 04
+ 2: a: .byte 0
+ 3:   .code
+ 4: * = $0200
+ 5:   NOP
+EXPECT_ERROR: 39
+EXPECT_LINE: 2
+EXPECT_MSG: Operand not allowed on .byte/.word in .zeropage
+
+---
+NAME: zeropage_word_operand_error
+DESCRIPTION: .word with operand in .zeropage triggers error
+INPUT:
+ 1:   .zeropage
+ 2: a: .word 0
+ 3:   .code
+ 4: * = $0200
+ 5:   NOP
+EXPECT_ERROR: 39
+EXPECT_LINE: 2
+EXPECT_MSG: Operand not allowed on .byte/.word in .zeropage
+
+---
+NAME: zeropage_asciiz_error
+DESCRIPTION: .asciiz in .zeropage triggers error
+INPUT:
+ 1:   .zeropage
+ 2: a: .asciiz "hello"
+ 3:   .code
+ 4: * = $0200
+ 5:   NOP
+EXPECT_ERROR: 38
+EXPECT_LINE: 2
+EXPECT_MSG: .asciiz not allowed in .zeropage
 
 ---
 NAME: zeropage_byte_no_operand_last
