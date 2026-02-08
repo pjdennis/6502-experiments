@@ -123,7 +123,7 @@ mode_lines:
   PLA
 .not_start:
   JSR write_b
-  CMP #$0A            ; newline
+  CMP #'\n'
   BNE .loop
   LDA #1
   STA AT_LINE_START
@@ -140,9 +140,9 @@ read_include_filename:
 .loop:
   JSR read_char
   BCS .done
-  CMP #$0A
+  CMP #'\n'
   BEQ .done
-  CMP #$0D            ; Also handle CR
+  CMP #'\r'
   BEQ .skip_cr
   STA TOKEN,X
   INX
@@ -164,7 +164,7 @@ mode_info:
   ; Count characters
   INC16 CHAR_COUNT16
   ; Count newlines
-  CMP #$0A
+  CMP #'\n'
   BNE .loop
   INC16 LINE_COUNT16
   JMP .loop
@@ -173,13 +173,13 @@ mode_info:
   PRINT_STR str_chars
   CP16 CHAR_COUNT16, TO_DECIMAL_VALUE16
   JSR print_decimal
-  LDA #$0A
+  LDA #'\n'
   JSR write_b
   ; Output "lines:N"
   PRINT_STR str_lines
   CP16 LINE_COUNT16, TO_DECIMAL_VALUE16
   JSR print_decimal
-  LDA #$0A
+  LDA #'\n'
   JSR write_b
   ; Output "stack:empty" or "stack:active"
   PRINT_STR str_stack
@@ -190,7 +190,7 @@ mode_info:
 .stack_not_empty:
   PRINT_STR str_active
 .info_done:
-  LDA #$0A
+  LDA #'\n'
   JSR write_b
   LDA #0
   JMP exit
@@ -215,7 +215,7 @@ mode_memory:
 .not_at_sign:
   JSR write_b
   ; Track line start
-  CMP #$0A
+  CMP #'\n'
   BNE .not_newline
   LDA #1
   STA AT_LINE_START
@@ -242,7 +242,7 @@ check_markers:
   BCS .buffer_eof
   CMP #' '
   BEQ .buffer_done
-  CMP #$0A
+  CMP #'\n'
   BEQ .buffer_done
   STA TOKEN,X
   INX
@@ -250,7 +250,7 @@ check_markers:
 .buffer_eof:
   LDA #$FF            ; Sentinel for EOF
 .buffer_done:
-  STA MARKER_TERM     ; Save terminator (space, $0A, or $FF)
+  STA MARKER_TERM     ; Save terminator (space, newline, or $FF)
   LDA #0
   STA TOKEN,X         ; Null-terminate the keyword
 
@@ -289,7 +289,7 @@ check_markers:
   LDA MARKER_TERM
   CMP #' '
   BEQ .memory_with_content
-  CMP #$0A
+  CMP #'\n'
   BEQ .memory_empty
   ; EOF after @memory = empty content
   ; ($FF terminator means EOF)
@@ -297,7 +297,7 @@ check_markers:
   ; @memory with no content - just set line start
   ; Increment line if terminated by newline
   LDA MARKER_TERM
-  CMP #$0A
+  CMP #'\n'
   BNE .memory_empty_no_newline
   INC16 CURLINE16
 .memory_empty_no_newline:
@@ -314,7 +314,7 @@ check_markers:
   ; Consume any remaining content on the line
   ; Use read_char to avoid incrementing line number
   LDA MARKER_TERM
-  CMP #$0A
+  CMP #'\n'
   BEQ .do_traceback
   CMP #$FF
   BEQ .do_traceback
@@ -322,7 +322,7 @@ check_markers:
 .skip_to_eol:
   JSR read_char
   BCS .do_traceback
-  CMP #$0A
+  CMP #'\n'
   BNE .skip_to_eol
 .do_traceback:
   ; Print the traceback (pops all stack entries, closes files)
@@ -372,7 +372,7 @@ flush_as_text:
   CMP #$FF
   BEQ .not_newline    ; EOF - nothing to output
   JSR write_b
-  CMP #$0A
+  CMP #'\n'
   BNE .not_newline
   INC16 CURLINE16
   LDA #1
@@ -443,9 +443,9 @@ read_memory_content:
 .loop:
   JSR read_char
   BCS .add_newline    ; EOF - add newline and done
-  CMP #$0A
+  CMP #'\n'
   BEQ .add_newline    ; Newline - add it and done
-  CMP #$0D            ; Also handle CR
+  CMP #'\r'
   BEQ .skip_cr
   STA TOKEN,X
   INX
@@ -453,7 +453,7 @@ read_memory_content:
 .skip_cr:
   JMP .loop
 .add_newline:
-  LDA #$0A
+  LDA #'\n'
   STA TOKEN,X
   INX
   RTS
@@ -503,7 +503,7 @@ print_traceback:
   CP16 CURLINE16, TO_DECIMAL_VALUE16
   JSR print_decimal
   ; Print newline
-  LDA #$0A
+  LDA #'\n'
   JSR write_b
   ; Pop current entry (closes file, restores parent's handle and line)
   JSR pop_file_stack
@@ -596,7 +596,7 @@ read_char_track_line:
   JSR read_char
   BCS .done
   ; Track line numbers (preserve A and C=0)
-  CMP #$0A
+  CMP #'\n'
   BNE .success
   INC16 CURLINE16
 .success:
@@ -620,7 +620,7 @@ parse_args:
   JSR argv
   ; A/X contains pointer to arg string
   STA TABP16
-  STX TABP16+$01
+  STX TABP16+1
   JSR parse_mode
   BCS .error
 
@@ -629,7 +629,7 @@ parse_args:
   JSR argv
   ; A/X contains pointer to arg string
   STA TABP16
-  STX TABP16+$01
+  STX TABP16+1
   ; Copy to TOKEN
   LDY #0
 .copy_filename:
