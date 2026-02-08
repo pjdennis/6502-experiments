@@ -1,8 +1,8 @@
   .zeropage
 
-TO_DECIMAL_VALUE16:          .word 0     ; 2 bytes
-TO_DECIMAL_MOD10:            .byte 0     ; 1 byte
-TO_DECIMAL_RESULT:           .byte 0, 0, 0, 0, 0, 0 ; 6 bytes
+TO_DECIMAL_VALUE16:          .word       ; 2 bytes
+TO_DECIMAL_MOD10:            .byte       ; 1 byte
+TO_DECIMAL_RESULT:           .reserve 6  ; 6 bytes
 
   .code
 
