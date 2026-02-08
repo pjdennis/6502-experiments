@@ -3631,3 +3631,87 @@ INPUT:
 EXPECT_ERROR: 37
 EXPECT_LINE: 2
 EXPECT_MSG: Comma expected
+
+---
+NAME: zeropage_byte_no_operand
+DESCRIPTION: Operand-less .byte in .zeropage allocates 1 byte
+INPUT:
+ 1:   .zeropage
+ 2: foo: .byte
+ 3: bar: .byte
+ 4:   .code
+ 5: * = $0200
+ 6:   LDA foo
+ 7:   LDA bar
+EXPECT_HEX: a5 00 a5 01
+
+---
+NAME: zeropage_word_no_operand
+DESCRIPTION: Operand-less .word in .zeropage allocates 2 bytes
+INPUT:
+ 1:   .zeropage
+ 2: ptr: .word
+ 3: val: .byte
+ 4:   .code
+ 5: * = $0200
+ 6:   LDA ptr
+ 7:   LDA val
+EXPECT_HEX: a5 00 a5 02
+
+---
+NAME: zeropage_mixed_no_operand
+DESCRIPTION: Mix of operand-less and with-operand .byte/.word in .zeropage
+INPUT:
+ 1:   .zeropage
+ 2: a: .byte
+ 3: b: .word
+ 4: c: .byte 0
+ 5: d: .word 0
+ 6:   .code
+ 7: * = $0200
+ 8:   LDA a
+ 9:   LDA b
+10:   LDA c
+11:   LDA d
+EXPECT_HEX: a5 00 a5 01 a5 03 a5 04
+
+---
+NAME: zeropage_byte_no_operand_last
+DESCRIPTION: Operand-less .byte at $FF boundary succeeds
+INPUT:
+ 1:   .zeropage
+ 2: * = $FF
+ 3: last: .byte
+ 4:   .code
+ 5: * = $0200
+ 6:   LDA last
+EXPECT_HEX: a5 ff
+
+---
+NAME: zeropage_byte_no_operand_overflow
+DESCRIPTION: Operand-less .byte past $FF overflows
+INPUT:
+ 1:   .zeropage
+ 2: * = $FF
+ 3: a: .byte
+ 4: b: .byte
+ 5:   .code
+ 6: * = $0200
+ 7:   NOP
+EXPECT_ERROR: 35
+EXPECT_LINE: 4
+EXPECT_MSG: Zero page overflow
+
+---
+NAME: zeropage_word_no_operand_overflow
+DESCRIPTION: Operand-less .word that crosses $FF boundary overflows
+INPUT:
+ 1:   .zeropage
+ 2: * = $FF
+ 3: a: .word
+ 4:   .code
+ 5: * = $0200
+ 6:   NOP
+EXPECT_ERROR: 35
+EXPECT_LINE: 3
+EXPECT_MSG: Zero page overflow

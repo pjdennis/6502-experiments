@@ -1431,13 +1431,35 @@ process_directive:
   JMP skip_rest_of_line  ; Tail call
 .byte:
   LDA #DATA_MODE_BYTE
+  BIT IN_ZEROPAGE
+  BMI .zp_reserve       ; In zeropage? check for operand-less form
   JMP set_data_mode
 .word:
   LDA #DATA_MODE_WORD
+  BIT IN_ZEROPAGE
+  BMI .zp_reserve       ; In zeropage? check for operand-less form
   JMP set_data_mode
 .asciiz:
   LDA #DATA_MODE_ASCIIZ
   JMP set_data_mode
+
+.zp_reserve:
+  ; A = DATA_MODE (1=byte, 2=word)
+  STA DATA_MODE
+  JSR check_for_end_of_line
+  BCC .zp_has_operand       ; Not EOL — has operand, use normal path
+  ; Operand-less: emit A dummy bytes (1 for .byte, 2 for .word)
+  LDA #$00
+  JSR emit                  ; Advance ZP PC by 1
+  LDA DATA_MODE
+  CMP #DATA_MODE_WORD
+  BNE .zp_done
+  LDA #$00
+  JSR emit                  ; Advance ZP PC by 2nd byte for .word
+.zp_done:
+  RTS
+.zp_has_operand:
+  JMP data_parameters_loop  ; Continue with normal value parsing
 
 
 ; On exit C=0 if processed; C=1 if not processed
