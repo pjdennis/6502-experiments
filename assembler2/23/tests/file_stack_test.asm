@@ -3,9 +3,8 @@
 ; Modes:
 ;   echo   - Read file char by char, write to stdout
 ;   lines  - Read file, output "N:content" for each line
-;   nested - Handle @include markers, echo all content
 ;   info   - Read file, output statistics
-;   memory - Handle @memory and @include markers, test memory sources
+;   memory - Handle @memory, @include, and @traceback markers
 
 * = $0200
 
@@ -16,7 +15,7 @@ TOKEN_MEM  = $1D80  ; Offset in TOKEN buffer for memory content
   .zeropage
 
 ; Test state
-TEST_MODE:     .byte 0       ; 0=echo, 1=lines, 2=nested, 3=info, 4=memory
+TEST_MODE:     .byte 0       ; 0=echo, 1=lines, 2=info, 3=memory
 CHAR_COUNT16:  .word 0       ; Character count
 LINE_COUNT16:  .word 0       ; Line count
 AT_LINE_START: .byte 0       ; Flag: at start of line (for lines mode)
@@ -24,12 +23,18 @@ AT_LINE_START: .byte 0       ; Flag: at start of line (for lines mode)
 ; Temporary
 TEMP:        .byte 0
 TABP16:      .word 0
+MARKER_TERM: .byte 0       ; Character that terminated the keyword ($FF = EOF)
 
   .code
 
   .include environment.asm
   .include macros.asm
   .include to_decimal.asm
+
+  .macro PRINT_STR str_addr
+  SET16 str_addr, TABP16
+  JSR print_str
+  .endmacro
 
 ; File stack configuration
 FS_FILENAME   = TOKEN
@@ -70,14 +75,10 @@ main:
   CMP #$01
   BEQ mode_lines
   CMP #$02
-  BEQ .go_nested
-  CMP #$03
   BEQ .go_info
-  CMP #$04
+  CMP #$03
   BEQ .go_memory
   JMP error_usage
-.go_nested:
-  JMP mode_nested
 .go_info:
   JMP mode_info
 .go_memory:
@@ -131,111 +132,6 @@ mode_lines:
   LDA #$00
   JMP exit
 
-; ============================================================================
-; MODE: nested - Handle @include markers
-; ============================================================================
-mode_nested:
-.loop:
-  JSR read_char_track_line
-  BCS .done
-  ; Check for '@' at start of line
-  CMP #'@'
-  BNE .not_include
-  LDA AT_LINE_START
-  BEQ .not_include
-  ; Might be @include - check
-  JSR check_include_marker
-  BCC .loop           ; Was @include, continue reading from new file
-  JMP .loop           ; Not @include, but already output - continue
-.not_include:
-  JSR write_b
-  ; Track line start
-  CMP #$0A
-  BNE .not_newline
-  LDA #$01
-  STA AT_LINE_START
-  JMP .loop
-.not_newline:
-  LDA #$00
-  STA AT_LINE_START
-  JMP .loop
-.done:
-  LDA #$00
-  JMP exit
-
-; Check if we're at "@include " and handle it
-; On entry: just read '@'
-; On exit: C=0 if was include (file pushed), C=1 if not (already output '@')
-check_include_marker:
-  ; Read and check "include "
-  LDX #$00
-.check_loop:
-  JSR read_char_track_line
-  BCS .not_include_eof
-  CMP include_marker,X
-  BNE .not_include_char
-  INX
-  CPX #$08            ; Length of "include "
-  BNE .check_loop
-  ; It's @include - read filename into TOKEN
-  JSR read_include_filename
-  JSR push_file_stack
-  ; Initialize line to 1 for included file
-  SET16 $01, CURLINE16
-  LDA #$01
-  STA AT_LINE_START
-  CLC
-  RTS
-.not_include_char:
-  ; Not @include - output '@' and what we read, then return char
-  PHA
-  LDA #'@'
-  JSR write_b
-  ; Output matched portion
-  TXA
-  BEQ .output_current
-  LDY #$00
-.output_matched:
-  LDA include_marker,Y
-  JSR write_b
-  INY
-  DEX
-  BNE .output_matched
-.output_current:
-  PLA
-  JSR write_b
-  ; Check if what we just output was a newline
-  CMP #$0A
-  BNE .not_newline_after
-  LDA #$01
-  STA AT_LINE_START
-  SEC
-  RTS
-.not_newline_after:
-  LDA #$00
-  STA AT_LINE_START
-  SEC
-  RTS
-.not_include_eof:
-  ; EOF during check - output '@' and matched portion
-  LDA #'@'
-  JSR write_b
-  TXA
-  BEQ .eof_done
-  LDY #$00
-.output_matched_eof:
-  LDA include_marker,Y
-  JSR write_b
-  INY
-  DEX
-  BNE .output_matched_eof
-.eof_done:
-  SEC
-  RTS
-
-include_marker:
-  .byte "include "
-
 ; Read filename until newline into TOKEN
 ; Note: Uses read_char (not read_char_track_line) to avoid incrementing
 ; line number - the line should be saved BEFORE reading the filename
@@ -274,25 +170,25 @@ mode_info:
   JMP .loop
 .done:
   ; Output "chars:N"
-  JSR print_str_chars
+  PRINT_STR str_chars
   CP16 CHAR_COUNT16, TO_DECIMAL_VALUE16
   JSR print_decimal
   LDA #$0A
   JSR write_b
   ; Output "lines:N"
-  JSR print_str_lines
+  PRINT_STR str_lines
   CP16 LINE_COUNT16, TO_DECIMAL_VALUE16
   JSR print_decimal
   LDA #$0A
   JSR write_b
   ; Output "stack:empty" or "stack:active"
-  JSR print_str_stack
+  PRINT_STR str_stack
   JSR file_stack_empty
   BNE .stack_not_empty
-  JSR print_str_empty
+  PRINT_STR str_empty
   JMP .info_done
 .stack_not_empty:
-  JSR print_str_active
+  PRINT_STR str_active
 .info_done:
   LDA #$0A
   JSR write_b
@@ -300,7 +196,7 @@ mode_info:
   JMP exit
 
 ; ============================================================================
-; MODE: memory - Handle @memory and @include markers
+; MODE: memory - Handle @memory, @include, and @traceback markers
 ; ============================================================================
 mode_memory:
 .loop:
@@ -308,14 +204,16 @@ mode_memory:
   BCS .done
   ; Check for '@' at start of line
   CMP #'@'
-  BNE .not_marker
+  BNE .not_at_sign
   LDA AT_LINE_START
-  BEQ .not_marker
-  ; Might be @include or @memory - check
-  JSR check_memory_or_include
+  BEQ .at_not_start
+  ; Might be a marker - check
+  JSR check_markers
   BCC .loop           ; Was a marker, continue reading
   JMP .loop           ; Not a marker, but already output - continue
-.not_marker:
+.at_not_start:
+  LDA #'@'            ; Restore the clobbered character
+.not_at_sign:
   JSR write_b
   ; Track line start
   CMP #$0A
@@ -331,60 +229,54 @@ mode_memory:
   LDA #$00
   JMP exit
 
-; Check if we're at "@include ", "@memory ", or "@traceback" and handle it
-; On entry: just read '@'
-; On exit: C=0 if was a marker (handled), C=1 if not (already output '@')
-check_memory_or_include:
-  ; Read char to see if it's 'i' (include), 'm' (memory), or 't' (traceback)
-  JSR read_char_track_line
-  BCS .not_marker_eof
-  CMP #'i'
-  BEQ .check_include
-  CMP #'m'
-  BEQ .go_check_memory
-  CMP #'t'
-  BEQ .go_check_traceback
-  JMP .not_a_marker
-.go_check_memory:
-  JMP .check_memory
-.go_check_traceback:
-  JMP .check_traceback
-.not_a_marker:
-  ; Not a marker - output '@' and this char
-  PHA
-  LDA #'@'
-  JSR write_b
-  PLA
-  JSR write_b
-  CMP #$0A
-  BNE .not_marker_not_newline
-  LDA #$01
-  STA AT_LINE_START
-  SEC
-  RTS
-.not_marker_not_newline:
-  LDA #$00
-  STA AT_LINE_START
-  SEC
-  RTS
-.not_marker_eof:
-  LDA #'@'
-  JSR write_b
-  SEC
-  RTS
-
-.check_include:
-  ; Check for "nclude " (we already matched 'i')
+; ============================================================================
+; Buffer-based marker matching
+; On entry: just read '@' at start of line
+; Buffers keyword into TOKEN, then compares against known markers.
+; On exit: C=0 if marker handled, C=1 if not (text already flushed)
+; ============================================================================
+check_markers:
+  ; Buffer the keyword after '@' into TOKEN
   LDX #$00
-.include_loop:
-  JSR read_char_track_line
-  BCS .not_include_eof
-  CMP include_rest,X
-  BNE .not_include_char
+.buffer_loop:
+  JSR read_char
+  BCS .buffer_eof
+  CMP #' '
+  BEQ .buffer_done
+  CMP #$0A
+  BEQ .buffer_done
+  STA TOKEN,X
   INX
-  CPX #$07            ; Length of "nclude "
-  BNE .include_loop
-  ; It's @include - read filename into TOKEN
+  JMP .buffer_loop
+.buffer_eof:
+  LDA #$FF            ; Sentinel for EOF
+.buffer_done:
+  STA MARKER_TERM     ; Save terminator (space, $0A, or $FF)
+  LDA #$00
+  STA TOKEN,X         ; Null-terminate the keyword
+
+  ; Try matching against each known marker
+  SET16 str_include, TABP16
+  JSR cmp_marker
+  BCC .handle_include
+
+  SET16 str_memory, TABP16
+  JSR cmp_marker
+  BCC .handle_memory
+
+  SET16 str_traceback, TABP16
+  JSR cmp_marker
+  BCC .handle_traceback
+
+  ; No match - flush '@' + keyword + terminator as text
+  JMP flush_as_text
+
+.handle_include:
+  ; @include requires space terminator (filename follows)
+  LDA MARKER_TERM
+  CMP #' '
+  BNE flush_as_text   ; Not followed by space, treat as text
+  ; Read filename into TOKEN (overwrites keyword)
   JSR read_include_filename
   JSR push_file_stack
   ; Initialize line to 1 for included file
@@ -393,93 +285,114 @@ check_memory_or_include:
   STA AT_LINE_START
   CLC
   RTS
-.not_include_char:
-  ; Not @include - output "@i" and matched portion, then this char
-  PHA
-  LDA #'@'
-  JSR write_b
-  LDA #'i'
-  JSR write_b
-  TXA
-  BEQ .include_output_current
-  LDY #$00
-.include_output_matched:
-  LDA include_rest,Y
-  JSR write_b
-  INY
-  DEX
-  BNE .include_output_matched
-.include_output_current:
-  PLA
-  JSR write_b
-  CMP #$0A
-  BNE .include_not_newline
-  LDA #$01
-  STA AT_LINE_START
-  SEC
-  RTS
-.include_not_newline:
-  LDA #$00
-  STA AT_LINE_START
-  SEC
-  RTS
-.not_include_eof:
-  ; EOF - output "@i" and matched portion
-  LDA #'@'
-  JSR write_b
-  LDA #'i'
-  JSR write_b
-  TXA
-  BEQ .include_eof_done
-  LDY #$00
-.include_eof_output:
-  LDA include_rest,Y
-  JSR write_b
-  INY
-  DEX
-  BNE .include_eof_output
-.include_eof_done:
-  SEC
-  RTS
 
-.check_memory:
-  ; Check for "emory" then space or newline (we already matched 'm')
-  LDX #$00
-.memory_loop:
-  JSR read_char_track_line
-  BCS .go_not_memory_eof
-  CMP memory_rest,X
-  BNE .go_check_memory_terminator
-  JMP .memory_loop_continue
-.go_not_memory_eof:
-  JMP .not_memory_eof
-.go_check_memory_terminator:
-  JMP .check_memory_terminator
-.memory_loop_continue:
-  INX
-  CPX #$05            ; Length of "emory" (without trailing space)
-  BNE .memory_loop
-  ; Got "emory", now check for space or newline
-  JSR read_char_track_line
-  BCS .memory_empty   ; EOF after @memory = empty content
+.handle_memory:
+  LDA MARKER_TERM
   CMP #' '
   BEQ .memory_with_content
   CMP #$0A
-  BEQ .memory_empty   ; Newline after @memory = empty content
-  ; Not space or newline - not a valid @memory marker
-  JMP .not_memory_after_emory
-.memory_with_content:
-  ; It's @memory with content - read into TOKEN until newline
-  JSR read_memory_content
-  JMP .setup_memory_source
+  BEQ .memory_empty
+  ; EOF after @memory = empty content
+  ; ($FF terminator means EOF)
 .memory_empty:
-  ; It's @memory with no content - don't push anything
+  ; @memory with no content - just set line start
+  ; Increment line if terminated by newline
+  LDA MARKER_TERM
+  CMP #$0A
+  BNE .memory_empty_no_newline
+  INC16 CURLINE16
+.memory_empty_no_newline:
   LDA #$01
   STA AT_LINE_START
   CLC
   RTS
-.setup_memory_source:
-  ; Set up memory source pointers
+.memory_with_content:
+  ; Read content into TOKEN until newline
+  JSR read_memory_content
+  JMP setup_memory_source
+
+.handle_traceback:
+  ; Consume any remaining content on the line
+  ; Use read_char to avoid incrementing line number
+  LDA MARKER_TERM
+  CMP #$0A
+  BEQ .do_traceback
+  CMP #$FF
+  BEQ .do_traceback
+  ; Terminator was space - skip to end of line
+.skip_to_eol:
+  JSR read_char
+  BCS .do_traceback
+  CMP #$0A
+  BNE .skip_to_eol
+.do_traceback:
+  ; Print the traceback (pops all stack entries, closes files)
+  JSR print_traceback
+  LDA #$01
+  STA AT_LINE_START
+  CLC
+  RTS
+
+; Compare null-terminated keyword in TOKEN against pattern at (TABP16)
+; Returns: C=0 if match, C=1 if no match
+cmp_marker:
+  LDY #$00
+.loop:
+  LDA TOKEN,Y
+  CMP (TABP16),Y
+  BNE .no_match
+  ; If both are null, it's a match
+  CMP #$00
+  BEQ .match
+  INY
+  JMP .loop
+.match:
+  CLC
+  RTS
+.no_match:
+  SEC
+  RTS
+
+; Flush '@' + TOKEN keyword + terminator as literal text
+; Updates AT_LINE_START and CURLINE16 as needed
+; Returns: C=1 (not a marker)
+flush_as_text:
+  LDA #'@'
+  JSR write_b
+  ; Output keyword from TOKEN
+  LDY #$00
+.loop:
+  LDA TOKEN,Y
+  BEQ .keyword_done
+  JSR write_b
+  INY
+  JMP .loop
+.keyword_done:
+  ; Output the terminator character
+  LDA MARKER_TERM
+  CMP #$FF
+  BEQ .eof_term       ; EOF - nothing to output
+  JSR write_b
+  CMP #$0A
+  BNE .not_newline
+  INC16 CURLINE16
+  LDA #$01
+  STA AT_LINE_START
+  SEC
+  RTS
+.not_newline:
+  LDA #$00
+  STA AT_LINE_START
+  SEC
+  RTS
+.eof_term:
+  LDA #$00
+  STA AT_LINE_START
+  SEC
+  RTS
+
+; Set up memory source from content in TOKEN (X = length)
+setup_memory_source:
   ; TOKEN contains the content, X = length
   ; Problem: FS_FILENAME = TOKEN, so we can't put name there without losing content
   ; Solution: Copy content to TOKEN+$80, then put name in TOKEN
@@ -517,163 +430,13 @@ check_memory_or_include:
   STA AT_LINE_START
   CLC
   RTS
-.check_memory_terminator:
-  ; Not @memory - output "@m" and matched portion, then this char
-  PHA
-  LDA #'@'
-  JSR write_b
-  LDA #'m'
-  JSR write_b
-  TXA
-  BEQ .memory_output_current
-  LDY #$00
-.memory_output_matched:
-  LDA memory_rest,Y
-  JSR write_b
-  INY
-  DEX
-  BNE .memory_output_matched
-.memory_output_current:
-  PLA
-  JSR write_b
-  CMP #$0A
-  BNE .memory_not_newline
-  LDA #$01
-  STA AT_LINE_START
-  SEC
-  RTS
-.memory_not_newline:
-  LDA #$00
-  STA AT_LINE_START
-  SEC
-  RTS
-.not_memory_after_emory:
-  ; Got @memory but followed by non-space/non-newline char
-  ; Output "@memory" and this char
-  PHA
-  LDA #'@'
-  JSR write_b
-  LDA #'m'
-  JSR write_b
-  LDY #$00
-.output_emory:
-  LDA memory_rest,Y
-  JSR write_b
-  INY
-  CPY #$05
-  BNE .output_emory
-  PLA
-  JSR write_b
-  CMP #$0A
-  BNE .after_emory_not_newline
-  LDA #$01
-  STA AT_LINE_START
-  SEC
-  RTS
-.after_emory_not_newline:
-  LDA #$00
-  STA AT_LINE_START
-  SEC
-  RTS
-.not_memory_eof:
-  ; EOF - output "@m" and matched portion
-  LDA #'@'
-  JSR write_b
-  LDA #'m'
-  JSR write_b
-  TXA
-  BEQ .memory_eof_done
-  LDY #$00
-.memory_eof_output:
-  LDA memory_rest,Y
-  JSR write_b
-  INY
-  DEX
-  BNE .memory_eof_output
-.memory_eof_done:
-  SEC
-  RTS
 
-.check_traceback:
-  ; Check for "raceback" (we already matched 't')
-  LDX #$00
-.traceback_loop:
-  JSR read_char_track_line
-  BCS .not_traceback_eof
-  CMP traceback_rest,X
-  BNE .not_traceback_char
-  INX
-  CPX #$08            ; Length of "raceback"
-  BNE .traceback_loop
-  ; It's @traceback - skip to end of line (consume any trailing content)
-  ; Use read_char to avoid incrementing line number
-.skip_to_eol:
-  JSR read_char
-  BCS .do_traceback
-  CMP #$0A
-  BNE .skip_to_eol
-.do_traceback:
-  ; Print the traceback (pops all stack entries, closes files)
-  JSR print_traceback
-  LDA #$01
-  STA AT_LINE_START
-  CLC
-  RTS
-.not_traceback_char:
-  ; Not @traceback - output "@t" and matched portion, then this char
-  PHA
-  LDA #'@'
-  JSR write_b
-  LDA #'t'
-  JSR write_b
-  TXA
-  BEQ .traceback_output_current
-  LDY #$00
-.traceback_output_matched:
-  LDA traceback_rest,Y
-  JSR write_b
-  INY
-  DEX
-  BNE .traceback_output_matched
-.traceback_output_current:
-  PLA
-  JSR write_b
-  CMP #$0A
-  BNE .traceback_not_newline
-  LDA #$01
-  STA AT_LINE_START
-  SEC
-  RTS
-.traceback_not_newline:
-  LDA #$00
-  STA AT_LINE_START
-  SEC
-  RTS
-.not_traceback_eof:
-  ; EOF - output "@t" and matched portion
-  LDA #'@'
-  JSR write_b
-  LDA #'t'
-  JSR write_b
-  TXA
-  BEQ .traceback_eof_done
-  LDY #$00
-.traceback_eof_output:
-  LDA traceback_rest,Y
-  JSR write_b
-  INY
-  DEX
-  BNE .traceback_eof_output
-.traceback_eof_done:
-  SEC
-  RTS
-
-include_rest:
-  .byte "nclude "
-memory_rest:
-  .byte "emory"
-traceback_rest:
-  .byte "raceback"
+str_include:
+  .asciiz "include"
+str_memory:
+  .asciiz "memory"
+str_traceback:
+  .asciiz "traceback"
 str_memory_source:
   .asciiz "MEMORY"
 
@@ -701,30 +464,6 @@ read_memory_content:
   INX
 .done:
   RTS
-
-; ============================================================================
-; String printing utilities
-; ============================================================================
-
-print_str_chars:
-  SET16 str_chars, TABP16
-  JMP print_str
-
-print_str_lines:
-  SET16 str_lines, TABP16
-  JMP print_str
-
-print_str_stack:
-  SET16 str_stack, TABP16
-  JMP print_str
-
-print_str_empty:
-  SET16 str_empty, TABP16
-  JMP print_str
-
-print_str_active:
-  SET16 str_active, TABP16
-  JMP print_str
 
 ; Print traceback of file stack - pops all entries, closes files
 ; Output format: "type:name:line\n" for each entry in stack
@@ -926,8 +665,6 @@ parse_mode:
   BEQ .check_echo
   CMP #'l'
   BEQ .check_lines
-  CMP #'n'
-  BEQ .check_nested
   CMP #'i'
   BEQ .check_info
   CMP #'m'
@@ -944,18 +681,13 @@ parse_mode:
   STA TEST_MODE
   CLC
   RTS
-.check_nested:
+.check_info:
   LDA #$02
   STA TEST_MODE
   CLC
   RTS
-.check_info:
-  LDA #$03
-  STA TEST_MODE
-  CLC
-  RTS
 .check_memory:
-  LDA #$04
+  LDA #$03
   STA TEST_MODE
   CLC
   RTS
@@ -981,7 +713,7 @@ print_str_err:
   RTS
 
 msg_usage:
-  .asciiz "Usage: file_stack_test <mode> <file>\nModes: echo, lines, nested, info, memory\n"
+  .asciiz "Usage: file_stack_test <mode> <file>\nModes: echo, lines, info, memory\n"
 
 ; Emulator convention - start address is the last 2 bytes of the file
   .word main

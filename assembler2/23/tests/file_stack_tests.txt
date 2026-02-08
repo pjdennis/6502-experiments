@@ -2,13 +2,13 @@
 #
 # Format:
 #   NAME: test identifier
-#   MODE: echo|lines|nested|info
+#   MODE: echo|lines|info|memory
 #   FILE <filename>: (multi-line content, "N: " prefix stripped)
 #   EXPECT_STDOUT: (multi-line expected output)
 #   EXPECT_STDERR: (multi-line expected stderr, for error tests)
 #
 # The first FILE defined is the main input file.
-# For nested mode, use @include <filename> to include other files.
+# For memory mode, use @include <filename> to include other files.
 
 # ============================================================================
 # ECHO MODE - Basic character reading
@@ -93,12 +93,12 @@ EXPECT_STDOUT:
 3:B
 
 # ============================================================================
-# NESTED MODE - Include handling
+# MEMORY MODE - Include handling
 # ============================================================================
 
 ---
 NAME: nested_no_includes
-MODE: nested
+MODE: memory
 FILE input.txt:
  1: Just text
  2: No includes
@@ -108,7 +108,7 @@ No includes
 
 ---
 NAME: nested_simple
-MODE: nested
+MODE: memory
 FILE main.txt:
  1: Before
  2: @include inner.txt
@@ -122,7 +122,7 @@ After
 
 ---
 NAME: nested_multiple_includes
-MODE: nested
+MODE: memory
 FILE main.txt:
  1: A
  2: @include one.txt
@@ -142,7 +142,7 @@ C
 
 ---
 NAME: nested_deep
-MODE: nested
+MODE: memory
 FILE main.txt:
  1: Outer1
  2: @include middle.txt
@@ -162,7 +162,7 @@ Outer2
 
 ---
 NAME: nested_at_not_include
-MODE: nested
+MODE: memory
 FILE input.txt:
  1: @other text
  2: Done
@@ -171,8 +171,18 @@ EXPECT_STDOUT:
 Done
 
 ---
+NAME: nested_at_mid_line
+MODE: memory
+FILE input.txt:
+ 1: foo@bar
+ 2: Done
+EXPECT_STDOUT:
+foo@bar
+Done
+
+---
 NAME: nested_include_multiline
-MODE: nested
+MODE: memory
 FILE main.txt:
  1: Start
  2: @include multi.txt
@@ -189,7 +199,7 @@ Line3
 End
 
 # ============================================================================
-# NESTED MODE WITH LINE TRACKING
+# LINES MODE WITH INCLUDES (not processed)
 # ============================================================================
 
 ---

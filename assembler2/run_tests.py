@@ -480,7 +480,7 @@ class TestRunner:
             # Write input files
             for filename, content in test.files.items():
                 # Transform @include directives for nested/memory modes
-                if test.mode in ("nested", "memory"):
+                if test.mode == "memory":
                     content = re.sub(
                         r"@include\s+(\S+)", rf"@include {tmpdir}/\1", content
                     )
