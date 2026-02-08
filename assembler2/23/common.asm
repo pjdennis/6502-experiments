@@ -1,7 +1,7 @@
 ; Addressing mode operand number of bytes
-OPERAND_BYTES_0 = 0<<4
-OPERAND_BYTES_1 = 1<<4
-OPERAND_BYTES_2 = 2<<4
+OPERAND_BYTES_0 = 0 << 4
+OPERAND_BYTES_1 = 1 << 4
+OPERAND_BYTES_2 = 2 << 4
 
 ; Addressing mode constants
 ; Upper nybble: operand bytes
