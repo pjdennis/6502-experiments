@@ -397,14 +397,6 @@ buf_insert_newline:
 ; Delete entire line N (N in A/X, low/high)
 ; Removes the line and its trailing newline
 buf_delete_line:
-  PHA
-  TXA
-  PHA
-
-  ; Get pointer to start of this line
-  PLA
-  TAX
-  PLA
   JSR buf_get_line_ptr
 
   ; Save start pointer
