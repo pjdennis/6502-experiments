@@ -34,7 +34,7 @@ render_init
   STA SCREEN_ROWS
   JSR term_cols
   STA SCREEN_COLS
-  LDA #$00
+  LDA #0
   STA CURSOR_ROW
   STA CURSOR_COL
   STA MODE
@@ -48,7 +48,7 @@ render_init
 render_screen
   JSR ansi_cursor_hide
 
-  LDA #$00
+  LDA #0
   STA RENDER_ROW
   CP16 VIEW_TOP16, RENDER_LINE16
 
@@ -56,16 +56,16 @@ render_screen
   ; Position cursor at start of this row
   LDA RENDER_ROW
   CLC
-  ADC #$01         ; ANSI rows are 1-based
+  ADC #1           ; ANSI rows are 1-based
   STA ANSI_ROW
-  LDA #$01
+  LDA #1
   STA ANSI_COL
   JSR ansi_move_cursor
 
   ; Check if this is the status line row (last row)
   LDA RENDER_ROW
   CLC
-  ADC #$01
+  ADC #1
   CMP SCREEN_ROWS
   BCS .row_done    ; At or past last row = done with text
 
@@ -115,7 +115,7 @@ render_screen
 render_status_line
   LDA SCREEN_ROWS
   STA ANSI_ROW
-  LDA #$01
+  LDA #1
   STA ANSI_COL
   JSR ansi_move_cursor
   JSR ansi_reverse_video
@@ -154,10 +154,10 @@ render_status_line
   ; Line number (1-based)
   CLC
   LDA FILE_LINE16
-  ADC #$01
+  ADC #1
   STA TO_DECIMAL_VALUE16
   LDA FILE_LINE16+$01
-  ADC #$00
+  ADC #0
   STA TO_DECIMAL_VALUE16+$01
   JSR to_decimal
   PRINT_STR TO_DECIMAL_RESULT
@@ -168,7 +168,7 @@ render_status_line
   ; Column (1-based)
   LDA CURSOR_COL
   CLC
-  ADC #$01
+  ADC #1
   JSR write_byte_dec
 
   ; Print total lines
@@ -190,11 +190,11 @@ render_status_line
 render_position_cursor
   LDA CURSOR_ROW
   CLC
-  ADC #$01         ; ANSI 1-based
+  ADC #1           ; ANSI 1-based
   STA ANSI_ROW
   LDA CURSOR_COL
   CLC
-  ADC #$01         ; ANSI 1-based
+  ADC #1           ; ANSI 1-based
   STA ANSI_COL
   JSR ansi_move_cursor
   RTS
@@ -206,9 +206,9 @@ render_current_line
 
   LDA CURSOR_ROW
   CLC
-  ADC #$01
+  ADC #1
   STA ANSI_ROW
-  LDA #$01
+  LDA #1
   STA ANSI_COL
   JSR ansi_move_cursor
 
@@ -231,9 +231,9 @@ render_current_line_and_status
 
   LDA CURSOR_ROW
   CLC
-  ADC #$01
+  ADC #1
   STA ANSI_ROW
-  LDA #$01
+  LDA #1
   STA ANSI_COL
   JSR ansi_move_cursor
 
@@ -254,7 +254,7 @@ render_current_line_and_status
 render_update
   LDA RENDER_FLAG
   BEQ .cursor_only
-  CMP #$01
+  CMP #1
   BEQ .current_line
   JMP render_screen
 .current_line
@@ -274,9 +274,9 @@ render_cursor_and_status
 ; Print line characters from BUF_PTR16 up to SCREEN_COLS or newline
 ; Replaces control chars with spaces. Clobbers A, Y.
 render_line_chars
-  LDA #$00
+  LDA #0
   STA RENDER_COL
-  LDY #$00
+  LDY #0
 .rlc_loop
   LDA (BUF_PTR16),Y
   CMP #'\n'

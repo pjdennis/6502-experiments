@@ -28,7 +28,7 @@ HAS_PUSHBACK .byte 0    ; $FF if pushback has a byte
 input_read_byte
   LDA HAS_PUSHBACK
   BEQ .no_pushback
-  LDA #$00
+  LDA #0
   STA HAS_PUSHBACK
   LDA PUSHBACK
   RTS

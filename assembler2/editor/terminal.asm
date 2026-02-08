@@ -84,7 +84,7 @@ ansi_seq_norm   .asciiz "0m"
 ; Write null-terminated string pointed to by STR_PTR16
 ; Clobbers A, Y
 write_string
-  LDY #$00
+  LDY #0
 .loop
   LDA (STR_PTR16),Y
   BEQ .done
@@ -97,13 +97,13 @@ write_string
 ; Write filename from (FNAME_PTR16), up to 32 chars
 ; Clobbers A, Y
 write_fname
-  LDY #$00
+  LDY #0
 .loop
   LDA (FNAME_PTR16),Y
   BEQ .done
   JSR write_b
   INY
-  CPY #$20
+  CPY #32
   BCC .loop
 .done
   RTS
@@ -112,53 +112,53 @@ write_fname
 ; Clobbers A, X, Y
 write_byte_dec
   STA ANSI_TEMP
-  LDY #$00      ; leading zero flag: 0 = nothing printed yet
+  LDY #0        ; leading zero flag: 0 = nothing printed yet
 
   ; Hundreds digit
-  LDA #$00
+  LDA #0
 .hundreds_loop
   LDX ANSI_TEMP
-  CPX #$64
+  CPX #100
   BCC .hundreds_done
   PHA
   TXA
   SEC
-  SBC #$64
+  SBC #100
   STA ANSI_TEMP
   PLA
   CLC
-  ADC #$01
+  ADC #1
   JMP .hundreds_loop
 .hundreds_done
   ; A = hundreds count
-  CMP #$00
+  CMP #0
   BEQ .no_hundreds
   CLC
   ADC #'0'
   JSR write_b
-  LDY #$01
+  LDY #1
 .no_hundreds
 
   ; Tens digit
-  LDA #$00
+  LDA #0
 .tens_loop
   LDX ANSI_TEMP
-  CPX #$0A
+  CPX #10
   BCC .tens_done
   PHA
   TXA
   SEC
-  SBC #$0A
+  SBC #10
   STA ANSI_TEMP
   PLA
   CLC
-  ADC #$01
+  ADC #1
   JMP .tens_loop
 .tens_done
   ; A = tens count
-  CMP #$00
+  CMP #0
   BNE .print_tens
-  CPY #$00
+  CPY #0
   BEQ .no_tens
 .print_tens
   CLC

@@ -135,7 +135,7 @@ normal_handle_key
 .not_colon
 
   ; Unknown key - clear last key, cursor-only update
-  LDA #$00
+  LDA #0
   STA LAST_KEY
   STA RENDER_FLAG
   RTS
@@ -147,7 +147,7 @@ normal_move_left
   BEQ .done
   DEC CURSOR_COL
 .done
-  LDA #$00
+  LDA #0
   STA LAST_KEY
   STA RENDER_FLAG
   RTS
@@ -157,13 +157,13 @@ normal_move_right
   STA LINE_LEN
   BEQ .done           ; Empty line
   SEC
-  SBC #$01
+  SBC #1
   CMP CURSOR_COL
   BCC .done           ; Already at or past end
   BEQ .done
   INC CURSOR_COL
 .done
-  LDA #$00
+  LDA #0
   STA LAST_KEY
   STA RENDER_FLAG
   RTS
@@ -172,10 +172,10 @@ normal_move_down
   ; Check if there's a next line
   CLC
   LDA FILE_LINE16
-  ADC #$01
+  ADC #1
   STA BUF_PTR16
   LDA FILE_LINE16+$01
-  ADC #$00
+  ADC #0
   STA BUF_PTR16+$01
 
   LDA BUF_PTR16+$01
@@ -192,19 +192,19 @@ normal_move_down
   ; Check if we need to scroll
   LDA CURSOR_ROW
   CLC
-  ADC #$02
+  ADC #2
   CMP SCREEN_ROWS
   BCC .no_scroll
   INC16 VIEW_TOP16
   JMP .clamp_col
 .no_scroll
   INC CURSOR_ROW
-  LDA #$00
+  LDA #0
   STA RENDER_FLAG
 .clamp_col
   JSR clamp_cursor_col
 .done
-  LDA #$00
+  LDA #0
   STA LAST_KEY
   RTS
 
@@ -221,12 +221,12 @@ normal_move_up
   JMP .clamp_col
 .no_scroll
   DEC CURSOR_ROW
-  LDA #$00
+  LDA #0
   STA RENDER_FLAG
 .clamp_col
   JSR clamp_cursor_col
 .done
-  LDA #$00
+  LDA #0
   STA LAST_KEY
   RTS
 
@@ -234,7 +234,7 @@ normal_page_down
   ; page_size = SCREEN_ROWS - 1 (content rows excluding status bar)
   LDA SCREEN_ROWS
   SEC
-  SBC #$01
+  SBC #1
   STA BUF_TEMP       ; BUF_TEMP = page_size
 
   ; target_line = FILE_LINE16 + page_size, clamped to LINE_COUNT16 - 1
@@ -243,7 +243,7 @@ normal_page_down
   ADC BUF_TEMP
   STA BUF_PTR16
   LDA FILE_LINE16+$01
-  ADC #$00
+  ADC #0
   STA BUF_PTR16+$01
 
   ; Clamp target to LINE_COUNT16 - 1
@@ -257,10 +257,10 @@ normal_page_down
 .pgdn_clamp_target
   SEC
   LDA LINE_COUNT16
-  SBC #$01
+  SBC #1
   STA BUF_PTR16
   LDA LINE_COUNT16+$01
-  SBC #$00
+  SBC #0
   STA BUF_PTR16+$01
 .pgdn_target_ok
 
@@ -270,7 +270,7 @@ normal_page_down
   ADC BUF_TEMP
   STA VIEW_TOP16
   LDA VIEW_TOP16+$01
-  ADC #$00
+  ADC #0
   STA VIEW_TOP16+$01
 
   ; Clamp VIEW_TOP16 to max(0, LINE_COUNT - page_size)
@@ -279,7 +279,7 @@ normal_page_down
   SBC BUF_TEMP
   TAX                ; X = low byte of max view top
   LDA LINE_COUNT16+$01
-  SBC #$00
+  SBC #0
   BCC .pgdn_view_zero  ; LINE_COUNT < page_size, set VIEW_TOP=0
   TAY                ; Y = high byte of max view top
 
@@ -295,7 +295,7 @@ normal_page_down
   JMP .pgdn_set_row
 
 .pgdn_view_zero
-  LDA #$00
+  LDA #0
   STA_LH16 VIEW_TOP16
 
 .pgdn_set_row
@@ -306,7 +306,7 @@ normal_page_down
   STA CURSOR_ROW
 
   JSR clamp_cursor_col
-  LDA #$00
+  LDA #0
   STA LAST_KEY
   RTS
 
@@ -314,7 +314,7 @@ normal_page_up
   ; page_size = SCREEN_ROWS - 1
   LDA SCREEN_ROWS
   SEC
-  SBC #$01
+  SBC #1
   STA BUF_TEMP       ; BUF_TEMP = page_size
 
   ; target_line = FILE_LINE16 - page_size, clamped to 0
@@ -323,11 +323,11 @@ normal_page_up
   SBC BUF_TEMP
   STA BUF_PTR16
   LDA FILE_LINE16+$01
-  SBC #$00
+  SBC #0
   STA BUF_PTR16+$01
   BCS .pgup_target_ok
   ; Underflow - clamp to 0
-  LDA #$00
+  LDA #0
   STA_LH16 BUF_PTR16
 .pgup_target_ok
 
@@ -339,7 +339,7 @@ normal_page_up
   BCS .pgup_can_sub
 
   ; VIEW_TOP16 < page_size: set VIEW_TOP16 = 0
-  LDA #$00
+  LDA #0
   STA_LH16 VIEW_TOP16
   JMP .pgup_set_row
 
@@ -349,7 +349,7 @@ normal_page_up
   SBC BUF_TEMP
   STA VIEW_TOP16
   LDA VIEW_TOP16+$01
-  SBC #$00
+  SBC #0
   STA VIEW_TOP16+$01
 
 .pgup_set_row
@@ -360,12 +360,12 @@ normal_page_up
   STA CURSOR_ROW
 
   JSR clamp_cursor_col
-  LDA #$00
+  LDA #0
   STA LAST_KEY
   RTS
 
 normal_line_start
-  LDA #$00
+  LDA #0
   STA CURSOR_COL
   STA LAST_KEY
   STA RENDER_FLAG
@@ -375,14 +375,14 @@ normal_line_end
   JSR get_current_line_len
   BEQ .empty
   SEC
-  SBC #$01
+  SBC #1
   STA CURSOR_COL
-  LDA #$00
+  LDA #0
   STA LAST_KEY
   STA RENDER_FLAG
   RTS
 .empty
-  LDA #$00
+  LDA #0
   STA CURSOR_COL
   STA LAST_KEY
   STA RENDER_FLAG
@@ -391,26 +391,26 @@ normal_line_end
 normal_goto_last
   SEC
   LDA LINE_COUNT16
-  SBC #$01
+  SBC #1
   STA FILE_LINE16
   LDA LINE_COUNT16+$01
-  SBC #$00
+  SBC #0
   STA FILE_LINE16+$01
 
   ; VIEW_TOP = max(0, LINE_COUNT - (SCREEN_ROWS - 1))
   LDA SCREEN_ROWS
   SEC
-  SBC #$01
+  SBC #1
   STA BUF_TEMP
   SEC
   LDA LINE_COUNT16
   SBC BUF_TEMP
   STA VIEW_TOP16
   LDA LINE_COUNT16+$01
-  SBC #$00
+  SBC #0
   STA VIEW_TOP16+$01
   BCS .view_ok
-  LDA #$00
+  LDA #0
   STA_LH16 VIEW_TOP16
 .view_ok
 
@@ -419,7 +419,7 @@ normal_goto_last
   SBC VIEW_TOP16
   STA CURSOR_ROW
 
-  LDA #$00
+  LDA #0
   STA CURSOR_COL
   STA LAST_KEY
   JSR clamp_cursor_col
@@ -430,7 +430,7 @@ normal_g_key
   CMP #'g'
   BNE .set_g
   ; gg: go to top
-  LDA #$00
+  LDA #0
   STA_LH16 FILE_LINE16
   STA_LH16 VIEW_TOP16
   STA CURSOR_ROW
@@ -441,7 +441,7 @@ normal_g_key
 .set_g
   LDA #'g'
   STA LAST_KEY
-  LDA #$00
+  LDA #0
   STA RENDER_FLAG
   RTS
 
@@ -460,7 +460,7 @@ normal_delete_char
   ADC CURSOR_COL
   STA BUF_PTR16
   LDA BUF_PTR16+$01
-  ADC #$00
+  ADC #0
   STA BUF_PTR16+$01
 
   LDA CURSOR_COL
@@ -469,13 +469,13 @@ normal_delete_char
 
   JSR buf_delete_char
   JSR buf_adjust_lines_dec
-  LDA #$01
+  LDA #1
   STA RENDER_FLAG
   LDA #$FF
   STA MODIFIED
   JSR clamp_cursor_col
 .done
-  LDA #$00
+  LDA #0
   STA LAST_KEY
   RTS
 
@@ -502,13 +502,13 @@ normal_d_key
 .do_clamp
   SEC
   LDA LINE_COUNT16
-  SBC #$01
+  SBC #1
   STA FILE_LINE16
   LDA LINE_COUNT16+$01
-  SBC #$00
+  SBC #0
   STA FILE_LINE16+$01
 .no_clamp
-  LDA #$00
+  LDA #0
   STA LAST_KEY
   JSR clamp_cursor_col
   RTS
@@ -521,7 +521,7 @@ normal_d_key
 normal_enter_insert
   LDA #MODE_INSERT
   STA MODE
-  LDA #$00
+  LDA #0
   STA LAST_KEY
   RTS
 
@@ -535,7 +535,7 @@ normal_enter_insert_after
 .enter
   LDA #MODE_INSERT
   STA MODE
-  LDA #$00
+  LDA #0
   STA LAST_KEY
   RTS
 
@@ -544,7 +544,7 @@ normal_enter_insert_eol
   STA CURSOR_COL
   LDA #MODE_INSERT
   STA MODE
-  LDA #$00
+  LDA #0
   STA LAST_KEY
   RTS
 
@@ -553,7 +553,7 @@ normal_open_below
   LDX FILE_LINE16+$01
   JSR buf_get_line_ptr
 
-  LDY #$00
+  LDY #0
 .find_nl
   LDA (BUF_PTR16),Y
   CMP #'\n'
@@ -566,7 +566,7 @@ normal_open_below
   CLC
   ADC BUF_PTR16
   STA BUF_PTR16
-  LDA #$00
+  LDA #0
   ADC BUF_PTR16+$01
   STA BUF_PTR16+$01
 
@@ -576,12 +576,12 @@ normal_open_below
   JSR buf_rebuild_lines
 
   INC16 FILE_LINE16
-  LDA #$00
+  LDA #0
   STA CURSOR_COL
 
   LDA CURSOR_ROW
   CLC
-  ADC #$02
+  ADC #2
   CMP SCREEN_ROWS
   BCC .no_scroll
   INC16 VIEW_TOP16
@@ -593,13 +593,13 @@ normal_open_below
   STA MODE
   LDA #$FF
   STA MODIFIED
-  LDA #$00
+  LDA #0
   STA LAST_KEY
   RTS
 .open_below_full
   SET16 str_buffer_full, STR_PTR16
   JSR show_status_message
-  LDA #$00
+  LDA #0
   STA LAST_KEY
   RTS
 
@@ -613,26 +613,26 @@ normal_open_above
   BCS .open_above_full
   JSR buf_rebuild_lines
 
-  LDA #$00
+  LDA #0
   STA CURSOR_COL
   LDA #MODE_INSERT
   STA MODE
   LDA #$FF
   STA MODIFIED
-  LDA #$00
+  LDA #0
   STA LAST_KEY
   RTS
 .open_above_full
   SET16 str_buffer_full, STR_PTR16
   JSR show_status_message
-  LDA #$00
+  LDA #0
   STA LAST_KEY
   RTS
 
 normal_enter_command
   LDA #MODE_COMMAND
   STA MODE
-  LDA #$00
+  LDA #0
   STA LAST_KEY
   RTS
 
@@ -648,13 +648,13 @@ clamp_cursor_col
   JSR get_current_line_len
   BEQ .set_zero
   SEC
-  SBC #$01
+  SBC #1
   CMP CURSOR_COL
   BCS .ok
   STA CURSOR_COL
 .ok
   RTS
 .set_zero
-  LDA #$00
+  LDA #0
   STA CURSOR_COL
   RTS

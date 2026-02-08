@@ -34,7 +34,7 @@ BUF_LIMIT     .byte 0     ; High byte of buffer limit (default >TEXT_LIMIT)
 buf_init
   SET16 TEXT_BUF, BUF_END16
   ; Add a newline to have at least one line
-  LDY #$00
+  LDY #0
   LDA #'\n'
   STA (BUF_END16),Y
   INC16 BUF_END16
@@ -49,7 +49,7 @@ buf_init
 buf_load_file
   STA FILE_HANDLE
   SET16 TEXT_BUF, BUF_END16
-  LDA #$00
+  LDA #0
   STA BUF_TEMP            ; Clear truncation flag
 
 .read_loop
@@ -57,7 +57,7 @@ buf_load_file
   JSR read
   BCS .read_done
   ; Store byte in buffer
-  LDY #$00
+  LDY #0
   STA (BUF_END16),Y
   INC16 BUF_END16
   ; Check for buffer overflow
@@ -75,14 +75,14 @@ buf_load_file
   ; Ensure buffer ends with newline
   SEC
   LDA BUF_END16
-  SBC #$01
+  SBC #1
   STA BUF_PTR16
   LDA BUF_END16+$01
-  SBC #$00
+  SBC #0
   STA BUF_PTR16+$01
 
   ; Check if last byte is newline
-  LDY #$00
+  LDY #0
   LDA (BUF_PTR16),Y
   CMP #'\n'
   BEQ .has_newline
@@ -91,14 +91,14 @@ buf_load_file
   BNE .overwrite_last
   ; Not truncated - append trailing newline
   LDA #'\n'
-  LDY #$00
+  LDY #0
   STA (BUF_END16),Y
   INC16 BUF_END16
   JMP .has_newline
 .overwrite_last
   ; Truncated - overwrite last byte to stay within buffer limit
   LDA #'\n'
-  LDY #$00
+  LDY #0
   STA (BUF_PTR16),Y
 .has_newline
 
@@ -110,7 +110,7 @@ buf_load_file
   CMP #>TEXT_BUF
   BNE .not_empty
   ; Empty buffer
-  LDY #$00
+  LDY #0
   LDA #'\n'
   STA (BUF_END16),Y
   INC16 BUF_END16
@@ -142,7 +142,7 @@ buf_save_file
   BCS .write_done
 
 .do_write
-  LDY #$00
+  LDY #0
   LDA (BUF_PTR16),Y
   LDX FILE_HANDLE
   JSR write
@@ -174,7 +174,7 @@ buf_get_line_ptr
   ADC #>LINE_TBL
   STA BUF_PTR16+$01
   ; Read the 16-bit pointer from the table
-  LDY #$00
+  LDY #0
   LDA (BUF_PTR16),Y
   PHA
   INY
@@ -189,7 +189,7 @@ buf_get_line_ptr
 ; Clobbers X, Y
 buf_get_line_len
   JSR buf_get_line_ptr
-  LDY #$00
+  LDY #0
 .len_loop
   LDA (BUF_PTR16),Y
   CMP #'\n'
@@ -236,15 +236,15 @@ buf_insert_char
   ; Y = low byte of (BUF_END16-1)
   SEC
   LDA BUF_END16
-  SBC #$01
+  SBC #1
   TAY                    ; Y = low byte of last source byte
   LDA BUF_END16+$01
   STA BUF_SRC16+$01      ; high byte = page
-  LDA #$00
+  LDA #0
   STA BUF_SRC16           ; BUF_SRC16 = page-aligned base
 
   ; BUF_DST16 = BUF_SRC16 + 1
-  LDA #$01
+  LDA #1
   STA BUF_DST16
   LDA BUF_SRC16+$01
   STA BUF_DST16+$01
@@ -286,7 +286,7 @@ buf_insert_char
 
 .shift_right_done
   ; Store the new character
-  LDY #$00
+  LDY #0
   LDA BUF_TEMP
   STA (BUF_PTR16),Y
 
@@ -307,10 +307,10 @@ buf_delete_char
   ; Check if nothing to move (delete at end)
   CLC
   LDA BUF_PTR16
-  ADC #$01
+  ADC #1
   STA BUF_SRC16
   LDA BUF_PTR16+$01
-  ADC #$00
+  ADC #0
   STA BUF_SRC16+$01
 
   ; Compare source start with BUF_END16
@@ -329,7 +329,7 @@ buf_delete_char
   TAY                    ; Y = low byte of first source byte
   LDA BUF_SRC16+$01
   STA BUF_SRC16+$01      ; high byte = page
-  LDA #$00
+  LDA #0
   STA BUF_SRC16           ; BUF_SRC16 = page-aligned base
 
   ; BUF_DST16 = BUF_SRC16 - 1 (shifting left by 1)
@@ -338,10 +338,10 @@ buf_delete_char
   ; (DST),Y = BUF_SRC16 - 1 + Y = source - 1 = correct destination
   SEC
   LDA BUF_SRC16
-  SBC #$01
+  SBC #1
   STA BUF_DST16
   LDA BUF_SRC16+$01
-  SBC #$00
+  SBC #0
   STA BUF_DST16+$01
 
   ; Determine last Y for this page: either $FF or limited by BUF_END16
@@ -369,7 +369,7 @@ buf_delete_char
   ; Move to next page
   INC BUF_SRC16+$01
   INC BUF_DST16+$01
-  LDY #$00
+  LDY #0
 
   ; Check if this is the page containing BUF_END16
   LDA BUF_SRC16+$01
@@ -387,10 +387,10 @@ buf_delete_char
   ; Decrement buffer end
   SEC
   LDA BUF_END16
-  SBC #$01
+  SBC #1
   STA BUF_END16
   LDA BUF_END16+$01
-  SBC #$00
+  SBC #0
   STA BUF_END16+$01
 
   RTS
@@ -423,7 +423,7 @@ buf_delete_line
   CP16 BUF_PTR16, BUF_SRC16
 
   ; Find end of line (the newline character)
-  LDY #$00
+  LDY #0
 .find_newline
   LDA (BUF_PTR16),Y
   CMP #'\n'
@@ -437,7 +437,7 @@ buf_delete_line
   CLC
   ADC BUF_SRC16
   STA BUF_SRC16
-  LDA #$00
+  LDA #0
   ADC BUF_SRC16+$01
   STA BUF_SRC16+$01
 
@@ -456,7 +456,7 @@ buf_delete_line
   BCS .del_shift_done
 
 .del_do_copy
-  LDY #$00
+  LDY #0
   LDA (BUF_SRC16),Y
   STA (BUF_PTR16),Y
 
@@ -477,7 +477,7 @@ buf_delete_line
   LDA BUF_END16+$01
   CMP #>TEXT_BUF
   BNE .del_not_empty
-  LDY #$00
+  LDY #0
   LDA #'\n'
   STA (BUF_END16),Y
   INC16 BUF_END16
@@ -494,7 +494,7 @@ buf_rebuild_lines
   SET16 LINE_TBL, BUF_DST16
 
   ; First line starts at TEXT_BUF
-  LDY #$00
+  LDY #0
   LDA BUF_PTR16
   STA (BUF_DST16),Y
   INY
@@ -513,7 +513,7 @@ buf_rebuild_lines
   BCS .scan_done
 
 .scan_byte
-  LDY #$00
+  LDY #0
   LDA (BUF_PTR16),Y
   INC16 BUF_PTR16
 
@@ -533,14 +533,14 @@ buf_rebuild_lines
   ; Advance line table pointer
   CLC
   LDA BUF_DST16
-  ADC #$02
+  ADC #2
   STA BUF_DST16
   LDA BUF_DST16+$01
-  ADC #$00
+  ADC #0
   STA BUF_DST16+$01
 
   ; Store line start pointer
-  LDY #$00
+  LDY #0
   LDA BUF_PTR16
   STA (BUF_DST16),Y
   INY
@@ -585,10 +585,10 @@ buf_adjust_lines_inc
   ; Entry address = LINE_TBL + (FILE_LINE16 + 1) * 2
   CLC
   LDA FILE_LINE16
-  ADC #$01
+  ADC #1
   STA BUF_PTR16
   LDA FILE_LINE16+$01
-  ADC #$00
+  ADC #0
   STA BUF_PTR16+$01
   ASL16 BUF_PTR16
   CLC
@@ -601,22 +601,22 @@ buf_adjust_lines_inc
 
 .inc_loop
   ; Increment the 16-bit line pointer at (BUF_PTR16)
-  LDY #$00
+  LDY #0
   CLC
   LDA (BUF_PTR16),Y
-  ADC #$01
+  ADC #1
   STA (BUF_PTR16),Y
   BCC .inc_no_carry
   INY
   LDA (BUF_PTR16),Y
-  ADC #$00
+  ADC #0
   STA (BUF_PTR16),Y
 .inc_no_carry
 
   ; Advance to next LINE_TBL entry (+2 bytes)
   CLC
   LDA BUF_PTR16
-  ADC #$02
+  ADC #2
   STA BUF_PTR16
   BCC .inc_no_page
   INC BUF_PTR16+$01
@@ -667,10 +667,10 @@ buf_adjust_lines_dec
   ; Calculate LINE_TBL entry for (FILE_LINE16 + 1)
   CLC
   LDA FILE_LINE16
-  ADC #$01
+  ADC #1
   STA BUF_PTR16
   LDA FILE_LINE16+$01
-  ADC #$00
+  ADC #0
   STA BUF_PTR16+$01
   ASL16 BUF_PTR16
   CLC
@@ -683,22 +683,22 @@ buf_adjust_lines_dec
 
 .dec_loop
   ; Decrement the 16-bit line pointer at (BUF_PTR16)
-  LDY #$00
+  LDY #0
   SEC
   LDA (BUF_PTR16),Y
-  SBC #$01
+  SBC #1
   STA (BUF_PTR16),Y
   BCS .dec_no_borrow2
   INY
   LDA (BUF_PTR16),Y
-  SBC #$00
+  SBC #0
   STA (BUF_PTR16),Y
 .dec_no_borrow2
 
   ; Advance to next LINE_TBL entry (+2 bytes)
   CLC
   LDA BUF_PTR16
-  ADC #$02
+  ADC #2
   STA BUF_PTR16
   BCC .dec_no_page
   INC BUF_PTR16+$01

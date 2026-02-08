@@ -19,7 +19,7 @@ TEMP      .byte 0
 
 main
   ; Initialize time to 00:00:00
-  LDA #$00
+  LDA #0
   STA SECONDS
   STA MINUTES
   STA HOURS
@@ -43,7 +43,7 @@ main
   JSR print_two_digits
 
   ; Print instruction
-  LDX #$00
+  LDX #0
 .print_msg
   LDA msg,X
   BEQ .msg_done
@@ -59,12 +59,12 @@ main
   ; Each middle iteration (Y=0 -> 256 inner): ~329,217 cycles
   ; 3 outer iterations: ~987,667 cycles
   ; Remaining ~12,333 cycles covered by display overhead
-  LDA #$03
+  LDA #3
   STA DELAY_CNT
 .delay_outer
-  LDY #$00             ; 2 cycles
+  LDY #0               ; 2 cycles
 .delay_middle
-  LDX #$00             ; 2 cycles
+  LDX #0               ; 2 cycles
 .delay_inner
   DEX                  ; 2 cycles
   BNE .delay_inner     ; 3 cycles (taken), 2 cycles (not taken)
@@ -87,30 +87,30 @@ main
   ; Increment time
   INC SECONDS
   LDA SECONDS
-  CMP #$3C             ; 60
+  CMP #60
   BNE .main_loop
-  LDA #$00
+  LDA #0
   STA SECONDS
 
   INC MINUTES
   LDA MINUTES
-  CMP #$3C             ; 60
+  CMP #60
   BNE .main_loop
-  LDA #$00
+  LDA #0
   STA MINUTES
 
   INC HOURS
   LDA HOURS
-  CMP #$18             ; 24
+  CMP #24
   BNE .main_loop
-  LDA #$00
+  LDA #0
   STA HOURS
   JMP .main_loop
 
 .quit
   JSR clear_screen
   JSR con_flush
-  LDA #$00
+  LDA #0
   JSR exit
 
 
@@ -120,11 +120,11 @@ main
 ; A = value to print
 print_two_digits
   STA TEMP
-  LDA #$00             ; tens counter
+  LDA #0               ; tens counter
   ; Divide by 10
 .tens_loop
   LDX TEMP
-  CPX #$0A
+  CPX #10
   BCC .tens_done
   LDX TEMP
   DEX
@@ -139,7 +139,7 @@ print_two_digits
   DEX
   STX TEMP
   CLC
-  ADC #$01
+  ADC #1
   JMP .tens_loop
 .tens_done
   ; A = tens digit, TEMP = ones digit

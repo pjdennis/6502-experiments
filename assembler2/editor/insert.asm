@@ -79,7 +79,7 @@ insert_exit
   BEQ .done
   DEC CURSOR_COL
 .done
-  LDA #$00
+  LDA #0
   STA RENDER_FLAG
   RTS
 
@@ -97,7 +97,7 @@ insert_char
   ADC CURSOR_COL
   STA BUF_PTR16
   LDA BUF_PTR16+$01
-  ADC #$00
+  ADC #0
   STA BUF_PTR16+$01
 
   LDA BUF_TEMP
@@ -106,7 +106,7 @@ insert_char
   JSR buf_adjust_lines_inc
 
   INC CURSOR_COL
-  LDA #$01
+  LDA #1
   STA RENDER_FLAG
   LDA #$FF
   STA MODIFIED
@@ -126,7 +126,7 @@ insert_newline
   ADC CURSOR_COL
   STA BUF_PTR16
   LDA BUF_PTR16+$01
-  ADC #$00
+  ADC #0
   STA BUF_PTR16+$01
 
   JSR buf_insert_newline
@@ -134,13 +134,13 @@ insert_newline
 
   ; Move to start of next line
   INC16 FILE_LINE16
-  LDA #$00
+  LDA #0
   STA CURSOR_COL
 
   ; Scroll if needed
   LDA CURSOR_ROW
   CLC
-  ADC #$02
+  ADC #2
   CMP SCREEN_ROWS
   BCC .no_scroll
   INC16 VIEW_TOP16
@@ -171,22 +171,22 @@ insert_backspace
   ADC CURSOR_COL
   STA BUF_PTR16
   LDA BUF_PTR16+$01
-  ADC #$00
+  ADC #0
   STA BUF_PTR16+$01
 
   ; Point to character before cursor
   SEC
   LDA BUF_PTR16
-  SBC #$01
+  SBC #1
   STA BUF_PTR16
   LDA BUF_PTR16+$01
-  SBC #$00
+  SBC #0
   STA BUF_PTR16+$01
 
   JSR buf_delete_char
   JSR buf_adjust_lines_dec
   DEC CURSOR_COL
-  LDA #$01
+  LDA #1
   STA RENDER_FLAG
   LDA #$FF
   STA MODIFIED
@@ -201,10 +201,10 @@ insert_backspace
   ; Get length of previous line (will become new cursor col)
   SEC
   LDA FILE_LINE16
-  SBC #$01
+  SBC #1
   TAY
   LDA FILE_LINE16+$01
-  SBC #$00
+  SBC #0
   TAX
   TYA
   JSR buf_get_line_len
@@ -213,15 +213,15 @@ insert_backspace
   ; Delete the newline at end of previous line
   SEC
   LDA FILE_LINE16
-  SBC #$01
+  SBC #1
   TAY
   LDA FILE_LINE16+$01
-  SBC #$00
+  SBC #0
   TAX
   TYA
   JSR buf_get_line_ptr
   ; Find the newline
-  LDY #$00
+  LDY #0
 .find_nl
   LDA (BUF_PTR16),Y
   CMP #'\n'
@@ -233,7 +233,7 @@ insert_backspace
   CLC
   ADC BUF_PTR16
   STA BUF_PTR16
-  LDA #$00
+  LDA #0
   ADC BUF_PTR16+$01
   STA BUF_PTR16+$01
 
@@ -283,7 +283,7 @@ insert_move_left
   BEQ .done
   DEC CURSOR_COL
 .done
-  LDA #$00
+  LDA #0
   STA RENDER_FLAG
   RTS
 
@@ -294,7 +294,7 @@ insert_move_right
   BEQ .done
   INC CURSOR_COL
 .done
-  LDA #$00
+  LDA #0
   STA RENDER_FLAG
   RTS
 

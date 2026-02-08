@@ -17,7 +17,7 @@ main
   JSR clear_screen
 
   ; Print "Terminal size: "
-  LDX #$00
+  LDX #0
 .print_size_msg
   LDA size_msg,X
   BEQ .print_rows
@@ -39,7 +39,7 @@ main
   JSR write_b
 
   ; Print instructions
-  LDX #$00
+  LDX #0
 .print_instr
   LDA instr_msg,X
   BEQ .flush_and_loop
@@ -61,7 +61,7 @@ main
   BEQ .quit
 
   ; Print "Key: $"
-  LDX #$00
+  LDX #0
 .print_key_msg
   LDA key_msg,X
   BEQ .print_key_val
@@ -102,7 +102,7 @@ main
 .quit
   JSR clear_screen
   JSR con_flush
-  LDA #$00
+  LDA #0
   JSR exit
 
 
@@ -137,10 +137,10 @@ print_hex
   PLA
   AND #$0F
 .hex_nibble
-  CMP #$0A
+  CMP #10
   BCC .hex_digit
   CLC
-  ADC #'A'-$0A
+  ADC #'A'-10
   JSR write_b
   RTS
 .hex_digit
@@ -153,44 +153,44 @@ print_hex
 ; Clobbers A, X, Y
 print_byte_dec
   STA TEMP_VAL
-  LDY #$00       ; leading zero suppression: 0=nothing printed yet
+  LDY #0         ; leading zero suppression: 0=nothing printed yet
 
   ; Hundreds digit
-  LDX #$00
+  LDX #0
 .hundreds_loop
   LDA TEMP_VAL
-  CMP #$64
+  CMP #100
   BCC .hundreds_done
   SEC
-  SBC #$64
+  SBC #100
   STA TEMP_VAL
   INX
   JMP .hundreds_loop
 .hundreds_done
-  CPX #$00
+  CPX #0
   BEQ .no_hundreds
   TXA
   CLC
   ADC #'0'
   JSR write_b
-  LDY #$01
+  LDY #1
 .no_hundreds
 
   ; Tens digit
-  LDX #$00
+  LDX #0
 .tens_loop
   LDA TEMP_VAL
-  CMP #$0A
+  CMP #10
   BCC .tens_done
   SEC
-  SBC #$0A
+  SBC #10
   STA TEMP_VAL
   INX
   JMP .tens_loop
 .tens_done
-  CPX #$00
+  CPX #0
   BNE .print_tens
-  CPY #$00
+  CPY #0
   BEQ .no_tens
 .print_tens
   TXA

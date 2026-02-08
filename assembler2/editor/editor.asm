@@ -54,7 +54,7 @@ FNAME_BUF   = $0200   ; Filename buffer (256 bytes)
 ; ============================================================================
 editor_main
   ; Initialize flags
-  LDA #$00
+  LDA #0
   STA CMD_QUIT
   STA READONLY
   LDA #>TEXT_LIMIT
@@ -62,15 +62,15 @@ editor_main
 
   ; Get filename from argv
   JSR argc
-  CMP #$01
+  CMP #1
   BCC .no_file
   ; Get first argument (the input filename)
-  LDA #$00
+  LDA #0
   JSR argv
   ; A;X = pointer to filename string, copy to FNAME_BUF and set FNAME_PTR16
   STA BUF_PTR16
   STX BUF_PTR16+$01
-  LDY #$00
+  LDY #0
 .copy_fname
   LDA (BUF_PTR16),Y
   STA FNAME_BUF,Y
@@ -89,7 +89,7 @@ editor_main
   LDA FNAME_PTR16
   LDX FNAME_PTR16+$01
   JSR open
-  CMP #$00
+  CMP #0
   BEQ .new_file
 
   ; File exists - load it
@@ -115,7 +115,7 @@ editor_main
   ; No file specified - use default name and empty buffer
   SET16 str_untitled, FNAME_PTR16
   ; Copy to FNAME_BUF
-  LDY #$00
+  LDY #0
 .copy_default
   LDA str_untitled,Y
   STA FNAME_BUF,Y
@@ -188,7 +188,7 @@ main_loop
   ADC CURSOR_ROW
   STA FILE_LINE16
   LDA VIEW_TOP16+$01
-  ADC #$00
+  ADC #0
   STA FILE_LINE16+$01
 
   ; Redraw screen (full or cursor-only based on RENDER_FLAG)
@@ -200,7 +200,7 @@ main_loop
   ; Clear screen and exit
   JSR ansi_clear_screen
   JSR con_flush
-  LDA #$00
+  LDA #0
   JSR exit
 
 ; ============================================================================
@@ -219,7 +219,7 @@ DBG_ARG_COUNT .byte 0     ; Total argument count
 parse_debug_args
   JSR argc
   STA DBG_ARG_COUNT
-  LDA #$01              ; Start at argv(1), argv(0) is filename
+  LDA #1                ; Start at argv(1), argv(0) is filename
   STA DBG_ARG_IDX
 
 .arg_loop
@@ -231,7 +231,7 @@ parse_debug_args
   STX BUF_PTR16+$01
 
   ; Check for "bufsize:" prefix (8 chars)
-  LDY #$00
+  LDY #0
   LDA (BUF_PTR16),Y
   CMP #'b'
   BNE .next_arg
@@ -300,11 +300,11 @@ parse_hex_digit
   RTS
 .upper
   SEC
-  SBC #'A'-$0A
+  SBC #'A'-10
   RTS
 .lower
   SEC
-  SBC #'a'-$0A
+  SBC #'a'-10
   RTS
 
   .endif

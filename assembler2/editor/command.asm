@@ -18,7 +18,7 @@ CMD_QUIT    .byte 0     ; Set to $FF when editor should quit
 
 ; Enter command mode - show prompt and read command
 command_handle
-  LDA #$00
+  LDA #0
   STA CMD_IDX
 
   ; Show ':' prompt on last line
@@ -80,7 +80,7 @@ command_handle
 .cmd_execute
   ; Null-terminate the command
   LDX CMD_IDX
-  LDA #$00
+  LDA #0
   STA CMD_BUF,X
 
   ; Parse and execute
@@ -98,7 +98,7 @@ command_handle
 command_show_prompt
   LDA SCREEN_ROWS
   STA ANSI_ROW
-  LDA #$01
+  LDA #1
   STA ANSI_COL
   JSR ansi_move_cursor
   JSR ansi_clear_line
@@ -186,7 +186,7 @@ command_parse
 .goto_line
   ; Parse decimal number from CMD_BUF
   SET16 $0000, BUF_LEN16   ; Accumulator for line number
-  LDX #$00
+  LDX #0
 
 .parse_digit
   LDA CMD_BUF,X
@@ -194,7 +194,7 @@ command_parse
   SEC
   SBC #'0'
   BMI .bad_digit
-  CMP #$0A
+  CMP #10
   BCS .bad_digit
   JMP .valid_digit
 .bad_digit
@@ -229,7 +229,7 @@ command_parse
   CLC
   ADC BUF_LEN16
   STA BUF_LEN16
-  LDA #$00
+  LDA #0
   ADC BUF_LEN16+$01
   STA BUF_LEN16+$01
 
@@ -244,10 +244,10 @@ command_parse
 
   SEC
   LDA BUF_LEN16
-  SBC #$01
+  SBC #1
   STA FILE_LINE16
   LDA BUF_LEN16+$01
-  SBC #$00
+  SBC #0
   STA FILE_LINE16+$01
 
   ; Clamp to last line
@@ -261,15 +261,15 @@ command_parse
 .clamp_line
   SEC
   LDA LINE_COUNT16
-  SBC #$01
+  SBC #1
   STA FILE_LINE16
   LDA LINE_COUNT16+$01
-  SBC #$00
+  SBC #0
   STA FILE_LINE16+$01
 .line_ok
   ; Set VIEW_TOP so cursor is near top of screen
   CP16 FILE_LINE16, VIEW_TOP16
-  LDA #$00
+  LDA #0
   STA CURSOR_ROW
   STA CURSOR_COL
   JSR clamp_cursor_col
@@ -293,7 +293,7 @@ command_write_file
   JSR close
 
   ; Clear modified flag
-  LDA #$00
+  LDA #0
   STA MODIFIED
 
   ; Show confirmation on status line
