@@ -2449,7 +2449,7 @@ show_macros:
   INY
   JSR .advance_tabp
 .show_params:
-  ; Output each param preceded by space
+  ; Output first param preceded by space
   LDA (TABP16),Y
   BEQ .show_params_done    ; Empty string = end of params
   LDA #' '
@@ -2458,7 +2458,19 @@ show_macros:
   ; Skip past null terminator
   INY
   JSR .advance_tabp
-  JMP .show_params
+.show_more_params:
+  ; Output subsequent params preceded by comma+space
+  LDA (TABP16),Y
+  BEQ .show_params_done    ; Empty string = end of params
+  LDA #','
+  JSR write_d
+  LDA #' '
+  JSR write_d
+  JSR show_message
+  ; Skip past null terminator
+  INY
+  JSR .advance_tabp
+  JMP .show_more_params
 .show_params_done:
   ; Advance past the trailing null
   INY

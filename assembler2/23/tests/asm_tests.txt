@@ -2534,7 +2534,7 @@ INPUT:
  8: [  .endmacro]
  9: [  NOP]
 EXPECT_STDERR:
-[Macro: test a b]
+[Macro: test a, b]
 [ LDA #$12 ]
 []
 [my_label]
