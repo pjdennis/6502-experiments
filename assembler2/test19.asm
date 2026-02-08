@@ -139,10 +139,10 @@ test_local_2
   BRK
   .byte $00
 
-output_filename          .byte "out/test_output.out" $00
-arguments_message        .byte " arguments\n" $00
-argument_message_prefix  .byte "  arg " $00
-argument_message_suffix  .byte ": " $00
+output_filename          .byte "out/test_output.out", $00
+arguments_message        .byte " arguments\n", $00
+argument_message_prefix  .byte "  arg ", $00
+argument_message_suffix  .byte ": ", $00
 
 
   .include test_inc19.asm
@@ -196,7 +196,7 @@ TO_DECIMAL_VALUE_L          .byte $00 ; 1 byte
 TO_DECIMAL_VALUE_H          .byte $00 ; 1 byte
 TO_DECIMAL_RESULT_MINUS_ONE
 TO_DECIMAL_MOD10            .byte $00 ; 1 byte
-TO_DECIMAL_RESULT           .byte $00 $00 $00 $00 $00 $00 ; 6 bytes
+TO_DECIMAL_RESULT           .byte $00, $00, $00, $00, $00, $00 ; 6 bytes
 
   .code
 

@@ -170,6 +170,11 @@ err_file_not_found:
   BRK
   .asciiz 36, "File not found"
 
+; --- Syntax errors (37) ---
+err_comma_expected:
+  BRK
+  .asciiz 37, "Comma expected"
+
 ; --- Command line/usage errors (240-241) ---
 err_usage:
   BRK

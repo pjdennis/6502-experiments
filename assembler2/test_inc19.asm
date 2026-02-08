@@ -1,5 +1,5 @@
 filename
-  .byte "test.txt" $00
+  .byte "test.txt", $00
 
 start2
   LDA #'X'

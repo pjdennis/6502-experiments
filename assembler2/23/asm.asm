@@ -272,31 +272,6 @@ check_for_end_of_line:
   RTS
 
 
-; Skip an optional comma separator between list items.
-; On entry CURR_CHAR contains current character
-; On exit A contains current character
-;         X, Y are preserved
-skip_optional_comma:
-  JSR skip_spaces
-  CMP #','
-  BNE .done
-  JSR read_char
-  JSR skip_spaces
-.done:
-  RTS
-
-
-; Skip one or more optional commas (with surrounding spaces).
-; On entry CURR_CHAR contains current character
-; On exit A contains current character
-;         X, Y are preserved
-skip_optional_commas:
-.loop:
-  JSR skip_optional_comma
-  CMP #','
-  BEQ .loop
-  RTS
-
 
 ; ============================================================================
 ; TIER 3: TOKEN & HEX READING
@@ -1561,8 +1536,7 @@ data_parameters_loop:
   BNE .data_value
   JSR read_char
   JSR emit_quoted
-  JSR skip_optional_comma
-  JMP data_parameters_loop
+  JMP .data_check_more
 .data_value:
   JSR parse_value
   LDA DATA_MODE
@@ -1577,15 +1551,21 @@ data_parameters_loop:
 .data_emit_one_byte:
   LDA OPERAND16
   JSR emit
-  JSR skip_optional_comma
-  JMP data_parameters_loop
+  JMP .data_check_more
 .data_emit_two_bytes:
   LDA OPERAND16          ; Emit low byte
   JSR emit
   LDA OPERAND16+$01      ; Emit high byte
   JSR emit
-  JSR skip_optional_comma
+.data_check_more:
+  JSR check_for_end_of_line
+  BCS .data_done
+  CMP #','
+  BNE .data_err_comma
+  JSR read_char
   JMP data_parameters_loop
+.data_err_comma:
+  JMP err_comma_expected
 .data_done:
   LDA DATA_MODE
   CMP #DATA_MODE_ASCIIZ
@@ -1717,7 +1697,6 @@ process_macro:
   APPEND_HEAPI MODE_MACRO
   JSR advance_heap
 .param_loop:
-  JSR skip_optional_commas
   JSR check_for_end_of_line
   BCS .params_done     ; End of line, no more params
   ; Read parameter name
@@ -1731,8 +1710,14 @@ process_macro:
   BNE .copy_param
   INY
   JSR advance_heap
-  JSR skip_optional_comma
+  JSR check_for_end_of_line
+  BCS .params_done
+  CMP #','
+  BNE .param_err_comma
+  JSR read_char
   JMP .param_loop
+.param_err_comma:
+  JMP err_comma_expected
 .params_done:
   ; Write empty string terminator for parameter list
   LDY #$00
@@ -1806,7 +1791,6 @@ expand_macro:
   ; Each entry: [is_fwdref][value_L][value_H] = 3 bytes
   LDX #$00
 .parse_loop:
-  JSR skip_optional_commas
   ; Check if we're at end of parameter list (empty string)
   LDY #$00
   LDA (MACRO_DEF_PTR16),Y
@@ -1828,7 +1812,6 @@ expand_macro:
 .have_arg:
   ; Parse argument expression (using PARENT's scope for lookups)
   JSR parse_expression
-  JSR skip_optional_comma
   ; MACRO_ARG_BUF bounds check
   ; Check if X < MACRO_ARG_LIMIT - MACRO_ARG_BUF - .ARG_SIZE + $01 (room for one more entry)
   CPX #MACRO_ARG_LIMIT - MACRO_ARG_BUF - .ARG_SIZE + $01
@@ -1846,10 +1829,23 @@ expand_macro:
   LDA OPERAND16+$01
   STA MACRO_ARG_BUF,X
   INX
+  ; Check if more params expected
+  LDY #$00
+  LDA (MACRO_DEF_PTR16),Y
+  BEQ .parse_done      ; Last param, skip comma check
+  ; More params expected - require comma
+  JSR check_for_end_of_line
+  BCS .too_few_next    ; EOL but more params expected
+  CMP #','
+  BNE .arg_err_comma
+  JSR read_char
   JMP .parse_loop
+.too_few_next:
+  JMP err_too_few_arguments
+.arg_err_comma:
+  JMP err_comma_expected
 .parse_done:
   ; Check for extra arguments (should be at end of line now)
-  JSR skip_optional_commas
   JSR check_for_end_of_line
   BCC .too_many
   ; NOW push label scope for the child macro
