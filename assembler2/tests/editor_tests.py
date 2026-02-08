@@ -1029,102 +1029,115 @@ class EditorTestRunner:
         print("Screen state - scrolling:")
         print()
 
-        # 15-line file, 9 j's: cursor at row 8, view scrolled
+        # 15-line file, 9 j's: full window after line scroll down
         self.run_test_screen(
-            "9 j's scrolls view down",
+            "Line scroll down: full window",
             make_lines(15),
             b"jjjjjjjjj:q!\r",
             expect_cursor=(8, 0),
-            expect_lines=[(0, "Line 2"), (8, "Line 10")]
+            expect_lines=[(i, f"Line {i+2}") for i in range(9)]
         )
 
-        # Scroll down then k back to top: view scrolls up
+        # Scroll down then back to top: full window restored
         self.run_test_screen(
-            "k back to top scrolls view up",
+            "Line scroll up: full window restored",
             make_lines(15),
             b"jjjjjjjjj" + b"kkkkkkkkk" + b":q!\r",
             expect_cursor=(0, 0),
-            expect_lines=[(0, "Line 1")]
+            expect_lines=[(i, f"Line {i+1}") for i in range(9)]
+        )
+
+        # Scroll down 3 lines past bottom: verify contiguous window
+        self.run_test_screen(
+            "3 lines past bottom: contiguous window",
+            make_lines(15),
+            b"jjjjjjjjjjj:q!\r",  # 11 j's = line 12, scroll_top=4
+            expect_cursor=(8, 0),
+            expect_lines=[(i, f"Line {i+4}") for i in range(9)]
         )
 
         print()
         print("Screen state - pagination:")
         print()
 
-        # Ctrl-F from start (30 lines): page_size=9
+        # Ctrl-F from start (30 lines): full window verification
         self.run_test_screen(
-            "Ctrl-F pages down from start",
+            "Ctrl-F: full window after page down",
             make_lines(30),
             CTRL_F + b":q!\r",
             expect_cursor=(0, 0),
-            expect_lines=[(0, "Line 10")]
+            expect_lines=[(i, f"Line {i+10}") for i in range(9)]
         )
 
-        # Two Ctrl-F's
+        # Two Ctrl-F's: full window verification
         self.run_test_screen(
-            "Two Ctrl-F's pages to Line 19",
+            "Two Ctrl-F's: full window",
             make_lines(30),
             CTRL_F + CTRL_F + b":q!\r",
             expect_cursor=(0, 0),
-            expect_lines=[(0, "Line 19")]
+            expect_lines=[(i, f"Line {i+19}") for i in range(9)]
         )
 
-        # Repeated Ctrl-F to end: cursor on last line
+        # Repeated Ctrl-F to end: full window with last line at bottom
         self.run_test_screen(
-            "Ctrl-F to end puts last line at bottom",
+            "Ctrl-F to end: full window",
             make_lines(30),
             CTRL_F + CTRL_F + CTRL_F + CTRL_F + b":q!\r",
             expect_cursor=(8, 0),
-            expect_lines=[(8, "Line 30")]
+            expect_lines=[(i, f"Line {i+22}") for i in range(9)]
         )
 
-        # Ctrl-B from middle: pages back correctly
+        # Ctrl-B from middle: full window after page back
         self.run_test_screen(
-            "Ctrl-B pages back from middle",
+            "Ctrl-B: full window after page back",
             make_lines(30),
             CTRL_F + CTRL_F + CTRL_B + b":q!\r",
             expect_cursor=(0, 0),
-            expect_lines=[(0, "Line 10")]
+            expect_lines=[(i, f"Line {i+10}") for i in range(9)]
         )
 
-        # Ctrl-B at start: stays at (0,0)
+        # Ctrl-B at start: stays at (0,0), full window
         self.run_test_screen(
-            "Ctrl-B at start stays at top",
+            "Ctrl-B at start: full window unchanged",
             make_lines(30),
             CTRL_B + b":q!\r",
             expect_cursor=(0, 0),
-            expect_lines=[(0, "Line 1")]
+            expect_lines=[(i, f"Line {i+1}") for i in range(9)]
         )
 
-        # Ctrl-F with fewer lines than a page
+        # Ctrl-F with fewer lines than a page: full window
         self.run_test_screen(
-            "Ctrl-F on short file moves to last line",
+            "Ctrl-F short file: full window",
             make_lines(5),
             CTRL_F + b":q!\r",
             expect_cursor=(4, 0),
-            expect_lines=[(0, "Line 1"), (4, "Line 5")]
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line 4"), (4, "Line 5"),
+                (5, "~"), (6, "~"), (7, "~"), (8, "~"),
+            ]
         )
 
         print()
         print("Screen state - G and gg:")
         print()
 
-        # G on 20-line file: cursor on last visible row
+        # G on 20-line file: full window with last line at bottom
         self.run_test_screen(
-            "G goes to last line",
+            "G: full window at end",
             make_lines(20),
             b"G:q!\r",
             expect_cursor=(8, 0),
-            expect_lines=[(8, "Line 20")]
+            expect_lines=[(i, f"Line {i+12}") for i in range(9)]
         )
 
-        # Ggg: back to (0,0), "Line 1" at row 0
+        # Ggg: full window back at top
         self.run_test_screen(
-            "Ggg returns to top",
+            "Ggg: full window at top",
             make_lines(20),
             b"Ggg:q!\r",
             expect_cursor=(0, 0),
-            expect_lines=[(0, "Line 1")]
+            expect_lines=[(i, f"Line {i+1}") for i in range(9)]
         )
 
         print()
