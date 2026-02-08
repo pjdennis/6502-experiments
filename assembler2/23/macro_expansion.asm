@@ -5,10 +5,7 @@
 
   .zeropage
 
-COND_DEPTH:      .byte        ; Conditional assembly nesting depth
-SKIP_DEPTH:      .byte        ; Depth where skipping started (0 = not skipping)
 IN_MACRO_DEF:    .byte        ; Flag: currently capturing macro body ($FF = capturing)
-IFDEF_INDEX:     .byte        ; Current index into IFDEF_DECISIONS buffer
 
   .code
 
