@@ -1,5 +1,5 @@
 ; ============================================================================
-; ASM22 - Self-Hosting 6502 Assembler
+; ASM23 - Self-Hosting 6502 Assembler
 ; ============================================================================
 ;
 ; ARCHITECTURE
@@ -49,7 +49,7 @@
 ; CODE ORGANIZATION
 ;   Functions organized in tiers by dependency level
 ;   Include files provide subsystems: hash tables, file stack, errors, etc.
-;   Shared code with instgen22.asm via common22.asm
+;   Shared code with instgen.asm via common.asm
 ;
 ; ============================================================================
 
