@@ -47,9 +47,18 @@
 ;   err_out_of_memory raised when heap and stack would collide
 ;
 ; CODE ORGANIZATION
-;   Functions organized in tiers by dependency level
-;   Include files provide subsystems: hash tables, file stack, errors, etc.
-;   Shared code with instgen.asm via common.asm
+;   Modules (included in dependency order):
+;     tokenizer.asm       - Character classification, token/hex reading
+;     expressions.asm     - Expression evaluation, char literals, byte selectors
+;     labels.asm          - Label capture, local labels, value assignment
+;     instructions.asm    - PC management, instruction lookup/emission, operands
+;     directives.asm      - Directive dispatch, data directives, conditionals
+;     macro_expansion.asm - Macro definition, expansion, body capture
+;     init.asm            - CLI argument processing, input file opening
+;   Shared subsystems:
+;     common.asm (includes hash_table.asm), file_stack.asm, errors.asm,
+;     label_scope.asm, forward_ref.asm, environment.asm, macros.asm
+;   This file: assembly loop, entry point, reset/interrupt vectors
 ;
 ; ============================================================================
 
@@ -122,8 +131,7 @@ CURR_LINE16        = FS_CURR_LINE16
 
 
 ; ============================================================================
-; TIER 11: ASSEMBLY ORCHESTRATION
-; Main assembly loop
+; ASSEMBLY LOOP
 ; ============================================================================
 
 ; Read from input, assemble code and write to output
@@ -238,8 +246,7 @@ assemble_code:
 
 
 ; ============================================================================
-; TIER 14: ENTRY POINT
-; Program entry and main control flow
+; ENTRY POINT
 ; ============================================================================
 
 ; Entry point
