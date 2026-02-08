@@ -1657,6 +1657,17 @@ class EditorTestRunner:
             expected_content="ABCX\n"
         )
 
+        # Excess backspace keys beyond column trigger join-lines
+        # Line 1: "AB", Line 2: "CD". j moves to line 2, li enters insert at col 1.
+        # 3 BS keys: first deletes 'C' (col 1->0), then 2 excess BS keys should
+        # trigger join-lines (joining "AB" + "D"), not be silently consumed.
+        self.run_test(
+            "Excess backspace triggers join-lines",
+            "AB\nCD\n",
+            b"jli\x08\x08\x1b:wq\r",
+            expected_content="ABD\n"
+        )
+
         # Render optimization: batch x reduces content redraws
         # Without batching: xxx -> frames [init, x, x, x] = 4 frames
         # With batching: frames [init, x+batch_xx] = 2 frames
