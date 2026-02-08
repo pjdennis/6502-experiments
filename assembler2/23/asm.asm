@@ -2282,7 +2282,9 @@ handle_define:
   SET16 $0001, HEX16
   LDA #LABEL_TYPE_GLOBAL
   STA LABEL_TYPE
-  JMP hash_add           ; Tail call
+  JSR select_label_hash_table
+  JSR hash_add
+  JMP store_hash_value   ; Store value and advance heap
 
 
   .zeropage
