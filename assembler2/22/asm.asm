@@ -1512,13 +1512,37 @@ process_directive:
   JMP set_data_mode
 .byte:
   LDA #$01
+  BIT IN_ZEROPAGE
+  BMI .zp_alloc          ; In zeropage? check for operand-less form
   JMP set_data_mode
 .word:
   LDA #$02
+  BIT IN_ZEROPAGE
+  BMI .zp_alloc          ; In zeropage? check for operand-less form
   JMP set_data_mode
 .asciiz:
   LDA #$03
   JMP set_data_mode
+
+.zp_alloc:
+  ; A = mode (1=byte, 2=word)
+  STA DATA_MODE
+  JSR check_for_end_of_line
+  BCC .zp_has_operand       ; Not EOL — has operand, use normal path
+  ; Operand-less: emit dummy bytes (1 for .byte, 2 for .word)
+  LDA #$00
+  JSR emit                  ; Advance ZP PC by 1
+  LDA DATA_MODE
+  CMP #$02
+  BNE .zp_done
+  LDA #$00
+  JSR emit                  ; Advance ZP PC by 2nd byte for .word
+.zp_done:
+  LDA #$FF
+  STA DATA_MODE             ; Reset DATA_MODE (same as set_data_mode exit)
+  RTS
+.zp_has_operand:
+  JMP data_parameters_loop  ; Continue with normal value parsing
 
 
 ; On exit C=0 if processed; C=1 if not processed
