@@ -210,8 +210,8 @@ main_loop
   .ifdef enable_debug
 
   .zeropage
-DBG_ARG_IDX   .data $00   ; Current argument index
-DBG_ARG_COUNT .data $00   ; Total argument count
+DBG_ARG_IDX   .byte 0     ; Current argument index
+DBG_ARG_COUNT .byte 0     ; Total argument count
   .code
 
 ; Parse additional command line arguments (after filename)
@@ -312,7 +312,7 @@ parse_hex_digit
 ; ============================================================================
 ; Data
 ; ============================================================================
-str_untitled .data "[No Name]" $00
+str_untitled .asciiz "[No Name]"
 
 ; Entry point address - emulator uses last 2 bytes of binary as reset vector
-  .data editor_main
+  .word editor_main

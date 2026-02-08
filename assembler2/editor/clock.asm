@@ -9,11 +9,11 @@
   .include environment.asm
 
   .zeropage
-SECONDS   .data $00
-MINUTES   .data $00
-HOURS     .data $00
-DELAY_CNT .data $00
-TEMP      .data $00
+SECONDS   .byte 0
+MINUTES   .byte 0
+HOURS     .byte 0
+DELAY_CNT .byte 0
+TEMP      .byte 0
 
   .code
 
@@ -177,7 +177,7 @@ cursor_home
 
 ; === Data ===
 
-msg .data "  Press q to quit" $0D $0A $00
+msg .asciiz "  Press q to quit\r\n"
 
 ; Entry point address
-  .data main
+  .word main

@@ -11,8 +11,8 @@ CMD_BUF     = $0300   ; Command buffer (256 bytes)
 CMD_BUF_LEN = $00FF   ; Max command length
 
   .zeropage
-CMD_IDX     .data $00   ; Current index into command buffer
-CMD_QUIT    .data $00   ; Set to $FF when editor should quit
+CMD_IDX     .byte 0     ; Current index into command buffer
+CMD_QUIT    .byte 0     ; Set to $FF when editor should quit
 
   .code
 
@@ -332,9 +332,9 @@ show_status_message
   RTS
 
 ; === String constants ===
-str_unknown_cmd .data "Unknown command" $00
-str_no_write    .data "No write since last change (use :q! to override)" $00
-str_written     .data "written" $00
-str_buffer_full .data "Buffer full" $00
-str_readonly    .data "Read-only (file truncated)" $00
-str_truncated   .data "WARNING: File too large - read only" $00
+str_unknown_cmd .asciiz "Unknown command"
+str_no_write    .asciiz "No write since last change (use :q! to override)"
+str_written     .asciiz "written"
+str_buffer_full .asciiz "Buffer full"
+str_readonly    .asciiz "Read-only (file truncated)"
+str_truncated   .asciiz "WARNING: File too large - read only"

@@ -9,7 +9,7 @@
   .include environment.asm
 
   .zeropage
-TEMP_VAL  .data $00
+TEMP_VAL  .byte 0
 
   .code
 
@@ -209,9 +209,9 @@ print_byte_dec
 
 ; === Data ===
 
-size_msg  .data "Terminal size: " $00
-instr_msg .data "Press keys to see codes, 'q' to quit" $00
-key_msg   .data "Key: $" $00
+size_msg  .asciiz "Terminal size: "
+instr_msg .asciiz "Press keys to see codes, 'q' to quit"
+key_msg   .asciiz "Key: $"
 
 ; Entry point address
-  .data main
+  .word main

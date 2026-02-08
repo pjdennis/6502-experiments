@@ -11,20 +11,20 @@ MODE_COMMAND = $02
 
   .zeropage
 
-CURSOR_ROW    .data $00   ; Cursor row (0-based, relative to view)
-CURSOR_COL    .data $00   ; Cursor column (0-based)
-VIEW_TOP16    .data $0000 ; First visible line number (0-based)
-SCREEN_ROWS   .data $00   ; Terminal height
-SCREEN_COLS   .data $00   ; Terminal width
-FILE_LINE16   .data $0000 ; Current file line (0-based, = VIEW_TOP16 + CURSOR_ROW)
-MODE          .data $00   ; Current mode: MODE_NORMAL, MODE_INSERT, MODE_COMMAND
-MODIFIED      .data $00   ; File modified flag ($00 = no, $FF = yes)
-READONLY      .data $00   ; Read-only mode ($00 = no, $FF = yes)
-RENDER_ROW    .data $00   ; Current row being rendered
-RENDER_LINE16 .data $0000 ; Current file line being rendered
-RENDER_COL    .data $00   ; Column counter during rendering
-FNAME_PTR16   .data $0000 ; Pointer to filename string (null-terminated)
-RENDER_FLAG   .data $00   ; $FF = full repaint, $01 = current line+status, $00 = cursor+status only
+CURSOR_ROW    .byte 0     ; Cursor row (0-based, relative to view)
+CURSOR_COL    .byte 0     ; Cursor column (0-based)
+VIEW_TOP16    .word 0     ; First visible line number (0-based)
+SCREEN_ROWS   .byte 0     ; Terminal height
+SCREEN_COLS   .byte 0     ; Terminal width
+FILE_LINE16   .word 0     ; Current file line (0-based, = VIEW_TOP16 + CURSOR_ROW)
+MODE          .byte 0     ; Current mode: MODE_NORMAL, MODE_INSERT, MODE_COMMAND
+MODIFIED      .byte 0     ; File modified flag ($00 = no, $FF = yes)
+READONLY      .byte 0     ; Read-only mode ($00 = no, $FF = yes)
+RENDER_ROW    .byte 0     ; Current row being rendered
+RENDER_LINE16 .word 0     ; Current file line being rendered
+RENDER_COL    .byte 0     ; Column counter during rendering
+FNAME_PTR16   .word 0     ; Pointer to filename string (null-terminated)
+RENDER_FLAG   .byte 0     ; $FF = full repaint, $01 = current line+status, $00 = cursor+status only
 
   .code
 
@@ -298,10 +298,10 @@ render_line_chars
   RTS
 
 ; === String constants ===
-str_normal        .data "NORMAL" $00
-str_insert        .data "INSERT" $00
-str_command       .data "COMMAND" $00
-mode_strings      .data str_normal str_insert str_command
-str_ro_indicator  .data " [RO]" $00
-str_mod_indicator .data " [+]" $00
-str_separator     .data " - " $00
+str_normal        .asciiz "NORMAL"
+str_insert        .asciiz "INSERT"
+str_command       .asciiz "COMMAND"
+mode_strings      .word str_normal, str_insert, str_command
+str_ro_indicator  .asciiz " [RO]"
+str_mod_indicator .asciiz " [+]"
+str_separator     .asciiz " - "

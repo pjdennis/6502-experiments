@@ -2,10 +2,10 @@
 ; All routines write escape sequences via write_b
 
   .zeropage
-ANSI_ROW     .data $00  ; Row for cursor positioning (1-based)
-ANSI_COL     .data $00  ; Column for cursor positioning (1-based)
-STR_PTR16    .data $0000 ; Pointer for write_string
-ANSI_TEMP    .data $00   ; Temp byte for decimal output
+ANSI_ROW     .byte 0    ; Row for cursor positioning (1-based)
+ANSI_COL     .byte 0    ; Column for cursor positioning (1-based)
+STR_PTR16    .word 0    ; Pointer for write_string
+ANSI_TEMP    .byte 0    ; Temp byte for decimal output
 
   .code
 
@@ -73,13 +73,13 @@ ansi_normal_video
   JMP ansi_write_seq
 
 ; ANSI sequence string constants
-ansi_seq_clear  .data "2J" $00
-ansi_seq_home   .data "H" $00
-ansi_seq_clreol .data "K" $00
-ansi_seq_show   .data "?25h" $00
-ansi_seq_hide   .data "?25l" $00
-ansi_seq_rev    .data "7m" $00
-ansi_seq_norm   .data "0m" $00
+ansi_seq_clear  .asciiz "2J"
+ansi_seq_home   .asciiz "H"
+ansi_seq_clreol .asciiz "K"
+ansi_seq_show   .asciiz "?25h"
+ansi_seq_hide   .asciiz "?25l"
+ansi_seq_rev    .asciiz "7m"
+ansi_seq_norm   .asciiz "0m"
 
 ; Write null-terminated string pointed to by STR_PTR16
 ; Clobbers A, Y
