@@ -1485,7 +1485,6 @@ EXPECT_HEX: a9 10
 ---
 NAME: expr_space_before_shift_operator_in_operand
 DESCRIPTION: Byte selector in shift count with space after selector
-SKIP: Fix TBD
 INPUT:
  1: * = $0200
  2:   LDA #$01 << 4
@@ -1494,7 +1493,6 @@ EXPECT_HEX: a9 10
 ---
 NAME: expr_space_before_shift_operator_in_assignment
 DESCRIPTION: Byte selector in shift count with space after selector
-SKIP: Fix TBD
 INPUT:
  1: * = $0200
  2: foo = 1 << 4
@@ -3308,7 +3306,7 @@ EXPECT_HEX: 30
 NAME: byte_byte_selectors
 INPUT:
  1: * = $0200
- 2:   .byte <$ABCD >$ABCD
+ 2:   .byte <$ABCD, >$ABCD
 EXPECT_HEX: cd ab
 
 ---
@@ -3484,7 +3482,7 @@ NAME: word_byte_selectors
 INPUT:
  1: * = $0200
  2: addr: = $ABCD
- 3:   .word <addr >addr
+ 3:   .word <addr, >addr
 EXPECT_HEX: cd 00 ab 00
 
 ---

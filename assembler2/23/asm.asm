@@ -689,15 +689,23 @@ parse_expression:
   ; Check << and >> before skipping spaces (< and > are ambiguous with byte selectors)
   LDA CURR_CHAR
   CMP #'<'
-  BEQ .check_left_shift
+  BNE .not_lt
+  JMP .check_left_shift
+.not_lt:
   CMP #'>'
-  BEQ .check_right_shift
-  ; Check + and - after skipping spaces
+  BNE .not_gt
+  JMP .check_right_shift
+.not_gt:
+  ; Check +, -, <<, >> after skipping spaces
   JSR skip_spaces
   CMP #'+'
   BEQ .add_op
   CMP #'-'
   BEQ .sub_op
+  CMP #'<'
+  BEQ .check_left_shift
+  CMP #'>'
+  BEQ .check_right_shift
 
   ; No more operators - restore and return
   LDA EXPR_FWDREF
