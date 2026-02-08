@@ -16,7 +16,6 @@ FROM_DECIMAL_TMP16:      .word 0     ; 2-byte temp for multiply-by-10
 ; Convert decimal digit string to 16-bit value
 ; On entry: CURR_CHAR contains first digit character ('0'-'9')
 ; On exit: FROM_DECIMAL16 contains 16-bit result
-;          C=0 if value <= 255, C=1 if > 255
 ;          CURR_CHAR contains first non-digit character
 ;          X is preserved
 ;          A, Y are not preserved
@@ -57,13 +56,6 @@ from_decimal:
   CMP #'9'+$01
   BCC .loop             ; >= '0' and <= '9', continue
 .done:
-  ; Set carry based on value size: C=0 if <= 255, C=1 if > 255
-  LDA FROM_DECIMAL16+$01
-  BEQ .one_byte
-  SEC                   ; Value > 255
-  RTS
-.one_byte:
-  CLC                   ; Value <= 255
   RTS
 .overflow:
   JMP err_value_out_of_range

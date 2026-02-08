@@ -325,7 +325,6 @@ read_hex_byte:
 ; Reads 1 or 2 byte (2 or 4 character) hex value
 ; On entry, A contains the first hex character
 ; On exit HEX16 contains the read value
-;         C set if 2 bytes read clear if 1 byte read
 ;         X, Y are preserved
 ;         A is not preserved
 ; Raises 'Invalid hex' error if encountering non-hex characters
@@ -335,17 +334,15 @@ read_hex_byte_or_word:
   JSR read_char        ; Read 3rd hex char or terminator
   JSR compare_end_of_token
   BCS .second
-  LDA HEX16+$01        ; No second byte so move result and return C = 0
+  LDA HEX16+$01        ; No second byte so move result
   STA HEX16
   LDA #$00
   STA HEX16+$01
-  CLC
   RTS
 .second:
   JSR read_hex_byte    ; Read 4th hex char and convert
   STA HEX16
-  JSR read_char        ; Read char
-  SEC                  ; Second byte so return C = 1
+  JSR read_char        ; Read char after 4th hex digit
   RTS
 
 
@@ -520,7 +517,6 @@ read_value:
 ; On exit  CURR_CHAR contains current character
 ;          OPERAND16 contains parsed value
 ;          IS_FWDREF set if bare label was forward ref (pass 1 only)
-;          C=1 if bare label, C=0 otherwise
 ;          X is preserved
 ;          Y is not preserved
 parse_term:
@@ -582,7 +578,6 @@ parse_term:
   STA IS_FWDREF
 .label_store:
   ; OPERAND16 already set (aliased to HEX16)
-  SEC                  ; Signal 2-byte value (from bare label)
   RTS
 .hex:
   JSR read_char        ; Skip $
@@ -590,11 +585,10 @@ parse_term:
 .char_literal:
   JSR parse_char_literal
   ; Result in OPERAND16
-  CLC                  ; Signal 1-byte value (character)
   RTS
 .decimal:
-  JSR from_decimal     ; Result in FROM_DECIMAL16, carry set per value size
-  CP16 FROM_DECIMAL16, OPERAND16 ; Copy result; LDA/STA preserves carry
+  JSR from_decimal     ; Result in FROM_DECIMAL16
+  CP16 FROM_DECIMAL16, OPERAND16
   RTS
 
 
@@ -603,7 +597,6 @@ parse_term:
 ; On exit: CURR_CHAR contains current character
 ;          OPERAND16 contains result
 ;          IS_FWDREF set if expression contains forward ref (NOT set for byte selectors)
-;          C=0 if first term is a single byte or C=1 if first term is two bytes
 parse_value:
   CMP #'<'
   BEQ .low_byte_selector
@@ -618,8 +611,7 @@ parse_value:
   ; Apply low byte: keep OPERAND16, zero OPERAND16+$01
   LDA #$00
   STA OPERAND16+$01
-  STA IS_FWDREF        ; Byte selectors don't set fwdref (always 1 byte result)
-  CLC                  ; Byte selector = C=0 (1 byte)
+  STA IS_FWDREF        ; Byte selectors don't set fwdref
   RTS
 
 .high_byte_selector:
@@ -631,8 +623,7 @@ parse_value:
   STA OPERAND16
   LDA #$00
   STA OPERAND16+$01
-  STA IS_FWDREF        ; Byte selectors don't set fwdref (always 1 byte result)
-  CLC                  ; Byte selector = C=0 (1 byte)
+  STA IS_FWDREF        ; Byte selectors don't set fwdref
   RTS
 
 
@@ -643,7 +634,6 @@ parse_value:
 ; On exit: CURR_CHAR contains current character
 ;          OPERAND16 contains result
 ;          IS_FWDREF set if term is forward ref (NOT set for byte selectors)
-;          C=1 if bare label, C=0 otherwise
 parse_term_with_selector:
   CMP #'<'
   BEQ .low_byte_selector
@@ -659,7 +649,6 @@ parse_term_with_selector:
   LDA #$00
   STA OPERAND16+$01
   STA IS_FWDREF        ; Byte selectors don't set fwdref
-  CLC
   RTS
 
 .high_byte_selector:
@@ -672,7 +661,6 @@ parse_term_with_selector:
   LDA #$00
   STA OPERAND16+$01
   STA IS_FWDREF        ; Byte selectors don't set fwdref
-  CLC
   RTS
 
 
@@ -681,11 +669,8 @@ parse_term_with_selector:
 ; On exit: CURR_CHAR contains current character
 ;          OPERAND16 contains result
 ;          IS_FWDREF set if any term is forward ref
-;          C=1 if 2-byte value (bare label or $xxxx), C=0 if 1-byte ($xx, 'c')
-;          (Carry from first term - used by .data to decide emit size)
 parse_expression:
   JSR parse_term       ; Parse first term, current char in CURR_CHAR
-  PHP ; Save carry flag
 
   ; Save IS_FWDREF from first term
   LDA IS_FWDREF
@@ -716,7 +701,6 @@ parse_expression:
   ; No more operators - restore and return
   LDA EXPR_FWDREF
   STA IS_FWDREF
-  PLP ; Restore carry flag from first term
   RTS
 
 .add_op:
