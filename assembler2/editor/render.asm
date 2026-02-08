@@ -12,24 +12,24 @@ MODE_COMMAND = $02
 
   .zeropage
 
-CURSOR_ROW:    .byte 0     ; Cursor screen row (0-based, derived from wrap computation)
-CURSOR_COL:    .byte 0     ; Cursor column (0-based, can exceed SCREEN_COLS for wrapped lines)
-VIEW_TOP16:    .word 0     ; First visible line number (0-based)
-SCREEN_ROWS:   .byte 0     ; Terminal height
-SCREEN_COLS:   .byte 0     ; Terminal width
-FILE_LINE16:   .word 0     ; Current file line (0-based)
-MODE:          .byte 0     ; Current mode: MODE_NORMAL, MODE_INSERT, MODE_COMMAND
-MODIFIED:      .byte 0     ; File modified flag ($00 = no, $FF = yes)
-READONLY:      .byte 0     ; Read-only mode ($00 = no, $FF = yes)
-RENDER_ROW:    .byte 0     ; Current row being rendered
-RENDER_LINE16: .word 0     ; Current file line being rendered
-RENDER_COL:    .byte 0     ; Column counter during rendering
-FNAME_PTR16:   .word 0     ; Pointer to filename string (null-terminated)
-RENDER_FLAG:   .byte 0     ; $FF = full repaint, $01 = current line+status, $00 = cursor+status only
-VIEW_TOP_WRAP: .byte 0     ; Wrap row offset for first visible line (0 = start of line)
-WRAP_QUOT:     .byte 0     ; Scratch: quotient from CURSOR_COL / SCREEN_COLS
-WRAP_REM:      .byte 0     ; Scratch: remainder from CURSOR_COL % SCREEN_COLS
-RENDER_WRAP:   .byte 0     ; Current wrap row offset during rendering
+CURSOR_ROW:    .byte     ; Cursor screen row (0-based, derived from wrap computation)
+CURSOR_COL:    .byte     ; Cursor column (0-based, can exceed SCREEN_COLS for wrapped lines)
+VIEW_TOP16:    .word     ; First visible line number (0-based)
+SCREEN_ROWS:   .byte     ; Terminal height
+SCREEN_COLS:   .byte     ; Terminal width
+FILE_LINE16:   .word     ; Current file line (0-based)
+MODE:          .byte     ; Current mode: MODE_NORMAL, MODE_INSERT, MODE_COMMAND
+MODIFIED:      .byte     ; File modified flag ($00 = no, $FF = yes)
+READONLY:      .byte     ; Read-only mode ($00 = no, $FF = yes)
+RENDER_ROW:    .byte     ; Current row being rendered
+RENDER_LINE16: .word     ; Current file line being rendered
+RENDER_COL:    .byte     ; Column counter during rendering
+FNAME_PTR16:   .word     ; Pointer to filename string (null-terminated)
+RENDER_FLAG:   .byte     ; $FF = full repaint, $01 = current line+status, $00 = cursor+status only
+VIEW_TOP_WRAP: .byte     ; Wrap row offset for first visible line (0 = start of line)
+WRAP_QUOT:     .byte     ; Scratch: quotient from CURSOR_COL / SCREEN_COLS
+WRAP_REM:      .byte     ; Scratch: remainder from CURSOR_COL % SCREEN_COLS
+RENDER_WRAP:   .byte     ; Current wrap row offset during rendering
 
   .code
 

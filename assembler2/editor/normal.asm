@@ -2,8 +2,8 @@
 
   .zeropage
 
-LAST_KEY:    .byte 0      ; Previous key for multi-key commands (dd, gg)
-LINE_LEN:    .byte 0      ; Cached length of current line
+LAST_KEY:    .byte      ; Previous key for multi-key commands (dd, gg)
+LINE_LEN:    .byte      ; Cached length of current line
 
   .code
 

@@ -2,10 +2,10 @@
 ; All routines write escape sequences via write_b
 
   .zeropage
-ANSI_ROW:     .byte 0    ; Row for cursor positioning (1-based)
-ANSI_COL:     .byte 0    ; Column for cursor positioning (1-based)
-STR_PTR16:    .word 0    ; Pointer for write_string
-ANSI_TEMP:    .byte 0    ; Temp byte for decimal output
+ANSI_ROW:     .byte    ; Row for cursor positioning (1-based)
+ANSI_COL:     .byte    ; Column for cursor positioning (1-based)
+STR_PTR16:    .word    ; Pointer for write_string
+ANSI_TEMP:    .byte    ; Temp byte for decimal output
 
   .code
 

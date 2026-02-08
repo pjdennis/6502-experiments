@@ -9,11 +9,11 @@
   .include environment.asm
 
   .zeropage
-SECONDS:   .byte 0
-MINUTES:   .byte 0
-HOURS:     .byte 0
-DELAY_CNT: .byte 0
-TEMP:      .byte 0
+SECONDS:   .byte
+MINUTES:   .byte
+HOURS:     .byte
+DELAY_CNT: .byte
+TEMP:      .byte
 
   .code
 

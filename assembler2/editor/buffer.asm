@@ -17,15 +17,15 @@ MAX_LINES   = $03FF  ; Maximum line count (1023), 0-indexed
 
   .zeropage
 
-BUF_END16:     .word 0     ; Points one past last byte of text
-LINE_COUNT16:  .word 0     ; Number of lines in buffer (16-bit)
-BUF_PTR16:     .word 0     ; General-purpose buffer pointer
-BUF_SRC16:     .word 0     ; Source pointer for block moves
-BUF_DST16:     .word 0     ; Destination pointer for block moves
-BUF_LEN16:     .word 0     ; Length/count for block moves
-BUF_TEMP:      .byte 0     ; Temp byte for buffer operations
-FILE_HANDLE:   .byte 0     ; File handle for load/save
-BUF_LIMIT:     .byte 0     ; High byte of buffer limit (default >TEXT_LIMIT)
+BUF_END16:     .word     ; Points one past last byte of text
+LINE_COUNT16:  .word     ; Number of lines in buffer (16-bit)
+BUF_PTR16:     .word     ; General-purpose buffer pointer
+BUF_SRC16:     .word     ; Source pointer for block moves
+BUF_DST16:     .word     ; Destination pointer for block moves
+BUF_LEN16:     .word     ; Length/count for block moves
+BUF_TEMP:      .byte     ; Temp byte for buffer operations
+FILE_HANDLE:   .byte     ; File handle for load/save
+BUF_LIMIT:     .byte     ; High byte of buffer limit (default >TEXT_LIMIT)
 
   .code
 

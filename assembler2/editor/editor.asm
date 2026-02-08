@@ -209,8 +209,8 @@ main_loop:
   .ifdef enable_debug
 
   .zeropage
-DBG_ARG_IDX:   .byte 0     ; Current argument index
-DBG_ARG_COUNT: .byte 0     ; Total argument count
+DBG_ARG_IDX:   .byte     ; Current argument index
+DBG_ARG_COUNT: .byte     ; Total argument count
   .code
 
 ; Parse additional command line arguments (after filename)

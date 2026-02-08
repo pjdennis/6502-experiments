@@ -9,7 +9,7 @@
   .include environment.asm
 
   .zeropage
-TEMP_VAL:  .byte 0
+TEMP_VAL:  .byte
 
   .code
 
