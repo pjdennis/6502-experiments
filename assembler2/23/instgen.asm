@@ -531,7 +531,7 @@ msg_heap_comment:
 ; Error handler needed by advance_heap's overflow check
 err_out_of_memory:
   BRK
-  .data $23 "Out of memory" $00
+  .asciiz 35, "Out of memory"
 
 
 HEAP:                  ; Heap goes after the program code

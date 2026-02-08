@@ -17,177 +17,177 @@
 ; ERROR HANDLERS - Grouped by category with sequential error codes
 ; ============================================================================
 
-; --- Label errors ($01-$04) ---
+; --- Label errors (1-4) ---
 err_label_not_found:
   BRK
-  .data $01 "Label not found" $00
+  .asciiz 1, "Label not found"
 
 err_duplicate_label:
   BRK
-  .data $02 "Duplicate label" $00
+  .asciiz 2, "Duplicate label"
 
 err_no_global_for_local:
   BRK
-  .data $03 "No global label for local" $00
+  .asciiz 3, "No global label for local"
 
 err_label_expected:
   BRK
-  .data $04 "Label expected" $00
+  .asciiz 4, "Label expected"
 
-; --- Symbol/Opcode errors ($05) ---
+; --- Symbol/Opcode errors (5) ---
 err_opcode_not_found:
   BRK
-  .data $05 "Opcode not found" $00
+  .asciiz 5, "Opcode not found"
 
-; --- Value/Expression errors ($06-$0C) ---
+; --- Value/Expression errors (6-13) ---
 err_value_out_of_range:
   BRK
-  .data $06 "Value out of range" $00
+  .asciiz 6, "Value out of range"
 
 err_invalid_hex:
   BRK
-  .data $07 "Invalid hex" $00
+  .asciiz 7, "Invalid hex"
 
 err_branch_out_of_range:
   BRK
-  .data $08 "Branch out of range" $00
+  .asciiz 8, "Branch out of range"
 
 err_invalid_operand:
   BRK
-  .data $09 "Invalid operand" $00
+  .asciiz 9, "Invalid operand"
 
 err_unexpected_text:
   BRK
-  .data $0A "Unexpected text after operand" $00
+  .asciiz 10, "Unexpected text after operand"
 
 err_expected_shift:
   BRK
-  .data $0B "Expected << or >>" $00
+  .asciiz 11, "Expected << or >>"
 
 err_invalid_char_literal:
   BRK
-  .data $0C "Invalid character literal" $00
+  .asciiz 12, "Invalid character literal"
 
 err_invalid_addressing_mode:
   BRK
-  .data $0D "Invalid addressing mode" $00
+  .asciiz 13, "Invalid addressing mode"
 
-; --- Directive errors ($0E-$12) ---
+; --- Directive errors (14-18) ---
 err_unknown_directive:
   BRK
-  .data $0E "Unknown directive" $00
+  .asciiz 14, "Unknown directive"
 
 err_pc_value_expected:
   BRK
-  .data $0F "PC value expected" $00
+  .asciiz 15, "PC value expected"
 
 err_cannot_move_pc_backwards:
   BRK
-  .data $10 "Cannot move PC backwards" $00
+  .asciiz 16, "Cannot move PC backwards"
 
 err_filename_expected:
   BRK
-  .data $11 "Filename expected" $00
+  .asciiz 17, "Filename expected"
 
 err_closing_quote_not_found:
   BRK
-  .data $12 "Closing quote not found" $00
+  .asciiz 18, "Closing quote not found"
 
-; --- Conditional assembly errors ($13-$15) ---
+; --- Conditional assembly errors (19-21) ---
 err_endif_without_ifdef:
   BRK
-  .data $13 ".endif without .ifdef" $00
+  .asciiz 19, ".endif without .ifdef"
 
 err_unclosed_ifdef:
   BRK
-  .data $14 "Unclosed .ifdef" $00
+  .asciiz 20, "Unclosed .ifdef"
 
 err_too_many_ifdefs:
   BRK
-  .data $15 "Too many .ifdef directives" $00
+  .asciiz 21, "Too many .ifdef directives"
 
-; --- Macro errors ($16-$1F) ---
+; --- Macro errors (22-31) ---
 err_macro_name_expected:
   BRK
-  .data $16 "Macro name expected" $00
+  .asciiz 22, "Macro name expected"
 
 err_macro_shadows_instruction:
   BRK
-  .data $17 "Macro name shadows instruction" $00
+  .asciiz 23, "Macro name shadows instruction"
 
 err_duplicate_macro:
   BRK
-  .data $18 "Duplicate macro definition" $00
+  .asciiz 24, "Duplicate macro definition"
 
 err_endmacro_without_macro:
   BRK
-  .data $19 ".endmacro without .macro" $00
+  .asciiz 25, ".endmacro without .macro"
 
 err_unclosed_macro:
   BRK
-  .data $1A "Unclosed .macro" $00
+  .asciiz 26, "Unclosed .macro"
 
 err_nested_macro_definition:
   BRK
-  .data $1B "Nested macro definition" $00
+  .asciiz 27, "Nested macro definition"
 
 err_recursive_macro:
   BRK
-  .data $1C "Recursive macro invocation" $00
+  .asciiz 28, "Recursive macro invocation"
 
 err_too_few_arguments:
   BRK
-  .data $1D "Too few macro arguments" $00
+  .asciiz 29, "Too few macro arguments"
 
 err_too_many_arguments:
   BRK
-  .data $1E "Too many macro arguments" $00
+  .asciiz 30, "Too many macro arguments"
 
 err_macro_nesting_too_deep:
   BRK
-  .data $1F "Macro nesting too deep" $00
+  .asciiz 31, "Macro nesting too deep"
 
-; --- Resource limit errors ($20-$22) ---
+; --- Resource limit errors (32-34) ---
 err_out_of_memory:
   BRK
-  .data $20 "Out of memory" $00
+  .asciiz 32, "Out of memory"
 
 err_token_too_long:
   BRK
-  .data $21 "Token too long" $00
+  .asciiz 33, "Token too long"
 
 err_too_many_forward_refs:
   BRK
-  .data $22 "Too many forward references" $00
+  .asciiz 34, "Too many forward references"
 
-; --- Memory section errors ($23) ---
+; --- Memory section errors (35) ---
 err_zeropage_overflow:
   BRK
-  .data $23 "Zero page overflow" $00
+  .asciiz 35, "Zero page overflow"
 
-; --- File I/O errors ($24) ---
+; --- File I/O errors (36) ---
 err_file_not_found:
   BRK
-  .data $24 "File not found" $00
+  .asciiz 36, "File not found"
 
-; --- Command line/usage errors ($F0-$F1) ---
+; --- Command line/usage errors (240-241) ---
 err_usage:
   BRK
-  .data $F0 "Usage: <assembler> <input> <output> [debug]" $00
+  .asciiz 240, "Usage: <assembler> <input> <output> [debug]"
 
 err_invalid_arg:
   BRK
-  .data $F1 "Invalid argument" $00
+  .asciiz 241, "Invalid argument"
 
-; --- Debug/internal errors ($FE-$FF, debug build only) ---
+; --- Debug/internal errors (254-255, debug build only) ---
   .ifdef enable_debug
 err_no_file:
   BRK
-  .data $FE "Attempt to read with no file open" $00
+  .asciiz 254, "Attempt to read with no file open"
 
 err_fwdref_tracking:
   BRK
-  .data $FF "Internal error - reference tracking" $00
+  .asciiz 255, "Internal error - reference tracking"
   .endif
 
 
@@ -282,11 +282,11 @@ interrupt:
   JMP exit ; Done
 
 msg_error:
-  .data "Error " $00
+  .asciiz "Error "
 msg_error_line:
-  .data " at line " $00
+  .asciiz " at line "
 msg_error_file:
-  .data " in file " $00
+  .asciiz " in file "
 
 
 ; Show a decimal value to the error output
@@ -366,10 +366,10 @@ show_include_traceback:
   RTS
 
 msg_error_macro:
-  .data " in macro " $00
+  .asciiz " in macro "
 msg_included_from:
-  .data "  included from " $00
+  .asciiz "  included from "
 msg_expanded_from:
-  .data "  expanded from " $00
+  .asciiz "  expanded from "
 msg_macro_prefix:
-  .data "macro " $00
+  .asciiz "macro "
