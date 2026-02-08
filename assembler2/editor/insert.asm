@@ -90,15 +90,15 @@ insert_char
 
   ; Get pointer to current position in buffer
   LDA FILE_LINE16
-  LDX FILE_LINE16+$01
+  LDX FILE_LINE16 + 1
   JSR buf_get_line_ptr
   CLC
   LDA BUF_PTR16
   ADC CURSOR_COL
   STA BUF_PTR16
-  LDA BUF_PTR16+$01
+  LDA BUF_PTR16 + 1
   ADC #0
-  STA BUF_PTR16+$01
+  STA BUF_PTR16 + 1
 
   LDA BUF_TEMP
   JSR buf_insert_char
@@ -119,15 +119,15 @@ insert_char
 ; Insert newline at cursor (split line)
 insert_newline
   LDA FILE_LINE16
-  LDX FILE_LINE16+$01
+  LDX FILE_LINE16 + 1
   JSR buf_get_line_ptr
   CLC
   LDA BUF_PTR16
   ADC CURSOR_COL
   STA BUF_PTR16
-  LDA BUF_PTR16+$01
+  LDA BUF_PTR16 + 1
   ADC #0
-  STA BUF_PTR16+$01
+  STA BUF_PTR16 + 1
 
   JSR buf_insert_newline
   BCS .insert_newline_full
@@ -164,24 +164,24 @@ insert_backspace
 
   ; Delete character before cursor
   LDA FILE_LINE16
-  LDX FILE_LINE16+$01
+  LDX FILE_LINE16 + 1
   JSR buf_get_line_ptr
   CLC
   LDA BUF_PTR16
   ADC CURSOR_COL
   STA BUF_PTR16
-  LDA BUF_PTR16+$01
+  LDA BUF_PTR16 + 1
   ADC #0
-  STA BUF_PTR16+$01
+  STA BUF_PTR16 + 1
 
   ; Point to character before cursor
   SEC
   LDA BUF_PTR16
   SBC #1
   STA BUF_PTR16
-  LDA BUF_PTR16+$01
+  LDA BUF_PTR16 + 1
   SBC #0
-  STA BUF_PTR16+$01
+  STA BUF_PTR16 + 1
 
   JSR buf_delete_char
   JSR buf_adjust_lines_dec
@@ -195,7 +195,7 @@ insert_backspace
 .join_lines
   ; At column 0 - join with previous line
   LDA FILE_LINE16
-  ORA FILE_LINE16+$01
+  ORA FILE_LINE16 + 1
   BEQ .cant_join     ; Can't join at first line
 
   ; Get length of previous line (will become new cursor col)
@@ -203,7 +203,7 @@ insert_backspace
   LDA FILE_LINE16
   SBC #1
   TAY
-  LDA FILE_LINE16+$01
+  LDA FILE_LINE16 + 1
   SBC #0
   TAX
   TYA
@@ -215,7 +215,7 @@ insert_backspace
   LDA FILE_LINE16
   SBC #1
   TAY
-  LDA FILE_LINE16+$01
+  LDA FILE_LINE16 + 1
   SBC #0
   TAX
   TYA
@@ -234,8 +234,8 @@ insert_backspace
   ADC BUF_PTR16
   STA BUF_PTR16
   LDA #0
-  ADC BUF_PTR16+$01
-  STA BUF_PTR16+$01
+  ADC BUF_PTR16 + 1
+  STA BUF_PTR16 + 1
 
   JSR buf_delete_char
   JSR buf_rebuild_lines

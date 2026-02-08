@@ -136,14 +136,14 @@ command_parse
   JSR show_status_message
   RTS
 .not_readonly_w
-  LDA CMD_BUF+$01
+  LDA CMD_BUF + 1
   BEQ .do_write       ; Just ":w"
   CMP #'q'
   BEQ .check_wq
   JMP .unknown
 
 .check_wq
-  LDA CMD_BUF+$02
+  LDA CMD_BUF + 2
   BNE .unknown        ; Extra chars after ":wq"
   ; :wq - write and quit
   JSR command_write_file
@@ -156,7 +156,7 @@ command_parse
   RTS
 
 .check_q
-  LDA CMD_BUF+$01
+  LDA CMD_BUF + 1
   BEQ .do_quit        ; Just ":q"
   CMP #'!'
   BEQ .force_quit
@@ -176,7 +176,7 @@ command_parse
   RTS
 
 .force_quit
-  LDA CMD_BUF+$02
+  LDA CMD_BUF + 2
   BNE .unknown        ; Extra chars after ":q!"
   LDA #$FF
   STA CMD_QUIT
@@ -215,14 +215,14 @@ command_parse
   ; + original*2
   CLC
   ASL BUF_SRC16
-  ROL BUF_SRC16+$01
+  ROL BUF_SRC16 + 1
   CLC
   LDA BUF_LEN16
   ADC BUF_SRC16
   STA BUF_LEN16
-  LDA BUF_LEN16+$01
-  ADC BUF_SRC16+$01
-  STA BUF_LEN16+$01
+  LDA BUF_LEN16 + 1
+  ADC BUF_SRC16 + 1
+  STA BUF_LEN16 + 1
 
   ; Add digit
   PLA
@@ -230,8 +230,8 @@ command_parse
   ADC BUF_LEN16
   STA BUF_LEN16
   LDA #0
-  ADC BUF_LEN16+$01
-  STA BUF_LEN16+$01
+  ADC BUF_LEN16 + 1
+  STA BUF_LEN16 + 1
 
   INX
   JMP .parse_digit
@@ -239,20 +239,20 @@ command_parse
 .goto_done
   ; BUF_LEN16 = 1-based line number, convert to 0-based
   LDA BUF_LEN16
-  ORA BUF_LEN16+$01
+  ORA BUF_LEN16 + 1
   BEQ .goto_ret      ; :0 does nothing
 
   SEC
   LDA BUF_LEN16
   SBC #1
   STA FILE_LINE16
-  LDA BUF_LEN16+$01
+  LDA BUF_LEN16 + 1
   SBC #0
-  STA FILE_LINE16+$01
+  STA FILE_LINE16 + 1
 
   ; Clamp to last line
-  LDA FILE_LINE16+$01
-  CMP LINE_COUNT16+$01
+  LDA FILE_LINE16 + 1
+  CMP LINE_COUNT16 + 1
   BCC .line_ok
   BNE .clamp_line
   LDA FILE_LINE16
@@ -263,9 +263,9 @@ command_parse
   LDA LINE_COUNT16
   SBC #1
   STA FILE_LINE16
-  LDA LINE_COUNT16+$01
+  LDA LINE_COUNT16 + 1
   SBC #0
-  STA FILE_LINE16+$01
+  STA FILE_LINE16 + 1
 .line_ok
   ; Set VIEW_TOP so cursor is near top of screen
   CP16 FILE_LINE16, VIEW_TOP16
@@ -280,7 +280,7 @@ command_parse
 command_write_file
   ; Open file for writing
   LDA FNAME_PTR16
-  LDX FNAME_PTR16+$01
+  LDX FNAME_PTR16 + 1
   JSR openout
   STA FILE_HANDLE
 
@@ -317,7 +317,7 @@ command_write_file
 ; STR_PTR16 must be set to the message string before calling
 show_status_message
   ; Save message pointer (command_show_prompt clobbers STR_PTR16)
-  LDA STR_PTR16+$01
+  LDA STR_PTR16 + 1
   PHA
   LDA STR_PTR16
   PHA
@@ -325,7 +325,7 @@ show_status_message
   PLA
   STA STR_PTR16
   PLA
-  STA STR_PTR16+$01
+  STA STR_PTR16 + 1
   JSR write_string
   JSR con_flush
   JSR input_read_byte

@@ -69,7 +69,7 @@ editor_main
   JSR argv
   ; A;X = pointer to filename string, copy to FNAME_BUF and set FNAME_PTR16
   STA BUF_PTR16
-  STX BUF_PTR16+$01
+  STX BUF_PTR16 + 1
   LDY #0
 .copy_fname
   LDA (BUF_PTR16),Y
@@ -87,7 +87,7 @@ editor_main
 
   ; Try to open the file for reading (returns 0 if not found)
   LDA FNAME_PTR16
-  LDX FNAME_PTR16+$01
+  LDX FNAME_PTR16 + 1
   JSR open
   CMP #0
   BEQ .new_file
@@ -187,9 +187,9 @@ main_loop
   LDA VIEW_TOP16
   ADC CURSOR_ROW
   STA FILE_LINE16
-  LDA VIEW_TOP16+$01
+  LDA VIEW_TOP16 + 1
   ADC #0
-  STA FILE_LINE16+$01
+  STA FILE_LINE16 + 1
 
   ; Redraw screen (full or cursor-only based on RENDER_FLAG)
   JSR render_update
@@ -228,7 +228,7 @@ parse_debug_args
   BCS .args_done        ; No more arguments
   JSR argv
   STA BUF_PTR16
-  STX BUF_PTR16+$01
+  STX BUF_PTR16 + 1
 
   ; Check for "bufsize:" prefix (8 chars)
   LDY #0
@@ -300,11 +300,11 @@ parse_hex_digit
   RTS
 .upper
   SEC
-  SBC #'A'-10
+  SBC #'A' - 10
   RTS
 .lower
   SEC
-  SBC #'a'-10
+  SBC #'a' - 10
   RTS
 
   .endif

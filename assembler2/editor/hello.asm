@@ -140,7 +140,7 @@ print_hex
   CMP #10
   BCC .hex_digit
   CLC
-  ADC #'A'-10
+  ADC #'A' - 10
   JSR write_b
   RTS
 .hex_digit

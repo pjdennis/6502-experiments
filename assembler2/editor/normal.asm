@@ -174,12 +174,12 @@ normal_move_down
   LDA FILE_LINE16
   ADC #1
   STA BUF_PTR16
-  LDA FILE_LINE16+$01
+  LDA FILE_LINE16 + 1
   ADC #0
-  STA BUF_PTR16+$01
+  STA BUF_PTR16 + 1
 
-  LDA BUF_PTR16+$01
-  CMP LINE_COUNT16+$01
+  LDA BUF_PTR16 + 1
+  CMP LINE_COUNT16 + 1
   BCC .can_move
   BNE .done
   LDA BUF_PTR16
@@ -210,7 +210,7 @@ normal_move_down
 
 normal_move_up
   LDA FILE_LINE16
-  ORA FILE_LINE16+$01
+  ORA FILE_LINE16 + 1
   BEQ .done
 
   DEC16 FILE_LINE16
@@ -242,13 +242,13 @@ normal_page_down
   LDA FILE_LINE16
   ADC BUF_TEMP
   STA BUF_PTR16
-  LDA FILE_LINE16+$01
+  LDA FILE_LINE16 + 1
   ADC #0
-  STA BUF_PTR16+$01
+  STA BUF_PTR16 + 1
 
   ; Clamp target to LINE_COUNT16 - 1
-  LDA BUF_PTR16+$01
-  CMP LINE_COUNT16+$01
+  LDA BUF_PTR16 + 1
+  CMP LINE_COUNT16 + 1
   BCC .pgdn_target_ok
   BNE .pgdn_clamp_target
   LDA BUF_PTR16
@@ -259,9 +259,9 @@ normal_page_down
   LDA LINE_COUNT16
   SBC #1
   STA BUF_PTR16
-  LDA LINE_COUNT16+$01
+  LDA LINE_COUNT16 + 1
   SBC #0
-  STA BUF_PTR16+$01
+  STA BUF_PTR16 + 1
 .pgdn_target_ok
 
   ; VIEW_TOP16 += page_size
@@ -269,29 +269,29 @@ normal_page_down
   LDA VIEW_TOP16
   ADC BUF_TEMP
   STA VIEW_TOP16
-  LDA VIEW_TOP16+$01
+  LDA VIEW_TOP16 + 1
   ADC #0
-  STA VIEW_TOP16+$01
+  STA VIEW_TOP16 + 1
 
   ; Clamp VIEW_TOP16 to max(0, LINE_COUNT - page_size)
   SEC
   LDA LINE_COUNT16
   SBC BUF_TEMP
   TAX                ; X = low byte of max view top
-  LDA LINE_COUNT16+$01
+  LDA LINE_COUNT16 + 1
   SBC #0
   BCC .pgdn_view_zero  ; LINE_COUNT < page_size, set VIEW_TOP=0
   TAY                ; Y = high byte of max view top
 
   ; If VIEW_TOP16 > max, clamp it
-  CPY VIEW_TOP16+$01
+  CPY VIEW_TOP16 + 1
   BCC .pgdn_clamp_view
   BNE .pgdn_set_row
   CPX VIEW_TOP16
   BCS .pgdn_set_row
 .pgdn_clamp_view
   STX VIEW_TOP16
-  STY VIEW_TOP16+$01
+  STY VIEW_TOP16 + 1
   JMP .pgdn_set_row
 
 .pgdn_view_zero
@@ -322,9 +322,9 @@ normal_page_up
   LDA FILE_LINE16
   SBC BUF_TEMP
   STA BUF_PTR16
-  LDA FILE_LINE16+$01
+  LDA FILE_LINE16 + 1
   SBC #0
-  STA BUF_PTR16+$01
+  STA BUF_PTR16 + 1
   BCS .pgup_target_ok
   ; Underflow - clamp to 0
   LDA #0
@@ -332,7 +332,7 @@ normal_page_up
 .pgup_target_ok
 
   ; VIEW_TOP16 -= page_size, clamped to 0
-  LDA VIEW_TOP16+$01
+  LDA VIEW_TOP16 + 1
   BNE .pgup_can_sub  ; High byte > 0, definitely >= page_size
   LDA VIEW_TOP16
   CMP BUF_TEMP
@@ -348,9 +348,9 @@ normal_page_up
   LDA VIEW_TOP16
   SBC BUF_TEMP
   STA VIEW_TOP16
-  LDA VIEW_TOP16+$01
+  LDA VIEW_TOP16 + 1
   SBC #0
-  STA VIEW_TOP16+$01
+  STA VIEW_TOP16 + 1
 
 .pgup_set_row
   ; CURSOR_ROW = target_line - VIEW_TOP16
@@ -393,9 +393,9 @@ normal_goto_last
   LDA LINE_COUNT16
   SBC #1
   STA FILE_LINE16
-  LDA LINE_COUNT16+$01
+  LDA LINE_COUNT16 + 1
   SBC #0
-  STA FILE_LINE16+$01
+  STA FILE_LINE16 + 1
 
   ; VIEW_TOP = max(0, LINE_COUNT - (SCREEN_ROWS - 1))
   LDA SCREEN_ROWS
@@ -406,9 +406,9 @@ normal_goto_last
   LDA LINE_COUNT16
   SBC BUF_TEMP
   STA VIEW_TOP16
-  LDA LINE_COUNT16+$01
+  LDA LINE_COUNT16 + 1
   SBC #0
-  STA VIEW_TOP16+$01
+  STA VIEW_TOP16 + 1
   BCS .view_ok
   LDA #0
   STA_LH16 VIEW_TOP16
@@ -453,15 +453,15 @@ normal_delete_char
   STA LINE_LEN
 
   LDA FILE_LINE16
-  LDX FILE_LINE16+$01
+  LDX FILE_LINE16 + 1
   JSR buf_get_line_ptr
   CLC
   LDA BUF_PTR16
   ADC CURSOR_COL
   STA BUF_PTR16
-  LDA BUF_PTR16+$01
+  LDA BUF_PTR16 + 1
   ADC #0
-  STA BUF_PTR16+$01
+  STA BUF_PTR16 + 1
 
   LDA CURSOR_COL
   CMP LINE_LEN
@@ -486,14 +486,14 @@ normal_d_key
 
   ; dd: delete current line
   LDA FILE_LINE16
-  LDX FILE_LINE16+$01
+  LDX FILE_LINE16 + 1
   JSR buf_delete_line
   LDA #$FF
   STA MODIFIED
 
   ; Clamp file line if past end
-  LDA FILE_LINE16+$01
-  CMP LINE_COUNT16+$01
+  LDA FILE_LINE16 + 1
+  CMP LINE_COUNT16 + 1
   BCC .no_clamp
   BNE .do_clamp
   LDA FILE_LINE16
@@ -504,9 +504,9 @@ normal_d_key
   LDA LINE_COUNT16
   SBC #1
   STA FILE_LINE16
-  LDA LINE_COUNT16+$01
+  LDA LINE_COUNT16 + 1
   SBC #0
-  STA FILE_LINE16+$01
+  STA FILE_LINE16 + 1
 .no_clamp
   LDA #0
   STA LAST_KEY
@@ -550,7 +550,7 @@ normal_enter_insert_eol
 
 normal_open_below
   LDA FILE_LINE16
-  LDX FILE_LINE16+$01
+  LDX FILE_LINE16 + 1
   JSR buf_get_line_ptr
 
   LDY #0
@@ -567,8 +567,8 @@ normal_open_below
   ADC BUF_PTR16
   STA BUF_PTR16
   LDA #0
-  ADC BUF_PTR16+$01
-  STA BUF_PTR16+$01
+  ADC BUF_PTR16 + 1
+  STA BUF_PTR16 + 1
 
   LDA #'\n'
   JSR buf_insert_char
@@ -605,7 +605,7 @@ normal_open_below
 
 normal_open_above
   LDA FILE_LINE16
-  LDX FILE_LINE16+$01
+  LDX FILE_LINE16 + 1
   JSR buf_get_line_ptr
 
   LDA #'\n'
@@ -640,7 +640,7 @@ normal_enter_command
 
 get_current_line_len
   LDA FILE_LINE16
-  LDX FILE_LINE16+$01
+  LDX FILE_LINE16 + 1
   JSR buf_get_line_len
   RTS
 

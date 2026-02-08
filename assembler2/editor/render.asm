@@ -70,8 +70,8 @@ render_screen
   BCS .row_done    ; At or past last row = done with text
 
   ; Check if line exists
-  LDA RENDER_LINE16+$01
-  CMP LINE_COUNT16+$01
+  LDA RENDER_LINE16 + 1
+  CMP LINE_COUNT16 + 1
   BCC .line_exists
   BNE .past_eof
   LDA RENDER_LINE16
@@ -81,7 +81,7 @@ render_screen
 .line_exists
   ; Render this line
   LDA RENDER_LINE16
-  LDX RENDER_LINE16+$01
+  LDX RENDER_LINE16 + 1
   JSR buf_get_line_ptr
 
   JSR render_line_chars
@@ -144,8 +144,8 @@ render_status_line
   TAX
   LDA mode_strings,X
   STA STR_PTR16
-  LDA mode_strings+$01,X
-  STA STR_PTR16+$01
+  LDA mode_strings + 1,X
+  STA STR_PTR16 + 1
   JSR write_string
 
   ; Print separator and line/col
@@ -156,9 +156,9 @@ render_status_line
   LDA FILE_LINE16
   ADC #1
   STA TO_DECIMAL_VALUE16
-  LDA FILE_LINE16+$01
+  LDA FILE_LINE16 + 1
   ADC #0
-  STA TO_DECIMAL_VALUE16+$01
+  STA TO_DECIMAL_VALUE16 + 1
   JSR to_decimal
   PRINT_STR TO_DECIMAL_RESULT
 
@@ -214,7 +214,7 @@ render_current_line
 
   ; Get current line pointer
   LDA FILE_LINE16
-  LDX FILE_LINE16+$01
+  LDX FILE_LINE16 + 1
   JSR buf_get_line_ptr
 
   JSR render_line_chars
@@ -238,7 +238,7 @@ render_current_line_and_status
   JSR ansi_move_cursor
 
   LDA FILE_LINE16
-  LDX FILE_LINE16+$01
+  LDX FILE_LINE16 + 1
   JSR buf_get_line_ptr
 
   JSR render_line_chars
