@@ -440,34 +440,6 @@ parse_char_literal:
   JMP err_invalid_char_literal
 
 
-; Check for the existance of an assigned value (read the equals sign)
-; On entry CURR_CHAR contains the current character
-; On exit C set if value exists; clear otherwise
-;         A contains the current character
-;         X, Y are preserved
-check_for_value:
-  JSR skip_spaces
-  CMP #'='             ; C=1 if A='=', C=0 otherwise
-  BEQ .done
-  CLC                  ; A < '=', so clear carry explicitly
-.done:
-  RTS
-
-
-; Read a value
-; On entry A contains the current character
-; On exit HEX16 contains the value read
-;         A contains the current character
-;         X is preserved
-;         Y is not preserved
-; Raises 'Bad hex' error if non-hex characters were encountered
-; Supports: $xx, $xxxx, label, <label, >label
-read_value:
-  JSR read_char        ; Read the character after the "="
-  JSR skip_spaces
-  JMP parse_value      ; Tail call; Returns value in OPERAND16 (aliased to HEX16)
-
-
 ; Parse a term (single value): $12, $1234, 'x', label, <label, or >label
 ; On entry A contains first character
 ; On exit  CURR_CHAR contains current character
@@ -755,8 +727,36 @@ parse_expression:
 
 ; ============================================================================
 ; TIER 5: LABEL MANAGEMENT & HASH TABLE
-; Label classification, lookup, and definition
+; Label classification, lookup, value assignment, and definition
 ; ============================================================================
+
+; Check for the existance of an assigned value (read the equals sign)
+; On entry CURR_CHAR contains the current character
+; On exit C set if value exists; clear otherwise
+;         A contains the current character
+;         X, Y are preserved
+check_for_value:
+  JSR skip_spaces
+  CMP #'='             ; C=1 if A='=', C=0 otherwise
+  BEQ .done
+  CLC                  ; A < '=', so clear carry explicitly
+.done:
+  RTS
+
+
+; Read a value
+; On entry A contains the current character
+; On exit HEX16 contains the value read
+;         A contains the current character
+;         X is preserved
+;         Y is not preserved
+; Raises 'Bad hex' error if non-hex characters were encountered
+; Supports: $xx, $xxxx, label, <label, >label
+read_value:
+  JSR read_char        ; Read the character after the "="
+  JSR skip_spaces
+  JMP parse_value      ; Tail call; Returns value in OPERAND16 (aliased to HEX16)
+
 
 ; Read a local label (dot already detected but not consumed)
 ; Skips dot, reads name into TOKEN, validates scope, sets LABEL_TYPE
