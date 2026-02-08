@@ -91,7 +91,7 @@ ARG_COUNT:       .byte 0      ; Total command line argument count
 IN_MACRO_DEF:    .byte 0      ; Flag: currently capturing macro body ($FF = capturing)
 MACRO_ENTRY16:   .word 0      ; Original macro hash entry address (for recursion check)
 IFDEF_INDEX:     .byte 0      ; Current index into IFDEF_DECISIONS buffer
-DATA_MODE:       .byte 0      ; Data directive mode: 0=.data 1=.byte 2=.word 3=.asciiz
+DATA_MODE:       .byte 0      ; Data directive mode: 1=.byte 2=.word 3=.asciiz
 
   .ifdef enable_debug
 DEBUG_FLAG:      .byte 0      ; Non-zero if debug output enabled
@@ -105,7 +105,6 @@ MACRO_PTR16:     .word 0      ; Pointer to macro name (for show_captured_macros)
 
 
 ; Constants
-DATA_MODE_DATA   = 0          ; Variable width
 DATA_MODE_BYTE   = 1          ; 1 Byte
 DATA_MODE_WORD   = 2          ; 2 Bytes
 DATA_MODE_ASCIIZ = 3          ; 1 Byte, null terminated
@@ -1451,10 +1450,6 @@ process_directive:
   SET16 directive_code, TABP16
   JSR compare_token
   BEQ .code
-  ; Check for 'data'
-  SET16 directive_data, TABP16
-  JSR compare_token
-  BEQ .data
   ; Check for 'byte'
   SET16 directive_byte, TABP16
   JSR compare_token
@@ -1508,9 +1503,6 @@ process_directive:
   JSR swap_pc_with_save
 .in_code:
   JMP skip_rest_of_line  ; Tail call
-.data:
-  LDA #DATA_MODE_DATA
-  JMP set_data_mode
 .byte:
   LDA #DATA_MODE_BYTE
   JMP set_data_mode
@@ -1554,9 +1546,6 @@ directive_zeropage:
 directive_code:
   .asciiz "code"
 
-directive_data:
-  .asciiz "data"
-
 directive_byte:
   .asciiz "byte"
 
@@ -1591,17 +1580,8 @@ data_parameters_loop:
   JSR skip_optional_comma
   JMP data_parameters_loop
 .data_value:
-  JSR parse_value        ; C=1 for 2-byte, C=0 for 1-byte
-  LDA DATA_MODE          ; LDA does NOT affect carry
-  BNE .forced_width      ; Non-zero = forced width mode
-  ; Mode 0 (.data): use carry from parse_value
-  BCS .data_emit_two_bytes
-.data_emit_one_byte:
-  LDA OPERAND16
-  JSR emit
-  JSR skip_optional_comma
-  JMP data_parameters_loop
-.forced_width:
+  JSR parse_value
+  LDA DATA_MODE
   CMP #DATA_MODE_WORD
   BEQ .data_emit_two_bytes  ; Mode 2 (.word): force 2 bytes
   ; Mode 1 (.byte) or Mode 3 (.asciiz): validate + emit 1 byte
@@ -1610,6 +1590,11 @@ data_parameters_loop:
   LDA OPERAND16+$01
   BEQ .data_emit_one_byte   ; Not an error
   JMP err_value_out_of_range
+.data_emit_one_byte:
+  LDA OPERAND16
+  JSR emit
+  JSR skip_optional_comma
+  JMP data_parameters_loop
 .data_emit_two_bytes:
   LDA OPERAND16          ; Emit low byte
   JSR emit

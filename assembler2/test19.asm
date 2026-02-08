@@ -137,12 +137,12 @@ test_local_2
   JSR write_d
 
   BRK
-  .data $00
+  .byte $00
 
-output_filename          .data "out/test_output.out" $00
-arguments_message        .data " arguments\n" $00
-argument_message_prefix  .data "  arg " $00
-argument_message_suffix  .data ": " $00
+output_filename          .byte "out/test_output.out" $00
+arguments_message        .byte " arguments\n" $00
+argument_message_prefix  .byte "  arg " $00
+argument_message_suffix  .byte ": " $00
 
 
   .include test_inc19.asm
@@ -153,10 +153,10 @@ argument_message_suffix  .data ": " $00
 
 * = $01
 
-FILE_HANDLE                 .data $00 ; 1 byte
-TABPL                       .data $00 ; 2 byte table pointer
-TABPH                       .data $00 ; "
-ARGC                        .data $00 ; 1 byte
+FILE_HANDLE                 .byte $00 ; 1 byte
+TABPL                       .byte $00 ; 2 byte table pointer
+TABPH                       .byte $00 ; "
+ARGC                        .byte $00 ; 1 byte
 
   .code
   .code
@@ -192,11 +192,11 @@ sm_done
 
   .zeropage
 
-TO_DECIMAL_VALUE_L          .data $00 ; 1 byte
-TO_DECIMAL_VALUE_H          .data $00 ; 1 byte
+TO_DECIMAL_VALUE_L          .byte $00 ; 1 byte
+TO_DECIMAL_VALUE_H          .byte $00 ; 1 byte
 TO_DECIMAL_RESULT_MINUS_ONE
-TO_DECIMAL_MOD10            .data $00 ; 1 byte
-TO_DECIMAL_RESULT           .data $00 $00 $00 $00 $00 $00 ; 6 bytes
+TO_DECIMAL_MOD10            .byte $00 ; 1 byte
+TO_DECIMAL_RESULT           .byte $00 $00 $00 $00 $00 $00 ; 6 bytes
 
   .code
 
@@ -278,4 +278,4 @@ to_decimal_shift_loop
   RTS
 
 
-  .data start
+  .word start

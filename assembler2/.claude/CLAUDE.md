@@ -59,7 +59,7 @@ The hash table requires caller to define `HT_KEY` and `HT_V16` before including.
 
 ### Zero Page Conventions
 
-Variables are allocated via `.data $00` in `.zeropage` section. Two-byte pointers use adjacent locations with a `16` suffix (e.g., `MEMP16`, `FS_P16`).
+Variables are allocated via `.byte 0` / `.word 0` in `.zeropage` section. Two-byte pointers use adjacent locations with a `16` suffix (e.g., `MEMP16`, `FS_P16`).
 
 ## Emulator Interface
 
@@ -87,7 +87,7 @@ Starting with asm19, the assembler supports expression evaluation with `+`, `-`,
 - `LDA #$01<<$04` - Left shift: $01 << 4 = $10
 - `LDA #$80>>$02` - Right shift: $80 >> 2 = $20
 - `foo = bar+$01` - Expressions in label assignments
-- `.data value+$05` - Expressions in data directives
+- `.byte value+$05` - Expressions in data directives
 - `LDA (ptr+$02,X)` - Expressions in address operands
 - `LDA #'Z'-'A'` - Character constant arithmetic
 
