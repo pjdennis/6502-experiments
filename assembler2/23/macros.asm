@@ -177,3 +177,18 @@
   PLA
   STA ptr
   .endmacro
+
+
+; LDAX16 ptr - Load 16-bit value into A (low) / X (high)
+; Used before calling subroutines that take A/X as 16-bit parameter
+  .macro LDAX16 ptr
+  LDA ptr
+  LDX ptr+$01
+  .endmacro
+
+
+; STAX16 ptr - Store A (low) / X (high) into 16-bit pointer
+  .macro STAX16 ptr
+  STA ptr
+  STX ptr+$01
+  .endmacro
