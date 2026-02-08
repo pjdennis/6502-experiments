@@ -27,9 +27,9 @@ TABP16:      .word 0
 
   .code
 
-  .include 22/environment.asm
-  .include 22/macros.asm
-  .include 22/to_decimal.asm
+  .include environment.asm
+  .include macros.asm
+  .include to_decimal.asm
 
 ; File stack configuration
 FS_FILENAME   = TOKEN
@@ -45,7 +45,7 @@ err_file_not_found:
   BRK
   .asciiz 36, "File not found"
 
-  .include 22/file_stack.asm
+  .include file_stack.asm
 read_char = file_stack_read_char
 CURLINE16 = FS_CURR_LINE16
 CURR_CHAR = FS_CURR_CHAR

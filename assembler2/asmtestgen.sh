@@ -113,12 +113,11 @@ echo "--- Version 22 ---"
   ../emulator.out ../21/out/asm_debug.out 2000 /dev/null /dev/null asm.asm out/asm_debug.out define:enable_debug)
 echo "--- Version 23 ---"
 (cd 23 && mkdir -p out &&
+  ../emulator.out ../22/out/asm_debug.out 2000 /dev/null /dev/null tests/file_stack_test.asm out/file_stack_test.out &&
   ../emulator.out ../22/out/asm_debug.out 2000 /dev/null /dev/null instgen.asm out/instgen.out &&
   ../emulator.out out/instgen.out 2000 /dev/null out/inst.asm.out &&
   ../emulator.out ../22/out/asm_debug.out 2000 /dev/null /dev/null asm.asm out/asm.out &&
   ../emulator.out ../22/out/asm_debug.out 2000 /dev/null /dev/null asm.asm out/asm_debug.out define:enable_debug)
-echo "--- File stack test ---"
-./emulator.out 23/out/asm_debug.out 2000 /dev/null /dev/null 23/tests/file_stack_test.asm out/file_stack_test.out
 echo "--- Self-assembly test ---"
 # Self-assembly test (without debug - smaller)
 (cd 23 && ../emulator.out out/asm.out 2000 /dev/null /dev/null asm.asm out/asm_2.out)

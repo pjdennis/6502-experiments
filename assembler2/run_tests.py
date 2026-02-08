@@ -91,7 +91,7 @@ class TestRunner:
         self.quiet = quiet
         self.emulator = base_dir / "emulator.out"
         self.assembler = base_dir / ASM_VERSION / "out" / "asm_debug.out"
-        self.file_stack_test = base_dir / "out" / "file_stack_test.out"
+        self.file_stack_test = base_dir / ASM_VERSION / "out" / "file_stack_test.out"
 
         self.passed = 0
         self.failed = 0
