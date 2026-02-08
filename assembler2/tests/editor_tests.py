@@ -1330,10 +1330,9 @@ class EditorTestRunner:
 
         # Insert mode: cursor tracks wrap when typing past screen edge
         # Start with 38 chars on 40-col screen, $a enters append at col 38.
-        # Type 3 chars: col 39 (row 0), col 40 (row 1), col 41 (row 1).
-        # Frame sequence: 0=init, 1=$, 2=a, 3=X(col39), 4=X(col40), 5=X(col41), 6=ESC
-        # At frame 4: CURSOR_COL=40, must be row 1 col 0 (crossed wrap boundary)
-        # At frame 5: CURSOR_COL=41, must be row 1 col 1
+        # Type 3 chars: first X at col 39, then XX batched -> col 41.
+        # Frame sequence: 0=init, 1=$, 2=a, 3=X+batch(col41), 4=ESC(col40)
+        # At frame 3: CURSOR_COL=41, must be row 1 col 1 (all 3 chars inserted)
         self.run_test_screen(
             "Insert cursor tracks wrap boundary",
             "A" * 38 + "\n",
@@ -1344,15 +1343,14 @@ class EditorTestRunner:
                 (1, "X"),
             ],
             expect_cursor_at_frame=[
-                (4, (1, 0)),
-                (5, (1, 1)),
+                (3, (1, 1)),
             ]
         )
 
         # Insert mode: cursor on wrap continuation while typing
         # Start with 39 chars, $a enters append at col 39, type 2 chars.
-        # Frame sequence: 0=init, 1=$, 2=a, 3=X(col40), 4=X(col41), 5=ESC
-        # At frame 3: CURSOR_COL=40, must be row 1 col 0
+        # Frame sequence: 0=init, 1=$, 2=a, 3=X+batch(col41), 4=ESC(col40)
+        # At frame 3: CURSOR_COL=41, must be row 1 col 1
         self.run_test_screen(
             "Insert cursor mid-wrap while typing",
             "A" * 39 + "\n",
@@ -1363,7 +1361,7 @@ class EditorTestRunner:
                 (1, "X"),
             ],
             expect_cursor_at_frame=[
-                (3, (1, 0)),
+                (3, (1, 1)),
             ]
         )
 
@@ -1579,6 +1577,51 @@ class EditorTestRunner:
             "Hello\nWorld\n",
             b"ji\x08\x1b:q!\r",
             expect_content_redraws=[True, False, True, True, False]
+        )
+
+        # ============================================================
+        # Batch insert tests
+        # When multiple printable keys are buffered, they should be
+        # inserted in a single operation with one render.
+        # ============================================================
+        print()
+        print("Batch insert:")
+        print()
+
+        # Render optimization: batch insert reduces content redraws
+        # Frame 0: initial render (True)
+        # Frame 1: 'i' enters insert mode (True - status bar changes)
+        # Frame 2: first char 'X' inserted, then Y and Z batched (True)
+        # Frame 3: ESC exits insert (False - cursor only)
+        self.run_test_screen(
+            "Render opt: batch insert reduces redraws",
+            "Hello\n",
+            b"iXYZ\x1b:q!\r",
+            expect_content_redraws=[True, True, True, False],
+        )
+
+        # Batch insert mid-line correctness
+        self.run_test(
+            "Batch insert mid-line",
+            "ABCD\n",
+            b"liXYZ\x1b:wq\r",
+            expected_content="AXYZBCD\n"
+        )
+
+        # Batch stops at newline (Enter after printable chars)
+        self.run_test(
+            "Batch insert stops at newline",
+            "Hello\n",
+            b"iXY\r\x1b:wq\r",
+            expected_content="XY\nHello\n"
+        )
+
+        # Batch insert many characters
+        self.run_test(
+            "Batch insert many characters",
+            "AB\n",
+            b"liHello World\x1b:wq\r",
+            expected_content="AHello WorldB\n"
         )
 
         print()

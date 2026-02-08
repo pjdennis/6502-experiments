@@ -98,6 +98,7 @@ insert_char:
   JSR buf_adjust_lines_inc
 
   INC CURSOR_COL
+  JSR insert_batch_pending
   LDA #1
   STA RENDER_FLAG
   JSR ensure_cursor_visible
@@ -107,6 +108,64 @@ insert_char:
 .insert_char_full:
   SET16 str_buffer_full, STR_PTR16
   JSR show_status_message
+  RTS
+
+; Read and batch-insert any pending printable characters from input
+; Called after the first character has been inserted and lines adjusted.
+; Uses BATCH_BUF as staging area, inserts up to BATCH_MAX chars at once.
+insert_batch_pending:
+  ; Check if more input is available
+  JSR input_ready
+  CMP #$FF
+  BNE .batch_done
+
+  ; Read pending printable chars into BATCH_BUF
+  LDX #0
+.batch_read:
+  JSR input_read_byte
+  ; Check if printable ($20-$7E)
+  CMP #' '
+  BCC .batch_not_printable
+  CMP #$7F
+  BCS .batch_not_printable
+  ; Store printable char
+  STA BATCH_BUF,X
+  INX
+  CPX #BATCH_MAX
+  BEQ .batch_insert        ; Hit limit, insert what we have
+  ; Check for more input
+  JSR input_ready
+  CMP #$FF
+  BEQ .batch_read
+  ; No more input, insert what we have
+  JMP .batch_insert
+
+.batch_not_printable:
+  ; Push back the non-printable char
+  JSR input_unread
+  ; Fall through to insert
+
+.batch_insert:
+  ; X = number of chars read
+  CPX #0
+  BEQ .batch_done
+
+  ; Set up for batch insert
+  STX BUF_DELTA
+  JSR get_cursor_buf_ptr
+  JSR buf_insert_chars
+  BCS .batch_done           ; Buffer full, skip batch
+
+  ; Adjust line pointers by BUF_DELTA
+  JSR buf_adjust_lines_inc
+
+  ; Advance cursor by BUF_DELTA
+  CLC
+  LDA CURSOR_COL
+  ADC BUF_DELTA
+  STA CURSOR_COL
+
+.batch_done:
   RTS
 
 ; Insert newline at cursor (split line)

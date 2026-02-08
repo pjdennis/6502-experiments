@@ -14,6 +14,8 @@ LINE_TBL    = $C000  ; Line pointer table (2 bytes per entry)
 LINE_LIMIT  = $E000  ; End of line table (supports up to 4096 entries = 2048 lines, but
                      ; practically limited by available text space)
 MAX_LINES   = $03FF  ; Maximum line count (1023), 0-indexed
+BATCH_BUF   = $E000  ; Staging buffer for batch insert (32 bytes)
+BATCH_MAX   = 32     ; Maximum batch size
 
   .zeropage
 
@@ -216,6 +218,28 @@ buf_insert_char:
   CLC
   RTS
 .full:
+  SEC
+  RTS
+
+; Insert multiple characters from BATCH_BUF at position in buffer
+; BUF_PTR16 = position to insert at
+; BUF_DELTA = number of characters to insert
+; Characters in BATCH_BUF[0..BUF_DELTA-1]
+; Returns carry set = buffer full, carry clear = success
+buf_insert_chars:
+  JSR buf_shift_right
+  BCS .batch_full
+  ; Copy BUF_DELTA bytes from BATCH_BUF into the gap at BUF_PTR16
+  LDY #0
+.batch_copy:
+  LDA BATCH_BUF,Y
+  STA (BUF_PTR16),Y
+  INY
+  CPY BUF_DELTA
+  BNE .batch_copy
+  CLC
+  RTS
+.batch_full:
   SEC
   RTS
 
