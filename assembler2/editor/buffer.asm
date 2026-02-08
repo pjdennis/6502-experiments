@@ -423,11 +423,7 @@ buf_delete_line:
   INY
   TYA
   CLC
-  ADC BUF_SRC16
-  STA BUF_SRC16
-  LDA #0
-  ADC BUF_SRC16 + 1
-  STA BUF_SRC16 + 1
+  ADCA16 BUF_SRC16, BUF_SRC16
 
   ; Now shift: copy from BUF_SRC16 to BUF_PTR16 up to BUF_END16
   ; BUF_PTR16 = destination (start of deleted line)

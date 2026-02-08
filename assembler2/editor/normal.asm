@@ -430,12 +430,8 @@ normal_delete_char:
   LDAX16 FILE_LINE16
   JSR buf_get_line_ptr
   CLC
-  LDA BUF_PTR16
-  ADC CURSOR_COL
-  STA BUF_PTR16
-  LDA BUF_PTR16 + 1
-  ADC #0
-  STA BUF_PTR16 + 1
+  LDA CURSOR_COL
+  ADCA16 BUF_PTR16, BUF_PTR16
 
   LDA CURSOR_COL
   CMP LINE_LEN
@@ -525,11 +521,7 @@ normal_open_below:
   INY
   TYA
   CLC
-  ADC BUF_PTR16
-  STA BUF_PTR16
-  LDA #0
-  ADC BUF_PTR16 + 1
-  STA BUF_PTR16 + 1
+  ADCA16 BUF_PTR16, BUF_PTR16
 
   LDA #'\n'
   JSR buf_insert_char

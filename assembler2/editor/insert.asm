@@ -92,12 +92,8 @@ insert_char:
   LDAX16 FILE_LINE16
   JSR buf_get_line_ptr
   CLC
-  LDA BUF_PTR16
-  ADC CURSOR_COL
-  STA BUF_PTR16
-  LDA BUF_PTR16 + 1
-  ADC #0
-  STA BUF_PTR16 + 1
+  LDA CURSOR_COL
+  ADCA16 BUF_PTR16, BUF_PTR16
 
   LDA BUF_TEMP
   JSR buf_insert_char
@@ -120,12 +116,8 @@ insert_newline:
   LDAX16 FILE_LINE16
   JSR buf_get_line_ptr
   CLC
-  LDA BUF_PTR16
-  ADC CURSOR_COL
-  STA BUF_PTR16
-  LDA BUF_PTR16 + 1
-  ADC #0
-  STA BUF_PTR16 + 1
+  LDA CURSOR_COL
+  ADCA16 BUF_PTR16, BUF_PTR16
 
   JSR buf_insert_newline
   BCS .insert_newline_full
@@ -164,12 +156,8 @@ insert_backspace:
   LDAX16 FILE_LINE16
   JSR buf_get_line_ptr
   CLC
-  LDA BUF_PTR16
-  ADC CURSOR_COL
-  STA BUF_PTR16
-  LDA BUF_PTR16 + 1
-  ADC #0
-  STA BUF_PTR16 + 1
+  LDA CURSOR_COL
+  ADCA16 BUF_PTR16, BUF_PTR16
 
   ; Point to character before cursor
   SEC
@@ -228,11 +216,7 @@ insert_backspace:
 .found_nl:
   TYA
   CLC
-  ADC BUF_PTR16
-  STA BUF_PTR16
-  LDA #0
-  ADC BUF_PTR16 + 1
-  STA BUF_PTR16 + 1
+  ADCA16 BUF_PTR16, BUF_PTR16
 
   JSR buf_delete_char
   JSR buf_rebuild_lines
