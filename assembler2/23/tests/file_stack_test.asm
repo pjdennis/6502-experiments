@@ -209,8 +209,7 @@ mode_memory:
   BEQ .at_not_start
   ; Might be a marker - check
   JSR check_markers
-  BCC .loop           ; Was a marker, continue reading
-  JMP .loop           ; Not a marker, but already output - continue
+  JMP .loop           ; Continue (marker handled or text already flushed)
 .at_not_start:
   LDA #'@'            ; Restore the clobbered character
 .not_at_sign:
@@ -371,7 +370,7 @@ flush_as_text:
   ; Output the terminator character
   LDA MARKER_TERM
   CMP #$FF
-  BEQ .eof_term       ; EOF - nothing to output
+  BEQ .not_newline    ; EOF - nothing to output
   JSR write_b
   CMP #$0A
   BNE .not_newline
@@ -381,11 +380,6 @@ flush_as_text:
   SEC
   RTS
 .not_newline:
-  LDA #$00
-  STA AT_LINE_START
-  SEC
-  RTS
-.eof_term:
   LDA #$00
   STA AT_LINE_START
   SEC
@@ -462,7 +456,6 @@ read_memory_content:
   LDA #$0A
   STA TOKEN,X
   INX
-.done:
   RTS
 
 ; Print traceback of file stack - pops all entries, closes files
@@ -661,34 +654,22 @@ parse_args:
 parse_mode:
   LDY #$00
   LDA (TABP16),Y
+  LDX #$00
   CMP #'e'
-  BEQ .check_echo
+  BEQ .set_mode
+  INX
   CMP #'l'
-  BEQ .check_lines
+  BEQ .set_mode
+  INX
   CMP #'i'
-  BEQ .check_info
+  BEQ .set_mode
+  INX
   CMP #'m'
-  BEQ .check_memory
+  BEQ .set_mode
   SEC
   RTS
-.check_echo:
-  LDA #$00
-  STA TEST_MODE
-  CLC
-  RTS
-.check_lines:
-  LDA #$01
-  STA TEST_MODE
-  CLC
-  RTS
-.check_info:
-  LDA #$02
-  STA TEST_MODE
-  CLC
-  RTS
-.check_memory:
-  LDA #$03
-  STA TEST_MODE
+.set_mode:
+  STX TEST_MODE
   CLC
   RTS
 
