@@ -1713,6 +1713,86 @@ class EditorTestRunner:
             expected_content="CDE\n"
         )
 
+        # ============================================================
+        # Batch Enter tests
+        # When multiple Enter keys are buffered in insert mode, they
+        # should be inserted in a single operation with one rebuild.
+        # ============================================================
+        print()
+        print("Batch Enter:")
+        print()
+
+        # Render optimization: batch Enter reduces redraws
+        # Frame 0: initial (True), Frame 1: i enters insert (True),
+        # Frame 2: first Enter + batch Enter*2 (True), Frame 3: ESC (False)
+        self.run_test_screen(
+            "Render opt: batch Enter reduces redraws",
+            "Hello\n",
+            b"i\r\r\r\x1b:q!\r",
+            expect_content_redraws=[True, True, True, False],
+        )
+
+        # Batch Enter correctness - 3 Enters create 3 empty lines before content
+        self.run_test(
+            "Batch Enter multiple newlines",
+            "Hello\n",
+            b"i\r\r\r\x1b:wq\r",
+            expected_content="\n\n\nHello\n"
+        )
+
+        # Batch Enter stops at non-Enter key
+        self.run_test(
+            "Batch Enter stops at printable",
+            "Hello\n",
+            b"i\r\rX\x1b:wq\r",
+            expected_content="\n\nXHello\n"
+        )
+
+        # ============================================================
+        # Batch join-lines tests
+        # When multiple backspace keys are buffered at column 0 with
+        # empty lines above, they should be joined in a single operation.
+        # ============================================================
+        print()
+        print("Batch join-lines:")
+        print()
+
+        # Render optimization: batch join-lines reduces redraws
+        # Start with 4 empty lines + content. Cursor at line 3 col 0.
+        # jjji enters insert at line 3.
+        # BS joins (empty line above), then 2 more BS batched
+        # Frame sequence: init(T), j(F), j(F), j(F), i(T), BS+batch(T), ESC(F)
+        self.run_test_screen(
+            "Render opt: batch join-lines reduces redraws",
+            "\n\n\nHello\n",
+            b"jjji\x08\x08\x08\x1b:q!\r",
+            expect_content_redraws=[True, False, False, False, True, True, False],
+        )
+
+        # Batch join-lines correctness - delete 3 empty lines above
+        self.run_test(
+            "Batch join empty lines",
+            "\n\n\nHello\n",
+            b"jjji\x08\x08\x08\x1b:wq\r",
+            expected_content="Hello\n"
+        )
+
+        # Batch join stops at non-empty line (3rd BS joins AB with Hello normally)
+        self.run_test(
+            "Batch join stops at non-empty line",
+            "AB\n\n\nHello\n",
+            b"jjji\x08\x08\x08\x1b:wq\r",
+            expected_content="ABHello\n"
+        )
+
+        # Batch join stops at line 0
+        self.run_test(
+            "Batch join stops at first line",
+            "\n\nHello\n",
+            b"jji\x08\x08\x08\x08\x1b:wq\r",
+            expected_content="Hello\n"
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed

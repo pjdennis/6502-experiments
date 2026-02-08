@@ -179,6 +179,7 @@ insert_newline:
   INC16 FILE_LINE16
   LDA #0
   STA CURSOR_COL
+  JSR enter_batch_pending
   JSR ensure_cursor_visible
   LDA #$FF
   STA MODIFIED
@@ -186,6 +187,47 @@ insert_newline:
 .insert_newline_full:
   SET16 str_buffer_full, STR_PTR16
   JSR show_status_message
+  RTS
+
+; Batch-insert pending Enter keys after first newline was inserted.
+; Counts buffered Enter keys, fills BATCH_BUF with $0A bytes,
+; and inserts them all with one buf_insert_chars + buf_rebuild_lines.
+enter_batch_pending:
+  ; Count pending Enter keys
+  LDA #KEY_ENTER
+  STA BUF_TEMP
+  JSR count_pending_key
+  CPX #0
+  BEQ .enter_batch_done
+
+  ; Fill BATCH_BUF with X newline ($0A) bytes
+  STX BUF_DELTA
+  LDY #0
+  LDA #'\n'
+.enter_fill:
+  STA BATCH_BUF,Y
+  INY
+  CPY BUF_DELTA
+  BNE .enter_fill
+
+  ; Insert at current cursor position
+  JSR get_cursor_buf_ptr
+  JSR buf_insert_chars
+  BCS .enter_batch_done       ; Buffer full, skip batch
+
+  ; Add BUF_DELTA to FILE_LINE16 (16-bit add)
+  CLC
+  LDA FILE_LINE16
+  ADC BUF_DELTA
+  STA FILE_LINE16
+  LDA FILE_LINE16 + 1
+  ADC #0
+  STA FILE_LINE16 + 1
+
+  ; Rebuild line table (one rebuild for entire batch)
+  JSR buf_rebuild_lines
+
+.enter_batch_done:
   RTS
 
 ; Handle backspace in insert mode
@@ -252,10 +294,158 @@ insert_backspace:
 
   ; Move to previous line
   DEC16 FILE_LINE16
+  JSR joinlines_batch_pending
   JSR ensure_cursor_visible
   LDA #$FF
   STA MODIFIED
 .cant_join:
+  RTS
+
+; Batch join-lines: consume pending backspace keys that join empty lines above.
+; Called after first join-lines completed. CURSOR_COL has the length of the
+; previous line (from the first join). We only batch when CURSOR_COL == 0
+; (the previous line was empty) and there are empty lines above to join.
+; Unlike count_pending_key, we read one BS at a time, checking buffer state
+; each iteration, to avoid consuming BS keys we can't handle.
+joinlines_batch_pending:
+  ; Only batch if cursor is at col 0 (previous line was empty)
+  LDA CURSOR_COL
+  BEQ .jl_batch_start
+  RTS
+.jl_batch_start:
+
+  ; Get current line start pointer
+  JSR get_cursor_buf_ptr
+
+  ; X = count of additional joins
+  LDX #0
+
+.jl_batch_loop:
+  ; Check if FILE_LINE16 - X > 0 (still lines above)
+  ; Compute FILE_LINE16 - X - 1
+  SEC
+  LDA FILE_LINE16
+  SBC #1
+  STA BUF_LEN16
+  LDA FILE_LINE16 + 1
+  SBC #0
+  STA BUF_LEN16 + 1
+  ; Subtract X
+  SEC
+  LDA BUF_LEN16
+  STX BUF_TEMP
+  SBC BUF_TEMP
+  STA BUF_LEN16
+  LDA BUF_LEN16 + 1
+  SBC #0
+  STA BUF_LEN16 + 1
+  ; If result < 0, no more lines above
+  BMI .jl_batch_apply
+
+  ; Check that the line above is empty.
+  ; An empty line is a \n preceded by another \n or at start of buffer.
+  ; The \n of the line above is at BUF_PTR16 - X - 1.
+  SEC
+  LDA BUF_PTR16
+  SBC BUF_TEMP
+  STA BUF_SRC16
+  LDA BUF_PTR16 + 1
+  SBC #0
+  STA BUF_SRC16 + 1
+  ; Subtract 1 more to point to the \n
+  SEC
+  LDA BUF_SRC16
+  SBC #1
+  STA BUF_SRC16
+  LDA BUF_SRC16 + 1
+  SBC #0
+  STA BUF_SRC16 + 1
+  ; Verify it's a \n
+  LDY #0
+  LDA (BUF_SRC16),Y
+  CMP #'\n'
+  BNE .jl_batch_apply     ; Not a newline, stop
+  ; Check if this \n is at TEXT_BUF (start of buffer = first line is empty)
+  LDA BUF_SRC16
+  CMP #<TEXT_BUF
+  BNE .jl_check_prev_byte
+  LDA BUF_SRC16 + 1
+  CMP #>TEXT_BUF
+  BEQ .jl_line_is_empty   ; At buffer start, line is empty
+.jl_check_prev_byte:
+  ; Check byte before this \n - must be \n for line to be empty
+  SEC
+  LDA BUF_SRC16
+  SBC #1
+  STA BUF_DST16
+  LDA BUF_SRC16 + 1
+  SBC #0
+  STA BUF_DST16 + 1
+  LDY #0
+  LDA (BUF_DST16),Y
+  CMP #'\n'
+  BNE .jl_batch_apply     ; Previous byte is not \n, line has content
+.jl_line_is_empty:
+
+  ; Check if input is available
+  STX BUF_TEMP
+  JSR input_ready
+  CMP #$FF
+  BNE .jl_batch_restore_x ; No more input
+  ; Read byte
+  JSR input_read_byte
+  ; Check if it's backspace ($08 or $7F)
+  CMP #KEY_BS
+  BEQ .jl_batch_match
+  CMP #$7F
+  BEQ .jl_batch_match
+  ; Not backspace, push back and stop
+  JSR input_unread
+  LDX BUF_TEMP
+  JMP .jl_batch_apply
+
+.jl_batch_match:
+  LDX BUF_TEMP
+  INX
+  CPX #BATCH_MAX
+  BEQ .jl_batch_apply
+  JMP .jl_batch_loop
+
+.jl_batch_restore_x:
+  LDX BUF_TEMP
+
+.jl_batch_apply:
+  ; X = number of additional newlines to delete
+  CPX #0
+  BEQ .jl_batch_done
+
+  STX BUF_DELTA
+
+  ; Point to first \n to delete: BUF_PTR16 - BUF_DELTA
+  SEC
+  LDA BUF_PTR16
+  SBC BUF_DELTA
+  STA BUF_PTR16
+  LDA BUF_PTR16 + 1
+  SBC #0
+  STA BUF_PTR16 + 1
+
+  ; Delete BUF_DELTA bytes
+  JSR buf_delete_chars
+
+  ; Subtract BUF_DELTA from FILE_LINE16
+  SEC
+  LDA FILE_LINE16
+  SBC BUF_DELTA
+  STA FILE_LINE16
+  LDA FILE_LINE16 + 1
+  SBC #0
+  STA FILE_LINE16 + 1
+
+  ; Rebuild line table once
+  JSR buf_rebuild_lines
+
+.jl_batch_done:
   RTS
 
 ; Arrow key handlers in insert mode
