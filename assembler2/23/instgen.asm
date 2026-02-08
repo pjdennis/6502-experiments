@@ -429,7 +429,7 @@ display_table_entry:
   ; Display hash entry name
   JSR load_hash_entry
   CLC
-  ADCI16 TABP16 $02 P16
+  ADCI16 TABP16, $02, P16
   JSR display_text
 .advance:
   LDA HASH
@@ -448,7 +448,7 @@ write_mnemonic_and_modes:
   JSR write_b
   ; Set P16 to point to mnemonic (TABP16 + 2)
   CLC
-  ADCI16 TABP16 $02 P16
+  ADCI16 TABP16, $02, P16
   ; Display mnemonic text
   JSR display_text
   ; Y now points to null terminator in mnemonic
@@ -508,7 +508,7 @@ display_data:
   SET16 msg_instprefix, P16
   JSR display_text
   CLC
-  ADCI16 TABP16 $02 P16
+  ADCI16 TABP16, $02, P16
   JSR display_text
   LDA #':'
   JSR write_b

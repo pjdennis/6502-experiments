@@ -719,7 +719,7 @@ parse_expression:
 
   ; Add: accumulator + OPERAND → OPERAND
   CLC
-  ADC16 EXPR_ACCU16 OPERAND16 OPERAND16
+  ADC16 EXPR_ACCU16, OPERAND16, OPERAND16
   JMP .loop
 
 .sub_op:
@@ -738,7 +738,7 @@ parse_expression:
 
   ; Subtract: accumulator - OPERAND → OPERAND
   SEC
-  SBC16 EXPR_ACCU16 OPERAND16 OPERAND16
+  SBC16 EXPR_ACCU16, OPERAND16, OPERAND16
   JMP .loop
 
 .check_left_shift:
@@ -1022,12 +1022,12 @@ update_pc:
   DEC STARTED
   BNE .no_fill        ; Always taken
 .started:
-  CMP16 HEX16 PC16
+  CMP16 HEX16, PC16
   BCC .less           ; HEX16 < PC16: error
   BIT PASS
   BPL .no_fill        ; skip writing during pass 1
 .loop:
-  CMP16 HEX16 PC16
+  CMP16 HEX16, PC16
   BEQ .loop_done
   LDA #$00
   JSR write
@@ -1757,7 +1757,7 @@ check_macro_recursion:
   SET16 SCOPE_STACK, TABP16
 .loop:
   ; Check if we've reached current scope pointer
-  CMP16 TABP16 SCOPE_PTR16
+  CMP16 TABP16, SCOPE_PTR16
   BEQ .done                 ; Reached current position, no recursion
   ; Compare macro address at offset +3 with MACRO_ENTRY16
   LDY #$03
@@ -1909,7 +1909,7 @@ expand_macro:
   ; Set memory pointer to body_ptr from macro definition
   ; Add one to MACR_DEF_PTR16 to skip 0 terminator and save to memory source
   CLC
-  ADCI16 MACRO_DEF_PTR16 $01 FS_MEM_PTR16
+  ADCI16 MACRO_DEF_PTR16, $01, FS_MEM_PTR16
   ; Restore X (output file handle)
   PLA
   TAX
@@ -2559,7 +2559,7 @@ start:
 
   .ifdef enable_debug
   ; Verify forward ref pointer matches pass 1
-  CMP16 FWDREF16 PASS_1_FWDREF16 
+  CMP16 FWDREF16, PASS_1_FWDREF16
   BEQ .fwdref_ok
   ; Mismatch in ref counts
   JMP err_fwdref_tracking
@@ -2579,14 +2579,14 @@ start:
   SHOW_MESSAGEI msg_heap_used
   ; Calculate heap used: MEMP16 - HEAP
   SEC
-  SBCI16 MEMP16 HEAP TO_DECIMAL_VALUE16
+  SBCI16 MEMP16, HEAP, TO_DECIMAL_VALUE16
   JSR show_decimal
   SHOW_MESSAGEI msg_bytes
   ; Print forward reference count
   SHOW_MESSAGEI msg_fwdref_count
   ; Calculate forward ref count: (PASS_1_FWDREF16 - FWDREF_LIST) / 2
   SEC
-  SBCI16 PASS_1_FWDREF16 FWDREF_LIST TO_DECIMAL_VALUE16
+  SBCI16 PASS_1_FWDREF16, FWDREF_LIST, TO_DECIMAL_VALUE16
   ; Divide by 2 (16-bit right shift)
   LSR16 TO_DECIMAL_VALUE16
   JSR show_decimal

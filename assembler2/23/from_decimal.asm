@@ -36,7 +36,7 @@ from_decimal:
   BCS .overflow
   ; Step 4: val += temp (now val = original * 4 + original = original * 5)
   CLC
-  ADC16 FROM_DECIMAL16 FROM_DECIMAL_TMP16 FROM_DECIMAL16
+  ADC16 FROM_DECIMAL16, FROM_DECIMAL_TMP16, FROM_DECIMAL16
   BCS .overflow
   ; Step 5: val <<= 1 (now val = original * 10)
   ASL16 FROM_DECIMAL16
