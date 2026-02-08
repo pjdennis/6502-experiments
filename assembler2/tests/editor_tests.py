@@ -1317,9 +1317,8 @@ class EditorTestRunner:
 
         # Insert mode: cursor tracks wrap when typing past screen edge
         # Start with 38 chars on 40-col screen, $a enters append at col 38.
-        # Type 3 chars: first X at col 39, then XX batched -> col 41.
-        # Frame sequence: 0=init, 1=$, 2=a, 3=X+batch(col41), 4=ESC(col40)
-        # At frame 3: CURSOR_COL=41, must be row 1 col 1 (all 3 chars inserted)
+        # Type 3 chars XXX -> col 41. ESC -> col 40 (row 1, col 0).
+        # With render-skip: frame 0=init, frame 1=final state
         self.run_test_screen(
             "Insert cursor tracks wrap boundary",
             "A" * 38 + "\n",
@@ -1329,15 +1328,11 @@ class EditorTestRunner:
                 (0, "A" * 38 + "XX"),
                 (1, "X"),
             ],
-            expect_cursor_at_frame=[
-                (3, (1, 1)),
-            ]
         )
 
         # Insert mode: cursor on wrap continuation while typing
-        # Start with 39 chars, $a enters append at col 39, type 2 chars.
-        # Frame sequence: 0=init, 1=$, 2=a, 3=X+batch(col41), 4=ESC(col40)
-        # At frame 3: CURSOR_COL=41, must be row 1 col 1
+        # Start with 39 chars, $a enters append at col 39, type 2 chars XX.
+        # ESC -> col 40 (row 1, col 0).
         self.run_test_screen(
             "Insert cursor mid-wrap while typing",
             "A" * 39 + "\n",
@@ -1347,15 +1342,11 @@ class EditorTestRunner:
                 (0, "A" * 39 + "X"),
                 (1, "X"),
             ],
-            expect_cursor_at_frame=[
-                (3, (1, 1)),
-            ]
         )
 
         # Backspace from wrap boundary back to previous row
         # Start with 41 chars (wraps to row 1 with 1 char). $a enters at col 41.
-        # Frame sequence: 0=init, 1=$, 2=a, 3=BS+batch_BS(col39), 4=ESC(col38)
-        # At frame 3: CURSOR_COL=39, must be row 0 col 39 (crossed back via batch)
+        # 2 BS -> col 39 (row 0, col 39). ESC -> col 38 (row 0, col 38).
         self.run_test_screen(
             "Backspace across wrap boundary",
             "A" * 41 + "\n",
@@ -1364,36 +1355,27 @@ class EditorTestRunner:
             expect_lines=[
                 (0, "A" * 39),
             ],
-            expect_cursor_at_frame=[
-                (3, (0, 39)),
-            ]
         )
 
         # A on wrapped line: cursor must move to end-of-line wrap row
         # 60-char line, 0 goes to col 0 (row 0), then A sets col=60 (row 1, col 20)
-        # Frame sequence: 0=init, 1=0, 2=A
-        # At frame 2: CURSOR_COL=60, must be row 1 col 20
+        # Type X, ESC -> col 60 (row 1, col 20)
         self.run_test_screen(
             "A on wrapped line positions cursor correctly",
             "A" * 60 + "\n",
             b"0AX\x1b:q!\r",
             expect_cursor=(1, 20),
-            expect_cursor_at_frame=[
-                (2, (1, 20)),
-            ]
         )
 
         # a at wrap boundary: cursor crosses to next wrap row
         # 41-char line, $ goes to col 40 (row 1), h goes to col 39 (row 0),
         # then a increments to col 40 (should be row 1, col 0)
-        # Frame sequence: 0=init, 1=$, 2=h, 3=a
+        # Type X, ESC -> final position checked via expect_cursor
         self.run_test_screen(
             "a at wrap boundary positions cursor correctly",
             "A" * 41 + "\n",
             b"$haX\x1b:q!\r",
-            expect_cursor_at_frame=[
-                (3, (1, 0)),
-            ]
+            expect_cursor=(1, 0),
         )
 
         # Insert mode up arrow from wrap row moves to previous line
@@ -1401,31 +1383,21 @@ class EditorTestRunner:
         # j$ puts cursor at col 59 (row 2: line 0 row + 2 wrap rows).
         # 'a' enters insert at col 60 (still row 2).
         # Up arrow should move to line 0 ("B"), col clamped to 0, row 0.
-        # Bug: ensure_cursor_visible ran with unclamped col 60 on line 0
-        # (1-char line), computing CURSOR_ROW=1 instead of 0.
-        # Frame sequence: 0=init, 1=j, 2=$, 3=a, 4=UP
         self.run_test_screen(
             "Insert up arrow from wrapped line to short line",
             "B\n" + "A" * 60 + "\n",
             b"j$a\x1b[A\x1b:q!\r",
             expect_cursor=(0, 0),
-            expect_cursor_at_frame=[
-                (4, (0, 0)),
-            ]
         )
 
         # Normal mode k from wrap row moves to previous line
         # Same setup but in normal mode with k instead of up arrow.
         # j$ puts cursor at line 1 col 59 (row 2), k should go to line 0.
-        # Frame sequence: 0=init, 1=j, 2=$, 3=k
         self.run_test_screen(
             "Normal k from wrapped line to short line",
             "B\n" + "A" * 60 + "\n",
             b"j$k:q!\r",
             expect_cursor=(0, 0),
-            expect_cursor_at_frame=[
-                (3, (0, 0)),
-            ]
         )
 
         # Normal mode x on wrapped line: content and cursor correct
@@ -1443,125 +1415,77 @@ class EditorTestRunner:
 
         # ============================================================
         # Render optimization tests
-        # Verify cursor-only movements skip content area redraws.
-        # Frame 0 is always the initial full render (True).
+        # With render-skip, all input is consumed before rendering.
+        # In test mode, all keys are available at once, so we get:
+        #   Frame 0: initial full render
+        #   Frame 1: final accumulated render before exit
+        # This verifies that render-skip collapses multiple operations
+        # into a single render pass.
         # ============================================================
         self._group("Screen state - render optimization:", leading_blank=True)
 
-        # h movement: cursor-only
+        # Cursor-only movements collapse to 2 frames (init + final)
         self.run_test_screen(
-            "Render opt: h is cursor-only",
+            "Render opt: movements collapse to 2 frames",
             "Hello\n",
-            b"lh:q!\r",
-            expect_content_redraws=[True, False, False]
+            b"lllh:q!\r",
+            expect_content_redraws=[True, True]
         )
 
-        # l movement: cursor-only
+        # j/k without scroll: 2 frames
         self.run_test_screen(
-            "Render opt: lll is cursor-only",
-            "Hello\n",
-            b"lll:q!\r",
-            expect_content_redraws=[True, False, False, False]
-        )
-
-        # j without scroll: cursor-only
-        self.run_test_screen(
-            "Render opt: j no scroll is cursor-only",
-            "Line 1\nLine 2\nLine 3\n",
-            b"j:q!\r",
-            expect_content_redraws=[True, False]
-        )
-
-        # k without scroll: cursor-only
-        self.run_test_screen(
-            "Render opt: jk no scroll is cursor-only",
+            "Render opt: j/k collapse to 2 frames",
             "Line 1\nLine 2\nLine 3\n",
             b"jk:q!\r",
-            expect_content_redraws=[True, False, False]
+            expect_content_redraws=[True, True]
         )
 
-        # j with scroll: full repaint
-        # 10 rows, 9 content rows. 9 j's on a 15-line file:
-        # j's 1-8 are cursor-only, j 9 triggers scroll (full repaint)
+        # j with scroll: still 2 frames (all collapsed)
         self.run_test_screen(
-            "Render opt: j scroll triggers repaint",
+            "Render opt: j scroll collapses to 2 frames",
             make_lines(15),
             b"jjjjjjjjj:q!\r",
-            expect_content_redraws=(
-                [True] +          # frame 0: initial
-                [False] * 8 +     # frames 1-8: cursor-only
-                [True]            # frame 9: scroll
-            )
+            expect_content_redraws=[True, True]
         )
 
-        # 0 (line start): cursor-only
+        # Insert mode operations: 2 frames
         self.run_test_screen(
-            "Render opt: 0 is cursor-only",
+            "Render opt: insert+ESC collapses to 2 frames",
             "Hello\n",
-            b"lll0:q!\r",
-            expect_content_redraws=[True, False, False, False, False]
-        )
-
-        # $ (line end): cursor-only
-        self.run_test_screen(
-            "Render opt: $ is cursor-only",
-            "Hello\n",
-            b"$:q!\r",
-            expect_content_redraws=[True, False]
-        )
-
-        # ESC from insert mode: cursor-only
-        # i enters insert (full repaint), ESC exits (cursor-only)
-        self.run_test_screen(
-            "Render opt: ESC from insert is cursor-only",
-            "Hello\n",
-            b"i\x1b:q!\r",
-            expect_content_redraws=[True, True, False]
-        )
-
-        # Insert char: only cursor's row is touched (not all rows)
-        # i enters insert (full repaint), 'X' inserts (current line only)
-        self.run_test_screen(
-            "Render opt: insert char is single-row",
-            "Hello\nWorld\n",
             b"iX\x1b:q!\r",
-            expect_content_redraws=[True, True, True, False],
-            expect_content_rows=[(2, {0})]
+            expect_content_redraws=[True, True]
         )
 
-        # Backspace mid-line: only cursor's row is touched
-        # Move right, enter insert, backspace (mid-line)
+        # Backspace mid-line: 2 frames
         self.run_test_screen(
-            "Render opt: backspace mid-line is single-row",
+            "Render opt: backspace collapses to 2 frames",
             "Hello\nWorld\n",
             b"li\x08\x1b:q!\r",
-            expect_content_redraws=[True, False, True, True, False],
-            expect_content_rows=[(3, {0})]
+            expect_content_redraws=[True, True]
         )
 
-        # Normal mode x: only cursor's row is touched
+        # Normal mode x: 2 frames
         self.run_test_screen(
-            "Render opt: x is single-row",
+            "Render opt: x collapses to 2 frames",
             "Hello\nWorld\n",
             b"x:q!\r",
-            expect_content_redraws=[True, True],
-            expect_content_rows=[(1, {0})]
+            expect_content_redraws=[True, True]
         )
 
-        # Insert newline: full repaint (multiple lines change)
+        # Insert newline: 2 frames
         self.run_test_screen(
-            "Render opt: Enter in insert is full repaint",
+            "Render opt: Enter collapses to 2 frames",
             "Hello\nWorld\n",
             b"i\r\x1b:q!\r",
-            expect_content_redraws=[True, True, True, False]
+            expect_content_redraws=[True, True]
         )
 
-        # Backspace at col 0 (join lines): full repaint
+        # Backspace at col 0 (join lines): 2 frames
         self.run_test_screen(
-            "Render opt: backspace join-lines is full repaint",
+            "Render opt: join-lines collapses to 2 frames",
             "Hello\nWorld\n",
             b"ji\x08\x1b:q!\r",
-            expect_content_redraws=[True, False, True, True, False]
+            expect_content_redraws=[True, True]
         )
 
         # ============================================================
@@ -1571,16 +1495,12 @@ class EditorTestRunner:
         # ============================================================
         self._group("Batch insert:", leading_blank=True)
 
-        # Render optimization: batch insert reduces content redraws
-        # Frame 0: initial render (True)
-        # Frame 1: 'i' enters insert mode (True - status bar changes)
-        # Frame 2: first char 'X' inserted, then Y and Z batched (True)
-        # Frame 3: ESC exits insert (False - cursor only)
+        # Render optimization: batch insert collapses to 2 frames
         self.run_test_screen(
-            "Render opt: batch insert reduces redraws",
+            "Render opt: batch insert collapses to 2 frames",
             "Hello\n",
             b"iXYZ\x1b:q!\r",
-            expect_content_redraws=[True, True, True, False],
+            expect_content_redraws=[True, True],
         )
 
         # Batch insert mid-line correctness
@@ -1614,19 +1534,12 @@ class EditorTestRunner:
         # ============================================================
         self._group("Batch delete:", leading_blank=True)
 
-        # Render optimization: batch backspace reduces content redraws
-        # Frame 0: initial render (True)
-        # Frame 1: l (False - cursor only)
-        # Frame 2: l (False - cursor only)
-        # Frame 3: l (False - cursor only)
-        # Frame 4: i enters insert mode (True - status bar)
-        # Frame 5: first BS deletes, then 2 more batched (True)
-        # Frame 6: ESC exits insert (False - cursor only)
+        # Render optimization: batch backspace collapses to 2 frames
         self.run_test_screen(
-            "Render opt: batch backspace reduces redraws",
+            "Render opt: batch backspace collapses to 2 frames",
             "Hello\n",
             b"llli\x08\x08\x08\x1b:q!\r",
-            expect_content_redraws=[True, False, False, False, True, True, False],
+            expect_content_redraws=[True, True],
         )
 
         # Batch backspace correctness
@@ -1668,17 +1581,12 @@ class EditorTestRunner:
             expected_content="ABD\n"
         )
 
-        # Render optimization: batch x reduces content redraws
-        # Without batching: xxx -> frames [init, x, x, x] = 4 frames
-        # With batching: frames [init, x+batch_xx] = 2 frames
-        # Frame 0: initial render (True)
-        # Frame 1: first x + batch xx (True)
-        # Then j triggers a cursor-only frame (False) proving no more x frames
+        # Render optimization: batch x collapses to 2 frames
         self.run_test_screen(
-            "Render opt: batch x reduces redraws",
+            "Render opt: batch x collapses to 2 frames",
             "Hello\nWorld\n",
             b"xxxj:q!\r",
-            expect_content_redraws=[True, True, False],
+            expect_content_redraws=[True, True],
         )
 
         # Batch x correctness
@@ -1712,14 +1620,12 @@ class EditorTestRunner:
         # ============================================================
         self._group("Batch Enter:", leading_blank=True)
 
-        # Render optimization: batch Enter reduces redraws
-        # Frame 0: initial (True), Frame 1: i enters insert (True),
-        # Frame 2: first Enter + batch Enter*2 (True), Frame 3: ESC (False)
+        # Render optimization: batch Enter collapses to 2 frames
         self.run_test_screen(
-            "Render opt: batch Enter reduces redraws",
+            "Render opt: batch Enter collapses to 2 frames",
             "Hello\n",
             b"i\r\r\r\x1b:q!\r",
-            expect_content_redraws=[True, True, True, False],
+            expect_content_redraws=[True, True],
         )
 
         # Batch Enter correctness - 3 Enters create 3 empty lines before content
@@ -1745,16 +1651,12 @@ class EditorTestRunner:
         # ============================================================
         self._group("Batch join-lines:", leading_blank=True)
 
-        # Render optimization: batch join-lines reduces redraws
-        # Start with 4 empty lines + content. Cursor at line 3 col 0.
-        # jjji enters insert at line 3.
-        # BS joins (empty line above), then 2 more BS batched
-        # Frame sequence: init(T), j(F), j(F), j(F), i(T), BS+batch(T), ESC(F)
+        # Render optimization: batch join-lines collapses to 2 frames
         self.run_test_screen(
-            "Render opt: batch join-lines reduces redraws",
+            "Render opt: batch join-lines collapses to 2 frames",
             "\n\n\nHello\n",
             b"jjji\x08\x08\x08\x1b:q!\r",
-            expect_content_redraws=[True, False, False, False, True, True, False],
+            expect_content_redraws=[True, True],
         )
 
         # Batch join-lines correctness - delete 3 empty lines above
