@@ -60,7 +60,12 @@ render_screen:
   CP16 VIEW_TOP16, RENDER_LINE16
   LDA VIEW_TOP_WRAP
   STA RENDER_WRAP
+  JMP render_from_row
 
+; Render rows from RENDER_ROW/RENDER_LINE16/RENDER_WRAP to end of screen
+; Expects ansi_cursor_hide already called
+; Renders remaining text rows, status bar, positions cursor, shows cursor
+render_from_row:
 .row_loop:
   ; Position cursor at start of this row
   LDA RENDER_ROW
@@ -264,7 +269,8 @@ render_current_line:
   JSR con_flush
   RTS
 
-; Redraw just the current line and status bar (optimization for single-line edits)
+; Redraw current line and rows below, plus status bar (for single-line edits)
+; Renders from CURSOR_ROW downward to handle line wrap changes correctly
 render_current_line_and_status:
   ; If line wraps (len >= SCREEN_COLS), upgrade to full repaint
   JSR get_current_line_len
@@ -276,26 +282,12 @@ render_current_line_and_status:
 
 .single_row:
   JSR ansi_cursor_hide
-
   LDA CURSOR_ROW
-  CLC
-  ADC #1
-  STA ANSI_ROW
-  LDA #1
-  STA ANSI_COL
-  JSR ansi_move_cursor
-
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_ptr
-
-  JSR render_line_chars
-  JSR ansi_clear_line
-
-  JSR render_status_line
-  JSR render_position_cursor
-  JSR ansi_cursor_show
-  JSR con_flush
-  RTS
+  STA RENDER_ROW
+  CP16 FILE_LINE16, RENDER_LINE16
+  LDA #0
+  STA RENDER_WRAP
+  JMP render_from_row
 
 ; Dispatch: full repaint, current line, or cursor+status only, based on RENDER_FLAG
 render_update:

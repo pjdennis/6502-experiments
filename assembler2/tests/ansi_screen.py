@@ -162,6 +162,15 @@ class AnsiScreen:
             return ""
         return ''.join(self.frame_buffer[row]).rstrip()
 
+    def get_row_text_at_frame(self, frame_idx: int, row: int) -> str:
+        """Row text from a specific frame, rstripped."""
+        if frame_idx < 0 or frame_idx >= len(self.frames):
+            return ""
+        buf = self.frames[frame_idx][0]
+        if row < 0 or row >= self.rows:
+            return ""
+        return ''.join(buf[row]).rstrip()
+
     def get_cursor(self) -> tuple:
         """Cursor (row, col) from last rendered frame, 0-based."""
         return self.frame_cursor

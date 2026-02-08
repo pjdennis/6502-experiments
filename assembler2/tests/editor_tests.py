@@ -298,7 +298,8 @@ class EditorTestRunner:
                         expect_content_redraws: list = None,
                         expect_content_rows: list = None,
                         expect_ansi_contains: str = None,
-                        expect_cursor_at_frame: list = None):
+                        expect_cursor_at_frame: list = None,
+                        expect_lines_at_frame: list = None):
         """Run an editor test and verify screen state via ANSI output.
 
         Args:
@@ -313,6 +314,8 @@ class EditorTestRunner:
             expect_ansi_contains: substring to find in raw ANSI output
             expect_cursor_at_frame: list of (frame_idx, (row, col)) tuples -
                 verify cursor position at specific frames
+            expect_lines_at_frame: list of (frame_idx, [(row_idx, text), ...])
+                tuples - verify row content at specific frames (not just last)
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir = Path(tmpdir)
@@ -440,6 +443,26 @@ class EditorTestRunner:
                             f"{expected_pos}, got {actual_pos}\n"
                             f"    Frame:\n{screen.dump()}")
                         return
+
+            if expect_lines_at_frame is not None:
+                actual_count = screen.get_frame_count()
+                for frame_idx, line_checks in expect_lines_at_frame:
+                    if frame_idx >= actual_count:
+                        self._fail(name,
+                            f"Expected frame {frame_idx} but only "
+                            f"{actual_count} frames\n"
+                            f"    Frame:\n{screen.dump()}")
+                        return
+                    for row_idx, expected_text in line_checks:
+                        actual_text = screen.get_row_text_at_frame(
+                            frame_idx, row_idx)
+                        if actual_text != expected_text:
+                            self._fail(name,
+                                f"Frame {frame_idx}, row {row_idx}: "
+                                f"expected {expected_text!r}, "
+                                f"got {actual_text!r}\n"
+                                f"    Frame:\n{screen.dump()}")
+                            return
 
             self._pass(name)
 
@@ -1520,32 +1543,34 @@ class EditorTestRunner:
         )
 
         # Insert char: only cursor's row is touched (not all rows)
-        # i enters insert (full repaint), 'X' inserts (current line only)
+        # i enters insert (full repaint), 'X' inserts (cursor row + below)
+        # render_current_line_and_status renders from cursor row downward
+        # to handle line unwrap correctly, so all rows from 0 are touched
         self.run_test_screen(
-            "Render opt: insert char is single-row",
+            "Render opt: insert char redraws from cursor",
             "Hello\nWorld\n",
             b"iX\x1b:q!\r",
             expect_content_redraws=[True, True, True, False],
-            expect_content_rows=[(2, {0})]
+            expect_content_rows=[(2, set(range(9)))]
         )
 
-        # Backspace mid-line: only cursor's row is touched
+        # Backspace mid-line: redraws from cursor row downward
         # Move right, enter insert, backspace (mid-line)
         self.run_test_screen(
-            "Render opt: backspace mid-line is single-row",
+            "Render opt: backspace redraws from cursor",
             "Hello\nWorld\n",
             b"li\x08\x1b:q!\r",
             expect_content_redraws=[True, False, True, True, False],
-            expect_content_rows=[(3, {0})]
+            expect_content_rows=[(3, set(range(9)))]
         )
 
-        # Normal mode x: only cursor's row is touched
+        # Normal mode x: redraws from cursor row downward
         self.run_test_screen(
-            "Render opt: x is single-row",
+            "Render opt: x redraws from cursor",
             "Hello\nWorld\n",
             b"x:q!\r",
             expect_content_redraws=[True, True],
-            expect_content_rows=[(1, {0})]
+            expect_content_rows=[(1, set(range(9)))]
         )
 
         # Insert newline: full repaint (multiple lines change)
@@ -1703,6 +1728,44 @@ class EditorTestRunner:
             "ABCDE\n",
             b"xxl:wq\r",
             expected_content="CDE\n"
+        )
+
+        # Batch x on wrapped line: when deletion unwraps the line, the
+        # stale second wrap row must be cleared.
+        # 45-char line on 40-col screen: initially row 0 = A*40, row 1 = A*5.
+        # Batch delete 6 chars -> 39 left, line no longer wraps.
+        # Frame 0: initial (full), Frame 1: batch x (single-line redraw).
+        # At frame 1, row 1 should show "B" (next line), not stale "AAAAA".
+        self.run_test_screen(
+            "Batch x unwrap clears stale row",
+            "A" * 45 + "\nB\n",
+            b"xxxxxx:q!\r",
+            expect_lines_at_frame=[
+                (1, [
+                    (0, "A" * 39),
+                    (1, "B"),
+                    (2, "~"),
+                ]),
+            ]
+        )
+
+        # Same bug in insert mode: batch backspace on a wrapped line should
+        # clear the stale wrap row when the line unwraps.
+        # 45-char line, cursor at end (col 44). Batch delete 6 -> 39 left.
+        # '$' moves to end-of-line, 'a' enters insert after cursor.
+        # Frame 0: initial, Frame 1: $ (cursor), Frame 2: a (insert mode),
+        # Frame 3: batch BS (single-line redraw - bug frame).
+        self.run_test_screen(
+            "Batch BS unwrap clears stale row",
+            "A" * 45 + "\nB\n",
+            b"$a\x7f\x7f\x7f\x7f\x7f\x7f\x1b:q!\r",
+            expect_lines_at_frame=[
+                (3, [
+                    (0, "A" * 39),
+                    (1, "B"),
+                    (2, "~"),
+                ]),
+            ]
         )
 
         # ============================================================
