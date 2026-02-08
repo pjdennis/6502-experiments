@@ -43,7 +43,7 @@ FS_FILENAME   = TOKEN
 ; Error handler for file-not-found (required by file_stack.asm)
 err_file_not_found:
   BRK
-  .data $24 "File not found" $00
+  .asciiz 36, "File not found"
 
   .include 22/file_stack.asm
 read_char = file_stack_read_char
@@ -234,7 +234,7 @@ check_include_marker:
   RTS
 
 include_marker:
-  .data "include "
+  .byte "include "
 
 ; Read filename until newline into TOKEN
 ; Note: Uses read_char (not read_char_track_line) to avoid incrementing
@@ -669,13 +669,13 @@ check_memory_or_include:
   RTS
 
 include_rest:
-  .data "nclude "
+  .byte "nclude "
 memory_rest:
-  .data "emory"
+  .byte "emory"
 traceback_rest:
-  .data "raceback"
+  .byte "raceback"
 str_memory_source:
-  .data "MEMORY" $00
+  .asciiz "MEMORY"
 
 ; Read memory content until newline into TOKEN
 ; Returns length in X (includes trailing newline)
@@ -784,9 +784,9 @@ print_traceback:
   RTS
 
 str_type_file:
-  .data "file:" $00
+  .asciiz "file:"
 str_type_memory:
-  .data "memory:" $00
+  .asciiz "memory:"
 
 ; Print just the basename from a path at TABP16 (skips everything before last '/')
 print_basename:
@@ -830,15 +830,15 @@ print_str:
   RTS
 
 str_chars:
-  .data "chars:" $00
+  .asciiz "chars:"
 str_lines:
-  .data "lines:" $00
+  .asciiz "lines:"
 str_stack:
-  .data "stack:" $00
+  .asciiz "stack:"
 str_empty:
-  .data "empty" $00
+  .asciiz "empty"
 str_active:
-  .data "active" $00
+  .asciiz "active"
 
 ; ============================================================================
 ; Print 16-bit decimal number (converts TO_DECIMAL_VALUE16 and prints it)
@@ -981,8 +981,7 @@ print_str_err:
   RTS
 
 msg_usage:
-  .data "Usage: file_stack_test <mode> <file>" $0A
-  .data "Modes: echo, lines, nested, info, memory" $0A $00
+  .asciiz "Usage: file_stack_test <mode> <file>\nModes: echo, lines, nested, info, memory\n"
 
 ; Emulator convention - start address is the last 2 bytes of the file
-  .data main
+  .word main
