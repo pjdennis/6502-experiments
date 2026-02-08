@@ -153,6 +153,16 @@ main_loop:
   JMP .after_key
 .not_command_entry:
 
+  ; Poll for input (non-blocking)
+  JSR input_ready
+  CMP #$FF
+  BEQ .key_available
+
+  ; No input - do background work and loop
+  JSR background_work
+  JMP main_loop
+
+.key_available:
   ; Read a key
   JSR read_key
 
@@ -305,6 +315,14 @@ parse_hex_digit:
   RTS
 
   .endif
+
+; ============================================================================
+; Background work
+; ============================================================================
+
+; Called when no input is available - hook for background tasks
+background_work:
+  RTS
 
 ; ============================================================================
 ; Data

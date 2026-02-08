@@ -44,6 +44,17 @@ input_unread:
   STA HAS_PUSHBACK
   RTS
 
+; Check if input is available (non-blocking)
+; Returns: A=$FF if ready, A=$00 if not
+input_ready:
+  LDA HAS_PUSHBACK
+  BNE .ready          ; Pushback byte waiting - ready
+  JSR con_ready       ; Non-blocking poll
+  RTS
+.ready:
+  LDA #$FF
+  RTS
+
 ; Read one key from console, handling escape sequences
 ; Returns key code in A
 ; Arrow keys: KEY_UP ($80), KEY_DOWN ($81), KEY_LEFT ($82), KEY_RIGHT ($83)
