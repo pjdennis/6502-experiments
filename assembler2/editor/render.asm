@@ -26,7 +26,6 @@ RENDER_LINE16: .word     ; Current file line being rendered
 RENDER_COL:    .byte     ; Column counter during rendering
 FNAME_PTR16:   .word     ; Pointer to filename string (null-terminated)
 RENDER_FLAG:   .byte     ; $FF = full repaint, $01 = current line+status, $00 = cursor+status only
-PENDING_RENDER: .byte    ; Accumulated render flag (for render-skip optimization)
 VIEW_TOP_WRAP: .byte     ; Wrap row offset for first visible line (0 = start of line)
 WRAP_QUOT:     .byte     ; Scratch: quotient from CURSOR_COL / SCREEN_COLS
 WRAP_REM:      .byte     ; Scratch: remainder from CURSOR_COL % SCREEN_COLS
@@ -46,7 +45,6 @@ render_init:
   STA MODE
   STA MODIFIED
   STA VIEW_TOP_WRAP
-  STA PENDING_RENDER
   STA_LH16 VIEW_TOP16
   STA_LH16 FILE_LINE16
   RTS

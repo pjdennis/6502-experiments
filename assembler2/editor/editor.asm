@@ -190,35 +190,12 @@ main_loop:
   LDA CMD_QUIT
   BNE .editor_exit
 
-  ; Accumulate RENDER_FLAG into PENDING_RENDER
-  LDA RENDER_FLAG
-  ORA PENDING_RENDER
-  STA PENDING_RENDER
-
-  ; If more input is available, skip render (batch visual updates)
-  JSR input_ready
-  CMP #$FF
-  BNE .do_render
-  JMP main_loop
-
-.do_render:
-  ; No more input - render with accumulated flag
-  LDA PENDING_RENDER
-  STA RENDER_FLAG
-  LDA #0
-  STA PENDING_RENDER
+  ; Redraw screen (full or cursor-only based on RENDER_FLAG)
   JSR render_update
 
   JMP main_loop
 
 .editor_exit:
-  ; Final render with any accumulated flag before exit
-  LDA PENDING_RENDER
-  ORA RENDER_FLAG
-  STA RENDER_FLAG
-  BEQ .skip_final_render
-  JSR render_update
-.skip_final_render:
   ; Clear screen and exit
   JSR ansi_clear_screen
   JSR con_flush
