@@ -1384,6 +1384,33 @@ class EditorTestRunner:
             ]
         )
 
+        # A on wrapped line: cursor must move to end-of-line wrap row
+        # 60-char line, 0 goes to col 0 (row 0), then A sets col=60 (row 1, col 20)
+        # Frame sequence: 0=init, 1=0, 2=A
+        # At frame 2: CURSOR_COL=60, must be row 1 col 20
+        self.run_test_screen(
+            "A on wrapped line positions cursor correctly",
+            "A" * 60 + "\n",
+            b"0AX\x1b:q!\r",
+            expect_cursor=(1, 20),
+            expect_cursor_at_frame=[
+                (2, (1, 20)),
+            ]
+        )
+
+        # a at wrap boundary: cursor crosses to next wrap row
+        # 41-char line, $ goes to col 40 (row 1), h goes to col 39 (row 0),
+        # then a increments to col 40 (should be row 1, col 0)
+        # Frame sequence: 0=init, 1=$, 2=h, 3=a
+        self.run_test_screen(
+            "a at wrap boundary positions cursor correctly",
+            "A" * 41 + "\n",
+            b"$haX\x1b:q!\r",
+            expect_cursor_at_frame=[
+                (3, (1, 0)),
+            ]
+        )
+
         # Normal mode x on wrapped line: content and cursor correct
         # 60-char line, $ goes to col 59 (row 1, col 19), x deletes -> col 58
         self.run_test_screen(

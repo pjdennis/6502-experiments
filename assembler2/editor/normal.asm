@@ -451,6 +451,7 @@ normal_enter_insert_after:
   BCC .enter
   INC CURSOR_COL
 .enter:
+  JSR ensure_cursor_visible
   LDA #MODE_INSERT
   STA MODE
   LDA #0
@@ -460,6 +461,7 @@ normal_enter_insert_after:
 normal_enter_insert_eol:
   JSR get_current_line_len
   STA CURSOR_COL
+  JSR ensure_cursor_visible
   LDA #MODE_INSERT
   STA MODE
   LDA #0
