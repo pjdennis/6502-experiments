@@ -3727,6 +3727,20 @@ INPUT:
 EXPECT_HEX: 00 00 00 ea
 
 ---
+NAME: reserve_with_comment
+DESCRIPTION: .reserve with trailing comment works
+INPUT:
+ 1:   .zeropage
+ 2: a .byte
+ 3:   .reserve 4  ; reserve 4 bytes
+ 4: b .byte
+ 5:   .code
+ 6: * = $0200
+ 7:   LDA a
+ 8:   LDA b
+EXPECT_HEX: a5 00 a5 05
+
+---
 NAME: reserve_zeropage_overflow
 DESCRIPTION: .reserve that causes ZP overflow triggers error
 INPUT:

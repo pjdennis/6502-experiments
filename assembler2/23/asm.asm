@@ -1021,7 +1021,8 @@ handle_reserve:
   LDA HEX16+$01
   ADC PC16+$01
   STA HEX16+$01
-  JMP advance_pc_to_hex16
+  JSR advance_pc_to_hex16
+  JMP skip_rest_of_line
 
 
 ; ============================================================================
