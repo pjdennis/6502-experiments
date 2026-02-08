@@ -9,15 +9,15 @@
   .include environment.asm
 
   .zeropage
-SECONDS   .byte 0
-MINUTES   .byte 0
-HOURS     .byte 0
-DELAY_CNT .byte 0
-TEMP      .byte 0
+SECONDS:   .byte 0
+MINUTES:   .byte 0
+HOURS:     .byte 0
+DELAY_CNT: .byte 0
+TEMP:      .byte 0
 
   .code
 
-main
+main:
   ; Initialize time to 00:00:00
   LDA #0
   STA SECONDS
@@ -26,7 +26,7 @@ main
 
   JSR clear_screen
 
-.main_loop
+.main_loop:
   ; Move cursor to home position
   JSR cursor_home
 
@@ -44,13 +44,13 @@ main
 
   ; Print instruction
   LDX #0
-.print_msg
+.print_msg:
   LDA msg,X
   BEQ .msg_done
   JSR write_b
   INX
   BNE .print_msg
-.msg_done
+.msg_done:
 
   JSR con_flush
 
@@ -61,11 +61,11 @@ main
   ; Remaining ~12,333 cycles covered by display overhead
   LDA #3
   STA DELAY_CNT
-.delay_outer
+.delay_outer:
   LDY #0               ; 2 cycles
-.delay_middle
+.delay_middle:
   LDX #0               ; 2 cycles
-.delay_inner
+.delay_inner:
   DEX                  ; 2 cycles
   BNE .delay_inner     ; 3 cycles (taken), 2 cycles (not taken)
   ; Inner loop: 255*5 + 4 = 1279 cycles + LDX = 1281
@@ -82,7 +82,7 @@ main
   JSR con_read
   CMP #'q'
   BEQ .quit
-.no_key
+.no_key:
 
   ; Increment time
   INC SECONDS
@@ -107,7 +107,7 @@ main
   STA HOURS
   JMP .main_loop
 
-.quit
+.quit:
   JSR clear_screen
   JSR con_flush
   LDA #0
@@ -118,11 +118,11 @@ main
 
 ; Print A as two decimal digits (00-99)
 ; A = value to print
-print_two_digits
+print_two_digits:
   STA TEMP
   LDA #0               ; tens counter
   ; Divide by 10
-.tens_loop
+.tens_loop:
   LDX TEMP
   CPX #10
   BCC .tens_done
@@ -141,7 +141,7 @@ print_two_digits
   CLC
   ADC #1
   JMP .tens_loop
-.tens_done
+.tens_done:
   ; A = tens digit, TEMP = ones digit
   CLC
   ADC #'0'
@@ -153,7 +153,7 @@ print_two_digits
   RTS
 
 ; Clear screen
-clear_screen
+clear_screen:
   LDA #$1B
   JSR write_b
   LDA #'['
@@ -165,7 +165,7 @@ clear_screen
   ; Fall through to cursor_home
 
 ; Move cursor to row 1, col 1
-cursor_home
+cursor_home:
   LDA #$1B
   JSR write_b
   LDA #'['
@@ -177,7 +177,7 @@ cursor_home
 
 ; === Data ===
 
-msg .asciiz "  Press q to quit\r\n"
+msg: .asciiz "  Press q to quit\r\n"
 
 ; Entry point address
   .word main

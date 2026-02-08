@@ -2,89 +2,89 @@
 
   .zeropage
 
-LAST_KEY    .byte 0      ; Previous key for multi-key commands (dd, gg)
-LINE_LEN    .byte 0      ; Cached length of current line
+LAST_KEY:    .byte 0      ; Previous key for multi-key commands (dd, gg)
+LINE_LEN:    .byte 0      ; Cached length of current line
 
   .code
 
 ; Handle a keystroke in normal mode
 ; Key code in A
-normal_handle_key
+normal_handle_key:
   STA BUF_TEMP
 
   ; Movement keys
   CMP #'h'
   BNE .not_h
   JMP normal_move_left
-.not_h
+.not_h:
   CMP #KEY_LEFT
   BNE .not_left
   JMP normal_move_left
-.not_left
+.not_left:
   CMP #'l'
   BNE .not_l
   JMP normal_move_right
-.not_l
+.not_l:
   CMP #KEY_RIGHT
   BNE .not_right
   JMP normal_move_right
-.not_right
+.not_right:
   CMP #'j'
   BNE .not_j
   JMP normal_move_down
-.not_j
+.not_j:
   CMP #KEY_DOWN
   BNE .not_down
   JMP normal_move_down
-.not_down
+.not_down:
   CMP #'k'
   BNE .not_k
   JMP normal_move_up
-.not_k
+.not_k:
   CMP #KEY_UP
   BNE .not_up
   JMP normal_move_up
-.not_up
+.not_up:
   CMP #'0'
   BNE .not_0
   JMP normal_line_start
-.not_0
+.not_0:
   CMP #KEY_HOME
   BNE .not_home
   JMP normal_line_start
-.not_home
+.not_home:
   CMP #'$'
   BNE .not_dollar
   JMP normal_line_end
-.not_dollar
+.not_dollar:
   CMP #KEY_END
   BNE .not_end
   JMP normal_line_end
-.not_end
+.not_end:
   CMP #KEY_PGDN
   BNE .not_pgdn
   JMP normal_page_down
-.not_pgdn
+.not_pgdn:
   CMP #KEY_PGUP
   BNE .not_pgup
   JMP normal_page_up
-.not_pgup
+.not_pgup:
   CMP #$06           ; Ctrl-F
   BNE .not_ctrl_f
   JMP normal_page_down
-.not_ctrl_f
+.not_ctrl_f:
   CMP #$02           ; Ctrl-B
   BNE .not_ctrl_b
   JMP normal_page_up
-.not_ctrl_b
+.not_ctrl_b:
   CMP #'G'
   BNE .not_G
   JMP normal_goto_last
-.not_G
+.not_G:
   CMP #'g'
   BNE .not_g
   JMP normal_g_key
-.not_g
+.not_g:
 
   ; Skip editing keys in read-only mode
   LDA READONLY
@@ -95,44 +95,44 @@ normal_handle_key
   CMP #'x'
   BNE .not_x
   JMP normal_delete_char
-.not_x
+.not_x:
   CMP #KEY_DEL
   BNE .not_del
   JMP normal_delete_char
-.not_del
+.not_del:
   CMP #'d'
   BNE .not_d
   JMP normal_d_key
-.not_d
+.not_d:
   CMP #'i'
   BNE .not_i
   JMP normal_enter_insert
-.not_i
+.not_i:
   CMP #'a'
   BNE .not_a
   JMP normal_enter_insert_after
-.not_a
+.not_a:
   CMP #'A'
   BNE .not_A
   JMP normal_enter_insert_eol
-.not_A
+.not_A:
   CMP #'o'
   BNE .not_o
   JMP normal_open_below
-.not_o
+.not_o:
   CMP #'O'
   BNE .not_O
   JMP normal_open_above
-.not_O
+.not_O:
 
-.readonly_skip
+.readonly_skip:
   LDA BUF_TEMP         ; Reload key
 
   ; Command mode
   CMP #':'
   BNE .not_colon
   JMP normal_enter_command
-.not_colon
+.not_colon:
 
   ; Unknown key - clear last key, cursor-only update
   LDA #0
@@ -142,17 +142,17 @@ normal_handle_key
 
 ; --- Movement ---
 
-normal_move_left
+normal_move_left:
   LDA CURSOR_COL
   BEQ .done
   DEC CURSOR_COL
-.done
+.done:
   LDA #0
   STA LAST_KEY
   STA RENDER_FLAG
   RTS
 
-normal_move_right
+normal_move_right:
   JSR get_current_line_len
   STA LINE_LEN
   BEQ .done           ; Empty line
@@ -162,13 +162,13 @@ normal_move_right
   BCC .done           ; Already at or past end
   BEQ .done
   INC CURSOR_COL
-.done
+.done:
   LDA #0
   STA LAST_KEY
   STA RENDER_FLAG
   RTS
 
-normal_move_down
+normal_move_down:
   ; Check if there's a next line
   CLC
   LDA FILE_LINE16
@@ -186,7 +186,7 @@ normal_move_down
   CMP LINE_COUNT16
   BCS .done
 
-.can_move
+.can_move:
   INC16 FILE_LINE16
 
   ; Check if we need to scroll
@@ -197,18 +197,18 @@ normal_move_down
   BCC .no_scroll
   INC16 VIEW_TOP16
   JMP .clamp_col
-.no_scroll
+.no_scroll:
   INC CURSOR_ROW
   LDA #0
   STA RENDER_FLAG
-.clamp_col
+.clamp_col:
   JSR clamp_cursor_col
-.done
+.done:
   LDA #0
   STA LAST_KEY
   RTS
 
-normal_move_up
+normal_move_up:
   LDA FILE_LINE16
   ORA FILE_LINE16 + 1
   BEQ .done
@@ -219,18 +219,18 @@ normal_move_up
   BNE .no_scroll
   DEC16 VIEW_TOP16
   JMP .clamp_col
-.no_scroll
+.no_scroll:
   DEC CURSOR_ROW
   LDA #0
   STA RENDER_FLAG
-.clamp_col
+.clamp_col:
   JSR clamp_cursor_col
-.done
+.done:
   LDA #0
   STA LAST_KEY
   RTS
 
-normal_page_down
+normal_page_down:
   ; page_size = SCREEN_ROWS - 1 (content rows excluding status bar)
   LDA SCREEN_ROWS
   SEC
@@ -254,7 +254,7 @@ normal_page_down
   LDA BUF_PTR16
   CMP LINE_COUNT16
   BCC .pgdn_target_ok
-.pgdn_clamp_target
+.pgdn_clamp_target:
   SEC
   LDA LINE_COUNT16
   SBC #1
@@ -262,7 +262,7 @@ normal_page_down
   LDA LINE_COUNT16 + 1
   SBC #0
   STA BUF_PTR16 + 1
-.pgdn_target_ok
+.pgdn_target_ok:
 
   ; VIEW_TOP16 += page_size
   CLC
@@ -289,16 +289,16 @@ normal_page_down
   BNE .pgdn_set_row
   CPX VIEW_TOP16
   BCS .pgdn_set_row
-.pgdn_clamp_view
+.pgdn_clamp_view:
   STX VIEW_TOP16
   STY VIEW_TOP16 + 1
   JMP .pgdn_set_row
 
-.pgdn_view_zero
+.pgdn_view_zero:
   LDA #0
   STA_LH16 VIEW_TOP16
 
-.pgdn_set_row
+.pgdn_set_row:
   ; CURSOR_ROW = target_line - VIEW_TOP16
   SEC
   LDA BUF_PTR16
@@ -310,7 +310,7 @@ normal_page_down
   STA LAST_KEY
   RTS
 
-normal_page_up
+normal_page_up:
   ; page_size = SCREEN_ROWS - 1
   LDA SCREEN_ROWS
   SEC
@@ -329,7 +329,7 @@ normal_page_up
   ; Underflow - clamp to 0
   LDA #0
   STA_LH16 BUF_PTR16
-.pgup_target_ok
+.pgup_target_ok:
 
   ; VIEW_TOP16 -= page_size, clamped to 0
   LDA VIEW_TOP16 + 1
@@ -343,7 +343,7 @@ normal_page_up
   STA_LH16 VIEW_TOP16
   JMP .pgup_set_row
 
-.pgup_can_sub
+.pgup_can_sub:
   SEC
   LDA VIEW_TOP16
   SBC BUF_TEMP
@@ -352,7 +352,7 @@ normal_page_up
   SBC #0
   STA VIEW_TOP16 + 1
 
-.pgup_set_row
+.pgup_set_row:
   ; CURSOR_ROW = target_line - VIEW_TOP16
   SEC
   LDA BUF_PTR16
@@ -364,14 +364,14 @@ normal_page_up
   STA LAST_KEY
   RTS
 
-normal_line_start
+normal_line_start:
   LDA #0
   STA CURSOR_COL
   STA LAST_KEY
   STA RENDER_FLAG
   RTS
 
-normal_line_end
+normal_line_end:
   JSR get_current_line_len
   BEQ .empty
   SEC
@@ -381,14 +381,14 @@ normal_line_end
   STA LAST_KEY
   STA RENDER_FLAG
   RTS
-.empty
+.empty:
   LDA #0
   STA CURSOR_COL
   STA LAST_KEY
   STA RENDER_FLAG
   RTS
 
-normal_goto_last
+normal_goto_last:
   SEC
   LDA LINE_COUNT16
   SBC #1
@@ -412,7 +412,7 @@ normal_goto_last
   BCS .view_ok
   LDA #0
   STA_LH16 VIEW_TOP16
-.view_ok
+.view_ok:
 
   SEC
   LDA FILE_LINE16
@@ -425,7 +425,7 @@ normal_goto_last
   JSR clamp_cursor_col
   RTS
 
-normal_g_key
+normal_g_key:
   LDA LAST_KEY
   CMP #'g'
   BNE .set_g
@@ -438,7 +438,7 @@ normal_g_key
   STA LAST_KEY
   JSR clamp_cursor_col
   RTS
-.set_g
+.set_g:
   LDA #'g'
   STA LAST_KEY
   LDA #0
@@ -447,7 +447,7 @@ normal_g_key
 
 ; --- Editing ---
 
-normal_delete_char
+normal_delete_char:
   JSR get_current_line_len
   BEQ .done
   STA LINE_LEN
@@ -474,12 +474,12 @@ normal_delete_char
   LDA #$FF
   STA MODIFIED
   JSR clamp_cursor_col
-.done
+.done:
   LDA #0
   STA LAST_KEY
   RTS
 
-normal_d_key
+normal_d_key:
   LDA LAST_KEY
   CMP #'d'
   BNE .set_d
@@ -499,7 +499,7 @@ normal_d_key
   LDA FILE_LINE16
   CMP LINE_COUNT16
   BCC .no_clamp
-.do_clamp
+.do_clamp:
   SEC
   LDA LINE_COUNT16
   SBC #1
@@ -507,39 +507,39 @@ normal_d_key
   LDA LINE_COUNT16 + 1
   SBC #0
   STA FILE_LINE16 + 1
-.no_clamp
+.no_clamp:
   LDA #0
   STA LAST_KEY
   JSR clamp_cursor_col
   RTS
 
-.set_d
+.set_d:
   LDA #'d'
   STA LAST_KEY
   RTS
 
-normal_enter_insert
+normal_enter_insert:
   LDA #MODE_INSERT
   STA MODE
   LDA #0
   STA LAST_KEY
   RTS
 
-normal_enter_insert_after
+normal_enter_insert_after:
   JSR get_current_line_len
   BEQ .enter
   CMP CURSOR_COL
   BEQ .enter
   BCC .enter
   INC CURSOR_COL
-.enter
+.enter:
   LDA #MODE_INSERT
   STA MODE
   LDA #0
   STA LAST_KEY
   RTS
 
-normal_enter_insert_eol
+normal_enter_insert_eol:
   JSR get_current_line_len
   STA CURSOR_COL
   LDA #MODE_INSERT
@@ -548,19 +548,19 @@ normal_enter_insert_eol
   STA LAST_KEY
   RTS
 
-normal_open_below
+normal_open_below:
   LDA FILE_LINE16
   LDX FILE_LINE16 + 1
   JSR buf_get_line_ptr
 
   LDY #0
-.find_nl
+.find_nl:
   LDA (BUF_PTR16),Y
   CMP #'\n'
   BEQ .found_nl
   INY
   BNE .find_nl
-.found_nl
+.found_nl:
   INY
   TYA
   CLC
@@ -586,9 +586,9 @@ normal_open_below
   BCC .no_scroll
   INC16 VIEW_TOP16
   JMP .set_mode
-.no_scroll
+.no_scroll:
   INC CURSOR_ROW
-.set_mode
+.set_mode:
   LDA #MODE_INSERT
   STA MODE
   LDA #$FF
@@ -596,14 +596,14 @@ normal_open_below
   LDA #0
   STA LAST_KEY
   RTS
-.open_below_full
+.open_below_full:
   SET16 str_buffer_full, STR_PTR16
   JSR show_status_message
   LDA #0
   STA LAST_KEY
   RTS
 
-normal_open_above
+normal_open_above:
   LDA FILE_LINE16
   LDX FILE_LINE16 + 1
   JSR buf_get_line_ptr
@@ -622,14 +622,14 @@ normal_open_above
   LDA #0
   STA LAST_KEY
   RTS
-.open_above_full
+.open_above_full:
   SET16 str_buffer_full, STR_PTR16
   JSR show_status_message
   LDA #0
   STA LAST_KEY
   RTS
 
-normal_enter_command
+normal_enter_command:
   LDA #MODE_COMMAND
   STA MODE
   LDA #0
@@ -638,13 +638,13 @@ normal_enter_command
 
 ; --- Utilities ---
 
-get_current_line_len
+get_current_line_len:
   LDA FILE_LINE16
   LDX FILE_LINE16 + 1
   JSR buf_get_line_len
   RTS
 
-clamp_cursor_col
+clamp_cursor_col:
   JSR get_current_line_len
   BEQ .set_zero
   SEC
@@ -652,9 +652,9 @@ clamp_cursor_col
   CMP CURSOR_COL
   BCS .ok
   STA CURSOR_COL
-.ok
+.ok:
   RTS
-.set_zero
+.set_zero:
   LDA #0
   STA CURSOR_COL
   RTS

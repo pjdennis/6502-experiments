@@ -52,7 +52,7 @@ FNAME_BUF   = $0200   ; Filename buffer (256 bytes)
 ; ============================================================================
 ; Entry point
 ; ============================================================================
-editor_main
+editor_main:
   ; Initialize flags
   LDA #0
   STA CMD_QUIT
@@ -71,13 +71,13 @@ editor_main
   STA BUF_PTR16
   STX BUF_PTR16 + 1
   LDY #0
-.copy_fname
+.copy_fname:
   LDA (BUF_PTR16),Y
   STA FNAME_BUF,Y
   BEQ .fname_copied
   INY
   BNE .copy_fname
-.fname_copied
+.fname_copied:
   SET16 FNAME_BUF, FNAME_PTR16
 
   .ifdef enable_debug
@@ -106,26 +106,26 @@ editor_main
   STA READONLY
   JMP .init_display
 
-.new_file
+.new_file:
   ; File doesn't exist - start with empty buffer
   JSR buf_init
   JMP .init_display
 
-.no_file
+.no_file:
   ; No file specified - use default name and empty buffer
   SET16 str_untitled, FNAME_PTR16
   ; Copy to FNAME_BUF
   LDY #0
-.copy_default
+.copy_default:
   LDA str_untitled,Y
   STA FNAME_BUF,Y
   BEQ .default_copied
   INY
   BNE .copy_default
-.default_copied
+.default_copied:
   JSR buf_init
 
-.init_display
+.init_display:
   ; Initialize rendering
   JSR render_init
 
@@ -137,12 +137,12 @@ editor_main
   BEQ .no_truncation_warning
   SET16 str_truncated, STR_PTR16
   JSR show_status_message
-.no_truncation_warning
+.no_truncation_warning:
 
 ; ============================================================================
 ; Main loop
 ; ============================================================================
-main_loop
+main_loop:
   ; Default to full repaint; handlers clear for cursor-only updates
   LDA #$FF
   STA RENDER_FLAG
@@ -153,7 +153,7 @@ main_loop
   BNE .not_command_entry
   JSR command_handle
   JMP .after_key
-.not_command_entry
+.not_command_entry:
 
   ; Read a key
   JSR read_key
@@ -162,7 +162,7 @@ main_loop
   CMP #$04
   BNE .not_eot
   JMP .editor_exit
-.not_eot
+.not_eot:
 
   ; Dispatch based on mode
   LDX MODE
@@ -173,11 +173,11 @@ main_loop
   JSR normal_handle_key
   JMP .after_key
 
-.insert_mode
+.insert_mode:
   JSR insert_handle_key
   JMP .after_key
 
-.after_key
+.after_key:
   ; Check if we should quit
   LDA CMD_QUIT
   BNE .editor_exit
@@ -196,7 +196,7 @@ main_loop
 
   JMP main_loop
 
-.editor_exit
+.editor_exit:
   ; Clear screen and exit
   JSR ansi_clear_screen
   JSR con_flush
@@ -210,19 +210,19 @@ main_loop
   .ifdef enable_debug
 
   .zeropage
-DBG_ARG_IDX   .byte 0     ; Current argument index
-DBG_ARG_COUNT .byte 0     ; Total argument count
+DBG_ARG_IDX:   .byte 0     ; Current argument index
+DBG_ARG_COUNT: .byte 0     ; Total argument count
   .code
 
 ; Parse additional command line arguments (after filename)
 ; Looks for: bufsize:NN (hex high byte of buffer limit)
-parse_debug_args
+parse_debug_args:
   JSR argc
   STA DBG_ARG_COUNT
   LDA #1                ; Start at argv(1), argv(0) is filename
   STA DBG_ARG_IDX
 
-.arg_loop
+.arg_loop:
   LDA DBG_ARG_IDX
   CMP DBG_ARG_COUNT
   BCS .args_done        ; No more arguments
@@ -280,16 +280,16 @@ parse_debug_args
   STA BUF_LIMIT
   JMP .next_arg
 
-.next_arg
+.next_arg:
   INC DBG_ARG_IDX
   JMP .arg_loop
 
-.args_done
+.args_done:
   RTS
 
 ; Parse a single hex digit in A, return value in A (0-15)
 ; Handles 0-9, A-F, a-f
-parse_hex_digit
+parse_hex_digit:
   CMP #'a'
   BCS .lower
   CMP #'A'
@@ -298,11 +298,11 @@ parse_hex_digit
   SEC
   SBC #'0'
   RTS
-.upper
+.upper:
   SEC
   SBC #'A' - 10
   RTS
-.lower
+.lower:
   SEC
   SBC #'a' - 10
   RTS
@@ -312,7 +312,7 @@ parse_hex_digit
 ; ============================================================================
 ; Data
 ; ============================================================================
-str_untitled .asciiz "[No Name]"
+str_untitled: .asciiz "[No Name]"
 
 ; Entry point address - emulator uses last 2 bytes of binary as reset vector
   .word editor_main

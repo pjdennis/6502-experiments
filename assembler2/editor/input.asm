@@ -16,29 +16,29 @@ KEY_BS    = $08
 KEY_TAB   = $09
 
   .zeropage
-INPUT_TEMP  .byte 0     ; Temp for input processing
-SPIN_COUNT  .byte 0     ; Spin loop counter for escape detection
-PUSHBACK    .byte 0     ; Pushback byte ($00 = none)
-HAS_PUSHBACK .byte 0    ; $FF if pushback has a byte
+INPUT_TEMP:  .byte 0     ; Temp for input processing
+SPIN_COUNT:  .byte 0     ; Spin loop counter for escape detection
+PUSHBACK:    .byte 0     ; Pushback byte ($00 = none)
+HAS_PUSHBACK: .byte 0    ; $FF if pushback has a byte
 
   .code
 
 ; Read one byte from input, with pushback support
 ; Returns byte in A
-input_read_byte
+input_read_byte:
   LDA HAS_PUSHBACK
   BEQ .no_pushback
   LDA #0
   STA HAS_PUSHBACK
   LDA PUSHBACK
   RTS
-.no_pushback
+.no_pushback:
   JSR con_read
   RTS
 
 ; Push back one byte into the input stream
 ; A = byte to push back
-input_unread
+input_unread:
   STA PUSHBACK
   LDA #$FF
   STA HAS_PUSHBACK
@@ -50,7 +50,7 @@ input_unread
 ; Bare ESC: $1B
 ; Backspace ($7F or $08) normalized to KEY_BS ($08)
 ; Clobbers X, Y
-read_key
+read_key:
   JSR input_read_byte
 
   ; Normalize backspace: $7F -> $08
@@ -58,21 +58,21 @@ read_key
   BNE .not_del_bs
   LDA #KEY_BS
   RTS
-.not_del_bs
+.not_del_bs:
 
   ; Check for ESC
   CMP #$1B
   BNE .not_esc
   JMP .is_esc
-.not_esc
+.not_esc:
   JMP .done
-.is_esc
+.is_esc:
 
   ; Got ESC - check if more bytes follow (escape sequence)
   ; Spin loop to wait briefly for next byte
   LDA #$FF
   STA SPIN_COUNT
-.spin
+.spin:
   JSR con_ready
   CMP #$FF
   BEQ .got_more
@@ -82,7 +82,7 @@ read_key
   LDA #KEY_ESC
   RTS
 
-.got_more
+.got_more:
   ; Read the next byte - should be '['
   JSR input_read_byte
   CMP #'['
@@ -131,45 +131,45 @@ read_key
   LDA #KEY_ESC
   RTS
 
-.key_up
+.key_up:
   LDA #KEY_UP
   RTS
-.key_down
+.key_down:
   LDA #KEY_DOWN
   RTS
-.key_right
+.key_right:
   LDA #KEY_RIGHT
   RTS
-.key_left
+.key_left:
   LDA #KEY_LEFT
   RTS
-.key_home
+.key_home:
   LDA #KEY_HOME
   RTS
-.key_end
+.key_end:
   LDA #KEY_END
   RTS
-.key_delete
+.key_delete:
   LDA #KEY_DEL
   RTS
-.key_pgup
+.key_pgup:
   LDA #KEY_PGUP
   RTS
-.key_pgdn
+.key_pgdn:
   LDA #KEY_PGDN
   RTS
 
-.not_tilde
-.unknown_csi
-.unknown_eat
+.not_tilde:
+.unknown_csi:
+.unknown_eat:
   ; Unknown escape sequence - return ESC
   LDA #KEY_ESC
   RTS
-.not_csi
+.not_csi:
   ; Byte after ESC was not '[' - push it back and return bare ESC
   JSR input_unread
   LDA #KEY_ESC
   RTS
 
-.done
+.done:
   RTS

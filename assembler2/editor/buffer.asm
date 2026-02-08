@@ -17,21 +17,21 @@ MAX_LINES   = $03FF  ; Maximum line count (1023), 0-indexed
 
   .zeropage
 
-BUF_END16     .word 0     ; Points one past last byte of text
-LINE_COUNT16  .word 0     ; Number of lines in buffer (16-bit)
-BUF_PTR16     .word 0     ; General-purpose buffer pointer
-BUF_SRC16     .word 0     ; Source pointer for block moves
-BUF_DST16     .word 0     ; Destination pointer for block moves
-BUF_LEN16     .word 0     ; Length/count for block moves
-BUF_TEMP      .byte 0     ; Temp byte for buffer operations
-FILE_HANDLE   .byte 0     ; File handle for load/save
-BUF_LIMIT     .byte 0     ; High byte of buffer limit (default >TEXT_LIMIT)
+BUF_END16:     .word 0     ; Points one past last byte of text
+LINE_COUNT16:  .word 0     ; Number of lines in buffer (16-bit)
+BUF_PTR16:     .word 0     ; General-purpose buffer pointer
+BUF_SRC16:     .word 0     ; Source pointer for block moves
+BUF_DST16:     .word 0     ; Destination pointer for block moves
+BUF_LEN16:     .word 0     ; Length/count for block moves
+BUF_TEMP:      .byte 0     ; Temp byte for buffer operations
+FILE_HANDLE:   .byte 0     ; File handle for load/save
+BUF_LIMIT:     .byte 0     ; High byte of buffer limit (default >TEXT_LIMIT)
 
   .code
 
 ; Initialize empty buffer
 ; Sets up an empty buffer with one empty line
-buf_init
+buf_init:
   SET16 TEXT_BUF, BUF_END16
   ; Add a newline to have at least one line
   LDY #0
@@ -46,13 +46,13 @@ buf_init
 ; File handle in A (already opened)
 ; On return: buffer contains file contents, line table built
 ; Carry set = file was truncated, carry clear = fully loaded
-buf_load_file
+buf_load_file:
   STA FILE_HANDLE
   SET16 TEXT_BUF, BUF_END16
   LDA #0
   STA BUF_TEMP            ; Clear truncation flag
 
-.read_loop
+.read_loop:
   LDA FILE_HANDLE
   JSR read
   BCS .read_done
@@ -69,9 +69,9 @@ buf_load_file
   STA BUF_TEMP
   JMP .read_done
 
-.read_loop_2
+.read_loop_2:
   JMP .read_loop
-.read_done
+.read_done:
   ; Ensure buffer ends with newline
   SEC
   LDA BUF_END16
@@ -95,12 +95,12 @@ buf_load_file
   STA (BUF_END16),Y
   INC16 BUF_END16
   JMP .has_newline
-.overwrite_last
+.overwrite_last:
   ; Truncated - overwrite last byte to stay within buffer limit
   LDA #'\n'
   LDY #0
   STA (BUF_PTR16),Y
-.has_newline
+.has_newline:
 
   ; If buffer is empty (nothing read), add a newline for one empty line
   LDA BUF_END16
@@ -114,25 +114,25 @@ buf_load_file
   LDA #'\n'
   STA (BUF_END16),Y
   INC16 BUF_END16
-.not_empty
+.not_empty:
 
   JSR buf_rebuild_lines
   LDA BUF_TEMP
   BEQ .return_ok
   SEC                    ; Truncated
   RTS
-.return_ok
+.return_ok:
   CLC                    ; Not truncated
   RTS
 
 ; Save buffer to file
 ; File handle in A (already opened for write)
 ; Writes all text except the final trailing newline of the last empty line
-buf_save_file
+buf_save_file:
   STA FILE_HANDLE
   SET16 TEXT_BUF, BUF_PTR16
 
-.write_loop
+.write_loop:
   ; Check if we've reached the end
   LDA BUF_PTR16 + 1
   CMP BUF_END16 + 1
@@ -141,7 +141,7 @@ buf_save_file
   CMP BUF_END16
   BCS .write_done
 
-.do_write
+.do_write:
   LDY #0
   LDA (BUF_PTR16),Y
   LDX FILE_HANDLE
@@ -149,18 +149,18 @@ buf_save_file
   INC16 BUF_PTR16
   JMP .write_loop
 
-.write_done
+.write_done:
   RTS
 
 ; Return line count in LINE_COUNT16
 ; (Already maintained by rebuild)
-buf_line_count
+buf_line_count:
   RTS
 
 ; Get pointer to start of line N (N in A/X, low/high)
 ; Returns pointer in BUF_PTR16
 ; Clobbers A, Y
-buf_get_line_ptr
+buf_get_line_ptr:
   ; Line table index = N * 2
   STA BUF_PTR16
   STX BUF_PTR16 + 1
@@ -187,10 +187,10 @@ buf_get_line_ptr
 ; Get length of line N (N in A/X, low/high)
 ; Returns length in A (capped at 255), not counting the newline
 ; Clobbers X, Y
-buf_get_line_len
+buf_get_line_len:
   JSR buf_get_line_ptr
   LDY #0
-.len_loop
+.len_loop:
   LDA (BUF_PTR16),Y
   CMP #'\n'
   BEQ .len_done
@@ -199,7 +199,7 @@ buf_get_line_len
   ; Line longer than 255 - cap at 255
   LDA #$FF
   RTS
-.len_done
+.len_done:
   TYA
   RTS
 
@@ -208,7 +208,7 @@ buf_get_line_len
 ; BUF_PTR16 = position to insert at
 ; Shifts all following bytes right by 1
 ; Returns carry set = buffer full, carry clear = success
-buf_insert_char
+buf_insert_char:
   STA BUF_TEMP
   ; Check if buffer is at capacity
   LDA BUF_END16 + 1
@@ -216,7 +216,7 @@ buf_insert_char
   BCC .has_room
   SEC              ; Buffer full
   RTS
-.has_room
+.has_room:
 
   ; Page-at-a-time shift right by 1, copying backwards.
   ; Uses Y register as page offset for fast inner loop.
@@ -230,7 +230,7 @@ buf_insert_char
   LDA BUF_END16
   CMP BUF_PTR16
   BEQ .shift_right_done
-.need_shift
+.need_shift:
 
   ; Set up BUF_SRC16 = page base of (BUF_END16-1)
   ; Y = low byte of (BUF_END16-1)
@@ -255,7 +255,7 @@ buf_insert_char
   BNE .full_page          ; Different page, copy Y down to 0
 
   ; Same page as insert point: copy Y down to low byte of BUF_PTR16
-.last_page
+.last_page:
   LDA (BUF_SRC16),Y
   STA (BUF_DST16),Y
   CPY BUF_PTR16
@@ -263,7 +263,7 @@ buf_insert_char
   DEY
   JMP .last_page
 
-.full_page
+.full_page:
   ; Copy from Y down to 0 on this page
   LDA (BUF_SRC16),Y
   STA (BUF_DST16),Y
@@ -284,7 +284,7 @@ buf_insert_char
   ; This page contains the insert point
   JMP .last_page
 
-.shift_right_done
+.shift_right_done:
   ; Store the new character
   LDY #0
   LDA BUF_TEMP
@@ -298,7 +298,7 @@ buf_insert_char
 
 ; Delete character at BUF_PTR16
 ; Shifts all following bytes left by 1
-buf_delete_char
+buf_delete_char:
   ; Page-at-a-time shift left by 1, copying forwards.
   ; Source = BUF_PTR16 + 1, copies forward to BUF_END16.
   ; BUF_SRC16 = page-aligned base of current source page
@@ -321,7 +321,7 @@ buf_delete_char
   LDA BUF_SRC16
   CMP BUF_END16
   BCS .del_shift_done
-.del_need_shift
+.del_need_shift:
 
   ; Set up BUF_SRC16 = page base of first source byte (BUF_PTR16+1)
   ; Y = low byte of first source byte
@@ -351,7 +351,7 @@ buf_delete_char
   BNE .del_full_page      ; Different page, copy Y up to $FF
 
   ; Same page as end: copy Y up to (BUF_END16 low - 1)
-.del_last_page
+.del_last_page:
   LDA (BUF_SRC16),Y
   STA (BUF_DST16),Y
   INY
@@ -359,7 +359,7 @@ buf_delete_char
   BNE .del_last_page
   JMP .del_shift_done
 
-.del_full_page
+.del_full_page:
   ; Copy from Y up to $FF on this page
   LDA (BUF_SRC16),Y
   STA (BUF_DST16),Y
@@ -383,7 +383,7 @@ buf_delete_char
   ; This page contains the end
   JMP .del_last_page
 
-.del_shift_done
+.del_shift_done:
   ; Decrement buffer end
   SEC
   LDA BUF_END16
@@ -397,18 +397,18 @@ buf_delete_char
 
 ; Insert newline at BUF_PTR16 (splits current line)
 ; Returns carry set = buffer full, carry clear = success
-buf_insert_newline
+buf_insert_newline:
   LDA #'\n'
   JSR buf_insert_char
   BCS .full
   JSR buf_rebuild_lines
   CLC
-.full
+.full:
   RTS
 
 ; Delete entire line N (N in A/X, low/high)
 ; Removes the line and its trailing newline
-buf_delete_line
+buf_delete_line:
   PHA
   TXA
   PHA
@@ -424,13 +424,13 @@ buf_delete_line
 
   ; Find end of line (the newline character)
   LDY #0
-.find_newline
+.find_newline:
   LDA (BUF_PTR16),Y
   CMP #'\n'
   BEQ .found_newline
   INY
   BNE .find_newline
-.found_newline
+.found_newline:
   ; BUF_PTR16 + Y + 1 = start of next line (after newline)
   INY
   TYA
@@ -445,7 +445,7 @@ buf_delete_line
   ; BUF_PTR16 = destination (start of deleted line)
   ; BUF_SRC16 = source (start of next line)
 
-.del_shift_loop
+.del_shift_loop:
   ; Check if src has reached end
   LDA BUF_SRC16 + 1
   CMP BUF_END16 + 1
@@ -455,7 +455,7 @@ buf_delete_line
   CMP BUF_END16
   BCS .del_shift_done
 
-.del_do_copy
+.del_do_copy:
   LDY #0
   LDA (BUF_SRC16),Y
   STA (BUF_PTR16),Y
@@ -465,7 +465,7 @@ buf_delete_line
 
   JMP .del_shift_loop
 
-.del_shift_done
+.del_shift_done:
   ; Update buffer end: subtract the number of bytes removed
   ; New end = BUF_PTR16 (which is where we stopped copying to)
   CP16 BUF_PTR16, BUF_END16
@@ -481,14 +481,14 @@ buf_delete_line
   LDA #'\n'
   STA (BUF_END16),Y
   INC16 BUF_END16
-.del_not_empty
+.del_not_empty:
 
   JSR buf_rebuild_lines
   RTS
 
 ; Rebuild line pointer table by scanning for newlines
 ; Sets LINE_COUNT16 and fills LINE_TBL
-buf_rebuild_lines
+buf_rebuild_lines:
   SET16 $0000, LINE_COUNT16
   SET16 TEXT_BUF, BUF_PTR16
   SET16 LINE_TBL, BUF_DST16
@@ -502,7 +502,7 @@ buf_rebuild_lines
   STA (BUF_DST16),Y
   INC16 LINE_COUNT16
 
-.scan_loop
+.scan_loop:
   ; Check if we've reached the end
   LDA BUF_PTR16 + 1
   CMP BUF_END16 + 1
@@ -512,7 +512,7 @@ buf_rebuild_lines
   CMP BUF_END16
   BCS .scan_done
 
-.scan_byte
+.scan_byte:
   LDY #0
   LDA (BUF_PTR16),Y
   INC16 BUF_PTR16
@@ -529,7 +529,7 @@ buf_rebuild_lines
   CMP BUF_END16
   BCS .scan_done
 
-.add_line
+.add_line:
   ; Advance line table pointer
   CLC
   LDA BUF_DST16
@@ -551,14 +551,14 @@ buf_rebuild_lines
 
   JMP .scan_loop
 
-.scan_done
+.scan_done:
   RTS
 
 ; Increment line pointers after current line by 1
 ; Used after inserting a non-newline character (no lines added/removed)
 ; Input: FILE_LINE16 = current line number
 ; Clobbers: A, Y
-buf_adjust_lines_inc
+buf_adjust_lines_inc:
   ; Calculate number of entries to adjust: LINE_COUNT16 - FILE_LINE16 - 1
   SEC
   LDA LINE_COUNT16
@@ -572,7 +572,7 @@ buf_adjust_lines_inc
   LDA BUF_LEN16
   BNE .inc_no_borrow
   DEC BUF_LEN16 + 1
-.inc_no_borrow
+.inc_no_borrow:
   DEC BUF_LEN16
 
   ; If count <= 0, nothing to adjust
@@ -599,7 +599,7 @@ buf_adjust_lines_inc
   ADC #>LINE_TBL
   STA BUF_PTR16 + 1
 
-.inc_loop
+.inc_loop:
   ; Increment the 16-bit line pointer at (BUF_PTR16)
   LDY #0
   CLC
@@ -611,7 +611,7 @@ buf_adjust_lines_inc
   LDA (BUF_PTR16),Y
   ADC #0
   STA (BUF_PTR16),Y
-.inc_no_carry
+.inc_no_carry:
 
   ; Advance to next LINE_TBL entry (+2 bytes)
   CLC
@@ -620,13 +620,13 @@ buf_adjust_lines_inc
   STA BUF_PTR16
   BCC .inc_no_page
   INC BUF_PTR16 + 1
-.inc_no_page
+.inc_no_page:
 
   ; Decrement count
   LDA BUF_LEN16
   BNE .inc_dec_no_borrow
   DEC BUF_LEN16 + 1
-.inc_dec_no_borrow
+.inc_dec_no_borrow:
   DEC BUF_LEN16
 
   ; Check if count reached 0
@@ -634,14 +634,14 @@ buf_adjust_lines_inc
   ORA BUF_LEN16 + 1
   BNE .inc_loop
 
-.inc_done
+.inc_done:
   RTS
 
 ; Decrement line pointers after current line by 1
 ; Used after deleting a non-newline character (no lines added/removed)
 ; Input: FILE_LINE16 = current line number
 ; Clobbers: A, Y
-buf_adjust_lines_dec
+buf_adjust_lines_dec:
   ; Calculate number of entries to adjust: LINE_COUNT16 - FILE_LINE16 - 1
   SEC
   LDA LINE_COUNT16
@@ -655,7 +655,7 @@ buf_adjust_lines_dec
   LDA BUF_LEN16
   BNE .dec_no_borrow
   DEC BUF_LEN16 + 1
-.dec_no_borrow
+.dec_no_borrow:
   DEC BUF_LEN16
 
   ; If count <= 0, nothing to adjust
@@ -681,7 +681,7 @@ buf_adjust_lines_dec
   ADC #>LINE_TBL
   STA BUF_PTR16 + 1
 
-.dec_loop
+.dec_loop:
   ; Decrement the 16-bit line pointer at (BUF_PTR16)
   LDY #0
   SEC
@@ -693,7 +693,7 @@ buf_adjust_lines_dec
   LDA (BUF_PTR16),Y
   SBC #0
   STA (BUF_PTR16),Y
-.dec_no_borrow2
+.dec_no_borrow2:
 
   ; Advance to next LINE_TBL entry (+2 bytes)
   CLC
@@ -702,13 +702,13 @@ buf_adjust_lines_dec
   STA BUF_PTR16
   BCC .dec_no_page
   INC BUF_PTR16 + 1
-.dec_no_page
+.dec_no_page:
 
   ; Decrement count
   LDA BUF_LEN16
   BNE .dec_dec_no_borrow
   DEC BUF_LEN16 + 1
-.dec_dec_no_borrow
+.dec_dec_no_borrow:
   DEC BUF_LEN16
 
   ; Check if count reached 0
@@ -716,5 +716,5 @@ buf_adjust_lines_dec
   ORA BUF_LEN16 + 1
   BNE .dec_loop
 
-.dec_done
+.dec_done:
   RTS

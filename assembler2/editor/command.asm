@@ -11,20 +11,20 @@ CMD_BUF     = $0300   ; Command buffer (256 bytes)
 CMD_BUF_LEN = $00FF   ; Max command length
 
   .zeropage
-CMD_IDX     .byte 0     ; Current index into command buffer
-CMD_QUIT    .byte 0     ; Set to $FF when editor should quit
+CMD_IDX:     .byte 0     ; Current index into command buffer
+CMD_QUIT:    .byte 0     ; Set to $FF when editor should quit
 
   .code
 
 ; Enter command mode - show prompt and read command
-command_handle
+command_handle:
   LDA #0
   STA CMD_IDX
 
   ; Show ':' prompt on last line
   JSR command_show_prompt
 
-.cmd_read_loop
+.cmd_read_loop:
   JSR input_read_byte
 
   CMP #KEY_ESC
@@ -58,7 +58,7 @@ command_handle
   JSR con_flush
   JMP .cmd_read_loop
 
-.cmd_backspace
+.cmd_backspace:
   LDA CMD_IDX
   BEQ .cmd_cancel     ; Nothing to delete, cancel
   DEC CMD_IDX
@@ -72,12 +72,12 @@ command_handle
   JSR con_flush
   JMP .cmd_read_loop
 
-.cmd_cancel
+.cmd_cancel:
   LDA #MODE_NORMAL
   STA MODE
   RTS
 
-.cmd_execute
+.cmd_execute:
   ; Null-terminate the command
   LDX CMD_IDX
   LDA #0
@@ -91,11 +91,11 @@ command_handle
   BNE .stay
   LDA #MODE_NORMAL
   STA MODE
-.stay
+.stay:
   RTS
 
 ; Show the ':' prompt on the status line
-command_show_prompt
+command_show_prompt:
   LDA SCREEN_ROWS
   STA ANSI_ROW
   LDA #1
@@ -108,7 +108,7 @@ command_show_prompt
   RTS
 
 ; Parse and execute the command in CMD_BUF
-command_parse
+command_parse:
   LDA CMD_BUF
 
   ; :w - write
@@ -125,24 +125,24 @@ command_parse
   CMP #':'          ; '9'+1 = ':'
   BCC .goto_line
 
-.unknown
+.unknown:
   SET16 str_unknown_cmd, STR_PTR16
   JMP show_status_message
 
-.check_w
+.check_w:
   LDA READONLY
   BEQ .not_readonly_w
   SET16 str_readonly, STR_PTR16
   JSR show_status_message
   RTS
-.not_readonly_w
+.not_readonly_w:
   LDA CMD_BUF + 1
   BEQ .do_write       ; Just ":w"
   CMP #'q'
   BEQ .check_wq
   JMP .unknown
 
-.check_wq
+.check_wq:
   LDA CMD_BUF + 2
   BNE .unknown        ; Extra chars after ":wq"
   ; :wq - write and quit
@@ -151,18 +151,18 @@ command_parse
   STA CMD_QUIT
   RTS
 
-.do_write
+.do_write:
   JSR command_write_file
   RTS
 
-.check_q
+.check_q:
   LDA CMD_BUF + 1
   BEQ .do_quit        ; Just ":q"
   CMP #'!'
   BEQ .force_quit
   JMP .unknown
 
-.do_quit
+.do_quit:
   ; Check if modified
   LDA MODIFIED
   BEQ .quit_ok
@@ -170,12 +170,12 @@ command_parse
   SET16 str_no_write, STR_PTR16
   JMP show_status_message
 
-.quit_ok
+.quit_ok:
   LDA #$FF
   STA CMD_QUIT
   RTS
 
-.force_quit
+.force_quit:
   LDA CMD_BUF + 2
   BNE .unknown        ; Extra chars after ":q!"
   LDA #$FF
@@ -183,12 +183,12 @@ command_parse
   RTS
 
 ; Go to line number
-.goto_line
+.goto_line:
   ; Parse decimal number from CMD_BUF
   SET16 $0000, BUF_LEN16   ; Accumulator for line number
   LDX #0
 
-.parse_digit
+.parse_digit:
   LDA CMD_BUF,X
   BEQ .goto_done
   SEC
@@ -197,9 +197,9 @@ command_parse
   CMP #10
   BCS .bad_digit
   JMP .valid_digit
-.bad_digit
+.bad_digit:
   JMP .unknown
-.valid_digit
+.valid_digit:
 
   ; Multiply accumulator by 10: BUF_LEN16 = BUF_LEN16 * 10
   ; = BUF_LEN16 * 8 + BUF_LEN16 * 2
@@ -236,7 +236,7 @@ command_parse
   INX
   JMP .parse_digit
 
-.goto_done
+.goto_done:
   ; BUF_LEN16 = 1-based line number, convert to 0-based
   LDA BUF_LEN16
   ORA BUF_LEN16 + 1
@@ -258,7 +258,7 @@ command_parse
   LDA FILE_LINE16
   CMP LINE_COUNT16
   BCC .line_ok
-.clamp_line
+.clamp_line:
   SEC
   LDA LINE_COUNT16
   SBC #1
@@ -266,18 +266,18 @@ command_parse
   LDA LINE_COUNT16 + 1
   SBC #0
   STA FILE_LINE16 + 1
-.line_ok
+.line_ok:
   ; Set VIEW_TOP so cursor is near top of screen
   CP16 FILE_LINE16, VIEW_TOP16
   LDA #0
   STA CURSOR_ROW
   STA CURSOR_COL
   JSR clamp_cursor_col
-.goto_ret
+.goto_ret:
   RTS
 
 ; Write (save) the file
-command_write_file
+command_write_file:
   ; Open file for writing
   LDA FNAME_PTR16
   LDX FNAME_PTR16 + 1
@@ -315,7 +315,7 @@ command_write_file
 
 ; Show a status message and wait for keypress
 ; STR_PTR16 must be set to the message string before calling
-show_status_message
+show_status_message:
   ; Save message pointer (command_show_prompt clobbers STR_PTR16)
   LDA STR_PTR16 + 1
   PHA
@@ -332,9 +332,9 @@ show_status_message
   RTS
 
 ; === String constants ===
-str_unknown_cmd .asciiz "Unknown command"
-str_no_write    .asciiz "No write since last change (use :q! to override)"
-str_written     .asciiz "written"
-str_buffer_full .asciiz "Buffer full"
-str_readonly    .asciiz "Read-only (file truncated)"
-str_truncated   .asciiz "WARNING: File too large - read only"
+str_unknown_cmd: .asciiz "Unknown command"
+str_no_write:    .asciiz "No write since last change (use :q! to override)"
+str_written:     .asciiz "written"
+str_buffer_full: .asciiz "Buffer full"
+str_readonly:    .asciiz "Read-only (file truncated)"
+str_truncated:   .asciiz "WARNING: File too large - read only"
