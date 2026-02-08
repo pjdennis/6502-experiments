@@ -73,7 +73,7 @@ FILE_STACK      = $F000  ; File stack will grow down from 1 below here
 TEMP:            .byte 0      ; 1 byte
 PC16:            .word 0      ; 2 byte program counter
 HEX16:           .word 0      ; 2 byte hex value, also aliased as OPERAND16
-OPERAND16 = HEX16            ; Operand value - alias for HEX16
+OPERAND16 = HEX16             ; Operand value - alias for HEX16
 PASS:            .byte 0      ; 1 byte $00 = pass 1 $FF = pass 2
 STARTED:         .byte 0      ; flag to indicate output has started
 CURR_OUT_FILE:   .byte 0      ; Current output file (for closing on error)
@@ -81,7 +81,7 @@ IN_ZEROPAGE:     .byte 0      ; Flag indicating if in zero page section
 PC_SAVE16:       .word 0      ; Save location for PC when switching sections
 ADDR_MODE:       .byte 0      ; Current addressing mode
 INST_PTR16:      .word 0      ; Pointer to instruction mode table entry, aliased as MACRO_DEF_PTR16
-MACRO_DEF_PTR16 = INST_PTR16 ; Heap pointer where macro body is being stored, aliased to INST_PTR16
+MACRO_DEF_PTR16 = INST_PTR16  ; Heap pointer where macro body is being stored, aliased to INST_PTR16
 IS_FWDREF:       .byte 0      ; $FF if current label is forward ref (pass 1 only)
 EXPR_ACCU16:     .word 0      ; Expression accumulator
 EXPR_FWDREF:     .byte 0      ; Accumulated forward ref flag
@@ -102,6 +102,13 @@ MACRO_PTR16:     .word 0      ; Pointer to macro name (for show_captured_macros)
   .endif
 
   .code
+
+
+; Constants
+DATA_MODE_DATA   = 0          ; Variable width
+DATA_MODE_BYTE   = 1          ; 1 Byte
+DATA_MODE_WORD   = 2          ; 2 Bytes
+DATA_MODE_ASCIIZ = 3          ; 1 Byte, null terminated
 
 
 ; Include files
@@ -1502,16 +1509,16 @@ process_directive:
 .in_code:
   JMP skip_rest_of_line  ; Tail call
 .data:
-  LDA #$00
+  LDA #DATA_MODE_DATA
   JMP set_data_mode
 .byte:
-  LDA #$01
+  LDA #DATA_MODE_BYTE
   JMP set_data_mode
 .word:
-  LDA #$02
+  LDA #DATA_MODE_WORD
   JMP set_data_mode
 .asciiz:
-  LDA #$03
+  LDA #DATA_MODE_ASCIIZ
   JMP set_data_mode
 
 
@@ -1595,15 +1602,13 @@ data_parameters_loop:
   JSR skip_optional_comma
   JMP data_parameters_loop
 .forced_width:
-  CMP #$02
+  CMP #DATA_MODE_WORD
   BEQ .data_emit_two_bytes  ; Mode 2 (.word): force 2 bytes
   ; Mode 1 (.byte) or Mode 3 (.asciiz): validate + emit 1 byte
   BIT PASS
   BPL .data_emit_one_byte   ; Skip validation on pass 1
   LDA OPERAND16+$01
-  BNE .data_byte_err
-  BEQ .data_emit_one_byte   ; Always taken
-.data_byte_err:
+  BEQ .data_emit_one_byte   ; Not an error
   JMP err_value_out_of_range
 .data_emit_two_bytes:
   LDA OPERAND16          ; Emit low byte
@@ -1614,7 +1619,7 @@ data_parameters_loop:
   JMP data_parameters_loop
 .data_done:
   LDA DATA_MODE
-  CMP #$03
+  CMP #DATA_MODE_ASCIIZ
   BNE .data_rts
   LDA #$00
   JMP emit           ; Tail call: emit null terminator
