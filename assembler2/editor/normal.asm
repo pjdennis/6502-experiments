@@ -176,22 +176,10 @@ normal_move_down:
   CMP16 BUF_PTR16, LINE_COUNT16
   BCS .done
 
-.can_move:
-  INC16 FILE_LINE16
-
-  ; Check if we need to scroll
-  LDA CURSOR_ROW
-  CLC
-  ADC #2
-  CMP SCREEN_ROWS
-  BCC .no_scroll
-  INC16 VIEW_TOP16
-  JMP .clamp_col
-.no_scroll:
-  INC CURSOR_ROW
   LDA #0
   STA RENDER_FLAG
-.clamp_col:
+  INC16 FILE_LINE16
+  JSR ensure_cursor_visible
   JSR clamp_cursor_col
 .done:
   LDA #0
@@ -203,17 +191,10 @@ normal_move_up:
   ORA FILE_LINE16 + 1
   BEQ .done
 
-  DEC16 FILE_LINE16
-
-  LDA CURSOR_ROW
-  BNE .no_scroll
-  DEC16 VIEW_TOP16
-  JMP .clamp_col
-.no_scroll:
-  DEC CURSOR_ROW
   LDA #0
   STA RENDER_FLAG
-.clamp_col:
+  DEC16 FILE_LINE16
+  JSR ensure_cursor_visible
   JSR clamp_cursor_col
 .done:
   LDA #0
@@ -279,6 +260,7 @@ normal_page_down:
   STA_LH16 VIEW_TOP16
 
 .pgdn_set_row:
+  CP16 BUF_PTR16, FILE_LINE16
   ; CURSOR_ROW = target_line - VIEW_TOP16
   SEC
   LDA BUF_PTR16
@@ -333,6 +315,7 @@ normal_page_up:
   STA VIEW_TOP16 + 1
 
 .pgup_set_row:
+  CP16 BUF_PTR16, FILE_LINE16
   ; CURSOR_ROW = target_line - VIEW_TOP16
   SEC
   LDA BUF_PTR16
@@ -527,17 +510,7 @@ normal_open_below:
   INC16 FILE_LINE16
   LDA #0
   STA CURSOR_COL
-
-  LDA CURSOR_ROW
-  CLC
-  ADC #2
-  CMP SCREEN_ROWS
-  BCC .no_scroll
-  INC16 VIEW_TOP16
-  JMP .set_mode
-.no_scroll:
-  INC CURSOR_ROW
-.set_mode:
+  JSR ensure_cursor_visible
   LDA #MODE_INSERT
   STA MODE
   LDA #$FF

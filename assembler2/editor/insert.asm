@@ -118,18 +118,7 @@ insert_newline:
   INC16 FILE_LINE16
   LDA #0
   STA CURSOR_COL
-
-  ; Scroll if needed
-  LDA CURSOR_ROW
-  CLC
-  ADC #2
-  CMP SCREEN_ROWS
-  BCC .no_scroll
-  INC16 VIEW_TOP16
-  JMP .done
-.no_scroll:
-  INC CURSOR_ROW
-.done:
+  JSR ensure_cursor_visible
   LDA #$FF
   STA MODIFIED
   RTS
@@ -201,16 +190,7 @@ insert_backspace:
 
   ; Move to previous line
   DEC16 FILE_LINE16
-
-  ; Adjust cursor row
-  LDA CURSOR_ROW
-  BNE .dec_row
-  ; Need to scroll up
-  DEC16 VIEW_TOP16
-  JMP .joined
-.dec_row:
-  DEC CURSOR_ROW
-.joined:
+  JSR ensure_cursor_visible
   LDA #$FF
   STA MODIFIED
 .cant_join:

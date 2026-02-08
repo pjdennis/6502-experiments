@@ -251,11 +251,9 @@ command_parse:
   SEC
   SBCI16 LINE_COUNT16, $0001, FILE_LINE16
 .line_ok:
-  ; Set VIEW_TOP so cursor is near top of screen
-  CP16 FILE_LINE16, VIEW_TOP16
   LDA #0
-  STA CURSOR_ROW
   STA CURSOR_COL
+  JSR ensure_cursor_visible
   JSR clamp_cursor_col
 .goto_ret:
   RTS

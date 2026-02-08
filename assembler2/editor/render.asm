@@ -284,6 +284,55 @@ render_line_chars:
 .rlc_done:
   RTS
 
+; Ensure cursor is visible on screen
+; Updates CURSOR_ROW from FILE_LINE16 and VIEW_TOP16
+; Scrolls if needed, setting RENDER_FLAG=$FF on scroll
+; Preserves RENDER_FLAG if no scroll needed
+ensure_cursor_visible:
+  ; Check if cursor is above view (FILE_LINE16 < VIEW_TOP16)
+  CMP16 FILE_LINE16, VIEW_TOP16
+  BCS .not_above
+
+  ; Scroll up: VIEW_TOP16 = FILE_LINE16
+  CP16 FILE_LINE16, VIEW_TOP16
+  LDA #0
+  STA CURSOR_ROW
+  LDA #$FF
+  STA RENDER_FLAG
+  RTS
+
+.not_above:
+  ; Compute CURSOR_ROW = FILE_LINE16 - VIEW_TOP16
+  SEC
+  LDA FILE_LINE16
+  SBC VIEW_TOP16
+  STA CURSOR_ROW
+
+  ; Check if cursor is below view (CURSOR_ROW >= SCREEN_ROWS - 1)
+  LDA CURSOR_ROW
+  CLC
+  ADC #1
+  CMP SCREEN_ROWS
+  BCC .visible
+
+  ; Scroll down: VIEW_TOP16 = FILE_LINE16 - (SCREEN_ROWS - 2)
+  LDA SCREEN_ROWS
+  SEC
+  SBC #2
+  STA CURSOR_ROW
+  ; VIEW_TOP16 = FILE_LINE16 - CURSOR_ROW
+  SEC
+  LDA FILE_LINE16
+  SBC CURSOR_ROW
+  STA VIEW_TOP16
+  LDA FILE_LINE16 + 1
+  SBC #0
+  STA VIEW_TOP16 + 1
+  LDA #$FF
+  STA RENDER_FLAG
+.visible:
+  RTS
+
 ; === String constants ===
 str_normal:        .asciiz "NORMAL"
 str_insert:        .asciiz "INSERT"

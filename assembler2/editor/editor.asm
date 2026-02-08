@@ -190,15 +190,6 @@ main_loop:
   LDA CMD_QUIT
   BNE .editor_exit
 
-  ; Update file line from view top + cursor row
-  CLC
-  LDA VIEW_TOP16
-  ADC CURSOR_ROW
-  STA FILE_LINE16
-  LDA VIEW_TOP16 + 1
-  ADC #0
-  STA FILE_LINE16 + 1
-
   ; Redraw screen (full or cursor-only based on RENDER_FLAG)
   JSR render_update
 
