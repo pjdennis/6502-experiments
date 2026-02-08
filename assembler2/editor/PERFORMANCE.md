@@ -46,6 +46,29 @@ Backspace batching stops at column 0 (join-lines requires full
 deleteable characters remain on the line. `count_pending_key` handles
 both $08 and $7F for backspace matching.
 
+### Batch Enter when keys are buffered
+
+After inserting a newline in insert mode, `enter_batch_pending` counts
+buffered Enter keys via `count_pending_key`. The matching keys (up to 32)
+are filled as `$0A` bytes into `BATCH_BUF` and inserted with a single
+`buf_insert_chars` call. `FILE_LINE16` is advanced by the batch count,
+then one `buf_rebuild_lines` rebuilds the line table for the whole batch.
+
+This reduces N+1 Enter keystrokes from `(N+1) * (shift + rebuild)` to
+`1 * (shift + rebuild) + 1 * (shift_N + rebuild)`.
+
+### Batch join-lines when keys are buffered
+
+After backspace at column 0 joins with an empty line above,
+`joinlines_batch_pending` checks for more buffered backspace keys. Unlike
+`count_pending_key`, it reads one key at a time, verifying the line above
+is empty before consuming each key. An empty line is identified by a `\n`
+preceded by another `\n` or at the start of the text buffer.
+
+Matched empty-line newlines are deleted with a single `buf_delete_chars`,
+`FILE_LINE16` is decremented by the batch count, and one `buf_rebuild_lines`
+call updates the line table.
+
 ## Future Work
 
 ### Step 4: Gap buffer
