@@ -251,14 +251,8 @@ command_parse:
   STA FILE_LINE16 + 1
 
   ; Clamp to last line
-  LDA FILE_LINE16 + 1
-  CMP LINE_COUNT16 + 1
+  CMP16 FILE_LINE16, LINE_COUNT16
   BCC .line_ok
-  BNE .clamp_line
-  LDA FILE_LINE16
-  CMP LINE_COUNT16
-  BCC .line_ok
-.clamp_line:
   SEC
   LDA LINE_COUNT16
   SBC #1

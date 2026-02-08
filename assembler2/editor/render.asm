@@ -70,12 +70,7 @@ render_screen:
   BCS .row_done    ; At or past last row = done with text
 
   ; Check if line exists
-  LDA RENDER_LINE16 + 1
-  CMP LINE_COUNT16 + 1
-  BCC .line_exists
-  BNE .past_eof
-  LDA RENDER_LINE16
-  CMP LINE_COUNT16
+  CMP16 RENDER_LINE16, LINE_COUNT16
   BCS .past_eof
 
 .line_exists:

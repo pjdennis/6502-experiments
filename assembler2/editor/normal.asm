@@ -178,12 +178,7 @@ normal_move_down:
   ADC #0
   STA BUF_PTR16 + 1
 
-  LDA BUF_PTR16 + 1
-  CMP LINE_COUNT16 + 1
-  BCC .can_move
-  BNE .done
-  LDA BUF_PTR16
-  CMP LINE_COUNT16
+  CMP16 BUF_PTR16, LINE_COUNT16
   BCS .done
 
 .can_move:
@@ -247,12 +242,7 @@ normal_page_down:
   STA BUF_PTR16 + 1
 
   ; Clamp target to LINE_COUNT16 - 1
-  LDA BUF_PTR16 + 1
-  CMP LINE_COUNT16 + 1
-  BCC .pgdn_target_ok
-  BNE .pgdn_clamp_target
-  LDA BUF_PTR16
-  CMP LINE_COUNT16
+  CMP16 BUF_PTR16, LINE_COUNT16
   BCC .pgdn_target_ok
 .pgdn_clamp_target:
   SEC
@@ -490,14 +480,8 @@ normal_d_key:
   STA MODIFIED
 
   ; Clamp file line if past end
-  LDA FILE_LINE16 + 1
-  CMP LINE_COUNT16 + 1
+  CMP16 FILE_LINE16, LINE_COUNT16
   BCC .no_clamp
-  BNE .do_clamp
-  LDA FILE_LINE16
-  CMP LINE_COUNT16
-  BCC .no_clamp
-.do_clamp:
   SEC
   LDA LINE_COUNT16
   SBC #1
