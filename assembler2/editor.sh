@@ -1,2 +1,3 @@
 #!/bin/bash
-exec ./emulator.out editor/out/editor.out 0400 --console --mhz 2 "$@"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+exec "$SCRIPT_DIR/emulator.out" "$SCRIPT_DIR/editor/out/editor.out" 0400 --console --mhz 2 "$@"
