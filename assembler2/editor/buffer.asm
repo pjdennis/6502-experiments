@@ -24,6 +24,7 @@ BUF_SRC16:     .word     ; Source pointer for block moves
 BUF_DST16:     .word     ; Destination pointer for block moves
 BUF_LEN16:     .word     ; Length/count for block moves
 BUF_TEMP:      .byte     ; Temp byte for buffer operations
+BUF_DELTA:     .byte     ; Shift amount for block moves
 FILE_HANDLE:   .byte     ; File handle for load/save
 BUF_LIMIT:     .byte     ; High byte of buffer limit (default >TEXT_LIMIT)
 
@@ -204,18 +205,41 @@ buf_get_line_len:
 ; Returns carry set = buffer full, carry clear = success
 buf_insert_char:
   STA BUF_TEMP
-  ; Check if buffer is at capacity
+  LDA #1
+  STA BUF_DELTA
+  JSR buf_shift_right
+  BCS .full
+  ; Store the new character
+  LDY #0
+  LDA BUF_TEMP
+  STA (BUF_PTR16),Y
+  CLC
+  RTS
+.full:
+  SEC
+  RTS
+
+; Shift buffer right by BUF_DELTA bytes at BUF_PTR16
+; Input: BUF_PTR16 = insert point, BUF_DELTA = shift amount
+; Returns carry set = buffer full, carry clear = success
+; Updates BUF_END16 on success
+buf_shift_right:
+  ; Check if buffer has room for BUF_DELTA bytes
+  CLC
+  LDA BUF_END16
+  ADC BUF_DELTA
   LDA BUF_END16 + 1
+  ADC #0
   CMP BUF_LIMIT
   BCC .has_room
   SEC              ; Buffer full
   RTS
 .has_room:
 
-  ; Page-at-a-time shift right by 1, copying backwards.
+  ; Page-at-a-time shift right by BUF_DELTA, copying backwards.
   ; Uses Y register as page offset for fast inner loop.
   ; BUF_SRC16 = page-aligned base of current source page
-  ; BUF_DST16 = BUF_SRC16 + 1 (so LDA (SRC),Y / STA (DST),Y shifts right by 1)
+  ; BUF_DST16 = BUF_SRC16 + BUF_DELTA (so LDA (SRC),Y / STA (DST),Y shifts right)
 
   ; Check if nothing to move (insert at end)
   LDA BUF_END16 + 1
@@ -238,8 +262,8 @@ buf_insert_char:
   LDA #0
   STA BUF_SRC16           ; BUF_SRC16 = page-aligned base
 
-  ; BUF_DST16 = BUF_SRC16 + 1
-  LDA #1
+  ; BUF_DST16 = BUF_SRC16 + BUF_DELTA
+  LDA BUF_DELTA
   STA BUF_DST16
   LDA BUF_SRC16 + 1
   STA BUF_DST16 + 1
@@ -280,13 +304,14 @@ buf_insert_char:
   JMP .last_page
 
 .shift_right_done:
-  ; Store the new character
-  LDY #0
-  LDA BUF_TEMP
-  STA (BUF_PTR16),Y
-
-  ; Increment buffer end
-  INC16 BUF_END16
+  ; Update buffer end: add BUF_DELTA
+  CLC
+  LDA BUF_END16
+  ADC BUF_DELTA
+  STA BUF_END16
+  LDA BUF_END16 + 1
+  ADC #0
+  STA BUF_END16 + 1
 
   CLC              ; Success
   RTS
