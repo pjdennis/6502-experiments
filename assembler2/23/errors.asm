@@ -175,6 +175,15 @@ err_comma_expected:
   BRK
   .asciiz 37, "Comma expected"
 
+; --- Zeropage directive errors (38-39) ---
+err_asciiz_in_zeropage:
+  BRK
+  .asciiz 38, ".asciiz not allowed in .zeropage"
+
+err_operand_in_zeropage:
+  BRK
+  .asciiz 39, "Operand not allowed on .byte/.word in .zeropage"
+
 ; --- Command line/usage errors (240-241) ---
 err_usage:
   BRK

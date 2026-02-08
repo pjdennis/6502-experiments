@@ -1478,8 +1478,12 @@ process_directive:
   BMI .zp_alloc          ; In zeropage? check for operand-less form
   JMP set_data_mode
 .asciiz:
+  BIT IN_ZEROPAGE
+  BMI .zp_asciiz_err
   LDA #DATA_MODE_ASCIIZ
   JMP set_data_mode
+.zp_asciiz_err:
+  JMP err_asciiz_in_zeropage
 .reserve:
   JMP handle_reserve
 .macro:
@@ -1503,7 +1507,7 @@ process_directive:
 .zp_done:
   RTS
 .zp_has_operand:
-  JMP data_parameters_loop  ; Continue with normal value parsing
+  JMP err_operand_in_zeropage
 
 
 ; On exit C=0 if processed; C=1 if not processed
@@ -2358,8 +2362,8 @@ handle_define:
 
   .zeropage
 
-JUMP_TARGET16: .word 0     ; Target for indirect jumps
-ARG_PTR16:     .word 0     ; Pointer into COMMAND_LINE_ARGS table
+JUMP_TARGET16: .word       ; Target for indirect jumps
+ARG_PTR16:     .word       ; Pointer into COMMAND_LINE_ARGS table
 
   .code
 
