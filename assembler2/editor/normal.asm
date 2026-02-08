@@ -145,11 +145,13 @@ normal_handle_key:
 normal_move_left:
   LDA CURSOR_COL
   BEQ .done
+  LDA #0
+  STA RENDER_FLAG
   DEC CURSOR_COL
+  JSR ensure_cursor_visible
 .done:
   LDA #0
   STA LAST_KEY
-  STA RENDER_FLAG
   RTS
 
 normal_move_right:
@@ -161,11 +163,13 @@ normal_move_right:
   CMP CURSOR_COL
   BCC .done           ; Already at or past end
   BEQ .done
+  LDA #0
+  STA RENDER_FLAG
   INC CURSOR_COL
+  JSR ensure_cursor_visible
 .done:
   LDA #0
   STA LAST_KEY
-  STA RENDER_FLAG
   RTS
 
 normal_move_down:
@@ -261,12 +265,10 @@ normal_page_down:
 
 .pgdn_set_row:
   CP16 BUF_PTR16, FILE_LINE16
-  ; CURSOR_ROW = target_line - VIEW_TOP16
-  SEC
-  LDA BUF_PTR16
-  SBC VIEW_TOP16
-  STA CURSOR_ROW
-
+  LDA #0
+  STA CURSOR_COL
+  STA VIEW_TOP_WRAP
+  JSR ensure_cursor_visible
   JSR clamp_cursor_col
   LDA #0
   STA LAST_KEY
@@ -316,12 +318,10 @@ normal_page_up:
 
 .pgup_set_row:
   CP16 BUF_PTR16, FILE_LINE16
-  ; CURSOR_ROW = target_line - VIEW_TOP16
-  SEC
-  LDA BUF_PTR16
-  SBC VIEW_TOP16
-  STA CURSOR_ROW
-
+  LDA #0
+  STA CURSOR_COL
+  STA VIEW_TOP_WRAP
+  JSR ensure_cursor_visible
   JSR clamp_cursor_col
   LDA #0
   STA LAST_KEY
@@ -332,6 +332,7 @@ normal_line_start:
   STA CURSOR_COL
   STA LAST_KEY
   STA RENDER_FLAG
+  JSR ensure_cursor_visible
   RTS
 
 normal_line_end:
@@ -340,46 +341,25 @@ normal_line_end:
   SEC
   SBC #1
   STA CURSOR_COL
-  LDA #0
-  STA LAST_KEY
-  STA RENDER_FLAG
-  RTS
+  JMP .ecv
 .empty:
   LDA #0
   STA CURSOR_COL
+.ecv:
+  LDA #0
   STA LAST_KEY
   STA RENDER_FLAG
+  JSR ensure_cursor_visible
   RTS
 
 normal_goto_last:
   SEC
   SBCI16 LINE_COUNT16, $0001, FILE_LINE16
-
-  ; VIEW_TOP = max(0, LINE_COUNT - (SCREEN_ROWS - 1))
-  LDA SCREEN_ROWS
-  SEC
-  SBC #1
-  STA BUF_TEMP
-  SEC
-  LDA LINE_COUNT16
-  SBC BUF_TEMP
-  STA VIEW_TOP16
-  LDA LINE_COUNT16 + 1
-  SBC #0
-  STA VIEW_TOP16 + 1
-  BCS .view_ok
-  LDA #0
-  STA_LH16 VIEW_TOP16
-.view_ok:
-
-  SEC
-  LDA FILE_LINE16
-  SBC VIEW_TOP16
-  STA CURSOR_ROW
-
   LDA #0
   STA CURSOR_COL
   STA LAST_KEY
+  STA VIEW_TOP_WRAP
+  JSR ensure_cursor_visible
   JSR clamp_cursor_col
   RTS
 
@@ -394,6 +374,7 @@ normal_g_key:
   STA CURSOR_ROW
   STA CURSOR_COL
   STA LAST_KEY
+  STA VIEW_TOP_WRAP
   JSR clamp_cursor_col
   RTS
 .set_g:

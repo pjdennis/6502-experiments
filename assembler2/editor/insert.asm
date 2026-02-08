@@ -81,6 +81,7 @@ insert_exit:
 .done:
   LDA #0
   STA RENDER_FLAG
+  JSR ensure_cursor_visible
   RTS
 
 ; Insert a printable character at cursor position
@@ -220,10 +221,11 @@ insert_page_up:
 insert_move_left:
   LDA CURSOR_COL
   BEQ .done
-  DEC CURSOR_COL
-.done:
   LDA #0
   STA RENDER_FLAG
+  DEC CURSOR_COL
+  JSR ensure_cursor_visible
+.done:
   RTS
 
 insert_move_right:
@@ -231,10 +233,11 @@ insert_move_right:
   CMP CURSOR_COL
   BCC .done
   BEQ .done
-  INC CURSOR_COL
-.done:
   LDA #0
   STA RENDER_FLAG
+  INC CURSOR_COL
+  JSR ensure_cursor_visible
+.done:
   RTS
 
 ; Clamp cursor for insert mode (can be one past end of line content)

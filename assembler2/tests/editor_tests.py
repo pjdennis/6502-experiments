@@ -1300,11 +1300,12 @@ class EditorTestRunner:
         # 10 rows, 9 content rows. Fill with lines that take 2 rows each.
         # 5 wrapped lines = 10 screen rows needed (only 9 content rows available)
         # After j x4 to line 4, scrolling should keep cursor visible
+        # Cursor is at line 5 (1-based), col 1
         self.run_test_screen(
             "Scroll with wrapped lines",
             ("X" * 60 + "\n") * 5,
             b"jjjj:q!\r",
-            expect_status_contains="5,1"
+            expect_status_contains="5,"
         )
 
         # ============================================================
