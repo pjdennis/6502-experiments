@@ -8,13 +8,13 @@
 
   .zeropage
 
-HASH:           .byte 0     ; 1 byte hash value
-CACHED_HASH:    .byte 0     ; Pre-ASL hash of current global (for local labels)
-HTP16:          .word 0     ; 2 byte pointer to hash table
-TABP16:         .word 0     ; 2 byte table pointer
-HTTP16:         .word 0     ; 2 byte temporary pointer
-LABEL_SCOPE16:  .word 0     ; Current scope for local label resolution
-LABEL_TYPE: .byte 0     ; Flag: non-zero if storing local label
+HASH:           .byte       ; 1 byte hash value
+CACHED_HASH:    .byte       ; Pre-ASL hash of current global (for local labels)
+HTP16:          .word       ; 2 byte pointer to hash table
+TABP16:         .word       ; 2 byte table pointer
+HTTP16:         .word       ; 2 byte temporary pointer
+LABEL_SCOPE16:  .word       ; Current scope for local label resolution
+LABEL_TYPE:     .byte       ; Flag: non-zero if storing local label
 
   .code
 
