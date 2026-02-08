@@ -85,13 +85,14 @@ class TestOutcome:
 
 
 class TestRunner:
-    def __init__(self, base_dir: Path, verbose: bool = False, quiet: bool = False):
+    def __init__(self, base_dir: Path, verbose: bool = False, quiet: bool = False,
+                 asm_version: str = ASM_VERSION):
         self.base_dir = base_dir
         self.verbose = verbose
         self.quiet = quiet
         self.emulator = base_dir / "emulator.out"
-        self.assembler = base_dir / ASM_VERSION / "out" / "asm_debug.out"
-        self.file_stack_test = base_dir / ASM_VERSION / "out" / "file_stack_test.out"
+        self.assembler = base_dir / asm_version / "out" / "asm_debug.out"
+        self.file_stack_test = base_dir / asm_version / "out" / "file_stack_test.out"
 
         self.passed = 0
         self.failed = 0
@@ -651,6 +652,10 @@ def main():
     parser.add_argument(
         "--no-color", action="store_true", help="Disable colored output"
     )
+    parser.add_argument(
+        "--version", default=ASM_VERSION,
+        help=f"Assembler version to test (default: {ASM_VERSION})"
+    )
 
     args = parser.parse_args()
 
@@ -661,7 +666,8 @@ def main():
     script_dir = Path(__file__).parent.resolve()
     base_dir = script_dir
 
-    runner = TestRunner(base_dir, verbose=args.verbose, quiet=args.quiet)
+    runner = TestRunner(base_dir, verbose=args.verbose, quiet=args.quiet,
+                        asm_version=args.version)
 
     print("=" * 40)
     print("Test Suite")
@@ -670,7 +676,7 @@ def main():
 
     # Default test files if none specified
     if not args.test_files:
-        latest_tests_dir = script_dir / ASM_VERSION / "tests"
+        latest_tests_dir = script_dir / args.version / "tests"
         args.test_files = [
             str(latest_tests_dir / "file_stack_tests.txt"),
             str(latest_tests_dir / "asm_tests.txt"),
