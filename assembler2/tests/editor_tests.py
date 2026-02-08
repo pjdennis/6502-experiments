@@ -1844,6 +1844,22 @@ class EditorTestRunner:
             expected_content="Hello\n"
         )
 
+        # Batch join-lines must not over-delete past a non-empty line.
+        # "AB\n\n\nCD\n" = lines AB, (empty), (empty), CD.
+        # Cursor on CD (line 3, col 0). 4 BS keys should:
+        #   1-2: delete the 2 empty lines (batch scan)
+        #   3: join CD onto AB → "ABCD", cursor at col 2 (end of AB)
+        #   4: within-line delete → "ACD", cursor at col 1
+        # Bug: backward \n scan treats AB's trailing \n as another empty
+        # line, consuming 3 BS in the scan. CURSOR_COL stays 0, and the
+        # 4th BS can't do anything → "ABCD" instead of "ACD".
+        self.run_test(
+            "Batch join does not over-delete past non-empty",
+            "AB\n\n\nCD\n",
+            b"jjji\x08\x08\x08\x08\x1b:wq\r",
+            expected_content="ACD\n"
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed
