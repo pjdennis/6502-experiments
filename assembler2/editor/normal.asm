@@ -183,8 +183,8 @@ normal_move_down:
   LDA #0
   STA RENDER_FLAG
   INC16 FILE_LINE16
-  JSR ensure_cursor_visible
   JSR clamp_cursor_col
+  JSR ensure_cursor_visible
 .done:
   LDA #0
   STA LAST_KEY
@@ -198,8 +198,8 @@ normal_move_up:
   LDA #0
   STA RENDER_FLAG
   DEC16 FILE_LINE16
-  JSR ensure_cursor_visible
   JSR clamp_cursor_col
+  JSR ensure_cursor_visible
 .done:
   LDA #0
   STA LAST_KEY

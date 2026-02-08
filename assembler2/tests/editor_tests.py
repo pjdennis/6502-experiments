@@ -1411,6 +1411,38 @@ class EditorTestRunner:
             ]
         )
 
+        # Insert mode up arrow from wrap row moves to previous line
+        # Line 0: "B", Line 1: 60 A's (wraps to 2 rows on 40-col screen)
+        # j$ puts cursor at col 59 (row 2: line 0 row + 2 wrap rows).
+        # 'a' enters insert at col 60 (still row 2).
+        # Up arrow should move to line 0 ("B"), col clamped to 0, row 0.
+        # Bug: ensure_cursor_visible ran with unclamped col 60 on line 0
+        # (1-char line), computing CURSOR_ROW=1 instead of 0.
+        # Frame sequence: 0=init, 1=j, 2=$, 3=a, 4=UP
+        self.run_test_screen(
+            "Insert up arrow from wrapped line to short line",
+            "B\n" + "A" * 60 + "\n",
+            b"j$a\x1b[A\x1b:q!\r",
+            expect_cursor=(0, 0),
+            expect_cursor_at_frame=[
+                (4, (0, 0)),
+            ]
+        )
+
+        # Normal mode k from wrap row moves to previous line
+        # Same setup but in normal mode with k instead of up arrow.
+        # j$ puts cursor at line 1 col 59 (row 2), k should go to line 0.
+        # Frame sequence: 0=init, 1=j, 2=$, 3=k
+        self.run_test_screen(
+            "Normal k from wrapped line to short line",
+            "B\n" + "A" * 60 + "\n",
+            b"j$k:q!\r",
+            expect_cursor=(0, 0),
+            expect_cursor_at_frame=[
+                (3, (0, 0)),
+            ]
+        )
+
         # Normal mode x on wrapped line: content and cursor correct
         # 60-char line, $ goes to col 59 (row 1, col 19), x deletes -> col 58
         self.run_test_screen(
