@@ -29,11 +29,11 @@ FILE_STACK  = $F000     ; File stack (needed by advance_heap check)
 
   .zeropage
 
-TEMP      .data $00     ; 1 byte temporary value
-HEX16     .data $00     ; 2 bytes
-P16       .data $0000   ; 2 byte pointer
-P2_16     .data $0000   ; 2 byte pointer
-FS_P16    .data $0000   ; File stack pointer - needed by advance_heap check
+TEMP:      .data $00     ; 1 byte temporary value
+HEX16:     .data $00     ; 2 bytes
+P16:       .data $0000   ; 2 byte pointer
+P2_16:     .data $0000   ; 2 byte pointer
+FS_P16:    .data $0000   ; File stack pointer - needed by advance_heap check
 
   .code
 
@@ -46,7 +46,7 @@ FS_P16    .data $0000   ; File stack pointer - needed by advance_heap check
 
 ; Instruction table with mode:opcode pairs
 ; Format: "MNEMONIC" $00 [mode opcode]... MODE_END
-MNTAB
+MNTAB:
   ; Load/Store instructions
   .data "LDA" $00  <MODE_IMM  $A9  <MODE_ZP   $A5  <MODE_ZPX  $B5  <MODE_ABS  $AD
   .data            <MODE_ABSX $BD  <MODE_ABSY $B9  <MODE_INDX $A1  <MODE_INDY $B1
@@ -180,10 +180,10 @@ MNTAB
 ;   MEMP16 = heap pointer (destination), managed by hash_add/advance_heap
 ;   Y = offset into current MNTAB entry
 ;
-populate_instruction_hash_table
+populate_instruction_hash_table:
   SET16 MNTAB P2_16           ; P2_16 points to start of instruction table
 
-.entry_loop
+.entry_loop:
   ; Check for end of table ($00 as first byte of entry)
   LDY #$00
   LDA (P2_16),Y
@@ -191,13 +191,13 @@ populate_instruction_hash_table
 
   ; --- Phase 1: Copy mnemonic string to TOKEN buffer ---
   ; hash_add expects the key (mnemonic) in TOKEN
-.token_loop
+.token_loop:
   STA TOKEN,Y                 ; Copy byte to TOKEN
   BEQ .token_loop_done        ; Exit when null terminator copied
   INY
   LDA (P2_16),Y
   JMP .token_loop
-.token_loop_done
+.token_loop_done:
   ; Y now points at null terminator in source
   ; Mode data starts at Y+1
 
@@ -218,7 +218,7 @@ populate_instruction_hash_table
   ; Solution: solved above by advancing P2_16 such that its required Y offset matches that required by the heap (i.e. starting at 0)
   LDY #$00                    ; Set initial source offset to mode data and to heap
 
-.copy_modes
+.copy_modes:
   LDA (P2_16),Y               ; Load mode byte from source
   CMP #MODE_END
   BEQ .copy_done
@@ -229,7 +229,7 @@ populate_instruction_hash_table
   INY
   JMP .copy_modes
 
-.copy_done
+.copy_done:
   ; Store MODE_END terminator
   APPEND_HEAPI MODE_END
 
@@ -243,17 +243,17 @@ populate_instruction_hash_table
 
   JMP .entry_loop
 
-.done
+.done:
   RTS
 
 
-display_hex_char
+display_hex_char:
   CMP #$0A
   BCS .low
   ; Carry already clear
   ADC #'0'
   JMP write_b          ; Tail call
-.low
+.low:
   ; C already set
   SBC #$0A ; Subtract 10
   CLC
@@ -261,7 +261,7 @@ display_hex_char
   JMP write_b ; Tail call
 
 
-display_hex
+display_hex:
   PHA
   LSR
   LSR
@@ -273,7 +273,7 @@ display_hex
   JMP display_hex_char ; Tail call
 
 
-display_byte
+display_byte:
   PHA
   LDA #'$'
   JSR write_b
@@ -281,12 +281,12 @@ display_byte
   JMP display_hex
 
 
-display_newline
+display_newline:
   LDA #'\n'
   JMP write_b
 
 
-display_data_prefix
+display_data_prefix:
   LDA #' '
   JSR write_b
   JSR write_b
@@ -296,28 +296,28 @@ display_data_prefix
 
 ; On entry P16 points to the text
 ; On exit Y points to the terminating 0
-display_text
+display_text:
   LDY #$00
-.loop
+.loop:
   LDA (P16),Y
   BEQ .done
   JSR write_b
   INY
   JMP .loop
-.done
+.done:
   RTS
 
 
-display_table
+display_table:
   LDA #$00
   STA HASH
-.loop
+.loop:
   ; Display line start
   JSR display_data_prefix
   ; Display line
   LDA #$00
   STA TEMP
-.lineloop
+.lineloop:
   LDA #' '
   JSR write_b
   JSR hash_entry_empty
@@ -330,7 +330,7 @@ display_table
   LDA #$00
   JSR display_hex
   JMP .next
-.not_empty
+.not_empty:
   ; Display instruction label prefix
   SET16 msg_instprefix P16
   JSR display_text
@@ -339,7 +339,7 @@ display_table
   CLC
   ADCI16 TABP16 $02 P16
   JSR display_text
-.next
+.next:
   LDA HASH
   CLC
   ADC #$02
@@ -351,16 +351,16 @@ display_table
   CMP #$08
   BEQ .next1
   JMP .lineloop
-.next1
+.next1:
   JSR display_newline
   LDA HASH
   BEQ .done
   JMP .loop
-.done
+.done:
   RTS
 
 
-write_label_and_modes
+write_label_and_modes:
   ; Display the mnemonic string
   LDA #' '
   JSR write_b
@@ -381,7 +381,7 @@ write_label_and_modes
   ; Now display mode:opcode pairs
   ; Y still valid from display_text, pointing at null
   INY                  ; Skip past null terminator to first mode byte
-.mode_loop
+.mode_loop:
   LDA (P16),Y
   CMP #MODE_END
   BEQ .mode_done
@@ -397,7 +397,7 @@ write_label_and_modes
   JSR display_byte
   INY
   JMP .mode_loop
-.mode_done
+.mode_done:
   LDA #' '
   JSR write_b
   LDA #MODE_END
@@ -406,17 +406,17 @@ write_label_and_modes
   RTS
 
 
-display_data
+display_data:
   LDA #$00
   STA HASH
-.loop
+.loop:
   JSR hash_entry_empty
   BNE .not_empty
   JMP .next
-.not_empty
+.not_empty:
   ; Load pointer to hash entry
   JSR load_hash_entry
-.entry_loop
+.entry_loop:
   ; Display instruction label prefix
   SET16 msg_instprefix P16
   JSR display_text
@@ -444,7 +444,7 @@ display_data
   JSR write_b
   JSR write_label_and_modes
   JMP .next
-.not_zero
+.not_zero:
   ; Has collision chain - display pointer to next entry
   SET16 msg_instprefix P16
   JSR display_text
@@ -467,19 +467,19 @@ display_data
   STA P16+$01
   CP16 P16 TABP16
   JMP .entry_loop
-.next
+.next:
   LDA HASH
   CLC
   ADC #$02
   STA HASH
   BEQ .done
   JMP .loop
-.done
+.done:
   RTS
 
 
 ; Entry point
-start
+start:
 ; Initialization
   LDA #LABEL_TYPE_GLOBAL
   STA LABEL_TYPE    ; Clear flag before using hash table
@@ -509,28 +509,28 @@ start
   .data $00              ; Success
 
 
-msg_data
+msg_data:
   .data ".data" $00
 
-msg_instprefix
+msg_instprefix:
   .data "." $00
 
-msg_IHASHTAB
+msg_IHASHTAB:
   .data "IHASHTAB" $00
 
-msg_hash_table_comment
+msg_hash_table_comment:
   .data "; Instructions hash table (pointers)" $00
 
-msg_heap_comment
+msg_heap_comment:
   .data "; Instructions heap data" $00
 
 ; Error handler needed by advance_heap's overflow check
-err_out_of_memory
+err_out_of_memory:
   BRK
   .data $23 "Out of memory" $00
 
 
-HEAP                  ; Heap goes after the program code
+HEAP:                  ; Heap goes after the program code
 
 
   .data start ; Emulation environment jumps to address in last 2 bytes

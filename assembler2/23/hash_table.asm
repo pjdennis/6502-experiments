@@ -8,19 +8,19 @@
 
   .zeropage
 
-HASH           .data $00   ; 1 byte hash value
-CACHED_HASH    .data $00   ; Pre-ASL hash of current global (for local labels)
-HTP16          .data $0000 ; 2 byte pointer to hash table
-TABP16         .data $0000 ; 2 byte table pointer
-HTTP16         .data $0000 ; 2 byte temporary pointer
-LABEL_SCOPE16  .data $0000 ; Current scope for local label resolution
-LABEL_TYPE .data $00   ; Flag: non-zero if storing local label
+HASH:           .data $00   ; 1 byte hash value
+CACHED_HASH:    .data $00   ; Pre-ASL hash of current global (for local labels)
+HTP16:          .data $0000 ; 2 byte pointer to hash table
+TABP16:         .data $0000 ; 2 byte table pointer
+HTTP16:         .data $0000 ; 2 byte temporary pointer
+LABEL_SCOPE16:  .data $0000 ; Current scope for local label resolution
+LABEL_TYPE: .data $00   ; Flag: non-zero if storing local label
 
   .code
 
 
 ; Contains each byte $00-$7F exactly once in random order
-scramble_table
+scramble_table:
   .data $01 $20 $33 $1B $1C $16 $29 $1F $3A $75 $62 $42 $68 $79 $00 $52
   .data $32 $0B $22 $77 $72 $71 $10 $59 $06 $4D $17 $37 $40 $0C $66 $21
   .data $1E $43 $3E $30 $13 $07 $7E $44 $6C $58 $15 $1A $5A $24 $0F $7A
@@ -36,10 +36,10 @@ scramble_table
 ; On exit hash entries are initialized to 0 (empty table)
 ;         X is preserved
 ;         A, Y are not preserved
-init_hash_table
+init_hash_table:
   LDY #$00
   TYA                  ; A <- 0
-.loop
+.loop:
   STA (HTP16),Y
   INY
   BNE .loop
@@ -50,7 +50,7 @@ init_hash_table
 ; Call this when updating CURR_GLOBAL for non-assignment global labels
 ; On exit A is not preserved
 ;         X, Y are preserved
-commit_cached_hash
+commit_cached_hash:
   LDA HASH
   LSR
   STA CACHED_HASH
@@ -61,7 +61,7 @@ commit_cached_hash
 ; On exit HASH contains the calculated hash value (post-ASL)
 ;         X is preserved
 ;         A, Y are not preserved
-calculate_hash_local
+calculate_hash_local:
   LDA CACHED_HASH
   STA HASH
   JMP hash_loop ; Tail call
@@ -72,7 +72,7 @@ calculate_hash_local
 ; On exit HASH contains the calculated hash value (post-ASL)
 ;         X is preserved
 ;         A, Y are not preserved
-calculate_hash
+calculate_hash:
   LDA #$00
   STA HASH
   ; fall through to common code
@@ -81,11 +81,11 @@ calculate_hash
 ; Shared hash loop - X = start index, HASH = initial value
 ; On exit: HASH = pre-ASL result, X at null terminator
 ; Private by convention (used only by calculate_hash and calculate_hash_local)
-hash_loop
+hash_loop:
   TXA
   PHA
   LDX #$00
-.loop
+.loop:
   LDA HT_KEY,X
   BEQ .done
   AND #$7F
@@ -95,7 +95,7 @@ hash_loop
   STA HASH
   INX
   BNE .loop
-.done
+.done:
   ASL HASH
   PLA
   TAX
@@ -109,14 +109,14 @@ hash_loop
 ;         HT_V16 contains the value if found
 ;         X is preserved
 ;         A, Y are not preserverd
-find_in_hash
+find_in_hash:
   LDA LABEL_TYPE
   BEQ .use_global_hash
   JSR calculate_hash_local
   JMP .lookup_value
-.use_global_hash
+.use_global_hash:
   JSR calculate_hash
-.lookup_value
+.lookup_value:
   JSR find_in_hash_common
   BCS .done ; Not found
   LDA (TABP16),Y
@@ -124,7 +124,7 @@ find_in_hash
   INY
   LDA (TABP16),Y
   STA HT_V16+$01
-.done
+.done:
   RTS
 
 
@@ -135,18 +135,18 @@ find_in_hash
 ;         TABP16 + Y points to the associated value
 ;         X is preserved
 ;         A, is not preserverd
-find_in_hash_instruction
+find_in_hash_instruction:
   JSR calculate_hash
   ; Fall through to common code
 
 
-find_in_hash_common
+find_in_hash_common:
   JSR hash_entry_empty
   BEQ .not_found
   ; Entry exists
   JSR load_hash_entry
   JMP find_token          ; Tail call
-.not_found
+.not_found:
   SEC
   RTS
 
@@ -155,14 +155,14 @@ find_in_hash_common
 ; On exit Z set if entry is empty, clear otherwise
 ;         X is preserved
 ;         A, Y are not preserved
-hash_entry_empty
+hash_entry_empty:
   LDA HASH
   TAY
   LDA (HTP16),Y
   BNE .done
   INY
   LDA (HTP16),Y
-.done
+.done:
   RTS
 
 
@@ -171,7 +171,7 @@ hash_entry_empty
 ; On exit TABP16 contains pointer corresponding to the hash value
 ;         X is preserved
 ;         A, Y are not preserved
-load_hash_entry
+load_hash_entry:
   LDA HASH
   TAY
   LDA (HTP16),Y
@@ -187,7 +187,7 @@ load_hash_entry
 ;          MEMP16 contains the pointer to store in the hash table
 ; On exit X is preserved
 ;         A, Y are not preserved
-store_hash_entry
+store_hash_entry:
   LDA HASH
   TAY
   LDA MEMP16
@@ -204,7 +204,7 @@ store_hash_entry
 ; On exit TABP16 + Y points to the location following the stored pointer
 ;         X is preserved
 ;         A is not preserved
-store_table_entry
+store_table_entry:
   LDA MEMP16
   STA (TABP16),Y
   INY
@@ -224,7 +224,7 @@ store_table_entry
 ; Handles both normal strings and escape format:
 ;   <type> <scope_lo> <scope_hi> "local" $00
 ; For escape format, verifies scope pointer matches before comparing
-compare_token
+compare_token:
   ; Quick check: is stored token in escape format?
   ; Escape format starts with type byte ($01=LOCAL, $02=MACRO)
   ; Valid label names start with printable chars >= $20
@@ -239,17 +239,17 @@ compare_token
   BNE .escape_nomatch       ; Looking for scoped label, but entry is global
   ; Global lookup - simple string comparison
   DEY                       ; Y = $FF
-.simple_loop
+.simple_loop:
   INY
   LDA (TABP16),Y
   CMP HT_KEY,Y
   BNE .simple_done
   CMP #$00
   BNE .simple_loop
-.simple_done
+.simple_done:
   RTS
 
-.handle_escape
+.handle_escape:
   ; === Escape format (<type> <scope_lo> <scope_hi> "bar" $00) ===
   ; First verify type byte matches current LABEL_TYPE
   ; (prevents LOCAL-type entries matching MACRO-type lookups and vice versa)
@@ -271,7 +271,7 @@ compare_token
   PHA
   LDX #$00
   INY                       ; Y = 3 (past $01 <lo> <hi>)
-.escape_loop
+.escape_loop:
   LDA (TABP16),Y
   CMP HT_KEY,X
   BNE .escape_nomatch_restore
@@ -280,15 +280,15 @@ compare_token
   INX
   INY
   BNE .escape_loop
-.escape_match
+.escape_match:
   PLA
   TAX
   LDA #$00                  ; Z=1 (match)
   RTS
-.escape_nomatch_restore
+.escape_nomatch_restore:
   PLA
   TAX
-.escape_nomatch
+.escape_nomatch:
   LDA #$01                  ; Z=0 (no match)
   RTS
 
@@ -300,8 +300,8 @@ compare_token
 ;         TABP16 + Y points to value if found or to 'next' pointer if not found
 ;         X is preserved
 ;         A, Y are not preserved
-find_token
-.token_loop
+find_token:
+.token_loop:
   ; Store the current pointer
   CP16 TABP16 HTTP16
   ; Advance past 'next' pointer
@@ -315,7 +315,7 @@ find_token
   INY                  ; point tab,Y to value
   CLC
   RTS
-.token_is_non_match    ; Not a match - move to next
+.token_is_non_match:    ; Not a match - move to next
   ; Load 'next' pointer and check if null
   LDY #$00
   LDA (HTTP16),Y
@@ -326,7 +326,7 @@ find_token
   ORA TABP16
   BEQ .at_end
   JMP .token_loop
-.at_end
+.at_end:
   ; point tabp,Y to the zero 'next' pointer
   CP16 HTTP16 TABP16
   LDY #$00
@@ -344,7 +344,7 @@ find_token
 ;         Y = 0
 ;         X is preserved
 ;         A is not preserved
-store_token
+store_token:
   LDY #$00
   ; Store null pointer (pointer to next)
   LDA #$00
@@ -365,10 +365,10 @@ store_token
   APPEND_HEAP LABEL_SCOPE16+$01
   JSR advance_heap      ; Advance past escape header (3 bytes)
   ; Fall through to copy HT_KEY
-.copy_token
+.copy_token:
   ; Copy token string to heap
   LDY #$FF
-.loop
+.loop:
   INY
   LDA HT_KEY,Y
   STA (MEMP16),Y
@@ -378,7 +378,7 @@ store_token
 
 ; Add HT_KEY to hash table (always global - for instructions and macros)
 ; On exit same as hash_add
-hash_add_instruction
+hash_add_instruction:
   JSR calculate_hash
   JMP hash_add_common
 
@@ -390,18 +390,18 @@ hash_add_instruction
 ;         Caller must store value and call advance_heap
 ;         If C = 1 (exists), TABP16 points to the key and TABP16 + Y points to the value
 ;         A, X, Y are not preserved
-hash_add
+hash_add:
   LDA LABEL_TYPE
   BEQ .use_global_hash
   JSR calculate_hash_local
   JMP .hash_done
-.use_global_hash
+.use_global_hash:
   JSR calculate_hash
-.hash_done
+.hash_done:
 ; Fall through to common code
 
 
-hash_add_common
+hash_add_common:
   JSR hash_entry_empty
   BEQ .entry_empty
   JSR load_hash_entry
@@ -409,12 +409,12 @@ hash_add_common
   BCS .new
   SEC
   RTS
-.new
+.new:
   JSR store_table_entry
   JMP .store
-.entry_empty
+.entry_empty:
   JSR store_hash_entry
-.store
+.store:
   JSR store_token
   CLC
   RTS
