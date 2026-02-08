@@ -295,7 +295,8 @@ class EditorTestRunner:
                         expect_lines: list = None,
                         expect_status_contains: str = None,
                         expected_content: str = None,
-                        expect_content_redraws: list = None):
+                        expect_content_redraws: list = None,
+                        expect_ansi_contains: str = None):
         """Run an editor test and verify screen state via ANSI output.
 
         Args:
@@ -305,6 +306,7 @@ class EditorTestRunner:
             expected_content: expected saved file content (after :wq)
             expect_content_redraws: list of bools, one per frame - True if
                 content area should have been redrawn in that frame
+            expect_ansi_contains: substring to find in raw ANSI output
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir = Path(tmpdir)
@@ -329,6 +331,14 @@ class EditorTestRunner:
             if exit_code != 0:
                 self._fail(name, f"Expected exit code 0, got {exit_code}")
                 return
+
+            if expect_ansi_contains is not None:
+                ansi_text = ansi.decode('latin-1')
+                if expect_ansi_contains not in ansi_text:
+                    self._fail(name,
+                        f"Raw ANSI output does not contain "
+                        f"{expect_ansi_contains!r}")
+                    return
 
             # Parse ANSI output through virtual terminal
             screen = AnsiScreen(rows, cols)
@@ -1043,6 +1053,15 @@ class EditorTestRunner:
             "Hello\nWorld\n",
             b"jlll:q!\r",
             expect_status_contains="COMMAND - 2,"
+        )
+
+        # :q on modified file shows warning message
+        # x modifies, :q\r triggers warning, 'z' dismisses message, :q!\r quits
+        self.run_test_screen(
+            ":q on modified shows warning message",
+            "Hello\n",
+            b"x:q\rz:q!\r",
+            expect_ansi_contains="No write since last change"
         )
 
         print()

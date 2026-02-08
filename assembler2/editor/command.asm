@@ -316,7 +316,16 @@ command_write_file
 ; Show a status message and wait for keypress
 ; STR_PTR16 must be set to the message string before calling
 show_status_message
+  ; Save message pointer (command_show_prompt clobbers STR_PTR16)
+  LDA STR_PTR16+$01
+  PHA
+  LDA STR_PTR16
+  PHA
   JSR command_show_prompt
+  PLA
+  STA STR_PTR16
+  PLA
+  STA STR_PTR16+$01
   JSR write_string
   JSR con_flush
   JSR input_read_byte
