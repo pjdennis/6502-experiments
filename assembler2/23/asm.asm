@@ -1531,37 +1531,37 @@ process_conditional_directive:
 
 
 directive_include:
-  .data "include" $00
+  .asciiz "include"
 
 directive_zeropage:
-  .data "zeropage" $00
+  .asciiz "zeropage"
 
 directive_code:
-  .data "code" $00
+  .asciiz "code"
 
 directive_data:
-  .data "data" $00
+  .asciiz "data"
 
 directive_byte:
-  .data "byte" $00
+  .asciiz "byte"
 
 directive_word:
-  .data "word" $00
+  .asciiz "word"
 
 directive_asciiz:
-  .data "asciiz" $00
+  .asciiz "asciiz"
 
 directive_ifdef:
-  .data "ifdef" $00
+  .asciiz "ifdef"
 
 directive_endif:
-  .data "endif" $00
+  .asciiz "endif"
 
 directive_macro:
-  .data "macro" $00
+  .asciiz "macro"
 
 directive_endmacro:
-  .data "endmacro" $00
+  .asciiz "endmacro"
 
 
 set_data_mode:
@@ -2299,12 +2299,20 @@ MATCH_FULL    = $01
 
 COMMAND_LINE_ARGS:
   .ifdef enable_debug
-  .data "debug"                $00 <MATCH_FULL    handle_debug
-  .data "small_heap"           $00 <MATCH_FULL    handle_small_heap
-  .data "show_captured_macros" $00 <MATCH_FULL    handle_show_captured_macros
+  .asciiz "debug"
+  .byte MATCH_FULL
+  .word handle_debug
+  .asciiz "small_heap"
+  .byte MATCH_FULL
+  .word handle_small_heap
+  .asciiz "show_captured_macros"
+  .byte MATCH_FULL
+  .word handle_show_captured_macros
   .endif
-  .data "define:"              $00 <MATCH_PARTIAL handle_define
-  .data $00 ; End of list
+  .asciiz "define:"
+  .byte MATCH_PARTIAL
+  .word handle_define
+  .byte 0 ; End of list
 
 
   .ifdef enable_debug
@@ -2488,7 +2496,7 @@ show_macros:
   LDY #$00
   RTS
 .macro_prefix:
-  .data "Macro: " $00
+  .asciiz "Macro: "
 
   .endif
 
@@ -2606,16 +2614,16 @@ start:
 
   ; All done, successfully
   BRK
-  .data $00             ; Success code
+  .byte 0               ; Success code
 
 
   .ifdef enable_debug
 msg_heap_used:
-  .data "Heap used: " $00
+  .asciiz "Heap used: "
 msg_bytes:
-  .data " bytes\n" $00
+  .asciiz " bytes\n"
 msg_fwdref_count:
-  .data "Forward references forced to absolute: " $00
+  .asciiz "Forward references forced to absolute: "
   .endif
 
 
@@ -2623,5 +2631,5 @@ HEAP:                   ; Heap goes after the program code
 
 
 * = $FFFC
-  .data start           ; Reset vector
-  .data interrupt       ; Interrupt vector
+  .word start           ; Reset vector
+  .word interrupt       ; Interrupt vector
