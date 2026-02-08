@@ -70,17 +70,17 @@ INPUT:
 EXPECT_HEX: a9 20 a2 3b a0 2c
 
 ---
-NAME: data_string_escape_btrn
+NAME: byte_string_escape_btrn
 INPUT:
  1: * = $0200
- 2:   .data "A\b\t\r\nZ"
+ 2:   .byte "A\b\t\r\nZ"
 EXPECT_HEX: 41 08 09 0d 0a 5a
 
 ---
 NAME: immediate_label
 INPUT:
  1: * = $0200
- 2: val = $42
+ 2: val: = $42
  3:   LDA #val
  4:   LDX #<val
  5:   LDY #>val
@@ -158,7 +158,7 @@ INPUT:
  1: * = $0200
  2:   BEQ skip
  3:   NOP
- 4: skip
+ 4: skip:
  5:   RTS
 EXPECT_HEX: f0 01 ea 60
 
@@ -167,15 +167,15 @@ NAME: branch_forward_max
 INPUT:
  1: * = $0200
  2:   BEQ target
- 3:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
- 4:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
- 5:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
- 6:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
- 7:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
- 8:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
- 9:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
-10:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
-11: target
+ 3:   .byte $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA
+ 4:   .byte $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA
+ 5:   .byte $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA
+ 6:   .byte $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA
+ 7:   .byte $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA
+ 8:   .byte $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA
+ 9:   .byte $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA
+10:   .byte $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA
+11: target:
 12:   RTS
 EXPECT_HEX: f0 7f ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea 60
 
@@ -185,7 +185,7 @@ INPUT:
  1: * = $0200
  2:   BEQ target
  3: * = $0282
- 4: target
+ 4: target:
  5:   RTS
 EXPECT_ERROR: 8
 EXPECT_LINE: 2
@@ -195,7 +195,7 @@ EXPECT_MSG: Branch out of range
 NAME: branch_backward_simple
 INPUT:
  1: * = $0200
- 2: loop
+ 2: loop:
  3:   NOP
  4:   BNE loop
 EXPECT_HEX: ea d0 fd
@@ -204,16 +204,16 @@ EXPECT_HEX: ea d0 fd
 NAME: branch_backward_max
 INPUT:
  1: * = $0182
- 2: target
+ 2: target:
  3:   NOP
- 4:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
- 5:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
- 6:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
- 7:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
- 8:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
- 9:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
-10:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
-11:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 4:   .byte $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA
+ 5:   .byte $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA
+ 6:   .byte $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA
+ 7:   .byte $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA
+ 8:   .byte $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA
+ 9:   .byte $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA
+10:   .byte $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA
+11:   .byte $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA, $EA
 12:   BNE target
 EXPECT_HEX: ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea d0 80
 
@@ -221,7 +221,7 @@ EXPECT_HEX: ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea
 NAME: branch_backward_just_past_max
 INPUT:
  1: * = $0181
- 2: target
+ 2: target:
  3:   NOP
  4: * = $0200
  5:   BNE target
@@ -233,7 +233,7 @@ EXPECT_MSG: Branch out of range
 NAME: branch_to_self
 INPUT:
  1: * = $0200
- 2: loop
+ 2: loop:
  3:   BNE loop
 EXPECT_HEX: d0 fe
 
@@ -257,7 +257,7 @@ INPUT:
  1: * = $0200
  2:   JSR sub
  3:   RTS
- 4: sub
+ 4: sub:
  5:   NOP
  6:   RTS
 EXPECT_HEX: 20 04 02 60 ea 60
@@ -266,11 +266,11 @@ EXPECT_HEX: 20 04 02 60 ea 60
 NAME: local_labels
 INPUT:
  1: * = $0200
- 2: global1
+ 2: global1:
  3: .local
  4:   NOP
  5:   BEQ .local
- 6: global2
+ 6: global2:
  7: .local
  8:   NOP
  9:   BEQ .local
@@ -282,7 +282,7 @@ INPUT:
  1: * = $0200
  2:   JMP target
  3:   NOP
- 4: target
+ 4: target:
  5:   RTS
 EXPECT_HEX: 4c 04 02 ea 60
 
@@ -290,7 +290,7 @@ EXPECT_HEX: 4c 04 02 ea 60
 NAME: label_assignment
 INPUT:
  1: * = $0200
- 2: addr = $1234
+ 2: addr: = $1234
  3:   LDA addr
  4:   STA addr
 EXPECT_HEX: ad 34 12 8d 34 12
@@ -299,9 +299,9 @@ EXPECT_HEX: ad 34 12 8d 34 12
 NAME: expression_assignment
 INPUT:
  1: * = $0200
- 2: addr  = $1234
- 3: add   = $01
- 4: addr2 = addr+add
+ 2: addr:  = $1234
+ 3: add:   = $01
+ 4: addr2: = addr+add
  3:   LDA addr
  4:   STA addr2
 EXPECT_HEX: ad 34 12 8d 35 12
@@ -471,7 +471,7 @@ EXPECT_MSG: Opcode not found
 NAME: immediate_label_value_out_of_range
 INPUT:
  1: * = $0200
- 2: VALUE = $1234
+ 2: VALUE: = $1234
  3:   LDA #VALUE
 EXPECT_ERROR: 6
 EXPECT_LINE: 3
@@ -499,7 +499,7 @@ EXPECT_MSG: Invalid hex
 NAME: closing_quote_not_found
 INPUT:
  1: * = $0200
- 2:   .data "unterminated
+ 2:   .byte "unterminated
 EXPECT_ERROR: 18
 EXPECT_LINE: 2
 EXPECT_MSG: Closing quote not found
@@ -563,9 +563,9 @@ EXPECT_MSG: No global label for local
 NAME: duplicate_label
 INPUT:
  1: * = $0200
- 2: label
+ 2: label:
  3:   NOP
- 4: label
+ 4: label:
  5:   RTS
 EXPECT_ERROR: 2
 EXPECT_LINE: 4
@@ -585,94 +585,95 @@ EXPECT_LINE: 6
 EXPECT_MSG: Opcode not found
 
 ---
-NAME: directive_data_bytes
+NAME: directive_byte_values
 INPUT:
  1: * = $0200
- 2:   .data $01 $02 $03
+ 2:   .byte $01, $02, $03
 EXPECT_HEX: 01 02 03
 
 ---
-NAME: directive_data_commas
+NAME: directive_byte_commas
 INPUT:
  1: * = $0200
- 2:   .data $01, $02, $03
+ 2:   .byte $01, $02, $03
 EXPECT_HEX: 01 02 03
 
 ---
-NAME: directive_data_trailig_comma
+NAME: directive_byte_trailing_comma
 INPUT:
  1: * = $0200
- 2:   .data $01, $02, $03,
+ 2:   .byte $01, $02, $03,
 EXPECT_HEX: 01 02 03
 
 ---
-NAME: directive_data_mixed_separators
+NAME: directive_byte_mixed_separators
 INPUT:
  1: * = $0200
- 2:   .data $01, $02 $03, $04
+ 2:   .byte $01, $02 $03, $04
 EXPECT_HEX: 01 02 03 04
 
 ---
-NAME: directive_data_string
+NAME: directive_asciiz_string
 INPUT:
  1: * = $0200
- 2:   .data "Hi" $00
+ 2:   .asciiz "Hi"
 EXPECT_HEX: 48 69 00
 
 ---
-NAME: directive_data_mixed
+NAME: directive_byte_mixed
 INPUT:
  1: * = $0200
- 2:   .data $01 "AB" $02
+ 2:   .byte $01, "AB", $02
 EXPECT_HEX: 01 41 42 02
 
 ---
-NAME: directive_data_label_bytes
+NAME: directive_byte_label_selectors
 INPUT:
  1: * = $0200
- 2: label
- 3:   .data <label >label
+ 2: label:
+ 3:   .byte <label, >label
 EXPECT_HEX: 00 02
 
 ---
-NAME: directive_data_label_word_small
+NAME: directive_word_label_small
 INPUT:
  1: * = $0200
- 2: label = $03
- 3:   .data label
+ 2: label: = $03
+ 3:   .word label
 EXPECT_HEX: 03 00
 
 ---
-NAME: directive_data_label_word
+NAME: directive_word_label
 INPUT:
  1: * = $0200
- 2: label
- 3:   .data label
+ 2: label:
+ 3:   .word label
 EXPECT_HEX: 00 02
 
 ---
-NAME: directive_data_forward_ref
+NAME: directive_word_forward_ref
 INPUT:
  1: * = $0200
- 2:   .data forward_label
- 3: forward_label = $1234
+ 2:   .word forward_label
+ 3: forward_label: = $1234
 EXPECT_HEX: 34 12
 EXPECT_FWDREF: 0
 
 ---
-NAME: directive_data_mixed_label_forms
+NAME: directive_mixed_label_forms
 INPUT:
  1: * = $0200
- 2: label = $ABCD
- 3:   .data <label >label label
+ 2: label: = $ABCD
+ 3:   .byte <label, >label
+ 4:   .word label
 EXPECT_HEX: cd ab cd ab
 EXPECT_FWDREF: 0
 
 ---
-NAME: directive_data_invalid
+NAME: directive_byte_invalid
 INPUT:
  1: * = $0200
- 2:   .data $00 @ $01
+ 2:   .byte $00, @ $01
 EXPECT_ERROR: 4
 EXPECT_LINE: 2
 EXPECT_MSG: Label expected
@@ -681,8 +682,8 @@ EXPECT_MSG: Label expected
 NAME: assignment_low_byte_select
 INPUT:
  1: * = $0200
- 2: source = $ABCD
- 3: low = <source
+ 2: source: = $ABCD
+ 3: low: = <source
  4:   LDA #low
 EXPECT_HEX: a9 cd
 EXPECT_FWDREF: 0
@@ -691,8 +692,8 @@ EXPECT_FWDREF: 0
 NAME: assignment_high_byte_select
 INPUT:
  1: * = $0200
- 2: source = $ABCD
- 3: high = >source
+ 2: source: = $ABCD
+ 3: high: = >source
  4:   LDA #high
 EXPECT_HEX: a9 ab
 EXPECT_FWDREF: 0
@@ -701,9 +702,9 @@ EXPECT_FWDREF: 0
 NAME: assignment_byte_select_both
 INPUT:
  1: * = $0200
- 2: source = $1234
- 3: low = <source
- 4: high = >source
+ 2: source: = $1234
+ 3: low: = <source
+ 4: high: = >source
  5:   LDA #low
  6:   LDX #high
 EXPECT_HEX: a9 34 a2 12
@@ -713,9 +714,9 @@ EXPECT_FWDREF: 0
 NAME: assignment_byte_select_chain
 INPUT:
  1: * = $0200
- 2: source = $ABCD
- 3: low = <source
- 4: copy = low
+ 2: source: = $ABCD
+ 3: low: = <source
+ 4: copy: = low
  5:   LDA #copy
 EXPECT_HEX: a9 cd
 EXPECT_FWDREF: 0
@@ -724,16 +725,16 @@ EXPECT_FWDREF: 0
 NAME: assignment_byte_select_multiple
 INPUT:
  1: * = $0200
- 2: val1 = $1234
- 3: val2 = $5678
- 4: low1 = <val1
- 5: high1 = >val1
- 6: low2 = <val2
- 7: high2 = >val2
+ 2: val1: = $1234
+ 3: val2: = $5678
+ 4: low1: = <val1
+ 5: high1: = >val1
+ 6: low2: = <val2
+ 7: high2: = >val2
  8:   LDA #low1
  9:   LDX #high1
 10:   LDY #low2
-11:   .data high2
+11:   .word high2
 EXPECT_HEX: a9 34 a2 12 a0 78 56 00
 EXPECT_FWDREF: 0
 
@@ -741,10 +742,10 @@ EXPECT_FWDREF: 0
 NAME: assignment_byte_select_in_data
 INPUT:
  1: * = $0200
- 2: source = $ABCD
- 3: low = <source
- 4: high = >source
- 5:   .data low high
+ 2: source: = $ABCD
+ 3: low: = <source
+ 4: high: = >source
+ 5:   .word low, high
 EXPECT_HEX: cd 00 ab 00
 EXPECT_FWDREF: 0
 
@@ -760,7 +761,7 @@ EXPECT_MSG: Label not found
 NAME: fwdref_backward_zp_capable_small
 INPUT:
  1: * = $0200
- 2: small = $12
+ 2: small: = $12
  3:   LDA small
 EXPECT_HEX: a5 12
 EXPECT_FWDREF: 0
@@ -769,7 +770,7 @@ EXPECT_FWDREF: 0
 NAME: fwdref_backward_zp_capable_boundary_ff
 INPUT:
  1: * = $0200
- 2: boundary = $FF
+ 2: boundary: = $FF
  3:   LDA boundary
 EXPECT_HEX: a5 ff
 EXPECT_FWDREF: 0
@@ -778,7 +779,7 @@ EXPECT_FWDREF: 0
 NAME: fwdref_backward_zp_capable_boundary_100
 INPUT:
  1: * = $0200
- 2: over = $0100
+ 2: over: = $0100
  3:   LDA over
 EXPECT_HEX: ad 00 01
 EXPECT_FWDREF: 0
@@ -787,7 +788,7 @@ EXPECT_FWDREF: 0
 NAME: fwdref_backward_zp_capable_large
 INPUT:
  1: * = $0200
- 2: large = $1234
+ 2: large: = $1234
  3:   LDA large
 EXPECT_HEX: ad 34 12
 EXPECT_FWDREF: 0
@@ -797,7 +798,7 @@ NAME: fwdref_forward_zp_capable_small
 INPUT:
  1: * = $0200
  2:   LDA target
- 3: target = $12
+ 3: target: = $12
 EXPECT_HEX: ad 12 00
 EXPECT_FWDREF: 1
 
@@ -806,7 +807,7 @@ NAME: fwdref_forward_zp_capable_boundary_ff
 INPUT:
  1: * = $0200
  2:   LDA target
- 3: target = $FF
+ 3: target: = $FF
 EXPECT_HEX: ad ff 00
 EXPECT_FWDREF: 1
 
@@ -815,7 +816,7 @@ NAME: fwdref_forward_zp_capable_boundary_100
 INPUT:
  1: * = $0200
  2:   LDA target
- 3: target = $0100
+ 3: target: = $0100
 EXPECT_HEX: ad 00 01
 EXPECT_FWDREF: 1
 
@@ -824,7 +825,7 @@ NAME: fwdref_forward_zp_capable_large
 INPUT:
  1: * = $0200
  2:   LDA target
- 3: target = $1234
+ 3: target: = $1234
 EXPECT_HEX: ad 34 12
 EXPECT_FWDREF: 1
 
@@ -832,7 +833,7 @@ EXPECT_FWDREF: 1
 NAME: fwdref_backward_zpx_capable_small
 INPUT:
  1: * = $0200
- 2: small = $12
+ 2: small: = $12
  3:   LDA small,X
 EXPECT_HEX: b5 12
 EXPECT_FWDREF: 0
@@ -841,7 +842,7 @@ EXPECT_FWDREF: 0
 NAME: fwdref_backward_zpx_capable_large
 INPUT:
  1: * = $0200
- 2: large = $1234
+ 2: large: = $1234
  3:   LDA large,X
 EXPECT_HEX: bd 34 12
 EXPECT_FWDREF: 0
@@ -851,7 +852,7 @@ NAME: fwdref_forward_zpx_capable_small
 INPUT:
  1: * = $0200
  2:   LDA target,X
- 3: target = $12
+ 3: target: = $12
 EXPECT_HEX: bd 12 00
 EXPECT_FWDREF: 1
 
@@ -860,7 +861,7 @@ NAME: fwdref_forward_zpx_capable_large
 INPUT:
  1: * = $0200
  2:   LDA target,X
- 3: target = $1234
+ 3: target: = $1234
 EXPECT_HEX: bd 34 12
 EXPECT_FWDREF: 1
 
@@ -868,7 +869,7 @@ EXPECT_FWDREF: 1
 NAME: fwdref_backward_zpy_capable_small
 INPUT:
  1: * = $0200
- 2: small = $12
+ 2: small: = $12
  3:   LDX small,Y
 EXPECT_HEX: b6 12
 EXPECT_FWDREF: 0
@@ -877,7 +878,7 @@ EXPECT_FWDREF: 0
 NAME: fwdref_backward_zpy_capable_large
 INPUT:
  1: * = $0200
- 2: large = $1234
+ 2: large: = $1234
  3:   LDX large,Y
 EXPECT_HEX: be 34 12
 EXPECT_FWDREF: 0
@@ -887,7 +888,7 @@ NAME: fwdref_forward_zpy_capable_small
 INPUT:
  1: * = $0200
  2:   LDX target,Y
- 3: target = $12
+ 3: target: = $12
 EXPECT_HEX: be 12 00
 EXPECT_FWDREF: 1
 
@@ -896,7 +897,7 @@ NAME: fwdref_forward_zpy_capable_large
 INPUT:
  1: * = $0200
  2:   LDX target,Y
- 3: target = $1234
+ 3: target: = $1234
 EXPECT_HEX: be 34 12
 EXPECT_FWDREF: 1
 
@@ -906,9 +907,9 @@ INPUT:
  1: * = $0200
  2:   LDA target1
  3:   LDA target2
- 4: target1 = $12
+ 4: target1: = $12
  5:   LDA target1
- 6: target2 = $34
+ 6: target2: = $34
  7:   LDA target2
 EXPECT_HEX: ad 12 00 ad 34 00 a5 12 a5 34
 EXPECT_FWDREF: 2
@@ -919,7 +920,7 @@ INPUT:
  1: * = $0200
  2:   JMP target
  3:   NOP
- 4: target
+ 4: target:
  5:   RTS
 EXPECT_HEX: 4c 04 02 ea 60
 EXPECT_FWDREF: 0
@@ -930,7 +931,7 @@ INPUT:
  1: * = $0200
  2:   LDA target
  3:   NOP
- 4: target
+ 4: target:
  5:   RTS
 EXPECT_HEX: ad 04 02 ea 60
 EXPECT_FWDREF: 1
@@ -939,7 +940,7 @@ EXPECT_FWDREF: 1
 NAME: fwdref_code_label_backward_ref
 INPUT:
  1: * = $0200
- 2: target
+ 2: target:
  3:   NOP
  4:   LDA target
 EXPECT_HEX: ea ad 00 02
@@ -949,8 +950,8 @@ EXPECT_FWDREF: 0
 NAME: fwdref_mixed_small_and_large
 INPUT:
  1: * = $0200
- 2: zp = $50
- 3: abs = $0300
+ 2: zp: = $50
+ 3: abs: = $0300
  4:   LDA zp
  5:   LDA abs
  6:   LDA zp,X
@@ -963,7 +964,7 @@ NAME: fwdref_forward_then_backward
 INPUT:
  1: * = $0200
  2:   LDA target
- 3: target = $42
+ 3: target: = $42
  4:   LDA target
 EXPECT_HEX: ad 42 00 a5 42
 EXPECT_FWDREF: 1
@@ -973,7 +974,7 @@ NAME: fwdref_jsr_forward_zp_range
 INPUT:
  1: * = $0200
  2:   JSR subroutine
- 3: subroutine = $0050
+ 3: subroutine: = $0050
 EXPECT_HEX: 20 50 00
 EXPECT_FWDREF: 0
 
@@ -982,7 +983,7 @@ NAME: fwdref_jsr_forward_high_range
 INPUT:
  1: * = $0200
  2:   JSR subroutine
- 3: subroutine = $1234
+ 3: subroutine: = $1234
 EXPECT_HEX: 20 34 12
 EXPECT_FWDREF: 0
 
@@ -992,7 +993,7 @@ INPUT:
  1: * = $0200
  2:   JSR subroutine
  3:   NOP
- 4: subroutine
+ 4: subroutine:
  5:   RTS
 EXPECT_HEX: 20 04 02 ea 60
 EXPECT_FWDREF: 0
@@ -1001,7 +1002,7 @@ EXPECT_FWDREF: 0
 NAME: fwdref_jsr_backward
 INPUT:
  1: * = $0200
- 2: subroutine
+ 2: subroutine:
  3:   RTS
  4:   JSR subroutine
 EXPECT_HEX: 60 20 00 02
@@ -1012,7 +1013,7 @@ NAME: fwdref_jmp_forward_zp_range
 INPUT:
  1: * = $0200
  2:   JMP target
- 3: target = $0050
+ 3: target: = $0050
 EXPECT_HEX: 4c 50 00
 EXPECT_FWDREF: 0
 
@@ -1021,7 +1022,7 @@ NAME: fwdref_jmp_forward_high_range
 INPUT:
  1: * = $0200
  2:   JMP target
- 3: target = $1234
+ 3: target: = $1234
 EXPECT_HEX: 4c 34 12
 EXPECT_FWDREF: 0
 
@@ -1031,7 +1032,7 @@ INPUT:
  1: * = $0200
  2:   JMP destination
  3:   NOP
- 4: destination
+ 4: destination:
  5:   RTS
 EXPECT_HEX: 4c 04 02 ea 60
 EXPECT_FWDREF: 0
@@ -1040,7 +1041,7 @@ EXPECT_FWDREF: 0
 NAME: fwdref_jmp_backward
 INPUT:
  1: * = $0200
- 2: loop
+ 2: loop:
  3:   NOP
  4:   JMP loop
 EXPECT_HEX: ea 4c 00 02
@@ -1051,7 +1052,7 @@ NAME: fwdref_jmp_indirect_forward
 INPUT:
  1: * = $0200
  2:   JMP (vector)
- 3: vector = $1234
+ 3: vector: = $1234
 EXPECT_HEX: 6c 34 12
 EXPECT_FWDREF: 0
 
@@ -1059,7 +1060,7 @@ EXPECT_FWDREF: 0
 NAME: fwdref_jmp_indirect_backward
 INPUT:
  1: * = $0200
- 2: vector = $1234
+ 2: vector: = $1234
  3:   JMP (vector)
 EXPECT_HEX: 6c 34 12
 EXPECT_FWDREF: 0
@@ -1072,10 +1073,10 @@ INPUT:
 EXPECT_HEX: a1 61
 
 ---
-NAME: char_in_data
+NAME: char_in_byte
 INPUT:
  1: * = $0200
- 2:   .data 'A' 'B' 'C'
+ 2:   .byte 'A', 'B', 'C'
 EXPECT_HEX: 41 42 43
 
 ---
@@ -1110,7 +1111,7 @@ EXPECT_HEX: a9 19
 NAME: expr_low_byte_add
 INPUT:
  1: * = $0200
- 2: val = $ABCD
+ 2: val: = $ABCD
  3:   LDA #<val+$10
 EXPECT_HEX: a9 dd
 
@@ -1118,7 +1119,7 @@ EXPECT_HEX: a9 dd
 NAME: expr_low_byte_add_after
 INPUT:
  1: * = $0200
- 2: val = $ABCD
+ 2: val: = $ABCD
  3:   LDA #$10+<val
 EXPECT_HEX: a9 dd
 
@@ -1126,7 +1127,7 @@ EXPECT_HEX: a9 dd
 NAME: expr_high_byte_add
 INPUT:
  1: * = $0200
- 2: val = $ABCD
+ 2: val: = $ABCD
  3:   LDA #>val+$0100
 EXPECT_HEX: a9 ac
 
@@ -1134,7 +1135,7 @@ EXPECT_HEX: a9 ac
 NAME: expr_low_byte_label_only
 INPUT:
  1: * = $0200
- 2: val = $ABCD
+ 2: val: = $ABCD
  3:   LDA #<val
 EXPECT_HEX: a9 cd
 
@@ -1142,7 +1143,7 @@ EXPECT_HEX: a9 cd
 NAME: expr_high_byte_label_only
 INPUT:
  1: * = $0200
- 2: val = $ABCD
+ 2: val: = $ABCD
  3:   LDA #>val
 EXPECT_HEX: a9 ab
 
@@ -1150,7 +1151,7 @@ EXPECT_HEX: a9 ab
 NAME: expr_label_add_abs
 INPUT:
  1: * = $0200
- 2: base = $1000
+ 2: base: = $1000
  3:   LDA base+$10
 EXPECT_HEX: ad 10 10
 
@@ -1158,7 +1159,7 @@ EXPECT_HEX: ad 10 10
 NAME: expr_assignment
 INPUT:
  1: * = $0200
- 2: val = $40+$02
+ 2: val: = $40+$02
  3:   LDA #val
 EXPECT_HEX: a9 42
 
@@ -1167,117 +1168,123 @@ NAME: expr_fwdref_add
 INPUT:
  1: * = $0200
  2:   LDA target+$01
- 3: target = $42
+ 3: target: = $42
 EXPECT_HEX: ad 43 00
 EXPECT_FWDREF: 1
 
 ---
-NAME: expr_data_add
+NAME: expr_word_add
 INPUT:
  1: * = $0200
- 2: base = $10
- 3:   .data base+$20
+ 2: base: = $10
+ 3:   .word base+$20
 EXPECT_HEX: 30 00
 
 ---
-NAME: expr_data_hex_const
+NAME: expr_byte_hex_const
 INPUT:
  1: * = $0200
- 2:   .data $10+$20
+ 2:   .byte $10+$20
 EXPECT_HEX: 30
 
 ---
-NAME: expr_data_byte_selector
+NAME: expr_byte_selector
 INPUT:
  1: * = $0200
- 2: addr = $ABCD
- 3:   .data <addr+$10
+ 2: addr: = $ABCD
+ 3:   .byte <addr+$10
 EXPECT_HEX: dd
 
 ---
-NAME: expr_data_multiple_values
+NAME: expr_byte_multiple_values
 INPUT:
  1: * = $0200
- 2: base = $10
- 3:   .data $05+$01 base+$10 $20-$05
+ 2: base: = $10
+ 3:   .byte $05+$01
+ 4:   .word base+$10
+ 5:   .byte $20-$05
 EXPECT_HEX: 06 20 00 1b
 
 ---
-NAME: expr_data_char_expression
+NAME: expr_byte_char_expression
 INPUT:
  1: * = $0200
- 2:   .data 'A'+$01
+ 2:   .byte 'A'+$01
 EXPECT_HEX: 42
 
 ---
-NAME: data_hex_2digit
+NAME: byte_hex_2digit
 INPUT:
  1: * = $0200
- 2:   .data $00 $FF $42
+ 2:   .byte $00, $FF, $42
 EXPECT_HEX: 00 ff 42
 
 ---
-NAME: data_hex_4digit
+NAME: word_hex_4digit
 INPUT:
  1: * = $0200
- 2:   .data $0000 $0100 $FFFF
+ 2:   .word $0000, $0100, $FFFF
 EXPECT_HEX: 00 00 00 01 ff ff
 
 ---
-NAME: data_hex_4digit_single
+NAME: word_hex_4digit_single
 INPUT:
  1: * = $0200
- 2:   .data $1234
+ 2:   .word $1234
 EXPECT_HEX: 34 12
 
 ---
-NAME: data_expr_2digit_start
+NAME: byte_expr_2digit_start
 INPUT:
  1: * = $0200
- 2:   .data $10+$20
+ 2:   .byte $10+$20
 EXPECT_HEX: 30
 
 ---
-NAME: data_expr_4digit_start
+NAME: word_expr_4digit_start
 INPUT:
  1: * = $0200
- 2:   .data $0010+$0020
+ 2:   .word $0010+$0020
 EXPECT_HEX: 30 00
 
 ---
-NAME: data_expr_4digit_zero
+NAME: word_expr_4digit_zero
 INPUT:
  1: * = $0200
- 2:   .data $0000+$42
+ 2:   .word $0000+$42
 EXPECT_HEX: 42 00
 
 ---
-NAME: data_expr_overflow_truncate
+NAME: byte_expr_overflow_error
 INPUT:
  1: * = $0200
- 2:   .data $FF+$01
-EXPECT_HEX: 00
+ 2:   .byte $FF+$01
+EXPECT_ERROR: 6
+EXPECT_LINE: 2
+EXPECT_MSG: Value out of range
 
 ---
-NAME: data_expr_overflow_4digit_workaround
+NAME: word_expr_overflow_workaround
 INPUT:
  1: * = $0200
- 2:   .data $0000+$FF+$01
+ 2:   .word $0000+$FF+$01
 EXPECT_HEX: 00 01
 
 ---
-NAME: data_mixed_sizes
+NAME: mixed_byte_word_sizes
 INPUT:
  1: * = $0200
- 2: label = $1234
- 3:   .data $42 $ABCD label 'X'
+ 2: label: = $1234
+ 3:   .byte $42
+ 4:   .word $ABCD, label
+ 5:   .byte 'X'
 EXPECT_HEX: 42 cd ab 34 12 58
 
 ---
 NAME: expr_indirect_indexed_add
 INPUT:
  1: * = $0200
- 2: ptr = $40
+ 2: ptr: = $40
  3:   LDA (ptr+$02),Y
 EXPECT_HEX: b1 42
 
@@ -1285,7 +1292,7 @@ EXPECT_HEX: b1 42
 NAME: expr_assign_to_label
 INPUT:
  1: * = $0200
- 2: value = $01+$02
+ 2: value: = $01+$02
  3:   LDA #value
 EXPECT_HEX: a9 03
 
@@ -1293,15 +1300,15 @@ EXPECT_HEX: a9 03
 NAME: expr_assign_label_expr_to_label
 INPUT:
  1: * = $0200
- 2: value1 = $02
- 3: value2 = value1+$03
+ 2: value1: = $02
+ 3: value2: = value1+$03
  4:   LDA #value2
 EXPECT_HEX: a9 05
 
 ---
 NAME: expr_assign_label_expr_to_pc
 INPUT:
- 1: value = $0200
+ 1: value: = $0200
  2: * = value
  3:   NOP
  4: * = value+$02
@@ -1437,7 +1444,7 @@ NAME: expr_label_with_spaces
 DESCRIPTION: Label expression with spaces around operator
 INPUT:
  1: * = $0200
- 2: base = $40
+ 2: base: = $40
  3:   LDA base + $02
 EXPECT_HEX: a5 42
 
@@ -1447,24 +1454,24 @@ DESCRIPTION: Forward reference expression with spaces
 INPUT:
  1: * = $0200
  2:   LDA target + $01
- 3: target = $42
+ 3: target: = $42
 EXPECT_HEX: ad 43 00
 EXPECT_FWDREF: 1
 
 ---
-NAME: expr_data_with_spaces
-DESCRIPTION: .data directive with spaces around operator
+NAME: expr_byte_with_spaces
+DESCRIPTION: .byte directive with spaces around operator
 INPUT:
  1: * = $0200
- 2:   .data $10 + $20
+ 2:   .byte $10 + $20
 EXPECT_HEX: 30
 
 ---
-NAME: expr_data_separate_values_still_work
-DESCRIPTION: .data with separate values (no operator) still produces multiple values
+NAME: byte_separate_values
+DESCRIPTION: .byte with separate values (no operator) still produces multiple values
 INPUT:
  1: * = $0200
- 2:   .data $10 $20
+ 2:   .byte $10 $20
 EXPECT_HEX: 10 20
 
 ---
@@ -1483,7 +1490,7 @@ EXPECT_HEX: a9 10
 NAME: ifdef_defined
 INPUT:
  1: * = $0200
- 2: foo = $42
+ 2: foo: = $42
  3:   .ifdef foo
  4:   LDA #$01
  5:   .endif
@@ -1495,7 +1502,7 @@ INPUT:
  1: * = $0200
  2:   .ifdef undefined_label
  3:   LDA #$01
- 4:   .data $1234
+ 4:   .word $1234
  5:   .endif
  6:   LDA #$02
 EXPECT_HEX: a9 02
@@ -1515,7 +1522,7 @@ EXPECT_HEX: a9 02
 NAME: ifdef_multiple_lines
 INPUT:
  1: * = $0200
- 2: foo = $42
+ 2: foo: = $42
  3:   .ifdef foo
  4:   LDA #$01
  5:   LDA #$02
@@ -1528,7 +1535,7 @@ NAME: ifdef_skips_labels
 INPUT:
  1: * = $0200
  2:   .ifdef undefined
- 3: label = $42
+ 3: label: = $42
  4:   .endif
  5:   LDA #label
 EXPECT_ERROR: 1
@@ -1557,8 +1564,8 @@ EXPECT_MSG: Unclosed .ifdef
 NAME: ifdef_nested_both_true
 INPUT:
  1: * = $0200
- 2: outer = $01
- 3: inner = $02
+ 2: outer: = $01
+ 3: inner: = $02
  4:   .ifdef outer
  5:   LDA #$01
  6:     .ifdef inner
@@ -1572,7 +1579,7 @@ EXPECT_HEX: a9 01 a9 02 a9 03
 NAME: ifdef_nested_outer_false
 INPUT:
  1: * = $0200
- 2: inner = $02
+ 2: inner: = $02
  3:   .ifdef undefined_outer
  4:   LDA #$01
  5:     .ifdef inner
@@ -1587,7 +1594,7 @@ EXPECT_HEX: a9 04
 NAME: ifdef_nested_inner_false
 INPUT:
  1: * = $0200
- 2: outer = $01
+ 2: outer: = $01
  3:   .ifdef outer
  4:   LDA #$01
  5:     .ifdef undefined_inner
@@ -1601,9 +1608,9 @@ EXPECT_HEX: a9 01 a9 03
 NAME: ifdef_deeply_nested
 INPUT:
  1: * = $0200
- 2: a = $01
- 3: b = $02
- 4: c = $03
+ 2: a: = $01
+ 3: b: = $02
+ 4: c: = $03
  5:   .ifdef a
  6:   LDA #$01
  7:     .ifdef b
@@ -1698,7 +1705,7 @@ EXPECT_HEX: a9 00
 NAME: shift_left_16bit
 INPUT:
  1: * = $0200
- 2: val = $0234<<$02
+ 2: val: = $0234<<$02
  3:   LDA #<val
  4:   LDA #>val
 EXPECT_HEX: a9 d0 a9 08
@@ -1707,7 +1714,7 @@ EXPECT_HEX: a9 d0 a9 08
 NAME: shift_right_16bit
 INPUT:
  1: * = $0200
- 2: val = $8000>>$01
+ 2: val: = $8000>>$01
  3:   LDA #<val
  4:   LDA #>val
 EXPECT_HEX: a9 00 a9 40
@@ -1716,7 +1723,7 @@ EXPECT_HEX: a9 00 a9 40
 NAME: shift_with_label
 INPUT:
  1: * = $0200
- 2: base = $0100
+ 2: base: = $0100
  3:   LDA base>>$04
 EXPECT_HEX: a5 10
 
@@ -1768,7 +1775,7 @@ EXPECT_HEX: a9 10
 NAME: shift_right_with_low_byte
 INPUT:
  1: * = $0200
- 2: val = $8000>><$0001
+ 2: val: = $8000>><$0001
  3:   LDA #<val
  4:   LDA #>val
 EXPECT_HEX: a9 00 a9 40
@@ -1806,10 +1813,10 @@ INPUT:
 EXPECT_HEX: ea f0 fd
 
 ---
-NAME: label_with_colon_same_line_data
+NAME: label_with_colon_same_line_byte
 INPUT:
  1: * = $0200
- 2: data: .data $42
+ 2: data: .byte $42
  3:   LDA data
 EXPECT_HEX: 42 ad 00 02
 
@@ -1827,7 +1834,7 @@ EXPECT_HEX: ea f0 fd
 NAME: local_label_with_colon_same_line
 INPUT:
  1: * = $0200
- 2: global
+ 2: global:
  3: .loop: NOP
  4:   BEQ .loop
 EXPECT_HEX: ea f0 fd
@@ -1838,7 +1845,7 @@ INPUT:
  1: * = $0200
  2: label1:
  3:   NOP
- 4: label2
+ 4: label2:
  5:   NOP
  6: label3: NOP
  7:   JMP label1
@@ -1878,7 +1885,7 @@ EXPECT_HEX: ea a9 ff 85 10 ea 60
 NAME: include_label_before
 INPUT:
  1: * = $0200
- 2: before = $10
+ 2: before: = $10
  3:   .include tests/include/basic.asm
  4:   LDA before
 EXPECT_HEX: ea ea a5 10
@@ -1888,7 +1895,7 @@ NAME: include_label_after
 INPUT:
  1: * = $0200
  2:   .include tests/include/basic.asm
- 3: after = $20
+ 3: after: = $20
  4:   LDA after
 EXPECT_HEX: ea ea a5 20
 
@@ -2147,7 +2154,7 @@ NAME: macro_local_no_conflict_with_caller
 DESCRIPTION: Local label in macro doesn't conflict with same name in caller
 INPUT:
  1: * = $0200
- 2: foo
+ 2: foo:
  3: .x
  4:   NOP
  5:   .macro bar
@@ -2315,7 +2322,7 @@ NAME: macro_reference_global_label
 DESCRIPTION: Macros can reference global labels
 INPUT:
  1: * = $0200
- 2: val = $42
+ 2: val: = $42
  3:   .macro mac
  4:   LDA #val
  5:   .endmacro
@@ -2327,7 +2334,7 @@ NAME: macro_global_label_param_name_conflict
 DESCRIPTION: Macro parameters should hide global labels
 INPUT:
  1: * = $0200
- 2: val = $42
+ 2: val: = $42
  3:   .macro mac val
  4:   LDA #val
  5:   .endmacro
@@ -2382,7 +2389,7 @@ INPUT:
  3:   LDA addr
  4:   .endmacro
  5:   load_addr target
- 6: target
+ 6: target:
 EXPECT_HEX: ad 03 02
 
 ---
@@ -2390,7 +2397,7 @@ NAME: macro_param_label_arg
 DESCRIPTION: Macro argument can be a defined label
 INPUT:
  1: * = $0200
- 2: target
+ 2: target:
  3:   .macro load_addr addr
  4:   LDA addr
  5:   .endmacro
@@ -2434,7 +2441,7 @@ NAME: macro_nested_param_backward_ref_zp
 DESCRIPTION: Parameters pass through multiple nesting levels
 INPUT:
  1: * = $0200
- 2: value = $12
+ 2: value: = $12
  3:   .macro level2 v2
  4:   LDA v2            ; Expect zero page addressing
  5:   .endmacro
@@ -2449,7 +2456,7 @@ NAME: macro_nested_param_backward_ref_abs
 DESCRIPTION: Parameters pass through multiple nesting levels
 INPUT:
  1: * = $0200
- 2: value = $1234
+ 2: value: = $1234
  3:   .macro level2 v2
  4:   LDA v2            ; Expect absolute addressing
  5:   .endmacro
@@ -2471,7 +2478,7 @@ INPUT:
  6:   level2 v1
  7:   .endmacro
  8:   level1 value
- 9: value = $12
+ 9: value: = $12
 EXPECT_HEX: ad 12 00
 
 ---
@@ -2486,7 +2493,7 @@ INPUT:
  6:   level2 v1
  7:   .endmacro
  8:   level1 value
- 9: value = $1234
+ 9: value: = $1234
 EXPECT_HEX: ad 34 12
 
 ---
@@ -2519,7 +2526,7 @@ INPUT:
  3: [  LDA  #$12  ;  Comment with trailing spaces  ]
  4: []
  5: [my_label]
- 6: [  .data  $01  ';' '\''  "String with semicolon; and double  space in it ''"  ; Comment  ]
+ 6: [  .byte  $01  ';' '\''  "String with semicolon; and double  space in it ''"  ; Comment  ]
  7: [  LDA #' ']
  8: [  .endmacro]
  9: [  NOP]
@@ -2528,7 +2535,7 @@ EXPECT_STDERR:
 [ LDA #$12 ]
 []
 [my_label]
-[ .data $01 ';' '\'' "String with semicolon; and double  space in it ''" ]
+[ .byte $01 ';' '\'' "String with semicolon; and double  space in it ''" ]
 [ LDA #' ']
 
 ---
@@ -2546,36 +2553,36 @@ DESCRIPTION: Out of memory when heap exhausted with small heap
 ARGS: debug small_heap
 INPUT:
  1: * = $0200
- 2: a00 = $01
- 3: a01 = $01
- 4: a02 = $01
- 5: a03 = $01
- 6: a04 = $01
- 7: a05 = $01
- 8: a06 = $01
- 9: a07 = $01
-10: a08 = $01
-11: a09 = $01
-12: a10 = $01
-13: a11 = $01
-14: a12 = $01
-15: a13 = $01
-16: a14 = $01
-17: a15 = $01
-18: a16 = $01
-19: a17 = $01
-20: a18 = $01
-21: a19 = $01
-22: a20 = $01
-23: a21 = $01
-24: a22 = $01
-25: a23 = $01
-26: a24 = $01
-27: a25 = $01
-28: a26 = $01
-29: a27 = $01
-30: a28 = $01
-31: a29 = $01
+ 2: a00: = $01
+ 3: a01: = $01
+ 4: a02: = $01
+ 5: a03: = $01
+ 6: a04: = $01
+ 7: a05: = $01
+ 8: a06: = $01
+ 9: a07: = $01
+10: a08: = $01
+11: a09: = $01
+12: a10: = $01
+13: a11: = $01
+14: a12: = $01
+15: a13: = $01
+16: a14: = $01
+17: a15: = $01
+18: a16: = $01
+19: a17: = $01
+20: a18: = $01
+21: a19: = $01
+22: a20: = $01
+23: a21: = $01
+24: a22: = $01
+25: a23: = $01
+26: a24: = $01
+27: a25: = $01
+28: a26: = $01
+29: a27: = $01
+30: a28: = $01
+31: a29: = $01
 32:   NOP
 EXPECT_ERROR: 32
 EXPECT_MSG: Out of memory
@@ -2595,36 +2602,36 @@ NAME: heap_normal_many_labels
 DESCRIPTION: Many labels work without small heap
 INPUT:
  1: * = $0200
- 2: a00 = $01
- 3: a01 = $01
- 4: a02 = $01
- 5: a03 = $01
- 6: a04 = $01
- 7: a05 = $01
- 8: a06 = $01
- 9: a07 = $01
-10: a08 = $01
-11: a09 = $01
-12: a10 = $01
-13: a11 = $01
-14: a12 = $01
-15: a13 = $01
-16: a14 = $01
-17: a15 = $01
-18: a16 = $01
-19: a17 = $01
-20: a18 = $01
-21: a19 = $01
-22: a20 = $01
-23: a21 = $01
-24: a22 = $01
-25: a23 = $01
-26: a24 = $01
-27: a25 = $01
-28: a26 = $01
-29: a27 = $01
-30: a28 = $01
-31: a29 = $01
+ 2: a00: = $01
+ 3: a01: = $01
+ 4: a02: = $01
+ 5: a03: = $01
+ 6: a04: = $01
+ 7: a05: = $01
+ 8: a06: = $01
+ 9: a07: = $01
+10: a08: = $01
+11: a09: = $01
+12: a10: = $01
+13: a11: = $01
+14: a12: = $01
+15: a13: = $01
+16: a14: = $01
+17: a15: = $01
+18: a16: = $01
+19: a17: = $01
+20: a18: = $01
+21: a19: = $01
+22: a20: = $01
+23: a21: = $01
+24: a22: = $01
+25: a23: = $01
+26: a24: = $01
+27: a25: = $01
+28: a26: = $01
+29: a27: = $01
+30: a28: = $01
+31: a29: = $01
 32:   LDA #a00
 EXPECT_HEX: a9 01
 
@@ -2643,7 +2650,7 @@ DESCRIPTION: Macro with line > 128 chars exercises batched heap advance
 INPUT:
  1: * = $0200
  2:   .macro longdata
- 3:   .data "This is a very long string that exceeds one hundred and twenty eight characters in order to test the optimized macro body capture loop path" $00
+ 3:   .asciiz "This is a very long string that exceeds one hundred and twenty eight characters in order to test the optimized macro body capture loop path"
  4:   .endmacro
  5:   longdata
 EXPECT_HEX: 54 68 69 73 20 69 73 20 61 20 76 65 72 79 20 6C 6F 6E 67 20 73 74 72 69 6E 67 20 74 68 61 74 20 65 78 63 65 65 64 73 20 6F 6E 65 20 68 75 6E 64 72 65 64 20 61 6E 64 20 74 77 65 6E 74 79 20 65 69 67 68 74 20 63 68 61 72 61 63 74 65 72 73 20 69 6E 20 6F 72 64 65 72 20 74 6F 20 74 65 73 74 20 74 68 65 20 6F 70 74 69 6D 69 7A 65 64 20 6D 61 63 72 6F 20 62 6F 64 79 20 63 61 70 74 75 72 65 20 6C 6F 6F 70 20 70 61 74 68 00
@@ -2695,7 +2702,7 @@ NAME: token_buffer_at_limit
 DESCRIPTION: 127 character token at buffer limit
 INPUT:
  1: * = $0200
- 2: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA = $42
+ 2: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA: = $42
  3:   LDA #AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 EXPECT_HEX: a9 42
 
@@ -2704,7 +2711,7 @@ NAME: token_buffer_overflow
 DESCRIPTION: 128 character token overflows buffer
 INPUT:
  1: * = $0200
- 2: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB = $42
+ 2: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB: = $42
 EXPECT_ERROR: 33
 EXPECT_LINE: 2
 EXPECT_MSG: Token too long
@@ -2717,7 +2724,7 @@ INPUT:
  2:   .ifdef LATER
  3:   LDA #$42
  4:   .endif
- 5: LATER = $01
+ 5: LATER: = $01
  6:   NOP
 EXPECT_HEX: ea
 
@@ -2726,14 +2733,14 @@ NAME: ifdef_nested_forward_reference
 DESCRIPTION: Nested .ifdef with forward reference in inner block
 INPUT:
  1: * = $0200
- 2: OUTER = $01
+ 2: OUTER: = $01
  3:   .ifdef OUTER
  4:     .ifdef INNER_LATER
  5:     LDA #$42
  6:     .endif
  7:   NOP
  8:   .endif
- 9: INNER_LATER = $01
+ 9: INNER_LATER: = $01
 10:   RTS
 EXPECT_HEX: ea 60
 
@@ -2749,7 +2756,7 @@ INPUT:
  6:   NOP
  7:   .endmacro
  8:   CONDITIONAL
- 9: FLAG = $01
+ 9: FLAG: = $01
 10:   CONDITIONAL
 EXPECT_HEX: ea a9 42 ea
 
@@ -2793,7 +2800,7 @@ NAME: local_macro_scope_independence
 DESCRIPTION: Local label .foo under global is independent from .foo in macro
 INPUT:
  1: * = $0200
- 2: global
+ 2: global:
  3: .foo
  4:   LDA #$01
  5:   .macro TESTMACRO
@@ -2810,7 +2817,7 @@ NAME: macro_local_does_not_collide_with_global
 DESCRIPTION: .foo in macro resolves to macro-local, not global foo
 INPUT:
  1: * = $0200
- 2: foo = $01
+ 2: foo: = $01
  3:   .macro TEST
  4: .foo
  5:   LDA #foo
@@ -2843,7 +2850,7 @@ DESCRIPTION: Can allocate the last zero page byte at $FF
 INPUT:
  1:   .zeropage
  2: * = $FF
- 3: last .data $00
+ 3: last: .byte 0
  4:   .code
  5: * = $0200
  6:   LDA last
@@ -2855,8 +2862,8 @@ DESCRIPTION: Zero page section overflow triggers error
 INPUT:
  1:   .zeropage
  2: * = $FF
- 3: foo .data $00
- 4: bar .data $00
+ 3: foo: .byte 0
+ 4: bar: .byte 0
  5:   .code
  6: * = $0200
  7:   NOP
@@ -2968,8 +2975,8 @@ NAME: assignment_spaces_in_expression
 DESCRIPTION: Spaces around + in assignment expression
 INPUT:
  1: * = $0200
- 2: a = $10
- 3: x = a + $20
+ 2: a: = $10
+ 3: x: = a + $20
  4:   LDA x
 EXPECT_HEX: a5 30
 
@@ -2977,7 +2984,7 @@ EXPECT_HEX: a5 30
 NAME: pc_assignment_spaces_in_expression
 DESCRIPTION: Spaces around + in PC assignment expression
 INPUT:
- 1: val = $0200
+ 1: val: = $0200
  2: * = val + $10
  3:   NOP
 EXPECT_HEX: ea
@@ -3015,7 +3022,7 @@ NAME: decimal_256
 DESCRIPTION: Decimal 256 is first 2-byte value
 INPUT:
  1: * = $0200
- 2: val = 256
+ 2: val: = 256
  3:   LDA #<val
  4:   LDA #>val
 EXPECT_HEX: a9 00 a9 01
@@ -3025,7 +3032,7 @@ NAME: decimal_1024
 DESCRIPTION: Decimal 1024 = $0400
 INPUT:
  1: * = $0200
- 2: val = 1024
+ 2: val: = 1024
  3:   LDA #<val
  4:   LDA #>val
 EXPECT_HEX: a9 00 a9 04
@@ -3035,7 +3042,7 @@ NAME: decimal_65535
 DESCRIPTION: Decimal 65535 = $FFFF (max 16-bit)
 INPUT:
  1: * = $0200
- 2: val = 65535
+ 2: val: = 65535
  3:   LDA #<val
  4:   LDA #>val
 EXPECT_HEX: a9 ff a9 ff
@@ -3133,19 +3140,19 @@ INPUT:
 EXPECT_HEX: bd 00 04
 
 ---
-NAME: decimal_data_1byte
-DESCRIPTION: Decimal constant in .data (1 byte)
+NAME: decimal_byte_1byte
+DESCRIPTION: Decimal constant in .byte (1 byte)
 INPUT:
  1: * = $0200
- 2:   .data 42
+ 2:   .byte 42
 EXPECT_HEX: 2a
 
 ---
-NAME: decimal_data_2byte
-DESCRIPTION: Decimal constant in .data (2 bytes)
+NAME: decimal_word_2byte
+DESCRIPTION: Decimal constant in .word (2 bytes)
 INPUT:
  1: * = $0200
- 2:   .data 1000
+ 2:   .word 1000
 EXPECT_HEX: e8 03
 
 ---
@@ -3153,7 +3160,7 @@ NAME: decimal_label_assignment
 DESCRIPTION: Decimal constant in label assignment
 INPUT:
  1: * = $0200
- 2: foo = 42
+ 2: foo: = 42
  3:   LDA #foo
 EXPECT_HEX: a9 2a
 
@@ -3203,7 +3210,7 @@ DESCRIPTION: Forward reference with decimal in expression
 INPUT:
  1: * = $0200
  2:   LDA target+1
- 3: target = $42
+ 3: target: = $42
 EXPECT_HEX: ad 43 00
 EXPECT_FWDREF: 1
 
@@ -3289,7 +3296,7 @@ EXPECT_HEX: cd ab
 NAME: byte_label_one_byte
 INPUT:
  1: * = $0200
- 2: val = $42
+ 2: val: = $42
  3:   .byte val
 EXPECT_HEX: 42
 
@@ -3298,7 +3305,7 @@ NAME: byte_forward_ref
 INPUT:
  1: * = $0200
  2:   .byte val
- 3: val = $42
+ 3: val: = $42
 EXPECT_HEX: 42
 
 ---
@@ -3351,7 +3358,7 @@ EXPECT_MSG: Value out of range
 NAME: byte_error_label_too_large
 INPUT:
  1: * = $0200
- 2: addr = $0200
+ 2: addr: = $0200
  3:   .byte addr
 EXPECT_ERROR: 6
 EXPECT_LINE: 3
@@ -3362,7 +3369,7 @@ NAME: byte_error_fwdref_too_large
 INPUT:
  1: * = $0200
  2:   .byte addr
- 3: addr = $0200
+ 3: addr: = $0200
 EXPECT_ERROR: 6
 EXPECT_LINE: 2
 EXPECT_MSG: Value out of range
@@ -3405,7 +3412,7 @@ EXPECT_HEX: 12 00 56 00
 NAME: word_label
 INPUT:
  1: * = $0200
- 2: label = $ABCD
+ 2: label: = $ABCD
  3:   .word label
 EXPECT_HEX: cd ab
 
@@ -3413,7 +3420,7 @@ EXPECT_HEX: cd ab
 NAME: word_label_small
 INPUT:
  1: * = $0200
- 2: val = $03
+ 2: val: = $03
  3:   .word val
 EXPECT_HEX: 03 00
 
@@ -3422,7 +3429,7 @@ NAME: word_forward_ref
 INPUT:
  1: * = $0200
  2:   .word target
- 3: target = $ABCD
+ 3: target: = $ABCD
 EXPECT_HEX: cd ab
 
 ---
@@ -3457,7 +3464,7 @@ EXPECT_HEX: 30 00
 NAME: word_byte_selectors
 INPUT:
  1: * = $0200
- 2: addr = $ABCD
+ 2: addr: = $ABCD
  3:   .word <addr >addr
 EXPECT_HEX: cd 00 ab 00
 
@@ -3540,7 +3547,7 @@ NAME: asciiz_forward_ref
 INPUT:
  1: * = $0200
  2:   .asciiz val
- 3: val = $42
+ 3: val: = $42
 EXPECT_HEX: 42 00
 
 ---
