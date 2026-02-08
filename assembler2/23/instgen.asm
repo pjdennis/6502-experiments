@@ -423,6 +423,8 @@ display_data:
   CLC
   ADCI16 TABP16 $02 P16
   JSR display_text
+  LDA #':'
+  JSR write_b
   JSR display_newline
   JSR display_data_prefix
   LDA #' '
@@ -495,6 +497,8 @@ start:
   JSR display_newline
   SET16 msg_IHASHTAB P16
   JSR display_text
+  LDA #':'
+  JSR write_b
   JSR display_newline
   JSR display_table
   JSR display_newline
