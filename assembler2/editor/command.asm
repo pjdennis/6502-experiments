@@ -238,8 +238,7 @@ command_parse:
 
 .goto_done:
   ; BUF_LEN16 = 1-based line number, convert to 0-based
-  LDA BUF_LEN16
-  ORA BUF_LEN16 + 1
+  TST16 BUF_LEN16
   BEQ .goto_ret      ; :0 does nothing
 
   SEC

@@ -191,8 +191,7 @@ normal_move_down:
   RTS
 
 normal_move_up:
-  LDA FILE_LINE16
-  ORA FILE_LINE16 + 1
+  TST16 FILE_LINE16
   BEQ .done
 
   LDA #0

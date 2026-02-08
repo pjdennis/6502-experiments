@@ -159,8 +159,7 @@ insert_backspace:
 
 .join_lines:
   ; At column 0 - join with previous line
-  LDA FILE_LINE16
-  ORA FILE_LINE16 + 1
+  TST16 FILE_LINE16
   BEQ .cant_join     ; Can't join at first line
 
   ; Compute previous line number once

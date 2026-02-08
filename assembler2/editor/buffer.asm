@@ -591,8 +591,7 @@ buf_adjust_lines_inc:
   DEC BUF_LEN16
 
   ; Check if count reached 0
-  LDA BUF_LEN16
-  ORA BUF_LEN16 + 1
+  TST16 BUF_LEN16
   BNE .inc_loop
 
 .inc_done:
@@ -663,8 +662,7 @@ buf_adjust_lines_dec:
   DEC BUF_LEN16
 
   ; Check if count reached 0
-  LDA BUF_LEN16
-  ORA BUF_LEN16 + 1
+  TST16 BUF_LEN16
   BNE .dec_loop
 
 .dec_done:
