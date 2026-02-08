@@ -1030,6 +1030,8 @@ int exitcode_set = -1;
 int error_output_started = 0;  // Track if emulated program wrote to stderr
 int console_mode = 0;
 double target_mhz = 0.0;
+int override_rows = 0;
+int override_cols = 0;
 struct termios orig_termios;
 
 void restore_terminal() {
@@ -1066,6 +1068,8 @@ void get_terminal_size(int *rows, int *cols) {
         *rows = 24;
         *cols = 80;
     }
+    if (override_rows > 0) *rows = override_rows;
+    if (override_cols > 0) *cols = override_cols;
 }
 
 void files_init(FILE* input_file) {
@@ -1264,7 +1268,7 @@ void show_commandline(int argc, char**argv) {
 int main(int argc, char **argv) {
     if (argc < 3) {
         fprintf(stderr, "usage: emulator <code file> <hex load address> <input file> <output file> [<arguments>]\n");
-        fprintf(stderr, "       emulator <code file> <hex load address> --console [--mhz <speed>] [<arguments>]\n");
+        fprintf(stderr, "       emulator <code file> <hex load address> --console [--mhz <speed>] [--rows N] [--cols N] [<arguments>]\n");
         return 1;
     }
 
@@ -1276,6 +1280,28 @@ int main(int argc, char **argv) {
         if (strcmp(argv[i], "--console") == 0) {
             console_mode = 1;
             i++;
+        } else if (strcmp(argv[i], "--rows") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "error: --rows requires a value\n");
+                return 1;
+            }
+            override_rows = (int)strtol(argv[i + 1], NULL, 10);
+            if (override_rows <= 0) {
+                fprintf(stderr, "error: --rows value must be positive\n");
+                return 1;
+            }
+            i += 2;
+        } else if (strcmp(argv[i], "--cols") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "error: --cols requires a value\n");
+                return 1;
+            }
+            override_cols = (int)strtol(argv[i + 1], NULL, 10);
+            if (override_cols <= 0) {
+                fprintf(stderr, "error: --cols value must be positive\n");
+                return 1;
+            }
+            i += 2;
         } else if (strcmp(argv[i], "--mhz") == 0) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "error: --mhz requires a value\n");

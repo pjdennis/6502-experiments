@@ -16,6 +16,14 @@ import sys
 import tempfile
 from pathlib import Path
 
+from ansi_screen import AnsiScreen
+
+
+def make_lines(n):
+    """Generate content with n numbered lines: 'Line 1\\nLine 2\\n...Line N\\n'."""
+    return ''.join(f"Line {i}\n" for i in range(1, n + 1))
+
+
 # ANSI colors
 class Colors:
     RED = "\033[0;31m"
@@ -255,6 +263,115 @@ class EditorTestRunner:
         ansi = output_file.read_text() if output_file.exists() else ""
 
         return result.returncode, saved, ansi
+
+    def run_editor_screen(self, input_file: str, keys: bytes, tmpdir: Path,
+                          rows: int = 10, cols: int = 40) -> tuple:
+        """Run the editor with explicit terminal size for screen-state testing.
+
+        Returns (exit_code, saved_content, ansi_output).
+        """
+        keys_file = tmpdir / "keys.bin"
+        output_file = tmpdir / "output.txt"
+        keys_file.write_bytes(keys)
+
+        result = subprocess.run(
+            [str(self.emulator), str(self.editor_bin), "0400",
+             "--rows", str(rows), "--cols", str(cols),
+             str(keys_file), str(output_file), input_file],
+            capture_output=True, timeout=10
+        )
+
+        saved = ""
+        if Path(input_file).exists():
+            saved = Path(input_file).read_text()
+
+        ansi = output_file.read_bytes() if output_file.exists() else b""
+
+        return result.returncode, saved, ansi
+
+    def run_test_screen(self, name: str, initial_content: str, keys: bytes,
+                        rows: int = 10, cols: int = 40,
+                        expect_cursor: tuple = None,
+                        expect_lines: list = None,
+                        expect_status_contains: str = None,
+                        expected_content: str = None):
+        """Run an editor test and verify screen state via ANSI output.
+
+        Args:
+            expect_cursor: (row, col) 0-based cursor position in last frame
+            expect_lines: [(row_idx, text), ...] expected row content
+            expect_status_contains: substring to find in status bar row
+            expected_content: expected saved file content (after :wq)
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            edit_file = tmpdir / "test.txt"
+
+            if initial_content is not None:
+                edit_file.write_text(initial_content)
+            else:
+                edit_file.write_text("")
+
+            try:
+                exit_code, saved, ansi = self.run_editor_screen(
+                    str(edit_file), keys, tmpdir, rows, cols
+                )
+            except subprocess.TimeoutExpired:
+                self._fail(name, "Timed out (infinite loop?)")
+                return
+            except Exception as e:
+                self._fail(name, f"Error: {e}")
+                return
+
+            if exit_code != 0:
+                self._fail(name, f"Expected exit code 0, got {exit_code}")
+                return
+
+            # Parse ANSI output through virtual terminal
+            screen = AnsiScreen(rows, cols)
+            screen.process(ansi.decode('latin-1'))
+
+            if screen.frame_buffer is None:
+                self._fail(name, "No rendered frame captured (no ESC[?25h)")
+                return
+
+            if expect_cursor is not None:
+                actual = screen.get_cursor()
+                if actual != expect_cursor:
+                    self._fail(name,
+                        f"Cursor: expected {expect_cursor}, got {actual}\n"
+                        f"    Frame:\n{screen.dump()}")
+                    return
+
+            if expect_lines is not None:
+                for row_idx, expected_text in expect_lines:
+                    actual_text = screen.get_row_text(row_idx)
+                    if actual_text != expected_text:
+                        self._fail(name,
+                            f"Row {row_idx}: expected {expected_text!r}, "
+                            f"got {actual_text!r}\n"
+                            f"    Frame:\n{screen.dump()}")
+                        return
+
+            if expect_status_contains is not None:
+                status_row = rows - 1
+                status_text = screen.get_row_text(status_row)
+                if expect_status_contains not in status_text:
+                    self._fail(name,
+                        f"Status bar: expected substring {expect_status_contains!r} "
+                        f"in {status_text!r}\n"
+                        f"    Frame:\n{screen.dump()}")
+                    return
+
+            if expected_content is not None:
+                if saved != expected_content:
+                    self._fail(name,
+                        f"Content mismatch:\n"
+                        f"  Expected: {expected_content!r}\n"
+                        f"  Actual:   {saved!r}")
+                    return
+
+            self._pass(name)
 
     def run_test_debug(self, name: str, initial_content: str, keys: bytes,
                        extra_args: list = None,
@@ -780,6 +897,263 @@ class EditorTestRunner:
                 b"x:wq\r",
                 expected_content="ello\n"
             )
+
+        # ============================================================
+        # Screen state tests (10 rows x 40 cols)
+        # 9 content rows (rows 0-8), 1 status bar (row 9)
+        # page_size = 9
+        # ============================================================
+        print()
+        print("Screen state - cursor movement:")
+        print()
+
+        CTRL_F = b'\x06'
+        CTRL_B = b'\x02'
+
+        # Initial cursor at (0,0)
+        self.run_test_screen(
+            "Initial cursor at (0,0)",
+            "Hello\n",
+            b":q!\r",
+            expect_cursor=(0, 0)
+        )
+
+        # lll -> cursor at (0,3)
+        self.run_test_screen(
+            "lll moves cursor to (0,3)",
+            "Hello\n",
+            b"lll:q!\r",
+            expect_cursor=(0, 3)
+        )
+
+        # lllh -> cursor at (0,2)
+        self.run_test_screen(
+            "lllh moves cursor to (0,2)",
+            "Hello\n",
+            b"lllh:q!\r",
+            expect_cursor=(0, 2)
+        )
+
+        # jj on 3-line file -> cursor at (2,0)
+        self.run_test_screen(
+            "jj moves cursor to (2,0)",
+            "Line 1\nLine 2\nLine 3\n",
+            b"jj:q!\r",
+            expect_cursor=(2, 0)
+        )
+
+        # jjk -> cursor at (1,0)
+        self.run_test_screen(
+            "jjk moves cursor to (1,0)",
+            "Line 1\nLine 2\nLine 3\n",
+            b"jjk:q!\r",
+            expect_cursor=(1, 0)
+        )
+
+        # $ on "Hello" -> cursor at (0,4)
+        self.run_test_screen(
+            "$ goes to end of line",
+            "Hello\n",
+            b"$:q!\r",
+            expect_cursor=(0, 4)
+        )
+
+        # lll0 -> cursor at (0,0)
+        self.run_test_screen(
+            "lll0 goes back to start of line",
+            "Hello\n",
+            b"lll0:q!\r",
+            expect_cursor=(0, 0)
+        )
+
+        # $j from "LongLine" to "AB" -> cursor clamped to (1,1)
+        self.run_test_screen(
+            "Cursor clamps on move to shorter line",
+            "LongLine\nAB\n",
+            b"$j:q!\r",
+            expect_cursor=(1, 1)
+        )
+
+        print()
+        print("Screen state - screen content:")
+        print()
+
+        # 5-line file: rows 0-4 show "Line 1"-"Line 5", rows 5-8 show ~
+        self.run_test_screen(
+            "5-line file shows content and tildes",
+            make_lines(5),
+            b":q!\r",
+            expect_lines=[
+                (0, "Line 1"),
+                (1, "Line 2"),
+                (2, "Line 3"),
+                (3, "Line 4"),
+                (4, "Line 5"),
+                (5, "~"),
+                (6, "~"),
+                (7, "~"),
+                (8, "~"),
+            ]
+        )
+
+        # 1-line file: row 0 shows content, rows 1+ show ~
+        self.run_test_screen(
+            "1-line file shows tildes on empty rows",
+            "Hello\n",
+            b":q!\r",
+            expect_lines=[
+                (0, "Hello"),
+                (1, "~"),
+                (2, "~"),
+            ]
+        )
+
+        # Status bar shows line,col position (1-based)
+        # Note: :q! enters command mode, so we check COMMAND mode status
+        self.run_test_screen(
+            "Status bar shows position at start",
+            "Hello\n",
+            b":q!\r",
+            expect_status_contains="COMMAND - 1,"
+        )
+
+        # Status bar after moving cursor
+        self.run_test_screen(
+            "Status bar shows line 2 after j",
+            "Hello\nWorld\n",
+            b"jlll:q!\r",
+            expect_status_contains="COMMAND - 2,"
+        )
+
+        print()
+        print("Screen state - scrolling:")
+        print()
+
+        # 15-line file, 9 j's: cursor at row 8, view scrolled
+        self.run_test_screen(
+            "9 j's scrolls view down",
+            make_lines(15),
+            b"jjjjjjjjj:q!\r",
+            expect_cursor=(8, 0),
+            expect_lines=[(0, "Line 2"), (8, "Line 10")]
+        )
+
+        # Scroll down then k back to top: view scrolls up
+        self.run_test_screen(
+            "k back to top scrolls view up",
+            make_lines(15),
+            b"jjjjjjjjj" + b"kkkkkkkkk" + b":q!\r",
+            expect_cursor=(0, 0),
+            expect_lines=[(0, "Line 1")]
+        )
+
+        print()
+        print("Screen state - pagination:")
+        print()
+
+        # Ctrl-F from start (30 lines): page_size=9
+        self.run_test_screen(
+            "Ctrl-F pages down from start",
+            make_lines(30),
+            CTRL_F + b":q!\r",
+            expect_cursor=(0, 0),
+            expect_lines=[(0, "Line 10")]
+        )
+
+        # Two Ctrl-F's
+        self.run_test_screen(
+            "Two Ctrl-F's pages to Line 19",
+            make_lines(30),
+            CTRL_F + CTRL_F + b":q!\r",
+            expect_cursor=(0, 0),
+            expect_lines=[(0, "Line 19")]
+        )
+
+        # Repeated Ctrl-F to end: cursor on last line
+        self.run_test_screen(
+            "Ctrl-F to end puts last line at bottom",
+            make_lines(30),
+            CTRL_F + CTRL_F + CTRL_F + CTRL_F + b":q!\r",
+            expect_cursor=(8, 0),
+            expect_lines=[(8, "Line 30")]
+        )
+
+        # Ctrl-B from middle: pages back correctly
+        self.run_test_screen(
+            "Ctrl-B pages back from middle",
+            make_lines(30),
+            CTRL_F + CTRL_F + CTRL_B + b":q!\r",
+            expect_cursor=(0, 0),
+            expect_lines=[(0, "Line 10")]
+        )
+
+        # Ctrl-B at start: stays at (0,0)
+        self.run_test_screen(
+            "Ctrl-B at start stays at top",
+            make_lines(30),
+            CTRL_B + b":q!\r",
+            expect_cursor=(0, 0),
+            expect_lines=[(0, "Line 1")]
+        )
+
+        # Ctrl-F with fewer lines than a page
+        self.run_test_screen(
+            "Ctrl-F on short file moves to last line",
+            make_lines(5),
+            CTRL_F + b":q!\r",
+            expect_cursor=(4, 0),
+            expect_lines=[(0, "Line 1"), (4, "Line 5")]
+        )
+
+        print()
+        print("Screen state - G and gg:")
+        print()
+
+        # G on 20-line file: cursor on last visible row
+        self.run_test_screen(
+            "G goes to last line",
+            make_lines(20),
+            b"G:q!\r",
+            expect_cursor=(8, 0),
+            expect_lines=[(8, "Line 20")]
+        )
+
+        # Ggg: back to (0,0), "Line 1" at row 0
+        self.run_test_screen(
+            "Ggg returns to top",
+            make_lines(20),
+            b"Ggg:q!\r",
+            expect_cursor=(0, 0),
+            expect_lines=[(0, "Line 1")]
+        )
+
+        print()
+        print("Screen state - edge cases:")
+        print()
+
+        # Single-line file: jjkk stays at (0,0)
+        self.run_test_screen(
+            "jjkk on single line stays at (0,0)",
+            "Only\n",
+            b"jjkk:q!\r",
+            expect_cursor=(0, 0)
+        )
+
+        # Empty line: l stays at col 0
+        self.run_test_screen(
+            "l on empty line stays at col 0",
+            "\n",
+            b"l:q!\r",
+            expect_cursor=(0, 0)
+        )
+
+        # Long line truncated to screen width
+        self.run_test_screen(
+            "Long line truncated to screen width",
+            "A" * 60 + "\n",
+            b":q!\r",
+            expect_lines=[(0, "A" * 40)]
+        )
 
         print()
         print("=" * 60)
