@@ -27,8 +27,7 @@ to_decimal:
   LDX #$10
 .divloop:
   ; Rotate quotient and remainder
-  ROL TO_DECIMAL_VALUE16
-  ROL TO_DECIMAL_VALUE16+$01
+  ROL16 TO_DECIMAL_VALUE16
   ROL TO_DECIMAL_MOD10
 
   ; a = dividend - divisor
@@ -41,8 +40,7 @@ to_decimal:
 .ignore_result:
   DEX
   BNE .divloop
-  ROL TO_DECIMAL_VALUE16
-  ROL TO_DECIMAL_VALUE16+$01
+  ROL16 TO_DECIMAL_VALUE16
 
   ; Shift result
 .shift:
@@ -60,8 +58,7 @@ to_decimal:
   STA TO_DECIMAL_RESULT
 
   ; If value != 0 then continue dividing
-  LDA TO_DECIMAL_VALUE16
-  ORA TO_DECIMAL_VALUE16+$01
+  TST16 TO_DECIMAL_VALUE16
   BNE .divide
 
   PLA

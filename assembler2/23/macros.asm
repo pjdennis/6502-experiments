@@ -114,8 +114,15 @@
   .endmacro
 
 
-; ASL16 ptr - Shift 16 bit value at ptr left
+; TST16 ptr - Tests 16 bit value at ptr; use BEQ for zero, BNE for non zero
 ; Clobbers A
+  .macro TST16 ptr
+  LDA ptr
+  ORA ptr + 1
+  .endmacro
+
+
+; ASL16 ptr - Shift 16 bit value at ptr left
   .macro ASL16 ptr
   ASL ptr
   ROL ptr+$01
@@ -123,9 +130,22 @@
 
 
 ; LSR16 ptr - Shift 16 bit value at ptr right
-; Clobbers A
   .macro LSR16 ptr
   LSR ptr+$01
+  ROR ptr
+  .endmacro
+
+
+; ROL16 ptr - Rotate 16 bit value at ptr left
+  .macro ROL16 ptr
+  ROL ptr
+  ROL ptr+1
+  .endmacro
+
+
+; ROR16 ptr - Rotate 16 bit value at ptr right
+  .macro ROR16 ptr
+  ROR ptr+1
   ROR ptr
   .endmacro
 
