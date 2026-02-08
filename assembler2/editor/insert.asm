@@ -106,6 +106,8 @@ insert_char
   JSR buf_rebuild_lines
 
   INC CURSOR_COL
+  LDA #$01
+  STA RENDER_FLAG
   LDA #$FF
   STA MODIFIED
   RTS
@@ -184,6 +186,8 @@ insert_backspace
   JSR buf_delete_char
   JSR buf_rebuild_lines
   DEC CURSOR_COL
+  LDA #$01
+  STA RENDER_FLAG
   LDA #$FF
   STA MODIFIED
   RTS

@@ -1033,6 +1033,7 @@ double target_mhz = 0.0;
 int override_rows = 0;
 int override_cols = 0;
 struct termios orig_termios;
+struct timespec start_time;
 
 void restore_terminal() {
     if (console_mode) {
@@ -1175,8 +1176,26 @@ uint8_t read6502(uint16_t address) {
         return arg_addresses[a] >> 8;
     } else if (address == port_con_read) {             // con_read
         if (console_mode) {
+            struct timespec before, after;
+            if (target_mhz > 0) clock_gettime(CLOCK_MONOTONIC, &before);
             uint8_t ch;
-            if (read(STDIN_FILENO, &ch, 1) == 1) return ch;
+            int got = read(STDIN_FILENO, &ch, 1);
+            if (target_mhz > 0) {
+                clock_gettime(CLOCK_MONOTONIC, &after);
+                long sec_diff = after.tv_sec - before.tv_sec;
+                long nsec_diff = after.tv_nsec - before.tv_nsec;
+                start_time.tv_sec += sec_diff;
+                start_time.tv_nsec += nsec_diff;
+                if (start_time.tv_nsec >= 1000000000L) {
+                    start_time.tv_sec++;
+                    start_time.tv_nsec -= 1000000000L;
+                }
+                if (start_time.tv_nsec < 0) {
+                    start_time.tv_sec--;
+                    start_time.tv_nsec += 1000000000L;
+                }
+            }
+            if (got == 1) return ch;
             return 0;
         } else {
             int b = fgetc(input_file_ptr);
@@ -1520,7 +1539,6 @@ int main(int argc, char **argv) {
     }
     reset6502();
 
-    struct timespec start_time;
     uint32_t next_throttle_check = 10000;
     if (target_mhz > 0) {
         clock_gettime(CLOCK_MONOTONIC, &start_time);

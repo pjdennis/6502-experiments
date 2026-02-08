@@ -296,6 +296,7 @@ class EditorTestRunner:
                         expect_status_contains: str = None,
                         expected_content: str = None,
                         expect_content_redraws: list = None,
+                        expect_content_rows: list = None,
                         expect_ansi_contains: str = None):
         """Run an editor test and verify screen state via ANSI output.
 
@@ -306,6 +307,8 @@ class EditorTestRunner:
             expected_content: expected saved file content (after :wq)
             expect_content_redraws: list of bools, one per frame - True if
                 content area should have been redrawn in that frame
+            expect_content_rows: list of (frame_idx, expected_rows_set) tuples -
+                verify exactly which content rows were touched in specific frames
             expect_ansi_contains: substring to find in raw ANSI output
         """
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -398,6 +401,23 @@ class EditorTestRunner:
                         self._fail(name,
                             f"Frame {i}: expected content_redrawn="
                             f"{expected_redraw}, got {actual_redraw}\n"
+                            f"    Frame:\n{screen.dump()}")
+                        return
+
+            if expect_content_rows is not None:
+                actual_count = screen.get_frame_count()
+                for frame_idx, expected_rows in expect_content_rows:
+                    if frame_idx >= actual_count:
+                        self._fail(name,
+                            f"Expected frame {frame_idx} but only "
+                            f"{actual_count} frames\n"
+                            f"    Frame:\n{screen.dump()}")
+                        return
+                    actual_rows = screen.content_rows_touched(frame_idx)
+                    if actual_rows != expected_rows:
+                        self._fail(name,
+                            f"Frame {frame_idx}: expected rows touched "
+                            f"{expected_rows}, got {actual_rows}\n"
                             f"    Frame:\n{screen.dump()}")
                         return
 
@@ -1285,6 +1305,51 @@ class EditorTestRunner:
             "Hello\n",
             b"i\x1b:q!\r",
             expect_content_redraws=[True, True, False]
+        )
+
+        # Insert char: only cursor's row is touched (not all rows)
+        # i enters insert (full repaint), 'X' inserts (current line only)
+        self.run_test_screen(
+            "Render opt: insert char is single-row",
+            "Hello\nWorld\n",
+            b"iX\x1b:q!\r",
+            expect_content_redraws=[True, True, True, False],
+            expect_content_rows=[(2, {0})]
+        )
+
+        # Backspace mid-line: only cursor's row is touched
+        # Move right, enter insert, backspace (mid-line)
+        self.run_test_screen(
+            "Render opt: backspace mid-line is single-row",
+            "Hello\nWorld\n",
+            b"li\x08\x1b:q!\r",
+            expect_content_redraws=[True, False, True, True, False],
+            expect_content_rows=[(3, {0})]
+        )
+
+        # Normal mode x: only cursor's row is touched
+        self.run_test_screen(
+            "Render opt: x is single-row",
+            "Hello\nWorld\n",
+            b"x:q!\r",
+            expect_content_redraws=[True, True],
+            expect_content_rows=[(1, {0})]
+        )
+
+        # Insert newline: full repaint (multiple lines change)
+        self.run_test_screen(
+            "Render opt: Enter in insert is full repaint",
+            "Hello\nWorld\n",
+            b"i\r\x1b:q!\r",
+            expect_content_redraws=[True, True, True, False]
+        )
+
+        # Backspace at col 0 (join lines): full repaint
+        self.run_test_screen(
+            "Render opt: backspace join-lines is full repaint",
+            "Hello\nWorld\n",
+            b"ji\x08\x1b:q!\r",
+            expect_content_redraws=[True, False, True, True, False]
         )
 
         print()

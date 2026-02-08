@@ -28,18 +28,18 @@ class AnsiScreen:
         self.frame_buffer = None
         self.frame_cursor = (0, 0)
         # Per-frame tracking for render optimization tests
-        self.frames = []            # List of (buffer_copy, cursor_pos, content_changed)
-        self.content_touched = False  # Whether content area was written this cycle
+        self.frames = []            # List of (buffer_copy, cursor_pos, content_touched)
+        self.content_touched = set()  # Set of content row indices written this cycle
 
     def _clear_screen(self):
         self.buffer = [[' '] * self.cols for _ in range(self.rows)]
-        self.content_touched = True
+        self.content_touched = set(range(self.rows - 1))
 
     def _clear_to_eol(self):
         row = self.cursor_row
         if 0 <= row < self.rows:
             if row < self.rows - 1:
-                self.content_touched = True
+                self.content_touched.add(row)
             for c in range(self.cursor_col, self.cols):
                 self.buffer[row][c] = ' '
 
@@ -53,7 +53,7 @@ class AnsiScreen:
         if self.cursor_col < 0 or self.cursor_col >= self.cols:
             return
         if self.cursor_row < self.rows - 1:
-            self.content_touched = True
+            self.content_touched.add(self.cursor_row)
         self.buffer[self.cursor_row][self.cursor_col] = ch
         self.cursor_col += 1
 
@@ -63,7 +63,7 @@ class AnsiScreen:
         self.frame_cursor = (self.cursor_row, self.cursor_col)
         self.frames.append((self.frame_buffer, self.frame_cursor,
                             self.content_touched))
-        self.content_touched = False
+        self.content_touched = set()
 
     def process(self, data: str) -> 'AnsiScreen':
         """Process ANSI output data through the virtual terminal."""
@@ -146,6 +146,12 @@ class AnsiScreen:
         """True if content area was written during this frame's render cycle."""
         if frame_idx < 0 or frame_idx >= len(self.frames):
             return False
+        return len(self.frames[frame_idx][2]) > 0
+
+    def content_rows_touched(self, frame_idx: int) -> set:
+        """Set of content row indices written during this frame."""
+        if frame_idx < 0 or frame_idx >= len(self.frames):
+            return set()
         return self.frames[frame_idx][2]
 
     def get_row_text(self, row: int) -> str:

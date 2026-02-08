@@ -469,6 +469,8 @@ normal_delete_char
 
   JSR buf_delete_char
   JSR buf_rebuild_lines
+  LDA #$01
+  STA RENDER_FLAG
   LDA #$FF
   STA MODIFIED
   JSR clamp_cursor_col
