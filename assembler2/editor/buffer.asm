@@ -466,9 +466,6 @@ buf_insert_newline:
 buf_delete_line:
   JSR buf_get_line_ptr
 
-  ; Save start pointer
-  CP16 BUF_PTR16, BUF_SRC16
-
   ; Find end of line (the newline character)
   LDY #0
 .find_newline:
@@ -478,40 +475,12 @@ buf_delete_line:
   INY
   BNE .find_newline
 .found_newline:
-  ; BUF_PTR16 + Y + 1 = start of next line (after newline)
+  ; BUF_DELTA = Y + 1 (line content + newline)
   INY
-  TYA
-  CLC
-  ADCA16 BUF_SRC16, BUF_SRC16
+  STY BUF_DELTA
 
-  ; Now shift: copy from BUF_SRC16 to BUF_PTR16 up to BUF_END16
-  ; BUF_PTR16 = destination (start of deleted line)
-  ; BUF_SRC16 = source (start of next line)
-
-.del_shift_loop:
-  ; Check if src has reached end
-  LDA BUF_SRC16 + 1
-  CMP BUF_END16 + 1
-  BCC .del_do_copy
-  BNE .del_shift_done
-  LDA BUF_SRC16
-  CMP BUF_END16
-  BCS .del_shift_done
-
-.del_do_copy:
-  LDY #0
-  LDA (BUF_SRC16),Y
-  STA (BUF_PTR16),Y
-
-  INC16 BUF_SRC16
-  INC16 BUF_PTR16
-
-  JMP .del_shift_loop
-
-.del_shift_done:
-  ; Update buffer end: subtract the number of bytes removed
-  ; New end = BUF_PTR16 (which is where we stopped copying to)
-  CP16 BUF_PTR16, BUF_END16
+  ; Delete BUF_DELTA bytes at BUF_PTR16
+  JSR buf_delete_chars
 
   ; If buffer is now empty, add a newline
   LDA BUF_END16
