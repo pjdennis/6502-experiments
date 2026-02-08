@@ -342,12 +342,32 @@ display_newline:
   JMP write_b
 
 
-display_data_prefix:
+display_word_prefix:
   LDA #' '
   JSR write_b
   JSR write_b
-  SET16 msg_data P16
+  SET16 msg_word P16
   JMP display_text
+
+display_byte_prefix:
+  LDA #' '
+  JSR write_b
+  JSR write_b
+  SET16 msg_byte P16
+  JMP display_text
+
+display_asciiz_prefix:
+  LDA #' '
+  JSR write_b
+  JSR write_b
+  SET16 msg_asciiz P16
+  JMP display_text
+
+display_comma:
+  LDA #','
+  JSR write_b
+  LDA #' '
+  JMP write_b
 
 
 ; On entry P16 points to the text
@@ -369,45 +389,23 @@ display_table:
   STA HASH
 .loop:
   ; Display line start
-  JSR display_data_prefix
-  ; Display line
+  JSR display_word_prefix
+  LDA #' '
+  JSR write_b
+  ; Display first entry
+  JSR display_table_entry
+  ; Display remaining 7 entries with comma prefix
   LDA #$00
   STA TEMP
 .lineloop:
-  LDA #' '
-  JSR write_b
-  JSR hash_entry_empty
-  BNE .not_empty
-  ; empty
-  LDA #'$'
-  JSR write_b
-  LDA #$00
-  JSR display_hex
-  LDA #$00
-  JSR display_hex
-  JMP .next
-.not_empty:
-  ; Display instruction label prefix
-  SET16 msg_instprefix P16
-  JSR display_text
-  ; Display hash entry
-  JSR load_hash_entry
-  CLC
-  ADCI16 TABP16 $02 P16
-  JSR display_text
-.next:
-  LDA HASH
-  CLC
-  ADC #$02
-  STA HASH
+  JSR display_comma
+  JSR display_table_entry
   LDA TEMP
   CLC
   ADC #$01
   STA TEMP
-  CMP #$08
-  BEQ .next1
-  JMP .lineloop
-.next1:
+  CMP #$07
+  BNE .lineloop
   JSR display_newline
   LDA HASH
   BEQ .done
@@ -415,9 +413,35 @@ display_table:
 .done:
   RTS
 
+; Display a single hash table entry (a .word value)
+; Advances HASH by 2
+display_table_entry:
+  JSR hash_entry_empty
+  BNE .not_empty
+  ; empty - display 0
+  LDA #'0'
+  JSR write_b
+  JMP .advance
+.not_empty:
+  ; Display instruction label prefix
+  SET16 msg_instprefix P16
+  JSR display_text
+  ; Display hash entry name
+  JSR load_hash_entry
+  CLC
+  ADCI16 TABP16 $02 P16
+  JSR display_text
+.advance:
+  LDA HASH
+  CLC
+  ADC #$02
+  STA HASH
+  RTS
 
-write_label_and_modes:
-  ; Display the mnemonic string
+
+write_mnemonic_and_modes:
+  ; Display .asciiz "MNEMONIC"
+  JSR display_asciiz_prefix
   LDA #' '
   JSR write_b
   LDA #'"'
@@ -430,32 +454,39 @@ write_label_and_modes:
   ; Y now points to null terminator in mnemonic
   LDA #'"'
   JSR write_b
+  JSR display_newline
+  ; Save Y (offset to null terminator) and P16 before display_byte_prefix
+  ; display_byte_prefix clobbers P16
+  TYA
+  PHA
+  PUSH16 P16
+  ; Now display mode:opcode pairs as .byte line
+  JSR display_byte_prefix
   LDA #' '
   JSR write_b
-  LDA #$00
-  JSR display_byte
-  ; Now display mode:opcode pairs
+  ; Restore P16 and Y
+  POP16 P16
+  PLA
+  TAY
   ; Y still valid from display_text, pointing at null
   INY                  ; Skip past null terminator to first mode byte
+  ; Display first mode byte
+  LDA (P16),Y
+  JSR display_byte
 .mode_loop:
+  INY
   LDA (P16),Y
   CMP #MODE_END
   BEQ .mode_done
-  PHA                  ; Save mode byte
-  LDA #' '
-  JSR write_b
-  PLA                  ; Restore mode byte
+  ; Display comma and mode byte
+  PHA
+  JSR display_comma
+  PLA
   JSR display_byte
-  INY
-  LDA #' '
-  JSR write_b
-  LDA (P16),Y           ; Opcode byte
-  JSR display_byte
-  INY
   JMP .mode_loop
 .mode_done:
-  LDA #' '
-  JSR write_b
+  ; Display final MODE_END
+  JSR display_comma
   LDA #MODE_END
   JSR display_byte
   JSR display_newline
@@ -473,7 +504,7 @@ display_data:
   ; Load pointer to hash entry
   JSR load_hash_entry
 .entry_loop:
-  ; Display instruction label prefix
+  ; Display label: .MNEMONIC:
   SET16 msg_instprefix P16
   JSR display_text
   CLC
@@ -482,10 +513,10 @@ display_data:
   LDA #':'
   JSR write_b
   JSR display_newline
-  JSR display_data_prefix
+  ; Display next pointer as .word
+  JSR display_word_prefix
   LDA #' '
   JSR write_b
-  ; Display next pointer
   LDY #$00
   LDA (TABP16),Y
   BNE .not_zero
@@ -493,17 +524,13 @@ display_data:
   LDA (TABP16),Y
   BNE .not_zero
   ; Zero - no collision chain
-  LDA #'$'
-  JSR write_b
   LDA #'0'
   JSR write_b
-  JSR write_b
-  JSR write_b
-  JSR write_b
-  JSR write_label_and_modes
+  JSR display_newline
+  JSR write_mnemonic_and_modes
   JMP .next
 .not_zero:
-  ; Has collision chain - display pointer to next entry
+  ; Has collision chain - display pointer to next entry as label
   SET16 msg_instprefix P16
   JSR display_text
   CLC
@@ -516,7 +543,8 @@ display_data:
   ADC #$00
   STA P16+$01
   JSR display_text
-  JSR write_label_and_modes
+  JSR display_newline
+  JSR write_mnemonic_and_modes
   LDY #$00
   LDA (TABP16),Y
   STA P16
@@ -569,8 +597,14 @@ start:
   .byte 0                ; Success
 
 
-msg_data:
-  .asciiz ".data"
+msg_word:
+  .asciiz ".word"
+
+msg_byte:
+  .asciiz ".byte"
+
+msg_asciiz:
+  .asciiz ".asciiz"
 
 msg_instprefix:
   .asciiz "."
