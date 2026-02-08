@@ -15,15 +15,15 @@ TOKEN_MEM  = $1D80  ; Offset in TOKEN buffer for memory content
   .zeropage
 
 ; Test state
-TEST_MODE:     .byte 0       ; 0=echo, 1=lines, 2=info, 3=memory
-CHAR_COUNT16:  .word 0       ; Character count
-LINE_COUNT16:  .word 0       ; Line count
-AT_LINE_START: .byte 0       ; Flag: at start of line (for lines mode)
+TEST_MODE:     .byte         ; 0=echo, 1=lines, 2=info, 3=memory
+CHAR_COUNT16:  .word         ; Character count
+LINE_COUNT16:  .word         ; Line count
+AT_LINE_START: .byte         ; Flag: at start of line (for lines mode)
 
 ; Temporary
-TEMP:        .byte 0
-TABP16:      .word 0
-MARKER_TERM: .byte 0       ; Character that terminated the keyword ($FF = EOF)
+TEMP:        .byte
+TABP16:      .word
+MARKER_TERM: .byte         ; Character that terminated the keyword ($FF = EOF)
 
   .code
 
