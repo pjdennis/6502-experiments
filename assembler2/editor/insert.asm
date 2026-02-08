@@ -89,11 +89,7 @@ insert_char:
   STA BUF_TEMP
 
   ; Get pointer to current position in buffer
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_ptr
-  CLC
-  LDA CURSOR_COL
-  ADCA16 BUF_PTR16, BUF_PTR16
+  JSR get_cursor_buf_ptr
 
   LDA BUF_TEMP
   JSR buf_insert_char
@@ -113,11 +109,7 @@ insert_char:
 
 ; Insert newline at cursor (split line)
 insert_newline:
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_ptr
-  CLC
-  LDA CURSOR_COL
-  ADCA16 BUF_PTR16, BUF_PTR16
+  JSR get_cursor_buf_ptr
 
   JSR buf_insert_newline
   BCS .insert_newline_full
@@ -153,11 +145,7 @@ insert_backspace:
   BEQ .join_lines
 
   ; Delete character before cursor
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_ptr
-  CLC
-  LDA CURSOR_COL
-  ADCA16 BUF_PTR16, BUF_PTR16
+  JSR get_cursor_buf_ptr
 
   ; Point to character before cursor
   SEC

@@ -427,11 +427,7 @@ normal_delete_char:
   BEQ .done
   STA LINE_LEN
 
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_ptr
-  CLC
-  LDA CURSOR_COL
-  ADCA16 BUF_PTR16, BUF_PTR16
+  JSR get_cursor_buf_ptr
 
   LDA CURSOR_COL
   CMP LINE_LEN
@@ -593,6 +589,17 @@ normal_enter_command:
 get_current_line_len:
   LDAX16 FILE_LINE16
   JSR buf_get_line_len
+  RTS
+
+; Get buffer pointer at cursor position on current line
+; Sets BUF_PTR16 to start of FILE_LINE16 + CURSOR_COL
+; Clobbers A, X, Y
+get_cursor_buf_ptr:
+  LDAX16 FILE_LINE16
+  JSR buf_get_line_ptr
+  CLC
+  LDA CURSOR_COL
+  ADCA16 BUF_PTR16, BUF_PTR16
   RTS
 
 clamp_cursor_col:
