@@ -36,7 +36,7 @@ FNAME_BUF   = $0200   ; Filename buffer (256 bytes)
 ; PRINT_STR addr - Print null-terminated string at addr
 ; Clobbers A, Y
   .macro PRINT_STR addr
-  SET16 addr STR_PTR16
+  SET16 addr, STR_PTR16
   JSR write_string
   .endmacro
 
@@ -78,7 +78,7 @@ editor_main
   INY
   BNE .copy_fname
 .fname_copied
-  SET16 FNAME_BUF FNAME_PTR16
+  SET16 FNAME_BUF, FNAME_PTR16
 
   .ifdef enable_debug
   ; Parse additional arguments (debug build only)
@@ -113,7 +113,7 @@ editor_main
 
 .no_file
   ; No file specified - use default name and empty buffer
-  SET16 str_untitled FNAME_PTR16
+  SET16 str_untitled, FNAME_PTR16
   ; Copy to FNAME_BUF
   LDY #$00
 .copy_default
@@ -135,7 +135,7 @@ editor_main
   ; Show truncation warning if file was truncated
   LDA READONLY
   BEQ .no_truncation_warning
-  SET16 str_truncated STR_PTR16
+  SET16 str_truncated, STR_PTR16
   JSR show_status_message
 .no_truncation_warning
 

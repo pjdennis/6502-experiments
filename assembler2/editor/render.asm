@@ -50,7 +50,7 @@ render_screen
 
   LDA #$00
   STA RENDER_ROW
-  CP16 VIEW_TOP16 RENDER_LINE16
+  CP16 VIEW_TOP16, RENDER_LINE16
 
 .row_loop
   ; Position cursor at start of this row
@@ -177,7 +177,7 @@ render_status_line
   LDA #'/'
   JSR write_b
 
-  CP16 LINE_COUNT16 TO_DECIMAL_VALUE16
+  CP16 LINE_COUNT16, TO_DECIMAL_VALUE16
   JSR to_decimal
   PRINT_STR TO_DECIMAL_RESULT
 

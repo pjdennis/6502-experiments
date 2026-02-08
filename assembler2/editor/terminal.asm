@@ -25,13 +25,13 @@ ansi_write_seq
 
 ; Clear entire screen and move cursor to home position
 ansi_clear_screen
-  SET16 ansi_seq_clear STR_PTR16
+  SET16 ansi_seq_clear, STR_PTR16
   JSR ansi_write_seq
   ; fall through to ansi_cursor_home
 
 ; Move cursor to position 1,1
 ansi_cursor_home
-  SET16 ansi_seq_home STR_PTR16
+  SET16 ansi_seq_home, STR_PTR16
   JMP ansi_write_seq
 
 ; Move cursor to ANSI_ROW, ANSI_COL (both 1-based)
@@ -49,27 +49,27 @@ ansi_move_cursor
 
 ; Clear from cursor to end of current line
 ansi_clear_line
-  SET16 ansi_seq_clreol STR_PTR16
+  SET16 ansi_seq_clreol, STR_PTR16
   JMP ansi_write_seq
 
 ; Show cursor
 ansi_cursor_show
-  SET16 ansi_seq_show STR_PTR16
+  SET16 ansi_seq_show, STR_PTR16
   JMP ansi_write_seq
 
 ; Hide cursor
 ansi_cursor_hide
-  SET16 ansi_seq_hide STR_PTR16
+  SET16 ansi_seq_hide, STR_PTR16
   JMP ansi_write_seq
 
 ; Enable reverse video
 ansi_reverse_video
-  SET16 ansi_seq_rev STR_PTR16
+  SET16 ansi_seq_rev, STR_PTR16
   JMP ansi_write_seq
 
 ; Reset to normal video
 ansi_normal_video
-  SET16 ansi_seq_norm STR_PTR16
+  SET16 ansi_seq_norm, STR_PTR16
   JMP ansi_write_seq
 
 ; ANSI sequence string constants

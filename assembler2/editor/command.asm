@@ -126,13 +126,13 @@ command_parse
   BCC .goto_line
 
 .unknown
-  SET16 str_unknown_cmd STR_PTR16
+  SET16 str_unknown_cmd, STR_PTR16
   JMP show_status_message
 
 .check_w
   LDA READONLY
   BEQ .not_readonly_w
-  SET16 str_readonly STR_PTR16
+  SET16 str_readonly, STR_PTR16
   JSR show_status_message
   RTS
 .not_readonly_w
@@ -167,7 +167,7 @@ command_parse
   LDA MODIFIED
   BEQ .quit_ok
   ; Show warning
-  SET16 str_no_write STR_PTR16
+  SET16 str_no_write, STR_PTR16
   JMP show_status_message
 
 .quit_ok
@@ -185,7 +185,7 @@ command_parse
 ; Go to line number
 .goto_line
   ; Parse decimal number from CMD_BUF
-  SET16 $0000 BUF_LEN16   ; Accumulator for line number
+  SET16 $0000, BUF_LEN16   ; Accumulator for line number
   LDX #$00
 
 .parse_digit
@@ -205,7 +205,7 @@ command_parse
   ; = BUF_LEN16 * 8 + BUF_LEN16 * 2
   PHA              ; save digit
   ; Save original
-  CP16 BUF_LEN16 BUF_SRC16
+  CP16 BUF_LEN16, BUF_SRC16
   ; *2
   ASL16 BUF_LEN16
   ; *4
@@ -268,7 +268,7 @@ command_parse
   STA FILE_LINE16+$01
 .line_ok
   ; Set VIEW_TOP so cursor is near top of screen
-  CP16 FILE_LINE16 VIEW_TOP16
+  CP16 FILE_LINE16, VIEW_TOP16
   LDA #$00
   STA CURSOR_ROW
   STA CURSOR_COL

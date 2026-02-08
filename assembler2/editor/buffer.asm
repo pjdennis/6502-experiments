@@ -32,7 +32,7 @@ BUF_LIMIT     .byte 0     ; High byte of buffer limit (default >TEXT_LIMIT)
 ; Initialize empty buffer
 ; Sets up an empty buffer with one empty line
 buf_init
-  SET16 TEXT_BUF BUF_END16
+  SET16 TEXT_BUF, BUF_END16
   ; Add a newline to have at least one line
   LDY #$00
   LDA #'\n'
@@ -48,7 +48,7 @@ buf_init
 ; Carry set = file was truncated, carry clear = fully loaded
 buf_load_file
   STA FILE_HANDLE
-  SET16 TEXT_BUF BUF_END16
+  SET16 TEXT_BUF, BUF_END16
   LDA #$00
   STA BUF_TEMP            ; Clear truncation flag
 
@@ -130,7 +130,7 @@ buf_load_file
 ; Writes all text except the final trailing newline of the last empty line
 buf_save_file
   STA FILE_HANDLE
-  SET16 TEXT_BUF BUF_PTR16
+  SET16 TEXT_BUF, BUF_PTR16
 
 .write_loop
   ; Check if we've reached the end
@@ -420,7 +420,7 @@ buf_delete_line
   JSR buf_get_line_ptr
 
   ; Save start pointer
-  CP16 BUF_PTR16 BUF_SRC16
+  CP16 BUF_PTR16, BUF_SRC16
 
   ; Find end of line (the newline character)
   LDY #$00
@@ -468,7 +468,7 @@ buf_delete_line
 .del_shift_done
   ; Update buffer end: subtract the number of bytes removed
   ; New end = BUF_PTR16 (which is where we stopped copying to)
-  CP16 BUF_PTR16 BUF_END16
+  CP16 BUF_PTR16, BUF_END16
 
   ; If buffer is now empty, add a newline
   LDA BUF_END16
@@ -489,9 +489,9 @@ buf_delete_line
 ; Rebuild line pointer table by scanning for newlines
 ; Sets LINE_COUNT16 and fills LINE_TBL
 buf_rebuild_lines
-  SET16 $0000 LINE_COUNT16
-  SET16 TEXT_BUF BUF_PTR16
-  SET16 LINE_TBL BUF_DST16
+  SET16 $0000, LINE_COUNT16
+  SET16 TEXT_BUF, BUF_PTR16
+  SET16 LINE_TBL, BUF_DST16
 
   ; First line starts at TEXT_BUF
   LDY #$00

@@ -112,7 +112,7 @@ insert_char
   STA MODIFIED
   RTS
 .insert_char_full
-  SET16 str_buffer_full STR_PTR16
+  SET16 str_buffer_full, STR_PTR16
   JSR show_status_message
   RTS
 
@@ -152,7 +152,7 @@ insert_newline
   STA MODIFIED
   RTS
 .insert_newline_full
-  SET16 str_buffer_full STR_PTR16
+  SET16 str_buffer_full, STR_PTR16
   JSR show_status_message
   RTS
 

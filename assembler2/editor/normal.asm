@@ -597,7 +597,7 @@ normal_open_below
   STA LAST_KEY
   RTS
 .open_below_full
-  SET16 str_buffer_full STR_PTR16
+  SET16 str_buffer_full, STR_PTR16
   JSR show_status_message
   LDA #$00
   STA LAST_KEY
@@ -623,7 +623,7 @@ normal_open_above
   STA LAST_KEY
   RTS
 .open_above_full
-  SET16 str_buffer_full STR_PTR16
+  SET16 str_buffer_full, STR_PTR16
   JSR show_status_message
   LDA #$00
   STA LAST_KEY
