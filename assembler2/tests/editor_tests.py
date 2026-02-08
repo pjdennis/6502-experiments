@@ -1219,12 +1219,92 @@ class EditorTestRunner:
             expect_cursor=(0, 0)
         )
 
-        # Long line truncated to screen width
+        # Long line wraps to next screen row
         self.run_test_screen(
-            "Long line truncated to screen width",
+            "Long line wraps to next screen row",
             "A" * 60 + "\n",
             b":q!\r",
-            expect_lines=[(0, "A" * 40)]
+            expect_lines=[
+                (0, "A" * 40),
+                (1, "A" * 20),
+            ]
+        )
+
+        # ============================================================
+        # Line wrapping tests
+        # ============================================================
+        print()
+        print("Screen state - line wrapping:")
+        print()
+
+        # Line after wrapped line pushed down
+        self.run_test_screen(
+            "Line after wrap pushed down",
+            "A" * 60 + "\n" + "B\n",
+            b":q!\r",
+            expect_lines=[
+                (0, "A" * 40),
+                (1, "A" * 20),
+                (2, "B"),
+            ]
+        )
+
+        # Tilde markers account for wrapping
+        self.run_test_screen(
+            "Tildes account for wrapped line height",
+            "A" * 80 + "\n",
+            b":q!\r",
+            expect_lines=[
+                (0, "A" * 40),
+                (1, "A" * 40),
+                (2, "~"),
+            ]
+        )
+
+        # Cursor position on wrapped line ($ command)
+        # 60-char line on 40-col screen: $ puts cursor at col 59
+        # screen row = 59 / 40 = 1, screen col = 59 % 40 = 19
+        self.run_test_screen(
+            "$ on wrapped line: cursor position",
+            "A" * 60 + "\n",
+            b"$:q!\r",
+            expect_cursor=(1, 19)
+        )
+
+        # Cursor position after right movement past screen edge
+        # Move right 40 times on a 60-char line with 40-col screen
+        # Cursor at col 40 -> screen row 1, screen col 0
+        self.run_test_screen(
+            "Right movement past screen edge wraps",
+            "A" * 60 + "\n",
+            b"l" * 40 + b":q!\r",
+            expect_cursor=(1, 0)
+        )
+
+        # j/k skip wrapped rows (move by file line, not screen row)
+        # Two long lines: j from line 0 to line 1
+        self.run_test_screen(
+            "j skips wrap rows to next file line",
+            "A" * 60 + "\n" + "B" * 60 + "\n",
+            b"j:q!\r",
+            expect_cursor=(2, 0),
+            expect_lines=[
+                (0, "A" * 40),
+                (1, "A" * 20),
+                (2, "B" * 40),
+                (3, "B" * 20),
+            ]
+        )
+
+        # Scrolling with wrapped lines
+        # 10 rows, 9 content rows. Fill with lines that take 2 rows each.
+        # 5 wrapped lines = 10 screen rows needed (only 9 content rows available)
+        # After j x4 to line 4, scrolling should keep cursor visible
+        self.run_test_screen(
+            "Scroll with wrapped lines",
+            ("X" * 60 + "\n") * 5,
+            b"jjjj:q!\r",
+            expect_status_contains="5,1"
         )
 
         # ============================================================
