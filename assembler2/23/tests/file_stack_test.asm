@@ -64,19 +64,19 @@ main:
 
 .args_ok:
   ; Initialize counters
-  SET16 $00, CHAR_COUNT16
-  SET16 $00, LINE_COUNT16
-  LDA #$01
+  SET16 0, CHAR_COUNT16
+  SET16 0, LINE_COUNT16
+  LDA #1
   STA AT_LINE_START
 
   ; Dispatch based on mode
   LDA TEST_MODE
   BEQ mode_echo
-  CMP #$01
+  CMP #1
   BEQ mode_lines
-  CMP #$02
+  CMP #2
   BEQ .go_info
-  CMP #$03
+  CMP #3
   BEQ .go_memory
   JMP error_usage
 .go_info:
@@ -94,7 +94,7 @@ mode_echo:
   JSR write_b
   JMP .loop
 .done:
-  LDA #$00
+  LDA #0
   JMP exit
 
 ; ============================================================================
@@ -118,25 +118,25 @@ mode_lines:
   JSR print_decimal
   LDA #':'
   JSR write_b
-  LDA #$00
+  LDA #0
   STA AT_LINE_START
   PLA
 .not_start:
   JSR write_b
   CMP #$0A            ; newline
   BNE .loop
-  LDA #$01
+  LDA #1
   STA AT_LINE_START
   JMP .loop
 .done:
-  LDA #$00
+  LDA #0
   JMP exit
 
 ; Read filename until newline into TOKEN
 ; Note: Uses read_char (not read_char_track_line) to avoid incrementing
 ; line number - the line should be saved BEFORE reading the filename
 read_include_filename:
-  LDX #$00
+  LDX #0
 .loop:
   JSR read_char
   BCS .done
@@ -150,7 +150,7 @@ read_include_filename:
 .skip_cr:
   JMP .loop
 .done:
-  LDA #$00
+  LDA #0
   STA TOKEN,X
   RTS
 
@@ -192,7 +192,7 @@ mode_info:
 .info_done:
   LDA #$0A
   JSR write_b
-  LDA #$00
+  LDA #0
   JMP exit
 
 ; ============================================================================
@@ -217,15 +217,15 @@ mode_memory:
   ; Track line start
   CMP #$0A
   BNE .not_newline
-  LDA #$01
+  LDA #1
   STA AT_LINE_START
   JMP .loop
 .not_newline:
-  LDA #$00
+  LDA #0
   STA AT_LINE_START
   JMP .loop
 .done:
-  LDA #$00
+  LDA #0
   JMP exit
 
 ; ============================================================================
@@ -236,7 +236,7 @@ mode_memory:
 ; ============================================================================
 check_markers:
   ; Buffer the keyword after '@' into TOKEN
-  LDX #$00
+  LDX #0
 .buffer_loop:
   JSR read_char
   BCS .buffer_eof
@@ -251,7 +251,7 @@ check_markers:
   LDA #$FF            ; Sentinel for EOF
 .buffer_done:
   STA MARKER_TERM     ; Save terminator (space, $0A, or $FF)
-  LDA #$00
+  LDA #0
   STA TOKEN,X         ; Null-terminate the keyword
 
   ; Try matching against each known marker
@@ -279,8 +279,8 @@ check_markers:
   JSR read_include_filename
   JSR push_file_stack
   ; Initialize line to 1 for included file
-  SET16 $01, CURLINE16
-  LDA #$01
+  SET16 1, CURLINE16
+  LDA #1
   STA AT_LINE_START
   CLC
   RTS
@@ -301,7 +301,7 @@ check_markers:
   BNE .memory_empty_no_newline
   INC16 CURLINE16
 .memory_empty_no_newline:
-  LDA #$01
+  LDA #1
   STA AT_LINE_START
   CLC
   RTS
@@ -327,7 +327,7 @@ check_markers:
 .do_traceback:
   ; Print the traceback (pops all stack entries, closes files)
   JSR print_traceback
-  LDA #$01
+  LDA #1
   STA AT_LINE_START
   CLC
   RTS
@@ -335,13 +335,13 @@ check_markers:
 ; Compare null-terminated keyword in TOKEN against pattern at (TABP16)
 ; Returns: C=0 if match, C=1 if no match
 cmp_marker:
-  LDY #$00
+  LDY #0
 .loop:
   LDA TOKEN,Y
   CMP (TABP16),Y
   BNE .no_match
   ; If both are null, it's a match
-  CMP #$00
+  CMP #0
   BEQ .match
   INY
   JMP .loop
@@ -359,7 +359,7 @@ flush_as_text:
   LDA #'@'
   JSR write_b
   ; Output keyword from TOKEN
-  LDY #$00
+  LDY #0
 .loop:
   LDA TOKEN,Y
   BEQ .keyword_done
@@ -375,12 +375,12 @@ flush_as_text:
   CMP #$0A
   BNE .not_newline
   INC16 CURLINE16
-  LDA #$01
+  LDA #1
   STA AT_LINE_START
   SEC
   RTS
 .not_newline:
-  LDA #$00
+  LDA #0
   STA AT_LINE_START
   SEC
   RTS
@@ -393,7 +393,7 @@ setup_memory_source:
   ; Save X (content length)
   STX TEMP
   ; Copy content from TOKEN to TOKEN_MEM
-  LDY #$00
+  LDY #0
 .copy_content:
   CPY TEMP
   BEQ .content_done
@@ -403,10 +403,10 @@ setup_memory_source:
   JMP .copy_content
 .content_done:
   ; Add null terminator after content (Y = length)
-  LDA #$00
+  LDA #0
   STA TOKEN_MEM,Y
   ; Copy "MEMORY" to TOKEN (which is FS_FILENAME)
-  LDY #$00
+  LDY #0
 .copy_name:
   LDA str_memory_source,Y
   STA TOKEN,Y
@@ -419,8 +419,8 @@ setup_memory_source:
   ; Push memory source (FS_FILENAME has name, pointer is set)
   JSR push_memory_source
   ; Initialize line to 1 for memory source, at start of line
-  SET16 $01, CURLINE16
-  LDA #$01
+  SET16 1, CURLINE16
+  LDA #1
   STA AT_LINE_START
   CLC
   RTS
@@ -439,7 +439,7 @@ str_memory_source:
 ; Note: Uses read_char (not read_char_track_line) to avoid incrementing
 ; line number - the line should be saved BEFORE reading the content
 read_memory_content:
-  LDX #$00
+  LDX #0
 .loop:
   JSR read_char
   BCS .add_newline    ; EOF - add newline and done
@@ -473,7 +473,7 @@ print_traceback:
   ; Find curr_type by scanning past the name
   ; FS_P16 points to: name\0 | curr_type | ...
   CP16 FS_P16, TABP16
-  LDY #$00
+  LDY #0
 .find_null:
   LDA (TABP16),Y
   BEQ .found_null
@@ -523,7 +523,7 @@ str_type_memory:
 ; Print just the basename from a path at TABP16 (skips everything before last '/')
 print_basename:
   ; Find the last '/' in the string
-  LDY #$00
+  LDY #0
   STY TEMP              ; TEMP = index of char after last '/'
 .scan:
   LDA (TABP16),Y
@@ -533,7 +533,7 @@ print_basename:
   ; Found '/', remember position after it
   TYA
   CLC
-  ADC #$01
+  ADC #1
   STA TEMP
 .not_slash:
   INY
@@ -551,7 +551,7 @@ print_basename:
   RTS
 
 print_str:
-  LDY #$00
+  LDY #0
 .loop:
   LDA (TABP16),Y
   BEQ .done
@@ -577,7 +577,7 @@ str_active:
 ; ============================================================================
 print_decimal:
   JSR to_decimal
-  LDY #$00
+  LDY #0
 .loop:
   LDA TO_DECIMAL_RESULT,Y
   BEQ .done
@@ -612,11 +612,11 @@ read_char_track_line:
 parse_args:
   ; Check argc >= 2 (mode, file - emulator doesn't include program name)
   JSR argc
-  CMP #$02
+  CMP #2
   BCC .error
 
   ; Get mode argument (argv[0])
-  LDA #$00
+  LDA #0
   JSR argv
   ; A/X contains pointer to arg string
   STA TABP16
@@ -625,13 +625,13 @@ parse_args:
   BCS .error
 
   ; Get filename argument (argv[1])
-  LDA #$01
+  LDA #1
   JSR argv
   ; A/X contains pointer to arg string
   STA TABP16
   STX TABP16+$01
   ; Copy to TOKEN
-  LDY #$00
+  LDY #0
 .copy_filename:
   LDA (TABP16),Y
   STA TOKEN,Y
@@ -642,7 +642,7 @@ parse_args:
   ; Open file via file stack (this resets line number to 0)
   JSR push_file_stack
   ; Initialize line number to 1 (first line is line 1)
-  SET16 $01, CURLINE16
+  SET16 1, CURLINE16
   CLC
   RTS
 .error:
@@ -652,9 +652,9 @@ parse_args:
 ; Parse mode string at TABP16/H
 ; Sets TEST_MODE, returns C=0 on success
 parse_mode:
-  LDY #$00
+  LDY #0
   LDA (TABP16),Y
-  LDX #$00
+  LDX #0
   CMP #'e'
   BEQ .set_mode
   INX
@@ -679,11 +679,11 @@ parse_mode:
 error_usage:
   SET16 msg_usage, TABP16
   JSR print_str_err
-  LDA #$01
+  LDA #1
   JMP exit
 
 print_str_err:
-  LDY #$00
+  LDY #0
 .loop:
   LDA (TABP16),Y
   BEQ .done
