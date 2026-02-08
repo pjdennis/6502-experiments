@@ -468,7 +468,7 @@ normal_delete_char
   BCS .done
 
   JSR buf_delete_char
-  JSR buf_rebuild_lines
+  JSR buf_adjust_lines_dec
   LDA #$01
   STA RENDER_FLAG
   LDA #$FF

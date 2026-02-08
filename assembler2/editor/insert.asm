@@ -103,7 +103,7 @@ insert_char
   LDA BUF_TEMP
   JSR buf_insert_char
   BCS .insert_char_full
-  JSR buf_rebuild_lines
+  JSR buf_adjust_lines_inc
 
   INC CURSOR_COL
   LDA #$01
@@ -184,7 +184,7 @@ insert_backspace
   STA BUF_PTR16+$01
 
   JSR buf_delete_char
-  JSR buf_rebuild_lines
+  JSR buf_adjust_lines_dec
   DEC CURSOR_COL
   LDA #$01
   STA RENDER_FLAG
