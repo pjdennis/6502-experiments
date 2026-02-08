@@ -171,12 +171,7 @@ normal_move_right:
 normal_move_down:
   ; Check if there's a next line
   CLC
-  LDA FILE_LINE16
-  ADC #1
-  STA BUF_PTR16
-  LDA FILE_LINE16 + 1
-  ADC #0
-  STA BUF_PTR16 + 1
+  ADCI16 FILE_LINE16, $0001, BUF_PTR16
 
   CMP16 BUF_PTR16, LINE_COUNT16
   BCS .done

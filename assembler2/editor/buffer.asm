@@ -520,12 +520,7 @@ buf_rebuild_lines:
 .add_line:
   ; Advance line table pointer
   CLC
-  LDA BUF_DST16
-  ADC #2
-  STA BUF_DST16
-  LDA BUF_DST16 + 1
-  ADC #0
-  STA BUF_DST16 + 1
+  ADCI16 BUF_DST16, $0002, BUF_DST16
 
   ; Store line start pointer
   LDY #0
@@ -572,12 +567,7 @@ buf_adjust_lines_inc:
   ; Calculate LINE_TBL entry for (FILE_LINE16 + 1)
   ; Entry address = LINE_TBL + (FILE_LINE16 + 1) * 2
   CLC
-  LDA FILE_LINE16
-  ADC #1
-  STA BUF_PTR16
-  LDA FILE_LINE16 + 1
-  ADC #0
-  STA BUF_PTR16 + 1
+  ADCI16 FILE_LINE16, $0001, BUF_PTR16
   ASL16 BUF_PTR16
   CLC
   LDA BUF_PTR16
@@ -603,12 +593,7 @@ buf_adjust_lines_inc:
 
   ; Advance to next LINE_TBL entry (+2 bytes)
   CLC
-  LDA BUF_PTR16
-  ADC #2
-  STA BUF_PTR16
-  BCC .inc_no_page
-  INC BUF_PTR16 + 1
-.inc_no_page:
+  ADCI16 BUF_PTR16, $0002, BUF_PTR16
 
   ; Decrement count
   LDA BUF_LEN16
@@ -654,12 +639,7 @@ buf_adjust_lines_dec:
 
   ; Calculate LINE_TBL entry for (FILE_LINE16 + 1)
   CLC
-  LDA FILE_LINE16
-  ADC #1
-  STA BUF_PTR16
-  LDA FILE_LINE16 + 1
-  ADC #0
-  STA BUF_PTR16 + 1
+  ADCI16 FILE_LINE16, $0001, BUF_PTR16
   ASL16 BUF_PTR16
   CLC
   LDA BUF_PTR16
@@ -685,12 +665,7 @@ buf_adjust_lines_dec:
 
   ; Advance to next LINE_TBL entry (+2 bytes)
   CLC
-  LDA BUF_PTR16
-  ADC #2
-  STA BUF_PTR16
-  BCC .dec_no_page
-  INC BUF_PTR16 + 1
-.dec_no_page:
+  ADCI16 BUF_PTR16, $0002, BUF_PTR16
 
   ; Decrement count
   LDA BUF_LEN16
