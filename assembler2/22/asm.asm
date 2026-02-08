@@ -692,18 +692,32 @@ parse_expression:
   BEQ .check_left_shift
   CMP #'>'
   BEQ .check_right_shift
-  ; Check + and - after skipping spaces
+  ; Check +, -, and (if not .data mode) << >> after skipping spaces
   JSR skip_spaces
   CMP #'+'
   BEQ .add_op
   CMP #'-'
   BEQ .sub_op
+  CMP #'<'
+  BEQ .spaced_lt
+  CMP #'>'
+  BEQ .spaced_gt
 
+.no_more_operators:
   ; No more operators - restore and return
   LDA EXPR_FWDREF
   STA IS_FWDREF
   PLP ; Restore carry flag from first term
   RTS
+
+.spaced_lt:
+  LDA DATA_MODE
+  BEQ .no_more_operators  ; .data mode: end expression
+  JMP .check_left_shift
+.spaced_gt:
+  LDA DATA_MODE
+  BEQ .no_more_operators  ; .data mode: end expression
+  JMP .check_right_shift
 
 .add_op:
   ; Save current accumulator
@@ -1606,11 +1620,13 @@ data_parameters_loop:
   JMP data_parameters_loop
 .data_done:
   LDA DATA_MODE
-  CMP #$03
-  BNE .data_rts
+  CMP #$03            ; TODO use a constant for the mode throughout
+  BNE .no_terminator
   LDA #$00
-  JMP emit           ; Tail call: emit null terminator
-.data_rts:
+  JSR emit            ; emit null terminator
+.no_terminator:
+  LDA #$FF
+  STA DATA_MODE       ; Reset: allow spaced << >> outside .data
   RTS
 
 
@@ -2540,6 +2556,8 @@ start:
 .err_usage:
   JMP err_usage
 .args_done:
+  LDA #$FF
+  STA DATA_MODE       ; Non-zero: allow spaced << >> in expressions
   LDA #$00
   STA PASS            ; Bit 7 = 0 (pass 1)
   JSR init_fwdref_list
