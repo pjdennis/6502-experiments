@@ -2386,7 +2386,7 @@ copy_string_to_token:
   BEQ .done
   STA TOKEN,Y
   INY
-  JMP .loop
+  BNE .loop              ; A is guaranteed non-zero (BEQ .done above)
 .done:
   LDA #$00
   STA TOKEN,Y          ; Null-terminate
