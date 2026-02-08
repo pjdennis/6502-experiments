@@ -171,27 +171,17 @@ insert_backspace:
   ORA FILE_LINE16 + 1
   BEQ .cant_join     ; Can't join at first line
 
-  ; Get length of previous line (will become new cursor col)
+  ; Compute previous line number once
   SEC
-  LDA FILE_LINE16
-  SBC #1
-  TAY
-  LDA FILE_LINE16 + 1
-  SBC #0
-  TAX
-  TYA
+  SBCI16 FILE_LINE16, $0001, BUF_LEN16
+
+  ; Get length of previous line (will become new cursor col)
+  LDAX16 BUF_LEN16
   JSR buf_get_line_len
   STA CURSOR_COL
 
   ; Delete the newline at end of previous line
-  SEC
-  LDA FILE_LINE16
-  SBC #1
-  TAY
-  LDA FILE_LINE16 + 1
-  SBC #0
-  TAX
-  TYA
+  LDAX16 BUF_LEN16
   JSR buf_get_line_ptr
   ; Find the newline
   LDY #0
