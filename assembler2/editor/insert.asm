@@ -135,37 +135,13 @@ insert_char:
   JSR show_status_message
   RTS
 
-; Insert newline at cursor (split line)
+; Insert newline(s) at cursor (split line, batch pending Enter keys)
 insert_newline:
-  JSR get_cursor_buf_ptr
-
-  JSR buf_insert_newline
-  BCS .insert_newline_full
-
-  ; Move to start of next line
-  INC16 FILE_LINE16
-  LDA #0
-  STA CURSOR_COL
-  JSR enter_batch_pending
-  JSR ensure_cursor_visible
-  LDA #$FF
-  STA MODIFIED
-  RTS
-.insert_newline_full:
-  SET16 str_buffer_full, STR_PTR16
-  JSR show_status_message
-  RTS
-
-; Batch-insert pending Enter keys after first newline was inserted.
-; Counts buffered Enter keys, fills BATCH_BUF with $0A bytes,
-; and inserts them all with one buf_insert_chars + buf_rebuild_lines.
-enter_batch_pending:
-  ; Count pending Enter keys
+  ; Count pending Enter keys, add 1 for current
   LDA #KEY_ENTER
   STA BUF_TEMP
-  JSR count_pending_key
-  CPX #0
-  BEQ .enter_batch_done
+  JSR count_pending_key      ; X = pending Enter count
+  INX                        ; +1 for current key
 
   ; Fill BATCH_BUF with X newline ($0A) bytes
   STX BUF_DELTA
@@ -180,9 +156,12 @@ enter_batch_pending:
   ; Insert at current cursor position
   JSR get_cursor_buf_ptr
   JSR buf_insert_chars
-  BCS .enter_batch_done       ; Buffer full, skip batch
+  BCS .insert_newline_full
 
-  ; Add BUF_DELTA to FILE_LINE16 (16-bit add)
+  ; Rebuild line table (one rebuild for entire batch)
+  JSR buf_rebuild_lines
+
+  ; Advance FILE_LINE16 by BUF_DELTA
   CLC
   LDA FILE_LINE16
   ADC BUF_DELTA
@@ -191,10 +170,15 @@ enter_batch_pending:
   ADC #0
   STA FILE_LINE16 + 1
 
-  ; Rebuild line table (one rebuild for entire batch)
-  JSR buf_rebuild_lines
-
-.enter_batch_done:
+  LDA #0
+  STA CURSOR_COL
+  JSR ensure_cursor_visible
+  LDA #$FF
+  STA MODIFIED
+  RTS
+.insert_newline_full:
+  SET16 str_buffer_full, STR_PTR16
+  JSR show_status_message
   RTS
 
 ; Handle backspace in insert mode

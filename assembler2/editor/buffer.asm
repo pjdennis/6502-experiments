@@ -450,17 +450,6 @@ buf_shift_left:
 
   RTS
 
-; Insert newline at BUF_PTR16 (splits current line)
-; Returns carry set = buffer full, carry clear = success
-buf_insert_newline:
-  LDA #'\n'
-  JSR buf_insert_char
-  BCS .full
-  JSR buf_rebuild_lines
-  CLC
-.full:
-  RTS
-
 ; Delete entire line N (N in A/X, low/high)
 ; Removes the line and its trailing newline
 buf_delete_line:
