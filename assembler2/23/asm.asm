@@ -1346,33 +1346,6 @@ parse_operand:
   RTS
 
 
-; Read and emit quoted ASCII
-; On entry A contains the first character within quotes
-; On exit A contains the current character after the closing quote
-;         X, Y are preserved
-; Raises 'Closing quote not found' error if closing quote not found on current line
-emit_quoted:
-.loop:
-  CMP #'\n'
-  BEQ .err_closing_quote
-  CMP #'"'
-  BEQ .done
-  CMP #'\\'
-  BNE .not_escaped
-  JSR read_char
-  CMP #'\n'
-  BEQ .err_closing_quote
-  JSR decode_escape
-.not_escaped:
-  JSR emit
-  JSR read_char
-  BCC .loop
-.err_closing_quote:
-  JMP err_closing_quote_not_found
-.done:
-  JMP read_char        ; Tail call; read char after closing quote
-
-
 ; ============================================================================
 ; TIER 10: DIRECTIVE PROCESSING
 ; Handle assembler directives (.include, .data, etc.)
@@ -1566,6 +1539,33 @@ directive_macro:
 
 directive_endmacro:
   .asciiz "endmacro"
+
+
+; Read and emit quoted ASCII
+; On entry A contains the first character within quotes
+; On exit A contains the current character after the closing quote
+;         X, Y are preserved
+; Raises 'Closing quote not found' error if closing quote not found on current line
+emit_quoted:
+.loop:
+  CMP #'\n'
+  BEQ .err_closing_quote
+  CMP #'"'
+  BEQ .done
+  CMP #'\\'
+  BNE .not_escaped
+  JSR read_char
+  CMP #'\n'
+  BEQ .err_closing_quote
+  JSR decode_escape
+.not_escaped:
+  JSR emit
+  JSR read_char
+  BCC .loop
+.err_closing_quote:
+  JMP err_closing_quote_not_found
+.done:
+  JMP read_char        ; Tail call; read char after closing quote
 
 
 set_data_mode:
