@@ -464,12 +464,10 @@ parse_char_literal:
 ;         X, Y are preserved
 check_for_value:
   JSR skip_spaces
-  CMP #'='
-  BEQ .value
-  CLC                  ; Did not find value so return C = 0
-  RTS
-.value:
-  SEC                  ; Found value so return C = 1
+  CMP #'='             ; C=1 if A='=', C=0 otherwise
+  BEQ .done
+  CLC                  ; A < '=', so clear carry explicitly
+.done:
   RTS
 
 
@@ -583,22 +581,29 @@ parse_value:
   JSR read_char        ; Skip '<'
   JSR skip_spaces
   JSR parse_expression ; Current char now in CURR_CHAR
-  ; Apply low byte: keep OPERAND16, zero OPERAND16+$01
-  LDA #$00
-  STA OPERAND16+$01
-  STA IS_FWDREF        ; Byte selectors don't set fwdref
-  RTS
+  JMP apply_low_byte
 
 .high_byte_selector:
   JSR read_char        ; Skip '>'
   JSR skip_spaces
   JSR parse_expression ; Current char now in CURR_CHAR
-  ; Apply high byte: shift OPERAND16 right by 8 bits
+  JMP apply_high_byte
+
+
+; Apply low byte selector: zero high byte and clear IS_FWDREF
+apply_low_byte:
+  LDA #$00
+  STA OPERAND16+$01
+  STA IS_FWDREF
+  RTS
+
+; Apply high byte selector: move high byte to low, zero high byte, clear IS_FWDREF
+apply_high_byte:
   LDA OPERAND16+$01
   STA OPERAND16
   LDA #$00
   STA OPERAND16+$01
-  STA IS_FWDREF        ; Byte selectors don't set fwdref
+  STA IS_FWDREF
   RTS
 
 
@@ -620,22 +625,28 @@ parse_term_with_selector:
   JSR read_char        ; Skip '<'
   JSR skip_spaces
   JSR parse_term       ; Current char now in CURR_CHAR
-  ; Apply low byte: keep OPERAND16, zero OPERAND16+$01
-  LDA #$00
-  STA OPERAND16+$01
-  STA IS_FWDREF        ; Byte selectors don't set fwdref
-  RTS
+  JMP apply_low_byte
 
 .high_byte_selector:
   JSR read_char        ; Skip '>'
   JSR skip_spaces
   JSR parse_term       ; Current char now in CURR_CHAR
-  ; Apply high byte: shift OPERAND16 right by 8 bits
-  LDA OPERAND16+$01
-  STA OPERAND16
-  LDA #$00
-  STA OPERAND16+$01
-  STA IS_FWDREF        ; Byte selectors don't set fwdref
+  JMP apply_high_byte
+
+
+; Save current operand, parse next term, accumulate forward ref flag
+; Used by expression operator paths to avoid duplicating this sequence
+; On exit: EXPR_ACCU16 contains the saved operand
+;          OPERAND16 contains the new term
+;          EXPR_FWDREF updated with IS_FWDREF
+expr_next_term:
+  CP16 OPERAND16, EXPR_ACCU16
+  JSR read_char
+  JSR skip_spaces
+  JSR parse_term_with_selector
+  LDA IS_FWDREF
+  ORA EXPR_FWDREF
+  STA EXPR_FWDREF
   RTS
 
 
@@ -679,18 +690,7 @@ parse_expression:
   RTS
 
 .add_op:
-  ; Save current accumulator
-  CP16 OPERAND16, EXPR_ACCU16
-
-  ; Parse next term (skip '+' first)
-  JSR read_char        ; Skip '+'
-  JSR skip_spaces
-  JSR parse_term_with_selector  ; Current char in CURR_CHAR
-
-  ; Accumulate forward ref flag
-  LDA IS_FWDREF
-  ORA EXPR_FWDREF
-  STA EXPR_FWDREF
+  JSR expr_next_term
 
   ; Add: accumulator + OPERAND → OPERAND
   CLC
@@ -698,18 +698,7 @@ parse_expression:
   JMP .loop
 
 .sub_op:
-  ; Save current accumulator
-  CP16 OPERAND16, EXPR_ACCU16
-
-  ; Parse next term (skip '-' first)
-  JSR read_char        ; Skip '-'
-  JSR skip_spaces
-  JSR parse_term_with_selector  ; Current char in CURR_CHAR
-
-  ; Accumulate forward ref flag
-  LDA IS_FWDREF
-  ORA EXPR_FWDREF
-  STA EXPR_FWDREF
+  JSR expr_next_term
 
   ; Subtract: accumulator - OPERAND → OPERAND
   SEC
@@ -731,18 +720,7 @@ parse_expression:
   JMP err_expected_shift    ; Single '>' in middle of expression is error
 
 .left_shift_op:
-  ; Save current operand to EXPR_ACCU
-  CP16 OPERAND16, EXPR_ACCU16
-
-  ; Parse shift count (use parse_term_with_selector to support byte selectors like <<<)
-  JSR read_char        ; Read char after second '<'
-  JSR skip_spaces
-  JSR parse_term_with_selector  ; Current char in CURR_CHAR
-
-  ; Accumulate forward ref flag
-  LDA IS_FWDREF
-  ORA EXPR_FWDREF
-  STA EXPR_FWDREF
+  JSR expr_next_term
 
   ; Check if shift count >= 16 (result will be 0)
   LDA OPERAND16+$01
@@ -763,18 +741,7 @@ parse_expression:
   JMP .left_shift_loop
 
 .right_shift_op:
-  ; Save current operand to EXPR_ACCU
-  CP16 OPERAND16, EXPR_ACCU16
-
-  ; Parse shift count (use parse_term_with_selector to support byte selectors like >>>)
-  JSR read_char        ; Read char after second '>'
-  JSR skip_spaces
-  JSR parse_term_with_selector  ; Current char in CURR_CHAR
-
-  ; Accumulate forward ref flag
-  LDA IS_FWDREF
-  ORA EXPR_FWDREF
-  STA EXPR_FWDREF
+  JSR expr_next_term
 
   ; Check if shift count >= 16 (result will be 0)
   LDA OPERAND16+$01
@@ -2263,12 +2230,7 @@ open_input:
   STX TABP16+$01
   PLA
   TAX
-  LDY #$FF
-.loop:
-  INY
-  LDA (TABP16),Y
-  STA TOKEN,Y
-  BNE .loop
+  JSR copy_string_to_token
   JMP push_file_stack ; tail call
 
 
