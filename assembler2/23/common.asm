@@ -1,23 +1,25 @@
 ; Addressing mode operand number of bytes
-OPERAND_BYTES_0 = $10
-OPERAND_BYTES_1 = $20
-OPERAND_BYTES_2 = $40
+OPERAND_BYTES_0 = 0<<4
+OPERAND_BYTES_1 = 1<<4
+OPERAND_BYTES_2 = 2<<4
 
 ; Addressing mode constants
-MODE_NONE  = $00 + OPERAND_BYTES_0 ; Implied (no operand)
-MODE_IMM   = $01 + OPERAND_BYTES_1 ; Immediate
-MODE_ZP    = $02 + OPERAND_BYTES_1 ; Zero page
-MODE_ZPX   = $03 + OPERAND_BYTES_1 ; Zero page, X
-MODE_ZPY   = $04 + OPERAND_BYTES_1 ; Zero page, Y
-MODE_ABS   = $05 + OPERAND_BYTES_2 ; Absolute
-MODE_ABSX  = $06 + OPERAND_BYTES_2 ; Absolute, X
-MODE_ABSY  = $07 + OPERAND_BYTES_2 ; Absolute, Y
-MODE_INDX  = $08 + OPERAND_BYTES_1 ; Indirect, X - ($zp,X)
-MODE_INDY  = $09 + OPERAND_BYTES_1 ; Indirect, Y - ($zp),Y
-MODE_REL   = $0A + OPERAND_BYTES_1 ; Relative (branches)
-MODE_IND   = $0B + OPERAND_BYTES_2 ; Indirect - JMP ($xxxx)
-MODE_MACRO = $8E                 ; Sentinel marker to indicate macro
-MODE_END   = $8F                 ; Terminates the list of modes
+; Upper nybble: operand bytes
+; Lower nybble: mode type (0 to 15)
+MODE_NONE  =  0 + OPERAND_BYTES_0 ; Implied (no operand)
+MODE_IMM   =  1 + OPERAND_BYTES_1 ; Immediate
+MODE_ZP    =  2 + OPERAND_BYTES_1 ; Zero page
+MODE_ZPX   =  3 + OPERAND_BYTES_1 ; Zero page, X
+MODE_ZPY   =  4 + OPERAND_BYTES_1 ; Zero page, Y
+MODE_ABS   =  5 + OPERAND_BYTES_2 ; Absolute
+MODE_ABSX  =  6 + OPERAND_BYTES_2 ; Absolute, X
+MODE_ABSY  =  7 + OPERAND_BYTES_2 ; Absolute, Y
+MODE_INDX  =  8 + OPERAND_BYTES_1 ; Indirect, X - ($zp,X)
+MODE_INDY  =  9 + OPERAND_BYTES_1 ; Indirect, Y - ($zp),Y
+MODE_REL   = 10 + OPERAND_BYTES_1 ; Relative (branches)
+MODE_IND   = 11 + OPERAND_BYTES_2 ; Indirect - JMP ($xxxx)
+MODE_MACRO = 14                   ; Sentinel marker to indicate macro
+MODE_END   = 15                   ; Terminates the list of modes
 
 ; Label type constants (for LABEL_TYPE variable in hash table operations)
 LABEL_TYPE_GLOBAL = $00   ; Global label (no escape format)
