@@ -492,6 +492,14 @@ class EditorTestRunner:
             print(f"  {name:<50} {Colors.GREEN}PASS{Colors.NC}")
         self.passed += 1
 
+    def _group(self, title, leading_blank=False):
+        if self.quiet:
+            return
+        if leading_blank:
+            print()
+        print(title)
+        print()
+
     def _fail(self, name, details):
         print(f"  {name:<50} {Colors.RED}FAIL{Colors.NC}")
         print(f"    {details}")
@@ -507,8 +515,7 @@ class EditorTestRunner:
         if not self.build_editor():
             return
 
-        print("Basic operations:")
-        print()
+        self._group("Basic operations:")
 
         # Open and quit without saving
         self.run_test(
@@ -843,9 +850,7 @@ class EditorTestRunner:
             expected_content="A\n\nB\n"
         )
 
-        print()
-        print("Console mode argument handling:")
-        print()
+        self._group("Console mode argument handling:", leading_blank=True)
 
         # Console mode saves to correct filename
         # In console mode, the emulator should not require an output_file
@@ -859,9 +864,7 @@ class EditorTestRunner:
             expected_content="ello\n"
         )
 
-        print()
-        print("New file creation:")
-        print()
+        self._group("New file creation:", leading_blank=True)
 
         # Edit a non-existent file creates it on save
         self.run_test_new_file(
@@ -870,9 +873,7 @@ class EditorTestRunner:
             expected_content="Hello\n"
         )
 
-        print()
-        print("Bounds checking (debug build):")
-        print()
+        self._group("Bounds checking (debug build):", leading_blank=True)
 
         if not self.build_debug_editor():
             print("  Skipping bounds checking tests (debug build failed)")
@@ -973,9 +974,7 @@ class EditorTestRunner:
         # 9 content rows (rows 0-8), 1 status bar (row 9)
         # page_size = 9
         # ============================================================
-        print()
-        print("Screen state - cursor movement:")
-        print()
+        self._group("Screen state - cursor movement:", leading_blank=True)
 
         CTRL_F = b'\x06'
         CTRL_B = b'\x02'
@@ -1044,9 +1043,7 @@ class EditorTestRunner:
             expect_cursor=(1, 1)
         )
 
-        print()
-        print("Screen state - screen content:")
-        print()
+        self._group("Screen state - screen content:", leading_blank=True)
 
         # 5-line file: rows 0-4 show "Line 1"-"Line 5", rows 5-8 show ~
         self.run_test_screen(
@@ -1104,9 +1101,7 @@ class EditorTestRunner:
             expect_ansi_contains="No write since last change"
         )
 
-        print()
-        print("Screen state - scrolling:")
-        print()
+        self._group("Screen state - scrolling:", leading_blank=True)
 
         # 15-line file, 9 j's: full window after line scroll down
         self.run_test_screen(
@@ -1135,9 +1130,7 @@ class EditorTestRunner:
             expect_lines=[(i, f"Line {i+4}") for i in range(9)]
         )
 
-        print()
-        print("Screen state - pagination:")
-        print()
+        self._group("Screen state - pagination:", leading_blank=True)
 
         # Ctrl-F from start (30 lines): full window verification
         self.run_test_screen(
@@ -1197,9 +1190,7 @@ class EditorTestRunner:
             ]
         )
 
-        print()
-        print("Screen state - G and gg:")
-        print()
+        self._group("Screen state - G and gg:", leading_blank=True)
 
         # G on 20-line file: full window with last line at bottom
         self.run_test_screen(
@@ -1219,9 +1210,7 @@ class EditorTestRunner:
             expect_lines=[(i, f"Line {i+1}") for i in range(9)]
         )
 
-        print()
-        print("Screen state - edge cases:")
-        print()
+        self._group("Screen state - edge cases:", leading_blank=True)
 
         # Single-line file: jjkk stays at (0,0)
         self.run_test_screen(
@@ -1253,9 +1242,7 @@ class EditorTestRunner:
         # ============================================================
         # Line wrapping tests
         # ============================================================
-        print()
-        print("Screen state - line wrapping:")
-        print()
+        self._group("Screen state - line wrapping:", leading_blank=True)
 
         # Line after wrapped line pushed down
         self.run_test_screen(
@@ -1459,9 +1446,7 @@ class EditorTestRunner:
         # Verify cursor-only movements skip content area redraws.
         # Frame 0 is always the initial full render (True).
         # ============================================================
-        print()
-        print("Screen state - render optimization:")
-        print()
+        self._group("Screen state - render optimization:", leading_blank=True)
 
         # h movement: cursor-only
         self.run_test_screen(
@@ -1584,9 +1569,7 @@ class EditorTestRunner:
         # When multiple printable keys are buffered, they should be
         # inserted in a single operation with one render.
         # ============================================================
-        print()
-        print("Batch insert:")
-        print()
+        self._group("Batch insert:", leading_blank=True)
 
         # Render optimization: batch insert reduces content redraws
         # Frame 0: initial render (True)
@@ -1629,9 +1612,7 @@ class EditorTestRunner:
         # When multiple backspace or x keys are buffered, they should
         # be deleted in a single operation with one render.
         # ============================================================
-        print()
-        print("Batch delete:")
-        print()
+        self._group("Batch delete:", leading_blank=True)
 
         # Render optimization: batch backspace reduces content redraws
         # Frame 0: initial render (True)
@@ -1718,9 +1699,7 @@ class EditorTestRunner:
         # When multiple Enter keys are buffered in insert mode, they
         # should be inserted in a single operation with one rebuild.
         # ============================================================
-        print()
-        print("Batch Enter:")
-        print()
+        self._group("Batch Enter:", leading_blank=True)
 
         # Render optimization: batch Enter reduces redraws
         # Frame 0: initial (True), Frame 1: i enters insert (True),
@@ -1753,9 +1732,7 @@ class EditorTestRunner:
         # When multiple backspace keys are buffered at column 0 with
         # empty lines above, they should be joined in a single operation.
         # ============================================================
-        print()
-        print("Batch join-lines:")
-        print()
+        self._group("Batch join-lines:", leading_blank=True)
 
         # Render optimization: batch join-lines reduces redraws
         # Start with 4 empty lines + content. Cursor at line 3 col 0.
