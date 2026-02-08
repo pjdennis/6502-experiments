@@ -24,6 +24,7 @@ RENDER_ROW    .data $00   ; Current row being rendered
 RENDER_LINE16 .data $0000 ; Current file line being rendered
 RENDER_COL    .data $00   ; Column counter during rendering
 FNAME_PTR16   .data $0000 ; Pointer to filename string (null-terminated)
+RENDER_FLAG   .data $00   ; $FF = full repaint, $00 = cursor+status only
 
   .code
 
@@ -219,6 +220,23 @@ render_current_line
   JSR render_line_chars
   JSR ansi_clear_line
 
+  JSR render_position_cursor
+  JSR ansi_cursor_show
+  JSR con_flush
+  RTS
+
+; Dispatch: full repaint or cursor+status only, based on RENDER_FLAG
+render_update
+  LDA RENDER_FLAG
+  BEQ .cursor_only
+  JMP render_screen
+.cursor_only
+  JMP render_cursor_and_status
+
+; Render just the status bar and reposition cursor (no content redraw)
+render_cursor_and_status
+  JSR ansi_cursor_hide
+  JSR render_status_line
   JSR render_position_cursor
   JSR ansi_cursor_show
   JSR con_flush

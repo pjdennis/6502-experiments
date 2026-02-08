@@ -134,9 +134,10 @@ normal_handle_key
   JMP normal_enter_command
 .not_colon
 
-  ; Unknown key - clear last key
+  ; Unknown key - clear last key, cursor-only update
   LDA #$00
   STA LAST_KEY
+  STA RENDER_FLAG
   RTS
 
 ; --- Movement ---
@@ -148,6 +149,7 @@ normal_move_left
 .done
   LDA #$00
   STA LAST_KEY
+  STA RENDER_FLAG
   RTS
 
 normal_move_right
@@ -163,6 +165,7 @@ normal_move_right
 .done
   LDA #$00
   STA LAST_KEY
+  STA RENDER_FLAG
   RTS
 
 normal_move_down
@@ -196,6 +199,8 @@ normal_move_down
   JMP .clamp_col
 .no_scroll
   INC CURSOR_ROW
+  LDA #$00
+  STA RENDER_FLAG
 .clamp_col
   JSR clamp_cursor_col
 .done
@@ -216,6 +221,8 @@ normal_move_up
   JMP .clamp_col
 .no_scroll
   DEC CURSOR_ROW
+  LDA #$00
+  STA RENDER_FLAG
 .clamp_col
   JSR clamp_cursor_col
 .done
@@ -361,6 +368,7 @@ normal_line_start
   LDA #$00
   STA CURSOR_COL
   STA LAST_KEY
+  STA RENDER_FLAG
   RTS
 
 normal_line_end
@@ -371,11 +379,13 @@ normal_line_end
   STA CURSOR_COL
   LDA #$00
   STA LAST_KEY
+  STA RENDER_FLAG
   RTS
 .empty
   LDA #$00
   STA CURSOR_COL
   STA LAST_KEY
+  STA RENDER_FLAG
   RTS
 
 normal_goto_last
@@ -431,6 +441,8 @@ normal_g_key
 .set_g
   LDA #'g'
   STA LAST_KEY
+  LDA #$00
+  STA RENDER_FLAG
   RTS
 
 ; --- Editing ---

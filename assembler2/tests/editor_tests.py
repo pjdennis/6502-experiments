@@ -294,7 +294,8 @@ class EditorTestRunner:
                         expect_cursor: tuple = None,
                         expect_lines: list = None,
                         expect_status_contains: str = None,
-                        expected_content: str = None):
+                        expected_content: str = None,
+                        expect_content_redraws: list = None):
         """Run an editor test and verify screen state via ANSI output.
 
         Args:
@@ -302,6 +303,8 @@ class EditorTestRunner:
             expect_lines: [(row_idx, text), ...] expected row content
             expect_status_contains: substring to find in status bar row
             expected_content: expected saved file content (after :wq)
+            expect_content_redraws: list of bools, one per frame - True if
+                content area should have been redrawn in that frame
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir = Path(tmpdir)
@@ -370,6 +373,23 @@ class EditorTestRunner:
                         f"  Expected: {expected_content!r}\n"
                         f"  Actual:   {saved!r}")
                     return
+
+            if expect_content_redraws is not None:
+                actual_count = screen.get_frame_count()
+                expected_count = len(expect_content_redraws)
+                if actual_count < expected_count:
+                    self._fail(name,
+                        f"Expected {expected_count} frames, got {actual_count}\n"
+                        f"    Frame:\n{screen.dump()}")
+                    return
+                for i, expected_redraw in enumerate(expect_content_redraws):
+                    actual_redraw = screen.was_content_redrawn(i)
+                    if actual_redraw != expected_redraw:
+                        self._fail(name,
+                            f"Frame {i}: expected content_redrawn="
+                            f"{expected_redraw}, got {actual_redraw}\n"
+                            f"    Frame:\n{screen.dump()}")
+                        return
 
             self._pass(name)
 
@@ -1166,6 +1186,86 @@ class EditorTestRunner:
             "A" * 60 + "\n",
             b":q!\r",
             expect_lines=[(0, "A" * 40)]
+        )
+
+        # ============================================================
+        # Render optimization tests
+        # Verify cursor-only movements skip content area redraws.
+        # Frame 0 is always the initial full render (True).
+        # ============================================================
+        print()
+        print("Screen state - render optimization:")
+        print()
+
+        # h movement: cursor-only
+        self.run_test_screen(
+            "Render opt: h is cursor-only",
+            "Hello\n",
+            b"lh:q!\r",
+            expect_content_redraws=[True, False, False]
+        )
+
+        # l movement: cursor-only
+        self.run_test_screen(
+            "Render opt: lll is cursor-only",
+            "Hello\n",
+            b"lll:q!\r",
+            expect_content_redraws=[True, False, False, False]
+        )
+
+        # j without scroll: cursor-only
+        self.run_test_screen(
+            "Render opt: j no scroll is cursor-only",
+            "Line 1\nLine 2\nLine 3\n",
+            b"j:q!\r",
+            expect_content_redraws=[True, False]
+        )
+
+        # k without scroll: cursor-only
+        self.run_test_screen(
+            "Render opt: jk no scroll is cursor-only",
+            "Line 1\nLine 2\nLine 3\n",
+            b"jk:q!\r",
+            expect_content_redraws=[True, False, False]
+        )
+
+        # j with scroll: full repaint
+        # 10 rows, 9 content rows. 9 j's on a 15-line file:
+        # j's 1-8 are cursor-only, j 9 triggers scroll (full repaint)
+        self.run_test_screen(
+            "Render opt: j scroll triggers repaint",
+            make_lines(15),
+            b"jjjjjjjjj:q!\r",
+            expect_content_redraws=(
+                [True] +          # frame 0: initial
+                [False] * 8 +     # frames 1-8: cursor-only
+                [True]            # frame 9: scroll
+            )
+        )
+
+        # 0 (line start): cursor-only
+        self.run_test_screen(
+            "Render opt: 0 is cursor-only",
+            "Hello\n",
+            b"lll0:q!\r",
+            expect_content_redraws=[True, False, False, False, False]
+        )
+
+        # $ (line end): cursor-only
+        self.run_test_screen(
+            "Render opt: $ is cursor-only",
+            "Hello\n",
+            b"$:q!\r",
+            expect_content_redraws=[True, False]
+        )
+
+        # ESC from insert mode: cursor-only
+        # i enters insert (full repaint), ESC exits (cursor-only)
+        self.run_test_screen(
+            "Render opt: ESC from insert is cursor-only",
+            "Hello\n",
+            b"i\x1b:q!\r",
+            expect_content_redraws=[True, True, False]
         )
 
         print()

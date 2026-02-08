@@ -27,13 +27,19 @@ class AnsiScreen:
         # Snapshot of last rendered frame (captured at ESC[?25h)
         self.frame_buffer = None
         self.frame_cursor = (0, 0)
+        # Per-frame tracking for render optimization tests
+        self.frames = []            # List of (buffer_copy, cursor_pos, content_changed)
+        self.content_touched = False  # Whether content area was written this cycle
 
     def _clear_screen(self):
         self.buffer = [[' '] * self.cols for _ in range(self.rows)]
+        self.content_touched = True
 
     def _clear_to_eol(self):
         row = self.cursor_row
         if 0 <= row < self.rows:
+            if row < self.rows - 1:
+                self.content_touched = True
             for c in range(self.cursor_col, self.cols):
                 self.buffer[row][c] = ' '
 
@@ -46,6 +52,8 @@ class AnsiScreen:
             return
         if self.cursor_col < 0 or self.cursor_col >= self.cols:
             return
+        if self.cursor_row < self.rows - 1:
+            self.content_touched = True
         self.buffer[self.cursor_row][self.cursor_col] = ch
         self.cursor_col += 1
 
@@ -53,6 +61,9 @@ class AnsiScreen:
         """Capture current buffer and cursor as a frame."""
         self.frame_buffer = [row[:] for row in self.buffer]
         self.frame_cursor = (self.cursor_row, self.cursor_col)
+        self.frames.append((self.frame_buffer, self.frame_cursor,
+                            self.content_touched))
+        self.content_touched = False
 
     def process(self, data: str) -> 'AnsiScreen':
         """Process ANSI output data through the virtual terminal."""
@@ -127,6 +138,16 @@ class AnsiScreen:
                 self.cursor_visible = True
                 self._snapshot()
 
+    def get_frame_count(self) -> int:
+        """Number of rendered frames (cursor-show events)."""
+        return len(self.frames)
+
+    def was_content_redrawn(self, frame_idx: int) -> bool:
+        """True if content area was written during this frame's render cycle."""
+        if frame_idx < 0 or frame_idx >= len(self.frames):
+            return False
+        return self.frames[frame_idx][2]
+
     def get_row_text(self, row: int) -> str:
         """Row text from last rendered frame, rstripped."""
         if self.frame_buffer is None:
@@ -193,5 +214,22 @@ if __name__ == "__main__":
     s3.process("\x1b[H")
     s3.process("\x1b[?25h")
     assert s3.get_cursor() == (0, 0)
+
+    # Test frame tracking for content changes
+    s4 = AnsiScreen(5, 20)
+    # Frame 1: write to content area + show cursor
+    s4.process("\x1b[1;1HHello\x1b[K\x1b[?25h")
+    assert s4.get_frame_count() == 1
+    assert s4.was_content_redrawn(0) == True
+
+    # Frame 2: only write to status bar (last row) + show cursor
+    s4.process("\x1b[5;1Hstatus\x1b[K\x1b[1;1H\x1b[?25h")
+    assert s4.get_frame_count() == 2
+    assert s4.was_content_redrawn(1) == False
+
+    # Frame 3: write to content area again
+    s4.process("\x1b[2;1HWorld\x1b[K\x1b[?25h")
+    assert s4.get_frame_count() == 3
+    assert s4.was_content_redrawn(2) == True
 
     print("All self-tests passed.")

@@ -143,6 +143,10 @@ editor_main
 ; Main loop
 ; ============================================================================
 main_loop
+  ; Default to full repaint; handlers clear for cursor-only updates
+  LDA #$FF
+  STA RENDER_FLAG
+
   ; If entering command mode, handle it specially (it does own I/O)
   LDA MODE
   CMP #MODE_COMMAND
@@ -187,8 +191,8 @@ main_loop
   ADC #$00
   STA FILE_LINE16+$01
 
-  ; Redraw screen
-  JSR render_screen
+  ; Redraw screen (full or cursor-only based on RENDER_FLAG)
+  JSR render_update
 
   JMP main_loop
 

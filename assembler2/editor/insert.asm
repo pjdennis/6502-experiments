@@ -79,6 +79,8 @@ insert_exit
   BEQ .done
   DEC CURSOR_COL
 .done
+  LDA #$00
+  STA RENDER_FLAG
   RTS
 
 ; Insert a printable character at cursor position
@@ -277,6 +279,8 @@ insert_move_left
   BEQ .done
   DEC CURSOR_COL
 .done
+  LDA #$00
+  STA RENDER_FLAG
   RTS
 
 insert_move_right
@@ -286,6 +290,8 @@ insert_move_right
   BEQ .done
   INC CURSOR_COL
 .done
+  LDA #$00
+  STA RENDER_FLAG
   RTS
 
 ; Clamp cursor for insert mode (can be one past end of line content)
