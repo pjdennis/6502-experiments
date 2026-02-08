@@ -237,7 +237,7 @@ MNTAB:
 ;   Y = offset into current MNTAB entry
 ;
 populate_instruction_hash_table:
-  SET16 MNTAB P2_16           ; P2_16 points to start of instruction table
+  SET16 MNTAB, P2_16 ; P2_16 points to start of instruction table
 
 .entry_loop:
   ; Check for end of table ($00 as first byte of entry)
@@ -260,7 +260,7 @@ populate_instruction_hash_table:
   ; Advance P2_16 to point to the mode data - P2_16 + Y + 1 -> P2_16
   TYA
   SEC                         ; Add 1
-  ADCA16 P2_16 P2_16
+  ADCA16 P2_16, P2_16
 
   ; --- Phase 2: Add mnemonic to hash table ---
   ; hash_add:
@@ -292,7 +292,7 @@ populate_instruction_hash_table:
   ; Advance P2_16 to next entry (add Y = total bytes consumed from this entry)
   TYA
   CLC
-  ADCA16 P2_16 P2_16          ; P2_16 + Y -> P2_16
+  ADCA16 P2_16, P2_16 ; P2_16 + Y -> P2_16
 
   ; Advance the heap
   JSR advance_heap
@@ -346,21 +346,21 @@ display_word_prefix:
   LDA #' '
   JSR write_b
   JSR write_b
-  SET16 msg_word P16
+  SET16 msg_word, P16
   JMP display_text
 
 display_byte_prefix:
   LDA #' '
   JSR write_b
   JSR write_b
-  SET16 msg_byte P16
+  SET16 msg_byte, P16
   JMP display_text
 
 display_asciiz_prefix:
   LDA #' '
   JSR write_b
   JSR write_b
-  SET16 msg_asciiz P16
+  SET16 msg_asciiz, P16
   JMP display_text
 
 display_comma:
@@ -424,7 +424,7 @@ display_table_entry:
   JMP .advance
 .not_empty:
   ; Display instruction label prefix
-  SET16 msg_instprefix P16
+  SET16 msg_instprefix, P16
   JSR display_text
   ; Display hash entry name
   JSR load_hash_entry
@@ -505,7 +505,7 @@ display_data:
   JSR load_hash_entry
 .entry_loop:
   ; Display label: .MNEMONIC:
-  SET16 msg_instprefix P16
+  SET16 msg_instprefix, P16
   JSR display_text
   CLC
   ADCI16 TABP16 $02 P16
@@ -531,7 +531,7 @@ display_data:
   JMP .next
 .not_zero:
   ; Has collision chain - display pointer to next entry as label
-  SET16 msg_instprefix P16
+  SET16 msg_instprefix, P16
   JSR display_text
   CLC
   LDY #$00
@@ -551,7 +551,7 @@ display_data:
   INY
   LDA (TABP16),Y
   STA P16+$01
-  CP16 P16 TABP16
+  CP16 P16, TABP16
   JMP .entry_loop
 .next:
   LDA HASH
@@ -570,16 +570,16 @@ start:
   LDA #LABEL_TYPE_GLOBAL
   STA LABEL_TYPE    ; Clear flag before using hash table
   JSR init_heap
-  SET16 FILE_STACK FS_P16  ; Initialize so heap overflow check works
+  SET16 FILE_STACK, FS_P16 ; Initialize so heap overflow check works
   JSR select_instruction_hash_table
   JSR init_hash_table
   JSR populate_instruction_hash_table
 
 ; Show the instructions hash table
-  SET16 msg_hash_table_comment P16
+  SET16 msg_hash_table_comment, P16
   JSR display_text
   JSR display_newline
-  SET16 msg_IHASHTAB P16
+  SET16 msg_IHASHTAB, P16
   JSR display_text
   LDA #':'
   JSR write_b
@@ -588,7 +588,7 @@ start:
   JSR display_newline
 
 ; Show the instructions heap data
-  SET16 msg_heap_comment P16
+  SET16 msg_heap_comment, P16
   JSR display_text
   JSR display_newline
   JSR display_data

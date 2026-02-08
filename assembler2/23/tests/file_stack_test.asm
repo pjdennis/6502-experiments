@@ -59,8 +59,8 @@ main:
 
 .args_ok:
   ; Initialize counters
-  SET16 $00 CHAR_COUNT16
-  SET16 $00 LINE_COUNT16
+  SET16 $00, CHAR_COUNT16
+  SET16 $00, LINE_COUNT16
   LDA #$01
   STA AT_LINE_START
 
@@ -104,7 +104,7 @@ mode_lines:
   ; If at line start, save line number BEFORE read_char can increment it
   LDA AT_LINE_START
   BEQ .do_read
-  CP16 CURLINE16 TO_DECIMAL_VALUE16
+  CP16 CURLINE16, TO_DECIMAL_VALUE16
 .do_read:
   ; Read first, then decide if we need line prefix
   JSR read_char_track_line
@@ -181,7 +181,7 @@ check_include_marker:
   JSR read_include_filename
   JSR push_file_stack
   ; Initialize line to 1 for included file
-  SET16 $01 CURLINE16
+  SET16 $01, CURLINE16
   LDA #$01
   STA AT_LINE_START
   CLC
@@ -275,13 +275,13 @@ mode_info:
 .done:
   ; Output "chars:N"
   JSR print_str_chars
-  CP16 CHAR_COUNT16 TO_DECIMAL_VALUE16
+  CP16 CHAR_COUNT16, TO_DECIMAL_VALUE16
   JSR print_decimal
   LDA #$0A
   JSR write_b
   ; Output "lines:N"
   JSR print_str_lines
-  CP16 LINE_COUNT16 TO_DECIMAL_VALUE16
+  CP16 LINE_COUNT16, TO_DECIMAL_VALUE16
   JSR print_decimal
   LDA #$0A
   JSR write_b
@@ -388,7 +388,7 @@ check_memory_or_include:
   JSR read_include_filename
   JSR push_file_stack
   ; Initialize line to 1 for included file
-  SET16 $01 CURLINE16
+  SET16 $01, CURLINE16
   LDA #$01
   STA AT_LINE_START
   CLC
@@ -508,11 +508,11 @@ check_memory_or_include:
   JMP .copy_name
 .name_done:
   ; Set memory pointer to TOKEN_MEM (content is now zero-terminated)
-  SET16 TOKEN_MEM FS_MEM_PTR16
+  SET16 TOKEN_MEM, FS_MEM_PTR16
   ; Push memory source (FS_FILENAME has name, pointer is set)
   JSR push_memory_source
   ; Initialize line to 1 for memory source, at start of line
-  SET16 $01 CURLINE16
+  SET16 $01, CURLINE16
   LDA #$01
   STA AT_LINE_START
   CLC
@@ -707,23 +707,23 @@ read_memory_content:
 ; ============================================================================
 
 print_str_chars:
-  SET16 str_chars TABP16
+  SET16 str_chars, TABP16
   JMP print_str
 
 print_str_lines:
-  SET16 str_lines TABP16
+  SET16 str_lines, TABP16
   JMP print_str
 
 print_str_stack:
-  SET16 str_stack TABP16
+  SET16 str_stack, TABP16
   JMP print_str
 
 print_str_empty:
-  SET16 str_empty TABP16
+  SET16 str_empty, TABP16
   JMP print_str
 
 print_str_active:
-  SET16 str_active TABP16
+  SET16 str_active, TABP16
   JMP print_str
 
 ; Print traceback of file stack - pops all entries, closes files
@@ -740,7 +740,7 @@ print_traceback:
   BEQ .done
   ; Find curr_type by scanning past the name
   ; FS_P16 points to: name\0 | curr_type | ...
-  CP16 FS_P16 TABP16
+  CP16 FS_P16, TABP16
   LDY #$00
 .find_null:
   LDA (TABP16),Y
@@ -753,22 +753,22 @@ print_traceback:
   LDA (TABP16),Y
   BNE .print_memory_type
   ; curr_type = 0: print "file:"
-  SET16 str_type_file TABP16
+  SET16 str_type_file, TABP16
   JSR print_str
   JMP .print_name
 .print_memory_type:
   ; curr_type = 1: print "memory:"
-  SET16 str_type_memory TABP16
+  SET16 str_type_memory, TABP16
   JSR print_str
 .print_name:
   ; Print name (FS_PL points to current entry's name)
-  CP16 FS_P16 TABP16
+  CP16 FS_P16, TABP16
   JSR print_basename
   ; Print ":"
   LDA #':'
   JSR write_b
   ; Print line number
-  CP16 CURLINE16 TO_DECIMAL_VALUE16
+  CP16 CURLINE16, TO_DECIMAL_VALUE16
   JSR print_decimal
   ; Print newline
   LDA #$0A
@@ -910,7 +910,7 @@ parse_args:
   ; Open file via file stack (this resets line number to 0)
   JSR push_file_stack
   ; Initialize line number to 1 (first line is line 1)
-  SET16 $01 CURLINE16
+  SET16 $01, CURLINE16
   CLC
   RTS
 .error:
@@ -964,7 +964,7 @@ parse_mode:
 ; Error handling
 ; ============================================================================
 error_usage:
-  SET16 msg_usage TABP16
+  SET16 msg_usage, TABP16
   JSR print_str_err
   LDA #$01
   JMP exit

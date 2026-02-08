@@ -21,7 +21,7 @@ FWDREF16:    .word 0     ; Pointer to forward reference list
 ;          X, Y are preserved
 init_fwdref_list:
 reset_fwdref_ptr:
-  SET16 FWDREF_LIST FWDREF16
+  SET16 FWDREF_LIST, FWDREF16
   RTS
 
 
@@ -44,7 +44,7 @@ finalize_fwdref_list:
 ;          Jumps to err_too_many_forward_refs if list is full
 add_forward_ref:
   ; Check if there's room (pointer must be < FWDREF_LIMIT - 2) to allow for terminator
-  CMPI16 FWDREF16 FWDREF_LIMIT-$02
+  CMPI16 FWDREF16, FWDREF_LIMIT - $02
   BCS .too_many           ; >= FWDREF_LIMIT, no room for entry + terminator
   ; Store PC at current list position
   LDY #$00

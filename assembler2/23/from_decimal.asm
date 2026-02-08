@@ -28,7 +28,7 @@ from_decimal:
 .loop:
   ; Multiply FROM_DECIMAL16 by 10 using: temp=val; val<<=2; val+=temp; val<<=1
   ; Step 1: temp = val
-  CP16 FROM_DECIMAL16 FROM_DECIMAL_TMP16
+  CP16 FROM_DECIMAL16, FROM_DECIMAL_TMP16
   ; Step 2: val <<= 1
   ASL16 FROM_DECIMAL16
   BCS .overflow
@@ -47,7 +47,7 @@ from_decimal:
   SEC
   SBC #'0'              ; Convert ASCII digit to value 0-9
   CLC
-  ADCA16 FROM_DECIMAL16 FROM_DECIMAL16
+  ADCA16 FROM_DECIMAL16, FROM_DECIMAL16
   BCS .overflow
   ; Read next character
   JSR read_char

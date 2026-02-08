@@ -55,11 +55,11 @@
 
 ; Addresses
 FWDREF_LIST     = $0200  ; Forward reference list (512 bytes, $0200-$03FF)
-FWDREF_LIMIT    = FWDREF_LIST+$0200 ; Limit for forward reference list data
+FWDREF_LIMIT    = FWDREF_LIST + $0200 ; Limit for forward reference list data
 SCOPE_STACK     = $0400  ; Label scope stack for macro expansions (256 bytes, $0400-$04FF)
-SCOPE_LIMIT     = SCOPE_STACK+$0100 ; Limit for scope stack
+SCOPE_LIMIT     = SCOPE_STACK + $0100 ; Limit for scope stack
 MACRO_ARG_BUF   = $0500  ; Temp buffer for macro args during expansion (256 bytes)
-MACRO_ARG_LIMIT = MACRO_ARG_BUF+$0100 ; Limit for macro arg buffer
+MACRO_ARG_LIMIT = MACRO_ARG_BUF + $0100 ; Limit for macro arg buffer
 TOKEN           = $0600  ; Buffer for the current token being read
 LHASHTAB        = $0700  ; Label hash table
 IFDEF_DECISIONS = $0800  ; Buffer for .ifdef decisions (256 bytes)
@@ -588,7 +588,7 @@ parse_term:
   RTS
 .decimal:
   JSR from_decimal     ; Result in FROM_DECIMAL16, carry set per value size
-  CP16 FROM_DECIMAL16 OPERAND16 ; Copy result; LDA/STA preserves carry
+  CP16 FROM_DECIMAL16, OPERAND16 ; Copy result; LDA/STA preserves carry
   RTS
 
 
@@ -707,7 +707,7 @@ parse_expression:
 
 .add_op:
   ; Save current accumulator
-  CP16 OPERAND16 EXPR_ACCU16
+  CP16 OPERAND16, EXPR_ACCU16
 
   ; Parse next term (skip '+' first)
   JSR read_char        ; Skip '+'
@@ -726,7 +726,7 @@ parse_expression:
 
 .sub_op:
   ; Save current accumulator
-  CP16 OPERAND16 EXPR_ACCU16
+  CP16 OPERAND16, EXPR_ACCU16
 
   ; Parse next term (skip '-' first)
   JSR read_char        ; Skip '-'
@@ -759,7 +759,7 @@ parse_expression:
 
 .left_shift_op:
   ; Save current operand to EXPR_ACCU
-  CP16 OPERAND16 EXPR_ACCU16
+  CP16 OPERAND16, EXPR_ACCU16
 
   ; Parse shift count (use parse_term_with_selector to support byte selectors like <<<)
   JSR read_char        ; Read char after second '<'
@@ -780,7 +780,7 @@ parse_expression:
   TAY                      ; Transfer shift count to Y
 
   ; Restore value to shift from EXPR_ACCU
-  CP16 EXPR_ACCU16 OPERAND16
+  CP16 EXPR_ACCU16, OPERAND16
 
   ; Perform left shift
 .left_shift_loop:
@@ -791,7 +791,7 @@ parse_expression:
 
 .right_shift_op:
   ; Save current operand to EXPR_ACCU
-  CP16 OPERAND16 EXPR_ACCU16
+  CP16 OPERAND16, EXPR_ACCU16
 
   ; Parse shift count (use parse_term_with_selector to support byte selectors like >>>)
   JSR read_char        ; Read char after second '>'
@@ -812,7 +812,7 @@ parse_expression:
   TAY                      ; Transfer shift count to Y
 
   ; Restore value to shift from EXPR_ACCU
-  CP16 EXPR_ACCU16 OPERAND16
+  CP16 EXPR_ACCU16, OPERAND16
 
   ; Perform right shift (logical/unsigned)
 .right_shift_loop:
@@ -864,7 +864,7 @@ read_local_label:
 
 
 select_label_hash_table:
-  SET16 LHASHTAB HTP16
+  SET16 LHASHTAB, HTP16
   RTS
 
 
@@ -881,7 +881,7 @@ update_label_scope_from_lookup:
   JSR find_in_hash       ; TABP16 now points to token string
   JSR commit_cached_hash ; Commit hash since this is a non-assignment global
   ; After find_in_hash, TABP16 points to token string (entry_start + 2)
-  CP16 TABP16 LABEL_SCOPE16
+  CP16 TABP16, LABEL_SCOPE16
   RTS
 
 
@@ -956,11 +956,11 @@ capture_label:
   LDA LABEL_TYPE
   BNE .was_local_1          ; If local flag != 0, skip
   ; Store the address of the current global label
-  CP16 TABP16 LABEL_SCOPE16
+  CP16 TABP16, LABEL_SCOPE16
   JSR commit_cached_hash    ; Commit hash for local label lookups
 .was_local_1:
   ; Store current program counter as the hash value into HEX16
-  CP16 PC16 HEX16
+  CP16 PC16, HEX16
   JSR store_hash_value
   JMP .skip_spaces_and_return_processed_flag
 .has_equals:
@@ -1042,7 +1042,7 @@ update_pc:
 .less:
   JMP err_cannot_move_pc_backwards
 .no_fill:
-  CP16 HEX16 PC16
+  CP16 HEX16, PC16
 .done:
   RTS
 
@@ -1075,14 +1075,14 @@ lookup_mnemonic:
   ; MACRO_DEF_PTR = TABP16 + Y + 1 (skip past MODE_MACRO to point at args)
   TYA
   SEC ; +1
-  ADCA16 TABP16 MACRO_DEF_PTR16
+  ADCA16 TABP16, MACRO_DEF_PTR16
   SEC                   ; Found macro usage
   RTS
 .is_instruction:
   ; Calculate INST_PTR = TABP16 + Y
   TYA
   CLC
-  ADCA16 TABP16 INST_PTR16
+  ADCA16 TABP16, INST_PTR16
   CLC                   ; Found mnemonic
   RTS
 
@@ -1425,41 +1425,41 @@ process_directive:
   LDA #LABEL_TYPE_GLOBAL
   STA LABEL_TYPE
   ; Check for 'include'
-  SET16 directive_include TABP16
+  SET16 directive_include, TABP16
   JSR compare_token
   BEQ .include
   ; Check for 'zeropage'
-  SET16 directive_zeropage TABP16
+  SET16 directive_zeropage, TABP16
   JSR compare_token
   BEQ .zeropage
   ; Check for 'code'
-  SET16 directive_code TABP16
+  SET16 directive_code, TABP16
   JSR compare_token
   BEQ .code
   ; Check for 'data'
-  SET16 directive_data TABP16
+  SET16 directive_data, TABP16
   JSR compare_token
   BEQ .data
   ; Check for 'byte'
-  SET16 directive_byte TABP16
+  SET16 directive_byte, TABP16
   JSR compare_token
   BEQ .byte
   ; Check for 'word'
-  SET16 directive_word TABP16
+  SET16 directive_word, TABP16
   JSR compare_token
   BEQ .word
   ; Check for 'asciiz'
-  SET16 directive_asciiz TABP16
+  SET16 directive_asciiz, TABP16
   JSR compare_token
   BEQ .asciiz
   JSR process_conditional_directive ; Returns with C=0 if processed
   BCC .directive_done
   ; Check for 'macro'
-  SET16 directive_macro TABP16
+  SET16 directive_macro, TABP16
   JSR compare_token
   BEQ .macro
   ; Check for 'endmacro'
-  SET16 directive_endmacro TABP16
+  SET16 directive_endmacro, TABP16
   JSR compare_token
   BEQ .endmacro
   JMP err_unknown_directive
@@ -1511,11 +1511,11 @@ process_directive:
 ;         A is not preserved
 process_conditional_directive:
   ; Check for 'ifdef'
-  SET16 directive_ifdef TABP16
+  SET16 directive_ifdef, TABP16
   JSR compare_token
   BEQ .ifdef
   ; Check for 'endif'
-  SET16 directive_endif TABP16
+  SET16 directive_endif, TABP16
   JSR compare_token
   BEQ .endif
   SEC ; Not processed
@@ -1728,7 +1728,7 @@ process_macro:
   ; MEMP16 points to location at which to store the value
   ; TABP16 points to the macro name on heap
   .ifdef enable_debug
-  CP16 TABP16 MACRO_PTR16
+  CP16 TABP16, MACRO_PTR16
   .endif
   ; Store MODE_MACRO sentinel
   LDY #$00
@@ -1757,7 +1757,7 @@ process_macro:
   APPEND_HEAPI $00
   JSR advance_heap
   ; Update MACRO_DEF_PTR to point where body will be stored
-  CP16 MEMP16 MACRO_DEF_PTR16
+  CP16 MEMP16, MACRO_DEF_PTR16
   ; Set IN_MACRO_DEF flag to start capturing
   LDA #$FF
   STA IN_MACRO_DEF
@@ -1772,7 +1772,7 @@ process_macro:
 ;          Uses TABP16 as walk pointer, A/Y clobbered, X preserved
 check_macro_recursion:
   ; Walk scope stack from bottom to current position
-  SET16 SCOPE_STACK TABP16
+  SET16 SCOPE_STACK, TABP16
 .loop:
   ; Check if we've reached current scope pointer
   CMP16 TABP16 SCOPE_PTR16
@@ -1810,7 +1810,7 @@ expand_macro:
 .ARG_SIZE = $03 ; Size of each macro argument (value_L, value_H, is_fwdref)
                 ; Max arguments = 256 / .ARG_SIZE = 85
   ; Save original macro entry address before MACRO_DEF_PTR is modified
-  CP16 MACRO_DEF_PTR16 MACRO_ENTRY16
+  CP16 MACRO_DEF_PTR16, MACRO_ENTRY16
   ; Check for recursive macro invocation
   JSR check_macro_recursion
   ; Save X (output file handle) - we'll use X as index into MACRO_ARG_BUF
@@ -1838,7 +1838,7 @@ expand_macro:
   ; Advance MACRO_DEF_PTR past the null terminator
   TYA
   SEC                   ; +1 for null
-  ADCA16 MACRO_DEF_PTR16 MACRO_DEF_PTR16
+  ADCA16 MACRO_DEF_PTR16, MACRO_DEF_PTR16
   ; Check for argument in input
   JSR check_for_end_of_line
   BCC .have_arg
@@ -1848,8 +1848,8 @@ expand_macro:
   JSR parse_expression
   JSR skip_optional_comma
   ; MACRO_ARG_BUF bounds check
-  ; Check if X < MACRO_ARG_LIMIT-MACRO_ARG_BUF-.ARG_SIZE+$01 (room for one more entry)
-  CPX #MACRO_ARG_LIMIT-MACRO_ARG_BUF-.ARG_SIZE+$01
+  ; Check if X < MACRO_ARG_LIMIT - MACRO_ARG_BUF - .ARG_SIZE + $01 (room for one more entry)
+  CPX #MACRO_ARG_LIMIT - MACRO_ARG_BUF - .ARG_SIZE + $01
   BCC .arg_ok         ; X < limit: safe
 .arg_overflow:
   JMP err_too_many_arguments
@@ -1875,7 +1875,7 @@ expand_macro:
 
   ; ----- Phase 2: Populate child macro scope with parameter values -----
   ; Restore params start to MACRO_DEF_PTR
-  CP16 MACRO_ENTRY16 MACRO_DEF_PTR16
+  CP16 MACRO_ENTRY16, MACRO_DEF_PTR16
   ; Reset X to read values from start of macro arg buffer
   LDX #$00
   ; Now iterate through params and add to hash with stored values
@@ -1894,7 +1894,7 @@ expand_macro:
   ; Advance MACRO_DEF_PTR past param name
   TYA
   SEC ; +1 for null terminator
-  ADCA16 MACRO_DEF_PTR16 MACRO_DEF_PTR16 ; MACRO_DEF_PTR + A + 1 -> MACRO_DEF_PTR
+  ADCA16 MACRO_DEF_PTR16, MACRO_DEF_PTR16 ; MACRO_DEF_PTR + A + 1 -> MACRO_DEF_PTR
   ; Load fwdref and value from buffer
   LDA MACRO_ARG_BUF,X
   STA IS_FWDREF
@@ -1974,7 +1974,7 @@ capture_macro_line:
 .pass1:
   ; === Pass 1: Copy to heap with compression ===
   ; Comments stripped, consecutive spaces collapsed (except in strings)
-  CP16 MEMP16 MACRO_DEF_PTR16  ; Save heap pos for potential undo
+  CP16 MEMP16, MACRO_DEF_PTR16 ; Save heap pos for potential undo
   LDX #$00               ; Space indicator - $01 if last char was a space, $00 otherwise
   LDY #$00               ; Capture index
   LDA CURR_CHAR
@@ -2064,7 +2064,7 @@ capture_macro_line:
   APPEND_HEAPA             ; Capture the newline
   JSR advance_heap
   ; Now check if this line was .endmacro or .macro
-  CP16 MACRO_DEF_PTR16 TABP16
+  CP16 MACRO_DEF_PTR16, TABP16
   ; Skip leading spaces
   LDY #$00
 .skip_space:
@@ -2079,13 +2079,13 @@ capture_macro_line:
   ; It's a directive
   TYA
   SEC                      ; +1
-  ADCA16 TABP16 TABP16     ; Advance TABP16 to point to the start of the directive
+  ADCA16 TABP16, TABP16 ; Advance TABP16 to point to the start of the directive
   ; Check for .endmacro first (the usual case)
-  SET16 directive_endmacro HEX16
+  SET16 directive_endmacro, HEX16
   JSR match_token
   BCS .not_endmacro        ; Not a match - keep as macro body
   ; Found .endmacro. Restore heap to undo the copy
-  CP16 MACRO_DEF_PTR16 MEMP16
+  CP16 MACRO_DEF_PTR16, MEMP16
   ; At end of macro definition. Write $00 terminator to body
   LDY #$00
   APPEND_HEAPI $00
@@ -2106,7 +2106,7 @@ capture_macro_line:
   JMP skip_rest_of_line    ; Tail call
 .not_endmacro:
   ; Not .endmacro - check if it's .macro (nested definition)
-  SET16 directive_macro HEX16
+  SET16 directive_macro, HEX16
   JSR match_token
   BCS .keep_line           ; Not a match, not .macro
   ; Found nested macro definition - error
@@ -2339,7 +2339,7 @@ handle_show_captured_macros:
 ; On entry TABP16 points past "define:" to label name
 handle_define:
   JSR copy_string_to_token
-  SET16 $0001 HEX16
+  SET16 $0001, HEX16
   LDA #LABEL_TYPE_GLOBAL
   STA LABEL_TYPE
   JMP hash_add           ; Tail call
@@ -2363,7 +2363,7 @@ ARG_PTR16:     .word 0     ; Pointer into COMMAND_LINE_ARGS table
 match_command_line_arg:
   TYA
   PHA
-  SET16 COMMAND_LINE_ARGS ARG_PTR16
+  SET16 COMMAND_LINE_ARGS, ARG_PTR16
 .try_entry:
   ; Check for end of table (first byte = 0)
   LDY #$00
@@ -2387,7 +2387,7 @@ match_command_line_arg:
   DEY                    ; Back up to the match position
   TYA                    ; Y is pointing at the text following the match
   CLC
-  ADCA16 TABP16 TABP16
+  ADCA16 TABP16, TABP16
   INY                    ; Skip forwards to the handler position
   JMP .load_handler
 .check_full_match:
@@ -2422,7 +2422,7 @@ match_command_line_arg:
   TYA
   CLC
   ADC #$04
-  ADCA16 ARG_PTR16 ARG_PTR16
+  ADCA16 ARG_PTR16, ARG_PTR16
   JMP .try_entry
 .no_match:
   SEC
@@ -2464,7 +2464,7 @@ show_macros:
   ; Output "Macro: "
   SHOW_MESSAGEI .macro_prefix
   ; Output macro name
-  CP16 MACRO_PTR16 TABP16
+  CP16 MACRO_PTR16, TABP16
   JSR show_message
   ; Skip past the trailing null and MODE_MACRO byte
   INY
@@ -2492,7 +2492,7 @@ show_macros:
 .advance_tabp:
   TYA
   CLC
-  ADCA16 TABP16 TABP16
+  ADCA16 TABP16, TABP16
   LDY #$00
   RTS
 .macro_prefix:
@@ -2565,7 +2565,7 @@ start:
 
   .ifdef enable_debug
   ; Capture forward ref pointer after pass 1
-  CP16 FWDREF16 PASS_1_FWDREF16
+  CP16 FWDREF16, PASS_1_FWDREF16
   .endif
 
   LDA #$FF

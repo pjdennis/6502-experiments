@@ -192,12 +192,12 @@ err_fwdref_tracking:
 
 
   .macro SHOW_MESSAGEI addr
-  SET16 addr TABP16
+  SET16 addr, TABP16
   JSR show_message
   .endmacro
 
   .macro SHOW_MESSAGE ptr
-  CP16 ptr TABP16
+  CP16 ptr, TABP16
   JSR show_message
   .endmacro
 
@@ -257,7 +257,7 @@ interrupt:
 ; Print the " at line " message
   SHOW_MESSAGEI msg_error_line
 ; Print the current line in decimal
-  CP16 CURR_LINE16 TO_DECIMAL_VALUE16
+  CP16 CURR_LINE16, TO_DECIMAL_VALUE16
   JSR show_decimal
 .location_done:
 ; Print the ": " message
@@ -296,7 +296,7 @@ msg_error_file:
 ;         Decimal number string stored at TO_DECIMAL_RESULT
 show_decimal:
   JSR to_decimal
-  SET16 TO_DECIMAL_RESULT TABP16
+  SET16 TO_DECIMAL_RESULT, TABP16
   JMP show_message ; tail call
 
 
@@ -356,7 +356,7 @@ show_include_traceback:
   ; Print ":"
   SHOW_CHAR ':'
   ; Print line number (CURR_LINE16 has line where include was)
-  CP16 CURR_LINE16 TO_DECIMAL_VALUE16
+  CP16 CURR_LINE16, TO_DECIMAL_VALUE16
   JSR show_decimal
   ; Continue to next parent
   JMP .loop

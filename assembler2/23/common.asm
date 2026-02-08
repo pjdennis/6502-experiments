@@ -4,18 +4,18 @@ OPERAND_BYTES_1 = $20
 OPERAND_BYTES_2 = $40
 
 ; Addressing mode constants
-MODE_NONE  = $00+OPERAND_BYTES_0 ; Implied (no operand)
-MODE_IMM   = $01+OPERAND_BYTES_1 ; Immediate
-MODE_ZP    = $02+OPERAND_BYTES_1 ; Zero page
-MODE_ZPX   = $03+OPERAND_BYTES_1 ; Zero page, X
-MODE_ZPY   = $04+OPERAND_BYTES_1 ; Zero page, Y
-MODE_ABS   = $05+OPERAND_BYTES_2 ; Absolute
-MODE_ABSX  = $06+OPERAND_BYTES_2 ; Absolute, X
-MODE_ABSY  = $07+OPERAND_BYTES_2 ; Absolute, Y
-MODE_INDX  = $08+OPERAND_BYTES_1 ; Indirect, X - ($zp,X)
-MODE_INDY  = $09+OPERAND_BYTES_1 ; Indirect, Y - ($zp),Y
-MODE_REL   = $0A+OPERAND_BYTES_1 ; Relative (branches)
-MODE_IND   = $0B+OPERAND_BYTES_2 ; Indirect - JMP ($xxxx)
+MODE_NONE  = $00 + OPERAND_BYTES_0 ; Implied (no operand)
+MODE_IMM   = $01 + OPERAND_BYTES_1 ; Immediate
+MODE_ZP    = $02 + OPERAND_BYTES_1 ; Zero page
+MODE_ZPX   = $03 + OPERAND_BYTES_1 ; Zero page, X
+MODE_ZPY   = $04 + OPERAND_BYTES_1 ; Zero page, Y
+MODE_ABS   = $05 + OPERAND_BYTES_2 ; Absolute
+MODE_ABSX  = $06 + OPERAND_BYTES_2 ; Absolute, X
+MODE_ABSY  = $07 + OPERAND_BYTES_2 ; Absolute, Y
+MODE_INDX  = $08 + OPERAND_BYTES_1 ; Indirect, X - ($zp,X)
+MODE_INDY  = $09 + OPERAND_BYTES_1 ; Indirect, Y - ($zp),Y
+MODE_REL   = $0A + OPERAND_BYTES_1 ; Relative (branches)
+MODE_IND   = $0B + OPERAND_BYTES_2 ; Indirect - JMP ($xxxx)
 MODE_MACRO = $8E                 ; Sentinel marker to indicate macro
 MODE_END   = $8F                 ; Terminates the list of modes
 
@@ -98,11 +98,11 @@ init_heap:
   LDA SMALL_HEAP_FLAG
   BEQ .normal_heap
   ; Small heap for testing: only ~384 bytes available
-  SET16 FILE_STACK-$0180 MEMP16
+  SET16 FILE_STACK - $0180, MEMP16
   RTS
 .normal_heap:
   .endif
-  SET16 HEAP MEMP16
+  SET16 HEAP, MEMP16
   RTS
 
 
@@ -146,5 +146,5 @@ store_hash_value:
 select_instruction_hash_table:
   LDA #LABEL_TYPE_GLOBAL
   STA LABEL_TYPE       ; Clear local label flag for instruction lookup
-  SET16 IHASHTAB HTP16
+  SET16 IHASHTAB, HTP16
   RTS

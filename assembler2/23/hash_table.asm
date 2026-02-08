@@ -303,11 +303,11 @@ compare_token:
 find_token:
 .token_loop:
   ; Store the current pointer
-  CP16 TABP16 HTTP16
+  CP16 TABP16, HTTP16
   ; Advance past 'next' pointer
   CLC
   LDA #$02
-  ADCA16 TABP16 TABP16
+  ADCA16 TABP16, TABP16
   ; Check for matching token
   JSR compare_token
   BNE .token_is_non_match
@@ -328,7 +328,7 @@ find_token:
   JMP .token_loop
 .at_end:
   ; point tabp,Y to the zero 'next' pointer
-  CP16 HTTP16 TABP16
+  CP16 HTTP16, TABP16
   LDY #$00
   SEC ; Carry set indicates not found
   RTS
@@ -354,7 +354,7 @@ store_token:
   INY
   JSR advance_heap
   ; Save the pointer to the key
-  CP16 MEMP16 TABP16
+  CP16 MEMP16, TABP16
   ; Check if this is a local label
   LDA LABEL_TYPE
   BEQ .copy_token       ; If global, skip escape header

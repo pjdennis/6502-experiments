@@ -36,7 +36,7 @@ FS_MEM_PTR16:  .word 0     ; Current read position in memory
 
 
 file_stack_init:
-  SET16 FILE_STACK FS_P16
+  SET16 FILE_STACK, FS_P16
   LDA #$00
   STA FS_SRC_TYPE
   STA FS_CURR_FILE
@@ -45,7 +45,7 @@ file_stack_init:
 
 ; On exit Z is set if file stack empty, clear otherwise
 file_stack_empty:
-  CMPI16 FS_P16 FILE_STACK
+  CMPI16 FS_P16, FILE_STACK
   RTS
 
 
@@ -87,7 +87,7 @@ push_source_frame:
   CHECK_FOR_OUT_OF_MEMORY FS_TEMP16
 
   ; Commit new stack pointer
-  CP16 FS_TEMP16 FS_P16
+  CP16 FS_TEMP16, FS_P16
   ; Copy name to stack
   LDY #$FF
 .copy_loop:
@@ -241,7 +241,7 @@ pop_source:
   ; Y points to last byte read, add Y+1 to stack pointer
   TYA
   SEC                   ; +1
-  ADCA16 FS_P16 FS_P16 
+  ADCA16 FS_P16, FS_P16
   RTS
 
 ; Legacy names for compatibility

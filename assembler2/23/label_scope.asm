@@ -38,8 +38,8 @@ SCOPE_DEPTH:    .byte 0     ; Current nesting depth (0 = not in macro)
 ;          EXPANSION_ID16 = 0, SCOPE_DEPTH = 0
 ;          A clobbered, X/Y preserved
 init_scope_stack:
-  SET16 SCOPE_STACK SCOPE_PTR16
-  SET16 $00 EXPANSION_ID16
+  SET16 SCOPE_STACK, SCOPE_PTR16
+  SET16 $00, EXPANSION_ID16
   LDA #$00
   STA SCOPE_DEPTH
   RTS
@@ -51,8 +51,8 @@ init_scope_stack:
 ;          EXPANSION_ID16 = 0, SCOPE_DEPTH = 0
 ;          A clobbered, X/Y preserved
 reset_scope_stack:
-  SET16 SCOPE_STACK SCOPE_PTR16
-  SET16 $00 EXPANSION_ID16
+  SET16 SCOPE_STACK, SCOPE_PTR16
+  SET16 $00, EXPANSION_ID16
   LDA #$00
   STA SCOPE_DEPTH
   RTS
@@ -75,8 +75,8 @@ reset_scope_stack:
 ;          A, Y clobbered, X preserved
 push_label_scope:
   ; SCOPE_STACK bounds check
-  ; Check if SCOPE_PTR16 <= SCOPE_LIMIT-SCOPE_ENTRY_SIZE (room for one more entry)
-  CMPI16 SCOPE_PTR16 SCOPE_LIMIT-SCOPE_ENTRY_SIZE
+  ; Check if SCOPE_PTR16 <= SCOPE_LIMIT - SCOPE_ENTRY_SIZE (room for one more entry)
+  CMPI16 SCOPE_PTR16, SCOPE_LIMIT - SCOPE_ENTRY_SIZE
   BCC .scope_ok       ; Less than limit: safe
   BEQ .scope_ok       ; Equal to limit: safe
   JMP err_macro_nesting_too_deep
@@ -100,7 +100,7 @@ push_label_scope:
   ; Increment expansion ID
   INC16 EXPANSION_ID16
   ; Set LABEL_SCOPE16 to expansion ID (synthetic scope pointer)
-  CP16 EXPANSION_ID16 LABEL_SCOPE16
+  CP16 EXPANSION_ID16, LABEL_SCOPE16
   ; Calculate CACHED_HASH from expansion ID
   ; Use low byte through scramble table for reasonable distribution
   LDA EXPANSION_ID16

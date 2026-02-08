@@ -27,7 +27,7 @@
 
 ; ADC16 ptr1 ptr2 ptr3 - Add two 16 bit values at ptr1 and ptr2, storing result at ptr3
 ; Clobbers A
-  .macro ADC16 ptr1 ptr2 ptr3
+  .macro ADC16 ptr1, ptr2, ptr3
   LDA ptr1
   ADC ptr2
   STA ptr3
@@ -39,7 +39,7 @@
 
 ; ADCA16 ptr1 ptr2 - Adds A to value at ptr1, storing result at ptr2
 ; Clobbers A
-  .macro ADCA16 ptr1 ptr2
+  .macro ADCA16 ptr1, ptr2
   ADC ptr1
   STA ptr2
   LDA #$00
@@ -50,7 +50,7 @@
 
 ; ADCI16 ptr1 val ptr2 - Adds val to value at ptr1, storing result at ptr2
 ; Clobbers A
-  .macro ADCI16 ptr1 val ptr2
+  .macro ADCI16 ptr1, val, ptr2
   LDA ptr1
   ADC #<val
   STA ptr2
@@ -62,7 +62,7 @@
 
 ; SBC16 ptr1 ptr2 ptr3 - Subtracts the value at ptr2 from the value at ptr1, storing result at ptr3
 ; Clobbers A
-  .macro SBC16 ptr1 ptr2 ptr3
+  .macro SBC16 ptr1, ptr2, ptr3
   LDA ptr1
   SBC ptr2
   STA ptr3
@@ -74,7 +74,7 @@
 
 ; SBCI16 ptr1 val ptr2 - subracts val from value at ptr1, storing result at ptr2
 ; Clobbers A
-  .macro SBCI16 ptr1 val ptr2
+  .macro SBCI16 ptr1, val, ptr2
   LDA ptr1
   SBC #<val
   STA ptr2
@@ -89,7 +89,7 @@
 ;   BEQ/BNE work for equality
 ;   BCC branches if value at ptr1 < value at ptr2
 ; Clobbers A
-  .macro CMP16 ptr1 ptr2
+  .macro CMP16 ptr1, ptr2
   LDA ptr1+$01
   CMP ptr2+$01
   BNE .done
@@ -104,7 +104,7 @@
 ;   BEQ/BNE work for equality
 ;   BCC branches if value at ptr < val
 ; Clobbers A
-  .macro CMPI16 ptr val
+  .macro CMPI16 ptr, val
   LDA ptr+$01
   CMP #>val
   BNE .done
@@ -132,7 +132,7 @@
 
 ; CP16 src dst - Copy 16-bit value from src to dst
 ; Clobbers A
-  .macro CP16 src dst
+  .macro CP16 src, dst
   LDA src
   STA dst
   LDA src+$01
@@ -142,7 +142,7 @@
 
 ; SET16 val ptr - Load 16-bit immediate value into ptr/ptr+$01
 ; Clobbers A
-  .macro SET16 val ptr
+  .macro SET16 val, ptr
   LDA #<val
   STA ptr
   LDA #>val
