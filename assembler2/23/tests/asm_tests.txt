@@ -442,13 +442,12 @@ INPUT:
 EXPECT_HEX: a9 42
 
 ---
-NAME: trailing_garbage_zp
+NAME: expr_space_before_add_zp
+DESCRIPTION: Space before + in zero page expression
 INPUT:
  1: * = $0200
  2:   LDA $42 +1
-EXPECT_ERROR: 10
-EXPECT_LINE: 2
-EXPECT_MSG: Unexpected text after operand
+EXPECT_HEX: a5 43
 
 ---
 NAME: label_not_found
@@ -1340,6 +1339,141 @@ INPUT:
 EXPECT_ERROR: 4
 EXPECT_LINE: 2
 EXPECT_MSG: Label expected
+
+# ============================================================================
+# SPACES IN EXPRESSIONS TESTS
+# ============================================================================
+
+---
+NAME: expr_spaces_around_add
+DESCRIPTION: Spaces around + operator in immediate mode
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$10 + $20
+EXPECT_HEX: a9 30
+
+---
+NAME: expr_spaces_around_sub
+DESCRIPTION: Spaces around - operator in immediate mode
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$30 - $10
+EXPECT_HEX: a9 20
+
+---
+NAME: expr_space_after_left_shift
+DESCRIPTION: Space after << operator in immediate mode
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$01<< $04
+EXPECT_HEX: a9 10
+
+---
+NAME: expr_space_after_right_shift
+DESCRIPTION: Space after >> operator in immediate mode
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$80>> $02
+EXPECT_HEX: a9 20
+
+---
+NAME: expr_space_before_add
+DESCRIPTION: Space before + only
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$10 +$20
+EXPECT_HEX: a9 30
+
+---
+NAME: expr_space_after_add
+DESCRIPTION: Space after + only
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$10+ $20
+EXPECT_HEX: a9 30
+
+---
+NAME: expr_multiple_spaces
+DESCRIPTION: Multiple spaces around operator
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$10  +  $20
+EXPECT_HEX: a9 30
+
+---
+NAME: expr_space_low_byte_selector
+DESCRIPTION: Space after low byte selector
+INPUT:
+ 1: * = $0200
+ 2:   LDA #< $ABCD
+EXPECT_HEX: a9 cd
+
+---
+NAME: expr_space_high_byte_selector
+DESCRIPTION: Space after high byte selector
+INPUT:
+ 1: * = $0200
+ 2:   LDA #> $ABCD
+EXPECT_HEX: a9 ab
+
+---
+NAME: expr_byte_selector_and_spaces_in_op
+DESCRIPTION: Byte selector with spaces around operator
+INPUT:
+ 1: * = $0200
+ 2:   LDA #< $1200 + $34
+EXPECT_HEX: a9 34
+
+---
+NAME: expr_chained_ops_with_spaces
+DESCRIPTION: Chained operators with spaces
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$10 + $20 - $05
+EXPECT_HEX: a9 2b
+
+---
+NAME: expr_label_with_spaces
+DESCRIPTION: Label expression with spaces around operator
+INPUT:
+ 1: * = $0200
+ 2: base = $40
+ 3:   LDA base + $02
+EXPECT_HEX: a5 42
+
+---
+NAME: expr_fwdref_with_spaces
+DESCRIPTION: Forward reference expression with spaces
+INPUT:
+ 1: * = $0200
+ 2:   LDA target + $01
+ 3: target = $42
+EXPECT_HEX: ad 43 00
+EXPECT_FWDREF: 1
+
+---
+NAME: expr_data_with_spaces
+DESCRIPTION: .data directive with spaces around operator
+INPUT:
+ 1: * = $0200
+ 2:   .data $10 + $20
+EXPECT_HEX: 30
+
+---
+NAME: expr_data_separate_values_still_work
+DESCRIPTION: .data with separate values (no operator) still produces multiple values
+INPUT:
+ 1: * = $0200
+ 2:   .data $10 $20
+EXPECT_HEX: 10 20
+
+---
+NAME: expr_shift_selector_with_spaces
+DESCRIPTION: Byte selector in shift count with space after selector
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$01<< < $0004
+EXPECT_HEX: a9 10
 
 # ============================================================================
 # CONDITIONAL ASSEMBLY TESTS
@@ -2830,25 +2964,23 @@ Error 1 in macro HELPER at line 1: Label not found
   included from {{MAIN_FILE}}:2
 
 ---
-NAME: assignment_trailing_expression
-DESCRIPTION: Spaces in assignment expression should not silently ignore trailing content
+NAME: assignment_spaces_in_expression
+DESCRIPTION: Spaces around + in assignment expression
 INPUT:
  1: * = $0200
  2: a = $10
  3: x = a + $20
-EXPECT_ERROR: 10
-EXPECT_LINE: 3
-EXPECT_MSG: Unexpected text after operand
+ 4:   LDA x
+EXPECT_HEX: a5 30
 
 ---
-NAME: pc_assignment_trailing_expression
-DESCRIPTION: Spaces in PC assignment expression should not silently ignore trailing content
+NAME: pc_assignment_spaces_in_expression
+DESCRIPTION: Spaces around + in PC assignment expression
 INPUT:
  1: val = $0200
  2: * = val + $10
-EXPECT_ERROR: 10
-EXPECT_LINE: 2
-EXPECT_MSG: Unexpected text after operand
+ 3:   NOP
+EXPECT_HEX: ea
 
 # ============================================================================
 # DECIMAL CONSTANT TESTS

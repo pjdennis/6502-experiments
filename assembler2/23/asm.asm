@@ -607,6 +607,7 @@ parse_value:
 
 .low_byte_selector:
   JSR read_char        ; Skip '<'
+  JSR skip_spaces
   JSR parse_expression ; Current char now in CURR_CHAR
   ; Apply low byte: keep OPERAND16, zero OPERAND16+$01
   LDA #$00
@@ -617,6 +618,7 @@ parse_value:
 
 .high_byte_selector:
   JSR read_char        ; Skip '>'
+  JSR skip_spaces
   JSR parse_expression ; Current char now in CURR_CHAR
   ; Apply high byte: shift OPERAND16 right by 8 bits
   LDA OPERAND16+$01
@@ -645,6 +647,7 @@ parse_term_with_selector:
 
 .low_byte_selector:
   JSR read_char        ; Skip '<'
+  JSR skip_spaces
   JSR parse_term       ; Current char now in CURR_CHAR
   ; Apply low byte: keep OPERAND16, zero OPERAND16+$01
   LDA #$00
@@ -655,6 +658,7 @@ parse_term_with_selector:
 
 .high_byte_selector:
   JSR read_char        ; Skip '>'
+  JSR skip_spaces
   JSR parse_term       ; Current char now in CURR_CHAR
   ; Apply high byte: shift OPERAND16 right by 8 bits
   LDA OPERAND16+$01
@@ -682,15 +686,18 @@ parse_expression:
   STA EXPR_FWDREF
 
 .loop:
+  ; Check << and >> before skipping spaces (< and > are ambiguous with byte selectors)
   LDA CURR_CHAR
-  CMP #'+'
-  BEQ .add_op
-  CMP #'-'
-  BEQ .sub_op
   CMP #'<'
   BEQ .check_left_shift
   CMP #'>'
   BEQ .check_right_shift
+  ; Check + and - after skipping spaces
+  JSR skip_spaces
+  CMP #'+'
+  BEQ .add_op
+  CMP #'-'
+  BEQ .sub_op
 
   ; No more operators - restore and return
   LDA EXPR_FWDREF
@@ -704,6 +711,7 @@ parse_expression:
 
   ; Parse next term (skip '+' first)
   JSR read_char        ; Skip '+'
+  JSR skip_spaces
   JSR parse_term_with_selector  ; Current char in CURR_CHAR
 
   ; Accumulate forward ref flag
@@ -722,6 +730,7 @@ parse_expression:
 
   ; Parse next term (skip '-' first)
   JSR read_char        ; Skip '-'
+  JSR skip_spaces
   JSR parse_term_with_selector  ; Current char in CURR_CHAR
 
   ; Accumulate forward ref flag
@@ -754,6 +763,7 @@ parse_expression:
 
   ; Parse shift count (use parse_term_with_selector to support byte selectors like <<<)
   JSR read_char        ; Read char after second '<'
+  JSR skip_spaces
   JSR parse_term_with_selector  ; Current char in CURR_CHAR
 
   ; Accumulate forward ref flag
@@ -785,6 +795,7 @@ parse_expression:
 
   ; Parse shift count (use parse_term_with_selector to support byte selectors like >>>)
   JSR read_char        ; Read char after second '>'
+  JSR skip_spaces
   JSR parse_term_with_selector  ; Current char in CURR_CHAR
 
   ; Accumulate forward ref flag
