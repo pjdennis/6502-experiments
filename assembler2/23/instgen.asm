@@ -48,117 +48,173 @@ FS_P16:    .word 0       ; File stack pointer - needed by advance_heap check
 ; Format: "MNEMONIC" $00 [mode opcode]... MODE_END
 MNTAB:
   ; Load/Store instructions
-  .data "LDA" $00  <MODE_IMM  $A9  <MODE_ZP   $A5  <MODE_ZPX  $B5  <MODE_ABS  $AD
-  .data            <MODE_ABSX $BD  <MODE_ABSY $B9  <MODE_INDX $A1  <MODE_INDY $B1
-  .data            <MODE_END
-  .data "LDX" $00  <MODE_IMM  $A2  <MODE_ZP   $A6  <MODE_ZPY  $B6
-  .data            <MODE_ABS  $AE  <MODE_ABSY $BE
-  .data            <MODE_END
-  .data "LDY" $00  <MODE_IMM  $A0  <MODE_ZP   $A4  <MODE_ZPX  $B4
-  .data            <MODE_ABS  $AC  <MODE_ABSX $BC
-  .data            <MODE_END
-  .data "STA" $00  <MODE_ZP   $85  <MODE_ZPX  $95  <MODE_ABS  $8D  <MODE_ABSX $9D
-  .data            <MODE_ABSY $99  <MODE_INDX $81  <MODE_INDY $91
-  .data            <MODE_END
-  .data "STX" $00  <MODE_ZP   $86  <MODE_ZPY  $96  <MODE_ABS  $8E  <MODE_END
-  .data "STY" $00  <MODE_ZP   $84  <MODE_ZPX  $94  <MODE_ABS  $8C  <MODE_END
+  .asciiz "LDA"
+  .byte MODE_IMM, $A9, MODE_ZP, $A5, MODE_ZPX, $B5, MODE_ABS, $AD
+  .byte MODE_ABSX, $BD, MODE_ABSY, $B9, MODE_INDX, $A1, MODE_INDY, $B1
+  .byte MODE_END
+  .asciiz "LDX"
+  .byte MODE_IMM, $A2, MODE_ZP, $A6, MODE_ZPY, $B6
+  .byte MODE_ABS, $AE, MODE_ABSY, $BE
+  .byte MODE_END
+  .asciiz "LDY"
+  .byte MODE_IMM, $A0, MODE_ZP, $A4, MODE_ZPX, $B4
+  .byte MODE_ABS, $AC, MODE_ABSX, $BC
+  .byte MODE_END
+  .asciiz "STA"
+  .byte MODE_ZP, $85, MODE_ZPX, $95, MODE_ABS, $8D, MODE_ABSX, $9D
+  .byte MODE_ABSY, $99, MODE_INDX, $81, MODE_INDY, $91
+  .byte MODE_END
+  .asciiz "STX"
+  .byte MODE_ZP, $86, MODE_ZPY, $96, MODE_ABS, $8E, MODE_END
+  .asciiz "STY"
+  .byte MODE_ZP, $84, MODE_ZPX, $94, MODE_ABS, $8C, MODE_END
 
   ; Arithmetic instructions
-  .data "ADC" $00  <MODE_IMM  $69  <MODE_ZP   $65  <MODE_ZPX  $75  <MODE_ABS  $6D
-  .data            <MODE_ABSX $7D  <MODE_ABSY $79  <MODE_INDX $61  <MODE_INDY $71
-  .data            <MODE_END
-  .data "SBC" $00  <MODE_IMM  $E9  <MODE_ZP   $E5  <MODE_ZPX  $F5  <MODE_ABS  $ED
-  .data            <MODE_ABSX $FD  <MODE_ABSY $F9  <MODE_INDX $E1  <MODE_INDY $F1
-  .data            <MODE_END
+  .asciiz "ADC"
+  .byte MODE_IMM, $69, MODE_ZP, $65, MODE_ZPX, $75, MODE_ABS, $6D
+  .byte MODE_ABSX, $7D, MODE_ABSY, $79, MODE_INDX, $61, MODE_INDY, $71
+  .byte MODE_END
+  .asciiz "SBC"
+  .byte MODE_IMM, $E9, MODE_ZP, $E5, MODE_ZPX, $F5, MODE_ABS, $ED
+  .byte MODE_ABSX, $FD, MODE_ABSY, $F9, MODE_INDX, $E1, MODE_INDY, $F1
+  .byte MODE_END
 
   ; Logical instructions
-  .data "AND" $00  <MODE_IMM  $29  <MODE_ZP   $25  <MODE_ZPX  $35  <MODE_ABS  $2D
-  .data            <MODE_ABSX $3D  <MODE_ABSY $39  <MODE_INDX $21  <MODE_INDY $31
-  .data            <MODE_END
-  .data "ORA" $00  <MODE_IMM  $09  <MODE_ZP   $05  <MODE_ZPX  $15  <MODE_ABS  $0D
-  .data            <MODE_ABSX $1D  <MODE_ABSY $19  <MODE_INDX $01  <MODE_INDY $11
-  .data            <MODE_END
-  .data "EOR" $00  <MODE_IMM  $49  <MODE_ZP   $45  <MODE_ZPX  $55  <MODE_ABS  $4D
-  .data            <MODE_ABSX $5D  <MODE_ABSY $59  <MODE_INDX $41  <MODE_INDY $51
-  .data            <MODE_END
+  .asciiz "AND"
+  .byte MODE_IMM, $29, MODE_ZP, $25, MODE_ZPX, $35, MODE_ABS, $2D
+  .byte MODE_ABSX, $3D, MODE_ABSY, $39, MODE_INDX, $21, MODE_INDY, $31
+  .byte MODE_END
+  .asciiz "ORA"
+  .byte MODE_IMM, $09, MODE_ZP, $05, MODE_ZPX, $15, MODE_ABS, $0D
+  .byte MODE_ABSX, $1D, MODE_ABSY, $19, MODE_INDX, $01, MODE_INDY, $11
+  .byte MODE_END
+  .asciiz "EOR"
+  .byte MODE_IMM, $49, MODE_ZP, $45, MODE_ZPX, $55, MODE_ABS, $4D
+  .byte MODE_ABSX, $5D, MODE_ABSY, $59, MODE_INDX, $41, MODE_INDY, $51
+  .byte MODE_END
 
   ; Compare instructions
-  .data "CMP" $00  <MODE_IMM  $C9  <MODE_ZP   $C5  <MODE_ZPX  $D5  <MODE_ABS  $CD
-  .data            <MODE_ABSX $DD  <MODE_ABSY $D9  <MODE_INDX $C1  <MODE_INDY $D1
-  .data            <MODE_END
-  .data "CPX" $00  <MODE_IMM  $E0  <MODE_ZP   $E4  <MODE_ABS  $EC  <MODE_END
-  .data "CPY" $00  <MODE_IMM  $C0  <MODE_ZP   $C4  <MODE_ABS  $CC  <MODE_END
+  .asciiz "CMP"
+  .byte MODE_IMM, $C9, MODE_ZP, $C5, MODE_ZPX, $D5, MODE_ABS, $CD
+  .byte MODE_ABSX, $DD, MODE_ABSY, $D9, MODE_INDX, $C1, MODE_INDY, $D1
+  .byte MODE_END
+  .asciiz "CPX"
+  .byte MODE_IMM, $E0, MODE_ZP, $E4, MODE_ABS, $EC, MODE_END
+  .asciiz "CPY"
+  .byte MODE_IMM, $C0, MODE_ZP, $C4, MODE_ABS, $CC, MODE_END
 
   ; Bit test
-  .data "BIT" $00  <MODE_ZP   $24  <MODE_ABS  $2C  <MODE_END
+  .asciiz "BIT"
+  .byte MODE_ZP, $24, MODE_ABS, $2C, MODE_END
 
   ; Increment/Decrement
-  .data "INC" $00  <MODE_ZP   $E6  <MODE_ZPX  $F6  <MODE_ABS  $EE  <MODE_ABSX $FE  <MODE_END
-  .data "DEC" $00  <MODE_ZP   $C6  <MODE_ZPX  $D6  <MODE_ABS  $CE  <MODE_ABSX $DE  <MODE_END
-  .data "INX" $00  <MODE_NONE $E8  <MODE_END
-  .data "INY" $00  <MODE_NONE $C8  <MODE_END
-  .data "DEX" $00  <MODE_NONE $CA  <MODE_END
-  .data "DEY" $00  <MODE_NONE $88  <MODE_END
+  .asciiz "INC"
+  .byte MODE_ZP, $E6, MODE_ZPX, $F6, MODE_ABS, $EE, MODE_ABSX, $FE, MODE_END
+  .asciiz "DEC"
+  .byte MODE_ZP, $C6, MODE_ZPX, $D6, MODE_ABS, $CE, MODE_ABSX, $DE, MODE_END
+  .asciiz "INX"
+  .byte MODE_NONE, $E8, MODE_END
+  .asciiz "INY"
+  .byte MODE_NONE, $C8, MODE_END
+  .asciiz "DEX"
+  .byte MODE_NONE, $CA, MODE_END
+  .asciiz "DEY"
+  .byte MODE_NONE, $88, MODE_END
 
   ; Shift/Rotate
-  .data "ASL" $00  <MODE_NONE $0A  <MODE_ZP   $06  <MODE_ZPX  $16  <MODE_ABS  $0E
-  .data            <MODE_ABSX $1E
-  .data            <MODE_END
-  .data "LSR" $00  <MODE_NONE $4A  <MODE_ZP   $46  <MODE_ZPX  $56  <MODE_ABS  $4E
-  .data            <MODE_ABSX $5E
-  .data            <MODE_END
-  .data "ROL" $00  <MODE_NONE $2A  <MODE_ZP   $26  <MODE_ZPX  $36  <MODE_ABS  $2E
-  .data            <MODE_ABSX $3E
-  .data            <MODE_END
-  .data "ROR" $00  <MODE_NONE $6A  <MODE_ZP   $66  <MODE_ZPX  $76  <MODE_ABS  $6E
-  .data            <MODE_ABSX $7E
-  .data            <MODE_END
+  .asciiz "ASL"
+  .byte MODE_NONE, $0A, MODE_ZP, $06, MODE_ZPX, $16, MODE_ABS, $0E
+  .byte MODE_ABSX, $1E
+  .byte MODE_END
+  .asciiz "LSR"
+  .byte MODE_NONE, $4A, MODE_ZP, $46, MODE_ZPX, $56, MODE_ABS, $4E
+  .byte MODE_ABSX, $5E
+  .byte MODE_END
+  .asciiz "ROL"
+  .byte MODE_NONE, $2A, MODE_ZP, $26, MODE_ZPX, $36, MODE_ABS, $2E
+  .byte MODE_ABSX, $3E
+  .byte MODE_END
+  .asciiz "ROR"
+  .byte MODE_NONE, $6A, MODE_ZP, $66, MODE_ZPX, $76, MODE_ABS, $6E
+  .byte MODE_ABSX, $7E
+  .byte MODE_END
 
   ; Branch instructions
-  .data "BCC" $00  <MODE_REL  $90  <MODE_END
-  .data "BCS" $00  <MODE_REL  $B0  <MODE_END
-  .data "BEQ" $00  <MODE_REL  $F0  <MODE_END
-  .data "BMI" $00  <MODE_REL  $30  <MODE_END
-  .data "BNE" $00  <MODE_REL  $D0  <MODE_END
-  .data "BPL" $00  <MODE_REL  $10  <MODE_END
-  .data "BVC" $00  <MODE_REL  $50  <MODE_END
-  .data "BVS" $00  <MODE_REL  $70  <MODE_END
+  .asciiz "BCC"
+  .byte MODE_REL, $90, MODE_END
+  .asciiz "BCS"
+  .byte MODE_REL, $B0, MODE_END
+  .asciiz "BEQ"
+  .byte MODE_REL, $F0, MODE_END
+  .asciiz "BMI"
+  .byte MODE_REL, $30, MODE_END
+  .asciiz "BNE"
+  .byte MODE_REL, $D0, MODE_END
+  .asciiz "BPL"
+  .byte MODE_REL, $10, MODE_END
+  .asciiz "BVC"
+  .byte MODE_REL, $50, MODE_END
+  .asciiz "BVS"
+  .byte MODE_REL, $70, MODE_END
 
   ; Jump instructions
-  .data "JMP" $00  <MODE_ABS  $4C  <MODE_IND  $6C  <MODE_END
-  .data "JSR" $00  <MODE_ABS  $20  <MODE_END
+  .asciiz "JMP"
+  .byte MODE_ABS, $4C, MODE_IND, $6C, MODE_END
+  .asciiz "JSR"
+  .byte MODE_ABS, $20, MODE_END
 
   ; Stack instructions
-  .data "PHA" $00  <MODE_NONE $48  <MODE_END
-  .data "PHP" $00  <MODE_NONE $08  <MODE_END
-  .data "PLA" $00  <MODE_NONE $68  <MODE_END
-  .data "PLP" $00  <MODE_NONE $28  <MODE_END
+  .asciiz "PHA"
+  .byte MODE_NONE, $48, MODE_END
+  .asciiz "PHP"
+  .byte MODE_NONE, $08, MODE_END
+  .asciiz "PLA"
+  .byte MODE_NONE, $68, MODE_END
+  .asciiz "PLP"
+  .byte MODE_NONE, $28, MODE_END
 
   ; Transfer instructions
-  .data "TAX" $00  <MODE_NONE $AA  <MODE_END
-  .data "TAY" $00  <MODE_NONE $A8  <MODE_END
-  .data "TSX" $00  <MODE_NONE $BA  <MODE_END
-  .data "TXA" $00  <MODE_NONE $8A  <MODE_END
-  .data "TXS" $00  <MODE_NONE $9A  <MODE_END
-  .data "TYA" $00  <MODE_NONE $98  <MODE_END
+  .asciiz "TAX"
+  .byte MODE_NONE, $AA, MODE_END
+  .asciiz "TAY"
+  .byte MODE_NONE, $A8, MODE_END
+  .asciiz "TSX"
+  .byte MODE_NONE, $BA, MODE_END
+  .asciiz "TXA"
+  .byte MODE_NONE, $8A, MODE_END
+  .asciiz "TXS"
+  .byte MODE_NONE, $9A, MODE_END
+  .asciiz "TYA"
+  .byte MODE_NONE, $98, MODE_END
 
   ; Flag instructions
-  .data "CLC" $00  <MODE_NONE $18  <MODE_END
-  .data "CLD" $00  <MODE_NONE $D8  <MODE_END
-  .data "CLI" $00  <MODE_NONE $58  <MODE_END
-  .data "CLV" $00  <MODE_NONE $B8  <MODE_END
-  .data "SEC" $00  <MODE_NONE $38  <MODE_END
-  .data "SED" $00  <MODE_NONE $F8  <MODE_END
-  .data "SEI" $00  <MODE_NONE $78  <MODE_END
+  .asciiz "CLC"
+  .byte MODE_NONE, $18, MODE_END
+  .asciiz "CLD"
+  .byte MODE_NONE, $D8, MODE_END
+  .asciiz "CLI"
+  .byte MODE_NONE, $58, MODE_END
+  .asciiz "CLV"
+  .byte MODE_NONE, $B8, MODE_END
+  .asciiz "SEC"
+  .byte MODE_NONE, $38, MODE_END
+  .asciiz "SED"
+  .byte MODE_NONE, $F8, MODE_END
+  .asciiz "SEI"
+  .byte MODE_NONE, $78, MODE_END
 
   ; Other
-  .data "BRK" $00  <MODE_NONE $00  <MODE_END
-  .data "NOP" $00  <MODE_NONE $EA  <MODE_END
-  .data "RTI" $00  <MODE_NONE $40  <MODE_END
-  .data "RTS" $00  <MODE_NONE $60  <MODE_END
+  .asciiz "BRK"
+  .byte MODE_NONE, $00, MODE_END
+  .asciiz "NOP"
+  .byte MODE_NONE, $EA, MODE_END
+  .asciiz "RTI"
+  .byte MODE_NONE, $40, MODE_END
+  .asciiz "RTS"
+  .byte MODE_NONE, $60, MODE_END
 
   ; End of table
-  .data $00
+  .byte 0
 
 
 ; Populate instruction hash table from MNTAB
@@ -510,23 +566,23 @@ start:
   JSR display_data
 
   BRK
-  .data $00              ; Success
+  .byte 0                ; Success
 
 
 msg_data:
-  .data ".data" $00
+  .asciiz ".data"
 
 msg_instprefix:
-  .data "." $00
+  .asciiz "."
 
 msg_IHASHTAB:
-  .data "IHASHTAB" $00
+  .asciiz "IHASHTAB"
 
 msg_hash_table_comment:
-  .data "; Instructions hash table (pointers)" $00
+  .asciiz "; Instructions hash table (pointers)"
 
 msg_heap_comment:
-  .data "; Instructions heap data" $00
+  .asciiz "; Instructions heap data"
 
 ; Error handler needed by advance_heap's overflow check
 err_out_of_memory:
@@ -537,4 +593,4 @@ err_out_of_memory:
 HEAP:                  ; Heap goes after the program code
 
 
-  .data start ; Emulation environment jumps to address in last 2 bytes
+  .word start ; Emulation environment jumps to address in last 2 bytes
