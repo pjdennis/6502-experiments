@@ -596,7 +596,7 @@ buf_adjust_lines_inc:
   LDY #0
   CLC
   LDA (BUF_PTR16),Y
-  ADC #1
+  ADC BUF_DELTA
   STA (BUF_PTR16),Y
   BCC .inc_no_carry
   INY
