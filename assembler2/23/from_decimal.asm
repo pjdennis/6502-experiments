@@ -7,8 +7,8 @@
 
   .zeropage
 
-FROM_DECIMAL16:          .word 0     ; 2-byte accumulator for value being built
-FROM_DECIMAL_TMP16:      .word 0     ; 2-byte temp for multiply-by-10
+FROM_DECIMAL16:          .word       ; 2-byte accumulator for value being built
+FROM_DECIMAL_TMP16:      .word       ; 2-byte temp for multiply-by-10
 
   .code
 
