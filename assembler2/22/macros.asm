@@ -10,7 +10,7 @@
   INC ptr
   BNE .skip
   INC ptr+$01
-.skip
+.skip:
   .endmacro
 
 
@@ -20,7 +20,7 @@
   LDA ptr
   BNE .skip
   DEC ptr+$01
-.skip
+.skip:
   DEC ptr
   .endmacro
 
@@ -95,7 +95,7 @@
   BNE .done
   LDA ptr1
   CMP ptr2
-.done
+.done:
   .endmacro
 
 
@@ -110,7 +110,7 @@
   BNE .done
   LDA ptr
   CMP #<val
-.done
+.done:
   .endmacro
 
 

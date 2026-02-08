@@ -7,8 +7,8 @@
 
   .zeropage
 
-FROM_DECIMAL16          .data $0000 ; 2-byte accumulator for value being built
-FROM_DECIMAL_TMP16      .data $0000 ; 2-byte temp for multiply-by-10
+FROM_DECIMAL16:          .data $0000 ; 2-byte accumulator for value being built
+FROM_DECIMAL_TMP16:      .data $0000 ; 2-byte temp for multiply-by-10
 
   .code
 
@@ -21,11 +21,11 @@ FROM_DECIMAL_TMP16      .data $0000 ; 2-byte temp for multiply-by-10
 ;          X is preserved
 ;          A, Y are not preserved
 ; Raises 'Value out of range' error if value > 65535
-from_decimal
+from_decimal:
   ; Initialize accumulator to 0
   LDA #$00
   STA_LH16 FROM_DECIMAL16
-.loop
+.loop:
   ; Multiply FROM_DECIMAL16 by 10 using: temp=val; val<<=2; val+=temp; val<<=1
   ; Step 1: temp = val
   CP16 FROM_DECIMAL16 FROM_DECIMAL_TMP16
@@ -56,14 +56,14 @@ from_decimal
   BCC .done             ; < '0', not a digit
   CMP #'9'+$01
   BCC .loop             ; >= '0' and <= '9', continue
-.done
+.done:
   ; Set carry based on value size: C=0 if <= 255, C=1 if > 255
   LDA FROM_DECIMAL16+$01
   BEQ .one_byte
   SEC                   ; Value > 255
   RTS
-.one_byte
+.one_byte:
   CLC                   ; Value <= 255
   RTS
-.overflow
+.overflow:
   JMP err_value_out_of_range

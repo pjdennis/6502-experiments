@@ -22,20 +22,20 @@
 
   .zeropage
 
-FS_CURR_CHAR   .data $00   ; The last character read
-FS_CURR_FILE   .data $00   ; The current file handle
-FS_CURR_LINE16 .data $0000 ; The current line number
-FS_P16         .data $0000 ; Pointer to the current location in the file stack
-FS_TEMP16      .data $0000 ; Temporary location for use in calculations
+FS_CURR_CHAR:   .data $00   ; The last character read
+FS_CURR_FILE:   .data $00   ; The current file handle
+FS_CURR_LINE16: .data $0000 ; The current line number
+FS_P16:         .data $0000 ; Pointer to the current location in the file stack
+FS_TEMP16:      .data $0000 ; Temporary location for use in calculations
 
 ; Memory source support (zero-terminated buffers)
-FS_SRC_TYPE   .data $00   ; Source type: 0=file, 1=memory
-FS_MEM_PTR16  .data $0000 ; Current read position in memory
+FS_SRC_TYPE:   .data $00   ; Source type: 0=file, 1=memory
+FS_MEM_PTR16:  .data $0000 ; Current read position in memory
 
   .code
 
 
-file_stack_init
+file_stack_init:
   SET16 FILE_STACK FS_P16
   LDA #$00
   STA FS_SRC_TYPE
@@ -44,7 +44,7 @@ file_stack_init
 
 
 ; On exit Z is set if file stack empty, clear otherwise
-file_stack_empty
+file_stack_empty:
   CMPI16 FS_P16 FILE_STACK
   RTS
 
@@ -55,11 +55,11 @@ file_stack_empty
 ; On exit: Frame built with name, curr_type, prev_type, prev_line, prev_data
 ;          FS_CURR_LINE16 reset to 0
 ;          A, X, Y clobbered
-push_source_frame
+push_source_frame:
   PHA                   ; Save curr_type for later
   ; Calculate name length
   LDY #$FF
-.len_loop
+.len_loop:
   INY
   LDA FS_FILENAME,Y
   BNE .len_loop
@@ -72,7 +72,7 @@ push_source_frame
   LDX FS_SRC_TYPE
   BEQ .size_done
   ADC #$01              ; Add 1 more for memory (2 bytes ptr - 1 already counted)
-.size_done
+.size_done:
   STA FS_TEMP16
   ; Decrease stack pointer by frame size
   SEC
@@ -90,7 +90,7 @@ push_source_frame
   CP16 FS_TEMP16 FS_P16
   ; Copy name to stack
   LDY #$FF
-.copy_loop
+.copy_loop:
   INY
   LDA FS_FILENAME,Y
   STA (FS_P16),Y
@@ -119,7 +119,7 @@ push_source_frame
   LDA FS_CURR_FILE
   STA (FS_P16),Y
   JMP .reset_line
-.save_memory_state
+.save_memory_state:
   ; prev_type=1: save memory pointer (zero-terminated, no end needed)
   INY
   LDA FS_MEM_PTR16
@@ -127,7 +127,7 @@ push_source_frame
   INY
   LDA FS_MEM_PTR16+$01
   STA (FS_P16),Y
-.reset_line
+.reset_line:
   ; Reset line number for new source
   LDA #$00
   STA_LH16 FS_CURR_LINE16
@@ -139,7 +139,7 @@ push_source_frame
 ;           FS_CURR_LINE16 contains the current line number
 ;           FS_CURR_FILE contains the current file handle
 ; On exit: X is preserved, new file is open and ready to read
-push_file_stack
+push_file_stack:
   TXA
   PHA                   ; Save X
   ; Open file before pushing frame so error reports parent context
@@ -149,7 +149,7 @@ push_file_stack
   CMP #$00
   BNE .file_ok
   JMP err_file_not_found
-.file_ok
+.file_ok:
   PHA                   ; Save new file handle
   LDA #$00              ; curr_type = file
   JSR push_source_frame
@@ -166,7 +166,7 @@ push_file_stack
 ; On entry: FS_FILENAME = name for this memory source (e.g., macro name)
 ;           FS_MEM_PTR16 = start of zero-terminated memory buffer
 ; On exit: X is preserved, reading will continue from memory buffer
-push_memory_source
+push_memory_source:
   TXA
   PHA                   ; Save X
   LDA #$01              ; curr_type = memory
@@ -183,10 +183,10 @@ push_memory_source
 ; On exit: Previous state restored (FS_CURR_FILE or FS_MEM_PTR)
 ;          FS_SRC_TYPE restored to prev_type
 ;          FS_CURR_LINE16 restored to prev_line
-pop_source
+pop_source:
   ; Skip past name to find null terminator
   LDY #$FF
-.skip_name
+.skip_name:
   INY
   LDA (FS_P16),Y
   BNE .skip_name
@@ -203,12 +203,12 @@ pop_source
   TAY                   ; Restore Y
   .endif
   JMP .restore_prev
-.was_file_source
+.was_file_source:
   ; curr_type=0: close the current file (if open)
   LDA FS_CURR_FILE
   BEQ .restore_prev     ; Handle 0 = no file to close
   JSR close
-.restore_prev
+.restore_prev:
   ; Read prev_type
   INY
   LDA (FS_P16),Y
@@ -229,7 +229,7 @@ pop_source
   LDA (FS_P16),Y
   STA FS_CURR_FILE
   JMP .adjust_stack
-.restore_memory
+.restore_memory:
   ; prev_type=1: restore memory pointer (zero-terminated, no end needed)
   INY
   LDA (FS_P16),Y
@@ -237,7 +237,7 @@ pop_source
   INY
   LDA (FS_P16),Y
   STA FS_MEM_PTR16+$01
-.adjust_stack
+.adjust_stack:
   ; Y points to last byte read, add Y+1 to stack pointer
   TYA
   SEC                   ; +1
@@ -253,7 +253,7 @@ pop_file_stack = pop_source
 ;          C = 0 if char read, C = 1 if all sources exhausted
 ;          X is preserved
 ;          Y is not preserved
-file_stack_read_char
+file_stack_read_char:
   LDA FS_SRC_TYPE
   BNE .read_memory
   ; Type 0 = file source
@@ -267,7 +267,7 @@ file_stack_read_char
   STA FS_CURR_CHAR
   ; Carry is clear
   RTS
-.read_memory
+.read_memory:
   ; Type 1 = memory source (zero-terminated)
   ; Read byte from memory pointer
   LDY #$00
@@ -278,17 +278,17 @@ file_stack_read_char
   STA FS_CURR_CHAR
   CLC
   RTS
-.source_exhausted
+.source_exhausted:
   ; Source exhausted - pop and try previous source
   JSR pop_source
   ; Check if stack is empty
   JSR file_stack_empty
   ; Continue reading from previous source
   BNE file_stack_read_char
-.all_done
+.all_done:
   SEC
   RTS
   .ifdef enable_debug
-.no_source
+.no_source:
   JMP FS_ERR_NO_FILE
   .endif

@@ -16,14 +16,14 @@ TOKEN_MEM  = $1D80  ; Offset in TOKEN buffer for memory content
   .zeropage
 
 ; Test state
-TEST_MODE     .data $00     ; 0=echo, 1=lines, 2=nested, 3=info, 4=memory
-CHAR_COUNT16  .data $0000   ; Character count
-LINE_COUNT16  .data $0000   ; Line count
-AT_LINE_START .data $00     ; Flag: at start of line (for lines mode)
+TEST_MODE:     .data $00     ; 0=echo, 1=lines, 2=nested, 3=info, 4=memory
+CHAR_COUNT16:  .data $0000   ; Character count
+LINE_COUNT16:  .data $0000   ; Line count
+AT_LINE_START: .data $00     ; Flag: at start of line (for lines mode)
 
 ; Temporary
-TEMP        .data $00
-TABP16      .data $0000
+TEMP:        .data $00
+TABP16:      .data $0000
 
   .code
 
@@ -41,7 +41,7 @@ FS_FILENAME   = TOKEN
   .endmacro
 
 ; Error handler for file-not-found (required by file_stack.asm)
-err_file_not_found
+err_file_not_found:
   BRK
   .data $24 "File not found" $00
 
