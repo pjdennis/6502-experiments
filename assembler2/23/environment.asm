@@ -1,3 +1,8 @@
+; environment.asm - Environment vector table
+;
+; Requires: none (symbols are provided by the runtime environment)
+; Provides: entry points for I/O, args, and console helpers
+;
 ; Provided by environment:
 read_b    = $F006 ; Returns next char in A; C set when at end; X, Y preserved
 write_b   = $F009 ; Writes char in A to stdout; A, X, Y preserved

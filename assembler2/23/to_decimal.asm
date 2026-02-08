@@ -1,3 +1,9 @@
+; to_decimal.asm - Convert 16-bit value in TO_DECIMAL_VALUE16 to decimal string
+;
+; Requires:
+;   TO_DECIMAL_VALUE16, TO_DECIMAL_MOD10, TO_DECIMAL_RESULT buffers
+;   ROL16, TST16 macros
+
   .zeropage
 
 TO_DECIMAL_VALUE16:          .word       ; 2 bytes

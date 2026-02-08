@@ -2,6 +2,17 @@
 ;
 ; Provides: process_macro, check_macro_recursion, expand_macro,
 ;           match_token, capture_macro_line
+;
+; Requires:
+;   CURR_CHAR, TOKEN, PASS, IN_MACRO_DEF
+;   MACRO_ARG_BUF, MACRO_ARG_LIMIT, MACRO_ENTRY16, OPERAND16
+;   LABEL_TYPE, LABEL_TYPE_MACRO, MODE_MACRO
+;   read_char, read_token, compare_end_of_token, check_for_end_of_line
+;   parse_expression, advance_heap
+;   select_instruction_hash_table, select_label_hash_table
+;   hash_add_instruction, hash_add, store_hash_value
+;   push_label_scope, push_memory_source
+;   err_* (macro name/dup/nested/recursive/arg count/unterminated errors)
 
   .zeropage
 

@@ -4,6 +4,7 @@
 ;   MEMP16       - addres of heap to store table entries
 ;   advance_heap - function to advance the heap
 ;   LABEL_SCOPE16    - current scope for local label resolution
+;   compare_token, find_token - token compare helpers from tokenizer/common
 
 
   .zeropage

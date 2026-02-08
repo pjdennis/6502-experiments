@@ -2,6 +2,7 @@
 ;   FILE_STACK     - 1 past the highest address from which the stack grows down
 ;   FS_FILENAME    - filename buffer
 ;   FS_ERR_NO_FILE - error handler for read_char when no file is open
+;   FS_POP_MEMORY_HOOK - optional hook for memory-source cleanup
 ;   err_file_not_found - error handler for when open returns 0
 ;   open, close, read - file I/O functions
 

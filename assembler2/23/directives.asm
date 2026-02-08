@@ -4,6 +4,16 @@
 ;           emit_quoted, set_data_mode, data_parameters_loop,
 ;           process_ifdef, process_endif,
 ;           directive string constants (directive_include, etc.)
+;
+; Requires:
+;   CURR_CHAR, TOKEN, PASS, PC16, PC_SAVE16, OPERAND16, IN_ZEROPAGE
+;   IFDEF_DECISIONS, COND_DEPTH, SKIP_DEPTH, IFDEF_INDEX
+;   read_char, read_token, read_filename, compare_token
+;   skip_rest_of_line, check_for_end_of_line
+;   emit, parse_value, handle_reserve, process_macro
+;   push_file_stack
+;   decode_escape
+;   err_* (unknown directive, filename/label expected, range/quote errors)
 
   .zeropage
 

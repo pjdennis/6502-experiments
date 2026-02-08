@@ -19,6 +19,12 @@
 ;   MODE_IND   = $0B  ; Indirect - JMP ($xxxx)
 ;   MODE_MACRO = $FE  ; Sentinel marker to indicate macro
 ;   MODE_END   = $FF  ; Terminator (end of mode list)
+;
+; Requires:
+;   init_heap, init_hash_table, select_instruction_hash_table
+;   hash_add, hash_entry_empty, load_hash_entry, advance_heap
+;   write_b (stdout), display_hex/display_text helpers (local below)
+;   LABEL_TYPE, LABEL_TYPE_GLOBAL, MODE_END constants
 
 ; Addresses
 TOKEN       = $1E00     ; Buffer for the current token being read

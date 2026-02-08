@@ -3,6 +3,14 @@
 ; Provides: open_input, match_command_line_arg, handle_define,
 ;           copy_string_to_token, show_macros (debug only),
 ;           COMMAND_LINE_ARGS table
+;
+; Requires:
+;   TOKEN, TABP16, ARG_COUNT, DEBUG_FLAG, SHOW_MACROS, SMALL_HEAP_FLAG
+;   argv, write_d
+;   init_heap, init_hash_table, select_label_hash_table
+;   hash_add, store_hash_value
+;   push_file_stack
+;   show_message (for debug output)
 
   .zeropage
 

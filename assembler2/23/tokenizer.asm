@@ -3,6 +3,11 @@
 ; Provides: compare_end_of_token, skip_token, convert_hex_character,
 ;           skip_spaces, skip_rest_of_line, check_for_end_of_line,
 ;           read_hex_byte, read_hex_byte_or_word, read_token, read_filename
+;
+; Requires:
+;   CURR_CHAR, TOKEN, HEX16, TEMP
+;   read_char
+;   err_invalid_hex, err_token_too_long
 
   .code
 

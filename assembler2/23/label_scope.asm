@@ -21,6 +21,7 @@
 ;   LABEL_SCOPE16        - current scope for local label resolution
 ;   CACHED_HASH          - pre-computed hash for current scope
 ;   scramble_table       - hash scrambling table
+;   err_macro_nesting_too_deep - error handler for scope overflow
 
 SCOPE_ENTRY_SIZE = 5
 

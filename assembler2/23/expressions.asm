@@ -3,6 +3,14 @@
 ; Provides: decode_escape, parse_char_literal, parse_term, parse_value,
 ;           apply_low_byte, apply_high_byte, parse_term_with_selector,
 ;           expr_next_term, parse_expression
+;
+; Requires:
+;   CURR_CHAR, TOKEN, HEX16, OPERAND16, PASS, IS_FWDREF
+;   LABEL_TYPE, LABEL_TYPE_GLOBAL, LABEL_TYPE_MACRO, SCOPE_DEPTH
+;   read_char, skip_spaces, compare_end_of_token, read_token
+;   read_local_label, select_label_hash_table, find_in_hash
+;   read_hex_byte_or_word, from_decimal
+;   err_* (label expected/not found, invalid char literal, shift errors)
 
   .zeropage
 

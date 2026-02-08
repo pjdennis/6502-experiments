@@ -5,6 +5,12 @@
 ;   lines  - Read file, output "N:content" for each line
 ;   info   - Read file, output statistics
 ;   memory - Handle @memory, @include, and @traceback markers
+;
+; Requires:
+;   environment.asm vectors (argc, argv, write_b, write_d, exit)
+;   file_stack.asm routines (file_stack_init, push_file_stack, pop_file_stack,
+;                            push_memory_source, file_stack_empty, read_char)
+;   to_decimal.asm (TO_DECIMAL_RESULT, to_decimal)
 
 * = $0200
 

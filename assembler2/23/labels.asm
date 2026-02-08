@@ -3,6 +3,15 @@
 ; Provides: check_for_value, read_value, read_local_label,
 ;           select_label_hash_table, update_label_scope_from_lookup,
 ;           capture_label
+;
+; Requires:
+;   CURR_CHAR, TOKEN, PASS, OPERAND16, LABEL_SCOPE16
+;   LABEL_TYPE, LABEL_TYPE_GLOBAL, LABEL_TYPE_LOCAL, LABEL_TYPE_MACRO_LOCAL
+;   SCOPE_DEPTH
+;   read_char, read_token, skip_spaces, check_for_end_of_line
+;   parse_value, update_pc
+;   find_in_hash, hash_add, store_hash_value, commit_cached_hash
+;   err_* (duplicate label, label expected, no global for local, PC value)
 
   .code
 

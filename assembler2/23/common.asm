@@ -1,3 +1,16 @@
+; common.asm - Shared constants, heap utilities, and hash table helpers
+;
+; Requires:
+;   TOKEN, HEX16     - base token/value buffers for HT_KEY/HT_V16 aliases
+;   HEAP, FILE_STACK - memory layout symbols for init_heap
+;   FS_P16           - file stack pointer for heap/stack collision checks
+;   SMALL_HEAP_FLAG  - debug flag for small-heap mode (optional)
+;   err_out_of_memory - error handler for heap/stack collision
+;
+; Provides:
+;   init_heap, advance_heap, store_hash_value, select_instruction_hash_table
+;   HASH/HTP16/HT_V16 helpers via included hash_table.asm
+
 ; Addressing mode operand number of bytes
 OPERAND_BYTES_0 = 0 << 4
 OPERAND_BYTES_1 = 1 << 4

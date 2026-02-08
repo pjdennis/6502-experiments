@@ -4,10 +4,12 @@
 ;   TEMP                 - zero page location for temporary storage
 ;   TABP16               - zero page location for table pointer
 ;   CURR_LINE16          - zero page location for current line number
+;   CURR_OUT_FILE        - output file handle (for close on error)
 ;   FS_P16               - zero page locations for file stack pointer
 ;   FS_SRC_TYPE          - zero page location for source type (0=file, 1=memory)
 ;   file_stack_empty     - function to check if file stack is empty
 ;   pop_file_stack       - function to pop file stack entry
+;   close                - function to close file handles
 ;   write_d              - function to write character to stderr
 ;   exit                 - function to exit program
 

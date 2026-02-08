@@ -2,6 +2,8 @@
 ;
 ; These macros assume consecutive zero-page locations for 16-bit values
 ; (low byte at ptr, high byte at ptr+$01)
+;
+; Requires: none (macro expansions only)
 
 
 ; INC16 ptr - Increment 16-bit value at ptr/ptr + 1

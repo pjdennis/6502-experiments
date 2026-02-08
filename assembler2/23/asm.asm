@@ -60,6 +60,20 @@
 ;     label_scope.asm, forward_ref.asm, environment.asm, macros.asm
 ;   This file: assembly loop, entry point, reset/interrupt vectors
 ;
+; REQUIRES (external globals/routines):
+;   CURR_CHAR, TOKEN, PASS, PC16, MEMP16, FS_P16
+;   COND_DEPTH, SKIP_DEPTH, IFDEF_INDEX, IN_MACRO_DEF, ARG_COUNT, TABP16
+;   read_char, read_token, skip_token, skip_rest_of_line, check_for_end_of_line
+;   capture_label, process_directive, process_conditional_directive
+;   lookup_mnemonic, parse_operand, emit_instruction
+;   expand_macro, capture_macro_line
+;   file_stack_init, open_input
+;   init_fwdref_list, finalize_fwdref_list, reset_fwdref_ptr
+;   init_scope_stack, reset_scope_stack
+;   init_heap, init_hash_table, select_label_hash_table
+;   argc, argv, openout, close
+;   err_* (usage, invalid arg, unexpected text, unclosed macro/ifdef, fwdref)
+;
 ; ============================================================================
 
 ; Addresses
