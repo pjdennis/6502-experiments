@@ -958,33 +958,70 @@ emit:
 ; Raises 'Cannot move PC backwards' error if attempting to move PC backwards
 update_pc:
   BIT IN_ZEROPAGE
-  BMI .no_fill
+  BMI .no_fill         ; No fill or STARTED check in zeropage
   BIT STARTED
   BMI .started
   DEC STARTED
-  BNE .no_fill        ; Always taken
+  BNE .no_fill         ; Always taken
 .started:
   CMP16 HEX16, PC16
-  BCC .less           ; HEX16 < PC16: error
+  BCC .less            ; HEX16 < PC16: error
+  JMP advance_pc_to_hex16
+.less:
+  JMP err_cannot_move_pc_backwards
+.no_fill:
+  CP16 HEX16, PC16
+  RTS
+
+
+; Advance PC16 to the value in HEX16
+; In .zeropage: sets PC, checks overflow
+; In .code pass 1: just sets PC (no output)
+; In .code pass 2: emits zero-fill bytes
+; Caller must ensure HEX16 >= PC16
+advance_pc_to_hex16:
+  BIT IN_ZEROPAGE
+  BMI .zp
   BIT PASS
-  BPL .no_fill        ; skip writing during pass 1
+  BPL .just_set        ; pass 1: just set PC
 .loop:
   CMP16 HEX16, PC16
-  BEQ .loop_done
+  BEQ .done
   LDA #$00
   JSR write
   INC PC16
   BNE .loop
   INC PC16+$01
-  BNE .loop           ; Always taken
-.loop_done:
-  RTS
-.less:
-  JMP err_cannot_move_pc_backwards
-.no_fill:
-  CP16 HEX16, PC16
+  BNE .loop            ; Always taken
 .done:
   RTS
+.just_set:
+  CP16 HEX16, PC16
+  RTS
+.zp:
+  LDA HEX16+$01
+  BNE .zp_overflow     ; Target > $FF
+  CP16 HEX16, PC16
+  RTS
+.zp_overflow:
+  JMP err_zeropage_overflow
+
+
+; Handle .reserve N directive
+; Reserves N bytes: zero-fill in .code, PC advance in .zeropage
+handle_reserve:
+  JSR skip_spaces
+  JSR parse_value
+  ; HEX16 (= OPERAND16) now holds the count
+  ; Compute target: HEX16 = PC16 + count
+  CLC
+  LDA HEX16
+  ADC PC16
+  STA HEX16
+  LDA HEX16+$01
+  ADC PC16+$01
+  STA HEX16+$01
+  JMP advance_pc_to_hex16
 
 
 ; ============================================================================
@@ -1388,6 +1425,10 @@ process_directive:
   SET16 directive_asciiz, TABP16
   JSR compare_token
   BEQ .asciiz
+  ; Check for 'reserve'
+  SET16 directive_reserve, TABP16
+  JSR compare_token
+  BEQ .reserve
   JSR process_conditional_directive ; Returns with C=0 if processed
   BCC .directive_done
   ; Check for 'macro'
@@ -1401,10 +1442,6 @@ process_directive:
   JMP err_unknown_directive
 .directive_done:
   RTS
-.macro:
-  JMP process_macro
-.endmacro:
-  JMP err_endmacro_without_macro
 .include:
   JSR check_for_end_of_line
   BCC .get_name
@@ -1432,18 +1469,24 @@ process_directive:
 .byte:
   LDA #DATA_MODE_BYTE
   BIT IN_ZEROPAGE
-  BMI .zp_reserve       ; In zeropage? check for operand-less form
+  BMI .zp_alloc          ; In zeropage? check for operand-less form
   JMP set_data_mode
 .word:
   LDA #DATA_MODE_WORD
   BIT IN_ZEROPAGE
-  BMI .zp_reserve       ; In zeropage? check for operand-less form
+  BMI .zp_alloc          ; In zeropage? check for operand-less form
   JMP set_data_mode
 .asciiz:
   LDA #DATA_MODE_ASCIIZ
   JMP set_data_mode
+.reserve:
+  JMP handle_reserve
+.macro:
+  JMP process_macro
+.endmacro:
+  JMP err_endmacro_without_macro
 
-.zp_reserve:
+.zp_alloc:
   ; A = DATA_MODE (1=byte, 2=word)
   STA DATA_MODE
   JSR check_for_end_of_line
@@ -1502,6 +1545,9 @@ directive_word:
 
 directive_asciiz:
   .asciiz "asciiz"
+
+directive_reserve:
+  .asciiz "reserve"
 
 directive_ifdef:
   .asciiz "ifdef"

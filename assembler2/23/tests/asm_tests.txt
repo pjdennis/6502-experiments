@@ -3715,3 +3715,67 @@ INPUT:
 EXPECT_ERROR: 35
 EXPECT_LINE: 3
 EXPECT_MSG: Zero page overflow
+
+---
+NAME: reserve_basic
+DESCRIPTION: .reserve 3 in .code emits 3 zero bytes
+INPUT:
+ 1: * = $0200
+ 2:   .reserve 3
+ 3:   NOP
+EXPECT_HEX: 00 00 00 ea
+
+---
+NAME: reserve_zeropage
+DESCRIPTION: .reserve 4 in .zeropage allocates 4 bytes
+INPUT:
+ 1:   .zeropage
+ 2: a: .byte
+ 3:   .reserve 4
+ 4: b: .byte
+ 5:   .code
+ 6: * = $0200
+ 7:   LDA a
+ 8:   LDA b
+EXPECT_HEX: a5 00 a5 05
+
+---
+NAME: reserve_one
+DESCRIPTION: .reserve 1 works
+INPUT:
+ 1: * = $0200
+ 2:   .reserve 1
+ 3:   NOP
+EXPECT_HEX: 00 ea
+
+---
+NAME: reserve_zero
+DESCRIPTION: .reserve 0 is a no-op
+INPUT:
+ 1: * = $0200
+ 2:   .reserve 0
+ 3:   NOP
+EXPECT_HEX: ea
+
+---
+NAME: reserve_expression
+DESCRIPTION: .reserve with expression works
+INPUT:
+ 1: * = $0200
+ 2:   .reserve $02+$01
+ 3:   NOP
+EXPECT_HEX: 00 00 00 ea
+
+---
+NAME: reserve_zeropage_overflow
+DESCRIPTION: .reserve that causes ZP overflow triggers error
+INPUT:
+ 1:   .zeropage
+ 2: * = $FE
+ 3:   .reserve 3
+ 4:   .code
+ 5: * = $0200
+ 6:   NOP
+EXPECT_ERROR: 35
+EXPECT_LINE: 3
+EXPECT_MSG: Zero page overflow
