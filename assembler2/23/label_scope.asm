@@ -26,9 +26,9 @@ SCOPE_ENTRY_SIZE = 5
 
   .zeropage
 
-EXPANSION_ID16: .word 0     ; 2-byte expansion counter for macro scopes
-SCOPE_PTR16:    .word 0     ; Pointer to next free slot in scope stack
-SCOPE_DEPTH:    .byte 0     ; Current nesting depth (0 = not in macro)
+EXPANSION_ID16: .word       ; 2-byte expansion counter for macro scopes
+SCOPE_PTR16:    .word       ; Pointer to next free slot in scope stack
+SCOPE_DEPTH:    .byte       ; Current nesting depth (0 = not in macro)
 
   .code
 
