@@ -5,9 +5,10 @@
 ;           read_hex_byte, read_hex_byte_or_word, read_token, read_filename
 ;
 ; Requires:
-;   CURR_CHAR, TOKEN, HEX16, TEMP
-;   read_char
-;   err_invalid_hex, err_token_too_long
+;   CURR_CHAR (asm.asm alias; backing storage in file_stack.asm)
+;   TOKEN, HEX16, TEMP (asm.asm)
+;   read_char (asm.asm alias; implemented in file_stack.asm)
+;   err_invalid_hex, err_token_too_long (errors.asm)
 
   .code
 

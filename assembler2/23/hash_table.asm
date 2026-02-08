@@ -1,10 +1,9 @@
 ; Requires:
-;   HT_KEY       - the address of the key used for hash table operations
-;   HT_V16       - zero page locations containing value in hash table
-;   MEMP16       - addres of heap to store table entries
-;   advance_heap - function to advance the heap
-;   LABEL_SCOPE16    - current scope for local label resolution
-;   compare_token, find_token - token compare helpers from tokenizer/common
+;   HT_KEY       - key buffer address (common.asm alias to TOKEN in asm.asm)
+;   HT_V16       - value buffer address (common.asm alias to HEX16 in asm.asm)
+;   MEMP16       - heap pointer (common.asm)
+;   advance_heap - advance the heap (common.asm)
+;   LABEL_SCOPE16    - current scope for local label resolution (hash_table.asm)
 
 
   .zeropage

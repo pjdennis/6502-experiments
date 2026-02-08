@@ -1,10 +1,10 @@
 ; Requires:
-;   FILE_STACK     - 1 past the highest address from which the stack grows down
-;   FS_FILENAME    - filename buffer
-;   FS_ERR_NO_FILE - error handler for read_char when no file is open
-;   FS_POP_MEMORY_HOOK - optional hook for memory-source cleanup
-;   err_file_not_found - error handler for when open returns 0
-;   open, close, read - file I/O functions
+;   FILE_STACK     - 1 past the highest address from which the stack grows down (asm.asm)
+;   FS_FILENAME    - filename buffer (asm.asm alias to TOKEN)
+;   FS_ERR_NO_FILE - error handler for read_char when no file is open (errors.asm)
+;   FS_POP_MEMORY_HOOK - optional hook for memory-source cleanup (asm.asm alias)
+;   err_file_not_found - error handler for when open returns 0 (errors.asm)
+;   open, close, read - file I/O functions (environment.asm)
 
 ; The file stack grows downwards. Unified frame format (from low to high address):
 ;

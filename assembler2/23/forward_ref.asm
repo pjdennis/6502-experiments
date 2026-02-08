@@ -3,10 +3,10 @@
 ; Each entry is 2 bytes (PC16) of an instruction with forward ref
 ;
 ; Requires:
-;   FWDREF_LIST  - start address of forward reference list
-;   FWDREF_LIMIT - max pointer value before adding (room for entry + terminator)
-;   PC16         - zero page location containing program counter
-;   err_too_many_forward_refs - error handler for list overflow
+;   FWDREF_LIST  - start address of forward reference list (asm.asm)
+;   FWDREF_LIMIT - max pointer value before adding (asm.asm)
+;   PC16         - program counter (asm.asm)
+;   err_too_many_forward_refs - error handler for list overflow (errors.asm)
 
   .zeropage
 

@@ -61,18 +61,24 @@
 ;   This file: assembly loop, entry point, reset/interrupt vectors
 ;
 ; REQUIRES (external globals/routines):
-;   CURR_CHAR, TOKEN, PASS, PC16, MEMP16, FS_P16
-;   COND_DEPTH, SKIP_DEPTH, IFDEF_INDEX, IN_MACRO_DEF, ARG_COUNT, TABP16
-;   read_char, read_token, skip_token, skip_rest_of_line, check_for_end_of_line
-;   capture_label, process_directive, process_conditional_directive
-;   lookup_mnemonic, parse_operand, emit_instruction
-;   expand_macro, capture_macro_line
-;   file_stack_init, open_input
-;   init_fwdref_list, finalize_fwdref_list, reset_fwdref_ptr
-;   init_scope_stack, reset_scope_stack
-;   init_heap, init_hash_table, select_label_hash_table
-;   argc, argv, openout, close
-;   err_* (usage, invalid arg, unexpected text, unclosed macro/ifdef, fwdref)
+;   CURR_CHAR (asm.asm alias; backing storage in file_stack.asm)
+;   TOKEN, PASS, PC16 (asm.asm)
+;   MEMP16 (common.asm), FS_P16 (file_stack.asm)
+;   COND_DEPTH, SKIP_DEPTH, IFDEF_INDEX (directives.asm)
+;   IN_MACRO_DEF (macro_expansion.asm), ARG_COUNT (init.asm), TABP16 (hash_table.asm)
+;   read_char (asm.asm alias; implemented in file_stack.asm)
+;   read_token, skip_token, skip_rest_of_line, check_for_end_of_line (tokenizer.asm)
+;   capture_label (labels.asm)
+;   process_directive, process_conditional_directive (directives.asm)
+;   lookup_mnemonic, parse_operand, emit_instruction (instructions.asm)
+;   expand_macro, capture_macro_line (macro_expansion.asm)
+;   file_stack_init, open_input (file_stack.asm / init.asm)
+;   init_fwdref_list, finalize_fwdref_list, reset_fwdref_ptr (forward_ref.asm)
+;   init_scope_stack, reset_scope_stack (label_scope.asm)
+;   init_heap, init_hash_table (common.asm / hash_table.asm)
+;   select_label_hash_table (labels.asm)
+;   argc, argv, openout, close (environment.asm)
+;   err_* (errors.asm)
 ;
 ; ============================================================================
 

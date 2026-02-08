@@ -5,13 +5,17 @@
 ;           capture_label
 ;
 ; Requires:
-;   CURR_CHAR, TOKEN, PASS, OPERAND16, LABEL_SCOPE16
-;   LABEL_TYPE, LABEL_TYPE_GLOBAL, LABEL_TYPE_LOCAL, LABEL_TYPE_MACRO_LOCAL
-;   SCOPE_DEPTH
-;   read_char, read_token, skip_spaces, check_for_end_of_line
-;   parse_value, update_pc
-;   find_in_hash, hash_add, store_hash_value, commit_cached_hash
-;   err_* (duplicate label, label expected, no global for local, PC value)
+;   CURR_CHAR (asm.asm alias; backing storage in file_stack.asm)
+;   TOKEN, PASS, OPERAND16 (asm.asm)
+;   LABEL_SCOPE16 (hash_table.asm)
+;   LABEL_TYPE, LABEL_TYPE_GLOBAL, LABEL_TYPE_LOCAL, LABEL_TYPE_MACRO_LOCAL (common.asm)
+;   SCOPE_DEPTH (label_scope.asm)
+;   read_char (asm.asm alias; implemented in file_stack.asm)
+;   read_token, skip_spaces, check_for_end_of_line (tokenizer.asm)
+;   parse_value (expressions.asm), update_pc (instructions.asm)
+;   find_in_hash, hash_add, commit_cached_hash (hash_table.asm)
+;   store_hash_value (common.asm)
+;   err_* (errors.asm)
 
   .code
 

@@ -6,14 +6,18 @@
 ;           directive string constants (directive_include, etc.)
 ;
 ; Requires:
-;   CURR_CHAR, TOKEN, PASS, PC16, PC_SAVE16, OPERAND16, IN_ZEROPAGE
-;   IFDEF_DECISIONS, COND_DEPTH, SKIP_DEPTH, IFDEF_INDEX
-;   read_char, read_token, read_filename, compare_token
-;   skip_rest_of_line, check_for_end_of_line
-;   emit, parse_value, handle_reserve, process_macro
-;   push_file_stack
-;   decode_escape
-;   err_* (unknown directive, filename/label expected, range/quote errors)
+;   CURR_CHAR (asm.asm alias; backing storage in file_stack.asm)
+;   TOKEN, PASS, PC16, PC_SAVE16, OPERAND16, IN_ZEROPAGE (asm.asm)
+;   IFDEF_DECISIONS (asm.asm), COND_DEPTH, SKIP_DEPTH, IFDEF_INDEX (directives.asm)
+;   read_char (asm.asm alias; implemented in file_stack.asm)
+;   read_token, read_filename (tokenizer.asm)
+;   compare_token (hash_table.asm)
+;   skip_rest_of_line, check_for_end_of_line (tokenizer.asm)
+;   emit, handle_reserve (instructions.asm)
+;   parse_value, decode_escape (expressions.asm)
+;   process_macro (macro_expansion.asm)
+;   push_file_stack (file_stack.asm)
+;   err_* (errors.asm)
 
   .zeropage
 

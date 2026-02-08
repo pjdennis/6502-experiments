@@ -4,15 +4,19 @@
 ;           match_token, capture_macro_line
 ;
 ; Requires:
-;   CURR_CHAR, TOKEN, PASS, IN_MACRO_DEF
-;   MACRO_ARG_BUF, MACRO_ARG_LIMIT, MACRO_ENTRY16, OPERAND16
-;   LABEL_TYPE, LABEL_TYPE_MACRO, MODE_MACRO
-;   read_char, read_token, compare_end_of_token, check_for_end_of_line
-;   parse_expression, advance_heap
-;   select_instruction_hash_table, select_label_hash_table
-;   hash_add_instruction, hash_add, store_hash_value
-;   push_label_scope, push_memory_source
-;   err_* (macro name/dup/nested/recursive/arg count/unterminated errors)
+;   CURR_CHAR (asm.asm alias; backing storage in file_stack.asm)
+;   TOKEN, PASS (asm.asm)
+;   IN_MACRO_DEF (macro_expansion.asm)
+;   MACRO_ARG_BUF, MACRO_ARG_LIMIT, MACRO_ENTRY16, OPERAND16 (asm.asm)
+;   LABEL_TYPE, LABEL_TYPE_MACRO, MODE_MACRO (common.asm)
+;   read_char (asm.asm alias; implemented in file_stack.asm)
+;   read_token, compare_end_of_token, check_for_end_of_line (tokenizer.asm)
+;   parse_expression (expressions.asm), advance_heap (common.asm)
+;   select_instruction_hash_table (common.asm)
+;   select_label_hash_table (labels.asm)
+;   hash_add_instruction, hash_add (hash_table.asm), store_hash_value (common.asm)
+;   push_label_scope (label_scope.asm), push_memory_source (file_stack.asm)
+;   err_* (errors.asm)
 
   .zeropage
 

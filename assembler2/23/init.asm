@@ -5,12 +5,14 @@
 ;           COMMAND_LINE_ARGS table
 ;
 ; Requires:
-;   TOKEN, TABP16, ARG_COUNT, DEBUG_FLAG, SHOW_MACROS, SMALL_HEAP_FLAG
-;   argv, write_d
-;   init_heap, init_hash_table, select_label_hash_table
-;   hash_add, store_hash_value
-;   push_file_stack
-;   show_message (for debug output)
+;   TOKEN (asm.asm), TABP16 (hash_table.asm), ARG_COUNT (init.asm)
+;   DEBUG_FLAG, SHOW_MACROS, SMALL_HEAP_FLAG (asm.asm)
+;   argv, write_d (environment.asm)
+;   init_heap (common.asm), init_hash_table (hash_table.asm)
+;   select_label_hash_table (labels.asm)
+;   hash_add (hash_table.asm), store_hash_value (common.asm)
+;   push_file_stack (file_stack.asm)
+;   show_message (errors.asm, debug output)
 
   .zeropage
 

@@ -1,17 +1,17 @@
 ; Error handling and messages
 ;
 ; Requires:
-;   TEMP                 - zero page location for temporary storage
-;   TABP16               - zero page location for table pointer
-;   CURR_LINE16          - zero page location for current line number
-;   CURR_OUT_FILE        - output file handle (for close on error)
-;   FS_P16               - zero page locations for file stack pointer
-;   FS_SRC_TYPE          - zero page location for source type (0=file, 1=memory)
-;   file_stack_empty     - function to check if file stack is empty
-;   pop_file_stack       - function to pop file stack entry
-;   close                - function to close file handles
-;   write_d              - function to write character to stderr
-;   exit                 - function to exit program
+;   TEMP                 - zero page location for temporary storage (asm.asm)
+;   TABP16               - zero page location for table pointer (hash_table.asm)
+;   CURR_LINE16          - zero page location for current line number (asm.asm alias)
+;   CURR_OUT_FILE        - output file handle (asm.asm)
+;   FS_P16               - file stack pointer (file_stack.asm)
+;   FS_SRC_TYPE          - source type (file_stack.asm)
+;   file_stack_empty     - check if file stack is empty (file_stack.asm)
+;   pop_file_stack       - pop file stack entry (file_stack.asm)
+;   close                - close file handles (environment.asm)
+;   write_d              - write character to stderr (environment.asm)
+;   exit                 - exit program (environment.asm)
 
   .include to_decimal.asm
 

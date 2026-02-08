@@ -5,13 +5,16 @@
 ;           handle_fwdref_mode, parse_operand
 ;
 ; Requires:
-;   CURR_CHAR, HEX16, OPERAND16, PC16, PASS, IN_ZEROPAGE, IS_FWDREF, STARTED
-;   read_char, read_token, skip_spaces, skip_rest_of_line, check_for_end_of_line
-;   parse_value
-;   select_instruction_hash_table, find_in_hash_instruction
-;   add_forward_ref, check_forward_ref
-;   write
-;   err_* (opcode/operand/mode/value/branch/zeropage errors)
+;   CURR_CHAR (asm.asm alias; backing storage in file_stack.asm)
+;   HEX16, OPERAND16, PC16, PASS, IN_ZEROPAGE, IS_FWDREF, STARTED (asm.asm)
+;   read_char (asm.asm alias; implemented in file_stack.asm)
+;   read_token, skip_spaces, skip_rest_of_line, check_for_end_of_line (tokenizer.asm)
+;   parse_value (expressions.asm)
+;   select_instruction_hash_table (common.asm)
+;   find_in_hash_instruction (hash_table.asm)
+;   add_forward_ref, check_forward_ref (forward_ref.asm)
+;   write (environment.asm)
+;   err_* (errors.asm)
 
   .zeropage
 

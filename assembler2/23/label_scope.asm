@@ -14,14 +14,14 @@
 ; The scope stack grows upward from SCOPE_STACK.
 ;
 ; Requires (from caller):
-;   SCOPE_STACK          - base address of scope stack
-;   MACRO_ENTRY16        - macro hash table entry address (set before push)
+;   SCOPE_STACK          - base address of scope stack (asm.asm)
+;   MACRO_ENTRY16        - macro hash table entry address (asm.asm)
 ;
 ; Requires (from hash_table22.asm):
-;   LABEL_SCOPE16        - current scope for local label resolution
-;   CACHED_HASH          - pre-computed hash for current scope
-;   scramble_table       - hash scrambling table
-;   err_macro_nesting_too_deep - error handler for scope overflow
+;   LABEL_SCOPE16        - current scope for local label resolution (hash_table.asm)
+;   CACHED_HASH          - pre-computed hash for current scope (hash_table.asm)
+;   scramble_table       - hash scrambling table (hash_table.asm)
+;   err_macro_nesting_too_deep - error handler for scope overflow (errors.asm)
 
 SCOPE_ENTRY_SIZE = 5
 
