@@ -116,7 +116,7 @@ DATA_MODE_ASCIIZ = 3          ; 1 Byte, null terminated
   .include macros.asm
   .include common.asm
   .include label_scope.asm
-  .include fwdref.asm
+  .include forward_ref.asm
 FS_FILENAME        = TOKEN
 FS_POP_MEMORY_HOOK = pop_label_scope
   .ifdef enable_debug
