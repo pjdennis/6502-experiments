@@ -17,41 +17,23 @@ up to 256 bytes per page, avoiding per-byte 16-bit pointer manipulation.
 
 ~16-18 cycles/byte vs ~47 cycles/byte.
 
+### Batch insert when keys are buffered
+
+After inserting a printable character, `insert_batch_pending` checks for
+additional buffered input. Pending printable characters (up to 32) are read
+into a staging buffer at `BATCH_BUF` ($E000), then inserted with a single
+`buf_shift_right` + copy via `buf_insert_chars`. Line pointer adjustment
+(`buf_adjust_lines_inc`) and rendering happen once for the whole batch.
+
+The shift-right loop uses `BUF_DELTA` to parameterize the shift amount,
+so `buf_shift_right` works for both single-char (delta=1) and batch
+(delta=N) operations. Non-printable characters (Enter, ESC, arrow keys)
+stop the batch and are pushed back for normal processing.
+
+This reduces N buffered keystrokes from `N * (shift + adjust + render)` to
+`1 * (shift + adjust + render) + 1 * (shift_N + adjust_N)`.
+
 ## Future Work
-
-### Step 3: Batch insert when keys are buffered
-
-**Problem:** When holding a key, multiple keystrokes buffer in stdin. Each is
-processed individually: shift buffer by 1, adjust lines, render. If N keys are
-buffered, we do N separate shifts of the entire buffer tail.
-
-**Design:** After processing an insert-mode printable character, check
-`con_ready` before rendering. If more printable keys are pending, read them
-all (up to a limit) and batch the operation:
-
-1. Read all pending printable characters into a small staging buffer (cap at
-   32 or so to bound latency).
-2. Shift the buffer right by N once, instead of N shifts by 1. The
-   page-at-a-time shift loop already supports this by adjusting the
-   SRC/DST offset from 1 to N.
-3. Copy all N characters into the opened gap.
-4. Call `buf_adjust_lines_inc` once (adjusting pointers by +N instead of +1).
-   This requires a parameterized version that takes the delta.
-5. Render once.
-
-This reduces N keystrokes from `N * (shift + adjust + render)` to
-`1 * (shift_N + adjust_N + render)`. The total bytes shifted is the same,
-but setup overhead, line adjustment, and render happen only once.
-
-**Call sites:**
-- `editor/insert.asm` `insert_char`: after inserting the first character,
-  loop reading `con_ready` / `con_read` for additional printable chars.
-- `editor/buffer.asm`: add `buf_insert_chars` (shift by N, fill N bytes)
-  and a parameterized `buf_adjust_lines_add` (add N to pointers).
-
-**Newline handling in batch:** If a newline (Enter) is encountered in the
-pending keys, stop the batch before it and process the newline separately,
-since newlines require a full `buf_rebuild_lines`.
 
 ### Step 4: Gap buffer
 
