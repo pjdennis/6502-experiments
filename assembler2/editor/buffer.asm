@@ -74,12 +74,7 @@ buf_load_file:
 .read_done:
   ; Ensure buffer ends with newline
   SEC
-  LDA BUF_END16
-  SBC #1
-  STA BUF_PTR16
-  LDA BUF_END16 + 1
-  SBC #0
-  STA BUF_PTR16 + 1
+  SBCI16 BUF_END16, $0001, BUF_PTR16
 
   ; Check if last byte is newline
   LDY #0
@@ -384,13 +379,7 @@ buf_delete_char:
 
 .del_shift_done:
   ; Decrement buffer end
-  SEC
-  LDA BUF_END16
-  SBC #1
-  STA BUF_END16
-  LDA BUF_END16 + 1
-  SBC #0
-  STA BUF_END16 + 1
+  DEC16 BUF_END16
 
   RTS
 

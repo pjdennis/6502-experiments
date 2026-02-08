@@ -246,12 +246,7 @@ normal_page_down:
   BCC .pgdn_target_ok
 .pgdn_clamp_target:
   SEC
-  LDA LINE_COUNT16
-  SBC #1
-  STA BUF_PTR16
-  LDA LINE_COUNT16 + 1
-  SBC #0
-  STA BUF_PTR16 + 1
+  SBCI16 LINE_COUNT16, $0001, BUF_PTR16
 .pgdn_target_ok:
 
   ; VIEW_TOP16 += page_size
@@ -380,12 +375,7 @@ normal_line_end:
 
 normal_goto_last:
   SEC
-  LDA LINE_COUNT16
-  SBC #1
-  STA FILE_LINE16
-  LDA LINE_COUNT16 + 1
-  SBC #0
-  STA FILE_LINE16 + 1
+  SBCI16 LINE_COUNT16, $0001, FILE_LINE16
 
   ; VIEW_TOP = max(0, LINE_COUNT - (SCREEN_ROWS - 1))
   LDA SCREEN_ROWS
@@ -483,12 +473,7 @@ normal_d_key:
   CMP16 FILE_LINE16, LINE_COUNT16
   BCC .no_clamp
   SEC
-  LDA LINE_COUNT16
-  SBC #1
-  STA FILE_LINE16
-  LDA LINE_COUNT16 + 1
-  SBC #0
-  STA FILE_LINE16 + 1
+  SBCI16 LINE_COUNT16, $0001, FILE_LINE16
 .no_clamp:
   LDA #0
   STA LAST_KEY

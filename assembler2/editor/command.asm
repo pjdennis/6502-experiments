@@ -243,23 +243,13 @@ command_parse:
   BEQ .goto_ret      ; :0 does nothing
 
   SEC
-  LDA BUF_LEN16
-  SBC #1
-  STA FILE_LINE16
-  LDA BUF_LEN16 + 1
-  SBC #0
-  STA FILE_LINE16 + 1
+  SBCI16 BUF_LEN16, $0001, FILE_LINE16
 
   ; Clamp to last line
   CMP16 FILE_LINE16, LINE_COUNT16
   BCC .line_ok
   SEC
-  LDA LINE_COUNT16
-  SBC #1
-  STA FILE_LINE16
-  LDA LINE_COUNT16 + 1
-  SBC #0
-  STA FILE_LINE16 + 1
+  SBCI16 LINE_COUNT16, $0001, FILE_LINE16
 .line_ok:
   ; Set VIEW_TOP so cursor is near top of screen
   CP16 FILE_LINE16, VIEW_TOP16
