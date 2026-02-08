@@ -100,6 +100,7 @@ insert_char:
   INC CURSOR_COL
   LDA #1
   STA RENDER_FLAG
+  JSR ensure_cursor_visible
   LDA #$FF
   STA MODIFIED
   RTS
@@ -151,6 +152,7 @@ insert_backspace:
   DEC CURSOR_COL
   LDA #1
   STA RENDER_FLAG
+  JSR ensure_cursor_visible
   LDA #$FF
   STA MODIFIED
   RTS

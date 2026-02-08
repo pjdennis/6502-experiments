@@ -297,7 +297,8 @@ class EditorTestRunner:
                         expected_content: str = None,
                         expect_content_redraws: list = None,
                         expect_content_rows: list = None,
-                        expect_ansi_contains: str = None):
+                        expect_ansi_contains: str = None,
+                        expect_cursor_at_frame: list = None):
         """Run an editor test and verify screen state via ANSI output.
 
         Args:
@@ -310,6 +311,8 @@ class EditorTestRunner:
             expect_content_rows: list of (frame_idx, expected_rows_set) tuples -
                 verify exactly which content rows were touched in specific frames
             expect_ansi_contains: substring to find in raw ANSI output
+            expect_cursor_at_frame: list of (frame_idx, (row, col)) tuples -
+                verify cursor position at specific frames
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir = Path(tmpdir)
@@ -418,6 +421,23 @@ class EditorTestRunner:
                         self._fail(name,
                             f"Frame {frame_idx}: expected rows touched "
                             f"{expected_rows}, got {actual_rows}\n"
+                            f"    Frame:\n{screen.dump()}")
+                        return
+
+            if expect_cursor_at_frame is not None:
+                actual_count = screen.get_frame_count()
+                for frame_idx, expected_pos in expect_cursor_at_frame:
+                    if frame_idx >= actual_count:
+                        self._fail(name,
+                            f"Expected frame {frame_idx} but only "
+                            f"{actual_count} frames\n"
+                            f"    Frame:\n{screen.dump()}")
+                        return
+                    actual_pos = screen.frames[frame_idx][1]
+                    if actual_pos != expected_pos:
+                        self._fail(name,
+                            f"Frame {frame_idx}: expected cursor at "
+                            f"{expected_pos}, got {actual_pos}\n"
                             f"    Frame:\n{screen.dump()}")
                         return
 
@@ -1306,6 +1326,75 @@ class EditorTestRunner:
             ("X" * 60 + "\n") * 5,
             b"jjjj:q!\r",
             expect_status_contains="5,"
+        )
+
+        # Insert mode: cursor tracks wrap when typing past screen edge
+        # Start with 38 chars on 40-col screen, $a enters append at col 38.
+        # Type 3 chars: col 39 (row 0), col 40 (row 1), col 41 (row 1).
+        # Frame sequence: 0=init, 1=$, 2=a, 3=X(col39), 4=X(col40), 5=X(col41), 6=ESC
+        # At frame 4: CURSOR_COL=40, must be row 1 col 0 (crossed wrap boundary)
+        # At frame 5: CURSOR_COL=41, must be row 1 col 1
+        self.run_test_screen(
+            "Insert cursor tracks wrap boundary",
+            "A" * 38 + "\n",
+            b"$aXXX\x1b:q!\r",
+            expect_cursor=(1, 0),
+            expect_lines=[
+                (0, "A" * 38 + "XX"),
+                (1, "X"),
+            ],
+            expect_cursor_at_frame=[
+                (4, (1, 0)),
+                (5, (1, 1)),
+            ]
+        )
+
+        # Insert mode: cursor on wrap continuation while typing
+        # Start with 39 chars, $a enters append at col 39, type 2 chars.
+        # Frame sequence: 0=init, 1=$, 2=a, 3=X(col40), 4=X(col41), 5=ESC
+        # At frame 3: CURSOR_COL=40, must be row 1 col 0
+        self.run_test_screen(
+            "Insert cursor mid-wrap while typing",
+            "A" * 39 + "\n",
+            b"$aXX\x1b:q!\r",
+            expect_cursor=(1, 0),
+            expect_lines=[
+                (0, "A" * 39 + "X"),
+                (1, "X"),
+            ],
+            expect_cursor_at_frame=[
+                (3, (1, 0)),
+            ]
+        )
+
+        # Backspace from wrap boundary back to previous row
+        # Start with 41 chars (wraps to row 1 with 1 char). $a enters at col 41.
+        # Frame sequence: 0=init, 1=$, 2=a, 3=BS(col40), 4=BS(col39), 5=ESC
+        # At frame 4: CURSOR_COL=39, must be row 0 col 39 (crossed back)
+        self.run_test_screen(
+            "Backspace across wrap boundary",
+            "A" * 41 + "\n",
+            b"$a\x08\x08\x1b:q!\r",
+            expect_cursor=(0, 38),
+            expect_lines=[
+                (0, "A" * 39),
+            ],
+            expect_cursor_at_frame=[
+                (4, (0, 39)),
+            ]
+        )
+
+        # Normal mode x on wrapped line: content and cursor correct
+        # 60-char line, $ goes to col 59 (row 1, col 19), x deletes -> col 58
+        self.run_test_screen(
+            "x on wrapped line keeps cursor correct",
+            "A" * 60 + "\n",
+            b"$x:q!\r",
+            expect_cursor=(1, 18),
+            expect_lines=[
+                (0, "A" * 40),
+                (1, "A" * 19),
+            ]
         )
 
         # ============================================================
