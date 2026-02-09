@@ -282,6 +282,31 @@ insert_backspace:
   CMP #'\n'
   BNE .jl_apply           ; Line above has content, stop
 
+  ; BUF_SRC16 points to a \n. Verify this \n ends an EMPTY line.
+  ; Empty if BUF_SRC16 is at buffer start, or byte before it is also \n.
+  LDA BUF_SRC16
+  CMP #<TEXT_BUF
+  BNE .jl_check_prev
+  LDA BUF_SRC16 + 1
+  CMP #>TEXT_BUF
+  BEQ .jl_line_empty      ; First byte of buffer, just \n → empty
+
+.jl_check_prev:
+  ; Check byte at BUF_SRC16 - 1 using BUF_LEN16 as temp
+  SEC
+  LDA BUF_SRC16
+  SBC #1
+  STA BUF_LEN16
+  LDA BUF_SRC16 + 1
+  SBC #0
+  STA BUF_LEN16 + 1
+  LDY #0
+  LDA (BUF_LEN16),Y
+  CMP #'\n'
+  BNE .jl_apply           ; Byte before is not \n → content line → stop
+
+.jl_line_empty:
+
   ; Read one BS key from input
   STX BUF_TEMP
   JSR input_ready
