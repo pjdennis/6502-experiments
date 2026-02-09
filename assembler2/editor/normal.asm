@@ -487,15 +487,24 @@ normal_delete_char:
   SBC CURSOR_COL
   STA LINE_LEN              ; Reuse as cap
 
-  ; Count pending 'x' keys, add 1 for current key
+  ; Start with count prefix (minimum 1)
+  JSR get_count_byte         ; X = count
+
+  ; Add pending 'x' keys
+  STX BUF_DELTA              ; Save count prefix
   LDA #'x'
   STA BUF_TEMP
-  JSR count_pending_key      ; Returns count in X
-  INX
+  JSR count_pending_key      ; Returns additional x count in X
+  TXA
+  CLC
+  ADC BUF_DELTA              ; Total = count + pending
+  BCS .x_cap_at_max          ; Overflow -> cap
+  TAX
 
   ; Cap at max deleteable
   CPX LINE_LEN
   BCC .x_cap_ok
+.x_cap_at_max:
   LDX LINE_LEN
 .x_cap_ok:
   STX BUF_DELTA
@@ -518,18 +527,30 @@ normal_d_key:
   CMP #'d'
   BNE .set_d
 
-  ; dd: delete current line
+  ; dd: delete N lines (N = count, min 1)
+  JSR get_count_byte         ; X = count
+.dd_loop:
+  STX LINE_LEN               ; Save remaining count
   LDAX16 FILE_LINE16
   JSR buf_delete_line
-  LDA #$FF
-  STA MODIFIED
 
-  ; Clamp file line if past end
+  ; If file line is past end, stop deleting
   CMP16 FILE_LINE16, LINE_COUNT16
-  BCC .no_clamp
+  BCS .dd_clamp
+
+  LDX LINE_LEN
+  DEX
+  BNE .dd_loop
+  JMP .dd_done
+
+.dd_clamp:
+  ; Clamp file line to last line
   SEC
   SBCI16 LINE_COUNT16, $0001, FILE_LINE16
-.no_clamp:
+
+.dd_done:
+  LDA #$FF
+  STA MODIFIED
   JSR clamp_cursor_col
   JMP clear_count
 

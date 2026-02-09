@@ -2069,6 +2069,75 @@ class EditorTestRunner:
             expect_status_contains="COMMAND - 10,"
         )
 
+        # ============================================================
+        # Count x and dd tests
+        # ============================================================
+        self._group("Count x and dd:", leading_blank=True)
+
+        # 3x deletes 3 chars
+        self.run_test(
+            "3x deletes 3 chars",
+            "ABCDEF\n",
+            b"3x:wq\r",
+            expected_content="DEF\n"
+        )
+
+        # 3x from middle
+        self.run_test(
+            "3x from middle of line",
+            "ABCDEF\n",
+            b"l3x:wq\r",
+            expected_content="AEF\n"
+        )
+
+        # Count x exceeding line clamps
+        self.run_test(
+            "Count x clamps at end of line",
+            "AB\n",
+            b"99x:wq\r",
+            expected_content="\n"
+        )
+
+        # x still works without count
+        self.run_test(
+            "x without count still works",
+            "Hello\n",
+            b"x:wq\r",
+            expected_content="ello\n"
+        )
+
+        # 2dd deletes 2 lines
+        self.run_test(
+            "2dd deletes 2 lines",
+            "A\nB\nC\nD\n",
+            b"2dd:wq\r",
+            expected_content="C\nD\n"
+        )
+
+        # 3dd from middle
+        self.run_test(
+            "3dd from line 2 deletes 3 lines",
+            "A\nB\nC\nD\nE\n",
+            b"j3dd:wq\r",
+            expected_content="A\nE\n"
+        )
+
+        # dd still works without count
+        self.run_test(
+            "dd without count still works",
+            "A\nB\n",
+            b"dd:wq\r",
+            expected_content="B\n"
+        )
+
+        # Count dd exceeding file clamps
+        self.run_test(
+            "Count dd clamps at end of file",
+            "A\nB\nC\n",
+            b"j99dd:wq\r",
+            expected_content="A\n"
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed
