@@ -14,7 +14,7 @@
 ;   compare_token (hash_table.asm)
 ;   skip_rest_of_line, check_for_end_of_line (tokenizer.asm)
 ;   select_label_hash_table (common.asm)
-;   emit, advance_pc_to_hex16 (instructions.asm)
+;   emit, advance_pc_to_hex16 (output.asm)
 ;   parse_value, decode_escape (expressions.asm)
 ;   process_macro (macro_expansion.asm)
 ;   push_file_stack (file_stack.asm)

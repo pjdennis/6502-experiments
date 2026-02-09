@@ -48,10 +48,11 @@
 ;
 ; CODE ORGANIZATION
 ;   Modules (included in dependency order):
+;     output.asm          - PC management, byte emission
 ;     tokenizer.asm       - Character classification, token/hex reading
 ;     expressions.asm     - Expression evaluation, char literals, byte selectors
 ;     labels.asm          - Label capture, local labels, value assignment
-;     instructions.asm    - PC management, instruction lookup/emission, operands
+;     instructions.asm    - Instruction lookup/emission, operand parsing
 ;     directives.asm      - Directive dispatch, data directives, conditionals
 ;     macro_expansion.asm - Macro definition, expansion, body capture
 ;     init.asm            - CLI argument processing, input file opening
@@ -142,6 +143,7 @@ CURR_CHAR          = FS_CURR_CHAR
 CURR_LINE16        = FS_CURR_LINE16
   .include errors.asm
   .include from_decimal.asm
+  .include output.asm
   .include tokenizer.asm
   .include expressions.asm
   .include labels.asm

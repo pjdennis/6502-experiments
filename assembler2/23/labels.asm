@@ -11,7 +11,7 @@
 ;   SCOPE_DEPTH (label_scope.asm)
 ;   read_char (asm.asm alias; implemented in file_stack.asm)
 ;   read_token, skip_spaces, check_for_end_of_line (tokenizer.asm)
-;   parse_value (expressions.asm), update_pc (instructions.asm)
+;   parse_value (expressions.asm), update_pc (output.asm)
 ;   find_in_hash, hash_add, commit_cached_hash (hash_table.asm)
 ;   select_label_hash_table, store_hash_value (common.asm)
 ;   err_* (errors.asm)
