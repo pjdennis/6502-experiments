@@ -204,17 +204,15 @@ command_parse:
   ; Multiply accumulator by 10: BUF_LEN16 = BUF_LEN16 * 10
   ; = BUF_LEN16 * 8 + BUF_LEN16 * 2
   PHA              ; save digit
-  ; Save original
+  ; Original * 2
+  ASL16 BUF_LEN16
+  ; Save Original * 2
   CP16 BUF_LEN16, BUF_SRC16
-  ; *2
+  ; Original * 4
   ASL16 BUF_LEN16
-  ; *4
+  ; Original * 8
   ASL16 BUF_LEN16
-  ; *8
-  ASL16 BUF_LEN16
-  ; + original*2
-  CLC
-  ASL16 BUF_SRC16
+  ; + original * 2
   CLC
   ADC16 BUF_LEN16, BUF_SRC16, BUF_LEN16
 
