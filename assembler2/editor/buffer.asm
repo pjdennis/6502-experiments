@@ -248,97 +248,12 @@ buf_insert_chars:
 ; Returns carry set = buffer full, carry clear = success
 ; Updates BUF_END16 on success
 buf_shift_right:
-  ; Check if buffer has room for BUF_DELTA bytes
-  CLC
-  LDA BUF_END16
-  ADC BUF_DELTA
-  LDA BUF_END16 + 1
-  ADC #0
-  CMP BUF_LIMIT
-  BCC .has_room
-  SEC              ; Buffer full
-  RTS
-.has_room:
-
-  ; Page-at-a-time shift right by BUF_DELTA, copying backwards.
-  ; Uses Y register as page offset for fast inner loop.
-  ; BUF_SRC16 = page-aligned base of current source page
-  ; BUF_DST16 = BUF_SRC16 + BUF_DELTA (so LDA (SRC),Y / STA (DST),Y shifts right)
-
-  ; Check if nothing to move (insert at end)
-  LDA BUF_END16 + 1
-  CMP BUF_PTR16 + 1
-  BNE .need_shift
-  LDA BUF_END16
-  CMP BUF_PTR16
-  BEQ .shift_right_done
-.need_shift:
-
-  ; Set up BUF_SRC16 = page base of (BUF_END16-1)
-  ; Y = low byte of (BUF_END16-1)
-  SEC
-  LDA BUF_END16
-  SBC #1
-  TAY                    ; Y = low byte of last source byte
-  LDA BUF_END16 + 1
-  SBC #0                  ; propagate borrow from low byte
-  STA BUF_SRC16 + 1      ; high byte = page
-  LDA #0
-  STA BUF_SRC16           ; BUF_SRC16 = page-aligned base
-
-  ; BUF_DST16 = BUF_SRC16 + BUF_DELTA
   LDA BUF_DELTA
-  STA BUF_DST16
-  LDA BUF_SRC16 + 1
-  STA BUF_DST16 + 1
+  STA BUF_LEN16
+  LDA #0
+  STA BUF_LEN16+1
+  ; Fall through to the 16 bit version
 
-  ; Check if insert point is on same page
-  LDA BUF_SRC16 + 1
-  CMP BUF_PTR16 + 1
-  BNE .full_page          ; Different page, copy Y down to 0
-
-  ; Same page as insert point: copy Y down to low byte of BUF_PTR16
-.last_page:
-  LDA (BUF_SRC16),Y
-  STA (BUF_DST16),Y
-  CPY BUF_PTR16
-  BEQ .shift_right_done
-  DEY
-  JMP .last_page
-
-.full_page:
-  ; Copy from Y down to 0 on this page
-  LDA (BUF_SRC16),Y
-  STA (BUF_DST16),Y
-  DEY
-  CPY #$FF
-  BNE .full_page
-
-  ; Move to previous page
-  DEC BUF_SRC16 + 1
-  DEC BUF_DST16 + 1
-  LDY #$FF
-
-  ; Check if this is the page containing the insert point
-  LDA BUF_SRC16 + 1
-  CMP BUF_PTR16 + 1
-  BNE .full_page          ; Not yet, do another full page
-
-  ; This page contains the insert point
-  JMP .last_page
-
-.shift_right_done:
-  ; Update buffer end: add BUF_DELTA
-  CLC
-  LDA BUF_END16
-  ADC BUF_DELTA
-  STA BUF_END16
-  LDA BUF_END16 + 1
-  ADC #0
-  STA BUF_END16 + 1
-
-  CLC              ; Success
-  RTS
 
 ; Shift buffer right by BUF_LEN16 bytes at BUF_PTR16 (16-bit version)
 ; Input: BUF_PTR16 = insert point, BUF_LEN16 = shift amount (16-bit)
@@ -553,104 +468,7 @@ buf_delete_char:
 ; Input: BUF_PTR16 = position, BUF_DELTA = count
 ; Shifts all following bytes left by BUF_DELTA, updates BUF_END16
 buf_delete_chars:
-  ; Fall through to buf_shift_left
-
-; Shift buffer left by BUF_DELTA bytes at BUF_PTR16
-; Input: BUF_PTR16 = delete point, BUF_DELTA = shift amount
-; Updates BUF_END16 on completion
-buf_shift_left:
-  ; Page-at-a-time shift left by BUF_DELTA, copying forwards.
-  ; Source = BUF_PTR16 + BUF_DELTA, copies forward to BUF_END16.
-  ; BUF_SRC16 = page-aligned base of current source page
-  ; BUF_DST16 = BUF_SRC16 - BUF_DELTA (so LDA (SRC),Y / STA (DST),Y shifts left)
-
-  ; Compute source start = BUF_PTR16 + BUF_DELTA
-  CLC
-  LDA BUF_PTR16
-  ADC BUF_DELTA
-  STA BUF_SRC16
-  LDA BUF_PTR16 + 1
-  ADC #0
-  STA BUF_SRC16 + 1
-
-  ; Check if nothing to move (source >= BUF_END16)
-  LDA BUF_SRC16 + 1
-  CMP BUF_END16 + 1
-  BCC .del_need_shift
-  BNE .del_shift_done
-  LDA BUF_SRC16
-  CMP BUF_END16
-  BCS .del_shift_done
-.del_need_shift:
-
-  ; Set up BUF_SRC16 = page base of first source byte
-  ; Y = low byte of first source byte
-  LDA BUF_SRC16
-  TAY                    ; Y = low byte of first source byte
-  LDA BUF_SRC16 + 1
-  STA BUF_SRC16 + 1      ; high byte = page
-  LDA #0
-  STA BUF_SRC16           ; BUF_SRC16 = page-aligned base
-
-  ; BUF_DST16 = BUF_SRC16 - BUF_DELTA
-  ; (DST),Y = page_base - BUF_DELTA + Y = source - BUF_DELTA = correct destination
-  SEC
-  LDA BUF_SRC16
-  SBC BUF_DELTA
-  STA BUF_DST16
-  LDA BUF_SRC16 + 1
-  SBC #0
-  STA BUF_DST16 + 1
-
-  ; Check if BUF_END16 is on the same page
-  LDA BUF_SRC16 + 1
-  CMP BUF_END16 + 1
-  BNE .del_full_page      ; Different page, copy Y up to $FF
-
-  ; Same page as end: copy Y up to (BUF_END16 low - 1)
-.del_last_page:
-  LDA (BUF_SRC16),Y
-  STA (BUF_DST16),Y
-  INY
-  CPY BUF_END16
-  BNE .del_last_page
-  JMP .del_shift_done
-
-.del_full_page:
-  ; Copy from Y up to $FF on this page
-  LDA (BUF_SRC16),Y
-  STA (BUF_DST16),Y
-  INY
-  BNE .del_full_page
-
-  ; Move to next page
-  INC BUF_SRC16 + 1
-  INC BUF_DST16 + 1
-  LDY #0
-
-  ; Check if this is the page containing BUF_END16
-  LDA BUF_SRC16 + 1
-  CMP BUF_END16 + 1
-  BNE .del_full_page      ; Not yet, do another full page
-
-  ; Check if BUF_END16 low byte is 0 (end is at page boundary, nothing to copy)
-  LDA BUF_END16
-  BEQ .del_shift_done
-
-  ; This page contains the end
-  JMP .del_last_page
-
-.del_shift_done:
-  ; Update buffer end: subtract BUF_DELTA
-  SEC
-  LDA BUF_END16
-  SBC BUF_DELTA
-  STA BUF_END16
-  LDA BUF_END16 + 1
-  SBC #0
-  STA BUF_END16 + 1
-
-  RTS
+  JMP buf_shift_left
 
 ; Delete entire line N (N in A/X, low/high)
 ; Removes the line and its trailing newline
@@ -747,6 +565,16 @@ buf_delete_lines:
 
   JSR buf_rebuild_lines
   RTS
+
+; Shift buffer left by BUF_DELTA bytes at BUF_PTR16
+; Input: BUF_PTR16 = delete point, BUF_DELTA = shift amount
+; Updates BUF_END16 on completion
+buf_shift_left:
+  LDA BUF_DELTA
+  STA BUF_LEN16
+  LDA #0
+  STA BUF_LEN16 + 1
+  ; Fall through to 16 bit version
 
 ; Shift buffer left by BUF_LEN16 bytes at BUF_PTR16 (16-bit version)
 ; Input: BUF_PTR16 = delete point, BUF_LEN16 = shift amount (16-bit)
