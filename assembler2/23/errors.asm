@@ -108,83 +108,95 @@ err_too_many_ifdefs:
   BRK
   .asciiz 21, "Too many .ifdef directives"
 
-; --- Macro errors (22-31) ---
+err_else_without_ifdef:
+  BRK
+  .asciiz 22, ".else without .ifdef"
+
+err_duplicate_else:
+  BRK
+  .asciiz 23, "Duplicate .else in conditional block"
+
+err_conditional_nesting_too_deep:
+  BRK
+  .asciiz 24, "Conditional nesting exceeds 16 levels"
+
+; --- Macro errors (25-34) ---
 err_macro_name_expected:
   BRK
-  .asciiz 22, "Macro name expected"
+  .asciiz 25, "Macro name expected"
 
 err_macro_shadows_instruction:
   BRK
-  .asciiz 23, "Macro name shadows instruction"
+  .asciiz 26, "Macro name shadows instruction"
 
 err_duplicate_macro:
   BRK
-  .asciiz 24, "Duplicate macro definition"
+  .asciiz 27, "Duplicate macro definition"
 
 err_endmacro_without_macro:
   BRK
-  .asciiz 25, ".endmacro without .macro"
+  .asciiz 28, ".endmacro without .macro"
 
 err_unclosed_macro:
   BRK
-  .asciiz 26, "Unclosed .macro"
+  .asciiz 29, "Unclosed .macro"
 
 err_nested_macro_definition:
   BRK
-  .asciiz 27, "Nested macro definition"
+  .asciiz 30, "Nested macro definition"
 
 err_recursive_macro:
   BRK
-  .asciiz 28, "Recursive macro invocation"
+  .asciiz 31, "Recursive macro invocation"
 
 err_too_few_arguments:
   BRK
-  .asciiz 29, "Too few macro arguments"
+  .asciiz 32, "Too few macro arguments"
 
 err_too_many_arguments:
   BRK
-  .asciiz 30, "Too many macro arguments"
+  .asciiz 33, "Too many macro arguments"
 
 err_macro_nesting_too_deep:
   BRK
-  .asciiz 31, "Macro nesting too deep"
+  .asciiz 34, "Macro nesting too deep"
 
-; --- Resource limit errors (32-34) ---
+; --- Resource limit errors (35-37) ---
 err_out_of_memory:
   BRK
-  .asciiz 32, "Out of memory"
+  .asciiz 35, "Out of memory"
 
 err_token_too_long:
   BRK
-  .asciiz 33, "Token too long"
+  .asciiz 36, "Token too long"
 
 err_too_many_forward_refs:
   BRK
-  .asciiz 34, "Too many forward references"
+  .asciiz 37, "Too many forward references"
 
-; --- Memory section errors (35) ---
+; --- Memory section errors (38) ---
 err_zeropage_overflow:
   BRK
-  .asciiz 35, "Zero page overflow"
+  .asciiz 38, "Zero page overflow"
 
-; --- File I/O errors (36) ---
+; --- File I/O errors (39) ---
 err_file_not_found:
   BRK
-  .asciiz 36, "File not found"
+  .asciiz 39, "File not found"
 
-; --- Syntax errors (37) ---
+; --- Syntax errors (40) ---
 err_comma_expected:
   BRK
-  .asciiz 37, "Comma expected"
+  .asciiz 40, "Comma expected"
 
-; --- Zeropage directive errors (38-39) ---
+; --- Zeropage directive errors (41-42) ---
 err_asciiz_in_zeropage:
   BRK
-  .asciiz 38, ".asciiz not allowed in .zeropage"
+  .asciiz 41, ".asciiz not allowed in .zeropage"
 
 err_operand_in_zeropage:
   BRK
-  .asciiz 39, "Operand not allowed on .byte/.word in .zeropage"
+  .asciiz 42, "Operand not allowed on .byte/.word in .zeropage"
 
 ; --- Command line/usage errors (240-241) ---
 err_usage:
