@@ -52,30 +52,6 @@ skip_token:
   RTS
 
 
-; Convert hex character to associated value
-; On entry, A contains a hex character A-Z|0-9
-; On exit A contains the value (0-15)
-;         X, Y are preserved
-; Raises 'Invalid hex' error if input is not a valid hex character
-convert_hex_character:
-  CMP #'A'
-  BCS .alpha           ; >= 'A'
-  ; Numeric path: '0'-'9' → 0-9
-  SBC #'0'-$01         ; Subtract 1 since carry is clear from CMP
-  CMP #'9'-'0'+$01     ; Check if result 0-9
-  BCS .error           ; >= 10, invalid
-  RTS
-.alpha:
-  ; Alpha path: 'A'-'F' → 10-15
-  SBC #'A'             ; Carry already set from CMP
-  CMP #'F'-'A'+$01     ; Check if result 0-5
-  BCS .error           ; >= 6, invalid
-  ADC #'9'-'0'+$01     ; Add 10 (carry clear from CMP)
-  RTS
-.error:
-  JMP err_invalid_hex
-
-
 ; read_char is provided by file_stack.asm
 
 ; Read and discard space characters
@@ -127,6 +103,30 @@ check_for_end_of_line:
 .done:
   SEC
   RTS
+
+
+; Convert hex character to associated value
+; On entry, A contains a hex character A-Z|0-9
+; On exit A contains the value (0-15)
+;         X, Y are preserved
+; Raises 'Invalid hex' error if input is not a valid hex character
+convert_hex_character:
+  CMP #'A'
+  BCS .alpha           ; >= 'A'
+  ; Numeric path: '0'-'9' → 0-9
+  SBC #'0'-$01         ; Subtract 1 since carry is clear from CMP
+  CMP #'9'-'0'+$01     ; Check if result 0-9
+  BCS .error           ; >= 10, invalid
+  RTS
+.alpha:
+  ; Alpha path: 'A'-'F' → 10-15
+  SBC #'A'             ; Carry already set from CMP
+  CMP #'F'-'A'+$01     ; Check if result 0-5
+  BCS .error           ; >= 6, invalid
+  ADC #'9'-'0'+$01     ; Add 10 (carry clear from CMP)
+  RTS
+.error:
+  JMP err_invalid_hex
 
 
 ; Reads 1 or 2 byte (2 or 4 character) hex value
