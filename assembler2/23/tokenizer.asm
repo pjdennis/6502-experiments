@@ -2,7 +2,7 @@
 ;
 ; Provides: compare_end_of_token, skip_token, convert_hex_character,
 ;           skip_spaces, skip_rest_of_line, check_for_end_of_line,
-;           read_hex_byte, read_hex_byte_or_word, read_token, read_filename,
+;           read_hex_byte_or_word, read_token, read_filename,
 ;           decode_escape
 ;
 ; Requires:
@@ -129,47 +129,37 @@ check_for_end_of_line:
   RTS
 
 
-
-; Reads 1 byte (2 character) hex value
-; On entry A contains first hex character
-; On exit A contains 2 character value (0-255)
-;         X, Y are preserved
-;         TEMP is not preserved
-; Raises 'Invalid hex' error if encountering non-hex characters
-read_hex_byte:
-  JSR convert_hex_character
-  ASL
-  ASL
-  ASL
-  ASL
-  STA TEMP
-  JSR read_char
-  JSR convert_hex_character
-  ORA TEMP
-  RTS
-
-
 ; Reads 1 or 2 byte (2 or 4 character) hex value
-; On entry, A contains the first hex character
+; On entry, CURR_CHAR contains the first hex character
 ; On exit HEX16 contains the read value
 ;         X, Y are preserved
 ;         A is not preserved
 ; Raises 'Invalid hex' error if encountering non-hex characters
 read_hex_byte_or_word:
-  JSR read_hex_byte    ; Read 2nd hex character and convert
-  STA HEX16+$01
+  JSR .read_hex_byte   ; Read 1st and 2nd hex characters and convert
   JSR read_char        ; Read 3rd hex char or terminator
   JSR compare_end_of_token
-  BCS .second
-  LDA HEX16+$01        ; No second byte so move result
-  STA HEX16
-  LDA #$00
-  STA HEX16+$01
+  BCS .has_second
+  LDA #0               ; Clear high byte
+  STA HEX16 + 1
   RTS
-.second:
-  JSR read_hex_byte    ; Read 4th hex char and convert
+.has_second:
+  LDA HEX16            ; Shift low byte into high byte
+  STA HEX16 + 1
+  JSR .read_hex_byte   ; Read 4th hex char and convert
+  JMP read_char        ; Tail call - Read char after 4th hex digit
+.read_hex_byte:        ; Local subroutine
+  LDA CURR_CHAR
+  JSR convert_hex_character
+  ASL
+  ASL
+  ASL
+  ASL
   STA HEX16
-  JSR read_char        ; Read char after 4th hex digit
+  JSR read_char
+  JSR convert_hex_character
+  ORA HEX16
+  STA HEX16
   RTS
 
 
