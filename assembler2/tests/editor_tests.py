@@ -2278,6 +2278,43 @@ class EditorTestRunner:
         )
 
         # ============================================================
+        # Count paste tests (Np, NP)
+        # ============================================================
+        self._group("Count paste (Np, NP):", leading_blank=True)
+
+        # 2p pastes twice
+        self.run_test(
+            "2p pastes line twice below",
+            "A\nB\nC\n",
+            b"yy2p:wq\r",
+            expected_content="A\nA\nA\nB\nC\n"
+        )
+
+        # 3p pastes three times
+        self.run_test(
+            "3p pastes line three times below",
+            "A\nB\n",
+            b"yy3p:wq\r",
+            expected_content="A\nA\nA\nA\nB\n"
+        )
+
+        # 2P pastes twice above
+        self.run_test(
+            "2P pastes line twice above",
+            "A\nB\nC\n",
+            b"jyy2P:wq\r",
+            expected_content="A\nB\nB\nB\nC\n"
+        )
+
+        # dd + 2p (cut one, paste two copies)
+        self.run_test(
+            "dd+2p pastes deleted line twice",
+            "A\nB\nC\n",
+            b"dd2p:wq\r",
+            expected_content="B\nA\nA\nC\n"
+        )
+
+        # ============================================================
         # Yank/copy (yy) tests
         # ============================================================
         self._group("Yank/copy (yy):", leading_blank=True)

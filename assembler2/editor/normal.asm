@@ -693,19 +693,41 @@ normal_open_above:
   JMP clear_count
 
 normal_paste_below:
+  JSR get_count_byte         ; X = count
+.paste_below_loop:
+  TXA
+  PHA                        ; Save remaining count
   JSR yank_paste_below
-  BCS .paste_below_done       ; Empty yank or buffer full (message already shown)
+  BCS .paste_below_fail_pop  ; Empty yank or buffer full
   LDA #$FF
   STA MODIFIED
-.paste_below_done:
+  PLA
+  TAX
+  DEX
+  BNE .paste_below_loop
+  JMP clear_count
+
+.paste_below_fail_pop:
+  PLA                        ; Clean stack
   JMP clear_count
 
 normal_paste_above:
+  JSR get_count_byte         ; X = count
+.paste_above_loop:
+  TXA
+  PHA                        ; Save remaining count
   JSR yank_paste_above
-  BCS .paste_above_done       ; Empty yank or buffer full (message already shown)
+  BCS .paste_above_fail_pop  ; Empty yank or buffer full
   LDA #$FF
   STA MODIFIED
-.paste_above_done:
+  PLA
+  TAX
+  DEX
+  BNE .paste_above_loop
+  JMP clear_count
+
+.paste_above_fail_pop:
+  PLA                        ; Clean stack
   JMP clear_count
 
 normal_y_key:
