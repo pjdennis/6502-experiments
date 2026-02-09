@@ -350,15 +350,6 @@ EXPECT_LINE: 2
 EXPECT_MSG: Invalid operand
 
 ---
-NAME: trailing_garbage_abs
-INPUT:
- 1: * = $0200
- 2:   LDA $1234garbage
-EXPECT_ERROR: 10
-EXPECT_LINE: 2
-EXPECT_MSG: Unexpected text after operand
-
----
 NAME: trailing_garbage_abs_space
 INPUT:
  1: * = $0200
@@ -409,6 +400,23 @@ EXPECT_HEX: a1 61
 
 # --- Expressions (expressions.asm) ---
 # Expression evaluation, shifts, byte selectors, spaces in expressions, character literals, decimal constants
+
+---
+NAME: hex_single_char
+INPUT:
+ 1: * = $0200
+ 2: foo = $7
+ 3:   LDA #foo
+EXPECT_HEX: a9 07
+
+---
+NAME: hex_three_chars
+INPUT:
+ 1: * = $0200
+ 2: foo = $712
+ 3:   LDA #<foo
+ 4:   LDA #>foo
+EXPECT_HEX: a9 12 a9 07
 
 ---
 NAME: expression_assignment
@@ -3534,6 +3542,25 @@ INPUT:
 EXPECT_ERROR: 7
 EXPECT_LINE: 2
 EXPECT_MSG: Invalid hex
+
+---
+NAME: invalid_hex_partial
+INPUT:
+ 1: * = $0200
+ 2:   LDA $1234garbage
+EXPECT_ERROR: 7
+EXPECT_LINE: 2
+EXPECT_MSG: Invalid hex
+
+---
+NAME: hex_value_out_of_range
+INPUT:
+ 1: * = $0200
+ 2:   .word $12345 ; Too big
+ 3:   NOP
+EXPECT_ERROR: 6
+EXPECT_LINE: 2
+EXPECT_MSG: Value out of range
 
 ---
 NAME: closing_quote_not_found

@@ -10,7 +10,7 @@
 ;   LABEL_TYPE, LABEL_TYPE_GLOBAL, LABEL_TYPE_MACRO (common.asm)
 ;   SCOPE_DEPTH (label_scope.asm)
 ;   read_char (asm.asm alias; implemented in file_stack.asm)
-;   skip_spaces, compare_end_of_token, read_token, read_hex_byte_or_word,
+;   skip_spaces, compare_end_of_token, read_token, read_hex,
 ;   decode_escape (tokenizer.asm)
 ;   read_local_label (labels.asm)
 ;   select_label_hash_table (common.asm)
@@ -130,7 +130,7 @@ parse_term:
   RTS
 .hex:
   JSR read_char        ; Skip $
-  JMP read_hex_byte_or_word  ; Tail call; Stores in HEX16
+  JMP read_hex         ; Tail call; Stores in HEX16
 .char_literal:
   JSR parse_char_literal
   ; Result in OPERAND16

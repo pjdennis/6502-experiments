@@ -2,8 +2,7 @@
 ;
 ; Provides: compare_end_of_token, skip_token, convert_hex_character,
 ;           skip_spaces, skip_rest_of_line, check_for_end_of_line,
-;           read_hex_byte_or_word, read_token, read_filename,
-;           decode_escape
+;           read_hex, read_token, read_filename, decode_escape
 ;
 ; Requires:
 ;   CURR_CHAR (asm.asm alias; backing storage in file_stack.asm)
@@ -129,38 +128,41 @@ convert_hex_character:
   JMP err_invalid_hex
 
 
-; Reads 1 or 2 byte (2 or 4 character) hex value
+; Reads a hex value
 ; On entry, CURR_CHAR contains the first hex character
-; On exit HEX16 contains the read value
+; On exit HEX16 contains the value read
 ;         X, Y are preserved
 ;         A is not preserved
 ; Raises 'Invalid hex' error if encountering non-hex characters
-read_hex_byte_or_word:
-  JSR .read_hex_byte   ; Read 1st and 2nd hex characters and convert
-  JSR read_char        ; Read 3rd hex char or terminator
-  JSR compare_end_of_token
-  BCS .has_second
-  LDA #0               ; Clear high byte
-  STA HEX16 + 1
-  RTS
-.has_second:
-  LDA HEX16            ; Shift low byte into high byte
-  STA HEX16 + 1
-  JSR .read_hex_byte   ; Read 4th hex char and convert
-  JMP read_char        ; Tail call - Read char after 4th hex digit
-.read_hex_byte:        ; Local subroutine
+;        'Value out of range' if the hex value > $FFFF
+read_hex:
   LDA CURR_CHAR
   JSR convert_hex_character
-  ASL
-  ASL
-  ASL
-  ASL
   STA HEX16
+  LDA #0
+  STA HEX16+1
+.loop:
   JSR read_char
+  JSR compare_end_of_token
+  BCC .done
+  LDA #$F0
+  AND HEX16 + 1
+  BNE .at_max
+  ASL16 HEX16
+  ASL16 HEX16
+  ASL16 HEX16
+  ASL16 HEX16
+  LDA CURR_CHAR
   JSR convert_hex_character
   ORA HEX16
   STA HEX16
+  JMP .loop
+.done:
   RTS
+.at_max:
+  LDA CURR_CHAR
+  JSR convert_hex_character    ; Trigger bad hex error if applicable
+  JMP err_value_out_of_range
 
 
 ; Reads token into TOKEN (zero terminated)
