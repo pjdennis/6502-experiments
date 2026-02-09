@@ -1,8 +1,7 @@
 ; labels.asm - Label capture, local labels, value assignment
 ;
 ; Provides: check_for_value, read_value, read_local_label,
-;           select_label_hash_table, update_label_scope_from_lookup,
-;           capture_label
+;           update_label_scope_from_lookup, capture_label
 ;
 ; Requires:
 ;   CURR_CHAR (asm.asm alias; backing storage in file_stack.asm)
@@ -14,7 +13,7 @@
 ;   read_token, skip_spaces, check_for_end_of_line (tokenizer.asm)
 ;   parse_value (expressions.asm), update_pc (instructions.asm)
 ;   find_in_hash, hash_add, commit_cached_hash (hash_table.asm)
-;   store_hash_value (common.asm)
+;   select_label_hash_table, store_hash_value (common.asm)
 ;   err_* (errors.asm)
 
   .code
@@ -73,11 +72,6 @@ read_local_label:
   LDA #LABEL_TYPE_MACRO_LOCAL
 .store:
   STA LABEL_TYPE
-  RTS
-
-
-select_label_hash_table:
-  SET16 LHASHTAB, HTP16
   RTS
 
 

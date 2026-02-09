@@ -9,7 +9,7 @@
 ;   DEBUG_FLAG, SHOW_MACROS, SMALL_HEAP_FLAG (asm.asm)
 ;   argv, write_d (environment.asm)
 ;   init_heap (common.asm), init_hash_table (hash_table.asm)
-;   select_label_hash_table (labels.asm)
+;   select_label_hash_table (common.asm)
 ;   hash_add (hash_table.asm), store_hash_value (common.asm)
 ;   push_file_stack (file_stack.asm)
 ;   show_message (errors.asm, debug output)

@@ -8,7 +8,8 @@
 ;   err_out_of_memory - error handler for heap/stack collision (errors.asm)
 ;
 ; Provides:
-;   init_heap, advance_heap, store_hash_value, select_instruction_hash_table
+;   init_heap, advance_heap, store_hash_value,
+;   select_label_hash_table, select_instruction_hash_table
 ;   HASH/HTP16/HT_V16 helpers via included hash_table.asm
 
 ; Addressing mode operand number of bytes
@@ -156,6 +157,13 @@ store_hash_value:
   STA (MEMP16),Y
   INY
   JMP advance_heap     ; Tail call
+
+
+  .ifdef LHASHTAB
+select_label_hash_table:
+  SET16 LHASHTAB, HTP16
+  RTS
+  .endif
 
 
 select_instruction_hash_table:

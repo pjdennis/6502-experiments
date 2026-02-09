@@ -13,7 +13,7 @@
 ;   read_token, compare_end_of_token, check_for_end_of_line (tokenizer.asm)
 ;   parse_expression (expressions.asm), advance_heap (common.asm)
 ;   select_instruction_hash_table (common.asm)
-;   select_label_hash_table (labels.asm)
+;   select_label_hash_table (common.asm)
 ;   hash_add_instruction, hash_add (hash_table.asm), store_hash_value (common.asm)
 ;   push_label_scope (label_scope.asm), push_memory_source (file_stack.asm)
 ;   err_* (errors.asm)

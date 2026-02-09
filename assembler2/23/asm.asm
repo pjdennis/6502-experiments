@@ -76,7 +76,7 @@
 ;   init_fwdref_list, finalize_fwdref_list, reset_fwdref_ptr (forward_ref.asm)
 ;   init_scope_stack, reset_scope_stack (label_scope.asm)
 ;   init_heap, init_hash_table (common.asm / hash_table.asm)
-;   select_label_hash_table (labels.asm)
+;   select_label_hash_table (common.asm)
 ;   argc, argv, openout, close (environment.asm)
 ;   err_* (errors.asm)
 ;

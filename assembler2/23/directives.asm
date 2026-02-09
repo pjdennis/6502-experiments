@@ -13,6 +13,7 @@
 ;   read_token, read_filename (tokenizer.asm)
 ;   compare_token (hash_table.asm)
 ;   skip_rest_of_line, check_for_end_of_line (tokenizer.asm)
+;   select_label_hash_table (common.asm)
 ;   emit, handle_reserve (instructions.asm)
 ;   parse_value, decode_escape (expressions.asm)
 ;   process_macro (macro_expansion.asm)
