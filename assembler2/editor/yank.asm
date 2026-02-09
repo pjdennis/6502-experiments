@@ -73,12 +73,7 @@ yank_add_line:
 ; Returns carry set if yank buffer empty, carry clear if has content
 yank_get_size:
   SEC
-  LDA YANK_END16
-  SBC #<YANK_BUF
-  STA BUF_LEN16
-  LDA YANK_END16 + 1
-  SBC #>YANK_BUF
-  STA BUF_LEN16 + 1
+  SBCI16 YANK_END16, YANK_BUF, BUF_LEN16
   ; Check if size is zero
   ORA BUF_LEN16
   BEQ .empty
@@ -196,12 +191,7 @@ yank_paste_below_n:
   BEQ .pbn_total_done
 .pbn_calc:
   CLC
-  LDA BUF_LEN16
-  ADC BUF_DST16
-  STA BUF_LEN16
-  LDA BUF_LEN16 + 1
-  ADC BUF_DST16 + 1
-  STA BUF_LEN16 + 1
+  ADC16 BUF_LEN16, BUF_DST16, BUF_LEN16
   DEX
   BNE .pbn_calc
 .pbn_total_done:
@@ -289,12 +279,7 @@ yank_paste_above_n:
   BEQ .pan_total_done
 .pan_calc:
   CLC
-  LDA BUF_LEN16
-  ADC BUF_DST16
-  STA BUF_LEN16
-  LDA BUF_LEN16 + 1
-  ADC BUF_DST16 + 1
-  STA BUF_LEN16 + 1
+  ADC16 BUF_LEN16, BUF_DST16, BUF_LEN16
   DEX
   BNE .pan_calc
 .pan_total_done:

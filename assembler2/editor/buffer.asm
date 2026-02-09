@@ -164,12 +164,7 @@ buf_get_line_ptr:
   ASL16 BUF_PTR16
   ; Add LINE_TBL base
   CLC
-  LDA BUF_PTR16
-  ADC #<LINE_TBL
-  STA BUF_PTR16
-  LDA BUF_PTR16 + 1
-  ADC #>LINE_TBL
-  STA BUF_PTR16 + 1
+  ADCI16 BUF_PTR16, LINE_TBL, BUF_PTR16
   ; Read the 16-bit pointer from the table
   LDY #0
   LDA (BUF_PTR16),Y
@@ -300,12 +295,7 @@ buf_shift_right_16:
 
   ; BUF_DST16 = BUF_SRC16 + BUF_LEN16
   CLC
-  LDA BUF_SRC16          ; = 0
-  ADC BUF_LEN16
-  STA BUF_DST16
-  LDA BUF_SRC16 + 1
-  ADC BUF_LEN16 + 1
-  STA BUF_DST16 + 1
+  ADC16 BUF_SRC16, BUF_LEN16, BUF_DST16
 
   ; Check if insert point is on same page
   LDA BUF_SRC16 + 1
@@ -344,12 +334,7 @@ buf_shift_right_16:
 .sr16_shift_done:
   ; Update buffer end: add BUF_LEN16
   CLC
-  LDA BUF_END16
-  ADC BUF_LEN16
-  STA BUF_END16
-  LDA BUF_END16 + 1
-  ADC BUF_LEN16 + 1
-  STA BUF_END16 + 1
+  ADC16 BUF_END16, BUF_LEN16, BUF_END16
 
   CLC              ; Success
   RTS
@@ -390,12 +375,7 @@ buf_insert_block:
 
   ; Set up dst = BUF_END16 + BUF_LEN16 - 1
   CLC
-  LDA BUF_END16
-  ADC BUF_LEN16
-  STA BUF_DST16
-  LDA BUF_END16 + 1
-  ADC BUF_LEN16 + 1
-  STA BUF_DST16 + 1
+  ADC16 BUF_END16, BUF_LEN16, BUF_DST16
   ; -1
   LDA BUF_DST16
   BNE .ib_no_borrow1
@@ -434,12 +414,7 @@ buf_insert_block:
 .ib_shift_done:
   ; Update BUF_END16
   CLC
-  LDA BUF_END16
-  ADC BUF_LEN16
-  STA BUF_END16
-  LDA BUF_END16 + 1
-  ADC BUF_LEN16 + 1
-  STA BUF_END16 + 1
+  ADC16 BUF_END16, BUF_LEN16, BUF_END16
 
   ; Copy BUF_LEN16 bytes from BUF_SRC16 to gap at BUF_PTR16
   ; Forward copy: src=BUF_SRC16, dst=BUF_PTR16, count=BUF_LEN16
@@ -582,12 +557,7 @@ buf_shift_left:
 buf_shift_left_16:
   ; Compute source start = BUF_PTR16 + BUF_LEN16
   CLC
-  LDA BUF_PTR16
-  ADC BUF_LEN16
-  STA BUF_SRC16
-  LDA BUF_PTR16 + 1
-  ADC BUF_LEN16 + 1
-  STA BUF_SRC16 + 1
+  ADC16 BUF_PTR16, BUF_LEN16, BUF_SRC16
 
   ; Check if nothing to move (source >= BUF_END16)
   LDA BUF_SRC16 + 1
@@ -609,12 +579,7 @@ buf_shift_left_16:
 
   ; BUF_DST16 = BUF_SRC16 - BUF_LEN16
   SEC
-  LDA BUF_SRC16          ; = 0
-  SBC BUF_LEN16
-  STA BUF_DST16
-  LDA BUF_SRC16 + 1
-  SBC BUF_LEN16 + 1
-  STA BUF_DST16 + 1
+  SBC16 BUF_SRC16, BUF_LEN16, BUF_DST16
 
   ; Check if BUF_END16 is on the same page
   LDA BUF_SRC16 + 1
@@ -656,12 +621,7 @@ buf_shift_left_16:
 .sl16_shift_done:
   ; Update buffer end: subtract BUF_LEN16
   SEC
-  LDA BUF_END16
-  SBC BUF_LEN16
-  STA BUF_END16
-  LDA BUF_END16 + 1
-  SBC BUF_LEN16 + 1
-  STA BUF_END16 + 1
+  SBC16 BUF_END16, BUF_LEN16, BUF_END16
 
   RTS
 
@@ -735,12 +695,7 @@ buf_rebuild_lines:
 buf_adjust_lines_inc:
   ; Calculate number of entries to adjust: LINE_COUNT16 - FILE_LINE16 - 1
   SEC
-  LDA LINE_COUNT16
-  SBC FILE_LINE16
-  STA BUF_LEN16
-  LDA LINE_COUNT16 + 1
-  SBC FILE_LINE16 + 1
-  STA BUF_LEN16 + 1
+  SBC16 LINE_COUNT16, FILE_LINE16, BUF_LEN16
 
   ; Subtract 1 (we start from line+1, not line)
   LDA BUF_LEN16
@@ -761,12 +716,7 @@ buf_adjust_lines_inc:
   ADCI16 FILE_LINE16, $0001, BUF_PTR16
   ASL16 BUF_PTR16
   CLC
-  LDA BUF_PTR16
-  ADC #<LINE_TBL
-  STA BUF_PTR16
-  LDA BUF_PTR16 + 1
-  ADC #>LINE_TBL
-  STA BUF_PTR16 + 1
+  ADCI16 BUF_PTR16, LINE_TBL, BUF_PTR16
 
 .inc_loop:
   ; Increment the 16-bit line pointer at (BUF_PTR16)
@@ -807,12 +757,7 @@ buf_adjust_lines_inc:
 buf_adjust_lines_dec:
   ; Calculate number of entries to adjust: LINE_COUNT16 - FILE_LINE16 - 1
   SEC
-  LDA LINE_COUNT16
-  SBC FILE_LINE16
-  STA BUF_LEN16
-  LDA LINE_COUNT16 + 1
-  SBC FILE_LINE16 + 1
-  STA BUF_LEN16 + 1
+  SBC16 LINE_COUNT16, FILE_LINE16, BUF_LEN16
 
   ; Subtract 1
   LDA BUF_LEN16
@@ -832,12 +777,7 @@ buf_adjust_lines_dec:
   ADCI16 FILE_LINE16, $0001, BUF_PTR16
   ASL16 BUF_PTR16
   CLC
-  LDA BUF_PTR16
-  ADC #<LINE_TBL
-  STA BUF_PTR16
-  LDA BUF_PTR16 + 1
-  ADC #>LINE_TBL
-  STA BUF_PTR16 + 1
+  ADCI16 BUF_PTR16, LINE_TBL, BUF_PTR16
 
 .dec_loop:
   ; Decrement the 16-bit line pointer at (BUF_PTR16)
