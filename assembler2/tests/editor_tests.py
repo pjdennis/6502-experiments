@@ -1246,6 +1246,15 @@ class EditorTestRunner:
             expect_lines=[(i, f"Line {i+12}") for i in range(9)]
         )
 
+        # G on 300-line file: tests 8-bit overflow in CURSOR_ROW walk
+        self.run_test_screen(
+            "G: large file scrolls correctly",
+            make_lines(300),
+            b"G:q!\r",
+            expect_cursor=(8, 0),
+            expect_lines=[(i, f"Line {i+292}") for i in range(9)]
+        )
+
         # Ggg: full window back at top
         self.run_test_screen(
             "Ggg: full window at top",

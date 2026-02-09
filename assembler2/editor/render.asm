@@ -463,6 +463,7 @@ ensure_cursor_visible:
   JSR line_screen_rows
   CLC
   ADC CURSOR_ROW
+  BCS .ecv_need_scroll_down  ; 8-bit overflow: cursor far below screen
   STA CURSOR_ROW
 
   INC16 RENDER_LINE16
@@ -473,6 +474,7 @@ ensure_cursor_visible:
   LDA CURSOR_ROW
   CLC
   ADC WRAP_QUOT
+  BCS .ecv_need_scroll_down  ; 8-bit overflow
   STA CURSOR_ROW
 
 .ecv_check_below:
@@ -483,49 +485,53 @@ ensure_cursor_visible:
   CMP SCREEN_ROWS
   BCC .ecv_visible
 
-  ; Need to scroll down
-  ; We need CURSOR_ROW = SCREEN_ROWS - 2
-  ; Scroll VIEW_TOP forward until cursor fits
+.ecv_need_scroll_down:
+  ; Cursor is below visible area
+  ; Walk backward from FILE_LINE16 to find correct VIEW_TOP16
   LDA #$FF
   STA RENDER_FLAG
 
-  ; Compute target CURSOR_ROW (store in RENDER_ROW as safe temp)
   LDA SCREEN_ROWS
   SEC
   SBC #2
-  STA RENDER_ROW     ; target CURSOR_ROW
+  STA CURSOR_ROW      ; Target: cursor at row SCREEN_ROWS - 2
+  STA RENDER_ROW      ; Rows to walk back
 
-.ecv_scroll_down:
-  ; Advance VIEW_TOP_WRAP/VIEW_TOP16 one screen row at a time
-  ; Get height of VIEW_TOP line
+  ; Start from cursor position
+  CP16 FILE_LINE16, VIEW_TOP16
+  LDA WRAP_QUOT
+  STA VIEW_TOP_WRAP
+
+.ecv_walk_back:
+  LDA RENDER_ROW
+  BEQ .ecv_visible
+
+  ; Can we go back within current line?
+  LDA VIEW_TOP_WRAP
+  BEQ .ecv_prev_line
+  DEC VIEW_TOP_WRAP
+  DEC RENDER_ROW
+  JMP .ecv_walk_back
+
+.ecv_prev_line:
+  TST16 VIEW_TOP16
+  BEQ .ecv_at_top
+  DEC16 VIEW_TOP16
   LDAX16 VIEW_TOP16
   JSR buf_get_line_len
   JSR line_screen_rows
-  ; A = total screen rows for VIEW_TOP line
-  STA RENDER_COL     ; temp: line_height
-
-  ; Can we advance within this line?
-  LDA VIEW_TOP_WRAP
-  CLC
-  ADC #1
-  CMP RENDER_COL
-  BCC .ecv_advance_wrap
-
-  ; Advance to next file line
-  INC16 VIEW_TOP16
-  LDA #0
+  SEC
+  SBC #1
   STA VIEW_TOP_WRAP
-  JMP .ecv_shed_row
+  DEC RENDER_ROW
+  JMP .ecv_walk_back
 
-.ecv_advance_wrap:
-  INC VIEW_TOP_WRAP
-
-.ecv_shed_row:
-  DEC CURSOR_ROW
+.ecv_at_top:
+  ; Hit beginning of file - adjust cursor row
   LDA CURSOR_ROW
-  CMP RENDER_ROW
-  BNE .ecv_scroll_down
-  ; Falls through when CURSOR_ROW == target
+  SEC
+  SBC RENDER_ROW
+  STA CURSOR_ROW
 
 .ecv_visible:
   RTS
