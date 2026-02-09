@@ -1026,6 +1026,9 @@ int override_cols = 0;
 struct termios orig_termios;
 struct timespec start_time;
 static volatile sig_atomic_t sigint_requested = 0;
+static volatile sig_atomic_t sigtstp_requested = 0;
+static volatile sig_atomic_t sigcont_requested = 0;
+static int termios_saved = 0;
 
 void restore_terminal() {
     if (console_mode) {
@@ -1036,14 +1039,11 @@ void restore_terminal() {
     }
 }
 
-void handle_sigint(int sig) {
-    (void)sig;
-    sigint_requested = 1;
-}
-
-void setup_console() {
-    tcgetattr(STDIN_FILENO, &orig_termios);
-    atexit(restore_terminal);
+void enter_console() {
+    if (!termios_saved) {
+        tcgetattr(STDIN_FILENO, &orig_termios);
+        termios_saved = 1;
+    }
     const char enter_seq[] = "\x1b[?1049h";
     if (write(STDOUT_FILENO, enter_seq, sizeof(enter_seq) - 1) < 0) {
     }
@@ -1053,6 +1053,26 @@ void setup_console() {
     raw.c_cc[VMIN] = 1;
     raw.c_cc[VTIME] = 0;
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+}
+
+void handle_sigint(int sig) {
+    (void)sig;
+    sigint_requested = 1;
+}
+
+void handle_sigtstp(int sig) {
+    (void)sig;
+    sigtstp_requested = 1;
+}
+
+void handle_sigcont(int sig) {
+    (void)sig;
+    sigcont_requested = 1;
+}
+
+void setup_console() {
+    atexit(restore_terminal);
+    enter_console();
 }
 
 int con_byte_ready() {
@@ -1549,6 +1569,10 @@ int main(int argc, char **argv) {
         sa.sa_handler = handle_sigint;
         sigemptyset(&sa.sa_mask);
         sigaction(SIGINT, &sa, NULL);
+        sa.sa_handler = handle_sigtstp;
+        sigaction(SIGTSTP, &sa, NULL);
+        sa.sa_handler = handle_sigcont;
+        sigaction(SIGCONT, &sa, NULL);
     } else {
         input_file_ptr = fopen(input_filename, "rb");
         if (!input_file_ptr) {
@@ -1593,6 +1617,22 @@ int main(int argc, char **argv) {
 
     const int max_cycles = 50000000;
     while (!done) {
+        if (sigtstp_requested) {
+            sigtstp_requested = 0;
+            if (console_mode) restore_terminal();
+            struct sigaction sa;
+            memset(&sa, 0, sizeof(sa));
+            sa.sa_handler = SIG_DFL;
+            sigemptyset(&sa.sa_mask);
+            sigaction(SIGTSTP, &sa, NULL);
+            raise(SIGTSTP);
+            sa.sa_handler = handle_sigtstp;
+            sigaction(SIGTSTP, &sa, NULL);
+        }
+        if (sigcont_requested) {
+            sigcont_requested = 0;
+            if (console_mode) enter_console();
+        }
         if (sigint_requested) {
             if (exitcode_set == -1) exitcode_set = 130;
             if (console_mode) restore_terminal();
