@@ -176,6 +176,10 @@ process_conditional_directive:
   SET16 directive_ifdef, TABP16
   JSR compare_token
   BEQ .ifdef
+  ; Check for 'ifndef'
+  SET16 directive_ifndef, TABP16
+  JSR compare_token
+  BEQ .ifndef
   ; Check for 'endif'
   SET16 directive_endif, TABP16
   JSR compare_token
@@ -184,6 +188,10 @@ process_conditional_directive:
   RTS
 .ifdef:
   JSR process_ifdef
+  CLC
+  RTS
+.ifndef:
+  JSR process_ifndef
   CLC
   RTS
 .endif:
@@ -218,6 +226,9 @@ directive_ifdef:
 
 directive_endif:
   .asciiz "endif"
+
+directive_ifndef:
+  .asciiz "ifndef"
 
 directive_macro:
   .asciiz "macro"
@@ -356,6 +367,63 @@ process_ifdef:
   ; Branch based on decision value
   BEQ .start_skip          ; Not defined ($00) - start skipping
   BNE .done                ; Defined ($FF) - continue (no skip)
+  ; --- Pass 2: Replay stored decision ---
+.pass2:
+  LDX IFDEF_INDEX
+  INC IFDEF_INDEX
+  LDA IFDEF_DECISIONS,X
+  BEQ .start_skip
+  BNE .done
+.start_skip:
+  LDA COND_DEPTH
+  STA SKIP_DEPTH
+.done:
+  ; Restore X (global output file handle)
+  PLA
+  TAX
+.already_skipping:
+  JMP skip_rest_of_line
+.overflow:
+  JMP err_too_many_ifdefs
+
+
+; Process .ifndef directive
+; Records decision in pass 1, replays in pass 2 for consistency with forward refs
+; Inverse of .ifdef: assembles if label NOT defined
+process_ifndef:
+  INC COND_DEPTH
+  LDA SKIP_DEPTH
+  BNE .already_skipping    ; Already skipping, don't record or evaluate
+  ; Evaluate condition
+  JSR check_for_end_of_line
+  BCC .has_label
+  JMP err_label_expected
+.has_label:
+  JSR read_token           ; Expects current char in A
+  ; Save X (global output file handle)
+  TXA
+  PHA
+  ; Check for pass 2 - no need to look up label in pass 2
+  BIT PASS
+  BMI .pass2
+  ; --- Pass 1: Evaluate and store decision ---
+  LDX IFDEF_INDEX
+  ; Increment and check for overflow (wrap from 255 to 0 = buffer full)
+  INC IFDEF_INDEX
+  BEQ .overflow            ; If wrapped to 0, we've used all 256 slots
+  LDA #LABEL_TYPE_GLOBAL
+  STA LABEL_TYPE
+  JSR select_label_hash_table
+  JSR find_in_hash         ; C=0 if found, C=1 if not found
+  ; Save result (INVERTED): A = $FF if NOT found (assemble), $00 if found (skip)
+  LDA #$FF                 ; Default: not defined (assemble for ifndef)
+  BCS .save_result         ; C=1 means not found
+  LDA #$00                 ; Found: defined (skip for ifndef)
+.save_result:
+  STA IFDEF_DECISIONS,X
+  ; Branch based on decision value
+  BEQ .start_skip          ; Defined ($00) - start skipping
+  BNE .done                ; Not defined ($FF) - continue (no skip)
   ; --- Pass 2: Replay stored decision ---
 .pass2:
   LDX IFDEF_INDEX

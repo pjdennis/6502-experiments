@@ -91,6 +91,7 @@ SCOPE_LIMIT     = SCOPE_STACK + $0100 ; Limit for scope stack
 MACRO_ARG_BUF   = $0500  ; Temp buffer for macro args during expansion (256 bytes)
 MACRO_ARG_LIMIT = MACRO_ARG_BUF + $0100 ; Limit for macro arg buffer
 TOKEN           = $0600  ; Buffer for the current token being read
+ELSE_SEEN_ARRAY = $0680  ; Array tracking .else seen per nesting level (16 bytes)
 LHASHTAB        = $0700  ; Label hash table
 IFDEF_DECISIONS = $0800  ; Buffer for .ifdef decisions (256 bytes)
 *               = $2000  ; Code generates here follwed by HEAP
@@ -176,6 +177,12 @@ assemble_code:
   STA SKIP_DEPTH         ; Clear skip depth
   STA IN_MACRO_DEF       ; Clear macro definition flag
   STA IFDEF_INDEX        ; Clear .ifdef decision index
+  ; Clear ELSE_SEEN_ARRAY (16 bytes)
+  LDY #15
+.clear_else_seen:
+  STA ELSE_SEEN_ARRAY,Y
+  DEY
+  BPL .clear_else_seen
 .line_loop:
   JSR read_char
   BCC .character_read
@@ -201,7 +208,7 @@ assemble_code:
   ; Check if we're skipping (conditional assembly)
   LDY SKIP_DEPTH
   BEQ .not_skipping
-  ; --- Skipping mode: only process .ifdef/.endif ---
+  ; --- Skipping mode: only process .ifdef/.ifndef/.endif ---
   CMP #' '
   BNE .skip_not_space
   ; Line starts with space - skip spaces to find directive
@@ -218,7 +225,7 @@ assemble_code:
 .skip_check_directive:
   CMP #'.'
   BNE .skip_line
-  ; It's a directive - only process ifdef/endif
+  ; It's a directive - only process ifdef/ifndef/endif
   JSR read_char
   JSR read_token
   JSR process_conditional_directive
