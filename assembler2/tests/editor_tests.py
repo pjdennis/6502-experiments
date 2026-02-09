@@ -1946,6 +1946,19 @@ class EditorTestRunner:
             ]
         )
 
+        # Count ignores digits past 4 digits (>= 1000)
+        # 1000 typed: 4th digit accepted. 5th digit ignored since 1000 >= 1000
+        self.run_test_screen(
+            "count limited to 4 digits (5th ignored)",
+            "Hello\n",
+            b"10005:q!\r",
+            cols=80,
+            expect_status_at_frame=[
+                (4, " - 1000 - "),  # After 4th digit: count=1000
+                (5, " - 1000 - "),  # 5th digit '5' ignored, still 1000
+            ]
+        )
+
         # ============================================================
         # Count movement tests
         # ============================================================
@@ -2166,6 +2179,102 @@ class EditorTestRunner:
             "A\nB\nC\n",
             b"G2dd:wq\r",
             expected_content="A\nB\n"
+        )
+
+        # ============================================================
+        # Paste tests (p and P)
+        # ============================================================
+        self._group("Paste (p and P):", leading_blank=True)
+
+        # dd + p = cut and paste below (effectively move line down)
+        self.run_test(
+            "dd+p pastes deleted line below",
+            "A\nB\nC\n",
+            b"ddp:wq\r",
+            expected_content="B\nA\nC\n"
+        )
+
+        # dd + P = cut and paste above (line goes back to same position)
+        self.run_test(
+            "dd+P pastes deleted line above (same pos)",
+            "A\nB\nC\n",
+            b"ddP:wq\r",
+            expected_content="A\nB\nC\n"
+        )
+
+        # 2dd + p = cut 2 lines and paste below
+        self.run_test(
+            "2dd+p pastes 2 deleted lines below",
+            "A\nB\nC\nD\n",
+            b"2ddp:wq\r",
+            expected_content="C\nA\nB\nD\n"
+        )
+
+        # dd on line 2 then p (paste below line 2 which is now C)
+        self.run_test(
+            "dd from middle + p pastes below current",
+            "A\nB\nC\nD\n",
+            b"jddp:wq\r",
+            expected_content="A\nC\nB\nD\n"
+        )
+
+        # P pastes above current line
+        # j=B, dd deletes B (cursor on C), j=D, P pastes B above D
+        self.run_test(
+            "dd from middle + P pastes above current",
+            "A\nB\nC\nD\n",
+            b"jddjP:wq\r",
+            expected_content="A\nC\nB\nD\n"
+        )
+
+        # p with empty yank does nothing
+        self.run_test(
+            "p with empty yank does nothing",
+            "A\nB\n",
+            b"p:wq\r",
+            expected_content="A\nB\n"
+        )
+
+        # P with empty yank does nothing
+        self.run_test(
+            "P with empty yank does nothing",
+            "A\nB\n",
+            b"P:wq\r",
+            expected_content="A\nB\n"
+        )
+
+        # dd on last line then p
+        self.run_test(
+            "dd last line + p pastes below",
+            "A\nB\nC\n",
+            b"Gddp:wq\r",
+            expected_content="A\nB\nC\n"
+        )
+
+        # Cursor position after p (below)
+        self.run_test_screen(
+            "cursor at first pasted line after p",
+            "A\nB\nC\n",
+            b"ddp:q!\r",
+            expect_cursor=(1, 0),  # line 1 (0-based) = "A" pasted below "B"
+        )
+
+        # Cursor position after P (above)
+        self.run_test_screen(
+            "cursor at first pasted line after P",
+            "A\nB\nC\n",
+            b"jddP:q!\r",
+            expect_cursor=(1, 0),  # line 1 = "B" pasted above at same line num
+        )
+
+        # Multiple dd then p (last dd overwrites yank)
+        # dd deletes A (yank=A), cursor on B, j=C, dd deletes C (yank=C),
+        # cursor on D, p pastes C below D
+        self.run_test(
+            "second dd overwrites first dd in yank",
+            "A\nB\nC\nD\n",
+            b"ddjddp:wq\r",
+            expected_content="B\nD\nC\n"
         )
 
         print()

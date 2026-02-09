@@ -160,6 +160,10 @@ normal_editing_keys:
   .word normal_open_below
   .byte 'O'
   .word normal_open_above
+  .byte 'p'
+  .word normal_paste_below
+  .byte 'P'
+  .word normal_paste_above
   .byte 0                ; End sentinel
 
 normal_other_keys:
@@ -686,6 +690,22 @@ normal_open_above:
   JSR show_status_message
   JMP clear_count
 
+normal_paste_below:
+  JSR yank_paste_below
+  BCS .paste_below_done       ; Empty yank or buffer full (message already shown)
+  LDA #$FF
+  STA MODIFIED
+.paste_below_done:
+  JMP clear_count
+
+normal_paste_above:
+  JSR yank_paste_above
+  BCS .paste_above_done       ; Empty yank or buffer full (message already shown)
+  LDA #$FF
+  STA MODIFIED
+.paste_above_done:
+  JMP clear_count
+
 normal_enter_command:
   LDA #MODE_COMMAND
   STA MODE
@@ -737,8 +757,23 @@ clear_count:
 
 ; Accumulate digit in A ('0'-'9') into COUNT16
 ; COUNT16 = COUNT16 * 10 + digit
+; If COUNT16 >= 1000, digit is ignored (prevents overflow)
 ; Clobbers A
 count_accumulate_digit:
+  ; Check if count already >= 1000 ($03E8)
+  PHA                    ; Save digit char
+  LDA COUNT16 + 1
+  CMP #$03
+  BCC .count_has_room
+  BNE .count_at_limit
+  LDA COUNT16
+  CMP #$E8
+  BCC .count_has_room
+.count_at_limit:
+  PLA                    ; Discard digit
+  RTS
+.count_has_room:
+  PLA                    ; Restore digit char
   SEC
   SBC #'0'
   PHA                    ; Save digit
