@@ -525,23 +525,58 @@ normal_delete_char:
 normal_d_key:
   LDA LAST_KEY
   CMP #'d'
-  BNE .set_d
+  BEQ .do_dd
+  JMP .set_d
+.do_dd:
 
-  ; dd: delete N lines (N = count, min 1)
+  ; dd: yank then delete N lines (N = count, min 1)
   JSR get_count_byte         ; X = count
+  STX LINE_LEN               ; LINE_LEN = total lines to process
+
+  ; Phase 1: Yank all N lines into yank buffer
+  JSR yank_clear
+  CP16 FILE_LINE16, BUF_SRC16  ; BUF_SRC16 = current line (yank cursor)
+  LDX LINE_LEN
+.yank_loop:
+  TXA
+  PHA                        ; Save remaining yank count on stack
+  ; Check if line exists
+  CMP16 BUF_SRC16, LINE_COUNT16
+  BCS .yank_done_all_pop     ; Past end of file
+  LDAX16 BUF_SRC16
+  JSR yank_add_line
+  BCS .yank_overflow_pop
+  INC16 BUF_SRC16
+  PLA
+  TAX
+  DEX
+  BNE .yank_loop
+  JMP .yank_done_all
+
+.yank_done_all_pop:
+  PLA                        ; Clean up stack
+.yank_done_all:
+
+  ; Phase 2: Delete N lines (same count, but clamped to what exists)
+  LDX LINE_LEN
 .dd_loop:
-  STX LINE_LEN               ; Save remaining count
+  TXA
+  PHA                        ; Save remaining delete count on stack
   LDAX16 FILE_LINE16
   JSR buf_delete_line
 
   ; If file line is past end, stop deleting
   CMP16 FILE_LINE16, LINE_COUNT16
-  BCS .dd_clamp
+  BCS .dd_clamp_pop
 
-  LDX LINE_LEN
+  PLA                        ; Restore count
+  TAX
   DEX
   BNE .dd_loop
   JMP .dd_done
+
+.dd_clamp_pop:
+  PLA                        ; Clean up stack
 
 .dd_clamp:
   ; Clamp file line to last line
@@ -552,6 +587,14 @@ normal_d_key:
   LDA #$FF
   STA MODIFIED
   JSR clamp_cursor_col
+  JMP clear_count
+
+.yank_overflow_pop:
+  PLA                        ; Clean up stack
+  ; Yank buffer full - clear yank, show error, don't delete
+  JSR yank_clear
+  SET16 str_yank_full, STR_PTR16
+  JSR show_status_message
   JMP clear_count
 
 .set_d:

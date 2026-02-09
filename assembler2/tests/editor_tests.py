@@ -2138,6 +2138,36 @@ class EditorTestRunner:
             expected_content="A\n"
         )
 
+        # ============================================================
+        # Yank buffer tests (dd fills yank, tested via paste later)
+        # For now, verify dd+yank doesn't break existing behavior
+        # ============================================================
+        self._group("Yank buffer (dd fills yank):", leading_blank=True)
+
+        # dd on single line still leaves empty buffer
+        self.run_test(
+            "dd on single-line file with yank",
+            "Only\n",
+            b"dd:wq\r",
+            expected_content="\n"
+        )
+
+        # dd on last line
+        self.run_test(
+            "dd on last line with yank",
+            "A\nB\nC\n",
+            b"Gdd:wq\r",
+            expected_content="A\nB\n"
+        )
+
+        # 2dd at end (partial: only 1 line to delete)
+        self.run_test(
+            "2dd at last line only deletes 1",
+            "A\nB\nC\n",
+            b"G2dd:wq\r",
+            expected_content="A\nB\n"
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed
