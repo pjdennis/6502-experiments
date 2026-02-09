@@ -302,9 +302,8 @@ class TestRunner:
             cmd = [
                 str(self.emulator),
                 str(self.assembler),
+                "--load",
                 "2000",
-                "/dev/null",
-                "/dev/null",
                 str(asm_file),
                 str(bin_file),
             ]
@@ -498,8 +497,9 @@ class TestRunner:
             cmd = [
                 str(self.emulator),
                 str(self.file_stack_test),
+                "--load",
                 "200",
-                "/dev/null",
+                "--output",
                 str(stdout_file),
                 test.mode,
                 str(main_file),
@@ -521,7 +521,7 @@ class TestRunner:
                     continue
                 if re.match(r"^out/", line):
                     continue
-                if re.match(r".*\.out \d+ /dev/null", line):
+                if re.search(r"\.out\s+--load\s+\S+", line):
                     continue
                 stderr_lines.append(line)
             actual_stderr = "\n".join(stderr_lines)

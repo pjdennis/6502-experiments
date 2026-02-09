@@ -5,7 +5,7 @@
 ; A vi-like text editor running on the 6502 emulator in console mode.
 ;
 ; Usage:
-;   ./emulator.out editor/out/editor.out 0400 --console outfile.txt infile.txt
+;   ./emulator.out editor/out/editor.out --load 0400 --console outfile.txt infile.txt
 ;
 ; Modes:
 ;   Normal:  h/j/k/l movement, x/dd delete, i/a/o/O insert, : command

@@ -59,8 +59,8 @@ class EditorTestRunner:
             return False
 
         output_bin.parent.mkdir(exist_ok=True)
-        cmd = [str(self.emulator), str(self.assembler), "2000",
-               "/dev/null", "/dev/null",
+        cmd = [str(self.emulator), str(self.assembler),
+               "--load", "2000",
                str(self.editor_asm), str(output_bin)]
         if extra_args:
             cmd.extend(extra_args)
@@ -90,8 +90,8 @@ class EditorTestRunner:
         keys_file.write_bytes(keys)
 
         result = subprocess.run(
-            [str(self.emulator), str(self.editor_bin), "0400",
-             str(keys_file), str(output_file), input_file],
+            [str(self.emulator), str(self.editor_bin), "--load", "0400",
+             "--input", str(keys_file), "--output", str(output_file), input_file],
             capture_output=True, timeout=10
         )
 
@@ -117,7 +117,7 @@ class EditorTestRunner:
 
         with open(keys_file, "rb") as stdin_file:
             result = subprocess.run(
-                [str(self.emulator), str(self.editor_bin), "0400",
+                [str(self.emulator), str(self.editor_bin), "--load", "0400",
                  "--console", input_file],
                 stdin=stdin_file, capture_output=True, timeout=10
             )
@@ -247,8 +247,8 @@ class EditorTestRunner:
         output_file = tmpdir / "output.txt"
         keys_file.write_bytes(keys)
 
-        cmd = [str(self.emulator), str(self.editor_debug_bin), "0400",
-               str(keys_file), str(output_file), input_file]
+        cmd = [str(self.emulator), str(self.editor_debug_bin), "--load", "0400",
+               "--input", str(keys_file), "--output", str(output_file), input_file]
         if extra_args:
             cmd.extend(extra_args)
 
@@ -275,9 +275,9 @@ class EditorTestRunner:
         keys_file.write_bytes(keys)
 
         result = subprocess.run(
-            [str(self.emulator), str(self.editor_bin), "0400",
+            [str(self.emulator), str(self.editor_bin), "--load", "0400",
              "--rows", str(rows), "--cols", str(cols),
-             str(keys_file), str(output_file), input_file],
+             "--input", str(keys_file), "--output", str(output_file), input_file],
             capture_output=True, timeout=10
         )
 

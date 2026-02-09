@@ -71,7 +71,7 @@ console/ANSI mode.
 - Normal-mode edit keys should be gated by `READONLY`.
 
 ## Build/run
-- Assemble (release): `./emulator.out 23/out/asm.out 2000 /dev/null /dev/null editor/editor.asm editor/out/editor.out`
-- Assemble (debug): `./emulator.out 23/out/asm.out 2000 /dev/null /dev/null editor/editor.asm editor/out/editor_debug.out define:enable_debug`
-- Run (console): `./emulator.out editor/out/editor.out 0400 --console <file>`
+- Assemble (release): `./emulator.out 23/out/asm.out --load 2000 editor/editor.asm editor/out/editor.out`
+- Assemble (debug): `./emulator.out 23/out/asm.out --load 2000 editor/editor.asm editor/out/editor_debug.out define:enable_debug`
+- Run (console): `./emulator.out editor/out/editor.out --load 0400 --console <file>`
 - Shortcut: `./editor.sh <file>`

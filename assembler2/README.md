@@ -192,8 +192,8 @@ Tests verify both positive cases (correct assembly output) and negative cases (p
 After a successful build, `test19.asm` is assembled and executed:
 
 ```bash
-./emulator.out 23/out/asm_debug.out 2000 /dev/null /dev/null test19.asm out/test19.out
-./emulator.out out/test19.out 1000 /dev/null - arg1 "arg 2"
+./emulator.out 23/out/asm_debug.out --load 2000 test19.asm out/test19.out
+./emulator.out out/test19.out --load 1000 --output - arg1 "arg 2"
 ```
 
 ## Emulator Interface
@@ -277,16 +277,16 @@ label                    ; Global label
 
 ```bash
 # Basic usage (run via emulator)
-./emulator.out 23/out/asm.out 2000 /dev/null /dev/null input.asm output.bin
+./emulator.out 23/out/asm.out --load 2000 input.asm output.bin
 
 # With debug output
-./emulator.out 23/out/asm_debug.out 2000 /dev/null /dev/null input.asm output.bin debug
+./emulator.out 23/out/asm_debug.out --load 2000 input.asm output.bin debug
 
 # Pre-define symbols for conditional assembly
-./emulator.out 23/out/asm.out 2000 /dev/null /dev/null input.asm output.bin define:SYMBOL1 define:SYMBOL2
+./emulator.out 23/out/asm.out --load 2000 input.asm output.bin define:SYMBOL1 define:SYMBOL2
 
 # Enable small heap for testing (debug build only)
-./emulator.out 23/out/asm_debug.out 2000 /dev/null /dev/null input.asm output.bin small_heap
+./emulator.out 23/out/asm_debug.out --load 2000 input.asm output.bin small_heap
 ```
 
 ### Syntax Evolution
