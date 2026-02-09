@@ -27,6 +27,7 @@ DATA_MODE:       .byte        ; Data directive mode: 1=.byte 2=.word 3=.asciiz
 COND_DEPTH:      .byte        ; Conditional assembly nesting depth
 SKIP_DEPTH:      .byte        ; Depth where skipping started (0 = not skipping)
 IFDEF_INDEX:     .byte        ; Current index into IFDEF_DECISIONS buffer
+COND_INVERT:     .byte        ; Value if label NOT found ($00 for ifdef, $FF for ifndef)
 
   .code
 
@@ -345,68 +346,24 @@ data_parameters_loop:
 ; Process .ifdef directive
 ; Records decision in pass 1, replays in pass 2 for consistency with forward refs
 process_ifdef:
-  INC COND_DEPTH
-  LDA COND_DEPTH
-  CMP #17                  ; Check for nesting limit (16 levels max)
-  BCS .nesting_too_deep
-  LDA SKIP_DEPTH
-  BNE .already_skipping    ; Already skipping, don't record or evaluate
-  ; Evaluate condition
-  JSR check_for_end_of_line
-  BCC .has_label
-  JMP err_label_expected
-.has_label:
-  JSR read_token           ; Expects current char in A
-  ; Save X (global output file handle)
-  TXA
-  PHA
-  ; Check for pass 2 - no need to look up label in pass 2
-  BIT PASS
-  BMI .pass2
-  ; --- Pass 1: Evaluate and store decision ---
-  LDX IFDEF_INDEX
-  ; Increment and check for overflow (wrap from 255 to 0 = buffer full)
-  INC IFDEF_INDEX
-  BEQ .overflow            ; If wrapped to 0, we've used all 256 slots
-  LDA #LABEL_TYPE_GLOBAL
-  STA LABEL_TYPE
-  JSR select_label_hash_table
-  JSR find_in_hash         ; C=0 if found, C=1 if not found
-  ; Save result: A = $FF if found (assemble), $00 if not found (skip)
-  LDA #$00                 ; Default: not defined (skip)
-  BCS .save_result         ; C=1 means not found
-  LDA #$FF                 ; Found: defined (assemble)
-.save_result:
-  STA IFDEF_DECISIONS,X
-  ; Branch based on decision value
-  BEQ .start_skip          ; Not defined ($00) - start skipping
-  BNE .done                ; Defined ($FF) - continue (no skip)
-  ; --- Pass 2: Replay stored decision ---
-.pass2:
-  LDX IFDEF_INDEX
-  INC IFDEF_INDEX
-  LDA IFDEF_DECISIONS,X
-  BEQ .start_skip
-  BNE .done
-.start_skip:
-  LDA COND_DEPTH
-  STA SKIP_DEPTH
-.done:
-  ; Restore X (global output file handle)
-  PLA
-  TAX
-.already_skipping:
-  JMP skip_rest_of_line
-.overflow:
-  JMP err_too_many_ifdefs
-.nesting_too_deep:
-  JMP err_conditional_nesting_too_deep
+  LDA #$00
+  STA COND_INVERT          ; Value if label NOT found (skip for ifdef)
+  JMP process_conditional_common
 
 
 ; Process .ifndef directive
 ; Records decision in pass 1, replays in pass 2 for consistency with forward refs
 ; Inverse of .ifdef: assembles if label NOT defined
 process_ifndef:
+  LDA #$FF
+  STA COND_INVERT          ; Value if label NOT found (assemble for ifndef)
+  ; Fall through to process_conditional_common
+
+
+; Common conditional processing for .ifdef and .ifndef
+; On entry: COND_INVERT = value if label NOT found ($00 for ifdef, $FF for ifndef)
+; This consolidates the nearly-identical logic between ifdef and ifndef
+process_conditional_common:
   INC COND_DEPTH
   LDA COND_DEPTH
   CMP #17                  ; Check for nesting limit (16 levels max)
@@ -434,15 +391,15 @@ process_ifndef:
   STA LABEL_TYPE
   JSR select_label_hash_table
   JSR find_in_hash         ; C=0 if found, C=1 if not found
-  ; Save result (INVERTED): A = $FF if NOT found (assemble), $00 if found (skip)
-  LDA #$FF                 ; Default: not defined (assemble for ifndef)
-  BCS .save_result         ; C=1 means not found
-  LDA #$00                 ; Found: defined (skip for ifndef)
+  ; COND_INVERT contains the "not found" value
+  LDA COND_INVERT
+  BCS .save_result         ; C=1 means not found, use value as-is
+  EOR #$FF                 ; C=0 means found, flip the value
 .save_result:
   STA IFDEF_DECISIONS,X
   ; Branch based on decision value
-  BEQ .start_skip          ; Defined ($00) - start skipping
-  BNE .done                ; Not defined ($FF) - continue (no skip)
+  BEQ .start_skip          ; $00 - start skipping
+  BNE .done                ; $FF - continue (no skip)
   ; --- Pass 2: Replay stored decision ---
 .pass2:
   LDX IFDEF_INDEX
