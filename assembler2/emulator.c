@@ -108,6 +108,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
+#include <errno.h>
 #include <sys/stat.h>
 #include <termios.h>
 #include <sys/ioctl.h>
@@ -117,6 +119,7 @@
 // unistd.h conflicts with the 6502 brk() opcode handler, so
 // we declare only the specific functions we need
 extern int read(int fd, void *buf, unsigned long count);
+extern int write(int fd, const void *buf, unsigned long count);
 extern int tcgetattr(int fd, struct termios *termios_p);
 extern int tcsetattr(int fd, int optional_actions, const struct termios *termios_p);
 extern int ioctl(int fd, unsigned long request, ...);
@@ -1034,16 +1037,26 @@ int override_rows = 0;
 int override_cols = 0;
 struct termios orig_termios;
 struct timespec start_time;
+static volatile sig_atomic_t sigint_requested = 0;
 
 void restore_terminal() {
     if (console_mode) {
         tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
+        const char seq[] = "\x1b[?1049l\x1b[?25h\x1b[0m";
+        write(STDOUT_FILENO, seq, sizeof(seq) - 1);
     }
+}
+
+void handle_sigint(int sig) {
+    (void)sig;
+    sigint_requested = 1;
 }
 
 void setup_console() {
     tcgetattr(STDIN_FILENO, &orig_termios);
     atexit(restore_terminal);
+    const char enter_seq[] = "\x1b[?1049h";
+    write(STDOUT_FILENO, enter_seq, sizeof(enter_seq) - 1);
     struct termios raw = orig_termios;
     cfmakeraw(&raw);
     raw.c_lflag |= ISIG;  // Keep Ctrl+C working for safety
@@ -1180,6 +1193,11 @@ uint8_t read6502(uint16_t address) {
             if (target_mhz > 0) clock_gettime(CLOCK_MONOTONIC, &before);
             uint8_t ch;
             int got = read(STDIN_FILENO, &ch, 1);
+            if (got < 0 && errno == EINTR && sigint_requested) {
+                if (exitcode_set == -1) exitcode_set = 130;
+                done = 1;
+                return 0;
+            }
             if (target_mhz > 0) {
                 clock_gettime(CLOCK_MONOTONIC, &after);
                 long sec_diff = after.tv_sec - before.tv_sec;
@@ -1536,6 +1554,11 @@ int main(int argc, char **argv) {
     if (console_mode) {
         input_file_ptr = stdin;
         setup_console();
+        struct sigaction sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_handler = handle_sigint;
+        sigemptyset(&sa.sa_mask);
+        sigaction(SIGINT, &sa, NULL);
     } else {
         input_file_ptr = fopen(input_filename, "rb");
         if (!input_file_ptr) {
@@ -1580,6 +1603,12 @@ int main(int argc, char **argv) {
 
     const int max_cycles = 50000000;
     while (!done) {
+        if (sigint_requested) {
+            if (exitcode_set == -1) exitcode_set = 130;
+            if (console_mode) restore_terminal();
+            done = 1;
+            break;
+        }
         step6502();
 
         if (target_mhz > 0 && clockticks6502 >= next_throttle_check) {
