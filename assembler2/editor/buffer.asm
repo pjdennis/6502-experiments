@@ -340,6 +340,105 @@ buf_shift_right:
   CLC              ; Success
   RTS
 
+; Shift buffer right by BUF_LEN16 bytes at BUF_PTR16 (16-bit version)
+; Input: BUF_PTR16 = insert point, BUF_LEN16 = shift amount (16-bit)
+; Returns carry set = buffer full, carry clear = success
+; Updates BUF_END16 on success. Does not modify BUF_PTR16.
+buf_shift_right_16:
+  ; Check if buffer has room for BUF_LEN16 bytes
+  CLC
+  LDA BUF_END16
+  ADC BUF_LEN16
+  STA BUF_DST16              ; Temp: new end low
+  LDA BUF_END16 + 1
+  ADC BUF_LEN16 + 1
+  CMP BUF_LIMIT
+  BCC .sr16_has_room
+  BNE .sr16_full
+  LDA BUF_DST16
+  BEQ .sr16_has_room         ; Exactly at limit is ok
+.sr16_full:
+  SEC
+  RTS
+.sr16_has_room:
+
+  ; Check if nothing to move (insert at end)
+  LDA BUF_END16 + 1
+  CMP BUF_PTR16 + 1
+  BNE .sr16_need_shift
+  LDA BUF_END16
+  CMP BUF_PTR16
+  BEQ .sr16_shift_done
+.sr16_need_shift:
+
+  ; Set up BUF_SRC16 = page base of (BUF_END16-1)
+  ; Y = low byte of (BUF_END16-1)
+  SEC
+  LDA BUF_END16
+  SBC #1
+  TAY                    ; Y = low byte of last source byte
+  LDA BUF_END16 + 1
+  SBC #0
+  STA BUF_SRC16 + 1
+  LDA #0
+  STA BUF_SRC16          ; BUF_SRC16 = page-aligned base
+
+  ; BUF_DST16 = BUF_SRC16 + BUF_LEN16
+  CLC
+  LDA BUF_SRC16          ; = 0
+  ADC BUF_LEN16
+  STA BUF_DST16
+  LDA BUF_SRC16 + 1
+  ADC BUF_LEN16 + 1
+  STA BUF_DST16 + 1
+
+  ; Check if insert point is on same page
+  LDA BUF_SRC16 + 1
+  CMP BUF_PTR16 + 1
+  BNE .sr16_full_page
+
+  ; Same page as insert point: copy Y down to low byte of BUF_PTR16
+.sr16_last_page:
+  LDA (BUF_SRC16),Y
+  STA (BUF_DST16),Y
+  CPY BUF_PTR16
+  BEQ .sr16_shift_done
+  DEY
+  JMP .sr16_last_page
+
+.sr16_full_page:
+  ; Copy from Y down to 0 on this page
+  LDA (BUF_SRC16),Y
+  STA (BUF_DST16),Y
+  DEY
+  CPY #$FF
+  BNE .sr16_full_page
+
+  ; Move to previous page
+  DEC BUF_SRC16 + 1
+  DEC BUF_DST16 + 1
+  LDY #$FF
+
+  ; Check if this is the page containing the insert point
+  LDA BUF_SRC16 + 1
+  CMP BUF_PTR16 + 1
+  BNE .sr16_full_page
+
+  JMP .sr16_last_page
+
+.sr16_shift_done:
+  ; Update buffer end: add BUF_LEN16
+  CLC
+  LDA BUF_END16
+  ADC BUF_LEN16
+  STA BUF_END16
+  LDA BUF_END16 + 1
+  ADC BUF_LEN16 + 1
+  STA BUF_END16 + 1
+
+  CLC              ; Success
+  RTS
+
 ; Insert a block of bytes from BUF_SRC16 into the text buffer at BUF_PTR16
 ; Input: BUF_PTR16 = insert point, BUF_SRC16 = source data, BUF_LEN16 = byte count
 ; Returns carry set = buffer full, carry clear = success
@@ -588,6 +687,154 @@ buf_delete_line:
 .del_not_empty:
 
   JSR buf_rebuild_lines
+  RTS
+
+; Delete N contiguous lines starting at line A/X
+; Input: A/X = first line number (low/high), BUF_TEMP = count of lines to delete
+; Handles end-of-file clamping, empty buffer, rebuilds line table once
+buf_delete_lines:
+  ; Save first line number
+  STAX16 BUF_DST16
+
+  ; Get pointer to start of first line
+  JSR buf_get_line_ptr       ; BUF_PTR16 = start of first line
+  PUSH16 BUF_PTR16           ; Save dest pointer on stack
+
+  ; Calculate line number after last deleted: first + count
+  CLC
+  LDA BUF_DST16
+  ADC BUF_TEMP
+  STA BUF_SRC16
+  LDA BUF_DST16 + 1
+  ADC #0
+  STA BUF_SRC16 + 1         ; BUF_SRC16 = end line number
+
+  ; If end line >= LINE_COUNT16, source = BUF_END16
+  CMP16 BUF_SRC16, LINE_COUNT16
+  BCC .get_end_ptr
+  CP16 BUF_END16, BUF_SRC16
+  JMP .have_source
+
+.get_end_ptr:
+  ; Get pointer to line after last deleted
+  LDAX16 BUF_SRC16
+  JSR buf_get_line_ptr       ; BUF_PTR16 = start of end line
+  CP16 BUF_PTR16, BUF_SRC16
+
+.have_source:
+  ; BUF_SRC16 = source address (data to keep)
+  POP16 BUF_PTR16            ; BUF_PTR16 = dest (start of deleted region)
+
+  ; Calculate shift amount: BUF_LEN16 = BUF_SRC16 - BUF_PTR16
+  SEC
+  SBC16 BUF_SRC16, BUF_PTR16, BUF_LEN16
+
+  ; Shift left by BUF_LEN16 bytes
+  JSR buf_shift_left_16
+
+  ; If buffer is now empty, add a newline
+  LDA BUF_END16
+  CMP #<TEXT_BUF
+  BNE .dels_not_empty
+  LDA BUF_END16 + 1
+  CMP #>TEXT_BUF
+  BNE .dels_not_empty
+  LDY #0
+  LDA #'\n'
+  STA (BUF_END16),Y
+  INC16 BUF_END16
+.dels_not_empty:
+
+  JSR buf_rebuild_lines
+  RTS
+
+; Shift buffer left by BUF_LEN16 bytes at BUF_PTR16 (16-bit version)
+; Input: BUF_PTR16 = delete point, BUF_LEN16 = shift amount (16-bit)
+; Updates BUF_END16 on completion
+buf_shift_left_16:
+  ; Compute source start = BUF_PTR16 + BUF_LEN16
+  CLC
+  LDA BUF_PTR16
+  ADC BUF_LEN16
+  STA BUF_SRC16
+  LDA BUF_PTR16 + 1
+  ADC BUF_LEN16 + 1
+  STA BUF_SRC16 + 1
+
+  ; Check if nothing to move (source >= BUF_END16)
+  LDA BUF_SRC16 + 1
+  CMP BUF_END16 + 1
+  BCC .sl16_need_shift
+  BNE .sl16_shift_done
+  LDA BUF_SRC16
+  CMP BUF_END16
+  BCS .sl16_shift_done
+.sl16_need_shift:
+
+  ; Set up page-aligned BUF_SRC16 and Y
+  LDA BUF_SRC16
+  TAY                    ; Y = low byte of first source byte
+  LDA BUF_SRC16 + 1
+  STA BUF_SRC16 + 1
+  LDA #0
+  STA BUF_SRC16          ; BUF_SRC16 = page-aligned base
+
+  ; BUF_DST16 = BUF_SRC16 - BUF_LEN16
+  SEC
+  LDA BUF_SRC16          ; = 0
+  SBC BUF_LEN16
+  STA BUF_DST16
+  LDA BUF_SRC16 + 1
+  SBC BUF_LEN16 + 1
+  STA BUF_DST16 + 1
+
+  ; Check if BUF_END16 is on the same page
+  LDA BUF_SRC16 + 1
+  CMP BUF_END16 + 1
+  BNE .sl16_full_page
+
+  ; Same page as end: copy Y up to (BUF_END16 low - 1)
+.sl16_last_page:
+  LDA (BUF_SRC16),Y
+  STA (BUF_DST16),Y
+  INY
+  CPY BUF_END16
+  BNE .sl16_last_page
+  JMP .sl16_shift_done
+
+.sl16_full_page:
+  ; Copy from Y up to $FF on this page
+  LDA (BUF_SRC16),Y
+  STA (BUF_DST16),Y
+  INY
+  BNE .sl16_full_page
+
+  ; Move to next page
+  INC BUF_SRC16 + 1
+  INC BUF_DST16 + 1
+  LDY #0
+
+  ; Check if this is the page containing BUF_END16
+  LDA BUF_SRC16 + 1
+  CMP BUF_END16 + 1
+  BNE .sl16_full_page
+
+  ; Check if BUF_END16 low byte is 0 (end is at page boundary)
+  LDA BUF_END16
+  BEQ .sl16_shift_done
+
+  JMP .sl16_last_page
+
+.sl16_shift_done:
+  ; Update buffer end: subtract BUF_LEN16
+  SEC
+  LDA BUF_END16
+  SBC BUF_LEN16
+  STA BUF_END16
+  LDA BUF_END16 + 1
+  SBC BUF_LEN16 + 1
+  STA BUF_END16 + 1
+
   RTS
 
 ; Rebuild line pointer table by scanning for newlines

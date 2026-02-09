@@ -567,29 +567,15 @@ normal_d_key:
   PLA                        ; Clean up stack
 .yank_done_all:
 
-  ; Phase 2: Delete N lines (same count, but clamped to what exists)
-  LDX LINE_LEN
-.dd_loop:
-  TXA
-  PHA                        ; Save remaining delete count on stack
+  ; Phase 2: Delete all N lines in one batch operation
+  LDA LINE_LEN
+  STA BUF_TEMP
   LDAX16 FILE_LINE16
-  JSR buf_delete_line
+  JSR buf_delete_lines
 
-  ; If file line is past end, stop deleting
+  ; Clamp file line if past end of file
   CMP16 FILE_LINE16, LINE_COUNT16
-  BCS .dd_clamp_pop
-
-  PLA                        ; Restore count
-  TAX
-  DEX
-  BNE .dd_loop
-  JMP .dd_done
-
-.dd_clamp_pop:
-  PLA                        ; Clean up stack
-
-.dd_clamp:
-  ; Clamp file line to last line
+  BCC .dd_done
   SEC
   SBCI16 LINE_COUNT16, $0001, FILE_LINE16
 
@@ -697,64 +683,22 @@ normal_open_above:
   JMP clear_count
 
 normal_paste_below:
-  JSR yank_get_size
-  BCS .paste_below_done      ; Empty yank
   JSR get_count_byte         ; X = count
-  TXA
-  PHA                        ; Save count
-  JSR check_paste_fits
-  PLA
-  BCS .paste_below_full      ; Not enough room for count * yank_size
-  TAX
-.paste_below_loop:
-  TXA
-  PHA                        ; Save remaining count
-  JSR yank_paste_below
-  BCS .paste_below_fail_pop  ; Shouldn't happen after pre-check
+  STX BUF_TEMP
+  JSR yank_paste_below_n
+  BCS .paste_below_done
   LDA #$FF
   STA MODIFIED
-  PLA
-  TAX
-  DEX
-  BNE .paste_below_loop
-  JMP clear_count
-.paste_below_full:
-  SET16 str_buffer_full, STR_PTR16
-  JSR show_status_message
-  JMP clear_count
-.paste_below_fail_pop:
-  PLA                        ; Clean stack
 .paste_below_done:
   JMP clear_count
 
 normal_paste_above:
-  JSR yank_get_size
-  BCS .paste_above_done      ; Empty yank
   JSR get_count_byte         ; X = count
-  TXA
-  PHA                        ; Save count
-  JSR check_paste_fits
-  PLA
-  BCS .paste_above_full      ; Not enough room for count * yank_size
-  TAX
-.paste_above_loop:
-  TXA
-  PHA                        ; Save remaining count
-  JSR yank_paste_above
-  BCS .paste_above_fail_pop  ; Shouldn't happen after pre-check
+  STX BUF_TEMP
+  JSR yank_paste_above_n
+  BCS .paste_above_done
   LDA #$FF
   STA MODIFIED
-  PLA
-  TAX
-  DEX
-  BNE .paste_above_loop
-  JMP clear_count
-.paste_above_full:
-  SET16 str_buffer_full, STR_PTR16
-  JSR show_status_message
-  JMP clear_count
-.paste_above_fail_pop:
-  PLA                        ; Clean stack
 .paste_above_done:
   JMP clear_count
 
