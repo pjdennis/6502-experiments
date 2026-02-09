@@ -1,6 +1,6 @@
 ; instructions.asm - PC management, instruction lookup/emission, operand parsing
 ;
-; Provides: emit, update_pc, advance_pc_to_hex16, handle_reserve,
+; Provides: emit, update_pc, advance_pc_to_hex16,
 ;           lookup_mnemonic, find_opcode_for_mode, emit_instruction,
 ;           handle_fwdref_mode, parse_operand
 ;
@@ -104,24 +104,6 @@ advance_pc_to_hex16:
   RTS
 .zp_overflow:
   JMP err_zeropage_overflow
-
-
-; Handle .reserve N directive
-; Reserves N bytes: zero-fill in .code, PC advance in .zeropage
-handle_reserve:
-  JSR skip_spaces
-  JSR parse_value
-  ; HEX16 (= OPERAND16) now holds the count
-  ; Compute target: HEX16 = PC16 + count
-  CLC
-  LDA HEX16
-  ADC PC16
-  STA HEX16
-  LDA HEX16+$01
-  ADC PC16+$01
-  STA HEX16+$01
-  JSR advance_pc_to_hex16
-  JMP skip_rest_of_line
 
 
 ; Look up mnemonic and save pointer to mode:opcode data
