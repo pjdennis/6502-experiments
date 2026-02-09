@@ -180,6 +180,10 @@ process_conditional_directive:
   SET16 directive_ifndef, TABP16
   JSR compare_token
   BEQ .ifndef
+  ; Check for 'else'
+  SET16 directive_else, TABP16
+  JSR compare_token
+  BEQ .else
   ; Check for 'endif'
   SET16 directive_endif, TABP16
   JSR compare_token
@@ -192,6 +196,10 @@ process_conditional_directive:
   RTS
 .ifndef:
   JSR process_ifndef
+  CLC
+  RTS
+.else:
+  JSR process_else
   CLC
   RTS
 .endif:
@@ -229,6 +237,9 @@ directive_endif:
 
 directive_ifndef:
   .asciiz "ifndef"
+
+directive_else:
+  .asciiz "else"
 
 directive_macro:
   .asciiz "macro"
@@ -444,12 +455,51 @@ process_ifndef:
   JMP err_too_many_ifdefs
 
 
+; Process .else directive
+; Toggles skip state for current conditional block
+process_else:
+  ; 1. Validate we're in a conditional block
+  LDA COND_DEPTH
+  BEQ .error_else_without_ifdef
+  ; 2. Check if this conditional already has .else
+  TAY                          ; Y = COND_DEPTH (use Y, not X!)
+  LDA ELSE_SEEN_ARRAY,Y
+  BNE .error_duplicate_else
+  ; 3. Mark .else seen at this depth
+  LDA #$FF
+  STA ELSE_SEEN_ARRAY,Y
+  ; 4. Toggle skip state
+  LDA SKIP_DEPTH
+  BNE .currently_skipping
+  ; Currently assembling - start skipping
+  LDA COND_DEPTH
+  STA SKIP_DEPTH
+  JMP skip_rest_of_line
+.currently_skipping:
+  ; Check if skipping at THIS level
+  CMP COND_DEPTH
+  BNE .skip_at_outer_level     ; Skipping at outer level, stay skipped
+  ; Skipping at this level - stop skipping
+  LDA #$00
+  STA SKIP_DEPTH
+.skip_at_outer_level:
+  JMP skip_rest_of_line
+.error_else_without_ifdef:
+  JMP err_else_without_ifdef
+.error_duplicate_else:
+  JMP err_duplicate_else
+
+
 ; Process .endif directive
 process_endif:
   LDA COND_DEPTH
   BNE .has_ifdef       ; In a conditional block
   JMP err_endif_without_ifdef
 .has_ifdef:
+  ; Clear ELSE_SEEN_ARRAY entry for this depth before decrementing
+  TAY                  ; Y = COND_DEPTH (use Y, not X!)
+  LDA #$00
+  STA ELSE_SEEN_ARRAY,Y
   DEC COND_DEPTH
   ; Check if this ends our skip block
   LDA SKIP_DEPTH

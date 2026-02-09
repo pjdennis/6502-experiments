@@ -208,7 +208,7 @@ assemble_code:
   ; Check if we're skipping (conditional assembly)
   LDY SKIP_DEPTH
   BEQ .not_skipping
-  ; --- Skipping mode: only process .ifdef/.ifndef/.endif ---
+  ; --- Skipping mode: only process .ifdef/.ifndef/.else/.endif ---
   CMP #' '
   BNE .skip_not_space
   ; Line starts with space - skip spaces to find directive
@@ -225,7 +225,7 @@ assemble_code:
 .skip_check_directive:
   CMP #'.'
   BNE .skip_line
-  ; It's a directive - only process ifdef/ifndef/endif
+  ; It's a directive - only process ifdef/ifndef/else/endif
   JSR read_char
   JSR read_token
   JSR process_conditional_directive
