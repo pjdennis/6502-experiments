@@ -147,6 +147,8 @@ normal_movement_keys:
   .word normal_search
   .byte 'n'
   .word normal_find_next
+  .byte 'N'
+  .word normal_find_prev
   .byte 0                ; End sentinel
 
 normal_editing_keys:
@@ -790,6 +792,17 @@ normal_find_next:
   JSR search_forward
   JMP clear_count
 .find_next_none:
+  ; No prior search, just cursor-only update
+  LDA #0
+  STA RENDER_FLAG
+  JMP clear_count
+
+normal_find_prev:
+  LDA SEARCH_LEN
+  BEQ .find_prev_none        ; No search pattern
+  JSR search_backward
+  JMP clear_count
+.find_prev_none:
   ; No prior search, just cursor-only update
   LDA #0
   STA RENDER_FLAG

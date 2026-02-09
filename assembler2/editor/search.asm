@@ -161,6 +161,63 @@ search_forward:
   JSR clamp_cursor_col
   RTS
 
+; Search backward from current line
+; Scans from FILE_LINE16-1, wraps around to FILE_LINE16
+; Sets cursor to matching line/col on success
+; Shows "Pattern not found" on failure
+search_backward:
+  ; Start searching from previous line
+  LDA FILE_LINE16
+  ORA FILE_LINE16+1
+  BNE .search_back_no_wrap
+  ; FILE_LINE16 is 0, wrap to last line
+  SEC
+  SBCI16 LINE_COUNT16, $0001, SEARCH_LINE16
+  JMP .search_back_loop
+.search_back_no_wrap:
+  SEC
+  SBCI16 FILE_LINE16, $0001, SEARCH_LINE16
+
+.search_back_loop:
+  ; Check if we've wrapped all the way back to start line
+  CMP16 SEARCH_LINE16, FILE_LINE16
+  BEQ .search_back_check_current
+
+  ; Search this line
+  JSR search_in_line
+  BCC .search_back_found
+
+  ; Previous line
+  LDA SEARCH_LINE16
+  ORA SEARCH_LINE16+1
+  BEQ .search_back_wrap
+  DEC16 SEARCH_LINE16
+  JMP .search_back_loop
+
+.search_back_wrap:
+  ; At line 0, wrap to last line
+  SEC
+  SBCI16 LINE_COUNT16, $0001, SEARCH_LINE16
+  JMP .search_back_loop
+
+.search_back_check_current:
+  ; Also check the current line (wrapping complete)
+  JSR search_in_line
+  BCC .search_back_found
+
+  ; Not found
+  JSR search_show_not_found
+  RTS
+
+.search_back_found:
+  ; Move cursor to match
+  CP16 SEARCH_LINE16, FILE_LINE16
+  LDA SEARCH_COL
+  STA CURSOR_COL
+  JSR ensure_cursor_visible
+  JSR clamp_cursor_col
+  RTS
+
 ; Search for pattern in line SEARCH_LINE16
 ; Returns carry clear = found (SEARCH_COL set), carry set = not found
 ; Uses BUF_TEMP to save pattern index during inner loop

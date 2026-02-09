@@ -2524,6 +2524,52 @@ class EditorTestRunner:
             expect_cursor=(4, 0),  # /X->line 2, n->line 4
         )
 
+        # Find-prev (N) tests
+        # ============================================================
+        self._group("Find-prev (N):", leading_blank=True)
+
+        # N searches backward to previous match
+        # Start at line 0, /BBB finds line 1, N goes backward (wraps to line 3)
+        self.run_test_screen(
+            "N searches backward to previous match",
+            "AAA\nBBB\nAAA\nBBB\n",
+            b"/BBB\rN:q!\r",
+            expect_cursor=(3, 0),  # /BBB->line 1, N wraps back to line 3
+        )
+
+        # N wraps around to last match when at beginning
+        self.run_test_screen(
+            "N wraps around to last match",
+            "AAA\nBBB\nCCC\n",
+            b"/BBB\rN:q!\r",
+            expect_cursor=(1, 0),  # Only one BBB, N wraps back to line 1
+        )
+
+        # N with no prior search is no-op
+        self.run_test_screen(
+            "N with no prior search is no-op",
+            "AAA\nBBB\n",
+            b"N:q!\r",
+            expect_cursor=(0, 0),  # Stays at line 0
+        )
+
+        # N goes to previous match (backward from current position)
+        # /X from line 0 finds line 2, N goes backward to line 0
+        self.run_test_screen(
+            "N finds previous match going backward",
+            "X\nY\nX\nY\nX\n",
+            b"/X\rN:q!\r",
+            expect_cursor=(0, 0),  # /X->line 2, N back to line 0
+        )
+
+        # n then N returns to previous match
+        self.run_test_screen(
+            "n then N returns to previous match",
+            "X\nY\nX\nY\nX\n",
+            b"/X\rnN:q!\r",
+            expect_cursor=(2, 0),  # /X->line 2, n->line 4, N back to line 2
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed
