@@ -60,7 +60,6 @@ class EditorTestRunner:
 
         output_bin.parent.mkdir(exist_ok=True)
         cmd = [str(self.emulator), str(self.assembler),
-               "--load", "2000",
                str(self.editor_asm), str(output_bin)]
         if extra_args:
             cmd.extend(extra_args)

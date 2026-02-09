@@ -302,8 +302,6 @@ class TestRunner:
             cmd = [
                 str(self.emulator),
                 str(self.assembler),
-                "--load",
-                "2000",
                 str(asm_file),
                 str(bin_file),
             ]
