@@ -298,7 +298,8 @@ class EditorTestRunner:
                         expect_content_rows: list = None,
                         expect_ansi_contains: str = None,
                         expect_cursor_at_frame: list = None,
-                        expect_lines_at_frame: list = None):
+                        expect_lines_at_frame: list = None,
+                        expect_status_at_frame: list = None):
         """Run an editor test and verify screen state via ANSI output.
 
         Args:
@@ -315,6 +316,8 @@ class EditorTestRunner:
                 verify cursor position at specific frames
             expect_lines_at_frame: list of (frame_idx, [(row_idx, text), ...])
                 tuples - verify row content at specific frames (not just last)
+            expect_status_at_frame: list of (frame_idx, substring) tuples -
+                verify status bar contains substring at specific frames
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir = Path(tmpdir)
@@ -462,6 +465,26 @@ class EditorTestRunner:
                                 f"got {actual_text!r}\n"
                                 f"    Frame:\n{screen.dump()}")
                             return
+
+            if expect_status_at_frame is not None:
+                actual_count = screen.get_frame_count()
+                status_row = rows - 1
+                for frame_idx, expected_substr in expect_status_at_frame:
+                    if frame_idx >= actual_count:
+                        self._fail(name,
+                            f"Expected frame {frame_idx} but only "
+                            f"{actual_count} frames\n"
+                            f"    Frame:\n{screen.dump()}")
+                        return
+                    actual_text = screen.get_row_text_at_frame(
+                        frame_idx, status_row)
+                    if expected_substr not in actual_text:
+                        self._fail(name,
+                            f"Frame {frame_idx}: status bar expected "
+                            f"substring {expected_substr!r} in "
+                            f"{actual_text!r}\n"
+                            f"    Frame:\n{screen.dump()}")
+                        return
 
             self._pass(name)
 
@@ -1866,30 +1889,42 @@ class EditorTestRunner:
         # ============================================================
         self._group("Count prefix:", leading_blank=True)
 
-        # Count shows in status bar via raw ANSI output
-        # When '3' is typed in normal mode, status bar should contain "3"
+        # Count shows in status bar
+        # Frame 0: initial, Frame 1: '3' (count active, cursor+status)
         self.run_test_screen(
             "Count displays in status bar",
             "Hello\n",
             b"3:q!\r",
-            expect_ansi_contains=" - 3 - "
+            cols=80,
+            expect_status_at_frame=[
+                (1, " - 3 - "),
+            ]
         )
 
         # Multi-digit count shows in status bar
+        # Frame 0: initial, Frame 1: '1', Frame 2: '0'
         self.run_test_screen(
             "Multi-digit count in status bar",
             "Hello\n",
             b"10:q!\r",
-            expect_ansi_contains=" - 10 - "
+            cols=80,
+            expect_status_at_frame=[
+                (1, " - 1 - "),
+                (2, " - 10 - "),
+            ]
         )
 
-        # ESC clears count (no count in subsequent status bar)
-        # After 3 ESC, status should show just "NORMAL" with no count prefix
+        # ESC clears count
+        # Frame 0: initial, Frame 1: '3' (count), Frame 2: ESC (cleared)
         self.run_test_screen(
             "ESC clears count",
             "Hello\n",
             b"3\x1b:q!\r",
-            expect_status_contains="COMMAND - 1,"
+            cols=80,
+            expect_status_at_frame=[
+                (1, " - 3 - "),
+                (2, "NORMAL - 1,"),
+            ]
         )
 
         # 0 as first key goes to line-start (not count)
@@ -1905,7 +1940,92 @@ class EditorTestRunner:
             "30 is count thirty not count-3 + line-start",
             "Hello\n",
             b"30:q!\r",
-            expect_ansi_contains=" - 30 - "
+            cols=80,
+            expect_status_at_frame=[
+                (2, " - 30 - "),
+            ]
+        )
+
+        # ============================================================
+        # Count movement tests
+        # ============================================================
+        self._group("Count movement:", leading_blank=True)
+
+        # 3j moves down 3 lines
+        self.run_test_screen(
+            "3j moves cursor down 3 lines",
+            make_lines(10),
+            b"3j:q!\r",
+            expect_cursor=(3, 0),
+            expect_status_contains="COMMAND - 4,"
+        )
+
+        # 5l moves right 5 columns
+        self.run_test_screen(
+            "5l moves cursor right 5",
+            "Hello World\n",
+            b"5l:q!\r",
+            expect_cursor=(0, 5)
+        )
+
+        # 2h moves left 2 columns
+        self.run_test_screen(
+            "2h moves cursor left 2",
+            "Hello World\n",
+            b"5l2h:q!\r",
+            expect_cursor=(0, 3)
+        )
+
+        # 3k moves up 3 lines
+        self.run_test_screen(
+            "3k moves cursor up 3",
+            make_lines(10),
+            b"5j3k:q!\r",
+            expect_cursor=(2, 0),
+            expect_status_contains="COMMAND - 3,"
+        )
+
+        # Count exceeding bounds clamps
+        self.run_test_screen(
+            "Count j clamps at last line",
+            make_lines(5),
+            b"99j:q!\r",
+            expect_cursor=(4, 0),
+            expect_status_contains="COMMAND - 5,"
+        )
+
+        self.run_test_screen(
+            "Count k clamps at first line",
+            make_lines(5),
+            b"3j99k:q!\r",
+            expect_cursor=(0, 0),
+            expect_status_contains="COMMAND - 1,"
+        )
+
+        self.run_test_screen(
+            "Count l clamps at end of line",
+            "Hello\n",
+            b"99l:q!\r",
+            expect_cursor=(0, 4)
+        )
+
+        self.run_test_screen(
+            "Count h clamps at column 0",
+            "Hello\n",
+            b"ll99h:q!\r",
+            expect_cursor=(0, 0)
+        )
+
+        # Count cleared after use
+        self.run_test_screen(
+            "Count cleared after movement",
+            make_lines(10),
+            b"3j:q!\r",
+            cols=80,
+            expect_status_at_frame=[
+                (1, " - 3 - "),   # '3' shows count
+            ],
+            expect_status_contains="COMMAND - 4,"  # After j, count gone
         )
 
         print()

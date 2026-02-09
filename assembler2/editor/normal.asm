@@ -203,65 +203,81 @@ dispatch_key:
 ; --- Movement ---
 
 normal_move_left:
+  JSR get_count_byte     ; X = count
+.left_loop:
   LDA CURSOR_COL
-  BEQ .done
+  BEQ .left_done
   LDA #0
   STA RENDER_FLAG
   DEC CURSOR_COL
+  DEX
+  BNE .left_loop
+.left_done:
   JSR ensure_cursor_visible
-.done:
-  LDA #0
-  STA LAST_KEY
+  JSR clear_count
   RTS
 
 normal_move_right:
+  JSR get_count_byte     ; X = count
+.right_loop:
+  STX LINE_LEN           ; Save counter in LINE_LEN
   JSR get_current_line_len
-  STA LINE_LEN
-  BEQ .done           ; Empty line
+  BEQ .right_done        ; Empty line
   SEC
   SBC #1
   CMP CURSOR_COL
-  BCC .done           ; Already at or past end
-  BEQ .done
+  BCC .right_done        ; Already at or past end
+  BEQ .right_done
   LDA #0
   STA RENDER_FLAG
   INC CURSOR_COL
+  LDX LINE_LEN
+  DEX
+  BNE .right_loop
+.right_done:
   JSR ensure_cursor_visible
-.done:
-  LDA #0
-  STA LAST_KEY
+  JSR clear_count
   RTS
 
 normal_move_down:
+  JSR get_count_byte     ; X = count
+.down_loop:
+  STX LINE_LEN           ; Save counter
   ; Check if there's a next line
   CLC
   ADCI16 FILE_LINE16, $0001, BUF_PTR16
-
   CMP16 BUF_PTR16, LINE_COUNT16
-  BCS .done
+  BCS .down_done
 
   LDA #0
   STA RENDER_FLAG
   INC16 FILE_LINE16
+  LDX LINE_LEN
+  DEX
+  BNE .down_loop
+.down_done:
   JSR clamp_cursor_col
   JSR ensure_cursor_visible
-.done:
-  LDA #0
-  STA LAST_KEY
+  JSR clear_count
   RTS
 
 normal_move_up:
+  JSR get_count_byte     ; X = count
+.up_loop:
+  STX LINE_LEN           ; Save counter
   TST16 FILE_LINE16
-  BEQ .done
+  BEQ .up_done
 
   LDA #0
   STA RENDER_FLAG
   DEC16 FILE_LINE16
+  LDX LINE_LEN
+  DEX
+  BNE .up_loop
+.up_done:
   JSR clamp_cursor_col
   JSR ensure_cursor_visible
-.done:
-  LDA #0
-  STA LAST_KEY
+  JSR clear_count
   RTS
 
 normal_page_down:
@@ -329,9 +345,7 @@ normal_page_down:
   STA VIEW_TOP_WRAP
   JSR ensure_cursor_visible
   JSR clamp_cursor_col
-  LDA #0
-  STA LAST_KEY
-  RTS
+  JMP clear_count
 
 normal_page_up:
   ; page_size = SCREEN_ROWS - 1
@@ -382,17 +396,14 @@ normal_page_up:
   STA VIEW_TOP_WRAP
   JSR ensure_cursor_visible
   JSR clamp_cursor_col
-  LDA #0
-  STA LAST_KEY
-  RTS
+  JMP clear_count
 
 normal_line_start:
   LDA #0
   STA CURSOR_COL
-  STA LAST_KEY
   STA RENDER_FLAG
   JSR ensure_cursor_visible
-  RTS
+  JMP clear_count
 
 normal_line_end:
   JSR get_current_line_len
@@ -406,21 +417,19 @@ normal_line_end:
   STA CURSOR_COL
 .ecv:
   LDA #0
-  STA LAST_KEY
   STA RENDER_FLAG
   JSR ensure_cursor_visible
-  RTS
+  JMP clear_count
 
 normal_goto_last:
   SEC
   SBCI16 LINE_COUNT16, $0001, FILE_LINE16
   LDA #0
   STA CURSOR_COL
-  STA LAST_KEY
   STA VIEW_TOP_WRAP
   JSR ensure_cursor_visible
   JSR clamp_cursor_col
-  RTS
+  JMP clear_count
 
 normal_g_key:
   LDA LAST_KEY
@@ -432,10 +441,9 @@ normal_g_key:
   STA_LH16 VIEW_TOP16
   STA CURSOR_ROW
   STA CURSOR_COL
-  STA LAST_KEY
   STA VIEW_TOP_WRAP
   JSR clamp_cursor_col
-  RTS
+  JMP clear_count
 .set_g:
   LDA #'g'
   STA LAST_KEY
@@ -484,9 +492,7 @@ normal_delete_char:
   STA MODIFIED
   JSR clamp_cursor_col
 .done:
-  LDA #0
-  STA LAST_KEY
-  RTS
+  JMP clear_count
 
 normal_d_key:
   LDA LAST_KEY
@@ -505,12 +511,11 @@ normal_d_key:
   SEC
   SBCI16 LINE_COUNT16, $0001, FILE_LINE16
 .no_clamp:
-  LDA #0
-  STA LAST_KEY
   JSR clamp_cursor_col
-  RTS
+  JMP clear_count
 
 .set_d:
+  ; First 'd': store in LAST_KEY but preserve count
   LDA #'d'
   STA LAST_KEY
   RTS
@@ -518,9 +523,7 @@ normal_d_key:
 normal_enter_insert:
   LDA #MODE_INSERT
   STA MODE
-  LDA #0
-  STA LAST_KEY
-  RTS
+  JMP clear_count
 
 normal_enter_insert_after:
   JSR get_current_line_len
@@ -533,9 +536,7 @@ normal_enter_insert_after:
   JSR ensure_cursor_visible
   LDA #MODE_INSERT
   STA MODE
-  LDA #0
-  STA LAST_KEY
-  RTS
+  JMP clear_count
 
 normal_enter_insert_eol:
   JSR get_current_line_len
@@ -543,9 +544,7 @@ normal_enter_insert_eol:
   JSR ensure_cursor_visible
   LDA #MODE_INSERT
   STA MODE
-  LDA #0
-  STA LAST_KEY
-  RTS
+  JMP clear_count
 
 normal_open_below:
   LDAX16 FILE_LINE16
@@ -577,15 +576,11 @@ normal_open_below:
   STA MODE
   LDA #$FF
   STA MODIFIED
-  LDA #0
-  STA LAST_KEY
-  RTS
+  JMP clear_count
 .open_below_full:
   SET16 str_buffer_full, STR_PTR16
   JSR show_status_message
-  LDA #0
-  STA LAST_KEY
-  RTS
+  JMP clear_count
 
 normal_open_above:
   LDAX16 FILE_LINE16
@@ -602,22 +597,16 @@ normal_open_above:
   STA MODE
   LDA #$FF
   STA MODIFIED
-  LDA #0
-  STA LAST_KEY
-  RTS
+  JMP clear_count
 .open_above_full:
   SET16 str_buffer_full, STR_PTR16
   JSR show_status_message
-  LDA #0
-  STA LAST_KEY
-  RTS
+  JMP clear_count
 
 normal_enter_command:
   LDA #MODE_COMMAND
   STA MODE
-  LDA #0
-  STA LAST_KEY
-  RTS
+  JMP clear_count
 
 ; --- Utilities ---
 
