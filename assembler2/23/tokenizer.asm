@@ -2,7 +2,8 @@
 ;
 ; Provides: compare_end_of_token, skip_token, convert_hex_character,
 ;           skip_spaces, skip_rest_of_line, check_for_end_of_line,
-;           read_hex_byte, read_hex_byte_or_word, read_token, read_filename
+;           read_hex_byte, read_hex_byte_or_word, read_token, read_filename,
+;           decode_escape
 ;
 ; Requires:
 ;   CURR_CHAR (asm.asm alias; backing storage in file_stack.asm)
@@ -224,3 +225,46 @@ read_filename:
   RTS
 .token_overflow:
   JMP err_token_too_long
+
+
+; Decode escape sequence character (after backslash)
+; On entry: A contains the escape code character
+; On exit: A contains decoded value if recognized
+;          C = 1 if recognized, C = 0 otherwise
+;          X, Y are preserved
+decode_escape:
+  CMP #'n'
+  BNE .esc_not_n
+  LDA #'\n'            ; Linefeed
+  SEC
+  RTS
+.esc_not_n:
+  CMP #'b'
+  BNE .esc_not_b
+  LDA #$08             ; Backspace
+  SEC
+  RTS
+.esc_not_b:
+  CMP #'t'
+  BNE .esc_not_t
+  LDA #$09             ; Tab
+  SEC
+  RTS
+.esc_not_t:
+  CMP #'r'
+  BNE .esc_not_r
+  LDA #$0D             ; Carriage return
+  SEC
+  RTS
+.esc_not_r:
+  CMP #'\\'
+  BEQ .esc_same
+  CMP #'\''
+  BEQ .esc_same
+  CMP #'"'
+  BEQ .esc_same
+  CLC
+  RTS
+.esc_same:
+  SEC
+  RTS

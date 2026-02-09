@@ -1,6 +1,6 @@
 ; expressions.asm - Expression evaluation, character literals, term parsing
 ;
-; Provides: decode_escape, parse_char_literal, parse_term, parse_value,
+; Provides: parse_char_literal, parse_term, parse_value,
 ;           apply_low_byte, apply_high_byte, parse_term_with_selector,
 ;           expr_next_term, parse_expression
 ;
@@ -10,7 +10,8 @@
 ;   LABEL_TYPE, LABEL_TYPE_GLOBAL, LABEL_TYPE_MACRO (common.asm)
 ;   SCOPE_DEPTH (label_scope.asm)
 ;   read_char (asm.asm alias; implemented in file_stack.asm)
-;   skip_spaces, compare_end_of_token, read_token, read_hex_byte_or_word (tokenizer.asm)
+;   skip_spaces, compare_end_of_token, read_token, read_hex_byte_or_word,
+;   decode_escape (tokenizer.asm)
 ;   read_local_label (labels.asm)
 ;   select_label_hash_table (common.asm)
 ;   find_in_hash (hash_table.asm)
@@ -24,48 +25,6 @@ EXPR_FWDREF:     .byte        ; Accumulated forward ref flag
 
   .code
 
-
-; Decode escape sequence character (after backslash)
-; On entry: A contains the escape code character
-; On exit: A contains decoded value if recognized
-;          C = 1 if recognized, C = 0 otherwise
-;          X, Y are preserved
-decode_escape:
-  CMP #'n'
-  BNE .esc_not_n
-  LDA #'\n'            ; Linefeed
-  SEC
-  RTS
-.esc_not_n:
-  CMP #'b'
-  BNE .esc_not_b
-  LDA #$08             ; Backspace
-  SEC
-  RTS
-.esc_not_b:
-  CMP #'t'
-  BNE .esc_not_t
-  LDA #$09             ; Tab
-  SEC
-  RTS
-.esc_not_t:
-  CMP #'r'
-  BNE .esc_not_r
-  LDA #$0D             ; Carriage return
-  SEC
-  RTS
-.esc_not_r:
-  CMP #'\\'
-  BEQ .esc_same
-  CMP #'\''
-  BEQ .esc_same
-  CMP #'"'
-  BEQ .esc_same
-  CLC
-  RTS
-.esc_same:
-  SEC
-  RTS
 
 ; Parse character literal: 'x' or escape sequences
 ; On entry: A contains the opening quote character '
