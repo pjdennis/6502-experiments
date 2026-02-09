@@ -1006,6 +1006,38 @@ class EditorTestRunner:
                 expect_unmodified=True
             )
 
+            # Counted paste pre-check: rejects paste that would overflow
+            # bufsize:21 = 256 bytes. Content ~50 bytes. Yank 2 lines (~20 bytes).
+            # 99p would need ~2000 bytes, way over 256 limit.
+            # File should be unmodified (pre-check rejects before any paste).
+            paste_content = "AAAA\nBBBB\nCCCC\nDDDD\n"  # ~20 bytes
+            self.run_test_debug(
+                "Counted paste pre-check rejects overflow (p)",
+                paste_content,
+                # yy yanks 1 line, 99p would overflow, z dismisses msg
+                b"2yy99pz:q!\r",
+                extra_args=["bufsize:21"],
+                expect_unmodified=True
+            )
+
+            # Same test for P (paste above)
+            self.run_test_debug(
+                "Counted paste pre-check rejects overflow (P)",
+                paste_content,
+                b"2yy99Pz:q!\r",
+                extra_args=["bufsize:21"],
+                expect_unmodified=True
+            )
+
+            # Single paste that fits should still work
+            self.run_test_debug(
+                "Single paste works when space available",
+                paste_content,
+                b"yyp:wq\r",
+                extra_args=["bufsize:21"],
+                expected_content="AAAA\nAAAA\nBBBB\nCCCC\nDDDD\n"
+            )
+
             # Normal editing works with debug build (no bufsize override)
             self.run_test_debug(
                 "Debug build normal editing works",

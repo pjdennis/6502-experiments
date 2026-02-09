@@ -697,12 +697,20 @@ normal_open_above:
   JMP clear_count
 
 normal_paste_below:
+  JSR yank_get_size
+  BCS .paste_below_done      ; Empty yank
   JSR get_count_byte         ; X = count
+  TXA
+  PHA                        ; Save count
+  JSR check_paste_fits
+  PLA
+  BCS .paste_below_full      ; Not enough room for count * yank_size
+  TAX
 .paste_below_loop:
   TXA
   PHA                        ; Save remaining count
   JSR yank_paste_below
-  BCS .paste_below_fail_pop  ; Empty yank or buffer full
+  BCS .paste_below_fail_pop  ; Shouldn't happen after pre-check
   LDA #$FF
   STA MODIFIED
   PLA
@@ -710,18 +718,30 @@ normal_paste_below:
   DEX
   BNE .paste_below_loop
   JMP clear_count
-
+.paste_below_full:
+  SET16 str_buffer_full, STR_PTR16
+  JSR show_status_message
+  JMP clear_count
 .paste_below_fail_pop:
   PLA                        ; Clean stack
+.paste_below_done:
   JMP clear_count
 
 normal_paste_above:
+  JSR yank_get_size
+  BCS .paste_above_done      ; Empty yank
   JSR get_count_byte         ; X = count
+  TXA
+  PHA                        ; Save count
+  JSR check_paste_fits
+  PLA
+  BCS .paste_above_full      ; Not enough room for count * yank_size
+  TAX
 .paste_above_loop:
   TXA
   PHA                        ; Save remaining count
   JSR yank_paste_above
-  BCS .paste_above_fail_pop  ; Empty yank or buffer full
+  BCS .paste_above_fail_pop  ; Shouldn't happen after pre-check
   LDA #$FF
   STA MODIFIED
   PLA
@@ -729,10 +749,45 @@ normal_paste_above:
   DEX
   BNE .paste_above_loop
   JMP clear_count
-
+.paste_above_full:
+  SET16 str_buffer_full, STR_PTR16
+  JSR show_status_message
+  JMP clear_count
 .paste_above_fail_pop:
   PLA                        ; Clean stack
+.paste_above_done:
   JMP clear_count
+
+; Check if count (X) pastes of BUF_LEN16 bytes fit in the text buffer
+; Call after yank_get_size (which sets BUF_LEN16)
+; Returns carry clear = fits, carry set = doesn't fit
+; Clobbers A, X, BUF_SRC16
+check_paste_fits:
+  ; available = BUF_LIMIT:00 - BUF_END16
+  LDA #0
+  SEC
+  SBC BUF_END16
+  STA BUF_SRC16
+  LDA BUF_LIMIT
+  SBC BUF_END16 + 1
+  STA BUF_SRC16 + 1
+  ; Subtract BUF_LEN16 from available, count times
+.cpf_loop:
+  SEC
+  LDA BUF_SRC16
+  SBC BUF_LEN16
+  STA BUF_SRC16
+  LDA BUF_SRC16 + 1
+  SBC BUF_LEN16 + 1
+  BCC .cpf_no_room
+  STA BUF_SRC16 + 1
+  DEX
+  BNE .cpf_loop
+  CLC
+  RTS
+.cpf_no_room:
+  SEC
+  RTS
 
 normal_y_key:
   ; Two-key command: first 'y' sets LAST_KEY, second 'y' yanks
