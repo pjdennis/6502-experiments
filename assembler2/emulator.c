@@ -1029,6 +1029,22 @@ static volatile sig_atomic_t sigint_requested = 0;
 static volatile sig_atomic_t sigtstp_requested = 0;
 static volatile sig_atomic_t sigcont_requested = 0;
 static int termios_saved = 0;
+static int screen_rows = 0;
+static int screen_cols = 0;
+static char *screen_cells = NULL;
+static unsigned char *screen_attr = NULL;
+static int cursor_row = 0;
+static int cursor_col = 0;
+static int parser_state = 0;
+static int csi_params[8];
+static int csi_param_count = 0;
+static int csi_param_value = -1;
+static int csi_private = 0;
+static unsigned char current_attr = 0;
+
+void get_terminal_size(int *rows, int *cols);
+void console_resize(int rows, int cols);
+void console_redraw();
 
 void restore_terminal() {
     if (console_mode) {
@@ -1044,6 +1060,9 @@ void enter_console() {
         tcgetattr(STDIN_FILENO, &orig_termios);
         termios_saved = 1;
     }
+    int rows, cols;
+    get_terminal_size(&rows, &cols);
+    console_resize(rows, cols);
     const char enter_seq[] = "\x1b[?1049h";
     if (write(STDOUT_FILENO, enter_seq, sizeof(enter_seq) - 1) < 0) {
     }
@@ -1068,6 +1087,344 @@ void handle_sigtstp(int sig) {
 void handle_sigcont(int sig) {
     (void)sig;
     sigcont_requested = 1;
+}
+
+void console_resize(int rows, int cols) {
+    if (rows <= 0 || cols <= 0) return;
+    if (rows == screen_rows && cols == screen_cols && screen_cells != NULL) return;
+    char *new_cells = malloc((size_t)rows * (size_t)cols);
+    unsigned char *new_attr = malloc((size_t)rows * (size_t)cols);
+    if (!new_cells) return;
+    if (!new_attr) {
+        free(new_cells);
+        return;
+    }
+    memset(new_cells, ' ', (size_t)rows * (size_t)cols);
+    memset(new_attr, 0, (size_t)rows * (size_t)cols);
+    if (screen_cells) {
+        int copy_rows = rows < screen_rows ? rows : screen_rows;
+        int copy_cols = cols < screen_cols ? cols : screen_cols;
+        for (int r = 0; r < copy_rows; r++) {
+            memcpy(new_cells + r * cols, screen_cells + r * screen_cols, (size_t)copy_cols);
+            memcpy(new_attr + r * cols, screen_attr + r * screen_cols, (size_t)copy_cols);
+        }
+        free(screen_cells);
+        free(screen_attr);
+    }
+    screen_cells = new_cells;
+    screen_attr = new_attr;
+    screen_rows = rows;
+    screen_cols = cols;
+    if (cursor_row >= screen_rows) cursor_row = screen_rows - 1;
+    if (cursor_row < 0) cursor_row = 0;
+    if (cursor_col >= screen_cols) cursor_col = screen_cols - 1;
+    if (cursor_col < 0) cursor_col = 0;
+}
+
+void console_clear_line(int mode) {
+    if (!screen_cells || screen_rows <= 0 || screen_cols <= 0) return;
+    if (mode == 1) {
+        int end = cursor_col + 1;
+        if (end > screen_cols) end = screen_cols;
+        memset(screen_cells + cursor_row * screen_cols, ' ', (size_t)end);
+        memset(screen_attr + cursor_row * screen_cols, 0, (size_t)end);
+    } else if (mode == 2) {
+        memset(screen_cells + cursor_row * screen_cols, ' ', (size_t)screen_cols);
+        memset(screen_attr + cursor_row * screen_cols, 0, (size_t)screen_cols);
+    } else {
+        int start = cursor_col;
+        if (start < 0) start = 0;
+        if (start < screen_cols) {
+            memset(screen_cells + cursor_row * screen_cols + start, ' ', (size_t)(screen_cols - start));
+            memset(screen_attr + cursor_row * screen_cols + start, 0, (size_t)(screen_cols - start));
+        }
+    }
+}
+
+void console_clear_screen(int mode) {
+    if (!screen_cells || screen_rows <= 0 || screen_cols <= 0) return;
+    if (mode == 1) {
+        for (int r = 0; r < cursor_row; r++) {
+            memset(screen_cells + r * screen_cols, ' ', (size_t)screen_cols);
+            memset(screen_attr + r * screen_cols, 0, (size_t)screen_cols);
+        }
+        int end = cursor_col + 1;
+        if (end > screen_cols) end = screen_cols;
+        memset(screen_cells + cursor_row * screen_cols, ' ', (size_t)end);
+        memset(screen_attr + cursor_row * screen_cols, 0, (size_t)end);
+    } else if (mode == 2 || mode == 3) {
+        memset(screen_cells, ' ', (size_t)screen_rows * (size_t)screen_cols);
+        memset(screen_attr, 0, (size_t)screen_rows * (size_t)screen_cols);
+    } else {
+        int start = cursor_col;
+        if (start < 0) start = 0;
+        if (start < screen_cols) {
+            memset(screen_cells + cursor_row * screen_cols + start, ' ', (size_t)(screen_cols - start));
+            memset(screen_attr + cursor_row * screen_cols + start, 0, (size_t)(screen_cols - start));
+        }
+        for (int r = cursor_row + 1; r < screen_rows; r++) {
+            memset(screen_cells + r * screen_cols, ' ', (size_t)screen_cols);
+            memset(screen_attr + r * screen_cols, 0, (size_t)screen_cols);
+        }
+    }
+}
+
+void console_scroll_up(int lines) {
+    if (!screen_cells || screen_rows <= 0 || screen_cols <= 0) return;
+    if (lines <= 0) return;
+    if (lines >= screen_rows) {
+        memset(screen_cells, ' ', (size_t)screen_rows * (size_t)screen_cols);
+        memset(screen_attr, 0, (size_t)screen_rows * (size_t)screen_cols);
+        return;
+    }
+    size_t row_bytes = (size_t)screen_cols;
+    memmove(screen_cells, screen_cells + lines * row_bytes, (size_t)(screen_rows - lines) * row_bytes);
+    memmove(screen_attr, screen_attr + lines * row_bytes, (size_t)(screen_rows - lines) * row_bytes);
+    memset(screen_cells + (screen_rows - lines) * row_bytes, ' ', (size_t)lines * row_bytes);
+    memset(screen_attr + (screen_rows - lines) * row_bytes, 0, (size_t)lines * row_bytes);
+}
+
+void console_put_char(unsigned char ch) {
+    if (!screen_cells || screen_rows <= 0 || screen_cols <= 0) return;
+    if (cursor_row < 0) cursor_row = 0;
+    if (cursor_row >= screen_rows) {
+        console_scroll_up(1);
+        cursor_row = screen_rows - 1;
+    }
+    if (cursor_col < 0) cursor_col = 0;
+    if (cursor_col >= screen_cols) {
+        cursor_col = 0;
+        cursor_row++;
+        if (cursor_row >= screen_rows) {
+            console_scroll_up(1);
+            cursor_row = screen_rows - 1;
+        }
+    }
+    screen_cells[cursor_row * screen_cols + cursor_col] = (char)ch;
+    screen_attr[cursor_row * screen_cols + cursor_col] = current_attr;
+    cursor_col++;
+    if (cursor_col >= screen_cols) {
+        cursor_col = 0;
+        cursor_row++;
+        if (cursor_row >= screen_rows) {
+            console_scroll_up(1);
+            cursor_row = screen_rows - 1;
+        }
+    }
+}
+
+void console_handle_csi(unsigned char final) {
+    if (csi_private) {
+        csi_private = 0;
+        return;
+    }
+    int params[8];
+    int count = 0;
+    for (int i = 0; i < csi_param_count && i < 8; i++) params[i] = csi_params[i];
+    count = csi_param_count;
+    if (count == 0) {
+        params[0] = 0;
+        count = 1;
+    }
+    switch (final) {
+        case 'A': { // CUU
+            int n = params[0] ? params[0] : 1;
+            cursor_row -= n;
+            if (cursor_row < 0) cursor_row = 0;
+            break;
+        }
+        case 'B': { // CUD
+            int n = params[0] ? params[0] : 1;
+            cursor_row += n;
+            if (cursor_row >= screen_rows) cursor_row = screen_rows - 1;
+            break;
+        }
+        case 'C': { // CUF
+            int n = params[0] ? params[0] : 1;
+            cursor_col += n;
+            if (cursor_col >= screen_cols) cursor_col = screen_cols - 1;
+            break;
+        }
+        case 'D': { // CUB
+            int n = params[0] ? params[0] : 1;
+            cursor_col -= n;
+            if (cursor_col < 0) cursor_col = 0;
+            break;
+        }
+        case 'E': { // CNL
+            int n = params[0] ? params[0] : 1;
+            cursor_row += n;
+            if (cursor_row >= screen_rows) cursor_row = screen_rows - 1;
+            cursor_col = 0;
+            break;
+        }
+        case 'F': { // CPL
+            int n = params[0] ? params[0] : 1;
+            cursor_row -= n;
+            if (cursor_row < 0) cursor_row = 0;
+            cursor_col = 0;
+            break;
+        }
+        case 'G': { // CHA
+            int n = params[0] ? params[0] : 1;
+            cursor_col = n - 1;
+            if (cursor_col < 0) cursor_col = 0;
+            if (cursor_col >= screen_cols) cursor_col = screen_cols - 1;
+            break;
+        }
+        case 'H':
+        case 'f': { // CUP
+            int r = (count > 0 && params[0] ? params[0] : 1) - 1;
+            int c = (count > 1 && params[1] ? params[1] : 1) - 1;
+            if (r < 0) r = 0;
+            if (c < 0) c = 0;
+            if (r >= screen_rows) r = screen_rows - 1;
+            if (c >= screen_cols) c = screen_cols - 1;
+            cursor_row = r;
+            cursor_col = c;
+            break;
+        }
+        case 'J': { // ED
+            console_clear_screen(params[0]);
+            break;
+        }
+        case 'K': { // EL
+            console_clear_line(params[0]);
+            break;
+        }
+        case 'm': { // SGR
+            for (int i = 0; i < count; i++) {
+                int p = params[i];
+                if (p == 0) {
+                    current_attr = 0;
+                } else if (p == 7) {
+                    current_attr = 1;
+                } else if (p == 27) {
+                    current_attr = 0;
+                }
+            }
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+void console_handle_byte(unsigned char ch) {
+    if (parser_state == 0) {
+        if (ch == 0x1b) {
+            parser_state = 1;
+            return;
+        }
+        if (ch == '\r') {
+            cursor_col = 0;
+            return;
+        }
+        if (ch == '\n') {
+            cursor_row++;
+            if (cursor_row >= screen_rows) {
+                console_scroll_up(1);
+                cursor_row = screen_rows - 1;
+            }
+            return;
+        }
+        if (ch == '\b') {
+            cursor_col--;
+            if (cursor_col < 0) cursor_col = 0;
+            return;
+        }
+        if (ch == '\t') {
+            int next_tab = (cursor_col + 8) & ~7;
+            if (next_tab >= screen_cols) next_tab = screen_cols - 1;
+            cursor_col = next_tab;
+            return;
+        }
+        if (ch >= 0x20) {
+            console_put_char(ch);
+        }
+        return;
+    }
+    if (parser_state == 1) {
+        if (ch == '[') {
+            parser_state = 2;
+            csi_param_count = 0;
+            csi_param_value = -1;
+            return;
+        }
+        parser_state = 0;
+        return;
+    }
+    if (parser_state == 2) {
+        if (ch == '?' && csi_param_count == 0 && csi_param_value < 0) {
+            csi_private = 1;
+            return;
+        }
+        if (ch >= '0' && ch <= '9') {
+            if (csi_param_value < 0) csi_param_value = 0;
+            csi_param_value = csi_param_value * 10 + (ch - '0');
+            return;
+        }
+        if (ch == ';') {
+            if (csi_param_count < 8) {
+                csi_params[csi_param_count++] = (csi_param_value < 0) ? 0 : csi_param_value;
+            }
+            csi_param_value = -1;
+            return;
+        }
+        if (csi_param_count < 8) {
+            csi_params[csi_param_count++] = (csi_param_value < 0) ? 0 : csi_param_value;
+        }
+        console_handle_csi(ch);
+        parser_state = 0;
+        return;
+    }
+}
+
+void console_redraw() {
+    if (!screen_cells || screen_rows <= 0 || screen_cols <= 0) return;
+    unsigned char last_attr = 0;
+    const char reset[] = "\x1b[0m";
+    if (write(STDOUT_FILENO, reset, sizeof(reset) - 1) < 0) {
+    }
+    for (int r = 0; r < screen_rows; r++) {
+        char pos[32];
+        int pos_len = snprintf(pos, sizeof(pos), "\x1b[%d;1H", r + 1);
+        if (pos_len > 0) {
+            if (write(STDOUT_FILENO, pos, (size_t)pos_len) < 0) {
+            }
+        }
+        for (int c = 0; c < screen_cols; c++) {
+            unsigned char attr = screen_attr[r * screen_cols + c];
+            if (attr != last_attr) {
+                if (attr) {
+                    const char rev[] = "\x1b[7m";
+                    if (write(STDOUT_FILENO, rev, sizeof(rev) - 1) < 0) {
+                    }
+                } else {
+                    const char norm[] = "\x1b[0m";
+                    if (write(STDOUT_FILENO, norm, sizeof(norm) - 1) < 0) {
+                    }
+                }
+                last_attr = attr;
+            }
+            if (write(STDOUT_FILENO, screen_cells + r * screen_cols + c, 1) < 0) {
+            }
+        }
+    }
+    if (current_attr) {
+        const char rev[] = "\x1b[7m";
+        if (write(STDOUT_FILENO, rev, sizeof(rev) - 1) < 0) {
+        }
+    } else {
+        if (write(STDOUT_FILENO, reset, sizeof(reset) - 1) < 0) {
+        }
+    }
+    char cur[32];
+    int len = snprintf(cur, sizeof(cur), "\x1b[%d;%dH", cursor_row + 1, cursor_col + 1);
+    if (len > 0) {
+        if (write(STDOUT_FILENO, cur, (size_t)len) < 0) {
+        }
+    }
 }
 
 void setup_console() {
@@ -1265,7 +1622,14 @@ uint8_t read6502(uint16_t address) {
 
 void write6502(uint16_t address, uint8_t value) {
     if (address == port_write_b) {                   // write_b
-        fputc(value, output_file_ptr);
+        if (console_mode) {
+            unsigned char ch = value;
+            console_handle_byte(ch);
+            if (write(STDOUT_FILENO, &ch, 1) < 0) {
+            }
+        } else {
+            fputc(value, output_file_ptr);
+        }
         return;
     } else if (address == port_write_d) {            // write_d
         if (!error_output_started) {
@@ -1632,6 +1996,7 @@ int main(int argc, char **argv) {
         if (sigcont_requested) {
             sigcont_requested = 0;
             if (console_mode) enter_console();
+            if (console_mode) console_redraw();
         }
         if (sigint_requested) {
             if (exitcode_set == -1) exitcode_set = 130;
