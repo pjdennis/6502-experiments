@@ -167,8 +167,7 @@ search_forward:
 ; Shows "Pattern not found" on failure
 search_backward:
   ; Start searching from previous line
-  LDA FILE_LINE16
-  ORA FILE_LINE16+1
+  TST16 FILE_LINE16
   BNE .search_back_no_wrap
   ; FILE_LINE16 is 0, wrap to last line
   SEC
@@ -188,8 +187,7 @@ search_backward:
   BCC .search_back_found
 
   ; Previous line
-  LDA SEARCH_LINE16
-  ORA SEARCH_LINE16+1
+  TST16 SEARCH_LINE16
   BEQ .search_back_wrap
   DEC16 SEARCH_LINE16
   JMP .search_back_loop
