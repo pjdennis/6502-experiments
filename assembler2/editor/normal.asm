@@ -141,6 +141,8 @@ normal_movement_keys:
   .word normal_goto_last
   .byte 'g'
   .word normal_g_key
+  .byte 'y'
+  .word normal_y_key
   .byte 0                ; End sentinel
 
 normal_editing_keys:
@@ -704,6 +706,53 @@ normal_paste_above:
   LDA #$FF
   STA MODIFIED
 .paste_above_done:
+  JMP clear_count
+
+normal_y_key:
+  ; Two-key command: first 'y' sets LAST_KEY, second 'y' yanks
+  LDA LAST_KEY
+  CMP #'y'
+  BEQ .do_yy
+  ; First 'y': store in LAST_KEY but preserve count
+  LDA #'y'
+  STA LAST_KEY
+  RTS
+
+.do_yy:
+  ; Yank N lines starting at current line
+  JSR yank_clear
+  JSR get_count_byte         ; X = count (min 1, max 255)
+  CP16 FILE_LINE16, BUF_DST16  ; BUF_DST16 = current line to yank
+
+.yy_loop:
+  TXA
+  PHA                        ; Save remaining count on stack
+
+  ; Check if line exists
+  CMP16 BUF_DST16, LINE_COUNT16
+  BCS .yy_done_pop           ; Past end of file
+
+  LDAX16 BUF_DST16
+  JSR yank_add_line
+  BCS .yy_overflow_pop       ; Yank buffer full
+
+  INC16 BUF_DST16            ; Next line
+
+  PLA
+  TAX
+  DEX
+  BNE .yy_loop
+  JMP clear_count            ; Done - don't set MODIFIED
+
+.yy_done_pop:
+  PLA                        ; Clean stack
+  JMP clear_count
+
+.yy_overflow_pop:
+  PLA                        ; Clean stack
+  JSR yank_clear
+  SET16 str_yank_full, STR_PTR16
+  JSR show_status_message
   JMP clear_count
 
 normal_enter_command:

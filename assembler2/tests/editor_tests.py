@@ -2277,6 +2277,67 @@ class EditorTestRunner:
             expected_content="B\nD\nC\n"
         )
 
+        # ============================================================
+        # Yank/copy (yy) tests
+        # ============================================================
+        self._group("Yank/copy (yy):", leading_blank=True)
+
+        # yy + p copies line (original stays, copy pasted below)
+        self.run_test(
+            "yy+p copies line below",
+            "A\nB\nC\n",
+            b"yyp:wq\r",
+            expected_content="A\nA\nB\nC\n"
+        )
+
+        # yy doesn't modify the buffer
+        self.run_test(
+            "yy does not set modified flag",
+            "A\nB\n",
+            b"yy:q\r",
+            expect_exit=0  # :q should succeed without warning
+        )
+
+        # 2yy + p copies 2 lines
+        self.run_test(
+            "2yy+p copies 2 lines below",
+            "A\nB\nC\nD\n",
+            b"2yyp:wq\r",
+            expected_content="A\nA\nB\nB\nC\nD\n"
+        )
+
+        # yy from last line + p
+        self.run_test(
+            "yy on last line + p",
+            "A\nB\nC\n",
+            b"Gyyp:wq\r",
+            expected_content="A\nB\nC\nC\n"
+        )
+
+        # dd overwrites yy's yank buffer
+        self.run_test(
+            "dd overwrites yy yank buffer",
+            "A\nB\nC\n",
+            b"yyjddp:wq\r",
+            expected_content="A\nC\nB\n"
+        )
+
+        # yy from middle + P pastes above
+        self.run_test(
+            "yy from middle + P pastes above",
+            "A\nB\nC\n",
+            b"jyyP:wq\r",
+            expected_content="A\nB\nB\nC\n"
+        )
+
+        # 2yy clamps at end of file
+        self.run_test(
+            "2yy at last line only yanks 1",
+            "A\nB\nC\n",
+            b"G2yyp:wq\r",
+            expected_content="A\nB\nC\nC\n"
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed
