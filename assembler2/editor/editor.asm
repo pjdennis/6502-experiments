@@ -124,8 +124,9 @@ editor_main:
   JSR buf_init
 
 .init_display:
-  ; Initialize rendering
+  ; Initialize rendering and normal mode state
   JSR render_init
+  JSR normal_init
 
   ; Draw initial screen
   JSR render_screen

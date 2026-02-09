@@ -1861,6 +1861,53 @@ class EditorTestRunner:
             expected_content="\n\n\nCD\n"
         )
 
+        # ============================================================
+        # Count prefix tests
+        # ============================================================
+        self._group("Count prefix:", leading_blank=True)
+
+        # Count shows in status bar via raw ANSI output
+        # When '3' is typed in normal mode, status bar should contain "3"
+        self.run_test_screen(
+            "Count displays in status bar",
+            "Hello\n",
+            b"3:q!\r",
+            expect_ansi_contains=" - 3 - "
+        )
+
+        # Multi-digit count shows in status bar
+        self.run_test_screen(
+            "Multi-digit count in status bar",
+            "Hello\n",
+            b"10:q!\r",
+            expect_ansi_contains=" - 10 - "
+        )
+
+        # ESC clears count (no count in subsequent status bar)
+        # After 3 ESC, status should show just "NORMAL" with no count prefix
+        self.run_test_screen(
+            "ESC clears count",
+            "Hello\n",
+            b"3\x1b:q!\r",
+            expect_status_contains="COMMAND - 1,"
+        )
+
+        # 0 as first key goes to line-start (not count)
+        self.run_test_screen(
+            "0 as first key is line-start not count",
+            "Hello\n",
+            b"ll0:q!\r",
+            expect_cursor=(0, 0)
+        )
+
+        # Count preserved across two-key: 30 continues as count digits
+        self.run_test_screen(
+            "30 is count thirty not count-3 + line-start",
+            "Hello\n",
+            b"30:q!\r",
+            expect_ansi_contains=" - 30 - "
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed

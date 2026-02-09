@@ -6,13 +6,80 @@ LAST_KEY:    .byte      ; Previous key for multi-key commands (dd, gg)
 LINE_LEN:    .byte      ; Cached length of current line
 DISPATCH_PTR16: .word    ; Pointer into dispatch table during scan
 JUMP_TARGET16:  .word    ; Target for indirect jump
+COUNT16:     .word      ; Accumulated count (0 = no count entered)
+COUNT_ACTIVE: .byte     ; $FF if digits are being entered, $00 otherwise
 
   .code
+
+; Initialize normal mode state
+normal_init:
+  LDA #0
+  STA LAST_KEY
+  STA COUNT16
+  STA COUNT16 + 1
+  STA COUNT_ACTIVE
+  RTS
 
 ; Handle a keystroke in normal mode
 ; Key code in A
 normal_handle_key:
   STA BUF_TEMP
+
+  ; --- Count prefix handling ---
+
+  ; ESC always clears count
+  CMP #KEY_ESC
+  BNE .not_esc_count
+  LDA COUNT_ACTIVE
+  BEQ .not_esc_count      ; No active count, let ESC fall through
+  JSR clear_count
+  LDA #0
+  STA RENDER_FLAG
+  RTS
+.not_esc_count:
+
+  ; If COUNT_ACTIVE, check for continued digit input
+  LDA COUNT_ACTIVE
+  BEQ .count_not_active
+
+  ; COUNT_ACTIVE=true: 0-9 continues accumulation
+  LDA BUF_TEMP
+  CMP #'0'
+  BCC .count_done_dispatch
+  CMP #':' ; '9'+1
+  BCS .count_done_dispatch
+  ; Accumulate digit into COUNT16
+  JSR count_accumulate_digit
+  LDA #0
+  STA RENDER_FLAG
+  RTS
+
+.count_done_dispatch:
+  ; Non-digit with active count: clear COUNT_ACTIVE, fall through to dispatch
+  LDA #0
+  STA COUNT_ACTIVE
+  JMP .dispatch_key
+
+.count_not_active:
+  ; Not counting yet: 1-9 starts a new count
+  LDA BUF_TEMP
+  CMP #'1'
+  BCC .dispatch_key
+  CMP #':'  ; '9'+1
+  BCS .dispatch_key
+  ; Start new count
+  LDA #$FF
+  STA COUNT_ACTIVE
+  LDA #0
+  STA COUNT16
+  STA COUNT16 + 1
+  LDA BUF_TEMP
+  JSR count_accumulate_digit
+  LDA #0
+  STA RENDER_FLAG
+  RTS
+
+.dispatch_key:
   LDA #<normal_movement_keys
   LDX #>normal_movement_keys
   JSR dispatch_key
@@ -28,9 +95,9 @@ normal_handle_key:
   LDX #>normal_other_keys
   JSR dispatch_key
   BCC .done
-  ; Unknown key - clear last key, cursor-only update
+  ; Unknown key - clear count and last key, cursor-only update
+  JSR clear_count
   LDA #0
-  STA LAST_KEY
   STA RENDER_FLAG
 .done:
   RTS
@@ -583,4 +650,74 @@ clamp_cursor_col:
 .set_zero:
   LDA #0
   STA CURSOR_COL
+  RTS
+
+; --- Count prefix helpers ---
+
+; Clear count state: zeroes COUNT16, COUNT_ACTIVE, LAST_KEY
+clear_count:
+  LDA #0
+  STA COUNT16
+  STA COUNT16 + 1
+  STA COUNT_ACTIVE
+  STA LAST_KEY
+  RTS
+
+; Accumulate digit in A ('0'-'9') into COUNT16
+; COUNT16 = COUNT16 * 10 + digit
+; Clobbers A
+count_accumulate_digit:
+  SEC
+  SBC #'0'
+  PHA                    ; Save digit
+
+  ; Multiply COUNT16 by 10: COUNT16 * 8 + COUNT16 * 2
+  ; Save original in BUF_LEN16
+  CP16 COUNT16, BUF_LEN16
+
+  ; *2
+  ASL16 COUNT16
+  ; *4
+  ASL16 COUNT16
+  ; *8
+  ASL16 COUNT16
+
+  ; original * 2
+  ASL16 BUF_LEN16
+
+  ; COUNT16 = COUNT16*8 + original*2
+  CLC
+  LDA COUNT16
+  ADC BUF_LEN16
+  STA COUNT16
+  LDA COUNT16 + 1
+  ADC BUF_LEN16 + 1
+  STA COUNT16 + 1
+
+  ; Add digit
+  PLA
+  CLC
+  ADC COUNT16
+  STA COUNT16
+  LDA #0
+  ADC COUNT16 + 1
+  STA COUNT16 + 1
+
+  RTS
+
+; Get effective count: returns min(COUNT16, 255) in X, minimum 1
+; If COUNT16 is 0, returns 1 (no count means "do once")
+; Clobbers A
+get_count_byte:
+  LDA COUNT16 + 1
+  BNE .cap_255           ; High byte non-zero = > 255
+  LDA COUNT16
+  BEQ .return_1          ; Zero = no count, return 1
+  TAX
+  RTS
+.cap_255:
+  LDX #$FF
+  RTS
+.return_1:
+  LDX #1
   RTS

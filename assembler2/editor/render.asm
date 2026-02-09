@@ -195,8 +195,17 @@ render_status_line:
   STA STR_PTR16 + 1
   JSR write_string
 
-  ; Print separator and line/col
+  ; Print separator and count (if active) or line/col
   PRINT_STR str_separator
+
+  ; Show count prefix if active
+  LDA COUNT_ACTIVE
+  BEQ .no_count_display
+  CP16 COUNT16, TO_DECIMAL_VALUE16
+  JSR to_decimal
+  PRINT_STR TO_DECIMAL_RESULT
+  PRINT_STR str_separator
+.no_count_display:
 
   ; Line number (1-based)
   CLC
