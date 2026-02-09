@@ -346,6 +346,9 @@ data_parameters_loop:
 ; Records decision in pass 1, replays in pass 2 for consistency with forward refs
 process_ifdef:
   INC COND_DEPTH
+  LDA COND_DEPTH
+  CMP #17                  ; Check for nesting limit (16 levels max)
+  BCS .nesting_too_deep
   LDA SKIP_DEPTH
   BNE .already_skipping    ; Already skipping, don't record or evaluate
   ; Evaluate condition
@@ -396,6 +399,8 @@ process_ifdef:
   JMP skip_rest_of_line
 .overflow:
   JMP err_too_many_ifdefs
+.nesting_too_deep:
+  JMP err_conditional_nesting_too_deep
 
 
 ; Process .ifndef directive
@@ -403,6 +408,9 @@ process_ifdef:
 ; Inverse of .ifdef: assembles if label NOT defined
 process_ifndef:
   INC COND_DEPTH
+  LDA COND_DEPTH
+  CMP #17                  ; Check for nesting limit (16 levels max)
+  BCS .nesting_too_deep
   LDA SKIP_DEPTH
   BNE .already_skipping    ; Already skipping, don't record or evaluate
   ; Evaluate condition
@@ -453,6 +461,8 @@ process_ifndef:
   JMP skip_rest_of_line
 .overflow:
   JMP err_too_many_ifdefs
+.nesting_too_deep:
+  JMP err_conditional_nesting_too_deep
 
 
 ; Process .else directive

@@ -3015,6 +3015,50 @@ INPUT:
 EXPECT_HEX: a9 02 a9 03
 
 ---
+NAME: conditional_nesting_limit
+DESCRIPTION: Conditional nesting exceeds 16 levels raises error
+INPUT:
+ 1: * = $0200
+ 2:   .ifdef a
+ 3:     .ifdef b
+ 4:       .ifdef c
+ 5:         .ifdef d
+ 6:           .ifdef e
+ 7:             .ifdef f
+ 8:               .ifdef g
+ 9:                 .ifdef h
+10:                   .ifdef i
+11:                     .ifdef j
+12:                       .ifdef k
+13:                         .ifdef l
+14:                           .ifdef m
+15:                             .ifdef n
+16:                               .ifdef o
+17:                                 .ifdef p
+18:                                   .ifdef q
+19:                                   LDA #$01
+20:                                   .endif
+21:                                 .endif
+22:                               .endif
+23:                             .endif
+24:                           .endif
+25:                         .endif
+26:                       .endif
+27:                     .endif
+28:                   .endif
+29:                 .endif
+30:               .endif
+31:             .endif
+32:           .endif
+33:         .endif
+34:       .endif
+35:     .endif
+36:   .endif
+EXPECT_ERROR: 24
+EXPECT_LINE: 18
+EXPECT_MSG: Conditional nesting exceeds 16 levels
+
+---
 NAME: macro_def_parses
 DESCRIPTION: Macro definition parses without error (body captured, not assembled)
 INPUT:
