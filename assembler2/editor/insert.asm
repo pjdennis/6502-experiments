@@ -11,64 +11,47 @@
 ; Handle a keystroke in insert mode
 ; Key code in A
 insert_handle_key:
-  CMP #KEY_ESC
-  BNE .not_esc
-  JMP insert_exit
-.not_esc:
-  CMP #KEY_ENTER
-  BNE .not_enter
-  JMP insert_newline
-.not_enter:
-  CMP #KEY_BS
-  BNE .not_bs
-  JMP insert_backspace
-.not_bs:
-
-  ; Arrow keys
-  CMP #KEY_UP
-  BNE .not_up
-  JMP insert_move_up
-.not_up:
-  CMP #KEY_DOWN
-  BNE .not_down
-  JMP insert_move_down
-.not_down:
-  CMP #KEY_LEFT
-  BNE .not_left
-  JMP insert_move_left
-.not_left:
-  CMP #KEY_RIGHT
-  BNE .not_right
-  JMP insert_move_right
-.not_right:
-  CMP #KEY_PGDN
-  BNE .not_pgdn
-  JMP insert_page_down
-.not_pgdn:
-  CMP #KEY_PGUP
-  BNE .not_pgup
-  JMP insert_page_up
-.not_pgup:
-  CMP #$06           ; Ctrl-F
-  BNE .not_ctrl_f
-  JMP insert_page_down
-.not_ctrl_f:
-  CMP #$02           ; Ctrl-B
-  BNE .not_ctrl_b
-  JMP insert_page_up
-.not_ctrl_b:
-
+  STA BUF_TEMP
+  LDA #<insert_keys
+  LDX #>insert_keys
+  JSR dispatch_key
+  BCC .done
   ; Printable character?
+  LDA BUF_TEMP
   CMP #' '
-  BCC .ignore
+  BCC .done
   CMP #$7F
-  BCS .ignore
-
-  ; Insert printable character
+  BCS .done
   JMP insert_char
-
-.ignore:
+.done:
   RTS
+
+; --- Dispatch table ---
+
+insert_keys:
+  .byte KEY_ESC
+  .word insert_exit
+  .byte KEY_ENTER
+  .word insert_newline
+  .byte KEY_BS
+  .word insert_backspace
+  .byte KEY_UP
+  .word insert_move_up
+  .byte KEY_DOWN
+  .word insert_move_down
+  .byte KEY_LEFT
+  .word insert_move_left
+  .byte KEY_RIGHT
+  .word insert_move_right
+  .byte KEY_PGDN
+  .word insert_page_down
+  .byte KEY_PGUP
+  .word insert_page_up
+  .byte $06              ; Ctrl-F
+  .word insert_page_down
+  .byte $02              ; Ctrl-B
+  .word insert_page_up
+  .byte 0                ; End sentinel
 
 ; Exit insert mode, return to normal mode
 insert_exit:

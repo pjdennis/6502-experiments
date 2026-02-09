@@ -4,6 +4,8 @@
 
 LAST_KEY:    .byte      ; Previous key for multi-key commands (dd, gg)
 LINE_LEN:    .byte      ; Cached length of current line
+DISPATCH_PTR16: .word    ; Pointer into dispatch table during scan
+JUMP_TARGET16:  .word    ; Target for indirect jump
 
   .code
 
@@ -11,134 +13,125 @@ LINE_LEN:    .byte      ; Cached length of current line
 ; Key code in A
 normal_handle_key:
   STA BUF_TEMP
-
-  ; Movement keys
-  CMP #'h'
-  BNE .not_h
-  JMP normal_move_left
-.not_h:
-  CMP #KEY_LEFT
-  BNE .not_left
-  JMP normal_move_left
-.not_left:
-  CMP #'l'
-  BNE .not_l
-  JMP normal_move_right
-.not_l:
-  CMP #KEY_RIGHT
-  BNE .not_right
-  JMP normal_move_right
-.not_right:
-  CMP #'j'
-  BNE .not_j
-  JMP normal_move_down
-.not_j:
-  CMP #KEY_DOWN
-  BNE .not_down
-  JMP normal_move_down
-.not_down:
-  CMP #'k'
-  BNE .not_k
-  JMP normal_move_up
-.not_k:
-  CMP #KEY_UP
-  BNE .not_up
-  JMP normal_move_up
-.not_up:
-  CMP #'0'
-  BNE .not_0
-  JMP normal_line_start
-.not_0:
-  CMP #KEY_HOME
-  BNE .not_home
-  JMP normal_line_start
-.not_home:
-  CMP #'$'
-  BNE .not_dollar
-  JMP normal_line_end
-.not_dollar:
-  CMP #KEY_END
-  BNE .not_end
-  JMP normal_line_end
-.not_end:
-  CMP #KEY_PGDN
-  BNE .not_pgdn
-  JMP normal_page_down
-.not_pgdn:
-  CMP #KEY_PGUP
-  BNE .not_pgup
-  JMP normal_page_up
-.not_pgup:
-  CMP #$06           ; Ctrl-F
-  BNE .not_ctrl_f
-  JMP normal_page_down
-.not_ctrl_f:
-  CMP #$02           ; Ctrl-B
-  BNE .not_ctrl_b
-  JMP normal_page_up
-.not_ctrl_b:
-  CMP #'G'
-  BNE .not_G
-  JMP normal_goto_last
-.not_G:
-  CMP #'g'
-  BNE .not_g
-  JMP normal_g_key
-.not_g:
-
-  ; Skip editing keys in read-only mode
+  LDA #<normal_movement_keys
+  LDX #>normal_movement_keys
+  JSR dispatch_key
+  BCC .done
   LDA READONLY
-  BNE .readonly_skip
-  LDA BUF_TEMP         ; Reload key
-
-  ; Editing keys
-  CMP #'x'
-  BNE .not_x
-  JMP normal_delete_char
-.not_x:
-  CMP #KEY_DEL
-  BNE .not_del
-  JMP normal_delete_char
-.not_del:
-  CMP #'d'
-  BNE .not_d
-  JMP normal_d_key
-.not_d:
-  CMP #'i'
-  BNE .not_i
-  JMP normal_enter_insert
-.not_i:
-  CMP #'a'
-  BNE .not_a
-  JMP normal_enter_insert_after
-.not_a:
-  CMP #'A'
-  BNE .not_A
-  JMP normal_enter_insert_eol
-.not_A:
-  CMP #'o'
-  BNE .not_o
-  JMP normal_open_below
-.not_o:
-  CMP #'O'
-  BNE .not_O
-  JMP normal_open_above
-.not_O:
-
-.readonly_skip:
-  LDA BUF_TEMP         ; Reload key
-
-  ; Command mode
-  CMP #':'
-  BNE .not_colon
-  JMP normal_enter_command
-.not_colon:
-
+  BNE .skip_editing
+  LDA #<normal_editing_keys
+  LDX #>normal_editing_keys
+  JSR dispatch_key
+  BCC .done
+.skip_editing:
+  LDA #<normal_other_keys
+  LDX #>normal_other_keys
+  JSR dispatch_key
+  BCC .done
   ; Unknown key - clear last key, cursor-only update
   LDA #0
   STA LAST_KEY
   STA RENDER_FLAG
+.done:
   RTS
+
+; --- Dispatch tables ---
+
+normal_movement_keys:
+  .byte 'h'
+  .word normal_move_left
+  .byte KEY_LEFT
+  .word normal_move_left
+  .byte 'l'
+  .word normal_move_right
+  .byte KEY_RIGHT
+  .word normal_move_right
+  .byte 'j'
+  .word normal_move_down
+  .byte KEY_DOWN
+  .word normal_move_down
+  .byte 'k'
+  .word normal_move_up
+  .byte KEY_UP
+  .word normal_move_up
+  .byte '0'
+  .word normal_line_start
+  .byte KEY_HOME
+  .word normal_line_start
+  .byte '$'
+  .word normal_line_end
+  .byte KEY_END
+  .word normal_line_end
+  .byte KEY_PGDN
+  .word normal_page_down
+  .byte KEY_PGUP
+  .word normal_page_up
+  .byte $06              ; Ctrl-F
+  .word normal_page_down
+  .byte $02              ; Ctrl-B
+  .word normal_page_up
+  .byte 'G'
+  .word normal_goto_last
+  .byte 'g'
+  .word normal_g_key
+  .byte 0                ; End sentinel
+
+normal_editing_keys:
+  .byte 'x'
+  .word normal_delete_char
+  .byte KEY_DEL
+  .word normal_delete_char
+  .byte 'd'
+  .word normal_d_key
+  .byte 'i'
+  .word normal_enter_insert
+  .byte 'a'
+  .word normal_enter_insert_after
+  .byte 'A'
+  .word normal_enter_insert_eol
+  .byte 'o'
+  .word normal_open_below
+  .byte 'O'
+  .word normal_open_above
+  .byte 0                ; End sentinel
+
+normal_other_keys:
+  .byte ':'
+  .word normal_enter_command
+  .byte 0                ; End sentinel
+
+; --- Generic key dispatcher ---
+; Input: A = low byte, X = high byte of dispatch table address
+;        BUF_TEMP = key code to match
+; Output: C = 0 if handler was called, C = 1 if no match
+dispatch_key:
+  STA DISPATCH_PTR16
+  STX DISPATCH_PTR16 + 1
+  LDY #0
+.loop:
+  LDA (DISPATCH_PTR16),Y
+  BEQ .no_match
+  CMP BUF_TEMP
+  BEQ .found
+  INY
+  INY
+  INY
+  JMP .loop
+.found:
+  INY
+  LDA (DISPATCH_PTR16),Y
+  STA JUMP_TARGET16
+  INY
+  LDA (DISPATCH_PTR16),Y
+  STA JUMP_TARGET16 + 1
+  JSR .do_jump
+  CLC
+  RTS
+.no_match:
+  SEC
+  RTS
+.do_jump:
+  JMP (JUMP_TARGET16)
 
 ; --- Movement ---
 
