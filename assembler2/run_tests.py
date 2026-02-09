@@ -86,13 +86,15 @@ class TestOutcome:
 
 class TestRunner:
     def __init__(self, base_dir: Path, verbose: bool = False, quiet: bool = False,
-                 asm_version: str = ASM_VERSION):
+                 asm_version: str = ASM_VERSION, python_mode: bool = False):
         self.base_dir = base_dir
         self.verbose = verbose
         self.quiet = quiet
+        self.python_mode = python_mode
         self.emulator = base_dir / "emulator.out"
         self.assembler = base_dir / asm_version / "out" / "asm_debug.out"
         self.file_stack_test = base_dir / asm_version / "out" / "file_stack_test.out"
+        self.python_asm = base_dir / "pyasm.py"
 
         self.passed = 0
         self.failed = 0
@@ -117,6 +119,16 @@ class TestRunner:
 
     def check_prerequisites(self, test_type: TestType) -> bool:
         """Check that required executables exist."""
+        if self.python_mode:
+            if test_type == TestType.ASSEMBLER:
+                if not self.python_asm.exists():
+                    print(f"Error: Python assembler not found at {self.python_asm}")
+                    return False
+                return True
+            elif test_type == TestType.FILE_STACK:
+                return True  # Will be skipped
+            return True
+
         if not self.emulator.exists():
             print(f"Error: Emulator not found at {self.emulator}")
             print("Run the build first")
@@ -279,6 +291,13 @@ class TestRunner:
         if test.skip:
             return TestOutcome(TestResult.SKIP, [test.skip])
 
+        # In python mode, skip file_stack tests and small_heap tests
+        if self.python_mode:
+            if test.test_type == TestType.FILE_STACK:
+                return TestOutcome(TestResult.SKIP, ["file_stack tests not applicable in python mode"])
+            if "small_heap" in test.args:
+                return TestOutcome(TestResult.SKIP, ["small_heap not applicable in python mode"])
+
         if test.test_type == TestType.ASSEMBLER:
             return self._run_assembler_test(test)
         elif test.test_type == TestType.FILE_STACK:
@@ -298,19 +317,32 @@ class TestRunner:
             if not test.missing_input:
                 asm_file.write_text(test.input_text + "\n")
 
-            # Build command
-            cmd = [
-                str(self.emulator),
-                str(self.assembler),
-                str(asm_file),
-                str(bin_file),
-            ]
-
-            # Add args (ARGS overrides the default "debug" argument)
-            if test.args:
-                cmd.extend(test.args.split())
+            if self.python_mode:
+                # Python assembler mode
+                cmd = [
+                    sys.executable,
+                    str(self.python_asm),
+                    str(asm_file),
+                    str(bin_file),
+                ]
+                # Add args (ARGS overrides the default "debug" argument)
+                if test.args:
+                    cmd.extend(test.args.split())
+                else:
+                    cmd.append("debug")
             else:
-                cmd.append("debug")
+                # Emulator mode
+                cmd = [
+                    str(self.emulator),
+                    str(self.assembler),
+                    str(asm_file),
+                    str(bin_file),
+                ]
+                # Add args (ARGS overrides the default "debug" argument)
+                if test.args:
+                    cmd.extend(test.args.split())
+                else:
+                    cmd.append("debug")
 
             # Run assembler
             with open(err_file, "w") as err_fh:
@@ -425,6 +457,12 @@ class TestRunner:
 
     def _filter_stderr(self, stderr_text: str) -> str:
         """Filter emulator noise from stderr and return cleaned text."""
+        if self.python_mode:
+            # No emulator noise to filter in python mode
+            lines = stderr_text.split("\n")
+            while lines and lines[-1] == "":
+                lines.pop()
+            return "\n".join(lines)
         actual_lines = []
         for line in stderr_text.split("\n"):
             # Skip emulator status lines
@@ -654,6 +692,10 @@ def main():
         "--version", default=ASM_VERSION,
         help=f"Assembler version to test (default: {ASM_VERSION})"
     )
+    parser.add_argument(
+        "--python", action="store_true",
+        help="Use Python assembler (pyasm.py) instead of emulator"
+    )
 
     args = parser.parse_args()
 
@@ -665,7 +707,7 @@ def main():
     base_dir = script_dir
 
     runner = TestRunner(base_dir, verbose=args.verbose, quiet=args.quiet,
-                        asm_version=args.version)
+                        asm_version=args.version, python_mode=args.python)
 
     print("=" * 40)
     print("Test Suite")
