@@ -2028,6 +2028,47 @@ class EditorTestRunner:
             expect_status_contains="COMMAND - 4,"  # After j, count gone
         )
 
+        # ============================================================
+        # Count + G navigation tests
+        # ============================================================
+        self._group("Count navigation (G):", leading_blank=True)
+
+        # 5G goes to line 5
+        self.run_test_screen(
+            "5G goes to line 5",
+            make_lines(10),
+            b"5G:q!\r",
+            expect_cursor=(4, 0),
+            expect_status_contains="COMMAND - 5,"
+        )
+
+        # G without count = last line
+        self.run_test_screen(
+            "G without count goes to last line",
+            make_lines(10),
+            b"G:q!\r",
+            cols=80,
+            expect_status_contains="COMMAND - 10,"
+        )
+
+        # 1G goes to first line
+        self.run_test_screen(
+            "1G goes to first line",
+            make_lines(10),
+            b"5j1G:q!\r",
+            expect_cursor=(0, 0),
+            expect_status_contains="COMMAND - 1,"
+        )
+
+        # 999G clamps to last line
+        self.run_test_screen(
+            "999G clamps to last line",
+            make_lines(10),
+            b"999G:q!\r",
+            cols=80,
+            expect_status_contains="COMMAND - 10,"
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed

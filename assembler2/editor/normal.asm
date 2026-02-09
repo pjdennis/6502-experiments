@@ -422,8 +422,27 @@ normal_line_end:
   JMP clear_count
 
 normal_goto_last:
+  ; If count is set, go to line N (1-based)
+  TST16 COUNT16
+  BEQ .goto_end
+
+  ; Convert 1-based count to 0-based file line
+  SEC
+  SBCI16 COUNT16, $0001, FILE_LINE16
+
+  ; Clamp to last line
+  CMP16 FILE_LINE16, LINE_COUNT16
+  BCC .goto_set
   SEC
   SBCI16 LINE_COUNT16, $0001, FILE_LINE16
+  JMP .goto_set
+
+.goto_end:
+  ; No count: go to last line
+  SEC
+  SBCI16 LINE_COUNT16, $0001, FILE_LINE16
+
+.goto_set:
   LDA #0
   STA CURSOR_COL
   STA VIEW_TOP_WRAP
