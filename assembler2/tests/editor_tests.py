@@ -2445,6 +2445,44 @@ class EditorTestRunner:
             expect_cursor=(2, 0),  # Finds line 2 first (starts from line 1)
         )
 
+        # ============================================================
+        # Find-next (n) tests
+        # ============================================================
+        self._group("Find-next (n):", leading_blank=True)
+
+        # n repeats search
+        self.run_test_screen(
+            "n repeats search to next match",
+            "AAA\nBBB\nAAA\nBBB\n",
+            b"/BBB\rn:q!\r",
+            expect_cursor=(3, 0),  # First / finds line 1, n finds line 3
+        )
+
+        # n wraps around
+        self.run_test_screen(
+            "n wraps around to first match",
+            "AAA\nBBB\nCCC\n",
+            b"/BBB\rn:q!\r",
+            expect_cursor=(1, 0),  # Only one BBB, n wraps back to line 1
+        )
+
+        # n with no prior search is no-op
+        self.run_test_screen(
+            "n with no prior search is no-op",
+            "AAA\nBBB\n",
+            b"n:q!\r",
+            expect_cursor=(0, 0),  # Stays at line 0
+        )
+
+        # Multiple n presses
+        # /X->line 2, first n->line 4, second n->wraps to line 0
+        self.run_test_screen(
+            "multiple n finds successive matches",
+            "X\nY\nX\nY\nX\n",
+            b"/X\rn:q!\r",
+            expect_cursor=(4, 0),  # /X->line 2, n->line 4
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed
