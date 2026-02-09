@@ -143,6 +143,8 @@ normal_movement_keys:
   .word normal_g_key
   .byte 'y'
   .word normal_y_key
+  .byte '/'
+  .word normal_search
   .byte 0                ; End sentinel
 
 normal_editing_keys:
@@ -775,6 +777,10 @@ normal_y_key:
   JSR yank_clear
   SET16 str_yank_full, STR_PTR16
   JSR show_status_message
+  JMP clear_count
+
+normal_search:
+  JSR search_handle
   JMP clear_count
 
 normal_enter_command:

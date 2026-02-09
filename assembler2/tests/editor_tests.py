@@ -2375,6 +2375,76 @@ class EditorTestRunner:
             expected_content="A\nB\nC\nC\n"
         )
 
+        # ============================================================
+        # Search tests (/)
+        # ============================================================
+        self._group("Search (/):", leading_blank=True)
+
+        # Basic search finds next line
+        self.run_test_screen(
+            "search finds text on next line",
+            "AAA\nBBB\nCCC\n",
+            b"/BBB\r:q!\r",
+            expect_cursor=(1, 0),  # Found on line 1 (B)
+        )
+
+        # Search wraps around
+        self.run_test_screen(
+            "search wraps around to beginning",
+            "AAA\nBBB\nCCC\n",
+            b"j/AAA\r:q!\r",
+            expect_cursor=(0, 0),  # Wraps to line 0
+        )
+
+        # Search finds text at column > 0
+        self.run_test_screen(
+            "search finds match at column offset",
+            "hello world\nfoo bar\n",
+            b"/bar\r:q!\r",
+            expect_cursor=(1, 4),  # "bar" starts at col 4
+        )
+
+        # Search not found shows message (and returns to current pos)
+        self.run_test_screen(
+            "search not found stays at current line",
+            "AAA\nBBB\nCCC\n",
+            b"/ZZZ\r :q!\r",  # Space dismisses message
+            expect_cursor=(0, 0),  # Stays at line 0
+        )
+
+        # Empty search with previous pattern repeats
+        # First /AAA finds line 2. Second / repeats from line 3 (wraps to 0).
+        self.run_test_screen(
+            "empty search repeats previous pattern",
+            "AAA\nBBB\nAAA\n",
+            b"/AAA\r/\r:q!\r",
+            expect_cursor=(0, 0),  # Wraps back to line 0
+        )
+
+        # Search on single-line file
+        self.run_test_screen(
+            "search finds match on same line (wraps)",
+            "hello\n",
+            b"/hello\r:q!\r",
+            expect_cursor=(0, 0),  # Only one line, wraps back
+        )
+
+        # ESC cancels search
+        self.run_test_screen(
+            "ESC cancels search",
+            "AAA\nBBB\n",
+            b"/BB\x1b:q!\r",
+            expect_cursor=(0, 0),  # Stays at line 0
+        )
+
+        # Search from middle of file
+        self.run_test_screen(
+            "search from middle finds below first",
+            "AAA\nBBB\nAAA\n",
+            b"/AAA\r:q!\r",
+            expect_cursor=(2, 0),  # Finds line 2 first (starts from line 1)
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed
