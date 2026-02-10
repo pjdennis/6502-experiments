@@ -248,8 +248,12 @@ assemble_code:
   CMP #'.'
   BNE .opcode
 ; Directive
+.directive:
   JSR read_char
   JSR process_directive
+  LDA CURR_CHAR
+  CMP #'.'
+  BEQ .directive            ; Another directive on same line
   JMP .line_loop
 .opcode:
   ; Read mnemonic and look up in instruction table
