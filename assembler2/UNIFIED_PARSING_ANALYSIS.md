@@ -503,6 +503,114 @@ Do NOT use `git commit` directly. The helper script ensures proper formatting an
 
 Each step can be tested individually with self-assembly as validation.
 
+---
+
+## Implementation Status (Updated 2026-02-10)
+
+### Completed Steps (1-6) ✓
+
+**Steps 1-6 have been successfully implemented and committed.** The infrastructure for unified parsing is in place:
+
+1. ✓ **emit() suppression** - Uses SKIP_DEPTH check with PHA/PLA to preserve A register
+2. ✓ **update_pc() suppression** - Prevents PC updates when skipping
+3. ✓ **capture_label parse-only mode** - Parses label syntax without capturing to hash table
+4. ✓ **parse_value error suppression** - Returns dummy values for undefined labels when skipping
+5. ✓ **Macro directive handling** - `.macro`/`.endmacro` parse but don't capture when skipping
+6. ✓ **Conditional directive dispatch** - `process_directive` only allows conditionals when skipping
+
+**Key implementation details:**
+- `SKIP_FLAG` was initially created as a fast BIT-testable flag (bit 7 set when SKIP_DEPTH > 0)
+- Discovered that `SKIP_FLAG` must be defined in `asm.asm` (not `directives.asm`) to avoid forward reference issues
+- Final implementation uses `SKIP_DEPTH` directly with PHA/PLA in `emit()` to preserve A register
+- All 456 tests pass, self-assembly succeeds
+
+### Step 7 Status: DEFERRED ⏸️
+
+**Attempted:** Removal of old skipping code path from main loop (lines 209-236 in `asm.asm`)
+
+**Result:** Self-assembly failed with "Error 8: Branch out of range in common.asm at line 116"
+
+**Root cause analysis:**
+The assembler uses a forward reference store/replay mechanism to guarantee consistent addressing modes between passes. When the old skipping code path was removed:
+
+1. Pass 1 and Pass 2 followed different code paths through the main loop
+2. This caused subtle differences in PC values between passes
+3. Branch offset calculations in pass 2 used incorrect PC values
+4. Branches that should have been in range appeared out of range
+
+**What was tried:**
+- Adding defensive SKIP_FLAG synchronization in `dir_endif`
+- Moving SKIP_FLAG definition to different locations
+- Using SKIP_DEPTH directly instead of SKIP_FLAG
+- Various branch restructuring in `common.asm`
+
+**The actual problem:** The old skipping code path serves a critical function that the unified parsing approach doesn't yet replicate: **ensuring that skipped code has ZERO effect on pass consistency**.
+
+### What's Needed for Step 7
+
+To safely remove the old skipping code path, we need to ensure that **all parsing operations in skipped blocks are perfectly idempotent and have identical behavior in both passes**.
+
+#### Current Issue
+
+When unified parsing processes a skipped block, it still calls:
+- `lookup_mnemonic` - Shouldn't have relevnt side effects
+- `parse_operand` - Creates forward references; need to stop that happeniing
+
+These operations may store forward reference decisions or affect state in ways that differ between passes, breaking the store/replay invariant.
+
+#### Proposed Solution: Guard Forward Reference Recording
+
+The conditional directives themselves need to ensure forward reference consistency. Specifically:
+
+**1. Add pass-tracking to conditional state**
+
+In `directives.asm`, track whether we're skipping in each pass:
+```asm
+IFDEF_SKIP_P1:  .byte   ; SKIP_DEPTH during pass 1 (stored per .ifdef)
+IFDEF_SKIP_P2:  .byte   ; SKIP_DEPTH during pass 2 (must match!)
+```
+
+**2. Store skip state with IFDEF_DECISIONS**
+
+Extend the IFDEF_DECISIONS buffer to store not just the condition result, but also whether that block was skipped:
+```asm
+; Current: IFDEF_DECISIONS[index] = $00 (skip) or $FF (don't skip)
+; Proposed: IFDEF_DECISIONS[index] has bits:
+;   bit 7: condition result ($00=skip, $80=don't skip)
+;   bit 0: pass 1 skip state
+;   bit 1: pass 2 skip state
+```
+
+**3. Verify consistency in .endif**
+
+When exiting a conditional block, verify that SKIP_DEPTH had the same value in both passes:
+```asm
+dir_endif:
+  ; ... existing logic ...
+  BIT PASS
+  BPL .pass1_endif
+  ; Pass 2: verify skip state matched pass 1
+  LDA SKIP_DEPTH_PASS1  ; Stored during pass 1
+  CMP SKIP_DEPTH        ; Current pass 2 value
+  BEQ .consistent
+  JMP err_pass_mismatch ; New error: passes diverged!
+.consistent:
+  ; ... continue ...
+```
+
+**4. Guard all forward reference recording**
+
+In `forward_ref.asm`, add checks before recording:
+```asm
+store_forward_ref:
+  ; Don't record forward refs when skipping
+  LDA SKIP_DEPTH
+  BNE .skip_recording   ; Skip if in conditional block
+  ; ... existing forward ref logic ...
+.skip_recording:
+  RTS
+```
+
 ## Behavior Changes (Acceptable)
 
 **Before**: Syntax inside false .ifdef blocks is not parsed, any text accepted
