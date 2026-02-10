@@ -162,6 +162,8 @@ normal_editing_keys:
   .word normal_delete_char
   .byte 'd'
   .word normal_d_key
+  .byte 'D'
+  .word normal_delete_to_eol
   .byte 'i'
   .word normal_enter_insert
   .byte 'a'
@@ -532,6 +534,31 @@ normal_delete_char:
 
   LDA #1
   STA RENDER_FLAG
+  LDA #$FF
+  STA MODIFIED
+  JSR clamp_cursor_col
+.done:
+  JMP clear_count
+
+normal_delete_to_eol:
+  JSR get_current_line_len
+  BEQ .done
+  STA LINE_LEN
+  LDA CURSOR_COL
+  CMP LINE_LEN
+  BCS .done                ; Cursor at or past end
+
+  ; count = LINE_LEN - CURSOR_COL
+  LDA LINE_LEN
+  SEC
+  SBC CURSOR_COL
+  STA BUF_DELTA
+
+  ; Delete BUF_DELTA chars at cursor position
+  JSR get_cursor_buf_ptr
+  JSR buf_delete_chars
+  JSR buf_adjust_lines_dec
+
   LDA #$FF
   STA MODIFIED
   JSR clamp_cursor_col

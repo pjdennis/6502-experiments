@@ -2180,6 +2180,51 @@ class EditorTestRunner:
         )
 
         # ============================================================
+        # D (delete to end of line)
+        # ============================================================
+        self._group("D (delete to end of line):", leading_blank=True)
+
+        # D at col 5 on "Hello World" deletes " World"
+        self.run_test(
+            "D at col 5 deletes to end of line",
+            "Hello World\n",
+            b"lllllD:wq\r",
+            expected_content="Hello\n"
+        )
+
+        # D at col 0 deletes entire line content (leaves newline)
+        self.run_test(
+            "D at col 0 deletes line content",
+            "Hello\n",
+            b"D:wq\r",
+            expected_content="\n"
+        )
+
+        # D on empty line does nothing
+        self.run_test(
+            "D on empty line does nothing",
+            "\n",
+            b"D:wq\r",
+            expected_content="\n"
+        )
+
+        # D at last char deletes just that char
+        self.run_test(
+            "D at last char deletes just that char",
+            "ABC\n",
+            b"llD:wq\r",
+            expected_content="AB\n"
+        )
+
+        # D doesn't affect next line
+        self.run_test(
+            "D doesn't affect next line",
+            "Hello World\nLine 2\n",
+            b"lllllD:wq\r",
+            expected_content="Hello\nLine 2\n"
+        )
+
+        # ============================================================
         # Yank buffer tests (dd fills yank, tested via paste later)
         # For now, verify dd+yank doesn't break existing behavior
         # ============================================================
