@@ -7,6 +7,7 @@
 ; Requires:
 ;   CURR_CHAR (asm.asm alias; backing storage in file_stack.asm)
 ;   TOKEN, HEX16, OPERAND16, PASS, IS_FWDREF (asm.asm)
+;   SKIP_FLAG (directives.asm)
 ;   LABEL_TYPE, LABEL_TYPE_GLOBAL, LABEL_TYPE_MACRO (common.asm)
 ;   SCOPE_DEPTH (label_scope.asm)
 ;   read_char (asm.asm alias; implemented in file_stack.asm)
@@ -119,7 +120,16 @@ parse_term:
   STA_LH16 HEX16
   BEQ .label_store     ; Always taken
 .label_not_found_pass2:
+  ; Check if skipping - if so, use dummy value instead of error
+  BIT SKIP_FLAG
+  BMI .skip_mode_dummy
   JMP err_label_not_found
+.skip_mode_dummy:
+  ; Use dummy zero value and continue
+  LDA #$00
+  STA IS_FWDREF
+  STA_LH16 HEX16
+  RTS
 .label_found:
   ; Label found - clear forward ref flag
   LDA #$00
