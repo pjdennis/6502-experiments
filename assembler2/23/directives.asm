@@ -2,7 +2,7 @@
 ;
 ; Provides: swap_pc_with_save, process_directive, process_conditional_directive,
 ;           emit_quoted, set_data_mode, data_parameters_loop,
-;           handle_reserve, process_ifdef, process_endif,
+;           dir_reserve, dir_ifdef, dir_ifndef, dir_else, dir_endif,
 ;           directive string constants (directive_ifdef, etc.)
 ;
 ; Requires:
@@ -17,7 +17,7 @@
 ;   emit, advance_pc_to_hex16 (output.asm)
 ;   decode_escape (tokenizer.asm)
 ;   parse_value (expressions.asm)
-;   process_macro (macro_expansion.asm)
+;   dir_macro (macro_expansion.asm)
 ;   push_file_stack (file_stack.asm)
 ;   err_* (errors.asm)
 
@@ -116,22 +116,8 @@ dir_asciiz:
   JMP set_data_mode
 .zp_asciiz_err:
   JMP err_asciiz_in_zeropage
-dir_reserve:
-  JMP handle_reserve
-dir_macro:
-  JMP process_macro
 dir_endmacro:
   JMP err_endmacro_without_macro
-; Directive handler stubs for conditional directives
-; (used by hash-based dispatch in later commits)
-dir_ifdef:
-  JMP process_ifdef
-dir_ifndef:
-  JMP process_ifndef
-dir_else:
-  JMP process_else
-dir_endif:
-  JMP process_endif
 
 dir_zp_alloc:
   ; A = DATA_MODE (1=byte, 2=word)
@@ -174,19 +160,19 @@ process_conditional_directive:
   SEC ; Not processed
   RTS
 .ifdef:
-  JSR process_ifdef
+  JSR dir_ifdef
   CLC
   RTS
 .ifndef:
-  JSR process_ifndef
+  JSR dir_ifndef
   CLC
   RTS
 .else:
-  JSR process_else
+  JSR dir_else
   CLC
   RTS
 .endif:
-  JSR process_endif
+  JSR dir_endif
   CLC
   RTS
 
@@ -239,7 +225,7 @@ emit_quoted:
 
 ; Handle .reserve N directive
 ; Reserves N bytes: zero-fill in .code, PC advance in .zeropage
-handle_reserve:
+dir_reserve:
   JSR skip_spaces
   JSR parse_value
   ; HEX16 (= OPERAND16) now holds the count
@@ -301,7 +287,7 @@ data_parameters_loop:
 
 ; Process .ifdef directive
 ; Records decision in pass 1, replays in pass 2 for consistency with forward refs
-process_ifdef:
+dir_ifdef:
   LDA #$00
   STA COND_INVERT          ; Value if label NOT found (skip for ifdef)
   JMP process_conditional_common
@@ -310,7 +296,7 @@ process_ifdef:
 ; Process .ifndef directive
 ; Records decision in pass 1, replays in pass 2 for consistency with forward refs
 ; Inverse of .ifdef: assembles if label NOT defined
-process_ifndef:
+dir_ifndef:
   LDA #$FF
   STA COND_INVERT          ; Value if label NOT found (assemble for ifndef)
   ; Fall through to process_conditional_common
@@ -380,7 +366,7 @@ process_conditional_common:
 
 ; Process .else directive
 ; Toggles skip state for current conditional block
-process_else:
+dir_else:
   ; 1. Validate we're in a conditional block
   LDA COND_DEPTH
   BEQ .error_else_without_ifdef
@@ -414,7 +400,7 @@ process_else:
 
 
 ; Process .endif directive
-process_endif:
+dir_endif:
   LDA COND_DEPTH
   BNE .has_ifdef       ; In a conditional block
   JMP err_endif_without_ifdef

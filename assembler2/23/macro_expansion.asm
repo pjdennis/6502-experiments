@@ -1,6 +1,6 @@
 ; macro_expansion.asm - Macro definition, expansion, and body capture
 ;
-; Provides: process_macro, check_macro_recursion, expand_macro,
+; Provides: dir_macro, check_macro_recursion, expand_macro,
 ;           match_token, capture_macro_line
 ;
 ; Requires:
@@ -28,7 +28,7 @@ IN_MACRO_DEF:    .byte        ; Flag: currently capturing macro body ($FF = capt
 ; Process .macro directive
 ; Syntax: .macro NAME [param1 param2 ...]
 ; Creates entry in LHASHTAB: [escape header][name $00][params...][$00][body $00]
-process_macro:
+dir_macro:
   ; Skip spaces and read macro name
   JSR check_for_end_of_line
   BCC .has_name
