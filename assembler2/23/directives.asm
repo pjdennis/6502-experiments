@@ -68,11 +68,11 @@ process_directive:
   ; Extract handler address
   INY
   LDA (TABP16),Y
-  STA INST_PTR16
+  STA JUMP_TARGET16
   INY
   LDA (TABP16),Y
-  STA INST_PTR16 + 1
-  JMP (INST_PTR16)     ; Tail call: handler RTS returns to our caller
+  STA JUMP_TARGET16 + 1
+  JMP do_jump           ; Tail call: handler RTS returns to our caller
 .not_found:
   JMP err_unknown_directive
 dir_include:
