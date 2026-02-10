@@ -4300,3 +4300,33 @@ INPUT:
  9:   .endmacro
 10:   outer
 EXPECT_HEX: ea 4c 00 02
+
+---
+NAME: macro_same_name_as_directive
+DESCRIPTION: Macro named "byte" coexists with .byte directive; both work correctly
+INPUT:
+ 1: * = $0200
+ 2:   .macro byte val
+ 3:   LDA #val
+ 4:   .endmacro
+ 5:   .byte $55
+ 6:   byte $42
+EXPECT_HEX: 55 a9 42
+
+---
+NAME: macro_shadows_instruction_error
+DESCRIPTION: Defining a macro with same name as a 6502 instruction produces error
+INPUT:
+ 1: * = $0200
+ 2:   .macro LDA val
+ 3:   NOP
+ 4:   .endmacro
+EXPECT_ERROR: 26
+
+---
+NAME: unknown_directive_error
+DESCRIPTION: Using an unknown directive name produces error 14
+INPUT:
+ 1: * = $0200
+ 2:   .badname
+EXPECT_ERROR: 14
