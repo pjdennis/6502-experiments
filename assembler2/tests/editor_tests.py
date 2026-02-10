@@ -2729,6 +2729,22 @@ class EditorTestRunner:
             expect_cursor=(0, 0),
         )
 
+        # :m is unknown command (partial match, doesn't match :marks)
+        self.run_test(
+            ":m is unknown command (partial)",
+            make_lines(3),
+            b":m\r :q!\r",  # space dismisses error
+            expect_unmodified=True,
+        )
+
+        # :marksx is unknown command (extra chars after :marks)
+        self.run_test(
+            ":marksx is unknown command (extra chars)",
+            make_lines(3),
+            b":marksx\r :q!\r",  # space dismisses error
+            expect_unmodified=True,
+        )
+
         # --- Range yank ---
 
         self._group("Range yank (:'a,.y):", leading_blank=True)

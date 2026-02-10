@@ -194,21 +194,10 @@ command_parse:
   RTS
 
 .check_marks:
-  ; Verify the command is exactly "marks"
-  LDA CMD_BUF + 1
-  CMP #'a'
-  BNE .marks_unknown
-  LDA CMD_BUF + 2
-  CMP #'r'
-  BNE .marks_unknown
-  LDA CMD_BUF + 3
-  CMP #'k'
-  BNE .marks_unknown
-  LDA CMD_BUF + 4
-  CMP #'s'
-  BNE .marks_unknown
-  LDA CMD_BUF + 5
-  BNE .marks_unknown      ; Extra chars after "marks"
+  SET16 str_marks_cmd, STR_PTR16
+  LDX #1                  ; Compare from CMD_BUF+1 (after 'm')
+  JSR cmd_str_match
+  BCS .marks_unknown
   JMP marks_display
 .marks_unknown:
   JMP .unknown
@@ -322,6 +311,29 @@ show_status_message:
   JSR write_string
   JSR con_flush
   JSR input_read_byte
+  RTS
+
+; Compare CMD_BUF (starting at offset X) against asciiz string at STR_PTR16
+; Input: X = starting offset in CMD_BUF, STR_PTR16 = string to match
+; Returns: carry clear = match, carry set = no match
+; Clobbers: A, X, Y
+cmd_str_match:
+  LDY #0
+.loop:
+  LDA (STR_PTR16),Y
+  BEQ .check_end
+  CMP CMD_BUF,X
+  BNE .no_match
+  INX
+  INY
+  JMP .loop
+.check_end:
+  LDA CMD_BUF,X
+  BNE .no_match
+  CLC
+  RTS
+.no_match:
+  SEC
   RTS
 
 ; Parse range command: :'a,.y or :'a,'by etc.
@@ -441,6 +453,7 @@ command_parse_range:
   JMP show_status_message
 
 str_lines_yanked: .asciiz " lines yanked"
+str_marks_cmd:    .asciiz "arks"
 
 ; === String constants ===
 str_unknown_cmd: .asciiz "Unknown command"
