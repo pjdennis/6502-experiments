@@ -439,60 +439,90 @@ buf_shift_left_16:
   BCS .sl16_shift_done
 .sl16_need_shift:
 
-  ; Set up page-aligned BUF_SRC16 and Y
-  LDA BUF_SRC16
-  TAY                    ; Y = low byte of first source byte
-  LDA BUF_SRC16 + 1
-  STA BUF_SRC16 + 1
-  LDA #0
-  STA BUF_SRC16          ; BUF_SRC16 = page-aligned base
-
-  ; BUF_DST16 = BUF_SRC16 - BUF_LEN16
-  SEC
-  SBC16 BUF_SRC16, BUF_LEN16, BUF_DST16
-
-  ; Check if BUF_END16 is on the same page
-  LDA BUF_SRC16 + 1
-  CMP BUF_END16 + 1
-  BNE .sl16_full_page
-
-  ; Same page as end: copy Y up to (BUF_END16 low - 1)
-.sl16_last_page:
-  LDA (BUF_SRC16),Y
-  STA (BUF_DST16),Y
-  INY
-  CPY BUF_END16
-  BNE .sl16_last_page
-  JMP .sl16_shift_done
-
-.sl16_full_page:
-  ; Copy from Y up to $FF on this page
-  LDA (BUF_SRC16),Y
-  STA (BUF_DST16),Y
-  INY
-  BNE .sl16_full_page
-
-  ; Move to next page
-  INC BUF_SRC16 + 1
-  INC BUF_DST16 + 1
-  LDY #0
-
-  ; Check if this is the page containing BUF_END16
-  LDA BUF_SRC16 + 1
-  CMP BUF_END16 + 1
-  BNE .sl16_full_page
-
-  ; Check if BUF_END16 low byte is 0 (end is at page boundary)
-  LDA BUF_END16
-  BEQ .sl16_shift_done
-
-  JMP .sl16_last_page
+  ; Set up mem_copy_down parameters:
+  ;   BUF_SRC16 = source start (already set above)
+  ;   BUF_DST16 = destination (delete point = original BUF_PTR16)
+  ;   BUF_PTR16 = source end (BUF_END16)
+  CP16 BUF_PTR16, BUF_DST16
+  CP16 BUF_END16, BUF_PTR16
+  JSR mem_copy_down
 
 .sl16_shift_done:
   ; Update buffer end: subtract BUF_LEN16
   SEC
   SBC16 BUF_END16, BUF_LEN16, BUF_END16
 
+  RTS
+
+; Forward copy (safe when dst <= src or non-overlapping)
+; Input: BUF_SRC16 = source start, BUF_PTR16 = source end (exclusive),
+;        BUF_DST16 = destination start
+; Preserves BUF_PTR16. Clobbers A, Y, BUF_SRC16, BUF_DST16
+mem_copy_down:
+  ; Check empty case (SRC >= END)
+  LDA BUF_SRC16 + 1
+  CMP BUF_PTR16 + 1
+  BCC .mcd_not_empty
+  BNE .mcd_done
+  LDA BUF_SRC16
+  CMP BUF_PTR16
+  BCS .mcd_done
+.mcd_not_empty:
+
+  ; Set up page-aligned source and Y offset
+  ; Y = low byte of BUF_SRC16, BUF_SRC16 = page base
+  ; Adjust BUF_DST16 so (BUF_DST16),Y gives correct dest address:
+  ;   BUF_DST16 = BUF_DST16 - SRC_low_byte
+  LDA BUF_SRC16
+  TAY                      ; Y = source low byte offset
+  SEC
+  LDA BUF_DST16
+  SBC BUF_SRC16            ; Subtract source low byte only
+  STA BUF_DST16
+  BCS .mcd_no_borrow
+  DEC BUF_DST16 + 1
+.mcd_no_borrow:
+  LDA #0
+  STA BUF_SRC16            ; BUF_SRC16 = page-aligned base
+
+  ; Check if end is on the same page as start
+  LDA BUF_SRC16 + 1
+  CMP BUF_PTR16 + 1
+  BNE .mcd_full_page
+
+  ; Same page: copy Y up to (end low - 1)
+.mcd_last_page:
+  LDA (BUF_SRC16),Y
+  STA (BUF_DST16),Y
+  INY
+  CPY BUF_PTR16
+  BNE .mcd_last_page
+  JMP .mcd_done
+
+.mcd_full_page:
+  ; Copy from Y up through $FF on this page
+  LDA (BUF_SRC16),Y
+  STA (BUF_DST16),Y
+  INY
+  BNE .mcd_full_page
+
+  ; Move to next page
+  INC BUF_SRC16 + 1
+  INC BUF_DST16 + 1
+  LDY #0
+
+  ; Check if this is the last page
+  LDA BUF_SRC16 + 1
+  CMP BUF_PTR16 + 1
+  BNE .mcd_full_page
+
+  ; Check if end low byte is 0 (end is at page boundary)
+  LDA BUF_PTR16
+  BEQ .mcd_done
+
+  JMP .mcd_last_page
+
+.mcd_done:
   RTS
 
 ; Rebuild line pointer table by scanning for newlines
