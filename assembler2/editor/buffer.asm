@@ -288,55 +288,18 @@ buf_shift_right_16:
   BEQ .sr16_shift_done
 .sr16_need_shift:
 
-  ; Set up BUF_SRC16 = page base of (BUF_END16-1)
-  ; Y = low byte of (BUF_END16-1)
-  SEC
-  LDA BUF_END16
-  SBC #1
-  TAY                    ; Y = low byte of last source byte
-  LDA BUF_END16 + 1
-  SBC #0
-  STA BUF_SRC16 + 1
-  LDA #0
-  STA BUF_SRC16          ; BUF_SRC16 = page-aligned base
-
-  ; BUF_DST16 = BUF_SRC16 + BUF_LEN16
+  ; Set up mem_copy_up parameters:
+  ;   BUF_SRC16 = source start (insert point = BUF_PTR16)
+  ;   BUF_DST16 = destination (insert point + shift amount)
+  ;   BUF_PTR16 = source end (BUF_END16)
+  ; Save BUF_PTR16 (callers need it preserved)
+  PUSH16 BUF_PTR16
+  CP16 BUF_PTR16, BUF_SRC16
   CLC
   ADC16 BUF_SRC16, BUF_LEN16, BUF_DST16
-
-  ; Check if insert point is on same page
-  LDA BUF_SRC16 + 1
-  CMP BUF_PTR16 + 1
-  BNE .sr16_full_page
-
-  ; Same page as insert point: copy Y down to low byte of BUF_PTR16
-.sr16_last_page:
-  LDA (BUF_SRC16),Y
-  STA (BUF_DST16),Y
-  CPY BUF_PTR16
-  BEQ .sr16_shift_done
-  DEY
-  JMP .sr16_last_page
-
-.sr16_full_page:
-  ; Copy from Y down to 0 on this page
-  LDA (BUF_SRC16),Y
-  STA (BUF_DST16),Y
-  DEY
-  CPY #$FF
-  BNE .sr16_full_page
-
-  ; Move to previous page
-  DEC BUF_SRC16 + 1
-  DEC BUF_DST16 + 1
-  LDY #$FF
-
-  ; Check if this is the page containing the insert point
-  LDA BUF_SRC16 + 1
-  CMP BUF_PTR16 + 1
-  BNE .sr16_full_page
-
-  JMP .sr16_last_page
+  CP16 BUF_END16, BUF_PTR16
+  JSR mem_copy_up
+  POP16 BUF_PTR16
 
 .sr16_shift_done:
   ; Update buffer end: add BUF_LEN16
@@ -344,6 +307,79 @@ buf_shift_right_16:
   ADC16 BUF_END16, BUF_LEN16, BUF_END16
 
   CLC              ; Success
+  RTS
+
+; Backward copy (safe when dst >= src or non-overlapping)
+; Input: BUF_SRC16 = source start, BUF_PTR16 = source end (exclusive),
+;        BUF_DST16 = destination start
+; Preserves BUF_SRC16. Clobbers A, Y, BUF_PTR16, BUF_DST16
+mem_copy_up:
+  ; Check empty case (SRC >= END)
+  LDA BUF_SRC16 + 1
+  CMP BUF_PTR16 + 1
+  BCC .mcu_not_empty
+  BNE .mcu_done
+  LDA BUF_SRC16
+  CMP BUF_PTR16
+  BCS .mcu_done
+.mcu_not_empty:
+
+  ; Compute offset = BUF_DST16 - BUF_SRC16 (constant shift amount)
+  ; Store in BUF_DST16 temporarily
+  SEC
+  SBC16 BUF_DST16, BUF_SRC16, BUF_DST16
+
+  ; Set up page-aligned end pointer and Y offset
+  ; BUF_PTR16 points to (end-1), page-aligned. Y = low byte of (end-1).
+  SEC
+  LDA BUF_PTR16
+  SBC #1
+  TAY                      ; Y = low byte of last source byte
+  LDA BUF_PTR16 + 1
+  SBC #0
+  STA BUF_PTR16 + 1
+  LDA #0
+  STA BUF_PTR16            ; BUF_PTR16 = page-aligned base
+
+  ; BUF_DST16 = BUF_PTR16 + offset (so (BUF_DST16),Y gives correct dest)
+  CLC
+  ADC16 BUF_PTR16, BUF_DST16, BUF_DST16
+
+  ; Check if source start is on the same page
+  LDA BUF_PTR16 + 1
+  CMP BUF_SRC16 + 1
+  BNE .mcu_full_page
+
+  ; Same page: copy Y down to low byte of BUF_SRC16
+.mcu_last_page:
+  LDA (BUF_PTR16),Y
+  STA (BUF_DST16),Y
+  CPY BUF_SRC16
+  BEQ .mcu_done
+  DEY
+  JMP .mcu_last_page
+
+.mcu_full_page:
+  ; Copy from Y down to 0 on this page
+  LDA (BUF_PTR16),Y
+  STA (BUF_DST16),Y
+  DEY
+  CPY #$FF
+  BNE .mcu_full_page
+
+  ; Move to previous page
+  DEC BUF_PTR16 + 1
+  DEC BUF_DST16 + 1
+  LDY #$FF
+
+  ; Check if this is the page containing the source start
+  LDA BUF_PTR16 + 1
+  CMP BUF_SRC16 + 1
+  BNE .mcu_full_page
+
+  JMP .mcu_last_page
+
+.mcu_done:
   RTS
 
 ; Delete BUF_DELTA characters starting at BUF_PTR16
