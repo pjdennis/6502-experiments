@@ -2,8 +2,7 @@
 ;
 ; Provides: swap_pc_with_save, process_directive, process_conditional_directive,
 ;           emit_quoted, set_data_mode, data_parameters_loop,
-;           dir_reserve, dir_ifdef, dir_ifndef, dir_else, dir_endif,
-;           directive string constants (directive_ifdef, etc.)
+;           dir_reserve, dir_ifdef, dir_ifndef, dir_else, dir_endif
 ;
 ; Requires:
 ;   CURR_CHAR (asm.asm alias; backing storage in file_stack.asm)
@@ -11,14 +10,16 @@
 ;   IFDEF_DECISIONS (asm.asm), COND_DEPTH, SKIP_DEPTH, IFDEF_INDEX (directives.asm)
 ;   read_char (asm.asm alias; implemented in file_stack.asm)
 ;   read_token, read_filename (tokenizer.asm)
-;   compare_token (hash_table.asm)
+;   find_in_hash_instruction, select_instruction_hash_table (common.asm/hash_table.asm)
 ;   skip_rest_of_line, check_for_end_of_line (tokenizer.asm)
 ;   select_label_hash_table (common.asm)
 ;   emit, advance_pc_to_hex16 (output.asm)
 ;   decode_escape (tokenizer.asm)
 ;   parse_value (expressions.asm)
 ;   dir_macro (macro_expansion.asm)
+;   do_jump, JUMP_TARGET16 (init.asm)
 ;   push_file_stack (file_stack.asm)
+;   CMPI16 (macros.asm)
 ;   err_* (errors.asm)
 
   .zeropage
@@ -171,25 +172,6 @@ process_conditional_directive:
   JSR do_jump                ; Call handler via trampoline
   CLC                        ; Processed
   RTS
-
-
-directive_ifdef:
-  .asciiz "ifdef"
-
-directive_endif:
-  .asciiz "endif"
-
-directive_ifndef:
-  .asciiz "ifndef"
-
-directive_else:
-  .asciiz "else"
-
-directive_macro:
-  .asciiz "macro"
-
-directive_endmacro:
-  .asciiz "endmacro"
 
 
 ; Read and emit quoted ASCII
