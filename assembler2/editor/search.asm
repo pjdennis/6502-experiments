@@ -34,43 +34,43 @@ search_handle:
   ; Show '/' prompt on status line
   JSR search_show_prompt
 
-.search_read_loop:
+.read_loop:
   JSR input_read_byte
 
   CMP #KEY_ESC
-  BEQ .search_cancel
+  BEQ .cancel
   CMP #$1B
-  BEQ .search_cancel
+  BEQ .cancel
   CMP #KEY_ENTER
-  BEQ .search_execute
+  BEQ .execute
   CMP #'\r'
-  BEQ .search_execute
+  BEQ .execute
   CMP #KEY_BS
-  BEQ .search_backspace
+  BEQ .backspace
   CMP #$7F
-  BEQ .search_backspace
+  BEQ .backspace
 
   ; Printable character?
   CMP #' '
-  BCC .search_read_loop
+  BCC .read_loop
   CMP #$7F
-  BCS .search_read_loop
+  BCS .read_loop
 
   ; Add to buffer
   LDX SEARCH_IDX
   CPX #SEARCH_MAX
-  BCS .search_read_loop   ; Buffer full
+  BCS .read_loop   ; Buffer full
   STA SEARCH_BUF,X
   INC SEARCH_IDX
 
   ; Echo character
   JSR write_b
   JSR con_flush
-  JMP .search_read_loop
+  JMP .read_loop
 
-.search_backspace:
+.backspace:
   LDA SEARCH_IDX
-  BEQ .search_cancel       ; Nothing to delete, cancel
+  BEQ .cancel       ; Nothing to delete, cancel
   DEC SEARCH_IDX
   ; Erase character on screen
   LDA #'\b'
@@ -80,12 +80,12 @@ search_handle:
   LDA #'\b'
   JSR write_b
   JSR con_flush
-  JMP .search_read_loop
+  JMP .read_loop
 
-.search_cancel:
+.cancel:
   RTS
 
-.search_execute:
+.execute:
   ; If empty search, reuse previous pattern
   LDA SEARCH_IDX
   BEQ .reuse_pattern
@@ -96,7 +96,7 @@ search_handle:
 .reuse_pattern:
   ; Check if there's a previous pattern
   LDA SEARCH_LEN
-  BEQ .search_cancel       ; No previous pattern either
+  BEQ .cancel       ; No previous pattern either
 
 .do_search:
   JSR search_forward
@@ -124,35 +124,35 @@ search_forward:
   CLC
   ADCI16 FILE_LINE16, $0001, SEARCH_LINE16
 
-.search_line_loop:
+.line_loop:
   ; Wrap around if past end
   CMP16 SEARCH_LINE16, LINE_COUNT16
-  BCC .search_no_wrap
+  BCC .no_wrap
   SET16 $0000, SEARCH_LINE16
-.search_no_wrap:
+.no_wrap:
 
   ; Check if we've wrapped all the way back to start line
   CMP16 SEARCH_LINE16, FILE_LINE16
-  BEQ .search_check_current
+  BEQ .check_current
 
   ; Search this line
   JSR search_in_line
-  BCC .search_found
+  BCC .found
 
   ; Next line
   INC16 SEARCH_LINE16
-  JMP .search_line_loop
+  JMP .line_loop
 
-.search_check_current:
+.check_current:
   ; Also check the current line (wrapping complete)
   JSR search_in_line
-  BCC .search_found
+  BCC .found
 
   ; Not found
   JSR search_show_not_found
   RTS
 
-.search_found:
+.found:
   ; Move cursor to match
   CP16 SEARCH_LINE16, FILE_LINE16
   LDA SEARCH_COL
@@ -168,46 +168,46 @@ search_forward:
 search_backward:
   ; Start searching from previous line
   TST16 FILE_LINE16
-  BNE .search_back_no_wrap
+  BNE .no_wrap
   ; FILE_LINE16 is 0, wrap to last line
   SEC
   SBCI16 LINE_COUNT16, $0001, SEARCH_LINE16
-  JMP .search_back_loop
-.search_back_no_wrap:
+  JMP .loop
+.no_wrap:
   SEC
   SBCI16 FILE_LINE16, $0001, SEARCH_LINE16
 
-.search_back_loop:
+.loop:
   ; Check if we've wrapped all the way back to start line
   CMP16 SEARCH_LINE16, FILE_LINE16
-  BEQ .search_back_check_current
+  BEQ .check_current
 
   ; Search this line
   JSR search_in_line
-  BCC .search_back_found
+  BCC .found
 
   ; Previous line
   TST16 SEARCH_LINE16
-  BEQ .search_back_wrap
+  BEQ .wrap
   DEC16 SEARCH_LINE16
-  JMP .search_back_loop
+  JMP .loop
 
-.search_back_wrap:
+.wrap:
   ; At line 0, wrap to last line
   SEC
   SBCI16 LINE_COUNT16, $0001, SEARCH_LINE16
-  JMP .search_back_loop
+  JMP .loop
 
-.search_back_check_current:
+.check_current:
   ; Also check the current line (wrapping complete)
   JSR search_in_line
-  BCC .search_back_found
+  BCC .found
 
   ; Not found
   JSR search_show_not_found
   RTS
 
-.search_back_found:
+.found:
   ; Move cursor to match
   CP16 SEARCH_LINE16, FILE_LINE16
   LDA SEARCH_COL

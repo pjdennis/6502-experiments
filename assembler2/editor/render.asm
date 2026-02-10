@@ -325,24 +325,24 @@ render_line_chars:
   LDA #0
   STA RENDER_COL
   LDY #0
-.rlc_loop:
+.loop:
   LDA (BUF_PTR16),Y
   CMP #'\n'
-  BEQ .rlc_done
+  BEQ .done
   CMP #' '
-  BCC .rlc_ctrl
+  BCC .ctrl
   JSR write_b
-  JMP .rlc_next
-.rlc_ctrl:
+  JMP .next
+.ctrl:
   LDA #' '
   JSR write_b
-.rlc_next:
+.next:
   INY
   INC RENDER_COL
   LDA RENDER_COL
   CMP SCREEN_COLS
-  BCC .rlc_loop
-.rlc_done:
+  BCC .loop
+.done:
   RTS
 
 ; === Wrap utility functions ===
@@ -368,20 +368,20 @@ div_mod_screen_cols:
 ; Clobbers: X
 line_screen_rows:
   CMP #0
-  BNE .ls_not_empty
+  BNE .not_empty
   LDA #1
   RTS
-.ls_not_empty:
+.not_empty:
   JSR div_mod_screen_cols
   ; X = quotient, A = remainder
   STA WRAP_REM
   TXA              ; A = quotient
   LDX WRAP_REM
   CPX #0
-  BEQ .ls_exact
+  BEQ .exact
   CLC
   ADC #1           ; Add 1 for partial last row
-.ls_exact:
+.exact:
   RTS
 
 ; Ensure cursor is visible on screen (wrap-aware)
@@ -430,16 +430,16 @@ ensure_cursor_visible:
 
   ; If VIEW_TOP16 == FILE_LINE16, just compute cursor_wrap - VIEW_TOP_WRAP
   CMP16 RENDER_LINE16, FILE_LINE16
-  BNE .ecv_walk_top
+  BNE .walk_top
 
   ; Same line
   SEC
   LDA WRAP_QUOT
   SBC VIEW_TOP_WRAP
   STA CURSOR_ROW
-  JMP .ecv_check_below
+  JMP .check_below
 
-.ecv_walk_top:
+.walk_top:
   ; Add screen rows for VIEW_TOP16 line (minus VIEW_TOP_WRAP)
   LDAX16 RENDER_LINE16
   JSR buf_get_line_len
@@ -452,10 +452,10 @@ ensure_cursor_visible:
   ; Advance to next line
   INC16 RENDER_LINE16
 
-.ecv_walk_loop:
+.walk_loop:
   ; Are we at FILE_LINE16?
   CMP16 RENDER_LINE16, FILE_LINE16
-  BEQ .ecv_at_cursor
+  BEQ .at_cursor
 
   ; Add screen rows for this intermediate line
   LDAX16 RENDER_LINE16
@@ -463,29 +463,29 @@ ensure_cursor_visible:
   JSR line_screen_rows
   CLC
   ADC CURSOR_ROW
-  BCS .ecv_need_scroll_down  ; 8-bit overflow: cursor far below screen
+  BCS .need_scroll_down  ; 8-bit overflow: cursor far below screen
   STA CURSOR_ROW
 
   INC16 RENDER_LINE16
-  JMP .ecv_walk_loop
+  JMP .walk_loop
 
-.ecv_at_cursor:
+.at_cursor:
   ; Add cursor's wrap row within FILE_LINE16
   LDA CURSOR_ROW
   CLC
   ADC WRAP_QUOT
-  BCS .ecv_need_scroll_down  ; 8-bit overflow
+  BCS .need_scroll_down  ; 8-bit overflow
   STA CURSOR_ROW
 
-.ecv_check_below:
+.check_below:
   ; Check if cursor is below view (CURSOR_ROW >= SCREEN_ROWS - 1)
   LDA CURSOR_ROW
   CLC
   ADC #1
   CMP SCREEN_ROWS
-  BCC .ecv_visible
+  BCC .visible
 
-.ecv_need_scroll_down:
+.need_scroll_down:
   ; Cursor is below visible area
   ; Walk backward from FILE_LINE16 to find correct VIEW_TOP16
   LDA #$FF
@@ -502,20 +502,20 @@ ensure_cursor_visible:
   LDA WRAP_QUOT
   STA VIEW_TOP_WRAP
 
-.ecv_walk_back:
+.walk_back:
   LDA RENDER_ROW
-  BEQ .ecv_visible
+  BEQ .visible
 
   ; Can we go back within current line?
   LDA VIEW_TOP_WRAP
-  BEQ .ecv_prev_line
+  BEQ .prev_line
   DEC VIEW_TOP_WRAP
   DEC RENDER_ROW
-  JMP .ecv_walk_back
+  JMP .walk_back
 
-.ecv_prev_line:
+.prev_line:
   TST16 VIEW_TOP16
-  BEQ .ecv_at_top
+  BEQ .at_top
   DEC16 VIEW_TOP16
   LDAX16 VIEW_TOP16
   JSR buf_get_line_len
@@ -524,16 +524,16 @@ ensure_cursor_visible:
   SBC #1
   STA VIEW_TOP_WRAP
   DEC RENDER_ROW
-  JMP .ecv_walk_back
+  JMP .walk_back
 
-.ecv_at_top:
+.at_top:
   ; Hit beginning of file - adjust cursor row
   LDA CURSOR_ROW
   SEC
   SBC RENDER_ROW
   STA CURSOR_ROW
 
-.ecv_visible:
+.visible:
   RTS
 
 ; === String constants ===

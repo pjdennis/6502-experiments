@@ -61,29 +61,29 @@ input_ready:
 ; Non-matching byte is pushed back
 count_pending_key:
   LDX #0
-.count_loop:
+.loop:
   JSR input_ready
   CMP #$FF
-  BNE .count_done
+  BNE .done
   JSR input_read_byte
   CMP BUF_TEMP
-  BEQ .count_match
+  BEQ .match
   ; For backspace ($08), also match $7F
   LDY BUF_TEMP
   CPY #KEY_BS
-  BNE .count_no_match
+  BNE .no_match
   CMP #$7F
-  BEQ .count_match
-.count_no_match:
+  BEQ .match
+.no_match:
   ; Push back the non-matching byte
   JSR input_unread
-  JMP .count_done
-.count_match:
+  JMP .done
+.match:
   INX
   CPX #BATCH_MAX
-  BEQ .count_done
-  JMP .count_loop
-.count_done:
+  BEQ .done
+  JMP .loop
+.done:
   RTS
 
 ; Read one key from console, handling escape sequences

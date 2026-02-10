@@ -24,43 +24,43 @@ command_handle:
   ; Show ':' prompt on last line
   JSR command_show_prompt
 
-.cmd_read_loop:
+.read_loop:
   JSR input_read_byte
 
   CMP #KEY_ESC
-  BEQ .cmd_cancel
+  BEQ .cancel
   CMP #$1B
-  BEQ .cmd_cancel
+  BEQ .cancel
   CMP #KEY_ENTER
-  BEQ .cmd_execute
+  BEQ .execute
   CMP #'\r'
-  BEQ .cmd_execute
+  BEQ .execute
   CMP #KEY_BS
-  BEQ .cmd_backspace
+  BEQ .backspace
   CMP #$7F
-  BEQ .cmd_backspace
+  BEQ .backspace
 
   ; Printable character?
   CMP #' '
-  BCC .cmd_read_loop
+  BCC .read_loop
   CMP #$7F
-  BCS .cmd_read_loop
+  BCS .read_loop
 
   ; Add to buffer
   LDX CMD_IDX
   CPX #CMD_BUF_LEN
-  BCS .cmd_read_loop  ; Buffer full
+  BCS .read_loop  ; Buffer full
   STA CMD_BUF,X
   INC CMD_IDX
 
   ; Echo character
   JSR write_b
   JSR con_flush
-  JMP .cmd_read_loop
+  JMP .read_loop
 
-.cmd_backspace:
+.backspace:
   LDA CMD_IDX
-  BEQ .cmd_cancel     ; Nothing to delete, cancel
+  BEQ .cancel     ; Nothing to delete, cancel
   DEC CMD_IDX
   ; Erase character on screen: backspace, space, backspace
   LDA #'\b'
@@ -70,14 +70,14 @@ command_handle:
   LDA #'\b'
   JSR write_b
   JSR con_flush
-  JMP .cmd_read_loop
+  JMP .read_loop
 
-.cmd_cancel:
+.cancel:
   LDA #MODE_NORMAL
   STA MODE
   RTS
 
-.cmd_execute:
+.execute:
   ; Null-terminate the command
   LDX CMD_IDX
   LDA #0

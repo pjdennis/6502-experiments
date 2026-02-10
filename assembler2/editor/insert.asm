@@ -173,25 +173,25 @@ insert_backspace:
   ; Count pending BS keys inline, capped at CURSOR_COL
   ; Start with 1 for the current BS key
   LDX #1
-.bs_count_loop:
+.count_loop:
   CPX CURSOR_COL
-  BEQ .bs_count_done         ; At cap, stop
+  BEQ .count_done         ; At cap, stop
   JSR input_ready
   CMP #$FF
-  BNE .bs_count_done
+  BNE .count_done
   JSR input_read_byte
   CMP #KEY_BS
-  BEQ .bs_count_match
+  BEQ .count_match
   CMP #$7F
-  BEQ .bs_count_match
+  BEQ .count_match
   ; Not backspace, push back and stop
   JSR input_unread
-  JMP .bs_count_done
-.bs_count_match:
+  JMP .count_done
+.count_match:
   INX
   CPX #BATCH_MAX
-  BNE .bs_count_loop
-.bs_count_done:
+  BNE .count_loop
+.count_done:
 
   STX BUF_DELTA
   ; Update cursor: CURSOR_COL -= BUF_DELTA
@@ -239,18 +239,18 @@ insert_backspace:
 
   ; If previous line has content, skip batch scan
   LDA CURSOR_COL
-  BNE .jl_apply
+  BNE .apply
 
   ; Previous line empty - scan backwards for consecutive \n bytes
-.jl_scan_loop:
+.scan_loop:
   ; Check if BUF_PTR16 is at TEXT_BUF (buffer start)
   LDA BUF_PTR16
   CMP #<TEXT_BUF
-  BNE .jl_not_start
+  BNE .not_start
   LDA BUF_PTR16 + 1
   CMP #>TEXT_BUF
-  BEQ .jl_apply           ; At buffer start, stop
-.jl_not_start:
+  BEQ .apply           ; At buffer start, stop
+.not_start:
 
   ; Check byte before BUF_PTR16
   SEC
@@ -263,18 +263,18 @@ insert_backspace:
   LDY #0
   LDA (BUF_SRC16),Y
   CMP #'\n'
-  BNE .jl_apply           ; Line above has content, stop
+  BNE .apply           ; Line above has content, stop
 
   ; BUF_SRC16 points to a \n. Verify this \n ends an EMPTY line.
   ; Empty if BUF_SRC16 is at buffer start, or byte before it is also \n.
   LDA BUF_SRC16
   CMP #<TEXT_BUF
-  BNE .jl_check_prev
+  BNE .check_prev
   LDA BUF_SRC16 + 1
   CMP #>TEXT_BUF
-  BEQ .jl_line_empty      ; First byte of buffer, just \n → empty
+  BEQ .line_empty      ; First byte of buffer, just \n → empty
 
-.jl_check_prev:
+.check_prev:
   ; Check byte at BUF_SRC16 - 1 using BUF_LEN16 as temp
   SEC
   LDA BUF_SRC16
@@ -286,36 +286,36 @@ insert_backspace:
   LDY #0
   LDA (BUF_LEN16),Y
   CMP #'\n'
-  BNE .jl_apply           ; Byte before is not \n → content line → stop
+  BNE .apply           ; Byte before is not \n → content line → stop
 
-.jl_line_empty:
+.line_empty:
 
   ; Read one BS key from input
   STX BUF_TEMP
   JSR input_ready
   CMP #$FF
-  BNE .jl_restore_x
+  BNE .restore_x
   JSR input_read_byte
   CMP #KEY_BS
-  BEQ .jl_match
+  BEQ .match
   CMP #$7F
-  BEQ .jl_match
+  BEQ .match
   ; Not backspace, push back and stop
   JSR input_unread
   LDX BUF_TEMP
-  JMP .jl_apply
-.jl_match:
+  JMP .apply
+.match:
   LDX BUF_TEMP
   INX
   CPX #BATCH_MAX
-  BEQ .jl_apply
+  BEQ .apply
   ; Move BUF_PTR16 back one byte
   CP16 BUF_SRC16, BUF_PTR16
-  JMP .jl_scan_loop
-.jl_restore_x:
+  JMP .scan_loop
+.restore_x:
   LDX BUF_TEMP
 
-.jl_apply:
+.apply:
   STX BUF_DELTA
   JSR buf_delete_chars
 

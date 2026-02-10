@@ -310,11 +310,11 @@ normal_page_down:
 
   ; Clamp target to LINE_COUNT16 - 1
   CMP16 BUF_PTR16, LINE_COUNT16
-  BCC .pgdn_target_ok
-.pgdn_clamp_target:
+  BCC .target_ok
+.clamp_target:
   SEC
   SBCI16 LINE_COUNT16, $0001, BUF_PTR16
-.pgdn_target_ok:
+.target_ok:
 
   ; VIEW_TOP16 += page_size
   CLC
@@ -332,25 +332,25 @@ normal_page_down:
   TAX                ; X = low byte of max view top
   LDA LINE_COUNT16 + 1
   SBC #0
-  BCC .pgdn_view_zero  ; LINE_COUNT < page_size, set VIEW_TOP=0
+  BCC .view_zero  ; LINE_COUNT < page_size, set VIEW_TOP=0
   TAY                ; Y = high byte of max view top
 
   ; If VIEW_TOP16 > max, clamp it
   CPY VIEW_TOP16 + 1
-  BCC .pgdn_clamp_view
-  BNE .pgdn_set_row
+  BCC .clamp_view
+  BNE .set_row
   CPX VIEW_TOP16
-  BCS .pgdn_set_row
-.pgdn_clamp_view:
+  BCS .set_row
+.clamp_view:
   STX VIEW_TOP16
   STY VIEW_TOP16 + 1
-  JMP .pgdn_set_row
+  JMP .set_row
 
-.pgdn_view_zero:
+.view_zero:
   LDA #0
   STA_LH16 VIEW_TOP16
 
-.pgdn_set_row:
+.set_row:
   CP16 BUF_PTR16, FILE_LINE16
   LDA #0
   STA CURSOR_COL
@@ -374,25 +374,25 @@ normal_page_up:
   LDA FILE_LINE16 + 1
   SBC #0
   STA BUF_PTR16 + 1
-  BCS .pgup_target_ok
+  BCS .target_ok
   ; Underflow - clamp to 0
   LDA #0
   STA_LH16 BUF_PTR16
-.pgup_target_ok:
+.target_ok:
 
   ; VIEW_TOP16 -= page_size, clamped to 0
   LDA VIEW_TOP16 + 1
-  BNE .pgup_can_sub  ; High byte > 0, definitely >= page_size
+  BNE .can_sub  ; High byte > 0, definitely >= page_size
   LDA VIEW_TOP16
   CMP BUF_TEMP
-  BCS .pgup_can_sub
+  BCS .can_sub
 
   ; VIEW_TOP16 < page_size: set VIEW_TOP16 = 0
   LDA #0
   STA_LH16 VIEW_TOP16
-  JMP .pgup_set_row
+  JMP .set_row
 
-.pgup_can_sub:
+.can_sub:
   SEC
   LDA VIEW_TOP16
   SBC BUF_TEMP
@@ -401,7 +401,7 @@ normal_page_up:
   SBC #0
   STA VIEW_TOP16 + 1
 
-.pgup_set_row:
+.set_row:
   CP16 BUF_PTR16, FILE_LINE16
   LDA #0
   STA CURSOR_COL
@@ -510,15 +510,15 @@ normal_delete_char:
   TXA
   CLC
   ADC BUF_DELTA              ; Total = count + pending
-  BCS .x_cap_at_max          ; Overflow -> cap
+  BCS .cap_at_max          ; Overflow -> cap
   TAX
 
   ; Cap at max deleteable
   CPX LINE_LEN
-  BCC .x_cap_ok
-.x_cap_at_max:
+  BCC .cap_ok
+.cap_at_max:
   LDX LINE_LEN
-.x_cap_ok:
+.cap_ok:
   STX BUF_DELTA
 
   ; Delete BUF_DELTA chars at cursor position
@@ -558,11 +558,11 @@ normal_d_key:
 
   ; Clamp file line if past end of file
   CMP16 FILE_LINE16, LINE_COUNT16
-  BCC .dd_done
+  BCC .done
   SEC
   SBCI16 LINE_COUNT16, $0001, FILE_LINE16
 
-.dd_done:
+.done:
   LDA #$FF
   STA MODIFIED
   JSR clamp_cursor_col
@@ -698,20 +698,20 @@ check_paste_fits:
   SBC BUF_END16 + 1
   STA BUF_SRC16 + 1
   ; Subtract BUF_LEN16 from available, count times
-.cpf_loop:
+.loop:
   SEC
   LDA BUF_SRC16
   SBC BUF_LEN16
   STA BUF_SRC16
   LDA BUF_SRC16 + 1
   SBC BUF_LEN16 + 1
-  BCC .cpf_no_room
+  BCC .no_room
   STA BUF_SRC16 + 1
   DEX
-  BNE .cpf_loop
+  BNE .loop
   CLC
   RTS
-.cpf_no_room:
+.no_room:
   SEC
   RTS
 
@@ -732,10 +732,10 @@ normal_y_key:
   STX BUF_TEMP
   LDAX16 FILE_LINE16
   JSR yank_add_lines
-  BCS .yy_overflow
+  BCS .overflow
   JMP clear_count            ; Done - don't set MODIFIED
 
-.yy_overflow:
+.overflow:
   JSR yank_clear
   SET16 str_yank_full, STR_PTR16
   JSR show_status_message
@@ -747,10 +747,10 @@ normal_search:
 
 normal_find_next:
   LDA SEARCH_LEN
-  BEQ .find_next_none        ; No search pattern
+  BEQ .none        ; No search pattern
   JSR search_forward
   JMP clear_count
-.find_next_none:
+.none:
   ; No prior search, just cursor-only update
   LDA #0
   STA RENDER_FLAG
@@ -758,10 +758,10 @@ normal_find_next:
 
 normal_find_prev:
   LDA SEARCH_LEN
-  BEQ .find_prev_none        ; No search pattern
+  BEQ .none        ; No search pattern
   JSR search_backward
   JMP clear_count
-.find_prev_none:
+.none:
   ; No prior search, just cursor-only update
   LDA #0
   STA RENDER_FLAG

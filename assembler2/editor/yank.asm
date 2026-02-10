@@ -40,14 +40,14 @@ yank_add_lines:
   SBC16 LINE_COUNT16, BUF_SRC16, BUF_LEN16  ; BUF_LEN16 = available lines
   ; If available < count, use available
   LDA BUF_LEN16 + 1
-  BNE .yal_count_ok           ; Available >= 256, count (8-bit) is fine
+  BNE .count_ok           ; Available >= 256, count (8-bit) is fine
   LDA BUF_TEMP
   CMP BUF_LEN16
-  BCC .yal_count_ok
-  BEQ .yal_count_ok
+  BCC .count_ok
+  BEQ .count_ok
   LDA BUF_LEN16
   STA BUF_TEMP                ; Clamp count
-.yal_count_ok:
+.count_ok:
 
   ; Look up LINE_TBL[first_line] → start address
   LDAX16 BUF_SRC16
@@ -65,15 +65,15 @@ yank_add_lines:
 
   ; If end line >= LINE_COUNT16, end address = BUF_END16
   CMP16 BUF_SRC16, LINE_COUNT16
-  BCC .yal_get_end_ptr
+  BCC .get_end_ptr
   CP16 BUF_END16, BUF_PTR16  ; BUF_PTR16 = end address = BUF_END16
-  JMP .yal_have_end
+  JMP .have_end
 
-.yal_get_end_ptr:
+.get_end_ptr:
   LDAX16 BUF_SRC16
   JSR buf_get_line_ptr        ; BUF_PTR16 = start of end line = our end addr
 
-.yal_have_end:
+.have_end:
   ; BUF_PTR16 = end address
   POP16 BUF_SRC16            ; BUF_SRC16 = start address
 
@@ -86,12 +86,12 @@ yank_add_lines:
   ADC16 YANK_END16, BUF_LEN16, BUF_DST16
   LDA BUF_DST16 + 1
   CMP #>YANK_LIMIT
-  BCC .yal_has_room
-  BNE .yal_full
+  BCC .has_room
+  BNE .full
   LDA BUF_DST16
-  BEQ .yal_has_room           ; Exactly at limit is ok
-  BNE .yal_full
-.yal_has_room:
+  BEQ .has_room           ; Exactly at limit is ok
+  BNE .full
+.has_room:
 
   ; mem_copy_down(start, end, YANK_END16)
   ;   BUF_SRC16 = start (already set)
@@ -111,7 +111,7 @@ yank_add_lines:
   CLC
   RTS
 
-.yal_full:
+.full:
   SEC
   RTS
 
@@ -143,28 +143,28 @@ yank_paste_below:
 ; Returns carry set = error (empty/full), carry clear = success
 yank_paste_below_n:
   JSR yank_paste_setup
-  BCC .pbn_has_data
+  BCC .has_data
   RTS
-.pbn_has_data:
+.has_data:
 
   ; Find insertion point: after current line's newline
   LDAX16 FILE_LINE16
   JSR buf_get_line_ptr        ; BUF_PTR16 = start of current line
   LDY #0
-.pbn_find_nl:
+.find_nl:
   LDA (BUF_PTR16),Y
   CMP #'\n'
-  BEQ .pbn_found_nl
+  BEQ .found_nl
   INY
-  BNE .pbn_find_nl
-.pbn_found_nl:
+  BNE .find_nl
+.found_nl:
   INY
   TYA
   CLC
   ADCA16 BUF_PTR16, BUF_PTR16 ; BUF_PTR16 = insertion point (after newline)
 
   JSR yank_paste_core
-  BCS .pbn_done
+  BCS .done
 
   ; Move cursor to first pasted line
   INC16 FILE_LINE16
@@ -173,7 +173,7 @@ yank_paste_below_n:
   JSR ensure_cursor_visible
   JSR clamp_cursor_col
   CLC
-.pbn_done:
+.done:
   RTS
 
 ; Paste yank buffer above current line
@@ -190,16 +190,16 @@ yank_paste_above:
 ; Returns carry set = error (empty/full), carry clear = success
 yank_paste_above_n:
   JSR yank_paste_setup
-  BCC .pan_has_data
+  BCC .has_data
   RTS
-.pan_has_data:
+.has_data:
 
   ; Insertion point: start of current line
   LDAX16 FILE_LINE16
   JSR buf_get_line_ptr        ; BUF_PTR16 = start of current line
 
   JSR yank_paste_core
-  BCS .pan_done
+  BCS .done
 
   ; Cursor stays at same line number
   LDA #0
@@ -207,7 +207,7 @@ yank_paste_above_n:
   JSR ensure_cursor_visible
   JSR clamp_cursor_col
   CLC
-.pan_done:
+.done:
   RTS
 
 ; Compute yank size and total paste size
@@ -216,19 +216,19 @@ yank_paste_above_n:
 ; Returns carry set if yank buffer empty, carry clear if ready
 yank_paste_setup:
   JSR yank_get_size           ; BUF_LEN16 = single yank size
-  BCC .yps_has_data
+  BCC .has_data
   RTS                         ; Empty yank, carry already set
-.yps_has_data:
+.has_data:
   CP16 BUF_LEN16, YANK_SIZE16 ; YANK_SIZE16 = single size
   LDX BUF_TEMP
   DEX
-  BEQ .yps_done
-.yps_calc:
+  BEQ .done
+.calc:
   CLC
   ADC16 BUF_LEN16, YANK_SIZE16, BUF_LEN16
   DEX
-  BNE .yps_calc
-.yps_done:
+  BNE .calc
+.done:
   CLC
   RTS
 
@@ -238,17 +238,17 @@ yank_paste_setup:
 yank_paste_core:
   ; Shift right to make room
   JSR buf_shift_right_16
-  BCC .ypc_shift_ok
+  BCC .shift_ok
   SET16 str_buffer_full, STR_PTR16
   JSR show_status_message
   SEC
   RTS
-.ypc_shift_ok:
+.shift_ok:
 
   ; Copy yank buffer into gap N times using mem_copy_down
   ; BUF_PTR16 = insertion point (gap start)
   LDX BUF_TEMP
-.ypc_copy_loop:
+.copy_loop:
   TXA
   PHA
   ; Set up mem_copy_down: src=YANK_BUF, end=YANK_END16, dst=write_pos
@@ -264,7 +264,7 @@ yank_paste_core:
   PLA
   TAX
   DEX
-  BNE .ypc_copy_loop
+  BNE .copy_loop
 
   ; Rebuild lines once
   JSR buf_rebuild_lines

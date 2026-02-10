@@ -270,23 +270,23 @@ buf_shift_right_16:
   LDA BUF_END16 + 1
   ADC BUF_LEN16 + 1
   CMP BUF_LIMIT
-  BCC .sr16_has_room
-  BNE .sr16_full
+  BCC .has_room
+  BNE .full
   LDA BUF_DST16
-  BEQ .sr16_has_room         ; Exactly at limit is ok
-.sr16_full:
+  BEQ .has_room         ; Exactly at limit is ok
+.full:
   SEC
   RTS
-.sr16_has_room:
+.has_room:
 
   ; Check if nothing to move (insert at end)
   LDA BUF_END16 + 1
   CMP BUF_PTR16 + 1
-  BNE .sr16_need_shift
+  BNE .need_shift
   LDA BUF_END16
   CMP BUF_PTR16
-  BEQ .sr16_shift_done
-.sr16_need_shift:
+  BEQ .shift_done
+.need_shift:
 
   ; Set up mem_copy_up parameters:
   ;   BUF_SRC16 = source start (insert point = BUF_PTR16)
@@ -301,7 +301,7 @@ buf_shift_right_16:
   JSR mem_copy_up
   POP16 BUF_PTR16
 
-.sr16_shift_done:
+.shift_done:
   ; Update buffer end: add BUF_LEN16
   CLC
   ADC16 BUF_END16, BUF_LEN16, BUF_END16
@@ -317,12 +317,12 @@ mem_copy_up:
   ; Check empty case (SRC >= END)
   LDA BUF_SRC16 + 1
   CMP BUF_PTR16 + 1
-  BCC .mcu_not_empty
-  BNE .mcu_done
+  BCC .not_empty
+  BNE .done
   LDA BUF_SRC16
   CMP BUF_PTR16
-  BCS .mcu_done
-.mcu_not_empty:
+  BCS .done
+.not_empty:
 
   ; Compute offset = BUF_DST16 - BUF_SRC16 (constant shift amount)
   ; Store in BUF_DST16 temporarily
@@ -348,24 +348,24 @@ mem_copy_up:
   ; Check if source start is on the same page
   LDA BUF_PTR16 + 1
   CMP BUF_SRC16 + 1
-  BNE .mcu_full_page
+  BNE .full_page
 
   ; Same page: copy Y down to low byte of BUF_SRC16
-.mcu_last_page:
+.last_page:
   LDA (BUF_PTR16),Y
   STA (BUF_DST16),Y
   CPY BUF_SRC16
-  BEQ .mcu_done
+  BEQ .done
   DEY
-  JMP .mcu_last_page
+  JMP .last_page
 
-.mcu_full_page:
+.full_page:
   ; Copy from Y down to 0 on this page
   LDA (BUF_PTR16),Y
   STA (BUF_DST16),Y
   DEY
   CPY #$FF
-  BNE .mcu_full_page
+  BNE .full_page
 
   ; Move to previous page
   DEC BUF_PTR16 + 1
@@ -375,11 +375,11 @@ mem_copy_up:
   ; Check if this is the page containing the source start
   LDA BUF_PTR16 + 1
   CMP BUF_SRC16 + 1
-  BNE .mcu_full_page
+  BNE .full_page
 
-  JMP .mcu_last_page
+  JMP .last_page
 
-.mcu_done:
+.done:
   RTS
 
 ; Delete BUF_DELTA characters starting at BUF_PTR16
@@ -434,15 +434,15 @@ buf_delete_lines:
   ; If buffer is now empty, add a newline
   LDA BUF_END16
   CMP #<TEXT_BUF
-  BNE .dels_not_empty
+  BNE .not_empty
   LDA BUF_END16 + 1
   CMP #>TEXT_BUF
-  BNE .dels_not_empty
+  BNE .not_empty
   LDY #0
   LDA #'\n'
   STA (BUF_END16),Y
   INC16 BUF_END16
-.dels_not_empty:
+.not_empty:
 
   JSR buf_rebuild_lines
   RTS
@@ -468,12 +468,12 @@ buf_shift_left_16:
   ; Check if nothing to move (source >= BUF_END16)
   LDA BUF_SRC16 + 1
   CMP BUF_END16 + 1
-  BCC .sl16_need_shift
-  BNE .sl16_shift_done
+  BCC .need_shift
+  BNE .shift_done
   LDA BUF_SRC16
   CMP BUF_END16
-  BCS .sl16_shift_done
-.sl16_need_shift:
+  BCS .shift_done
+.need_shift:
 
   ; Set up mem_copy_down parameters:
   ;   BUF_SRC16 = source start (already set above)
@@ -483,7 +483,7 @@ buf_shift_left_16:
   CP16 BUF_END16, BUF_PTR16
   JSR mem_copy_down
 
-.sl16_shift_done:
+.shift_done:
   ; Update buffer end: subtract BUF_LEN16
   SEC
   SBC16 BUF_END16, BUF_LEN16, BUF_END16
@@ -498,12 +498,12 @@ mem_copy_down:
   ; Check empty case (SRC >= END)
   LDA BUF_SRC16 + 1
   CMP BUF_PTR16 + 1
-  BCC .mcd_not_empty
-  BNE .mcd_done
+  BCC .not_empty
+  BNE .done
   LDA BUF_SRC16
   CMP BUF_PTR16
-  BCS .mcd_done
-.mcd_not_empty:
+  BCS .done
+.not_empty:
 
   ; Set up page-aligned source and Y offset
   ; Y = low byte of BUF_SRC16, BUF_SRC16 = page base
@@ -515,32 +515,32 @@ mem_copy_down:
   LDA BUF_DST16
   SBC BUF_SRC16            ; Subtract source low byte only
   STA BUF_DST16
-  BCS .mcd_no_borrow
+  BCS .no_borrow
   DEC BUF_DST16 + 1
-.mcd_no_borrow:
+.no_borrow:
   LDA #0
   STA BUF_SRC16            ; BUF_SRC16 = page-aligned base
 
   ; Check if end is on the same page as start
   LDA BUF_SRC16 + 1
   CMP BUF_PTR16 + 1
-  BNE .mcd_full_page
+  BNE .full_page
 
   ; Same page: copy Y up to (end low - 1)
-.mcd_last_page:
+.last_page:
   LDA (BUF_SRC16),Y
   STA (BUF_DST16),Y
   INY
   CPY BUF_PTR16
-  BNE .mcd_last_page
-  JMP .mcd_done
+  BNE .last_page
+  JMP .done
 
-.mcd_full_page:
+.full_page:
   ; Copy from Y up through $FF on this page
   LDA (BUF_SRC16),Y
   STA (BUF_DST16),Y
   INY
-  BNE .mcd_full_page
+  BNE .full_page
 
   ; Move to next page
   INC BUF_SRC16 + 1
@@ -550,15 +550,15 @@ mem_copy_down:
   ; Check if this is the last page
   LDA BUF_SRC16 + 1
   CMP BUF_PTR16 + 1
-  BNE .mcd_full_page
+  BNE .full_page
 
   ; Check if end low byte is 0 (end is at page boundary)
   LDA BUF_PTR16
-  BEQ .mcd_done
+  BEQ .done
 
-  JMP .mcd_last_page
+  JMP .last_page
 
-.mcd_done:
+.done:
   RTS
 
 ; Rebuild line pointer table by scanning for newlines
@@ -635,16 +635,16 @@ buf_adjust_lines_inc:
 
   ; Subtract 1 (we start from line+1, not line)
   LDA BUF_LEN16
-  BNE .inc_no_borrow
+  BNE .no_borrow
   DEC BUF_LEN16 + 1
-.inc_no_borrow:
+.no_borrow:
   DEC BUF_LEN16
 
   ; If count <= 0, nothing to adjust
   LDA BUF_LEN16 + 1
-  BMI .inc_done
+  BMI .done
   ORA BUF_LEN16
-  BEQ .inc_done
+  BEQ .done
 
   ; Calculate LINE_TBL entry for (FILE_LINE16 + 1)
   ; Entry address = LINE_TBL + (FILE_LINE16 + 1) * 2
@@ -654,19 +654,19 @@ buf_adjust_lines_inc:
   CLC
   ADCI16 BUF_PTR16, LINE_TBL, BUF_PTR16
 
-.inc_loop:
+.loop:
   ; Increment the 16-bit line pointer at (BUF_PTR16)
   LDY #0
   CLC
   LDA (BUF_PTR16),Y
   ADC BUF_DELTA
   STA (BUF_PTR16),Y
-  BCC .inc_no_carry
+  BCC .no_carry
   INY
   LDA (BUF_PTR16),Y
   ADC #0
   STA (BUF_PTR16),Y
-.inc_no_carry:
+.no_carry:
 
   ; Advance to next LINE_TBL entry (+2 bytes)
   CLC
@@ -674,16 +674,16 @@ buf_adjust_lines_inc:
 
   ; Decrement count
   LDA BUF_LEN16
-  BNE .inc_dec_no_borrow
+  BNE .no_borrow2
   DEC BUF_LEN16 + 1
-.inc_dec_no_borrow:
+.no_borrow2:
   DEC BUF_LEN16
 
   ; Check if count reached 0
   TST16 BUF_LEN16
-  BNE .inc_loop
+  BNE .loop
 
-.inc_done:
+.done:
   RTS
 
 ; Decrement line pointers after current line by 1
@@ -697,16 +697,16 @@ buf_adjust_lines_dec:
 
   ; Subtract 1
   LDA BUF_LEN16
-  BNE .dec_no_borrow
+  BNE .no_borrow
   DEC BUF_LEN16 + 1
-.dec_no_borrow:
+.no_borrow:
   DEC BUF_LEN16
 
   ; If count <= 0, nothing to adjust
   LDA BUF_LEN16 + 1
-  BMI .dec_done
+  BMI .done
   ORA BUF_LEN16
-  BEQ .dec_done
+  BEQ .done
 
   ; Calculate LINE_TBL entry for (FILE_LINE16 + 1)
   CLC
@@ -715,19 +715,19 @@ buf_adjust_lines_dec:
   CLC
   ADCI16 BUF_PTR16, LINE_TBL, BUF_PTR16
 
-.dec_loop:
+.loop:
   ; Decrement the 16-bit line pointer at (BUF_PTR16)
   LDY #0
   SEC
   LDA (BUF_PTR16),Y
   SBC BUF_DELTA
   STA (BUF_PTR16),Y
-  BCS .dec_no_borrow2
+  BCS .no_borrow2
   INY
   LDA (BUF_PTR16),Y
   SBC #0
   STA (BUF_PTR16),Y
-.dec_no_borrow2:
+.no_borrow2:
 
   ; Advance to next LINE_TBL entry (+2 bytes)
   CLC
@@ -735,14 +735,14 @@ buf_adjust_lines_dec:
 
   ; Decrement count
   LDA BUF_LEN16
-  BNE .dec_dec_no_borrow
+  BNE .no_borrow3
   DEC BUF_LEN16 + 1
-.dec_dec_no_borrow:
+.no_borrow3:
   DEC BUF_LEN16
 
   ; Check if count reached 0
   TST16 BUF_LEN16
-  BNE .dec_loop
+  BNE .loop
 
-.dec_done:
+.done:
   RTS
