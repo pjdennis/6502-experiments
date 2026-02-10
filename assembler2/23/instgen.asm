@@ -24,7 +24,7 @@
 ;   init_heap, advance_heap, select_instruction_hash_table (common.asm)
 ;   init_hash_table, hash_add, hash_entry_empty, load_hash_entry (hash_table.asm)
 ;   write_b (environment.asm), display_hex/display_text helpers (local below)
-;   LABEL_TYPE, LABEL_TYPE_GLOBAL, MODE_END constants (common.asm)
+;   LABEL_TYPE, LABEL_TYPE_GLOBAL, MODE_DIRECTIVE, MODE_END constants (common.asm)
 
 ; Addresses
 TOKEN       = $1E00     ; Buffer for the current token being read

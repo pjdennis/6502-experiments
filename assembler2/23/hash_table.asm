@@ -376,13 +376,6 @@ store_token:
   INY
   JMP advance_heap      ; Tail call
 
-; Add HT_KEY to hash table (always global - for instructions)
-; On exit same as hash_add
-hash_add_instruction:
-  JSR calculate_hash
-  JMP hash_add_common
-
-
 ; Find macro definition in LHASHTAB
 ; On entry HT_KEY contains the macro name to find
 ;          HTP16 must point to LHASHTAB (caller must select_label_hash_table)
