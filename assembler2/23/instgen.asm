@@ -17,7 +17,7 @@
 ;   MODE_INDY  = $09  ; Indirect, Y - ($zp),Y
 ;   MODE_REL   = $0A  ; Relative (branches)
 ;   MODE_IND   = $0B  ; Indirect - JMP ($xxxx)
-;   MODE_MACRO = $FE  ; Sentinel marker to indicate macro
+;   MODE_DIRECTIVE = $0D  ; Directive handler entry
 ;   MODE_END   = $FF  ; Terminator (end of mode list)
 ;
 ; Requires:
@@ -223,6 +223,52 @@ MNTAB:
   .byte 0
 
 
+; Directive table with handler label names
+; Format: "directive" $00 MODE_DIRECTIVE "handler_label" $00
+DIRTAB:
+  .asciiz "include"
+  .byte MODE_DIRECTIVE
+  .asciiz "dir_include"
+  .asciiz "zeropage"
+  .byte MODE_DIRECTIVE
+  .asciiz "dir_zeropage"
+  .asciiz "code"
+  .byte MODE_DIRECTIVE
+  .asciiz "dir_code"
+  .asciiz "byte"
+  .byte MODE_DIRECTIVE
+  .asciiz "dir_byte"
+  .asciiz "word"
+  .byte MODE_DIRECTIVE
+  .asciiz "dir_word"
+  .asciiz "asciiz"
+  .byte MODE_DIRECTIVE
+  .asciiz "dir_asciiz"
+  .asciiz "reserve"
+  .byte MODE_DIRECTIVE
+  .asciiz "dir_reserve"
+  .asciiz "ifdef"
+  .byte MODE_DIRECTIVE
+  .asciiz "dir_ifdef"
+  .asciiz "ifndef"
+  .byte MODE_DIRECTIVE
+  .asciiz "dir_ifndef"
+  .asciiz "else"
+  .byte MODE_DIRECTIVE
+  .asciiz "dir_else"
+  .asciiz "endif"
+  .byte MODE_DIRECTIVE
+  .asciiz "dir_endif"
+  .asciiz "macro"
+  .byte MODE_DIRECTIVE
+  .asciiz "dir_macro"
+  .asciiz "endmacro"
+  .byte MODE_DIRECTIVE
+  .asciiz "dir_endmacro"
+  ; End of table
+  .byte 0
+
+
 ; Populate instruction hash table from MNTAB
 ;
 ; MNTAB format (each entry):
@@ -299,6 +345,74 @@ populate_instruction_hash_table:
   TYA
   CLC
   ADCA16 P2_16, P2_16 ; P2_16 + Y -> P2_16
+
+  ; Advance the heap
+  JSR advance_heap
+
+  JMP .entry_loop
+
+.done:
+  RTS
+
+
+; Populate directive entries in instruction hash table from DIRTAB
+;
+; DIRTAB format (each entry):
+;   "directive" $00 MODE_DIRECTIVE "handler_label" $00
+;   - Null-terminated directive name
+;   - MODE_DIRECTIVE byte followed by null-terminated handler label name
+;   - $00 as first byte marks end of entire table
+;
+; Hash table entry format (on heap after hash_add):
+;   [next_ptr_lo] [next_ptr_hi] [directive $00] MODE_DIRECTIVE "handler_label" $00
+;
+; Register usage:
+;   P2_16 = pointer to current entry in DIRTAB (source)
+;   MEMP16 = heap pointer (destination), managed by hash_add/advance_heap
+;   Y = offset into current entry
+;
+populate_directive_hash_table:
+  SET16 DIRTAB, P2_16
+
+.entry_loop:
+  ; Check for end of table ($00 as first byte of entry)
+  LDY #$00
+  LDA (P2_16),Y
+  BEQ .done
+
+  ; --- Phase 1: Copy directive name to TOKEN buffer ---
+.token_loop:
+  STA TOKEN,Y
+  BEQ .token_loop_done
+  INY
+  LDA (P2_16),Y
+  JMP .token_loop
+.token_loop_done:
+  ; Advance P2_16 past directive name (including null)
+  TYA
+  SEC
+  ADCA16 P2_16, P2_16
+
+  ; --- Phase 2: Add directive name to hash table ---
+  JSR hash_add
+
+  ; --- Phase 3: Copy MODE_DIRECTIVE + handler label name to heap ---
+  ; P2_16 points to MODE_DIRECTIVE byte, MEMP16 points to value start
+  ; Both use Y=0 as starting offset
+  LDY #$00
+.copy_value:
+  LDA (P2_16),Y
+  STA (MEMP16),Y
+  BEQ .copy_done
+  INY
+  JMP .copy_value
+.copy_done:
+  INY                    ; Count includes null terminator
+
+  ; Advance P2_16 past copied value data
+  TYA
+  CLC
+  ADCA16 P2_16, P2_16
 
   ; Advance the heap
   JSR advance_heap
@@ -446,21 +560,28 @@ display_table_entry:
 
 
 write_mnemonic_and_modes:
-  ; Display .asciiz "MNEMONIC"
+  ; Display .asciiz "NAME"
   JSR display_asciiz_prefix
   LDA #' '
   JSR write_b
   LDA #'"'
   JSR write_b
-  ; Set P16 to point to mnemonic (TABP16 + 2)
+  ; Set P16 to point to name (TABP16 + 2)
   CLC
   ADCI16 TABP16, $02, P16
-  ; Display mnemonic text
+  ; Display name text
   JSR display_text
-  ; Y now points to null terminator in mnemonic
+  ; Y now points to null terminator in name
   LDA #'"'
   JSR write_b
   JSR display_newline
+  ; Check for directive entry (value starts at Y+1)
+  INY
+  LDA (P16),Y
+  CMP #MODE_DIRECTIVE
+  BEQ .write_directive
+  DEY                  ; Restore Y to null terminator
+  ; --- Instruction entry: display mode:opcode pairs ---
   ; Save Y (offset to null terminator) and P16 before display_byte_prefix
   ; display_byte_prefix clobbers P16
   TYA
@@ -495,8 +616,40 @@ write_mnemonic_and_modes:
   JSR display_comma
   LDA #MODE_END
   JSR display_byte
+  JMP display_newline  ; Tail call
+.write_directive:
+  ; --- Directive entry: display MODE_DIRECTIVE + handler label ---
+  ; Y points to MODE_DIRECTIVE byte, P16 = TABP16 + 2
+  ; Save Y and P16 before display_byte_prefix clobbers P16
+  TYA
+  PHA
+  PUSH16 P16
+  ; Display "  .byte $0D"
+  JSR display_byte_prefix
+  LDA #' '
+  JSR write_b
+  LDA #MODE_DIRECTIVE
+  JSR display_byte
   JSR display_newline
-  RTS
+  ; Display "  .word "
+  JSR display_word_prefix
+  LDA #' '
+  JSR write_b
+  ; Restore P16 and Y
+  POP16 P16
+  PLA
+  TAY
+  ; Y points to MODE_DIRECTIVE, advance to handler name
+  INY
+  ; Display handler name as text
+.handler_loop:
+  LDA (P16),Y
+  BEQ .handler_done
+  JSR write_b
+  INY
+  JMP .handler_loop
+.handler_done:
+  JMP display_newline  ; Tail call
 
 
 display_data:
@@ -580,8 +733,9 @@ start:
   JSR select_instruction_hash_table
   JSR init_hash_table
   JSR populate_instruction_hash_table
+  JSR populate_directive_hash_table
 
-; Show the instructions hash table
+; Show the hash table
   SET16 msg_hash_table_comment, P16
   JSR display_text
   JSR display_newline
@@ -593,7 +747,7 @@ start:
   JSR display_table
   JSR display_newline
 
-; Show the instructions heap data
+; Show the heap data
   SET16 msg_heap_comment, P16
   JSR display_text
   JSR display_newline
@@ -619,10 +773,10 @@ msg_IHASHTAB:
   .asciiz "IHASHTAB"
 
 msg_hash_table_comment:
-  .asciiz "; Instructions hash table (pointers)"
+  .asciiz "; Instructions and directives hash table (pointers)"
 
 msg_heap_comment:
-  .asciiz "; Instructions heap data"
+  .asciiz "; Instructions and directives heap data"
 
 ; Error handler needed by advance_heap's overflow check
 err_out_of_memory:
