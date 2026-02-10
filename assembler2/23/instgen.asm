@@ -18,7 +18,7 @@
 ;   MODE_REL   = $0A  ; Relative (branches)
 ;   MODE_IND   = $0B  ; Indirect - JMP ($xxxx)
 ;   MODE_DIRECTIVE = $0D  ; Directive handler entry
-;   MODE_END   = $FF  ; Terminator (end of mode list)
+;   MODE_END   = $0F  ; Terminator (end of mode list)
 ;
 ; Requires:
 ;   init_heap, advance_heap, select_instruction_hash_table (common.asm)
