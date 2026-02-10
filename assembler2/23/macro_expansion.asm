@@ -1,7 +1,7 @@
 ; macro_expansion.asm - Macro definition, expansion, and body capture
 ;
 ; Provides: dir_macro, check_macro_recursion, expand_macro,
-;           match_token, capture_macro_line
+;           capture_macro_line
 ;
 ; Requires:
 ;   CURR_CHAR (asm.asm alias; backing storage in file_stack.asm)
@@ -284,27 +284,6 @@ expand_macro:
   JMP err_too_many_arguments
 
 
-; On entry HEX16 points to the token to match
-;          TABP16 points to the string to match against
-; On exit C clear if token matches
-;         X is preserved
-;         A, Y are not preserved
-match_token:
-  LDY #$FF
-.loop:
-  INY
-  LDA (HEX16),Y
-  BEQ .match
-  CMP (TABP16),Y
-  BEQ .loop
-; not match - return with carry set
-  SEC
-  RTS
-.match:
-  LDA (TABP16),Y
-  JMP compare_end_of_token ; Tail call - returns with C = 0 if end of token, i.e. match found
-
-
 ; Capture a line during macro definition
 ; On entry: A contains first character of line
 ; On exit: Line copied to heap (with $0A), or .endmacro processed
@@ -428,10 +407,43 @@ capture_macro_line:
   TYA
   SEC                      ; +1
   ADCA16 TABP16, TABP16 ; Advance TABP16 to point to the start of the directive
-  ; Check for .endmacro first (the usual case)
-  SET16 directive_endmacro, HEX16
-  JSR match_token
-  BCS .not_endmacro        ; Not a match - keep as macro body
+  ; Copy directive name from heap (TABP16) to TOKEN
+  LDY #$00
+.copy_dir:
+  LDA (TABP16),Y
+  JSR compare_end_of_token
+  BCC .copy_dir_done          ; End of token character
+  STA TOKEN,Y
+  INY
+  BNE .copy_dir
+.copy_dir_done:
+  LDA #$00
+  STA TOKEN,Y                 ; Null-terminate
+  ; Look up in IHASHTAB
+  JSR select_instruction_hash_table
+  JSR find_in_hash_instruction
+  BCS .keep_line              ; Not found — not a known directive
+  ; Check for MODE_DIRECTIVE
+  LDA (TABP16),Y
+  CMP #MODE_DIRECTIVE
+  BNE .keep_line
+  ; Extract handler address
+  INY
+  LDA (TABP16),Y
+  STA JUMP_TARGET16
+  INY
+  LDA (TABP16),Y
+  STA JUMP_TARGET16 + 1
+  ; Check for .endmacro
+  CMPI16 JUMP_TARGET16, dir_endmacro
+  BEQ .found_endmacro
+  ; Check for .macro (nested = error)
+  CMPI16 JUMP_TARGET16, dir_macro
+  BEQ .found_nested_macro
+  JMP .keep_line              ; Other directive — keep as macro body
+.found_nested_macro:
+  JMP err_nested_macro_definition
+.found_endmacro:
   ; Found .endmacro. Restore heap to undo the copy
   CP16 MACRO_DEF_PTR16, MEMP16
   ; At end of macro definition. Write $00 terminator to body
@@ -452,13 +464,6 @@ capture_macro_line:
   PLA
   TAX
   JMP skip_rest_of_line    ; Tail call
-.not_endmacro:
-  ; Not .endmacro - check if it's .macro (nested definition)
-  SET16 directive_macro, HEX16
-  JSR match_token
-  BCS .keep_line           ; Not a match, not .macro
-  ; Found nested macro definition - error
-  JMP err_nested_macro_definition
 .keep_line:
   ; Restore X (output file handle)
   PLA
@@ -483,14 +488,21 @@ capture_macro_line:
   ; Check if directive is .endmacro
   JSR read_char            ; Read char after '.'
   JSR read_token           ; Read directive name into TOKEN
-  LDX #$FF
-.p2_compare:
-  INX
-  LDA directive_endmacro,X
+  JSR select_instruction_hash_table
+  JSR find_in_hash_instruction
+  BCS .p2_skip               ; Not found
+  LDA (TABP16),Y
+  CMP #MODE_DIRECTIVE
+  BNE .p2_skip
+  INY
+  LDA (TABP16),Y
+  STA JUMP_TARGET16
+  INY
+  LDA (TABP16),Y
+  STA JUMP_TARGET16 + 1
+  CMPI16 JUMP_TARGET16, dir_endmacro
   BEQ .p2_found_endmacro
-  CMP TOKEN,X
-  BEQ .p2_compare
-  ; .endmacro not found
+  ; Not .endmacro — fall through to .p2_skip
 .p2_skip:
   PLA                      ; Restore X (output file handle)
   TAX
