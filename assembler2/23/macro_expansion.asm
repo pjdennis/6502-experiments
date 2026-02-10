@@ -68,6 +68,7 @@ dir_macro:
   ; MEMP16 points to location at which to store the value (directly after key)
   ; TABP16 points to the macro name on heap
   .ifdef enable_debug
+  ; Supports the 'show_macros' debug option
   CP16 TABP16, MACRO_PTR16
   .endif
 .param_loop:
@@ -311,9 +312,8 @@ find_directive_handler:
 
 
 ; Capture a line during macro definition
-; On entry: A contains first character of line
-; On exit: Line copied to heap (with $0A), or .endmacro processed
-;          Returns to caller (who should JMP .line_loop)
+; On entry: CURR_CHAR contains first character of line
+; On exit: Line copied to heap (with '\n'), or .endmacro processed
 ;
 ; Strategy: Copy whole line to heap, then check if it was .endmacro.
 ; If so, undo the copy and process .endmacro normally.
@@ -453,9 +453,7 @@ capture_macro_line:
   BEQ .found_endmacro
   ; Check for .macro (nested = error)
   CMPI16 JUMP_TARGET16, dir_macro
-  BEQ .found_nested_macro
-  JMP .keep_line              ; Other directive — keep as macro body
-.found_nested_macro:
+  BNE .keep_line              ; Other directive — keep as macro body
   JMP err_nested_macro_definition
 .found_endmacro:
   ; Found .endmacro. Restore heap to undo the copy
@@ -474,10 +472,7 @@ capture_macro_line:
   ; Clear the capturing flag
   LDA #$00
   STA IN_MACRO_DEF
-  ; Restore X (output file handle)
-  PLA
-  TAX
-  JMP skip_rest_of_line    ; Tail call
+  JSR skip_rest_of_line
 .keep_line:
   ; Restore X (output file handle)
   PLA
