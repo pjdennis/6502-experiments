@@ -34,8 +34,22 @@ lookup_mnemonic:
   JSR read_token       ; Current char in CURR_CHAR
   JSR select_instruction_hash_table
   JSR find_in_hash_instruction
-  BCC .found_instruction
-  ; Not in IHASHTAB - try LHASHTAB for macros
+  BCS .try_macro       ; Not in IHASHTAB - try LHASHTAB for macros
+  ; Found in IHASHTAB - check for directive entry
+  ; Calculate INST_PTR = TABP16 + Y (value start)
+  TYA
+  CLC
+  ADCA16 TABP16, INST_PTR16
+  ; Check first value byte for MODE_DIRECTIVE
+  LDY #$00
+  LDA (INST_PTR16),Y
+  CMP #MODE_DIRECTIVE
+  BEQ .try_macro       ; Directive, not an instruction - try LHASHTAB
+  ; Found instruction
+  CLC
+  RTS
+.try_macro:
+  ; Try LHASHTAB for macros
   ; Save LABEL_SCOPE16 before find_macro_in_hash clobbers it
   LDA LABEL_SCOPE16
   PHA
@@ -58,13 +72,6 @@ lookup_mnemonic:
   RTS
 .not_found:
   JMP err_opcode_not_found
-.found_instruction:
-  ; Calculate INST_PTR = TABP16 + Y
-  TYA
-  CLC
-  ADCA16 TABP16, INST_PTR16
-  CLC                   ; Found mnemonic
-  RTS
 
 
 ; Find opcode for addressing mode in mode:opcode list

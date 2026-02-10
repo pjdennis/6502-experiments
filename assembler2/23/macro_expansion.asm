@@ -39,6 +39,10 @@ process_macro:
   JSR select_instruction_hash_table
   JSR find_in_hash_instruction
   BCS .no_instruction_collision
+  ; Found in IHASHTAB - check if it's a directive (directives can be shadowed)
+  LDA (TABP16),Y
+  CMP #MODE_DIRECTIVE
+  BEQ .no_instruction_collision
   JMP err_macro_shadows_instruction
 .no_instruction_collision:
   ; Save LABEL_SCOPE16 before add_macro_to_hash clobbers it
