@@ -106,8 +106,8 @@ find_opcode_for_mode:
 ; Raises error if addressing mode is not valid for this instruction
 emit_instruction:
   ; Check if skipping - if so, return immediately
-  LDA SKIP_DEPTH
-  BNE .skip_emit
+  BIT SKIP_FLAG
+  BMI .skip_emit
   ; Find opcode for this addressing mode
   JSR find_opcode_for_mode
   BCS .invalid_mode
