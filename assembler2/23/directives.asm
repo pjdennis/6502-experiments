@@ -3,7 +3,7 @@
 ; Provides: swap_pc_with_save, process_directive, process_conditional_directive,
 ;           emit_quoted, set_data_mode, data_parameters_loop,
 ;           handle_reserve, process_ifdef, process_endif,
-;           directive string constants (directive_include, etc.)
+;           directive string constants (directive_ifdef, etc.)
 ;
 ; Requires:
 ;   CURR_CHAR (asm.asm alias; backing storage in file_stack.asm)
@@ -190,27 +190,6 @@ process_conditional_directive:
   CLC
   RTS
 
-
-directive_include:
-  .asciiz "include"
-
-directive_zeropage:
-  .asciiz "zeropage"
-
-directive_code:
-  .asciiz "code"
-
-directive_byte:
-  .asciiz "byte"
-
-directive_word:
-  .asciiz "word"
-
-directive_asciiz:
-  .asciiz "asciiz"
-
-directive_reserve:
-  .asciiz "reserve"
 
 directive_ifdef:
   .asciiz "ifdef"
