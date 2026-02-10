@@ -383,11 +383,14 @@ command_parse_range:
 
 .range_dispatch:
   ; A = command char
+  STA CMD_IDX              ; Save command char
   CMP #'y'
-  BEQ .range_yank
+  BEQ .range_action
+  CMP #'d'
+  BEQ .range_action
   JMP .range_unknown
 
-.range_yank:
+.range_action:
   ; Ensure start <= end (swap if needed)
   CMP16 BUF_SRC16, BUF_DST16
   BCC .range_order_ok
@@ -412,7 +415,7 @@ command_parse_range:
   SBC16 BUF_DST16, BUF_SRC16, BUF_LEN16
   INC16 BUF_LEN16
 
-  ; Cap count at 255 for yank_add_lines
+  ; Cap count at 255
   LDA BUF_LEN16 + 1
   BNE .range_cap
   LDA BUF_LEN16
@@ -422,6 +425,12 @@ command_parse_range:
 .range_count_ok:
   STA BUF_TEMP
 
+  ; Dispatch to yank or delete
+  LDA CMD_IDX
+  CMP #'d'
+  BEQ .range_do_delete
+
+  ; --- Range yank ---
   JSR yank_clear
   LDAX16 BUF_SRC16
   JSR yank_add_lines
@@ -444,6 +453,58 @@ command_parse_range:
   SET16 str_yank_full, STR_PTR16
   JMP show_status_message
 
+  ; --- Range delete ---
+.range_do_delete:
+  ; Yank lines first (so user can paste them back)
+  ; Save first line (yank_add_lines clobbers BUF_SRC16)
+  PUSH16 BUF_SRC16
+  JSR yank_clear
+  LDAX16 BUF_SRC16
+  JSR yank_add_lines
+  POP16 BUF_SRC16          ; PLA preserves carry on 6502
+  BCS .range_yank_full
+
+  ; Adjust marks before deletion (mark_adjust_delete clobbers BUF_SRC16/BUF_DST16)
+  LDA YANK_LINES
+  STA BUF_TEMP
+  PUSH16 BUF_SRC16
+  LDAX16 BUF_SRC16
+  JSR mark_adjust_delete
+  POP16 BUF_SRC16
+
+  ; Delete lines (buf_delete_lines clobbers BUF_SRC16)
+  LDA YANK_LINES
+  STA BUF_TEMP
+  PUSH16 BUF_SRC16
+  LDAX16 BUF_SRC16
+  JSR buf_delete_lines
+  POP16 BUF_SRC16
+
+  ; Move cursor to first deleted line position
+  CP16 BUF_SRC16, FILE_LINE16
+
+  ; Clamp cursor if past end of file
+  CMP16 FILE_LINE16, LINE_COUNT16
+  BCC .range_del_ok
+  SEC
+  SBCI16 LINE_COUNT16, $0001, FILE_LINE16
+.range_del_ok:
+  LDA #$FF
+  STA MODIFIED
+  JSR clamp_cursor_col
+
+  ; Show "N lines deleted"
+  LDA YANK_LINES
+  STA TO_DECIMAL_VALUE16
+  LDA #0
+  STA TO_DECIMAL_VALUE16 + 1
+  JSR to_decimal
+  JSR command_show_prompt
+  PRINT_STR TO_DECIMAL_RESULT
+  PRINT_STR str_lines_deleted
+  JSR con_flush
+  RTS
+
 .range_mark_err:
   SET16 str_mark_not_set, STR_PTR16
   JMP show_status_message
@@ -452,8 +513,9 @@ command_parse_range:
   SET16 str_unknown_cmd, STR_PTR16
   JMP show_status_message
 
-str_lines_yanked: .asciiz " lines yanked"
-str_marks_cmd:    .asciiz "arks"
+str_lines_yanked:  .asciiz " lines yanked"
+str_lines_deleted: .asciiz " lines deleted"
+str_marks_cmd:     .asciiz "arks"
 
 ; === String constants ===
 str_unknown_cmd: .asciiz "Unknown command"

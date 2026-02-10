@@ -2834,6 +2834,77 @@ class EditorTestRunner:
             expect_cursor=(0, 0),
         )
 
+        # --- Range delete ---
+
+        self._group("Range delete (:'a,.d):", leading_blank=True)
+
+        # :'a,.d deletes range
+        self.run_test(
+            ":'a,.d deletes range",
+            make_lines(5),
+            b"majj:'a,.d\r:wq\r",  # ma line1, jj->line3, :'a,.d
+            expected_content="Line 4\nLine 5\n",
+        )
+
+        # Range delete between two marks
+        self.run_test(
+            ":'a,'bd deletes between two marks",
+            make_lines(5),
+            b"jmajjjmb:'a,'bd\r:wq\r",  # ma line2, mb line5, range delete
+            expected_content="Line 1\n",
+        )
+
+        # Range delete with reverse order auto-swaps
+        self.run_test(
+            "Range delete reverse order auto-swaps",
+            make_lines(5),
+            b"jjmakk:'a,.d\r:wq\r",  # ma line3, kk->line1, :'a,.d
+            expected_content="Line 4\nLine 5\n",
+        )
+
+        # Range delete of all lines leaves single empty line
+        self.run_test(
+            "Range delete all lines leaves empty",
+            make_lines(3),
+            b"majj:'a,.d\r:wq\r",  # ma line1, jj->line3, :'a,.d deletes all
+            expected_content="\n",
+        )
+
+        # Range delete yanks lines first (verify with p)
+        self.run_test(
+            "Range delete yanks lines for paste",
+            make_lines(5),
+            b"majj:'a,.d\rp:wq\r",  # delete lines 1-3, then paste
+            expected_content="Line 4\nLine 1\nLine 2\nLine 3\nLine 5\n",
+        )
+
+        # Range delete adjusts marks (mark below deleted range shifts up)
+        self.run_test_screen(
+            "Range delete adjusts marks",
+            make_lines(5),
+            b"jjjjmb" +           # mb on line 5
+            b"ggma" +              # ma on line 1
+            b"jj:'a,.d\r" +       # jj to line 3, delete lines 1-3
+            b"'b:q!\r",           # 'b should be at line 2 (was 5, shifted by 3)
+            expect_cursor=(1, 0),  # Mark was line 5 (idx 4), shifted to idx 1
+        )
+
+        # Range delete with unset mark shows error
+        self.run_test_screen(
+            "Range delete unset mark shows error",
+            make_lines(3),
+            b":'z,.d\r :q!\r",  # space dismisses error
+            expect_ansi_contains="Mark not set",
+        )
+
+        # Shows "N lines deleted" message
+        self.run_test_screen(
+            "Range delete shows lines deleted message",
+            make_lines(5),
+            b"majj:'a,.d\r:q!\r",
+            expect_ansi_contains="3 lines deleted",
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed
