@@ -1668,6 +1668,12 @@ data_parameters_loop:
   BNE .data_value
   JSR read_char
   JSR emit_quoted
+  LDA DATA_MODE
+  CMP #$03
+  BNE .data_check_more
+  LDA #$00
+  JSR emit
+.data_check_more:
   JSR skip_optional_comma
   JMP data_parameters_loop
 .data_value:
@@ -1700,12 +1706,6 @@ data_parameters_loop:
   JSR skip_optional_comma
   JMP data_parameters_loop
 .data_done:
-  LDA DATA_MODE
-  CMP #$03            ; TODO use a constant for the mode throughout
-  BNE .no_terminator
-  LDA #$00
-  JSR emit            ; emit null terminator
-.no_terminator:
   LDA #$FF
   STA DATA_MODE       ; Reset: allow spaced << >> outside .data
   RTS
