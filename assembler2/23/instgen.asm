@@ -244,6 +244,30 @@ DIRTAB:
   .byte 0
 
 
+; Copy name from (P2_16) to TOKEN buffer and add to hash table
+; On entry: A contains first byte of name (already checked non-zero by caller)
+;           P2_16 points to start of name in table
+; On exit: P2_16 advanced past name + null terminator
+;          MEMP16 points to where value data should be stored
+;          TOKEN contains the name (for callers that need it)
+;          A, X, Y are not preserved
+hash_add_from_table:
+  LDY #0
+.copy_loop:
+  STA TOKEN,Y
+  CMP #$00              ; STA doesn't set flags; explicitly test for null
+  BEQ .copy_end
+  INY
+  LDA (P2_16),Y
+  JMP .copy_loop
+.copy_end:
+  TYA
+  SEC                         ; +1 for null
+  ADCA16 P2_16, P2_16
+  JSR hash_add
+  RTS
+
+
 ; Populate instruction hash table from MNTAB
 ;
 ; MNTAB format (each entry):
@@ -258,11 +282,6 @@ DIRTAB:
 ;   - hash_add stores next_ptr and mnemonic
 ;   - This routine appends the mode:opcode pairs and MODE_END terminator
 ;
-; Register usage:
-;   P2_16 = pointer to current entry in MNTAB (source)
-;   MEMP16 = heap pointer (destination), managed by hash_add/advance_heap
-;   Y = offset into current MNTAB entry
-;
 populate_instruction_hash_table:
   SET16 MNTAB, P2_16 ; P2_16 points to start of instruction table
 
@@ -272,29 +291,8 @@ populate_instruction_hash_table:
   LDA (P2_16),Y
   BEQ .done
 
-  ; --- Phase 1: Copy mnemonic string to TOKEN buffer ---
-  ; hash_add expects the key (mnemonic) in TOKEN
-.token_loop:
-  STA TOKEN,Y                 ; Copy byte to TOKEN
-  BEQ .token_loop_done        ; Exit when null terminator copied
-  INY
-  LDA (P2_16),Y
-  JMP .token_loop
-.token_loop_done:
-  ; Y now points at null terminator in source
-  ; Mode data starts at Y+1
-
-  ; Advance P2_16 to point to the mode data - P2_16 + Y + 1 -> P2_16
-  TYA
-  SEC                         ; Add 1
-  ADCA16 P2_16, P2_16
-
-  ; --- Phase 2: Add mnemonic to hash table ---
-  ; hash_add:
-  ;   - Calculates hash from TOKEN
-  ;   - Allocates heap entry: [next_ptr $0000] [mnemonic $00]
-  ;   - Returns with MEMP16 pointing to where value data should go
-  JSR hash_add
+  ; --- Phases 1+2: Copy mnemonic to TOKEN and add to hash table ---
+  JSR hash_add_from_table
 
   ; --- Phase 3: Copy mode:opcode pairs to heap ---
   ; Problem: both (P2_16),Y and (MEMP16),Y need Y for indirect indexed mode
@@ -356,21 +354,8 @@ populate_directive_hash_table:
   LDA (P2_16),Y
   BEQ .done
 
-  ; --- Phase 1: Copy directive name to TOKEN buffer ---
-.token_loop:
-  STA TOKEN,Y
-  BEQ .token_loop_done
-  INY
-  LDA (P2_16),Y
-  JMP .token_loop
-.token_loop_done:
-  ; Advance P2_16 past directive name (including null)
-  TYA
-  SEC
-  ADCA16 P2_16, P2_16
-
-  ; --- Phase 2: Add directive name to hash table ---
-  JSR hash_add
+  ; --- Phases 1+2: Copy name to TOKEN and add to hash table ---
+  JSR hash_add_from_table
 
   ; --- Phase 3: Construct MODE_DIRECTIVE + "dir_" + name on heap ---
   ; MEMP16 points to value start, Y = 0 from hash_add
