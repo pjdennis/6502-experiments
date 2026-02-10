@@ -1,7 +1,7 @@
 ; macro_expansion.asm - Macro definition, expansion, and body capture
 ;
 ; Provides: dir_macro, check_macro_recursion, expand_macro,
-;           capture_macro_line
+;           capture_macro_line, find_directive_handler
 ;
 ; Requires:
 ;   CURR_CHAR (asm.asm alias; backing storage in file_stack.asm)
@@ -284,6 +284,32 @@ expand_macro:
   JMP err_too_many_arguments
 
 
+; Look up TOKEN in IHASHTAB and extract directive handler address
+; On entry: TOKEN contains the directive name
+; On exit: C=0 if found, JUMP_TARGET16 contains handler address
+;          C=1 if not found (not in IHASHTAB or not a directive)
+;          A, Y are not preserved, X is preserved
+find_directive_handler:
+  JSR select_instruction_hash_table
+  JSR find_in_hash_instruction
+  BCS .not_found
+  LDA (TABP16),Y
+  CMP #MODE_DIRECTIVE
+  BNE .not_found_set_carry
+  INY
+  LDA (TABP16),Y
+  STA JUMP_TARGET16
+  INY
+  LDA (TABP16),Y
+  STA JUMP_TARGET16 + 1
+  CLC
+  RTS
+.not_found_set_carry:
+  SEC
+.not_found:
+  RTS
+
+
 ; Capture a line during macro definition
 ; On entry: A contains first character of line
 ; On exit: Line copied to heap (with $0A), or .endmacro processed
@@ -420,20 +446,8 @@ capture_macro_line:
   LDA #$00
   STA TOKEN,Y                 ; Null-terminate
   ; Look up in IHASHTAB
-  JSR select_instruction_hash_table
-  JSR find_in_hash_instruction
+  JSR find_directive_handler
   BCS .keep_line              ; Not found — not a known directive
-  ; Check for MODE_DIRECTIVE
-  LDA (TABP16),Y
-  CMP #MODE_DIRECTIVE
-  BNE .keep_line
-  ; Extract handler address
-  INY
-  LDA (TABP16),Y
-  STA JUMP_TARGET16
-  INY
-  LDA (TABP16),Y
-  STA JUMP_TARGET16 + 1
   ; Check for .endmacro
   CMPI16 JUMP_TARGET16, dir_endmacro
   BEQ .found_endmacro
@@ -488,18 +502,8 @@ capture_macro_line:
   ; Check if directive is .endmacro
   JSR read_char            ; Read char after '.'
   JSR read_token           ; Read directive name into TOKEN
-  JSR select_instruction_hash_table
-  JSR find_in_hash_instruction
+  JSR find_directive_handler
   BCS .p2_skip               ; Not found
-  LDA (TABP16),Y
-  CMP #MODE_DIRECTIVE
-  BNE .p2_skip
-  INY
-  LDA (TABP16),Y
-  STA JUMP_TARGET16
-  INY
-  LDA (TABP16),Y
-  STA JUMP_TARGET16 + 1
   CMPI16 JUMP_TARGET16, dir_endmacro
   BEQ .p2_found_endmacro
   ; Not .endmacro — fall through to .p2_skip
