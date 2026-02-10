@@ -65,45 +65,45 @@ process_directive:
   ; Check for 'include'
   SET16 directive_include, TABP16
   JSR compare_token
-  BEQ .include
+  BEQ dir_include
   ; Check for 'zeropage'
   SET16 directive_zeropage, TABP16
   JSR compare_token
-  BEQ .zeropage
+  BEQ dir_zeropage
   ; Check for 'code'
   SET16 directive_code, TABP16
   JSR compare_token
-  BEQ .code
+  BEQ dir_code
   ; Check for 'byte'
   SET16 directive_byte, TABP16
   JSR compare_token
-  BEQ .byte
+  BEQ dir_byte
   ; Check for 'word'
   SET16 directive_word, TABP16
   JSR compare_token
-  BEQ .word
+  BEQ dir_word
   ; Check for 'asciiz'
   SET16 directive_asciiz, TABP16
   JSR compare_token
-  BEQ .asciiz
+  BEQ dir_asciiz
   ; Check for 'reserve'
   SET16 directive_reserve, TABP16
   JSR compare_token
-  BEQ .reserve
+  BEQ dir_reserve
   JSR process_conditional_directive ; Returns with C=0 if processed
   BCC .directive_done
   ; Check for 'macro'
   SET16 directive_macro, TABP16
   JSR compare_token
-  BEQ .macro
+  BEQ dir_macro
   ; Check for 'endmacro'
   SET16 directive_endmacro, TABP16
   JSR compare_token
-  BEQ .endmacro
+  BEQ dir_endmacro
   JMP err_unknown_directive
 .directive_done:
   RTS
-.include:
+dir_include:
   JSR check_for_end_of_line
   BCC .get_name
   JMP err_filename_expected
@@ -111,7 +111,7 @@ process_directive:
   JSR read_filename
   JSR skip_rest_of_line
   JMP push_file_stack    ; Tail call
-.zeropage:
+dir_zeropage:
   BIT IN_ZEROPAGE
   BMI .in_zeropage
   LDA #$FF
@@ -119,7 +119,7 @@ process_directive:
   JSR swap_pc_with_save
 .in_zeropage:
   JMP skip_rest_of_line  ; Tail call
-.code:
+dir_code:
   BIT IN_ZEROPAGE
   BPL .in_code
   LDA #$00
@@ -127,31 +127,41 @@ process_directive:
   JSR swap_pc_with_save
 .in_code:
   JMP skip_rest_of_line  ; Tail call
-.byte:
+dir_byte:
   LDA #DATA_MODE_BYTE
   BIT IN_ZEROPAGE
-  BMI .zp_alloc          ; In zeropage? check for operand-less form
+  BMI dir_zp_alloc       ; In zeropage? check for operand-less form
   JMP set_data_mode
-.word:
+dir_word:
   LDA #DATA_MODE_WORD
   BIT IN_ZEROPAGE
-  BMI .zp_alloc          ; In zeropage? check for operand-less form
+  BMI dir_zp_alloc       ; In zeropage? check for operand-less form
   JMP set_data_mode
-.asciiz:
+dir_asciiz:
   BIT IN_ZEROPAGE
   BMI .zp_asciiz_err
   LDA #DATA_MODE_ASCIIZ
   JMP set_data_mode
 .zp_asciiz_err:
   JMP err_asciiz_in_zeropage
-.reserve:
+dir_reserve:
   JMP handle_reserve
-.macro:
+dir_macro:
   JMP process_macro
-.endmacro:
+dir_endmacro:
   JMP err_endmacro_without_macro
+; Directive handler stubs for conditional directives
+; (used by hash-based dispatch in later commits)
+dir_ifdef:
+  JMP process_ifdef
+dir_ifndef:
+  JMP process_ifndef
+dir_else:
+  JMP process_else
+dir_endif:
+  JMP process_endif
 
-.zp_alloc:
+dir_zp_alloc:
   ; A = DATA_MODE (1=byte, 2=word)
   STA DATA_MODE
   JSR check_for_end_of_line

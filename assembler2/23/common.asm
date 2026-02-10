@@ -32,6 +32,7 @@ MODE_INDX  =  8 + OPERAND_BYTES_1 ; Indirect, X - ($zp,X)
 MODE_INDY  =  9 + OPERAND_BYTES_1 ; Indirect, Y - ($zp),Y
 MODE_REL   = 10 + OPERAND_BYTES_1 ; Relative (branches)
 MODE_IND   = 11 + OPERAND_BYTES_2 ; Indirect - JMP ($xxxx)
+MODE_DIRECTIVE = 13               ; Directive handler (stored in IHASHTAB)
 MODE_END   = 15                   ; Terminates the list of modes
 
 ; Label type constants (for LABEL_TYPE variable in hash table operations)
