@@ -3634,20 +3634,18 @@ EXPECT_HEX: a5 00 a5 02
 
 ---
 NAME: zeropage_mixed_no_operand
-DESCRIPTION: Mix of operand-less and with-operand .byte/.word in .zeropage
+DESCRIPTION: Operand on .byte in .zeropage triggers error
 INPUT:
  1:   .zeropage
  2: a .byte
  3: b .word
  4: c .byte 0
- 5: d .word 0
- 6:   .code
- 7: * = $0200
- 8:   LDA a
- 9:   LDA b
-10:   LDA c
-11:   LDA d
-EXPECT_HEX: a5 00 a5 01 a5 03 a5 04
+ 5:   .code
+ 6: * = $0200
+ 7:   NOP
+EXPECT_ERROR: 37
+EXPECT_LINE: 4
+EXPECT_MSG: Operand not allowed on .byte/.word in .zeropage
 
 ---
 NAME: zeropage_byte_no_operand_last
@@ -3767,3 +3765,118 @@ INPUT:
 EXPECT_ERROR: 35
 EXPECT_LINE: 3
 EXPECT_MSG: Zero page overflow
+
+# --- Multiple directives on one line ---
+
+---
+NAME: multi_dir_asciiz_word
+DESCRIPTION: .asciiz followed by .word on same line
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz "Hello" .word $1321
+EXPECT_HEX: 48 65 6c 6c 6f 00 21 13
+
+---
+NAME: multi_dir_byte_word
+DESCRIPTION: .byte followed by .word on same line
+INPUT:
+ 1: * = $0200
+ 2:   .byte $42 .word $1234
+EXPECT_HEX: 42 34 12
+
+---
+NAME: multi_dir_word_byte
+DESCRIPTION: .word followed by .byte on same line
+INPUT:
+ 1: * = $0200
+ 2:   .word $1234 .byte $56
+EXPECT_HEX: 34 12 56
+
+---
+NAME: multi_dir_three_bytes
+DESCRIPTION: Three .byte directives on one line
+INPUT:
+ 1: * = $0200
+ 2:   .byte $01 .byte $02 .byte $03
+EXPECT_HEX: 01 02 03
+
+---
+NAME: multi_dir_comma_then_directive
+DESCRIPTION: Comma-separated values followed by another directive
+INPUT:
+ 1: * = $0200
+ 2:   .byte $01, $02 .word $0304
+EXPECT_HEX: 01 02 04 03
+
+---
+NAME: multi_dir_asciiz_asciiz
+DESCRIPTION: Two .asciiz directives on one line
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz "A" .asciiz "B"
+EXPECT_HEX: 41 00 42 00
+
+---
+NAME: multi_dir_byte_asciiz
+DESCRIPTION: .byte followed by .asciiz on same line
+INPUT:
+ 1: * = $0200
+ 2:   .byte $42 .asciiz "Hi"
+EXPECT_HEX: 42 48 69 00
+
+---
+NAME: multi_dir_with_label
+DESCRIPTION: Label prefix with multiple directives on same line
+INPUT:
+ 1: * = $0200
+ 2: data: .byte $01 .word $0203
+EXPECT_HEX: 01 03 02
+
+---
+NAME: multi_dir_forward_ref
+DESCRIPTION: Forward reference in second directive on same line
+INPUT:
+ 1: * = $0200
+ 2:   .byte $01 .word target
+ 3: target:
+ 4:   NOP
+EXPECT_HEX: 01 03 02 ea
+
+---
+NAME: zeropage_multi_byte_word
+DESCRIPTION: Multiple zeropage allocations on one line (.byte .word)
+INPUT:
+ 1:   .zeropage
+ 2: a: .byte .word
+ 3: b: .byte
+ 4:   .code
+ 5: * = $0200
+ 6:   LDA a
+ 7:   LDA b
+EXPECT_HEX: a5 00 a5 03
+
+---
+NAME: zeropage_multi_word_byte
+DESCRIPTION: Multiple zeropage allocations on one line (.word .byte)
+INPUT:
+ 1:   .zeropage
+ 2: a: .word .byte
+ 3: b: .byte
+ 4:   .code
+ 5: * = $0200
+ 6:   LDA a
+ 7:   LDA b
+EXPECT_HEX: a5 00 a5 03
+
+---
+NAME: zeropage_multi_three
+DESCRIPTION: Three zeropage allocations on one line
+INPUT:
+ 1:   .zeropage
+ 2: a: .byte .byte .word
+ 3: b: .byte
+ 4:   .code
+ 5: * = $0200
+ 6:   LDA a
+ 7:   LDA b
+EXPECT_HEX: a5 00 a5 04

@@ -170,6 +170,11 @@ err_file_not_found:
   BRK
   .data $24 "File not found" $00
 
+; --- Zeropage directive errors ($25) ---
+err_operand_in_zeropage:
+  BRK
+  .data $25 "Operand not allowed on .byte/.word in .zeropage" $00
+
 ; --- Command line/usage errors ($F0-$F1) ---
 err_usage:
   BRK

@@ -1554,8 +1554,12 @@ process_directive:
   ; A = mode (1=byte, 2=word)
   STA DATA_MODE
   JSR check_for_end_of_line
-  BCC .zp_has_operand       ; Not EOL — has operand, use normal path
-  ; Operand-less: emit dummy bytes (1 for .byte, 2 for .word)
+  BCS .zp_allocate          ; EOL — operand-less form
+  CMP #'.'
+  BEQ .zp_allocate          ; Another directive follows — operand-less form
+  JMP err_operand_in_zeropage
+.zp_allocate:
+  ; Emit dummy bytes (1 for .byte, 2 for .word)
   LDA #$00
   JSR emit                  ; Advance ZP PC by 1
   LDA DATA_MODE
@@ -1564,11 +1568,7 @@ process_directive:
   LDA #$00
   JSR emit                  ; Advance ZP PC by 2nd byte for .word
 .zp_done:
-  LDA #$FF
-  STA DATA_MODE             ; Reset DATA_MODE (same as set_data_mode exit)
   RTS
-.zp_has_operand:
-  JMP data_parameters_loop  ; Continue with normal value parsing
 
 
 handle_include:
@@ -1674,7 +1674,15 @@ data_parameters_loop:
   LDA #$00
   JSR emit
 .data_check_more:
-  JSR skip_optional_comma
+  JSR skip_spaces
+  CMP #','
+  BNE .data_not_comma
+  JSR read_char            ; Skip comma
+  JSR skip_spaces
+  JMP data_parameters_loop
+.data_not_comma:
+  CMP #'.'
+  BEQ .data_done           ; Another directive follows — return to caller
   JMP data_parameters_loop
 .data_value:
   JSR parse_value        ; C=1 for 2-byte, C=0 for 1-byte
@@ -1685,8 +1693,7 @@ data_parameters_loop:
 .data_emit_one_byte:
   LDA OPERAND16
   JSR emit
-  JSR skip_optional_comma
-  JMP data_parameters_loop
+  JMP .data_check_more
 .forced_width:
   CMP #$02
   BEQ .data_emit_two_bytes  ; Mode 2 (.word): force 2 bytes
@@ -1703,8 +1710,7 @@ data_parameters_loop:
   JSR emit
   LDA OPERAND16+$01      ; Emit high byte
   JSR emit
-  JSR skip_optional_comma
-  JMP data_parameters_loop
+  JMP .data_check_more
 .data_done:
   LDA #$FF
   STA DATA_MODE       ; Reset: allow spaced << >> outside .data
@@ -2342,8 +2348,12 @@ assemble_code:
   CMP #'.'
   BNE .opcode
 ; Directive
+.directive:
   JSR read_char
   JSR process_directive
+  LDA CURR_CHAR
+  CMP #'.'
+  BEQ .directive            ; Another directive on same line
   JMP .line_loop
 .opcode:
   ; Read mnemonic and look up in instruction table
