@@ -2905,6 +2905,74 @@ class EditorTestRunner:
             expect_ansi_contains="3 lines deleted",
         )
 
+        # --- Line numbers in range commands ---
+
+        self._group("Line numbers in range commands:", leading_blank=True)
+
+        # :1,'ay with mark a on line 3 yanks lines 1-3
+        self.run_test(
+            ":1,'ay yanks with line number start",
+            make_lines(5),
+            b"jjma:1,'ay\rGp:wq\r",  # ma on line3, :1,'ay, G, p
+            expected_content="Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 1\nLine 2\nLine 3\n",
+        )
+
+        # :1,3d deletes first 3 lines
+        self.run_test(
+            ":1,3d deletes lines 1-3",
+            make_lines(5),
+            b":1,3d\r:wq\r",
+            expected_content="Line 4\nLine 5\n",
+        )
+
+        # :'a,3y with mark a on line 1 yanks lines 1-3
+        self.run_test(
+            ":'a,3y yanks mark to line number",
+            make_lines(5),
+            b"ma:\'a,3y\rGp:wq\r",  # ma on line1, :'a,3y, G, p
+            expected_content="Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 1\nLine 2\nLine 3\n",
+        )
+
+        # :1,.y from line 3 yanks lines 1-3
+        self.run_test(
+            ":1,.y yanks line number to current",
+            make_lines(5),
+            b"jj:1,.y\rGp:wq\r",  # jj to line3, :1,.y, G, p
+            expected_content="Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 1\nLine 2\nLine 3\n",
+        )
+
+        # :.,3y from line 1 yanks lines 1-3
+        self.run_test(
+            ":.,3y yanks current to line number",
+            make_lines(5),
+            b":.,3y\rGp:wq\r",  # on line1, :.,3y, G, p
+            expected_content="Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 1\nLine 2\nLine 3\n",
+        )
+
+        # :5 still works as goto line (regression)
+        self.run_test_screen(
+            ":5 goes to line 5",
+            make_lines(10),
+            b":5\r:q!\r",
+            expect_cursor=(4, 0),
+        )
+
+        # :999 goes to last line (regression)
+        self.run_test_screen(
+            ":999 clamps to last line",
+            make_lines(5),
+            b":999\r:q!\r",
+            expect_cursor=(4, 0),
+        )
+
+        # Line numbers are 1-based
+        self.run_test(
+            ":2,4d deletes lines 2-4 (1-based)",
+            make_lines(5),
+            b":2,4d\r:wq\r",
+            expected_content="Line 1\nLine 5\n",
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed

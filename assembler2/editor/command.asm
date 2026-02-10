@@ -119,21 +119,20 @@ command_parse:
   CMP #'q'
   BEQ .check_q
 
-  ; Digit - go to line
-  CMP #'0'
-  BCC .not_digit
-  CMP #':'          ; '9'+1 = ':'
-  BCS .not_digit
-  JMP .goto_line
-.not_digit:
-
   ; :marks - display marks
   CMP #'m'
   BEQ .check_marks
 
-  ; :'a range commands
+  ; Range/goto: ', ., or digit
   CMP #'\''
-  BNE .unknown
+  BEQ .try_range
+  CMP #'.'
+  BEQ .try_range
+  CMP #'0'
+  BCC .unknown
+  CMP #':'              ; '9'+1
+  BCS .unknown
+.try_range:
   JMP command_parse_range
 
 .unknown:
@@ -202,67 +201,91 @@ command_parse:
 .marks_unknown:
   JMP .unknown
 
-; Go to line number
-.goto_line:
-  ; Parse decimal number from CMD_BUF
-  SET16 $0000, BUF_LEN16   ; Accumulator for line number
-  LDX #0
-
-.parse_digit:
+; Parse decimal number from CMD_BUF starting at offset X
+; Returns: BUF_LEN16 = parsed number, X = updated offset past digits
+;          carry clear = valid number, carry set = no digits found
+; Clobbers: A, BUF_LEN16, BUF_SRC16
+parse_decimal:
+  SET16 $0000, BUF_LEN16
+  STX CMD_IDX              ; Save start offset
+.loop:
   LDA CMD_BUF,X
-  BEQ .goto_done
   SEC
   SBC #'0'
-  BMI .bad_digit
+  BMI .done
   CMP #10
-  BCS .bad_digit
-  JMP .valid_digit
-.bad_digit:
-  JMP .unknown
-.valid_digit:
+  BCS .done
 
-  ; Multiply accumulator by 10: BUF_LEN16 = BUF_LEN16 * 10
-  ; = BUF_LEN16 * 8 + BUF_LEN16 * 2
-  PHA              ; save digit
-  ; Original * 2
+  ; Multiply BUF_LEN16 by 10 and add digit
+  PHA
   ASL16 BUF_LEN16
-  ; Save Original * 2
   CP16 BUF_LEN16, BUF_SRC16
-  ; Original * 4
   ASL16 BUF_LEN16
-  ; Original * 8
   ASL16 BUF_LEN16
-  ; + original * 2
   CLC
   ADC16 BUF_LEN16, BUF_SRC16, BUF_LEN16
-
-  ; Add digit
   PLA
   CLC
   ADCA16 BUF_LEN16, BUF_LEN16
 
   INX
-  JMP .parse_digit
+  JMP .loop
+.done:
+  CPX CMD_IDX
+  BEQ .no_digits
+  CLC
+  RTS
+.no_digits:
+  SEC
+  RTS
 
-.goto_done:
-  ; BUF_LEN16 = 1-based line number, convert to 0-based
+; Parse one range position starting at CMD_BUF[X]
+; Handles: 'x (mark), . (current line), decimal number (1-based)
+; Returns: BUF_LEN16 = 0-based line number, X = updated offset
+;          carry clear = success, carry set = error
+; Clobbers: A
+parse_range_pos:
+  LDA CMD_BUF,X
+  CMP #'\''
+  BEQ .mark
+  CMP #'.'
+  BEQ .dot
+  ; Try decimal number
+  JSR parse_decimal        ; BUF_LEN16 = number, X = updated offset
+  BCS .error
+  ; Convert 1-based to 0-based (0 stays at 0 = first line)
   TST16 BUF_LEN16
-  BEQ .goto_ret      ; :0 does nothing
-
+  BEQ .num_ok
   SEC
-  SBCI16 BUF_LEN16, $0001, FILE_LINE16
-
-  ; Clamp to last line
-  CMP16 FILE_LINE16, LINE_COUNT16
-  BCC .line_ok
+  SBCI16 BUF_LEN16, $0001, BUF_LEN16
+  ; Clamp to LINE_COUNT16-1
+  CMP16 BUF_LEN16, LINE_COUNT16
+  BCC .num_ok
   SEC
-  SBCI16 LINE_COUNT16, $0001, FILE_LINE16
-.line_ok:
-  LDA #0
-  STA CURSOR_COL
-  JSR ensure_cursor_visible
-  JSR clamp_cursor_col
-.goto_ret:
+  SBCI16 LINE_COUNT16, $0001, BUF_LEN16
+.num_ok:
+  CLC
+  RTS
+.mark:
+  INX                     ; Skip quote
+  LDA CMD_BUF,X
+  INX                     ; Skip mark letter
+  ; Save X (CMD_BUF offset), mark_get returns result in A/X
+  STX CMD_IDX
+  JSR mark_get            ; A = low, X = high, carry set if invalid
+  BCS .error
+  STA BUF_LEN16
+  STX BUF_LEN16 + 1
+  LDX CMD_IDX
+  CLC
+  RTS
+.dot:
+  INX                     ; Skip dot
+  CP16 FILE_LINE16, BUF_LEN16
+  CLC
+  RTS
+.error:
+  SEC
   RTS
 
 ; Write (save) the file
@@ -336,49 +359,46 @@ cmd_str_match:
   SEC
   RTS
 
-; Parse range command: :'a,.y or :'a,'by etc.
-; CMD_BUF contains the command starting with '
+; Parse range or goto command
+; Handles: :'a,.y  :'a,'bd  :1,3d  :1,.y  :.,'ay  :NNN (goto)
 command_parse_range:
-  ; Parse first mark: CMD_BUF[1] should be a-z
-  LDA CMD_BUF + 1
-  JSR mark_get
+  LDX #0
+  JSR parse_range_pos     ; Parse first position → BUF_LEN16
   BCC .range_first_ok
   JMP .range_mark_err
 .range_first_ok:
-  STAX16 BUF_SRC16         ; BUF_SRC16 = first line (start)
+  CP16 BUF_LEN16, BUF_SRC16
 
-  ; Expect comma at CMD_BUF[2]
-  LDA CMD_BUF + 2
+  ; Check for comma (range) or end (goto)
+  LDA CMD_BUF,X
   CMP #','
   BEQ .range_has_comma
-  JMP .range_unknown
+
+  ; No comma: maybe :NNN goto
+  CMP #0
+  BEQ .range_goto
+  JMP .range_unknown      ; Extra chars = unknown command
+
+.range_goto:
+  ; :NNN goto (BUF_SRC16 = 0-based line)
+  CP16 BUF_SRC16, FILE_LINE16
+  LDA #0
+  STA CURSOR_COL
+  JSR ensure_cursor_visible
+  JMP clamp_cursor_col
+
 .range_has_comma:
-
-  ; Parse second position: CMD_BUF[3]
-  LDA CMD_BUF + 3
-  CMP #'.'
-  BEQ .range_dot
-  CMP #'\''
-  BEQ .range_second_mark
-  JMP .range_unknown
-
-.range_dot:
-  ; Current line
-  CP16 FILE_LINE16, BUF_DST16
-  ; Command char at CMD_BUF[4]
-  LDA CMD_BUF + 4
-  JMP .range_dispatch
-
-.range_second_mark:
-  ; CMD_BUF[4] = mark name
-  LDA CMD_BUF + 4
-  JSR mark_get
+  INX                     ; Skip comma
+  PUSH16 BUF_SRC16        ; Save first position (parse_decimal clobbers BUF_SRC16)
+  JSR parse_range_pos     ; Parse second position → BUF_LEN16
+  POP16 BUF_SRC16         ; PLA preserves carry on 6502
   BCC .range_second_ok
   JMP .range_mark_err
 .range_second_ok:
-  STAX16 BUF_DST16
-  ; Command char at CMD_BUF[5]
-  LDA CMD_BUF + 5
+  CP16 BUF_LEN16, BUF_DST16
+
+  ; Get command char
+  LDA CMD_BUF,X
   JMP .range_dispatch
 
 .range_dispatch:
