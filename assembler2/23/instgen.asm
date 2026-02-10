@@ -223,48 +223,23 @@ MNTAB:
   .byte 0
 
 
-; Directive table with handler label names
-; Format: "directive" $00 MODE_DIRECTIVE "handler_label" $00
+; Directive table — just directive names
+; Handler label is computed as "dir_" + name
+; Format: "directive" $00 ... $00 (end of table)
 DIRTAB:
   .asciiz "include"
-  .byte MODE_DIRECTIVE
-  .asciiz "dir_include"
   .asciiz "zeropage"
-  .byte MODE_DIRECTIVE
-  .asciiz "dir_zeropage"
   .asciiz "code"
-  .byte MODE_DIRECTIVE
-  .asciiz "dir_code"
   .asciiz "byte"
-  .byte MODE_DIRECTIVE
-  .asciiz "dir_byte"
   .asciiz "word"
-  .byte MODE_DIRECTIVE
-  .asciiz "dir_word"
   .asciiz "asciiz"
-  .byte MODE_DIRECTIVE
-  .asciiz "dir_asciiz"
   .asciiz "reserve"
-  .byte MODE_DIRECTIVE
-  .asciiz "dir_reserve"
   .asciiz "ifdef"
-  .byte MODE_DIRECTIVE
-  .asciiz "dir_ifdef"
   .asciiz "ifndef"
-  .byte MODE_DIRECTIVE
-  .asciiz "dir_ifndef"
   .asciiz "else"
-  .byte MODE_DIRECTIVE
-  .asciiz "dir_else"
   .asciiz "endif"
-  .byte MODE_DIRECTIVE
-  .asciiz "dir_endif"
   .asciiz "macro"
-  .byte MODE_DIRECTIVE
-  .asciiz "dir_macro"
   .asciiz "endmacro"
-  .byte MODE_DIRECTIVE
-  .asciiz "dir_endmacro"
   ; End of table
   .byte 0
 
@@ -358,18 +333,19 @@ populate_instruction_hash_table:
 ; Populate directive entries in instruction hash table from DIRTAB
 ;
 ; DIRTAB format (each entry):
-;   "directive" $00 MODE_DIRECTIVE "handler_label" $00
+;   "directive" $00
 ;   - Null-terminated directive name
-;   - MODE_DIRECTIVE byte followed by null-terminated handler label name
 ;   - $00 as first byte marks end of entire table
 ;
 ; Hash table entry format (on heap after hash_add):
-;   [next_ptr_lo] [next_ptr_hi] [directive $00] MODE_DIRECTIVE "handler_label" $00
+;   [next_ptr_lo] [next_ptr_hi] [directive $00] MODE_DIRECTIVE "dir_<name>" $00
+;   - hash_add stores next_ptr and directive name
+;   - This routine appends MODE_DIRECTIVE and constructs handler label "dir_" + name
 ;
 ; Register usage:
 ;   P2_16 = pointer to current entry in DIRTAB (source)
 ;   MEMP16 = heap pointer (destination), managed by hash_add/advance_heap
-;   Y = offset into current entry
+;   X, Y = offsets during copy
 ;
 populate_directive_hash_table:
   SET16 DIRTAB, P2_16
@@ -396,23 +372,24 @@ populate_directive_hash_table:
   ; --- Phase 2: Add directive name to hash table ---
   JSR hash_add
 
-  ; --- Phase 3: Copy MODE_DIRECTIVE + handler label name to heap ---
-  ; P2_16 points to MODE_DIRECTIVE byte, MEMP16 points to value start
-  ; Both use Y=0 as starting offset
-  LDY #0
-.copy_value:
-  LDA (P2_16),Y
+  ; --- Phase 3: Construct MODE_DIRECTIVE + "dir_" + name on heap ---
+  ; MEMP16 points to value start, Y = 0 from hash_add
+  APPEND_HEAPI MODE_DIRECTIVE
+  APPEND_HEAPI 'd'
+  APPEND_HEAPI 'i'
+  APPEND_HEAPI 'r'
+  APPEND_HEAPI '_'
+  ; Copy directive name from TOKEN (still valid after hash_add)
+  LDX #$00
+.copy_name:
+  LDA TOKEN,X
   STA (MEMP16),Y
   BEQ .copy_done
+  INX
   INY
-  JMP .copy_value
+  JMP .copy_name
 .copy_done:
   INY                    ; Count includes null terminator
-
-  ; Advance P2_16 past copied value data
-  TYA
-  CLC
-  ADCA16 P2_16, P2_16
 
   ; Advance the heap
   JSR advance_heap
