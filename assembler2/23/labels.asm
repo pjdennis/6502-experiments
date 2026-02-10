@@ -5,7 +5,7 @@
 ;
 ; Requires:
 ;   CURR_CHAR (asm.asm alias; backing storage in file_stack.asm)
-;   TOKEN, PASS, OPERAND16 (asm.asm)
+;   TOKEN, PASS, OPERAND16, SKIP_FLAG (asm.asm)
 ;   LABEL_SCOPE16 (hash_table.asm)
 ;   LABEL_TYPE, LABEL_TYPE_GLOBAL, LABEL_TYPE_LOCAL, LABEL_TYPE_MACRO_LOCAL (common.asm)
 ;   SCOPE_DEPTH (label_scope.asm)

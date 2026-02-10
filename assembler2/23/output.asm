@@ -3,8 +3,7 @@
 ; Provides: emit, update_pc, advance_pc_to_hex16
 ;
 ; Requires:
-;   HEX16, PC16, PASS, IN_ZEROPAGE, STARTED (asm.asm)
-;   SKIP_FLAG (directives.asm)
+;   HEX16, PC16, PASS, IN_ZEROPAGE, STARTED, SKIP_FLAG, SKIP_DEPTH (asm.asm)
 ;   write (environment.asm)
 ;   INC16, CMP16, CP16 (macros.asm)
 ;   err_zeropage_overflow, err_cannot_move_pc_backwards (errors.asm)
@@ -19,9 +18,13 @@
 ; TODO: Consolidate the PASS and IN_ZEROPAGE flags so that emit can
 ;       do a single check instead of two for suppression of output
 emit:
-  ; Check if skipping conditional assembly (BIT doesn't clobber A)
-  BIT SKIP_FLAG
-  BMI .skip_conditional ; Skip if bit 7 set (in false .ifdef block)
+  ; Check if skipping conditional assembly
+  ; Save A temporarily
+  PHA
+  LDA SKIP_DEPTH
+  BNE .is_skipping
+  ; Not skipping, restore A and continue
+  PLA
   BIT IN_ZEROPAGE
   BMI .in_zeropage     ; If in zero page, handle separately
   ; Not in zero page - proceed with normal emit logic
@@ -29,6 +32,9 @@ emit:
   BIT PASS
   BPL .skip_conditional ; Skip writing during pass 1
   JMP write            ; Tail call
+.is_skipping:
+  ; Restore A and return
+  PLA
 .skip_conditional:
   RTS
 .in_zeropage:
@@ -49,8 +55,8 @@ emit:
 ; Raises 'Cannot move PC backwards' error if attempting to move PC backwards
 update_pc:
   ; Check if skipping conditional assembly
-  BIT SKIP_FLAG
-  BMI .skip_update     ; Skip if in false .ifdef block
+  LDA SKIP_DEPTH
+  BNE .skip_update     ; Skip if in false .ifdef block
   BIT IN_ZEROPAGE
   BMI .no_fill         ; No fill or STARTED check in zeropage
   BIT STARTED

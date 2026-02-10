@@ -6,8 +6,7 @@
 ;
 ; Requires:
 ;   CURR_CHAR (asm.asm alias; backing storage in file_stack.asm)
-;   TOKEN, HEX16, OPERAND16, PASS, IS_FWDREF (asm.asm)
-;   SKIP_FLAG (directives.asm)
+;   TOKEN, HEX16, OPERAND16, PASS, IS_FWDREF, SKIP_FLAG (asm.asm)
 ;   LABEL_TYPE, LABEL_TYPE_GLOBAL, LABEL_TYPE_MACRO (common.asm)
 ;   SCOPE_DEPTH (label_scope.asm)
 ;   read_char (asm.asm alias; implemented in file_stack.asm)

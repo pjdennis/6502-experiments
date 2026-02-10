@@ -109,6 +109,7 @@ PASS:            .byte        ; 1 byte $00 = pass 1 $FF = pass 2
 STARTED:         .byte        ; flag to indicate output has started
 CURR_OUT_FILE:   .byte        ; Current output file (for closing on error)
 IN_ZEROPAGE:     .byte        ; Flag indicating if in zero page section
+SKIP_FLAG:       .byte        ; Fast skip test: bit 7 set when SKIP_DEPTH > 0
 PC_SAVE16:       .word        ; Save location for PC when switching sections
 INST_PTR16:      .word        ; Pointer to instruction mode table entry, aliased as MACRO_DEF_PTR16
 MACRO_DEF_PTR16 = INST_PTR16  ; Heap pointer where macro body is being stored, aliased to INST_PTR16

@@ -6,7 +6,7 @@
 ;
 ; Requires:
 ;   CURR_CHAR (asm.asm alias; backing storage in file_stack.asm)
-;   TOKEN, PASS, PC16, PC_SAVE16, OPERAND16, IN_ZEROPAGE (asm.asm)
+;   TOKEN, PASS, PC16, PC_SAVE16, OPERAND16, IN_ZEROPAGE, SKIP_FLAG (asm.asm)
 ;   IFDEF_DECISIONS (asm.asm), COND_DEPTH, SKIP_DEPTH, IFDEF_INDEX (directives.asm)
 ;   read_char (asm.asm alias; implemented in file_stack.asm)
 ;   read_token, read_filename (tokenizer.asm)
@@ -27,7 +27,6 @@
 DATA_MODE:       .byte        ; Data directive mode: 1=.byte 2=.word 3=.asciiz
 COND_DEPTH:      .byte        ; Conditional assembly nesting depth
 SKIP_DEPTH:      .byte        ; Depth where skipping started (0 = not skipping)
-SKIP_FLAG:       .byte        ; Fast skip test: bit 7 set when SKIP_DEPTH > 0
 IFDEF_INDEX:     .byte        ; Current index into IFDEF_DECISIONS buffer
 COND_INVERT:     .byte        ; Value if label NOT found ($00 for ifdef, $FF for ifndef)
 
@@ -429,4 +428,10 @@ dir_endif:
   STA SKIP_DEPTH
   STA SKIP_FLAG
 .done:
+  ; Ensure SKIP_FLAG matches SKIP_DEPTH (defensive programming)
+  LDA SKIP_DEPTH
+  BNE .still_skipping
+  ; SKIP_DEPTH is 0, ensure SKIP_FLAG is also 0
+  STA SKIP_FLAG
+.still_skipping:
   JMP skip_rest_of_line ; Tail call
