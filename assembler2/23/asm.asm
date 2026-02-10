@@ -70,7 +70,7 @@
 ;   read_char (asm.asm alias; implemented in file_stack.asm)
 ;   read_token, skip_token, skip_rest_of_line, check_for_end_of_line (tokenizer.asm)
 ;   capture_label (labels.asm)
-;   process_directive, process_conditional_directive (directives.asm)
+;   process_directive (directives.asm)
 ;   lookup_mnemonic, parse_operand, emit_instruction (instructions.asm)
 ;   expand_macro, capture_macro_line (macro_expansion.asm)
 ;   file_stack_init, open_input (file_stack.asm / init.asm)

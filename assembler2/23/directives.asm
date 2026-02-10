@@ -1,8 +1,8 @@
 ; directives.asm - Directive dispatch, data directives, conditional assembly
 ;
-; Provides: swap_pc_with_save, process_directive, process_conditional_directive,
-;           emit_quoted, set_data_mode, data_parameters_loop,
-;           dir_reserve, dir_ifdef, dir_ifndef, dir_else, dir_endif
+; Provides: swap_pc_with_save, process_directive, emit_quoted, set_data_mode,
+;           data_parameters_loop, dir_reserve, dir_ifdef, dir_ifndef,
+;           dir_else, dir_endif
 ;
 ; Requires:
 ;   CURR_CHAR (asm.asm alias; backing storage in file_stack.asm)
@@ -163,39 +163,6 @@ dir_zp_alloc:
 
 ; On exit C=0 if processed; C=1 if not processed
 ;         A is not preserved
-process_conditional_directive:
-  JSR select_instruction_hash_table
-  JSR find_in_hash_instruction
-  BCS .not_conditional       ; Not found in IHASHTAB
-  ; Check for MODE_DIRECTIVE
-  LDA (TABP16),Y
-  CMP #MODE_DIRECTIVE
-  BNE .not_conditional
-  ; Extract handler address
-  INY
-  LDA (TABP16),Y
-  STA JUMP_TARGET16
-  INY
-  LDA (TABP16),Y
-  STA JUMP_TARGET16 + 1
-  ; Check if it's one of the 4 conditional directives
-  CMPI16 JUMP_TARGET16, dir_ifdef
-  BEQ .found
-  CMPI16 JUMP_TARGET16, dir_ifndef
-  BEQ .found
-  CMPI16 JUMP_TARGET16, dir_else
-  BEQ .found
-  CMPI16 JUMP_TARGET16, dir_endif
-  BEQ .found
-.not_conditional:
-  SEC                        ; Not a conditional directive
-  RTS
-.found:
-  JSR do_jump                ; Call handler via trampoline
-  CLC                        ; Processed
-  RTS
-
-
 ; Read and emit quoted ASCII
 ; On entry A contains the first character within quotes
 ; On exit A contains the current character after the closing quote
