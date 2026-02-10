@@ -149,6 +149,10 @@ normal_movement_keys:
   .word normal_find_next
   .byte 'N'
   .word normal_find_prev
+  .byte 'm'
+  .word normal_mark_set
+  .byte '\''
+  .word normal_mark_goto
   .byte 0                ; End sentinel
 
 normal_editing_keys:
@@ -550,6 +554,12 @@ normal_d_key:
   JSR yank_add_lines
   BCS .yank_overflow
 
+  ; Adjust marks before deletion
+  LDA LINE_LEN
+  STA BUF_TEMP
+  LDAX16 FILE_LINE16
+  JSR mark_adjust_delete
+
   ; Delete all N lines in one batch operation
   LDA LINE_LEN
   STA BUF_TEMP
@@ -629,6 +639,14 @@ normal_open_below:
   BCS .open_below_full
   JSR buf_rebuild_lines
 
+  ; Adjust marks: new line inserted at FILE_LINE16+1
+  LDA #1
+  STA BUF_TEMP
+  CLC
+  ADCI16 FILE_LINE16, $0001, BUF_DST16
+  LDAX16 BUF_DST16
+  JSR mark_adjust_insert
+
   INC16 FILE_LINE16
   LDA #0
   STA CURSOR_COL
@@ -652,6 +670,12 @@ normal_open_above:
   BCS .open_above_full
   JSR buf_rebuild_lines
 
+  ; Adjust marks: new line inserted at FILE_LINE16
+  LDA #1
+  STA BUF_TEMP
+  LDAX16 FILE_LINE16
+  JSR mark_adjust_insert
+
   LDA #0
   STA CURSOR_COL
   LDA #MODE_INSERT
@@ -667,8 +691,26 @@ normal_open_above:
 normal_paste_below:
   JSR get_count_byte         ; X = count
   STX BUF_TEMP
+  STX LINE_LEN               ; Save paste count
   JSR yank_paste_below_n
   BCS .paste_below_done
+  ; Adjust marks: lines inserted at FILE_LINE16 (first pasted line)
+  ; Total lines = YANK_LINES * paste_count
+  LDA #0
+  LDX LINE_LEN
+.paste_below_mul:
+  CLC
+  ADC YANK_LINES
+  BCS .paste_below_cap
+  DEX
+  BNE .paste_below_mul
+  JMP .paste_below_adjust
+.paste_below_cap:
+  LDA #$FF
+.paste_below_adjust:
+  STA BUF_TEMP
+  LDAX16 FILE_LINE16
+  JSR mark_adjust_insert
   LDA #$FF
   STA MODIFIED
 .paste_below_done:
@@ -677,8 +719,25 @@ normal_paste_below:
 normal_paste_above:
   JSR get_count_byte         ; X = count
   STX BUF_TEMP
+  STX LINE_LEN               ; Save paste count
   JSR yank_paste_above_n
   BCS .paste_above_done
+  ; Adjust marks: lines inserted at FILE_LINE16
+  LDA #0
+  LDX LINE_LEN
+.paste_above_mul:
+  CLC
+  ADC YANK_LINES
+  BCS .paste_above_cap
+  DEX
+  BNE .paste_above_mul
+  JMP .paste_above_adjust
+.paste_above_cap:
+  LDA #$FF
+.paste_above_adjust:
+  STA BUF_TEMP
+  LDAX16 FILE_LINE16
+  JSR mark_adjust_insert
   LDA #$FF
   STA MODIFIED
 .paste_above_done:
@@ -765,6 +824,28 @@ normal_find_prev:
   ; No prior search, just cursor-only update
   LDA #0
   STA RENDER_FLAG
+  JMP clear_count
+
+normal_mark_set:
+  JSR input_read_byte
+  JSR mark_set
+  LDA #0
+  STA RENDER_FLAG
+  JMP clear_count
+
+normal_mark_goto:
+  JSR input_read_byte
+  JSR mark_get
+  BCS .mark_not_set
+  STAX16 FILE_LINE16
+  LDA #0
+  STA CURSOR_COL
+  JSR ensure_cursor_visible
+  JSR clamp_cursor_col
+  JMP clear_count
+.mark_not_set:
+  SET16 str_mark_not_set, STR_PTR16
+  JSR show_status_message
   JMP clear_count
 
 normal_enter_command:

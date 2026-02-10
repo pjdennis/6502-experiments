@@ -50,6 +50,7 @@ FNAME_BUF   = $0200   ; Filename buffer (256 bytes)
   .include editor/normal.asm
   .include editor/insert.asm
   .include editor/command.asm
+  .include editor/mark.asm
 
 ; ============================================================================
 ; Entry point
@@ -126,6 +127,7 @@ editor_main:
   JSR normal_init
   JSR yank_init
   JSR search_init
+  JSR mark_init
 
   ; Draw initial screen
   JSR render_screen

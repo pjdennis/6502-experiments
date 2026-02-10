@@ -121,9 +121,20 @@ command_parse:
 
   ; Digit - go to line
   CMP #'0'
-  BCC .unknown
+  BCC .not_digit
   CMP #':'          ; '9'+1 = ':'
-  BCC .goto_line
+  BCS .not_digit
+  JMP .goto_line
+.not_digit:
+
+  ; :marks - display marks
+  CMP #'m'
+  BEQ .check_marks
+
+  ; :'a range commands
+  CMP #'\''
+  BNE .unknown
+  JMP command_parse_range
 
 .unknown:
   SET16 str_unknown_cmd, STR_PTR16
@@ -181,6 +192,26 @@ command_parse:
   LDA #$FF
   STA CMD_QUIT
   RTS
+
+.check_marks:
+  ; Verify the command is exactly "marks"
+  LDA CMD_BUF + 1
+  CMP #'a'
+  BNE .marks_unknown
+  LDA CMD_BUF + 2
+  CMP #'r'
+  BNE .marks_unknown
+  LDA CMD_BUF + 3
+  CMP #'k'
+  BNE .marks_unknown
+  LDA CMD_BUF + 4
+  CMP #'s'
+  BNE .marks_unknown
+  LDA CMD_BUF + 5
+  BNE .marks_unknown      ; Extra chars after "marks"
+  JMP marks_display
+.marks_unknown:
+  JMP .unknown
 
 ; Go to line number
 .goto_line:
@@ -293,6 +324,124 @@ show_status_message:
   JSR input_read_byte
   RTS
 
+; Parse range command: :'a,.y or :'a,'by etc.
+; CMD_BUF contains the command starting with '
+command_parse_range:
+  ; Parse first mark: CMD_BUF[1] should be a-z
+  LDA CMD_BUF + 1
+  JSR mark_get
+  BCC .range_first_ok
+  JMP .range_mark_err
+.range_first_ok:
+  STAX16 BUF_SRC16         ; BUF_SRC16 = first line (start)
+
+  ; Expect comma at CMD_BUF[2]
+  LDA CMD_BUF + 2
+  CMP #','
+  BEQ .range_has_comma
+  JMP .range_unknown
+.range_has_comma:
+
+  ; Parse second position: CMD_BUF[3]
+  LDA CMD_BUF + 3
+  CMP #'.'
+  BEQ .range_dot
+  CMP #'\''
+  BEQ .range_second_mark
+  JMP .range_unknown
+
+.range_dot:
+  ; Current line
+  CP16 FILE_LINE16, BUF_DST16
+  ; Command char at CMD_BUF[4]
+  LDA CMD_BUF + 4
+  JMP .range_dispatch
+
+.range_second_mark:
+  ; CMD_BUF[4] = mark name
+  LDA CMD_BUF + 4
+  JSR mark_get
+  BCC .range_second_ok
+  JMP .range_mark_err
+.range_second_ok:
+  STAX16 BUF_DST16
+  ; Command char at CMD_BUF[5]
+  LDA CMD_BUF + 5
+  JMP .range_dispatch
+
+.range_dispatch:
+  ; A = command char
+  CMP #'y'
+  BEQ .range_yank
+  JMP .range_unknown
+
+.range_yank:
+  ; Ensure start <= end (swap if needed)
+  CMP16 BUF_SRC16, BUF_DST16
+  BCC .range_order_ok
+  BEQ .range_order_ok
+  ; Swap BUF_SRC16 and BUF_DST16
+  LDA BUF_SRC16
+  PHA
+  LDA BUF_DST16
+  STA BUF_SRC16
+  PLA
+  STA BUF_DST16
+  LDA BUF_SRC16 + 1
+  PHA
+  LDA BUF_DST16 + 1
+  STA BUF_SRC16 + 1
+  PLA
+  STA BUF_DST16 + 1
+.range_order_ok:
+
+  ; count = end - start + 1
+  SEC
+  SBC16 BUF_DST16, BUF_SRC16, BUF_LEN16
+  INC16 BUF_LEN16
+
+  ; Cap count at 255 for yank_add_lines
+  LDA BUF_LEN16 + 1
+  BNE .range_cap
+  LDA BUF_LEN16
+  JMP .range_count_ok
+.range_cap:
+  LDA #$FF
+.range_count_ok:
+  STA BUF_TEMP
+
+  JSR yank_clear
+  LDAX16 BUF_SRC16
+  JSR yank_add_lines
+  BCS .range_yank_full
+
+  ; Show "N lines yanked"
+  LDA YANK_LINES
+  STA TO_DECIMAL_VALUE16
+  LDA #0
+  STA TO_DECIMAL_VALUE16 + 1
+  JSR to_decimal
+  JSR command_show_prompt
+  PRINT_STR TO_DECIMAL_RESULT
+  PRINT_STR str_lines_yanked
+  JSR con_flush
+  RTS
+
+.range_yank_full:
+  JSR yank_clear
+  SET16 str_yank_full, STR_PTR16
+  JMP show_status_message
+
+.range_mark_err:
+  SET16 str_mark_not_set, STR_PTR16
+  JMP show_status_message
+
+.range_unknown:
+  SET16 str_unknown_cmd, STR_PTR16
+  JMP show_status_message
+
+str_lines_yanked: .asciiz " lines yanked"
+
 ; === String constants ===
 str_unknown_cmd: .asciiz "Unknown command"
 str_no_write:    .asciiz "No write since last change (use :q! to override)"
@@ -301,3 +450,4 @@ str_buffer_full: .asciiz "Buffer full"
 str_readonly:    .asciiz "Read-only (file truncated)"
 str_truncated:   .asciiz "WARNING: File too large - read only"
 str_yank_full:   .asciiz "Yank buffer full"
+str_mark_not_set: .asciiz "Mark not set"

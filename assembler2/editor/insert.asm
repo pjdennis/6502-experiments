@@ -144,6 +144,14 @@ insert_newline:
   ; Rebuild line table (one rebuild for entire batch)
   JSR buf_rebuild_lines
 
+  ; Adjust marks: BUF_DELTA lines inserted at FILE_LINE16+1
+  LDA BUF_DELTA
+  STA BUF_TEMP
+  CLC
+  ADCI16 FILE_LINE16, $0001, BUF_DST16
+  LDAX16 BUF_DST16
+  JSR mark_adjust_insert
+
   ; Advance FILE_LINE16 by BUF_DELTA
   CLC
   LDA FILE_LINE16
@@ -329,6 +337,15 @@ insert_backspace:
   STA FILE_LINE16 + 1
 
   JSR buf_rebuild_lines
+
+  ; Adjust marks: BUF_DELTA lines deleted at FILE_LINE16+1
+  LDA BUF_DELTA
+  STA BUF_TEMP
+  CLC
+  ADCI16 FILE_LINE16, $0001, BUF_DST16
+  LDAX16 BUF_DST16
+  JSR mark_adjust_delete
+
   JSR ensure_cursor_visible
   LDA #$FF
   STA MODIFIED

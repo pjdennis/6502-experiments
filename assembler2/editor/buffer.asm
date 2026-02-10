@@ -8,13 +8,13 @@
 ; The line table stores 16-bit pointers to the start of each line.
 ; Insertions/deletions shift all text after the edit point.
 
-TEXT_BUF    = $2000  ; Start of text buffer
+TEXT_BUF    = $2100  ; Start of text buffer
 
-; Buffer size: normal build = 40KB, small build = 256 bytes
+; Buffer size: normal build = ~39.75KB, small build = 256 bytes
   .ifndef small_buffer
-TEXT_LIMIT  = $C000  ; End of text buffer space (40KB: $2000-$BFFF)
+TEXT_LIMIT  = $C000  ; End of text buffer space ($2100-$BFFF)
   .else
-TEXT_LIMIT  = $2100  ; End of text buffer space (256 bytes: $2000-$20FF)
+TEXT_LIMIT  = $2200  ; End of text buffer space (256 bytes: $2100-$21FF)
   .endif
 
 LINE_TBL    = $C000  ; Line pointer table (2 bytes per entry)

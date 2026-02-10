@@ -2557,6 +2557,222 @@ class EditorTestRunner:
             expect_cursor=(2, 0),  # /X->line 2, n->line 4, N back to line 2
         )
 
+        # ==========================================================
+        # Marks
+        # ==========================================================
+        self._group("Marks (m/'/adjust):", leading_blank=True)
+
+        # --- Set and go to mark ---
+
+        # Set mark on line 1, go to line 3, return via 'a
+        self.run_test_screen(
+            "ma then 'a returns to marked line",
+            make_lines(5),
+            b"majj'a:q!\r",
+            expect_cursor=(0, 0),  # Back to line 1
+        )
+
+        # Set mark on line 3, go to line 1, jump to mark
+        self.run_test_screen(
+            "'a jumps forward to marked line",
+            make_lines(5),
+            b"jjmakk'a:q!\r",
+            expect_cursor=(2, 0),  # Line 3
+        )
+
+        # Set two marks on different lines, verify both work
+        self.run_test_screen(
+            "Two marks on different lines",
+            make_lines(5),
+            b"majjjmb'a:q!\r",
+            expect_cursor=(0, 0),  # 'a -> line 1
+        )
+
+        self.run_test_screen(
+            "Second mark also works",
+            make_lines(5),
+            b"majjjmb'b:q!\r",
+            expect_cursor=(3, 0),  # 'b -> line 4
+        )
+
+        # 'z with no mark set shows error (keypress dismisses)
+        self.run_test_screen(
+            "'z unset mark shows error message",
+            make_lines(3),
+            b"'z :q!\r",  # space dismisses the error
+            expect_cursor=(0, 0),  # stays on line 1
+        )
+
+        # m followed by non-letter does nothing harmful
+        self.run_test(
+            "m1 (non-letter) does nothing",
+            make_lines(3),
+            b"m1:q!\r",
+            expect_unmodified=True,
+        )
+
+        # 'a sets cursor col to 0
+        self.run_test_screen(
+            "'a sets cursor col to 0",
+            "Hello\nWorld\n",
+            b"mallj'a:q!\r",
+            expect_cursor=(0, 0),
+        )
+
+        # --- Mark adjustment: dd ---
+
+        # dd the marked line -> mark is unset
+        self.run_test_screen(
+            "dd marked line unsets mark",
+            make_lines(3),
+            b"madd'a :q!\r",  # space dismisses "Mark not set"
+            expect_cursor=(0, 0),  # stays (error message dismissed)
+        )
+
+        # Set mark on line 3, dd line 1 -> mark shifts to line 2
+        self.run_test_screen(
+            "dd above mark shifts mark down",
+            make_lines(5),
+            b"jjmagg dd'a:q!\r",  # gg->line1, dd line1, 'a
+            expect_cursor=(1, 0),  # mark was line 3 (idx 2), now idx 1
+        )
+
+        # Set mark on line 1, dd line 3 -> mark stays on line 1
+        self.run_test_screen(
+            "dd below mark leaves mark unchanged",
+            make_lines(5),
+            b"majjdd'a:q!\r",  # mark line1, jj->line3, dd, 'a
+            expect_cursor=(0, 0),  # mark still at line 1
+        )
+
+        # --- Mark adjustment: o/O ---
+
+        # Set mark on line 3, o on line 1 (opens line 2) -> mark shifts to line 4
+        self.run_test_screen(
+            "o above mark shifts mark down",
+            make_lines(5),
+            b"jjmagg o\x1b'a:q!\r",  # mark at line3, gg, o+ESC, 'a
+            expect_cursor=(3, 0),  # was idx 2, now idx 3
+        )
+
+        # Set mark on line 1, O on line 3 -> mark stays on line 1
+        self.run_test_screen(
+            "O below mark leaves mark unchanged",
+            make_lines(5),
+            b"majjO\x1b'a:q!\r",  # mark at line1, jj, O+ESC, 'a
+            expect_cursor=(0, 0),
+        )
+
+        # O on same line as mark -> mark shifts down
+        self.run_test_screen(
+            "O on marked line shifts mark down",
+            make_lines(5),
+            b"jmaO\x1b'a:q!\r",  # mark at line2, O+ESC, 'a
+            expect_cursor=(2, 0),  # was idx 1, shifted to idx 2
+        )
+
+        # --- Mark adjustment: paste ---
+
+        # Yank a line, paste below line above mark -> mark shifts
+        self.run_test_screen(
+            "paste above mark shifts mark down",
+            make_lines(5),
+            b"jjmayy gg p'a:q!\r",  # mark line3, yy, gg, p, 'a
+            expect_cursor=(3, 0),  # was idx 2, paste adds 1 line before -> idx 3
+        )
+
+        # Yank a line, paste below line below mark -> mark unchanged
+        self.run_test_screen(
+            "paste below mark leaves mark unchanged",
+            make_lines(5),
+            b"mayyjjjp'a:q!\r",  # mark line1, yy, jjj->line4, p, 'a
+            expect_cursor=(0, 0),
+        )
+
+        # --- Mark adjustment: Enter in insert mode ---
+
+        # Set mark on line 3, insert Enter on line 1 -> mark shifts
+        self.run_test_screen(
+            "Enter in insert above mark shifts mark",
+            make_lines(5),
+            b"jjmagg A\r\x1b'a:q!\r",  # mark line3, gg, A+Enter+ESC, 'a
+            expect_cursor=(3, 0),  # was idx 2, Enter added line -> idx 3
+        )
+
+        # --- Mark adjustment: backspace join ---
+
+        # Set mark on line 3, backspace-join at line 2 col 0 -> mark shifts
+        self.run_test_screen(
+            "BS join above mark shifts mark up",
+            make_lines(5),
+            b"jjmaki\x08\x1b'a:q!\r",  # mark line3, k->line2, i+BS(join)+ESC, 'a
+            expect_cursor=(1, 0),  # was idx 2, join removed line -> idx 1
+        )
+
+        # --- :marks command ---
+
+        self._group(":marks command:", leading_blank=True)
+
+        # :marks with no marks shows "No marks set"
+        self.run_test_screen(
+            ":marks with no marks set",
+            make_lines(3),
+            b":marks\r :q!\r",  # space dismisses marks display
+            expect_cursor=(0, 0),
+        )
+
+        # :marks shows set marks
+        self.run_test_screen(
+            ":marks shows mark a",
+            make_lines(3),
+            b"ma:marks\r :q!\r",
+            expect_cursor=(0, 0),
+        )
+
+        # --- Range yank ---
+
+        self._group("Range yank (:'a,.y):", leading_blank=True)
+
+        # Set mark on line 1, navigate to line 3, :'a,.y yanks 3 lines
+        self.run_test(
+            ":'a,.y yanks range and paste works",
+            make_lines(5),
+            b"majj:'a,.y\rjp:wq\r",  # ma, jj, :'a,.y, j, p, :wq
+            expected_content="Line 1\nLine 2\nLine 3\nLine 4\nLine 1\nLine 2\nLine 3\nLine 5\n",
+        )
+
+        # Range with marks in reverse order (auto-swap)
+        self.run_test(
+            "Range with end < start auto-swaps",
+            make_lines(5),
+            b"jjmakk:'a,.y\rjjjjp:wq\r",  # ma on line3, kk->line1, :'a,.y, paste
+            expected_content="Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 1\nLine 2\nLine 3\n",
+        )
+
+        # Range yank between two marks
+        self.run_test(
+            ":'a,'by yanks between two marks",
+            make_lines(5),
+            b"majjjmb:'a,'by\rGp:wq\r",  # ma line1, mb line4, range yank, G, p
+            expected_content="Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 1\nLine 2\nLine 3\nLine 4\n",
+        )
+
+        # Range yank single line
+        self.run_test(
+            "Range yank single line",
+            make_lines(3),
+            b"jma:'a,.y\rjp:wq\r",  # ma on line2, :'a,.y on line2, p after line3
+            expected_content="Line 1\nLine 2\nLine 3\nLine 2\n",
+        )
+
+        # Range yank with unset mark shows error
+        self.run_test_screen(
+            "Range yank unset mark shows error",
+            make_lines(3),
+            b":'z,.y\r :q!\r",  # space dismisses error
+            expect_cursor=(0, 0),
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed
