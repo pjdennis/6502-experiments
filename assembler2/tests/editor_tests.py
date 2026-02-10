@@ -703,6 +703,94 @@ class EditorTestRunner:
             expected_content="Helo\n"
         )
 
+        # Delete in insert mode (forward delete)
+        self.run_test(
+            "Delete in insert mode deletes char under cursor",
+            "Hello\n",
+            b"lli\x1b[3~\x1b:wq\r",
+            expected_content="Helo\n"
+        )
+
+        # Delete at end of line (deletes last char)
+        self.run_test(
+            "Delete at end of line with $i",
+            "Hello\n",
+            b"$i\x1b[3~\x1b:wq\r",
+            expected_content="Hell\n"
+        )
+
+        # Delete past end of line (does nothing)
+        self.run_test(
+            "Delete past end of line does nothing",
+            "Hello\n",
+            b"$a\x1b[3~\x1b:wq\r",
+            expected_content="Hello\n"
+        )
+
+        # Delete multiple characters (batching)
+        self.run_test(
+            "Delete batches multiple keypresses",
+            "Hello\n",
+            b"i\x1b[3~\x1b[3~\x1b[3~\x1b:wq\r",
+            expected_content="lo\n"
+        )
+
+        # Delete in middle of line (deletes space)
+        self.run_test(
+            "Delete in middle of line",
+            "Hello World\n",
+            b"llllli\x1b[3~\x1b:wq\r",
+            expected_content="HelloWorld\n"
+        )
+
+        # Delete batching - many characters at once
+        self.run_test(
+            "Delete batches many characters efficiently",
+            "0123456789ABCDEF\n",
+            b"i\x1b[3~\x1b[3~\x1b[3~\x1b[3~\x1b[3~\x1b[3~\x1b[3~\x1b[3~\x1b:wq\r",
+            expected_content="89ABCDEF\n"
+        )
+
+        # Delete batching capped at end of line
+        self.run_test(
+            "Delete batching stops at line end",
+            "ABC\n",
+            b"i\x1b[3~\x1b[3~\x1b[3~\x1b[3~\x1b[3~\x1b:wq\r",
+            expected_content="\n"
+        )
+
+        # Delete from middle - batching
+        # NOTE: Batching not yet implemented for Delete in insert mode
+        self.run_test(
+            "Delete from middle of line (no batching yet)",
+            "0123456789\n",
+            b"llllli\x1b[3~\x1b[3~\x1b[3~\x1b:wq\r",
+            expected_content="0123489\n"  # Deletes '5', '6', '7' one at a time
+        )
+
+        # Delete with long line (potential wrap scenario)
+        # Line longer than typical terminal width (80 chars)
+        long_line = "A" * 100 + "\n"
+        expected_after_delete = "A" * 50 + "\n"
+        self.run_test(
+            "Delete batching on long line",
+            long_line,
+            b"lllllllllllllllllllllllllllllllllllllllllllllllllli" +
+            b"\x1b[3~" * 50 + b"\x1b:wq\r",
+            expected_content=expected_after_delete
+        )
+
+        # Delete causing line wrap change (2 rows -> 1 row)
+        # Create a line that wraps at 80 chars, delete enough to unwrap
+        wrap_line = "X" * 85 + "\n"
+        expected_unwrap = "X" * 75 + "\n"
+        self.run_test(
+            "Delete batching across line wrap boundary",
+            wrap_line,
+            b"i" + b"\x1b[3~" * 10 + b"\x1b:wq\r",
+            expected_content=expected_unwrap
+        )
+
         # :w saves without quitting, then :q quits
         # Actually, :w then EOT will exit due to EOT handling
         self.run_test(

@@ -35,6 +35,8 @@ insert_keys:
   .word insert_newline
   .byte KEY_BS
   .word insert_backspace
+  .byte KEY_DEL
+  .word insert_delete
   .byte KEY_UP
   .word insert_move_up
   .byte KEY_DOWN
@@ -349,6 +351,37 @@ insert_backspace:
   JSR ensure_cursor_visible
   LDA #$FF
   STA MODIFIED
+  RTS
+
+; Handle delete in insert mode (forward delete)
+insert_delete:
+  JSR get_current_line_len
+  BEQ .early_done        ; Empty line
+  STA LINE_LEN
+
+  LDA CURSOR_COL
+  CMP LINE_LEN
+  BCS .early_done        ; At or past end of line
+
+  ; Delete one character at cursor position
+  ; TODO: Implement batching (requires multi-byte pushback for escape sequences)
+  LDA #1
+  STA BUF_DELTA
+
+  ; Delete BUF_DELTA chars at cursor position
+  JSR get_cursor_buf_ptr
+  JSR buf_delete_chars
+  JSR buf_adjust_lines_dec
+
+  LDA #1
+  STA RENDER_FLAG
+  JSR ensure_cursor_visible
+  LDA #$FF
+  STA MODIFIED
+
+.early_done:
+  ; Early exit point (for branches that are too far from .done)
+.done:
   RTS
 
 ; Arrow key handlers in insert mode
