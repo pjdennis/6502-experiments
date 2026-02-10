@@ -58,51 +58,23 @@ swap_pc_with_save:
 ; On entry, A contains the first character of the directive
 process_directive:
   JSR read_token       ; Current char in CURR_CHAR
-  ; Reset LABEL_TYPE for directive string comparisons
-  ; (compare_token checks LABEL_TYPE, must be GLOBAL for non-escape strings)
-  LDA #LABEL_TYPE_GLOBAL
-  STA LABEL_TYPE
-  ; Check for 'include'
-  SET16 directive_include, TABP16
-  JSR compare_token
-  BEQ dir_include
-  ; Check for 'zeropage'
-  SET16 directive_zeropage, TABP16
-  JSR compare_token
-  BEQ dir_zeropage
-  ; Check for 'code'
-  SET16 directive_code, TABP16
-  JSR compare_token
-  BEQ dir_code
-  ; Check for 'byte'
-  SET16 directive_byte, TABP16
-  JSR compare_token
-  BEQ dir_byte
-  ; Check for 'word'
-  SET16 directive_word, TABP16
-  JSR compare_token
-  BEQ dir_word
-  ; Check for 'asciiz'
-  SET16 directive_asciiz, TABP16
-  JSR compare_token
-  BEQ dir_asciiz
-  ; Check for 'reserve'
-  SET16 directive_reserve, TABP16
-  JSR compare_token
-  BEQ dir_reserve
-  JSR process_conditional_directive ; Returns with C=0 if processed
-  BCC .directive_done
-  ; Check for 'macro'
-  SET16 directive_macro, TABP16
-  JSR compare_token
-  BEQ dir_macro
-  ; Check for 'endmacro'
-  SET16 directive_endmacro, TABP16
-  JSR compare_token
-  BEQ dir_endmacro
+  JSR select_instruction_hash_table
+  JSR find_in_hash_instruction
+  BCS .not_found
+  ; Check for MODE_DIRECTIVE
+  LDA (TABP16),Y
+  CMP #MODE_DIRECTIVE
+  BNE .not_found
+  ; Extract handler address
+  INY
+  LDA (TABP16),Y
+  STA INST_PTR16
+  INY
+  LDA (TABP16),Y
+  STA INST_PTR16+$01
+  JMP (INST_PTR16)     ; Tail call: handler RTS returns to our caller
+.not_found:
   JMP err_unknown_directive
-.directive_done:
-  RTS
 dir_include:
   JSR check_for_end_of_line
   BCC .get_name
