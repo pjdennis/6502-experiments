@@ -223,6 +223,11 @@ data_parameters_loop:
   BNE .data_value
   JSR read_char
   JSR emit_quoted
+  LDA DATA_MODE
+  CMP #DATA_MODE_ASCIIZ
+  BNE .data_check_more
+  LDA #$00
+  JSR emit
   JMP .data_check_more
 .data_value:
   JSR parse_value
@@ -254,12 +259,6 @@ data_parameters_loop:
 .data_err_comma:
   JMP err_comma_expected
 .data_done:
-  LDA DATA_MODE
-  CMP #DATA_MODE_ASCIIZ
-  BNE .data_rts
-  LDA #$00
-  JMP emit           ; Tail call: emit null terminator
-.data_rts:
   RTS
 
 

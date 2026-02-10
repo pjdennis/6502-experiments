@@ -1773,6 +1773,20 @@ INPUT:
 EXPECT_HEX: 48 69 00
 
 ---
+NAME: directive_asciiz_string_mulitple
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz "Hi", "Ho"
+EXPECT_HEX: 48 69 00 48 6F 00
+
+---
+NAME: directive_asciiz_string_with_byte
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz "Hi", $42
+EXPECT_HEX: 48 69 00 42
+
+---
 NAME: directive_byte_mixed
 INPUT:
  1: * = $0200
@@ -2239,7 +2253,7 @@ NAME: asciiz_single_byte
 INPUT:
  1: * = $0200
  2:   .asciiz $42
-EXPECT_HEX: 42 00
+EXPECT_HEX: 42
 
 ---
 NAME: asciiz_mixed
@@ -2253,14 +2267,14 @@ NAME: asciiz_multiple_bytes
 INPUT:
  1: * = $0200
  2:   .asciiz $01, $02, $03
-EXPECT_HEX: 01 02 03 00
+EXPECT_HEX: 01 02 03
 
 ---
 NAME: asciiz_char_literals
 INPUT:
  1: * = $0200
  2:   .asciiz 'H', 'i'
-EXPECT_HEX: 48 69 00
+EXPECT_HEX: 48 69
 
 ---
 NAME: asciiz_forward_ref
@@ -2268,7 +2282,7 @@ INPUT:
  1: * = $0200
  2:   .asciiz val
  3: val: = $42
-EXPECT_HEX: 42 00
+EXPECT_HEX: 42
 
 ---
 NAME: asciiz_escape_seq
@@ -2282,7 +2296,7 @@ NAME: asciiz_with_commas
 INPUT:
  1: * = $0200
  2:   .asciiz $48, $69, $00
-EXPECT_HEX: 48 69 00 00
+EXPECT_HEX: 48 69 00
 
 ---
 NAME: asciiz_error_word_value
