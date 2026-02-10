@@ -136,9 +136,7 @@ marks_display:
   JSR to_decimal
   JSR write_decimal_rjust
 
-  ; Print 2 spaces before text
-  LDA #' '
-  JSR write_b
+  ; Print 1 space before text
   LDA #' '
   JSR write_b
 
@@ -216,7 +214,7 @@ write_decimal_rjust:
 .pad:
   ; Print (6 - X) spaces
   STX BUF_DELTA
-  LDX #6
+  LDX #7
 .pad_loop:
   CPX BUF_DELTA
   BEQ .print
@@ -228,7 +226,7 @@ write_decimal_rjust:
   PRINT_STR TO_DECIMAL_RESULT
   RTS
 
-str_marks_header: .asciiz "mark  line  text"
+str_marks_header: .asciiz "mark line text"
 str_no_marks:     .asciiz "No marks set"
 
 ; Adjust marks after lines are deleted

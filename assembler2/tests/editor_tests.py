@@ -2772,7 +2772,7 @@ class EditorTestRunner:
             make_lines(3),
             b"ma:marks\r :q!\r",
             expect_cursor=(0, 0),
-            expect_ansi_contains=" a     1",
+            expect_ansi_contains=" a      1",
         )
 
         # :marks with mark on line 100 aligns with single-digit marks
@@ -2781,7 +2781,7 @@ class EditorTestRunner:
             make_lines(100),
             b"ma:100\rmb" +         # ma on line 1, goto line 100, mb
             b":marks\r :q!\r",
-            expect_ansi_contains=" b   100",
+            expect_ansi_contains=" b    100",
         )
 
         # :marks with wider terminal shows more text
