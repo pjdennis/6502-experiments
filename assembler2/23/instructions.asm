@@ -105,6 +105,9 @@ find_opcode_for_mode:
 ;         A, Y are not preserved
 ; Raises error if addressing mode is not valid for this instruction
 emit_instruction:
+  ; Check if skipping - if so, return immediately
+  LDA SKIP_DEPTH
+  BNE .skip_emit
   ; Find opcode for this addressing mode
   JSR find_opcode_for_mode
   BCS .invalid_mode
@@ -167,6 +170,8 @@ emit_instruction:
   JMP emit                ; Tail call
 .invalid_mode:
   JMP err_invalid_addressing_mode
+.skip_emit:
+  RTS
 
 
 ; Checks mode availability, value size, and forward reference forcing

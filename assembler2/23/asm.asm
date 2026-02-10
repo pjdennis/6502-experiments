@@ -207,35 +207,7 @@ assemble_code:
   JSR capture_macro_line
   JMP .line_loop
 .not_capturing_macro:
-  ; Check if we're skipping (conditional assembly)
-  LDY SKIP_DEPTH
-  BEQ .not_skipping
-  ; --- Skipping mode: only process .ifdef/.ifndef/.else/.endif ---
-  CMP #' '
-  BNE .skip_not_space
-  ; Line starts with space - skip spaces to find directive
-  JSR check_for_end_of_line
-  BCS .line_loop
-  JMP .skip_check_directive
-.skip_not_space:
-  JSR check_for_end_of_line
-  BCS .line_loop
-  ; Line starts with non-space - skip label, check for directive
-  JSR skip_token
-  JSR check_for_end_of_line
-  BCS .line_loop
-.skip_check_directive:
-  CMP #'.'
-  BNE .skip_line
-  ; It's a directive - only process ifdef/ifndef/else/endif
-  JSR read_char
-  JSR read_token
-  JSR process_conditional_directive
-  BCC .back_to_line_loop ; directive processed; already skipped line
-.skip_line:
-  JSR skip_rest_of_line
-  JMP .line_loop
-.not_skipping:
+  ; Normal and skipping modes now use unified parsing path
   CMP #' '
   BEQ .line_starts_with_space
   JSR check_for_end_of_line
