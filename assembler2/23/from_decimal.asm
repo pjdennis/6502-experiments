@@ -53,7 +53,7 @@ from_decimal:
   ; Check if it's a digit
   CMP #'0'
   BCC .done             ; < '0', not a digit
-  CMP #'9'+$01
+  CMP #'9' + 1
   BCC .loop             ; >= '0' and <= '9', continue
 .done:
   RTS

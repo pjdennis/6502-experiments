@@ -293,7 +293,7 @@ populate_instruction_hash_table:
 
 .entry_loop:
   ; Check for end of table ($00 as first byte of entry)
-  LDY #$00
+  LDY #0
   LDA (P2_16),Y
   BEQ .done
 
@@ -324,7 +324,7 @@ populate_instruction_hash_table:
   ; --- Phase 3: Copy mode:opcode pairs to heap ---
   ; Problem: both (P2_16),Y and (MEMP16),Y need Y for indirect indexed mode
   ; Solution: solved above by advancing P2_16 such that its required Y offset matches that required by the heap (i.e. starting at 0)
-  LDY #$00                    ; Set initial source offset to mode data and to heap
+  LDY #0                    ; Set initial source offset to mode data and to heap
 
 .copy_modes:
   LDA (P2_16),Y               ; Load mode byte from source
@@ -376,7 +376,7 @@ populate_directive_hash_table:
 
 .entry_loop:
   ; Check for end of table ($00 as first byte of entry)
-  LDY #$00
+  LDY #0
   LDA (P2_16),Y
   BEQ .done
 
@@ -399,7 +399,7 @@ populate_directive_hash_table:
   ; --- Phase 3: Copy MODE_DIRECTIVE + handler label name to heap ---
   ; P2_16 points to MODE_DIRECTIVE byte, MEMP16 points to value start
   ; Both use Y=0 as starting offset
-  LDY #$00
+  LDY #0
 .copy_value:
   LDA (P2_16),Y
   STA (MEMP16),Y
@@ -424,16 +424,14 @@ populate_directive_hash_table:
 
 
 display_hex_char:
-  CMP #$0A
+  CMP #10
   BCS .low
   ; Carry already clear
   ADC #'0'
   JMP write_b          ; Tail call
 .low:
-  ; C already set
-  SBC #$0A ; Subtract 10
   CLC
-  ADC #'A'
+  ADC #'A' - 10
   JMP write_b ; Tail call
 
 
@@ -493,7 +491,7 @@ display_comma:
 ; On entry P16 points to the text
 ; On exit Y points to the terminating 0
 display_text:
-  LDY #$00
+  LDY #0
 .loop:
   LDA (P16),Y
   BEQ .done
@@ -515,16 +513,16 @@ display_table:
   ; Display first entry
   JSR display_table_entry
   ; Display remaining 7 entries with comma prefix
-  LDA #$00
+  LDA #0
   STA TEMP
 .lineloop:
   JSR display_comma
   JSR display_table_entry
   LDA TEMP
   CLC
-  ADC #$01
+  ADC #1
   STA TEMP
-  CMP #$07
+  CMP #7
   BNE .lineloop
   JSR display_newline
   LDA HASH
@@ -554,7 +552,7 @@ display_table_entry:
 .advance:
   LDA HASH
   CLC
-  ADC #$02
+  ADC #2
   STA HASH
   RTS
 
@@ -693,29 +691,29 @@ display_data:
   SET16 msg_instprefix, P16
   JSR display_text
   CLC
-  LDY #$00
+  LDY #0
   LDA (TABP16),Y
-  ADC #$02
+  ADC #2
   STA P16
   INY
   LDA (TABP16),Y
-  ADC #$00
-  STA P16+$01
+  ADC #0
+  STA P16 + 1
   JSR display_text
   JSR display_newline
   JSR write_mnemonic_and_modes
-  LDY #$00
+  LDY #0
   LDA (TABP16),Y
   STA P16
   INY
   LDA (TABP16),Y
-  STA P16+$01
+  STA P16 + 1
   CP16 P16, TABP16
   JMP .entry_loop
 .next:
   LDA HASH
   CLC
-  ADC #$02
+  ADC #2
   STA HASH
   BEQ .done
   JMP .loop

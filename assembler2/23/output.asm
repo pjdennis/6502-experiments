@@ -30,7 +30,7 @@ emit:
 .in_zeropage:
   ; In zero page - check for overflow BEFORE incrementing
   ; If high byte already non-zero, we've already overflowed past $FF
-  LDA PC16+$01
+  LDA PC16 + 1
   BNE .overflow
   INC16 PC16           ; Safe to increment
   RTS                  ; No writing in zeropage
@@ -76,9 +76,7 @@ advance_pc_to_hex16:
   BEQ .done
   LDA #$00
   JSR write
-  INC PC16
-  BNE .loop
-  INC PC16+$01
+  INC16 PC16
   BNE .loop            ; Always taken
 .done:
   RTS
@@ -86,7 +84,7 @@ advance_pc_to_hex16:
   CP16 HEX16, PC16
   RTS
 .zp:
-  LDA HEX16+$01
+  LDA HEX16 + 1
   BNE .zp_overflow     ; Target > $FF
   CP16 HEX16, PC16
   RTS

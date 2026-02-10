@@ -56,8 +56,7 @@ read_value:
 read_local_label:
   JSR read_char             ; Skip '.'
   JSR read_token            ; Read name into TOKEN
-  LDA LABEL_SCOPE16
-  ORA LABEL_SCOPE16+$01
+  TST16 LABEL_SCOPE16
   BNE .have_scope
   JMP err_no_global_for_local
 .have_scope:

@@ -51,17 +51,11 @@ lookup_mnemonic:
 .try_macro:
   ; Try LHASHTAB for macros
   ; Save LABEL_SCOPE16 before find_macro_in_hash clobbers it
-  LDA LABEL_SCOPE16
-  PHA
-  LDA LABEL_SCOPE16+$01
-  PHA
+  PUSH16 LABEL_SCOPE16
   JSR select_label_hash_table
   JSR find_macro_in_hash
   ; Restore LABEL_SCOPE16
-  PLA
-  STA LABEL_SCOPE16+$01
-  PLA
-  STA LABEL_SCOPE16
+  POP16 LABEL_SCOPE16
   BCS .not_found
   ; Found macro in LHASHTAB
   ; MACRO_DEF_PTR = TABP16 + Y (value starts directly at params)
@@ -128,7 +122,7 @@ emit_instruction:
   ; 2-byte operand (absolute modes)
   LDA OPERAND16
   JSR emit
-  LDA OPERAND16+$01
+  LDA OPERAND16 + 1
   JMP emit               ; Tail call
 .done:
   RTS
@@ -136,7 +130,7 @@ emit_instruction:
   ; Validate operand <= $FF
   BIT PASS
   BPL .one_byte_ok       ; Skip validation on pass 1
-  LDA OPERAND16+$01
+  LDA OPERAND16 + 1
   BNE .one_byte_error
 .one_byte_ok:
   LDA OPERAND16
@@ -151,8 +145,8 @@ emit_instruction:
   LDA OPERAND16
   SBC PC16
   STA OPERAND16
-  LDA OPERAND16+$01
-  SBC PC16+$01
+  LDA OPERAND16 + 1
+  SBC PC16 + 1
   ; Check if within range
   CMP #$00
   BEQ .forward
@@ -205,7 +199,7 @@ handle_fwdref_mode:
   BCS .use_abs             ; Was in list (forced to ABS), return C=1
 .check_value:
   ; Check if value requires absolute addressing (>= $100)
-  LDA OPERAND16+$01
+  LDA OPERAND16 + 1
   BNE .use_abs             ; Value >= $100, must use ABS
   ; Can use ZP
   CLC

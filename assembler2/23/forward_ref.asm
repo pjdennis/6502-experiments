@@ -51,7 +51,7 @@ add_forward_ref:
   LDA PC16
   STA (FWDREF16),Y
   INY
-  LDA PC16+$01
+  LDA PC16 + 1
   STA (FWDREF16),Y
   ; Advance pointer by 2
   CLC
@@ -74,7 +74,7 @@ check_forward_ref:
   BNE .no_match
   INY
   LDA (FWDREF16),Y
-  CMP PC16+$01
+  CMP PC16 + 1
   BNE .no_match
   ; Match - advance pointer and return C=1
   CLC

@@ -46,18 +46,12 @@ process_macro:
   JMP err_macro_shadows_instruction
 .no_instruction_collision:
   ; Save LABEL_SCOPE16 before add_macro_to_hash clobbers it
-  LDA LABEL_SCOPE16
-  PHA
-  LDA LABEL_SCOPE16+$01
-  PHA
+  PUSH16 LABEL_SCOPE16
   ; Add macro to LHASHTAB
   JSR select_label_hash_table
   JSR add_macro_to_hash
   ; Restore LABEL_SCOPE16
-  PLA
-  STA LABEL_SCOPE16+$01
-  PLA
-  STA LABEL_SCOPE16
+  POP16 LABEL_SCOPE16
   BCC .name_ok         ; C=0 means new entry added
   ; Name already exists - pass 2 expects this, pass 1 is duplicate error
   BIT PASS
@@ -125,24 +119,20 @@ check_macro_recursion:
   CMP16 TABP16, SCOPE_PTR16
   BEQ .done                 ; Reached current position, no recursion
   ; Compare macro address at offset +3 with MACRO_ENTRY16
-  LDY #$03
+  LDY #3
   LDA (TABP16),Y
   CMP MACRO_ENTRY16
   BNE .next
   INY
   LDA (TABP16),Y
-  CMP MACRO_ENTRY16+$01
+  CMP MACRO_ENTRY16 + 1
   BNE .next
   ; Match found - recursion detected
   JMP err_recursive_macro
 .next:
   ; Advance to next entry (+5 bytes)
-  LDA TABP16
   CLC
-  ADC #$05
-  STA TABP16
-  BCC .loop
-  INC TABP16+$01
+  ADCI16 TABP16, 5, TABP16
   JMP .loop
 .done:
   RTS
@@ -206,7 +196,7 @@ expand_macro:
   LDA OPERAND16
   STA MACRO_ARG_BUF,X
   INX
-  LDA OPERAND16+$01
+  LDA OPERAND16 + 1
   STA MACRO_ARG_BUF,X
   INX
   ; Check if more params expected
@@ -261,7 +251,7 @@ expand_macro:
   STA OPERAND16
   INX
   LDA MACRO_ARG_BUF,X
-  STA OPERAND16+$01
+  STA OPERAND16 + 1
   INX
   ; Skip adding if forward ref in pass 1
   LDA IS_FWDREF
@@ -334,7 +324,7 @@ capture_macro_line:
   ; Comments stripped, consecutive spaces collapsed (except in strings)
   CP16 MEMP16, MACRO_DEF_PTR16 ; Save heap pos for potential undo
   LDX #$00               ; Space indicator - $01 if last char was a space, $00 otherwise
-  LDY #$00               ; Capture index
+  LDY #0                 ; Capture index
   LDA CURR_CHAR
   BNE .process           ; Always taken
 .next:
@@ -424,7 +414,7 @@ capture_macro_line:
   ; Now check if this line was .endmacro or .macro
   CP16 MACRO_DEF_PTR16, TABP16
   ; Skip leading spaces
-  LDY #$00
+  LDY #0
 .skip_space:
   LDA (TABP16),Y
   CMP #' '
@@ -445,7 +435,7 @@ capture_macro_line:
   ; Found .endmacro. Restore heap to undo the copy
   CP16 MACRO_DEF_PTR16, MEMP16
   ; At end of macro definition. Write $00 terminator to body
-  LDY #$00
+  LDY #0
   APPEND_HEAPI $00
   JSR advance_heap
   ; The debug version of the assembler supports displaying the captured macro

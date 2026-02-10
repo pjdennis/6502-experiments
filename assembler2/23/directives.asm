@@ -48,10 +48,10 @@ swap_pc_with_save:
   STY PC16
   STA PC_SAVE16
   ; Swap PC16 high byte with save location
-  LDA PC16+$01
-  LDY PC_SAVE16+$01
-  STY PC16+$01
-  STA PC_SAVE16+$01
+  LDA PC16 + 1
+  LDY PC_SAVE16 + 1
+  STY PC16 + 1
+  STA PC_SAVE16 + 1
   RTS
 
 
@@ -71,7 +71,7 @@ process_directive:
   STA INST_PTR16
   INY
   LDA (TABP16),Y
-  STA INST_PTR16+$01
+  STA INST_PTR16 + 1
   JMP (INST_PTR16)     ; Tail call: handler RTS returns to our caller
 .not_found:
   JMP err_unknown_directive
@@ -245,12 +245,7 @@ handle_reserve:
   ; HEX16 (= OPERAND16) now holds the count
   ; Compute target: HEX16 = PC16 + count
   CLC
-  LDA HEX16
-  ADC PC16
-  STA HEX16
-  LDA HEX16+$01
-  ADC PC16+$01
-  STA HEX16+$01
+  ADC16 HEX16, PC16, HEX16
   JSR advance_pc_to_hex16
   JMP skip_rest_of_line
 
@@ -273,7 +268,7 @@ data_parameters_loop:
   ; Mode 1 (.byte) or Mode 3 (.asciiz): validate + emit 1 byte
   BIT PASS
   BPL .data_emit_one_byte   ; Skip validation on pass 1
-  LDA OPERAND16+$01
+  LDA OPERAND16 + 1
   BEQ .data_emit_one_byte   ; Not an error
   JMP err_value_out_of_range
 .data_emit_one_byte:
@@ -283,7 +278,7 @@ data_parameters_loop:
 .data_emit_two_bytes:
   LDA OPERAND16          ; Emit low byte
   JSR emit
-  LDA OPERAND16+$01      ; Emit high byte
+  LDA OPERAND16 + 1      ; Emit high byte
   JSR emit
 .data_check_more:
   JSR check_for_end_of_line

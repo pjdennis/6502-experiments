@@ -52,7 +52,7 @@ to_decimal:
 .shift:
   LDX #$05
 .shift_loop:
-  LDA TO_DECIMAL_RESULT-$01,X
+  LDA TO_DECIMAL_RESULT - 1,X
   STA TO_DECIMAL_RESULT,X
   DEX
   BNE .shift_loop

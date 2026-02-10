@@ -31,8 +31,7 @@ open_input:
   PHA
   LDA #$00
   JSR argv
-  STA TABP16
-  STX TABP16+$01
+  STAX16 TABP16
   PLA
   TAX
   JSR copy_string_to_token
@@ -142,7 +141,7 @@ match_command_line_arg:
   STA JUMP_TARGET16
   INY
   LDA (ARG_PTR16),Y
-  STA JUMP_TARGET16+$01
+  STA JUMP_TARGET16 + 1
   JSR do_jump            ; Call handler
   CLC                    ; Match found
   PLA                    ; Restore Y

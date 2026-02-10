@@ -79,11 +79,11 @@ push_label_scope:
   ; Save current scope state to scope stack
   LDY #$00
   APPEND_TO_SCOPE LABEL_SCOPE16
-  APPEND_TO_SCOPE LABEL_SCOPE16+$01
+  APPEND_TO_SCOPE LABEL_SCOPE16 + 1
   APPEND_TO_SCOPE CACHED_HASH
   ; Save macro entry address for recursion detection
   APPEND_TO_SCOPE MACRO_ENTRY16
-  APPEND_TO_SCOPE MACRO_ENTRY16+$01
+  APPEND_TO_SCOPE MACRO_ENTRY16 + 1
   ; Advance scope pointer by 5 bytes for the 5 entries added above
   CLC
   ADCI16 SCOPE_PTR16, $05, SCOPE_PTR16
@@ -121,7 +121,7 @@ pop_label_scope:
   STA LABEL_SCOPE16
   INY
   LDA (SCOPE_PTR16),Y
-  STA LABEL_SCOPE16+$01
+  STA LABEL_SCOPE16 + 1
   INY
   LDA (SCOPE_PTR16),Y
   STA CACHED_HASH

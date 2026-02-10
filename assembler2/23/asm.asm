@@ -309,8 +309,7 @@ start:
   BCS .args_done         ; Processed all args
   TYA                    ; Argument index
   JSR argv               ; Get arg[Argument index]
-  STA TABP16
-  STX TABP16+$01
+  STAX16 TABP16
   JSR match_command_line_arg
   BCS .invalid_argument  ; Match not found
   INY                    ; Move to next argument
@@ -326,7 +325,7 @@ start:
   JSR open_input
 
   ; Open output file
-  LDA #$01
+  LDA #1
   JSR argv
   JSR openout
   STA CURR_OUT_FILE

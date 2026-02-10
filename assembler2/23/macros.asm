@@ -1,7 +1,7 @@
 ; Utility macros for 16-bit operations
 ;
 ; These macros assume consecutive zero-page locations for 16-bit values
-; (low byte at ptr, high byte at ptr+$01)
+; (low byte at ptr, high byte at ptr + 1)
 ;
 ; Requires: none (macro expansions only)
 

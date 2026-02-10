@@ -21,17 +21,17 @@ compare_end_of_token:
   ; Check if A is a valid token character (0-9, A-Z, _, a-z)
   ; Returns C=0 if token char (not end), C=1 if not token char (end of token)
   ; Preserves A, X, Y
-  CMP #'z'+$01
+  CMP #'z' + 1
   BCS .end              ; > 'z'
   CMP #'a'
   BCS .not_end          ; 'a'-'z'
   CMP #'_'
   BEQ .not_end          ; '_'
-  CMP #'Z'+$01
+  CMP #'Z' + 1
   BCS .end              ; > 'Z'
   CMP #'A'
   BCS .not_end          ; 'A'-'Z'
-  CMP #'9'+$01
+  CMP #'9' + 1
   BCS .end              ; > '9'
   CMP #'0'
   BCS .not_end          ; '0'-'9'
@@ -113,16 +113,16 @@ convert_hex_character:
   CMP #'A'
   BCS .alpha           ; >= 'A'
   ; Numeric path: '0'-'9' → 0-9
-  SBC #'0'-$01         ; Subtract 1 since carry is clear from CMP
-  CMP #'9'-'0'+$01     ; Check if result 0-9
+  SBC #'0' - 1         ; Subtract 1 since carry is clear from CMP
+  CMP #'9' - '0' + 1   ; Check if result 0-9
   BCS .error           ; >= 10, invalid
   RTS
 .alpha:
   ; Alpha path: 'A'-'F' → 10-15
   SBC #'A'             ; Carry already set from CMP
-  CMP #'F'-'A'+$01     ; Check if result 0-5
+  CMP #'F' - 'A' + 1   ; Check if result 0-5
   BCS .error           ; >= 6, invalid
-  ADC #'9'-'0'+$01     ; Add 10 (carry clear from CMP)
+  ADC #'9' - '0' + 1   ; Add 10 (carry clear from CMP)
   RTS
 .error:
   JMP err_invalid_hex

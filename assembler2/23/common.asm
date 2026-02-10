@@ -92,9 +92,9 @@ MEMP16:          .word       ; 2 byte heap pointer
 ; On exit: A not preserved, X and Y preserved
   .macro CHECK_FOR_OUT_OF_MEMORY fs_ptr
   ; Quick check: if ptr_H - MEMP16_H > 1, we have >= 512 bytes free
-  LDA fs_ptr+$01
+  LDA fs_ptr + 1
   SEC
-  SBC MEMP16+$01        ; A = high byte difference
+  SBC MEMP16 + 1        ; A = high byte difference
   CMP #$02
   BCS .oom_ok           ; >= 2 means >= 512 bytes, definitely safe
   ; High bytes are close (differ by 0 or 1) - do precise check
@@ -102,8 +102,8 @@ MEMP16:          .word       ; 2 byte heap pointer
   LDA fs_ptr
   SEC
   SBC MEMP16            ; Low byte of difference (result discarded, need borrow)
-  LDA fs_ptr+$01
-  SBC MEMP16+$01        ; A = high byte of (ptr - MEMP16)
+  LDA fs_ptr + 1
+  SBC MEMP16 + 1        ; A = high byte of (ptr - MEMP16)
   BNE .oom_ok           ; Non-zero means >= 256 bytes free
   JMP err_out_of_memory
 .oom_ok:
@@ -135,7 +135,7 @@ advance_heap:
   ADC MEMP16
   STA MEMP16
   BCC .done
-  INC MEMP16+$01
+  INC MEMP16 + 1
 .done:
   ; Check for collision with file stack
   CHECK_FOR_OUT_OF_MEMORY FS_P16
@@ -152,11 +152,9 @@ advance_heap:
 store_hash_value:
   LDY #$00
   LDA HT_V16
-  STA (MEMP16),Y
-  INY
-  LDA HT_V16+$01
-  STA (MEMP16),Y
-  INY
+  APPEND_HEAPA
+  LDA HT_V16 + 1
+  APPEND_HEAPA
   JMP advance_heap     ; Tail call
 
 

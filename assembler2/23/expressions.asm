@@ -54,7 +54,7 @@ parse_char_literal:
   CMP #'\''
   BNE .char_invalid
   LDA #$00
-  STA OPERAND16+$01
+  STA OPERAND16 + 1
   ; Read char for garbage check
   JMP read_char        ; Tail call
 .char_invalid:
@@ -78,7 +78,7 @@ parse_term:
   ; Check for decimal digit
   CMP #'0'
   BCC .not_decimal       ; < '0'
-  CMP #'9'+$01
+  CMP #'9' + 1
   BCC .decimal           ; >= '0' and <= '9'
 .not_decimal:
   ; Global label path
@@ -113,11 +113,10 @@ parse_term:
   BIT PASS
   BMI .label_not_found_pass2
   ; Pass 1 - forward reference: use zero values
-  LDY #$FF
-  STY IS_FWDREF        ; Mark as forward reference
-  LDY #$00
-  STY HEX16
-  STY HEX16+$01
+  LDA #$FF
+  STA IS_FWDREF        ; Mark as forward reference
+  LDA #$00
+  STA_LH16 HEX16
   BEQ .label_store     ; Always taken
 .label_not_found_pass2:
   JMP err_label_not_found
@@ -169,16 +168,16 @@ parse_value:
 ; Apply low byte selector: zero high byte and clear IS_FWDREF
 apply_low_byte:
   LDA #$00
-  STA OPERAND16+$01
+  STA OPERAND16 + 1
   STA IS_FWDREF
   RTS
 
 ; Apply high byte selector: move high byte to low, zero high byte, clear IS_FWDREF
 apply_high_byte:
-  LDA OPERAND16+$01
+  LDA OPERAND16 + 1
   STA OPERAND16
   LDA #$00
-  STA OPERAND16+$01
+  STA OPERAND16 + 1
   STA IS_FWDREF
   RTS
 
@@ -299,7 +298,7 @@ parse_expression:
   JSR expr_next_term
 
   ; Check if shift count >= 16 (result will be 0)
-  LDA OPERAND16+$01
+  LDA OPERAND16 + 1
   BNE .shift_zero     ; High byte != 0 means shift >= 256
   LDA OPERAND16
   CMP #$10
@@ -320,7 +319,7 @@ parse_expression:
   JSR expr_next_term
 
   ; Check if shift count >= 16 (result will be 0)
-  LDA OPERAND16+$01
+  LDA OPERAND16 + 1
   BNE .shift_zero    ; High byte != 0 means shift >= 256
   LDA OPERAND16
   CMP #$10

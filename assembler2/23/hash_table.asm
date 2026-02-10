@@ -123,7 +123,7 @@ find_in_hash:
   STA HT_V16
   INY
   LDA (TABP16),Y
-  STA HT_V16+$01
+  STA HT_V16 + 1
 .done:
   RTS
 
@@ -178,7 +178,7 @@ load_hash_entry:
   STA TABP16
   INY
   LDA (HTP16),Y
-  STA TABP16+$01
+  STA TABP16 + 1
   RTS
 
 
@@ -193,7 +193,7 @@ store_hash_entry:
   LDA MEMP16
   STA (HTP16),Y
   INY
-  LDA MEMP16+$01
+  LDA MEMP16 + 1
   STA (HTP16),Y
   RTS
 
@@ -208,7 +208,7 @@ store_table_entry:
   LDA MEMP16
   STA (TABP16),Y
   INY
-  LDA MEMP16+$01
+  LDA MEMP16 + 1
   STA (TABP16),Y
   INY
   RTS
@@ -263,7 +263,7 @@ compare_token:
   BNE .escape_nomatch
   INY
   LDA (TABP16),Y
-  CMP LABEL_SCOPE16+$01
+  CMP LABEL_SCOPE16 + 1
   BNE .escape_nomatch
   ; Scope matches - compare local part (Y=2, need Y=3 to skip header)
   ; Use X for HT_KEY index, save/restore since X is file handle
@@ -322,7 +322,7 @@ find_token:
   STA TABP16
   INY
   LDA (HTTP16),Y
-  STA TABP16+$01
+  STA TABP16 + 1
   ORA TABP16
   BEQ .at_end
   JMP .token_loop
@@ -362,7 +362,7 @@ store_token:
   ; HT_KEY contains "bar" without dot - no scanning needed
   APPEND_HEAP LABEL_TYPE ; Escape byte (type)
   APPEND_HEAP LABEL_SCOPE16
-  APPEND_HEAP LABEL_SCOPE16+$01
+  APPEND_HEAP LABEL_SCOPE16 + 1
   JSR advance_heap      ; Advance past escape header (3 bytes)
   ; Fall through to copy HT_KEY
 .copy_token:
@@ -387,8 +387,7 @@ find_macro_in_hash:
   LDA #LABEL_TYPE_MACRO_DEF
   STA LABEL_TYPE
   LDA #$00
-  STA LABEL_SCOPE16
-  STA LABEL_SCOPE16+$01
+  STA_LH16 LABEL_SCOPE16
   JSR calculate_hash       ; Global hash (not calculate_hash_local)
   JMP find_in_hash_common  ; Tail call
 
@@ -403,8 +402,7 @@ add_macro_to_hash:
   LDA #LABEL_TYPE_MACRO_DEF
   STA LABEL_TYPE
   LDA #$00
-  STA LABEL_SCOPE16
-  STA LABEL_SCOPE16+$01
+  STA_LH16 LABEL_SCOPE16
   JSR calculate_hash       ; Global hash (not calculate_hash_local)
   JMP hash_add_common      ; Tail call
 

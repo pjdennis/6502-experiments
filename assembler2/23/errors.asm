@@ -241,13 +241,13 @@ interrupt:
   TSX
   SEC
   LDA $0102,X
-  SBC #$01
+  SBC #1
   STA TABP16
   LDA $0103,X
-  SBC #$00
-  STA TABP16+$01
+  SBC #0
+  STA TABP16 + 1
 ; Retrieve error code and skip diagnostics if no error
-  LDY #$00
+  LDY #0
   LDA (TABP16),Y
   BNE .error
   JMP exit ; Done
@@ -267,13 +267,14 @@ interrupt:
   LDA TEMP
   STA TO_DECIMAL_VALUE16
   LDA #$00
-  STA TO_DECIMAL_VALUE16+$01
+  STA TO_DECIMAL_VALUE16 + 1
   JSR show_decimal
 ; Print the current file and line if any file is open
   JSR file_stack_empty
   BEQ .location_done
 ; Print " in file " or " in macro " based on source type
   LDA FS_SRC_TYPE
+  CMP #FS_SRC_TYPE_FILE
   BNE .in_macro
   SHOW_MESSAGEI msg_error_file
   JMP .show_source_name
@@ -296,7 +297,7 @@ interrupt:
   LDA $0102,X
   STA TABP16
   LDA $0103,X
-  STA TABP16+$01
+  STA TABP16 + 1
   JSR show_message
 ; Print include traceback (if any files open)
   JSR file_stack_empty
@@ -341,7 +342,7 @@ show_message:
   JSR write_d
   INY
   BNE .loop
-  INC TABP16+$01
+  INC TABP16 + 1
   BNE .loop        ; Always taken
 .done:
   RTS
@@ -350,7 +351,7 @@ show_message:
 ; Show traceback - uses file stack API to walk include/expansion chain
 ; On entry FS_P16 points to current file stack entry
 ; On exit A, X, Y not preserved
-;         TABP16;TABP16+$01 not preserved
+;         TABP16;TABP16 + 1 not preserved
 ;         All files in stack are closed
 show_include_traceback:
 .loop:
@@ -366,6 +367,7 @@ show_include_traceback:
   SHOW_CHAR '\n'
   ; Print verb based on child type (saved on stack)
   PLA
+  CMP #FS_SRC_TYPE_FILE
   BEQ .verb_included
   ; Child was macro → "expanded from"
   SHOW_MESSAGEI msg_expanded_from
@@ -376,6 +378,7 @@ show_include_traceback:
 .show_parent:
   ; Check parent type for "macro " prefix
   LDA FS_SRC_TYPE
+  CMP #FS_SRC_TYPE_FILE
   BEQ .parent_is_file
   SHOW_MESSAGEI msg_macro_prefix
 .parent_is_file:
