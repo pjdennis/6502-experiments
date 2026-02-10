@@ -119,7 +119,12 @@ dir_asciiz:
 .zp_asciiz_err:
   JMP err_asciiz_in_zeropage
 dir_endmacro:
+  ; Check if we're skipping - if so, just ignore (don't error)
+  BIT SKIP_FLAG
+  BMI .skip_endmacro
   JMP err_endmacro_without_macro
+.skip_endmacro:
+  JMP skip_rest_of_line
 
 dir_zp_alloc:
   ; A = DATA_MODE (1=byte, 2=word)

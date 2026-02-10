@@ -29,6 +29,11 @@ IN_MACRO_DEF:    .byte        ; Flag: currently capturing macro body ($FF = capt
 ; Syntax: .macro NAME [param1 param2 ...]
 ; Creates entry in LHASHTAB: [escape header][name $00][params...][$00][body $00]
 dir_macro:
+  ; Check if skipping - if so, just parse line and return
+  BIT SKIP_FLAG
+  BPL .not_skipping
+  JMP .skip_macro_def
+.not_skipping:
   ; Skip spaces and read macro name
   JSR check_for_end_of_line
   BCC .has_name
@@ -103,6 +108,23 @@ dir_macro:
   LDA #$FF
   STA IN_MACRO_DEF
   ; Skip rest of line (already done by check_for_end_of_line)
+  RTS
+.skip_macro_def:
+  ; Parse the macro name and parameters without capturing
+  JSR check_for_end_of_line
+  BCS .skip_done       ; End of line, no name
+  JSR read_token       ; Read macro name
+.skip_param_loop:
+  JSR check_for_end_of_line
+  BCS .skip_done       ; End of line, done
+  JSR read_token       ; Read parameter
+  JSR check_for_end_of_line
+  BCS .skip_done
+  CMP #','
+  BNE .skip_done       ; Not a comma, done
+  JSR read_char        ; Skip comma
+  JMP .skip_param_loop
+.skip_done:
   RTS
 
 
