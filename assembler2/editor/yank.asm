@@ -14,6 +14,7 @@ YANK_LIMIT = $E500
 
 YANK_END16:    .word     ; Points one past last byte in yank buffer
 YANK_LINES:    .byte     ; Number of lines in yank buffer
+YANK_SIZE16:   .word     ; Single yank size for paste operations
 
   .code
 
@@ -147,20 +148,16 @@ yank_paste_below_n:
 .pbn_has_data:
 
   ; Calculate total size = single × count
-  CP16 BUF_LEN16, BUF_DST16  ; BUF_DST16 = single size
+  CP16 BUF_LEN16, YANK_SIZE16 ; YANK_SIZE16 = single size
   LDX BUF_TEMP
   DEX
   BEQ .pbn_total_done
 .pbn_calc:
   CLC
-  ADC16 BUF_LEN16, BUF_DST16, BUF_LEN16
+  ADC16 BUF_LEN16, YANK_SIZE16, BUF_LEN16
   DEX
   BNE .pbn_calc
 .pbn_total_done:
-  ; BUF_LEN16 = total size, BUF_DST16 = single size
-
-  ; Save single size on stack
-  PUSH16 BUF_DST16
 
   ; Find insertion point: after current line's newline
   LDAX16 FILE_LINE16
@@ -180,7 +177,6 @@ yank_paste_below_n:
 
   ; Shift right to make room: BUF_PTR16 = insert point, BUF_LEN16 = total size
   JSR buf_shift_right_16
-  POP16 BUF_DST16            ; Restore single size (PLA doesn't affect carry)
   BCC .pbn_shift_ok
   ; Buffer full
   SET16 str_buffer_full, STR_PTR16
@@ -190,8 +186,7 @@ yank_paste_below_n:
 .pbn_shift_ok:
 
   ; Copy yank buffer into gap N times using mem_copy_down
-  ; BUF_PTR16 = insertion point (gap start), BUF_DST16 = single size
-  PUSH16 BUF_DST16            ; Save single size on stack
+  ; BUF_PTR16 = insertion point (gap start)
   LDX BUF_TEMP
 .pbn_copy_loop:
   TXA
@@ -203,21 +198,13 @@ yank_paste_below_n:
   CP16 YANK_END16, BUF_PTR16  ; BUF_PTR16 = end of yank data
   JSR mem_copy_down            ; Preserves BUF_PTR16
   POP16 BUF_PTR16             ; Restore write position
-  ; Advance write position by single size (peek from stack)
-  ; Stack: ... single_lo single_hi count
-  TSX
+  ; Advance write position by single size
   CLC
-  LDA BUF_PTR16
-  ADC $0103,X                 ; Single size low byte
-  STA BUF_PTR16
-  LDA BUF_PTR16 + 1
-  ADC $0102,X                 ; Single size high byte
-  STA BUF_PTR16 + 1
+  ADC16 BUF_PTR16, YANK_SIZE16, BUF_PTR16
   PLA
   TAX
   DEX
   BNE .pbn_copy_loop
-  POP16 BUF_DST16             ; Clean single size from stack
 
   ; Rebuild lines once
   JSR buf_rebuild_lines
@@ -250,19 +237,16 @@ yank_paste_above_n:
 .pan_has_data:
 
   ; Calculate total size = single × count
-  CP16 BUF_LEN16, BUF_DST16  ; BUF_DST16 = single size
+  CP16 BUF_LEN16, YANK_SIZE16 ; YANK_SIZE16 = single size
   LDX BUF_TEMP
   DEX
   BEQ .pan_total_done
 .pan_calc:
   CLC
-  ADC16 BUF_LEN16, BUF_DST16, BUF_LEN16
+  ADC16 BUF_LEN16, YANK_SIZE16, BUF_LEN16
   DEX
   BNE .pan_calc
 .pan_total_done:
-
-  ; Save single size on stack
-  PUSH16 BUF_DST16
 
   ; Insertion point: start of current line
   LDAX16 FILE_LINE16
@@ -270,7 +254,6 @@ yank_paste_above_n:
 
   ; Shift right to make room
   JSR buf_shift_right_16
-  POP16 BUF_DST16
   BCC .pan_shift_ok
   ; Buffer full
   SET16 str_buffer_full, STR_PTR16
@@ -280,8 +263,7 @@ yank_paste_above_n:
 .pan_shift_ok:
 
   ; Copy yank buffer into gap N times using mem_copy_down
-  ; BUF_PTR16 = insertion point (gap start), BUF_DST16 = single size
-  PUSH16 BUF_DST16            ; Save single size on stack
+  ; BUF_PTR16 = insertion point (gap start)
   LDX BUF_TEMP
 .pan_copy_loop:
   TXA
@@ -293,21 +275,13 @@ yank_paste_above_n:
   CP16 YANK_END16, BUF_PTR16  ; BUF_PTR16 = end of yank data
   JSR mem_copy_down            ; Preserves BUF_PTR16
   POP16 BUF_PTR16             ; Restore write position
-  ; Advance write position by single size (peek from stack)
-  ; Stack: ... single_lo single_hi count
-  TSX
+  ; Advance write position by single size
   CLC
-  LDA BUF_PTR16
-  ADC $0103,X                 ; Single size low byte
-  STA BUF_PTR16
-  LDA BUF_PTR16 + 1
-  ADC $0102,X                 ; Single size high byte
-  STA BUF_PTR16 + 1
+  ADC16 BUF_PTR16, YANK_SIZE16, BUF_PTR16
   PLA
   TAX
   DEX
   BNE .pan_copy_loop
-  POP16 BUF_DST16             ; Clean single size from stack
 
   ; Rebuild lines once
   JSR buf_rebuild_lines
