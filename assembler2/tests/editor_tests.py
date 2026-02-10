@@ -45,7 +45,7 @@ class EditorTestRunner:
         self.assembler = base_dir / "23" / "out" / "asm.out"
         self.editor_asm = base_dir / "editor" / "editor.asm"
         self.editor_bin = base_dir / "editor" / "out" / "editor.out"
-        self.editor_debug_bin = base_dir / "editor" / "out" / "editor_debug.out"
+        self.editor_small_bin = base_dir / "editor" / "out" / "editor_small.out"
         self.passed = 0
         self.failed = 0
 
@@ -74,10 +74,10 @@ class EditorTestRunner:
         """Assemble the editor."""
         return self._assemble_editor(self.editor_bin)
 
-    def build_debug_editor(self):
-        """Assemble the debug editor (with enable_debug defined)."""
-        return self._assemble_editor(self.editor_debug_bin,
-                                     ["define:enable_debug"])
+    def build_small_buffer_editor(self):
+        """Assemble the editor with small buffer (256 bytes for testing)."""
+        return self._assemble_editor(self.editor_small_bin,
+                                     ["define:small_buffer"])
 
     def run_editor(self, input_file: str, keys: bytes, tmpdir: Path) -> tuple:
         """Run the editor with given keystroke sequence.
@@ -236,9 +236,9 @@ class EditorTestRunner:
 
             self._pass(name)
 
-    def run_editor_debug(self, input_file: str, keys: bytes,
-                         tmpdir: Path, extra_args: list = None) -> tuple:
-        """Run the debug editor with given keystroke sequence and extra args.
+    def run_editor_small_buffer(self, input_file: str, keys: bytes,
+                               tmpdir: Path) -> tuple:
+        """Run the small buffer editor with given keystroke sequence.
 
         Returns (exit_code, saved_content, ansi_output).
         """
@@ -246,10 +246,8 @@ class EditorTestRunner:
         output_file = tmpdir / "output.txt"
         keys_file.write_bytes(keys)
 
-        cmd = [str(self.emulator), str(self.editor_debug_bin), "--load", "0400",
+        cmd = [str(self.emulator), str(self.editor_small_bin), "--load", "0400",
                "--input", str(keys_file), "--output", str(output_file), input_file]
-        if extra_args:
-            cmd.extend(extra_args)
 
         result = subprocess.run(
             cmd, capture_output=True, timeout=10
@@ -488,11 +486,10 @@ class EditorTestRunner:
 
             self._pass(name)
 
-    def run_test_debug(self, name: str, initial_content: str, keys: bytes,
-                       extra_args: list = None,
-                       expected_content: str = None, expect_exit: int = 0,
-                       expect_unmodified: bool = False):
-        """Run a test using the debug editor with extra arguments."""
+    def run_test_small_buffer(self, name: str, initial_content: str, keys: bytes,
+                             expected_content: str = None, expect_exit: int = 0,
+                             expect_unmodified: bool = False):
+        """Run a test using the small buffer editor (256 bytes)."""
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir = Path(tmpdir)
             edit_file = tmpdir / "test.txt"
@@ -503,8 +500,8 @@ class EditorTestRunner:
                 edit_file.write_text("")
 
             try:
-                exit_code, saved, ansi = self.run_editor_debug(
-                    str(edit_file), keys, tmpdir, extra_args
+                exit_code, saved, ansi = self.run_editor_small_buffer(
+                    str(edit_file), keys, tmpdir
                 )
             except subprocess.TimeoutExpired:
                 self._fail(name, "Timed out (infinite loop?)")
@@ -918,83 +915,77 @@ class EditorTestRunner:
             expected_content="Hello\n"
         )
 
-        self._group("Bounds checking (debug build):", leading_blank=True)
+        self._group("Bounds checking (small buffer build):", leading_blank=True)
 
-        if not self.build_debug_editor():
-            print("  Skipping bounds checking tests (debug build failed)")
+        if not self.build_small_buffer_editor():
+            print("  Skipping bounds checking tests (small buffer build failed)")
         else:
             # Read-only mode: file exceeds buffer, editing keys blocked
-            # bufsize:21 limits buffer to $2000-$20FF (256 bytes)
+            # small_buffer limits buffer to $2000-$20FF (256 bytes)
             # File has 300 bytes so it will be truncated
             # Truncation warning consumes one keypress (the 'x')
             # Then 'x' should be ignored (readonly), :q exits
             large_content = "A" * 299 + "\n"  # 300 bytes > 256
-            self.run_test_debug(
+            self.run_test_small_buffer(
                 "Truncated file enters read-only mode",
                 large_content,
                 # 'x' dismissed truncation warning, 'x' ignored (RO), :q quits
                 b"xx:q\r",
-                extra_args=["bufsize:21"],
                 expect_unmodified=True
             )
 
             # Read-only mode: :w is blocked
             # Truncation warning consumes 'x', then :w shows RO message,
             # 'x' dismisses that, :q! quits
-            self.run_test_debug(
+            self.run_test_small_buffer(
                 "Read-only mode blocks :w",
                 large_content,
                 b"x:w\rx:q!\r",
-                extra_args=["bufsize:21"],
                 expect_unmodified=True
             )
 
             # Read-only mode: :wq is blocked
-            self.run_test_debug(
+            self.run_test_small_buffer(
                 "Read-only mode blocks :wq",
                 large_content,
                 b"x:wq\rx:q!\r",
-                extra_args=["bufsize:21"],
                 expect_unmodified=True
             )
 
             # Read-only mode: :q exits cleanly
-            self.run_test_debug(
+            self.run_test_small_buffer(
                 "Read-only mode allows :q",
                 large_content,
                 b"x:q\r",
-                extra_args=["bufsize:21"],
                 expect_unmodified=True
             )
 
             # Read-only mode: i key is blocked (no insert mode)
-            self.run_test_debug(
+            self.run_test_small_buffer(
                 "Read-only mode blocks i",
                 large_content,
                 b"x:q\r",   # 'x' dismisses warning, :q quits
-                extra_args=["bufsize:21"],
                 expect_unmodified=True
             )
 
             # Buffer full during editing: insert char fails
-            # bufsize:21 = 256 bytes buffer. File with 250 bytes leaves ~6 free
+            # small_buffer = 256 bytes buffer. File with 250 bytes leaves ~6 free
             # After loading, type characters until full
             near_full = "B" * 249 + "\n"  # 250 bytes, ~6 bytes free
-            self.run_test_debug(
+            self.run_test_small_buffer(
                 "Buffer full refuses insert char",
                 near_full,
                 # Enter insert mode, type 7 chars (6 succeed, 7th triggers full)
                 # 'z' dismisses "Buffer full" message
                 # ESC back to normal, :q! quits
                 b"iAAAAAA" + b"A" + b"z\x1b:q!\r",
-                extra_args=["bufsize:21"],
                 expect_unmodified=True
             )
 
             # Buffer full during editing: newline insert fails
             # File with 254 bytes leaves ~2 free
             almost_full = "C" * 253 + "\n"  # 254 bytes, ~2 bytes free
-            self.run_test_debug(
+            self.run_test_small_buffer(
                 "Buffer full refuses newline insert",
                 almost_full,
                 # Insert mode, type 'A' (succeeds, 1 byte free),
@@ -1002,45 +993,41 @@ class EditorTestRunner:
                 # Actually with 2 bytes free: 'A' uses 1, Enter uses 1 = exactly full
                 # Try one more char to trigger full
                 b"iAA" + b"z\x1b:q!\r",
-                extra_args=["bufsize:21"],
                 expect_unmodified=True
             )
 
             # Counted paste pre-check: rejects paste that would overflow
-            # bufsize:21 = 256 bytes. Content ~50 bytes. Yank 2 lines (~20 bytes).
+            # small_buffer = 256 bytes. Content ~50 bytes. Yank 2 lines (~20 bytes).
             # 99p would need ~2000 bytes, way over 256 limit.
             # File should be unmodified (pre-check rejects before any paste).
             paste_content = "AAAA\nBBBB\nCCCC\nDDDD\n"  # ~20 bytes
-            self.run_test_debug(
+            self.run_test_small_buffer(
                 "Counted paste pre-check rejects overflow (p)",
                 paste_content,
                 # yy yanks 1 line, 99p would overflow, z dismisses msg
                 b"2yy99pz:q!\r",
-                extra_args=["bufsize:21"],
                 expect_unmodified=True
             )
 
             # Same test for P (paste above)
-            self.run_test_debug(
+            self.run_test_small_buffer(
                 "Counted paste pre-check rejects overflow (P)",
                 paste_content,
                 b"2yy99Pz:q!\r",
-                extra_args=["bufsize:21"],
                 expect_unmodified=True
             )
 
             # Single paste that fits should still work
-            self.run_test_debug(
+            self.run_test_small_buffer(
                 "Single paste works when space available",
                 paste_content,
                 b"yyp:wq\r",
-                extra_args=["bufsize:21"],
                 expected_content="AAAA\nAAAA\nBBBB\nCCCC\nDDDD\n"
             )
 
-            # Normal editing works with debug build (no bufsize override)
-            self.run_test_debug(
-                "Debug build normal editing works",
+            # Normal editing works with small buffer build
+            self.run_test_small_buffer(
+                "Small buffer build normal editing works",
                 "Hello\n",
                 b"x:wq\r",
                 expected_content="ello\n"

@@ -35,8 +35,9 @@ console/ANSI mode.
   Always ends with a newline; empty buffer is one newline.
 - **Line table**: `LINE_TBL = $C000`, 16-bit pointers to each line start.
   `LINE_COUNT16` is recomputed in `buf_rebuild_lines` after every edit.
-- **Buffer limits**: `TEXT_LIMIT = $C000`; debug builds can override the
-  high byte via `bufsize:NN` arg (see tests).
+- **Buffer limits**: `TEXT_LIMIT` is conditionally defined at compile-time:
+  - Normal build: `$C000` (40KB buffer: $2000-$BFFF)
+  - Small buffer build (`define:small_buffer`): `$2100` (256 bytes: $2000-$20FF, used for testing)
 - **Editor state**: `CURSOR_ROW/CURSOR_COL`, `VIEW_TOP16`, `FILE_LINE16`,
   `MODE`, `MODIFIED`, `READONLY` live in zero page.
 - **Read-only mode**: set if file load truncates; edit keys are ignored and
@@ -56,8 +57,8 @@ console/ANSI mode.
 - `tests/editor_tests.py` assembles the editor (`23/out/asm.out`) and runs
   it under `emulator.out`, feeding keystroke byte streams and verifying
   saved file contents.
-- Debug tests build `editor_debug.out` with `define:enable_debug` and use
-  `bufsize:NN` to force truncation/read-only scenarios.
+- Bounds checking tests build `editor_small.out` with `define:small_buffer`
+  to create a 256-byte buffer, forcing truncation/read-only scenarios.
 
 ### Quick commands
 - Run tests: `./tests/editor_tests.py`
@@ -72,6 +73,6 @@ console/ANSI mode.
 
 ## Build/run
 - Assemble (release): `./emulator.out 23/out/asm.out editor/editor.asm editor/out/editor.out`
-- Assemble (debug): `./emulator.out 23/out/asm.out editor/editor.asm editor/out/editor_debug.out define:enable_debug`
+- Assemble (small buffer): `./emulator.out 23/out/asm.out editor/editor.asm editor/out/editor_small.out define:small_buffer`
 - Run (console): `./emulator.out editor/out/editor.out --load 0400 --console <file>`
 - Shortcut: `./editor.sh <file>`

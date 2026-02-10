@@ -9,7 +9,14 @@
 ; Insertions/deletions shift all text after the edit point.
 
 TEXT_BUF    = $2000  ; Start of text buffer
-TEXT_LIMIT  = $C000  ; End of text buffer space
+
+; Buffer size: normal build = 40KB, small build = 256 bytes
+  .ifndef small_buffer
+TEXT_LIMIT  = $C000  ; End of text buffer space (40KB: $2000-$BFFF)
+  .else
+TEXT_LIMIT  = $2100  ; End of text buffer space (256 bytes: $2000-$20FF)
+  .endif
+
 LINE_TBL    = $C000  ; Line pointer table (2 bytes per entry)
 LINE_LIMIT  = $E000  ; End of line table (supports up to 4096 entries = 2048 lines, but
                      ; practically limited by available text space)

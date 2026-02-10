@@ -81,11 +81,6 @@ editor_main:
 .fname_copied:
   SET16 FNAME_BUF, FNAME_PTR16
 
-  .ifdef enable_debug
-  ; Parse additional arguments (debug build only)
-  JSR parse_debug_args
-  .endif
-
   ; Try to open the file for reading (returns 0 if not found)
   LDAX16 FNAME_PTR16
   JSR open
@@ -206,111 +201,6 @@ main_loop:
   JSR con_flush
   LDA #0
   JSR exit
-
-; ============================================================================
-; Debug support (compiled in only with define:enable_debug)
-; ============================================================================
-
-  .ifdef enable_debug
-
-  .zeropage
-DBG_ARG_IDX:   .byte     ; Current argument index
-DBG_ARG_COUNT: .byte     ; Total argument count
-  .code
-
-; Parse additional command line arguments (after filename)
-; Looks for: bufsize:NN (hex high byte of buffer limit)
-parse_debug_args:
-  JSR argc
-  STA DBG_ARG_COUNT
-  LDA #1                ; Start at argv(1), argv(0) is filename
-  STA DBG_ARG_IDX
-
-.arg_loop:
-  LDA DBG_ARG_IDX
-  CMP DBG_ARG_COUNT
-  BCS .args_done        ; No more arguments
-  JSR argv
-  STAX16 BUF_PTR16
-
-  ; Check for "bufsize:" prefix (8 chars)
-  LDY #0
-  LDA (BUF_PTR16),Y
-  CMP #'b'
-  BNE .next_arg
-  INY
-  LDA (BUF_PTR16),Y
-  CMP #'u'
-  BNE .next_arg
-  INY
-  LDA (BUF_PTR16),Y
-  CMP #'f'
-  BNE .next_arg
-  INY
-  LDA (BUF_PTR16),Y
-  CMP #'s'
-  BNE .next_arg
-  INY
-  LDA (BUF_PTR16),Y
-  CMP #'i'
-  BNE .next_arg
-  INY
-  LDA (BUF_PTR16),Y
-  CMP #'z'
-  BNE .next_arg
-  INY
-  LDA (BUF_PTR16),Y
-  CMP #'e'
-  BNE .next_arg
-  INY
-  LDA (BUF_PTR16),Y
-  CMP #':'
-  BNE .next_arg
-
-  ; Found "bufsize:" - parse 2-digit hex value at Y+1
-  INY
-  LDA (BUF_PTR16),Y
-  JSR parse_hex_digit
-  ASL
-  ASL
-  ASL
-  ASL
-  STA BUF_TEMP
-  INY
-  LDA (BUF_PTR16),Y
-  JSR parse_hex_digit
-  ORA BUF_TEMP
-  STA BUF_LIMIT
-  JMP .next_arg
-
-.next_arg:
-  INC DBG_ARG_IDX
-  JMP .arg_loop
-
-.args_done:
-  RTS
-
-; Parse a single hex digit in A, return value in A (0-15)
-; Handles 0-9, A-F, a-f
-parse_hex_digit:
-  CMP #'a'
-  BCS .lower
-  CMP #'A'
-  BCS .upper
-  ; 0-9
-  SEC
-  SBC #'0'
-  RTS
-.upper:
-  SEC
-  SBC #'A' - 10
-  RTS
-.lower:
-  SEC
-  SBC #'a' - 10
-  RTS
-
-  .endif
 
 ; ============================================================================
 ; Background work
