@@ -27,28 +27,38 @@ ADDR_MODE:       .byte        ; Current addressing mode
 ; On exit C = 0 if mnemonic or 1 if macro
 ;         CURR_CHAR contains the current character
 ;         If C = 0: INST_PTR16 points to mode:opcode data (past mnemonic)
+;         If C = 1: MACRO_DEF_PTR16 points to macro param data
 ;         X, Y are not preserved
 ; Raises 'Opcode not found' error if mnemonic is not found
 lookup_mnemonic:
   JSR read_token       ; Current char in CURR_CHAR
   JSR select_instruction_hash_table
   JSR find_in_hash_instruction
-  BCC .found
-  JMP err_opcode_not_found
-.found:
-  ; TABP16 + Y points to mode:opcode data or macro sentinel
-  ; Check for macro sentinel (MODE_MACRO)
-  LDA (TABP16),Y
-  CMP #MODE_MACRO
-  BNE .is_instruction
-  ; It's a macro - compute pointer to macro data and expand
-  ; MACRO_DEF_PTR = TABP16 + Y + 1 (skip past MODE_MACRO to point at args)
+  BCC .found_instruction
+  ; Not in IHASHTAB - try LHASHTAB for macros
+  ; Save LABEL_SCOPE16 before find_macro_in_hash clobbers it
+  LDA LABEL_SCOPE16
+  PHA
+  LDA LABEL_SCOPE16+$01
+  PHA
+  JSR select_label_hash_table
+  JSR find_macro_in_hash
+  ; Restore LABEL_SCOPE16
+  PLA
+  STA LABEL_SCOPE16+$01
+  PLA
+  STA LABEL_SCOPE16
+  BCS .not_found
+  ; Found macro in LHASHTAB
+  ; MACRO_DEF_PTR = TABP16 + Y (value starts directly at params)
   TYA
-  SEC ; +1
+  CLC
   ADCA16 TABP16, MACRO_DEF_PTR16
   SEC                   ; Found macro usage
   RTS
-.is_instruction:
+.not_found:
+  JMP err_opcode_not_found
+.found_instruction:
   ; Calculate INST_PTR = TABP16 + Y
   TYA
   CLC

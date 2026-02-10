@@ -8,13 +8,13 @@
 ;   TOKEN, PASS (asm.asm)
 ;   IN_MACRO_DEF (macro_expansion.asm)
 ;   MACRO_ARG_BUF, MACRO_ARG_LIMIT, MACRO_ENTRY16, OPERAND16 (asm.asm)
-;   LABEL_TYPE, LABEL_TYPE_MACRO, MODE_MACRO (common.asm)
+;   LABEL_TYPE, LABEL_TYPE_MACRO (common.asm)
 ;   read_char (asm.asm alias; implemented in file_stack.asm)
 ;   read_token, compare_end_of_token, check_for_end_of_line (tokenizer.asm)
 ;   parse_expression (expressions.asm), advance_heap (common.asm)
 ;   select_instruction_hash_table (common.asm)
 ;   select_label_hash_table (common.asm)
-;   hash_add_instruction, hash_add (hash_table.asm), store_hash_value (common.asm)
+;   find_in_hash_instruction, add_macro_to_hash, hash_add (hash_table.asm), store_hash_value (common.asm)
 ;   push_label_scope (label_scope.asm), push_memory_source (file_stack.asm)
 ;   err_* (errors.asm)
 
@@ -27,7 +27,7 @@ IN_MACRO_DEF:    .byte        ; Flag: currently capturing macro body ($FF = capt
 
 ; Process .macro directive
 ; Syntax: .macro NAME [param1 param2 ...]
-; Creates entry in IHASHTAB: [name $00][MODE_MACRO][params...][$00][body $00]
+; Creates entry in LHASHTAB: [escape header][name $00][params...][$00][body $00]
 process_macro:
   ; Skip spaces and read macro name
   JSR check_for_end_of_line
@@ -35,19 +35,27 @@ process_macro:
   JMP err_macro_name_expected
 .has_name:
   JSR read_token       ; Macro name now in TOKEN, current char in CURR_CHAR
-  ; Check for instruction collision or duplicate macro
+  ; Check for instruction collision in IHASHTAB
   JSR select_instruction_hash_table
-  ; Optimistically attempt to add macro to the instruction hash table
-  JSR hash_add_instruction
-  BCC .name_ok         ; C=0 means new, so move on to storing value
-  ; Name was already present in hash table - is it an instruction or existing macro?
-  ; Check first byte of value - MODE_MACRO means macro, else instruction
-  LDA (TABP16),Y
-  CMP #MODE_MACRO
-  BEQ .is_macro
+  JSR find_in_hash_instruction
+  BCS .no_instruction_collision
   JMP err_macro_shadows_instruction
-.is_macro:
-  ; It's a macro - in pass 2 this is expected, just skip to capturing
+.no_instruction_collision:
+  ; Save LABEL_SCOPE16 before add_macro_to_hash clobbers it
+  LDA LABEL_SCOPE16
+  PHA
+  LDA LABEL_SCOPE16+$01
+  PHA
+  ; Add macro to LHASHTAB
+  JSR select_label_hash_table
+  JSR add_macro_to_hash
+  ; Restore LABEL_SCOPE16
+  PLA
+  STA LABEL_SCOPE16+$01
+  PLA
+  STA LABEL_SCOPE16
+  BCC .name_ok         ; C=0 means new entry added
+  ; Name already exists - pass 2 expects this, pass 1 is duplicate error
   BIT PASS
   BMI .pass2_skip_add
   JMP err_duplicate_macro
@@ -59,15 +67,11 @@ process_macro:
   JMP skip_rest_of_line
 .name_ok:
   ; Add macro entry value
-  ; MEMP16 points to location at which to store the value
+  ; MEMP16 points to location at which to store the value (directly after key)
   ; TABP16 points to the macro name on heap
   .ifdef enable_debug
   CP16 TABP16, MACRO_PTR16
   .endif
-  ; Store MODE_MACRO sentinel
-  LDY #$00
-  APPEND_HEAPI MODE_MACRO
-  JSR advance_heap
 .param_loop:
   JSR check_for_end_of_line
   BCS .params_done     ; End of line, no more params

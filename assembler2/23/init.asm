@@ -197,11 +197,12 @@ copy_string_to_token:
 show_macros:
   ; Output "Macro: "
   SHOW_MESSAGEI .macro_prefix
-  ; Output macro name
+  ; Output macro name (skip escape format header: type, scope_lo, scope_hi)
   CP16 MACRO_PTR16, TABP16
+  LDY #$03
+  JSR .advance_tabp
   JSR show_message
-  ; Skip past the trailing null and MODE_MACRO byte
-  INY
+  ; Skip past the trailing null
   INY
   JSR .advance_tabp
 .show_params:
