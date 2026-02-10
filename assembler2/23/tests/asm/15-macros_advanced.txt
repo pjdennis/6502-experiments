@@ -1,0 +1,247 @@
+NAME: macro_param_multiple_invocations
+DESCRIPTION: Multiple invocations with different parameter values
+INPUT:
+ 1: * = $0200
+ 2:   .macro inc_loc addr
+ 3:   INC addr
+ 4:   .endmacro
+ 5:   inc_loc $10
+ 6:   inc_loc $20
+ 7:   inc_loc $30
+EXPECT_HEX: e6 10 e6 20 e6 30
+
+---
+NAME: macro_param_and_local_label
+DESCRIPTION: Macro with both parameters and local labels
+INPUT:
+ 1: * = $0200
+ 2:   .macro countdown start
+ 3:   LDX #start
+ 4: .loop
+ 5:   DEX
+ 6:   BNE .loop
+ 7:   .endmacro
+ 8:   countdown $05
+EXPECT_HEX: a2 05 ca d0 fd
+
+---
+NAME: macro_reference_global_label
+DESCRIPTION: Macros can reference global labels
+INPUT:
+ 1: * = $0200
+ 2: val: = $42
+ 3:   .macro mac
+ 4:   LDA #val
+ 5:   .endmacro
+ 6:   mac
+EXPECT_HEX: a9 42
+
+---
+NAME: macro_global_label_param_name_conflict
+DESCRIPTION: Macro parameters should hide global labels
+INPUT:
+ 1: * = $0200
+ 2: val: = $42
+ 3:   .macro mac val
+ 4:   LDA #val
+ 5:   .endmacro
+ 6:   mac $43
+EXPECT_HEX: a9 43
+
+---
+NAME: macro_param_too_few
+DESCRIPTION: Error when fewer arguments than parameters
+INPUT:
+ 1: * = $0200
+ 2:   .macro twoparams a, b
+ 3:   NOP
+ 4:   .endmacro
+ 5:   twoparams $10
+EXPECT_ERROR: 32
+EXPECT_LINE: 5
+EXPECT_MSG: Too few macro arguments
+
+---
+NAME: macro_param_too_many
+DESCRIPTION: Error when more arguments than parameters
+INPUT:
+ 1: * = $0200
+ 2:   .macro oneparam a
+ 3:   NOP
+ 4:   .endmacro
+ 5:   oneparam $10 $20
+EXPECT_ERROR: 33
+EXPECT_LINE: 5
+EXPECT_MSG: Too many macro arguments
+
+---
+NAME: macro_param_noparam_extra_arg
+DESCRIPTION: Error when no-param macro gets arguments
+INPUT:
+ 1: * = $0200
+ 2:   .macro noparam
+ 3:   NOP
+ 4:   .endmacro
+ 5:   noparam $10
+EXPECT_ERROR: 33
+EXPECT_LINE: 5
+EXPECT_MSG: Too many macro arguments
+
+---
+NAME: macro_param_fwdref_arg
+DESCRIPTION: Macro argument can be a forward reference label
+INPUT:
+ 1: * = $0200
+ 2:   .macro load_addr addr
+ 3:   LDA addr
+ 4:   .endmacro
+ 5:   load_addr target
+ 6: target:
+EXPECT_HEX: ad 03 02
+
+---
+NAME: macro_param_label_arg
+DESCRIPTION: Macro argument can be a defined label
+INPUT:
+ 1: * = $0200
+ 2: target:
+ 3:   .macro load_addr addr
+ 4:   LDA addr
+ 5:   .endmacro
+ 6:   load_addr target
+EXPECT_HEX: ad 00 02
+
+---
+NAME: macro_nested_param_passing
+DESCRIPTION: Nested macros can pass parameters down
+INPUT:
+ 1: * = $0200
+ 2:   .macro inner val
+ 3:   LDA #val
+ 4:   .endmacro
+ 5:   .macro outer x
+ 6:   inner x
+ 7:   INX
+ 8:   .endmacro
+ 9:   outer $42
+EXPECT_HEX: a9 42 e8
+
+---
+NAME: macro_nested_param_multiple_levels
+DESCRIPTION: Parameters pass through multiple nesting levels
+INPUT:
+ 1: * = $0200
+ 2:   .macro level3 v
+ 3:   STA v
+ 4:   .endmacro
+ 5:   .macro level2 v
+ 6:   level3 v
+ 7:   .endmacro
+ 8:   .macro level1 v
+ 9:   level2 v
+10:   .endmacro
+11:   level1 $80
+EXPECT_HEX: 85 80
+
+---
+NAME: macro_nested_param_backward_ref_zp
+DESCRIPTION: Parameters pass through multiple nesting levels
+INPUT:
+ 1: * = $0200
+ 2: value: = $12
+ 3:   .macro level2 v2
+ 4:   LDA v2            ; Expect zero page addressing
+ 5:   .endmacro
+ 6:   .macro level1 v1
+ 7:   level2 v1
+ 8:   .endmacro
+ 9:   level1 value
+EXPECT_HEX: a5 12
+
+---
+NAME: macro_nested_param_backward_ref_abs
+DESCRIPTION: Parameters pass through multiple nesting levels
+INPUT:
+ 1: * = $0200
+ 2: value: = $1234
+ 3:   .macro level2 v2
+ 4:   LDA v2            ; Expect absolute addressing
+ 5:   .endmacro
+ 6:   .macro level1 v1
+ 7:   level2 v1
+ 8:   .endmacro
+ 9:   level1 value
+EXPECT_HEX: ad 34 12
+
+---
+NAME: macro_nested_param_forward_ref_1_byte
+DESCRIPTION: Parameters pass through multiple nesting levels
+INPUT:
+ 1: * = $0200
+ 2:   .macro level2 v2
+ 3:   LDA v2            ; Expect absolute addressing
+ 4:   .endmacro
+ 5:   .macro level1 v1
+ 6:   level2 v1
+ 7:   .endmacro
+ 8:   level1 value
+ 9: value: = $12
+EXPECT_HEX: ad 12 00
+
+---
+NAME: macro_nested_param_forward_ref_2_byte
+DESCRIPTION: Parameters pass through multiple nesting levels
+INPUT:
+ 1: * = $0200
+ 2:   .macro level2 v2
+ 3:   LDA v2            ; Expect absolute addressing
+ 4:   .endmacro
+ 5:   .macro level1 v1
+ 6:   level2 v1
+ 7:   .endmacro
+ 8:   level1 value
+ 9: value: = $1234
+EXPECT_HEX: ad 34 12
+
+---
+NAME: macro_nested_local_labels_isolated
+DESCRIPTION: Local labels in nested macros remain isolated
+INPUT:
+ 1: * = $0200
+ 2:   .macro inner
+ 3:   BNE .skip
+ 4:   NOP
+ 5: .skip
+ 6:   INX
+ 7:   .endmacro
+ 8:   .macro outer
+ 9:   BEQ .skip
+10:   inner
+11: .skip
+12:   INY
+13:   .endmacro
+14:   outer
+EXPECT_HEX: f0 04 d0 01 ea e8 c8
+
+---
+NAME: macro_capture_is_compressed
+DESCRIPTION: When capturing macros, comments are removed and consecutive spaces replaced with one space unless significant
+ARGS: show_captured_macros
+INPUT:
+ 1: [* = $0200]
+ 2: [  .macro test a, b ]
+ 3: [  LDA  #$12  ;  Comment with trailing spaces  ]
+ 4: []
+ 5: [my_label]
+ 6: [  .byte  $01  ';' '\''  "String with semicolon; and double  space in it ''"  ; Comment  ]
+ 7: [  LDA #' ']
+ 8: [  .endmacro]
+ 9: [  NOP]
+EXPECT_STDERR:
+[Macro: test a, b]
+[ LDA #$12 ]
+[]
+[my_label]
+[ .byte $01 ';' '\'' "String with semicolon; and double  space in it ''" ]
+[ LDA #' ']
+

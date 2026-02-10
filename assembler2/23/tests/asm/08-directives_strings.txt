@@ -1,0 +1,300 @@
+
+---
+NAME: byte_char_literal
+INPUT:
+ 1: * = $0200
+ 2:   .byte 'A', 'B', 'C'
+EXPECT_HEX: 41 42 43
+
+---
+NAME: byte_decimal
+INPUT:
+ 1: * = $0200
+ 2:   .byte 42
+EXPECT_HEX: 2a
+
+---
+NAME: byte_decimal_255
+INPUT:
+ 1: * = $0200
+ 2:   .byte 255
+EXPECT_HEX: ff
+
+---
+NAME: byte_expression
+INPUT:
+ 1: * = $0200
+ 2:   .byte $10+$20
+EXPECT_HEX: 30
+
+---
+NAME: byte_byte_selectors
+INPUT:
+ 1: * = $0200
+ 2:   .byte <$ABCD, >$ABCD
+EXPECT_HEX: cd ab
+
+---
+NAME: byte_label_one_byte
+INPUT:
+ 1: * = $0200
+ 2: val: = $42
+ 3:   .byte val
+EXPECT_HEX: 42
+
+---
+NAME: byte_forward_ref
+INPUT:
+ 1: * = $0200
+ 2:   .byte val
+ 3: val: = $42
+EXPECT_HEX: 42
+
+---
+NAME: byte_4digit_hex_zero_high
+INPUT:
+ 1: * = $0200
+ 2:   .byte $0042
+EXPECT_HEX: 42
+
+---
+NAME: byte_mixed_from_example
+INPUT:
+ 1: * = $0200
+ 2:   .byte $00, "Hello", $AB, $0012
+EXPECT_HEX: 00 48 65 6c 6c 6f ab 12
+
+---
+NAME: byte_with_commas
+INPUT:
+ 1: * = $0200
+ 2:   .byte $01, $02, $03
+EXPECT_HEX: 01 02 03
+
+---
+NAME: byte_commas_with_string
+INPUT:
+ 1: * = $0200
+ 2:   .byte $01, "AB", $02
+EXPECT_HEX: 01 41 42 02
+
+---
+NAME: byte_error_4digit_hex
+INPUT:
+ 1: * = $0200
+ 2:   .byte $1234
+EXPECT_ERROR: 6
+EXPECT_LINE: 2
+EXPECT_MSG: Value out of range
+
+---
+NAME: byte_error_decimal_256
+INPUT:
+ 1: * = $0200
+ 2:   .byte 256
+EXPECT_ERROR: 6
+EXPECT_LINE: 2
+EXPECT_MSG: Value out of range
+
+---
+NAME: byte_error_label_too_large
+INPUT:
+ 1: * = $0200
+ 2: addr: = $0200
+ 3:   .byte addr
+EXPECT_ERROR: 6
+EXPECT_LINE: 3
+EXPECT_MSG: Value out of range
+
+---
+NAME: byte_error_fwdref_too_large
+INPUT:
+ 1: * = $0200
+ 2:   .byte addr
+ 3: addr: = $0200
+EXPECT_ERROR: 6
+EXPECT_LINE: 2
+EXPECT_MSG: Value out of range
+
+---
+NAME: byte_error_expr_overflow
+INPUT:
+ 1: * = $0200
+ 2:   .byte $FF+$01
+EXPECT_ERROR: 6
+EXPECT_LINE: 2
+EXPECT_MSG: Value out of range
+
+---
+NAME: word_basic
+INPUT:
+ 1: * = $0200
+ 2:   .word $1234
+EXPECT_HEX: 34 12
+
+---
+NAME: word_small_value
+INPUT:
+ 1: * = $0200
+ 2:   .word $42
+EXPECT_HEX: 42 00
+
+---
+NAME: word_multiple
+INPUT:
+ 1: * = $0200
+ 2:   .word $12, $0056
+EXPECT_HEX: 12 00 56 00
+
+---
+NAME: word_label
+INPUT:
+ 1: * = $0200
+ 2: label: = $ABCD
+ 3:   .word label
+EXPECT_HEX: cd ab
+
+---
+NAME: word_label_small
+INPUT:
+ 1: * = $0200
+ 2: val: = $03
+ 3:   .word val
+EXPECT_HEX: 03 00
+
+---
+NAME: word_forward_ref
+INPUT:
+ 1: * = $0200
+ 2:   .word target
+ 3: target: = $ABCD
+EXPECT_HEX: cd ab
+
+---
+NAME: word_zero
+INPUT:
+ 1: * = $0200
+ 2:   .word $00
+EXPECT_HEX: 00 00
+
+---
+NAME: word_ffff
+INPUT:
+ 1: * = $0200
+ 2:   .word $FFFF
+EXPECT_HEX: ff ff
+
+---
+NAME: word_string_mixed
+INPUT:
+ 1: * = $0200
+ 2:   .word $1234, "ABC", $5678
+EXPECT_HEX: 34 12 41 42 43 78 56
+
+---
+NAME: word_expression
+INPUT:
+ 1: * = $0200
+ 2:   .word $10+$20
+EXPECT_HEX: 30 00
+
+---
+NAME: word_byte_selectors
+INPUT:
+ 1: * = $0200
+ 2: addr: = $ABCD
+ 3:   .word <addr, >addr
+EXPECT_HEX: cd 00 ab 00
+
+---
+NAME: word_char_literal
+INPUT:
+ 1: * = $0200
+ 2:   .word 'A'
+EXPECT_HEX: 41 00
+
+---
+NAME: word_decimal
+INPUT:
+ 1: * = $0200
+ 2:   .word 1000
+EXPECT_HEX: e8 03
+
+---
+NAME: word_with_commas
+INPUT:
+ 1: * = $0200
+ 2:   .word $1234, $5678
+EXPECT_HEX: 34 12 78 56
+
+---
+NAME: word_commas_with_string
+INPUT:
+ 1: * = $0200
+ 2:   .word $1234, "AB", $5678
+EXPECT_HEX: 34 12 41 42 78 56
+
+---
+NAME: asciiz_string
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz "Hello"
+EXPECT_HEX: 48 65 6c 6c 6f 00
+
+---
+NAME: asciiz_empty_string
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz ""
+EXPECT_HEX: 00
+
+---
+NAME: asciiz_single_byte
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz $42
+EXPECT_HEX: 42
+
+---
+NAME: asciiz_mixed
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz 42, "Text"
+EXPECT_HEX: 2a 54 65 78 74 00
+
+---
+NAME: asciiz_multiple_bytes
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz $01, $02, $03
+EXPECT_HEX: 01 02 03
+
+---
+NAME: asciiz_char_literals
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz 'H', 'i'
+EXPECT_HEX: 48 69
+
+---
+NAME: asciiz_forward_ref
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz val
+ 3: val: = $42
+EXPECT_HEX: 42
+
+---
+NAME: asciiz_escape_seq
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz "A\nB"
+EXPECT_HEX: 41 0a 42 00
+
+---
+NAME: asciiz_with_commas
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz $48, $69, $00
+EXPECT_HEX: 48 69 00
+

@@ -1,0 +1,111 @@
+# --- Error handling (cross-cutting) ---
+# Parse errors, comma-expected errors
+
+---
+NAME: opcode_not_found
+INPUT:
+ 1: * = $0200
+ 2:   BADOP
+EXPECT_ERROR: 5
+EXPECT_LINE: 2
+EXPECT_MSG: Opcode not found
+
+---
+NAME: immediate_label_value_out_of_range
+INPUT:
+ 1: * = $0200
+ 2: VALUE: = $1234
+ 3:   LDA #VALUE
+EXPECT_ERROR: 6
+EXPECT_LINE: 3
+EXPECT_MSG: Value out of range
+
+---
+NAME: immediate_value_out_of_range
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$1234 ; Comment
+EXPECT_ERROR: 6
+EXPECT_LINE: 2
+EXPECT_MSG: Value out of range
+
+---
+NAME: invalid_hex
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$GG
+EXPECT_ERROR: 7
+EXPECT_LINE: 2
+EXPECT_MSG: Invalid hex
+
+---
+NAME: invalid_hex_partial
+INPUT:
+ 1: * = $0200
+ 2:   LDA $1234garbage
+EXPECT_ERROR: 7
+EXPECT_LINE: 2
+EXPECT_MSG: Invalid hex
+
+---
+NAME: hex_value_out_of_range
+INPUT:
+ 1: * = $0200
+ 2:   .word $12345 ; Too big
+ 3:   NOP
+EXPECT_ERROR: 6
+EXPECT_LINE: 2
+EXPECT_MSG: Value out of range
+
+---
+NAME: closing_quote_not_found
+INPUT:
+ 1: * = $0200
+ 2:   .byte "unterminated
+EXPECT_ERROR: 18
+EXPECT_LINE: 2
+EXPECT_MSG: Closing quote not found
+
+---
+NAME: invalid_char_literal_empty
+INPUT:
+ 1: * = $0200
+ 2:   LDA #''
+EXPECT_ERROR: 12
+EXPECT_LINE: 2
+EXPECT_MSG: Invalid character literal
+
+---
+NAME: invalid_char_literal_missing_quote
+INPUT:
+ 1: * = $0200
+ 2:   LDA #'
+EXPECT_ERROR: 12
+EXPECT_LINE: 2
+EXPECT_MSG: Invalid character literal
+
+---
+NAME: invalid_char_literal_toolong
+INPUT:
+ 1: * = $0200
+ 2:   LDA #'AB'
+EXPECT_ERROR: 12
+EXPECT_LINE: 2
+EXPECT_MSG: Invalid character literal
+
+---
+NAME: shift_with_operand_treats_as_label
+INPUT:
+ 1: * = $0200
+ 2:   ASL A
+EXPECT_ERROR: 1
+EXPECT_LINE: 2
+EXPECT_MSG: Label not found
+
+---
+NAME: char_in_byte
+INPUT:
+ 1: * = $0200
+ 2:   .byte 'A', 'B', 'C'
+EXPECT_HEX: 41 42 43
+
