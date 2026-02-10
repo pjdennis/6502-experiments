@@ -119,11 +119,14 @@ command_parse:
   CMP #'q'
   BEQ .check_q
 
-  ; :marks - display marks
-  CMP #'m'
-  BEQ .check_marks
+  ; Try named commands (full string match from CMD_BUF[0])
+  SET16 str_marks_cmd, STR_PTR16
+  LDX #0
+  JSR cmd_str_match
+  BCC .do_marks
 
   ; Range/goto: ', ., or digit
+  LDA CMD_BUF
   CMP #'\''
   BEQ .try_range
   CMP #'.'
@@ -138,6 +141,9 @@ command_parse:
 .unknown:
   SET16 str_unknown_cmd, STR_PTR16
   JMP show_status_message
+
+.do_marks:
+  JMP marks_display
 
 .check_w:
   LDA READONLY
@@ -191,15 +197,6 @@ command_parse:
   LDA #$FF
   STA CMD_QUIT
   RTS
-
-.check_marks:
-  SET16 str_marks_cmd, STR_PTR16
-  LDX #1                  ; Compare from CMD_BUF+1 (after 'm')
-  JSR cmd_str_match
-  BCS .marks_unknown
-  JMP marks_display
-.marks_unknown:
-  JMP .unknown
 
 ; Parse decimal number from CMD_BUF starting at offset X
 ; Returns: BUF_LEN16 = parsed number, X = updated offset past digits
@@ -512,6 +509,7 @@ command_parse_range:
   LDA #$FF
   STA MODIFIED
   JSR clamp_cursor_col
+  JSR ensure_cursor_visible
 
   ; Show "N lines deleted"
   LDA YANK_LINES
@@ -535,7 +533,7 @@ command_parse_range:
 
 str_lines_yanked:  .asciiz " lines yanked"
 str_lines_deleted: .asciiz " lines deleted"
-str_marks_cmd:     .asciiz "arks"
+str_marks_cmd:     .asciiz "marks"
 
 ; === String constants ===
 str_unknown_cmd: .asciiz "Unknown command"

@@ -2924,6 +2924,14 @@ class EditorTestRunner:
             expect_ansi_contains="3 lines deleted",
         )
 
+        # Range delete positions cursor at first deleted line
+        self.run_test_screen(
+            "Range delete positions cursor correctly",
+            make_lines(5),
+            b"majj:'a,.d\r:q!\r",  # ma line1, jj->line3, delete 1-3
+            expect_cursor=(0, 0),  # cursor at first deleted line (now line 1)
+        )
+
         # --- Line numbers in range commands ---
 
         self._group("Line numbers in range commands:", leading_blank=True)
