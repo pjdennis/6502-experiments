@@ -4258,3 +4258,45 @@ INPUT:
 EXPECT_ERROR: 21
 EXPECT_LINE: 10
 EXPECT_MSG: Too many .ifdef directives
+
+---
+NAME: macro_same_name_as_label
+DESCRIPTION: A macro and a global label can have the same name since they are in separate scopes (LABEL_TYPE_MACRO_DEF vs global)
+INPUT:
+ 1: * = $0200
+ 2: test = $42
+ 3:   .macro test val
+ 4:   LDA #val
+ 5:   .endmacro
+ 6:   test $55
+ 7:   LDA #test
+EXPECT_HEX: a9 55 a9 42
+
+---
+NAME: macro_with_label_param_same_name
+DESCRIPTION: Macro parameter shadows a global label with the same name during expansion
+INPUT:
+ 1: * = $0200
+ 2: val = $FF
+ 3:   .macro load val
+ 4:   LDA #val
+ 5:   .endmacro
+ 6:   load $42
+ 7:   LDA #val
+EXPECT_HEX: a9 42 a9 ff
+
+---
+NAME: local_label_same_name_as_macro
+DESCRIPTION: A local label inside a macro can have the same name as a macro definition
+INPUT:
+ 1: * = $0200
+ 2:   .macro inner
+ 3:   NOP
+ 4:   .endmacro
+ 5:   .macro outer
+ 6: .inner
+ 7:   NOP
+ 8:   JMP .inner
+ 9:   .endmacro
+10:   outer
+EXPECT_HEX: ea 4c 00 02
