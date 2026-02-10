@@ -48,6 +48,9 @@ emit:
 ; On exit
 ; Raises 'Cannot move PC backwards' error if attempting to move PC backwards
 update_pc:
+  ; Check if skipping conditional assembly
+  BIT SKIP_FLAG
+  BMI .skip_update     ; Skip if in false .ifdef block
   BIT IN_ZEROPAGE
   BMI .no_fill         ; No fill or STARTED check in zeropage
   BIT STARTED
@@ -62,6 +65,7 @@ update_pc:
   JMP err_cannot_move_pc_backwards
 .no_fill:
   CP16 HEX16, PC16
+.skip_update:
   RTS
 
 
