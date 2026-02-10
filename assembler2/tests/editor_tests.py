@@ -2774,20 +2774,20 @@ class EditorTestRunner:
             expect_cursor=(0, 0),
         )
 
-        # :m is unknown command (partial match, doesn't match :marks)
-        self.run_test(
-            ":m is unknown command (partial)",
+        # :m shows "Unknown command" (partial match, doesn't match :marks)
+        self.run_test_screen(
+            ":m shows Unknown command",
             make_lines(3),
             b":m\r :q!\r",  # space dismisses error
-            expect_unmodified=True,
+            expect_ansi_contains="Unknown command",
         )
 
-        # :marksx is unknown command (extra chars after :marks)
-        self.run_test(
-            ":marksx is unknown command (extra chars)",
+        # :marksx shows "Unknown command" (extra chars after :marks)
+        self.run_test_screen(
+            ":marksx shows Unknown command",
             make_lines(3),
             b":marksx\r :q!\r",  # space dismisses error
-            expect_unmodified=True,
+            expect_ansi_contains="Unknown command",
         )
 
         # --- Range yank ---
