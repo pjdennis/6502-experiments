@@ -51,173 +51,117 @@ FS_P16:    .word         ; File stack pointer - needed by advance_heap check
 
 
 ; Instruction table with mode:opcode pairs
-; Format: "MNEMONIC" $00 [mode opcode]... MODE_END
+; Format: .asciiz "MNEMONIC", [mode, opcode]..., MODE_END
 MNTAB:
   ; Load/Store instructions
-  .asciiz "LDA"
-  .byte MODE_IMM, $A9, MODE_ZP, $A5, MODE_ZPX, $B5, MODE_ABS, $AD
+  .asciiz "LDA", MODE_IMM, $A9, MODE_ZP, $A5, MODE_ZPX, $B5, MODE_ABS, $AD
   .byte MODE_ABSX, $BD, MODE_ABSY, $B9, MODE_INDX, $A1, MODE_INDY, $B1
   .byte MODE_END
-  .asciiz "LDX"
-  .byte MODE_IMM, $A2, MODE_ZP, $A6, MODE_ZPY, $B6
+  .asciiz "LDX", MODE_IMM, $A2, MODE_ZP, $A6, MODE_ZPY, $B6
   .byte MODE_ABS, $AE, MODE_ABSY, $BE
   .byte MODE_END
-  .asciiz "LDY"
-  .byte MODE_IMM, $A0, MODE_ZP, $A4, MODE_ZPX, $B4
+  .asciiz "LDY", MODE_IMM, $A0, MODE_ZP, $A4, MODE_ZPX, $B4
   .byte MODE_ABS, $AC, MODE_ABSX, $BC
   .byte MODE_END
-  .asciiz "STA"
-  .byte MODE_ZP, $85, MODE_ZPX, $95, MODE_ABS, $8D, MODE_ABSX, $9D
+  .asciiz "STA", MODE_ZP, $85, MODE_ZPX, $95, MODE_ABS, $8D, MODE_ABSX, $9D
   .byte MODE_ABSY, $99, MODE_INDX, $81, MODE_INDY, $91
   .byte MODE_END
-  .asciiz "STX"
-  .byte MODE_ZP, $86, MODE_ZPY, $96, MODE_ABS, $8E, MODE_END
-  .asciiz "STY"
-  .byte MODE_ZP, $84, MODE_ZPX, $94, MODE_ABS, $8C, MODE_END
+  .asciiz "STX", MODE_ZP, $86, MODE_ZPY, $96, MODE_ABS, $8E, MODE_END
+  .asciiz "STY", MODE_ZP, $84, MODE_ZPX, $94, MODE_ABS, $8C, MODE_END
 
   ; Arithmetic instructions
-  .asciiz "ADC"
-  .byte MODE_IMM, $69, MODE_ZP, $65, MODE_ZPX, $75, MODE_ABS, $6D
+  .asciiz "ADC", MODE_IMM, $69, MODE_ZP, $65, MODE_ZPX, $75, MODE_ABS, $6D
   .byte MODE_ABSX, $7D, MODE_ABSY, $79, MODE_INDX, $61, MODE_INDY, $71
   .byte MODE_END
-  .asciiz "SBC"
-  .byte MODE_IMM, $E9, MODE_ZP, $E5, MODE_ZPX, $F5, MODE_ABS, $ED
+  .asciiz "SBC", MODE_IMM, $E9, MODE_ZP, $E5, MODE_ZPX, $F5, MODE_ABS, $ED
   .byte MODE_ABSX, $FD, MODE_ABSY, $F9, MODE_INDX, $E1, MODE_INDY, $F1
   .byte MODE_END
 
   ; Logical instructions
-  .asciiz "AND"
-  .byte MODE_IMM, $29, MODE_ZP, $25, MODE_ZPX, $35, MODE_ABS, $2D
+  .asciiz "AND", MODE_IMM, $29, MODE_ZP, $25, MODE_ZPX, $35, MODE_ABS, $2D
   .byte MODE_ABSX, $3D, MODE_ABSY, $39, MODE_INDX, $21, MODE_INDY, $31
   .byte MODE_END
-  .asciiz "ORA"
-  .byte MODE_IMM, $09, MODE_ZP, $05, MODE_ZPX, $15, MODE_ABS, $0D
+  .asciiz "ORA", MODE_IMM, $09, MODE_ZP, $05, MODE_ZPX, $15, MODE_ABS, $0D
   .byte MODE_ABSX, $1D, MODE_ABSY, $19, MODE_INDX, $01, MODE_INDY, $11
   .byte MODE_END
-  .asciiz "EOR"
-  .byte MODE_IMM, $49, MODE_ZP, $45, MODE_ZPX, $55, MODE_ABS, $4D
+  .asciiz "EOR", MODE_IMM, $49, MODE_ZP, $45, MODE_ZPX, $55, MODE_ABS, $4D
   .byte MODE_ABSX, $5D, MODE_ABSY, $59, MODE_INDX, $41, MODE_INDY, $51
   .byte MODE_END
 
   ; Compare instructions
-  .asciiz "CMP"
-  .byte MODE_IMM, $C9, MODE_ZP, $C5, MODE_ZPX, $D5, MODE_ABS, $CD
+  .asciiz "CMP", MODE_IMM, $C9, MODE_ZP, $C5, MODE_ZPX, $D5, MODE_ABS, $CD
   .byte MODE_ABSX, $DD, MODE_ABSY, $D9, MODE_INDX, $C1, MODE_INDY, $D1
   .byte MODE_END
-  .asciiz "CPX"
-  .byte MODE_IMM, $E0, MODE_ZP, $E4, MODE_ABS, $EC, MODE_END
-  .asciiz "CPY"
-  .byte MODE_IMM, $C0, MODE_ZP, $C4, MODE_ABS, $CC, MODE_END
+  .asciiz "CPX", MODE_IMM, $E0, MODE_ZP, $E4, MODE_ABS, $EC, MODE_END
+  .asciiz "CPY", MODE_IMM, $C0, MODE_ZP, $C4, MODE_ABS, $CC, MODE_END
 
   ; Bit test
-  .asciiz "BIT"
-  .byte MODE_ZP, $24, MODE_ABS, $2C, MODE_END
+  .asciiz "BIT", MODE_ZP, $24, MODE_ABS, $2C, MODE_END
 
   ; Increment/Decrement
-  .asciiz "INC"
-  .byte MODE_ZP, $E6, MODE_ZPX, $F6, MODE_ABS, $EE, MODE_ABSX, $FE, MODE_END
-  .asciiz "DEC"
-  .byte MODE_ZP, $C6, MODE_ZPX, $D6, MODE_ABS, $CE, MODE_ABSX, $DE, MODE_END
-  .asciiz "INX"
-  .byte MODE_NONE, $E8, MODE_END
-  .asciiz "INY"
-  .byte MODE_NONE, $C8, MODE_END
-  .asciiz "DEX"
-  .byte MODE_NONE, $CA, MODE_END
-  .asciiz "DEY"
-  .byte MODE_NONE, $88, MODE_END
+  .asciiz "INC", MODE_ZP, $E6, MODE_ZPX, $F6, MODE_ABS, $EE, MODE_ABSX, $FE, MODE_END
+  .asciiz "DEC", MODE_ZP, $C6, MODE_ZPX, $D6, MODE_ABS, $CE, MODE_ABSX, $DE, MODE_END
+  .asciiz "INX", MODE_NONE, $E8, MODE_END
+  .asciiz "INY", MODE_NONE, $C8, MODE_END
+  .asciiz "DEX", MODE_NONE, $CA, MODE_END
+  .asciiz "DEY", MODE_NONE, $88, MODE_END
 
   ; Shift/Rotate
-  .asciiz "ASL"
-  .byte MODE_NONE, $0A, MODE_ZP, $06, MODE_ZPX, $16, MODE_ABS, $0E
+  .asciiz "ASL", MODE_NONE, $0A, MODE_ZP, $06, MODE_ZPX, $16, MODE_ABS, $0E
   .byte MODE_ABSX, $1E
   .byte MODE_END
-  .asciiz "LSR"
-  .byte MODE_NONE, $4A, MODE_ZP, $46, MODE_ZPX, $56, MODE_ABS, $4E
+  .asciiz "LSR", MODE_NONE, $4A, MODE_ZP, $46, MODE_ZPX, $56, MODE_ABS, $4E
   .byte MODE_ABSX, $5E
   .byte MODE_END
-  .asciiz "ROL"
-  .byte MODE_NONE, $2A, MODE_ZP, $26, MODE_ZPX, $36, MODE_ABS, $2E
+  .asciiz "ROL", MODE_NONE, $2A, MODE_ZP, $26, MODE_ZPX, $36, MODE_ABS, $2E
   .byte MODE_ABSX, $3E
   .byte MODE_END
-  .asciiz "ROR"
-  .byte MODE_NONE, $6A, MODE_ZP, $66, MODE_ZPX, $76, MODE_ABS, $6E
+  .asciiz "ROR", MODE_NONE, $6A, MODE_ZP, $66, MODE_ZPX, $76, MODE_ABS, $6E
   .byte MODE_ABSX, $7E
   .byte MODE_END
 
   ; Branch instructions
-  .asciiz "BCC"
-  .byte MODE_REL, $90, MODE_END
-  .asciiz "BCS"
-  .byte MODE_REL, $B0, MODE_END
-  .asciiz "BEQ"
-  .byte MODE_REL, $F0, MODE_END
-  .asciiz "BMI"
-  .byte MODE_REL, $30, MODE_END
-  .asciiz "BNE"
-  .byte MODE_REL, $D0, MODE_END
-  .asciiz "BPL"
-  .byte MODE_REL, $10, MODE_END
-  .asciiz "BVC"
-  .byte MODE_REL, $50, MODE_END
-  .asciiz "BVS"
-  .byte MODE_REL, $70, MODE_END
+  .asciiz "BCC", MODE_REL, $90, MODE_END
+  .asciiz "BCS", MODE_REL, $B0, MODE_END
+  .asciiz "BEQ", MODE_REL, $F0, MODE_END
+  .asciiz "BMI", MODE_REL, $30, MODE_END
+  .asciiz "BNE", MODE_REL, $D0, MODE_END
+  .asciiz "BPL", MODE_REL, $10, MODE_END
+  .asciiz "BVC", MODE_REL, $50, MODE_END
+  .asciiz "BVS", MODE_REL, $70, MODE_END
 
   ; Jump instructions
-  .asciiz "JMP"
-  .byte MODE_ABS, $4C, MODE_IND, $6C, MODE_END
-  .asciiz "JSR"
-  .byte MODE_ABS, $20, MODE_END
+  .asciiz "JMP", MODE_ABS, $4C, MODE_IND, $6C, MODE_END
+  .asciiz "JSR", MODE_ABS, $20, MODE_END
 
   ; Stack instructions
-  .asciiz "PHA"
-  .byte MODE_NONE, $48, MODE_END
-  .asciiz "PHP"
-  .byte MODE_NONE, $08, MODE_END
-  .asciiz "PLA"
-  .byte MODE_NONE, $68, MODE_END
-  .asciiz "PLP"
-  .byte MODE_NONE, $28, MODE_END
+  .asciiz "PHA", MODE_NONE, $48, MODE_END
+  .asciiz "PHP", MODE_NONE, $08, MODE_END
+  .asciiz "PLA", MODE_NONE, $68, MODE_END
+  .asciiz "PLP", MODE_NONE, $28, MODE_END
 
   ; Transfer instructions
-  .asciiz "TAX"
-  .byte MODE_NONE, $AA, MODE_END
-  .asciiz "TAY"
-  .byte MODE_NONE, $A8, MODE_END
-  .asciiz "TSX"
-  .byte MODE_NONE, $BA, MODE_END
-  .asciiz "TXA"
-  .byte MODE_NONE, $8A, MODE_END
-  .asciiz "TXS"
-  .byte MODE_NONE, $9A, MODE_END
-  .asciiz "TYA"
-  .byte MODE_NONE, $98, MODE_END
+  .asciiz "TAX", MODE_NONE, $AA, MODE_END
+  .asciiz "TAY", MODE_NONE, $A8, MODE_END
+  .asciiz "TSX", MODE_NONE, $BA, MODE_END
+  .asciiz "TXA", MODE_NONE, $8A, MODE_END
+  .asciiz "TXS", MODE_NONE, $9A, MODE_END
+  .asciiz "TYA", MODE_NONE, $98, MODE_END
 
   ; Flag instructions
-  .asciiz "CLC"
-  .byte MODE_NONE, $18, MODE_END
-  .asciiz "CLD"
-  .byte MODE_NONE, $D8, MODE_END
-  .asciiz "CLI"
-  .byte MODE_NONE, $58, MODE_END
-  .asciiz "CLV"
-  .byte MODE_NONE, $B8, MODE_END
-  .asciiz "SEC"
-  .byte MODE_NONE, $38, MODE_END
-  .asciiz "SED"
-  .byte MODE_NONE, $F8, MODE_END
-  .asciiz "SEI"
-  .byte MODE_NONE, $78, MODE_END
+  .asciiz "CLC", MODE_NONE, $18, MODE_END
+  .asciiz "CLD", MODE_NONE, $D8, MODE_END
+  .asciiz "CLI", MODE_NONE, $58, MODE_END
+  .asciiz "CLV", MODE_NONE, $B8, MODE_END
+  .asciiz "SEC", MODE_NONE, $38, MODE_END
+  .asciiz "SED", MODE_NONE, $F8, MODE_END
+  .asciiz "SEI", MODE_NONE, $78, MODE_END
 
   ; Other
-  .asciiz "BRK"
-  .byte MODE_NONE, $00, MODE_END
-  .asciiz "NOP"
-  .byte MODE_NONE, $EA, MODE_END
-  .asciiz "RTI"
-  .byte MODE_NONE, $40, MODE_END
-  .asciiz "RTS"
-  .byte MODE_NONE, $60, MODE_END
+  .asciiz "BRK", MODE_NONE, $00, MODE_END
+  .asciiz "NOP", MODE_NONE, $EA, MODE_END
+  .asciiz "RTI", MODE_NONE, $40, MODE_END
+  .asciiz "RTS", MODE_NONE, $60, MODE_END
 
   ; End of table
   .byte 0

@@ -43,18 +43,14 @@ MATCH_FULL    = 1
 
 COMMAND_LINE_ARGS:
   .ifdef enable_debug
-  .asciiz "debug"
-  .byte MATCH_FULL
+  .asciiz "debug", MATCH_FULL
   .word handle_debug
-  .asciiz "small_heap"
-  .byte MATCH_FULL
+  .asciiz "small_heap", MATCH_FULL
   .word handle_small_heap
-  .asciiz "show_captured_macros"
-  .byte MATCH_FULL
+  .asciiz "show_captured_macros", MATCH_FULL
   .word handle_show_captured_macros
   .endif
-  .asciiz "define:"
-  .byte MATCH_PARTIAL
+  .asciiz "define:", MATCH_PARTIAL
   .word handle_define
   .byte 0 ; End of list
 
