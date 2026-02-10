@@ -40,6 +40,7 @@ LABEL_TYPE_GLOBAL = 0   ; Global label (no escape format)
 LABEL_TYPE_LOCAL  = 1   ; Local label under global scope (heap address)
 LABEL_TYPE_MACRO  = 2   ; Macro parameter (expansion ID)
 LABEL_TYPE_MACRO_LOCAL = 3 ; Macro-local label (expansion ID)
+LABEL_TYPE_MACRO_DEF  = 4 ; Macro definition (stored in LHASHTAB)
 
 HT_KEY = TOKEN
 HT_V16 = HEX16

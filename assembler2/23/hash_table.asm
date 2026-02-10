@@ -376,11 +376,44 @@ store_token:
   INY
   JMP advance_heap      ; Tail call
 
-; Add HT_KEY to hash table (always global - for instructions and macros)
+; Add HT_KEY to hash table (always global - for instructions)
 ; On exit same as hash_add
 hash_add_instruction:
   JSR calculate_hash
   JMP hash_add_common
+
+
+; Find macro definition in LHASHTAB
+; On entry HT_KEY contains the macro name to find
+;          HTP16 must point to LHASHTAB (caller must select_label_hash_table)
+; On exit C = 0 if found, C = 1 if not found
+;         If found: TABP16 + Y points to the associated value
+;         X is preserved
+;         A, Y are not preserved
+find_macro_in_hash:
+  LDA #LABEL_TYPE_MACRO_DEF
+  STA LABEL_TYPE
+  LDA #$00
+  STA LABEL_SCOPE16
+  STA LABEL_SCOPE16+$01
+  JSR calculate_hash       ; Global hash (not calculate_hash_local)
+  JMP find_in_hash_common  ; Tail call
+
+
+; Add macro definition to LHASHTAB
+; On entry HT_KEY contains the macro name to add
+;          HTP16 must point to LHASHTAB (caller must select_label_hash_table)
+; On exit C = 0 if added, MEMP16 points to where value should be stored
+;         C = 1 if exists, TABP16 + Y points to existing value
+;         A, X, Y are not preserved
+add_macro_to_hash:
+  LDA #LABEL_TYPE_MACRO_DEF
+  STA LABEL_TYPE
+  LDA #$00
+  STA LABEL_SCOPE16
+  STA LABEL_SCOPE16+$01
+  JSR calculate_hash       ; Global hash (not calculate_hash_local)
+  JMP hash_add_common      ; Tail call
 
 ; Add HT_KEY to hash table
 ; On entry HT_KEY contains key
