@@ -2766,12 +2766,31 @@ class EditorTestRunner:
             expect_cursor=(0, 0),
         )
 
-        # :marks shows set marks
+        # :marks shows set marks with right-justified line numbers
         self.run_test_screen(
-            ":marks shows mark a",
+            ":marks shows mark a with formatting",
             make_lines(3),
             b"ma:marks\r :q!\r",
             expect_cursor=(0, 0),
+            expect_ansi_contains=" a     1",
+        )
+
+        # :marks with mark on line 100 aligns with single-digit marks
+        self.run_test_screen(
+            ":marks right-justifies line numbers",
+            make_lines(100),
+            b"ma:100\rmb" +         # ma on line 1, goto line 100, mb
+            b":marks\r :q!\r",
+            expect_ansi_contains=" b   100",
+        )
+
+        # :marks with wider terminal shows more text
+        self.run_test_screen(
+            ":marks wider terminal shows more text",
+            "Hello World - this is a long line\n",
+            b"ma:marks\r :q!\r",
+            rows=10, cols=80,
+            expect_ansi_contains="Hello World - this is a long line",
         )
 
         # :m shows "Unknown command" (partial match, doesn't match :marks)

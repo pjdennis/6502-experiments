@@ -112,14 +112,13 @@ marks_display:
   STA ANSI_COL
   JSR ansi_move_cursor
 
-  ; Print " a   " (mark letter)
+  ; Print " a" (mark letter)
   LDA #' '
   JSR write_b
   LDA BUF_TEMP
   CLC
   ADC #'a'
   JSR write_b
-  PRINT_STR str_marks_sep
 
   ; Restore table offset, get line number
   PLA
@@ -132,10 +131,14 @@ marks_display:
   ; Save line for text lookup (before INC16 modifies it)
   PUSH16 TO_DECIMAL_VALUE16
 
-  ; Print 1-based line number
+  ; Print right-justified 1-based line number in 6-char field
   INC16 TO_DECIMAL_VALUE16
   JSR to_decimal
-  PRINT_STR TO_DECIMAL_RESULT
+  JSR write_decimal_rjust
+
+  ; Print 2 spaces before text
+  LDA #' '
+  JSR write_b
   LDA #' '
   JSR write_b
 
@@ -145,8 +148,15 @@ marks_display:
   BCS .marks_text_done
   LDAX16 BUF_PTR16
   JSR buf_get_line_ptr
+  ; Compute text width limit: SCREEN_COLS - 10 (2 " a" + 6 number + 2 spaces)
+  LDA SCREEN_COLS
+  SEC
+  SBC #10
+  STA LINE_LEN
   LDY #0
 .marks_text:
+  CPY LINE_LEN
+  BCS .marks_text_done
   LDA (BUF_PTR16),Y
   CMP #'\n'
   BEQ .marks_text_done
@@ -156,8 +166,7 @@ marks_display:
 .marks_text_ok:
   JSR write_b
   INY
-  CPY #25
-  BCC .marks_text
+  JMP .marks_text
 .marks_text_done:
 
   INC ANSI_ROW
@@ -194,8 +203,32 @@ marks_display:
   STA RENDER_FLAG
   RTS
 
-str_marks_header: .asciiz "mark  line text"
-str_marks_sep:    .asciiz "   "
+; Print TO_DECIMAL_RESULT right-justified in a 6-character field
+; Clobbers: A, X, Y
+write_decimal_rjust:
+  ; Count digits
+  LDX #0
+.count:
+  LDA TO_DECIMAL_RESULT,X
+  BEQ .pad
+  INX
+  JMP .count
+.pad:
+  ; Print (6 - X) spaces
+  STX BUF_DELTA
+  LDX #6
+.pad_loop:
+  CPX BUF_DELTA
+  BEQ .print
+  LDA #' '
+  JSR write_b
+  DEX
+  JMP .pad_loop
+.print:
+  PRINT_STR TO_DECIMAL_RESULT
+  RTS
+
+str_marks_header: .asciiz "mark  line  text"
 str_no_marks:     .asciiz "No marks set"
 
 ; Adjust marks after lines are deleted
