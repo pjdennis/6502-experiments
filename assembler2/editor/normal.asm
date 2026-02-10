@@ -542,34 +542,15 @@ normal_d_key:
 .do_dd:
 
   ; dd: yank then delete N lines (N = count, min 1)
+  JSR yank_clear
   JSR get_count_byte         ; X = count
   STX LINE_LEN               ; LINE_LEN = total lines to process
+  STX BUF_TEMP
+  LDAX16 FILE_LINE16
+  JSR yank_add_lines
+  BCS .yank_overflow
 
-  ; Phase 1: Yank all N lines into yank buffer
-  JSR yank_clear
-  CP16 FILE_LINE16, BUF_SRC16  ; BUF_SRC16 = current line (yank cursor)
-  LDX LINE_LEN
-.yank_loop:
-  TXA
-  PHA                        ; Save remaining yank count on stack
-  ; Check if line exists
-  CMP16 BUF_SRC16, LINE_COUNT16
-  BCS .yank_done_all_pop     ; Past end of file
-  LDAX16 BUF_SRC16
-  JSR yank_add_line
-  BCS .yank_overflow_pop
-  INC16 BUF_SRC16
-  PLA
-  TAX
-  DEX
-  BNE .yank_loop
-  JMP .yank_done_all
-
-.yank_done_all_pop:
-  PLA                        ; Clean up stack
-.yank_done_all:
-
-  ; Phase 2: Delete all N lines in one batch operation
+  ; Delete all N lines in one batch operation
   LDA LINE_LEN
   STA BUF_TEMP
   LDAX16 FILE_LINE16
@@ -587,8 +568,7 @@ normal_d_key:
   JSR clamp_cursor_col
   JMP clear_count
 
-.yank_overflow_pop:
-  PLA                        ; Clean up stack
+.yank_overflow:
   ; Yank buffer full - clear yank, show error, don't delete
   JSR yank_clear
   SET16 str_yank_full, STR_PTR16
@@ -749,34 +729,13 @@ normal_y_key:
   ; Yank N lines starting at current line
   JSR yank_clear
   JSR get_count_byte         ; X = count (min 1, max 255)
-  CP16 FILE_LINE16, BUF_DST16  ; BUF_DST16 = current line to yank
-
-.yy_loop:
-  TXA
-  PHA                        ; Save remaining count on stack
-
-  ; Check if line exists
-  CMP16 BUF_DST16, LINE_COUNT16
-  BCS .yy_done_pop           ; Past end of file
-
-  LDAX16 BUF_DST16
-  JSR yank_add_line
-  BCS .yy_overflow_pop       ; Yank buffer full
-
-  INC16 BUF_DST16            ; Next line
-
-  PLA
-  TAX
-  DEX
-  BNE .yy_loop
+  STX BUF_TEMP
+  LDAX16 FILE_LINE16
+  JSR yank_add_lines
+  BCS .yy_overflow
   JMP clear_count            ; Done - don't set MODIFIED
 
-.yy_done_pop:
-  PLA                        ; Clean stack
-  JMP clear_count
-
-.yy_overflow_pop:
-  PLA                        ; Clean stack
+.yy_overflow:
   JSR yank_clear
   SET16 str_yank_full, STR_PTR16
   JSR show_status_message

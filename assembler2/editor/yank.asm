@@ -26,46 +26,91 @@ yank_clear:
   STA YANK_LINES
   RTS
 
-; Add line N (in A/X low/high) to yank buffer
-; Copies line content + newline from text buffer into yank buffer
+; Add N contiguous lines to yank buffer in one bulk copy
+; Input: A/X = first line number (low/high), BUF_TEMP = count of lines
+; Clamps count to available lines. Uses mem_copy_down for page-optimized copy.
 ; Returns carry set = yank buffer full, carry clear = success
-yank_add_line:
-  JSR buf_get_line_ptr     ; BUF_PTR16 = start of line
+; On success: YANK_END16 updated, YANK_LINES = actual lines copied
+yank_add_lines:
+  STAX16 BUF_SRC16           ; BUF_SRC16 = first line number
 
-  ; Copy bytes until newline (inclusive)
-  LDY #0
-.copy_loop:
-  ; Check if yank buffer is full
-  LDA YANK_END16 + 1
+  ; Clamp count: actual = min(count, LINE_COUNT16 - first_line)
+  SEC
+  SBC16 LINE_COUNT16, BUF_SRC16, BUF_LEN16  ; BUF_LEN16 = available lines
+  ; If available < count, use available
+  LDA BUF_LEN16 + 1
+  BNE .yal_count_ok           ; Available >= 256, count (8-bit) is fine
+  LDA BUF_TEMP
+  CMP BUF_LEN16
+  BCC .yal_count_ok
+  BEQ .yal_count_ok
+  LDA BUF_LEN16
+  STA BUF_TEMP                ; Clamp count
+.yal_count_ok:
+
+  ; Look up LINE_TBL[first_line] → start address
+  LDAX16 BUF_SRC16
+  JSR buf_get_line_ptr        ; BUF_PTR16 = start of first line
+  PUSH16 BUF_PTR16            ; Save start address on stack
+
+  ; Compute end line number = first_line + actual_count
+  CLC
+  LDA BUF_SRC16
+  ADC BUF_TEMP
+  STA BUF_SRC16
+  LDA BUF_SRC16 + 1
+  ADC #0
+  STA BUF_SRC16 + 1          ; BUF_SRC16 = end line number
+
+  ; If end line >= LINE_COUNT16, end address = BUF_END16
+  CMP16 BUF_SRC16, LINE_COUNT16
+  BCC .yal_get_end_ptr
+  CP16 BUF_END16, BUF_PTR16  ; BUF_PTR16 = end address = BUF_END16
+  JMP .yal_have_end
+
+.yal_get_end_ptr:
+  LDAX16 BUF_SRC16
+  JSR buf_get_line_ptr        ; BUF_PTR16 = start of end line = our end addr
+
+.yal_have_end:
+  ; BUF_PTR16 = end address
+  POP16 BUF_SRC16            ; BUF_SRC16 = start address
+
+  ; Compute size = BUF_PTR16 - BUF_SRC16
+  SEC
+  SBC16 BUF_PTR16, BUF_SRC16, BUF_LEN16
+
+  ; Check if YANK_END16 + size <= YANK_LIMIT
+  CLC
+  ADC16 YANK_END16, BUF_LEN16, BUF_DST16
+  LDA BUF_DST16 + 1
   CMP #>YANK_LIMIT
-  BCC .yank_has_room
-  LDA YANK_END16
-  CMP #<YANK_LIMIT
-  BCS .yank_full
-.yank_has_room:
-  LDA (BUF_PTR16),Y
-  PHA                      ; Save byte
-  ; Store in yank buffer
-  STY BUF_TEMP             ; Save Y (offset into source line)
-  LDY #0
-  PLA                      ; Restore byte
-  STA (YANK_END16),Y
-  INC16 YANK_END16
-  LDY BUF_TEMP             ; Restore source offset
-  LDA (BUF_PTR16),Y        ; Re-read to check for newline
-  CMP #'\n'
-  BEQ .line_done
-  INY
-  BNE .copy_loop
-  ; Line longer than 255 chars - shouldn't happen in practice
-  JMP .copy_loop
+  BCC .yal_has_room
+  BNE .yal_full
+  LDA BUF_DST16
+  BEQ .yal_has_room           ; Exactly at limit is ok
+  BNE .yal_full
+.yal_has_room:
 
-.line_done:
-  INC YANK_LINES
+  ; mem_copy_down(start, end, YANK_END16)
+  ;   BUF_SRC16 = start (already set)
+  ;   BUF_PTR16 = end (already set)
+  ;   BUF_DST16 = YANK_END16
+  CP16 YANK_END16, BUF_DST16
+  JSR mem_copy_down            ; Preserves BUF_PTR16
+
+  ; YANK_END16 += size
+  CLC
+  ADC16 YANK_END16, BUF_LEN16, YANK_END16
+
+  ; YANK_LINES = actual count
+  LDA BUF_TEMP
+  STA YANK_LINES
+
   CLC
   RTS
 
-.yank_full:
+.yal_full:
   SEC
   RTS
 
