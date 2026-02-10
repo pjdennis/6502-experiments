@@ -149,6 +149,9 @@ capture_label:
   JSR read_value
   JMP .return_processed
 .pass_1:
+  ; Check if skipping - if so, just parse but don't capture
+  BIT SKIP_FLAG
+  BMI .skip_capture_parse_only
   ; LABEL_TYPE already set
   ; Add key to hash table first (before read_value may overwrite TOKEN)
   JSR select_label_hash_table
@@ -183,3 +186,12 @@ capture_label:
   JMP err_unexpected_text
 .duplicate_label:
   JMP err_duplicate_label
+.skip_capture_parse_only:
+  ; Parse the syntax but don't capture to hash
+  JSR check_for_value
+  BCS .skip_has_equals
+  ; No = found, just skip spaces and return processed flag
+  JMP .skip_spaces_and_return_processed_flag
+.skip_has_equals:
+  JSR read_value  ; Parse but don't store
+  JMP .return_processed
