@@ -717,10 +717,29 @@ def main():
     # Default test files if none specified
     if not args.test_files:
         latest_tests_dir = script_dir / args.version / "tests"
-        args.test_files = [
-            str(latest_tests_dir / "file_stack_tests.txt"),
-            str(latest_tests_dir / "asm_tests.txt"),
-        ]
+
+        # Check for modular structure (v23+)
+        asm_subdir = latest_tests_dir / "asm"
+        file_stack_subdir = latest_tests_dir / "file_stack"
+
+        if asm_subdir.exists() and asm_subdir.is_dir():
+            # Modular structure: discover all .txt files
+            args.test_files = []
+
+            # Add file_stack tests first
+            if file_stack_subdir.exists():
+                for test_file in sorted(file_stack_subdir.glob("*.txt")):
+                    args.test_files.append(str(test_file))
+
+            # Add asm tests (alphabetically sorted - numeric prefixes preserve logical order)
+            for test_file in sorted(asm_subdir.glob("*.txt")):
+                args.test_files.append(str(test_file))
+        else:
+            # Legacy structure (v22 and earlier)
+            args.test_files = [
+                str(latest_tests_dir / "file_stack_tests.txt"),
+                str(latest_tests_dir / "asm_tests.txt"),
+            ]
 
     for test_file in args.test_files:
         filepath = Path(test_file)

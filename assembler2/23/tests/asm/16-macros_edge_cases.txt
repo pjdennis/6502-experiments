@@ -1,0 +1,233 @@
+---
+NAME: small_heap_simple_include
+DESCRIPTION: Small heap allows basic include with label allocation
+ARGS: debug small_heap
+INPUT:
+ 1: * = $0200
+ 2:   .include tests/overflow/d20.asm
+EXPECT_HEX: ea
+
+---
+NAME: macro_long_line
+DESCRIPTION: Macro with line > 128 chars exercises batched heap advance
+INPUT:
+ 1: * = $0200
+ 2:   .macro longdata
+ 3:   .asciiz "This is a very long string that exceeds one hundred and twenty eight characters in order to test the optimized macro body capture loop path"
+ 4:   .endmacro
+ 5:   longdata
+EXPECT_HEX: 54 68 69 73 20 69 73 20 61 20 76 65 72 79 20 6C 6F 6E 67 20 73 74 72 69 6E 67 20 74 68 61 74 20 65 78 63 65 65 64 73 20 6F 6E 65 20 68 75 6E 64 72 65 64 20 61 6E 64 20 74 77 65 6E 74 79 20 65 69 67 68 74 20 63 68 61 72 61 63 74 65 72 73 20 69 6E 20 6F 72 64 65 72 20 74 6F 20 74 65 73 74 20 74 68 65 20 6F 70 74 69 6D 69 7A 65 64 20 6D 61 63 72 6F 20 62 6F 64 79 20 63 61 70 74 75 72 65 20 6C 6F 6F 70 20 70 61 74 68 00
+
+---
+NAME: ifdef_forward_reference_consistency
+DESCRIPTION: .ifdef with forward-defined label behaves consistently
+INPUT:
+ 1: * = $0200
+ 2:   .ifdef LATER
+ 3:   LDA #$42
+ 4:   .endif
+ 5: LATER: = $01
+ 6:   NOP
+EXPECT_HEX: ea
+
+---
+NAME: ifdef_nested_forward_reference
+DESCRIPTION: Nested .ifdef with forward reference in inner block
+INPUT:
+ 1: * = $0200
+ 2: OUTER: = $01
+ 3:   .ifdef OUTER
+ 4:     .ifdef INNER_LATER
+ 5:     LDA #$42
+ 6:     .endif
+ 7:   NOP
+ 8:   .endif
+ 9: INNER_LATER: = $01
+10:   RTS
+EXPECT_HEX: ea 60
+
+---
+NAME: ifdef_in_macro_evaluated_at_expansion
+DESCRIPTION: .ifdef in macro body evaluated at expansion time, not definition time
+INPUT:
+ 1: * = $0200
+ 2:   .macro CONDITIONAL
+ 3:   .ifdef FLAG
+ 4:   LDA #$42
+ 5:   .endif
+ 6:   NOP
+ 7:   .endmacro
+ 8:   CONDITIONAL
+ 9: FLAG: = $01
+10:   CONDITIONAL
+EXPECT_HEX: ea a9 42 ea
+
+---
+NAME: local_macro_scope_independence
+DESCRIPTION: Local label .foo under global is independent from .foo in macro
+INPUT:
+ 1: * = $0200
+ 2: global:
+ 3: .foo
+ 4:   LDA #$01
+ 5:   .macro TESTMACRO
+ 6:   LDA #$02
+ 7: .foo
+ 8:   LDA #$03
+ 9:   .endmacro
+10:   JMP .foo     ; Should jump to global's .foo at $0200
+11:   TESTMACRO
+EXPECT_HEX: a9 01 4c 00 02 a9 02 a9 03
+
+---
+NAME: macro_local_does_not_collide_with_global
+DESCRIPTION: .foo in macro resolves to macro-local, not global foo
+INPUT:
+ 1: * = $0200
+ 2: foo: = $01
+ 3:   .macro TEST
+ 4: .foo
+ 5:   LDA #foo
+ 6:   BEQ .foo
+ 7:   .endmacro
+ 8:   TEST
+EXPECT_HEX: a9 01 f0 fc
+
+---
+NAME: nested_macro_local_shadowing
+DESCRIPTION: Inner macro local label shadows outer macro local label
+INPUT:
+ 1: * = $0200
+ 2:   .macro INNER
+ 3: .label
+ 4:   LDA #$02
+ 5:   .endmacro
+ 6:   .macro OUTER
+ 7: .label
+ 8:   LDA #$01
+ 9:   INNER
+10:   JMP .label    ; Should jump to OUTER's .label, not INNER's
+11:   .endmacro
+12:   OUTER
+EXPECT_HEX: a9 01 a9 02 4c 00 02
+
+---
+NAME: macro_param_and_local_same_name
+DESCRIPTION: Macro parameter and local label with same base name coexist
+INPUT:
+ 1: * = $0200
+ 2:   .macro TEST foo
+ 3: .foo
+ 4:   LDA #foo
+ 5:   BEQ .foo
+ 6:   .endmacro
+ 7:   TEST $42
+EXPECT_HEX: a9 42 f0 fc
+
+---
+NAME: macro_include_basic
+DESCRIPTION: Macro body can .include a file
+INPUT:
+ 1: * = $0200
+ 2:   .macro WITH_INCLUDE
+ 3:   .include tests/include/from_macro.asm
+ 4:   .endmacro
+ 5:   WITH_INCLUDE
+ 6:   RTS
+EXPECT_HEX: ea ea 60
+
+---
+NAME: macro_include_multiple
+DESCRIPTION: Same macro with .include expanded twice produces correct output
+INPUT:
+ 1: * = $0200
+ 2:   .macro WITH_INCLUDE
+ 3:   .include tests/include/from_macro.asm
+ 4:   .endmacro
+ 5:   WITH_INCLUDE
+ 6:   INX
+ 7:   WITH_INCLUDE
+ 8:   RTS
+EXPECT_HEX: ea ea e8 ea ea 60
+
+---
+NAME: macro_error_in_body
+DESCRIPTION: Error in macro body reports source as macro, not file
+INPUT:
+ 1: * = $0200
+ 2:   .macro MYMACRO
+ 3:   LDA undefined
+ 4:   .endmacro
+ 5:   MYMACRO
+EXPECT_STDERR:
+Error 1 in macro MYMACRO at line 1: Label not found
+  expanded from {{MAIN_FILE}}:5
+
+---
+NAME: macro_error_nested_macros
+DESCRIPTION: Error in nested macro shows macro traceback chain
+INPUT:
+ 1: * = $0200
+ 2:   .macro INNER
+ 3:   LDA undefined
+ 4:   .endmacro
+ 5:   .macro OUTER
+ 6:   INNER
+ 7:   .endmacro
+ 8:   OUTER
+EXPECT_STDERR:
+Error 1 in macro INNER at line 1: Label not found
+  expanded from macro OUTER:1
+  expanded from {{MAIN_FILE}}:8
+
+---
+NAME: macro_error_include_from_macro
+DESCRIPTION: Error in file included from macro shows mixed traceback
+INPUT:
+ 1: * = $0200
+ 2:   .macro WITHMACRO
+ 3:   NOP
+ 4:   .include tests/include/error_inside.asm
+ 5:   .endmacro
+ 6:   WITHMACRO
+EXPECT_STDERR:
+Error 1 in file tests/include/error_inside.asm at line 3: Label not found
+  included from macro WITHMACRO:2
+  expanded from {{MAIN_FILE}}:6
+
+---
+NAME: macro_error_in_included_file_macro
+DESCRIPTION: Error in macro defined and invoked inside an included file
+INPUT:
+ 1: * = $0200
+ 2:   .include tests/include/error_in_macro.asm
+EXPECT_STDERR:
+Error 1 in macro HELPER at line 1: Label not found
+  expanded from tests/include/error_in_macro.asm:5
+  included from {{MAIN_FILE}}:2
+
+---
+NAME: macro_def_comma_expected
+DESCRIPTION: Macro definition with space-separated params requires comma
+INPUT:
+ 1: * = $0200
+ 2:   .macro foo a b
+ 3:   NOP
+ 4:   .endmacro
+EXPECT_ERROR: 40
+EXPECT_LINE: 2
+EXPECT_MSG: Comma expected
+
+---
+NAME: macro_arg_comma_expected
+DESCRIPTION: Macro invocation with space-separated args requires comma
+INPUT:
+ 1: * = $0200
+ 2:   .macro foo a, b
+ 3:   NOP
+ 4:   .endmacro
+ 5:   foo $01 $02
+EXPECT_ERROR: 40
+EXPECT_LINE: 5
+EXPECT_MSG: Comma expected
+

@@ -1,0 +1,280 @@
+NAME: shift_left_with_low_byte
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$01<<<$1204
+EXPECT_HEX: a9 10
+
+---
+NAME: shift_left_with_high_byte
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$01<<>$0400
+EXPECT_HEX: a9 10
+
+---
+NAME: shift_right_with_low_byte
+INPUT:
+ 1: * = $0200
+ 2: val: = $8000>><$0001
+ 3:   LDA #<val
+ 4:   LDA #>val
+EXPECT_HEX: a9 00 a9 40
+
+---
+NAME: shift_right_with_high_byte
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$FF>>>$0100
+EXPECT_HEX: a9 7f
+
+---
+NAME: assignment_spaces_in_expression
+DESCRIPTION: Spaces around + in assignment expression
+INPUT:
+ 1: * = $0200
+ 2: a: = $10
+ 3: x: = a + $20
+ 4:   LDA x
+EXPECT_HEX: a5 30
+
+---
+NAME: pc_assignment_spaces_in_expression
+DESCRIPTION: Spaces around + in PC assignment expression
+INPUT:
+ 1: val: = $0200
+ 2: * = val + $10
+ 3:   NOP
+EXPECT_HEX: ea
+
+---
+NAME: decimal_zero
+DESCRIPTION: Decimal constant 0
+INPUT:
+ 1: * = $0200
+ 2:   LDA #0
+EXPECT_HEX: a9 00
+
+---
+NAME: decimal_small
+DESCRIPTION: Small decimal constant
+INPUT:
+ 1: * = $0200
+ 2:   LDA #5
+EXPECT_HEX: a9 05
+
+---
+NAME: decimal_max_1byte
+DESCRIPTION: Decimal 255 is max 1-byte value
+INPUT:
+ 1: * = $0200
+ 2:   LDA #255
+EXPECT_HEX: a9 ff
+
+---
+NAME: decimal_256
+DESCRIPTION: Decimal 256 is first 2-byte value
+INPUT:
+ 1: * = $0200
+ 2: val: = 256
+ 3:   LDA #<val
+ 4:   LDA #>val
+EXPECT_HEX: a9 00 a9 01
+
+---
+NAME: decimal_1024
+DESCRIPTION: Decimal 1024 = $0400
+INPUT:
+ 1: * = $0200
+ 2: val: = 1024
+ 3:   LDA #<val
+ 4:   LDA #>val
+EXPECT_HEX: a9 00 a9 04
+
+---
+NAME: decimal_65535
+DESCRIPTION: Decimal 65535 = $FFFF (max 16-bit)
+INPUT:
+ 1: * = $0200
+ 2: val: = 65535
+ 3:   LDA #<val
+ 4:   LDA #>val
+EXPECT_HEX: a9 ff a9 ff
+
+---
+NAME: decimal_overflow_65536
+DESCRIPTION: Decimal 65536 overflows 16-bit
+INPUT:
+ 1: * = $0200
+ 2:   LDA #65536
+EXPECT_ERROR: 6
+EXPECT_LINE: 2
+EXPECT_MSG: Value out of range
+
+---
+NAME: decimal_overflow_99999
+DESCRIPTION: Large decimal overflows 16-bit
+INPUT:
+ 1: * = $0200
+ 2:   LDA #99999
+EXPECT_ERROR: 6
+EXPECT_LINE: 2
+EXPECT_MSG: Value out of range
+
+---
+NAME: decimal_leading_zeros
+DESCRIPTION: Leading zeros in decimal constant
+INPUT:
+ 1: * = $0200
+ 2:   LDA #00042
+EXPECT_HEX: a9 2a
+
+---
+NAME: decimal_expr_add
+DESCRIPTION: Decimal constants in addition expression
+INPUT:
+ 1: * = $0200
+ 2:   LDA #10+20
+EXPECT_HEX: a9 1e
+
+---
+NAME: decimal_expr_sub
+DESCRIPTION: Decimal constants in subtraction expression
+INPUT:
+ 1: * = $0200
+ 2:   LDA #100-50
+EXPECT_HEX: a9 32
+
+---
+NAME: decimal_expr_mixed_hex
+DESCRIPTION: Mixed hex and decimal in expression
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$10+10
+EXPECT_HEX: a9 1a
+
+---
+NAME: decimal_expr_mixed_char
+DESCRIPTION: Mixed char and decimal in expression
+INPUT:
+ 1: * = $0200
+ 2:   LDA #'A'+1
+EXPECT_HEX: a9 42
+
+---
+NAME: decimal_zp_auto
+DESCRIPTION: Decimal constant auto-selects zero page mode
+INPUT:
+ 1: * = $0200
+ 2:   LDA 66
+EXPECT_HEX: a5 42
+
+---
+NAME: decimal_abs_auto
+DESCRIPTION: Decimal constant auto-selects absolute mode
+INPUT:
+ 1: * = $0200
+ 2:   LDA 1024
+EXPECT_HEX: ad 00 04
+
+---
+NAME: decimal_indirect_y
+DESCRIPTION: Decimal constant in indirect indexed Y mode
+INPUT:
+ 1: * = $0200
+ 2:   LDA (64),Y
+EXPECT_HEX: b1 40
+
+---
+NAME: decimal_indexed_x
+DESCRIPTION: Decimal constant in absolute indexed X mode
+INPUT:
+ 1: * = $0200
+ 2:   LDA 1024,X
+EXPECT_HEX: bd 00 04
+
+---
+NAME: decimal_byte_1byte
+DESCRIPTION: Decimal constant in .byte (1 byte)
+INPUT:
+ 1: * = $0200
+ 2:   .byte 42
+EXPECT_HEX: 2a
+
+---
+NAME: decimal_word_2byte
+DESCRIPTION: Decimal constant in .word (2 bytes)
+INPUT:
+ 1: * = $0200
+ 2:   .word 1000
+EXPECT_HEX: e8 03
+
+---
+NAME: decimal_label_assignment
+DESCRIPTION: Decimal constant in label assignment
+INPUT:
+ 1: * = $0200
+ 2: foo: = 42
+ 3:   LDA #foo
+EXPECT_HEX: a9 2a
+
+---
+NAME: decimal_pc_set
+DESCRIPTION: Decimal constant for setting PC
+INPUT:
+ 1: * = 512
+ 2:   NOP
+EXPECT_HEX: ea
+
+---
+NAME: decimal_low_byte_selector
+DESCRIPTION: Low byte selector with decimal
+INPUT:
+ 1: * = $0200
+ 2:   LDA #<1024
+EXPECT_HEX: a9 00
+
+---
+NAME: decimal_high_byte_selector
+DESCRIPTION: High byte selector with decimal
+INPUT:
+ 1: * = $0200
+ 2:   LDA #>1024
+EXPECT_HEX: a9 04
+
+---
+NAME: decimal_shift_left
+DESCRIPTION: Decimal constant with left shift
+INPUT:
+ 1: * = $0200
+ 2:   LDA #1<<4
+EXPECT_HEX: a9 10
+
+---
+NAME: decimal_shift_right
+DESCRIPTION: Decimal constant with right shift
+INPUT:
+ 1: * = $0200
+ 2:   LDA #128>>2
+EXPECT_HEX: a9 20
+
+---
+NAME: decimal_fwdref_expr
+DESCRIPTION: Forward reference with decimal in expression
+INPUT:
+ 1: * = $0200
+ 2:   LDA target+1
+ 3: target: = $42
+EXPECT_HEX: ad 43 00
+EXPECT_FWDREF: 1
+
+---
+NAME: decimal_macro_arg
+DESCRIPTION: Decimal constant as macro argument
+INPUT:
+ 1: * = $0200
+ 2:   .macro LOAD val
+ 3:   LDA #val
+ 4:   .endmacro
+ 5:   LOAD 66
+EXPECT_HEX: a9 42
+

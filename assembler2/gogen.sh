@@ -23,7 +23,7 @@ do
         22/asm.asm 22/instgen.asm 22/environment.asm 22/common.asm 22/hash_table.asm 22/file_stack.asm 22/to_decimal.asm 22/errors.asm 22/fwdref.asm 22/label_scope.asm 22/macros.asm \
         23/asm.asm 23/instgen.asm 23/environment.asm 23/common.asm 23/hash_table.asm 23/file_stack.asm 23/to_decimal.asm 23/errors.asm 23/fwdref.asm 23/label_scope.asm 23/macros.asm \
         test19.asm test_inc19.asm \
-	run_tests.py 23/tests/file_stack_test.asm 23/tests/file_stack_tests.txt 23/tests/asm_tests.txt
+	run_tests.py 23/tests/file_stack/file_stack_test.asm 23/tests/file_stack/file_stack_tests.txt 23/tests/asm/*.txt
         > /dev/null
 
     sleep 0.1

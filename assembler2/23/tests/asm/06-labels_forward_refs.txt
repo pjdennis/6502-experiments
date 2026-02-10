@@ -1,0 +1,240 @@
+
+---
+NAME: fwdref_forward_zpy_capable_large
+INPUT:
+ 1: * = $0200
+ 2:   LDX target,Y
+ 3: target: = $1234
+EXPECT_HEX: be 34 12
+EXPECT_FWDREF: 1
+
+---
+NAME: fwdref_multiple_forward_refs
+INPUT:
+ 1: * = $0200
+ 2:   LDA target1
+ 3:   LDA target2
+ 4: target1: = $12
+ 5:   LDA target1
+ 6: target2: = $34
+ 7:   LDA target2
+EXPECT_HEX: ad 12 00 ad 34 00 a5 12 a5 34
+EXPECT_FWDREF: 2
+
+---
+NAME: fwdref_code_label_small
+INPUT:
+ 1: * = $0200
+ 2:   JMP target
+ 3:   NOP
+ 4: target:
+ 5:   RTS
+EXPECT_HEX: 4c 04 02 ea 60
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_code_label_forward_ref
+INPUT:
+ 1: * = $0200
+ 2:   LDA target
+ 3:   NOP
+ 4: target:
+ 5:   RTS
+EXPECT_HEX: ad 04 02 ea 60
+EXPECT_FWDREF: 1
+
+---
+NAME: fwdref_code_label_backward_ref
+INPUT:
+ 1: * = $0200
+ 2: target:
+ 3:   NOP
+ 4:   LDA target
+EXPECT_HEX: ea ad 00 02
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_mixed_small_and_large
+INPUT:
+ 1: * = $0200
+ 2: zp: = $50
+ 3: abs: = $0300
+ 4:   LDA zp
+ 5:   LDA abs
+ 6:   LDA zp,X
+ 7:   LDA abs,X
+EXPECT_HEX: a5 50 ad 00 03 b5 50 bd 00 03
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_forward_then_backward
+INPUT:
+ 1: * = $0200
+ 2:   LDA target
+ 3: target: = $42
+ 4:   LDA target
+EXPECT_HEX: ad 42 00 a5 42
+EXPECT_FWDREF: 1
+
+---
+NAME: fwdref_jsr_forward_zp_range
+INPUT:
+ 1: * = $0200
+ 2:   JSR subroutine
+ 3: subroutine: = $0050
+EXPECT_HEX: 20 50 00
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_jsr_forward_high_range
+INPUT:
+ 1: * = $0200
+ 2:   JSR subroutine
+ 3: subroutine: = $1234
+EXPECT_HEX: 20 34 12
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_jsr_forward_code_label
+INPUT:
+ 1: * = $0200
+ 2:   JSR subroutine
+ 3:   NOP
+ 4: subroutine:
+ 5:   RTS
+EXPECT_HEX: 20 04 02 ea 60
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_jsr_backward
+INPUT:
+ 1: * = $0200
+ 2: subroutine:
+ 3:   RTS
+ 4:   JSR subroutine
+EXPECT_HEX: 60 20 00 02
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_jmp_forward_zp_range
+INPUT:
+ 1: * = $0200
+ 2:   JMP target
+ 3: target: = $0050
+EXPECT_HEX: 4c 50 00
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_jmp_forward_high_range
+INPUT:
+ 1: * = $0200
+ 2:   JMP target
+ 3: target: = $1234
+EXPECT_HEX: 4c 34 12
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_jmp_forward_code_label
+INPUT:
+ 1: * = $0200
+ 2:   JMP destination
+ 3:   NOP
+ 4: destination:
+ 5:   RTS
+EXPECT_HEX: 4c 04 02 ea 60
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_jmp_backward
+INPUT:
+ 1: * = $0200
+ 2: loop:
+ 3:   NOP
+ 4:   JMP loop
+EXPECT_HEX: ea 4c 00 02
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_jmp_indirect_forward
+INPUT:
+ 1: * = $0200
+ 2:   JMP (vector)
+ 3: vector: = $1234
+EXPECT_HEX: 6c 34 12
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_jmp_indirect_backward
+INPUT:
+ 1: * = $0200
+ 2: vector: = $1234
+ 3:   JMP (vector)
+EXPECT_HEX: 6c 34 12
+EXPECT_FWDREF: 0
+
+---
+NAME: label_with_colon_basic
+INPUT:
+ 1: * = $0200
+ 2: start:
+ 3:   NOP
+ 4:   JMP start
+EXPECT_HEX: ea 4c 00 02
+
+---
+NAME: label_with_colon_assignment
+INPUT:
+ 1: * = $0200
+ 2: addr: = $1234
+ 3:   LDA addr
+EXPECT_HEX: ad 34 12
+
+---
+NAME: label_with_colon_same_line_instruction
+INPUT:
+ 1: * = $0200
+ 2: loop: NOP
+ 3:   BEQ loop
+EXPECT_HEX: ea f0 fd
+
+---
+NAME: label_with_colon_same_line_byte
+INPUT:
+ 1: * = $0200
+ 2: data: .byte $42
+ 3:   LDA data
+EXPECT_HEX: 42 ad 00 02
+
+---
+NAME: local_label_with_colon
+INPUT:
+ 1: * = $0200
+ 2: global:
+ 3: .local:
+ 4:   NOP
+ 5:   BEQ .local
+EXPECT_HEX: ea f0 fd
+
+---
+NAME: local_label_with_colon_same_line
+INPUT:
+ 1: * = $0200
+ 2: global:
+ 3: .loop: NOP
+ 4:   BEQ .loop
+EXPECT_HEX: ea f0 fd
+
+---
+NAME: mixed_colon_no_colon_labels
+INPUT:
+ 1: * = $0200
+ 2: label1:
+ 3:   NOP
+ 4: label2:
+ 5:   NOP
+ 6: label3: NOP
+ 7:   JMP label1
+ 8:   JMP label2
+ 9:   JMP label3
+EXPECT_HEX: ea ea ea 4c 00 02 4c 01 02 4c 02 02
+
