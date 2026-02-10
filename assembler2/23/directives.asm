@@ -27,6 +27,7 @@
 DATA_MODE:       .byte        ; Data directive mode: 1=.byte 2=.word 3=.asciiz
 COND_DEPTH:      .byte        ; Conditional assembly nesting depth
 SKIP_DEPTH:      .byte        ; Depth where skipping started (0 = not skipping)
+SKIP_FLAG:       .byte        ; Fast skip test: bit 7 set when SKIP_DEPTH > 0
 IFDEF_INDEX:     .byte        ; Current index into IFDEF_DECISIONS buffer
 COND_INVERT:     .byte        ; Value if label NOT found ($00 for ifdef, $FF for ifndef)
 
@@ -333,6 +334,8 @@ process_conditional_common:
 .start_skip:
   LDA COND_DEPTH
   STA SKIP_DEPTH
+  LDA #$80
+  STA SKIP_FLAG
 .done:
   ; Restore X (global output file handle)
   PLA
@@ -364,6 +367,8 @@ dir_else:
   ; Currently assembling - start skipping
   LDA COND_DEPTH
   STA SKIP_DEPTH
+  LDA #$80
+  STA SKIP_FLAG
   JMP skip_rest_of_line
 .currently_skipping:
   ; Check if skipping at THIS level
@@ -372,6 +377,7 @@ dir_else:
   ; Skipping at this level - stop skipping
   LDA #$00
   STA SKIP_DEPTH
+  STA SKIP_FLAG
 .skip_at_outer_level:
   JMP skip_rest_of_line
 .error_else_without_ifdef:
@@ -401,5 +407,6 @@ dir_endif:
   ; COND_DEPTH < SKIP_DEPTH, stop skipping
   LDA #$00
   STA SKIP_DEPTH
+  STA SKIP_FLAG
 .done:
   JMP skip_rest_of_line ; Tail call

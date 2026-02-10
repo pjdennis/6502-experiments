@@ -175,6 +175,7 @@ assemble_code:
   STA LABEL_TYPE         ; Initialize local label flag
   STA COND_DEPTH         ; Clear conditional depth
   STA SKIP_DEPTH         ; Clear skip depth
+  STA SKIP_FLAG          ; Clear skip flag
   STA IN_MACRO_DEF       ; Clear macro definition flag
   STA IFDEF_INDEX        ; Clear .ifdef decision index
   ; Clear ELSE_SEEN_ARRAY (16 bytes)

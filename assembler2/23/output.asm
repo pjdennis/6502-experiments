@@ -4,6 +4,7 @@
 ;
 ; Requires:
 ;   HEX16, PC16, PASS, IN_ZEROPAGE, STARTED (asm.asm)
+;   SKIP_FLAG (directives.asm)
 ;   write (environment.asm)
 ;   INC16, CMP16, CP16 (macros.asm)
 ;   err_zeropage_overflow, err_cannot_move_pc_backwards (errors.asm)
@@ -18,14 +19,17 @@
 ; TODO: Consolidate the PASS and IN_ZEROPAGE flags so that emit can
 ;       do a single check instead of two for suppression of output
 emit:
+  ; Check if skipping conditional assembly (BIT doesn't clobber A)
+  BIT SKIP_FLAG
+  BMI .skip_conditional ; Skip if bit 7 set (in false .ifdef block)
   BIT IN_ZEROPAGE
   BMI .in_zeropage     ; If in zero page, handle separately
   ; Not in zero page - proceed with normal emit logic
   INC16 PC16
   BIT PASS
-  BPL .skip            ; Skip writing during pass 1
+  BPL .skip_conditional ; Skip writing during pass 1
   JMP write            ; Tail call
-.skip:
+.skip_conditional:
   RTS
 .in_zeropage:
   ; In zero page - check for overflow BEFORE incrementing
