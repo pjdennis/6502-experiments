@@ -73,21 +73,6 @@ process_directive:
   INY
   LDA (TABP16),Y
   STA JUMP_TARGET16 + 1
-  ; Check if skipping
-  BIT SKIP_FLAG
-  BPL .dispatch         ; Not skipping, dispatch normally
-  ; In skip mode - only allow conditional directives
-  CMPI16 JUMP_TARGET16, dir_ifdef
-  BEQ .dispatch
-  CMPI16 JUMP_TARGET16, dir_ifndef
-  BEQ .dispatch
-  CMPI16 JUMP_TARGET16, dir_else
-  BEQ .dispatch
-  CMPI16 JUMP_TARGET16, dir_endif
-  BEQ .dispatch
-  ; Not conditional - skip rest of line and return
-  JMP skip_rest_of_line
-.dispatch:
   JMP do_jump           ; Tail call: handler RTS returns to our caller
 .not_found:
   JMP err_unknown_directive
