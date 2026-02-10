@@ -141,39 +141,35 @@ dir_zp_alloc:
 ; On exit C=0 if processed; C=1 if not processed
 ;         A is not preserved
 process_conditional_directive:
-  ; Check for 'ifdef'
-  SET16 directive_ifdef, TABP16
-  JSR compare_token
-  BEQ .ifdef
-  ; Check for 'ifndef'
-  SET16 directive_ifndef, TABP16
-  JSR compare_token
-  BEQ .ifndef
-  ; Check for 'else'
-  SET16 directive_else, TABP16
-  JSR compare_token
-  BEQ .else
-  ; Check for 'endif'
-  SET16 directive_endif, TABP16
-  JSR compare_token
-  BEQ .endif
-  SEC ; Not processed
+  JSR select_instruction_hash_table
+  JSR find_in_hash_instruction
+  BCS .not_conditional       ; Not found in IHASHTAB
+  ; Check for MODE_DIRECTIVE
+  LDA (TABP16),Y
+  CMP #MODE_DIRECTIVE
+  BNE .not_conditional
+  ; Extract handler address
+  INY
+  LDA (TABP16),Y
+  STA JUMP_TARGET16
+  INY
+  LDA (TABP16),Y
+  STA JUMP_TARGET16 + 1
+  ; Check if it's one of the 4 conditional directives
+  CMPI16 JUMP_TARGET16, dir_ifdef
+  BEQ .found
+  CMPI16 JUMP_TARGET16, dir_ifndef
+  BEQ .found
+  CMPI16 JUMP_TARGET16, dir_else
+  BEQ .found
+  CMPI16 JUMP_TARGET16, dir_endif
+  BEQ .found
+.not_conditional:
+  SEC                        ; Not a conditional directive
   RTS
-.ifdef:
-  JSR dir_ifdef
-  CLC
-  RTS
-.ifndef:
-  JSR dir_ifndef
-  CLC
-  RTS
-.else:
-  JSR dir_else
-  CLC
-  RTS
-.endif:
-  JSR dir_endif
-  CLC
+.found:
+  JSR do_jump                ; Call handler via trampoline
+  CLC                        ; Processed
   RTS
 
 
