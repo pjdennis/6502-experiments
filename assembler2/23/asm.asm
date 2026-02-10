@@ -92,6 +92,7 @@ MACRO_ARG_BUF   = $0500  ; Temp buffer for macro args during expansion (256 byte
 MACRO_ARG_LIMIT = MACRO_ARG_BUF + $0100 ; Limit for macro arg buffer
 TOKEN           = $0600  ; Buffer for the current token being read
 ELSE_SEEN_ARRAY = $0680  ; Array tracking .else seen per nesting level (16 bytes)
+ELSE_SEEN_LIMIT = $0690  ; 16 Entries
 LHASHTAB        = $0700  ; Label hash table
 IFDEF_DECISIONS = $0800  ; Buffer for .ifdef decisions (256 bytes)
 *               = $2000  ; Code generates here follwed by HEAP

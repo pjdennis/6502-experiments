@@ -76,6 +76,8 @@ process_directive:
   JMP do_jump           ; Tail call: handler RTS returns to our caller
 .not_found:
   JMP err_unknown_directive
+
+
 dir_include:
   JSR check_for_end_of_line
   BCC .get_name
@@ -84,6 +86,8 @@ dir_include:
   JSR read_filename
   JSR skip_rest_of_line
   JMP push_file_stack    ; Tail call
+
+
 dir_zeropage:
   BIT IN_ZEROPAGE
   BMI .in_zeropage
@@ -92,6 +96,8 @@ dir_zeropage:
   JSR swap_pc_with_save
 .in_zeropage:
   JMP skip_rest_of_line  ; Tail call
+
+
 dir_code:
   BIT IN_ZEROPAGE
   BPL .in_code
@@ -100,16 +106,22 @@ dir_code:
   JSR swap_pc_with_save
 .in_code:
   JMP skip_rest_of_line  ; Tail call
+
+
 dir_byte:
   LDA #DATA_MODE_BYTE
   BIT IN_ZEROPAGE
   BMI dir_zp_alloc       ; In zeropage? check for operand-less form
   JMP set_data_mode
+
+
 dir_word:
   LDA #DATA_MODE_WORD
   BIT IN_ZEROPAGE
   BMI dir_zp_alloc       ; In zeropage? check for operand-less form
   JMP set_data_mode
+
+
 dir_asciiz:
   BIT IN_ZEROPAGE
   BMI .zp_asciiz_err
@@ -117,13 +129,16 @@ dir_asciiz:
   JMP set_data_mode
 .zp_asciiz_err:
   JMP err_asciiz_in_zeropage
+
+
 dir_endmacro:
   ; Check if we're skipping - if so, just ignore (don't error)
   BIT SKIP_FLAG
-  BMI .skip_endmacro
-  JMP err_endmacro_without_macro
-.skip_endmacro:
+  BPL .error
   JMP skip_rest_of_line
+.error
+  JMP err_endmacro_without_macro
+
 
 dir_zp_alloc:
   ; A = DATA_MODE (1=byte, 2=word)
@@ -243,7 +258,7 @@ data_parameters_loop:
 dir_ifdef:
   LDA #$00
   STA COND_INVERT          ; Value if label NOT found (skip for ifdef)
-  JMP process_conditional_common
+  BEQ process_conditional_common ; Always taken
 
 
 ; Process .ifndef directive
@@ -259,10 +274,10 @@ dir_ifndef:
 ; On entry: COND_INVERT = value if label NOT found ($00 for ifdef, $FF for ifndef)
 ; This consolidates the nearly-identical logic between ifdef and ifndef
 process_conditional_common:
-  INC COND_DEPTH
   LDA COND_DEPTH
-  CMP #17                  ; Check for nesting limit (16 levels max)
+  CMP #ELSE_SEEN_LIMIT - ELSE_SEEN_ARRAY ; Check for nesting limit
   BCS .nesting_too_deep
+  INC COND_DEPTH
   LDA SKIP_DEPTH
   BNE .already_skipping    ; Already skipping, don't record or evaluate
   ; Evaluate condition
