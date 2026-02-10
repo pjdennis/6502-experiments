@@ -112,7 +112,10 @@ parse_term:
   ; Label not found - check pass
   BIT PASS
   BMI .label_not_found_pass2
-  ; Pass 1 - forward reference: use zero values
+  ; Pass 1 - check if skipping first
+  BIT SKIP_FLAG
+  BMI .skip_mode_dummy    ; Skipping - use dummy value, don't mark as fwdref
+  ; Forward reference: use zero values
   LDA #$FF
   STA IS_FWDREF        ; Mark as forward reference
   LDA #$00
