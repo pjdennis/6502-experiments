@@ -102,11 +102,7 @@ buf_load_file:
 .has_newline:
 
   ; If buffer is empty (nothing read), add a newline for one empty line
-  LDA BUF_END16
-  CMP #<TEXT_BUF
-  BNE .not_empty
-  LDA BUF_END16 + 1
-  CMP #>TEXT_BUF
+  CMPI16 BUF_END16, TEXT_BUF
   BNE .not_empty
   ; Empty buffer
   LDY #0
@@ -427,11 +423,7 @@ buf_delete_lines:
   JSR buf_shift_left_16
 
   ; If buffer is now empty, add a newline
-  LDA BUF_END16
-  CMP #<TEXT_BUF
-  BNE .not_empty
-  LDA BUF_END16 + 1
-  CMP #>TEXT_BUF
+  CMPI16 BUF_END16, TEXT_BUF
   BNE .not_empty
   LDY #0
   LDA #'\n'

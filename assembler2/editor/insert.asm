@@ -259,13 +259,8 @@ insert_backspace:
   ; Previous line empty - scan backwards for consecutive \n bytes
 .scan_loop:
   ; Check if BUF_PTR16 is at TEXT_BUF (buffer start)
-  LDA BUF_PTR16
-  CMP #<TEXT_BUF
-  BNE .not_start
-  LDA BUF_PTR16 + 1
-  CMP #>TEXT_BUF
+  CMPI16 BUF_PTR16, TEXT_BUF
   BEQ .apply           ; At buffer start, stop
-.not_start:
 
   ; Check byte before BUF_PTR16
   SEC
@@ -282,11 +277,7 @@ insert_backspace:
 
   ; BUF_SRC16 points to a \n. Verify this \n ends an EMPTY line.
   ; Empty if BUF_SRC16 is at buffer start, or byte before it is also \n.
-  LDA BUF_SRC16
-  CMP #<TEXT_BUF
-  BNE .check_prev
-  LDA BUF_SRC16 + 1
-  CMP #>TEXT_BUF
+  CMPI16 BUF_SRC16, TEXT_BUF
   BEQ .line_empty      ; First byte of buffer, just \n → empty
 
 .check_prev:
