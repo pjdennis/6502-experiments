@@ -27,6 +27,7 @@ BUF_SRC16:     .word     ; Source pointer for block moves
 BUF_DST16:     .word     ; Destination pointer for block moves
 BUF_LEN16:     .word     ; Length/count for block moves
 BUF_TEMP:      .byte     ; Temp byte for buffer operations
+BUF_TEMP16:    .word     ; 16-bit count for line operations (delete, yank, etc.)
 BUF_DELTA:     .byte     ; Shift amount for block moves
 FILE_HANDLE:   .byte     ; File handle for load/save
 BUF_LIMIT:     .byte     ; High byte of buffer limit (default >TEXT_LIMIT)

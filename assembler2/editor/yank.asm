@@ -14,6 +14,7 @@ YANK_LIMIT = $E500
 
 YANK_END16:    .word     ; Points one past last byte in yank buffer
 YANK_LINES:    .byte     ; Number of lines in yank buffer
+YANK_LINES16:  .word     ; 16-bit line count for yank buffer
 YANK_SIZE16:   .word     ; Single yank size for paste operations
 
   .code
