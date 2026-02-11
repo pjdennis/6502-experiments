@@ -11,6 +11,7 @@ Usage:
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -78,6 +79,20 @@ class EditorTestRunner:
         """Assemble the editor with small buffer (256 bytes for testing)."""
         return self._assemble_editor(self.editor_small_bin,
                                      ["define:small_buffer"])
+
+    def create_stable_copy(self):
+        """Create a stable copy of editor.out after successful tests."""
+        stable_path = self.base_dir / "editor" / "out" / "editor_stable.out"
+        try:
+            shutil.copy2(self.editor_bin, stable_path)
+            if not self.quiet:
+                print()
+                print(f"{Colors.GREEN}Created stable copy:{Colors.NC} {stable_path}")
+            return True
+        except Exception as e:
+            print()
+            print(f"{Colors.RED}Warning: Failed to create stable copy:{Colors.NC} {e}")
+            return False
 
     def run_editor(self, input_file: str, keys: bytes, tmpdir: Path) -> tuple:
         """Run the editor with given keystroke sequence.
@@ -3526,6 +3541,10 @@ class EditorTestRunner:
             parts.append(f"{Colors.RED}{self.failed} failed{Colors.NC}")
         print(f"Results: {', '.join(parts)} of {total} tests")
         print("=" * 60)
+
+        # Create stable copy only if all tests passed
+        if self.failed == 0:
+            self.create_stable_copy()
 
 
 def main():
