@@ -611,11 +611,12 @@ buf_rebuild_lines:
 .scan_done:
   RTS
 
-; Increment line pointers after current line by 1
-; Used after inserting a non-newline character (no lines added/removed)
-; Input: FILE_LINE16 = current line number
-; Clobbers: A, Y
-buf_adjust_lines_inc:
+; Common setup for buf_adjust_lines_inc/dec
+; Calculates count = LINE_COUNT16 - FILE_LINE16 - 1
+; Computes BUF_PTR16 = LINE_TBL entry for FILE_LINE16 + 1
+; Returns carry set if nothing to do (count <= 0)
+; Clobbers: A
+buf_adjust_lines_setup:
   ; Calculate number of entries to adjust: LINE_COUNT16 - FILE_LINE16 - 1
   SEC
   SBC16 LINE_COUNT16, FILE_LINE16, BUF_LEN16
@@ -625,9 +626,9 @@ buf_adjust_lines_inc:
 
   ; If count <= 0, nothing to adjust
   LDA BUF_LEN16 + 1
-  BMI .done
+  BMI .nothing
   ORA BUF_LEN16
-  BEQ .done
+  BEQ .nothing
 
   ; Calculate LINE_TBL entry for (FILE_LINE16 + 1)
   ; Entry address = LINE_TBL + (FILE_LINE16 + 1) * 2
@@ -636,6 +637,19 @@ buf_adjust_lines_inc:
   ASL16 BUF_PTR16
   CLC
   ADCI16 BUF_PTR16, LINE_TBL, BUF_PTR16
+
+  CLC              ; Has work to do
+  RTS
+.nothing:
+  SEC              ; Nothing to do
+  RTS
+
+; Increment line pointers after current line by BUF_DELTA
+; Input: FILE_LINE16 = current line number, BUF_DELTA = shift amount
+; Clobbers: A, Y
+buf_adjust_lines_inc:
+  JSR buf_adjust_lines_setup
+  BCS .done
 
 .loop:
   ; Increment the 16-bit line pointer at (BUF_PTR16)
@@ -665,30 +679,12 @@ buf_adjust_lines_inc:
 .done:
   RTS
 
-; Decrement line pointers after current line by 1
-; Used after deleting a non-newline character (no lines added/removed)
-; Input: FILE_LINE16 = current line number
+; Decrement line pointers after current line by BUF_DELTA
+; Input: FILE_LINE16 = current line number, BUF_DELTA = shift amount
 ; Clobbers: A, Y
 buf_adjust_lines_dec:
-  ; Calculate number of entries to adjust: LINE_COUNT16 - FILE_LINE16 - 1
-  SEC
-  SBC16 LINE_COUNT16, FILE_LINE16, BUF_LEN16
-
-  ; Subtract 1
-  DEC16 BUF_LEN16
-
-  ; If count <= 0, nothing to adjust
-  LDA BUF_LEN16 + 1
-  BMI .done
-  ORA BUF_LEN16
-  BEQ .done
-
-  ; Calculate LINE_TBL entry for (FILE_LINE16 + 1)
-  CLC
-  ADCI16 FILE_LINE16, $0001, BUF_PTR16
-  ASL16 BUF_PTR16
-  CLC
-  ADCI16 BUF_PTR16, LINE_TBL, BUF_PTR16
+  JSR buf_adjust_lines_setup
+  BCS .done
 
 .loop:
   ; Decrement the 16-bit line pointer at (BUF_PTR16)
@@ -697,12 +693,12 @@ buf_adjust_lines_dec:
   LDA (BUF_PTR16),Y
   SBC BUF_DELTA
   STA (BUF_PTR16),Y
-  BCS .no_borrow2
+  BCS .no_borrow
   INY
   LDA (BUF_PTR16),Y
   SBC #0
   STA (BUF_PTR16),Y
-.no_borrow2:
+.no_borrow:
 
   ; Advance to next LINE_TBL entry (+2 bytes)
   CLC
