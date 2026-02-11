@@ -107,6 +107,7 @@ echo "--- Version 21 ---"
   ../emulator.out ../20/out/asm.out asm.asm out/asm_debug.out define:enable_debug)
 echo "--- Version 22 ---"
 (cd 22 && mkdir -p out &&
+  ../emulator.out ../21/out/asm_debug.out tests/file_stack_test.asm out/file_stack_test.out &&
   ../emulator.out ../21/out/asm_debug.out instgen.asm out/instgen.out &&
   ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
   ../emulator.out ../21/out/asm_debug.out asm.asm out/asm.out &&

@@ -543,8 +543,9 @@ class TestRunner:
                 str(main_file),
             ]
 
+            # Run with cwd set to tmpdir so nested includes resolve correctly
             with open(stderr_file, "w") as err_fh:
-                subprocess.run(cmd, stderr=err_fh)
+                subprocess.run(cmd, stderr=err_fh, cwd=tmpdir)
 
             # Read outputs
             actual_stdout = self._read_text_safe(stdout_file) if stdout_file.exists() else ""

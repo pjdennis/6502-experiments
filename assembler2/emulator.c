@@ -1509,14 +1509,17 @@ int file_write(uint8_t file, uint8_t value) {
     return fputc(value, file_handle(file));
 }
 
-void files_destroy() {
+int files_destroy() {
+    int unclosed_count = 0;
     for (size_t x = 1; x != 255; x++) {
         if (files[x] != NULL) {
 	    fprintf(stderr, "File %i was not closed\n", (int) (x + 1));
             fclose(files[x]);
 	    files[x] = NULL;
+            unclosed_count++;
         }
     }
+    return unclosed_count;
 }
 
 uint8_t read6502(uint16_t address) {
@@ -2033,7 +2036,7 @@ int main(int argc, char **argv) {
 
     free(arg_addresses);
 
-    files_destroy();
+    int unclosed_files = files_destroy();
 
     if (!console_mode && strcmp(output_filename, "-") != 0) {
         fclose(output_file_ptr);
@@ -2062,6 +2065,11 @@ int main(int argc, char **argv) {
             }
             fputc('\n', stderr);
         }
+    }
+
+    // If files were left unclosed and no other error occurred, set error exit code
+    if (unclosed_files > 0 && exitcode == 0) {
+        exitcode = 1;
     }
 
     // Print final status line (skip in console mode)
