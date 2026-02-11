@@ -233,8 +233,7 @@ normal_move_left:
   BNE .left_loop
 .left_done:
   JSR ensure_cursor_visible
-  JSR clear_count
-  RTS
+  JMP clear_count
 
 normal_move_right:
   JSR get_count_byte     ; X = count
@@ -257,8 +256,7 @@ normal_move_right:
   BNE .right_loop
 .right_done:
   JSR ensure_cursor_visible
-  JSR clear_count
-  RTS
+  JMP clear_count
 
 normal_move_down:
   JSR get_count_byte     ; X = count
@@ -279,8 +277,7 @@ normal_move_down:
 .down_done:
   JSR clamp_cursor_col
   JSR ensure_cursor_visible
-  JSR clear_count
-  RTS
+  JMP clear_count
 
 normal_move_up:
   JSR get_count_byte     ; X = count
@@ -298,8 +295,7 @@ normal_move_up:
 .up_done:
   JSR clamp_cursor_col
   JSR ensure_cursor_visible
-  JSR clear_count
-  RTS
+  JMP clear_count
 
 normal_page_down:
   ; page_size = SCREEN_ROWS - 1 (content rows excluding status bar)
@@ -884,8 +880,7 @@ normal_enter_command:
 
 get_current_line_len:
   LDAX16 FILE_LINE16
-  JSR buf_get_line_len
-  RTS
+  JMP buf_get_line_len
 
 ; Get buffer pointer at cursor position on current line
 ; Sets BUF_PTR16 to start of FILE_LINE16 + CURSOR_COL16

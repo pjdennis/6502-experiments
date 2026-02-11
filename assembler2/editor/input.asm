@@ -35,8 +35,7 @@ input_read_byte:
   LDA PUSHBACK
   RTS
 .no_pushback:
-  JSR con_read
-  RTS
+  JMP con_read
 
 ; Push back one byte into the input stream
 ; A = byte to push back

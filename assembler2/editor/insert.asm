@@ -66,8 +66,7 @@ insert_exit:
 .done:
   LDA #0
   STA RENDER_FLAG
-  JSR ensure_cursor_visible
-  RTS
+  JMP ensure_cursor_visible
 
 ; Insert a printable character at cursor position
 ; Character in A. Reads and batches any pending printable chars.
@@ -389,23 +388,19 @@ insert_delete:
 ; Arrow key handlers in insert mode
 insert_move_up:
   JSR normal_move_up
-  JSR clamp_cursor_col_insert
-  RTS
+  JMP clamp_cursor_col_insert
 
 insert_move_down:
   JSR normal_move_down
-  JSR clamp_cursor_col_insert
-  RTS
+  JMP clamp_cursor_col_insert
 
 insert_page_down:
   JSR normal_page_down
-  JSR clamp_cursor_col_insert
-  RTS
+  JMP clamp_cursor_col_insert
 
 insert_page_up:
   JSR normal_page_up
-  JSR clamp_cursor_col_insert
-  RTS
+  JMP clamp_cursor_col_insert
 
 insert_move_left:
   TST16 CURSOR_COL16

@@ -160,8 +160,7 @@ command_parse:
   RTS
 
 .do_write:
-  JSR command_write_file
-  RTS
+  JMP command_write_file
 
 .check_q:
   LDA CMD_BUF + 1

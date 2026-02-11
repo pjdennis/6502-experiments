@@ -43,8 +43,7 @@ buf_init:
   STA (BUF_END16),Y
   INC16 BUF_END16
   ; Build line table
-  JSR buf_rebuild_lines
-  RTS
+  JMP buf_rebuild_lines
 
 ; Load file into buffer
 ; File handle in A (already opened)
@@ -431,8 +430,7 @@ buf_delete_lines:
   INC16 BUF_END16
 .not_empty:
 
-  JSR buf_rebuild_lines
-  RTS
+  JMP buf_rebuild_lines
 
 ; Shift buffer left by BUF_DELTA bytes at BUF_PTR16
 ; Input: BUF_PTR16 = delete point, BUF_DELTA = shift amount

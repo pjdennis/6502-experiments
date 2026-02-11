@@ -99,8 +99,7 @@ search_handle:
   BEQ .cancel       ; No previous pattern either
 
 .do_search:
-  JSR search_forward
-  RTS
+  JMP search_forward
 
 ; Show the '/' prompt on the status line
 search_show_prompt:

@@ -156,8 +156,7 @@ render_from_row:
   JSR render_position_cursor
 
   JSR ansi_cursor_show
-  JSR con_flush
-  RTS
+  JMP con_flush
 
 ; Render just the status line (last row)
 render_status_line:
@@ -235,8 +234,7 @@ render_status_line:
 
   ; Clear rest of status line and restore normal video
   JSR ansi_clear_line
-  JSR ansi_normal_video
-  RTS
+  JMP ansi_normal_video
 
 ; Position cursor at the editing position (wrap-aware)
 render_position_cursor:
@@ -251,8 +249,7 @@ render_position_cursor:
   CLC
   ADC #1           ; ANSI 1-based
   STA ANSI_COL
-  JSR ansi_move_cursor
-  RTS
+  JMP ansi_move_cursor
 
 ; Render just the current line (optimization for insert mode)
 ; Redraws the line at CURSOR_ROW and repositions cursor
@@ -276,8 +273,7 @@ render_current_line:
 
   JSR render_position_cursor
   JSR ansi_cursor_show
-  JSR con_flush
-  RTS
+  JMP con_flush
 
 ; Redraw current line and rows below, plus status bar (for single-line edits)
 ; Renders from CURSOR_ROW downward to handle line wrap changes correctly
@@ -321,8 +317,7 @@ render_cursor_and_status:
   JSR render_status_line
   JSR render_position_cursor
   JSR ansi_cursor_show
-  JSR con_flush
-  RTS
+  JMP con_flush
 
 ; Print line characters from BUF_PTR16 up to SCREEN_COLS or newline
 ; Replaces control chars with spaces. Clobbers A, Y.
