@@ -479,11 +479,8 @@ capture_macro_line:
   LDA CURR_CHAR
   CMP #' '
   BNE .keep_line ; First column - not a directive (even if '.')
-.p2_scan_spaces:
-  JSR read_char
-  BCS .unclosed_macro
-  CMP #' '
-  BEQ .p2_scan_spaces
+  JSR skip_spaces
+  LDA CURR_CHAR
   CMP #'.'
   BNE .keep_line           ; Not a directive
   ; Check if directive is .endmacro
@@ -496,6 +493,3 @@ capture_macro_line:
   LDA #$00                 ; Clear the capturing flag
   STA IN_MACRO_DEF
   BEQ .keep_line           ; Always taken (A = 0)
-.unclosed_macro:
-  JMP err_unclosed_macro   ; EOF in macro
-
