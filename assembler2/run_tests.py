@@ -647,7 +647,8 @@ class TestRunner:
         except ValueError:
             display_path = filepath
         print(f"Running tests from {display_path}")
-        print()
+        if not self.quiet:
+            print()
 
         for test in tests:
             outcome = self.run_test(test, filter_pattern)
@@ -752,7 +753,8 @@ def main():
             continue
 
         runner.run_test_file(filepath, args.filter)
-        print()
+        if not args.quiet:
+            print()
 
     runner.print_summary()
 
