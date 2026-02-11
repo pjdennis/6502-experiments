@@ -16,8 +16,7 @@ NORMAL_TEMP: .byte      ; Temp byte for normal mode operations
 normal_init:
   LDA #0
   STA LAST_KEY
-  STA COUNT16
-  STA COUNT16 + 1
+  STA_LH16 COUNT16
   STA COUNT_ACTIVE
   RTS
 
@@ -106,85 +105,49 @@ normal_handle_key:
 ; --- Dispatch tables ---
 
 normal_movement_keys:
-  .byte 'h'
-  .word normal_move_left
-  .byte KEY_LEFT
-  .word normal_move_left
-  .byte 'l'
-  .word normal_move_right
-  .byte KEY_RIGHT
-  .word normal_move_right
-  .byte 'j'
-  .word normal_move_down
-  .byte KEY_DOWN
-  .word normal_move_down
-  .byte 'k'
-  .word normal_move_up
-  .byte KEY_UP
-  .word normal_move_up
-  .byte '0'
-  .word normal_line_start
-  .byte KEY_HOME
-  .word normal_line_start
-  .byte '$'
-  .word normal_line_end
-  .byte KEY_END
-  .word normal_line_end
-  .byte KEY_PGDN
-  .word normal_page_down
-  .byte KEY_PGUP
-  .word normal_page_up
-  .byte $06              ; Ctrl-F
-  .word normal_page_down
-  .byte $02              ; Ctrl-B
-  .word normal_page_up
-  .byte 'G'
-  .word normal_goto_last
-  .byte 'g'
-  .word normal_g_key
-  .byte 'y'
-  .word normal_y_key
-  .byte '/'
-  .word normal_search
-  .byte 'n'
-  .word normal_find_next
-  .byte 'N'
-  .word normal_find_prev
-  .byte 'm'
-  .word normal_mark_set
-  .byte '\''
-  .word normal_mark_goto
-  .byte 0                ; End sentinel
+  .byte 'h'         .word normal_move_left
+  .byte KEY_LEFT    .word normal_move_left
+  .byte 'l'         .word normal_move_right
+  .byte KEY_RIGHT   .word normal_move_right
+  .byte 'j'         .word normal_move_down
+  .byte KEY_DOWN    .word normal_move_down
+  .byte 'k'         .word normal_move_up
+  .byte KEY_UP      .word normal_move_up
+  .byte '0'         .word normal_line_start
+  .byte KEY_HOME    .word normal_line_start
+  .byte '$'         .word normal_line_end
+  .byte KEY_END     .word normal_line_end
+  .byte KEY_PGDN    .word normal_page_down
+  .byte KEY_PGUP    .word normal_page_up
+  .byte $06         .word normal_page_down     ; Ctrl-F
+  .byte $02         .word normal_page_up       ; Ctrl-B
+  .byte 'G'         .word normal_goto_last
+  .byte 'g'         .word normal_g_key
+  .byte 'y'         .word normal_y_key
+  .byte '/'         .word normal_search
+  .byte 'n'         .word normal_find_next
+  .byte 'N'         .word normal_find_prev
+  .byte 'm'         .word normal_mark_set
+  .byte '\''        .word normal_mark_goto
+  .byte 0           ; End sentinel
 
 normal_editing_keys:
-  .byte 'x'
-  .word normal_delete_char
-  .byte KEY_DEL
-  .word normal_delete_char
-  .byte 'd'
-  .word normal_d_key
-  .byte 'D'
-  .word normal_delete_to_eol
-  .byte 'i'
-  .word normal_enter_insert
-  .byte 'a'
-  .word normal_enter_insert_after
-  .byte 'A'
-  .word normal_enter_insert_eol
-  .byte 'o'
-  .word normal_open_below
-  .byte 'O'
-  .word normal_open_above
-  .byte 'p'
-  .word normal_paste_below
-  .byte 'P'
-  .word normal_paste_above
-  .byte 0                ; End sentinel
+  .byte 'x'         .word normal_delete_char
+  .byte KEY_DEL     .word normal_delete_char
+  .byte 'd'         .word normal_d_key
+  .byte 'D'         .word normal_delete_to_eol
+  .byte 'i'         .word normal_enter_insert
+  .byte 'a'         .word normal_enter_insert_after
+  .byte 'A'         .word normal_enter_insert_eol
+  .byte 'o'         .word normal_open_below
+  .byte 'O'         .word normal_open_above
+  .byte 'p'         .word normal_paste_below
+  .byte 'P'         .word normal_paste_above
+  .byte 0           ; End sentinel
 
 normal_other_keys:
-  .byte ':'
-  .word normal_enter_command
-  .byte 0                ; End sentinel
+  .byte ':'         .word normal_enter_command
+  .byte 0           ; End sentinel
 
 ; --- Generic key dispatcher ---
 ; Input: A = low byte, X = high byte of dispatch table address
@@ -244,7 +207,7 @@ normal_move_right:
   TST16 LINE_LEN16
   BEQ .right_done        ; Empty line
   SEC
-  SBCI16 LINE_LEN16, $0001, LINE_LEN16  ; LINE_LEN16 = len - 1
+  SBCI16 LINE_LEN16, 1, LINE_LEN16  ; LINE_LEN16 = len - 1
   CMP16 LINE_LEN16, CURSOR_COL16
   BCC .right_done        ; Already at or past end
   BEQ .right_done
@@ -264,7 +227,7 @@ normal_move_down:
   STX BUF_TEMP           ; Save counter
   ; Check if there's a next line
   CLC
-  ADCI16 FILE_LINE16, $0001, BUF_PTR16
+  ADCI16 FILE_LINE16, 1, BUF_PTR16
   CMP16 BUF_PTR16, LINE_COUNT16
   BCS .down_done
 
@@ -318,7 +281,7 @@ normal_page_down:
   BCC .target_ok
 .clamp_target:
   SEC
-  SBCI16 LINE_COUNT16, $0001, BUF_PTR16
+  SBCI16 LINE_COUNT16, 1, BUF_PTR16
 .target_ok:
 
   ; VIEW_TOP16 += page_size
@@ -428,7 +391,7 @@ normal_line_end:
   TST16 LINE_LEN16
   BEQ .empty
   SEC
-  SBCI16 LINE_LEN16, $0001, CURSOR_COL16
+  SBCI16 LINE_LEN16, 1, CURSOR_COL16
   JMP .ecv
 .empty:
   LDA #0
@@ -446,19 +409,19 @@ normal_goto_last:
 
   ; Convert 1-based count to 0-based file line
   SEC
-  SBCI16 COUNT16, $0001, FILE_LINE16
+  SBCI16 COUNT16, 1, FILE_LINE16
 
   ; Clamp to last line
   CMP16 FILE_LINE16, LINE_COUNT16
   BCC .goto_set
   SEC
-  SBCI16 LINE_COUNT16, $0001, FILE_LINE16
+  SBCI16 LINE_COUNT16, 1, FILE_LINE16
   JMP .goto_set
 
 .goto_end:
   ; No count: go to last line
   SEC
-  SBCI16 LINE_COUNT16, $0001, FILE_LINE16
+  SBCI16 LINE_COUNT16, 1, FILE_LINE16
 
 .goto_set:
   LDA #0
@@ -599,7 +562,7 @@ normal_d_key:
   CMP16 FILE_LINE16, LINE_COUNT16
   BCC .done
   SEC
-  SBCI16 LINE_COUNT16, $0001, FILE_LINE16
+  SBCI16 LINE_COUNT16, 1, FILE_LINE16
 
 .done:
   LDA #$FF
@@ -679,7 +642,7 @@ normal_open_below:
   LDA #1
   STA BUF_TEMP
   CLC
-  ADCI16 FILE_LINE16, $0001, BUF_DST16
+  ADCI16 FILE_LINE16, 1, BUF_DST16
   LDAX16 BUF_DST16
   JSR mark_adjust_insert
 
@@ -898,7 +861,7 @@ clamp_cursor_col:
   TST16 LINE_LEN16
   BEQ .set_zero
   SEC
-  SBCI16 LINE_LEN16, $0001, LINE_LEN16  ; LINE_LEN16 = len - 1
+  SBCI16 LINE_LEN16, 1, LINE_LEN16  ; LINE_LEN16 = len - 1
   CMP16 LINE_LEN16, CURSOR_COL16
   BCS .ok                ; len-1 >= cursor, cursor is fine
   CP16 LINE_LEN16, CURSOR_COL16
@@ -914,8 +877,7 @@ clamp_cursor_col:
 ; Clear count state: zeroes COUNT16, COUNT_ACTIVE, LAST_KEY
 clear_count:
   LDA #0
-  STA COUNT16
-  STA COUNT16 + 1
+  STA_LH16 COUNT16
   STA COUNT_ACTIVE
   STA LAST_KEY
   RTS
