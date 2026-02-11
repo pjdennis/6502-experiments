@@ -19,10 +19,11 @@ mark_init:
   BPL .loop
   RTS
 
-; Set mark: store current FILE_LINE16 at mark position
-; Input: A = mark name ('a'-'z')
-; Returns: carry set if invalid name, carry clear if set
-mark_set:
+; Calculate the pointer offset for a mark
+; Input: A - mark name ('a'-'z')
+; Returns: Mark offset in A
+;          Carry set if invalid name, car
+mark_calculate_pointer_offset
   CMP #'a'
   BCC .invalid
   CMP #'z' + 1
@@ -30,6 +31,18 @@ mark_set:
   SEC
   SBC #'a'
   ASL                  ; *2 for 16-bit entries
+  CLC
+  RTS
+.invalid:
+  SEC
+  RTS
+
+; Set mark: store current FILE_LINE16 at mark position
+; Input: A = mark name ('a'-'z')
+; Returns: carry set if invalid name, carry clear if set
+mark_set:
+  JSR mark_calculate_pointer_offset
+  BCS .invalid
   TAX
   LDA FILE_LINE16
   STA MARK_TBL,X
@@ -46,13 +59,8 @@ mark_set:
 ; Returns: A = low byte, X = high byte of line number
 ;          carry set if unset or invalid, carry clear if valid
 mark_get:
-  CMP #'a'
-  BCC .invalid
-  CMP #'{'             ; 'z'+1
+  JSR mark_calculate_pointer_offset
   BCS .invalid
-  SEC
-  SBC #'a'
-  ASL                  ; *2 for 16-bit entries
   TAX
   LDA MARK_TBL + 1,X
   CMP #$FF
