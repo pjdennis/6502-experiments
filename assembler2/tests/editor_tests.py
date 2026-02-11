@@ -2140,6 +2140,86 @@ class EditorTestRunner:
             expect_content_redraws=[True, True, True]
         )
 
+        self._group("Insert mode navigation keys:", leading_blank=True)
+
+        HOME = b"\x1b[H"
+        END = b"\x1b[F"
+
+        # Home key moves cursor to beginning of line
+        # Start on "Hello World", move right 5 times, enter insert, Home, type X
+        self.run_test(
+            "Home key moves to line start",
+            "Hello World\n",
+            b"llllli" + HOME + b"X\x1b:wq\r",
+            expected_content="XHello World\n"
+        )
+
+        # Home key does nothing when already at beginning
+        self.run_test(
+            "Home key at line start is no-op",
+            "Hello World\n",
+            b"i" + HOME + b"X\x1b:wq\r",
+            expected_content="XHello World\n"
+        )
+
+        # End key moves cursor to end of line
+        # Enter insert at start, End, type X
+        self.run_test(
+            "End key moves to line end",
+            "Hello World\n",
+            b"i" + END + b"X\x1b:wq\r",
+            expected_content="Hello WorldX\n"
+        )
+
+        # End key does nothing when already at end
+        self.run_test(
+            "End key at line end is no-op",
+            "Hello World\n",
+            b"$a" + END + b"X\x1b:wq\r",
+            expected_content="Hello WorldX\n"
+        )
+
+        # Home and End work together
+        # Move right, enter insert, End (go to end), Home (back to start), type X
+        self.run_test(
+            "Home and End in sequence",
+            "Hello World\n",
+            b"llllli" + END + HOME + b"X\x1b:wq\r",
+            expected_content="XHello World\n"
+        )
+
+        # Home/End on empty line
+        self.run_test(
+            "Home/End on empty line",
+            "\n",
+            b"i" + HOME + END + HOME + b"X\x1b:wq\r",
+            expected_content="X\n"
+        )
+
+        # Home/End on multi-line content
+        self.run_test(
+            "Home/End on second line",
+            "First\nSecond Line\nThird\n",
+            b"jllllli" + HOME + b"X\x1b" + END + b"aY\x1b:wq\r",
+            expected_content="First\nXSecond LineY\nThird\n"
+        )
+
+        # Home key during text insertion
+        self.run_test(
+            "Home during text insertion",
+            "World\n",
+            b"i" + END + b"Hello " + HOME + b"!\x1b:wq\r",
+            expected_content="!WorldHello \n"
+        )
+
+        # End key after backspace
+        self.run_test(
+            "End key after backspace",
+            "Hello\n",
+            b"$i\x08\x08" + END + b"X\x1b:wq\r",
+            expected_content="HeoX\n"
+        )
+
         self._group("Batch movement in insert mode:", leading_blank=True)
 
         DOWN = b"\x1b[B"

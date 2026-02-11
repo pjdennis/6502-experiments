@@ -45,6 +45,10 @@ insert_keys:
   .word insert_move_left
   .byte KEY_RIGHT
   .word insert_move_right
+  .byte KEY_HOME
+  .word insert_home
+  .byte KEY_END
+  .word insert_end
   .byte KEY_PGDN
   .word insert_page_down
   .byte KEY_PGUP
@@ -421,6 +425,29 @@ insert_move_right:
   LDA #0
   STA RENDER_FLAG
   INC16 CURSOR_COL16
+  JSR ensure_cursor_visible
+.done:
+  RTS
+
+insert_home:
+  TST16 CURSOR_COL16
+  BEQ .done            ; Already at column 0
+  LDA #0
+  STA RENDER_FLAG
+  STA_LH16 CURSOR_COL16
+  JSR ensure_cursor_visible
+.done:
+  RTS
+
+insert_end:
+  JSR get_current_line_len
+  STAX16 LINE_LEN16
+  CMP16 LINE_LEN16, CURSOR_COL16
+  BEQ .done            ; Already at end
+  BCC .done
+  LDA #0
+  STA RENDER_FLAG
+  CP16 LINE_LEN16, CURSOR_COL16
   JSR ensure_cursor_visible
 .done:
   RTS
