@@ -2,84 +2,10 @@
 ; ASM23 - Self-Hosting 6502 Assembler
 ; ============================================================================
 ;
-; ARCHITECTURE
-;   Two-pass assembler with hash tables for labels/instructions/macros.
-;   Pass 1: Collect labels and macro definitions, mark forward references.
-;   Pass 2: Resolve all references and emit code.
+; See README for architecture, memory map, and module documentation.
 ;
-; MEMORY LAYOUT
-;   $0000-$00FF   Zero page variables
-;   $0200-$03FF   Forward reference list (512 bytes)
-;   $0400-$04FF   Label scope stack for macro expansions (256 bytes)
-;   $0500-$05FF   Macro argument buffer (256 bytes)
-;   $0600         TOKEN buffer (current token being parsed)
-;   $0700         LHASHTAB - Label hash table
-;   $2000+        Generated code, then heap (grows upward via MEMP16)
-;   $F000         FILE_STACK - Include/memory source stack (grows downward via FS_P16)
-;
-; REGISTER CONVENTIONS
-;   X - Output file handle (preserved across most function calls)
-;   Y - General purpose indexing (often clobbered)
-;   A - Accumulator (generally clobbered unless documented otherwise)
-;
-; KEY GLOBAL STATE
-;   CURR_CHAR     Current character (last byte read by read_char)
-;   TOKEN         Buffer holding current token being parsed
-;   PASS          $00 = pass 1, $FF = pass 2
-;   PC16          Current program counter (where code is being generated)
-;   MEMP16        Heap pointer (grows upward from end of generated code)
-;   FS_P16        File stack pointer (grows downward from FILE_STACK)
-;
-; PARSING MODEL
-;   read_char advances input, stores result in both A and CURR_CHAR
-;   Token reading uses TOKEN buffer, writes null terminator
-;   Single-character lookahead via CURR_CHAR for parsing decisions
-;
-; MACRO SYSTEM
-;   Macro definitions stored on heap with body and parameter names
-;   Macro expansions use synthetic scope IDs (EXPANSION_ID16) for local labels
-;   Parameters shadow global labels with same name during expansion
-;   Recursion detected by walking scope stack (SCOPE_PTR16)
-;
-; MEMORY PROTECTION
-;   Heap (MEMP16) and file stack (FS_P16) collision is detected
-;   256-byte safety buffer maintained for indexed addressing (Y register 0-255)
-;   err_out_of_memory raised when heap and stack would collide
-;
-; CODE ORGANIZATION
-;   Modules (included in dependency order):
-;     output.asm          - PC management, byte emission
-;     tokenizer.asm       - Character classification, token/hex reading
-;     expressions.asm     - Expression evaluation, char literals, byte selectors
-;     labels.asm          - Label capture, local labels, value assignment
-;     instructions.asm    - Instruction lookup/emission, operand parsing
-;     directives.asm      - Directive dispatch, data directives, conditionals
-;     macro_expansion.asm - Macro definition, expansion, body capture
-;     init.asm            - CLI argument processing, input file opening
-;   Shared subsystems:
-;     common.asm (includes hash_table.asm), file_stack.asm, errors.asm,
-;     label_scope.asm, forward_ref.asm, environment.asm, macros.asm
-;   This file: assembly loop, entry point, reset/interrupt vectors
-;
-; REQUIRES (external globals/routines):
-;   CURR_CHAR (asm.asm alias; backing storage in file_stack.asm)
-;   TOKEN, PASS, PC16 (asm.asm)
-;   MEMP16 (common.asm), FS_P16 (file_stack.asm)
-;   COND_DEPTH, SKIP_DEPTH, IFDEF_INDEX (directives.asm)
-;   IN_MACRO_DEF (macro_expansion.asm), ARG_COUNT (init.asm), TABP16 (hash_table.asm)
-;   read_char (asm.asm alias; implemented in file_stack.asm)
-;   read_token, skip_token, skip_rest_of_line, check_for_end_of_line (tokenizer.asm)
-;   capture_label (labels.asm)
-;   process_directive, process_conditional_directive (directives.asm)
-;   lookup_mnemonic, parse_operand, emit_instruction (instructions.asm)
-;   expand_macro, capture_macro_line (macro_expansion.asm)
-;   file_stack_init, open_input (file_stack.asm / init.asm)
-;   init_fwdref_list, finalize_fwdref_list, reset_fwdref_ptr (forward_ref.asm)
-;   init_scope_stack, reset_scope_stack (label_scope.asm)
-;   init_heap, init_hash_table (common.asm / hash_table.asm)
-;   select_label_hash_table (common.asm)
-;   argc, argv, openout, close (environment.asm)
-;   err_* (errors.asm)
+; This file: memory layout constants, zero page variables, module includes,
+;            assembly loop, entry point, reset/interrupt vectors.
 ;
 ; ============================================================================
 
@@ -150,6 +76,7 @@ CURR_LINE16        = FS_CURR_LINE16
   .include labels.asm
   .include instructions.asm
   .include directives.asm
+  .include macro_capture.asm
   .include macro_expansion.asm
 
 

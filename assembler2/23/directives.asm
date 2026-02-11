@@ -16,7 +16,7 @@
 ;   emit, advance_pc_to_hex16 (output.asm)
 ;   decode_escape (tokenizer.asm)
 ;   parse_value (expressions.asm)
-;   dir_macro (macro_expansion.asm)
+;   dir_macro (macro_capture.asm)
 ;   do_jump, JUMP_TARGET16 (init.asm)
 ;   push_file_stack (file_stack.asm)
 ;   CMPI16 (macros.asm)
