@@ -19,8 +19,10 @@
 ;   $0300-$03FF   Command buffer
 ;   $0400         Editor code loads here
 ;   TEXT_BUF      Text buffer (page-aligned after code, up to $BFFF)
-;   LINE_TBL      Line pointer table ($C000-$DFFF)
-;   $E000-$EFFF   Scratch space
+;   $C000-$DEFF   Line pointer table (LINE_TBL)
+;   $DF00-$DF1F   Batch insert staging buffer (BATCH_BUF)
+;   $DF20-$DF53   Mark table (MARK_TBL)
+;   $E000-$EFFF   Yank buffer (4KB)
 ;   $F000+        Emulator I/O
 ; ============================================================================
 

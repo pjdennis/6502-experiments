@@ -1,10 +1,10 @@
 ; Mark storage and operations
 ;
 ; Stores line-oriented marks (a-z) as 16-bit line numbers.
-; Marks are stored in MARK_TBL at $E500 (52 bytes: 26 entries x 2 bytes).
+; Marks are stored in MARK_TBL at $DF20 (52 bytes: 26 entries x 2 bytes).
 ; MARK_UNSET ($FFFF) indicates an unset mark.
 
-MARK_TBL   = $E500    ; 26 entries x 2 bytes = 52 bytes
+MARK_TBL   = $DF20    ; 26 entries x 2 bytes = 52 bytes
 MARK_UNSET = $FFFF
 
   .zeropage

@@ -4,11 +4,11 @@
 ; Lines are stored contiguously with newline delimiters, like the text buffer.
 ;
 ; Memory layout:
-;   YANK_BUF  ($E100) - Start of yank buffer
-;   YANK_LIMIT ($E500) - End of yank buffer (1KB)
+;   YANK_BUF  ($E000) - Start of yank buffer
+;   YANK_LIMIT ($F000) - End of yank buffer (4KB)
 
-YANK_BUF   = $E100
-YANK_LIMIT = $E500
+YANK_BUF   = $E000
+YANK_LIMIT = $F000
 
   .zeropage
 

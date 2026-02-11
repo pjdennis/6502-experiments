@@ -12,10 +12,10 @@
 ; labels, so TEXT_BUF automatically adjusts as the code grows.
 
 LINE_TBL    = $C000  ; Line pointer table (2 bytes per entry)
-LINE_LIMIT  = $E000  ; End of line table (supports up to 4096 entries = 2048 lines, but
-                     ; practically limited by available text space)
+LINE_LIMIT  = $DF00  ; End of line table (supports up to 3968 entries, but
+                     ; practically limited by MAX_LINES = 1023)
 MAX_LINES   = $03FF  ; Maximum line count (1023), 0-indexed
-BATCH_BUF   = $E000  ; Staging buffer for batch insert (32 bytes)
+BATCH_BUF   = $DF00  ; Staging buffer for batch insert (32 bytes)
 BATCH_MAX   = 32     ; Maximum batch size
 
   .zeropage

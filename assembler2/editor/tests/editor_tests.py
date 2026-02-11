@@ -3538,20 +3538,16 @@ class EditorTestRunner:
         # ============================================================
         self._group("Operations exceeding 255 lines (>255):", leading_blank=True)
 
-        # EXPECTED TO FAIL: 256dd - delete 256 lines
-        # Currently fails because get_count_byte caps at 255
         self.run_test(
-            "256dd deletes 256 lines (EXPECTED FAIL)",
+            "256dd deletes 256 lines",
             make_lines(300),
             b"256dd:wq\r",
             # Lines 1-256 deleted, lines 257-300 remain
             expected_content=''.join(f"Line {i}\n" for i in range(257, 301))
         )
 
-        # EXPECTED TO FAIL: 300yy - yank 300 lines
-        # Currently fails because YANK_LINES is 8-bit
         self.run_test(
-            "300yy yanks 300 lines (EXPECTED FAIL)",
+            "300yy yanks 300 lines",
             make_lines(300) + "Extra\n",
             b"300yyGp:wq\r",
             # After 300yy, cursor on line 1. G moves to last line (301).
@@ -3559,11 +3555,8 @@ class EditorTestRunner:
             expected_content=make_lines(300) + "Extra\n" + make_lines(300)
         )
 
-        # EXPECTED TO FAIL: 16yy + 16p - paste 256 lines
-        # Critical bug: 16p with 16-line buffer inserts 256 lines but
-        # adjusts marks by only 255 due to 8-bit multiplication overflow
         self.run_test(
-            "16yy + 16p pastes 256 lines correctly (EXPECTED FAIL)",
+            "16yy + 16p pastes 256 lines correctly",
             make_lines(20),
             b"16yy3G16p:wq\r",
             # 16yy yanks lines 1-16. 3G moves to line 3.
@@ -3576,10 +3569,8 @@ class EditorTestRunner:
             )
         )
 
-        # EXPECTED TO FAIL: Mark adjustment with 256+ line delete
-        # Marks should adjust correctly when deleting >255 lines
         self.run_test(
-            "Mark adjustment with 256dd (EXPECTED FAIL)",
+            "Mark adjustment with 256dd",
             make_lines(400),
             b"100Gma100G256dd:wq\r",
             # 100G goes to line 100, ma sets mark a
@@ -3593,10 +3584,8 @@ class EditorTestRunner:
             )
         )
 
-        # EXPECTED TO FAIL: Range delete :100,399d - delete 300 lines
-        # Currently fails because BUF_LEN16+1 check caps count at 255
         self.run_test(
-            "Range :100,399d deletes 300 lines (EXPECTED FAIL)",
+            "Range :100,399d deletes 300 lines",
             make_lines(500),
             b":100,399d\r:wq\r",
             # Delete lines 100-399 (300 lines)
