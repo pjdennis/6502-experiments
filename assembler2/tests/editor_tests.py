@@ -2220,6 +2220,68 @@ class EditorTestRunner:
             expected_content="HeoX\n"
         )
 
+        self._group("Delete key line joining:", leading_blank=True)
+
+        DEL = b"\x1b[3~"
+
+        # Delete at end of line joins with next line
+        self.run_test(
+            "Delete at end of line joins next line",
+            "Hello\nWorld\n",
+            b"$a" + DEL + b"\x1b:wq\r",
+            expected_content="HelloWorld\n"
+        )
+
+        # Delete at end of line does nothing on last line
+        self.run_test(
+            "Delete at end of last line is no-op",
+            "Hello\n",
+            b"$a" + DEL + b"\x1b:wq\r",
+            expected_content="Hello\n"
+        )
+
+        # Delete at end of empty line joins next line
+        self.run_test(
+            "Delete at end of empty line joins next",
+            "\nWorld\n",
+            b"i" + DEL + b"\x1b:wq\r",
+            expected_content="World\n"
+        )
+
+        # Delete joins then deletes next char
+        # First Delete joins "A" and "B" -> "AB\nC\n"
+        # Second Delete is now in middle of "AB", deletes "B" -> "A\nC\n"
+        self.run_test(
+            "Delete join then delete char",
+            "A\nB\nC\n",
+            b"$a" + DEL + DEL + b"\x1b:wq\r",
+            expected_content="A\nC\n"
+        )
+
+        # Join multiple lines by using End key after each join
+        self.run_test(
+            "Multiple line joins with End key",
+            "A\nB\nC\n",
+            b"$a" + DEL + END + DEL + b"\x1b:wq\r",
+            expected_content="ABC\n"
+        )
+
+        # Delete at end preserves cursor position
+        self.run_test(
+            "Delete join preserves cursor position",
+            "Hello\nWorld\n",
+            b"$aX" + DEL + b"Y\x1b:wq\r",
+            expected_content="HelloXYWorld\n"
+        )
+
+        # Delete in middle of line still works
+        self.run_test(
+            "Delete in middle of line unchanged",
+            "Hello\n",
+            b"lli" + DEL + b"\x1b:wq\r",
+            expected_content="Helo\n"
+        )
+
         self._group("Batch movement in insert mode:", leading_blank=True)
 
         DOWN = b"\x1b[B"

@@ -346,12 +346,56 @@ insert_backspace:
 insert_delete:
   JSR get_current_line_len
   STAX16 LINE_LEN16
-  TST16 LINE_LEN16
-  BEQ .early_done        ; Empty line
 
+  ; Check cursor position relative to line length
   CMP16 CURSOR_COL16, LINE_LEN16
-  BCS .early_done        ; At or past end of line
+  BEQ .join_lines        ; At end of line, try to join
+  BCC .delete_chars      ; In middle of line, delete chars
 
+.done:
+  RTS
+
+.join_lines:
+  ; At end of line - check if we can join with next line
+  ; Check if this is the last line
+  LDAX16 FILE_LINE16
+  CLC
+  ADC #1
+  STA BUF_SRC16
+  TXA
+  ADC #0
+  STA BUF_SRC16 + 1
+  ; Compare with LINE_COUNT16
+  CMP16 BUF_SRC16, LINE_COUNT16
+  BCS .done              ; At or past last line, nothing to join
+
+  ; Join with next line by deleting the newline character
+  ; Get pointer to end of current line (the \n character)
+  JSR get_cursor_buf_ptr
+
+  ; Delete exactly 1 newline character (no batching for line joins)
+  LDA #1
+  STA BUF_DELTA
+  JSR buf_delete_chars
+
+  ; Rebuild line table
+  JSR buf_rebuild_lines
+
+  ; Adjust marks: 1 line deleted at FILE_LINE16+1
+  LDA #1
+  STA BUF_TEMP
+  CLC
+  ADCI16 FILE_LINE16, $0001, BUF_DST16
+  LDAX16 BUF_DST16
+  JSR mark_adjust_delete
+
+  LDA #$FF
+  STA MODIFIED
+  JSR ensure_cursor_visible
+  RTS
+
+.delete_chars:
+  ; In middle of line - delete characters normally
   ; Calculate max deleteable = LINE_LEN16 - CURSOR_COL16, capped at 255
   SEC
   SBC16 LINE_LEN16, CURSOR_COL16, LINE_LEN16
@@ -383,10 +427,6 @@ insert_delete:
   JSR ensure_cursor_visible
   LDA #$FF
   STA MODIFIED
-
-.early_done:
-  ; Early exit point (for branches that are too far from .done)
-.done:
   RTS
 
 ; Arrow key handlers in insert mode
