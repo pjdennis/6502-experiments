@@ -7,6 +7,8 @@
 MARK_TBL   = $E500    ; 26 entries x 2 bytes = 52 bytes
 MARK_UNSET = $FFFF
 
+  .zeropage
+MARK_DELTA16: .word
   .code
 
 ; Initialize all 26 marks to MARK_UNSET ($FFFF)
@@ -240,7 +242,23 @@ str_no_marks:     .asciiz "No marks set"
 ;        Carry flag: clear = add (insert), set = subtract (delete)
 ; Clobbers: A, X, Y
 mark_adjust_range:
-  PHP                  ; Save operation flag
+  ; Prepare delta: positive for insert, negative for delete
+  LDA BUF_TEMP
+  STA MARK_DELTA16
+  LDA #0
+  STA MARK_DELTA16 + 1
+  BCC .loop_start      ; Insert: use +count as-is
+
+  ; Delete: negate MARK_DELTA16 (2's complement)
+  SEC
+  LDA #0
+  SBC MARK_DELTA16
+  STA MARK_DELTA16
+  LDA #0
+  SBC MARK_DELTA16 + 1
+  STA MARK_DELTA16 + 1
+
+.loop_start:
   LDX #0               ; Index into MARK_TBL
 .loop:
   ; Skip unset marks
@@ -279,29 +297,13 @@ mark_adjust_range:
   JMP .next
 
 .adjust:
-  ; Mark >= end_line: add or subtract count
-  PLP                   ; Recover operation flag
-  PHP                   ; Save it again for next iteration
-  BCS .subtract
-
-  ; Add count
+  ; Mark >= end_line: add MARK_DELTA16 (positive for insert, negative for delete)
   CLC
   LDA MARK_TBL,X
-  ADC BUF_TEMP
+  ADC MARK_DELTA16
   STA MARK_TBL,X
   LDA MARK_TBL + 1,X
-  ADC #0
-  STA MARK_TBL + 1,X
-  JMP .next
-
-.subtract:
-  ; Subtract count
-  SEC
-  LDA MARK_TBL,X
-  SBC BUF_TEMP
-  STA MARK_TBL,X
-  LDA MARK_TBL + 1,X
-  SBC #0
+  ADC MARK_DELTA16 + 1
   STA MARK_TBL + 1,X
 
 .next:
@@ -309,7 +311,6 @@ mark_adjust_range:
   INX
   CPX #52              ; 26 * 2
   BNE .loop
-  PLP                  ; Clean up saved flags
   RTS
 
 ; Adjust marks after lines are deleted
