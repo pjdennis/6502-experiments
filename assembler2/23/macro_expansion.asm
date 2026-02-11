@@ -429,6 +429,8 @@ capture_macro_line:
 .check_dot:
   CMP #'.'
   BNE .keep_line
+  CPY #$00
+  BEQ .keep_line           ; Column 0 = local label, not directive
   ; It's a directive
   TYA
   SEC                      ; +1
@@ -483,15 +485,21 @@ capture_macro_line:
   ; Just detect .endmacro to clear IN_MACRO_DEF flag
 .pass2:
   LDA CURR_CHAR
-.p2_scan:
   CMP #' '
-  BNE .p2_not_space
-  JSR read_char
-  BCC .p2_scan
-  JMP err_unclosed_macro   ; EOF in macro
-.p2_not_space:
+  BEQ .p2_scan_spaces
+  ; First column - not a directive (even if '.')
   CMP #'\n'
-  BEQ .keep_line           ; Empty/blank line
+  BEQ .keep_line           ; Empty line
+  JMP .p2_skip             ; Column 0 content, skip line
+.p2_scan_spaces:
+  JSR read_char
+  BCC .p2_scan_check
+  JMP err_unclosed_macro   ; EOF in macro
+.p2_scan_check:
+  CMP #' '
+  BEQ .p2_scan_spaces
+  CMP #'\n'
+  BEQ .keep_line           ; Blank line
   CMP #'.'
   BNE .p2_skip             ; Not a directive
   ; Check if directive is .endmacro

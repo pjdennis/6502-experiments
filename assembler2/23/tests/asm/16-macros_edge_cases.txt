@@ -151,6 +151,58 @@ INPUT:
 EXPECT_HEX: ea ea e8 ea ea 60
 
 ---
+NAME: macro_endmacro_as_label_in_macro
+DESCRIPTION: Verify that endmacro can be used as a label within a macro
+INPUT:
+ 1: * = $0200
+ 2:   .macro my_macro
+ 3: my_func:
+ 4: .endmacro:
+ 5:   BNE .endmacro
+ 6:   .endmacro
+ 7:   my_macro
+EXPECT_HEX: d0 fe
+
+---
+NAME: macro_macro_as_label_in_macro
+DESCRIPTION: Verify that .macro can be used as a label within a macro
+INPUT:
+ 1: * = $0200
+ 2:   .macro my_macro
+ 3: my_func:
+ 4: .macro:
+ 5:   BNE .macro
+ 6:   .endmacro
+ 7:   my_macro
+EXPECT_HEX: d0 fe
+
+---
+NAME: macro_endmacro_as_label_in_macro_without_colon
+DESCRIPTION: Verify that endmacro can be used as a label within a macro
+INPUT:
+ 1: * = $0200
+ 2:   .macro my_macro
+ 3: my_func:
+ 4: .endmacro
+ 5:   BNE .endmacro
+ 6:   .endmacro
+ 7:   my_macro
+EXPECT_HEX: d0 fe
+
+---
+NAME: macro_macro_as_label_in_macro_without_colon
+DESCRIPTION: Verify that .macro can be used as a label within a macro
+INPUT:
+ 1: * = $0200
+ 2:   .macro my_macro
+ 3: my_func:
+ 4: .macro
+ 5:   BNE .macro
+ 6:   .endmacro
+ 7:   my_macro
+EXPECT_HEX: d0 fe
+
+---
 NAME: macro_error_in_body
 DESCRIPTION: Error in macro body reports source as macro, not file
 INPUT:
