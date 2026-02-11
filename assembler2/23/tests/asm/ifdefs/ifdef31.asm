@@ -1,6 +1,6 @@
 ; 31 .ifdef/.endif pairs with undefined labels
 ; Used for testing .ifdef decision buffer limits
-; 8 includes × 31 = 248, leaving room for 7 more to hit 255 limit
+; 8 includes x 31 = 248, leaving room for 7 more to hit 255 limit
   .ifdef UNDEF_00
   .endif
   .ifdef UNDEF_01

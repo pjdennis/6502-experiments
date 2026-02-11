@@ -261,7 +261,7 @@ insert_backspace:
   ; BUF_SRC16 points to a \n. Verify this \n ends an EMPTY line.
   ; Empty if BUF_SRC16 is at buffer start, or byte before it is also \n.
   CMPI16 BUF_SRC16, TEXT_BUF
-  BEQ .line_empty      ; First byte of buffer, just \n → empty
+  BEQ .line_empty      ; First byte of buffer, just \n -> empty
 
 .check_prev:
   ; Check byte at BUF_SRC16 - 1 using BUF_LEN16 as temp
@@ -275,7 +275,7 @@ insert_backspace:
   LDY #0
   LDA (BUF_LEN16),Y
   CMP #'\n'
-  BNE .apply           ; Byte before is not \n → content line → stop
+  BNE .apply           ; Byte before is not \n -> content line -> stop
 
 .line_empty:
 

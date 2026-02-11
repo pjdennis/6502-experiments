@@ -128,7 +128,7 @@ MNTAB:
   .byte 0
 
 
-; Directive table — just directive names
+; Directive table - just directive names
 ; Handler label is computed as "dir_" + name
 ; Format: "directive" $00 ... $00 (end of table)
 DIRTAB:

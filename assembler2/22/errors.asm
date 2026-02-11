@@ -344,11 +344,11 @@ show_include_traceback:
   ; Print verb based on child type (saved on stack)
   PLA
   BEQ .verb_included
-  ; Child was macro → "expanded from"
+  ; Child was macro -> "expanded from"
   SHOW_MESSAGEI msg_expanded_from
   JMP .show_parent
 .verb_included:
-  ; Child was file → "included from"
+  ; Child was file -> "included from"
   SHOW_MESSAGEI msg_included_from
 .show_parent:
   ; Check parent type for "macro " prefix

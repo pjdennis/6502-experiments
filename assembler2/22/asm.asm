@@ -175,13 +175,13 @@ skip_token:
 convert_hex_character:
   CMP #'A'
   BCS .alpha           ; >= 'A'
-  ; Numeric path: '0'-'9' → 0-9
+  ; Numeric path: '0'-'9' -> 0-9
   SBC #'0'-$01         ; Subtract 1 since carry is clear from CMP
   CMP #'9'-'0'+$01     ; Check if result 0-9
   BCS .error           ; >= 10, invalid
   RTS
 .alpha:
-  ; Alpha path: 'A'-'F' → 10-15
+  ; Alpha path: 'A'-'F' -> 10-15
   SBC #'A'             ; Carry already set from CMP
   CMP #'F'-'A'+$01     ; Check if result 0-5
   BCS .error           ; >= 6, invalid
@@ -733,7 +733,7 @@ parse_expression:
   ORA EXPR_FWDREF
   STA EXPR_FWDREF
 
-  ; Add: accumulator + OPERAND → OPERAND
+  ; Add: accumulator + OPERAND -> OPERAND
   CLC
   ADC16 EXPR_ACCU16 OPERAND16 OPERAND16
   JMP .loop
@@ -752,7 +752,7 @@ parse_expression:
   ORA EXPR_FWDREF
   STA EXPR_FWDREF
 
-  ; Subtract: accumulator - OPERAND → OPERAND
+  ; Subtract: accumulator - OPERAND -> OPERAND
   SEC
   SBC16 EXPR_ACCU16 OPERAND16 OPERAND16
   JMP .loop
@@ -1554,9 +1554,9 @@ process_directive:
   ; A = mode (1=byte, 2=word)
   STA DATA_MODE
   JSR check_for_end_of_line
-  BCS .zp_allocate          ; EOL — operand-less form
+  BCS .zp_allocate          ; EOL - operand-less form
   CMP #'.'
-  BEQ .zp_allocate          ; Another directive follows — operand-less form
+  BEQ .zp_allocate          ; Another directive follows - operand-less form
   JMP err_operand_in_zeropage
 .zp_allocate:
   ; Emit dummy bytes (1 for .byte, 2 for .word)
@@ -1682,7 +1682,7 @@ data_parameters_loop:
   JMP data_parameters_loop
 .data_not_comma:
   CMP #'.'
-  BEQ .data_done           ; Another directive follows — return to caller
+  BEQ .data_done           ; Another directive follows - return to caller
   JMP data_parameters_loop
 .data_value:
   JSR parse_value        ; C=1 for 2-byte, C=0 for 1-byte

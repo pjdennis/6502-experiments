@@ -267,7 +267,7 @@ parse_expression:
 .add_op:
   JSR expr_next_term
 
-  ; Add: accumulator + OPERAND → OPERAND
+  ; Add: accumulator + OPERAND -> OPERAND
   CLC
   ADC16 EXPR_ACCU16, OPERAND16, OPERAND16
   JMP .loop
@@ -275,7 +275,7 @@ parse_expression:
 .sub_op:
   JSR expr_next_term
 
-  ; Subtract: accumulator - OPERAND → OPERAND
+  ; Subtract: accumulator - OPERAND -> OPERAND
   SEC
   SBC16 EXPR_ACCU16, OPERAND16, OPERAND16
   JMP .loop

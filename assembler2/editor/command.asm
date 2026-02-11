@@ -351,7 +351,7 @@ cmd_str_match:
 ; Handles: :'a,.y  :'a,'bd  :1,3d  :1,.y  :.,'ay  :NNN (goto)
 command_parse_range:
   LDX #0
-  JSR parse_range_pos     ; Parse first position → BUF_LEN16
+  JSR parse_range_pos     ; Parse first position -> BUF_LEN16
   BCC .range_first_ok
   JMP .range_mark_err
 .range_first_ok:
@@ -378,7 +378,7 @@ command_parse_range:
 .range_has_comma:
   INX                     ; Skip comma
   PUSH16 BUF_SRC16        ; Save first position (parse_decimal clobbers BUF_SRC16)
-  JSR parse_range_pos     ; Parse second position → BUF_LEN16
+  JSR parse_range_pos     ; Parse second position -> BUF_LEN16
   POP16 BUF_SRC16         ; PLA preserves carry on 6502
   BCC .range_second_ok
   JMP .range_mark_err

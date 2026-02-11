@@ -112,13 +112,13 @@ check_for_end_of_line:
 convert_hex_character:
   CMP #'A'
   BCS .alpha           ; >= 'A'
-  ; Numeric path: '0'-'9' → 0-9
+  ; Numeric path: '0'-'9' -> 0-9
   SBC #'0' - 1         ; Subtract 1 since carry is clear from CMP
   CMP #'9' - '0' + 1   ; Check if result 0-9
   BCS .error           ; >= 10, invalid
   RTS
 .alpha:
-  ; Alpha path: 'A'-'F' → 10-15
+  ; Alpha path: 'A'-'F' -> 10-15
   SBC #'A'             ; Carry already set from CMP
   CMP #'F' - 'A' + 1   ; Check if result 0-5
   BCS .error           ; >= 6, invalid

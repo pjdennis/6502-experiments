@@ -262,13 +262,13 @@ capture_macro_line:
   STA TOKEN,Y                 ; Null-terminate
   ; Look up in IHASHTAB
   JSR find_directive_handler
-  BCS .keep_line              ; Not found — not a known directive
+  BCS .keep_line              ; Not found - not a known directive
   ; Check for .endmacro
   CMPI16 JUMP_TARGET16, dir_endmacro
   BEQ .found_endmacro
   ; Check for .macro (nested = error)
   CMPI16 JUMP_TARGET16, dir_macro
-  BNE .keep_line              ; Other directive — keep as macro body
+  BNE .keep_line              ; Other directive - keep as macro body
   JMP err_nested_macro_definition
 .found_endmacro:
   ; Found .endmacro. Restore heap to undo the copy

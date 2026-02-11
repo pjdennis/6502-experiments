@@ -49,7 +49,7 @@ yank_add_lines:
 .count_ok:
   ; Now BUF_TEMP16 = actual line count, BUF_LEN16 = actual line count
 
-  ; Look up LINE_TBL[first_line] → start address
+  ; Look up LINE_TBL[first_line] -> start address
   LDAX16 BUF_SRC16
   JSR buf_get_line_ptr        ; BUF_PTR16 = start of first line
   PUSH16 BUF_PTR16            ; Save start address on stack

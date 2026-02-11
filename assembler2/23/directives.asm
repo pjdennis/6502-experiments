@@ -124,9 +124,9 @@ dir_zp_alloc:
   ; A = DATA_MODE (1=byte, 2=word)
   STA DATA_MODE
   JSR check_for_end_of_line
-  BCS .zp_allocate          ; EOL — operand-less form
+  BCS .zp_allocate          ; EOL - operand-less form
   CMP #'.'
-  BEQ .zp_allocate          ; Another directive follows — operand-less form
+  BEQ .zp_allocate          ; Another directive follows - operand-less form
   JMP err_operand_in_zeropage
 .zp_allocate:
   ; Emit dummy bytes (1 for .byte, 2 for .word)
@@ -257,7 +257,7 @@ data_parameters_loop:
   CMP #','
   BEQ .data_comma
   CMP #'.'
-  BEQ .data_done           ; Another directive follows — return to caller
+  BEQ .data_done           ; Another directive follows - return to caller
   JMP err_comma_expected
 .data_comma:
   JSR read_char

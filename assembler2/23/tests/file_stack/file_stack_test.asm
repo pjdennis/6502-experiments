@@ -467,7 +467,7 @@ read_memory_content:
 ; Print traceback of file stack - pops all entries, closes files
 ; Output format: "type:name:line\n" for each entry in stack
 ; where type is "file" or "memory"
-; Loop: check if empty → print current → pop → repeat
+; Loop: check if empty -> print current -> pop -> repeat
 print_traceback:
   ; Preserve X (output file handle)
   TXA

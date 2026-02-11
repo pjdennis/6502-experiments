@@ -62,7 +62,7 @@ buf_load_file:
   JSR read                ; preserves X, Y
   BCS .read_done
   CMP #$80
-  BCS .non_ascii           ; Byte >= $80 → non-ASCII
+  BCS .non_ascii           ; Byte >= $80 -> non-ASCII
   STA (BUF_END16),Y
   INY
   BNE .read_loop          ; Stay on same page
