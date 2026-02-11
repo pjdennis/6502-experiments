@@ -508,11 +508,9 @@ normal_delete_char:
   ; Start with count prefix (minimum 1)
   JSR get_count_byte         ; X = count
 
-  ; Add pending 'x' keys
+  ; Add pending matching keys (x or Delete)
   STX BUF_DELTA              ; Save count prefix
-  LDA #'x'
-  STA BUF_TEMP
-  JSR count_pending_key      ; Returns additional x count in X
+  JSR count_pending_key      ; Returns additional count in X
   TXA
   CLC
   ADC BUF_DELTA              ; Total = count + pending
