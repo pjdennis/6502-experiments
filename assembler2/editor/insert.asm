@@ -104,13 +104,9 @@ insert_char:
   JSR buf_adjust_lines_inc
 
   ; Advance cursor by BUF_DELTA
+  LDA BUF_DELTA
   CLC
-  LDA CURSOR_COL16
-  ADC BUF_DELTA
-  STA CURSOR_COL16
-  BCC .no_carry_cc
-  INC CURSOR_COL16 + 1
-.no_carry_cc:
+  ADCA16 CURSOR_COL16, CURSOR_COL16
 
   LDA #1
   STA RENDER_FLAG
@@ -158,13 +154,9 @@ insert_newline:
   JSR mark_adjust_insert
 
   ; Advance FILE_LINE16 by BUF_DELTA
+  LDA BUF_DELTA
   CLC
-  LDA FILE_LINE16
-  ADC BUF_DELTA
-  STA FILE_LINE16
-  LDA FILE_LINE16 + 1
-  ADC #0
-  STA FILE_LINE16 + 1
+  ADCA16 FILE_LINE16, FILE_LINE16
 
   LDA #0
   STA_LH16 CURSOR_COL16
