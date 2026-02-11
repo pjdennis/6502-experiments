@@ -377,7 +377,7 @@ buf_delete_chars:
   JMP buf_shift_left
 
 ; Delete N contiguous lines starting at line A/X
-; Input: A/X = first line number (low/high), BUF_TEMP = count of lines to delete
+; Input: A/X = first line number (low/high), BUF_TEMP16 = count of lines to delete (16-bit)
 ; Handles end-of-file clamping, empty buffer, rebuilds line table once
 buf_delete_lines:
   ; Save first line number
@@ -389,12 +389,7 @@ buf_delete_lines:
 
   ; Calculate line number after last deleted: first + count
   CLC
-  LDA BUF_DST16
-  ADC BUF_TEMP
-  STA BUF_SRC16
-  LDA BUF_DST16 + 1
-  ADC #0
-  STA BUF_SRC16 + 1         ; BUF_SRC16 = end line number
+  ADC16 BUF_DST16, BUF_TEMP16, BUF_SRC16  ; BUF_SRC16 = end line number
 
   ; If end line >= LINE_COUNT16, source = BUF_END16
   CMP16 BUF_SRC16, LINE_COUNT16

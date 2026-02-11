@@ -576,7 +576,9 @@ normal_d_key:
 
   ; Delete all N lines in one batch operation
   LDA LINE_LEN16
-  STA BUF_TEMP
+  STA BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
   LDAX16 FILE_LINE16
   JSR buf_delete_lines
 

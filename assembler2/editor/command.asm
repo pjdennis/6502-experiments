@@ -484,7 +484,9 @@ command_parse_range:
 
   ; Delete lines (buf_delete_lines clobbers BUF_SRC16)
   LDA YANK_LINES
-  STA BUF_TEMP
+  STA BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
   PUSH16 BUF_SRC16
   LDAX16 BUF_SRC16
   JSR buf_delete_lines
