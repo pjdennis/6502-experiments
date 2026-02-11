@@ -730,24 +730,29 @@ normal_paste_above:
 .paste_above_done:
   JMP clear_count
 
-; Adjust marks after paste: total lines = YANK_LINES * NORMAL_TEMP (capped at 255)
+; Adjust marks after paste: total lines = YANK_LINES16 * NORMAL_TEMP (16-bit)
 ; Sets MODIFIED flag
 paste_adjust_marks:
-  LDA #0
-  LDX NORMAL_TEMP
+  ; BUF_TEMP16 = YANK_LINES16 * NORMAL_TEMP (16-bit multiplication)
+  ; Start with YANK_LINES16 as base
+  CP16 YANK_LINES16, BUF_TEMP16
+
+  ; Check if paste count is 1
+  LDA NORMAL_TEMP
+  CMP #1
+  BEQ .adjust
+
+  ; Decrement count (already have one copy in BUF_TEMP16)
+  DEC NORMAL_TEMP
+
 .mul:
+  ; BUF_TEMP16 += YANK_LINES16
   CLC
-  ADC YANK_LINES
-  BCS .cap
-  DEX
+  ADC16 BUF_TEMP16, YANK_LINES16, BUF_TEMP16
+  DEC NORMAL_TEMP
   BNE .mul
-  JMP .adjust
-.cap:
-  LDA #$FF
+
 .adjust:
-  STA BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1
   LDAX16 FILE_LINE16
   JSR mark_adjust_insert
   LDA #$FF
