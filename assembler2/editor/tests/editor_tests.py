@@ -6,7 +6,7 @@ Tests the editor by providing keystroke sequences as input files
 and verifying the saved output matches expectations.
 
 Usage:
-    ./tests/editor_tests.py [-v]
+    ./editor/tests/editor_tests.py [-v]
 """
 
 import argparse
@@ -3540,7 +3540,7 @@ def main():
         Colors.disable()
 
     script_dir = Path(__file__).parent.resolve()
-    base_dir = script_dir.parent
+    base_dir = script_dir.parent.parent
 
     runner = EditorTestRunner(base_dir, verbose=args.verbose, quiet=args.quiet)
     runner.run_all_tests()

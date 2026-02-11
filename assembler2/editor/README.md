@@ -53,15 +53,19 @@ console/ANSI mode.
 - `CMD_BUF` at `$0300` stores the command line; `CMD_QUIT` signals exit.
 - Status messages (`show_status_message`) wait for a keypress to dismiss.
 
+## Notes on remaining sections
+- Paths in commands shown below are given relative to the parent of the editor folder
+
 ## Testing
-- `tests/editor_tests.py` assembles the editor (`23/out/asm.out`) and runs
-  it under `emulator.out`, feeding keystroke byte streams and verifying
-  saved file contents.
-- Bounds checking tests build `editor_small.out` with `define:small_buffer`
-  to create a 256-byte buffer, forcing truncation/read-only scenarios.
+- `editor/tests/editor_tests.py` assembles the editor (using `23/out/asm.out`
+  via the emulator) and runs it under `./emulator.out`, feeding keystroke
+  byte streams and verifying saved file contents.
+- Bounds checking tests build `editor_small.out` assembled with
+  `define:small_buffer` to create a 256-byte buffer, forcing
+  truncation/read-only scenarios.
 
 ### Quick commands
-- Run tests: `./tests/editor_tests.py`
+- Run tests: `editor/tests/editor_tests.py`
 - Run editor (console): `./editor.sh <file>`
 
 ## Tips for LLMs making changes
