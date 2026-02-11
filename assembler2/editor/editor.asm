@@ -94,14 +94,22 @@ editor_main:
   STA FILE_HANDLE
   LDA FILE_HANDLE
   JSR buf_load_file
-  PHP                  ; Save carry (truncation flag)
+  PHA                  ; Save result code
   LDA FILE_HANDLE
   JSR close
-  PLP                  ; Restore carry
-  BCC .init_display
-  ; File was truncated - set read-only mode
+  PLA
+  BEQ .init_display    ; A=0: success
+  CMP #2
+  BEQ .non_ascii_error ; A=2: non-ASCII
+  ; A=1: truncated
   LDA #$FF
   STA READONLY
+  JMP .init_display
+
+.non_ascii_error:
+  JSR buf_init           ; Reset to empty buffer
+  LDA #$FE
+  STA READONLY           ; Non-zero = read-only
   JMP .init_display
 
 .new_file:
@@ -134,12 +142,18 @@ editor_main:
   ; Draw initial screen
   JSR render_screen
 
-  ; Show truncation warning if file was truncated
+  ; Show warning if file had issues
   LDA READONLY
-  BEQ .no_truncation_warning
+  BEQ .no_warning
+  CMP #$FE
+  BEQ .non_ascii_warning
   SET16 str_truncated, STR_PTR16
+  JMP .show_warning
+.non_ascii_warning:
+  SET16 str_non_ascii, STR_PTR16
+.show_warning:
   JSR show_status_message
-.no_truncation_warning:
+.no_warning:
 
 ; ============================================================================
 ; Main loop
