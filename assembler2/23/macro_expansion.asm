@@ -332,19 +332,18 @@ capture_macro_line:
   LDY #0                 ; Capture index
   LDA CURR_CHAR
   BNE .process           ; Always taken
+.capture:
+  APPEND_HEAPA_ADVANCE
 .next:
   JSR read_char
   BCS .eof_error
 .process:
-  CMP #'\n'
-  BNE .not_newline
-  JMP .newline
-.not_newline:
   CMP #';'
   BNE .not_semi
-  JSR skip_rest_of_line
-  JMP .newline
+  JSR skip_rest_of_line  ; A = '\n'
 .not_semi:
+  CMP #'\n'
+  BEQ .newline
   CMP #'"'
   BEQ .string_lit
   CMP #'\''
@@ -352,10 +351,8 @@ capture_macro_line:
   CMP #' '
   BEQ .space
   ; Regular character
-  LDX #$00               ; Clear last space indicator
-.capture:
-  APPEND_HEAPA_ADVANCE
-  JMP .next
+  LDX #$00               ; Clear last space indicator (sets Z)
+  BEQ .capture           ; Always taken
 .eof_error:
   JMP err_unclosed_macro
 .space:
@@ -388,7 +385,7 @@ capture_macro_line:
   CMP #'"'                 ; Was it the terminating string character?
   BNE .string_lit_loop     ; No so process the next character
   ; Terminator character so we are done with the string
-  JMP .next
+  BEQ .next                ; Always taken (Z set from CMP match)
 .char_lit:
   ; Output char definition from opening ' through closing '
   LDX #$00                 ; Clear last_space
@@ -481,14 +478,10 @@ capture_macro_line:
 .pass2:
   LDA CURR_CHAR
   CMP #' '
-  BEQ .p2_scan_spaces
-  ; First column - not a directive (even if '.')
-  JMP .keep_line
+  BNE .keep_line ; First column - not a directive (even if '.')
 .p2_scan_spaces:
   JSR read_char
-  BCC .p2_scan_check
-  JMP err_unclosed_macro   ; EOF in macro
-.p2_scan_check:
+  BCS .unclosed_macro
   CMP #' '
   BEQ .p2_scan_spaces
   CMP #'.'
@@ -502,4 +495,7 @@ capture_macro_line:
   BNE .keep_line           ; Not .endmacro
   LDA #$00                 ; Clear the capturing flag
   STA IN_MACRO_DEF
-  JMP .keep_line
+  BEQ .keep_line           ; Always taken (A = 0)
+.unclosed_macro:
+  JMP err_unclosed_macro   ; EOF in macro
+
