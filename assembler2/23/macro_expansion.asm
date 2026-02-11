@@ -342,11 +342,7 @@ capture_macro_line:
 .not_newline:
   CMP #';'
   BNE .not_semi
-.skip_comment:
-  JSR read_char
-  BCS .eof_error
-  CMP #'\n'
-  BNE .skip_comment
+  JSR skip_rest_of_line
   JMP .newline
 .not_semi:
   CMP #'"'
@@ -474,12 +470,11 @@ capture_macro_line:
   ; Clear the capturing flag
   LDA #$00
   STA IN_MACRO_DEF
-  JSR skip_rest_of_line
 .keep_line:
   ; Restore X (output file handle)
   PLA
   TAX
-  RTS
+  JMP skip_rest_of_line    ; No-op in pass 1 (already at '\n'), skips line in pass 2
 
   ; === Pass 2: Skip without copying to heap ===
   ; Just detect .endmacro to clear IN_MACRO_DEF flag
@@ -488,9 +483,7 @@ capture_macro_line:
   CMP #' '
   BEQ .p2_scan_spaces
   ; First column - not a directive (even if '.')
-  CMP #'\n'
-  BEQ .keep_line           ; Empty line
-  JMP .p2_skip             ; Column 0 content, skip line
+  JMP .keep_line
 .p2_scan_spaces:
   JSR read_char
   BCC .p2_scan_check
@@ -498,25 +491,15 @@ capture_macro_line:
 .p2_scan_check:
   CMP #' '
   BEQ .p2_scan_spaces
-  CMP #'\n'
-  BEQ .keep_line           ; Blank line
   CMP #'.'
-  BNE .p2_skip             ; Not a directive
+  BNE .keep_line           ; Not a directive
   ; Check if directive is .endmacro
   JSR read_char            ; Read char after '.'
   JSR read_token           ; Read directive name into TOKEN
   JSR find_directive_handler
-  BCS .p2_skip               ; Not found
+  BCS .keep_line           ; Not found
   CMPI16 JUMP_TARGET16, dir_endmacro
-  BEQ .p2_found_endmacro
-  ; Not .endmacro — fall through to .p2_skip
-.p2_skip:
-  PLA                      ; Restore X (output file handle)
-  TAX
-  JMP skip_rest_of_line    ; Tail call
-.p2_found_endmacro:
+  BNE .keep_line           ; Not .endmacro
   LDA #$00                 ; Clear the capturing flag
   STA IN_MACRO_DEF
-  PLA                      ; Restore X (output file handle)
-  TAX
-  JMP skip_rest_of_line    ; Tail call
+  JMP .keep_line
