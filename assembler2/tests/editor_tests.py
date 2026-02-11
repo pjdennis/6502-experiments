@@ -2140,6 +2140,51 @@ class EditorTestRunner:
             expect_content_redraws=[True, True, True]
         )
 
+        self._group("Batch movement in insert mode:", leading_blank=True)
+
+        DOWN = b"\x1b[B"
+        UP = b"\x1b[A"
+
+        # Batch KEY_DOWN in insert mode with scrolling
+        # 15-line file, 10 rows. Enter insert on line 1, 11 down arrows
+        # scrolls down. Insert mode delegates to normal_move_down which batches.
+        self.run_test_screen(
+            "Batch insert down arrow with scroll",
+            make_lines(15),
+            b"i" + DOWN * 11 + b"\x1b:q!\r",
+            expect_cursor=(8, 0),
+            expect_lines=[(i, f"Line {i+4}") for i in range(9)]
+        )
+
+        # Batch KEY_UP in insert mode with scrolling
+        # Go to bottom with G, enter insert, then 12 up arrows.
+        self.run_test_screen(
+            "Batch insert up arrow with scroll",
+            make_lines(15),
+            b"Gi" + UP * 12 + b"\x1b:q!\r",
+            expect_cursor=(0, 0),
+            expect_lines=[(0, "Line 3")]
+        )
+
+        # Render optimization: batch insert down arrows reduce redraws
+        # i enters insert (T), then 5 batched DOWN arrows no-scroll (F), ESC (F)
+        self.run_test_screen(
+            "Render opt: batch insert down no-scroll",
+            make_lines(10),
+            b"i" + DOWN * 5 + b"\x1b:q!\r",
+            expect_content_redraws=[True, True, False, False]
+        )
+
+        # Batch insert up arrows: correctness check
+        # 5j batched then i, 3 UP arrows batched -> line 2 (0-indexed)
+        self.run_test_screen(
+            "Batch insert up moves correct lines",
+            make_lines(10),
+            b"5ji" + UP * 3 + b"\x1b:q!\r",
+            expect_cursor=(2, 0),
+            expect_status_contains="COMMAND - 3,"
+        )
+
         # ============================================================
         # Count prefix tests
         # ============================================================
