@@ -185,7 +185,8 @@ dispatch_key:
 ; --- Movement ---
 
 normal_move_left:
-  JSR get_count_byte     ; X = count
+  JSR get_count          ; BUF_TEMP16 = count
+  LDX BUF_TEMP16         ; X = count (low byte, capped at 255)
 .left_loop:
   TST16 CURSOR_COL16
   BEQ .left_done
@@ -199,7 +200,8 @@ normal_move_left:
   JMP clear_count
 
 normal_move_right:
-  JSR get_count_byte     ; X = count
+  JSR get_count          ; BUF_TEMP16 = count
+  LDX BUF_TEMP16         ; X = count (low byte, capped at 255)
 .right_loop:
   STX BUF_TEMP           ; Save counter
   JSR get_current_line_len
@@ -222,7 +224,8 @@ normal_move_right:
   JMP clear_count
 
 normal_move_down:
-  JSR get_count_byte     ; X = count
+  JSR get_count          ; BUF_TEMP16 = count
+  LDX BUF_TEMP16         ; X = count (low byte, capped at 255)
   STX BUF_DELTA
   JSR count_pending_key  ; X = pending matching keys
   TXA
@@ -253,7 +256,8 @@ normal_move_down:
   JMP clear_count
 
 normal_move_up:
-  JSR get_count_byte     ; X = count
+  JSR get_count          ; BUF_TEMP16 = count
+  LDX BUF_TEMP16         ; X = count (low byte, capped at 255)
   STX BUF_DELTA
   JSR count_pending_key  ; X = pending matching keys
   TXA
@@ -495,7 +499,8 @@ normal_delete_char:
   STA LINE_LEN16            ; Reuse low byte as 8-bit cap
 
   ; Start with count prefix (minimum 1)
-  JSR get_count_byte         ; X = count
+  JSR get_count              ; BUF_TEMP16 = count
+  LDX BUF_TEMP16             ; X = count (low byte, capped at 255)
 
   ; Add pending matching keys (x or Delete)
   STX BUF_DELTA              ; Save count prefix
@@ -559,28 +564,16 @@ normal_d_key:
 
   ; dd: yank then delete N lines (N = count, min 1)
   JSR yank_clear
-  JSR get_count_byte         ; X = count
-  STX LINE_LEN16             ; LINE_LEN16 low byte = total lines to process
-  STX BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1
+  JSR get_count              ; BUF_TEMP16 = count (16-bit)
   LDAX16 FILE_LINE16
   JSR yank_add_lines
   BCS .yank_overflow
 
   ; Adjust marks before deletion
-  LDA LINE_LEN16
-  STA BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1
   LDAX16 FILE_LINE16
   JSR mark_adjust_delete
 
   ; Delete all N lines in one batch operation
-  LDA LINE_LEN16
-  STA BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1
   LDAX16 FILE_LINE16
   JSR buf_delete_lines
 
@@ -718,10 +711,8 @@ normal_open_above:
   JMP clear_count
 
 normal_paste_below:
-  JSR get_count_byte         ; X = count
-  STX BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1
+  JSR get_count              ; BUF_TEMP16 = count
+  LDX BUF_TEMP16             ; X = count (low byte)
   STX NORMAL_TEMP            ; Save paste count
   JSR yank_paste_below_n
   BCS .paste_below_done
@@ -730,10 +721,8 @@ normal_paste_below:
   JMP clear_count
 
 normal_paste_above:
-  JSR get_count_byte         ; X = count
-  STX BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1
+  JSR get_count              ; BUF_TEMP16 = count
+  LDX BUF_TEMP16             ; X = count (low byte)
   STX NORMAL_TEMP            ; Save paste count
   JSR yank_paste_above_n
   BCS .paste_above_done
@@ -809,10 +798,7 @@ normal_y_key:
 .do_yy:
   ; Yank N lines starting at current line
   JSR yank_clear
-  JSR get_count_byte         ; X = count (min 1, max 255)
-  STX BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1
+  JSR get_count              ; BUF_TEMP16 = count (16-bit)
   LDAX16 FILE_LINE16
   JSR yank_add_lines
   BCS .overflow
@@ -971,16 +957,23 @@ count_accumulate_digit:
 ; Get effective count: returns min(COUNT16, 255) in X, minimum 1
 ; If COUNT16 is 0, returns 1 (no count means "do once")
 ; Clobbers A
-get_count_byte:
-  LDA COUNT16 + 1
-  BNE .cap_255           ; High byte non-zero = > 255
+; Get effective count in BUF_TEMP16, minimum 1
+; If COUNT16 is 0, returns 1 (no count means "do once")
+; Clobbers: A
+get_count:
   LDA COUNT16
-  BEQ .return_1          ; Zero = no count, return 1
-  TAX
+  ORA COUNT16 + 1
+  BNE .has_count
+  ; Zero = no count, return 1
+  LDA #1
+  STA BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
   RTS
-.cap_255:
-  LDX #$FF
-  RTS
-.return_1:
-  LDX #1
+.has_count:
+  ; Copy COUNT16 to BUF_TEMP16
+  LDA COUNT16
+  STA BUF_TEMP16
+  LDA COUNT16 + 1
+  STA BUF_TEMP16 + 1
   RTS
