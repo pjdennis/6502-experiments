@@ -1871,7 +1871,7 @@ EXPECT_HEX: ea ea ea 4c 00 02 4c 01 02 4c 02 02
 NAME: include_basic
 INPUT:
  1: * = $0200
- 2:   .include tests/include/basic.asm
+ 2:   .include include/basic.asm
  3:   RTS
 EXPECT_HEX: ea ea 60
 
@@ -1879,7 +1879,7 @@ EXPECT_HEX: ea ea 60
 NAME: include_with_label
 INPUT:
  1: * = $0200
- 2:   .include tests/include/with_label.asm
+ 2:   .include include/with_label.asm
  3:   LDX #included_label
 EXPECT_HEX: a9 42 a2 42
 
@@ -1887,7 +1887,7 @@ EXPECT_HEX: a9 42 a2 42
 NAME: include_nested
 INPUT:
  1: * = $0200
- 2:   .include tests/include/nested1.asm
+ 2:   .include include/nested1.asm
  3:   RTS
 EXPECT_HEX: ea a9 ff 85 10 ea 60
 
@@ -1896,7 +1896,7 @@ NAME: include_label_before
 INPUT:
  1: * = $0200
  2: before = $10
- 3:   .include tests/include/basic.asm
+ 3:   .include include/basic.asm
  4:   LDA before
 EXPECT_HEX: ea ea a5 10
 
@@ -1904,7 +1904,7 @@ EXPECT_HEX: ea ea a5 10
 NAME: include_label_after
 INPUT:
  1: * = $0200
- 2:   .include tests/include/basic.asm
+ 2:   .include include/basic.asm
  3: after = $20
  4:   LDA after
 EXPECT_HEX: ea ea a5 20
@@ -1913,19 +1913,19 @@ EXPECT_HEX: ea ea a5 20
 NAME: include_error_inside
 INPUT:
  1: * = $0200
- 2:   .include tests/include/error_inside.asm
+ 2:   .include include/error_inside.asm
 EXPECT_STDERR:
-[Error 1 in file tests/include/error_inside.asm at line 3: Label not found]
+[Error 1 in file include/error_inside.asm at line 3: Label not found]
 [  included from {{MAIN_FILE}}:2]
 
 ---
 NAME: include_error_nested
 INPUT:
  1: * = $0200
- 2:   .include tests/include/nested_error1.asm
+ 2:   .include include/nested_error1.asm
 EXPECT_STDERR:
-Error 1 in file tests/include/nested_error2.asm at line 3: Label not found
-  included from tests/include/nested_error1.asm:4
+Error 1 in file include/nested_error2.asm at line 3: Label not found
+  included from include/nested_error1.asm:4
   included from {{MAIN_FILE}}:2
 
 ---
@@ -1942,9 +1942,9 @@ NAME: include_file_not_found_nested
 DESCRIPTION: Error when an included file references a nonexistent file
 INPUT:
  1: * = $0200
- 2:   .include tests/include/includes_nonexistent.asm
+ 2:   .include include/includes_nonexistent.asm
 EXPECT_STDERR:
-Error 36 in file tests/include/includes_nonexistent.asm at line 2: File not found
+Error 36 in file include/includes_nonexistent.asm at line 2: File not found
   included from {{MAIN_FILE}}:2
 
 ---
@@ -2554,7 +2554,7 @@ DESCRIPTION: Small heap allows basic include with label allocation
 ARGS: debug small_heap
 INPUT:
  1: * = $0200
- 2:   .include tests/overflow/d20.asm
+ 2:   .include overflow/d20.asm
 EXPECT_HEX: ea
 
 ---
@@ -2603,7 +2603,7 @@ DESCRIPTION: Out of memory when file stack exhausted with small heap
 ARGS: debug small_heap
 INPUT:
  1: * = $0200
- 2:   .include tests/overflow/d01.asm
+ 2:   .include overflow/d01.asm
 EXPECT_ERROR: 32
 EXPECT_MSG: Out of memory
 
@@ -2650,7 +2650,7 @@ NAME: file_stack_normal_deep_include
 DESCRIPTION: Deep include works without small heap
 INPUT:
  1: * = $0200
- 2:   .include tests/overflow/d01.asm
+ 2:   .include overflow/d01.asm
  3:   RTS
 EXPECT_HEX: ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea 60
 
@@ -2670,7 +2670,7 @@ NAME: scope_stack_at_limit
 DESCRIPTION: 51 nested macros at scope stack limit
 INPUT:
  1: * = $0200
- 2:   .include tests/scope/s51.asm
+ 2:   .include scope/s51.asm
 EXPECT_HEX: ea
 
 ---
@@ -2678,7 +2678,7 @@ NAME: scope_stack_overflow
 DESCRIPTION: 52 nested macros overflow scope stack
 INPUT:
  1: * = $0200
- 2:   .include tests/scope/s52.asm
+ 2:   .include scope/s52.asm
 EXPECT_ERROR: 31
 EXPECT_LINE: 5
 EXPECT_MSG: Macro nesting too deep
@@ -2775,14 +2775,14 @@ NAME: ifdef_decisions_at_limit
 DESCRIPTION: 255 .ifdef directives exactly at buffer limit (7x32 + 31 = 255)
 INPUT:
  1: * = $0200
- 2:   .include tests/ifdefs/ifdef32.asm
- 3:   .include tests/ifdefs/ifdef32.asm
- 4:   .include tests/ifdefs/ifdef32.asm
- 5:   .include tests/ifdefs/ifdef32.asm
- 6:   .include tests/ifdefs/ifdef32.asm
- 7:   .include tests/ifdefs/ifdef32.asm
- 8:   .include tests/ifdefs/ifdef32.asm
- 9:   .include tests/ifdefs/ifdef31.asm
+ 2:   .include ifdefs/ifdef32.asm
+ 3:   .include ifdefs/ifdef32.asm
+ 4:   .include ifdefs/ifdef32.asm
+ 5:   .include ifdefs/ifdef32.asm
+ 6:   .include ifdefs/ifdef32.asm
+ 7:   .include ifdefs/ifdef32.asm
+ 8:   .include ifdefs/ifdef32.asm
+ 9:   .include ifdefs/ifdef31.asm
 10:   NOP
 EXPECT_HEX: ea
 
@@ -2791,14 +2791,14 @@ NAME: ifdef_decisions_overflow
 DESCRIPTION: 256 .ifdef directives overflows 255-entry buffer (7x32 + 31 + 1 = 256)
 INPUT:
  1: * = $0200
- 2:   .include tests/ifdefs/ifdef32.asm
- 3:   .include tests/ifdefs/ifdef32.asm
- 4:   .include tests/ifdefs/ifdef32.asm
- 5:   .include tests/ifdefs/ifdef32.asm
- 6:   .include tests/ifdefs/ifdef32.asm
- 7:   .include tests/ifdefs/ifdef32.asm
- 8:   .include tests/ifdefs/ifdef32.asm
- 9:   .include tests/ifdefs/ifdef31.asm
+ 2:   .include ifdefs/ifdef32.asm
+ 3:   .include ifdefs/ifdef32.asm
+ 4:   .include ifdefs/ifdef32.asm
+ 5:   .include ifdefs/ifdef32.asm
+ 6:   .include ifdefs/ifdef32.asm
+ 7:   .include ifdefs/ifdef32.asm
+ 8:   .include ifdefs/ifdef32.asm
+ 9:   .include ifdefs/ifdef31.asm
 10:   .ifdef ONE_MORE
 11:   .endif
 EXPECT_ERROR: 21
@@ -2900,7 +2900,7 @@ DESCRIPTION: Macro body can .include a file
 INPUT:
  1: * = $0200
  2:   .macro WITH_INCLUDE
- 3:   .include tests/include/from_macro.asm
+ 3:   .include include/from_macro.asm
  4:   .endmacro
  5:   WITH_INCLUDE
  6:   RTS
@@ -2912,7 +2912,7 @@ DESCRIPTION: Same macro with .include expanded twice produces correct output
 INPUT:
  1: * = $0200
  2:   .macro WITH_INCLUDE
- 3:   .include tests/include/from_macro.asm
+ 3:   .include include/from_macro.asm
  4:   .endmacro
  5:   WITH_INCLUDE
  6:   INX
@@ -2961,11 +2961,11 @@ INPUT:
  1: * = $0200
  2:   .macro WITHMACRO
  3:   NOP
- 4:   .include tests/include/error_inside.asm
+ 4:   .include include/error_inside.asm
  5:   .endmacro
  6:   WITHMACRO
 EXPECT_STDERR:
-Error 1 in file tests/include/error_inside.asm at line 3: Label not found
+Error 1 in file include/error_inside.asm at line 3: Label not found
   included from macro WITHMACRO:2
   expanded from {{MAIN_FILE}}:6
 
@@ -2974,10 +2974,10 @@ NAME: macro_error_in_included_file_macro
 DESCRIPTION: Error in macro defined and invoked inside an included file
 INPUT:
  1: * = $0200
- 2:   .include tests/include/error_in_macro.asm
+ 2:   .include include/error_in_macro.asm
 EXPECT_STDERR:
 Error 1 in macro HELPER at line 1: Label not found
-  expanded from tests/include/error_in_macro.asm:5
+  expanded from include/error_in_macro.asm:5
   included from {{MAIN_FILE}}:2
 
 ---
