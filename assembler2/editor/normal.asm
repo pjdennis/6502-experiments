@@ -734,25 +734,7 @@ normal_paste_below:
   STX NORMAL_TEMP            ; Save paste count
   JSR yank_paste_below_n
   BCS .paste_below_done
-  ; Adjust marks: lines inserted at FILE_LINE16 (first pasted line)
-  ; Total lines = YANK_LINES * paste_count
-  LDA #0
-  LDX NORMAL_TEMP
-.paste_below_mul:
-  CLC
-  ADC YANK_LINES
-  BCS .paste_below_cap
-  DEX
-  BNE .paste_below_mul
-  JMP .paste_below_adjust
-.paste_below_cap:
-  LDA #$FF
-.paste_below_adjust:
-  STA BUF_TEMP
-  LDAX16 FILE_LINE16
-  JSR mark_adjust_insert
-  LDA #$FF
-  STA MODIFIED
+  JSR paste_adjust_marks
 .paste_below_done:
   JMP clear_count
 
@@ -762,26 +744,31 @@ normal_paste_above:
   STX NORMAL_TEMP            ; Save paste count
   JSR yank_paste_above_n
   BCS .paste_above_done
-  ; Adjust marks: lines inserted at FILE_LINE16
+  JSR paste_adjust_marks
+.paste_above_done:
+  JMP clear_count
+
+; Adjust marks after paste: total lines = YANK_LINES * NORMAL_TEMP (capped at 255)
+; Sets MODIFIED flag
+paste_adjust_marks:
   LDA #0
   LDX NORMAL_TEMP
-.paste_above_mul:
+.mul:
   CLC
   ADC YANK_LINES
-  BCS .paste_above_cap
+  BCS .cap
   DEX
-  BNE .paste_above_mul
-  JMP .paste_above_adjust
-.paste_above_cap:
+  BNE .mul
+  JMP .adjust
+.cap:
   LDA #$FF
-.paste_above_adjust:
+.adjust:
   STA BUF_TEMP
   LDAX16 FILE_LINE16
   JSR mark_adjust_insert
   LDA #$FF
   STA MODIFIED
-.paste_above_done:
-  JMP clear_count
+  RTS
 
 ; Check if count (X) pastes of BUF_LEN16 bytes fit in the text buffer
 ; Call after yank_get_size (which sets BUF_LEN16)
