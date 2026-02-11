@@ -380,7 +380,7 @@ command_parse_range:
   ; :NNN goto (BUF_SRC16 = 0-based line)
   CP16 BUF_SRC16, FILE_LINE16
   LDA #0
-  STA CURSOR_COL
+  STA_LH16 CURSOR_COL16
   JSR ensure_cursor_visible
   JMP clamp_cursor_col
 

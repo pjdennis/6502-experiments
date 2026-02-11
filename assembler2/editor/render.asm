@@ -13,7 +13,7 @@ MODE_COMMAND = $02
   .zeropage
 
 CURSOR_ROW:    .byte     ; Cursor screen row (0-based, derived from wrap computation)
-CURSOR_COL:    .byte     ; Cursor column (0-based, can exceed SCREEN_COLS for wrapped lines)
+CURSOR_COL16:  .word     ; Cursor column (0-based, 16-bit for lines >255 chars)
 VIEW_TOP16:    .word     ; First visible line number (0-based)
 SCREEN_ROWS:   .byte     ; Terminal height
 SCREEN_COLS:   .byte     ; Terminal width
@@ -30,6 +30,7 @@ VIEW_TOP_WRAP: .byte     ; Wrap row offset for first visible line (0 = start of 
 WRAP_QUOT:     .byte     ; Scratch: quotient from CURSOR_COL / SCREEN_COLS
 WRAP_REM:      .byte     ; Scratch: remainder from CURSOR_COL % SCREEN_COLS
 RENDER_WRAP:   .byte     ; Current wrap row offset during rendering
+DIV_INPUT16:   .word     ; Scratch for 16-bit division
 
   .code
 
@@ -41,7 +42,7 @@ render_init:
   STA SCREEN_COLS
   LDA #0
   STA CURSOR_ROW
-  STA CURSOR_COL
+  STA_LH16 CURSOR_COL16
   STA MODE
   STA MODIFIED
   STA VIEW_TOP_WRAP
@@ -216,11 +217,11 @@ render_status_line:
   LDA #','
   JSR write_b
 
-  ; Column (1-based)
-  LDA CURSOR_COL
+  ; Column (1-based, 16-bit)
   CLC
-  ADC #1
-  JSR write_byte_dec
+  ADCI16 CURSOR_COL16, $0001, TO_DECIMAL_VALUE16
+  JSR to_decimal
+  PRINT_STR TO_DECIMAL_RESULT
 
   ; Print total lines
   LDA #' '
@@ -243,9 +244,9 @@ render_position_cursor:
   CLC
   ADC #1           ; ANSI 1-based
   STA ANSI_ROW
-  ; Screen column = CURSOR_COL % SCREEN_COLS + 1
-  LDA CURSOR_COL
-  JSR div_mod_screen_cols
+  ; Screen column = CURSOR_COL16 % SCREEN_COLS + 1
+  CP16 CURSOR_COL16, DIV_INPUT16
+  JSR div_mod_screen_cols_16
   ; A = remainder (screen col 0-based)
   CLC
   ADC #1           ; ANSI 1-based
@@ -283,8 +284,12 @@ render_current_line:
 render_current_line_and_status:
   ; If line wraps (len >= SCREEN_COLS), upgrade to full repaint
   JSR get_current_line_len
+  ; A/X = 16-bit length; if X > 0, definitely wraps
+  CPX #0
+  BNE .do_full
   CMP SCREEN_COLS
   BCC .single_row
+.do_full:
 
   ; Line wraps - do full repaint
   JMP render_screen
@@ -347,32 +352,48 @@ render_line_chars:
 
 ; === Wrap utility functions ===
 
-; Divide A by SCREEN_COLS using repeated subtraction
-; Returns: X = quotient, A = remainder
+; Divide 16-bit value in DIV_INPUT16 by SCREEN_COLS using repeated subtraction
+; Returns: X = quotient (capped at 255), A = remainder
 ; Clobbers: X
-div_mod_screen_cols:
+div_mod_screen_cols_16:
   LDX #0
 .div_loop:
+  LDA DIV_INPUT16 + 1
+  BNE .can_sub               ; High byte > 0, definitely >= SCREEN_COLS
+  LDA DIV_INPUT16
   CMP SCREEN_COLS
-  BCC .div_done
+  BCC .div_done              ; Value < SCREEN_COLS, done
+  LDA DIV_INPUT16            ; Reload low byte for subtraction
+.can_sub:
   SEC
+  LDA DIV_INPUT16
   SBC SCREEN_COLS
+  STA DIV_INPUT16
+  LDA DIV_INPUT16 + 1
+  SBC #0
+  STA DIV_INPUT16 + 1
   INX
+  BEQ .cap_255               ; Quotient wrapped to 0, cap at 255
   JMP .div_loop
+.cap_255:
+  LDX #$FF
+  LDA #0                     ; Remainder doesn't matter at cap
 .div_done:
   RTS
 
 ; Compute number of screen rows a line occupies
-; Input: A = line length
+; Input: A/X = 16-bit line length (A=low, X=high)
 ; Returns: A = number of screen rows (1 for empty/short, ceil(len/SCREEN_COLS) for longer)
 ; Clobbers: X
 line_screen_rows:
-  CMP #0
+  STA DIV_INPUT16
+  STX DIV_INPUT16 + 1
+  ORA DIV_INPUT16 + 1
   BNE .not_empty
   LDA #1
   RTS
 .not_empty:
-  JSR div_mod_screen_cols
+  JSR div_mod_screen_cols_16
   ; X = quotient, A = remainder
   STA WRAP_REM
   TXA              ; A = quotient
@@ -389,9 +410,9 @@ line_screen_rows:
 ; Scrolls if needed, setting RENDER_FLAG=$FF on scroll
 ; Preserves RENDER_FLAG if no scroll needed
 ensure_cursor_visible:
-  ; Compute cursor's wrap row: CURSOR_COL / SCREEN_COLS
-  LDA CURSOR_COL
-  JSR div_mod_screen_cols
+  ; Compute cursor's wrap row: CURSOR_COL16 / SCREEN_COLS
+  CP16 CURSOR_COL16, DIV_INPUT16
+  JSR div_mod_screen_cols_16
   STX WRAP_QUOT      ; cursor_wrap_row
   STA WRAP_REM       ; not used here but available
 

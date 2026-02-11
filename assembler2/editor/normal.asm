@@ -3,11 +3,12 @@
   .zeropage
 
 LAST_KEY:    .byte      ; Previous key for multi-key commands (dd, gg)
-LINE_LEN:    .byte      ; Cached length of current line
+LINE_LEN16:  .word      ; Cached length of current line (16-bit)
 DISPATCH_PTR16: .word    ; Pointer into dispatch table during scan
 JUMP_TARGET16:  .word    ; Target for indirect jump
 COUNT16:     .word      ; Accumulated count (0 = no count entered)
 COUNT_ACTIVE: .byte     ; $FF if digits are being entered, $00 otherwise
+NORMAL_TEMP: .byte      ; Temp byte for normal mode operations
 
   .code
 
@@ -223,11 +224,11 @@ dispatch_key:
 normal_move_left:
   JSR get_count_byte     ; X = count
 .left_loop:
-  LDA CURSOR_COL
+  TST16 CURSOR_COL16
   BEQ .left_done
   LDA #0
   STA RENDER_FLAG
-  DEC CURSOR_COL
+  DEC16 CURSOR_COL16
   DEX
   BNE .left_loop
 .left_done:
@@ -238,18 +239,20 @@ normal_move_left:
 normal_move_right:
   JSR get_count_byte     ; X = count
 .right_loop:
-  STX LINE_LEN           ; Save counter in LINE_LEN
+  STX BUF_TEMP           ; Save counter
   JSR get_current_line_len
+  STAX16 LINE_LEN16
+  TST16 LINE_LEN16
   BEQ .right_done        ; Empty line
   SEC
-  SBC #1
-  CMP CURSOR_COL
+  SBCI16 LINE_LEN16, $0001, LINE_LEN16  ; LINE_LEN16 = len - 1
+  CMP16 LINE_LEN16, CURSOR_COL16
   BCC .right_done        ; Already at or past end
   BEQ .right_done
   LDA #0
   STA RENDER_FLAG
-  INC CURSOR_COL
-  LDX LINE_LEN
+  INC16 CURSOR_COL16
+  LDX BUF_TEMP
   DEX
   BNE .right_loop
 .right_done:
@@ -260,7 +263,7 @@ normal_move_right:
 normal_move_down:
   JSR get_count_byte     ; X = count
 .down_loop:
-  STX LINE_LEN           ; Save counter
+  STX BUF_TEMP           ; Save counter
   ; Check if there's a next line
   CLC
   ADCI16 FILE_LINE16, $0001, BUF_PTR16
@@ -270,7 +273,7 @@ normal_move_down:
   LDA #0
   STA RENDER_FLAG
   INC16 FILE_LINE16
-  LDX LINE_LEN
+  LDX BUF_TEMP
   DEX
   BNE .down_loop
 .down_done:
@@ -282,14 +285,14 @@ normal_move_down:
 normal_move_up:
   JSR get_count_byte     ; X = count
 .up_loop:
-  STX LINE_LEN           ; Save counter
+  STX BUF_TEMP           ; Save counter
   TST16 FILE_LINE16
   BEQ .up_done
 
   LDA #0
   STA RENDER_FLAG
   DEC16 FILE_LINE16
-  LDX LINE_LEN
+  LDX BUF_TEMP
   DEX
   BNE .up_loop
 .up_done:
@@ -359,7 +362,7 @@ normal_page_down:
 .set_row:
   CP16 BUF_PTR16, FILE_LINE16
   LDA #0
-  STA CURSOR_COL
+  STA_LH16 CURSOR_COL16
   STA VIEW_TOP_WRAP
   JSR ensure_cursor_visible
   JSR clamp_cursor_col
@@ -410,7 +413,7 @@ normal_page_up:
 .set_row:
   CP16 BUF_PTR16, FILE_LINE16
   LDA #0
-  STA CURSOR_COL
+  STA_LH16 CURSOR_COL16
   STA VIEW_TOP_WRAP
   JSR ensure_cursor_visible
   JSR clamp_cursor_col
@@ -418,21 +421,22 @@ normal_page_up:
 
 normal_line_start:
   LDA #0
-  STA CURSOR_COL
+  STA_LH16 CURSOR_COL16
   STA RENDER_FLAG
   JSR ensure_cursor_visible
   JMP clear_count
 
 normal_line_end:
   JSR get_current_line_len
+  STAX16 LINE_LEN16
+  TST16 LINE_LEN16
   BEQ .empty
   SEC
-  SBC #1
-  STA CURSOR_COL
+  SBCI16 LINE_LEN16, $0001, CURSOR_COL16
   JMP .ecv
 .empty:
   LDA #0
-  STA CURSOR_COL
+  STA_LH16 CURSOR_COL16
 .ecv:
   LDA #0
   STA RENDER_FLAG
@@ -462,7 +466,7 @@ normal_goto_last:
 
 .goto_set:
   LDA #0
-  STA CURSOR_COL
+  STA_LH16 CURSOR_COL16
   STA VIEW_TOP_WRAP
   JSR ensure_cursor_visible
   JSR clamp_cursor_col
@@ -477,7 +481,7 @@ normal_g_key:
   STA_LH16 FILE_LINE16
   STA_LH16 VIEW_TOP16
   STA CURSOR_ROW
-  STA CURSOR_COL
+  STA_LH16 CURSOR_COL16
   STA VIEW_TOP_WRAP
   JSR clamp_cursor_col
   JMP clear_count
@@ -492,18 +496,24 @@ normal_g_key:
 
 normal_delete_char:
   JSR get_current_line_len
+  STAX16 LINE_LEN16
+  TST16 LINE_LEN16
   BEQ .done
-  STA LINE_LEN
 
-  LDA CURSOR_COL
-  CMP LINE_LEN
+  CMP16 CURSOR_COL16, LINE_LEN16
   BCS .done
 
-  ; Calculate max deleteable = LINE_LEN - CURSOR_COL
-  LDA LINE_LEN
+  ; Calculate max deleteable = LINE_LEN16 - CURSOR_COL16, capped at 255
   SEC
-  SBC CURSOR_COL
-  STA LINE_LEN              ; Reuse as cap
+  SBC16 LINE_LEN16, CURSOR_COL16, LINE_LEN16
+  LDA LINE_LEN16 + 1
+  BNE .cap_diff            ; High byte > 0, cap at 255
+  LDA LINE_LEN16
+  JMP .have_max
+.cap_diff:
+  LDA #$FF
+.have_max:
+  STA LINE_LEN16            ; Reuse low byte as 8-bit cap
 
   ; Start with count prefix (minimum 1)
   JSR get_count_byte         ; X = count
@@ -518,10 +528,10 @@ normal_delete_char:
   TAX
 
   ; Cap at max deleteable
-  CPX LINE_LEN
+  CPX LINE_LEN16
   BCC .cap_ok
 .cap_at_max:
-  LDX LINE_LEN
+  LDX LINE_LEN16
 .cap_ok:
   STX BUF_DELTA
 
@@ -540,22 +550,20 @@ normal_delete_char:
 
 normal_delete_to_eol:
   JSR get_current_line_len
+  STAX16 LINE_LEN16
+  TST16 LINE_LEN16
   BEQ .done
-  STA LINE_LEN
-  LDA CURSOR_COL
-  CMP LINE_LEN
+  CMP16 CURSOR_COL16, LINE_LEN16
   BCS .done                ; Cursor at or past end
 
-  ; count = LINE_LEN - CURSOR_COL
-  LDA LINE_LEN
+  ; count = LINE_LEN16 - CURSOR_COL16 (16-bit)
   SEC
-  SBC CURSOR_COL
-  STA BUF_DELTA
+  SBC16 LINE_LEN16, CURSOR_COL16, BUF_LEN16
 
-  ; Delete BUF_DELTA chars at cursor position
+  ; Delete BUF_LEN16 chars at cursor position
   JSR get_cursor_buf_ptr
-  JSR buf_delete_chars
-  JSR buf_adjust_lines_dec
+  JSR buf_shift_left_16
+  JSR buf_rebuild_lines
 
   LDA #$FF
   STA MODIFIED
@@ -573,20 +581,20 @@ normal_d_key:
   ; dd: yank then delete N lines (N = count, min 1)
   JSR yank_clear
   JSR get_count_byte         ; X = count
-  STX LINE_LEN               ; LINE_LEN = total lines to process
+  STX LINE_LEN16             ; LINE_LEN16 low byte = total lines to process
   STX BUF_TEMP
   LDAX16 FILE_LINE16
   JSR yank_add_lines
   BCS .yank_overflow
 
   ; Adjust marks before deletion
-  LDA LINE_LEN
+  LDA LINE_LEN16
   STA BUF_TEMP
   LDAX16 FILE_LINE16
   JSR mark_adjust_delete
 
   ; Delete all N lines in one batch operation
-  LDA LINE_LEN
+  LDA LINE_LEN16
   STA BUF_TEMP
   LDAX16 FILE_LINE16
   JSR buf_delete_lines
@@ -623,11 +631,13 @@ normal_enter_insert:
 
 normal_enter_insert_after:
   JSR get_current_line_len
+  STAX16 LINE_LEN16
+  TST16 LINE_LEN16
   BEQ .enter
-  CMP CURSOR_COL
+  CMP16 LINE_LEN16, CURSOR_COL16
   BEQ .enter
   BCC .enter
-  INC CURSOR_COL
+  INC16 CURSOR_COL16
 .enter:
   JSR ensure_cursor_visible
   LDA #MODE_INSERT
@@ -636,7 +646,7 @@ normal_enter_insert_after:
 
 normal_enter_insert_eol:
   JSR get_current_line_len
-  STA CURSOR_COL
+  STAX16 CURSOR_COL16
   JSR ensure_cursor_visible
   LDA #MODE_INSERT
   STA MODE
@@ -653,8 +663,13 @@ normal_open_below:
   BEQ .found_nl
   INY
   BNE .find_nl
+  INC BUF_PTR16 + 1          ; Y wrapped: advance pointer by 256
+  JMP .find_nl
 .found_nl:
   INY
+  BNE .no_wrap_nl
+  INC BUF_PTR16 + 1          ; Y wrapped past newline: advance page
+.no_wrap_nl:
   TYA
   CLC
   ADCA16 BUF_PTR16, BUF_PTR16
@@ -674,7 +689,7 @@ normal_open_below:
 
   INC16 FILE_LINE16
   LDA #0
-  STA CURSOR_COL
+  STA_LH16 CURSOR_COL16
   JSR ensure_cursor_visible
   LDA #MODE_INSERT
   STA MODE
@@ -702,7 +717,7 @@ normal_open_above:
   JSR mark_adjust_insert
 
   LDA #0
-  STA CURSOR_COL
+  STA_LH16 CURSOR_COL16
   LDA #MODE_INSERT
   STA MODE
   LDA #$FF
@@ -716,13 +731,13 @@ normal_open_above:
 normal_paste_below:
   JSR get_count_byte         ; X = count
   STX BUF_TEMP
-  STX LINE_LEN               ; Save paste count
+  STX NORMAL_TEMP            ; Save paste count
   JSR yank_paste_below_n
   BCS .paste_below_done
   ; Adjust marks: lines inserted at FILE_LINE16 (first pasted line)
   ; Total lines = YANK_LINES * paste_count
   LDA #0
-  LDX LINE_LEN
+  LDX NORMAL_TEMP
 .paste_below_mul:
   CLC
   ADC YANK_LINES
@@ -744,12 +759,12 @@ normal_paste_below:
 normal_paste_above:
   JSR get_count_byte         ; X = count
   STX BUF_TEMP
-  STX LINE_LEN               ; Save paste count
+  STX NORMAL_TEMP            ; Save paste count
   JSR yank_paste_above_n
   BCS .paste_above_done
   ; Adjust marks: lines inserted at FILE_LINE16
   LDA #0
-  LDX LINE_LEN
+  LDX NORMAL_TEMP
 .paste_above_mul:
   CLC
   ADC YANK_LINES
@@ -864,7 +879,7 @@ normal_mark_goto:
   BCS .mark_not_set
   STAX16 FILE_LINE16
   LDA #0
-  STA CURSOR_COL
+  STA_LH16 CURSOR_COL16
   JSR ensure_cursor_visible
   JSR clamp_cursor_col
   JMP clear_count
@@ -886,29 +901,30 @@ get_current_line_len:
   RTS
 
 ; Get buffer pointer at cursor position on current line
-; Sets BUF_PTR16 to start of FILE_LINE16 + CURSOR_COL
+; Sets BUF_PTR16 to start of FILE_LINE16 + CURSOR_COL16
 ; Clobbers A, X, Y
 get_cursor_buf_ptr:
   LDAX16 FILE_LINE16
   JSR buf_get_line_ptr
   CLC
-  LDA CURSOR_COL
-  ADCA16 BUF_PTR16, BUF_PTR16
+  ADC16 CURSOR_COL16, BUF_PTR16, BUF_PTR16
   RTS
 
 clamp_cursor_col:
   JSR get_current_line_len
+  STAX16 LINE_LEN16
+  TST16 LINE_LEN16
   BEQ .set_zero
   SEC
-  SBC #1
-  CMP CURSOR_COL
-  BCS .ok
-  STA CURSOR_COL
+  SBCI16 LINE_LEN16, $0001, LINE_LEN16  ; LINE_LEN16 = len - 1
+  CMP16 LINE_LEN16, CURSOR_COL16
+  BCS .ok                ; len-1 >= cursor, cursor is fine
+  CP16 LINE_LEN16, CURSOR_COL16
 .ok:
   RTS
 .set_zero:
   LDA #0
-  STA CURSOR_COL
+  STA_LH16 CURSOR_COL16
   RTS
 
 ; --- Count prefix helpers ---

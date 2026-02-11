@@ -1,20 +1,20 @@
 ; Text buffer data structure and operations
 ;
 ; Memory layout:
-;   TEXT_BUF ($2200) - Start of text buffer (contiguous, newline-delimited)
+;   TEXT_BUF ($2800) - Start of text buffer (contiguous, newline-delimited)
 ;   LINE_TBL ($C000) - Line pointer table (16-bit offsets, max 1024 lines)
 ;
 ; The text buffer stores all text contiguously. Lines are delimited by $0A.
 ; The line table stores 16-bit pointers to the start of each line.
 ; Insertions/deletions shift all text after the edit point.
 
-TEXT_BUF    = $2200  ; Start of text buffer
+TEXT_BUF    = $2800  ; Start of text buffer (must be past end of program code)
 
-; Buffer size: normal build = ~39.5KB, small build = 256 bytes
+; Buffer size: normal build = ~38KB, small build = 256 bytes
   .ifndef small_buffer
-TEXT_LIMIT  = $C000  ; End of text buffer space ($2200-$BFFF)
+TEXT_LIMIT  = $C000  ; End of text buffer space ($2800-$BFFF)
   .else
-TEXT_LIMIT  = $2300  ; End of text buffer space (256 bytes: $2200-$22FF)
+TEXT_LIMIT  = $2900  ; End of text buffer space (256 bytes: $2800-$28FF)
   .endif
 
 LINE_TBL    = $C000  ; Line pointer table (2 bytes per entry)
@@ -184,10 +184,11 @@ buf_get_line_ptr:
   RTS
 
 ; Get length of line N (N in A/X, low/high)
-; Returns length in A (capped at 255), not counting the newline
-; Clobbers X, Y
+; Returns 16-bit length in A (low) / X (high), not counting the newline
+; Clobbers Y
 buf_get_line_len:
   JSR buf_get_line_ptr
+  LDX #0                     ; X = high byte (page counter)
   LDY #0
 .len_loop:
   LDA (BUF_PTR16),Y
@@ -195,11 +196,11 @@ buf_get_line_len:
   BEQ .len_done
   INY
   BNE .len_loop
-  ; Line longer than 255 - cap at 255
-  LDA #$FF
-  RTS
+  INC BUF_PTR16 + 1          ; Y wrapped: advance pointer page
+  INX                        ; Count pages
+  JMP .len_loop
 .len_done:
-  TYA
+  TYA                        ; A = low byte of length
   RTS
 
 ; Insert character at position in buffer

@@ -169,7 +169,7 @@ yank_paste_below_n:
   ; Move cursor to first pasted line
   INC16 FILE_LINE16
   LDA #0
-  STA CURSOR_COL
+  STA_LH16 CURSOR_COL16
   JSR ensure_cursor_visible
   JSR clamp_cursor_col
   CLC
@@ -203,7 +203,7 @@ yank_paste_above_n:
 
   ; Cursor stays at same line number
   LDA #0
-  STA CURSOR_COL
+  STA_LH16 CURSOR_COL16
   JSR ensure_cursor_visible
   JSR clamp_cursor_col
   CLC

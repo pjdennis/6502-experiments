@@ -3115,6 +3115,53 @@ class EditorTestRunner:
             expected_content="Line 1\nLine 5\n",
         )
 
+        self._group("Long line handling (>255 chars):", leading_blank=True)
+
+        long_line_300 = "A" * 300 + "\n"
+
+        # Search on a line >255 chars should complete (not hang)
+        # Search for a pattern that doesn't exist - should report not found
+        self.run_test(
+            "Search on >255 char line doesn't hang (pattern not found)",
+            long_line_300,
+            b"/ZZZZZ\r:q!\r",
+            expect_unmodified=True
+        )
+
+        # Search for a pattern in first 255 chars still works
+        content_with_marker = "B" * 100 + "MARKER" + "B" * 200 + "\n"
+        self.run_test(
+            "Search finds pattern within first 255 chars of long line",
+            content_with_marker,
+            b"/MARKER\rx:wq\r",
+            expected_content="B" * 100 + "ARKER" + "B" * 200 + "\n"
+        )
+
+        # 'o' (open below) on a line >255 chars inserts correctly
+        self.run_test(
+            "Open below (o) on >255 char line",
+            long_line_300,
+            b"oHello\x1b:wq\r",
+            expected_content=long_line_300 + "Hello\n"
+        )
+
+        # 'o' on a line exactly at 256 chars (edge case for Y wrap)
+        long_line_256 = "X" * 256 + "\n"
+        self.run_test(
+            "Open below (o) on 256 char line (Y wrap edge case)",
+            long_line_256,
+            b"oWorld\x1b:wq\r",
+            expected_content=long_line_256 + "World\n"
+        )
+
+        # 'o' on multi-line file where long line is first
+        self.run_test(
+            "Open below (o) on long first line with second line",
+            long_line_300 + "Short\n",
+            b"oMiddle\x1b:wq\r",
+            expected_content=long_line_300 + "Middle\n" + "Short\n"
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed

@@ -156,7 +156,9 @@ search_forward:
   ; Move cursor to match
   CP16 SEARCH_LINE16, FILE_LINE16
   LDA SEARCH_COL
-  STA CURSOR_COL
+  STA CURSOR_COL16
+  LDA #0
+  STA CURSOR_COL16 + 1
   JSR ensure_cursor_visible
   JSR clamp_cursor_col
   RTS
@@ -211,7 +213,9 @@ search_backward:
   ; Move cursor to match
   CP16 SEARCH_LINE16, FILE_LINE16
   LDA SEARCH_COL
-  STA CURSOR_COL
+  STA CURSOR_COL16
+  LDA #0
+  STA CURSOR_COL16 + 1
   JSR ensure_cursor_visible
   JSR clamp_cursor_col
   RTS
@@ -242,6 +246,7 @@ search_in_line:
   TXA
   CLC
   ADC SEARCH_COL
+  BCS .not_found_here        ; Sum > 255, can't index with Y
   TAY
 
   ; Check for end of line
@@ -260,6 +265,7 @@ search_in_line:
 .not_found_here:
   LDY SEARCH_COL
   INY                        ; Try next start position
+  BEQ .not_found_in_line     ; Y wrapped past 255
   JMP .outer_loop
 
 .found_in_line:

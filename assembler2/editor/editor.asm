@@ -18,7 +18,7 @@
 ;   $0200-$02FF   Filename buffer
 ;   $0300-$03FF   Command buffer
 ;   $0400         Editor code loads here
-;   TEXT_BUF      Text buffer ($2200-$BFFF)
+;   TEXT_BUF      Text buffer ($2800-$BFFF)
 ;   LINE_TBL      Line pointer table ($C000-$DFFF)
 ;   $E000-$EFFF   Scratch space
 ;   $F000+        Emulator I/O

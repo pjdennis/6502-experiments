@@ -60,9 +60,9 @@ insert_exit:
   LDA #MODE_NORMAL
   STA MODE
   ; Move cursor back one per vi convention (unless at column 0)
-  LDA CURSOR_COL
+  TST16 CURSOR_COL16
   BEQ .done
-  DEC CURSOR_COL
+  DEC16 CURSOR_COL16
 .done:
   LDA #0
   STA RENDER_FLAG
@@ -105,9 +105,12 @@ insert_char:
 
   ; Advance cursor by BUF_DELTA
   CLC
-  LDA CURSOR_COL
+  LDA CURSOR_COL16
   ADC BUF_DELTA
-  STA CURSOR_COL
+  STA CURSOR_COL16
+  BCC .no_carry_cc
+  INC CURSOR_COL16 + 1
+.no_carry_cc:
 
   LDA #1
   STA RENDER_FLAG
@@ -164,7 +167,7 @@ insert_newline:
   STA FILE_LINE16 + 1
 
   LDA #0
-  STA CURSOR_COL
+  STA_LH16 CURSOR_COL16
   JSR ensure_cursor_visible
   LDA #$FF
   STA MODIFIED
@@ -177,15 +180,19 @@ insert_newline:
 ; Handle backspace in insert mode
 insert_backspace:
   ; If at column 0, join with previous line
-  LDA CURSOR_COL
+  TST16 CURSOR_COL16
   BEQ .join_lines
 
-  ; Count pending BS keys inline, capped at CURSOR_COL
+  ; Count pending BS keys inline, capped at CURSOR_COL16 (max 255)
   ; Start with 1 for the current BS key
   LDX #1
 .count_loop:
-  CPX CURSOR_COL
-  BEQ .count_done         ; At cap, stop
+  ; Cap at 255 or CURSOR_COL16 (whichever is smaller)
+  LDA CURSOR_COL16 + 1
+  BNE .count_no_cap        ; High byte > 0, X < CURSOR_COL16 for sure
+  CPX CURSOR_COL16
+  BEQ .count_done           ; At cap, stop
+.count_no_cap:
   JSR key_ready
   CMP #$FF
   BNE .count_done
@@ -202,11 +209,14 @@ insert_backspace:
 .count_done:
 
   STX BUF_DELTA
-  ; Update cursor: CURSOR_COL -= BUF_DELTA
+  ; Update cursor: CURSOR_COL16 -= BUF_DELTA
   SEC
-  LDA CURSOR_COL
+  LDA CURSOR_COL16
   SBC BUF_DELTA
-  STA CURSOR_COL
+  STA CURSOR_COL16
+  LDA CURSOR_COL16 + 1
+  SBC #0
+  STA CURSOR_COL16 + 1
   ; Get buffer pointer at new cursor position
   JSR get_cursor_buf_ptr
   ; Delete BUF_DELTA chars
@@ -226,27 +236,24 @@ insert_backspace:
   BNE .can_join
   RTS                      ; Can't join at first line
 .can_join:
-
-  ; Get previous line length -> CURSOR_COL
+  ; Get previous line length -> CURSOR_COL16
   SEC
   SBCI16 FILE_LINE16, $0001, BUF_LEN16
   LDAX16 BUF_LEN16
   JSR buf_get_line_len
-  STA CURSOR_COL
+  STAX16 CURSOR_COL16
 
   ; Point BUF_PTR16 to the newline ending the previous line
   LDAX16 BUF_LEN16
   JSR buf_get_line_ptr
-  LDY CURSOR_COL
-  TYA
   CLC
-  ADCA16 BUF_PTR16, BUF_PTR16
+  ADC16 CURSOR_COL16, BUF_PTR16, BUF_PTR16
 
   ; X = count of newlines to delete (starts at 1 for the first join)
   LDX #1
 
   ; If previous line has content, skip batch scan
-  LDA CURSOR_COL
+  TST16 CURSOR_COL16
   BNE .apply
 
   ; Previous line empty - scan backwards for consecutive \n bytes
@@ -352,25 +359,31 @@ insert_backspace:
 ; Handle delete in insert mode (forward delete)
 insert_delete:
   JSR get_current_line_len
+  STAX16 LINE_LEN16
+  TST16 LINE_LEN16
   BEQ .early_done        ; Empty line
-  STA LINE_LEN
 
-  LDA CURSOR_COL
-  CMP LINE_LEN
+  CMP16 CURSOR_COL16, LINE_LEN16
   BCS .early_done        ; At or past end of line
 
-  ; Calculate max deleteable = LINE_LEN - CURSOR_COL
-  LDA LINE_LEN
+  ; Calculate max deleteable = LINE_LEN16 - CURSOR_COL16, capped at 255
   SEC
-  SBC CURSOR_COL
-  STA LINE_LEN              ; Reuse as cap
+  SBC16 LINE_LEN16, CURSOR_COL16, LINE_LEN16
+  LDA LINE_LEN16 + 1
+  BNE .cap_del_max         ; High byte > 0, cap at 255
+  LDA LINE_LEN16
+  JMP .have_del_max
+.cap_del_max:
+  LDA #$FF
+.have_del_max:
+  STA LINE_LEN16            ; Reuse low byte as 8-bit cap
 
   ; Count pending Delete keys, add 1 for current
   JSR count_pending_key      ; X = pending count
   INX
-  CPX LINE_LEN
+  CPX LINE_LEN16
   BCC .cap_ok
-  LDX LINE_LEN
+  LDX LINE_LEN16
 .cap_ok:
   STX BUF_DELTA
 
@@ -412,23 +425,24 @@ insert_page_up:
   RTS
 
 insert_move_left:
-  LDA CURSOR_COL
+  TST16 CURSOR_COL16
   BEQ .done
   LDA #0
   STA RENDER_FLAG
-  DEC CURSOR_COL
+  DEC16 CURSOR_COL16
   JSR ensure_cursor_visible
 .done:
   RTS
 
 insert_move_right:
   JSR get_current_line_len
-  CMP CURSOR_COL
+  STAX16 LINE_LEN16
+  CMP16 LINE_LEN16, CURSOR_COL16
   BCC .done
   BEQ .done
   LDA #0
   STA RENDER_FLAG
-  INC CURSOR_COL
+  INC16 CURSOR_COL16
   JSR ensure_cursor_visible
 .done:
   RTS
@@ -436,8 +450,9 @@ insert_move_right:
 ; Clamp cursor for insert mode (can be one past end of line content)
 clamp_cursor_col_insert:
   JSR get_current_line_len
-  CMP CURSOR_COL
+  STAX16 LINE_LEN16
+  CMP16 LINE_LEN16, CURSOR_COL16
   BCS .ok
-  STA CURSOR_COL
+  CP16 LINE_LEN16, CURSOR_COL16
 .ok:
   RTS

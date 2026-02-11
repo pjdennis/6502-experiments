@@ -150,10 +150,10 @@ marks_display:
   LDA SCREEN_COLS
   SEC
   SBC #10
-  STA LINE_LEN
+  STA LINE_LEN16
   LDY #0
 .marks_text:
-  CPY LINE_LEN
+  CPY LINE_LEN16
   BCS .marks_text_done
   LDA (BUF_PTR16),Y
   CMP #'\n'
