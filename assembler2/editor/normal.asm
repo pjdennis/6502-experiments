@@ -854,14 +854,14 @@ normal_find_prev:
   JMP clear_count
 
 normal_mark_set:
-  JSR input_read_byte
+  JSR get_key
   JSR mark_set
   LDA #0
   STA RENDER_FLAG
   JMP clear_count
 
 normal_mark_goto:
-  JSR input_read_byte
+  JSR get_key
   JSR mark_get
   BCS .mark_not_set
   STAX16 FILE_LINE16

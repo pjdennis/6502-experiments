@@ -35,7 +35,7 @@ search_handle:
   JSR search_show_prompt
 
 .read_loop:
-  JSR input_read_byte
+  JSR get_key
 
   CMP #KEY_ESC
   BEQ .cancel
@@ -294,7 +294,7 @@ search_show_not_found:
   JMP .print_pattern
 .print_done:
   JSR con_flush
-  JSR input_read_byte         ; Wait for keypress
+  JSR get_key                  ; Wait for keypress
   RTS
 
 ; String constants

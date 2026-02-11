@@ -156,7 +156,7 @@ main_loop:
 .not_command_entry:
 
   ; Poll for input (non-blocking)
-  JSR input_ready
+  JSR key_ready
   CMP #$FF
   BEQ .key_available
 
@@ -166,7 +166,7 @@ main_loop:
 
 .key_available:
   ; Read a key
-  JSR read_key
+  JSR get_key
 
   ; EOT ($04) = end of input (for scripted/test mode)
   CMP #$04

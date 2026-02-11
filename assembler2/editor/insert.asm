@@ -78,10 +78,10 @@ insert_char:
 
   ; Read pending printable chars into BATCH_BUF[1..]
 .batch_read:
-  JSR input_ready
+  JSR key_ready
   CMP #$FF
   BNE .batch_apply
-  JSR input_read_byte
+  JSR get_key
   ; Check if printable ($20-$7E)
   CMP #' '
   BCC .batch_not_printable
@@ -94,7 +94,7 @@ insert_char:
   JMP .batch_apply
 
 .batch_not_printable:
-  JSR input_unread
+  JSR unget_key
 
 .batch_apply:
   STX BUF_DELTA
@@ -186,16 +186,14 @@ insert_backspace:
 .count_loop:
   CPX CURSOR_COL
   BEQ .count_done         ; At cap, stop
-  JSR input_ready
+  JSR key_ready
   CMP #$FF
   BNE .count_done
-  JSR input_read_byte
+  JSR get_key
   CMP #KEY_BS
   BEQ .count_match
-  CMP #$7F
-  BEQ .count_match
   ; Not backspace, push back and stop
-  JSR input_unread
+  JSR unget_key
   JMP .count_done
 .count_match:
   INX
@@ -302,16 +300,14 @@ insert_backspace:
 
   ; Read one BS key from input
   STX BUF_TEMP
-  JSR input_ready
+  JSR key_ready
   CMP #$FF
   BNE .restore_x
-  JSR input_read_byte
+  JSR get_key
   CMP #KEY_BS
   BEQ .match
-  CMP #$7F
-  BEQ .match
   ; Not backspace, push back and stop
-  JSR input_unread
+  JSR unget_key
   LDX BUF_TEMP
   JMP .apply
 .match:

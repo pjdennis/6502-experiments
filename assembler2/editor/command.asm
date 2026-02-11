@@ -25,7 +25,7 @@ command_handle:
   JSR command_show_prompt
 
 .read_loop:
-  JSR input_read_byte
+  JSR get_key
 
   CMP #KEY_ESC
   BEQ .cancel
@@ -330,7 +330,7 @@ show_status_message:
   POP16 STR_PTR16
   JSR write_string
   JSR con_flush
-  JSR input_read_byte
+  JSR get_key
   RTS
 
 ; Compare CMD_BUF (starting at offset X) against asciiz string at STR_PTR16

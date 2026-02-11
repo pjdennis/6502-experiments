@@ -20,6 +20,8 @@ INPUT_TEMP:  .byte     ; Temp for input processing
 SPIN_COUNT:  .byte     ; Spin loop counter for escape detection
 PUSHBACK:    .byte     ; Pushback byte ($00 = none)
 HAS_PUSHBACK: .byte    ; $FF if pushback has a byte
+KEY_DECODED:     .byte  ; Buffered decoded key
+HAS_KEY_DECODED: .byte  ; $FF if KEY_DECODED has a value
 
   .code
 
@@ -55,28 +57,21 @@ input_ready:
   LDA #$FF
   RTS
 
-; Count pending input bytes matching BUF_TEMP (or $7F for backspace)
-; Input: BUF_TEMP = byte to match (if $08, also matches $7F)
-; Returns: X = count of matching bytes (0 to BATCH_MAX)
-; Non-matching byte is pushed back
+; Count pending keys matching BUF_TEMP
+; Input: BUF_TEMP = key code to match
+; Returns: X = count of matching keys (0 to BATCH_MAX)
+; Non-matching key is pushed back
 count_pending_key:
   LDX #0
 .loop:
-  JSR input_ready
+  JSR key_ready
   CMP #$FF
   BNE .done
-  JSR input_read_byte
+  JSR get_key
   CMP BUF_TEMP
   BEQ .match
-  ; For backspace ($08), also match $7F
-  LDY BUF_TEMP
-  CPY #KEY_BS
-  BNE .no_match
-  CMP #$7F
-  BEQ .match
-.no_match:
-  ; Push back the non-matching byte
-  JSR input_unread
+  ; Push back the non-matching key
+  JSR unget_key
   JMP .done
 .match:
   INX
@@ -214,4 +209,63 @@ read_key:
   RTS
 
 .done:
+  RTS
+
+; Read one decoded key (with decoded pushback support)
+; Returns key code in A. Preserves X, Y.
+get_key:
+  LDA HAS_KEY_DECODED
+  BEQ .no_decoded
+  LDA #0
+  STA HAS_KEY_DECODED
+  LDA KEY_DECODED
+  RTS
+.no_decoded:
+  TXA
+  PHA
+  TYA
+  PHA
+  JSR read_key
+  STA KEY_DECODED
+  PLA
+  TAY
+  PLA
+  TAX
+  LDA KEY_DECODED
+  RTS
+
+; Push back one decoded key
+; A = key to push back. Preserves X, Y.
+unget_key:
+  STA KEY_DECODED
+  LDA #$FF
+  STA HAS_KEY_DECODED
+  RTS
+
+; Check if a decoded key is available (non-blocking)
+; Returns: A=$FF if ready, A=$00 if not. Preserves X, Y.
+key_ready:
+  LDA HAS_KEY_DECODED
+  BNE .ready
+  JSR input_ready
+  CMP #$FF
+  BNE .not_ready
+  ; Raw input available - speculatively decode
+  TXA
+  PHA
+  TYA
+  PHA
+  JSR read_key
+  STA KEY_DECODED
+  LDA #$FF
+  STA HAS_KEY_DECODED
+  PLA
+  TAY
+  PLA
+  TAX
+.ready:
+  LDA #$FF
+  RTS
+.not_ready:
+  LDA #0
   RTS

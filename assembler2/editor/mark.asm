@@ -196,7 +196,7 @@ marks_display:
 
 .marks_wait:
   JSR con_flush
-  JSR input_read_byte
+  JSR get_key
   LDA #$FF
   STA RENDER_FLAG
   RTS
