@@ -29,35 +29,21 @@ insert_handle_key:
 ; --- Dispatch table ---
 
 insert_keys:
-  .byte KEY_ESC
-  .word insert_exit
-  .byte KEY_ENTER
-  .word insert_newline
-  .byte KEY_BS
-  .word insert_backspace
-  .byte KEY_DEL
-  .word insert_delete
-  .byte KEY_UP
-  .word insert_move_up
-  .byte KEY_DOWN
-  .word insert_move_down
-  .byte KEY_LEFT
-  .word insert_move_left
-  .byte KEY_RIGHT
-  .word insert_move_right
-  .byte KEY_HOME
-  .word insert_home
-  .byte KEY_END
-  .word insert_end
-  .byte KEY_PGDN
-  .word insert_page_down
-  .byte KEY_PGUP
-  .word insert_page_up
-  .byte $06              ; Ctrl-F
-  .word insert_page_down
-  .byte $02              ; Ctrl-B
-  .word insert_page_up
-  .byte 0                ; End sentinel
+  .byte KEY_ESC     .word insert_exit
+  .byte KEY_ENTER   .word insert_newline
+  .byte KEY_BS      .word insert_backspace
+  .byte KEY_DEL     .word insert_delete
+  .byte KEY_UP      .word insert_move_up
+  .byte KEY_DOWN    .word insert_move_down
+  .byte KEY_LEFT    .word insert_move_left
+  .byte KEY_RIGHT   .word insert_move_right
+  .byte KEY_HOME    .word insert_home
+  .byte KEY_END     .word insert_end
+  .byte KEY_PGDN    .word insert_page_down
+  .byte KEY_PGUP    .word insert_page_up
+  .byte $06         .word insert_page_down    ; Ctrl-F
+  .byte $02         .word insert_page_up      ; Ctrl-B
+  .byte 0           ; End sentinel
 
 ; Exit insert mode, return to normal mode
 insert_exit:
