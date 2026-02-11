@@ -25,7 +25,7 @@ mark_init:
 mark_set:
   CMP #'a'
   BCC .invalid
-  CMP #'{'             ; 'z'+1
+  CMP #'z' + 1
   BCS .invalid
   SEC
   SBC #'a'
@@ -82,11 +82,9 @@ marks_display:
 
   LDA #0
   STA BUF_TEMP           ; Mark index (0-25)
+  STA BUF_DELTA          ; Count of marks displayed (init 0 since row 2 != 0)
   LDA #2
   STA ANSI_ROW           ; Start at row 2
-  STA BUF_DELTA          ; Count of marks displayed (init 0 since row 2 != 0)
-  LDA #0
-  STA BUF_DELTA
 
 .marks_loop:
   LDA BUF_TEMP
@@ -210,18 +208,16 @@ write_decimal_rjust:
   LDA TO_DECIMAL_RESULT,X
   BEQ .pad
   INX
-  JMP .count
+  BNE .count      ; Always taken
 .pad:
   ; Print (6 - X) spaces
-  STX BUF_DELTA
-  LDX #7
-.pad_loop:
-  CPX BUF_DELTA
-  BEQ .print
   LDA #' '
+.pad_loop:
+  CPX #6 + 1
+  BEQ .print
   JSR write_b
-  DEX
-  JMP .pad_loop
+  INX
+  BNE .pad_loop   ; Always taken
 .print:
   PRINT_STR TO_DECIMAL_RESULT
   RTS
