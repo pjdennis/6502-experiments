@@ -119,7 +119,7 @@ EXPECT_MSG: Comma expected
 NAME: include_basic
 INPUT:
  1: * = $0200
- 2:   .include tests/include/basic.asm
+ 2:   .include include/basic.asm
  3:   RTS
 EXPECT_HEX: ea ea 60
 
@@ -127,7 +127,7 @@ EXPECT_HEX: ea ea 60
 NAME: include_with_label
 INPUT:
  1: * = $0200
- 2:   .include tests/include/with_label.asm
+ 2:   .include include/with_label.asm
  3:   LDX #included_label
 EXPECT_HEX: a9 42 a2 42
 
@@ -135,7 +135,7 @@ EXPECT_HEX: a9 42 a2 42
 NAME: include_nested
 INPUT:
  1: * = $0200
- 2:   .include tests/include/nested1.asm
+ 2:   .include include/nested1.asm
  3:   RTS
 EXPECT_HEX: ea a9 ff 85 10 ea 60
 
@@ -144,7 +144,7 @@ NAME: include_label_before
 INPUT:
  1: * = $0200
  2: before: = $10
- 3:   .include tests/include/basic.asm
+ 3:   .include include/basic.asm
  4:   LDA before
 EXPECT_HEX: ea ea a5 10
 
@@ -152,7 +152,7 @@ EXPECT_HEX: ea ea a5 10
 NAME: include_label_after
 INPUT:
  1: * = $0200
- 2:   .include tests/include/basic.asm
+ 2:   .include include/basic.asm
  3: after: = $20
  4:   LDA after
 EXPECT_HEX: ea ea a5 20
@@ -161,19 +161,19 @@ EXPECT_HEX: ea ea a5 20
 NAME: include_error_inside
 INPUT:
  1: * = $0200
- 2:   .include tests/include/error_inside.asm
+ 2:   .include include/error_inside.asm
 EXPECT_STDERR:
-[Error 1 in file tests/include/error_inside.asm at line 3: Label not found]
+[Error 1 in file include/error_inside.asm at line 3: Label not found]
 [  included from {{MAIN_FILE}}:2]
 
 ---
 NAME: include_error_nested
 INPUT:
  1: * = $0200
- 2:   .include tests/include/nested_error1.asm
+ 2:   .include include/nested_error1.asm
 EXPECT_STDERR:
-Error 1 in file tests/include/nested_error2.asm at line 3: Label not found
-  included from tests/include/nested_error1.asm:4
+Error 1 in file include/nested_error2.asm at line 3: Label not found
+  included from include/nested_error1.asm:4
   included from {{MAIN_FILE}}:2
 
 ---
@@ -190,9 +190,9 @@ NAME: include_file_not_found_nested
 DESCRIPTION: Error when an included file references a nonexistent file
 INPUT:
  1: * = $0200
- 2:   .include tests/include/includes_nonexistent.asm
+ 2:   .include include/includes_nonexistent.asm
 EXPECT_STDERR:
-Error 39 in file tests/include/includes_nonexistent.asm at line 2: File not found
+Error 39 in file include/includes_nonexistent.asm at line 2: File not found
   included from {{MAIN_FILE}}:2
 
 ---

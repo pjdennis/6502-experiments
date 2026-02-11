@@ -99,6 +99,7 @@ class TestRunner:
         self.passed = 0
         self.failed = 0
         self.skipped = 0
+        self.current_test_file = None  # Track current test file for relative includes
 
     def _read_text_safe(self, filepath: Path) -> str:
         """Read a file, converting non-UTF8 bytes to [0xNN] format."""
@@ -344,9 +345,10 @@ class TestRunner:
                 else:
                     cmd.append("debug")
 
-            # Run assembler
+            # Run assembler with cwd set to test file's directory for relative includes
+            test_dir = self.current_test_file.parent if self.current_test_file else None
             with open(err_file, "w") as err_fh:
-                result = subprocess.run(cmd, stderr=err_fh, capture_output=False)
+                result = subprocess.run(cmd, stderr=err_fh, capture_output=False, cwd=test_dir)
 
             exit_code = result.returncode
             stderr_text = self._read_text_safe(err_file)
@@ -649,6 +651,9 @@ class TestRunner:
         print(f"Running tests from {display_path}")
         if not self.quiet:
             print()
+
+        # Set current test file for relative include resolution
+        self.current_test_file = filepath
 
         for test in tests:
             outcome = self.run_test(test, filter_pattern)

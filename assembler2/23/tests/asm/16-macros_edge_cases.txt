@@ -4,7 +4,7 @@ DESCRIPTION: Small heap allows basic include with label allocation
 ARGS: debug small_heap
 INPUT:
  1: * = $0200
- 2:   .include tests/overflow/d20.asm
+ 2:   .include overflow/d20.asm
 EXPECT_HEX: ea
 
 ---
@@ -130,7 +130,7 @@ DESCRIPTION: Macro body can .include a file
 INPUT:
  1: * = $0200
  2:   .macro WITH_INCLUDE
- 3:   .include tests/include/from_macro.asm
+ 3:   .include include/from_macro.asm
  4:   .endmacro
  5:   WITH_INCLUDE
  6:   RTS
@@ -142,7 +142,7 @@ DESCRIPTION: Same macro with .include expanded twice produces correct output
 INPUT:
  1: * = $0200
  2:   .macro WITH_INCLUDE
- 3:   .include tests/include/from_macro.asm
+ 3:   .include include/from_macro.asm
  4:   .endmacro
  5:   WITH_INCLUDE
  6:   INX
@@ -239,11 +239,11 @@ INPUT:
  1: * = $0200
  2:   .macro WITHMACRO
  3:   NOP
- 4:   .include tests/include/error_inside.asm
+ 4:   .include include/error_inside.asm
  5:   .endmacro
  6:   WITHMACRO
 EXPECT_STDERR:
-Error 1 in file tests/include/error_inside.asm at line 3: Label not found
+Error 1 in file include/error_inside.asm at line 3: Label not found
   included from macro WITHMACRO:2
   expanded from {{MAIN_FILE}}:6
 
@@ -252,10 +252,10 @@ NAME: macro_error_in_included_file_macro
 DESCRIPTION: Error in macro defined and invoked inside an included file
 INPUT:
  1: * = $0200
- 2:   .include tests/include/error_in_macro.asm
+ 2:   .include include/error_in_macro.asm
 EXPECT_STDERR:
 Error 1 in macro HELPER at line 1: Label not found
-  expanded from tests/include/error_in_macro.asm:5
+  expanded from include/error_in_macro.asm:5
   included from {{MAIN_FILE}}:2
 
 ---

@@ -47,7 +47,7 @@ DESCRIPTION: Out of memory when file stack exhausted with small heap
 ARGS: debug small_heap
 INPUT:
  1: * = $0200
- 2:   .include tests/overflow/d01.asm
+ 2:   .include overflow/d01.asm
 EXPECT_ERROR: 35
 EXPECT_MSG: Out of memory
 
@@ -94,7 +94,7 @@ NAME: file_stack_normal_deep_include
 DESCRIPTION: Deep include works without small heap
 INPUT:
  1: * = $0200
- 2:   .include tests/overflow/d01.asm
+ 2:   .include overflow/d01.asm
  3:   RTS
 EXPECT_HEX: ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea 60
 
@@ -103,7 +103,7 @@ NAME: scope_stack_at_limit
 DESCRIPTION: 51 nested macros at scope stack limit
 INPUT:
  1: * = $0200
- 2:   .include tests/scope/s51.asm
+ 2:   .include scope/s51.asm
 EXPECT_HEX: ea
 
 ---
@@ -111,7 +111,7 @@ NAME: scope_stack_overflow
 DESCRIPTION: 52 nested macros overflow scope stack
 INPUT:
  1: * = $0200
- 2:   .include tests/scope/s52.asm
+ 2:   .include scope/s52.asm
 EXPECT_ERROR: 34
 EXPECT_LINE: 5
 EXPECT_MSG: Macro nesting too deep
@@ -164,14 +164,14 @@ NAME: ifdef_decisions_at_limit
 DESCRIPTION: 255 .ifdef directives exactly at buffer limit (7x32 + 31 = 255)
 INPUT:
  1: * = $0200
- 2:   .include tests/ifdefs/ifdef32.asm
- 3:   .include tests/ifdefs/ifdef32.asm
- 4:   .include tests/ifdefs/ifdef32.asm
- 5:   .include tests/ifdefs/ifdef32.asm
- 6:   .include tests/ifdefs/ifdef32.asm
- 7:   .include tests/ifdefs/ifdef32.asm
- 8:   .include tests/ifdefs/ifdef32.asm
- 9:   .include tests/ifdefs/ifdef31.asm
+ 2:   .include ifdefs/ifdef32.asm
+ 3:   .include ifdefs/ifdef32.asm
+ 4:   .include ifdefs/ifdef32.asm
+ 5:   .include ifdefs/ifdef32.asm
+ 6:   .include ifdefs/ifdef32.asm
+ 7:   .include ifdefs/ifdef32.asm
+ 8:   .include ifdefs/ifdef32.asm
+ 9:   .include ifdefs/ifdef31.asm
 10:   NOP
 EXPECT_HEX: ea
 
@@ -180,14 +180,14 @@ NAME: ifdef_decisions_overflow
 DESCRIPTION: 256 .ifdef directives overflows 255-entry buffer (7x32 + 31 + 1 = 256)
 INPUT:
  1: * = $0200
- 2:   .include tests/ifdefs/ifdef32.asm
- 3:   .include tests/ifdefs/ifdef32.asm
- 4:   .include tests/ifdefs/ifdef32.asm
- 5:   .include tests/ifdefs/ifdef32.asm
- 6:   .include tests/ifdefs/ifdef32.asm
- 7:   .include tests/ifdefs/ifdef32.asm
- 8:   .include tests/ifdefs/ifdef32.asm
- 9:   .include tests/ifdefs/ifdef31.asm
+ 2:   .include ifdefs/ifdef32.asm
+ 3:   .include ifdefs/ifdef32.asm
+ 4:   .include ifdefs/ifdef32.asm
+ 5:   .include ifdefs/ifdef32.asm
+ 6:   .include ifdefs/ifdef32.asm
+ 7:   .include ifdefs/ifdef32.asm
+ 8:   .include ifdefs/ifdef32.asm
+ 9:   .include ifdefs/ifdef31.asm
 10:   .ifdef ONE_MORE
 11:   .endif
 EXPECT_ERROR: 21
