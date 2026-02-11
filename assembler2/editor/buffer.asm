@@ -629,11 +629,7 @@ buf_adjust_lines_inc:
   SBC16 LINE_COUNT16, FILE_LINE16, BUF_LEN16
 
   ; Subtract 1 (we start from line+1, not line)
-  LDA BUF_LEN16
-  BNE .no_borrow
-  DEC BUF_LEN16 + 1
-.no_borrow:
-  DEC BUF_LEN16
+  DEC16 BUF_LEN16
 
   ; If count <= 0, nothing to adjust
   LDA BUF_LEN16 + 1
@@ -668,11 +664,7 @@ buf_adjust_lines_inc:
   ADCI16 BUF_PTR16, $0002, BUF_PTR16
 
   ; Decrement count
-  LDA BUF_LEN16
-  BNE .no_borrow2
-  DEC BUF_LEN16 + 1
-.no_borrow2:
-  DEC BUF_LEN16
+  DEC16 BUF_LEN16
 
   ; Check if count reached 0
   TST16 BUF_LEN16
@@ -691,11 +683,7 @@ buf_adjust_lines_dec:
   SBC16 LINE_COUNT16, FILE_LINE16, BUF_LEN16
 
   ; Subtract 1
-  LDA BUF_LEN16
-  BNE .no_borrow
-  DEC BUF_LEN16 + 1
-.no_borrow:
-  DEC BUF_LEN16
+  DEC16 BUF_LEN16
 
   ; If count <= 0, nothing to adjust
   LDA BUF_LEN16 + 1
@@ -729,11 +717,7 @@ buf_adjust_lines_dec:
   ADCI16 BUF_PTR16, $0002, BUF_PTR16
 
   ; Decrement count
-  LDA BUF_LEN16
-  BNE .no_borrow3
-  DEC BUF_LEN16 + 1
-.no_borrow3:
-  DEC BUF_LEN16
+  DEC16 BUF_LEN16
 
   ; Check if count reached 0
   TST16 BUF_LEN16
