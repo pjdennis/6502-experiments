@@ -438,10 +438,7 @@ command_parse_range:
   BCS .range_yank_full
 
   ; Show "N lines yanked"
-  LDA YANK_LINES
-  STA TO_DECIMAL_VALUE16
-  LDA #0
-  STA TO_DECIMAL_VALUE16 + 1
+  CP16 YANK_LINES16, TO_DECIMAL_VALUE16
   JSR to_decimal
   JSR command_show_prompt
   PRINT_STR TO_DECIMAL_RESULT
@@ -466,20 +463,14 @@ command_parse_range:
   BCS .range_yank_full
 
   ; Adjust marks before deletion (mark_adjust_delete clobbers BUF_SRC16/BUF_DST16)
-  LDA YANK_LINES
-  STA BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1
+  CP16 YANK_LINES16, BUF_TEMP16
   PUSH16 BUF_SRC16
   LDAX16 BUF_SRC16
   JSR mark_adjust_delete
   POP16 BUF_SRC16
 
   ; Delete lines (buf_delete_lines clobbers BUF_SRC16)
-  LDA YANK_LINES
-  STA BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1
+  CP16 YANK_LINES16, BUF_TEMP16
   PUSH16 BUF_SRC16
   LDAX16 BUF_SRC16
   JSR buf_delete_lines
@@ -500,10 +491,7 @@ command_parse_range:
   JSR ensure_cursor_visible
 
   ; Show "N lines deleted"
-  LDA YANK_LINES
-  STA TO_DECIMAL_VALUE16
-  LDA #0
-  STA TO_DECIMAL_VALUE16 + 1
+  CP16 YANK_LINES16, TO_DECIMAL_VALUE16
   JSR to_decimal
   JSR command_show_prompt
   PRINT_STR TO_DECIMAL_RESULT

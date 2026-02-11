@@ -13,7 +13,6 @@ YANK_LIMIT = $E500
   .zeropage
 
 YANK_END16:    .word     ; Points one past last byte in yank buffer
-YANK_LINES:    .byte     ; Number of lines in yank buffer
 YANK_LINES16:  .word     ; 16-bit line count for yank buffer
 YANK_SIZE16:   .word     ; Single yank size for paste operations
 
@@ -24,8 +23,6 @@ yank_init:
 ; Clear yank buffer (reset to empty)
 yank_clear:
   SET16 YANK_BUF, YANK_END16
-  LDA #0
-  STA YANK_LINES
   RTS
 
 ; Add N contiguous lines to yank buffer in one bulk copy
@@ -104,16 +101,6 @@ yank_add_lines:
 
   ; YANK_LINES16 = actual line count (in BUF_TEMP16, preserved from clamping)
   CP16 BUF_TEMP16, YANK_LINES16
-  ; Also update old 8-bit YANK_LINES for compatibility (clamp to 255)
-  LDA BUF_TEMP16 + 1
-  BEQ .store_low
-  LDA #$FF
-  STA YANK_LINES
-  JMP .done
-.store_low:
-  LDA BUF_TEMP16
-  STA YANK_LINES
-.done:
   CLC
   RTS
 
