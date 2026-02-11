@@ -430,13 +430,34 @@ insert_delete:
   RTS
 
 ; Arrow key handlers in insert mode
+; These implement simple line movement without the normal mode clamping
+; that would clamp to len-1 instead of len (one past last char for insert)
+
 insert_move_up:
-  JSR normal_move_up
-  JMP clamp_cursor_col_insert
+  ; Move up one line if not at first line
+  TST16 FILE_LINE16
+  BEQ .done
+  DEC16 FILE_LINE16
+  LDA #0
+  STA RENDER_FLAG
+  JSR clamp_cursor_col_insert
+  JSR ensure_cursor_visible
+.done:
+  RTS
 
 insert_move_down:
-  JSR normal_move_down
-  JMP clamp_cursor_col_insert
+  ; Move down one line if not at last line
+  CLC
+  ADCI16 FILE_LINE16, $0001, BUF_PTR16
+  CMP16 BUF_PTR16, LINE_COUNT16
+  BCS .done
+  INC16 FILE_LINE16
+  LDA #0
+  STA RENDER_FLAG
+  JSR clamp_cursor_col_insert
+  JSR ensure_cursor_visible
+.done:
+  RTS
 
 insert_page_down:
   JSR normal_page_down

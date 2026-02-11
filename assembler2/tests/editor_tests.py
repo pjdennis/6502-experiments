@@ -1561,9 +1561,8 @@ class EditorTestRunner:
         # Line 0: "B", Line 1: 60 A's (wraps to 2 rows on 40-col screen)
         # j$ puts cursor at col 59 (row 2: line 0 row + 2 wrap rows).
         # 'a' enters insert at col 60 (still row 2).
-        # Up arrow should move to line 0 ("B"), col clamped to 0, row 0.
-        # Bug: ensure_cursor_visible ran with unclamped col 60 on line 0
-        # (1-char line), computing CURSOR_ROW=1 instead of 0.
+        # Up arrow should move to line 0 ("B"), col clamped to 1 (one past 'B'), row 0.
+        # Insert mode allows cursor one past last char for end-of-line insertion.
         # Frame sequence: 0=init, 1=j, 2=$, 3=a, 4=UP
         self.run_test_screen(
             "Insert up arrow from wrapped line to short line",
@@ -1571,7 +1570,7 @@ class EditorTestRunner:
             b"j$a\x1b[A\x1b:q!\r",
             expect_cursor=(0, 0),
             expect_cursor_at_frame=[
-                (4, (0, 0)),
+                (4, (0, 1)),  # After UP arrow, before ESC
             ]
         )
 
@@ -2218,6 +2217,63 @@ class EditorTestRunner:
             "Hello\n",
             b"$i\x08\x08" + END + b"X\x1b:wq\r",
             expected_content="HeoX\n"
+        )
+
+        self._group("Insert mode cursor clamping:", leading_blank=True)
+
+        DOWN = b"\x1b[B"
+        UP = b"\x1b[A"
+
+        # Moving from longer line to shorter line should clamp to end+1
+        # Line 1: "Hello" (5 chars), Line 2: "Hi" (2 chars)
+        # Start at end of line 1 (col 5), move down to line 2
+        # Should be at col 2 (one past 'i'), allowing insertion at end
+        self.run_test(
+            "Down arrow clamps to one past end in insert mode",
+            "Hello\nHi\n",
+            b"$a" + DOWN + b"X\x1b:wq\r",
+            expected_content="Hello\nHiX\n"
+        )
+
+        # Moving up from shorter to longer line preserves column
+        self.run_test(
+            "Up arrow from short to long line in insert mode",
+            "Hi\nHello\n",
+            b"j$a" + UP + b"X\x1b:wq\r",
+            expected_content="HiX\nHello\n"
+        )
+
+        # Moving down to empty line should position at column 0
+        self.run_test(
+            "Down to empty line in insert mode",
+            "Hello\n\n",
+            b"$a" + DOWN + b"X\x1b:wq\r",
+            expected_content="Hello\nX\n"
+        )
+
+        # Test wrapping boundary: 40-char line (exactly fits screen width)
+        # Moving from 40-char line to shorter line should preserve insert semantics
+        self.run_test(
+            "Down from full-width line to short line",
+            "A" * 40 + "\nHi\n",
+            b"$a" + DOWN + b"X\x1b:wq\r",
+            expected_content="A" * 40 + "\nHiX\n"
+        )
+
+        # Test moving down from 41-char line (wraps to 2 screen rows) to short line
+        self.run_test(
+            "Down from wrapped line to short line",
+            "A" * 41 + "\nHi\n",
+            b"$a" + DOWN + b"X\x1b:wq\r",
+            expected_content="A" * 41 + "\nHiX\n"
+        )
+
+        # Test moving up from short line to wrapped line preserves column
+        self.run_test(
+            "Up from short line to wrapped line",
+            "A" * 41 + "\nHi\n",
+            b"j$a" + UP + b"X\x1b:wq\r",
+            expected_content="AA" + "X" + "A" * 39 + "\nHi\n"
         )
 
         self._group("Delete key line joining:", leading_blank=True)
