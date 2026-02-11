@@ -2092,6 +2092,54 @@ class EditorTestRunner:
 
         self._group("Batch movement up:", leading_blank=True)
 
+        # Batch k keys: start at line 5, 3 k's move to line 2
+        self.run_test_screen(
+            "Batch k moves correct number of lines",
+            make_lines(10),
+            b"5jkkk:q!\r",
+            expect_cursor=(2, 0),
+            expect_status_contains="COMMAND - 3,"
+        )
+
+        # Batch KEY_UP arrow keys
+        UP = b"\x1b[A"
+        self.run_test_screen(
+            "Batch up arrow moves correct lines",
+            make_lines(10),
+            b"5j" + UP * 3 + b":q!\r",
+            expect_cursor=(2, 0),
+            expect_status_contains="COMMAND - 3,"
+        )
+
+        # Batch k with scrolling: scroll up from bottom
+        # 15-line file, 10 rows. Go to line 14 (G), then 12 k's -> line 2.
+        # ensure_cursor_visible places cursor at top of viewport.
+        self.run_test_screen(
+            "Batch k with scrolling shows correct window",
+            make_lines(15),
+            b"G" + b"k" * 12 + b":q!\r",
+            expect_cursor=(0, 0),
+            expect_lines=[(0, "Line 3")]
+        )
+
+        # Render optimization: batch k no-scroll is single frame
+        # 5j produces 1 frame (batched), then kkk produces 1 frame (batched)
+        self.run_test_screen(
+            "Render opt: batch k no-scroll is single frame",
+            make_lines(10),
+            b"5jkkk:q!\r",
+            expect_content_redraws=[True, False, False]
+        )
+
+        # Render optimization: batch k with scroll is single repaint
+        # G scrolls (full repaint), then 12 batched k's scroll up (one repaint)
+        self.run_test_screen(
+            "Render opt: batch k scroll is single repaint",
+            make_lines(15),
+            b"G" + b"k" * 12 + b":q!\r",
+            expect_content_redraws=[True, True, True]
+        )
+
         # ============================================================
         # Count prefix tests
         # ============================================================
