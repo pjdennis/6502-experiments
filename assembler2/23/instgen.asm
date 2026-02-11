@@ -57,22 +57,28 @@ MNTAB:
   .asciiz "LDA", MODE_IMM, $A9, MODE_ZP, $A5, MODE_ZPX, $B5, MODE_ABS, $AD
   .byte MODE_ABSX, $BD, MODE_ABSY, $B9, MODE_INDX, $A1, MODE_INDY, $B1
   .byte MODE_END
+
   .asciiz "LDX", MODE_IMM, $A2, MODE_ZP, $A6, MODE_ZPY, $B6
   .byte MODE_ABS, $AE, MODE_ABSY, $BE
   .byte MODE_END
+
   .asciiz "LDY", MODE_IMM, $A0, MODE_ZP, $A4, MODE_ZPX, $B4
   .byte MODE_ABS, $AC, MODE_ABSX, $BC
   .byte MODE_END
+
   .asciiz "STA", MODE_ZP, $85, MODE_ZPX, $95, MODE_ABS, $8D, MODE_ABSX, $9D
   .byte MODE_ABSY, $99, MODE_INDX, $81, MODE_INDY, $91
   .byte MODE_END
+
   .asciiz "STX", MODE_ZP, $86, MODE_ZPY, $96, MODE_ABS, $8E, MODE_END
+
   .asciiz "STY", MODE_ZP, $84, MODE_ZPX, $94, MODE_ABS, $8C, MODE_END
 
   ; Arithmetic instructions
   .asciiz "ADC", MODE_IMM, $69, MODE_ZP, $65, MODE_ZPX, $75, MODE_ABS, $6D
   .byte MODE_ABSX, $7D, MODE_ABSY, $79, MODE_INDX, $61, MODE_INDY, $71
   .byte MODE_END
+
   .asciiz "SBC", MODE_IMM, $E9, MODE_ZP, $E5, MODE_ZPX, $F5, MODE_ABS, $ED
   .byte MODE_ABSX, $FD, MODE_ABSY, $F9, MODE_INDX, $E1, MODE_INDY, $F1
   .byte MODE_END
@@ -81,9 +87,11 @@ MNTAB:
   .asciiz "AND", MODE_IMM, $29, MODE_ZP, $25, MODE_ZPX, $35, MODE_ABS, $2D
   .byte MODE_ABSX, $3D, MODE_ABSY, $39, MODE_INDX, $21, MODE_INDY, $31
   .byte MODE_END
+
   .asciiz "ORA", MODE_IMM, $09, MODE_ZP, $05, MODE_ZPX, $15, MODE_ABS, $0D
   .byte MODE_ABSX, $1D, MODE_ABSY, $19, MODE_INDX, $01, MODE_INDY, $11
   .byte MODE_END
+
   .asciiz "EOR", MODE_IMM, $49, MODE_ZP, $45, MODE_ZPX, $55, MODE_ABS, $4D
   .byte MODE_ABSX, $5D, MODE_ABSY, $59, MODE_INDX, $41, MODE_INDY, $51
   .byte MODE_END
@@ -92,7 +100,9 @@ MNTAB:
   .asciiz "CMP", MODE_IMM, $C9, MODE_ZP, $C5, MODE_ZPX, $D5, MODE_ABS, $CD
   .byte MODE_ABSX, $DD, MODE_ABSY, $D9, MODE_INDX, $C1, MODE_INDY, $D1
   .byte MODE_END
+
   .asciiz "CPX", MODE_IMM, $E0, MODE_ZP, $E4, MODE_ABS, $EC, MODE_END
+
   .asciiz "CPY", MODE_IMM, $C0, MODE_ZP, $C4, MODE_ABS, $CC, MODE_END
 
   ; Bit test
@@ -110,12 +120,15 @@ MNTAB:
   .asciiz "ASL", MODE_NONE, $0A, MODE_ZP, $06, MODE_ZPX, $16, MODE_ABS, $0E
   .byte MODE_ABSX, $1E
   .byte MODE_END
+
   .asciiz "LSR", MODE_NONE, $4A, MODE_ZP, $46, MODE_ZPX, $56, MODE_ABS, $4E
   .byte MODE_ABSX, $5E
   .byte MODE_END
+
   .asciiz "ROL", MODE_NONE, $2A, MODE_ZP, $26, MODE_ZPX, $36, MODE_ABS, $2E
   .byte MODE_ABSX, $3E
   .byte MODE_END
+
   .asciiz "ROR", MODE_NONE, $6A, MODE_ZP, $66, MODE_ZPX, $76, MODE_ABS, $6E
   .byte MODE_ABSX, $7E
   .byte MODE_END
