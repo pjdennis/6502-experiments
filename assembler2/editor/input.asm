@@ -16,12 +16,13 @@ KEY_BS    = $08
 KEY_TAB   = $09
 
   .zeropage
-INPUT_TEMP:  .byte     ; Temp for input processing
-SPIN_COUNT:  .byte     ; Spin loop counter for escape detection
-PUSHBACK:    .byte     ; Pushback byte ($00 = none)
-HAS_PUSHBACK: .byte    ; $FF if pushback has a byte
-KEY_DECODED:     .byte  ; Buffered decoded key
-HAS_KEY_DECODED: .byte  ; $FF if KEY_DECODED has a value
+
+INPUT_TEMP:       .byte  ; Temp for input processing
+SPIN_COUNT:       .byte  ; Spin loop counter for escape detection
+PUSHBACK:         .byte  ; Pushback byte ($00 = none)
+HAS_PUSHBACK:     .byte  ; $FF if pushback has a byte
+KEY_DECODED:      .byte  ; Buffered decoded key
+HAS_KEY_DECODED:  .byte  ; $FF if KEY_DECODED has a value
 
   .code
 
