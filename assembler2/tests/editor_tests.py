@@ -1009,7 +1009,7 @@ class EditorTestRunner:
             print("  Skipping bounds checking tests (small buffer build failed)")
         else:
             # Read-only mode: file exceeds buffer, editing keys blocked
-            # small_buffer limits buffer to $2000-$20FF (256 bytes)
+            # small_buffer limits buffer to 256 bytes (TEXT_BUF to TEXT_BUF+$FF)
             # File has 300 bytes so it will be truncated
             # Truncation warning consumes one keypress (the 'x')
             # Then 'x' should be ignored (readonly), :q exits

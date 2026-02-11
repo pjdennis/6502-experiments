@@ -18,7 +18,7 @@
 ;   $0200-$02FF   Filename buffer
 ;   $0300-$03FF   Command buffer
 ;   $0400         Editor code loads here
-;   TEXT_BUF      Text buffer ($2800-$BFFF)
+;   TEXT_BUF      Text buffer (page-aligned after code, up to $BFFF)
 ;   LINE_TBL      Line pointer table ($C000-$DFFF)
 ;   $E000-$EFFF   Scratch space
 ;   $F000+        Emulator I/O
@@ -219,3 +219,19 @@ str_untitled: .asciiz "[No Name]"
 
 ; Entry point address - emulator uses last 2 bytes of binary as reset vector
   .word editor_main
+
+; ============================================================================
+; TEXT_BUF - floating text buffer start address
+; ============================================================================
+; Page-aligned to the next page boundary after the end of program code.
+; This ensures TEXT_BUF automatically moves as the code grows, preventing
+; overlap between program code and the text buffer.
+_code_end:
+TEXT_BUF = _code_end + $00FF >> $08 << $08
+
+; Buffer size: normal build = up to $C000 (LINE_TBL), small build = 256 bytes
+  .ifndef small_buffer
+TEXT_LIMIT  = $C000  ; End of text buffer space (up to start of LINE_TBL)
+  .else
+TEXT_LIMIT  = TEXT_BUF + $0100  ; Small test buffer (256 bytes)
+  .endif

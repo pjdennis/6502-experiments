@@ -1,21 +1,15 @@
 ; Text buffer data structure and operations
 ;
 ; Memory layout:
-;   TEXT_BUF ($2800) - Start of text buffer (contiguous, newline-delimited)
-;   LINE_TBL ($C000) - Line pointer table (16-bit offsets, max 1024 lines)
+;   TEXT_BUF           - Start of text buffer (page-aligned, past end of code)
+;   LINE_TBL ($C000)   - Line pointer table (16-bit offsets, max 1024 lines)
 ;
 ; The text buffer stores all text contiguously. Lines are delimited by $0A.
 ; The line table stores 16-bit pointers to the start of each line.
 ; Insertions/deletions shift all text after the edit point.
-
-TEXT_BUF    = $2800  ; Start of text buffer (must be past end of program code)
-
-; Buffer size: normal build = ~38KB, small build = 256 bytes
-  .ifndef small_buffer
-TEXT_LIMIT  = $C000  ; End of text buffer space ($2800-$BFFF)
-  .else
-TEXT_LIMIT  = $2900  ; End of text buffer space (256 bytes: $2800-$28FF)
-  .endif
+;
+; TEXT_BUF and TEXT_LIMIT are defined at the end of editor.asm as floating
+; labels, so TEXT_BUF automatically adjusts as the code grows.
 
 LINE_TBL    = $C000  ; Line pointer table (2 bytes per entry)
 LINE_LIMIT  = $E000  ; End of line table (supports up to 4096 entries = 2048 lines, but
