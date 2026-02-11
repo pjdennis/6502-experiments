@@ -223,6 +223,16 @@ normal_move_right:
 
 normal_move_down:
   JSR get_count_byte     ; X = count
+  STX BUF_DELTA
+  JSR count_pending_key  ; X = pending matching keys
+  TXA
+  CLC
+  ADC BUF_DELTA          ; Total = count + pending
+  BCS .cap_down          ; Overflow -> cap at 255
+  TAX
+  JMP .down_loop
+.cap_down:
+  LDX #$FF
 .down_loop:
   STX BUF_TEMP           ; Save counter
   ; Check if there's a next line

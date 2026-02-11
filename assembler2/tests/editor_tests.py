@@ -1641,17 +1641,16 @@ class EditorTestRunner:
             expect_content_redraws=[True, False, False]
         )
 
-        # j with scroll: full repaint
+        # j with scroll: batched into single full repaint
         # 10 rows, 9 content rows. 9 j's on a 15-line file:
-        # j's 1-8 are cursor-only, j 9 triggers scroll (full repaint)
+        # All 9 j's are batched into one movement, triggering one scroll repaint
         self.run_test_screen(
             "Render opt: j scroll triggers repaint",
             make_lines(15),
             b"jjjjjjjjj:q!\r",
             expect_content_redraws=(
                 [True] +          # frame 0: initial
-                [False] * 8 +     # frames 1-8: cursor-only
-                [True]            # frame 9: scroll
+                [True]            # frame 1: batched j*9 with scroll
             )
         )
 
@@ -1975,14 +1974,14 @@ class EditorTestRunner:
 
         # Render optimization: batch join-lines reduces redraws
         # Start with 4 empty lines + content. Cursor at line 3 col 0.
-        # jjji enters insert at line 3.
+        # jjj batched into one move, i enters insert at line 3.
         # BS joins (empty line above), then 2 more BS batched
-        # Frame sequence: init(T), j(F), j(F), j(F), i(T), BS+batch(T), ESC(F)
+        # Frame sequence: init(T), jjj-batched(F), i(T), BS+batch(T), ESC(F)
         self.run_test_screen(
             "Render opt: batch join-lines reduces redraws",
             "\n\n\nHello\n",
             b"jjji\x08\x08\x08\x1b:q!\r",
-            expect_content_redraws=[True, False, False, False, True, True, False],
+            expect_content_redraws=[True, False, True, True, False],
         )
 
         # Batch join-lines correctness - delete 3 empty lines above
@@ -2026,6 +2025,72 @@ class EditorTestRunner:
             b"jjjji\x08\x08\x08\x08\x1b:wq\r",
             expected_content="\n\n\nCD\n"
         )
+
+        # ============================================================
+        # Batch movement tests (j/k and arrow keys)
+        # Consecutive identical movement keys are consumed in one
+        # operation, reducing frame count and improving scroll perf.
+        # ============================================================
+        self._group("Batch movement down:", leading_blank=True)
+
+        # Batch j keys: 5 j's on a 10-line file move to line 5
+        self.run_test_screen(
+            "Batch j moves correct number of lines",
+            make_lines(10),
+            b"jjjjj:q!\r",
+            expect_cursor=(5, 0),
+            expect_status_contains="COMMAND - 6,"
+        )
+
+        # Batch KEY_DOWN arrow keys
+        DOWN = b"\x1b[B"
+        self.run_test_screen(
+            "Batch down arrow moves correct lines",
+            make_lines(10),
+            DOWN * 5 + b":q!\r",
+            expect_cursor=(5, 0),
+            expect_status_contains="COMMAND - 6,"
+        )
+
+        # Batch j with scrolling: verify screen content
+        # 10 rows = 9 content rows. 11 j's on 15-line file -> line 12.
+        self.run_test_screen(
+            "Batch j with scrolling shows correct window",
+            make_lines(15),
+            b"jjjjjjjjjjj:q!\r",
+            expect_cursor=(8, 0),
+            expect_lines=[(i, f"Line {i+4}") for i in range(9)]
+        )
+
+        # Count prefix + batch: 3j with 2 pending j's = 5 total
+        self.run_test_screen(
+            "Count prefix + batch j combines",
+            make_lines(10),
+            b"3jjj:q!\r",
+            expect_cursor=(5, 0),
+            expect_status_contains="COMMAND - 6,"
+        )
+
+        # Render optimization: batch j reduces redraws
+        # 5 j's on a 10-line file (no scroll). Without batching: 6 frames.
+        # With batching: init(T) + batched jjjjj(F) = 2 frames
+        self.run_test_screen(
+            "Render opt: batch j no-scroll is single frame",
+            make_lines(10),
+            b"jjjjj:q!\r",
+            expect_content_redraws=[True, False]
+        )
+
+        # Render optimization: batch j with scroll is single repaint
+        # 11 j's on 15-line file triggers scroll, but only one frame
+        self.run_test_screen(
+            "Render opt: batch j scroll is single repaint",
+            make_lines(15),
+            b"jjjjjjjjjjj:q!\r",
+            expect_content_redraws=[True, True]
+        )
+
+        self._group("Batch movement up:", leading_blank=True)
 
         # ============================================================
         # Count prefix tests
