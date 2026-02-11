@@ -238,14 +238,14 @@ str_no_marks:     .asciiz "No marks set"
 ; Adjust marks based on line range and operation
 ; Input: BUF_SRC16 = start_line
 ;        BUF_DST16 = end_line (for delete) or start_line (for insert)
-;        BUF_TEMP = count
+;        BUF_TEMP16 = count (16-bit)
 ;        Carry flag: clear = add (insert), set = subtract (delete)
 ; Clobbers: A, X, Y
 mark_adjust_range:
   ; Prepare delta: positive for insert, negative for delete
-  LDA BUF_TEMP
+  LDA BUF_TEMP16
   STA MARK_DELTA16
-  LDA #0
+  LDA BUF_TEMP16 + 1
   STA MARK_DELTA16 + 1
   BCC .loop_start      ; Insert: use +count as-is
 
@@ -315,7 +315,7 @@ mark_adjust_range:
 
 ; Adjust marks after lines are deleted
 ; Input: A/X = first deleted line (16-bit low/high)
-;        BUF_TEMP = count of deleted lines
+;        BUF_TEMP16 = count of deleted lines (16-bit)
 ; Marks on [first_line, first_line+count): unset
 ; Marks >= first_line+count: subtract count
 ; Clobbers: A, X, Y
@@ -325,18 +325,13 @@ mark_adjust_delete:
 
   ; Compute end_line = first_line + count -> BUF_DST16
   CLC
-  LDA BUF_SRC16
-  ADC BUF_TEMP
-  STA BUF_DST16
-  LDA BUF_SRC16 + 1
-  ADC #0
-  STA BUF_DST16 + 1
+  ADC16 BUF_SRC16, BUF_TEMP16, BUF_DST16
 
   SEC                  ; Set carry for subtract
   JMP mark_adjust_range
 
 ; Adjust marks after lines are inserted
-; Input: A/X = at_line (16-bit low/high), BUF_TEMP = count of inserted lines
+; Input: A/X = at_line (16-bit low/high), BUF_TEMP16 = count of inserted lines (16-bit)
 ; Marks >= at_line: add count
 ; Clobbers: A, X, Y
 mark_adjust_insert:

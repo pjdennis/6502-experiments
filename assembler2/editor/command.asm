@@ -474,7 +474,9 @@ command_parse_range:
 
   ; Adjust marks before deletion (mark_adjust_delete clobbers BUF_SRC16/BUF_DST16)
   LDA YANK_LINES
-  STA BUF_TEMP
+  STA BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
   PUSH16 BUF_SRC16
   LDAX16 BUF_SRC16
   JSR mark_adjust_delete

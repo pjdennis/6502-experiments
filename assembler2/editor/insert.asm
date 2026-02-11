@@ -136,7 +136,9 @@ insert_newline:
 
   ; Adjust marks: BUF_DELTA lines inserted at FILE_LINE16+1
   LDA BUF_DELTA
-  STA BUF_TEMP
+  STA BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
   CLC
   ADCI16 FILE_LINE16, $0001, BUF_DST16
   LDAX16 BUF_DST16
@@ -317,7 +319,9 @@ insert_backspace:
 
   ; Adjust marks: BUF_DELTA lines deleted at FILE_LINE16+1
   LDA BUF_DELTA
-  STA BUF_TEMP
+  STA BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
   CLC
   ADCI16 FILE_LINE16, $0001, BUF_DST16
   LDAX16 BUF_DST16
@@ -369,7 +373,9 @@ insert_delete:
 
   ; Adjust marks: 1 line deleted at FILE_LINE16+1
   LDA #1
-  STA BUF_TEMP
+  STA BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
   CLC
   ADCI16 FILE_LINE16, $0001, BUF_DST16
   LDAX16 BUF_DST16

@@ -568,7 +568,9 @@ normal_d_key:
 
   ; Adjust marks before deletion
   LDA LINE_LEN16
-  STA BUF_TEMP
+  STA BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
   LDAX16 FILE_LINE16
   JSR mark_adjust_delete
 
@@ -660,7 +662,9 @@ normal_open_below:
 
   ; Adjust marks: new line inserted at FILE_LINE16+1
   LDA #1
-  STA BUF_TEMP
+  STA BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
   CLC
   ADCI16 FILE_LINE16, 1, BUF_DST16
   LDAX16 BUF_DST16
@@ -691,7 +695,9 @@ normal_open_above:
 
   ; Adjust marks: new line inserted at FILE_LINE16
   LDA #1
-  STA BUF_TEMP
+  STA BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
   LDAX16 FILE_LINE16
   JSR mark_adjust_insert
 
@@ -742,7 +748,9 @@ paste_adjust_marks:
 .cap:
   LDA #$FF
 .adjust:
-  STA BUF_TEMP
+  STA BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
   LDAX16 FILE_LINE16
   JSR mark_adjust_insert
   LDA #$FF
