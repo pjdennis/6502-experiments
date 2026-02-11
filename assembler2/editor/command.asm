@@ -96,16 +96,8 @@ command_handle:
 
 ; Show the ':' prompt on the status line
 command_show_prompt:
-  LDA SCREEN_ROWS
-  STA ANSI_ROW
-  LDA #1
-  STA ANSI_COL
-  JSR ansi_move_cursor
-  JSR ansi_clear_line
   LDA #':'
-  JSR write_b
-  JSR con_flush
-  RTS
+  JMP show_prompt
 
 ; Parse and execute the command in CMD_BUF
 command_parse:

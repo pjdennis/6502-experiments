@@ -108,6 +108,26 @@ write_fname:
 .done:
   RTS
 
+; Move cursor to status line and clear it
+; Clobbers A, Y
+status_line_clear:
+  LDA SCREEN_ROWS
+  STA ANSI_ROW
+  LDA #1
+  STA ANSI_COL
+  JSR ansi_move_cursor
+  JMP ansi_clear_line
+
+; Show prompt character on status line
+; A = prompt character (e.g. ':', '/')
+; Clobbers A, Y
+show_prompt:
+  PHA
+  JSR status_line_clear
+  PLA
+  JSR write_b
+  JMP con_flush
+
 ; Write A (0-255) as decimal digits, no leading zeros
 ; Clobbers A, X, Y
 write_byte_dec:

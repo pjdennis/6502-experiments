@@ -104,16 +104,8 @@ search_handle:
 
 ; Show the '/' prompt on the status line
 search_show_prompt:
-  LDA SCREEN_ROWS
-  STA ANSI_ROW
-  LDA #1
-  STA ANSI_COL
-  JSR ansi_move_cursor
-  JSR ansi_clear_line
   LDA #'/'
-  JSR write_b
-  JSR con_flush
-  RTS
+  JMP show_prompt
 
 ; Search forward from current line
 ; Scans from FILE_LINE16+1, wraps around to FILE_LINE16
@@ -279,14 +271,7 @@ search_in_line:
 
 ; Show "Pattern not found: <pattern>" on status line
 search_show_not_found:
-  ; Show prompt area
-  LDA SCREEN_ROWS
-  STA ANSI_ROW
-  LDA #1
-  STA ANSI_COL
-  JSR ansi_move_cursor
-  JSR ansi_clear_line
-
+  JSR status_line_clear
   PRINT_STR str_not_found
 
   ; Print the pattern
