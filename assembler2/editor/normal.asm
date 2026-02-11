@@ -719,7 +719,9 @@ normal_open_above:
 
 normal_paste_below:
   JSR get_count_byte         ; X = count
-  STX BUF_TEMP
+  STX BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
   STX NORMAL_TEMP            ; Save paste count
   JSR yank_paste_below_n
   BCS .paste_below_done
@@ -729,7 +731,9 @@ normal_paste_below:
 
 normal_paste_above:
   JSR get_count_byte         ; X = count
-  STX BUF_TEMP
+  STX BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
   STX NORMAL_TEMP            ; Save paste count
   JSR yank_paste_above_n
   BCS .paste_above_done

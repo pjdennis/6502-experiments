@@ -141,11 +141,13 @@ yank_get_size:
 ; Returns carry set = buffer full or empty yank, carry clear = success
 yank_paste_below:
   LDA #1
-  STA BUF_TEMP
+  STA BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
   ; Fall through
 
 ; Paste yank buffer below current line, N times in one batch operation
-; Input: BUF_TEMP = count of times to paste
+; Input: BUF_TEMP16 = count of times to paste (16-bit)
 ; Returns carry set = error (empty/full), carry clear = success
 yank_paste_below_n:
   JSR yank_paste_setup
@@ -188,11 +190,13 @@ yank_paste_below_n:
 ; Returns carry set = buffer full or empty yank, carry clear = success
 yank_paste_above:
   LDA #1
-  STA BUF_TEMP
+  STA BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
   ; Fall through
 
 ; Paste yank buffer above current line, N times in one batch operation
-; Input: BUF_TEMP = count of times to paste
+; Input: BUF_TEMP16 = count of times to paste (16-bit)
 ; Returns carry set = error (empty/full), carry clear = success
 yank_paste_above_n:
   JSR yank_paste_setup
@@ -217,7 +221,7 @@ yank_paste_above_n:
   RTS
 
 ; Compute yank size and total paste size
-; Input: BUF_TEMP = paste count
+; Input: BUF_TEMP16 = paste count (16-bit, preserved)
 ; Output: BUF_LEN16 = total size, YANK_SIZE16 = single size
 ; Returns carry set if yank buffer empty, carry clear if ready
 yank_paste_setup:
@@ -226,20 +230,33 @@ yank_paste_setup:
   RTS                         ; Empty yank, carry already set
 .has_data:
   CP16 BUF_LEN16, YANK_SIZE16 ; YANK_SIZE16 = single size
-  LDX BUF_TEMP
-  DEX
-  BEQ .done
+
+  ; Check if count is 1
+  CMPI16 BUF_TEMP16, 1
+  BEQ .done                   ; Count is 1, total size already set
+
+  ; Use stack to preserve count while we use it as loop counter
+  PUSH16 BUF_TEMP16           ; Save original count
+
+  ; Decrement for loop (already have one size in BUF_LEN16)
+  SEC
+  SBCI16 BUF_TEMP16, 1, BUF_TEMP16
+
 .calc:
   CLC
   ADC16 BUF_LEN16, YANK_SIZE16, BUF_LEN16
-  DEX
+  DEC16 BUF_TEMP16
+  TST16 BUF_TEMP16
   BNE .calc
+
+  POP16 BUF_TEMP16            ; Restore original count
+
 .done:
   CLC
   RTS
 
 ; Shift right, copy yank buffer N times into gap, rebuild lines
-; Input: BUF_PTR16 = insertion point, BUF_LEN16 = total size, BUF_TEMP = count
+; Input: BUF_PTR16 = insertion point, BUF_LEN16 = total size, BUF_TEMP16 = count (16-bit)
 ; Returns carry set = buffer full, carry clear = success
 yank_paste_core:
   ; Shift right to make room
@@ -253,10 +270,11 @@ yank_paste_core:
 
   ; Copy yank buffer into gap N times using mem_copy_down
   ; BUF_PTR16 = insertion point (gap start)
-  LDX BUF_TEMP
 .copy_loop:
-  TXA
-  PHA
+  ; Check if count is zero
+  TST16 BUF_TEMP16
+  BEQ .done
+
   ; Set up mem_copy_down: src=YANK_BUF, end=YANK_END16, dst=write_pos
   PUSH16 BUF_PTR16            ; Save write position
   CP16 BUF_PTR16, BUF_DST16   ; BUF_DST16 = write position
@@ -264,14 +282,16 @@ yank_paste_core:
   CP16 YANK_END16, BUF_PTR16  ; BUF_PTR16 = end of yank data
   JSR mem_copy_down            ; Preserves BUF_PTR16
   POP16 BUF_PTR16             ; Restore write position
+
   ; Advance write position by single size
   CLC
   ADC16 BUF_PTR16, YANK_SIZE16, BUF_PTR16
-  PLA
-  TAX
-  DEX
-  BNE .copy_loop
 
+  ; Decrement count and loop
+  DEC16 BUF_TEMP16
+  JMP .copy_loop
+
+.done:
   ; Rebuild lines once
   JSR buf_rebuild_lines
   CLC
