@@ -2,13 +2,13 @@
 
   .zeropage
 
-LAST_KEY:    .byte      ; Previous key for multi-key commands (dd, gg)
-LINE_LEN16:  .word      ; Cached length of current line (16-bit)
-DISPATCH_PTR16: .word    ; Pointer into dispatch table during scan
-JUMP_TARGET16:  .word    ; Target for indirect jump
-COUNT16:     .word      ; Accumulated count (0 = no count entered)
-COUNT_ACTIVE: .byte     ; $FF if digits are being entered, $00 otherwise
-NORMAL_TEMP: .byte      ; Temp byte for normal mode operations
+LAST_KEY:       .byte  ; Previous key for multi-key commands (dd, gg)
+LINE_LEN16:     .word  ; Cached length of current line (16-bit)
+DISPATCH_PTR16: .word  ; Pointer into dispatch table during scan
+JUMP_TARGET16:  .word  ; Target for indirect jump
+COUNT16:        .word  ; Accumulated count (0 = no count entered)
+COUNT_ACTIVE:   .byte  ; $FF if digits are being entered, $00 otherwise
+NORMAL_TEMP:    .byte  ; Temp byte for normal mode operations
 
   .code
 
