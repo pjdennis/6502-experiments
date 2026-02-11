@@ -359,10 +359,20 @@ insert_delete:
   CMP LINE_LEN
   BCS .early_done        ; At or past end of line
 
-  ; Delete one character at cursor position
-  ; TODO: Implement batching (requires multi-byte pushback for escape sequences)
-  LDA #1
-  STA BUF_DELTA
+  ; Calculate max deleteable = LINE_LEN - CURSOR_COL
+  LDA LINE_LEN
+  SEC
+  SBC CURSOR_COL
+  STA LINE_LEN              ; Reuse as cap
+
+  ; Count pending Delete keys, add 1 for current
+  JSR count_pending_key      ; X = pending count
+  INX
+  CPX LINE_LEN
+  BCC .cap_ok
+  LDX LINE_LEN
+.cap_ok:
+  STX BUF_DELTA
 
   ; Delete BUF_DELTA chars at cursor position
   JSR get_cursor_buf_ptr

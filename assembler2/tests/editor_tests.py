@@ -1906,6 +1906,19 @@ class EditorTestRunner:
             ]
         )
 
+        # Render optimization: batch Delete key in insert mode
+        # Frame 0: initial render (True)
+        # Frame 1: i enters insert (True - status bar)
+        # Frame 2: first Del + batch Del*2 (True)
+        # Frame 3: ESC exits insert (False - cursor only)
+        DEL = b"\x1b[3~"
+        self.run_test_screen(
+            "Render opt: batch insert Delete reduces redraws",
+            "Hello\n",
+            b"i" + DEL * 3 + b"\x1b:q!\r",
+            expect_content_redraws=[True, True, True, False],
+        )
+
         # Render optimization: batch Delete key in normal mode
         # Without batching: Del Del Del -> frames [init, Del, Del, Del] = 4 frames
         # With batching: frames [init, Del+batch_Del*2] = 2 frames
