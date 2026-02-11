@@ -453,6 +453,11 @@ command_parse_range:
 
   ; --- Range delete ---
 .range_do_delete:
+  LDA READONLY
+  BEQ .range_not_readonly
+  SET16 str_readonly, STR_PTR16
+  JMP show_status_message
+.range_not_readonly:
   ; Yank lines first (so user can paste them back)
   ; Save first line (yank_add_lines clobbers BUF_SRC16)
   PUSH16 BUF_SRC16

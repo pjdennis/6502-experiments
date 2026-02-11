@@ -1055,6 +1055,18 @@ class EditorTestRunner:
                 expect_unmodified=True
             )
 
+            # Read-only mode: :1,2d is blocked
+            # Multi-line content > 256 bytes to trigger truncation
+            large_multiline = ''.join(f"Line {i}\n" for i in range(1, 50))
+            self.run_test_small_buffer(
+                "Read-only mode blocks :1,2d",
+                large_multiline,
+                # 'x' dismisses truncation warning, :1,2d shows RO msg,
+                # 'x' dismisses that, :q! quits
+                b"x:1,2d\rx:q!\r",
+                expect_unmodified=True
+            )
+
             # Read-only mode: :q exits cleanly
             self.run_test_small_buffer(
                 "Read-only mode allows :q",
@@ -1236,6 +1248,15 @@ class EditorTestRunner:
             # Dismiss warning, try :w, dismiss read-only msg, :q! quits
             b"x:w\rx:q!\r",
             expect_ansi_contains="non-ASCII"
+        )
+
+        # Non-ASCII file is read-only (:1,1d blocked)
+        run_non_ascii_test(
+            "Non-ASCII file blocks :1,1d",
+            b"Hello\x80World\n",
+            # Dismiss warning, :1,1d shows read-only msg, dismiss, :q! quits
+            b"x:1,1d\rx:q!\r",
+            expect_ansi_contains="Read-only"
         )
 
         # Non-ASCII file: buffer is empty (reset), edits blocked
