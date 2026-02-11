@@ -431,7 +431,9 @@ command_parse_range:
 .range_cap:
   LDA #$FF
 .range_count_ok:
-  STA BUF_TEMP
+  STA BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
 
   ; Dispatch to yank or delete
   LDA CMD_IDX

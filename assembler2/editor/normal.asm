@@ -561,7 +561,9 @@ normal_d_key:
   JSR yank_clear
   JSR get_count_byte         ; X = count
   STX LINE_LEN16             ; LINE_LEN16 low byte = total lines to process
-  STX BUF_TEMP
+  STX BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
   LDAX16 FILE_LINE16
   JSR yank_add_lines
   BCS .yank_overflow
@@ -804,7 +806,9 @@ normal_y_key:
   ; Yank N lines starting at current line
   JSR yank_clear
   JSR get_count_byte         ; X = count (min 1, max 255)
-  STX BUF_TEMP
+  STX BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
   LDAX16 FILE_LINE16
   JSR yank_add_lines
   BCS .overflow

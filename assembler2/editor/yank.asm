@@ -29,26 +29,28 @@ yank_clear:
   RTS
 
 ; Add N contiguous lines to yank buffer in one bulk copy
-; Input: A/X = first line number (low/high), BUF_TEMP = count of lines
+; Input: A/X = first line number (low/high), BUF_TEMP16 = count of lines (16-bit)
 ; Clamps count to available lines. Uses mem_copy_down for page-optimized copy.
 ; Returns carry set = yank buffer full, carry clear = success
-; On success: YANK_END16 updated, YANK_LINES = actual lines copied
+; On success: YANK_END16 updated, YANK_LINES16 = actual lines copied (16-bit)
 yank_add_lines:
   STAX16 BUF_SRC16           ; BUF_SRC16 = first line number
 
   ; Clamp count: actual = min(count, LINE_COUNT16 - first_line)
   SEC
   SBC16 LINE_COUNT16, BUF_SRC16, BUF_LEN16  ; BUF_LEN16 = available lines
-  ; If available < count, use available
-  LDA BUF_LEN16 + 1
-  BNE .count_ok           ; Available >= 256, count (8-bit) is fine
-  LDA BUF_TEMP
-  CMP BUF_LEN16
-  BCC .count_ok
-  BEQ .count_ok
-  LDA BUF_LEN16
-  STA BUF_TEMP                ; Clamp count
+  ; If available < count, use available; otherwise use count
+  CMP16 BUF_TEMP16, BUF_LEN16
+  BCC .use_count            ; count < available, use count
+  BEQ .use_count            ; count == available, use count
+  ; count > available, use available (save to BUF_TEMP16)
+  CP16 BUF_LEN16, BUF_TEMP16
+  JMP .count_ok
+.use_count:
+  ; count <= available, use count (already in BUF_TEMP16)
+  CP16 BUF_TEMP16, BUF_LEN16
 .count_ok:
+  ; Now BUF_TEMP16 = actual line count, BUF_LEN16 = actual line count
 
   ; Look up LINE_TBL[first_line] → start address
   LDAX16 BUF_SRC16
@@ -57,12 +59,7 @@ yank_add_lines:
 
   ; Compute end line number = first_line + actual_count
   CLC
-  LDA BUF_SRC16
-  ADC BUF_TEMP
-  STA BUF_SRC16
-  LDA BUF_SRC16 + 1
-  ADC #0
-  STA BUF_SRC16 + 1          ; BUF_SRC16 = end line number
+  ADC16 BUF_SRC16, BUF_LEN16, BUF_SRC16  ; BUF_SRC16 = end line number
 
   ; If end line >= LINE_COUNT16, end address = BUF_END16
   CMP16 BUF_SRC16, LINE_COUNT16
@@ -105,10 +102,18 @@ yank_add_lines:
   CLC
   ADC16 YANK_END16, BUF_LEN16, YANK_END16
 
-  ; YANK_LINES = actual count
-  LDA BUF_TEMP
+  ; YANK_LINES16 = actual line count (in BUF_TEMP16, preserved from clamping)
+  CP16 BUF_TEMP16, YANK_LINES16
+  ; Also update old 8-bit YANK_LINES for compatibility (clamp to 255)
+  LDA BUF_TEMP16 + 1
+  BEQ .store_low
+  LDA #$FF
   STA YANK_LINES
-
+  JMP .done
+.store_low:
+  LDA BUF_TEMP16
+  STA YANK_LINES
+.done:
   CLC
   RTS
 
