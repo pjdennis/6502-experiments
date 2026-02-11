@@ -423,17 +423,8 @@ command_parse_range:
   SBC16 BUF_DST16, BUF_SRC16, BUF_LEN16
   INC16 BUF_LEN16
 
-  ; Cap count at 255
-  LDA BUF_LEN16 + 1
-  BNE .range_cap
-  LDA BUF_LEN16
-  JMP .range_count_ok
-.range_cap:
-  LDA #$FF
-.range_count_ok:
-  STA BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1
+  ; Copy full 16-bit count to BUF_TEMP16 (no 255 cap)
+  CP16 BUF_LEN16, BUF_TEMP16
 
   ; Dispatch to yank or delete
   LDA CMD_IDX
