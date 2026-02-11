@@ -55,26 +55,24 @@ buf_load_file:
   LDA #0
   STA BUF_TEMP            ; Clear truncation flag
 
+  LDY #0                  ; Y = page offset, set once
 .read_loop:
   LDA FILE_HANDLE
-  JSR read
+  JSR read                ; preserves X, Y
   BCS .read_done
-  ; Store byte in buffer
-  LDY #0
   STA (BUF_END16),Y
-  INC16 BUF_END16
-  ; Check for buffer overflow
+  INY
+  BNE .read_loop          ; Stay on same page
+  ; Page boundary (every 256 chars)
+  INC BUF_END16 + 1
   LDA BUF_END16 + 1
   CMP BUF_LIMIT
   BCC .read_loop
   ; Buffer full - file was truncated
   LDA #$FF
   STA BUF_TEMP
-  JMP .read_done
-
-.read_loop_2:
-  JMP .read_loop
 .read_done:
+  STY BUF_END16           ; Reconstruct full pointer
   ; Ensure buffer ends with newline
   SEC
   SBCI16 BUF_END16, $0001, BUF_PTR16
@@ -126,23 +124,22 @@ buf_save_file:
   STA FILE_HANDLE
   SET16 TEXT_BUF, BUF_PTR16
 
+  LDY #0                  ; Y = page offset, set once
 .write_loop:
-  ; Check if we've reached the end
-  LDA BUF_PTR16 + 1
+  CPY BUF_END16           ; Fast: compare low bytes
+  BNE .do_write
+  LDA BUF_PTR16 + 1       ; Only when low bytes match
   CMP BUF_END16 + 1
-  BCC .do_write
-  LDA BUF_PTR16
-  CMP BUF_END16
-  BCS .write_done
-
+  BEQ .write_done
 .do_write:
-  LDY #0
   LDA (BUF_PTR16),Y
   LDX FILE_HANDLE
-  JSR write
-  INC16 BUF_PTR16
+  JSR write               ; preserves Y
+  INY
+  BNE .write_loop         ; Stay on same page
+  ; Page boundary
+  INC BUF_PTR16 + 1
   JMP .write_loop
-
 .write_done:
   RTS
 
