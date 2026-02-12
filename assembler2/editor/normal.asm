@@ -1620,40 +1620,7 @@ do_db:
   JMP .db_done
 .db_not_bol:
 
-  ; Find backward word boundary starting from CURSOR_COL16 - 1
-  SEC
-  SBCI16 CURSOR_COL16, 1, BUF_LEN16
-
-  ; Skip whitespace backward
-.db_skip_ws:
-  JSR get_scan_buf_ptr
-  LDY #0
-  LDA (BUF_PTR16),Y
-  JSR char_class
-  CMP #0
-  BNE .db_found_nonws
-  TST16 BUF_LEN16
-  BEQ .db_have_start
-  DEC16 BUF_LEN16
-  JMP .db_skip_ws
-
-.db_found_nonws:
-  STA WORD_CLASS
-
-  ; Skip same-class chars backward
-.db_skip_same:
-  TST16 BUF_LEN16
-  BEQ .db_have_start
-  DEC16 BUF_LEN16
-  JSR get_scan_buf_ptr
-  LDY #0
-  LDA (BUF_PTR16),Y
-  JSR char_class
-  CMP WORD_CLASS
-  BEQ .db_skip_same
-  INC16 BUF_LEN16           ; Different class - word starts one to right
-
-.db_have_start:
+  JSR find_word_start_backward
   ; BUF_LEN16 = start position. Delete from start to cursor.
   ; Yank: source = line_ptr + start, count = cursor - start
   PUSH16 BUF_LEN16           ; Save start position
@@ -1780,38 +1747,7 @@ do_cb:
   JMP .cb_insert
 .cb_not_bol:
 
-  ; Find backward word boundary (same as db)
-  SEC
-  SBCI16 CURSOR_COL16, 1, BUF_LEN16
-
-.cb_skip_ws:
-  JSR get_scan_buf_ptr
-  LDY #0
-  LDA (BUF_PTR16),Y
-  JSR char_class
-  CMP #0
-  BNE .cb_found_nonws
-  TST16 BUF_LEN16
-  BEQ .cb_have_start
-  DEC16 BUF_LEN16
-  JMP .cb_skip_ws
-
-.cb_found_nonws:
-  STA WORD_CLASS
-
-.cb_skip_same:
-  TST16 BUF_LEN16
-  BEQ .cb_have_start
-  DEC16 BUF_LEN16
-  JSR get_scan_buf_ptr
-  LDY #0
-  LDA (BUF_PTR16),Y
-  JSR char_class
-  CMP WORD_CLASS
-  BEQ .cb_skip_same
-  INC16 BUF_LEN16
-
-.cb_have_start:
+  JSR find_word_start_backward
   ; Yank from start to cursor
   PUSH16 BUF_LEN16
   JSR get_scan_buf_ptr
@@ -1841,6 +1777,46 @@ do_cb:
   JMP clear_count
 
 ; --- Utilities ---
+
+; Find word start scanning backward from CURSOR_COL16 - 1
+; Output: BUF_LEN16 = column of word start
+; Assumes CURSOR_COL16 > 0 (caller checks)
+; Clobbers: A, X, Y, BUF_PTR16, WORD_CLASS
+find_word_start_backward:
+  SEC
+  SBCI16 CURSOR_COL16, 1, BUF_LEN16
+
+  ; Skip whitespace backward
+.fwsb_skip_ws:
+  JSR get_scan_buf_ptr
+  LDY #0
+  LDA (BUF_PTR16),Y
+  JSR char_class
+  CMP #0
+  BNE .fwsb_found_nonws
+  TST16 BUF_LEN16
+  BEQ .fwsb_done
+  DEC16 BUF_LEN16
+  JMP .fwsb_skip_ws
+
+.fwsb_found_nonws:
+  STA WORD_CLASS
+
+  ; Skip same-class chars backward
+.fwsb_skip_same:
+  TST16 BUF_LEN16
+  BEQ .fwsb_done
+  DEC16 BUF_LEN16
+  JSR get_scan_buf_ptr
+  LDY #0
+  LDA (BUF_PTR16),Y
+  JSR char_class
+  CMP WORD_CLASS
+  BEQ .fwsb_skip_same
+  INC16 BUF_LEN16           ; Different class - word starts one to right
+
+.fwsb_done:
+  RTS
 
 get_current_line_len:
   LDAX16 FILE_LINE16

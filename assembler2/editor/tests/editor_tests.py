@@ -4748,6 +4748,22 @@ class EditorTestRunner:
             expected_content="Xthree\n",
         )
 
+        # cb on all-whitespace line (cursor after spaces)
+        self.run_test(
+            "cb on whitespace-only content",
+            "   \n",
+            b"$cbX\x1b:wq\r",
+            expected_content="X \n",
+        )
+
+        # db at start of line stays put
+        self.run_test_screen(
+            "db at start of line is no-op",
+            "hello world\n",
+            b"db:q!\r",
+            expect_cursor=(0, 0),
+        )
+
         self._group("Backward search (?):", leading_blank=True)
 
         self.run_test_screen(
