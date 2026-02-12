@@ -4,11 +4,13 @@
 ; Pattern is stored in SEARCH_BUF for reuse with 'n' command.
 ;
 ; Memory layout:
-;   SEARCH_BUF  ($DF54) - Search pattern buffer (after MARK_TBL)
-;   SEARCH_MAX  (171)   - Maximum pattern length ($DFFF - $DF54 = $AB)
+;   SEARCH_BUF   ($DF54) - Search pattern buffer (after MARK_TBL)
+;   SEARCH_LIMIT ($E000) - One past last byte of search buffer
+;   SEARCH_MAX   (172)   - Maximum pattern length (SEARCH_LIMIT - SEARCH_BUF)
 
-SEARCH_BUF = $DF54
-SEARCH_MAX = 171        ; $DFFF - $DF54 (last usable byte before YANK_BUF page)
+SEARCH_BUF   = $DF54
+SEARCH_LIMIT = $E000
+SEARCH_MAX   = SEARCH_LIMIT - SEARCH_BUF
 
   .zeropage
 
