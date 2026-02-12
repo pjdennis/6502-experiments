@@ -1,0 +1,88 @@
+Assembler Version 20
+====================
+Assembled by: version 19 (both instgen and asm)
+
+Features Supported by This Assembler
+-------------------------------------
+All features from version 19, plus conditional assembly and variable
+argument count:
+
+Syntax:
+- Standard 6502 mnemonic syntax (LDA, STA, etc.)
+- All addressing modes (immediate, zero page, absolute, indexed, indirect)
+- DATA pseudo-instruction for raw byte emission
+- .data directive for byte/string data
+- Hex constants: $xx (1 byte) or $xxxx (2 bytes)
+- Character literals: 'x', '\n', '\\', '\''
+- Expression evaluation with + and - operators (left-to-right)
+- Quoted strings with escape sequences
+- Label definitions with PC value or explicit assignment
+- Local labels with . prefix
+- PC setting via: * = $xxxx (with zero-fill on pass 2)
+- Low byte (<) and high byte (>) operators
+- Comments with semicolons
+- Two-pass assembly with forward reference tracking
+- Automatic zero page vs absolute addressing
+
+Directives:
+- .include filename - includes contents of another file
+- .zeropage - switch to zero page section
+- .code - switch to code section
+- .data - declare raw byte data
+- .ifdef label - begin conditional block if label is defined
+- .endif - end conditional block
+
+Command line:
+- Variable argument count (2 or more arguments)
+- define:label - pre-define a label with value $0001
+
+Error handling: same as version 19, plus:
+- err_endif_without_ifdef ($17): .endif without matching .ifdef
+- err_unclosed_ifdef ($18): missing .endif at end of file
+- err_label_expected ($19): .ifdef without label name
+- err_invalid_arg ($10): replaces err_invalid_debug_arg with generic message
+
+New in this version (relative to version 19):
+- Conditional assembly with .ifdef/.endif
+  - COND_DEPTH tracks nesting depth
+  - SKIP_DEPTH records depth where skipping started
+  - When skipping, only .ifdef and .endif are processed (for nesting)
+  - Skip mode: lines parsed minimally to find directive keywords
+  - skip_token function added for efficient skipping in conditional blocks
+  - process_conditional_directive function dispatches ifdef/endif
+- Command line define:label support
+  - check_define_prefix parses "define:" prefix
+  - Defined labels added to hash table with value $0001
+  - Variable argument count via argc/argv (ARG_COUNT, ARG_INDEX)
+  - Supports multiple define: arguments
+- Error code $10 changed from "Invalid third argument" to generic
+  "Invalid argument"
+
+Features Used in This Assembler's Source Code
+----------------------------------------------
+- Standard 6502 mnemonic syntax
+- All addressing modes including indirect indexed
+- .data directive for byte/string data
+- Hex constants ($xx and $xxxx)
+- Character literals and character literal expressions
+- Expressions with + and - operators
+- Quoted strings with escape sequences
+- Labels and label assignments
+- Local labels with . prefix
+- PC setting (* = $2000 and * = $FFFC)
+- Low byte (<) and high byte (>) operators
+- Comments (;)
+- BRK with inline error code and message
+- .include directive
+- .zeropage and .code directives
+
+New syntax used in source (relative to version 19):
+- Expression evaluation with + operator in constant definitions
+  (e.g., FWDREF_LIST+$0200, TOKEN+$0100 for LHASHTAB)
+- Character literal arithmetic in expressions
+  (e.g., '9'-'0'+$01, 'F'-'A'+$01)
+
+Other source changes:
+- COND_DEPTH, SKIP_DEPTH, ARG_COUNT, ARG_INDEX zero page variables
+- Note: the source does NOT use .ifdef/.endif itself yet (no conditional
+  compilation in this version's source)

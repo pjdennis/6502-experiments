@@ -1,0 +1,83 @@
+Assembler Version 19
+====================
+Assembled by: version 18 (both instgen and asm)
+
+Features Supported by This Assembler
+-------------------------------------
+All features from version 18, plus expression evaluation:
+
+Syntax:
+- Standard 6502 mnemonic syntax (LDA, STA, etc.)
+- All addressing modes (immediate, zero page, absolute, indexed, indirect)
+- DATA pseudo-instruction for raw byte emission
+- Hex constants: $xx (1 byte) or $xxxx (2 bytes)
+- Character literals: 'x', '\n', '\\', '\'' (in expressions and immediate mode)
+- Quoted strings in DATA with escape sequences
+- Label definitions with PC value or explicit assignment (label = value)
+- Local labels with . prefix (.label), scoped to most recent global label
+- PC setting via: * = $xxxx (with zero-fill on pass 2)
+- Low byte (<) and high byte (>) operators (applied to entire expression result)
+- Expression evaluation with + and - operators (left-to-right, no precedence)
+- Mixed expressions: hex, labels, and character literals (e.g., '9'-'0'+$01)
+- Comments with semicolons
+- Two-pass assembly with forward reference tracking
+- Automatic zero page vs absolute addressing based on value
+
+Directives:
+- .include filename - includes contents of another file
+- .zeropage - switch to zero page section
+- .code - switch to code section
+- .data - declare raw byte data
+
+Error handling: same as version 18 (errors $01-$15), plus:
+- err_fwdref_tracking ($16): Internal error - forward ref tracking mismatch
+  between passes (debug verification)
+
+New in this version (relative to version 18):
+- Expression evaluation with + and - operators
+  - parse_term: parses a single value ($hex, 'char', label)
+  - parse_expression: chains terms with + and - operators
+  - parse_value: handles < > byte selectors then calls parse_expression
+  - Left-to-right evaluation, no operator precedence
+  - Character literals supported as expression terms
+  - Forward references propagate through expressions (if any term is forward
+    ref, entire expression is treated as forward ref)
+- OPERAND_L/OPERAND_H aliased to HEX2/HEX1 (shared storage)
+- EXPR_ACCU_L/EXPR_ACCU_H zero page variables for expression accumulator
+- EXPR_FWDREF for accumulated forward reference flag in expressions
+- EXPR_CARRY for saved carry from first term
+- FWDREF_PASS1_L/FWDREF_PASS1_H for forward ref pointer verification
+- + and - added as token terminators in compare_end_of_token
+- Forward reference count verified between pass 1 and pass 2
+- Source syntax changed from DATA to .data for data declarations
+
+Features Used in This Assembler's Source Code
+----------------------------------------------
+- Standard 6502 mnemonic syntax
+- All addressing modes including indirect indexed
+- .data directive for byte/string data (replaces DATA pseudo-instruction)
+- Hex constants ($xx and $xxxx)
+- Character literals in immediate mode (#'x', #'\n', etc.)
+- Quoted strings with escape sequences
+- Labels and label assignments
+- Local labels with . prefix
+- PC setting (* = $2000 and * = $FFFC)
+- Low byte (<) and high byte (>) operators
+- Comments (;)
+- BRK with inline error code and message
+- .include directive
+- .zeropage and .code directives
+
+New syntax used in source (relative to version 18):
+- .data directive replaces DATA pseudo-instruction throughout
+  (this is the key syntax migration in this version's source)
+
+Note: the source does NOT use expression evaluation (no + or - operators
+in operands). Expressions are a feature this assembler SUPPORTS for programs
+it assembles. Version 20 is the first version whose source uses expressions,
+since it is assembled by version 19.
+
+Other source changes:
+- OPERAND_L/OPERAND_H aliased to HEX2/HEX1 via = assignment
+- Expression accumulator variables (EXPR_ACCU_L/H, EXPR_FWDREF, EXPR_CARRY)
+- Forward reference tracking verification between passes

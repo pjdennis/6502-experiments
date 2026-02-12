@@ -1,0 +1,90 @@
+Assembler Version 11
+====================
+Assembled by: version 10 (both instgen and asm)
+
+Features Supported by This Assembler
+-------------------------------------
+All features from version 10, plus additional instructions:
+
+Syntax:
+- Non-standard (custom) mnemonic syntax: LDA#, LDAZ, STAZ, etc.
+- DATA pseudo-instruction for raw byte emission
+- Hex constants: $xx (1 byte) or $xxxx (2 bytes)
+- Quoted strings with \n escape
+- Label definitions with PC value or explicit assignment
+- PC setting via: * = $xxxx (with zero-fill on pass 2)
+- Low byte (<) and high byte (>) operators on labels
+- Relative branch (~label) syntax (also auto-detected via flags)
+- Labels as 2-byte operands
+- Comments with semicolons
+- Two-pass assembly
+- Flag-based operand type detection
+- Zero page addressing with plain hex values
+- .include directive for including external files
+
+Directives:
+- .include filename - includes contents of another file at current position
+
+Instruction set (expanded from v10):
+- ADC#, ADCZ, AND#, ASLA
+- BCC, BCS, BEQ, BITZ, BMI, BNE, BPL, BRK
+- CLC, CMPZ, CMP#, CMP,Y, CPXZ, CPYZ, CPY#
+- DECZ, DEX, DEY
+- EORZ
+- INCZ, INX, INY
+- JMP, JSR
+- LDA, LDX, LDY (absolute), LDA#, LDAZ(),Y, LDA,X, LDA,Y, LDAZ, LDAZ,X,
+  LDXZ, LDYZ, LDX#, LDY#
+- LSRA
+- ORAZ
+- PHA, PLA
+- ROLZ, RTS
+- SBC#, SBCZ, SEC
+- STA, STAZ(),Y, STA,X, STA,Y, STAZ, STAZ,X, STXZ, STYZ
+- TAX, TAY, TSX, TXA, TYA
+
+Error handling: same as version 10 (errors 1-C)
+
+New in this version (relative to version 10):
+- New instructions: CPXZ, CPYZ, DEY, LDXZ, LDYZ, STXZ, STYZ
+- Code modularization using .include: source split into multiple files
+  (asm.asm, common.asm, environment.asm)
+- Label hash table moved to $1F00 (from $4000)
+- Heap placed after program code (HEAP label at end of source) instead of
+  at a fixed address
+- Hash tables reduced to 128 entries (CPY# $80 loop termination)
+- calculate_hash preserves X register (TXA/PHA ... PLA/TAX)
+- instgen.asm also uses .include for shared code (environment.asm, common.asm)
+- Instruction hash table included from generated file (out/inst.asm.out)
+  via .include rather than cat/prepend
+- Environment I/O addresses documented in environment.asm with additional
+  entry points: argc ($F01B), argv ($F01E), openout ($F021), write ($F024)
+
+Features Used in This Assembler's Source Code
+----------------------------------------------
+- Non-standard mnemonic syntax (LDA#, LDAZ, STAZ, etc.)
+- DATA pseudo-instruction
+- Hex constants ($xx and $xxxx)
+- Quoted strings with escape sequences
+- Labels and label assignments
+- PC setting (* = $2000 and * = $FFFC for vectors)
+- Low byte (<) and high byte (>) operators
+- Labels as absolute 2-byte operands
+- Comments (;)
+- BRK with inline error code and message
+- .include directive (environment.asm, common.asm, out/inst.asm.out)
+- Zero page variables addressed without < prefix
+- Stack access via TSX and LDA,X for interrupt handler
+- File I/O: open, close, read
+- File stack operations (push/pop)
+
+New syntax used in source (relative to version 10):
+- .include directive (first version where the assembler's source uses .include)
+
+Other source changes:
+- Source split into: asm.asm (main), common.asm (shared code with instgen),
+  environment.asm (I/O address definitions)
+- instgen.asm also uses .include for common.asm and environment.asm
+- Instruction hash table loaded via .include out/inst.asm.out (no longer
+  prepended via cat)
+- HEAP label defined at end of code rather than at a fixed address

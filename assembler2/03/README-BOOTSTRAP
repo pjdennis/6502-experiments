@@ -1,0 +1,83 @@
+Assembler Version 03
+====================
+Assembled by: Version 02
+
+Features Supported by This Assembler
+-------------------------------------
+This version adds label constant assignments, origin setting, and byte
+selectors for extracting the low or high byte of a label's value. These
+features lay the groundwork for the next version to use named zero-page
+variables and set the program origin.
+
+Instruction mnemonics (expanded from version 02):
+  ADC# ADCZ ASLA BCC BCS BEQ BNE BRK CLC CMPZ,X CMP# CMP,Y DEY INCZ INX
+  INY JMP JSR LDAZ LDA# LDA(),Y LDA,Y LDX# LDY# ORAZ RTS SBC# SBCZ SEC
+  STA STA(),Y STAZ STAZ,X TYA
+
+  New instructions: BITZ (BIT zero-page), BMI, BPL, SBCZ (SBC zero-page)
+
+DATA directive:
+  DATA $XX ...        - emit hex bytes
+  DATA "string"       - emit ASCII string with \n and \\ escapes
+  DATA $XXXX          - emit 16-bit value (little-endian)
+  Mixed: DATA $XX "string" $XXXX on same line
+
+Operand types in instruction arguments:
+  $XX                 - 8-bit hex value
+  $XXXX               - 16-bit hex value (little-endian)
+  "string"            - ASCII string with \n, \\, and \" escapes
+  label               - 16-bit label reference (little-endian)
+  <label              - low byte of label value (1 byte emitted)
+  >label              - high byte of label value (1 byte emitted)
+
+Label features:
+  - Labels at column 0 bound to program counter
+  - label = $XXXX     - constant assignment (hex value only)
+  - * = $XXXX         - set program counter (origin directive)
+  - Linear search through label table at $3000
+  - Forward references NOT supported (single-pass)
+  - Duplicate label detection
+
+Error handling:
+  - Error 01: Label not found
+  - Error 02: Duplicate label
+  - Error 03: Opcode not found
+  - Error 04: Expected hex value
+
+Semicolon comments (to end of line).
+Output starts at $2000 (hardcoded in source).
+
+New in this version (relative to version 02):
+- < (low byte) selector for label operands
+- > (high byte) selector for label operands
+- label = $XXXX constant assignments
+- * = $XXXX origin/program counter setting
+- New instructions: BITZ, BMI, BPL, SBCZ
+- Separate findlabel and readandfindexistinglabel helper functions
+- Improved checkforend with common path for ; and newline
+- New error code for missing hex values
+
+Features Used in This Assembler's Source Code
+----------------------------------------------
+The source uses the same feature set as version 02 provides. Despite adding
+< and > byte selectors and label = $XXXX assignments, the source itself does
+not use these new features. Zero-page variables are still referenced by raw
+hex addresses (e.g., $02 instead of <TABL), and constants are listed as
+comments rather than actual assignments.
+
+Source features used:
+  - Non-standard instruction mnemonics (from version 02's table)
+  - Labels at column 0 for code locations
+  - Label references as 16-bit operands
+  - DATA directive with hex bytes and string literals
+  - Hex operands ($XX and $XXXX)
+  - String character literals in operands (e.g., CMP# "\n", CMP# "\\")
+  - Semicolon comments
+  - Branch targets as hardcoded hex offsets
+
+New syntax used in source (relative to version 02):
+- Character escape literals used directly in instruction operands
+  (e.g., CMP# "\n" instead of CMP# $0A, CMP# "\\" instead of CMP# $5C,
+  CMP# "\"" instead of CMP# $22). While technically supported by version 01
+  as string operands, this is the first version to use them extensively in
+  instruction operands for readability.

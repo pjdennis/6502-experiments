@@ -1,0 +1,68 @@
+Assembler Version 06
+====================
+Assembled by: version 05
+
+Features Supported by This Assembler
+-------------------------------------
+Same feature set as version 05, refactored with hash tables:
+
+Syntax:
+- Non-standard (custom) mnemonic syntax: LDA#, LDAZ, STAZ, STAZ(),Y, etc.
+- DATA pseudo-instruction for raw byte emission
+- Hex constants: $xx (1 byte) or $xxxx (2 bytes)
+- Quoted strings with \n escape: "text" and "\n"
+- Label definitions (at start of line) with PC value or explicit assignment: label = $xxxx
+- PC setting via: * = $xxxx
+- Low byte operator: <label
+- High byte operator: >label
+- Relative branch operator: ~label (used for branch targets)
+- Labels as 2-byte operands (absolute addresses)
+- Comments with semicolons
+- Two-pass assembly (pass 1 collects labels, pass 2 resolves and emits)
+
+Instruction set (non-standard mnemonics):
+- ADC#, ADCZ, AND#, ASLA
+- BCC, BCS, BEQ, BITZ, BMI, BNE, BPL, BRK
+- CLC, CMP#, CMP,Y
+- EORZ
+- INCZ, INX, INY
+- JMP, JSR
+- LDA#, LDAZ(),Y, LDA,X, LDA,Y, LDAZ, LDAZ,X, LDX#, LDY#
+- LSRA
+- ORAZ
+- PHA, PLA
+- RTS
+- SBC#, SBCZ, SEC
+- STA, STAZ(),Y, STA,X, STA,Y, STAZ, STAZ,X
+- TAY, TYA
+
+Error handling:
+- Label not found (error 1)
+- Duplicate label (error 2)
+- Opcode not found (error 3)
+- Expected hex value (error 4)
+
+New in this version (relative to version 05):
+- Hash table-based lookup for both labels and instructions (replacing linear table scan)
+- Scramble table for hash computation
+- Heap-based storage for hash table entries
+- Separate label and instruction hash tables (256-entry each)
+- PHA/PLA used for saving/restoring next character (instead of NEXTCHAR variable)
+
+Features Used in This Assembler's Source Code
+----------------------------------------------
+- Non-standard mnemonic syntax (LDA#, LDAZ, STAZ, etc.)
+- DATA pseudo-instruction
+- Hex constants ($xx and $xxxx)
+- Quoted strings with escape sequences
+- Labels and label assignments (= $xxxx)
+- PC setting (* = $2000)
+- Low byte (<) and high byte (>) operators on labels
+- Relative branch (~label) syntax
+- Two-byte label operands
+- Comments (;)
+- BRK with inline error code and message string
+- Last 2 bytes of output used as entry point address
+
+New syntax used in source (relative to version 05):
+- None

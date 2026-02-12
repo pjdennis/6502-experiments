@@ -1,0 +1,88 @@
+Assembler Version 04
+====================
+Assembled by: Version 03
+
+Features Supported by This Assembler
+-------------------------------------
+This version keeps the same instruction set as version 03 but does not add
+new assembler features compared to version 03. It serves as an intermediate
+version that uses version 03's new features (label assignments, byte
+selectors, origin setting) in its own source code, establishing patterns
+that version 05 will build upon.
+
+Instruction mnemonics (same set as version 03):
+  ADC# ADCZ ASLA BCC BCS BEQ BITZ BMI BNE BPL BRK CLC CMPZ,X CMP# CMP,Y
+  DEY INCZ INX INY JMP JSR LDA# LDA(),Y LDA,Y LDAZ LDX# LDY# ORAZ RTS
+  SBC# SBCZ SEC STA STA(),Y STAZ STAZ,X TYA
+
+DATA directive:
+  DATA $XX ...        - emit hex bytes
+  DATA "string"       - emit ASCII string with \n and \\ escapes
+  DATA $XXXX          - emit 16-bit value (little-endian)
+  Mixed: DATA $XX "string" $XXXX on same line
+
+Operand types in instruction arguments:
+  $XX                 - 8-bit hex value
+  $XXXX               - 16-bit hex value (little-endian)
+  "string"            - ASCII string with \n, \\, and \" escapes
+  label               - 16-bit label reference (little-endian)
+  <label              - low byte of label value (1 byte emitted)
+  >label              - high byte of label value (1 byte emitted)
+
+Label features:
+  - Labels at column 0 bound to program counter
+  - label = $XXXX     - constant assignment (hex value only)
+  - * = $XXXX         - set program counter (origin directive)
+  - Linear search through label table at $3000
+  - Forward references NOT supported (single-pass)
+  - Duplicate label detection
+
+Error handling:
+  - Error 01: Label not found
+  - Error 02: Duplicate label
+  - Error 03: Opcode not found
+  - Error 04: Expected hex value
+
+Semicolon comments (to end of line).
+
+New in this version (relative to version 03):
+- No new assembler features. The assembler capabilities are identical to
+  version 03. The significance is that the source code now uses version 03's
+  features (label assignments, byte selectors, origin setting), making the
+  code more maintainable and preparing for version 05's additions.
+
+Features Used in This Assembler's Source Code
+----------------------------------------------
+This is the first version whose source code takes full advantage of the
+assembler features added in version 03: label constant assignments for
+zero-page variables, < byte selectors for zero-page addressing, and > byte
+selectors for high-byte extraction.
+
+Source features used:
+  - Non-standard instruction mnemonics (from version 03's table)
+  - Labels at column 0 for code locations
+  - label = $XXXX constant assignments for all zero-page variables
+    (TEMP, NEXTCHAR, TABL, TABH, PCL, PCH, HEX1, HEX2, TOKEN)
+    and memory addresses (PC_START, LBTAB)
+  - Does NOT use * = $XXXX origin directive (a comment says ";  .org $2000"
+    but origin is set programmatically via PC_START label in start routine)
+  - <label byte selectors for zero-page operands (e.g., INCZ <PCL,
+    STAZ <TEMP, LDAZ <NEXTCHAR, LDA(),Y <TABL)
+  - >label byte selectors for high-byte extraction (e.g., LDA# >LBTAB,
+    LDA# >MNTAB, LDA# >PC_START)
+  - <label byte selectors for low-byte extraction (e.g., LDA# <LBTAB,
+    LDA# <MNTAB, LDA# <PC_START)
+  - Label references as 16-bit operands
+  - DATA directive with hex bytes and string literals
+  - Character string operands in instructions (e.g., CMP# "\n", CMP# "\\")
+  - Hex operands ($XX, $XXXX)
+  - Semicolon comments
+  - Branch targets as hardcoded hex offsets
+
+New syntax used in source (relative to version 03):
+- label = $XXXX constant assignments for zero-page variables and addresses
+- < byte selectors for zero-page addressing (e.g., STAZ <TABL instead of STAZ $02)
+- > byte selectors for high-byte extraction from labels
+
+Other source changes:
+- Named variables instead of raw hex addresses in all operands

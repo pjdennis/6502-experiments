@@ -1,0 +1,52 @@
+Bootstrap Chain Milestones
+==========================
+
+Version  Milestone
+-------  ---------
+00       Minimal DATA-only bootstrap (129 bytes)
+01       First non-standard 6502 mnemonics
+02       Source becomes human-readable assembly
+03       Byte selectors, label assignments, origin setting
+05       Two-pass assembly (forward references)
+07       Instruction table generator (instgen)
+10       .include directive
+11       First modularized source
+16       Standard 6502 syntax support
+17       Source transitions to standard syntax
+18       Forward reference tracking
+19       Expression evaluation
+20       .ifdef/.endif conditional assembly
+22       Macros
+23       Self-hosting, .ifndef/.else
+
+
+Source Syntax Evolution
+=======================
+Each version's source code can only use syntax supported by the assembler
+that builds it. This table shows when new syntax first appears in source.
+
+Version  New syntax used in source
+-------  -------------------------
+01       None (still DATA hex bytes, assembled by v00)
+02       Non-standard mnemonics, labels, label references
+03       Character escape literals in operands
+04       Label assignments (=), < > byte selectors
+05       * = origin directive
+06       None
+07       None
+08       Zero page addressing without < prefix
+09       None
+10       None
+11       .include directive
+12       None
+13       .zeropage and .code directives
+14       None
+15       Local labels (.prefix)
+16       None
+17       Standard 6502 syntax, #'x' character literals
+18       None
+19       .data directive (replaces DATA)
+20       Expression evaluation (+, -), character literal arithmetic
+21       .ifdef/.endif, define: command line
+22       Label colons, macros, << >> operators
+23       .byte, .word, .asciiz, decimal constants

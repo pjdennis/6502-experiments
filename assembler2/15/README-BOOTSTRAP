@@ -1,0 +1,92 @@
+Assembler Version 15
+====================
+Assembled by: version 14 (both instgen and asm)
+
+Features Supported by This Assembler
+-------------------------------------
+Same external features as version 14. Internal improvements to local label
+storage and hash table performance:
+
+Syntax:
+- Non-standard (custom) mnemonic syntax: LDA#, LDAZ, STAZ, etc.
+- DATA pseudo-instruction for raw byte emission
+- Hex constants: $xx (1 byte) or $xxxx (2 bytes)
+- Quoted strings with \n and \\ escapes
+- Label definitions with PC value or explicit assignment (including label refs)
+- PC setting via: * = $xxxx (with zero-fill on pass 2)
+- Low byte (<) and high byte (>) operators on labels
+- Relative branch labels (auto-detected via instruction flags)
+- Labels as 2-byte operands
+- Comments with semicolons
+- Two-pass assembly
+- .include directive
+- .zeropage and .code section directives
+- Command-line arguments: <assembler> <input> <output> [debug]
+- Local labels with . prefix, scoped to enclosing global label
+
+Directives:
+- .include filename
+- .zeropage - switches to zero page section
+- .code - switches back to code section
+
+Instruction set: same as version 14
+
+Error handling: same as version 14 (errors 1-10)
+
+New in this version (relative to version 14):
+- Heap-based global label storage: CURR_GLOBAL_HEAP_L/H stores a pointer to
+  the global label string on the heap, replacing the CURR_GLOBAL buffer at
+  $1C00. This eliminates the need to copy the global label name.
+- $01 escape format for local labels on the heap: local labels are stored as
+  $01 <addr_lo> <addr_hi> ".local" $00, where the address is a pointer to
+  the global label's heap entry. This allows scope verification during lookup
+  by comparing the stored pointer against CURR_GLOBAL_HEAP.
+- Cached hash optimization (CACHED_HASH): when a global label is defined,
+  its pre-ASL hash value is cached. Local label hash calculation starts from
+  this cached value rather than rehashing the global prefix, saving time.
+- Separate hash functions: calculate_hash (global labels, updates hash),
+  calculate_hash_local (starts from CACHED_HASH), and
+  calculate_hash_instruction (global hash, does NOT modify CACHED_HASH)
+- find_in_hash_instruction: separate lookup path for instruction opcodes that
+  avoids modifying the cached hash state
+- IS_LOCAL_LABEL flag: used throughout hash table code to select between
+  global and local label handling
+- compare_token handles both normal strings and $01 escape format, verifying
+  scope pointer matches before comparing local label names
+- Emit optimization: INC PC moved before PASS/IN_ZEROPAGE checks, with
+  write as a tail call instead of inline JSR
+- select_instruction_hash_table in common.asm clears IS_LOCAL_LABEL flag
+- commit_cached_hash function: explicitly saves pre-ASL hash to CACHED_HASH
+  when updating global label scope
+
+Features Used in This Assembler's Source Code
+----------------------------------------------
+- Non-standard mnemonic syntax (LDA#, LDAZ, STAZ, BITZ, INCZ, ASLZ, etc.)
+- DATA pseudo-instruction
+- DATA $00 for zero page variable allocation in .zeropage section
+- Hex constants ($xx and $xxxx)
+- Quoted strings with escape sequences
+- Labels and label assignments (label = value)
+- PC setting (* = $2000 and * = $FFFC for vectors)
+- Low byte (<) and high byte (>) operators
+- Labels as absolute 2-byte operands
+- Comments (;)
+- BRK with inline error code and message
+- .include directive (out/inst.asm.out, environment.asm, common.asm,
+  file_stack.asm, to_decimal.asm)
+- .zeropage and .code section directives
+- Local labels (.label syntax) throughout the codebase
+- Command-line arg access: argc, argv
+- File I/O: open, close, read, openout, write
+
+New syntax used in source (relative to version 14):
+- Local labels with . prefix (.loop, .done, .no_file, .skip, etc.) - first
+  version where the assembler's own source uses local labels
+
+Other source changes:
+- CURR_GLOBAL_HEAP_L/H replaces CURR_GLOBAL buffer ($1C00 no longer used)
+- IS_LOCAL_LABEL and CACHED_HASH variables added to zero page
+- LHASHTAB back at $1E00 (same as v14), TOKEN at $1D00
+- hash_table.asm significantly more complex: escape format storage/comparison,
+  three separate calculate_hash variants, find_in_hash split into
+  find_in_hash and find_in_hash_instruction with shared find_in_hash_common

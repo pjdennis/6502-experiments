@@ -1,0 +1,132 @@
+Assembler Version 21
+====================
+Assembled by: version 20 (asm and debug build both assembled by v20)
+
+Build notes: This version produces both a normal build (asm.out) and a
+debug build (asm_debug.out) using define:enable_debug. The debug build
+is used to assemble version 22.
+
+Features Supported by This Assembler
+-------------------------------------
+All features from version 20, plus macros, shift operators, and label
+scope management:
+
+Syntax:
+- Standard 6502 mnemonic syntax (LDA, STA, etc.)
+- All addressing modes (immediate, zero page, absolute, indexed, indirect)
+- DATA pseudo-instruction for raw byte emission
+- .data directive for byte/string data
+- Hex constants: $xx (1 byte) or $xxxx (2 bytes)
+- Character literals: 'x', '\n', '\\', '\''
+- Expression evaluation with +, -, <<, >> operators (left-to-right)
+- Quoted strings with escape sequences
+- Label definitions with PC value or explicit assignment
+- Optional colon after label definitions (label: as well as label)
+- Local labels with . prefix
+- PC setting via: * = $xxxx (with zero-fill on pass 2)
+- Low byte (<) and high byte (>) operators
+- Comments with semicolons
+- Two-pass assembly with forward reference tracking
+- Automatic zero page vs absolute addressing
+
+Directives:
+- .include filename - includes contents of another file
+- .zeropage - switch to zero page section
+- .code - switch to code section
+- .data - declare raw byte data
+- .ifdef label - begin conditional block if label is defined
+- .endif - end conditional block
+- .macro NAME [param1 param2 ...] - begin macro definition
+- .endmacro - end macro definition
+
+Command line:
+- Variable argument count (2 or more arguments)
+- define:label - pre-define a label with value $0001
+
+Macro system:
+- Macro definitions stored on heap with body text and parameter names
+- Invocation by macro name (parsed like instructions)
+- Text substitution of parameters during expansion
+- Local labels (.label) scoped per invocation via EXPANSION_ID
+- Recursion detection by walking scope stack
+- Memory source reading for macro body expansion
+- File stack used to push macro expansion as memory source
+
+Label scope:
+- Label scope stack (label_scope.asm) for macro expansions
+- SCOPE_STACK at $0400 (256 bytes, 5-byte entries)
+- EXPANSION_ID16 provides synthetic scope pointer for local labels
+- push_label_scope / pop_label_scope / init_scope_stack / reset_scope_stack
+
+Error handling: same as version 20, plus:
+- err_expected_shift ($1A): Expected << or >>
+- err_macro_name_expected ($1B): .macro without name
+- err_macro_shadows_instruction ($1C): Macro name conflicts with instruction
+- err_duplicate_macro ($1D): Duplicate macro definition
+- err_endmacro_without_macro: .endmacro outside macro definition
+- err_unclosed_macro: Missing .endmacro at end of file
+- err_recursive_macro: Recursive macro invocation detected
+- err_too_few_arguments: Not enough arguments for macro
+- err_too_many_arguments: Too many arguments for macro
+- Include traceback shows file inclusion chain on errors
+- err_fwdref_tracking now conditional (debug build only)
+
+New in this version (relative to version 20):
+- << and >> shift operators in expressions
+  - parse_term_with_selector for shift count parsing
+  - Added <, >, :, = as token terminators in compare_end_of_token
+- .macro/.endmacro directive support
+  - capture_macro_line captures macro body to heap during definition
+  - IN_MACRO_DEF flag tracks macro capture state
+  - MACRO_DEF_PTR_L/H points to heap during capture
+  - Macro bodies stored on heap with null-terminated parameter list
+- Macro expansion via expand_macro
+  - MACRO_ARG_BUF at $0500 for argument text during expansion
+  - push_memory_source pushes macro body onto file stack
+  - Parameter substitution during read_char from memory source
+  - MACRO_ENTRY_L/H for recursion detection
+- Label scope stack (new label_scope.asm module)
+  - SCOPE_STACK at $0400, 5-byte entries
+  - Synthetic EXPANSION_ID for local label scoping in macros
+  - FS_POP_MEMORY_HOOK = pop_label_scope for automatic cleanup
+- Optional colon after label definitions (label:)
+- NEXT_CHAR variable for single-character lookahead
+- CURR_OUT_FILE for output file handle (used by error handler)
+- read_char aliased to file_stack_read_char
+- Error handler shows include/expansion traceback
+
+Features Used in This Assembler's Source Code
+----------------------------------------------
+- Standard 6502 mnemonic syntax
+- All addressing modes including indirect indexed
+- .data directive for byte/string data
+- Hex constants ($xx and $xxxx)
+- Character literals and character literal expressions
+- Expressions with + and - operators
+- Quoted strings with escape sequences
+- Labels and label assignments (without colon suffix)
+- Local labels with . prefix
+- PC setting (* = $2000 and * = $FFFC)
+- Low byte (<) and high byte (>) operators
+- Comments (;)
+- BRK with inline error code and message
+- .include directive (environment.asm, common.asm, label_scope.asm,
+  file_stack.asm, errors.asm, fwdref.asm, to_decimal.asm, out/inst.asm.out)
+- .zeropage and .code directives
+- .ifdef enable_debug / .endif conditional compilation
+
+New syntax used in source (relative to version 20):
+- .ifdef/.endif conditional assembly (first version where source uses
+  conditional compilation)
+- define:enable_debug command-line argument for debug builds
+
+Other source changes:
+- label_scope.asm module included (new file)
+- SCOPE_STACK and MACRO_ARG_BUF memory regions defined
+- Multiple new zero page variables for macro support
+- FS_POP_MEMORY_HOOK and FS_ERR_NO_FILE configuration constants
+  for file_stack.asm
+- read_char aliased to file_stack_read_char via = assignment
+- Note: source does NOT use colon after labels (still space-terminated)
+- Note: source does NOT use << or >> operators
+- Note: source does NOT use macros in its own code
