@@ -57,6 +57,16 @@ normal_word_forward:
   STA RENDER_FLAG
   JSR get_count
   LDX BUF_TEMP16         ; X = count (low byte, capped at 255)
+  STX BUF_DELTA
+  JSR count_pending_key  ; X = pending matching 'w' keys
+  TXA
+  CLC
+  ADC BUF_DELTA          ; Total = count + pending
+  BCS .cap_w
+  TAX
+  JMP .w_loop
+.cap_w:
+  LDX #$FF
 
 .w_loop:
   STX NORMAL_TEMP         ; Save counter
@@ -144,6 +154,16 @@ normal_word_backward:
   STA RENDER_FLAG
   JSR get_count
   LDX BUF_TEMP16         ; X = count (low byte, capped at 255)
+  STX BUF_DELTA
+  JSR count_pending_key  ; X = pending matching 'b' keys
+  TXA
+  CLC
+  ADC BUF_DELTA          ; Total = count + pending
+  BCS .cap_b
+  TAX
+  JMP .b_loop
+.cap_b:
+  LDX #$FF
 
 .b_loop:
   STX NORMAL_TEMP         ; Save counter
@@ -218,6 +238,16 @@ normal_word_end:
   STA RENDER_FLAG
   JSR get_count
   LDX BUF_TEMP16         ; X = count (low byte, capped at 255)
+  STX BUF_DELTA
+  JSR count_pending_key  ; X = pending matching 'e' keys
+  TXA
+  CLC
+  ADC BUF_DELTA          ; Total = count + pending
+  BCS .cap_e
+  TAX
+  JMP .e_loop
+.cap_e:
+  LDX #$FF
 
 .e_loop:
   STX NORMAL_TEMP         ; Save counter
