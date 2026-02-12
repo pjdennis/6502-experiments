@@ -335,6 +335,79 @@ normal_word_end:
   DEC16 CURSOR_COL16
   JMP .e_done_one
 
+; --- Word boundary helpers (used by dw/db/cw/cb) ---
+
+; Skip forward past chars of WORD_CLASS, starting from BUF_LEN16
+; Input: BUF_LEN16 = start col, LINE_LEN16 = line length, WORD_CLASS = class to skip
+; Output: BUF_LEN16 = col after last same-class char
+;         Carry set = at/past end of line
+;         Carry clear = found different class, A = new class
+; Clobbers: A, X, Y, BUF_PTR16
+skip_word_class_forward:
+  INC16 BUF_LEN16
+  CMP16 BUF_LEN16, LINE_LEN16
+  BCS .swcf_at_end
+  JSR get_scan_buf_ptr
+  LDY #0
+  LDA (BUF_PTR16),Y
+  JSR char_class
+  CMP WORD_CLASS
+  BEQ skip_word_class_forward
+  CLC
+  RTS
+.swcf_at_end:
+  RTS
+
+; Find word start scanning backward from CURSOR_COL16 - 1
+; Output: BUF_LEN16 = column of word start
+; Assumes CURSOR_COL16 > 0 (caller checks)
+; Clobbers: A, X, Y, BUF_PTR16, WORD_CLASS
+find_word_start_backward:
+  SEC
+  SBCI16 CURSOR_COL16, 1, BUF_LEN16
+
+  ; Skip whitespace backward
+.fwsb_skip_ws:
+  JSR get_scan_buf_ptr
+  LDY #0
+  LDA (BUF_PTR16),Y
+  JSR char_class
+  CMP #0
+  BNE .fwsb_found_nonws
+  TST16 BUF_LEN16
+  BEQ .fwsb_done
+  DEC16 BUF_LEN16
+  JMP .fwsb_skip_ws
+
+.fwsb_found_nonws:
+  STA WORD_CLASS
+
+  ; Skip same-class chars backward
+.fwsb_skip_same:
+  TST16 BUF_LEN16
+  BEQ .fwsb_done
+  DEC16 BUF_LEN16
+  JSR get_scan_buf_ptr
+  LDY #0
+  LDA (BUF_PTR16),Y
+  JSR char_class
+  CMP WORD_CLASS
+  BEQ .fwsb_skip_same
+  INC16 BUF_LEN16           ; Different class - word starts one to right
+
+.fwsb_done:
+  RTS
+
+; Get buffer pointer at BUF_LEN16 offset on current line
+; Sets BUF_PTR16 = start of FILE_LINE16 + BUF_LEN16
+; Clobbers A, X, Y
+get_scan_buf_ptr:
+  LDAX16 FILE_LINE16
+  JSR buf_get_line_ptr
+  CLC
+  ADC16 BUF_LEN16, BUF_PTR16, BUF_PTR16
+  RTS
+
 ; --- ^ command: move to first non-blank character ---
 normal_first_nonblank:
   LDA #0
