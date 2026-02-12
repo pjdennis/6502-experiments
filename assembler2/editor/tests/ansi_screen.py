@@ -9,30 +9,35 @@ Supported sequences:
     ESC[{r};{c}H    - Cursor move (1-based)
     ESC[H           - Cursor home (1,1)
     ESC[K           - Clear to end of line
-    ESC[7m / ESC[0m - Reverse/normal video (tracked, not stored per-cell)
+    ESC[7m / ESC[0m - Reverse/normal video (tracked per-cell in attrs buffer)
     ESC[?25l        - Cursor hide
     ESC[?25h        - Cursor show (triggers frame snapshot)
 """
 
 
 class AnsiScreen:
+    ATTR_REVERSE = 0x01
+
     def __init__(self, rows, cols):
         self.rows = rows
         self.cols = cols
         self.buffer = [[' '] * cols for _ in range(rows)]
+        self.attrs = [[0] * cols for _ in range(rows)]
         self.cursor_row = 0  # 0-based
         self.cursor_col = 0
         self.reverse_video = False
         self.cursor_visible = True
         # Snapshot of last rendered frame (captured at ESC[?25h)
         self.frame_buffer = None
+        self.frame_attrs = None
         self.frame_cursor = (0, 0)
         # Per-frame tracking for render optimization tests
-        self.frames = []            # List of (buffer_copy, cursor_pos, content_touched)
+        self.frames = []            # List of (buffer_copy, cursor_pos, content_touched, attrs_copy)
         self.content_touched = set()  # Set of content row indices written this cycle
 
     def _clear_screen(self):
         self.buffer = [[' '] * self.cols for _ in range(self.rows)]
+        self.attrs = [[0] * self.cols for _ in range(self.rows)]
         self.content_touched = set(range(self.rows - 1))
 
     def _clear_to_eol(self):
@@ -42,6 +47,7 @@ class AnsiScreen:
                 self.content_touched.add(row)
             for c in range(self.cursor_col, self.cols):
                 self.buffer[row][c] = ' '
+                self.attrs[row][c] = 0
 
     def _move_cursor(self, row, col):
         self.cursor_row = row
@@ -55,14 +61,16 @@ class AnsiScreen:
         if self.cursor_row < self.rows - 1:
             self.content_touched.add(self.cursor_row)
         self.buffer[self.cursor_row][self.cursor_col] = ch
+        self.attrs[self.cursor_row][self.cursor_col] = self.ATTR_REVERSE if self.reverse_video else 0
         self.cursor_col += 1
 
     def _snapshot(self):
         """Capture current buffer and cursor as a frame."""
         self.frame_buffer = [row[:] for row in self.buffer]
+        self.frame_attrs = [row[:] for row in self.attrs]
         self.frame_cursor = (self.cursor_row, self.cursor_col)
         self.frames.append((self.frame_buffer, self.frame_cursor,
-                            self.content_touched))
+                            self.content_touched, self.frame_attrs))
         self.content_touched = set()
 
     def process(self, data: str) -> 'AnsiScreen':
@@ -175,6 +183,14 @@ class AnsiScreen:
         """Cursor (row, col) from last rendered frame, 0-based."""
         return self.frame_cursor
 
+    def is_reverse_at(self, row: int, col: int) -> bool:
+        """True if cell at (row, col) has reverse video in last rendered frame."""
+        if self.frame_attrs is None:
+            return False
+        if row < 0 or row >= self.rows or col < 0 or col >= self.cols:
+            return False
+        return (self.frame_attrs[row][col] & self.ATTR_REVERSE) != 0
+
     def dump(self) -> str:
         """Return a string representation of the last rendered frame for debugging."""
         if self.frame_buffer is None:
@@ -246,5 +262,21 @@ if __name__ == "__main__":
     s4.process("\x1b[2;1HWorld\x1b[K\x1b[?25h")
     assert s4.get_frame_count() == 3
     assert s4.was_content_redrawn(2) == True
+
+    # Test reverse video attribute tracking
+    s5 = AnsiScreen(3, 10)
+    s5.process("AB")
+    s5.process("\x1b[7m")   # reverse video on
+    s5.process("CD")
+    s5.process("\x1b[0m")   # normal video
+    s5.process("EF")
+    s5.process("\x1b[?25h")  # snapshot
+    assert s5.get_row_text(0) == "ABCDEF"
+    assert s5.is_reverse_at(0, 0) == False, "A should be normal"
+    assert s5.is_reverse_at(0, 1) == False, "B should be normal"
+    assert s5.is_reverse_at(0, 2) == True, "C should be reverse"
+    assert s5.is_reverse_at(0, 3) == True, "D should be reverse"
+    assert s5.is_reverse_at(0, 4) == False, "E should be normal"
+    assert s5.is_reverse_at(0, 5) == False, "F should be normal"
 
     print("All self-tests passed.")

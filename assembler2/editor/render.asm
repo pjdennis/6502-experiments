@@ -327,6 +327,7 @@ render_line_chars:
   LDY #0
 .loop:
   LDA (BUF_PTR16),Y
+  BMI .nonascii
   CMP #'\n'
   BEQ .done
   CMP #' '
@@ -344,6 +345,16 @@ render_line_chars:
   BCC .loop
 .done:
   RTS
+.nonascii:
+  TYA
+  PHA
+  JSR ansi_reverse_video
+  LDA #'?'
+  JSR write_b
+  JSR ansi_normal_video
+  PLA
+  TAY
+  JMP .next
 
 ; === Wrap utility functions ===
 

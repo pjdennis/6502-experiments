@@ -295,7 +295,10 @@ class EditorTestRunner:
 
         saved = ""
         if Path(input_file).exists():
-            saved = Path(input_file).read_text()
+            try:
+                saved = Path(input_file).read_text()
+            except UnicodeDecodeError:
+                saved = Path(input_file).read_bytes().decode('latin-1')
 
         ansi = output_file.read_bytes() if output_file.exists() else b""
 
@@ -312,7 +315,9 @@ class EditorTestRunner:
                         expect_ansi_contains: str = None,
                         expect_cursor_at_frame: list = None,
                         expect_lines_at_frame: list = None,
-                        expect_status_at_frame: list = None):
+                        expect_status_at_frame: list = None,
+                        initial_bytes: bytes = None,
+                        expect_reverse_at: list = None):
         """Run an editor test and verify screen state via ANSI output.
 
         Args:
@@ -331,12 +336,18 @@ class EditorTestRunner:
                 tuples - verify row content at specific frames (not just last)
             expect_status_at_frame: list of (frame_idx, substring) tuples -
                 verify status bar contains substring at specific frames
+            initial_bytes: raw bytes for initial file content (overrides
+                initial_content; use when content has non-UTF-8 bytes)
+            expect_reverse_at: list of (row, col, expected_bool) tuples -
+                verify reverse video attribute at specific cells
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir = Path(tmpdir)
             edit_file = tmpdir / "test.txt"
 
-            if initial_content is not None:
+            if initial_bytes is not None:
+                edit_file.write_bytes(initial_bytes)
+            elif initial_content is not None:
                 edit_file.write_text(initial_content)
             else:
                 edit_file.write_text("")
@@ -496,6 +507,16 @@ class EditorTestRunner:
                             f"Frame {frame_idx}: status bar expected "
                             f"substring {expected_substr!r} in "
                             f"{actual_text!r}\n"
+                            f"    Frame:\n{screen.dump()}")
+                        return
+
+            if expect_reverse_at is not None:
+                for row, col, expected_rev in expect_reverse_at:
+                    actual_rev = screen.is_reverse_at(row, col)
+                    if actual_rev != expected_rev:
+                        self._fail(name,
+                            f"Cell ({row},{col}): expected reverse="
+                            f"{expected_rev}, got {actual_rev}\n"
                             f"    Frame:\n{screen.dump()}")
                         return
 
@@ -3606,6 +3627,57 @@ class EditorTestRunner:
                 make_lines(99) +
                 ''.join(f"Line {i}\n" for i in range(400, 501))
             )
+        )
+
+        self._group("Screen state - non-ASCII display:", leading_blank=True)
+
+        # Single non-ASCII byte mid-line
+        self.run_test_screen(
+            "Non-ASCII byte displayed as reverse ?",
+            None,
+            b":q!\r",
+            initial_bytes=b"AB\x80CD\n",
+            expect_lines=[(0, "AB?CD")],
+            expect_reverse_at=[
+                (0, 0, False), (0, 1, False),
+                (0, 2, True),
+                (0, 3, False), (0, 4, False),
+            ]
+        )
+
+        # Multiple non-ASCII bytes
+        self.run_test_screen(
+            "Multiple non-ASCII bytes as reverse ?",
+            None,
+            b":q!\r",
+            initial_bytes=b"A\xFF\xFEB\n",
+            expect_lines=[(0, "A??B")],
+            expect_reverse_at=[
+                (0, 0, False),
+                (0, 1, True), (0, 2, True),
+                (0, 3, False),
+            ]
+        )
+
+        # Cursor movement past non-ASCII bytes (one column per byte)
+        self.run_test_screen(
+            "Cursor movement past non-ASCII bytes",
+            None,
+            b"lll:q!\r",
+            initial_bytes=b"A\x80\x90D\n",
+            expect_cursor=(0, 3),
+        )
+
+        # Non-ASCII at end of line with $ motion
+        self.run_test_screen(
+            "Non-ASCII at end of line with $ motion",
+            None,
+            b"$:q!\r",
+            initial_bytes=b"ABC\x80\n",
+            expect_cursor=(0, 3),
+            expect_reverse_at=[
+                (0, 3, True),
+            ]
         )
 
         print()
