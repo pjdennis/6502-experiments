@@ -100,17 +100,17 @@ clamp_cursor_col:
 
 ; Move down X lines (clamped to last line)
 ; Input: X = number of lines to move
-; Sets RENDER_FLAG=0 if any movement occurred
+; Sets RENDER_FLAG=0; ensure_cursor_visible upgrades to $FF if scroll needed
 ; Clobbers: A, X, BUF_TEMP, BUF_PTR16
 move_down_x:
+  LDA #0
+  STA RENDER_FLAG
 .loop:
   STX BUF_TEMP
   CLC
   ADCI16 FILE_LINE16, $0001, BUF_PTR16
   CMP16 BUF_PTR16, LINE_COUNT16
   BCS .done
-  LDA #0
-  STA RENDER_FLAG
   INC16 FILE_LINE16
   LDX BUF_TEMP
   DEX
@@ -120,15 +120,15 @@ move_down_x:
 
 ; Move up X lines (clamped to first line)
 ; Input: X = number of lines to move
-; Sets RENDER_FLAG=0 if any movement occurred
+; Sets RENDER_FLAG=0; ensure_cursor_visible upgrades to $FF if scroll needed
 ; Clobbers: A, X, BUF_TEMP
 move_up_x:
+  LDA #0
+  STA RENDER_FLAG
 .loop:
   STX BUF_TEMP
   TST16 FILE_LINE16
   BEQ .done
-  LDA #0
-  STA RENDER_FLAG
   DEC16 FILE_LINE16
   LDX BUF_TEMP
   DEX

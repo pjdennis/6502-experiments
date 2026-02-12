@@ -2020,6 +2020,40 @@ class EditorTestRunner:
             expect_content_redraws=[True, False, False, False, False]
         )
 
+        # k at first line: cursor-only (no movement, no repaint)
+        self.run_test_screen(
+            "Render opt: k at first line is cursor-only",
+            "Hello\n",
+            b"k:q!\r",
+            expect_content_redraws=[True, False]
+        )
+
+        # j at last line: cursor-only (no movement, no repaint)
+        self.run_test_screen(
+            "Render opt: j at last line is cursor-only",
+            "Hello\n",
+            b"j:q!\r",
+            expect_content_redraws=[True, False]
+        )
+
+        # Insert UP at first line: cursor-only
+        UP = b"\x1b[A"
+        self.run_test_screen(
+            "Render opt: insert UP at first line is cursor-only",
+            "Hello\n",
+            b"i" + UP + b"\x1b:q!\r",
+            expect_content_redraws=[True, False, False, False]
+        )
+
+        # Insert DOWN at last line: cursor-only
+        DOWN = b"\x1b[B"
+        self.run_test_screen(
+            "Render opt: insert DOWN at last line is cursor-only",
+            "Hello\n",
+            b"i" + DOWN + b"\x1b:q!\r",
+            expect_content_redraws=[True, False, False, False]
+        )
+
         # Insert char: only cursor's row is touched (not all rows)
         # i enters insert (cursor-only), 'X' inserts (cursor row + below)
         # render_current_line_and_status renders from cursor row downward
