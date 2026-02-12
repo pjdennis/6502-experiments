@@ -134,6 +134,12 @@ pending_key_dispatch:
   BEQ .exec_gg
   CMP #'y'
   BEQ .exec_yy
+  CMP #'c'
+  BEQ .exec_cc
+  CMP #'>'
+  BEQ .exec_indent
+  CMP #'<'
+  BEQ .exec_unindent
 .not_repeat:
   ; Key doesn't match pending - reset all state, no side effects
   JSR clear_count
@@ -146,6 +152,12 @@ pending_key_dispatch:
   JMP do_gg
 .exec_yy:
   JMP do_yy
+.exec_cc:
+  JMP do_cc
+.exec_indent:
+  JMP do_indent
+.exec_unindent:
+  JMP do_unindent
 .exec_mark_set:
   JMP do_mark_set
 .exec_mark_goto:
@@ -203,6 +215,10 @@ normal_editing_keys:
   .byte 'r'         .word normal_r_key
   .byte 's'         .word normal_substitute_char
   .byte 'C'         .word normal_change_to_eol
+  .byte 'S'         .word normal_substitute_line
+  .byte 'c'         .word normal_c_key
+  .byte '>'         .word normal_gt_key
+  .byte '<'         .word normal_lt_key
   .byte 0           ; End sentinel
 
 normal_other_keys:
@@ -1266,6 +1282,198 @@ do_replace_char:
   BNE .replace_loop
 
 .replace_done:
+  JMP clear_count
+
+; --- Change line (cc) ---
+; Yank line(s), delete, insert newline, enter insert at col 0.
+normal_c_key:
+  LDA #'c'
+  JMP set_pending_key
+
+; S = substitute line (alias for cc with count=1)
+normal_substitute_line:
+  LDA #1
+  STA BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16+1
+  JMP cc_have_count
+
+do_cc:
+  JSR get_count
+cc_have_count:
+  JSR yank_clear
+  LDAX16 FILE_LINE16
+  JSR yank_add_lines
+  BCS .cc_overflow
+
+  LDAX16 FILE_LINE16
+  JSR mark_adjust_delete
+
+  LDAX16 FILE_LINE16
+  JSR buf_delete_lines
+
+  ; Clamp file line if past end
+  CMP16 FILE_LINE16, LINE_COUNT16
+  BCC .cc_insert_nl
+  SEC
+  SBCI16 LINE_COUNT16, 1, FILE_LINE16
+
+.cc_insert_nl:
+  ; Check if current line is already empty (from buf_delete_lines empty handling)
+  JSR get_current_line_len
+  STAX16 LINE_LEN16
+  TST16 LINE_LEN16
+  BEQ .cc_already_empty
+
+  ; Insert a blank line at FILE_LINE16
+  LDAX16 FILE_LINE16
+  JSR buf_get_line_ptr       ; BUF_PTR16 = start of current line
+  LDA #'\n'
+  JSR buf_insert_char
+  BCS .cc_buf_full
+  JSR buf_rebuild_lines
+
+  ; Adjust marks for inserted line
+  LDA #1
+  STA BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16+1
+  LDAX16 FILE_LINE16
+  JSR mark_adjust_insert
+
+.cc_already_empty:
+  LDA #0
+  STA_LH16 CURSOR_COL16
+  JSR ensure_cursor_visible
+  LDA #MODE_INSERT
+  STA MODE
+  LDA #$FF
+  STA MODIFIED
+  JMP clear_count
+
+.cc_overflow:
+  JSR yank_clear
+  SET16 str_yank_full, STR_PTR16
+  JSR show_status_message
+  JMP clear_count
+
+.cc_buf_full:
+  SET16 str_buffer_full, STR_PTR16
+  JSR show_status_message
+  JMP clear_count
+
+; --- Indent (>>) ---
+INDENT_WIDTH = 2
+
+normal_gt_key:
+  LDA #'>'
+  JMP set_pending_key
+
+normal_lt_key:
+  LDA #'<'
+  JMP set_pending_key
+
+do_indent:
+  JSR get_count
+  ; BUF_TEMP16 = count of lines to indent
+
+  ; Clamp count to available lines
+  SEC
+  SBC16 LINE_COUNT16, FILE_LINE16, BUF_LEN16
+  CMP16 BUF_TEMP16, BUF_LEN16
+  BCC .indent_count_ok
+  CP16 BUF_LEN16, BUF_TEMP16
+.indent_count_ok:
+  ; BUF_TEMP16 = clamped count
+  ; Use LINE_LEN16 as current line number counter
+  CP16 FILE_LINE16, LINE_LEN16
+
+.indent_loop:
+  TST16 BUF_TEMP16
+  BEQ .indent_done_loop
+
+  ; Get line pointer
+  LDAX16 LINE_LEN16
+  JSR buf_get_line_ptr       ; BUF_PTR16 = start of line
+
+  ; Insert 2 spaces at start of line
+  LDA #INDENT_WIDTH
+  STA BUF_DELTA
+  LDA #' '
+  STA BATCH_BUF
+  STA BATCH_BUF+1
+  JSR buf_insert_chars
+  BCS .indent_done_loop      ; Buffer full, stop
+  JSR buf_rebuild_lines
+
+  INC16 LINE_LEN16
+  DEC16 BUF_TEMP16
+  JMP .indent_loop
+
+.indent_done_loop:
+  ; Adjust cursor col
+  CLC
+  ADCI16 CURSOR_COL16, INDENT_WIDTH, CURSOR_COL16
+  JSR ensure_cursor_visible
+  LDA #$FF
+  STA MODIFIED
+  JMP clear_count
+
+; --- Unindent (<<) ---
+do_unindent:
+  JSR get_count
+
+  ; Clamp count to available lines
+  SEC
+  SBC16 LINE_COUNT16, FILE_LINE16, BUF_LEN16
+  CMP16 BUF_TEMP16, BUF_LEN16
+  BCC .unindent_count_ok
+  CP16 BUF_LEN16, BUF_TEMP16
+.unindent_count_ok:
+  CP16 FILE_LINE16, LINE_LEN16
+
+.unindent_loop:
+  TST16 BUF_TEMP16
+  BEQ .unindent_done_loop
+
+  LDAX16 LINE_LEN16
+  JSR buf_get_line_ptr
+
+  ; Count leading spaces (up to INDENT_WIDTH)
+  LDY #0
+  LDA (BUF_PTR16),Y
+  CMP #' '
+  BNE .unindent_no_remove
+  INY
+  LDA (BUF_PTR16),Y
+  CMP #' '
+  BNE .unindent_one
+  LDA #2
+  JMP .unindent_do_remove
+.unindent_one:
+  LDA #1
+.unindent_do_remove:
+  STA BUF_DELTA
+  JSR buf_delete_chars
+  JSR buf_rebuild_lines
+
+.unindent_no_remove:
+  INC16 LINE_LEN16
+  DEC16 BUF_TEMP16
+  JMP .unindent_loop
+
+.unindent_done_loop:
+  ; Adjust cursor col (subtract INDENT_WIDTH, clamp to 0)
+  SEC
+  SBCI16 CURSOR_COL16, INDENT_WIDTH, CURSOR_COL16
+  BCS .unindent_col_ok
+  LDA #0
+  STA_LH16 CURSOR_COL16
+.unindent_col_ok:
+  JSR clamp_cursor_col
+  JSR ensure_cursor_visible
+  LDA #$FF
+  STA MODIFIED
   JMP clear_count
 
 ; --- Utilities ---

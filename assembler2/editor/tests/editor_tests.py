@@ -4298,6 +4298,94 @@ class EditorTestRunner:
             expected_content="X\n"
         )
 
+        self._group("Change line (cc, S):", leading_blank=True)
+
+        self.run_test(
+            "cc deletes line and enters insert",
+            "hello\nworld\n",
+            b"ccXY\x1b:wq\r",
+            expected_content="XY\nworld\n"
+        )
+
+        self.run_test(
+            "2cc changes 2 lines",
+            "one\ntwo\nthree\n",
+            b"2ccXY\x1b:wq\r",
+            expected_content="XY\nthree\n"
+        )
+
+        self.run_test(
+            "S substitutes single line",
+            "hello\nworld\n",
+            b"SXY\x1b:wq\r",
+            expected_content="XY\nworld\n"
+        )
+
+        self.run_test(
+            "cc on single line",
+            "hello\n",
+            b"ccXY\x1b:wq\r",
+            expected_content="XY\n"
+        )
+
+        self._group("Indent (>>, <<):", leading_blank=True)
+
+        self.run_test(
+            ">> indents single line by 2 spaces",
+            "hello\n",
+            b">>:wq\r",
+            expected_content="  hello\n"
+        )
+
+        self.run_test(
+            ">> on single line indents correctly",
+            "one\ntwo\n",
+            b">>:wq\r",
+            expected_content="  one\ntwo\n"
+        )
+
+        self.run_test(
+            ">> on multiple lines with count",
+            "one\ntwo\nthree\n",
+            b"2>>:wq\r",
+            expected_content="  one\n  two\nthree\n"
+        )
+
+        self.run_test(
+            "<< unindents single line",
+            "  hello\n",
+            b"<<:wq\r",
+            expected_content="hello\n"
+        )
+
+        self.run_test(
+            "<< with partial indent (1 space)",
+            " hello\n",
+            b"<<:wq\r",
+            expected_content="hello\n"
+        )
+
+        self.run_test(
+            "<< on line with no indent",
+            "hello\n",
+            b"<<:wq\r",
+            expected_content="hello\n"
+        )
+
+        self.run_test(
+            "<< on multiple lines with count",
+            "  one\n  two\nthree\n",
+            b"2<<:wq\r",
+            expected_content="one\ntwo\nthree\n"
+        )
+
+        self.run_test(
+            ">> then << round-trips",
+            "hello\n",
+            b">><<:wq\r",
+            expected_content="hello\n"
+        )
+
         self._group("First non-blank (^):", leading_blank=True)
 
         self.run_test_screen(
