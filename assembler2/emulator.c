@@ -1054,6 +1054,9 @@ static int csi_param_count = 0;
 static int csi_param_value = -1;
 static int csi_private = 0;
 static unsigned char current_attr = 0;
+static char serial_inject_buf[32];
+static int serial_inject_pos = 0;
+static int serial_inject_len = 0;
 
 void get_terminal_size(int *rows, int *cols);
 void console_resize(int rows, int cols);
@@ -1230,6 +1233,15 @@ void console_put_char(unsigned char ch) {
     }
 }
 
+void serial_inject_response(const char *str) {
+    int len = (int)strlen(str);
+    if (len > (int)sizeof(serial_inject_buf) - serial_inject_len) {
+        len = (int)sizeof(serial_inject_buf) - serial_inject_len;
+    }
+    memcpy(serial_inject_buf + serial_inject_len, str, (size_t)len);
+    serial_inject_len += len;
+}
+
 void console_handle_csi(unsigned char final) {
     if (csi_private) {
         csi_private = 0;
@@ -1307,6 +1319,14 @@ void console_handle_csi(unsigned char final) {
         }
         case 'K': { // EL
             console_clear_line(params[0]);
+            break;
+        }
+        case 'n': { // DSR
+            if (params[0] == 6) {
+                char buf[32];
+                snprintf(buf, sizeof(buf), "\x1b[%d;%dR", cursor_row + 1, cursor_col + 1);
+                serial_inject_response(buf);
+            }
             break;
         }
         case 'm': { // SGR
@@ -1630,6 +1650,8 @@ uint8_t read6502(uint16_t address) {
             return 0xFF;  // In file mode, always ready
         }
     } else if (address == port_serial_ready) {        // serial_ready
+        if (serial_inject_pos < serial_inject_len)
+            return 0xFF;
         if (serial_baud > 0 && clockticks6502 < serial_read_available_at)
             return 0x00;
         if (terminal_interactive) {
@@ -1642,6 +1664,16 @@ uint8_t read6502(uint16_t address) {
         }
         return 0x00;
     } else if (address == port_serial_data) {         // serial_data
+        if (serial_inject_pos < serial_inject_len) {
+            uint8_t ch = (uint8_t)serial_inject_buf[serial_inject_pos++];
+            if (serial_inject_pos >= serial_inject_len) {
+                serial_inject_pos = 0;
+                serial_inject_len = 0;
+            }
+            if (serial_baud > 0)
+                serial_read_available_at = clockticks6502 + serial_cycles_per_byte;
+            return ch;
+        }
         if (terminal_interactive) {
             struct timespec before, after;
             if (target_mhz > 0) clock_gettime(CLOCK_MONOTONIC, &before);
@@ -1750,6 +1782,9 @@ void write6502(uint16_t address, uint8_t value) {
             }
         } else if (terminal_mode && serial_output_file) {
             fputc(value, serial_output_file);
+        }
+        if (terminal_mode) {
+            console_handle_byte(value);
         }
         if (serial_baud > 0)
             serial_write_ready_at = clockticks6502 + serial_cycles_per_byte;
@@ -2161,6 +2196,12 @@ int main(int argc, char **argv) {
             fprintf(stderr, "could not open input file: %s\n", input_filename);
             return 1;
         }
+    }
+
+    if (terminal_mode) {
+        int rows, cols;
+        get_terminal_size(&rows, &cols);
+        console_resize(rows, cols);
     }
 
     if (console_mode) {

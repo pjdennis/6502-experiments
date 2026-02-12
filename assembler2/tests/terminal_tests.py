@@ -37,11 +37,13 @@ class TerminalTestRunner:
         self.assembler = base_dir / "23" / "out" / "asm.out"
         self.test_asm = base_dir / "tests" / "terminal_test.asm"
         self.test_bin = base_dir / "tests" / "out" / "terminal_test.out"
+        self.dsr_test_asm = base_dir / "tests" / "terminal_dsr_test.asm"
+        self.dsr_test_bin = base_dir / "tests" / "out" / "terminal_dsr_test.out"
         self.passed = 0
         self.failed = 0
 
-    def build_test_program(self):
-        """Assemble the terminal test program."""
+    def _assemble(self, src, dst):
+        """Assemble a test program."""
         if not self.emulator.exists():
             print(f"Error: Emulator not found at {self.emulator}")
             return False
@@ -49,17 +51,67 @@ class TerminalTestRunner:
             print(f"Error: Assembler not found at {self.assembler}")
             return False
 
-        self.test_bin.parent.mkdir(exist_ok=True)
+        dst.parent.mkdir(exist_ok=True)
         result = subprocess.run(
             [str(self.emulator), str(self.assembler),
-             str(self.test_asm), str(self.test_bin)],
+             str(src), str(dst)],
             capture_output=True, text=True
         )
         if result.returncode != 0:
-            print(f"Error: Failed to assemble terminal test program:")
+            print(f"Error: Failed to assemble {src.name}:")
             print(result.stderr)
             return False
         return True
+
+    def build_test_program(self):
+        """Assemble the terminal test program."""
+        return self._assemble(self.test_asm, self.test_bin)
+
+    def build_dsr_test_program(self):
+        """Assemble the DSR test program."""
+        return self._assemble(self.dsr_test_asm, self.dsr_test_bin)
+
+    def run_dsr_test(self, name: str, extra_args: list = None,
+                     expected_output: bytes = None):
+        """Run the DSR test program and verify output."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            keys_file = tmpdir / "input.bin"
+            output_file = tmpdir / "output.bin"
+            keys_file.write_bytes(b"")  # No input needed
+
+            cmd = [str(self.emulator), str(self.dsr_test_bin),
+                   "--load", "0400", "--terminal",
+                   "--input", str(keys_file),
+                   "--output", str(output_file)]
+            if extra_args:
+                cmd.extend(extra_args)
+
+            try:
+                result = subprocess.run(cmd, capture_output=True, timeout=10)
+            except subprocess.TimeoutExpired:
+                self._fail(name, "Timed out (infinite loop?)")
+                return
+            except Exception as e:
+                self._fail(name, f"Error: {e}")
+                return
+
+            if result.returncode != 0:
+                self._fail(name,
+                    f"Expected exit code 0, got {result.returncode}\n"
+                    f"  stderr: {result.stderr.decode('utf-8', errors='replace')}")
+                return
+
+            output = output_file.read_bytes() if output_file.exists() else b""
+            if expected_output is not None:
+                if output != expected_output:
+                    self._fail(name,
+                        f"Output mismatch:\n"
+                        f"  Expected: {expected_output!r}\n"
+                        f"  Actual:   {output!r}")
+                    return
+
+            self._pass(name)
 
     def run_terminal(self, input_bytes: bytes, tmpdir: Path,
                      extra_args: list = None) -> tuple:
@@ -201,6 +253,35 @@ class TerminalTestRunner:
             expected_output=b"Ok",
             extra_args=["--cpu-mhz", "1"]
         )
+
+        # DSR tests
+        if not self.build_dsr_test_program():
+            print("Skipping DSR tests (build failed)")
+        else:
+            # Output prefix: ESC[999;999H + ESC[6n (command bytes written before response)
+            cmd_prefix = b"\x1b[999;999H\x1b[6n"
+
+            # DSR basic response: default 24x80
+            self.run_dsr_test(
+                "DSR basic response (24x80)",
+                extra_args=["--rows", "24", "--cols", "80"],
+                expected_output=cmd_prefix + b"\x1b[24;80R"
+            )
+
+            # DSR with custom size
+            self.run_dsr_test(
+                "DSR custom size (10x40)",
+                extra_args=["--rows", "10", "--cols", "40"],
+                expected_output=cmd_prefix + b"\x1b[10;40R"
+            )
+
+            # DSR with baud rate
+            self.run_dsr_test(
+                "DSR with baud rate",
+                extra_args=["--rows", "10", "--cols", "40",
+                            "--cpu-mhz", "1", "--baud", "9600"],
+                expected_output=cmd_prefix + b"\x1b[10;40R"
+            )
 
         # Print results
         total = self.passed + self.failed
