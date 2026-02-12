@@ -61,7 +61,8 @@ class TerminalTestRunner:
             return False
         return True
 
-    def run_terminal(self, input_bytes: bytes, tmpdir: Path) -> tuple:
+    def run_terminal(self, input_bytes: bytes, tmpdir: Path,
+                     extra_args: list = None) -> tuple:
         """Run the test program in terminal mode with file I/O.
 
         Returns (exit_code, output_bytes).
@@ -70,12 +71,13 @@ class TerminalTestRunner:
         output_file = tmpdir / "output.bin"
         keys_file.write_bytes(input_bytes)
 
-        result = subprocess.run(
-            [str(self.emulator), str(self.test_bin), "--load", "0400",
-             "--terminal", "--input", str(keys_file),
-             "--output", str(output_file)],
-            capture_output=True, timeout=10
-        )
+        cmd = [str(self.emulator), str(self.test_bin), "--load", "0400",
+               "--terminal", "--input", str(keys_file),
+               "--output", str(output_file)]
+        if extra_args:
+            cmd.extend(extra_args)
+
+        result = subprocess.run(cmd, capture_output=True, timeout=10)
 
         output = output_file.read_bytes() if output_file.exists() else b""
         return result.returncode, output
@@ -89,14 +91,35 @@ class TerminalTestRunner:
         self.failed += 1
         print(f"  {Colors.RED}FAIL{Colors.NC} {name}: {reason}")
 
+    def run_emulator_args_test(self, name: str, extra_args: list,
+                               expect_exit: int = 0):
+        """Test emulator CLI argument validation (no test program needed)."""
+        cmd = [str(self.emulator), str(self.test_bin), "--load", "0400",
+               "--terminal"] + extra_args
+        try:
+            result = subprocess.run(cmd, capture_output=True, timeout=10)
+        except subprocess.TimeoutExpired:
+            self._fail(name, "Timed out")
+            return
+        except Exception as e:
+            self._fail(name, f"Error: {e}")
+            return
+        if result.returncode != expect_exit:
+            self._fail(name,
+                f"Expected exit code {expect_exit}, got {result.returncode}")
+            return
+        self._pass(name)
+
     def run_test(self, name: str, input_bytes: bytes,
                  expected_output: bytes = None,
-                 expect_exit: int = 0):
+                 expect_exit: int = 0,
+                 extra_args: list = None):
         """Run a terminal test case."""
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir = Path(tmpdir)
             try:
-                exit_code, output = self.run_terminal(input_bytes, tmpdir)
+                exit_code, output = self.run_terminal(input_bytes, tmpdir,
+                                                      extra_args=extra_args)
             except subprocess.TimeoutExpired:
                 self._fail(name, "Timed out (infinite loop?)")
                 return
@@ -154,6 +177,29 @@ class TerminalTestRunner:
             "CR/LF echo",
             input_bytes=b"ab\r\ncd\x04",
             expected_output=b"ab\r\ncd"
+        )
+
+        # Baud rate: --baud without --cpu-mhz or --mhz should error
+        self.run_emulator_args_test(
+            "Baud without clock errors",
+            ["--baud", "9600"],
+            expect_exit=1
+        )
+
+        # Baud rate: echo still works with --baud and --cpu-mhz
+        self.run_test(
+            "Echo with baud rate",
+            input_bytes=b"Hi\x04",
+            expected_output=b"Hi",
+            extra_args=["--cpu-mhz", "1", "--baud", "9600"]
+        )
+
+        # --cpu-mhz alone doesn't break existing tests
+        self.run_test(
+            "cpu-mhz without baud",
+            input_bytes=b"Ok\x04",
+            expected_output=b"Ok",
+            extra_args=["--cpu-mhz", "1"]
         )
 
         # Print results

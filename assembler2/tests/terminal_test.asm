@@ -13,7 +13,9 @@ main:
   CMP #$04            ; Ctrl+D (EOT)?
   BEQ .quit
 
+.write:
   JSR serial_write    ; Echo the byte
+  BCS .write          ; Retry if not accepted
   JMP .loop
 
 .quit:
