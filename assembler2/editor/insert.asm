@@ -492,23 +492,24 @@ insert_move_right:
   JMP ensure_cursor_visible
 
 insert_home:
+  LDA #0
+  STA RENDER_FLAG
   TST16 CURSOR_COL16
   BEQ .done            ; Already at column 0
   LDA #0
-  STA RENDER_FLAG
   STA_LH16 CURSOR_COL16
   JSR ensure_cursor_visible
 .done:
   RTS
 
 insert_end:
+  LDA #0
+  STA RENDER_FLAG
   JSR get_current_line_len
   STAX16 LINE_LEN16
   CMP16 LINE_LEN16, CURSOR_COL16
   BEQ .done            ; Already at end
   BCC .done
-  LDA #0
-  STA RENDER_FLAG
   CP16 LINE_LEN16, CURSOR_COL16
   JSR ensure_cursor_visible
 .done:

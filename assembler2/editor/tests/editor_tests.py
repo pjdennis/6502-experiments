@@ -2000,6 +2000,26 @@ class EditorTestRunner:
             expect_content_redraws=[True, False, False]
         )
 
+        # Insert HOME at col 0: cursor-only (already at start)
+        # i enters insert (F), HOME at col 0 is no-op (F), ESC (F)
+        HOME = b"\x1b[H"
+        self.run_test_screen(
+            "Render opt: insert HOME at col 0 is cursor-only",
+            "Hello\n",
+            b"i" + HOME + b"\x1b:q!\r",
+            expect_content_redraws=[True, False, False, False]
+        )
+
+        # Insert END at end of line: cursor-only (already at end)
+        # $ (F), a enters insert at end (F), END at EOL is no-op (F), ESC (F)
+        END = b"\x1b[F"
+        self.run_test_screen(
+            "Render opt: insert END at EOL is cursor-only",
+            "Hello\n",
+            b"$a" + END + b"\x1b:q!\r",
+            expect_content_redraws=[True, False, False, False, False]
+        )
+
         # Insert char: only cursor's row is touched (not all rows)
         # i enters insert (cursor-only), 'X' inserts (cursor row + below)
         # render_current_line_and_status renders from cursor row downward
