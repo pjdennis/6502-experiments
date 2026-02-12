@@ -158,15 +158,7 @@ search_forward:
   RTS
 
 .found:
-  ; Move cursor to match
-  CP16 SEARCH_LINE16, FILE_LINE16
-  LDA SEARCH_COL
-  STA CURSOR_COL16
-  LDA #0
-  STA CURSOR_COL16 + 1
-  JSR ensure_cursor_visible
-  JSR clamp_cursor_col
-  RTS
+  JMP search_move_to_match
 
 ; Search backward from current line
 ; Scans from FILE_LINE16-1, wraps around to FILE_LINE16
@@ -215,15 +207,18 @@ search_backward:
   RTS
 
 .found:
-  ; Move cursor to match
+  JMP search_move_to_match
+
+; Move cursor to search match position
+; SEARCH_LINE16 = line of match, SEARCH_COL = column of match
+search_move_to_match:
   CP16 SEARCH_LINE16, FILE_LINE16
   LDA SEARCH_COL
   STA CURSOR_COL16
   LDA #0
   STA CURSOR_COL16 + 1
   JSR ensure_cursor_visible
-  JSR clamp_cursor_col
-  RTS
+  JMP clamp_cursor_col
 
 ; Search for pattern in line SEARCH_LINE16
 ; Returns carry clear = found (SEARCH_COL set), carry set = not found
