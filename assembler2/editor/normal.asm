@@ -365,11 +365,15 @@ do_dd:
   JMP show_yank_overflow
 
 normal_enter_insert:
+  LDA #0
+  STA RENDER_FLAG
   LDA #MODE_INSERT
   STA MODE
   JMP clear_count
 
 normal_enter_insert_after:
+  LDA #0
+  STA RENDER_FLAG
   JSR get_current_line_len
   STAX16 LINE_LEN16
   TST16 LINE_LEN16
@@ -385,6 +389,8 @@ normal_enter_insert_after:
   JMP clear_count
 
 normal_enter_insert_eol:
+  LDA #0
+  STA RENDER_FLAG
   JSR get_current_line_len
   STAX16 CURSOR_COL16
   JSR ensure_cursor_visible

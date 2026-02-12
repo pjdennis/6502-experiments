@@ -1911,16 +1911,16 @@ class EditorTestRunner:
             "Render opt: insert LEFT at col 0 is cursor-only",
             "Hello\n",
             b"i" + LEFT + b"\x1b:q!\r",
-            expect_content_redraws=[True, True, False, False]
+            expect_content_redraws=[True, False, False, False]
         )
 
         # Insert RIGHT at end-of-line: cursor-only
-        # $=cursor-only, a=full repaint (enters insert), RIGHT at EOL=cursor-only, ESC=cursor-only
+        # $=cursor-only, a=cursor-only (enters insert), RIGHT at EOL=cursor-only, ESC=cursor-only
         self.run_test_screen(
             "Render opt: insert RIGHT at EOL is cursor-only",
             "Hello\n",
             b"$a" + RIGHT + b"\x1b:q!\r",
-            expect_content_redraws=[True, False, True, False, False]
+            expect_content_redraws=[True, False, False, False, False]
         )
 
         # j without scroll: cursor-only
@@ -1968,24 +1968,39 @@ class EditorTestRunner:
             expect_content_redraws=[True, False]
         )
 
-        # ESC from insert mode: cursor-only
-        # i enters insert (full repaint), ESC exits (cursor-only)
+        # i enters insert mode: cursor-only (only status bar changes)
         self.run_test_screen(
-            "Render opt: ESC from insert is cursor-only",
+            "Render opt: i enter insert is cursor-only",
             "Hello\n",
             b"i\x1b:q!\r",
-            expect_content_redraws=[True, True, False]
+            expect_content_redraws=[True, False, False]
+        )
+
+        # a enters insert mode: cursor-only
+        self.run_test_screen(
+            "Render opt: a enter insert is cursor-only",
+            "Hello\n",
+            b"a\x1b:q!\r",
+            expect_content_redraws=[True, False, False]
+        )
+
+        # A enters insert mode: cursor-only
+        self.run_test_screen(
+            "Render opt: A enter insert is cursor-only",
+            "Hello\n",
+            b"A\x1b:q!\r",
+            expect_content_redraws=[True, False, False]
         )
 
         # Insert char: only cursor's row is touched (not all rows)
-        # i enters insert (full repaint), 'X' inserts (cursor row + below)
+        # i enters insert (cursor-only), 'X' inserts (cursor row + below)
         # render_current_line_and_status renders from cursor row downward
         # to handle line unwrap correctly, so all rows from 0 are touched
         self.run_test_screen(
             "Render opt: insert char redraws from cursor",
             "Hello\nWorld\n",
             b"iX\x1b:q!\r",
-            expect_content_redraws=[True, True, True, False],
+            expect_content_redraws=[True, False, True, False],
             expect_content_rows=[(2, set(range(9)))]
         )
 
@@ -1995,7 +2010,7 @@ class EditorTestRunner:
             "Render opt: backspace redraws from cursor",
             "Hello\nWorld\n",
             b"li\x08\x1b:q!\r",
-            expect_content_redraws=[True, False, True, True, False],
+            expect_content_redraws=[True, False, False, True, False],
             expect_content_rows=[(3, set(range(9)))]
         )
 
@@ -2013,7 +2028,7 @@ class EditorTestRunner:
             "Render opt: Enter in insert is full repaint",
             "Hello\nWorld\n",
             b"i\r\x1b:q!\r",
-            expect_content_redraws=[True, True, True, False]
+            expect_content_redraws=[True, False, True, False]
         )
 
         # Backspace at col 0 (join lines): full repaint
@@ -2021,7 +2036,7 @@ class EditorTestRunner:
             "Render opt: backspace join-lines is full repaint",
             "Hello\nWorld\n",
             b"ji\x08\x1b:q!\r",
-            expect_content_redraws=[True, False, True, True, False]
+            expect_content_redraws=[True, False, False, True, False]
         )
 
         # ============================================================
@@ -2033,14 +2048,14 @@ class EditorTestRunner:
 
         # Render optimization: batch insert reduces content redraws
         # Frame 0: initial render (True)
-        # Frame 1: 'i' enters insert mode (True - status bar changes)
+        # Frame 1: 'i' enters insert mode (False - cursor+status only)
         # Frame 2: first char 'X' inserted, then Y and Z batched (True)
         # Frame 3: ESC exits insert (False - cursor only)
         self.run_test_screen(
             "Render opt: batch insert reduces redraws",
             "Hello\n",
             b"iXYZ\x1b:q!\r",
-            expect_content_redraws=[True, True, True, False],
+            expect_content_redraws=[True, False, True, False],
         )
 
         # Batch insert mid-line correctness
@@ -2079,14 +2094,14 @@ class EditorTestRunner:
         # Frame 1: l (False - cursor only)
         # Frame 2: l (False - cursor only)
         # Frame 3: l (False - cursor only)
-        # Frame 4: i enters insert mode (True - status bar)
+        # Frame 4: i enters insert mode (False - cursor+status only)
         # Frame 5: first BS deletes, then 2 more batched (True)
         # Frame 6: ESC exits insert (False - cursor only)
         self.run_test_screen(
             "Render opt: batch backspace reduces redraws",
             "Hello\n",
             b"llli\x08\x08\x08\x1b:q!\r",
-            expect_content_redraws=[True, False, False, False, True, True, False],
+            expect_content_redraws=[True, False, False, False, False, True, False],
         )
 
         # Batch backspace correctness
@@ -2205,7 +2220,7 @@ class EditorTestRunner:
 
         # Render optimization: batch Delete key in insert mode
         # Frame 0: initial render (True)
-        # Frame 1: i enters insert (True - status bar)
+        # Frame 1: i enters insert (False - cursor+status only)
         # Frame 2: first Del + batch Del*2 (True)
         # Frame 3: ESC exits insert (False - cursor only)
         DEL = b"\x1b[3~"
@@ -2213,7 +2228,7 @@ class EditorTestRunner:
             "Render opt: batch insert Delete reduces redraws",
             "Hello\n",
             b"i" + DEL * 3 + b"\x1b:q!\r",
-            expect_content_redraws=[True, True, True, False],
+            expect_content_redraws=[True, False, True, False],
         )
 
         # Render optimization: batch Delete key in normal mode
@@ -2238,13 +2253,13 @@ class EditorTestRunner:
         self._group("Batch Enter:", leading_blank=True)
 
         # Render optimization: batch Enter reduces redraws
-        # Frame 0: initial (True), Frame 1: i enters insert (True),
+        # Frame 0: initial (True), Frame 1: i enters insert (False),
         # Frame 2: first Enter + batch Enter*2 (True), Frame 3: ESC (False)
         self.run_test_screen(
             "Render opt: batch Enter reduces redraws",
             "Hello\n",
             b"i\r\r\r\x1b:q!\r",
-            expect_content_redraws=[True, True, True, False],
+            expect_content_redraws=[True, False, True, False],
         )
 
         # Batch Enter correctness - 3 Enters create 3 empty lines before content
@@ -2274,12 +2289,12 @@ class EditorTestRunner:
         # Start with 4 empty lines + content. Cursor at line 3 col 0.
         # jjj batched into one move, i enters insert at line 3.
         # BS joins (empty line above), then 2 more BS batched
-        # Frame sequence: init(T), jjj-batched(F), i(T), BS+batch(T), ESC(F)
+        # Frame sequence: init(T), jjj-batched(F), i(F), BS+batch(T), ESC(F)
         self.run_test_screen(
             "Render opt: batch join-lines reduces redraws",
             "\n\n\nHello\n",
             b"jjji\x08\x08\x08\x1b:q!\r",
-            expect_content_redraws=[True, False, True, True, False],
+            expect_content_redraws=[True, False, False, True, False],
         )
 
         # Batch join-lines correctness - delete 3 empty lines above
@@ -2664,34 +2679,34 @@ class EditorTestRunner:
         )
 
         # Render optimization: batch insert down arrows reduce redraws
-        # i enters insert (T), then 5 batched DOWN arrows no-scroll (F), ESC (F)
+        # i enters insert (F), then 5 batched DOWN arrows no-scroll (F), ESC (F)
         self.run_test_screen(
             "Render opt: batch insert down no-scroll",
             make_lines(10),
             b"i" + DOWN * 5 + b"\x1b:q!\r",
-            expect_content_redraws=[True, True, False, False]
+            expect_content_redraws=[True, False, False, False]
         )
 
         # Render optimization: batch insert down arrows with scroll
-        # 15-line file, 10 rows. i(T), then 11 DOWN arrows batch into one
+        # 15-line file, 10 rows. i(F), then 11 DOWN arrows batch into one
         # scroll repaint(T), ESC(F). Without batching: each DOWN is a
         # separate frame, first 8 are no-scroll(F) then 3 scroll(T).
         self.run_test_screen(
             "Render opt: batch insert down scroll is single repaint",
             make_lines(15),
             b"i" + DOWN * 11 + b"\x1b:q!\r",
-            expect_content_redraws=[True, True, True, False]
+            expect_content_redraws=[True, False, True, False]
         )
 
         # Render optimization: batch insert up arrows with scroll
-        # G(T) scrolls to bottom, i(T), 12 UP arrows batch into one
+        # G(T) scrolls to bottom, i(F), 12 UP arrows batch into one
         # scroll repaint(T), ESC(F). Without batching: each UP is a
         # separate frame, first ~5 are no-scroll(F) then rest scroll(T).
         self.run_test_screen(
             "Render opt: batch insert up scroll is single repaint",
             make_lines(15),
             b"Gi" + UP * 12 + b"\x1b:q!\r",
-            expect_content_redraws=[True, True, True, True, False]
+            expect_content_redraws=[True, True, False, True, False]
         )
 
         # Batch insert up arrows: correctness check
