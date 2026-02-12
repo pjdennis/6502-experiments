@@ -1023,6 +1023,7 @@ int done = 0;
 int exitcode_set = -1;
 int error_output_started = 0;  // Track if emulated program wrote to stderr
 int console_mode = 0;
+int terminal_mode = 0;
 double target_mhz = 0.0;
 int override_rows = 0;
 int override_cols = 0;
@@ -1690,7 +1691,7 @@ void show_commandline(int argc, char**argv) {
 
 int main(int argc, char **argv) {
     if (argc < 2) {
-        fprintf(stderr, "usage: emulator <code file> [--load <hex load address>] [--input <input file>] [--output <output file>] [--console] [--mhz <speed>] [--rows N] [--cols N] [<arguments>]\n");
+        fprintf(stderr, "usage: emulator <code file> [--load <hex load address>] [--input <input file>] [--output <output file>] [--console] [--terminal] [--mhz <speed>] [--rows N] [--cols N] [<arguments>]\n");
         return 1;
     }
 
@@ -1703,6 +1704,9 @@ int main(int argc, char **argv) {
     while (i < argc && strncmp(argv[i], "--", 2) == 0) {
         if (strcmp(argv[i], "--console") == 0) {
             console_mode = 1;
+            i++;
+        } else if (strcmp(argv[i], "--terminal") == 0) {
+            terminal_mode = 1;
             i++;
         } else if (strcmp(argv[i], "--load") == 0) {
             if (i + 1 >= argc) {
@@ -1766,6 +1770,11 @@ int main(int argc, char **argv) {
             fprintf(stderr, "error: unknown option %s\n", argv[i]);
             return 1;
         }
+    }
+
+    if (console_mode && terminal_mode) {
+        fprintf(stderr, "error: --console and --terminal are mutually exclusive\n");
+        return 1;
     }
 
     int arg_base = i;
