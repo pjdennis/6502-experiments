@@ -215,6 +215,8 @@ normal_movement_keys:
   .byte 'w'         .word normal_word_forward
   .byte 'b'         .word normal_word_backward
   .byte 'e'         .word normal_word_end
+  .byte KEY_WORD_FWD  .word normal_word_forward
+  .byte KEY_WORD_BACK .word normal_word_backward
   .byte '^'         .word normal_first_nonblank
   .byte 'm'         .word normal_mark_set
   .byte '\''        .word normal_mark_goto

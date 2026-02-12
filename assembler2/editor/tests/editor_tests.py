@@ -5356,12 +5356,52 @@ class EditorTestRunner:
             expected_content="hello\n"
         )
 
-        # Ctrl+Right (ESC[1;5C) in normal mode - should be consumed
-        self.run_test(
-            "Ctrl+Right in normal mode is no-op",
-            "hello\n",
-            b"\x1b[1;5C:wq\r",
-            expected_content="hello\n"
+        # Ctrl+Right word motion in normal mode
+        self.run_test_screen(
+            "Ctrl+Right moves to next word in normal mode",
+            "hello world\n",
+            b"\x1b[1;5C:q!\r",
+            expect_cursor=(0, 6),
+        )
+
+        # Ctrl+Left word motion in normal mode
+        self.run_test_screen(
+            "Ctrl+Left moves to prev word in normal mode",
+            "hello world\n",
+            b"$\x1b[1;5D:q!\r",
+            expect_cursor=(0, 6),
+        )
+
+        # Ctrl+Right crosses line boundary
+        self.run_test_screen(
+            "Ctrl+Right crosses line boundary",
+            "foo\nbar\n",
+            b"$\x1b[1;5C:q!\r",
+            expect_cursor=(1, 0),
+        )
+
+        # Ctrl+Left crosses line boundary
+        self.run_test_screen(
+            "Ctrl+Left crosses line boundary",
+            "foo\nbar\n",
+            b"j\x1b[1;5D:q!\r",
+            expect_cursor=(0, 2),
+        )
+
+        # Count prefix with Ctrl+Right
+        self.run_test_screen(
+            "Count prefix with Ctrl+Right",
+            "one two three\n",
+            b"2\x1b[1;5C:q!\r",
+            expect_cursor=(0, 8),
+        )
+
+        # Batching: 3x Ctrl+Right
+        self.run_test_screen(
+            "Batching 3x Ctrl+Right",
+            "one two three four five\n",
+            b"\x1b[1;5C\x1b[1;5C\x1b[1;5C:q!\r",
+            expect_cursor=(0, 14),
         )
 
         # Shift+Up (ESC[1;2A) in normal mode - should be consumed
@@ -5400,7 +5440,7 @@ class EditorTestRunner:
         self.run_test(
             "Multiple unknown keys in a row",
             "hello\n",
-            b"\x1b[15~\x1b[24~\x1b[1;5C:wq\r",
+            b"\x1b[15~\x1b[24~\x1b[1;2A:wq\r",
             expected_content="hello\n"
         )
 
