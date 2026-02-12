@@ -4039,6 +4039,166 @@ class EditorTestRunner:
             ]
         )
 
+        self._group("Word motions (w, b, e):", leading_blank=True)
+
+        self.run_test_screen(
+            "w skips word to next word",
+            "hello world\n",
+            b"w:q!\r",
+            expect_cursor=(0, 6),
+        )
+
+        self.run_test_screen(
+            "w from middle of word",
+            "hello world\n",
+            b"llw:q!\r",
+            expect_cursor=(0, 6),
+        )
+
+        self.run_test_screen(
+            "w skips punctuation class",
+            "foo...bar\n",
+            b"w:q!\r",
+            expect_cursor=(0, 3),
+        )
+
+        self.run_test_screen(
+            "w from punct to word",
+            "...bar\n",
+            b"w:q!\r",
+            expect_cursor=(0, 3),
+        )
+
+        self.run_test_screen(
+            "w at end of line goes to next line",
+            "foo\nbar\n",
+            b"$w:q!\r",
+            expect_cursor=(1, 0),
+        )
+
+        self.run_test_screen(
+            "w on empty line goes to next line",
+            "\nbar\n",
+            b"w:q!\r",
+            expect_cursor=(1, 0),
+        )
+
+        self.run_test_screen(
+            "w skips whitespace between words",
+            "foo   bar\n",
+            b"w:q!\r",
+            expect_cursor=(0, 6),
+        )
+
+        self.run_test_screen(
+            "2w skips two words",
+            "one two three\n",
+            b"2w:q!\r",
+            expect_cursor=(0, 8),
+        )
+
+        # b: move to start of previous word
+        self.run_test_screen(
+            "b from middle of second word",
+            "hello world\n",
+            b"$b:q!\r",
+            expect_cursor=(0, 6),
+        )
+
+        self.run_test_screen(
+            "b from start of second word",
+            "hello world\n",
+            b"llllllb:q!\r",
+            expect_cursor=(0, 0),
+        )
+
+        self.run_test_screen(
+            "b at col 0 goes to previous line end",
+            "foo\nbar\n",
+            b"jb:q!\r",
+            expect_cursor=(0, 2),
+        )
+
+        self.run_test_screen(
+            "b with punctuation",
+            "foo...bar\n",
+            b"$b:q!\r",
+            expect_cursor=(0, 6),
+        )
+
+        self.run_test_screen(
+            "2b skips two words",
+            "one two three\n",
+            b"$2b:q!\r",
+            expect_cursor=(0, 4),
+        )
+
+        # e: move to end of current/next word
+        self.run_test_screen(
+            "e from start of word",
+            "hello world\n",
+            b"e:q!\r",
+            expect_cursor=(0, 4),
+        )
+
+        self.run_test_screen(
+            "e skips to next word end",
+            "hello world\n",
+            b"ee:q!\r",
+            expect_cursor=(0, 10),
+        )
+
+        self.run_test_screen(
+            "e with punctuation",
+            "foo...bar\n",
+            b"e:q!\r",
+            expect_cursor=(0, 2),
+        )
+
+        self.run_test_screen(
+            "e at end of line goes to next line",
+            "foo\nbar\n",
+            b"ee:q!\r",
+            expect_cursor=(1, 2),
+        )
+
+        self.run_test_screen(
+            "2e skips two word ends",
+            "one two three\n",
+            b"2e:q!\r",
+            expect_cursor=(0, 6),
+        )
+
+        self._group("First non-blank (^):", leading_blank=True)
+
+        self.run_test_screen(
+            "^ on line with leading spaces",
+            "   hello\n",
+            b"^:q!\r",
+            expect_cursor=(0, 3),
+        )
+
+        self.run_test_screen(
+            "^ on line without leading spaces",
+            "hello\n",
+            b"ll^:q!\r",
+            expect_cursor=(0, 0),
+        )
+
+        self.run_test_screen(
+            "^ on empty line stays at col 0",
+            "\n",
+            b"^:q!\r",
+            expect_cursor=(0, 0),
+        )
+
+        self.run_test_screen(
+            "^ on all-spaces line stays at col 0",
+            "   \n",
+            b"^:q!\r",
+            expect_cursor=(0, 0),
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed
