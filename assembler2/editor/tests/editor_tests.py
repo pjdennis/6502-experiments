@@ -2604,6 +2604,46 @@ class EditorTestRunner:
             expect_status_contains="COMMAND - 1,",
         )
 
+        # m shows pending key in status
+        self.run_test_screen(
+            "m shows pending key in status",
+            make_lines(3),
+            b"ma:q!\r",
+            cols=80,
+            expect_status_at_frame=[
+                (1, " - m - "),
+            ]
+        )
+
+        # ' shows pending key in status
+        self.run_test_screen(
+            "' shows pending key in status",
+            make_lines(3),
+            b"ma'a:q!\r",
+            cols=80,
+            expect_status_at_frame=[
+                (3, " - ' - "),
+            ]
+        )
+
+        # After ma, pending key clears
+        self.run_test_screen(
+            "ma clears pending key from status",
+            make_lines(3),
+            b"ma:q!\r",
+            cols=80,
+            expect_status_contains="COMMAND - 1,",
+        )
+
+        # After 'a with mark set, pending key clears
+        self.run_test_screen(
+            "'a clears pending key from status",
+            make_lines(3),
+            b"ma'a:q!\r",
+            cols=80,
+            expect_status_contains="COMMAND - 1,",
+        )
+
         # ============================================================
         # Count movement tests
         # ============================================================

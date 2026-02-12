@@ -109,13 +109,19 @@ normal_dispatch:
 
 ; --- Pending key dispatch ---
 ; Called when LAST_KEY is set and a second key arrives in BUF_TEMP.
-; If BUF_TEMP matches LAST_KEY, execute the two-key command.
-; Otherwise, clear LAST_KEY and re-dispatch the key normally.
+; For d/g/y: if BUF_TEMP matches LAST_KEY, execute the two-key command.
+; For m/': second key is always the register letter.
 pending_key_dispatch:
+  ; Check for commands that always consume second key
+  LDA LAST_KEY
+  CMP #'m'
+  BEQ .exec_mark_set
+  CMP #'\''
+  BEQ .exec_mark_goto
+  ; For d/g/y: second key must match first
   LDA BUF_TEMP
   CMP LAST_KEY
   BNE .not_repeat
-  ; Second key matches first - execute the command
   LDA LAST_KEY
   CMP #'d'
   BEQ .exec_dd
@@ -123,19 +129,21 @@ pending_key_dispatch:
   BEQ .exec_gg
   CMP #'y'
   BEQ .exec_yy
-  ; Unknown pending key - clear and fall through
-  JMP .not_repeat
+.not_repeat:
+  ; Key doesn't match pending - clear LAST_KEY, re-dispatch normally
+  LDA #0
+  STA LAST_KEY
+  JMP normal_dispatch
 .exec_dd:
   JMP do_dd
 .exec_gg:
   JMP do_gg
 .exec_yy:
   JMP do_yy
-.not_repeat:
-  ; Key doesn't match pending - clear LAST_KEY, re-dispatch normally
-  LDA #0
-  STA LAST_KEY
-  JMP normal_dispatch
+.exec_mark_set:
+  JMP do_mark_set
+.exec_mark_goto:
+  JMP do_mark_goto
 
 ; --- Dispatch tables ---
 
@@ -858,14 +866,24 @@ normal_find_prev:
   JMP clear_count
 
 normal_mark_set:
-  JSR get_key
+  LDA #'m'
+  JMP set_pending_key
+
+normal_mark_goto:
+  LDA #'\''
+  JMP set_pending_key
+
+; Execute mark set with register letter in BUF_TEMP
+do_mark_set:
+  LDA BUF_TEMP
   JSR mark_set
   LDA #0
   STA RENDER_FLAG
   JMP clear_count
 
-normal_mark_goto:
-  JSR get_key
+; Execute mark goto with register letter in BUF_TEMP
+do_mark_goto:
+  LDA BUF_TEMP
   JSR mark_get
   BCS .mark_not_set
   STAX16 FILE_LINE16
