@@ -146,8 +146,8 @@ search_backward_handle:
   STA SEARCH_BUF,X
   INC SEARCH_IDX
 
-  JSR write_b
-  JSR con_flush
+  JSR io_write
+  JSR io_flush
   JMP .bw_read_loop
 
 .bw_backspace:
@@ -155,12 +155,12 @@ search_backward_handle:
   BEQ .bw_cancel
   DEC SEARCH_IDX
   LDA #'\b'
-  JSR write_b
+  JSR io_write
   LDA #' '
-  JSR write_b
+  JSR io_write
   LDA #'\b'
-  JSR write_b
-  JSR con_flush
+  JSR io_write
+  JSR io_flush
   JMP .bw_read_loop
 
 .bw_cancel:
