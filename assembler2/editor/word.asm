@@ -53,6 +53,8 @@ char_class:
 ; Skip current word-class chars, skip whitespace.
 ; If at EOL, move to next line col 0.
 normal_word_forward:
+  LDA #0
+  STA RENDER_FLAG
   JSR get_count
   LDX BUF_TEMP16         ; X = count (low byte, capped at 255)
 
@@ -138,6 +140,8 @@ normal_word_forward:
 ; --- b command: move to start of previous word ---
 ; Accepts count prefix.
 normal_word_backward:
+  LDA #0
+  STA RENDER_FLAG
   JSR get_count
   LDX BUF_TEMP16         ; X = count (low byte, capped at 255)
 
@@ -210,6 +214,8 @@ normal_word_backward:
 ; --- e command: move to end of current/next word ---
 ; Accepts count prefix.
 normal_word_end:
+  LDA #0
+  STA RENDER_FLAG
   JSR get_count
   LDX BUF_TEMP16         ; X = count (low byte, capped at 255)
 

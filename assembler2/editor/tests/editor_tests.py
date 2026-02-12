@@ -2119,6 +2119,30 @@ class EditorTestRunner:
             expect_content_redraws=[True, False, False, False, False]
         )
 
+        # w at end of file: cursor-only (no next word to move to)
+        self.run_test_screen(
+            "Render opt: w at end of file is cursor-only",
+            "Hello\n",
+            b"$w:q!\r",
+            expect_content_redraws=[True, False, False]
+        )
+
+        # b at start of file: cursor-only (no previous word)
+        self.run_test_screen(
+            "Render opt: b at start of file is cursor-only",
+            "Hello\n",
+            b"b:q!\r",
+            expect_content_redraws=[True, False]
+        )
+
+        # e at end of file: cursor-only (no next word end)
+        self.run_test_screen(
+            "Render opt: e at end of file is cursor-only",
+            "Hello\n",
+            b"$e:q!\r",
+            expect_content_redraws=[True, False, False]
+        )
+
         # Insert char: only cursor's row is touched (not all rows)
         # i enters insert (cursor-only), 'X' inserts (cursor row + below)
         # render_current_line_and_status renders from cursor row downward
