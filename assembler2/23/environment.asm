@@ -25,3 +25,9 @@ con_flush = $F02A ; Flush stdout
 con_ready = $F02D ; Non-blocking poll: A=$FF if byte ready, A=$00 if not
 term_rows = $F030 ; Returns terminal height in A
 term_cols = $F033 ; Returns terminal width in A
+
+; Serial I/O ports
+serial_read  = $F036 ; Read one byte from serial (non blocking); returns in A.
+                     ; C set if no byte was avaiable, clear otherwise. X, Y preserved
+serial_write = $F039 ; Write byte in A to serial (non blocking); returns with C set if
+                     ; byte not accepted (buffer full), clear otherwise. A, X, Y preserved
