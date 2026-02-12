@@ -216,7 +216,14 @@ read_key:
   LDA #$00
   RTS
 .not_csi:
-  ; Byte after ESC was not '[' - push it back and return bare ESC
+  ; Check for SS3 sequences: ESC O <final byte> (F1-F4 on some terminals)
+  CMP #'O'
+  BNE .not_ss3
+  JSR input_read_byte    ; Read and discard the final byte
+  LDA #$00
+  RTS
+.not_ss3:
+  ; Unknown byte after ESC - push it back and return bare ESC
   JSR input_unread
   LDA #KEY_ESC
   RTS
