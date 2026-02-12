@@ -685,23 +685,7 @@ normal_delete_to_eol:
   ; count = LINE_LEN16 - CURSOR_COL16 (16-bit)
   SEC
   SBC16 LINE_LEN16, CURSOR_COL16, BUF_LEN16
-
-  ; Yank deleted chars before deleting
-  JSR get_cursor_buf_ptr     ; BUF_PTR16 = cursor position
-  CP16 BUF_PTR16, BUF_SRC16 ; BUF_SRC16 = source for yank
-  JSR yank_add_chars         ; Ignore failure; clobbers BUF_LEN16, BUF_PTR16
-
-  ; Recompute count and cursor pointer
-  SEC
-  SBC16 LINE_LEN16, CURSOR_COL16, BUF_LEN16
-  JSR get_cursor_buf_ptr
-
-  ; Delete BUF_LEN16 chars at cursor position
-  JSR buf_shift_left_16
-  JSR buf_rebuild_lines
-
-  LDA #$FF
-  STA MODIFIED
+  JSR yank_delete_at_cursor
   JSR clamp_cursor_col
 .done:
   JMP clear_count
@@ -1276,19 +1260,7 @@ normal_change_to_eol:
 
   SEC
   SBC16 LINE_LEN16, CURSOR_COL16, BUF_LEN16
-
-  JSR get_cursor_buf_ptr
-  CP16 BUF_PTR16, BUF_SRC16
-  JSR yank_add_chars
-
-  SEC
-  SBC16 LINE_LEN16, CURSOR_COL16, BUF_LEN16
-  JSR get_cursor_buf_ptr
-  JSR buf_shift_left_16
-  JSR buf_rebuild_lines
-
-  LDA #$FF
-  STA MODIFIED
+  JSR yank_delete_at_cursor
 
 .c_insert:
   LDA #MODE_INSERT
@@ -1570,20 +1542,7 @@ do_dw:
   ; delete count = BUF_LEN16 - CURSOR_COL16
   SEC
   SBC16 BUF_LEN16, CURSOR_COL16, BUF_LEN16
-  PUSH16 BUF_LEN16           ; Save delete count
-
-  ; Yank
-  JSR get_cursor_buf_ptr
-  CP16 BUF_PTR16, BUF_SRC16
-  JSR yank_add_chars
-
-  ; Delete (restore count, recompute pointer)
-  POP16 BUF_LEN16
-  JSR get_cursor_buf_ptr
-  JSR buf_shift_left_16
-  JSR buf_rebuild_lines
-  LDA #$FF
-  STA MODIFIED
+  JSR yank_delete_at_cursor
 
   LDX NORMAL_TEMP
   DEX
@@ -1608,23 +1567,12 @@ do_db:
 
   JSR find_word_start_backward
   ; BUF_LEN16 = start position. Delete from start to cursor.
-  ; Yank: source = line_ptr + start, count = cursor - start
+  ; Compute delete count and move cursor to start
   PUSH16 BUF_LEN16           ; Save start position
-  JSR get_scan_buf_ptr        ; BUF_PTR16 = line + start_pos
-  CP16 BUF_PTR16, BUF_SRC16
   SEC
   SBC16 CURSOR_COL16, BUF_LEN16, BUF_LEN16   ; BUF_LEN16 = delete count
-  PUSH16 BUF_LEN16           ; Save delete count
-  JSR yank_add_chars
-
-  ; Delete: restore count and start position
-  POP16 BUF_LEN16            ; delete count
-  POP16 CURSOR_COL16         ; move cursor to start position
-  JSR get_cursor_buf_ptr
-  JSR buf_shift_left_16
-  JSR buf_rebuild_lines
-  LDA #$FF
-  STA MODIFIED
+  POP16 CURSOR_COL16         ; Move cursor to start position
+  JSR yank_delete_at_cursor
 
   LDX NORMAL_TEMP
   DEX
@@ -1680,20 +1628,7 @@ do_cw:
   ; delete count = BUF_LEN16 - CURSOR_COL16
   SEC
   SBC16 BUF_LEN16, CURSOR_COL16, BUF_LEN16
-  PUSH16 BUF_LEN16           ; Save delete count
-
-  ; Yank
-  JSR get_cursor_buf_ptr
-  CP16 BUF_PTR16, BUF_SRC16
-  JSR yank_add_chars
-
-  ; Delete (restore count, recompute pointer)
-  POP16 BUF_LEN16
-  JSR get_cursor_buf_ptr
-  JSR buf_shift_left_16
-  JSR buf_rebuild_lines
-  LDA #$FF
-  STA MODIFIED
+  JSR yank_delete_at_cursor
 
   LDX NORMAL_TEMP
   DEX
@@ -1718,23 +1653,12 @@ do_cb:
 .cb_not_bol:
 
   JSR find_word_start_backward
-  ; Yank from start to cursor
-  PUSH16 BUF_LEN16
-  JSR get_scan_buf_ptr
-  CP16 BUF_PTR16, BUF_SRC16
+  ; Compute delete count and move cursor to start
+  PUSH16 BUF_LEN16           ; Save start position
   SEC
-  SBC16 CURSOR_COL16, BUF_LEN16, BUF_LEN16
-  PUSH16 BUF_LEN16
-  JSR yank_add_chars
-
-  ; Delete
-  POP16 BUF_LEN16
-  POP16 CURSOR_COL16
-  JSR get_cursor_buf_ptr
-  JSR buf_shift_left_16
-  JSR buf_rebuild_lines
-  LDA #$FF
-  STA MODIFIED
+  SBC16 CURSOR_COL16, BUF_LEN16, BUF_LEN16   ; BUF_LEN16 = delete count
+  POP16 CURSOR_COL16         ; Move cursor to start position
+  JSR yank_delete_at_cursor
 
   LDX NORMAL_TEMP
   DEX
@@ -1747,6 +1671,23 @@ do_cb:
   JMP clear_count
 
 ; --- Utilities ---
+
+; Yank chars at cursor position then delete them
+; Input: BUF_LEN16 = number of bytes to delete, cursor position set via CURSOR_COL16
+; Yanks from cursor, deletes, rebuilds lines, sets MODIFIED
+; Clobbers: A, X, Y, BUF_PTR16, BUF_SRC16, BUF_DST16
+yank_delete_at_cursor:
+  PUSH16 BUF_LEN16           ; Save delete count
+  JSR get_cursor_buf_ptr     ; BUF_PTR16 = cursor position
+  CP16 BUF_PTR16, BUF_SRC16
+  JSR yank_add_chars         ; Clobbers BUF_LEN16, BUF_PTR16
+  POP16 BUF_LEN16            ; Restore delete count
+  JSR get_cursor_buf_ptr     ; Recompute after yank clobbers
+  JSR buf_shift_left_16
+  JSR buf_rebuild_lines
+  LDA #$FF
+  STA MODIFIED
+  RTS
 
 ; Skip forward past chars of WORD_CLASS, starting from BUF_LEN16
 ; Input: BUF_LEN16 = start col, LINE_LEN16 = line length, WORD_CLASS = class to skip

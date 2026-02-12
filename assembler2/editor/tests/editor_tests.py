@@ -3114,6 +3114,30 @@ class EditorTestRunner:
             expected_content="Hello\nLine 2\n"
         )
 
+        # D then p pastes deleted text (char paste inserts inline)
+        self.run_test(
+            "D then p pastes deleted text",
+            "Hello World\n",
+            b"lllllD0p:wq\r",
+            expected_content="H Worldello\n",
+        )
+
+        # C then p pastes deleted text (char paste inserts inline)
+        self.run_test(
+            "C then p pastes deleted text",
+            "Hello World\n",
+            b"lllllCX\x1b0p:wq\r",
+            expected_content="H WorldelloX\n",
+        )
+
+        # dw then p pastes deleted word
+        self.run_test(
+            "dw then p pastes deleted word",
+            "foo bar baz\n",
+            b"dw$p:wq\r",
+            expected_content="bar bazfoo \n",
+        )
+
         # ============================================================
         # Yank buffer tests (dd fills yank, tested via paste later)
         # For now, verify dd+yank doesn't break existing behavior
