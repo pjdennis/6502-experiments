@@ -6,6 +6,7 @@ A vi-like text editor for the 6502 platform.
 Usage: editor <filename>
 
 If the file does not exist, starts with an empty buffer.
+If no filename is given, starts with [No Name].
 Maximum file size: ~40KB. Files exceeding this are truncated and
 opened read-only.
 Maximum lines: 1023.
@@ -17,7 +18,7 @@ MODES
 The editor has three modes:
 
   NORMAL   Default mode for navigation and commands.
-  INSERT   Text entry mode. Entered via i, a, A, o, O.
+  INSERT   Text entry mode. Entered via i, a, A, o, O, s, S, C, cc, cw, cb.
   COMMAND  Colon command-line mode. Entered via :.
 
 
@@ -30,10 +31,18 @@ NORMAL MODE - MOVEMENT
   k, Up          Move cursor up (accepts count)
   0, Home        Move to beginning of line
   $, End         Move to end of line (last character)
+  ^              Move to first non-blank character on line
+  w              Move to start of next word (accepts count)
+  b              Move to start of previous word (accepts count)
+  e              Move to end of current/next word (accepts count)
   G              Go to last line; [N]G goes to line N
   gg             Go to first line
   Ctrl-F, PgDn   Scroll forward one screen
   Ctrl-B, PgUp   Scroll backward one screen
+
+  Word motions cross line boundaries. Words are classified as:
+  word characters (a-z, A-Z, 0-9, _), punctuation, or whitespace.
+  A word boundary is a transition between classes.
 
 
 NORMAL MODE - EDITING
@@ -52,6 +61,30 @@ All editing commands are blocked in read-only mode.
                  Yanks deleted characters (character yank)
   dd             Delete current line (accepts count: [N]dd)
                  Yanks deleted lines first (line yank)
+  dw             Delete from cursor to next word boundary (accepts count)
+                 Yanks deleted characters (character yank)
+  db             Delete backward to word start (accepts count)
+                 Yanks deleted characters (character yank)
+  cc             Delete current line, open blank line, enter insert mode
+                 (accepts count: [N]cc). Yanks deleted lines (line yank)
+  cw             Change word: delete to end of word, enter insert mode
+                 (accepts count). Yanks deleted characters (character yank)
+  cb             Change backward: delete to word start, enter insert mode
+                 (accepts count). Yanks deleted characters (character yank)
+  C              Delete from cursor to end of line, enter insert mode
+                 Yanks deleted characters (character yank)
+  s              Delete character(s) at cursor, enter insert mode
+                 (accepts count). Yanks deleted characters (character yank)
+  S              Delete current line, open blank line, enter insert mode
+                 Same as cc (alias)
+  r              Replace character at cursor (accepts count: [N]r)
+                 Waits for next keypress, replaces N characters
+  ~              Toggle case of character at cursor (accepts count)
+                 Advances cursor after each toggle
+  J              Join current line with next line (accepts count: [N]J)
+                 Replaces newline with a space. With count N, joins N lines
+  >>             Indent current line by 2 spaces (accepts count: [N]>>)
+  <<             Unindent current line by up to 2 spaces (accepts count)
   yy             Yank (copy) current line (accepts count: [N]yy)
                  Does not modify the file
   p              Paste after/below cursor (accepts count: [N]p)
@@ -65,11 +98,15 @@ All editing commands are blocked in read-only mode.
 NORMAL MODE - SEARCH
 --------------------
 
-  /              Enter search prompt. Type a pattern and press Enter.
-                 Empty pattern reuses the previous search.
+  /              Enter forward search prompt. Type a pattern and press
+                 Enter. Empty pattern reuses the previous search.
                  ESC cancels. Search is literal (no regex).
-  n              Repeat last search forward (wraps around)
-  N              Repeat last search backward (wraps around)
+  ?              Enter backward search prompt. Same behavior as /
+                 but searches backward through the file.
+  n              Repeat last search in the same direction (wraps around)
+  N              Repeat last search in the opposite direction (wraps around)
+
+  If the pattern is not found, "Pattern not found" is displayed.
 
 
 NORMAL MODE - MARKS
@@ -92,6 +129,10 @@ NORMAL MODE - COUNT PREFIX
     3dd            Delete 3 lines
     10x            Delete 10 characters
     2p             Paste 2 times
+    4w             Move forward 4 words
+    3>>            Indent 3 lines
+    5~             Toggle case of 5 characters
+    3J             Join 3 lines (current + 2 below)
 
   Counts are capped at 1000. ESC clears an active count.
   0 alone moves to line start; it does not start a count.
@@ -158,15 +199,14 @@ YANK BUFFER
   The yank buffer (4KB) holds either complete lines or character
   data, depending on the last yank/delete operation:
 
-  Line yank (from dd, yy, range commands):
+  Line yank (from dd, yy, cc, range commands):
     p/P paste complete lines above or below.
 
-  Character yank (from x, D):
+  Character yank (from x, D, dw, db, cw, cb, s, C):
     p inserts after cursor (or at line start if empty line).
     P inserts before cursor.
 
-  Each new dd, yy, or range yank/delete clears the previous
-  yank buffer contents.
+  Each new yank/delete clears the previous yank buffer contents.
 
 
 STATUS BAR
