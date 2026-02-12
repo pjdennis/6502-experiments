@@ -5,11 +5,11 @@
 normal_move_left:
   JSR get_count          ; BUF_TEMP16 = count
   LDX BUF_TEMP16         ; X = count (low byte, capped at 255)
+  LDA #0
+  STA RENDER_FLAG
 .left_loop:
   TST16 CURSOR_COL16
   BEQ .left_done
-  LDA #0
-  STA RENDER_FLAG
   DEC16 CURSOR_COL16
   DEX
   BNE .left_loop
@@ -20,6 +20,8 @@ normal_move_left:
 normal_move_right:
   JSR get_count          ; BUF_TEMP16 = count
   LDX BUF_TEMP16         ; X = count (low byte, capped at 255)
+  LDA #0
+  STA RENDER_FLAG
 .right_loop:
   STX BUF_TEMP           ; Save counter
   JSR get_current_line_len
@@ -31,8 +33,6 @@ normal_move_right:
   CMP16 LINE_LEN16, CURSOR_COL16
   BCC .right_done        ; Already at or past end
   BEQ .right_done
-  LDA #0
-  STA RENDER_FLAG
   INC16 CURSOR_COL16
   LDX BUF_TEMP
   DEX

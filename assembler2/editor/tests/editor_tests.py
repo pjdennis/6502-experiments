@@ -1887,6 +1887,42 @@ class EditorTestRunner:
             expect_content_redraws=[True, False, False, False]
         )
 
+        # h at col 0: cursor-only (no movement, no repaint)
+        self.run_test_screen(
+            "Render opt: h at col 0 is cursor-only",
+            "Hello\n",
+            b"h:q!\r",
+            expect_content_redraws=[True, False]
+        )
+
+        # l at end-of-line: cursor-only (no movement, no repaint)
+        self.run_test_screen(
+            "Render opt: l at EOL is cursor-only",
+            "Hello\n",
+            b"$l:q!\r",
+            expect_content_redraws=[True, False, False]
+        )
+
+        LEFT = b"\x1b[D"
+        RIGHT = b"\x1b[C"
+
+        # Insert LEFT at col 0: cursor-only
+        self.run_test_screen(
+            "Render opt: insert LEFT at col 0 is cursor-only",
+            "Hello\n",
+            b"i" + LEFT + b"\x1b:q!\r",
+            expect_content_redraws=[True, True, False, False]
+        )
+
+        # Insert RIGHT at end-of-line: cursor-only
+        # $=cursor-only, a=full repaint (enters insert), RIGHT at EOL=cursor-only, ESC=cursor-only
+        self.run_test_screen(
+            "Render opt: insert RIGHT at EOL is cursor-only",
+            "Hello\n",
+            b"$a" + RIGHT + b"\x1b:q!\r",
+            expect_content_redraws=[True, False, True, False, False]
+        )
+
         # j without scroll: cursor-only
         self.run_test_screen(
             "Render opt: j no scroll is cursor-only",

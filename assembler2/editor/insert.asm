@@ -454,23 +454,23 @@ insert_page_up:
   JMP clamp_cursor_col_insert
 
 insert_move_left:
-  TST16 CURSOR_COL16
-  BEQ .done
   LDA #0
   STA RENDER_FLAG
+  TST16 CURSOR_COL16
+  BEQ .done
   DEC16 CURSOR_COL16
   JSR ensure_cursor_visible
 .done:
   RTS
 
 insert_move_right:
+  LDA #0
+  STA RENDER_FLAG
   JSR get_current_line_len
   STAX16 LINE_LEN16
   CMP16 LINE_LEN16, CURSOR_COL16
   BCC .done
   BEQ .done
-  LDA #0
-  STA RENDER_FLAG
   INC16 CURSOR_COL16
   JSR ensure_cursor_visible
 .done:
