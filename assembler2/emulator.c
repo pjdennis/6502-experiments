@@ -1266,6 +1266,7 @@ static int serial_tx_count() {
 // Characters arrive from the "wire" at baud rate intervals and queue in the
 // hardware FIFO. The CPU can then read them out as fast as it wants.
 void serial_rx_fill() {
+    int filled = 0;
     while (clockticks6502 >= serial_rx_next_fill_at &&
            serial_rx_count() < SERIAL_BUF_SIZE - 1) {
         int ch = -1;
@@ -1284,6 +1285,13 @@ void serial_rx_fill() {
         serial_rx_buf[serial_rx_head] = (uint8_t)ch;
         serial_rx_head = (serial_rx_head + 1) % SERIAL_BUF_SIZE;
         serial_rx_next_fill_at += serial_cycles_per_byte;
+        filled = 1;
+    }
+    // Prevent credit accumulation: when no input was available and the CPU
+    // has been running (e.g. idle-polling), advance the fill timestamp so
+    // future RX bytes arrive at baud rate from "now".
+    if (!filled && serial_rx_next_fill_at < clockticks6502) {
+        serial_rx_next_fill_at = clockticks6502;
     }
 }
 
@@ -1304,6 +1312,13 @@ void serial_tx_drain() {
             console_handle_byte(b);
         }
         serial_tx_next_drain_at += serial_cycles_per_byte;
+    }
+    // Prevent credit accumulation: when the TX buffer is empty and the CPU
+    // has been running (e.g. idle-polling for input), advance the drain
+    // timestamp so future TX bytes drain at baud rate from "now", not from
+    // the distant past.
+    if (serial_tx_head == serial_tx_tail && serial_tx_next_drain_at < clockticks6502) {
+        serial_tx_next_drain_at = clockticks6502;
     }
 }
 
