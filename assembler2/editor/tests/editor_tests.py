@@ -2143,6 +2143,54 @@ class EditorTestRunner:
             expect_content_redraws=[True, False, False]
         )
 
+        # Forward search, match visible, no scroll -> cursor-only
+        # 3-line file, 10 rows. /BBB finds line 1, no scroll.
+        # Frame 0: initial (True), Frame 1: /BBB\r complete (False after fix)
+        self.run_test_screen(
+            "Render opt: search no-scroll is cursor-only",
+            "AAA\nBBB\nCCC\n",
+            b"/BBB\r:q!\r",
+            expect_cursor=(1, 0),
+            expect_content_redraws=[True, False]
+        )
+
+        # Search with scroll -> full repaint (verify we don't break scrolling)
+        # 15-line file, 10 rows. /Line 12 finds line 11 (0-indexed), scrolls.
+        self.run_test_screen(
+            "Render opt: search with scroll triggers repaint",
+            make_lines(15),
+            b"/Line 12\r:q!\r",
+            expect_content_redraws=[True, True]
+        )
+
+        # Find-next (n) no-scroll -> cursor-only
+        # /AAA on "AAA\nBBB\nAAA\n" finds line 2. n wraps to line 0 (visible).
+        self.run_test_screen(
+            "Render opt: n no-scroll is cursor-only",
+            "AAA\nBBB\nAAA\n",
+            b"/AAA\rn:q!\r",
+            expect_cursor=(0, 0),
+            expect_content_redraws=[True, False, False]
+        )
+
+        # Cancel search (ESC) -> cursor-only
+        self.run_test_screen(
+            "Render opt: search cancel is cursor-only",
+            "AAA\nBBB\n",
+            b"/\x1b:q!\r",
+            expect_content_redraws=[True, False]
+        )
+
+        # Not found -> cursor-only after dismissal
+        # Space dismisses the "not found" message (consumed inside search handler)
+        self.run_test_screen(
+            "Render opt: search not-found is cursor-only",
+            "AAA\nBBB\nCCC\n",
+            b"/ZZZ\r :q!\r",
+            expect_cursor=(0, 0),
+            expect_content_redraws=[True, False]
+        )
+
         # Insert char: only cursor's row is touched (not all rows)
         # i enters insert (cursor-only), 'X' inserts (cursor row + below)
         # render_current_line_and_status renders from cursor row downward
