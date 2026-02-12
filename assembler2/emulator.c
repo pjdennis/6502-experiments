@@ -1032,8 +1032,20 @@ double target_mhz = 0.0;
 double cpu_mhz = 0.0;
 int serial_baud = 0;
 uint32_t serial_cycles_per_byte = 0;
-uint32_t serial_read_available_at = 0;
-uint32_t serial_write_ready_at = 0;
+
+// Serial buffering - simulates hardware FIFOs
+// RX: characters fill from source at baud rate, CPU reads instantly from buffer
+// TX: CPU writes instantly to buffer, bytes drain to output at baud rate
+#define SERIAL_BUF_SIZE 256
+static uint8_t serial_rx_buf[SERIAL_BUF_SIZE];
+static int serial_rx_head = 0;  // next write position
+static int serial_rx_tail = 0;  // next read position
+static uint32_t serial_rx_next_fill_at = 0;
+
+static uint8_t serial_tx_buf[SERIAL_BUF_SIZE];
+static int serial_tx_head = 0;
+static int serial_tx_tail = 0;
+static uint32_t serial_tx_next_drain_at = 0;
 int override_rows = 0;
 int override_cols = 0;
 struct termios orig_termios;
@@ -1234,6 +1246,79 @@ void console_put_char(unsigned char ch) {
         if (cursor_row >= screen_rows) {
             console_scroll_up(1);
             cursor_row = screen_rows - 1;
+        }
+    }
+}
+
+// Forward declarations for buffer functions
+int con_byte_ready();
+void console_handle_byte(unsigned char ch);
+
+static int serial_rx_count() {
+    return (serial_rx_head - serial_rx_tail + SERIAL_BUF_SIZE) % SERIAL_BUF_SIZE;
+}
+
+static int serial_tx_count() {
+    return (serial_tx_head - serial_tx_tail + SERIAL_BUF_SIZE) % SERIAL_BUF_SIZE;
+}
+
+// Fill RX buffer from input source at baud rate.
+// Characters arrive from the "wire" at baud rate intervals and queue in the
+// hardware FIFO. The CPU can then read them out as fast as it wants.
+void serial_rx_fill() {
+    while (clockticks6502 >= serial_rx_next_fill_at &&
+           serial_rx_count() < SERIAL_BUF_SIZE - 1) {
+        int ch = -1;
+        if (terminal_interactive) {
+            if (!con_byte_ready()) break;
+            uint8_t b;
+            int got = read(STDIN_FILENO, &b, 1);
+            if (got != 1) break;
+            ch = b;
+        } else if (serial_input_file) {
+            ch = fgetc(serial_input_file);
+            if (ch == EOF) break;
+        } else {
+            break;
+        }
+        serial_rx_buf[serial_rx_head] = (uint8_t)ch;
+        serial_rx_head = (serial_rx_head + 1) % SERIAL_BUF_SIZE;
+        serial_rx_next_fill_at += serial_cycles_per_byte;
+    }
+}
+
+// Drain TX buffer to output at baud rate.
+// Bytes leave the FIFO onto the "wire" at baud rate intervals.
+// The CPU can fill the buffer as fast as it wants.
+void serial_tx_drain() {
+    while (clockticks6502 >= serial_tx_next_drain_at &&
+           serial_tx_head != serial_tx_tail) {
+        uint8_t b = serial_tx_buf[serial_tx_tail];
+        serial_tx_tail = (serial_tx_tail + 1) % SERIAL_BUF_SIZE;
+        if (terminal_interactive) {
+            if (write(STDOUT_FILENO, &b, 1) < 0) {}
+        } else if (serial_output_file) {
+            fputc(b, serial_output_file);
+        }
+        if (terminal_mode) {
+            console_handle_byte(b);
+        }
+        serial_tx_next_drain_at += serial_cycles_per_byte;
+    }
+}
+
+// Flush any remaining bytes in TX buffer (called at exit)
+void serial_tx_flush() {
+    while (serial_tx_head != serial_tx_tail) {
+        uint8_t b = serial_tx_buf[serial_tx_tail];
+        serial_tx_tail = (serial_tx_tail + 1) % SERIAL_BUF_SIZE;
+        if (terminal_interactive) {
+            if (write(STDOUT_FILENO, &b, 1) < 0) {}
+        } else if (serial_output_file) {
+            fputc(b, serial_output_file);
+        }
+        if (terminal_mode) {
+            console_handle_byte(b);
         }
     }
 }
@@ -1667,10 +1752,15 @@ uint8_t read6502(uint16_t address) {
             return 0xFF;  // In file mode, always ready
         }
     } else if (address == port_serial_ready) {        // serial_ready
+        if (serial_baud > 0)
+            serial_tx_drain();  // drain TX so DSR responses can be injected
         if (serial_inject_pos < serial_inject_len)
             return 0xFF;
-        if (serial_baud > 0 && clockticks6502 < serial_read_available_at)
-            return 0x00;
+        if (serial_baud > 0) {
+            serial_rx_fill();
+            return serial_rx_head != serial_rx_tail ? 0xFF : 0x00;
+        }
+        // No baud rate - direct polling
         if (terminal_interactive) {
             return con_byte_ready() ? 0xFF : 0x00;
         } else if (terminal_mode && serial_input_file) {
@@ -1687,10 +1777,18 @@ uint8_t read6502(uint16_t address) {
                 serial_inject_pos = 0;
                 serial_inject_len = 0;
             }
-            if (serial_baud > 0)
-                serial_read_available_at = clockticks6502 + serial_cycles_per_byte;
             return ch;
         }
+        if (serial_baud > 0) {
+            serial_rx_fill();
+            if (serial_rx_head != serial_rx_tail) {
+                uint8_t ch = serial_rx_buf[serial_rx_tail];
+                serial_rx_tail = (serial_rx_tail + 1) % SERIAL_BUF_SIZE;
+                return ch;
+            }
+            return 0;
+        }
+        // No baud rate - direct read
         if (terminal_interactive) {
             struct timespec before, after;
             if (target_mhz > 0) clock_gettime(CLOCK_MONOTONIC, &before);
@@ -1716,23 +1814,19 @@ uint8_t read6502(uint16_t address) {
                     start_time.tv_nsec += 1000000000L;
                 }
             }
-            if (got == 1) {
-                if (serial_baud > 0)
-                    serial_read_available_at = clockticks6502 + serial_cycles_per_byte;
-                return ch;
-            }
+            if (got == 1) return ch;
             return 0;
         } else if (terminal_mode && serial_input_file) {
             int b = fgetc(serial_input_file);
             if (b == EOF) return 0;
-            if (serial_baud > 0)
-                serial_read_available_at = clockticks6502 + serial_cycles_per_byte;
             return (uint8_t)b;
         }
         return 0x00;
     } else if (address == port_serial_write_ready) {  // serial_write_ready
-        if (serial_baud > 0)
-            return clockticks6502 >= serial_write_ready_at ? 0xFF : 0x00;
+        if (serial_baud > 0) {
+            serial_tx_drain();
+            return serial_tx_count() < SERIAL_BUF_SIZE - 1 ? 0xFF : 0x00;
+        }
         return 0xFF;
     } else if (address == 0xfffe && memory[0xfffe] == 0 && memory[0xffff] == 0) {
         done = 1;
@@ -1795,6 +1889,13 @@ void write6502(uint16_t address, uint8_t value) {
         fflush(stdout);
         return;
     } else if (address == port_serial_write) {      // serial_write
+        if (serial_baud > 0) {
+            serial_tx_drain();
+            serial_tx_buf[serial_tx_head] = value;
+            serial_tx_head = (serial_tx_head + 1) % SERIAL_BUF_SIZE;
+            return;
+        }
+        // No baud rate - direct write
         if (terminal_interactive) {
             unsigned char ch = value;
             if (write(STDOUT_FILENO, &ch, 1) < 0) {
@@ -1805,8 +1906,6 @@ void write6502(uint16_t address, uint8_t value) {
         if (terminal_mode) {
             console_handle_byte(value);
         }
-        if (serial_baud > 0)
-            serial_write_ready_at = clockticks6502 + serial_cycles_per_byte;
         return;
     }
 
@@ -2316,6 +2415,7 @@ int main(int argc, char **argv) {
 
     int unclosed_files = files_destroy();
 
+    if (serial_baud > 0) serial_tx_flush();
     if (serial_input_file) fclose(serial_input_file);
     if (serial_output_file) fclose(serial_output_file);
 

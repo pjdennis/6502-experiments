@@ -348,7 +348,9 @@ class EditorTestRunner:
                                  expect_lines: list = None,
                                  expect_status_contains: str = None,
                                  expected_content: str = None,
-                                 extra_args: list = None):
+                                 extra_args: list = None,
+                                 expect_content_redraws: list = None,
+                                 expect_lines_at_frame: list = None):
         """Run a terminal-mode editor test and verify screen state."""
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir = Path(tmpdir)
@@ -418,6 +420,43 @@ class EditorTestRunner:
                         f"  Expected: {expected_content!r}\n"
                         f"  Actual:   {saved!r}")
                     return
+
+            if expect_content_redraws is not None:
+                actual_count = screen.get_frame_count()
+                expected_count = len(expect_content_redraws)
+                if actual_count < expected_count:
+                    self._fail(name,
+                        f"Expected {expected_count} frames, got {actual_count}\n"
+                        f"    Frame:\n{screen.dump()}")
+                    return
+                for i, expected_redraw in enumerate(expect_content_redraws):
+                    actual_redraw = screen.was_content_redrawn(i)
+                    if actual_redraw != expected_redraw:
+                        self._fail(name,
+                            f"Frame {i}: expected content_redrawn="
+                            f"{expected_redraw}, got {actual_redraw}\n"
+                            f"    Frame:\n{screen.dump()}")
+                        return
+
+            if expect_lines_at_frame is not None:
+                actual_count = screen.get_frame_count()
+                for frame_idx, line_checks in expect_lines_at_frame:
+                    if frame_idx >= actual_count:
+                        self._fail(name,
+                            f"Expected frame {frame_idx} but only "
+                            f"{actual_count} frames\n"
+                            f"    Frame:\n{screen.dump()}")
+                        return
+                    for row_idx, expected_text in line_checks:
+                        actual_text = screen.get_row_text_at_frame(
+                            frame_idx, row_idx)
+                        if actual_text != expected_text:
+                            self._fail(name,
+                                f"Frame {frame_idx}, row {row_idx}: "
+                                f"expected {expected_text!r}, "
+                                f"got {actual_text!r}\n"
+                                f"    Frame:\n{screen.dump()}")
+                            return
 
             self._pass(name)
 
@@ -5268,6 +5307,32 @@ class EditorTestRunner:
                 b"jj?alpha\r:q!\r",
                 expect_cursor=(0, 0),
                 extra_args=BAUD_ARGS
+            )
+
+            # --------------------------------------------------------
+            # Baud rate batching tests
+            # --------------------------------------------------------
+            self._group("Terminal mode - baud rate batching:", leading_blank=True)
+
+            BAUD2_ARGS = ["--cpu-mhz", "2", "--baud", "9600"]
+
+            # Insert 5 chars at 2MHz/9600 baud - should batch into fewer
+            # frames than 5.  With hardware FIFO buffering, chars accumulate
+            # in the RX buffer during rendering and the editor reads them
+            # all in one batch.  Verify only 1 content redraw for the
+            # insert (frame index 1), not 5 separate redraws.
+            self.run_test_terminal_screen(
+                "Terminal baud: insert batching",
+                "\n",
+                b"ihello\x1b:q!\r",
+                expect_lines=[(0, "hello")],
+                expect_lines_at_frame=[
+                    # Frame 1: enter insert mode, no chars yet
+                    (1, [(0, "")]),
+                    # Frame 2: all 5 chars batched in one redraw
+                    (2, [(0, "hello")]),
+                ],
+                extra_args=BAUD2_ARGS
             )
 
         print()
