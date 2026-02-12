@@ -5452,12 +5452,52 @@ class EditorTestRunner:
             expected_content="Xhello\n"
         )
 
-        # Ctrl+Right in insert mode - should stay in insert mode
+        # Ctrl+Right word motion in insert mode
         self.run_test(
-            "Ctrl+Right in insert mode stays in insert mode",
-            "hello\n",
+            "Ctrl+Right in insert mode moves to next word",
+            "hello world\n",
             b"i\x1b[1;5CX\x1b:wq\r",
-            expected_content="Xhello\n"
+            expected_content="hello Xworld\n"
+        )
+
+        # Ctrl+Left word motion in insert mode
+        self.run_test(
+            "Ctrl+Left in insert mode moves to prev word",
+            "hello world\n",
+            b"$a\x1b[1;5DX\x1b:wq\r",
+            expected_content="hello Xworld\n"
+        )
+
+        # Ctrl+Right crosses line in insert mode
+        self.run_test(
+            "Ctrl+Right crosses line in insert mode",
+            "foo\nbar\n",
+            b"$a\x1b[1;5CX\x1b:wq\r",
+            expected_content="foo\nXbar\n"
+        )
+
+        # Ctrl+Left crosses line in insert mode
+        self.run_test(
+            "Ctrl+Left crosses line in insert mode",
+            "foo\nbar\n",
+            b"ji\x1b[1;5DX\x1b:wq\r",
+            expected_content="foXo\nbar\n"
+        )
+
+        # Batching Ctrl+Right in insert mode
+        self.run_test(
+            "Batching 3x Ctrl+Right in insert mode",
+            "one two three four\n",
+            b"i\x1b[1;5C\x1b[1;5C\x1b[1;5CX\x1b:wq\r",
+            expected_content="one two three Xfour\n"
+        )
+
+        # Ctrl+Right on empty line in insert mode
+        self.run_test(
+            "Ctrl+Right on empty line in insert mode",
+            "\nbar\n",
+            b"i\x1b[1;5CX\x1b:wq\r",
+            expected_content="\nXbar\n"
         )
 
         # Regression: arrow keys still work

@@ -43,6 +43,8 @@ insert_keys:
   .byte KEY_PGUP    .word insert_page_up
   .byte $06         .word insert_page_down    ; Ctrl-F
   .byte $02         .word insert_page_up      ; Ctrl-B
+  .byte KEY_WORD_FWD  .word insert_word_forward
+  .byte KEY_WORD_BACK .word insert_word_backward
   .byte 0           ; End sentinel
 
 ; Exit insert mode, return to normal mode
@@ -514,6 +516,28 @@ insert_end:
   JSR ensure_cursor_visible
 .done:
   RTS
+
+insert_word_forward:
+  LDA #KEY_WORD_FWD
+  STA BUF_TEMP
+  JSR count_pending_key   ; X = pending matching keys
+  INX                     ; +1 for current key
+  LDA #0
+  STA RENDER_FLAG
+  JSR word_forward_x
+  JSR clamp_cursor_col_insert
+  JMP ensure_cursor_visible
+
+insert_word_backward:
+  LDA #KEY_WORD_BACK
+  STA BUF_TEMP
+  JSR count_pending_key   ; X = pending matching keys
+  INX                     ; +1 for current key
+  LDA #0
+  STA RENDER_FLAG
+  JSR word_backward_x
+  JSR clamp_cursor_col_insert
+  JMP ensure_cursor_visible
 
 ; Clamp cursor for insert mode (can be one past end of line content)
 clamp_cursor_col_insert:
