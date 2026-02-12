@@ -221,6 +221,7 @@ normal_movement_keys:
   .byte 'g'         .word normal_g_key
   .byte 'y'         .word normal_y_key
   .byte '/'         .word normal_search
+  .byte '?'         .word normal_search_backward
   .byte 'n'         .word normal_find_next
   .byte 'N'         .word normal_find_prev
   .byte 'w'         .word normal_word_forward
@@ -1045,10 +1046,19 @@ normal_search:
   JSR search_handle
   JMP clear_count
 
+normal_search_backward:
+  JSR search_backward_handle
+  JMP clear_count
+
 normal_find_next:
   LDA SEARCH_LEN
   BEQ .none        ; No search pattern
+  LDA SEARCH_DIR
+  BNE .backward
   JSR search_forward
+  JMP clear_count
+.backward:
+  JSR search_backward
   JMP clear_count
 .none:
   ; No prior search, just cursor-only update
@@ -1059,7 +1069,12 @@ normal_find_next:
 normal_find_prev:
   LDA SEARCH_LEN
   BEQ .none        ; No search pattern
+  LDA SEARCH_DIR
+  BNE .forward
   JSR search_backward
+  JMP clear_count
+.forward:
+  JSR search_forward
   JMP clear_count
 .none:
   ; No prior search, just cursor-only update

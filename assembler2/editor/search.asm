@@ -18,6 +18,7 @@ SEARCH_LEN:   .byte     ; Length of current search pattern
 SEARCH_IDX:   .byte     ; Current index during search input
 SEARCH_LINE16: .word    ; Line number being searched
 SEARCH_COL:   .byte     ; Column position of match
+SEARCH_DIR:   .byte     ; Search direction: 0=forward (/), 1=backward (?)
 
   .code
 
@@ -25,6 +26,7 @@ SEARCH_COL:   .byte     ; Column position of match
 search_init:
   LDA #0
   STA SEARCH_LEN
+  STA SEARCH_DIR
   RTS
 
 ; Handle '/' search command
@@ -101,7 +103,83 @@ search_handle:
   BEQ .cancel       ; No previous pattern either
 
 .do_search:
+  LDA #0
+  STA SEARCH_DIR
   JMP search_forward
+
+; Handle '?' backward search command
+; Shows '?' prompt, reads pattern, searches backward
+search_backward_handle:
+  LDA #0
+  STA SEARCH_IDX
+
+  ; Show '?' prompt on status line
+  LDA #'?'
+  JSR show_prompt
+
+.bw_read_loop:
+  JSR get_key
+
+  CMP #KEY_ESC
+  BEQ .bw_cancel
+  CMP #$1B
+  BEQ .bw_cancel
+  CMP #KEY_ENTER
+  BEQ .bw_execute
+  CMP #'\r'
+  BEQ .bw_execute
+  CMP #KEY_BS
+  BEQ .bw_backspace
+  CMP #$7F
+  BEQ .bw_backspace
+
+  ; Printable character?
+  CMP #' '
+  BCC .bw_read_loop
+  CMP #$7F
+  BCS .bw_read_loop
+
+  ; Add to buffer
+  LDX SEARCH_IDX
+  CPX #SEARCH_MAX
+  BCS .bw_read_loop
+  STA SEARCH_BUF,X
+  INC SEARCH_IDX
+
+  JSR write_b
+  JSR con_flush
+  JMP .bw_read_loop
+
+.bw_backspace:
+  LDA SEARCH_IDX
+  BEQ .bw_cancel
+  DEC SEARCH_IDX
+  LDA #'\b'
+  JSR write_b
+  LDA #' '
+  JSR write_b
+  LDA #'\b'
+  JSR write_b
+  JSR con_flush
+  JMP .bw_read_loop
+
+.bw_cancel:
+  RTS
+
+.bw_execute:
+  LDA SEARCH_IDX
+  BEQ .bw_reuse
+  STA SEARCH_LEN
+  JMP .bw_do_search
+
+.bw_reuse:
+  LDA SEARCH_LEN
+  BEQ .bw_cancel
+
+.bw_do_search:
+  LDA #1
+  STA SEARCH_DIR
+  JMP search_backward
 
 ; Show the '/' prompt on the status line
 search_show_prompt:

@@ -4592,6 +4592,57 @@ class EditorTestRunner:
             expected_content="Xthree\n",
         )
 
+        self._group("Backward search (?):", leading_blank=True)
+
+        self.run_test_screen(
+            "? finds match on previous line",
+            "alpha\nbeta\ngamma\n",
+            b"jj?alpha\r:q!\r",
+            expect_cursor=(0, 0),
+        )
+
+        self.run_test_screen(
+            "? wraps around to find match below",
+            "alpha\nbeta\ngamma\n",
+            b"?gamma\r:q!\r",
+            expect_cursor=(2, 0),
+        )
+
+        self.run_test_screen(
+            "n after ? searches backward",
+            "aaa\nbbb\naaa\nccc\naaa\n",
+            b"jj?aaa\rn:q!\r",
+            expect_cursor=(4, 0),
+        )
+
+        self.run_test_screen(
+            "N after ? searches forward",
+            "aaa\nbbb\naaa\nccc\naaa\n",
+            b"jj?aaa\rN:q!\r",
+            expect_cursor=(2, 0),
+        )
+
+        self.run_test_screen(
+            "n after / searches forward",
+            "aaa\nbbb\naaa\nccc\naaa\n",
+            b"jj/aaa\rn:q!\r",
+            expect_cursor=(0, 0),
+        )
+
+        self.run_test_screen(
+            "N after / searches backward",
+            "aaa\nbbb\naaa\nccc\naaa\n",
+            b"jj/aaa\rN:q!\r",
+            expect_cursor=(2, 0),
+        )
+
+        self.run_test_screen(
+            "? with empty pattern reuses previous",
+            "foo\nbar\nfoo\n",
+            b"jj?foo\r?\r:q!\r",
+            expect_cursor=(2, 0),
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed
