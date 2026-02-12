@@ -1062,7 +1062,11 @@ void get_terminal_size(int *rows, int *cols);
 void console_resize(int rows, int cols);
 void console_redraw();
 
+int terminal_restored = 0;
+
 void restore_terminal() {
+    if (terminal_restored) return;
+    terminal_restored = 1;
     if (console_mode || terminal_mode) {
         tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
         const char seq[] = "\x1b[?1049l\x1b[?25h\x1b[0m";
@@ -1085,6 +1089,7 @@ void setup_raw_terminal() {
     raw.c_cc[VMIN] = 1;
     raw.c_cc[VTIME] = 0;
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+    terminal_restored = 0;
 }
 
 void enter_console() {
@@ -1509,6 +1514,7 @@ uint8_t file_open_with_mode(const char* name, const char* mode) {
 	    return x + 1;
         }
     }
+    restore_terminal();
     fprintf(stderr, "could not open file: %s: too many files open\n", name);
     exit(1);
 }
@@ -1523,6 +1529,7 @@ uint8_t file_open_for_write(const char* name) {
 
 FILE* file_handle(uint8_t file) {
     if (file == 0 || files[file - 1] == NULL) {
+        restore_terminal();
         fprintf(stderr, "file %i is not open\n", (int) file);
 	exit(1);
     }
@@ -1531,6 +1538,7 @@ FILE* file_handle(uint8_t file) {
 
 void file_close(uint8_t file) {
     if (file <= 1) {
+        restore_terminal();
         fprintf(stderr, "Cannot close standard file %i\n", (int) file);
         exit(1);
     }
@@ -1562,6 +1570,7 @@ int files_destroy() {
 uint8_t read6502(uint16_t address) {
     if (address == port_read_b) {                    // read_b
         if (terminal_mode) {
+            restore_terminal();
             fprintf(stderr, "Error: read_b not available in terminal mode, use serial_read\n");
             exit(1);
         }
@@ -1588,18 +1597,21 @@ uint8_t read6502(uint16_t address) {
         return arg_count;
     } else if (address == port_argv_l) {             // argvl
         if (a >= arg_count) {
+            restore_terminal();
             fprintf(stderr, "Argument %i does not exist\n", (int) a);
             exit(1);
         }
         return arg_addresses[a] & 0xff;
     } else if (address == port_argv_h) {             // argvh
         if (a >= arg_count) {
+            restore_terminal();
             fprintf(stderr, "Argument %i does not exist\n", (int) a);
             exit(1);
         }
         return arg_addresses[a] >> 8;
     } else if (address == port_con_read) {             // con_read
         if (terminal_mode) {
+            restore_terminal();
             fprintf(stderr, "Error: con_read not available in terminal mode, use serial_read\n");
             exit(1);
         }
@@ -1644,6 +1656,11 @@ uint8_t read6502(uint16_t address) {
         get_terminal_size(&rows, &cols);
         return (uint8_t)cols;
     } else if (address == port_con_ready) {           // con_ready
+        if (terminal_mode) {
+            restore_terminal();
+            fprintf(stderr, "Error: con_ready not available in terminal mode, use serial_read\n");
+            exit(1);
+        }
         if (console_mode) {
             return con_byte_ready() ? 0xFF : 0x00;
         } else {
@@ -1739,6 +1756,7 @@ uint8_t read6502(uint16_t address) {
 void write6502(uint16_t address, uint8_t value) {
     if (address == port_write_b) {                   // write_b
         if (terminal_mode) {
+            restore_terminal();
             fprintf(stderr, "Error: write_b not available in terminal mode, use serial_write\n");
             exit(1);
         }
@@ -1770,6 +1788,7 @@ void write6502(uint16_t address, uint8_t value) {
         return;
     } else if (address == port_con_flush) {          // con_flush
         if (terminal_mode) {
+            restore_terminal();
             fprintf(stderr, "Error: con_flush not available in terminal mode, use serial_write\n");
             exit(1);
         }

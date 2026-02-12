@@ -5173,6 +5173,15 @@ class EditorTestRunner:
                 extra_args=BAUD_ARGS
             )
 
+            # Backward search
+            self.run_test_terminal_screen(
+                "Terminal baud: backward search ?alpha",
+                "alpha\nbeta\ngamma\n",
+                b"jj?alpha\r:q!\r",
+                expect_cursor=(0, 0),
+                extra_args=BAUD_ARGS
+            )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed
