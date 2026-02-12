@@ -62,14 +62,7 @@ command_handle:
   LDA CMD_IDX
   BEQ .cancel     ; Nothing to delete, cancel
   DEC CMD_IDX
-  ; Erase character on screen: backspace, space, backspace
-  LDA #'\b'
-  JSR io_write
-  LDA #' '
-  JSR io_write
-  LDA #'\b'
-  JSR io_write
-  JSR io_flush
+  JSR erase_char
   JMP .read_loop
 
 .cancel:

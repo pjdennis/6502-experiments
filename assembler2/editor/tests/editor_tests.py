@@ -4815,6 +4815,14 @@ class EditorTestRunner:
             expect_cursor=(1, 0),  # Searches for "BBB" not "BC"
         )
 
+        # : command with multiple backspaces then retype
+        self.run_test(
+            ": command backspace then retype",
+            "hello\n",
+            b":ww\x7f\x7fq!\r",
+            # Type :ww, BS twice to clear, type q! -> :q!
+        )
+
         # ============================================================
         # Terminal mode tests
         # ============================================================

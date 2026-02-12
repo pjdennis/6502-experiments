@@ -88,14 +88,7 @@ search_input_handle:
   LDA SEARCH_IDX
   BEQ .cancel       ; Nothing to delete, cancel
   DEC SEARCH_IDX
-  ; Erase character on screen
-  LDA #'\b'
-  JSR io_write
-  LDA #' '
-  JSR io_write
-  LDA #'\b'
-  JSR io_write
-  JSR io_flush
+  JSR erase_char
   JMP .read_loop
 
 .cancel:

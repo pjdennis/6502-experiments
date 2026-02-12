@@ -128,6 +128,17 @@ show_prompt:
   JSR io_write
   JMP io_flush
 
+; Erase one character on screen: backspace, space, backspace, flush
+; Clobbers A
+erase_char:
+  LDA #'\b'
+  JSR io_write
+  LDA #' '
+  JSR io_write
+  LDA #'\b'
+  JSR io_write
+  JMP io_flush
+
 ; Write A (0-255) as decimal digits, no leading zeros
 ; Clobbers A, X, Y
 write_byte_dec:
