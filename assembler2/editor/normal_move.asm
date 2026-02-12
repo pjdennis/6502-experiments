@@ -321,6 +321,8 @@ do_yy:
   LDAX16 FILE_LINE16
   JSR yank_add_lines
   BCS .overflow
+  LDA #0
+  STA RENDER_FLAG            ; Yank doesn't change display
   JMP clear_count            ; Done - don't set MODIFIED
 
 .overflow:

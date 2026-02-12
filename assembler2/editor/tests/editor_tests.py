@@ -2109,6 +2109,15 @@ class EditorTestRunner:
             expect_content_redraws=[True, False, False]
         )
 
+        # yy: cursor-only (yank doesn't change display)
+        # y (F - pending key), y (should be F - yank, no display change)
+        self.run_test_screen(
+            "Render opt: yy is cursor-only",
+            "Hello\n",
+            b"yy:q!\r",
+            expect_content_redraws=[True, False, False]
+        )
+
         # Mark goto to current line: cursor-only
         # m (F - pending key), a (F - mark set), ' (F - pending key),
         # a (should be F - mark goto to same line, no scroll)
