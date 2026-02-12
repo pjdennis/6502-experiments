@@ -62,6 +62,9 @@ normal_handle_key:
   JMP .dispatch_key
 
 .count_not_active:
+  ; If pending key is set, don't start a new count - dispatch directly
+  LDA LAST_KEY
+  BNE .dispatch_key
   ; Not counting yet: 1-9 starts a new count
   LDA BUF_TEMP
   CMP #'1'
@@ -130,10 +133,11 @@ pending_key_dispatch:
   CMP #'y'
   BEQ .exec_yy
 .not_repeat:
-  ; Key doesn't match pending - clear LAST_KEY, re-dispatch normally
+  ; Key doesn't match pending - reset all state, no side effects
+  JSR clear_count
   LDA #0
-  STA LAST_KEY
-  JMP normal_dispatch
+  STA RENDER_FLAG
+  RTS
 .exec_dd:
   JMP do_dd
 .exec_gg:
