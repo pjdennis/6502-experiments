@@ -198,14 +198,24 @@ render_status_line:
   ; Print separator and count (if active) or line/col
   PRINT_STR str_separator
 
-  ; Show count prefix if active
-  LDA COUNT_ACTIVE
-  BEQ .no_count_display
+  ; Show count/pending-key prefix if active
+  LDA COUNT16
+  ORA COUNT16 + 1
+  BNE .has_count
+  LDA LAST_KEY
+  BNE .has_pending_no_count
+  JMP .no_prefix_display
+.has_count:
   CP16 COUNT16, TO_DECIMAL_VALUE16
   JSR to_decimal
   PRINT_STR TO_DECIMAL_RESULT
+.has_pending_no_count:
+  LDA LAST_KEY
+  BEQ .done_prefix
+  JSR write_b
+.done_prefix:
   PRINT_STR str_separator
-.no_count_display:
+.no_prefix_display:
 
   ; Line number (1-based)
   CLC

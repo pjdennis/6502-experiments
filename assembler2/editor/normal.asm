@@ -27,11 +27,12 @@ normal_handle_key:
 
   ; --- Count prefix handling ---
 
-  ; ESC always clears count
+  ; ESC always clears count and pending key
   CMP #KEY_ESC
   BNE .not_esc_count
   LDA COUNT_ACTIVE
-  BEQ .not_esc_count      ; No active count, let ESC fall through
+  ORA LAST_KEY
+  BEQ .not_esc_count      ; No active count or pending key, let ESC fall through
   JSR clear_count
   LDA #0
   STA RENDER_FLAG

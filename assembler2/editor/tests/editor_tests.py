@@ -2511,30 +2511,93 @@ class EditorTestRunner:
         # ============================================================
         self._group("Pending key display:", leading_blank=True)
 
-        # After pressing 'g', a frame is rendered (RENDER_FLAG=0)
-        # Currently no pending key shown in status
+        # After pressing 'g', status shows "g" pending key
         self.run_test_screen(
-            "g renders cursor-only frame",
+            "g shows pending key in status",
             make_lines(5),
             b"gG:q!\r",
             cols=80,
             expect_status_at_frame=[
-                (0, "NORMAL - 1,"),  # initial frame, no pending key shown
+                (1, " - g - "),
             ]
         )
 
-        # After dd completes, status shows updated position
+        # After pressing 'd', status shows "d" pending key
         self.run_test_screen(
-            "dd completes and shows position",
+            "d shows pending key in status",
+            make_lines(3),
+            b"dd:q!\r",
+            cols=80,
+            expect_status_at_frame=[
+                (1, " - d - "),
+            ]
+        )
+
+        # After pressing 'y', status shows "y" pending key
+        self.run_test_screen(
+            "y shows pending key in status",
+            make_lines(3),
+            b"yy:q!\r",
+            cols=80,
+            expect_status_at_frame=[
+                (1, " - y - "),
+            ]
+        )
+
+        # 3d shows count then count+pending key
+        self.run_test_screen(
+            "3d shows count and pending key",
+            make_lines(5),
+            b"3dd:q!\r",
+            cols=80,
+            expect_status_at_frame=[
+                (1, " - 3 - "),
+                (2, " - 3d - "),
+            ]
+        )
+
+        # 3y shows count then count+pending key
+        self.run_test_screen(
+            "3y shows count and pending key",
+            make_lines(5),
+            b"3yy:q!\r",
+            cols=80,
+            expect_status_at_frame=[
+                (1, " - 3 - "),
+                (2, " - 3y - "),
+            ]
+        )
+
+        # After dd completes, pending key is cleared
+        self.run_test_screen(
+            "dd clears pending key from status",
             make_lines(3),
             b"dd:q!\r",
             cols=80,
             expect_status_contains="COMMAND - 1,",
         )
 
-        # 3d then ESC clears count
+        # After 3dd completes, pending key and count are cleared
         self.run_test_screen(
-            "3d ESC clears count",
+            "3dd clears pending key from status",
+            make_lines(5),
+            b"3dd:q!\r",
+            cols=80,
+            expect_status_contains="COMMAND - 1,",
+        )
+
+        # ESC after d clears pending key
+        self.run_test_screen(
+            "ESC after d clears pending key",
+            make_lines(3),
+            b"d\x1b:q!\r",
+            cols=80,
+            expect_status_contains="COMMAND - 1,",
+        )
+
+        # ESC after 3d clears everything
+        self.run_test_screen(
+            "ESC after 3d clears count and pending key",
             make_lines(5),
             b"3d\x1b:q!\r",
             cols=80,
