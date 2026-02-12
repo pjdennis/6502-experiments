@@ -10,11 +10,15 @@
 YANK_BUF   = $E000
 YANK_LIMIT = $F000
 
+YANK_LINE = 0
+YANK_CHAR = 1
+
   .zeropage
 
 YANK_END16:    .word     ; Points one past last byte in yank buffer
 YANK_LINES16:  .word     ; 16-bit line count for yank buffer
 YANK_SIZE16:   .word     ; Single yank size for paste operations
+YANK_TYPE:     .byte     ; 0=line, 1=char
 
   .code
 
@@ -23,6 +27,8 @@ yank_init:
 ; Clear yank buffer (reset to empty)
 yank_clear:
   SET16 YANK_BUF, YANK_END16
+  LDA #YANK_LINE
+  STA YANK_TYPE
   RTS
 
 ; Add N contiguous lines to yank buffer in one bulk copy
@@ -101,6 +107,48 @@ yank_add_lines:
 
   ; YANK_LINES16 = actual line count (in BUF_TEMP16, preserved from clamping)
   CP16 BUF_TEMP16, YANK_LINES16
+  CLC
+  RTS
+
+.full:
+  SEC
+  RTS
+
+; Add character data to yank buffer
+; Input: BUF_SRC16 = source address, BUF_LEN16 = byte count
+; Clears yank buffer first, copies bytes, sets YANK_TYPE = YANK_CHAR
+; Returns carry set = buffer full, carry clear = success
+yank_add_chars:
+  ; Check if YANK_BUF + size <= YANK_LIMIT
+  CLC
+  ADCI16 BUF_LEN16, YANK_BUF, BUF_DST16
+  LDA BUF_DST16 + 1
+  CMP #>YANK_LIMIT
+  BCC .has_room
+  BNE .full
+  LDA BUF_DST16
+  BEQ .has_room             ; Exactly at limit is ok
+  BNE .full
+.has_room:
+
+  ; Reset yank buffer
+  SET16 YANK_BUF, YANK_END16
+
+  ; Set up mem_copy_down: src=BUF_SRC16, end=BUF_SRC16+BUF_LEN16, dst=YANK_BUF
+  ;   BUF_SRC16 = source (already set)
+  ;   BUF_PTR16 = end of source data
+  CLC
+  ADC16 BUF_SRC16, BUF_LEN16, BUF_PTR16
+  SET16 YANK_BUF, BUF_DST16
+  JSR mem_copy_down
+
+  ; YANK_END16 = YANK_BUF + BUF_LEN16
+  CLC
+  ADCI16 BUF_LEN16, YANK_BUF, YANK_END16
+
+  ; Set type to char
+  LDA #YANK_CHAR
+  STA YANK_TYPE
   CLC
   RTS
 

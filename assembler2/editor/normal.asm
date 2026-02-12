@@ -561,8 +561,21 @@ normal_delete_char:
 .cap_ok:
   STX BUF_DELTA
 
+  ; Yank deleted chars before deleting
+  JSR get_cursor_buf_ptr     ; BUF_PTR16 = cursor position
+  CP16 BUF_PTR16, BUF_SRC16 ; BUF_SRC16 = source for yank
+  LDA BUF_DELTA
+  STA BUF_LEN16
+  LDA #0
+  STA BUF_LEN16 + 1
+  LDA BUF_DELTA
+  PHA                        ; Save BUF_DELTA on stack
+  JSR yank_add_chars         ; Ignore failure
+  PLA
+  STA BUF_DELTA              ; Restore BUF_DELTA
+
   ; Delete BUF_DELTA chars at cursor position
-  JSR get_cursor_buf_ptr
+  JSR get_cursor_buf_ptr     ; Recompute (yank clobbered BUF_PTR16)
   JSR buf_delete_chars
   JSR buf_adjust_lines_dec
 
@@ -586,8 +599,17 @@ normal_delete_to_eol:
   SEC
   SBC16 LINE_LEN16, CURSOR_COL16, BUF_LEN16
 
-  ; Delete BUF_LEN16 chars at cursor position
+  ; Yank deleted chars before deleting
+  JSR get_cursor_buf_ptr     ; BUF_PTR16 = cursor position
+  CP16 BUF_PTR16, BUF_SRC16 ; BUF_SRC16 = source for yank
+  JSR yank_add_chars         ; Ignore failure; clobbers BUF_LEN16, BUF_PTR16
+
+  ; Recompute count and cursor pointer
+  SEC
+  SBC16 LINE_LEN16, CURSOR_COL16, BUF_LEN16
   JSR get_cursor_buf_ptr
+
+  ; Delete BUF_LEN16 chars at cursor position
   JSR buf_shift_left_16
   JSR buf_rebuild_lines
 
@@ -745,6 +767,10 @@ normal_open_above:
   JMP clear_count
 
 normal_paste_below:
+  LDA YANK_TYPE
+  BEQ .line_paste
+  JMP char_paste_below
+.line_paste:
   JSR get_count              ; BUF_TEMP16 = count
   LDX BUF_TEMP16             ; X = count (low byte)
   STX NORMAL_TEMP            ; Save paste count
@@ -755,6 +781,10 @@ normal_paste_below:
   JMP clear_count
 
 normal_paste_above:
+  LDA YANK_TYPE
+  BEQ .line_paste
+  JMP char_paste_above
+.line_paste:
   JSR get_count              ; BUF_TEMP16 = count
   LDX BUF_TEMP16             ; X = count (low byte)
   STX NORMAL_TEMP            ; Save paste count
@@ -823,6 +853,88 @@ check_paste_fits:
 .no_room:
   SEC
   RTS
+
+; Character paste below (after cursor)
+; For non-empty lines, inserts after cursor char; for empty lines, inserts at line start
+char_paste_below:
+  JSR get_count              ; BUF_TEMP16 = count
+  JSR yank_paste_setup
+  BCS .done                  ; Empty yank
+
+  ; Save total paste size on stack
+  PUSH16 BUF_LEN16
+
+  ; Compute insertion point
+  JSR get_current_line_len
+  STAX16 LINE_LEN16
+  TST16 LINE_LEN16
+  BEQ .empty_line
+
+  ; Non-empty line: insert after cursor
+  JSR get_cursor_buf_ptr
+  INC16 BUF_PTR16
+  LDA #1                     ; Flag: non-empty line
+  PHA
+  JMP .do_paste
+
+.empty_line:
+  JSR get_cursor_buf_ptr     ; Insert at line start
+  LDA #0                     ; Flag: empty line
+  PHA
+
+.do_paste:
+  JSR yank_paste_core
+  PLA                        ; Recover empty-line flag
+  STA NORMAL_TEMP            ; Save temporarily
+  POP16 BUF_LEN16            ; Recover total paste size
+  BCS .done                  ; Paste failed (buffer full)
+
+  ; Adjust cursor column
+  LDA NORMAL_TEMP
+  BEQ .cursor_empty
+
+  ; Non-empty: CURSOR_COL16 += BUF_LEN16
+  CLC
+  ADC16 CURSOR_COL16, BUF_LEN16, CURSOR_COL16
+  JMP .cursor_done
+
+.cursor_empty:
+  ; Empty line: CURSOR_COL16 = BUF_LEN16 - 1
+  SEC
+  SBCI16 BUF_LEN16, 1, CURSOR_COL16
+
+.cursor_done:
+  JSR ensure_cursor_visible
+  LDA #$FF
+  STA MODIFIED
+.done:
+  JMP clear_count
+
+; Character paste above (before cursor)
+char_paste_above:
+  JSR get_count              ; BUF_TEMP16 = count
+  JSR yank_paste_setup
+  BCS .done                  ; Empty yank
+
+  ; Save total paste size on stack
+  PUSH16 BUF_LEN16
+
+  ; Insertion point: at cursor position
+  JSR get_cursor_buf_ptr
+
+  JSR yank_paste_core
+  POP16 BUF_LEN16            ; Recover total paste size
+  BCS .done                  ; Paste failed
+
+  ; CURSOR_COL16 = CURSOR_COL16 + BUF_LEN16 - 1
+  CLC
+  ADC16 CURSOR_COL16, BUF_LEN16, CURSOR_COL16
+  DEC16 CURSOR_COL16
+  JSR ensure_cursor_visible
+  LDA #$FF
+  STA MODIFIED
+.done:
+  JMP clear_count
 
 normal_y_key:
   LDA #'y'

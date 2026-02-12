@@ -3183,6 +3183,115 @@ class EditorTestRunner:
         )
 
         # ============================================================
+        # Character yank/paste tests (x, D with p/P)
+        # ============================================================
+        self._group("Character yank/paste (x/D + p/P):", leading_blank=True)
+
+        # x + p: swap first two characters
+        self.run_test(
+            "x+p swaps first two chars",
+            "AB\n",
+            b"xp:wq\r",
+            expected_content="BA\n"
+        )
+
+        # x + P: paste before restores original
+        self.run_test(
+            "x+P restores original",
+            "AB\n",
+            b"xP:wq\r",
+            expected_content="AB\n"
+        )
+
+        # 3x + p: yank multiple chars and paste
+        self.run_test(
+            "3x+p yanks multiple chars",
+            "ABCDE\n",
+            b"3xp:wq\r",
+            expected_content="DABCE\n"
+        )
+
+        # D + p: delete-to-EOL and paste on same line
+        self.run_test(
+            "D+p deletes to EOL and pastes after",
+            "ABCDE\n",
+            b"lD$p:wq\r",
+            expected_content="ABCDE\n"
+        )
+
+        # D + p on next line
+        self.run_test(
+            "D+p pastes char yank on next line",
+            "ABCDE\nXY\n",
+            b"lDjp:wq\r",
+            expected_content="A\nXBCDEY\n"
+        )
+
+        # dd after x: line yank overwrites char yank
+        self.run_test(
+            "dd after x overwrites char yank",
+            "AB\nCD\n",
+            b"xjddp:wq\r",
+            expected_content="B\nCD\n"
+        )
+
+        # x after dd: char yank overwrites line yank
+        self.run_test(
+            "x after dd overwrites line yank",
+            "AB\nCD\n",
+            b"ddjxp:wq\r",
+            expected_content="DC\n"
+        )
+
+        # 2p with char yank: paste text twice inline
+        self.run_test(
+            "2p with char yank pastes twice",
+            "AB\n",
+            b"x2p:wq\r",
+            expected_content="BAA\n"
+        )
+
+        # Char paste on empty line
+        self.run_test(
+            "char paste on empty line",
+            "AB\n\n",
+            b"xjp:wq\r",
+            expected_content="B\nA\n"
+        )
+
+        # Cursor position after char p (non-empty line)
+        self.run_test_screen(
+            "cursor after char p on non-empty line",
+            "ABC\n",
+            b"xp:q!\r",
+            expect_cursor=(0, 1),  # Pasted A after B, cursor on A (col 1)
+        )
+
+        # Cursor position after char P
+        self.run_test_screen(
+            "cursor after char P",
+            "ABC\n",
+            b"lxP:q!\r",
+            expect_cursor=(0, 1),  # Deleted B, P pastes before A->cursor at B (col 1)
+        )
+
+        # Batched x yanks all deleted chars
+        self.run_test(
+            "batched xxxx yanks all deleted chars",
+            "ABCDE\n",
+            b"xxxxp:wq\r",
+            expected_content="EABCD\n"
+        )
+
+        # D on first col yanks entire line content
+        self.run_test(
+            "D from col 0 yanks whole line",
+            "HELLO\nWORLD\n",
+            b"Djp:wq\r",
+            expected_content="\nWHELLOORLD\n"
+        )
+
+        # ============================================================
         # Search tests (/)
         # ============================================================
         self._group("Search (/):", leading_blank=True)
