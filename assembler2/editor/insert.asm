@@ -431,17 +431,7 @@ insert_move_up:
   STA BUF_TEMP
   JSR count_pending_key  ; X = pending matching keys
   INX                     ; +1 for current key
-.up_loop:
-  STX BUF_TEMP           ; Save counter
-  TST16 FILE_LINE16
-  BEQ .up_done
-  LDA #0
-  STA RENDER_FLAG
-  DEC16 FILE_LINE16
-  LDX BUF_TEMP
-  DEX
-  BNE .up_loop
-.up_done:
+  JSR move_up_x
   JSR clamp_cursor_col_insert
   JMP ensure_cursor_visible
 
@@ -451,19 +441,7 @@ insert_move_down:
   STA BUF_TEMP
   JSR count_pending_key  ; X = pending matching keys
   INX                     ; +1 for current key
-.down_loop:
-  STX BUF_TEMP           ; Save counter
-  CLC
-  ADCI16 FILE_LINE16, $0001, BUF_PTR16
-  CMP16 BUF_PTR16, LINE_COUNT16
-  BCS .down_done
-  LDA #0
-  STA RENDER_FLAG
-  INC16 FILE_LINE16
-  LDX BUF_TEMP
-  DEX
-  BNE .down_loop
-.down_done:
+  JSR move_down_x
   JSR clamp_cursor_col_insert
   JMP ensure_cursor_visible
 

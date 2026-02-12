@@ -96,6 +96,46 @@ clamp_cursor_col:
   STA_LH16 CURSOR_COL16
   RTS
 
+; --- Shared vertical movement loops ---
+
+; Move down X lines (clamped to last line)
+; Input: X = number of lines to move
+; Sets RENDER_FLAG=0 if any movement occurred
+; Clobbers: A, X, BUF_TEMP, BUF_PTR16
+move_down_x:
+.loop:
+  STX BUF_TEMP
+  CLC
+  ADCI16 FILE_LINE16, $0001, BUF_PTR16
+  CMP16 BUF_PTR16, LINE_COUNT16
+  BCS .done
+  LDA #0
+  STA RENDER_FLAG
+  INC16 FILE_LINE16
+  LDX BUF_TEMP
+  DEX
+  BNE .loop
+.done:
+  RTS
+
+; Move up X lines (clamped to first line)
+; Input: X = number of lines to move
+; Sets RENDER_FLAG=0 if any movement occurred
+; Clobbers: A, X, BUF_TEMP
+move_up_x:
+.loop:
+  STX BUF_TEMP
+  TST16 FILE_LINE16
+  BEQ .done
+  LDA #0
+  STA RENDER_FLAG
+  DEC16 FILE_LINE16
+  LDX BUF_TEMP
+  DEX
+  BNE .loop
+.done:
+  RTS
+
 ; --- Count prefix helpers ---
 
 ; Set pending key for multi-key commands (dd, gg, yy, m, ')

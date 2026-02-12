@@ -51,24 +51,11 @@ normal_move_down:
   ADC BUF_DELTA          ; Total = count + pending
   BCS .cap_down          ; Overflow -> cap at 255
   TAX
-  JMP .down_loop
+  JMP .go_down
 .cap_down:
   LDX #$FF
-.down_loop:
-  STX BUF_TEMP           ; Save counter
-  ; Check if there's a next line
-  CLC
-  ADCI16 FILE_LINE16, 1, BUF_PTR16
-  CMP16 BUF_PTR16, LINE_COUNT16
-  BCS .down_done
-
-  LDA #0
-  STA RENDER_FLAG
-  INC16 FILE_LINE16
-  LDX BUF_TEMP
-  DEX
-  BNE .down_loop
-.down_done:
+.go_down:
+  JSR move_down_x
   JSR clamp_cursor_col
   JSR ensure_cursor_visible
   JMP clear_count
@@ -83,21 +70,11 @@ normal_move_up:
   ADC BUF_DELTA          ; Total = count + pending
   BCS .cap_up            ; Overflow -> cap at 255
   TAX
-  JMP .up_loop
+  JMP .go_up
 .cap_up:
   LDX #$FF
-.up_loop:
-  STX BUF_TEMP           ; Save counter
-  TST16 FILE_LINE16
-  BEQ .up_done
-
-  LDA #0
-  STA RENDER_FLAG
-  DEC16 FILE_LINE16
-  LDX BUF_TEMP
-  DEX
-  BNE .up_loop
-.up_done:
+.go_up:
+  JSR move_up_x
   JSR clamp_cursor_col
   JSR ensure_cursor_visible
   JMP clear_count
