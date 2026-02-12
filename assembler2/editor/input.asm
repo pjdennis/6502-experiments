@@ -90,6 +90,14 @@ count_pending_key:
 read_key:
   JSR input_read_byte
 
+  ; Skip non-ASCII bytes (>= $80): UTF-8 multi-byte sequences
+  ; would collide with KEY_UP..KEY_DEL codes ($80-$88)
+  CMP #$80
+  BCC .not_high_byte
+  LDA #$00         ; Harmless: no dispatch match, not printable (< $20)
+  RTS
+.not_high_byte:
+
   ; Normalize backspace: $7F -> $08
   CMP #$7F
   BNE .not_del_bs
