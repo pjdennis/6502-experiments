@@ -2644,6 +2644,83 @@ class EditorTestRunner:
             expect_status_contains="COMMAND - 1,",
         )
 
+        # Invalid second key after pending key resets state completely
+        # (no re-dispatch, no side effects)
+
+        # d then digit: should reset, not start a count
+        # Frame 0: initial, Frame 1: 'd' pending, Frame 2: '1' should reset
+        self.run_test_screen(
+            "d1 resets state (no count started)",
+            make_lines(3),
+            b"d1:q!\r",
+            cols=80,
+            expect_status_at_frame=[
+                (2, "NORMAL - 1,"),  # After '1', state fully reset
+            ]
+        )
+
+        # d then x: should not delete a character
+        self.run_test_screen(
+            "dx does not delete character",
+            "Hello\n",
+            b"dx:wq\r",
+            expected_content="Hello\n",
+        )
+
+        # d then j: should not move cursor
+        self.run_test_screen(
+            "dj does not move cursor",
+            make_lines(3),
+            b"dj:q!\r",
+            expect_cursor=(0, 0),
+        )
+
+        # g then digit: should reset, not start a count
+        self.run_test_screen(
+            "g1 resets state (no count started)",
+            make_lines(3),
+            b"g1:q!\r",
+            cols=80,
+            expect_status_at_frame=[
+                (2, "NORMAL - 1,"),
+            ]
+        )
+
+        # g then x: should not delete a character
+        self.run_test_screen(
+            "gx does not delete character",
+            "Hello\n",
+            b"gx:wq\r",
+            expected_content="Hello\n",
+        )
+
+        # y then digit: should reset, not start a count
+        self.run_test_screen(
+            "y1 resets state (no count started)",
+            make_lines(3),
+            b"y1:q!\r",
+            cols=80,
+            expect_status_at_frame=[
+                (2, "NORMAL - 1,"),
+            ]
+        )
+
+        # y then x: should not delete a character
+        self.run_test_screen(
+            "yx does not delete character",
+            "Hello\n",
+            b"yx:wq\r",
+            expected_content="Hello\n",
+        )
+
+        # 3d then non-d: should reset count too, not just pending key
+        self.run_test_screen(
+            "3dx resets count and pending key",
+            "Hello\n",
+            b"3dx:wq\r",
+            expected_content="Hello\n",
+        )
+
         # ============================================================
         # Count movement tests
         # ============================================================
