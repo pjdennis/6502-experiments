@@ -3275,11 +3275,19 @@ class EditorTestRunner:
             expect_cursor=(0, 1),  # Deleted B, P pastes before A->cursor at B (col 1)
         )
 
-        # Batched x yanks all deleted chars
+        # Batched x yanks only last deleted char (matches slow typing)
         self.run_test(
-            "batched xxxx yanks all deleted chars",
+            "batched xxxx yanks only last char",
             "ABCDE\n",
             b"xxxxp:wq\r",
+            expected_content="ED\n"
+        )
+
+        # Explicit count 4x yanks all 4 chars (count is intentional)
+        self.run_test(
+            "4x yanks all 4 chars",
+            "ABCDE\n",
+            b"4xp:wq\r",
             expected_content="EABCD\n"
         )
 

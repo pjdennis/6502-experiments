@@ -523,10 +523,14 @@ normal_delete_char:
   JSR get_current_line_len
   STAX16 LINE_LEN16
   TST16 LINE_LEN16
-  BEQ .done
+  BNE .not_empty
+  JMP .done
+.not_empty:
 
   CMP16 CURSOR_COL16, LINE_LEN16
-  BCS .done
+  BCC .in_range
+  JMP .done
+.in_range:
 
   ; Calculate max deleteable = LINE_LEN16 - CURSOR_COL16, capped at 255
   SEC
@@ -545,12 +549,19 @@ normal_delete_char:
   LDX BUF_TEMP16             ; X = count (low byte, capped at 255)
 
   ; Add pending matching keys (x or Delete)
+  ; BUF_TEMP16 = yank count (last effective x command's count).
+  ; Pending keys are individual x commands (count=1), so if any
+  ; are batched, clamp yank count to 1.
   STX BUF_DELTA              ; Save count prefix
   JSR count_pending_key      ; Returns additional count in X
-  TXA
+  TXA                        ; A = pending count
+  BEQ .no_pending
+  LDX #1
+  STX BUF_TEMP16             ; Pending: last x has count=1
+.no_pending:
   CLC
   ADC BUF_DELTA              ; Total = count + pending
-  BCS .cap_at_max          ; Overflow -> cap
+  BCS .cap_at_max            ; Overflow -> cap
   TAX
 
   ; Cap at max deleteable
@@ -561,10 +572,23 @@ normal_delete_char:
 .cap_ok:
   STX BUF_DELTA
 
-  ; Yank deleted chars before deleting
-  JSR get_cursor_buf_ptr     ; BUF_PTR16 = cursor position
-  CP16 BUF_PTR16, BUF_SRC16 ; BUF_SRC16 = source for yank
+  ; Clamp yank count to delete count (e.g. 99x on short line)
+  LDA BUF_TEMP16
+  CMP BUF_DELTA
+  BCC .yank_count_ok
+  BEQ .yank_count_ok
   LDA BUF_DELTA
+  STA BUF_TEMP16
+.yank_count_ok:
+
+  ; Yank BUF_TEMP16 chars from end of delete range
+  JSR get_cursor_buf_ptr     ; BUF_PTR16 = cursor position
+  LDA BUF_DELTA
+  SEC
+  SBC BUF_TEMP16             ; A = offset to yank start
+  CLC
+  ADCA16 BUF_PTR16, BUF_SRC16 ; BUF_SRC16 = cursor + offset
+  LDA BUF_TEMP16
   STA BUF_LEN16
   LDA #0
   STA BUF_LEN16 + 1
