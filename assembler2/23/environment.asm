@@ -31,6 +31,3 @@ serial_read  = $F036 ; Read one byte from serial (non blocking); returns in A.
                      ; C set if no byte was avaiable, clear otherwise. X, Y preserved
 serial_write = $F039 ; Write byte in A to serial (non blocking); returns with C set if
                      ; byte not accepted (buffer full), clear otherwise. A, X, Y preserved
-
-; Serial status ports (memory-mapped, read only)
-port_serial_write_ready = $FE98 ; $FF if serial write port can accept a byte, $00 if busy
