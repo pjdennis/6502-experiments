@@ -2,7 +2,7 @@
 
   .zeropage
 
-LAST_KEY:       .byte  ; Previous key for multi-key commands (dd, gg)
+LAST_KEY:       .byte  ; Previous key for multi-key commands (dd, gg, yy, m, ')
 LINE_LEN16:     .word  ; Cached length of current line (16-bit)
 DISPATCH_PTR16: .word  ; Pointer into dispatch table during scan
 JUMP_TARGET16:  .word  ; Target for indirect jump
@@ -85,9 +85,9 @@ normal_handle_key:
 
 .dispatch_key:
   LDA LAST_KEY
-  BEQ normal_dispatch
+  BEQ .normal_dispatch
   JMP pending_key_dispatch
-normal_dispatch:
+.normal_dispatch:
   LDA #<normal_movement_keys
   LDX #>normal_movement_keys
   JSR dispatch_key
@@ -941,7 +941,7 @@ clamp_cursor_col:
 
 ; --- Count prefix helpers ---
 
-; Set pending key for multi-key commands (dd, gg, yy)
+; Set pending key for multi-key commands (dd, gg, yy, m, ')
 ; A = key character to store
 set_pending_key:
   STA LAST_KEY
