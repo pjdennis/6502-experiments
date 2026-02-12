@@ -1,0 +1,188 @@
+EDITOR HELP
+===========
+
+A vi-like text editor for the 6502 platform.
+
+Usage: editor <filename>
+
+If the file does not exist, starts with an empty buffer.
+Maximum file size: ~40KB. Files exceeding this are truncated and
+opened read-only.
+Maximum lines: 1023.
+
+
+MODES
+-----
+
+The editor has three modes:
+
+  NORMAL   Default mode for navigation and commands.
+  INSERT   Text entry mode. Entered via i, a, A, o, O.
+  COMMAND  Colon command-line mode. Entered via :.
+
+
+NORMAL MODE - MOVEMENT
+----------------------
+
+  h, Left        Move cursor left (accepts count)
+  l, Right       Move cursor right (accepts count)
+  j, Down        Move cursor down (accepts count)
+  k, Up          Move cursor up (accepts count)
+  0, Home        Move to beginning of line
+  $, End         Move to end of line (last character)
+  G              Go to last line; [N]G goes to line N
+  gg             Go to first line
+  Ctrl-F, PgDn   Scroll forward one screen
+  Ctrl-B, PgUp   Scroll backward one screen
+
+
+NORMAL MODE - EDITING
+---------------------
+
+All editing commands are blocked in read-only mode.
+
+  i              Enter insert mode at cursor
+  a              Enter insert mode after cursor
+  A              Enter insert mode at end of line
+  o              Open new line below, enter insert mode
+  O              Open new line above, enter insert mode
+  x, Delete      Delete character at cursor (accepts count)
+                 Yanks deleted characters (character yank)
+  D              Delete from cursor to end of line
+                 Yanks deleted characters (character yank)
+  dd             Delete current line (accepts count: [N]dd)
+                 Yanks deleted lines first (line yank)
+  yy             Yank (copy) current line (accepts count: [N]yy)
+                 Does not modify the file
+  p              Paste after/below cursor (accepts count: [N]p)
+                 Line yank: pastes lines below current line
+                 Char yank: inserts after cursor position
+  P              Paste before/above cursor (accepts count: [N]P)
+                 Line yank: pastes lines above current line
+                 Char yank: inserts before cursor position
+
+
+NORMAL MODE - SEARCH
+--------------------
+
+  /              Enter search prompt. Type a pattern and press Enter.
+                 Empty pattern reuses the previous search.
+                 ESC cancels. Search is literal (no regex).
+  n              Repeat last search forward (wraps around)
+  N              Repeat last search backward (wraps around)
+
+
+NORMAL MODE - MARKS
+-------------------
+
+  ma             Set mark 'a' at current line (a-z available)
+  'a             Jump to mark 'a' (cursor goes to column 0)
+
+  Marks are automatically adjusted when lines are inserted or
+  deleted. Marks within a deleted range are cleared.
+
+
+NORMAL MODE - COUNT PREFIX
+--------------------------
+
+  Type a number (1-9 to start, then 0-9) before a command to
+  repeat it. Examples:
+
+    5j             Move down 5 lines
+    3dd            Delete 3 lines
+    10x            Delete 10 characters
+    2p             Paste 2 times
+
+  Counts are capped at 1000. ESC clears an active count.
+  0 alone moves to line start; it does not start a count.
+
+
+NORMAL MODE - OTHER
+-------------------
+
+  :              Enter command-line mode
+  ESC            Clear count prefix and/or pending two-key command
+
+
+INSERT MODE
+-----------
+
+  Printable chars   Insert at cursor position
+  Enter             Split line (insert newline)
+  Backspace         Delete character before cursor; at column 0,
+                    joins with the previous line
+  Delete            Delete character at cursor; at end of line,
+                    joins with the next line
+  ESC               Return to normal mode (cursor moves back one)
+
+  Arrow keys, Home, End, PgUp, PgDn, Ctrl-F, Ctrl-B all work
+  for navigation within insert mode. The cursor can be positioned
+  one past the last character (for appending).
+
+
+COMMAND-LINE MODE
+-----------------
+
+  :w             Save file
+  :q             Quit (warns if file is modified)
+  :wq            Save and quit
+  :q!            Quit without saving
+  :[N]           Go to line N (1-based)
+  :marks         Display all set marks with line numbers
+
+  Range commands:
+
+  :[start],[end]d    Delete lines in range (yanks first)
+  :[start],[end]y    Yank (copy) lines in range
+
+  Range positions can be:
+    N              Line number (1-based)
+    'a             Mark reference
+    .              Current line
+
+  Examples:
+    :1,5d          Delete lines 1 through 5
+    :'a,'bd        Delete from mark a to mark b
+    :.,'ay         Yank from current line to mark a
+    :3,3d          Delete just line 3
+
+  If start > end, the range is automatically swapped.
+
+  ESC cancels command input. Backspace edits the command;
+  backspacing past the start cancels.
+
+
+YANK BUFFER
+-----------
+
+  The yank buffer (4KB) holds either complete lines or character
+  data, depending on the last yank/delete operation:
+
+  Line yank (from dd, yy, range commands):
+    p/P paste complete lines above or below.
+
+  Character yank (from x, D):
+    p inserts after cursor (or at line start if empty line).
+    P inserts before cursor.
+
+  Each new dd, yy, or range yank/delete clears the previous
+  yank buffer contents.
+
+
+STATUS BAR
+----------
+
+  The bottom line shows:
+    filename  [RO]  [+]  mode  count/pending  line,col  total
+
+  [RO]  = read-only (file was truncated)
+  [+]   = file has been modified since last save
+
+
+DISPLAY
+-------
+
+  Long lines wrap across multiple screen rows.
+  Lines past end of file are shown as ~ (tilde).
+  Non-ASCII bytes (high bit set) are shown as ? in reverse video.
+  Control characters in file content are shown as spaces.
