@@ -49,7 +49,7 @@ buf_init:
 ; Load file into buffer
 ; File handle in A (already opened)
 ; On return: buffer contains file contents, line table built
-; A=0: success, A=1: truncated, A=2: non-ASCII byte detected
+; Carry set = file was truncated, carry clear = fully loaded
 buf_load_file:
   STA FILE_HANDLE
   SET16 TEXT_BUF, BUF_END16
@@ -61,8 +61,6 @@ buf_load_file:
   LDA FILE_HANDLE
   JSR read                ; preserves X, Y
   BCS .read_done
-  CMP #$80
-  BCS .non_ascii           ; Byte >= $80 -> non-ASCII
   STA (BUF_END16),Y
   INY
   BNE .read_loop          ; Stay on same page
@@ -112,16 +110,12 @@ buf_load_file:
 .not_empty:
 
   JSR buf_rebuild_lines
-  LDA BUF_TEMP            ; 0 = success, $FF = truncated
+  LDA BUF_TEMP
   BEQ .return_ok
-  LDA #1                  ; Truncated
+  SEC                    ; Truncated
   RTS
 .return_ok:
-  LDA #0                  ; Success
-  RTS
-
-.non_ascii:
-  LDA #2                  ; Non-ASCII byte detected
+  CLC                    ; Not truncated
   RTS
 
 ; Save buffer to file
