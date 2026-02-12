@@ -15,14 +15,13 @@ Add conditional compiled option for:
   -labels without the : syntax
   -lower-case/mixed case opcodes
 
+Allow batching of inputtext to include newlines, and handle these within the batch insert
+Increase the maximum key batch size
+Make it so that actions affetcing only the currently line don't trigger a redraw (until e.e. the line wraps) Affects many things like typing, Shift+D, x, etc.
 
 fprintf(stderr, "Code file %s is too large to fit in memory\n", code_filename); - dead code in emulator.c?
 
 normal.asm - count prefix handling - can use ADC16
-
-After doing a delete, and retrying the search the search value seemed to have changed
-
-Let's make it so that ASCIIZ adds a null terminator on the strings, and so allow multiple null terminated strings
 
 Tests for mnemonic in directive position and visa versa
 
@@ -64,6 +63,12 @@ Please update the plan with the following:
 io.asm query_terminal_size - use strings instead of byte by byte
 
 Attempting to run the terminal version of the editor in the terminal version of the emulator results in nothing - should error out
+
+Resuming after Ctrl+Z doesn't restore the screen, when in terminal mode
+
+Other things triggering full redraws:
+-Home and end (insert mode) when already at home/end
+-Up/down and pgup/pgdn when at top/bottom (normal and insert mode)
 
 
 normal.asm - table driven key dispatch opportunity
