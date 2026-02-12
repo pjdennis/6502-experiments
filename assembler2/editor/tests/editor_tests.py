@@ -2727,6 +2727,48 @@ class EditorTestRunner:
             expected_content="Hello XWorld\n",
         )
 
+        self._group("Batch word motions (w, b, e):", leading_blank=True)
+
+        # Batch w: 5 w's on a 7-word line -> single frame
+        # Words: one(0) two(4) three(8) four(14) five(19) six(24) seven(28)
+        # 5 w's from col 0 -> col 24 ("six")
+        self.run_test_screen(
+            "Render opt: batch w is single frame",
+            "one two three four five six seven\n",
+            b"wwwww:q!\r",
+            expect_cursor=(0, 24),
+            expect_content_redraws=[True, False]
+        )
+
+        # Batch b: $ then 5 b's -> single frame
+        # $ -> col 32, 5 b's -> col 8 ("three")
+        self.run_test_screen(
+            "Render opt: batch b is single frame",
+            "one two three four five six seven\n",
+            b"$bbbbb:q!\r",
+            expect_cursor=(0, 8),
+            expect_content_redraws=[True, False, False]
+        )
+
+        # Batch e: 5 e's -> single frame
+        # e: one(2), two(6), three(12), four(17), five(22)
+        self.run_test_screen(
+            "Render opt: batch e is single frame",
+            "one two three four five six seven\n",
+            b"eeeee:q!\r",
+            expect_cursor=(0, 22),
+            expect_content_redraws=[True, False]
+        )
+
+        # Count prefix + batch: 3w + 2 batched w's = 5 total
+        self.run_test_screen(
+            "Count prefix + batch w combines",
+            "one two three four five six seven\n",
+            b"3www:q!\r",
+            expect_cursor=(0, 24),
+            expect_content_redraws=[True, False]
+        )
+
         self._group("Insert mode navigation keys:", leading_blank=True)
 
         HOME = b"\x1b[H"
