@@ -202,6 +202,28 @@ count_accumulate_digit:
 
   RTS
 
+; Get effective count with pending key batching
+; Clears RENDER_FLAG, gets count prefix, adds pending matching keys
+; Input: BUF_TEMP = key code to match (set by normal_handle_key)
+; Output: X = total count (count + pending), capped at 255
+; Clobbers: A
+get_batched_count:
+  LDA #0
+  STA RENDER_FLAG
+  JSR get_count
+  LDX BUF_TEMP16         ; X = count (low byte, capped at 255)
+  STX BUF_DELTA
+  JSR count_pending_key  ; X = pending matching keys
+  TXA
+  CLC
+  ADC BUF_DELTA          ; Total = count + pending
+  BCS .cap
+  TAX
+  RTS
+.cap:
+  LDX #$FF
+  RTS
+
 ; Get effective count in BUF_TEMP16, minimum 1
 ; If COUNT16 is 0, returns 1 (no count means "do once")
 ; Clobbers: A

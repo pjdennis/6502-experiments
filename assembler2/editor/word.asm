@@ -53,20 +53,7 @@ char_class:
 ; Skip current word-class chars, skip whitespace.
 ; If at EOL, move to next line col 0.
 normal_word_forward:
-  LDA #0
-  STA RENDER_FLAG
-  JSR get_count
-  LDX BUF_TEMP16         ; X = count (low byte, capped at 255)
-  STX BUF_DELTA
-  JSR count_pending_key  ; X = pending matching 'w' keys
-  TXA
-  CLC
-  ADC BUF_DELTA          ; Total = count + pending
-  BCS .cap_w
-  TAX
-  JMP .w_loop
-.cap_w:
-  LDX #$FF
+  JSR get_batched_count
 
 .w_loop:
   STX NORMAL_TEMP         ; Save counter
@@ -150,20 +137,7 @@ normal_word_forward:
 ; --- b command: move to start of previous word ---
 ; Accepts count prefix.
 normal_word_backward:
-  LDA #0
-  STA RENDER_FLAG
-  JSR get_count
-  LDX BUF_TEMP16         ; X = count (low byte, capped at 255)
-  STX BUF_DELTA
-  JSR count_pending_key  ; X = pending matching 'b' keys
-  TXA
-  CLC
-  ADC BUF_DELTA          ; Total = count + pending
-  BCS .cap_b
-  TAX
-  JMP .b_loop
-.cap_b:
-  LDX #$FF
+  JSR get_batched_count
 
 .b_loop:
   STX NORMAL_TEMP         ; Save counter
@@ -234,20 +208,7 @@ normal_word_backward:
 ; --- e command: move to end of current/next word ---
 ; Accepts count prefix.
 normal_word_end:
-  LDA #0
-  STA RENDER_FLAG
-  JSR get_count
-  LDX BUF_TEMP16         ; X = count (low byte, capped at 255)
-  STX BUF_DELTA
-  JSR count_pending_key  ; X = pending matching 'e' keys
-  TXA
-  CLC
-  ADC BUF_DELTA          ; Total = count + pending
-  BCS .cap_e
-  TAX
-  JMP .e_loop
-.cap_e:
-  LDX #$FF
+  JSR get_batched_count
 
 .e_loop:
   STX NORMAL_TEMP         ; Save counter
