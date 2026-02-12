@@ -3451,6 +3451,33 @@ class EditorTestRunner:
             expect_cursor=(0, 0),  # cursor at first deleted line (now line 1)
         )
 
+        # Range delete corrupts search buffer (yank buffer overlaps search buffer)
+        # YANK_BUF=$E000, SEARCH_BUF=$E020 - yank overwrites search pattern
+        # after 32 bytes. Delete enough lines so the yanked content exceeds
+        # 32 bytes, then repeat search with empty /. The pattern should still
+        # be intact.
+        self.run_test_screen(
+            "Search repeat works after range delete",
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZ_padding\n"
+            + "ABCDEFGHIJKLMNOPQRSTUVWXYZ_padding\n"
+            + "keepme\n" + "NEEDLE\n",
+            # Cursor starts at line 0.
+            # /NEEDLE finds NEEDLE on line 3. gg goes to line 0.
+            # ma on line 0, j to line 1, :'a,.d deletes lines 0-1
+            # (yanks >68 bytes, overwriting SEARCH_BUF at $E020).
+            # Remaining: "keepme\n" (line 0) and "NEEDLE\n" (line 1).
+            # Cursor at line 0 after delete. /\r repeats search.
+            # If search buffer intact: finds NEEDLE on line 1 -> cursor (1,0)
+            # If corrupted: pattern not found -> cursor stays at (0,0)
+            b"/NEEDLE\r"          # search finds NEEDLE on line 3
+            b"ggma"               # gg to line 0, set mark a
+            b"j"                  # move to line 1
+            b":'a,.d\r"           # delete lines 0-1 (yanks >68 bytes)
+            b"/\r"                # repeat search - should find NEEDLE
+            b":q!\r",
+            expect_cursor=(1, 0),  # NEEDLE is on line 1 after delete
+        )
+
         # --- Line numbers in range commands ---
 
         self._group("Line numbers in range commands:", leading_blank=True)
