@@ -1005,6 +1005,9 @@ void hookexternal(void *funcptr) {
 #define port_term_rows 0xfe92
 #define port_term_cols 0xfe93
 #define port_con_ready 0xfe94
+#define port_serial_ready 0xfe95
+#define port_serial_data  0xfe96
+#define port_serial_write 0xfe97
 
 uint8_t memory[0x10001];
 
@@ -1604,6 +1607,10 @@ uint8_t read6502(uint16_t address) {
         } else {
             return 0xFF;  // In file mode, always ready
         }
+    } else if (address == port_serial_ready) {        // serial_ready
+        return 0x00;  // Never ready (stub)
+    } else if (address == port_serial_data) {         // serial_data
+        return 0x00;  // No data (stub)
     } else if (address == 0xfffe && memory[0xfffe] == 0 && memory[0xffff] == 0) {
         done = 1;
     }/* else if (address == 0xfe) {
@@ -1654,6 +1661,8 @@ void write6502(uint16_t address, uint8_t value) {
     } else if (address == port_con_flush) {          // con_flush
         fflush(stdout);
         return;
+    } else if (address == port_serial_write) {      // serial_write
+        return;  // Silently discard (stub)
     }
 
     memory[address] = value;
@@ -1848,6 +1857,10 @@ int main(int argc, char **argv) {
     save_address(addr_term_rows);
     emit_byte(inst_jmp);        // f033     jmp term_cols
     save_address(addr_term_cols);
+    emit_byte(inst_jmp);        // f036     jmp serial_read
+    save_address(addr_serial_read);
+    emit_byte(inst_jmp);        // f039     jmp serial_write
+    save_address(addr_serial_write);
     fill_address(addr_read_b);
     emit_byte(inst_lda);        // read_b:  lda $f004
     emit_address(port_read_b);
@@ -1927,6 +1940,20 @@ int main(int argc, char **argv) {
     emit_byte(inst_lda);        // term_cols: lda $fe93
     emit_address(port_term_cols);
     emit_byte(inst_rts);        //            rts
+    fill_address(addr_serial_read);
+    emit_byte(inst_lda);        // serial_read: lda $fe95
+    emit_address(port_serial_ready);
+    emit_byte(inst_beq);        //              beq .no_data (+4)
+    emit_byte(0x04);
+    emit_byte(inst_lda);        //              lda $fe96
+    emit_address(port_serial_data);
+    emit_byte(inst_clc);        //              clc
+    emit_byte(inst_rts);        //              rts
+    emit_byte(inst_sec);        // .no_data:    sec
+    emit_byte(inst_rts);        //              rts
+    fill_address(addr_serial_write);
+    emit_byte(inst_sec);        // serial_write: sec (not accepted, no terminal mode)
+    emit_byte(inst_rts);        //               rts
 
     if (console_mode) {
         input_file_ptr = stdin;
