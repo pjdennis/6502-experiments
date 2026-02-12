@@ -355,6 +355,8 @@ do_mark_goto:
 ; --- Mode switch ---
 
 normal_enter_command:
+  LDA #0
+  STA RENDER_FLAG
   LDA #MODE_COMMAND
   STA MODE
   JMP clear_count

@@ -159,6 +159,8 @@ main_loop:
   LDA MODE
   CMP #MODE_COMMAND
   BNE .not_command_entry
+  LDA #0
+  STA RENDER_FLAG
   JSR command_handle
   JMP .after_key
 .not_command_entry:

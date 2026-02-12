@@ -1992,6 +1992,14 @@ class EditorTestRunner:
             expect_content_redraws=[True, False, False]
         )
 
+        # : then ESC (cancel command mode): cursor-only
+        self.run_test_screen(
+            "Render opt: command cancel is cursor-only",
+            "Hello\n",
+            b":\x1b:q!\r",
+            expect_content_redraws=[True, False, False]
+        )
+
         # Insert char: only cursor's row is touched (not all rows)
         # i enters insert (cursor-only), 'X' inserts (cursor row + below)
         # render_current_line_and_status renders from cursor row downward
