@@ -172,8 +172,8 @@ read_key:
   BEQ .key_pgup
   CMP #'6'
   BEQ .key_pgdn
-  ; Unknown Fn key - return ESC
-  LDA #KEY_ESC
+  ; Unknown Fn key (e.g. Insert) - return no-op
+  LDA #$00
   RTS
 
 .key_up:
@@ -207,8 +207,13 @@ read_key:
 .not_tilde:
 .unknown_csi:
 .unknown_eat:
-  ; Unknown escape sequence - return ESC
-  LDA #KEY_ESC
+  ; Unknown CSI sequence - consume remaining bytes and return no-op
+  ; CSI final bytes are >= $40 ('@'-'~'); params/intermediates are < $40
+  CMP #$40
+  BCS .csi_consumed      ; Last byte read was already a final byte
+  JSR consume_csi_tail   ; Drain until final byte
+.csi_consumed:
+  LDA #$00
   RTS
 .not_csi:
   ; Byte after ESC was not '[' - push it back and return bare ESC
@@ -217,6 +222,13 @@ read_key:
   RTS
 
 .done:
+  RTS
+
+; Drain remaining bytes of a CSI sequence until final byte (>= $40)
+consume_csi_tail:
+  JSR input_read_byte
+  CMP #$40
+  BCC consume_csi_tail   ; Keep reading param/intermediate bytes (< $40)
   RTS
 
 ; Read one decoded key (with decoded pushback support)

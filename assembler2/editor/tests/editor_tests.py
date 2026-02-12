@@ -5336,6 +5336,100 @@ class EditorTestRunner:
         )
 
         # ============================================================
+        # Extended key handling (function keys, ctrl+arrows, etc.)
+        # ============================================================
+        self._group("Extended key handling:", leading_blank=True)
+
+        # F5 (ESC[15~) in normal mode - should be consumed, no side effects
+        self.run_test(
+            "F5 in normal mode is no-op",
+            "hello\n",
+            b"\x1b[15~:wq\r",
+            expected_content="hello\n"
+        )
+
+        # F12 (ESC[24~) in normal mode - should be consumed, no side effects
+        self.run_test(
+            "F12 in normal mode is no-op",
+            "hello\n",
+            b"\x1b[24~:wq\r",
+            expected_content="hello\n"
+        )
+
+        # Ctrl+Right (ESC[1;5C) in normal mode - should be consumed
+        self.run_test(
+            "Ctrl+Right in normal mode is no-op",
+            "hello\n",
+            b"\x1b[1;5C:wq\r",
+            expected_content="hello\n"
+        )
+
+        # Shift+Up (ESC[1;2A) in normal mode - should be consumed
+        self.run_test(
+            "Shift+Up in normal mode is no-op",
+            "hello\n",
+            b"\x1b[1;2A:wq\r",
+            expected_content="hello\n"
+        )
+
+        # Insert key (ESC[2~) in normal mode - should be no-op
+        self.run_test(
+            "Insert key in normal mode is no-op",
+            "hello\n",
+            b"\x1b[2~:wq\r",
+            expected_content="hello\n"
+        )
+
+        # Multiple unknown sequences in a row
+        self.run_test(
+            "Multiple unknown keys in a row",
+            "hello\n",
+            b"\x1b[15~\x1b[24~\x1b[1;5C:wq\r",
+            expected_content="hello\n"
+        )
+
+        # F5 in insert mode - should stay in insert mode
+        self.run_test(
+            "F5 in insert mode stays in insert mode",
+            "hello\n",
+            b"i\x1b[15~X\x1b:wq\r",
+            expected_content="Xhello\n"
+        )
+
+        # Ctrl+Right in insert mode - should stay in insert mode
+        self.run_test(
+            "Ctrl+Right in insert mode stays in insert mode",
+            "hello\n",
+            b"i\x1b[1;5CX\x1b:wq\r",
+            expected_content="Xhello\n"
+        )
+
+        # Regression: arrow keys still work
+        self.run_test_screen(
+            "Regression: right arrow still works",
+            "hello\n",
+            b"ll:q!\r",
+            expect_cursor=(0, 2),
+        )
+
+        # Regression: delete key still works
+        self.run_test(
+            "Regression: delete key still works",
+            "hello\n",
+            b"\x1b[3~:wq\r",
+            expected_content="ello\n"
+        )
+
+        # Regression: PgDn still works
+        self.run_test_screen(
+            "Regression: PgDn still works",
+            make_lines(30),
+            b"\x1b[6~:q!\r",
+            expect_cursor=(0, 0),
+            expect_lines=[(0, "Line 10")],
+        )
+
+        # ============================================================
         # Terminal mode tests
         # ============================================================
         self._group("Terminal mode:", leading_blank=True)
