@@ -424,9 +424,18 @@ class EditorTestRunner:
             if expect_content_redraws is not None:
                 actual_count = screen.get_frame_count()
                 expected_count = len(expect_content_redraws)
+                # Build full redraw pattern for diagnostics
+                actual_pattern = [screen.was_content_redrawn(i)
+                                  for i in range(actual_count)]
+                pattern_str = (
+                    f"    Total frames: {actual_count}\n"
+                    f"    Actual redraws:   {actual_pattern}\n"
+                    f"    Expected redraws: {list(expect_content_redraws)}"
+                )
                 if actual_count < expected_count:
                     self._fail(name,
                         f"Expected {expected_count} frames, got {actual_count}\n"
+                        f"{pattern_str}\n"
                         f"    Frame:\n{screen.dump()}")
                     return
                 for i, expected_redraw in enumerate(expect_content_redraws):
@@ -435,6 +444,7 @@ class EditorTestRunner:
                         self._fail(name,
                             f"Frame {i}: expected content_redrawn="
                             f"{expected_redraw}, got {actual_redraw}\n"
+                            f"{pattern_str}\n"
                             f"    Frame:\n{screen.dump()}")
                         return
 
@@ -617,9 +627,18 @@ class EditorTestRunner:
             if expect_content_redraws is not None:
                 actual_count = screen.get_frame_count()
                 expected_count = len(expect_content_redraws)
+                # Build full redraw pattern for diagnostics
+                actual_pattern = [screen.was_content_redrawn(i)
+                                  for i in range(actual_count)]
+                pattern_str = (
+                    f"    Total frames: {actual_count}\n"
+                    f"    Actual redraws:   {actual_pattern}\n"
+                    f"    Expected redraws: {list(expect_content_redraws)}"
+                )
                 if actual_count < expected_count:
                     self._fail(name,
                         f"Expected {expected_count} frames, got {actual_count}\n"
+                        f"{pattern_str}\n"
                         f"    Frame:\n{screen.dump()}")
                     return
                 for i, expected_redraw in enumerate(expect_content_redraws):
@@ -628,6 +647,7 @@ class EditorTestRunner:
                         self._fail(name,
                             f"Frame {i}: expected content_redrawn="
                             f"{expected_redraw}, got {actual_redraw}\n"
+                            f"{pattern_str}\n"
                             f"    Frame:\n{screen.dump()}")
                         return
 
@@ -2614,6 +2634,28 @@ class EditorTestRunner:
             make_lines(10),
             b"i" + DOWN * 5 + b"\x1b:q!\r",
             expect_content_redraws=[True, True, False, False]
+        )
+
+        # Render optimization: batch insert down arrows with scroll
+        # 15-line file, 10 rows. i(T), then 11 DOWN arrows batch into one
+        # scroll repaint(T), ESC(F). Without batching: each DOWN is a
+        # separate frame, first 8 are no-scroll(F) then 3 scroll(T).
+        self.run_test_screen(
+            "Render opt: batch insert down scroll is single repaint",
+            make_lines(15),
+            b"i" + DOWN * 11 + b"\x1b:q!\r",
+            expect_content_redraws=[True, True, True, False]
+        )
+
+        # Render optimization: batch insert up arrows with scroll
+        # G(T) scrolls to bottom, i(T), 12 UP arrows batch into one
+        # scroll repaint(T), ESC(F). Without batching: each UP is a
+        # separate frame, first ~5 are no-scroll(F) then rest scroll(T).
+        self.run_test_screen(
+            "Render opt: batch insert up scroll is single repaint",
+            make_lines(15),
+            b"Gi" + UP * 12 + b"\x1b:q!\r",
+            expect_content_redraws=[True, True, True, True, False]
         )
 
         # Batch insert up arrows: correctness check

@@ -426,30 +426,46 @@ insert_delete:
 ; that would clamp to len-1 instead of len (one past last char for insert)
 
 insert_move_up:
-  ; Move up one line if not at first line
+  ; Batch pending UP keys and move up
+  LDA #KEY_UP
+  STA BUF_TEMP
+  JSR count_pending_key  ; X = pending matching keys
+  INX                     ; +1 for current key
+.up_loop:
+  STX BUF_TEMP           ; Save counter
   TST16 FILE_LINE16
-  BEQ .done
-  DEC16 FILE_LINE16
+  BEQ .up_done
   LDA #0
   STA RENDER_FLAG
+  DEC16 FILE_LINE16
+  LDX BUF_TEMP
+  DEX
+  BNE .up_loop
+.up_done:
   JSR clamp_cursor_col_insert
-  JSR ensure_cursor_visible
-.done:
-  RTS
+  JMP ensure_cursor_visible
 
 insert_move_down:
-  ; Move down one line if not at last line
+  ; Batch pending DOWN keys and move down
+  LDA #KEY_DOWN
+  STA BUF_TEMP
+  JSR count_pending_key  ; X = pending matching keys
+  INX                     ; +1 for current key
+.down_loop:
+  STX BUF_TEMP           ; Save counter
   CLC
   ADCI16 FILE_LINE16, $0001, BUF_PTR16
   CMP16 BUF_PTR16, LINE_COUNT16
-  BCS .done
-  INC16 FILE_LINE16
+  BCS .down_done
   LDA #0
   STA RENDER_FLAG
+  INC16 FILE_LINE16
+  LDX BUF_TEMP
+  DEX
+  BNE .down_loop
+.down_done:
   JSR clamp_cursor_col_insert
-  JSR ensure_cursor_visible
-.done:
-  RTS
+  JMP ensure_cursor_visible
 
 insert_page_down:
   JSR normal_page_down
