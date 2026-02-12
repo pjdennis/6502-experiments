@@ -81,6 +81,10 @@ normal_handle_key:
   RTS
 
 .dispatch_key:
+  LDA LAST_KEY
+  BEQ normal_dispatch
+  JMP pending_key_dispatch
+normal_dispatch:
   LDA #<normal_movement_keys
   LDX #>normal_movement_keys
   JSR dispatch_key
@@ -102,6 +106,36 @@ normal_handle_key:
   STA RENDER_FLAG
 .done:
   RTS
+
+; --- Pending key dispatch ---
+; Called when LAST_KEY is set and a second key arrives in BUF_TEMP.
+; If BUF_TEMP matches LAST_KEY, execute the two-key command.
+; Otherwise, clear LAST_KEY and re-dispatch the key normally.
+pending_key_dispatch:
+  LDA BUF_TEMP
+  CMP LAST_KEY
+  BNE .not_repeat
+  ; Second key matches first - execute the command
+  LDA LAST_KEY
+  CMP #'d'
+  BEQ .exec_dd
+  CMP #'g'
+  BEQ .exec_gg
+  CMP #'y'
+  BEQ .exec_yy
+  ; Unknown pending key - clear and fall through
+  JMP .not_repeat
+.exec_dd:
+  JMP do_dd
+.exec_gg:
+  JMP do_gg
+.exec_yy:
+  JMP do_yy
+.not_repeat:
+  ; Key doesn't match pending - clear LAST_KEY, re-dispatch normally
+  LDA #0
+  STA LAST_KEY
+  JMP normal_dispatch
 
 ; --- Dispatch tables ---
 
@@ -457,10 +491,11 @@ normal_goto_last:
   JMP clear_count
 
 normal_g_key:
-  LDA LAST_KEY
-  CMP #'g'
-  BNE .set_g
-  ; gg: go to top
+  LDA #'g'
+  JMP set_pending_key
+
+; gg: go to top of file
+do_gg:
   LDA #0
   STA_LH16 FILE_LINE16
   STA_LH16 VIEW_TOP16
@@ -469,9 +504,6 @@ normal_g_key:
   STA VIEW_TOP_WRAP
   JSR clamp_cursor_col
   JMP clear_count
-.set_g:
-  LDA #'g'
-  JMP set_pending_key
 
 ; --- Editing ---
 
@@ -554,13 +586,11 @@ normal_delete_to_eol:
   JMP clear_count
 
 normal_d_key:
-  LDA LAST_KEY
-  CMP #'d'
-  BEQ .do_dd
-  JMP .set_d
-.do_dd:
+  LDA #'d'
+  JMP set_pending_key
 
-  ; dd: yank then delete N lines (N = count, min 1)
+; dd: yank then delete N lines (N = count, min 1)
+do_dd:
   JSR yank_clear
   JSR get_count              ; BUF_TEMP16 = count (16-bit)
   LDAX16 FILE_LINE16
@@ -593,10 +623,6 @@ normal_d_key:
   SET16 str_yank_full, STR_PTR16
   JSR show_status_message
   JMP clear_count
-
-.set_d:
-  LDA #'d'
-  JMP set_pending_key
 
 normal_enter_insert:
   LDA #MODE_INSERT
@@ -787,15 +813,11 @@ check_paste_fits:
   RTS
 
 normal_y_key:
-  ; Two-key command: first 'y' sets LAST_KEY, second 'y' yanks
-  LDA LAST_KEY
-  CMP #'y'
-  BEQ .do_yy
   LDA #'y'
   JMP set_pending_key
 
-.do_yy:
-  ; Yank N lines starting at current line
+; yy: yank N lines starting at current line
+do_yy:
   JSR yank_clear
   JSR get_count              ; BUF_TEMP16 = count (16-bit)
   LDAX16 FILE_LINE16
