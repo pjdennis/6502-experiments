@@ -1036,32 +1036,25 @@ normal_search_backward:
 
 normal_find_next:
   LDA SEARCH_LEN
-  BEQ .none        ; No search pattern
+  BEQ search_find_none
   LDA SEARCH_DIR
+  JMP search_find_dir
+
+normal_find_prev:
+  LDA SEARCH_LEN
+  BEQ search_find_none
+  LDA SEARCH_DIR
+  EOR #1
+
+search_find_dir:
   BNE .backward
   JSR search_forward
   JMP clear_count
 .backward:
   JSR search_backward
   JMP clear_count
-.none:
-  ; No prior search, just cursor-only update
-  LDA #0
-  STA RENDER_FLAG
-  JMP clear_count
 
-normal_find_prev:
-  LDA SEARCH_LEN
-  BEQ .none        ; No search pattern
-  LDA SEARCH_DIR
-  BNE .forward
-  JSR search_backward
-  JMP clear_count
-.forward:
-  JSR search_forward
-  JMP clear_count
-.none:
-  ; No prior search, just cursor-only update
+search_find_none:
   LDA #0
   STA RENDER_FLAG
   JMP clear_count
