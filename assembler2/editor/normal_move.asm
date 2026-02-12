@@ -279,6 +279,7 @@ normal_goto_last:
 
 .goto_set:
   LDA #0
+  STA RENDER_FLAG
   STA_LH16 CURSOR_COL16
   STA VIEW_TOP_WRAP
   JSR ensure_cursor_visible
@@ -291,6 +292,13 @@ normal_g_key:
 
 ; gg: go to top of file
 do_gg:
+  LDA VIEW_TOP16
+  ORA VIEW_TOP16 + 1
+  ORA VIEW_TOP_WRAP
+  BNE .do_it             ; View will change, keep $FF
+  LDA #0
+  STA RENDER_FLAG        ; Already at top, cursor-only
+.do_it:
   LDA #0
   STA_LH16 FILE_LINE16
   STA_LH16 VIEW_TOP16
@@ -378,6 +386,7 @@ do_mark_goto:
   BCS .mark_not_set
   STAX16 FILE_LINE16
   LDA #0
+  STA RENDER_FLAG
   STA_LH16 CURSOR_COL16
   JSR ensure_cursor_visible
   JSR clamp_cursor_col

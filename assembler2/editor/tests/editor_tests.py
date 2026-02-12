@@ -2090,6 +2090,35 @@ class EditorTestRunner:
             expect_content_redraws=[True, False, False, False]
         )
 
+        # G at last line (no scroll): cursor-only
+        # On a 5-line file (fits in 9 content rows), G moves to last line
+        # but view doesn't change. ensure_cursor_visible won't upgrade.
+        self.run_test_screen(
+            "Render opt: G on short file is cursor-only",
+            make_lines(5),
+            b"G:q!\r",
+            expect_content_redraws=[True, False]
+        )
+
+        # gg at first line: cursor-only (already at top)
+        # g (F - pending key), g (should be F - already at top)
+        self.run_test_screen(
+            "Render opt: gg at top is cursor-only",
+            "Hello\n",
+            b"gg:q!\r",
+            expect_content_redraws=[True, False, False]
+        )
+
+        # Mark goto to current line: cursor-only
+        # m (F - pending key), a (F - mark set), ' (F - pending key),
+        # a (should be F - mark goto to same line, no scroll)
+        self.run_test_screen(
+            "Render opt: mark goto same line is cursor-only",
+            "Line 1\nLine 2\n",
+            b"ma'a:q!\r",
+            expect_content_redraws=[True, False, False, False, False]
+        )
+
         # Insert char: only cursor's row is touched (not all rows)
         # i enters insert (cursor-only), 'X' inserts (cursor row + below)
         # render_current_line_and_status renders from cursor row downward
