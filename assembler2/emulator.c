@@ -94,7 +94,7 @@
  *****************************************************
  * Useful variables in this emulator:                *
  *                                                   *
- * uint32_t clockticks6502                           *
+ * uint64_t clockticks6502                           *
  *   - A running total of the emulated cycle count.  *
  *                                                   *
  * uint32_t instructions                             *
@@ -187,7 +187,7 @@ uint8_t sp, a, x, y, status;
 
 //helper variables
 uint32_t instructions = 0; //keep track of total instructions executed
-uint32_t clockticks6502 = 0, clockgoal6502 = 0;
+uint64_t clockticks6502 = 0, clockgoal6502 = 0;
 uint16_t oldpc, ea, reladdr, value, result;
 uint8_t opcode, oldstatus;
 
@@ -938,7 +938,7 @@ void irq6502() {
 uint8_t callexternal = 0;
 void (*loopexternal)();
 
-void exec6502(uint32_t tickcount) {
+void exec6502(uint64_t tickcount) {
     clockgoal6502 += tickcount;
 
     while (clockticks6502 < clockgoal6502) {
@@ -1031,7 +1031,7 @@ FILE* serial_output_file = NULL;
 double target_mhz = 0.0;
 double cpu_mhz = 0.0;
 int serial_baud = 0;
-uint32_t serial_cycles_per_byte = 0;
+uint64_t serial_cycles_per_byte = 0;
 
 // Serial buffering - simulates hardware FIFOs
 // RX: characters fill from source at baud rate, CPU reads instantly from buffer
@@ -1040,12 +1040,12 @@ uint32_t serial_cycles_per_byte = 0;
 static uint8_t serial_rx_buf[SERIAL_BUF_SIZE];
 static int serial_rx_head = 0;  // next write position
 static int serial_rx_tail = 0;  // next read position
-static uint32_t serial_rx_next_fill_at = 0;
+static uint64_t serial_rx_next_fill_at = 0;
 
 static uint8_t serial_tx_buf[SERIAL_BUF_SIZE];
 static int serial_tx_head = 0;
 static int serial_tx_tail = 0;
-static uint32_t serial_tx_next_drain_at = 0;
+static uint64_t serial_tx_next_drain_at = 0;
 int override_rows = 0;
 int override_cols = 0;
 struct termios orig_termios;
@@ -2070,7 +2070,7 @@ int main(int argc, char **argv) {
 
     if (serial_baud > 0) {
         double effective_cpu_mhz = cpu_mhz > 0.0 ? cpu_mhz : target_mhz;
-        serial_cycles_per_byte = (uint32_t)(effective_cpu_mhz * 10000000.0 / serial_baud);
+        serial_cycles_per_byte = (uint64_t)(effective_cpu_mhz * 10000000.0 / serial_baud);
     }
 
     if (terminal_mode && !input_specified && !output_specified) {
@@ -2368,7 +2368,7 @@ int main(int argc, char **argv) {
     }
     reset6502();
 
-    uint32_t next_throttle_check = 10000;
+    uint64_t next_throttle_check = 10000;
     if (target_mhz > 0) {
         clock_gettime(CLOCK_MONOTONIC, &start_time);
     }
@@ -2474,9 +2474,9 @@ int main(int argc, char **argv) {
     // Print final status line (skip in console/terminal mode)
     if (!console_mode && !terminal_mode) {
         if (error_output_started || exitcode != 0) {
-            fprintf(stderr, "Exit code %d; Executed %i cycles\n", exitcode, clockticks6502);
+            fprintf(stderr, "Exit code %d; Executed %llu cycles\n", exitcode, (unsigned long long)clockticks6502);
         } else {
-            fprintf(stderr, "executed %i cycles\n", clockticks6502);
+            fprintf(stderr, "executed %llu cycles\n", (unsigned long long)clockticks6502);
         }
     }
 
