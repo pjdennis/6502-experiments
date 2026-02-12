@@ -706,10 +706,7 @@ do_dd:
   JMP clear_count
 
 .yank_overflow:
-  JSR yank_clear
-  SET16 str_yank_full, STR_PTR16
-  JSR show_status_message
-  JMP clear_count
+  JMP show_yank_overflow
 
 normal_enter_insert:
   LDA #MODE_INSERT
@@ -1003,10 +1000,7 @@ do_yy:
   JMP clear_count            ; Done - don't set MODIFIED
 
 .overflow:
-  JSR yank_clear
-  SET16 str_yank_full, STR_PTR16
-  JSR show_status_message
-  JMP clear_count
+  JMP show_yank_overflow
 
 normal_search:
   JSR search_handle
@@ -1331,10 +1325,7 @@ cc_have_count:
   JMP clear_count
 
 .cc_overflow:
-  JSR yank_clear
-  SET16 str_yank_full, STR_PTR16
-  JSR show_status_message
-  JMP clear_count
+  JMP show_yank_overflow
 
 .cc_buf_full:
   SET16 str_buffer_full, STR_PTR16
@@ -1630,6 +1621,14 @@ do_cb:
   JMP clear_count
 
 ; --- Utilities ---
+
+; Show yank overflow error: clear yank, show message, clear count
+; Used when yank buffer is too full to complete an operation
+show_yank_overflow:
+  JSR yank_clear
+  SET16 str_yank_full, STR_PTR16
+  JSR show_status_message
+  JMP clear_count
 
 ; Yank then delete N lines starting at FILE_LINE16
 ; Input: BUF_TEMP16 = count of lines (from get_count)
