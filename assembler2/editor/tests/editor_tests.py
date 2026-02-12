@@ -2054,6 +2054,42 @@ class EditorTestRunner:
             expect_content_redraws=[True, False, False, False]
         )
 
+        # Ctrl-F at bottom of file: cursor-only (view doesn't change)
+        # 5-line file, 10 rows (9 content). All lines fit on screen.
+        # Ctrl-F clamps to last line but view stays the same.
+        CTRL_F = b'\x06'
+        CTRL_B = b'\x02'
+        self.run_test_screen(
+            "Render opt: Ctrl-F at bottom is cursor-only",
+            make_lines(5),
+            CTRL_F + b":q!\r",
+            expect_content_redraws=[True, False]
+        )
+
+        # Ctrl-B at top of file: cursor-only (view doesn't change)
+        self.run_test_screen(
+            "Render opt: Ctrl-B at top is cursor-only",
+            make_lines(5),
+            CTRL_B + b":q!\r",
+            expect_content_redraws=[True, False]
+        )
+
+        # Insert Ctrl-F at bottom: cursor-only
+        self.run_test_screen(
+            "Render opt: insert Ctrl-F at bottom is cursor-only",
+            make_lines(5),
+            b"i" + CTRL_F + b"\x1b:q!\r",
+            expect_content_redraws=[True, False, False, False]
+        )
+
+        # Insert Ctrl-B at top: cursor-only
+        self.run_test_screen(
+            "Render opt: insert Ctrl-B at top is cursor-only",
+            make_lines(5),
+            b"i" + CTRL_B + b"\x1b:q!\r",
+            expect_content_redraws=[True, False, False, False]
+        )
+
         # Insert char: only cursor's row is touched (not all rows)
         # i enters insert (cursor-only), 'X' inserts (cursor row + below)
         # render_current_line_and_status renders from cursor row downward

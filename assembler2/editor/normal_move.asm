@@ -103,6 +103,7 @@ normal_move_up:
   JMP clear_count
 
 normal_page_down:
+  CP16 VIEW_TOP16, BUF_DST16  ; Save original VIEW_TOP16
   ; page_size = SCREEN_ROWS - 1 (content rows excluding status bar)
   LDA SCREEN_ROWS
   SEC
@@ -161,6 +162,11 @@ normal_page_down:
   STA_LH16 VIEW_TOP16
 
 .set_row:
+  CMP16 BUF_DST16, VIEW_TOP16  ; Did view actually scroll?
+  BNE .did_scroll
+  LDA #0
+  STA RENDER_FLAG               ; No scroll -> cursor-only
+.did_scroll:
   CP16 BUF_PTR16, FILE_LINE16
   LDA #0
   STA_LH16 CURSOR_COL16
@@ -170,6 +176,7 @@ normal_page_down:
   JMP clear_count
 
 normal_page_up:
+  CP16 VIEW_TOP16, BUF_DST16  ; Save original VIEW_TOP16
   ; page_size = SCREEN_ROWS - 1
   LDA SCREEN_ROWS
   SEC
@@ -212,6 +219,11 @@ normal_page_up:
   STA VIEW_TOP16 + 1
 
 .set_row:
+  CMP16 BUF_DST16, VIEW_TOP16  ; Did view actually scroll?
+  BNE .did_scroll
+  LDA #0
+  STA RENDER_FLAG               ; No scroll -> cursor-only
+.did_scroll:
   CP16 BUF_PTR16, FILE_LINE16
   LDA #0
   STA_LH16 CURSOR_COL16
