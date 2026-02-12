@@ -583,14 +583,7 @@ do_gg:
 ; --- Editing ---
 
 normal_delete_char:
-  JSR get_current_line_len
-  STAX16 LINE_LEN16
-  TST16 LINE_LEN16
-  BNE .not_empty
-  JMP .done
-.not_empty:
-
-  CMP16 CURSOR_COL16, LINE_LEN16
+  JSR check_cursor_in_line
   BCC .in_range
   JMP .done
 .in_range:
@@ -675,12 +668,8 @@ normal_delete_char:
   JMP clear_count
 
 normal_delete_to_eol:
-  JSR get_current_line_len
-  STAX16 LINE_LEN16
-  TST16 LINE_LEN16
-  BEQ .done
-  CMP16 CURSOR_COL16, LINE_LEN16
-  BCS .done                ; Cursor at or past end
+  JSR check_cursor_in_line
+  BCS .done
 
   ; count = LINE_LEN16 - CURSOR_COL16 (16-bit)
   SEC
@@ -1079,11 +1068,7 @@ normal_toggle_case:
 
 .tilde_loop:
   STX NORMAL_TEMP
-  JSR get_current_line_len
-  STAX16 LINE_LEN16
-  TST16 LINE_LEN16
-  BEQ .tilde_done
-  CMP16 CURSOR_COL16, LINE_LEN16
+  JSR check_cursor_in_line
   BCS .tilde_done
 
   JSR get_cursor_buf_ptr
@@ -1179,11 +1164,7 @@ normal_join_lines:
 
 ; --- Substitute char (s) ---
 normal_substitute_char:
-  JSR get_current_line_len
-  STAX16 LINE_LEN16
-  TST16 LINE_LEN16
-  BEQ .sub_insert
-  CMP16 CURSOR_COL16, LINE_LEN16
+  JSR check_cursor_in_line
   BCS .sub_insert
 
   SEC
@@ -1220,11 +1201,7 @@ normal_substitute_char:
 
 ; --- Change to EOL (C) ---
 normal_change_to_eol:
-  JSR get_current_line_len
-  STAX16 LINE_LEN16
-  TST16 LINE_LEN16
-  BEQ .c_insert
-  CMP16 CURSOR_COL16, LINE_LEN16
+  JSR check_cursor_in_line
   BCS .c_insert
 
   SEC
@@ -1247,11 +1224,7 @@ do_replace_char:
 
 .replace_loop:
   STX NORMAL_TEMP
-  JSR get_current_line_len
-  STAX16 LINE_LEN16
-  TST16 LINE_LEN16
-  BEQ .replace_done
-  CMP16 CURSOR_COL16, LINE_LEN16
+  JSR check_cursor_in_line
   BCS .replace_done
 
   JSR get_cursor_buf_ptr
@@ -1455,16 +1428,8 @@ do_dw:
 
 .dw_loop:
   STX NORMAL_TEMP
-  JSR get_current_line_len
-  STAX16 LINE_LEN16
-  TST16 LINE_LEN16
-  BNE .dw_not_empty
-  JMP .dw_done
-.dw_not_empty:
-  CMP16 CURSOR_COL16, LINE_LEN16
-  BCC .dw_in_range
-  JMP .dw_done
-.dw_in_range:
+  JSR check_cursor_in_line
+  BCS .dw_done
 
   ; Find forward word boundary
   CP16 CURSOR_COL16, BUF_LEN16   ; BUF_LEN16 = scan position
@@ -1542,16 +1507,8 @@ do_cw:
 
 .cw_loop:
   STX NORMAL_TEMP
-  JSR get_current_line_len
-  STAX16 LINE_LEN16
-  TST16 LINE_LEN16
-  BNE .cw_not_empty
-  JMP .cw_insert
-.cw_not_empty:
-  CMP16 CURSOR_COL16, LINE_LEN16
-  BCC .cw_in_range
-  JMP .cw_insert
-.cw_in_range:
+  JSR check_cursor_in_line
+  BCS .cw_insert
 
   ; Find end of current word (no trailing whitespace)
   CP16 CURSOR_COL16, BUF_LEN16
@@ -1736,6 +1693,23 @@ find_word_start_backward:
   INC16 BUF_LEN16           ; Different class - word starts one to right
 
 .fwsb_done:
+  RTS
+
+; Check if cursor is within current line
+; Returns: carry clear = cursor in range (LINE_LEN16 set)
+;          carry set = line empty or cursor at/past end
+; Clobbers: A, X
+check_cursor_in_line:
+  JSR get_current_line_len
+  STAX16 LINE_LEN16
+  TST16 LINE_LEN16
+  BEQ .bail
+  CMP16 CURSOR_COL16, LINE_LEN16
+  BCS .bail
+  CLC
+  RTS
+.bail:
+  SEC
   RTS
 
 get_current_line_len:
