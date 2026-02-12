@@ -4875,6 +4875,304 @@ class EditorTestRunner:
                 extra_args=["--cpu-mhz", "1", "--baud", "9600"]
             )
 
+            # --------------------------------------------------------
+            # Screen state tests in terminal mode
+            # --------------------------------------------------------
+            self._group("Terminal mode - screen state:", leading_blank=True)
+
+            # Cursor at (0,0) on open
+            self.run_test_terminal_screen(
+                "Terminal cursor at (0,0) on open",
+                "Hello\n",
+                b":q!\r",
+                expect_cursor=(0, 0)
+            )
+
+            # Cursor movement: lll -> (0,3)
+            self.run_test_terminal_screen(
+                "Terminal lll moves cursor to (0,3)",
+                "Hello\n",
+                b"lll:q!\r",
+                expect_cursor=(0, 3)
+            )
+
+            # Cursor movement: lllh -> (0,2)
+            self.run_test_terminal_screen(
+                "Terminal lllh moves cursor to (0,2)",
+                "Hello\n",
+                b"lllh:q!\r",
+                expect_cursor=(0, 2)
+            )
+
+            # Cursor movement: jj -> (2,0)
+            self.run_test_terminal_screen(
+                "Terminal jj moves cursor to (2,0)",
+                "Line 1\nLine 2\nLine 3\n",
+                b"jj:q!\r",
+                expect_cursor=(2, 0)
+            )
+
+            # Cursor movement: jjk -> (1,0)
+            self.run_test_terminal_screen(
+                "Terminal jjk moves cursor to (1,0)",
+                "Line 1\nLine 2\nLine 3\n",
+                b"jjk:q!\r",
+                expect_cursor=(1, 0)
+            )
+
+            # Arrow keys: right right right -> (0,3)
+            self.run_test_terminal_screen(
+                "Terminal arrow keys move cursor",
+                "Hello\n",
+                b"\x1b[C\x1b[C\x1b[C:q!\r",
+                expect_cursor=(0, 3)
+            )
+
+            # Screen content: 5-line file
+            self.run_test_terminal_screen(
+                "Terminal 5-line file content and tildes",
+                make_lines(5),
+                b":q!\r",
+                expect_lines=[
+                    (0, "Line 1"),
+                    (1, "Line 2"),
+                    (2, "Line 3"),
+                    (3, "Line 4"),
+                    (4, "Line 5"),
+                    (5, "~"),
+                    (8, "~"),
+                ]
+            )
+
+            # Status bar shows filename and position
+            self.run_test_terminal_screen(
+                "Terminal status bar shows filename",
+                "Hello\n",
+                b":q!\r",
+                expect_status_contains="test.txt"
+            )
+
+            # Status bar shows mode (COMMAND after :)
+            self.run_test_terminal_screen(
+                "Terminal status bar shows COMMAND",
+                "Hello\n",
+                b":q!\r",
+                expect_status_contains="COMMAND - 1,"
+            )
+
+            # Status bar after cursor movement
+            self.run_test_terminal_screen(
+                "Terminal status bar after j",
+                "Hello\nWorld\n",
+                b"jlll:q!\r",
+                expect_status_contains="COMMAND - 2,"
+            )
+
+            # Scrolling down past screen bottom
+            self.run_test_terminal_screen(
+                "Terminal scroll down",
+                make_lines(15),
+                b"jjjjjjjjj:q!\r",
+                expect_cursor=(8, 0),
+                expect_lines=[(i, f"Line {i+2}") for i in range(9)]
+            )
+
+            # Scroll down then back up
+            self.run_test_terminal_screen(
+                "Terminal scroll up restores view",
+                make_lines(15),
+                b"jjjjjjjjj" + b"kkkkkkkkk" + b":q!\r",
+                expect_cursor=(0, 0),
+                expect_lines=[(i, f"Line {i+1}") for i in range(9)]
+            )
+
+            # Insert mode: type a character
+            self.run_test_terminal_screen(
+                "Terminal insert updates screen",
+                "Hello\n",
+                b"iX\x1b:q!\r",
+                expect_lines=[(0, "XHello")],
+                expect_cursor=(0, 0)
+            )
+
+            # Insert mode: ESC returns to normal
+            self.run_test_terminal_screen(
+                "Terminal ESC returns to normal mode",
+                "Hello\n",
+                b"i\x1b:q!\r",
+                expect_status_contains="COMMAND"
+            )
+
+            # --------------------------------------------------------
+            # Baud rate screen state tests
+            # --------------------------------------------------------
+            self._group("Terminal mode - baud rate screen state:", leading_blank=True)
+
+            BAUD_ARGS = ["--cpu-mhz", "1", "--baud", "9600"]
+
+            # Cursor movement with baud rate
+            self.run_test_terminal_screen(
+                "Terminal baud: cursor movement",
+                "Hello\n",
+                b"lll:q!\r",
+                expect_cursor=(0, 3),
+                extra_args=BAUD_ARGS
+            )
+
+            # Insert with baud rate
+            self.run_test_terminal_screen(
+                "Terminal baud: insert character",
+                "Hello\n",
+                b"iX\x1b:q!\r",
+                expect_lines=[(0, "XHello")],
+                extra_args=BAUD_ARGS
+            )
+
+            # Scrolling with baud rate
+            self.run_test_terminal_screen(
+                "Terminal baud: scroll down",
+                make_lines(15),
+                b"jjjjjjjjj:q!\r",
+                expect_cursor=(8, 0),
+                expect_lines=[(0, "Line 2"), (8, "Line 10")],
+                extra_args=BAUD_ARGS
+            )
+
+            # --------------------------------------------------------
+            # Functional tests in terminal mode
+            # --------------------------------------------------------
+            self._group("Terminal mode - functional:", leading_blank=True)
+
+            # :w saves file
+            self.run_test_terminal(
+                "Terminal :w saves file",
+                "Hello\n",
+                b":w\r:q!\r",
+                expected_content="Hello\n"
+            )
+
+            # :wq saves and quits
+            self.run_test_terminal(
+                "Terminal :wq saves and quits",
+                "Hello\n",
+                b":wq\r",
+                expected_content="Hello\n"
+            )
+
+            # :q on unmodified file
+            self.run_test_terminal(
+                "Terminal :q on unmodified",
+                "Hello\n",
+                b":q\r",
+                expected_content="Hello\n"
+            )
+
+            # :q! force quit
+            self.run_test_terminal(
+                "Terminal :q! force quit",
+                "Hello\n",
+                b"x:q!\r",
+                expected_content="Hello\n"
+            )
+
+            # x delete character
+            self.run_test_terminal(
+                "Terminal x deletes char",
+                "Hello\n",
+                b"llx:wq\r",
+                expected_content="Helo\n"
+            )
+
+            # dd delete line
+            self.run_test_terminal(
+                "Terminal dd deletes line",
+                "Line 1\nLine 2\nLine 3\n",
+                b"jdd:wq\r",
+                expected_content="Line 1\nLine 3\n"
+            )
+
+            # i insert mode
+            self.run_test_terminal(
+                "Terminal i inserts text",
+                "Hello\n",
+                b"iWorld \x1b:wq\r",
+                expected_content="World Hello\n"
+            )
+
+            # a append mode
+            self.run_test_terminal(
+                "Terminal a appends text",
+                "Hello\n",
+                b"aX\x1b:wq\r",
+                expected_content="HXello\n"
+            )
+
+            # o open line below
+            self.run_test_terminal(
+                "Terminal o opens line below",
+                "Line 1\nLine 2\n",
+                b"oNew\x1b:wq\r",
+                expected_content="Line 1\nNew\nLine 2\n"
+            )
+
+            # O open line above
+            self.run_test_terminal(
+                "Terminal O opens line above",
+                "Line 1\nLine 2\n",
+                b"jONew\x1b:wq\r",
+                expected_content="Line 1\nNew\nLine 2\n"
+            )
+
+            # --------------------------------------------------------
+            # Baud rate functional tests
+            # --------------------------------------------------------
+            self._group("Terminal mode - baud rate functional:", leading_blank=True)
+
+            # Batch insert with baud rate
+            self.run_test_terminal(
+                "Terminal baud: insert text",
+                "Hello\n",
+                b"iABC\x1b:wq\r",
+                expected_content="ABCHello\n",
+                extra_args=BAUD_ARGS
+            )
+
+            # Batch delete with baud rate
+            self.run_test_terminal(
+                "Terminal baud: x delete",
+                "Hello\n",
+                b"xx:wq\r",
+                expected_content="llo\n",
+                extra_args=BAUD_ARGS
+            )
+
+            # dd with baud rate
+            self.run_test_terminal(
+                "Terminal baud: dd delete line",
+                "Line 1\nLine 2\nLine 3\n",
+                b"dd:wq\r",
+                expected_content="Line 2\nLine 3\n",
+                extra_args=BAUD_ARGS
+            )
+
+            # Command mode with baud rate
+            self.run_test_terminal(
+                "Terminal baud: :wq command",
+                "Test\n",
+                b":wq\r",
+                expected_content="Test\n",
+                extra_args=BAUD_ARGS
+            )
+
+            # Search mode with baud rate
+            self.run_test_terminal_screen(
+                "Terminal baud: search /Line",
+                "First\nLine 2\nLine 3\n",
+                b"/Line\r:q!\r",
+                expect_cursor=(1, 0),
+                extra_args=BAUD_ARGS
+            )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed
