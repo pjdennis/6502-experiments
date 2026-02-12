@@ -1051,7 +1051,7 @@ void console_resize(int rows, int cols);
 void console_redraw();
 
 void restore_terminal() {
-    if (console_mode) {
+    if (console_mode || terminal_mode) {
         tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
         const char seq[] = "\x1b[?1049l\x1b[?25h\x1b[0m";
         if (write(STDOUT_FILENO, seq, sizeof(seq) - 1) < 0) {
@@ -1059,14 +1059,11 @@ void restore_terminal() {
     }
 }
 
-void enter_console() {
+void setup_raw_terminal() {
     if (!termios_saved) {
         tcgetattr(STDIN_FILENO, &orig_termios);
         termios_saved = 1;
     }
-    int rows, cols;
-    get_terminal_size(&rows, &cols);
-    console_resize(rows, cols);
     const char enter_seq[] = "\x1b[?1049h";
     if (write(STDOUT_FILENO, enter_seq, sizeof(enter_seq) - 1) < 0) {
     }
@@ -1076,6 +1073,13 @@ void enter_console() {
     raw.c_cc[VMIN] = 1;
     raw.c_cc[VTIME] = 0;
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+}
+
+void enter_console() {
+    int rows, cols;
+    get_terminal_size(&rows, &cols);
+    console_resize(rows, cols);
+    setup_raw_terminal();
 }
 
 void handle_sigint(int sig) {
@@ -2022,7 +2026,7 @@ int main(int argc, char **argv) {
     while (!done) {
         if (sigtstp_requested) {
             sigtstp_requested = 0;
-            if (console_mode) restore_terminal();
+            if (console_mode || terminal_mode) restore_terminal();
             struct sigaction sa;
             memset(&sa, 0, sizeof(sa));
             sa.sa_handler = SIG_DFL;
@@ -2036,10 +2040,11 @@ int main(int argc, char **argv) {
             sigcont_requested = 0;
             if (console_mode) enter_console();
             if (console_mode) console_redraw();
+            if (terminal_mode) setup_raw_terminal();
         }
         if (sigint_requested) {
             if (exitcode_set == -1) exitcode_set = 130;
-            if (console_mode) restore_terminal();
+            if (console_mode || terminal_mode) restore_terminal();
             done = 1;
             break;
         }
