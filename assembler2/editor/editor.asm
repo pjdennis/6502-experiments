@@ -46,6 +46,7 @@ FNAME_BUF   = $0200   ; Filename buffer (256 bytes)
   .include 23/to_decimal.asm
   .include editor/terminal.asm
   .include editor/input.asm
+  .include editor/buffer_mem.asm
   .include editor/buffer.asm
   .include editor/render.asm
   .include editor/yank.asm
