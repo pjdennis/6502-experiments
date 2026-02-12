@@ -54,6 +54,15 @@ char_class:
 ; If at EOL, move to next line col 0.
 normal_word_forward:
   JSR get_batched_count
+  JSR word_forward_x
+  JSR clamp_cursor_col
+  JSR ensure_cursor_visible
+  JMP clear_count
+
+; Core word-forward motion: move cursor forward X words
+; Input: X = count of words to move
+; Clobbers: A, X, Y, NORMAL_TEMP, WORD_CLASS, LINE_LEN16, BUF_PTR16
+word_forward_x:
 
 .w_loop:
   STX NORMAL_TEMP         ; Save counter
@@ -130,14 +139,21 @@ normal_word_forward:
   JMP .w_loop
 
 .w_done_final:
-  JSR clamp_cursor_col
-  JSR ensure_cursor_visible
-  JMP clear_count
+  RTS
 
 ; --- b command: move to start of previous word ---
 ; Accepts count prefix.
 normal_word_backward:
   JSR get_batched_count
+  JSR word_backward_x
+  JSR clamp_cursor_col
+  JSR ensure_cursor_visible
+  JMP clear_count
+
+; Core word-backward motion: move cursor backward X words
+; Input: X = count of words to move
+; Clobbers: A, X, Y, NORMAL_TEMP, WORD_CLASS, LINE_LEN16, BUF_PTR16
+word_backward_x:
 
 .b_loop:
   STX NORMAL_TEMP         ; Save counter
@@ -201,9 +217,7 @@ normal_word_backward:
   JMP .b_loop
 
 .b_done_final:
-  JSR clamp_cursor_col
-  JSR ensure_cursor_visible
-  JMP clear_count
+  RTS
 
 ; --- e command: move to end of current/next word ---
 ; Accepts count prefix.
