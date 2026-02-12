@@ -59,3 +59,6 @@ clear_seq:
 
 greeting:
   .byte "Serial Terminal Demo - type characters (q to quit)", $0D, $0A, $00
+
+; Reset vector: last 2 bytes of binary set entry point
+  .byte <main, >main
