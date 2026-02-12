@@ -470,10 +470,7 @@ normal_g_key:
   JMP clear_count
 .set_g:
   LDA #'g'
-  STA LAST_KEY
-  LDA #0
-  STA RENDER_FLAG
-  RTS
+  JMP set_pending_key
 
 ; --- Editing ---
 
@@ -597,10 +594,8 @@ normal_d_key:
   JMP clear_count
 
 .set_d:
-  ; First 'd': store in LAST_KEY but preserve count
   LDA #'d'
-  STA LAST_KEY
-  RTS
+  JMP set_pending_key
 
 normal_enter_insert:
   LDA #MODE_INSERT
@@ -795,10 +790,8 @@ normal_y_key:
   LDA LAST_KEY
   CMP #'y'
   BEQ .do_yy
-  ; First 'y': store in LAST_KEY but preserve count
   LDA #'y'
-  STA LAST_KEY
-  RTS
+  JMP set_pending_key
 
 .do_yy:
   ; Yank N lines starting at current line
@@ -902,6 +895,14 @@ clamp_cursor_col:
   RTS
 
 ; --- Count prefix helpers ---
+
+; Set pending key for multi-key commands (dd, gg, yy)
+; A = key character to store
+set_pending_key:
+  STA LAST_KEY
+  LDA #0
+  STA RENDER_FLAG
+  RTS
 
 ; Clear count state: zeroes COUNT16, COUNT_ACTIVE, LAST_KEY
 clear_count:
