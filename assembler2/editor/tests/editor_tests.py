@@ -4799,6 +4799,22 @@ class EditorTestRunner:
             expect_cursor=(2, 0),
         )
 
+        # Backspace on empty pattern cancels ? search
+        self.run_test_screen(
+            "? backspace cancels to normal mode",
+            "AAA\nBBB\n",
+            b"j?\x7f:q!\r",
+            expect_cursor=(1, 0),  # Stays on line 1
+        )
+
+        # / with backspace editing pattern
+        self.run_test_screen(
+            "/ with backspace editing pattern",
+            "AAA\nBBB\nBCC\n",
+            b"/BC\x7fBB\r:q!\r",
+            expect_cursor=(1, 0),  # Searches for "BBB" not "BC"
+        )
+
         # ============================================================
         # Terminal mode tests
         # ============================================================

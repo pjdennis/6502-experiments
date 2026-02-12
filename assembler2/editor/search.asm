@@ -30,13 +30,25 @@ search_init:
   RTS
 
 ; Handle '/' search command
-; Shows '/' prompt, reads pattern, searches forward
 search_handle:
+  LDA #'/'
+  JMP search_input_handle
+
+; Handle '?' backward search command
+search_backward_handle:
+  LDA #'?'
+  ; Fall through
+
+; Unified search input handler
+; A = prompt character ('/' or '?')
+search_input_handle:
+  STA BUF_TEMP           ; Save prompt char
   LDA #0
   STA SEARCH_IDX
 
-  ; Show '/' prompt on status line
-  JSR search_show_prompt
+  ; Show prompt on status line
+  LDA BUF_TEMP
+  JSR show_prompt
 
 .read_loop:
   JSR get_key
@@ -103,88 +115,17 @@ search_handle:
   BEQ .cancel       ; No previous pattern either
 
 .do_search:
-  LDA #0
-  STA SEARCH_DIR
-  JMP search_forward
-
-; Handle '?' backward search command
-; Shows '?' prompt, reads pattern, searches backward
-search_backward_handle:
-  LDA #0
-  STA SEARCH_IDX
-
-  ; Show '?' prompt on status line
-  LDA #'?'
-  JSR show_prompt
-
-.bw_read_loop:
-  JSR get_key
-
-  CMP #KEY_ESC
-  BEQ .bw_cancel
-  CMP #$1B
-  BEQ .bw_cancel
-  CMP #KEY_ENTER
-  BEQ .bw_execute
-  CMP #'\r'
-  BEQ .bw_execute
-  CMP #KEY_BS
-  BEQ .bw_backspace
-  CMP #$7F
-  BEQ .bw_backspace
-
-  ; Printable character?
-  CMP #' '
-  BCC .bw_read_loop
-  CMP #$7F
-  BCS .bw_read_loop
-
-  ; Add to buffer
-  LDX SEARCH_IDX
-  CPX #SEARCH_MAX
-  BCS .bw_read_loop
-  STA SEARCH_BUF,X
-  INC SEARCH_IDX
-
-  JSR io_write
-  JSR io_flush
-  JMP .bw_read_loop
-
-.bw_backspace:
-  LDA SEARCH_IDX
-  BEQ .bw_cancel
-  DEC SEARCH_IDX
-  LDA #'\b'
-  JSR io_write
-  LDA #' '
-  JSR io_write
-  LDA #'\b'
-  JSR io_write
-  JSR io_flush
-  JMP .bw_read_loop
-
-.bw_cancel:
-  RTS
-
-.bw_execute:
-  LDA SEARCH_IDX
-  BEQ .bw_reuse
-  STA SEARCH_LEN
-  JMP .bw_do_search
-
-.bw_reuse:
-  LDA SEARCH_LEN
-  BEQ .bw_cancel
-
-.bw_do_search:
+  ; Set direction based on prompt char
+  LDA BUF_TEMP
+  CMP #'?'
+  BNE .forward
   LDA #1
   STA SEARCH_DIR
   JMP search_backward
-
-; Show the '/' prompt on the status line
-search_show_prompt:
-  LDA #'/'
-  JMP show_prompt
+.forward:
+  LDA #0
+  STA SEARCH_DIR
+  JMP search_forward
 
 ; Search forward from current line
 ; Scans from FILE_LINE16+1, wraps around to FILE_LINE16
