@@ -4416,6 +4416,182 @@ class EditorTestRunner:
             expect_cursor=(0, 0),
         )
 
+        self._group("Delete word (dw):", leading_blank=True)
+
+        self.run_test(
+            "dw deletes word and trailing space",
+            "hello world\n",
+            b"dw:wq\r",
+            expected_content="world\n",
+        )
+
+        self.run_test(
+            "dw at middle of word deletes to next word",
+            "hello world\n",
+            b"lldw:wq\r",
+            expected_content="heworld\n",
+        )
+
+        self.run_test(
+            "dw on punctuation deletes punct and space",
+            "...bar baz\n",
+            b"dw:wq\r",
+            expected_content="bar baz\n",
+        )
+
+        self.run_test(
+            "dw on last word deletes to EOL",
+            "foo bar\n",
+            b"4ldw:wq\r",
+            expected_content="foo \n",
+        )
+
+        self.run_test(
+            "dw on whitespace deletes to next word",
+            "foo   bar\n",
+            b"3ldw:wq\r",
+            expected_content="foobar\n",
+        )
+
+        self.run_test(
+            "dw on empty line does nothing",
+            "\n",
+            b"dw:wq\r",
+            expected_content="\n",
+        )
+
+        self.run_test(
+            "2dw deletes two words",
+            "one two three\n",
+            b"2dw:wq\r",
+            expected_content="three\n",
+        )
+
+        self.run_test(
+            "dw yanks deleted text (paste back)",
+            "hello world\n",
+            b"dw$p:wq\r",
+            expected_content="worldhello \n",
+        )
+
+        self._group("Delete word backward (db):", leading_blank=True)
+
+        self.run_test(
+            "db deletes previous word",
+            "hello world\n",
+            b"wdb:wq\r",
+            expected_content="world\n",
+        )
+
+        self.run_test(
+            "db from middle of word deletes back to word start",
+            "hello world\n",
+            b"wlldb:wq\r",
+            expected_content="hello rld\n",
+        )
+
+        self.run_test(
+            "db at col 0 does nothing",
+            "hello\n",
+            b"db:wq\r",
+            expected_content="hello\n",
+        )
+
+        self.run_test(
+            "db with whitespace before cursor",
+            "foo   bar\n",
+            b"6ldb:wq\r",
+            expected_content="bar\n",
+        )
+
+        self.run_test(
+            "2db deletes two words backward",
+            "one two three\n",
+            b"$2db:wq\r",
+            expected_content="one e\n",
+        )
+
+        self.run_test(
+            "db yanks deleted text",
+            "hello world\n",
+            b"wdb$p:wq\r",
+            expected_content="worldhello \n",
+        )
+
+        self._group("Change word (cw):", leading_blank=True)
+
+        self.run_test(
+            "cw deletes word and enters insert mode",
+            "hello world\n",
+            b"cwbye\x1b:wq\r",
+            expected_content="bye world\n",
+        )
+
+        self.run_test(
+            "cw from mid-word deletes rest of word (ce behavior)",
+            "hello world\n",
+            b"llcwXX\x1b:wq\r",
+            expected_content="heXX world\n",
+        )
+
+        self.run_test(
+            "cw on punct deletes punct class",
+            "...bar\n",
+            b"cwXX\x1b:wq\r",
+            expected_content="XXbar\n",
+        )
+
+        self.run_test(
+            "cw on whitespace deletes ws and next word",
+            "foo   bar baz\n",
+            b"3lcwX\x1b:wq\r",
+            expected_content="fooX baz\n",
+        )
+
+        self.run_test(
+            "cw on empty line enters insert mode",
+            "\n",
+            b"cwhi\x1b:wq\r",
+            expected_content="hi\n",
+        )
+
+        self.run_test(
+            "2cw deletes two words and enters insert mode",
+            "one two three\n",
+            b"2cwX\x1b:wq\r",
+            expected_content="X three\n",
+        )
+
+        self._group("Change word backward (cb):", leading_blank=True)
+
+        self.run_test(
+            "cb deletes previous word and enters insert mode",
+            "hello world\n",
+            b"wcbX\x1b:wq\r",
+            expected_content="Xworld\n",
+        )
+
+        self.run_test(
+            "cb at col 0 just enters insert mode",
+            "hello\n",
+            b"cbhi \x1b:wq\r",
+            expected_content="hi hello\n",
+        )
+
+        self.run_test(
+            "cb from mid-word deletes back to word start",
+            "hello world\n",
+            b"wllcbX\x1b:wq\r",
+            expected_content="hello Xrld\n",
+        )
+
+        self.run_test(
+            "2cb deletes two words backward",
+            "one two three\n",
+            b"8l2cbX\x1b:wq\r",
+            expected_content="Xthree\n",
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed

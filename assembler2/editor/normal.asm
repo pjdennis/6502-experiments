@@ -141,7 +141,32 @@ pending_key_dispatch:
   CMP #'<'
   BEQ .exec_unindent
 .not_repeat:
-  ; Key doesn't match pending - reset all state, no side effects
+  ; Check operator+motion combos (d+w, d+b, c+w, c+b)
+  LDA LAST_KEY
+  CMP #'d'
+  BEQ .check_d_motion
+  CMP #'c'
+  BEQ .check_c_motion
+  ; No match - reset
+  JMP .no_match
+
+.check_d_motion:
+  LDA BUF_TEMP
+  CMP #'w'
+  BEQ .exec_dw
+  CMP #'b'
+  BEQ .exec_db
+  JMP .no_match
+
+.check_c_motion:
+  LDA BUF_TEMP
+  CMP #'w'
+  BEQ .exec_cw
+  CMP #'b'
+  BEQ .exec_cb
+  JMP .no_match
+
+.no_match:
   JSR clear_count
   LDA #0
   STA RENDER_FLAG
@@ -158,6 +183,14 @@ pending_key_dispatch:
   JMP do_indent
 .exec_unindent:
   JMP do_unindent
+.exec_dw:
+  JMP do_dw
+.exec_db:
+  JMP do_db
+.exec_cw:
+  JMP do_cw
+.exec_cb:
+  JMP do_cb
 .exec_mark_set:
   JMP do_mark_set
 .exec_mark_goto:
@@ -1476,6 +1509,322 @@ do_unindent:
   STA MODIFIED
   JMP clear_count
 
+; --- Delete word (dw) ---
+; Delete from cursor to next word boundary on current line.
+; Yanks deleted text. Accepts count.
+do_dw:
+  JSR get_count
+  LDX BUF_TEMP16
+
+.dw_loop:
+  STX NORMAL_TEMP
+  JSR get_current_line_len
+  STAX16 LINE_LEN16
+  TST16 LINE_LEN16
+  BNE .dw_not_empty
+  JMP .dw_done
+.dw_not_empty:
+  CMP16 CURSOR_COL16, LINE_LEN16
+  BCC .dw_in_range
+  JMP .dw_done
+.dw_in_range:
+
+  ; Find forward word boundary
+  CP16 CURSOR_COL16, BUF_LEN16   ; BUF_LEN16 = scan position
+  JSR get_cursor_buf_ptr
+  LDY #0
+  LDA (BUF_PTR16),Y
+  JSR char_class
+  STA WORD_CLASS
+  CMP #0
+  BEQ .dw_skip_ws
+
+  ; Skip same-class chars
+.dw_skip_same:
+  INC16 BUF_LEN16
+  CMP16 BUF_LEN16, LINE_LEN16
+  BCS .dw_have_end
+  JSR get_scan_buf_ptr
+  LDY #0
+  LDA (BUF_PTR16),Y
+  JSR char_class
+  CMP WORD_CLASS
+  BEQ .dw_skip_same
+  CMP #0
+  BNE .dw_have_end
+
+  ; Skip trailing whitespace
+.dw_skip_ws:
+  INC16 BUF_LEN16
+  CMP16 BUF_LEN16, LINE_LEN16
+  BCS .dw_have_end
+  JSR get_scan_buf_ptr
+  LDY #0
+  LDA (BUF_PTR16),Y
+  JSR char_class
+  CMP #0
+  BEQ .dw_skip_ws
+
+.dw_have_end:
+  ; delete count = BUF_LEN16 - CURSOR_COL16
+  SEC
+  SBC16 BUF_LEN16, CURSOR_COL16, BUF_LEN16
+  PUSH16 BUF_LEN16           ; Save delete count
+
+  ; Yank
+  JSR get_cursor_buf_ptr
+  CP16 BUF_PTR16, BUF_SRC16
+  JSR yank_add_chars
+
+  ; Delete (restore count, recompute pointer)
+  POP16 BUF_LEN16
+  JSR get_cursor_buf_ptr
+  JSR buf_shift_left_16
+  JSR buf_rebuild_lines
+  LDA #$FF
+  STA MODIFIED
+
+  LDX NORMAL_TEMP
+  DEX
+  BEQ .dw_done
+  JMP .dw_loop
+
+.dw_done:
+  JSR clamp_cursor_col
+  JMP clear_count
+
+; --- Delete word backward (db) ---
+do_db:
+  JSR get_count
+  LDX BUF_TEMP16
+
+.db_loop:
+  STX NORMAL_TEMP
+  TST16 CURSOR_COL16
+  BNE .db_not_bol          ; Not at col 0, proceed
+  JMP .db_done
+.db_not_bol:
+
+  ; Find backward word boundary starting from CURSOR_COL16 - 1
+  SEC
+  SBCI16 CURSOR_COL16, 1, BUF_LEN16
+
+  ; Skip whitespace backward
+.db_skip_ws:
+  JSR get_scan_buf_ptr
+  LDY #0
+  LDA (BUF_PTR16),Y
+  JSR char_class
+  CMP #0
+  BNE .db_found_nonws
+  TST16 BUF_LEN16
+  BEQ .db_have_start
+  DEC16 BUF_LEN16
+  JMP .db_skip_ws
+
+.db_found_nonws:
+  STA WORD_CLASS
+
+  ; Skip same-class chars backward
+.db_skip_same:
+  TST16 BUF_LEN16
+  BEQ .db_have_start
+  DEC16 BUF_LEN16
+  JSR get_scan_buf_ptr
+  LDY #0
+  LDA (BUF_PTR16),Y
+  JSR char_class
+  CMP WORD_CLASS
+  BEQ .db_skip_same
+  INC16 BUF_LEN16           ; Different class - word starts one to right
+
+.db_have_start:
+  ; BUF_LEN16 = start position. Delete from start to cursor.
+  ; Yank: source = line_ptr + start, count = cursor - start
+  PUSH16 BUF_LEN16           ; Save start position
+  JSR get_scan_buf_ptr        ; BUF_PTR16 = line + start_pos
+  CP16 BUF_PTR16, BUF_SRC16
+  SEC
+  SBC16 CURSOR_COL16, BUF_LEN16, BUF_LEN16   ; BUF_LEN16 = delete count
+  PUSH16 BUF_LEN16           ; Save delete count
+  JSR yank_add_chars
+
+  ; Delete: restore count and start position
+  POP16 BUF_LEN16            ; delete count
+  POP16 CURSOR_COL16         ; move cursor to start position
+  JSR get_cursor_buf_ptr
+  JSR buf_shift_left_16
+  JSR buf_rebuild_lines
+  LDA #$FF
+  STA MODIFIED
+
+  LDX NORMAL_TEMP
+  DEX
+  BEQ .db_done
+  JMP .db_loop
+
+.db_done:
+  JSR clamp_cursor_col
+  JMP clear_count
+
+; --- Change word (cw) ---
+; vi's cw = ce: delete to end of current word only (no trailing ws).
+; Enter insert mode after deletion.
+do_cw:
+  JSR get_count
+  LDX BUF_TEMP16
+
+.cw_loop:
+  STX NORMAL_TEMP
+  JSR get_current_line_len
+  STAX16 LINE_LEN16
+  TST16 LINE_LEN16
+  BNE .cw_not_empty
+  JMP .cw_insert
+.cw_not_empty:
+  CMP16 CURSOR_COL16, LINE_LEN16
+  BCC .cw_in_range
+  JMP .cw_insert
+.cw_in_range:
+
+  ; Find end of current word (no trailing whitespace)
+  CP16 CURSOR_COL16, BUF_LEN16
+  JSR get_cursor_buf_ptr
+  LDY #0
+  LDA (BUF_PTR16),Y
+  JSR char_class
+  STA WORD_CLASS
+  CMP #0
+  BEQ .cw_skip_ws_first
+
+  ; Skip same-class chars
+.cw_skip_same:
+  INC16 BUF_LEN16
+  CMP16 BUF_LEN16, LINE_LEN16
+  BCS .cw_have_end
+  JSR get_scan_buf_ptr
+  LDY #0
+  LDA (BUF_PTR16),Y
+  JSR char_class
+  CMP WORD_CLASS
+  BEQ .cw_skip_same
+  JMP .cw_have_end
+
+.cw_skip_ws_first:
+  ; On whitespace: skip ws, then skip that word class
+  INC16 BUF_LEN16
+  CMP16 BUF_LEN16, LINE_LEN16
+  BCS .cw_have_end
+  JSR get_scan_buf_ptr
+  LDY #0
+  LDA (BUF_PTR16),Y
+  JSR char_class
+  CMP #0
+  BEQ .cw_skip_ws_first
+  STA WORD_CLASS
+  JMP .cw_skip_same
+
+.cw_have_end:
+  ; delete count = BUF_LEN16 - CURSOR_COL16
+  SEC
+  SBC16 BUF_LEN16, CURSOR_COL16, BUF_LEN16
+  PUSH16 BUF_LEN16           ; Save delete count
+
+  ; Yank
+  JSR get_cursor_buf_ptr
+  CP16 BUF_PTR16, BUF_SRC16
+  JSR yank_add_chars
+
+  ; Delete (restore count, recompute pointer)
+  POP16 BUF_LEN16
+  JSR get_cursor_buf_ptr
+  JSR buf_shift_left_16
+  JSR buf_rebuild_lines
+  LDA #$FF
+  STA MODIFIED
+
+  LDX NORMAL_TEMP
+  DEX
+  BEQ .cw_insert
+  JMP .cw_loop
+
+.cw_insert:
+  LDA #MODE_INSERT
+  STA MODE
+  JMP clear_count
+
+; --- Change word backward (cb) ---
+do_cb:
+  JSR get_count
+  LDX BUF_TEMP16
+
+.cb_loop:
+  STX NORMAL_TEMP
+  TST16 CURSOR_COL16
+  BNE .cb_not_bol
+  JMP .cb_insert
+.cb_not_bol:
+
+  ; Find backward word boundary (same as db)
+  SEC
+  SBCI16 CURSOR_COL16, 1, BUF_LEN16
+
+.cb_skip_ws:
+  JSR get_scan_buf_ptr
+  LDY #0
+  LDA (BUF_PTR16),Y
+  JSR char_class
+  CMP #0
+  BNE .cb_found_nonws
+  TST16 BUF_LEN16
+  BEQ .cb_have_start
+  DEC16 BUF_LEN16
+  JMP .cb_skip_ws
+
+.cb_found_nonws:
+  STA WORD_CLASS
+
+.cb_skip_same:
+  TST16 BUF_LEN16
+  BEQ .cb_have_start
+  DEC16 BUF_LEN16
+  JSR get_scan_buf_ptr
+  LDY #0
+  LDA (BUF_PTR16),Y
+  JSR char_class
+  CMP WORD_CLASS
+  BEQ .cb_skip_same
+  INC16 BUF_LEN16
+
+.cb_have_start:
+  ; Yank from start to cursor
+  PUSH16 BUF_LEN16
+  JSR get_scan_buf_ptr
+  CP16 BUF_PTR16, BUF_SRC16
+  SEC
+  SBC16 CURSOR_COL16, BUF_LEN16, BUF_LEN16
+  PUSH16 BUF_LEN16
+  JSR yank_add_chars
+
+  ; Delete
+  POP16 BUF_LEN16
+  POP16 CURSOR_COL16
+  JSR get_cursor_buf_ptr
+  JSR buf_shift_left_16
+  JSR buf_rebuild_lines
+  LDA #$FF
+  STA MODIFIED
+
+  LDX NORMAL_TEMP
+  DEX
+  BEQ .cb_insert
+  JMP .cb_loop
+
+.cb_insert:
+  LDA #MODE_INSERT
+  STA MODE
+  JMP clear_count
+
 ; --- Utilities ---
 
 get_current_line_len:
@@ -1490,6 +1839,16 @@ get_cursor_buf_ptr:
   JSR buf_get_line_ptr
   CLC
   ADC16 CURSOR_COL16, BUF_PTR16, BUF_PTR16
+  RTS
+
+; Get buffer pointer at BUF_LEN16 offset on current line
+; Sets BUF_PTR16 = start of FILE_LINE16 + BUF_LEN16
+; Clobbers A, X, Y
+get_scan_buf_ptr:
+  LDAX16 FILE_LINE16
+  JSR buf_get_line_ptr
+  CLC
+  ADC16 BUF_LEN16, BUF_PTR16, BUF_PTR16
   RTS
 
 clamp_cursor_col:
