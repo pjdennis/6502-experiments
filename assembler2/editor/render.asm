@@ -142,7 +142,7 @@ render_from_row:
 .past_eof:
   ; Draw tilde for lines past end of file
   LDA #'~'
-  JSR write_b
+  JSR io_write
   JSR ansi_clear_line
 
   INC RENDER_ROW
@@ -156,7 +156,7 @@ render_from_row:
   JSR render_position_cursor
 
   JSR ansi_cursor_show
-  JMP con_flush
+  JMP io_flush
 
 ; Render just the status line (last row)
 render_status_line:
@@ -212,7 +212,7 @@ render_status_line:
 .has_pending_no_count:
   LDA LAST_KEY
   BEQ .done_prefix
-  JSR write_b
+  JSR io_write
 .done_prefix:
   PRINT_STR str_separator
 .no_prefix_display:
@@ -224,7 +224,7 @@ render_status_line:
   PRINT_STR TO_DECIMAL_RESULT
 
   LDA #','
-  JSR write_b
+  JSR io_write
 
   ; Column (1-based, 16-bit)
   CLC
@@ -234,9 +234,9 @@ render_status_line:
 
   ; Print total lines
   LDA #' '
-  JSR write_b
+  JSR io_write
   LDA #'/'
-  JSR write_b
+  JSR io_write
 
   CP16 LINE_COUNT16, TO_DECIMAL_VALUE16
   JSR to_decimal
@@ -283,7 +283,7 @@ render_current_line:
 
   JSR render_position_cursor
   JSR ansi_cursor_show
-  JMP con_flush
+  JMP io_flush
 
 ; Redraw current line and rows below, plus status bar (for single-line edits)
 ; Renders from CURSOR_ROW downward to handle line wrap changes correctly
@@ -327,7 +327,7 @@ render_cursor_and_status:
   JSR render_status_line
   JSR render_position_cursor
   JSR ansi_cursor_show
-  JMP con_flush
+  JMP io_flush
 
 ; Print line characters from BUF_PTR16 up to SCREEN_COLS or newline
 ; Replaces control chars with spaces. Clobbers A, Y.
@@ -342,11 +342,11 @@ render_line_chars:
   BEQ .done
   CMP #' '
   BCC .ctrl
-  JSR write_b
+  JSR io_write
   JMP .next
 .ctrl:
   LDA #' '
-  JSR write_b
+  JSR io_write
 .next:
   INY
   INC RENDER_COL
@@ -360,7 +360,7 @@ render_line_chars:
   PHA
   JSR ansi_reverse_video
   LDA #'?'
-  JSR write_b
+  JSR io_write
   JSR ansi_normal_video
   PLA
   TAY

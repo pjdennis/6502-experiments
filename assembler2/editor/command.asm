@@ -54,8 +54,8 @@ command_handle:
   INC CMD_IDX
 
   ; Echo character
-  JSR write_b
-  JSR con_flush
+  JSR io_write
+  JSR io_flush
   JMP .read_loop
 
 .backspace:
@@ -64,12 +64,12 @@ command_handle:
   DEC CMD_IDX
   ; Erase character on screen: backspace, space, backspace
   LDA #'\b'
-  JSR write_b
+  JSR io_write
   LDA #' '
-  JSR write_b
+  JSR io_write
   LDA #'\b'
-  JSR write_b
-  JSR con_flush
+  JSR io_write
+  JSR io_flush
   JMP .read_loop
 
 .cancel:
@@ -298,17 +298,17 @@ command_write_file:
   ; Show confirmation on status line
   JSR command_show_prompt
   LDA #'"'
-  JSR write_b
+  JSR io_write
   JSR write_fname
   LDA #'"'
-  JSR write_b
+  JSR io_write
   LDA #' '
-  JSR write_b
+  JSR io_write
 
   ; Print " written"
   PRINT_STR str_written
 
-  JSR con_flush
+  JSR io_flush
   ; Brief pause to show message - wait for next redraw
   RTS
 
@@ -320,7 +320,7 @@ show_status_message:
   JSR command_show_prompt
   POP16 STR_PTR16
   JSR write_string
-  JSR con_flush
+  JSR io_flush
   JSR get_key
   RTS
 
@@ -443,7 +443,7 @@ command_parse_range:
   JSR command_show_prompt
   PRINT_STR TO_DECIMAL_RESULT
   PRINT_STR str_lines_yanked
-  JSR con_flush
+  JSR io_flush
   RTS
 
 .range_yank_full:
@@ -501,7 +501,7 @@ command_parse_range:
   JSR command_show_prompt
   PRINT_STR TO_DECIMAL_RESULT
   PRINT_STR str_lines_deleted
-  JSR con_flush
+  JSR io_flush
   RTS
 
 .range_mark_err:

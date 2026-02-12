@@ -36,7 +36,7 @@ input_read_byte:
   LDA PUSHBACK
   RTS
 .no_pushback:
-  JMP con_read
+  JMP io_read
 
 ; Push back one byte into the input stream
 ; A = byte to push back
@@ -51,7 +51,7 @@ input_unread:
 input_ready:
   LDA HAS_PUSHBACK
   BNE .ready          ; Pushback byte waiting - ready
-  JSR con_ready       ; Non-blocking poll
+  JSR io_ready       ; Non-blocking poll
   RTS
 .ready:
   LDA #$FF
@@ -110,7 +110,7 @@ read_key:
   LDA #$FF
   STA SPIN_COUNT
 .spin:
-  JSR con_ready
+  JSR io_ready
   CMP #$FF
   BEQ .got_more
   DEC SPIN_COUNT

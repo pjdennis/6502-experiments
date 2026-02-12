@@ -68,8 +68,8 @@ search_handle:
   INC SEARCH_IDX
 
   ; Echo character
-  JSR write_b
-  JSR con_flush
+  JSR io_write
+  JSR io_flush
   JMP .read_loop
 
 .backspace:
@@ -78,12 +78,12 @@ search_handle:
   DEC SEARCH_IDX
   ; Erase character on screen
   LDA #'\b'
-  JSR write_b
+  JSR io_write
   LDA #' '
-  JSR write_b
+  JSR io_write
   LDA #'\b'
-  JSR write_b
-  JSR con_flush
+  JSR io_write
+  JSR io_flush
   JMP .read_loop
 
 .cancel:
@@ -359,11 +359,11 @@ search_show_not_found:
   CPX SEARCH_LEN
   BEQ .print_done
   LDA SEARCH_BUF,X
-  JSR write_b
+  JSR io_write
   INX
   JMP .print_pattern
 .print_done:
-  JSR con_flush
+  JSR io_flush
   JSR get_key                  ; Wait for keypress
   RTS
 

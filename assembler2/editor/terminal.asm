@@ -1,5 +1,5 @@
 ; ANSI terminal output library
-; All routines write escape sequences via write_b
+; All routines write escape sequences via io_write
 
   .zeropage
 ANSI_ROW:     .byte    ; Row for cursor positioning (1-based)
@@ -13,9 +13,9 @@ ANSI_TEMP:    .byte    ; Temp byte for decimal output
 ; Clobbers A
 ansi_csi:
   LDA #$1B
-  JSR write_b
+  JSR io_write
   LDA #'['
-  JMP write_b
+  JMP io_write
 
 ; Output ESC[ followed by null-terminated string at STR_PTR16
 ; Clobbers A, Y
@@ -41,11 +41,11 @@ ansi_move_cursor:
   LDA ANSI_ROW
   JSR write_byte_dec
   LDA #';'
-  JSR write_b
+  JSR io_write
   LDA ANSI_COL
   JSR write_byte_dec
   LDA #'H'
-  JMP write_b
+  JMP io_write
 
 ; Clear from cursor to end of current line
 ansi_clear_line:
@@ -88,7 +88,7 @@ write_string:
 .loop:
   LDA (STR_PTR16),Y
   BEQ .done
-  JSR write_b
+  JSR io_write
   INY
   BNE .loop
 .done:
@@ -101,7 +101,7 @@ write_fname:
 .loop:
   LDA (FNAME_PTR16),Y
   BEQ .done
-  JSR write_b
+  JSR io_write
   INY
   CPY #32
   BCC .loop
@@ -125,8 +125,8 @@ show_prompt:
   PHA
   JSR status_line_clear
   PLA
-  JSR write_b
-  JMP con_flush
+  JSR io_write
+  JMP io_flush
 
 ; Write A (0-255) as decimal digits, no leading zeros
 ; Clobbers A, X, Y
@@ -155,7 +155,7 @@ write_byte_dec:
   BEQ .no_hundreds
   CLC
   ADC #'0'
-  JSR write_b
+  JSR io_write
   LDY #1
 .no_hundreds:
 
@@ -183,12 +183,12 @@ write_byte_dec:
 .print_tens:
   CLC
   ADC #'0'
-  JSR write_b
+  JSR io_write
 .no_tens:
 
   ; Ones digit (always printed)
   LDA ANSI_TEMP
   CLC
   ADC #'0'
-  JSR write_b
+  JSR io_write
   RTS

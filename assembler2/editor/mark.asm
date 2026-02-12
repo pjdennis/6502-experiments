@@ -122,11 +122,11 @@ marks_display:
 
   ; Print " a" (mark letter)
   LDA #' '
-  JSR write_b
+  JSR io_write
   LDA BUF_TEMP
   CLC
   ADC #'a'
-  JSR write_b
+  JSR io_write
 
   ; Restore table offset, get line number
   PLA
@@ -146,7 +146,7 @@ marks_display:
 
   ; Print 1 space before text
   LDA #' '
-  JSR write_b
+  JSR io_write
 
   ; Get saved line number, print text
   POP16 BUF_PTR16
@@ -170,7 +170,7 @@ marks_display:
   BCS .marks_text_ok
   LDA #' '
 .marks_text_ok:
-  JSR write_b
+  JSR io_write
   INY
   JMP .marks_text
 .marks_text_done:
@@ -203,7 +203,7 @@ marks_display:
   PRINT_STR str_no_marks
 
 .marks_wait:
-  JSR con_flush
+  JSR io_flush
   JSR get_key
   LDA #$FF
   STA RENDER_FLAG
@@ -225,7 +225,7 @@ write_decimal_rjust:
 .pad_loop:
   CPX #6 + 1
   BEQ .print
-  JSR write_b
+  JSR io_write
   INX
   BNE .pad_loop   ; Always taken
 .print:

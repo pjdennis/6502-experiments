@@ -34,6 +34,7 @@ FNAME_BUF   = $0200   ; Filename buffer (256 bytes)
 
   .include 23/environment.asm
   .include 23/macros.asm
+  .include editor/io.asm
 
 ; PRINT_STR addr - Print null-terminated string at addr
 ; Clobbers A, Y
@@ -203,7 +204,7 @@ main_loop:
 .editor_exit:
   ; Clear screen and exit
   JSR ansi_clear_screen
-  JSR con_flush
+  JSR io_flush
   LDA #0
   JSR exit
 
