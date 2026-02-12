@@ -696,34 +696,16 @@ normal_d_key:
 
 ; dd: yank then delete N lines (N = count, min 1)
 do_dd:
-  JSR yank_clear
   JSR get_count              ; BUF_TEMP16 = count (16-bit)
-  LDAX16 FILE_LINE16
-  JSR yank_add_lines
+  JSR yank_delete_current_lines
   BCS .yank_overflow
 
-  ; Adjust marks before deletion
-  LDAX16 FILE_LINE16
-  JSR mark_adjust_delete
-
-  ; Delete all N lines in one batch operation
-  LDAX16 FILE_LINE16
-  JSR buf_delete_lines
-
-  ; Clamp file line if past end of file
-  CMP16 FILE_LINE16, LINE_COUNT16
-  BCC .done
-  SEC
-  SBCI16 LINE_COUNT16, 1, FILE_LINE16
-
-.done:
   LDA #$FF
   STA MODIFIED
   JSR clamp_cursor_col
   JMP clear_count
 
 .yank_overflow:
-  ; Yank buffer full - clear yank, show error, don't delete
   JSR yank_clear
   SET16 str_yank_full, STR_PTR16
   JSR show_status_message
@@ -1314,24 +1296,8 @@ normal_substitute_line:
 do_cc:
   JSR get_count
 cc_have_count:
-  JSR yank_clear
-  LDAX16 FILE_LINE16
-  JSR yank_add_lines
+  JSR yank_delete_current_lines
   BCS .cc_overflow
-
-  LDAX16 FILE_LINE16
-  JSR mark_adjust_delete
-
-  LDAX16 FILE_LINE16
-  JSR buf_delete_lines
-
-  ; Clamp file line if past end
-  CMP16 FILE_LINE16, LINE_COUNT16
-  BCC .cc_insert_nl
-  SEC
-  SBCI16 LINE_COUNT16, 1, FILE_LINE16
-
-.cc_insert_nl:
   ; Check if current line is already empty (from buf_delete_lines empty handling)
   JSR get_current_line_len
   STAX16 LINE_LEN16
@@ -1664,6 +1630,36 @@ do_cb:
   JMP clear_count
 
 ; --- Utilities ---
+
+; Yank then delete N lines starting at FILE_LINE16
+; Input: BUF_TEMP16 = count of lines (from get_count)
+; Returns carry set = yank overflow, carry clear = success
+; On success: lines deleted, FILE_LINE16 clamped, YANK_LINES16 set
+; Clobbers: A, X, Y, BUF_PTR16, BUF_SRC16, BUF_DST16, BUF_LEN16
+yank_delete_current_lines:
+  JSR yank_clear
+  LDAX16 FILE_LINE16
+  JSR yank_add_lines
+  BCS .ydcl_overflow
+
+  LDAX16 FILE_LINE16
+  JSR mark_adjust_delete
+
+  LDAX16 FILE_LINE16
+  JSR buf_delete_lines
+
+  ; Clamp file line if past end of file
+  CMP16 FILE_LINE16, LINE_COUNT16
+  BCC .ydcl_ok
+  SEC
+  SBCI16 LINE_COUNT16, 1, FILE_LINE16
+.ydcl_ok:
+  CLC
+  RTS
+
+.ydcl_overflow:
+  SEC
+  RTS
 
 ; Yank chars at cursor position then delete them
 ; Input: BUF_LEN16 = number of bytes to delete, cursor position set via CURSOR_COL16

@@ -4508,6 +4508,22 @@ class EditorTestRunner:
             expected_content="XY\n"
         )
 
+        # 3dd then p pastes 3 deleted lines
+        self.run_test(
+            "3dd then p pastes 3 deleted lines",
+            "aaa\nbbb\nccc\nddd\n",
+            b"3ddp:wq\r",
+            expected_content="ddd\naaa\nbbb\nccc\n",
+        )
+
+        # 2cc replaces 2 lines and enters insert
+        self.run_test(
+            "2cc replaces 2 lines and enters insert",
+            "aaa\nbbb\nccc\n",
+            b"2ccX\x1b:wq\r",
+            expected_content="X\nccc\n",
+        )
+
         self._group("Indent (>>, <<):", leading_blank=True)
 
         self.run_test(
