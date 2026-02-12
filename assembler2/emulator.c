@@ -1005,9 +1005,10 @@ void hookexternal(void *funcptr) {
 #define port_term_rows 0xfe92
 #define port_term_cols 0xfe93
 #define port_con_ready 0xfe94
-#define port_serial_ready 0xfe95
-#define port_serial_data  0xfe96
-#define port_serial_write 0xfe97
+#define port_serial_ready       0xfe95
+#define port_serial_data        0xfe96
+#define port_serial_write       0xfe97
+#define port_serial_write_ready 0xfe98
 
 uint8_t memory[0x10001];
 
@@ -1028,6 +1029,11 @@ int terminal_interactive = 0;
 FILE* serial_input_file = NULL;
 FILE* serial_output_file = NULL;
 double target_mhz = 0.0;
+double cpu_mhz = 0.0;
+int serial_baud = 0;
+uint32_t serial_cycles_per_byte = 0;
+uint32_t serial_read_available_at = 0;
+uint32_t serial_write_ready_at = 0;
 int override_rows = 0;
 int override_cols = 0;
 struct termios orig_termios;
@@ -1624,6 +1630,8 @@ uint8_t read6502(uint16_t address) {
             return 0xFF;  // In file mode, always ready
         }
     } else if (address == port_serial_ready) {        // serial_ready
+        if (serial_baud > 0 && clockticks6502 < serial_read_available_at)
+            return 0x00;
         if (terminal_interactive) {
             return con_byte_ready() ? 0xFF : 0x00;
         } else if (terminal_mode && serial_input_file) {
@@ -1659,14 +1667,24 @@ uint8_t read6502(uint16_t address) {
                     start_time.tv_nsec += 1000000000L;
                 }
             }
-            if (got == 1) return ch;
+            if (got == 1) {
+                if (serial_baud > 0)
+                    serial_read_available_at = clockticks6502 + serial_cycles_per_byte;
+                return ch;
+            }
             return 0;
         } else if (terminal_mode && serial_input_file) {
             int b = fgetc(serial_input_file);
             if (b == EOF) return 0;
+            if (serial_baud > 0)
+                serial_read_available_at = clockticks6502 + serial_cycles_per_byte;
             return (uint8_t)b;
         }
         return 0x00;
+    } else if (address == port_serial_write_ready) {  // serial_write_ready
+        if (serial_baud > 0)
+            return clockticks6502 >= serial_write_ready_at ? 0xFF : 0x00;
+        return 0xFF;
     } else if (address == 0xfffe && memory[0xfffe] == 0 && memory[0xffff] == 0) {
         done = 1;
     }/* else if (address == 0xfe) {
@@ -1733,6 +1751,8 @@ void write6502(uint16_t address, uint8_t value) {
         } else if (terminal_mode && serial_output_file) {
             fputc(value, serial_output_file);
         }
+        if (serial_baud > 0)
+            serial_write_ready_at = clockticks6502 + serial_cycles_per_byte;
         return;
     }
 
@@ -1758,10 +1778,12 @@ void show_commandline(int argc, char**argv) {
 #define inst_sta 0x8d
 #define inst_cmpi 0xc9
 #define inst_ldx 0xae
+#define inst_pha 0x48
+#define inst_pla 0x68
 
 int main(int argc, char **argv) {
     if (argc < 2) {
-        fprintf(stderr, "usage: emulator <code file> [--load <hex load address>] [--input <input file>] [--output <output file>] [--console] [--terminal] [--mhz <speed>] [--rows N] [--cols N] [<arguments>]\n");
+        fprintf(stderr, "usage: emulator <code file> [--load <hex load address>] [--input <input file>] [--output <output file>] [--console] [--terminal] [--mhz <speed>] [--cpu-mhz <speed>] [--baud <rate>] [--rows N] [--cols N] [<arguments>]\n");
         return 1;
     }
 
@@ -1840,6 +1862,28 @@ int main(int argc, char **argv) {
                 return 1;
             }
             i += 2;
+        } else if (strcmp(argv[i], "--cpu-mhz") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "error: --cpu-mhz requires a value\n");
+                return 1;
+            }
+            cpu_mhz = strtod(argv[i + 1], NULL);
+            if (cpu_mhz <= 0.0) {
+                fprintf(stderr, "error: --cpu-mhz value must be positive\n");
+                return 1;
+            }
+            i += 2;
+        } else if (strcmp(argv[i], "--baud") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "error: --baud requires a value\n");
+                return 1;
+            }
+            serial_baud = (int)strtol(argv[i + 1], NULL, 10);
+            if (serial_baud <= 0) {
+                fprintf(stderr, "error: --baud value must be positive\n");
+                return 1;
+            }
+            i += 2;
         } else {
             fprintf(stderr, "error: unknown option %s\n", argv[i]);
             return 1;
@@ -1849,6 +1893,16 @@ int main(int argc, char **argv) {
     if (console_mode && terminal_mode) {
         fprintf(stderr, "error: --console and --terminal are mutually exclusive\n");
         return 1;
+    }
+
+    if (serial_baud > 0 && cpu_mhz <= 0.0 && target_mhz <= 0.0) {
+        fprintf(stderr, "error: --baud requires --cpu-mhz or --mhz\n");
+        return 1;
+    }
+
+    if (serial_baud > 0) {
+        double effective_cpu_mhz = cpu_mhz > 0.0 ? cpu_mhz : target_mhz;
+        serial_cycles_per_byte = (uint32_t)(effective_cpu_mhz * 10000000.0 / serial_baud);
     }
 
     if (terminal_mode && !input_specified && !output_specified) {
@@ -2030,8 +2084,8 @@ int main(int argc, char **argv) {
     fill_address(addr_serial_read);
     emit_byte(inst_lda);        // serial_read: lda $fe95
     emit_address(port_serial_ready);
-    emit_byte(inst_beq);        //              beq .no_data (+4)
-    emit_byte(0x04);
+    emit_byte(inst_beq);        //              beq .no_data (+5)
+    emit_byte(0x05);
     emit_byte(inst_lda);        //              lda $fe96
     emit_address(port_serial_data);
     emit_byte(inst_clc);        //              clc
@@ -2040,9 +2094,18 @@ int main(int argc, char **argv) {
     emit_byte(inst_rts);        //              rts
     fill_address(addr_serial_write);
     if (terminal_mode) {
-        emit_byte(inst_sta);    // serial_write: sta $fe97
+        emit_byte(inst_pha);    // serial_write: pha
+        emit_byte(inst_lda);    //               lda $fe98
+        emit_address(port_serial_write_ready);
+        emit_byte(inst_beq);    //               beq .not_ready (+6)
+        emit_byte(0x06);
+        emit_byte(inst_pla);    //               pla
+        emit_byte(inst_sta);    //               sta $fe97
         emit_address(port_serial_write);
         emit_byte(inst_clc);    //               clc (accepted)
+        emit_byte(inst_rts);    //               rts
+        emit_byte(inst_pla);    // .not_ready:   pla
+        emit_byte(inst_sec);    //               sec (not accepted)
         emit_byte(inst_rts);    //               rts
     } else {
         emit_byte(inst_sec);    // serial_write: sec (not accepted, no terminal mode)
