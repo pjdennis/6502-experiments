@@ -1,0 +1,78 @@
+Clean up some of the repeating print code in the editor via helper functions
+
+Try to centralize the buffer full message checks
+
+Addressing mode constants - decimals
+
+OPERAND_BYTES_0 = 0 << 4 
+
+avoid assembler directory name in file_stack_tests.asm
+
+why is it using hex constants e.g. $0002 e.g. for "Advance to next LINE_TBL entry"
+
+Add debug assembler option to print progress messages
+Add conditional compiled option for:
+  -labels without the : syntax
+  -lower-case/mixed case opcodes
+
+
+fprintf(stderr, "Code file %s is too large to fit in memory\n", code_filename); - dead code in emulator.c?
+
+normal.asm - count prefix handling - can use ADC16
+
+After doing a delete, and retrying the search the search value seemed to have changed
+
+Let's make it so that ASCIIZ adds a null terminator on the strings, and so allow multiple null terminated strings
+
+Tests for mnemonic in directive position and visa versa
+
+" ; Save LABEL_SCOPE16 before add_macro_to_hash clobbers it" - in a couple of places. Is there a better fix - shouldn't label scope be set before any label lookup? Otherwise use the macros for push/pop
+
+Use the symbolic constant instead of .byte $0D in the instgen output for directives
+
+directives.asm and probably elsewhere: Change hex offsets to decimal
+
+macro_expansion.asm: "; Found in IHASHTAB - check if it's a directive (directives can be shadowed)" - directives can't be shadowed, exactly, but someone could write a directive in the position for an in struction and visa versa. Maybe clarify the comment and add tests.
+
+Pasting a large block of text into the editor towards the end resulted in text going to the wrong place; in the middle of the file
+
+EMIT16 macro
+
+-Marks display has cursor visible
+-Marks display should show as much of the line as will fit
+
+Add the :'a,.d syntax to delete (assuming that's what it is)
+
+Allow line numbers in the range for yank/delete.
+Allow $ for last line
+
+ JMP do_jump not needed
+
+Allow for delete but prompt if it will not fit in the yank buffer
+
+Editor crashes when pasting a chunk of text a large number of multiples
+
+Please update the plan with the following:
+
+  -Use the definitions for the new io ports that I created in 23/environment.asm - I want two non-blocking
+  ports with the carry flag indicating if the byte was returned/accepted. In a serial environment write
+  might fill the send buffer.
+  -Clarify the wording in the intro of "connected to the host terminal via ANSI sequences over serial." - in
+  the emulated environment it's not connected over serial, but rather, serial is emulated within the
+  emulator and the emulator uses the environments console interface.
+
+io.asm query_terminal_size - use strings instead of byte by byte
+
+Attempting to run the terminal version of the editor in the terminal version of the emulator results in nothing - should error out
+
+
+normal.asm - table driven key dispatch opportunity
+
+-Cursor movement attempts at the beginning/end of a line trigger full redraw
+-Need batching for horizonal cursor movement
+-Starting command entry triggers a full redraw
+-Ctrl+arrow keys causes deletion to end of line, etc.
+-Need batching for counted version of << and >>
+-counted version of cw/cb should copy all?
+-counter version of cw/cb should be batched and should cross line boundaries
+-word move is modulo 256 - needs to be 16 bit
