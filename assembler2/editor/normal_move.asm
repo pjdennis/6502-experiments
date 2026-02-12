@@ -5,6 +5,17 @@
 normal_move_left:
   JSR get_count          ; BUF_TEMP16 = count
   LDX BUF_TEMP16         ; X = count (low byte, capped at 255)
+  STX BUF_DELTA
+  JSR count_pending_key  ; X = pending matching keys
+  TXA
+  CLC
+  ADC BUF_DELTA          ; Total = count + pending
+  BCS .cap_left          ; Overflow -> cap at 255
+  TAX
+  JMP .go_left
+.cap_left:
+  LDX #$FF
+.go_left:
   LDA #0
   STA RENDER_FLAG
 .left_loop:
@@ -20,21 +31,33 @@ normal_move_left:
 normal_move_right:
   JSR get_count          ; BUF_TEMP16 = count
   LDX BUF_TEMP16         ; X = count (low byte, capped at 255)
+  STX BUF_DELTA
+  JSR count_pending_key  ; X = pending matching keys
+  TXA
+  CLC
+  ADC BUF_DELTA          ; Total = count + pending
+  BCS .cap_right         ; Overflow -> cap at 255
+  TAX
+  JMP .go_right
+.cap_right:
+  LDX #$FF
+.go_right:
   LDA #0
   STA RENDER_FLAG
-.right_loop:
-  STX BUF_TEMP           ; Save counter
+  ; Hoist line length calculation outside loop (line doesn't change)
+  STX BUF_TEMP           ; Save count
   JSR get_current_line_len
   STAX16 LINE_LEN16
+  LDX BUF_TEMP           ; Restore count
   TST16 LINE_LEN16
   BEQ .right_done        ; Empty line
   SEC
   SBCI16 LINE_LEN16, 1, LINE_LEN16  ; LINE_LEN16 = len - 1
+.right_loop:
   CMP16 LINE_LEN16, CURSOR_COL16
   BCC .right_done        ; Already at or past end
   BEQ .right_done
   INC16 CURSOR_COL16
-  LDX BUF_TEMP
   DEX
   BNE .right_loop
 .right_done:

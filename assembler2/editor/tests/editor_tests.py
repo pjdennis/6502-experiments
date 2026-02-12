@@ -1879,12 +1879,12 @@ class EditorTestRunner:
             expect_content_redraws=[True, False, False]
         )
 
-        # l movement: cursor-only
+        # l movement: cursor-only (batched into single frame)
         self.run_test_screen(
             "Render opt: lll is cursor-only",
             "Hello\n",
             b"lll:q!\r",
-            expect_content_redraws=[True, False, False, False]
+            expect_content_redraws=[True, False, False]
         )
 
         # h at col 0: cursor-only (no movement, no repaint)
@@ -1952,12 +1952,12 @@ class EditorTestRunner:
             )
         )
 
-        # 0 (line start): cursor-only
+        # 0 (line start): cursor-only (lll batched into single frame)
         self.run_test_screen(
             "Render opt: 0 is cursor-only",
             "Hello\n",
             b"lll0:q!\r",
-            expect_content_redraws=[True, False, False, False, False]
+            expect_content_redraws=[True, False, False, False]
         )
 
         # $ (line end): cursor-only
@@ -2099,17 +2099,15 @@ class EditorTestRunner:
 
         # Render optimization: batch backspace reduces content redraws
         # Frame 0: initial render (True)
-        # Frame 1: l (False - cursor only)
-        # Frame 2: l (False - cursor only)
-        # Frame 3: l (False - cursor only)
-        # Frame 4: i enters insert mode (False - cursor+status only)
-        # Frame 5: first BS deletes, then 2 more batched (True)
-        # Frame 6: ESC exits insert (False - cursor only)
+        # Frame 1: lll batched (False - cursor only)
+        # Frame 2: i enters insert mode (False - cursor+status only)
+        # Frame 3: first BS deletes, then 2 more batched (True)
+        # Frame 4: ESC exits insert (False - cursor only)
         self.run_test_screen(
             "Render opt: batch backspace reduces redraws",
             "Hello\n",
             b"llli\x08\x08\x08\x1b:q!\r",
-            expect_content_redraws=[True, False, False, False, False, True, False],
+            expect_content_redraws=[True, False, False, True, False],
         )
 
         # Batch backspace correctness
@@ -2459,6 +2457,83 @@ class EditorTestRunner:
             make_lines(15),
             b"G" + b"k" * 12 + b":q!\r",
             expect_content_redraws=[True, True, True]
+        )
+
+        self._group("Batch movement left/right:", leading_blank=True)
+
+        # Batch l keys: 5 l's on "Hello World" should produce a single frame
+        self.run_test_screen(
+            "Render opt: batch l no-scroll is single frame",
+            "Hello World\n",
+            b"lllll:q!\r",
+            expect_content_redraws=[True, False]
+        )
+
+        # Batch h keys: move right, then 5 h's back
+        self.run_test_screen(
+            "Render opt: batch h no-scroll is single frame",
+            "Hello World\n",
+            b"$hhhhh:q!\r",
+            expect_content_redraws=[True, False, False]
+        )
+
+        # Batch l correctness: 5 l's move to col 5
+        self.run_test_screen(
+            "Batch l moves correct columns",
+            "Hello World\n",
+            b"lllll:q!\r",
+            expect_cursor=(0, 5),
+        )
+
+        # Batch h correctness: $ then 3 h's from col 10 -> col 7
+        self.run_test_screen(
+            "Batch h moves correct columns",
+            "Hello World\n",
+            b"$hhh:q!\r",
+            expect_cursor=(0, 7),
+        )
+
+        # Count prefix + batch l: 3l with 2 pending l's = 5 total
+        self.run_test_screen(
+            "Count prefix + batch l combines",
+            "Hello World\n",
+            b"3lll:q!\r",
+            expect_cursor=(0, 5),
+        )
+
+        RIGHT = b"\x1b[C"
+        LEFT = b"\x1b[D"
+
+        # Batch insert RIGHT: 5 RIGHT arrows in insert mode
+        self.run_test_screen(
+            "Render opt: batch insert RIGHT is single frame",
+            "Hello World\n",
+            b"i" + RIGHT * 5 + b"\x1b:q!\r",
+            expect_content_redraws=[True, False, False, False]
+        )
+
+        # Batch insert LEFT: move to end, then 5 LEFT arrows in insert mode
+        self.run_test_screen(
+            "Render opt: batch insert LEFT is single frame",
+            "Hello World\n",
+            b"$a" + LEFT * 5 + b"\x1b:q!\r",
+            expect_content_redraws=[True, False, False, False, False]
+        )
+
+        # Batch insert RIGHT correctness
+        self.run_test(
+            "Batch insert RIGHT moves correct columns",
+            "Hello World\n",
+            b"i" + RIGHT * 5 + b"X\x1b:wq\r",
+            expected_content="HelloX World\n",
+        )
+
+        # Batch insert LEFT correctness
+        self.run_test(
+            "Batch insert LEFT moves correct columns",
+            "Hello World\n",
+            b"$a" + LEFT * 5 + b"X\x1b:wq\r",
+            expected_content="Hello XWorld\n",
         )
 
         self._group("Insert mode navigation keys:", leading_blank=True)

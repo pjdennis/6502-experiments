@@ -454,27 +454,42 @@ insert_page_up:
   JMP clamp_cursor_col_insert
 
 insert_move_left:
+  LDA #KEY_LEFT
+  STA BUF_TEMP
+  JSR count_pending_key  ; X = pending matching keys
+  INX                     ; +1 for current key
   LDA #0
   STA RENDER_FLAG
+.left_loop:
   TST16 CURSOR_COL16
   BEQ .done
   DEC16 CURSOR_COL16
-  JSR ensure_cursor_visible
+  DEX
+  BNE .left_loop
 .done:
-  RTS
+  JMP ensure_cursor_visible
 
 insert_move_right:
+  LDA #KEY_RIGHT
+  STA BUF_TEMP
+  JSR count_pending_key  ; X = pending matching keys
+  INX                     ; +1 for current key
   LDA #0
   STA RENDER_FLAG
+  ; Hoist line length calculation (line doesn't change)
+  STX BUF_DELTA          ; Save count
   JSR get_current_line_len
   STAX16 LINE_LEN16
+  LDX BUF_DELTA          ; Restore count
+.right_loop:
   CMP16 LINE_LEN16, CURSOR_COL16
   BCC .done
   BEQ .done
   INC16 CURSOR_COL16
-  JSR ensure_cursor_visible
+  DEX
+  BNE .right_loop
 .done:
-  RTS
+  JMP ensure_cursor_visible
 
 insert_home:
   TST16 CURSOR_COL16
