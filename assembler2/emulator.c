@@ -1024,6 +1024,9 @@ int exitcode_set = -1;
 int error_output_started = 0;  // Track if emulated program wrote to stderr
 int console_mode = 0;
 int terminal_mode = 0;
+int terminal_interactive = 0;
+FILE* serial_input_file = NULL;
+FILE* serial_output_file = NULL;
 double target_mhz = 0.0;
 int override_rows = 0;
 int override_cols = 0;
@@ -1532,6 +1535,10 @@ int files_destroy() {
 
 uint8_t read6502(uint16_t address) {
     if (address == port_read_b) {                    // read_b
+        if (terminal_mode) {
+            fprintf(stderr, "Error: read_b not available in terminal mode, use serial_read\n");
+            exit(1);
+        }
         int b = fgetc(input_file_ptr);
         if (b == EOF) {
             b = 4;
@@ -1566,6 +1573,10 @@ uint8_t read6502(uint16_t address) {
         }
         return arg_addresses[a] >> 8;
     } else if (address == port_con_read) {             // con_read
+        if (terminal_mode) {
+            fprintf(stderr, "Error: con_read not available in terminal mode, use serial_read\n");
+            exit(1);
+        }
         if (console_mode) {
             struct timespec before, after;
             if (target_mhz > 0) clock_gettime(CLOCK_MONOTONIC, &before);
@@ -1613,9 +1624,49 @@ uint8_t read6502(uint16_t address) {
             return 0xFF;  // In file mode, always ready
         }
     } else if (address == port_serial_ready) {        // serial_ready
-        return 0x00;  // Never ready (stub)
+        if (terminal_interactive) {
+            return con_byte_ready() ? 0xFF : 0x00;
+        } else if (terminal_mode && serial_input_file) {
+            int ch = fgetc(serial_input_file);
+            if (ch == EOF) return 0x00;
+            ungetc(ch, serial_input_file);
+            return 0xFF;
+        }
+        return 0x00;
     } else if (address == port_serial_data) {         // serial_data
-        return 0x00;  // No data (stub)
+        if (terminal_interactive) {
+            struct timespec before, after;
+            if (target_mhz > 0) clock_gettime(CLOCK_MONOTONIC, &before);
+            uint8_t ch;
+            int got = read(STDIN_FILENO, &ch, 1);
+            if (got < 0 && errno == EINTR && sigint_requested) {
+                if (exitcode_set == -1) exitcode_set = 130;
+                done = 1;
+                return 0;
+            }
+            if (target_mhz > 0) {
+                clock_gettime(CLOCK_MONOTONIC, &after);
+                long sec_diff = after.tv_sec - before.tv_sec;
+                long nsec_diff = after.tv_nsec - before.tv_nsec;
+                start_time.tv_sec += sec_diff;
+                start_time.tv_nsec += nsec_diff;
+                if (start_time.tv_nsec >= 1000000000L) {
+                    start_time.tv_sec++;
+                    start_time.tv_nsec -= 1000000000L;
+                }
+                if (start_time.tv_nsec < 0) {
+                    start_time.tv_sec--;
+                    start_time.tv_nsec += 1000000000L;
+                }
+            }
+            if (got == 1) return ch;
+            return 0;
+        } else if (terminal_mode && serial_input_file) {
+            int b = fgetc(serial_input_file);
+            if (b == EOF) return 0;
+            return (uint8_t)b;
+        }
+        return 0x00;
     } else if (address == 0xfffe && memory[0xfffe] == 0 && memory[0xffff] == 0) {
         done = 1;
     }/* else if (address == 0xfe) {
@@ -1637,6 +1688,10 @@ uint8_t read6502(uint16_t address) {
 
 void write6502(uint16_t address, uint8_t value) {
     if (address == port_write_b) {                   // write_b
+        if (terminal_mode) {
+            fprintf(stderr, "Error: write_b not available in terminal mode, use serial_write\n");
+            exit(1);
+        }
         if (console_mode) {
             unsigned char ch = value;
             console_handle_byte(ch);
@@ -1664,10 +1719,21 @@ void write6502(uint16_t address, uint8_t value) {
         file_write(x, value);
         return;
     } else if (address == port_con_flush) {          // con_flush
+        if (terminal_mode) {
+            fprintf(stderr, "Error: con_flush not available in terminal mode, use serial_write\n");
+            exit(1);
+        }
         fflush(stdout);
         return;
     } else if (address == port_serial_write) {      // serial_write
-        return;  // Silently discard (stub)
+        if (terminal_interactive) {
+            unsigned char ch = value;
+            if (write(STDOUT_FILENO, &ch, 1) < 0) {
+            }
+        } else if (terminal_mode && serial_output_file) {
+            fputc(value, serial_output_file);
+        }
+        return;
     }
 
     memory[address] = value;
@@ -1703,6 +1769,8 @@ int main(int argc, char **argv) {
     long load_address = -1;
     char* input_filename = "/dev/null";
     char* output_filename = "/dev/null";
+    int input_specified = 0;
+    int output_specified = 0;
 
     int i = 2;
     while (i < argc && strncmp(argv[i], "--", 2) == 0) {
@@ -1729,6 +1797,7 @@ int main(int argc, char **argv) {
                 return 1;
             }
             input_filename = argv[i + 1];
+            input_specified = 1;
             i += 2;
         } else if (strcmp(argv[i], "--output") == 0) {
             if (i + 1 >= argc) {
@@ -1736,6 +1805,7 @@ int main(int argc, char **argv) {
                 return 1;
             }
             output_filename = argv[i + 1];
+            output_specified = 1;
             i += 2;
         } else if (strcmp(argv[i], "--rows") == 0) {
             if (i + 1 >= argc) {
@@ -1779,6 +1849,10 @@ int main(int argc, char **argv) {
     if (console_mode && terminal_mode) {
         fprintf(stderr, "error: --console and --terminal are mutually exclusive\n");
         return 1;
+    }
+
+    if (terminal_mode && !input_specified && !output_specified) {
+        terminal_interactive = 1;
     }
 
     int arg_base = i;
@@ -1965,8 +2039,15 @@ int main(int argc, char **argv) {
     emit_byte(inst_sec);        // .no_data:    sec
     emit_byte(inst_rts);        //              rts
     fill_address(addr_serial_write);
-    emit_byte(inst_sec);        // serial_write: sec (not accepted, no terminal mode)
-    emit_byte(inst_rts);        //               rts
+    if (terminal_mode) {
+        emit_byte(inst_sta);    // serial_write: sta $fe97
+        emit_address(port_serial_write);
+        emit_byte(inst_clc);    //               clc (accepted)
+        emit_byte(inst_rts);    //               rts
+    } else {
+        emit_byte(inst_sec);    // serial_write: sec (not accepted, no terminal mode)
+        emit_byte(inst_rts);    //               rts
+    }
 
     if (console_mode) {
         input_file_ptr = stdin;
@@ -1980,6 +2061,37 @@ int main(int argc, char **argv) {
         sigaction(SIGTSTP, &sa, NULL);
         sa.sa_handler = handle_sigcont;
         sigaction(SIGCONT, &sa, NULL);
+    } else if (terminal_interactive) {
+        input_file_ptr = fopen("/dev/null", "rb");
+        atexit(restore_terminal);
+        setup_raw_terminal();
+        struct sigaction sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_handler = handle_sigint;
+        sigemptyset(&sa.sa_mask);
+        sigaction(SIGINT, &sa, NULL);
+        sa.sa_handler = handle_sigtstp;
+        sigaction(SIGTSTP, &sa, NULL);
+        sa.sa_handler = handle_sigcont;
+        sigaction(SIGCONT, &sa, NULL);
+    } else if (terminal_mode) {
+        // Terminal mode with file I/O
+        input_file_ptr = fopen("/dev/null", "rb");
+        if (input_specified) {
+            serial_input_file = fopen(input_filename, "rb");
+            if (!serial_input_file) {
+                fprintf(stderr, "could not open input file: %s\n", input_filename);
+                return 1;
+            }
+        }
+        if (output_specified) {
+            serial_output_file = fopen(output_filename, "wb");
+            if (!serial_output_file) {
+                fprintf(stderr, "could not open output file: %s\n", output_filename);
+                if (serial_input_file) fclose(serial_input_file);
+                return 1;
+            }
+        }
     } else {
         input_file_ptr = fopen(input_filename, "rb");
         if (!input_file_ptr) {
@@ -1990,6 +2102,8 @@ int main(int argc, char **argv) {
 
     if (console_mode) {
         output_file_ptr = stdout;
+    } else if (terminal_mode) {
+        output_file_ptr = fopen("/dev/null", "wb");
     } else if (strcmp(output_filename, "-") == 0) {
         output_file_ptr = stdout;
     } else {
@@ -2012,7 +2126,7 @@ int main(int argc, char **argv) {
             ;
     }
 
-    if (!console_mode) {
+    if (!console_mode && !terminal_mode) {
         show_commandline(argc, argv);  // Print command line before emulation (no newline yet)
     }
     reset6502();
@@ -2066,7 +2180,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (!console_mode && clockticks6502 > max_cycles) {
+        if (!console_mode && !terminal_mode && clockticks6502 > max_cycles) {
             fprintf(stderr, "\ndid not terminate within %i cycles\n", max_cycles);
             free(arg_addresses);
             fclose(output_file_ptr);
@@ -2079,7 +2193,13 @@ int main(int argc, char **argv) {
 
     int unclosed_files = files_destroy();
 
-    if (!console_mode && strcmp(output_filename, "-") != 0) {
+    if (serial_input_file) fclose(serial_input_file);
+    if (serial_output_file) fclose(serial_output_file);
+
+    if (!console_mode && !terminal_mode && strcmp(output_filename, "-") != 0) {
+        fclose(output_file_ptr);
+    }
+    if (terminal_mode) {
         fclose(output_file_ptr);
     }
 
@@ -2113,8 +2233,8 @@ int main(int argc, char **argv) {
         exitcode = 1;
     }
 
-    // Print final status line (skip in console mode)
-    if (!console_mode) {
+    // Print final status line (skip in console/terminal mode)
+    if (!console_mode && !terminal_mode) {
         if (error_output_started || exitcode != 0) {
             fprintf(stderr, "Exit code %d; Executed %i cycles\n", exitcode, clockticks6502);
         } else {
@@ -2122,7 +2242,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (console_mode) {
+    if (console_mode || terminal_mode) {
         return exitcode;
     }
 
