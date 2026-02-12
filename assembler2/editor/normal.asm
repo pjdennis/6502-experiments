@@ -833,66 +833,6 @@ normal_paste_above:
 .paste_above_done:
   JMP clear_count
 
-; Adjust marks after paste: total lines = YANK_LINES16 * NORMAL_TEMP (16-bit)
-; Sets MODIFIED flag
-paste_adjust_marks:
-  ; BUF_TEMP16 = YANK_LINES16 * NORMAL_TEMP (16-bit multiplication)
-  ; Start with YANK_LINES16 as base
-  CP16 YANK_LINES16, BUF_TEMP16
-
-  ; Check if paste count is 1
-  LDA NORMAL_TEMP
-  CMP #1
-  BEQ .adjust
-
-  ; Decrement count (already have one copy in BUF_TEMP16)
-  DEC NORMAL_TEMP
-
-.mul:
-  ; BUF_TEMP16 += YANK_LINES16
-  CLC
-  ADC16 BUF_TEMP16, YANK_LINES16, BUF_TEMP16
-  DEC NORMAL_TEMP
-  BNE .mul
-
-.adjust:
-  LDAX16 FILE_LINE16
-  JSR mark_adjust_insert
-  LDA #$FF
-  STA MODIFIED
-  RTS
-
-; Check if count (X) pastes of BUF_LEN16 bytes fit in the text buffer
-; Call after yank_get_size (which sets BUF_LEN16)
-; Returns carry clear = fits, carry set = doesn't fit
-; Clobbers A, X, BUF_SRC16
-check_paste_fits:
-  ; available = BUF_LIMIT:00 - BUF_END16
-  LDA #0
-  SEC
-  SBC BUF_END16
-  STA BUF_SRC16
-  LDA BUF_LIMIT
-  SBC BUF_END16 + 1
-  STA BUF_SRC16 + 1
-  ; Subtract BUF_LEN16 from available, count times
-.loop:
-  SEC
-  LDA BUF_SRC16
-  SBC BUF_LEN16
-  STA BUF_SRC16
-  LDA BUF_SRC16 + 1
-  SBC BUF_LEN16 + 1
-  BCC .no_room
-  STA BUF_SRC16 + 1
-  DEX
-  BNE .loop
-  CLC
-  RTS
-.no_room:
-  SEC
-  RTS
-
 ; Character paste below (after cursor)
 ; For non-empty lines, inserts after cursor char; for empty lines, inserts at line start
 char_paste_below:
