@@ -121,6 +121,8 @@ pending_key_dispatch:
   BEQ .exec_mark_set
   CMP #'\''
   BEQ .exec_mark_goto
+  CMP #'r'
+  BEQ .exec_replace
   ; For d/g/y: second key must match first
   LDA BUF_TEMP
   CMP LAST_KEY
@@ -148,6 +150,8 @@ pending_key_dispatch:
   JMP do_mark_set
 .exec_mark_goto:
   JMP do_mark_goto
+.exec_replace:
+  JMP do_replace_char
 
 ; --- Dispatch tables ---
 
@@ -194,6 +198,11 @@ normal_editing_keys:
   .byte 'O'         .word normal_open_above
   .byte 'p'         .word normal_paste_below
   .byte 'P'         .word normal_paste_above
+  .byte '~'         .word normal_toggle_case
+  .byte 'J'         .word normal_join_lines
+  .byte 'r'         .word normal_r_key
+  .byte 's'         .word normal_substitute_char
+  .byte 'C'         .word normal_change_to_eol
   .byte 0           ; End sentinel
 
 normal_other_keys:
@@ -1044,6 +1053,219 @@ do_mark_goto:
 normal_enter_command:
   LDA #MODE_COMMAND
   STA MODE
+  JMP clear_count
+
+; --- Toggle case (~) ---
+normal_toggle_case:
+  JSR get_count
+  LDX BUF_TEMP16
+
+.tilde_loop:
+  STX NORMAL_TEMP
+  JSR get_current_line_len
+  STAX16 LINE_LEN16
+  TST16 LINE_LEN16
+  BEQ .tilde_done
+  CMP16 CURSOR_COL16, LINE_LEN16
+  BCS .tilde_done
+
+  JSR get_cursor_buf_ptr
+  LDY #0
+  LDA (BUF_PTR16),Y
+  CMP #'A'
+  BCC .tilde_advance
+  CMP #$5B
+  BCC .tilde_toggle
+  CMP #'a'
+  BCC .tilde_advance
+  CMP #$7B
+  BCS .tilde_advance
+
+.tilde_toggle:
+  EOR #$20
+  STA (BUF_PTR16),Y
+  LDA #$FF
+  STA MODIFIED
+  LDA #1
+  STA RENDER_FLAG
+
+.tilde_advance:
+  SEC
+  SBCI16 LINE_LEN16, 1, BUF_TEMP16
+  CMP16 CURSOR_COL16, BUF_TEMP16
+  BCS .tilde_next
+  INC16 CURSOR_COL16
+
+.tilde_next:
+  LDX NORMAL_TEMP
+  DEX
+  BNE .tilde_loop
+
+.tilde_done:
+  JSR ensure_cursor_visible
+  JMP clear_count
+
+; --- Join lines (J) ---
+normal_join_lines:
+  JSR get_count
+  LDX BUF_TEMP16
+
+  TST16 COUNT16
+  BEQ .join_start
+  DEX
+  BEQ .join_done
+
+.join_start:
+  STX NORMAL_TEMP
+
+.join_loop:
+  CLC
+  ADCI16 FILE_LINE16, 1, BUF_PTR16
+  CMP16 BUF_PTR16, LINE_COUNT16
+  BCS .join_done
+
+  LDAX16 FILE_LINE16
+  JSR buf_get_line_ptr
+  LDY #0
+.join_find_nl:
+  LDA (BUF_PTR16),Y
+  CMP #'\n'
+  BEQ .join_found_nl
+  INY
+  BNE .join_find_nl
+  INC BUF_PTR16+1
+  JMP .join_find_nl
+
+.join_found_nl:
+  LDA #' '
+  STA (BUF_PTR16),Y
+  JSR buf_rebuild_lines
+
+  LDA #1
+  STA BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16+1
+  CLC
+  ADCI16 FILE_LINE16, 1, BUF_PTR16
+  LDAX16 BUF_PTR16
+  JSR mark_adjust_delete
+
+  DEC NORMAL_TEMP
+  BNE .join_loop
+
+  LDA #$FF
+  STA MODIFIED
+  JSR clamp_cursor_col
+
+.join_done:
+  JMP clear_count
+
+; --- Substitute char (s) ---
+normal_substitute_char:
+  JSR get_current_line_len
+  STAX16 LINE_LEN16
+  TST16 LINE_LEN16
+  BEQ .sub_insert
+  CMP16 CURSOR_COL16, LINE_LEN16
+  BCS .sub_insert
+
+  SEC
+  SBC16 LINE_LEN16, CURSOR_COL16, BUF_LEN16
+  JSR get_count
+  LDA BUF_TEMP16
+  CMP BUF_LEN16
+  BCC .sub_count_ok
+  LDA BUF_LEN16
+.sub_count_ok:
+  STA BUF_DELTA
+
+  JSR get_cursor_buf_ptr
+  CP16 BUF_PTR16, BUF_SRC16
+  LDA BUF_DELTA
+  STA BUF_LEN16
+  LDA #0
+  STA BUF_LEN16+1
+  JSR yank_add_chars
+
+  JSR get_cursor_buf_ptr
+  JSR buf_delete_chars
+  JSR buf_adjust_lines_dec
+
+  LDA #$FF
+  STA MODIFIED
+  LDA #1
+  STA RENDER_FLAG
+
+.sub_insert:
+  LDA #MODE_INSERT
+  STA MODE
+  JMP clear_count
+
+; --- Change to EOL (C) ---
+normal_change_to_eol:
+  JSR get_current_line_len
+  STAX16 LINE_LEN16
+  TST16 LINE_LEN16
+  BEQ .c_insert
+  CMP16 CURSOR_COL16, LINE_LEN16
+  BCS .c_insert
+
+  SEC
+  SBC16 LINE_LEN16, CURSOR_COL16, BUF_LEN16
+
+  JSR get_cursor_buf_ptr
+  CP16 BUF_PTR16, BUF_SRC16
+  JSR yank_add_chars
+
+  SEC
+  SBC16 LINE_LEN16, CURSOR_COL16, BUF_LEN16
+  JSR get_cursor_buf_ptr
+  JSR buf_shift_left_16
+  JSR buf_rebuild_lines
+
+  LDA #$FF
+  STA MODIFIED
+
+.c_insert:
+  LDA #MODE_INSERT
+  STA MODE
+  JMP clear_count
+
+normal_r_key:
+  LDA #'r'
+  JMP set_pending_key
+
+; --- Replace char (r) ---
+do_replace_char:
+  JSR get_count
+  LDX BUF_TEMP16
+
+.replace_loop:
+  STX NORMAL_TEMP
+  JSR get_current_line_len
+  STAX16 LINE_LEN16
+  TST16 LINE_LEN16
+  BEQ .replace_done
+  CMP16 CURSOR_COL16, LINE_LEN16
+  BCS .replace_done
+
+  JSR get_cursor_buf_ptr
+  LDY #0
+  LDA BUF_TEMP
+  STA (BUF_PTR16),Y
+  LDA #$FF
+  STA MODIFIED
+  LDA #1
+  STA RENDER_FLAG
+
+  LDX NORMAL_TEMP
+  CPX #1
+  BEQ .replace_done
+  INC16 CURSOR_COL16
+  DEX
+  BNE .replace_loop
+
+.replace_done:
   JMP clear_count
 
 ; --- Utilities ---

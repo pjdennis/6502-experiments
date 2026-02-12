@@ -4169,6 +4169,135 @@ class EditorTestRunner:
             expect_cursor=(0, 6),
         )
 
+        self._group("Toggle case (~):", leading_blank=True)
+
+        self.run_test(
+            "~ toggles lowercase to uppercase",
+            "hello\n",
+            b"~:wq\r",
+            expected_content="Hello\n"
+        )
+
+        self.run_test(
+            "~ toggles uppercase to lowercase",
+            "HELLO\n",
+            b"~:wq\r",
+            expected_content="hELLO\n"
+        )
+
+        self.run_test(
+            "~ on non-alpha advances cursor",
+            "1abc\n",
+            b"~~:wq\r",
+            expected_content="1Abc\n"
+        )
+
+        self.run_test(
+            "3~ toggles 3 chars",
+            "hello\n",
+            b"3~:wq\r",
+            expected_content="HELlo\n"
+        )
+
+        self.run_test(
+            "~ on empty line does nothing",
+            "\n",
+            b"~:q!\r",
+            expect_unmodified=True
+        )
+
+        self._group("Join lines (J):", leading_blank=True)
+
+        self.run_test(
+            "J joins two lines with space",
+            "foo\nbar\n",
+            b"J:wq\r",
+            expected_content="foo bar\n"
+        )
+
+        self.run_test(
+            "3J joins 3 lines",
+            "one\ntwo\nthree\nfour\n",
+            b"3J:wq\r",
+            expected_content="one two three\nfour\n"
+        )
+
+        self.run_test(
+            "J on last line does nothing",
+            "only\n",
+            b"J:q!\r",
+            expect_unmodified=True
+        )
+
+        self._group("Replace char (r):", leading_blank=True)
+
+        self.run_test(
+            "rx replaces char at cursor",
+            "hello\n",
+            b"rx:wq\r",
+            expected_content="xello\n"
+        )
+
+        self.run_test(
+            "3rx replaces 3 chars",
+            "hello\n",
+            b"3rx:wq\r",
+            expected_content="xxxlo\n"
+        )
+
+        self.run_test(
+            "r on empty line does nothing",
+            "\n",
+            b"rx:q!\r",
+            expect_unmodified=True
+        )
+
+        self._group("Substitute char (s):", leading_blank=True)
+
+        self.run_test(
+            "s deletes char and enters insert",
+            "hello\n",
+            b"sX\x1b:wq\r",
+            expected_content="Xello\n"
+        )
+
+        self.run_test(
+            "2s deletes 2 chars and enters insert",
+            "hello\n",
+            b"2sXY\x1b:wq\r",
+            expected_content="XYllo\n"
+        )
+
+        self.run_test(
+            "s on empty line enters insert",
+            "\n",
+            b"sX\x1b:wq\r",
+            expected_content="X\n"
+        )
+
+        self._group("Change to EOL (C):", leading_blank=True)
+
+        self.run_test(
+            "C at start deletes all and inserts",
+            "hello\n",
+            b"CXY\x1b:wq\r",
+            expected_content="XY\n"
+        )
+
+        self.run_test(
+            "C at middle deletes to EOL and inserts",
+            "hello\n",
+            b"llCXY\x1b:wq\r",
+            expected_content="heXY\n"
+        )
+
+        self.run_test(
+            "C on empty line enters insert",
+            "\n",
+            b"CX\x1b:wq\r",
+            expected_content="X\n"
+        )
+
         self._group("First non-blank (^):", leading_blank=True)
 
         self.run_test_screen(
