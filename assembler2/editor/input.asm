@@ -9,7 +9,9 @@ KEY_HOME  = $84
 KEY_END   = $85
 KEY_PGUP  = $86
 KEY_PGDN  = $87
-KEY_DEL   = $88
+KEY_DEL       = $88
+KEY_WORD_FWD  = $89    ; Ctrl+Right (ESC[1;5C)
+KEY_WORD_BACK = $8A    ; Ctrl+Left  (ESC[1;5D)
 KEY_ESC   = $1B
 KEY_ENTER = $0D
 KEY_BS    = $08
@@ -131,7 +133,9 @@ read_key:
   ; Read the next byte - should be '['
   JSR input_read_byte
   CMP #'['
-  BNE .not_csi
+  BEQ .is_csi
+  JMP .not_csi
+.is_csi:
   ; CSI sequence - read the final byte
   JSR input_read_byte
   STA INPUT_TEMP
@@ -160,11 +164,34 @@ read_key:
   BCC .unknown_csi
   CMP #'7'
   BCS .unknown_csi
-  ; It's a digit 1-6, read the next char expecting ~
+  ; It's a digit 1-6, read the next char expecting ~ or ;
   STA INPUT_TEMP
   JSR input_read_byte
   CMP #'~'
-  BNE .unknown_eat ; unknown sequence, discard
+  BEQ .is_tilde
+  CMP #';'
+  BNE .unknown_eat        ; Not ~ or ; -> consume rest, return $00
+  ; ESC[digit;modifier<final> - read modifier
+  JSR input_read_byte
+  CMP #'5'                ; Ctrl modifier?
+  BNE .eat_after_semi     ; No -> consume rest, return $00
+  JSR input_read_byte     ; Read final byte
+  CMP #'C'
+  BEQ .key_word_fwd
+  CMP #'D'
+  BEQ .key_word_back
+  ; Unknown Ctrl+key final byte - already consumed if >= $40
+  CMP #$40
+  BCS .csi_consumed
+  JSR consume_csi_tail
+  JMP .csi_consumed
+.eat_after_semi:
+  ; Non-Ctrl modifier - consume remaining bytes
+  CMP #$40
+  BCS .csi_consumed
+  JSR consume_csi_tail
+  JMP .csi_consumed
+.is_tilde:
   LDA INPUT_TEMP
   CMP #'3'
   BEQ .key_delete
@@ -202,6 +229,12 @@ read_key:
   RTS
 .key_pgdn:
   LDA #KEY_PGDN
+  RTS
+.key_word_fwd:
+  LDA #KEY_WORD_FWD
+  RTS
+.key_word_back:
+  LDA #KEY_WORD_BACK
   RTS
 
 .not_tilde:

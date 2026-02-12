@@ -5372,6 +5372,22 @@ class EditorTestRunner:
             expected_content="hello\n"
         )
 
+        # Ctrl+Up (ESC[1;5A) in normal mode - should be consumed
+        self.run_test(
+            "Ctrl+Up in normal mode is no-op",
+            "hello\n",
+            b"\x1b[1;5A:wq\r",
+            expected_content="hello\n"
+        )
+
+        # Ctrl+Down (ESC[1;5B) in normal mode - should be consumed
+        self.run_test(
+            "Ctrl+Down in normal mode is no-op",
+            "hello\n",
+            b"\x1b[1;5B:wq\r",
+            expected_content="hello\n"
+        )
+
         # Insert key (ESC[2~) in normal mode - should be no-op
         self.run_test(
             "Insert key in normal mode is no-op",
