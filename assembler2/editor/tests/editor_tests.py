@@ -47,6 +47,7 @@ class EditorTestRunner:
         self.editor_asm = base_dir / "editor" / "editor.asm"
         self.editor_bin = base_dir / "editor" / "out" / "editor.out"
         self.editor_small_bin = base_dir / "editor" / "out" / "editor_small.out"
+        self.editor_terminal_bin = base_dir / "editor" / "out" / "editor_terminal.out"
         self.passed = 0
         self.failed = 0
 
@@ -79,6 +80,11 @@ class EditorTestRunner:
         """Assemble the editor with small buffer (256 bytes for testing)."""
         return self._assemble_editor(self.editor_small_bin,
                                      ["define:small_buffer"])
+
+    def build_terminal_editor(self):
+        """Assemble the editor with terminal_mode defined."""
+        return self._assemble_editor(self.editor_terminal_bin,
+                                     ["define:terminal_mode"])
 
     def create_stable_copy(self):
         """Create a stable copy of editor.out after successful tests."""
@@ -303,6 +309,156 @@ class EditorTestRunner:
         ansi = output_file.read_bytes() if output_file.exists() else b""
 
         return result.returncode, saved, ansi
+
+    def run_editor_terminal(self, input_file: str, keys: bytes, tmpdir: Path,
+                            rows: int = 10, cols: int = 40,
+                            extra_args: list = None) -> tuple:
+        """Run the terminal-mode editor with serial I/O.
+
+        Returns (exit_code, saved_content, ansi_output_bytes).
+        """
+        keys_file = tmpdir / "keys.bin"
+        output_file = tmpdir / "output.bin"
+        keys_file.write_bytes(keys)
+
+        cmd = [str(self.emulator), str(self.editor_terminal_bin),
+               "--load", "0400", "--terminal",
+               "--rows", str(rows), "--cols", str(cols),
+               "--input", str(keys_file), "--output", str(output_file),
+               input_file]
+        if extra_args:
+            cmd.extend(extra_args)
+
+        result = subprocess.run(cmd, capture_output=True, timeout=10)
+
+        saved = ""
+        if Path(input_file).exists():
+            try:
+                saved = Path(input_file).read_text()
+            except UnicodeDecodeError:
+                saved = Path(input_file).read_bytes().decode('latin-1')
+
+        ansi = output_file.read_bytes() if output_file.exists() else b""
+
+        return result.returncode, saved, ansi
+
+    def run_test_terminal_screen(self, name: str, initial_content: str,
+                                 keys: bytes, rows: int = 10, cols: int = 40,
+                                 expect_cursor: tuple = None,
+                                 expect_lines: list = None,
+                                 expect_status_contains: str = None,
+                                 expected_content: str = None,
+                                 extra_args: list = None):
+        """Run a terminal-mode editor test and verify screen state."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            edit_file = tmpdir / "test.txt"
+
+            if initial_content is not None:
+                edit_file.write_text(initial_content)
+            else:
+                edit_file.write_text("")
+
+            try:
+                exit_code, saved, ansi = self.run_editor_terminal(
+                    str(edit_file), keys, tmpdir, rows, cols,
+                    extra_args=extra_args
+                )
+            except subprocess.TimeoutExpired:
+                self._fail(name, "Timed out (infinite loop?)")
+                return
+            except Exception as e:
+                self._fail(name, f"Error: {e}")
+                return
+
+            if exit_code != 0:
+                self._fail(name, f"Expected exit code 0, got {exit_code}")
+                return
+
+            # Parse ANSI output through virtual terminal
+            screen = AnsiScreen(rows, cols)
+            screen.process(ansi.decode('latin-1'))
+
+            if screen.frame_buffer is None:
+                self._fail(name, "No rendered frame captured (no ESC[?25h)")
+                return
+
+            if expect_cursor is not None:
+                actual = screen.get_cursor()
+                if actual != expect_cursor:
+                    self._fail(name,
+                        f"Cursor: expected {expect_cursor}, got {actual}\n"
+                        f"    Frame:\n{screen.dump()}")
+                    return
+
+            if expect_lines is not None:
+                for row_idx, expected_text in expect_lines:
+                    actual_text = screen.get_row_text(row_idx)
+                    if actual_text != expected_text:
+                        self._fail(name,
+                            f"Row {row_idx}: expected {expected_text!r}, "
+                            f"got {actual_text!r}\n"
+                            f"    Frame:\n{screen.dump()}")
+                        return
+
+            if expect_status_contains is not None:
+                status_row = rows - 1
+                status_text = screen.get_row_text(status_row)
+                if expect_status_contains not in status_text:
+                    self._fail(name,
+                        f"Status bar: expected substring {expect_status_contains!r} "
+                        f"in {status_text!r}\n"
+                        f"    Frame:\n{screen.dump()}")
+                    return
+
+            if expected_content is not None:
+                if saved != expected_content:
+                    self._fail(name,
+                        f"Content mismatch:\n"
+                        f"  Expected: {expected_content!r}\n"
+                        f"  Actual:   {saved!r}")
+                    return
+
+            self._pass(name)
+
+    def run_test_terminal(self, name: str, initial_content: str, keys: bytes,
+                          expected_content: str = None, expect_exit: int = 0,
+                          extra_args: list = None):
+        """Run a terminal-mode editor test verifying file content."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            edit_file = tmpdir / "test.txt"
+
+            if initial_content is not None:
+                edit_file.write_text(initial_content)
+            else:
+                edit_file.write_text("")
+
+            try:
+                exit_code, saved, ansi = self.run_editor_terminal(
+                    str(edit_file), keys, tmpdir,
+                    extra_args=extra_args
+                )
+            except subprocess.TimeoutExpired:
+                self._fail(name, "Timed out (infinite loop?)")
+                return
+            except Exception as e:
+                self._fail(name, f"Error: {e}")
+                return
+
+            if exit_code != expect_exit:
+                self._fail(name, f"Expected exit code {expect_exit}, got {exit_code}")
+                return
+
+            if expected_content is not None:
+                if saved != expected_content:
+                    self._fail(name,
+                        f"Content mismatch:\n"
+                        f"  Expected: {expected_content!r}\n"
+                        f"  Actual:   {saved!r}")
+                    return
+
+            self._pass(name)
 
     def run_test_screen(self, name: str, initial_content: str, keys: bytes,
                         rows: int = 10, cols: int = 40,
@@ -4642,6 +4798,37 @@ class EditorTestRunner:
             b"jj?foo\r?\r:q!\r",
             expect_cursor=(2, 0),
         )
+
+        # ============================================================
+        # Terminal mode tests
+        # ============================================================
+        self._group("Terminal mode:", leading_blank=True)
+
+        if not self.build_terminal_editor():
+            print("  Skipping terminal mode tests (build failed)")
+        else:
+            # Basic smoke test: quit exits cleanly
+            self.run_test_terminal(
+                "Terminal :q! exits cleanly",
+                "Hello\n",
+                b":q!\r"
+            )
+
+            # Open and save unchanged
+            self.run_test_terminal(
+                "Terminal :wq saves unchanged file",
+                "Hello\n",
+                b":wq\r",
+                expected_content="Hello\n"
+            )
+
+            # Delete char with x
+            self.run_test_terminal(
+                "Terminal x deletes first char",
+                "Hello\n",
+                b"x:wq\r",
+                expected_content="ello\n"
+            )
 
         print()
         print("=" * 60)
