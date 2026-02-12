@@ -36,10 +36,14 @@ DIV_INPUT16:   .word     ; Scratch for 16-bit division
 
 ; Initialize rendering state
 render_init:
+  .ifdef terminal_mode
+  JSR query_terminal_size
+  .else
   JSR term_rows
   STA SCREEN_ROWS
   JSR term_cols
   STA SCREEN_COLS
+  .endif
   LDA #0
   STA CURSOR_ROW
   STA_LH16 CURSOR_COL16

@@ -19,6 +19,7 @@ io_ready = con_ready
   .zeropage
 SERIAL_BYTE:     .byte    ; Byte buffered by io_ready
 SERIAL_HAS_BYTE: .byte    ; $FF if SERIAL_BYTE valid
+DSR_VALUE:       .byte    ; Temp for parsing DSR decimal values
 
   .code
 
@@ -64,6 +65,114 @@ io_ready:
   RTS
 .not_ready:
   LDA #$00
+  RTS
+
+; Query terminal size via DSR (Device Status Report)
+; Sends ESC[999;999H to move cursor to bottom-right (clamped by terminal)
+; Then sends ESC[6n to query cursor position
+; Parses response ESC[{rows};{cols}R
+; Stores results in SCREEN_ROWS and SCREEN_COLS
+query_terminal_size:
+  ; Send ESC[999;999H (move cursor to max position)
+  LDA #$1B
+  JSR io_write
+  LDA #'['
+  JSR io_write
+  LDA #'9'
+  JSR io_write
+  LDA #'9'
+  JSR io_write
+  LDA #'9'
+  JSR io_write
+  LDA #';'
+  JSR io_write
+  LDA #'9'
+  JSR io_write
+  LDA #'9'
+  JSR io_write
+  LDA #'9'
+  JSR io_write
+  LDA #'H'
+  JSR io_write
+
+  ; Send ESC[6n (request cursor position)
+  LDA #$1B
+  JSR io_write
+  LDA #'['
+  JSR io_write
+  LDA #'6'
+  JSR io_write
+  LDA #'n'
+  JSR io_write
+
+  ; Read response: ESC[{rows};{cols}R
+  ; Skip ESC
+  JSR io_read
+  ; Skip [
+  JSR io_read
+
+  ; Parse rows (decimal digits until ';')
+  LDA #0
+  STA DSR_VALUE
+.read_rows:
+  JSR io_read
+  CMP #';'
+  BEQ .rows_done
+  ; Accumulate digit: DSR_VALUE = DSR_VALUE * 10 + digit
+  SEC
+  SBC #'0'
+  PHA
+  LDA DSR_VALUE
+  ASL        ; *2
+  STA DSR_VALUE
+  ASL        ; *4
+  ASL        ; *8
+  CLC
+  ADC DSR_VALUE  ; *10
+  STA DSR_VALUE
+  PLA
+  CLC
+  ADC DSR_VALUE
+  STA DSR_VALUE
+  JMP .read_rows
+.rows_done:
+  LDA DSR_VALUE
+  STA SCREEN_ROWS
+
+  ; Parse cols (decimal digits until 'R')
+  LDA #0
+  STA DSR_VALUE
+.read_cols:
+  JSR io_read
+  CMP #'R'
+  BEQ .cols_done
+  SEC
+  SBC #'0'
+  PHA
+  LDA DSR_VALUE
+  ASL
+  STA DSR_VALUE
+  ASL
+  ASL
+  CLC
+  ADC DSR_VALUE
+  STA DSR_VALUE
+  PLA
+  CLC
+  ADC DSR_VALUE
+  STA DSR_VALUE
+  JMP .read_cols
+.cols_done:
+  LDA DSR_VALUE
+  STA SCREEN_COLS
+
+  ; Send ESC[H to move cursor back to home position
+  LDA #$1B
+  JSR io_write
+  LDA #'['
+  JSR io_write
+  LDA #'H'
+  JSR io_write
   RTS
 
   .endif

@@ -4830,6 +4830,51 @@ class EditorTestRunner:
                 expected_content="ello\n"
             )
 
+            # Terminal size detection: 10x40
+            self.run_test_terminal_screen(
+                "Terminal size 10x40",
+                "Hello\n",
+                b":q!\r",
+                rows=10, cols=40,
+                expect_lines=[(0, "Hello")],
+                expect_status_contains="test.txt"
+            )
+
+            # Terminal size detection: verify tilde rows
+            self.run_test_terminal_screen(
+                "Terminal size 10x40 tilde rows",
+                "Line1\nLine2\n",
+                b":q!\r",
+                rows=10, cols=40,
+                expect_lines=[
+                    (0, "Line1"),
+                    (1, "Line2"),
+                    (2, "~"),
+                    (7, "~"),
+                ]
+            )
+
+            # Terminal size detection: 24x80
+            self.run_test_terminal_screen(
+                "Terminal size 24x80",
+                "Hello\n",
+                b":q!\r",
+                rows=24, cols=80,
+                expect_lines=[(0, "Hello")],
+                expect_status_contains="test.txt"
+            )
+
+            # Terminal size with baud rate
+            self.run_test_terminal_screen(
+                "Terminal size with baud rate",
+                "Hello\n",
+                b":q!\r",
+                rows=10, cols=40,
+                expect_lines=[(0, "Hello")],
+                expect_status_contains="test.txt",
+                extra_args=["--cpu-mhz", "1", "--baud", "9600"]
+            )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed
