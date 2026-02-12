@@ -1555,30 +1555,16 @@ do_dw:
   BEQ .dw_skip_ws
 
   ; Skip same-class chars
-.dw_skip_same:
-  INC16 BUF_LEN16
-  CMP16 BUF_LEN16, LINE_LEN16
+  JSR skip_word_class_forward
   BCS .dw_have_end
-  JSR get_scan_buf_ptr
-  LDY #0
-  LDA (BUF_PTR16),Y
-  JSR char_class
-  CMP WORD_CLASS
-  BEQ .dw_skip_same
   CMP #0
   BNE .dw_have_end
 
   ; Skip trailing whitespace
 .dw_skip_ws:
-  INC16 BUF_LEN16
-  CMP16 BUF_LEN16, LINE_LEN16
-  BCS .dw_have_end
-  JSR get_scan_buf_ptr
-  LDY #0
-  LDA (BUF_PTR16),Y
-  JSR char_class
-  CMP #0
-  BEQ .dw_skip_ws
+  LDA #0
+  STA WORD_CLASS
+  JSR skip_word_class_forward
 
 .dw_have_end:
   ; delete count = BUF_LEN16 - CURSOR_COL16
@@ -1679,32 +1665,16 @@ do_cw:
   CMP #0
   BEQ .cw_skip_ws_first
 
-  ; Skip same-class chars
-.cw_skip_same:
-  INC16 BUF_LEN16
-  CMP16 BUF_LEN16, LINE_LEN16
-  BCS .cw_have_end
-  JSR get_scan_buf_ptr
-  LDY #0
-  LDA (BUF_PTR16),Y
-  JSR char_class
-  CMP WORD_CLASS
-  BEQ .cw_skip_same
+  ; Skip same-class chars (no trailing ws for cw)
+  JSR skip_word_class_forward
   JMP .cw_have_end
 
 .cw_skip_ws_first:
   ; On whitespace: skip ws, then skip that word class
-  INC16 BUF_LEN16
-  CMP16 BUF_LEN16, LINE_LEN16
+  JSR skip_word_class_forward
   BCS .cw_have_end
-  JSR get_scan_buf_ptr
-  LDY #0
-  LDA (BUF_PTR16),Y
-  JSR char_class
-  CMP #0
-  BEQ .cw_skip_ws_first
   STA WORD_CLASS
-  JMP .cw_skip_same
+  JSR skip_word_class_forward
 
 .cw_have_end:
   ; delete count = BUF_LEN16 - CURSOR_COL16
@@ -1777,6 +1747,27 @@ do_cb:
   JMP clear_count
 
 ; --- Utilities ---
+
+; Skip forward past chars of WORD_CLASS, starting from BUF_LEN16
+; Input: BUF_LEN16 = start col, LINE_LEN16 = line length, WORD_CLASS = class to skip
+; Output: BUF_LEN16 = col after last same-class char
+;         Carry set = at/past end of line
+;         Carry clear = found different class, A = new class
+; Clobbers: A, X, Y, BUF_PTR16
+skip_word_class_forward:
+  INC16 BUF_LEN16
+  CMP16 BUF_LEN16, LINE_LEN16
+  BCS .swcf_at_end
+  JSR get_scan_buf_ptr
+  LDY #0
+  LDA (BUF_PTR16),Y
+  JSR char_class
+  CMP WORD_CLASS
+  BEQ skip_word_class_forward
+  CLC
+  RTS
+.swcf_at_end:
+  RTS
 
 ; Find word start scanning backward from CURSOR_COL16 - 1
 ; Output: BUF_LEN16 = column of word start

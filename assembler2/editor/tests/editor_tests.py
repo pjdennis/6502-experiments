@@ -4630,6 +4630,14 @@ class EditorTestRunner:
             expected_content="worldhello \n",
         )
 
+        # dw on whitespace only deletes whitespace (not next word)
+        self.run_test(
+            "dw on only whitespace deletes whitespace",
+            "foo   \n",
+            b"3ldw:wq\r",
+            expected_content="foo\n",
+        )
+
         self._group("Delete word backward (db):", leading_blank=True)
 
         self.run_test(
