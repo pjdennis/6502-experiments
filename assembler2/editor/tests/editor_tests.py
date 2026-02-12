@@ -2507,6 +2507,41 @@ class EditorTestRunner:
         )
 
         # ============================================================
+        # Pending key display tests
+        # ============================================================
+        self._group("Pending key display:", leading_blank=True)
+
+        # After pressing 'g', a frame is rendered (RENDER_FLAG=0)
+        # Currently no pending key shown in status
+        self.run_test_screen(
+            "g renders cursor-only frame",
+            make_lines(5),
+            b"gG:q!\r",
+            cols=80,
+            expect_status_at_frame=[
+                (0, "NORMAL - 1,"),  # initial frame, no pending key shown
+            ]
+        )
+
+        # After dd completes, status shows updated position
+        self.run_test_screen(
+            "dd completes and shows position",
+            make_lines(3),
+            b"dd:q!\r",
+            cols=80,
+            expect_status_contains="COMMAND - 1,",
+        )
+
+        # 3d then ESC clears count
+        self.run_test_screen(
+            "3d ESC clears count",
+            make_lines(5),
+            b"3d\x1b:q!\r",
+            cols=80,
+            expect_status_contains="COMMAND - 1,",
+        )
+
+        # ============================================================
         # Count movement tests
         # ============================================================
         self._group("Count movement:", leading_blank=True)
