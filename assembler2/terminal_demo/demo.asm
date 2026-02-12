@@ -6,6 +6,12 @@
   JMP main
   .include 23/environment.asm
 
+blocking_write:
+.retry:
+  JSR serial_write
+  BCS .retry
+  RTS
+
 ; Print a null-terminated string via serial
 ; String address in A (low) and X (high)
 print_str:
@@ -15,7 +21,7 @@ print_str:
 .loop:
   LDA ($10),Y
   BEQ .done
-  JSR serial_write
+  JSR blocking_write
   INY
   BNE .loop
 .done:
@@ -42,13 +48,13 @@ main:
   BEQ .quit
 
   ; Echo the character
-  JSR serial_write
+  JSR blocking_write
   JMP .loop
 
 .quit:
   ; Restore screen: print newline, then exit
   LDA #$0A
-  JSR serial_write
+  JSR blocking_write
   LDA #$00
   JMP exit
 
