@@ -10,6 +10,7 @@ JUMP_TARGET16:  .word  ; Target for indirect jump
 COUNT16:        .word  ; Accumulated count (0 = no count entered)
 COUNT_ACTIVE:   .byte  ; $FF if digits are being entered, $00 otherwise
 NORMAL_TEMP:    .byte  ; Temp byte for normal mode operations
+BATCH_RESTORE_KEY: .byte ; Key to restore to LAST_KEY after batch (0 = none)
 
   .code
 
@@ -147,11 +148,15 @@ set_pending_key:
   RTS
 
 ; Clear count state: zeroes COUNT16, COUNT_ACTIVE, LAST_KEY
+; If BATCH_RESTORE_KEY is set, restores it to LAST_KEY (for partial pair e.g. dddw)
 clear_count:
   LDA #0
   STA_LH16 COUNT16
   STA COUNT_ACTIVE
+  LDA BATCH_RESTORE_KEY
   STA LAST_KEY
+  LDA #0
+  STA BATCH_RESTORE_KEY
   RTS
 
 ; Accumulate digit in A ('0'-'9') into COUNT16
@@ -243,6 +248,67 @@ get_count:
   STA BUF_TEMP16
   LDA COUNT16 + 1
   STA BUF_TEMP16 + 1
+  RTS
+
+; --- Pair batching for 2-key commands ---
+
+; Batch pending pairs of LAST_KEY + BUF_TEMP from the input stream
+; Uses LAST_KEY (first key) and BUF_TEMP (second key) already set by
+; pending_key_dispatch. Adds matched pairs to COUNT16.
+; Sets BATCH_RESTORE_KEY if a partial pair was consumed.
+; Clobbers: A, X
+batch_pending_pairs:
+  LDX #0                   ; X = extra pairs found
+.loop:
+  JSR key_ready
+  CMP #$FF
+  BNE .done                ; No key available, stop
+  JSR get_key
+  CMP LAST_KEY
+  BNE .no_first_match      ; First key doesn't match, push back
+  ; First key matches - need second key
+  JSR key_ready
+  CMP #$FF
+  BNE .partial             ; No second key available
+  JSR get_key
+  CMP BUF_TEMP
+  BNE .second_mismatch     ; Second key doesn't match
+  ; Full pair matched
+  INX
+  CPX #BATCH_MAX
+  BEQ .done
+  JMP .loop
+.second_mismatch:
+  ; Push back the non-matching second key
+  JSR unget_key
+.partial:
+  ; Save consumed first key for restore after command completes
+  LDA LAST_KEY
+  STA BATCH_RESTORE_KEY
+  JMP .done
+.no_first_match:
+  ; Push back the non-matching key
+  JSR unget_key
+.done:
+  ; Add X extra pairs to COUNT16
+  TXA
+  BEQ .no_add              ; No extra pairs, nothing to do
+  ; Ensure COUNT16 >= 1 (the original command counts as 1)
+  PHA                      ; Save extra count
+  LDA COUNT16
+  ORA COUNT16 + 1
+  BNE .has_count
+  LDA #1
+  STA COUNT16              ; COUNT16 was 0, set to 1
+.has_count:
+  PLA                      ; Restore extra count
+  CLC
+  ADC COUNT16
+  STA COUNT16
+  LDA #0
+  ADC COUNT16 + 1
+  STA COUNT16 + 1
+.no_add:
   RTS
 
 ; --- Common yank/delete operations ---
