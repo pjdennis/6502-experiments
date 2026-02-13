@@ -4944,6 +4944,75 @@ class EditorTestRunner:
             expect_cursor=(1, 0),  # was idx 2, join removed line -> idx 1
         )
 
+        # --- Mark adjustment: batched insert mode ---
+        # Verify marks are correctly adjusted by the unified insert_batch
+        # handler regardless of how keystrokes are batched together.
+
+        # Batch Enter×2 above mark -> mark shifts by 2
+        # (sequential composition of inserts is additive)
+        self.run_test_screen(
+            "Batch Enter×2 above mark shifts mark +2",
+            make_lines(5),
+            b"jjjmagg A\r\r\x1b'a:q!\r",  # mark line4, gg, A+Enter+Enter+ESC, 'a
+            expect_cursor=(5, 0),  # was idx 3, +2 newlines -> idx 5
+        )
+
+        # Batch BS×2 crossing 2 newlines above mark -> mark shifts by -2
+        # Content has consecutive empty lines so 2 backward bytes are both \n.
+        # (sequential composition of deletes at same anchor is additive)
+        self.run_test_screen(
+            "Batch BS×2 join above mark shifts mark -2",
+            "A\n\n\nB\nC\n",
+            b"jjjmaki\x08\x08\x1b'a:q!\r",  # mark "B" (idx3), k->line2, BS×2
+            expect_cursor=(1, 0),  # was idx 3, -2 newlines -> idx 1
+        )
+
+        # DEL across newline above mark -> mark shifts
+        DEL = b"\x1b[3~"
+        self.run_test_screen(
+            "DEL across newline above mark shifts mark",
+            make_lines(5),
+            b"jjjjmagg A" + DEL + b"\x1b'a:q!\r",  # mark line5, gg, A(end)+DEL
+            expect_cursor=(3, 0),  # was idx 4, DEL removed 1 newline -> idx 3
+        )
+
+        # Mixed: Enter then BS cancels within batch -> mark unchanged
+        # BS cancels the Enter during collection, so no newlines are
+        # actually inserted or deleted -> marks unaffected
+        self.run_test_screen(
+            "Enter+BS cancel in batch leaves mark unchanged",
+            make_lines(5),
+            b"jjmagg i\r\x08\x1b'a:q!\r",  # mark line3, gg, Enter+BS cancel
+            expect_cursor=(2, 0),  # mark still at idx 2
+        )
+
+        # Mixed: BS join + Enter re-split -> mark survives round-trip
+        # BS deletes newline (joining lines), Enter re-inserts one.
+        # delete(1,1) then insert(1,1) is identity for marks.
+        self.run_test_screen(
+            "BS join + Enter re-split preserves mark",
+            make_lines(5),
+            b"jjjjmagg ji\x08\r\x1b'a:q!\r",  # mark line5, j->line2, BS+Enter
+            expect_cursor=(4, 0),  # mark still at idx 4
+        )
+
+        # DEL across newline + typing in batch -> mark below shifts
+        DEL = b"\x1b[3~"
+        self.run_test_screen(
+            "DEL+typing across newline shifts mark below",
+            make_lines(5),
+            b"jjjmagg A" + DEL + b"XY\x1b'a:q!\r",  # mark line4, gg, A+DEL+XY
+            expect_cursor=(2, 0),  # was idx 3, -1 newline -> idx 2
+        )
+
+        # BS + typing across newline -> mark below shifts
+        self.run_test_screen(
+            "BS+typing across newline shifts mark below",
+            make_lines(5),
+            b"jjjjmagg ji\x08XY\x1b'a:q!\r",  # mark line5, j->line2, BS+XY
+            expect_cursor=(3, 0),  # was idx 4, -1 newline -> idx 3
+        )
+
         # --- :marks command ---
 
         self._group(":marks command:", leading_blank=True)
