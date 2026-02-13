@@ -3,6 +3,15 @@
 set -e
 shopt -s extglob
 
+# Run tests for a version if test directory exists
+run_version_tests() {
+    local ver=$1
+    if [ -d "${ver}/tests" ]; then
+        echo "--- Test asm${ver} ---"
+        ./run_tests.py --version "$ver" -q "${ver}/tests/asm_tests.txt"
+    fi
+}
+
 mkdir -p out
 rm -f out/*.out out/*.asm.out
 rm -rf {00..99}/out
@@ -15,6 +24,7 @@ echo "--- Version 02 ---"
 (cd 02 && mkdir -p out && ../emulator.out ../01/out/asm.out --load 2000 --input asm.asm --output out/asm.out)
 echo "--- Version 03 ---"
 (cd 03 && mkdir -p out && ../emulator.out ../02/out/asm.out --load 2000 --input asm.asm --output out/asm.out)
+run_version_tests 03
 echo "--- Version 04 ---"
 (cd 04 && mkdir -p out && ../emulator.out ../03/out/asm.out --load 2000 --input asm.asm --output out/asm.out)
 echo "--- Version 05 ---"
@@ -33,6 +43,7 @@ echo "--- Version 08 ---"
   ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
   cat out/inst.asm.out asm.asm > out/asmc.asm.out &&
   ../emulator.out ../07/out/asmc.out --load 2000 --input out/asmc.asm.out --output out/asmc.out)
+run_version_tests 08
 echo "--- Version 09 ---"
 (cd 09 && mkdir -p out &&
   ../emulator.out ../08/out/asmc.out --load 2000 --input instgen.asm --output out/instgen.out &&
@@ -45,6 +56,7 @@ echo "--- Version 10 ---"
   ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
   cat out/inst.asm.out asm.asm > out/asmc.asm.out &&
   ../emulator.out ../09/out/asmc.out --input out/asmc.asm.out --output out/asmc.out)
+run_version_tests 10
 echo "--- Version 11 ---"
 (cd 11 && mkdir -p out &&
   ../emulator.out ../10/out/asmc.out --input instgen.asm --output out/instgen.out &&
@@ -55,6 +67,7 @@ echo "--- Version 12 ---"
   ../emulator.out ../11/out/asm.out --input instgen.asm --output out/instgen.out &&
   ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
   ../emulator.out ../11/out/asm.out --input asm.asm --output out/asm.out)
+run_version_tests 12
 echo "--- Version 13 ---"
 (cd 13 && mkdir -p out &&
   ../emulator.out ../12/out/asm.out instgen.asm out/instgen.out &&
@@ -65,6 +78,7 @@ echo "--- Version 14 ---"
   ../emulator.out ../13/out/asm.out instgen.asm out/instgen.out &&
   ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
   ../emulator.out ../13/out/asm.out asm.asm out/asm.out)
+run_version_tests 14
 echo "--- Version 15 ---"
 (cd 15 && mkdir -p out &&
   ../emulator.out ../14/out/asm.out instgen.asm out/instgen.out &&
@@ -75,6 +89,7 @@ echo "--- Version 16 ---"
   ../emulator.out ../15/out/asm.out instgen.asm out/instgen.out &&
   ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
   ../emulator.out ../15/out/asm.out asm.asm out/asm.out)
+run_version_tests 16
 echo "--- Test asm16 ---"
 ./emulator.out 16/out/asm.out test16.asm out/test16.out
 echo "--- Version 17 ---"
@@ -82,29 +97,34 @@ echo "--- Version 17 ---"
   ../emulator.out ../16/out/asm.out instgen.asm out/instgen.out &&
   ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
   ../emulator.out ../16/out/asm.out asm.asm out/asm.out)
+run_version_tests 17
 diff <(hexdump -C 16/out/asm.out) <(hexdump -C 17/out/asm.out)
 echo "--- Version 18 ---"
 (cd 18 && mkdir -p out &&
   ../emulator.out ../17/out/asm.out instgen.asm out/instgen.out &&
   ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
   ../emulator.out ../17/out/asm.out asm.asm out/asm.out)
+run_version_tests 18
 diff 16/out/inst.asm.out 18/out/inst.asm.out
 echo "--- Version 19 ---"
 (cd 19 && mkdir -p out &&
   ../emulator.out ../18/out/asm.out instgen.asm out/instgen.out &&
   ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
   ../emulator.out ../18/out/asm.out asm.asm out/asm.out)
+run_version_tests 19
 echo "--- Version 20 ---"
 (cd 20 && mkdir -p out &&
   ../emulator.out ../19/out/asm.out instgen.asm out/instgen.out &&
   ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
   ../emulator.out ../19/out/asm.out asm.asm out/asm.out)
+run_version_tests 20
 echo "--- Version 21 ---"
 (cd 21 && mkdir -p out &&
   ../emulator.out ../20/out/asm.out instgen.asm out/instgen.out &&
   ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
   ../emulator.out ../20/out/asm.out asm.asm out/asm.out &&
   ../emulator.out ../20/out/asm.out asm.asm out/asm_debug.out define:enable_debug)
+run_version_tests 21
 echo "--- Version 22 ---"
 (cd 22 && mkdir -p out &&
   ../emulator.out ../21/out/asm_debug.out tests/file_stack_test.asm out/file_stack_test.out &&

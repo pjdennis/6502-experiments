@@ -91,8 +91,9 @@ class TestRunner:
         self.verbose = verbose
         self.quiet = quiet
         self.python_mode = python_mode
+        self.asm_version = asm_version
         self.emulator = base_dir / "emulator.out"
-        self.assembler = base_dir / asm_version / "out" / "asm_debug.out"
+        self.assembler = self._resolve_assembler_binary(base_dir, asm_version)
         self.file_stack_test = base_dir / asm_version / "out" / "file_stack_test.out"
         self.python_asm = base_dir / "pyasm.py"
 
@@ -100,6 +101,19 @@ class TestRunner:
         self.failed = 0
         self.skipped = 0
         self.current_test_file = None  # Track current test file for relative includes
+
+    @staticmethod
+    def _resolve_assembler_binary(base_dir: Path, asm_version: str) -> Path:
+        """Determine the correct assembler binary for a given version."""
+        version = int(asm_version)
+        if version <= 6:
+            return base_dir / asm_version / "out" / "asm.out"
+        elif version <= 10:
+            return base_dir / asm_version / "out" / "asmc.out"
+        elif version <= 20:
+            return base_dir / asm_version / "out" / "asm.out"
+        else:  # v21+
+            return base_dir / asm_version / "out" / "asm_debug.out"
 
     def _read_text_safe(self, filepath: Path) -> str:
         """Read a file, converting non-UTF8 bytes to [0xNN] format."""
@@ -332,18 +346,38 @@ class TestRunner:
                 else:
                     cmd.append("debug")
             else:
-                # Emulator mode
-                cmd = [
-                    str(self.emulator),
-                    str(self.assembler),
-                    str(asm_file),
-                    str(bin_file),
-                ]
-                # Add args (ARGS overrides the default "debug" argument)
-                if test.args:
-                    cmd.extend(test.args.split())
+                # Emulator mode - version-aware command construction
+                version = int(self.asm_version)
+                if version <= 9:
+                    # v01-v09: --load 2000 --input FILE --output FILE
+                    cmd = [
+                        str(self.emulator),
+                        str(self.assembler),
+                        "--load", "2000",
+                        "--input", str(asm_file),
+                        "--output", str(bin_file),
+                    ]
+                elif version <= 11:
+                    # v10-v11: --input FILE --output FILE (no --load)
+                    cmd = [
+                        str(self.emulator),
+                        str(self.assembler),
+                        "--input", str(asm_file),
+                        "--output", str(bin_file),
+                    ]
                 else:
-                    cmd.append("debug")
+                    # v13+: positional args
+                    cmd = [
+                        str(self.emulator),
+                        str(self.assembler),
+                        str(asm_file),
+                        str(bin_file),
+                    ]
+                    # Add args (ARGS overrides the default "debug" argument)
+                    if test.args:
+                        cmd.extend(test.args.split())
+                    elif version >= 19:
+                        cmd.append("debug")
 
             # Run assembler with cwd set to test file's directory for relative includes
             test_dir = self.current_test_file.parent if self.current_test_file else None

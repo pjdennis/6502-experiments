@@ -1,0 +1,163 @@
+# Test suite for asm03 assembler
+# Non-standard syntax: LDA#, STAZ, etc. No origin support. PC starts at $2000.
+# Features: labels, label assignment (=), DATA, < > byte selectors, strings
+# Note: Single pass - no forward references for labels used as operands
+# Note: Labels emit 2 bytes - only use with 2-byte operand instructions (STA, JMP, JSR)
+# Note: Branches use raw hex offsets, not labels
+# Note: Label assignment requires 4-char hex: label = $XXXX
+
+---
+NAME: implied_rts
+INPUT:
+1:   RTS
+EXPECT_HEX: 60
+
+---
+NAME: immediate
+INPUT:
+1:   LDA# $42
+2:   LDX# $00
+3:   LDY# $FF
+EXPECT_HEX: a9 42 a2 00 a0 ff
+
+---
+NAME: zero_page_hex
+INPUT:
+1:   LDAZ $42
+2:   STAZ $10
+EXPECT_HEX: a5 42 85 10
+
+---
+NAME: absolute
+INPUT:
+1:   STA $1234
+EXPECT_HEX: 8d 34 12
+
+---
+NAME: zero_page_x_hex
+INPUT:
+1:   STAZ,X $20
+EXPECT_HEX: 95 20
+
+---
+NAME: indirect_y_hex
+INPUT:
+1:   LDA(),Y $10
+2:   STA(),Y $20
+EXPECT_HEX: b1 10 91 20
+
+---
+NAME: data_hex
+INPUT:
+1:   DATA $01 $02 $03
+EXPECT_HEX: 01 02 03
+
+---
+NAME: data_string
+INPUT:
+1:   DATA "Hi" $00
+EXPECT_HEX: 48 69 00
+
+---
+NAME: data_mixed
+INPUT:
+1:   DATA $01 "AB" $02
+EXPECT_HEX: 01 41 42 02
+
+---
+NAME: branch_with_hex_offset
+INPUT:
+1:   BEQ $01
+2:   INX
+3:   RTS
+EXPECT_HEX: f0 01 e8 60
+
+---
+NAME: label_assignment_absolute
+DESCRIPTION: Label assignment with 4-char hex, used with absolute instruction
+INPUT:
+1: addr = $1234
+2:   STA addr
+EXPECT_HEX: 8d 34 12
+
+---
+NAME: byte_selector_low
+INPUT:
+1: addr = $1234
+2:   LDA# <addr
+EXPECT_HEX: a9 34
+
+---
+NAME: byte_selector_high
+INPUT:
+1: addr = $1234
+2:   LDA# >addr
+EXPECT_HEX: a9 12
+
+---
+NAME: jmp_hex
+INPUT:
+1:   JMP $2010
+EXPECT_HEX: 4c 10 20
+
+---
+NAME: jmp_label
+INPUT:
+1: target
+2:   JMP target
+EXPECT_HEX: 4c 00 20
+
+---
+NAME: jsr_label
+INPUT:
+1: sub
+2:   JSR sub
+EXPECT_HEX: 20 00 20
+
+---
+NAME: comment
+INPUT:
+1: ; this is a comment
+2:   RTS
+EXPECT_HEX: 60
+
+---
+NAME: data_label_bytes
+INPUT:
+1: label
+2:   DATA <label >label
+EXPECT_HEX: 00 20
+
+---
+NAME: implied_instructions
+INPUT:
+1:   CLC
+2:   SEC
+3:   INX
+4:   INY
+5:   DEY
+6:   TYA
+7:   ASLA
+8:   RTS
+EXPECT_HEX: 18 38 e8 c8 88 98 0a 60
+
+---
+NAME: absolute_y_hex
+INPUT:
+1:   LDA,Y $1234
+2:   CMP,Y $5678
+EXPECT_HEX: b9 34 12 d9 78 56
+
+---
+NAME: string_escape
+INPUT:
+1:   DATA "A\nB"
+EXPECT_HEX: 41 0a 42
+
+---
+NAME: compare_immediate
+INPUT:
+1:   CMP# $42
+2:   ADC# $10
+3:   SBC# $20
+EXPECT_HEX: c9 42 69 10 e9 20

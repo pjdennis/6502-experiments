@@ -1,0 +1,163 @@
+# Test suite for asm10 assembler
+# Non-standard syntax, two-pass assembly, hash table instructions
+# Features: forward refs, branches with labels, origin, DATA, < > selectors
+# Error format: "Error N at line L: message" (from v09)
+
+---
+NAME: implied_rts
+INPUT:
+1: * = $0200
+2:   RTS
+EXPECT_HEX: 60
+
+---
+NAME: immediate
+INPUT:
+1: * = $0200
+2:   LDA# $42
+3:   LDX# $00
+4:   LDY# $FF
+EXPECT_HEX: a9 42 a2 00 a0 ff
+
+---
+NAME: zero_page
+INPUT:
+1: * = $0200
+2:   LDAZ $42
+3:   STAZ $10
+EXPECT_HEX: a5 42 85 10
+
+---
+NAME: absolute
+INPUT:
+1: * = $0200
+2:   STA $1234
+EXPECT_HEX: 8d 34 12
+
+---
+NAME: branch_forward
+INPUT:
+1: * = $0200
+2:   BEQ skip
+3:   INX
+4: skip
+5:   RTS
+EXPECT_HEX: f0 01 e8 60
+
+---
+NAME: branch_backward
+INPUT:
+1: * = $0200
+2: loop
+3:   INX
+4:   BNE loop
+EXPECT_HEX: e8 d0 fd
+
+---
+NAME: jmp_jsr_forward
+INPUT:
+1: * = $0200
+2:   JSR sub
+3:   RTS
+4: sub
+5:   CLC
+6:   RTS
+EXPECT_HEX: 20 04 02 60 18 60
+
+---
+NAME: data_hex
+INPUT:
+1: * = $0200
+2:   DATA $01 $02 $03
+EXPECT_HEX: 01 02 03
+
+---
+NAME: data_string
+INPUT:
+1: * = $0200
+2:   DATA "Hi" $00
+EXPECT_HEX: 48 69 00
+
+---
+NAME: label_assignment
+INPUT:
+1: * = $0200
+2: addr = $1234
+3:   STA addr
+EXPECT_HEX: 8d 34 12
+
+---
+NAME: byte_selectors
+INPUT:
+1: * = $0200
+2: addr = $1234
+3:   LDA# <addr
+4:   LDX# >addr
+EXPECT_HEX: a9 34 a2 12
+
+---
+NAME: indexed_modes
+INPUT:
+1: * = $0200
+2:   LDAZ,X $20
+3:   STAZ,X $30
+4:   LDA,X $1234
+5:   LDA,Y $5678
+EXPECT_HEX: b5 20 95 30 bd 34 12 b9 78 56
+
+---
+NAME: indirect_y
+INPUT:
+1: * = $0200
+2:   LDAZ(),Y $10
+3:   STAZ(),Y $20
+EXPECT_HEX: b1 10 91 20
+
+---
+NAME: all_implied
+INPUT:
+1: * = $0200
+2:   CLC
+3:   SEC
+4:   INX
+5:   INY
+6:   DEX
+7:   TAX
+8:   TXA
+9:   TAY
+10:   TYA
+11:   PHA
+12:   PLA
+13:   TSX
+14:   RTS
+EXPECT_HEX: 18 38 e8 c8 ca aa 8a a8 98 48 68 ba 60
+
+---
+NAME: error_label_not_found
+INPUT:
+1: * = $0200
+2:   STA undefined
+EXPECT_ERROR: 1
+EXPECT_LINE: 2
+EXPECT_MSG: Label not found
+
+---
+NAME: error_opcode_not_found
+INPUT:
+1: * = $0200
+2:   BADOP
+EXPECT_ERROR: 3
+EXPECT_LINE: 2
+EXPECT_MSG: Opcode not found
+
+---
+NAME: error_duplicate_label
+INPUT:
+1: * = $0200
+2: label
+3:   INX
+4: label
+5:   RTS
+EXPECT_ERROR: 2
+EXPECT_LINE: 4
+EXPECT_MSG: Duplicate label
