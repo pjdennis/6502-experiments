@@ -129,7 +129,8 @@ def run_sigtstp_redraw_test(base_dir, verbose=False):
     # Assemble the test program
     test_bin.parent.mkdir(exist_ok=True)
     result = subprocess.run(
-        [str(emulator), str(assembler), str(test_asm), str(test_bin)],
+        [str(emulator), str(assembler), "--no-dump",
+         str(test_asm), str(test_bin)],
         capture_output=True, text=True
     )
     if result.returncode != 0:
@@ -144,7 +145,8 @@ def run_sigtstp_redraw_test(base_dir, verbose=False):
         # Start emulator in terminal-interactive mode on the PTY
         # --terminal without --input/--output = terminal_interactive
         proc = subprocess.Popen(
-            [str(emulator), str(test_bin), "--load", "0400",
+            [str(emulator), str(test_bin), "--no-dump",
+             "--load", "0400",
              "--terminal", "--rows", "24", "--cols", "80",
              "--cpu-mhz", "10", "--baud", "115200"],
             stdin=slave_fd,

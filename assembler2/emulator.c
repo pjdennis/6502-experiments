@@ -1951,7 +1951,7 @@ void show_commandline(int argc, char**argv) {
 
 int main(int argc, char **argv) {
     if (argc < 2) {
-        fprintf(stderr, "usage: emulator <code file> [--load <hex load address>] [--input <input file>] [--output <output file>] [--console] [--terminal] [--mhz <speed>] [--cpu-mhz <speed>] [--baud <rate>] [--rows N] [--cols N] [<arguments>]\n");
+        fprintf(stderr, "usage: emulator <code file> [--load <hex load address>] [--input <input file>] [--output <output file>] [--dump <dump file>] [--no-dump] [--console] [--terminal] [--mhz <speed>] [--cpu-mhz <speed>] [--baud <rate>] [--rows N] [--cols N] [<arguments>]\n");
         return 1;
     }
 
@@ -1959,6 +1959,8 @@ int main(int argc, char **argv) {
     long load_address = -1;
     char* input_filename = "/dev/null";
     char* output_filename = "/dev/null";
+    char* dump_filename = NULL;
+    int no_dump = 0;
     int input_specified = 0;
     int output_specified = 0;
 
@@ -1997,6 +1999,16 @@ int main(int argc, char **argv) {
             output_filename = argv[i + 1];
             output_specified = 1;
             i += 2;
+        } else if (strcmp(argv[i], "--dump") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "error: --dump requires a value\n");
+                return 1;
+            }
+            dump_filename = argv[i + 1];
+            i += 2;
+        } else if (strcmp(argv[i], "--no-dump") == 0) {
+            no_dump = 1;
+            i++;
         } else if (strcmp(argv[i], "--rows") == 0) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "error: --rows requires a value\n");
@@ -2481,37 +2493,29 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (console_mode || terminal_mode) {
-        return exitcode;
+    if (dump_filename || (exitcode != 0 && !no_dump)) {
+        char* auto_dump = NULL;
+        if (!dump_filename) {
+            // Auto-dump on error: derive filename from code file basename
+            const char* base = strrchr(code_filename, '/');
+            base = base ? base + 1 : code_filename;
+            const char* suffix = ".dump.bin";
+            auto_dump = malloc(strlen(base) + strlen(suffix) + 1);
+            strcpy(auto_dump, base);
+            strcat(auto_dump, suffix);
+            dump_filename = auto_dump;
+            fprintf(stderr, "Dumping memory to %s\n", dump_filename);
+        }
+        FILE* dump_file_ptr = fopen(dump_filename, "wb");
+        if (!dump_file_ptr) {
+            fprintf(stderr, "could not open dump file: %s\n", dump_filename);
+            free(auto_dump);
+            return 1;
+        }
+        fwrite(memory, 1, 0x10000, dump_file_ptr);
+        fclose(dump_file_ptr);
+        free(auto_dump);
     }
-
-    char* dump_filename_base = argv[argc - 1];
-    if (strcmp("-", dump_filename_base) == 0) {
-        dump_filename_base = "stdout";
-    }
-
-    // Extract basename (remove directory prefix)
-    char* basename = strrchr(dump_filename_base, '/');
-    basename = basename ? basename + 1 : dump_filename_base;
-
-    const char* dump_dir = "dump/";
-    const char* dump_file_suffix = ".dump.bin";
-    char* dump_filename = malloc(strlen(dump_dir) + strlen(basename) + strlen(dump_file_suffix) + 1);
-    strcpy(dump_filename, dump_dir);
-    strcat(dump_filename, basename);
-    strcat(dump_filename, dump_file_suffix);
-
-    mkdir("dump", 0755);
-    FILE* dump_file_ptr = fopen(dump_filename, "wb");
-    if (!dump_file_ptr) {
-        fprintf(stderr, "could not open output file: %s\n", dump_filename);
-        free(dump_filename);
-        return 1;
-    }
-
-    fwrite(memory, 1, 0x10000, dump_file_ptr);
-    fclose(dump_file_ptr);
-    free(dump_filename);
 
     return exitcode;
 }

@@ -2,7 +2,7 @@
   tracking.
 
 
-
+Update the emulator to generate a dump only if requested, and with a filename provided
 
 Clean up some of the repeating print code in the editor via helper functions
 
@@ -11,8 +11,6 @@ Try to centralize the buffer full message checks
 Addressing mode constants - decimals
 
 OPERAND_BYTES_0 = 0 << 4 
-
-avoid assembler directory name in file_stack_tests.asm
 
 why is it using hex constants e.g. $0002 e.g. for "Advance to next LINE_TBL entry"
 

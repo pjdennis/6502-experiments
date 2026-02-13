@@ -54,7 +54,7 @@ class TerminalTestRunner:
         dst.parent.mkdir(exist_ok=True)
         result = subprocess.run(
             [str(self.emulator), str(self.assembler),
-             str(src), str(dst)],
+             "--no-dump", str(src), str(dst)],
             capture_output=True, text=True
         )
         if result.returncode != 0:
@@ -81,7 +81,7 @@ class TerminalTestRunner:
             keys_file.write_bytes(b"")  # No input needed
 
             cmd = [str(self.emulator), str(self.dsr_test_bin),
-                   "--load", "0400", "--terminal",
+                   "--no-dump", "--load", "0400", "--terminal",
                    "--input", str(keys_file),
                    "--output", str(output_file)]
             if extra_args:
@@ -123,8 +123,8 @@ class TerminalTestRunner:
         output_file = tmpdir / "output.bin"
         keys_file.write_bytes(input_bytes)
 
-        cmd = [str(self.emulator), str(self.test_bin), "--load", "0400",
-               "--terminal", "--input", str(keys_file),
+        cmd = [str(self.emulator), str(self.test_bin), "--no-dump",
+               "--load", "0400", "--terminal", "--input", str(keys_file),
                "--output", str(output_file)]
         if extra_args:
             cmd.extend(extra_args)
@@ -146,8 +146,8 @@ class TerminalTestRunner:
     def run_emulator_args_test(self, name: str, extra_args: list,
                                expect_exit: int = 0):
         """Test emulator CLI argument validation (no test program needed)."""
-        cmd = [str(self.emulator), str(self.test_bin), "--load", "0400",
-               "--terminal"] + extra_args
+        cmd = [str(self.emulator), str(self.test_bin), "--no-dump",
+               "--load", "0400", "--terminal"] + extra_args
         try:
             result = subprocess.run(cmd, capture_output=True, timeout=10)
         except subprocess.TimeoutExpired:

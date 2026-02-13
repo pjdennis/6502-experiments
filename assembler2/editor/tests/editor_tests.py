@@ -62,7 +62,7 @@ class EditorTestRunner:
 
         output_bin.parent.mkdir(exist_ok=True)
         cmd = [str(self.emulator), str(self.assembler),
-               str(self.editor_asm), str(output_bin)]
+               "--no-dump", str(self.editor_asm), str(output_bin)]
         if extra_args:
             cmd.extend(extra_args)
         result = subprocess.run(cmd, capture_output=True, text=True)
@@ -110,7 +110,8 @@ class EditorTestRunner:
         keys_file.write_bytes(keys)
 
         result = subprocess.run(
-            [str(self.emulator), str(self.editor_bin), "--load", "0400",
+            [str(self.emulator), str(self.editor_bin), "--no-dump",
+             "--load", "0400",
              "--input", str(keys_file), "--output", str(output_file), input_file],
             capture_output=True, timeout=10
         )
@@ -137,8 +138,8 @@ class EditorTestRunner:
 
         with open(keys_file, "rb") as stdin_file:
             result = subprocess.run(
-                [str(self.emulator), str(self.editor_bin), "--load", "0400",
-                 "--console", input_file],
+                [str(self.emulator), str(self.editor_bin), "--no-dump",
+                 "--load", "0400", "--console", input_file],
                 stdin=stdin_file, capture_output=True, timeout=10
             )
 
@@ -267,7 +268,8 @@ class EditorTestRunner:
         output_file = tmpdir / "output.txt"
         keys_file.write_bytes(keys)
 
-        cmd = [str(self.emulator), str(self.editor_small_bin), "--load", "0400",
+        cmd = [str(self.emulator), str(self.editor_small_bin), "--no-dump",
+               "--load", "0400",
                "--input", str(keys_file), "--output", str(output_file), input_file]
 
         result = subprocess.run(
@@ -293,7 +295,8 @@ class EditorTestRunner:
         keys_file.write_bytes(keys)
 
         result = subprocess.run(
-            [str(self.emulator), str(self.editor_bin), "--load", "0400",
+            [str(self.emulator), str(self.editor_bin), "--no-dump",
+             "--load", "0400",
              "--rows", str(rows), "--cols", str(cols),
              "--input", str(keys_file), "--output", str(output_file), input_file],
             capture_output=True, timeout=10
@@ -322,7 +325,7 @@ class EditorTestRunner:
         keys_file.write_bytes(keys)
 
         cmd = [str(self.emulator), str(self.editor_terminal_bin),
-               "--load", "0400", "--terminal",
+               "--no-dump", "--load", "0400", "--terminal",
                "--rows", str(rows), "--cols", str(cols),
                "--input", str(keys_file), "--output", str(output_file),
                input_file]
