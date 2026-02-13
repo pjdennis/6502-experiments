@@ -12,62 +12,50 @@ For a 318-line file: ~12K cycles vs ~194K cycles.
 
 ### Page-at-a-time byte shifting
 
-`buf_insert_char` and `buf_delete_char` use Y-indexed inner loops to process
+`buf_shift_right_16` and `buf_shift_left_16` use Y-indexed inner loops to process
 up to 256 bytes per page, avoiding per-byte 16-bit pointer manipulation.
 
 ~16-18 cycles/byte vs ~47 cycles/byte.
 
-### Batch insert when keys are buffered
+### Unified insert-mode batching
 
-After inserting a printable character, `insert_batch_pending` checks for
-additional buffered input. Pending printable characters (up to 32) are read
-into a staging buffer at `BATCH_BUF` ($E000), then inserted with a single
-`buf_shift_right` + copy via `buf_insert_chars`. Line pointer adjustment
-(`buf_adjust_lines_inc`) and rendering happen once for the whole batch.
+All insert-mode editing keys (printable, Enter, BS, DEL) are handled by a
+single `insert_batch` handler. On each keystroke, it collects pending keys
+from the input buffer and consolidates them on-the-fly into canonical form:
 
-The shift-right loop uses `BUF_DELTA` to parameterize the shift amount,
-so `buf_shift_right` works for both single-char (delta=1) and batch
-(delta=N) operations. Non-printable characters (Enter, ESC, arrow keys)
-stop the batch and are pushed back for normal processing.
+```
+[back N] [insert BATCH_BUF[0..len-1]] [fwd N]
+```
 
-This reduces N buffered keystrokes from `N * (shift + adjust + render)` to
-`1 * (shift + adjust + render) + 1 * (shift_N + adjust_N)`.
+- **Printable/Enter**: appended to `BATCH_BUF`
+- **BS**: cancels the last buffered char if any, otherwise increments `back`
+- **DEL**: increments `fwd`
+- **Other key**: pushed back, collection stops
 
-### Batch delete when keys are buffered
+Up to `BATCH_MAX` (32) keys are consumed per batch. The on-the-fly
+consolidation means BS can cancel a just-typed character without ever
+touching the buffer (e.g. `type A, BS, type B` → inserts just "B").
 
-After deleting a character (backspace in insert mode, x in normal mode),
-`count_pending_key` (shared in input.asm) checks for additional buffered
-matching keys. Pending deletes are counted and executed with a single
-`buf_shift_left` via `buf_delete_chars`, with one `buf_adjust_lines_dec`
-call for the batch.
+Execution computes `net = insert_len - back - fwd` and performs a single
+`buf_shift_right_16` (net > 0) or `buf_shift_left_16` (net < 0), then
+copies `BATCH_BUF` into place. Two post-operation paths:
 
-Backspace batching stops at column 0 (join-lines requires full
-`buf_rebuild_lines` and is not batched). x batching stops when no
-deleteable characters remain on the line. `count_pending_key` handles
-both $08 and $7F for backspace matching.
+- **Fast path** (no newlines crossed): incremental `buf_adjust_lines_inc`
+  or `buf_adjust_lines_dec`. O(line_count) pointer walk.
+- **Newlines path** (any newline inserted or deleted): full
+  `buf_rebuild_lines` + `mark_adjust_delete`/`mark_adjust_insert`.
 
-### Batch Enter when keys are buffered
+This reduces N mixed keystrokes from `N * (shift + rebuild + render)` to
+`1 * (shift + render)`, regardless of key type mixing. Previous handlers
+required returning to the main loop whenever the key type changed (e.g.
+type → BS → type was 3 separate operations).
 
-After inserting a newline in insert mode, `enter_batch_pending` counts
-buffered Enter keys via `count_pending_key`. The matching keys (up to 32)
-are filled as `$0A` bytes into `BATCH_BUF` and inserted with a single
-`buf_insert_chars` call. `FILE_LINE16` is advanced by the batch count,
-then one `buf_rebuild_lines` rebuilds the line table for the whole batch.
+### Batch delete in normal mode
 
-This reduces N+1 Enter keystrokes from `(N+1) * (shift + rebuild)` to
-`1 * (shift + rebuild) + 1 * (shift_N + rebuild)`.
-
-### Batch join-lines when keys are buffered
-
-After backspace at column 0 joins with an empty line above,
-`joinlines_batch_pending` checks for more buffered backspace keys. Unlike
-`count_pending_key`, it reads one key at a time, verifying the line above
-is empty before consuming each key. An empty line is identified by a `\n`
-preceded by another `\n` or at the start of the text buffer.
-
-Matched empty-line newlines are deleted with a single `buf_delete_chars`,
-`FILE_LINE16` is decremented by the batch count, and one `buf_rebuild_lines`
-call updates the line table.
+In normal mode, `count_pending_key` (in input.asm) checks for additional
+buffered matching keys after x. Pending deletes are counted and executed
+with a single `buf_shift_left` via `buf_delete_chars`, with one
+`buf_adjust_lines_dec` call for the batch.
 
 ## Future Work
 
@@ -105,15 +93,17 @@ doesn't exist) and translate on access. The first approach is simpler since
 most line table operations just compare or iterate.
 
 **Affected code:**
-- `editor/buffer.asm`: buf_insert_char, buf_delete_char become O(1).
-  buf_get_line_ptr needs gap translation. buf_rebuild_lines scans
-  non-gap regions. buf_insert_newline and buf_delete_line need gap
-  awareness.
-- `editor/render.asm`: render_line_chars reads buffer content that may
+- `editor/buffer.asm`: `buf_shift_right_16`/`buf_shift_left_16` become
+  O(1) gap adjustments. `buf_get_line_ptr` needs gap translation.
+  `buf_rebuild_lines` scans non-gap regions.
+- `editor/render.asm`: `render_line_chars` reads buffer content that may
   span the gap. Needs to check if current line crosses the gap and
   handle the split.
-- `editor/insert.asm`, `editor/normal.asm`: Cursor movement may need to
-  shift bytes across the gap, but the high-level logic stays the same.
+- `editor/insert.asm`: `insert_batch` writes to `BATCH_BUF` and copies
+  into the buffer, so it needs gap-aware copy. The collection phase is
+  unchanged.
+- `editor/normal.asm`: Cursor movement may need to shift bytes across
+  the gap, but the high-level logic stays the same.
 
 **Incremental line adjustment with gap buffer:** With a gap buffer,
 buf_adjust_lines_inc/dec are no longer needed since insert/delete don't
