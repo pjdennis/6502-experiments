@@ -93,6 +93,11 @@ normal_handle_key:
   LDX #>normal_other_keys
   JSR dispatch_key
   BCC .done
+  ; Check if key starts a multi-key combo
+  LDA #<pending_combo_keys
+  LDX #>pending_combo_keys
+  JSR check_combo_first_key
+  BCC .done
   ; Unknown key - clear count and last key, cursor-only update
   JSR clear_count
   LDA #0
@@ -135,8 +140,6 @@ normal_movement_keys:
   .byte $06         .word normal_page_down     ; Ctrl-F
   .byte $02         .word normal_page_up       ; Ctrl-B
   .byte 'G'         .word normal_goto_last
-  .byte 'g'         .word normal_g_key
-  .byte 'y'         .word normal_y_key
   .byte '/'         .word normal_search
   .byte '?'         .word normal_search_backward
   .byte 'n'         .word normal_find_next
@@ -147,14 +150,11 @@ normal_movement_keys:
   .byte KEY_WORD_FWD  .word normal_word_forward
   .byte KEY_WORD_BACK .word normal_word_backward
   .byte '^'         .word normal_first_nonblank
-  .byte 'm'         .word normal_mark_set
-  .byte '\''        .word normal_mark_goto
   .byte 0           ; End sentinel
 
 normal_editing_keys:
   .byte 'x'         .word normal_delete_char
   .byte KEY_DEL     .word normal_delete_char
-  .byte 'd'         .word normal_d_key
   .byte 'D'         .word normal_delete_to_eol
   .byte 'i'         .word normal_enter_insert
   .byte 'a'         .word normal_enter_insert_after
@@ -165,13 +165,9 @@ normal_editing_keys:
   .byte 'P'         .word normal_paste_above
   .byte '~'         .word normal_toggle_case
   .byte 'J'         .word normal_join_lines
-  .byte 'r'         .word normal_r_key
   .byte 's'         .word normal_substitute_char
   .byte 'C'         .word normal_change_to_eol
   .byte 'S'         .word normal_substitute_line
-  .byte 'c'         .word normal_c_key
-  .byte '>'         .word normal_gt_key
-  .byte '<'         .word normal_lt_key
   .byte 0           ; End sentinel
 
 normal_other_keys:
@@ -181,20 +177,21 @@ normal_other_keys:
 ; Pending combo key table: 5-byte entries [last_key, second_key, flags, handler]
 ;   second_key=0: wildcard (any second key)
 ;   flags bit 0: call batch_pending_pairs before handler
+;   flags bit 1: editing command (blocked in READONLY mode)
 pending_combo_keys:
   .byte 'm', 0, $00         .word do_mark_set
   .byte '\'', 0, $00        .word do_mark_goto
-  .byte 'r', 0, $00         .word do_replace_char
-  .byte 'd', 'd', $01       .word do_dd
+  .byte 'r', 0, $02         .word do_replace_char
+  .byte 'd', 'd', $03       .word do_dd
   .byte 'g', 'g', $00       .word do_gg
-  .byte 'y', 'y', $01       .word do_yy
-  .byte 'c', 'c', $00       .word do_cc
-  .byte '>', '>', $00       .word do_indent
-  .byte '<', '<', $00       .word do_unindent
-  .byte 'd', 'w', $01       .word do_dw
-  .byte 'd', 'b', $01       .word do_db
-  .byte 'c', 'w', $00       .word do_cw
-  .byte 'c', 'b', $00       .word do_cb
+  .byte 'y', 'y', $00       .word do_yy
+  .byte 'c', 'c', $02       .word do_cc
+  .byte '>', '>', $02       .word do_indent
+  .byte '<', '<', $02       .word do_unindent
+  .byte 'd', 'w', $03       .word do_dw
+  .byte 'd', 'b', $03       .word do_db
+  .byte 'c', 'w', $02       .word do_cw
+  .byte 'c', 'b', $02       .word do_cb
   .byte 0                   ; End sentinel
 
 ; --- Editing ---
@@ -299,10 +296,6 @@ normal_delete_to_eol:
   JSR ensure_cursor_visible
 .done:
   JMP clear_count
-
-normal_d_key:
-  LDA #'d'
-  JMP set_pending_key
 
 ; dd: yank then delete N lines (N = count, min 1)
 ; When batched (BATCH_EXTRA > 0): delete (total-1) without yank, then

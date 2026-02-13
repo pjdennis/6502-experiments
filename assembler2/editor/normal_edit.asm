@@ -273,10 +273,6 @@ normal_change_to_eol:
   STA MODE
   JMP clear_count
 
-normal_r_key:
-  LDA #'r'
-  JMP set_pending_key
-
 ; --- Replace char (r) ---
 do_replace_char:
   JSR get_count
@@ -308,10 +304,6 @@ do_replace_char:
 
 ; --- Change line (cc) ---
 ; Yank line(s), delete, insert newline, enter insert at col 0.
-normal_c_key:
-  LDA #'c'
-  JMP set_pending_key
-
 ; S = substitute line (alias for cc with count=1)
 normal_substitute_line:
   LDA #1
@@ -367,14 +359,6 @@ cc_have_count:
 
 ; --- Indent (>>) ---
 INDENT_WIDTH = 2
-
-normal_gt_key:
-  LDA #'>'
-  JMP set_pending_key
-
-normal_lt_key:
-  LDA #'<'
-  JMP set_pending_key
 
 do_indent:
   JSR get_count

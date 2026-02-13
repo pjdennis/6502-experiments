@@ -196,12 +196,45 @@ move_up_x:
 
 ; --- Count prefix helpers ---
 
-; Set pending key for multi-key commands (dd, gg, yy, m, ')
-; A = key character to store
-set_pending_key:
+; Check if key starts a multi-key combo by scanning the combo table
+; Input: A = low byte, X = high byte of combo table address
+;        BUF_TEMP = key code to match
+; Output: C = 0 if valid first key (LAST_KEY set), C = 1 if not
+; Respects READONLY: skips entries with flags bit 1 set
+check_combo_first_key:
+  STA DISPATCH_PTR16
+  STX DISPATCH_PTR16 + 1
+  LDY #0
+.loop:
+  LDA (DISPATCH_PTR16),Y
+  BEQ .no_match
+  CMP BUF_TEMP
+  BNE .skip
+  ; Key matches - check READONLY + editing flag
+  LDA READONLY
+  BEQ .found
+  INY
+  INY
+  LDA (DISPATCH_PTR16),Y
+  DEY
+  DEY
+  AND #$02
+  BEQ .found
+.skip:
+  TYA
+  CLC
+  ADC #5
+  TAY
+  JMP .loop
+.found:
+  LDA BUF_TEMP
   STA LAST_KEY
   LDA #0
   STA RENDER_FLAG
+  CLC
+  RTS
+.no_match:
+  SEC
   RTS
 
 ; Clear count state: zeroes COUNT16, COUNT_ACTIVE, LAST_KEY

@@ -286,10 +286,6 @@ normal_goto_last:
   JSR clamp_cursor_col
   JMP clear_count
 
-normal_g_key:
-  LDA #'g'
-  JMP set_pending_key
-
 ; gg: go to top of file
 do_gg:
   LDA VIEW_TOP16
@@ -309,10 +305,6 @@ do_gg:
   JMP clear_count
 
 ; --- Yank ---
-
-normal_y_key:
-  LDA #'y'
-  JMP set_pending_key
 
 ; yy: yank N lines starting at current line
 ; When batched (BATCH_EXTRA > 0): cap count to 1. Batched extra pairs
@@ -374,14 +366,6 @@ search_find_none:
   JMP clear_count
 
 ; --- Marks ---
-
-normal_mark_set:
-  LDA #'m'
-  JMP set_pending_key
-
-normal_mark_goto:
-  LDA #'\''
-  JMP set_pending_key
 
 ; Execute mark set with register letter in BUF_TEMP
 do_mark_set:
