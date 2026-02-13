@@ -4045,19 +4045,27 @@ class EditorTestRunner:
             expected_content="A\nB\nC\nC\n"
         )
 
-        # Batched yy pairs
+        # Batched yy pairs: only last yy's count matters (implicit 1)
         self.run_test(
-            "yyyy batches to yank 2 lines",
+            "yyyy+p yanks only 1 line (last yy overwrites)",
             "A\nB\nC\n",
             b"yyyyp:wq\r",
-            expected_content="A\nA\nB\nB\nC\n"
+            expected_content="A\nA\nB\nC\n"
         )
 
         self.run_test(
-            "yyyyyy batches to yank 3 lines",
+            "yyyyyy+p yanks only 1 line (last yy overwrites)",
             "A\nB\nC\nD\n",
             b"yyyyyyp:wq\r",
-            expected_content="A\nA\nB\nC\nB\nC\nD\n"
+            expected_content="A\nA\nB\nC\nD\n"
+        )
+
+        # Non-batched: 2yy still yanks 2 lines
+        self.run_test(
+            "2yy+p still pastes 2 lines (no batching)",
+            "A\nB\nC\n",
+            b"2yyp:wq\r",
+            expected_content="A\nA\nB\nB\nC\n"
         )
 
         # ============================================================

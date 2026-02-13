@@ -315,9 +315,19 @@ normal_y_key:
   JMP set_pending_key
 
 ; yy: yank N lines starting at current line
+; When batched (BATCH_EXTRA > 0): cap count to 1. Batched extra pairs
+; have implicit count=1, and the last yy overwrites previous yanks,
+; so only 1 line should be yanked.
 do_yy:
   JSR yank_clear
   JSR get_count              ; BUF_TEMP16 = count (16-bit)
+  LDA BATCH_EXTRA
+  BEQ .do_yank
+  LDA #1
+  STA BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
+.do_yank:
   LDAX16 FILE_LINE16
   JSR yank_add_lines
   BCS .overflow
