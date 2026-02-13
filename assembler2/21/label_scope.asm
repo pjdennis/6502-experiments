@@ -75,6 +75,19 @@ reset_scope_stack
 ;          Previous scope saved on scope stack
 ;          A, Y clobbered, X preserved
 push_label_scope
+  ; Bounds check: ensure room for one 5-byte entry
+  ; Check if SCOPE_PTR > SCOPE_LIMIT - 5 (last valid position for 5-byte write)
+  LDA SCOPE_PTR_H
+  CMP #>SCOPE_LIMIT-$05
+  BCC .scope_ok
+  BNE .scope_overflow
+  LDA SCOPE_PTR_L
+  CMP #<SCOPE_LIMIT-$05
+  BCC .scope_ok
+  BEQ .scope_ok
+.scope_overflow
+  JMP err_macro_nesting_too_deep
+.scope_ok
   ; Save current scope state to scope stack
   LDY #$00
   LDA CURR_GLOBAL_HEAP_L

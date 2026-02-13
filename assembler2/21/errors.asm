@@ -146,6 +146,10 @@ err_too_many_arguments
   BRK
   .data $22 "Too many macro arguments" $00
 
+err_macro_nesting_too_deep
+  BRK
+  .data $23 "Macro nesting too deep" $00
+
 
 ; Interrupt handler - processes BRK for error display
 interrupt

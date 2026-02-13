@@ -2191,3 +2191,21 @@ INPUT:
 13:   .endmacro
 14:   outer
 EXPECT_HEX: f0 04 d0 01 ea e8 c8
+
+---
+NAME: scope_stack_at_limit
+DESCRIPTION: 51 nested macros at scope stack limit
+INPUT:
+ 1: * = $0200
+ 2:   .include scope/s51.asm
+EXPECT_HEX: ea
+
+---
+NAME: scope_stack_overflow
+DESCRIPTION: 52 nested macros overflow scope stack
+INPUT:
+ 1: * = $0200
+ 2:   .include scope/s52.asm
+EXPECT_ERROR: 35
+EXPECT_LINE: 5
+EXPECT_MSG: Macro nesting too deep
