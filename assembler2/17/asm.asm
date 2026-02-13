@@ -211,6 +211,9 @@ assemble_code:
 
 ; Entry point
 start:
+  .ifdef enable_test_runner
+  JMP test_runner_start
+  .endif
   ; Initialize output file handle to 0
   LDA #$00
   STA CURR_OUT_FILE
@@ -328,6 +331,10 @@ msg_fwdref_count:
   .asciiz "Forward references forced to absolute: "
   .endif
 
+
+  .ifdef enable_test_runner
+  .include test_runner.asm
+  .endif
 
 HEAP:                   ; Heap goes after the program code
 
