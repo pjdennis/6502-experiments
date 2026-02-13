@@ -2580,7 +2580,7 @@ class EditorTestRunner:
             "Render opt: mixed enter+chars reduces redraws",
             "Hello\n",
             b"i\ra\ra\ra\r\x1b:q!\r",
-            expect_content_redraws=[True, False, True, True, False],
+            expect_content_redraws=[True, False, True, False],
         )
 
         # --- Enter mixing: cursor position ---
@@ -2654,6 +2654,123 @@ class EditorTestRunner:
             "Hello\n",
             b"iab\x08c\x1b:q!\r",
             expect_content_redraws=[True, False, True, False],
+        )
+
+        # ============================================================
+        # Mixed-type batch tests (unified insert_batch handler)
+        # When mixed editing keys (printable, Enter, BS, DEL) arrive
+        # in rapid succession, they should be consolidated into a
+        # single buffer operation.
+        # ============================================================
+        self._group("Mixed-type batch:", leading_blank=True)
+
+        # DEL then typing: position cursor at start, DEL deletes first
+        # char, then type "Z" -> "Z" replaces first char
+        DEL = b"\x1b[3~"
+        self.run_test(
+            "DEL then typing in single batch",
+            "Hello\n",
+            b"i" + DEL + b"Z\x1b:wq\r",
+            expected_content="Zello\n"
+        )
+
+        # Multiple DEL then typing: 3 DELs then "ABC"
+        DEL = b"\x1b[3~"
+        self.run_test(
+            "Multiple DEL then typing",
+            "Hello World\n",
+            b"i" + DEL * 3 + b"ABC\x1b:wq\r",
+            expected_content="ABClo World\n"
+        )
+
+        # Typing then DEL: type "XY" then DEL removes char after insert
+        DEL = b"\x1b[3~"
+        self.run_test(
+            "Typing then DEL in single batch",
+            "Hello\n",
+            b"i" + b"XY" + DEL + b"\x1b:wq\r",
+            expected_content="XYello\n"
+        )
+
+        # BS overflow into buffer delete: type "a", then BS*2
+        # First BS cancels 'a', second BS deletes char before cursor
+        self.run_test(
+            "BS overflow deletes from buffer",
+            "Hello\n",
+            b"lla" + b"\x08\x08\x1b:wq\r",
+            expected_content="Hlo\n"
+        )
+
+        # Mixed DEL + BS: DEL*2 then BS*1 at col 2
+        # DEL removes 2 chars forward, BS removes 1 char backward
+        DEL = b"\x1b[3~"
+        self.run_test(
+            "DEL and BS mixed in batch",
+            "ABCDE\n",
+            b"lli" + DEL * 2 + b"\x08\x1b:wq\r",
+            expected_content="AE\n"
+        )
+
+        # DEL across newline then typing
+        DEL = b"\x1b[3~"
+        self.run_test(
+            "DEL across newline then typing",
+            "AB\nCD\n",
+            b"lli" + DEL * 3 + b"XY\x1b:wq\r",
+            expected_content="AXYD\n"
+        )
+
+        # BS across newline then typing (col 0 BS joins line)
+        self.run_test(
+            "BS across newline then typing",
+            "AB\nCD\n",
+            b"ji\x08XY\x1b:wq\r",
+            expected_content="ABXYCD\n"
+        )
+
+        # Pure DEL batch (same as before, should still work)
+        DEL = b"\x1b[3~"
+        self.run_test(
+            "Pure DEL batch still works",
+            "ABCDE\n",
+            b"i" + DEL * 3 + b"\x1b:wq\r",
+            expected_content="DE\n"
+        )
+
+        # BS cancels all then DEL: type "ab", BS*2 cancels, DEL*2 forward
+        DEL = b"\x1b[3~"
+        self.run_test(
+            "BS cancels batch then DEL forward",
+            "Hello\n",
+            b"iab\x08\x08" + DEL * 2 + b"\x1b:wq\r",
+            expected_content="llo\n"
+        )
+
+        # DEL at end of last line (past final newline) is no-op
+        DEL = b"\x1b[3~"
+        self.run_test(
+            "DEL at final newline is no-op",
+            "A\n",
+            b"A" + DEL * 5 + b"\x1b:wq\r",
+            expected_content="A\n"
+        )
+
+        # Mixed render optimization: DEL+typing in single batch
+        DEL = b"\x1b[3~"
+        self.run_test_screen(
+            "Render opt: DEL+typing in single batch",
+            "Hello\n",
+            b"i" + DEL * 2 + b"AB\x1b:q!\r",
+            expect_content_redraws=[True, False, True, False],
+        )
+
+        # Mixed: type, Enter, DEL all in one batch
+        DEL = b"\x1b[3~"
+        self.run_test(
+            "Type Enter DEL in one batch",
+            "Hello\n",
+            b"iX\r" + DEL + b"\x1b:wq\r",
+            expected_content="X\nello\n"
         )
 
         # ============================================================

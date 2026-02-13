@@ -2,9 +2,15 @@
 ;
 ; In insert mode:
 ;   - Printable characters ($20-$7E) are inserted at cursor
-;   - Enter ($0D) splits the line
+;   - Enter ($0D) inserts newline
 ;   - Backspace ($08) deletes char before cursor or joins lines
+;   - Delete ($88) deletes char at cursor or joins lines forward
 ;   - ESC ($1B) returns to normal mode
+;
+; All editing keys (printable, Enter, BS, DEL) are handled by a single
+; unified batch handler (insert_batch) that collects mixed keystrokes
+; and consolidates them into: [back N] [insert chars] [fwd N]
+; Then executes with a single buffer shift.
 
   .code
 
@@ -12,27 +18,29 @@
 ; Key code in A
 insert_handle_key:
   STA BUF_TEMP
+  ; Route batchable keys directly to insert_batch
+  CMP #KEY_ENTER
+  BEQ .batch
+  CMP #KEY_BS
+  BEQ .batch
+  CMP #KEY_DEL
+  BEQ .batch
+  CMP #' '
+  BCC .dispatch
+  CMP #$7F
+  BCC .batch             ; $20-$7E = printable
+.dispatch:
   LDA #<insert_keys
   LDX #>insert_keys
   JSR dispatch_key
-  BCC .done
-  ; Printable character?
-  LDA BUF_TEMP
-  CMP #' '
-  BCC .done
-  CMP #$7F
-  BCS .done
-  JMP insert_char
-.done:
   RTS
+.batch:
+  JMP insert_batch
 
 ; --- Dispatch table ---
 
 insert_keys:
   .byte KEY_ESC     .word insert_exit
-  .byte KEY_ENTER   .word insert_newline
-  .byte KEY_BS      .word insert_backspace
-  .byte KEY_DEL     .word insert_delete
   .byte KEY_UP      .word insert_move_up
   .byte KEY_DOWN    .word insert_move_down
   .byte KEY_LEFT    .word insert_move_left
@@ -58,427 +66,497 @@ insert_exit:
 .done:
   RTS
 
-; Insert a printable character at cursor position
-; Character in A. Reads and batches pending printable chars, Enter, and BS.
-insert_char:
-  ; Store first char in BATCH_BUF[0]
-  STA BATCH_BUF
-  LDX #1
+; ============================================================================
+; Unified batch handler for insert-mode editing
+; ============================================================================
+;
+; Collects a mixed batch of printable/Enter/BS/DEL keys and consolidates
+; on-the-fly into canonical form: [back N] [insert BATCH_BUF] [fwd N]
+; Then executes with a single buffer shift.
+;
+; On entry: BUF_TEMP = first key (printable, Enter, BS, or DEL)
+;
+; Collection phase variables:
+;   BUF_TEMP16.lo = back count (BS overflow past batch)
+;   BUF_TEMP16.hi = fwd count (DEL)
+;   X = BATCH_BUF write index
+;   Y = remaining capacity (counts down from BATCH_MAX)
+;
+; Execution phase variables:
+;   BUF_DELTA      = insert_len
+;   BUF_TEMP16.lo  = back
+;   BUF_TEMP       = fwd_actual (after forward scan)
+;   LINE_LEN16.lo  = back_nl
+;   LINE_LEN16.hi  = fwd_nl
+;   NORMAL_TEMP    = ins_nl (after BATCH_BUF scan)
+;   BATCH_EXTRA    = last_nl_pos (after BATCH_BUF scan)
+;   BUF_PTR16      = delete_start
+;   BUF_SRC16      = forward scan pointer
+;   Stack          = cursor_buf_pos (in newline path)
+;
+insert_batch:
+  ; --- Collection phase ---
+  LDA #0
+  STA BUF_TEMP16           ; back = 0
+  STA BUF_TEMP16 + 1       ; fwd = 0
+  LDX #0                   ; BATCH_BUF write index
+  LDY #BATCH_MAX           ; remaining capacity
 
-  ; Read pending chars into BATCH_BUF[1..] (printable, Enter as \n, BS cancels)
-.batch_read:
+  ; Process first key (already in BUF_TEMP)
+  LDA BUF_TEMP
+  JMP .collect_key
+
+.collect_loop:
+  CPY #0
+  BEQ .collect_done
   JSR key_ready
   CMP #$FF
-  BNE .batch_apply
+  BNE .collect_done
   JSR get_key
+
+.collect_key:
   CMP #KEY_ENTER
-  BEQ .batch_enter
+  BEQ .key_enter
   CMP #KEY_BS
-  BEQ .batch_bs
-  ; Check if printable ($20-$7E)
+  BEQ .key_bs
+  CMP #KEY_DEL
+  BEQ .key_del
+  ; Check printable ($20-$7E)
   CMP #' '
-  BCC .batch_not_printable
+  BCC .key_other
   CMP #$7F
-  BCS .batch_not_printable
-.batch_store:
+  BCS .key_other
+  ; Printable: store in BATCH_BUF
   STA BATCH_BUF,X
   INX
-  CPX #BATCH_MAX
-  BNE .batch_read
-  JMP .batch_apply
+  DEY
+  JMP .collect_loop
 
-.batch_enter:
+.key_enter:
   LDA #'\n'
-  JMP .batch_store
+  STA BATCH_BUF,X
+  INX
+  DEY
+  JMP .collect_loop
 
-.batch_bs:
+.key_bs:
   CPX #0
-  BEQ .batch_bs_empty
-  DEX                       ; Cancel last char/newline in batch
-  JMP .batch_read
-.batch_bs_empty:
-  JSR unget_key             ; Push BS back for normal handler
-  JMP .batch_apply          ; BUF_DELTA will be 0 -> no-op
+  BEQ .key_bs_overflow
+  DEX                       ; Cancel last char in batch
+  DEY
+  JMP .collect_loop
+.key_bs_overflow:
+  INC BUF_TEMP16            ; back++
+  DEY
+  JMP .collect_loop
 
-.batch_not_printable:
+.key_del:
+  INC BUF_TEMP16 + 1        ; fwd++
+  DEY
+  JMP .collect_loop
+
+.key_other:
   JSR unget_key
 
-.batch_apply:
+.collect_done:
+  ; X = insert_len, BUF_TEMP16.lo = back, BUF_TEMP16.hi = fwd
   STX BUF_DELTA
-  CPX #0
-  BEQ .batch_noop           ; BS canceled everything
 
-  JSR get_cursor_buf_ptr
-  JSR buf_insert_chars
-  BCS .insert_char_full
+  ; --- Check for no-op ---
+  TXA
+  ORA BUF_TEMP16
+  ORA BUF_TEMP16 + 1
+  BNE .exec_start
+  RTS                       ; Nothing to do
 
-  ; Scan BATCH_BUF for newlines
+.exec_start:
+  ; --- Execution phase ---
+
+  ; Step 2: Get cursor buffer position
+  JSR get_cursor_buf_ptr    ; BUF_PTR16 = cursor position
+
+  ; Step 3: Clamp back to available bytes before cursor
+  ; dist = BUF_PTR16 - TEXT_BUF
+  SEC
+  LDA BUF_PTR16
+  SBC #<TEXT_BUF
+  STA BUF_SRC16             ; dist.lo
+  LDA BUF_PTR16 + 1
+  SBC #>TEXT_BUF
+  ; If high byte > 0, back (max 32) fits
+  BNE .back_ok
+  ; High byte = 0: clamp back to min(back, dist.lo)
+  LDA BUF_SRC16
+  CMP BUF_TEMP16
+  BCS .back_ok
+  STA BUF_TEMP16            ; back = dist (clamped)
+.back_ok:
+
+  ; Step 4: BUF_PTR16 -= back (delete_start)
+  SEC
+  LDA BUF_PTR16
+  SBC BUF_TEMP16
+  STA BUF_PTR16
+  LDA BUF_PTR16 + 1
+  SBC #0
+  STA BUF_PTR16 + 1
+  ; BUF_PTR16 = delete_start
+
+  ; Step 5: Count newlines in backward-deleted region [delete_start, delete_start+back)
   LDA #0
-  STA BUF_TEMP              ; Newline count
-  TAY                       ; Y = scan index
-.scan_nl:
+  STA LINE_LEN16            ; back_nl = 0
+  LDY #0
+  LDA BUF_TEMP16            ; back
+  BEQ .no_back_scan
+.back_scan:
+  LDA (BUF_PTR16),Y
+  CMP #'\n'
+  BNE .back_not_nl
+  INC LINE_LEN16
+.back_not_nl:
+  INY
+  CPY BUF_TEMP16
+  BNE .back_scan
+.no_back_scan:
+
+  ; Step 6: Scan forward from original cursor, consuming fwd bytes
+  ; Original cursor = delete_start + back = BUF_PTR16 + back
+  CLC
+  LDA BUF_PTR16
+  ADC BUF_TEMP16
+  STA BUF_SRC16
+  LDA BUF_PTR16 + 1
+  ADC #0
+  STA BUF_SRC16 + 1         ; BUF_SRC16 = original cursor pos
+
+  ; Pre-compute final \n address = BUF_END16 - 1 -> BUF_LEN16 (temp)
+  SEC
+  LDA BUF_END16
+  SBC #1
+  STA BUF_LEN16
+  LDA BUF_END16 + 1
+  SBC #0
+  STA BUF_LEN16 + 1
+
+  LDA #0
+  STA BUF_TEMP              ; fwd_actual = 0
+  STA LINE_LEN16 + 1        ; fwd_nl = 0
+
+.fwd_scan:
+  LDA BUF_TEMP16 + 1        ; remaining fwd
+  BEQ .fwd_done
+
+  CMP16 BUF_SRC16, BUF_END16
+  BCS .fwd_done
+
+  LDY #0
+  LDA (BUF_SRC16),Y
+  CMP #'\n'
+  BNE .fwd_advance
+
+  ; Newline - is it the final one?
+  CMP16 BUF_SRC16, BUF_LEN16
+  BCS .fwd_done              ; final \n, stop
+
+  INC LINE_LEN16 + 1        ; fwd_nl++
+
+.fwd_advance:
+  INC16 BUF_SRC16
+  INC BUF_TEMP               ; fwd_actual++
+  DEC BUF_TEMP16 + 1         ; remaining fwd--
+  JMP .fwd_scan
+
+.fwd_done:
+  ; State: BUF_TEMP16.lo=back, BUF_TEMP=fwd_actual, BUF_DELTA=insert_len
+  ;        LINE_LEN16.lo=back_nl, LINE_LEN16.hi=fwd_nl
+  ;        BUF_PTR16=delete_start
+
+  ; Step 7: Compute net = insert_len - total_delete and shift
+  ; total_delete = back + fwd_actual
+  LDA BUF_TEMP16             ; back
+  CLC
+  ADC BUF_TEMP               ; + fwd_actual
+  STA BUF_SRC16              ; total_delete (stash in BUF_SRC16.lo)
+
+  ; net = insert_len - total_delete
+  LDA BUF_DELTA              ; insert_len
+  SEC
+  SBC BUF_SRC16              ; - total_delete
+  BEQ .no_shift
+  BCS .shift_right           ; carry set = no borrow = net > 0
+
+  ; --- net < 0: shift left ---
+  ; |net| = total_delete - insert_len
+  LDA BUF_SRC16              ; total_delete
+  SEC
+  SBC BUF_DELTA              ; - insert_len
+  STA BUF_LEN16
+  LDA #0
+  STA BUF_LEN16 + 1
+  ; Shift point = delete_start + insert_len
+  PUSH16 BUF_PTR16           ; save delete_start
+  LDA BUF_DELTA
+  CLC
+  ADCA16 BUF_PTR16, BUF_PTR16
+  JSR buf_shift_left_16
+  POP16 BUF_PTR16            ; restore delete_start
+  JMP .do_copy
+
+.shift_right:
+  ; --- net > 0: A = net ---
+  STA BUF_LEN16
+  LDA #0
+  STA BUF_LEN16 + 1
+  ; Shift point = delete_start + total_delete
+  PUSH16 BUF_PTR16           ; save delete_start
+  LDA BUF_SRC16              ; total_delete
+  CLC
+  ADCA16 BUF_PTR16, BUF_PTR16
+  JSR buf_shift_right_16
+  POP16 BUF_PTR16            ; restore delete_start
+  BCC .do_copy
+  ; Buffer full
+  JMP show_buffer_full_msg
+
+.no_shift:
+.do_copy:
+  ; Step 8: Copy BATCH_BUF[0..insert_len-1] to delete_start (BUF_PTR16)
+  LDA BUF_DELTA
+  BEQ .copy_done
+  LDY #0
+.copy_loop:
+  LDA BATCH_BUF,Y
+  STA (BUF_PTR16),Y
+  INY
+  CPY BUF_DELTA
+  BNE .copy_loop
+.copy_done:
+
+  ; Step 10: Scan BATCH_BUF for newlines -> ins_nl, last_nl_pos
+  LDA #0
+  STA NORMAL_TEMP            ; ins_nl = 0
+  STA BATCH_EXTRA            ; last_nl_pos = 0
+  LDY #0
+  LDA BUF_DELTA
+  BEQ .scan_ins_done
+.scan_ins:
   LDA BATCH_BUF,Y
   CMP #'\n'
-  BNE .scan_not_nl
-  INC BUF_TEMP
+  BNE .scan_ins_not_nl
+  INC NORMAL_TEMP            ; ins_nl++
   TYA
   CLC
   ADC #1
-  STA LINE_LEN16            ; Track position after last \n
-.scan_not_nl:
+  STA BATCH_EXTRA            ; last_nl_pos = Y + 1
+.scan_ins_not_nl:
   INY
   CPY BUF_DELTA
-  BNE .scan_nl
+  BNE .scan_ins
+.scan_ins_done:
 
-  LDA BUF_TEMP
-  BEQ .no_newlines
+  ; Step 11: Decide path based on newline counts
+  LDA LINE_LEN16             ; back_nl
+  ORA LINE_LEN16 + 1         ; fwd_nl
+  ORA NORMAL_TEMP            ; ins_nl
+  BEQ .fast_path
+  JMP .newlines_path
 
-  ; --- Newline path: rebuild lines + adjust marks + advance line ---
-  JSR buf_rebuild_lines
-
-  ; mark_adjust_insert: BUF_TEMP16 lines at FILE_LINE16+1
-  LDA BUF_TEMP
-  STA BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1
-  CLC
-  ADCI16 FILE_LINE16, $0001, BUF_DST16
-  LDAX16 BUF_DST16
-  JSR mark_adjust_insert
-
-  ; Advance FILE_LINE16 by newline count
-  LDA BUF_TEMP
-  CLC
-  ADCA16 FILE_LINE16, FILE_LINE16
-
-  ; CURSOR_COL16 = BUF_DELTA - LINE_LEN16 (bytes after last \n)
+  ; ========================================
+  ; Fast path: no newlines at all
+  ; ========================================
+.fast_path:
+  ; CURSOR_COL16 -= back
   SEC
-  LDA BUF_DELTA
-  SBC LINE_LEN16
+  LDA CURSOR_COL16
+  SBC BUF_TEMP16
   STA CURSOR_COL16
-  LDA #0
+  LDA CURSOR_COL16 + 1
+  SBC #0
   STA CURSOR_COL16 + 1
-
-  LDA #$FF
-  STA MODIFIED
-  RTS
-
-.no_newlines:
-  ; --- Fast path: no newlines (existing behavior) ---
-  JSR buf_adjust_lines_inc
-
-  ; Advance cursor by BUF_DELTA
+  ; CURSOR_COL16 += insert_len
   LDA BUF_DELTA
   CLC
   ADCA16 CURSOR_COL16, CURSOR_COL16
 
-  LDA #$FF
-  STA MODIFIED
-  RTS
+  ; Line table adjustment: net = insert_len - (back + fwd_actual)
+  LDA BUF_TEMP16             ; back
+  CLC
+  ADC BUF_TEMP               ; + fwd_actual = total_delete
+  STA NORMAL_TEMP            ; stash total_delete (ins_nl is 0 here)
+  LDA BUF_DELTA              ; insert_len
+  SEC
+  SBC NORMAL_TEMP            ; - total_delete = net
+  BEQ .fast_done
+  BCS .fast_inc              ; net > 0
 
-.batch_noop:
-  RTS
+  ; net < 0: adjust lines down
+  EOR #$FF
+  CLC
+  ADC #1                     ; |net|
+  STA BUF_DELTA
+  JSR buf_adjust_lines_dec
+  JMP .fast_done
 
-.insert_char_full:
-  JMP show_buffer_full_msg
+.fast_inc:
+  STA BUF_DELTA
+  JSR buf_adjust_lines_inc
 
-; Insert newline(s) at cursor (split line, batch pending Enter keys)
-insert_newline:
-  ; Count pending Enter keys, add 1 for current
-  LDA #KEY_ENTER
-  STA BUF_TEMP
-  JSR count_pending_key      ; X = pending Enter count
-  INX                        ; +1 for current key
+.fast_done:
+  JMP .set_modified
 
-  ; Fill BATCH_BUF with X newline ($0A) bytes
-  STX BUF_DELTA
-  LDY #0
-  LDA #'\n'
-.enter_fill:
-  STA BATCH_BUF,Y
-  INY
-  CPY BUF_DELTA
-  BNE .enter_fill
+  ; ========================================
+  ; Newlines path: rebuild + mark adjust
+  ; ========================================
+.newlines_path:
+  ; Save cursor_buf_pos = BUF_PTR16 + insert_len
+  LDA BUF_DELTA
+  CLC
+  ADC BUF_PTR16
+  STA BUF_SRC16
+  LDA #0
+  ADC BUF_PTR16 + 1
+  STA BUF_SRC16 + 1
+  PUSH16 BUF_SRC16          ; stack: cursor_buf_pos
 
-  ; Insert at current cursor position
-  JSR get_cursor_buf_ptr
-  JSR buf_insert_chars
-  BCS .insert_newline_full
+  ; Save back for cursor computation in fwd-only case
+  LDA BUF_TEMP16
+  PHA                        ; stack: back, cursor_buf_pos
 
-  ; Rebuild line table (one rebuild for entire batch)
   JSR buf_rebuild_lines
 
-  ; Adjust marks: BUF_DELTA lines inserted at FILE_LINE16+1
-  LDA BUF_DELTA
+  ; --- Mark adjust delete if back_nl + fwd_nl > 0 ---
+  LDA LINE_LEN16             ; back_nl
+  CLC
+  ADC LINE_LEN16 + 1         ; + fwd_nl
+  BEQ .no_mark_del
+
+  ; BUF_TEMP16 = count of deleted lines
   STA BUF_TEMP16
   LDA #0
   STA BUF_TEMP16 + 1
+
+  ; first_line = FILE_LINE16 + 1 - back_nl
   CLC
   ADCI16 FILE_LINE16, $0001, BUF_DST16
+  SEC
+  LDA BUF_DST16
+  SBC LINE_LEN16             ; - back_nl
+  STA BUF_DST16
+  LDA BUF_DST16 + 1
+  SBC #0
+  STA BUF_DST16 + 1
+
+  LDAX16 BUF_DST16
+  JSR mark_adjust_delete
+
+.no_mark_del:
+  ; --- Mark adjust insert if ins_nl > 0 ---
+  LDA NORMAL_TEMP            ; ins_nl
+  BEQ .no_mark_ins
+
+  STA BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
+
+  ; Same first_line = FILE_LINE16 + 1 - back_nl
+  CLC
+  ADCI16 FILE_LINE16, $0001, BUF_DST16
+  SEC
+  LDA BUF_DST16
+  SBC LINE_LEN16
+  STA BUF_DST16
+  LDA BUF_DST16 + 1
+  SBC #0
+  STA BUF_DST16 + 1
+
   LDAX16 BUF_DST16
   JSR mark_adjust_insert
 
-  ; Advance FILE_LINE16 by BUF_DELTA
-  LDA BUF_DELTA
-  CLC
-  ADCA16 FILE_LINE16, FILE_LINE16
+.no_mark_ins:
+  ; --- Update FILE_LINE16 and CURSOR_COL16 ---
+  ; Decide sub-case
+  LDA NORMAL_TEMP            ; ins_nl
+  BNE .case_ins_nl
+  LDA LINE_LEN16             ; back_nl
+  BNE .case_back_nl
 
-  LDA #0
-  STA_LH16 CURSOR_COL16
-  LDA #$FF
-  STA MODIFIED
-  RTS
-.insert_newline_full:
-  JMP show_buffer_full_msg
-
-; Handle backspace in insert mode
-insert_backspace:
-  ; If at column 0, join with previous line
-  TST16 CURSOR_COL16
-  BEQ .join_lines
-
-  ; Count pending BS keys inline, capped at CURSOR_COL16 (max 255)
-  ; Start with 1 for the current BS key
-  LDX #1
-.count_loop:
-  ; Cap at 255 or CURSOR_COL16 (whichever is smaller)
-  LDA CURSOR_COL16 + 1
-  BNE .count_no_cap        ; High byte > 0, X < CURSOR_COL16 for sure
-  CPX CURSOR_COL16
-  BEQ .count_done           ; At cap, stop
-.count_no_cap:
-  JSR key_ready
-  CMP #$FF
-  BNE .count_done
-  JSR get_key
-  CMP #KEY_BS
-  BEQ .count_match
-  ; Not backspace, push back and stop
-  JSR unget_key
-  JMP .count_done
-.count_match:
-  INX
-  CPX #BATCH_MAX
-  BNE .count_loop
-.count_done:
-
-  STX BUF_DELTA
-  ; Update cursor: CURSOR_COL16 -= BUF_DELTA
+  ; --- Case: fwd_nl only (no back/insert newlines) ---
+  ; FILE_LINE16 unchanged
+  ; CURSOR_COL16 = CURSOR_COL16 - back + insert_len
+  PLA                        ; back
+  STA BUF_SRC16              ; temp
   SEC
   LDA CURSOR_COL16
-  SBC BUF_DELTA
+  SBC BUF_SRC16
   STA CURSOR_COL16
   LDA CURSOR_COL16 + 1
   SBC #0
   STA CURSOR_COL16 + 1
-  ; Get buffer pointer at new cursor position
-  JSR get_cursor_buf_ptr
-  ; Delete BUF_DELTA chars
-  JSR buf_delete_chars
-  JSR buf_adjust_lines_dec
-
-  LDA #$FF
-  STA MODIFIED
-  RTS
-
-.join_lines:
-  ; At column 0 - join with previous line
-  TST16 FILE_LINE16
-  BNE .can_join
-  RTS                      ; Can't join at first line
-.can_join:
-  ; Get previous line length -> CURSOR_COL16
-  SEC
-  SBCI16 FILE_LINE16, $0001, BUF_LEN16
-  LDAX16 BUF_LEN16
-  JSR buf_get_line_len
-  STAX16 CURSOR_COL16
-
-  ; Point BUF_PTR16 to the newline ending the previous line
-  LDAX16 BUF_LEN16
-  JSR buf_get_line_ptr
+  LDA BUF_DELTA
   CLC
-  ADC16 CURSOR_COL16, BUF_PTR16, BUF_PTR16
+  ADCA16 CURSOR_COL16, CURSOR_COL16
+  ; Clean up cursor_buf_pos from stack
+  PLA
+  PLA
+  JMP .set_modified
 
-  ; X = count of newlines to delete (starts at 1 for the first join)
-  LDX #1
-
-  ; If previous line has content, skip batch scan
-  TST16 CURSOR_COL16
-  BNE .apply
-
-  ; Previous line empty - scan backwards for consecutive \n bytes
-.scan_loop:
-  ; Check if BUF_PTR16 is at TEXT_BUF (buffer start)
-  CMPI16 BUF_PTR16, TEXT_BUF
-  BEQ .apply           ; At buffer start, stop
-
-  ; Check byte before BUF_PTR16
-  SEC
-  LDA BUF_PTR16
-  SBC #1
-  STA BUF_SRC16
-  LDA BUF_PTR16 + 1
-  SBC #0
-  STA BUF_SRC16 + 1
-  LDY #0
-  LDA (BUF_SRC16),Y
-  CMP #'\n'
-  BNE .apply           ; Line above has content, stop
-
-  ; BUF_SRC16 points to a \n. Verify this \n ends an EMPTY line.
-  ; Empty if BUF_SRC16 is at buffer start, or byte before it is also \n.
-  CMPI16 BUF_SRC16, TEXT_BUF
-  BEQ .line_empty      ; First byte of buffer, just \n -> empty
-
-.check_prev:
-  ; Check byte at BUF_SRC16 - 1 using BUF_LEN16 as temp
-  SEC
-  LDA BUF_SRC16
-  SBC #1
-  STA BUF_LEN16
-  LDA BUF_SRC16 + 1
-  SBC #0
-  STA BUF_LEN16 + 1
-  LDY #0
-  LDA (BUF_LEN16),Y
-  CMP #'\n'
-  BNE .apply           ; Byte before is not \n -> content line -> stop
-
-.line_empty:
-
-  ; Read one BS key from input
-  STX BUF_TEMP
-  JSR key_ready
-  CMP #$FF
-  BNE .restore_x
-  JSR get_key
-  CMP #KEY_BS
-  BEQ .match
-  ; Not backspace, push back and stop
-  JSR unget_key
-  LDX BUF_TEMP
-  JMP .apply
-.match:
-  LDX BUF_TEMP
-  INX
-  CPX #BATCH_MAX
-  BEQ .apply
-  ; Move BUF_PTR16 back one byte
-  CP16 BUF_SRC16, BUF_PTR16
-  JMP .scan_loop
-.restore_x:
-  LDX BUF_TEMP
-
-.apply:
-  STX BUF_DELTA
-  JSR buf_delete_chars
-
-  ; Subtract BUF_DELTA from FILE_LINE16
+.case_ins_nl:
+  ; --- Case: newlines inserted ---
+  ; FILE_LINE16 = FILE_LINE16 - back_nl + ins_nl
   SEC
   LDA FILE_LINE16
-  SBC BUF_DELTA
+  SBC LINE_LEN16             ; - back_nl
+  STA FILE_LINE16
+  LDA FILE_LINE16 + 1
+  SBC #0
+  STA FILE_LINE16 + 1
+  LDA NORMAL_TEMP            ; ins_nl
+  CLC
+  ADCA16 FILE_LINE16, FILE_LINE16
+
+  ; CURSOR_COL16 = insert_len - last_nl_pos
+  SEC
+  LDA BUF_DELTA
+  SBC BATCH_EXTRA            ; last_nl_pos
+  STA CURSOR_COL16
+  LDA #0
+  STA CURSOR_COL16 + 1
+
+  ; Clean up stack: back + cursor_buf_pos
+  PLA
+  PLA
+  PLA
+  JMP .set_modified
+
+.case_back_nl:
+  ; --- Case: backward newlines deleted, none inserted ---
+  ; FILE_LINE16 -= back_nl
+  SEC
+  LDA FILE_LINE16
+  SBC LINE_LEN16
   STA FILE_LINE16
   LDA FILE_LINE16 + 1
   SBC #0
   STA FILE_LINE16 + 1
 
-  JSR buf_rebuild_lines
+  ; CURSOR_COL16 = cursor_buf_pos - LINE_TBL[new FILE_LINE16]
+  LDAX16 FILE_LINE16
+  JSR buf_get_line_ptr       ; BUF_PTR16 = start of current line
 
-  ; Adjust marks: BUF_DELTA lines deleted at FILE_LINE16+1
-  LDA BUF_DELTA
-  STA BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1
-  CLC
-  ADCI16 FILE_LINE16, $0001, BUF_DST16
-  LDAX16 BUF_DST16
-  JSR mark_adjust_delete
-
-  LDA #$FF
-  STA MODIFIED
-  RTS
-
-; Handle delete in insert mode (forward delete)
-; Unified algorithm: counts all pending DEL keys, scans forward through
-; the buffer consuming chars and newlines, deletes everything in one call.
-insert_delete:
-  ; Count all pending DEL keys (BUF_TEMP = KEY_DEL from dispatch)
-  JSR count_pending_key       ; X = pending count
-  INX                         ; +1 for current
-  STX BUF_TEMP                ; total DEL count
-
-  ; Get cursor buffer position
-  JSR get_cursor_buf_ptr      ; BUF_PTR16 = cursor
-
-  ; Pre-compute address of final \n (BUF_END16 - 1)
+  ; Pop back (discard)
+  PLA
+  ; Pop cursor_buf_pos -> BUF_SRC16
+  POP16 BUF_SRC16
+  ; CURSOR_COL16 = cursor_buf_pos - line_start
   SEC
-  LDA BUF_END16
-  SBC #1
-  STA LINE_LEN16
-  LDA BUF_END16 + 1
-  SBC #0
-  STA LINE_LEN16 + 1
-
-  ; Initialize scan state
-  LDA #0
-  STA BUF_DELTA               ; bytes to delete
-  STA_LH16 BUF_TEMP16         ; newline count = 0
-  CP16 BUF_PTR16, BUF_SRC16   ; scan ptr = cursor
-
-.scan:
-  LDA BUF_TEMP
-  BEQ .scan_done              ; no more DELs
-
-  CMP16 BUF_SRC16, BUF_END16
-  BCS .scan_done              ; at/past buffer end
-
-  LDY #0
-  LDA (BUF_SRC16),Y
-  CMP #'\n'
-  BNE .scan_advance
-
-  ; It's a \n - is it the final one?
-  CMP16 BUF_SRC16, LINE_LEN16
-  BCS .scan_done              ; final \n, stop
-
-  INC BUF_TEMP16              ; count deleted newline
-
-.scan_advance:
-  INC16 BUF_SRC16
-  INC BUF_DELTA
-  DEC BUF_TEMP
-  JMP .scan
-
-.scan_done:
-  ; Anything to delete?
-  LDA BUF_DELTA
-  BEQ .done                   ; no-op (DEL at end of last line)
-
-  ; Delete BUF_DELTA bytes at BUF_PTR16
-  JSR buf_delete_chars
-
-  ; Rebuild or fast path
-  LDA BUF_TEMP16
-  ORA BUF_TEMP16 + 1
-  BEQ .no_newlines
-
-  ; Newlines deleted: full rebuild + mark adjust
-  JSR buf_rebuild_lines
-  CLC
-  ADCI16 FILE_LINE16, $0001, BUF_DST16
-  LDAX16 BUF_DST16
-  JSR mark_adjust_delete
+  SBC16 BUF_SRC16, BUF_PTR16, CURSOR_COL16
   JMP .set_modified
-
-.no_newlines:
-  JSR buf_adjust_lines_dec    ; fast path, no line count change
 
 .set_modified:
   LDA #$FF
   STA MODIFIED
-
-.done:
+  LDA #$01
+  STA RENDER_FLAG            ; Force at least current-line redraw
   RTS
 
 ; Arrow key handlers in insert mode
