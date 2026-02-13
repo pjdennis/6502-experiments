@@ -5,7 +5,7 @@
 
 * = $0400
   JMP main
-  .include 23/environment.asm
+  .include 17/environment.asm
 
 main:
   ; Send ESC[999;999H (move cursor to bottom-right, clamped to screen size)
