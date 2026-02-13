@@ -110,18 +110,28 @@ command_parse:
   JSR cmd_str_match
   BCC .do_marks
 
-  ; Range/goto: ', ., or digit
+  ; Range/goto: ', ., digit, or bare shift
   LDA CMD_BUF
   CMP #'\''
   BEQ .try_range
   CMP #'.'
   BEQ .try_range
+  CMP #'>'
+  BEQ .bare_shift
+  CMP #'<'
+  BEQ .bare_shift
   CMP #'0'
   BCC .unknown
   CMP #':'              ; '9'+1
   BCS .unknown
 .try_range:
   JMP command_parse_range
+
+.bare_shift:
+  CP16 FILE_LINE16, BUF_SRC16
+  CP16 FILE_LINE16, BUF_DST16
+  LDA CMD_BUF
+  JMP range_dispatch
 
 .unknown:
   SET16 str_unknown_cmd, STR_PTR16
@@ -351,7 +361,7 @@ command_parse_range:
   LDX #0
   JSR parse_range_pos     ; Parse first position -> BUF_LEN16
   BCC .range_first_ok
-  JMP .range_mark_err
+  JMP range_mark_err
 .range_first_ok:
   CP16 BUF_LEN16, BUF_SRC16
 
@@ -363,7 +373,11 @@ command_parse_range:
   ; No comma: maybe :NNN goto
   CMP #0
   BEQ .range_goto
-  JMP .range_unknown      ; Extra chars = unknown command
+
+  ; Single-position + command (e.g. :.> or :5d)
+  CP16 BUF_SRC16, BUF_DST16   ; end = start
+  LDA CMD_BUF,X                ; command char
+  JMP range_dispatch
 
 .range_goto:
   ; :NNN goto (BUF_SRC16 = 0-based line)
@@ -378,22 +392,26 @@ command_parse_range:
   JSR parse_range_pos     ; Parse second position -> BUF_LEN16
   POP16 BUF_SRC16         ; PLA preserves carry on 6502
   BCC .range_second_ok
-  JMP .range_mark_err
+  JMP range_mark_err
 .range_second_ok:
   CP16 BUF_LEN16, BUF_DST16
 
   ; Get command char
   LDA CMD_BUF,X
-  JMP .range_dispatch
+  JMP range_dispatch
 
-.range_dispatch:
+range_dispatch:
   ; A = command char
   STA CMD_IDX              ; Save command char
   CMP #'y'
   BEQ .range_action
   CMP #'d'
   BEQ .range_action
-  JMP .range_unknown
+  CMP #'>'
+  BEQ .range_action
+  CMP #'<'
+  BEQ .range_action
+  JMP range_unknown
 
 .range_action:
   ; Ensure start <= end (swap if needed)
@@ -423,10 +441,23 @@ command_parse_range:
   ; Copy full 16-bit count to BUF_TEMP16 (no 255 cap)
   CP16 BUF_LEN16, BUF_TEMP16
 
-  ; Dispatch to yank or delete
+  ; Readonly check for editing commands (d, >, <) — yank allowed
+  LDA CMD_IDX
+  CMP #'y'
+  BEQ .range_dispatch_cmd
+  LDA READONLY
+  BEQ .range_dispatch_cmd
+  SET16 str_readonly, STR_PTR16
+  JMP show_status_message
+
+.range_dispatch_cmd:
   LDA CMD_IDX
   CMP #'d'
   BEQ .range_do_delete
+  CMP #'>'
+  BEQ .range_jmp_indent
+  CMP #'<'
+  BEQ .range_jmp_unindent
 
   ; --- Range yank ---
   JSR yank_clear
@@ -448,13 +479,13 @@ command_parse_range:
   SET16 str_yank_full, STR_PTR16
   JMP show_status_message
 
+.range_jmp_indent:
+  JMP .range_do_indent
+.range_jmp_unindent:
+  JMP .range_do_unindent
+
   ; --- Range delete ---
 .range_do_delete:
-  LDA READONLY
-  BEQ .range_not_readonly
-  SET16 str_readonly, STR_PTR16
-  JMP show_status_message
-.range_not_readonly:
   ; Yank lines first (so user can paste them back)
   ; Save first line (yank_add_lines clobbers BUF_SRC16)
   PUSH16 BUF_SRC16
@@ -500,16 +531,50 @@ command_parse_range:
   JSR io_flush
   RTS
 
-.range_mark_err:
+  ; --- Range indent ---
+.range_do_indent:
+  PUSH16 FILE_LINE16           ; Save cursor line
+  PUSH16 CURSOR_COL16          ; Save cursor column
+  PUSH16 BUF_TEMP16            ; Save count for message
+  CP16 BUF_SRC16, FILE_LINE16  ; FILE_LINE16 = range start
+  CP16 BUF_TEMP16, COUNT16     ; COUNT16 = count
+  JSR do_indent
+  JMP range_shift_finish
+
+  ; --- Range unindent ---
+.range_do_unindent:
+  PUSH16 FILE_LINE16           ; Save cursor line
+  PUSH16 CURSOR_COL16          ; Save cursor column
+  PUSH16 BUF_TEMP16            ; Save count for message
+  CP16 BUF_SRC16, FILE_LINE16  ; FILE_LINE16 = range start
+  CP16 BUF_TEMP16, COUNT16     ; COUNT16 = count
+  JSR do_unindent
+  JMP range_shift_finish
+
+range_shift_finish:
+  POP16 BUF_TEMP16             ; Restore count
+  CP16 BUF_TEMP16, TO_DECIMAL_VALUE16
+  POP16 CURSOR_COL16           ; Restore cursor column
+  POP16 FILE_LINE16            ; Restore cursor line
+  JSR clamp_cursor_col         ; Clamp (unindent may shorten line)
+  JSR to_decimal
+  JSR command_show_prompt
+  PRINT_STR TO_DECIMAL_RESULT
+  PRINT_STR str_lines_shifted
+  JSR io_flush
+  RTS
+
+range_mark_err:
   SET16 str_mark_not_set, STR_PTR16
   JMP show_status_message
 
-.range_unknown:
+range_unknown:
   SET16 str_unknown_cmd, STR_PTR16
   JMP show_status_message
 
 str_lines_yanked:  .asciiz " lines yanked"
 str_lines_deleted: .asciiz " lines deleted"
+str_lines_shifted: .asciiz " lines shifted"
 str_marks_cmd:     .asciiz "marks"
 
 ; === String constants ===

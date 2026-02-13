@@ -4917,6 +4917,96 @@ class EditorTestRunner:
             expected_content="Line 1\nLine 5\n",
         )
 
+        self._group("Range indent/unindent (:>, :<):", leading_blank=True)
+
+        # Range indent
+        self.run_test(
+            ":1,3> indents lines 1-3",
+            "aaa\nbbb\nccc\nddd\n",
+            b":1,3>\r:wq\r",
+            expected_content="  aaa\n  bbb\n  ccc\nddd\n",
+        )
+
+        # Range unindent
+        self.run_test(
+            ":1,3< unindents lines 1-3",
+            "  aaa\n  bbb\n  ccc\nddd\n",
+            b":1,3<\r:wq\r",
+            expected_content="aaa\nbbb\nccc\nddd\n",
+        )
+
+        # Bare :> indents current line
+        self.run_test(
+            ":> indents current line",
+            "hello\nworld\n",
+            b":>\r:wq\r",
+            expected_content="  hello\nworld\n",
+        )
+
+        # Bare :< unindents current line
+        self.run_test(
+            ":< unindents current line",
+            "  hello\nworld\n",
+            b":<\r:wq\r",
+            expected_content="hello\nworld\n",
+        )
+
+        # Single-position :.> indents current line (cursor on line 2)
+        self.run_test(
+            ":.> indents current line",
+            "hello\nworld\n",
+            b"j:.>\r:wq\r",
+            expected_content="hello\n  world\n",
+        )
+
+        # Single-position :2> indents line 2
+        self.run_test(
+            ":2> indents line 2",
+            "aaa\nbbb\nccc\n",
+            b":2>\r:wq\r",
+            expected_content="aaa\n  bbb\nccc\n",
+        )
+
+        # Mark range indent
+        self.run_test(
+            ":'a,.> indents from mark to current",
+            "aaa\nbbb\nccc\nddd\n",
+            b"majj:'a,.>\r:wq\r",
+            expected_content="  aaa\n  bbb\n  ccc\nddd\n",
+        )
+
+        # Mark range unindent
+        self.run_test(
+            ":'a,.< unindents from mark to current",
+            "  aaa\n  bbb\n  ccc\nddd\n",
+            b"majj:'a,.<\r:wq\r",
+            expected_content="aaa\nbbb\nccc\nddd\n",
+        )
+
+        # Empty line handling
+        self.run_test(
+            ":> range skips empty lines",
+            "aaa\n\nbbb\n",
+            b":1,3>\r:wq\r",
+            expected_content="  aaa\n\n  bbb\n",
+        )
+
+        # Single-position :5d works (bonus from single-position support)
+        self.run_test(
+            ":5d deletes line 5 (single-position command)",
+            make_lines(6),
+            b":5d\r:wq\r",
+            expected_content="Line 1\nLine 2\nLine 3\nLine 4\nLine 6\n",
+        )
+
+        # :5 still works as goto (regression)
+        self.run_test_screen(
+            ":5 still works as goto after shift support",
+            make_lines(10),
+            b":5\r:q!\r",
+            expect_cursor=(4, 0),
+        )
+
         self._group("Long line handling (>255 chars):", leading_blank=True)
 
         long_line_300 = "A" * 300 + "\n"

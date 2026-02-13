@@ -175,17 +175,29 @@ COMMAND-LINE MODE
 
   :[start],[end]d    Delete lines in range (yanks first)
   :[start],[end]y    Yank (copy) lines in range
+  :[start],[end]>    Indent lines in range by 2 spaces
+  :[start],[end]<    Unindent lines in range by up to 2 spaces
 
   Range positions can be:
     N              Line number (1-based)
     'a             Mark reference
     .              Current line
 
+  A single position can be used instead of a range:
+    :[pos]d            Delete one line at position
+    :[pos]>            Indent one line at position
+
+  Bare :> and :< apply to the current line.
+
   Examples:
     :1,5d          Delete lines 1 through 5
     :'a,'bd        Delete from mark a to mark b
     :.,'ay         Yank from current line to mark a
     :3,3d          Delete just line 3
+    :1,10>         Indent lines 1 through 10
+    :'a,.<         Unindent from mark a to current line
+    :>             Indent current line
+    :5>            Indent line 5
 
   If start > end, the range is automatically swapped.
 
