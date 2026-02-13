@@ -450,6 +450,23 @@ scan_words_forward:
 .swf_done:
   RTS
 
+; Scan backward N words from CURSOR_COL16
+; Input: X = count, CURSOR_COL16 = start position (must be > 0)
+; Output: CURSOR_COL16 = position after scanning back N words (stops at BOL)
+; Clobbers: A, X, Y, BUF_PTR16, BUF_LEN16, WORD_CLASS, NORMAL_TEMP
+scan_words_backward:
+.swb_loop:
+  STX NORMAL_TEMP
+  TST16 CURSOR_COL16
+  BEQ .swb_done               ; At col 0, stop
+  JSR find_word_start_backward ; BUF_LEN16 = word start
+  CP16 BUF_LEN16, CURSOR_COL16
+  LDX NORMAL_TEMP
+  DEX
+  BNE .swb_loop
+.swb_done:
+  RTS
+
 ; Get buffer pointer at BUF_LEN16 offset on current line
 ; Sets BUF_PTR16 = start of FILE_LINE16 + BUF_LEN16
 ; Clobbers A, X, Y

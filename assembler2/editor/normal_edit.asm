@@ -538,36 +538,66 @@ do_dw:
   JMP clear_count
 
 ; --- Delete word backward (db) ---
+; Delete backward to previous word boundary on current line.
+; Yanks deleted text. Accepts count.
+; Non-batched (count prefix): scans N words back, single yank+delete (yanks ALL)
+; Batched (dbdb...): delete N-1 words (no yank), yank+delete last word
 do_db:
-  JSR get_count
-  LDX BUF_TEMP16
-
-.db_loop:
-  STX NORMAL_TEMP
+  JSR get_count              ; BUF_TEMP16 = N
   TST16 CURSOR_COL16
-  BNE .db_not_bol          ; Not at col 0, proceed
+  BNE .db_not_bol            ; Not at col 0, proceed
   JMP .db_done
 .db_not_bol:
 
-  JSR find_word_start_backward
-  ; BUF_LEN16 = start position. Delete from start to cursor.
-  ; Compute delete count and move cursor to start
-  PUSH16 BUF_LEN16           ; Save start position
+  LDA BATCH_EXTRA
+  BNE .db_batched
+
+  ; --- Non-batched: scan N words back, single yank+delete ---
+  PUSH16 CURSOR_COL16         ; Save original cursor
+  LDX BUF_TEMP16
+  JSR scan_words_backward     ; CURSOR_COL16 = new position
+  POP16 BUF_LEN16             ; BUF_LEN16 = original cursor
   SEC
-  SBC16 CURSOR_COL16, BUF_LEN16, BUF_LEN16   ; BUF_LEN16 = delete count
-  POP16 CURSOR_COL16         ; Move cursor to start position
-  JSR yank_delete_at_cursor
-
-  LDX NORMAL_TEMP
-  DEX
+  SBC16 BUF_LEN16, CURSOR_COL16, BUF_LEN16  ; BUF_LEN16 = delete count
+  TST16 BUF_LEN16
   BEQ .db_done
-  JMP .db_loop
+  JSR yank_delete_at_cursor
+  JMP .db_finish
 
-.db_done:
+.db_batched:
+  ; --- Batched: delete (N-1) without yank, then yank+delete last word ---
+  LDX BUF_TEMP16
+  DEX
+  BEQ .db_batch_last          ; N=1, skip first delete
+  PUSH16 CURSOR_COL16
+  JSR scan_words_backward
+  POP16 BUF_LEN16
+  SEC
+  SBC16 BUF_LEN16, CURSOR_COL16, BUF_LEN16
+  TST16 BUF_LEN16
+  BEQ .db_batch_last
+  JSR delete_at_cursor        ; 1st shift (no yank)
+
+.db_batch_last:
+  ; Yank+delete last word
+  TST16 CURSOR_COL16
+  BEQ .db_done
+  PUSH16 CURSOR_COL16
+  LDX #1
+  JSR scan_words_backward
+  POP16 BUF_LEN16
+  SEC
+  SBC16 BUF_LEN16, CURSOR_COL16, BUF_LEN16
+  TST16 BUF_LEN16
+  BEQ .db_done
+  JSR yank_delete_at_cursor   ; 2nd shift (yanks last word)
+
+.db_finish:
   JSR clamp_cursor_col
   LDA #1
   STA RENDER_FLAG
   JSR ensure_cursor_visible
+.db_done:
   JMP clear_count
 
 ; --- Change word (cw) ---
