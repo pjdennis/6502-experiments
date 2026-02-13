@@ -12,15 +12,23 @@ Supported sequences:
     ESC[7m / ESC[0m - Reverse/normal video (tracked per-cell in attrs buffer)
     ESC[?25l        - Cursor hide
     ESC[?25h        - Cursor show (triggers frame snapshot)
+
+Deferred auto-wrap (opt-in via deferred_wrap=True):
+    Matches real VT100/xterm behavior where writing to the last column
+    sets a pending-wrap flag instead of immediately advancing the cursor.
+    ESC[K in this state clears from the last column, erasing the character.
+    Cursor movement commands (ESC[r;cH) cancel the pending wrap.
 """
 
 
 class AnsiScreen:
     ATTR_REVERSE = 0x01
 
-    def __init__(self, rows, cols):
+    def __init__(self, rows, cols, deferred_wrap=False):
         self.rows = rows
         self.cols = cols
+        self.deferred_wrap = deferred_wrap
+        self._pending_wrap = False
         self.buffer = [[' '] * cols for _ in range(rows)]
         self.attrs = [[0] * cols for _ in range(rows)]
         self.cursor_row = 0  # 0-based
@@ -39,6 +47,7 @@ class AnsiScreen:
         self.buffer = [[' '] * self.cols for _ in range(self.rows)]
         self.attrs = [[0] * self.cols for _ in range(self.rows)]
         self.content_touched = set(range(self.rows - 1))
+        self._pending_wrap = False
 
     def _clear_to_eol(self):
         row = self.cursor_row
@@ -52,8 +61,16 @@ class AnsiScreen:
     def _move_cursor(self, row, col):
         self.cursor_row = row
         self.cursor_col = col
+        self._pending_wrap = False
 
     def _put_char(self, ch):
+        # Deferred wrap: resolve pending wrap before writing next character
+        if self.deferred_wrap and self._pending_wrap:
+            self.cursor_col = 0
+            self.cursor_row += 1
+            if self.cursor_row >= self.rows:
+                self.cursor_row = self.rows - 1
+            self._pending_wrap = False
         if self.cursor_row < 0 or self.cursor_row >= self.rows:
             return
         if self.cursor_col < 0 or self.cursor_col >= self.cols:
@@ -63,6 +80,10 @@ class AnsiScreen:
         self.buffer[self.cursor_row][self.cursor_col] = ch
         self.attrs[self.cursor_row][self.cursor_col] = self.ATTR_REVERSE if self.reverse_video else 0
         self.cursor_col += 1
+        # Deferred wrap: stay at last column with pending flag
+        if self.deferred_wrap and self.cursor_col >= self.cols:
+            self.cursor_col = self.cols - 1
+            self._pending_wrap = True
 
     def _snapshot(self):
         """Capture current buffer and cursor as a frame."""
@@ -278,5 +299,34 @@ if __name__ == "__main__":
     assert s5.is_reverse_at(0, 3) == True, "D should be reverse"
     assert s5.is_reverse_at(0, 4) == False, "E should be normal"
     assert s5.is_reverse_at(0, 5) == False, "F should be normal"
+
+    # Test deferred wrap: writing to last column sets pending wrap
+    s6 = AnsiScreen(3, 5, deferred_wrap=True)
+    s6.process("ABCDE")  # 5 chars on 5-col screen
+    # After writing 'E' at col 4, cursor stays at col 4 with pending wrap
+    assert s6.cursor_col == 4, f"expected col 4, got {s6.cursor_col}"
+    assert s6._pending_wrap == True, "pending wrap should be set"
+    assert s6.buffer[0] == list("ABCDE"), f"got {s6.buffer[0]}"
+
+    # ESC[K in pending wrap state clears from last column (the bug!)
+    s7 = AnsiScreen(3, 5, deferred_wrap=True)
+    s7.process("ABCDE")    # fill row, pending wrap at col 4
+    s7.process("\x1b[K")    # clear to end of line
+    # With deferred wrap, ESC[K clears col 4 (the 'E')
+    assert s7.buffer[0] == list("ABCD "), f"expected 'ABCD ', got {''.join(s7.buffer[0])!r}"
+
+    # Cursor move cancels pending wrap
+    s8 = AnsiScreen(3, 5, deferred_wrap=True)
+    s8.process("ABCDE")        # fill row, pending wrap
+    s8.process("\x1b[1;1H")    # move to (0,0), cancels pending wrap
+    s8.process("X")            # overwrites 'A' at (0,0)
+    assert s8.buffer[0] == list("XBCDE"), f"got {''.join(s8.buffer[0])!r}"
+
+    # Next char after pending wrap goes to next row
+    s9 = AnsiScreen(3, 5, deferred_wrap=True)
+    s9.process("ABCDE")    # fill row, pending wrap
+    s9.process("F")         # resolves wrap: cursor to (1,0), writes 'F'
+    assert s9.buffer[0] == list("ABCDE"), f"row 0: {''.join(s9.buffer[0])!r}"
+    assert s9.buffer[1][0] == 'F', f"row 1 col 0: {s9.buffer[1][0]!r}"
 
     print("All self-tests passed.")

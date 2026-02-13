@@ -522,7 +522,8 @@ class EditorTestRunner:
                         expect_lines_at_frame: list = None,
                         expect_status_at_frame: list = None,
                         initial_bytes: bytes = None,
-                        expect_reverse_at: list = None):
+                        expect_reverse_at: list = None,
+                        deferred_wrap: bool = False):
         """Run an editor test and verify screen state via ANSI output.
 
         Args:
@@ -581,7 +582,7 @@ class EditorTestRunner:
                     return
 
             # Parse ANSI output through virtual terminal
-            screen = AnsiScreen(rows, cols)
+            screen = AnsiScreen(rows, cols, deferred_wrap=deferred_wrap)
             screen.process(ansi.decode('latin-1'))
 
             if screen.frame_buffer is None:
@@ -1661,6 +1662,21 @@ class EditorTestRunner:
                 (0, "A" * 40),
                 (1, "A" * 20),
             ]
+        )
+
+        # Bug repro: last char on first wrap row erased by ESC[K
+        # Real terminals use deferred auto-wrap: after writing to the last
+        # column, the cursor stays there with a pending-wrap flag. ESC[K
+        # then clears from that position, erasing the last character.
+        self.run_test_screen(
+            "Wrap: last char on first row (deferred wrap)",
+            "A" * 60 + "\n",
+            b":q!\r",
+            expect_lines=[
+                (0, "A" * 40),
+                (1, "A" * 20),
+            ],
+            deferred_wrap=True
         )
 
         # ============================================================

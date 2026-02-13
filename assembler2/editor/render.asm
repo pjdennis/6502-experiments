@@ -129,14 +129,14 @@ render_from_row:
   ; Check if next char is newline (line boundary at exact multiple)
   LDA (BUF_PTR16),Y
   CMP #'\n'
-  BEQ .line_done
-  ; More wrap rows remain
-  JSR ansi_clear_line
+  BEQ .line_ended
+  ; More wrap rows remain (row is full, no clear needed)
   INC RENDER_WRAP
   INC RENDER_ROW
   JMP .row_loop
 
 .line_done:
+  ; Row not full (RENDER_COL < SCREEN_COLS) - clear remainder
   JSR ansi_clear_line
 
 .line_ended:
@@ -313,7 +313,11 @@ render_current_line_and_status:
   STX RENDER_WRAP              ; save loop counter
   JSR ansi_move_cursor
   JSR render_line_chars
+  LDA RENDER_COL
+  CMP SCREEN_COLS
+  BCS .no_clear            ; row full, skip clear for deferred-wrap terminals
   JSR ansi_clear_line
+.no_clear:
   ; Advance BUF_PTR16 by SCREEN_COLS for next wrap row
   CLC
   LDA BUF_PTR16
