@@ -35,7 +35,7 @@ normal_handle_key:
   LDA BUF_TEMP
   CMP #'0'
   BCC .count_done_dispatch
-  CMP #':' ; '9'+1
+  CMP #'9' + 1
   BCS .count_done_dispatch
   ; Accumulate digit into COUNT16
   JSR count_accumulate_digit
@@ -55,14 +55,13 @@ normal_handle_key:
   LDA BUF_TEMP
   CMP #'1'
   BCC .dispatch_key
-  CMP #':'  ; '9'+1
+  CMP #'9' + 1
   BCS .dispatch_key
   ; Start new count
   LDA #$FF
   STA COUNT_ACTIVE
   LDA #0
-  STA COUNT16
-  STA COUNT16 + 1
+  STA_LH16 COUNT16
   LDA BUF_TEMP
   JSR count_accumulate_digit
   RTS
