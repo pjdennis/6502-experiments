@@ -44,6 +44,7 @@ TR_MISMATCH_FLAG:  .byte       ; Nonzero if byte mismatch detected
 TR_MISMATCH_ACTUAL: .byte      ; Actual byte at first mismatch
 TR_MISMATCH_EXPECT: .byte      ; Expected byte at first mismatch
 TR_MISMATCH_POS16: .word       ; Position of first mismatch
+TR_LIMIT_FLAG:     .byte       ; Nonzero if runner hit a resource limit
 
   .code
 
@@ -147,8 +148,16 @@ tr_msg_running:
 tr_finalize_test:
   ; Auto-skip tests needing special builds
   LDA TR_ARGV_COUNT
-  BEQ .check_skip
+  BEQ .check_limit
   JSR tr_check_auto_skip
+.check_limit:
+  ; Check for runner resource limitations
+  LDA TR_LIMIT_FLAG
+  BEQ .check_skip
+  JSR tr_print_test_name
+  SHOW_MESSAGEI tr_msg_limit
+  INC16 TR_SKIP_COUNT16
+  RTS
 .check_skip:
   LDA TR_SKIP_FLAG
   BEQ .run
@@ -258,6 +267,7 @@ tr_setup_argv:
   RTS
 
 tr_msg_skip:        .asciiz " SKIP\n"
+tr_msg_limit:       .asciiz " LIMIT (input line exceeds 255 chars)\n"
 tr_msg_pass:        .asciiz " PASS\n"
 tr_msg_fail:        .asciiz " FAIL"
 tr_msg_close_paren: .asciiz ")\n"
@@ -817,6 +827,12 @@ tr_handle_input:
 
 ; Handle an input content line (strip "N: " prefix, write to temp file)
 tr_handle_input_line:
+  ; Flag if this line was truncated (runner limitation)
+  LDA TR_LINE_TRUNC
+  BEQ .no_trunc
+  ORA TR_LIMIT_FLAG         ; Don't clear if already set
+  STA TR_LIMIT_FLAG
+.no_trunc:
   ; Strip line number prefix: skip spaces, digits, ": "
   LDY #$00
   ; Skip leading spaces
@@ -1189,6 +1205,7 @@ tr_init_test:
   STA TR_TEST_TYPE
   STA TR_STATE
   STA TR_ARGV_COUNT
+  STA TR_LIMIT_FLAG
   RTS
 
 ; Print the test name (indented, no newline)
