@@ -175,6 +175,7 @@ pending_key_dispatch:
 .exec_unindent:
   JMP do_unindent
 .exec_dw:
+  JSR batch_pending_pairs
   JMP do_dw
 .exec_db:
   JMP do_db

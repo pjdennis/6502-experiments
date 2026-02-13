@@ -5346,6 +5346,28 @@ class EditorTestRunner:
             expected_content="foo\n",
         )
 
+        # Batched dw pairs
+        self.run_test(
+            "dwdw batches to delete 2 words",
+            "one two three four\n",
+            b"dwdw:wq\r",
+            expected_content="three four\n",
+        )
+
+        self.run_test(
+            "dwdwdw batches to delete 3 words",
+            "one two three four\n",
+            b"dwdwdw:wq\r",
+            expected_content="four\n",
+        )
+
+        self.run_test(
+            "2dwdw batches count 2 plus 1 extra pair",
+            "one two three four\n",
+            b"2dwdw:wq\r",
+            expected_content="four\n",
+        )
+
         self._group("Delete word backward (db):", leading_blank=True)
 
         self.run_test(
