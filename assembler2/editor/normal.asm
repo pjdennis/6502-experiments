@@ -102,95 +102,18 @@ normal_handle_key:
 
 ; --- Pending key dispatch ---
 ; Called when LAST_KEY is set and a second key arrives in BUF_TEMP.
-; For d/g/y: if BUF_TEMP matches LAST_KEY, execute the two-key command.
-; For m/': second key is always the register letter.
+; Uses table-based dispatch via dispatch_pending_key.
 pending_key_dispatch:
-  ; Check for commands that always consume second key
-  LDA LAST_KEY
-  CMP #'m'
-  BEQ .exec_mark_set
-  CMP #'\''
-  BEQ .exec_mark_goto
-  CMP #'r'
-  BEQ .exec_replace
-  ; For d/g/y: second key must match first
-  LDA BUF_TEMP
-  CMP LAST_KEY
-  BNE .not_repeat
-  LDA LAST_KEY
-  CMP #'d'
-  BEQ .exec_dd
-  CMP #'g'
-  BEQ .exec_gg
-  CMP #'y'
-  BEQ .exec_yy
-  CMP #'c'
-  BEQ .exec_cc
-  CMP #'>'
-  BEQ .exec_indent
-  CMP #'<'
-  BEQ .exec_unindent
-.not_repeat:
-  ; Check operator+motion combos (d+w, d+b, c+w, c+b)
-  LDA LAST_KEY
-  CMP #'d'
-  BEQ .check_d_motion
-  CMP #'c'
-  BEQ .check_c_motion
+  LDA #<pending_combo_keys
+  LDX #>pending_combo_keys
+  JSR dispatch_pending_key
+  BCC .done
   ; No match - reset
-  JMP .no_match
-
-.check_d_motion:
-  LDA BUF_TEMP
-  CMP #'w'
-  BEQ .exec_dw
-  CMP #'b'
-  BEQ .exec_db
-  JMP .no_match
-
-.check_c_motion:
-  LDA BUF_TEMP
-  CMP #'w'
-  BEQ .exec_cw
-  CMP #'b'
-  BEQ .exec_cb
-  JMP .no_match
-
-.no_match:
   JSR clear_count
   LDA #0
   STA RENDER_FLAG
+.done:
   RTS
-.exec_mark_set:
-  JMP do_mark_set
-.exec_mark_goto:
-  JMP do_mark_goto
-.exec_replace:
-  JMP do_replace_char
-.exec_dd:
-  JSR batch_pending_pairs
-  JMP do_dd
-.exec_gg:
-  JMP do_gg
-.exec_yy:
-  JSR batch_pending_pairs
-  JMP do_yy
-.exec_cc:
-  JMP do_cc
-.exec_indent:
-  JMP do_indent
-.exec_unindent:
-  JMP do_unindent
-.exec_dw:
-  JSR batch_pending_pairs
-  JMP do_dw
-.exec_db:
-  JSR batch_pending_pairs
-  JMP do_db
-.exec_cw:
-  JMP do_cw
-.exec_cb:
-  JMP do_cb
 
 ; --- Dispatch tables ---
 
@@ -254,6 +177,25 @@ normal_editing_keys:
 normal_other_keys:
   .byte ':'         .word normal_enter_command
   .byte 0           ; End sentinel
+
+; Pending combo key table: 5-byte entries [last_key, second_key, flags, handler]
+;   second_key=0: wildcard (any second key)
+;   flags bit 0: call batch_pending_pairs before handler
+pending_combo_keys:
+  .byte 'm', 0, $00         .word do_mark_set
+  .byte '\'', 0, $00        .word do_mark_goto
+  .byte 'r', 0, $00         .word do_replace_char
+  .byte 'd', 'd', $01       .word do_dd
+  .byte 'g', 'g', $00       .word do_gg
+  .byte 'y', 'y', $01       .word do_yy
+  .byte 'c', 'c', $00       .word do_cc
+  .byte '>', '>', $00       .word do_indent
+  .byte '<', '<', $00       .word do_unindent
+  .byte 'd', 'w', $01       .word do_dw
+  .byte 'd', 'b', $01       .word do_db
+  .byte 'c', 'w', $00       .word do_cw
+  .byte 'c', 'b', $00       .word do_cb
+  .byte 0                   ; End sentinel
 
 ; --- Editing ---
 

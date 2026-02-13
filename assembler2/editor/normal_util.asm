@@ -48,6 +48,62 @@ dispatch_key:
 .do_jump:
   JMP (JUMP_TARGET16)
 
+; --- Pending key dispatcher ---
+; Input: A = low byte, X = high byte of dispatch table address
+;        LAST_KEY = first key, BUF_TEMP = second key
+; Output: C = 0 if handler was called, C = 1 if no match
+; Table format: 5-byte entries [last_key, second_key, flags, handler_lo, handler_hi]
+;   second_key = 0 means wildcard (match any second key)
+;   flags bit 0: call batch_pending_pairs before handler
+;   Terminated by 0 byte
+dispatch_pending_key:
+  STA DISPATCH_PTR16
+  STX DISPATCH_PTR16 + 1
+  LDY #0
+.loop:
+  LDA (DISPATCH_PTR16),Y
+  BEQ .no_match
+  CMP LAST_KEY
+  BNE .next5
+  INY
+  LDA (DISPATCH_PTR16),Y
+  BEQ .matched
+  CMP BUF_TEMP
+  BNE .next4
+.matched:
+  INY
+  LDA (DISPATCH_PTR16),Y
+  LSR
+  BCC .no_batch
+  TYA
+  PHA
+  JSR batch_pending_pairs
+  PLA
+  TAY
+.no_batch:
+  INY
+  LDA (DISPATCH_PTR16),Y
+  STA JUMP_TARGET16
+  INY
+  LDA (DISPATCH_PTR16),Y
+  STA JUMP_TARGET16 + 1
+  JSR .do_jump
+  CLC
+  RTS
+.next5:
+  INY
+.next4:
+  INY
+  INY
+  INY
+  INY
+  JMP .loop
+.no_match:
+  SEC
+  RTS
+.do_jump:
+  JMP (JUMP_TARGET16)
+
 ; --- Cursor and line utilities ---
 
 ; Check if cursor is within current line
