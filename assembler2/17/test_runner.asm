@@ -38,6 +38,7 @@ TR_TEST_TYPE:      .byte       ; 0=hex test, 1=error test
 TR_HAS_TEST:       .byte       ; Nonzero if a test has been parsed
 TR_ACTUAL_LEN16:   .word       ; Length of actual output bytes
 TR_ARGV_COUNT:     .byte       ; Number of extra ARGS entries
+TR_LINE_TRUNC:     .byte       ; Nonzero if line was truncated (more in file)
 
   .code
 
@@ -84,18 +85,32 @@ test_runner_start:
 .main_loop:
   JSR tr_read_line
   BCS .eof
-  ; Skip empty lines
-  LDA TR_LINE_LEN
-  BEQ .main_loop
-  ; Skip comments (lines starting with #)
-  LDA TR_LINE_BUF
-  CMP #'#'
-  BEQ .main_loop
-  ; Try to match fields
-  JSR tr_dispatch_line
+  ; Check for --- separator (always, even in input state)
+  JSR tr_check_separator
+  BCC .handle_sep
+  ; Try field keywords (ends input state if matched)
+  JSR tr_dispatch_field
+  BCC .field_done
+  ; No field matched
+  LDA TR_STATE
+  BNE .input_line
+  ; Not in a section: skip empty lines and comments
+  JSR tr_skip_rest_of_line
+  JMP .main_loop
+.input_line:
+  JSR tr_handle_input_line
+  JMP .main_loop
+.field_done:
+  JSR tr_skip_rest_of_line
+  JMP .main_loop
+.handle_sep:
+  JSR tr_skip_rest_of_line
+  JSR tr_close_input_state
+  JSR tr_handle_separator
   JMP .main_loop
 .eof:
   ; Handle last test in file (no trailing ---)
+  JSR tr_close_input_state
   LDA TR_HAS_TEST
   BEQ .done
   JSR tr_print_test_name
@@ -121,29 +136,80 @@ tr_test_resume:
 ; FIELD DISPATCH
 ; ============================================================================
 
-; Try to match the current line against known field prefixes
-; Dispatches to the appropriate handler on match
-tr_dispatch_line:
-  ; Check for --- separator (exactly 3 dashes)
+; Check if line is a --- separator
+; On exit: C clear = is separator, C set = not
+tr_check_separator:
   LDA TR_LINE_LEN
   CMP #$03
-  BNE .not_sep
+  BNE .no
   LDA TR_LINE_BUF
   CMP #'-'
-  BNE .not_sep
+  BNE .no
   LDA TR_LINE_BUF + 1
   CMP #'-'
-  BNE .not_sep
+  BNE .no
   LDA TR_LINE_BUF + 2
   CMP #'-'
-  BNE .not_sep
-  JMP tr_handle_separator
-.not_sep:
-  ; Check for "NAME: " prefix
+  BNE .no
+  CLC
+  RTS
+.no:
+  SEC
+  RTS
+
+; Try to match field keywords. Closes input state on match.
+; On exit: C clear = field matched and handled
+;          C set = no field matched
+tr_dispatch_field:
   SET16 tr_pfx_name, TABP16
   JSR tr_match_prefix
-  BCC tr_handle_name
-  ; Unrecognized line - skip
+  BCS .not_name
+  JSR tr_close_input_state
+  JMP tr_handle_name      ; Returns (C clear via tail path)
+.not_name:
+  SET16 tr_pfx_input, TABP16
+  JSR tr_match_prefix
+  BCS .not_input
+  JSR tr_close_input_state
+  JMP tr_handle_input
+.not_input:
+  SET16 tr_pfx_expect_hex, TABP16
+  JSR tr_match_prefix
+  BCS .not_hex
+  JSR tr_close_input_state
+  JMP tr_handle_expect_hex
+.not_hex:
+  SET16 tr_pfx_expect_error, TABP16
+  JSR tr_match_prefix
+  BCS .not_error
+  JSR tr_close_input_state
+  JMP tr_handle_expect_error
+.not_error:
+  SET16 tr_pfx_expect_line, TABP16
+  JSR tr_match_prefix
+  BCS .not_line
+  JSR tr_close_input_state
+  JMP tr_handle_expect_line
+.not_line:
+  SET16 tr_pfx_expect_msg, TABP16
+  JSR tr_match_prefix
+  BCS .not_msg
+  JSR tr_close_input_state
+  JMP tr_handle_expect_msg
+.not_msg:
+  SET16 tr_pfx_skip, TABP16
+  JSR tr_match_prefix
+  BCS .not_skip
+  JSR tr_close_input_state
+  JMP tr_handle_skip
+.not_skip:
+  SET16 tr_pfx_args, TABP16
+  JSR tr_match_prefix
+  BCS .no_match
+  JSR tr_close_input_state
+  JMP tr_handle_args
+.no_match:
+  SEC
   RTS
 
 
@@ -160,11 +226,169 @@ tr_handle_separator:
   JMP tr_init_test        ; Tail call - reset for next test
 
 ; Handle NAME: field - copy test name
+; On entry: Y = offset past prefix
 tr_handle_name:
-  ; Y = offset past "NAME: " prefix from tr_match_prefix
   JSR tr_copy_field_to_name
   LDA #$01
   STA TR_HAS_TEST
+  CLC
+  RTS
+
+; Handle INPUT: field - open temp file, enter input state
+tr_handle_input:
+  LDA #<TR_INPUT_FILE
+  LDX #>TR_INPUT_FILE
+  JSR openout
+  STA TR_INPUT_HANDLE
+  LDA #$01
+  STA TR_STATE            ; Enter input state
+  CLC
+  RTS
+
+; Handle an input content line (strip "N: " prefix, write to temp file)
+tr_handle_input_line:
+  ; Strip line number prefix: skip spaces, digits, ": "
+  LDY #$00
+  ; Skip leading spaces
+.skip_spaces:
+  CPY TR_LINE_LEN
+  BCS .write
+  LDA TR_LINE_BUF,Y
+  CMP #' '
+  BNE .skip_digits
+  INY
+  JMP .skip_spaces
+.skip_digits:
+  CPY TR_LINE_LEN
+  BCS .write
+  LDA TR_LINE_BUF,Y
+  CMP #'0'
+  BCC .write              ; Not a digit
+  CMP #':'                ; ':' = $3A, after '9' = $39
+  BCS .check_colon
+  INY
+  JMP .skip_digits
+.check_colon:
+  CMP #':'
+  BNE .write
+  INY
+  CPY TR_LINE_LEN
+  BCS .write
+  LDA TR_LINE_BUF,Y
+  CMP #' '
+  BNE .write
+  INY                     ; Skip the space after colon
+.write:
+  ; Write from Y to end of line to temp file
+.write_loop:
+  CPY TR_LINE_LEN
+  BCS .write_nl
+  LDA TR_LINE_BUF,Y
+  LDX TR_INPUT_HANDLE
+  JSR write
+  INY
+  JMP .write_loop
+.write_nl:
+  LDA #$0A
+  LDX TR_INPUT_HANDLE
+  JSR write
+  RTS
+
+; Handle EXPECT_HEX: field - parse hex bytes
+; On entry: Y = offset past prefix
+tr_handle_expect_hex:
+  LDA #$00
+  STA TR_TEST_TYPE        ; Mark as hex test
+  STA_LH16 TR_EXPECT_LEN16
+  ; Parse hex bytes from buffer
+  JSR tr_parse_hex_from_buf
+  ; If line was truncated, continue reading hex from file
+  LDA TR_LINE_TRUNC
+  BEQ .done
+  JSR tr_parse_hex_from_file
+.done:
+  CLC
+  RTS
+
+; Handle EXPECT_ERROR: field - parse decimal error code
+; On entry: Y = offset past prefix
+tr_handle_expect_error:
+  LDA #$01
+  STA TR_TEST_TYPE        ; Mark as error test
+  JSR tr_parse_decimal
+  LDA HEX16
+  STA TR_EXPECT_ERROR
+  CLC
+  RTS
+
+; Handle EXPECT_LINE: field - parse decimal line number
+; On entry: Y = offset past prefix
+tr_handle_expect_line:
+  JSR tr_parse_decimal
+  CP16 HEX16, TR_EXPECT_LINE16
+  CLC
+  RTS
+
+; Handle EXPECT_MSG: field - copy message string
+; On entry: Y = offset past prefix
+tr_handle_expect_msg:
+  LDX #$00
+.loop:
+  CPY TR_LINE_LEN
+  BCS .done
+  LDA TR_LINE_BUF,Y
+  STA TR_EXPECT_MSG,X
+  INY
+  INX
+  BNE .loop
+.done:
+  LDA #$00
+  STA TR_EXPECT_MSG,X     ; Null-terminate
+  CLC
+  RTS
+
+; Handle SKIP: field - set skip flag
+tr_handle_skip:
+  LDA #$01
+  STA TR_SKIP_FLAG
+  CLC
+  RTS
+
+; Handle ARGS: field - store args string (parsed later)
+; On entry: Y = offset past prefix
+tr_handle_args:
+  ; Copy args to TR_ARGV_STRS for later parsing
+  LDX #$00
+.loop:
+  CPY TR_LINE_LEN
+  BCS .done
+  LDA TR_LINE_BUF,Y
+  STA TR_ARGV_STRS,X
+  INY
+  INX
+  BNE .loop
+.done:
+  LDA #$00
+  STA TR_ARGV_STRS,X      ; Null-terminate
+  LDA #$01
+  STA TR_ARGV_COUNT        ; Mark that args exist
+  CLC
+  RTS
+
+; Close input state (close temp file if input was being written)
+; Preserves Y (callers depend on Y being the prefix offset)
+tr_close_input_state:
+  LDA TR_STATE
+  BEQ .done
+  TYA
+  PHA                       ; Save Y
+  LDA TR_INPUT_HANDLE
+  JSR close
+  LDA #$00
+  STA TR_STATE
+  PLA
+  TAY                       ; Restore Y
+.done:
   RTS
 
 
@@ -195,7 +419,186 @@ tr_match_prefix:
   RTS
 
 ; Field prefix strings
-tr_pfx_name:  .asciiz "NAME: "
+tr_pfx_name:          .asciiz "NAME: "
+tr_pfx_input:         .asciiz "INPUT:"
+tr_pfx_expect_hex:    .asciiz "EXPECT_HEX: "
+tr_pfx_expect_error:  .asciiz "EXPECT_ERROR: "
+tr_pfx_expect_line:   .asciiz "EXPECT_LINE: "
+tr_pfx_expect_msg:    .asciiz "EXPECT_MSG: "
+tr_pfx_skip:          .asciiz "SKIP:"
+tr_pfx_args:          .asciiz "ARGS: "
+
+
+; ============================================================================
+; HEX PARSER
+; ============================================================================
+
+; Parse hex byte pairs from TR_LINE_BUF into TR_EXPECT_BUF
+; On entry: Y = offset in TR_LINE_BUF
+; On exit: TR_EXPECT_LEN16 updated
+tr_parse_hex_from_buf:
+.loop:
+  CPY TR_LINE_LEN
+  BCS .done
+  LDA TR_LINE_BUF,Y
+  CMP #' '
+  BNE .hex_hi
+  INY
+  JMP .loop
+.hex_hi:
+  JSR tr_hex_char_to_val
+  BCS .done
+  ASL
+  ASL
+  ASL
+  ASL
+  STA TEMP                ; High nibble
+  INY
+  CPY TR_LINE_LEN
+  BCS .done
+  LDA TR_LINE_BUF,Y
+  JSR tr_hex_char_to_val
+  BCS .done
+  ORA TEMP                ; Combine nibbles
+  JSR tr_store_expect_byte
+  INY
+  JMP .loop
+.done:
+  RTS
+
+; Continue parsing hex bytes directly from the file (for truncated lines)
+; Reads chars until newline or EOF
+tr_parse_hex_from_file:
+  LDA #$00
+  STA TEMP                ; State: 0=need hi, 1=need lo
+.loop:
+  LDA TR_FILE_HANDLE
+  JSR read
+  BCS .done
+  CMP #$0A
+  BEQ .done
+  CMP #' '
+  BEQ .loop               ; Skip spaces
+  JSR tr_hex_char_to_val
+  BCS .loop               ; Skip non-hex
+  LDX TEMP
+  BNE .lo_nibble
+  ; High nibble
+  ASL
+  ASL
+  ASL
+  ASL
+  STA PC16                ; Temp store high nibble
+  LDA #$01
+  STA TEMP
+  JMP .loop
+.lo_nibble:
+  ORA PC16
+  JSR tr_store_expect_byte
+  LDA #$00
+  STA TEMP
+  JMP .loop
+.done:
+  LDA #$00
+  STA TR_LINE_TRUNC
+  RTS
+
+; Store a byte in TR_EXPECT_BUF and increment TR_EXPECT_LEN16
+; On entry: A = byte to store
+; Preserves Y (caller uses Y as buffer index)
+; Fails fast if buffer would overflow (512 byte limit)
+tr_store_expect_byte:
+  STY tr_store_save_y       ; Save caller's Y
+  PHA
+  ; Check for buffer overflow (512 bytes max)
+  CMPI16 TR_EXPECT_LEN16, $0200
+  BCC .ok
+  JMP tr_err_expect_overflow
+.ok:
+  ; Use 16-bit index for >256 byte buffers
+  LDAX16 TR_EXPECT_LEN16
+  STX TABP16 + 1
+  CLC
+  ADC #<TR_EXPECT_BUF
+  STA TABP16
+  LDA TABP16 + 1
+  ADC #>TR_EXPECT_BUF
+  STA TABP16 + 1
+  PLA
+  LDY #$00
+  STA (TABP16),Y
+  INC16 TR_EXPECT_LEN16
+  LDY tr_store_save_y       ; Restore caller's Y
+  RTS
+
+tr_store_save_y: .byte 0
+
+; Convert ASCII hex char in A to value 0-15
+; On exit: A = value, C clear = valid, C set = invalid
+tr_hex_char_to_val:
+  CMP #'0'
+  BCC .invalid
+  CMP #':'                ; '9' + 1
+  BCC .digit
+  CMP #'a'
+  BCC .invalid
+  CMP #'g'                ; 'f' + 1
+  BCS .invalid
+  SEC
+  SBC #'a'-$0A
+  CLC
+  RTS
+.digit:
+  SEC
+  SBC #'0'
+  CLC
+  RTS
+.invalid:
+  SEC
+  RTS
+
+
+; ============================================================================
+; DECIMAL PARSER
+; ============================================================================
+
+; Parse decimal number from TR_LINE_BUF starting at offset Y
+; Result stored in HEX16 (16-bit)
+; On exit: Y = past last digit, HEX16 = parsed value
+tr_parse_decimal:
+  LDA #$00
+  STA HEX16
+  STA HEX16 + 1
+.loop:
+  CPY TR_LINE_LEN
+  BCS .done
+  LDA TR_LINE_BUF,Y
+  CMP #'0'
+  BCC .done
+  CMP #':'                ; '9' + 1
+  BCS .done
+  SEC
+  SBC #'0'
+  STA TEMP                ; Save digit
+  ; HEX16 *= 10 = (x*4 + x) * 2
+  CP16 HEX16, PC16        ; PC16 = saved x
+  ASL16 HEX16             ; x*2
+  ASL16 HEX16             ; x*4
+  CLC
+  ADC16 HEX16, PC16, HEX16  ; x*4 + x = x*5
+  ASL16 HEX16             ; x*10
+  ; Add digit
+  LDA TEMP
+  CLC
+  ADC HEX16
+  STA HEX16
+  BCC .no_carry
+  INC HEX16 + 1
+.no_carry:
+  INY
+  JMP .loop
+.done:
+  RTS
 
 
 ; ============================================================================
@@ -217,16 +620,36 @@ tr_init_test:
   STA TR_ARGV_COUNT
   RTS
 
-; Print test name (indented)
+; Print test name with parsed info (for verification)
 tr_print_test_name:
   SHOW_MESSAGEI tr_msg_indent
   SET16 TR_NAME_BUF, TABP16
   JSR show_message
-  SHOW_CHAR '\n'
+  ; Print parsed details
+  LDA TR_TEST_TYPE
+  BNE .error_test
+  ; Hex test: print expected byte count
+  SHOW_MESSAGEI tr_msg_hex_count
+  CP16 TR_EXPECT_LEN16, TO_DECIMAL_VALUE16
+  JSR show_decimal
+  SHOW_MESSAGEI tr_msg_bytes
+  RTS
+.error_test:
+  ; Error test: print expected error code
+  SHOW_MESSAGEI tr_msg_err_code
+  LDA TR_EXPECT_ERROR
+  STA TO_DECIMAL_VALUE16
+  LDA #$00
+  STA TO_DECIMAL_VALUE16 + 1
+  JSR show_decimal
+  SHOW_MESSAGEI tr_msg_err_close
   RTS
 
-tr_msg_indent:
-  .asciiz "  "
+tr_msg_indent:    .asciiz "  "
+tr_msg_hex_count: .asciiz " (hex: "
+tr_msg_bytes:     .asciiz " bytes)\n"
+tr_msg_err_code:  .asciiz " (error: "
+tr_msg_err_close: .asciiz ")\n"
 
 ; Copy from TR_LINE_BUF[Y..TR_LINE_LEN) to TR_NAME_BUF
 ; On entry: Y = starting offset in TR_LINE_BUF
@@ -252,29 +675,57 @@ tr_copy_field_to_name:
 
 ; Read one line from the test file into TR_LINE_BUF
 ; On exit: TR_LINE_LEN = length (excluding newline)
-;          C clear = line read OK
+;          TR_LINE_TRUNC = 1 if line was truncated (more data in file)
+;          C clear = line read OK (or truncated)
 ;          C set = EOF reached (TR_LINE_LEN may be >0 for partial line)
 ;          A, X, Y not preserved
 tr_read_line:
   LDY #$00              ; Buffer index
 .loop:
+  CPY #$FF              ; Buffer full? Check BEFORE reading
+  BCS .full
   LDA TR_FILE_HANDLE
   JSR read              ; Read char; C set at EOF
   BCS .eof
   CMP #$0A              ; Newline?
   BEQ .eol
-  CPY #$FF              ; Buffer full? (255 chars max)
-  BCS .loop             ; Discard excess chars, keep reading
   STA TR_LINE_BUF,Y
   INY
   JMP .loop
+.full:
+  STY TR_LINE_LEN       ; 255 chars stored
+  LDA #$01
+  STA TR_LINE_TRUNC     ; More data in file for this line
+  CLC
+  RTS
 .eol:
   STY TR_LINE_LEN
+  LDA #$00
+  STA TR_LINE_TRUNC
   CLC                   ; Line read OK
   RTS
 .eof:
   STY TR_LINE_LEN
+  LDA #$00
+  STA TR_LINE_TRUNC
   SEC                   ; EOF
+  RTS
+
+; Skip remaining chars on current line (when truncated)
+; Reads from file until newline or EOF
+tr_skip_rest_of_line:
+  LDA TR_LINE_TRUNC
+  BEQ .done
+.loop:
+  LDA TR_FILE_HANDLE
+  JSR read
+  BCS .eof
+  CMP #$0A
+  BNE .loop
+.eof:
+  LDA #$00
+  STA TR_LINE_TRUNC
+.done:
   RTS
 
 
@@ -396,13 +847,34 @@ tr_save_y: .byte 0
 ; fake_write_d - Buffer stderr byte and forward to real port
 ; On entry: A = byte to write
 ; On exit: A, X, Y preserved (matches real write_d contract)
+; Caps buffer at 255 bytes (stops buffering, still forwards to stderr)
 fake_write_d:
   STA $F002               ; Forward to real stderr port
   STX tr_save_x           ; Save X
   LDX TR_STDERR_LEN
+  CPX #$FF                ; Buffer full?
+  BCS .skip               ; Don't buffer, but keep forwarding
   STA TR_STDERR_BUF,X     ; Buffer the byte
-  INC TR_STDERR_LEN       ; Wraps at 256 (truncates long output)
+  INC TR_STDERR_LEN
+.skip:
   LDX tr_save_x           ; Restore X
   RTS
 
 tr_save_x: .byte 0
+
+
+; ============================================================================
+; ERROR HANDLERS
+; ============================================================================
+
+; Fatal error: EXPECT_HEX buffer overflow (>512 bytes)
+tr_err_expect_overflow:
+  SHOW_MESSAGEI tr_err_msg_expect_overflow
+  SET16 TR_NAME_BUF, TABP16
+  JSR show_message
+  SHOW_CHAR '\n'
+  BRK
+  .byte 1
+
+tr_err_msg_expect_overflow:
+  .asciiz "FATAL: EXPECT_HEX buffer overflow (>512 bytes) in test: "
