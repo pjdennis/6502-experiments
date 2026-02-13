@@ -31,7 +31,7 @@ WRAP_QUOT:     .byte     ; Scratch: quotient from CURSOR_COL / SCREEN_COLS
 WRAP_REM:      .byte     ; Scratch: remainder from CURSOR_COL % SCREEN_COLS
 RENDER_WRAP:   .byte     ; Current wrap row offset during rendering
 DIV_INPUT16:   .word     ; Scratch for 16-bit division
-PREV_SINGLE_ROW: .byte   ; $FF = line was single-row before edit, $00 = was multi-row
+PREV_LINE_ROWS: .byte    ; Screen rows the current line occupied before the edit
 
   .code
 
@@ -266,47 +266,83 @@ render_position_cursor:
   STA ANSI_COL
   JMP ansi_move_cursor
 
-; Redraw current line and rows below, plus status bar (for single-line edits)
-; If both before and after the edit the line is a single row, renders just
-; that one row + status bar. Otherwise renders from CURSOR_ROW downward.
+; Redraw current line's wrap rows plus status bar (for single-line edits)
+; If row count unchanged: renders just the line's rows + status bar.
+; If row count changed: renders from line's first row to bottom of screen.
 render_current_line_and_status:
-  ; If line wraps (len >= SCREEN_COLS), upgrade to full repaint
+  ; Compute cursor's wrap row from CURSOR_COL16
+  CP16 CURSOR_COL16, DIV_INPUT16
+  JSR div_mod_screen_cols_16
+  STX WRAP_QUOT
+
+  ; Get current line row count
   JSR get_current_line_len
-  ; A/X = 16-bit length; if X > 0, definitely wraps
-  CPX #0
-  BNE .do_full
-  CMP SCREEN_COLS
-  BCS .do_full
-  ; Currently single-row. Was it also single-row before?
-  LDA PREV_SINGLE_ROW
-  BEQ .render_from_cursor    ; Was multi-row -> render cursor row downward (clears stale rows)
-  ; Both single-row -> render just the one row + status + cursor
-  JSR ansi_cursor_hide
+  JSR line_screen_rows
+  ; A = current row count
+
+  CMP PREV_LINE_ROWS
+  BNE .rows_changed
+
+  ; --- Same row count: render just the line's rows ---
+  TAX                          ; X = row count (loop counter)
   LDA CURSOR_ROW
+  SEC
+  SBC WRAP_QUOT
+  BMI .do_full                 ; first row above visible area
+  STA RENDER_ROW
+
+  STX RENDER_WRAP              ; save loop counter (LDAX16 clobbers X)
+  JSR ansi_cursor_hide
+  LDAX16 FILE_LINE16
+  JSR buf_get_line_ptr
+  LDX RENDER_WRAP              ; restore loop counter
+
+.wrap_loop:
+  LDA RENDER_ROW
   CLC
   ADC #1
+  CMP SCREEN_ROWS
+  BCS .wrap_done               ; at status bar row, stop
   STA ANSI_ROW
   LDA #1
   STA ANSI_COL
+  STX RENDER_WRAP              ; save loop counter
   JSR ansi_move_cursor
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_ptr
   JSR render_line_chars
   JSR ansi_clear_line
+  ; Advance BUF_PTR16 by SCREEN_COLS for next wrap row
+  CLC
+  LDA BUF_PTR16
+  ADC SCREEN_COLS
+  STA BUF_PTR16
+  LDA BUF_PTR16 + 1
+  ADC #0
+  STA BUF_PTR16 + 1
+  INC RENDER_ROW
+  LDX RENDER_WRAP              ; restore loop counter
+  DEX
+  BNE .wrap_loop
+
+.wrap_done:
   JSR render_status_line
   JSR render_position_cursor
   JSR ansi_cursor_show
   JMP io_flush
-.render_from_cursor:
-  JSR ansi_cursor_hide
+
+.rows_changed:
+  ; Different row count: render from first row of line to bottom
   LDA CURSOR_ROW
+  SEC
+  SBC WRAP_QUOT
+  BMI .do_full
   STA RENDER_ROW
+  JSR ansi_cursor_hide
   CP16 FILE_LINE16, RENDER_LINE16
   LDA #0
   STA RENDER_WRAP
   JMP render_from_row
+
 .do_full:
-  ; Line wraps - do full repaint
   JMP render_screen
 
 ; Dispatch: full repaint, current line, or cursor+status only, based on RENDER_FLAG

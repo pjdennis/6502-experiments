@@ -2334,6 +2334,70 @@ class EditorTestRunner:
             expect_content_rows=[(2, {0})]
         )
 
+        # --- Wrapped-line optimization tests (line spans 2+ screen rows) ---
+        # "A"*60 = 2 rows on a 40-col screen (40+20)
+
+        # Insert in wrapped line, same wrap count
+        # Frame 0: init(T), Frame 1: i enters insert(F), Frame 2: X inserts(T)
+        self.run_test_screen(
+            "Render opt: insert in wrapped line, same count",
+            "A" * 60 + "\nSecond\n",
+            b"iX\x1b:q!\r",
+            expect_content_redraws=[True, False, True, False],
+            expect_content_rows=[(2, {0, 1})]
+        )
+
+        # x in wrapped line, same wrap count
+        self.run_test_screen(
+            "Render opt: x in wrapped line, same count",
+            "A" * 60 + "\nSecond\n",
+            b"x:q!\r",
+            expect_content_redraws=[True, True],
+            expect_content_rows=[(1, {0, 1})]
+        )
+
+        # r replaces char in wrapped line
+        # Frame 0: init(T), Frame 1: r pending(F), Frame 2: X replaces(T)
+        self.run_test_screen(
+            "Render opt: r in wrapped line",
+            "A" * 60 + "\nSecond\n",
+            b"rX:q!\r",
+            expect_content_redraws=[True, False, True, False],
+            expect_content_rows=[(2, {0, 1})]
+        )
+
+        # ~ toggles case in wrapped line
+        self.run_test_screen(
+            "Render opt: ~ in wrapped line",
+            "a" * 60 + "\nSecond\n",
+            b"~:q!\r",
+            expect_content_redraws=[True, True],
+            expect_content_rows=[(1, {0, 1})]
+        )
+
+        # D in wrapped line stays wrapped (at col 0, deletes most but 40+ remain? No.
+        # Actually $D from col 0 deletes all to EOL -> single char line.
+        # Use $ to go to end, then come back: move to col 20 (on 2nd wrap row),
+        # D deletes from col 20 to end -> 20 chars left = 1 row.
+        # That changes row count, so it renders from first row downward.
+        # Better test: line is 80 chars (2 full rows), D from col 0 -> empty = 1 row, rows change
+        # For "stays wrapped": line is 80 chars, delete 1 with x -> 79 chars = still 2 rows
+        self.run_test_screen(
+            "Render opt: $D wrapped line stays wrapped",
+            "A" * 60 + "\nSecond\n",
+            b"$D:q!\r",
+            expect_content_rows=[(2, {0, 1})]
+        )
+
+        # x unwraps line (41 chars -> 40 after first x -> 1 row), renders from first row
+        # Row count changes from 2 to 1 on the first x, so render_from_row is used
+        self.run_test_screen(
+            "Render opt: x unwraps line, renders from first row",
+            "A" * 41 + "\nSecond\n",
+            b"x:q!\r",
+            expect_content_rows=[(1, set(range(9)))]
+        )
+
         # Insert newline: full repaint (multiple lines change)
         self.run_test_screen(
             "Render opt: Enter in insert is full repaint",
