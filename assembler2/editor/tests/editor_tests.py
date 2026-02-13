@@ -2460,9 +2460,9 @@ class EditorTestRunner:
             expected_content="AXYZBCD\n"
         )
 
-        # Batch stops at newline (Enter after printable chars)
+        # Batch includes newline (Enter after printable chars)
         self.run_test(
-            "Batch insert stops at newline",
+            "Batch insert includes newline",
             "Hello\n",
             b"iXY\r\x1b:wq\r",
             expected_content="XY\nHello\n"
@@ -2474,6 +2474,119 @@ class EditorTestRunner:
             "AB\n",
             b"liHello World\x1b:wq\r",
             expected_content="AHello WorldB\n"
+        )
+
+        # --- Enter mixing: correctness ---
+
+        # Mixed chars and newlines batched together
+        self.run_test(
+            "Mixed chars and newlines",
+            "Hello\n",
+            b"ia\rb\rc\r\x1b:wq\r",
+            expected_content="a\nb\nc\nHello\n"
+        )
+
+        # Char then only newlines
+        self.run_test(
+            "Char then only newlines",
+            "X\n",
+            b"ia\r\r\r\x1b:wq\r",
+            expected_content="a\n\n\nX\n"
+        )
+
+        # Mixed batch mid-line
+        self.run_test(
+            "Mixed batch mid-line",
+            "XY\n",
+            b"lia\rb\r\x1b:wq\r",
+            expected_content="Xa\nb\nY\n"
+        )
+
+        # --- Enter mixing: render optimization ---
+        # i\ra\ra\ra\r on "Hello\n"
+        # Frame 0: initial render (True)
+        # Frame 1: 'i' enters insert mode (False - cursor+status only)
+        # Frame 2: enter key triggers newline insert (True)
+        # Frame 3: 'a' + remaining \ra\r batched together (True)
+        # Frame 4: ESC exits insert (False - cursor only)
+        self.run_test_screen(
+            "Render opt: mixed enter+chars reduces redraws",
+            "Hello\n",
+            b"i\ra\ra\ra\r\x1b:q!\r",
+            expect_content_redraws=[True, False, True, True, False],
+        )
+
+        # --- Enter mixing: cursor position ---
+
+        # After ia\rb\r\x1b -> cursor at (2, 0) - trailing newline, col 0
+        self.run_test_screen(
+            "Mixed batch cursor: trailing newline",
+            "Hello\n",
+            b"ia\rb\r\x1b:q!\r",
+            expect_cursor=(2, 0),
+        )
+
+        # After ia\rbc\x1b -> cursor at (1, 1) - trailing chars, ESC back 1
+        self.run_test_screen(
+            "Mixed batch cursor: trailing chars",
+            "Hello\n",
+            b"ia\rbc\x1b:q!\r",
+            expect_cursor=(1, 1),
+        )
+
+        # --- Backspace cancellation: correctness ---
+
+        # BS cancels within batch: iabBSc -> "ac"
+        self.run_test(
+            "BS cancels within batch",
+            "Hello\n",
+            b"iab\x08c\x1b:wq\r",
+            expected_content="acHello\n"
+        )
+
+        # BS cancels newline: ia\rBSb -> "ab"
+        self.run_test(
+            "BS cancels newline in batch",
+            "Hello\n",
+            b"ia\r\x08" b"b\x1b:wq\r",
+            expected_content="abHello\n"
+        )
+
+        # BS cancels all -> no-op (second BS pushed back, at col 0 it's no-op)
+        self.run_test(
+            "BS cancels all in batch is no-op",
+            "Hello\n",
+            b"ia\x08\x08\x1b:wq\r",
+            expected_content="Hello\n"
+        )
+
+        # BS then more typing: iabcBSBSde -> "ade"
+        self.run_test(
+            "BS then more typing",
+            "X\n",
+            b"iabc\x08\x08de\x1b:wq\r",
+            expected_content="adeX\n"
+        )
+
+        # BS mixed with Enter: ia\rbBSc\r -> "a\nc\n"
+        self.run_test(
+            "BS mixed with Enter",
+            "Z\n",
+            b"ia\rb\x08c\r\x1b:wq\r",
+            expected_content="a\nc\nZ\n"
+        )
+
+        # --- Backspace cancellation: render optimization ---
+        # iabBSc on "Hello\n"
+        # Frame 0: initial render (True)
+        # Frame 1: 'i' enters insert mode (False - cursor+status only)
+        # Frame 2: batch abBSc -> "ac" (True - single batch)
+        # Frame 3: ESC exits insert (False - cursor only)
+        self.run_test_screen(
+            "Render opt: BS cancellation in single batch",
+            "Hello\n",
+            b"iab\x08c\x1b:q!\r",
+            expect_content_redraws=[True, False, True, False],
         )
 
         # ============================================================
