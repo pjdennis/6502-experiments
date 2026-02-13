@@ -207,7 +207,11 @@ buf_insert_char:
 ; Characters in BATCH_BUF[0..BUF_DELTA-1]
 ; Returns carry set = buffer full, carry clear = success
 buf_insert_chars:
-  JSR buf_shift_right
+  LDA BUF_DELTA
+  STA BUF_LEN16
+  LDA #0
+  STA BUF_LEN16+1
+  JSR buf_shift_right_16
   BCS .batch_full
   ; Copy BUF_DELTA bytes from BATCH_BUF into the gap at BUF_PTR16
   LDY #0
@@ -222,18 +226,6 @@ buf_insert_chars:
 .batch_full:
   SEC
   RTS
-
-; Shift buffer right by BUF_DELTA bytes at BUF_PTR16
-; Input: BUF_PTR16 = insert point, BUF_DELTA = shift amount
-; Returns carry set = buffer full, carry clear = success
-; Updates BUF_END16 on success
-buf_shift_right:
-  LDA BUF_DELTA
-  STA BUF_LEN16
-  LDA #0
-  STA BUF_LEN16+1
-  ; Fall through to the 16 bit version
-
 
 ; Shift buffer right by BUF_LEN16 bytes at BUF_PTR16 (16-bit version)
 ; Input: BUF_PTR16 = insert point, BUF_LEN16 = shift amount (16-bit)
@@ -287,12 +279,6 @@ buf_shift_right_16:
   CLC              ; Success
   RTS
 
-; Delete BUF_DELTA characters starting at BUF_PTR16
-; Input: BUF_PTR16 = position, BUF_DELTA = count
-; Shifts all following bytes left by BUF_DELTA, updates BUF_END16
-buf_delete_chars:
-  JMP buf_shift_left
-
 ; Delete N contiguous lines starting at line A/X
 ; Input: A/X = first line number (low/high), BUF_TEMP16 = count of lines to delete (16-bit)
 ; Handles end-of-file clamping, empty buffer, rebuilds line table once
@@ -342,10 +328,10 @@ buf_delete_lines:
 
   JMP buf_rebuild_lines
 
-; Shift buffer left by BUF_DELTA bytes at BUF_PTR16
-; Input: BUF_PTR16 = delete point, BUF_DELTA = shift amount
+; Delete BUF_DELTA characters at BUF_PTR16 / shift buffer left by BUF_DELTA
+; Input: BUF_PTR16 = position, BUF_DELTA = shift amount
 ; Updates BUF_END16 on completion
-buf_shift_left:
+buf_delete_chars:
   LDA BUF_DELTA
   STA BUF_LEN16
   LDA #0
@@ -481,61 +467,44 @@ buf_adjust_lines_setup:
   SEC              ; Nothing to do
   RTS
 
-; Increment line pointers after current line by BUF_DELTA
-; Input: FILE_LINE16 = current line number, BUF_DELTA = shift amount
-; Clobbers: A, Y
-buf_adjust_lines_inc:
-  JSR buf_adjust_lines_setup
-  BCS .done
-
-.loop:
-  ; Increment the 16-bit line pointer at (BUF_PTR16)
-  LDY #0
-  CLC
-  LDA (BUF_PTR16),Y
-  ADC BUF_DELTA
-  STA (BUF_PTR16),Y
-  BCC .no_carry
-  INY
-  LDA (BUF_PTR16),Y
-  ADC #0
-  STA (BUF_PTR16),Y
-.no_carry:
-
-  ; Advance to next LINE_TBL entry (+2 bytes)
-  CLC
-  ADCI16 BUF_PTR16, $0002, BUF_PTR16
-
-  ; Decrement count
-  DEC16 BUF_LEN16
-
-  ; Check if count reached 0
-  TST16 BUF_LEN16
-  BNE .loop
-
-.done:
-  RTS
-
 ; Decrement line pointers after current line by BUF_DELTA
 ; Input: FILE_LINE16 = current line number, BUF_DELTA = shift amount
 ; Clobbers: A, Y
 buf_adjust_lines_dec:
+  LDA #0
+  SEC
+  SBC BUF_DELTA
+  STA BUF_SRC16
+  LDA #$FF
+  STA BUF_SRC16 + 1
+  JMP buf_adjust_lines_apply
+
+; Increment line pointers after current line by BUF_DELTA
+; Input: FILE_LINE16 = current line number, BUF_DELTA = shift amount
+; Clobbers: A, Y
+buf_adjust_lines_inc:
+  LDA BUF_DELTA
+  STA BUF_SRC16
+  LDA #0
+  STA BUF_SRC16 + 1
+  ; Fall through
+
+; Apply 16-bit signed delta in BUF_SRC16 to line pointers after current line
+buf_adjust_lines_apply:
   JSR buf_adjust_lines_setup
   BCS .done
 
 .loop:
-  ; Decrement the 16-bit line pointer at (BUF_PTR16)
+  ; Add BUF_SRC16 to the 16-bit line pointer at (BUF_PTR16)
   LDY #0
-  SEC
+  CLC
   LDA (BUF_PTR16),Y
-  SBC BUF_DELTA
+  ADC BUF_SRC16
   STA (BUF_PTR16),Y
-  BCS .no_borrow
   INY
   LDA (BUF_PTR16),Y
-  SBC #0
+  ADC BUF_SRC16 + 1
   STA (BUF_PTR16),Y
-.no_borrow:
 
   ; Advance to next LINE_TBL entry (+2 bytes)
   CLC
