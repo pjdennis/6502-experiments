@@ -305,6 +305,11 @@ command_write_file:
   ; Brief pause to show message - wait for next redraw
   RTS
 
+; Show "Buffer full" status message
+show_buffer_full_msg:
+  SET16 str_buffer_full, STR_PTR16
+  JMP show_status_message
+
 ; Show a status message and wait for keypress
 ; STR_PTR16 must be set to the message string before calling
 show_status_message:

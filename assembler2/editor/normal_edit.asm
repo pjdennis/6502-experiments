@@ -347,8 +347,7 @@ cc_have_count:
   JMP show_yank_overflow
 
 .cc_buf_full:
-  SET16 str_buffer_full, STR_PTR16
-  JSR show_status_message
+  JSR show_buffer_full_msg
   JMP clear_count
 
 ; --- Indent (>>) ---

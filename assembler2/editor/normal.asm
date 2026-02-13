@@ -398,8 +398,7 @@ normal_open_below:
   STA MODIFIED
   JMP enter_insert_mode
 .open_below_full:
-  SET16 str_buffer_full, STR_PTR16
-  JSR show_status_message
+  JSR show_buffer_full_msg
   JMP clear_count
 
 normal_open_above:
@@ -425,7 +424,6 @@ normal_open_above:
   STA MODIFIED
   JMP enter_insert_mode
 .open_above_full:
-  SET16 str_buffer_full, STR_PTR16
-  JSR show_status_message
+  JSR show_buffer_full_msg
   JMP clear_count
 

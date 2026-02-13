@@ -106,9 +106,7 @@ insert_char:
   STA MODIFIED
   RTS
 .insert_char_full:
-  SET16 str_buffer_full, STR_PTR16
-  JSR show_status_message
-  RTS
+  JMP show_buffer_full_msg
 
 ; Insert newline(s) at cursor (split line, batch pending Enter keys)
 insert_newline:
@@ -158,9 +156,7 @@ insert_newline:
   STA MODIFIED
   RTS
 .insert_newline_full:
-  SET16 str_buffer_full, STR_PTR16
-  JSR show_status_message
-  RTS
+  JMP show_buffer_full_msg
 
 ; Handle backspace in insert mode
 insert_backspace:
