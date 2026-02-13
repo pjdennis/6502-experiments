@@ -48,6 +48,8 @@ store_hash_value
 
 
 select_instruction_hash_table
+  LDA# $00
+  STAZ IS_LOCAL_LABEL       ; Clear local label flag for instruction lookup
   LDA# <IHASHTAB
   STAZ HTPL
   LDA# >IHASHTAB

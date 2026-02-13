@@ -15,6 +15,8 @@ PL        DATA $00     ; 2 byte pointer
 PH        DATA $00     ; "
 P2L       DATA $00     ; 2 byte pointer
 P2H       DATA $00     ; "
+CURR_GLOBAL_HEAP_L DATA $00 ; Required by hash_table.asm (unused here)
+CURR_GLOBAL_HEAP_H DATA $00 ; "
 
 
   .code

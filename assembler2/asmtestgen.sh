@@ -61,16 +61,11 @@ echo "--- Version 14 ---"
   ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
   ../emulator.out ../12/out/asm.out asm.asm out/asm.out)
 run_version_tests 14
-echo "--- Version 15 ---"
-(cd 15 && mkdir -p out &&
+echo "--- Version 16 ---"
+(cd 16 && mkdir -p out &&
   ../emulator.out ../14/out/asm.out instgen.asm out/instgen.out &&
   ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
   ../emulator.out ../14/out/asm.out asm.asm out/asm.out)
-echo "--- Version 16 ---"
-(cd 16 && mkdir -p out &&
-  ../emulator.out ../15/out/asm.out instgen.asm out/instgen.out &&
-  ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
-  ../emulator.out ../15/out/asm.out asm.asm out/asm.out)
 run_version_tests 16
 echo "--- Test asm16 ---"
 ./emulator.out 16/out/asm.out test16.asm out/test16.out
