@@ -10,6 +10,8 @@ avoid assembler directory name in file_stack_tests.asm
 
 why is it using hex constants e.g. $0002 e.g. for "Advance to next LINE_TBL entry"
 
+move_left_x and move_right_x - change from an addition loop to use math
+
 Add debug assembler option to print progress messages
 Add conditional compiled option for:
   -labels without the : syntax
