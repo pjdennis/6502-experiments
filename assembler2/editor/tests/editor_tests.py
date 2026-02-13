@@ -2961,6 +2961,68 @@ class EditorTestRunner:
             expect_content_redraws=[True, False]
         )
 
+        self._group("Batch page down/up:", leading_blank=True)
+
+        # Render optimization: batch Ctrl-F reduces redraws
+        # Without batching: 3 Ctrl-F's -> frames [init, pgdn, pgdn, pgdn] = 4
+        # With batching: frames [init, pgdn+batch] = 2 frames
+        # Then j triggers a cursor-only frame (False) proving batch happened
+        self.run_test_screen(
+            "Render opt: batch Ctrl-F reduces redraws",
+            make_lines(30),
+            CTRL_F * 3 + b"j:q!\r",
+            expect_content_redraws=[True, True, False],
+        )
+
+        # Render optimization: batch Ctrl-B reduces redraws
+        # G scrolls to end (full repaint), then 3 batched Ctrl-B's
+        # produce a single repaint, then j is cursor-only
+        self.run_test_screen(
+            "Render opt: batch Ctrl-B reduces redraws",
+            make_lines(30),
+            b"G" + CTRL_B * 3 + b"j:q!\r",
+            expect_content_redraws=[True, True, True, False],
+        )
+
+        # Batch Ctrl-F correctness: 3 pages down on 30-line file
+        # page_size=9, lines 0->9->18->27, VIEW_TOP clamped to 21
+        self.run_test_screen(
+            "Batch Ctrl-F moves correct number of pages",
+            make_lines(30),
+            CTRL_F * 3 + b":q!\r",
+            expect_cursor=(6, 0),
+            expect_lines=[(i, f"Line {i+22}") for i in range(9)]
+        )
+
+        # Batch Ctrl-B correctness: go to end then 2 pages up
+        # G puts cursor on line 29, VIEW_TOP=21.
+        # 2 page-ups: line 29->20->11, VIEW_TOP 21->12->3
+        self.run_test_screen(
+            "Batch Ctrl-B moves correct number of pages",
+            make_lines(30),
+            b"G" + CTRL_B * 2 + b":q!\r",
+            expect_cursor=(8, 0),
+            expect_lines=[(i, f"Line {i+4}") for i in range(9)]
+        )
+
+        # Batch PgDn key: same result as batch Ctrl-F
+        PGDN = b"\x1b[6~"
+        self.run_test_screen(
+            "Render opt: batch PgDn reduces redraws",
+            make_lines(30),
+            PGDN * 3 + b"j:q!\r",
+            expect_content_redraws=[True, True, False],
+        )
+
+        # Count prefix + batch Ctrl-F: 2Ctrl-F + 1 pending = 3 pages
+        self.run_test_screen(
+            "Count prefix + batch Ctrl-F combines",
+            make_lines(30),
+            b"2" + CTRL_F * 2 + b":q!\r",
+            expect_cursor=(6, 0),
+            expect_lines=[(i, f"Line {i+22}") for i in range(9)]
+        )
+
         self._group("Insert mode navigation keys:", leading_blank=True)
 
         HOME = b"\x1b[H"

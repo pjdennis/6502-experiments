@@ -35,12 +35,16 @@ normal_move_up:
   JMP clear_count
 
 normal_page_down:
+  JSR get_batched_count
+  STX BUF_DELTA            ; BUF_DELTA = loop counter
+
   ; page_size = SCREEN_ROWS - 1 (content rows excluding status bar)
   LDA SCREEN_ROWS
   SEC
   SBC #1
   STA BUF_TEMP       ; BUF_TEMP = page_size
 
+.page_loop:
   ; target_line = FILE_LINE16 + page_size, clamped to LINE_COUNT16 - 1
   CLC
   LDA FILE_LINE16
@@ -53,7 +57,6 @@ normal_page_down:
   ; Clamp target to LINE_COUNT16 - 1
   CMP16 BUF_PTR16, LINE_COUNT16
   BCC .target_ok
-.clamp_target:
   SEC
   SBCI16 LINE_COUNT16, 1, BUF_PTR16
 .target_ok:
@@ -80,20 +83,23 @@ normal_page_down:
   ; If VIEW_TOP16 > max, clamp it
   CPY VIEW_TOP16 + 1
   BCC .clamp_view
-  BNE .set_row
+  BNE .next_iter
   CPX VIEW_TOP16
-  BCS .set_row
+  BCS .next_iter
 .clamp_view:
   STX VIEW_TOP16
   STY VIEW_TOP16 + 1
-  JMP .set_row
+  JMP .next_iter
 
 .view_zero:
   LDA #0
   STA_LH16 VIEW_TOP16
 
-.set_row:
+.next_iter:
   CP16 BUF_PTR16, FILE_LINE16
+  DEC BUF_DELTA
+  BNE .page_loop
+
   LDA #0
   STA_LH16 CURSOR_COL16
   STA VIEW_TOP_WRAP
@@ -101,12 +107,16 @@ normal_page_down:
   JMP clear_count
 
 normal_page_up:
+  JSR get_batched_count
+  STX BUF_DELTA            ; BUF_DELTA = loop counter
+
   ; page_size = SCREEN_ROWS - 1
   LDA SCREEN_ROWS
   SEC
   SBC #1
   STA BUF_TEMP       ; BUF_TEMP = page_size
 
+.page_loop:
   ; target_line = FILE_LINE16 - page_size, clamped to 0
   SEC
   LDA FILE_LINE16
@@ -131,7 +141,7 @@ normal_page_up:
   ; VIEW_TOP16 < page_size: set VIEW_TOP16 = 0
   LDA #0
   STA_LH16 VIEW_TOP16
-  JMP .set_row
+  JMP .next_iter
 
 .can_sub:
   SEC
@@ -142,8 +152,11 @@ normal_page_up:
   SBC #0
   STA VIEW_TOP16 + 1
 
-.set_row:
+.next_iter:
   CP16 BUF_PTR16, FILE_LINE16
+  DEC BUF_DELTA
+  BNE .page_loop
+
   LDA #0
   STA_LH16 CURSOR_COL16
   STA VIEW_TOP_WRAP
