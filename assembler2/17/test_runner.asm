@@ -156,7 +156,7 @@ tr_finalize_test:
   BEQ .check_skip
   JSR tr_print_test_name
   SHOW_MESSAGEI tr_msg_limit
-  INC16 TR_SKIP_COUNT16
+  INC16 TR_FAIL_COUNT16
   RTS
 .check_skip:
   LDA TR_SKIP_FLAG
