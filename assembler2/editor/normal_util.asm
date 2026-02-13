@@ -161,8 +161,6 @@ clamp_cursor_col:
 ; Sets RENDER_FLAG=0; ensure_cursor_visible upgrades to $FF if scroll needed
 ; Clobbers: A, X, BUF_TEMP, BUF_PTR16
 move_down_x:
-  LDA #0
-  STA RENDER_FLAG
 .loop:
   STX BUF_TEMP
   CLC
@@ -181,8 +179,6 @@ move_down_x:
 ; Sets RENDER_FLAG=0; ensure_cursor_visible upgrades to $FF if scroll needed
 ; Clobbers: A, X, BUF_TEMP
 move_up_x:
-  LDA #0
-  STA RENDER_FLAG
 .loop:
   STX BUF_TEMP
   TST16 FILE_LINE16
@@ -254,8 +250,6 @@ check_combo_first_key:
 .found:
   LDA BUF_TEMP
   STA LAST_KEY
-  LDA #0
-  STA RENDER_FLAG
   CLC
   RTS
 .no_match:
@@ -280,8 +274,6 @@ get_count_clamp_lines:
 
 ; Enter insert mode with render flag=1
 enter_insert_mode_render:
-  LDA #1
-  STA RENDER_FLAG
   ; fall through
 
 ; Enter insert mode and clear count
@@ -356,8 +348,6 @@ count_accumulate_digit:
 ; Output: X = total count (count + pending), capped at 255
 ; Clobbers: A
 get_batched_count:
-  LDA #0
-  STA RENDER_FLAG
   JSR get_count
   LDX BUF_TEMP16         ; X = count (low byte, capped at 255)
   STX BUF_DELTA

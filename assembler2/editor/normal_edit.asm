@@ -81,8 +81,6 @@ char_paste_below:
   SBCI16 BUF_LEN16, 1, CURSOR_COL16
 
 .cursor_done:
-  LDA #1
-  STA RENDER_FLAG
   LDA #$FF
   STA MODIFIED
 .done:
@@ -108,8 +106,6 @@ char_paste_above:
   CLC
   ADC16 CURSOR_COL16, BUF_LEN16, CURSOR_COL16
   DEC16 CURSOR_COL16
-  LDA #1
-  STA RENDER_FLAG
   LDA #$FF
   STA MODIFIED
 .done:
@@ -244,8 +240,6 @@ normal_substitute_char:
 
   LDA #$FF
   STA MODIFIED
-  LDA #1
-  STA RENDER_FLAG
 
 .sub_insert:
   JMP enter_insert_mode
@@ -258,8 +252,6 @@ normal_change_to_eol:
   SEC
   SBC16 LINE_LEN16, CURSOR_COL16, BUF_LEN16
   JSR yank_delete_at_cursor
-  LDA #1
-  STA RENDER_FLAG
 
 .c_insert:
   JMP enter_insert_mode
@@ -376,6 +368,7 @@ do_indent:
   CLC
   ADCI16 CURSOR_COL16, INDENT_WIDTH, CURSOR_COL16
   LDA #$FF
+  STA RENDER_FLAG        ; Multi-line edit; BUF_END16 change only triggers current-line
   STA MODIFIED
   JMP clear_count
 
@@ -423,6 +416,7 @@ do_unindent:
 .unindent_col_ok:
   JSR clamp_cursor_col
   LDA #$FF
+  STA RENDER_FLAG        ; Multi-line edit; BUF_END16 change only triggers current-line
   STA MODIFIED
   JMP clear_count
 
@@ -478,8 +472,6 @@ do_dw:
 
 .dw_finish:
   JSR clamp_cursor_col
-  LDA #1
-  STA RENDER_FLAG
 .dw_done:
   JMP clear_count
 
@@ -540,8 +532,6 @@ do_db:
 
 .db_finish:
   JSR clamp_cursor_col
-  LDA #1
-  STA RENDER_FLAG
 .db_done:
   JMP clear_count
 

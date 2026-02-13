@@ -543,8 +543,6 @@ ensure_cursor_visible:
   STA VIEW_TOP_WRAP
   LDA #0
   STA CURSOR_ROW
-  LDA #$FF
-  STA RENDER_FLAG
   RTS
 
 .not_above:
@@ -618,8 +616,6 @@ ensure_cursor_visible:
 .need_scroll_down:
   ; Cursor is below visible area
   ; Walk backward from FILE_LINE16 to find correct VIEW_TOP16
-  LDA #$FF
-  STA RENDER_FLAG
 
   LDA SCREEN_ROWS
   SEC

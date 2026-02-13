@@ -151,16 +151,14 @@ editor_main:
 ; Main loop
 ; ============================================================================
 main_loop:
-  ; Default to full repaint; handlers clear for cursor-only updates
-  LDA #$FF
+  ; Default: no render. Snapshot detection infers render level.
+  LDA #0
   STA RENDER_FLAG
 
   ; If entering command mode, handle it specially (it does own I/O)
   LDA MODE
   CMP #MODE_COMMAND
   BNE .not_command_entry
-  LDA #0
-  STA RENDER_FLAG
   JSR render_snapshot
   JSR command_handle
   JMP .after_key

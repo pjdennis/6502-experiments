@@ -488,7 +488,6 @@ command_parse_range:
   SBCI16 LINE_COUNT16, $0001, FILE_LINE16
 .range_del_ok:
   LDA #$FF
-  STA RENDER_FLAG
   STA MODIFIED
   JSR clamp_cursor_col
 

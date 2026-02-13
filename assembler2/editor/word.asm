@@ -546,6 +546,4 @@ normal_first_nonblank:
   STA CURSOR_COL16 + 1
 
 .done:
-  LDA #0
-  STA RENDER_FLAG
   JMP clear_count

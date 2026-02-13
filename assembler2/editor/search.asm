@@ -92,8 +92,6 @@ search_input_handle:
   JMP .read_loop
 
 .cancel:
-  LDA #0
-  STA RENDER_FLAG           ; No content changed
   RTS
 
 .execute:
@@ -219,7 +217,6 @@ search_move_to_match:
   STA CURSOR_COL16
   LDA #0
   STA CURSOR_COL16 + 1
-  STA RENDER_FLAG
   JMP clamp_cursor_col
 
 ; Search for pattern in line SEARCH_LINE16
@@ -296,8 +293,6 @@ search_show_not_found:
 .print_done:
   JSR io_flush
   JSR get_key                  ; Wait for keypress
-  LDA #0
-  STA RENDER_FLAG              ; No content changed
   RTS
 
 ; String constants

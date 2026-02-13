@@ -35,7 +35,6 @@ normal_move_up:
   JMP clear_count
 
 normal_page_down:
-  CP16 VIEW_TOP16, BUF_DST16  ; Save original VIEW_TOP16
   ; page_size = SCREEN_ROWS - 1 (content rows excluding status bar)
   LDA SCREEN_ROWS
   SEC
@@ -94,11 +93,6 @@ normal_page_down:
   STA_LH16 VIEW_TOP16
 
 .set_row:
-  CMP16 BUF_DST16, VIEW_TOP16  ; Did view actually scroll?
-  BNE .did_scroll
-  LDA #0
-  STA RENDER_FLAG               ; No scroll -> cursor-only
-.did_scroll:
   CP16 BUF_PTR16, FILE_LINE16
   LDA #0
   STA_LH16 CURSOR_COL16
@@ -107,7 +101,6 @@ normal_page_down:
   JMP clear_count
 
 normal_page_up:
-  CP16 VIEW_TOP16, BUF_DST16  ; Save original VIEW_TOP16
   ; page_size = SCREEN_ROWS - 1
   LDA SCREEN_ROWS
   SEC
@@ -150,11 +143,6 @@ normal_page_up:
   STA VIEW_TOP16 + 1
 
 .set_row:
-  CMP16 BUF_DST16, VIEW_TOP16  ; Did view actually scroll?
-  BNE .did_scroll
-  LDA #0
-  STA RENDER_FLAG               ; No scroll -> cursor-only
-.did_scroll:
   CP16 BUF_PTR16, FILE_LINE16
   LDA #0
   STA_LH16 CURSOR_COL16
@@ -165,7 +153,6 @@ normal_page_up:
 normal_line_start:
   LDA #0
   STA_LH16 CURSOR_COL16
-  STA RENDER_FLAG
   JMP clear_count
 
 normal_line_end:
@@ -180,8 +167,6 @@ normal_line_end:
   LDA #0
   STA_LH16 CURSOR_COL16
 .ecv:
-  LDA #0
-  STA RENDER_FLAG
   JMP clear_count
 
 normal_goto_last:
@@ -207,7 +192,6 @@ normal_goto_last:
 
 .goto_set:
   LDA #0
-  STA RENDER_FLAG
   STA_LH16 CURSOR_COL16
   STA VIEW_TOP_WRAP
   JSR clamp_cursor_col
@@ -215,13 +199,6 @@ normal_goto_last:
 
 ; gg: go to top of file
 do_gg:
-  LDA VIEW_TOP16
-  ORA VIEW_TOP16 + 1
-  ORA VIEW_TOP_WRAP
-  BNE .do_it             ; View will change, keep $FF
-  LDA #0
-  STA RENDER_FLAG        ; Already at top, cursor-only
-.do_it:
   LDA #0
   STA_LH16 FILE_LINE16
   STA_LH16 VIEW_TOP16
@@ -250,8 +227,6 @@ do_yy:
   LDAX16 FILE_LINE16
   JSR yank_add_lines
   BCS .overflow
-  LDA #0
-  STA RENDER_FLAG            ; Yank doesn't change display
   JMP clear_count            ; Done - don't set MODIFIED
 
 .overflow:
@@ -288,8 +263,6 @@ search_find_dir:
   JMP clear_count
 
 search_find_none:
-  LDA #0
-  STA RENDER_FLAG
   JMP clear_count
 
 ; --- Marks ---
@@ -298,8 +271,6 @@ search_find_none:
 do_mark_set:
   LDA BUF_TEMP
   JSR mark_set
-  LDA #0
-  STA RENDER_FLAG
   JMP clear_count
 
 ; Execute mark goto with register letter in BUF_TEMP
@@ -309,7 +280,6 @@ do_mark_goto:
   BCS .mark_not_set
   STAX16 FILE_LINE16
   LDA #0
-  STA RENDER_FLAG
   STA_LH16 CURSOR_COL16
   JSR clamp_cursor_col
   JMP clear_count
@@ -321,8 +291,6 @@ do_mark_goto:
 ; --- Mode switch ---
 
 normal_enter_command:
-  LDA #0
-  STA RENDER_FLAG
   LDA #MODE_COMMAND
   STA MODE
   JMP clear_count

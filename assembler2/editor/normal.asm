@@ -24,8 +24,6 @@ normal_handle_key:
   ORA LAST_KEY
   BEQ .not_esc_count      ; No active count or pending key, let ESC fall through
   JSR clear_count
-  LDA #0
-  STA RENDER_FLAG
   RTS
 .not_esc_count:
 
@@ -41,8 +39,6 @@ normal_handle_key:
   BCS .count_done_dispatch
   ; Accumulate digit into COUNT16
   JSR count_accumulate_digit
-  LDA #0
-  STA RENDER_FLAG
   RTS
 
 .count_done_dispatch:
@@ -69,8 +65,6 @@ normal_handle_key:
   STA COUNT16 + 1
   LDA BUF_TEMP
   JSR count_accumulate_digit
-  LDA #0
-  STA RENDER_FLAG
   RTS
 
 .dispatch_key:
@@ -100,8 +94,6 @@ normal_handle_key:
   BCC .done
   ; Unknown key - clear count and last key, cursor-only update
   JSR clear_count
-  LDA #0
-  STA RENDER_FLAG
 .done:
   RTS
 
@@ -115,8 +107,6 @@ pending_key_dispatch:
   BCC .done
   ; No match - reset
   JSR clear_count
-  LDA #0
-  STA RENDER_FLAG
 .done:
   RTS
 
@@ -274,8 +264,6 @@ normal_delete_char:
   JSR buf_adjust_lines_dec
 
   JSR clamp_cursor_col
-  LDA #1
-  STA RENDER_FLAG
   LDA #$FF
   STA MODIFIED
 .done:
@@ -290,8 +278,6 @@ normal_delete_to_eol:
   SBC16 LINE_LEN16, CURSOR_COL16, BUF_LEN16
   JSR yank_delete_at_cursor
   JSR clamp_cursor_col
-  LDA #1
-  STA RENDER_FLAG
 .done:
   JMP clear_count
 
@@ -324,13 +310,9 @@ do_dd:
   JMP show_yank_overflow
 
 normal_enter_insert:
-  LDA #0
-  STA RENDER_FLAG
   JMP enter_insert_mode
 
 normal_enter_insert_after:
-  LDA #0
-  STA RENDER_FLAG
   JSR get_current_line_len
   STAX16 LINE_LEN16
   TST16 LINE_LEN16
@@ -343,8 +325,6 @@ normal_enter_insert_after:
   JMP enter_insert_mode
 
 normal_enter_insert_eol:
-  LDA #0
-  STA RENDER_FLAG
   JSR get_current_line_len
   STAX16 CURSOR_COL16
   JMP enter_insert_mode

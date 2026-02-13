@@ -56,8 +56,6 @@ insert_exit:
   BEQ .done
   DEC16 CURSOR_COL16
 .done:
-  LDA #0
-  STA RENDER_FLAG
   RTS
 
 ; Insert a printable character at cursor position
@@ -99,8 +97,6 @@ insert_char:
   CLC
   ADCA16 CURSOR_COL16, CURSOR_COL16
 
-  LDA #1
-  STA RENDER_FLAG
   LDA #$FF
   STA MODIFIED
   RTS
@@ -202,8 +198,6 @@ insert_backspace:
   JSR buf_delete_chars
   JSR buf_adjust_lines_dec
 
-  LDA #1
-  STA RENDER_FLAG
   LDA #$FF
   STA MODIFIED
   RTS
@@ -407,8 +401,6 @@ insert_delete:
   JSR buf_delete_chars
   JSR buf_adjust_lines_dec
 
-  LDA #1
-  STA RENDER_FLAG
   LDA #$FF
   STA MODIFIED
   RTS
@@ -450,8 +442,6 @@ insert_move_left:
   STA BUF_TEMP
   JSR count_pending_key  ; X = pending matching keys
   INX                     ; +1 for current key
-  LDA #0
-  STA RENDER_FLAG
   JSR move_left_x
   RTS
 
@@ -460,8 +450,6 @@ insert_move_right:
   STA BUF_TEMP
   JSR count_pending_key  ; X = pending matching keys
   INX                     ; +1 for current key
-  LDA #0
-  STA RENDER_FLAG
   ; Hoist line length calculation (line doesn't change)
   STX BUF_DELTA          ; Save count
   JSR get_current_line_len
@@ -471,8 +459,6 @@ insert_move_right:
   RTS
 
 insert_home:
-  LDA #0
-  STA RENDER_FLAG
   TST16 CURSOR_COL16
   BEQ .done            ; Already at column 0
   LDA #0
@@ -481,8 +467,6 @@ insert_home:
   RTS
 
 insert_end:
-  LDA #0
-  STA RENDER_FLAG
   JSR get_current_line_len
   STAX16 LINE_LEN16
   CMP16 LINE_LEN16, CURSOR_COL16
@@ -497,8 +481,6 @@ insert_word_forward:
   STA BUF_TEMP
   JSR count_pending_key   ; X = pending matching keys
   INX                     ; +1 for current key
-  LDA #0
-  STA RENDER_FLAG
   JSR word_forward_x
   JSR clamp_cursor_col_insert
   RTS
@@ -508,8 +490,6 @@ insert_word_backward:
   STA BUF_TEMP
   JSR count_pending_key   ; X = pending matching keys
   INX                     ; +1 for current key
-  LDA #0
-  STA RENDER_FLAG
   JSR word_backward_x
   JSR clamp_cursor_col_insert
   RTS
