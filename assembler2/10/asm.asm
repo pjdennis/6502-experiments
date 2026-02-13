@@ -15,9 +15,8 @@ open      = $F012
 close     = $F015
 read      = $F018
 
-LHASHTABL  = $4000      ; Label hash table (low and high)
-LHASHTABH  = $4080      ; "
-HEAP       = $4100      ; Data heap
+LHASHTABL  = $1F00      ; Label hash table (low and high)
+LHASHTABH  = $1F80      ; "
 FILE_STACK = $F000      ; File stack will grow down from 1 below here
 
 TEMP      = $00        ; 1 byte
@@ -96,9 +95,13 @@ err_unknown_directive
 err_filename_expected
   BRK $0C "Filename expected" $00
 
+err_no_file
+  BRK $0D "No file open" $00
+
 
 read_char
   LDAZ CURR_FILE
+  BEQ rc_no_file
   JSR read
   BCS rc_at_end
   RTS
@@ -106,9 +109,11 @@ rc_at_end
   JSR file_stack_empty
   BEQ rc_done
   JSR pop_file_stack
-  JMP read_char ; recursive tail call
+  JMP read_char          ; Recursive tail call
 rc_done
   RTS
+rc_no_file
+  JMP err_no_file
 
 
 init_file_stack
@@ -272,6 +277,7 @@ iht_loop
   STAZ(),Y HTLPL
   STAZ(),Y HTHPL
   INY
+  CPY# $80
   BNE iht_loop
   RTS
 
@@ -1339,6 +1345,9 @@ to_decimal_shift_loop
   BNE to_decimal_divide
 
   RTS
+
+
+HEAP                  ; Heap goes after the program code
 
 
 * = $FFFC

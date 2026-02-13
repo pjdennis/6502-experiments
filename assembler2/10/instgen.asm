@@ -65,9 +65,12 @@ MNTAB
   DATA "CMPZ"     $00 $04 $C5
   DATA "CMP#"     $00 $04 $C9
   DATA "CMP,Y"    $00 $00 $D9
+  DATA "CPXZ"     $00 $04 $E4
+  DATA "CPYZ"     $00 $04 $C4
   DATA "CPY#"     $00 $04 $C0
   DATA "DECZ"     $00 $04 $C6
   DATA "DEX"      $00 $00 $CA
+  DATA "DEY"      $00 $00 $88
   DATA "EORZ"     $00 $04 $45
   DATA "INCZ"     $00 $04 $E6
   DATA "INX"      $00 $00 $E8
@@ -84,7 +87,9 @@ MNTAB
   DATA "LDAZ"     $00 $04 $A5
   DATA "LDAZ,X"   $00 $04 $B5
   DATA "LDX#"     $00 $04 $A2
+  DATA "LDXZ"     $00 $04 $A6
   DATA "LDY#"     $00 $04 $A0
+  DATA "LDYZ"     $00 $04 $A4
   DATA "LSRA"     $00 $00 $4A
   DATA "ORAZ"     $00 $04 $05
   DATA "PHA"      $00 $00 $48
@@ -100,6 +105,8 @@ MNTAB
   DATA "STA,Y"    $00 $00 $99
   DATA "STAZ"     $00 $04 $85
   DATA "STAZ,X"   $00 $04 $95
+  DATA "STXZ"     $00 $04 $86
+  DATA "STYZ"     $00 $04 $84
   DATA "TAX"      $00 $00 $AA
   DATA "TAY"      $00 $00 $A8
   DATA "TSX"      $00 $00 $BA

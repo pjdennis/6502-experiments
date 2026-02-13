@@ -49,16 +49,11 @@ echo "--- Version 10 ---"
   cat out/inst.asm.out asm.asm > out/asmc.asm.out &&
   ../emulator.out ../08/out/asmc.out --load 2000 --input out/asmc.asm.out --output out/asmc.out)
 run_version_tests 10
-echo "--- Version 11 ---"
-(cd 11 && mkdir -p out &&
+echo "--- Version 12 ---"
+(cd 12 && mkdir -p out &&
   ../emulator.out ../10/out/asmc.out --input instgen.asm --output out/instgen.out &&
   ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
   ../emulator.out ../10/out/asmc.out --input asm.asm --output out/asm.out)
-echo "--- Version 12 ---"
-(cd 12 && mkdir -p out &&
-  ../emulator.out ../11/out/asm.out --input instgen.asm --output out/instgen.out &&
-  ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
-  ../emulator.out ../11/out/asm.out --input asm.asm --output out/asm.out)
 run_version_tests 12
 echo "--- Version 13 ---"
 (cd 13 && mkdir -p out &&
