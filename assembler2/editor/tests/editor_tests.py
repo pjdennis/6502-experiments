@@ -5490,6 +5490,41 @@ class EditorTestRunner:
             expected_content="hello\n"
         )
 
+        self.run_test(
+            "<< with mixed indent levels",
+            "  aaa\n bbb\nccc\n",
+            b"3<<:wq\r",
+            expected_content="aaa\nbbb\nccc\n"
+        )
+
+        self.run_test(
+            "<< preserves lines after range",
+            "  aaa\n  bbb\n  ccc\n",
+            b"2<<:wq\r",
+            expected_content="aaa\nbbb\n  ccc\n"
+        )
+
+        self.run_test(
+            "<< with empty lines in range",
+            "  aaa\n\n  bbb\n",
+            b"3<<:wq\r",
+            expected_content="aaa\n\nbbb\n"
+        )
+
+        self.run_test_screen(
+            "<< on unindented line does not move cursor",
+            "hello\n",
+            b"ll<<:q!\r",
+            expect_cursor=(0, 2),
+        )
+
+        self.run_test_screen(
+            "<< adjusts cursor by actual spaces removed",
+            " hello\n",
+            b"lll<<:q!\r",
+            expect_cursor=(0, 2),
+        )
+
         self._group("First non-blank (^):", leading_blank=True)
 
         self.run_test_screen(

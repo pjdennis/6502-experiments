@@ -441,46 +441,97 @@ do_indent:
 ; --- Unindent (<<) ---
 do_unindent:
   JSR get_count_clamp_lines
+  LDA #0
+  STA NORMAL_TEMP              ; Cursor line spaces removed
+  STA COUNT16                  ; total_shrink = 0
+  STA COUNT16+1
+
+  ; Set write_ptr = first line start
+  LDAX16 FILE_LINE16
+  JSR buf_get_line_ptr
+  CP16 BUF_PTR16, JUMP_TARGET16  ; JUMP_TARGET16 = write_ptr
 
 .unindent_loop:
   TST16 BUF_TEMP16
   BEQ .unindent_done_loop
 
+  ; Get line start from LINE_TBL (still valid, no shifts yet)
   LDAX16 LINE_LEN16
-  JSR buf_get_line_ptr
+  JSR buf_get_line_ptr         ; BUF_PTR16 = line start
 
-  ; Count leading spaces (up to INDENT_WIDTH)
+  ; Count leading spaces (0, 1, or 2)
   LDY #0
   LDA (BUF_PTR16),Y
   CMP #' '
-  BNE .unindent_no_remove
+  BNE .unindent_zero_sp
   INY
   LDA (BUF_PTR16),Y
   CMP #' '
-  BNE .unindent_one
+  BNE .unindent_one_sp
   LDA #2
-  JMP .unindent_do_remove
-.unindent_one:
+  JMP .unindent_have_sp
+.unindent_one_sp:
   LDA #1
-.unindent_do_remove:
-  STA BUF_DELTA
-  JSR buf_delete_chars
-  JSR buf_rebuild_lines
+  JMP .unindent_have_sp
+.unindent_zero_sp:
+  LDA #0
 
-.unindent_no_remove:
+.unindent_have_sp:
+  ; A = spaces to remove (0, 1, or 2)
+  STA BUF_DELTA
+
+  ; If cursor line, save actual removal in NORMAL_TEMP
+  CMP16 LINE_LEN16, FILE_LINE16
+  BNE .unindent_not_cursor
+  LDA BUF_DELTA
+  STA NORMAL_TEMP
+.unindent_not_cursor:
+
+  ; Add to total_shrink
+  LDA BUF_DELTA
+  CLC
+  ADCA16 COUNT16, COUNT16
+
+  ; Advance BUF_PTR16 past leading spaces
+  LDA BUF_DELTA
+  CLC
+  ADCA16 BUF_PTR16, BUF_PTR16
+
+  ; Copy remaining line (including newline) to write_ptr
+  JSR copy_line_to_nl
+
   INC16 LINE_LEN16
   DEC16 BUF_TEMP16
   JMP .unindent_loop
 
 .unindent_done_loop:
-  ; Adjust cursor col (subtract INDENT_WIDTH, clamp to 0)
+  ; If nothing was removed, skip shift
+  TST16 COUNT16
+  BEQ .unindent_no_cursor_adj
+
+  ; Single shift left: close the gap after processed range
+  CP16 JUMP_TARGET16, BUF_PTR16
+  CP16 COUNT16, BUF_LEN16
+  JSR buf_shift_left_16
+  JSR buf_rebuild_lines
+
+  ; Cursor adjustment: subtract actual spaces removed, clamp to 0
+  LDA NORMAL_TEMP
+  BEQ .unindent_no_cursor_adj
+  LDA CURSOR_COL16
   SEC
-  SBCI16 CURSOR_COL16, INDENT_WIDTH, CURSOR_COL16
+  SBC NORMAL_TEMP
+  STA CURSOR_COL16
+  LDA CURSOR_COL16+1
+  SBC #0
+  STA CURSOR_COL16+1
   BCS .unindent_col_ok
   LDA #0
   STA_LH16 CURSOR_COL16
 .unindent_col_ok:
   JSR clamp_cursor_col
+
+.unindent_no_cursor_adj:
   LDA #$FF
   STA RENDER_FLAG        ; Multi-line edit; BUF_END16 change only triggers current-line
   STA MODIFIED
