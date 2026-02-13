@@ -18,13 +18,7 @@ normal_move_left:
 .go_left:
   LDA #0
   STA RENDER_FLAG
-.left_loop:
-  TST16 CURSOR_COL16
-  BEQ .left_done
-  DEC16 CURSOR_COL16
-  DEX
-  BNE .left_loop
-.left_done:
+  JSR move_left_x
   JSR ensure_cursor_visible
   JMP clear_count
 
@@ -53,13 +47,7 @@ normal_move_right:
   BEQ .right_done        ; Empty line
   SEC
   SBCI16 LINE_LEN16, 1, LINE_LEN16  ; LINE_LEN16 = len - 1
-.right_loop:
-  CMP16 LINE_LEN16, CURSOR_COL16
-  BCC .right_done        ; Already at or past end
-  BEQ .right_done
-  INC16 CURSOR_COL16
-  DEX
-  BNE .right_loop
+  JSR move_right_x
 .right_done:
   JSR ensure_cursor_visible
   JMP clear_count

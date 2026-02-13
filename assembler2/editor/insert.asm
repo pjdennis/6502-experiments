@@ -462,13 +462,7 @@ insert_move_left:
   INX                     ; +1 for current key
   LDA #0
   STA RENDER_FLAG
-.left_loop:
-  TST16 CURSOR_COL16
-  BEQ .done
-  DEC16 CURSOR_COL16
-  DEX
-  BNE .left_loop
-.done:
+  JSR move_left_x
   JMP ensure_cursor_visible
 
 insert_move_right:
@@ -483,14 +477,7 @@ insert_move_right:
   JSR get_current_line_len
   STAX16 LINE_LEN16
   LDX BUF_DELTA          ; Restore count
-.right_loop:
-  CMP16 LINE_LEN16, CURSOR_COL16
-  BCC .done
-  BEQ .done
-  INC16 CURSOR_COL16
-  DEX
-  BNE .right_loop
-.done:
+  JSR move_right_x
   JMP ensure_cursor_visible
 
 insert_home:

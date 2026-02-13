@@ -194,6 +194,31 @@ move_up_x:
 .done:
   RTS
 
+; --- Shared horizontal movement loops ---
+
+; Move left X positions, clamped to col 0
+; Input: X = count. Clobbers: A, X
+move_left_x:
+  TST16 CURSOR_COL16
+  BEQ .done
+  DEC16 CURSOR_COL16
+  DEX
+  BNE move_left_x
+.done:
+  RTS
+
+; Move right X positions, clamped to LINE_LEN16
+; Input: X = count, LINE_LEN16 = max col. Clobbers: A, X
+move_right_x:
+  CMP16 LINE_LEN16, CURSOR_COL16
+  BCC .done
+  BEQ .done
+  INC16 CURSOR_COL16
+  DEX
+  BNE move_right_x
+.done:
+  RTS
+
 ; --- Count prefix helpers ---
 
 ; Check if key starts a multi-key combo by scanning the combo table
