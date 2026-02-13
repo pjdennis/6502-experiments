@@ -219,8 +219,7 @@ search_move_to_match:
   STA CURSOR_COL16
   LDA #0
   STA CURSOR_COL16 + 1
-  STA RENDER_FLAG           ; Cursor-only; ensure_cursor_visible upgrades if scroll
-  JSR ensure_cursor_visible
+  STA RENDER_FLAG
   JMP clamp_cursor_col
 
 ; Search for pattern in line SEARCH_LINE16

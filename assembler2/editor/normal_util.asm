@@ -278,11 +278,10 @@ get_count_clamp_lines:
 
 ; --- Insert mode entry helpers ---
 
-; Enter insert mode with render flag=1 and ensure_cursor_visible
+; Enter insert mode with render flag=1
 enter_insert_mode_render:
   LDA #1
   STA RENDER_FLAG
-  JSR ensure_cursor_visible
   ; fall through
 
 ; Enter insert mode and clear count

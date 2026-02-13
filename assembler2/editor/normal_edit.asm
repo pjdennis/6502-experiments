@@ -83,7 +83,6 @@ char_paste_below:
 .cursor_done:
   LDA #1
   STA RENDER_FLAG
-  JSR ensure_cursor_visible
   LDA #$FF
   STA MODIFIED
 .done:
@@ -111,7 +110,6 @@ char_paste_above:
   DEC16 CURSOR_COL16
   LDA #1
   STA RENDER_FLAG
-  JSR ensure_cursor_visible
   LDA #$FF
   STA MODIFIED
 .done:
@@ -160,7 +158,6 @@ normal_toggle_case:
   BNE .tilde_loop
 
 .tilde_done:
-  JSR ensure_cursor_visible
   JMP clear_count
 
 ; --- Join lines (J) ---
@@ -249,7 +246,6 @@ normal_substitute_char:
   STA MODIFIED
   LDA #1
   STA RENDER_FLAG
-  JSR ensure_cursor_visible
 
 .sub_insert:
   JMP enter_insert_mode
@@ -264,7 +260,6 @@ normal_change_to_eol:
   JSR yank_delete_at_cursor
   LDA #1
   STA RENDER_FLAG
-  JSR ensure_cursor_visible
 
 .c_insert:
   JMP enter_insert_mode
@@ -337,7 +332,6 @@ cc_have_count:
 .cc_already_empty:
   LDA #0
   STA_LH16 CURSOR_COL16
-  JSR ensure_cursor_visible
   LDA #$FF
   STA MODIFIED
   JMP enter_insert_mode
@@ -381,7 +375,6 @@ do_indent:
   ; Adjust cursor col
   CLC
   ADCI16 CURSOR_COL16, INDENT_WIDTH, CURSOR_COL16
-  JSR ensure_cursor_visible
   LDA #$FF
   STA MODIFIED
   JMP clear_count
@@ -429,7 +422,6 @@ do_unindent:
   STA_LH16 CURSOR_COL16
 .unindent_col_ok:
   JSR clamp_cursor_col
-  JSR ensure_cursor_visible
   LDA #$FF
   STA MODIFIED
   JMP clear_count
@@ -488,7 +480,6 @@ do_dw:
   JSR clamp_cursor_col
   LDA #1
   STA RENDER_FLAG
-  JSR ensure_cursor_visible
 .dw_done:
   JMP clear_count
 
@@ -551,7 +542,6 @@ do_db:
   JSR clamp_cursor_col
   LDA #1
   STA RENDER_FLAG
-  JSR ensure_cursor_visible
 .db_done:
   JMP clear_count
 

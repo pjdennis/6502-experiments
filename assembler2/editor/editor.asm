@@ -207,6 +207,9 @@ main_loop:
   LDA CMD_QUIT
   BNE .editor_exit
 
+  ; Ensure cursor is on screen (may scroll viewport)
+  JSR ensure_cursor_visible
+
   ; Compare state snapshots and dispatch render
   JSR render_decide
 

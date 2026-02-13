@@ -5,7 +5,6 @@
 normal_move_left:
   JSR get_batched_count
   JSR move_left_x
-  JSR ensure_cursor_visible
   JMP clear_count
 
 normal_move_right:
@@ -21,21 +20,18 @@ normal_move_right:
   SBCI16 LINE_LEN16, 1, LINE_LEN16  ; LINE_LEN16 = len - 1
   JSR move_right_x
 .right_done:
-  JSR ensure_cursor_visible
   JMP clear_count
 
 normal_move_down:
   JSR get_batched_count
   JSR move_down_x
   JSR clamp_cursor_col
-  JSR ensure_cursor_visible
   JMP clear_count
 
 normal_move_up:
   JSR get_batched_count
   JSR move_up_x
   JSR clamp_cursor_col
-  JSR ensure_cursor_visible
   JMP clear_count
 
 normal_page_down:
@@ -107,7 +103,6 @@ normal_page_down:
   LDA #0
   STA_LH16 CURSOR_COL16
   STA VIEW_TOP_WRAP
-  JSR ensure_cursor_visible
   JSR clamp_cursor_col
   JMP clear_count
 
@@ -164,7 +159,6 @@ normal_page_up:
   LDA #0
   STA_LH16 CURSOR_COL16
   STA VIEW_TOP_WRAP
-  JSR ensure_cursor_visible
   JSR clamp_cursor_col
   JMP clear_count
 
@@ -172,7 +166,6 @@ normal_line_start:
   LDA #0
   STA_LH16 CURSOR_COL16
   STA RENDER_FLAG
-  JSR ensure_cursor_visible
   JMP clear_count
 
 normal_line_end:
@@ -189,7 +182,6 @@ normal_line_end:
 .ecv:
   LDA #0
   STA RENDER_FLAG
-  JSR ensure_cursor_visible
   JMP clear_count
 
 normal_goto_last:
@@ -218,7 +210,6 @@ normal_goto_last:
   STA RENDER_FLAG
   STA_LH16 CURSOR_COL16
   STA VIEW_TOP_WRAP
-  JSR ensure_cursor_visible
   JSR clamp_cursor_col
   JMP clear_count
 
@@ -320,7 +311,6 @@ do_mark_goto:
   LDA #0
   STA RENDER_FLAG
   STA_LH16 CURSOR_COL16
-  JSR ensure_cursor_visible
   JSR clamp_cursor_col
   JMP clear_count
 .mark_not_set:

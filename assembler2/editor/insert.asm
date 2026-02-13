@@ -58,7 +58,7 @@ insert_exit:
 .done:
   LDA #0
   STA RENDER_FLAG
-  JMP ensure_cursor_visible
+  RTS
 
 ; Insert a printable character at cursor position
 ; Character in A. Reads and batches any pending printable chars.
@@ -101,7 +101,6 @@ insert_char:
 
   LDA #1
   STA RENDER_FLAG
-  JSR ensure_cursor_visible
   LDA #$FF
   STA MODIFIED
   RTS
@@ -151,7 +150,6 @@ insert_newline:
 
   LDA #0
   STA_LH16 CURSOR_COL16
-  JSR ensure_cursor_visible
   LDA #$FF
   STA MODIFIED
   RTS
@@ -206,7 +204,6 @@ insert_backspace:
 
   LDA #1
   STA RENDER_FLAG
-  JSR ensure_cursor_visible
   LDA #$FF
   STA MODIFIED
   RTS
@@ -325,7 +322,6 @@ insert_backspace:
   LDAX16 BUF_DST16
   JSR mark_adjust_delete
 
-  JSR ensure_cursor_visible
   LDA #$FF
   STA MODIFIED
   RTS
@@ -381,7 +377,6 @@ insert_delete:
 
   LDA #$FF
   STA MODIFIED
-  JSR ensure_cursor_visible
   RTS
 
 .delete_chars:
@@ -414,7 +409,6 @@ insert_delete:
 
   LDA #1
   STA RENDER_FLAG
-  JSR ensure_cursor_visible
   LDA #$FF
   STA MODIFIED
   RTS
@@ -431,7 +425,7 @@ insert_move_up:
   INX                     ; +1 for current key
   JSR move_up_x
   JSR clamp_cursor_col_insert
-  JMP ensure_cursor_visible
+  RTS
 
 insert_move_down:
   ; Batch pending DOWN keys and move down
@@ -441,7 +435,7 @@ insert_move_down:
   INX                     ; +1 for current key
   JSR move_down_x
   JSR clamp_cursor_col_insert
-  JMP ensure_cursor_visible
+  RTS
 
 insert_page_down:
   JSR normal_page_down
@@ -459,7 +453,7 @@ insert_move_left:
   LDA #0
   STA RENDER_FLAG
   JSR move_left_x
-  JMP ensure_cursor_visible
+  RTS
 
 insert_move_right:
   LDA #KEY_RIGHT
@@ -474,7 +468,7 @@ insert_move_right:
   STAX16 LINE_LEN16
   LDX BUF_DELTA          ; Restore count
   JSR move_right_x
-  JMP ensure_cursor_visible
+  RTS
 
 insert_home:
   LDA #0
@@ -483,7 +477,6 @@ insert_home:
   BEQ .done            ; Already at column 0
   LDA #0
   STA_LH16 CURSOR_COL16
-  JSR ensure_cursor_visible
 .done:
   RTS
 
@@ -496,7 +489,6 @@ insert_end:
   BEQ .done            ; Already at end
   BCC .done
   CP16 LINE_LEN16, CURSOR_COL16
-  JSR ensure_cursor_visible
 .done:
   RTS
 
@@ -509,7 +501,7 @@ insert_word_forward:
   STA RENDER_FLAG
   JSR word_forward_x
   JSR clamp_cursor_col_insert
-  JMP ensure_cursor_visible
+  RTS
 
 insert_word_backward:
   LDA #KEY_WORD_BACK
@@ -520,7 +512,7 @@ insert_word_backward:
   STA RENDER_FLAG
   JSR word_backward_x
   JSR clamp_cursor_col_insert
-  JMP ensure_cursor_visible
+  RTS
 
 ; Clamp cursor for insert mode (can be one past end of line content)
 clamp_cursor_col_insert:

@@ -56,7 +56,6 @@ normal_word_forward:
   JSR get_batched_count
   JSR word_forward_x
   JSR clamp_cursor_col
-  JSR ensure_cursor_visible
   JMP clear_count
 
 ; Core word-forward motion: move cursor forward X words
@@ -147,7 +146,6 @@ normal_word_backward:
   JSR get_batched_count
   JSR word_backward_x
   JSR clamp_cursor_col
-  JSR ensure_cursor_visible
   JMP clear_count
 
 ; Core word-backward motion: move cursor backward X words
@@ -289,7 +287,6 @@ normal_word_end:
 
 .e_done_final:
   JSR clamp_cursor_col
-  JSR ensure_cursor_visible
   JMP clear_count
 
 .e_next_line:
@@ -551,5 +548,4 @@ normal_first_nonblank:
 .done:
   LDA #0
   STA RENDER_FLAG
-  JSR ensure_cursor_visible
   JMP clear_count

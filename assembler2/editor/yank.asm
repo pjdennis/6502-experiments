@@ -213,7 +213,6 @@ yank_paste_below_n:
   INC16 FILE_LINE16
   LDA #0
   STA_LH16 CURSOR_COL16
-  JSR ensure_cursor_visible
   JSR clamp_cursor_col
   CLC
 .done:
@@ -249,7 +248,6 @@ yank_paste_above_n:
   ; Cursor stays at same line number
   LDA #0
   STA_LH16 CURSOR_COL16
-  JSR ensure_cursor_visible
   JSR clamp_cursor_col
   CLC
 .done:

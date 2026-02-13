@@ -370,7 +370,6 @@ command_parse_range:
   CP16 BUF_SRC16, FILE_LINE16
   LDA #0
   STA_LH16 CURSOR_COL16
-  JSR ensure_cursor_visible
   JMP clamp_cursor_col
 
 .range_has_comma:
@@ -492,7 +491,6 @@ command_parse_range:
   STA RENDER_FLAG
   STA MODIFIED
   JSR clamp_cursor_col
-  JSR ensure_cursor_visible
 
   ; Show "N lines deleted"
   CP16 YANK_LINES16, TO_DECIMAL_VALUE16

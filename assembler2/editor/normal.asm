@@ -276,7 +276,6 @@ normal_delete_char:
   JSR clamp_cursor_col
   LDA #1
   STA RENDER_FLAG
-  JSR ensure_cursor_visible
   LDA #$FF
   STA MODIFIED
 .done:
@@ -293,7 +292,6 @@ normal_delete_to_eol:
   JSR clamp_cursor_col
   LDA #1
   STA RENDER_FLAG
-  JSR ensure_cursor_visible
 .done:
   JMP clear_count
 
@@ -342,7 +340,6 @@ normal_enter_insert_after:
   BCC .enter
   INC16 CURSOR_COL16
 .enter:
-  JSR ensure_cursor_visible
   JMP enter_insert_mode
 
 normal_enter_insert_eol:
@@ -350,7 +347,6 @@ normal_enter_insert_eol:
   STA RENDER_FLAG
   JSR get_current_line_len
   STAX16 CURSOR_COL16
-  JSR ensure_cursor_visible
   JMP enter_insert_mode
 
 normal_open_below:
@@ -393,7 +389,6 @@ normal_open_below:
   INC16 FILE_LINE16
   LDA #0
   STA_LH16 CURSOR_COL16
-  JSR ensure_cursor_visible
   LDA #$FF
   STA MODIFIED
   JMP enter_insert_mode
