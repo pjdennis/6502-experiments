@@ -158,7 +158,6 @@ clamp_cursor_col:
 
 ; Move down X lines (clamped to last line)
 ; Input: X = number of lines to move
-; Sets RENDER_FLAG=0; ensure_cursor_visible upgrades to $FF if scroll needed
 ; Clobbers: A, X, BUF_TEMP, BUF_PTR16
 move_down_x:
 .loop:
@@ -176,7 +175,6 @@ move_down_x:
 
 ; Move up X lines (clamped to first line)
 ; Input: X = number of lines to move
-; Sets RENDER_FLAG=0; ensure_cursor_visible upgrades to $FF if scroll needed
 ; Clobbers: A, X, BUF_TEMP
 move_up_x:
 .loop:
@@ -343,7 +341,7 @@ count_accumulate_digit:
   RTS
 
 ; Get effective count with pending key batching
-; Clears RENDER_FLAG, gets count prefix, adds pending matching keys
+; Gets count prefix, adds pending matching keys
 ; Input: BUF_TEMP = key code to match (set by normal_handle_key)
 ; Output: X = total count (count + pending), capped at 255
 ; Clobbers: A

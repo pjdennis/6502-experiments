@@ -25,7 +25,7 @@ RENDER_ROW:     .byte   ; Current row being rendered
 RENDER_LINE16:  .word   ; Current file line being rendered
 RENDER_COL:     .byte   ; Column counter during rendering
 FNAME_PTR16:    .word   ; Pointer to filename string (null-terminated)
-RENDER_FLAG:    .byte   ; $FF = full repaint, $01 = current line+status, $00 = cursor+status only
+RENDER_FLAG:    .byte   ; Optional override: $FF = full, $01 = current line. Default $00 = auto-detect via snapshot
 VIEW_TOP_WRAP:  .byte   ; Wrap row offset for first visible line (0 = start of line)
 WRAP_QUOT:      .byte   ; Scratch: quotient from CURSOR_COL / SCREEN_COLS
 WRAP_REM:       .byte   ; Scratch: remainder from CURSOR_COL % SCREEN_COLS
@@ -349,18 +349,6 @@ render_current_line_and_status:
 .do_full:
   JMP render_screen
 
-; Dispatch: full repaint, current line, or cursor+status only, based on RENDER_FLAG
-render_update:
-  LDA RENDER_FLAG
-  BEQ .cursor_only
-  CMP #1
-  BEQ .current_line
-  JMP render_screen
-.current_line:
-  JMP render_current_line_and_status
-.cursor_only:
-  JMP render_cursor_and_status
-
 ; Capture state snapshot before handler runs
 ; Saves VIEW_TOP16, VIEW_TOP_WRAP, LINE_COUNT16, BUF_END16
 render_snapshot:
@@ -516,8 +504,7 @@ line_screen_rows:
 
 ; Ensure cursor is visible on screen (wrap-aware)
 ; Updates CURSOR_ROW from FILE_LINE16 and VIEW_TOP16
-; Scrolls if needed, setting RENDER_FLAG=$FF on scroll
-; Preserves RENDER_FLAG if no scroll needed
+; Scrolls VIEW_TOP16 if needed (render_decide detects the change)
 ensure_cursor_visible:
   ; Compute cursor's wrap row: CURSOR_COL16 / SCREEN_COLS
   CP16 CURSOR_COL16, DIV_INPUT16
