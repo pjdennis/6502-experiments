@@ -289,11 +289,10 @@ do_replace_char:
   STA RENDER_FLAG
 
   LDX NORMAL_TEMP
-  CPX #1
+  DEX
   BEQ .replace_done
   INC16 CURSOR_COL16
-  DEX
-  BNE .replace_loop
+  JMP .replace_loop
 
 .replace_done:
   JMP clear_count
