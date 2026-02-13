@@ -627,29 +627,21 @@ do_cw:
   JMP clear_count
 
 ; --- Change word backward (cb) ---
+; Scans N words back then single yank+delete (yanks ALL deleted text).
 do_cb:
-  JSR get_count
-  LDX BUF_TEMP16
-
-.cb_loop:
-  STX NORMAL_TEMP
+  JSR get_count              ; BUF_TEMP16 = N
   TST16 CURSOR_COL16
-  BNE .cb_not_bol
-  JMP .cb_insert
-.cb_not_bol:
+  BEQ .cb_insert             ; At col 0, just enter insert
 
-  JSR find_word_start_backward
-  ; Compute delete count and move cursor to start
-  PUSH16 BUF_LEN16           ; Save start position
+  PUSH16 CURSOR_COL16         ; Save original cursor
+  LDX BUF_TEMP16
+  JSR scan_words_backward     ; CURSOR_COL16 = new position
+  POP16 BUF_LEN16             ; BUF_LEN16 = original cursor
   SEC
-  SBC16 CURSOR_COL16, BUF_LEN16, BUF_LEN16   ; BUF_LEN16 = delete count
-  POP16 CURSOR_COL16         ; Move cursor to start position
-  JSR yank_delete_at_cursor
-
-  LDX NORMAL_TEMP
-  DEX
+  SBC16 BUF_LEN16, CURSOR_COL16, BUF_LEN16  ; BUF_LEN16 = delete count
+  TST16 BUF_LEN16
   BEQ .cb_insert
-  JMP .cb_loop
+  JSR yank_delete_at_cursor
 
 .cb_insert:
   LDA #1

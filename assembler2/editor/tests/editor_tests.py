@@ -5601,6 +5601,14 @@ class EditorTestRunner:
             expected_content="X \n",
         )
 
+        # Count-prefix cb yank: yanks ALL deleted text
+        self.run_test(
+            "2cb+Esc 0p yanks all deleted text backward",
+            "one two three\n",
+            b"8l2cb\x1b0p:wq\r",
+            expected_content="tone two hree\n",
+        )
+
         # db at start of line stays put
         self.run_test_screen(
             "db at start of line is no-op",
