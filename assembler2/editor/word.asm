@@ -409,6 +409,47 @@ find_word_start_backward:
 .fwsb_done:
   RTS
 
+; Scan forward N words from BUF_LEN16
+; Input: X = count, BUF_LEN16 = start column, LINE_LEN16 = line length
+; Output: BUF_LEN16 = column after N words (stops at EOL)
+; Clobbers: A, X, Y, BUF_PTR16, WORD_CLASS, NORMAL_TEMP
+scan_words_forward:
+.swf_loop:
+  STX NORMAL_TEMP
+
+  ; At/past end of line? Done.
+  CMP16 BUF_LEN16, LINE_LEN16
+  BCS .swf_done
+
+  ; Classify char at BUF_LEN16
+  JSR get_scan_buf_ptr
+  LDY #0
+  LDA (BUF_PTR16),Y
+  JSR char_class
+  STA WORD_CLASS
+  CMP #0
+  BEQ .swf_skip_ws
+
+  ; Skip same-class chars
+  JSR skip_word_class_forward
+  BCS .swf_done_one          ; Hit EOL
+  CMP #0
+  BNE .swf_done_one          ; Hit different non-ws class
+
+  ; Skip trailing whitespace
+.swf_skip_ws:
+  LDA #0
+  STA WORD_CLASS
+  JSR skip_word_class_forward
+
+.swf_done_one:
+  LDX NORMAL_TEMP
+  DEX
+  BNE .swf_loop
+
+.swf_done:
+  RTS
+
 ; Get buffer pointer at BUF_LEN16 offset on current line
 ; Sets BUF_PTR16 = start of FILE_LINE16 + BUF_LEN16
 ; Clobbers A, X, Y

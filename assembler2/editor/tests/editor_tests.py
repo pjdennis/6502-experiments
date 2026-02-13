@@ -5414,6 +5414,21 @@ class EditorTestRunner:
             expected_content="threetwo \n",
         )
 
+        # Count-prefix dw yank: yanks ALL deleted text
+        self.run_test(
+            "2dw+$p yanks all deleted text",
+            "one two three\n",
+            b"2dw$p:wq\r",
+            expected_content="threeone two \n",
+        )
+
+        self.run_test(
+            "3dw+$p yanks all deleted text",
+            "one two three four\n",
+            b"3dw$p:wq\r",
+            expected_content="fourone two three \n",
+        )
+
         self._group("Delete word backward (db):", leading_blank=True)
 
         self.run_test(

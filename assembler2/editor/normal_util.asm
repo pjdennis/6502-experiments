@@ -370,7 +370,14 @@ yank_delete_at_cursor:
   CP16 BUF_PTR16, BUF_SRC16
   JSR yank_add_chars         ; Clobbers BUF_LEN16, BUF_PTR16
   POP16 BUF_LEN16            ; Restore delete count
-  JSR get_cursor_buf_ptr     ; Recompute after yank clobbers
+  ; Fall through to delete_at_cursor
+
+; Delete bytes at cursor position (no yank)
+; Input: BUF_LEN16 = number of bytes to delete, cursor position set via CURSOR_COL16
+; Shifts buffer, rebuilds lines, sets MODIFIED
+; Clobbers: A, X, Y, BUF_PTR16, BUF_SRC16, BUF_DST16
+delete_at_cursor:
+  JSR get_cursor_buf_ptr     ; BUF_PTR16 = cursor position
   JSR buf_shift_left_16
   JSR buf_rebuild_lines
   LDA #$FF
