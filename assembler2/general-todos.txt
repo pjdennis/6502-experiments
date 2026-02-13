@@ -27,6 +27,8 @@ normal.asm - count prefix handling - can use ADC16
 
 Tests for mnemonic in directive position and visa versa
 
+buf_get_line_len could do math based on the offset of the next line, vs. scanning.
+
 " ; Save LABEL_SCOPE16 before add_macro_to_hash clobbers it" - in a couple of places. Is there a better fix - shouldn't label scope be set before any label lookup? Otherwise use the macros for push/pop
 
 Use the symbolic constant instead of .byte $0D in the instgen output for directives
