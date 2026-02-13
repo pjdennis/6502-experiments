@@ -355,19 +355,7 @@ cc_have_count:
 INDENT_WIDTH = 2
 
 do_indent:
-  JSR get_count
-  ; BUF_TEMP16 = count of lines to indent
-
-  ; Clamp count to available lines
-  SEC
-  SBC16 LINE_COUNT16, FILE_LINE16, BUF_LEN16
-  CMP16 BUF_TEMP16, BUF_LEN16
-  BCC .indent_count_ok
-  CP16 BUF_LEN16, BUF_TEMP16
-.indent_count_ok:
-  ; BUF_TEMP16 = clamped count
-  ; Use LINE_LEN16 as current line number counter
-  CP16 FILE_LINE16, LINE_LEN16
+  JSR get_count_clamp_lines
 
 .indent_loop:
   TST16 BUF_TEMP16
@@ -402,16 +390,7 @@ do_indent:
 
 ; --- Unindent (<<) ---
 do_unindent:
-  JSR get_count
-
-  ; Clamp count to available lines
-  SEC
-  SBC16 LINE_COUNT16, FILE_LINE16, BUF_LEN16
-  CMP16 BUF_TEMP16, BUF_LEN16
-  BCC .unindent_count_ok
-  CP16 BUF_LEN16, BUF_TEMP16
-.unindent_count_ok:
-  CP16 FILE_LINE16, LINE_LEN16
+  JSR get_count_clamp_lines
 
 .unindent_loop:
   TST16 BUF_TEMP16

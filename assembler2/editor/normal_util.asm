@@ -262,6 +262,20 @@ check_combo_first_key:
   SEC
   RTS
 
+; Get count and clamp to available lines from FILE_LINE16
+; Output: BUF_TEMP16 = clamped count, LINE_LEN16 = FILE_LINE16 (line counter)
+; Clobbers: A
+get_count_clamp_lines:
+  JSR get_count
+  SEC
+  SBC16 LINE_COUNT16, FILE_LINE16, BUF_LEN16
+  CMP16 BUF_TEMP16, BUF_LEN16
+  BCC .ok
+  CP16 BUF_LEN16, BUF_TEMP16
+.ok:
+  CP16 FILE_LINE16, LINE_LEN16
+  RTS
+
 ; --- Insert mode entry helpers ---
 
 ; Enter insert mode with render flag=1 and ensure_cursor_visible
