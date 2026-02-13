@@ -23,7 +23,10 @@ MNTAB
   DATA "BCC"     $00 $00 $90
   DATA "BCS"     $00 $00 $B0
   DATA "BEQ"     $00 $00 $F0
+  DATA "BITZ"    $00 $00 $24
+  DATA "BMI"     $00 $00 $30
   DATA "BNE"     $00 $00 $D0
+  DATA "BPL"     $00 $00 $10
   DATA "BRK"     $00 $00 $00
   DATA "CLC"     $00 $00 $18
   DATA "CMPZ,X"  $00 $00 $D5
@@ -44,6 +47,7 @@ MNTAB
   DATA "ORAZ"    $00 $00 $05
   DATA "RTS"     $00 $00 $60
   DATA "SBC#"    $00 $00 $E9
+  DATA "SBCZ"    $00 $00 $E5
   DATA "SEC"     $00 $00 $38
   DATA "STA"     $00 $00 $8D
   DATA "STA(),Y" $00 $00 $91
@@ -274,12 +278,32 @@ htt_hexvalue
   RTS
 
 
+cl_setpc
+  LDAZ $00             ; LDAZ TEMP
+  JSR skipspaces
+  JSR read
+  JSR skipspaces
+  JSR read
+  JSR readhex
+  STAZ $05             ; STAZ PCH
+  JSR read
+  JSR readhex
+  STAZ $04             ; STAZ PCL
+  JSR read
+  STAZ $00             ; STAZ TEMP
+  RTS
+
+
 capturelabel
   JSR readandfindlabel
   BCS $12              ; BCS cl_notfound
   BRK                  ; duplicate label
   DATA $01 "Duplicate label" $00
 cl_notfound
+  LDAZ $06             ; LDAZ TOKEN
+  CMP# "*"
+  BNE $03              ; BNE cl_loop
+  JMP cl_setpc
 cl_loop                ; Copy TOKEN to table
   LDA,Y $0006          ; LDA,Y TOKEN
   STA(),Y $02          ; STA(),Y TAB

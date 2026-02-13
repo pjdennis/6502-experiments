@@ -1,6 +1,6 @@
 # Test suite for asm03 assembler
-# Non-standard syntax: LDA#, STAZ, etc. No origin support. PC starts at $2000.
-# Features: labels, label assignment (=), DATA, < > byte selectors, strings
+# Non-standard syntax: LDA#, STAZ, etc. PC starts at $2000.
+# Features: labels, label assignment (=), DATA, < > byte selectors, strings, origin (* = $XXXX)
 # Note: Single pass - no forward references for labels used as operands
 # Note: Labels emit 2 bytes - only use with 2-byte operand instructions (STA, JMP, JSR)
 # Note: Branches use raw hex offsets, not labels
@@ -161,3 +161,45 @@ INPUT:
 2:   ADC# $10
 3:   SBC# $20
 EXPECT_HEX: c9 42 69 10 e9 20
+
+---
+NAME: bitz_instruction
+INPUT:
+1:   BITZ $08
+EXPECT_HEX: 24 08
+
+---
+NAME: bmi_instruction
+INPUT:
+1:   BMI $FD
+EXPECT_HEX: 30 fd
+
+---
+NAME: bpl_instruction
+INPUT:
+1:   BPL $FD
+EXPECT_HEX: 10 fd
+
+---
+NAME: sbcz_instruction
+INPUT:
+1:   SBCZ $04
+EXPECT_HEX: e5 04
+
+---
+NAME: origin_support
+DESCRIPTION: Set origin and verify label addresses
+INPUT:
+1: * = $0300
+2: label
+3:   STA label
+EXPECT_HEX: 8d 00 03
+
+---
+NAME: origin_with_label_bytes
+DESCRIPTION: Origin affects label values for byte selectors
+INPUT:
+1: * = $1234
+2: here
+3:   DATA <here >here
+EXPECT_HEX: 34 12

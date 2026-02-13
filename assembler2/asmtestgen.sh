@@ -25,10 +25,8 @@ echo "--- Version 02 ---"
 echo "--- Version 03 ---"
 (cd 03 && mkdir -p out && ../emulator.out ../02/out/asm.out --load 2000 --input asm.asm --output out/asm.out)
 run_version_tests 03
-echo "--- Version 04 ---"
-(cd 04 && mkdir -p out && ../emulator.out ../03/out/asm.out --load 2000 --input asm.asm --output out/asm.out)
 echo "--- Version 05 ---"
-(cd 05 && mkdir -p out && ../emulator.out ../04/out/asm.out --load 2000 --input asm.asm --output out/asm.out)
+(cd 05 && mkdir -p out && ../emulator.out ../03/out/asm.out --load 2000 --input asm.asm --output out/asm.out)
 echo "--- Version 06 ---"
 (cd 06 && mkdir -p out && ../emulator.out ../05/out/asm.out --load 2000 --input asm.asm --output out/asm.out)
 echo "--- Version 07 ---"
@@ -44,18 +42,12 @@ echo "--- Version 08 ---"
   cat out/inst.asm.out asm.asm > out/asmc.asm.out &&
   ../emulator.out ../07/out/asmc.out --load 2000 --input out/asmc.asm.out --output out/asmc.out)
 run_version_tests 08
-echo "--- Version 09 ---"
-(cd 09 && mkdir -p out &&
+echo "--- Version 10 ---"
+(cd 10 && mkdir -p out &&
   ../emulator.out ../08/out/asmc.out --load 2000 --input instgen.asm --output out/instgen.out &&
   ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
   cat out/inst.asm.out asm.asm > out/asmc.asm.out &&
   ../emulator.out ../08/out/asmc.out --load 2000 --input out/asmc.asm.out --output out/asmc.out)
-echo "--- Version 10 ---"
-(cd 10 && mkdir -p out &&
-  ../emulator.out ../09/out/asmc.out --load 2000 --input instgen.asm --output out/instgen.out &&
-  ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
-  cat out/inst.asm.out asm.asm > out/asmc.asm.out &&
-  ../emulator.out ../09/out/asmc.out --input out/asmc.asm.out --output out/asmc.out)
 run_version_tests 10
 echo "--- Version 11 ---"
 (cd 11 && mkdir -p out &&
