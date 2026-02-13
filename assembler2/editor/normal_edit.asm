@@ -342,44 +342,91 @@ do_indent:
   JSR get_count_clamp_lines
   LDA #0
   STA NORMAL_TEMP              ; Cursor-line-indented flag
+  STA COUNT16                  ; N_ne = 0 (non-empty line count)
+  STA COUNT16+1
 
-.indent_loop:
+  ; --- Pre-scan: count non-empty lines ---
+  PUSH16 BUF_TEMP16            ; Save loop count for redistribute
+
+.indent_prescan:
   TST16 BUF_TEMP16
-  BEQ .indent_done_loop
+  BEQ .indent_prescan_done
 
-  ; Get line pointer
   LDAX16 LINE_LEN16
-  JSR buf_get_line_ptr       ; BUF_PTR16 = start of line
-
-  ; Skip empty lines (first byte is newline)
+  JSR buf_get_line_ptr
   LDY #0
   LDA (BUF_PTR16),Y
   CMP #'\n'
-  BEQ .indent_next_line
+  BEQ .indent_prescan_next
 
-  ; Track if cursor line (first line) was indented
+  ; Non-empty line
+  INC16 COUNT16
+  ; Check if cursor line
   CMP16 LINE_LEN16, FILE_LINE16
-  BNE .indent_not_cursor
+  BNE .indent_prescan_next
   LDA #$FF
   STA NORMAL_TEMP
-.indent_not_cursor:
 
-  ; Insert 2 spaces at start of line
-  LDA #INDENT_WIDTH
-  STA BUF_DELTA
-  LDA #' '
-  STA BATCH_BUF
-  STA BATCH_BUF+1
-  JSR buf_insert_chars
-  BCS .indent_done_loop      ; Buffer full, stop
-  JSR buf_rebuild_lines
-
-.indent_next_line:
+.indent_prescan_next:
   INC16 LINE_LEN16
   DEC16 BUF_TEMP16
-  JMP .indent_loop
+  JMP .indent_prescan
 
-.indent_done_loop:
+.indent_prescan_done:
+  POP16 BUF_TEMP16             ; Restore loop count
+  CP16 FILE_LINE16, LINE_LEN16 ; Reset line counter
+
+  ; If no non-empty lines, nothing to do
+  TST16 COUNT16
+  BEQ .indent_no_col_adj
+
+  ; total_shift = N_ne * INDENT_WIDTH (= N_ne << 1)
+  CP16 COUNT16, BUF_LEN16
+  ASL16 BUF_LEN16              ; BUF_LEN16 = total_shift
+
+  ; Get first line start
+  LDAX16 FILE_LINE16
+  JSR buf_get_line_ptr         ; BUF_PTR16 = first line start
+
+  ; Single buffer shift right
+  JSR buf_shift_right_16
+  BCS .indent_no_col_adj       ; Buffer full, bail
+
+  ; --- Redistribute: insert spaces into non-empty lines ---
+  ; BUF_PTR16 = first line start (preserved by buf_shift_right_16)
+  ; JUMP_TARGET16 = write_ptr (starts at first line start)
+  ; BUF_PTR16 = read_ptr (first line start + total_shift)
+  CP16 BUF_PTR16, JUMP_TARGET16
+  CLC
+  ADC16 BUF_PTR16, BUF_LEN16, BUF_PTR16
+
+.indent_redist:
+  TST16 BUF_TEMP16
+  BEQ .indent_redist_done
+
+  ; Check first byte of line at read_ptr
+  LDY #0
+  LDA (BUF_PTR16),Y
+  CMP #'\n'
+  BEQ .indent_copy_line
+
+  ; Non-empty: write 2 spaces at write_ptr
+  LDA #' '
+  STA (JUMP_TARGET16),Y       ; Y = 0
+  INY
+  STA (JUMP_TARGET16),Y
+  INC16 JUMP_TARGET16
+  INC16 JUMP_TARGET16
+
+.indent_copy_line:
+  JSR copy_line_to_nl
+
+  DEC16 BUF_TEMP16
+  JMP .indent_redist
+
+.indent_redist_done:
+  JSR buf_rebuild_lines
+
   ; Only adjust cursor col if cursor line was indented
   LDA NORMAL_TEMP
   BEQ .indent_no_col_adj
@@ -438,6 +485,19 @@ do_unindent:
   STA RENDER_FLAG        ; Multi-line edit; BUF_END16 change only triggers current-line
   STA MODIFIED
   JMP clear_count
+
+; Copy bytes from (BUF_PTR16) to (JUMP_TARGET16) until '\n' is copied.
+; Advances both pointers past the copied data.
+; Clobbers: A, Y
+copy_line_to_nl:
+  LDY #0
+  LDA (BUF_PTR16),Y
+  STA (JUMP_TARGET16),Y
+  INC16 BUF_PTR16
+  INC16 JUMP_TARGET16
+  CMP #'\n'
+  BNE copy_line_to_nl
+  RTS
 
 ; --- Delete word (dw) ---
 ; Delete from cursor to next word boundary on current line.

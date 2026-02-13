@@ -5442,6 +5442,20 @@ class EditorTestRunner:
         )
 
         self.run_test(
+            ">> with count and mixed empty lines",
+            "aaa\n\n\nbbb\n",
+            b"4>>:wq\r",
+            expected_content="  aaa\n\n\n  bbb\n"
+        )
+
+        self.run_test(
+            ">> preserves lines after indented range",
+            "aaa\nbbb\nccc\n",
+            b"2>>:wq\r",
+            expected_content="  aaa\n  bbb\nccc\n"
+        )
+
+        self.run_test(
             "<< unindents single line",
             "  hello\n",
             b"<<:wq\r",
