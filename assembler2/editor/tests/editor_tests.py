@@ -3722,6 +3722,36 @@ class EditorTestRunner:
             expected_content="world\n"
         )
 
+        # Batched dd yank: only last line should be in yank buffer
+        self.run_test(
+            "dddd+p yanks only last deleted line",
+            "A\nB\nC\n",
+            b"ddddp:wq\r",
+            expected_content="C\nB\n"
+        )
+
+        self.run_test(
+            "dddddd+p yanks only last deleted line",
+            "A\nB\nC\nD\n",
+            b"ddddddp:wq\r",
+            expected_content="D\nC\n"
+        )
+
+        self.run_test(
+            "3dddd+p yanks only last deleted line (not 4)",
+            "A\nB\nC\nD\nE\n",
+            b"3ddddp:wq\r",
+            expected_content="E\nD\n"
+        )
+
+        # Non-batched: 3dd still yanks all 3 lines
+        self.run_test(
+            "3dd+p still pastes all 3 lines (no batching)",
+            "A\nB\nC\nD\n",
+            b"3ddp:wq\r",
+            expected_content="D\nA\nB\nC\n"
+        )
+
         # ============================================================
         # D (delete to end of line)
         # ============================================================

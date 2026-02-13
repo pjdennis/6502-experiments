@@ -363,8 +363,22 @@ normal_d_key:
   JMP set_pending_key
 
 ; dd: yank then delete N lines (N = count, min 1)
+; When batched (BATCH_EXTRA > 0): delete (total-1) without yank, then
+; yank_delete 1 line. This matches unbatched semantics where each dd
+; overwrites the yank buffer, so only the last line is yanked.
 do_dd:
   JSR get_count              ; BUF_TEMP16 = count (16-bit)
+  LDA BATCH_EXTRA
+  BEQ .do_yank_delete        ; No batching, standard path
+  ; Batched: delete (total-1) lines without yank first
+  SEC
+  SBCI16 BUF_TEMP16, 1, BUF_TEMP16
+  JSR delete_current_lines
+  LDA #1
+  STA BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
+.do_yank_delete:
   JSR yank_delete_current_lines
   BCS .yank_overflow
 

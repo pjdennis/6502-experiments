@@ -333,7 +333,19 @@ yank_delete_current_lines:
   LDAX16 FILE_LINE16
   JSR yank_add_lines
   BCS .ydcl_overflow
+  JSR delete_current_lines
+  CLC
+  RTS
 
+.ydcl_overflow:
+  SEC
+  RTS
+
+; Delete N lines starting at FILE_LINE16 without yanking
+; Input: BUF_TEMP16 = count of lines (from get_count)
+; Adjusts marks, deletes lines, clamps FILE_LINE16
+; Clobbers: A, X, Y, BUF_PTR16, BUF_SRC16, BUF_DST16, BUF_LEN16
+delete_current_lines:
   LDAX16 FILE_LINE16
   JSR mark_adjust_delete
 
@@ -342,15 +354,10 @@ yank_delete_current_lines:
 
   ; Clamp file line if past end of file
   CMP16 FILE_LINE16, LINE_COUNT16
-  BCC .ydcl_ok
+  BCC .dcl_ok
   SEC
   SBCI16 LINE_COUNT16, 1, FILE_LINE16
-.ydcl_ok:
-  CLC
-  RTS
-
-.ydcl_overflow:
-  SEC
+.dcl_ok:
   RTS
 
 ; Yank chars at cursor position then delete them
