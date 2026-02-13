@@ -3211,6 +3211,81 @@ class EditorTestRunner:
             expect_status_contains="COMMAND - 3,"
         )
 
+        # --- Snapshot detection baseline tests ---
+        # These verify current render behavior to protect against regressions
+        # when switching to snapshot-based render detection.
+
+        # Replace char (ra) triggers content redraw on current row
+        # Frame 0: init(T), Frame 1: r pending(F), Frame 2: a replaces(T)
+        self.run_test_screen(
+            "Render opt: ra triggers current row redraw",
+            "Hello\nWorld\n",
+            b"ra:q!\r",
+            expect_content_redraws=[True, False, True, False],
+            expect_content_rows=[(2, {0})]
+        )
+
+        # Toggle case (~) triggers content redraw on current row
+        self.run_test_screen(
+            "Render opt: ~ triggers current row redraw",
+            "Hello\nWorld\n",
+            b"~:q!\r",
+            expect_content_redraws=[True, True],
+            expect_content_rows=[(1, {0})]
+        )
+
+        # Multi-line indent (2>>) triggers full content redraw
+        # Frame 0: init(T), Frame 1: 2(F), Frame 2: > pending(F),
+        # Frame 3: > triggers indent(T)
+        self.run_test_screen(
+            "Render opt: 2>> triggers full redraw",
+            "Hello\nWorld\nThird\n",
+            b"2>>:q!\r",
+            expect_content_redraws=[True, False, False, True, False]
+        )
+
+        # dd triggers full content redraw
+        # Frame 0: init(T), Frame 1: d pending(F), Frame 2: d triggers dd(T)
+        self.run_test_screen(
+            "Render opt: dd triggers full redraw",
+            "Hello\nWorld\n",
+            b"dd:q!\r",
+            expect_content_redraws=[True, False, True, False]
+        )
+
+        # x triggers content redraw on current row
+        self.run_test_screen(
+            "Render opt: x triggers current row redraw",
+            "Hello\nWorld\n",
+            b"x:q!\r",
+            expect_content_redraws=[True, True],
+            expect_content_rows=[(1, {0})]
+        )
+
+        # Movement without scroll (l) does NOT trigger content redraw
+        self.run_test_screen(
+            "Render opt: l no content redraw",
+            "Hello\n",
+            b"l:q!\r",
+            expect_content_redraws=[True, False]
+        )
+
+        # ESC with no pending count does NOT trigger content redraw
+        self.run_test_screen(
+            "Render opt: ESC no content redraw",
+            "Hello\n",
+            b"\x1b:q!\r",
+            expect_content_redraws=[True, False]
+        )
+
+        # o (open below) triggers full content redraw
+        self.run_test_screen(
+            "Render opt: o triggers full redraw",
+            "Hello\nWorld\n",
+            b"o\x1b:q!\r",
+            expect_content_redraws=[True, True, False]
+        )
+
         # ============================================================
         # Count prefix tests
         # ============================================================

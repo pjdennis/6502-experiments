@@ -32,6 +32,10 @@ WRAP_REM:       .byte   ; Scratch: remainder from CURSOR_COL % SCREEN_COLS
 RENDER_WRAP:    .byte   ; Current wrap row offset during rendering
 DIV_INPUT16:    .word   ; Scratch for 16-bit division
 PREV_LINE_ROWS: .byte   ; Screen rows the current line occupied before the edit
+SNAP_VIEW_TOP16: .word  ; Snapshot of VIEW_TOP16 before handler
+SNAP_VIEW_TOP_WRAP: .byte ; Snapshot of VIEW_TOP_WRAP before handler
+SNAP_LINE_COUNT16: .word ; Snapshot of LINE_COUNT16 before handler
+SNAP_BUF_END16: .word   ; Snapshot of BUF_END16 before handler
 
   .code
 
@@ -356,6 +360,59 @@ render_update:
   JMP render_current_line_and_status
 .cursor_only:
   JMP render_cursor_and_status
+
+; Capture state snapshot before handler runs
+; Saves VIEW_TOP16, VIEW_TOP_WRAP, LINE_COUNT16, BUF_END16
+render_snapshot:
+  CP16 VIEW_TOP16, SNAP_VIEW_TOP16
+  LDA VIEW_TOP_WRAP
+  STA SNAP_VIEW_TOP_WRAP
+  CP16 LINE_COUNT16, SNAP_LINE_COUNT16
+  CP16 BUF_END16, SNAP_BUF_END16
+  RTS
+
+; Compare post-handler state against snapshot to decide render level
+; Takes the max of handler-set RENDER_FLAG and snapshot-inferred level.
+; Then dispatches to the appropriate render routine.
+render_decide:
+  ; If handler already set $FF, skip detection
+  LDA RENDER_FLAG
+  CMP #$FF
+  BEQ .dispatch
+
+  ; Check VIEW_TOP16 changed -> full repaint
+  CMP16 SNAP_VIEW_TOP16, VIEW_TOP16
+  BNE .full
+
+  ; Check VIEW_TOP_WRAP changed -> full repaint
+  LDA SNAP_VIEW_TOP_WRAP
+  CMP VIEW_TOP_WRAP
+  BNE .full
+
+  ; Check LINE_COUNT16 changed -> full repaint
+  CMP16 SNAP_LINE_COUNT16, LINE_COUNT16
+  BNE .full
+
+  ; Check BUF_END16 changed -> current line repaint (at least)
+  CMP16 SNAP_BUF_END16, BUF_END16
+  BNE .current_line
+
+  ; No snapshot changes detected; use handler's RENDER_FLAG as-is
+  LDA RENDER_FLAG
+  BNE .current_line       ; $01 from handler -> current line
+  JMP render_cursor_and_status
+
+.full:
+  LDA #$FF
+  STA RENDER_FLAG
+.dispatch:
+  JMP render_screen
+
+.current_line:
+  LDA RENDER_FLAG
+  ORA #$01
+  STA RENDER_FLAG
+  JMP render_current_line_and_status
 
 ; Render just the status bar and reposition cursor (no content redraw)
 render_cursor_and_status:
