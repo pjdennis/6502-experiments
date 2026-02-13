@@ -1062,6 +1062,57 @@ class EditorTestRunner:
             expected_content="a\n"
         )
 
+        # Batch DEL across multiple lines - 7 DELs from start of "Hello\nWorld\n"
+        # should delete "Hello\n" (6 chars) + "W" (1 char) leaving "orld\n"
+        DEL = b"\x1b[3~"
+        self.run_test(
+            "Batch DEL across multiple lines",
+            "Hello\nWorld\n",
+            b"i" + DEL * 7 + b"\x1b:wq\r",
+            expected_content="orld\n"
+        )
+
+        # Batch DEL collapses empty lines - A enters insert at end of "A"
+        # (col 1), 4 DELs delete: \n, \n, \n, \n leaving "AB\n"
+        DEL = b"\x1b[3~"
+        self.run_test(
+            "Batch DEL collapses empty lines",
+            "A\n\n\n\nB\n",
+            b"A" + DEL * 4 + b"\x1b:wq\r",
+            expected_content="AB\n"
+        )
+
+        # Batch DEL from mid-line across boundary - cursor at col 3,
+        # 5 DELs: delete "lo" (2) + \n (1) + "Wo" (2) = "Helrld\n"
+        DEL = b"\x1b[3~"
+        self.run_test(
+            "Batch DEL from mid-line across boundary",
+            "Hello\nWorld\n",
+            b"llli" + DEL * 5 + b"\x1b:wq\r",
+            expected_content="Helrld\n"
+        )
+
+        # Batch DEL stops at final newline - 10 DELs but only 3 chars to
+        # delete ("A\nB") before final \n, so result is just "\n"
+        DEL = b"\x1b[3~"
+        self.run_test(
+            "Batch DEL stops at final newline",
+            "A\nB\n",
+            b"i" + DEL * 10 + b"\x1b:wq\r",
+            expected_content="\n"
+        )
+
+        # Render opt: batch DEL across lines reduces redraws
+        # Frame 0: initial (True), Frame 1: i enters insert (False),
+        # Frame 2: DEL*4 batched (True), Frame 3: ESC (False)
+        DEL = b"\x1b[3~"
+        self.run_test_screen(
+            "Render opt: batch DEL across lines",
+            "A\nB\nC\n",
+            b"i" + DEL * 4 + b"\x1b:q!\r",
+            expect_content_redraws=[True, False, True, False],
+        )
+
         # :w saves without quitting, then :q quits
         # Actually, :w then EOT will exit due to EOT handling
         self.run_test(
