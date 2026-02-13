@@ -28,18 +28,18 @@ IHASHTAB   = $1F00      ; Instruction hash table
 
   .zeropage
 
-TEMP      .data $00     ; 1 byte temporary value
-TEMP2     .data $00     ; 1 byte temporary value (for Y save)
-HEX1      .data $00     ; 1 byte
-HEX2      .data $00     ; 1 byte
-MEMPL     .data $00     ; 2 byte heap pointer
-MEMPH     .data $00     ; "
-PL        .data $00     ; 2 byte pointer
-PH        .data $00     ; "
-P2L       .data $00     ; 2 byte pointer
-P2H       .data $00     ; "
-CURR_GLOBAL_HEAP_L .data $00 ; Required by hash_table (unused here)
-CURR_GLOBAL_HEAP_H .data $00 ; "
+TEMP      DATA $00     ; 1 byte temporary value
+TEMP2     DATA $00     ; 1 byte temporary value (for Y save)
+HEX1      DATA $00     ; 1 byte
+HEX2      DATA $00     ; 1 byte
+MEMPL     DATA $00     ; 2 byte heap pointer
+MEMPH     DATA $00     ; "
+PL        DATA $00     ; 2 byte pointer
+PH        DATA $00     ; "
+P2L       DATA $00     ; 2 byte pointer
+P2H       DATA $00     ; "
+CURR_GLOBAL_HEAP_L DATA $00 ; Required by hash_table (unused here)
+CURR_GLOBAL_HEAP_H DATA $00 ; "
 
 
   .code
@@ -53,159 +53,159 @@ CURR_GLOBAL_HEAP_H .data $00 ; "
 ; Format: "MNEMONIC" $00 [mode opcode]... $FF
 MNTAB
   ; Load/Store instructions
-  .data "LDA" $00  <MODE_IMM  $A9  <MODE_ZP   $A5  <MODE_ZPX  $B5  <MODE_ABS  $AD
-  .data            <MODE_ABSX $BD  <MODE_ABSY $B9  <MODE_INDX $A1  <MODE_INDY $B1
-  .data            $FF
-  .data "LDX" $00  <MODE_IMM  $A2  <MODE_ZP   $A6  <MODE_ZPY  $B6
-  .data            <MODE_ABS  $AE  <MODE_ABSY $BE
-  .data            $FF
-  .data "LDY" $00  <MODE_IMM  $A0  <MODE_ZP   $A4  <MODE_ZPX  $B4
-  .data            <MODE_ABS  $AC  <MODE_ABSX $BC
-  .data            $FF
-  .data "STA" $00  <MODE_ZP   $85  <MODE_ZPX  $95  <MODE_ABS  $8D  <MODE_ABSX $9D
-  .data            <MODE_ABSY $99  <MODE_INDX $81  <MODE_INDY $91
-  .data            $FF
-  .data "STX" $00  <MODE_ZP   $86  <MODE_ZPY  $96  <MODE_ABS  $8E
-  .data            $FF
-  .data "STY" $00  <MODE_ZP   $84  <MODE_ZPX  $94  <MODE_ABS  $8C
-  .data            $FF
+  DATA "LDA" $00  <MODE_IMM  $A9  <MODE_ZP   $A5  <MODE_ZPX  $B5  <MODE_ABS  $AD
+  DATA            <MODE_ABSX $BD  <MODE_ABSY $B9  <MODE_INDX $A1  <MODE_INDY $B1
+  DATA            $FF
+  DATA "LDX" $00  <MODE_IMM  $A2  <MODE_ZP   $A6  <MODE_ZPY  $B6
+  DATA            <MODE_ABS  $AE  <MODE_ABSY $BE
+  DATA            $FF
+  DATA "LDY" $00  <MODE_IMM  $A0  <MODE_ZP   $A4  <MODE_ZPX  $B4
+  DATA            <MODE_ABS  $AC  <MODE_ABSX $BC
+  DATA            $FF
+  DATA "STA" $00  <MODE_ZP   $85  <MODE_ZPX  $95  <MODE_ABS  $8D  <MODE_ABSX $9D
+  DATA            <MODE_ABSY $99  <MODE_INDX $81  <MODE_INDY $91
+  DATA            $FF
+  DATA "STX" $00  <MODE_ZP   $86  <MODE_ZPY  $96  <MODE_ABS  $8E
+  DATA            $FF
+  DATA "STY" $00  <MODE_ZP   $84  <MODE_ZPX  $94  <MODE_ABS  $8C
+  DATA            $FF
 
   ; Arithmetic instructions
-  .data "ADC" $00  <MODE_IMM  $69  <MODE_ZP   $65  <MODE_ZPX  $75  <MODE_ABS  $6D
-  .data            <MODE_ABSX $7D  <MODE_ABSY $79  <MODE_INDX $61  <MODE_INDY $71
-  .data            $FF
-  .data "SBC" $00  <MODE_IMM  $E9  <MODE_ZP   $E5  <MODE_ZPX  $F5  <MODE_ABS  $ED
-  .data            <MODE_ABSX $FD  <MODE_ABSY $F9  <MODE_INDX $E1  <MODE_INDY $F1
-  .data            $FF
+  DATA "ADC" $00  <MODE_IMM  $69  <MODE_ZP   $65  <MODE_ZPX  $75  <MODE_ABS  $6D
+  DATA            <MODE_ABSX $7D  <MODE_ABSY $79  <MODE_INDX $61  <MODE_INDY $71
+  DATA            $FF
+  DATA "SBC" $00  <MODE_IMM  $E9  <MODE_ZP   $E5  <MODE_ZPX  $F5  <MODE_ABS  $ED
+  DATA            <MODE_ABSX $FD  <MODE_ABSY $F9  <MODE_INDX $E1  <MODE_INDY $F1
+  DATA            $FF
 
   ; Logical instructions
-  .data "AND" $00  <MODE_IMM  $29  <MODE_ZP   $25  <MODE_ZPX  $35  <MODE_ABS  $2D
-  .data            <MODE_ABSX $3D  <MODE_ABSY $39  <MODE_INDX $21  <MODE_INDY $31
-  .data            $FF
-  .data "ORA" $00  <MODE_IMM  $09  <MODE_ZP   $05  <MODE_ZPX  $15  <MODE_ABS  $0D
-  .data            <MODE_ABSX $1D  <MODE_ABSY $19  <MODE_INDX $01  <MODE_INDY $11
-  .data            $FF
-  .data "EOR" $00  <MODE_IMM  $49  <MODE_ZP   $45  <MODE_ZPX  $55  <MODE_ABS  $4D
-  .data            <MODE_ABSX $5D  <MODE_ABSY $59  <MODE_INDX $41  <MODE_INDY $51
-  .data            $FF
+  DATA "AND" $00  <MODE_IMM  $29  <MODE_ZP   $25  <MODE_ZPX  $35  <MODE_ABS  $2D
+  DATA            <MODE_ABSX $3D  <MODE_ABSY $39  <MODE_INDX $21  <MODE_INDY $31
+  DATA            $FF
+  DATA "ORA" $00  <MODE_IMM  $09  <MODE_ZP   $05  <MODE_ZPX  $15  <MODE_ABS  $0D
+  DATA            <MODE_ABSX $1D  <MODE_ABSY $19  <MODE_INDX $01  <MODE_INDY $11
+  DATA            $FF
+  DATA "EOR" $00  <MODE_IMM  $49  <MODE_ZP   $45  <MODE_ZPX  $55  <MODE_ABS  $4D
+  DATA            <MODE_ABSX $5D  <MODE_ABSY $59  <MODE_INDX $41  <MODE_INDY $51
+  DATA            $FF
 
   ; Compare instructions
-  .data "CMP" $00  <MODE_IMM  $C9  <MODE_ZP   $C5  <MODE_ZPX  $D5  <MODE_ABS  $CD
-  .data            <MODE_ABSX $DD  <MODE_ABSY $D9  <MODE_INDX $C1  <MODE_INDY $D1
-  .data            $FF
-  .data "CPX" $00  <MODE_IMM  $E0  <MODE_ZP   $E4  <MODE_ABS  $EC
-  .data            $FF
-  .data "CPY" $00  <MODE_IMM  $C0  <MODE_ZP   $C4  <MODE_ABS  $CC
-  .data            $FF
+  DATA "CMP" $00  <MODE_IMM  $C9  <MODE_ZP   $C5  <MODE_ZPX  $D5  <MODE_ABS  $CD
+  DATA            <MODE_ABSX $DD  <MODE_ABSY $D9  <MODE_INDX $C1  <MODE_INDY $D1
+  DATA            $FF
+  DATA "CPX" $00  <MODE_IMM  $E0  <MODE_ZP   $E4  <MODE_ABS  $EC
+  DATA            $FF
+  DATA "CPY" $00  <MODE_IMM  $C0  <MODE_ZP   $C4  <MODE_ABS  $CC
+  DATA            $FF
 
   ; Bit test
-  .data "BIT" $00  <MODE_ZP   $24  <MODE_ABS  $2C
-  .data            $FF
+  DATA "BIT" $00  <MODE_ZP   $24  <MODE_ABS  $2C
+  DATA            $FF
 
   ; Increment/Decrement
-  .data "INC" $00  <MODE_ZP   $E6  <MODE_ZPX  $F6  <MODE_ABS  $EE  <MODE_ABSX $FE
-  .data            $FF
-  .data "DEC" $00  <MODE_ZP   $C6  <MODE_ZPX  $D6  <MODE_ABS  $CE  <MODE_ABSX $DE
-  .data            $FF
-  .data "INX" $00  <MODE_NONE $E8
-  .data            $FF
-  .data "INY" $00  <MODE_NONE $C8
-  .data            $FF
-  .data "DEX" $00  <MODE_NONE $CA
-  .data            $FF
-  .data "DEY" $00  <MODE_NONE $88
-  .data            $FF
+  DATA "INC" $00  <MODE_ZP   $E6  <MODE_ZPX  $F6  <MODE_ABS  $EE  <MODE_ABSX $FE
+  DATA            $FF
+  DATA "DEC" $00  <MODE_ZP   $C6  <MODE_ZPX  $D6  <MODE_ABS  $CE  <MODE_ABSX $DE
+  DATA            $FF
+  DATA "INX" $00  <MODE_NONE $E8
+  DATA            $FF
+  DATA "INY" $00  <MODE_NONE $C8
+  DATA            $FF
+  DATA "DEX" $00  <MODE_NONE $CA
+  DATA            $FF
+  DATA "DEY" $00  <MODE_NONE $88
+  DATA            $FF
 
   ; Shift/Rotate
-  .data "ASL" $00  <MODE_NONE $0A  <MODE_ZP   $06  <MODE_ZPX  $16
-  .data            <MODE_ABS  $0E  <MODE_ABSX $1E
-  .data            $FF
-  .data "LSR" $00  <MODE_NONE $4A  <MODE_ZP   $46  <MODE_ZPX  $56
-  .data            <MODE_ABS  $4E  <MODE_ABSX $5E
-  .data            $FF
-  .data "ROL" $00  <MODE_NONE $2A  <MODE_ZP   $26  <MODE_ZPX  $36
-  .data            <MODE_ABS  $2E  <MODE_ABSX $3E
-  .data            $FF
-  .data "ROR" $00  <MODE_NONE $6A  <MODE_ZP   $66  <MODE_ZPX  $76
-  .data            <MODE_ABS  $6E  <MODE_ABSX $7E
-  .data            $FF
+  DATA "ASL" $00  <MODE_NONE $0A  <MODE_ZP   $06  <MODE_ZPX  $16
+  DATA            <MODE_ABS  $0E  <MODE_ABSX $1E
+  DATA            $FF
+  DATA "LSR" $00  <MODE_NONE $4A  <MODE_ZP   $46  <MODE_ZPX  $56
+  DATA            <MODE_ABS  $4E  <MODE_ABSX $5E
+  DATA            $FF
+  DATA "ROL" $00  <MODE_NONE $2A  <MODE_ZP   $26  <MODE_ZPX  $36
+  DATA            <MODE_ABS  $2E  <MODE_ABSX $3E
+  DATA            $FF
+  DATA "ROR" $00  <MODE_NONE $6A  <MODE_ZP   $66  <MODE_ZPX  $76
+  DATA            <MODE_ABS  $6E  <MODE_ABSX $7E
+  DATA            $FF
 
   ; Branch instructions
-  .data "BCC" $00  <MODE_REL  $90
-  .data            $FF
-  .data "BCS" $00  <MODE_REL  $B0
-  .data            $FF
-  .data "BEQ" $00  <MODE_REL  $F0
-  .data            $FF
-  .data "BMI" $00  <MODE_REL  $30
-  .data            $FF
-  .data "BNE" $00  <MODE_REL  $D0
-  .data            $FF
-  .data "BPL" $00  <MODE_REL  $10
-  .data            $FF
-  .data "BVC" $00  <MODE_REL  $50
-  .data            $FF
-  .data "BVS" $00  <MODE_REL  $70
-  .data            $FF
+  DATA "BCC" $00  <MODE_REL  $90
+  DATA            $FF
+  DATA "BCS" $00  <MODE_REL  $B0
+  DATA            $FF
+  DATA "BEQ" $00  <MODE_REL  $F0
+  DATA            $FF
+  DATA "BMI" $00  <MODE_REL  $30
+  DATA            $FF
+  DATA "BNE" $00  <MODE_REL  $D0
+  DATA            $FF
+  DATA "BPL" $00  <MODE_REL  $10
+  DATA            $FF
+  DATA "BVC" $00  <MODE_REL  $50
+  DATA            $FF
+  DATA "BVS" $00  <MODE_REL  $70
+  DATA            $FF
 
   ; Jump instructions
-  .data "JMP" $00  <MODE_ABS  $4C  <MODE_IND  $6C
-  .data            $FF
-  .data "JSR" $00  <MODE_ABS  $20
-  .data            $FF
+  DATA "JMP" $00  <MODE_ABS  $4C  <MODE_IND  $6C
+  DATA            $FF
+  DATA "JSR" $00  <MODE_ABS  $20
+  DATA            $FF
 
   ; Stack instructions
-  .data "PHA" $00  <MODE_NONE $48
-  .data            $FF
-  .data "PHP" $00  <MODE_NONE $08
-  .data            $FF
-  .data "PLA" $00  <MODE_NONE $68
-  .data            $FF
-  .data "PLP" $00  <MODE_NONE $28
-  .data            $FF
+  DATA "PHA" $00  <MODE_NONE $48
+  DATA            $FF
+  DATA "PHP" $00  <MODE_NONE $08
+  DATA            $FF
+  DATA "PLA" $00  <MODE_NONE $68
+  DATA            $FF
+  DATA "PLP" $00  <MODE_NONE $28
+  DATA            $FF
 
   ; Transfer instructions
-  .data "TAX" $00  <MODE_NONE $AA
-  .data            $FF
-  .data "TAY" $00  <MODE_NONE $A8
-  .data            $FF
-  .data "TSX" $00  <MODE_NONE $BA
-  .data            $FF
-  .data "TXA" $00  <MODE_NONE $8A
-  .data            $FF
-  .data "TXS" $00  <MODE_NONE $9A
-  .data            $FF
-  .data "TYA" $00  <MODE_NONE $98
-  .data            $FF
+  DATA "TAX" $00  <MODE_NONE $AA
+  DATA            $FF
+  DATA "TAY" $00  <MODE_NONE $A8
+  DATA            $FF
+  DATA "TSX" $00  <MODE_NONE $BA
+  DATA            $FF
+  DATA "TXA" $00  <MODE_NONE $8A
+  DATA            $FF
+  DATA "TXS" $00  <MODE_NONE $9A
+  DATA            $FF
+  DATA "TYA" $00  <MODE_NONE $98
+  DATA            $FF
 
   ; Flag instructions
-  .data "CLC" $00  <MODE_NONE $18
-  .data            $FF
-  .data "CLD" $00  <MODE_NONE $D8
-  .data            $FF
-  .data "CLI" $00  <MODE_NONE $58
-  .data            $FF
-  .data "CLV" $00  <MODE_NONE $B8
-  .data            $FF
-  .data "SEC" $00  <MODE_NONE $38
-  .data            $FF
-  .data "SED" $00  <MODE_NONE $F8
-  .data            $FF
-  .data "SEI" $00  <MODE_NONE $78
-  .data            $FF
+  DATA "CLC" $00  <MODE_NONE $18
+  DATA            $FF
+  DATA "CLD" $00  <MODE_NONE $D8
+  DATA            $FF
+  DATA "CLI" $00  <MODE_NONE $58
+  DATA            $FF
+  DATA "CLV" $00  <MODE_NONE $B8
+  DATA            $FF
+  DATA "SEC" $00  <MODE_NONE $38
+  DATA            $FF
+  DATA "SED" $00  <MODE_NONE $F8
+  DATA            $FF
+  DATA "SEI" $00  <MODE_NONE $78
+  DATA            $FF
 
   ; Other
-  .data "BRK" $00  <MODE_NONE $00
-  .data            $FF
-  .data "NOP" $00  <MODE_NONE $EA
-  .data            $FF
-  .data "RTI" $00  <MODE_NONE $40
-  .data            $FF
-  .data "RTS" $00  <MODE_NONE $60
-  .data            $FF
+  DATA "BRK" $00  <MODE_NONE $00
+  DATA            $FF
+  DATA "NOP" $00  <MODE_NONE $EA
+  DATA            $FF
+  DATA "RTI" $00  <MODE_NONE $40
+  DATA            $FF
+  DATA "RTS" $00  <MODE_NONE $60
+  DATA            $FF
 
   ; End of table
-  .data $00
+  DATA $00
 
 
 populate_instruction_hash_table
@@ -292,10 +292,10 @@ display_hex_char
 
 display_hex
   PHA
-  LSR
-  LSR
-  LSR
-  LSR
+  LSR A
+  LSR A
+  LSR A
+  LSR A
   JSR display_hex_char
   PLA
   AND #$0F
@@ -576,26 +576,26 @@ start
   JSR display_data
 
   BRK
-  .data $00              ; Success
+  DATA $00              ; Success
 
 
 msg_data
-  .data ".data" $00
+  DATA "DATA" $00
 
 msg_instprefix
-  .data "." $00
+  DATA "." $00
 
 msg_IHASHTAB
-  .data "IHASHTAB" $00
+  DATA "IHASHTAB" $00
 
 msg_hash_table_comment
-  .data "; Instructions hash table (pointers)" $00
+  DATA "; Instructions hash table (pointers)" $00
 
 msg_heap_comment
-  .data "; Instructions heap data" $00
+  DATA "; Instructions heap data" $00
 
 
 HEAP                  ; Heap goes after the program code
 
 
-  .data start ; Emulation environment jumps to address in last 2 bytes
+  DATA start ; Emulation environment jumps to address in last 2 bytes

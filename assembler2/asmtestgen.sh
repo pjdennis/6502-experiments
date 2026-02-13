@@ -76,18 +76,11 @@ echo "--- Version 17 ---"
   ../emulator.out ../16/out/asm.out asm.asm out/asm.out)
 run_version_tests 17
 diff <(hexdump -C 16/out/asm.out) <(hexdump -C 17/out/asm.out)
-echo "--- Version 18 ---"
-(cd 18 && mkdir -p out &&
+echo "--- Version 19 ---"
+(cd 19 && mkdir -p out &&
   ../emulator.out ../17/out/asm.out instgen.asm out/instgen.out &&
   ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
   ../emulator.out ../17/out/asm.out asm.asm out/asm.out)
-run_version_tests 18
-diff 16/out/inst.asm.out 18/out/inst.asm.out
-echo "--- Version 19 ---"
-(cd 19 && mkdir -p out &&
-  ../emulator.out ../18/out/asm.out instgen.asm out/instgen.out &&
-  ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
-  ../emulator.out ../18/out/asm.out asm.asm out/asm.out)
 run_version_tests 19
 echo "--- Version 20 ---"
 (cd 20 && mkdir -p out &&

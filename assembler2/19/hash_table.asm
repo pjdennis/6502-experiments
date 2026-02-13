@@ -8,29 +8,29 @@
 
   .zeropage
 
-HASH      .data $00     ; 1 byte hash value
-CACHED_HASH .data $00   ; Pre-ASL hash of current global (for local labels)
-HTPL      .data $00     ; 2 byte pointer to hash table
-HTPH      .data $00     ; "
-TABPL     .data $00     ; 2 byte table pointer
-TABPH     .data $00     ; "
-HTTPL     .data $00     ; 2 byte temporary pointer
-HTTPH     .data $00     ; "
-IS_LOCAL_LABEL .data $00 ; Flag: non-zero if storing local label
+HASH      DATA $00     ; 1 byte hash value
+CACHED_HASH DATA $00   ; Pre-ASL hash of current global (for local labels)
+HTPL      DATA $00     ; 2 byte pointer to hash table
+HTPH      DATA $00     ; "
+TABPL     DATA $00     ; 2 byte table pointer
+TABPH     DATA $00     ; "
+HTTPL     DATA $00     ; 2 byte temporary pointer
+HTTPH     DATA $00     ; "
+IS_LOCAL_LABEL DATA $00 ; Flag: non-zero if storing local label
 
   .code
 
 
 ; Contains each byte $00-$7F exactly once in random order
 scramble_table
-  .data $01 $20 $33 $1B $1C $16 $29 $1F $3A $75 $62 $42 $68 $79 $00 $52
-  .data $32 $0B $22 $77 $72 $71 $10 $59 $06 $4D $17 $37 $40 $0C $66 $21
-  .data $1E $43 $3E $30 $13 $07 $7E $44 $6C $58 $15 $1A $5A $24 $0F $7A
-  .data $7B $39 $4B $53 $70 $73 $19 $69 $55 $7D $4C $2C $7C $47 $23 $61
-  .data $56 $48 $74 $2F $76 $26 $2E $2B $6B $57 $12 $4F $25 $64 $0A $27
-  .data $50 $65 $5D $31 $2A $46 $6F $5F $67 $54 $18 $49 $05 $11 $03 $6E
-  .data $02 $0E $34 $5E $63 $08 $6D $14 $6A $0D $3B $4E $3D $60 $41 $38
-  .data $45 $7F $3F $3C $5C $2D $35 $51 $04 $28 $09 $4A $78 $1D $36 $5B
+  DATA $01 $20 $33 $1B $1C $16 $29 $1F $3A $75 $62 $42 $68 $79 $00 $52
+  DATA $32 $0B $22 $77 $72 $71 $10 $59 $06 $4D $17 $37 $40 $0C $66 $21
+  DATA $1E $43 $3E $30 $13 $07 $7E $44 $6C $58 $15 $1A $5A $24 $0F $7A
+  DATA $7B $39 $4B $53 $70 $73 $19 $69 $55 $7D $4C $2C $7C $47 $23 $61
+  DATA $56 $48 $74 $2F $76 $26 $2E $2B $6B $57 $12 $4F $25 $64 $0A $27
+  DATA $50 $65 $5D $31 $2A $46 $6F $5F $67 $54 $18 $49 $05 $11 $03 $6E
+  DATA $02 $0E $34 $5E $63 $08 $6D $14 $6A $0D $3B $4E $3D $60 $41 $38
+  DATA $45 $7F $3F $3C $5C $2D $35 $51 $04 $28 $09 $4A $78 $1D $36 $5B
 
 
 ; Initialize a hash table
@@ -67,7 +67,7 @@ calculate_hash
 ;         X, Y are preserved
 commit_cached_hash
   LDA HASH
-  LSR
+  LSR A
   STA CACHED_HASH
   RTS
 

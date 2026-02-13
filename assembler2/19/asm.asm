@@ -10,36 +10,36 @@ FILE_STACK   = $F000    ; File stack will grow down from 1 below here
   .zeropage
 
 ; Zero page locations
-TEMP        .data $00 ; 1 byte
-PCL         .data $00 ; 2 byte program counter
-PCH         .data $00 ; "
-HEX1        .data $00 ; 1 byte (high byte - also aliased as OPERAND_H)
-HEX2        .data $00 ; 1 byte (low byte - also aliased as OPERAND_L)
-PASS        .data $00 ; 1 byte $00 = pass 1 $FF = pass 2
-MEMPL       .data $00 ; 2 byte heap pointer
-MEMPH       .data $00 ; "
-STARTED     .data $00 ; flag to indicate output has started
-CURR_FILE   .data $00 ; current file handle
-CURLINEL    .data $00 ; Current line (L)
-CURLINEH    .data $00 ; Current line (H)
-IN_ZEROPAGE .data $00 ; Flag indicating if in zero page section
-PC_SAVEL    .data $00 ; Save location for PC when switching sections
-PC_SAVEH    .data $00 ; "
-CURR_GLOBAL_HEAP_L .data $00 ; Heap address of current global label string
-CURR_GLOBAL_HEAP_H .data $00 ; "
-DEBUG_FLAG  .data $00 ; Non-zero if debug output enabled
-ADDR_MODE   .data $00 ; Current addressing mode
-INST_PTR_L  .data $00 ; Pointer to instruction mode table entry
-INST_PTR_H  .data $00 ; "
+TEMP        DATA $00 ; 1 byte
+PCL         DATA $00 ; 2 byte program counter
+PCH         DATA $00 ; "
+HEX1        DATA $00 ; 1 byte (high byte - also aliased as OPERAND_H)
+HEX2        DATA $00 ; 1 byte (low byte - also aliased as OPERAND_L)
+PASS        DATA $00 ; 1 byte $00 = pass 1 $FF = pass 2
+MEMPL       DATA $00 ; 2 byte heap pointer
+MEMPH       DATA $00 ; "
+STARTED     DATA $00 ; flag to indicate output has started
+CURR_FILE   DATA $00 ; current file handle
+CURLINEL    DATA $00 ; Current line (L)
+CURLINEH    DATA $00 ; Current line (H)
+IN_ZEROPAGE DATA $00 ; Flag indicating if in zero page section
+PC_SAVEL    DATA $00 ; Save location for PC when switching sections
+PC_SAVEH    DATA $00 ; "
+CURR_GLOBAL_HEAP_L DATA $00 ; Heap address of current global label string
+CURR_GLOBAL_HEAP_H DATA $00 ; "
+DEBUG_FLAG  DATA $00 ; Non-zero if debug output enabled
+ADDR_MODE   DATA $00 ; Current addressing mode
+INST_PTR_L  DATA $00 ; Pointer to instruction mode table entry
+INST_PTR_H  DATA $00 ; "
 OPERAND_L = HEX2     ; Operand value (low byte) - alias for HEX2
 OPERAND_H = HEX1     ; Operand value (high byte) - alias for HEX1
-IS_FWDREF   .data $00 ; $FF if current label is forward ref (pass 1 only)
-FWDREF_PASS1_L .data $00 ; Forward ref pointer after pass 1 (low byte)
-FWDREF_PASS1_H .data $00 ; Forward ref pointer after pass 1 (high byte)
-EXPR_ACCU_L .data $00 ; Expression accumulator low byte
-EXPR_ACCU_H .data $00 ; Expression accumulator high byte
-EXPR_FWDREF .data $00 ; Accumulated forward ref flag
-EXPR_CARRY  .data $00 ; Saved carry from first term
+IS_FWDREF   DATA $00 ; $FF if current label is forward ref (pass 1 only)
+FWDREF_PASS1_L DATA $00 ; Forward ref pointer after pass 1 (low byte)
+FWDREF_PASS1_H DATA $00 ; Forward ref pointer after pass 1 (high byte)
+EXPR_ACCU_L DATA $00 ; Expression accumulator low byte
+EXPR_ACCU_H DATA $00 ; Expression accumulator high byte
+EXPR_FWDREF DATA $00 ; Accumulated forward ref flag
+EXPR_CARRY  DATA $00 ; Saved carry from first term
 
   .code
 
@@ -222,10 +222,10 @@ check_for_end_of_line
 ; Raises 'Invalid hex' error if encountering non-hex characters
 read_hex_byte
   JSR convert_hex_character
-  ASL
-  ASL
-  ASL
-  ASL
+  ASL A
+  ASL A
+  ASL A
+  ASL A
   STA TEMP
   JSR read_char
   JSR convert_hex_character
@@ -517,7 +517,7 @@ parse_expression
   LDA EXPR_FWDREF
   STA IS_FWDREF
   LDA EXPR_CARRY
-  LSR                  ; Shift bit 0 into carry
+  LSR A                ; Shift bit 0 into carry
   PLA                  ; Restore next char
   RTS
 
@@ -1313,16 +1313,16 @@ process_directive
 
 
 directive_include
-  .data "include" $00
+  DATA "include" $00
 
 directive_zeropage
-  .data "zeropage" $00
+  DATA "zeropage" $00
 
 directive_code
-  .data "code" $00
+  DATA "code" $00
 
 directive_data
-  .data "data" $00
+  DATA "data" $00
 
 
 
@@ -1477,7 +1477,7 @@ check_debug_string
   RTS
 
 str_debug
-  .data "debug" $00
+  DATA "debug" $00
 
 
 ; ============================================================================
@@ -1604,20 +1604,20 @@ start
 .skip_debug_output
 
   BRK
-  .data $00             ; Success code
+  DATA $00             ; Success code
 
 
 msg_heap_used
-  .data "Heap used: " $00
+  DATA "Heap used: " $00
 msg_bytes
-  .data " bytes\n" $00
+  DATA " bytes\n" $00
 msg_fwdref_count
-  .data "Forward references forced to absolute: " $00
+  DATA "Forward references forced to absolute: " $00
 
 
 HEAP                   ; Heap goes after the program code
 
 
 * = $FFFC
-  .data start           ; Reset vector
-  .data interrupt       ; Interrupt vector
+  DATA start           ; Reset vector
+  DATA interrupt       ; Interrupt vector

@@ -10,8 +10,8 @@
 
   .zeropage
 
-FWDREF_L    .data $00 ; Pointer to forward reference list (low)
-FWDREF_H    .data $00 ; Pointer to forward reference list (high)
+FWDREF_L    DATA $00 ; Pointer to forward reference list (low)
+FWDREF_H    DATA $00 ; Pointer to forward reference list (high)
 
   .code
 

@@ -14,87 +14,87 @@
 ; Error labels - each triggers BRK with inline error code and message
 err_label_not_found
   BRK
-  .data $01 "Label not found" $00
+  DATA $01 "Label not found" $00
 
 err_duplicate_label
   BRK
-  .data $02 "Duplicate label" $00
+  DATA $02 "Duplicate label" $00
 
 err_opcode_not_found
   BRK
-  .data $03 "Opcode not found" $00
+  DATA $03 "Opcode not found" $00
 
 err_branch_out_of_range
   BRK
-  .data $05 "Branch out of range" $00
+  DATA $05 "Branch out of range" $00
 
 err_value_out_of_range
   BRK
-  .data $06 "Value out of range" $00
+  DATA $06 "Value out of range" $00
 
 err_invalid_hex
   BRK
-  .data $07 "Invalid hex" $00
+  DATA $07 "Invalid hex" $00
 
 err_pc_value_expected
   BRK
-  .data $08 "PC value expected" $00
+  DATA $08 "PC value expected" $00
 
 err_closing_quote_not_found
   BRK
-  .data $09 "Closing quote not found" $00
+  DATA $09 "Closing quote not found" $00
 
 err_cannot_move_pc_backwards
   BRK
-  .data $0A "Cannot move PC backwards" $00
+  DATA $0A "Cannot move PC backwards" $00
 
 err_unknown_directive
   BRK
-  .data $0B "Unknown directive" $00
+  DATA $0B "Unknown directive" $00
 
 err_filename_expected
   BRK
-  .data $0C "Filename expected" $00
+  DATA $0C "Filename expected" $00
 
 err_too_many_forward_refs
   BRK
-  .data $13 "Too many forward references" $00
+  DATA $13 "Too many forward references" $00
 
 err_usage
   BRK
-  .data $0D "Usage <assembler> <input> <output> [debug]" $00
+  DATA $0D "Usage <assembler> <input> <output> [debug]" $00
 
 err_no_file
   BRK
-  .data $0E "Attempt to read with no file open" $00
+  DATA $0E "Attempt to read with no file open" $00
 
 err_invalid_debug_arg
   BRK
-  .data $10 "Invalid third argument (expected 'debug')" $00
+  DATA $10 "Invalid third argument (expected 'debug')" $00
 
 err_no_global_for_local
   BRK
-  .data $0F "No global label for local" $00
+  DATA $0F "No global label for local" $00
 
 err_invalid_addressing_mode
   BRK
-  .data $11 "Invalid addressing mode for instruction" $00
+  DATA $11 "Invalid addressing mode for instruction" $00
 
 err_invalid_char_literal
   BRK
-  .data $12 "Invalid character literal" $00
+  DATA $12 "Invalid character literal" $00
 
 err_invalid_operand
   BRK
-  .data $14 "Invalid operand" $00
+  DATA $14 "Invalid operand" $00
 
 err_unexpected_text
   BRK
-  .data $15 "Unexpected text after operand" $00
+  DATA $15 "Unexpected text after operand" $00
 
 err_fwdref_tracking
   BRK
-  .data $16 "Internal error - reference tracking" $00
+  DATA $16 "Internal error - reference tracking" $00
 
 
 ; Interrupt handler - processes BRK for error display
@@ -178,11 +178,11 @@ interrupt
   JMP exit
 
 msg_error
-  .data "Error " $00
+  DATA "Error " $00
 msg_error_line
-  .data " at line " $00
+  DATA " at line " $00
 msg_error_file
-  .data " in file " $00
+  DATA " in file " $00
 
 
 ; Show a decimal value to the error output
