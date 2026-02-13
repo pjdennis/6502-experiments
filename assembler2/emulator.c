@@ -2391,7 +2391,8 @@ int main(int argc, char **argv) {
             sigcont_requested = 0;
             if (console_mode) enter_console();
             if (console_mode) console_redraw();
-            if (terminal_mode) setup_raw_terminal();
+            if (terminal_mode) enter_console();
+            if (terminal_mode) console_redraw();
         }
         if (sigint_requested) {
             if (exitcode_set == -1) exitcode_set = 130;
