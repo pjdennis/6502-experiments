@@ -12,26 +12,26 @@ MODE_COMMAND = $02
 
   .zeropage
 
-CURSOR_ROW:    .byte     ; Cursor screen row (0-based, derived from wrap computation)
-CURSOR_COL16:  .word     ; Cursor column (0-based, 16-bit for lines >255 chars)
-VIEW_TOP16:    .word     ; First visible line number (0-based)
-SCREEN_ROWS:   .byte     ; Terminal height
-SCREEN_COLS:   .byte     ; Terminal width
-FILE_LINE16:   .word     ; Current file line (0-based)
-MODE:          .byte     ; Current mode: MODE_NORMAL, MODE_INSERT, MODE_COMMAND
-MODIFIED:      .byte     ; File modified flag ($00 = no, $FF = yes)
-READONLY:      .byte     ; Read-only mode ($00 = no, $FF = yes)
-RENDER_ROW:    .byte     ; Current row being rendered
-RENDER_LINE16: .word     ; Current file line being rendered
-RENDER_COL:    .byte     ; Column counter during rendering
-FNAME_PTR16:   .word     ; Pointer to filename string (null-terminated)
-RENDER_FLAG:   .byte     ; $FF = full repaint, $01 = current line+status, $00 = cursor+status only
-VIEW_TOP_WRAP: .byte     ; Wrap row offset for first visible line (0 = start of line)
-WRAP_QUOT:     .byte     ; Scratch: quotient from CURSOR_COL / SCREEN_COLS
-WRAP_REM:      .byte     ; Scratch: remainder from CURSOR_COL % SCREEN_COLS
-RENDER_WRAP:   .byte     ; Current wrap row offset during rendering
-DIV_INPUT16:   .word     ; Scratch for 16-bit division
-PREV_LINE_ROWS: .byte    ; Screen rows the current line occupied before the edit
+CURSOR_ROW:     .byte   ; Cursor screen row (0-based, derived from wrap computation)
+CURSOR_COL16:   .word   ; Cursor column (0-based, 16-bit for lines >255 chars)
+VIEW_TOP16:     .word   ; First visible line number (0-based)
+SCREEN_ROWS:    .byte   ; Terminal height
+SCREEN_COLS:    .byte   ; Terminal width
+FILE_LINE16:    .word   ; Current file line (0-based)
+MODE:           .byte   ; Current mode: MODE_NORMAL, MODE_INSERT, MODE_COMMAND
+MODIFIED:       .byte   ; File modified flag ($00 = no, $FF = yes)
+READONLY:       .byte   ; Read-only mode ($00 = no, $FF = yes)
+RENDER_ROW:     .byte   ; Current row being rendered
+RENDER_LINE16:  .word   ; Current file line being rendered
+RENDER_COL:     .byte   ; Column counter during rendering
+FNAME_PTR16:    .word   ; Pointer to filename string (null-terminated)
+RENDER_FLAG:    .byte   ; $FF = full repaint, $01 = current line+status, $00 = cursor+status only
+VIEW_TOP_WRAP:  .byte   ; Wrap row offset for first visible line (0 = start of line)
+WRAP_QUOT:      .byte   ; Scratch: quotient from CURSOR_COL / SCREEN_COLS
+WRAP_REM:       .byte   ; Scratch: remainder from CURSOR_COL % SCREEN_COLS
+RENDER_WRAP:    .byte   ; Current wrap row offset during rendering
+DIV_INPUT16:    .word   ; Scratch for 16-bit division
+PREV_LINE_ROWS: .byte   ; Screen rows the current line occupied before the edit
 
   .code
 
@@ -610,10 +610,10 @@ ensure_cursor_visible:
   RTS
 
 ; === String constants ===
+str_ro_indicator:  .asciiz " [RO]"
+str_mod_indicator: .asciiz " [+]"
+str_separator:     .asciiz " - "
 str_normal:        .asciiz "NORMAL"
 str_insert:        .asciiz "INSERT"
 str_command:       .asciiz "COMMAND"
 mode_strings:      .word str_normal, str_insert, str_command
-str_ro_indicator:  .asciiz " [RO]"
-str_mod_indicator: .asciiz " [+]"
-str_separator:     .asciiz " - "
