@@ -59,37 +59,112 @@ insert_exit:
   RTS
 
 ; Insert a printable character at cursor position
-; Character in A. Reads and batches any pending printable chars.
+; Character in A. Reads and batches pending printable chars, Enter, and BS.
 insert_char:
   ; Store first char in BATCH_BUF[0]
   STA BATCH_BUF
   LDX #1
 
-  ; Read pending printable chars into BATCH_BUF[1..]
+  ; Read pending chars into BATCH_BUF[1..] (printable, Enter as \n, BS cancels)
 .batch_read:
   JSR key_ready
   CMP #$FF
   BNE .batch_apply
   JSR get_key
+  CMP #KEY_ENTER
+  BEQ .batch_enter
+  CMP #KEY_BS
+  BEQ .batch_bs
   ; Check if printable ($20-$7E)
   CMP #' '
   BCC .batch_not_printable
   CMP #$7F
   BCS .batch_not_printable
+.batch_store:
   STA BATCH_BUF,X
   INX
   CPX #BATCH_MAX
   BNE .batch_read
   JMP .batch_apply
 
+.batch_enter:
+  LDA #'\n'
+  JMP .batch_store
+
+.batch_bs:
+  CPX #0
+  BEQ .batch_bs_empty
+  DEX                       ; Cancel last char/newline in batch
+  JMP .batch_read
+.batch_bs_empty:
+  JSR unget_key             ; Push BS back for normal handler
+  JMP .batch_apply          ; BUF_DELTA will be 0 -> no-op
+
 .batch_not_printable:
   JSR unget_key
 
 .batch_apply:
   STX BUF_DELTA
+  CPX #0
+  BEQ .batch_noop           ; BS canceled everything
+
   JSR get_cursor_buf_ptr
   JSR buf_insert_chars
   BCS .insert_char_full
+
+  ; Scan BATCH_BUF for newlines
+  LDA #0
+  STA BUF_TEMP              ; Newline count
+  TAY                       ; Y = scan index
+.scan_nl:
+  LDA BATCH_BUF,Y
+  CMP #'\n'
+  BNE .scan_not_nl
+  INC BUF_TEMP
+  TYA
+  CLC
+  ADC #1
+  STA LINE_LEN16            ; Track position after last \n
+.scan_not_nl:
+  INY
+  CPY BUF_DELTA
+  BNE .scan_nl
+
+  LDA BUF_TEMP
+  BEQ .no_newlines
+
+  ; --- Newline path: rebuild lines + adjust marks + advance line ---
+  JSR buf_rebuild_lines
+
+  ; mark_adjust_insert: BUF_TEMP16 lines at FILE_LINE16+1
+  LDA BUF_TEMP
+  STA BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
+  CLC
+  ADCI16 FILE_LINE16, $0001, BUF_DST16
+  LDAX16 BUF_DST16
+  JSR mark_adjust_insert
+
+  ; Advance FILE_LINE16 by newline count
+  LDA BUF_TEMP
+  CLC
+  ADCA16 FILE_LINE16, FILE_LINE16
+
+  ; CURSOR_COL16 = BUF_DELTA - LINE_LEN16 (bytes after last \n)
+  SEC
+  LDA BUF_DELTA
+  SBC LINE_LEN16
+  STA CURSOR_COL16
+  LDA #0
+  STA CURSOR_COL16 + 1
+
+  LDA #$FF
+  STA MODIFIED
+  RTS
+
+.no_newlines:
+  ; --- Fast path: no newlines (existing behavior) ---
   JSR buf_adjust_lines_inc
 
   ; Advance cursor by BUF_DELTA
@@ -100,6 +175,10 @@ insert_char:
   LDA #$FF
   STA MODIFIED
   RTS
+
+.batch_noop:
+  RTS
+
 .insert_char_full:
   JMP show_buffer_full_msg
 
