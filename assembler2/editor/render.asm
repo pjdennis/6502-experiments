@@ -302,7 +302,7 @@ render_current_line_and_status:
   JSR buf_get_line_ptr
   LDX RENDER_WRAP              ; restore loop counter
 
-.wrap_loop:
+  ; Position cursor for first row only
   LDA RENDER_ROW
   CLC
   ADC #1
@@ -313,6 +313,8 @@ render_current_line_and_status:
   STA ANSI_COL
   STX RENDER_WRAP              ; save loop counter
   JSR ansi_move_cursor
+
+.wrap_loop:
   JSR render_line_chars
   LDA RENDER_COL
   CMP SCREEN_COLS
@@ -330,7 +332,15 @@ render_current_line_and_status:
   INC RENDER_ROW
   LDX RENDER_WRAP              ; restore loop counter
   DEX
-  BNE .wrap_loop
+  BEQ .wrap_done
+  STX RENDER_WRAP              ; save for next iteration
+  ; Check if next row is the status bar
+  LDA RENDER_ROW
+  CLC
+  ADC #1
+  CMP SCREEN_ROWS
+  BCS .wrap_done
+  JMP .wrap_loop
 
 .wrap_done:
   JSR render_status_line
