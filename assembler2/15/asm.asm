@@ -6,6 +6,8 @@ SCOPE_LIMIT   = SCOPE_STACK+$0100 ; Limit for scope stack
 MACRO_ARG_BUF = $0500             ; Temp buffer for macro args during expansion (256 bytes)
 TOKEN         = $0600             ; Buffer for the current token being read
 LHASHTAB      = $0700             ; Label hash table
+IFDEF_DECISIONS = $0800           ; Buffer for .ifdef decisions (255 bytes, $0800-$08FE)
+IFDEF_INDEX     = $08FF           ; Current index into IFDEF_DECISIONS buffer
 *             = $2000             ; Code generates here
 FILE_STACK    = $F000             ; File stack will grow down from 1 below here
 
@@ -1529,27 +1531,60 @@ data_parameters_loop_entry
 
 ; Process .ifdef directive
 process_ifdef
-  INC COND_DEPTH       ; Always increment depth
-  ; Check if already skipping
+  INC COND_DEPTH
+  LDA COND_DEPTH
+  CMP #$11             ; Check for nesting limit (16 levels max, depth 17 = overflow)
+  BCS .nesting_too_deep
   LDA SKIP_DEPTH
-  BNE .pi_skip_rest    ; Already skipping, don't evaluate condition
+  BNE .already_skipping ; Already skipping, don't record or evaluate
   ; Not skipping - evaluate condition
   JSR check_for_end_of_line
-  BCC .pi_has_label    ; Label present
-  JMP err_label_expected  ; Missing label
-.pi_has_label
-  JSR read_token       ; Read label name into TOKEN, next char in NEXT_CHAR
-  ; Look up label in symbol table (don't use local label handling for .ifdef)
+  BCC .has_label
+  JMP err_label_expected
+.has_label
+  JSR read_token
+  ; Save X (output file handle)
+  TXA
+  PHA
+  ; Check for pass 2 - replay stored decision
+  BIT PASS
+  BMI .pass2
+  ; --- Pass 1: Evaluate and store decision ---
+  LDX IFDEF_INDEX
+  INC IFDEF_INDEX
+  BEQ .overflow        ; If wrapped to 0, we've used all 256 slots
   LDA #$00
   STA IS_LOCAL_LABEL
   JSR select_label_hash_table
-  JSR find_in_hash
-  BCC .pi_skip_rest    ; Label found - continue assembling
-  ; Label doesn't exist - start skipping
+  JSR find_in_hash     ; C=0 if found, C=1 if not found
+  LDA #$00             ; Default: not defined (skip)
+  BCS .save_result     ; C=1 means not found
+  LDA #$FF             ; Found: defined (assemble)
+.save_result
+  STA IFDEF_DECISIONS,X
+  BEQ .start_skip      ; Not defined ($00) - start skipping
+  BNE .done            ; Defined ($FF) - continue
+  ; --- Pass 2: Replay stored decision ---
+.pass2
+  LDX IFDEF_INDEX
+  INC IFDEF_INDEX
+  LDA IFDEF_DECISIONS,X
+  BEQ .start_skip
+  BNE .done
+.start_skip
   LDA COND_DEPTH
   STA SKIP_DEPTH
-.pi_skip_rest
-  JMP skip_rest_of_line ; Tail call
+.done
+  ; Restore X (output file handle)
+  PLA
+  TAX
+  JMP skip_rest_of_line
+.already_skipping
+  JMP skip_rest_of_line
+.overflow
+  JMP err_too_many_ifdefs
+.nesting_too_deep
+  JMP err_conditional_nesting_too_deep
 
 
 ; Process .endif directive
@@ -2017,6 +2052,7 @@ assemble_code
   STA IS_LOCAL_LABEL  ; Initialize local label flag
   STA COND_DEPTH      ; Clear conditional depth
   STA SKIP_DEPTH      ; Clear skip depth
+  STA IFDEF_INDEX     ; Clear .ifdef decision index
   STA IN_MACRO_DEF    ; Clear macro definition flag
 asm_line_loop                 ; Global entry for macro expansion
 .line_loop

@@ -92,9 +92,13 @@ err_filename_expected
 err_usage
   BRK $0D "Usage <assebler> <input> <output>" $00
 
+err_no_file
+  BRK $0E "No file open" $00
+
 
 read_char
   LDAZ CURR_FILE
+  BEQ rc_no_file
   JSR read
   BCS rc_at_end
   RTS
@@ -103,12 +107,13 @@ rc_at_end
   BEQ rc_done
   JSR pop_file_stack
   LDAZ CURR_FILE
-  BEQ rc_set_carry
+  BEQ rc_done
   JMP read_char          ; Recursive tail call
-rc_set_carry
-  SEC
 rc_done
+  SEC
   RTS
+rc_no_file
+  JMP err_no_file
 
 
 init_file_stack

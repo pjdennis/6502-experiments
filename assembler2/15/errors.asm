@@ -110,6 +110,14 @@ err_label_expected
   BRK
   .data $19 "Label expected" $00
 
+err_too_many_ifdefs
+  BRK
+  .data $24 "Too many .ifdef directives" $00
+
+err_conditional_nesting_too_deep
+  BRK
+  .data $25 "Conditional nesting exceeds 16 levels" $00
+
 err_expected_shift
   BRK
   .data $1A "Expected << or >>" $00
