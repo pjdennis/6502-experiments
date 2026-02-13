@@ -9,9 +9,9 @@ of this version is that the source code itself is rewritten in standard 6502
 syntax, taking advantage of version 11's standard syntax support.
 
 Version 12 produces binary-identical output to version 11 for any given input.
-This is the bootstrap chain's fixed point: two implementations (non-standard
-source assembled by v10, standard source assembled by v11) producing the
-same binary.
+This is the bootstrap chain's standard syntax migration: two implementations
+(non-standard source assembled by v10, standard source assembled by v11)
+producing the same binary.
 
 Syntax (standard 6502 - same as version 11):
 - Standard 6502 mnemonic syntax: LDA #$42, STA $00, LDA ($10),Y, etc.

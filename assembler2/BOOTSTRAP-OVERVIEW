@@ -15,7 +15,7 @@ Version  Milestone
 09       Sections (.zeropage/.code), command-line arguments
 10       Local labels, heap-based global label storage
 11       Standard 6502 syntax (all 13 addressing modes), forward reference tracking
-12       Source transitions to standard syntax (fixed point)
+12       Source transitions to standard syntax (standard syntax migration)
 13       Expression evaluation, .data directive
 14       .ifdef/.endif conditional assembly
 15       Macros, << >> shift operators
