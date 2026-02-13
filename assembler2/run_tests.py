@@ -376,7 +376,7 @@ class TestRunner:
                     # Add args (ARGS overrides the default "debug" argument)
                     if test.args:
                         cmd.extend(test.args.split())
-                    elif version >= 13:
+                    elif version >= 11:
                         cmd.append("debug")
 
             # Run assembler with cwd set to test file's directory for relative includes
