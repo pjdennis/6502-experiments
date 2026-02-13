@@ -4015,6 +4015,21 @@ class EditorTestRunner:
             expected_content="A\nB\nC\nC\n"
         )
 
+        # Batched yy pairs
+        self.run_test(
+            "yyyy batches to yank 2 lines",
+            "A\nB\nC\n",
+            b"yyyyp:wq\r",
+            expected_content="A\nA\nB\nB\nC\n"
+        )
+
+        self.run_test(
+            "yyyyyy batches to yank 3 lines",
+            "A\nB\nC\nD\n",
+            b"yyyyyyp:wq\r",
+            expected_content="A\nA\nB\nC\nB\nC\nD\n"
+        )
+
         # ============================================================
         # Character yank/paste tests (x, D with p/P)
         # ============================================================

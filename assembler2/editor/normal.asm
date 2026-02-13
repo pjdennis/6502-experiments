@@ -166,6 +166,7 @@ pending_key_dispatch:
 .exec_gg:
   JMP do_gg
 .exec_yy:
+  JSR batch_pending_pairs
   JMP do_yy
 .exec_cc:
   JMP do_cc
