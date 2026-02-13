@@ -196,20 +196,10 @@ buf_get_line_len:
 ; Shifts all following bytes right by 1
 ; Returns carry set = buffer full, carry clear = success
 buf_insert_char:
-  STA BUF_TEMP
+  STA BATCH_BUF
   LDA #1
   STA BUF_DELTA
-  JSR buf_shift_right
-  BCS .full
-  ; Store the new character
-  LDY #0
-  LDA BUF_TEMP
-  STA (BUF_PTR16),Y
-  CLC
-  RTS
-.full:
-  SEC
-  RTS
+  ; fall through
 
 ; Insert multiple characters from BATCH_BUF at position in buffer
 ; BUF_PTR16 = position to insert at
