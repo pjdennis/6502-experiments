@@ -1,3 +1,9 @@
+  v11-v12: These have the bug. They use standard syntax with automatic ZP detection, but have no forward reference
+  tracking.
+
+
+
+
 Clean up some of the repeating print code in the editor via helper functions
 
 Try to centralize the buffer full message checks
