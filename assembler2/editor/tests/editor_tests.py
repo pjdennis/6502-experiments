@@ -5406,6 +5406,14 @@ class EditorTestRunner:
             expected_content="four\n",
         )
 
+        # Batched dw yank: only last word deleted is in yank buffer
+        self.run_test(
+            "dwdw+$p yanks only last deleted word",
+            "one two three\n",
+            b"dwdw$p:wq\r",
+            expected_content="threetwo \n",
+        )
+
         self._group("Delete word backward (db):", leading_blank=True)
 
         self.run_test(
@@ -5463,6 +5471,14 @@ class EditorTestRunner:
             "one two three four\n",
             b"$dbdbdb:wq\r",
             expected_content="one r\n",
+        )
+
+        # Batched db yank: only last word deleted is in yank buffer
+        self.run_test(
+            "dbdb+0p yanks only last deleted word",
+            "one two three\n",
+            b"$dbdb0p:wq\r",
+            expected_content="otwo ne e\n",
         )
 
         self._group("Change word (cw):", leading_blank=True)
