@@ -3,6 +3,8 @@ TOKEN      = $1D00      ; Buffer for the current token being read
 LHASHTAB   = $1E00      ; Label hash table
 *          = $2000      ; Code generates here
 FILE_STACK = $F000      ; File stack will grow down from 1 below here
+FWDREF_LIST  = $0200    ; Forward reference list (512 bytes, $0200-$03FF)
+FWDREF_LIMIT = $03FE    ; Max pointer before add (room for entry + terminator)
 
 
   .zeropage
@@ -31,6 +33,9 @@ INST_PTR_L  DATA $00 ; Pointer to instruction mode table entry
 INST_PTR_H  DATA $00 ; "
 OPERAND_L   DATA $00 ; Operand value (low byte)
 OPERAND_H   DATA $00 ; Operand value (high byte)
+IS_FWDREF   DATA $00 ; $FF if current label is forward ref (pass 1 only)
+FWDREF_PASS1_L DATA $00 ; Forward ref pointer after pass 1 (low byte)
+FWDREF_PASS1_H DATA $00 ; Forward ref pointer after pass 1 (high byte)
 
   .code
 
@@ -45,6 +50,7 @@ FS_CURR_LINEL = CURLINEL
 FS_CURR_LINEH = CURLINEH
   .include file_stack.asm
   .include to_decimal.asm
+  .include fwdref.asm
 
 
 ; Addressing mode constants (must match instgen16.asm)
@@ -132,6 +138,14 @@ err_invalid_addressing_mode
 err_invalid_char_literal
   BRK
   DATA $12 "Invalid character literal" $00
+
+err_too_many_forward_refs
+  BRK
+  DATA $13 "Too many forward references" $00
+
+err_fwdref_tracking
+  BRK
+  DATA $16 "Internal error - reference tracking" $00
 
 
 ; Read next character from file stack
@@ -1495,7 +1509,9 @@ parse_operand_and_emit
   ; Label not found - check pass
   BIT PASS
   BMI .label_not_found_pass2
-  ; Pass 1 - use zero values
+  ; Pass 1 - forward reference: set IS_FWDREF
+  LDY #$FF
+  STY IS_FWDREF
   LDY #$00
   STY HEX1
   STY HEX2
@@ -1503,7 +1519,9 @@ parse_operand_and_emit
 .label_not_found_pass2
   JMP err_label_not_found
 .label_found
-  ; HEX1:HEX2 now contains the label value
+  ; Label found - clear forward ref flag
+  LDY #$00
+  STY IS_FWDREF
 .label_continue
   ; Next char is still on stack from earlier PHA
   LDA HEX2
@@ -1528,56 +1546,44 @@ parse_operand_and_emit
 .label_absx
   JSR read_char        ; Read char after X for garbage check
   PHA
-  ; Check if label value is in zero page
-  LDA OPERAND_H
-  BNE .label_absx_use_abs
-  ; Try zero page X mode
   LDA #MODE_ZPX
   STA ADDR_MODE
-  JSR find_opcode_for_mode
+  JSR handle_fwdref_mode
   BCS .label_absx_use_abs
-  PLA                  ; Restore next char for garbage check
+  PLA
   JMP emit_instruction ; Tail call
 .label_absx_use_abs
   LDA #MODE_ABSX
   STA ADDR_MODE
-  PLA                  ; Restore next char for garbage check
+  PLA
   JMP emit_instruction ; Tail call
 .label_absy
   JSR read_char        ; Read char after Y for garbage check
   PHA
-  ; Check if label value is in zero page
-  LDA OPERAND_H
-  BNE .label_absy_use_abs
-  ; Try zero page Y mode
   LDA #MODE_ZPY
   STA ADDR_MODE
-  JSR find_opcode_for_mode
+  JSR handle_fwdref_mode
   BCS .label_absy_use_abs
-  PLA                  ; Restore next char for garbage check
+  PLA
   JMP emit_instruction ; Tail call
 .label_absy_use_abs
   LDA #MODE_ABSY
   STA ADDR_MODE
-  PLA                  ; Restore next char for garbage check
+  PLA
   JMP emit_instruction ; Tail call
 .label_abs_no_index
   ; A contains next char for garbage check
-  PHA                  ; Save next char
-  ; Check if label value is in zero page (high byte = 0)
-  LDA OPERAND_H
-  BNE .label_use_abs
-  ; High byte is 0 - try zero page mode
+  PHA
   LDA #MODE_ZP
   STA ADDR_MODE
-  JSR find_opcode_for_mode
-  BCS .label_use_abs       ; Mode not supported, use absolute
-  PLA                  ; Restore next char for garbage check
+  JSR handle_fwdref_mode
+  BCS .label_use_abs
+  PLA
   JMP emit_instruction ; Tail call
 .label_use_abs
   LDA #MODE_ABS
   STA ADDR_MODE
-  PLA                  ; Restore next char for garbage check
+  PLA
   JMP emit_instruction ; Tail call
 .label_is_branch
   ; Next char is still on stack
@@ -1585,6 +1591,46 @@ parse_operand_and_emit
   STA ADDR_MODE
   PLA                  ; Restore next char for garbage check
   JMP emit_instruction ; Tail call
+
+
+; Determine whether to use ZP or ABS addressing for a label operand
+; Considers: ZP mode availability, forward ref status, operand value
+; On entry: ADDR_MODE set to ZP variant (MODE_ZP, MODE_ZPX, MODE_ZPY)
+;           OPERAND_L:OPERAND_H contain operand value
+;           IS_FWDREF set if operand is forward reference (pass 1)
+;           PASS indicates current pass
+; On exit: C=1 if must use ABS variant, C=0 if can use ZP variant
+;          In pass 1 with forward ref: adds PC to forward ref list
+;          In pass 2: consumes forward ref list entry if present
+;          A, Y not preserved, X preserved
+handle_fwdref_mode
+  JSR find_opcode_for_mode
+  BCS .use_abs             ; No ZP mode available, must use ABS
+  ; Check forward reference forcing (must be done before value check
+  ; to properly consume forward ref entries in pass 2)
+  BIT PASS
+  BMI .pass2
+  ; Pass 1 - check if this is a forward reference
+  BIT IS_FWDREF
+  BPL .check_value         ; Not a forward ref, check value size
+  ; Forward ref in pass 1 - add to list, return C=1 (use ABS)
+  JSR add_forward_ref
+  SEC
+  RTS
+.pass2
+  ; Pass 2 - check the forward ref list
+  JSR check_forward_ref    ; Returns C=1 if in list, C=0 if not
+  BCS .use_abs             ; Was in list (forced to ABS), return C=1
+.check_value
+  ; Check if value requires absolute addressing (>= $100)
+  LDA OPERAND_H
+  BNE .use_abs             ; Value >= $100, must use ABS
+  ; Can use ZP
+  CLC
+  RTS
+.use_abs
+  SEC
+  RTS
 
 
 ; Check if current instruction is a branch (supports MODE_REL)
@@ -1743,6 +1789,7 @@ start
   LDA #$00
   STA CURR_FILE
   STA PASS            ; Bit 7 = 0 (pass 1)
+  JSR init_fwdref_list
   JSR open_input
 
   ; Open output file
@@ -1752,11 +1799,29 @@ start
   TAX
 
   JSR assemble_code
+  JSR finalize_fwdref_list
+  ; Capture forward ref pointer after pass 1
+  LDA FWDREF_L
+  STA FWDREF_PASS1_L
+  LDA FWDREF_H
+  STA FWDREF_PASS1_H
 
   LDA #$FF
   STA PASS            ; Bit 7 = 1 (pass 2)
+  JSR reset_fwdref_ptr
   JSR open_input
   JSR assemble_code
+  ; Verify forward ref pointer matches pass 1
+  LDA FWDREF_L
+  CMP FWDREF_PASS1_L
+  BNE .fwdref_error
+  LDA FWDREF_H
+  CMP FWDREF_PASS1_H
+  BNE .fwdref_error
+  JMP .fwdref_ok
+.fwdref_error
+  JMP err_fwdref_tracking
+.fwdref_ok
 
   ; Close output file
   TXA
@@ -1784,6 +1849,37 @@ start
   LDA #>msg_bytes
   STA TABPH
   JSR show_message
+  ; Print forward reference count
+  LDA #<msg_fwdref_count
+  STA TABPL
+  LDA #>msg_fwdref_count
+  STA TABPH
+  JSR show_message
+  ; Calculate forward ref count: (FWDREF_PASS1 - FWDREF_LIST) / 2
+  SEC
+  LDA FWDREF_PASS1_L
+  SBC #<FWDREF_LIST
+  STA TO_DECIMAL_VALUE_L
+  LDA FWDREF_PASS1_H
+  SBC #>FWDREF_LIST
+  STA TO_DECIMAL_VALUE_H
+  ; Divide by 2 (16-bit right shift, match v11 workaround for identical binary)
+  LDA TO_DECIMAL_VALUE_H
+  LSR A                      ; carry = old bit 0 of H
+  STA TO_DECIMAL_VALUE_H     ; H >> 1 (always 0)
+  LDA TO_DECIMAL_VALUE_L     ; carry preserved (LDA doesn't affect C)
+  BCC .no_high_bit
+  LSR A                      ; L >> 1
+  CLC
+  ADC #$80                   ; bring in carry from H as bit 7
+  JMP .store_count
+.no_high_bit
+  LSR A                      ; L >> 1, bit 7 = 0
+.store_count
+  STA TO_DECIMAL_VALUE_L
+  JSR show_decimal
+  LDA #'\n'
+  JSR write_d
 .skip_debug_output
 
   BRK
@@ -1880,6 +1976,8 @@ msg_heap_used
   DATA "Heap used: " $00
 msg_bytes
   DATA " bytes\n" $00
+msg_fwdref_count
+  DATA "Forward references forced to absolute: " $00
 
 
 ; Show message to the error output
