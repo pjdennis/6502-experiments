@@ -39,6 +39,11 @@ TR_HAS_TEST:       .byte       ; Nonzero if a test has been parsed
 TR_ACTUAL_LEN16:   .word       ; Length of actual output bytes
 TR_ARGV_COUNT:     .byte       ; Number of extra ARGS entries
 TR_LINE_TRUNC:     .byte       ; Nonzero if line was truncated (more in file)
+TR_ACTUAL_PTR16:   .word       ; Pointer into TR_EXPECT_BUF for comparison
+TR_MISMATCH_FLAG:  .byte       ; Nonzero if byte mismatch detected
+TR_MISMATCH_ACTUAL: .byte      ; Actual byte at first mismatch
+TR_MISMATCH_EXPECT: .byte      ; Expected byte at first mismatch
+TR_MISMATCH_POS16: .word       ; Position of first mismatch
 
   .code
 
@@ -148,6 +153,10 @@ tr_run_test:
   ; Clear stderr capture
   LDA #$00
   STA TR_STDERR_LEN
+  ; Initialize output comparison state
+  STA_LH16 TR_ACTUAL_LEN16
+  STA TR_MISMATCH_FLAG
+  SET16 TR_EXPECT_BUF, TR_ACTUAL_PTR16
   ; Patch vectors to intercept
   JSR tr_patch_vectors
   ; Save stack pointer
@@ -163,15 +172,24 @@ tr_run_test:
 tr_test_resume:
   ; Restore original vectors immediately
   JSR tr_restore_vectors
-  ; Print test name and exit code
+  ; Verify results based on test type
+  LDA TR_TEST_TYPE
+  BNE .error_test
+  ; === Hex test ===
+  JSR tr_verify_hex
+  BCS .fail
+  JMP .pass
+.error_test:
+  ; === Error test ===
+  JSR tr_verify_error
+  BCS .fail
+.pass:
   JSR tr_print_test_name
-  SHOW_MESSAGEI tr_msg_exit
-  LDA TR_EXIT_CODE
-  STA TO_DECIMAL_VALUE16
-  LDA #$00
-  STA TO_DECIMAL_VALUE16 + 1
-  JSR show_decimal
-  SHOW_MESSAGEI tr_msg_close_paren
+  SHOW_MESSAGEI tr_msg_pass
+  INC16 TR_PASS_COUNT16
+  RTS
+.fail:
+  INC16 TR_FAIL_COUNT16
   RTS
 
 ; Set up virtual argv for the assembler
@@ -184,8 +202,352 @@ tr_setup_argv:
   RTS
 
 tr_msg_skip:        .asciiz " SKIP\n"
-tr_msg_exit:        .asciiz " (exit: "
+tr_msg_pass:        .asciiz " PASS\n"
+tr_msg_fail:        .asciiz " FAIL"
 tr_msg_close_paren: .asciiz ")\n"
+tr_msg_expected:    .asciiz " (expected "
+tr_msg_got:         .asciiz ", got "
+tr_msg_bytes:       .asciiz " bytes"
+tr_msg_error:       .asciiz "error "
+tr_msg_line:        .asciiz "line "
+tr_msg_msg:         .asciiz "msg \""
+tr_msg_quote:       .asciiz "\""
+tr_msg_byte_at:     .asciiz " (byte "
+tr_msg_colon_space: .asciiz ": "
+
+
+; ============================================================================
+; HEX VERIFICATION
+; ============================================================================
+
+; Verify hex test: compare actual output (captured on-the-fly) with expected
+; On exit: C clear = pass, C set = fail (details already printed)
+tr_verify_hex:
+  ; First check: assembler should have succeeded
+  LDA TR_EXIT_CODE
+  BEQ .exit_ok
+  ; Assembler failed unexpectedly
+  JSR tr_print_test_name
+  SHOW_MESSAGEI tr_msg_fail
+  SHOW_MESSAGEI tr_msg_expected
+  SHOW_MESSAGEI tr_msg_error
+  SHOW_CHAR '0'
+  SHOW_MESSAGEI tr_msg_got
+  SHOW_MESSAGEI tr_msg_error
+  JSR tr_print_exit_code
+  SHOW_MESSAGEI tr_msg_close_paren
+  SEC
+  RTS
+.exit_ok:
+  ; Check lengths match
+  CMP16 TR_ACTUAL_LEN16, TR_EXPECT_LEN16
+  BEQ .lengths_match
+  ; Length mismatch
+  JSR tr_print_test_name
+  SHOW_MESSAGEI tr_msg_fail
+  SHOW_MESSAGEI tr_msg_expected
+  JSR tr_print_expect_len
+  SHOW_MESSAGEI tr_msg_bytes
+  SHOW_MESSAGEI tr_msg_got
+  JSR tr_print_actual_len
+  SHOW_MESSAGEI tr_msg_bytes
+  SHOW_MESSAGEI tr_msg_close_paren
+  SEC
+  RTS
+.lengths_match:
+  ; Check for byte mismatch (recorded during write interception)
+  LDA TR_MISMATCH_FLAG
+  BEQ .hex_pass
+  ; Byte mismatch - print details
+  JSR tr_print_test_name
+  SHOW_MESSAGEI tr_msg_fail
+  SHOW_MESSAGEI tr_msg_byte_at
+  CP16 TR_MISMATCH_POS16, TO_DECIMAL_VALUE16
+  JSR show_decimal
+  SHOW_MESSAGEI tr_msg_colon_space
+  LDA TR_MISMATCH_EXPECT
+  JSR tr_print_hex_byte
+  SHOW_MESSAGEI tr_msg_got
+  LDA TR_MISMATCH_ACTUAL
+  JSR tr_print_hex_byte
+  SHOW_MESSAGEI tr_msg_close_paren
+  SEC
+  RTS
+.hex_pass:
+  CLC
+  RTS
+
+
+; ============================================================================
+; ERROR VERIFICATION
+; ============================================================================
+
+; Verify error test: check exit code, line number, and message
+; On exit: C clear = pass, C set = fail (details already printed)
+tr_verify_error:
+  ; Check exit code
+  LDA TR_EXIT_CODE
+  CMP TR_EXPECT_ERROR
+  BEQ .code_ok
+  JMP .wrong_code
+.code_ok:
+  ; Check line number (if expected)
+  LDA TR_EXPECT_LINE16
+  ORA TR_EXPECT_LINE16 + 1
+  BEQ .skip_line
+  JSR tr_check_stderr_line
+  BCC .skip_line
+  JMP .wrong_line
+.skip_line:
+  ; Check message (if expected)
+  LDA TR_EXPECT_MSG
+  BEQ .pass
+  JSR tr_check_stderr_msg
+  BCC .pass
+  JMP .wrong_msg
+.pass:
+  CLC
+  RTS
+.wrong_code:
+  JSR tr_print_test_name
+  SHOW_MESSAGEI tr_msg_fail
+  SHOW_MESSAGEI tr_msg_expected
+  SHOW_MESSAGEI tr_msg_error
+  LDA TR_EXPECT_ERROR
+  STA TO_DECIMAL_VALUE16
+  LDA #$00
+  STA TO_DECIMAL_VALUE16 + 1
+  JSR show_decimal
+  SHOW_MESSAGEI tr_msg_got
+  SHOW_MESSAGEI tr_msg_error
+  JSR tr_print_exit_code
+  SHOW_MESSAGEI tr_msg_close_paren
+  SEC
+  RTS
+.wrong_line:
+  JSR tr_print_test_name
+  SHOW_MESSAGEI tr_msg_fail
+  SHOW_MESSAGEI tr_msg_expected
+  SHOW_MESSAGEI tr_msg_line
+  CP16 TR_EXPECT_LINE16, TO_DECIMAL_VALUE16
+  JSR show_decimal
+  SHOW_MESSAGEI tr_msg_got
+  SHOW_MESSAGEI tr_msg_line
+  CP16 HEX16, TO_DECIMAL_VALUE16
+  JSR show_decimal
+  SHOW_MESSAGEI tr_msg_close_paren
+  SEC
+  RTS
+.wrong_msg:
+  JSR tr_print_test_name
+  SHOW_MESSAGEI tr_msg_fail
+  SHOW_MESSAGEI tr_msg_expected
+  SHOW_MESSAGEI tr_msg_msg
+  SET16 TR_EXPECT_MSG, TABP16
+  JSR show_message
+  SHOW_MESSAGEI tr_msg_quote
+  SHOW_MESSAGEI tr_msg_close_paren
+  SEC
+  RTS
+
+; Check "at line N" in stderr, compare N with TR_EXPECT_LINE16
+; On exit: C clear = match, C set = mismatch
+;          HEX16 = parsed line number (for error reporting)
+tr_check_stderr_line:
+  ; Search for "at line " in stderr buffer
+  LDY #$00
+.search:
+  CPY TR_STDERR_LEN
+  BCS .not_found
+  LDA TR_STDERR_BUF,Y
+  CMP #'a'
+  BNE .next
+  ; Check "at line " (8 chars)
+  INY
+  CPY TR_STDERR_LEN
+  BCS .not_found
+  LDA TR_STDERR_BUF,Y
+  CMP #'t'
+  BNE .search              ; Restart from current Y (already past 'a')
+  INY
+  CPY TR_STDERR_LEN
+  BCS .not_found
+  LDA TR_STDERR_BUF,Y
+  CMP #' '
+  BNE .search
+  INY
+  CPY TR_STDERR_LEN
+  BCS .not_found
+  LDA TR_STDERR_BUF,Y
+  CMP #'l'
+  BNE .search
+  INY
+  CPY TR_STDERR_LEN
+  BCS .not_found
+  LDA TR_STDERR_BUF,Y
+  CMP #'i'
+  BNE .search
+  INY
+  CPY TR_STDERR_LEN
+  BCS .not_found
+  LDA TR_STDERR_BUF,Y
+  CMP #'n'
+  BNE .search
+  INY
+  CPY TR_STDERR_LEN
+  BCS .not_found
+  LDA TR_STDERR_BUF,Y
+  CMP #'e'
+  BNE .search
+  INY
+  CPY TR_STDERR_LEN
+  BCS .not_found
+  LDA TR_STDERR_BUF,Y
+  CMP #' '
+  BNE .search
+  INY
+  ; Y now points to the line number digits
+  JSR tr_parse_decimal_from_stderr
+  ; Compare with expected
+  CMP16 HEX16, TR_EXPECT_LINE16
+  BEQ .match
+  SEC
+  RTS
+.match:
+  CLC
+  RTS
+.next:
+  INY
+  JMP .search
+.not_found:
+  SEC
+  RTS
+
+; Check message after ": " in stderr matches TR_EXPECT_MSG
+; On exit: C clear = match, C set = mismatch
+tr_check_stderr_msg:
+  ; Search backwards for ": " (the message delimiter)
+  LDY TR_STDERR_LEN
+  DEY
+.search:
+  CPY #$01
+  BCC .not_found            ; Reached start without finding ": "
+  LDA TR_STDERR_BUF - 1,Y
+  CMP #':'
+  BNE .dec
+  LDA TR_STDERR_BUF,Y
+  CMP #' '
+  BEQ .found
+.dec:
+  DEY
+  JMP .search
+.found:
+  INY                       ; Y past ": " → start of message
+  LDX #$00
+.cmp:
+  LDA TR_EXPECT_MSG,X
+  BEQ .end_expected
+  CPY TR_STDERR_LEN
+  BCS .mismatch
+  CMP TR_STDERR_BUF,Y
+  BNE .mismatch
+  INX
+  INY
+  JMP .cmp
+.end_expected:
+  ; Expected msg fully matched; check actual has ended (newline or end)
+  CPY TR_STDERR_LEN
+  BCS .match
+  LDA TR_STDERR_BUF,Y
+  CMP #$0A
+  BEQ .match
+.mismatch:
+.not_found:
+  SEC
+  RTS
+.match:
+  CLC
+  RTS
+
+; Parse decimal from TR_STDERR_BUF starting at Y, result in HEX16
+tr_parse_decimal_from_stderr:
+  LDA #$00
+  STA HEX16
+  STA HEX16 + 1
+.loop:
+  CPY TR_STDERR_LEN
+  BCS .done
+  LDA TR_STDERR_BUF,Y
+  CMP #'0'
+  BCC .done
+  CMP #':'
+  BCS .done
+  SEC
+  SBC #'0'
+  STA TEMP
+  CP16 HEX16, PC16
+  ASL16 HEX16
+  ASL16 HEX16
+  CLC
+  ADC16 HEX16, PC16, HEX16
+  ASL16 HEX16
+  LDA TEMP
+  CLC
+  ADC HEX16
+  STA HEX16
+  BCC .no_carry
+  INC HEX16 + 1
+.no_carry:
+  INY
+  JMP .loop
+.done:
+  RTS
+
+
+; ============================================================================
+; PRINT HELPERS
+; ============================================================================
+
+; Print TR_EXIT_CODE as decimal
+tr_print_exit_code:
+  LDA TR_EXIT_CODE
+  STA TO_DECIMAL_VALUE16
+  LDA #$00
+  STA TO_DECIMAL_VALUE16 + 1
+  JMP show_decimal
+
+; Print TR_EXPECT_LEN16 as decimal
+tr_print_expect_len:
+  CP16 TR_EXPECT_LEN16, TO_DECIMAL_VALUE16
+  JMP show_decimal
+
+; Print TR_ACTUAL_LEN16 as decimal
+tr_print_actual_len:
+  CP16 TR_ACTUAL_LEN16, TO_DECIMAL_VALUE16
+  JMP show_decimal
+
+; Print byte in A as two hex digits
+tr_print_hex_byte:
+  PHA
+  LSR
+  LSR
+  LSR
+  LSR
+  JSR .nibble
+  PLA
+  AND #$0F
+.nibble:
+  CMP #$0A
+  BCC .digit
+  CLC
+  ADC #'a'-$0A
+  JMP .out
+.digit:
+  CLC
+  ADC #'0'
+.out:
+  STA $F002               ; Write to stderr
+  RTS
 
 
 ; ============================================================================
@@ -775,6 +1137,7 @@ tr_skip_rest_of_line:
 ;   exit      $F00F    $F010-$F011     fake_exit
 ;   argc      $F01B    $F01C-$F01D     fake_argc
 ;   argv      $F01E    $F01F-$F020     fake_argv
+;   write     $F024    $F025-$F026     fake_write
 
 ; Save original vector target addresses
 tr_save_vectors:
@@ -794,6 +1157,10 @@ tr_save_vectors:
   STA tr_orig_argv
   LDA $F020
   STA tr_orig_argv + 1
+  LDA $F025
+  STA tr_orig_write
+  LDA $F026
+  STA tr_orig_write + 1
   RTS
 
 ; Patch vectors to point to fake handlers
@@ -814,6 +1181,10 @@ tr_patch_vectors:
   STA $F01F
   LDA #>fake_argv
   STA $F020
+  LDA #<fake_write
+  STA $F025
+  LDA #>fake_write
+  STA $F026
   RTS
 
 ; Restore original vector targets
@@ -834,6 +1205,10 @@ tr_restore_vectors:
   STA $F01F
   LDA tr_orig_argv + 1
   STA $F020
+  LDA tr_orig_write
+  STA $F025
+  LDA tr_orig_write + 1
+  STA $F026
   RTS
 
 ; Storage for original vector targets
@@ -841,6 +1216,7 @@ tr_orig_write_d:  .word 0
 tr_orig_exit:     .word 0
 tr_orig_argc:     .word 0
 tr_orig_argv:     .word 0
+tr_orig_write:    .word 0
 
 
 ; ============================================================================
@@ -894,6 +1270,44 @@ fake_write_d:
   RTS
 
 tr_save_x: .byte 0
+
+; fake_write - Intercept output bytes for on-the-fly comparison
+; On entry: A = byte to write, X = file handle
+; On exit: A, X, Y preserved (matches real write contract)
+fake_write:
+  STA $FE84               ; Forward to real write port
+  STA tr_fw_save_a
+  STX tr_fw_save_x
+  STY tr_fw_save_y
+  ; Are we beyond expected data?
+  CMP16 TR_ACTUAL_LEN16, TR_EXPECT_LEN16
+  BCS .beyond
+  ; Compare written byte with expected byte
+  LDY #$00
+  LDA tr_fw_save_a
+  CMP (TR_ACTUAL_PTR16),Y
+  BEQ .match
+  ; Mismatch - record if first one
+  LDX TR_MISMATCH_FLAG
+  BNE .match              ; Already recorded
+  STA TR_MISMATCH_ACTUAL
+  LDA (TR_ACTUAL_PTR16),Y
+  STA TR_MISMATCH_EXPECT
+  CP16 TR_ACTUAL_LEN16, TR_MISMATCH_POS16
+  LDA #$01
+  STA TR_MISMATCH_FLAG
+.match:
+  INC16 TR_ACTUAL_PTR16
+.beyond:
+  INC16 TR_ACTUAL_LEN16
+  LDA tr_fw_save_a
+  LDX tr_fw_save_x
+  LDY tr_fw_save_y
+  RTS
+
+tr_fw_save_a: .byte 0
+tr_fw_save_x: .byte 0
+tr_fw_save_y: .byte 0
 
 
 ; ============================================================================
