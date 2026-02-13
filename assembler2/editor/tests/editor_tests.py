@@ -352,9 +352,9 @@ class EditorTestRunner:
                                  expect_content_redraws: list = None,
                                  expect_lines_at_frame: list = None):
         """Run a terminal-mode editor test and verify screen state."""
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with tempfile.TemporaryDirectory(prefix='') as tmpdir:
             tmpdir = Path(tmpdir)
-            edit_file = tmpdir / "test.txt"
+            edit_file = tmpdir / "t"
 
             if initial_content is not None:
                 edit_file.write_text(initial_content)
@@ -547,9 +547,9 @@ class EditorTestRunner:
             expect_reverse_at: list of (row, col, expected_bool) tuples -
                 verify reverse video attribute at specific cells
         """
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with tempfile.TemporaryDirectory(prefix='') as tmpdir:
             tmpdir = Path(tmpdir)
-            edit_file = tmpdir / "test.txt"
+            edit_file = tmpdir / "t"
 
             if initial_bytes is not None:
                 edit_file.write_bytes(initial_bytes)
@@ -6036,7 +6036,7 @@ class EditorTestRunner:
                 b":q!\r",
                 rows=10, cols=40,
                 expect_lines=[(0, "Hello")],
-                expect_status_contains="test.txt"
+                expect_status_contains="/t "
             )
 
             # Terminal size detection: verify tilde rows
@@ -6060,7 +6060,7 @@ class EditorTestRunner:
                 b":q!\r",
                 rows=24, cols=80,
                 expect_lines=[(0, "Hello")],
-                expect_status_contains="test.txt"
+                expect_status_contains="/t "
             )
 
             # Terminal size with baud rate
@@ -6070,7 +6070,7 @@ class EditorTestRunner:
                 b":q!\r",
                 rows=10, cols=40,
                 expect_lines=[(0, "Hello")],
-                expect_status_contains="test.txt",
+                expect_status_contains="/t ",
                 extra_args=["--cpu-mhz", "1", "--baud", "9600"]
             )
 
@@ -6148,7 +6148,7 @@ class EditorTestRunner:
                 "Terminal status bar shows filename",
                 "Hello\n",
                 b":q!\r",
-                expect_status_contains="test.txt"
+                expect_status_contains="/t "
             )
 
             # Status bar shows mode (COMMAND after :)

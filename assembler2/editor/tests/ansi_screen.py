@@ -84,6 +84,12 @@ class AnsiScreen:
         if self.deferred_wrap and self.cursor_col >= self.cols:
             self.cursor_col = self.cols - 1
             self._pending_wrap = True
+        # Immediate wrap: cursor past last column wraps to next row
+        if not self.deferred_wrap and self.cursor_col >= self.cols:
+            self.cursor_col = 0
+            self.cursor_row += 1
+            if self.cursor_row >= self.rows:
+                self.cursor_row = self.rows - 1
 
     def _snapshot(self):
         """Capture current buffer and cursor as a frame."""

@@ -85,6 +85,7 @@ render_from_row:
   LDA #1
   STA ANSI_COL
   JSR ansi_move_cursor
+.row_no_cursor:
 
   ; Check if this is the status line row (last row)
   LDA RENDER_ROW
@@ -133,7 +134,7 @@ render_from_row:
   ; More wrap rows remain (row is full, no clear needed)
   INC RENDER_WRAP
   INC RENDER_ROW
-  JMP .row_loop
+  JMP .row_no_cursor
 
 .line_done:
   ; Row not full (RENDER_COL < SCREEN_COLS) - clear remainder
