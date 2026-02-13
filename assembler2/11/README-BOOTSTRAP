@@ -1,6 +1,6 @@
-Assembler Version 16
+Assembler Version 11
 ====================
-Assembled by: version 15 (both instgen and asm)
+Assembled by: version 10 (both instgen and asm)
 
 Features Supported by This Assembler
 -------------------------------------
@@ -61,11 +61,11 @@ Full 6502 instruction set (56 opcodes):
 - Other: BRK, NOP, RTI, RTS
 - Pseudo: DATA
 
-Error handling: same as version 15 (errors 1-10), plus:
+Error handling: same as version 10 (errors 1-10), plus:
 - Invalid addressing mode (error 11): mode not supported for instruction
 - Invalid character literal (error 12): malformed character literal
 
-New in this version (relative to version 15):
+New in this version (relative to version 10):
 - Complete rewrite of instruction processing for standard 6502 syntax
 - New instruction table format with mode:opcode pairs: each instruction
   entry contains the mnemonic followed by pairs of (mode, opcode) terminated
@@ -86,7 +86,7 @@ New in this version (relative to version 15):
 - Comma and closing parenthesis are now token terminators (needed for
   parsing indexed and indirect addressing modes)
 - check_for_data_pseudo: handles DATA as special case via MODE_DATA
-- instgen16.asm generates the new-format instruction hash table
+- instgen generates the new-format instruction hash table
 
 Features Used in This Assembler's Source Code
 ----------------------------------------------
@@ -108,9 +108,9 @@ Features Used in This Assembler's Source Code
 - Command-line arg access: argc, argv
 - File I/O: open, close, read, openout, write
 
-New syntax used in source (relative to version 15):
+New syntax used in source (relative to version 10):
 - None (source is still written in non-standard mnemonic syntax because it
-  is assembled by version 15 which only supports non-standard syntax)
+  is assembled by version 10 which only supports non-standard syntax)
 
 Other source changes:
 - ADDR_MODE, INST_PTR_L/H, OPERAND_L/H added to zero page variables

@@ -7,17 +7,20 @@ Version  Milestone
 01       First non-standard 6502 mnemonics
 02       Source becomes human-readable assembly
 03       Byte selectors, label assignments, origin setting
-05       Two-pass assembly (forward references)
-07       Instruction table generator (instgen)
-10       .include directive
-11       First modularized source
-16       Standard 6502 syntax support
-17       Source transitions to standard syntax
-18       Forward reference tracking
-19       Expression evaluation
-20       .ifdef/.endif conditional assembly
-22       Macros
-23       Self-hosting, .ifndef/.else
+04       Two-pass assembly (forward references)
+05       Hash tables for label/instruction lookup
+06       Instruction table generator (instgen)
+07       Error diagnostics, line numbers, stderr output
+08       .include directive, file stack
+09       Sections (.zeropage/.code), command-line arguments
+10       Local labels, heap-based global label storage
+11       Standard 6502 syntax (all 13 addressing modes)
+12       Source transitions to standard syntax (fixed point)
+13       Expression evaluation, forward reference tracking
+14       .ifdef/.endif conditional assembly
+15       Macros, << >> shift operators
+16       Data directives, decimal constants, memory protection
+17       Self-hosting, .ifndef/.else
 
 
 Source Syntax Evolution
@@ -35,34 +38,34 @@ Ver New syntax supported             New syntax used in source
 02  None                             Non-standard mnemonics,
                                      labels, label references
 03  < > byte selectors,              Char escape literals
-    label = $XX, * = $XXXX
-04  None                             = assignments, < > selectors
-05  Two-pass (fwd refs),             * = origin
-    ~ branches, more instrs
-06  None                             None
-07  More instrs (via instgen),       None
+    label = $XX, * = $XXXX,
+    new instrs (BITZ, BMI,
+    BPL, SBCZ)
+04  Two-pass (fwd refs),             = assignments, < > selectors,
+    ~ branches, more instrs          * = origin
+05  Hash tables (internal)           None
+06  More instrs (via instgen),       None
     flag-based operand types
-08  None                             ZP addressing without <
-                                     (STAZ VAR not STAZ <VAR)
-09  None                             None
-10  .include                         None
-11  More instructions                .include
-12  .zeropage, .code                 None
-13  None                             .zeropage, .code
-14  Local labels (.prefix)           None
-15  None                             Local labels (.prefix)
-16  Standard 6502 syntax,            None
+07  Error diagnostics, stderr,       ZP addressing without <
+    line number tracking             (STAZ VAR not STAZ <VAR)
+08  .include, file stack,            None
+    more instructions
+09  .zeropage, .code, ASLZ,         .include
+    command-line arguments
+10  Local labels (.prefix),          .zeropage, .code
+    heap-based global labels
+11  Standard 6502 syntax,            None
     all 13 addr modes, #'x'
-17  None                             Standard 6502 syntax,
+12  None                             Standard 6502 syntax,
                                      #'x' character literals
-18  .data directive                  None
-19  Expressions (+, -),              .data (replaces DATA)
+13  Expressions (+, -), .data,       .data (replaces DATA)
+    fwd ref tracking,
     char lits as terms
-20  .ifdef/.endif, define:           Expressions (+, -),
+14  .ifdef/.endif, define:           Expressions (+, -),
                                      char literal arithmetic
-21  .macro/.endmacro, << >>,         .ifdef/.endif, define:
+15  .macro/.endmacro, << >>,         .ifdef/.endif, define:
     optional label colons
-22  .byte/.word/.asciiz/.reserve,    Colons, macros, << >>
+16  .byte/.word/.asciiz/.reserve,    Colons, macros, << >>
     decimal, comma-separated
-23  .ifndef, .else                   .byte, .word, .asciiz,
+17  .ifndef, .else                   .byte, .word, .asciiz,
                                      decimal constants

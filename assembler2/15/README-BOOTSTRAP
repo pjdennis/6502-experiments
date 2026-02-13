@@ -1,14 +1,14 @@
-Assembler Version 21
+Assembler Version 15
 ====================
-Assembled by: version 20 (asm and debug build both assembled by v20)
+Assembled by: version 14 (asm and debug build both assembled by v14)
 
 Build notes: This version produces both a normal build (asm.out) and a
 debug build (asm_debug.out) using define:enable_debug. The debug build
-is used to assemble version 22.
+is used to assemble version 16.
 
 Features Supported by This Assembler
 -------------------------------------
-All features from version 20, plus macros, shift operators, and label
+All features from version 14, plus macros, shift operators, and label
 scope management:
 
 Syntax:
@@ -36,8 +36,8 @@ Directives:
 - .data - declare raw byte data
 - .ifdef label - begin conditional block if label is defined
 - .endif - end conditional block
-- .macro NAME [param1 param2 ...] - begin macro definition
-- .endmacro - end macro definition
+- .macro NAME [param1 param2 ...] - begin macro definition (new)
+- .endmacro - end macro definition (new)
 
 Command line:
 - Variable argument count (2 or more arguments)
@@ -57,8 +57,9 @@ Label scope:
 - SCOPE_STACK at $0400 (256 bytes, 5-byte entries)
 - EXPANSION_ID16 provides synthetic scope pointer for local labels
 - push_label_scope / pop_label_scope / init_scope_stack / reset_scope_stack
+- Scope stack bounds check (err_macro_nesting_too_deep)
 
-Error handling: same as version 20, plus:
+Error handling: same as version 14, plus:
 - err_expected_shift ($1A): Expected << or >>
 - err_macro_name_expected ($1B): .macro without name
 - err_macro_shadows_instruction ($1C): Macro name conflicts with instruction
@@ -68,10 +69,11 @@ Error handling: same as version 20, plus:
 - err_recursive_macro: Recursive macro invocation detected
 - err_too_few_arguments: Not enough arguments for macro
 - err_too_many_arguments: Too many arguments for macro
+- err_macro_nesting_too_deep: Scope stack overflow
 - Include traceback shows file inclusion chain on errors
 - err_fwdref_tracking now conditional (debug build only)
 
-New in this version (relative to version 20):
+New in this version (relative to version 14):
 - << and >> shift operators in expressions
   - parse_term_with_selector for shift count parsing
   - Added <, >, :, = as token terminators in compare_end_of_token
@@ -89,11 +91,14 @@ New in this version (relative to version 20):
   - SCOPE_STACK at $0400, 5-byte entries
   - Synthetic EXPANSION_ID for local label scoping in macros
   - FS_POP_MEMORY_HOOK = pop_label_scope for automatic cleanup
+  - Bounds check against SCOPE_LIMIT
 - Optional colon after label definitions (label:)
 - NEXT_CHAR variable for single-character lookahead
 - CURR_OUT_FILE for output file handle (used by error handler)
 - read_char aliased to file_stack_read_char
 - Error handler shows include/expansion traceback
+- IFDEF_DECISIONS moved to $0800 (separate from zero page)
+- IFDEF_INDEX moved to $08FF (non-zero-page, separate byte)
 
 Features Used in This Assembler's Source Code
 ----------------------------------------------
@@ -111,11 +116,11 @@ Features Used in This Assembler's Source Code
 - Comments (;)
 - BRK with inline error code and message
 - .include directive (environment.asm, common.asm, label_scope.asm,
-  file_stack.asm, errors.asm, fwdref.asm, to_decimal.asm, out/inst.asm.out)
+  file_stack.asm, errors.asm, fwdref.asm, out/inst.asm.out)
 - .zeropage and .code directives
 - .ifdef enable_debug / .endif conditional compilation
 
-New syntax used in source (relative to version 20):
+New syntax used in source (relative to version 14):
 - .ifdef/.endif conditional assembly (first version where source uses
   conditional compilation)
 - define:enable_debug command-line argument for debug builds

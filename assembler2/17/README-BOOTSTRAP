@@ -1,15 +1,15 @@
-Assembler Version 23
+Assembler Version 17
 ====================
-Assembled by: version 22 debug build (asm_debug.out with define:enable_debug)
+Assembled by: version 16 debug build (asm_debug.out with define:enable_debug)
 
-Build notes: The v22 debug build is used because v23 source uses
-.ifdef enable_debug conditional compilation. Version 23 is self-hosting:
+Build notes: The v16 debug build is used because v17 source uses
+.ifdef enable_debug conditional compilation. Version 17 is self-hosting:
 it can assemble its own source code, verified by diff of asm.out vs
 asm_2.out (and asm_debug.out vs asm_debug_2.out).
 
 Features Supported by This Assembler
 -------------------------------------
-All features from version 22, plus .ifndef, .else, directive hash table
+All features from version 16, plus .ifndef, .else, directive hash table
 dispatch, enhanced conditional assembly, and major source refactoring:
 
 Syntax:
@@ -39,8 +39,8 @@ Directives:
 - .reserve N - reserve N bytes (zero-fill in .code, PC advance in .zeropage)
 - .byte / .word (without operand in .zeropage) - allocate zero page storage
 - .ifdef label - begin conditional block if label is defined
-- .ifndef label - begin conditional block if label is NOT defined
-- .else - alternative branch in conditional block
+- .ifndef label - begin conditional block if label is NOT defined (new)
+- .else - alternative branch in conditional block (new)
 - .endif - end conditional block
 - .macro NAME [param1, param2, ...] - begin macro definition
 - .endmacro - end macro definition
@@ -68,15 +68,15 @@ Command line:
 Memory protection:
 - Heap/stack collision detection with 256-byte safety buffer
 
-Error handling: same categories as version 22, plus:
+Error handling: same categories as version 16, plus:
 - err_else_without_ifdef (22): .else outside conditional block
 - err_duplicate_else (23): Multiple .else in same block
 - err_conditional_nesting_too_deep (24): Exceeds 16 nesting levels
 - err_comma_expected (40): Missing comma in data directive
 - err_asciiz_in_zeropage (41): .asciiz not allowed in .zeropage section
-- Error codes use decimal numbers instead of hex in .asciiz format
+- Error messages use .asciiz format with decimal error codes
 
-New in this version (relative to version 22):
+New in this version (relative to version 16):
 - .ifndef directive (inverse of .ifdef)
   - COND_INVERT variable: $00 for ifdef (skip if not found),
     $FF for ifndef (assemble if not found)
@@ -107,8 +107,6 @@ New in this version (relative to version 22):
   - instruction_tables.asm: instruction and addressing mode tables
 - asm.asm reduced to ~338 lines (memory layout, includes, assembly loop,
   entry point, reset/interrupt vectors)
-- Multiple directives on same line supported (directive chaining via '.')
-- Source uses .byte/.word/.asciiz instead of .data
 
 Features Used in This Assembler's Source Code
 ----------------------------------------------
@@ -141,7 +139,7 @@ Features Used in This Assembler's Source Code
   STA_LH16, PUSH16, POP16, LDAX16, STAX16, CHECK_FOR_OUT_OF_MEMORY,
   SHOW_MESSAGEI, SHOW_MESSAGE, SHOW_CHAR)
 
-New syntax used in source (relative to version 22):
+New syntax used in source (relative to version 16):
 - .byte directive (replaces .data $00 for zero page allocation and byte data)
 - .word directive (replaces .data $0000 for zero page allocation and word data)
 - .asciiz directive for null-terminated strings
@@ -149,7 +147,7 @@ New syntax used in source (relative to version 22):
 - Decimal constants (e.g., in .asciiz error data)
 
 Other source changes:
-- Source split into 17 include files (was ~2600 lines in one file for v22,
+- Source split into 17 include files (was ~2600 lines in one file for v16,
   now main asm.asm is ~338 lines)
 - New macros added: ROL16, ROR16, TST16, LDAX16, STAX16
 - ELSE_SEEN_ARRAY at $0680 for conditional assembly tracking

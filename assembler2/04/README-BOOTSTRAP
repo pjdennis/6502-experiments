@@ -1,6 +1,6 @@
-Assembler Version 05
+Assembler Version 04
 ====================
-Assembled by: Version 04
+Assembled by: Version 03
 
 Features Supported by This Assembler
 -------------------------------------
@@ -58,7 +58,7 @@ Error handling:
 
 Semicolon comments (to end of line).
 
-New in this version (relative to version 04):
+New in this version (relative to version 03):
 - Two-pass assembly enabling forward references
 - ~ prefix for relative branch target labels (emitlabelrel computes
   target - PC - 1 on pass 2)
@@ -75,13 +75,12 @@ New in this version (relative to version 04):
 
 Features Used in This Assembler's Source Code
 ----------------------------------------------
-The source uses features from version 04 (which has the same capabilities
-as version 03). It uses label assignments, byte selectors, and the origin
-directive that version 03 introduced, plus the same instruction set that
-versions 03/04 support.
+The source uses features from version 03. It uses label assignments, byte
+selectors, and the origin directive that version 03 introduced, plus the
+same instruction set that version 03 supports.
 
 Source features used:
-  - Non-standard instruction mnemonics from version 04's table
+  - Non-standard instruction mnemonics from version 03's table
     (including BITZ, BMI, BPL, SBCZ which were added in version 03)
   - Labels at column 0 for code locations
   - label = $XXXX constant assignments for all variables
@@ -96,8 +95,9 @@ Source features used:
   - Semicolon comments
   - Branch targets as hardcoded hex offsets (not yet using ~ for branches)
 
-New syntax used in source (relative to version 04):
-- * = $2000 origin directive (version 04 had it commented out)
+New syntax used in source (relative to version 03):
+- * = $2000 origin directive
+- label = $XXXX constant assignments for zero-page variables
 
 Other source changes:
 - BRK with inline data on single line (BRK $01 "Label not found" $00)

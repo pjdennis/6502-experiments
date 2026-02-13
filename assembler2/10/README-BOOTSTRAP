@@ -1,10 +1,11 @@
-Assembler Version 14
+Assembler Version 10
 ====================
-Assembled by: version 13 (both instgen and asm)
+Assembled by: version 09 (both instgen and asm)
 
 Features Supported by This Assembler
 -------------------------------------
-All features from version 13, plus local labels and debug output:
+All features from version 09, plus local labels, heap-based global label
+storage, debug output, and an expanded instruction set:
 
 Syntax:
 - Non-standard (custom) mnemonic syntax: LDA#, LDAZ, STAZ, etc.
@@ -28,33 +29,35 @@ Directives:
 - .zeropage - switches to zero page section
 - .code - switches back to code section
 
-Instruction set: same as version 13, plus:
+Instruction set: same as version 09, plus:
 - CMP,X (compare absolute indexed X - opcode $DD)
 
-Error handling: same as version 13 (errors 1-D), plus:
+Error handling: same as version 09 (errors 1-D), plus:
 - No file open (error E): attempt to read with no file open
 - No global label for local (error F): local label used before any global label
 - Invalid debug argument (error 10): third argument is not "debug"
 
-New in this version (relative to version 13):
+New in this version (relative to version 09):
 - Local labels (.label syntax): labels starting with . are scoped to the
   most recent global label. The assembler expands ".foo" to "globalname.foo"
   internally before storing in the hash table.
-- CURR_GLOBAL buffer at $1C00: stores the name of the current global label
-  for local label expansion
-- update_global_label function: called when a non-assignment global label is
-  defined, copies label name to CURR_GLOBAL buffer
-- expand_local_label function: prepends CURR_GLOBAL to local label name
+- Heap-based global label storage: CURR_GLOBAL_HEAP_L/H stores a heap
+  pointer to the current global label string, replacing the fixed buffer
+  approach. Local labels use $01 escape format on heap.
+- IS_LOCAL_LABEL flag: set by check_local_label to distinguish local/global
+- update_global_heap_from_lookup function: sets CURR_GLOBAL_HEAP after
+  looking up a global label in the hash table
 - Optional debug command-line argument: "debug" as third arg enables debug
   output (DEBUG_FLAG)
 - New instruction: CMP,X (absolute indexed X)
-- Hash table changed from split low/high ($80 offset) to 2-byte pointer
-  entries (HASH is ASL'd to index pairs of bytes), using 256-byte table
-  with 128 entries
+- Hash table changed from split low/high ($80 offset) to unified 2-byte
+  pointer entries (HASH is ASL'd to index pairs of bytes)
 - store_hash_value extracted to common.asm: separates value storage from
-  token storage in hash_add, allowing caller to store value after hash_add
+  token storage in hash_add
+- HTTPL/HTTPH temporary pointer added to hash_table.asm for hash table
+  traversal
 - LHASHTAB moved to $1E00, TOKEN moved to $1D00
-- Error for reading with no file open (previously would silently fail)
+- Error for reading with no file open (err_no_file)
 
 Features Used in This Assembler's Source Code
 ----------------------------------------------
@@ -68,22 +71,21 @@ Features Used in This Assembler's Source Code
 - Low byte (<) and high byte (>) operators
 - Labels as absolute 2-byte operands
 - Comments (;)
-- BRK with inline error code and message
+- BRK with inline error code and message (BRK $xx "message" $00)
 - .include directive (out/inst.asm.out, environment.asm, common.asm,
   file_stack.asm, to_decimal.asm)
 - .zeropage and .code section directives
 - Command-line arg access: argc, argv
 - File I/O: open, close, read, openout, write
 
-New syntax used in source (relative to version 13):
-- None (source does NOT use local labels; all labels are global)
+New syntax used in source (relative to version 09):
+- .zeropage and .code section directives (first version whose source uses
+  these directives for zero page variable allocation)
 
 Other source changes:
-- CURR_GLOBAL buffer at $1C00 for tracking current global label name
+- CURR_GLOBAL_HEAP_L/H heap pointer for tracking current global label
+- IS_LOCAL_LABEL variable in zero page
 - DEBUG_FLAG variable in zero page
-- expand_local_label and update_global_label functions
-- Hash table uses ASL HASH for 2-byte pointer entries (changed from
-  HASH+$80 offset in v13)
-- HTTPL/HTTPH temporary pointer added to hash_table.asm (replaces PL/PH
-  from common.asm for hash table traversal)
-- store_hash_value in common.asm stores value separately from store_token
+- check_local_label, update_global_heap_from_lookup functions
+- Hash table uses ASL HASH for 2-byte pointer entries
+- Note: source does NOT use local labels; all labels are global

@@ -1,11 +1,11 @@
-Assembler Version 08
+Assembler Version 07
 ====================
-Assembled by: version 07 (both instgen and asm)
+Assembled by: version 06 (both instgen and asm)
 
 Features Supported by This Assembler
 -------------------------------------
-Same non-standard mnemonic syntax as version 07, with improved error handling
-and PC management:
+Same non-standard mnemonic syntax as version 06, with improved error handling,
+error diagnostics with line numbers, stderr output, and PC management:
 
 Syntax:
 - Non-standard (custom) mnemonic syntax: LDA#, LDAZ, STAZ, etc.
@@ -23,7 +23,7 @@ Syntax:
 - Zero page addressing uses plain hex values without the < prefix (e.g., STAZ $07
   rather than STAZ <$07)
 
-Instruction set: same as version 07
+Instruction set: same as version 06
 
 Error handling (expanded):
 - Label not found (error 1)
@@ -37,7 +37,15 @@ Error handling (expanded):
 - Closing quote not found (error 9)
 - Cannot move PC backwards (error A)
 
-New in this version (relative to version 07):
+New in this version (relative to version 06):
+- Interrupt handler for formatted error output: errors displayed via BRK
+  interrupt with error code and inline message string
+- Stderr output via write_d ($F00C): error messages written to stderr
+- Decimal number formatting (to_decimal): line numbers in error messages
+  displayed in decimal
+- Line number tracking: CURLINEL/CURLINEH count input lines, included in
+  error messages (format: "Error N at line M: message")
+- Exit vector at $FFFC/$FFFE for interrupt/reset handling
 - Hex input validation: detects and reports invalid hex characters (error 7)
 - Value out of range checking for single-byte operands (error 6)
 - PC value expected error when * used without = assignment (error 8)
@@ -45,8 +53,6 @@ New in this version (relative to version 07):
 - Cannot move PC backwards error (error A)
 - Zero-fill between old and new PC positions on pass 2 (update_pc)
 - STARTED flag to track whether output has begun
-- Line number tracking (CURLINEL/CURLINEH) - stored but not yet used in errors
-- INST_FLAG variable stores instruction flags for current opcode
 - Zero page addresses used without < prefix (e.g., STAZ MEMPL instead of
   STAZ <MEMPL), meaning the assembler uses raw zero-page addresses
 - read_token now checks for end-of-token before storing (reordered loop)
@@ -68,10 +74,13 @@ Features Used in This Assembler's Source Code
   STAZ MEMPL where MEMPL = $08)
 - Forward branch labels (no ~ prefix needed, auto-detected by flags)
 
-New syntax used in source (relative to version 07):
+New syntax used in source (relative to version 06):
 - Zero page addressing without < prefix (STAZ MEMPL instead of STAZ <MEMPL)
 
 Other source changes:
+- Interrupt handler with stack inspection for error reporting
+- to_decimal routine for formatting line numbers
+- write_d for stderr output
 - More extensive use of flag-based branch label handling (auto-detected
   relative/byte operands replace some explicit ~ usage)
 - read_token loop restructured: end-of-token check happens before store

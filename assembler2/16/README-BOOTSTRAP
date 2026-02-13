@@ -1,14 +1,14 @@
-Assembler Version 22
+Assembler Version 16
 ====================
-Assembled by: version 21 debug build (asm_debug.out with define:enable_debug)
+Assembled by: version 15 debug build (asm_debug.out with define:enable_debug)
 
-Build notes: The v21 debug build is used because v22 source uses
-.ifdef enable_debug conditional compilation, which requires v21 support.
-Version 22 also produces both normal and debug builds.
+Build notes: The v15 debug build is used because v16 source uses
+.ifdef enable_debug conditional compilation, which requires v15 support.
+Version 16 also produces both normal and debug builds.
 
 Features Supported by This Assembler
 -------------------------------------
-All features from version 21, plus .byte/.word/.asciiz directives,
+All features from version 15, plus .byte/.word/.asciiz directives,
 .reserve, decimal numbers, memory protection, and enhanced conditional
 assembly:
 
@@ -35,11 +35,11 @@ Directives:
 - .zeropage - switch to zero page section
 - .code - switch to code section
 - .data - declare raw byte data (legacy, retained)
-- .byte expr [, expr ...] - emit byte values (comma-separated)
-- .word expr [, expr ...] - emit 16-bit word values (comma-separated)
-- .asciiz expr [, "string" ...] - emit null-terminated strings/values
-- .reserve N - reserve N bytes (zero-fill in .code, PC advance in .zeropage)
-- .byte / .word (without operand in .zeropage) - allocate zero page storage
+- .byte expr [, expr ...] - emit byte values (comma-separated) (new)
+- .word expr [, expr ...] - emit 16-bit word values (comma-separated) (new)
+- .asciiz expr [, "string" ...] - emit null-terminated strings/values (new)
+- .reserve N - reserve N bytes (zero-fill in .code, PC advance in .zeropage) (new)
+- .byte / .word (without operand in .zeropage) - allocate zero page storage (new)
 - .ifdef label - begin conditional block if label is defined
 - .endif - end conditional block
 - .macro NAME [param1 param2 ...] - begin macro definition
@@ -48,9 +48,9 @@ Directives:
 Command line:
 - Variable argument count
 - define:label - pre-define a label
-- debug - enable debug output
-- small_heap - use reduced heap for testing
-- show_captured_macros - display captured macro definitions
+- debug - enable debug output (new)
+- small_heap - use reduced heap for testing (new)
+- show_captured_macros - display captured macro definitions (new)
 
 Memory protection:
 - CHECK_FOR_OUT_OF_MEMORY macro detects heap/stack collision
@@ -69,7 +69,7 @@ Error handling: reorganized error codes into categories, plus new errors:
 - err_nested_macro_definition ($1B): Nested .macro inside .macro
 - Error codes reorganized: usage errors at $F0-$F1, debug at $FE-$FF
 
-New in this version (relative to version 21):
+New in this version (relative to version 15):
 - .byte, .word, .asciiz directives with comma-separated values
   - DATA_MODE tracking (0=.data, 1=.byte, 2=.word, 3=.asciiz)
   - Comma-separated data values in .byte, .word, .asciiz
@@ -78,10 +78,6 @@ New in this version (relative to version 21):
   - .byte/.word without operands in .zeropage allocates storage
 - .reserve N directive for reserving bytes
 - Decimal number parsing (from_decimal.asm module)
-- IFDEF_DECISIONS buffer at $0800 for deterministic pass 2
-  - Pass 1 evaluates .ifdef conditions and records decisions
-  - Pass 2 replays recorded decisions for consistency with forward refs
-  - IFDEF_INDEX tracks current position in decisions buffer
 - Memory protection (CHECK_FOR_OUT_OF_MEMORY macro in common.asm)
   - Detects when heap approaches file stack
   - 256-byte safety buffer for indexed addressing
@@ -93,7 +89,6 @@ New in this version (relative to version 21):
 - Zero page variables use 16-suffix naming (PC16, HEX16, etc.)
 - OPERAND16 aliased to HEX16 (single 16-bit location)
 - Detailed architecture documentation in source header comments
-- tests/ directory added with file_stack_test.asm
 
 Features Used in This Assembler's Source Code
 ----------------------------------------------
@@ -118,7 +113,7 @@ Features Used in This Assembler's Source Code
 - .ifdef enable_debug / .endif conditional compilation
 - Macro invocations (SET16, CP16, INC16, DEC16, etc.)
 
-New syntax used in source (relative to version 21):
+New syntax used in source (relative to version 15):
 - Colon after label definitions (label:) - first version using
   colon-terminated labels
 - Macro invocations (SET16, CP16, INC16, DEC16, CMP16, CMPI16,

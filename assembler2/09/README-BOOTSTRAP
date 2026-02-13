@@ -1,10 +1,11 @@
-Assembler Version 12
+Assembler Version 09
 ====================
-Assembled by: version 11 (both instgen and asm)
+Assembled by: version 08 (both instgen and asm)
 
 Features Supported by This Assembler
 -------------------------------------
-All features from version 11, plus section directives and command-line arguments:
+All features from version 08, plus section directives, command-line arguments,
+parameterized hash table module, and modular source organization:
 
 Syntax:
 - Non-standard (custom) mnemonic syntax: LDA#, LDAZ, STAZ, etc.
@@ -29,12 +30,13 @@ Directives:
 - .zeropage - switches to zero page section (new)
 - .code - switches back to code section (new)
 
-Instruction set: same as version 11
+Instruction set: same as version 08, plus:
+- ASLZ (ASL zero-page)
 
-Error handling: same errors as version 11 (errors 1-C), plus:
+Error handling: same errors as version 08 (errors 1-E), plus:
 - Usage error (error D): wrong number of command-line arguments
 
-New in this version (relative to version 11):
+New in this version (relative to version 08):
 - .zeropage and .code section directives: allows defining zero page variables
   separately from code, with automatic PC save/restore between sections
 - IN_ZEROPAGE flag: suppresses code output during zero page section
@@ -43,11 +45,12 @@ New in this version (relative to version 11):
   reads from stdin; instead it takes input and output filenames as arguments
   via argc ($F01B) and argv ($F01E)
 - Usage error message when wrong number of arguments provided
-- TOKEN in zero page at $24 (still a zero page variable, not yet at fixed
-  absolute address)
-- TOKEN2 buffer at $1E00 for secondary token storage
-- Hash table still uses split low/high format (LHASHTABL at $1F00,
-  LHASHTABH at $1F80) with 128 entries, same as version 11
+- Parameterized hash table module: common.asm extracted for shared code
+  between asm.asm and instgen.asm
+- ASLZ instruction added to instruction table
+- First version using .include in its own source code (environment.asm,
+  common.asm, out/inst.asm.out)
+- Output via file handle: openout ($F021) and write ($F024) replace stdout
 
 Features Used in This Assembler's Source Code
 ----------------------------------------------
@@ -67,11 +70,13 @@ Features Used in This Assembler's Source Code
 - File stack operations (push/pop) for .include handling
 - Command-line arg access: argc, argv
 
-New syntax used in source (relative to version 11):
-- None (source does NOT yet use .zeropage/.code directives; it still defines
-  zero page variables via explicit = assignments)
+New syntax used in source (relative to version 08):
+- .include directive (first version to use .include in its own source,
+  including environment.asm, common.asm, and out/inst.asm.out)
 
 Other source changes:
+- Source split into modules: asm.asm, common.asm, environment.asm, instgen.asm
 - Command-line argument handling via argc/argv in start routine
 - Output file opened via openout and argv (replaces stdout-only output)
 - IN_ZEROPAGE flag and PC save/restore for section directive handling
+- inst.asm.out now included via .include instead of prepended
