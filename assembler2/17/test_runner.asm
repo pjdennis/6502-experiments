@@ -71,30 +71,35 @@ test_runner_start:
   JSR argv
   JSR open
   STA TR_FILE_HANDLE
-  ; Print filename
+  ; Print header
   SHOW_MESSAGEI tr_msg_running
   LDA #$00
   JSR argv
   STAX16 TABP16
   JSR show_message
   SHOW_CHAR '\n'
-  ; Count lines
-  SET16 $0000, TR_PASS_COUNT16
-.count_loop:
+  ; Initialize test state
+  JSR tr_init_test
+  ; Main parse loop
+.main_loop:
   JSR tr_read_line
-  BCS .count_done
-  INC16 TR_PASS_COUNT16
-  JMP .count_loop
-.count_done:
-  ; Count partial final line (no trailing newline)
+  BCS .eof
+  ; Skip empty lines
   LDA TR_LINE_LEN
-  BEQ .no_final_line
-  INC16 TR_PASS_COUNT16
-.no_final_line:
-  ; Print line count
-  CP16 TR_PASS_COUNT16, TO_DECIMAL_VALUE16
-  JSR show_decimal
-  SHOW_MESSAGEI tr_msg_lines
+  BEQ .main_loop
+  ; Skip comments (lines starting with #)
+  LDA TR_LINE_BUF
+  CMP #'#'
+  BEQ .main_loop
+  ; Try to match fields
+  JSR tr_dispatch_line
+  JMP .main_loop
+.eof:
+  ; Handle last test in file (no trailing ---)
+  LDA TR_HAS_TEST
+  BEQ .done
+  JSR tr_print_test_name
+.done:
   ; Close test file
   LDA TR_FILE_HANDLE
   JSR close
@@ -103,8 +108,6 @@ test_runner_start:
 
 tr_msg_running:
   .asciiz "Running tests from "
-tr_msg_lines:
-  .asciiz " lines\n"
 
 ; Resume point after assembler exits (fake_exit jumps here)
 tr_test_resume:
@@ -112,6 +115,135 @@ tr_test_resume:
   JSR tr_restore_vectors
   BRK
   .byte 0
+
+
+; ============================================================================
+; FIELD DISPATCH
+; ============================================================================
+
+; Try to match the current line against known field prefixes
+; Dispatches to the appropriate handler on match
+tr_dispatch_line:
+  ; Check for --- separator (exactly 3 dashes)
+  LDA TR_LINE_LEN
+  CMP #$03
+  BNE .not_sep
+  LDA TR_LINE_BUF
+  CMP #'-'
+  BNE .not_sep
+  LDA TR_LINE_BUF + 1
+  CMP #'-'
+  BNE .not_sep
+  LDA TR_LINE_BUF + 2
+  CMP #'-'
+  BNE .not_sep
+  JMP tr_handle_separator
+.not_sep:
+  ; Check for "NAME: " prefix
+  SET16 tr_pfx_name, TABP16
+  JSR tr_match_prefix
+  BCC tr_handle_name
+  ; Unrecognized line - skip
+  RTS
+
+
+; ============================================================================
+; FIELD HANDLERS
+; ============================================================================
+
+; Handle --- separator: finalize previous test, reset state
+tr_handle_separator:
+  LDA TR_HAS_TEST
+  BEQ .no_prev_test
+  JSR tr_print_test_name
+.no_prev_test:
+  JMP tr_init_test        ; Tail call - reset for next test
+
+; Handle NAME: field - copy test name
+tr_handle_name:
+  ; Y = offset past "NAME: " prefix from tr_match_prefix
+  JSR tr_copy_field_to_name
+  LDA #$01
+  STA TR_HAS_TEST
+  RTS
+
+
+; ============================================================================
+; FIELD MATCHING
+; ============================================================================
+
+; Check if TR_LINE_BUF starts with the string at (TABP16)
+; On entry: TABP16 points to null-terminated prefix string
+; On exit: C clear = match, Y = offset past prefix in TR_LINE_BUF
+;          C set = no match
+tr_match_prefix:
+  LDY #$00
+.loop:
+  LDA (TABP16),Y
+  BEQ .match              ; End of prefix → match
+  CPY TR_LINE_LEN
+  BCS .no_match           ; Line shorter than prefix
+  CMP TR_LINE_BUF,Y
+  BNE .no_match
+  INY
+  BNE .loop
+.no_match:
+  SEC
+  RTS
+.match:
+  CLC
+  RTS
+
+; Field prefix strings
+tr_pfx_name:  .asciiz "NAME: "
+
+
+; ============================================================================
+; TEST STATE MANAGEMENT
+; ============================================================================
+
+; Initialize/reset test state for a new test
+tr_init_test:
+  LDA #$00
+  STA TR_HAS_TEST
+  STA TR_NAME_BUF         ; Clear name (null terminator at start)
+  STA TR_SKIP_FLAG
+  STA TR_EXPECT_ERROR
+  STA_LH16 TR_EXPECT_LEN16
+  STA_LH16 TR_EXPECT_LINE16
+  STA TR_EXPECT_MSG        ; Clear expected message
+  STA TR_TEST_TYPE
+  STA TR_STATE
+  STA TR_ARGV_COUNT
+  RTS
+
+; Print test name (indented)
+tr_print_test_name:
+  SHOW_MESSAGEI tr_msg_indent
+  SET16 TR_NAME_BUF, TABP16
+  JSR show_message
+  SHOW_CHAR '\n'
+  RTS
+
+tr_msg_indent:
+  .asciiz "  "
+
+; Copy from TR_LINE_BUF[Y..TR_LINE_LEN) to TR_NAME_BUF
+; On entry: Y = starting offset in TR_LINE_BUF
+tr_copy_field_to_name:
+  LDX #$00
+.loop:
+  CPY TR_LINE_LEN
+  BCS .done
+  LDA TR_LINE_BUF,Y
+  STA TR_NAME_BUF,X
+  INY
+  INX
+  BNE .loop
+.done:
+  LDA #$00
+  STA TR_NAME_BUF,X       ; Null-terminate
+  RTS
 
 
 ; ============================================================================
