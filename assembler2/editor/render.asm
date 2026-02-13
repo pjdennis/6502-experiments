@@ -31,6 +31,7 @@ WRAP_QUOT:     .byte     ; Scratch: quotient from CURSOR_COL / SCREEN_COLS
 WRAP_REM:      .byte     ; Scratch: remainder from CURSOR_COL % SCREEN_COLS
 RENDER_WRAP:   .byte     ; Current wrap row offset during rendering
 DIV_INPUT16:   .word     ; Scratch for 16-bit division
+PREV_SINGLE_ROW: .byte   ; $FF = line was single-row before edit, $00 = was multi-row
 
   .code
 
@@ -265,32 +266,9 @@ render_position_cursor:
   STA ANSI_COL
   JMP ansi_move_cursor
 
-; Render just the current line (optimization for insert mode)
-; Redraws the line at CURSOR_ROW and repositions cursor
-render_current_line:
-  JSR ansi_cursor_hide
-
-  LDA CURSOR_ROW
-  CLC
-  ADC #1
-  STA ANSI_ROW
-  LDA #1
-  STA ANSI_COL
-  JSR ansi_move_cursor
-
-  ; Get current line pointer
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_ptr
-
-  JSR render_line_chars
-  JSR ansi_clear_line
-
-  JSR render_position_cursor
-  JSR ansi_cursor_show
-  JMP io_flush
-
 ; Redraw current line and rows below, plus status bar (for single-line edits)
-; Renders from CURSOR_ROW downward to handle line wrap changes correctly
+; If both before and after the edit the line is a single row, renders just
+; that one row + status bar. Otherwise renders from CURSOR_ROW downward.
 render_current_line_and_status:
   ; If line wraps (len >= SCREEN_COLS), upgrade to full repaint
   JSR get_current_line_len
@@ -298,13 +276,28 @@ render_current_line_and_status:
   CPX #0
   BNE .do_full
   CMP SCREEN_COLS
-  BCC .single_row
-.do_full:
-
-  ; Line wraps - do full repaint
-  JMP render_screen
-
-.single_row:
+  BCS .do_full
+  ; Currently single-row. Was it also single-row before?
+  LDA PREV_SINGLE_ROW
+  BEQ .render_from_cursor    ; Was multi-row -> render cursor row downward (clears stale rows)
+  ; Both single-row -> render just the one row + status + cursor
+  JSR ansi_cursor_hide
+  LDA CURSOR_ROW
+  CLC
+  ADC #1
+  STA ANSI_ROW
+  LDA #1
+  STA ANSI_COL
+  JSR ansi_move_cursor
+  LDAX16 FILE_LINE16
+  JSR buf_get_line_ptr
+  JSR render_line_chars
+  JSR ansi_clear_line
+  JSR render_status_line
+  JSR render_position_cursor
+  JSR ansi_cursor_show
+  JMP io_flush
+.render_from_cursor:
   JSR ansi_cursor_hide
   LDA CURSOR_ROW
   STA RENDER_ROW
@@ -312,6 +305,9 @@ render_current_line_and_status:
   LDA #0
   STA RENDER_WRAP
   JMP render_from_row
+.do_full:
+  ; Line wraps - do full repaint
+  JMP render_screen
 
 ; Dispatch: full repaint, current line, or cursor+status only, based on RENDER_FLAG
 render_update:

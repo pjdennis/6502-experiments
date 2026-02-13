@@ -245,6 +245,7 @@ normal_substitute_char:
   STA MODIFIED
   LDA #1
   STA RENDER_FLAG
+  JSR ensure_cursor_visible
 
 .sub_insert:
   LDA #MODE_INSERT

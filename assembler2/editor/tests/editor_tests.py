@@ -2201,34 +2201,70 @@ class EditorTestRunner:
         )
 
         # Insert char: only cursor's row is touched (not all rows)
-        # i enters insert (cursor-only), 'X' inserts (cursor row + below)
-        # render_current_line_and_status renders from cursor row downward
-        # to handle line unwrap correctly, so all rows from 0 are touched
+        # i enters insert (cursor-only), 'X' inserts char
+        # Single-row optimization: only row 0 is redrawn
         self.run_test_screen(
             "Render opt: insert char redraws from cursor",
             "Hello\nWorld\n",
             b"iX\x1b:q!\r",
             expect_content_redraws=[True, False, True, False],
-            expect_content_rows=[(2, set(range(9)))]
+            expect_content_rows=[(2, {0})]
         )
 
-        # Backspace mid-line: redraws from cursor row downward
+        # Backspace mid-line: single-row redraw
         # Move right, enter insert, backspace (mid-line)
         self.run_test_screen(
             "Render opt: backspace redraws from cursor",
             "Hello\nWorld\n",
             b"li\x08\x1b:q!\r",
             expect_content_redraws=[True, False, False, True, False],
-            expect_content_rows=[(3, set(range(9)))]
+            expect_content_rows=[(3, {0})]
         )
 
-        # Normal mode x: redraws from cursor row downward
+        # Normal mode x: single-row redraw
         self.run_test_screen(
             "Render opt: x redraws from cursor",
             "Hello\nWorld\n",
             b"x:q!\r",
             expect_content_redraws=[True, True],
-            expect_content_rows=[(1, set(range(9)))]
+            expect_content_rows=[(1, {0})]
+        )
+
+        # r replaces char: single-row redraw
+        # Frame 0: init(T), Frame 1: r pending key(F), Frame 2: X replaces(T), Frame 3: :q!(F)
+        self.run_test_screen(
+            "Render opt: r replaces with single-row redraw",
+            "Hello\n",
+            b"rX:q!\r",
+            expect_content_redraws=[True, False, True, False],
+            expect_content_rows=[(2, {0})]
+        )
+
+        # ~ toggles case: single-row redraw
+        self.run_test_screen(
+            "Render opt: ~ toggles with single-row redraw",
+            "Hello\n",
+            b"~:q!\r",
+            expect_content_redraws=[True, True],
+            expect_content_rows=[(1, {0})]
+        )
+
+        # s substitutes: single-row redraw for the s frame
+        # Frame 0: init(T), Frame 1: s deletes+enters insert(T), Frame 2: X inserts(T), Frame 3: ESC(F)
+        self.run_test_screen(
+            "Render opt: s substitutes with single-row redraw",
+            "Hello\n",
+            b"sX\x1b:q!\r",
+            expect_content_rows=[(1, {0})]
+        )
+
+        # Insert Delete (forward delete): single-row redraw
+        DEL = b"\x1b[3~"
+        self.run_test_screen(
+            "Render opt: insert Delete single-row redraw",
+            "Hello\n",
+            b"i" + DEL + b"\x1b:q!\r",
+            expect_content_rows=[(2, {0})]
         )
 
         # Insert newline: full repaint (multiple lines change)

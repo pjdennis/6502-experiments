@@ -175,6 +175,19 @@ main_loop:
   JMP main_loop
 
 .key_available:
+  ; Save current line's single-row status for render optimization
+  JSR get_current_line_len
+  CPX #0
+  BNE .prev_multi
+  CMP SCREEN_COLS
+  BCS .prev_multi
+  LDA #$FF
+  STA PREV_SINGLE_ROW
+  JMP .prev_done
+.prev_multi:
+  LDA #0
+  STA PREV_SINGLE_ROW
+.prev_done:
   ; Read a key
   JSR get_key
 

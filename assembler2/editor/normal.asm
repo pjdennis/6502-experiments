@@ -328,11 +328,12 @@ normal_delete_char:
   JSR buf_delete_chars
   JSR buf_adjust_lines_dec
 
+  JSR clamp_cursor_col
   LDA #1
   STA RENDER_FLAG
+  JSR ensure_cursor_visible
   LDA #$FF
   STA MODIFIED
-  JSR clamp_cursor_col
 .done:
   JMP clear_count
 
