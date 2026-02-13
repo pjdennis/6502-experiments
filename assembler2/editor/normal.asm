@@ -346,6 +346,9 @@ normal_delete_to_eol:
   SBC16 LINE_LEN16, CURSOR_COL16, BUF_LEN16
   JSR yank_delete_at_cursor
   JSR clamp_cursor_col
+  LDA #1
+  STA RENDER_FLAG
+  JSR ensure_cursor_visible
 .done:
   JMP clear_count
 

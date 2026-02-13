@@ -2267,6 +2267,31 @@ class EditorTestRunner:
             expect_content_rows=[(2, {0})]
         )
 
+        # D deletes to end of line: single-row redraw
+        self.run_test_screen(
+            "Render opt: D redraws current row only",
+            "Hello World\n",
+            b"D:q!\r",
+            expect_content_rows=[(1, {0})]
+        )
+
+        # dw deletes word: single-row redraw
+        self.run_test_screen(
+            "Render opt: dw redraws current row only",
+            "Hello World\n",
+            b"dw:q!\r",
+            expect_content_rows=[(2, {0})]
+        )
+
+        # db deletes word backward: single-row redraw
+        # Frame 0: init(T), Frame 1: $(F), Frame 2: d pending(F), Frame 3: b triggers db(T)
+        self.run_test_screen(
+            "Render opt: db redraws current row only",
+            "Hello World\n",
+            b"$db:q!\r",
+            expect_content_rows=[(3, {0})]
+        )
+
         # Insert newline: full repaint (multiple lines change)
         self.run_test_screen(
             "Render opt: Enter in insert is full repaint",

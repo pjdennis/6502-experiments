@@ -519,6 +519,9 @@ do_dw:
 
 .dw_done:
   JSR clamp_cursor_col
+  LDA #1
+  STA RENDER_FLAG
+  JSR ensure_cursor_visible
   JMP clear_count
 
 ; --- Delete word backward (db) ---
@@ -549,6 +552,9 @@ do_db:
 
 .db_done:
   JSR clamp_cursor_col
+  LDA #1
+  STA RENDER_FLAG
+  JSR ensure_cursor_visible
   JMP clear_count
 
 ; --- Change word (cw) ---
