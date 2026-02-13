@@ -3,7 +3,7 @@
 
 * = $0400
   JMP main
-  .include 23/environment.asm
+  .include 17/environment.asm
 
 main:
 .loop:
