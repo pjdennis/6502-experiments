@@ -66,15 +66,45 @@ TR_OUTPUT_FILE: .asciiz "_tr_out.tmp"
 test_runner_start:
   ; Save original vector targets before any patching
   JSR tr_save_vectors
-  SHOW_MESSAGEI tr_msg_started
-  ; Verify save/restore round-trip works
-  JSR tr_patch_vectors
-  JSR tr_restore_vectors
+  ; Open test file from argv[0]
+  LDA #$00
+  JSR argv
+  JSR open
+  STA TR_FILE_HANDLE
+  ; Print filename
+  SHOW_MESSAGEI tr_msg_running
+  LDA #$00
+  JSR argv
+  STAX16 TABP16
+  JSR show_message
+  SHOW_CHAR '\n'
+  ; Count lines
+  SET16 $0000, TR_PASS_COUNT16
+.count_loop:
+  JSR tr_read_line
+  BCS .count_done
+  INC16 TR_PASS_COUNT16
+  JMP .count_loop
+.count_done:
+  ; Count partial final line (no trailing newline)
+  LDA TR_LINE_LEN
+  BEQ .no_final_line
+  INC16 TR_PASS_COUNT16
+.no_final_line:
+  ; Print line count
+  CP16 TR_PASS_COUNT16, TO_DECIMAL_VALUE16
+  JSR show_decimal
+  SHOW_MESSAGEI tr_msg_lines
+  ; Close test file
+  LDA TR_FILE_HANDLE
+  JSR close
   BRK
   .byte 0
 
-tr_msg_started:
-  .asciiz "Test runner started\n"
+tr_msg_running:
+  .asciiz "Running tests from "
+tr_msg_lines:
+  .asciiz " lines\n"
 
 ; Resume point after assembler exits (fake_exit jumps here)
 tr_test_resume:
@@ -82,6 +112,38 @@ tr_test_resume:
   JSR tr_restore_vectors
   BRK
   .byte 0
+
+
+; ============================================================================
+; LINE READER
+; ============================================================================
+
+; Read one line from the test file into TR_LINE_BUF
+; On exit: TR_LINE_LEN = length (excluding newline)
+;          C clear = line read OK
+;          C set = EOF reached (TR_LINE_LEN may be >0 for partial line)
+;          A, X, Y not preserved
+tr_read_line:
+  LDY #$00              ; Buffer index
+.loop:
+  LDA TR_FILE_HANDLE
+  JSR read              ; Read char; C set at EOF
+  BCS .eof
+  CMP #$0A              ; Newline?
+  BEQ .eol
+  CPY #$FF              ; Buffer full? (255 chars max)
+  BCS .loop             ; Discard excess chars, keep reading
+  STA TR_LINE_BUF,Y
+  INY
+  JMP .loop
+.eol:
+  STY TR_LINE_LEN
+  CLC                   ; Line read OK
+  RTS
+.eof:
+  STY TR_LINE_LEN
+  SEC                   ; EOF
+  RTS
 
 
 ; ============================================================================
