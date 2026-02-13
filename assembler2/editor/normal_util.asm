@@ -11,6 +11,7 @@ COUNT16:        .word  ; Accumulated count (0 = no count entered)
 COUNT_ACTIVE:   .byte  ; $FF if digits are being entered, $00 otherwise
 NORMAL_TEMP:    .byte  ; Temp byte for normal mode operations
 BATCH_RESTORE_KEY: .byte ; Key to restore to LAST_KEY after batch (0 = none)
+BATCH_EXTRA:       .byte ; Number of extra pairs found by batch_pending_pairs (0 = none)
 
   .code
 
@@ -290,6 +291,7 @@ batch_pending_pairs:
   ; Push back the non-matching key
   JSR unget_key
 .done:
+  STX BATCH_EXTRA
   ; Add X extra pairs to COUNT16
   TXA
   BEQ .no_add              ; No extra pairs, nothing to do

@@ -7,6 +7,7 @@ normal_init:
   STA_LH16 COUNT16
   STA COUNT_ACTIVE
   STA BATCH_RESTORE_KEY
+  STA BATCH_EXTRA
   RTS
 
 ; Handle a keystroke in normal mode
