@@ -37,7 +37,7 @@ NAME: directive_asciiz_string_mulitple
 INPUT:
  1: * = $0200
  2:   .asciiz "Hi", "Ho"
-EXPECT_HEX: 48 69 00 48 6F 00
+EXPECT_HEX: 48 69 00 48 6f 00
 
 ---
 NAME: directive_asciiz_string_with_byte

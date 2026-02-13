@@ -123,8 +123,17 @@ test_runner_start:
   ; Close test file
   LDA TR_FILE_HANDLE
   JSR close
-  BRK
-  .byte 0
+  ; Print summary
+  JSR tr_print_summary
+  ; Exit with failure code if any tests failed
+  LDA TR_FAIL_COUNT16
+  ORA TR_FAIL_COUNT16 + 1
+  BNE .exit_fail
+  LDA #$00
+  JMP exit
+.exit_fail:
+  LDA #$01
+  JMP exit
 
 tr_msg_running:
   .asciiz "Running tests from "
@@ -136,6 +145,11 @@ tr_msg_running:
 
 ; Finalize the current test: skip or run it
 tr_finalize_test:
+  ; Auto-skip tests needing special builds
+  LDA TR_ARGV_COUNT
+  BEQ .check_skip
+  JSR tr_check_auto_skip
+.check_skip:
   LDA TR_SKIP_FLAG
   BEQ .run
   ; Skip this test
@@ -193,12 +207,54 @@ tr_test_resume:
   RTS
 
 ; Set up virtual argv for the assembler
-; argv[0] = "_tr_in.tmp", argv[1] = "_tr_out.tmp"
+; argv[0] = "_tr_in.tmp", argv[1] = "_tr_out.tmp", argv[2+] = ARGS tokens
 tr_setup_argv:
   SET16 TR_INPUT_FILE, TR_ARGV_PTRS
   SET16 TR_OUTPUT_FILE, TR_ARGV_PTRS + $02
   LDA #$02
   STA TR_ARGC
+  ; Parse ARGS string if present
+  LDX TR_ARGV_COUNT
+  BEQ .done
+  ; Walk TR_ARGV_STRS, splitting on spaces
+  ; Each token becomes argv[TR_ARGC]
+  LDY #$00                 ; Index into TR_ARGV_STRS
+.skip_spaces:
+  LDA TR_ARGV_STRS,Y
+  BEQ .done                ; Null terminator
+  CMP #' '
+  BNE .start_token
+  INY
+  JMP .skip_spaces
+.start_token:
+  ; Record pointer to this token in argv table
+  LDX TR_ARGC
+  CPX #$08                 ; Max 8 argv entries (16 bytes of pointers)
+  BCS .done
+  TXA
+  ASL                      ; *2 for word-sized entries
+  TAX
+  CLC
+  TYA
+  ADC #<TR_ARGV_STRS
+  STA TR_ARGV_PTRS,X
+  LDA #$00
+  ADC #>TR_ARGV_STRS
+  STA TR_ARGV_PTRS + 1,X
+  INC TR_ARGC
+.scan_token:
+  LDA TR_ARGV_STRS,Y
+  BEQ .done                ; End of string
+  CMP #' '
+  BEQ .end_token
+  INY
+  JMP .scan_token
+.end_token:
+  LDA #$00
+  STA TR_ARGV_STRS,Y       ; Null-terminate this token
+  INY
+  JMP .skip_spaces
+.done:
   RTS
 
 tr_msg_skip:        .asciiz " SKIP\n"
@@ -550,6 +606,96 @@ tr_print_hex_byte:
   RTS
 
 
+; Print summary: "N passed, M failed, K skipped"
+tr_print_summary:
+  CP16 TR_PASS_COUNT16, TO_DECIMAL_VALUE16
+  JSR show_decimal
+  SHOW_MESSAGEI tr_msg_sum_passed
+  CP16 TR_FAIL_COUNT16, TO_DECIMAL_VALUE16
+  JSR show_decimal
+  SHOW_MESSAGEI tr_msg_sum_failed
+  CP16 TR_SKIP_COUNT16, TO_DECIMAL_VALUE16
+  JSR show_decimal
+  SHOW_MESSAGEI tr_msg_sum_skipped
+  RTS
+
+tr_msg_sum_passed:  .asciiz " passed, "
+tr_msg_sum_failed:  .asciiz " failed, "
+tr_msg_sum_skipped: .asciiz " skipped\n"
+
+; Check if test ARGS require a special build; set TR_SKIP_FLAG if so
+; Auto-skips tests with "debug", "small_heap", or "show_captured_macros" in ARGS
+tr_check_auto_skip:
+  ; Check for "debug"
+  SET16 tr_skip_debug, TABP16
+  JSR tr_args_contains
+  BCC .skip
+  ; Check for "small_heap"
+  SET16 tr_skip_small_heap, TABP16
+  JSR tr_args_contains
+  BCC .skip
+  ; Check for "show_captured_macros"
+  SET16 tr_skip_show_macros, TABP16
+  JSR tr_args_contains
+  BCC .skip
+  RTS
+.skip:
+  LDA #$01
+  STA TR_SKIP_FLAG
+  RTS
+
+tr_skip_debug:       .asciiz "debug"
+tr_skip_small_heap:  .asciiz "small_heap"
+tr_skip_show_macros: .asciiz "show_captured_macros"
+
+; Check if TR_ARGV_STRS contains the null-terminated string at (TABP16)
+; On exit: C clear = found, C set = not found
+tr_args_contains:
+  LDX #$00                 ; Index into TR_ARGV_STRS
+.outer:
+  LDA TR_ARGV_STRS,X
+  BEQ .not_found           ; End of args string
+  ; Try to match from current position
+  STX tr_args_start        ; Save start of this token
+  LDY #$00                 ; Index into search string
+.inner:
+  LDA (TABP16),Y
+  BEQ .check_boundary      ; End of search string - check word boundary
+  CMP TR_ARGV_STRS,X
+  BNE .next
+  INX
+  INY
+  JMP .inner
+.check_boundary:
+  ; Full search string matched - check word boundary
+  LDA TR_ARGV_STRS,X
+  BEQ .found               ; End of args = valid boundary
+  CMP #' '
+  BEQ .found               ; Space = valid boundary
+  ; Partial match - fall through to advance past this token
+.next:
+  ; Advance X to next space or end from the token start
+  LDX tr_args_start
+.advance:
+  LDA TR_ARGV_STRS,X
+  BEQ .not_found
+  CMP #' '
+  BEQ .skip_space
+  INX
+  JMP .advance
+.skip_space:
+  INX
+  JMP .outer
+.found:
+  CLC
+  RTS
+.not_found:
+  SEC
+  RTS
+
+tr_args_start: .byte 0
+
+
 ; ============================================================================
 ; FIELD DISPATCH
 ; ============================================================================
@@ -623,9 +769,15 @@ tr_dispatch_field:
 .not_skip:
   SET16 tr_pfx_args, TABP16
   JSR tr_match_prefix
-  BCS .no_match
+  BCS .not_args
   JSR tr_close_input_state
   JMP tr_handle_args
+.not_args:
+  SET16 tr_pfx_expect_stderr, TABP16
+  JSR tr_match_prefix
+  BCS .no_match
+  JSR tr_close_input_state
+  JMP tr_handle_skip         ; Treat as skip (can't verify stderr)
 .no_match:
   SEC
   RTS
@@ -845,6 +997,7 @@ tr_pfx_expect_line:   .asciiz "EXPECT_LINE: "
 tr_pfx_expect_msg:    .asciiz "EXPECT_MSG: "
 tr_pfx_skip:          .asciiz "SKIP:"
 tr_pfx_args:          .asciiz "ARGS: "
+tr_pfx_expect_stderr: .asciiz "EXPECT_STDERR:"
 
 
 ; ============================================================================
