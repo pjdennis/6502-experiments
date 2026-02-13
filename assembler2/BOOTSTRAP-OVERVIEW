@@ -14,9 +14,9 @@ Version  Milestone
 08       .include directive, file stack
 09       Sections (.zeropage/.code), command-line arguments
 10       Local labels, heap-based global label storage
-11       Standard 6502 syntax (all 13 addressing modes)
+11       Standard 6502 syntax (all 13 addressing modes), forward reference tracking
 12       Source transitions to standard syntax (fixed point)
-13       Expression evaluation, forward reference tracking
+13       Expression evaluation, .data directive
 14       .ifdef/.endif conditional assembly
 15       Macros, << >> shift operators
 16       Data directives, decimal constants, memory protection
@@ -55,11 +55,11 @@ Ver New syntax supported             New syntax used in source
 10  Local labels (.prefix),          .zeropage, .code
     heap-based global labels
 11  Standard 6502 syntax,            None
-    all 13 addr modes, #'x'
+    all 13 addr modes, #'x',
+    fwd ref tracking
 12  None                             Standard 6502 syntax,
                                      #'x' character literals
 13  Expressions (+, -), .data,       .data (replaces DATA)
-    fwd ref tracking,
     char lits as terms
 14  .ifdef/.endif, define:           Expressions (+, -),
                                      char literal arithmetic

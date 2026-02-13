@@ -4,8 +4,8 @@ Assembled by: version 12 (both instgen and asm)
 
 Features Supported by This Assembler
 -------------------------------------
-All features from version 12, plus expression evaluation, forward reference
-tracking, .data directive, and error module extraction:
+All features from version 12, plus expression evaluation, .data directive,
+expression-aware forward reference propagation, and error module extraction:
 
 Syntax:
 - Standard 6502 mnemonic syntax (LDA, STA, etc.)
@@ -21,7 +21,7 @@ Syntax:
 - Expression evaluation with + and - operators (left-to-right, no precedence)
 - Mixed expressions: hex, labels, and character literals (e.g., '9'-'0'+$01)
 - Comments with semicolons
-- Two-pass assembly with forward reference tracking
+- Two-pass assembly with forward reference tracking (from version 12)
 - Automatic zero page vs absolute addressing based on value
 
 Directives:
@@ -30,12 +30,9 @@ Directives:
 - .code - switch to code section
 - .data - declare raw byte data (new)
 
-Error handling: same as version 12 (errors $01-$12), plus:
-- err_too_many_forward_refs ($13): forward reference list overflow
+Error handling: same as version 12 (errors $01-$12, $13, $16), plus:
 - err_invalid_operand ($14): invalid operand in expression
 - err_unexpected_text ($15): unexpected text after operand
-- err_fwdref_tracking ($16): internal error - forward ref tracking mismatch
-  between passes (debug verification)
 
 New in this version (relative to version 12):
 - Expression evaluation with + and - operators
@@ -45,25 +42,19 @@ New in this version (relative to version 12):
   - Left-to-right evaluation, no operator precedence
   - Character literals supported as expression terms
   - Forward references propagate through expressions (if any term is forward
-    ref, entire expression is treated as forward ref)
-- Forward reference tracking for correct zero page detection
-  - IS_FWDREF flag: marks labels not yet defined in pass 1
-  - FWDREF_LIST at $0200 (512 bytes): records labels that were forward refs
-  - handle_fwdref_mode: forces absolute addressing for forward refs in pass 1,
-    uses FWDREF_LIST in pass 2 to determine original addressing mode
-  - add_forward_ref / check_forward_ref: manage the forward ref list
-  - Ensures forward refs to zero page labels use absolute mode (3 bytes)
-    since the assembler doesn't know the value in pass 1
+    ref, entire expression is treated as forward ref via EXPR_FWDREF)
+- Extended forward reference tracking for expressions
+  - Version 12 introduced basic forward ref tracking for single label operands;
+    this version extends IS_FWDREF propagation to multi-term expressions
+  - EXPR_FWDREF accumulates forward reference status across expression terms
 - .data directive: new directive form for raw byte data
 - errors.asm module: error messages and interrupt handler extracted from
   main source into separate include file
-- fwdref.asm module: forward reference list management
 - OPERAND_L/OPERAND_H aliased to HEX2/HEX1 (shared storage)
 - EXPR_ACCU_L/EXPR_ACCU_H zero page variables for expression accumulator
 - EXPR_FWDREF for accumulated forward reference flag in expressions
 - EXPR_CARRY for saved carry from first term
 - + and - added as token terminators in compare_end_of_token
-- Forward reference count verified between pass 1 and pass 2
 
 Features Used in This Assembler's Source Code
 ----------------------------------------------

@@ -34,7 +34,9 @@ Syntax (new standard syntax):
 - Low byte (<) and high byte (>) operators on labels
 - Labels as operands in all addressing modes
 - Comments with semicolons
-- Two-pass assembly
+- Two-pass assembly with forward reference tracking
+- Forward reference tracking: labels used before definition are forced to
+  absolute addressing mode (3 bytes) to prevent pass 1/pass 2 size mismatch
 - .include directive
 - .zeropage and .code section directives
 - Command-line arguments: <assembler> <input> <output> [debug]
@@ -64,6 +66,9 @@ Full 6502 instruction set (56 opcodes):
 Error handling: same as version 10 (errors 1-10), plus:
 - Invalid addressing mode (error 11): mode not supported for instruction
 - Invalid character literal (error 12): malformed character literal
+- Too many forward references (error 13): forward reference list overflow
+- Internal error - reference tracking (error 16): forward ref pointer mismatch
+  between passes (debug verification)
 
 New in this version (relative to version 10):
 - Complete rewrite of instruction processing for standard 6502 syntax
@@ -72,7 +77,8 @@ New in this version (relative to version 10):
   by $FF. This replaces the old format where each mnemonic variant was a
   separate hash table entry.
 - Addressing mode constants: MODE_NONE through MODE_IND, plus MODE_DATA
-- New zero page variables: ADDR_MODE, INST_PTR_L/H, OPERAND_L/H
+- New zero page variables: ADDR_MODE, INST_PTR_L/H, OPERAND_L/H,
+  IS_FWDREF, FWDREF_PASS1_L/H
 - INST_FLAG removed (replaced by mode-based dispatch)
 - lookup_mnemonic: looks up 3-letter mnemonic in instruction hash table,
   returns pointer to mode:opcode list
@@ -87,6 +93,16 @@ New in this version (relative to version 10):
   parsing indexed and indirect addressing modes)
 - check_for_data_pseudo: handles DATA as special case via MODE_DATA
 - instgen generates the new-format instruction hash table
+- Forward reference tracking for correct zero page detection:
+  - IS_FWDREF flag: marks labels not yet defined in pass 1
+  - FWDREF_LIST at $0200 (512 bytes): records PCs where forward-referenced
+    labels caused zero page mode selection
+  - handle_fwdref_mode: forces absolute addressing for forward refs in pass 1,
+    uses FWDREF_LIST in pass 2 to match the same addressing mode choice
+  - fwdref.asm module: forward reference list management (init, finalize,
+    add_forward_ref, check_forward_ref, reset_fwdref_ptr)
+  - Forward reference count verified between pass 1 and pass 2
+  - Debug output includes forward reference count
 
 Features Used in This Assembler's Source Code
 ----------------------------------------------
@@ -102,7 +118,7 @@ Features Used in This Assembler's Source Code
 - Comments (;)
 - BRK with inline error code and message (BRK $xx "message" $00)
 - .include directive (out/inst.asm.out, environment.asm, common.asm,
-  file_stack.asm, to_decimal.asm)
+  file_stack.asm, to_decimal.asm, fwdref.asm)
 - .zeropage and .code section directives
 - Local labels (.label syntax)
 - Command-line arg access: argc, argv
@@ -114,6 +130,8 @@ New syntax used in source (relative to version 10):
 
 Other source changes:
 - ADDR_MODE, INST_PTR_L/H, OPERAND_L/H added to zero page variables
+- IS_FWDREF, FWDREF_PASS1_L/H added to zero page variables
 - INST_FLAG removed (no longer needed with mode-based instruction lookup)
+- fwdref.asm module for forward reference list management
 - Substantially larger codebase due to operand parsing, mode detection,
-  and character literal parsing logic
+  character literal parsing, and forward reference tracking logic
