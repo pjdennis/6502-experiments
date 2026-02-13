@@ -252,9 +252,7 @@ normal_substitute_char:
   JSR ensure_cursor_visible
 
 .sub_insert:
-  LDA #MODE_INSERT
-  STA MODE
-  JMP clear_count
+  JMP enter_insert_mode
 
 ; --- Change to EOL (C) ---
 normal_change_to_eol:
@@ -269,9 +267,7 @@ normal_change_to_eol:
   JSR ensure_cursor_visible
 
 .c_insert:
-  LDA #MODE_INSERT
-  STA MODE
-  JMP clear_count
+  JMP enter_insert_mode
 
 ; --- Replace char (r) ---
 do_replace_char:
@@ -343,11 +339,9 @@ cc_have_count:
   LDA #0
   STA_LH16 CURSOR_COL16
   JSR ensure_cursor_visible
-  LDA #MODE_INSERT
-  STA MODE
   LDA #$FF
   STA MODIFIED
-  JMP clear_count
+  JMP enter_insert_mode
 
 .cc_overflow:
   JMP show_yank_overflow
@@ -603,12 +597,7 @@ do_cw:
   JSR yank_delete_at_cursor
 
 .cw_insert:
-  LDA #1
-  STA RENDER_FLAG
-  JSR ensure_cursor_visible
-  LDA #MODE_INSERT
-  STA MODE
-  JMP clear_count
+  JMP enter_insert_mode_render
 
 ; --- Change word backward (cb) ---
 ; Scans N words back then single yank+delete (yanks ALL deleted text).
@@ -628,9 +617,4 @@ do_cb:
   JSR yank_delete_at_cursor
 
 .cb_insert:
-  LDA #1
-  STA RENDER_FLAG
-  JSR ensure_cursor_visible
-  LDA #MODE_INSERT
-  STA MODE
-  JMP clear_count
+  JMP enter_insert_mode_render

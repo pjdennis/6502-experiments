@@ -328,9 +328,7 @@ do_dd:
 normal_enter_insert:
   LDA #0
   STA RENDER_FLAG
-  LDA #MODE_INSERT
-  STA MODE
-  JMP clear_count
+  JMP enter_insert_mode
 
 normal_enter_insert_after:
   LDA #0
@@ -345,9 +343,7 @@ normal_enter_insert_after:
   INC16 CURSOR_COL16
 .enter:
   JSR ensure_cursor_visible
-  LDA #MODE_INSERT
-  STA MODE
-  JMP clear_count
+  JMP enter_insert_mode
 
 normal_enter_insert_eol:
   LDA #0
@@ -355,9 +351,7 @@ normal_enter_insert_eol:
   JSR get_current_line_len
   STAX16 CURSOR_COL16
   JSR ensure_cursor_visible
-  LDA #MODE_INSERT
-  STA MODE
-  JMP clear_count
+  JMP enter_insert_mode
 
 normal_open_below:
   LDAX16 FILE_LINE16
@@ -400,11 +394,9 @@ normal_open_below:
   LDA #0
   STA_LH16 CURSOR_COL16
   JSR ensure_cursor_visible
-  LDA #MODE_INSERT
-  STA MODE
   LDA #$FF
   STA MODIFIED
-  JMP clear_count
+  JMP enter_insert_mode
 .open_below_full:
   SET16 str_buffer_full, STR_PTR16
   JSR show_status_message
@@ -429,11 +421,9 @@ normal_open_above:
 
   LDA #0
   STA_LH16 CURSOR_COL16
-  LDA #MODE_INSERT
-  STA MODE
   LDA #$FF
   STA MODIFIED
-  JMP clear_count
+  JMP enter_insert_mode
 .open_above_full:
   SET16 str_buffer_full, STR_PTR16
   JSR show_status_message

@@ -262,6 +262,21 @@ check_combo_first_key:
   SEC
   RTS
 
+; --- Insert mode entry helpers ---
+
+; Enter insert mode with render flag=1 and ensure_cursor_visible
+enter_insert_mode_render:
+  LDA #1
+  STA RENDER_FLAG
+  JSR ensure_cursor_visible
+  ; fall through
+
+; Enter insert mode and clear count
+enter_insert_mode:
+  LDA #MODE_INSERT
+  STA MODE
+  JMP clear_count
+
 ; Clear count state: zeroes COUNT16, COUNT_ACTIVE, LAST_KEY
 ; If BATCH_RESTORE_KEY is set, restores it to LAST_KEY (for partial pair e.g. dddw)
 clear_count:
