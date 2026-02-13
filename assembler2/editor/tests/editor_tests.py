@@ -5407,6 +5407,41 @@ class EditorTestRunner:
         )
 
         self.run_test(
+            ">> on empty line does not indent",
+            "\n",
+            b">>:wq\r",
+            expected_content="\n"
+        )
+
+        self.run_test(
+            ">> skips empty lines in range",
+            "aaa\n\nbbb\n",
+            b"3>>:wq\r",
+            expected_content="  aaa\n\n  bbb\n"
+        )
+
+        self.run_test(
+            ">> on spaces-only line does indent",
+            "   \n",
+            b">>:wq\r",
+            expected_content="     \n"
+        )
+
+        self.run_test(
+            ">> on all empty lines is no-op",
+            "\n\n\n",
+            b"3>>:wq\r",
+            expected_content="\n\n\n"
+        )
+
+        self.run_test_screen(
+            ">> on empty line does not move cursor",
+            "\nfoo\n",
+            b">>:q!\r",
+            expect_cursor=(0, 0),
+        )
+
+        self.run_test(
             "<< unindents single line",
             "  hello\n",
             b"<<:wq\r",

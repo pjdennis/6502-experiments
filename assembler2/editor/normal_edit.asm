@@ -340,6 +340,8 @@ INDENT_WIDTH = 2
 
 do_indent:
   JSR get_count_clamp_lines
+  LDA #0
+  STA NORMAL_TEMP              ; Cursor-line-indented flag
 
 .indent_loop:
   TST16 BUF_TEMP16
@@ -348,6 +350,19 @@ do_indent:
   ; Get line pointer
   LDAX16 LINE_LEN16
   JSR buf_get_line_ptr       ; BUF_PTR16 = start of line
+
+  ; Skip empty lines (first byte is newline)
+  LDY #0
+  LDA (BUF_PTR16),Y
+  CMP #'\n'
+  BEQ .indent_next_line
+
+  ; Track if cursor line (first line) was indented
+  CMP16 LINE_LEN16, FILE_LINE16
+  BNE .indent_not_cursor
+  LDA #$FF
+  STA NORMAL_TEMP
+.indent_not_cursor:
 
   ; Insert 2 spaces at start of line
   LDA #INDENT_WIDTH
@@ -359,14 +374,18 @@ do_indent:
   BCS .indent_done_loop      ; Buffer full, stop
   JSR buf_rebuild_lines
 
+.indent_next_line:
   INC16 LINE_LEN16
   DEC16 BUF_TEMP16
   JMP .indent_loop
 
 .indent_done_loop:
-  ; Adjust cursor col
+  ; Only adjust cursor col if cursor line was indented
+  LDA NORMAL_TEMP
+  BEQ .indent_no_col_adj
   CLC
   ADCI16 CURSOR_COL16, INDENT_WIDTH, CURSOR_COL16
+.indent_no_col_adj:
   LDA #$FF
   STA RENDER_FLAG        ; Multi-line edit; BUF_END16 change only triggers current-line
   STA MODIFIED
