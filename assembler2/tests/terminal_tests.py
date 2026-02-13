@@ -34,7 +34,7 @@ class TerminalTestRunner:
         self.base_dir = base_dir
         self.verbose = verbose
         self.emulator = base_dir / "emulator.out"
-        self.assembler = base_dir / "23" / "out" / "asm.out"
+        self.assembler = base_dir / "17" / "out" / "asm.out"
         self.test_asm = base_dir / "tests" / "terminal_test.asm"
         self.test_bin = base_dir / "tests" / "out" / "terminal_test.out"
         self.dsr_test_asm = base_dir / "tests" / "terminal_dsr_test.asm"
