@@ -5555,6 +5555,14 @@ class EditorTestRunner:
             expected_content="X three\n",
         )
 
+        # Count-prefix cw yank: yanks ALL deleted text
+        self.run_test(
+            "2cw+Esc $p yanks all deleted text",
+            "one two three\n",
+            b"2cw\x1b$p:wq\r",
+            expected_content=" threeone two\n",
+        )
+
         self._group("Change word backward (cb):", leading_blank=True)
 
         self.run_test(

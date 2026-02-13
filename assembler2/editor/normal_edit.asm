@@ -603,46 +603,20 @@ do_db:
 ; --- Change word (cw) ---
 ; vi's cw = ce: delete to end of current word only (no trailing ws).
 ; Enter insert mode after deletion.
+; Scans N words then single yank+delete (yanks ALL deleted text).
 do_cw:
-  JSR get_count
-  LDX BUF_TEMP16
-
-.cw_loop:
-  STX NORMAL_TEMP
+  JSR get_count              ; BUF_TEMP16 = N
   JSR check_cursor_in_line
   BCS .cw_insert
 
-  ; Find end of current word (no trailing whitespace)
-  CP16 CURSOR_COL16, BUF_LEN16
-  JSR get_cursor_buf_ptr
-  LDY #0
-  LDA (BUF_PTR16),Y
-  JSR char_class
-  STA WORD_CLASS
-  CMP #0
-  BEQ .cw_skip_ws_first
-
-  ; Skip same-class chars (no trailing ws for cw)
-  JSR skip_word_class_forward
-  JMP .cw_have_end
-
-.cw_skip_ws_first:
-  ; On whitespace: skip ws, then skip that word class
-  JSR skip_word_class_forward
-  BCS .cw_have_end
-  STA WORD_CLASS
-  JSR skip_word_class_forward
-
-.cw_have_end:
-  ; delete count = BUF_LEN16 - CURSOR_COL16
+  CP16 CURSOR_COL16, BUF_LEN16  ; BUF_LEN16 = scan start at cursor
+  LDX BUF_TEMP16
+  JSR scan_cw_forward
   SEC
   SBC16 BUF_LEN16, CURSOR_COL16, BUF_LEN16
-  JSR yank_delete_at_cursor
-
-  LDX NORMAL_TEMP
-  DEX
+  TST16 BUF_LEN16
   BEQ .cw_insert
-  JMP .cw_loop
+  JSR yank_delete_at_cursor
 
 .cw_insert:
   LDA #1

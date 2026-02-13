@@ -467,6 +467,48 @@ scan_words_backward:
 .swb_done:
   RTS
 
+; Scan forward N words with cw semantics from BUF_LEN16
+; Like scan_words_forward but does NOT skip trailing whitespace on non-ws chars.
+; On whitespace: skips ws then next word class.
+; Input: X = count, BUF_LEN16 = start column, LINE_LEN16 = line length
+; Output: BUF_LEN16 = column after N words (stops at EOL)
+; Clobbers: A, X, Y, BUF_PTR16, WORD_CLASS, NORMAL_TEMP
+scan_cw_forward:
+.scf_loop:
+  STX NORMAL_TEMP
+
+  ; At/past end of line? Done.
+  CMP16 BUF_LEN16, LINE_LEN16
+  BCS .scf_done
+
+  ; Classify char at BUF_LEN16
+  JSR get_scan_buf_ptr
+  LDY #0
+  LDA (BUF_PTR16),Y
+  JSR char_class
+  STA WORD_CLASS
+  CMP #0
+  BEQ .scf_on_ws
+
+  ; Non-whitespace: skip same-class chars only (no trailing ws)
+  JSR skip_word_class_forward
+  JMP .scf_done_one
+
+.scf_on_ws:
+  ; On whitespace: skip ws, then skip next word class
+  JSR skip_word_class_forward
+  BCS .scf_done_one           ; Hit EOL
+  STA WORD_CLASS
+  JSR skip_word_class_forward
+
+.scf_done_one:
+  LDX NORMAL_TEMP
+  DEX
+  BNE .scf_loop
+
+.scf_done:
+  RTS
+
 ; Get buffer pointer at BUF_LEN16 offset on current line
 ; Sets BUF_PTR16 = start of FILE_LINE16 + BUF_LEN16
 ; Clobbers A, X, Y
