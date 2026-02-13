@@ -400,100 +400,85 @@ insert_backspace:
   RTS
 
 ; Handle delete in insert mode (forward delete)
+; Unified algorithm: counts all pending DEL keys, scans forward through
+; the buffer consuming chars and newlines, deletes everything in one call.
 insert_delete:
-  JSR get_current_line_len
-  STAX16 LINE_LEN16
+  ; Count all pending DEL keys (BUF_TEMP = KEY_DEL from dispatch)
+  JSR count_pending_key       ; X = pending count
+  INX                         ; +1 for current
+  STX BUF_TEMP                ; total DEL count
 
-  ; Check cursor position relative to line length
-  CMP16 CURSOR_COL16, LINE_LEN16
-  BEQ .join_lines        ; At end of line, try to join
-  BCC .delete_chars      ; In middle of line, delete chars
+  ; Get cursor buffer position
+  JSR get_cursor_buf_ptr      ; BUF_PTR16 = cursor
 
-.done:
-  RTS
+  ; Pre-compute address of final \n (BUF_END16 - 1)
+  SEC
+  LDA BUF_END16
+  SBC #1
+  STA LINE_LEN16
+  LDA BUF_END16 + 1
+  SBC #0
+  STA LINE_LEN16 + 1
 
-.join_lines:
-  ; At end of line - check if we can join with next line
-  ; Check if this is the last line
-  LDAX16 FILE_LINE16
-  CLC
-  ADC #1
-  STA BUF_SRC16
-  TXA
-  ADC #0
-  STA BUF_SRC16 + 1
-  ; Compare with LINE_COUNT16
-  CMP16 BUF_SRC16, LINE_COUNT16
-  BCS .done              ; At or past last line, nothing to join
+  ; Initialize scan state
+  LDA #0
+  STA BUF_DELTA               ; bytes to delete
+  STA_LH16 BUF_TEMP16         ; newline count = 0
+  CP16 BUF_PTR16, BUF_SRC16   ; scan ptr = cursor
 
-  ; Join with next line by deleting the newline character
-  ; Get pointer to end of current line (the \n character)
-  JSR get_cursor_buf_ptr
+.scan:
+  LDA BUF_TEMP
+  BEQ .scan_done              ; no more DELs
 
-  ; Delete exactly 1 newline character (no batching for line joins)
-  LDA #1
-  STA BUF_DELTA
+  CMP16 BUF_SRC16, BUF_END16
+  BCS .scan_done              ; at/past buffer end
+
+  LDY #0
+  LDA (BUF_SRC16),Y
+  CMP #'\n'
+  BNE .scan_advance
+
+  ; It's a \n - is it the final one?
+  CMP16 BUF_SRC16, LINE_LEN16
+  BCS .scan_done              ; final \n, stop
+
+  INC BUF_TEMP16              ; count deleted newline
+
+.scan_advance:
+  INC16 BUF_SRC16
+  INC BUF_DELTA
+  DEC BUF_TEMP
+  JMP .scan
+
+.scan_done:
+  ; Anything to delete?
+  LDA BUF_DELTA
+  BEQ .done                   ; no-op (DEL at end of last line)
+
+  ; Delete BUF_DELTA bytes at BUF_PTR16
   JSR buf_delete_chars
 
-  ; Rebuild line table
-  JSR buf_rebuild_lines
+  ; Rebuild or fast path
+  LDA BUF_TEMP16
+  ORA BUF_TEMP16 + 1
+  BEQ .no_newlines
 
-  ; Adjust marks: 1 line deleted at FILE_LINE16+1
-  LDA #1
-  STA BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1
+  ; Newlines deleted: full rebuild + mark adjust
+  JSR buf_rebuild_lines
   CLC
   ADCI16 FILE_LINE16, $0001, BUF_DST16
   LDAX16 BUF_DST16
   JSR mark_adjust_delete
+  JMP .set_modified
 
+.no_newlines:
+  JSR buf_adjust_lines_dec    ; fast path, no line count change
+
+.set_modified:
   LDA #$FF
   STA MODIFIED
-  RTS
 
-.delete_chars:
-  ; In middle of line - delete characters normally
-  ; Calculate max deleteable = LINE_LEN16 - CURSOR_COL16, capped at 255
-  SEC
-  SBC16 LINE_LEN16, CURSOR_COL16, LINE_LEN16
-  LDA LINE_LEN16 + 1
-  BNE .cap_del_max         ; High byte > 0, cap at 255
-  LDA LINE_LEN16
-  JMP .have_del_max
-.cap_del_max:
-  LDA #$FF
-.have_del_max:
-  STA LINE_LEN16            ; Reuse low byte as 8-bit cap
-
-  ; Count pending Delete keys, capped at LINE_LEN16
-  ; (Must not overconsume: excess DELs need to trigger join-lines)
-  LDX #1                    ; 1 for current key
-.del_count:
-  CPX LINE_LEN16
-  BCS .del_count_done        ; Reached cap, stop
-  JSR key_ready
-  CMP #$FF
-  BNE .del_count_done
-  JSR get_key
-  CMP BUF_TEMP
-  BEQ .del_match
-  JSR unget_key
-  JMP .del_count_done
-.del_match:
-  INX
-  CPX #BATCH_MAX
-  BNE .del_count
-.del_count_done:
-  STX BUF_DELTA
-
-  ; Delete BUF_DELTA chars at cursor position
-  JSR get_cursor_buf_ptr
-  JSR buf_delete_chars
-  JSR buf_adjust_lines_dec
-
-  LDA #$FF
-  STA MODIFIED
+.done:
   RTS
 
 ; Arrow key handlers in insert mode
