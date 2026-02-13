@@ -160,6 +160,12 @@ pending_key_dispatch:
   LDA #0
   STA RENDER_FLAG
   RTS
+.exec_mark_set:
+  JMP do_mark_set
+.exec_mark_goto:
+  JMP do_mark_goto
+.exec_replace:
+  JMP do_replace_char
 .exec_dd:
   JSR batch_pending_pairs
   JMP do_dd
@@ -178,17 +184,12 @@ pending_key_dispatch:
   JSR batch_pending_pairs
   JMP do_dw
 .exec_db:
+  JSR batch_pending_pairs
   JMP do_db
 .exec_cw:
   JMP do_cw
 .exec_cb:
   JMP do_cb
-.exec_mark_set:
-  JMP do_mark_set
-.exec_mark_goto:
-  JMP do_mark_goto
-.exec_replace:
-  JMP do_replace_char
 
 ; --- Dispatch tables ---
 

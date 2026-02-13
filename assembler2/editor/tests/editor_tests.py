@@ -5412,6 +5412,21 @@ class EditorTestRunner:
             expected_content="worldhello \n",
         )
 
+        # Batched db pairs
+        self.run_test(
+            "dbdb batches to delete 2 words backward",
+            "one two three\n",
+            b"$dbdb:wq\r",
+            expected_content="one e\n",
+        )
+
+        self.run_test(
+            "dbdbdb batches to delete 3 words backward",
+            "one two three four\n",
+            b"$dbdbdb:wq\r",
+            expected_content="one r\n",
+        )
+
         self._group("Change word (cw):", leading_blank=True)
 
         self.run_test(
