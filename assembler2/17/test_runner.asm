@@ -113,7 +113,7 @@ test_runner_start:
   JSR tr_close_input_state
   LDA TR_HAS_TEST
   BEQ .done
-  JSR tr_print_test_name
+  JSR tr_finalize_test
 .done:
   ; Close test file
   LDA TR_FILE_HANDLE
@@ -124,12 +124,68 @@ test_runner_start:
 tr_msg_running:
   .asciiz "Running tests from "
 
-; Resume point after assembler exits (fake_exit jumps here)
+
+; ============================================================================
+; TEST EXECUTION
+; ============================================================================
+
+; Finalize the current test: skip or run it
+tr_finalize_test:
+  LDA TR_SKIP_FLAG
+  BEQ .run
+  ; Skip this test
+  JSR tr_print_test_name
+  SHOW_MESSAGEI tr_msg_skip
+  INC16 TR_SKIP_COUNT16
+  RTS
+.run:
+  JMP tr_run_test           ; Tail call
+
+; Run a single test: set up argv, patch vectors, call assembler
+tr_run_test:
+  ; Set up virtual argv
+  JSR tr_setup_argv
+  ; Clear stderr capture
+  LDA #$00
+  STA TR_STDERR_LEN
+  ; Patch vectors to intercept
+  JSR tr_patch_vectors
+  ; Save stack pointer
+  TSX
+  STX TR_SAVED_SP
+  ; Run assembler (skip the JMP test_runner_start at start:)
+  JSR start + $03
+  ; NOTE: We never reach here - fake_exit intercepts and jumps to tr_test_resume
+
+; Resume point after assembler exits (fake_exit jumps here via stack unwind)
+; The stack has been restored to the state before JSR start+3,
+; so RTS returns to the caller of tr_run_test.
 tr_test_resume:
-  ; Placeholder - full implementation in later commits
+  ; Restore original vectors immediately
   JSR tr_restore_vectors
-  BRK
-  .byte 0
+  ; Print test name and exit code
+  JSR tr_print_test_name
+  SHOW_MESSAGEI tr_msg_exit
+  LDA TR_EXIT_CODE
+  STA TO_DECIMAL_VALUE16
+  LDA #$00
+  STA TO_DECIMAL_VALUE16 + 1
+  JSR show_decimal
+  SHOW_MESSAGEI tr_msg_close_paren
+  RTS
+
+; Set up virtual argv for the assembler
+; argv[0] = "_tr_in.tmp", argv[1] = "_tr_out.tmp"
+tr_setup_argv:
+  SET16 TR_INPUT_FILE, TR_ARGV_PTRS
+  SET16 TR_OUTPUT_FILE, TR_ARGV_PTRS + $02
+  LDA #$02
+  STA TR_ARGC
+  RTS
+
+tr_msg_skip:        .asciiz " SKIP\n"
+tr_msg_exit:        .asciiz " (exit: "
+tr_msg_close_paren: .asciiz ")\n"
 
 
 ; ============================================================================
@@ -221,7 +277,7 @@ tr_dispatch_field:
 tr_handle_separator:
   LDA TR_HAS_TEST
   BEQ .no_prev_test
-  JSR tr_print_test_name
+  JSR tr_finalize_test
 .no_prev_test:
   JMP tr_init_test        ; Tail call - reset for next test
 
@@ -620,36 +676,13 @@ tr_init_test:
   STA TR_ARGV_COUNT
   RTS
 
-; Print test name with parsed info (for verification)
+; Print the test name (indented, no newline)
 tr_print_test_name:
   SHOW_MESSAGEI tr_msg_indent
   SET16 TR_NAME_BUF, TABP16
-  JSR show_message
-  ; Print parsed details
-  LDA TR_TEST_TYPE
-  BNE .error_test
-  ; Hex test: print expected byte count
-  SHOW_MESSAGEI tr_msg_hex_count
-  CP16 TR_EXPECT_LEN16, TO_DECIMAL_VALUE16
-  JSR show_decimal
-  SHOW_MESSAGEI tr_msg_bytes
-  RTS
-.error_test:
-  ; Error test: print expected error code
-  SHOW_MESSAGEI tr_msg_err_code
-  LDA TR_EXPECT_ERROR
-  STA TO_DECIMAL_VALUE16
-  LDA #$00
-  STA TO_DECIMAL_VALUE16 + 1
-  JSR show_decimal
-  SHOW_MESSAGEI tr_msg_err_close
-  RTS
+  JMP show_message          ; Tail call
 
 tr_msg_indent:    .asciiz "  "
-tr_msg_hex_count: .asciiz " (hex: "
-tr_msg_bytes:     .asciiz " bytes)\n"
-tr_msg_err_code:  .asciiz " (error: "
-tr_msg_err_close: .asciiz ")\n"
 
 ; Copy from TR_LINE_BUF[Y..TR_LINE_LEN) to TR_NAME_BUF
 ; On entry: Y = starting offset in TR_LINE_BUF
