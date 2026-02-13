@@ -3693,6 +3693,35 @@ class EditorTestRunner:
             expected_content="A\n"
         )
 
+        # Batched dd pairs
+        self.run_test(
+            "dddd batches to delete 2 lines",
+            "A\nB\nC\nD\n",
+            b"dddd:wq\r",
+            expected_content="C\nD\n"
+        )
+
+        self.run_test(
+            "dddddd batches to delete 3 lines",
+            "A\nB\nC\nD\nE\nF\n",
+            b"dddddd:wq\r",
+            expected_content="D\nE\nF\n"
+        )
+
+        self.run_test(
+            "3dddd batches count 3 plus 1 extra pair",
+            "A\nB\nC\nD\nE\nF\n",
+            b"3dddd:wq\r",
+            expected_content="E\nF\n"
+        )
+
+        self.run_test(
+            "dddw partial pair restores pending d then w completes dw",
+            "first\nhello world\n",
+            b"dddw:wq\r",
+            expected_content="world\n"
+        )
+
         # ============================================================
         # D (delete to end of line)
         # ============================================================

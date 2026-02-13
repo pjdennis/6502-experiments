@@ -161,6 +161,7 @@ pending_key_dispatch:
   STA RENDER_FLAG
   RTS
 .exec_dd:
+  JSR batch_pending_pairs
   JMP do_dd
 .exec_gg:
   JMP do_gg
