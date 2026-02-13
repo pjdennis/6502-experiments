@@ -161,6 +161,7 @@ main_loop:
   BNE .not_command_entry
   LDA #0
   STA RENDER_FLAG
+  JSR render_snapshot
   JSR command_handle
   JMP .after_key
 .not_command_entry:
@@ -178,6 +179,7 @@ main_loop:
   JSR get_current_line_len
   JSR line_screen_rows
   STA PREV_LINE_ROWS
+  JSR render_snapshot
   ; Read a key
   JSR get_key
 
@@ -205,8 +207,8 @@ main_loop:
   LDA CMD_QUIT
   BNE .editor_exit
 
-  ; Redraw screen (full or cursor-only based on RENDER_FLAG)
-  JSR render_update
+  ; Compare state snapshots and dispatch render
+  JSR render_decide
 
   JMP main_loop
 
