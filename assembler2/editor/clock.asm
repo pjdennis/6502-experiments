@@ -6,7 +6,7 @@
 
   JMP main
 
-  .include 23/environment.asm
+  .include 17/environment.asm
 
   .zeropage
 SECONDS:   .byte

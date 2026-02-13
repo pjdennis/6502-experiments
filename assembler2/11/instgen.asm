@@ -1,149 +1,240 @@
-IHASHTABL = $4200      ; Instruction hash table (low and high)
-IHASHTABH = $4300      ; "
-HEAP      = $4400      ; Data heap
+; instgen16.asm - Instruction table generator for new conventional syntax
+;
+; New table format: each instruction has mode:opcode pairs
+;   [mnemonic string] $00 [mode1 opcode1] [mode2 opcode2] ... $FF
+;
+; Mode encoding:
+;   MODE_NONE = $00  ; Implied (no operand)
+;   MODE_ACC  = $01  ; Accumulator
+;   MODE_IMM  = $02  ; Immediate
+;   MODE_ZP   = $03  ; Zero page
+;   MODE_ZPX  = $04  ; Zero page, X
+;   MODE_ZPY  = $05  ; Zero page, Y
+;   MODE_ABS  = $06  ; Absolute
+;   MODE_ABSX = $07  ; Absolute, X
+;   MODE_ABSY = $08  ; Absolute, Y
+;   MODE_INDX = $09  ; Indirect, X - ($zp,X)
+;   MODE_INDY = $0A  ; Indirect, Y - ($zp),Y
+;   MODE_REL  = $0B  ; Relative (branches)
+;   MODE_IND  = $0C  ; Indirect - JMP ($xxxx)
+;   MODE_DATA = $FE  ; Pseudo-instruction (DATA)
+;   $FF = terminator (end of mode list)
 
-TEMP      = $0000      ; 1 byte temporary value
-TABPL     = $0001      ; 2 byte table pointer
-TABPH     = $0002      ; "
-HEX1      = $0003      ; 1 byte
-HEX2      = $0004      ; 1 byte
-MEMPL     = $0005      ; 2 byte heap pointer
-MEMPH     = $0006      ; "
-PL        = $0007      ; 2 byte pointer
-PH        = $0008      ; "
-P2L       = $0009      ; 2 byte pointer
-P2H       = $000A      ; "
-HASH      = $000B      ; 1 byte hash value
-CHAR      = $000C      ; 1 byte character value
-HTLPL     = $000D      ; 2 byte pointer to low byte hash table
-HTLPH     = $000E      ; "
-HTHPL     = $000F      ; 2 byte pointer to high byte hash table
-HTHPH     = $0010      ; "
-TOKEN     = $0011      ; multiple bytes
+; Addresses
+TOKEN      = $1E00      ; Buffer for the current token being read
+IHASHTAB   = $1F00      ; Instruction hash table
+*          = $2000      ; Code generates here
 
 
-*         = $2000       ; Set PC
+  .zeropage
+
+TEMP      DATA $00     ; 1 byte temporary value
+TEMP2     DATA $00     ; 1 byte temporary value (for Y save)
+HEX1      DATA $00     ; 1 byte
+HEX2      DATA $00     ; 1 byte
+MEMPL     DATA $00     ; 2 byte heap pointer
+MEMPH     DATA $00     ; "
+PL        DATA $00     ; 2 byte pointer
+PH        DATA $00     ; "
+P2L       DATA $00     ; 2 byte pointer
+P2H       DATA $00     ; "
+CURR_GLOBAL_HEAP_L DATA $00 ; Required by hash_table15.asm (unused here)
+CURR_GLOBAL_HEAP_H DATA $00 ; "
 
 
+  .code
+
+; Include files
   .include environment.asm
   .include common.asm
 
 
-; Instruction table
+; Mode constants (for documentation)
+MODE_NONE = $00
+MODE_ACC  = $01
+MODE_IMM  = $02
+MODE_ZP   = $03
+MODE_ZPX  = $04
+MODE_ZPY  = $05
+MODE_ABS  = $06
+MODE_ABSX = $07
+MODE_ABSY = $08
+MODE_INDX = $09
+MODE_INDY = $0A
+MODE_REL  = $0B
+MODE_IND  = $0C
+MODE_DATA = $FE
+
+
+; Instruction table with mode:opcode pairs
+; Format: "MNEMONIC" $00 [mode opcode]... $FF
 MNTAB
-;      Mnemonic           Opcode
-  DATA "ADC#"     $00 $04 $69
-  DATA "ADCZ"     $00 $04 $65
-  DATA "AND#"     $00 $04 $29
-  DATA "ASLA"     $00 $00 $0A
-  DATA "BCC"      $00 $02 $90
-  DATA "BCS"      $00 $02 $B0
-  DATA "BEQ"      $00 $02 $F0
-  DATA "BITZ"     $00 $04 $24
-  DATA "BMI"      $00 $02 $30
-  DATA "BNE"      $00 $02 $D0
-  DATA "BPL"      $00 $02 $10
-  DATA "BRK"      $00 $00 $00
-  DATA "CLC"      $00 $00 $18
-  DATA "CMPZ"     $00 $04 $C5
-  DATA "CMP#"     $00 $04 $C9
-  DATA "CMP,Y"    $00 $00 $D9
-  DATA "CPXZ"     $00 $04 $E4
-  DATA "CPYZ"     $00 $04 $C4
-  DATA "CPY#"     $00 $04 $C0
-  DATA "DECZ"     $00 $04 $C6
-  DATA "DEX"      $00 $00 $CA
-  DATA "DEY"      $00 $00 $88
-  DATA "EORZ"     $00 $04 $45
-  DATA "INCZ"     $00 $04 $E6
-  DATA "INX"      $00 $00 $E8
-  DATA "INY"      $00 $00 $C8
-  DATA "JMP"      $00 $00 $4C
-  DATA "JSR"      $00 $00 $20
-  DATA "LDA"      $00 $00 $AD
-  DATA "LDX"      $00 $00 $AE
-  DATA "LDY"      $00 $00 $AC
-  DATA "LDA#"     $00 $04 $A9
-  DATA "LDAZ(),Y" $00 $04 $B1
-  DATA "LDA,X"    $00 $00 $BD
-  DATA "LDA,Y"    $00 $00 $B9
-  DATA "LDAZ"     $00 $04 $A5
-  DATA "LDAZ,X"   $00 $04 $B5
-  DATA "LDXZ"     $00 $04 $A6
-  DATA "LDYZ"     $00 $04 $A4
-  DATA "LDX#"     $00 $04 $A2
-  DATA "LDY#"     $00 $04 $A0
-  DATA "LSRA"     $00 $00 $4A
-  DATA "ORAZ"     $00 $04 $05
-  DATA "PHA"      $00 $00 $48
-  DATA "PLA"      $00 $00 $68
-  DATA "ROLZ"     $00 $04 $26
-  DATA "RTS"      $00 $00 $60
-  DATA "SBC#"     $00 $04 $E9
-  DATA "SBCZ"     $00 $04 $E5
-  DATA "SEC"      $00 $00 $38
-  DATA "STA"      $00 $00 $8D
-  DATA "STAZ(),Y" $00 $04 $91
-  DATA "STA,X"    $00 $00 $9D
-  DATA "STA,Y"    $00 $00 $99
-  DATA "STAZ"     $00 $04 $85
-  DATA "STAZ,X"   $00 $04 $95
-  DATA "STXZ"     $00 $04 $86
-  DATA "STYZ"     $00 $04 $84
-  DATA "TAX"      $00 $00 $AA
-  DATA "TAY"      $00 $00 $A8
-  DATA "TSX"      $00 $00 $BA
-  DATA "TXA"      $00 $00 $8A
-  DATA "TYA"      $00 $00 $98
-  DATA "DATA"     $00 $01 $00 ; Directive
+  ; Load/Store instructions
+  DATA "LDA" $00 $02 $A9 $03 $A5 $04 $B5 $06 $AD $07 $BD $08 $B9 $09 $A1 $0A $B1 $FF
+  DATA "LDX" $00 $02 $A2 $03 $A6 $05 $B6 $06 $AE $08 $BE $FF
+  DATA "LDY" $00 $02 $A0 $03 $A4 $04 $B4 $06 $AC $07 $BC $FF
+  DATA "STA" $00 $03 $85 $04 $95 $06 $8D $07 $9D $08 $99 $09 $81 $0A $91 $FF
+  DATA "STX" $00 $03 $86 $05 $96 $06 $8E $FF
+  DATA "STY" $00 $03 $84 $04 $94 $06 $8C $FF
+
+  ; Arithmetic instructions
+  DATA "ADC" $00 $02 $69 $03 $65 $04 $75 $06 $6D $07 $7D $08 $79 $09 $61 $0A $71 $FF
+  DATA "SBC" $00 $02 $E9 $03 $E5 $04 $F5 $06 $ED $07 $FD $08 $F9 $09 $E1 $0A $F1 $FF
+
+  ; Logical instructions
+  DATA "AND" $00 $02 $29 $03 $25 $04 $35 $06 $2D $07 $3D $08 $39 $09 $21 $0A $31 $FF
+  DATA "ORA" $00 $02 $09 $03 $05 $04 $15 $06 $0D $07 $1D $08 $19 $09 $01 $0A $11 $FF
+  DATA "EOR" $00 $02 $49 $03 $45 $04 $55 $06 $4D $07 $5D $08 $59 $09 $41 $0A $51 $FF
+
+  ; Compare instructions
+  DATA "CMP" $00 $02 $C9 $03 $C5 $04 $D5 $06 $CD $07 $DD $08 $D9 $09 $C1 $0A $D1 $FF
+  DATA "CPX" $00 $02 $E0 $03 $E4 $06 $EC $FF
+  DATA "CPY" $00 $02 $C0 $03 $C4 $06 $CC $FF
+
+  ; Bit test
+  DATA "BIT" $00 $03 $24 $06 $2C $FF
+
+  ; Increment/Decrement
+  DATA "INC" $00 $03 $E6 $04 $F6 $06 $EE $07 $FE $FF
+  DATA "DEC" $00 $03 $C6 $04 $D6 $06 $CE $07 $DE $FF
+  DATA "INX" $00 $00 $E8 $FF
+  DATA "INY" $00 $00 $C8 $FF
+  DATA "DEX" $00 $00 $CA $FF
+  DATA "DEY" $00 $00 $88 $FF
+
+  ; Shift/Rotate
+  DATA "ASL" $00 $01 $0A $03 $06 $04 $16 $06 $0E $07 $1E $FF
+  DATA "LSR" $00 $01 $4A $03 $46 $04 $56 $06 $4E $07 $5E $FF
+  DATA "ROL" $00 $01 $2A $03 $26 $04 $36 $06 $2E $07 $3E $FF
+  DATA "ROR" $00 $01 $6A $03 $66 $04 $76 $06 $6E $07 $7E $FF
+
+  ; Branch instructions
+  DATA "BCC" $00 $0B $90 $FF
+  DATA "BCS" $00 $0B $B0 $FF
+  DATA "BEQ" $00 $0B $F0 $FF
+  DATA "BMI" $00 $0B $30 $FF
+  DATA "BNE" $00 $0B $D0 $FF
+  DATA "BPL" $00 $0B $10 $FF
+  DATA "BVC" $00 $0B $50 $FF
+  DATA "BVS" $00 $0B $70 $FF
+
+  ; Jump instructions
+  DATA "JMP" $00 $06 $4C $0C $6C $FF
+  DATA "JSR" $00 $06 $20 $FF
+
+  ; Stack instructions
+  DATA "PHA" $00 $00 $48 $FF
+  DATA "PHP" $00 $00 $08 $FF
+  DATA "PLA" $00 $00 $68 $FF
+  DATA "PLP" $00 $00 $28 $FF
+
+  ; Transfer instructions
+  DATA "TAX" $00 $00 $AA $FF
+  DATA "TAY" $00 $00 $A8 $FF
+  DATA "TSX" $00 $00 $BA $FF
+  DATA "TXA" $00 $00 $8A $FF
+  DATA "TXS" $00 $00 $9A $FF
+  DATA "TYA" $00 $00 $98 $FF
+
+  ; Flag instructions
+  DATA "CLC" $00 $00 $18 $FF
+  DATA "CLD" $00 $00 $D8 $FF
+  DATA "CLI" $00 $00 $58 $FF
+  DATA "CLV" $00 $00 $B8 $FF
+  DATA "SEC" $00 $00 $38 $FF
+  DATA "SED" $00 $00 $F8 $FF
+  DATA "SEI" $00 $00 $78 $FF
+
+  ; Other
+  DATA "BRK" $00 $00 $00 $FF
+  DATA "NOP" $00 $00 $EA $FF
+  DATA "RTI" $00 $00 $40 $FF
+  DATA "RTS" $00 $00 $60 $FF
+
+  ; Pseudo-instruction (DATA directive)
+  ; Mode $FE is a special marker for pseudo-instructions (DATA)
+  ; ($FF is reserved as the mode list terminator)
+  DATA "DATA" $00 $FE $00 $FF
+
+  ; End of table
   DATA $00
 
 
 populate_instruction_hash_table
   LDA# <MNTAB
-  STAZ <P2L
+  STAZ P2L
   LDA# >MNTAB
-  STAZ <P2H
-piht_entry_loop
+  STAZ P2H
+.entry_loop
   LDY# $00
-  LDAZ(),Y <P2L
-  BEQ piht_done
-piht_token_loop
+  LDAZ(),Y P2L
+  BEQ .done
+  ; Copy mnemonic to TOKEN
+.token_loop
   STA,Y TOKEN
-  BEQ piht_token_loop_done
+  BEQ .token_loop_done
   INY
-  LDAZ(),Y <P2L
-  JMP piht_token_loop
-piht_token_loop_done
+  LDAZ(),Y P2L
+  JMP .token_loop
+.token_loop_done
+  ; Y now points at null terminator
+  ; Save Y for later (start of mode data is at Y+1)
   INY
-  LDAZ(),Y <P2L
-  STAZ <HEX2
+  STYZ TEMP        ; Save offset to mode data
+  ; Add entry to hash table (this copies the mnemonic to heap)
+  JSR hash_add
+  ; Now copy all mode:opcode pairs to the heap
+  LDYZ TEMP        ; Restore offset to mode data
+.copy_modes
+  LDAZ(),Y P2L     ; Get mode byte
+  CMP# $FF
+  BEQ .copy_done
+  ; Store mode byte
+  JSR store_byte_to_heap
   INY
-  LDAZ(),Y <P2L
-  STAZ <HEX1
+  ; Store opcode byte
+  LDAZ(),Y P2L
+  JSR store_byte_to_heap
   INY
-  ; Advance
+  JMP .copy_modes
+.copy_done
+  ; Store the $FF terminator
+  LDA# $FF
+  JSR store_byte_to_heap
+  INY              ; Skip past $FF in source
+  ; Advance P2L:P2H to next entry
   TYA
   CLC
-  ADCZ <P2L
-  STAZ <P2L
+  ADCZ P2L
+  STAZ P2L
   LDA# $00
-  ADCZ <P2H
-  STAZ <P2H
-  ; Store entry
-  JSR hash_add
-  JMP piht_entry_loop
-piht_done
+  ADCZ P2H
+  STAZ P2H
+  JMP .entry_loop
+.done
+  RTS
+
+
+; Store byte A to heap and advance heap pointer
+; On entry: A = byte to store
+; On exit: Y is preserved, A is not preserved
+store_byte_to_heap
+  STYZ TEMP2       ; Save Y
+  LDY# $00
+  STAZ(),Y MEMPL   ; Store byte at (MEMPL)
+  INY
+  JSR advance_heap ; Advance heap by 1
+  LDYZ TEMP2       ; Restore Y
   RTS
 
 
 display_hex_char
   CMP# $0A
-  BCS display_hex_char_low
-  ; Carry alrady clear
+  BCS .low
+  ; Carry already clear
   ADC# "0"
   JMP write_b          ; Tail call
-display_hex_char_low
+.low
   ; C already set
   SBC# $0A ; Subtract 10
   CLC
@@ -181,9 +272,9 @@ display_data_prefix
   JSR write_b
   JSR write_b
   LDA# <msg_data
-  STAZ <PL
+  STAZ PL
   LDA# >msg_data
-  STAZ <PH
+  STAZ PH
   JMP display_text
 
 
@@ -191,144 +282,154 @@ display_data_prefix
 ; On exit Y points to the terminating 0
 display_text
   LDY# $00
-dtext_loop
-  LDAZ(),Y <PL
-  BEQ dtext_done
+.loop
+  LDAZ(),Y PL
+  BEQ .done
   JSR write_b
   INY
-  JMP dtext_loop
-dtext_done
+  JMP .loop
+.done
   RTS
 
 
 display_table
   LDA# $00
-  STAZ <HASH
-dt_loop
+  STAZ HASH
+.loop
   ; Display line start
   JSR display_data_prefix
   ; Display line
   LDA# $00
-  STAZ <TEMP
-dt_lineloop
+  STAZ TEMP
+.lineloop
   LDA# " "
   JSR write_b
   JSR hash_entry_empty
-  BNE dt_not_empty
+  BNE .not_empty
   ; empty
-  LDA# $00
-  JSR display_byte
-  JMP dt_next
-dt_not_empty
-  ; Display byte selector < or >
-  LDAZ <CHAR
+  LDA# "$"
   JSR write_b
+  LDA# $00
+  JSR display_hex
+  LDA# $00
+  JSR display_hex
+  JMP .next
+.not_empty
   ; Display instruction label prefix
   LDA# <msg_instprefix
-  STAZ <PL
+  STAZ PL
   LDA# >msg_instprefix
-  STAZ <PH
+  STAZ PH
   JSR display_text
   ; Display hash entry
-  LDAZ <HASH
-  TAY
-  ; Load pointer to hash entry
-  LDAZ(),Y <HTLPL
-  STAZ <TABPL
-  LDAZ(),Y <HTHPL
-  STAZ <TABPH
+  JSR load_hash_entry
   CLC
-  LDAZ <TABPL
+  LDAZ TABPL
   ADC# $02
-  STAZ <PL
-  LDAZ <TABPH
+  STAZ PL
+  LDAZ TABPH
   ADC# $00
-  STAZ <PH
+  STAZ PH
   JSR display_text
-dt_next
-  LDAZ <HASH
+.next
+  LDAZ HASH
+  CLC
+  ADC# $02
+  STAZ HASH
+  LDAZ TEMP
   CLC
   ADC# $01
-  STAZ <HASH
-  LDAZ <TEMP
-  CLC
-  ADC# $01
-  STAZ <TEMP
+  STAZ TEMP
   CMP# $08
-  BEQ dt_next1
-  JMP dt_lineloop
-dt_next1
+  BEQ .next1
+  JMP .lineloop
+.next1
   JSR display_newline
-  LDAZ <HASH
-  CMP# $80
-  BEQ dt_done 
-  JMP dt_loop
-dt_done
+  LDAZ HASH
+  BEQ .done
+  JMP .loop
+.done
   RTS
 
 
-write_label
+write_label_and_modes
+  ; Display the mnemonic string
   LDA# " "
   JSR write_b
   LDA# "\""
   JSR write_b
+  ; Set PL:PH to point to mnemonic (TABPL+2)
   CLC
-  LDAZ <TABPL
+  LDAZ TABPL
   ADC# $02
-  STAZ <PL
-  LDAZ <TABPH
+  STAZ PL
+  LDAZ TABPH
   ADC# $00
-  STAZ <PH
+  STAZ PH
+  ; Display mnemonic text
   JSR display_text
+  ; Y now points to null terminator in mnemonic
   LDA# "\""
   JSR write_b
   LDA# " "
   JSR write_b
   LDA# $00
   JSR display_byte
+  ; Now display mode:opcode pairs
+  ; Y still valid from display_text, pointing at null
+  INY                  ; Skip past null terminator to first mode byte
+.mode_loop
+  LDAZ(),Y PL
+  CMP# $FF
+  BEQ .mode_done
+  PHA                  ; Save mode byte
   LDA# " "
   JSR write_b
-  INY
-  LDAZ(),Y <PL
+  PLA                  ; Restore mode byte
   JSR display_byte
+  INY
   LDA# " "
   JSR write_b
-  INY
-  LDAZ(),Y <PL
+  LDAZ(),Y PL          ; Opcode byte
   JSR display_byte
+  INY
+  JMP .mode_loop
+.mode_done
+  LDA# " "
+  JSR write_b
+  LDA# "$"
+  JSR write_b
+  LDA# "F"
+  JSR write_b
+  JSR write_b
   JSR display_newline
-  RTS 
+  RTS
 
 
 display_data
   LDA# $00
-  STAZ <HASH
-dd_loop
+  STAZ HASH
+.loop
   JSR hash_entry_empty
-  BNE dd_not_empty
-  JMP dd_next
-dd_not_empty
+  BNE .not_empty
+  JMP .next
+.not_empty
   ; Load pointer to hash entry
-  LDAZ <HASH
-  TAY
-  LDAZ(),Y <HTLPL
-  STAZ <TABPL
-  LDAZ(),Y <HTHPL
-  STAZ <TABPH
-dd_entry_loop
+  JSR load_hash_entry
+.entry_loop
   ; Display instruction label prefix
   LDA# <msg_instprefix
-  STAZ <PL
+  STAZ PL
   LDA# >msg_instprefix
-  STAZ <PH
+  STAZ PH
   JSR display_text
   CLC
-  LDAZ <TABPL
+  LDAZ TABPL
   ADC# $02
-  STAZ <PL
-  LDAZ <TABPH
+  STAZ PL
+  LDAZ TABPH
   ADC# $00
-  STAZ <PH
+  STAZ PH
   JSR display_text
   JSR display_newline
   JSR display_data_prefix
@@ -336,12 +437,12 @@ dd_entry_loop
   JSR write_b
   ; Display next pointer
   LDY# $00
-  LDAZ(),Y <TABPL
-  BNE dd_not_zero
+  LDAZ(),Y TABPL
+  BNE .not_zero
   INY
-  LDAZ(),Y <TABPL
-  BNE dd_not_zero
-  ; Zero
+  LDAZ(),Y TABPL
+  BNE .not_zero
+  ; Zero - no collision chain
   LDA# "$"
   JSR write_b
   LDA# "0"
@@ -349,82 +450,81 @@ dd_entry_loop
   JSR write_b
   JSR write_b
   JSR write_b
-  JSR write_label
-  JMP dd_next
-dd_not_zero
+  JSR write_label_and_modes
+  JMP .next
+.not_zero
+  ; Has collision chain - display pointer to next entry
   LDA# <msg_instprefix
-  STAZ <PL
+  STAZ PL
   LDA# >msg_instprefix
-  STAZ <PH
+  STAZ PH
   JSR display_text
   CLC
   LDY# $00
-  LDAZ(),Y <TABPL
+  LDAZ(),Y TABPL
   ADC# $02
-  STAZ <PL
+  STAZ PL
   INY
-  LDAZ(),Y <TABPL
+  LDAZ(),Y TABPL
   ADC# $00
-  STAZ <PH
+  STAZ PH
   JSR display_text
-  JSR write_label
+  JSR write_label_and_modes
   LDY# $00
-  LDAZ(),Y <TABPL
-  STAZ <PL
+  LDAZ(),Y TABPL
+  STAZ PL
   INY
-  LDAZ(),Y <TABPL
-  STAZ <PH
-  LDAZ <PL
-  STAZ <TABPL
-  LDAZ <PH
-  STAZ <TABPH
-  JMP dd_entry_loop
-dd_next
-  LDAZ <HASH
+  LDAZ(),Y TABPL
+  STAZ PH
+  LDAZ PL
+  STAZ TABPL
+  LDAZ PH
+  STAZ TABPH
+  JMP .entry_loop
+.next
+  LDAZ HASH
   CLC
-  ADC# $01
-  STAZ <HASH
-  BEQ dd_done
-  JMP dd_loop
-dd_done
+  ADC# $02
+  STAZ HASH
+  BEQ .done
+  JMP .loop
+.done
   RTS
 
 
 ; Entry point
 start
 ; Initialization
+  LDA# $00
+  STAZ IS_LOCAL_LABEL    ; Clear flag before using hash table
   JSR init_heap
   JSR select_instruction_hash_table
   JSR init_hash_table
   JSR populate_instruction_hash_table
 
-; Show the instruction hash table - high
-  LDA# <msg_IHASHTABL
-  STAZ <PL
-  LDA# >msg_IHASHTABL
-  STAZ <PH
+; Show the instructions hash table
+  LDA# <msg_hash_table_comment
+  STAZ PL
+  LDA# >msg_hash_table_comment
+  STAZ PH
   JSR display_text
   JSR display_newline
-  LDA# "<"
-  STAZ <CHAR
-  JSR display_table
-
-  JSR display_newline
-
-; Show the instruction hash table - low
-  LDA# <msg_IHASHTABH
-  STAZ <PL
-  LDA# >msg_IHASHTABH
-  STAZ <PH
+  LDA# <msg_IHASHTAB
+  STAZ PL
+  LDA# >msg_IHASHTAB
+  STAZ PH
   JSR display_text
   JSR display_newline
-  LDA# ">"
-  STAZ <CHAR
   JSR display_table
-
   JSR display_newline
 
-; Show the heap data
+; Show the instructions heap data
+  LDA# <msg_heap_comment
+  STAZ PL
+  LDA# >msg_heap_comment
+  STAZ PH
+  JSR display_text
+  JSR display_newline
   JSR display_data
 
   BRK $00              ; Success
@@ -434,13 +534,19 @@ msg_data
   DATA "DATA" $00
 
 msg_instprefix
-  DATA "i_" $00
+  DATA "." $00
 
-msg_IHASHTABL
-  DATA "IHASHTABL" $00
+msg_IHASHTAB
+  DATA "IHASHTAB" $00
 
-msg_IHASHTABH
-  DATA "IHASHTABH" $00
+msg_hash_table_comment
+  DATA "; Instructions hash table (pointers)" $00
+
+msg_heap_comment
+  DATA "; Instructions heap data" $00
+
+
+HEAP                  ; Heap goes after the program code
 
 
   DATA start ; Emulation environment jumps to address in last 2 bytes

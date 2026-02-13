@@ -1,105 +1,68 @@
-Assembler Version 05
+Assembler Version 06
 ====================
-Assembled by: Version 04
+Assembled by: version 05
 
 Features Supported by This Assembler
 -------------------------------------
-This is the first two-pass assembler in the bootstrap chain, enabling forward
-references. It also adds relative branch label resolution and significantly
-expands the instruction table. Two-pass assembly is a major architectural
-change: pass 1 collects all label definitions, pass 2 resolves references
-and emits code.
+Same feature set as version 05, refactored with hash tables:
 
-Instruction mnemonics (significantly expanded):
-  ADC# ADCZ AND# ASLA BCC BCS BEQ BITZ BMI BNE BPL BRK CLC CMP# CMP,Y
-  EORZ INCZ INX INY JMP JSR LDA# LDAZ(),Y LDA,X LDA,Y LDAZ LDAZ,X LDX#
-  LDY# LSRA ORAZ PHA PLA RTS SBC# SBCZ SEC STA STAZ(),Y STA,X STA,Y STAZ
-  STAZ,X TAY TYA
+Syntax:
+- Non-standard (custom) mnemonic syntax: LDA#, LDAZ, STAZ, STAZ(),Y, etc.
+- DATA pseudo-instruction for raw byte emission
+- Hex constants: $xx (1 byte) or $xxxx (2 bytes)
+- Quoted strings with \n escape: "text" and "\n"
+- Label definitions (at start of line) with PC value or explicit assignment: label = $xxxx
+- PC setting via: * = $xxxx
+- Low byte operator: <label
+- High byte operator: >label
+- Relative branch operator: ~label (used for branch targets)
+- Labels as 2-byte operands (absolute addresses)
+- Comments with semicolons
+- Two-pass assembly (pass 1 collects labels, pass 2 resolves and emits)
 
-  New instructions: AND#, EORZ, LDAZ(),Y (was LDA(),Y), LDA,X, LDAZ,X,
-    LSRA, PHA, PLA, STA,X, STA,Y, STAZ(),Y (was STA(),Y), TAY
-  Removed: CMPZ,X, DEY
-
-DATA directive:
-  DATA $XX ...        - emit hex bytes
-  DATA "string"       - emit ASCII string with \n and \\ escapes
-  DATA $XXXX          - emit 16-bit value (little-endian)
-  Mixed: DATA $XX "string" $XXXX on same line
-
-Operand types in instruction arguments:
-  $XX                 - 8-bit hex value
-  $XXXX               - 16-bit hex value (little-endian)
-  "string"            - ASCII string with \n, \\, and \" escapes
-  label               - 16-bit label reference (little-endian)
-  <label              - low byte of label value (1 byte emitted)
-  >label              - high byte of label value (1 byte emitted)
-  ~label              - relative branch offset (target - PC - 1)
-
-Label features:
-  - Labels at column 0 bound to program counter
-  - label = $XXXX     - constant assignment (hex value only)
-  - * = $XXXX         - set program counter (origin directive)
-  - Linear search through label table at $3000
-  - Forward references SUPPORTED (two-pass assembly)
-  - Duplicate label detection (pass 1 only)
-
-Two-pass assembly:
-  - Pass 1 ($PASS=$00): Collects label definitions, tracks PC but does not
-    emit output. Label references emit dummy bytes to maintain correct PC.
-  - Pass 2 ($PASS=$FF): Resolves all label references and emits final output.
-  - The emit function checks PASS and only writes to output on pass 2.
-  - capturelabel only stores labels on pass 1; skips to end of line on pass 2.
+Instruction set (non-standard mnemonics):
+- ADC#, ADCZ, AND#, ASLA
+- BCC, BCS, BEQ, BITZ, BMI, BNE, BPL, BRK
+- CLC, CMP#, CMP,Y
+- EORZ
+- INCZ, INX, INY
+- JMP, JSR
+- LDA#, LDAZ(),Y, LDA,X, LDA,Y, LDAZ, LDAZ,X, LDX#, LDY#
+- LSRA
+- ORAZ
+- PHA, PLA
+- RTS
+- SBC#, SBCZ, SEC
+- STA, STAZ(),Y, STA,X, STA,Y, STAZ, STAZ,X
+- TAY, TYA
 
 Error handling:
-  - Error 01: Label not found
-  - Error 02: Duplicate label
-  - Error 03: Opcode not found
-  - Error 04: Expected hex value
+- Label not found (error 1)
+- Duplicate label (error 2)
+- Opcode not found (error 3)
+- Expected hex value (error 4)
 
-Semicolon comments (to end of line).
-
-New in this version (relative to version 04):
-- Two-pass assembly enabling forward references
-- ~ prefix for relative branch target labels (emitlabelrel computes
-  target - PC - 1 on pass 2)
-- Pass-aware emit (only writes output on pass 2)
-- Pass-aware label capture (only on pass 1)
-- Pass-aware label resolution (returns dummy on pass 1)
-- Expanded instruction table: AND#, EORZ, LDAZ(),Y, LDA,X, LDAZ,X,
-  LSRA, PHA, PLA, STA,X, STA,Y, STAZ(),Y, TAY
-- Removed CMPZ,X and DEY from instruction table
-- Renamed LDA(),Y to LDAZ(),Y and STA(),Y to STAZ(),Y (Z prefix indicates
-  zero-page pointer)
-- findintab now initializes Y=0 internally (callers no longer need to
-  maintain Y=0)
+New in this version (relative to version 05):
+- Hash table-based lookup for both labels and instructions (replacing linear table scan)
+- Scramble table for hash computation
+- Heap-based storage for hash table entries
+- Separate label and instruction hash tables (256-entry each)
+- PHA/PLA used for saving/restoring next character (instead of NEXTCHAR variable)
 
 Features Used in This Assembler's Source Code
 ----------------------------------------------
-The source uses features from version 04 (which has the same capabilities
-as version 03). It uses label assignments, byte selectors, and the origin
-directive that version 03 introduced, plus the same instruction set that
-versions 03/04 support.
+- Non-standard mnemonic syntax (LDA#, LDAZ, STAZ, etc.)
+- DATA pseudo-instruction
+- Hex constants ($xx and $xxxx)
+- Quoted strings with escape sequences
+- Labels and label assignments (= $xxxx)
+- PC setting (* = $2000)
+- Low byte (<) and high byte (>) operators on labels
+- Relative branch (~label) syntax
+- Two-byte label operands
+- Comments (;)
+- BRK with inline error code and message string
+- Last 2 bytes of output used as entry point address
 
-Source features used:
-  - Non-standard instruction mnemonics from version 04's table
-    (including BITZ, BMI, BPL, SBCZ which were added in version 03)
-  - Labels at column 0 for code locations
-  - label = $XXXX constant assignments for all variables
-    (TEMP, NEXTCHAR, TABL, TABH, PCL, PCH, HEX1, HEX2, PASS, TOKEN, LBTAB)
-  - * = $2000 origin directive
-  - <label byte selectors for zero-page operands
-  - >label byte selectors for high-byte extraction
-  - Label references as 16-bit operands
-  - DATA directive with hex bytes and string literals
-  - Character string operands in instructions (e.g., CMP# "\n")
-  - Hex operands ($XX, $XXXX)
-  - Semicolon comments
-  - Branch targets as hardcoded hex offsets (not yet using ~ for branches)
-
-New syntax used in source (relative to version 04):
-- * = $2000 origin directive (version 04 had it commented out)
-
-Other source changes:
-- BRK with inline data on single line (BRK $01 "Label not found" $00)
-  instead of separate BRK and DATA lines
-- PASS variable and BITZ/BMI/BPL used for two-pass control flow
+New syntax used in source (relative to version 05):
+- None

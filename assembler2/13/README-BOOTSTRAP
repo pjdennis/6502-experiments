@@ -1,87 +1,83 @@
-Assembler Version 13
+Assembler Version 19
 ====================
-Assembled by: version 12 (both instgen and asm)
+Assembled by: version 18 (both instgen and asm)
 
 Features Supported by This Assembler
 -------------------------------------
-All features from version 12, plus one new instruction:
+All features from version 18, plus expression evaluation:
 
 Syntax:
-- Non-standard (custom) mnemonic syntax: LDA#, LDAZ, STAZ, etc.
+- Standard 6502 mnemonic syntax (LDA, STA, etc.)
+- All addressing modes (immediate, zero page, absolute, indexed, indirect)
 - DATA pseudo-instruction for raw byte emission
 - Hex constants: $xx (1 byte) or $xxxx (2 bytes)
-- Quoted strings with \n and \\ escapes
-- Label definitions with PC value or explicit assignment (including label refs)
+- Character literals: 'x', '\n', '\\', '\'' (in expressions and immediate mode)
+- Quoted strings in DATA with escape sequences
+- Label definitions with PC value or explicit assignment (label = value)
+- Local labels with . prefix (.label), scoped to most recent global label
 - PC setting via: * = $xxxx (with zero-fill on pass 2)
-- Low byte (<) and high byte (>) operators on labels
-- Relative branch labels (auto-detected via instruction flags)
-- Labels as 2-byte operands
+- Low byte (<) and high byte (>) operators (applied to entire expression result)
+- Expression evaluation with + and - operators (left-to-right, no precedence)
+- Mixed expressions: hex, labels, and character literals (e.g., '9'-'0'+$01)
 - Comments with semicolons
-- Two-pass assembly
-- Flag-based operand type detection
-- .include directive for including external files
-- .zeropage and .code section directives
-- Command-line arguments: <assembler> <input> <output>
+- Two-pass assembly with forward reference tracking
+- Automatic zero page vs absolute addressing based on value
 
 Directives:
-- .include filename
-- .zeropage - switches to zero page section
-- .code - switches back to code section
+- .include filename - includes contents of another file
+- .zeropage - switch to zero page section
+- .code - switch to code section
+- .data - declare raw byte data
 
-Instruction set: same as version 12, plus:
-- ASLZ (arithmetic shift left, zero page - opcode $06)
+Error handling: same as version 18 (errors $01-$15), plus:
+- err_fwdref_tracking ($16): Internal error - forward ref tracking mismatch
+  between passes (debug verification)
 
-Error handling: same as version 12 (errors 1-D)
-
-New in this version (relative to version 12):
-- New instruction: ASLZ (zero page arithmetic shift left)
-- Major internal refactoring into separate modules (no new external features)
-- Source split into: asm.asm, common.asm, hash_table.asm, file_stack.asm,
-  to_decimal.asm, environment.asm
-- Parameterized hash table: common.asm defines HT_KEY, HT_VL, HT_VH before
-  including hash_table.asm, allowing the hash table to be reused with
-  different key/value bindings
-- Parameterized file stack: FS_FILENAME, FS_CURR_FILE, FS_CURR_LINEL,
-  FS_CURR_LINEH defined before including file_stack.asm
-- Hash table uses split low/high access via single pointer HTPL/HTPH
-  (HASH at offset 0 for low byte, HASH+$80 for high byte) instead of
-  separate HTLPL/HTHPL pointers from version 12
-- TOKEN buffer moved to absolute address $1E00 (from zero page at $24)
-- TOKEN2 buffer at $1D00
-- LHASHTAB at $1F00 (single 256-byte region)
-- Hash table variables allocated via .zeropage DATA $00 instead of explicit
-  = assignments
-- Hash table stores value together with token in store_token (value stored
-  inline after token name on heap)
+New in this version (relative to version 18):
+- Expression evaluation with + and - operators
+  - parse_term: parses a single value ($hex, 'char', label)
+  - parse_expression: chains terms with + and - operators
+  - parse_value: handles < > byte selectors then calls parse_expression
+  - Left-to-right evaluation, no operator precedence
+  - Character literals supported as expression terms
+  - Forward references propagate through expressions (if any term is forward
+    ref, entire expression is treated as forward ref)
+- OPERAND_L/OPERAND_H aliased to HEX2/HEX1 (shared storage)
+- EXPR_ACCU_L/EXPR_ACCU_H zero page variables for expression accumulator
+- EXPR_FWDREF for accumulated forward reference flag in expressions
+- EXPR_CARRY for saved carry from first term
+- FWDREF_PASS1_L/FWDREF_PASS1_H for forward ref pointer verification
+- + and - added as token terminators in compare_end_of_token
+- Forward reference count verified between pass 1 and pass 2
+- Source syntax changed from DATA to .data for data declarations
 
 Features Used in This Assembler's Source Code
 ----------------------------------------------
-- Non-standard mnemonic syntax (LDA#, LDAZ, STAZ, BITZ, INCZ, etc.)
-- DATA pseudo-instruction
-- DATA $00 for zero page variable allocation in .zeropage section
+- Standard 6502 mnemonic syntax
+- All addressing modes including indirect indexed
+- .data directive for byte/string data (replaces DATA pseudo-instruction)
 - Hex constants ($xx and $xxxx)
+- Character literals in immediate mode (#'x', #'\n', etc.)
 - Quoted strings with escape sequences
-- Labels and label assignments (label = value)
-- PC setting (* = $2000 and * = $FFFC for vectors)
+- Labels and label assignments
+- Local labels with . prefix
+- PC setting (* = $2000 and * = $FFFC)
 - Low byte (<) and high byte (>) operators
-- Labels as absolute 2-byte operands
 - Comments (;)
 - BRK with inline error code and message
-- .include directive (out/inst.asm.out, environment.asm, common.asm,
-  file_stack.asm, to_decimal.asm)
-- .zeropage and .code section directives
-- Command-line arg access: argc, argv
-- File I/O: open, close, read, openout, write
+- .include directive
+- .zeropage and .code directives
 
-New syntax used in source (relative to version 12):
-- .zeropage and .code section directives (replaces explicit = assignments
-  for zero page variables)
+New syntax used in source (relative to version 18):
+- .data directive replaces DATA pseudo-instruction throughout
+  (this is the key syntax migration in this version's source)
+
+Note: the source does NOT use expression evaluation (no + or - operators
+in operands). Expressions are a feature this assembler SUPPORTS for programs
+it assembles. Version 20 is the first version whose source uses expressions,
+since it is assembled by version 19.
 
 Other source changes:
-- Modular source structure: hash_table.asm, file_stack.asm, to_decimal.asm
-  extracted as reusable modules
-- Parameterized includes: HT_KEY = TOKEN, HT_VL = HEX2, HT_VH = HEX1
-  defined before .include hash_table.asm; FS_FILENAME = TOKEN, etc. defined
-  before .include file_stack.asm
-- TOKEN moved from zero page to absolute address $1E00
-- instgen.asm also uses .zeropage/.code and parameterized common.asm
+- OPERAND_L/OPERAND_H aliased to HEX2/HEX1 via = assignment
+- Expression accumulator variables (EXPR_ACCU_L/H, EXPR_FWDREF, EXPR_CARRY)
+- Forward reference tracking verification between passes

@@ -1,119 +1,134 @@
-Assembler Version 16
+Assembler Version 22
 ====================
-Assembled by: version 15 (both instgen and asm)
+Assembled by: version 21 debug build (asm_debug.out with define:enable_debug)
+
+Build notes: The v21 debug build is used because v22 source uses
+.ifdef enable_debug conditional compilation, which requires v21 support.
+Version 22 also produces both normal and debug builds.
 
 Features Supported by This Assembler
 -------------------------------------
-Major upgrade: supports standard 6502 assembly syntax with all addressing modes.
-This is the first version that can assemble standard 6502 assembly language.
+All features from version 21, plus .byte/.word/.asciiz directives,
+.reserve, decimal numbers, memory protection, and enhanced conditional
+assembly:
 
-Syntax (new standard syntax):
-- Standard 6502 mnemonic syntax: LDA #$42, STA $00, LDA ($10),Y, etc.
-- Automatic addressing mode detection from operand syntax
-- Automatic zero page detection: operand < $100 uses zero page mode
-- All 13 standard 6502 addressing modes:
-  - Implied: NOP, RTS, CLC, etc. (no operand)
-  - Accumulator: ASL A, LSR A, ROL A, ROR A
-  - Immediate: LDA #$42
-  - Zero page: LDA $00
-  - Zero page,X: LDA $00,X
-  - Zero page,Y: LDX $00,Y
-  - Absolute: LDA $1234
-  - Absolute,X: LDA $1234,X
-  - Absolute,Y: LDA $1234,Y
-  - Indirect,X: LDA ($10,X)
-  - Indirect,Y: LDA ($10),Y
-  - Relative: BEQ label (branches)
-  - Indirect: JMP ($1234)
-- Character literals: #'A', #'\n', #'\\', #'\''
-- DATA pseudo-instruction (backward compatible)
+Syntax:
+- Standard 6502 mnemonic syntax (LDA, STA, etc.)
+- All addressing modes (immediate, zero page, absolute, indexed, indirect)
+- .data directive for byte/string data (retained for compatibility)
 - Hex constants: $xx (1 byte) or $xxxx (2 bytes)
-- Quoted strings with \n and \\ escapes
+- Decimal constants (parsed by from_decimal.asm)
+- Character literals: 'x', '\n', '\\', '\''
+- Expression evaluation with +, -, <<, >> operators (left-to-right)
+- Quoted strings with full escape sequence support (decode_escape)
 - Label definitions with PC value or explicit assignment
-- PC setting via: * = $xxxx
-- Low byte (<) and high byte (>) operators on labels
-- Labels as operands in all addressing modes
+- Optional colon after label definitions (label:)
+- Local labels with . prefix
+- PC setting via: * = $xxxx (with zero-fill on pass 2)
+- Low byte (<) and high byte (>) operators
 - Comments with semicolons
-- Two-pass assembly
-- .include directive
-- .zeropage and .code section directives
-- Command-line arguments: <assembler> <input> <output> [debug]
-- Local labels with . prefix, scoped to enclosing global label
+- Two-pass assembly with forward reference tracking
+- Automatic zero page vs absolute addressing
 
 Directives:
-- .include filename
-- .zeropage - switches to zero page section
-- .code - switches back to code section
+- .include filename - includes contents of another file
+- .zeropage - switch to zero page section
+- .code - switch to code section
+- .data - declare raw byte data (legacy, retained)
+- .byte expr [, expr ...] - emit byte values (comma-separated)
+- .word expr [, expr ...] - emit 16-bit word values (comma-separated)
+- .asciiz expr [, "string" ...] - emit null-terminated strings/values
+- .reserve N - reserve N bytes (zero-fill in .code, PC advance in .zeropage)
+- .byte / .word (without operand in .zeropage) - allocate zero page storage
+- .ifdef label - begin conditional block if label is defined
+- .endif - end conditional block
+- .macro NAME [param1 param2 ...] - begin macro definition
+- .endmacro - end macro definition
 
-Full 6502 instruction set (56 opcodes):
-- Load/Store: LDA, LDX, LDY, STA, STX, STY
-- Arithmetic: ADC, SBC
-- Logical: AND, ORA, EOR
-- Compare: CMP, CPX, CPY
-- Bit test: BIT
-- Increment/Decrement: INC, DEC, INX, INY, DEX, DEY
-- Shift/Rotate: ASL, LSR, ROL, ROR
-- Branch: BCC, BCS, BEQ, BMI, BNE, BPL, BVC, BVS
-- Jump: JMP (absolute and indirect), JSR
-- Stack: PHA, PHP, PLA, PLP
-- Transfer: TAX, TAY, TSX, TXA, TXS, TYA
-- Flag: CLC, CLD, CLI, CLV, SEC, SED, SEI
-- Other: BRK, NOP, RTI, RTS
-- Pseudo: DATA
+Command line:
+- Variable argument count
+- define:label - pre-define a label
+- debug - enable debug output
+- small_heap - use reduced heap for testing
+- show_captured_macros - display captured macro definitions
 
-Error handling: same as version 15 (errors 1-10), plus:
-- Invalid addressing mode (error 11): mode not supported for instruction
-- Invalid character literal (error 12): malformed character literal
+Memory protection:
+- CHECK_FOR_OUT_OF_MEMORY macro detects heap/stack collision
+- 256-byte safety buffer maintained between heap (MEMP16) and
+  file stack (FS_P16)
 
-New in this version (relative to version 15):
-- Complete rewrite of instruction processing for standard 6502 syntax
-- New instruction table format with mode:opcode pairs: each instruction
-  entry contains the mnemonic followed by pairs of (mode, opcode) terminated
-  by $FF. This replaces the old format where each mnemonic variant was a
-  separate hash table entry.
-- Addressing mode constants: MODE_NONE through MODE_IND, plus MODE_DATA
-- New zero page variables: ADDR_MODE, INST_PTR_L/H, OPERAND_L/H
-- INST_FLAG removed (replaced by mode-based dispatch)
-- lookup_mnemonic: looks up 3-letter mnemonic in instruction hash table,
-  returns pointer to mode:opcode list
-- parse_operand_and_emit: parses operand to determine addressing mode and
-  operand value, then finds matching opcode
-- find_opcode_for_mode: walks mode:opcode pairs to find opcode matching
-  the detected addressing mode, with ZP/ABS fallback
-- check_if_branch: tests if instruction supports relative mode
-- emit_instruction: emits opcode plus 0, 1, or 2 operand bytes based on mode
-- Character literal parsing: #'x' syntax with escape sequences
-- Comma and closing parenthesis are now token terminators (needed for
-  parsing indexed and indirect addressing modes)
-- check_for_data_pseudo: handles DATA as special case via MODE_DATA
-- instgen16.asm generates the new-format instruction hash table
+Error handling: reorganized error codes into categories, plus new errors:
+- Error codes renumbered and grouped by category ($01-$FF)
+- err_too_many_ifdefs ($15): IFDEF_DECISIONS buffer full
+- err_macro_nesting_too_deep ($1F): Macro nesting limit exceeded
+- err_out_of_memory ($20): Heap/stack collision
+- err_token_too_long ($21): Token exceeds buffer
+- err_zeropage_overflow ($23): Zero page section overflow
+- err_file_not_found ($24): File not found (debug build)
+- err_operand_in_zeropage ($25): Operand on .byte/.word in .zeropage
+- err_nested_macro_definition ($1B): Nested .macro inside .macro
+- Error codes reorganized: usage errors at $F0-$F1, debug at $FE-$FF
+
+New in this version (relative to version 21):
+- .byte, .word, .asciiz directives with comma-separated values
+  - DATA_MODE tracking (0=.data, 1=.byte, 2=.word, 3=.asciiz)
+  - Comma-separated data values in .byte, .word, .asciiz
+  - .asciiz auto-appends null terminator after each string
+  - Quoted strings supported in .byte and .asciiz
+  - .byte/.word without operands in .zeropage allocates storage
+- .reserve N directive for reserving bytes
+- Decimal number parsing (from_decimal.asm module)
+- IFDEF_DECISIONS buffer at $0800 for deterministic pass 2
+  - Pass 1 evaluates .ifdef conditions and records decisions
+  - Pass 2 replays recorded decisions for consistency with forward refs
+  - IFDEF_INDEX tracks current position in decisions buffer
+- Memory protection (CHECK_FOR_OUT_OF_MEMORY macro in common.asm)
+  - Detects when heap approaches file stack
+  - 256-byte safety buffer for indexed addressing
+- decode_escape for string escape sequences (\n, \\, \', \0, etc.)
+- compare_end_of_token rewritten as positive character class matching
+  (alphanumeric + underscore) instead of negative list of terminators
+- Error codes reorganized into sequential categories
+- macros.asm module with utility macros (SET16, CP16, INC16, etc.)
+- Zero page variables use 16-suffix naming (PC16, HEX16, etc.)
+- OPERAND16 aliased to HEX16 (single 16-bit location)
+- Detailed architecture documentation in source header comments
+- tests/ directory added with file_stack_test.asm
 
 Features Used in This Assembler's Source Code
 ----------------------------------------------
-- Non-standard mnemonic syntax (LDA#, LDAZ, STAZ, BITZ, INCZ, ASLZ, etc.)
-- DATA pseudo-instruction
-- DATA $00 for zero page variable allocation in .zeropage section
+- Standard 6502 mnemonic syntax
+- All addressing modes including indirect indexed
+- .data directive for byte/string data
 - Hex constants ($xx and $xxxx)
+- Character literals and character literal expressions
+- Expressions with +, -, <<, >> operators
 - Quoted strings with escape sequences
-- Labels and label assignments (label = value)
-- PC setting (* = $2000 and * = $FFFC for vectors)
+- Labels with colon suffix (label:)
+- Label assignments (e.g., OPERAND16 = HEX16)
+- Local labels with . prefix
+- PC setting (* = $2000 and * = $FFFC)
 - Low byte (<) and high byte (>) operators
-- Labels as absolute 2-byte operands
 - Comments (;)
-- BRK with inline error code and message (BRK $xx "message" $00)
-- .include directive (out/inst.asm.out, environment.asm, common.asm,
-  file_stack.asm, to_decimal.asm)
-- .zeropage and .code section directives
-- Local labels (.label syntax)
-- Command-line arg access: argc, argv
-- File I/O: open, close, read, openout, write
+- BRK with inline error code and message
+- .include directive (environment.asm, macros.asm, common.asm,
+  label_scope.asm, fwdref.asm, file_stack.asm, errors.asm,
+  from_decimal.asm, to_decimal.asm, out/inst.asm.out)
+- .zeropage and .code directives
+- .ifdef enable_debug / .endif conditional compilation
+- Macro invocations (SET16, CP16, INC16, DEC16, etc.)
 
-New syntax used in source (relative to version 15):
-- None (source is still written in non-standard mnemonic syntax because it
-  is assembled by version 15 which only supports non-standard syntax)
+New syntax used in source (relative to version 21):
+- Colon after label definitions (label:) - first version using
+  colon-terminated labels
+- Macro invocations (SET16, CP16, INC16, DEC16, CMP16, CMPI16,
+  ADC16, SBC16, ADCI16, SBCI16, ADCA16, etc.)
+- Macro definitions (.macro/.endmacro) in macros.asm
+- << and >> shift operators in expressions
 
 Other source changes:
-- ADDR_MODE, INST_PTR_L/H, OPERAND_L/H added to zero page variables
-- INST_FLAG removed (no longer needed with mode-based instruction lookup)
-- Substantially larger codebase due to operand parsing, mode detection,
-  and character literal parsing logic
+- from_decimal.asm module included
+- Zero page variables use 16-suffix naming (PC16, HEX16, MEMP16, etc.)
+  and .data $0000 for 16-bit values
+- IFDEF_DECISIONS buffer at $0800
+- Note: source still uses .data directive, NOT .byte/.word/.asciiz

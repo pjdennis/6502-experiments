@@ -1,3 +1,8 @@
+; environment.asm - Environment vector table
+;
+; Requires: none (symbols are provided by the runtime environment)
+; Provides: entry points for I/O, args, and console helpers
+;
 ; Provided by environment:
 read_b    = $F006 ; Returns next char in A; C set when at end; X, Y preserved
 write_b   = $F009 ; Writes char in A to stdout; A, X, Y preserved
@@ -13,3 +18,16 @@ argv      = $F01E ; Returns argument A in A;X; Y preserved
 openout   = $F021 ; Opens file with name at A;X for writing. Returns handle
                   ; in A; Y preserved
 write     = $F024 ; writs char in A to file with handle in X; Y preserved
+
+; Console I/O ports
+con_read  = $F027 ; Read one byte from console (blocking); returns in A
+con_flush = $F02A ; Flush stdout
+con_ready = $F02D ; Non-blocking poll: A=$FF if byte ready, A=$00 if not
+term_rows = $F030 ; Returns terminal height in A
+term_cols = $F033 ; Returns terminal width in A
+
+; Serial I/O ports
+serial_read  = $F036 ; Read one byte from serial (non blocking); returns in A.
+                     ; C set if no byte was avaiable, clear otherwise. X, Y preserved
+serial_write = $F039 ; Write byte in A to serial (non blocking); returns with C set if
+                     ; byte not accepted (buffer full), clear otherwise. A, X, Y preserved

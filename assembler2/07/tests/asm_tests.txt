@@ -1,7 +1,7 @@
-# Test suite for asm10 assembler
-# Non-standard syntax, two-pass assembly, hash table instructions
-# Features: forward refs, branches with labels, origin, DATA, < > selectors
-# Error format: "Error N at line L: message" (from v09)
+# Test suite for asm08 assembler
+# Non-standard syntax with hash table instruction lookup, two-pass assembly
+# Features: labels with forward refs, branches with labels, DATA, < > selectors
+# Has: origin (*=), label assignments, character literals ('A')
 
 ---
 NAME: implied_rts
@@ -33,6 +33,38 @@ INPUT:
 1: * = $0200
 2:   STA $1234
 EXPECT_HEX: 8d 34 12
+
+---
+NAME: zero_page_x
+INPUT:
+1: * = $0200
+2:   LDAZ,X $20
+3:   STAZ,X $30
+EXPECT_HEX: b5 20 95 30
+
+---
+NAME: absolute_indexed
+INPUT:
+1: * = $0200
+2:   LDA,X $1234
+3:   LDA,Y $5678
+EXPECT_HEX: bd 34 12 b9 78 56
+
+---
+NAME: indirect_y
+INPUT:
+1: * = $0200
+2:   LDAZ(),Y $10
+3:   STAZ(),Y $20
+EXPECT_HEX: b1 10 91 20
+
+---
+NAME: accumulator
+INPUT:
+1: * = $0200
+2:   ASLA
+3:   LSRA
+EXPECT_HEX: 0a 4a
 
 ---
 NAME: branch_forward
@@ -96,68 +128,43 @@ INPUT:
 EXPECT_HEX: a9 34 a2 12
 
 ---
-NAME: indexed_modes
+NAME: comment
 INPUT:
 1: * = $0200
-2:   LDAZ,X $20
-3:   STAZ,X $30
-4:   LDA,X $1234
-5:   LDA,Y $5678
-EXPECT_HEX: b5 20 95 30 bd 34 12 b9 78 56
+2: ; comment line
+3:   RTS ; inline comment
+EXPECT_HEX: 60
 
 ---
-NAME: indirect_y
+NAME: all_branches
 INPUT:
 1: * = $0200
-2:   LDAZ(),Y $10
-3:   STAZ(),Y $20
-EXPECT_HEX: b1 10 91 20
+2: loop
+3:   BCC loop
+4:   BCS loop
+5:   BEQ loop
+6:   BNE loop
+7:   BMI loop
+8:   BPL loop
+EXPECT_HEX: 90 fe b0 fc f0 fa d0 f8 30 f6 10 f4
 
 ---
-NAME: all_implied
+NAME: stack_operations
 INPUT:
 1: * = $0200
-2:   CLC
-3:   SEC
-4:   INX
-5:   INY
-6:   DEX
-7:   TAX
-8:   TXA
-9:   TAY
-10:   TYA
-11:   PHA
-12:   PLA
-13:   TSX
-14:   RTS
-EXPECT_HEX: 18 38 e8 c8 ca aa 8a a8 98 48 68 ba 60
+2:   PHA
+3:   PLA
+4:   TAX
+5:   TXA
+6:   TAY
+7:   TYA
+8:   TSX
+EXPECT_HEX: 48 68 aa 8a a8 98 ba
 
 ---
-NAME: error_label_not_found
+NAME: data_label_bytes
 INPUT:
 1: * = $0200
-2:   STA undefined
-EXPECT_ERROR: 1
-EXPECT_LINE: 2
-EXPECT_MSG: Label not found
-
----
-NAME: error_opcode_not_found
-INPUT:
-1: * = $0200
-2:   BADOP
-EXPECT_ERROR: 3
-EXPECT_LINE: 2
-EXPECT_MSG: Opcode not found
-
----
-NAME: error_duplicate_label
-INPUT:
-1: * = $0200
-2: label
-3:   INX
-4: label
-5:   RTS
-EXPECT_ERROR: 2
-EXPECT_LINE: 4
-EXPECT_MSG: Duplicate label
+2: start
+3:   DATA <start >start
+EXPECT_HEX: 00 02

@@ -32,8 +32,8 @@ FNAME_BUF   = $0200   ; Filename buffer (256 bytes)
 
   JMP editor_main
 
-  .include 23/environment.asm
-  .include 23/macros.asm
+  .include 17/environment.asm
+  .include 17/macros.asm
   .include editor/io.asm
 
 ; PRINT_STR addr - Print null-terminated string at addr
@@ -43,7 +43,7 @@ FNAME_BUF   = $0200   ; Filename buffer (256 bytes)
   JSR write_string
   .endmacro
 
-  .include 23/to_decimal.asm
+  .include 17/to_decimal.asm
   .include editor/terminal.asm
   .include editor/input.asm
   .include editor/buffer_mem.asm

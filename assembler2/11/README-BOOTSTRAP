@@ -1,90 +1,119 @@
-Assembler Version 11
+Assembler Version 16
 ====================
-Assembled by: version 10 (both instgen and asm)
+Assembled by: version 15 (both instgen and asm)
 
 Features Supported by This Assembler
 -------------------------------------
-All features from version 10, plus additional instructions:
+Major upgrade: supports standard 6502 assembly syntax with all addressing modes.
+This is the first version that can assemble standard 6502 assembly language.
 
-Syntax:
-- Non-standard (custom) mnemonic syntax: LDA#, LDAZ, STAZ, etc.
-- DATA pseudo-instruction for raw byte emission
+Syntax (new standard syntax):
+- Standard 6502 mnemonic syntax: LDA #$42, STA $00, LDA ($10),Y, etc.
+- Automatic addressing mode detection from operand syntax
+- Automatic zero page detection: operand < $100 uses zero page mode
+- All 13 standard 6502 addressing modes:
+  - Implied: NOP, RTS, CLC, etc. (no operand)
+  - Accumulator: ASL A, LSR A, ROL A, ROR A
+  - Immediate: LDA #$42
+  - Zero page: LDA $00
+  - Zero page,X: LDA $00,X
+  - Zero page,Y: LDX $00,Y
+  - Absolute: LDA $1234
+  - Absolute,X: LDA $1234,X
+  - Absolute,Y: LDA $1234,Y
+  - Indirect,X: LDA ($10,X)
+  - Indirect,Y: LDA ($10),Y
+  - Relative: BEQ label (branches)
+  - Indirect: JMP ($1234)
+- Character literals: #'A', #'\n', #'\\', #'\''
+- DATA pseudo-instruction (backward compatible)
 - Hex constants: $xx (1 byte) or $xxxx (2 bytes)
-- Quoted strings with \n escape
+- Quoted strings with \n and \\ escapes
 - Label definitions with PC value or explicit assignment
-- PC setting via: * = $xxxx (with zero-fill on pass 2)
+- PC setting via: * = $xxxx
 - Low byte (<) and high byte (>) operators on labels
-- Relative branch (~label) syntax (also auto-detected via flags)
-- Labels as 2-byte operands
+- Labels as operands in all addressing modes
 - Comments with semicolons
 - Two-pass assembly
-- Flag-based operand type detection
-- Zero page addressing with plain hex values
-- .include directive for including external files
+- .include directive
+- .zeropage and .code section directives
+- Command-line arguments: <assembler> <input> <output> [debug]
+- Local labels with . prefix, scoped to enclosing global label
 
 Directives:
-- .include filename - includes contents of another file at current position
+- .include filename
+- .zeropage - switches to zero page section
+- .code - switches back to code section
 
-Instruction set (expanded from v10):
-- ADC#, ADCZ, AND#, ASLA
-- BCC, BCS, BEQ, BITZ, BMI, BNE, BPL, BRK
-- CLC, CMPZ, CMP#, CMP,Y, CPXZ, CPYZ, CPY#
-- DECZ, DEX, DEY
-- EORZ
-- INCZ, INX, INY
-- JMP, JSR
-- LDA, LDX, LDY (absolute), LDA#, LDAZ(),Y, LDA,X, LDA,Y, LDAZ, LDAZ,X,
-  LDXZ, LDYZ, LDX#, LDY#
-- LSRA
-- ORAZ
-- PHA, PLA
-- ROLZ, RTS
-- SBC#, SBCZ, SEC
-- STA, STAZ(),Y, STA,X, STA,Y, STAZ, STAZ,X, STXZ, STYZ
-- TAX, TAY, TSX, TXA, TYA
+Full 6502 instruction set (56 opcodes):
+- Load/Store: LDA, LDX, LDY, STA, STX, STY
+- Arithmetic: ADC, SBC
+- Logical: AND, ORA, EOR
+- Compare: CMP, CPX, CPY
+- Bit test: BIT
+- Increment/Decrement: INC, DEC, INX, INY, DEX, DEY
+- Shift/Rotate: ASL, LSR, ROL, ROR
+- Branch: BCC, BCS, BEQ, BMI, BNE, BPL, BVC, BVS
+- Jump: JMP (absolute and indirect), JSR
+- Stack: PHA, PHP, PLA, PLP
+- Transfer: TAX, TAY, TSX, TXA, TXS, TYA
+- Flag: CLC, CLD, CLI, CLV, SEC, SED, SEI
+- Other: BRK, NOP, RTI, RTS
+- Pseudo: DATA
 
-Error handling: same as version 10 (errors 1-C)
+Error handling: same as version 15 (errors 1-10), plus:
+- Invalid addressing mode (error 11): mode not supported for instruction
+- Invalid character literal (error 12): malformed character literal
 
-New in this version (relative to version 10):
-- New instructions: CPXZ, CPYZ, DEY, LDXZ, LDYZ, STXZ, STYZ
-- Code modularization using .include: source split into multiple files
-  (asm.asm, common.asm, environment.asm)
-- Label hash table moved to $1F00 (from $4000)
-- Heap placed after program code (HEAP label at end of source) instead of
-  at a fixed address
-- Hash tables reduced to 128 entries (CPY# $80 loop termination)
-- calculate_hash preserves X register (TXA/PHA ... PLA/TAX)
-- instgen.asm also uses .include for shared code (environment.asm, common.asm)
-- Instruction hash table included from generated file (out/inst.asm.out)
-  via .include rather than cat/prepend
-- Environment I/O addresses documented in environment.asm with additional
-  entry points: argc ($F01B), argv ($F01E), openout ($F021), write ($F024)
+New in this version (relative to version 15):
+- Complete rewrite of instruction processing for standard 6502 syntax
+- New instruction table format with mode:opcode pairs: each instruction
+  entry contains the mnemonic followed by pairs of (mode, opcode) terminated
+  by $FF. This replaces the old format where each mnemonic variant was a
+  separate hash table entry.
+- Addressing mode constants: MODE_NONE through MODE_IND, plus MODE_DATA
+- New zero page variables: ADDR_MODE, INST_PTR_L/H, OPERAND_L/H
+- INST_FLAG removed (replaced by mode-based dispatch)
+- lookup_mnemonic: looks up 3-letter mnemonic in instruction hash table,
+  returns pointer to mode:opcode list
+- parse_operand_and_emit: parses operand to determine addressing mode and
+  operand value, then finds matching opcode
+- find_opcode_for_mode: walks mode:opcode pairs to find opcode matching
+  the detected addressing mode, with ZP/ABS fallback
+- check_if_branch: tests if instruction supports relative mode
+- emit_instruction: emits opcode plus 0, 1, or 2 operand bytes based on mode
+- Character literal parsing: #'x' syntax with escape sequences
+- Comma and closing parenthesis are now token terminators (needed for
+  parsing indexed and indirect addressing modes)
+- check_for_data_pseudo: handles DATA as special case via MODE_DATA
+- instgen16.asm generates the new-format instruction hash table
 
 Features Used in This Assembler's Source Code
 ----------------------------------------------
-- Non-standard mnemonic syntax (LDA#, LDAZ, STAZ, etc.)
+- Non-standard mnemonic syntax (LDA#, LDAZ, STAZ, BITZ, INCZ, ASLZ, etc.)
 - DATA pseudo-instruction
+- DATA $00 for zero page variable allocation in .zeropage section
 - Hex constants ($xx and $xxxx)
 - Quoted strings with escape sequences
-- Labels and label assignments
+- Labels and label assignments (label = value)
 - PC setting (* = $2000 and * = $FFFC for vectors)
 - Low byte (<) and high byte (>) operators
 - Labels as absolute 2-byte operands
 - Comments (;)
-- BRK with inline error code and message
-- .include directive (environment.asm, common.asm, out/inst.asm.out)
-- Zero page variables addressed without < prefix
-- Stack access via TSX and LDA,X for interrupt handler
-- File I/O: open, close, read
-- File stack operations (push/pop)
+- BRK with inline error code and message (BRK $xx "message" $00)
+- .include directive (out/inst.asm.out, environment.asm, common.asm,
+  file_stack.asm, to_decimal.asm)
+- .zeropage and .code section directives
+- Local labels (.label syntax)
+- Command-line arg access: argc, argv
+- File I/O: open, close, read, openout, write
 
-New syntax used in source (relative to version 10):
-- .include directive (first version where the assembler's source uses .include)
+New syntax used in source (relative to version 15):
+- None (source is still written in non-standard mnemonic syntax because it
+  is assembled by version 15 which only supports non-standard syntax)
 
 Other source changes:
-- Source split into: asm.asm (main), common.asm (shared code with instgen),
-  environment.asm (I/O address definitions)
-- instgen.asm also uses .include for common.asm and environment.asm
-- Instruction hash table loaded via .include out/inst.asm.out (no longer
-  prepended via cat)
-- HEAP label defined at end of code rather than at a fixed address
+- ADDR_MODE, INST_PTR_L/H, OPERAND_L/H added to zero page variables
+- INST_FLAG removed (no longer needed with mode-based instruction lookup)
+- Substantially larger codebase due to operand parsing, mode detection,
+  and character literal parsing logic

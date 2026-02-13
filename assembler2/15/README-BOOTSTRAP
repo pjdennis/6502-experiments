@@ -1,92 +1,132 @@
-Assembler Version 15
+Assembler Version 21
 ====================
-Assembled by: version 14 (both instgen and asm)
+Assembled by: version 20 (asm and debug build both assembled by v20)
+
+Build notes: This version produces both a normal build (asm.out) and a
+debug build (asm_debug.out) using define:enable_debug. The debug build
+is used to assemble version 22.
 
 Features Supported by This Assembler
 -------------------------------------
-Same external features as version 14. Internal improvements to local label
-storage and hash table performance:
+All features from version 20, plus macros, shift operators, and label
+scope management:
 
 Syntax:
-- Non-standard (custom) mnemonic syntax: LDA#, LDAZ, STAZ, etc.
+- Standard 6502 mnemonic syntax (LDA, STA, etc.)
+- All addressing modes (immediate, zero page, absolute, indexed, indirect)
 - DATA pseudo-instruction for raw byte emission
+- .data directive for byte/string data
 - Hex constants: $xx (1 byte) or $xxxx (2 bytes)
-- Quoted strings with \n and \\ escapes
-- Label definitions with PC value or explicit assignment (including label refs)
+- Character literals: 'x', '\n', '\\', '\''
+- Expression evaluation with +, -, <<, >> operators (left-to-right)
+- Quoted strings with escape sequences
+- Label definitions with PC value or explicit assignment
+- Optional colon after label definitions (label: as well as label)
+- Local labels with . prefix
 - PC setting via: * = $xxxx (with zero-fill on pass 2)
-- Low byte (<) and high byte (>) operators on labels
-- Relative branch labels (auto-detected via instruction flags)
-- Labels as 2-byte operands
+- Low byte (<) and high byte (>) operators
 - Comments with semicolons
-- Two-pass assembly
-- .include directive
-- .zeropage and .code section directives
-- Command-line arguments: <assembler> <input> <output> [debug]
-- Local labels with . prefix, scoped to enclosing global label
+- Two-pass assembly with forward reference tracking
+- Automatic zero page vs absolute addressing
 
 Directives:
-- .include filename
-- .zeropage - switches to zero page section
-- .code - switches back to code section
+- .include filename - includes contents of another file
+- .zeropage - switch to zero page section
+- .code - switch to code section
+- .data - declare raw byte data
+- .ifdef label - begin conditional block if label is defined
+- .endif - end conditional block
+- .macro NAME [param1 param2 ...] - begin macro definition
+- .endmacro - end macro definition
 
-Instruction set: same as version 14
+Command line:
+- Variable argument count (2 or more arguments)
+- define:label - pre-define a label with value $0001
 
-Error handling: same as version 14 (errors 1-10)
+Macro system:
+- Macro definitions stored on heap with body text and parameter names
+- Invocation by macro name (parsed like instructions)
+- Text substitution of parameters during expansion
+- Local labels (.label) scoped per invocation via EXPANSION_ID
+- Recursion detection by walking scope stack
+- Memory source reading for macro body expansion
+- File stack used to push macro expansion as memory source
 
-New in this version (relative to version 14):
-- Heap-based global label storage: CURR_GLOBAL_HEAP_L/H stores a pointer to
-  the global label string on the heap, replacing the CURR_GLOBAL buffer at
-  $1C00. This eliminates the need to copy the global label name.
-- $01 escape format for local labels on the heap: local labels are stored as
-  $01 <addr_lo> <addr_hi> ".local" $00, where the address is a pointer to
-  the global label's heap entry. This allows scope verification during lookup
-  by comparing the stored pointer against CURR_GLOBAL_HEAP.
-- Cached hash optimization (CACHED_HASH): when a global label is defined,
-  its pre-ASL hash value is cached. Local label hash calculation starts from
-  this cached value rather than rehashing the global prefix, saving time.
-- Separate hash functions: calculate_hash (global labels, updates hash),
-  calculate_hash_local (starts from CACHED_HASH), and
-  calculate_hash_instruction (global hash, does NOT modify CACHED_HASH)
-- find_in_hash_instruction: separate lookup path for instruction opcodes that
-  avoids modifying the cached hash state
-- IS_LOCAL_LABEL flag: used throughout hash table code to select between
-  global and local label handling
-- compare_token handles both normal strings and $01 escape format, verifying
-  scope pointer matches before comparing local label names
-- Emit optimization: INC PC moved before PASS/IN_ZEROPAGE checks, with
-  write as a tail call instead of inline JSR
-- select_instruction_hash_table in common.asm clears IS_LOCAL_LABEL flag
-- commit_cached_hash function: explicitly saves pre-ASL hash to CACHED_HASH
-  when updating global label scope
+Label scope:
+- Label scope stack (label_scope.asm) for macro expansions
+- SCOPE_STACK at $0400 (256 bytes, 5-byte entries)
+- EXPANSION_ID16 provides synthetic scope pointer for local labels
+- push_label_scope / pop_label_scope / init_scope_stack / reset_scope_stack
+
+Error handling: same as version 20, plus:
+- err_expected_shift ($1A): Expected << or >>
+- err_macro_name_expected ($1B): .macro without name
+- err_macro_shadows_instruction ($1C): Macro name conflicts with instruction
+- err_duplicate_macro ($1D): Duplicate macro definition
+- err_endmacro_without_macro: .endmacro outside macro definition
+- err_unclosed_macro: Missing .endmacro at end of file
+- err_recursive_macro: Recursive macro invocation detected
+- err_too_few_arguments: Not enough arguments for macro
+- err_too_many_arguments: Too many arguments for macro
+- Include traceback shows file inclusion chain on errors
+- err_fwdref_tracking now conditional (debug build only)
+
+New in this version (relative to version 20):
+- << and >> shift operators in expressions
+  - parse_term_with_selector for shift count parsing
+  - Added <, >, :, = as token terminators in compare_end_of_token
+- .macro/.endmacro directive support
+  - capture_macro_line captures macro body to heap during definition
+  - IN_MACRO_DEF flag tracks macro capture state
+  - MACRO_DEF_PTR_L/H points to heap during capture
+  - Macro bodies stored on heap with null-terminated parameter list
+- Macro expansion via expand_macro
+  - MACRO_ARG_BUF at $0500 for argument text during expansion
+  - push_memory_source pushes macro body onto file stack
+  - Parameter substitution during read_char from memory source
+  - MACRO_ENTRY_L/H for recursion detection
+- Label scope stack (new label_scope.asm module)
+  - SCOPE_STACK at $0400, 5-byte entries
+  - Synthetic EXPANSION_ID for local label scoping in macros
+  - FS_POP_MEMORY_HOOK = pop_label_scope for automatic cleanup
+- Optional colon after label definitions (label:)
+- NEXT_CHAR variable for single-character lookahead
+- CURR_OUT_FILE for output file handle (used by error handler)
+- read_char aliased to file_stack_read_char
+- Error handler shows include/expansion traceback
 
 Features Used in This Assembler's Source Code
 ----------------------------------------------
-- Non-standard mnemonic syntax (LDA#, LDAZ, STAZ, BITZ, INCZ, ASLZ, etc.)
-- DATA pseudo-instruction
-- DATA $00 for zero page variable allocation in .zeropage section
+- Standard 6502 mnemonic syntax
+- All addressing modes including indirect indexed
+- .data directive for byte/string data
 - Hex constants ($xx and $xxxx)
+- Character literals and character literal expressions
+- Expressions with + and - operators
 - Quoted strings with escape sequences
-- Labels and label assignments (label = value)
-- PC setting (* = $2000 and * = $FFFC for vectors)
+- Labels and label assignments (without colon suffix)
+- Local labels with . prefix
+- PC setting (* = $2000 and * = $FFFC)
 - Low byte (<) and high byte (>) operators
-- Labels as absolute 2-byte operands
 - Comments (;)
 - BRK with inline error code and message
-- .include directive (out/inst.asm.out, environment.asm, common.asm,
-  file_stack.asm, to_decimal.asm)
-- .zeropage and .code section directives
-- Local labels (.label syntax) throughout the codebase
-- Command-line arg access: argc, argv
-- File I/O: open, close, read, openout, write
+- .include directive (environment.asm, common.asm, label_scope.asm,
+  file_stack.asm, errors.asm, fwdref.asm, to_decimal.asm, out/inst.asm.out)
+- .zeropage and .code directives
+- .ifdef enable_debug / .endif conditional compilation
 
-New syntax used in source (relative to version 14):
-- Local labels with . prefix (.loop, .done, .no_file, .skip, etc.) - first
-  version where the assembler's own source uses local labels
+New syntax used in source (relative to version 20):
+- .ifdef/.endif conditional assembly (first version where source uses
+  conditional compilation)
+- define:enable_debug command-line argument for debug builds
 
 Other source changes:
-- CURR_GLOBAL_HEAP_L/H replaces CURR_GLOBAL buffer ($1C00 no longer used)
-- IS_LOCAL_LABEL and CACHED_HASH variables added to zero page
-- LHASHTAB back at $1E00 (same as v14), TOKEN at $1D00
-- hash_table.asm significantly more complex: escape format storage/comparison,
-  three separate calculate_hash variants, find_in_hash split into
-  find_in_hash and find_in_hash_instruction with shared find_in_hash_common
+- label_scope.asm module included (new file)
+- SCOPE_STACK and MACRO_ARG_BUF memory regions defined
+- Multiple new zero page variables for macro support
+- FS_POP_MEMORY_HOOK and FS_ERR_NO_FILE configuration constants
+  for file_stack.asm
+- read_char aliased to file_stack_read_char via = assignment
+- Note: source does NOT use colon after labels (still space-terminated)
+- Note: source does NOT use << or >> operators
+- Note: source does NOT use macros in its own code

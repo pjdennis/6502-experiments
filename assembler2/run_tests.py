@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Optional
 
 
-ASM_VERSION = "23"
+ASM_VERSION = "17"
 
 
 class TestType(Enum):
@@ -106,13 +106,13 @@ class TestRunner:
     def _resolve_assembler_binary(base_dir: Path, asm_version: str) -> Path:
         """Determine the correct assembler binary for a given version."""
         version = int(asm_version)
-        if version <= 6:
+        if version <= 5:
             return base_dir / asm_version / "out" / "asm.out"
-        elif version <= 10:
+        elif version <= 8:
             return base_dir / asm_version / "out" / "asmc.out"
-        elif version <= 20:
+        elif version <= 14:
             return base_dir / asm_version / "out" / "asm.out"
-        else:  # v21+
+        else:  # v15+
             return base_dir / asm_version / "out" / "asm_debug.out"
 
     def _read_text_safe(self, filepath: Path) -> str:
@@ -348,8 +348,8 @@ class TestRunner:
             else:
                 # Emulator mode - version-aware command construction
                 version = int(self.asm_version)
-                if version <= 9:
-                    # v01-v09: --load 2000 --input FILE --output FILE
+                if version <= 7:
+                    # v01-v07: --load 2000 --input FILE --output FILE
                     cmd = [
                         str(self.emulator),
                         str(self.assembler),
@@ -357,8 +357,8 @@ class TestRunner:
                         "--input", str(asm_file),
                         "--output", str(bin_file),
                     ]
-                elif version <= 11:
-                    # v10-v11: --input FILE --output FILE (no --load)
+                elif version <= 8:
+                    # v08: --input FILE --output FILE (no --load)
                     cmd = [
                         str(self.emulator),
                         str(self.assembler),
@@ -366,7 +366,7 @@ class TestRunner:
                         "--output", str(bin_file),
                     ]
                 else:
-                    # v13+: positional args
+                    # v09+: positional args
                     cmd = [
                         str(self.emulator),
                         str(self.assembler),
@@ -376,7 +376,7 @@ class TestRunner:
                     # Add args (ARGS overrides the default "debug" argument)
                     if test.args:
                         cmd.extend(test.args.split())
-                    elif version >= 19:
+                    elif version >= 13:
                         cmd.append("debug")
 
             # Run assembler with cwd set to test file's directory for relative includes

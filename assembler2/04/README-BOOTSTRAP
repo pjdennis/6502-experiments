@@ -1,19 +1,24 @@
-Assembler Version 04
+Assembler Version 05
 ====================
-Assembled by: Version 03
+Assembled by: Version 04
 
 Features Supported by This Assembler
 -------------------------------------
-This version keeps the same instruction set as version 03 but does not add
-new assembler features compared to version 03. It serves as an intermediate
-version that uses version 03's new features (label assignments, byte
-selectors, origin setting) in its own source code, establishing patterns
-that version 05 will build upon.
+This is the first two-pass assembler in the bootstrap chain, enabling forward
+references. It also adds relative branch label resolution and significantly
+expands the instruction table. Two-pass assembly is a major architectural
+change: pass 1 collects all label definitions, pass 2 resolves references
+and emits code.
 
-Instruction mnemonics (same set as version 03):
-  ADC# ADCZ ASLA BCC BCS BEQ BITZ BMI BNE BPL BRK CLC CMPZ,X CMP# CMP,Y
-  DEY INCZ INX INY JMP JSR LDA# LDA(),Y LDA,Y LDAZ LDX# LDY# ORAZ RTS
-  SBC# SBCZ SEC STA STA(),Y STAZ STAZ,X TYA
+Instruction mnemonics (significantly expanded):
+  ADC# ADCZ AND# ASLA BCC BCS BEQ BITZ BMI BNE BPL BRK CLC CMP# CMP,Y
+  EORZ INCZ INX INY JMP JSR LDA# LDAZ(),Y LDA,X LDA,Y LDAZ LDAZ,X LDX#
+  LDY# LSRA ORAZ PHA PLA RTS SBC# SBCZ SEC STA STAZ(),Y STA,X STA,Y STAZ
+  STAZ,X TAY TYA
+
+  New instructions: AND#, EORZ, LDAZ(),Y (was LDA(),Y), LDA,X, LDAZ,X,
+    LSRA, PHA, PLA, STA,X, STA,Y, STAZ(),Y (was STA(),Y), TAY
+  Removed: CMPZ,X, DEY
 
 DATA directive:
   DATA $XX ...        - emit hex bytes
@@ -28,14 +33,22 @@ Operand types in instruction arguments:
   label               - 16-bit label reference (little-endian)
   <label              - low byte of label value (1 byte emitted)
   >label              - high byte of label value (1 byte emitted)
+  ~label              - relative branch offset (target - PC - 1)
 
 Label features:
   - Labels at column 0 bound to program counter
   - label = $XXXX     - constant assignment (hex value only)
   - * = $XXXX         - set program counter (origin directive)
   - Linear search through label table at $3000
-  - Forward references NOT supported (single-pass)
-  - Duplicate label detection
+  - Forward references SUPPORTED (two-pass assembly)
+  - Duplicate label detection (pass 1 only)
+
+Two-pass assembly:
+  - Pass 1 ($PASS=$00): Collects label definitions, tracks PC but does not
+    emit output. Label references emit dummy bytes to maintain correct PC.
+  - Pass 2 ($PASS=$FF): Resolves all label references and emits final output.
+  - The emit function checks PASS and only writes to output on pass 2.
+  - capturelabel only stores labels on pass 1; skips to end of line on pass 2.
 
 Error handling:
   - Error 01: Label not found
@@ -45,44 +58,48 @@ Error handling:
 
 Semicolon comments (to end of line).
 
-New in this version (relative to version 03):
-- No new assembler features. The assembler capabilities are identical to
-  version 03. The significance is that the source code now uses version 03's
-  features (label assignments, byte selectors, origin setting), making the
-  code more maintainable and preparing for version 05's additions.
+New in this version (relative to version 04):
+- Two-pass assembly enabling forward references
+- ~ prefix for relative branch target labels (emitlabelrel computes
+  target - PC - 1 on pass 2)
+- Pass-aware emit (only writes output on pass 2)
+- Pass-aware label capture (only on pass 1)
+- Pass-aware label resolution (returns dummy on pass 1)
+- Expanded instruction table: AND#, EORZ, LDAZ(),Y, LDA,X, LDAZ,X,
+  LSRA, PHA, PLA, STA,X, STA,Y, STAZ(),Y, TAY
+- Removed CMPZ,X and DEY from instruction table
+- Renamed LDA(),Y to LDAZ(),Y and STA(),Y to STAZ(),Y (Z prefix indicates
+  zero-page pointer)
+- findintab now initializes Y=0 internally (callers no longer need to
+  maintain Y=0)
 
 Features Used in This Assembler's Source Code
 ----------------------------------------------
-This is the first version whose source code takes full advantage of the
-assembler features added in version 03: label constant assignments for
-zero-page variables, < byte selectors for zero-page addressing, and > byte
-selectors for high-byte extraction.
+The source uses features from version 04 (which has the same capabilities
+as version 03). It uses label assignments, byte selectors, and the origin
+directive that version 03 introduced, plus the same instruction set that
+versions 03/04 support.
 
 Source features used:
-  - Non-standard instruction mnemonics (from version 03's table)
+  - Non-standard instruction mnemonics from version 04's table
+    (including BITZ, BMI, BPL, SBCZ which were added in version 03)
   - Labels at column 0 for code locations
-  - label = $XXXX constant assignments for all zero-page variables
-    (TEMP, NEXTCHAR, TABL, TABH, PCL, PCH, HEX1, HEX2, TOKEN)
-    and memory addresses (PC_START, LBTAB)
-  - Does NOT use * = $XXXX origin directive (a comment says ";  .org $2000"
-    but origin is set programmatically via PC_START label in start routine)
-  - <label byte selectors for zero-page operands (e.g., INCZ <PCL,
-    STAZ <TEMP, LDAZ <NEXTCHAR, LDA(),Y <TABL)
-  - >label byte selectors for high-byte extraction (e.g., LDA# >LBTAB,
-    LDA# >MNTAB, LDA# >PC_START)
-  - <label byte selectors for low-byte extraction (e.g., LDA# <LBTAB,
-    LDA# <MNTAB, LDA# <PC_START)
+  - label = $XXXX constant assignments for all variables
+    (TEMP, NEXTCHAR, TABL, TABH, PCL, PCH, HEX1, HEX2, PASS, TOKEN, LBTAB)
+  - * = $2000 origin directive
+  - <label byte selectors for zero-page operands
+  - >label byte selectors for high-byte extraction
   - Label references as 16-bit operands
   - DATA directive with hex bytes and string literals
-  - Character string operands in instructions (e.g., CMP# "\n", CMP# "\\")
+  - Character string operands in instructions (e.g., CMP# "\n")
   - Hex operands ($XX, $XXXX)
   - Semicolon comments
-  - Branch targets as hardcoded hex offsets
+  - Branch targets as hardcoded hex offsets (not yet using ~ for branches)
 
-New syntax used in source (relative to version 03):
-- label = $XXXX constant assignments for zero-page variables and addresses
-- < byte selectors for zero-page addressing (e.g., STAZ <TABL instead of STAZ $02)
-- > byte selectors for high-byte extraction from labels
+New syntax used in source (relative to version 04):
+- * = $2000 origin directive (version 04 had it commented out)
 
 Other source changes:
-- Named variables instead of raw hex addresses in all operands
+- BRK with inline data on single line (BRK $01 "Label not found" $00)
+  instead of separate BRK and DATA lines
+- PASS variable and BITZ/BMI/BPL used for two-pass control flow

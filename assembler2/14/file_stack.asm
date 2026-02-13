@@ -13,29 +13,29 @@
 
   .zeropage
 
-FS_PL   DATA $00 ; Pointer to the current location in the file stack
-FS_PH   DATA $00 ; "
-FS_TEMP DATA $00 ; Temporary location for use in calculations
+FS_PL   .data $00 ; Pointer to the current location in the file stack
+FS_PH   .data $00 ; "
+FS_TEMP .data $00 ; Temporary location for use in calculations
 
   .code
 
 
 file_stack_init
-  LDA# <FILE_STACK
-  STAZ FS_PL
-  LDA# >FILE_STACK
-  STAZ FS_PH
+  LDA #<FILE_STACK
+  STA FS_PL
+  LDA #>FILE_STACK
+  STA FS_PH
   RTS
 
 
 ; On exit Z is set if file stack empty, clear otherwise
 file_stack_empty
-  LDAZ FS_PL
-  CMP# <FILE_STACK
-  BNE fse_done
-  LDAZ FS_PH
-  CMP# >FILE_STACK
-fse_done
+  LDA FS_PL
+  CMP #<FILE_STACK
+  BNE .done
+  LDA FS_PH
+  CMP #>FILE_STACK
+.done
   RTS
 
 
@@ -46,54 +46,54 @@ fse_done
 ;          FS_CURR_FILE contains the current file handle
 ; On exit X is preserved
 push_file_stack
-  LDY# $FF
-pfs_len_loop
-; A <- len(FS_FILENAME) 
+  LDY #$FF
+.len_loop
+; A <- len(FS_FILENAME)
   INY
-  LDA,Y FS_FILENAME
-  BNE pfs_len_loop
+  LDA FS_FILENAME,Y
+  BNE .len_loop
 ; Decrease file stack pointer by len(FS_FILENAME) + 4
 ; (null terminator + handle + 2-byte line number)
   TYA
   CLC
-  ADC# $04
-  STAZ FS_TEMP
+  ADC #$04
+  STA FS_TEMP
   SEC
-  LDAZ FS_PL
-  SBCZ FS_TEMP
-  STAZ FS_PL
-  LDAZ FS_PH
-  SBC# $00
-  STAZ FS_PH
-  LDY# $FF
-pfs_copy_loop
+  LDA FS_PL
+  SBC FS_TEMP
+  STA FS_PL
+  LDA FS_PH
+  SBC #$00
+  STA FS_PH
+  LDY #$FF
+.copy_loop
   INY
-  LDA,Y FS_FILENAME
-  STAZ(),Y FS_PL
-  BNE pfs_copy_loop
+  LDA FS_FILENAME,Y
+  STA (FS_PL),Y
+  BNE .copy_loop
   ; Store file handle
   INY
   LDA FS_CURR_FILE
-  STAZ(),Y FS_PL
+  STA (FS_PL),Y
   INY
   ; Store line number
   LDA FS_CURR_LINEL
-  STAZ(),Y FS_PL
+  STA (FS_PL),Y
   INY
   LDA FS_CURR_LINEH
-  STAZ(),Y FS_PL
+  STA (FS_PL),Y
   INY
 ; Reset line number and open new file
-  LDA# $00
-  STAZ FS_CURR_LINEL
-  STAZ FS_CURR_LINEH
+  LDA #$00
+  STA FS_CURR_LINEL
+  STA FS_CURR_LINEH
 
   TXA
   PHA
-  LDA# <FS_FILENAME
-  LDX# >FS_FILENAME
+  LDA #<FS_FILENAME
+  LDX #>FS_FILENAME
   JSR open
-  STAZ FS_CURR_FILE
+  STA FS_CURR_FILE
   PLA
   TAX
 
@@ -104,31 +104,31 @@ pfs_copy_loop
 ;         FS_CURR_LINEL;FS_CURR_LINEH contains the previous line number
 pop_file_stack
 ; Close currnet file and restore from filestack
-  LDAZ FS_CURR_FILE
+  LDA FS_CURR_FILE
   JSR close
 ; Pop the filename
-  LDY# $FF
-rc_pop_loop
+  LDY #$FF
+.pop_loop
   INY
-  LDAZ(),Y FS_PL
-  BNE rc_pop_loop
+  LDA (FS_PL),Y
+  BNE .pop_loop
 ; Pop the file handle
   INY
-  LDAZ(),Y FS_PL
-  STAZ FS_CURR_FILE
+  LDA (FS_PL),Y
+  STA FS_CURR_FILE
 ; Pop the line number
   INY
-  LDAZ(),Y FS_PL
-  STAZ FS_CURR_LINEL
+  LDA (FS_PL),Y
+  STA FS_CURR_LINEL
   INY
-  LDAZ(),Y FS_PL
-  STAZ FS_CURR_LINEH
+  LDA (FS_PL),Y
+  STA FS_CURR_LINEH
 ; Adjust stack pointer
   TYA
   SEC  ; +1
-  ADCZ FS_PL
-  STAZ FS_PL
-  LDA# $00
-  ADCZ FS_PH
-  STAZ FS_PH
+  ADC FS_PL
+  STA FS_PL
+  LDA #$00
+  ADC FS_PH
+  STA FS_PH
   RTS

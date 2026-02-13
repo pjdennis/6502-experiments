@@ -5,10 +5,10 @@ HT_VH  = HEX1
 
 
 init_heap
-  LDA #<HEAP
-  STA MEMPL
-  LDA #>HEAP
-  STA MEMPH
+  LDA# <HEAP
+  STAZ MEMPL
+  LDA# >HEAP
+  STAZ MEMPH
   RTS
 
 
@@ -19,13 +19,13 @@ init_heap
 ;         A is not preserved
 advance_heap
   TYA
-  LDY #$00
+  LDY# $00
   CLC
-  ADC MEMPL
-  STA MEMPL
+  ADCZ MEMPL
+  STAZ MEMPL
   TYA
-  ADC MEMPH
-  STA MEMPH
+  ADCZ MEMPH
+  STAZ MEMPH
   RTS
 
 
@@ -37,21 +37,21 @@ advance_heap
 ;         X is preserved
 ;         A is not preserved
 store_hash_value
-  LDY #$00
-  LDA HT_VL
-  STA (MEMPL),Y
+  LDY# $00
+  LDAZ HT_VL
+  STAZ(),Y MEMPL
   INY
-  LDA HT_VH
-  STA (MEMPL),Y
+  LDAZ HT_VH
+  STAZ(),Y MEMPL
   INY
   JMP advance_heap     ; Tail call
 
 
 select_instruction_hash_table
-  LDA #$00
-  STA IS_LOCAL_LABEL       ; Clear local label flag for instruction lookup
-  LDA #<IHASHTAB
-  STA HTPL
-  LDA #>IHASHTAB
-  STA HTPH
+  LDA# $00
+  STAZ IS_LOCAL_LABEL       ; Clear local label flag for instruction lookup
+  LDA# <IHASHTAB
+  STAZ HTPL
+  LDA# >IHASHTAB
+  STAZ HTPH
   RTS

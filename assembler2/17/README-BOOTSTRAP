@@ -1,127 +1,158 @@
-Assembler Version 17
+Assembler Version 23
 ====================
-Assembled by: version 16 (both instgen and asm)
+Assembled by: version 22 debug build (asm_debug.out with define:enable_debug)
+
+Build notes: The v22 debug build is used because v23 source uses
+.ifdef enable_debug conditional compilation. Version 23 is self-hosting:
+it can assemble its own source code, verified by diff of asm.out vs
+asm_2.out (and asm_debug.out vs asm_debug_2.out).
 
 Features Supported by This Assembler
 -------------------------------------
-Same features as version 16. No new assembler capabilities. The significance
-of this version is that the source code itself is rewritten in standard 6502
-syntax, taking advantage of version 16's standard syntax support.
+All features from version 22, plus .ifndef, .else, directive hash table
+dispatch, enhanced conditional assembly, and major source refactoring:
 
-Syntax (standard 6502 - same as version 16):
-- Standard 6502 mnemonic syntax: LDA #$42, STA $00, LDA ($10),Y, etc.
-- Automatic addressing mode detection from operand syntax
-- Automatic zero page detection: operand < $100 uses zero page mode
-- All 13 standard 6502 addressing modes
-- Character literals: #'A', #'\n', #'\\', #'\''
-- DATA pseudo-instruction
+Syntax:
+- Standard 6502 mnemonic syntax (LDA, STA, etc.)
+- All addressing modes (immediate, zero page, absolute, indexed, indirect)
 - Hex constants: $xx (1 byte) or $xxxx (2 bytes)
-- Quoted strings with \n and \\ escapes
+- Decimal constants
+- Character literals: 'x', '\n', '\\', '\''
+- Expression evaluation with +, -, <<, >> operators (left-to-right)
+- Quoted strings with full escape sequence support
 - Label definitions with PC value or explicit assignment
-- PC setting via: * = $xxxx
-- Low byte (<) and high byte (>) operators on labels
+- Optional colon after label definitions (label:)
+- Local labels with . prefix
+- PC setting via: * = $xxxx (with zero-fill on pass 2)
+- Low byte (<) and high byte (>) operators
 - Comments with semicolons
-- Two-pass assembly
-- .include directive
-- .zeropage and .code section directives
-- Command-line arguments: <assembler> <input> <output> [debug]
-- Local labels with . prefix, scoped to enclosing global label
+- Two-pass assembly with forward reference tracking
+- Automatic zero page vs absolute addressing
 
 Directives:
-- .include filename
-- .zeropage - switches to zero page section
-- .code - switches back to code section
+- .include filename - includes contents of another file
+- .zeropage - switch to zero page section
+- .code - switch to code section
+- .byte expr [, expr ...] - emit byte values (comma-separated)
+- .word expr [, expr ...] - emit 16-bit word values (comma-separated)
+- .asciiz expr [, "string" ...] - emit null-terminated strings/values
+- .reserve N - reserve N bytes (zero-fill in .code, PC advance in .zeropage)
+- .byte / .word (without operand in .zeropage) - allocate zero page storage
+- .ifdef label - begin conditional block if label is defined
+- .ifndef label - begin conditional block if label is NOT defined
+- .else - alternative branch in conditional block
+- .endif - end conditional block
+- .macro NAME [param1, param2, ...] - begin macro definition
+- .endmacro - end macro definition
 
-Full 6502 instruction set: same as version 16 (56 opcodes plus DATA pseudo)
+Conditional assembly:
+- .ifdef/.ifndef/.else/.endif with up to 16 levels of nesting
+- IFDEF_DECISIONS buffer for deterministic pass 2 replay
+- ELSE_SEEN_ARRAY tracks duplicate .else per nesting level
+- COND_INVERT mechanism shares logic between .ifdef and .ifndef
 
-Error handling: same as version 16 (errors 1-12)
+Macro system:
+- Macro definitions stored on heap with body text and parameter names
+- Invocation by macro name (parsed like instructions)
+- Text substitution of parameters during expansion
+- Local labels (.label) scoped per invocation via EXPANSION_ID
+- Recursion detection by walking scope stack
 
-New in this version (relative to version 16):
-- No new assembler features. The assembler produces binary-identical output
-  to version 16 for any given input.
-- This version exists solely as a source code migration: the assembler's own
-  source is rewritten from non-standard to standard 6502 syntax.
+Command line:
+- Variable argument count
+- define:label - pre-define a label
+- debug - enable debug output (debug build only)
+- small_heap - use reduced heap for testing (debug build only)
+- show_captured_macros - display macro definitions (debug build only)
+
+Memory protection:
+- Heap/stack collision detection with 256-byte safety buffer
+
+Error handling: same categories as version 22, plus:
+- err_else_without_ifdef (22): .else outside conditional block
+- err_duplicate_else (23): Multiple .else in same block
+- err_conditional_nesting_too_deep (24): Exceeds 16 nesting levels
+- err_comma_expected (40): Missing comma in data directive
+- err_asciiz_in_zeropage (41): .asciiz not allowed in .zeropage section
+- Error codes use decimal numbers instead of hex in .asciiz format
+
+New in this version (relative to version 22):
+- .ifndef directive (inverse of .ifdef)
+  - COND_INVERT variable: $00 for ifdef (skip if not found),
+    $FF for ifndef (assemble if not found)
+  - process_conditional_common shared between dir_ifdef and dir_ifndef
+- .else directive for conditional blocks
+  - dir_else toggles skip state at current nesting depth
+  - ELSE_SEEN_ARRAY at $0680 tracks whether .else has been used
+    at each nesting depth (prevents duplicate .else)
+- Conditional nesting limit of 16 levels (err_conditional_nesting_too_deep)
+- Directive dispatch via instruction hash table (MODE_DIRECTIVE)
+  - Directives looked up using same hash table as instructions
+  - JUMP_TARGET16 and do_jump for indirect directive dispatch
+  - process_conditional_directive checks for all 4 conditional directives
+- .data directive removed (replaced by .byte/.word/.asciiz)
+- Error messages use .asciiz with comma-separated decimal error code
+  and string (e.g., .asciiz 1, "Label not found")
+- Major source refactoring into many modules:
+  - directives.asm: directive dispatch, data directives, conditional assembly
+  - expressions.asm: expression evaluation
+  - instructions.asm: instruction encoding and emission
+  - labels.asm: label capture and lookup
+  - output.asm: code emission and PC management
+  - tokenizer.asm: token reading, filename reading, escape decoding
+  - macro_capture.asm: macro definition capture
+  - macro_expansion.asm: macro invocation and expansion
+  - forward_ref.asm: forward reference tracking (renamed from fwdref.asm)
+  - init.asm: initialization, argument parsing, input/output setup
+  - instruction_tables.asm: instruction and addressing mode tables
+- asm.asm reduced to ~338 lines (memory layout, includes, assembly loop,
+  entry point, reset/interrupt vectors)
+- Multiple directives on same line supported (directive chaining via '.')
+- Source uses .byte/.word/.asciiz instead of .data
 
 Features Used in This Assembler's Source Code
 ----------------------------------------------
-- Standard 6502 mnemonic syntax (this is the milestone change):
-  - LDA #$xx (immediate) instead of LDA# $xx
-  - LDA $xx / STA $xx (auto zero page) instead of LDAZ / STAZ
-  - LDA ($xx),Y (indirect indexed) instead of LDAZ(),Y $xx
-  - LDA $xxxx,X (absolute indexed) instead of LDA,X $xxxx
-  - BIT $xx instead of BITZ $xx
-  - INC $xx instead of INCZ $xx
-  - ORA $xx instead of ORAZ $xx
-  - EOR $xx instead of EORZ $xx
-  - ASL A (accumulator) instead of ASLA
-  - CMP #$xx instead of CMP# $xx
-- Character literals: #'x', #'\n', #'\\', #'\''
-- DATA pseudo-instruction
-- DATA $00 for zero page variable allocation in .zeropage section
+- Standard 6502 mnemonic syntax
+- All addressing modes including indirect indexed
+- .byte directive for zero page allocation (operand-less form)
+- .word directive for zero page allocation (operand-less form)
+- .byte with values (e.g., .byte 0 for BRK success code)
+- .word with label values (e.g., .word start for reset vector)
+- .asciiz for null-terminated strings (e.g., .asciiz "Heap used: ")
+- .asciiz with comma-separated values (e.g., .asciiz 1, "Label not found")
 - Hex constants ($xx and $xxxx)
+- Decimal constants (e.g., .asciiz 1, .asciiz 240)
+- Character literals and character literal expressions
+- Expressions with +, -, <<, >> operators
 - Quoted strings with escape sequences
-- Labels and label assignments (label = value)
-- PC setting (* = $2000 and * = $FFFC for vectors)
+- Labels with colon suffix (label:)
+- Label assignments (e.g., OPERAND16 = HEX16)
+- Local labels with . prefix
+- PC setting (* = $2000 and * = $FFFC)
 - Low byte (<) and high byte (>) operators
-- Labels as absolute 2-byte operands
 - Comments (;)
-- BRK on its own line, followed by DATA $xx "message" $00 on the next line
-  (instead of BRK $xx "message" $00 on one line)
-- .include directive (out/inst.asm.out, environment.asm, common.asm,
-  file_stack.asm, to_decimal.asm)
-- .zeropage and .code section directives
-- Local labels (.label syntax)
-- Command-line arg access: argc, argv
-- File I/O: open, close, read, openout, write
+- BRK with inline data via .asciiz
+- .include directive (17 source modules)
+- .zeropage and .code directives
+- .ifdef enable_debug / .endif conditional compilation
+- Macro definitions (.macro / .endmacro) in macros.asm
+- Macro invocations (INC16, DEC16, SET16, CP16, CMP16, CMPI16, TST16,
+  ADC16, ADCI16, ADCA16, SBC16, SBCI16, ASL16, LSR16, ROL16, ROR16,
+  STA_LH16, PUSH16, POP16, LDAX16, STAX16, CHECK_FOR_OUT_OF_MEMORY,
+  SHOW_MESSAGEI, SHOW_MESSAGE, SHOW_CHAR)
 
-New syntax used in source (relative to version 16):
-- Standard 6502 mnemonic syntax replaces non-standard syntax throughout.
-  This is a major milestone: from this version forward, all source code
-  uses standard assembly syntax. Specific syntax transitions:
-  - LDA# -> LDA #      (immediate mode)
-  - LDAZ -> LDA        (zero page, auto-detected)
-  - STAZ -> STA        (zero page, auto-detected)
-  - LDAZ(),Y -> LDA (), Y  (indirect indexed)
-  - STAZ(),Y -> STA (), Y  (indirect indexed)
-  - LDAZ,X -> LDA ,X   (zero page indexed, auto-detected)
-  - STAZ,X -> STA ,X   (zero page indexed, auto-detected)
-  - LDA,X -> LDA ,X    (absolute indexed)
-  - LDA,Y -> LDA ,Y    (absolute indexed)
-  - STA,X -> STA ,X    (absolute indexed)
-  - STA,Y -> STA ,Y    (absolute indexed)
-  - CMP,Y -> CMP ,Y    (absolute indexed)
-  - CMP,X -> CMP ,X    (absolute indexed)
-  - CMP# -> CMP #      (immediate)
-  - LDX# -> LDX #      (immediate)
-  - LDY# -> LDY #      (immediate)
-  - CPY# -> CPY #      (immediate)
-  - ADC# -> ADC #      (immediate)
-  - SBC# -> SBC #      (immediate)
-  - AND# -> AND #      (immediate)
-  - BITZ -> BIT        (zero page, auto-detected)
-  - INCZ -> INC        (zero page, auto-detected)
-  - DECZ -> DEC        (zero page, auto-detected)
-  - ASLZ -> ASL        (zero page, auto-detected)
-  - ROLZ -> ROL        (zero page, auto-detected)
-  - ORAZ -> ORA        (zero page, auto-detected)
-  - EORZ -> EOR        (zero page, auto-detected)
-  - CMPZ -> CMP        (zero page, auto-detected)
-  - SBCZ -> SBC        (zero page, auto-detected)
-  - ADCZ -> ADC        (zero page, auto-detected)
-  - ASLA -> ASL A      (accumulator)
-  - LSRA -> LSR A      (accumulator)
-  - CPXZ -> CPX        (zero page, auto-detected)
-  - CPYZ -> CPY        (zero page, auto-detected)
-  - LDXZ -> LDX        (zero page, auto-detected)
-  - LDYZ -> LDY        (zero page, auto-detected)
-  - STXZ -> STX        (zero page, auto-detected)
-  - STYZ -> STY        (zero page, auto-detected)
-- #'x' character literal syntax replaces #"x" format
-- BRK as implied instruction (on its own line) with DATA on next line,
-  replacing BRK with inline data
+New syntax used in source (relative to version 22):
+- .byte directive (replaces .data $00 for zero page allocation and byte data)
+- .word directive (replaces .data $0000 for zero page allocation and word data)
+- .asciiz directive for null-terminated strings
+- .asciiz with comma-separated values (e.g., .asciiz 1, "message")
+- Decimal constants (e.g., in .asciiz error data)
 
 Other source changes:
-- All included modules (common.asm, hash_table.asm, file_stack.asm,
-  to_decimal.asm) also rewritten in standard syntax
-- instgen.asm rewritten in standard syntax but generates the same
-  instruction table format as version 16
+- Source split into 17 include files (was ~2600 lines in one file for v22,
+  now main asm.asm is ~338 lines)
+- New macros added: ROL16, ROR16, TST16, LDAX16, STAX16
+- ELSE_SEEN_ARRAY at $0680 for conditional assembly tracking
+- LABEL_TYPE variable and constants (LABEL_TYPE_GLOBAL, LABEL_TYPE_LOCAL,
+  LABEL_TYPE_MACRO, LABEL_TYPE_MACRO_LOCAL)
+- Note: source does NOT use .ifndef or .else in its own code

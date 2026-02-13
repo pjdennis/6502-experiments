@@ -15,19 +15,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 make
 ```
 
-The build succeeds when `23/out/asm.out == 23/out/asm_2.out` (self-assembly verification).
+The build succeeds when `17/out/asm.out == 17/out/asm_2.out` (self-assembly verification).
 
 ## Architecture
 
-This is a self-hosting 6502 assembler built through progressive bootstrapping. The current assembler (`23/asm.asm`) can assemble its own source code.
+This is a self-hosting 6502 assembler built through progressive bootstrapping. The current assembler (`17/asm.asm`) can assemble its own source code.
 
 ### Bootstrap Chain
 
-A C bootstrap assembler assembles the initial versions, which then assemble progressively more capable versions (asm00 → asm01 → ... → asm23). Each version adds features needed by the next. Each version lives in its own subdirectory (`00/` through `23/`) with all its source files.
+A C bootstrap assembler assembles the initial versions, which then assemble progressively more capable versions (asm00 → asm01 → ... → asm17). Each version adds features needed by the next. Each version lives in its own subdirectory (`00/` through `17/`) with all its source files.
 
 ### Build Output Structure
 
-Each version builds into its own `NN/out/` directory (e.g., `22/out/asm.out`). The root `out/` directory is used only for test outputs. The emulator auto-creates its `dump/` directory, so no symlinks or pre-creation are needed. `make clean` removes all per-version `out/` and `dump/` directories.
+Each version builds into its own `NN/out/` directory (e.g., `16/out/asm.out`). The root `out/` directory is used only for test outputs. The emulator auto-creates its `dump/` directory, so no symlinks or pre-creation are needed. `make clean` removes all per-version `out/` and `dump/` directories.
 
 ### Key Components
 
@@ -39,7 +39,7 @@ Each version builds into its own `NN/out/` directory (e.g., `22/out/asm.out`). T
 
 - **Two-pass assembly**: Pass 1 collects labels, Pass 2 resolves references and emits code.
 
-### Memory Layout (asm23)
+### Memory Layout (asm17)
 
 - `$0000-$00FF`: Zero page variables (see `.zeropage` section)
 - `$1D00`: TOKEN buffer (current token being read)
@@ -52,8 +52,8 @@ The heap (`MEMP16`) grows upward storing hash entries, macro definitions, and fo
 ### Shared Code Pattern
 
 Common code is factored into include files within each version directory:
-- `23/common.asm`: Shared between `23/asm.asm` and `23/instgen.asm`
-- `23/hash_table.asm`: Hash table implementation (included by common)
+- `17/common.asm`: Shared between `17/asm.asm` and `17/instgen.asm`
+- `17/hash_table.asm`: Hash table implementation (included by common)
 
 The hash table requires caller to define `HT_KEY` and `HT_V16` before including.
 
@@ -70,17 +70,17 @@ The C emulator (`emulator.c`) provides memory-mapped I/O. Key addresses:
 
 ## Syntax Notes
 
-The current assembler (asm23) uses standard 6502 syntax:
+The current assembler (asm17) uses standard 6502 syntax:
 - `LDA #$42` for immediate mode
 - `LDA $00` for zero page (automatic detection based on value)
 - `LDA ($00),Y` for indirect indexed
 - `LDA $1234,X` for indexed absolute
 
-Early bootstrap levels (asm00-06) used non-standard syntax (`LDA#`, `LDAZ`, etc.) but asm07+ uses standard syntax.
+Early bootstrap levels (asm00-05) used non-standard syntax (`LDA#`, `LDAZ`, etc.) but asm06+ uses standard syntax.
 
-### Expression Evaluation (asm19+)
+### Expression Evaluation (asm13+)
 
-Starting with asm19, the assembler supports expression evaluation with `+`, `-`, `<<`, and `>>` operators:
+Starting with asm13, the assembler supports expression evaluation with `+`, `-`, `<<`, and `>>` operators:
 
 **Syntax:**
 - `LDA #$10+$20` - Arithmetic in immediate mode
@@ -111,14 +111,14 @@ Starting with asm19, the assembler supports expression evaluation with `+`, `-`,
 - If any term in an expression is a forward reference, the entire expression is treated as a forward reference
 - The assembler resolves the complete expression in pass 2
 
-### Conditional Assembly (asm20+, enhanced in asm23)
+### Conditional Assembly (asm14+, enhanced in asm17)
 
 The assembler supports conditional assembly with `.ifdef`, `.ifndef`, `.else`, and `.endif` directives:
 
 **Directives:**
-- `.ifdef label` - Begin conditional block if label is defined (asm20+)
-- `.ifndef label` - Begin conditional block if label is NOT defined (asm23+)
-- `.else` - Alternative branch in conditional block (asm23+)
+- `.ifdef label` - Begin conditional block if label is defined (asm14+)
+- `.ifndef label` - Begin conditional block if label is NOT defined (asm17+)
+- `.else` - Alternative branch in conditional block (asm17+)
 - `.endif` - End conditional block
 
 **Basic Usage:**
@@ -189,9 +189,9 @@ DEBUG = $01          ; Define a label
 - Error 24: `Conditional nesting exceeds 16 levels` - Too deeply nested
 - Error 4: `Label expected` - `.ifdef`/`.ifndef` without a label name
 
-### Macros (asm22+)
+### Macros (asm16+)
 
-Starting with asm22, the assembler supports macros with parameters:
+Starting with asm16, the assembler supports macros with parameters:
 
 **Defining Macros:**
 ```asm
@@ -232,4 +232,4 @@ Lessons learned from syntax migrations (e.g., DATA → .data):
 
 4. **Self-hosting is powerful verification** - The assembler assembling itself catches subtle issues that unit tests might miss. Always run the full build chain after changes.
 
-5. **Test suite retention is valuable** - Keep the old test suite (e.g., asm21_tests.txt) as reference even when removing obsolete tests from the new one (asm22_tests.txt).
+5. **Test suite retention is valuable** - Keep the old test suite as reference even when removing obsolete tests from the new one.

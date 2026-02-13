@@ -13,3 +13,10 @@ argv      = $F01E ; Returns argument A in A;X; Y preserved
 openout   = $F021 ; Opens file with name at A;X for writing. Returns handle
                   ; in A; Y preserved
 write     = $F024 ; writs char in A to file with handle in X; Y preserved
+
+; Console I/O ports
+con_read  = $F027 ; Read one byte from console (blocking); returns in A
+con_flush = $F02A ; Flush stdout
+con_ready = $F02D ; Non-blocking poll: A=$FF if byte ready, A=$00 if not
+term_rows = $F030 ; Returns terminal height in A
+term_cols = $F033 ; Returns terminal width in A

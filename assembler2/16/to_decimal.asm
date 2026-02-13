@@ -1,69 +1,67 @@
   .zeropage
 
-TO_DECIMAL_VALUE_L          DATA $00 ; 1 byte
-TO_DECIMAL_VALUE_H          DATA $00 ; 1 byte
-TO_DECIMAL_MOD10
-TO_DECIMAL_RESULT_MINUS_ONE DATA $00 ; 1 byte
-TO_DECIMAL_RESULT           DATA $00 $00 $00 $00 $00 $00 ; 6 bytes
+TO_DECIMAL_VALUE16:          .data $0000 ; 2 bytes
+TO_DECIMAL_MOD10:            .data $00   ; 1 byte
+TO_DECIMAL_RESULT:           .data $00 $00 $00 $00 $00 $00 ; 6 bytes
 
   .code
 
 
-; On entry TO_DECIMAL_VALUE_L;TO_DECIMAL_VALUE_H contains the value to convert
+; On entry TO_DECIMAL_VALUE16 contains the value to convert
 ; On exit TO_DECIMAL_RESULT contains the result
 ;         X, Y are preserved
 ;         A is not preserved
-to_decimal
+to_decimal:
   TXA
   PHA
   ; Initialize result to empty string
-  LDA# $00
-  STAZ TO_DECIMAL_RESULT
+  LDA #$00
+  STA TO_DECIMAL_RESULT
 
-.divide
+.divide:
   ; Initialize the remainder to be zero
-  LDA# $00
-  STAZ TO_DECIMAL_MOD10
+  LDA #$00
+  STA TO_DECIMAL_MOD10
   CLC
 
-  LDX# $10
-.divloop
+  LDX #$10
+.divloop:
   ; Rotate quotient and remainder
-  ROLZ TO_DECIMAL_VALUE_L
-  ROLZ TO_DECIMAL_VALUE_H
-  ROLZ TO_DECIMAL_MOD10
+  ROL TO_DECIMAL_VALUE16
+  ROL TO_DECIMAL_VALUE16+$01
+  ROL TO_DECIMAL_MOD10
 
   ; a = dividend - divisor
   SEC
-  LDAZ TO_DECIMAL_MOD10
-  SBC# $0A ; 10
+  LDA TO_DECIMAL_MOD10
+  SBC #$0A ; 10
   BCC .ignore_result ; Branch if dividend < divisor
-  STAZ TO_DECIMAL_MOD10
+  STA TO_DECIMAL_MOD10
 
-.ignore_result
+.ignore_result:
   DEX
   BNE .divloop
-  ROLZ TO_DECIMAL_VALUE_L
-  ROLZ TO_DECIMAL_VALUE_H
+  ROL TO_DECIMAL_VALUE16
+  ROL TO_DECIMAL_VALUE16+$01
 
   ; Shift result
-.shift
-  LDX# $05
-.shift_loop
-  LDAZ,X TO_DECIMAL_RESULT_MINUS_ONE
-  STAZ,X TO_DECIMAL_RESULT
+.shift:
+  LDX #$05
+.shift_loop:
+  LDA TO_DECIMAL_RESULT-$01,X
+  STA TO_DECIMAL_RESULT,X
   DEX
   BNE .shift_loop
 
   ; Save value into result
-  LDAZ TO_DECIMAL_MOD10
+  LDA TO_DECIMAL_MOD10
   CLC
-  ADC# "0"
-  STAZ TO_DECIMAL_RESULT
+  ADC #'0'
+  STA TO_DECIMAL_RESULT
 
   ; If value != 0 then continue dividing
-  LDAZ TO_DECIMAL_VALUE_L
-  ORAZ TO_DECIMAL_VALUE_H
+  LDA TO_DECIMAL_VALUE16
+  ORA TO_DECIMAL_VALUE16+$01
   BNE .divide
 
   PLA

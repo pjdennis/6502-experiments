@@ -2,7 +2,7 @@
 
 
 ; Provided by environment:
-;   read_b:  Returns next character in A
+;   read_char:  Returns next character in A
 ;            C set when at end
 ;            Automatically restarts input after reaching end
 ;
@@ -11,10 +11,13 @@ read_b    = $F006
 write_b   = $F009
 write_d   = $F00C
 exit      = $F00F
+open      = $F012
+close     = $F015
+read      = $F018
 
-LHASHTABL = $4000      ; Label hash table (low and high)
-LHASHTABH = $4080      ; "
-HEAP      = $4100      ; Data heap
+LHASHTABL  = $1F00      ; Label hash table (low and high)
+LHASHTABH  = $1F80      ; "
+FILE_STACK = $F000      ; File stack will grow down from 1 below here
 
 TEMP      = $00        ; 1 byte
 TABPL     = $01        ; 2 byte table pointer
@@ -44,7 +47,11 @@ TO_DECIMAL_MOD10            = $17 ; 1 byte
 TO_DECIMAL_RESULT_MINUS_ONE = $17
 TO_DECIMAL_RESULT           = $18 ; 6 bytes
 
-TOKEN     = $1E        ; multiple bytes
+CURR_FILE    = $1E
+FILE_STACK_L = $1F
+FILE_STACK_H = $20
+TOKEN        = $21        ; multiple bytes
+
 
 INST_PSUEDO   = $01
 INST_RELATIVE = $02
@@ -82,8 +89,137 @@ err_closing_quote_not_found
 err_cannot_move_pc_backwards
   BRK $0A "Cannot move PC backwards" $00
 
-err_debug
-  BRK $0B "Debug!" $00
+err_unknown_directive
+  BRK $0B "Unknown directive" $00
+
+err_filename_expected
+  BRK $0C "Filename expected" $00
+
+err_no_file
+  BRK $0D "No file open" $00
+
+
+read_char
+  LDAZ CURR_FILE
+  BEQ rc_no_file
+  JSR read
+  BCS rc_at_end
+  RTS
+rc_at_end
+  JSR file_stack_empty
+  BEQ rc_done
+  JSR pop_file_stack
+  JMP read_char          ; Recursive tail call
+rc_done
+  RTS
+rc_no_file
+  JMP err_no_file
+
+
+init_file_stack
+  LDA# <FILE_STACK
+  STAZ FILE_STACK_L
+  LDA# >FILE_STACK
+  STAZ FILE_STACK_H
+  RTS
+
+
+; On exit Z is set if file stack empty, clear otherwise
+file_stack_empty
+  LDAZ FILE_STACK_L
+  CMP# <FILE_STACK
+  BNE fse_done
+  LDAZ FILE_STACK_H
+  CMP# >FILE_STACK
+fse_done
+  RTS
+
+
+; On entry TOKEN contains the file name
+;          CURLINEL;CURLINEH contains the current line number
+;          CURR_FILE contains the current file handle
+push_file_stack
+  LDY# $FF
+pfs_len_loop
+  INY
+  LDA,Y TOKEN
+  BNE pfs_len_loop
+  TYA
+  STAZ TEMP
+  CLC    ; -1
+  LDAZ FILE_STACK_L
+  SBCZ TEMP
+  STAZ FILE_STACK_L
+  LDAZ FILE_STACK_H
+  SBC# $00
+  STAZ FILE_STACK_H
+  LDY# $FF
+pfs_copy_loop            ; Copy up to 127 characters
+  INY
+  LDA,Y TOKEN
+  STAZ(),Y FILE_STACK_L
+  BNE pfs_copy_loop
+  ; Adjust pointer for line number and file handle
+  SEC
+  LDAZ FILE_STACK_L
+  SBC# $03
+  STAZ FILE_STACK_L
+  LDAZ FILE_STACK_H
+  SBC# $00
+  STAZ FILE_STACK_H
+  ; Store file handle
+  LDY# $00
+  LDA CURR_FILE
+  STAZ(),Y FILE_STACK_L
+  INY
+  ; Store line number
+  LDA CURLINEL
+  STAZ(),Y FILE_STACK_L
+  INY
+  LDA CURLINEH
+  STAZ(),Y FILE_STACK_L
+  INY
+; Reset line number and open new file
+  LDA# $00
+  STAZ CURLINEL
+  STAZ CURLINEH
+  LDA# <TOKEN
+  LDX# >TOKEN
+  JSR open
+  STAZ CURR_FILE
+
+  RTS
+
+
+; On exit CURR_FILE contains the previous file handle
+;         CURLINEL;CURLINEH contains the previous line number
+pop_file_stack
+; Close currnet file and restore from filestack
+  LDAZ CURR_FILE
+  JSR close
+  LDY# $00
+  LDAZ(),Y FILE_STACK_L
+  STAZ CURR_FILE
+  INY
+  LDAZ(),Y FILE_STACK_L
+  STAZ CURLINEL
+  INY
+  LDAZ(),Y FILE_STACK_L
+  STAZ CURLINEH
+rc_pop_loop
+  INY
+  LDAZ(),Y FILE_STACK_L
+  BNE rc_pop_loop
+; Adjust stack pointer
+  TYA
+  SEC  ; +1
+  ADCZ FILE_STACK_L
+  STAZ FILE_STACK_L
+  LDA# $00
+  ADCZ FILE_STACK_H
+  STAZ FILE_STACK_H
+  RTS
+
 
 init_heap
   LDA# <HEAP
@@ -141,6 +277,7 @@ iht_loop
   STAZ(),Y HTLPL
   STAZ(),Y HTHPL
   INY
+  CPY# $80
   BNE iht_loop
   RTS
 
@@ -226,6 +363,24 @@ store_table_entry
   RTS
 
 
+; On entry TOKEN contains the token to compare with
+;          TABPL;TABPH points to the value to compare with
+; On exit Z set if equal, unset otherwise
+;         Y points to terminating 0 if equal
+compare_token
+  LDY# $FF
+ct_loop
+  INY
+  LDAZ(),Y TABPL
+  CMP,Y TOKEN
+  BNE ct_done
+  CMP# $00
+  BNE ct_loop
+  ; Match
+ct_done
+  RTS
+
+
 ; On entry TABPL;TABPH point to head of list of entries
 ;          TOKEN contains the token to find
 ; On exit C clear if found; set if not found
@@ -247,14 +402,8 @@ ft_token_loop
   ADCZ TABPH
   STAZ TABPH
   ; Check for matching token
-  LDY# $FF
-fg_char_loop
-  INY
-  LDAZ(),Y TABPL
-  CMP,Y TOKEN
+  JSR compare_token
   BNE ft_token_is_non_match
-  CMP# $00
-  BNE fg_char_loop
   ; Match
   INY                  ; point tab,Y to value
   CLC
@@ -397,7 +546,7 @@ skip_rest_of_line
 srol_loop
   CMP# "\n"
   BEQ srol_done
-  JSR read_b
+  JSR read_char
   JMP srol_loop
 srol_done
   RTS
@@ -411,7 +560,7 @@ skip_spaces
 ss_loop
   CMP# " "
   BNE ss_done
-  JSR read_b
+  JSR read_char
   JMP ss_loop
 ss_done
   RTS
@@ -459,11 +608,13 @@ cfeol_done
 read_token
   LDX# $00
 rt_loop
+  JSR compare_end_of_token
+  BEQ rt_done
   STAZ,X TOKEN
   INX
-  JSR read_b
-  JSR compare_end_of_token
-  BNE rt_loop
+  JSR read_char
+  JMP rt_loop
+rt_done
   TAY                  ; Save next char
   LDA# $00
   STAZ,X TOKEN
@@ -533,7 +684,7 @@ read_hex_byte
   ASLA
   ASLA
   STAZ TEMP
-  JSR read_b
+  JSR read_char
   JSR convert_hex_character
   ORAZ TEMP
   RTS
@@ -548,7 +699,7 @@ read_hex_byte
 read_hex_byte_or_word
   JSR read_hex_byte    ; Read 2nd hex character and convert
   STAZ HEX1
-  JSR read_b           ; Read 3rd hex char or terminator
+  JSR read_char        ; Read 3rd hex char or terminator
   JSR compare_end_of_token
   BNE rhbow_second
   CLC                  ; No second byte so return C = 0
@@ -556,7 +707,7 @@ read_hex_byte_or_word
 rhbow_second
   JSR read_hex_byte    ; Read 4th hex char and convert
   STAZ HEX2
-  JSR read_b           ; Read next char
+  JSR read_char        ; Read next char
   SEC                  ; Second byte so return C = 1
   RTS
 
@@ -594,13 +745,13 @@ read_value
   CLC                  ; Did not find valud so return C = 0
   RTS
 rv_value
-  JSR read_b           ; Read the character after the "="
+  JSR read_char        ; Read the character after the "="
   JSR skip_spaces
   CMP# "$"
   BEQ rv_hexvalue
   JMP err_expected_hex
 rv_hexvalue
-  JSR read_b
+  JSR read_char
   JSR read_hex_byte_or_word
   BCS rv_ok            ; 2 bytes were read
   ; 1 byte was read - shift into LSB position (HEX2)
@@ -654,6 +805,7 @@ up_no_fill
   STAZ PCH
 up_done
   RTS
+
 
 ; Reads a label, and optionally an assigned value. The label is stored in the current hash table
 ; mapped to the assigned value (if provided) otherwise the current PC value. The special label '*'
@@ -749,7 +901,7 @@ eq_loop
   BEQ eq_done
   CMP# "\\"
   BNE eq_not_escaped
-  JSR read_b
+  JSR read_char
   CMP# "\n"
   BEQ eq_err_closing_quote
   CMP# "n"
@@ -757,10 +909,10 @@ eq_loop
   LDA# "\n"            ; Escaped "n" is linefeed
 eq_not_escaped
   JSR emit
-  JSR read_b
+  JSR read_char
   JMP eq_loop
 eq_done
-  JSR read_b           ; Done; read next char
+  JSR read_char        ; Done; read next char
   RTS
 eq_err_closing_quote
   JMP err_closing_quote_not_found
@@ -880,6 +1032,34 @@ elr_ok
   RTS
 
 
+; On entry, A contains the first character of the directive
+process_directive
+  JSR read_token
+  PHA                          ; Save next char
+  LDA# <directive_include
+  STAZ TABPL
+  LDA# >directive_include
+  STAZ TABPH
+  JSR compare_token
+  BEQ pd_include
+  PLA                          ; Restore next char
+  JMP err_unknown_directive
+pd_include
+  PLA                          ; Restore next char
+  JSR skip_spaces
+  JSR check_for_end_of_line
+  BCC pd_get_name
+  JMP err_filename_expected
+pd_get_name
+  JSR read_token
+  JSR skip_rest_of_line
+  JSR push_file_stack
+  RTS
+
+directive_include
+  DATA "include" $00
+
+
 ; Read from input, assemble code and write to output
 ; On entry PASS indicates the current pass:
 ;            bit 7 clear = pass 1
@@ -892,7 +1072,7 @@ assemble_code
   STAZ CURLINEL
   STAZ CURLINEH
 ac_line_loop
-  JSR read_b
+  JSR read_char
   BCC ac_character_read
   RTS                  ; At end of input
 ac_character_read
@@ -910,6 +1090,13 @@ ac_line_starts_with_space
   JSR skip_spaces
   JSR check_for_end_of_line
   BCS ac_line_loop
+  CMP# "."
+  BNE ac_opcode
+; Directive
+  JSR read_char
+  JSR process_directive
+  JMP ac_line_loop
+ac_opcode
   ; Read mnemonic and emit opcode
   JSR emit_opcode
   JMP ac_parameters_loop_entry
@@ -924,25 +1111,25 @@ ac_parameters_loop_entry
   BCS ac_line_loop     ; End of line
   CMP# "\""            ; Quoted string
   BNE ac_check_for_hex
-  JSR read_b
+  JSR read_char
   JSR emit_quoted
   JMP ac_parameters_loop
 ac_check_for_hex
   CMP# "$"             ; 1 or 2 byte hex
   BNE ac_check_for_lsb
-  JSR read_b
+  JSR read_char
   JSR emit_hex
   JMP ac_parameters_loop
 ac_check_for_lsb
   CMP# "<"             ; LSB of variable
   BNE ac_check_for_msb
-  JSR read_b
+  JSR read_char
   JSR emit_label_lsb
   JMP ac_parameters_loop
 ac_check_for_msb
   CMP# ">"             ; MSB of variable
   BNE ac_check_for_relative
-  JSR read_b
+  JSR read_char
   JSR emit_label_msb
   JMP ac_parameters_loop
 ac_check_for_relative
@@ -968,13 +1155,12 @@ ac_label
 
 ; Entry point
 start
-  LDA# <interrupt
-  STA $FFFE
-  LDA# >interrupt
-  STA $FFFF
   JSR init_heap
   JSR select_label_hash_table
   JSR init_hash_table
+  JSR init_file_stack
+  LDA# $01            ; stdin
+  STAZ CURR_FILE
   LDA# $00
   STAZ STARTED
   STAZ PASS           ; Bit 7 = 0 (pass 1)
@@ -982,11 +1168,12 @@ start
   LDA# $FF
   STAZ PASS           ; Bit 7 = 1 (pass 2)
   JSR assemble_code
-  BRK $00              ; Success
+  BRK $00             ; Success
 
 
 ; Interrupt handler, entered upon BRK
 interrupt
+; Retrieve pointer to error code
   TSX
   SEC
   LDA,X $0102
@@ -995,52 +1182,71 @@ interrupt
   LDA,X $0103
   SBC# $00
   STAZ TABPH
-
+; Retrieve error code and skip diagnostics if no error
   LDY# $00
   LDAZ(),Y TABPL
   BEQ i_done
-
+; Save error code
   STAZ TEMP
-
+; Print the "Error " message
   LDA# <msg_error
   STAZ TABPL
   LDA# >msg_error
   STAZ TABPH
   JSR show_message
-
+; Print the error code in decimal
   LDAZ TEMP
   STAZ TO_DECIMAL_VALUE_L
   LDA# $00
   STAZ TO_DECIMAL_VALUE_H
   JSR show_decimal
-
+; Print the current file if any
+  JSR file_stack_empty
+  BEQ i_file_done
+; Print the " in file " message
+  LDA# <msg_error_file
+  STAZ TABPL
+  LDA# >msg_error_file
+  STAZ TABPH
+  JSR show_message
+; Print the filename
+  CLC
+  LDAZ FILE_STACK_L
+  ADC# $03
+  STAZ TABPL
+  LDAZ FILE_STACK_H
+  ADC# $00
+  STAZ TABPH
+  JSR show_message
+i_file_done
+; Print the " at line " messaage
   LDA# <msg_error_line
   STAZ TABPL
   LDA# >msg_error_line
   STAZ TABPH
   JSR show_message
-
+; Print the current line in decimal
   LDAZ CURLINEL
   STAZ TO_DECIMAL_VALUE_L
   LDAZ CURLINEH
   STAZ TO_DECIMAL_VALUE_H
   JSR show_decimal
-
+; Print the ": " message
   LDA# ":"
   JSR write_d
   LDA# " "
   JSR write_d
-
+; Retrieve pointer to the error message and show it
   TSX
   LDA,X $0102
   STAZ TABPL
   LDA,X $0103
   STAZ TABPH
   JSR show_message
-
+; Print the final newline
   LDA# "\n"
   JSR write_d
-
+; Load the error code so that it is returned
   LDAZ TEMP
 i_done
   JMP exit
@@ -1049,6 +1255,8 @@ msg_error
   DATA "Error " $00
 msg_error_line
   DATA " at line " $00
+msg_error_file
+  DATA " in file " $00
 
 
 ; Show message to the error output
@@ -1139,4 +1347,9 @@ to_decimal_shift_loop
   RTS
 
 
-  DATA start
+HEAP                  ; Heap goes after the program code
+
+
+* = $FFFC
+  DATA start          ; Reset vector
+  DATA interrupt      ; Interrupt vector

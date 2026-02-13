@@ -65,9 +65,12 @@ MNTAB
   DATA "CMPZ"     $00 $04 $C5
   DATA "CMP#"     $00 $04 $C9
   DATA "CMP,Y"    $00 $00 $D9
+  DATA "CPXZ"     $00 $04 $E4
+  DATA "CPYZ"     $00 $04 $C4
   DATA "CPY#"     $00 $04 $C0
   DATA "DECZ"     $00 $04 $C6
   DATA "DEX"      $00 $00 $CA
+  DATA "DEY"      $00 $00 $88
   DATA "EORZ"     $00 $04 $45
   DATA "INCZ"     $00 $04 $E6
   DATA "INX"      $00 $00 $E8
@@ -84,7 +87,9 @@ MNTAB
   DATA "LDAZ"     $00 $04 $A5
   DATA "LDAZ,X"   $00 $04 $B5
   DATA "LDX#"     $00 $04 $A2
+  DATA "LDXZ"     $00 $04 $A6
   DATA "LDY#"     $00 $04 $A0
+  DATA "LDYZ"     $00 $04 $A4
   DATA "LSRA"     $00 $00 $4A
   DATA "ORAZ"     $00 $04 $05
   DATA "PHA"      $00 $00 $48
@@ -100,6 +105,8 @@ MNTAB
   DATA "STA,Y"    $00 $00 $99
   DATA "STAZ"     $00 $04 $85
   DATA "STAZ,X"   $00 $04 $95
+  DATA "STXZ"     $00 $04 $86
+  DATA "STYZ"     $00 $04 $84
   DATA "TAX"      $00 $00 $AA
   DATA "TAY"      $00 $00 $A8
   DATA "TSX"      $00 $00 $BA
@@ -149,10 +156,10 @@ populate_instruction_hash_table
 piht_entry_loop
   LDY# $00
   LDAZ(),Y <P2L
-  BEQ ~piht_done
+  BEQ piht_done
 piht_token_loop
   STA,Y TOKEN
-  BEQ ~piht_token_loop_done
+  BEQ piht_token_loop_done
   INY
   LDAZ(),Y <P2L
   JMP piht_token_loop
@@ -186,7 +193,7 @@ iht_loop
   STAZ(),Y <HTLPL
   STAZ(),Y <HTHPL
   INX
-  BNE ~iht_loop
+  BNE iht_loop
   RTS
   
 
@@ -196,7 +203,7 @@ calculate_hash
   LDX# $00
 ch_loop
   LDAZ,X <TOKEN
-  BEQ ~ch_done
+  BEQ ch_done
   EORZ <HASH
   TAY
   LDA,Y scramble_table
@@ -212,7 +219,7 @@ hash_entry_empty
   LDAZ <HASH
   TAY
   LDAZ(),Y <HTLPL
-  BNE ~hee_done
+  BNE hee_done
   LDAZ(),Y <HTHPL
 hee_done
   RTS
@@ -277,9 +284,9 @@ ft_charloop
   INY
   LDAZ(),Y <TABPL
   CMP,Y TOKEN
-  BNE ~ft_notmatch
+  BNE ft_notmatch
   CMP# $00
-  BNE ~ft_charloop
+  BNE ft_charloop
   ; Match
   INY                  ; point tab,Y to value
   CLC
@@ -288,10 +295,10 @@ ft_notmatch            ; Not a match - move to next
   ; Check if 'next' pointer is 0
   LDY# $00
   LDAZ(),Y <PL
-  BNE ~ft_notmatch1 ; not zero
+  BNE ft_notmatch1 ; not zero
   INY
   LDAZ(),Y <PL
-  BEQ ~ft_atend
+  BEQ ft_atend
   ; Not at end
   STAZ <TABPH
   LDA# $00
@@ -333,7 +340,7 @@ st_loop
   INY
   LDA,Y TOKEN
   STAZ(),Y <MEMPL
-  BNE ~st_loop
+  BNE st_loop
   INY
   ; Store value
   LDAZ <HEX2
@@ -351,10 +358,10 @@ st_loop
 hash_add
   JSR calculate_hash
   JSR hash_entry_empty
-  BEQ ~ha_entry_empty
+  BEQ ha_entry_empty
   JSR load_hash_entry
   JSR find_token
-  BCS ~ha_new
+  BCS ha_new
   SEC
   RTS
 ha_new
@@ -370,7 +377,7 @@ ha_store
 
 display_hex_char
   CMP# $0A
-  BCS ~display_hex_char_low
+  BCS display_hex_char_low
   ; Carry alrady clear
   ADC# "0"
   JMP write_b          ; Tail call
@@ -424,7 +431,7 @@ display_text
   LDY# $00
 dtext_loop
   LDAZ(),Y <PL
-  BEQ ~dtext_done
+  BEQ dtext_done
   JSR write_b
   INY
   JMP dtext_loop
@@ -455,13 +462,13 @@ dst_lineloop
   ADC# $01
   STAZ <TEMP
   CMP# $10
-  BEQ ~dst_next1
+  BEQ dst_next1
   JMP dst_lineloop
 dst_next1
   JSR display_newline
   LDAZ <HASH
   CMP# $80
-  BEQ ~dst_done
+  BEQ dst_done
   JMP dst_loop
 dst_done
   RTS
@@ -480,7 +487,7 @@ dt_lineloop
   LDA# " "
   JSR write_b
   JSR hash_entry_empty
-  BNE ~dt_not_empty
+  BNE dt_not_empty
   ; empty
   LDA# $00
   JSR display_byte
@@ -521,13 +528,13 @@ dt_next
   ADC# $01
   STAZ <TEMP
   CMP# $08
-  BEQ ~dt_next1
+  BEQ dt_next1
   JMP dt_lineloop
 dt_next1
   JSR display_newline
   LDAZ <HASH
   CMP# $80
-  BEQ ~dt_done 
+  BEQ dt_done
   JMP dt_loop
 dt_done
   RTS
@@ -571,7 +578,7 @@ display_data
   STAZ <HASH
 dd_loop
   JSR hash_entry_empty
-  BNE ~dd_not_empty
+  BNE dd_not_empty
   JMP dd_next
 dd_not_empty
   ; Load pointer to hash entry
@@ -603,10 +610,10 @@ dd_entry_loop
   ; Display next pointer
   LDY# $00
   LDAZ(),Y <TABPL
-  BNE ~dd_not_zero
+  BNE dd_not_zero
   INY
   LDAZ(),Y <TABPL
-  BNE ~dd_not_zero
+  BNE dd_not_zero
   ; Zero
   LDA# "$"
   JSR write_b
@@ -650,7 +657,7 @@ dd_next
   CLC
   ADC# $01
   STAZ <HASH
-  BEQ ~dd_done
+  BEQ dd_done
   JMP dd_loop
 dd_done
   RTS

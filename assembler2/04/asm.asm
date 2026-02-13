@@ -1,5 +1,5 @@
 read     = $F006 ; Provided by emulation environment
-write_b  = $F009 ; provided by emulation environment
+write_b  = $F009 ; Provided by emulation environment
 
 TEMP     = $0000 ; 1 byte
 NEXTCHAR = $0001 ; 1 byte
@@ -9,82 +9,89 @@ PCL      = $0004 ; 1 byte
 PCH      = $0005 ; 1 byte
 HEX1     = $0006 ; 1 byte
 HEX2     = $0007 ; 1 byte
-TOKEN    = $0008 ; multiple bytes
+PASS     = $0008 ; 1 byte $00 = pass1 $FF = pass2
+TOKEN    = $0009 ; multiple bytes
 
-PC_START = $2000
 LBTAB    = $3000
 
-;  .org $2000
+*        = $2000 ; .org $2000
 
 
 ; Emulation environment surfaces error codes and messages
 err_labelnotfound
-  BRK
-  DATA $01 "Label not found" $00
+  BRK $01 "Label not found" $00
 
 err_duplicatelabel
-  BRK
-  DATA $02 "Duplicate label" $00
+  BRK $02 "Duplicate label" $00
 
 err_opcodenotfound
-  BRK
-  DATA $03 "Opcode not found" $00
+  BRK $03 "Opcode not found" $00
 
 err_expectedhex
-  BRK
-  DATA $04 "Expected hex value" $00
+  BRK $04 "Expected hex value" $00
 
 
 ; Instruction table
 MNTAB
-;      Mnemonic          Opcode
-  DATA "ADC#"    $00 $00 $69
-  DATA "ADCZ"    $00 $00 $65
-  DATA "ASLA"    $00 $00 $0A
-  DATA "BCC"     $00 $00 $90
-  DATA "BCS"     $00 $00 $B0
-  DATA "BEQ"     $00 $00 $F0
-  DATA "BITZ"    $00 $00 $24
-  DATA "BMI"     $00 $00 $30
-  DATA "BNE"     $00 $00 $D0
-  DATA "BPL"     $00 $00 $10
-  DATA "BRK"     $00 $00 $00
-  DATA "CLC"     $00 $00 $18
-  DATA "CMPZ,X"  $00 $00 $D5
-  DATA "CMP#"    $00 $00 $C9
-  DATA "CMP,Y"   $00 $00 $D9
-  DATA "DEY"     $00 $00 $88
-  DATA "INCZ"    $00 $00 $E6
-  DATA "INX"     $00 $00 $E8
-  DATA "INY"     $00 $00 $C8
-  DATA "JMP"     $00 $00 $4C
-  DATA "JSR"     $00 $00 $20
-  DATA "LDAZ"    $00 $00 $A5
-  DATA "LDA#"    $00 $00 $A9
-  DATA "LDA(),Y" $00 $00 $B1
-  DATA "LDA,Y"   $00 $00 $B9
-  DATA "LDX#"    $00 $00 $A2
-  DATA "LDY#"    $00 $00 $A0
-  DATA "ORAZ"    $00 $00 $05
-  DATA "RTS"     $00 $00 $60
-  DATA "SBC#"    $00 $00 $E9
-  DATA "SBCZ"    $00 $00 $E5
-  DATA "SEC"     $00 $00 $38
-  DATA "STA"     $00 $00 $8D
-  DATA "STA(),Y" $00 $00 $91
-  DATA "STAZ"    $00 $00 $85
-  DATA "STAZ,X"  $00 $00 $95
-  DATA "TYA"     $00 $00 $98
-  DATA "DATA"    $00 $01 $00 ; Directive
+;      Mnemonic           Opcode
+  DATA "ADC#"     $00 $00 $69
+  DATA "ADCZ"     $00 $00 $65
+  DATA "AND#"     $00 $00 $29
+  DATA "ASLA"     $00 $00 $0A
+  DATA "BCC"      $00 $00 $90
+  DATA "BCS"      $00 $00 $B0
+  DATA "BEQ"      $00 $00 $F0
+  DATA "BITZ"     $00 $00 $24
+  DATA "BMI"      $00 $00 $30
+  DATA "BNE"      $00 $00 $D0
+  DATA "BPL"      $00 $00 $10
+  DATA "BRK"      $00 $00 $00
+  DATA "CLC"      $00 $00 $18
+  DATA "CMP#"     $00 $00 $C9
+  DATA "CMP,Y"    $00 $00 $D9
+  DATA "EORZ"     $00 $00 $45
+  DATA "INCZ"     $00 $00 $E6
+  DATA "INX"      $00 $00 $E8
+  DATA "INY"      $00 $00 $C8
+  DATA "JMP"      $00 $00 $4C
+  DATA "JSR"      $00 $00 $20
+  DATA "LDA#"     $00 $00 $A9
+  DATA "LDAZ(),Y" $00 $00 $B1
+  DATA "LDA,X"    $00 $00 $BD
+  DATA "LDA,Y"    $00 $00 $B9
+  DATA "LDAZ"     $00 $00 $A5
+  DATA "LDAZ,X"   $00 $00 $B5
+  DATA "LDX#"     $00 $00 $A2
+  DATA "LDY#"     $00 $00 $A0
+  DATA "LSRA"     $00 $00 $4A
+  DATA "ORAZ"     $00 $00 $05
+  DATA "PHA"      $00 $00 $48
+  DATA "PLA"      $00 $00 $68
+  DATA "RTS"      $00 $00 $60
+  DATA "SBC#"     $00 $00 $E9
+  DATA "SBCZ"     $00 $00 $E5
+  DATA "SEC"      $00 $00 $38
+  DATA "STA"      $00 $00 $8D
+  DATA "STAZ(),Y" $00 $00 $91
+  DATA "STA,X"    $00 $00 $9D
+  DATA "STA,Y"    $00 $00 $99
+  DATA "STAZ"     $00 $00 $85
+  DATA "STAZ,X"   $00 $00 $95
+  DATA "TAY"      $00 $00 $A8
+  DATA "TYA"      $00 $00 $98
+  DATA "DATA"     $00 $01 $00 ; Directive
   DATA $00
 
 
 emit
+  BITZ <PASS
+  BPL $03              ; BVC emit_incpc
   JSR write_b
+emit_incpc
   INCZ <PCL
-  BNE $02              ; BNE emitdone
+  BNE $02              ; BNE emit_done
   INCZ <PCH
-emitdone
+emit_done
   RTS
 
 
@@ -136,10 +143,9 @@ cfe_end
 
 
 ; On entry A contains first character of token
-;          Y = 0
 ; Reads token into TOKEN (zero terminated)
 ; On exit NEXTCHAR contains next character after token
-;         Y = 0
+;         Y is preserved
 ;         A, X are not preserved
 readtoken
   LDX# $00
@@ -158,7 +164,7 @@ rt_done
 
 
 ; On entry Y contains offset into TAB
-; On exit TAB;TAB+1 += Y
+; On exit TABL;TABH += Y + 1
 ;         Y = 0
 ;         A is not preserved
 advanceintab
@@ -175,16 +181,17 @@ advanceintab
 
 
 ; On entry TOKEN contains token to find
-;          TAB;TAB+1 points to table
-;          Y must equal 0
+;          TABL;TABH points to table
 ; On exit C clear if found; set if not found
 ;         TABL;TABH points to token value if found
 ;                   or to end of table if not found
 ;         Y = 0
 ;         A is not preserved
-findintab              ; outer loop
+findintab
+  LDY# $00
+fit_tokenloop          ; Outer loop
   LDA(),Y <TABL
-  BNE $02              ; BNE findintab2
+  BNE $02              ; BNE fit_charloop
   ; not found
   SEC
   RTS
@@ -199,24 +206,23 @@ fit_charloop           ; inner loop
   JSR advanceintab
   CLC
   RTS
-fit_nextchar           ; move to next char
+fit_nextchar           ; Move to next char
   INY
   LDA(),Y <TABL
-  JMP fit_charloop     ; inner loop
-fit_skipcurrent        ; skip current symbol in table
+  JMP fit_charloop     ; Inner loop
+fit_skipcurrent        ; Skip current symbol in table
   LDA(),Y <TABL
   BEQ $04              ; BEQ fit_nextsymbol ; done skipping
   INY
   JMP fit_skipcurrent
-fit_nextsymbol         ; move to next symbol in table
-  INY                  ; move past 2 data bytes
+fit_nextsymbol         ; Move to next symbol in table
+  INY                  ; Move past 2 data bytes
   INY
   JSR advanceintab
-  JMP findintab        ; outer loop
+  JMP fit_tokenloop    ; Outer loop
 
 
 ; On entry TOKEN contains a label
-;          Y must equal 0
 ; On exit C clear if found; set if not found
 ;         TABL;TABH points to token value if found
 ;                   or to end of table if not found
@@ -233,8 +239,16 @@ findlabel
 ; On exit NEXTCHAR contains the next character
 readandfindexistinglabel
   JSR readtoken
+  BITZ <PASS
+  BMI $08              ; rafel_pass2
+  LDA# $00
+  STAZ <TABL
+  STAZ <TABH
+  CLC
+  RTS
+rafel_pass2
   JSR findlabel
-  BCS $01              ; BCC rafel_notfound
+  BCS $01              ; BCS rafel_notfound
   RTS
 rafel_notfound
   JMP err_labelnotfound
@@ -298,7 +312,7 @@ gh_second
 emithex
   JSR grabhex
   STAZ <NEXTCHAR
-  BCC $05              ; BCS eh_one
+  BCC $05              ; BCC eh_one
   LDAZ <HEX2
   JSR emit
 eh_one
@@ -307,9 +321,10 @@ eh_one
   LDAZ <NEXTCHAR
   RTS
 
-
+; On entry NEXTCHAR contains the next character
 ; On exit C set if value read; clear otherwise
 readvalue
+  LDAZ <NEXTCHAR
   JSR skipspaces
   CMP# "="
   BEQ $02              ; BNE rv_value
@@ -327,7 +342,6 @@ rv_hexvalue
 
 ; capturelabel helper
 cl_setpc
-  LDAZ <NEXTCHAR
   JSR readvalue
   JSR skiprestofline
   LDAZ <HEX2
@@ -344,6 +358,11 @@ capturelabel
   BNE $03              ; BNE cl_normallabel
   JMP cl_setpc
 cl_normallabel
+  BITZ <PASS
+  BPL $05              ; BPL cl_pass1
+  LDAZ <NEXTCHAR
+  JMP skiprestofline   ; Tail call
+cl_pass1
   JSR findlabel
   BCS $03              ; BCS cl_notfound
   JMP err_duplicatelabel
@@ -355,10 +374,9 @@ cl_loop                ; Copy TOKEN to table
   INY
   JMP cl_loop
 cl_copyvalue           ; Copy value or PC value to table
-  LDAZ <NEXTCHAR
   JSR readvalue
   STAZ <NEXTCHAR
-  BCS $08              ; BNE cl_hextotable
+  BCS $08              ; BCS cl_hextotable
   ; Store program counter
   LDAZ <PCL
   STAZ <HEX2
@@ -378,13 +396,13 @@ cl_hextotable
   INY
   LDA# $00
   STA(),Y <TABL
-  LDY# $00             ; restore Y register
   RTS
 
 
-; emit the opcode
-; On exit NEXTCHAR contains the next character
+; Emit the opcode
+; On exit A contains the next character
 emitopcode
+  JSR readtoken
   LDA# <MNTAB
   STAZ <TABL
   LDA# >MNTAB
@@ -394,17 +412,17 @@ emitopcode
   JMP err_opcodenotfound
 eo_found
   LDA(),Y <TABL
-  BEQ $01              ; BEQ eo_opcode
-  RTS                  ; Not opcode (DATA command)
-eo_opcode
+  BNE $06              ; BNE eo_done ; Not opcode (DATA command)
+  ; Opcode
   INY
   LDA(),Y <TABL
-  DEY
   JSR emit
+eo_done
+  LDAZ <NEXTCHAR
   RTS
 
 
-; read and emit quoted ASCII
+; Read and emit quoted ASCII
 emitquoted
   JSR read
   CMP# "\""
@@ -431,7 +449,6 @@ emitlabel
   JSR emit
   INY
   LDA(),Y <TABL
-  DEY
   JSR emit
   LDAZ <NEXTCHAR       ; Load next character
   RTS
@@ -453,17 +470,35 @@ emitlabelmsb
   ; Emit high byte
   INY
   LDA(),Y <TABL
-  DEY
   JSR emit
   LDAZ <NEXTCHAR       ; Load next character
   RTS
 
 
+emitlabelrel
+  BITZ <PASS           ; <PASS
+  BMI $09              ; BMI elr_pass2
+  JSR readtoken
+  JSR emit
+  LDAZ <NEXTCHAR
+  RTS
+elr_pass2
+  JSR readandfindexistinglabel
+  ; Calculate target - PC - 1
+  CLC ; for the - 1
+  LDA(),Y <TABL
+  SBCZ <PCL
+  JSR emit
+  LDAZ <NEXTCHAR
+  RTS
+
+
+; Main assembler
 assemble
 lnloop
   JSR read
   BCC $01              ; BCC lnloop1
-  RTS                  ; at end of input
+  RTS                  ; At end of input
 lnloop1
   JSR checkforend
   BCC $03              ; BCC lnloop2
@@ -480,14 +515,12 @@ lnloop3
   JMP lnloop
 lnloop4
 ; Read mnemonic and emit opcode
-  JSR readtoken
   JSR emitopcode
-  LDAZ <NEXTCHAR
 tokloop
   JSR skipspaces
   JSR checkforend
   BCC $03              ; BCC tokloop1
-  JMP lnloop           ; end of line
+  JMP lnloop           ; End of line
 tokloop1
   CMP# "\""
   BNE $06              ; BNE tokloop2
@@ -511,22 +544,31 @@ tokloop4
   JSR emitlabelmsb
   JMP tokloop
 tokloop5
+  CMP# "~"
+  BNE $09              ; BNE tokloop6
+  JSR read
+  JSR emitlabelrel
+  JMP tokloop
+tokloop6
   ; label
   JSR emitlabel
   JMP tokloop
 
-
+; Entry point
 start
-  LDA# <PC_START
+  LDA# $00
   STAZ <PCL
-  LDA# >PC_START
   STAZ <PCH
-  LDY# $00             ; Y remains 0 (for indirect addressing)
-  TYA                  ; A <- 0
   STA LBTAB
+  STAZ <PASS
   JSR assemble
-  BRK
-  DATA $00 ; Success
+  LDA# $00
+  STAZ <PCL
+  STAZ <PCH
+  LDA# $FF
+  STAZ <PASS
+  JSR assemble
+  BRK $00              ; Success
 
 
   DATA start ; Emulation environment jumps here
