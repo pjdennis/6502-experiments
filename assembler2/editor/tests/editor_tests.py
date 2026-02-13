@@ -1046,6 +1046,22 @@ class EditorTestRunner:
             expected_content=expected_unwrap
         )
 
+        # Delete across line boundaries - 6 DELs on short lines should
+        # alternate between deleting chars and joining lines.
+        # Each "a" line has 1 char, so each pair of DELs does:
+        #   DEL 1: delete 'a' (line becomes empty)
+        #   DEL 2: join with next line (merges the \n)
+        # 6 DELs = 3 pairs = remove 3 of 4 lines, leaving "a\n"
+        # BUG: count_pending_key greedily consumes all pending DEL keys,
+        # but the cap at line length discards the excess, losing them.
+        DEL = b"\x1b[3~"
+        self.run_test(
+            "Delete across line boundaries not lost to batching cap",
+            "a\na\na\na\n",
+            b"i" + DEL * 6 + b"\x1b:wq\r",
+            expected_content="a\n"
+        )
+
         # :w saves without quitting, then :q quits
         # Actually, :w then EOT will exit due to EOT handling
         self.run_test(

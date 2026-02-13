@@ -466,13 +466,25 @@ insert_delete:
 .have_del_max:
   STA LINE_LEN16            ; Reuse low byte as 8-bit cap
 
-  ; Count pending Delete keys, add 1 for current
-  JSR count_pending_key      ; X = pending count
-  INX
+  ; Count pending Delete keys, capped at LINE_LEN16
+  ; (Must not overconsume: excess DELs need to trigger join-lines)
+  LDX #1                    ; 1 for current key
+.del_count:
   CPX LINE_LEN16
-  BCC .cap_ok
-  LDX LINE_LEN16
-.cap_ok:
+  BCS .del_count_done        ; Reached cap, stop
+  JSR key_ready
+  CMP #$FF
+  BNE .del_count_done
+  JSR get_key
+  CMP BUF_TEMP
+  BEQ .del_match
+  JSR unget_key
+  JMP .del_count_done
+.del_match:
+  INX
+  CPX #BATCH_MAX
+  BNE .del_count
+.del_count_done:
   STX BUF_DELTA
 
   ; Delete BUF_DELTA chars at cursor position
