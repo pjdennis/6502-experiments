@@ -87,6 +87,10 @@ All editing commands are blocked in read-only mode.
   <<             Unindent current line by up to 2 spaces (accepts count)
   yy             Yank (copy) current line (accepts count: [N]yy)
                  Does not modify the file
+  yw             Yank from cursor to next word boundary (accepts count)
+                 Character yank. Does not modify the file
+  yb             Yank backward to word start (accepts count)
+                 Character yank. Cursor moves to start of yanked region
   p              Paste after/below cursor (accepts count: [N]p)
                  Line yank: pastes lines below current line
                  Char yank: inserts after cursor position
@@ -214,7 +218,7 @@ YANK BUFFER
   Line yank (from dd, yy, cc, range commands):
     p/P paste complete lines above or below.
 
-  Character yank (from x, D, dw, db, cw, cb, s, C):
+  Character yank (from x, D, dw, db, yw, yb, cw, cb, s, C):
     p inserts after cursor (or at line start if empty line).
     P inserts before cursor.
 

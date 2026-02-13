@@ -5944,6 +5944,150 @@ class EditorTestRunner:
             expect_cursor=(0, 0),
         )
 
+        self._group("Yank word forward (yw):", leading_blank=True)
+
+        self.run_test(
+            "yw yanks word and trailing space",
+            "hello world\n",
+            b"yw$p:wq\r",
+            expected_content="hello worldhello \n",
+        )
+
+        self.run_test(
+            "yw at middle of word yanks to next word",
+            "hello world\n",
+            b"llyw$p:wq\r",
+            expected_content="hello worldllo \n",
+        )
+
+        self.run_test(
+            "yw on punctuation yanks punct group",
+            "...bar baz\n",
+            b"yw$p:wq\r",
+            expected_content="...bar baz...\n",
+        )
+
+        self.run_test(
+            "yw on last word yanks to EOL",
+            "foo bar\n",
+            b"4lyw$p:wq\r",
+            expected_content="foo barbar\n",
+        )
+
+        self.run_test(
+            "yw on whitespace yanks spaces only",
+            "foo   bar\n",
+            b"3lyw$p:wq\r",
+            expected_content="foo   bar   \n",
+        )
+
+        self.run_test(
+            "yw on empty line preserves previous yank",
+            "hello\n\n",
+            b"yyjyw$p:wq\r",
+            expected_content="hello\n\nhello\n",
+        )
+
+        self.run_test(
+            "2yw yanks two words",
+            "one two three\n",
+            b"2yw$p:wq\r",
+            expected_content="one two threeone two \n",
+        )
+
+        self.run_test(
+            "yw does not modify the file",
+            "hello world\n",
+            b"yw:q\r",
+            expect_exit=0,
+        )
+
+        self.run_test_screen(
+            "yw cursor stays at original position",
+            "hello world\n",
+            b"yw:q!\r",
+            expect_cursor=(0, 0),
+        )
+
+        self.run_test_screen(
+            "yw from col 2 cursor stays at col 2",
+            "hello world\n",
+            b"llyw:q!\r",
+            expect_cursor=(0, 2),
+        )
+
+        self.run_test(
+            "ywyw yanks same word (second overwrites first)",
+            "hello world\n",
+            b"ywyw$p:wq\r",
+            expected_content="hello worldhello \n",
+        )
+
+        self.run_test(
+            "yw on only whitespace yanks whitespace",
+            "foo   \n",
+            b"3lyw$p:wq\r",
+            expected_content="foo      \n",
+        )
+
+        self._group("Yank word backward (yb):", leading_blank=True)
+
+        self.run_test(
+            "yb yanks previous word",
+            "hello world\n",
+            b"wyb$p:wq\r",
+            expected_content="hello worldhello \n",
+        )
+
+        self.run_test(
+            "yb from middle of word yanks back to word start",
+            "hello world\n",
+            b"wllyb$p:wq\r",
+            expected_content="hello worldwo\n",
+        )
+
+        self.run_test(
+            "yb at col 0 does nothing",
+            "hello\n",
+            b"yb:q\r",
+            expect_exit=0,
+        )
+
+        self.run_test(
+            "yb with whitespace before cursor",
+            "foo   bar\n",
+            b"6lyb$p:wq\r",
+            expected_content="foo   barfoo   \n",
+        )
+
+        self.run_test(
+            "2yb yanks two words backward",
+            "one two three\n",
+            b"$2yb$p:wq\r",
+            expected_content="one two threetwo thre\n",
+        )
+
+        self.run_test(
+            "yb does not modify the file",
+            "hello world\n",
+            b"wyb:q\r",
+            expect_exit=0,
+        )
+
+        self.run_test_screen(
+            "yb cursor moves to word start",
+            "hello world\n",
+            b"wyb:q!\r",
+            expect_cursor=(0, 0),
+        )
+
+        self.run_test(
+            "ybyb yanks second word back (cursor moves twice)",
+            "one two three\n",
+            b"$ybyb$p:wq\r",
+            expected_content="one two threetwo \n",
+        )
+
         self._group("Backward search (?):", leading_blank=True)
 
         self.run_test_screen(

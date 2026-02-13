@@ -175,6 +175,8 @@ pending_combo_keys:
   .byte 'd', 'd', $03       .word do_dd
   .byte 'g', 'g', $00       .word do_gg
   .byte 'y', 'y', $00       .word do_yy
+  .byte 'y', 'w', $00       .word do_yw
+  .byte 'y', 'b', $00       .word do_yb
   .byte 'c', 'c', $02       .word do_cc
   .byte '>', '>', $02       .word do_indent
   .byte '<', '<', $02       .word do_unindent

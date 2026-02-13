@@ -245,6 +245,48 @@ do_yy:
 .overflow:
   JMP show_yank_overflow
 
+; yw: yank N words forward from cursor (character yank)
+; Cursor does not move. Does not modify the file.
+do_yw:
+  JSR get_count              ; BUF_TEMP16 = N
+  JSR check_cursor_in_line
+  BCS .yw_done               ; Empty line, bail
+
+  CP16 CURSOR_COL16, BUF_LEN16  ; BUF_LEN16 = scan start at cursor
+  LDX BUF_TEMP16
+  JSR scan_words_forward
+  SEC
+  SBC16 BUF_LEN16, CURSOR_COL16, BUF_LEN16  ; BUF_LEN16 = byte count
+  TST16 BUF_LEN16
+  BEQ .yw_done               ; Nothing to yank
+  JSR get_cursor_buf_ptr     ; BUF_PTR16 = cursor position
+  CP16 BUF_PTR16, BUF_SRC16
+  JSR yank_add_chars
+.yw_done:
+  JMP clear_count
+
+; yb: yank N words backward from cursor (character yank)
+; Cursor moves to start of yanked region (like b motion).
+; Does not modify the file.
+do_yb:
+  JSR get_count              ; BUF_TEMP16 = N
+  TST16 CURSOR_COL16
+  BEQ .yb_done               ; At col 0, nothing to yank
+
+  PUSH16 CURSOR_COL16         ; Save original cursor
+  LDX BUF_TEMP16
+  JSR scan_words_backward     ; CURSOR_COL16 = new position
+  POP16 BUF_LEN16             ; BUF_LEN16 = original cursor
+  SEC
+  SBC16 BUF_LEN16, CURSOR_COL16, BUF_LEN16  ; BUF_LEN16 = byte count
+  TST16 BUF_LEN16
+  BEQ .yb_done               ; Nothing to yank
+  JSR get_cursor_buf_ptr     ; BUF_PTR16 = new cursor position
+  CP16 BUF_PTR16, BUF_SRC16
+  JSR yank_add_chars
+.yb_done:
+  JMP clear_count
+
 ; --- Search ---
 
 normal_search:
