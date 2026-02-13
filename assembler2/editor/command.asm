@@ -26,21 +26,15 @@ command_handle:
 
 .read_loop:
   JSR get_key
+  STA BUF_TEMP
 
-  CMP #KEY_ESC
-  BEQ .cancel
-  CMP #$1B
-  BEQ .cancel
-  CMP #KEY_ENTER
-  BEQ .execute
-  CMP #'\r'
-  BEQ .execute
-  CMP #KEY_BS
-  BEQ .backspace
-  CMP #$7F
-  BEQ .backspace
+  LDA #<command_keys
+  LDX #>command_keys
+  JSR dispatch_key
+  BCC .check_done
 
-  ; Printable character?
+  ; No match - printable character?
+  LDA BUF_TEMP
   CMP #' '
   BCC .read_loop
   CMP #$7F
@@ -58,19 +52,30 @@ command_handle:
   JSR io_flush
   JMP .read_loop
 
-.backspace:
-  LDA CMD_IDX
-  BEQ .cancel     ; Nothing to delete, cancel
-  DEC CMD_IDX
-  JSR erase_char
+.check_done:
+  LDA MODE
+  CMP #MODE_COMMAND
+  BNE .done
+  LDA CMD_QUIT
+  BNE .done
   JMP .read_loop
+.done:
+  RTS
 
-.cancel:
+; --- Command input dispatch table ---
+command_keys:
+  .byte KEY_ESC     .word cmd_cancel
+  .byte KEY_ENTER   .word cmd_execute
+  .byte KEY_BS      .word cmd_backspace
+  .byte $7F         .word cmd_backspace
+  .byte 0           ; End sentinel
+
+cmd_cancel:
   LDA #MODE_NORMAL
   STA MODE
   RTS
 
-.execute:
+cmd_execute:
   ; Null-terminate the command
   LDX CMD_IDX
   LDA #0
@@ -87,6 +92,12 @@ command_handle:
 .stay:
   RTS
 
+cmd_backspace:
+  LDA CMD_IDX
+  BEQ cmd_cancel     ; Nothing to delete, cancel
+  DEC CMD_IDX
+  JMP erase_char
+
 ; Show the ':' prompt on the status line
 command_show_prompt:
   LDA #':'
@@ -95,14 +106,11 @@ command_show_prompt:
 ; Parse and execute the command in CMD_BUF
 command_parse:
   LDA CMD_BUF
-
-  ; :w - write
-  CMP #'w'
-  BEQ .check_w
-
-  ; :q - quit
-  CMP #'q'
-  BEQ .check_q
+  STA BUF_TEMP
+  LDA #<command_parse_keys
+  LDX #>command_parse_keys
+  JSR dispatch_key
+  BCC .done
 
   ; Try named commands (full string match from CMD_BUF[0])
   SET16 str_marks_cmd, STR_PTR16
@@ -110,52 +118,49 @@ command_parse:
   JSR cmd_str_match
   BCC .do_marks
 
-  ; Range/goto: ', ., digit, or bare shift
+  ; Range/goto: digit
   LDA CMD_BUF
-  CMP #'\''
-  BEQ .try_range
-  CMP #'.'
-  BEQ .try_range
-  CMP #'>'
-  BEQ .bare_shift
-  CMP #'<'
-  BEQ .bare_shift
   CMP #'0'
   BCC .unknown
   CMP #':'              ; '9'+1
   BCS .unknown
-.try_range:
   JMP command_parse_range
-
-.bare_shift:
-  CP16 FILE_LINE16, BUF_SRC16
-  CP16 FILE_LINE16, BUF_DST16
-  LDA CMD_BUF
-  JMP range_dispatch
-
-.unknown:
-  SET16 str_unknown_cmd, STR_PTR16
-  JMP show_status_message
 
 .do_marks:
   JMP marks_display
 
-.check_w:
+.unknown:
+  JMP cmd_unknown
+
+.done:
+  RTS
+
+; --- Command parse dispatch table ---
+command_parse_keys:
+  .byte 'w'    .word cmd_parse_w
+  .byte 'q'    .word cmd_parse_q
+  .byte '\''   .word command_parse_range
+  .byte '.'    .word command_parse_range
+  .byte '>'    .word cmd_parse_bare_shift
+  .byte '<'    .word cmd_parse_bare_shift
+  .byte 0      ; End sentinel
+
+cmd_parse_w:
   LDA READONLY
-  BEQ .not_readonly_w
+  BEQ .not_readonly
   SET16 str_readonly, STR_PTR16
   JSR show_status_message
   RTS
-.not_readonly_w:
+.not_readonly:
   LDA CMD_BUF + 1
   BEQ .do_write       ; Just ":w"
   CMP #'q'
   BEQ .check_wq
-  JMP .unknown
+  JMP cmd_unknown
 
 .check_wq:
   LDA CMD_BUF + 2
-  BNE .unknown        ; Extra chars after ":wq"
+  BNE cmd_unknown     ; Extra chars after ":wq"
   ; :wq - write and quit
   JSR command_write_file
   LDA #$FF
@@ -165,12 +170,12 @@ command_parse:
 .do_write:
   JMP command_write_file
 
-.check_q:
+cmd_parse_q:
   LDA CMD_BUF + 1
   BEQ .do_quit        ; Just ":q"
   CMP #'!'
   BEQ .force_quit
-  JMP .unknown
+  JMP cmd_unknown
 
 .do_quit:
   ; Check if modified
@@ -187,10 +192,20 @@ command_parse:
 
 .force_quit:
   LDA CMD_BUF + 2
-  BNE .unknown        ; Extra chars after ":q!"
+  BNE cmd_unknown     ; Extra chars after ":q!"
   LDA #$FF
   STA CMD_QUIT
   RTS
+
+cmd_parse_bare_shift:
+  CP16 FILE_LINE16, BUF_SRC16
+  CP16 FILE_LINE16, BUF_DST16
+  LDA CMD_BUF
+  JMP range_dispatch
+
+cmd_unknown:
+  SET16 str_unknown_cmd, STR_PTR16
+  JMP show_status_message
 
 ; Parse decimal number from CMD_BUF starting at offset X
 ; Returns: BUF_LEN16 = parsed number, X = updated offset past digits
@@ -403,17 +418,7 @@ command_parse_range:
 range_dispatch:
   ; A = command char
   STA CMD_IDX              ; Save command char
-  CMP #'y'
-  BEQ .range_action
-  CMP #'d'
-  BEQ .range_action
-  CMP #'>'
-  BEQ .range_action
-  CMP #'<'
-  BEQ .range_action
-  JMP range_unknown
 
-.range_action:
   ; Ensure start <= end (swap if needed)
   CMP16 BUF_SRC16, BUF_DST16
   BCC .range_order_ok
@@ -452,18 +457,29 @@ range_dispatch:
 
 .range_dispatch_cmd:
   LDA CMD_IDX
-  CMP #'d'
-  BEQ .range_do_delete
-  CMP #'>'
-  BEQ .range_jmp_indent
-  CMP #'<'
-  BEQ .range_jmp_unindent
+  STA BUF_TEMP
+  LDA #<range_action_keys
+  LDX #>range_action_keys
+  JSR dispatch_key
+  BCC .done
+  JMP range_unknown
+.done:
+  RTS
+
+; --- Range action dispatch table ---
+range_action_keys:
+  .byte 'y'   .word range_do_yank
+  .byte 'd'   .word range_do_delete
+  .byte '>'   .word range_do_indent
+  .byte '<'   .word range_do_unindent
+  .byte 0     ; End sentinel
 
   ; --- Range yank ---
+range_do_yank:
   JSR yank_clear
   LDAX16 BUF_SRC16
   JSR yank_add_lines
-  BCS .range_yank_full
+  BCS range_yank_full
 
   ; Show "N lines yanked"
   CP16 YANK_LINES16, TO_DECIMAL_VALUE16
@@ -474,18 +490,13 @@ range_dispatch:
   JSR io_flush
   RTS
 
-.range_yank_full:
+range_yank_full:
   JSR yank_clear
   SET16 str_yank_full, STR_PTR16
   JMP show_status_message
 
-.range_jmp_indent:
-  JMP .range_do_indent
-.range_jmp_unindent:
-  JMP .range_do_unindent
-
   ; --- Range delete ---
-.range_do_delete:
+range_do_delete:
   ; Yank lines first (so user can paste them back)
   ; Save first line (yank_add_lines clobbers BUF_SRC16)
   PUSH16 BUF_SRC16
@@ -493,7 +504,7 @@ range_dispatch:
   LDAX16 BUF_SRC16
   JSR yank_add_lines
   POP16 BUF_SRC16          ; PLA preserves carry on 6502
-  BCS .range_yank_full
+  BCS range_yank_full
 
   ; Adjust marks before deletion (mark_adjust_delete clobbers BUF_SRC16/BUF_DST16)
   CP16 YANK_LINES16, BUF_TEMP16
@@ -532,7 +543,7 @@ range_dispatch:
   RTS
 
   ; --- Range indent ---
-.range_do_indent:
+range_do_indent:
   PUSH16 FILE_LINE16           ; Save cursor line
   PUSH16 CURSOR_COL16          ; Save cursor column
   PUSH16 BUF_TEMP16            ; Save count for message
@@ -542,7 +553,7 @@ range_dispatch:
   JMP range_shift_finish
 
   ; --- Range unindent ---
-.range_do_unindent:
+range_do_unindent:
   PUSH16 FILE_LINE16           ; Save cursor line
   PUSH16 CURSOR_COL16          ; Save cursor column
   PUSH16 BUF_TEMP16            ; Save count for message
