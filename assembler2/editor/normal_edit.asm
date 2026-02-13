@@ -81,6 +81,8 @@ char_paste_below:
   SBCI16 BUF_LEN16, 1, CURSOR_COL16
 
 .cursor_done:
+  LDA #1
+  STA RENDER_FLAG
   JSR ensure_cursor_visible
   LDA #$FF
   STA MODIFIED
@@ -107,6 +109,8 @@ char_paste_above:
   CLC
   ADC16 CURSOR_COL16, BUF_LEN16, CURSOR_COL16
   DEC16 CURSOR_COL16
+  LDA #1
+  STA RENDER_FLAG
   JSR ensure_cursor_visible
   LDA #$FF
   STA MODIFIED
@@ -260,6 +264,9 @@ normal_change_to_eol:
   SEC
   SBC16 LINE_LEN16, CURSOR_COL16, BUF_LEN16
   JSR yank_delete_at_cursor
+  LDA #1
+  STA RENDER_FLAG
+  JSR ensure_cursor_visible
 
 .c_insert:
   LDA #MODE_INSERT
@@ -602,6 +609,9 @@ do_cw:
   JMP .cw_loop
 
 .cw_insert:
+  LDA #1
+  STA RENDER_FLAG
+  JSR ensure_cursor_visible
   LDA #MODE_INSERT
   STA MODE
   JMP clear_count
@@ -632,6 +642,9 @@ do_cb:
   JMP .cb_loop
 
 .cb_insert:
+  LDA #1
+  STA RENDER_FLAG
+  JSR ensure_cursor_visible
   LDA #MODE_INSERT
   STA MODE
   JMP clear_count

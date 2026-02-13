@@ -2292,6 +2292,48 @@ class EditorTestRunner:
             expect_content_rows=[(3, {0})]
         )
 
+        # C changes to end of line: single-row redraw
+        self.run_test_screen(
+            "Render opt: C redraws current row only",
+            "Hello World\n",
+            b"C\x1b:q!\r",
+            expect_content_rows=[(1, {0})]
+        )
+
+        # cw changes word: single-row redraw
+        # Frame 0: init(T), Frame 1: c pending(F), Frame 2: w triggers cw(T)
+        self.run_test_screen(
+            "Render opt: cw redraws current row only",
+            "Hello World\n",
+            b"cw\x1b:q!\r",
+            expect_content_rows=[(2, {0})]
+        )
+
+        # cb changes word backward: single-row redraw
+        # Frame 0: init(T), Frame 1: $(F), Frame 2: c pending(F), Frame 3: b triggers cb(T)
+        self.run_test_screen(
+            "Render opt: cb redraws current row only",
+            "Hello World\n",
+            b"$cb\x1b:q!\r",
+            expect_content_rows=[(3, {0})]
+        )
+
+        # char paste p: single-row redraw
+        self.run_test_screen(
+            "Render opt: char paste p redraws current row only",
+            "Hello\n",
+            b"xp:q!\r",
+            expect_content_rows=[(2, {0})]
+        )
+
+        # char paste P: single-row redraw
+        self.run_test_screen(
+            "Render opt: char paste P redraws current row only",
+            "Hello\n",
+            b"xP:q!\r",
+            expect_content_rows=[(2, {0})]
+        )
+
         # Insert newline: full repaint (multiple lines change)
         self.run_test_screen(
             "Render opt: Enter in insert is full repaint",
