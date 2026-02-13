@@ -29,19 +29,19 @@ echo "--- Version 07 ---"
   ../emulator.out ../06/out/asm.out --load 2000 --input out/asmc.asm.out --output out/asmc.out)
 echo "--- Version 08 ---"
 (cd 08 && mkdir -p out &&
-  ../emulator.out ../06/out/asm.out --load 2000 --input instgen.asm --output out/instgen.out &&
+  ../emulator.out ../07/out/asmc.out --load 2000 --input instgen.asm --output out/instgen.out &&
   ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
   cat out/inst.asm.out asm.asm > out/asmc.asm.out &&
   ../emulator.out ../07/out/asmc.out --load 2000 --input out/asmc.asm.out --output out/asmc.out)
 echo "--- Version 09 ---"
 (cd 09 && mkdir -p out &&
-  ../emulator.out ../06/out/asm.out --load 2000 --input instgen.asm --output out/instgen.out &&
+  ../emulator.out ../08/out/asmc.out --load 2000 --input instgen.asm --output out/instgen.out &&
   ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
   cat out/inst.asm.out asm.asm > out/asmc.asm.out &&
   ../emulator.out ../08/out/asmc.out --load 2000 --input out/asmc.asm.out --output out/asmc.out)
 echo "--- Version 10 ---"
 (cd 10 && mkdir -p out &&
-  ../emulator.out ../06/out/asm.out --load 2000 --input instgen.asm --output out/instgen.out &&
+  ../emulator.out ../09/out/asmc.out --load 2000 --input instgen.asm --output out/instgen.out &&
   ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
   cat out/inst.asm.out asm.asm > out/asmc.asm.out &&
   ../emulator.out ../09/out/asmc.out --input out/asmc.asm.out --output out/asmc.out)
