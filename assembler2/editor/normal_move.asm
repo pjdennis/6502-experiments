@@ -3,41 +3,13 @@
 ; --- Movement ---
 
 normal_move_left:
-  JSR get_count          ; BUF_TEMP16 = count
-  LDX BUF_TEMP16         ; X = count (low byte, capped at 255)
-  STX BUF_DELTA
-  JSR count_pending_key  ; X = pending matching keys
-  TXA
-  CLC
-  ADC BUF_DELTA          ; Total = count + pending
-  BCS .cap_left          ; Overflow -> cap at 255
-  TAX
-  JMP .go_left
-.cap_left:
-  LDX #$FF
-.go_left:
-  LDA #0
-  STA RENDER_FLAG
+  JSR get_batched_count
   JSR move_left_x
   JSR ensure_cursor_visible
   JMP clear_count
 
 normal_move_right:
-  JSR get_count          ; BUF_TEMP16 = count
-  LDX BUF_TEMP16         ; X = count (low byte, capped at 255)
-  STX BUF_DELTA
-  JSR count_pending_key  ; X = pending matching keys
-  TXA
-  CLC
-  ADC BUF_DELTA          ; Total = count + pending
-  BCS .cap_right         ; Overflow -> cap at 255
-  TAX
-  JMP .go_right
-.cap_right:
-  LDX #$FF
-.go_right:
-  LDA #0
-  STA RENDER_FLAG
+  JSR get_batched_count
   ; Hoist line length calculation outside loop (line doesn't change)
   STX BUF_TEMP           ; Save count
   JSR get_current_line_len
@@ -53,38 +25,14 @@ normal_move_right:
   JMP clear_count
 
 normal_move_down:
-  JSR get_count          ; BUF_TEMP16 = count
-  LDX BUF_TEMP16         ; X = count (low byte, capped at 255)
-  STX BUF_DELTA
-  JSR count_pending_key  ; X = pending matching keys
-  TXA
-  CLC
-  ADC BUF_DELTA          ; Total = count + pending
-  BCS .cap_down          ; Overflow -> cap at 255
-  TAX
-  JMP .go_down
-.cap_down:
-  LDX #$FF
-.go_down:
+  JSR get_batched_count
   JSR move_down_x
   JSR clamp_cursor_col
   JSR ensure_cursor_visible
   JMP clear_count
 
 normal_move_up:
-  JSR get_count          ; BUF_TEMP16 = count
-  LDX BUF_TEMP16         ; X = count (low byte, capped at 255)
-  STX BUF_DELTA
-  JSR count_pending_key  ; X = pending matching keys
-  TXA
-  CLC
-  ADC BUF_DELTA          ; Total = count + pending
-  BCS .cap_up            ; Overflow -> cap at 255
-  TAX
-  JMP .go_up
-.cap_up:
-  LDX #$FF
-.go_up:
+  JSR get_batched_count
   JSR move_up_x
   JSR clamp_cursor_col
   JSR ensure_cursor_visible
