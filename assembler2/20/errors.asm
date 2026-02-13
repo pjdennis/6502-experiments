@@ -104,6 +104,14 @@ err_unclosed_ifdef
   BRK
   .data $18 "Unclosed .ifdef" $00
 
+err_too_many_ifdefs
+  BRK
+  .data $1A "Too many .ifdef directives" $00
+
+err_conditional_nesting_too_deep
+  BRK
+  .data $1B "Conditional nesting exceeds 16 levels" $00
+
 err_label_expected
   BRK
   .data $19 "Label expected" $00

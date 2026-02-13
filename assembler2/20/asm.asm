@@ -4,6 +4,7 @@ FWDREF_LIMIT = FWDREF_LIST+$0200 ; Limit for forward reference list data
 TOKEN        = $1D00             ; Buffer for the current token being read
 LHASHTAB     = TOKEN+$0100       ; Label hash table
 *            = $2000             ; Code generates here
+IFDEF_DECISIONS = $0800          ; Buffer for .ifdef decisions (256 bytes)
 FILE_STACK   = $F000             ; File stack will grow down from 1 below here
 
 
@@ -42,6 +43,7 @@ EXPR_FWDREF .data $00 ; Accumulated forward ref flag
 EXPR_CARRY  .data $00 ; Saved carry from first term
 COND_DEPTH  .data $00 ; Conditional assembly nesting depth
 SKIP_DEPTH  .data $00 ; Depth where skipping started (0 = not skipping)
+IFDEF_INDEX .data $00 ; Current index into IFDEF_DECISIONS buffer
 ARG_COUNT   .data $00 ; Total command line argument count
 ARG_INDEX   .data $00 ; Current argument index being processed
 
@@ -1412,33 +1414,73 @@ data_parameters_loop_entry
 
 
 ; Process .ifdef directive
+; Records decision in pass 1, replays in pass 2 for consistency with forward refs
 ; On entry: A contains char after directive name
 process_ifdef
   PHA                  ; Save input char
-  INC COND_DEPTH       ; Always increment depth
-  ; Check if already skipping
+  INC COND_DEPTH
+  LDA COND_DEPTH
+  CMP #$11             ; Check for nesting limit (16 levels max, depth 17 = overflow)
+  BCS .nesting_too_deep
   LDA SKIP_DEPTH
-  BNE .pi_skip_rest    ; Already skipping, don't evaluate condition
+  BNE .already_skipping ; Already skipping, don't record or evaluate
   ; Not skipping - evaluate condition
   PLA                  ; Restore input char
   JSR check_for_end_of_line
-  BCC .pi_has_label    ; Label present
-  JMP err_label_expected  ; Missing label
-.pi_has_label
-  JSR read_token       ; Read label name into TOKEN
-  PHA                  ; Save char after token
-  ; Look up label in symbol table (don't use local label handling for .ifdef)
+  BCC .has_label
+  JMP err_label_expected
+.has_label
+  JSR read_token
+  PHA                  ; Save char after token (could be '\n')
+  ; Save X (global output file handle)
+  TXA
+  PHA
+  ; Check for pass 2 - no need to look up label in pass 2
+  BIT PASS
+  BMI .pass2
+  ; --- Pass 1: Evaluate and store decision ---
+  LDX IFDEF_INDEX
+  ; Increment and check for overflow (wrap from 255 to 0 = buffer full)
+  INC IFDEF_INDEX
+  BEQ .overflow        ; If wrapped to 0, we've used all 256 slots
   LDA #$00
   STA IS_LOCAL_LABEL
   JSR select_label_hash_table
-  JSR find_in_hash
-  BCC .pi_skip_rest    ; Label found - continue assembling
-  ; Label doesn't exist - start skipping
+  JSR find_in_hash     ; C=0 if found, C=1 if not found
+  ; Save result: A = $FF if found (assemble), $00 if not found (skip)
+  LDA #$00             ; Default: not defined (skip)
+  BCS .save_result     ; C=1 means not found
+  LDA #$FF             ; Found: defined (assemble)
+.save_result
+  STA IFDEF_DECISIONS,X
+  ; Branch based on decision value
+  BEQ .start_skip      ; Not defined ($00) - start skipping
+  BNE .done            ; Defined ($FF) - continue (no skip)
+  ; --- Pass 2: Replay stored decision ---
+.pass2
+  LDX IFDEF_INDEX
+  INC IFDEF_INDEX
+  LDA IFDEF_DECISIONS,X
+  BEQ .start_skip
+  BNE .done
+.start_skip
   LDA COND_DEPTH
   STA SKIP_DEPTH
-.pi_skip_rest
-  PLA                  ; Restore char
-  JMP skip_rest_of_line ; Tail call
+.done
+  ; Restore X (global output file handle)
+  PLA
+  TAX
+  ; Restore char after token for skip_rest_of_line
+  PLA
+  JMP skip_rest_of_line
+.already_skipping
+  PLA                  ; Balance stack (saved input char)
+  JMP skip_rest_of_line
+.overflow
+  JMP err_too_many_ifdefs
+.nesting_too_deep
+  PLA                  ; Balance stack (saved input char)
+  JMP err_conditional_nesting_too_deep
 
 
 ; Process .endif directive
@@ -1492,6 +1534,7 @@ assemble_code
   STA IS_LOCAL_LABEL  ; Initialize local label flag
   STA COND_DEPTH      ; Clear conditional depth
   STA SKIP_DEPTH      ; Clear skip depth
+  STA IFDEF_INDEX     ; Clear .ifdef decision index
 .line_loop
   JSR read_char
   BCC .character_read
