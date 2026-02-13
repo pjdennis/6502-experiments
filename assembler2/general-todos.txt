@@ -1,14 +1,22 @@
   v11-v12: These have the bug. They use standard syntax with automatic ZP detection, but have no forward reference
   tracking.
 
+Move readonly checks to the destructive actions vs. the key presses?
+
+Make a variable batch limit - text entry should have a high batch limit (to support pasting) while keeping other limits as is for better visual feedback while e.g. navigating. (maybne) we could try first just bumping the limit.
 
 Update the emulator to generate a dump only if requested, and with a filename provided
+
+Batching of backspace and delete in insert mode seems to be broken
 
 Clean up some of the repeating print code in the editor via helper functions
 
 Try to centralize the buffer full message checks
 
 Addressing mode constants - decimals
+
+Search should find the first value on the current line following cursor position
+
 
 OPERAND_BYTES_0 = 0 << 4 
 
