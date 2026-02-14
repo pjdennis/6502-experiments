@@ -504,12 +504,46 @@ yank_delete_at_cursor:
 
 ; Delete bytes at cursor position (no yank)
 ; Input: BUF_LEN16 = number of bytes to delete, cursor position set via CURSOR_COL16
-; Shifts buffer, rebuilds lines, sets MODIFIED
+; Shifts buffer, adjusts line table (incremental if no newlines), sets MODIFIED
 ; Clobbers: A, X, Y, BUF_PTR16, BUF_SRC16, BUF_DST16
 delete_at_cursor:
   JSR get_cursor_buf_ptr     ; BUF_PTR16 = cursor position
+  ; Scan deleted range for newlines
+  CP16 BUF_PTR16, BUF_DST16 ; BUF_DST16 = scan pointer
+  LDA #0
+  STA NORMAL_TEMP            ; 0 = no newlines found
+  PUSH16 BUF_LEN16           ; Save delete count
+.scan_nl:
+  TST16 BUF_LEN16
+  BEQ .scan_done
+  LDY #0
+  LDA (BUF_DST16),Y
+  CMP #'\n'
+  BNE .scan_next
+  INC NORMAL_TEMP            ; Found newline
+.scan_next:
+  INC16 BUF_DST16
+  DEC16 BUF_LEN16
+  JMP .scan_nl
+.scan_done:
+  POP16 BUF_LEN16            ; Restore delete count
+  JSR get_cursor_buf_ptr     ; Recompute BUF_PTR16 (scan clobbered BUF_DST16)
   JSR buf_shift_left_16
+  LDA NORMAL_TEMP
+  BNE .full_rebuild
+  ; Incremental: negate BUF_LEN16 into BUF_SRC16
+  LDA #0
+  SEC
+  SBC BUF_LEN16
+  STA BUF_SRC16
+  LDA #0
+  SBC BUF_LEN16 + 1
+  STA BUF_SRC16 + 1
+  JSR buf_adjust_lines_apply
+  JMP .done
+.full_rebuild:
   JSR buf_rebuild_lines
+.done:
   LDA #$FF
   STA MODIFIED
   RTS
