@@ -656,6 +656,32 @@ def test_multiline_stderr_continuation():
             f"Missing continuation indent for expected in: {output}"
 
 
+# Test that "at line N" is found even when "at" appears earlier in the message.
+# Error 39 "File not found" at line 2 — the stderr is:
+# "Error 39 in file _tr_in.tmp at line 2: File not found"
+# The word "at" appears in "at line 2" (which is what we look for).
+# Using a filename that contains "at" to test: "catering.asm"
+LINE_NUMBER_AFTER_AT_TEST = """\
+---
+NAME: line_number_after_at
+INPUT:
+ 1: * = $0200
+ 2:   .include catering.asm
+EXPECT_ERROR: 39
+EXPECT_LINE: 2
+---
+"""
+
+
+def test_line_number_after_at_in_message():
+    """Line number extraction works even when 'at' appears before 'at line N'."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "test.txt").write_text(LINE_NUMBER_AFTER_AT_TEST)
+        output, rc = run_test_runner(tmpdir)
+        assert rc == 0, f"Expected exit code 0, got {rc}\nOutput: {output}"
+        assert "1 passed" in output, f"Expected 1 passed in: {output}"
+
+
 def test_unknown_flag_ignored():
     """An unknown flag like -x should be silently ignored; tests still run."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -703,6 +729,7 @@ def main():
         ("unknown_flag_ignored", test_unknown_flag_ignored),
         ("error_then_pass_in_one_file", test_error_then_pass_in_one_file),
         ("multiline_stderr_continuation", test_multiline_stderr_continuation),
+        ("line_number_after_at_in_message", test_line_number_after_at_in_message),
     ]
 
     passed = 0

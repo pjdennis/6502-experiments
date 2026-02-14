@@ -663,78 +663,47 @@ tr_verify_error:
   SEC
   RTS
 
+tr_at_line_str: .asciiz "at line "
+
 ; Check "at line N" in stderr, compare N with TR_EXPECT_LINE16
 ; On exit: C clear = match, C set = mismatch
 ;          HEX16 = parsed line number (for error reporting)
 tr_check_stderr_line:
-  ; Search for "at line " in stderr buffer
   LDY #$00
 .search:
   CPY TR_STDERR_LEN
   BCS .not_found
-  LDA TR_STDERR_BUF,Y
-  CMP #'a'
+  STY tr_ssl_start
+  LDX #$00
+.match_str:
+  LDA tr_at_line_str,X
+  BEQ .found               ; null = full match
+  CPY TR_STDERR_LEN
+  BCS .not_found
+  CMP TR_STDERR_BUF,Y
   BNE .next
-  ; Check "at line " (8 chars)
+  INX
   INY
-  CPY TR_STDERR_LEN
-  BCS .not_found
-  LDA TR_STDERR_BUF,Y
-  CMP #'t'
-  BNE .search              ; Restart from current Y (already past 'a')
-  INY
-  CPY TR_STDERR_LEN
-  BCS .not_found
-  LDA TR_STDERR_BUF,Y
-  CMP #' '
-  BNE .search
-  INY
-  CPY TR_STDERR_LEN
-  BCS .not_found
-  LDA TR_STDERR_BUF,Y
-  CMP #'l'
-  BNE .search
-  INY
-  CPY TR_STDERR_LEN
-  BCS .not_found
-  LDA TR_STDERR_BUF,Y
-  CMP #'i'
-  BNE .search
-  INY
-  CPY TR_STDERR_LEN
-  BCS .not_found
-  LDA TR_STDERR_BUF,Y
-  CMP #'n'
-  BNE .search
-  INY
-  CPY TR_STDERR_LEN
-  BCS .not_found
-  LDA TR_STDERR_BUF,Y
-  CMP #'e'
-  BNE .search
-  INY
-  CPY TR_STDERR_LEN
-  BCS .not_found
-  LDA TR_STDERR_BUF,Y
-  CMP #' '
-  BNE .search
-  INY
-  ; Y now points to the line number digits
-  JSR tr_parse_decimal_from_stderr
-  ; Compare with expected
-  CMP16 HEX16, TR_EXPECT_LINE16
-  BEQ .match
-  SEC
-  RTS
-.match:
-  CLC
-  RTS
+  JMP .match_str
 .next:
+  LDY tr_ssl_start
   INY
   JMP .search
+.found:
+  ; Y now points to the line number digits
+  JSR tr_parse_decimal_from_stderr
+  CMP16 HEX16, TR_EXPECT_LINE16
+  BEQ .matched
+  SEC
+  RTS
+.matched:
+  CLC
+  RTS
 .not_found:
   SEC
   RTS
+
+tr_ssl_start: .byte 0
 
 ; Check message after ": " in stderr matches TR_EXPECT_MSG
 ; On exit: C clear = match, C set = mismatch
