@@ -1765,71 +1765,106 @@ tr_skip_rest_of_line:
 ;   argc      $F01B    $F01C-$F01D     fake_argc
 ;   argv      $F01E    $F01F-$F020     fake_argv
 
-; Save original vector target addresses
+; Vector table: (port_target_addr, fake_handler_addr) for each vector
+tr_vector_table:
+  .word write_d,    fake_write_d
+  .word exit,       fake_exit
+  .word argc,       fake_argc
+  .word argv,       fake_argv
+tr_vector_table_end:
+TR_VECTOR_ENTRIES = tr_vector_table_end - tr_vector_table >> 2
+TR_ORIG_VECTORS_SIZE = TR_VECTOR_ENTRIES + TR_VECTOR_ENTRIES
+
+tr_orig_vectors: .reserve TR_ORIG_VECTORS_SIZE
+
+tr_vc_count: .byte 0
+
+; Trampoline: JSR tr_call_action → JMP (tr_action_ptr) → action RTS back
+tr_call_action:
+  JMP (tr_action_ptr)
+tr_action_ptr: .word 0
+
+; Walk table, calling action for each entry
+; On each call: TABP16 = port target addr, X = orig_vectors index,
+;               TR_ACTUAL_PTR16 = current table entry
+tr_vector_walk:
+  SET16 tr_vector_table, TR_ACTUAL_PTR16
+  LDX #$00
+  LDA #TR_VECTOR_ENTRIES
+  STA tr_vc_count
+.loop:
+  ; Load port target address from table[0..1] into TABP16
+  LDY #$00
+  CLC
+  LDA (TR_ACTUAL_PTR16),Y
+  ADC #1
+  STA TABP16
+  INY
+  LDA (TR_ACTUAL_PTR16),Y
+  ADC #0
+  STA TABP16 + 1
+  ; Call action
+  JSR tr_call_action
+  ; Advance X (orig_vectors index) and table pointer
+  INX
+  INX
+  CLC
+  LDA TR_ACTUAL_PTR16
+  ADC #$04
+  STA TR_ACTUAL_PTR16
+  BCC .no_carry
+  INC TR_ACTUAL_PTR16 + 1
+.no_carry:
+  DEC tr_vc_count
+  BNE .loop
+  RTS
+
+; Public API — thin wrappers setting the action pointer
 tr_save_vectors:
-  LDA $F00D
-  STA tr_orig_write_d
-  LDA $F00E
-  STA tr_orig_write_d + 1
-  LDA $F010
-  STA tr_orig_exit
-  LDA $F011
-  STA tr_orig_exit + 1
-  LDA $F01C
-  STA tr_orig_argc
-  LDA $F01D
-  STA tr_orig_argc + 1
-  LDA $F01F
-  STA tr_orig_argv
-  LDA $F020
-  STA tr_orig_argv + 1
-  RTS
+  SET16 tr_action_save, tr_action_ptr
+  JMP tr_vector_walk
 
-; Patch vectors to point to fake handlers
 tr_patch_vectors:
-  LDA #<fake_write_d
-  STA $F00D
-  LDA #>fake_write_d
-  STA $F00E
-  LDA #<fake_exit
-  STA $F010
-  LDA #>fake_exit
-  STA $F011
-  LDA #<fake_argc
-  STA $F01C
-  LDA #>fake_argc
-  STA $F01D
-  LDA #<fake_argv
-  STA $F01F
-  LDA #>fake_argv
-  STA $F020
-  RTS
+  SET16 tr_action_patch, tr_action_ptr
+  JMP tr_vector_walk
 
-; Restore original vector targets
 tr_restore_vectors:
-  LDA tr_orig_write_d
-  STA $F00D
-  LDA tr_orig_write_d + 1
-  STA $F00E
-  LDA tr_orig_exit
-  STA $F010
-  LDA tr_orig_exit + 1
-  STA $F011
-  LDA tr_orig_argc
-  STA $F01C
-  LDA tr_orig_argc + 1
-  STA $F01D
-  LDA tr_orig_argv
-  STA $F01F
-  LDA tr_orig_argv + 1
-  STA $F020
+  SET16 tr_action_restore, tr_action_ptr
+  JMP tr_vector_walk
+
+; Action: copy 2 bytes from (TABP16) → tr_orig_vectors+X
+tr_action_save:
+  LDY #$00
+  LDA (TABP16),Y
+  STA tr_orig_vectors,X
+  INY
+  LDA (TABP16),Y
+  STA tr_orig_vectors + 1,X
   RTS
 
-; Storage for original vector targets
-tr_orig_write_d:  .word 0
-tr_orig_exit:     .word 0
-tr_orig_argc:     .word 0
-tr_orig_argv:     .word 0
+; Action: copy fake handler addr from table[2..3] → (TABP16)
+tr_action_patch:
+  LDY #$02
+  LDA (TR_ACTUAL_PTR16),Y     ; fake lo
+  PHA
+  INY
+  LDA (TR_ACTUAL_PTR16),Y     ; fake hi
+  LDY #$01
+  STA (TABP16),Y               ; write hi
+  PLA
+  DEY
+  STA (TABP16),Y               ; write lo
+  RTS
+
+; Action: copy 2 bytes from tr_orig_vectors+X → (TABP16)
+tr_action_restore:
+  LDY #$00
+  LDA tr_orig_vectors,X
+  STA (TABP16),Y
+  INY
+  LDA tr_orig_vectors + 1,X
+  STA (TABP16),Y
+  RTS
 
 
 ; ============================================================================

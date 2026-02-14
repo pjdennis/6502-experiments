@@ -599,6 +599,35 @@ def test_all_field_types_dispatched():
         assert "1 skipped" in output, f"Expected 1 skipped in: {output}"
 
 
+# Two tests in one file: first triggers error, second is a normal hex pass
+ERROR_THEN_PASS_TEST = """\
+---
+NAME: first_error_test
+INPUT:
+ 1: * = $0200
+ 2:   LDA bogus
+EXPECT_ERROR: 1
+---
+NAME: second_pass_test
+INPUT:
+ 1: * = $0200
+ 2:   NOP
+EXPECT_HEX: ea
+---
+"""
+
+
+def test_error_then_pass_in_one_file():
+    """Error test followed by hex test in same file: vectors must restore."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "test.txt").write_text(ERROR_THEN_PASS_TEST)
+        output, rc = run_test_runner(tmpdir)
+        assert rc == 0, f"Expected exit code 0, got {rc}\nOutput: {output}"
+        assert "first_error_test" in output, f"Missing error test in: {output}"
+        assert "second_pass_test" in output, f"Missing pass test in: {output}"
+        assert "2 passed" in output, f"Expected 2 passed in: {output}"
+
+
 def test_unknown_flag_ignored():
     """An unknown flag like -x should be silently ignored; tests still run."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -644,6 +673,7 @@ def main():
         ("summary_no_emphasis_on_pass", test_summary_no_emphasis_on_pass),
         ("all_field_types_dispatched", test_all_field_types_dispatched),
         ("unknown_flag_ignored", test_unknown_flag_ignored),
+        ("error_then_pass_in_one_file", test_error_then_pass_in_one_file),
     ]
 
     passed = 0
