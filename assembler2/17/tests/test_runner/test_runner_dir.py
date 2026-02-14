@@ -197,6 +197,51 @@ EXPECT_HEX: a9 00
         assert "LIMIT" not in output, f"Unexpected LIMIT in: {output}"
 
 
+# A test with intentional byte mismatch (expect a9 42, input produces a9 43)
+BYTE_MISMATCH_TEST = """\
+---
+NAME: byte_mismatch
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$43
+EXPECT_HEX: a9 42
+---
+"""
+
+# A test with length mismatch (expect 3 bytes, input produces 2)
+LENGTH_MISMATCH_TEST = """\
+---
+NAME: length_mismatch
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$42
+EXPECT_HEX: a9 42 ea
+---
+"""
+
+
+def test_byte_mismatch_shows_hex_dumps():
+    """On byte mismatch, failure output should include exp: and got: hex dumps."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "test.txt").write_text(BYTE_MISMATCH_TEST)
+        output, rc = run_test_runner(tmpdir)
+        assert rc == 1, f"Expected exit code 1, got {rc}\nOutput: {output}"
+        assert "FAIL" in output, f"Missing FAIL in: {output}"
+        assert "exp: a9 42" in output, f"Missing exp hex dump in: {output}"
+        assert "got: a9 43" in output, f"Missing got hex dump in: {output}"
+
+
+def test_length_mismatch_shows_hex_dumps():
+    """On length mismatch, failure output should include exp: and got: hex dumps."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "test.txt").write_text(LENGTH_MISMATCH_TEST)
+        output, rc = run_test_runner(tmpdir)
+        assert rc == 1, f"Expected exit code 1, got {rc}\nOutput: {output}"
+        assert "FAIL" in output, f"Missing FAIL in: {output}"
+        assert "exp: a9 42 ea" in output, f"Missing exp hex dump in: {output}"
+        assert "got: a9 42" in output, f"Missing got hex dump in: {output}"
+
+
 def main():
     if not EMULATOR.exists():
         print(f"Error: Emulator not found at {EMULATOR}")
@@ -214,6 +259,8 @@ def main():
         ("empty_directory", test_empty_directory),
         ("cumulative_counts_across_files", test_cumulative_counts_across_files),
         ("long_input_lines", test_long_input_lines),
+        ("byte_mismatch_shows_hex_dumps", test_byte_mismatch_shows_hex_dumps),
+        ("length_mismatch_shows_hex_dumps", test_length_mismatch_shows_hex_dumps),
     ]
 
     passed = 0

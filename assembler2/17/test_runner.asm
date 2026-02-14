@@ -61,6 +61,7 @@ TR_DIR_META:       .byte       ; Current directory entry metadata byte
 ; BUFFER LAYOUT ($0900-$0FFF)
 ; ============================================================================
 
+TR_ACTUAL_BUF   = $1000  ; Actual output bytes for failure display (256 bytes, $1000-$10FF)
 TR_EXPECT_BUF   = $0900  ; Expected hex bytes (512 bytes, $0900-$0AFF)
 TR_STDERR_BUF   = $0B00  ; Captured stderr output (256 bytes, $0B00-$0BFF)
 TR_EXPECT_MSG   = $0C00  ; Expected error message (256 bytes, $0C00-$0CFF)
@@ -384,6 +385,8 @@ tr_msg_msg:         .asciiz "msg \""
 tr_msg_quote:       .asciiz "\""
 tr_msg_byte_at:     .asciiz " (byte "
 tr_msg_colon_space: .asciiz ": "
+tr_msg_exp_prefix:  .asciiz "    exp: "
+tr_msg_got_prefix:  .asciiz "    got: "
 
 
 ; ============================================================================
@@ -425,6 +428,12 @@ tr_verify_hex:
   JSR read
   BCS .eof
   STA tr_verify_byte
+  ; Buffer actual byte for failure display (first 256 only)
+  LDX TR_ACTUAL_LEN16 + 1
+  BNE .skip_buf             ; high byte != 0 → position >= 256
+  LDX TR_ACTUAL_LEN16
+  STA TR_ACTUAL_BUF,X
+.skip_buf:
   ; Compare if within expected range
   CMP16 TR_ACTUAL_LEN16, TR_EXPECT_LEN16
   BCS .beyond
@@ -463,6 +472,7 @@ tr_verify_hex:
   JSR tr_print_actual_len
   SHOW_MESSAGEI tr_msg_bytes
   SHOW_MESSAGEI tr_msg_close_paren
+  JSR tr_show_failure_dumps
   SEC
   RTS
 .lengths_match:
@@ -482,6 +492,7 @@ tr_verify_hex:
   LDA TR_MISMATCH_ACTUAL
   JSR tr_print_hex_byte
   SHOW_MESSAGEI tr_msg_close_paren
+  JSR tr_show_failure_dumps
   SEC
   RTS
 .hex_pass:
@@ -1588,6 +1599,98 @@ fake_write_d:
   RTS
 
 tr_save_x: .byte 0
+
+
+; ============================================================================
+; FAILURE HEX DUMP DISPLAY
+; ============================================================================
+
+; Print expected and actual hex dumps on test failure
+; Clobbers A, X, Y, TABP16
+tr_show_failure_dumps:
+  SHOW_MESSAGEI tr_msg_exp_prefix
+  JSR tr_dump_expect_hex
+  SHOW_CHAR '\n'
+  SHOW_MESSAGEI tr_msg_got_prefix
+  JSR tr_dump_actual_hex
+  SHOW_CHAR '\n'
+  RTS
+
+; Print expected bytes from TR_EXPECT_BUF as hex
+; Uses (TABP16),Y indirect addressing for 16-bit indexing
+; Prints min(TR_EXPECT_LEN16, 512) bytes
+tr_dump_expect_hex:
+  SET16 TR_EXPECT_BUF, TABP16
+  LDA #$00
+  STA tr_dump_pos16
+  STA tr_dump_pos16 + 1
+.loop:
+  CMP16 tr_dump_pos16, TR_EXPECT_LEN16
+  BCS .done
+  LDY #$00
+  LDA (TABP16),Y
+  JSR tr_print_hex_byte
+  SHOW_CHAR ' '
+  INC16 TABP16
+  INC16 tr_dump_pos16
+  JMP .loop
+.done:
+  RTS
+
+; Print actual bytes: first from TR_ACTUAL_BUF, then from file if > 256
+tr_dump_actual_hex:
+  ; Phase 1: print from buffer (up to min(TR_ACTUAL_LEN16, 256))
+  LDX #$00
+.buf_loop:
+  ; Check if X >= TR_ACTUAL_LEN16
+  LDA TR_ACTUAL_LEN16 + 1
+  BNE .buf_check_x           ; len >= 256, so X < len (X is 8-bit)
+  CPX TR_ACTUAL_LEN16
+  BCS .done                  ; X >= low byte and high byte is 0
+.buf_check_x:
+  LDA TR_ACTUAL_BUF,X
+  JSR tr_print_hex_byte
+  SHOW_CHAR ' '
+  INX
+  BNE .buf_loop              ; Loop until X wraps (256 bytes max)
+  ; Phase 2: if more than 256 bytes, read remaining from file
+  LDA TR_ACTUAL_LEN16 + 1
+  BEQ .done                  ; len <= 256, all done
+  ; Reopen output file
+  LDA #<TR_OUTPUT_FILE
+  LDX #>TR_OUTPUT_FILE
+  JSR open
+  STA tr_dump_handle
+  ; Skip first 256 bytes
+  JSR tr_skip_file_bytes
+  ; Print remaining bytes from file
+.file_loop:
+  LDA tr_dump_handle
+  JSR read
+  BCS .file_done
+  JSR tr_print_hex_byte
+  SHOW_CHAR ' '
+  JMP .file_loop
+.file_done:
+  LDA tr_dump_handle
+  JSR close
+.done:
+  RTS
+
+; Skip 256 bytes from file in tr_dump_handle
+tr_skip_file_bytes:
+  LDY #$00
+.loop:
+  LDA tr_dump_handle
+  JSR read
+  BCS .done
+  INY
+  BNE .loop                  ; Loop 256 times (Y wraps to 0)
+.done:
+  RTS
+
+tr_dump_pos16:  .word 0
+tr_dump_handle: .byte 0
 
 
 ; ============================================================================
