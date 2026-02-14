@@ -1009,6 +1009,8 @@ void hookexternal(void *funcptr) {
 #define port_serial_data        0xfe96
 #define port_serial_write       0xfe97
 #define port_serial_write_ready 0xfe98
+#define port_eof_b   0xfe99
+#define port_eof     0xfe9a
 
 uint8_t memory[0x10001];
 
@@ -1693,6 +1695,28 @@ uint8_t read6502(uint16_t address) {
             fseek(file_handle(a), 0, SEEK_SET);
         }
         return b;
+    } else if (address == port_eof_b) {              // eof_b
+        if (terminal_mode) {
+            restore_terminal();
+            fprintf(stderr, "Error: eof_b not available in terminal mode, use serial_read\n");
+            exit(1);
+        }
+        int b = fgetc(input_file_ptr);
+        if (b == EOF) {
+            fseek(input_file_ptr, 0, SEEK_SET);
+            return 0x80;
+        }
+        ungetc(b, input_file_ptr);
+        return 0;
+    } else if (address == port_eof) {                // eof
+        FILE *f = file_handle(a);
+        int b = fgetc(f);
+        if (b == EOF) {
+            fseek(f, 0, SEEK_SET);
+            return 0x80;
+        }
+        ungetc(b, f);
+        return 0;
     } else if (address == port_argc) {               // argc
         return arg_count;
     } else if (address == port_argv_l) {             // argvl
@@ -1944,10 +1968,11 @@ void show_commandline(int argc, char**argv) {
 #define inst_rts 0x60
 #define inst_sec 0x38
 #define inst_sta 0x8d
-#define inst_cmpi 0xc9
 #define inst_ldx 0xae
 #define inst_pha 0x48
 #define inst_pla 0x68
+#define inst_bit 0x2c
+#define inst_bmi 0x30
 
 int main(int argc, char **argv) {
     if (argc < 2) {
@@ -2183,12 +2208,12 @@ int main(int argc, char **argv) {
     emit_byte(inst_jmp);        // f039     jmp serial_write
     save_address(addr_serial_write);
     fill_address(addr_read_b);
-    emit_byte(inst_lda);        // read_b:  lda $f004
+    emit_byte(inst_bit);        // read_b:  bit port_eof_b
+    emit_address(port_eof_b);
+    emit_byte(inst_bmi);        //          bmi .at_end (+5)
+    emit_byte(0x05);
+    emit_byte(inst_lda);        //          lda port_read_b
     emit_address(port_read_b);
-    emit_byte(inst_cmpi);       //          cmp #4
-    emit_byte(0x04);
-    emit_byte(inst_beq);        //          beq .at_end
-    emit_byte(0x02);
     emit_byte(inst_clc);        //          clc
     emit_byte(inst_rts);        //          rts
     emit_byte(inst_sec);        // .at_end: sec
@@ -2213,12 +2238,12 @@ int main(int argc, char **argv) {
     emit_address(port_close);
     emit_byte(inst_rts);        //          rts
     fill_address(addr_read);
-    emit_byte(inst_lda);        // read:    lda $efff
+    emit_byte(inst_bit);        // read:    bit port_eof
+    emit_address(port_eof);
+    emit_byte(inst_bmi);        //          bmi .at_end (+5)
+    emit_byte(0x05);
+    emit_byte(inst_lda);        //          lda port_read
     emit_address(port_read);
-    emit_byte(inst_cmpi);       //          cmp #4
-    emit_byte(0x04);
-    emit_byte(inst_beq);        //          beq .at_end
-    emit_byte(0x02);
     emit_byte(inst_clc);        //          clc
     emit_byte(inst_rts);        //          rts
     emit_byte(inst_sec);        // .at_end: sec
