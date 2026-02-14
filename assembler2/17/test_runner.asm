@@ -3,6 +3,7 @@
 ; Runs assembler test files entirely within the emulated environment.
 ; The assembler code is called as a black box via JSR start.
 ; Vectors (exit, argc, argv, write_d) are intercepted to capture results.
+; Output is verified by reading back the output file after assembly.
 ;
 ; Build:
 ;   (cd 17 && ../emulator.out out/asm.out asm.asm out/test_runner.out define:enable_test_runner)
@@ -176,10 +177,6 @@ tr_run_test:
   ; Clear stderr capture
   LDA #$00
   STA TR_STDERR_LEN
-  ; Initialize output comparison state
-  STA_LH16 TR_ACTUAL_LEN16
-  STA TR_MISMATCH_FLAG
-  SET16 TR_EXPECT_BUF, TR_ACTUAL_PTR16
   ; Patch vectors to intercept
   JSR tr_patch_vectors
   ; Save stack pointer
@@ -286,7 +283,7 @@ tr_msg_colon_space: .asciiz ": "
 ; HEX VERIFICATION
 ; ============================================================================
 
-; Verify hex test: compare actual output (captured on-the-fly) with expected
+; Verify hex test: read back output file and compare with expected bytes
 ; On exit: C clear = pass, C set = fail (details already printed)
 tr_verify_hex:
   ; First check: assembler should have succeeded
@@ -305,6 +302,47 @@ tr_verify_hex:
   SEC
   RTS
 .exit_ok:
+  ; Open output file for reading
+  LDA #<TR_OUTPUT_FILE
+  LDX #>TR_OUTPUT_FILE
+  JSR open
+  STA tr_verify_handle
+  ; Initialize comparison state
+  LDA #$00
+  STA_LH16 TR_ACTUAL_LEN16
+  STA TR_MISMATCH_FLAG
+  SET16 TR_EXPECT_BUF, TR_ACTUAL_PTR16
+  ; Read loop: compare each output byte with expected
+.read_loop:
+  LDA tr_verify_handle
+  JSR read
+  BCS .eof
+  STA tr_verify_byte
+  ; Compare if within expected range
+  CMP16 TR_ACTUAL_LEN16, TR_EXPECT_LEN16
+  BCS .beyond
+  LDY #$00
+  LDA tr_verify_byte
+  CMP (TR_ACTUAL_PTR16),Y
+  BEQ .match
+  ; Mismatch - record if first one
+  LDX TR_MISMATCH_FLAG
+  BNE .match              ; Already recorded
+  STA TR_MISMATCH_ACTUAL
+  LDA (TR_ACTUAL_PTR16),Y
+  STA TR_MISMATCH_EXPECT
+  CP16 TR_ACTUAL_LEN16, TR_MISMATCH_POS16
+  LDA #$01
+  STA TR_MISMATCH_FLAG
+.match:
+  INC16 TR_ACTUAL_PTR16
+.beyond:
+  INC16 TR_ACTUAL_LEN16
+  JMP .read_loop
+.eof:
+  ; Close output file
+  LDA tr_verify_handle
+  JSR close
   ; Check lengths match
   CMP16 TR_ACTUAL_LEN16, TR_EXPECT_LEN16
   BEQ .lengths_match
@@ -321,7 +359,7 @@ tr_verify_hex:
   SEC
   RTS
 .lengths_match:
-  ; Check for byte mismatch (recorded during write interception)
+  ; Check for byte mismatch
   LDA TR_MISMATCH_FLAG
   BEQ .hex_pass
   ; Byte mismatch - print details
@@ -342,6 +380,9 @@ tr_verify_hex:
 .hex_pass:
   CLC
   RTS
+
+tr_verify_handle: .byte 0
+tr_verify_byte:   .byte 0
 
 
 ; ============================================================================
@@ -1307,7 +1348,6 @@ tr_skip_rest_of_line:
 ;   exit      $F00F    $F010-$F011     fake_exit
 ;   argc      $F01B    $F01C-$F01D     fake_argc
 ;   argv      $F01E    $F01F-$F020     fake_argv
-;   write     $F024    $F025-$F026     fake_write
 
 ; Save original vector target addresses
 tr_save_vectors:
@@ -1327,10 +1367,6 @@ tr_save_vectors:
   STA tr_orig_argv
   LDA $F020
   STA tr_orig_argv + 1
-  LDA $F025
-  STA tr_orig_write
-  LDA $F026
-  STA tr_orig_write + 1
   RTS
 
 ; Patch vectors to point to fake handlers
@@ -1351,10 +1387,6 @@ tr_patch_vectors:
   STA $F01F
   LDA #>fake_argv
   STA $F020
-  LDA #<fake_write
-  STA $F025
-  LDA #>fake_write
-  STA $F026
   RTS
 
 ; Restore original vector targets
@@ -1375,10 +1407,6 @@ tr_restore_vectors:
   STA $F01F
   LDA tr_orig_argv + 1
   STA $F020
-  LDA tr_orig_write
-  STA $F025
-  LDA tr_orig_write + 1
-  STA $F026
   RTS
 
 ; Storage for original vector targets
@@ -1386,7 +1414,6 @@ tr_orig_write_d:  .word 0
 tr_orig_exit:     .word 0
 tr_orig_argc:     .word 0
 tr_orig_argv:     .word 0
-tr_orig_write:    .word 0
 
 
 ; ============================================================================
@@ -1440,44 +1467,6 @@ fake_write_d:
   RTS
 
 tr_save_x: .byte 0
-
-; fake_write - Intercept output bytes for on-the-fly comparison
-; On entry: A = byte to write, X = file handle
-; On exit: A, X, Y preserved (matches real write contract)
-fake_write:
-  STA $FE84               ; Forward to real write port
-  STA tr_fw_save_a
-  STX tr_fw_save_x
-  STY tr_fw_save_y
-  ; Are we beyond expected data?
-  CMP16 TR_ACTUAL_LEN16, TR_EXPECT_LEN16
-  BCS .beyond
-  ; Compare written byte with expected byte
-  LDY #$00
-  LDA tr_fw_save_a
-  CMP (TR_ACTUAL_PTR16),Y
-  BEQ .match
-  ; Mismatch - record if first one
-  LDX TR_MISMATCH_FLAG
-  BNE .match              ; Already recorded
-  STA TR_MISMATCH_ACTUAL
-  LDA (TR_ACTUAL_PTR16),Y
-  STA TR_MISMATCH_EXPECT
-  CP16 TR_ACTUAL_LEN16, TR_MISMATCH_POS16
-  LDA #$01
-  STA TR_MISMATCH_FLAG
-.match:
-  INC16 TR_ACTUAL_PTR16
-.beyond:
-  INC16 TR_ACTUAL_LEN16
-  LDA tr_fw_save_a
-  LDX tr_fw_save_x
-  LDY tr_fw_save_y
-  RTS
-
-tr_fw_save_a: .byte 0
-tr_fw_save_x: .byte 0
-tr_fw_save_y: .byte 0
 
 
 ; ============================================================================
