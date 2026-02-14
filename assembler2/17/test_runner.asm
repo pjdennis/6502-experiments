@@ -51,7 +51,6 @@ TR_MISMATCH_FLAG:  .byte       ; Nonzero if byte mismatch detected
 TR_MISMATCH_ACTUAL: .byte      ; Actual byte at first mismatch
 TR_MISMATCH_EXPECT: .byte      ; Expected byte at first mismatch
 TR_MISMATCH_POS16: .word       ; Position of first mismatch
-TR_LIMIT_FLAG:     .byte       ; Nonzero if runner hit a resource limit
 TR_DIR_HANDLE:     .byte       ; Directory handle for directory scanning mode
 TR_DIR_META:       .byte       ; Current directory entry metadata byte
 
@@ -266,16 +265,8 @@ tr_check_txt_extension:
 tr_finalize_test:
   ; Auto-skip tests needing special builds
   LDA TR_ARGV_COUNT
-  BEQ .check_limit
-  JSR tr_check_auto_skip
-.check_limit:
-  ; Check for runner resource limitations
-  LDA TR_LIMIT_FLAG
   BEQ .check_skip
-  JSR tr_print_test_name
-  SHOW_MESSAGEI tr_msg_limit
-  INC16 TR_FAIL_COUNT16
-  RTS
+  JSR tr_check_auto_skip
 .check_skip:
   LDA TR_SKIP_FLAG
   BEQ .run
@@ -381,7 +372,6 @@ tr_setup_argv:
   RTS
 
 tr_msg_skip:        .asciiz " SKIP\n"
-tr_msg_limit:       .asciiz " LIMIT (input line exceeds 255 chars)\n"
 tr_msg_pass:        .asciiz " PASS\n"
 tr_msg_fail:        .asciiz " FAIL"
 tr_msg_close_paren: .asciiz ")\n"
@@ -985,12 +975,6 @@ tr_handle_input:
 
 ; Handle an input content line (strip "N: " prefix, write to temp file)
 tr_handle_input_line:
-  ; Flag if this line was truncated (runner limitation)
-  LDA TR_LINE_TRUNC
-  BEQ .no_trunc
-  ORA TR_LIMIT_FLAG         ; Don't clear if already set
-  STA TR_LIMIT_FLAG
-.no_trunc:
   ; Strip line number prefix: skip spaces, digits, ": "
   LDY #$00
   ; Skip leading spaces
@@ -1033,9 +1017,30 @@ tr_handle_input_line:
   INY
   JMP .write_loop
 .write_nl:
+  ; If line was truncated, stream remaining bytes from test file
+  LDA TR_LINE_TRUNC
+  BEQ .no_trunc
+  JSR tr_stream_input_overflow
+.no_trunc:
   LDA #$0A
   LDX TR_INPUT_HANDLE
   JSR write
+  RTS
+
+; Stream remaining bytes of a truncated input line from test file to temp input
+tr_stream_input_overflow:
+.loop:
+  LDA TR_FILE_HANDLE
+  JSR read
+  BCS .done               ; EOF
+  CMP #$0A
+  BEQ .done               ; Newline ends the line
+  LDX TR_INPUT_HANDLE
+  JSR write
+  JMP .loop
+.done:
+  LDA #$00
+  STA TR_LINE_TRUNC
   RTS
 
 ; Handle EXPECT_HEX: field - parse hex bytes
@@ -1363,7 +1368,6 @@ tr_init_test:
   STA TR_TEST_TYPE
   STA TR_STATE
   STA TR_ARGV_COUNT
-  STA TR_LIMIT_FLAG
   RTS
 
 ; Print the test name (indented, no newline)

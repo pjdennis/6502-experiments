@@ -168,6 +168,35 @@ def test_cumulative_counts_across_files():
         assert "3 passed" in output, f"Expected 3 passed in: {output}"
 
 
+def test_long_input_lines():
+    """INPUT lines longer than 255 chars should be streamed correctly."""
+    # Build a macro with many parameters - the .macro line exceeds 255 chars
+    params = ", ".join(f"a{i:02d}" for i in range(50))
+    args = ", ".join(f"${i:02X}" for i in range(50))
+    long_test = f"""\
+---
+NAME: long_input_line
+INPUT:
+ 1: * = $0200
+ 2:   .macro BIG {params}
+ 3:   LDA #a00
+ 4:   .endmacro
+ 5:   BIG {args}
+EXPECT_HEX: a9 00
+---
+"""
+    # Verify the test file actually has lines >255 chars
+    max_line = max(len(line) for line in long_test.splitlines())
+    assert max_line > 255, f"Test setup error: max line is only {max_line} chars"
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "test.txt").write_text(long_test)
+        output, rc = run_test_runner(tmpdir)
+        assert rc == 0, f"Expected exit code 0, got {rc}\nOutput: {output}"
+        assert "1 passed" in output, f"Expected 1 passed in: {output}"
+        assert "LIMIT" not in output, f"Unexpected LIMIT in: {output}"
+
+
 def main():
     if not EMULATOR.exists():
         print(f"Error: Emulator not found at {EMULATOR}")
@@ -184,6 +213,7 @@ def main():
         ("single_file_mode_still_works", test_single_file_mode_still_works),
         ("empty_directory", test_empty_directory),
         ("cumulative_counts_across_files", test_cumulative_counts_across_files),
+        ("long_input_lines", test_long_input_lines),
     ]
 
     passed = 0

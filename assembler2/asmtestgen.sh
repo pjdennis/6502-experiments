@@ -128,8 +128,7 @@ diff <(hexdump -C 17/out/asm.out) <(hexdump -C 17/out/asm_2.out)
 diff <(hexdump -C 17/out/asm_debug.out) <(hexdump -C 17/out/asm_debug_2.out)
 echo "--- Self-hosted tests ---"
 (cd 17 && ../emulator.out out/asm.out asm.asm out/test_runner.out define:enable_test_runner)
-#TODO: re-enable once LIMIT handling is fixed (2 tests exceed 255 char line limit)
-#(cd 17/tests/asm && ../../../emulator.out ../../out/test_runner.out)
+(cd 17/tests/asm && ../../../emulator.out ../../out/test_runner.out)
 echo "--- Test runner directory mode tests ---"
 python3 17/tests/test_runner/test_runner_dir.py
 
