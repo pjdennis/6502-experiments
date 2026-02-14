@@ -189,84 +189,28 @@ pending_combo_keys:
 
 normal_delete_char:
   JSR check_cursor_in_line
-  BCC .in_range
-  JMP .done
-.in_range:
+  BCS .done
 
-  ; Calculate max deleteable = LINE_LEN16 - CURSOR_COL16, capped at 255
-  SEC
-  SBC16 LINE_LEN16, CURSOR_COL16, LINE_LEN16
-  LDA LINE_LEN16 + 1
-  BNE .cap_diff            ; High byte > 0, cap at 255
-  LDA LINE_LEN16
-  JMP .have_max
-.cap_diff:
-  LDA #$FF
-.have_max:
-  STA LINE_LEN16            ; Reuse low byte as 8-bit cap
-
-  ; Start with count prefix (minimum 1)
-  JSR get_count              ; BUF_TEMP16 = count
-  LDX BUF_TEMP16             ; X = count (low byte, capped at 255)
-
-  ; Add pending matching keys (x or Delete)
-  ; BUF_TEMP16 = yank count (last effective x command's count).
-  ; Pending keys are individual x commands (count=1), so if any
-  ; are batched, clamp yank count to 1.
+  ; Normalize batching: count_pending_key → BATCH_EXTRA
+  JSR get_count              ; BUF_TEMP16 = count prefix
+  LDX BUF_TEMP16
   STX BUF_DELTA              ; Save count prefix
-  JSR count_pending_key      ; Returns additional count in X
-  TXA                        ; A = pending count
-  BEQ .no_pending
-  LDX #1
-  STX BUF_TEMP16             ; Pending: last x has count=1
-.no_pending:
+  JSR count_pending_key      ; X = extra x keys from typeahead
+  STX BATCH_EXTRA
+  TXA
+  BEQ .no_extras
   CLC
-  ADC BUF_DELTA              ; Total = count + pending
-  BCS .cap_at_max            ; Overflow -> cap
-  TAX
-
-  ; Cap at max deleteable
-  CPX LINE_LEN16
-  BCC .cap_ok
-.cap_at_max:
-  LDX LINE_LEN16
-.cap_ok:
-  STX BUF_DELTA
-
-  ; Clamp yank count to delete count (e.g. 99x on short line)
-  LDA BUF_TEMP16
-  CMP BUF_DELTA
-  BCC .yank_count_ok
-  BEQ .yank_count_ok
-  LDA BUF_DELTA
-  STA BUF_TEMP16
-.yank_count_ok:
-
-  ; Yank BUF_TEMP16 chars from end of delete range
-  JSR get_cursor_buf_ptr     ; BUF_PTR16 = cursor position
-  LDA BUF_DELTA
-  SEC
-  SBC BUF_TEMP16             ; A = offset to yank start
-  CLC
-  ADCA16 BUF_PTR16, BUF_SRC16 ; BUF_SRC16 = cursor + offset
-  LDA BUF_TEMP16
-  STA BUF_LEN16
-  LDA #0
-  STA BUF_LEN16 + 1
-  LDA BUF_DELTA
-  PHA                        ; Save BUF_DELTA on stack
-  JSR yank_add_chars         ; Ignore failure
-  PLA
-  STA BUF_DELTA              ; Restore BUF_DELTA
-
-  ; Delete BUF_DELTA chars at cursor position
-  JSR get_cursor_buf_ptr     ; Recompute (yank clobbered BUF_PTR16)
-  JSR buf_delete_chars
-  JSR buf_adjust_lines_dec
-
-  JSR clamp_cursor_col
+  ADC BUF_DELTA
+  BCS .cap_total
+  STA BUF_TEMP16             ; total = count + extras
+  JMP .no_extras
+.cap_total:
   LDA #$FF
-  STA MODIFIED
+  STA BUF_TEMP16
+.no_extras:
+  LDA #RANGE_CHARS_FWD
+  STA RANGE_MODE
+  JMP batched_char_delete
 .done:
   JMP clear_count
 

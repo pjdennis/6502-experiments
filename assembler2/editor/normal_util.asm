@@ -12,6 +12,7 @@ COUNT_ACTIVE:   .byte  ; $FF if digits are being entered, $00 otherwise
 NORMAL_TEMP:    .byte  ; Temp byte for normal mode operations
 BATCH_RESTORE_KEY: .byte ; Key to restore to LAST_KEY after batch (0 = none)
 BATCH_EXTRA:       .byte ; Number of extra pairs found by batch_pending_pairs (0 = none)
+RANGE_MODE:        .byte ; Range computation mode: 0=chars fwd, 1=words fwd, $FF=words back
 
   .code
 
@@ -581,3 +582,79 @@ apply_char_operator:
   RTS
 .change:
   JMP enter_insert_mode_render
+
+; --- Shared batched delete ---
+
+; RANGE_MODE values
+RANGE_CHARS_FWD = 0
+RANGE_WORDS_FWD = 1
+RANGE_WORDS_BACK = $FF
+
+; Shared batched character delete for x, dw, db
+; Input: BUF_TEMP16 = total count, BATCH_EXTRA = # of extra batched units (0 = no batching)
+;        RANGE_MODE = range computation mode
+;        LINE_LEN16 = line length (for forward modes, from check_cursor_in_line)
+; Clobbers: A, X, Y, BUF_PTR16, BUF_SRC16, BUF_DST16, BUF_LEN16
+batched_char_delete:
+  LDA BATCH_EXTRA
+  BNE .batched
+
+  ; --- Non-batched: compute full range, yank+delete all ---
+  LDX BUF_TEMP16
+  JSR compute_range_dispatch
+  BCS .done
+  LDA #OP_DELETE
+  JSR apply_char_operator
+  JMP .finish
+
+.batched:
+  ; --- Delete (total-1) units without yank ---
+  LDX BUF_TEMP16
+  DEX
+  BEQ .batch_last
+  JSR compute_range_dispatch
+  BCS .batch_last
+  JSR delete_at_cursor
+
+.batch_last:
+  ; Guard: anything left to operate on?
+  JSR batch_guard
+  BCS .done
+  LDX #1
+  JSR compute_range_dispatch
+  BCS .done
+  LDA #OP_DELETE
+  JSR apply_char_operator
+
+.finish:
+  JSR clamp_cursor_col
+.done:
+  JMP clear_count
+
+; Dispatch range computation based on RANGE_MODE
+; Input: X = count, LINE_LEN16 = line length (forward modes)
+; Output: BUF_LEN16 = range, carry set if nothing
+compute_range_dispatch:
+  LDA RANGE_MODE
+  BEQ .chars_fwd
+  BMI .words_back
+  JMP compute_word_range_forward
+.chars_fwd:
+  JMP compute_char_range_forward
+.words_back:
+  JMP compute_word_range_backward
+
+; Guard check for batched second pass
+; Forward: must have chars on line. Backward: cursor must be > 0.
+batch_guard:
+  LDA RANGE_MODE
+  BMI .backward
+  JMP check_cursor_in_line
+.backward:
+  TST16 CURSOR_COL16
+  BEQ .fail
+  CLC
+  RTS
+.fail:
+  SEC
+  RTS

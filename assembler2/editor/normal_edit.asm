@@ -551,49 +551,9 @@ do_dw:
   JSR get_count              ; BUF_TEMP16 = N
   JSR check_cursor_in_line
   BCS .dw_done               ; Empty line, bail
-
-  CP16 CURSOR_COL16, BUF_LEN16  ; BUF_LEN16 = scan start at cursor
-
-  LDA BATCH_EXTRA
-  BNE .dw_batched
-
-  ; --- Non-batched: scan N words, single yank+delete ---
-  LDX BUF_TEMP16
-  JSR scan_words_forward
-  SEC
-  SBC16 BUF_LEN16, CURSOR_COL16, BUF_LEN16
-  TST16 BUF_LEN16
-  BEQ .dw_done               ; Nothing to delete
-  JSR yank_delete_at_cursor
-  JMP .dw_finish
-
-.dw_batched:
-  ; --- Batched: delete (N-1) without yank, then yank+delete last word ---
-  LDX BUF_TEMP16
-  DEX
-  BEQ .dw_batch_last         ; N=1, skip first delete
-  JSR scan_words_forward
-  SEC
-  SBC16 BUF_LEN16, CURSOR_COL16, BUF_LEN16
-  TST16 BUF_LEN16
-  BEQ .dw_batch_last         ; Nothing for first part
-  JSR delete_at_cursor       ; 1st shift (no yank)
-
-.dw_batch_last:
-  ; Yank+delete last word
-  JSR check_cursor_in_line
-  BCS .dw_done
-  CP16 CURSOR_COL16, BUF_LEN16
-  LDX #1
-  JSR scan_words_forward
-  SEC
-  SBC16 BUF_LEN16, CURSOR_COL16, BUF_LEN16
-  TST16 BUF_LEN16
-  BEQ .dw_done               ; Nothing to delete
-  JSR yank_delete_at_cursor   ; 2nd shift (yanks last word)
-
-.dw_finish:
-  JSR clamp_cursor_col
+  LDA #RANGE_WORDS_FWD
+  STA RANGE_MODE
+  JMP batched_char_delete
 .dw_done:
   JMP clear_count
 
@@ -605,55 +565,10 @@ do_dw:
 do_db:
   JSR get_count              ; BUF_TEMP16 = N
   TST16 CURSOR_COL16
-  BNE .db_not_bol            ; Not at col 0, proceed
-  JMP .db_done
-.db_not_bol:
-
-  LDA BATCH_EXTRA
-  BNE .db_batched
-
-  ; --- Non-batched: scan N words back, single yank+delete ---
-  PUSH16 CURSOR_COL16         ; Save original cursor
-  LDX BUF_TEMP16
-  JSR scan_words_backward     ; CURSOR_COL16 = new position
-  POP16 BUF_LEN16             ; BUF_LEN16 = original cursor
-  SEC
-  SBC16 BUF_LEN16, CURSOR_COL16, BUF_LEN16  ; BUF_LEN16 = delete count
-  TST16 BUF_LEN16
-  BEQ .db_done
-  JSR yank_delete_at_cursor
-  JMP .db_finish
-
-.db_batched:
-  ; --- Batched: delete (N-1) without yank, then yank+delete last word ---
-  LDX BUF_TEMP16
-  DEX
-  BEQ .db_batch_last          ; N=1, skip first delete
-  PUSH16 CURSOR_COL16
-  JSR scan_words_backward
-  POP16 BUF_LEN16
-  SEC
-  SBC16 BUF_LEN16, CURSOR_COL16, BUF_LEN16
-  TST16 BUF_LEN16
-  BEQ .db_batch_last
-  JSR delete_at_cursor        ; 1st shift (no yank)
-
-.db_batch_last:
-  ; Yank+delete last word
-  TST16 CURSOR_COL16
-  BEQ .db_done
-  PUSH16 CURSOR_COL16
-  LDX #1
-  JSR scan_words_backward
-  POP16 BUF_LEN16
-  SEC
-  SBC16 BUF_LEN16, CURSOR_COL16, BUF_LEN16
-  TST16 BUF_LEN16
-  BEQ .db_done
-  JSR yank_delete_at_cursor   ; 2nd shift (yanks last word)
-
-.db_finish:
-  JSR clamp_cursor_col
+  BEQ .db_done               ; At col 0, nothing to do
+  LDA #RANGE_WORDS_BACK
+  STA RANGE_MODE
+  JMP batched_char_delete
 .db_done:
   JMP clear_count
 
