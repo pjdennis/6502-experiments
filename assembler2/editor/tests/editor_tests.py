@@ -4526,6 +4526,15 @@ class EditorTestRunner:
             expected_content="A\nA\nB\nB\nC\n"
         )
 
+        # yy+p on line longer than 255 chars (tests page-crossing in newline scan)
+        long_line = "A" * 300
+        self.run_test(
+            "yy+p with 300-char line (page crossing)",
+            long_line + "\nB\nC\n",
+            b"yyp:wq\r",
+            expected_content=long_line + "\n" + long_line + "\nB\nC\n"
+        )
+
         # ============================================================
         # Character yank/paste tests (x, D with p/P)
         # ============================================================

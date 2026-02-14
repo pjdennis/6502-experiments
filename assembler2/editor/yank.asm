@@ -200,6 +200,8 @@ yank_paste_below_n:
   BEQ .found_nl
   INY
   BNE .find_nl
+  INC BUF_PTR16+1
+  JMP .find_nl
 .found_nl:
   INY
   TYA
