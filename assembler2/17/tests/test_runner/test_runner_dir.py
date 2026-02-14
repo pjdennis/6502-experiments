@@ -437,6 +437,29 @@ def test_bracketed_input():
         assert "1 passed" in output, f"Expected 1 passed in: {output}"
 
 
+# A test with bracketed EXPECT_STDERR (preserving leading whitespace)
+BRACKETED_STDERR_TEST = """\
+---
+NAME: bracketed_stderr
+INPUT:
+ 1: * = $0200
+ 2:   .include nonexistent_file_12345.asm
+EXPECT_STDERR:
+[Error 39 in file _tr_in.tmp at line 2: File not found]
+---
+"""
+
+
+def test_bracketed_stderr():
+    """EXPECT_STDERR lines with [content] brackets should preserve whitespace."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "test.txt").write_text(BRACKETED_STDERR_TEST)
+        output, rc = run_test_runner(tmpdir)
+        assert rc == 0, f"Expected exit code 0, got {rc}\nOutput: {output}"
+        assert "SKIP" not in output, f"Unexpected SKIP in: {output}"
+        assert "1 passed" in output, f"Expected 1 passed in: {output}"
+
+
 def test_verbose_flag_shows_stderr():
     """With -v flag, assembler stderr (Error messages) should appear in output."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -477,6 +500,7 @@ def main():
         ("expect_stderr_mismatch_display", test_expect_stderr_mismatch_display),
         ("expect_stderr_main_file_placeholder", test_expect_stderr_main_file_placeholder),
         ("bracketed_input", test_bracketed_input),
+        ("bracketed_stderr", test_bracketed_stderr),
     ]
 
     passed = 0

@@ -1356,6 +1356,23 @@ tr_handle_expect_stderr:
 ; Handle a line inside EXPECT_STDERR section
 ; Copies line bytes to TR_EXPECT_BUF, appending \n between lines
 tr_handle_stderr_line:
+  ; Check for bracketed content [...]
+  LDY #$00
+  CPY TR_LINE_LEN
+  BCS .no_brackets
+  LDA TR_LINE_BUF,Y
+  CMP #'['
+  BNE .no_brackets
+  LDX TR_LINE_LEN
+  DEX
+  LDA TR_LINE_BUF,X
+  CMP #']'
+  BNE .no_brackets
+  ; Strip brackets: skip '[', exclude ']'
+  INY
+  STX TR_LINE_LEN
+.no_brackets:
+  STY tr_stderr_start_y
   ; If not the first line, prepend \n
   LDA TR_EXPECT_LEN16
   ORA TR_EXPECT_LEN16 + 1
@@ -1363,7 +1380,7 @@ tr_handle_stderr_line:
   LDA #$0A
   JSR tr_store_expect_byte
 .no_separator:
-  LDY #$00
+  LDY tr_stderr_start_y
 .copy:
   CPY TR_LINE_LEN
   BCS .done
@@ -1397,7 +1414,8 @@ tr_handle_stderr_line:
 .done:
   RTS
 
-tr_stderr_save_y: .byte 0
+tr_stderr_save_y:  .byte 0
+tr_stderr_start_y: .byte 0
 
 ; Check if {{MAIN_FILE}} starts at TR_LINE_BUF[Y]
 ; On entry: Y = index of first '{' in TR_LINE_BUF
