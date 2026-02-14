@@ -9,7 +9,7 @@
 ;   (cd 17 && ../emulator.out out/asm.out asm.asm out/test_runner.out define:enable_test_runner)
 ;
 ; Usage:
-;   (cd 17 && ../emulator.out out/test_runner.out tests/asm/01-instructions.txt)
+;   (cd 17/tests/asm && ../../../emulator.out ../../out/test_runner.out 01-instructions.txt)
 
 
 ; ============================================================================
