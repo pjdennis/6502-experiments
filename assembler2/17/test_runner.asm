@@ -56,8 +56,22 @@ TR_DIR_META:       .byte       ; Current directory entry metadata byte
 TR_VERBOSE:        .byte       ; Nonzero to forward assembler stderr to terminal
 TR_FILE_ARG:       .byte       ; Index of filename arg in argv, or $FF for none
 TR_QUIET:          .byte       ; Nonzero to suppress passing test output
+TR_PTR16:          .word       ; General-purpose 16-bit pointer
+TR_TEMP:           .byte       ; Temporary scratch byte
+TR_PARSE16:        .word       ; 16-bit parsed value
+TR_SCRATCH16:      .word       ; 16-bit scratch for multiply
 
   .code
+
+  .macro TR_SHOW_CHAR val
+  LDA #val
+  JSR write_d
+  .endmacro
+
+  .macro TR_SHOW_MESSAGEI addr
+  SET16 addr, TR_PTR16
+  JSR tr_show_message
+  .endmacro
 
 
 ; ============================================================================
@@ -101,17 +115,17 @@ test_runner_start:
   TXA
   PHA                       ; Save arg index
   JSR argv                  ; A/X = pointer to arg string
-  STAX16 TABP16
+  STAX16 TR_PTR16
   LDY #$00
-  LDA (TABP16),Y
+  LDA (TR_PTR16),Y
   CMP #'-'
   BNE .is_file
   ; Verify exactly "-X" (null terminator at index 2)
   LDY #$02
-  LDA (TABP16),Y
+  LDA (TR_PTR16),Y
   BNE .skip_arg             ; Not a 2-char flag
   LDY #$01
-  LDA (TABP16),Y            ; Flag character
+  LDA (TR_PTR16),Y            ; Flag character
   LDX #$00
 .flag_loop:
   LDY tr_flag_table,X
@@ -145,12 +159,12 @@ test_runner_start:
   JSR open
   STA TR_FILE_HANDLE
   ; Print header
-  SHOW_MESSAGEI tr_msg_running
+  TR_SHOW_MESSAGEI tr_msg_running
   LDA TR_FILE_ARG
   JSR argv
-  STAX16 TABP16
-  JSR show_message
-  SHOW_CHAR '\n'
+  STAX16 TR_PTR16
+  JSR tr_show_message
+  TR_SHOW_CHAR '\n'
   ; Run all tests from this file
   JSR tr_run_file
   JMP .summary
@@ -274,10 +288,10 @@ tr_run_directory:
   JSR tr_check_txt_extension
   BCS .entry_loop
   ; Print header for this file
-  SHOW_MESSAGEI tr_msg_running
-  SET16 TR_LINE_BUF, TABP16
-  JSR show_message
-  SHOW_CHAR '\n'
+  TR_SHOW_MESSAGEI tr_msg_running
+  SET16 TR_LINE_BUF, TR_PTR16
+  JSR tr_show_message
+  TR_SHOW_CHAR '\n'
   ; Open the file and run all tests from it
   LDA #<TR_LINE_BUF
   LDX #>TR_LINE_BUF
@@ -336,7 +350,7 @@ tr_finalize_test:
   LDA TR_QUIET
   BNE .skip_quiet
   JSR tr_print_test_name
-  SHOW_MESSAGEI tr_msg_skip
+  TR_SHOW_MESSAGEI tr_msg_skip
 .skip_quiet:
   INC16 TR_SKIP_COUNT16
   RTS
@@ -388,7 +402,7 @@ tr_test_resume:
   LDA TR_QUIET
   BNE .pass_quiet
   JSR tr_print_test_name
-  SHOW_MESSAGEI tr_msg_pass
+  TR_SHOW_MESSAGEI tr_msg_pass
 .pass_quiet:
   INC16 TR_PASS_COUNT16
   RTS
@@ -479,14 +493,14 @@ tr_verify_hex:
   BEQ .exit_ok
   ; Assembler failed unexpectedly
   JSR tr_print_test_name
-  SHOW_MESSAGEI tr_msg_fail
-  SHOW_MESSAGEI tr_msg_expected
-  SHOW_MESSAGEI tr_msg_error
-  SHOW_CHAR '0'
-  SHOW_MESSAGEI tr_msg_got
-  SHOW_MESSAGEI tr_msg_error
+  TR_SHOW_MESSAGEI tr_msg_fail
+  TR_SHOW_MESSAGEI tr_msg_expected
+  TR_SHOW_MESSAGEI tr_msg_error
+  TR_SHOW_CHAR '0'
+  TR_SHOW_MESSAGEI tr_msg_got
+  TR_SHOW_MESSAGEI tr_msg_error
   JSR tr_print_exit_code
-  SHOW_MESSAGEI tr_msg_close_paren
+  TR_SHOW_MESSAGEI tr_msg_close_paren
   SEC
   RTS
 .exit_ok:
@@ -542,14 +556,14 @@ tr_verify_hex:
   BEQ .lengths_match
   ; Length mismatch
   JSR tr_print_test_name
-  SHOW_MESSAGEI tr_msg_fail
-  SHOW_MESSAGEI tr_msg_expected
+  TR_SHOW_MESSAGEI tr_msg_fail
+  TR_SHOW_MESSAGEI tr_msg_expected
   JSR tr_print_expect_len
-  SHOW_MESSAGEI tr_msg_bytes
-  SHOW_MESSAGEI tr_msg_got
+  TR_SHOW_MESSAGEI tr_msg_bytes
+  TR_SHOW_MESSAGEI tr_msg_got
   JSR tr_print_actual_len
-  SHOW_MESSAGEI tr_msg_bytes
-  SHOW_MESSAGEI tr_msg_close_paren
+  TR_SHOW_MESSAGEI tr_msg_bytes
+  TR_SHOW_MESSAGEI tr_msg_close_paren
   JSR tr_show_failure_dumps
   SEC
   RTS
@@ -559,17 +573,17 @@ tr_verify_hex:
   BEQ .hex_pass
   ; Byte mismatch - print details
   JSR tr_print_test_name
-  SHOW_MESSAGEI tr_msg_fail
-  SHOW_MESSAGEI tr_msg_byte_at
+  TR_SHOW_MESSAGEI tr_msg_fail
+  TR_SHOW_MESSAGEI tr_msg_byte_at
   CP16 TR_MISMATCH_POS16, TO_DECIMAL_VALUE16
-  JSR show_decimal
-  SHOW_MESSAGEI tr_msg_colon_space
+  JSR tr_show_decimal
+  TR_SHOW_MESSAGEI tr_msg_colon_space
   LDA TR_MISMATCH_EXPECT
   JSR tr_print_hex_byte
-  SHOW_MESSAGEI tr_msg_got
+  TR_SHOW_MESSAGEI tr_msg_got
   LDA TR_MISMATCH_ACTUAL
   JSR tr_print_hex_byte
-  SHOW_MESSAGEI tr_msg_close_paren
+  TR_SHOW_MESSAGEI tr_msg_close_paren
   JSR tr_show_failure_dumps
   SEC
   RTS
@@ -613,53 +627,53 @@ tr_verify_error:
   RTS
 .wrong_code:
   JSR tr_print_test_name
-  SHOW_MESSAGEI tr_msg_fail
-  SHOW_MESSAGEI tr_msg_wrong_code
-  SHOW_MESSAGEI tr_msg_exp_prefix
-  SHOW_MESSAGEI tr_msg_error
+  TR_SHOW_MESSAGEI tr_msg_fail
+  TR_SHOW_MESSAGEI tr_msg_wrong_code
+  TR_SHOW_MESSAGEI tr_msg_exp_prefix
+  TR_SHOW_MESSAGEI tr_msg_error
   LDA TR_EXPECT_ERROR
   STA TO_DECIMAL_VALUE16
   LDA #$00
   STA TO_DECIMAL_VALUE16 + 1
-  JSR show_decimal
-  SHOW_CHAR '\n'
-  SHOW_MESSAGEI tr_msg_got_prefix
-  SHOW_MESSAGEI tr_msg_error
+  JSR tr_show_decimal
+  TR_SHOW_CHAR '\n'
+  TR_SHOW_MESSAGEI tr_msg_got_prefix
+  TR_SHOW_MESSAGEI tr_msg_error
   JSR tr_print_exit_code
-  SHOW_CHAR '\n'
+  TR_SHOW_CHAR '\n'
   SEC
   RTS
 .wrong_line:
   JSR tr_print_test_name
-  SHOW_MESSAGEI tr_msg_fail
-  SHOW_MESSAGEI tr_msg_wrong_line
-  SHOW_MESSAGEI tr_msg_exp_prefix
-  SHOW_MESSAGEI tr_msg_line
+  TR_SHOW_MESSAGEI tr_msg_fail
+  TR_SHOW_MESSAGEI tr_msg_wrong_line
+  TR_SHOW_MESSAGEI tr_msg_exp_prefix
+  TR_SHOW_MESSAGEI tr_msg_line
   CP16 TR_EXPECT_LINE16, TO_DECIMAL_VALUE16
-  JSR show_decimal
-  SHOW_CHAR '\n'
-  SHOW_MESSAGEI tr_msg_got_prefix
-  SHOW_MESSAGEI tr_msg_line
-  CP16 HEX16, TO_DECIMAL_VALUE16
-  JSR show_decimal
-  SHOW_CHAR '\n'
+  JSR tr_show_decimal
+  TR_SHOW_CHAR '\n'
+  TR_SHOW_MESSAGEI tr_msg_got_prefix
+  TR_SHOW_MESSAGEI tr_msg_line
+  CP16 TR_PARSE16, TO_DECIMAL_VALUE16
+  JSR tr_show_decimal
+  TR_SHOW_CHAR '\n'
   SEC
   RTS
 .wrong_msg:
   JSR tr_print_test_name
-  SHOW_MESSAGEI tr_msg_fail
-  SHOW_MESSAGEI tr_msg_wrong_msg
-  SHOW_MESSAGEI tr_msg_exp_prefix
-  SHOW_MESSAGEI tr_msg_quote
-  SET16 TR_EXPECT_MSG, TABP16
-  JSR show_message
-  SHOW_MESSAGEI tr_msg_quote
-  SHOW_CHAR '\n'
-  SHOW_MESSAGEI tr_msg_got_prefix
-  SHOW_MESSAGEI tr_msg_quote
+  TR_SHOW_MESSAGEI tr_msg_fail
+  TR_SHOW_MESSAGEI tr_msg_wrong_msg
+  TR_SHOW_MESSAGEI tr_msg_exp_prefix
+  TR_SHOW_MESSAGEI tr_msg_quote
+  SET16 TR_EXPECT_MSG, TR_PTR16
+  JSR tr_show_message
+  TR_SHOW_MESSAGEI tr_msg_quote
+  TR_SHOW_CHAR '\n'
+  TR_SHOW_MESSAGEI tr_msg_got_prefix
+  TR_SHOW_MESSAGEI tr_msg_quote
   JSR tr_print_stderr_msg
-  SHOW_MESSAGEI tr_msg_quote
-  SHOW_CHAR '\n'
+  TR_SHOW_MESSAGEI tr_msg_quote
+  TR_SHOW_CHAR '\n'
   SEC
   RTS
 
@@ -667,7 +681,7 @@ tr_at_line_str: .asciiz "at line "
 
 ; Check "at line N" in stderr, compare N with TR_EXPECT_LINE16
 ; On exit: C clear = match, C set = mismatch
-;          HEX16 = parsed line number (for error reporting)
+;          TR_PARSE16 = parsed line number (for error reporting)
 tr_check_stderr_line:
   LDY #$00
 .search:
@@ -692,7 +706,7 @@ tr_check_stderr_line:
 .found:
   ; Y now points to the line number digits
   JSR tr_parse_decimal_from_stderr
-  CMP16 HEX16, TR_EXPECT_LINE16
+  CMP16 TR_PARSE16, TR_EXPECT_LINE16
   BEQ .matched
   SEC
   RTS
@@ -783,11 +797,11 @@ tr_print_stderr_msg:
 .done:
   RTS
 
-; Parse decimal from TR_STDERR_BUF starting at Y, result in HEX16
+; Parse decimal from TR_STDERR_BUF starting at Y, result in TR_PARSE16
 tr_parse_decimal_from_stderr:
   LDA #$00
-  STA HEX16
-  STA HEX16 + 1
+  STA TR_PARSE16
+  STA TR_PARSE16 + 1
 .loop:
   CPY TR_STDERR_LEN
   BCS .done
@@ -798,19 +812,19 @@ tr_parse_decimal_from_stderr:
   BCS .done
   SEC
   SBC #'0'
-  STA TEMP
-  CP16 HEX16, PC16
-  ASL16 HEX16
-  ASL16 HEX16
+  STA TR_TEMP
+  CP16 TR_PARSE16, TR_SCRATCH16
+  ASL16 TR_PARSE16
+  ASL16 TR_PARSE16
   CLC
-  ADC16 HEX16, PC16, HEX16
-  ASL16 HEX16
-  LDA TEMP
+  ADC16 TR_PARSE16, TR_SCRATCH16, TR_PARSE16
+  ASL16 TR_PARSE16
+  LDA TR_TEMP
   CLC
-  ADC HEX16
-  STA HEX16
+  ADC TR_PARSE16
+  STA TR_PARSE16
   BCC .no_carry
-  INC HEX16 + 1
+  INC TR_PARSE16 + 1
 .no_carry:
   INY
   JMP .loop
@@ -868,26 +882,26 @@ tr_verify_stderr:
 .fail:
   ; Print failure details
   JSR tr_print_test_name
-  SHOW_MESSAGEI tr_msg_fail
-  SHOW_MESSAGEI tr_msg_wrong_stderr
-  SHOW_MESSAGEI tr_msg_exp_prefix
+  TR_SHOW_MESSAGEI tr_msg_fail
+  TR_SHOW_MESSAGEI tr_msg_wrong_stderr
+  TR_SHOW_MESSAGEI tr_msg_exp_prefix
   JSR tr_print_expect_stderr
-  SHOW_CHAR '\n'
-  SHOW_MESSAGEI tr_msg_got_prefix
+  TR_SHOW_CHAR '\n'
+  TR_SHOW_MESSAGEI tr_msg_got_prefix
   JSR tr_print_actual_stderr
-  SHOW_CHAR '\n'
+  TR_SHOW_CHAR '\n'
   SEC
   RTS
 
 ; Print buffer with continuation indent on newlines
-; On entry: TABP16 = buffer pointer, tr_print_len = length
+; On entry: TR_PTR16 = buffer pointer, tr_print_len = length
 tr_print_with_continuation:
-  CP16 TABP16, tr_print_buf16   ; save buffer ptr (SHOW_MESSAGEI clobbers TABP16)
+  CP16 TR_PTR16, tr_print_buf16   ; save buffer ptr (TR_SHOW_MESSAGEI clobbers TR_PTR16)
   LDY #$00
 .loop:
   CPY tr_print_len
   BCS .done
-  LDA (TABP16),Y
+  LDA (TR_PTR16),Y
   CMP #$0A
   BEQ .newline
   JSR write_d
@@ -896,8 +910,8 @@ tr_print_with_continuation:
 .newline:
   JSR write_d                 ; Print the \n
   STY tr_print_save_y
-  SHOW_MESSAGEI tr_msg_continuation
-  CP16 tr_print_buf16, TABP16   ; restore buffer ptr
+  TR_SHOW_MESSAGEI tr_msg_continuation
+  CP16 tr_print_buf16, TR_PTR16   ; restore buffer ptr
   LDY tr_print_save_y
   INY
   JMP .loop
@@ -905,13 +919,13 @@ tr_print_with_continuation:
   RTS
 
 tr_print_expect_stderr:
-  SET16 TR_EXPECT_BUF, TABP16
+  SET16 TR_EXPECT_BUF, TR_PTR16
   LDA TR_EXPECT_LEN16
   STA tr_print_len
   JMP tr_print_with_continuation
 
 tr_print_actual_stderr:
-  SET16 TR_STDERR_BUF, TABP16
+  SET16 TR_STDERR_BUF, TR_PTR16
   LDA TR_STDERR_LEN
   STA tr_print_len
   JMP tr_print_with_continuation
@@ -928,23 +942,45 @@ tr_msg_continuation:  .asciiz "         "
 ; PRINT HELPERS
 ; ============================================================================
 
+; Show null-terminated message to stderr
+; On entry: TR_PTR16 points to the message
+tr_show_message:
+  LDY #$00
+.loop:
+  LDA (TR_PTR16),Y
+  BEQ .done
+  JSR write_d
+  INY
+  BNE .loop
+  INC TR_PTR16 + 1
+  BNE .loop
+.done:
+  RTS
+
+; Show decimal value to stderr
+; On entry: TO_DECIMAL_VALUE16 contains the value
+tr_show_decimal:
+  JSR to_decimal
+  SET16 TO_DECIMAL_RESULT, TR_PTR16
+  JMP tr_show_message
+
 ; Print TR_EXIT_CODE as decimal
 tr_print_exit_code:
   LDA TR_EXIT_CODE
   STA TO_DECIMAL_VALUE16
   LDA #$00
   STA TO_DECIMAL_VALUE16 + 1
-  JMP show_decimal
+  JMP tr_show_decimal
 
 ; Print TR_EXPECT_LEN16 as decimal
 tr_print_expect_len:
   CP16 TR_EXPECT_LEN16, TO_DECIMAL_VALUE16
-  JMP show_decimal
+  JMP tr_show_decimal
 
 ; Print TR_ACTUAL_LEN16 as decimal
 tr_print_actual_len:
   CP16 TR_ACTUAL_LEN16, TO_DECIMAL_VALUE16
-  JMP show_decimal
+  JMP tr_show_decimal
 
 ; Print byte in A as two hex digits
 tr_print_hex_byte:
@@ -973,22 +1009,22 @@ tr_print_hex_byte:
 ; Print summary: "N passed, M failed, K skipped"
 tr_print_summary:
   CP16 TR_PASS_COUNT16, TO_DECIMAL_VALUE16
-  JSR show_decimal
-  SHOW_MESSAGEI tr_msg_sum_passed
+  JSR tr_show_decimal
+  TR_SHOW_MESSAGEI tr_msg_sum_passed
   CP16 TR_FAIL_COUNT16, TO_DECIMAL_VALUE16
-  JSR show_decimal
+  JSR tr_show_decimal
   ; Use !!failed!! if there are failures, plain "failed" otherwise
   LDA TR_FAIL_COUNT16
   ORA TR_FAIL_COUNT16 + 1
   BNE .has_failures
-  SHOW_MESSAGEI tr_msg_sum_failed
+  TR_SHOW_MESSAGEI tr_msg_sum_failed
   JMP .print_skipped
 .has_failures:
-  SHOW_MESSAGEI tr_msg_sum_failed_emphasis
+  TR_SHOW_MESSAGEI tr_msg_sum_failed_emphasis
 .print_skipped:
   CP16 TR_SKIP_COUNT16, TO_DECIMAL_VALUE16
-  JSR show_decimal
-  SHOW_MESSAGEI tr_msg_sum_skipped
+  JSR tr_show_decimal
+  TR_SHOW_MESSAGEI tr_msg_sum_skipped
   RTS
 
 tr_msg_sum_passed:          .asciiz " passed, "
@@ -1043,11 +1079,11 @@ tr_dispatch_field:
   ; Load prefix pointer from table
   LDY #$00
   LDA (TR_ACTUAL_PTR16),Y     ; prefix lo
-  STA TABP16
+  STA TR_PTR16
   INY
   LDA (TR_ACTUAL_PTR16),Y     ; prefix hi
-  STA TABP16 + 1
-  ORA TABP16                   ; null = end of table
+  STA TR_PTR16 + 1
+  ORA TR_PTR16                   ; null = end of table
   BEQ .no_match
   JSR tr_match_prefix
   BCC .matched
@@ -1064,12 +1100,12 @@ tr_dispatch_field:
   STY tr_dispatch_save_y
   LDY #$02
   LDA (TR_ACTUAL_PTR16),Y     ; handler lo
-  STA TABP16
+  STA TR_PTR16
   INY
   LDA (TR_ACTUAL_PTR16),Y     ; handler hi
-  STA TABP16 + 1
+  STA TR_PTR16 + 1
   LDY tr_dispatch_save_y       ; restore line offset for handler
-  JMP (TABP16)                 ; indirect jump to handler
+  JMP (TR_PTR16)                 ; indirect jump to handler
 .no_match:
   SEC
   RTS
@@ -1216,7 +1252,7 @@ tr_handle_expect_error:
   LDA #$01
   STA TR_TEST_TYPE        ; Mark as error test
   JSR tr_parse_decimal
-  LDA HEX16
+  LDA TR_PARSE16
   STA TR_EXPECT_ERROR
   CLC
   RTS
@@ -1225,7 +1261,7 @@ tr_handle_expect_error:
 ; On entry: Y = offset past prefix
 tr_handle_expect_line:
   JSR tr_parse_decimal
-  CP16 HEX16, TR_EXPECT_LINE16
+  CP16 TR_PARSE16, TR_EXPECT_LINE16
   CLC
   RTS
 
@@ -1404,14 +1440,14 @@ tr_close_input_state:
 ; FIELD MATCHING
 ; ============================================================================
 
-; Check if TR_LINE_BUF starts with the string at (TABP16)
-; On entry: TABP16 points to null-terminated prefix string
+; Check if TR_LINE_BUF starts with the string at (TR_PTR16)
+; On entry: TR_PTR16 points to null-terminated prefix string
 ; On exit: C clear = match, Y = offset past prefix in TR_LINE_BUF
 ;          C set = no match
 tr_match_prefix:
   LDY #$00
 .loop:
-  LDA (TABP16),Y
+  LDA (TR_PTR16),Y
   BEQ .match              ; End of prefix → match
   CPY TR_LINE_LEN
   BCS .no_match           ; Line shorter than prefix
@@ -1461,14 +1497,14 @@ tr_parse_hex_from_buf:
   ASL
   ASL
   ASL
-  STA TEMP                ; High nibble
+  STA TR_TEMP                ; High nibble
   INY
   CPY TR_LINE_LEN
   BCS .done
   LDA TR_LINE_BUF,Y
   JSR tr_hex_char_to_val
   BCS .done
-  ORA TEMP                ; Combine nibbles
+  ORA TR_TEMP                ; Combine nibbles
   JSR tr_store_expect_byte
   INY
   JMP .loop
@@ -1479,7 +1515,7 @@ tr_parse_hex_from_buf:
 ; Reads chars until newline or EOF
 tr_parse_hex_from_file:
   LDA #$00
-  STA TEMP                ; State: 0=need hi, 1=need lo
+  STA TR_TEMP                ; State: 0=need hi, 1=need lo
 .loop:
   LDA TR_FILE_HANDLE
   JSR read
@@ -1490,22 +1526,22 @@ tr_parse_hex_from_file:
   BEQ .loop               ; Skip spaces
   JSR tr_hex_char_to_val
   BCS .loop               ; Skip non-hex
-  LDX TEMP
+  LDX TR_TEMP
   BNE .lo_nibble
   ; High nibble
   ASL
   ASL
   ASL
   ASL
-  STA PC16                ; Temp store high nibble
+  STA TR_SCRATCH16                ; Temp store high nibble
   LDA #$01
-  STA TEMP
+  STA TR_TEMP
   JMP .loop
 .lo_nibble:
-  ORA PC16
+  ORA TR_SCRATCH16
   JSR tr_store_expect_byte
   LDA #$00
-  STA TEMP
+  STA TR_TEMP
   JMP .loop
 .done:
   LDA #$00
@@ -1526,16 +1562,16 @@ tr_store_expect_byte:
 .ok:
   ; Use 16-bit index for >256 byte buffers
   LDAX16 TR_EXPECT_LEN16
-  STX TABP16 + 1
+  STX TR_PTR16 + 1
   CLC
   ADC #<TR_EXPECT_BUF
-  STA TABP16
-  LDA TABP16 + 1
+  STA TR_PTR16
+  LDA TR_PTR16 + 1
   ADC #>TR_EXPECT_BUF
-  STA TABP16 + 1
+  STA TR_PTR16 + 1
   PLA
   LDY #$00
-  STA (TABP16),Y
+  STA (TR_PTR16),Y
   INC16 TR_EXPECT_LEN16
   LDY tr_store_save_y       ; Restore caller's Y
   RTS
@@ -1572,12 +1608,12 @@ tr_hex_char_to_val:
 ; ============================================================================
 
 ; Parse decimal number from TR_LINE_BUF starting at offset Y
-; Result stored in HEX16 (16-bit)
-; On exit: Y = past last digit, HEX16 = parsed value
+; Result stored in TR_PARSE16 (16-bit)
+; On exit: Y = past last digit, TR_PARSE16 = parsed value
 tr_parse_decimal:
   LDA #$00
-  STA HEX16
-  STA HEX16 + 1
+  STA TR_PARSE16
+  STA TR_PARSE16 + 1
 .loop:
   CPY TR_LINE_LEN
   BCS .done
@@ -1588,21 +1624,21 @@ tr_parse_decimal:
   BCS .done
   SEC
   SBC #'0'
-  STA TEMP                ; Save digit
-  ; HEX16 *= 10 = (x*4 + x) * 2
-  CP16 HEX16, PC16        ; PC16 = saved x
-  ASL16 HEX16             ; x*2
-  ASL16 HEX16             ; x*4
+  STA TR_TEMP                ; Save digit
+  ; TR_PARSE16 *= 10 = (x*4 + x) * 2
+  CP16 TR_PARSE16, TR_SCRATCH16        ; saved x
+  ASL16 TR_PARSE16             ; x*2
+  ASL16 TR_PARSE16             ; x*4
   CLC
-  ADC16 HEX16, PC16, HEX16  ; x*4 + x = x*5
-  ASL16 HEX16             ; x*10
+  ADC16 TR_PARSE16, TR_SCRATCH16, TR_PARSE16  ; x*4 + x = x*5
+  ASL16 TR_PARSE16             ; x*10
   ; Add digit
-  LDA TEMP
+  LDA TR_TEMP
   CLC
-  ADC HEX16
-  STA HEX16
+  ADC TR_PARSE16
+  STA TR_PARSE16
   BCC .no_carry
-  INC HEX16 + 1
+  INC TR_PARSE16 + 1
 .no_carry:
   INY
   JMP .loop
@@ -1631,9 +1667,9 @@ tr_init_test:
 
 ; Print the test name (indented, no newline)
 tr_print_test_name:
-  SHOW_MESSAGEI tr_msg_indent
-  SET16 TR_NAME_BUF, TABP16
-  JMP show_message          ; Tail call
+  TR_SHOW_MESSAGEI tr_msg_indent
+  SET16 TR_NAME_BUF, TR_PTR16
+  JMP tr_show_message          ; Tail call
 
 tr_msg_indent:    .asciiz "  "
 
@@ -1749,7 +1785,7 @@ tr_call_action:
 tr_action_ptr: .word 0
 
 ; Walk table, calling action for each entry
-; On each call: TABP16 = port target addr, X = orig_vectors index,
+; On each call: TR_PTR16 = port target addr, X = orig_vectors index,
 ;               TR_ACTUAL_PTR16 = current table entry
 tr_vector_walk:
   SET16 tr_vector_table, TR_ACTUAL_PTR16
@@ -1757,16 +1793,16 @@ tr_vector_walk:
   LDA #TR_VECTOR_ENTRIES
   STA tr_vc_count
 .loop:
-  ; Load port target address from table[0..1] into TABP16
+  ; Load port target address from table[0..1] into TR_PTR16
   LDY #$00
   CLC
   LDA (TR_ACTUAL_PTR16),Y
   ADC #1
-  STA TABP16
+  STA TR_PTR16
   INY
   LDA (TR_ACTUAL_PTR16),Y
   ADC #0
-  STA TABP16 + 1
+  STA TR_PTR16 + 1
   ; Call action
   JSR tr_call_action
   ; Advance X (orig_vectors index) and table pointer
@@ -1796,17 +1832,17 @@ tr_restore_vectors:
   SET16 tr_action_restore, tr_action_ptr
   JMP tr_vector_walk
 
-; Action: copy 2 bytes from (TABP16) → tr_orig_vectors+X
+; Action: copy 2 bytes from (TR_PTR16) → tr_orig_vectors+X
 tr_action_save:
   LDY #$00
-  LDA (TABP16),Y
+  LDA (TR_PTR16),Y
   STA tr_orig_vectors,X
   INY
-  LDA (TABP16),Y
+  LDA (TR_PTR16),Y
   STA tr_orig_vectors + 1,X
   RTS
 
-; Action: copy fake handler addr from table[2..3] → (TABP16)
+; Action: copy fake handler addr from table[2..3] → (TR_PTR16)
 tr_action_patch:
   LDY #$02
   LDA (TR_ACTUAL_PTR16),Y     ; fake lo
@@ -1814,20 +1850,20 @@ tr_action_patch:
   INY
   LDA (TR_ACTUAL_PTR16),Y     ; fake hi
   LDY #$01
-  STA (TABP16),Y               ; write hi
+  STA (TR_PTR16),Y               ; write hi
   PLA
   DEY
-  STA (TABP16),Y               ; write lo
+  STA (TR_PTR16),Y               ; write lo
   RTS
 
-; Action: copy 2 bytes from tr_orig_vectors+X → (TABP16)
+; Action: copy 2 bytes from tr_orig_vectors+X → (TR_PTR16)
 tr_action_restore:
   LDY #$00
   LDA tr_orig_vectors,X
-  STA (TABP16),Y
+  STA (TR_PTR16),Y
   INY
   LDA tr_orig_vectors + 1,X
-  STA (TABP16),Y
+  STA (TR_PTR16),Y
   RTS
 
 
@@ -1897,21 +1933,21 @@ tr_save_x: .byte 0
 ; ============================================================================
 
 ; Print expected and actual hex dumps on test failure
-; Clobbers A, X, Y, TABP16
+; Clobbers A, X, Y, TR_PTR16
 tr_show_failure_dumps:
-  SHOW_MESSAGEI tr_msg_exp_prefix
+  TR_SHOW_MESSAGEI tr_msg_exp_prefix
   JSR tr_dump_expect_hex
-  SHOW_CHAR '\n'
-  SHOW_MESSAGEI tr_msg_got_prefix
+  TR_SHOW_CHAR '\n'
+  TR_SHOW_MESSAGEI tr_msg_got_prefix
   JSR tr_dump_actual_hex
-  SHOW_CHAR '\n'
+  TR_SHOW_CHAR '\n'
   RTS
 
 ; Print expected bytes from TR_EXPECT_BUF as hex
-; Uses (TABP16),Y indirect addressing for 16-bit indexing
+; Uses (TR_PTR16),Y indirect addressing for 16-bit indexing
 ; Prints min(TR_EXPECT_LEN16, 512) bytes
 tr_dump_expect_hex:
-  SET16 TR_EXPECT_BUF, TABP16
+  SET16 TR_EXPECT_BUF, TR_PTR16
   LDA #$00
   STA tr_dump_pos16
   STA tr_dump_pos16 + 1
@@ -1919,10 +1955,10 @@ tr_dump_expect_hex:
   CMP16 tr_dump_pos16, TR_EXPECT_LEN16
   BCS .done
   LDY #$00
-  LDA (TABP16),Y
+  LDA (TR_PTR16),Y
   JSR tr_print_hex_byte
-  SHOW_CHAR ' '
-  INC16 TABP16
+  TR_SHOW_CHAR ' '
+  INC16 TR_PTR16
   INC16 tr_dump_pos16
   JMP .loop
 .done:
@@ -1941,7 +1977,7 @@ tr_dump_actual_hex:
 .buf_check_x:
   LDA TR_ACTUAL_BUF,X
   JSR tr_print_hex_byte
-  SHOW_CHAR ' '
+  TR_SHOW_CHAR ' '
   INX
   BNE .buf_loop              ; Loop until X wraps (256 bytes max)
   ; Phase 2: if more than 256 bytes, read remaining from file
@@ -1960,7 +1996,7 @@ tr_dump_actual_hex:
   JSR read
   BCS .file_done
   JSR tr_print_hex_byte
-  SHOW_CHAR ' '
+  TR_SHOW_CHAR ' '
   JMP .file_loop
 .file_done:
   LDA tr_dump_handle
@@ -1990,10 +2026,10 @@ tr_dump_handle: .byte 0
 
 ; Fatal error: EXPECT_HEX buffer overflow (>512 bytes)
 tr_err_expect_overflow:
-  SHOW_MESSAGEI tr_err_msg_expect_overflow
-  SET16 TR_NAME_BUF, TABP16
-  JSR show_message
-  SHOW_CHAR '\n'
+  TR_SHOW_MESSAGEI tr_err_msg_expect_overflow
+  SET16 TR_NAME_BUF, TR_PTR16
+  JSR tr_show_message
+  TR_SHOW_CHAR '\n'
   BRK
   .byte 1
 
