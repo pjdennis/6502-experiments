@@ -674,3 +674,63 @@ do_cb:
   RTS
 .cb_insert:
   JMP enter_insert_mode_render
+
+; --- Delete word end (de) ---
+; Delete from cursor to end of word (inclusive, multi-line).
+; Yanks deleted text. Accepts count.
+; Non-batched (count prefix): scans N words, single yank+delete (yanks ALL)
+; Batched (dede...): delete N-1 words (no yank), yank+delete last word
+do_de:
+  JSR get_count              ; BUF_TEMP16 = N
+  JSR check_cursor_in_line
+  BCS .de_done               ; Empty line, bail
+  LDA BATCH_EXTRA
+  BNE .de_batched
+
+  ; Non-batched: single compute + yank+delete
+  LDX BUF_TEMP16
+  JSR compute_multiline_word_end_range_forward
+  BCS .de_done
+  LDA #OP_DELETE
+  JSR apply_char_operator
+  JMP .de_finish
+
+.de_batched:
+  ; Delete (total-1) words without yank
+  LDX BUF_TEMP16
+  DEX
+  BEQ .de_batch_last
+  JSR compute_multiline_word_end_range_forward
+  BCS .de_batch_last
+  JSR delete_at_cursor
+
+.de_batch_last:
+  ; Re-check line after deletions
+  JSR check_cursor_in_line
+  BCS .de_done
+  LDX #1
+  JSR compute_multiline_word_end_range_forward
+  BCS .de_done
+  LDA #OP_DELETE
+  JSR apply_char_operator
+
+.de_finish:
+  JSR clamp_cursor_col
+.de_done:
+  JMP clear_count
+
+; --- Change word end (ce) ---
+; Delete from cursor to end of word (inclusive, multi-line), enter insert mode.
+; Scans N words then single yank+delete (yanks ALL deleted text).
+do_ce:
+  JSR get_count              ; BUF_TEMP16 = N
+  JSR check_cursor_in_line
+  BCS .ce_insert
+  LDX BUF_TEMP16
+  JSR compute_multiline_word_end_range_forward
+  BCS .ce_insert
+  LDA #OP_CHANGE
+  JSR apply_char_operator
+  RTS
+.ce_insert:
+  JMP enter_insert_mode_render

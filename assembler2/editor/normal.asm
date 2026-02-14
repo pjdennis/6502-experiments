@@ -183,6 +183,9 @@ pending_combo_keys:
   .byte 'd', 'b', $03       .word do_db
   .byte 'c', 'w', $02       .word do_cw
   .byte 'c', 'b', $02       .word do_cb
+  .byte 'd', 'e', $03       .word do_de
+  .byte 'y', 'e', $00       .word do_ye
+  .byte 'c', 'e', $02       .word do_ce
   .byte 0                   ; End sentinel
 
 ; --- Editing ---

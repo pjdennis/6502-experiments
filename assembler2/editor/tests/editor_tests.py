@@ -2409,6 +2409,24 @@ class EditorTestRunner:
             expect_content_rows=[(3, {0})]
         )
 
+        # de deletes to word end: single-row redraw
+        # Frame 0: init(T), Frame 1: d pending(F), Frame 2: e triggers de(T)
+        self.run_test_screen(
+            "Render opt: de redraws current row only",
+            "Hello World\n",
+            b"de:q!\r",
+            expect_content_rows=[(2, {0})]
+        )
+
+        # ce changes to word end: single-row redraw
+        # Frame 0: init(T), Frame 1: c pending(F), Frame 2: e triggers ce(T)
+        self.run_test_screen(
+            "Render opt: ce redraws current row only",
+            "Hello World\n",
+            b"ce\x1b:q!\r",
+            expect_content_rows=[(2, {0})]
+        )
+
         # char paste p: single-row redraw
         self.run_test_screen(
             "Render opt: char paste p redraws current row only",
@@ -6693,6 +6711,261 @@ class EditorTestRunner:
             "foo\nbar\n",
             b"jyb0P:wq\r",
             expected_content="foo\nfoo\nbar\n",
+        )
+
+        self._group("Delete word end (de):", leading_blank=True)
+
+        self.run_test(
+            "de deletes to end of word (inclusive)",
+            "hello world\n",
+            b"de:wq\r",
+            expected_content=" world\n",
+        )
+
+        self.run_test(
+            "de from mid-word deletes to end of word",
+            "hello world\n",
+            b"llde:wq\r",
+            expected_content="he world\n",
+        )
+
+        self.run_test(
+            "de at end of word deletes next word",
+            "hello world\n",
+            b"4lde:wq\r",
+            expected_content="hell\n",
+        )
+
+        self.run_test(
+            "de on punctuation deletes punct group",
+            "...bar\n",
+            b"de:wq\r",
+            expected_content="bar\n",
+        )
+
+        self.run_test(
+            "de on single char line",
+            "x\n",
+            b"de:wq\r",
+            expected_content="\n",
+        )
+
+        self.run_test(
+            "de on empty line does nothing",
+            "\n",
+            b"de:wq\r",
+            expected_content="\n",
+        )
+
+        self.run_test(
+            "2de deletes two word ends",
+            "one two three\n",
+            b"2de:wq\r",
+            expected_content=" three\n",
+        )
+
+        self.run_test(
+            "de yanks deleted text (paste back)",
+            "hello world\n",
+            b"de$p:wq\r",
+            expected_content=" worldhello\n",
+        )
+
+        # Batched de pairs
+        self.run_test(
+            "dede batches to delete 2 word ends",
+            "one two three four\n",
+            b"dede:wq\r",
+            expected_content=" three four\n",
+        )
+
+        self.run_test(
+            "dedede batches to delete 3 word ends",
+            "one two three four\n",
+            b"dedede:wq\r",
+            expected_content=" four\n",
+        )
+
+        self.run_test(
+            "2dede batches count 2 plus 1 extra pair",
+            "one two three four\n",
+            b"2dede:wq\r",
+            expected_content=" four\n",
+        )
+
+        # Batched de yank: only last word-end deleted is in yank buffer
+        # After first de removes "one", cursor is on space; second de's
+        # inclusive range is " two" (space through end of word)
+        self.run_test(
+            "dede+$p yanks only last deleted word",
+            "one two three\n",
+            b"dede$p:wq\r",
+            expected_content=" three two\n",
+        )
+
+        # Count-prefix de yank: yanks ALL deleted text
+        self.run_test(
+            "2de+$p yanks all deleted text",
+            "one two three\n",
+            b"2de$p:wq\r",
+            expected_content=" threeone two\n",
+        )
+
+        # Multi-line de tests
+        self.run_test(
+            "de at end of line crosses to next line",
+            "foo\nbar baz\n",
+            b"2lde:wq\r",
+            expected_content="fo baz\n",
+        )
+
+        self.run_test(
+            "2de crossing line boundary",
+            "one\ntwo three\n",
+            b"2de:wq\r",
+            expected_content=" three\n",
+        )
+
+        self._group("Change word end (ce):", leading_blank=True)
+
+        self.run_test(
+            "ce deletes to end of word and enters insert mode",
+            "hello world\n",
+            b"cebye\x1b:wq\r",
+            expected_content="bye world\n",
+        )
+
+        self.run_test(
+            "ce from mid-word deletes rest of word",
+            "hello world\n",
+            b"llceXX\x1b:wq\r",
+            expected_content="heXX world\n",
+        )
+
+        self.run_test(
+            "ce on punctuation deletes punct class",
+            "...bar\n",
+            b"ceXX\x1b:wq\r",
+            expected_content="XXbar\n",
+        )
+
+        self.run_test(
+            "ce on empty line enters insert mode",
+            "\n",
+            b"cehi\x1b:wq\r",
+            expected_content="hi\n",
+        )
+
+        self.run_test(
+            "2ce deletes two word ends and enters insert mode",
+            "one two three\n",
+            b"2ceX\x1b:wq\r",
+            expected_content="X three\n",
+        )
+
+        # Count-prefix ce yank: yanks ALL deleted text
+        self.run_test(
+            "2ce+Esc $p yanks all deleted text",
+            "one two three\n",
+            b"2ce\x1b$p:wq\r",
+            expected_content=" threeone two\n",
+        )
+
+        # Multi-line ce tests
+        self.run_test(
+            "ce at last word on line",
+            "foo\nbar\n",
+            b"cebaz\x1b:wq\r",
+            expected_content="baz\nbar\n",
+        )
+
+        self.run_test(
+            "2ce crossing line boundary",
+            "foo\nbar baz\n",
+            b"2cex\x1b:wq\r",
+            expected_content="x baz\n",
+        )
+
+        self._group("Yank word end (ye):", leading_blank=True)
+
+        self.run_test(
+            "ye yanks to end of word (inclusive, no trailing space)",
+            "hello world\n",
+            b"ye$p:wq\r",
+            expected_content="hello worldhello\n",
+        )
+
+        self.run_test(
+            "ye at middle of word yanks to word end",
+            "hello world\n",
+            b"llye$p:wq\r",
+            expected_content="hello worldllo\n",
+        )
+
+        self.run_test(
+            "ye on punctuation yanks punct group",
+            "...bar baz\n",
+            b"ye$p:wq\r",
+            expected_content="...bar baz...\n",
+        )
+
+        self.run_test(
+            "ye on last word yanks to end of word",
+            "foo bar\n",
+            b"4lye$p:wq\r",
+            expected_content="foo barbar\n",
+        )
+
+        self.run_test(
+            "ye on empty line preserves previous yank",
+            "hello\n\n",
+            b"yyjye$p:wq\r",
+            expected_content="hello\n\nhello\n",
+        )
+
+        self.run_test(
+            "2ye yanks two word ends",
+            "one two three\n",
+            b"2ye$p:wq\r",
+            expected_content="one two threeone two\n",
+        )
+
+        self.run_test(
+            "ye does not modify the file",
+            "hello world\n",
+            b"ye:q\r",
+            expect_exit=0,
+        )
+
+        self.run_test_screen(
+            "ye cursor stays at original position",
+            "hello world\n",
+            b"ye:q!\r",
+            expect_cursor=(0, 0),
+        )
+
+        self.run_test_screen(
+            "ye from col 2 cursor stays at col 2",
+            "hello world\n",
+            b"llye:q!\r",
+            expect_cursor=(0, 2),
+        )
+
+        self.run_test(
+            "yeye yanks same word end (second overwrites first)",
+            "hello world\n",
+            b"yeye$p:wq\r",
+            expected_content="hello worldhello\n",
+        )
+
+        # Multi-line ye tests
+        # From end of "foo" (col 2), e crosses to end of "bar" on next line.
+        # Inclusive range = "o\nbar". Pasting after $ inserts after last char.
+        self.run_test(
+            "ye at end of word yanks next word across line",
+            "foo\nbar baz\n",
+            b"2lye$p:wq\r",
+            expected_content="fooo\nbar\nbar baz\n",
         )
 
         self._group("Backward search (?):", leading_blank=True)

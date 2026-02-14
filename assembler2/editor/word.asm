@@ -220,6 +220,14 @@ word_backward_x:
 ; Accepts count prefix.
 normal_word_end:
   JSR get_batched_count
+  JSR word_end_x
+  JSR clamp_cursor_col
+  JMP clear_count
+
+; Core word-end motion: move cursor to end of Xth word
+; Input: X = count of words to move
+; Clobbers: A, X, Y, NORMAL_TEMP, WORD_CLASS, LINE_LEN16, BUF_PTR16, BUF_TEMP16
+word_end_x:
 
 .e_loop:
   STX NORMAL_TEMP         ; Save counter
@@ -285,8 +293,7 @@ normal_word_end:
   JMP .e_loop
 
 .e_done_final:
-  JSR clamp_cursor_col
-  JMP clear_count
+  RTS
 
 .e_next_line:
   ; Move to next line and find first word end
@@ -718,6 +725,34 @@ compute_multiline_word_range_backward:
   CLC
   RTS
 .cmwrb_nothing:
+  SEC
+  RTS
+
+; Compute forward word-end range (multi-line) for de/ye/ce
+; e is an inclusive motion: range includes the character at the end position.
+; Input: X = word count
+; Output: BUF_LEN16 = byte count, carry set if nothing to operate on
+; Side effect: cursor restored to original position
+; Clobbers: A, X, Y, NORMAL_TEMP, WORD_CLASS, LINE_LEN16, BUF_PTR16, BUF_TEMP16
+compute_multiline_word_end_range_forward:
+  STX NORMAL_TEMP                   ; save word count (X clobbered by get_cursor_buf_ptr)
+  PUSH16 CURSOR_COL16              ; save original cursor
+  PUSH16 FILE_LINE16
+  JSR get_cursor_buf_ptr            ; BUF_PTR16 = start_buf_ptr
+  CP16 BUF_PTR16, BUF_SRC16        ; save start_buf_ptr (safe across word_end_x)
+  LDX NORMAL_TEMP                   ; restore word count
+  JSR word_end_x                    ; move cursor to end of Nth word
+  JSR get_cursor_buf_ptr            ; BUF_PTR16 = end_buf_ptr
+  INC16 BUF_PTR16                   ; inclusive: include end char
+  SEC
+  SBC16 BUF_PTR16, BUF_SRC16, BUF_LEN16
+  POP16 FILE_LINE16                 ; restore cursor
+  POP16 CURSOR_COL16
+  TST16 BUF_LEN16
+  BEQ .cmwerf_nothing
+  CLC
+  RTS
+.cmwerf_nothing:
   SEC
   RTS
 

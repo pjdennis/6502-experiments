@@ -278,6 +278,20 @@ do_yb:
 .yb_done:
   JMP clear_count
 
+; ye: yank from cursor to end of word (inclusive, multi-line)
+; Cursor does not move. Does not modify the file.
+do_ye:
+  JSR get_count              ; BUF_TEMP16 = N
+  JSR check_cursor_in_line
+  BCS .ye_done               ; Empty line, bail
+  LDX BUF_TEMP16
+  JSR compute_multiline_word_end_range_forward
+  BCS .ye_done
+  LDA #OP_YANK
+  JSR apply_char_operator
+.ye_done:
+  JMP clear_count
+
 ; --- Search ---
 
 normal_search:
