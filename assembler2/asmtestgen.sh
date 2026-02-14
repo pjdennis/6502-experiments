@@ -3,11 +3,18 @@
 set -e
 shopt -s extglob
 
-# Run tests for a version if test directory exists
+# Run tests for a version
 run_version_tests() {
     local ver=$1
-    if [ -d "${ver}/tests" ]; then
-        echo "--- Test asm${ver} ---"
+    if [ ! -d "${ver}/tests" ]; then
+        echo "ERROR: Test directory ${ver}/tests not found" >&2
+        exit 1
+    fi
+    echo "--- Test asm${ver} ---"
+    if [ -d "${ver}/tests/asm" ]; then
+        # Modular test structure (v17+)
+        ./run_tests.py --version "$ver" -q
+    else
         ./run_tests.py --version "$ver" -q "${ver}/tests/asm_tests.txt"
     fi
 }
@@ -102,6 +109,7 @@ echo "--- Version 16 ---"
   ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
   ../emulator.out ../15/out/asm_debug.out asm.asm out/asm.out &&
   ../emulator.out ../15/out/asm_debug.out asm.asm out/asm_debug.out define:enable_debug)
+run_version_tests 16
 echo "--- Version 17 ---"
 (cd 17 && mkdir -p out &&
   ../emulator.out ../16/out/asm_debug.out tests/file_stack/file_stack_test.asm out/file_stack_test.out &&
@@ -109,6 +117,7 @@ echo "--- Version 17 ---"
   ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
   ../emulator.out ../16/out/asm_debug.out asm.asm out/asm.out &&
   ../emulator.out ../16/out/asm_debug.out asm.asm out/asm_debug.out define:enable_debug)
+run_version_tests 17
 echo "--- Self-assembly test ---"
 # Self-assembly test (without debug - smaller)
 (cd 17 && ../emulator.out out/asm.out asm.asm out/asm_2.out)
