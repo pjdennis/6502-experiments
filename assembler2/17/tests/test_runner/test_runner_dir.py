@@ -460,6 +460,29 @@ def test_bracketed_stderr():
         assert "1 passed" in output, f"Expected 1 passed in: {output}"
 
 
+# A test with ARGS: debug
+DEBUG_ARG_TEST = """\
+---
+NAME: debug_arg_test
+ARGS: debug
+INPUT:
+ 1: * = $0200
+ 2:   NOP
+EXPECT_HEX: ea
+---
+"""
+
+
+def test_debug_args_not_skipped():
+    """Tests with ARGS: debug should PASS, not SKIP."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "test.txt").write_text(DEBUG_ARG_TEST)
+        output, rc = run_test_runner(tmpdir)
+        assert rc == 0, f"Expected exit code 0, got {rc}\nOutput: {output}"
+        assert "SKIP" not in output, f"Unexpected SKIP in: {output}"
+        assert "1 passed" in output, f"Expected 1 passed in: {output}"
+
+
 def test_verbose_flag_shows_stderr():
     """With -v flag, assembler stderr (Error messages) should appear in output."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -501,6 +524,7 @@ def main():
         ("expect_stderr_main_file_placeholder", test_expect_stderr_main_file_placeholder),
         ("bracketed_input", test_bracketed_input),
         ("bracketed_stderr", test_bracketed_stderr),
+        ("debug_args_not_skipped", test_debug_args_not_skipped),
     ]
 
     passed = 0

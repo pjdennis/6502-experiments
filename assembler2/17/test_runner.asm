@@ -311,11 +311,6 @@ tr_check_txt_extension:
 
 ; Finalize the current test: skip or run it
 tr_finalize_test:
-  ; Auto-skip tests needing special builds
-  LDA TR_ARGV_COUNT
-  BEQ .check_skip
-  JSR tr_check_auto_skip
-.check_skip:
   LDA TR_SKIP_FLAG
   BEQ .run
   ; Skip this test
@@ -838,12 +833,23 @@ tr_parse_decimal_from_stderr:
 tr_verify_stderr:
   ; Strip trailing \n from actual stderr (if present)
   LDX TR_STDERR_LEN
-  BEQ .compare
+  BEQ .strip_expected
   DEX
   LDA TR_STDERR_BUF,X
   CMP #$0A
-  BNE .compare
+  BNE .strip_expected
   STX TR_STDERR_LEN          ; Trim trailing newline
+.strip_expected:
+  ; Strip trailing \n from expected stderr (if present)
+  LDA TR_EXPECT_LEN16 + 1
+  BNE .compare               ; > 255 bytes, skip this optimization
+  LDX TR_EXPECT_LEN16
+  BEQ .compare
+  DEX
+  LDA TR_EXPECT_BUF,X
+  CMP #$0A
+  BNE .compare
+  STX TR_EXPECT_LEN16        ; Trim trailing newline
 .compare:
   ; Compare lengths first
   LDA TR_EXPECT_LEN16 + 1
@@ -893,7 +899,9 @@ tr_print_expect_stderr:
   JMP .loop
 .newline:
   JSR write_d                 ; Print the \n
-  SHOW_MESSAGEI tr_msg_got_prefix  ; Indent continuation (reuse got_prefix spacing)
+  STY tr_print_save_y
+  SHOW_MESSAGEI tr_msg_continuation
+  LDY tr_print_save_y
   INY
   JMP .loop
 .done:
@@ -913,13 +921,18 @@ tr_print_actual_stderr:
   JMP .loop
 .newline:
   JSR write_d
-  SHOW_MESSAGEI tr_msg_got_prefix
+  STY tr_print_save_y
+  SHOW_MESSAGEI tr_msg_continuation
+  LDY tr_print_save_y
   INY
   JMP .loop
 .done:
   RTS
 
-tr_msg_wrong_stderr: .asciiz " (stderr mismatch)\n"
+tr_print_save_y: .byte 0
+
+tr_msg_wrong_stderr:  .asciiz " (stderr mismatch)\n"
+tr_msg_continuation:  .asciiz "         "
 
 
 ; ============================================================================
@@ -984,79 +997,6 @@ tr_print_summary:
 tr_msg_sum_passed:  .asciiz " passed, "
 tr_msg_sum_failed:  .asciiz " failed, "
 tr_msg_sum_skipped: .asciiz " skipped\n"
-
-; Check if test ARGS require a special build; set TR_SKIP_FLAG if so
-; Auto-skips tests with "debug", "small_heap", or "show_captured_macros" in ARGS
-tr_check_auto_skip:
-  ; Check for "debug"
-  SET16 tr_skip_debug, TABP16
-  JSR tr_args_contains
-  BCC .skip
-  ; Check for "small_heap"
-  SET16 tr_skip_small_heap, TABP16
-  JSR tr_args_contains
-  BCC .skip
-  ; Check for "show_captured_macros"
-  SET16 tr_skip_show_macros, TABP16
-  JSR tr_args_contains
-  BCC .skip
-  RTS
-.skip:
-  LDA #$01
-  STA TR_SKIP_FLAG
-  RTS
-
-tr_skip_debug:       .asciiz "debug"
-tr_skip_small_heap:  .asciiz "small_heap"
-tr_skip_show_macros: .asciiz "show_captured_macros"
-
-; Check if TR_ARGV_STRS contains the null-terminated string at (TABP16)
-; On exit: C clear = found, C set = not found
-tr_args_contains:
-  LDX #$00                 ; Index into TR_ARGV_STRS
-.outer:
-  LDA TR_ARGV_STRS,X
-  BEQ .not_found           ; End of args string
-  ; Try to match from current position
-  STX tr_args_start        ; Save start of this token
-  LDY #$00                 ; Index into search string
-.inner:
-  LDA (TABP16),Y
-  BEQ .check_boundary      ; End of search string - check word boundary
-  CMP TR_ARGV_STRS,X
-  BNE .next
-  INX
-  INY
-  JMP .inner
-.check_boundary:
-  ; Full search string matched - check word boundary
-  LDA TR_ARGV_STRS,X
-  BEQ .found               ; End of args = valid boundary
-  CMP #' '
-  BEQ .found               ; Space = valid boundary
-  ; Partial match - fall through to advance past this token
-.next:
-  ; Advance X to next space or end from the token start
-  LDX tr_args_start
-.advance:
-  LDA TR_ARGV_STRS,X
-  BEQ .not_found
-  CMP #' '
-  BEQ .skip_space
-  INX
-  JMP .advance
-.skip_space:
-  INX
-  JMP .outer
-.found:
-  CLC
-  RTS
-.not_found:
-  SEC
-  RTS
-
-tr_args_start: .byte 0
-
 
 ; ============================================================================
 ; FIELD DISPATCH

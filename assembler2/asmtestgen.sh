@@ -127,7 +127,7 @@ diff <(hexdump -C 17/out/asm.out) <(hexdump -C 17/out/asm_2.out)
 (cd 17 && ../emulator.out out/asm_debug.out asm.asm out/asm_debug_2.out define:enable_debug)
 diff <(hexdump -C 17/out/asm_debug.out) <(hexdump -C 17/out/asm_debug_2.out)
 echo "--- Self-hosted tests ---"
-(cd 17 && ../emulator.out out/asm.out asm.asm out/test_runner.out define:enable_test_runner)
+(cd 17 && ../emulator.out out/asm.out asm.asm out/test_runner.out define:enable_test_runner define:enable_debug)
 (cd 17/tests/asm && ../../../emulator.out ../../out/test_runner.out)
 echo "--- Test runner directory mode tests ---"
 python3 17/tests/test_runner/test_runner_dir.py
