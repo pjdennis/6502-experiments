@@ -344,6 +344,55 @@ def test_wrong_code_aligned_display():
             f"Missing 'got: error' in: {output}"
 
 
+# A simple EXPECT_STDERR test (file not found gives predictable stderr)
+EXPECT_STDERR_TEST = """\
+---
+NAME: stderr_simple
+INPUT:
+ 1: * = $0200
+ 2:   .include nonexistent_file_12345.asm
+EXPECT_STDERR:
+Error 39 in file _tr_in.tmp at line 2: File not found
+---
+"""
+
+
+def test_expect_stderr_not_skipped():
+    """Tests with simple EXPECT_STDERR should PASS, not SKIP."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "test.txt").write_text(EXPECT_STDERR_TEST)
+        output, rc = run_test_runner(tmpdir)
+        assert rc == 0, f"Expected exit code 0, got {rc}\nOutput: {output}"
+        assert "SKIP" not in output, f"Unexpected SKIP in: {output}"
+        assert "1 passed" in output, f"Expected 1 passed in: {output}"
+
+
+# A test with mismatched EXPECT_STDERR
+EXPECT_STDERR_MISMATCH_TEST = """\
+---
+NAME: stderr_mismatch
+INPUT:
+ 1: * = $0200
+ 2:   .include nonexistent_file_12345.asm
+EXPECT_STDERR:
+Error 99 in file wrong.asm at line 1: Wrong message
+---
+"""
+
+
+def test_expect_stderr_mismatch_display():
+    """On EXPECT_STDERR mismatch, failure should show exp: and got: content."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "test.txt").write_text(EXPECT_STDERR_MISMATCH_TEST)
+        output, rc = run_test_runner(tmpdir)
+        assert rc == 1, f"Expected exit code 1, got {rc}\nOutput: {output}"
+        assert "FAIL" in output, f"Missing FAIL in: {output}"
+        assert "exp: Error 99" in output, \
+            f"Missing expected stderr in: {output}"
+        assert "got: Error 39" in output, \
+            f"Missing actual stderr in: {output}"
+
+
 def test_verbose_flag_shows_stderr():
     """With -v flag, assembler stderr (Error messages) should appear in output."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -380,6 +429,8 @@ def main():
         ("verbose_flag_shows_stderr", test_verbose_flag_shows_stderr),
         ("wrong_line_aligned_display", test_wrong_line_aligned_display),
         ("wrong_code_aligned_display", test_wrong_code_aligned_display),
+        ("expect_stderr_not_skipped", test_expect_stderr_not_skipped),
+        ("expect_stderr_mismatch_display", test_expect_stderr_mismatch_display),
     ]
 
     passed = 0

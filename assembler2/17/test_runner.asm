@@ -183,12 +183,17 @@ tr_run_file:
   BCC .field_done
   ; No field matched
   LDA TR_STATE
-  BNE .input_line
+  BEQ .idle_line
+  CMP #$02
+  BEQ .stderr_line
+  JSR tr_handle_input_line
+  JMP .main_loop
+.stderr_line:
+  JSR tr_handle_stderr_line
+  JMP .main_loop
+.idle_line:
   ; Not in a section: skip empty lines and comments
   JSR tr_skip_rest_of_line
-  JMP .main_loop
-.input_line:
-  JSR tr_handle_input_line
   JMP .main_loop
 .field_done:
   JSR tr_skip_rest_of_line
@@ -345,9 +350,17 @@ tr_test_resume:
   JSR tr_restore_vectors
   ; Verify results based on test type
   LDA TR_TEST_TYPE
-  BNE .error_test
+  CMP #$02
+  BEQ .stderr_test
+  CMP #$01
+  BEQ .error_test
   ; === Hex test ===
   JSR tr_verify_hex
+  BCS .fail
+  JMP .pass
+.stderr_test:
+  ; === Stderr test ===
+  JSR tr_verify_stderr
   BCS .fail
   JMP .pass
 .error_test:
@@ -817,6 +830,99 @@ tr_parse_decimal_from_stderr:
 
 
 ; ============================================================================
+; STDERR VERIFICATION
+; ============================================================================
+
+; Verify stderr test: compare captured stderr with expected
+; On exit: C clear = pass, C set = fail (details already printed)
+tr_verify_stderr:
+  ; Strip trailing \n from actual stderr (if present)
+  LDX TR_STDERR_LEN
+  BEQ .compare
+  DEX
+  LDA TR_STDERR_BUF,X
+  CMP #$0A
+  BNE .compare
+  STX TR_STDERR_LEN          ; Trim trailing newline
+.compare:
+  ; Compare lengths first
+  LDA TR_EXPECT_LEN16 + 1
+  BNE .long_expected          ; Expected > 255 bytes, can't match 8-bit actual
+  LDA TR_STDERR_LEN
+  CMP TR_EXPECT_LEN16
+  BNE .fail
+  ; Same length — compare byte by byte
+  LDY #$00
+.cmp_loop:
+  CPY TR_STDERR_LEN
+  BCS .pass
+  LDA TR_STDERR_BUF,Y
+  CMP TR_EXPECT_BUF,Y
+  BNE .fail
+  INY
+  JMP .cmp_loop
+.pass:
+  CLC
+  RTS
+.long_expected:
+.fail:
+  ; Print failure details
+  JSR tr_print_test_name
+  SHOW_MESSAGEI tr_msg_fail
+  SHOW_MESSAGEI tr_msg_wrong_stderr
+  SHOW_MESSAGEI tr_msg_exp_prefix
+  JSR tr_print_expect_stderr
+  SHOW_CHAR '\n'
+  SHOW_MESSAGEI tr_msg_got_prefix
+  JSR tr_print_actual_stderr
+  SHOW_CHAR '\n'
+  SEC
+  RTS
+
+; Print expected stderr from TR_EXPECT_BUF (up to TR_EXPECT_LEN16)
+tr_print_expect_stderr:
+  LDY #$00
+.loop:
+  CPY TR_EXPECT_LEN16
+  BCS .done
+  LDA TR_EXPECT_BUF,Y
+  CMP #$0A
+  BEQ .newline
+  JSR write_d
+  INY
+  JMP .loop
+.newline:
+  JSR write_d                 ; Print the \n
+  SHOW_MESSAGEI tr_msg_got_prefix  ; Indent continuation (reuse got_prefix spacing)
+  INY
+  JMP .loop
+.done:
+  RTS
+
+; Print actual stderr from TR_STDERR_BUF (up to TR_STDERR_LEN)
+tr_print_actual_stderr:
+  LDY #$00
+.loop:
+  CPY TR_STDERR_LEN
+  BCS .done
+  LDA TR_STDERR_BUF,Y
+  CMP #$0A
+  BEQ .newline
+  JSR write_d
+  INY
+  JMP .loop
+.newline:
+  JSR write_d
+  SHOW_MESSAGEI tr_msg_got_prefix
+  INY
+  JMP .loop
+.done:
+  RTS
+
+tr_msg_wrong_stderr: .asciiz " (stderr mismatch)\n"
+
+
+; ============================================================================
 ; PRINT HELPERS
 ; ============================================================================
 
@@ -1033,7 +1139,7 @@ tr_dispatch_field:
   JSR tr_match_prefix
   BCS .no_match
   JSR tr_close_input_state
-  JMP tr_handle_skip         ; Treat as skip (can't verify stderr)
+  JMP tr_handle_expect_stderr
 .no_match:
   SEC
   RTS
@@ -1222,11 +1328,48 @@ tr_handle_args:
   CLC
   RTS
 
-; Close input state (close temp file if input was being written)
+; Handle EXPECT_STDERR: field - enter stderr collection state
+tr_handle_expect_stderr:
+  LDA #$02
+  STA TR_TEST_TYPE           ; Mark as stderr test
+  STA TR_STATE               ; Enter stderr state
+  LDA #$00
+  STA_LH16 TR_EXPECT_LEN16   ; Clear expected stderr length
+  CLC
+  RTS
+
+; Handle a line inside EXPECT_STDERR section
+; Copies line bytes to TR_EXPECT_BUF, appending \n between lines
+tr_handle_stderr_line:
+  ; Skip empty lines (blank lines between --- and first content)
+  ; Actually, empty lines are meaningful in stderr - they separate traceback
+  ; But if TR_EXPECT_LEN16 is 0 and line is empty, skip (leading blank)
+  ; For now, just append all lines
+  ; If not the first line, prepend \n
+  LDA TR_EXPECT_LEN16
+  ORA TR_EXPECT_LEN16 + 1
+  BEQ .no_separator
+  LDA #$0A
+  JSR tr_store_expect_byte
+.no_separator:
+  LDY #$00
+.copy:
+  CPY TR_LINE_LEN
+  BCS .done
+  LDA TR_LINE_BUF,Y
+  JSR tr_store_expect_byte
+  INY
+  JMP .copy
+.done:
+  RTS
+
+; Close input/stderr state (close temp file if input was being written)
 ; Preserves Y (callers depend on Y being the prefix offset)
 tr_close_input_state:
   LDA TR_STATE
   BEQ .done
+  CMP #$02
+  BEQ .close_stderr
   TYA
   PHA                       ; Save Y
   LDA TR_INPUT_HANDLE
@@ -1236,6 +1379,10 @@ tr_close_input_state:
   PLA
   TAY                       ; Restore Y
 .done:
+  RTS
+.close_stderr:
+  LDA #$00
+  STA TR_STATE
   RTS
 
 
