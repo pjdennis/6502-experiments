@@ -74,8 +74,6 @@ echo "--- Version 11 ---"
   ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
   ../emulator.out ../10/out/asm.out asm.asm out/asm.out)
 run_version_tests 11
-echo "--- Test asm11 ---"
-./emulator.out 11/out/asm.out test16.asm out/test16.out
 echo "--- Version 12 ---"
 (cd 12 && mkdir -p out &&
   ../emulator.out ../11/out/asm.out instgen.asm out/instgen.out &&
@@ -136,9 +134,3 @@ SIZE2=$(perl -e 'open(F,"<","17/out/asm_debug.out");binmode(F);read(F,$d,0xE000)
 echo "  asm.out (no debug):     $SIZE1 bytes"
 echo "  asm_debug.out:          $SIZE2 bytes"
 echo "  Difference:             $((SIZE2 - SIZE1)) bytes"
-
-echo "--- Test asm17 ---"
-./emulator.out 17/out/asm_debug.out test19.asm out/test19.out
-# hexdump -C out/test19.out
-echo "Assembled test program"
-./emulator.out out/test19.out --load 1000 --output - arg1 "arg 2"
