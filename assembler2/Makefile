@@ -2,10 +2,8 @@ all: emulator.out 00/out/asm_c.out
 
 clean:
 	rm -f emulator.out
-	rm -f out/*.out
-	rm -f dump/*.bin
-	for d in [0-9][0-9]; do rm -rf "$$d/out" "$$d/dump"; done
-
+	find . -type d -name "out" -exec rm -rf {} +
+	find . -type f -name "*.tmp" -delete
 emulator.out: emulator.c
 	@mkdir -p out
 	gcc -O2 -march=native -flto -DNDEBUG -o emulator.out emulator.c
