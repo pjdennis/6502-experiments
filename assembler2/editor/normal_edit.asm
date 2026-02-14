@@ -63,16 +63,19 @@ char_paste_below:
   POP16 BUF_LEN16            ; Recover total paste size
   BCS .done                  ; Paste failed (buffer full)
 
-  ; target = insertion_point + paste_size - 1 (last pasted byte)
+  ; Check if pasted content is multi-line
+  JSR yank_has_newline
+  BCS .cpb_multiline
+
+  ; Single-line: cursor at last pasted byte
   CLC
   ADC16 BUF_PTR16, BUF_LEN16, BUF_PTR16
   DEC16 BUF_PTR16
-  ; If last pasted byte is '\n', back up before it
-  LDY #0
-  LDA (BUF_PTR16),Y
-  CMP #'\n'
-  BNE .cpb_find_pos
-  DEC16 BUF_PTR16
+  JMP .cpb_find_pos
+
+.cpb_multiline:
+  ; Multi-line: cursor at first pasted byte (BUF_PTR16 already set)
+
 .cpb_find_pos:
   JSR find_line_for_ptr      ; sets FILE_LINE16, CURSOR_COL16
   JSR clamp_cursor_col
@@ -100,16 +103,19 @@ char_paste_above:
   POP16 BUF_LEN16            ; Recover total paste size
   BCS .done                  ; Paste failed
 
-  ; target = insertion_point + paste_size - 1 (last pasted byte)
+  ; Check if pasted content is multi-line
+  JSR yank_has_newline
+  BCS .cpa_multiline
+
+  ; Single-line: cursor at last pasted byte
   CLC
   ADC16 BUF_PTR16, BUF_LEN16, BUF_PTR16
   DEC16 BUF_PTR16
-  ; If last pasted byte is '\n', back up before it
-  LDY #0
-  LDA (BUF_PTR16),Y
-  CMP #'\n'
-  BNE .cpa_find_pos
-  DEC16 BUF_PTR16
+  JMP .cpa_find_pos
+
+.cpa_multiline:
+  ; Multi-line: cursor at first pasted byte (BUF_PTR16 already set)
+
 .cpa_find_pos:
   JSR find_line_for_ptr      ; sets FILE_LINE16, CURSOR_COL16
   JSR clamp_cursor_col

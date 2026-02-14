@@ -4614,6 +4614,21 @@ class EditorTestRunner:
             expect_cursor=(0, 1),  # Deleted B, P pastes before A->cursor at B (col 1)
         )
 
+        # Multi-line paste cursor position: cursor at first pasted char
+        self.run_test_screen(
+            "p with multi-line yank: cursor at first pasted char",
+            "foo\nbar\n",
+            b"jdb0p:q!\r",
+            expect_cursor=(0, 1),
+        )
+
+        self.run_test_screen(
+            "P with multi-line yank: cursor at first pasted char",
+            "foo\nbar\n",
+            b"jdb0P:q!\r",
+            expect_cursor=(0, 0),
+        )
+
         # Batched x yanks only last deleted char (matches slow typing)
         self.run_test(
             "batched xxxx yanks only last char",

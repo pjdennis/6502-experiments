@@ -359,6 +359,33 @@ paste_adjust_marks:
   STA MODIFIED
   RTS
 
+; Check if yank buffer contains a newline character
+; Input: YANK_SIZE16 = single yank size (set by yank_paste_setup)
+; Output: carry set if newline found, carry clear if not
+; Clobbers: A, Y, BUF_SRC16, BUF_DST16
+yank_has_newline:
+  SET16 YANK_BUF, BUF_SRC16
+  CP16 YANK_SIZE16, BUF_DST16       ; BUF_DST16 = remaining count
+  LDY #0
+.loop:
+  TST16 BUF_DST16
+  BEQ .not_found
+  LDA (BUF_SRC16),Y
+  CMP #'\n'
+  BEQ .found
+  INY
+  BNE .no_page
+  INC BUF_SRC16 + 1
+.no_page:
+  DEC16 BUF_DST16
+  JMP .loop
+.not_found:
+  CLC
+  RTS
+.found:
+  SEC
+  RTS
+
 ; Check if count (X) pastes of BUF_LEN16 bytes fit in the text buffer
 ; Call after yank_get_size (which sets BUF_LEN16)
 ; Returns carry clear = fits, carry set = doesn't fit
