@@ -6,6 +6,7 @@ ANSI_ROW:     .byte    ; Row for cursor positioning (1-based)
 ANSI_COL:     .byte    ; Column for cursor positioning (1-based)
 STR_PTR16:    .word    ; Pointer for write_string
 ANSI_TEMP:    .byte    ; Temp byte for decimal output
+ANSI_DIVISOR: .byte    ; Divisor for div_byte
 
   .code
 
@@ -146,22 +147,8 @@ write_byte_dec:
   LDY #0        ; leading zero flag: 0 = nothing printed yet
 
   ; Hundreds digit
-  LDA #0
-.hundreds_loop:
-  LDX ANSI_TEMP
-  CPX #100
-  BCC .hundreds_done
-  PHA
-  TXA
-  SEC
-  SBC #100
-  STA ANSI_TEMP
-  PLA
-  CLC
-  ADC #1
-  JMP .hundreds_loop
-.hundreds_done:
-  ; A = hundreds count
+  LDA #100
+  JSR div_byte
   CMP #0
   BEQ .no_hundreds
   CLC
@@ -171,22 +158,8 @@ write_byte_dec:
 .no_hundreds:
 
   ; Tens digit
-  LDA #0
-.tens_loop:
-  LDX ANSI_TEMP
-  CPX #10
-  BCC .tens_done
-  PHA
-  TXA
-  SEC
-  SBC #10
-  STA ANSI_TEMP
-  PLA
-  CLC
-  ADC #1
-  JMP .tens_loop
-.tens_done:
-  ; A = tens count
+  LDA #10
+  JSR div_byte
   CMP #0
   BNE .print_tens
   CPY #0
@@ -202,4 +175,27 @@ write_byte_dec:
   CLC
   ADC #'0'
   JSR io_write
+  RTS
+
+; Divide ANSI_TEMP by A via repeated subtraction
+; Input: A = divisor, ANSI_TEMP = dividend
+; Output: A = quotient, ANSI_TEMP = remainder
+; Clobbers: X
+div_byte:
+  STA ANSI_DIVISOR
+  LDA #0
+.loop:
+  LDX ANSI_TEMP
+  CPX ANSI_DIVISOR
+  BCC .done
+  PHA
+  TXA
+  SEC
+  SBC ANSI_DIVISOR
+  STA ANSI_TEMP
+  PLA
+  CLC
+  ADC #1
+  JMP .loop
+.done:
   RTS
