@@ -251,17 +251,11 @@ do_yw:
   JSR get_count              ; BUF_TEMP16 = N
   JSR check_cursor_in_line
   BCS .yw_done               ; Empty line, bail
-
-  CP16 CURSOR_COL16, BUF_LEN16  ; BUF_LEN16 = scan start at cursor
   LDX BUF_TEMP16
-  JSR scan_words_forward
-  SEC
-  SBC16 BUF_LEN16, CURSOR_COL16, BUF_LEN16  ; BUF_LEN16 = byte count
-  TST16 BUF_LEN16
-  BEQ .yw_done               ; Nothing to yank
-  JSR get_cursor_buf_ptr     ; BUF_PTR16 = cursor position
-  CP16 BUF_PTR16, BUF_SRC16
-  JSR yank_add_chars
+  JSR compute_word_range_forward
+  BCS .yw_done
+  LDA #OP_YANK
+  JSR apply_char_operator
 .yw_done:
   JMP clear_count
 
@@ -272,18 +266,11 @@ do_yb:
   JSR get_count              ; BUF_TEMP16 = N
   TST16 CURSOR_COL16
   BEQ .yb_done               ; At col 0, nothing to yank
-
-  PUSH16 CURSOR_COL16         ; Save original cursor
   LDX BUF_TEMP16
-  JSR scan_words_backward     ; CURSOR_COL16 = new position
-  POP16 BUF_LEN16             ; BUF_LEN16 = original cursor
-  SEC
-  SBC16 BUF_LEN16, CURSOR_COL16, BUF_LEN16  ; BUF_LEN16 = byte count
-  TST16 BUF_LEN16
-  BEQ .yb_done               ; Nothing to yank
-  JSR get_cursor_buf_ptr     ; BUF_PTR16 = new cursor position
-  CP16 BUF_PTR16, BUF_SRC16
-  JSR yank_add_chars
+  JSR compute_word_range_backward
+  BCS .yb_done
+  LDA #OP_YANK
+  JSR apply_char_operator
 .yb_done:
   JMP clear_count
 

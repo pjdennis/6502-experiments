@@ -506,6 +506,87 @@ scan_cw_forward:
 .scf_done:
   RTS
 
+; --- Range computation helpers ---
+
+; Compute forward word range from cursor
+; Input: X = word count, LINE_LEN16 = line length (from check_cursor_in_line)
+; Output: BUF_LEN16 = byte count, carry set if nothing to operate on
+; Does NOT move cursor
+; Clobbers: A, X, Y, BUF_PTR16, WORD_CLASS, NORMAL_TEMP
+compute_word_range_forward:
+  CP16 CURSOR_COL16, BUF_LEN16   ; BUF_LEN16 = scan start at cursor
+  JSR scan_words_forward          ; BUF_LEN16 = end position
+  SEC
+  SBC16 BUF_LEN16, CURSOR_COL16, BUF_LEN16
+  TST16 BUF_LEN16
+  BEQ .nothing
+  CLC
+  RTS
+.nothing:
+  SEC
+  RTS
+
+; Compute forward cw-semantics word range from cursor
+; Input: X = word count, LINE_LEN16 = line length (from check_cursor_in_line)
+; Output: BUF_LEN16 = byte count, carry set if nothing to operate on
+; Does NOT move cursor
+; Clobbers: A, X, Y, BUF_PTR16, WORD_CLASS, NORMAL_TEMP
+compute_cw_range_forward:
+  CP16 CURSOR_COL16, BUF_LEN16   ; BUF_LEN16 = scan start at cursor
+  JSR scan_cw_forward             ; BUF_LEN16 = end position
+  SEC
+  SBC16 BUF_LEN16, CURSOR_COL16, BUF_LEN16
+  TST16 BUF_LEN16
+  BEQ .nothing
+  CLC
+  RTS
+.nothing:
+  SEC
+  RTS
+
+; Compute backward word range from cursor
+; Input: X = word count, CURSOR_COL16 > 0
+; Output: BUF_LEN16 = byte count, CURSOR_COL16 = start of range, carry set if nothing
+; DOES move cursor to range start (backward scan modifies CURSOR_COL16)
+; Clobbers: A, X, Y, BUF_PTR16, WORD_CLASS, NORMAL_TEMP
+compute_word_range_backward:
+  PUSH16 CURSOR_COL16
+  JSR scan_words_backward         ; CURSOR_COL16 = new position
+  POP16 BUF_LEN16                 ; BUF_LEN16 = original cursor
+  SEC
+  SBC16 BUF_LEN16, CURSOR_COL16, BUF_LEN16
+  TST16 BUF_LEN16
+  BEQ .nothing
+  CLC
+  RTS
+.nothing:
+  SEC
+  RTS
+
+; Compute forward character range from cursor
+; Input: X = char count (8-bit), LINE_LEN16 = line length (from check_cursor_in_line)
+; Output: BUF_LEN16 = min(X, available chars on line), carry set if nothing
+; Clobbers: A
+compute_char_range_forward:
+  STX BUF_LEN16
+  LDA #0
+  STA BUF_LEN16 + 1
+  ; available = LINE_LEN16 - CURSOR_COL16
+  SEC
+  SBC16 LINE_LEN16, CURSOR_COL16, BUF_DST16
+  CMP16 BUF_LEN16, BUF_DST16
+  BCC .ok
+  BEQ .ok
+  CP16 BUF_DST16, BUF_LEN16     ; Clamp to available
+.ok:
+  TST16 BUF_LEN16
+  BEQ .nothing
+  CLC
+  RTS
+.nothing:
+  SEC
+  RTS
+
 ; Get buffer pointer at BUF_LEN16 offset on current line
 ; Sets BUF_PTR16 = start of FILE_LINE16 + BUF_LEN16
 ; Clobbers A, X, Y
