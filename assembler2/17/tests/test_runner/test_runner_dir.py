@@ -540,6 +540,65 @@ def test_summary_no_emphasis_on_pass():
             f"Summary should NOT use !!failed!! when all pass: {output}"
 
 
+# A single test file exercising every field type
+ALL_FIELD_TYPES_TEST = """\
+---
+NAME: all_fields_hex
+INPUT:
+ 1: * = $0200
+ 2:   NOP
+EXPECT_HEX: ea
+---
+NAME: all_fields_error
+INPUT:
+ 1: * = $0200
+ 2:   LDA bogus
+EXPECT_ERROR: 1
+EXPECT_LINE: 2
+EXPECT_MSG: Label not found
+---
+NAME: all_fields_skip
+SKIP:
+INPUT:
+ 1: * = $0200
+ 2:   NOP
+EXPECT_HEX: ea
+---
+NAME: all_fields_args
+ARGS: define:MY_FLAG
+INPUT:
+ 1: * = $0200
+ 2:   .ifdef MY_FLAG
+ 3:   NOP
+ 4:   .endif
+EXPECT_HEX: ea
+---
+NAME: all_fields_stderr
+INPUT:
+ 1: * = $0200
+ 2:   .include nonexistent_file_12345.asm
+EXPECT_STDERR:
+Error 39 in file {{MAIN_FILE}} at line 2: File not found
+---
+"""
+
+
+def test_all_field_types_dispatched():
+    """All field types (NAME, INPUT, EXPECT_HEX, EXPECT_ERROR, EXPECT_LINE,
+    EXPECT_MSG, SKIP, ARGS, EXPECT_STDERR) dispatch correctly."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "test.txt").write_text(ALL_FIELD_TYPES_TEST)
+        output, rc = run_test_runner(tmpdir)
+        assert rc == 0, f"Expected exit code 0, got {rc}\nOutput: {output}"
+        assert "all_fields_hex" in output, f"Missing hex test in: {output}"
+        assert "all_fields_error" in output, f"Missing error test in: {output}"
+        assert "all_fields_skip" in output, f"Missing skip test in: {output}"
+        assert "all_fields_args" in output, f"Missing args test in: {output}"
+        assert "all_fields_stderr" in output, f"Missing stderr test in: {output}"
+        assert "4 passed" in output, f"Expected 4 passed in: {output}"
+        assert "1 skipped" in output, f"Expected 1 skipped in: {output}"
+
+
 def main():
     if not EMULATOR.exists():
         print(f"Error: Emulator not found at {EMULATOR}")
@@ -574,6 +633,7 @@ def main():
         ("quiet_flag_shows_failures", test_quiet_flag_shows_failures),
         ("summary_fail_emphasis", test_summary_fail_emphasis),
         ("summary_no_emphasis_on_pass", test_summary_no_emphasis_on_pass),
+        ("all_field_types_dispatched", test_all_field_types_dispatched),
     ]
 
     passed = 0

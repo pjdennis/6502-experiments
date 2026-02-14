@@ -1049,66 +1049,60 @@ tr_check_separator:
   SEC
   RTS
 
+; Field dispatch table: (prefix_ptr, handler_ptr) pairs, null-terminated
+tr_field_table:
+  .word tr_pfx_name,          tr_handle_name
+  .word tr_pfx_input,         tr_handle_input
+  .word tr_pfx_expect_hex,    tr_handle_expect_hex
+  .word tr_pfx_expect_error,  tr_handle_expect_error
+  .word tr_pfx_expect_line,   tr_handle_expect_line
+  .word tr_pfx_expect_msg,    tr_handle_expect_msg
+  .word tr_pfx_skip,          tr_handle_skip
+  .word tr_pfx_args,          tr_handle_args
+  .word tr_pfx_expect_stderr, tr_handle_expect_stderr
+  .word 0                     ; sentinel
+
 ; Try to match field keywords. Closes input state on match.
 ; On exit: C clear = field matched and handled
 ;          C set = no field matched
 tr_dispatch_field:
-  SET16 tr_pfx_name, TABP16
+  SET16 tr_field_table, TR_ACTUAL_PTR16
+.loop:
+  ; Load prefix pointer from table
+  LDY #$00
+  LDA (TR_ACTUAL_PTR16),Y     ; prefix lo
+  STA TABP16
+  INY
+  LDA (TR_ACTUAL_PTR16),Y     ; prefix hi
+  STA TABP16 + 1
+  ORA TABP16                   ; null = end of table
+  BEQ .no_match
   JSR tr_match_prefix
-  BCS .not_name
-  JSR tr_close_input_state
-  JMP tr_handle_name      ; Returns (C clear via tail path)
-.not_name:
-  SET16 tr_pfx_input, TABP16
-  JSR tr_match_prefix
-  BCS .not_input
-  JSR tr_close_input_state
-  JMP tr_handle_input
-.not_input:
-  SET16 tr_pfx_expect_hex, TABP16
-  JSR tr_match_prefix
-  BCS .not_hex
-  JSR tr_close_input_state
-  JMP tr_handle_expect_hex
-.not_hex:
-  SET16 tr_pfx_expect_error, TABP16
-  JSR tr_match_prefix
-  BCS .not_error
-  JSR tr_close_input_state
-  JMP tr_handle_expect_error
-.not_error:
-  SET16 tr_pfx_expect_line, TABP16
-  JSR tr_match_prefix
-  BCS .not_line
-  JSR tr_close_input_state
-  JMP tr_handle_expect_line
-.not_line:
-  SET16 tr_pfx_expect_msg, TABP16
-  JSR tr_match_prefix
-  BCS .not_msg
-  JSR tr_close_input_state
-  JMP tr_handle_expect_msg
-.not_msg:
-  SET16 tr_pfx_skip, TABP16
-  JSR tr_match_prefix
-  BCS .not_skip
-  JSR tr_close_input_state
-  JMP tr_handle_skip
-.not_skip:
-  SET16 tr_pfx_args, TABP16
-  JSR tr_match_prefix
-  BCS .not_args
-  JSR tr_close_input_state
-  JMP tr_handle_args
-.not_args:
-  SET16 tr_pfx_expect_stderr, TABP16
-  JSR tr_match_prefix
-  BCS .no_match
-  JSR tr_close_input_state
-  JMP tr_handle_expect_stderr
+  BCC .matched
+  ; Advance to next entry (+4 bytes)
+  CLC
+  LDA TR_ACTUAL_PTR16
+  ADC #$04
+  STA TR_ACTUAL_PTR16
+  BCC .loop
+  INC TR_ACTUAL_PTR16 + 1
+  JMP .loop
+.matched:
+  JSR tr_close_input_state     ; preserves Y (line offset)
+  STY tr_dispatch_save_y
+  LDY #$02
+  LDA (TR_ACTUAL_PTR16),Y     ; handler lo
+  STA TABP16
+  INY
+  LDA (TR_ACTUAL_PTR16),Y     ; handler hi
+  STA TABP16 + 1
+  LDY tr_dispatch_save_y       ; restore line offset for handler
+  JMP (TABP16)                 ; indirect jump to handler
 .no_match:
   SEC
   RTS
+
+tr_dispatch_save_y: .byte 0
 
 
 ; ============================================================================
