@@ -5615,6 +5615,62 @@ class EditorTestRunner:
             ]
         )
 
+        self._group("Screen state - tab and control char display:", leading_blank=True)
+
+        # Tab displayed as reverse >
+        self.run_test_screen(
+            "Tab displayed as reverse >",
+            None,
+            b":q!\r",
+            initial_bytes=b"A\tB\n",
+            expect_lines=[(0, "A>B")],
+            expect_reverse_at=[
+                (0, 0, False),
+                (0, 1, True),
+                (0, 2, False),
+            ]
+        )
+
+        # Control char displayed as reverse ?
+        self.run_test_screen(
+            "Control char displayed as reverse ?",
+            None,
+            b":q!\r",
+            initial_bytes=b"A\x01B\n",
+            expect_lines=[(0, "A?B")],
+            expect_reverse_at=[
+                (0, 0, False),
+                (0, 1, True),
+                (0, 2, False),
+            ]
+        )
+
+        # Tab inserted via insert mode
+        self.run_test_screen(
+            "Tab key inserts tab in insert mode",
+            "AB\n",
+            b"i\tC\x1b:q!\r",
+            expect_lines=[(0, ">CAB")],
+            expect_reverse_at=[
+                (0, 0, True),
+                (0, 1, False),
+            ]
+        )
+
+        # Multiple tabs and control chars
+        self.run_test_screen(
+            "Multiple tabs and control chars",
+            None,
+            b":q!\r",
+            initial_bytes=b"\t\x02\t\n",
+            expect_lines=[(0, ">?>")],
+            expect_reverse_at=[
+                (0, 0, True),
+                (0, 1, True),
+                (0, 2, True),
+            ]
+        )
+
         self._group("Word motions (w, b, e):", leading_blank=True)
 
         self.run_test_screen(

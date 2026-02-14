@@ -426,14 +426,14 @@ render_cursor_and_status:
   JMP io_flush
 
 ; Print line characters from BUF_PTR16 up to SCREEN_COLS or newline
-; Replaces control chars with spaces. Clobbers A, Y.
+; Control chars: tab as '>' reverse, others as '.' reverse. Clobbers A, Y.
 render_line_chars:
   LDA #0
   STA RENDER_COL
   LDY #0
 .loop:
   LDA (BUF_PTR16),Y
-  BMI .nonascii
+  BMI .unprintable
   CMP #'\n'
   BEQ .done
   CMP #' '
@@ -441,8 +441,22 @@ render_line_chars:
   JSR io_write
   JMP .next
 .ctrl:
-  LDA #' '
+  CMP #'\t'
+  BNE .unprintable
+  LDA #'>'
+  JMP .rev_char
+.unprintable:
+  LDA #'?'
+.rev_char:
+  STA BUF_TEMP
+  TYA
+  PHA
+  JSR ansi_reverse_video
+  LDA BUF_TEMP
   JSR io_write
+  JSR ansi_normal_video
+  PLA
+  TAY
 .next:
   INY
   INC RENDER_COL
@@ -451,16 +465,6 @@ render_line_chars:
   BCC .loop
 .done:
   RTS
-.nonascii:
-  TYA
-  PHA
-  JSR ansi_reverse_video
-  LDA #'?'
-  JSR io_write
-  JSR ansi_normal_video
-  PLA
-  TAY
-  JMP .next
 
 ; === Wrap utility functions ===
 

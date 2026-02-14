@@ -25,6 +25,8 @@ insert_handle_key:
   BEQ .batch
   CMP #KEY_DEL
   BEQ .batch
+  CMP #KEY_TAB
+  BEQ .batch
   CMP #' '
   BCC .dispatch
   CMP #$7F
@@ -121,12 +123,15 @@ insert_batch:
   BEQ .key_bs
   CMP #KEY_DEL
   BEQ .key_del
+  CMP #KEY_TAB
+  BEQ .key_printable
   ; Check printable ($20-$7E)
   CMP #' '
   BCC .key_other
   CMP #$7F
   BCS .key_other
-  ; Printable: store in BATCH_BUF
+  ; Printable/tab: store in BATCH_BUF
+.key_printable:
   STA BATCH_BUF,X
   INX
   DEY

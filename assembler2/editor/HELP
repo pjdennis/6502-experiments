@@ -153,6 +153,7 @@ INSERT MODE
 -----------
 
   Printable chars   Insert at cursor position
+  Tab               Insert tab character
   Enter             Split line (insert newline)
   Backspace         Delete character before cursor; at column 0,
                     joins with the previous line
@@ -241,4 +242,5 @@ DISPLAY
   Long lines wrap across multiple screen rows.
   Lines past end of file are shown as ~ (tilde).
   Non-ASCII bytes (high bit set) are shown as ? in reverse video.
-  Control characters in file content are shown as spaces.
+  Tab characters are shown as > in reverse video.
+  Other control characters are shown as . in reverse video.
