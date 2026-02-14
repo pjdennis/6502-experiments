@@ -293,6 +293,18 @@ def test_stderr_suppressed_by_default():
             f"Assembler stderr should be suppressed, but found: {error_lines}"
 
 
+def test_verbose_flag_shows_stderr():
+    """With -v flag, assembler stderr (Error messages) should appear in output."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "test.txt").write_text(ERROR_TEST)
+        output, rc = run_test_runner(tmpdir, args=["-v", "test.txt"])
+        assert rc == 0, f"Expected exit code 0, got {rc}\nOutput: {output}"
+        assert "1 passed" in output, f"Expected 1 passed in: {output}"
+        # With -v, the assembler's "Error" message should appear
+        assert "Error " in output, \
+            f"With -v, assembler stderr should appear in: {output}"
+
+
 def main():
     if not EMULATOR.exists():
         print(f"Error: Emulator not found at {EMULATOR}")
@@ -314,6 +326,7 @@ def main():
         ("length_mismatch_shows_hex_dumps", test_length_mismatch_shows_hex_dumps),
         ("wrong_msg_shows_actual", test_wrong_msg_shows_actual),
         ("stderr_suppressed_by_default", test_stderr_suppressed_by_default),
+        ("verbose_flag_shows_stderr", test_verbose_flag_shows_stderr),
     ]
 
     passed = 0

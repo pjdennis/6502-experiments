@@ -54,6 +54,7 @@ TR_MISMATCH_POS16: .word       ; Position of first mismatch
 TR_DIR_HANDLE:     .byte       ; Directory handle for directory scanning mode
 TR_DIR_META:       .byte       ; Current directory entry metadata byte
 TR_VERBOSE:        .byte       ; Nonzero to forward assembler stderr to terminal
+TR_FILE_ARG:       .byte       ; Index of filename arg in argv, or $FF for none
 
   .code
 
@@ -86,18 +87,53 @@ test_runner_start:
   ; Default: suppress assembler stderr output
   LDA #$00
   STA TR_VERBOSE
-  ; Check if a filename was specified
+  ; Scan argv for flags (-v) and find filename arg
+  LDA #$FF
+  STA TR_FILE_ARG           ; No filename found yet
   JSR argc
-  CMP #$01
-  BCC .dir_mode
+  STA tr_argc_total
+  LDX #$00                  ; Arg index
+.scan_args:
+  CPX tr_argc_total
+  BCS .args_done
+  TXA
+  PHA                       ; Save arg index
+  JSR argv                  ; A/X = pointer to arg string
+  STAX16 TABP16
+  LDY #$00
+  LDA (TABP16),Y
+  CMP #'-'
+  BNE .is_file
+  INY
+  LDA (TABP16),Y
+  CMP #'v'
+  BNE .skip_arg
+  INY
+  LDA (TABP16),Y
+  BNE .skip_arg             ; Not null-terminated after "-v"
+  LDA #$01
+  STA TR_VERBOSE
+  JMP .skip_arg
+.is_file:
+  PLA
+  STA TR_FILE_ARG
+  PHA
+.skip_arg:
+  PLA                       ; Restore arg index
+  TAX
+  INX
+  JMP .scan_args
+.args_done:
+  LDA TR_FILE_ARG
+  CMP #$FF
+  BEQ .dir_mode
   ; --- Single file mode ---
-  LDA #$00
   JSR argv
   JSR open
   STA TR_FILE_HANDLE
   ; Print header
   SHOW_MESSAGEI tr_msg_running
-  LDA #$00
+  LDA TR_FILE_ARG
   JSR argv
   STAX16 TABP16
   JSR show_message
@@ -123,6 +159,8 @@ test_runner_start:
 
 tr_msg_running:
   .asciiz "Running tests from "
+
+tr_argc_total: .byte 0
 
 
 ; ============================================================================
