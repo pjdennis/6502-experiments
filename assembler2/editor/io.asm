@@ -20,6 +20,7 @@ io_ready = con_ready
 SERIAL_BYTE:     .byte    ; Byte buffered by io_ready
 SERIAL_HAS_BYTE: .byte    ; $FF if SERIAL_BYTE valid
 DSR_VALUE:       .byte    ; Temp for parsing DSR decimal values
+DSR_TERM:        .byte    ; Terminator char for parse_dsr_value
 
   .code
 
@@ -112,13 +113,38 @@ query_terminal_size:
   JSR io_read
 
   ; Parse rows (decimal digits until ';')
+  LDA #';'
+  JSR parse_dsr_value
+  LDA DSR_VALUE
+  STA SCREEN_ROWS
+
+  ; Parse cols (decimal digits until 'R')
+  LDA #'R'
+  JSR parse_dsr_value
+  LDA DSR_VALUE
+  STA SCREEN_COLS
+
+  ; Send ESC[H to move cursor back to home position
+  LDA #$1B
+  JSR io_write
+  LDA #'['
+  JSR io_write
+  LDA #'H'
+  JSR io_write
+  RTS
+
+; Parse decimal digits from serial input until terminator char
+; Input: A = terminator character
+; Output: DSR_VALUE = parsed decimal value
+; Clobbers: A
+parse_dsr_value:
+  STA DSR_TERM
   LDA #0
   STA DSR_VALUE
-.read_rows:
+.loop:
   JSR io_read
-  CMP #';'
-  BEQ .rows_done
-  ; Accumulate digit: DSR_VALUE = DSR_VALUE * 10 + digit
+  CMP DSR_TERM
+  BEQ .done
   SEC
   SBC #'0'
   PHA
@@ -134,45 +160,8 @@ query_terminal_size:
   CLC
   ADC DSR_VALUE
   STA DSR_VALUE
-  JMP .read_rows
-.rows_done:
-  LDA DSR_VALUE
-  STA SCREEN_ROWS
-
-  ; Parse cols (decimal digits until 'R')
-  LDA #0
-  STA DSR_VALUE
-.read_cols:
-  JSR io_read
-  CMP #'R'
-  BEQ .cols_done
-  SEC
-  SBC #'0'
-  PHA
-  LDA DSR_VALUE
-  ASL
-  STA DSR_VALUE
-  ASL
-  ASL
-  CLC
-  ADC DSR_VALUE
-  STA DSR_VALUE
-  PLA
-  CLC
-  ADC DSR_VALUE
-  STA DSR_VALUE
-  JMP .read_cols
-.cols_done:
-  LDA DSR_VALUE
-  STA SCREEN_COLS
-
-  ; Send ESC[H to move cursor back to home position
-  LDA #$1B
-  JSR io_write
-  LDA #'['
-  JSR io_write
-  LDA #'H'
-  JSR io_write
+  JMP .loop
+.done:
   RTS
 
   .endif
