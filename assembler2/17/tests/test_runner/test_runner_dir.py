@@ -242,6 +242,32 @@ def test_length_mismatch_shows_hex_dumps():
         assert "got: a9 42" in output, f"Missing got hex dump in: {output}"
 
 
+# A test with wrong expected error message
+WRONG_MSG_TEST = """\
+---
+NAME: wrong_msg
+INPUT:
+ 1: * = $0200
+ 2:   LDA bogus
+EXPECT_ERROR: 1
+EXPECT_MSG: Wrong message text
+---
+"""
+
+
+def test_wrong_msg_shows_actual():
+    """On message mismatch, failure should show both expected and actual messages."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "test.txt").write_text(WRONG_MSG_TEST)
+        output, rc = run_test_runner(tmpdir)
+        assert rc == 1, f"Expected exit code 1, got {rc}\nOutput: {output}"
+        assert "FAIL" in output, f"Missing FAIL in: {output}"
+        assert 'msg "Wrong message text"' in output, \
+            f"Missing expected msg in: {output}"
+        assert 'msg "Label not found"' in output, \
+            f"Missing actual msg in: {output}"
+
+
 def main():
     if not EMULATOR.exists():
         print(f"Error: Emulator not found at {EMULATOR}")
@@ -261,6 +287,7 @@ def main():
         ("long_input_lines", test_long_input_lines),
         ("byte_mismatch_shows_hex_dumps", test_byte_mismatch_shows_hex_dumps),
         ("length_mismatch_shows_hex_dumps", test_length_mismatch_shows_hex_dumps),
+        ("wrong_msg_shows_actual", test_wrong_msg_shows_actual),
     ]
 
     passed = 0

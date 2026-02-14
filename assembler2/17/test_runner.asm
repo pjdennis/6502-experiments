@@ -571,6 +571,10 @@ tr_verify_error:
   SET16 TR_EXPECT_MSG, TABP16
   JSR show_message
   SHOW_MESSAGEI tr_msg_quote
+  SHOW_MESSAGEI tr_msg_got
+  SHOW_MESSAGEI tr_msg_msg
+  JSR tr_print_stderr_msg
+  SHOW_MESSAGEI tr_msg_quote
   SHOW_MESSAGEI tr_msg_close_paren
   SEC
   RTS
@@ -692,6 +696,38 @@ tr_check_stderr_msg:
   RTS
 .match:
   CLC
+  RTS
+
+; Print the actual error message from TR_STDERR_BUF (after last ": ")
+; Searches backwards for ": " delimiter, then prints chars until newline/end
+tr_print_stderr_msg:
+  LDY TR_STDERR_LEN
+  DEY
+.search:
+  CPY #$01
+  BCC .not_found
+  LDA TR_STDERR_BUF - 1,Y
+  CMP #':'
+  BNE .dec
+  LDA TR_STDERR_BUF,Y
+  CMP #' '
+  BEQ .found
+.dec:
+  DEY
+  JMP .search
+.found:
+  INY                       ; Y past ": " → start of message
+.print:
+  CPY TR_STDERR_LEN
+  BCS .done
+  LDA TR_STDERR_BUF,Y
+  CMP #$0A
+  BEQ .done
+  JSR write_d
+  INY
+  JMP .print
+.not_found:
+.done:
   RTS
 
 ; Parse decimal from TR_STDERR_BUF starting at Y, result in HEX16
