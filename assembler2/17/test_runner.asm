@@ -374,7 +374,7 @@ tr_setup_argv:
 
 tr_msg_skip:        .asciiz " SKIP\n"
 tr_msg_pass:        .asciiz " PASS\n"
-tr_msg_fail:        .asciiz " FAIL"
+tr_msg_fail:        .asciiz " !!FAIL!!"
 tr_msg_close_paren: .asciiz ")\n"
 tr_msg_expected:    .asciiz " (expected "
 tr_msg_got:         .asciiz ", got "
