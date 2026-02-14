@@ -320,39 +320,28 @@ insert_batch:
 
 .no_shift:
 .do_copy:
-  ; Step 8: Copy BATCH_BUF[0..insert_len-1] to delete_start (BUF_PTR16)
-  LDA BUF_DELTA
-  BEQ .copy_done
-  LDY #0
-.copy_loop:
-  LDA BATCH_BUF,Y
-  STA (BUF_PTR16),Y
-  INY
-  CPY BUF_DELTA
-  BNE .copy_loop
-.copy_done:
-
-  ; Step 10: Scan BATCH_BUF for newlines -> ins_nl, last_nl_pos
+  ; Steps 8+10: Copy BATCH_BUF to buffer and scan for newlines in one pass
   LDA #0
   STA NORMAL_TEMP            ; ins_nl = 0
   STA BATCH_EXTRA            ; last_nl_pos = 0
-  LDY #0
   LDA BUF_DELTA
-  BEQ .scan_ins_done
-.scan_ins:
+  BEQ .copy_scan_done
+  LDY #0
+.copy_scan:
   LDA BATCH_BUF,Y
+  STA (BUF_PTR16),Y          ; copy
   CMP #'\n'
-  BNE .scan_ins_not_nl
+  BNE .not_nl
   INC NORMAL_TEMP            ; ins_nl++
   TYA
   CLC
   ADC #1
   STA BATCH_EXTRA            ; last_nl_pos = Y + 1
-.scan_ins_not_nl:
+.not_nl:
   INY
   CPY BUF_DELTA
-  BNE .scan_ins
-.scan_ins_done:
+  BNE .copy_scan
+.copy_scan_done:
 
   ; Step 11: Decide path based on newline counts
   LDA LINE_LEN16             ; back_nl
