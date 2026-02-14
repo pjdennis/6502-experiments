@@ -268,6 +268,31 @@ def test_wrong_msg_shows_actual():
             f"Missing actual msg in: {output}"
 
 
+# A test that triggers an assembler error (for stderr suppression tests)
+ERROR_TEST = """\
+---
+NAME: error_test
+INPUT:
+ 1: * = $0200
+ 2:   LDA bogus
+EXPECT_ERROR: 1
+---
+"""
+
+
+def test_stderr_suppressed_by_default():
+    """Assembler stderr (Error messages) should NOT appear in test runner output."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "test.txt").write_text(ERROR_TEST)
+        output, rc = run_test_runner(tmpdir)
+        assert rc == 0, f"Expected exit code 0, got {rc}\nOutput: {output}"
+        assert "1 passed" in output, f"Expected 1 passed in: {output}"
+        # The assembler's "Error 1 in file..." should NOT appear in output
+        error_lines = [l for l in output.splitlines() if l.strip().startswith("Error ")]
+        assert len(error_lines) == 0, \
+            f"Assembler stderr should be suppressed, but found: {error_lines}"
+
+
 def main():
     if not EMULATOR.exists():
         print(f"Error: Emulator not found at {EMULATOR}")
@@ -288,6 +313,7 @@ def main():
         ("byte_mismatch_shows_hex_dumps", test_byte_mismatch_shows_hex_dumps),
         ("length_mismatch_shows_hex_dumps", test_length_mismatch_shows_hex_dumps),
         ("wrong_msg_shows_actual", test_wrong_msg_shows_actual),
+        ("stderr_suppressed_by_default", test_stderr_suppressed_by_default),
     ]
 
     passed = 0

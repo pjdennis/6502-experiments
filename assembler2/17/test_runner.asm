@@ -53,6 +53,7 @@ TR_MISMATCH_EXPECT: .byte      ; Expected byte at first mismatch
 TR_MISMATCH_POS16: .word       ; Position of first mismatch
 TR_DIR_HANDLE:     .byte       ; Directory handle for directory scanning mode
 TR_DIR_META:       .byte       ; Current directory entry metadata byte
+TR_VERBOSE:        .byte       ; Nonzero to forward assembler stderr to terminal
 
   .code
 
@@ -82,6 +83,9 @@ TR_OUTPUT_FILE: .asciiz "_tr_out.tmp"
 test_runner_start:
   ; Save original vector targets before any patching
   JSR tr_save_vectors
+  ; Default: suppress assembler stderr output
+  LDA #$00
+  STA TR_VERBOSE
   ; Check if a filename was specified
   JSR argc
   CMP #$01
@@ -1621,16 +1625,24 @@ fake_argv:
 
 tr_save_y: .byte 0
 
-; fake_write_d - Buffer stderr byte and forward to real port
+; fake_write_d - Buffer stderr byte and optionally forward to real port
 ; On entry: A = byte to write
 ; On exit: A, X, Y preserved (matches real write_d contract)
-; Caps buffer at 255 bytes (stops buffering, still forwards to stderr)
+; Caps buffer at 255 bytes (stops buffering, still forwards if verbose)
 fake_write_d:
+  PHA
+  LDA TR_VERBOSE
+  BNE .forward
+  PLA
+  JMP .buffer
+.forward:
+  PLA
   STA $F002               ; Forward to real stderr port
+.buffer:
   STX tr_save_x           ; Save X
   LDX TR_STDERR_LEN
   CPX #$FF                ; Buffer full?
-  BCS .skip               ; Don't buffer, but keep forwarding
+  BCS .skip               ; Don't buffer
   STA TR_STDERR_BUF,X     ; Buffer the byte
   INC TR_STDERR_LEN
 .skip:
