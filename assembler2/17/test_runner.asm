@@ -910,13 +910,15 @@ tr_verify_stderr:
   SEC
   RTS
 
-; Print expected stderr from TR_EXPECT_BUF (up to TR_EXPECT_LEN16)
-tr_print_expect_stderr:
+; Print buffer with continuation indent on newlines
+; On entry: TABP16 = buffer pointer, tr_print_len = length
+tr_print_with_continuation:
+  CP16 TABP16, tr_print_buf16   ; save buffer ptr (SHOW_MESSAGEI clobbers TABP16)
   LDY #$00
 .loop:
-  CPY TR_EXPECT_LEN16
+  CPY tr_print_len
   BCS .done
-  LDA TR_EXPECT_BUF,Y
+  LDA (TABP16),Y
   CMP #$0A
   BEQ .newline
   JSR write_d
@@ -926,35 +928,28 @@ tr_print_expect_stderr:
   JSR write_d                 ; Print the \n
   STY tr_print_save_y
   SHOW_MESSAGEI tr_msg_continuation
+  CP16 tr_print_buf16, TABP16   ; restore buffer ptr
   LDY tr_print_save_y
   INY
   JMP .loop
 .done:
   RTS
 
-; Print actual stderr from TR_STDERR_BUF (up to TR_STDERR_LEN)
+tr_print_expect_stderr:
+  SET16 TR_EXPECT_BUF, TABP16
+  LDA TR_EXPECT_LEN16
+  STA tr_print_len
+  JMP tr_print_with_continuation
+
 tr_print_actual_stderr:
-  LDY #$00
-.loop:
-  CPY TR_STDERR_LEN
-  BCS .done
-  LDA TR_STDERR_BUF,Y
-  CMP #$0A
-  BEQ .newline
-  JSR write_d
-  INY
-  JMP .loop
-.newline:
-  JSR write_d
-  STY tr_print_save_y
-  SHOW_MESSAGEI tr_msg_continuation
-  LDY tr_print_save_y
-  INY
-  JMP .loop
-.done:
-  RTS
+  SET16 TR_STDERR_BUF, TABP16
+  LDA TR_STDERR_LEN
+  STA tr_print_len
+  JMP tr_print_with_continuation
 
-tr_print_save_y: .byte 0
+tr_print_save_y:   .byte 0
+tr_print_len:      .byte 0
+tr_print_buf16:    .word 0
 
 tr_msg_wrong_stderr:  .asciiz " (stderr mismatch)\n"
 tr_msg_continuation:  .asciiz "         "

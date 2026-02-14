@@ -628,6 +628,34 @@ def test_error_then_pass_in_one_file():
         assert "2 passed" in output, f"Expected 2 passed in: {output}"
 
 
+# A test with multiline stderr mismatch (both expected and actual have 2 lines)
+MULTILINE_STDERR_MISMATCH_TEST = """\
+---
+NAME: multiline_stderr_mismatch
+INPUT:
+ 1: * = $0200
+ 2:   .include nonexistent_file_12345.asm
+EXPECT_STDERR:
+Wrong first line
+Wrong second line
+---
+"""
+
+
+def test_multiline_stderr_continuation():
+    """Multiline stderr mismatch should show continuation indent in both sections."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "test.txt").write_text(MULTILINE_STDERR_MISMATCH_TEST)
+        output, rc = run_test_runner(tmpdir)
+        assert rc == 1, f"Expected exit code 1, got {rc}\nOutput: {output}"
+        assert "FAIL" in output, f"Missing FAIL in: {output}"
+        # Expected stderr has two lines with continuation indent
+        assert "exp: Wrong first line" in output, \
+            f"Missing expected first line in: {output}"
+        assert "         Wrong second line" in output, \
+            f"Missing continuation indent for expected in: {output}"
+
+
 def test_unknown_flag_ignored():
     """An unknown flag like -x should be silently ignored; tests still run."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -674,6 +702,7 @@ def main():
         ("all_field_types_dispatched", test_all_field_types_dispatched),
         ("unknown_flag_ignored", test_unknown_flag_ignored),
         ("error_then_pass_in_one_file", test_error_then_pass_in_one_file),
+        ("multiline_stderr_continuation", test_multiline_stderr_continuation),
     ]
 
     passed = 0
