@@ -493,10 +493,10 @@ buf_adjust_lines_inc:
 buf_adjust_lines_apply:
   JSR buf_adjust_lines_setup
   BCS .done
-
+  LDY BUF_PTR16              ; Y = offset within page
+  LDA #0
+  STA BUF_PTR16              ; BUF_PTR16 = page-aligned base
 .loop:
-  ; Add BUF_SRC16 to the 16-bit line pointer at (BUF_PTR16)
-  LDY #0
   CLC
   LDA (BUF_PTR16),Y
   ADC BUF_SRC16
@@ -505,17 +505,14 @@ buf_adjust_lines_apply:
   LDA (BUF_PTR16),Y
   ADC BUF_SRC16 + 1
   STA (BUF_PTR16),Y
-
-  ; Advance to next LINE_TBL entry (+2 bytes)
-  CLC
-  ADCI16 BUF_PTR16, $0002, BUF_PTR16
-
-  ; Decrement count
+  INY
+  BEQ .page_cross
+.back:
   DEC16 BUF_LEN16
-
-  ; Check if count reached 0
   TST16 BUF_LEN16
   BNE .loop
-
 .done:
   RTS
+.page_cross:
+  INC BUF_PTR16 + 1
+  JMP .back
