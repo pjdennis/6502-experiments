@@ -123,6 +123,10 @@ diff <(hexdump -C 17/out/asm.out) <(hexdump -C 17/out/asm_2.out)
 # Self-assembly test (with debug)
 (cd 17 && ../emulator.out out/asm_debug.out asm.asm out/asm_debug_2.out define:enable_debug)
 diff <(hexdump -C 17/out/asm_debug.out) <(hexdump -C 17/out/asm_debug_2.out)
+echo "--- Self-hosted tests ---"
+(cd 17 && ../emulator.out out/asm.out asm.asm out/test_runner.out define:enable_test_runner)
+(cd 17/tests/asm && ../../../emulator.out ../../out/test_runner.out 01-instructions.txt)
+#TODO run more of the self-hosted tests
 
 echo "Build chain completed OK"
 
