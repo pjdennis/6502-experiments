@@ -41,18 +41,18 @@ insert_handle_key:
 
 insert_keys:
   .byte KEY_ESC     .word insert_exit
-  .byte KEY_UP      .word insert_move_up
-  .byte KEY_DOWN    .word insert_move_down
-  .byte KEY_LEFT    .word insert_move_left
-  .byte KEY_RIGHT   .word insert_move_right
+  .byte KEY_UP      .word insert_counted_move
+  .byte KEY_DOWN    .word insert_counted_move
+  .byte KEY_LEFT    .word insert_counted_move
+  .byte KEY_RIGHT   .word insert_counted_move
   .byte KEY_HOME    .word insert_home
   .byte KEY_END     .word insert_end
   .byte KEY_PGDN    .word insert_page_down
   .byte KEY_PGUP    .word insert_page_up
   .byte $06         .word insert_page_down    ; Ctrl-F
   .byte $02         .word insert_page_up      ; Ctrl-B
-  .byte KEY_WORD_FWD  .word insert_word_forward
-  .byte KEY_WORD_BACK .word insert_word_backward
+  .byte KEY_WORD_FWD  .word insert_counted_move
+  .byte KEY_WORD_BACK .word insert_counted_move
   .byte 0           ; End sentinel
 
 ; Exit insert mode, return to normal mode
@@ -563,25 +563,44 @@ insert_batch:
 ; These implement simple line movement without the normal mode clamping
 ; that would clamp to len-1 instead of len (one past last char for insert)
 
-insert_move_up:
-  ; Batch pending UP keys and move up
-  LDA #KEY_UP
-  STA BUF_TEMP
-  JSR count_pending_key  ; X = pending matching keys
-  INX                     ; +1 for current key
+; Consolidated insert mode movement handler
+; BUF_TEMP = key code (set by insert_handle_key before dispatch)
+insert_counted_move:
+  ; BUF_TEMP already set by insert_handle_key
+  JSR count_pending_key    ; X = pending matching keys
+  INX                      ; +1 for current key
+  LDA BUF_TEMP
+  CMP #KEY_UP
+  BEQ .up
+  CMP #KEY_DOWN
+  BEQ .down
+  CMP #KEY_LEFT
+  BEQ .left
+  CMP #KEY_RIGHT
+  BEQ .right
+  CMP #KEY_WORD_FWD
+  BEQ .word_fwd
+  ; Must be KEY_WORD_BACK
+  JSR word_backward_x
+  JMP clamp_cursor_col_insert
+.up:
   JSR move_up_x
-  JSR clamp_cursor_col_insert
-  RTS
-
-insert_move_down:
-  ; Batch pending DOWN keys and move down
-  LDA #KEY_DOWN
-  STA BUF_TEMP
-  JSR count_pending_key  ; X = pending matching keys
-  INX                     ; +1 for current key
+  JMP clamp_cursor_col_insert
+.down:
   JSR move_down_x
-  JSR clamp_cursor_col_insert
-  RTS
+  JMP clamp_cursor_col_insert
+.left:
+  JMP move_left_x           ; No clamp needed
+.right:
+  ; Hoist line length calculation (line doesn't change)
+  STX BUF_DELTA
+  JSR get_current_line_len
+  STAX16 LINE_LEN16
+  LDX BUF_DELTA
+  JMP move_right_x
+.word_fwd:
+  JSR word_forward_x
+  JMP clamp_cursor_col_insert
 
 insert_page_down:
   JSR normal_page_down
@@ -590,27 +609,6 @@ insert_page_down:
 insert_page_up:
   JSR normal_page_up
   JMP clamp_cursor_col_insert
-
-insert_move_left:
-  LDA #KEY_LEFT
-  STA BUF_TEMP
-  JSR count_pending_key  ; X = pending matching keys
-  INX                     ; +1 for current key
-  JSR move_left_x
-  RTS
-
-insert_move_right:
-  LDA #KEY_RIGHT
-  STA BUF_TEMP
-  JSR count_pending_key  ; X = pending matching keys
-  INX                     ; +1 for current key
-  ; Hoist line length calculation (line doesn't change)
-  STX BUF_DELTA          ; Save count
-  JSR get_current_line_len
-  STAX16 LINE_LEN16
-  LDX BUF_DELTA          ; Restore count
-  JSR move_right_x
-  RTS
 
 insert_home:
   TST16 CURSOR_COL16
@@ -628,24 +626,6 @@ insert_end:
   BCC .done
   CP16 LINE_LEN16, CURSOR_COL16
 .done:
-  RTS
-
-insert_word_forward:
-  LDA #KEY_WORD_FWD
-  STA BUF_TEMP
-  JSR count_pending_key   ; X = pending matching keys
-  INX                     ; +1 for current key
-  JSR word_forward_x
-  JSR clamp_cursor_col_insert
-  RTS
-
-insert_word_backward:
-  LDA #KEY_WORD_BACK
-  STA BUF_TEMP
-  JSR count_pending_key   ; X = pending matching keys
-  INX                     ; +1 for current key
-  JSR word_backward_x
-  JSR clamp_cursor_col_insert
   RTS
 
 ; Clamp cursor for insert mode (can be one past end of line content)
