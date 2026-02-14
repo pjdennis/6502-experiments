@@ -387,6 +387,7 @@ tr_msg_byte_at:     .asciiz " (byte "
 tr_msg_colon_space: .asciiz ": "
 tr_msg_exp_prefix:  .asciiz "    exp: "
 tr_msg_got_prefix:  .asciiz "    got: "
+tr_msg_wrong_msg:   .asciiz " (msg mismatch)\n"
 
 
 ; ============================================================================
@@ -566,16 +567,18 @@ tr_verify_error:
 .wrong_msg:
   JSR tr_print_test_name
   SHOW_MESSAGEI tr_msg_fail
-  SHOW_MESSAGEI tr_msg_expected
-  SHOW_MESSAGEI tr_msg_msg
+  SHOW_MESSAGEI tr_msg_wrong_msg
+  SHOW_MESSAGEI tr_msg_exp_prefix
+  SHOW_MESSAGEI tr_msg_quote
   SET16 TR_EXPECT_MSG, TABP16
   JSR show_message
   SHOW_MESSAGEI tr_msg_quote
-  SHOW_MESSAGEI tr_msg_got
-  SHOW_MESSAGEI tr_msg_msg
+  SHOW_CHAR '\n'
+  SHOW_MESSAGEI tr_msg_got_prefix
+  SHOW_MESSAGEI tr_msg_quote
   JSR tr_print_stderr_msg
   SHOW_MESSAGEI tr_msg_quote
-  SHOW_MESSAGEI tr_msg_close_paren
+  SHOW_CHAR '\n'
   SEC
   RTS
 

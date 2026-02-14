@@ -262,9 +262,9 @@ def test_wrong_msg_shows_actual():
         output, rc = run_test_runner(tmpdir)
         assert rc == 1, f"Expected exit code 1, got {rc}\nOutput: {output}"
         assert "FAIL" in output, f"Missing FAIL in: {output}"
-        assert 'msg "Wrong message text"' in output, \
+        assert 'exp: "Wrong message text"' in output, \
             f"Missing expected msg in: {output}"
-        assert 'msg "Label not found"' in output, \
+        assert 'got: "Label not found"' in output, \
             f"Missing actual msg in: {output}"
 
 
