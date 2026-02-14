@@ -208,8 +208,6 @@ normal_delete_char:
   LDA #$FF
   STA BUF_TEMP16
 .no_extras:
-  LDA #RANGE_CHARS_FWD
-  STA RANGE_MODE
   JMP batched_char_delete
 .done:
   JMP clear_count

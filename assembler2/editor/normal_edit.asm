@@ -33,6 +33,7 @@ normal_paste_above:
 
 ; Character paste below (after cursor)
 ; For non-empty lines, inserts after cursor char; for empty lines, inserts at line start
+; Handles newlines in yanked content via find_line_for_ptr
 char_paste_below:
   JSR get_count              ; BUF_TEMP16 = count
   JSR yank_paste_setup
@@ -50,43 +51,38 @@ char_paste_below:
   ; Non-empty line: insert after cursor
   JSR get_cursor_buf_ptr
   INC16 BUF_PTR16
-  LDA #1                     ; Flag: non-empty line
-  PHA
   JMP .do_paste
 
 .empty_line:
   JSR get_cursor_buf_ptr     ; Insert at line start
-  LDA #0                     ; Flag: empty line
-  PHA
 
 .do_paste:
+  PUSH16 BUF_PTR16           ; Save insertion point
   JSR yank_paste_core
-  PLA                        ; Recover empty-line flag
-  STA NORMAL_TEMP            ; Save temporarily
+  POP16 BUF_PTR16            ; Recover insertion point
   POP16 BUF_LEN16            ; Recover total paste size
   BCS .done                  ; Paste failed (buffer full)
 
-  ; Adjust cursor column
-  LDA NORMAL_TEMP
-  BEQ .cursor_empty
-
-  ; Non-empty: CURSOR_COL16 += BUF_LEN16
+  ; target = insertion_point + paste_size - 1 (last pasted byte)
   CLC
-  ADC16 CURSOR_COL16, BUF_LEN16, CURSOR_COL16
-  JMP .cursor_done
-
-.cursor_empty:
-  ; Empty line: CURSOR_COL16 = BUF_LEN16 - 1
-  SEC
-  SBCI16 BUF_LEN16, 1, CURSOR_COL16
-
-.cursor_done:
+  ADC16 BUF_PTR16, BUF_LEN16, BUF_PTR16
+  DEC16 BUF_PTR16
+  ; If last pasted byte is '\n', back up before it
+  LDY #0
+  LDA (BUF_PTR16),Y
+  CMP #'\n'
+  BNE .cpb_find_pos
+  DEC16 BUF_PTR16
+.cpb_find_pos:
+  JSR find_line_for_ptr      ; sets FILE_LINE16, CURSOR_COL16
+  JSR clamp_cursor_col
   LDA #$FF
   STA MODIFIED
 .done:
   JMP clear_count
 
 ; Character paste above (before cursor)
+; Handles newlines in yanked content via find_line_for_ptr
 char_paste_above:
   JSR get_count              ; BUF_TEMP16 = count
   JSR yank_paste_setup
@@ -98,14 +94,25 @@ char_paste_above:
   ; Insertion point: at cursor position
   JSR get_cursor_buf_ptr
 
+  PUSH16 BUF_PTR16           ; Save insertion point
   JSR yank_paste_core
+  POP16 BUF_PTR16            ; Recover insertion point
   POP16 BUF_LEN16            ; Recover total paste size
   BCS .done                  ; Paste failed
 
-  ; CURSOR_COL16 = CURSOR_COL16 + BUF_LEN16 - 1
+  ; target = insertion_point + paste_size - 1 (last pasted byte)
   CLC
-  ADC16 CURSOR_COL16, BUF_LEN16, CURSOR_COL16
-  DEC16 CURSOR_COL16
+  ADC16 BUF_PTR16, BUF_LEN16, BUF_PTR16
+  DEC16 BUF_PTR16
+  ; If last pasted byte is '\n', back up before it
+  LDY #0
+  LDA (BUF_PTR16),Y
+  CMP #'\n'
+  BNE .cpa_find_pos
+  DEC16 BUF_PTR16
+.cpa_find_pos:
+  JSR find_line_for_ptr      ; sets FILE_LINE16, CURSOR_COL16
+  JSR clamp_cursor_col
   LDA #$FF
   STA MODIFIED
 .done:
@@ -543,7 +550,7 @@ copy_line_to_nl:
   RTS
 
 ; --- Delete word (dw) ---
-; Delete from cursor to next word boundary on current line.
+; Delete from cursor to next word boundary (multi-line).
 ; Yanks deleted text. Accepts count.
 ; Non-batched (count prefix): scans N words, single yank+delete (yanks ALL)
 ; Batched (dwdw...): delete N-1 words (no yank), yank+delete last word
@@ -551,37 +558,101 @@ do_dw:
   JSR get_count              ; BUF_TEMP16 = N
   JSR check_cursor_in_line
   BCS .dw_done               ; Empty line, bail
-  LDA #RANGE_WORDS_FWD
-  STA RANGE_MODE
-  JMP batched_char_delete
+  LDA BATCH_EXTRA
+  BNE .dw_batched
+
+  ; Non-batched: single compute + yank+delete
+  LDX BUF_TEMP16
+  JSR compute_multiline_word_range_forward
+  BCS .dw_done
+  LDA #OP_DELETE
+  JSR apply_char_operator
+  JMP .dw_finish
+
+.dw_batched:
+  ; Delete (total-1) words without yank
+  LDX BUF_TEMP16
+  DEX
+  BEQ .dw_batch_last
+  JSR compute_multiline_word_range_forward
+  BCS .dw_batch_last
+  JSR delete_at_cursor
+
+.dw_batch_last:
+  ; Re-check line after deletions
+  JSR check_cursor_in_line
+  BCS .dw_done
+  LDX #1
+  JSR compute_multiline_word_range_forward
+  BCS .dw_done
+  LDA #OP_DELETE
+  JSR apply_char_operator
+
+.dw_finish:
+  JSR clamp_cursor_col
 .dw_done:
   JMP clear_count
 
 ; --- Delete word backward (db) ---
-; Delete backward to previous word boundary on current line.
+; Delete backward to previous word boundary (multi-line).
 ; Yanks deleted text. Accepts count.
 ; Non-batched (count prefix): scans N words back, single yank+delete (yanks ALL)
 ; Batched (dbdb...): delete N-1 words (no yank), yank+delete last word
 do_db:
   JSR get_count              ; BUF_TEMP16 = N
+  ; Bail only at file start (col 0 AND line 0)
   TST16 CURSOR_COL16
-  BEQ .db_done               ; At col 0, nothing to do
-  LDA #RANGE_WORDS_BACK
-  STA RANGE_MODE
-  JMP batched_char_delete
+  BNE .db_ok
+  TST16 FILE_LINE16
+  BEQ .db_done               ; At file start, nothing to do
+.db_ok:
+  LDA BATCH_EXTRA
+  BNE .db_batched
+
+  ; Non-batched
+  LDX BUF_TEMP16
+  JSR compute_multiline_word_range_backward
+  BCS .db_done
+  LDA #OP_DELETE
+  JSR apply_char_operator
+  JMP .db_finish
+
+.db_batched:
+  LDX BUF_TEMP16
+  DEX
+  BEQ .db_batch_last
+  JSR compute_multiline_word_range_backward
+  BCS .db_batch_last
+  JSR delete_at_cursor
+
+.db_batch_last:
+  ; Re-check: still have room to go backward?
+  TST16 CURSOR_COL16
+  BNE .db_batch_ok
+  TST16 FILE_LINE16
+  BEQ .db_done
+.db_batch_ok:
+  LDX #1
+  JSR compute_multiline_word_range_backward
+  BCS .db_done
+  LDA #OP_DELETE
+  JSR apply_char_operator
+
+.db_finish:
+  JSR clamp_cursor_col
 .db_done:
   JMP clear_count
 
 ; --- Change word (cw) ---
 ; vi's cw = ce: delete to end of current word only (no trailing ws).
-; Enter insert mode after deletion.
+; Enter insert mode after deletion. Multi-line.
 ; Scans N words then single yank+delete (yanks ALL deleted text).
 do_cw:
   JSR get_count              ; BUF_TEMP16 = N
   JSR check_cursor_in_line
   BCS .cw_insert
   LDX BUF_TEMP16
-  JSR compute_cw_range_forward
+  JSR compute_multiline_cw_range_forward
   BCS .cw_insert
   LDA #OP_CHANGE
   JSR apply_char_operator
@@ -590,13 +661,17 @@ do_cw:
   JMP enter_insert_mode_render
 
 ; --- Change word backward (cb) ---
-; Scans N words back then single yank+delete (yanks ALL deleted text).
+; Scans N words back then single yank+delete (yanks ALL deleted text). Multi-line.
 do_cb:
   JSR get_count              ; BUF_TEMP16 = N
+  ; Bail only at file start (col 0 AND line 0)
   TST16 CURSOR_COL16
-  BEQ .cb_insert             ; At col 0, just enter insert
+  BNE .cb_ok
+  TST16 FILE_LINE16
+  BEQ .cb_insert
+.cb_ok:
   LDX BUF_TEMP16
-  JSR compute_word_range_backward
+  JSR compute_multiline_word_range_backward
   BCS .cb_insert
   LDA #OP_CHANGE
   JSR apply_char_operator

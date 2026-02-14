@@ -4638,6 +4638,14 @@ class EditorTestRunner:
             expected_content="\nWHELLOORLD\n"
         )
 
+        # Multi-line char paste: db yanks content with newline, P restores it
+        self.run_test(
+            "db cross-line yank + P round-trips content",
+            "foo\nbar\n",
+            b"jdb0P:wq\r",
+            expected_content="foo\nbar\n",
+        )
+
         # ============================================================
         # Search tests (/)
         # ============================================================
@@ -5643,10 +5651,10 @@ class EditorTestRunner:
         )
 
         self.run_test_screen(
-            "b at col 0 goes to previous line end",
+            "b at col 0 goes to start of last word on previous line",
             "foo\nbar\n",
             b"jb:q!\r",
-            expect_cursor=(0, 2),
+            expect_cursor=(0, 0),
         )
 
         self.run_test_screen(
@@ -5661,6 +5669,27 @@ class EditorTestRunner:
             "one two three\n",
             b"$2b:q!\r",
             expect_cursor=(0, 4),
+        )
+
+        self.run_test_screen(
+            "b from BOL to multi-word prev line",
+            "one two\nthree\n",
+            b"jb:q!\r",
+            expect_cursor=(0, 4),
+        )
+
+        self.run_test_screen(
+            "2b crossing line boundary",
+            "hello\nworld\n",
+            b"j2b:q!\r",
+            expect_cursor=(0, 0),
+        )
+
+        self.run_test_screen(
+            "w then b returns to origin",
+            "hello\nworld\n",
+            b"wb:q!\r",
+            expect_cursor=(0, 0),
         )
 
         # e: move to end of current/next word
@@ -6157,6 +6186,35 @@ class EditorTestRunner:
             expected_content="fourone two three \n",
         )
 
+        # Multi-line dw tests
+        self.run_test(
+            "dw at last word uses exclusive-linewise (preserves newline)",
+            "foo\nbar\n",
+            b"dw:wq\r",
+            expected_content="\nbar\n",
+        )
+
+        self.run_test(
+            "dw at last word with trailing spaces",
+            "foo  \nbar\n",
+            b"dw:wq\r",
+            expected_content="\nbar\n",
+        )
+
+        self.run_test(
+            "2dw crossing line boundary (lands mid-line, no adjustment)",
+            "one\ntwo three\n",
+            b"2dw:wq\r",
+            expected_content="three\n",
+        )
+
+        self.run_test(
+            "dw mid-line (single-line, no line crossing)",
+            "foo bar\n",
+            b"dw:wq\r",
+            expected_content="bar\n",
+        )
+
         self._group("Delete word backward (db):", leading_blank=True)
 
         self.run_test(
@@ -6239,6 +6297,21 @@ class EditorTestRunner:
             expected_content="otwo three foune r\n",
         )
 
+        # Multi-line db tests
+        self.run_test(
+            "db from BOL deletes previous line content",
+            "foo\nbar\n",
+            b"jdb:wq\r",
+            expected_content="bar\n",
+        )
+
+        self.run_test(
+            "2db crossing line boundary",
+            "hello world\nfoo\n",
+            b"j2db:wq\r",
+            expected_content="foo\n",
+        )
+
         self._group("Change word (cw):", leading_blank=True)
 
         self.run_test(
@@ -6289,6 +6362,21 @@ class EditorTestRunner:
             "one two three\n",
             b"2cw\x1b$p:wq\r",
             expected_content=" threeone two\n",
+        )
+
+        # Multi-line cw tests
+        self.run_test(
+            "cw at last word on line (ce semantics, no line join)",
+            "foo\nbar\n",
+            b"cwbaz\x1b:wq\r",
+            expected_content="baz\nbar\n",
+        )
+
+        self.run_test(
+            "2cw crossing line boundary",
+            "foo\nbar\n",
+            b"2cwx\x1b:wq\r",
+            expected_content="x\n",
         )
 
         self._group("Change word backward (cb):", leading_blank=True)
@@ -6343,6 +6431,14 @@ class EditorTestRunner:
             "hello world\n",
             b"db:q!\r",
             expect_cursor=(0, 0),
+        )
+
+        # Multi-line cb tests
+        self.run_test(
+            "cb from BOL deletes back across line",
+            "foo\nbar\n",
+            b"jcbbaz\x1b:wq\r",
+            expected_content="bazbar\n",
         )
 
         self._group("Yank word forward (yw):", leading_blank=True)
@@ -6431,6 +6527,14 @@ class EditorTestRunner:
             expected_content="foo      \n",
         )
 
+        # Multi-line yw tests
+        self.run_test(
+            "yw at last word uses exclusive-linewise (yanks word only)",
+            "foo\nbar\n",
+            b"ywjp:wq\r",
+            expected_content="foo\nbfooar\n",
+        )
+
         self._group("Yank word backward (yb):", leading_blank=True)
 
         self.run_test(
@@ -6487,6 +6591,14 @@ class EditorTestRunner:
             "one two three\n",
             b"$ybyb$p:wq\r",
             expected_content="one two threetwo \n",
+        )
+
+        # Multi-line yb tests
+        self.run_test(
+            "yb from BOL yanks across line boundary",
+            "foo\nbar\n",
+            b"jyb0P:wq\r",
+            expected_content="foo\nfoo\nbar\n",
         )
 
         self._group("Backward search (?):", leading_blank=True)
@@ -6665,12 +6777,12 @@ class EditorTestRunner:
             expect_cursor=(1, 0),
         )
 
-        # Ctrl+Left crosses line boundary
+        # Ctrl+Left crosses line boundary (lands at start of last word)
         self.run_test_screen(
             "Ctrl+Left crosses line boundary",
             "foo\nbar\n",
             b"j\x1b[1;5D:q!\r",
-            expect_cursor=(0, 2),
+            expect_cursor=(0, 0),
         )
 
         # Count prefix with Ctrl+Right
@@ -6761,12 +6873,12 @@ class EditorTestRunner:
             expected_content="foo\nXbar\n"
         )
 
-        # Ctrl+Left crosses line in insert mode
+        # Ctrl+Left crosses line in insert mode (lands at start of last word)
         self.run_test(
             "Ctrl+Left crosses line in insert mode",
             "foo\nbar\n",
             b"ji\x1b[1;5DX\x1b:wq\r",
-            expected_content="foXo\nbar\n"
+            expected_content="Xfoo\nbar\n"
         )
 
         # Batching Ctrl+Right in insert mode
