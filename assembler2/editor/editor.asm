@@ -110,23 +110,15 @@ editor_main:
   STA READONLY
   JMP .init_display
 
-.new_file:
-  ; File doesn't exist - start with empty buffer
-  JSR buf_init
-  JMP .init_display
-
 .no_file:
   ; No file specified - use default name and empty buffer
   SET16 str_untitled, FNAME_PTR16
-  ; Copy to FNAME_BUF
+  SET16 str_untitled, BUF_PTR16
   LDY #0
-.copy_default:
-  LDA str_untitled,Y
-  STA FNAME_BUF,Y
-  BEQ .default_copied
-  INY
-  BNE .copy_default
-.default_copied:
+  JMP .copy_fname
+
+.new_file:
+  ; File doesn't exist or no file specified - start with empty buffer
   JSR buf_init
 
 .init_display:
