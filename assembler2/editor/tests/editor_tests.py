@@ -87,10 +87,15 @@ class EditorTestRunner:
                                      ["define:terminal_mode"])
 
     def create_stable_copy(self):
-        """Create a stable copy of editor.out after successful tests."""
-        stable_path = self.base_dir / "editor" / "out" / "editor_stable.out"
+        """Create stable copies of editor binaries after successful tests."""
+        self._copy_stable(self.editor_bin, "editor_stable.out")
+        self._copy_stable(self.editor_terminal_bin, "editor_terminal_stable.out")
+
+    def _copy_stable(self, src_path, dest_name):
+        """Copy a binary to a stable copy in the output directory."""
+        stable_path = self.base_dir / "editor" / "out" / dest_name
         try:
-            shutil.copy2(self.editor_bin, stable_path)
+            shutil.copy2(src_path, stable_path)
             if not self.quiet:
                 print()
                 print(f"{Colors.GREEN}Created stable copy:{Colors.NC} {stable_path}")
