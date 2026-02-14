@@ -1341,10 +1341,6 @@ tr_handle_expect_stderr:
 ; Handle a line inside EXPECT_STDERR section
 ; Copies line bytes to TR_EXPECT_BUF, appending \n between lines
 tr_handle_stderr_line:
-  ; Skip empty lines (blank lines between --- and first content)
-  ; Actually, empty lines are meaningful in stderr - they separate traceback
-  ; But if TR_EXPECT_LEN16 is 0 and line is empty, skip (leading blank)
-  ; For now, just append all lines
   ; If not the first line, prepend \n
   LDA TR_EXPECT_LEN16
   ORA TR_EXPECT_LEN16 + 1
@@ -1357,11 +1353,64 @@ tr_handle_stderr_line:
   CPY TR_LINE_LEN
   BCS .done
   LDA TR_LINE_BUF,Y
+  CMP #'{'
+  BEQ .check_placeholder
+  JSR tr_store_expect_byte
+  INY
+  JMP .copy
+.check_placeholder:
+  ; Check if {{MAIN_FILE}} starts at Y
+  JSR tr_check_main_file
+  BCS .not_placeholder
+  ; Substitute _tr_in.tmp
+  STY tr_stderr_save_y        ; Save Y (past the placeholder)
+  LDY #$00
+.sub_loop:
+  LDA TR_INPUT_FILE,Y
+  BEQ .sub_done
+  JSR tr_store_expect_byte
+  INY
+  JMP .sub_loop
+.sub_done:
+  LDY tr_stderr_save_y
+  JMP .copy
+.not_placeholder:
+  LDA #'{'
   JSR tr_store_expect_byte
   INY
   JMP .copy
 .done:
   RTS
+
+tr_stderr_save_y: .byte 0
+
+; Check if {{MAIN_FILE}} starts at TR_LINE_BUF[Y]
+; On entry: Y = index of first '{' in TR_LINE_BUF
+; On exit: C clear = matched, Y advanced past '}}'
+;          C set = no match, Y unchanged
+tr_check_main_file:
+  STY tr_cmf_save_y
+  LDX #$00
+.loop:
+  LDA tr_main_file_pattern,X
+  BEQ .matched
+  CPY TR_LINE_LEN
+  BCS .no_match
+  CMP TR_LINE_BUF,Y
+  BNE .no_match
+  INY
+  INX
+  JMP .loop
+.matched:
+  CLC
+  RTS
+.no_match:
+  LDY tr_cmf_save_y
+  SEC
+  RTS
+
+tr_cmf_save_y: .byte 0
+tr_main_file_pattern: .asciiz "{{MAIN_FILE}}"
 
 ; Close input/stderr state (close temp file if input was being written)
 ; Preserves Y (callers depend on Y being the prefix offset)
