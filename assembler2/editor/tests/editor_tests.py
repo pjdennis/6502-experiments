@@ -4708,6 +4708,38 @@ class EditorTestRunner:
             expect_cursor=(2, 0),  # Finds line 2 first (starts from line 1)
         )
 
+        # / finds match later on SAME line (after cursor)
+        self.run_test_screen(
+            "/ finds match on same line after cursor",
+            "AA BB AA\n",
+            b"/AA\r:q!\r",
+            expect_cursor=(0, 6),  # cursor starts at col 0, finds AA at col 6
+        )
+
+        # n advances to next match on same line
+        self.run_test_screen(
+            "n finds next match on same line",
+            "AA BB AA CC AA\n",
+            b"/AA\rn:q!\r",
+            expect_cursor=(0, 12),  # / finds col 6, n finds col 12
+        )
+
+        # n wraps from last match on line to next line
+        self.run_test_screen(
+            "n wraps from last same-line match to next line",
+            "AA BB AA\nCC AA DD\n",
+            b"/AA\rn:q!\r",
+            expect_cursor=(1, 3),  # / finds (0,6), n finds (1,3)
+        )
+
+        # / wraps around file back to same line col 0
+        self.run_test_screen(
+            "/ wraps around to match at start of current line",
+            "AA BB\n",
+            b"ll/AA\r:q!\r",
+            expect_cursor=(0, 0),  # cursor at col 2, wraps to find AA at col 0
+        )
+
         # ============================================================
         # Find-next (n) tests
         # ============================================================
@@ -6506,6 +6538,62 @@ class EditorTestRunner:
             "foo\nbar\nfoo\n",
             b"jj?foo\r?\r:q!\r",
             expect_cursor=(2, 0),
+        )
+
+        # ? finds match earlier on same line (before cursor)
+        self.run_test_screen(
+            "? finds match on same line before cursor",
+            "AA BB AA\n",
+            b"llllll?AA\r:q!\r",
+            expect_cursor=(0, 0),  # cursor at col 6, finds AA at col 0
+        )
+
+        # N (after /) finds previous match on same line
+        self.run_test_screen(
+            "N finds previous match on same line",
+            "AA BB AA CC AA\n",
+            b"/AA\rnN:q!\r",
+            expect_cursor=(0, 6),  # /->col6, n->col12, N reverses back to col6
+        )
+
+        # ? finds rightmost match on previous line
+        self.run_test_screen(
+            "? finds rightmost match on previous line",
+            "AA BB AA\nCC\n",
+            b"j?AA\r:q!\r",
+            expect_cursor=(0, 6),  # from line 1, backward finds last AA on line 0
+        )
+
+        # ? wraps around to find match after cursor on same line
+        self.run_test_screen(
+            "? wraps around to match after cursor on same line",
+            "BB CC AA\n",
+            b"lll?AA\r:q!\r",
+            expect_cursor=(0, 6),  # cursor at col 3, no AA before col 3, wraps to find AA at col 6
+        )
+
+        # Forward search skips match AT cursor position
+        self.run_test_screen(
+            "/ skips match at cursor position",
+            "AA BB\n",
+            b"/AA\r:q!\r",   # cursor at (0,0) which IS an AA match
+            expect_cursor=(0, 0),  # only one AA, wraps all the way around back to it
+        )
+
+        # Single-line file, multiple matches, n cycles through
+        self.run_test_screen(
+            "n cycles through all matches on single line",
+            "ABCABCABC\n",
+            b"/ABC\rnn:q!\r",
+            expect_cursor=(0, 0),  # /->col3, n->col6, n wraps to col0
+        )
+
+        # Backward search with cursor at col 0 goes to previous line
+        self.run_test_screen(
+            "? at col 0 goes to previous line",
+            "AA\nBB\nAA\n",
+            b"jj?AA\r:q!\r",
+            expect_cursor=(0, 0),  # from (2,0), goes to (0,0)
         )
 
         # Backspace on empty pattern cancels ? search

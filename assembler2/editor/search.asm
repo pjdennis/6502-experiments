@@ -17,8 +17,9 @@ SEARCH_MAX   = SEARCH_LIMIT - SEARCH_BUF
 SEARCH_LEN:   .byte     ; Length of current search pattern
 SEARCH_IDX:   .byte     ; Current index during search input
 SEARCH_LINE16: .word    ; Line number being searched
-SEARCH_COL:   .byte     ; Column position of match
+SEARCH_COL:   .byte     ; Column position of match / start column for search
 SEARCH_DIR:   .byte     ; Search direction: 0=forward (/), 1=backward (?)
+SEARCH_LIMIT_COL: .byte ; Column limit for backward line search
 
   .code
 
@@ -120,12 +121,28 @@ search_input_handle:
   STA SEARCH_DIR
   JMP search_forward
 
-; Search forward from current line
-; Scans from FILE_LINE16+1, wraps around to FILE_LINE16
+; Search forward from current position
+; First searches current line from CURSOR_COL+1, then subsequent lines from col 0
+; Wraps around, finally checks current line from col 0
 ; Sets cursor to matching line/col on success
 ; Shows "Pattern not found" on failure
 search_forward:
-  ; Start searching from next line
+  CP16 FILE_LINE16, SEARCH_LINE16
+
+  ; Try current line from CURSOR_COL + 1
+  LDA CURSOR_COL16 + 1
+  BNE .skip_current          ; CURSOR_COL > 255, skip current line
+  LDA CURSOR_COL16
+  CLC
+  ADC #1
+  BCS .skip_current          ; CURSOR_COL = 255, overflow
+  STA SEARCH_COL
+  JSR search_setup_line
+  JSR search_match_from
+  BCC .found
+
+.skip_current:
+  ; Advance to next line
   CLC
   ADCI16 FILE_LINE16, $0001, SEARCH_LINE16
 
@@ -140,7 +157,7 @@ search_forward:
   CMP16 SEARCH_LINE16, FILE_LINE16
   BEQ .check_current
 
-  ; Search this line
+  ; Search this line from col 0
   JSR search_in_line
   BCC .found
 
@@ -149,7 +166,7 @@ search_forward:
   JMP .line_loop
 
 .check_current:
-  ; Also check the current line (wrapping complete)
+  ; Wrapped back: search current line from col 0 (catches matches at/before cursor)
   JSR search_in_line
   BCC .found
 
@@ -160,19 +177,41 @@ search_forward:
 .found:
   JMP search_move_to_match
 
-; Search backward from current line
-; Scans from FILE_LINE16-1, wraps around to FILE_LINE16
+; Search backward from current position
+; First finds rightmost match before CURSOR_COL on current line
+; Then searches previous lines (rightmost match per line)
+; Wraps around, finally checks current line for any rightmost match
 ; Sets cursor to matching line/col on success
 ; Shows "Pattern not found" on failure
 search_backward:
-  ; Start searching from previous line
+  CP16 FILE_LINE16, SEARCH_LINE16
+
+  ; Try current line: find rightmost match before CURSOR_COL
+  LDA CURSOR_COL16 + 1
+  BNE .search_whole_current  ; CURSOR_COL > 255, search whole line
+  LDA CURSOR_COL16
+  BEQ .skip_current          ; CURSOR_COL = 0, nothing before cursor
+  STA SEARCH_COL             ; SEARCH_COL = exclusive upper bound
+  JSR search_in_line_last
+  BCC .found
+  JMP .skip_current
+
+.search_whole_current:
+  ; CURSOR_COL > 255, search entire current line for rightmost
+  LDA #0
+  STA SEARCH_COL
+  JSR search_in_line_last
+  BCC .found
+
+.skip_current:
+  ; Move to previous line
   TST16 FILE_LINE16
-  BNE .no_wrap
+  BNE .no_wrap_start
   ; FILE_LINE16 is 0, wrap to last line
   SEC
   SBCI16 LINE_COUNT16, $0001, SEARCH_LINE16
   JMP .loop
-.no_wrap:
+.no_wrap_start:
   SEC
   SBCI16 FILE_LINE16, $0001, SEARCH_LINE16
 
@@ -181,8 +220,10 @@ search_backward:
   CMP16 SEARCH_LINE16, FILE_LINE16
   BEQ .check_current
 
-  ; Search this line
-  JSR search_in_line
+  ; Search this line for rightmost match
+  LDA #0
+  STA SEARCH_COL
+  JSR search_in_line_last
   BCC .found
 
   ; Previous line
@@ -198,8 +239,10 @@ search_backward:
   JMP .loop
 
 .check_current:
-  ; Also check the current line (wrapping complete)
-  JSR search_in_line
+  ; Wrapped back: search entire current line for rightmost match
+  LDA #0
+  STA SEARCH_COL
+  JSR search_in_line_last
   BCC .found
 
   ; Not found
@@ -219,15 +262,26 @@ search_move_to_match:
   STA CURSOR_COL16 + 1
   JMP clamp_cursor_col
 
-; Search for pattern in line SEARCH_LINE16
+; Search for pattern in line SEARCH_LINE16 starting from column 0
+; Returns carry clear = found (SEARCH_COL set), carry set = not found
+search_in_line:
+  LDA #0
+  STA SEARCH_COL
+  JSR search_setup_line
+  JMP search_match_from
+
+; Set up BUF_PTR16 for line SEARCH_LINE16
+search_setup_line:
+  LDAX16 SEARCH_LINE16
+  JMP buf_get_line_ptr       ; BUF_PTR16 = start of line
+
+; Search for pattern starting from column SEARCH_COL
+; BUF_PTR16 must already point to line start (call search_setup_line first)
 ; Returns carry clear = found (SEARCH_COL set), carry set = not found
 ; Uses BUF_TEMP to save pattern index during inner loop
-search_in_line:
-  LDAX16 SEARCH_LINE16
-  JSR buf_get_line_ptr       ; BUF_PTR16 = start of line
-
+search_match_from:
   ; Outer loop: try each starting position in the line
-  LDY #0                     ; Y = start position in line
+  LDY SEARCH_COL             ; Y = start position in line
 .outer_loop:
   LDA (BUF_PTR16),Y
   CMP #'\n'
@@ -273,6 +327,52 @@ search_in_line:
   RTS
 
 .not_found_in_line:
+  SEC
+  RTS
+
+; Find the rightmost match in line SEARCH_LINE16
+; Input: SEARCH_COL = exclusive upper bound column (0 = search entire line)
+; Returns carry clear = found (SEARCH_COL set to rightmost match), carry set = not found
+; Uses BUF_DELTA as "best match found" tracker ($FF = none)
+search_in_line_last:
+  LDA SEARCH_COL
+  STA SEARCH_LIMIT_COL       ; Save limit
+  LDA #$FF
+  STA BUF_DELTA              ; No match found yet
+  LDA #0
+  STA SEARCH_COL             ; Start searching from col 0
+  JSR search_setup_line
+
+.loop:
+  JSR search_match_from
+  BCS .done                  ; No more matches
+
+  ; Check if match is past limit (when limit > 0)
+  LDA SEARCH_LIMIT_COL
+  BEQ .save                  ; 0 = no limit, accept any match
+  LDA SEARCH_COL
+  CMP SEARCH_LIMIT_COL
+  BCS .done                  ; Match at/past limit, stop
+
+.save:
+  ; Save this match position, continue looking
+  LDA SEARCH_COL
+  STA BUF_DELTA
+  CLC
+  ADC #1
+  BCS .done                  ; Can't advance past 255
+  STA SEARCH_COL
+  JMP .loop
+
+.done:
+  ; Return best match found
+  LDA BUF_DELTA
+  CMP #$FF
+  BEQ .not_found
+  STA SEARCH_COL
+  CLC
+  RTS
+.not_found:
   SEC
   RTS
 
