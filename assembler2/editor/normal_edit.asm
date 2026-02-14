@@ -216,30 +216,20 @@ normal_substitute_char:
   JSR check_cursor_in_line
   BCS .sub_insert
 
+  ; available = LINE_LEN16 - CURSOR_COL16
   SEC
   SBC16 LINE_LEN16, CURSOR_COL16, BUF_LEN16
   JSR get_count
-  LDA BUF_TEMP16
-  CMP BUF_LEN16
+  ; Clamp count to available chars
+  CMP16 BUF_TEMP16, BUF_LEN16
   BCC .sub_count_ok
-  LDA BUF_LEN16
+  BEQ .sub_count_ok
+  CP16 BUF_LEN16, BUF_TEMP16
 .sub_count_ok:
-  STA BUF_DELTA
-
-  JSR get_cursor_buf_ptr
-  CP16 BUF_PTR16, BUF_SRC16
-  LDA BUF_DELTA
-  STA BUF_LEN16
-  LDA #0
-  STA BUF_LEN16+1
-  JSR yank_add_chars
-
-  JSR get_cursor_buf_ptr
-  JSR buf_delete_chars
-  JSR buf_adjust_lines_dec
-
-  LDA #$FF
-  STA MODIFIED
+  CP16 BUF_TEMP16, BUF_LEN16
+  LDA #OP_CHANGE
+  JSR apply_char_operator
+  RTS
 
 .sub_insert:
   JMP enter_insert_mode
@@ -251,7 +241,9 @@ normal_change_to_eol:
 
   SEC
   SBC16 LINE_LEN16, CURSOR_COL16, BUF_LEN16
-  JSR yank_delete_at_cursor
+  LDA #OP_CHANGE
+  JSR apply_char_operator
+  RTS
 
 .c_insert:
   JMP enter_insert_mode

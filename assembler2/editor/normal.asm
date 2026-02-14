@@ -277,8 +277,8 @@ normal_delete_to_eol:
   ; count = LINE_LEN16 - CURSOR_COL16 (16-bit)
   SEC
   SBC16 LINE_LEN16, CURSOR_COL16, BUF_LEN16
-  JSR yank_delete_at_cursor
-  JSR clamp_cursor_col
+  LDA #OP_DELETE
+  JSR apply_char_operator
 .done:
   JMP clear_count
 

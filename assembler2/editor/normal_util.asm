@@ -547,3 +547,37 @@ delete_at_cursor:
   LDA #$FF
   STA MODIFIED
   RTS
+
+; --- Operator dispatch ---
+
+OP_YANK   = 0
+OP_DELETE = 1
+OP_CHANGE = 2
+
+; Apply operator to character range at cursor
+; Input: A = operator (OP_YANK, OP_DELETE, OP_CHANGE)
+;        BUF_LEN16 = byte count of range
+;        Cursor at start of range (CURSOR_COL16, FILE_LINE16)
+; OP_YANK:   yank range, done
+; OP_DELETE:  yank range, delete, clamp cursor
+; OP_CHANGE:  yank range, delete, enter insert mode
+; Clobbers: A, X, Y, BUF_PTR16, BUF_SRC16, BUF_DST16
+apply_char_operator:
+  CMP #OP_YANK
+  BNE .do_delete
+  ; Yank only: no delete, no MODIFIED
+  JSR get_cursor_buf_ptr
+  CP16 BUF_PTR16, BUF_SRC16
+  JSR yank_add_chars
+  RTS
+.do_delete:
+  PHA                          ; Save operator on stack
+  JSR yank_delete_at_cursor
+  PLA                          ; Restore operator
+  CMP #OP_CHANGE
+  BEQ .change
+  ; OP_DELETE: clamp cursor
+  JSR clamp_cursor_col
+  RTS
+.change:
+  JMP enter_insert_mode_render
