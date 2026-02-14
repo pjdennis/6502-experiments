@@ -10,6 +10,12 @@
 ;
 ; Usage:
 ;   (cd 17/tests/asm && ../../../emulator.out ../../out/test_runner.out 01-instructions.txt)
+;
+; Directory mode (no arguments):
+;   (cd 17/tests/asm && ../../../emulator.out ../../out/test_runner.out)
+;
+; When no filename is given, opendir(".") is used to discover and run all
+; .txt files in the current directory in alphabetical order.
 
 
 ; ============================================================================
@@ -46,6 +52,8 @@ TR_MISMATCH_ACTUAL: .byte      ; Actual byte at first mismatch
 TR_MISMATCH_EXPECT: .byte      ; Expected byte at first mismatch
 TR_MISMATCH_POS16: .word       ; Position of first mismatch
 TR_LIMIT_FLAG:     .byte       ; Nonzero if runner hit a resource limit
+TR_DIR_HANDLE:     .byte       ; Directory handle for directory scanning mode
+TR_DIR_META:       .byte       ; Current directory entry metadata byte
 
   .code
 
@@ -74,7 +82,11 @@ TR_OUTPUT_FILE: .asciiz "_tr_out.tmp"
 test_runner_start:
   ; Save original vector targets before any patching
   JSR tr_save_vectors
-  ; Open test file from argv[0]
+  ; Check if a filename was specified
+  JSR argc
+  CMP #$01
+  BCC .dir_mode
+  ; --- Single file mode ---
   LDA #$00
   JSR argv
   JSR open
@@ -86,9 +98,38 @@ test_runner_start:
   STAX16 TABP16
   JSR show_message
   SHOW_CHAR '\n'
-  ; Initialize test state
+  ; Run all tests from this file
+  JSR tr_run_file
+  JMP .summary
+.dir_mode:
+  ; --- Directory mode: scan for .txt files ---
+  JSR tr_run_directory
+.summary:
+  ; Print summary
+  JSR tr_print_summary
+  ; Exit with failure code if any tests failed
+  LDA TR_FAIL_COUNT16
+  ORA TR_FAIL_COUNT16 + 1
+  BNE .exit_fail
+  LDA #$00
+  JMP exit
+.exit_fail:
+  LDA #$01
+  JMP exit
+
+tr_msg_running:
+  .asciiz "Running tests from "
+
+
+; ============================================================================
+; FILE PROCESSING
+; ============================================================================
+
+; Run all tests from the file in TR_FILE_HANDLE
+; On entry: TR_FILE_HANDLE = open file handle
+; On exit: TR_FILE_HANDLE is closed, pass/fail/skip counts updated
+tr_run_file:
   JSR tr_init_test
-  ; Main parse loop
 .main_loop:
   JSR tr_read_line
   BCS .eof
@@ -125,20 +166,96 @@ test_runner_start:
   ; Close test file
   LDA TR_FILE_HANDLE
   JSR close
-  ; Print summary
-  JSR tr_print_summary
-  ; Exit with failure code if any tests failed
-  LDA TR_FAIL_COUNT16
-  ORA TR_FAIL_COUNT16 + 1
-  BNE .exit_fail
-  LDA #$00
-  JMP exit
-.exit_fail:
-  LDA #$01
-  JMP exit
+  RTS
 
-tr_msg_running:
-  .asciiz "Running tests from "
+
+; ============================================================================
+; DIRECTORY SCANNING
+; ============================================================================
+
+; Scan current directory for .txt files and run each one
+; Uses opendir(".") to list entries, filters for non-directory .txt files
+tr_run_directory:
+  LDA #<tr_dot_path
+  LDX #>tr_dot_path
+  JSR opendir
+  CMP #$00
+  BEQ .done
+  STA TR_DIR_HANDLE
+.entry_loop:
+  ; Read metadata byte
+  LDA TR_DIR_HANDLE
+  JSR read
+  BCS .close_dir
+  STA TR_DIR_META
+  ; Read filename into TR_LINE_BUF (null-terminated by opendir)
+  LDY #$00
+.name_loop:
+  LDA TR_DIR_HANDLE
+  JSR read
+  BCS .close_dir               ; Unexpected EOF mid-entry
+  STA TR_LINE_BUF,Y
+  BEQ .name_done               ; Null terminator
+  INY
+  JMP .name_loop
+.name_done:
+  STY TR_LINE_LEN
+  ; Skip directories
+  LDA TR_DIR_META
+  AND #DIR_ENTRY_DIR
+  BNE .entry_loop
+  ; Check if filename ends with ".txt"
+  JSR tr_check_txt_extension
+  BCS .entry_loop
+  ; Print header for this file
+  SHOW_MESSAGEI tr_msg_running
+  SET16 TR_LINE_BUF, TABP16
+  JSR show_message
+  SHOW_CHAR '\n'
+  ; Open the file and run all tests from it
+  LDA #<TR_LINE_BUF
+  LDX #>TR_LINE_BUF
+  JSR open
+  STA TR_FILE_HANDLE
+  JSR tr_run_file
+  JMP .entry_loop
+.close_dir:
+  LDA TR_DIR_HANDLE
+  JSR close
+.done:
+  RTS
+
+tr_dot_path: .asciiz "."
+
+
+; Check if TR_LINE_BUF[0..TR_LINE_LEN) ends with ".txt"
+; On exit: C clear = ends with .txt, C set = does not
+tr_check_txt_extension:
+  LDA TR_LINE_LEN
+  CMP #$05                    ; Must be at least 5 chars (x.txt)
+  BCC .no
+  TAY
+  DEY                          ; Y = index of last char
+  LDA TR_LINE_BUF,Y
+  CMP #'t'
+  BNE .no
+  DEY
+  LDA TR_LINE_BUF,Y
+  CMP #'x'
+  BNE .no
+  DEY
+  LDA TR_LINE_BUF,Y
+  CMP #'t'
+  BNE .no
+  DEY
+  LDA TR_LINE_BUF,Y
+  CMP #'.'
+  BNE .no
+  CLC
+  RTS
+.no:
+  SEC
+  RTS
 
 
 ; ============================================================================
