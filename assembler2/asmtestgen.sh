@@ -111,11 +111,14 @@ run_version_tests 16
 echo "--- Version 17 ---"
 (cd 17 && mkdir -p out &&
   ../emulator.out ../16/out/asm_debug.out tests/file_stack/file_stack_test.asm out/file_stack_test.out &&
+  ../emulator.out ../16/out/asm_debug.out tests/opendir/opendir_test.asm out/opendir_test.out &&
   ../emulator.out ../16/out/asm_debug.out instgen.asm out/instgen.out &&
   ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
   ../emulator.out ../16/out/asm_debug.out asm.asm out/asm.out &&
   ../emulator.out ../16/out/asm_debug.out asm.asm out/asm_debug.out define:enable_debug)
 run_version_tests 17
+echo "--- opendir tests ---"
+python3 17/tests/opendir/test_opendir.py
 echo "--- Self-assembly test ---"
 # Self-assembly test (without debug - smaller)
 (cd 17 && ../emulator.out out/asm.out asm.asm out/asm_2.out)

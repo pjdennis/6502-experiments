@@ -112,6 +112,8 @@
 #include <errno.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <dirent.h>
+#include <limits.h>
 #include <termios.h>
 #include <sys/ioctl.h>
 #include <sys/select.h>
@@ -1011,10 +1013,19 @@ void hookexternal(void *funcptr) {
 #define port_serial_write_ready 0xfe98
 #define port_eof_b   0xfe99
 #define port_eof     0xfe9a
+#define port_opendir 0xfe9b
 
 uint8_t memory[0x10001];
 
 FILE* files[255];
+
+typedef struct {
+    char *buffer;
+    size_t buf_size;
+    size_t buf_pos;
+} DirState;
+
+DirState *dir_state[255];
 
 FILE* input_file_ptr;
 FILE* output_file_ptr;
@@ -1602,12 +1613,15 @@ void files_init(FILE* input_file) {
     for (size_t x = 1; x != 255; x++) {
         files[x] = NULL;
     }
+    for (size_t x = 0; x != 255; x++) {
+        dir_state[x] = NULL;
+    }
 }
 
 uint8_t file_open_with_mode(const char* name, const char* mode) {
     uint8_t x;
     for (x = 1; x != 255; x++) {
-        if (files[x] == NULL) {
+        if (files[x] == NULL && dir_state[x] == NULL) {
             FILE* file = fopen(name, mode);
             if (!file) {
                 return 0;
@@ -1629,6 +1643,70 @@ uint8_t file_open_for_write(const char* name) {
     return file_open_with_mode(name, "wb");
 }
 
+static int dir_filter(const struct dirent *entry) {
+    return entry->d_name[0] != '.';
+}
+
+uint8_t dir_open(const char* name) {
+    uint8_t slot = 0;
+    for (uint8_t x = 1; x != 255; x++) {
+        if (files[x] == NULL && dir_state[x] == NULL) {
+            slot = x; break;
+        }
+    }
+    if (slot == 0) {
+        restore_terminal();
+        fprintf(stderr, "could not open directory: %s: too many handles open\n", name);
+        exit(1);
+    }
+
+    struct dirent **namelist;
+    int n = scandir(name, &namelist, dir_filter, alphasort);
+    if (n < 0) return 0;
+
+    size_t total = 0;
+    for (int i = 0; i < n; i++)
+        total += 1 + strlen(namelist[i]->d_name) + 1;
+
+    char *buf = malloc(total ? total : 1);
+    size_t pos = 0;
+    for (int i = 0; i < n; i++) {
+        uint8_t meta = 0;
+        int is_dir = 0;
+        if (namelist[i]->d_type == DT_DIR) {
+            is_dir = 1;
+        } else if (namelist[i]->d_type == DT_UNKNOWN) {
+            char fullpath[PATH_MAX];
+            snprintf(fullpath, sizeof(fullpath), "%s/%s", name, namelist[i]->d_name);
+            struct stat st;
+            if (stat(fullpath, &st) == 0 && S_ISDIR(st.st_mode))
+                is_dir = 1;
+        }
+        if (is_dir) meta |= 0x01;
+
+        if (!is_dir) {
+            char fullpath[PATH_MAX];
+            snprintf(fullpath, sizeof(fullpath), "%s/%s", name, namelist[i]->d_name);
+            if (access(fullpath, W_OK) != 0)
+                meta |= 0x02;
+        }
+
+        buf[pos++] = meta;
+        size_t namelen = strlen(namelist[i]->d_name);
+        memcpy(buf + pos, namelist[i]->d_name, namelen + 1);
+        pos += namelen + 1;
+        free(namelist[i]);
+    }
+    free(namelist);
+
+    DirState *ds = malloc(sizeof(DirState));
+    ds->buffer = buf;
+    ds->buf_size = pos;
+    ds->buf_pos = 0;
+    dir_state[slot] = ds;
+    return slot + 1;
+}
+
 FILE* file_handle(uint8_t file) {
     if (file == 0 || files[file - 1] == NULL) {
         restore_terminal();
@@ -1643,6 +1721,13 @@ void file_close(uint8_t file) {
         restore_terminal();
         fprintf(stderr, "Cannot close standard file %i\n", (int) file);
         exit(1);
+    }
+    if (dir_state[file - 1] != NULL) {
+        DirState *ds = dir_state[file - 1];
+        free(ds->buffer);
+        free(ds);
+        dir_state[file - 1] = NULL;
+        return;
     }
     fclose(file_handle(file));
     files[file - 1] = NULL;
@@ -1663,6 +1748,13 @@ int files_destroy() {
 	    fprintf(stderr, "File %i was not closed\n", (int) (x + 1));
             fclose(files[x]);
 	    files[x] = NULL;
+            unclosed_count++;
+        }
+        if (dir_state[x] != NULL) {
+            fprintf(stderr, "File %i was not closed\n", (int) (x + 1));
+            free(dir_state[x]->buffer);
+            free(dir_state[x]);
+            dir_state[x] = NULL;
             unclosed_count++;
         }
     }
@@ -1689,6 +1781,11 @@ uint8_t read6502(uint16_t address) {
         uint16_t address = a | (x << 8);
         return file_open_for_write((const char*) (memory + address));
     } else if (address == port_read) {               // read
+        if (a > 0 && dir_state[a - 1] != NULL) {
+            DirState *ds = dir_state[a - 1];
+            if (ds->buf_pos >= ds->buf_size) return 4;
+            return (uint8_t)ds->buffer[ds->buf_pos++];
+        }
         int b = file_read(a);
         if (b == EOF) {
             b = 4;
@@ -1709,6 +1806,10 @@ uint8_t read6502(uint16_t address) {
         ungetc(b, input_file_ptr);
         return 0;
     } else if (address == port_eof) {                // eof
+        if (a > 0 && dir_state[a - 1] != NULL) {
+            DirState *ds = dir_state[a - 1];
+            return (ds->buf_pos >= ds->buf_size) ? 0x80 : 0x00;
+        }
         FILE *f = file_handle(a);
         int b = fgetc(f);
         if (b == EOF) {
@@ -1717,6 +1818,9 @@ uint8_t read6502(uint16_t address) {
         }
         ungetc(b, f);
         return 0;
+    } else if (address == port_opendir) {            // opendir
+        uint16_t addr = a | (x << 8);
+        return dir_open((const char*)(memory + addr));
     } else if (address == port_argc) {               // argc
         return arg_count;
     } else if (address == port_argv_l) {             // argvl
@@ -2207,6 +2311,8 @@ int main(int argc, char **argv) {
     save_address(addr_serial_read);
     emit_byte(inst_jmp);        // f039     jmp serial_write
     save_address(addr_serial_write);
+    emit_byte(inst_jmp);        // f03c     jmp opendir
+    save_address(addr_opendir);
     fill_address(addr_read_b);
     emit_byte(inst_bit);        // read_b:  bit port_eof_b
     emit_address(port_eof_b);
@@ -2316,6 +2422,10 @@ int main(int argc, char **argv) {
         emit_byte(inst_sec);    // serial_write: sec (not accepted, no terminal mode)
         emit_byte(inst_rts);    //               rts
     }
+    fill_address(addr_opendir);
+    emit_byte(inst_lda);        // opendir: lda port_opendir
+    emit_address(port_opendir);
+    emit_byte(inst_rts);        //          rts
 
     if (console_mode) {
         input_file_ptr = stdin;
