@@ -275,15 +275,7 @@ normal_enter_insert_eol:
 normal_open_below:
   LDAX16 FILE_LINE16
   JSR buf_get_line_ptr
-  JSR find_line_end
-
-  INY
-  BNE .no_wrap_nl
-  INC BUF_PTR16 + 1          ; Y wrapped past newline: advance page
-.no_wrap_nl:
-  TYA
-  CLC
-  ADCA16 BUF_PTR16, BUF_PTR16
+  JSR advance_past_line_end
 
   LDA #'\n'
   JSR buf_insert_char

@@ -4535,6 +4535,15 @@ class EditorTestRunner:
             expected_content=long_line + "\n" + long_line + "\nB\nC\n"
         )
 
+        # yy+p below 255-char line (tests INY wrap past newline at Y=255)
+        line_255 = "B" * 255
+        self.run_test(
+            "yy paste below 255-char line (INY page wrap)",
+            "X\n" + line_255 + "\nC\n",
+            b"yyjp:wq\r",
+            expected_content="X\n" + line_255 + "\nX\nC\n"
+        )
+
         # ============================================================
         # Character yank/paste tests (x, D with p/P)
         # ============================================================

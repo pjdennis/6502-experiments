@@ -198,6 +198,21 @@ find_line_end:
 .done:
   RTS
 
+; Scan (BUF_PTR16) for newline, then advance BUF_PTR16 past it
+; Input: BUF_PTR16 = scan start
+; Output: BUF_PTR16 = address after the newline
+; Clobbers: A, X, Y
+advance_past_line_end:
+  JSR find_line_end
+  INY
+  BNE .no_wrap
+  INC BUF_PTR16 + 1
+.no_wrap:
+  TYA
+  CLC
+  ADCA16 BUF_PTR16, BUF_PTR16
+  RTS
+
 ; Insert character at position in buffer
 ; A = character to insert
 ; BUF_PTR16 = position to insert at

@@ -193,11 +193,7 @@ yank_paste_below_n:
   ; Find insertion point: after current line's newline
   LDAX16 FILE_LINE16
   JSR buf_get_line_ptr        ; BUF_PTR16 = start of current line
-  JSR find_line_end
-  INY
-  TYA
-  CLC
-  ADCA16 BUF_PTR16, BUF_PTR16 ; BUF_PTR16 = insertion point (after newline)
+  JSR advance_past_line_end   ; BUF_PTR16 = insertion point (after newline)
 
   JSR yank_paste_core
   BCS .done
