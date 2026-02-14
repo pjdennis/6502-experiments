@@ -580,16 +580,12 @@ do_cw:
   JSR get_count              ; BUF_TEMP16 = N
   JSR check_cursor_in_line
   BCS .cw_insert
-
-  CP16 CURSOR_COL16, BUF_LEN16  ; BUF_LEN16 = scan start at cursor
   LDX BUF_TEMP16
-  JSR scan_cw_forward
-  SEC
-  SBC16 BUF_LEN16, CURSOR_COL16, BUF_LEN16
-  TST16 BUF_LEN16
-  BEQ .cw_insert
-  JSR yank_delete_at_cursor
-
+  JSR compute_cw_range_forward
+  BCS .cw_insert
+  LDA #OP_CHANGE
+  JSR apply_char_operator
+  RTS
 .cw_insert:
   JMP enter_insert_mode_render
 
@@ -599,16 +595,11 @@ do_cb:
   JSR get_count              ; BUF_TEMP16 = N
   TST16 CURSOR_COL16
   BEQ .cb_insert             ; At col 0, just enter insert
-
-  PUSH16 CURSOR_COL16         ; Save original cursor
   LDX BUF_TEMP16
-  JSR scan_words_backward     ; CURSOR_COL16 = new position
-  POP16 BUF_LEN16             ; BUF_LEN16 = original cursor
-  SEC
-  SBC16 BUF_LEN16, CURSOR_COL16, BUF_LEN16  ; BUF_LEN16 = delete count
-  TST16 BUF_LEN16
-  BEQ .cb_insert
-  JSR yank_delete_at_cursor
-
+  JSR compute_word_range_backward
+  BCS .cb_insert
+  LDA #OP_CHANGE
+  JSR apply_char_operator
+  RTS
 .cb_insert:
   JMP enter_insert_mode_render
