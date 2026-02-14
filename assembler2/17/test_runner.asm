@@ -430,6 +430,7 @@ tr_msg_colon_space: .asciiz ": "
 tr_msg_exp_prefix:  .asciiz "    exp: "
 tr_msg_got_prefix:  .asciiz "    got: "
 tr_msg_wrong_msg:   .asciiz " (msg mismatch)\n"
+tr_msg_wrong_line:  .asciiz " (line mismatch)\n"
 
 
 ; ============================================================================
@@ -595,15 +596,17 @@ tr_verify_error:
 .wrong_line:
   JSR tr_print_test_name
   SHOW_MESSAGEI tr_msg_fail
-  SHOW_MESSAGEI tr_msg_expected
+  SHOW_MESSAGEI tr_msg_wrong_line
+  SHOW_MESSAGEI tr_msg_exp_prefix
   SHOW_MESSAGEI tr_msg_line
   CP16 TR_EXPECT_LINE16, TO_DECIMAL_VALUE16
   JSR show_decimal
-  SHOW_MESSAGEI tr_msg_got
+  SHOW_CHAR '\n'
+  SHOW_MESSAGEI tr_msg_got_prefix
   SHOW_MESSAGEI tr_msg_line
   CP16 HEX16, TO_DECIMAL_VALUE16
   JSR show_decimal
-  SHOW_MESSAGEI tr_msg_close_paren
+  SHOW_CHAR '\n'
   SEC
   RTS
 .wrong_msg:

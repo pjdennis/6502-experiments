@@ -293,6 +293,32 @@ def test_stderr_suppressed_by_default():
             f"Assembler stderr should be suppressed, but found: {error_lines}"
 
 
+# A test with wrong expected line number
+WRONG_LINE_TEST = """\
+---
+NAME: wrong_line
+INPUT:
+ 1: * = $0200
+ 2:   LDA bogus
+EXPECT_ERROR: 1
+EXPECT_LINE: 99
+---
+"""
+
+
+def test_wrong_line_aligned_display():
+    """On line mismatch, failure should show exp:/got: on separate lines."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "test.txt").write_text(WRONG_LINE_TEST)
+        output, rc = run_test_runner(tmpdir)
+        assert rc == 1, f"Expected exit code 1, got {rc}\nOutput: {output}"
+        assert "FAIL" in output, f"Missing FAIL in: {output}"
+        assert "exp: line " in output, \
+            f"Missing 'exp: line' in: {output}"
+        assert "got: line " in output, \
+            f"Missing 'got: line' in: {output}"
+
+
 def test_verbose_flag_shows_stderr():
     """With -v flag, assembler stderr (Error messages) should appear in output."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -327,6 +353,7 @@ def main():
         ("wrong_msg_shows_actual", test_wrong_msg_shows_actual),
         ("stderr_suppressed_by_default", test_stderr_suppressed_by_default),
         ("verbose_flag_shows_stderr", test_verbose_flag_shows_stderr),
+        ("wrong_line_aligned_display", test_wrong_line_aligned_display),
     ]
 
     passed = 0
