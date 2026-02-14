@@ -106,24 +106,26 @@ test_runner_start:
   LDA (TABP16),Y
   CMP #'-'
   BNE .is_file
-  INY
+  ; Verify exactly "-X" (null terminator at index 2)
+  LDY #$02
   LDA (TABP16),Y
-  CMP #'v'
-  BNE .check_q
-  INY
-  LDA (TABP16),Y
-  BNE .skip_arg             ; Not null-terminated after "-v"
+  BNE .skip_arg             ; Not a 2-char flag
+  LDY #$01
+  LDA (TABP16),Y            ; Flag character
+  LDX #$00
+.flag_loop:
+  LDY tr_flag_table,X
+  BEQ .skip_arg             ; Sentinel: unknown flag, ignore
+  CMP tr_flag_table,X
+  BEQ .flag_found
+  INX
+  INX
+  JMP .flag_loop
+.flag_found:
+  LDA tr_flag_table + 1,X   ; ZP address from table
+  TAX
   LDA #$01
-  STA TR_VERBOSE
-  JMP .skip_arg
-.check_q:
-  CMP #'q'
-  BNE .skip_arg
-  INY
-  LDA (TABP16),Y
-  BNE .skip_arg             ; Not null-terminated after "-q"
-  LDA #$01
-  STA TR_QUIET
+  STA $00,X                  ; Store $01 to the ZP variable
   JMP .skip_arg
 .is_file:
   PLA
@@ -172,6 +174,12 @@ tr_msg_running:
   .asciiz "Running tests from "
 
 tr_argc_total: .byte 0
+
+; Flag table: (char, zp_address) pairs, null sentinel
+tr_flag_table:
+  .byte 'v', TR_VERBOSE
+  .byte 'q', TR_QUIET
+  .byte 0
 
 
 ; ============================================================================

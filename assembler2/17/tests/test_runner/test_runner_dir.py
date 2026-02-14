@@ -599,6 +599,15 @@ def test_all_field_types_dispatched():
         assert "1 skipped" in output, f"Expected 1 skipped in: {output}"
 
 
+def test_unknown_flag_ignored():
+    """An unknown flag like -x should be silently ignored; tests still run."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "test.txt").write_text(SIMPLE_PASS_TEST)
+        output, rc = run_test_runner(tmpdir, args=["-x", "test.txt"])
+        assert rc == 0, f"Expected exit code 0, got {rc}\nOutput: {output}"
+        assert "1 passed" in output, f"Expected 1 passed in: {output}"
+
+
 def main():
     if not EMULATOR.exists():
         print(f"Error: Emulator not found at {EMULATOR}")
@@ -634,6 +643,7 @@ def main():
         ("summary_fail_emphasis", test_summary_fail_emphasis),
         ("summary_no_emphasis_on_pass", test_summary_no_emphasis_on_pass),
         ("all_field_types_dispatched", test_all_field_types_dispatched),
+        ("unknown_flag_ignored", test_unknown_flag_ignored),
     ]
 
     passed = 0
