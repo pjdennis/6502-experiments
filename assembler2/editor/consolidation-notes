@@ -1,0 +1,63 @@
+ 
+  ┌─────────────────────────┬───────┬───────────────────────────────────────────────────────────────────┐
+  │        Category         │ Count │                            Description                            │
+  ├─────────────────────────┼───────┼───────────────────────────────────────────────────────────────────┤
+  │ A. Memory Copy/Shift    │ 2     │ mem_copy_up / mem_copy_down (mirror pair)                         │
+  ├─────────────────────────┼───────┼───────────────────────────────────────────────────────────────────┤
+  │ B. Buffer & Line Table  │ 7     │ File I/O, newline scan, line rebuild, line adjust, line lookup    │
+  ├─────────────────────────┼───────┼───────────────────────────────────────────────────────────────────┤
+  │ C. Rendering            │ 7     │ Row rendering, char printing, wrap offset, division, cursor walk  │
+  ├─────────────────────────┼───────┼───────────────────────────────────────────────────────────────────┤
+  │ D. Input/Key Processing │ 3     │ ESC spin, key batching, CSI drain                                 │
+  ├─────────────────────────┼───────┼───────────────────────────────────────────────────────────────────┤
+  │ E. Insert Mode          │ 5     │ Batch collect, back/fwd scan, copy, newline scan                  │
+  ├─────────────────────────┼───────┼───────────────────────────────────────────────────────────────────┤
+  │ F. Normal Mode Editing  │ 10    │ Newline find, join, tilde, replace, indent/unindent, delete scan  │
+  ├─────────────────────────┼───────┼───────────────────────────────────────────────────────────────────┤
+  │ G. Dispatch Tables      │ 3     │ 3-byte and 5-byte table scans                                     │
+  ├─────────────────────────┼───────┼───────────────────────────────────────────────────────────────────┤
+  │ H. Movement             │ 6     │ Up/down/left/right counted, page up/down                          │
+  ├─────────────────────────┼───────┼───────────────────────────────────────────────────────────────────┤
+  │ I. Word Motion          │ 11    │ Forward/backward/end word, skip class, first nonblank             │
+  ├─────────────────────────┼───────┼───────────────────────────────────────────────────────────────────┤
+  │ J. Search               │ 5     │ Forward/backward line iteration, substring match, rightmost match │
+  ├─────────────────────────┼───────┼───────────────────────────────────────────────────────────────────┤
+  │ K. Yank Buffer          │ 5     │ Multiplication, multi-copy, newline check, fit check              │
+  ├─────────────────────────┼───────┼───────────────────────────────────────────────────────────────────┤
+  │ L. Marks                │ 4     │ Init, adjust, display, text preview                               │
+  ├─────────────────────────┼───────┼───────────────────────────────────────────────────────────────────┤
+  │ M. Command/String       │ 3     │ Input loop, decimal parse, string compare                         │
+  ├─────────────────────────┼───────┼───────────────────────────────────────────────────────────────────┤
+  │ N. Terminal/IO          │ 8     │ String print, serial spin, DSR parse, byte-to-decimal             │
+  ├─────────────────────────┼───────┼───────────────────────────────────────────────────────────────────┤
+  │ O. Filename Copy        │ 2     │ Copy from pointer / absolute address                              │
+  ├─────────────────────────┼───────┼───────────────────────────────────────────────────────────────────┤
+  │ P. Pair Batching        │ 1     │ Batch two-key combos                                              │
+  ├─────────────────────────┼───────┼───────────────────────────────────────────────────────────────────┤
+  │ Q. Yank Paste           │ 1     │ Find newline for paste point                                      │
+  └─────────────────────────┴───────┴───────────────────────────────────────────────────────────────────┘
+
+
+ Not Recommended (analyzed but impractical on 6502)
+
+ Target: E2/E5 batch buffer newline scans
+ Reason: Different addressing modes (indirect vs absolute), different output requirements, would clobber live BUF_PTR16
+ ────────────────────────────────────────
+ Target: H1-H4 counted movement loops
+ Reason: 5-7 instructions each; parameterizing variable, boundary, and direction on 6502 costs more than the loop bodies
+ ────────────────────────────────────────
+ Target: N1/N2 string print
+ Reason: Different pointers (STR_PTR16 vs FNAME_PTR16); adding length cap to write_string would slow all callers
+ ────────────────────────────────────────
+ Target: F7/F9 indent/unindent
+ Reason: Already share copy_line_to_nl; per-line logic (write spaces vs count/skip spaces) differs too much
+ ────────────────────────────────────────
+ Target: K1/K3 repeated multiplication
+ Reason: 3-4 instruction bodies with different variable widths (16-bit vs 8-bit counter); parameterization exceeds loop
+   size
+ ────────────────────────────────────────
+ Target: G1/G2/G3 dispatch tables
+ Reason: Different entry sizes (3 vs 5 bytes) and matching logic (single key vs two-key combo vs existence check)
+
+ None of these would affect performance of expensive operations -- they're rejected purely because the consolidation
+ overhead would exceed the code they replace.
