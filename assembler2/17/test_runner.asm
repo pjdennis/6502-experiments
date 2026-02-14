@@ -1211,6 +1211,21 @@ tr_handle_input_line:
   BNE .write
   INY                     ; Skip the space after colon
 .write:
+  ; Check for bracketed content [...]
+  CPY TR_LINE_LEN
+  BCS .write_loop
+  LDA TR_LINE_BUF,Y
+  CMP #'['
+  BNE .write_loop
+  ; Check if last char is ']'
+  LDX TR_LINE_LEN
+  DEX
+  LDA TR_LINE_BUF,X
+  CMP #']'
+  BNE .write_loop
+  ; Strip brackets: skip '[', exclude ']'
+  INY
+  STX TR_LINE_LEN          ; TR_LINE_LEN now points to ']' (excluded)
   ; Write from Y to end of line to temp file
 .write_loop:
   CPY TR_LINE_LEN
