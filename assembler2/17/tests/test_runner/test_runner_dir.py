@@ -319,6 +319,31 @@ def test_wrong_line_aligned_display():
             f"Missing 'got: line' in: {output}"
 
 
+# A test with wrong expected error code
+WRONG_CODE_TEST = """\
+---
+NAME: wrong_code
+INPUT:
+ 1: * = $0200
+ 2:   LDA bogus
+EXPECT_ERROR: 5
+---
+"""
+
+
+def test_wrong_code_aligned_display():
+    """On error code mismatch, failure should show exp:/got: on separate lines."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "test.txt").write_text(WRONG_CODE_TEST)
+        output, rc = run_test_runner(tmpdir)
+        assert rc == 1, f"Expected exit code 1, got {rc}\nOutput: {output}"
+        assert "FAIL" in output, f"Missing FAIL in: {output}"
+        assert "exp: error " in output, \
+            f"Missing 'exp: error' in: {output}"
+        assert "got: error " in output, \
+            f"Missing 'got: error' in: {output}"
+
+
 def test_verbose_flag_shows_stderr():
     """With -v flag, assembler stderr (Error messages) should appear in output."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -354,6 +379,7 @@ def main():
         ("stderr_suppressed_by_default", test_stderr_suppressed_by_default),
         ("verbose_flag_shows_stderr", test_verbose_flag_shows_stderr),
         ("wrong_line_aligned_display", test_wrong_line_aligned_display),
+        ("wrong_code_aligned_display", test_wrong_code_aligned_display),
     ]
 
     passed = 0

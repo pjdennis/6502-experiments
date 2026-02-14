@@ -431,6 +431,7 @@ tr_msg_exp_prefix:  .asciiz "    exp: "
 tr_msg_got_prefix:  .asciiz "    got: "
 tr_msg_wrong_msg:   .asciiz " (msg mismatch)\n"
 tr_msg_wrong_line:  .asciiz " (line mismatch)\n"
+tr_msg_wrong_code:  .asciiz " (error code mismatch)\n"
 
 
 ; ============================================================================
@@ -580,17 +581,19 @@ tr_verify_error:
 .wrong_code:
   JSR tr_print_test_name
   SHOW_MESSAGEI tr_msg_fail
-  SHOW_MESSAGEI tr_msg_expected
+  SHOW_MESSAGEI tr_msg_wrong_code
+  SHOW_MESSAGEI tr_msg_exp_prefix
   SHOW_MESSAGEI tr_msg_error
   LDA TR_EXPECT_ERROR
   STA TO_DECIMAL_VALUE16
   LDA #$00
   STA TO_DECIMAL_VALUE16 + 1
   JSR show_decimal
-  SHOW_MESSAGEI tr_msg_got
+  SHOW_CHAR '\n'
+  SHOW_MESSAGEI tr_msg_got_prefix
   SHOW_MESSAGEI tr_msg_error
   JSR tr_print_exit_code
-  SHOW_MESSAGEI tr_msg_close_paren
+  SHOW_CHAR '\n'
   SEC
   RTS
 .wrong_line:
