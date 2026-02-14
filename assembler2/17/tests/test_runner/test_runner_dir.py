@@ -495,6 +495,51 @@ def test_verbose_flag_shows_stderr():
             f"With -v, assembler stderr should appear in: {output}"
 
 
+def test_quiet_flag_suppresses_pass():
+    """With -q flag, passing test names should not appear in output."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "test.txt").write_text(SIMPLE_PASS_TEST)
+        output, rc = run_test_runner(tmpdir, args=["-q", "test.txt"])
+        assert rc == 0, f"Expected exit code 0, got {rc}\nOutput: {output}"
+        assert "1 passed" in output, f"Expected summary in: {output}"
+        assert "simple_nop" not in output, \
+            f"Passing test name should be suppressed with -q: {output}"
+        assert "Running tests from test.txt" in output, \
+            f"File header should still appear with -q: {output}"
+
+
+def test_quiet_flag_shows_failures():
+    """With -q flag, failing tests should still appear in output."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "test.txt").write_text(BYTE_MISMATCH_TEST)
+        output, rc = run_test_runner(tmpdir, args=["-q", "test.txt"])
+        assert rc == 1, f"Expected exit code 1, got {rc}\nOutput: {output}"
+        assert "byte_mismatch" in output, \
+            f"Failing test should appear with -q: {output}"
+        assert "FAIL" in output, f"Missing FAIL in: {output}"
+
+
+def test_summary_fail_emphasis():
+    """When tests fail, summary should use !!failed!! instead of failed."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "test.txt").write_text(BYTE_MISMATCH_TEST)
+        output, rc = run_test_runner(tmpdir)
+        assert rc == 1, f"Expected exit code 1, got {rc}\nOutput: {output}"
+        assert "!!failed!!" in output, \
+            f"Summary should use !!failed!! on failure: {output}"
+
+
+def test_summary_no_emphasis_on_pass():
+    """When all tests pass, summary should use plain 'failed' (no emphasis)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "test.txt").write_text(SIMPLE_PASS_TEST)
+        output, rc = run_test_runner(tmpdir)
+        assert rc == 0, f"Expected exit code 0, got {rc}\nOutput: {output}"
+        assert " failed," in output, f"Expected 'failed,' in: {output}"
+        assert "!!failed!!" not in output, \
+            f"Summary should NOT use !!failed!! when all pass: {output}"
+
+
 def main():
     if not EMULATOR.exists():
         print(f"Error: Emulator not found at {EMULATOR}")
@@ -525,6 +570,10 @@ def main():
         ("bracketed_input", test_bracketed_input),
         ("bracketed_stderr", test_bracketed_stderr),
         ("debug_args_not_skipped", test_debug_args_not_skipped),
+        ("quiet_flag_suppresses_pass", test_quiet_flag_suppresses_pass),
+        ("quiet_flag_shows_failures", test_quiet_flag_shows_failures),
+        ("summary_fail_emphasis", test_summary_fail_emphasis),
+        ("summary_no_emphasis_on_pass", test_summary_no_emphasis_on_pass),
     ]
 
     passed = 0

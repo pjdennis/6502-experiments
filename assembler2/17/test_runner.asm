@@ -55,6 +55,7 @@ TR_DIR_HANDLE:     .byte       ; Directory handle for directory scanning mode
 TR_DIR_META:       .byte       ; Current directory entry metadata byte
 TR_VERBOSE:        .byte       ; Nonzero to forward assembler stderr to terminal
 TR_FILE_ARG:       .byte       ; Index of filename arg in argv, or $FF for none
+TR_QUIET:          .byte       ; Nonzero to suppress passing test output
 
   .code
 
@@ -84,9 +85,10 @@ TR_OUTPUT_FILE: .asciiz "_tr_out.tmp"
 test_runner_start:
   ; Save original vector targets before any patching
   JSR tr_save_vectors
-  ; Default: suppress assembler stderr output
+  ; Default: suppress assembler stderr output, show all results
   LDA #$00
   STA TR_VERBOSE
+  STA TR_QUIET
   ; Scan argv for flags (-v) and find filename arg
   LDA #$FF
   STA TR_FILE_ARG           ; No filename found yet
@@ -107,12 +109,21 @@ test_runner_start:
   INY
   LDA (TABP16),Y
   CMP #'v'
-  BNE .skip_arg
+  BNE .check_q
   INY
   LDA (TABP16),Y
   BNE .skip_arg             ; Not null-terminated after "-v"
   LDA #$01
   STA TR_VERBOSE
+  JMP .skip_arg
+.check_q:
+  CMP #'q'
+  BNE .skip_arg
+  INY
+  LDA (TABP16),Y
+  BNE .skip_arg             ; Not null-terminated after "-q"
+  LDA #$01
+  STA TR_QUIET
   JMP .skip_arg
 .is_file:
   PLA
@@ -314,8 +325,11 @@ tr_finalize_test:
   LDA TR_SKIP_FLAG
   BEQ .run
   ; Skip this test
+  LDA TR_QUIET
+  BNE .skip_quiet
   JSR tr_print_test_name
   SHOW_MESSAGEI tr_msg_skip
+.skip_quiet:
   INC16 TR_SKIP_COUNT16
   RTS
 .run:
@@ -363,8 +377,11 @@ tr_test_resume:
   JSR tr_verify_error
   BCS .fail
 .pass:
+  LDA TR_QUIET
+  BNE .pass_quiet
   JSR tr_print_test_name
   SHOW_MESSAGEI tr_msg_pass
+.pass_quiet:
   INC16 TR_PASS_COUNT16
   RTS
 .fail:
@@ -988,15 +1005,24 @@ tr_print_summary:
   SHOW_MESSAGEI tr_msg_sum_passed
   CP16 TR_FAIL_COUNT16, TO_DECIMAL_VALUE16
   JSR show_decimal
+  ; Use !!failed!! if there are failures, plain "failed" otherwise
+  LDA TR_FAIL_COUNT16
+  ORA TR_FAIL_COUNT16 + 1
+  BNE .has_failures
   SHOW_MESSAGEI tr_msg_sum_failed
+  JMP .print_skipped
+.has_failures:
+  SHOW_MESSAGEI tr_msg_sum_failed_emphasis
+.print_skipped:
   CP16 TR_SKIP_COUNT16, TO_DECIMAL_VALUE16
   JSR show_decimal
   SHOW_MESSAGEI tr_msg_sum_skipped
   RTS
 
-tr_msg_sum_passed:  .asciiz " passed, "
-tr_msg_sum_failed:  .asciiz " failed, "
-tr_msg_sum_skipped: .asciiz " skipped\n"
+tr_msg_sum_passed:          .asciiz " passed, "
+tr_msg_sum_failed:          .asciiz " failed, "
+tr_msg_sum_failed_emphasis: .asciiz " !!failed!!, "
+tr_msg_sum_skipped:         .asciiz " skipped\n"
 
 ; ============================================================================
 ; FIELD DISPATCH
