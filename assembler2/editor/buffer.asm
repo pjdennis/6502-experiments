@@ -175,19 +175,27 @@ buf_get_line_ptr:
 ; Clobbers Y
 buf_get_line_len:
   JSR buf_get_line_ptr
-  LDX #0                     ; X = high byte (page counter)
+  JSR find_line_end
+  TYA                        ; A = low byte of length
+  RTS
+
+; Scan (BUF_PTR16) for newline character
+; Input: BUF_PTR16 = scan start
+; Output: (BUF_PTR16),Y points to '\n', X = page crosses
+; Clobbers: A
+find_line_end:
+  LDX #0
   LDY #0
-.len_loop:
+.loop:
   LDA (BUF_PTR16),Y
   CMP #'\n'
-  BEQ .len_done
+  BEQ .done
   INY
-  BNE .len_loop
-  INC BUF_PTR16 + 1          ; Y wrapped: advance pointer page
-  INX                        ; Count pages
-  JMP .len_loop
-.len_done:
-  TYA                        ; A = low byte of length
+  BNE .loop
+  INC BUF_PTR16 + 1
+  INX
+  JMP .loop
+.done:
   RTS
 
 ; Insert character at position in buffer

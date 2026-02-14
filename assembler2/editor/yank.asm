@@ -193,16 +193,7 @@ yank_paste_below_n:
   ; Find insertion point: after current line's newline
   LDAX16 FILE_LINE16
   JSR buf_get_line_ptr        ; BUF_PTR16 = start of current line
-  LDY #0
-.find_nl:
-  LDA (BUF_PTR16),Y
-  CMP #'\n'
-  BEQ .found_nl
-  INY
-  BNE .find_nl
-  INC BUF_PTR16+1
-  JMP .find_nl
-.found_nl:
+  JSR find_line_end
   INY
   TYA
   CLC

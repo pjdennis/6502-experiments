@@ -275,17 +275,8 @@ normal_enter_insert_eol:
 normal_open_below:
   LDAX16 FILE_LINE16
   JSR buf_get_line_ptr
+  JSR find_line_end
 
-  LDY #0
-.find_nl:
-  LDA (BUF_PTR16),Y
-  CMP #'\n'
-  BEQ .found_nl
-  INY
-  BNE .find_nl
-  INC BUF_PTR16 + 1          ; Y wrapped: advance pointer by 256
-  JMP .find_nl
-.found_nl:
   INY
   BNE .no_wrap_nl
   INC BUF_PTR16 + 1          ; Y wrapped past newline: advance page

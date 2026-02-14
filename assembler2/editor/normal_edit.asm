@@ -190,17 +190,7 @@ normal_join_lines:
 
   LDAX16 FILE_LINE16
   JSR buf_get_line_ptr
-  LDY #0
-.join_find_nl:
-  LDA (BUF_PTR16),Y
-  CMP #'\n'
-  BEQ .join_found_nl
-  INY
-  BNE .join_find_nl
-  INC BUF_PTR16+1
-  JMP .join_find_nl
-
-.join_found_nl:
+  JSR find_line_end
   LDA #' '
   STA (BUF_PTR16),Y
   JSR buf_rebuild_lines
