@@ -129,6 +129,7 @@ normal_movement_keys:
   .byte $06         .word normal_page_down     ; Ctrl-F
   .byte $02         .word normal_page_up       ; Ctrl-B
   .byte $04         .word normal_half_page_down ; Ctrl-D
+  .byte $15         .word normal_half_page_up   ; Ctrl-U
   .byte 'G'         .word normal_goto_last
   .byte '/'         .word normal_search
   .byte '?'         .word normal_search_backward

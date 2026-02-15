@@ -1684,6 +1684,7 @@ class EditorTestRunner:
         self._group("Screen state - half page scroll:", leading_blank=True)
 
         CTRL_D = b'\x04'
+        CTRL_U = b'\x15'
 
         # Ctrl-D from start (30 lines): half-page = 4
         self.run_test_screen(
@@ -1759,6 +1760,73 @@ class EditorTestRunner:
             b"2" + CTRL_D + b":q!\r",
             expect_cursor=(0, 0),
             expect_lines=[(i, f"Line {i+3}") for i in range(9)]
+        )
+
+        # --- Ctrl-U tests ---
+
+        # Ctrl-U from middle: half-page up
+        self.run_test_screen(
+            "Ctrl-U: basic half-page up",
+            make_lines(30),
+            CTRL_F + CTRL_U + b":q!\r",
+            expect_cursor=(0, 0),
+            expect_lines=[(i, f"Line {i+6}") for i in range(9)]
+        )
+
+        # Ctrl-U at start: no movement
+        self.run_test_screen(
+            "Ctrl-U at start: no movement",
+            make_lines(30),
+            CTRL_U + b":q!\r",
+            expect_cursor=(0, 0),
+            expect_lines=[(i, f"Line {i+1}") for i in range(9)]
+        )
+
+        # Ctrl-U column preserved
+        self.run_test_screen(
+            "Ctrl-U: column preserved",
+            make_lines(30),
+            CTRL_F + b"lll" + CTRL_U + b":q!\r",
+            expect_cursor=(0, 3),
+            expect_lines=[(i, f"Line {i+6}") for i in range(9)]
+        )
+
+        # Multiple Ctrl-U from end
+        self.run_test_screen(
+            "Two Ctrl-U's from end",
+            make_lines(30),
+            b"G" + CTRL_U * 2 + b":q!\r",
+            expect_cursor=(8, 0),
+            expect_lines=[(i, f"Line {i+14}") for i in range(9)]
+        )
+
+        # Count prefix sets scroll amount for Ctrl-U
+        self.run_test_screen(
+            "Ctrl-U with count: scroll 3 lines",
+            make_lines(30),
+            b"G" + b"3" + CTRL_U + b":q!\r",
+            expect_cursor=(8, 0),
+            expect_lines=[(i, f"Line {i+19}") for i in range(9)]
+        )
+
+        # --- Combined tests ---
+
+        # Roundtrip: Ctrl-D then Ctrl-U returns to start
+        self.run_test_screen(
+            "Ctrl-D + Ctrl-U roundtrip",
+            make_lines(30),
+            CTRL_D + CTRL_U + b":q!\r",
+            expect_cursor=(0, 0),
+            expect_lines=[(i, f"Line {i+1}") for i in range(9)]
+        )
+
+        # Three Ctrl-D's
+        self.run_test_screen(
+            "Three Ctrl-D's",
+            make_lines(30),
+            CTRL_D * 3 + b":q!\r",
+            expect_cursor=(0, 0),
+            expect_lines=[(i, f"Line {i+13}") for i in range(9)]
         )
 
         self._group("Screen state - G and gg:", leading_blank=True)
@@ -2243,6 +2311,24 @@ class EditorTestRunner:
             make_lines(5),
             CTRL_B + b":q!\r",
             expect_content_redraws=[True, False]
+        )
+
+        # Ctrl-D scroll then j: Ctrl-D repaints, j is cursor-only
+        CTRL_D = b'\x04'
+        CTRL_U = b'\x15'
+        self.run_test_screen(
+            "Render opt: Ctrl-D scroll then j",
+            make_lines(30),
+            CTRL_D + b"j:q!\r",
+            expect_content_redraws=[True, True, False]
+        )
+
+        # Ctrl-U scroll then j: Ctrl-F and Ctrl-U repaint, j is cursor-only
+        self.run_test_screen(
+            "Render opt: Ctrl-U scroll then j",
+            make_lines(30),
+            CTRL_F + CTRL_U + b"j:q!\r",
+            expect_content_redraws=[True, True, True, False]
         )
 
         # Insert Ctrl-F at bottom: cursor-only
