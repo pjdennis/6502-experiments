@@ -4944,6 +4944,22 @@ class EditorTestRunner:
             expected_content="EABCD\n"
         )
 
+        # Count + batch x: 2x + batched xx = 4 chars deleted, yank last
+        self.run_test(
+            "2x + batched xx yanks last char",
+            "ABCDE\n",
+            b"2xxx$p:wq\r",
+            expected_content="ED\n"
+        )
+
+        # Batched x from middle of line
+        self.run_test(
+            "batched xx from col 2 yanks last char",
+            "ABCDE\n",
+            b"llxxp:wq\r",
+            expected_content="ABED\n"
+        )
+
         # D on first col yanks entire line content
         self.run_test(
             "D from col 0 yanks whole line",

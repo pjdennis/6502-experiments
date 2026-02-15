@@ -616,23 +616,30 @@ batched_char_delete:
   JMP .finish
 
 .batched:
-  ; --- Delete (total-1) chars without yank ---
+  ; --- Batched: compute full range, yank last char, delete all ---
   LDX BUF_TEMP16
-  DEX
-  BEQ .batch_last
   JSR compute_char_range_forward
-  BCS .batch_last
+  BCS .done
+  ; Yank 1 char at cursor + range - 1
+  PUSH16 BUF_LEN16              ; Save full range
+  JSR yank_clear
+  SEC
+  SBCI16 BUF_LEN16, 1, BUF_LEN16
+  CLC
+  ADC16 CURSOR_COL16, BUF_LEN16, BUF_LEN16  ; BUF_LEN16 = col of last char
+  PUSH16 CURSOR_COL16
+  CP16 BUF_LEN16, CURSOR_COL16  ; Move cursor to last char
+  JSR get_cursor_buf_ptr         ; BUF_PTR16 = address of last char
+  CP16 BUF_PTR16, BUF_SRC16
+  LDA #1
+  STA BUF_LEN16
+  LDA #0
+  STA BUF_LEN16 + 1
+  JSR yank_add_chars
+  POP16 CURSOR_COL16             ; Restore original cursor
+  POP16 BUF_LEN16               ; Restore full range
+  ; Delete full range in single operation
   JSR delete_at_cursor
-
-.batch_last:
-  ; Guard: anything left to operate on?
-  JSR check_cursor_in_line
-  BCS .done
-  LDX #1
-  JSR compute_char_range_forward
-  BCS .done
-  LDA #OP_DELETE
-  JSR apply_char_operator
 
 .finish:
   JSR clamp_cursor_col
