@@ -186,25 +186,30 @@ scroll_view_up:
   RTS
 
 ; Get half-page scroll amount into BUF_TEMP
-; Uses COUNT16 if set, else (SCREEN_ROWS-1)/2
+; Uses COUNT16 if set (and remembers it), else sticky value, else default.
 get_half_page_amount:
   LDA COUNT16
   ORA COUNT16 + 1
   BNE .use_count
-  ; No count: half_page = (SCREEN_ROWS - 1) / 2
+  ; No count: use sticky if set, else compute default
+  LDA SCROLL_AMOUNT
+  BNE .store
+  ; Default: half_page = (SCREEN_ROWS - 1) / 2
   LDA SCREEN_ROWS
   SEC
   SBC #1
   LSR
   JMP .store
 .use_count:
-  ; Use COUNT16 as scroll amount (cap to 8-bit)
+  ; Use COUNT16 as scroll amount (cap to 8-bit), save as sticky
   LDA COUNT16 + 1
   BNE .cap
   LDA COUNT16
-  JMP .store
+  JMP .save_sticky
 .cap:
   LDA #$FF
+.save_sticky:
+  STA SCROLL_AMOUNT
 .store:
   STA BUF_TEMP
   RTS

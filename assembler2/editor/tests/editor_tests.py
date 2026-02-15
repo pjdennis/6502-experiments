@@ -1809,6 +1809,38 @@ class EditorTestRunner:
             expect_lines=[(i, f"Line {i+19}") for i in range(9)]
         )
 
+        # --- Sticky scroll count ---
+
+        # Count on Ctrl-D is remembered for next Ctrl-D without count
+        # 2Ctrl-D scrolls 2; next Ctrl-D (no count) also scrolls 2
+        self.run_test_screen(
+            "Ctrl-D count sticky for next Ctrl-D",
+            make_lines(30),
+            b"2" + CTRL_D + CTRL_D + b":q!\r",
+            expect_cursor=(0, 0),
+            expect_lines=[(i, f"Line {i+5}") for i in range(9)]
+        )
+
+        # Ctrl-D count carries to Ctrl-U
+        # Ctrl-F to line 9; 2Ctrl-D scrolls 2 (sticky=2); Ctrl-U scrolls 2 back
+        self.run_test_screen(
+            "Ctrl-D count sticky carries to Ctrl-U",
+            make_lines(30),
+            CTRL_F + b"2" + CTRL_D + CTRL_U + b":q!\r",
+            expect_cursor=(0, 0),
+            expect_lines=[(i, f"Line {i+10}") for i in range(9)]
+        )
+
+        # Ctrl-U count overrides previous sticky
+        # Ctrl-F to line 9; 2Ctrl-D (sticky=2); 3Ctrl-U overrides (sticky=3)
+        self.run_test_screen(
+            "Ctrl-U count overrides sticky",
+            make_lines(30),
+            CTRL_F + b"2" + CTRL_D + b"3" + CTRL_U + b":q!\r",
+            expect_cursor=(0, 0),
+            expect_lines=[(i, f"Line {i+9}") for i in range(9)]
+        )
+
         # --- Combined tests ---
 
         # Roundtrip: Ctrl-D then Ctrl-U returns to start

@@ -8,6 +8,7 @@ normal_init:
   STA COUNT_ACTIVE
   STA BATCH_RESTORE_KEY
   STA BATCH_EXTRA
+  STA SCROLL_AMOUNT
   RTS
 
 ; Handle a keystroke in normal mode

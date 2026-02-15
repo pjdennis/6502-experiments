@@ -10,6 +10,7 @@ JUMP_TARGET16:  .word  ; Target for indirect jump
 COUNT16:        .word  ; Accumulated count (0 = no count entered)
 COUNT_ACTIVE:   .byte  ; $FF if digits are being entered, $00 otherwise
 NORMAL_TEMP:    .byte  ; Temp byte for normal mode operations
+SCROLL_AMOUNT:  .byte  ; Sticky scroll amount for Ctrl-D/U (0 = half-page default)
 BATCH_RESTORE_KEY: .byte ; Key to restore to LAST_KEY after batch (0 = none)
 BATCH_EXTRA:       .byte ; Number of extra pairs found by batch_pending_pairs (0 = none)
 
