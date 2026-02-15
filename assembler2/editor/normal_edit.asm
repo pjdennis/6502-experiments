@@ -516,6 +516,13 @@ cc_have_count:
 INDENT_WIDTH = 2
 
 do_indent:
+  ; Compute BUF_DELTA = INDENT_WIDTH * (1 + BATCH_EXTRA) = spaces per non-empty line
+  LDA BATCH_EXTRA
+  CLC
+  ADC #1                       ; A = 1 + BATCH_EXTRA
+  ASL                          ; A = 2 * (1 + BATCH_EXTRA)  [INDENT_WIDTH=2]
+  STA BUF_DELTA
+
   ; Undo batch_pending_pairs COUNT16 addition (>> count = line count, not repeat)
   LDA BATCH_EXTRA
   BEQ .indent_no_undo
@@ -528,16 +535,6 @@ do_indent:
   STA COUNT16+1
 .indent_no_undo:
   JSR get_count_clamp_lines
-  PUSH16 BUF_TEMP16            ; Save line count for repeated iterations
-
-.indent_iter:
-  ; Restore line count from stack (peek without pop)
-  ; PUSH16 pushes low then high, so high is at SP+1, low at SP+2
-  TSX
-  LDA $0102,X
-  STA BUF_TEMP16
-  LDA $0101,X
-  STA BUF_TEMP16+1
   CP16 FILE_LINE16, LINE_LEN16
 
   LDA #0
@@ -578,11 +575,25 @@ do_indent:
 
   ; If no non-empty lines, nothing to do
   TST16 COUNT16
-  BEQ .indent_no_col_adj
+  BNE .indent_has_ne
+  JMP .indent_no_col_adj
+.indent_has_ne:
 
-  ; total_shift = N_ne * INDENT_WIDTH (= N_ne << 1)
+  ; total_shift = N_ne * BUF_DELTA = N_ne * 2 * (1 + BATCH_EXTRA)
+  ; First: BUF_LEN16 = N_ne * 2
   CP16 COUNT16, BUF_LEN16
-  ASL16 BUF_LEN16              ; BUF_LEN16 = total_shift
+  ASL16 BUF_LEN16              ; BUF_LEN16 = N_ne * 2
+  ; Multiply by (1 + BATCH_EXTRA): add N_ne*2 BATCH_EXTRA more times
+  LDX BATCH_EXTRA
+  BEQ .indent_mul_done
+  CP16 BUF_LEN16, COUNT16     ; COUNT16 = base = N_ne * 2
+.indent_mul_loop:
+  CLC
+  ADC16 BUF_LEN16, COUNT16, BUF_LEN16
+  DEX
+  BNE .indent_mul_loop
+.indent_mul_done:
+  ; BUF_LEN16 = total_shift
 
   ; Get first line start
   LDAX16 FILE_LINE16
@@ -593,9 +604,6 @@ do_indent:
   BCS .indent_no_col_adj       ; Buffer full, bail
 
   ; --- Redistribute: insert spaces into non-empty lines ---
-  ; BUF_PTR16 = first line start (preserved by buf_shift_right_16)
-  ; JUMP_TARGET16 = write_ptr (starts at first line start)
-  ; BUF_PTR16 = read_ptr (first line start + total_shift)
   CP16 BUF_PTR16, JUMP_TARGET16
   CLC
   ADC16 BUF_PTR16, BUF_LEN16, BUF_PTR16
@@ -610,13 +618,19 @@ do_indent:
   CMP #'\n'
   BEQ .indent_copy_line
 
-  ; Non-empty: write 2 spaces at write_ptr
+  ; Non-empty: write BUF_DELTA spaces at write_ptr
+  LDY #0
+  LDX BUF_DELTA
+.indent_write_sp:
   LDA #' '
-  STA (JUMP_TARGET16),Y       ; Y = 0
-  INY
   STA (JUMP_TARGET16),Y
-  INC16 JUMP_TARGET16
-  INC16 JUMP_TARGET16
+  INY
+  DEX
+  BNE .indent_write_sp
+  ; Advance write_ptr by BUF_DELTA
+  LDA BUF_DELTA
+  CLC
+  ADCA16 JUMP_TARGET16, JUMP_TARGET16
 
 .indent_copy_line:
   JSR copy_line_to_nl
@@ -630,23 +644,24 @@ do_indent:
   ; Only adjust cursor col if cursor line was indented
   LDA NORMAL_TEMP
   BEQ .indent_no_col_adj
+  LDA BUF_DELTA
   CLC
-  ADCI16 CURSOR_COL16, INDENT_WIDTH, CURSOR_COL16
+  ADCA16 CURSOR_COL16, CURSOR_COL16
 .indent_no_col_adj:
   LDA #$FF
   STA RENDER_FLAG        ; Multi-line edit; BUF_END16 change only triggers current-line
   STA MODIFIED
-  ; Check for more batch repeats
-  LDA BATCH_EXTRA
-  BEQ .indent_done
-  DEC BATCH_EXTRA
-  JMP .indent_iter
-.indent_done:
-  POP16 BUF_TEMP16             ; Clean up saved line count
   JMP clear_count
 
 ; --- Unindent (<<) ---
 do_unindent:
+  ; Compute BUF_DELTA = INDENT_WIDTH * (1 + BATCH_EXTRA) = max spaces to remove per line
+  LDA BATCH_EXTRA
+  CLC
+  ADC #1                       ; A = 1 + BATCH_EXTRA
+  ASL                          ; A = 2 * (1 + BATCH_EXTRA)  [INDENT_WIDTH=2]
+  STA BUF_DELTA
+
   ; Undo batch_pending_pairs COUNT16 addition (<< count = line count, not repeat)
   LDA BATCH_EXTRA
   BEQ .unindent_no_undo
@@ -659,20 +674,10 @@ do_unindent:
   STA COUNT16+1
 .unindent_no_undo:
   JSR get_count_clamp_lines
-  PUSH16 BUF_TEMP16            ; Save line count for repeated iterations
-
-.unindent_iter:
-  ; Restore line count from stack (peek without pop)
-  ; PUSH16 pushes low then high, so high is at SP+1, low at SP+2
-  TSX
-  LDA $0102,X
-  STA BUF_TEMP16
-  LDA $0101,X
-  STA BUF_TEMP16+1
   CP16 FILE_LINE16, LINE_LEN16
 
   LDA #0
-  STA NORMAL_TEMP              ; Cursor line spaces removed
+  STA NORMAL_TEMP              ; Cursor line total spaces removed
   STA COUNT16                  ; total_shrink = 0
   STA COUNT16+1
 
@@ -689,41 +694,32 @@ do_unindent:
   LDAX16 LINE_LEN16
   JSR buf_get_line_ptr         ; BUF_PTR16 = line start
 
-  ; Count leading spaces (0, 1, or 2)
+  ; Count leading spaces up to BUF_DELTA
   LDY #0
+.unindent_count_sp:
+  CPY BUF_DELTA
+  BCS .unindent_have_sp
   LDA (BUF_PTR16),Y
   CMP #' '
-  BNE .unindent_zero_sp
+  BNE .unindent_have_sp
   INY
-  LDA (BUF_PTR16),Y
-  CMP #' '
-  BNE .unindent_one_sp
-  LDA #2
-  JMP .unindent_have_sp
-.unindent_one_sp:
-  LDA #1
-  JMP .unindent_have_sp
-.unindent_zero_sp:
-  LDA #0
-
+  JMP .unindent_count_sp
 .unindent_have_sp:
-  ; A = spaces to remove (0, 1, or 2)
-  STA BUF_DELTA
+  ; Y = spaces to remove for this line (0..BUF_DELTA)
 
   ; If cursor line, save actual removal in NORMAL_TEMP
   CMP16 LINE_LEN16, FILE_LINE16
   BNE .unindent_not_cursor
-  LDA BUF_DELTA
-  STA NORMAL_TEMP
+  STY NORMAL_TEMP
 .unindent_not_cursor:
 
-  ; Add to total_shrink
-  LDA BUF_DELTA
+  ; Add Y to total_shrink
+  TYA
   CLC
   ADCA16 COUNT16, COUNT16
 
   ; Advance BUF_PTR16 past leading spaces
-  LDA BUF_DELTA
+  TYA
   CLC
   ADCA16 BUF_PTR16, BUF_PTR16
 
@@ -765,13 +761,6 @@ do_unindent:
   LDA #$FF
   STA RENDER_FLAG        ; Multi-line edit; BUF_END16 change only triggers current-line
   STA MODIFIED
-  ; Check for more batch repeats
-  LDA BATCH_EXTRA
-  BEQ .unindent_done
-  DEC BATCH_EXTRA
-  JMP .unindent_iter
-.unindent_done:
-  POP16 BUF_TEMP16             ; Clean up saved line count
   JMP clear_count
 
 ; Copy bytes from (BUF_PTR16) to (JUMP_TARGET16) until '\n' is copied.
