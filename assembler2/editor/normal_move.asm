@@ -42,10 +42,48 @@ normal_page_down:
   LDA SCREEN_ROWS
   SEC
   SBC #1
-  STA BUF_TEMP       ; BUF_TEMP = page_size
+  STA BUF_TEMP       ; BUF_TEMP = move amount
+  STA NORMAL_TEMP    ; NORMAL_TEMP = content_rows for view clamp
 
 .page_loop:
-  ; target_line = FILE_LINE16 + page_size, clamped to LINE_COUNT16 - 1
+  JSR scroll_view_down
+  DEC BUF_DELTA
+  BNE .page_loop
+
+  LDA #0
+  STA_LH16 CURSOR_COL16
+  JSR clamp_cursor_col
+  JMP clear_count
+
+normal_page_up:
+  JSR get_batched_count
+  STX BUF_DELTA            ; BUF_DELTA = loop counter
+
+  ; page_size = SCREEN_ROWS - 1
+  LDA SCREEN_ROWS
+  SEC
+  SBC #1
+  STA BUF_TEMP       ; BUF_TEMP = move amount
+
+.page_loop:
+  JSR scroll_view_up
+  DEC BUF_DELTA
+  BNE .page_loop
+
+  LDA #0
+  STA_LH16 CURSOR_COL16
+  JSR clamp_cursor_col
+  JMP clear_count
+
+; --- Shared scroll subroutines ---
+
+; Scroll viewport down by BUF_TEMP lines
+; Input: BUF_TEMP = lines to move FILE_LINE and VIEW_TOP
+;        NORMAL_TEMP = content_rows for VIEW_TOP max clamp
+; Modifies: FILE_LINE16, VIEW_TOP16, VIEW_TOP_WRAP
+; Clobbers: A, X, Y, BUF_PTR16
+scroll_view_down:
+  ; target_line = FILE_LINE16 + BUF_TEMP, clamped to LINE_COUNT16 - 1
   CLC
   LDA FILE_LINE16
   ADC BUF_TEMP
@@ -61,7 +99,7 @@ normal_page_down:
   SBCI16 LINE_COUNT16, 1, BUF_PTR16
 .target_ok:
 
-  ; VIEW_TOP16 += page_size
+  ; VIEW_TOP16 += BUF_TEMP
   CLC
   LDA VIEW_TOP16
   ADC BUF_TEMP
@@ -70,54 +108,43 @@ normal_page_down:
   ADC #0
   STA VIEW_TOP16 + 1
 
-  ; Clamp VIEW_TOP16 to max(0, LINE_COUNT - page_size)
+  ; Clamp VIEW_TOP16 to max(0, LINE_COUNT - content_rows)
   SEC
   LDA LINE_COUNT16
-  SBC BUF_TEMP
+  SBC NORMAL_TEMP
   TAX                ; X = low byte of max view top
   LDA LINE_COUNT16 + 1
   SBC #0
-  BCC .view_zero  ; LINE_COUNT < page_size, set VIEW_TOP=0
+  BCC .view_zero  ; LINE_COUNT < content_rows, set VIEW_TOP=0
   TAY                ; Y = high byte of max view top
 
   ; If VIEW_TOP16 > max, clamp it
   CPY VIEW_TOP16 + 1
   BCC .clamp_view
-  BNE .next_iter
+  BNE .set_file_line
   CPX VIEW_TOP16
-  BCS .next_iter
+  BCS .set_file_line
 .clamp_view:
   STX VIEW_TOP16
   STY VIEW_TOP16 + 1
-  JMP .next_iter
+  JMP .set_file_line
 
 .view_zero:
   LDA #0
   STA_LH16 VIEW_TOP16
 
-.next_iter:
+.set_file_line:
   CP16 BUF_PTR16, FILE_LINE16
-  DEC BUF_DELTA
-  BNE .page_loop
-
   LDA #0
-  STA_LH16 CURSOR_COL16
   STA VIEW_TOP_WRAP
-  JSR clamp_cursor_col
-  JMP clear_count
+  RTS
 
-normal_page_up:
-  JSR get_batched_count
-  STX BUF_DELTA            ; BUF_DELTA = loop counter
-
-  ; page_size = SCREEN_ROWS - 1
-  LDA SCREEN_ROWS
-  SEC
-  SBC #1
-  STA BUF_TEMP       ; BUF_TEMP = page_size
-
-.page_loop:
-  ; target_line = FILE_LINE16 - page_size, clamped to 0
+; Scroll viewport up by BUF_TEMP lines
+; Input: BUF_TEMP = lines to move FILE_LINE and VIEW_TOP
+; Modifies: FILE_LINE16, VIEW_TOP16, VIEW_TOP_WRAP
+; Clobbers: A, X, Y, BUF_PTR16
+scroll_view_up:
+  ; target_line = FILE_LINE16 - BUF_TEMP, clamped to 0
   SEC
   LDA FILE_LINE16
   SBC BUF_TEMP
@@ -131,17 +158,17 @@ normal_page_up:
   STA_LH16 BUF_PTR16
 .target_ok:
 
-  ; VIEW_TOP16 -= page_size, clamped to 0
+  ; VIEW_TOP16 -= BUF_TEMP, clamped to 0
   LDA VIEW_TOP16 + 1
-  BNE .can_sub  ; High byte > 0, definitely >= page_size
+  BNE .can_sub  ; High byte > 0, definitely >= BUF_TEMP
   LDA VIEW_TOP16
   CMP BUF_TEMP
   BCS .can_sub
 
-  ; VIEW_TOP16 < page_size: set VIEW_TOP16 = 0
+  ; VIEW_TOP16 < BUF_TEMP: set VIEW_TOP16 = 0
   LDA #0
   STA_LH16 VIEW_TOP16
-  JMP .next_iter
+  JMP .set_file_line
 
 .can_sub:
   SEC
@@ -152,16 +179,11 @@ normal_page_up:
   SBC #0
   STA VIEW_TOP16 + 1
 
-.next_iter:
+.set_file_line:
   CP16 BUF_PTR16, FILE_LINE16
-  DEC BUF_DELTA
-  BNE .page_loop
-
   LDA #0
-  STA_LH16 CURSOR_COL16
   STA VIEW_TOP_WRAP
-  JSR clamp_cursor_col
-  JMP clear_count
+  RTS
 
 normal_line_start:
   LDA #0
