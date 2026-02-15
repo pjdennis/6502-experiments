@@ -3052,6 +3052,341 @@ class EditorTestRunner:
         )
 
         # ============================================================
+        # Screen content verification after insert mode operations
+        # These tests verify the DISPLAYED content (not just file
+        # content) is correct after various insert mode operations,
+        # including batched and multi-line edits.
+        # ============================================================
+        self._group("Insert mode screen content:", leading_blank=True)
+
+        # Single Enter splits line - screen shows both halves
+        self.run_test_screen(
+            "Enter splits line: screen shows both halves",
+            "Hello World\n",
+            b"llllli\rX\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Hello"), (1, "X World"),
+            ],
+            expect_cursor=(1, 0),
+        )
+
+        # Batched Enter (2 Enters) - screen shows all lines correctly
+        self.run_test_screen(
+            "Batched Enter: screen shows all new lines",
+            "Hello World\n",
+            b"llllli\r\r\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Hello"), (1, ""), (2, " World"),
+                (3, "~"),
+            ],
+            expect_cursor=(2, 0),
+        )
+
+        # Batched Enter (3 Enters) - screen shows all lines correctly
+        self.run_test_screen(
+            "Batched 3 Enters: screen shows all new lines",
+            "ABCDEF\n",
+            b"llli\r\r\r\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "ABC"), (1, ""), (2, ""), (3, "DEF"),
+                (4, "~"),
+            ],
+            expect_cursor=(3, 0),
+        )
+
+        # Batched Enter at start of line
+        self.run_test_screen(
+            "Batched Enter at start: blank lines above",
+            "Hello\nWorld\n",
+            b"ji\r\r\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Hello"), (1, ""), (2, ""), (3, "World"),
+                (4, "~"),
+            ],
+            expect_cursor=(3, 0),
+        )
+
+        # Enter with chars (a\rb\r) - screen shows all content
+        self.run_test_screen(
+            "Mixed chars and Enter: screen correct",
+            "XY\n",
+            b"ia\rb\r\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "a"), (1, "b"), (2, "XY"),
+            ],
+            expect_cursor=(2, 0),
+        )
+
+        # Batched BS at col 0 joining lines - screen shows merged content
+        self.run_test_screen(
+            "BS at col 0 joins: screen shows merged line",
+            "Hello\nWorld\n",
+            b"ji\x08\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "HelloWorld"), (1, "~"),
+            ],
+            expect_cursor=(0, 4),
+        )
+
+        # Batched BS at col 0: 3 BS deletes 3 bytes backward from cursor
+        # Cursor at col 0 of "DD". 3 bytes back = "CC\n" → delete that.
+        # Result: "AA\nBB\nDD\n"
+        self.run_test_screen(
+            "Batched BS joins one line: screen correct",
+            "AA\nBB\nCC\nDD\n",
+            b"jjji\x08\x08\x08\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "AA"), (1, "BB"), (2, "DD"), (3, "~"),
+            ],
+            expect_cursor=(2, 0),
+        )
+
+        # DEL at end of line joining with next - screen correct
+        DEL = b"\x1b[3~"
+        self.run_test_screen(
+            "DEL at EOL joins lines: screen correct",
+            "Hello\nWorld\n",
+            b"A" + DEL + b"\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "HelloWorld"), (1, "~"),
+            ],
+            expect_cursor=(0, 4),
+        )
+
+        # ============================================================
+        # Screen content verification after normal mode editing
+        # ============================================================
+        self._group("Normal mode editing screen content:", leading_blank=True)
+
+        # D (delete to EOL) - screen shows truncated line
+        self.run_test_screen(
+            "D deletes to EOL: screen correct",
+            "Hello World\n",
+            b"lllllD:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello")],
+            expect_cursor=(0, 4),
+        )
+
+        # C (change to EOL) - enters insert after deleting to EOL
+        self.run_test_screen(
+            "C changes to EOL: screen correct",
+            "Hello World\nLine 2\n",
+            b"lllllCXYZ\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "HelloXYZ"), (1, "Line 2")],
+            expect_cursor=(0, 7),
+        )
+
+        # S (substitute line) - replaces entire line
+        self.run_test_screen(
+            "S substitutes line: screen correct",
+            "Hello\nWorld\n",
+            b"SXYZ\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "XYZ"), (1, "World")],
+            expect_cursor=(0, 2),
+        )
+
+        # s (substitute char) - replaces single char, enters insert
+        self.run_test_screen(
+            "s substitutes char: screen correct",
+            "Hello\nWorld\n",
+            b"sX\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Xello"), (1, "World")],
+            expect_cursor=(0, 0),
+        )
+
+        # 3s (substitute 3 chars) - replaces 3 chars
+        self.run_test_screen(
+            "3s substitutes 3 chars: screen correct",
+            "Hello\nWorld\n",
+            b"3sXYZ\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "XYZlo"), (1, "World")],
+            expect_cursor=(0, 2),
+        )
+
+        # o (open below) - creates new line below
+        self.run_test_screen(
+            "o opens below: screen correct",
+            "Line 1\nLine 2\n",
+            b"oNew\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Line 1"), (1, "New"), (2, "Line 2")],
+            expect_cursor=(1, 2),
+        )
+
+        # O (open above) - creates new line above
+        self.run_test_screen(
+            "O opens above: screen correct",
+            "Line 1\nLine 2\n",
+            b"jONew\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Line 1"), (1, "New"), (2, "Line 2")],
+            expect_cursor=(1, 2),
+        )
+
+        # J (join lines) - screen shows merged line
+        self.run_test_screen(
+            "J joins lines: screen correct",
+            "Hello\nWorld\n",
+            b"J:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello World"), (1, "~")],
+            expect_cursor=(0, 0),
+        )
+
+        # 3J joins 3 lines
+        self.run_test_screen(
+            "3J joins 3 lines: screen correct",
+            "AA\nBB\nCC\nDD\n",
+            b"3J:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "AA BB CC"), (1, "DD")],
+            expect_cursor=(0, 0),
+        )
+
+        # cc (change line) - replaces line content
+        self.run_test_screen(
+            "cc changes line: screen correct",
+            "Hello\nWorld\n",
+            b"ccNew\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "New"), (1, "World")],
+            expect_cursor=(0, 2),
+        )
+
+        # 2cc (change 2 lines) - deletes 2, inserts blank
+        self.run_test_screen(
+            "2cc changes 2 lines: screen correct",
+            "Line 1\nLine 2\nLine 3\n",
+            b"2ccNew\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "New"), (1, "Line 3")],
+            expect_cursor=(0, 2),
+        )
+
+        # dd - deletes line
+        self.run_test_screen(
+            "dd deletes line: screen correct",
+            "Line 1\nLine 2\nLine 3\n",
+            b"dd:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Line 2"), (1, "Line 3"), (2, "~")],
+            expect_cursor=(0, 0),
+        )
+
+        # 2dd - deletes 2 lines
+        self.run_test_screen(
+            "2dd deletes 2 lines: screen correct",
+            "Line 1\nLine 2\nLine 3\nLine 4\n",
+            b"2dd:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Line 3"), (1, "Line 4"), (2, "~")],
+            expect_cursor=(0, 0),
+        )
+
+        # p (paste below) - screen shows pasted content
+        self.run_test_screen(
+            "p pastes line below: screen correct",
+            "Line 1\nLine 2\nLine 3\n",
+            b"ddp:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Line 2"), (1, "Line 1"), (2, "Line 3")],
+            expect_cursor=(1, 0),
+        )
+
+        # P (paste above) - screen shows pasted content
+        self.run_test_screen(
+            "P pastes line above: screen correct",
+            "Line 1\nLine 2\nLine 3\n",
+            b"ddjP:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Line 2"), (1, "Line 1"), (2, "Line 3")],
+            expect_cursor=(1, 0),
+        )
+
+        # 2x with screen verification
+        self.run_test_screen(
+            "2x deletes 2 chars: screen correct",
+            "Hello\nWorld\n",
+            b"2x:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "llo"), (1, "World")],
+            expect_cursor=(0, 0),
+        )
+
+        # >> indent - screen shows indented line
+        self.run_test_screen(
+            ">> indents line: screen correct",
+            "Hello\nWorld\n",
+            b">>:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "  Hello"), (1, "World")],
+            expect_cursor=(0, 2),
+        )
+
+        # << unindent - screen shows unindented line
+        self.run_test_screen(
+            "<< unindents line: screen correct",
+            "  Hello\nWorld\n",
+            b"<<:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello"), (1, "World")],
+            expect_cursor=(0, 0),
+        )
+
+        # r (replace char) - screen shows replaced char
+        self.run_test_screen(
+            "r replaces char: screen correct",
+            "Hello\nWorld\n",
+            b"rX:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Xello"), (1, "World")],
+            expect_cursor=(0, 0),
+        )
+
+        # ~ (toggle case) - screen shows toggled char
+        self.run_test_screen(
+            "~ toggles case: screen correct",
+            "Hello\n",
+            b"~~~:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "hELlo")],
+            expect_cursor=(0, 3),
+        )
+
+        # dw (delete word) - screen shows result
+        self.run_test_screen(
+            "dw deletes word: screen correct",
+            "Hello World\n",
+            b"dw:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "World")],
+            expect_cursor=(0, 0),
+        )
+
+        # cw (change word) - replaces word
+        self.run_test_screen(
+            "cw changes word: screen correct",
+            "Hello World\n",
+            b"cwBye\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Bye World")],
+            expect_cursor=(0, 2),
+        )
+
+        # ============================================================
         # Batch movement tests (j/k and arrow keys)
         # Consecutive identical movement keys are consumed in one
         # operation, reducing frame count and improving scroll perf.
