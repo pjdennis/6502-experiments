@@ -3395,6 +3395,188 @@ class EditorTestRunner:
             expect_content_redraws=[True, False, True, False]
         )
 
+        # ============================================================
+        # Batch paste (p, P)
+        # Repeated paste keys should consolidate into a single render
+        # frame when multiple keys are available in the input buffer.
+        # ============================================================
+        self._group("Batch paste:", leading_blank=True)
+
+        # Line paste pp: yank a line with dd, paste twice with pp
+        # Without batching: init(T), dd(T), p(T), p(T) = 4 frames
+        # With batching: init(T), dd(T), pp batched(T) = 3 frames
+        self.run_test_screen(
+            "Batch line pp is single action frame",
+            "A\nB\nC\n",
+            b"ddpp:q!\r",
+            expect_content_redraws=[True, True, True, False]
+        )
+
+        # Line paste pp correctness: two copies pasted
+        self.run_test(
+            "Batch line pp pastes two copies",
+            "A\nB\nC\n",
+            b"ddpp:wq\r",
+            expected_content="B\nA\nA\nC\n"
+        )
+
+        # Line paste PPP correctness: three copies pasted above
+        self.run_test(
+            "Batch line PPP pastes three copies above",
+            "A\nB\n",
+            b"ddPPP:wq\r",
+            expected_content="A\nA\nA\nB\n"
+        )
+
+        # Line paste PP: batched into single frame
+        self.run_test_screen(
+            "Batch line PP is single action frame",
+            "A\nB\nC\n",
+            b"ddPP:q!\r",
+            expect_content_redraws=[True, True, True, False]
+        )
+
+        # Char paste pp: yank a char with x, paste twice with pp
+        # Without batching: init(T), x(T), p(T), p(T) = 4 frames
+        # With batching: init(T), x(T), pp batched(T) = 3 frames
+        self.run_test_screen(
+            "Batch char pp is single action frame",
+            "Hello\n",
+            b"xpp:q!\r",
+            expect_content_redraws=[True, True, True, False]
+        )
+
+        # Char paste pp correctness
+        self.run_test(
+            "Batch char pp pastes two copies",
+            "Hello\n",
+            b"xpp:wq\r",
+            expected_content="eHHllo\n"
+        )
+
+        # Char paste PPP correctness
+        self.run_test(
+            "Batch char PPP pastes three copies",
+            "Hello\n",
+            b"xPPP:wq\r",
+            expected_content="HHHello\n"
+        )
+
+        # Multi-char yank + batched PP: content must match iterative
+        # yw yanks "one " (4 chars), 2G goes to blank line 2, PP pastes twice
+        self.run_test(
+            "Batch char PP multi-char yank content matches iterative",
+            "one two three\n\n",
+            b"yw2GPP:wq\r",
+            expected_content="one two three\noneone  \n"
+        )
+
+        # Multi-char yank + count+extras 2PP: content must match iterative
+        # yw yanks "one " (4 chars), 2G goes to blank line 2, 2PP = count 2 + 1 extra
+        self.run_test(
+            "Count 2PP multi-char yank content matches iterative",
+            "one two three\n\n",
+            b"yw2G2PP:wq\r",
+            expected_content="one two three\none oneone  \n"
+        )
+
+        # Char paste PP: batched into single frame
+        self.run_test_screen(
+            "Batch char PP is single action frame",
+            "Hello\n",
+            b"xPP:q!\r",
+            expect_content_redraws=[True, True, True, False]
+        )
+
+        # Count + batch: 2p then extra p should paste 3 total
+        self.run_test(
+            "Count 2p + extra p pastes three copies",
+            "A\nB\nC\n",
+            b"dd2pp:wq\r",
+            expected_content="B\nA\nA\nA\nC\n"
+        )
+
+        # Cursor position tests for line paste batching
+        # yy pp: cursor on row 2 (two lines pasted below, cursor on last)
+        self.run_test_screen(
+            "Batch line pp cursor on last pasted line",
+            "A\nB\nC\n",
+            b"yypp:q!\r",
+            expect_cursor=(2, 0),
+        )
+
+        # yy 2p: cursor on row 1 (counted paste, cursor on first pasted line)
+        self.run_test_screen(
+            "Count line 2p cursor on first pasted line",
+            "A\nB\nC\n",
+            b"yy2p:q!\r",
+            expect_cursor=(1, 0),
+        )
+
+        # yy ppp: cursor on row 3
+        self.run_test_screen(
+            "Batch line ppp cursor on last pasted line",
+            "A\nB\nC\n",
+            b"yyppp:q!\r",
+            expect_cursor=(3, 0),
+        )
+
+        # yy 2pp: cursor on row 2 (count 2 + 1 extra = 3 pastes, cursor at 1 + extras)
+        self.run_test_screen(
+            "Count 2p + batch p cursor position",
+            "A\nB\nC\n",
+            b"yy2pp:q!\r",
+            expect_cursor=(2, 0),
+        )
+
+        # Line paste above: yy PP -> cursor on row 0
+        self.run_test_screen(
+            "Batch line PP cursor stays at row 0",
+            "A\nB\nC\n",
+            b"yyPP:q!\r",
+            expect_cursor=(0, 0),
+        )
+
+        # Line paste above: yy 2P -> cursor on row 0 (no adjustment needed)
+        self.run_test_screen(
+            "Count line 2P cursor stays at row 0",
+            "A\nB\nC\n",
+            b"yy2P:q!\r",
+            expect_cursor=(0, 0),
+        )
+
+        # Char paste below: x pp -> cursor at col 2
+        self.run_test_screen(
+            "Batch char pp cursor position",
+            "Hello\n",
+            b"xpp:q!\r",
+            expect_cursor=(0, 2),
+        )
+
+        # Char paste below: x 2p -> cursor at col 2 (same as pp)
+        self.run_test_screen(
+            "Count char 2p cursor position",
+            "Hello\n",
+            b"x2p:q!\r",
+            expect_cursor=(0, 2),
+        )
+
+        # Char paste above: lx PP -> cursor at col 1 (adjusted back by 1)
+        self.run_test_screen(
+            "Batch char PP cursor adjusted",
+            "Hello\n",
+            b"lxPP:q!\r",
+            expect_cursor=(0, 1),
+        )
+
+        # Char paste above: lx 2P -> cursor at col 2 (counted, no adjustment)
+        self.run_test_screen(
+            "Count char 2P cursor not adjusted",
+            "Hello\n",
+            b"lx2P:q!\r",
+            expect_cursor=(0, 2),
+        )
+
         self._group("Batch page down/up:", leading_blank=True)
 
         # Render optimization: batch Ctrl-F reduces redraws

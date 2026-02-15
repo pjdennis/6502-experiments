@@ -9,11 +9,17 @@ normal_paste_below:
   JMP char_paste_below
 .line_paste:
   JSR get_count              ; BUF_TEMP16 = count
-  LDX BUF_TEMP16             ; X = count (low byte)
-  STX NORMAL_TEMP            ; Save paste count
+  JSR count_paste_extras     ; BUF_TEMP16 += extras, BATCH_EXTRA = extras
+  LDX BUF_TEMP16             ; X = total count (low byte)
+  STX NORMAL_TEMP            ; Save paste count for paste_adjust_marks
   JSR yank_paste_below_n
   BCS .paste_below_done
   JSR paste_adjust_marks
+  ; Cursor: yank_paste_below_n does INC16 once; add extras for iterative semantics
+  LDA BATCH_EXTRA
+  BEQ .paste_below_done
+  CLC
+  ADCA16 FILE_LINE16, FILE_LINE16
 .paste_below_done:
   JMP clear_count
 
@@ -23,11 +29,13 @@ normal_paste_above:
   JMP char_paste_above
 .line_paste:
   JSR get_count              ; BUF_TEMP16 = count
-  LDX BUF_TEMP16             ; X = count (low byte)
-  STX NORMAL_TEMP            ; Save paste count
+  JSR count_paste_extras     ; BUF_TEMP16 += extras
+  LDX BUF_TEMP16             ; X = total count (low byte)
+  STX NORMAL_TEMP            ; Save paste count for paste_adjust_marks
   JSR yank_paste_above_n
   BCS .paste_above_done
   JSR paste_adjust_marks
+  ; No cursor adjustment - yank_paste_above_n doesn't change FILE_LINE16
 .paste_above_done:
   JMP clear_count
 
@@ -36,6 +44,14 @@ normal_paste_above:
 ; Handles newlines in yanked content via find_line_for_ptr
 char_paste_below:
   JSR get_count              ; BUF_TEMP16 = count
+  JSR count_paste_extras     ; BUF_TEMP16 += extras
+  JSR do_char_paste_below
+  ; No cursor adjustment - contiguous insertion gives same cursor as iterative
+  JMP clear_count
+
+; Core char paste below: paste BUF_TEMP16 copies after cursor
+; Returns carry set = failed/empty, carry clear = success
+do_char_paste_below:
   JSR yank_paste_setup
   BCS .done                  ; Empty yank
 
@@ -65,31 +81,38 @@ char_paste_below:
 
   ; Check if pasted content is multi-line
   JSR yank_has_newline
-  BCS .cpb_multiline
+  BCS .multiline
 
   ; Single-line: cursor at last pasted byte
   CLC
   ADC16 BUF_PTR16, BUF_LEN16, BUF_PTR16
   DEC16 BUF_PTR16
-  JMP .cpb_find_pos
+  JMP .find_pos
 
-.cpb_multiline:
+.multiline:
   ; Multi-line: cursor at first pasted byte (BUF_PTR16 already set)
 
-.cpb_find_pos:
+.find_pos:
   JSR find_line_for_ptr      ; sets FILE_LINE16, CURSOR_COL16
   JSR clamp_cursor_col
   LDA #$FF
   STA MODIFIED
+  CLC
 .done:
-  JMP clear_count
+  RTS
 
 ; Character paste above (before cursor)
 ; Handles newlines in yanked content via find_line_for_ptr
+; Single-shift interleaved fill for all yank sizes
 char_paste_above:
-  JSR get_count              ; BUF_TEMP16 = count
-  JSR yank_paste_setup
+  JSR get_count              ; BUF_TEMP16 = count C
+  JSR count_paste_extras     ; BUF_TEMP16 += extras, BATCH_EXTRA = extras
+  JSR yank_paste_setup       ; BUF_LEN16 = total size, YANK_SIZE16 = single size
   BCS .done                  ; Empty yank
+
+  ; Save total count N for fill routines
+  LDA BUF_TEMP16
+  STA NORMAL_TEMP
 
   ; Save total paste size on stack
   PUSH16 BUF_LEN16
@@ -98,31 +121,158 @@ char_paste_above:
   JSR get_cursor_buf_ptr
 
   PUSH16 BUF_PTR16           ; Save insertion point
-  JSR yank_paste_core
-  POP16 BUF_PTR16            ; Recover insertion point
-  POP16 BUF_LEN16            ; Recover total paste size
-  BCS .done                  ; Paste failed
 
-  ; Check if pasted content is multi-line
+  ; Single buffer shift
+  JSR buf_shift_right_16
+  BCS .shift_fail
+
+  ; Choose fill strategy based on yank content
   JSR yank_has_newline
-  BCS .cpa_multiline
+  BCS .do_contiguous
 
-  ; Single-line: cursor at last pasted byte
+  ; Single-line: interleaved fill
+  JSR interleaved_fill
+  JMP .fill_done
+
+.do_contiguous:
+  ; Multi-line: N contiguous copies
+  JSR contiguous_fill
+
+.fill_done:
+  JSR buf_rebuild_lines
+
+  ; Recover insertion point and total size
+  POP16 BUF_PTR16
+  POP16 BUF_LEN16
+
+  ; Cursor positioning
+  JSR yank_has_newline
+  BCS .multiline
+
+  ; Single-line: cursor at insertion + total_size - 1 - BATCH_EXTRA
   CLC
   ADC16 BUF_PTR16, BUF_LEN16, BUF_PTR16
   DEC16 BUF_PTR16
-  JMP .cpa_find_pos
+  LDA BUF_PTR16
+  SEC
+  SBC BATCH_EXTRA
+  STA BUF_PTR16
+  LDA BUF_PTR16+1
+  SBC #0
+  STA BUF_PTR16+1
+  JMP .find_pos
 
-.cpa_multiline:
-  ; Multi-line: cursor at first pasted byte (BUF_PTR16 already set)
+.multiline:
+  ; Multi-line: cursor at first pasted byte (BUF_PTR16 = insertion point)
 
-.cpa_find_pos:
+.find_pos:
   JSR find_line_for_ptr      ; sets FILE_LINE16, CURSOR_COL16
   JSR clamp_cursor_col
   LDA #$FF
   STA MODIFIED
+
 .done:
   JMP clear_count
+
+.shift_fail:
+  POP16 BUF_PTR16            ; Clean up stack
+  POP16 BUF_LEN16
+  JSR show_buffer_full_msg
+  JMP clear_count
+
+; Interleaved fill for single-line char paste above
+; Writes iterative-correct pattern into gap:
+;   (C-1) full copies, (E+1) prefixes [0..S-2], (E+1) last bytes [S-1]
+; Input: BUF_PTR16 = write position (gap start)
+;        NORMAL_TEMP = total count N, BATCH_EXTRA = extras E
+;        YANK_SIZE16 = single yank size S (low byte, assumed < 256)
+; Clobbers: A, X, Y, NORMAL_TEMP
+interleaved_fill:
+  ; Phase 1: (C-1) full copies where C = N - E
+  LDA NORMAL_TEMP
+  SEC
+  SBC BATCH_EXTRA
+  SBC #1                     ; A = C - 1
+  BEQ .phase2
+  TAX                        ; X = loop counter
+
+.full_loop:
+  LDY #0
+.full_byte:
+  LDA YANK_BUF,Y
+  STA (BUF_PTR16),Y
+  INY
+  CPY YANK_SIZE16
+  BNE .full_byte
+  ; Advance write ptr by S
+  TYA
+  CLC
+  ADCA16 BUF_PTR16, BUF_PTR16
+  DEX
+  BNE .full_loop
+
+.phase2:
+  ; (E+1) copies of prefix (first S-1 bytes)
+  LDA YANK_SIZE16
+  SEC
+  SBC #1                     ; A = prefix size = S - 1
+  BEQ .phase3                ; S=1, no prefix to write
+  STA NORMAL_TEMP            ; Repurpose NORMAL_TEMP = prefix size
+  LDX BATCH_EXTRA
+  INX                        ; X = E + 1
+
+.prefix_loop:
+  LDY #0
+.prefix_byte:
+  LDA YANK_BUF,Y
+  STA (BUF_PTR16),Y
+  INY
+  CPY NORMAL_TEMP
+  BNE .prefix_byte
+  ; Advance write ptr by prefix size
+  TYA
+  CLC
+  ADCA16 BUF_PTR16, BUF_PTR16
+  DEX
+  BNE .prefix_loop
+
+.phase3:
+  ; (E+1) copies of last byte yank[S-1]
+  LDY YANK_SIZE16
+  DEY                        ; Y = S - 1
+  LDA YANK_BUF,Y             ; A = last byte
+  LDX BATCH_EXTRA
+  INX                        ; X = E + 1
+  LDY #0
+.suffix_loop:
+  STA (BUF_PTR16),Y
+  INY
+  DEX
+  BNE .suffix_loop
+  RTS
+
+; Contiguous fill: write N copies of yank buffer at BUF_PTR16
+; Input: BUF_PTR16 = write position, NORMAL_TEMP = count N
+; Clobbers: A, X, Y, BUF_SRC16, BUF_DST16
+contiguous_fill:
+  LDX NORMAL_TEMP
+.loop:
+  PUSH16 BUF_PTR16           ; Save write position
+  CP16 BUF_PTR16, BUF_DST16  ; BUF_DST16 = write position
+  SET16 YANK_BUF, BUF_SRC16
+  CP16 YANK_END16, BUF_PTR16 ; BUF_PTR16 = end of yank data
+  TXA
+  PHA                        ; Save loop counter
+  JSR mem_copy_down
+  PLA
+  TAX                        ; Restore loop counter
+  POP16 BUF_PTR16            ; Restore write position
+  ; Advance write position by single yank size
+  CLC
+  ADC16 BUF_PTR16, YANK_SIZE16, BUF_PTR16
+  DEX
+  BNE .loop
+  RTS
 
 ; --- Toggle case (~) ---
 normal_toggle_case:
