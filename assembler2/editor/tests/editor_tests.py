@@ -6118,6 +6118,54 @@ class EditorTestRunner:
             expect_unmodified=True
         )
 
+        # Batched ~ (rapid ~~~ toggles 3 chars)
+        self.run_test(
+            "~~~ batched toggles 3 chars",
+            "hello\n",
+            b"~~~:wq\r",
+            expected_content="HELlo\n"
+        )
+
+        # Batched ~ matches count prefix
+        self.run_test(
+            "~~~ batched matches 3~ result",
+            "hello\n",
+            b"3~:wq\r",
+            expected_content="HELlo\n"
+        )
+
+        # Batched ~ cursor position
+        self.run_test_screen(
+            "~~~ batched cursor at col 3",
+            "hello\n",
+            b"~~~:q!\r",
+            expect_cursor=(0, 3),
+        )
+
+        # Count + batch combination
+        self.run_test(
+            "2~ + batched ~ toggles 3 chars",
+            "hello\n",
+            b"2~~:wq\r",
+            expected_content="HELlo\n"
+        )
+
+        # Batched ~ at end of line stops at last char
+        self.run_test(
+            "~~~~~ batched on 3-char line toggles all",
+            "abc\n",
+            b"~~~~~:wq\r",
+            expected_content="ABC\n"
+        )
+
+        # Render: batched ~ is single action frame
+        self.run_test_screen(
+            "Batch ~~~ is single action frame",
+            "hello\n",
+            b"~~~:q!\r",
+            expect_content_redraws=[True, True, False]
+        )
+
         self._group("Join lines (J):", leading_blank=True)
 
         self.run_test(

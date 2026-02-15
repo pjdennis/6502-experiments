@@ -276,8 +276,7 @@ contiguous_fill:
 
 ; --- Toggle case (~) ---
 normal_toggle_case:
-  JSR get_count
-  LDX BUF_TEMP16
+  JSR get_batched_count
 
 .tilde_loop:
   STX NORMAL_TEMP
