@@ -185,10 +185,9 @@ scroll_view_up:
   STA VIEW_TOP_WRAP
   RTS
 
-; Ctrl-D: half-page down
-; Scroll down by half a screen (or count lines). Column preserved.
-normal_half_page_down:
-  ; Determine scroll amount: COUNT16 if set, else (SCREEN_ROWS-1)/2
+; Get half-page scroll amount into BUF_TEMP
+; Uses COUNT16 if set, else (SCREEN_ROWS-1)/2
+get_half_page_amount:
   LDA COUNT16
   ORA COUNT16 + 1
   BNE .use_count
@@ -197,17 +196,23 @@ normal_half_page_down:
   SEC
   SBC #1
   LSR
-  JMP .set_amount
+  JMP .store
 .use_count:
   ; Use COUNT16 as scroll amount (cap to 8-bit)
   LDA COUNT16 + 1
   BNE .cap
   LDA COUNT16
-  JMP .set_amount
+  JMP .store
 .cap:
   LDA #$FF
-.set_amount:
+.store:
   STA BUF_TEMP
+  RTS
+
+; Ctrl-D: half-page down
+; Scroll down by half a screen (or count lines). Column preserved.
+normal_half_page_down:
+  JSR get_half_page_amount
   ; NORMAL_TEMP = content_rows = SCREEN_ROWS - 1
   LDX SCREEN_ROWS
   DEX
@@ -219,26 +224,7 @@ normal_half_page_down:
 ; Ctrl-U: half-page up
 ; Scroll up by half a screen (or count lines). Column preserved.
 normal_half_page_up:
-  ; Determine scroll amount: COUNT16 if set, else (SCREEN_ROWS-1)/2
-  LDA COUNT16
-  ORA COUNT16 + 1
-  BNE .use_count
-  ; No count: half_page = (SCREEN_ROWS - 1) / 2
-  LDA SCREEN_ROWS
-  SEC
-  SBC #1
-  LSR
-  JMP .set_amount
-.use_count:
-  ; Use COUNT16 as scroll amount (cap to 8-bit)
-  LDA COUNT16 + 1
-  BNE .cap
-  LDA COUNT16
-  JMP .set_amount
-.cap:
-  LDA #$FF
-.set_amount:
-  STA BUF_TEMP
+  JSR get_half_page_amount
   JSR scroll_view_up
   JSR clamp_cursor_col
   JMP clear_count
