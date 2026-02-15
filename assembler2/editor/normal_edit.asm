@@ -509,6 +509,8 @@ cc_have_count:
   STA_LH16 CURSOR_COL16
   LDA #$FF
   STA MODIFIED
+  LDA #$02
+  STA RENDER_FLAG        ; Signal line-delete for scroll optimization
   JMP enter_insert_mode
 
 .cc_overflow:

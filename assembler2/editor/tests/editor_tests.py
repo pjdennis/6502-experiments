@@ -8414,6 +8414,25 @@ class EditorTestRunner:
             expect_content_rows=[(3, {3, 7, 8})]
         )
 
+        # 3cc at mid-screen: deletes 3 lines, inserts blank, scroll shifts up.
+        # Net LINE_COUNT16 decrease = 2. Frames: 0=initial, 1='3' count,
+        # 2=jjj cursor, 3=cc scroll frame
+        self.run_test_screen(
+            "Scroll opt: 3cc at mid-screen uses scroll",
+            make_lines(15),
+            b"jjj3cc\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, ""), (4, "Line 7"),
+                (5, "Line 8"), (6, "Line 9"), (7, "Line 10"),
+                (8, "Line 11"),
+            ],
+            expect_cursor=(3, 0),
+            # Frame 3 (3cc): cursor row + bottom 2 rows
+            expect_content_rows=[(3, {3, 7, 8})]
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed
