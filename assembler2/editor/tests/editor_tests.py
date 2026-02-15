@@ -1681,6 +1681,86 @@ class EditorTestRunner:
             ]
         )
 
+        self._group("Screen state - half page scroll:", leading_blank=True)
+
+        CTRL_D = b'\x04'
+
+        # Ctrl-D from start (30 lines): half-page = 4
+        self.run_test_screen(
+            "Ctrl-D: basic half-page down",
+            make_lines(30),
+            CTRL_D + b":q!\r",
+            expect_cursor=(0, 0),
+            expect_lines=[(i, f"Line {i+5}") for i in range(9)]
+        )
+
+        # Two Ctrl-D's
+        self.run_test_screen(
+            "Two Ctrl-D's: full window",
+            make_lines(30),
+            CTRL_D * 2 + b":q!\r",
+            expect_cursor=(0, 0),
+            expect_lines=[(i, f"Line {i+9}") for i in range(9)]
+        )
+
+        # Ctrl-D at end of file: no movement
+        self.run_test_screen(
+            "Ctrl-D at end: no movement",
+            make_lines(30),
+            b"G" + CTRL_D + b":q!\r",
+            expect_cursor=(8, 0),
+            expect_lines=[(i, f"Line {i+22}") for i in range(9)]
+        )
+
+        # Ctrl-D short file (5 lines): cursor moves, view stays
+        self.run_test_screen(
+            "Ctrl-D short file: view stays at top",
+            make_lines(5),
+            CTRL_D + b":q!\r",
+            expect_cursor=(4, 0),
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line 4"), (4, "Line 5"),
+                (5, "~"), (6, "~"), (7, "~"), (8, "~"),
+            ]
+        )
+
+        # Ctrl-D column preserved
+        self.run_test_screen(
+            "Ctrl-D: column preserved",
+            make_lines(30),
+            b"$" + CTRL_D + b":q!\r",
+            expect_cursor=(0, 5),
+            expect_lines=[(i, f"Line {i+5}") for i in range(9)]
+        )
+
+        # Ctrl-D column clamped to shorter line
+        self.run_test_screen(
+            "Ctrl-D: column clamped",
+            "ABCDEFGHIJ\n" + "XY\n" * 12,
+            b"$" + CTRL_D + b":q!\r",
+            expect_cursor=(0, 1),
+            expect_lines=[(i, "XY") for i in range(9)]
+        )
+
+        # Ctrl-D near end: partial scroll, view clamped
+        self.run_test_screen(
+            "Ctrl-D near end: view clamped",
+            make_lines(12),
+            CTRL_D + b":q!\r",
+            expect_cursor=(1, 0),
+            expect_lines=[(i, f"Line {i+4}") for i in range(9)]
+        )
+
+        # Count prefix sets scroll amount
+        self.run_test_screen(
+            "Ctrl-D with count: scroll 2 lines",
+            make_lines(30),
+            b"2" + CTRL_D + b":q!\r",
+            expect_cursor=(0, 0),
+            expect_lines=[(i, f"Line {i+3}") for i in range(9)]
+        )
+
         self._group("Screen state - G and gg:", leading_blank=True)
 
         # G on 20-line file: full window with last line at bottom

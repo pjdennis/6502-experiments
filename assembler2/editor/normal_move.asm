@@ -185,6 +185,37 @@ scroll_view_up:
   STA VIEW_TOP_WRAP
   RTS
 
+; Ctrl-D: half-page down
+; Scroll down by half a screen (or count lines). Column preserved.
+normal_half_page_down:
+  ; Determine scroll amount: COUNT16 if set, else (SCREEN_ROWS-1)/2
+  LDA COUNT16
+  ORA COUNT16 + 1
+  BNE .use_count
+  ; No count: half_page = (SCREEN_ROWS - 1) / 2
+  LDA SCREEN_ROWS
+  SEC
+  SBC #1
+  LSR
+  JMP .set_amount
+.use_count:
+  ; Use COUNT16 as scroll amount (cap to 8-bit)
+  LDA COUNT16 + 1
+  BNE .cap
+  LDA COUNT16
+  JMP .set_amount
+.cap:
+  LDA #$FF
+.set_amount:
+  STA BUF_TEMP
+  ; NORMAL_TEMP = content_rows = SCREEN_ROWS - 1
+  LDX SCREEN_ROWS
+  DEX
+  STX NORMAL_TEMP
+  JSR scroll_view_down
+  JSR clamp_cursor_col
+  JMP clear_count
+
 normal_line_start:
   LDA #0
   STA_LH16 CURSOR_COL16

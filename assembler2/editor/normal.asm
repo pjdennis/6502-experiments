@@ -128,6 +128,7 @@ normal_movement_keys:
   .byte KEY_PGUP    .word normal_page_up
   .byte $06         .word normal_page_down     ; Ctrl-F
   .byte $02         .word normal_page_up       ; Ctrl-B
+  .byte $04         .word normal_half_page_down ; Ctrl-D
   .byte 'G'         .word normal_goto_last
   .byte '/'         .word normal_search
   .byte '?'         .word normal_search_backward
