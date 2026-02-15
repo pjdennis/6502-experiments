@@ -6398,6 +6398,78 @@ class EditorTestRunner:
             expect_cursor=(0, 2),
         )
 
+        # Batched >> (>>>> = two rapid >> combos)
+        self.run_test(
+            ">>>> batched indents two lines",
+            "aaa\nbbb\nccc\n",
+            b">>>>:wq\r",
+            expected_content="  aaa\n  bbb\nccc\n"
+        )
+
+        # Batched >> matches count prefix
+        self.run_test(
+            ">>>> batched matches 2>> result",
+            "aaa\nbbb\nccc\n",
+            b"2>>:wq\r",
+            expected_content="  aaa\n  bbb\nccc\n"
+        )
+
+        # Batched << (<<<< = two rapid << combos)
+        self.run_test(
+            "<<<< batched unindents two lines",
+            "  aaa\n  bbb\n  ccc\n",
+            b"<<<<:wq\r",
+            expected_content="aaa\nbbb\n  ccc\n"
+        )
+
+        # Batched << matches count prefix
+        self.run_test(
+            "<<<< batched matches 2<< result",
+            "  aaa\n  bbb\n  ccc\n",
+            b"2<<:wq\r",
+            expected_content="aaa\nbbb\n  ccc\n"
+        )
+
+        # Triple batched >>
+        self.run_test(
+            ">>>>>> batched indents three lines",
+            "aaa\nbbb\nccc\nddd\n",
+            b">>>>>>:wq\r",
+            expected_content="  aaa\n  bbb\n  ccc\nddd\n"
+        )
+
+        # Batched >> cursor position
+        self.run_test_screen(
+            ">>>> batched cursor col adjusted",
+            "aaa\nbbb\nccc\n",
+            b"l>>>>:q!\r",
+            expect_cursor=(0, 3),
+        )
+
+        # Batched << cursor position
+        self.run_test_screen(
+            "<<<< batched cursor col adjusted",
+            "  aaa\n  bbb\n  ccc\n",
+            b"lll<<<<:q!\r",
+            expect_cursor=(0, 1),
+        )
+
+        # Render: >>>> batched into single action frame
+        self.run_test_screen(
+            "Batch >>>> is single action frame",
+            "aaa\nbbb\nccc\n",
+            b">>>>:q!\r",
+            expect_content_redraws=[True, True, False]
+        )
+
+        # Render: <<<< batched into single action frame
+        self.run_test_screen(
+            "Batch <<<< is single action frame",
+            "  aaa\n  bbb\n  ccc\n",
+            b"<<<<:q!\r",
+            expect_content_redraws=[True, True, False]
+        )
+
         self._group("First non-blank (^):", leading_blank=True)
 
         self.run_test_screen(
