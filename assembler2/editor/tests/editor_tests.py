@@ -8516,6 +8516,47 @@ class EditorTestRunner:
             expect_content_rows=[(2, {0, 1})]
         )
 
+        # dd on a wrapped line: SCROLL_DELTA should be 2 (screen rows), not 1
+        wrap_dd_content = ("Short 0\n"
+                           "This is a longer line!\n"  # 22 chars at 20 cols = 2 rows
+                           + ''.join(f"Short {i}\n" for i in range(2, 12)))
+        self.run_test_screen(
+            "Scroll opt: dd on wrapped line uses correct scroll",
+            wrap_dd_content,
+            b"jdd:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Short 0"), (1, "Short 2"), (2, "Short 3"),
+                (3, "Short 4"), (4, "Short 5"), (5, "Short 6"),
+                (6, "Short 7"), (7, "Short 8"), (8, "Short 9"),
+            ],
+            expect_cursor=(1, 0),
+            # Frame 2 (dd): cursor row 1 + bottom 2 rows (7, 8)
+            expect_content_rows=[(2, {1, 7, 8})]
+        )
+
+        # p pasting a wrapped line: SCROLL_DELTA should be 2 (screen rows)
+        wrap_p_content = ("This is a longer line!\n"  # wraps at 20 cols
+                          + ''.join(f"Short {i}\n" for i in range(1, 12)))
+        self.run_test_screen(
+            "Scroll opt: p pasting wrapped line uses correct scroll",
+            wrap_p_content,
+            b"yyjjjp:q!\r",
+            rows=10, cols=20,
+            # yy yanks line 0 (wrapped). jjj to line 3 = "Short 3" at row 4.
+            # p pastes below: new line 4 = "This is a longer line!" (2 screen rows).
+            # SCROLL_DELTA should be 2.
+            expect_lines=[
+                (0, "This is a longer lin"), (1, "e!"),
+                (2, "Short 1"), (3, "Short 2"), (4, "Short 3"),
+                (5, "This is a longer lin"), (6, "e!"),
+                (7, "Short 4"), (8, "Short 5"),
+            ],
+            expect_cursor=(5, 0),
+            # Frame 3 (p): row above cursor (4) + 2 cursor rows (5, 6)
+            expect_content_rows=[(3, {4, 5, 6})]
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed

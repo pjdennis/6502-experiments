@@ -232,6 +232,19 @@ normal_delete_to_eol:
 ; all N lines in a single operation (one shift, one rebuild).
 do_dd:
   JSR get_count              ; BUF_TEMP16 = count (16-bit)
+
+  ; Pre-compute screen rows of lines being deleted (before deletion)
+  LDA BUF_TEMP16 + 1
+  BNE .dd_skip_precompute    ; Count > 255, skip
+  CP16 FILE_LINE16, RENDER_LINE16
+  LDA BUF_TEMP16
+  JSR compute_delete_screen_rows
+  JMP .dd_after_precompute
+.dd_skip_precompute:
+  LDA #0
+  STA DELETE_SCREEN_ROWS
+.dd_after_precompute:
+
   LDA BATCH_EXTRA
   BEQ .do_yank_delete        ; No batching, standard path
 

@@ -38,6 +38,7 @@ SNAP_LINE_COUNT16: .word ; Snapshot of LINE_COUNT16 before handler
 SNAP_BUF_END16: .word   ; Snapshot of BUF_END16 before handler
 SCROLL_DELTA:   .byte   ; Screen rows to scroll (unsigned)
 RENDER_LIMIT:   .byte   ; Max rows to render (0=unlimited)
+DELETE_SCREEN_ROWS: .byte ; Pre-computed screen rows for line-delete scroll (0=use file delta)
 
   .code
 
@@ -432,7 +433,10 @@ render_decide:
 
 .line_delete_scroll:
   ; LINE_COUNT16 decreased and RENDER_FLAG=$02 (line delete at cursor).
-  ; Compute delta = SNAP_LINE_COUNT16 - LINE_COUNT16
+  ; Use pre-computed DELETE_SCREEN_ROWS if available, else file delta.
+  LDA DELETE_SCREEN_ROWS
+  BNE .have_delete_rows
+  ; Fall back to file line delta
   SEC
   LDA SNAP_LINE_COUNT16
   SBC LINE_COUNT16
@@ -440,6 +444,12 @@ render_decide:
   LDA SNAP_LINE_COUNT16 + 1
   SBC LINE_COUNT16 + 1
   BNE .full                  ; Delta > 255, fall back
+  JMP .delete_check
+.have_delete_rows:
+  STA SCROLL_DELTA
+  LDA #0
+  STA DELETE_SCREEN_ROWS     ; Reset for next frame
+.delete_check:
   LDA SCROLL_DELTA
   BEQ .full                  ; Delta 0, shouldn't happen
 
@@ -458,37 +468,56 @@ render_decide:
 
 .line_insert_scroll:
   ; LINE_COUNT16 increased and RENDER_FLAG=$03 (line insert at cursor).
-  ; Compute delta = LINE_COUNT16 - SNAP_LINE_COUNT16
+  ; Compute file delta = LINE_COUNT16 - SNAP_LINE_COUNT16
   SEC
   LDA LINE_COUNT16
   SBC SNAP_LINE_COUNT16
-  STA SCROLL_DELTA
+  STA RENDER_LIMIT           ; file_delta (temp)
   LDA LINE_COUNT16 + 1
   SBC SNAP_LINE_COUNT16 + 1
   BNE .full                  ; Delta > 255, fall back
-  LDA SCROLL_DELTA
+  LDA RENDER_LIMIT
   BEQ .full                  ; Delta 0, shouldn't happen
+
+  ; Walk inserted lines (FILE_LINE16 for file_delta lines) to compute screen rows
+  CP16 FILE_LINE16, RENDER_LINE16
+  LDA #0
+  STA SCROLL_DELTA
+.walk_ins:
+  LDAX16 RENDER_LINE16
+  JSR buf_get_line_len
+  JSR line_screen_rows
+  CLC
+  ADC SCROLL_DELTA
+  STA SCROLL_DELTA
+  INC16 RENDER_LINE16
+  DEC RENDER_LIMIT
+  BNE .walk_ins
 
   ; Check delta < available rows below cursor
   ; available = SCREEN_ROWS - 1 - CURSOR_ROW
+  LDA SCROLL_DELTA
+  BEQ .ins_full
   LDA SCREEN_ROWS
   SEC
   SBC #1
   SEC
   SBC CURSOR_ROW
   CMP SCROLL_DELTA
-  BCC .full                  ; delta > available
-  BEQ .full                  ; delta == available (no benefit from scroll)
+  BCC .ins_full              ; delta > available
+  BEQ .ins_full              ; delta == available (no benefit from scroll)
 
   JMP render_line_insert_scroll
+.ins_full:
+  JMP .full
 
 .view_changed:
   ; VIEW_TOP16 changed. Try scroll optimization.
   ; Requirement: both old and new VIEW_TOP_WRAP must be 0 (no partial wraps)
   LDA SNAP_VIEW_TOP_WRAP
-  BNE .full
+  BNE .ins_full
   LDA VIEW_TOP_WRAP
-  BNE .full
+  BNE .ins_full
 
   ; Determine direction: new > old = scrolled down (scroll up on screen)
   CMP16 VIEW_TOP16, SNAP_VIEW_TOP16
@@ -957,6 +986,31 @@ line_screen_rows:
   CLC
   ADC #1           ; Add 1 for partial last row
 .exact:
+  RTS
+
+; Pre-compute screen rows of lines for line-delete scroll.
+; Input: A = number of lines to walk, RENDER_LINE16 = starting file line
+; Output: DELETE_SCREEN_ROWS set (0 on overflow = fall back to file delta)
+; Clobbers: A, X, Y, RENDER_LIMIT, RENDER_LINE16, BUF_PTR16, DIV_INPUT16
+compute_delete_screen_rows:
+  STA RENDER_LIMIT
+  LDA #0
+  STA DELETE_SCREEN_ROWS
+.loop:
+  LDAX16 RENDER_LINE16
+  JSR buf_get_line_len
+  JSR line_screen_rows
+  CLC
+  ADC DELETE_SCREEN_ROWS
+  BCS .overflow              ; > 255
+  STA DELETE_SCREEN_ROWS
+  INC16 RENDER_LINE16
+  DEC RENDER_LIMIT
+  BNE .loop
+  RTS
+.overflow:
+  LDA #0
+  STA DELETE_SCREEN_ROWS     ; Signal fall back to file delta
   RTS
 
 ; Ensure cursor is visible on screen (wrap-aware)
