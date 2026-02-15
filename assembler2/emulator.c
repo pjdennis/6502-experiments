@@ -1845,7 +1845,7 @@ uint8_t read6502(uint16_t address) {
         }
         if (console_mode) {
             struct timespec before, after;
-            if (target_mhz > 0) clock_gettime(CLOCK_MONOTONIC, &before);
+            clock_gettime(CLOCK_MONOTONIC, &before);
             uint8_t ch;
             int got = read(STDIN_FILENO, &ch, 1);
             if (got < 0 && errno == EINTR && sigint_requested) {
@@ -1853,20 +1853,18 @@ uint8_t read6502(uint16_t address) {
                 done = 1;
                 return 0;
             }
-            if (target_mhz > 0) {
-                clock_gettime(CLOCK_MONOTONIC, &after);
-                long sec_diff = after.tv_sec - before.tv_sec;
-                long nsec_diff = after.tv_nsec - before.tv_nsec;
-                start_time.tv_sec += sec_diff;
-                start_time.tv_nsec += nsec_diff;
-                if (start_time.tv_nsec >= 1000000000L) {
-                    start_time.tv_sec++;
-                    start_time.tv_nsec -= 1000000000L;
-                }
-                if (start_time.tv_nsec < 0) {
-                    start_time.tv_sec--;
-                    start_time.tv_nsec += 1000000000L;
-                }
+            clock_gettime(CLOCK_MONOTONIC, &after);
+            long sec_diff = after.tv_sec - before.tv_sec;
+            long nsec_diff = after.tv_nsec - before.tv_nsec;
+            start_time.tv_sec += sec_diff;
+            start_time.tv_nsec += nsec_diff;
+            if (start_time.tv_nsec >= 1000000000L) {
+                start_time.tv_sec++;
+                start_time.tv_nsec -= 1000000000L;
+            }
+            if (start_time.tv_nsec < 0) {
+                start_time.tv_sec--;
+                start_time.tv_nsec += 1000000000L;
             }
             if (got == 1) return ch;
             return 0;
@@ -1934,7 +1932,7 @@ uint8_t read6502(uint16_t address) {
         // No baud rate - direct read
         if (terminal_interactive) {
             struct timespec before, after;
-            if (target_mhz > 0) clock_gettime(CLOCK_MONOTONIC, &before);
+            clock_gettime(CLOCK_MONOTONIC, &before);
             uint8_t ch;
             int got = read(STDIN_FILENO, &ch, 1);
             if (got < 0 && errno == EINTR && sigint_requested) {
@@ -1942,20 +1940,18 @@ uint8_t read6502(uint16_t address) {
                 done = 1;
                 return 0;
             }
-            if (target_mhz > 0) {
-                clock_gettime(CLOCK_MONOTONIC, &after);
-                long sec_diff = after.tv_sec - before.tv_sec;
-                long nsec_diff = after.tv_nsec - before.tv_nsec;
-                start_time.tv_sec += sec_diff;
-                start_time.tv_nsec += nsec_diff;
-                if (start_time.tv_nsec >= 1000000000L) {
-                    start_time.tv_sec++;
-                    start_time.tv_nsec -= 1000000000L;
-                }
-                if (start_time.tv_nsec < 0) {
-                    start_time.tv_sec--;
-                    start_time.tv_nsec += 1000000000L;
-                }
+            clock_gettime(CLOCK_MONOTONIC, &after);
+            long sec_diff = after.tv_sec - before.tv_sec;
+            long nsec_diff = after.tv_nsec - before.tv_nsec;
+            start_time.tv_sec += sec_diff;
+            start_time.tv_nsec += nsec_diff;
+            if (start_time.tv_nsec >= 1000000000L) {
+                start_time.tv_sec++;
+                start_time.tv_nsec -= 1000000000L;
+            }
+            if (start_time.tv_nsec < 0) {
+                start_time.tv_sec--;
+                start_time.tv_nsec += 1000000000L;
             }
             if (got == 1) return ch;
             return 0;
@@ -2516,9 +2512,7 @@ int main(int argc, char **argv) {
     reset6502();
 
     uint64_t next_throttle_check = 10000;
-    if (target_mhz > 0) {
-        clock_gettime(CLOCK_MONOTONIC, &start_time);
-    }
+    clock_gettime(CLOCK_MONOTONIC, &start_time);
 
     const int max_cycles = 100000000;
     while (!done) {
@@ -2619,12 +2613,26 @@ int main(int argc, char **argv) {
         exitcode = 1;
     }
 
+    // Compute MHz for display
+    double display_mhz = 0.0;
+    if (target_mhz > 0) {
+        display_mhz = target_mhz;
+    } else {
+        struct timespec end_time;
+        clock_gettime(CLOCK_MONOTONIC, &end_time);
+        double elapsed_us = (end_time.tv_sec - start_time.tv_sec) * 1e6
+                          + (end_time.tv_nsec - start_time.tv_nsec) / 1e3;
+        if (elapsed_us > 0) {
+            display_mhz = (double)clockticks6502 / elapsed_us;
+        }
+    }
+
     // Print final status line (skip in console/terminal mode)
     if (!console_mode && !terminal_mode) {
         if (error_output_started || exitcode != 0) {
-            fprintf(stderr, "Exit code %d; Executed %llu cycles\n", exitcode, (unsigned long long)clockticks6502);
+            fprintf(stderr, "Exit code %d; Executed %llu cycles at %.1f MHz\n", exitcode, (unsigned long long)clockticks6502, display_mhz);
         } else {
-            fprintf(stderr, "executed %llu cycles\n", (unsigned long long)clockticks6502);
+            fprintf(stderr, "executed %llu cycles at %.1f MHz\n", (unsigned long long)clockticks6502, display_mhz);
         }
     }
 
