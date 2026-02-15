@@ -1029,6 +1029,7 @@ DirState *dir_state[255];
 
 FILE* input_file_ptr;
 FILE* output_file_ptr;
+int con_eof_flag = 0;
 
 int arg_count;
 uint16_t* arg_addresses;
@@ -1870,7 +1871,7 @@ uint8_t read6502(uint16_t address) {
             return 0;
         } else {
             int b = fgetc(input_file_ptr);
-            if (b == EOF) return 4;
+            if (b == EOF) { con_eof_flag = 1; return 0; }
             return b;
         }
     } else if (address == port_term_rows) {           // term_rows
@@ -1890,7 +1891,7 @@ uint8_t read6502(uint16_t address) {
         if (console_mode) {
             return con_byte_ready() ? 0xFF : 0x00;
         } else {
-            return 0xFF;  // In file mode, always ready
+            return con_eof_flag ? 0x00 : 0xFF;
         }
     } else if (address == port_serial_ready) {        // serial_ready
         if (serial_baud > 0)

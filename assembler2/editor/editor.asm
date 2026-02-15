@@ -161,7 +161,12 @@ main_loop:
   CMP #$FF
   BEQ .key_available
 
-  ; No input - do background work and loop
+  ; No input - check for EOF in file mode
+  .ifndef terminal_mode
+  JSR io_ready
+  CMP #$FF
+  BNE .editor_exit
+  .endif
   JSR background_work
   JMP main_loop
 
@@ -173,11 +178,17 @@ main_loop:
   ; Read a key
   JSR get_key
 
-  ; EOT ($04) = end of input (for scripted/test mode)
-  CMP #$04
-  BNE .not_eot
+  ; In file mode, check if input is exhausted (EOF)
+  .ifndef terminal_mode
+  PHA
+  JSR io_ready
+  CMP #$FF
+  BEQ .not_eof
+  PLA
   JMP .editor_exit
-.not_eot:
+.not_eof:
+  PLA
+  .endif
 
   ; Dispatch based on mode
   LDX MODE
