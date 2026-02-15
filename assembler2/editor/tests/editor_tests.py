@@ -8472,6 +8472,50 @@ class EditorTestRunner:
             expect_content_rows=[(3, {2, 8})]
         )
 
+        # j past bottom with wrapped line between old/new VIEW_TOP.
+        # Line 0 wraps (22 chars at 20 cols = 2 rows). When scrolling past it,
+        # SCROLL_DELTA should accumulate 2 screen rows, not fall back.
+        # Lines 1-19 are short (1 row each).
+        wrap_content = ("This is a longer line!\n"
+                        + ''.join(f"Short {i}\n" for i in range(1, 20)))
+        self.run_test_screen(
+            "Scroll opt: j past bottom with wrapped line uses scroll",
+            wrap_content,
+            b"j" * 9 + b":q!\r",
+            rows=10, cols=20,
+            # VIEW_TOP scrolls from 0 to 1 (past wrapping line 0 = 2 screen rows).
+            # SCROLL_DELTA = 2 screen rows (line 0: 2 rows)
+            expect_lines=[
+                (0, "Short 1"), (1, "Short 2"), (2, "Short 3"),
+                (3, "Short 4"), (4, "Short 5"), (5, "Short 6"),
+                (6, "Short 7"), (7, "Short 8"),
+                (8, "Short 9"),
+            ],
+            expect_cursor=(8, 0),
+            # Scroll optimization: only bottom 2 rows touched (not all 9)
+            expect_content_rows=[(1, {7, 8})]
+        )
+
+        # k past top with wrapped line between old/new VIEW_TOP.
+        # After scrolling down past the wrapping line, scroll back up.
+        self.run_test_screen(
+            "Scroll opt: k past top with wrapped line uses scroll",
+            wrap_content,
+            b"j" * 9 + b"k" * 9 + b":q!\r",
+            rows=10, cols=20,
+            # VIEW_TOP scrolls back from 1 to 0 (past wrapping line 0).
+            # SCROLL_DELTA = 2 screen rows
+            expect_lines=[
+                (0, "This is a longer lin"), (1, "e!"),
+                (2, "Short 1"), (3, "Short 2"), (4, "Short 3"),
+                (5, "Short 4"), (6, "Short 5"), (7, "Short 6"),
+                (8, "Short 7"),
+            ],
+            expect_cursor=(0, 0),
+            # Scroll optimization: only top 2 rows touched (not all 9)
+            expect_content_rows=[(2, {0, 1})]
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed

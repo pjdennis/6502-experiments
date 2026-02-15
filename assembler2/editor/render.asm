@@ -495,7 +495,6 @@ render_decide:
   BCC .scroll_down_detect    ; VIEW_TOP16 < SNAP → scrolled up (screen scrolls down)
 
   ; Scrolled down: walk from old VIEW_TOP to new VIEW_TOP, summing screen rows
-  ; If any line wraps (>1 row), fall back to full repaint
   CP16 SNAP_VIEW_TOP16, RENDER_LINE16
   LDA #0
   STA SCROLL_DELTA
@@ -505,9 +504,9 @@ render_decide:
   LDAX16 RENDER_LINE16
   JSR buf_get_line_len
   JSR line_screen_rows
-  CMP #1
-  BNE .scroll_full           ; Wrapped line → fall back
-  INC SCROLL_DELTA
+  CLC
+  ADC SCROLL_DELTA
+  STA SCROLL_DELTA
   INC16 RENDER_LINE16
   JMP .scroll_up_walk
 
@@ -535,9 +534,9 @@ render_decide:
   LDAX16 RENDER_LINE16
   JSR buf_get_line_len
   JSR line_screen_rows
-  CMP #1
-  BNE .scroll_full           ; Wrapped line → fall back
-  INC SCROLL_DELTA
+  CLC
+  ADC SCROLL_DELTA
+  STA SCROLL_DELTA
   INC16 RENDER_LINE16
   JMP .scroll_down_walk
 
@@ -578,12 +577,9 @@ render_scroll_up:
   SEC
   SBC SCROLL_DELTA
   STA RENDER_ROW
-  STA RENDER_LIMIT         ; Will render SCROLL_DELTA rows from here
 
   ; Find the file line at RENDER_ROW by walking from VIEW_TOP16
   JSR find_line_at_render_row
-  LDA #0
-  STA RENDER_WRAP
   JMP render_limited_rows
 
 ; Scroll screen down and render newly exposed top rows.
@@ -667,8 +663,6 @@ render_line_delete_scroll:
 
   ; Find the file line at RENDER_ROW
   JSR find_line_at_render_row
-  LDA #0
-  STA RENDER_WRAP
   JMP render_limited_rows
 
 ; Scroll for line insertion at cursor.
@@ -727,8 +721,6 @@ render_line_insert_scroll:
 
   ; Find the file line at RENDER_ROW
   JSR find_line_at_render_row
-  LDA #0
-  STA RENDER_WRAP
   JMP render_limited_rows
 
 ; Render limited rows: renders SCROLL_DELTA rows starting at
@@ -827,20 +819,39 @@ render_limited_rows:
   JMP io_flush
 
 ; Walk from VIEW_TOP16 forward to find which file line corresponds
-; to screen row RENDER_ROW. Sets RENDER_LINE16.
-; Assumes no wrapping (lines occupy 1 row each - verified by caller).
+; to screen row RENDER_ROW. Sets RENDER_LINE16 and RENDER_WRAP.
+; Handles wrapped lines (one file line can span multiple screen rows).
 ; Input: RENDER_ROW = target screen row
 ; Output: RENDER_LINE16 = file line at that row
+;         RENDER_WRAP = wrap row offset within the line
 ; Clobbers: A, X
 find_line_at_render_row:
   CP16 VIEW_TOP16, RENDER_LINE16
+  LDA #0
+  STA RENDER_WRAP
   LDA RENDER_ROW
   BEQ .found
-  TAX                     ; X = rows to skip
+  STA RENDER_LIMIT         ; remaining rows to skip
 .walk:
+  LDAX16 RENDER_LINE16
+  JSR buf_get_line_len
+  JSR line_screen_rows     ; A = screen rows for this line
+  CMP RENDER_LIMIT
+  BEQ .skip_line           ; exactly consumes remaining → next line
+  BCS .within_line         ; target is within this wrapped line
+.skip_line:
+  ; Subtract A (screen rows) from RENDER_LIMIT without clobbering RENDER_WRAP
+  EOR #$FF
+  SEC
+  ADC RENDER_LIMIT         ; RENDER_LIMIT - screen_rows
+  STA RENDER_LIMIT
   INC16 RENDER_LINE16
-  DEX
-  BNE .walk
+  LDA RENDER_LIMIT
+  BEQ .found               ; remaining=0, RENDER_WRAP is still 0 from init
+  JMP .walk
+.within_line:
+  LDA RENDER_LIMIT
+  STA RENDER_WRAP
 .found:
   RTS
 
