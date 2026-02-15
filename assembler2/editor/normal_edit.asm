@@ -15,6 +15,8 @@ normal_paste_below:
   JSR yank_paste_below_n
   BCS .paste_below_done
   JSR paste_adjust_marks
+  LDA #$03
+  STA RENDER_FLAG        ; Signal line-insert for scroll optimization
   ; Cursor: yank_paste_below_n does INC16 once; add extras for iterative semantics
   LDA BATCH_EXTRA
   BEQ .paste_below_done
@@ -35,6 +37,8 @@ normal_paste_above:
   JSR yank_paste_above_n
   BCS .paste_above_done
   JSR paste_adjust_marks
+  LDA #$03
+  STA RENDER_FLAG        ; Signal line-insert for scroll optimization
   ; No cursor adjustment - yank_paste_above_n doesn't change FILE_LINE16
 .paste_above_done:
   JMP clear_count
@@ -520,8 +524,15 @@ do_indent:
   LDA BATCH_EXTRA
   CLC
   ADC #1                       ; A = 1 + BATCH_EXTRA
-  ASL                          ; A = 2 * (1 + BATCH_EXTRA)  [INDENT_WIDTH=2]
-  STA BUF_DELTA
+  STA BUF_DELTA                ; temp = repeat_count
+  LDA #0
+  LDX #INDENT_WIDTH
+.indent_mul_bd:
+  CLC
+  ADC BUF_DELTA
+  DEX
+  BNE .indent_mul_bd
+  STA BUF_DELTA                ; BUF_DELTA = INDENT_WIDTH * repeat_count
 
   ; Undo batch_pending_pairs COUNT16 addition (>> count = line count, not repeat)
   LDA BATCH_EXTRA
@@ -579,20 +590,16 @@ do_indent:
   JMP .indent_no_col_adj
 .indent_has_ne:
 
-  ; total_shift = N_ne * BUF_DELTA = N_ne * 2 * (1 + BATCH_EXTRA)
-  ; First: BUF_LEN16 = N_ne * 2
-  CP16 COUNT16, BUF_LEN16
-  ASL16 BUF_LEN16              ; BUF_LEN16 = N_ne * 2
-  ; Multiply by (1 + BATCH_EXTRA): add N_ne*2 BATCH_EXTRA more times
-  LDX BATCH_EXTRA
-  BEQ .indent_mul_done
-  CP16 BUF_LEN16, COUNT16     ; COUNT16 = base = N_ne * 2
-.indent_mul_loop:
+  ; total_shift = N_ne * BUF_DELTA
+  LDA #0
+  STA BUF_LEN16
+  STA BUF_LEN16+1              ; BUF_LEN16 = 0
+  LDX BUF_DELTA
+.indent_mul_ts:
   CLC
   ADC16 BUF_LEN16, COUNT16, BUF_LEN16
   DEX
-  BNE .indent_mul_loop
-.indent_mul_done:
+  BNE .indent_mul_ts
   ; BUF_LEN16 = total_shift
 
   ; Get first line start
@@ -659,8 +666,15 @@ do_unindent:
   LDA BATCH_EXTRA
   CLC
   ADC #1                       ; A = 1 + BATCH_EXTRA
-  ASL                          ; A = 2 * (1 + BATCH_EXTRA)  [INDENT_WIDTH=2]
-  STA BUF_DELTA
+  STA BUF_DELTA                ; temp = repeat_count
+  LDA #0
+  LDX #INDENT_WIDTH
+.unindent_mul_bd:
+  CLC
+  ADC BUF_DELTA
+  DEX
+  BNE .unindent_mul_bd
+  STA BUF_DELTA                ; BUF_DELTA = INDENT_WIDTH * repeat_count
 
   ; Undo batch_pending_pairs COUNT16 addition (<< count = line count, not repeat)
   LDA BATCH_EXTRA

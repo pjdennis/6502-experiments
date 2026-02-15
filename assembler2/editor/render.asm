@@ -401,10 +401,14 @@ render_decide:
   ; Check LINE_COUNT16 changed
   CMP16 SNAP_LINE_COUNT16, LINE_COUNT16
   BEQ .line_count_same
-  ; LINE_COUNT16 changed - check for line-delete scroll optimization
+  ; LINE_COUNT16 changed - check for scroll optimizations
   LDA RENDER_FLAG
   CMP #$02
   BEQ .line_delete_scroll
+  CMP #$03
+  BNE .not_line_insert
+  JMP .line_insert_scroll
+.not_line_insert:
   JMP .full
 .line_count_same:
 
@@ -451,6 +455,32 @@ render_decide:
   BEQ .full                  ; delta == available (no point in scroll)
 
   JMP render_line_delete_scroll
+
+.line_insert_scroll:
+  ; LINE_COUNT16 increased and RENDER_FLAG=$03 (line insert at cursor).
+  ; Compute delta = LINE_COUNT16 - SNAP_LINE_COUNT16
+  SEC
+  LDA LINE_COUNT16
+  SBC SNAP_LINE_COUNT16
+  STA SCROLL_DELTA
+  LDA LINE_COUNT16 + 1
+  SBC SNAP_LINE_COUNT16 + 1
+  BNE .full                  ; Delta > 255, fall back
+  LDA SCROLL_DELTA
+  BEQ .full                  ; Delta 0, shouldn't happen
+
+  ; Check delta < available rows below cursor
+  ; available = SCREEN_ROWS - 1 - CURSOR_ROW
+  LDA SCREEN_ROWS
+  SEC
+  SBC #1
+  SEC
+  SBC CURSOR_ROW
+  CMP SCROLL_DELTA
+  BCC .full                  ; delta > available
+  BEQ .full                  ; delta == available (no benefit from scroll)
+
+  JMP render_line_insert_scroll
 
 .view_changed:
   ; VIEW_TOP16 changed. Try scroll optimization.
@@ -616,6 +646,39 @@ render_line_delete_scroll:
   SBC #1
   SEC
   SBC SCROLL_DELTA
+  STA RENDER_ROW
+
+  ; Find the file line at RENDER_ROW
+  JSR find_line_at_render_row
+  LDA #0
+  STA RENDER_WRAP
+  JMP render_limited_rows
+
+; Scroll for line insertion at cursor.
+; SCROLL_DELTA = lines inserted. CURSOR_ROW = screen row of insertion.
+; Scrolls rows from cursor down, renders newly inserted rows at cursor.
+render_line_insert_scroll:
+  JSR ansi_cursor_hide
+
+  ; Set scroll region from CURSOR_ROW+1 (1-based) to SCREEN_ROWS-1 (1-based)
+  ; This covers the cursor row through the bottom content row.
+  LDA CURSOR_ROW
+  CLC
+  ADC #1           ; Convert to 1-based
+  STA ANSI_ROW
+  LDA SCREEN_ROWS
+  SEC
+  SBC #1
+  STA ANSI_COL
+  JSR ansi_set_scroll_region
+
+  ; Scroll down by SCROLL_DELTA
+  LDA SCROLL_DELTA
+  JSR ansi_scroll_down
+  JSR ansi_reset_scroll_region
+
+  ; Render SCROLL_DELTA rows at CURSOR_ROW (newly inserted content).
+  LDA CURSOR_ROW
   STA RENDER_ROW
 
   ; Find the file line at RENDER_ROW

@@ -8324,6 +8324,61 @@ class EditorTestRunner:
             expect_content_rows=[(2, {6, 7, 8})]
         )
 
+        # o at mid-screen: scroll shifts rows below insertion down,
+        # only new empty line needs rendering.
+        # Frames: 0=initial, 1=jjj cursor, 2=o scroll frame
+        self.run_test_screen(
+            "Scroll opt: o at mid-screen uses scroll",
+            make_lines(15),
+            b"jjjo\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line 4"), (4, ""),
+                (5, "Line 5"), (6, "Line 6"), (7, "Line 7"),
+                (8, "Line 8"),
+            ],
+            expect_cursor=(4, 0),
+            # Frame 2 (o): only new line row (4) should be touched
+            expect_content_rows=[(2, {4})]
+        )
+
+        # O at mid-screen: scroll shifts cursor row and below down,
+        # only new empty line needs rendering.
+        self.run_test_screen(
+            "Scroll opt: O at mid-screen uses scroll",
+            make_lines(15),
+            b"jjjO\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, ""),
+                (4, "Line 4"), (5, "Line 5"), (6, "Line 6"),
+                (7, "Line 7"), (8, "Line 8"),
+            ],
+            expect_cursor=(3, 0),
+            # Frame 2 (O): only new line row (3) should be touched
+            expect_content_rows=[(2, {3})]
+        )
+
+        # p (line paste below) at mid-screen uses scroll
+        # Frames: 0=initial, 1=jjj cursor, 2=yy status, 3=p scroll
+        self.run_test_screen(
+            "Scroll opt: p (line paste) uses scroll",
+            make_lines(15),
+            b"jjjyyp:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line 4"), (4, "Line 4"),
+                (5, "Line 5"), (6, "Line 6"), (7, "Line 7"),
+                (8, "Line 8"),
+            ],
+            expect_cursor=(4, 0),
+            # Frame 3 (p): only pasted row (4) should be touched
+            expect_content_rows=[(3, {4})]
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed

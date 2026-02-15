@@ -319,6 +319,8 @@ normal_open_below:
   STA_LH16 CURSOR_COL16
   LDA #$FF
   STA MODIFIED
+  LDA #$03
+  STA RENDER_FLAG        ; Signal line-insert for scroll optimization
   JMP enter_insert_mode
 .open_below_full:
   JSR show_buffer_full_msg
@@ -345,6 +347,8 @@ normal_open_above:
   STA_LH16 CURSOR_COL16
   LDA #$FF
   STA MODIFIED
+  LDA #$03
+  STA RENDER_FLAG        ; Signal line-insert for scroll optimization
   JMP enter_insert_mode
 .open_above_full:
   JSR show_buffer_full_msg
