@@ -220,7 +220,8 @@ main_loop:
   JMP main_loop
 
 .editor_exit:
-  ; Clear screen and exit
+  ; Reset scroll region and clear screen before exit
+  JSR ansi_reset_scroll_region
   JSR ansi_clear_screen
   JSR io_flush
   LDA #0

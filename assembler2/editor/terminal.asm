@@ -73,14 +73,57 @@ ansi_normal_video:
   SET16 ansi_seq_norm, STR_PTR16
   JMP ansi_write_seq
 
+; Set scroll region: ANSI_ROW = top (1-based), ANSI_COL = bottom (1-based)
+; Emits ESC[top;bottomr
+; Clobbers A, X, Y
+ansi_set_scroll_region:
+  JSR ansi_csi
+  LDA ANSI_ROW
+  JSR write_byte_dec
+  LDA #';'
+  JSR io_write
+  LDA ANSI_COL
+  JSR write_byte_dec
+  LDA #'r'
+  JMP io_write
+
+; Reset scroll region to full screen: ESC[r
+; Clobbers A, Y
+ansi_reset_scroll_region:
+  SET16 ansi_seq_reset_sr, STR_PTR16
+  JMP ansi_write_seq
+
+; Scroll up by A lines (content moves up, blanks at bottom of region)
+; Emits ESC[nS. Input: A = count
+; Clobbers A, X, Y
+ansi_scroll_up:
+  PHA
+  JSR ansi_csi
+  PLA
+  JSR write_byte_dec
+  LDA #'S'
+  JMP io_write
+
+; Scroll down by A lines (content moves down, blanks at top of region)
+; Emits ESC[nT. Input: A = count
+; Clobbers A, X, Y
+ansi_scroll_down:
+  PHA
+  JSR ansi_csi
+  PLA
+  JSR write_byte_dec
+  LDA #'T'
+  JMP io_write
+
 ; ANSI sequence string constants
-ansi_seq_clear:  .asciiz "2J"
-ansi_seq_home:   .asciiz "H"
-ansi_seq_clreol: .asciiz "K"
-ansi_seq_show:   .asciiz "?25h"
-ansi_seq_hide:   .asciiz "?25l"
-ansi_seq_rev:    .asciiz "7m"
-ansi_seq_norm:   .asciiz "0m"
+ansi_seq_clear:    .asciiz "2J"
+ansi_seq_home:     .asciiz "H"
+ansi_seq_clreol:   .asciiz "K"
+ansi_seq_show:     .asciiz "?25h"
+ansi_seq_hide:     .asciiz "?25l"
+ansi_seq_rev:      .asciiz "7m"
+ansi_seq_norm:     .asciiz "0m"
+ansi_seq_reset_sr: .asciiz "r"
 
 ; Write null-terminated string pointed to by STR_PTR16
 ; Clobbers A, Y

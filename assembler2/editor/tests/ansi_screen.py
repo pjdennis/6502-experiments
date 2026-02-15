@@ -12,6 +12,10 @@ Supported sequences:
     ESC[7m / ESC[0m - Reverse/normal video (tracked per-cell in attrs buffer)
     ESC[?25l        - Cursor hide
     ESC[?25h        - Cursor show (triggers frame snapshot)
+    ESC[{t};{b}r    - Set scroll region (1-based top;bottom)
+    ESC[r           - Reset scroll region to full screen
+    ESC[{n}S        - Scroll up n lines (content moves up, blanks at bottom)
+    ESC[{n}T        - Scroll down n lines (content moves down, blanks at top)
 
 Deferred auto-wrap (opt-in via deferred_wrap=True):
     Matches real VT100/xterm behavior where writing to the last column
@@ -39,6 +43,9 @@ class AnsiScreen:
         self.frame_buffer = None
         self.frame_attrs = None
         self.frame_cursor = (0, 0)
+        # Scroll region (0-based, inclusive)
+        self.scroll_top = 0
+        self.scroll_bottom = rows - 1
         # Per-frame tracking for render optimization tests
         self.frames = []            # List of (buffer_copy, cursor_pos, content_touched, attrs_copy)
         self.content_touched = set()  # Set of content row indices written this cycle
@@ -90,6 +97,42 @@ class AnsiScreen:
             self.cursor_row += 1
             if self.cursor_row >= self.rows:
                 self.cursor_row = self.rows - 1
+
+    def _set_scroll_region(self, top, bottom):
+        """Set scroll region (0-based, inclusive)."""
+        self.scroll_top = max(0, min(top, self.rows - 1))
+        self.scroll_bottom = max(0, min(bottom, self.rows - 1))
+
+    def _reset_scroll_region(self):
+        """Reset scroll region to full screen."""
+        self.scroll_top = 0
+        self.scroll_bottom = self.rows - 1
+
+    def _scroll_region_up(self, n):
+        """Scroll region up: remove n rows from top, insert blanks at bottom."""
+        for _ in range(n):
+            if self.scroll_top > self.scroll_bottom:
+                break
+            del self.buffer[self.scroll_top]
+            del self.attrs[self.scroll_top]
+            self.buffer.insert(self.scroll_bottom, [' '] * self.cols)
+            self.attrs.insert(self.scroll_bottom, [0] * self.cols)
+        for r in range(self.scroll_top, self.scroll_bottom + 1):
+            if r < self.rows - 1:
+                self.content_touched.add(r)
+
+    def _scroll_region_down(self, n):
+        """Scroll region down: remove n rows from bottom, insert blanks at top."""
+        for _ in range(n):
+            if self.scroll_top > self.scroll_bottom:
+                break
+            del self.buffer[self.scroll_bottom]
+            del self.attrs[self.scroll_bottom]
+            self.buffer.insert(self.scroll_top, [' '] * self.cols)
+            self.attrs.insert(self.scroll_top, [0] * self.cols)
+        for r in range(self.scroll_top, self.scroll_bottom + 1):
+            if r < self.rows - 1:
+                self.content_touched.add(r)
 
     def _snapshot(self):
         """Capture current buffer and cursor as a frame."""
@@ -172,6 +215,23 @@ class AnsiScreen:
             if params == '?25':
                 self.cursor_visible = True
                 self._snapshot()
+        elif final == 'r':
+            # Set/reset scroll region
+            if params == '' or params == ';':
+                self._reset_scroll_region()
+            else:
+                parts = params.split(';')
+                top = int(parts[0]) - 1 if parts[0] else 0
+                bottom = int(parts[1]) - 1 if len(parts) > 1 and parts[1] else self.rows - 1
+                self._set_scroll_region(top, bottom)
+        elif final == 'S':
+            # Scroll up
+            n = int(params) if params else 1
+            self._scroll_region_up(n)
+        elif final == 'T':
+            # Scroll down
+            n = int(params) if params else 1
+            self._scroll_region_down(n)
 
     def get_frame_count(self) -> int:
         """Number of rendered frames (cursor-show events)."""
@@ -334,5 +394,58 @@ if __name__ == "__main__":
     s9.process("F")         # resolves wrap: cursor to (1,0), writes 'F'
     assert s9.buffer[0] == list("ABCDE"), f"row 0: {''.join(s9.buffer[0])!r}"
     assert s9.buffer[1][0] == 'F', f"row 1 col 0: {s9.buffer[1][0]!r}"
+
+    # Test scroll region: set region and scroll up
+    s10 = AnsiScreen(5, 10)
+    # Fill rows: row0="AAA", row1="BBB", row2="CCC", row3="DDD", row4="EEE"
+    s10.process("\x1b[1;1HAAA\x1b[2;1HBBB\x1b[3;1HCCC\x1b[4;1HDDD\x1b[5;1HEEE")
+    # Set scroll region rows 2-4 (1-based), then scroll up 1
+    s10.process("\x1b[2;4r")
+    s10.process("\x1b[1S")
+    s10.process("\x1b[r")  # reset scroll region
+    s10.process("\x1b[?25h")
+    # Row 0 unchanged (outside region), rows 1-3 shifted up within region
+    assert s10.get_row_text(0) == "AAA", f"got {s10.get_row_text(0)!r}"
+    assert s10.get_row_text(1) == "CCC", f"got {s10.get_row_text(1)!r}"
+    assert s10.get_row_text(2) == "DDD", f"got {s10.get_row_text(2)!r}"
+    assert s10.get_row_text(3) == "", f"got {s10.get_row_text(3)!r}"  # blank
+    assert s10.get_row_text(4) == "EEE", f"got {s10.get_row_text(4)!r}"
+
+    # Test scroll region: scroll down
+    s11 = AnsiScreen(5, 10)
+    s11.process("\x1b[1;1HAAA\x1b[2;1HBBB\x1b[3;1HCCC\x1b[4;1HDDD\x1b[5;1HEEE")
+    # Set scroll region rows 2-4 (1-based), then scroll down 1
+    s11.process("\x1b[2;4r")
+    s11.process("\x1b[1T")
+    s11.process("\x1b[r")
+    s11.process("\x1b[?25h")
+    assert s11.get_row_text(0) == "AAA", f"got {s11.get_row_text(0)!r}"
+    assert s11.get_row_text(1) == "", f"got {s11.get_row_text(1)!r}"  # blank
+    assert s11.get_row_text(2) == "BBB", f"got {s11.get_row_text(2)!r}"
+    assert s11.get_row_text(3) == "CCC", f"got {s11.get_row_text(3)!r}"
+    assert s11.get_row_text(4) == "EEE", f"got {s11.get_row_text(4)!r}"
+
+    # Test scroll region: scroll up by 2
+    s12 = AnsiScreen(6, 10)
+    s12.process("\x1b[1;1HAAA\x1b[2;1HBBB\x1b[3;1HCCC\x1b[4;1HDDD\x1b[5;1HEEE\x1b[6;1HFFF")
+    s12.process("\x1b[1;5r")  # region rows 1-5 (0-based 0-4)
+    s12.process("\x1b[2S")    # scroll up 2
+    s12.process("\x1b[r")
+    s12.process("\x1b[?25h")
+    assert s12.get_row_text(0) == "CCC", f"got {s12.get_row_text(0)!r}"
+    assert s12.get_row_text(1) == "DDD", f"got {s12.get_row_text(1)!r}"
+    assert s12.get_row_text(2) == "EEE", f"got {s12.get_row_text(2)!r}"
+    assert s12.get_row_text(3) == "", f"got {s12.get_row_text(3)!r}"
+    assert s12.get_row_text(4) == "", f"got {s12.get_row_text(4)!r}"
+    assert s12.get_row_text(5) == "FFF", f"got {s12.get_row_text(5)!r}"
+
+    # Test reset scroll region (ESC[r with no params)
+    s13 = AnsiScreen(3, 10)
+    s13.process("\x1b[2;2r")  # set narrow region
+    assert s13.scroll_top == 1
+    assert s13.scroll_bottom == 1
+    s13.process("\x1b[r")     # reset
+    assert s13.scroll_top == 0
+    assert s13.scroll_bottom == 2
 
     print("All self-tests passed.")
