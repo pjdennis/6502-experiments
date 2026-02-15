@@ -639,6 +639,23 @@ render_line_delete_scroll:
   JSR ansi_scroll_up
   JSR ansi_reset_scroll_region
 
+  ; Re-render cursor row (content may have changed, e.g., J join, cc change)
+  LDA CURSOR_ROW
+  CLC
+  ADC #1           ; ANSI 1-based
+  STA ANSI_ROW
+  LDA #1
+  STA ANSI_COL
+  JSR ansi_move_cursor
+  LDAX16 FILE_LINE16
+  JSR buf_get_line_ptr
+  JSR render_line_chars
+  LDA RENDER_COL
+  CMP SCREEN_COLS
+  BCS .cursor_no_clear
+  JSR ansi_clear_line
+.cursor_no_clear:
+
   ; Render the bottom SCROLL_DELTA rows (newly exposed content).
   ; RENDER_ROW = SCREEN_ROWS - 1 - SCROLL_DELTA
   LDA SCREEN_ROWS

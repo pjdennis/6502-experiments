@@ -8287,8 +8287,8 @@ class EditorTestRunner:
                 (6, "Line 8"), (7, "Line 9"), (8, "Line 10"),
             ],
             expect_cursor=(3, 0),
-            # Frame 2 (dd): only bottom row (8) should be touched
-            expect_content_rows=[(2, {8})]
+            # Frame 2 (dd): cursor row + bottom row touched
+            expect_content_rows=[(2, {3, 8})]
         )
 
         # dd at row 0: entire content area scrolls up, bottom row rendered
@@ -8303,8 +8303,8 @@ class EditorTestRunner:
                 (6, "Line 8"), (7, "Line 9"), (8, "Line 10"),
             ],
             expect_cursor=(0, 0),
-            # Frame 1 (dd): only bottom row (8) should be touched
-            expect_content_rows=[(1, {8})]
+            # Frame 1 (dd): cursor row + bottom row touched
+            expect_content_rows=[(1, {0, 8})]
         )
 
         # 3dd: 3 lines deleted, 3 bottom rows need rendering
@@ -8320,8 +8320,8 @@ class EditorTestRunner:
                 (6, "Line 10"), (7, "Line 11"), (8, "Line 12"),
             ],
             expect_cursor=(0, 0),
-            # Frame 2 (3dd): bottom 3 rows touched
-            expect_content_rows=[(2, {6, 7, 8})]
+            # Frame 2 (3dd): cursor row + bottom 3 rows touched
+            expect_content_rows=[(2, {0, 6, 7, 8})]
         )
 
         # o at mid-screen: scroll shifts rows below insertion down,
@@ -8377,6 +8377,41 @@ class EditorTestRunner:
             expect_cursor=(4, 0),
             # Frame 3 (p): only pasted row (4) should be touched
             expect_content_rows=[(3, {4})]
+        )
+
+        # J at mid-screen: join decreases LINE_COUNT16, scroll shifts up.
+        # Frames: 0=initial, 1=jjj cursor, 2=J scroll frame
+        self.run_test_screen(
+            "Scroll opt: J at mid-screen uses scroll",
+            make_lines(15),
+            b"jjjJ:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line 4 Line 5"), (4, "Line 6"), (5, "Line 7"),
+                (6, "Line 8"), (7, "Line 9"), (8, "Line 10"),
+            ],
+            expect_cursor=(3, 0),
+            # Frame 2 (J): cursor row (content changed) + bottom row
+            expect_content_rows=[(2, {3, 8})]
+        )
+
+        # 3J at mid-screen: joins 2 lines, scroll shifts up by 2.
+        # Frames: 0=initial, 1='3' count display, 2=jjj cursor, 3=J scroll
+        self.run_test_screen(
+            "Scroll opt: 3J at mid-screen uses scroll",
+            make_lines(15),
+            b"jjj3J:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line 4 Line 5 Line 6"), (4, "Line 7"),
+                (5, "Line 8"), (6, "Line 9"), (7, "Line 10"),
+                (8, "Line 11"),
+            ],
+            expect_cursor=(3, 0),
+            # Frame 3 (3J): cursor row + bottom 2 rows
+            expect_content_rows=[(3, {3, 7, 8})]
         )
 
         print()

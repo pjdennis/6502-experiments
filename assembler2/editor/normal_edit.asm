@@ -395,6 +395,8 @@ normal_join_lines:
 
   LDA #$FF
   STA MODIFIED
+  LDA #$02
+  STA RENDER_FLAG        ; Signal line-delete for scroll optimization
   JSR clamp_cursor_col
 
 .join_done:
