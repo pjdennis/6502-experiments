@@ -6769,6 +6769,13 @@ class EditorTestRunner:
             expected_content="bar\n",
         )
 
+        self.run_test(
+            "dwdw multi-line batch (crosses line boundary)",
+            "one two\nthree four\n",
+            b"dwdw:wq\r",
+            expected_content="\nthree four\n",
+        )
+
         self._group("Delete word backward (db):", leading_blank=True)
 
         self.run_test(
@@ -6864,6 +6871,20 @@ class EditorTestRunner:
             "hello world\nfoo\n",
             b"j2db:wq\r",
             expected_content="foo\n",
+        )
+
+        self.run_test(
+            "2dbdb count+batch deletes 3 words backward",
+            "one two three four\n",
+            b"$2dbdb:wq\r",
+            expected_content="one r\n",
+        )
+
+        self.run_test(
+            "dbdb multi-line batch (crosses line boundary)",
+            "one two\nthree\n",
+            b"j$dbdb:wq\r",
+            expected_content="one e\n",
         )
 
         self._group("Change word (cw):", leading_blank=True)
@@ -7266,6 +7287,13 @@ class EditorTestRunner:
             "one\ntwo three\n",
             b"2de:wq\r",
             expected_content=" three\n",
+        )
+
+        self.run_test(
+            "2dede count+batch deletes 3 word ends",
+            "one two three four\n",
+            b"2dede:wq\r",
+            expected_content=" four\n",
         )
 
         self._group("Change word end (ce):", leading_blank=True)

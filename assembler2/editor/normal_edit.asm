@@ -731,7 +731,7 @@ copy_line_to_nl:
 ; Delete from cursor to next word boundary (multi-line).
 ; Yanks deleted text. Accepts count.
 ; Non-batched (count prefix): scans N words, single yank+delete (yanks ALL)
-; Batched (dwdw...): delete N-1 words (no yank), yank+delete last word
+; Batched (dwdw...): yank last word, delete all N words in single operation
 do_dw:
   JSR get_count              ; BUF_TEMP16 = N
   JSR check_cursor_in_line
@@ -748,23 +748,8 @@ do_dw:
   JMP .dw_finish
 
 .dw_batched:
-  ; Delete (total-1) words without yank
-  LDX BUF_TEMP16
-  DEX
-  BEQ .dw_batch_last
-  JSR compute_multiline_word_range_forward
-  BCS .dw_batch_last
-  JSR delete_at_cursor
-
-.dw_batch_last:
-  ; Re-check line after deletions
-  JSR check_cursor_in_line
-  BCS .dw_done
-  LDX #1
-  JSR compute_multiline_word_range_forward
-  BCS .dw_done
-  LDA #OP_DELETE
-  JSR apply_char_operator
+  SET16 compute_multiline_word_range_forward, JUMP_TARGET16
+  JSR batched_word_delete_fwd
 
 .dw_finish:
   JSR clamp_cursor_col
@@ -796,25 +781,7 @@ do_db:
   JMP .db_finish
 
 .db_batched:
-  LDX BUF_TEMP16
-  DEX
-  BEQ .db_batch_last
-  JSR compute_multiline_word_range_backward
-  BCS .db_batch_last
-  JSR delete_at_cursor
-
-.db_batch_last:
-  ; Re-check: still have room to go backward?
-  TST16 CURSOR_COL16
-  BNE .db_batch_ok
-  TST16 FILE_LINE16
-  BEQ .db_done
-.db_batch_ok:
-  LDX #1
-  JSR compute_multiline_word_range_backward
-  BCS .db_done
-  LDA #OP_DELETE
-  JSR apply_char_operator
+  JSR batched_word_delete_bwd
 
 .db_finish:
   JSR clamp_cursor_col
@@ -861,7 +828,7 @@ do_cb:
 ; Delete from cursor to end of word (inclusive, multi-line).
 ; Yanks deleted text. Accepts count.
 ; Non-batched (count prefix): scans N words, single yank+delete (yanks ALL)
-; Batched (dede...): delete N-1 words (no yank), yank+delete last word
+; Batched (dede...): yank last word, delete all N words in single operation
 do_de:
   JSR get_count              ; BUF_TEMP16 = N
   JSR check_cursor_in_line
@@ -878,23 +845,8 @@ do_de:
   JMP .de_finish
 
 .de_batched:
-  ; Delete (total-1) words without yank
-  LDX BUF_TEMP16
-  DEX
-  BEQ .de_batch_last
-  JSR compute_multiline_word_end_range_forward
-  BCS .de_batch_last
-  JSR delete_at_cursor
-
-.de_batch_last:
-  ; Re-check line after deletions
-  JSR check_cursor_in_line
-  BCS .de_done
-  LDX #1
-  JSR compute_multiline_word_end_range_forward
-  BCS .de_done
-  LDA #OP_DELETE
-  JSR apply_char_operator
+  SET16 compute_multiline_word_end_range_forward, JUMP_TARGET16
+  JSR batched_word_delete_fwd
 
 .de_finish:
   JSR clamp_cursor_col
@@ -916,3 +868,125 @@ do_ce:
   RTS
 .ce_insert:
   JMP enter_insert_mode_render
+
+; --- Batched word delete helpers ---
+
+; Batched word delete forward (shared by dw and de batched paths)
+; Input: JUMP_TARGET16 = range computation function pointer
+;        BUF_TEMP16 = N (total word count, >= 2)
+; Computes full N-word range, yanks last word only, deletes all in single shift.
+; Clobbers: A, X, Y, BUF_PTR16, BUF_SRC16, BUF_DST16, BUF_LEN16, BUF_TEMP16,
+;           NORMAL_TEMP, WORD_CLASS, LINE_LEN16
+batched_word_delete_fwd:
+  ; Save N on stack
+  LDA BUF_TEMP16
+  PHA
+
+  ; Compute full N-word range
+  LDX BUF_TEMP16
+  JSR .fwd_call_range          ; BUF_LEN16 = full_range, cursor restored
+  BCS .fwd_bail
+
+  ; Save full_range on stack
+  PUSH16 BUF_LEN16
+
+  ; Compute (N-1)-word prefix range
+  TSX
+  LDA $0103,X                  ; Recover N (under 2 bytes of full_range)
+  SEC
+  SBC #1
+  TAX                           ; X = N-1
+  JSR .fwd_call_range          ; BUF_LEN16 = prefix_range, cursor restored
+
+  ; Yank last word using buffer pointer arithmetic (no cursor movement)
+  ; BUF_LEN16 = prefix_range
+  JSR yank_clear
+  JSR get_cursor_buf_ptr        ; BUF_PTR16 = cursor buf address
+
+  ; BUF_SRC16 = cursor_buf_ptr + prefix_range = start of last word
+  CLC
+  ADC16 BUF_PTR16, BUF_LEN16, BUF_SRC16
+
+  ; Recover full_range, discard N
+  POP16 BUF_TEMP16              ; BUF_TEMP16 = full_range
+  PLA                           ; discard N
+
+  ; last_word_len = full_range - prefix_range
+  SEC
+  SBC16 BUF_TEMP16, BUF_LEN16, BUF_LEN16  ; BUF_LEN16 = last_word_len
+
+  ; Yank the last word
+  JSR yank_add_chars            ; Yank BUF_LEN16 chars from BUF_SRC16
+
+  ; Delete full range at cursor (single shift)
+  CP16 BUF_TEMP16, BUF_LEN16   ; BUF_LEN16 = full_range
+  JSR delete_at_cursor
+
+  RTS
+
+.fwd_bail:
+  PLA                           ; Clean up N
+  RTS
+
+.fwd_call_range:
+  JMP (JUMP_TARGET16)
+
+; Batched word delete backward (for db batched path)
+; Input: BUF_TEMP16 = N (total word count, >= 2)
+; Computes full N-word backward range, yanks last word only, deletes all in single shift.
+; Clobbers: A, X, Y, BUF_PTR16, BUF_SRC16, BUF_DST16, BUF_LEN16, BUF_TEMP16,
+;           NORMAL_TEMP, WORD_CLASS, LINE_LEN16, COUNT16, BATCH_EXTRA
+batched_word_delete_bwd:
+  ; Save original position on stack
+  PUSH16 CURSOR_COL16
+  PUSH16 FILE_LINE16
+
+  ; Save N in BATCH_EXTRA (safe across backward range computation)
+  LDA BUF_TEMP16
+  STA BATCH_EXTRA
+
+  ; Compute N-word backward range
+  LDX BUF_TEMP16
+  JSR compute_multiline_word_range_backward  ; cursor -> S, BUF_LEN16 = full_range
+  BCS .bwd_bail
+
+  ; Save S position and full_range in zero-page temps (safe across backward range)
+  CP16 CURSOR_COL16, BUF_TEMP16 ; BUF_TEMP16 = S col
+  CP16 FILE_LINE16, BUF_DST16   ; BUF_DST16 = S line
+  CP16 BUF_LEN16, COUNT16       ; COUNT16 = full_range
+
+  ; Restore original position for (N-1) computation
+  POP16 FILE_LINE16
+  POP16 CURSOR_COL16
+
+  ; Compute (N-1)-word backward range
+  LDA BATCH_EXTRA
+  SEC
+  SBC #1
+  TAX                            ; X = N-1
+  JSR compute_multiline_word_range_backward  ; cursor -> M, BUF_LEN16 = prefix_range
+
+  ; Restore S position (for yank and delete)
+  CP16 BUF_TEMP16, CURSOR_COL16 ; Restore S col
+  CP16 BUF_DST16, FILE_LINE16   ; Restore S line
+
+  ; Compute last_word_range = full_range - prefix_range
+  SEC
+  SBC16 COUNT16, BUF_LEN16, BUF_LEN16  ; BUF_LEN16 = last_word_range
+
+  ; Yank last word at S
+  JSR yank_clear
+  JSR get_cursor_buf_ptr         ; BUF_PTR16 = buffer address at S
+  CP16 BUF_PTR16, BUF_SRC16     ; BUF_SRC16 = yank source
+  JSR yank_add_chars             ; Yank last_word_range chars
+
+  ; Delete full range at S (single shift)
+  CP16 COUNT16, BUF_LEN16       ; BUF_LEN16 = full_range
+  JSR delete_at_cursor
+
+  RTS
+
+.bwd_bail:
+  POP16 FILE_LINE16
+  POP16 CURSOR_COL16
+  RTS
