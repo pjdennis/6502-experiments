@@ -36,6 +36,8 @@ SNAP_VIEW_TOP16: .word  ; Snapshot of VIEW_TOP16 before handler
 SNAP_VIEW_TOP_WRAP: .byte ; Snapshot of VIEW_TOP_WRAP before handler
 SNAP_LINE_COUNT16: .word ; Snapshot of LINE_COUNT16 before handler
 SNAP_BUF_END16: .word   ; Snapshot of BUF_END16 before handler
+SCROLL_DELTA:   .byte   ; Screen rows to scroll (unsigned)
+RENDER_LIMIT:   .byte   ; Max rows to render (0=unlimited)
 
   .code
 
@@ -381,11 +383,15 @@ render_decide:
   ; If handler already set $FF, skip detection
   LDA RENDER_FLAG
   CMP #$FF
-  BEQ .dispatch
+  BNE .not_forced
+  JMP render_screen
+.not_forced:
 
-  ; Check VIEW_TOP16 changed -> full repaint
+  ; Check VIEW_TOP16 changed -> try scroll optimization before full repaint
   CMP16 SNAP_VIEW_TOP16, VIEW_TOP16
-  BNE .full
+  BEQ .view_same
+  JMP .view_changed
+.view_same:
 
   ; Check VIEW_TOP_WRAP changed -> full repaint
   LDA SNAP_VIEW_TOP_WRAP
@@ -406,9 +412,6 @@ render_decide:
   JMP render_cursor_and_status
 
 .full:
-  LDA #$FF
-  STA RENDER_FLAG
-.dispatch:
   JMP render_screen
 
 .current_line:
@@ -416,6 +419,253 @@ render_decide:
   ORA #$01
   STA RENDER_FLAG
   JMP render_current_line_and_status
+
+.view_changed:
+  ; VIEW_TOP16 changed. Try scroll optimization.
+  ; Requirement: both old and new VIEW_TOP_WRAP must be 0 (no partial wraps)
+  LDA SNAP_VIEW_TOP_WRAP
+  BNE .full
+  LDA VIEW_TOP_WRAP
+  BNE .full
+
+  ; Determine direction: new > old = scrolled down (scroll up on screen)
+  CMP16 VIEW_TOP16, SNAP_VIEW_TOP16
+  BCC .scroll_down_detect    ; VIEW_TOP16 < SNAP → scrolled up (screen scrolls down)
+
+  ; Scrolled down: walk from old VIEW_TOP to new VIEW_TOP, summing screen rows
+  ; If any line wraps (>1 row), fall back to full repaint
+  CP16 SNAP_VIEW_TOP16, RENDER_LINE16
+  LDA #0
+  STA SCROLL_DELTA
+.scroll_up_walk:
+  CMP16 RENDER_LINE16, VIEW_TOP16
+  BEQ .scroll_up_ready
+  LDAX16 RENDER_LINE16
+  JSR buf_get_line_len
+  JSR line_screen_rows
+  CMP #1
+  BNE .scroll_full           ; Wrapped line → fall back
+  INC SCROLL_DELTA
+  INC16 RENDER_LINE16
+  JMP .scroll_up_walk
+
+.scroll_up_ready:
+  ; Check delta < SCREEN_ROWS - 1 (else full repaint is better)
+  LDA SCROLL_DELTA
+  BEQ .scroll_full           ; Delta 0 shouldn't happen, but safety
+  CLC
+  ADC #1
+  CMP SCREEN_ROWS
+  BCS .scroll_full           ; Delta >= SCREEN_ROWS-1, full repaint
+  JMP render_scroll_up
+
+.scroll_full:
+  JMP render_screen
+
+.scroll_down_detect:
+  ; Scrolled up: walk from new VIEW_TOP to old VIEW_TOP
+  CP16 VIEW_TOP16, RENDER_LINE16
+  LDA #0
+  STA SCROLL_DELTA
+.scroll_down_walk:
+  CMP16 RENDER_LINE16, SNAP_VIEW_TOP16
+  BEQ .scroll_down_ready
+  LDAX16 RENDER_LINE16
+  JSR buf_get_line_len
+  JSR line_screen_rows
+  CMP #1
+  BNE .scroll_full           ; Wrapped line → fall back
+  INC SCROLL_DELTA
+  INC16 RENDER_LINE16
+  JMP .scroll_down_walk
+
+.scroll_down_ready:
+  LDA SCROLL_DELTA
+  BEQ .scroll_full
+  CLC
+  ADC #1
+  CMP SCREEN_ROWS
+  BCS .scroll_full
+  JMP render_scroll_down
+
+; Scroll screen up and render newly exposed bottom rows.
+; SCROLL_DELTA = number of rows to scroll.
+; Content moves up, blanks appear at bottom of scroll region.
+render_scroll_up:
+  JSR ansi_cursor_hide
+
+  ; Set scroll region: rows 1 to SCREEN_ROWS-1 (1-based, excludes status bar)
+  LDA #1
+  STA ANSI_ROW
+  LDA SCREEN_ROWS
+  SEC
+  SBC #1
+  STA ANSI_COL
+  JSR ansi_set_scroll_region
+
+  ; Scroll up by SCROLL_DELTA
+  LDA SCROLL_DELTA
+  JSR ansi_scroll_up
+  JSR ansi_reset_scroll_region
+
+  ; Render newly exposed bottom rows.
+  ; RENDER_ROW = SCREEN_ROWS - 1 - SCROLL_DELTA
+  LDA SCREEN_ROWS
+  SEC
+  SBC #1
+  SEC
+  SBC SCROLL_DELTA
+  STA RENDER_ROW
+  STA RENDER_LIMIT         ; Will render SCROLL_DELTA rows from here
+
+  ; Find the file line at RENDER_ROW by walking from VIEW_TOP16
+  JSR find_line_at_render_row
+  LDA #0
+  STA RENDER_WRAP
+  JMP render_limited_rows
+
+; Scroll screen down and render newly exposed top rows.
+; SCROLL_DELTA = number of rows to scroll.
+; Content moves down, blanks appear at top of scroll region.
+render_scroll_down:
+  JSR ansi_cursor_hide
+
+  ; Set scroll region: rows 1 to SCREEN_ROWS-1 (1-based, excludes status bar)
+  LDA #1
+  STA ANSI_ROW
+  LDA SCREEN_ROWS
+  SEC
+  SBC #1
+  STA ANSI_COL
+  JSR ansi_set_scroll_region
+
+  ; Scroll down by SCROLL_DELTA
+  LDA SCROLL_DELTA
+  JSR ansi_scroll_down
+  JSR ansi_reset_scroll_region
+
+  ; Render newly exposed top rows.
+  ; RENDER_ROW = 0, RENDER_LINE16 = VIEW_TOP16, RENDER_WRAP = 0
+  LDA #0
+  STA RENDER_ROW
+  STA RENDER_WRAP
+  LDA SCROLL_DELTA
+  STA RENDER_LIMIT
+  CP16 VIEW_TOP16, RENDER_LINE16
+  JMP render_limited_rows
+
+; Render limited rows: renders RENDER_LIMIT rows starting at
+; RENDER_ROW/RENDER_LINE16/RENDER_WRAP, then draws status bar + cursor.
+render_limited_rows:
+  ; RENDER_LIMIT = starting RENDER_ROW (used to compute how many rows to render)
+  ; We need to render until RENDER_ROW reaches RENDER_LIMIT + SCROLL_DELTA
+  ; Actually: we render from RENDER_ROW until we've done SCROLL_DELTA rows
+  ; (or hit the status bar / end of file). Use RENDER_LIMIT as the stop row.
+  LDA RENDER_ROW
+  CLC
+  ADC SCROLL_DELTA
+  STA RENDER_LIMIT         ; Stop at this row
+
+.limited_loop:
+  ; Check if we've rendered enough rows
+  LDA RENDER_ROW
+  CMP RENDER_LIMIT
+  BCS .limited_done
+
+  ; Check if we've hit the status bar
+  LDA RENDER_ROW
+  CLC
+  ADC #1
+  CMP SCREEN_ROWS
+  BCS .limited_done
+
+  ; Position cursor at start of this row
+  LDA RENDER_ROW
+  CLC
+  ADC #1              ; ANSI 1-based
+  STA ANSI_ROW
+  LDA #1
+  STA ANSI_COL
+  JSR ansi_move_cursor
+
+  ; Check if line exists
+  CMP16 RENDER_LINE16, LINE_COUNT16
+  BCS .limited_past_eof
+
+  ; Get line pointer
+  LDAX16 RENDER_LINE16
+  JSR buf_get_line_ptr
+
+  ; Advance BUF_PTR16 by RENDER_WRAP * SCREEN_COLS
+  LDA RENDER_WRAP
+  BEQ .limited_no_wrap
+  TAX
+.limited_wrap_loop:
+  CLC
+  LDA BUF_PTR16
+  ADC SCREEN_COLS
+  STA BUF_PTR16
+  LDA BUF_PTR16 + 1
+  ADC #0
+  STA BUF_PTR16 + 1
+  DEX
+  BNE .limited_wrap_loop
+.limited_no_wrap:
+
+  JSR render_line_chars
+
+  ; Check if line has more wrap rows
+  LDA RENDER_COL
+  CMP SCREEN_COLS
+  BNE .limited_line_done
+  LDA (BUF_PTR16),Y
+  CMP #'\n'
+  BEQ .limited_line_ended
+  ; More wrap rows
+  INC RENDER_WRAP
+  INC RENDER_ROW
+  JMP .limited_loop
+
+.limited_line_done:
+  JSR ansi_clear_line
+
+.limited_line_ended:
+  INC RENDER_ROW
+  INC16 RENDER_LINE16
+  LDA #0
+  STA RENDER_WRAP
+  JMP .limited_loop
+
+.limited_past_eof:
+  LDA #'~'
+  JSR io_write
+  JSR ansi_clear_line
+  INC RENDER_ROW
+  JMP .limited_loop
+
+.limited_done:
+  JSR render_status_line
+  JSR render_position_cursor
+  JSR ansi_cursor_show
+  JMP io_flush
+
+; Walk from VIEW_TOP16 forward to find which file line corresponds
+; to screen row RENDER_ROW. Sets RENDER_LINE16.
+; Assumes no wrapping (lines occupy 1 row each - verified by caller).
+; Input: RENDER_ROW = target screen row
+; Output: RENDER_LINE16 = file line at that row
+; Clobbers: A, X
+find_line_at_render_row:
+  CP16 VIEW_TOP16, RENDER_LINE16
+  LDA RENDER_ROW
+  BEQ .found
+  TAX                     ; X = rows to skip
+.walk:
+  INC16 RENDER_LINE16
+  DEX
+  BNE .walk
+.found:
+  RTS
 
 ; Render just the status bar and reposition cursor (no content redraw)
 render_cursor_and_status:

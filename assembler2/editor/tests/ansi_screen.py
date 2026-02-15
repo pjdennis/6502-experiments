@@ -109,7 +109,9 @@ class AnsiScreen:
         self.scroll_bottom = self.rows - 1
 
     def _scroll_region_up(self, n):
-        """Scroll region up: remove n rows from top, insert blanks at bottom."""
+        """Scroll region up: remove n rows from top, insert blanks at bottom.
+        Does NOT mark rows as content_touched since the terminal hardware
+        performs the scroll - only explicit character writes count."""
         for _ in range(n):
             if self.scroll_top > self.scroll_bottom:
                 break
@@ -117,12 +119,11 @@ class AnsiScreen:
             del self.attrs[self.scroll_top]
             self.buffer.insert(self.scroll_bottom, [' '] * self.cols)
             self.attrs.insert(self.scroll_bottom, [0] * self.cols)
-        for r in range(self.scroll_top, self.scroll_bottom + 1):
-            if r < self.rows - 1:
-                self.content_touched.add(r)
 
     def _scroll_region_down(self, n):
-        """Scroll region down: remove n rows from bottom, insert blanks at top."""
+        """Scroll region down: remove n rows from bottom, insert blanks at top.
+        Does NOT mark rows as content_touched since the terminal hardware
+        performs the scroll - only explicit character writes count."""
         for _ in range(n):
             if self.scroll_top > self.scroll_bottom:
                 break
@@ -130,9 +131,6 @@ class AnsiScreen:
             del self.attrs[self.scroll_bottom]
             self.buffer.insert(self.scroll_top, [' '] * self.cols)
             self.attrs.insert(self.scroll_top, [0] * self.cols)
-        for r in range(self.scroll_top, self.scroll_bottom + 1):
-            if r < self.rows - 1:
-                self.content_touched.add(r)
 
     def _snapshot(self):
         """Capture current buffer and cursor as a frame."""

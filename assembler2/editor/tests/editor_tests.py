@@ -8194,6 +8194,85 @@ class EditorTestRunner:
                 extra_args=BAUD2_ARGS
             )
 
+        # ============================================================
+        # Scroll region optimization tests
+        # ============================================================
+        self._group("Scroll region optimization:", leading_blank=True)
+
+        # j past bottom: scroll up uses partial redraw, not full repaint.
+        # 15-line file, 10-row screen (9 content + 1 status).
+        # All 10 j's batch into one cycle. Cursor moves to line 10,
+        # VIEW_TOP goes from 0 to 2 (delta=2). Frame 1 is the scroll
+        # frame - with optimization, only 2 newly exposed bottom rows.
+        self.run_test_screen(
+            "Scroll opt: j past bottom uses scroll",
+            make_lines(15),
+            b"j" * 10 + b":q!\r",
+            rows=10, cols=40,
+            expect_lines=[(i, f"Line {i+3}") for i in range(9)],
+            expect_cursor=(8, 0),
+            # Frame 1 is the scroll frame - should touch only 2 rows
+            # (newly exposed bottom rows), not all 9
+            expect_content_rows=[(1, {7, 8})]
+        )
+
+        # k past top: scroll down uses partial redraw.
+        # After scrolling down, scroll back up.
+        # 10 j's batch → frame 1 (scroll down). 10 k's batch → frame 2
+        # (scroll up). VIEW_TOP goes from 2 back to 0 (delta=2).
+        self.run_test_screen(
+            "Scroll opt: k past top uses scroll",
+            make_lines(15),
+            b"j" * 10 + b"k" * 10 + b":q!\r",
+            rows=10, cols=40,
+            expect_lines=[(i, f"Line {i+1}") for i in range(9)],
+            expect_cursor=(0, 0),
+            # Frame 2 is the scroll-up frame - should touch only 2 rows
+            # (newly exposed top rows), not all 9
+            expect_content_rows=[(2, {0, 1})]
+        )
+
+        # Batched jjjjjjjjjjjjj scrolls multiple in one frame.
+        # 13 j's: cursor at line 13, VIEW_TOP goes from 0 to 5 (delta=5).
+        # With optimization: scroll up 5, render 5 new bottom rows.
+        self.run_test_screen(
+            "Scroll opt: batched j*13 scrolls multiple",
+            make_lines(20),
+            b"j" * 13 + b":q!\r",
+            rows=10, cols=40,
+            expect_lines=[(i, f"Line {i+6}") for i in range(9)],
+            expect_cursor=(8, 0),
+            # Frame 1: scroll by 5 - touches only the 5 new bottom rows
+            expect_content_rows=[(1, {4, 5, 6, 7, 8})]
+        )
+
+        # Large scroll falls back to full repaint (G to end of file)
+        self.run_test_screen(
+            "Scroll opt: large scroll falls back to full repaint",
+            make_lines(20),
+            b"G:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(i, f"Line {i+12}") for i in range(9)],
+            expect_cursor=(8, 0),
+            # G scrolls by 11 lines (>= 9 content rows), falls back to
+            # full repaint touching all 9 content rows
+            expect_content_rows=[(1, {0, 1, 2, 3, 4, 5, 6, 7, 8})]
+        )
+
+        # Scroll by 1 row: single j from bottom edge
+        # Put cursor at line 8 (bottom), then 1 more j to scroll by 1.
+        # Since all batch: 9 j's = cursor at line 9. VIEW_TOP goes 0→1.
+        self.run_test_screen(
+            "Scroll opt: scroll by 1 row",
+            make_lines(15),
+            b"j" * 9 + b":q!\r",
+            rows=10, cols=40,
+            expect_lines=[(i, f"Line {i+2}") for i in range(9)],
+            expect_cursor=(8, 0),
+            # Frame 1: scroll by 1 - touches only 1 new bottom row
+            expect_content_rows=[(1, {8})]
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed
