@@ -228,25 +228,42 @@ normal_delete_to_eol:
   JMP clear_count
 
 ; dd: yank then delete N lines (N = count, min 1)
-; When batched (BATCH_EXTRA > 0): delete (total-1) without yank, then
-; yank_delete 1 line. This matches unbatched semantics where each dd
-; overwrites the yank buffer, so only the last line is yanked.
+; When batched (BATCH_EXTRA > 0): yank only the last line, then delete
+; all N lines in a single operation (one shift, one rebuild).
 do_dd:
   JSR get_count              ; BUF_TEMP16 = count (16-bit)
   LDA BATCH_EXTRA
   BEQ .do_yank_delete        ; No batching, standard path
-  ; Batched: delete (total-1) lines without yank first
+
+  ; Batched: yank last line only, then delete all in one operation
+  ; Save total count
+  PUSH16 BUF_TEMP16
+  ; Yank 1 line at FILE_LINE16 + (total - 1)
+  JSR yank_clear
   SEC
   SBCI16 BUF_TEMP16, 1, BUF_TEMP16
-  JSR delete_current_lines
+  CLC
+  ADC16 FILE_LINE16, BUF_TEMP16, BUF_TEMP16
+  ; BUF_TEMP16 = last line number; set count=1 via BUF_LEN16, then swap
+  LDAX16 BUF_TEMP16          ; A/X = last line number
+  PHA                        ; Save A (line number low byte)
   LDA #1
   STA BUF_TEMP16
   LDA #0
-  STA BUF_TEMP16 + 1
+  STA BUF_TEMP16 + 1         ; BUF_TEMP16 = 1 (count)
+  PLA                        ; Restore A = last line number low byte
+  JSR yank_add_lines
+  ; Restore total count and delete all lines
+  POP16 BUF_TEMP16
+  BCS .yank_overflow
+  JSR delete_current_lines
+  JMP .dd_done
+
 .do_yank_delete:
   JSR yank_delete_current_lines
   BCS .yank_overflow
 
+.dd_done:
   LDA #$FF
   STA MODIFIED
   JSR clamp_cursor_col

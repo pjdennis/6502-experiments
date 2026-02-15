@@ -4469,6 +4469,23 @@ class EditorTestRunner:
             expected_content="D\nA\nB\nC\n"
         )
 
+        # Batched dd cursor position: should end on correct line
+        self.run_test_screen(
+            "dddd batched cursor on correct line",
+            "A\nB\nC\nD\n",
+            b"dddd:q!\r",
+            expect_cursor=(0, 0),
+            expect_lines=[(0, "C")],
+        )
+
+        # Batched dd at end of file: cursor clamps to last line
+        self.run_test(
+            "dddd batched at EOF clamps correctly",
+            "A\nB\n",
+            b"dddd:wq\r",
+            expected_content="\n"
+        )
+
         # ============================================================
         # D (delete to end of line)
         # ============================================================
