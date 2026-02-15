@@ -3386,6 +3386,455 @@ class EditorTestRunner:
             expect_cursor=(0, 2),
         )
 
+        # db (delete word backward) - screen correct
+        self.run_test_screen(
+            "db deletes word: screen correct",
+            "Hello World\n",
+            b"wdb:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "World")],
+            expect_cursor=(0, 0),
+        )
+
+        # 2dw - screen shows result
+        self.run_test_screen(
+            "2dw deletes 2 words: screen correct",
+            "one two three\n",
+            b"2dw:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "three")],
+            expect_cursor=(0, 0),
+        )
+
+        # 2db - screen shows result
+        self.run_test_screen(
+            "2db deletes 2 words backward: screen correct",
+            "one two three\n",
+            b"$2db:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "one e")],
+            expect_cursor=(0, 4),
+        )
+
+        # de (delete word end) - screen correct
+        self.run_test_screen(
+            "de deletes to word end: screen correct",
+            "Hello World\n",
+            b"de:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, " World")],
+            expect_cursor=(0, 0),
+        )
+
+        # 2p line paste - screen shows all pasted lines
+        self.run_test_screen(
+            "2p line paste: screen correct",
+            "A\nB\nC\n",
+            b"yy2p:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "A"), (1, "A"), (2, "A"), (3, "B"), (4, "C")],
+            expect_cursor=(1, 0),
+        )
+
+        # 2P line paste above - screen correct
+        self.run_test_screen(
+            "2P line paste above: screen correct",
+            "A\nB\n",
+            b"yy2P:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "A"), (1, "A"), (2, "A"), (3, "B")],
+            expect_cursor=(0, 0),
+        )
+
+        # Batched pp line paste - screen correct
+        self.run_test_screen(
+            "Batched pp line paste: screen correct",
+            "A\nB\nC\n",
+            b"yypp:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "A"), (1, "A"), (2, "A"), (3, "B"), (4, "C")],
+            expect_cursor=(2, 0),
+        )
+
+        # Batched PPP line paste above - screen correct
+        self.run_test_screen(
+            "Batched PPP line paste above: screen correct",
+            "A\nB\n",
+            b"yyPPP:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "A"), (1, "A"), (2, "A"), (3, "A"), (4, "B")],
+            expect_cursor=(0, 0),
+        )
+
+        # 2p char paste - screen correct
+        # x on "AB" yanks 'A' leaving "B", 2p pastes "AA" after cursor → "BAA"
+        self.run_test_screen(
+            "2p char paste: screen correct",
+            "AB\n",
+            b"x2p:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "BAA")],
+            expect_cursor=(0, 2),
+        )
+
+        # Batched pp char paste - screen correct
+        self.run_test_screen(
+            "Batched pp char paste: screen correct",
+            "Hello\n",
+            b"xpp:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "eHHllo")],
+            expect_cursor=(0, 2),
+        )
+
+        # ============================================================
+        # Cross-line screen content: paste, dw/db unwrapping
+        # Operations that add/remove newlines, verified via screen state
+        # ============================================================
+        self._group("Cross-line screen content:", leading_blank=True)
+
+        # --- Multi-line char paste (content with newlines) ---
+
+        # db yanks across newline ("foo\n"), p pastes inline after cursor
+        # Result: "barfoo\n\n" - cursor at first pasted char (col 3)
+        self.run_test_screen(
+            "Multi-line char paste p: screen correct",
+            "foo\nbar\n",
+            b"jdb$p:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "barfoo"), (1, ""), (2, "~"),
+            ],
+            expect_cursor=(0, 3),
+        )
+
+        # db yanks across newline, P pastes multi-line content above
+        self.run_test_screen(
+            "Multi-line char paste P: screen correct",
+            "foo\nbar\n",
+            b"jdb0P:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "foo"), (1, "bar"),
+            ],
+            expect_cursor=(0, 0),
+        )
+
+        # D yanks rest of line, paste on next line inserts chars inline
+        self.run_test_screen(
+            "D + p char paste on next line: screen correct",
+            "ABCDE\nXY\n",
+            b"lDjp:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "A"), (1, "XBCDEY"),
+            ],
+            expect_cursor=(1, 4),
+        )
+
+        # Multi-line char paste with 2p (two copies of "foo\n")
+        # Inserts "foo\nfoo\n" after 'r': "barfoo\nfoo\n\n"
+        self.run_test_screen(
+            "Multi-line char 2p: screen correct",
+            "foo\nbar\n",
+            b"jdb$2p:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "barfoo"), (1, "foo"), (2, ""), (3, "~"),
+            ],
+            expect_cursor=(0, 3),
+        )
+
+        # Multi-line char paste with batched pp (same content, same cursor for multiline)
+        self.run_test_screen(
+            "Multi-line char batched pp: screen correct",
+            "foo\nbar\n",
+            b"jdb$pp:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "barfoo"), (1, "foo"), (2, ""), (3, "~"),
+            ],
+            expect_cursor=(0, 3),
+        )
+
+        # --- Char paste causing line wrapping ---
+        # Paste content that pushes a line beyond screen width
+
+        # Single char paste causing wrap
+        # yw on 18 A's yanks "AAAAAAAAAAAAAAAAAA", 2G to B line, p inserts after col 0
+        # Result: "B" + 18 A's + 17 B's = 36 chars; wraps at col 20
+        self.run_test_screen(
+            "Char paste causes line wrap: screen correct",
+            "A" * 18 + "\n" + "B" * 18 + "\n",
+            b"yw2Gp:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "A" * 18),
+                (1, "B" + "A" * 18 + "B"),             # first 20 chars
+                (2, "B" * 16),                          # remaining 16 B's
+            ],
+            expect_cursor=(1, 18),
+        )
+
+        # Char 2p paste causing wrap
+        # yw yanks 10 A's, 2G to B line, 2p inserts 20 A's after col 0
+        # Result: "B" + 20 A's + 4 B's = 25 chars
+        self.run_test_screen(
+            "Char 2p causing line wrap: screen correct",
+            "A" * 10 + "\n" + "B" * 5 + "\n",
+            b"yw2G2p:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "A" * 10),
+                (1, "B" + "A" * 19),                   # first 20
+                (2, "A" + "B" * 4),                     # remaining 5
+            ],
+            expect_cursor=(2, 0),
+        )
+
+        # Batched char pp causing wrap (same content/cursor as 2p for single-line yank)
+        self.run_test_screen(
+            "Char batched pp causing line wrap: screen correct",
+            "A" * 10 + "\n" + "B" * 5 + "\n",
+            b"yw2Gpp:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "A" * 10),
+                (1, "B" + "A" * 19),                   # first 20
+                (2, "A" + "B" * 4),                     # remaining 5
+            ],
+            expect_cursor=(2, 0),
+        )
+
+        # Line paste causing wrap (pasted line is wider than screen)
+        self.run_test_screen(
+            "Line paste of long line causes wrap: screen correct",
+            "A" * 25 + "\nshort\n",
+            b"yyjp:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "A" * 20),      # first line wraps: first 20
+                (1, "AAAAA"),        # wrap continuation
+                (2, "short"),
+                (3, "A" * 20),      # pasted line wraps: first 20
+                (4, "AAAAA"),        # wrap continuation
+            ],
+            expect_cursor=(3, 0),
+        )
+
+        # --- dw causing unwrap (deleting across newlines) ---
+
+        # 2dw crossing line boundary - unwraps lines
+        self.run_test_screen(
+            "2dw crossing line: screen correct",
+            "one\ntwo three\n",
+            b"2dw:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "three"), (1, "~")],
+            expect_cursor=(0, 0),
+        )
+
+        # dw at last word on line (exclusive-linewise: deletes word, keeps newline)
+        self.run_test_screen(
+            "dw at last word: screen correct",
+            "foo\nbar\n",
+            b"dw:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, ""), (1, "bar")],
+            expect_cursor=(0, 0),
+        )
+
+        # Batched dwdw crossing line boundary
+        self.run_test_screen(
+            "Batched dwdw crossing line: screen correct",
+            "one two\nthree four\n",
+            b"dwdw:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, ""), (1, "three four")],
+            expect_cursor=(0, 0),
+        )
+
+        # 2dw single-line (no unwrap)
+        self.run_test_screen(
+            "2dw single-line: screen correct",
+            "one two three four\n",
+            b"2dw:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "three four")],
+            expect_cursor=(0, 0),
+        )
+
+        # Batched dwdw single-line
+        self.run_test_screen(
+            "Batched dwdw single-line: screen correct",
+            "one two three four\n",
+            b"dwdw:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "three four")],
+            expect_cursor=(0, 0),
+        )
+
+        # 3dw crossing multiple lines
+        self.run_test_screen(
+            "3dw crossing 2 lines: screen correct",
+            "aa\nbb\ncc dd\n",
+            b"3dw:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "dd"), (1, "~")],
+            expect_cursor=(0, 0),
+        )
+
+        # --- db causing unwrap (deleting across newlines backward) ---
+
+        # db from BOL - joins with previous line
+        self.run_test_screen(
+            "db from BOL unwraps: screen correct",
+            "foo\nbar\n",
+            b"jdb:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "bar"), (1, "~")],
+            expect_cursor=(0, 0),
+        )
+
+        # 2db crossing line boundary
+        self.run_test_screen(
+            "2db crossing line: screen correct",
+            "hello world\nfoo\n",
+            b"j2db:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "foo"), (1, "~")],
+            expect_cursor=(0, 0),
+        )
+
+        # Batched dbdb crossing line boundary
+        self.run_test_screen(
+            "Batched dbdb crossing line: screen correct",
+            "one two\nthree\n",
+            b"j$dbdb:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "one e"), (1, "~")],
+            expect_cursor=(0, 4),
+        )
+
+        # Batched dbdb from BOL
+        self.run_test_screen(
+            "Batched dbdb from BOL: screen correct",
+            "foo bar\nbaz\n",
+            b"jdbdb:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "baz"), (1, "~")],
+            expect_cursor=(0, 0),
+        )
+
+        # 2db single-line (no unwrap)
+        self.run_test_screen(
+            "2db single-line: screen correct",
+            "one two three\n",
+            b"$2db:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "one e")],
+            expect_cursor=(0, 4),
+        )
+
+        # --- de causing unwrap (deleting to word end across newlines) ---
+
+        # de at end of line crosses to next line
+        self.run_test_screen(
+            "de crossing line: screen correct",
+            "foo\nbar baz\n",
+            b"2lde:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "fo baz"), (1, "~")],
+            expect_cursor=(0, 2),
+        )
+
+        # 2de crossing line boundary
+        self.run_test_screen(
+            "2de crossing line: screen correct",
+            "one\ntwo three\n",
+            b"2de:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, " three"), (1, "~")],
+            expect_cursor=(0, 0),
+        )
+
+        # --- cb crossing line boundary ---
+        self.run_test_screen(
+            "cb from BOL crosses line: screen correct",
+            "foo\nbar\n",
+            b"jcbbaz\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "bazbar"), (1, "~")],
+            expect_cursor=(0, 2),
+        )
+
+        # --- 2cw crossing line boundary ---
+        self.run_test_screen(
+            "2cw crossing line: screen correct",
+            "foo\nbar\n",
+            b"2cwx\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "x"), (1, "~")],
+            expect_cursor=(0, 0),
+        )
+
+        # --- Multi-line line-mode paste screen content ---
+
+        # 2yy + p pastes 2 lines
+        self.run_test_screen(
+            "2yy + p pastes 2 lines: screen correct",
+            "A\nB\nC\n",
+            b"2yyp:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "A"), (1, "A"), (2, "B"), (3, "B"), (4, "C"),
+            ],
+            expect_cursor=(1, 0),
+        )
+
+        # 2yy + 2p pastes 2 lines twice
+        self.run_test_screen(
+            "2yy + 2p pastes 2 lines twice: screen correct",
+            "A\nB\nC\n",
+            b"2yy2p:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "A"), (1, "A"), (2, "B"), (3, "A"),
+                (4, "B"), (5, "B"), (6, "C"),
+            ],
+            expect_cursor=(1, 0),
+        )
+
+        # dd + pp pastes deleted line twice (batched)
+        self.run_test_screen(
+            "dd + batched pp: screen correct",
+            "A\nB\nC\n",
+            b"ddpp:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "B"), (1, "A"), (2, "A"), (3, "C")],
+            expect_cursor=(2, 0),
+        )
+
+        # dd + 2p pastes deleted line twice (count prefix)
+        self.run_test_screen(
+            "dd + 2p: screen correct",
+            "A\nB\nC\n",
+            b"dd2p:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "B"), (1, "A"), (2, "A"), (3, "C")],
+            expect_cursor=(1, 0),
+        )
+
+        # --- ce crossing line boundary ---
+        self.run_test_screen(
+            "2ce crossing line: screen correct",
+            "foo\nbar\n",
+            b"2ceX\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "X"), (1, "~")],
+            expect_cursor=(0, 0),
+        )
+
         # ============================================================
         # Batch movement tests (j/k and arrow keys)
         # Consecutive identical movement keys are consumed in one
