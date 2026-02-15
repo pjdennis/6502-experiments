@@ -6189,6 +6189,54 @@ class EditorTestRunner:
             expect_unmodified=True
         )
 
+        # Batched J (rapid JJ joins 2 lines)
+        self.run_test(
+            "JJ batched joins 2 lines",
+            "aaa\nbbb\nccc\nddd\n",
+            b"JJ:wq\r",
+            expected_content="aaa bbb ccc\nddd\n"
+        )
+
+        # Batched JJ matches 3J result (3J joins current + 2 more)
+        self.run_test(
+            "JJ batched matches 3J result",
+            "aaa\nbbb\nccc\nddd\n",
+            b"3J:wq\r",
+            expected_content="aaa bbb ccc\nddd\n"
+        )
+
+        # Triple batched J
+        self.run_test(
+            "JJJ batched joins 3 lines",
+            "aaa\nbbb\nccc\nddd\neee\n",
+            b"JJJ:wq\r",
+            expected_content="aaa bbb ccc ddd\neee\n"
+        )
+
+        # Count + batch combination: 2J = 1 join, + batched J = 1 more join = 2 total
+        self.run_test(
+            "2J + batched J joins 3 lines into one",
+            "aaa\nbbb\nccc\nddd\n",
+            b"2JJ:wq\r",
+            expected_content="aaa bbb ccc\nddd\n"
+        )
+
+        # Batched J at end of file stops gracefully
+        self.run_test(
+            "JJJ batched on 3-line file joins all",
+            "aaa\nbbb\nccc\n",
+            b"JJJ:wq\r",
+            expected_content="aaa bbb ccc\n"
+        )
+
+        # Render: batched JJ is single action frame
+        self.run_test_screen(
+            "Batch JJ is single action frame",
+            "aaa\nbbb\nccc\n",
+            b"JJ:q!\r",
+            expect_content_redraws=[True, True, False]
+        )
+
         self._group("Replace char (r):", leading_blank=True)
 
         self.run_test(

@@ -320,31 +320,67 @@ normal_toggle_case:
 
 ; --- Join lines (J) ---
 normal_join_lines:
-  JSR get_count
-  LDX BUF_TEMP16
+  JSR get_batched_count
 
-  TST16 COUNT16
+  ; Adjust for explicit count: NJ joins N-1 lines
+  LDA COUNT16
+  ORA COUNT16 + 1
   BEQ .join_start
   DEX
-  BEQ .join_done
+  BNE .join_start
+  JMP .join_done
 
 .join_start:
-  STX NORMAL_TEMP
+  STX NORMAL_TEMP            ; NORMAL_TEMP = number of joins to do
 
-.join_loop:
-  CLC
-  ADCI16 FILE_LINE16, 1, BUF_PTR16
-  CMP16 BUF_PTR16, LINE_COUNT16
-  BCS .join_done
+  ; Clamp to available lines: can join at most LINE_COUNT16 - FILE_LINE16 - 1
+  SEC
+  SBC16 LINE_COUNT16, FILE_LINE16, BUF_TEMP16
+  DEC16 BUF_TEMP16           ; BUF_TEMP16 = available joins
+  LDA BUF_TEMP16 + 1
+  BNE .clamp_ok              ; > 255 available, no clamp needed
+  LDA NORMAL_TEMP
+  CMP BUF_TEMP16
+  BCC .clamp_ok
+  BEQ .clamp_ok
+  LDA BUF_TEMP16
+  STA NORMAL_TEMP
+.clamp_ok:
+  LDA NORMAL_TEMP
+  BEQ .join_done             ; Nothing to join
 
+  ; Find first newline: get current line, scan to end
   LDAX16 FILE_LINE16
   JSR buf_get_line_ptr
-  JSR find_line_end
+  JSR find_line_end          ; (BUF_PTR16),Y points to '\n'
+  ; Advance BUF_PTR16 by Y so BUF_PTR16 points directly to the '\n'
+  TYA
+  CLC
+  ADCA16 BUF_PTR16, BUF_PTR16
+
+  LDX NORMAL_TEMP            ; X = joins remaining
+
+  ; Single pass: scan forward replacing newlines with spaces
+.join_loop:
+  LDY #0
+  LDA (BUF_PTR16),Y
+  CMP #'\n'
+  BNE .join_next
+  ; Replace newline with space
   LDA #' '
   STA (BUF_PTR16),Y
+  DEX
+  BEQ .join_finish
+.join_next:
+  INC16 BUF_PTR16
+  JMP .join_loop
+
+.join_finish:
+  ; Single rebuild
   JSR buf_rebuild_lines
 
-  LDA #1
+  ; Single mark adjust for all removed lines
+  LDA NORMAL_TEMP
   STA BUF_TEMP16
   LDA #0
   STA BUF_TEMP16+1
@@ -352,9 +388,6 @@ normal_join_lines:
   ADCI16 FILE_LINE16, 1, BUF_PTR16
   LDAX16 BUF_PTR16
   JSR mark_adjust_delete
-
-  DEC NORMAL_TEMP
-  BNE .join_loop
 
   LDA #$FF
   STA MODIFIED
