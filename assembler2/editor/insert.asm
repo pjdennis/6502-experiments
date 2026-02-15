@@ -520,6 +520,13 @@ insert_batch:
   PLA
   PLA
   PLA
+
+  ; Check for pure line insert (no back_nl, no fwd_nl) -> scroll optimization
+  LDA LINE_LEN16             ; back_nl
+  ORA LINE_LEN16 + 1         ; fwd_nl
+  BNE .set_modified           ; Complex case, fall back to current-line redraw
+  LDA #$03
+  STA RENDER_FLAG            ; Signal line-insert for scroll optimization
   JMP .set_modified
 
 .case_back_nl:
@@ -549,8 +556,11 @@ insert_batch:
 .set_modified:
   LDA #$FF
   STA MODIFIED
+  LDA RENDER_FLAG
+  BNE .skip_flag             ; Already set by caller (e.g., scroll optimization)
   LDA #$01
   STA RENDER_FLAG            ; Force at least current-line redraw
+.skip_flag:
   RTS
 
 ; Arrow key handlers in insert mode

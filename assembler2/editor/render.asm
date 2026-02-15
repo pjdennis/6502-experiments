@@ -694,6 +694,33 @@ render_line_insert_scroll:
   JSR ansi_scroll_down
   JSR ansi_reset_scroll_region
 
+  ; Re-render row above cursor (content may have changed, e.g., Enter line split)
+  LDA CURSOR_ROW
+  BEQ .no_above_render     ; At top row, nothing above
+  STA RENDER_ROW           ; Save cursor row
+  SEC
+  SBC #1
+  CLC
+  ADC #1                   ; ANSI 1-based
+  STA ANSI_ROW
+  LDA #1
+  STA ANSI_COL
+  JSR ansi_move_cursor
+  LDA RENDER_ROW           ; restore cursor row
+  SEC
+  SBC #1
+  STA RENDER_ROW
+  JSR find_line_at_render_row
+  LDAX16 RENDER_LINE16
+  JSR buf_get_line_ptr
+  JSR render_line_chars
+  LDA RENDER_COL
+  CMP SCREEN_COLS
+  BCS .above_no_clear
+  JSR ansi_clear_line
+.above_no_clear:
+.no_above_render:
+
   ; Render SCROLL_DELTA rows at CURSOR_ROW (newly inserted content).
   LDA CURSOR_ROW
   STA RENDER_ROW

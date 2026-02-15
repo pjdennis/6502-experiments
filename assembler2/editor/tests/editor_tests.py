@@ -8339,8 +8339,8 @@ class EditorTestRunner:
                 (8, "Line 8"),
             ],
             expect_cursor=(4, 0),
-            # Frame 2 (o): only new line row (4) should be touched
-            expect_content_rows=[(2, {4})]
+            # Frame 2 (o): new line row + row above (re-rendered by handler)
+            expect_content_rows=[(2, {3, 4})]
         )
 
         # O at mid-screen: scroll shifts cursor row and below down,
@@ -8357,8 +8357,8 @@ class EditorTestRunner:
                 (7, "Line 7"), (8, "Line 8"),
             ],
             expect_cursor=(3, 0),
-            # Frame 2 (O): only new line row (3) should be touched
-            expect_content_rows=[(2, {3})]
+            # Frame 2 (O): new line row + row above
+            expect_content_rows=[(2, {2, 3})]
         )
 
         # p (line paste below) at mid-screen uses scroll
@@ -8375,8 +8375,8 @@ class EditorTestRunner:
                 (8, "Line 8"),
             ],
             expect_cursor=(4, 0),
-            # Frame 3 (p): only pasted row (4) should be touched
-            expect_content_rows=[(3, {4})]
+            # Frame 3 (p): pasted row + row above
+            expect_content_rows=[(3, {3, 4})]
         )
 
         # J at mid-screen: join decreases LINE_COUNT16, scroll shifts up.
@@ -8431,6 +8431,26 @@ class EditorTestRunner:
             expect_cursor=(3, 0),
             # Frame 3 (3cc): cursor row + bottom 2 rows
             expect_content_rows=[(3, {3, 7, 8})]
+        )
+
+        # Enter in insert mode at mid-line: splits line, LINE_COUNT16 increases.
+        # Frames: 0=initial, 1=jjj cursor, 2=llll cursor,
+        #         3=i mode switch, 4=Enter scroll frame
+        # "llll" moves to col 4 in "Line 4", Enter splits to "Line" / " 4"
+        self.run_test_screen(
+            "Scroll opt: Enter in insert mode uses scroll",
+            make_lines(15),
+            b"jjjlllli\r\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line"), (4, " 4"),
+                (5, "Line 5"), (6, "Line 6"), (7, "Line 7"),
+                (8, "Line 8"),
+            ],
+            expect_cursor=(4, 0),
+            # Frame 4 (Enter): split row above + new row
+            expect_content_rows=[(4, {3, 4})]
         )
 
         print()
