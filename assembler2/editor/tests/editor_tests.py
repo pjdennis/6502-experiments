@@ -8453,6 +8453,25 @@ class EditorTestRunner:
             expect_content_rows=[(4, {3, 4})]
         )
 
+        # BS at col 0 in insert mode: joins with previous line, LINE_COUNT16 decreases.
+        # Cursor was at line 3 (Line 4), col 0. BS joins with line 2 (Line 3).
+        # Frames: 0=initial, 1=jjj cursor, 2=i mode switch, 3=BS scroll frame
+        self.run_test_screen(
+            "Scroll opt: BS at col 0 in insert mode uses scroll",
+            make_lines(15),
+            b"jjji\x08\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"),
+                (2, "Line 3Line 4"), (3, "Line 5"), (4, "Line 6"),
+                (5, "Line 7"), (6, "Line 8"), (7, "Line 9"),
+                (8, "Line 10"),
+            ],
+            expect_cursor=(2, 5),
+            # Frame 3 (BS): cursor row (content changed) + bottom row
+            expect_content_rows=[(3, {2, 8})]
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed

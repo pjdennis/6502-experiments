@@ -551,6 +551,12 @@ insert_batch:
   ; CURSOR_COL16 = cursor_buf_pos - line_start
   SEC
   SBC16 BUF_SRC16, BUF_PTR16, CURSOR_COL16
+
+  ; Check for pure line join (no fwd_nl) -> scroll optimization
+  LDA LINE_LEN16 + 1         ; fwd_nl
+  BNE .set_modified           ; Complex case, fall back to current-line redraw
+  LDA #$02
+  STA RENDER_FLAG            ; Signal line-delete for scroll optimization
   JMP .set_modified
 
 .set_modified:
