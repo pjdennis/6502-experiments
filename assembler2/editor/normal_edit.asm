@@ -516,7 +516,30 @@ cc_have_count:
 INDENT_WIDTH = 2
 
 do_indent:
+  ; Undo batch_pending_pairs COUNT16 addition (>> count = line count, not repeat)
+  LDA BATCH_EXTRA
+  BEQ .indent_no_undo
+  LDA COUNT16
+  SEC
+  SBC BATCH_EXTRA
+  STA COUNT16
+  LDA COUNT16+1
+  SBC #0
+  STA COUNT16+1
+.indent_no_undo:
   JSR get_count_clamp_lines
+  PUSH16 BUF_TEMP16            ; Save line count for repeated iterations
+
+.indent_iter:
+  ; Restore line count from stack (peek without pop)
+  ; PUSH16 pushes low then high, so high is at SP+1, low at SP+2
+  TSX
+  LDA $0102,X
+  STA BUF_TEMP16
+  LDA $0101,X
+  STA BUF_TEMP16+1
+  CP16 FILE_LINE16, LINE_LEN16
+
   LDA #0
   STA NORMAL_TEMP              ; Cursor-line-indented flag
   STA COUNT16                  ; N_ne = 0 (non-empty line count)
@@ -613,11 +636,41 @@ do_indent:
   LDA #$FF
   STA RENDER_FLAG        ; Multi-line edit; BUF_END16 change only triggers current-line
   STA MODIFIED
+  ; Check for more batch repeats
+  LDA BATCH_EXTRA
+  BEQ .indent_done
+  DEC BATCH_EXTRA
+  JMP .indent_iter
+.indent_done:
+  POP16 BUF_TEMP16             ; Clean up saved line count
   JMP clear_count
 
 ; --- Unindent (<<) ---
 do_unindent:
+  ; Undo batch_pending_pairs COUNT16 addition (<< count = line count, not repeat)
+  LDA BATCH_EXTRA
+  BEQ .unindent_no_undo
+  LDA COUNT16
+  SEC
+  SBC BATCH_EXTRA
+  STA COUNT16
+  LDA COUNT16+1
+  SBC #0
+  STA COUNT16+1
+.unindent_no_undo:
   JSR get_count_clamp_lines
+  PUSH16 BUF_TEMP16            ; Save line count for repeated iterations
+
+.unindent_iter:
+  ; Restore line count from stack (peek without pop)
+  ; PUSH16 pushes low then high, so high is at SP+1, low at SP+2
+  TSX
+  LDA $0102,X
+  STA BUF_TEMP16
+  LDA $0101,X
+  STA BUF_TEMP16+1
+  CP16 FILE_LINE16, LINE_LEN16
+
   LDA #0
   STA NORMAL_TEMP              ; Cursor line spaces removed
   STA COUNT16                  ; total_shrink = 0
@@ -712,6 +765,13 @@ do_unindent:
   LDA #$FF
   STA RENDER_FLAG        ; Multi-line edit; BUF_END16 change only triggers current-line
   STA MODIFIED
+  ; Check for more batch repeats
+  LDA BATCH_EXTRA
+  BEQ .unindent_done
+  DEC BATCH_EXTRA
+  JMP .unindent_iter
+.unindent_done:
+  POP16 BUF_TEMP16             ; Clean up saved line count
   JMP clear_count
 
 ; Copy bytes from (BUF_PTR16) to (JUMP_TARGET16) until '\n' is copied.

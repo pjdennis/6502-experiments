@@ -6527,73 +6527,74 @@ class EditorTestRunner:
             expect_cursor=(0, 2),
         )
 
-        # Batched >> (>>>> = two rapid >> combos)
+        # >>>> = two rapid >> combos: indents current line TWICE (4 spaces)
+        # This is NOT the same as 2>> which indents 2 lines once.
         self.run_test(
-            ">>>> batched indents two lines",
+            ">>>> indents current line twice (4 spaces)",
             "aaa\nbbb\nccc\n",
             b">>>>:wq\r",
-            expected_content="  aaa\n  bbb\nccc\n"
+            expected_content="    aaa\nbbb\nccc\n"
         )
 
-        # Batched >> matches count prefix
+        # 2>> indents 2 lines (count = line count, not repeat count)
         self.run_test(
-            ">>>> batched matches 2>> result",
+            "2>> indents two lines once (different from >>>>)",
             "aaa\nbbb\nccc\n",
             b"2>>:wq\r",
             expected_content="  aaa\n  bbb\nccc\n"
         )
 
-        # Batched << (<<<< = two rapid << combos)
+        # <<<< = two rapid << combos: unindents current line twice
         self.run_test(
-            "<<<< batched unindents two lines",
-            "  aaa\n  bbb\n  ccc\n",
+            "<<<< unindents current line twice",
+            "    aaa\n  bbb\n  ccc\n",
             b"<<<<:wq\r",
-            expected_content="aaa\nbbb\n  ccc\n"
+            expected_content="aaa\n  bbb\n  ccc\n"
         )
 
-        # Batched << matches count prefix
+        # 2<< unindents 2 lines (count = line count, not repeat count)
         self.run_test(
-            "<<<< batched matches 2<< result",
+            "2<< unindents two lines once (different from <<<<)",
             "  aaa\n  bbb\n  ccc\n",
             b"2<<:wq\r",
             expected_content="aaa\nbbb\n  ccc\n"
         )
 
-        # Triple batched >>
+        # >>>>>> = three rapid >> combos: indents current line three times (6 spaces)
         self.run_test(
-            ">>>>>> batched indents three lines",
+            ">>>>>> indents current line three times (6 spaces)",
             "aaa\nbbb\nccc\nddd\n",
             b">>>>>>:wq\r",
-            expected_content="  aaa\n  bbb\n  ccc\nddd\n"
+            expected_content="      aaa\nbbb\nccc\nddd\n"
         )
 
-        # Batched >> cursor position
+        # >>>> cursor: col 1 + two indents (2+2 spaces) = col 5
         self.run_test_screen(
-            ">>>> batched cursor col adjusted",
+            ">>>> cursor col adjusted for double indent",
             "aaa\nbbb\nccc\n",
             b"l>>>>:q!\r",
-            expect_cursor=(0, 3),
+            expect_cursor=(0, 5),
         )
 
-        # Batched << cursor position
+        # <<<< cursor: col 3 on "  aaa", first << removes 2 → col 1, second << no-op → col 1
         self.run_test_screen(
-            "<<<< batched cursor col adjusted",
+            "<<<< cursor col adjusted for double unindent",
             "  aaa\n  bbb\n  ccc\n",
             b"lll<<<<:q!\r",
             expect_cursor=(0, 1),
         )
 
-        # Render: >>>> batched into single action frame
+        # Render: >>>> batched into single action frame (3 frames: init, action, quit)
         self.run_test_screen(
-            "Batch >>>> is single action frame",
+            "Render: >>>> is single action frame",
             "aaa\nbbb\nccc\n",
             b">>>>:q!\r",
             expect_content_redraws=[True, True, False]
         )
 
-        # Render: <<<< batched into single action frame
+        # Render: <<<< batched into single action frame (3 frames: init, action, quit)
         self.run_test_screen(
-            "Batch <<<< is single action frame",
+            "Render: <<<< is single action frame",
             "  aaa\n  bbb\n  ccc\n",
             b"<<<<:q!\r",
             expect_content_redraws=[True, True, False]

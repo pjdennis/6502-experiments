@@ -290,6 +290,7 @@ clear_count:
   STA LAST_KEY
   LDA #0
   STA BATCH_RESTORE_KEY
+  STA BATCH_EXTRA
   RTS
 
 ; Accumulate digit in A ('0'-'9') into COUNT16
