@@ -8273,6 +8273,57 @@ class EditorTestRunner:
             expect_content_rows=[(1, {8})]
         )
 
+        # dd at cursor row 3: scroll shifts rows below cursor up,
+        # only bottom row needs rendering.
+        # Frames: 0=initial, 1=jjj cursor-only, 2=dd scroll frame
+        self.run_test_screen(
+            "Scroll opt: dd at mid-screen uses scroll",
+            make_lines(15),
+            b"jjjdd:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line 5"), (4, "Line 6"), (5, "Line 7"),
+                (6, "Line 8"), (7, "Line 9"), (8, "Line 10"),
+            ],
+            expect_cursor=(3, 0),
+            # Frame 2 (dd): only bottom row (8) should be touched
+            expect_content_rows=[(2, {8})]
+        )
+
+        # dd at row 0: entire content area scrolls up, bottom row rendered
+        self.run_test_screen(
+            "Scroll opt: dd at top uses scroll",
+            make_lines(15),
+            b"dd:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 2"), (1, "Line 3"), (2, "Line 4"),
+                (3, "Line 5"), (4, "Line 6"), (5, "Line 7"),
+                (6, "Line 8"), (7, "Line 9"), (8, "Line 10"),
+            ],
+            expect_cursor=(0, 0),
+            # Frame 1 (dd): only bottom row (8) should be touched
+            expect_content_rows=[(1, {8})]
+        )
+
+        # 3dd: 3 lines deleted, 3 bottom rows need rendering
+        # Frame 0=initial, 1=count '3' display, 2=dd scroll frame
+        self.run_test_screen(
+            "Scroll opt: 3dd uses scroll",
+            make_lines(15),
+            b"3dd:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 4"), (1, "Line 5"), (2, "Line 6"),
+                (3, "Line 7"), (4, "Line 8"), (5, "Line 9"),
+                (6, "Line 10"), (7, "Line 11"), (8, "Line 12"),
+            ],
+            expect_cursor=(0, 0),
+            # Frame 2 (3dd): bottom 3 rows touched
+            expect_content_rows=[(2, {6, 7, 8})]
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed

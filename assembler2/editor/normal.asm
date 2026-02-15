@@ -266,6 +266,8 @@ do_dd:
 .dd_done:
   LDA #$FF
   STA MODIFIED
+  LDA #$02
+  STA RENDER_FLAG        ; Signal line-delete for scroll optimization
   JSR clamp_cursor_col
   JMP clear_count
 
