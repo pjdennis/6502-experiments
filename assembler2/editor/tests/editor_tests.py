@@ -2192,31 +2192,30 @@ class EditorTestRunner:
         )
 
         # gg at first line: cursor-only (already at top)
-        # g (F - pending key), g (should be F - already at top)
+        # g+g batched into single frame (no pending-key frame)
         self.run_test_screen(
             "Render opt: gg at top is cursor-only",
             "Hello\n",
             b"gg:q!\r",
-            expect_content_redraws=[True, False, False]
+            expect_content_redraws=[True, False]
         )
 
         # yy: cursor-only (yank doesn't change display)
-        # y (F - pending key), y (should be F - yank, no display change)
+        # y+y batched into single frame (no pending-key frame)
         self.run_test_screen(
             "Render opt: yy is cursor-only",
             "Hello\n",
             b"yy:q!\r",
-            expect_content_redraws=[True, False, False]
+            expect_content_redraws=[True, False]
         )
 
         # Mark goto to current line: cursor-only
-        # m (F - pending key), a (F - mark set), ' (F - pending key),
-        # a (should be F - mark goto to same line, no scroll)
+        # m+a batched, '+a batched (no pending-key frames)
         self.run_test_screen(
             "Render opt: mark goto same line is cursor-only",
             "Line 1\nLine 2\n",
             b"ma'a:q!\r",
-            expect_content_redraws=[True, False, False, False, False]
+            expect_content_redraws=[True, False, False]
         )
 
         # w at end of file: cursor-only (no next word to move to)
@@ -2322,13 +2321,13 @@ class EditorTestRunner:
         )
 
         # r replaces char: single-row redraw
-        # Frame 0: init(T), Frame 1: r pending key(F), Frame 2: X replaces(T), Frame 3: :q!(F)
+        # Frame 0: init(T), Frame 1: r+X batched replaces(T), Frame 2: :q!(F)
         self.run_test_screen(
             "Render opt: r replaces with single-row redraw",
             "Hello\n",
             b"rX:q!\r",
-            expect_content_redraws=[True, False, True, False],
-            expect_content_rows=[(2, {0})]
+            expect_content_redraws=[True, True, False],
+            expect_content_rows=[(1, {0})]
         )
 
         # ~ toggles case: single-row redraw
@@ -2367,20 +2366,21 @@ class EditorTestRunner:
         )
 
         # dw deletes word: single-row redraw
+        # d+w batched into single frame (no pending-key frame)
         self.run_test_screen(
             "Render opt: dw redraws current row only",
             "Hello World\n",
             b"dw:q!\r",
-            expect_content_rows=[(2, {0})]
+            expect_content_rows=[(1, {0})]
         )
 
         # db deletes word backward: single-row redraw
-        # Frame 0: init(T), Frame 1: $(F), Frame 2: d pending(F), Frame 3: b triggers db(T)
+        # Frame 0: init(T), Frame 1: $(F), Frame 2: d+b batched(T)
         self.run_test_screen(
             "Render opt: db redraws current row only",
             "Hello World\n",
             b"$db:q!\r",
-            expect_content_rows=[(3, {0})]
+            expect_content_rows=[(2, {0})]
         )
 
         # C changes to end of line: single-row redraw
@@ -2392,39 +2392,39 @@ class EditorTestRunner:
         )
 
         # cw changes word: single-row redraw
-        # Frame 0: init(T), Frame 1: c pending(F), Frame 2: w triggers cw(T)
+        # c+w batched into single frame (no pending-key frame)
         self.run_test_screen(
             "Render opt: cw redraws current row only",
             "Hello World\n",
             b"cw\x1b:q!\r",
-            expect_content_rows=[(2, {0})]
+            expect_content_rows=[(1, {0})]
         )
 
         # cb changes word backward: single-row redraw
-        # Frame 0: init(T), Frame 1: $(F), Frame 2: c pending(F), Frame 3: b triggers cb(T)
+        # Frame 0: init(T), Frame 1: $(F), Frame 2: c+b batched(T)
         self.run_test_screen(
             "Render opt: cb redraws current row only",
             "Hello World\n",
             b"$cb\x1b:q!\r",
-            expect_content_rows=[(3, {0})]
+            expect_content_rows=[(2, {0})]
         )
 
         # de deletes to word end: single-row redraw
-        # Frame 0: init(T), Frame 1: d pending(F), Frame 2: e triggers de(T)
+        # d+e batched into single frame (no pending-key frame)
         self.run_test_screen(
             "Render opt: de redraws current row only",
             "Hello World\n",
             b"de:q!\r",
-            expect_content_rows=[(2, {0})]
+            expect_content_rows=[(1, {0})]
         )
 
         # ce changes to word end: single-row redraw
-        # Frame 0: init(T), Frame 1: c pending(F), Frame 2: e triggers ce(T)
+        # c+e batched into single frame (no pending-key frame)
         self.run_test_screen(
             "Render opt: ce redraws current row only",
             "Hello World\n",
             b"ce\x1b:q!\r",
-            expect_content_rows=[(2, {0})]
+            expect_content_rows=[(1, {0})]
         )
 
         # char paste p: single-row redraw
@@ -2466,13 +2466,13 @@ class EditorTestRunner:
         )
 
         # r replaces char in wrapped line
-        # Frame 0: init(T), Frame 1: r pending(F), Frame 2: X replaces(T)
+        # Frame 0: init(T), Frame 1: r+X batched replaces(T)
         self.run_test_screen(
             "Render opt: r in wrapped line",
             "A" * 60 + "\nSecond\n",
             b"rX:q!\r",
-            expect_content_redraws=[True, False, True, False],
-            expect_content_rows=[(2, {0, 1})]
+            expect_content_redraws=[True, True, False],
+            expect_content_rows=[(1, {0, 1})]
         )
 
         # ~ toggles case in wrapped line
@@ -3284,6 +3284,117 @@ class EditorTestRunner:
             expect_content_redraws=[True, False]
         )
 
+        # ============================================================
+        # Batch combo keys (dw, yw, dd, gg, ra, etc.)
+        # Two-key combos should consolidate into a single render frame
+        # when both keys are available in the input buffer.
+        # ============================================================
+        self._group("Batch combo keys:", leading_blank=True)
+
+        # dw: d+w batched into single frame (no pending d frame)
+        # Without batching: init(T), d-pending(F), dw(T) = 3 frames
+        # With batching: init(T), dw(T) = 2 frames
+        self.run_test_screen(
+            "Batch dw is single action frame",
+            "Hello World\n",
+            b"dw:q!\r",
+            expect_content_redraws=[True, True, False]
+        )
+
+        # yw: y+w batched into single frame
+        # Without batching: init(T), y-pending(F), yw(F) = 3 frames
+        # With batching: init(T), yw(F) = 2 frames
+        self.run_test_screen(
+            "Batch yw is single action frame",
+            "Hello World\n",
+            b"yw:q!\r",
+            expect_content_redraws=[True, False]
+        )
+
+        # dd: d+d batched into single frame
+        self.run_test_screen(
+            "Batch dd is single action frame",
+            "Hello\nWorld\n",
+            b"dd:q!\r",
+            expect_content_redraws=[True, True, False]
+        )
+
+        # gg: g+g batched into single frame (cursor-only, no content redraw)
+        # init(T), G(F cursor-only), g+g batched(F cursor-only), :q!(F)
+        self.run_test_screen(
+            "Batch gg is single action frame",
+            make_lines(5),
+            b"Ggg:q!\r",
+            expect_content_redraws=[True, False, False, False]
+        )
+
+        # ra: r+a batched into single frame
+        self.run_test_screen(
+            "Batch ra is single action frame",
+            "Hello\n",
+            b"ra:q!\r",
+            expect_content_redraws=[True, True, False]
+        )
+
+        # de: d+e batched into single frame
+        self.run_test_screen(
+            "Batch de is single action frame",
+            "Hello World\n",
+            b"de:q!\r",
+            expect_content_redraws=[True, True, False]
+        )
+
+        # ye: y+e batched into single frame
+        self.run_test_screen(
+            "Batch ye is single action frame",
+            "Hello World\n",
+            b"ye:q!\r",
+            expect_content_redraws=[True, False]
+        )
+
+        # cw: c+w batched into single frame (then insert mode)
+        self.run_test_screen(
+            "Batch cw is single action frame",
+            "Hello World\n",
+            b"cw\x1b:q!\r",
+            expect_content_redraws=[True, True, False, False]
+        )
+
+        # >>: >+> batched into single frame
+        self.run_test_screen(
+            "Batch >> is single action frame",
+            "Hello\nWorld\n",
+            b">>:q!\r",
+            expect_content_redraws=[True, True, False]
+        )
+
+        # <<: <+< batched into single frame
+        self.run_test_screen(
+            "Batch << is single action frame",
+            "  Hello\n  World\n",
+            b"<<:q!\r",
+            expect_content_redraws=[True, True, False]
+        )
+
+        # dwdw: both dw pairs batched via pair batching + combo batching
+        # d+w consumed as first pair, d+w consumed by batch_pending_pairs
+        # Result: single action frame for both deletions
+        self.run_test_screen(
+            "Batch dwdw is single action frame",
+            "one two three four\n",
+            b"dwdw:q!\r",
+            expect_content_redraws=[True, True, False]
+        )
+
+        # 3dw: count digit gets own frame, then d+w batched
+        # Frame 0: init(T), Frame 1: count 3(F), Frame 2: dw(T)
+        self.run_test_screen(
+            "Count prefix + batch dw",
+            "one two three four five\n",
+            b"3dw:q!\r",
+            expect_content_redraws=[True, False, True, False]
+        )
+
         self._group("Batch page down/up:", leading_blank=True)
 
         # Render optimization: batch Ctrl-F reduces redraws
@@ -3617,13 +3728,13 @@ class EditorTestRunner:
         # when switching to snapshot-based render detection.
 
         # Replace char (ra) triggers content redraw on current row
-        # Frame 0: init(T), Frame 1: r pending(F), Frame 2: a replaces(T)
+        # Frame 0: init(T), Frame 1: r+a batched replaces(T)
         self.run_test_screen(
             "Render opt: ra triggers current row redraw",
             "Hello\nWorld\n",
             b"ra:q!\r",
-            expect_content_redraws=[True, False, True, False],
-            expect_content_rows=[(2, {0})]
+            expect_content_redraws=[True, True, False],
+            expect_content_rows=[(1, {0})]
         )
 
         # Toggle case (~) triggers content redraw on current row
@@ -3636,22 +3747,21 @@ class EditorTestRunner:
         )
 
         # Multi-line indent (2>>) triggers full content redraw
-        # Frame 0: init(T), Frame 1: 2(F), Frame 2: > pending(F),
-        # Frame 3: > triggers indent(T)
+        # Frame 0: init(T), Frame 1: 2(F count), Frame 2: >+> batched indent(T)
         self.run_test_screen(
             "Render opt: 2>> triggers full redraw",
             "Hello\nWorld\nThird\n",
             b"2>>:q!\r",
-            expect_content_redraws=[True, False, False, True, False]
+            expect_content_redraws=[True, False, True, False]
         )
 
         # dd triggers full content redraw
-        # Frame 0: init(T), Frame 1: d pending(F), Frame 2: d triggers dd(T)
+        # Frame 0: init(T), Frame 1: d+d batched dd(T)
         self.run_test_screen(
             "Render opt: dd triggers full redraw",
             "Hello\nWorld\n",
             b"dd:q!\r",
-            expect_content_redraws=[True, False, True, False]
+            expect_content_redraws=[True, True, False]
         )
 
         # x triggers content redraw on current row
@@ -3767,62 +3877,9 @@ class EditorTestRunner:
         # ============================================================
         self._group("Pending key display:", leading_blank=True)
 
-        # After pressing 'g', status shows "g" pending key
-        self.run_test_screen(
-            "g shows pending key in status",
-            make_lines(5),
-            b"gG:q!\r",
-            cols=80,
-            expect_status_at_frame=[
-                (1, " - g - "),
-            ]
-        )
-
-        # After pressing 'd', status shows "d" pending key
-        self.run_test_screen(
-            "d shows pending key in status",
-            make_lines(3),
-            b"dd:q!\r",
-            cols=80,
-            expect_status_at_frame=[
-                (1, " - d - "),
-            ]
-        )
-
-        # After pressing 'y', status shows "y" pending key
-        self.run_test_screen(
-            "y shows pending key in status",
-            make_lines(3),
-            b"yy:q!\r",
-            cols=80,
-            expect_status_at_frame=[
-                (1, " - y - "),
-            ]
-        )
-
-        # 3d shows count then count+pending key
-        self.run_test_screen(
-            "3d shows count and pending key",
-            make_lines(5),
-            b"3dd:q!\r",
-            cols=80,
-            expect_status_at_frame=[
-                (1, " - 3 - "),
-                (2, " - 3d - "),
-            ]
-        )
-
-        # 3y shows count then count+pending key
-        self.run_test_screen(
-            "3y shows count and pending key",
-            make_lines(5),
-            b"3yy:q!\r",
-            cols=80,
-            expect_status_at_frame=[
-                (1, " - 3 - "),
-                (2, " - 3y - "),
-            ]
-        )
+        # Combo key batching: the pending-key frame is skipped when the
+        # second key is already available.  The pending key display is only
+        # visible when typing slowly (second key not yet in buffer).
 
         # After dd completes, pending key is cleared
         self.run_test_screen(
@@ -3840,6 +3897,28 @@ class EditorTestRunner:
             b"3dd:q!\r",
             cols=80,
             expect_status_contains="COMMAND - 1,",
+        )
+
+        # 3d: count frame still shows (count digits not batched)
+        self.run_test_screen(
+            "3d shows count before batched combo",
+            make_lines(5),
+            b"3dd:q!\r",
+            cols=80,
+            expect_status_at_frame=[
+                (1, " - 3 - "),
+            ]
+        )
+
+        # 3y: count frame still shows (count digits not batched)
+        self.run_test_screen(
+            "3y shows count before batched combo",
+            make_lines(5),
+            b"3yy:q!\r",
+            cols=80,
+            expect_status_at_frame=[
+                (1, " - 3 - "),
+            ]
         )
 
         # ESC after d clears pending key
@@ -3860,29 +3939,7 @@ class EditorTestRunner:
             expect_status_contains="COMMAND - 1,",
         )
 
-        # m shows pending key in status
-        self.run_test_screen(
-            "m shows pending key in status",
-            make_lines(3),
-            b"ma:q!\r",
-            cols=80,
-            expect_status_at_frame=[
-                (1, " - m - "),
-            ]
-        )
-
-        # ' shows pending key in status
-        self.run_test_screen(
-            "' shows pending key in status",
-            make_lines(3),
-            b"ma'a:q!\r",
-            cols=80,
-            expect_status_at_frame=[
-                (3, " - ' - "),
-            ]
-        )
-
-        # After ma, pending key clears
+        # After ma, pending key clears (m+a batched when keys available)
         self.run_test_screen(
             "ma clears pending key from status",
             make_lines(3),
@@ -3891,7 +3948,7 @@ class EditorTestRunner:
             expect_status_contains="COMMAND - 1,",
         )
 
-        # After 'a with mark set, pending key clears
+        # After 'a with mark set, pending key clears ('+a batched)
         self.run_test_screen(
             "'a clears pending key from status",
             make_lines(3),
@@ -3904,14 +3961,14 @@ class EditorTestRunner:
         # (no re-dispatch, no side effects)
 
         # d then digit: should reset, not start a count
-        # Frame 0: initial, Frame 1: 'd' pending, Frame 2: '1' should reset
+        # d+1 batched: frame 1 shows reset state (no pending, no count)
         self.run_test_screen(
             "d1 resets state (no count started)",
             make_lines(3),
             b"d1:q!\r",
             cols=80,
             expect_status_at_frame=[
-                (2, "NORMAL - 1,"),  # After '1', state fully reset
+                (1, "NORMAL - 1,"),  # After d+1 batched, state fully reset
             ]
         )
 
@@ -3932,13 +3989,14 @@ class EditorTestRunner:
         )
 
         # g then digit: should reset, not start a count
+        # g+1 batched: frame 1 shows reset state
         self.run_test_screen(
             "g1 resets state (no count started)",
             make_lines(3),
             b"g1:q!\r",
             cols=80,
             expect_status_at_frame=[
-                (2, "NORMAL - 1,"),
+                (1, "NORMAL - 1,"),
             ]
         )
 
@@ -3951,13 +4009,14 @@ class EditorTestRunner:
         )
 
         # y then digit: should reset, not start a count
+        # y+1 batched: frame 1 shows reset state
         self.run_test_screen(
             "y1 resets state (no count started)",
             make_lines(3),
             b"y1:q!\r",
             cols=80,
             expect_status_at_frame=[
-                (2, "NORMAL - 1,"),
+                (1, "NORMAL - 1,"),
             ]
         )
 
