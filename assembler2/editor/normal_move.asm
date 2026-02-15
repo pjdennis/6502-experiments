@@ -246,51 +246,21 @@ do_yy:
   JMP show_yank_overflow
 
 ; yw: yank N words forward from cursor (character yank, multi-line)
-; Cursor does not move. Does not modify the file.
 do_yw:
-  JSR get_count              ; BUF_TEMP16 = N
-  JSR check_cursor_in_line
-  BCS .yw_done               ; Empty line, bail
-  LDX BUF_TEMP16
-  JSR compute_multiline_word_range_forward
-  BCS .yw_done
+  SET16 compute_multiline_word_range_forward, JUMP_TARGET16
   LDA #OP_YANK
-  JSR apply_char_operator
-.yw_done:
-  JMP clear_count
+  JMP word_op_forward
 
 ; yb: yank N words backward from cursor (character yank, multi-line)
-; Cursor moves to start of yanked region (like b motion).
-; Does not modify the file.
 do_yb:
-  JSR get_count              ; BUF_TEMP16 = N
-  ; Bail only at file start (col 0 AND line 0)
-  TST16 CURSOR_COL16
-  BNE .yb_ok
-  TST16 FILE_LINE16
-  BEQ .yb_done
-.yb_ok:
-  LDX BUF_TEMP16
-  JSR compute_multiline_word_range_backward
-  BCS .yb_done
   LDA #OP_YANK
-  JSR apply_char_operator
-.yb_done:
-  JMP clear_count
+  JMP word_op_backward
 
 ; ye: yank from cursor to end of word (inclusive, multi-line)
-; Cursor does not move. Does not modify the file.
 do_ye:
-  JSR get_count              ; BUF_TEMP16 = N
-  JSR check_cursor_in_line
-  BCS .ye_done               ; Empty line, bail
-  LDX BUF_TEMP16
-  JSR compute_multiline_word_end_range_forward
-  BCS .ye_done
+  SET16 compute_multiline_word_end_range_forward, JUMP_TARGET16
   LDA #OP_YANK
-  JSR apply_char_operator
-.ye_done:
-  JMP clear_count
+  JMP word_op_forward
 
 ; --- Search ---
 

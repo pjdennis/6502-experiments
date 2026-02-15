@@ -727,146 +727,158 @@ copy_line_to_nl:
   BNE copy_line_to_nl
   RTS
 
-; --- Delete word (dw) ---
-; Delete from cursor to next word boundary (multi-line).
-; Yanks deleted text. Accepts count.
-; Non-batched (count prefix): scans N words, single yank+delete (yanks ALL)
-; Batched (dwdw...): yank last word, delete all N words in single operation
+; --- Word operations: delete, change ---
+; All word operations are thin wrappers that set up the range function
+; and operator type, then delegate to word_op_forward/word_op_backward.
+
+; dw: delete N words forward
 do_dw:
-  JSR get_count              ; BUF_TEMP16 = N
-  JSR check_cursor_in_line
-  BCS .dw_done               ; Empty line, bail
-  LDA BATCH_EXTRA
-  BNE .dw_batched
-
-  ; Non-batched: single compute + yank+delete
-  LDX BUF_TEMP16
-  JSR compute_multiline_word_range_forward
-  BCS .dw_done
-  LDA #OP_DELETE
-  JSR apply_char_operator
-  JMP .dw_finish
-
-.dw_batched:
   SET16 compute_multiline_word_range_forward, JUMP_TARGET16
-  JSR batched_word_delete_fwd
+  LDA #OP_DELETE
+  JMP word_op_forward
 
-.dw_finish:
-  JSR clamp_cursor_col
-.dw_done:
-  JMP clear_count
-
-; --- Delete word backward (db) ---
-; Delete backward to previous word boundary (multi-line).
-; Yanks deleted text. Accepts count.
-; Non-batched (count prefix): scans N words back, single yank+delete (yanks ALL)
-; Batched (dbdb...): delete N-1 words (no yank), yank+delete last word
+; db: delete N words backward
 do_db:
-  JSR get_count              ; BUF_TEMP16 = N
-  ; Bail only at file start (col 0 AND line 0)
-  TST16 CURSOR_COL16
-  BNE .db_ok
-  TST16 FILE_LINE16
-  BEQ .db_done               ; At file start, nothing to do
-.db_ok:
-  LDA BATCH_EXTRA
-  BNE .db_batched
-
-  ; Non-batched
-  LDX BUF_TEMP16
-  JSR compute_multiline_word_range_backward
-  BCS .db_done
   LDA #OP_DELETE
-  JSR apply_char_operator
-  JMP .db_finish
+  JMP word_op_backward
 
-.db_batched:
-  JSR batched_word_delete_bwd
-
-.db_finish:
-  JSR clamp_cursor_col
-.db_done:
-  JMP clear_count
-
-; --- Change word (cw) ---
-; vi's cw = ce: delete to end of current word only (no trailing ws).
-; Enter insert mode after deletion. Multi-line.
-; Scans N words then single yank+delete (yanks ALL deleted text).
+; cw: change N words forward (vi cw = ce range)
 do_cw:
-  JSR get_count              ; BUF_TEMP16 = N
-  JSR check_cursor_in_line
-  BCS .cw_insert
-  LDX BUF_TEMP16
-  JSR compute_multiline_cw_range_forward
-  BCS .cw_insert
+  SET16 compute_multiline_cw_range_forward, JUMP_TARGET16
   LDA #OP_CHANGE
-  JSR apply_char_operator
-  RTS
-.cw_insert:
-  JMP enter_insert_mode_render
+  JMP word_op_forward
 
-; --- Change word backward (cb) ---
-; Scans N words back then single yank+delete (yanks ALL deleted text). Multi-line.
+; cb: change N words backward
 do_cb:
-  JSR get_count              ; BUF_TEMP16 = N
-  ; Bail only at file start (col 0 AND line 0)
-  TST16 CURSOR_COL16
-  BNE .cb_ok
-  TST16 FILE_LINE16
-  BEQ .cb_insert
-.cb_ok:
-  LDX BUF_TEMP16
-  JSR compute_multiline_word_range_backward
-  BCS .cb_insert
   LDA #OP_CHANGE
-  JSR apply_char_operator
-  RTS
-.cb_insert:
-  JMP enter_insert_mode_render
+  JMP word_op_backward
 
-; --- Delete word end (de) ---
-; Delete from cursor to end of word (inclusive, multi-line).
-; Yanks deleted text. Accepts count.
-; Non-batched (count prefix): scans N words, single yank+delete (yanks ALL)
-; Batched (dede...): yank last word, delete all N words in single operation
+; de: delete to end of N words forward
 do_de:
-  JSR get_count              ; BUF_TEMP16 = N
-  JSR check_cursor_in_line
-  BCS .de_done               ; Empty line, bail
-  LDA BATCH_EXTRA
-  BNE .de_batched
-
-  ; Non-batched: single compute + yank+delete
-  LDX BUF_TEMP16
-  JSR compute_multiline_word_end_range_forward
-  BCS .de_done
-  LDA #OP_DELETE
-  JSR apply_char_operator
-  JMP .de_finish
-
-.de_batched:
   SET16 compute_multiline_word_end_range_forward, JUMP_TARGET16
-  JSR batched_word_delete_fwd
+  LDA #OP_DELETE
+  JMP word_op_forward
 
-.de_finish:
+; ce: change to end of N words forward
+do_ce:
+  SET16 compute_multiline_word_end_range_forward, JUMP_TARGET16
+  LDA #OP_CHANGE
+  JMP word_op_forward
+
+; --- Shared word operation helpers ---
+
+; Forward word operation: handles delete, yank, and change for w/e motions.
+; Input: JUMP_TARGET16 = range computation function
+;        A = operator (OP_DELETE, OP_YANK, OP_CHANGE)
+; Handles: get_count, check_cursor_in_line, batch check (OP_DELETE only),
+;          range computation, apply_char_operator, clamp, clear_count.
+; OP_CHANGE bails into insert mode on empty line or failed range.
+word_op_forward:
+  PHA                          ; Save operator
+  JSR get_count                ; BUF_TEMP16 = N
+  JSR check_cursor_in_line
+  BCS .bail
+
+  ; Check for batched delete (OP_DELETE with BATCH_EXTRA > 0)
+  TSX
+  LDA $0101,X                  ; Peek operator from stack
+  CMP #OP_DELETE
+  BNE .non_batched
+  LDA BATCH_EXTRA
+  BNE .batched
+
+.non_batched:
+  LDX BUF_TEMP16
+  JSR .call_range              ; BUF_LEN16 = range
+  BCS .bail
+  PLA                          ; A = operator
+  CMP #OP_CHANGE
+  PHA                          ; Re-save (A preserved, flags from CMP)
+  BEQ .do_change
+  ; OP_DELETE or OP_YANK
+  JSR apply_char_operator
+  PLA
   JSR clamp_cursor_col
-.de_done:
   JMP clear_count
 
-; --- Change word end (ce) ---
-; Delete from cursor to end of word (inclusive, multi-line), enter insert mode.
-; Scans N words then single yank+delete (yanks ALL deleted text).
-do_ce:
-  JSR get_count              ; BUF_TEMP16 = N
-  JSR check_cursor_in_line
-  BCS .ce_insert
-  LDX BUF_TEMP16
-  JSR compute_multiline_word_end_range_forward
-  BCS .ce_insert
-  LDA #OP_CHANGE
-  JSR apply_char_operator
+.do_change:
+  PLA                          ; A = OP_CHANGE
+  JSR apply_char_operator      ; Enters insert mode + clear_count
   RTS
-.ce_insert:
+
+.batched:
+  PLA                          ; Discard operator (always DELETE)
+  JSR batched_word_delete_fwd
+  JSR clamp_cursor_col
+  JMP clear_count
+
+.bail:
+  PLA                          ; Recover operator
+  CMP #OP_CHANGE
+  BEQ .bail_insert
+  JMP clear_count
+
+.bail_insert:
+  JMP enter_insert_mode_render
+
+.call_range:
+  JMP (JUMP_TARGET16)
+
+; Backward word operation: handles delete, yank, and change for b motion.
+; Input: A = operator (OP_DELETE, OP_YANK, OP_CHANGE)
+; Uses compute_multiline_word_range_backward directly.
+; Handles: get_count, file-start bail, batch check (OP_DELETE only),
+;          range computation, apply_char_operator, clamp, clear_count.
+; OP_CHANGE bails into insert mode at file start or failed range.
+word_op_backward:
+  PHA                          ; Save operator
+  JSR get_count                ; BUF_TEMP16 = N
+  ; Bail at file start (col 0 AND line 0)
+  TST16 CURSOR_COL16
+  BNE .ok
+  TST16 FILE_LINE16
+  BEQ .bail
+.ok:
+  ; Check for batched delete (OP_DELETE with BATCH_EXTRA > 0)
+  TSX
+  LDA $0101,X                  ; Peek operator from stack
+  CMP #OP_DELETE
+  BNE .non_batched
+  LDA BATCH_EXTRA
+  BNE .batched
+
+.non_batched:
+  LDX BUF_TEMP16
+  JSR compute_multiline_word_range_backward
+  BCS .bail
+  PLA                          ; A = operator
+  CMP #OP_CHANGE
+  PHA                          ; Re-save (A preserved, flags from CMP)
+  BEQ .do_change
+  ; OP_DELETE or OP_YANK
+  JSR apply_char_operator
+  PLA
+  JSR clamp_cursor_col
+  JMP clear_count
+
+.do_change:
+  PLA                          ; A = OP_CHANGE
+  JSR apply_char_operator      ; Enters insert mode + clear_count
+  RTS
+
+.batched:
+  PLA                          ; Discard operator (always DELETE)
+  JSR batched_word_delete_bwd
+  JSR clamp_cursor_col
+  JMP clear_count
+
+.bail:
+  PLA                          ; Recover operator
+  CMP #OP_CHANGE
+  BEQ .bail_insert
+  JMP clear_count
+
+.bail_insert:
   JMP enter_insert_mode_render
 
 ; --- Batched word delete helpers ---
