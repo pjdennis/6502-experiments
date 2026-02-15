@@ -2363,6 +2363,28 @@ class EditorTestRunner:
             expect_content_redraws=[True, True, True, False]
         )
 
+        # Batched Ctrl-D: two Ctrl-D's consumed in one frame
+        # Frame 0: init(T), Frame 1: both Ctrl-D's batched(T), Frame 2: j(F)
+        self.run_test_screen(
+            "Render opt: batched Ctrl-D*2 is single frame",
+            make_lines(30),
+            CTRL_D * 2 + b"j:q!\r",
+            expect_cursor=(1, 0),
+            expect_lines=[(i, f"Line {i+9}") for i in range(9)],
+            expect_content_redraws=[True, True, False]
+        )
+
+        # Batched Ctrl-U: two Ctrl-U's consumed in one frame
+        # Frame 0: init(T), Frame 1: Ctrl-F(T), Frame 2: both Ctrl-U's(T), Frame 3: j(F)
+        self.run_test_screen(
+            "Render opt: batched Ctrl-U*2 is single frame",
+            make_lines(30),
+            CTRL_F + CTRL_U * 2 + b"j:q!\r",
+            expect_cursor=(1, 0),
+            expect_lines=[(i, f"Line {i+2}") for i in range(9)],
+            expect_content_redraws=[True, True, True, False]
+        )
+
         # Insert Ctrl-F at bottom: cursor-only
         self.run_test_screen(
             "Render opt: insert Ctrl-F at bottom is cursor-only",

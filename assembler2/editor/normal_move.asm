@@ -217,20 +217,34 @@ get_half_page_amount:
 ; Ctrl-D: half-page down
 ; Scroll down by half a screen (or count lines). Column preserved.
 normal_half_page_down:
-  JSR get_half_page_amount
+  ; Count extra Ctrl-D keys in typeahead (BUF_TEMP = key code from dispatch)
+  JSR count_pending_key
+  INX
+  STX BUF_DELTA              ; BUF_DELTA = loop counter (1 + extras)
+  JSR get_half_page_amount   ; BUF_TEMP = scroll amount
   ; NORMAL_TEMP = content_rows = SCREEN_ROWS - 1
   LDX SCREEN_ROWS
   DEX
   STX NORMAL_TEMP
+.loop:
   JSR scroll_view_down
+  DEC BUF_DELTA
+  BNE .loop
   JSR clamp_cursor_col
   JMP clear_count
 
 ; Ctrl-U: half-page up
 ; Scroll up by half a screen (or count lines). Column preserved.
 normal_half_page_up:
-  JSR get_half_page_amount
+  ; Count extra Ctrl-U keys in typeahead (BUF_TEMP = key code from dispatch)
+  JSR count_pending_key
+  INX
+  STX BUF_DELTA              ; BUF_DELTA = loop counter (1 + extras)
+  JSR get_half_page_amount   ; BUF_TEMP = scroll amount
+.loop:
   JSR scroll_view_up
+  DEC BUF_DELTA
+  BNE .loop
   JSR clamp_cursor_col
   JMP clear_count
 
