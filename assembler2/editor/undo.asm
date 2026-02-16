@@ -185,6 +185,13 @@ undo_do_redo:
   JSR buf_insert_char
   BCS .redo_cc_done
   JSR buf_rebuild_lines
+  ; Adjust marks for inserted blank line (matches original cc behavior)
+  LDA #1
+  STA BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
+  LDAX16 FILE_LINE16
+  JSR mark_adjust_insert
 .redo_cc_done:
   LDA #0
   STA UNDO_IS_REDO
