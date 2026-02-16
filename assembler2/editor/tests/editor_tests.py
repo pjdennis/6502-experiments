@@ -9628,6 +9628,18 @@ class EditorTestRunner:
 
         self._group("Sub-line render optimization:", leading_blank=True)
 
+        # Normal ~: toggle case at col 3, partial render from col 3
+        # lll=move to col 3, ~=toggle case
+        # Frame 0=initial, 1=lll move, 2=~ toggle
+        self.run_test_screen(
+            "~ toggle case: partial render from cursor col",
+            "Hello World\n",
+            b"lll~:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "HelLo World")],
+            expect_min_col=[(2, 0, 3)]
+        )
+
         # Normal x: delete at col 3, partial render from col 3
         # lll=move to col 3, x=delete char
         # Frame 0=initial, 1=lll move, 2=x delete

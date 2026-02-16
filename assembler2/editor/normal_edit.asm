@@ -281,6 +281,7 @@ contiguous_fill:
 ; --- Toggle case (~) ---
 normal_toggle_case:
   JSR get_batched_count
+  CP16 CURSOR_COL16, RENDER_FROM_COL16
 
 .tilde_loop:
   STX NORMAL_TEMP
