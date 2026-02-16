@@ -9628,6 +9628,18 @@ class EditorTestRunner:
 
         self._group("Sub-line render optimization:", leading_blank=True)
 
+        # Normal r: replace at col 3, partial render from col 3
+        # lll=move to col 3, rZ=replace with 'Z'
+        # Frame 0=initial, 1=lll move, 2=rZ replace
+        self.run_test_screen(
+            "r replace: partial render from cursor col",
+            "Hello World\n",
+            b"lllrZ:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "HelZo World")],
+            expect_min_col=[(2, 0, 3)]
+        )
+
         # Normal ~: toggle case at col 3, partial render from col 3
         # lll=move to col 3, ~=toggle case
         # Frame 0=initial, 1=lll move, 2=~ toggle

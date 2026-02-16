@@ -444,6 +444,7 @@ normal_change_to_eol:
 do_replace_char:
   JSR get_count
   LDX BUF_TEMP16
+  CP16 CURSOR_COL16, RENDER_FROM_COL16
 
 .replace_loop:
   STX NORMAL_TEMP
