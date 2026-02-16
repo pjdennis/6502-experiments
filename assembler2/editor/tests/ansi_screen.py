@@ -47,13 +47,15 @@ class AnsiScreen:
         self.scroll_top = 0
         self.scroll_bottom = rows - 1
         # Per-frame tracking for render optimization tests
-        self.frames = []            # List of (buffer_copy, cursor_pos, content_touched, attrs_copy)
+        self.frames = []            # List of (buffer_copy, cursor_pos, content_touched, attrs_copy, min_content_col)
         self.content_touched = set()  # Set of content row indices written this cycle
+        self.min_content_col = {}     # row → min column index written this cycle
 
     def _clear_screen(self):
         self.buffer = [[' '] * self.cols for _ in range(self.rows)]
         self.attrs = [[0] * self.cols for _ in range(self.rows)]
         self.content_touched = set(range(self.rows - 1))
+        self.min_content_col = {}
         self._pending_wrap = False
 
     def _clear_to_eol(self):
@@ -84,6 +86,10 @@ class AnsiScreen:
             return
         if self.cursor_row < self.rows - 1:
             self.content_touched.add(self.cursor_row)
+            row = self.cursor_row
+            col = self.cursor_col
+            if row not in self.min_content_col or col < self.min_content_col[row]:
+                self.min_content_col[row] = col
         self.buffer[self.cursor_row][self.cursor_col] = ch
         self.attrs[self.cursor_row][self.cursor_col] = self.ATTR_REVERSE if self.reverse_video else 0
         self.cursor_col += 1
@@ -138,8 +144,10 @@ class AnsiScreen:
         self.frame_attrs = [row[:] for row in self.attrs]
         self.frame_cursor = (self.cursor_row, self.cursor_col)
         self.frames.append((self.frame_buffer, self.frame_cursor,
-                            self.content_touched, self.frame_attrs))
+                            self.content_touched, self.frame_attrs,
+                            self.min_content_col))
         self.content_touched = set()
+        self.min_content_col = {}
 
     def process(self, data: str) -> 'AnsiScreen':
         """Process ANSI output data through the virtual terminal."""
@@ -246,6 +254,14 @@ class AnsiScreen:
         if frame_idx < 0 or frame_idx >= len(self.frames):
             return set()
         return self.frames[frame_idx][2]
+
+    def get_min_col(self, frame_idx: int, row: int) -> int:
+        """Minimum column index written to on a given row in a given frame.
+        Returns -1 if the row was not written to in that frame."""
+        if frame_idx < 0 or frame_idx >= len(self.frames):
+            return -1
+        min_cols = self.frames[frame_idx][4]
+        return min_cols.get(row, -1)
 
     def get_row_text(self, row: int) -> str:
         """Row text from last rendered frame, rstripped."""

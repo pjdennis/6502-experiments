@@ -535,6 +535,7 @@ class EditorTestRunner:
                         expect_status_at_frame: list = None,
                         initial_bytes: bytes = None,
                         expect_reverse_at: list = None,
+                        expect_min_col: list = None,
                         deferred_wrap: bool = False):
         """Run an editor test and verify screen state via ANSI output.
 
@@ -558,6 +559,8 @@ class EditorTestRunner:
                 initial_content; use when content has non-UTF-8 bytes)
             expect_reverse_at: list of (row, col, expected_bool) tuples -
                 verify reverse video attribute at specific cells
+            expect_min_col: list of (frame_idx, row, min_col) tuples -
+                verify minimum column written on a row in a specific frame
         """
         with tempfile.TemporaryDirectory(prefix='') as tmpdir:
             tmpdir = Path(tmpdir)
@@ -749,6 +752,23 @@ class EditorTestRunner:
                         self._fail(name,
                             f"Cell ({row},{col}): expected reverse="
                             f"{expected_rev}, got {actual_rev}\n"
+                            f"    Frame:\n{screen.dump()}")
+                        return
+
+            if expect_min_col is not None:
+                actual_count = screen.get_frame_count()
+                for frame_idx, row, expected_col in expect_min_col:
+                    if frame_idx >= actual_count:
+                        self._fail(name,
+                            f"Expected frame {frame_idx} but only "
+                            f"{actual_count} frames\n"
+                            f"    Frame:\n{screen.dump()}")
+                        return
+                    actual_col = screen.get_min_col(frame_idx, row)
+                    if actual_col != expected_col:
+                        self._fail(name,
+                            f"Frame {frame_idx}, row {row}: expected "
+                            f"min_col={expected_col}, got {actual_col}\n"
                             f"    Frame:\n{screen.dump()}")
                         return
 
