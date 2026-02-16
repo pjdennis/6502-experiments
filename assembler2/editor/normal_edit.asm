@@ -522,6 +522,7 @@ cc_have_count:
   JSR mark_adjust_insert
 
 .cc_already_empty:
+  JSR undo_record_cc         ; Upgrade line-delete undo to cc type
   LDA #0
   STA_LH16 CURSOR_COL16
   LDA #$FF

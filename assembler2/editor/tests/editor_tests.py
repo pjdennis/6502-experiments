@@ -9853,6 +9853,56 @@ class EditorTestRunner:
             expected_content="Hello\n"
         )
 
+        self._group("Undo change commands (clean insert exit):", leading_blank=True)
+
+        # s + ESC without typing + undo
+        self.run_test(
+            "s ESC undo restores char",
+            "Hello\n",
+            b"s\x1bu:wq\r",
+            expected_content="Hello\n"
+        )
+
+        # s + typing clears undo
+        self.run_test(
+            "sX ESC: typing clears undo",
+            "Hello\n",
+            b"sX\x1bu:wq\r",
+            expected_content="Xello\n"
+        )
+
+        # cc + ESC + undo
+        self.run_test(
+            "cc ESC undo restores line",
+            "Hello\nWorld\n",
+            b"cc\x1bu:wq\r",
+            expected_content="Hello\nWorld\n"
+        )
+
+        # cc + typing clears undo
+        self.run_test(
+            "cc New ESC: typing clears undo",
+            "Hello\nWorld\n",
+            b"ccNew\x1bu:wq\r",
+            expected_content="New\nWorld\n"
+        )
+
+        # C + ESC + undo
+        self.run_test(
+            "C ESC undo at col 2",
+            "Hello\n",
+            b"llC\x1bu:wq\r",
+            expected_content="Hello\n"
+        )
+
+        # cw + ESC + undo
+        self.run_test(
+            "cw ESC undo restores word",
+            "Hello World\n",
+            b"cw\x1bu:wq\r",
+            expected_content="Hello World\n"
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed
