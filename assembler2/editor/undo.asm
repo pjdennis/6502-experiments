@@ -100,8 +100,8 @@ undo_do_undo:
   STAX16 LINE_LEN16
   TST16 LINE_LEN16
   BNE .undo_cc_has_content
-  ; Delete the blank line (and its newline/line structure)
-  JSR buf_delete_lines_no_mark
+  ; Delete the blank line (with mark adjustment)
+  JSR delete_current_lines
   JMP .undo_line_paste
 .undo_cc_has_content:
   ; Line has content (shouldn't happen if insert exited clean, but be safe)
@@ -239,15 +239,3 @@ undo_do_redo:
 .redo_fail:
   JMP clear_count
 
-; Delete lines without mark adjustment (for undo internal use)
-; Input: BUF_TEMP16 = count, FILE_LINE16 = first line
-buf_delete_lines_no_mark:
-  LDAX16 FILE_LINE16
-  JSR buf_delete_lines
-  ; Clamp file line if past end of file
-  CMP16 FILE_LINE16, LINE_COUNT16
-  BCC .ok
-  SEC
-  SBCI16 LINE_COUNT16, 1, FILE_LINE16
-.ok:
-  RTS
