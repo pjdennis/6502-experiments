@@ -2763,7 +2763,7 @@ class EditorTestRunner:
             "a" * 60 + "\nSecond\n",
             b"~:q!\r",
             expect_content_redraws=[True, True],
-            expect_content_rows=[(1, {0, 1})]
+            expect_content_rows=[(1, {0})]
         )
 
         # D in wrapped line stays wrapped (at col 0, deletes most but 40+ remain? No.
@@ -9669,7 +9669,20 @@ class EditorTestRunner:
             b"lll~:q!\r",
             rows=10, cols=40,
             expect_lines=[(0, "HelLo World")],
-            expect_min_col=[(2, 0, 3)]
+            expect_min_col=[(2, 0, 3)],
+            expect_max_col=[(2, 0, 3)]
+        )
+
+        # Counted ~ at end of line: 3~ on "Hi" from col 0 toggles 'H','i'
+        # then stops (can't advance past end). Should not write past EOL.
+        # Frame 0=initial, 1=count '3' display, 2=~ operation
+        self.run_test_screen(
+            "~ counted at end of line: no garbage past EOL",
+            "Hi\n",
+            b"3~:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "hI")],
+            expect_max_col=[(2, 0, 1)]
         )
 
         # Normal x: delete at col 3, partial render from col 3

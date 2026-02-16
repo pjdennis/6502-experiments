@@ -303,16 +303,15 @@ normal_toggle_case:
 .tilde_toggle:
   EOR #$20
   STA (BUF_PTR16),Y
+  JSR io_write             ; direct write toggled char
   LDA #$FF
   STA MODIFIED
-  LDA #1
-  STA RENDER_FLAG
 
 .tilde_advance:
   SEC
   SBCI16 LINE_LEN16, 1, BUF_TEMP16
   CMP16 CURSOR_COL16, BUF_TEMP16
-  BCS .tilde_next
+  BCS .tilde_done            ; at end of line, stop
   INC16 CURSOR_COL16
 
 .tilde_next:
