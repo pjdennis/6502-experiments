@@ -9735,6 +9735,64 @@ class EditorTestRunner:
             expect_lines=[(0, "HelXlo World")],
             # Frame 3 is the batched insert; first affected col is 3
             expect_min_col=[(3, 0, 3)]
+
+        self._group("Undo (u):", leading_blank=True)
+
+        # dd undo: restore deleted line
+        self.run_test(
+            "dd undo restores deleted line",
+            "Hello\nWorld\n",
+            b"ddu:wq\r",
+            expected_content="Hello\nWorld\n"
+        )
+
+        # dd undo then redo (uu)
+        self.run_test(
+            "dd undo then redo (uu)",
+            "Hello\nWorld\n",
+            b"dduu:wq\r",
+            expected_content="World\n"
+        )
+
+        # dd undo on last line
+        self.run_test(
+            "dd undo on last line of 3-line file",
+            "A\nB\nC\n",
+            b"jjddu:wq\r",
+            expected_content="A\nB\nC\n"
+        )
+
+        # 2dd undo
+        self.run_test(
+            "2dd undo restores both lines",
+            "A\nB\nC\n",
+            b"2ddu:wq\r",
+            expected_content="A\nB\nC\n"
+        )
+
+        # dd then dd then undo: first dd stays, second dd undone
+        self.run_test(
+            "dd dd u: first dd stays, second dd undone",
+            "A\nB\nC\n",
+            b"ddjddu:wq\r",
+            expected_content="B\nC\n"
+        )
+
+        # dd then insert clears undo
+        self.run_test(
+            "dd then oNew ESC u: insert clears undo",
+            "A\nB\n",
+            b"ddoNew\x1bu:wq\r",
+            expected_content="B\nNew\n"
+        )
+
+        # u with no prior edit is no-op
+        self.run_test(
+            "u with no prior edit is no-op",
+            "Hello\n",
+            b"u:wq\r",
+            expected_content="Hello\n",
+            expect_unmodified=True
         )
 
         print()

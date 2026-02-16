@@ -160,6 +160,7 @@ normal_editing_keys:
   .byte 's'         .word normal_substitute_char
   .byte 'C'         .word normal_change_to_eol
   .byte 'S'         .word normal_substitute_line
+  .byte 'u'         .word undo_handle
   .byte 0           ; End sentinel
 
 normal_other_keys:
@@ -273,6 +274,7 @@ do_dd:
   ; Restore total count and delete all lines
   POP16 BUF_TEMP16
   BCS .yank_overflow
+  JSR undo_record_line_delete
   JSR delete_current_lines
   JMP .dd_done
 
@@ -312,6 +314,7 @@ normal_enter_insert_eol:
   JMP enter_insert_mode
 
 normal_open_below:
+  JSR undo_clear
   LDAX16 FILE_LINE16
   JSR buf_get_line_ptr
   JSR advance_past_line_end
@@ -344,6 +347,7 @@ normal_open_below:
   JMP clear_count
 
 normal_open_above:
+  JSR undo_clear
   LDAX16 FILE_LINE16
   JSR buf_get_line_ptr
 

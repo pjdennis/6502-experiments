@@ -4,6 +4,7 @@
 ; --- Paste ---
 
 normal_paste_below:
+  JSR undo_clear
   LDA YANK_TYPE
   BEQ .line_paste
   JMP char_paste_below
@@ -26,6 +27,7 @@ normal_paste_below:
   JMP clear_count
 
 normal_paste_above:
+  JSR undo_clear
   LDA YANK_TYPE
   BEQ .line_paste
   JMP char_paste_above
@@ -280,6 +282,7 @@ contiguous_fill:
 
 ; --- Toggle case (~) ---
 normal_toggle_case:
+  JSR undo_clear
   JSR get_batched_count
   CP16 CURSOR_COL16, RENDER_FROM_COL16
 
@@ -324,6 +327,7 @@ normal_toggle_case:
 
 ; --- Join lines (J) ---
 normal_join_lines:
+  JSR undo_clear
   JSR get_batched_count
 
   ; Adjust for explicit count: NJ joins N-1 lines
@@ -441,6 +445,7 @@ normal_change_to_eol:
 
 ; --- Replace char (r) ---
 do_replace_char:
+  JSR undo_clear
   JSR get_count
   LDX BUF_TEMP16
   CP16 CURSOR_COL16, RENDER_FROM_COL16
@@ -536,6 +541,7 @@ cc_have_count:
 INDENT_WIDTH = 2
 
 do_indent:
+  JSR undo_clear
   ; Compute BUF_DELTA = INDENT_WIDTH * (1 + BATCH_EXTRA) = spaces per non-empty line
   LDA BATCH_EXTRA
   CLC
@@ -678,6 +684,7 @@ do_indent:
 
 ; --- Unindent (<<) ---
 do_unindent:
+  JSR undo_clear
   ; Compute BUF_DELTA = INDENT_WIDTH * (1 + BATCH_EXTRA) = max spaces to remove per line
   LDA BATCH_EXTRA
   CLC

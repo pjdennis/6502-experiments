@@ -1,0 +1,169 @@
+; Undo/redo support for normal mode deletion commands
+;
+; Single-level undo: 'u' toggles between undo and redo.
+; The yank buffer stores deleted content, so undo = paste it back,
+; redo = re-delete it.
+;
+; UNDO_TYPE values:
+;   0 = none (no undoable operation)
+;   1 = line-delete (dd, 2dd, etc.)
+;   2 = char-delete (x, D, dw, db, de)
+
+UNDO_NONE = 0
+UNDO_LINE = 1
+UNDO_CHAR = 2
+
+  .zeropage
+
+UNDO_TYPE:       .byte    ; 0=none, 1=line-delete, 2=char-delete
+UNDO_LINE16:     .word    ; FILE_LINE16 at time of operation
+UNDO_COL16:      .word    ; CURSOR_COL16 at time of operation (char-delete only)
+UNDO_IS_REDO:    .byte    ; 0=undo pending, $FF=redo pending
+INSERT_CHANGED:  .byte    ; tracks if insert mode modified buffer
+
+  .code
+
+; Initialize undo state (call once at startup)
+undo_init:
+; Clear undo state (called when a new edit supersedes the undo slot)
+undo_clear:
+  LDA #UNDO_NONE
+  STA UNDO_TYPE
+  LDA #0
+  STA UNDO_IS_REDO
+  RTS
+
+; Record a line-delete for undo
+; Call after yank succeeds, before delete.
+; Saves: type=1, FILE_LINE16
+undo_record_line_delete:
+  LDA #UNDO_LINE
+  STA UNDO_TYPE
+  CP16 FILE_LINE16, UNDO_LINE16
+  LDA #0
+  STA UNDO_IS_REDO
+  RTS
+
+; Record a char-delete for undo
+; Call at entry of yank_delete_at_cursor (before anything modified).
+; Saves: type=2, FILE_LINE16, CURSOR_COL16
+undo_record_char_delete:
+  LDA #UNDO_CHAR
+  STA UNDO_TYPE
+  CP16 FILE_LINE16, UNDO_LINE16
+  CP16 CURSOR_COL16, UNDO_COL16
+  LDA #0
+  STA UNDO_IS_REDO
+  RTS
+
+; Handle 'u' key: dispatch undo or redo based on UNDO_IS_REDO
+undo_handle:
+  LDA UNDO_TYPE
+  BEQ .done                  ; No undoable operation, no-op
+  LDA UNDO_IS_REDO
+  BNE .do_redo
+  JMP undo_do_undo
+.do_redo:
+  JMP undo_do_redo
+.done:
+  JMP clear_count
+
+; --- Undo ---
+undo_do_undo:
+  LDA UNDO_TYPE
+  CMP #UNDO_LINE
+  BEQ .undo_line
+  JMP .undo_char
+
+.undo_line:
+  ; Restore FILE_LINE16 to saved position
+  CP16 UNDO_LINE16, FILE_LINE16
+  ; Paste above: reuses existing yank_paste_above_n
+  LDA #1
+  STA BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
+  JSR yank_paste_above_n
+  BCS .undo_fail
+  ; Adjust marks for inserted lines
+  CP16 YANK_LINES16, BUF_TEMP16
+  LDAX16 FILE_LINE16
+  JSR mark_adjust_insert
+  ; Set flags
+  LDA #$FF
+  STA UNDO_IS_REDO
+  STA MODIFIED
+  LDA #$03
+  STA RENDER_FLAG            ; Signal line-insert for scroll optimization
+  JMP clear_count
+
+.undo_char:
+  ; Restore position
+  CP16 UNDO_LINE16, FILE_LINE16
+  CP16 UNDO_COL16, CURSOR_COL16
+  ; Set up paste: BUF_TEMP16 = 1
+  LDA #1
+  STA BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
+  JSR yank_paste_setup       ; BUF_LEN16 = yank size
+  BCS .undo_fail
+  JSR get_cursor_buf_ptr     ; BUF_PTR16 = cursor position
+  JSR yank_paste_core        ; Shift right, copy yank data, rebuild
+  BCS .undo_fail
+  ; Restore cursor position (yank_paste_core may have moved things)
+  CP16 UNDO_COL16, CURSOR_COL16
+  ; Set flags
+  LDA #$FF
+  STA UNDO_IS_REDO
+  STA MODIFIED
+  LDA #1
+  STA RENDER_FLAG
+  JMP clear_count
+
+.undo_fail:
+  JMP clear_count
+
+; --- Redo ---
+undo_do_redo:
+  LDA UNDO_TYPE
+  CMP #UNDO_LINE
+  BEQ .redo_line
+  JMP .redo_char
+
+.redo_line:
+  ; Restore FILE_LINE16
+  CP16 UNDO_LINE16, FILE_LINE16
+  ; Get yank size to know how many lines to delete
+  CP16 YANK_LINES16, BUF_TEMP16
+  JSR delete_current_lines
+  ; Set flags
+  LDA #0
+  STA UNDO_IS_REDO
+  LDA #$FF
+  STA MODIFIED
+  LDA #$02
+  STA RENDER_FLAG            ; Signal line-delete for scroll optimization
+  JSR clamp_cursor_col
+  JMP clear_count
+
+.redo_char:
+  ; Restore position
+  CP16 UNDO_LINE16, FILE_LINE16
+  CP16 UNDO_COL16, CURSOR_COL16
+  ; Get yank size for delete count
+  JSR yank_get_size          ; BUF_LEN16 = yank size
+  BCS .redo_fail
+  JSR delete_at_cursor       ; Delete BUF_LEN16 bytes at cursor
+  ; Restore cursor
+  CP16 UNDO_COL16, CURSOR_COL16
+  JSR clamp_cursor_col
+  ; Set flags
+  LDA #0
+  STA UNDO_IS_REDO
+  LDA #1
+  STA RENDER_FLAG
+  JMP clear_count
+
+.redo_fail:
+  JMP clear_count

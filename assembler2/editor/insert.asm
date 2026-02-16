@@ -59,6 +59,10 @@ insert_keys:
 
 ; Exit insert mode, return to normal mode
 insert_exit:
+  LDA INSERT_CHANGED
+  BEQ .skip_undo_clear
+  JSR undo_clear
+.skip_undo_clear:
   LDA #MODE_NORMAL
   STA MODE
   ; Move cursor back one per vi convention (unless at column 0)
@@ -569,6 +573,7 @@ insert_batch:
 .set_modified:
   LDA #$FF
   STA MODIFIED
+  STA INSERT_CHANGED
   LDA RENDER_FLAG
   BNE .skip_flag             ; Already set by caller (e.g., scroll optimization)
   LDA #$01

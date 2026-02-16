@@ -279,6 +279,8 @@ enter_insert_mode_render:
 enter_insert_mode:
   LDA #MODE_INSERT
   STA MODE
+  LDA #0
+  STA INSERT_CHANGED
   JMP clear_count
 
 ; Clear count state: zeroes COUNT16, COUNT_ACTIVE, LAST_KEY
@@ -480,6 +482,7 @@ yank_delete_current_lines:
   LDAX16 FILE_LINE16
   JSR yank_add_lines
   BCS .ydcl_overflow
+  JSR undo_record_line_delete
   JSR delete_current_lines
   CLC
   RTS
