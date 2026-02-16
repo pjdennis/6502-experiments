@@ -9795,6 +9795,64 @@ class EditorTestRunner:
             expect_unmodified=True
         )
 
+        self._group("Undo char-delete (x, D, dw, db, de):", leading_blank=True)
+
+        # x undo
+        self.run_test(
+            "x undo restores deleted char",
+            "Hello\n",
+            b"xu:wq\r",
+            expected_content="Hello\n"
+        )
+
+        # x undo then redo (xuu)
+        self.run_test(
+            "x undo then redo (xuu)",
+            "Hello\n",
+            b"xuu:wq\r",
+            expected_content="ello\n"
+        )
+
+        # D undo at col 2
+        self.run_test(
+            "D undo at col 2",
+            "Hello\n",
+            b"llDu:wq\r",
+            expected_content="Hello\n"
+        )
+
+        # dw undo
+        self.run_test(
+            "dw undo restores deleted word",
+            "Hello World\n",
+            b"dwu:wq\r",
+            expected_content="Hello World\n"
+        )
+
+        # db undo
+        self.run_test(
+            "db undo restores deleted word backward",
+            "Hello World\n",
+            b"edbu:wq\r",
+            expected_content="Hello World\n"
+        )
+
+        # de undo
+        self.run_test(
+            "de undo restores deleted word end",
+            "Hello World\n",
+            b"deu:wq\r",
+            expected_content="Hello World\n"
+        )
+
+        # 3x undo
+        self.run_test(
+            "3x undo restores 3 deleted chars",
+            "Hello\n",
+            b"3xu:wq\r",
+            expected_content="Hello\n"
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed

@@ -515,6 +515,7 @@ delete_current_lines:
 ; Yanks from cursor, deletes, rebuilds lines, sets MODIFIED
 ; Clobbers: A, X, Y, BUF_PTR16, BUF_SRC16, BUF_DST16
 yank_delete_at_cursor:
+  JSR undo_record_char_delete
   PUSH16 BUF_LEN16           ; Save delete count
   JSR get_cursor_buf_ptr     ; BUF_PTR16 = cursor position
   CP16 BUF_PTR16, BUF_SRC16
