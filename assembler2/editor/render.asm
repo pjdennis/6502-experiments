@@ -290,14 +290,18 @@ render_current_line_and_status:
   ; A = current row count
 
   CMP PREV_LINE_ROWS
-  BNE .rows_changed
+  BEQ .same_row_count
+  JMP .rows_changed
 
+.same_row_count:
   ; --- Same row count: render just the line's rows ---
   TAX                          ; X = row count (loop counter)
   LDA CURSOR_ROW
   SEC
   SBC WRAP_QUOT
-  BMI .do_full                 ; first row above visible area
+  BPL .row_visible             ; first row on screen
+  JMP .do_full                 ; first row above visible area
+.row_visible:
   STA RENDER_ROW
 
   STX RENDER_WRAP              ; save loop counter (LDAX16 clobbers X)
@@ -311,15 +315,62 @@ render_current_line_and_status:
   CLC
   ADC #1
   CMP SCREEN_ROWS
-  BCS .wrap_done               ; at status bar row, stop
+  BCC .not_at_status           ; not at status bar
+  JMP .wrap_done               ; at status bar row, stop
+.not_at_status:
   STA ANSI_ROW
   LDA #1
   STA ANSI_COL
   STX RENDER_WRAP              ; save loop counter
   JSR ansi_move_cursor
 
+  ; --- Partial render check ---
+  LDA RENDER_FROM_COL16 + 1
+  AND RENDER_FROM_COL16
+  CMP #$FF
+  BEQ .wrap_loop              ; $FFFF → render all rows normally
+
+  ; Compute from_wrap and from_col
+  CP16 RENDER_FROM_COL16, DIV_INPUT16
+  JSR div_mod_screen_cols_16   ; X=from_wrap, A=from_col
+  STA WRAP_REM                 ; save from_col
+
+  ; Skip from_wrap wrap rows
+  CPX #0
+  BEQ .partial_same_row
+.partial_skip_loop:
+  CLC
+  LDA SCREEN_COLS
+  ADCA16 BUF_PTR16, BUF_PTR16
+  INC RENDER_ROW
+  LDY RENDER_WRAP
+  DEY
+  STY RENDER_WRAP
+  BEQ .wrap_done               ; no more rows to render
+  DEX
+  BNE .partial_skip_loop
+
+.partial_same_row:
+  ; Reposition cursor at (RENDER_ROW+1, from_col+1)
+  LDA RENDER_ROW
+  CLC
+  ADC #1
+  STA ANSI_ROW
+  LDA WRAP_REM
+  CLC
+  ADC #1
+  STA ANSI_COL
+  JSR ansi_move_cursor
+
+  ; Render from from_col
+  LDA WRAP_REM
+  STA RENDER_COL
+  JSR render_line_chars_from
+  JMP .check_clear
+
 .wrap_loop:
   JSR render_line_chars
+.check_clear:
   LDA RENDER_COL
   CMP SCREEN_COLS
   BCS .no_clear            ; row full, skip clear for deferred-wrap terminals
