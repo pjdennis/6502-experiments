@@ -9931,6 +9931,24 @@ class EditorTestRunner:
             expect_cursor=(2, 0),  # mark on "C" = line 2 after redo
         )
 
+        # dd undo preserves mark below
+        self.run_test_screen(
+            "dd undo preserves mark set below",
+            "A\nB\nC\nD\n",
+            b"jjmaggddu'a:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(2, 0),  # mark on "C" = line 2 after undo
+        )
+
+        # dd redo preserves mark below
+        self.run_test_screen(
+            "dd redo preserves mark set below",
+            "A\nB\nC\nD\n",
+            b"jjmaggdduu'a:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(1, 0),  # mark on "C" = line 1 after redo (A deleted)
+        )
+
         # cc + typing clears undo
         self.run_test(
             "cc New ESC: typing clears undo",
