@@ -40,6 +40,7 @@ SCROLL_DELTA:   .byte   ; Screen rows to scroll (unsigned)
 RENDER_LIMIT:   .byte   ; Max rows to render (0=unlimited)
 DELETE_SCREEN_ROWS: .byte ; Pre-computed screen rows for line-delete scroll (0=use file delta)
 RENDER_FROM_COL16: .word  ; First affected line column for partial render ($FFFF = full line)
+INSERT_LINE_COUNT:  .byte ; Override line count for line-insert scroll (0=use file delta)
 
   .code
 
@@ -799,6 +800,27 @@ render_line_insert_scroll:
 .above_no_clear:
 .no_above_render:
 
+  ; If INSERT_LINE_COUNT is set, the actual repaint needs more rows than the
+  ; scroll (e.g., cc undo: net file delta < inserted line count).
+  ; Walk INSERT_LINE_COUNT lines to compute repaint screen rows.
+  LDA INSERT_LINE_COUNT
+  BEQ .ins_repaint_default
+
+  CP16 FILE_LINE16, RENDER_LINE16
+  LDA #0
+  STA SCROLL_DELTA           ; Recompute as repaint row count
+.walk_repaint:
+  LDAX16 RENDER_LINE16
+  JSR buf_get_line_len
+  JSR line_screen_rows
+  CLC
+  ADC SCROLL_DELTA
+  STA SCROLL_DELTA
+  INC16 RENDER_LINE16
+  DEC INSERT_LINE_COUNT
+  BNE .walk_repaint
+
+.ins_repaint_default:
   ; Render SCROLL_DELTA rows at CURSOR_ROW (newly inserted content).
   LDA CURSOR_ROW
   STA RENDER_ROW

@@ -9879,6 +9879,16 @@ class EditorTestRunner:
             expected_content="Hello\nWorld\n"
         )
 
+        # 2cc ESC undo: screen shows both restored lines
+        self.run_test_screen(
+            "2cc ESC undo: screen shows both restored lines",
+            "Line 1\nLine 2\nLine 3\n",
+            b"2cc\x1bu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Line 1"), (1, "Line 2"), (2, "Line 3")],
+            expect_cursor=(0, 0),
+        )
+
         # cc + typing clears undo
         self.run_test(
             "cc New ESC: typing clears undo",

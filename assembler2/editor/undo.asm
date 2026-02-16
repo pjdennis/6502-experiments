@@ -127,6 +127,8 @@ undo_do_undo:
   LDA #$FF
   STA UNDO_IS_REDO
   STA MODIFIED
+  LDA YANK_LINES16           ; Actual lines inserted (may differ from net delta)
+  STA INSERT_LINE_COUNT
   LDA #$03
   STA RENDER_FLAG            ; Signal line-insert for scroll optimization
   JMP clear_count
