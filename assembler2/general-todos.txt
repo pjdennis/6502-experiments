@@ -1,3 +1,17 @@
+Error message in macro shows last param name vs. macro name:
+
+  .macro SBC16_8 ptr1, ptr2_8, ptr3
+  LDA ptr1
+  SBC ptr2_8
+  STA ptr3
+  LDA ptr1 + 1
+  SBC #0
+  STA ptr2 + 1
+  .endmacro
+
+Error 1 in macro ptr3 at line 6: Label not found
+                 ^^^^
+
 Move readonly checks to the destructive actions vs. the key presses?
 
 Make a variable batch limit - text entry should have a high batch limit (to support pasting) while keeping other limits as is for better visual feedback while e.g. navigating. (maybne) we could try first just bumping the limit.
