@@ -393,11 +393,14 @@ class EditorTestRunner:
                 self._fail(name, "No rendered frame captured (no ESC[?25h)")
                 return
 
+            exp_dump = self._expected_dump(rows, expect_lines, expect_cursor)
+
             if expect_cursor is not None:
                 actual = screen.get_cursor()
                 if actual != expect_cursor:
                     self._fail(name,
                         f"Cursor: expected {expect_cursor}, got {actual}\n"
+                        f"    Expected:\n{exp_dump}\n"
                         f"    Frame:\n{screen.dump()}")
                     return
 
@@ -408,6 +411,7 @@ class EditorTestRunner:
                         self._fail(name,
                             f"Row {row_idx}: expected {expected_text!r}, "
                             f"got {actual_text!r}\n"
+                            f"    Expected:\n{exp_dump}\n"
                             f"    Frame:\n{screen.dump()}")
                         return
 
@@ -597,11 +601,14 @@ class EditorTestRunner:
                 self._fail(name, "No rendered frame captured (no ESC[?25h)")
                 return
 
+            exp_dump = self._expected_dump(rows, expect_lines, expect_cursor)
+
             if expect_cursor is not None:
                 actual = screen.get_cursor()
                 if actual != expect_cursor:
                     self._fail(name,
                         f"Cursor: expected {expect_cursor}, got {actual}\n"
+                        f"    Expected:\n{exp_dump}\n"
                         f"    Frame:\n{screen.dump()}")
                     return
 
@@ -612,6 +619,7 @@ class EditorTestRunner:
                         self._fail(name,
                             f"Row {row_idx}: expected {expected_text!r}, "
                             f"got {actual_text!r}\n"
+                            f"    Expected:\n{exp_dump}\n"
                             f"    Frame:\n{screen.dump()}")
                         return
 
@@ -788,6 +796,20 @@ class EditorTestRunner:
                     return
 
             self._pass(name)
+
+    @staticmethod
+    def _expected_dump(rows, expect_lines, expect_cursor):
+        """Build expected frame string for diagnostics."""
+        exp_lines = dict(expect_lines) if expect_lines else {}
+        exp_r, exp_c = expect_cursor if expect_cursor else (None, None)
+        parts = []
+        for i in range(rows):
+            text = repr(exp_lines[i]) if i in exp_lines else "..."
+            if i == exp_r:
+                parts.append(f"  {i:2d}: {text}  <- cursor at col {exp_c}")
+            else:
+                parts.append(f"  {i:2d}: {text}")
+        return '\n'.join(parts)
 
     def _pass(self, name):
         if not self.quiet:
