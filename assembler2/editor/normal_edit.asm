@@ -520,9 +520,9 @@ cc_have_count:
   STA BUF_TEMP16+1
   LDAX16 FILE_LINE16
   JSR mark_adjust_insert
+  JSR undo_record_cc         ; Upgrade line-delete undo to cc type (blank inserted)
 
 .cc_already_empty:
-  JSR undo_record_cc         ; Upgrade line-delete undo to cc type
   LDA #0
   STA_LH16 CURSOR_COL16
   LDA #$FF

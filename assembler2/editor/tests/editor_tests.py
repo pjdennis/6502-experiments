@@ -9879,6 +9879,30 @@ class EditorTestRunner:
             expected_content="Hello\nWorld\n"
         )
 
+        # cc undo when next line is blank
+        self.run_test(
+            "cc ESC undo preserves following blank line",
+            "Hello\n\nWorld\n",
+            b"cc\x1bu:wq\r",
+            expected_content="Hello\n\nWorld\n"
+        )
+
+        # 2cc undo when following line is blank
+        self.run_test(
+            "2cc ESC undo preserves following blank line",
+            "A\nB\n\nC\n",
+            b"2cc\x1bu:wq\r",
+            expected_content="A\nB\n\nC\n"
+        )
+
+        # 3cc undo when following line is blank
+        self.run_test(
+            "3cc ESC undo preserves following blank line",
+            "A\nB\nC\n\nD\n",
+            b"3cc\x1bu:wq\r",
+            expected_content="A\nB\nC\n\nD\n"
+        )
+
         # 2cc ESC undo: screen shows both restored lines
         self.run_test_screen(
             "2cc ESC undo: screen shows both restored lines",
