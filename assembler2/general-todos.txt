@@ -1,3 +1,5 @@
+counted C should delete lines below
+
 Error message in macro shows last param name vs. macro name:
 
   .macro SBC16_8 ptr1, ptr2_8, ptr3

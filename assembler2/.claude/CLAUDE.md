@@ -8,8 +8,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Full build and verification
 ./asmtestgen.sh
 
-# Watch mode (rebuilds on source changes)
-./gogen.sh
+# Run assembler tests
+python3 run_tests.py -q
+
+# Build editor and run editor tests
+python3 editor/tests/editor_tests.py -q
 
 # Build just the emulator and initial bootstrap
 make
@@ -20,6 +23,8 @@ The build succeeds when `17/out/asm.out == 17/out/asm_2.out` (self-assembly veri
 ## Architecture
 
 This is a self-hosting 6502 assembler built through progressive bootstrapping. The current assembler (`17/asm.asm`) can assemble its own source code.
+
+Also, there is a vi-like editor with source code in `editor`
 
 ### Bootstrap Chain
 
