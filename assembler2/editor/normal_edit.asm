@@ -454,10 +454,21 @@ do_replace_char:
   LDY #0
   LDA BUF_TEMP
   STA (BUF_PTR16),Y
-  LDA #$FF
-  STA MODIFIED
+  ; Direct write if printable
+  CMP #' '
+  BCC .replace_need_render
+  CMP #$7F
+  BCS .replace_need_render
+  JSR io_write
+  JMP .replace_modified
+
+.replace_need_render:
   LDA #1
   STA RENDER_FLAG
+
+.replace_modified:
+  LDA #$FF
+  STA MODIFIED
 
   LDX NORMAL_TEMP
   DEX

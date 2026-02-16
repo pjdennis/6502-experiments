@@ -2754,7 +2754,7 @@ class EditorTestRunner:
             "A" * 60 + "\nSecond\n",
             b"rX:q!\r",
             expect_content_redraws=[True, True, False],
-            expect_content_rows=[(1, {0, 1})]
+            expect_content_rows=[(1, {0})]
         )
 
         # ~ toggles case in wrapped line
@@ -9657,7 +9657,8 @@ class EditorTestRunner:
             b"lllrZ:q!\r",
             rows=10, cols=40,
             expect_lines=[(0, "HelZo World")],
-            expect_min_col=[(2, 0, 3)]
+            expect_min_col=[(2, 0, 3)],
+            expect_max_col=[(2, 0, 3)]
         )
 
         # Normal ~: toggle case at col 3, partial render from col 3
