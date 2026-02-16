@@ -54,7 +54,7 @@ Ver New syntax supported             New syntax used in source
     command-line arguments
 10  Local labels (.prefix),          .zeropage, .code
     heap-based global labels
-11  Standard 6502 syntax,            None
+11  Standard 6502 syntax,            None (cannot self-host)
     all 13 addr modes, #'x',
     fwd ref tracking
 12  None                             Standard 6502 syntax,
