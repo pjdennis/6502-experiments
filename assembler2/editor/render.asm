@@ -39,6 +39,7 @@ SNAP_BUF_END16: .word   ; Snapshot of BUF_END16 before handler
 SCROLL_DELTA:   .byte   ; Screen rows to scroll (unsigned)
 RENDER_LIMIT:   .byte   ; Max rows to render (0=unlimited)
 DELETE_SCREEN_ROWS: .byte ; Pre-computed screen rows for line-delete scroll (0=use file delta)
+RENDER_FROM_COL16: .word  ; First affected line column for partial render ($FFFF = full line)
 
   .code
 
@@ -900,7 +901,8 @@ render_cursor_and_status:
 render_line_chars:
   LDA #0
   STA RENDER_COL
-  LDY #0
+render_line_chars_from:
+  LDY RENDER_COL
 .loop:
   LDA (BUF_PTR16),Y
   BMI .unprintable
