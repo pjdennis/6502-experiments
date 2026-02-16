@@ -3364,6 +3364,29 @@ class EditorTestRunner:
             expect_cursor=(2, 0),
         )
 
+        # Batched Enter causing scroll with mid-screen insertion.
+        # With 6 rows (5 content + 1 status), lines 1-5 fill the screen.
+        # Cursor on Line 3 (row 2, middle of screen). 'A' enters insert at
+        # end, then 3 Enter keys are batched. This inserts 3 blank lines
+        # after "Line 3", making: Line 1-3, (blank)×3, Line 4-5 = 8 lines.
+        # Cursor lands on 3rd blank (line index 5). View scrolls to keep
+        # cursor visible (VIEW_TOP moves from 0 to 1).
+        # The scroll optimization shifts the old screen up and only redraws
+        # newly exposed bottom rows, but the rows below the insertion point
+        # changed (should be blank lines, not the old "Line 4"/"Line 5").
+        # Expected screen (VIEW_TOP=1, showing lines 1-5):
+        #   row 0: "Line 2", row 1: "Line 3", row 2: "", row 3: "", row 4: ""
+        self.run_test_screen(
+            "Batched Enter with scroll: display not corrupted",
+            make_lines(5),
+            b"jjA\r\r\r\x1b:q!\r",
+            rows=6, cols=40,
+            expect_lines=[
+                (0, "Line 2"), (1, "Line 3"), (2, ""), (3, ""), (4, ""),
+            ],
+            expect_cursor=(4, 0),
+        )
+
         # Batched BS at col 0 joining lines - screen shows merged content
         self.run_test_screen(
             "BS at col 0 joins: screen shows merged line",

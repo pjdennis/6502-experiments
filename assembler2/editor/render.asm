@@ -513,6 +513,9 @@ render_decide:
 
 .view_changed:
   ; VIEW_TOP16 changed. Try scroll optimization.
+  ; Requirement: LINE_COUNT16 unchanged (content not structurally modified)
+  CMP16 SNAP_LINE_COUNT16, LINE_COUNT16
+  BNE .ins_full
   ; Requirement: both old and new VIEW_TOP_WRAP must be 0 (no partial wraps)
   LDA SNAP_VIEW_TOP_WRAP
   BNE .ins_full
