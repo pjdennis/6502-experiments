@@ -9626,6 +9626,46 @@ class EditorTestRunner:
             expect_content_rows=[(3, {4, 5, 6})]
         )
 
+        self._group("Sub-line render optimization:", leading_blank=True)
+
+        # Insert at end of line: only render from cursor position
+        # A=append at EOL, type "world", ESC. 'Hello' is 5 chars,
+        # so first affected col is 5. Frame 0=initial, 1=enter insert, 2=typed chars
+        self.run_test_screen(
+            "Insert at end of line: partial render from cursor col",
+            "Hello\n",
+            b"Aworld\x1b",
+            rows=10, cols=40,
+            expect_lines=[(0, "Helloworld")],
+            # Frame 2 is the 'world' insert; row 0 should start at col 5
+            expect_min_col=[(2, 0, 5)]
+        )
+
+        # Insert mid-line: render from affected column
+        # lll=move to col 3, i=insert, type "XYZ", ESC
+        # Frame 0=initial, 1=lll move, 2=i enter insert, 3=XYZ typed
+        self.run_test_screen(
+            "Insert mid-line: partial render from insert col",
+            "Hello World\n",
+            b"llliXYZ\x1b",
+            rows=10, cols=40,
+            expect_lines=[(0, "HelXYZlo World")],
+            # Frame 3 is the insert; first affected col is 3
+            expect_min_col=[(3, 0, 3)]
+        )
+
+        # Backspace mid-line: batched insert+BS renders from affected col
+        # lll=col 3, i=insert, XY+BS batched → net insert "X" at col 3
+        self.run_test_screen(
+            "Backspace mid-line in insert mode: partial render",
+            "Hello World\n",
+            b"llliXY\x08\x1b",
+            rows=10, cols=40,
+            expect_lines=[(0, "HelXlo World")],
+            # Frame 3 is the batched insert; first affected col is 3
+            expect_min_col=[(3, 0, 3)]
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed

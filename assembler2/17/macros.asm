@@ -86,6 +86,18 @@
   .endmacro
 
 
+; SBC16_8 ptr1 ptr2_8 ptr3 - Subracts 8 bit value at ptr2_8 from value at ptr1, storing result at ptr3
+; Clobbers A
+  .macro SBC16_8 ptr1, ptr2_8, ptr3
+  LDA ptr1
+  SBC ptr2_8
+  STA ptr3
+  LDA ptr1 + 1
+  SBC #0
+  STA ptr3 + 1
+  .endmacro
+
+
 ; CMP16 ptr1 ptr2 Compares value at ptr1 to val at ptr2, setting flags accordingly
 ; After calling:
 ;   BEQ/BNE work for equality

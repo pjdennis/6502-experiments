@@ -372,6 +372,10 @@ insert_batch:
   CLC
   ADCA16 CURSOR_COL16, CURSOR_COL16
 
+  ; RENDER_FROM_COL16 = CURSOR_COL16 - insert_len (first affected col)
+  SEC
+  SBC16_8 CURSOR_COL16, BUF_DELTA, RENDER_FROM_COL16
+
   ; Line table adjustment: net = insert_len - (back + fwd_actual)
   LDA BUF_TEMP16             ; back
   CLC
