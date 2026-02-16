@@ -214,6 +214,7 @@ normal_delete_char:
   LDA #$FF
   STA BUF_TEMP16
 .no_extras:
+  CP16 CURSOR_COL16, RENDER_FROM_COL16
   JMP batched_char_delete
 .done:
   JMP clear_count

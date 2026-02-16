@@ -9628,6 +9628,19 @@ class EditorTestRunner:
 
         self._group("Sub-line render optimization:", leading_blank=True)
 
+        # Normal x: delete at col 3, partial render from col 3
+        # lll=move to col 3, x=delete char
+        # Frame 0=initial, 1=lll move, 2=x delete
+        self.run_test_screen(
+            "x delete: partial render from cursor col",
+            "Hello World\n",
+            b"lllx:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Helo World")],
+            # Frame 2 is the delete; first affected col is 3
+            expect_min_col=[(2, 0, 3)]
+        )
+
         # Insert at end of line: only render from cursor position
         # A=append at EOL, type "world", ESC. 'Hello' is 5 chars,
         # so first affected col is 5. Frame 0=initial, 1=enter insert, 2=typed chars
