@@ -1,3 +1,5 @@
+Mark adjustment for multi-line character mode deletes and pastes including for undo/redo
+
 counted C should delete lines below
 
 Error message in macro shows last param name vs. macro name:
