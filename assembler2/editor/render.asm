@@ -25,7 +25,7 @@ RENDER_ROW:     .byte   ; Current row being rendered
 RENDER_LINE16:  .word   ; Current file line being rendered
 RENDER_COL:     .byte   ; Column counter during rendering
 FNAME_PTR16:    .word   ; Pointer to filename string (null-terminated)
-RENDER_FLAG:    .byte   ; Optional override: $FF = full, $01 = current line. Default $00 = auto-detect via snapshot
+RENDER_FLAG:    .byte   ; $FF=full, $01=current line, $02=line delete, $03/$04/$05=line insert. $00=auto
 VIEW_TOP_WRAP:  .byte   ; Wrap row offset for first visible line (0 = start of line)
 WRAP_QUOT:      .byte   ; Scratch: quotient from CURSOR_COL / SCREEN_COLS
 WRAP_REM:       .byte   ; Scratch: remainder from CURSOR_COL % SCREEN_COLS
@@ -462,6 +462,8 @@ render_decide:
   CMP #$03
   BEQ .do_line_insert
   CMP #$04
+  BEQ .do_line_insert
+  CMP #$05
   BNE .not_line_insert
 .do_line_insert:
   JMP .line_insert_scroll
@@ -535,7 +537,16 @@ render_decide:
   LDA RENDER_LIMIT
   BEQ .full                  ; Delta 0, shouldn't happen
 
-  ; Walk inserted lines (FILE_LINE16 for file_delta lines) to compute screen rows
+  ; Walk lines to compute SCROLL_DELTA (screen rows to scroll).
+  ; RENDER_FLAG=$05: single Enter, always scrolls exactly 1 screen row
+  ; RENDER_FLAG=$03/$04: walk inserted lines at FILE_LINE16
+  LDA RENDER_FLAG
+  CMP #$05
+  BNE .do_walk
+  LDA #1
+  STA SCROLL_DELTA
+  JMP .walk_done
+.do_walk:
   CP16 FILE_LINE16, RENDER_LINE16
   LDA #0
   STA SCROLL_DELTA
@@ -549,6 +560,7 @@ render_decide:
   INC16 RENDER_LINE16
   DEC RENDER_LIMIT
   BNE .walk_ins
+.walk_done:
 
   ; Check delta < available rows below cursor
   ; available = SCREEN_ROWS - 1 - CURSOR_ROW
@@ -736,6 +748,21 @@ render_line_delete_scroll:
   JSR ansi_move_cursor
   LDAX16 FILE_LINE16
   JSR buf_get_line_ptr
+  ; Advance BUF_PTR16 by WRAP_QUOT * SCREEN_COLS for wrap continuations
+  LDA WRAP_QUOT
+  BEQ .no_cursor_wrap
+  TAX
+.cursor_wrap_loop:
+  CLC
+  LDA BUF_PTR16
+  ADC SCREEN_COLS
+  STA BUF_PTR16
+  LDA BUF_PTR16 + 1
+  ADC #0
+  STA BUF_PTR16 + 1
+  DEX
+  BNE .cursor_wrap_loop
+.no_cursor_wrap:
   JSR render_line_chars
   LDA RENDER_COL
   CMP SCREEN_COLS
@@ -771,7 +798,7 @@ render_line_insert_scroll:
   JSR ansi_cursor_hide
 
   ; Set scroll region start (1-based) to SCREEN_ROWS-1 (1-based)
-  ; RENDER_FLAG=$03: from CURSOR_ROW+1 (includes cursor row)
+  ; RENDER_FLAG=$03/$05: from CURSOR_ROW+1 (includes cursor row)
   ; RENDER_FLAG=$04: from CURSOR_ROW+2 (skips cursor row, for J undo)
   LDA RENDER_FLAG
   CMP #$04
@@ -790,9 +817,10 @@ render_line_insert_scroll:
   SEC
   SBC #1
   STA ANSI_COL
-  ; Guard: skip scroll if region invalid (ANSI_COL < ANSI_ROW)
+  ; Guard: skip scroll if region is single row or invalid (no rows to shift)
   CMP ANSI_ROW
   BCC .skip_ins_scroll
+  BEQ .skip_ins_scroll
   JSR ansi_set_scroll_region
   LDA SCROLL_DELTA
   JSR ansi_scroll_down
@@ -818,6 +846,21 @@ render_line_insert_scroll:
   JSR find_line_at_render_row
   LDAX16 RENDER_LINE16
   JSR buf_get_line_ptr
+  ; Advance BUF_PTR16 by RENDER_WRAP * SCREEN_COLS for wrap continuations
+  LDA RENDER_WRAP
+  BEQ .no_above_wrap
+  TAX
+.above_wrap_loop:
+  CLC
+  LDA BUF_PTR16
+  ADC SCREEN_COLS
+  STA BUF_PTR16
+  LDA BUF_PTR16 + 1
+  ADC #0
+  STA BUF_PTR16 + 1
+  DEX
+  BNE .above_wrap_loop
+.no_above_wrap:
   JSR render_line_chars
   LDA RENDER_COL
   CMP SCREEN_COLS

@@ -9688,6 +9688,55 @@ class EditorTestRunner:
             expect_content_rows=[(4, {3, 4})]
         )
 
+        # Enter at start of wrapped line: inserts blank above, content shifts down.
+        # The wrapped continuation must not be duplicated as a ghost row.
+        # Frames: 0=initial, 1=i mode switch, 2=Enter scroll frame, 3=ESC
+        self.run_test_screen(
+            "Scroll opt: Enter above wrapped line no ghost row",
+            "The quick brown fox jumps over the lazy dog. Once upon a time\n",
+            b"i\r\x1b:q!\r",
+            rows=10, cols=50,
+            expect_lines=[
+                (0, ""),
+                (1, "The quick brown fox jumps over the lazy dog. Once"),
+                (2, "upon a time"),
+                (3, "~"),
+            ],
+            expect_cursor=(1, 0),
+        )
+
+        # Enter at end of wrapped line: cursor was at wrap row 1 (end of line).
+        # After Enter, blank line appears below the wrapped line.
+        # The wrap continuation row must not be overwritten with wrap row 0 content.
+        self.run_test_screen(
+            "Scroll opt: Enter at end of wrapped line no overwrite",
+            "The quick brown fox jumps over the lazy dog. Once upon a time\n",
+            b"A\r\x1b:q!\r",
+            rows=10, cols=50,
+            expect_lines=[
+                (0, "The quick brown fox jumps over the lazy dog. Once"),
+                (1, "upon a time"),
+                (2, ""),
+                (3, "~"),
+            ],
+            expect_cursor=(2, 0),
+        )
+
+        # BS at col 0 below a wrapped line: joins with previous (wrapped) line.
+        # The cursor ends up on a wrap continuation row. The re-render of the
+        # cursor row must not overwrite with wrap row 0 content.
+        self.run_test_screen(
+            "Scroll opt: BS below wrapped line no overwrite",
+            "The quick brown fox jumps over the lazy dog. Once upon a time\nhello\n",
+            b"ji\x08\x1b:q!\r",
+            rows=10, cols=50,
+            expect_lines=[
+                (0, "The quick brown fox jumps over the lazy dog. Once"),
+                (1, "upon a timehello"),
+                (2, "~"),
+            ],
+        )
+
         # BS at col 0 in insert mode: joins with previous line, LINE_COUNT16 decreases.
         # Cursor was at line 3 (Line 4), col 0. BS joins with line 2 (Line 3).
         # Frames: 0=initial, 1=jjj cursor, 2=i mode switch, 3=BS scroll frame
@@ -9842,6 +9891,30 @@ class EditorTestRunner:
             expect_cursor=(8, 0),
             # Frame 3 (u): row above cursor (7) + cursor row (8)
             expect_content_rows=[(3, {7, 8})]
+        )
+
+        # J undo on wrapped last line: no scroll should happen.
+        # Cursor line wraps (22 chars at 20 cols = 2 rows), filling rows 7-8.
+        # J joins the off-screen line, u restores it. The insert scroll path
+        # computes ANSI_ROW=CURSOR_ROW+2=9, ANSI_COL=SCREEN_ROWS-1=9, giving
+        # a single-row scroll region [9;9r]. This scroll is unnecessary and
+        # causes visible status bar artifacts on real terminals.
+        # Frames: 0=initial, 1=jjjjjjj cursor, 2=J frame, 3=u undo frame
+        wrap_undo_content = (''.join(f"L{i}\n" for i in range(1, 8))
+                             + "This is a longer line!\n"
+                             + "Next\nMore1\nMore2\n")
+        self.run_test_screen(
+            "Scroll opt: J undo on wrapped last line no scroll",
+            wrap_undo_content,
+            b"j" * 7 + b"Ju:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (7, "This is a longer lin"),
+                (8, "e!"),
+            ],
+            expect_cursor=(7, 0),
+            # Frame 3 (u): no scroll needed, just re-render
+            expect_scrolled_at_frame=[(3, False)]
         )
 
         # J redo on last visible line: same as J, minimal repaint.

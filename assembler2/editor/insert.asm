@@ -536,8 +536,8 @@ insert_batch:
   LDA NORMAL_TEMP            ; ins_nl
   CMP #1
   BNE .set_modified           ; Multiple newlines, fall back (scroll only handles 1)
-  LDA #$03
-  STA RENDER_FLAG            ; Signal line-insert for scroll optimization
+  LDA #$05
+  STA RENDER_FLAG            ; Signal line-insert above cursor for scroll optimization
   JMP .set_modified
 
 .case_back_nl:
