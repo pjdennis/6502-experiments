@@ -8,8 +8,8 @@
 ;   SEARCH_LIMIT ($E000) - One past last byte of search buffer
 ;   SEARCH_MAX   (172)   - Maximum pattern length (SEARCH_LIMIT - SEARCH_BUF)
 
-SEARCH_BUF   = $DF54
-SEARCH_LIMIT = $E000
+SEARCH_BUF   = $D654
+SEARCH_LIMIT = $D700
 SEARCH_MAX   = SEARCH_LIMIT - SEARCH_BUF
 
   .zeropage

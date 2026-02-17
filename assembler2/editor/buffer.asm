@@ -2,7 +2,7 @@
 ;
 ; Memory layout:
 ;   TEXT_BUF           - Start of text buffer (page-aligned, past end of code)
-;   LINE_TBL ($C000)   - Line pointer table (16-bit offsets, max 1024 lines)
+;   LINE_TBL ($D800)   - Line pointer table (16-bit offsets, max 1024 lines)
 ;
 ; The text buffer stores all text contiguously. Lines are delimited by $0A.
 ; The line table stores 16-bit pointers to the start of each line.
@@ -11,11 +11,9 @@
 ; TEXT_BUF and TEXT_LIMIT are defined at the end of editor.asm as floating
 ; labels, so TEXT_BUF automatically adjusts as the code grows.
 
-LINE_TBL    = $C000  ; Line pointer table (2 bytes per entry)
-LINE_LIMIT  = $DF00  ; End of line table (supports up to 3968 entries, but
-                     ; practically limited by MAX_LINES = 1023)
+LINE_TBL    = $D800  ; Line pointer table (2 bytes per entry)
 MAX_LINES   = $03FF  ; Maximum line count (1023), 0-indexed
-BATCH_BUF   = $DF00  ; Staging buffer for batch insert (32 bytes)
+BATCH_BUF   = $D600  ; Staging buffer for batch insert (32 bytes)
 BATCH_MAX   = 32     ; Maximum batch size
 
   .zeropage

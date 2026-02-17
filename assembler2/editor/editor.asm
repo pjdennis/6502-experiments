@@ -18,10 +18,12 @@
 ;   $0200-$02FF   Filename buffer
 ;   $0300-$03FF   Command buffer
 ;   $0400         Editor code loads here
-;   TEXT_BUF      Text buffer (page-aligned after code, up to $BFFF)
-;   $C000-$DEFF   Line pointer table (LINE_TBL)
-;   $DF00-$DF1F   Batch insert staging buffer (BATCH_BUF)
-;   $DF20-$DF53   Mark table (MARK_TBL)
+;   TEXT_BUF      Text buffer (page-aligned after code, up to $D5FF)
+;   $D600-$D61F   Batch insert staging buffer (BATCH_BUF)
+;   $D620-$D653   Mark table (MARK_TBL)
+;   $D654-$D6FF   Search buffer (SEARCH_BUF)
+;   $D700-$D7FF   Join undo buffer (JOIN_UNDO_BUF)
+;   $D800-$DFFF   Line pointer table (LINE_TBL)
 ;   $E000-$EFFF   Yank buffer (4KB)
 ;   $F000+        Emulator I/O
 ; ============================================================================
@@ -270,9 +272,9 @@ str_untitled: .asciiz "[No Name]"
 _code_end:
 TEXT_BUF = _code_end + $00FF >> $08 << $08
 
-; Buffer size: normal build = up to $C000 (LINE_TBL), small build = 256 bytes
+; Buffer size: normal build = up to $D600 (BATCH_BUF), small build = 256 bytes
   .ifndef small_buffer
-TEXT_LIMIT  = $C000  ; End of text buffer space (up to start of LINE_TBL)
+TEXT_LIMIT  = $D600  ; End of text buffer space (up to start of BATCH_BUF)
   .else
 TEXT_LIMIT  = TEXT_BUF + $0100  ; Small test buffer (256 bytes)
   .endif

@@ -4,7 +4,7 @@
 ; Marks are stored in MARK_TBL at $DF20 (52 bytes: 26 entries x 2 bytes).
 ; MARK_UNSET ($FFFF) indicates an unset mark.
 
-MARK_TBL   = $DF20    ; 26 entries x 2 bytes = 52 bytes
+MARK_TBL   = $D620    ; 26 entries x 2 bytes = 52 bytes
 MARK_UNSET = $FFFF
 
   .zeropage

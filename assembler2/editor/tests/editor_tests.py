@@ -9849,7 +9849,7 @@ class EditorTestRunner:
             rows=10, cols=40,
             expect_lines=[(0, "HelXlo World")],
             # Frame 3 is the batched insert; first affected col is 3
-            expect_min_col=[(3, 0, 3)],
+            expect_min_col=[(3, 0, 3)]
         )
 
         self._group("Undo (u):", leading_blank=True)
