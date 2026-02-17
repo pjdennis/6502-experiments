@@ -460,7 +460,10 @@ render_decide:
   CMP #$02
   BEQ .line_delete_scroll
   CMP #$03
+  BEQ .do_line_insert
+  CMP #$04
   BNE .not_line_insert
+.do_line_insert:
   JMP .line_insert_scroll
 .not_line_insert:
   JMP .full
@@ -756,11 +759,21 @@ render_line_delete_scroll:
 render_line_insert_scroll:
   JSR ansi_cursor_hide
 
-  ; Set scroll region from CURSOR_ROW+1 (1-based) to SCREEN_ROWS-1 (1-based)
-  ; This covers the cursor row through the bottom content row.
+  ; Set scroll region start (1-based) to SCREEN_ROWS-1 (1-based)
+  ; RENDER_FLAG=$03: from CURSOR_ROW+1 (includes cursor row)
+  ; RENDER_FLAG=$04: from CURSOR_ROW+2 (skips cursor row, for J undo)
+  LDA RENDER_FLAG
+  CMP #$04
+  BNE .scroll_at_cursor
+  LDA CURSOR_ROW
+  CLC
+  ADC #2           ; 1-based, skip cursor row
+  JMP .set_scroll_start
+.scroll_at_cursor:
   LDA CURSOR_ROW
   CLC
   ADC #1           ; Convert to 1-based
+.set_scroll_start:
   STA ANSI_ROW
   LDA SCREEN_ROWS
   SEC

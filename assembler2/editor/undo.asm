@@ -9,19 +9,25 @@
 ;   1 = line-delete (dd, 2dd, etc.)
 ;   2 = char-delete (x, D, dw, db, de)
 ;   3 = cc/S line-delete (like line-delete but cc inserted blank line)
+;   4 = join (J, NJ)
 
 UNDO_NONE = 0
 UNDO_LINE = 1
 UNDO_CHAR = 2
 UNDO_CC   = 3
+UNDO_JOIN = 4
+
+JOIN_UNDO_BUF = $D700     ; 256 bytes for 16-bit offsets
+JOIN_UNDO_MAX = 128       ; 256 / 2 bytes per entry
 
   .zeropage
 
-UNDO_TYPE:       .byte    ; 0=none, 1=line-delete, 2=char-delete, 3=cc
+UNDO_TYPE:       .byte    ; 0=none, 1=line-delete, 2=char-delete, 3=cc, 4=join
 UNDO_LINE16:     .word    ; FILE_LINE16 at time of operation
 UNDO_COL16:      .word    ; CURSOR_COL16 at time of operation (char-delete only)
 UNDO_IS_REDO:    .byte    ; 0=undo pending, $FF=redo pending
 INSERT_CHANGED:  .byte    ; tracks if insert mode modified buffer
+UNDO_JOIN_COUNT: .byte    ; Number of joins recorded (1-128)
 
   .code
 
@@ -82,11 +88,16 @@ undo_handle:
 ; --- Undo ---
 undo_do_undo:
   LDA UNDO_TYPE
+  CMP #UNDO_JOIN
+  BEQ .undo_join
   CMP #UNDO_CC
   BEQ .undo_cc
   CMP #UNDO_LINE
   BEQ .undo_line
   JMP .undo_char
+
+.undo_join:
+  JMP undo_join_undo
 
 .undo_cc:
   ; cc undo: first delete the blank line cc inserted, then paste original lines
@@ -175,11 +186,16 @@ undo_do_undo:
 ; --- Redo ---
 undo_do_redo:
   LDA UNDO_TYPE
+  CMP #UNDO_JOIN
+  BEQ .redo_join
   CMP #UNDO_CC
   BEQ .redo_cc
   CMP #UNDO_LINE
   BEQ .redo_line
   JMP .redo_char
+
+.redo_join:
+  JMP undo_join_redo
 
 .redo_cc:
   ; cc redo: delete lines, insert blank line (reproduces cc effect)
@@ -245,5 +261,105 @@ undo_do_redo:
   JMP clear_count
 
 .redo_fail:
+  JMP clear_count
+
+; --- Join undo: replace spaces back to newlines ---
+undo_join_undo:
+  CP16 UNDO_LINE16, FILE_LINE16
+  LDAX16 FILE_LINE16
+  JSR buf_get_line_ptr          ; BUF_PTR16 = line start
+  CP16 BUF_PTR16, BUF_SRC16    ; BUF_SRC16 = line start (base for offsets)
+
+  LDX #0                       ; X = buffer index
+  LDA UNDO_JOIN_COUNT
+  STA NORMAL_TEMP               ; loop counter
+.undo_join_loop:
+  LDA JOIN_UNDO_BUF,X
+  STA BUF_PTR16
+  INX
+  LDA JOIN_UNDO_BUF,X
+  STA BUF_PTR16 + 1
+  INX
+  ; BUF_PTR16 = offset; compute address = BUF_SRC16 + offset
+  CLC
+  ADC16 BUF_SRC16, BUF_PTR16, BUF_PTR16
+  LDY #0
+  LDA #'\n'
+  STA (BUF_PTR16),Y
+  DEC NORMAL_TEMP
+  BNE .undo_join_loop
+
+  JSR buf_rebuild_lines
+
+  ; Adjust marks: insert UNDO_JOIN_COUNT lines after FILE_LINE16
+  LDA UNDO_JOIN_COUNT
+  STA BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
+  CLC
+  ADCI16 FILE_LINE16, 1, BUF_PTR16
+  LDAX16 BUF_PTR16
+  JSR mark_adjust_insert
+
+  ; Set flags
+  LDA #$FF
+  STA UNDO_IS_REDO
+  STA MODIFIED
+  ; Repaint cursor line + restored lines (cursor line content also changed)
+  LDA UNDO_JOIN_COUNT
+  CLC
+  ADC #1
+  STA INSERT_LINE_COUNT
+  LDA #$04
+  STA RENDER_FLAG            ; Line-insert scroll, skip cursor row
+  JSR clamp_cursor_col
+  JMP clear_count
+
+; --- Join redo: replace newlines back to spaces ---
+undo_join_redo:
+  CP16 UNDO_LINE16, FILE_LINE16
+  LDAX16 FILE_LINE16
+  JSR buf_get_line_ptr          ; BUF_PTR16 = line start
+  CP16 BUF_PTR16, BUF_SRC16    ; BUF_SRC16 = line start (base for offsets)
+
+  LDX #0                       ; X = buffer index
+  LDA UNDO_JOIN_COUNT
+  STA NORMAL_TEMP               ; loop counter
+.redo_join_loop:
+  LDA JOIN_UNDO_BUF,X
+  STA BUF_PTR16
+  INX
+  LDA JOIN_UNDO_BUF,X
+  STA BUF_PTR16 + 1
+  INX
+  ; Compute address = BUF_SRC16 + offset
+  CLC
+  ADC16 BUF_SRC16, BUF_PTR16, BUF_PTR16
+  LDY #0
+  LDA #' '
+  STA (BUF_PTR16),Y
+  DEC NORMAL_TEMP
+  BNE .redo_join_loop
+
+  JSR buf_rebuild_lines
+
+  ; Adjust marks: delete UNDO_JOIN_COUNT lines after FILE_LINE16
+  LDA UNDO_JOIN_COUNT
+  STA BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
+  CLC
+  ADCI16 FILE_LINE16, 1, BUF_PTR16
+  LDAX16 BUF_PTR16
+  JSR mark_adjust_delete
+
+  ; Set flags
+  LDA #0
+  STA UNDO_IS_REDO
+  LDA #$FF
+  STA MODIFIED
+  LDA #$02
+  STA RENDER_FLAG
+  JSR clamp_cursor_col
   JMP clear_count
 

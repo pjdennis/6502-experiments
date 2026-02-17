@@ -352,6 +352,13 @@ normal_join_lines:
   JSR undo_clear
   JSR get_batched_count
 
+  ; Detect batching: BUF_DELTA = count prefix, X = total (count + pending)
+  ; If X > BUF_DELTA, there are pending keys (batching)
+  TXA
+  SEC
+  SBC BUF_DELTA              ; A = pending count
+  STA UNDO_COL16             ; Repurpose: nonzero = batching
+
   ; Adjust for explicit count: NJ joins N-1 lines
   LDA COUNT16
   ORA COUNT16 + 1
@@ -377,18 +384,47 @@ normal_join_lines:
   STA NORMAL_TEMP
 .clamp_ok:
   LDA NORMAL_TEMP
-  BEQ .join_done             ; Nothing to join
+  BNE .join_has_work
+  JMP .join_done
+.join_has_work:
 
-  ; Find first newline: get current line, scan to end
+  ; Compute undo_count: if batching → 1, else → NORMAL_TEMP
+  LDA UNDO_COL16             ; batching flag
+  BEQ .no_batch
+  LDA #1
+  JMP .set_undo_count
+.no_batch:
+  LDA NORMAL_TEMP
+.set_undo_count:
+  STA UNDO_JOIN_COUNT
+
+  ; Limit check: undo_count must fit in JOIN_UNDO_BUF
+  CMP #JOIN_UNDO_MAX + 1
+  BCC .join_limit_ok
+  JMP .join_limit_exceeded
+.join_limit_ok:
+
+  ; Record undo state
+  CP16 FILE_LINE16, UNDO_LINE16
+  LDA #UNDO_JOIN
+  STA UNDO_TYPE
+  LDA #0
+  STA UNDO_IS_REDO
+
+  ; Get line start for offset calculations
   LDAX16 FILE_LINE16
-  JSR buf_get_line_ptr
-  JSR find_line_end          ; (BUF_PTR16),Y points to '\n'
+  JSR buf_get_line_ptr        ; BUF_PTR16 = line start
+  CP16 BUF_PTR16, BUF_SRC16  ; BUF_SRC16 = line start (base for offsets)
+
+  JSR find_line_end           ; (BUF_PTR16),Y points to '\n'
   ; Advance BUF_PTR16 by Y so BUF_PTR16 points directly to the '\n'
   TYA
   CLC
   ADCA16 BUF_PTR16, BUF_PTR16
 
-  LDX NORMAL_TEMP            ; X = joins remaining
+  LDX #0                     ; X = undo buffer write index
+  LDA NORMAL_TEMP
+  STA BUF_TEMP               ; loop counter
 
   ; Single pass: scan forward replacing newlines with spaces
 .join_loop:
@@ -396,10 +432,24 @@ normal_join_lines:
   LDA (BUF_PTR16),Y
   CMP #'\n'
   BNE .join_next
+  ; Record offset in undo buffer: offset = BUF_PTR16 - BUF_SRC16
+  SEC
+  LDA BUF_PTR16
+  SBC BUF_SRC16
+  STA JOIN_UNDO_BUF,X
+  LDA BUF_PTR16 + 1
+  SBC BUF_SRC16 + 1
+  STA JOIN_UNDO_BUF + 1,X
+  ; Advance write index only if not batching
+  LDA UNDO_COL16             ; batching flag
+  BNE .skip_advance
+  INX
+  INX
+.skip_advance:
   ; Replace newline with space
   LDA #' '
   STA (BUF_PTR16),Y
-  DEX
+  DEC BUF_TEMP
   BEQ .join_finish
 .join_next:
   INC16 BUF_PTR16
@@ -430,6 +480,13 @@ normal_join_lines:
 
 .join_done:
   JMP clear_count
+
+.join_limit_exceeded:
+  SET16 str_join_limit, STR_PTR16
+  JSR show_status_message
+  JMP clear_count
+
+str_join_limit: .asciiz "Too many lines to join"
 
 ; --- Substitute char (s) ---
 normal_substitute_char:

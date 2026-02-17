@@ -10089,6 +10089,190 @@ class EditorTestRunner:
             expected_content="Hello World\n"
         )
 
+        self._group("Undo join (J):", leading_blank=True)
+
+        # J undo: restore joined lines
+        self.run_test(
+            "J undo restores original lines",
+            "Hello\nWorld\n",
+            b"Ju:wq\r",
+            expected_content="Hello\nWorld\n"
+        )
+
+        # J undo then redo (Juu)
+        self.run_test(
+            "J undo then redo (Juu)",
+            "Hello\nWorld\n",
+            b"Juu:wq\r",
+            expected_content="Hello World\n"
+        )
+
+        # 3J undo restores all 3 original lines (3J joins 2 lines)
+        self.run_test(
+            "3J undo restores all 3 original lines",
+            "A\nB\nC\nD\n",
+            b"3Ju:wq\r",
+            expected_content="A\nB\nC\nD\n"
+        )
+
+        # 3J undo then redo
+        self.run_test(
+            "3J undo then redo (3Juu)",
+            "A\nB\nC\nD\n",
+            b"3Juu:wq\r",
+            expected_content="A B C\nD\n"
+        )
+
+        # J on last line is no-op, no undo state
+        self.run_test(
+            "J on last line is no-op",
+            "Hello\n",
+            b"Ju:wq\r",
+            expected_content="Hello\n",
+            expect_unmodified=True
+        )
+
+        # JJ batched: undo only undoes last join (second J)
+        # A\nB\nC\n -> JJ batched -> A B C\n -> u -> A B\nC\n
+        self.run_test(
+            "JJ batched: undo only undoes last join",
+            "A\nB\nC\n",
+            b"JJ u:wq\r",
+            expected_content="A B\nC\n"
+        )
+
+        # JJ batched: redo re-does the last join
+        # A\nB\nC\n -> JJ -> A B C\n -> u -> A B\nC\n -> u -> A B C\n
+        self.run_test(
+            "JJ batched: redo re-joins",
+            "A\nB\nC\n",
+            b"JJ uu:wq\r",
+            expected_content="A B C\n"
+        )
+
+        # J then other edit then undo: J not undoable (superseded)
+        self.run_test(
+            "J then x then u: J superseded by x",
+            "AB\nCD\n",
+            b"Jxu:wq\r",
+            expected_content="AB CD\n"
+        )
+
+        # Join limit: 129J on 130-line file exceeds JOIN_UNDO_MAX (128)
+        # Should show error and not modify buffer (keypress dismisses msg)
+        content_130 = ''.join(f"{i}\n" for i in range(130))
+        self.run_test(
+            "129J exceeds limit: no modification",
+            content_130,
+            b"130J :wq\r",  # space dismisses error msg
+            expected_content=content_130,
+            expect_unmodified=True
+        )
+
+        # 128J should work fine (exactly at limit)
+        content_129 = ''.join(f"{i}\n" for i in range(129))
+        expected_128j = ' '.join(str(i) for i in range(129)) + '\n'
+        self.run_test(
+            "128J at limit succeeds",
+            content_129,
+            b"129J:wq\r",
+            expected_content=expected_128j
+        )
+
+        # J undo preserves mark below
+        # ma on C (line 2), go to line 0, J joins A+B, undo restores,
+        # mark should still be on C (line 2)
+        self.run_test_screen(
+            "J undo preserves mark set below",
+            "A\nB\nC\nD\n",
+            b"jjmaggJu'a:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(2, 0),  # mark on "C" = line 2 after undo
+        )
+
+        # J redo preserves mark below
+        # ma on C (line 2), go to line 0, J joins A+B, undo, redo re-joins,
+        # mark should be on C but now line 1 (A B merged)
+        self.run_test_screen(
+            "J redo preserves mark set below",
+            "A\nB\nC\nD\n",
+            b"jjmaggJuu'a:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(1, 0),  # mark on "C" = line 1 after redo (A+B joined)
+        )
+
+        # 3J undo preserves mark below
+        # ma on D (line 3), go to line 0, 3J joins A+B+C, undo restores,
+        # mark should still be on D (line 3)
+        self.run_test_screen(
+            "3J undo preserves mark set below",
+            "A\nB\nC\nD\nE\n",
+            b"jjjmagg3Ju'a:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(3, 0),  # mark on "D" = line 3 after undo
+        )
+
+        # JJ batched undo: screen shows correct content
+        # A\nB\nC\n -> JJ -> A B C\n -> u -> A B\nC\n
+        self.run_test_screen(
+            "JJ batched undo: screen correct",
+            "A\nB\nC\n",
+            b"JJ u:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "A B"), (1, "C")],
+        )
+
+        # JJ batched redo: screen shows correct content
+        # A\nB\nC\n -> JJ -> A B C\n -> u -> A B\nC\n -> u -> A B C\n
+        self.run_test_screen(
+            "JJ batched redo: screen correct",
+            "A\nB\nC\n",
+            b"JJ uu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "A B C"), (1, "~")],
+        )
+
+        # Non-batched J undo: screen shows restored lines
+        self.run_test_screen(
+            "J undo: screen correct",
+            "Hello\nWorld\n",
+            b"Ju:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello"), (1, "World")],
+        )
+
+        # Non-batched 3J undo: screen shows all restored lines
+        self.run_test_screen(
+            "3J undo: screen correct",
+            "A\nB\nC\nD\n",
+            b"3Ju:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "A"), (1, "B"), (2, "C"), (3, "D")],
+        )
+
+        # JJ batched undo: cursor stays at col 0
+        self.run_test_screen(
+            "JJ batched undo: cursor position",
+            "A\nB\nC\n",
+            b"JJ u:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(0, 0),
+        )
+
+        # J undo scroll region should exclude cursor row
+        # When J is undone, cursor row content changes but doesn't need to scroll.
+        # Only rows below cursor should scroll down.
+        # For cursor at row 0 with 10 rows: scroll region should be ESC[2;9r
+        # (rows 2-9 in 1-based = rows 1-8 in 0-based), not ESC[1;9r
+        self.run_test_screen(
+            "J undo scroll excludes cursor row",
+            "Hello\nWorld\n",
+            b"Ju:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello"), (1, "World")],
+            expect_ansi_contains="\x1b[2;9r",
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed
