@@ -957,6 +957,17 @@ copy_line_to_nl:
 
 ; --- Dollar motion operations: d$, y$, d0, y0 ---
 
+; y$ handler: yank from cursor to EOL, with count support
+do_y_dollar:
+  JSR get_count
+  JSR check_cursor_in_line
+  BCS .done
+  JSR compute_dollar_range
+  LDA #OP_YANK
+  JSR apply_char_operator
+.done:
+  JMP clear_count
+
 ; d$ handler: delete from cursor to EOL, with count support
 do_d_dollar:
   JSR get_count

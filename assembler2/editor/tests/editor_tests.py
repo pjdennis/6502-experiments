@@ -8766,6 +8766,48 @@ class EditorTestRunner:
             expected_content="fooo\nbar\nbar baz\n",
         )
 
+        self._group("Yank to EOL (y$):", leading_blank=True)
+
+        # y$ at col 2 yanks "llo", paste after cursor char 'l' at col 2
+        self.run_test(
+            "y$p yanks to EOL and pastes",
+            "Hello\n",
+            b"lly$p:wq\r",
+            expected_content="Helllolo\n"
+        )
+
+        # y$ at col 0 yanks whole line content
+        self.run_test(
+            "y$0p yanks whole line",
+            "Hello\n",
+            b"y$0P:wq\r",
+            expected_content="HelloHello\n"
+        )
+
+        # y$ on empty line does nothing (no yank)
+        self.run_test(
+            "y$ on empty line",
+            "\n",
+            b"y$:wq\r",
+            expected_content="\n"
+        )
+
+        # 2y$ yanks across 2 lines
+        self.run_test(
+            "2y$p yanks across 2 lines",
+            "Hello\nWorld\nFoo\n",
+            b"ll2y$$p:wq\r",
+            expected_content="Hellollo\nWorld\nWorld\nFoo\n"
+        )
+
+        # y$ doesn't modify buffer
+        self.run_test(
+            "y$ doesn't modify buffer",
+            "Hello\n",
+            b"y$:wq\r",
+            expected_content="Hello\n"
+        )
+
         self._group("Backward search (?):", leading_blank=True)
 
         self.run_test_screen(
