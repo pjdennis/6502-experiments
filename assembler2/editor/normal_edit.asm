@@ -126,9 +126,16 @@ do_char_paste_below:
 char_paste_above:
   JSR get_count              ; BUF_TEMP16 = count C
   JSR count_paste_extras     ; BUF_TEMP16 += extras, BATCH_EXTRA = extras
+  JSR do_char_paste_above
+  JMP clear_count
+
+; Core char paste above: paste BUF_TEMP16 copies at cursor
+; Input: BUF_TEMP16 = count, BATCH_EXTRA = extras
+; Returns carry set = failed/empty, carry clear = success
+do_char_paste_above:
   JSR yank_paste_setup       ; BUF_LEN16 = total size, YANK_SIZE16 = single size
   BCC .not_empty
-  JMP .done                  ; Empty yank
+  RTS                        ; Empty yank (carry set)
 .not_empty:
 
   ; Save total count N for fill routines
@@ -198,15 +205,15 @@ char_paste_above:
   JSR clamp_cursor_col
   LDA #$FF
   STA MODIFIED
-
-.done:
-  JMP clear_count
+  CLC
+  RTS
 
 .shift_fail:
   POP16 BUF_PTR16            ; Clean up stack
   POP16 BUF_LEN16
   JSR show_buffer_full_msg
-  JMP clear_count
+  SEC
+  RTS
 
 ; Interleaved fill for single-line char paste above
 ; Writes iterative-correct pattern into gap:
