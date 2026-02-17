@@ -9688,6 +9688,89 @@ class EditorTestRunner:
             expect_scroll_rows=[(5, {4, 5, 6, 7, 8})]
         )
 
+        # J on wrapped cursor line: both wrap rows must show correct content.
+        # Line 2 = "This is a longer line!" (22 chars, wraps at 20 cols = 2 rows).
+        # After J, line 2 = "This is a longer line! Short 4" (30 chars, still 2 rows).
+        # Frames: 0=initial, 1=jj cursor, 2=J scroll frame
+        wrap_j_content = ("Short 1\nShort 2\n"
+                          "This is a longer line!\n"
+                          + ''.join(f"Short {i}\n" for i in range(4, 15)))
+        self.run_test_screen(
+            "Scroll opt: J on wrapped cursor line correct content",
+            wrap_j_content,
+            b"jjJ:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Short 1"), (1, "Short 2"),
+                (2, "This is a longer lin"),
+                (3, "e! Short 4"),
+                (4, "Short 5"), (5, "Short 6"),
+                (6, "Short 7"), (7, "Short 8"),
+                (8, "Short 9"),
+            ],
+            expect_cursor=(2, 0),
+        )
+
+        # J on wrapped cursor line: scroll region must skip ALL cursor line rows.
+        # Cursor line occupies rows 2-3 (0-based). Scroll should be rows 4-8.
+        self.run_test_screen(
+            "Scroll opt: J on wrapped cursor line scroll region",
+            wrap_j_content,
+            b"jjJ:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Short 1"), (1, "Short 2"),
+                (2, "This is a longer lin"),
+                (3, "e! Short 4"),
+                (4, "Short 5"), (5, "Short 6"),
+                (6, "Short 7"), (7, "Short 8"),
+                (8, "Short 9"),
+            ],
+            expect_cursor=(2, 0),
+            expect_scroll_rows=[(2, {4, 5, 6, 7, 8})]
+        )
+
+        # J redo on wrapped cursor line: scroll region must skip wrap rows.
+        # Sequence: J, u (undo), space (break u-batching), u (redo).
+        # Frames: 0=initial, 1=jj cursor, 2=J, 3=u (undo), 4=space, 5=u (redo)
+        self.run_test_screen(
+            "Scroll opt: J redo on wrapped cursor line scroll region",
+            wrap_j_content,
+            b"jjJu u:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Short 1"), (1, "Short 2"),
+                (2, "This is a longer lin"),
+                (3, "e! Short 4"),
+                (4, "Short 5"), (5, "Short 6"),
+                (6, "Short 7"), (7, "Short 8"),
+                (8, "Short 9"),
+            ],
+            expect_cursor=(2, 0),
+            expect_scroll_rows=[(5, {4, 5, 6, 7, 8})]
+        )
+
+        # J undo on wrapped cursor line: after undo, screen should return
+        # to the original layout. The scroll region must skip ALL cursor
+        # line wrap rows, not just one — otherwise the wrap continuation
+        # gets pushed down and appears duplicated below the restored line.
+        # Frames: 0=initial, 1=jj cursor, 2=J, 3=u (undo)
+        self.run_test_screen(
+            "Scroll opt: J undo on wrapped cursor line correct content",
+            wrap_j_content,
+            b"jjJu:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Short 1"), (1, "Short 2"),
+                (2, "This is a longer lin"),
+                (3, "e!"),
+                (4, "Short 4"), (5, "Short 5"),
+                (6, "Short 6"), (7, "Short 7"),
+                (8, "Short 8"),
+            ],
+            expect_cursor=(2, 0),
+        )
+
         # 3J at mid-screen: joins 2 lines, scroll shifts up by 2.
         # Frames: 0=initial, 1='3' count display, 2=jjj cursor, 3=J scroll
         self.run_test_screen(

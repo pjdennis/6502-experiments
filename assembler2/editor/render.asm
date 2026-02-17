@@ -550,6 +550,12 @@ render_decide:
   JMP .walk_done
 .do_walk:
   CP16 FILE_LINE16, RENDER_LINE16
+  ; For $04 (J undo), skip cursor line — only count restored lines
+  LDA RENDER_FLAG
+  CMP #$04
+  BNE .no_skip_cursor
+  INC16 RENDER_LINE16
+.no_skip_cursor:
   LDA #0
   STA SCROLL_DELTA
 .walk_ins:
@@ -722,13 +728,19 @@ render_line_delete_scroll:
 
   ; Set scroll region start (1-based) to SCREEN_ROWS-1 (1-based)
   ; RENDER_FLAG=$02: from CURSOR_ROW+1 (includes cursor row, for dd)
-  ; RENDER_FLAG=$06: from CURSOR_ROW+2 (skips cursor row, for J)
+  ; RENDER_FLAG=$06: skip ALL cursor line rows (for J on wrapped lines)
+  ;   first_row = CURSOR_ROW - WRAP_QUOT
+  ;   scroll_start = first_row + PREV_LINE_ROWS + 1 (1-based)
   LDA RENDER_FLAG
   CMP #$06
   BNE .scroll_at_cursor_del
   LDA CURSOR_ROW
+  SEC
+  SBC WRAP_QUOT          ; first_row (0-based)
   CLC
-  ADC #2           ; 1-based, skip cursor row
+  ADC PREV_LINE_ROWS     ; past end of cursor line (0-based)
+  CLC
+  ADC #1                 ; 1-based
   JMP .set_del_scroll_start
 .scroll_at_cursor_del:
   LDA CURSOR_ROW
@@ -750,6 +762,24 @@ render_line_delete_scroll:
   JSR ansi_reset_scroll_region
 .skip_del_scroll:
 
+  ; For J ($06) on wrapped cursor line: render from first row of line to bottom.
+  ; This re-renders all wrap rows (content changed) + newly exposed bottom rows.
+  LDA RENDER_FLAG
+  CMP #$06
+  BNE .single_row_render
+  LDA PREV_LINE_ROWS
+  CMP #2
+  BCC .single_row_render       ; PREV_LINE_ROWS < 2, non-wrapped
+  LDA CURSOR_ROW
+  SEC
+  SBC WRAP_QUOT
+  STA RENDER_ROW
+  CP16 FILE_LINE16, RENDER_LINE16
+  LDA #0
+  STA RENDER_WRAP
+  JMP render_from_row
+
+.single_row_render:
   ; Re-render cursor row (content may have changed, e.g., J join, cc change)
   LDA CURSOR_ROW
   CLC
@@ -811,13 +841,19 @@ render_line_insert_scroll:
 
   ; Set scroll region start (1-based) to SCREEN_ROWS-1 (1-based)
   ; RENDER_FLAG=$03/$05: from CURSOR_ROW+1 (includes cursor row)
-  ; RENDER_FLAG=$04: from CURSOR_ROW+2 (skips cursor row, for J undo)
+  ; RENDER_FLAG=$04: skip ALL cursor line rows (for J undo on wrapped lines)
+  ;   first_row = CURSOR_ROW - WRAP_QUOT
+  ;   scroll_start = first_row + PREV_LINE_ROWS + 1 (1-based)
   LDA RENDER_FLAG
   CMP #$04
   BNE .scroll_at_cursor
   LDA CURSOR_ROW
+  SEC
+  SBC WRAP_QUOT          ; first_row (0-based)
   CLC
-  ADC #2           ; 1-based, skip cursor row
+  ADC PREV_LINE_ROWS     ; past end of cursor line (0-based)
+  CLC
+  ADC #1                 ; 1-based
   JMP .set_scroll_start
 .scroll_at_cursor:
   LDA CURSOR_ROW
