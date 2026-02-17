@@ -517,9 +517,9 @@ render_decide:
   SEC
   SBC CURSOR_ROW
   CMP SCROLL_DELTA
-  BCC .full                  ; delta > available
-  BEQ .full                  ; delta == available (no point in scroll)
-
+  BCS .delete_scroll_ok      ; available >= delta, OK
+  STA SCROLL_DELTA            ; clamp delta to available
+.delete_scroll_ok:
   JMP render_line_delete_scroll
 
 .line_insert_scroll:
@@ -560,9 +560,9 @@ render_decide:
   SEC
   SBC CURSOR_ROW
   CMP SCROLL_DELTA
-  BCC .ins_full              ; delta > available
-  BEQ .ins_full              ; delta == available (no benefit from scroll)
-
+  BCS .ins_scroll_ok         ; available >= delta, OK
+  STA SCROLL_DELTA            ; clamp delta to available
+.ins_scroll_ok:
   JMP render_line_insert_scroll
 .ins_full:
   JMP .full
@@ -716,12 +716,15 @@ render_line_delete_scroll:
   SEC
   SBC #1
   STA ANSI_COL
+  ; Guard: skip scroll if region is single row or invalid (no rows to shift)
+  CMP ANSI_ROW
+  BCC .skip_del_scroll
+  BEQ .skip_del_scroll
   JSR ansi_set_scroll_region
-
-  ; Scroll up by SCROLL_DELTA
   LDA SCROLL_DELTA
   JSR ansi_scroll_up
   JSR ansi_reset_scroll_region
+.skip_del_scroll:
 
   ; Re-render cursor row (content may have changed, e.g., J join, cc change)
   LDA CURSOR_ROW
@@ -748,10 +751,18 @@ render_line_delete_scroll:
   SEC
   SBC SCROLL_DELTA
   STA RENDER_ROW
-
+  ; If no newly-exposed rows below cursor, skip to status+cursor
+  CMP CURSOR_ROW
+  BCC .delete_status_only     ; RENDER_ROW < CURSOR_ROW (safety)
+  BEQ .delete_status_only     ; RENDER_ROW = CURSOR_ROW (already rendered)
   ; Find the file line at RENDER_ROW
   JSR find_line_at_render_row
   JMP render_limited_rows
+.delete_status_only:
+  JSR render_status_line
+  JSR render_position_cursor
+  JSR ansi_cursor_show
+  JMP io_flush
 
 ; Scroll for line insertion at cursor.
 ; SCROLL_DELTA = lines inserted. CURSOR_ROW = screen row of insertion.
@@ -779,12 +790,14 @@ render_line_insert_scroll:
   SEC
   SBC #1
   STA ANSI_COL
+  ; Guard: skip scroll if region invalid (ANSI_COL < ANSI_ROW)
+  CMP ANSI_ROW
+  BCC .skip_ins_scroll
   JSR ansi_set_scroll_region
-
-  ; Scroll down by SCROLL_DELTA
   LDA SCROLL_DELTA
   JSR ansi_scroll_down
   JSR ansi_reset_scroll_region
+.skip_ins_scroll:
 
   ; Re-render row above cursor (content may have changed, e.g., Enter line split)
   LDA CURSOR_ROW

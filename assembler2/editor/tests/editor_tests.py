@@ -537,6 +537,7 @@ class EditorTestRunner:
                         expect_reverse_at: list = None,
                         expect_min_col: list = None,
                         expect_max_col: list = None,
+                        expect_scrolled_at_frame: list = None,
                         deferred_wrap: bool = False):
         """Run an editor test and verify screen state via ANSI output.
 
@@ -789,6 +790,23 @@ class EditorTestRunner:
                         self._fail(name,
                             f"Frame {frame_idx}, row {row}: expected "
                             f"max_col={expected_col}, got {actual_col}\n"
+                            f"    Frame:\n{screen.dump()}")
+                        return
+
+            if expect_scrolled_at_frame is not None:
+                actual_count = screen.get_frame_count()
+                for frame_idx, expected_scrolled in expect_scrolled_at_frame:
+                    if frame_idx >= actual_count:
+                        self._fail(name,
+                            f"Expected frame {frame_idx} but only "
+                            f"{actual_count} frames\n"
+                            f"    Frame:\n{screen.dump()}")
+                        return
+                    actual_scrolled = screen.was_scrolled(frame_idx)
+                    if actual_scrolled != expected_scrolled:
+                        self._fail(name,
+                            f"Frame {frame_idx}: expected scrolled="
+                            f"{expected_scrolled}, got {actual_scrolled}\n"
                             f"    Frame:\n{screen.dump()}")
                         return
 
@@ -6595,7 +6613,7 @@ class EditorTestRunner:
             "AB\nCD\nEF\n",
             b"jjma" +           # mark "EF" (idx 2)
             b"kdb" +            # db deletes "AB\n" -> mark shifts to 1
-            b"uu" +             # undo then redo: mark should be back at 1
+            b"u u" +            # undo then redo: mark should be back at 1
             b"'a:q!\r",
             expect_cursor=(1, 0),  # mark shifted down by redo
         )
@@ -9774,6 +9792,74 @@ class EditorTestRunner:
             expect_content_rows=[(3, {4, 5, 6})]
         )
 
+        # J on last visible line: joined line is off-screen, only cursor row redrawn.
+        # rows=10 → 9 content rows (0-8), status on row 9.
+        # jjjjjjjj = 8 j's → cursor at row 8 (Line 9). J joins off-screen Line 10.
+        # Frames: 0=initial, 1=jjjjjjjj cursor, 2=J frame
+        self.run_test_screen(
+            "Scroll opt: J on last visible line minimal repaint",
+            make_lines(15),
+            b"j" * 8 + b"J:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (7, "Line 8"),
+                (8, "Line 9 Line 10"),
+            ],
+            expect_cursor=(8, 0),
+            # Frame 2 (J): only cursor row 8 redrawn, no scroll needed
+            expect_content_rows=[(2, {8})],
+            expect_scrolled_at_frame=[(2, False)]
+        )
+
+        # dd on last visible line: deleted line at bottom, only cursor row redrawn.
+        # Cursor moves to next line (Line 10) which scrolls into view at row 8.
+        # Frames: 0=initial, 1=jjjjjjjj cursor, 2=dd frame
+        self.run_test_screen(
+            "Scroll opt: dd on last visible line minimal repaint",
+            make_lines(15),
+            b"j" * 8 + b"dd:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (7, "Line 8"),
+                (8, "Line 10"),
+            ],
+            expect_cursor=(8, 0),
+            # Frame 2 (dd): only cursor row 8 redrawn
+            expect_content_rows=[(2, {8})]
+        )
+
+        # J undo on last visible line: restore split line below (off-screen).
+        # Frames: 0=initial, 1=jjjjjjjj cursor, 2=J frame, 3=u undo frame
+        self.run_test_screen(
+            "Scroll opt: J undo on last visible line minimal repaint",
+            make_lines(15),
+            b"j" * 8 + b"Ju:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (7, "Line 8"),
+                (8, "Line 9"),
+            ],
+            expect_cursor=(8, 0),
+            # Frame 3 (u): row above cursor (7) + cursor row (8)
+            expect_content_rows=[(3, {7, 8})]
+        )
+
+        # J redo on last visible line: same as J, minimal repaint.
+        # Frames: 0=initial, 1=jjjjjjjj cursor, 2=J, 3=u undo, 4=space noop, 5=u redo
+        self.run_test_screen(
+            "Scroll opt: J redo on last visible line minimal repaint",
+            make_lines(15),
+            b"j" * 8 + b"Ju u:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (7, "Line 8"),
+                (8, "Line 9 Line 10"),
+            ],
+            expect_cursor=(8, 0),
+            # Frame 5 (redo): only cursor row 8 redrawn
+            expect_content_rows=[(5, {8})]
+        )
+
         self._group("Sub-line render optimization:", leading_blank=True)
 
         # Normal r: replace at col 3, partial render from col 3
@@ -9875,11 +9961,11 @@ class EditorTestRunner:
             expected_content="Hello\nWorld\n"
         )
 
-        # dd undo then redo (uu)
+        # dd undo then redo
         self.run_test(
-            "dd undo then redo (uu)",
+            "dd undo then redo",
             "Hello\nWorld\n",
-            b"dduu:wq\r",
+            b"ddu u:wq\r",
             expected_content="World\n"
         )
 
@@ -9934,11 +10020,11 @@ class EditorTestRunner:
             expected_content="Hello\n"
         )
 
-        # x undo then redo (xuu)
+        # x undo then redo
         self.run_test(
-            "x undo then redo (xuu)",
+            "x undo then redo",
             "Hello\n",
-            b"xuu:wq\r",
+            b"xu u:wq\r",
             expected_content="ello\n"
         )
 
@@ -10055,7 +10141,7 @@ class EditorTestRunner:
         self.run_test_screen(
             "cc redo preserves mark set below",
             "A\nB\nC\nD\n",
-            b"jjmaggcc\x1buu'a:q!\r",
+            b"jjmaggcc\x1bu u'a:q!\r",
             rows=10, cols=40,
             expect_cursor=(2, 0),  # mark on "C" = line 2 after redo
         )
@@ -10073,7 +10159,7 @@ class EditorTestRunner:
         self.run_test_screen(
             "dd redo preserves mark set below",
             "A\nB\nC\nD\n",
-            b"jjmaggdduu'a:q!\r",
+            b"jjmaggddu u'a:q!\r",
             rows=10, cols=40,
             expect_cursor=(1, 0),  # mark on "C" = line 1 after redo (A deleted)
         )
@@ -10112,11 +10198,11 @@ class EditorTestRunner:
             expected_content="Hello\nWorld\n"
         )
 
-        # J undo then redo (Juu)
+        # J undo then redo
         self.run_test(
-            "J undo then redo (Juu)",
+            "J undo then redo",
             "Hello\nWorld\n",
-            b"Juu:wq\r",
+            b"Ju u:wq\r",
             expected_content="Hello World\n"
         )
 
@@ -10130,9 +10216,9 @@ class EditorTestRunner:
 
         # 3J undo then redo
         self.run_test(
-            "3J undo then redo (3Juu)",
+            "3J undo then redo",
             "A\nB\nC\nD\n",
-            b"3Juu:wq\r",
+            b"3Ju u:wq\r",
             expected_content="A B C\nD\n"
         )
 
@@ -10159,7 +10245,7 @@ class EditorTestRunner:
         self.run_test(
             "JJ batched: redo re-joins",
             "A\nB\nC\n",
-            b"JJ uu:wq\r",
+            b"JJ u u:wq\r",
             expected_content="A B C\n"
         )
 
@@ -10209,7 +10295,7 @@ class EditorTestRunner:
         self.run_test_screen(
             "J redo preserves mark set below",
             "A\nB\nC\nD\n",
-            b"jjmaggJuu'a:q!\r",
+            b"jjmaggJu u'a:q!\r",
             rows=10, cols=40,
             expect_cursor=(1, 0),  # mark on "C" = line 1 after redo (A+B joined)
         )
@@ -10240,7 +10326,7 @@ class EditorTestRunner:
         self.run_test_screen(
             "JJ batched redo: screen correct",
             "A\nB\nC\n",
-            b"JJ uu:q!\r",
+            b"JJ u u:q!\r",
             rows=10, cols=40,
             expect_lines=[(0, "A B C"), (1, "~")],
         )

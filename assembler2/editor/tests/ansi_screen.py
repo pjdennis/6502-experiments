@@ -47,10 +47,11 @@ class AnsiScreen:
         self.scroll_top = 0
         self.scroll_bottom = rows - 1
         # Per-frame tracking for render optimization tests
-        self.frames = []            # List of (buffer_copy, cursor_pos, content_touched, attrs_copy, min_content_col, max_content_col)
+        self.frames = []            # List of (buffer_copy, cursor_pos, content_touched, attrs_copy, min_content_col, max_content_col, frame_scrolled)
         self.content_touched = set()  # Set of content row indices written this cycle
         self.min_content_col = {}     # row → min column index written this cycle
         self.max_content_col = {}     # row → max column index written this cycle
+        self.frame_scrolled = False   # Whether any scroll happened this cycle
 
     def _clear_screen(self):
         self.buffer = [[' '] * self.cols for _ in range(self.rows)]
@@ -58,6 +59,7 @@ class AnsiScreen:
         self.content_touched = set(range(self.rows - 1))
         self.min_content_col = {}
         self.max_content_col = {}
+        self.frame_scrolled = False
         self._pending_wrap = False
 
     def _clear_to_eol(self):
@@ -122,6 +124,7 @@ class AnsiScreen:
         """Scroll region up: remove n rows from top, insert blanks at bottom.
         Does NOT mark rows as content_touched since the terminal hardware
         performs the scroll - only explicit character writes count."""
+        self.frame_scrolled = True
         for _ in range(n):
             if self.scroll_top > self.scroll_bottom:
                 break
@@ -134,6 +137,7 @@ class AnsiScreen:
         """Scroll region down: remove n rows from bottom, insert blanks at top.
         Does NOT mark rows as content_touched since the terminal hardware
         performs the scroll - only explicit character writes count."""
+        self.frame_scrolled = True
         for _ in range(n):
             if self.scroll_top > self.scroll_bottom:
                 break
@@ -149,10 +153,12 @@ class AnsiScreen:
         self.frame_cursor = (self.cursor_row, self.cursor_col)
         self.frames.append((self.frame_buffer, self.frame_cursor,
                             self.content_touched, self.frame_attrs,
-                            self.min_content_col, self.max_content_col))
+                            self.min_content_col, self.max_content_col,
+                            self.frame_scrolled))
         self.content_touched = set()
         self.min_content_col = {}
         self.max_content_col = {}
+        self.frame_scrolled = False
 
     def process(self, data: str) -> 'AnsiScreen':
         """Process ANSI output data through the virtual terminal."""
@@ -259,6 +265,12 @@ class AnsiScreen:
         if frame_idx < 0 or frame_idx >= len(self.frames):
             return set()
         return self.frames[frame_idx][2]
+
+    def was_scrolled(self, frame_idx: int) -> bool:
+        """True if a scroll operation was performed during this frame."""
+        if frame_idx < 0 or frame_idx >= len(self.frames):
+            return False
+        return self.frames[frame_idx][6]
 
     def get_min_col(self, frame_idx: int, row: int) -> int:
         """Minimum column index written to on a given row in a given frame.
