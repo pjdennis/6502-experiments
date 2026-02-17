@@ -74,9 +74,15 @@ undo_record_char_delete:
   RTS
 
 ; Handle 'u' key: dispatch undo or redo based on UNDO_IS_REDO
+; Batching: consume pending 'u' keys. Since u toggles undo/redo,
+; odd total = one operation, even total = noop.
 undo_handle:
   LDA UNDO_TYPE
   BEQ .done                  ; No undoable operation, no-op
+  JSR count_pending_key      ; X = extra u keys in typeahead
+  TXA
+  AND #$01
+  BNE .done                  ; Odd extras = even total = noop
   LDA UNDO_IS_REDO
   BNE .do_redo
   JMP undo_do_undo

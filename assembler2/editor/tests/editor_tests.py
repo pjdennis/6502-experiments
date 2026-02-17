@@ -10259,6 +10259,63 @@ class EditorTestRunner:
             expect_cursor=(0, 0),
         )
 
+        self._group("Undo batching (u):", leading_blank=True)
+
+        # uu batched: even count = noop, no content redraw
+        # Frames: initial (True), dd (True), uu noop (False)
+        self.run_test_screen(
+            "uu batched: even count is noop after dd",
+            "A\nB\nC\n",
+            b"dduu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "B"), (1, "C")],
+            expect_content_redraws=[True, True, False],
+        )
+
+        # uuu batched: odd count = one undo, one content redraw
+        # Frames: initial (True), dd (True), uuu = one undo (True)
+        self.run_test_screen(
+            "uuu batched: odd count does undo after dd",
+            "A\nB\nC\n",
+            b"dduuu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "A"), (1, "B"), (2, "C")],
+            expect_content_redraws=[True, True, True],
+        )
+
+        # uuuu batched: even count = noop, no content redraw
+        # Frames: initial (True), dd (True), uuuu noop (False)
+        self.run_test_screen(
+            "uuuu batched: even count is noop after dd",
+            "A\nB\nC\n",
+            b"dduuuu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "B"), (1, "C")],
+            expect_content_redraws=[True, True, False],
+        )
+
+        # uu batched after x: noop, no content redraw
+        # Frames: initial (True), x (True), uu noop (False)
+        self.run_test_screen(
+            "uu batched: even count is noop after x",
+            "Hello\n",
+            b"xuu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "ello")],
+            expect_content_redraws=[True, True, False],
+        )
+
+        # uuu batched after J: odd count = one undo, one content redraw
+        # Frames: initial (True), J (True), uuu = one undo (True)
+        self.run_test_screen(
+            "uuu batched: odd count does undo after J",
+            "Hello\nWorld\n",
+            b"Juuu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello"), (1, "World")],
+            expect_content_redraws=[True, True, True],
+        )
+
         # J undo scroll region should exclude cursor row
         # When J is undone, cursor row content changes but doesn't need to scroll.
         # Only rows below cursor should scroll down.
