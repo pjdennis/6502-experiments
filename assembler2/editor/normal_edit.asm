@@ -957,6 +957,35 @@ copy_line_to_nl:
 
 ; --- Dollar motion operations: d$, y$, d0, y0 ---
 
+; d0 handler: delete from BOL to cursor (count ignored)
+do_d_zero:
+  TST16 CURSOR_COL16
+  BEQ .done                   ; Already at col 0, nothing to delete
+  ; BUF_LEN16 = CURSOR_COL16 (bytes from BOL to cursor)
+  CP16 CURSOR_COL16, BUF_LEN16
+  ; Move cursor to col 0 (delete is forward from cursor)
+  LDA #0
+  STA_LH16 CURSOR_COL16
+  LDA #OP_DELETE
+  JSR apply_char_operator
+.done:
+  JMP clear_count
+
+; y0 handler: yank from BOL to cursor (count ignored)
+do_y_zero:
+  TST16 CURSOR_COL16
+  BEQ .done                   ; Already at col 0, nothing to yank
+  ; Save cursor col, move to 0 for yank, then restore
+  PUSH16 CURSOR_COL16
+  CP16 CURSOR_COL16, BUF_LEN16
+  LDA #0
+  STA_LH16 CURSOR_COL16
+  LDA #OP_YANK
+  JSR apply_char_operator
+  POP16 CURSOR_COL16
+.done:
+  JMP clear_count
+
 ; y$ handler: yank from cursor to EOL, with count support
 do_y_dollar:
   JSR get_count

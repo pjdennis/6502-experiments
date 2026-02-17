@@ -8766,6 +8766,56 @@ class EditorTestRunner:
             expected_content="fooo\nbar\nbar baz\n",
         )
 
+        self._group("Delete/yank to BOL (d0, y0):", leading_blank=True)
+
+        # d0 at col 3 deletes "Hel"
+        self.run_test(
+            "d0 at col 3 deletes to BOL",
+            "Hello\n",
+            b"llld0:wq\r",
+            expected_content="lo\n"
+        )
+
+        # d0 at col 0 does nothing
+        self.run_test(
+            "d0 at col 0 does nothing",
+            "Hello\n",
+            b"d0:wq\r",
+            expected_content="Hello\n"
+        )
+
+        # d0 on empty line does nothing
+        self.run_test(
+            "d0 on empty line does nothing",
+            "\n",
+            b"d0:wq\r",
+            expected_content="\n"
+        )
+
+        # 2d0 = d0 (count ignored)
+        self.run_test(
+            "2d0 same as d0 (count ignored)",
+            "Hello\n",
+            b"lll2d0:wq\r",
+            expected_content="lo\n"
+        )
+
+        # y0 at col 3 yanks "Hel", paste at col 0
+        self.run_test(
+            "y0p yanks to BOL and pastes",
+            "Hello\n",
+            b"llly0P:wq\r",
+            expected_content="HelHello\n"
+        )
+
+        # y0 at col 0 does nothing (no yank)
+        self.run_test(
+            "y0 at col 0 does nothing",
+            "Hello\n",
+            b"y0:wq\r",
+            expected_content="Hello\n"
+        )
+
         self._group("Yank to EOL (y$):", leading_blank=True)
 
         # y$ at col 2 yanks "llo", paste after cursor char 'l' at col 2
