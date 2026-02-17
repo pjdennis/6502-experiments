@@ -387,29 +387,16 @@ undo_join_redo:
   JMP clear_count
 
 ; --- Paste undo ---
-; Dispatch: UNDO_TYPE >= UNDO_LINE_PASTE_BELOW
 undo_paste_undo:
   LDA UNDO_TYPE
   CMP #UNDO_CHAR_PASTE_BELOW
   BCS .undo_char_paste
-  CMP #UNDO_LINE_PASTE_BELOW
-  BEQ .undo_line_paste_below
-  CMP #UNDO_LINE_PASTE_ABOVE
-  BEQ .undo_line_paste_above
-  JMP clear_count
-
-.undo_char_paste:
-  JMP undo_char_paste_undo
-
-.undo_line_paste_below:
-  ; Delete pasted lines: they start at UNDO_LINE16 + 1
-  CLC
-  ADCI16 UNDO_LINE16, 1, FILE_LINE16
-  JMP .undo_line_paste
-
-.undo_line_paste_above:
-  ; Delete pasted lines: they start at UNDO_LINE16
+  ; Line paste undo: set FILE_LINE16 to first pasted line
   CP16 UNDO_LINE16, FILE_LINE16
+  LDA UNDO_TYPE
+  CMP #UNDO_LINE_PASTE_BELOW
+  BNE .undo_line_paste
+  INC16 FILE_LINE16            ; BELOW: pasted lines start one past saved
 
 .undo_line_paste:
   ; BUF_TEMP16 = YANK_LINES16 * UNDO_PASTE_COUNT16
@@ -427,31 +414,24 @@ undo_paste_undo:
   STA RENDER_FLAG
   JMP clear_count
 
+.undo_char_paste:
+  JMP undo_char_paste_undo
+
 ; --- Paste redo ---
 undo_paste_redo:
   LDA UNDO_TYPE
   CMP #UNDO_CHAR_PASTE_BELOW
   BCS .redo_char_paste
-  CMP #UNDO_LINE_PASTE_BELOW
-  BEQ .redo_line_paste_below
+  ; Line paste redo: common setup
+  CP16 UNDO_LINE16, FILE_LINE16
+  CP16 UNDO_PASTE_COUNT16, BUF_TEMP16
+  LDA UNDO_TYPE
   CMP #UNDO_LINE_PASTE_ABOVE
   BEQ .redo_line_paste_above
-  JMP clear_count
-
-.redo_char_paste:
-  JMP undo_char_paste_redo
-
-.redo_line_paste_below:
-  CP16 UNDO_LINE16, FILE_LINE16
-  CP16 UNDO_PASTE_COUNT16, BUF_TEMP16
   JSR yank_paste_below_n
   JMP .redo_line_paste_done
-
 .redo_line_paste_above:
-  CP16 UNDO_LINE16, FILE_LINE16
-  CP16 UNDO_PASTE_COUNT16, BUF_TEMP16
   JSR yank_paste_above_n
-
 .redo_line_paste_done:
   BCS .redo_fail
   ; paste_adjust_marks needs BUF_TEMP16 = count
@@ -471,6 +451,9 @@ undo_paste_redo:
 
 .redo_fail:
   JMP clear_count
+
+.redo_char_paste:
+  JMP undo_char_paste_redo
 
 ; Compute BUF_TEMP16 = YANK_LINES16 * UNDO_PASTE_COUNT16 (16-bit)
 ; Clobbers: A, COUNT16
