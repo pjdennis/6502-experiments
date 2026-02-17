@@ -10258,6 +10258,69 @@ class EditorTestRunner:
             expect_content_rows=[(3, {2, 8})]
         )
 
+        # BS at col 0 joining with line that creates a wrapped result.
+        # Line 0: "This is 20 char line" (20 chars = 1 row at 20 cols).
+        # Line 1: "end" (3 chars = 1 row). BS at col 0 joins them.
+        # Merged: "This is 20 char lineend" (23 chars = 2 rows at 20 cols).
+        # Old total = 1+1 = 2, new total = 2. Displacement = 0.
+        # File delta = 1. Current code scrolls by 1 (wrong), should not scroll.
+        # After ESC: cursor col 20→19 (back one), wrap row 0 col 19.
+        self.run_test_screen(
+            "Scroll opt: BS creating wrap no displacement",
+            "This is 20 char line\nend\nnext line\nanother\n",
+            b"ji\x08\x1b:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "This is 20 char line"),
+                (1, "end"),
+                (2, "next line"),
+                (3, "another"),
+                (4, "~"),
+            ],
+            expect_cursor=(0, 19),
+        )
+
+        # BS at col 0 joining wrapped previous line.
+        # Line 0: "This is a longer line!" (22 chars = 2 rows at 20 cols).
+        # Line 1: "end" (3 chars = 1 row). BS at col 0 joins them.
+        # Merged: "This is a longer line!end" (25 chars = 2 rows at 20 cols).
+        # Old total = 2+1 = 3, new total = 2. Displacement = 1 = file delta.
+        # After ESC: cursor col 22→21, wrap row 1 col 1.
+        self.run_test_screen(
+            "Scroll opt: BS joining with wrapped line",
+            "This is a longer line!\nend\nnext line\nanother\n",
+            b"ji\x08\x1b:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "This is a longer lin"),
+                (1, "e!end"),
+                (2, "next line"),
+                (3, "another"),
+                (4, "~"),
+            ],
+            expect_cursor=(1, 1),
+        )
+
+        # Enter in middle of wrapped line: total screen rows unchanged.
+        # Line: "12345678901234567890abc" (23 chars = 2 rows at 20 cols).
+        # 10 l's to col 10, i enters insert, iii types 3 chars, Enter splits.
+        # "1234567890iii" (13, 1 row) + "1234567890abc" (13, 1 row) = 2 rows.
+        # Old total = 2. Displacement = 0. SCROLL_DELTA=1 is wrong.
+        self.run_test_screen(
+            "Scroll opt: Enter on wrapped line no displacement",
+            "12345678901234567890abc\nnext line\nanother\n",
+            b"lllllllllliiii\r\x1b:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "1234567890iii"),
+                (1, "1234567890abc"),
+                (2, "next line"),
+                (3, "another"),
+                (4, "~"),
+            ],
+            expect_cursor=(1, 0),
+        )
+
         # j past bottom with wrapped line between old/new VIEW_TOP.
         # Line 0 wraps (22 chars at 20 cols = 2 rows). When scrolling past it,
         # SCROLL_DELTA should accumulate 2 screen rows, not fall back.
