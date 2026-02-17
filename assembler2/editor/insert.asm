@@ -228,6 +228,26 @@ insert_batch:
   BNE .back_scan
 .no_back_scan:
 
+  ; Pre-compute screen rows for BS join scroll optimization
+  LDA LINE_LEN16            ; back_nl
+  BEQ .skip_bs_precompute   ; No newlines deleted
+  PUSH16 BUF_PTR16          ; Save delete_start
+  ; first_line = FILE_LINE16 - back_nl
+  LDA FILE_LINE16
+  SEC
+  SBC LINE_LEN16
+  STA RENDER_LINE16
+  LDA FILE_LINE16 + 1
+  SBC #0
+  STA RENDER_LINE16 + 1
+  ; count = back_nl + 1
+  LDA LINE_LEN16
+  CLC
+  ADC #1
+  JSR compute_delete_screen_rows
+  POP16 BUF_PTR16           ; Restore delete_start
+.skip_bs_precompute:
+
   ; Step 6: Scan forward from original cursor, consuming fwd bytes
   ; Original cursor = delete_start + back = BUF_PTR16 + back
   CLC
@@ -566,8 +586,8 @@ insert_batch:
   ; Check for pure line join (no fwd_nl) -> scroll optimization
   LDA LINE_LEN16 + 1         ; fwd_nl
   BNE .set_modified           ; Complex case, fall back to current-line redraw
-  LDA #$02
-  STA RENDER_FLAG            ; Signal line-delete for scroll optimization
+  LDA #$06
+  STA RENDER_FLAG            ; Line-delete with displacement-based scroll
   JMP .set_modified
 
 .set_modified:

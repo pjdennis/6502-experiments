@@ -562,14 +562,57 @@ render_decide:
   BEQ .full                  ; Delta 0, shouldn't happen
 
   ; Walk lines to compute SCROLL_DELTA (screen rows to scroll).
-  ; RENDER_FLAG=$05: single Enter, always scrolls exactly 1 screen row
+  ; RENDER_FLAG=$05: single Enter, compute displacement from wrapped line split
   ; RENDER_FLAG=$03/$04: walk inserted lines at FILE_LINE16
   LDA RENDER_FLAG
   CMP #$05
   BNE .do_walk
+  ; --- Enter displacement: compare old vs new total screen rows ---
+  ; Get len(line_above) = FILE_LINE16 - 1
+  SEC
+  SBCI16 FILE_LINE16, 1, RENDER_LINE16
+  LDAX16 RENDER_LINE16
+  JSR buf_get_line_len      ; A/X = len(above)
+  STA RENDER_LINE16
+  STX RENDER_LINE16 + 1
+  ; Get len(cursor_line)
+  LDAX16 FILE_LINE16
+  JSR buf_get_line_len      ; A/X = len(cursor)
+  STA SCROLL_DELTA          ; len_cursor_lo (temp)
+  STX DELETE_SCREEN_ROWS    ; len_cursor_hi (temp)
+  ; old_length = len_above + len_cursor
+  CLC
+  ADC RENDER_LINE16
+  TAY
+  LDA DELETE_SCREEN_ROWS
+  ADC RENDER_LINE16 + 1
+  TAX
+  TYA                       ; A/X = old_length
+  JSR line_screen_rows      ; A = old_total
+  STA RENDER_LIMIT          ; save old_total
+  ; rows_above = screen_rows(len_above)
+  LDAX16 RENDER_LINE16
+  JSR line_screen_rows
+  STA RENDER_LINE16         ; repurpose: rows_above
+  ; rows_cursor = screen_rows(len_cursor)
+  LDA SCROLL_DELTA
+  LDX DELETE_SCREEN_ROWS
+  JSR line_screen_rows      ; A = rows_cursor
+  ; new_total = rows_above + rows_cursor
+  CLC
+  ADC RENDER_LINE16
+  CMP RENDER_LIMIT          ; new_total vs old_total
+  BEQ .enter_no_disp
+  ; displacement = 1 (only possible non-zero value for single Enter)
   LDA #1
   STA SCROLL_DELTA
+  LDA #0
+  STA DELETE_SCREEN_ROWS
   JMP .walk_done
+.enter_no_disp:
+  LDA #0
+  STA DELETE_SCREEN_ROWS
+  JMP .ins_full
 .do_walk:
   CP16 FILE_LINE16, RENDER_LINE16
   ; For $04 (J undo), skip cursor line — only count restored lines
