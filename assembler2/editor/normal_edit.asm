@@ -627,6 +627,17 @@ normal_substitute_line:
 do_cc:
   JSR get_count
 cc_have_count:
+  ; Pre-compute screen rows for displacement-based scroll
+  LDA BUF_TEMP16 + 1
+  BNE .cc_skip_precompute    ; Count > 255, skip
+  CP16 FILE_LINE16, RENDER_LINE16
+  LDA BUF_TEMP16
+  JSR compute_delete_screen_rows
+  JMP .cc_after_precompute
+.cc_skip_precompute:
+  LDA #0
+  STA DELETE_SCREEN_ROWS
+.cc_after_precompute:
   JSR yank_delete_current_lines
   BCS .cc_overflow
   ; Check if current line is already empty (from buf_delete_lines empty handling)
@@ -653,8 +664,8 @@ cc_have_count:
   STA_LH16 CURSOR_COL16
   LDA #$FF
   STA MODIFIED
-  LDA #$02
-  STA RENDER_FLAG        ; Signal line-delete for scroll optimization
+  LDA #$06
+  STA RENDER_FLAG        ; Signal line-delete with displacement-based scroll
   JMP enter_insert_mode
 
 .cc_overflow:

@@ -10406,6 +10406,83 @@ class EditorTestRunner:
             expect_content_rows=[(3, {4, 5, 6})]
         )
 
+        # 2cc deleting lines including a wrapped line: displacement > file delta.
+        # Lines: "Short 1" (1 row), "This is a longer line!" (2 rows at 20 cols).
+        # 2cc: deletes both (3 screen rows), inserts blank (1 row).
+        # File delta = 1, but actual displacement = 2.
+        cc_wrap_content = ("Short 1\n"
+                           "This is a longer line!\n"
+                           + ''.join(f"Short {i}\n" for i in range(3, 12)))
+        self.run_test_screen(
+            "Scroll opt: 2cc on wrapped lines correct displacement",
+            cc_wrap_content,
+            b"2cc\x1b:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, ""),
+                (1, "Short 3"), (2, "Short 4"),
+                (3, "Short 5"), (4, "Short 6"),
+                (5, "Short 7"), (6, "Short 8"),
+                (7, "Short 9"), (8, "Short 10"),
+            ],
+            expect_cursor=(0, 0),
+        )
+
+        # dd when replacement line wraps and cursor has WRAP_QUOT > 0.
+        # Line 0: 25 chars (2 rows at 20 cols). Line 1: also 25 chars.
+        # $ moves to col 24. dd deletes line 0. Replacement wraps.
+        # clamp_cursor_col keeps col 24, WRAP_QUOT=1.
+        # Bug: row 0 shows stale deleted content instead of replacement row 0.
+        dd_wrap_replace = ("1234567890123456789012345\n"
+                           "abcdefghijklmnopqrstuvwxy\n"
+                           + ''.join(f"Short {i}\n" for i in range(3, 12)))
+        self.run_test_screen(
+            "Scroll opt: dd with wrapped replacement WRAP_QUOT>0",
+            dd_wrap_replace,
+            b"$dd:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "abcdefghijklmnopqrst"),
+                (1, "uvwxy"),
+                (2, "Short 3"), (3, "Short 4"),
+                (4, "Short 5"), (5, "Short 6"),
+                (6, "Short 7"), (7, "Short 8"),
+                (8, "Short 9"),
+            ],
+            expect_cursor=(1, 4),
+        )
+
+        # Redo of 2cc on wrapped lines: same displacement issue.
+        self.run_test_screen(
+            "Redo: 2cc on wrapped lines correct displacement",
+            cc_wrap_content,
+            b"2cc\x1bu u:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, ""),
+                (1, "Short 3"), (2, "Short 4"),
+                (3, "Short 5"), (4, "Short 6"),
+                (5, "Short 7"), (6, "Short 8"),
+                (7, "Short 9"), (8, "Short 10"),
+            ],
+            expect_cursor=(0, 0),
+        )
+
+        # Redo of dd on wrapped line: missing pre-computation.
+        # dd deletes wrapped line (2 rows), redo should use SCROLL_DELTA=2.
+        self.run_test_screen(
+            "Redo: dd on wrapped line correct displacement",
+            wrap_dd_content,
+            b"jddu u:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Short 0"), (1, "Short 2"), (2, "Short 3"),
+                (3, "Short 4"), (4, "Short 5"), (5, "Short 6"),
+                (6, "Short 7"), (7, "Short 8"), (8, "Short 9"),
+            ],
+            expect_cursor=(1, 0),
+        )
+
         # J on last visible line: joined line is off-screen, only cursor row redrawn.
         # rows=10 → 9 content rows (0-8), status on row 9.
         # jjjjjjjj = 8 j's → cursor at row 8 (Line 9). J joins off-screen Line 10.

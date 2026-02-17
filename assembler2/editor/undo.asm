@@ -161,6 +161,15 @@ undo_do_undo:
   STA MODIFIED
   LDA YANK_LINES16           ; Actual lines inserted (may differ from net delta)
   STA INSERT_LINE_COUNT
+  ; cc undo deletes blank + pastes lines: file delta != screen displacement.
+  ; Use full repaint to avoid insert-scroll mismatch.
+  LDA UNDO_TYPE
+  CMP #UNDO_CC
+  BNE .undo_line_scroll
+  LDA #$FF
+  STA RENDER_FLAG
+  JMP clear_count
+.undo_line_scroll:
   LDA #$03
   STA RENDER_FLAG            ; Signal line-insert for scroll optimization
   JMP clear_count
@@ -224,6 +233,10 @@ undo_do_redo:
   ; cc redo: delete lines, insert blank line (reproduces cc effect)
   CP16 UNDO_LINE16, FILE_LINE16
   CP16 YANK_LINES16, BUF_TEMP16
+  ; Pre-compute screen rows for displacement-based scroll
+  CP16 FILE_LINE16, RENDER_LINE16
+  LDA BUF_TEMP16
+  JSR compute_delete_screen_rows
   JSR delete_current_lines
   ; Insert blank line at FILE_LINE16 (like cc does)
   JSR get_current_line_len
@@ -245,8 +258,8 @@ undo_do_redo:
   STA_LH16 CURSOR_COL16
   LDA #$FF
   STA MODIFIED
-  LDA #$02
-  STA RENDER_FLAG
+  LDA #$06
+  STA RENDER_FLAG        ; displacement-based scroll
   JMP clear_count
 
 .redo_line:
@@ -254,6 +267,17 @@ undo_do_redo:
   CP16 UNDO_LINE16, FILE_LINE16
   ; Get yank size to know how many lines to delete
   CP16 YANK_LINES16, BUF_TEMP16
+  ; Pre-compute screen rows for line-delete scroll
+  LDA BUF_TEMP16 + 1
+  BNE .redo_line_skip_pre
+  CP16 FILE_LINE16, RENDER_LINE16
+  LDA BUF_TEMP16
+  JSR compute_delete_screen_rows
+  JMP .redo_line_del
+.redo_line_skip_pre:
+  LDA #0
+  STA DELETE_SCREEN_ROWS
+.redo_line_del:
   JSR delete_current_lines
   ; Set flags
   LDA #0

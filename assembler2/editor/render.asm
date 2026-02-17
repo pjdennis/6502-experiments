@@ -809,6 +809,8 @@ render_line_delete_scroll:
   JMP .set_del_scroll_start
 .scroll_at_cursor_del:
   LDA CURSOR_ROW
+  SEC
+  SBC WRAP_QUOT     ; first_row (0-based); no-op when WRAP_QUOT=0
   CLC
   ADC #1           ; Convert to 1-based
 .set_del_scroll_start:
@@ -849,6 +851,19 @@ render_line_delete_scroll:
   JMP render_from_row
 
 .single_row_render:
+  ; For $02 when WRAP_QUOT > 0: render all wrap rows from first_row to bottom
+  LDA WRAP_QUOT
+  BEQ .render_cursor_row
+  LDA CURSOR_ROW
+  SEC
+  SBC WRAP_QUOT
+  STA RENDER_ROW
+  CP16 FILE_LINE16, RENDER_LINE16
+  LDA #0
+  STA RENDER_WRAP
+  JMP render_from_row
+
+.render_cursor_row:
   ; Re-render cursor row (content may have changed, e.g., J join, cc change)
   LDA CURSOR_ROW
   CLC
