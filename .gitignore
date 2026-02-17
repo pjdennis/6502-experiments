@@ -14,4 +14,7 @@ setup.sh
 __pycache__
 commit
 update
+set
+rebase
+log
 _tr_*.tmp
