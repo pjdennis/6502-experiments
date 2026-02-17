@@ -1,3 +1,4 @@
+Implmement y$, d$, etc.
 Line-level render optimiaztion for undo and redo
 Undo for paste operations
 Batching for undo
