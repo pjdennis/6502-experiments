@@ -6383,6 +6383,19 @@ class EditorTestRunner:
             expect_cursor=(0, 0),
         )
 
+        # 257p: mark adjustment must use 16-bit count
+        # yy yanks 1 line, 257p inserts 257 lines below line 0.
+        # Mark at line 1 should shift to 1+257=258.
+        # Bug: low byte of 257 ($0101) is 1, so mark shifts by 1 only -> line 2.
+        self.run_test(
+            "257p mark adjustment uses 16-bit count",
+            "A\nB\n",
+            b"jmagg" +          # mark B (line 1), go to line 0
+            b"yy257p" +         # yank A, paste 257 copies below line 0
+            b"'add:wq\r",       # go to mark, delete that line, save
+            expected_content="A\n" * 258  # 1 original + 257 copies, B deleted
+        )
+
         # --- Mark adjustment: Enter in insert mode ---
 
         # Set mark on line 3, insert Enter on line 1 -> mark shifts

@@ -11,9 +11,9 @@ normal_paste_below:
 .line_paste:
   JSR get_count              ; BUF_TEMP16 = count
   JSR count_paste_extras     ; BUF_TEMP16 += extras, BATCH_EXTRA = extras
-  LDX BUF_TEMP16             ; X = total count (low byte)
-  STX NORMAL_TEMP            ; Save paste count for paste_adjust_marks
+  PUSH16 BUF_TEMP16          ; Save paste count for paste_adjust_marks
   JSR yank_paste_below_n
+  POP16 BUF_TEMP16           ; Restore paste count (carry preserved by PLA/STA)
   BCS .paste_below_done
   JSR paste_adjust_marks
   LDA #$03
@@ -34,9 +34,9 @@ normal_paste_above:
 .line_paste:
   JSR get_count              ; BUF_TEMP16 = count
   JSR count_paste_extras     ; BUF_TEMP16 += extras
-  LDX BUF_TEMP16             ; X = total count (low byte)
-  STX NORMAL_TEMP            ; Save paste count for paste_adjust_marks
+  PUSH16 BUF_TEMP16          ; Save paste count for paste_adjust_marks
   JSR yank_paste_above_n
+  POP16 BUF_TEMP16           ; Restore paste count (carry preserved by PLA/STA)
   BCS .paste_above_done
   JSR paste_adjust_marks
   LDA #$03
