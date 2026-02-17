@@ -10549,6 +10549,49 @@ class EditorTestRunner:
             expect_cursor=(1, 0),
         )
 
+        self._group("Undo char paste above (P):", leading_blank=True)
+
+        # x then P then u: undo removes pasted char (x already committed)
+        self.run_test(
+            "xPu undoes char paste (x stays)",
+            "AB\n",
+            b"xPu:wq\r",
+            expected_content="B\n"
+        )
+
+        # x then P then uu: redo re-pastes
+        self.run_test(
+            "xPuu redo re-pastes",
+            "AB\n",
+            b"xPuu:wq\r",
+            expected_content="AB\n"
+        )
+
+        # x then 2P then u: undo removes both copies
+        self.run_test(
+            "x2Pu undoes counted char paste (x stays)",
+            "AB\n",
+            b"x2Pu:wq\r",
+            expected_content="B\n"
+        )
+
+        # Multiline char paste above undo
+        self.run_test(
+            "multiline char paste P undo",
+            "AB\nCD\nEF\n",
+            b"$de" +            # delete "B\nCD" (multiline yank)
+            b"Pu:wq\r",        # paste above then undo
+            expected_content="A\nEF\n"
+        )
+
+        # Cursor position after undo
+        self.run_test_screen(
+            "xPu cursor restored",
+            "ABC\n",
+            b"lxPu:q!\r",      # col1, x deletes B, P pastes at cursor, u undoes
+            expect_cursor=(0, 1),
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed

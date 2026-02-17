@@ -489,33 +489,33 @@ undo_compute_paste_lines:
 .done:
   RTS
 
-; --- Char paste undo ---
+; --- Char paste undo (handles both BELOW and ABOVE) ---
 undo_char_paste_undo:
-  LDA UNDO_TYPE
-  CMP #UNDO_CHAR_PASTE_BELOW
-  BEQ .undo_cpb
-  JMP clear_count              ; CHAR_PASTE_ABOVE handled in next step
-
-.undo_cpb:
   ; Position at insertion point and delete pasted content
   CP16 UNDO_LINE16, FILE_LINE16
   CP16 UNDO_COL16, CURSOR_COL16
-  ; Compute total paste size
   CP16 UNDO_PASTE_COUNT16, BUF_TEMP16
   JSR yank_paste_setup         ; BUF_LEN16 = total paste size
-  BCS .undo_cpb_fail
+  BCS .undo_cp_fail
   JSR delete_at_cursor         ; Deletes BUF_LEN16 bytes, handles marks
-  ; Restore cursor: pre-paste col = max(insertion_col - 1, 0)
+  ; Restore cursor
   CP16 UNDO_LINE16, FILE_LINE16
+  LDA UNDO_TYPE
+  CMP #UNDO_CHAR_PASTE_ABOVE
+  BEQ .undo_cp_above
+  ; BELOW: pre-paste col = max(insertion_col - 1, 0)
   TST16 UNDO_COL16
-  BEQ .undo_cpb_col_zero
+  BEQ .undo_cp_col_zero
   SEC
   SBCI16 UNDO_COL16, 1, CURSOR_COL16
-  JMP .undo_cpb_flags
-.undo_cpb_col_zero:
+  JMP .undo_cp_flags
+.undo_cp_above:
+  CP16 UNDO_COL16, CURSOR_COL16
+  JMP .undo_cp_flags
+.undo_cp_col_zero:
   LDA #0
   STA_LH16 CURSOR_COL16
-.undo_cpb_flags:
+.undo_cp_flags:
   JSR clamp_cursor_col
   LDA #$FF
   STA UNDO_IS_REDO
@@ -523,32 +523,34 @@ undo_char_paste_undo:
   LDA #1
   STA RENDER_FLAG
   JMP clear_count
-.undo_cpb_fail:
+.undo_cp_fail:
   JMP clear_count
 
-; --- Char paste redo ---
+; --- Char paste redo (handles both BELOW and ABOVE) ---
 undo_char_paste_redo:
-  LDA UNDO_TYPE
-  CMP #UNDO_CHAR_PASTE_BELOW
-  BEQ .redo_cpb
-  JMP clear_count              ; CHAR_PASTE_ABOVE handled in next step
-
-.redo_cpb:
   CP16 UNDO_LINE16, FILE_LINE16
-  ; Restore pre-paste cursor: max(insertion_col - 1, 0)
-  TST16 UNDO_COL16
-  BEQ .redo_cpb_col_zero
-  SEC
-  SBCI16 UNDO_COL16, 1, CURSOR_COL16
-  JMP .redo_cpb_paste
-.redo_cpb_col_zero:
-  LDA #0
-  STA_LH16 CURSOR_COL16
-.redo_cpb_paste:
   LDA #0
   STA BATCH_EXTRA
   CP16 UNDO_PASTE_COUNT16, BUF_TEMP16
+  LDA UNDO_TYPE
+  CMP #UNDO_CHAR_PASTE_ABOVE
+  BEQ .redo_cpa
+  ; BELOW: cursor = max(insertion_col - 1, 0)
+  TST16 UNDO_COL16
+  BEQ .redo_cp_col_zero
+  SEC
+  SBCI16 UNDO_COL16, 1, CURSOR_COL16
+  JMP .redo_cpb_paste
+.redo_cp_col_zero:
+  LDA #0
+  STA_LH16 CURSOR_COL16
+.redo_cpb_paste:
   JSR do_char_paste_below
+  JMP .redo_cp_flags
+.redo_cpa:
+  CP16 UNDO_COL16, CURSOR_COL16
+  JSR do_char_paste_above
+.redo_cp_flags:
   LDA #0
   STA UNDO_IS_REDO
   LDA #1

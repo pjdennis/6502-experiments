@@ -151,9 +151,16 @@ do_char_paste_below:
 ; Handles newlines in yanked content via find_line_for_ptr
 ; Single-shift interleaved fill for all yank sizes
 char_paste_above:
+  CP16 FILE_LINE16, UNDO_LINE16
+  CP16 CURSOR_COL16, UNDO_COL16
   JSR get_count              ; BUF_TEMP16 = count C
   JSR count_paste_extras     ; BUF_TEMP16 += extras, BATCH_EXTRA = extras
+  CP16 BUF_TEMP16, UNDO_PASTE_COUNT16
   JSR do_char_paste_above
+  BCS .cpa_done
+  LDA #UNDO_CHAR_PASTE_ABOVE
+  STA UNDO_TYPE
+.cpa_done:
   JMP clear_count
 
 ; Core char paste above: paste BUF_TEMP16 copies at cursor
