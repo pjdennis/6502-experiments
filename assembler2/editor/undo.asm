@@ -103,6 +103,8 @@ undo_handle:
 ; --- Undo ---
 undo_do_undo:
   LDA UNDO_TYPE
+  CMP #UNDO_LINE_PASTE_BELOW
+  BCS .undo_paste
   CMP #UNDO_JOIN
   BEQ .undo_join
   CMP #UNDO_CC
@@ -111,6 +113,8 @@ undo_do_undo:
   BEQ .undo_line
   JMP .undo_char
 
+.undo_paste:
+  JMP undo_paste_undo
 .undo_join:
   JMP undo_join_undo
 
@@ -201,6 +205,8 @@ undo_do_undo:
 ; --- Redo ---
 undo_do_redo:
   LDA UNDO_TYPE
+  CMP #UNDO_LINE_PASTE_BELOW
+  BCS .redo_paste
   CMP #UNDO_JOIN
   BEQ .redo_join
   CMP #UNDO_CC
@@ -209,6 +215,8 @@ undo_do_redo:
   BEQ .redo_line
   JMP .redo_char
 
+.redo_paste:
+  JMP undo_paste_redo
 .redo_join:
   JMP undo_join_redo
 
@@ -377,4 +385,78 @@ undo_join_redo:
   STA RENDER_FLAG
   JSR clamp_cursor_col
   JMP clear_count
+
+; --- Paste undo ---
+; Dispatch: UNDO_TYPE >= UNDO_LINE_PASTE_BELOW
+undo_paste_undo:
+  LDA UNDO_TYPE
+  CMP #UNDO_LINE_PASTE_BELOW
+  BEQ .undo_line_paste_below
+  JMP clear_count              ; Other paste types handled in later steps
+
+.undo_line_paste_below:
+  ; Delete pasted lines: they start at UNDO_LINE16 + 1
+  CLC
+  ADCI16 UNDO_LINE16, 1, FILE_LINE16
+  ; BUF_TEMP16 = YANK_LINES16 * UNDO_PASTE_COUNT16
+  JSR undo_compute_paste_lines
+  JSR delete_current_lines
+  ; Restore cursor
+  CP16 UNDO_LINE16, FILE_LINE16
+  CP16 UNDO_COL16, CURSOR_COL16
+  JSR clamp_cursor_col
+  ; Set flags
+  LDA #$FF
+  STA UNDO_IS_REDO
+  STA MODIFIED
+  LDA #$02
+  STA RENDER_FLAG
+  JMP clear_count
+
+; --- Paste redo ---
+undo_paste_redo:
+  LDA UNDO_TYPE
+  CMP #UNDO_LINE_PASTE_BELOW
+  BEQ .redo_line_paste_below
+  JMP clear_count              ; Other paste types handled in later steps
+
+.redo_line_paste_below:
+  CP16 UNDO_LINE16, FILE_LINE16
+  CP16 UNDO_PASTE_COUNT16, BUF_TEMP16
+  JSR yank_paste_below_n
+  BCS .redo_fail
+  ; paste_adjust_marks needs BUF_TEMP16 = count
+  CP16 UNDO_PASTE_COUNT16, BUF_TEMP16
+  JSR paste_adjust_marks
+  ; Set flags
+  LDA #0
+  STA UNDO_IS_REDO
+  LDA #$FF
+  STA MODIFIED
+  ; INSERT_LINE_COUNT = total pasted lines (in BUF_TEMP16 from paste_adjust_marks)
+  LDA BUF_TEMP16
+  STA INSERT_LINE_COUNT
+  LDA #$03
+  STA RENDER_FLAG
+  JMP clear_count
+
+.redo_fail:
+  JMP clear_count
+
+; Compute BUF_TEMP16 = YANK_LINES16 * UNDO_PASTE_COUNT16 (16-bit)
+; Clobbers: A, COUNT16
+undo_compute_paste_lines:
+  CP16 YANK_LINES16, BUF_TEMP16
+  CMPI16 UNDO_PASTE_COUNT16, 1
+  BEQ .done
+  CP16 UNDO_PASTE_COUNT16, COUNT16
+  DEC16 COUNT16
+.mul:
+  CLC
+  ADC16 BUF_TEMP16, YANK_LINES16, BUF_TEMP16
+  DEC16 COUNT16
+  TST16 COUNT16
+  BNE .mul
+.done:
+  RTS
 

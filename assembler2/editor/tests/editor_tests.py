@@ -10343,6 +10343,87 @@ class EditorTestRunner:
             expect_ansi_contains="\x1b[2;9r",
         )
 
+        self._group("Undo line paste below (p):", leading_blank=True)
+
+        # dd then p then u: undo removes pasted line (dd already committed)
+        self.run_test(
+            "ddpu undoes paste (dd stays)",
+            "A\nB\nC\n",
+            b"ddpu:wq\r",
+            expected_content="B\nC\n"
+        )
+
+        # dd then p then uu: redo re-pastes
+        self.run_test(
+            "ddpuu redo re-pastes",
+            "A\nB\nC\n",
+            b"ddpuu:wq\r",
+            expected_content="B\nA\nC\n"
+        )
+
+        # yy then p then u: removes pasted copy
+        self.run_test(
+            "yypu removes pasted copy",
+            "A\nB\n",
+            b"yypu:wq\r",
+            expected_content="A\nB\n"
+        )
+
+        # yy then 2p then u: removes all pasted copies
+        self.run_test(
+            "yy2pu removes all copies",
+            "A\nB\n",
+            b"yy2pu:wq\r",
+            expected_content="A\nB\n"
+        )
+
+        # yy then 2p then uu: redo re-pastes both
+        self.run_test(
+            "yy2puu redo re-pastes both",
+            "A\nB\n",
+            b"yy2puu:wq\r",
+            expected_content="A\nA\nA\nB\n"
+        )
+
+        # yy then pp (batched) then u: undo removes entire batched paste
+        self.run_test(
+            "yyppu undo removes batched paste",
+            "A\nB\n",
+            b"yyppu:wq\r",
+            expected_content="A\nB\n"
+        )
+
+        # Cursor position after undo: back to pre-paste line+col
+        self.run_test_screen(
+            "ddpu cursor at original position",
+            "AB\nCD\nEF\n",
+            b"l" +              # cursor at col 1
+            b"ddpu:q!\r",
+            expect_cursor=(0, 1),
+        )
+
+        # Mark adjustment on undo: mark shifts back
+        self.run_test_screen(
+            "ddpu mark preserved",
+            "A\nB\nC\n",
+            b"jjma" +           # mark C (line 2)
+            b"ggyy p" +         # yank A, paste below line 0 -> C shifts to 3
+            b"u" +              # undo paste -> C shifts back to 2
+            b"'a:q!\r",
+            expect_cursor=(2, 0),
+        )
+
+        # Mark adjustment on redo: mark shifts forward again
+        self.run_test_screen(
+            "ddpuu mark preserved on redo",
+            "A\nB\nC\n",
+            b"jjma" +           # mark C (line 2)
+            b"ggyy p" +         # paste -> C at 3
+            b"uu" +             # undo+redo -> C at 3
+            b"'a:q!\r",
+            expect_cursor=(3, 0),
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed

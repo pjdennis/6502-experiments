@@ -9,13 +9,18 @@ normal_paste_below:
   BEQ .line_paste
   JMP char_paste_below
 .line_paste:
+  CP16 FILE_LINE16, UNDO_LINE16
+  CP16 CURSOR_COL16, UNDO_COL16
   JSR get_count              ; BUF_TEMP16 = count
   JSR count_paste_extras     ; BUF_TEMP16 += extras, BATCH_EXTRA = extras
+  CP16 BUF_TEMP16, UNDO_PASTE_COUNT16
   PUSH16 BUF_TEMP16          ; Save paste count for paste_adjust_marks
   JSR yank_paste_below_n
   POP16 BUF_TEMP16           ; Restore paste count (carry preserved by PLA/STA)
   BCS .paste_below_done
   JSR paste_adjust_marks
+  LDA #UNDO_LINE_PASTE_BELOW
+  STA UNDO_TYPE
   LDA #$03
   STA RENDER_FLAG        ; Signal line-insert for scroll optimization
   ; Cursor: yank_paste_below_n does INC16 once; add extras for iterative semantics
