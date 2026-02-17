@@ -21,13 +21,17 @@ normal_paste_below:
   JSR paste_adjust_marks
   LDA #UNDO_LINE_PASTE_BELOW
   STA UNDO_TYPE
-  LDA #$03
-  STA RENDER_FLAG        ; Signal line-insert for scroll optimization
   ; Cursor: yank_paste_below_n does INC16 once; add extras for iterative semantics
   LDA BATCH_EXTRA
-  BEQ .paste_below_done
+  BEQ .paste_below_scroll
+  ; Batched paste: cursor adjustment shifts FILE_LINE16 past first pasted
+  ; lines, so scroll walk would start at wrong position.
   CLC
   ADCA16 FILE_LINE16, FILE_LINE16
+  JMP .paste_below_done           ; RENDER_FLAG stays 0 → full repaint
+.paste_below_scroll:
+  LDA #$03
+  STA RENDER_FLAG        ; Signal line-insert for scroll optimization
 .paste_below_done:
   JMP clear_count
 

@@ -1,3 +1,4 @@
+When undoing/redoing J with wrapped lines, a phantom empty line appers at the end
 Implmement y$, d$, etc.
 Line-level render optimiaztion for undo and redo
 Undo for paste operations

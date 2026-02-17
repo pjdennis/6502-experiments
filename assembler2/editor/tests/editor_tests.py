@@ -10406,6 +10406,24 @@ class EditorTestRunner:
             expect_content_rows=[(3, {4, 5, 6})]
         )
 
+        # pp batched paste of wrapped line: BATCH_EXTRA adjusts FILE_LINE16 past
+        # first pasted lines, causing scroll walk to start at wrong position.
+        # Without fix, row 4 shows stale content instead of COPY1 wrap row 0.
+        self.run_test_screen(
+            "Scroll opt: pp batched paste of wrapped line",
+            wrap_p_content,
+            b"yyjjpp:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "This is a longer lin"), (1, "e!"),
+                (2, "Short 1"), (3, "Short 2"),
+                (4, "This is a longer lin"), (5, "e!"),
+                (6, "This is a longer lin"), (7, "e!"),
+                (8, "Short 3"),
+            ],
+            expect_cursor=(6, 0),
+        )
+
         # 2cc deleting lines including a wrapped line: displacement > file delta.
         # Lines: "Short 1" (1 row), "This is a longer line!" (2 rows at 20 cols).
         # 2cc: deletes both (3 screen rows), inserts blank (1 row).
