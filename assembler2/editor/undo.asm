@@ -10,24 +10,33 @@
 ;   2 = char-delete (x, D, dw, db, de)
 ;   3 = cc/S line-delete (like line-delete but cc inserted blank line)
 ;   4 = join (J, NJ)
+;   5 = line-paste-below (p with line yank)
+;   6 = line-paste-above (P with line yank)
+;   7 = char-paste-below (p with char yank)
+;   8 = char-paste-above (P with char yank)
 
 UNDO_NONE = 0
 UNDO_LINE = 1
 UNDO_CHAR = 2
 UNDO_CC   = 3
 UNDO_JOIN = 4
+UNDO_LINE_PASTE_BELOW = 5
+UNDO_LINE_PASTE_ABOVE = 6
+UNDO_CHAR_PASTE_BELOW = 7
+UNDO_CHAR_PASTE_ABOVE = 8
 
 JOIN_UNDO_BUF = $D700     ; 256 bytes for 16-bit offsets
 JOIN_UNDO_MAX = 128       ; 256 / 2 bytes per entry
 
   .zeropage
 
-UNDO_TYPE:       .byte    ; 0=none, 1=line-delete, 2=char-delete, 3=cc, 4=join
+UNDO_TYPE:       .byte    ; 0=none, 1-4=delete/cc/join, 5-8=paste
 UNDO_LINE16:     .word    ; FILE_LINE16 at time of operation
-UNDO_COL16:      .word    ; CURSOR_COL16 at time of operation (char-delete only)
+UNDO_COL16:      .word    ; CURSOR_COL16 at time of operation
 UNDO_IS_REDO:    .byte    ; 0=undo pending, $FF=redo pending
 INSERT_CHANGED:  .byte    ; tracks if insert mode modified buffer
 UNDO_JOIN_COUNT: .byte    ; Number of joins recorded (1-128)
+UNDO_PASTE_COUNT16: .word ; Paste multiplier N (for redo), 16-bit
 
   .code
 
