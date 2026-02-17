@@ -392,12 +392,21 @@ undo_paste_undo:
   LDA UNDO_TYPE
   CMP #UNDO_LINE_PASTE_BELOW
   BEQ .undo_line_paste_below
+  CMP #UNDO_LINE_PASTE_ABOVE
+  BEQ .undo_line_paste_above
   JMP clear_count              ; Other paste types handled in later steps
 
 .undo_line_paste_below:
   ; Delete pasted lines: they start at UNDO_LINE16 + 1
   CLC
   ADCI16 UNDO_LINE16, 1, FILE_LINE16
+  JMP .undo_line_paste
+
+.undo_line_paste_above:
+  ; Delete pasted lines: they start at UNDO_LINE16
+  CP16 UNDO_LINE16, FILE_LINE16
+
+.undo_line_paste:
   ; BUF_TEMP16 = YANK_LINES16 * UNDO_PASTE_COUNT16
   JSR undo_compute_paste_lines
   JSR delete_current_lines
@@ -418,12 +427,22 @@ undo_paste_redo:
   LDA UNDO_TYPE
   CMP #UNDO_LINE_PASTE_BELOW
   BEQ .redo_line_paste_below
+  CMP #UNDO_LINE_PASTE_ABOVE
+  BEQ .redo_line_paste_above
   JMP clear_count              ; Other paste types handled in later steps
 
 .redo_line_paste_below:
   CP16 UNDO_LINE16, FILE_LINE16
   CP16 UNDO_PASTE_COUNT16, BUF_TEMP16
   JSR yank_paste_below_n
+  JMP .redo_line_paste_done
+
+.redo_line_paste_above:
+  CP16 UNDO_LINE16, FILE_LINE16
+  CP16 UNDO_PASTE_COUNT16, BUF_TEMP16
+  JSR yank_paste_above_n
+
+.redo_line_paste_done:
   BCS .redo_fail
   ; paste_adjust_marks needs BUF_TEMP16 = count
   CP16 UNDO_PASTE_COUNT16, BUF_TEMP16

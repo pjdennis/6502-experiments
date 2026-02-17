@@ -10424,6 +10424,60 @@ class EditorTestRunner:
             expect_cursor=(3, 0),
         )
 
+        self._group("Undo line paste above (P):", leading_blank=True)
+
+        # jdd then P then u: undo removes pasted line
+        self.run_test(
+            "jddPu undoes paste (dd stays)",
+            "A\nB\nC\n",
+            b"jddPu:wq\r",
+            expected_content="A\nC\n"
+        )
+
+        # jdd then P then uu: redo re-pastes
+        self.run_test(
+            "jddPuu redo re-pastes",
+            "A\nB\nC\n",
+            b"jddPuu:wq\r",
+            expected_content="A\nB\nC\n"
+        )
+
+        # yy then P then u: removes pasted copy
+        self.run_test(
+            "yyPu removes pasted copy",
+            "A\nB\n",
+            b"yyPu:wq\r",
+            expected_content="A\nB\n"
+        )
+
+        # yy then 2P then u: removes all copies
+        self.run_test(
+            "yy2Pu removes all copies",
+            "A\nB\n",
+            b"yy2Pu:wq\r",
+            expected_content="A\nB\n"
+        )
+
+        # Cursor position after undo
+        self.run_test_screen(
+            "jddPu cursor at original position",
+            "AB\nCD\nEF\n",
+            b"l" +              # cursor at col 1
+            b"jddPu:q!\r",
+            expect_cursor=(1, 1),
+        )
+
+        # Mark adjustment on undo
+        self.run_test_screen(
+            "yyPu mark preserved",
+            "A\nB\nC\n",
+            b"jjma" +           # mark C (line 2)
+            b"ggyy P" +         # paste above line 0 -> C shifts to 3
+            b"u" +              # undo -> C back to 2
+            b"'a:q!\r",
+            expect_cursor=(2, 0),
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed
