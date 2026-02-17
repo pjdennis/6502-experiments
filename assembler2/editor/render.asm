@@ -492,7 +492,7 @@ render_decide:
   JMP render_current_line_and_status
 
 .line_delete_scroll:
-  ; LINE_COUNT16 decreased and RENDER_FLAG=$02 (line delete at cursor).
+  ; LINE_COUNT16 decreased and RENDER_FLAG=$02/$06 (line delete at cursor).
   ; Use pre-computed DELETE_SCREEN_ROWS if available, else file delta.
   LDA DELETE_SCREEN_ROWS
   BNE .have_delete_rows
@@ -506,6 +506,28 @@ render_decide:
   BNE .full                  ; Delta > 255, fall back
   JMP .delete_check
 .have_delete_rows:
+  ; RENDER_FLAG=$06 (J): compute displacement-based delta
+  LDX RENDER_FLAG
+  CPX #$06
+  BNE .dd_delete_rows
+  ; --- J path: A = old_total from pre-computation ---
+  STA SCROLL_DELTA          ; save old_total temporarily
+  LDAX16 FILE_LINE16
+  JSR buf_get_line_len
+  JSR line_screen_rows      ; A = new_total
+  STA DELETE_SCREEN_ROWS    ; store new_total for scroll region
+  LDA SCROLL_DELTA          ; old_total
+  SEC
+  SBC DELETE_SCREEN_ROWS    ; old_total - new_total
+  BEQ .j_no_scroll
+  BCC .j_no_scroll          ; underflow safety
+  STA SCROLL_DELTA
+  JMP .delete_check
+.j_no_scroll:
+  LDA #0
+  STA DELETE_SCREEN_ROWS
+  JMP render_current_line_and_status
+.dd_delete_rows:
   STA SCROLL_DELTA
   LDA #0
   STA DELETE_SCREEN_ROWS     ; Reset for next frame
@@ -728,9 +750,9 @@ render_line_delete_scroll:
 
   ; Set scroll region start (1-based) to SCREEN_ROWS-1 (1-based)
   ; RENDER_FLAG=$02: from CURSOR_ROW+1 (includes cursor row, for dd)
-  ; RENDER_FLAG=$06: skip ALL cursor line rows (for J on wrapped lines)
+  ; RENDER_FLAG=$06: skip combined line's rows (for J with wrapped lines)
   ;   first_row = CURSOR_ROW - WRAP_QUOT
-  ;   scroll_start = first_row + PREV_LINE_ROWS + 1 (1-based)
+  ;   scroll_start = first_row + DELETE_SCREEN_ROWS + 1 (1-based)
   LDA RENDER_FLAG
   CMP #$06
   BNE .scroll_at_cursor_del
@@ -738,7 +760,7 @@ render_line_delete_scroll:
   SEC
   SBC WRAP_QUOT          ; first_row (0-based)
   CLC
-  ADC PREV_LINE_ROWS     ; past end of cursor line (0-based)
+  ADC DELETE_SCREEN_ROWS ; past end of combined line (0-based)
   CLC
   ADC #1                 ; 1-based
   JMP .set_del_scroll_start
@@ -762,14 +784,18 @@ render_line_delete_scroll:
   JSR ansi_reset_scroll_region
 .skip_del_scroll:
 
-  ; For J ($06) on wrapped cursor line: render from first row of line to bottom.
-  ; This re-renders all wrap rows (content changed) + newly exposed bottom rows.
+  ; For J ($06) with wrapped combined line: render from first row to bottom.
+  ; DELETE_SCREEN_ROWS holds new_total (combined line's screen rows).
   LDA RENDER_FLAG
   CMP #$06
   BNE .single_row_render
-  LDA PREV_LINE_ROWS
+  LDA DELETE_SCREEN_ROWS
+  PHA
+  LDA #0
+  STA DELETE_SCREEN_ROWS    ; reset for next frame
+  PLA
   CMP #2
-  BCC .single_row_render       ; PREV_LINE_ROWS < 2, non-wrapped
+  BCC .single_row_render    ; new_total < 2, non-wrapped: single row suffices
   LDA CURSOR_ROW
   SEC
   SBC WRAP_QUOT

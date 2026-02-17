@@ -9771,6 +9771,368 @@ class EditorTestRunner:
             expect_cursor=(2, 0),
         )
 
+        # J joining next wrapped line: when B wraps, ALL of B's rows need
+        # repainting since B's content reflows into A. The scroll region must
+        # not include B's wrap rows — otherwise stale wrap content appears.
+        # Setup: cursor on "Short 2" (non-wrapped), next line wraps to 2 rows.
+        # After J: "Short 2 This is a longer line!" wraps to 2 rows.
+        # Frames: 0=initial, 1=j cursor, 2=J
+        self.run_test_screen(
+            "Scroll opt: J joining next wrapped line correct content",
+            wrap_j_content,
+            b"jJ:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Short 1"),
+                (1, "Short 2 This is a lo"),
+                (2, "nger line!"),
+                (3, "Short 4"), (4, "Short 5"),
+                (5, "Short 6"), (6, "Short 7"),
+                (7, "Short 8"), (8, "Short 9"),
+            ],
+            expect_cursor=(1, 0),
+        )
+
+        # J that causes line to wrap: joining non-wrapped A with non-wrapped B
+        # produces a wrapped result occupying the same vertical space (2 rows)
+        # as A+B individually (1+1). No scroll needed — just repaint.
+        # "Almost full width!!" (19 chars) + " " + "XY" = 22 chars, wraps at 20.
+        # Frames: 0=initial, 1=jj cursor, 2=J
+        join_becomes_wrap = ("Short 1\nShort 2\n"
+                             "Almost full width!!\n"
+                             "XY\n"
+                             + ''.join(f"Short {i}\n" for i in range(5, 15)))
+        self.run_test_screen(
+            "Scroll opt: J result wraps same height no scroll",
+            join_becomes_wrap,
+            b"jjJ:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Short 1"), (1, "Short 2"),
+                (2, "Almost full width!!"),
+                (3, "XY"),
+                (4, "Short 5"), (5, "Short 6"),
+                (6, "Short 7"), (7, "Short 8"),
+                (8, "Short 9"),
+            ],
+            expect_cursor=(2, 0),
+            expect_scroll_rows=[(2, set())]
+        )
+
+        # JJ (2 batched joins) where first joined line B is wrapped:
+        # joins Short 2 + "This is a longer line!" (wraps) + Short 4.
+        # Result: "Short 2 This is a longer line! Short 4" (38 chars, 2 rows).
+        # Before: 1+2+1 = 4 rows. After: 2 rows. Freed: 2.
+        # Frames: 0=initial, 1=j cursor, 2=JJ
+        self.run_test_screen(
+            "Scroll opt: JJ first joined line wrapped",
+            wrap_j_content,
+            b"jJJ:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Short 1"),
+                (1, "Short 2 This is a lo"),
+                (2, "nger line! Short 4"),
+                (3, "Short 5"), (4, "Short 6"),
+                (5, "Short 7"), (6, "Short 8"),
+                (7, "Short 9"), (8, "Short 10"),
+            ],
+            expect_cursor=(1, 0),
+        )
+
+        # JJ (2 batched joins) where second joined line C is wrapped:
+        # joins Short 2 + "and" + "This is a longer line!" (wraps).
+        # Result: "Short 2 and This is a longer line!" (34 chars, 2 rows).
+        # Before: 1+1+2 = 4 rows. After: 2 rows. Freed: 2.
+        # Frames: 0=initial, 1=j cursor, 2=JJ
+        join_c_wrapped = ("Short 1\n"
+                          "Short 2\n"
+                          "and\n"
+                          "This is a longer line!\n"
+                          + ''.join(f"Short {i}\n" for i in range(5, 15)))
+        self.run_test_screen(
+            "Scroll opt: JJ second joined line wrapped",
+            join_c_wrapped,
+            b"jJJ:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Short 1"),
+                (1, "Short 2 and This is"),
+                (2, "a longer line!"),
+                (3, "Short 5"), (4, "Short 6"),
+                (5, "Short 7"), (6, "Short 8"),
+                (7, "Short 9"), (8, "Short 10"),
+            ],
+            expect_cursor=(1, 0),
+        )
+
+        # JJ (2 batched joins) all non-wrapped, result wraps to same height:
+        # 3 lines of 1 row each become 1 line wrapping to 3 rows. No scroll.
+        # "First longer line!!" (19) + " " + "Second longer line!" (19)
+        # + " " + "Third!" (6) = 46 chars -> 3 rows at 20 cols.
+        # Frames: 0=initial, 1=jj cursor, 2=JJ
+        join_3_same_height = ("Short 1\nShort 2\n"
+                              "First longer line!!\n"
+                              "Second longer line!\n"
+                              "Third!\n"
+                              + ''.join(f"Short {i}\n" for i in range(6, 15)))
+        self.run_test_screen(
+            "Scroll opt: JJ result wraps same height no scroll",
+            join_3_same_height,
+            b"jjJJ:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Short 1"), (1, "Short 2"),
+                (2, "First longer line!!"),
+                (3, "Second longer line!"),
+                (4, "Third!"),
+                (5, "Short 6"), (6, "Short 7"),
+                (7, "Short 8"), (8, "Short 9"),
+            ],
+            expect_cursor=(2, 0),
+            expect_scroll_rows=[(2, set())]
+        )
+
+        # JJ (2 batched joins) result wraps, partial height reduction:
+        # 3 non-wrapped lines (3 rows) become 1 line wrapping to 2 rows.
+        # Freed 1 row, but file delta = 2. SCROLL_DELTA must not overcount.
+        # "Almost full width!!" (19) + " " + "XY" (2) + " " + "Z" (1) = 24 chars.
+        # Frames: 0=initial, 1=jj cursor, 2=JJ
+        join_jj_partial = ("Short 1\nShort 2\n"
+                           "Almost full width!!\n"
+                           "XY\n"
+                           "Z\n"
+                           + ''.join(f"Short {i}\n" for i in range(6, 15)))
+        self.run_test_screen(
+            "Scroll opt: JJ result wraps partial height reduction",
+            join_jj_partial,
+            b"jjJJ:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Short 1"), (1, "Short 2"),
+                (2, "Almost full width!!"),
+                (3, "XY Z"),
+                (4, "Short 6"), (5, "Short 7"),
+                (6, "Short 8"), (7, "Short 9"),
+                (8, "Short 10"),
+            ],
+            expect_cursor=(2, 0),
+        )
+
+        # JJJ (3 batched joins) with wrapped line among those joined:
+        # joins Short 2 + "This is a longer line!" (wraps) + Short 4 + Short 5.
+        # Result: 46 chars, 3 rows at 20 cols.
+        # Before: 1+2+1+1 = 5 rows. After: 3 rows. Freed: 2.
+        # File delta = 3 but actual SCROLL_DELTA should be 2.
+        # Frames: 0=initial, 1=j cursor, 2=JJJ
+        self.run_test_screen(
+            "Scroll opt: JJJ with wrapped line among joined",
+            wrap_j_content,
+            b"jJJJ:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Short 1"),
+                (1, "Short 2 This is a lo"),
+                (2, "nger line! Short 4 S"),
+                (3, "hort 5"),
+                (4, "Short 6"), (5, "Short 7"),
+                (6, "Short 8"), (7, "Short 9"),
+                (8, "Short 10"),
+            ],
+            expect_cursor=(1, 0),
+        )
+
+        # J with following line off-screen: cursor near bottom, joined line wraps,
+        # following line was off-screen but should become visible after join frees rows.
+        join_offscreen = ("Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6\n"
+                          "Short 7\nThis is a longer line!\nLine 9\nLine 10\n")
+        self.run_test_screen(
+            "Scroll opt: J with following line off screen",
+            join_offscreen,
+            b"jjjjjjJ:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"),
+                (2, "Line 3"), (3, "Line 4"),
+                (4, "Line 5"), (5, "Line 6"),
+                (6, "Short 7 This is a lo"),
+                (7, "nger line!"),
+                (8, "Line 9"),
+            ],
+            expect_cursor=(6, 0),
+        )
+
+        # J at end of file: joining the last two lines, no following line.
+        # Row after combined line should show ~ (EOF tilde).
+        join_eof = ("Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6\nLine 7\n"
+                    "Short 8\nEnd\n")
+        self.run_test_screen(
+            "Scroll opt: J at EOF no following line",
+            join_eof,
+            b"jjjjjjjJ:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"),
+                (2, "Line 3"), (3, "Line 4"),
+                (4, "Line 5"), (5, "Line 6"),
+                (6, "Line 7"),
+                (7, "Short 8 End"),
+                (8, "~"),
+            ],
+            expect_cursor=(7, 0),
+        )
+
+        # --- Redo counterparts for all J scroll tests ---
+        # Each uses "Ju u" pattern: J, u (undo), space (break batching), u (redo).
+        # Space is unmapped in normal mode, so cursor stays at col 0.
+
+        self.run_test_screen(
+            "Redo: J joining next wrapped line",
+            wrap_j_content,
+            b"jJu u:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Short 1"),
+                (1, "Short 2 This is a lo"),
+                (2, "nger line!"),
+                (3, "Short 4"), (4, "Short 5"),
+                (5, "Short 6"), (6, "Short 7"),
+                (7, "Short 8"), (8, "Short 9"),
+            ],
+            expect_cursor=(1, 0),
+        )
+
+        self.run_test_screen(
+            "Redo: J result wraps same height no scroll",
+            join_becomes_wrap,
+            b"jjJu u:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Short 1"), (1, "Short 2"),
+                (2, "Almost full width!!"),
+                (3, "XY"),
+                (4, "Short 5"), (5, "Short 6"),
+                (6, "Short 7"), (7, "Short 8"),
+                (8, "Short 9"),
+            ],
+            expect_cursor=(2, 0),
+            expect_scroll_rows=[(5, set())]
+        )
+
+        self.run_test_screen(
+            "Redo: JJ first joined line wrapped",
+            wrap_j_content,
+            b"jJJu u:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Short 1"),
+                (1, "Short 2 This is a lo"),
+                (2, "nger line! Short 4"),
+                (3, "Short 5"), (4, "Short 6"),
+                (5, "Short 7"), (6, "Short 8"),
+                (7, "Short 9"), (8, "Short 10"),
+            ],
+            expect_cursor=(1, 0),
+        )
+
+        self.run_test_screen(
+            "Redo: JJ second joined line wrapped",
+            join_c_wrapped,
+            b"jJJu u:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Short 1"),
+                (1, "Short 2 and This is"),
+                (2, "a longer line!"),
+                (3, "Short 5"), (4, "Short 6"),
+                (5, "Short 7"), (6, "Short 8"),
+                (7, "Short 9"), (8, "Short 10"),
+            ],
+            expect_cursor=(1, 0),
+        )
+
+        self.run_test_screen(
+            "Redo: JJ result wraps same height no scroll",
+            join_3_same_height,
+            b"jjJJu u:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Short 1"), (1, "Short 2"),
+                (2, "First longer line!!"),
+                (3, "Second longer line!"),
+                (4, "Third!"),
+                (5, "Short 6"), (6, "Short 7"),
+                (7, "Short 8"), (8, "Short 9"),
+            ],
+            expect_cursor=(2, 0),
+            expect_scroll_rows=[(5, set())]
+        )
+
+        self.run_test_screen(
+            "Redo: JJ result wraps partial height reduction",
+            join_jj_partial,
+            b"jjJJu u:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Short 1"), (1, "Short 2"),
+                (2, "Almost full width!!"),
+                (3, "XY Z"),
+                (4, "Short 6"), (5, "Short 7"),
+                (6, "Short 8"), (7, "Short 9"),
+                (8, "Short 10"),
+            ],
+            expect_cursor=(2, 0),
+        )
+
+        self.run_test_screen(
+            "Redo: JJJ with wrapped line among joined",
+            wrap_j_content,
+            b"jJJJu u:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Short 1"),
+                (1, "Short 2 This is a lo"),
+                (2, "nger line! Short 4 S"),
+                (3, "hort 5"),
+                (4, "Short 6"), (5, "Short 7"),
+                (6, "Short 8"), (7, "Short 9"),
+                (8, "Short 10"),
+            ],
+            expect_cursor=(1, 0),
+        )
+
+        self.run_test_screen(
+            "Redo: J with following line off screen",
+            join_offscreen,
+            b"jjjjjjJu u:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"),
+                (2, "Line 3"), (3, "Line 4"),
+                (4, "Line 5"), (5, "Line 6"),
+                (6, "Short 7 This is a lo"),
+                (7, "nger line!"),
+                (8, "Line 9"),
+            ],
+            expect_cursor=(6, 0),
+        )
+
+        self.run_test_screen(
+            "Redo: J at EOF no following line",
+            join_eof,
+            b"jjjjjjjJu u:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"),
+                (2, "Line 3"), (3, "Line 4"),
+                (4, "Line 5"), (5, "Line 6"),
+                (6, "Line 7"),
+                (7, "Short 8 End"),
+                (8, "~"),
+            ],
+            expect_cursor=(7, 0),
+        )
+
         # 3J at mid-screen: joins 2 lines, scroll shifts up by 2.
         # Frames: 0=initial, 1='3' count display, 2=jjj cursor, 3=J scroll
         self.run_test_screen(

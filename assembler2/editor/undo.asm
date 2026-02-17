@@ -341,6 +341,14 @@ undo_join_undo:
 ; --- Join redo: replace newlines back to spaces ---
 undo_join_redo:
   CP16 UNDO_LINE16, FILE_LINE16
+
+  ; Pre-compute old_total screen rows for displacement-based scroll
+  CP16 FILE_LINE16, RENDER_LINE16
+  LDA UNDO_JOIN_COUNT
+  CLC
+  ADC #1           ; +1 for cursor line
+  JSR compute_delete_screen_rows
+
   LDAX16 FILE_LINE16
   JSR buf_get_line_ptr          ; BUF_PTR16 = line start
   CP16 BUF_PTR16, BUF_SRC16    ; BUF_SRC16 = line start (base for offsets)

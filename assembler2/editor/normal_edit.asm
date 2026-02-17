@@ -429,6 +429,13 @@ normal_join_lines:
   JMP .join_done
 .join_has_work:
 
+  ; Pre-compute old_total screen rows for displacement-based scroll
+  CP16 FILE_LINE16, RENDER_LINE16
+  LDA NORMAL_TEMP
+  CLC
+  ADC #1           ; +1 for cursor line
+  JSR compute_delete_screen_rows
+
   ; Compute undo_count: if batching → 1, else → NORMAL_TEMP
   LDA UNDO_COL16             ; batching flag
   BEQ .no_batch
