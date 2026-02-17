@@ -7713,6 +7713,30 @@ class EditorTestRunner:
             expected_content="XY\nworld\n"
         )
 
+        # 2S substitutes 2 lines (same as 2cc)
+        self.run_test(
+            "2S substitutes 2 lines",
+            "one\ntwo\nthree\n",
+            b"2SXY\x1b:wq\r",
+            expected_content="XY\nthree\n"
+        )
+
+        # 3S substitutes 3 lines
+        self.run_test(
+            "3S substitutes 3 lines",
+            "aaa\nbbb\nccc\nddd\n",
+            b"3SX\x1b:wq\r",
+            expected_content="X\nddd\n"
+        )
+
+        # S with count clamped to available lines
+        self.run_test(
+            "5S clamps to available lines",
+            "hello\nworld\n",
+            b"5SX\x1b:wq\r",
+            expected_content="X\n"
+        )
+
         self.run_test(
             "cc on single line",
             "hello\n",

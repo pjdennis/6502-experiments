@@ -622,10 +622,7 @@ do_replace_char:
 ; Yank line(s), delete, insert newline, enter insert at col 0.
 ; S = substitute line (alias for cc with count=1)
 normal_substitute_line:
-  LDA #1
-  STA BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16+1
+  JSR get_count
   JMP cc_have_count
 
 do_cc:
