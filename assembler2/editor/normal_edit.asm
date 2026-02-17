@@ -59,10 +59,27 @@ normal_paste_above:
 ; For non-empty lines, inserts after cursor char; for empty lines, inserts at line start
 ; Handles newlines in yanked content via find_line_for_ptr
 char_paste_below:
+  CP16 FILE_LINE16, UNDO_LINE16
   JSR get_count              ; BUF_TEMP16 = count
   JSR count_paste_extras     ; BUF_TEMP16 += extras
+  CP16 BUF_TEMP16, UNDO_PASTE_COUNT16
+  ; Compute insertion column for undo: cursor+1 (non-empty) or 0 (empty)
+  JSR get_current_line_len
+  STAX16 LINE_LEN16
+  TST16 LINE_LEN16
+  BEQ .cpb_empty
+  CLC
+  ADCI16 CURSOR_COL16, 1, UNDO_COL16
+  JMP .cpb_paste
+.cpb_empty:
+  LDA #0
+  STA_LH16 UNDO_COL16
+.cpb_paste:
   JSR do_char_paste_below
-  ; No cursor adjustment - contiguous insertion gives same cursor as iterative
+  BCS .cpb_done
+  LDA #UNDO_CHAR_PASTE_BELOW
+  STA UNDO_TYPE
+.cpb_done:
   JMP clear_count
 
 ; Core char paste below: paste BUF_TEMP16 copies after cursor

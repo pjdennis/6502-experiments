@@ -10478,6 +10478,77 @@ class EditorTestRunner:
             expect_cursor=(2, 0),
         )
 
+        self._group("Undo char paste below (p):", leading_blank=True)
+
+        # x then p then u: undo removes pasted char (x already committed)
+        self.run_test(
+            "xpu undoes char paste (x stays)",
+            "AB\n",
+            b"xpu:wq\r",
+            expected_content="B\n"
+        )
+
+        # x then p then uu: redo re-pastes
+        self.run_test(
+            "xpuu redo re-pastes",
+            "AB\n",
+            b"xpuu:wq\r",
+            expected_content="BA\n"
+        )
+
+        # D then p then u: undo removes pasted chars (D already committed)
+        self.run_test(
+            "Dpu undoes char paste (D stays)",
+            "Hello World\n",
+            b"llDpu:wq\r",
+            expected_content="He\n"
+        )
+
+        # x then 2p then u: undo removes both pasted copies (x already committed)
+        self.run_test(
+            "x2pu undoes counted char paste (x stays)",
+            "AB\n",
+            b"x2pu:wq\r",
+            expected_content="B\n"
+        )
+
+        # Multiline char paste undo (content with newlines)
+        self.run_test(
+            "multiline char paste p undo",
+            "AB\nCD\nEF\n",
+            b"$de" +            # delete "B\nCD" (multiline yank)
+            b"pu:wq\r",        # paste then undo
+            expected_content="A\nEF\n"
+        )
+
+        # Empty line char paste undo
+        self.run_test(
+            "empty line char paste p undo",
+            "\nB\n",
+            b"jx" +             # delete B from second line
+            b"kpu:wq\r",       # go to empty line, paste, undo
+            expected_content="\n\n"
+        )
+
+        # Cursor position after undo: back to pre-paste col
+        self.run_test_screen(
+            "xpu cursor restored",
+            "ABC\n",
+            b"lxpu:q!\r",      # col1, x deletes B, p pastes after cursor, u undoes
+            expect_cursor=(0, 1),
+        )
+
+        # Multiline char paste mark adjustment on undo
+        self.run_test_screen(
+            "multiline char paste p undo preserves mark",
+            "AB\nCD\nEF\n",
+            b"jjma" +           # mark EF (line 2)
+            b"gg$de" +          # delete "B\nCD" -> EF at line 1
+            b"pu" +             # paste then undo -> EF back at 1
+            b"'a:q!\r",
+            expect_cursor=(1, 0),
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed
