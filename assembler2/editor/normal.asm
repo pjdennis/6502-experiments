@@ -325,14 +325,13 @@ normal_open_below:
   JSR buf_rebuild_lines
 
   ; Adjust marks: new line inserted at FILE_LINE16+1
-  LDA #1
-  STA BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1
+  LDAX16 FILE_LINE16
   CLC
-  ADCI16 FILE_LINE16, 1, BUF_DST16
-  LDAX16 BUF_DST16
-  JSR mark_adjust_insert
+  ADC #1
+  BCC .mark_adj
+  INX
+.mark_adj:
+  JSR mark_insert_one
 
   INC16 FILE_LINE16
   LDA #0
@@ -357,12 +356,8 @@ normal_open_above:
   JSR buf_rebuild_lines
 
   ; Adjust marks: new line inserted at FILE_LINE16
-  LDA #1
-  STA BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1
   LDAX16 FILE_LINE16
-  JSR mark_adjust_insert
+  JSR mark_insert_one
 
   LDA #0
   STA_LH16 CURSOR_COL16

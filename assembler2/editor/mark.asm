@@ -313,6 +313,37 @@ mark_adjust_range:
   BNE .loop
   RTS
 
+; Adjust marks with col-0 line adjustment via CURSOR_COL16
+; At col 0: line consumed entirely, A/X unchanged
+; At col > 0: line partially survives, A/X incremented
+; Carry: set = delete, clear = insert
+; Input: A/X = base line, BUF_TEMP16 = count
+mark_adjust_col:
+  PHP
+  LDY CURSOR_COL16
+  BNE .col_nz
+  LDY CURSOR_COL16 + 1
+  BEQ .dispatch
+.col_nz:
+  CLC
+  ADC #1
+  BCC .dispatch
+  INX
+.dispatch:
+  PLP
+  BCS mark_adjust_delete
+  JMP mark_adjust_insert
+
+; Insert 1 line at A/X, adjust marks
+mark_insert_one:
+  PHA
+  LDA #1
+  STA BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
+  PLA
+  JMP mark_adjust_insert
+
 ; Adjust marks after lines are deleted
 ; Input: A/X = first deleted line (16-bit low/high)
 ;        BUF_TEMP16 = count of deleted lines (16-bit)

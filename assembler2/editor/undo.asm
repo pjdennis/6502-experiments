@@ -155,20 +155,9 @@ undo_do_undo:
   SBC16 LINE_COUNT16, COUNT16, BUF_TEMP16
   TST16 BUF_TEMP16
   BEQ .undo_char_flags
-  ; at_line = UNDO_LINE16 + (UNDO_COL16 > 0 ? 1 : 0)
-  LDAX16 UNDO_LINE16
-  LDY UNDO_COL16
-  BNE .undo_char_col_nz
-  LDY UNDO_COL16 + 1
-  BNE .undo_char_col_nz
-  JMP .undo_char_mark
-.undo_char_col_nz:
+  LDAX16 FILE_LINE16
   CLC
-  ADC #1
-  BCC .undo_char_mark
-  INX
-.undo_char_mark:
-  JSR mark_adjust_insert
+  JSR mark_adjust_col
 .undo_char_flags:
   ; Restore cursor position (yank_paste_core may have moved things)
   CP16 UNDO_COL16, CURSOR_COL16
@@ -209,12 +198,8 @@ undo_do_redo:
   BCS .redo_cc_done
   JSR buf_rebuild_lines
   ; Adjust marks for inserted blank line (matches original cc behavior)
-  LDA #1
-  STA BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1
   LDAX16 FILE_LINE16
-  JSR mark_adjust_insert
+  JSR mark_insert_one
 .redo_cc_done:
   LDA #0
   STA UNDO_IS_REDO

@@ -188,20 +188,9 @@ char_paste_above:
   ; Adjust marks for inserted lines
   SEC
   SBC16 LINE_COUNT16, COUNT16, BUF_TEMP16
-  ; at_line = FILE_LINE16 + (CURSOR_COL16 > 0 ? 1 : 0)
   LDAX16 FILE_LINE16
-  LDY CURSOR_COL16
-  BNE .col_nz
-  LDY CURSOR_COL16 + 1
-  BNE .col_nz
-  JMP .mark_adj
-.col_nz:
   CLC
-  ADC #1
-  BCC .mark_adj
-  INX
-.mark_adj:
-  JSR mark_adjust_insert
+  JSR mark_adjust_col
   ; Cursor at first pasted byte (BUF_PTR16 = insertion point)
 
 .find_pos:
@@ -425,9 +414,12 @@ normal_join_lines:
   STA BUF_TEMP16
   LDA #0
   STA BUF_TEMP16+1
+  LDAX16 FILE_LINE16
   CLC
-  ADCI16 FILE_LINE16, 1, BUF_PTR16
-  LDAX16 BUF_PTR16
+  ADC #1
+  BCC .mark_adj
+  INX
+.mark_adj:
   JSR mark_adjust_delete
 
   LDA #$FF
@@ -547,12 +539,8 @@ cc_have_count:
   JSR buf_rebuild_lines
 
   ; Adjust marks for inserted line
-  LDA #1
-  STA BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16+1
   LDAX16 FILE_LINE16
-  JSR mark_adjust_insert
+  JSR mark_insert_one
   JSR undo_record_cc         ; Upgrade line-delete undo to cc type (blank inserted)
 
 .cc_already_empty:
