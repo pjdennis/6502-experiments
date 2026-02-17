@@ -6535,6 +6535,58 @@ class EditorTestRunner:
             expect_cursor=(1, 0),  # mark unset, cursor stays at line 1
         )
 
+        # --- Mark adjustment: char paste with newlines ---
+
+        # Char paste below (p) with multiline content: mark shifts up
+        # de across newline yanks "B\nCD", then p pastes it back.
+        # After de: "A\nEF\n" (2 lines), mark shifted from 2 to 1.
+        # After p: "AB\nCD\nEF\n" (3 lines), delta=1, mark at 1 shifts to 2.
+        self.run_test_screen(
+            "char paste below shifts mark on line below",
+            "AB\nCD\nEF\n",
+            b"jjma" +           # mark "EF" (idx 2)
+            b"gg$de" +          # go to 'B', de yanks "B\nCD" (1 newline)
+            b"p" +              # paste below: inserts "B\nCD" after 'A'
+            b"'a:q!\r",
+            expect_cursor=(2, 0),  # was 1 after de, +1 from paste newline -> 2
+        )
+
+        # Char paste above (P) with multiline content: mark shifts up
+        # Same sequence but P instead of p. Col=0 so at_line=FILE_LINE16.
+        self.run_test_screen(
+            "char paste above shifts mark on line below",
+            "AB\nCD\nEF\n",
+            b"jjma" +           # mark "EF" (idx 2)
+            b"gg$de" +          # go to 'B', de yanks "B\nCD" (1 newline)
+            b"P" +              # paste above: inserts "B\nCD" at cursor
+            b"'a:q!\r",
+            expect_cursor=(2, 0),  # was 1 after de, +1 from paste newline -> 2
+        )
+
+        # --- Mark adjustment: undo/redo of multiline char delete ---
+
+        # Undo of multiline char delete (db): mark shifts back up
+        self.run_test_screen(
+            "undo multiline char delete shifts mark back",
+            "AB\nCD\nEF\n",
+            b"jjma" +           # mark "EF" (idx 2)
+            b"kdb" +            # line 1 col0, db deletes "AB\n" -> mark shifts to 1
+            b"u" +              # undo: pastes "AB\n" back -> mark shifts to 2
+            b"'a:q!\r",
+            expect_cursor=(2, 0),  # mark restored to original idx 2
+        )
+
+        # Redo of multiline char delete: mark shifts down (via delete_at_cursor)
+        self.run_test_screen(
+            "redo multiline char delete shifts mark down",
+            "AB\nCD\nEF\n",
+            b"jjma" +           # mark "EF" (idx 2)
+            b"kdb" +            # db deletes "AB\n" -> mark shifts to 1
+            b"uu" +             # undo then redo: mark should be back at 1
+            b"'a:q!\r",
+            expect_cursor=(1, 0),  # mark shifted down by redo
+        )
+
         # --- :marks command ---
 
         self._group(":marks command:", leading_blank=True)

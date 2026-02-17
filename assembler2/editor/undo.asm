@@ -118,7 +118,9 @@ undo_do_undo:
   LDA #0
   STA BUF_TEMP16 + 1
   JSR yank_paste_above_n
-  BCS .undo_fail
+  BCC .undo_line_ok
+  JMP .undo_fail
+.undo_line_ok:
   ; Adjust marks for inserted lines
   CP16 YANK_LINES16, BUF_TEMP16
   LDAX16 FILE_LINE16
@@ -142,11 +144,32 @@ undo_do_undo:
   STA BUF_TEMP16
   LDA #0
   STA BUF_TEMP16 + 1
+  CP16 LINE_COUNT16, COUNT16 ; Save line count for mark adjustment
   JSR yank_paste_setup       ; BUF_LEN16 = yank size
   BCS .undo_fail
   JSR get_cursor_buf_ptr     ; BUF_PTR16 = cursor position
   JSR yank_paste_core        ; Shift right, copy yank data, rebuild
   BCS .undo_fail
+  ; Adjust marks if paste added lines
+  SEC
+  SBC16 LINE_COUNT16, COUNT16, BUF_TEMP16
+  TST16 BUF_TEMP16
+  BEQ .undo_char_flags
+  ; at_line = UNDO_LINE16 + (UNDO_COL16 > 0 ? 1 : 0)
+  LDAX16 UNDO_LINE16
+  LDY UNDO_COL16
+  BNE .undo_char_col_nz
+  LDY UNDO_COL16 + 1
+  BNE .undo_char_col_nz
+  JMP .undo_char_mark
+.undo_char_col_nz:
+  CLC
+  ADC #1
+  BCC .undo_char_mark
+  INX
+.undo_char_mark:
+  JSR mark_adjust_insert
+.undo_char_flags:
   ; Restore cursor position (yank_paste_core may have moved things)
   CP16 UNDO_COL16, CURSOR_COL16
   ; Set flags

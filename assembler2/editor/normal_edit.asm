@@ -59,7 +59,9 @@ char_paste_below:
 ; Returns carry set = failed/empty, carry clear = success
 do_char_paste_below:
   JSR yank_paste_setup
-  BCS .done                  ; Empty yank
+  BCC .not_empty
+  RTS                          ; Empty yank (carry set)
+.not_empty:
 
   ; Save total paste size on stack
   PUSH16 BUF_LEN16
@@ -79,6 +81,7 @@ do_char_paste_below:
   JSR get_cursor_buf_ptr     ; Insert at line start
 
 .do_paste:
+  CP16 LINE_COUNT16, COUNT16 ; Save line count for mark adjustment
   PUSH16 BUF_PTR16           ; Save insertion point
   JSR yank_paste_core
   POP16 BUF_PTR16            ; Recover insertion point
@@ -96,7 +99,17 @@ do_char_paste_below:
   JMP .find_pos
 
 .multiline:
-  ; Multi-line: cursor at first pasted byte (BUF_PTR16 already set)
+  ; Adjust marks for inserted lines (paste below: at_line = FILE_LINE16 + 1)
+  SEC
+  SBC16 LINE_COUNT16, COUNT16, BUF_TEMP16
+  LDAX16 FILE_LINE16
+  CLC
+  ADC #1
+  BCC .mark_adj
+  INX
+.mark_adj:
+  JSR mark_adjust_insert
+  ; Cursor at first pasted byte (BUF_PTR16 already set)
 
 .find_pos:
   JSR find_line_for_ptr      ; sets FILE_LINE16, CURSOR_COL16
@@ -114,7 +127,9 @@ char_paste_above:
   JSR get_count              ; BUF_TEMP16 = count C
   JSR count_paste_extras     ; BUF_TEMP16 += extras, BATCH_EXTRA = extras
   JSR yank_paste_setup       ; BUF_LEN16 = total size, YANK_SIZE16 = single size
-  BCS .done                  ; Empty yank
+  BCC .not_empty
+  JMP .done                  ; Empty yank
+.not_empty:
 
   ; Save total count N for fill routines
   LDA BUF_TEMP16
@@ -127,6 +142,7 @@ char_paste_above:
   JSR get_cursor_buf_ptr
 
   PUSH16 BUF_PTR16           ; Save insertion point
+  CP16 LINE_COUNT16, COUNT16 ; Save line count for mark adjustment
 
   ; Single buffer shift
   JSR buf_shift_right_16
@@ -169,7 +185,24 @@ char_paste_above:
   JMP .find_pos
 
 .multiline:
-  ; Multi-line: cursor at first pasted byte (BUF_PTR16 = insertion point)
+  ; Adjust marks for inserted lines
+  SEC
+  SBC16 LINE_COUNT16, COUNT16, BUF_TEMP16
+  ; at_line = FILE_LINE16 + (CURSOR_COL16 > 0 ? 1 : 0)
+  LDAX16 FILE_LINE16
+  LDY CURSOR_COL16
+  BNE .col_nz
+  LDY CURSOR_COL16 + 1
+  BNE .col_nz
+  JMP .mark_adj
+.col_nz:
+  CLC
+  ADC #1
+  BCC .mark_adj
+  INX
+.mark_adj:
+  JSR mark_adjust_insert
+  ; Cursor at first pasted byte (BUF_PTR16 = insertion point)
 
 .find_pos:
   JSR find_line_for_ptr      ; sets FILE_LINE16, CURSOR_COL16
