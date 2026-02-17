@@ -5664,6 +5664,80 @@ class EditorTestRunner:
             expected_content="H Worldello\n",
         )
 
+        # d$ at col 0 deletes line content (same as D)
+        self.run_test(
+            "d$ at col 0 deletes line content",
+            "Hello\n",
+            b"d$:wq\r",
+            expected_content="\n"
+        )
+
+        # d$ at col 2 deletes to end
+        self.run_test(
+            "d$ at col 2 deletes to end",
+            "Hello\n",
+            b"lld$:wq\r",
+            expected_content="He\n"
+        )
+
+        # d$ on empty line does nothing
+        self.run_test(
+            "d$ on empty line does nothing",
+            "\n",
+            b"d$:wq\r",
+            expected_content="\n"
+        )
+
+        # d$ at last char deletes single char
+        self.run_test(
+            "d$ at last char deletes just that char",
+            "ABC\n",
+            b"lld$:wq\r",
+            expected_content="AB\n"
+        )
+
+        # 2D deletes cursor-to-EOL plus next complete line
+        self.run_test(
+            "2D deletes to EOL + 1 line below",
+            "Hello\nWorld\nFoo\n",
+            b"ll2D:wq\r",
+            expected_content="He\nFoo\n"
+        )
+
+        # 2d$ synonym for 2D
+        self.run_test(
+            "2d$ synonym for 2D",
+            "Hello\nWorld\nFoo\n",
+            b"ll2d$:wq\r",
+            expected_content="He\nFoo\n"
+        )
+
+        # 3d$ on 4 lines at col 0: deletes 3 full lines content + newlines
+        self.run_test(
+            "3d$ deletes from cursor across 3 lines",
+            "ab\ncd\nef\ngh\n",
+            b"3d$:wq\r",
+            expected_content="\ngh\n"
+        )
+
+        # Count exceeds available lines - clamps
+        self.run_test(
+            "5d$ clamps to available lines",
+            "Hello\nWorld\n",
+            b"ll5d$:wq\r",
+            expected_content="He\n"
+        )
+
+        # 2D then p: charwise paste of deleted content
+        # 2D at col 2 deletes "llo\nWorld", cursor clamps to col 1 ('e')
+        # p pastes "llo\nWorld" after 'e', restoring original
+        self.run_test(
+            "2D then p pastes charwise multi-line",
+            "Hello\nWorld\nFoo\n",
+            b"ll2Dp:wq\r",
+            expected_content="Hello\nWorld\nFoo\n"
+        )
+
         # C then p pastes deleted text (char paste inserts inline)
         self.run_test(
             "C then p pastes deleted text",

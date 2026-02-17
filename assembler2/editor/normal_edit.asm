@@ -955,6 +955,73 @@ copy_line_to_nl:
   BNE copy_line_to_nl
   RTS
 
+; --- Dollar motion operations: d$, y$, d0, y0 ---
+
+; d$ handler: delete from cursor to EOL, with count support
+do_d_dollar:
+  JSR get_count
+  JSR check_cursor_in_line
+  BCS .done
+  JSR compute_dollar_range
+  LDA #OP_DELETE
+  JSR apply_char_operator
+.done:
+  JMP clear_count
+
+; Compute byte range for $ motion with count
+; Input: BUF_TEMP16 = count (from get_count), LINE_LEN16 set by check_cursor_in_line
+; Output: BUF_LEN16 = byte count from cursor to end of range
+; For count=1: BUF_LEN16 = LINE_LEN16 - CURSOR_COL16
+; For count>1: adds newline + line_length for each additional line
+compute_dollar_range:
+  ; Start with current line remainder
+  SEC
+  SBC16 LINE_LEN16, CURSOR_COL16, BUF_LEN16
+
+  ; Check if count > 1
+  LDA BUF_TEMP16 + 1
+  BNE .multiline              ; count > 255
+  LDA BUF_TEMP16
+  CMP #2
+  BCC .done                   ; count = 1, done
+
+.multiline:
+  ; remaining = count - 1
+  SEC
+  SBCI16 BUF_TEMP16, 1, BUF_TEMP16
+  ; next_line = FILE_LINE16 + 1
+  CLC
+  ADCI16 FILE_LINE16, 1, COUNT16
+
+.add_line:
+  ; Check bounds: if next_line >= LINE_COUNT16, stop
+  CMP16 COUNT16, LINE_COUNT16
+  BCS .done
+
+  ; Add 1 for the newline
+  CLC
+  ADCI16 BUF_LEN16, 1, BUF_LEN16
+
+  ; Get length of this line
+  LDAX16 COUNT16
+  JSR buf_get_line_len
+  ; A = low byte, X = high byte of line length
+  CLC
+  ADC BUF_LEN16
+  STA BUF_LEN16
+  TXA
+  ADC BUF_LEN16 + 1
+  STA BUF_LEN16 + 1
+
+  ; Next line
+  INC16 COUNT16
+  DEC16 BUF_TEMP16
+  TST16 BUF_TEMP16
+  BNE .add_line
+
+.done:
+  RTS
+
 ; --- Word operations: delete, change ---
 ; All word operations are thin wrappers that set up the range function
 ; and operator type, then delegate to word_op_forward/word_op_backward.

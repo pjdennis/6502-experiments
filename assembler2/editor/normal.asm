@@ -183,6 +183,7 @@ pending_combo_keys:
   .byte 'c', 'c', $02       .word do_cc
   .byte '>', '>', $03       .word do_indent
   .byte '<', '<', $03       .word do_unindent
+  .byte 'd', '$', $02       .word do_d_dollar
   .byte 'd', 'w', $03       .word do_dw
   .byte 'd', 'b', $03       .word do_db
   .byte 'c', 'w', $02       .word do_cw
@@ -224,9 +225,8 @@ normal_delete_to_eol:
   JSR check_cursor_in_line
   BCS .done
 
-  ; count = LINE_LEN16 - CURSOR_COL16 (16-bit)
-  SEC
-  SBC16 LINE_LEN16, CURSOR_COL16, BUF_LEN16
+  JSR get_count
+  JSR compute_dollar_range
   LDA #OP_DELETE
   JSR apply_char_operator
 .done:
