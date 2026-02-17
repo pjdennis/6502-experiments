@@ -564,6 +564,26 @@ delete_at_cursor:
   JMP .done
 .full_rebuild:
   JSR buf_rebuild_lines
+  ; Adjust marks for deleted newlines (NORMAL_TEMP = count)
+  LDA NORMAL_TEMP
+  STA BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
+  ; first_line = FILE_LINE16 + (CURSOR_COL16 > 0 ? 1 : 0)
+  ; At col 0 the entire current line is consumed; at col > 0 it partially survives
+  LDAX16 FILE_LINE16
+  LDY CURSOR_COL16
+  BNE .col_nonzero
+  LDY CURSOR_COL16 + 1
+  BNE .col_nonzero
+  JMP .do_mark_del
+.col_nonzero:
+  CLC
+  ADC #1
+  BCC .do_mark_del
+  INX
+.do_mark_del:
+  JSR mark_adjust_delete
 .done:
   LDA #$FF
   STA MODIFIED

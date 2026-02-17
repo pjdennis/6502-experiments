@@ -6472,6 +6472,69 @@ class EditorTestRunner:
             expect_cursor=(3, 0),  # was idx 4, -1 newline -> idx 3
         )
 
+        # --- Mark adjustment: char delete across newlines (db) ---
+
+        # db across newline: mark on line below shifts up
+        self.run_test_screen(
+            "db across newline shifts mark below",
+            "AB\nCD\nEF\nGH\n",
+            b"jjjmakkdb'a:q!\r",  # mark "GH" (idx3), kk->line1 col0, db
+            expect_cursor=(2, 0),  # was idx 3, 1 newline deleted -> idx 2
+        )
+
+        # 2db across 2 newlines: mark shifts by 2
+        self.run_test_screen(
+            "2db across 2 newlines shifts mark by 2",
+            "A\nB\nC\nD\nE\n",
+            b"jjjjmakk2db'a:q!\r",  # mark "E" (idx4), kk->line2, 2db crosses 2 NLs
+            expect_cursor=(2, 0),  # was idx 4, 2 newlines deleted -> idx 2
+        )
+
+        # de across newline: mark on consumed line is unset (col > 0)
+        self.run_test_screen(
+            "de across newline unsets mark on consumed line",
+            "AB\nCD\nEF\n",
+            b"jmagg$de'a :q!\r",  # mark "CD" (idx1), gg, $->B, de crosses NL
+            expect_cursor=(0, 0),  # mark at idx1 unset (in [1,2)), space dismisses
+        )
+
+        # db from col0: mark on cursor line shifts correctly
+        # db from (1,0): deletes "AB\n", cursor at (0,0). Col=0 so first_line=0.
+        # Mark at idx 1 is in [0,1) -> unset (idx 1 IS the cursor line content)
+        # Wait: [0, 0+1) = [0, 1). Mark at 1: NOT in range. Shifted by 1 to 0.
+        self.run_test_screen(
+            "db col0 shifts mark on next line",
+            "AB\nCD\nEF\n",
+            b"jjmakdb'a:q!\r",  # mark "EF" (idx2), k->line1, db from col0
+            expect_cursor=(1, 0),  # first_line=0 (col0), [0,1): mark at 2 shifted to 1
+        )
+
+        # 2db from col0: verify content is correct
+        self.run_test(
+            "2db from col0 deletes 2 words backward",
+            "A\nB\nC\nD\nE\n",
+            b"jjj2db:wq\r",  # line3, 2db
+            expected_content="A\nD\nE\n",
+        )
+
+        # 2db from col0: mark past deletion shifts correctly
+        self.run_test_screen(
+            "2db from col0 shifts mark past deletion",
+            "A\nB\nC\nD\nE\n",
+            b"jjjjmak2db'a:q!\r",  # mark "E" (idx4), k->line3, 2db deletes B\nC\n
+            expect_cursor=(2, 0),  # mark at 4 shifted by -2 to 2 ("E")
+        )
+
+        # 2db from col0: mark on consumed line is unset
+        # After 2db: "A\nD\nE\n", cursor at line 1. Mark 'a' was line 2 (in [1,3)) -> unset.
+        # 'a fails -> cursor stays at (1,0). If mark were valid at 2, cursor would go to (2,0).
+        self.run_test_screen(
+            "2db from col0 unsets mark on consumed line",
+            "A\nB\nC\nD\nE\n",
+            b"jjmaj2db'a:q!\r",  # mark "C" (idx2), j->line3, 2db deletes B\nC\n
+            expect_cursor=(1, 0),  # mark unset, cursor stays at line 1
+        )
+
         # --- :marks command ---
 
         self._group(":marks command:", leading_blank=True)
@@ -9734,7 +9797,8 @@ class EditorTestRunner:
             rows=10, cols=40,
             expect_lines=[(0, "HelXlo World")],
             # Frame 3 is the batched insert; first affected col is 3
-            expect_min_col=[(3, 0, 3)]
+            expect_min_col=[(3, 0, 3)],
+        )
 
         self._group("Undo (u):", leading_blank=True)
 
