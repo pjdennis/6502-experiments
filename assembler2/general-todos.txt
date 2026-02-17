@@ -1,6 +1,9 @@
-Mark adjustment for multi-line character mode deletes and pastes including for undo/redo
+Line-level render optimiaztion for undo and redo
+Undo for paste operations
+Batching for undo
+Undo restore cursor position based on the operation OK?
 
-counted C should delete lines below
+Render optimize ~ and r to render only the current character
 
 Error message in macro shows last param name vs. macro name:
 
