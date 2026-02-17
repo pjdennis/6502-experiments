@@ -47,11 +47,12 @@ class AnsiScreen:
         self.scroll_top = 0
         self.scroll_bottom = rows - 1
         # Per-frame tracking for render optimization tests
-        self.frames = []            # List of (buffer_copy, cursor_pos, content_touched, attrs_copy, min_content_col, max_content_col, frame_scrolled)
+        self.frames = []            # List of (buffer_copy, cursor_pos, content_touched, attrs_copy, min_content_col, max_content_col, frame_scrolled, scroll_touched)
         self.content_touched = set()  # Set of content row indices written this cycle
         self.min_content_col = {}     # row → min column index written this cycle
         self.max_content_col = {}     # row → max column index written this cycle
         self.frame_scrolled = False   # Whether any scroll happened this cycle
+        self.scroll_touched = set()   # Set of row indices affected by scroll operations
 
     def _clear_screen(self):
         self.buffer = [[' '] * self.cols for _ in range(self.rows)]
@@ -60,6 +61,7 @@ class AnsiScreen:
         self.min_content_col = {}
         self.max_content_col = {}
         self.frame_scrolled = False
+        self.scroll_touched = set()
         self._pending_wrap = False
 
     def _clear_to_eol(self):
@@ -125,6 +127,7 @@ class AnsiScreen:
         Does NOT mark rows as content_touched since the terminal hardware
         performs the scroll - only explicit character writes count."""
         self.frame_scrolled = True
+        self.scroll_touched.update(range(self.scroll_top, self.scroll_bottom + 1))
         for _ in range(n):
             if self.scroll_top > self.scroll_bottom:
                 break
@@ -138,6 +141,7 @@ class AnsiScreen:
         Does NOT mark rows as content_touched since the terminal hardware
         performs the scroll - only explicit character writes count."""
         self.frame_scrolled = True
+        self.scroll_touched.update(range(self.scroll_top, self.scroll_bottom + 1))
         for _ in range(n):
             if self.scroll_top > self.scroll_bottom:
                 break
@@ -154,11 +158,12 @@ class AnsiScreen:
         self.frames.append((self.frame_buffer, self.frame_cursor,
                             self.content_touched, self.frame_attrs,
                             self.min_content_col, self.max_content_col,
-                            self.frame_scrolled))
+                            self.frame_scrolled, self.scroll_touched))
         self.content_touched = set()
         self.min_content_col = {}
         self.max_content_col = {}
         self.frame_scrolled = False
+        self.scroll_touched = set()
 
     def process(self, data: str) -> 'AnsiScreen':
         """Process ANSI output data through the virtual terminal."""
@@ -271,6 +276,12 @@ class AnsiScreen:
         if frame_idx < 0 or frame_idx >= len(self.frames):
             return False
         return self.frames[frame_idx][6]
+
+    def scroll_rows_touched(self, frame_idx: int) -> set:
+        """Set of row indices affected by scroll operations during this frame."""
+        if frame_idx < 0 or frame_idx >= len(self.frames):
+            return set()
+        return self.frames[frame_idx][7]
 
     def get_min_col(self, frame_idx: int, row: int) -> int:
         """Minimum column index written to on a given row in a given frame.

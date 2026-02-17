@@ -25,7 +25,7 @@ RENDER_ROW:     .byte   ; Current row being rendered
 RENDER_LINE16:  .word   ; Current file line being rendered
 RENDER_COL:     .byte   ; Column counter during rendering
 FNAME_PTR16:    .word   ; Pointer to filename string (null-terminated)
-RENDER_FLAG:    .byte   ; $FF=full, $01=current line, $02=line delete, $03/$04/$05=line insert. $00=auto
+RENDER_FLAG:    .byte   ; $FF=full, $01=current line, $02/$06=line delete, $03/$04/$05=line insert. $00=auto
 VIEW_TOP_WRAP:  .byte   ; Wrap row offset for first visible line (0 = start of line)
 WRAP_QUOT:      .byte   ; Scratch: quotient from CURSOR_COL / SCREEN_COLS
 WRAP_REM:       .byte   ; Scratch: remainder from CURSOR_COL % SCREEN_COLS
@@ -459,6 +459,8 @@ render_decide:
   LDA RENDER_FLAG
   CMP #$02
   BEQ .line_delete_scroll
+  CMP #$06
+  BEQ .line_delete_scroll
   CMP #$03
   BEQ .do_line_insert
   CMP #$04
@@ -718,11 +720,21 @@ render_scroll_down:
 render_line_delete_scroll:
   JSR ansi_cursor_hide
 
-  ; Set scroll region from CURSOR_ROW+1 (1-based) to SCREEN_ROWS-1 (1-based)
-  ; This covers the cursor row through the bottom content row.
+  ; Set scroll region start (1-based) to SCREEN_ROWS-1 (1-based)
+  ; RENDER_FLAG=$02: from CURSOR_ROW+1 (includes cursor row, for dd)
+  ; RENDER_FLAG=$06: from CURSOR_ROW+2 (skips cursor row, for J)
+  LDA RENDER_FLAG
+  CMP #$06
+  BNE .scroll_at_cursor_del
+  LDA CURSOR_ROW
+  CLC
+  ADC #2           ; 1-based, skip cursor row
+  JMP .set_del_scroll_start
+.scroll_at_cursor_del:
   LDA CURSOR_ROW
   CLC
   ADC #1           ; Convert to 1-based
+.set_del_scroll_start:
   STA ANSI_ROW
   LDA SCREEN_ROWS
   SEC

@@ -381,8 +381,8 @@ undo_join_redo:
   STA UNDO_IS_REDO
   LDA #$FF
   STA MODIFIED
-  LDA #$02
-  STA RENDER_FLAG
+  LDA #$06
+  STA RENDER_FLAG        ; Line-delete, skip cursor row scroll
   JSR clamp_cursor_col
   JMP clear_count
 

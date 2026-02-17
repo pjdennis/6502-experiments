@@ -538,6 +538,7 @@ class EditorTestRunner:
                         expect_min_col: list = None,
                         expect_max_col: list = None,
                         expect_scrolled_at_frame: list = None,
+                        expect_scroll_rows: list = None,
                         deferred_wrap: bool = False):
         """Run an editor test and verify screen state via ANSI output.
 
@@ -807,6 +808,23 @@ class EditorTestRunner:
                         self._fail(name,
                             f"Frame {frame_idx}: expected scrolled="
                             f"{expected_scrolled}, got {actual_scrolled}\n"
+                            f"    Frame:\n{screen.dump()}")
+                        return
+
+            if expect_scroll_rows is not None:
+                actual_count = screen.get_frame_count()
+                for frame_idx, expected_rows in expect_scroll_rows:
+                    if frame_idx >= actual_count:
+                        self._fail(name,
+                            f"Expected frame {frame_idx} but only "
+                            f"{actual_count} frames\n"
+                            f"    Frame:\n{screen.dump()}")
+                        return
+                    actual_rows = screen.scroll_rows_touched(frame_idx)
+                    if actual_rows != expected_rows:
+                        self._fail(name,
+                            f"Frame {frame_idx}: expected scroll rows "
+                            f"{expected_rows}, got {actual_rows}\n"
                             f"    Frame:\n{screen.dump()}")
                         return
 
@@ -9629,6 +9647,45 @@ class EditorTestRunner:
             expect_cursor=(3, 0),
             # Frame 2 (J): cursor row (content changed) + bottom row
             expect_content_rows=[(2, {3, 8})]
+        )
+
+        # J at mid-screen: scroll region should NOT include the cursor row.
+        # The cursor row content changes (gains joined text) and gets re-rendered,
+        # so scrolling it first causes a visible glitch.
+        # Scroll region should be rows 4-8 (0-based), not 3-8.
+        # Frames: 0=initial, 1=jjj cursor, 2=J scroll frame
+        self.run_test_screen(
+            "Scroll opt: J at mid-screen does not scroll cursor row",
+            make_lines(15),
+            b"jjjJ:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line 4 Line 5"), (4, "Line 6"), (5, "Line 7"),
+                (6, "Line 8"), (7, "Line 9"), (8, "Line 10"),
+            ],
+            expect_cursor=(3, 0),
+            # Frame 2 (J): scroll region should be rows 4-8, NOT 3-8
+            expect_scroll_rows=[(2, {4, 5, 6, 7, 8})]
+        )
+
+        # J redo at mid-screen: scroll region should NOT include the cursor row.
+        # Sequence: J, u (undo), space (break u-batching), u (redo).
+        # Frames: 0=initial, 1=jjj cursor, 2=J, 3=u (undo), 4=space (status),
+        #         5=u (redo)
+        self.run_test_screen(
+            "Scroll opt: J redo does not scroll cursor row",
+            make_lines(15),
+            b"jjjJu u:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line 4 Line 5"), (4, "Line 6"), (5, "Line 7"),
+                (6, "Line 8"), (7, "Line 9"), (8, "Line 10"),
+            ],
+            expect_cursor=(3, 0),
+            # Frame 5 (redo J): scroll region should be rows 4-8, NOT 3-8
+            expect_scroll_rows=[(5, {4, 5, 6, 7, 8})]
         )
 
         # 3J at mid-screen: joins 2 lines, scroll shifts up by 2.
