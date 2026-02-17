@@ -568,8 +568,8 @@ normal_change_to_eol:
   JSR check_cursor_in_line
   BCS .c_insert
 
-  SEC
-  SBC16 LINE_LEN16, CURSOR_COL16, BUF_LEN16
+  JSR get_count
+  JSR compute_dollar_range
   LDA #OP_CHANGE
   JSR apply_char_operator
   RTS

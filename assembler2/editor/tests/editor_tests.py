@@ -7666,6 +7666,30 @@ class EditorTestRunner:
             expected_content="X\n"
         )
 
+        # Counted C: 2C at col 2 deletes to EOL + next line, enters insert
+        self.run_test(
+            "2C changes to EOL + next line",
+            "Hello\nWorld\nFoo\n",
+            b"ll2CNew\x1b:wq\r",
+            expected_content="HeNew\nFoo\n"
+        )
+
+        # 3C from col 0 on 4 lines
+        self.run_test(
+            "3C changes 3 lines from cursor",
+            "ab\ncd\nef\ngh\n",
+            b"3CX\x1b:wq\r",
+            expected_content="X\ngh\n"
+        )
+
+        # Counted C clamps to available lines
+        self.run_test(
+            "5C clamps to available lines",
+            "Hello\nWorld\n",
+            b"ll5CX\x1b:wq\r",
+            expected_content="HeX\n"
+        )
+
         self._group("Change line (cc, S):", leading_blank=True)
 
         self.run_test(
