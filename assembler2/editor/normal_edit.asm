@@ -140,8 +140,15 @@ do_char_paste_below:
   INX
 .mark_adj:
   JSR mark_adjust_insert
-  LDA #$03
-  STA RENDER_FLAG            ; Line-insert scroll
+  ; Skip cursor row in scroll region (save/restore BUF_PTR16 across buf_get_line_len)
+  PUSH16 BUF_PTR16
+  LDAX16 FILE_LINE16
+  JSR buf_get_line_len
+  JSR line_screen_rows
+  STA PREV_LINE_ROWS
+  POP16 BUF_PTR16
+  LDA #$09
+  STA RENDER_FLAG            ; Line-insert scroll, skip cursor row
   ; INSERT_LINE_COUNT = new_lines + 1 (for split cursor line)
   LDA BUF_TEMP16
   CLC
@@ -198,7 +205,9 @@ do_char_paste_above:
 
   ; Single buffer shift
   JSR buf_shift_right_16
-  BCS .shift_fail
+  BCC .shift_ok
+  JMP .shift_fail
+.shift_ok:
 
   ; Choose fill strategy based on yank content
   JSR yank_has_newline
@@ -243,8 +252,15 @@ do_char_paste_above:
   LDAX16 FILE_LINE16
   CLC
   JSR mark_adjust_col
-  LDA #$03
-  STA RENDER_FLAG            ; Line-insert scroll
+  ; Skip cursor row in scroll region (save/restore BUF_PTR16 across buf_get_line_len)
+  PUSH16 BUF_PTR16
+  LDAX16 FILE_LINE16
+  JSR buf_get_line_len
+  JSR line_screen_rows
+  STA PREV_LINE_ROWS
+  POP16 BUF_PTR16
+  LDA #$09
+  STA RENDER_FLAG            ; Line-insert scroll, skip cursor row
   ; INSERT_LINE_COUNT = new_lines + 1 (for split cursor line)
   LDA BUF_TEMP16
   CLC

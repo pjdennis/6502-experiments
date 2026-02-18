@@ -482,6 +482,8 @@ render_decide:
   CMP #$04
   BEQ .do_line_insert
   CMP #$05
+  BEQ .do_line_insert
+  CMP #$09
   BNE .not_line_insert
 .do_line_insert:
   JMP .line_insert_scroll
@@ -1063,12 +1065,15 @@ render_line_insert_scroll:
 
   ; Set scroll region start (1-based) to SCREEN_ROWS-1 (1-based)
   ; RENDER_FLAG=$03/$05: from CURSOR_ROW+1 (includes cursor row)
-  ; RENDER_FLAG=$04: skip ALL cursor line rows (for J undo on wrapped lines)
+  ; RENDER_FLAG=$04/$09: skip cursor line rows
   ;   first_row = CURSOR_ROW - WRAP_QUOT
   ;   scroll_start = first_row + PREV_LINE_ROWS + 1 (1-based)
   LDA RENDER_FLAG
   CMP #$04
+  BEQ .scroll_skip_cursor_ins
+  CMP #$09
   BNE .scroll_at_cursor
+.scroll_skip_cursor_ins:
   LDA CURSOR_ROW
   SEC
   SBC WRAP_QUOT          ; first_row (0-based)

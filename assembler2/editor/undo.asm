@@ -197,8 +197,12 @@ undo_do_undo:
   LDAX16 FILE_LINE16
   CLC
   JSR mark_adjust_col
-  ; Multi-line: set scroll optimization
-  LDA #$03
+  ; Multi-line: set scroll optimization, skip cursor row in scroll region
+  LDAX16 FILE_LINE16
+  JSR buf_get_line_len
+  JSR line_screen_rows
+  STA PREV_LINE_ROWS
+  LDA #$09
   STA RENDER_FLAG
   ; INSERT_LINE_COUNT = new_lines + 1 (for split cursor line)
   LDA BUF_TEMP16
