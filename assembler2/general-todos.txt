@@ -4,6 +4,8 @@ Algorithm for batch of J:
 -Do the join and calculate the new screen row for the line following the joined lines
 -Scroll from the row following the lines to be joined, up by the delta amount
 
+Support terminal resize
+
 Update the tests that are relying on u u to break the batch to do something else like a movement key - we might at some point filter ' ' before batching since it doesn't do anything.
 When last line wraps, rows 2+ don't display at all
 When backspacing from below a wrapped line onto the wrapped line, the row that was just moved to is unnecessarily redrawn
