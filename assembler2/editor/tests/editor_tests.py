@@ -12165,6 +12165,90 @@ class EditorTestRunner:
             expect_scrolled_at_frame=[(6, False)]
         )
 
+        # cc ESC u on line where next line is blank: cc uses UNDO_LINE path
+        # (skips blank insert since next line is already blank). Undo should
+        # restore the correct screen content without incorrectly scrolling
+        # rows below the cursor.
+        # Content: AAA, (blank), BBB, (blank), CCC, ...
+        # After cc on BBB: line deleted, next blank becomes cursor line.
+        # After u: BBB restored. Row 4 should show CCC, not be blank.
+        # Frames: 0=initial, 1=jj, 2=cc (insert), 3=ESC, 4=u
+        cc_blank_around = 'AAA\n\nBBB\n\nCCC\nDDD\nEEE\nFFF\nGGG\nHHH\nIII\n'
+        self.run_test_screen(
+            "Minimal repaint: cc ESC u with blank line after",
+            cc_blank_around,
+            b"jjcc\x1bu:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "AAA"), (1, ""), (2, "BBB"), (3, ""),
+                (4, "CCC"), (5, "DDD"), (6, "EEE"),
+                (7, "FFF"), (8, "GGG"),
+            ],
+            expect_cursor=(2, 0),
+        )
+
+        # 2C undo should not paint the line above the cursor.
+        # Frames: 0=initial, 1=jjj, 2=count '2', 3=C (delete+insert), 4=ESC, 5=u
+        self.run_test_screen(
+            "Minimal repaint: 2C undo does not paint line above",
+            'S1\nS2\nS3\nAAAA\nBBBB\nS6\nS7\nS8\nS9\nS10\nS11\n',
+            b"jjj2C\x1bu:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "S1"), (1, "S2"), (2, "S3"),
+                (3, "AAAA"), (4, "BBBB"), (5, "S6"),
+                (6, "S7"), (7, "S8"), (8, "S9"),
+            ],
+            expect_cursor=(3, 0),
+            # Frame 5 = undo. Should touch only cursor row + restored line.
+            # Row 2 (line above) must NOT be in the set.
+            expect_content_rows=[(5, {3, 4})]
+        )
+
+        # C on a wrapping line: line shrinks from 2 rows to 1 row (displacement -1).
+        # Should use scroll-up optimization, not repaint everything from cursor
+        # to bottom of screen.
+        # Content: S1, S2, S3, AAA...30chars (2 rows at 20 cols), S5, ...
+        # After C: cursor line becomes empty (1 row), content below shifts up by 1.
+        # Frames: 0=initial, 1=jjj, 2=C (delete+insert), 3=ESC
+        c_wrap_content = 'S1\nS2\nS3\n' + 'A' * 30 + '\nS5\nS6\nS7\nS8\nS9\nS10\n'
+        self.run_test_screen(
+            "Minimal repaint: C on wrapping line uses scroll",
+            c_wrap_content,
+            b"jjjC\x1b:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "S1"), (1, "S2"), (2, "S3"),
+                (3, ""), (4, "S5"), (5, "S6"),
+                (6, "S7"), (7, "S8"), (8, "S9"),
+            ],
+            expect_cursor=(3, 0),
+            # Frame 2 = C operation. Should repaint cursor row + bottom row only.
+            expect_content_rows=[(2, {3, 8})]
+        )
+
+        # 2C when second line wraps: total screen displacement should account
+        # for the wrapped line's extra rows. File delta = 1 line, but the
+        # wrapped line occupies 2 screen rows, so actual displacement = 2.
+        # Content: S1, S2, S3, AAAA (1 row), BBB...30chars (2 rows), S6, ...
+        # After 2C: cursor line becomes empty (1 row). Freed 3 rows (1+2),
+        # new cursor = 1 row, so displacement = 2.
+        # Frames: 0=initial, 1=jjj, 2=count '2', 3=C (delete+insert), 4=ESC
+        c2_wrap_content = ('S1\nS2\nS3\nAAAA\n' + 'B' * 30
+                           + '\nS6\nS7\nS8\nS9\nS10\nS11\n')
+        self.run_test_screen(
+            "Minimal repaint: 2C with wrapped second line correct scroll",
+            c2_wrap_content,
+            b"jjj2C\x1b:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "S1"), (1, "S2"), (2, "S3"),
+                (3, ""), (4, "S6"), (5, "S7"),
+                (6, "S8"), (7, "S9"), (8, "S10"),
+            ],
+            expect_cursor=(3, 0),
+        )
+
         self._group("Scroll opt: insert mode wrap:", leading_blank=True)
 
         # Typing at end of line past screen width: line wraps, LINE_COUNT16 increases.
