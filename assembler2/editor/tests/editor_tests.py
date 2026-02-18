@@ -10172,8 +10172,8 @@ class EditorTestRunner:
                 (8, "Short 9"),
             ],
             expect_cursor=(2, 0),
-            expect_scroll_rows=[(3, {5, 6, 7, 8})],
-            # Only cursor line (row 2) + restored line (row 3) repainted
+            expect_scroll_rows=[(3, {4, 5, 6, 7, 8})],
+            # Only cursor line (row 2) + restored line (row 3) + bottom exposed (row 8)
             expect_content_rows=[(3, {2, 3, 8})]
         )
 
@@ -10572,8 +10572,9 @@ class EditorTestRunner:
                 (7, "Short 9"), (8, "Short 10"),
             ],
             expect_cursor=(1, 0),
-            # Only cursor line's 2 wrap rows + bottom exposed rows repainted
-            expect_content_rows=[(5, {1, 2, 7, 8})]
+            # Redo re-joins 1 line (batched JJ records UNDO_JOIN_COUNT=1):
+            # cursor wrap rows (1,2) + 1 bottom exposed row (8)
+            expect_content_rows=[(5, {1, 2, 8})]
         )
 
         self.run_test_screen(
@@ -10590,8 +10591,9 @@ class EditorTestRunner:
                 (7, "Short 9"), (8, "Short 10"),
             ],
             expect_cursor=(1, 0),
-            # Only cursor line's 2 wrap rows + bottom exposed rows repainted
-            expect_content_rows=[(5, {1, 2, 7, 8})]
+            # Redo re-joins 1 line (batched JJ records UNDO_JOIN_COUNT=1):
+            # cursor wrap rows (1,2) + 1 bottom exposed row (8)
+            expect_content_rows=[(5, {1, 2, 8})]
         )
 
         self.run_test_screen(

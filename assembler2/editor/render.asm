@@ -80,6 +80,16 @@ render_screen:
 ; Set up RENDER_ROW/RENDER_LINE16/RENDER_WRAP from cursor first_row,
 ; then fall through to render_from_row.
 ; Expects ansi_cursor_hide already called.
+render_from_first_row_limited:
+  LDA CURSOR_ROW
+  SEC
+  SBC WRAP_QUOT
+  STA RENDER_ROW
+  CP16 FILE_LINE16, RENDER_LINE16
+  LDA #0
+  STA RENDER_WRAP
+  JMP render_limited_rows
+
 render_from_first_row:
   LDA CURSOR_ROW
   SEC
@@ -581,10 +591,14 @@ render_decide:
   JSR ansi_scroll_down
   JSR ansi_reset_scroll_region
 .j_grow_skip_scroll:
+  LDA DELETE_SCREEN_ROWS     ; new_total (cursor line's screen rows)
+  STA SCROLL_DELTA           ; number of rows to render
   LDA #0
   STA DELETE_SCREEN_ROWS     ; reset for next frame
-  JMP render_from_first_row
+  JMP render_from_first_row_limited
 .j_really_no_scroll:
+  LDA DELETE_SCREEN_ROWS     ; new_total
+  STA PREV_LINE_ROWS
   LDA #0
   STA DELETE_SCREEN_ROWS
   JMP render_current_line_and_status
@@ -708,7 +722,9 @@ render_decide:
   ; from the raw sum of restored line rows.
   LDA RENDER_FLAG
   CMP #$04
-  BNE .no_disp_adjust
+  BEQ .do_disp_adjust
+  JMP .no_disp_adjust
+.do_disp_adjust:
   LDAX16 FILE_LINE16
   JSR buf_get_line_len
   JSR line_screen_rows       ; A = new cursor line screen rows
@@ -724,9 +740,11 @@ render_decide:
   STA PREV_LINE_ROWS
   JMP .no_disp_adjust
 .disp_exact_zero:
-  PLA
-  STA PREV_LINE_ROWS
-  JMP .ins_full
+  PLA                        ; new_cursor_rows (discard value)
+  LDA PREV_LINE_ROWS         ; old cursor rows = total rows to render
+  STA SCROLL_DELTA
+  JSR ansi_cursor_hide
+  JMP render_from_first_row_limited
 .disp_negative:
   ; Old cursor line was taller than restored lines + new cursor combined.
   ; Scroll UP to fill freed rows.
@@ -740,14 +758,17 @@ render_decide:
   SEC
   SBC SCROLL_DELTA
   BEQ .disp_neg_zero
-  STA SCROLL_DELTA
+  STA SCROLL_DELTA           ; reverse_delta
   JSR ansi_cursor_hide
-  ; Scroll region start = first_row + PREV_LINE_ROWS + 1 (1-based)
+  ; new_content_rows = PREV_LINE_ROWS - reverse_delta
+  ; Scroll region start = first_row + new_content_rows + 1 (1-based)
   LDA CURSOR_ROW
   SEC
   SBC WRAP_QUOT
   CLC
   ADC PREV_LINE_ROWS
+  SEC
+  SBC SCROLL_DELTA           ; adjust: start after new content, not old
   CLC
   ADC #1
   STA ANSI_ROW
@@ -763,6 +784,32 @@ render_decide:
   LDA SCROLL_DELTA
   JSR ansi_scroll_up
   JSR ansi_reset_scroll_region
+  ; Render new content area from first_row, then bottom exposed rows
+  LDA SCROLL_DELTA
+  PHA                        ; save reverse_delta for bottom rows
+  LDA PREV_LINE_ROWS
+  SEC
+  SBC SCROLL_DELTA           ; new_content_rows
+  STA SCROLL_DELTA
+  LDA CURSOR_ROW
+  SEC
+  SBC WRAP_QUOT
+  STA RENDER_ROW
+  CP16 FILE_LINE16, RENDER_LINE16
+  LDA #0
+  STA RENDER_WRAP
+  JSR render_limited_loop
+  ; Render bottom exposed rows
+  PLA
+  STA SCROLL_DELTA           ; reverse_delta = bottom rows
+  LDA SCREEN_ROWS
+  SEC
+  SBC #1
+  SEC
+  SBC SCROLL_DELTA
+  STA RENDER_ROW
+  JSR find_line_at_render_row
+  JMP render_limited_rows
 .disp_neg_skip_scroll:
   JMP render_from_first_row
 .disp_neg_zero:
@@ -983,18 +1030,33 @@ render_line_delete_scroll:
   STA DELETE_SCREEN_ROWS    ; reset for next frame
   JMP .del_bottom_rows      ; skip cursor repaint, just bottom rows
 .not_skip_cursor:
-  ; For J ($06) with wrapped combined line: render from first row to bottom.
+  ; For J ($06) with wrapped combined line: render cursor wrap rows + bottom rows.
   ; DELETE_SCREEN_ROWS holds new_total (combined line's screen rows).
   CMP #$06
   BNE .single_row_render
   LDA DELETE_SCREEN_ROWS
-  PHA
+  STA RENDER_LIMIT           ; save new_total
   LDA #0
-  STA DELETE_SCREEN_ROWS    ; reset for next frame
-  PLA
+  STA DELETE_SCREEN_ROWS     ; reset for next frame
+  LDA RENDER_LIMIT
   CMP #2
-  BCC .single_row_render    ; new_total < 2, non-wrapped: single row suffices
-  JMP render_from_first_row
+  BCC .single_row_render     ; new_total < 2, non-wrapped: single row suffices
+  ; Render cursor wrap rows (new_total rows from first_row)
+  LDA SCROLL_DELTA
+  PHA                        ; save delete delta for bottom rows
+  LDA RENDER_LIMIT
+  STA SCROLL_DELTA           ; new_total rows to render
+  LDA CURSOR_ROW
+  SEC
+  SBC WRAP_QUOT
+  STA RENDER_ROW
+  CP16 FILE_LINE16, RENDER_LINE16
+  LDA #0
+  STA RENDER_WRAP
+  JSR render_limited_loop
+  PLA
+  STA SCROLL_DELTA           ; restore delete delta
+  JMP .del_bottom_rows
 
 .single_row_render:
   ; For $02 when WRAP_QUOT > 0: render all wrap rows from first_row to bottom
@@ -1176,10 +1238,16 @@ render_line_insert_scroll:
 ; Render limited rows: renders SCROLL_DELTA rows starting at
 ; RENDER_ROW/RENDER_LINE16/RENDER_WRAP, then draws status bar + cursor.
 render_limited_rows:
-  ; RENDER_LIMIT = starting RENDER_ROW (used to compute how many rows to render)
-  ; We need to render until RENDER_ROW reaches RENDER_LIMIT + SCROLL_DELTA
-  ; Actually: we render from RENDER_ROW until we've done SCROLL_DELTA rows
-  ; (or hit the status bar / end of file). Use RENDER_LIMIT as the stop row.
+  JSR render_limited_loop
+  JSR render_status_line
+  JSR render_position_cursor
+  JSR ansi_cursor_show
+  JMP io_flush
+
+; Render loop only: renders SCROLL_DELTA rows starting at
+; RENDER_ROW/RENDER_LINE16/RENDER_WRAP, then returns.
+; Caller must handle status bar, cursor positioning, etc.
+render_limited_loop:
   LDA RENDER_ROW
   CLC
   ADC SCROLL_DELTA
@@ -1263,10 +1331,7 @@ render_limited_rows:
   JMP .limited_loop
 
 .limited_done:
-  JSR render_status_line
-  JSR render_position_cursor
-  JSR ansi_cursor_show
-  JMP io_flush
+  RTS
 
 ; Walk from VIEW_TOP16 forward to find which file line corresponds
 ; to screen row RENDER_ROW. Sets RENDER_LINE16 and RENDER_WRAP.
