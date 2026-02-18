@@ -11420,6 +11420,690 @@ class EditorTestRunner:
             expect_content_rows=[(4, {8})]
         )
 
+        self._group("Minimal repaint: undo/redo:", leading_blank=True)
+
+        # --- Line-count-changing operations: undo/redo need scroll ---
+        # Insert scroll (scroll down, line restored/added): cursor row(s) need
+        #   content write; bottom row filled by scroll — NOT repainted.
+        # Delete scroll (scroll up, line removed): content shifts up; bottom
+        #   row(s) need content write from below viewport.
+        # In neither case should the row ABOVE cursor be repainted.
+
+        # dd undo: restores line 4. Insert scroll pushes content down.
+        # Only cursor row 3 needs content write (restored line).
+        # Frames: 0=initial, 1=jjj, 2=dd, 3=u
+        self.run_test_screen(
+            "Minimal repaint: dd undo",
+            make_lines(15),
+            b"jjjddu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line 4"), (4, "Line 5"), (5, "Line 6"),
+                (6, "Line 7"), (7, "Line 8"), (8, "Line 9"),
+            ],
+            expect_cursor=(3, 0),
+            expect_content_rows=[(3, {3})]
+        )
+
+        # dd redo: re-deletes line 4. Delete scroll pulls content up.
+        # Bottom row 8 needs content write from below viewport.
+        # Frames: 0=initial, 1=jjj, 2=dd, 3=u, 4=space, 5=u redo
+        self.run_test_screen(
+            "Minimal repaint: dd redo",
+            make_lines(15),
+            b"jjjddu u:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line 5"), (4, "Line 6"), (5, "Line 7"),
+                (6, "Line 8"), (7, "Line 9"), (8, "Line 10"),
+            ],
+            expect_cursor=(3, 0),
+            expect_content_rows=[(5, {8})]
+        )
+
+        # 3dd undo: restores lines 4-6. Insert scroll of 3, rows 3-5
+        # need content writes for restored lines.
+        # Frames: 0=initial, 1=jjj, 2=count '3', 3=dd, 4=u
+        self.run_test_screen(
+            "Minimal repaint: 3dd undo",
+            make_lines(15),
+            b"jjj3ddu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line 4"), (4, "Line 5"), (5, "Line 6"),
+                (6, "Line 7"), (7, "Line 8"), (8, "Line 9"),
+            ],
+            expect_cursor=(3, 0),
+            expect_content_rows=[(4, {3, 4, 5})]
+        )
+
+        # 3dd redo: re-deletes lines 4-6. Delete scroll of 3,
+        # bottom rows 6-8 need content writes.
+        # Frames: 0=initial, 1=jjj, 2=count '3', 3=dd, 4=u, 5=space, 6=u redo
+        self.run_test_screen(
+            "Minimal repaint: 3dd redo",
+            make_lines(15),
+            b"jjj3ddu u:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line 7"), (4, "Line 8"), (5, "Line 9"),
+                (6, "Line 10"), (7, "Line 11"), (8, "Line 12"),
+            ],
+            expect_cursor=(3, 0),
+            expect_content_rows=[(6, {6, 7, 8})]
+        )
+
+        # dd at top undo: restores line 1. Insert scroll.
+        # Frames: 0=initial, 1=dd, 2=u
+        self.run_test_screen(
+            "Minimal repaint: dd at top undo",
+            make_lines(15),
+            b"ddu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line 4"), (4, "Line 5"), (5, "Line 6"),
+                (6, "Line 7"), (7, "Line 8"), (8, "Line 9"),
+            ],
+            expect_cursor=(0, 0),
+            expect_content_rows=[(2, {0})]
+        )
+
+        # dd at top redo: re-deletes line 1. Delete scroll.
+        # Frames: 0=initial, 1=dd, 2=u, 3=space, 4=u redo
+        self.run_test_screen(
+            "Minimal repaint: dd at top redo",
+            make_lines(15),
+            b"ddu u:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 2"), (1, "Line 3"), (2, "Line 4"),
+                (3, "Line 5"), (4, "Line 6"), (5, "Line 7"),
+                (6, "Line 8"), (7, "Line 9"), (8, "Line 10"),
+            ],
+            expect_cursor=(0, 0),
+            expect_content_rows=[(4, {8})]
+        )
+
+        # J undo: restores split (line count +1). Insert scroll.
+        # Cursor row 3 content changes (joined→original). Only row 3.
+        # Frames: 0=initial, 1=jjj, 2=J, 3=u
+        self.run_test_screen(
+            "Minimal repaint: J undo",
+            make_lines(15),
+            b"jjjJu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line 4"), (4, "Line 5"), (5, "Line 6"),
+                (6, "Line 7"), (7, "Line 8"), (8, "Line 9"),
+            ],
+            expect_cursor=(3, 0),
+            expect_content_rows=[(3, {3})]
+        )
+
+        # J redo: re-joins (line count -1). Delete scroll.
+        # Cursor row 3 content changes + bottom row 8 from below viewport.
+        # Frames: 0=initial, 1=jjj, 2=J, 3=u, 4=space, 5=u redo
+        self.run_test_screen(
+            "Minimal repaint: J redo",
+            make_lines(15),
+            b"jjjJu u:q!\r",
+            rows=10, cols=40,
+            expect_content_rows=[(5, {3, 8})]
+        )
+
+        # JJ undo: undo second J only (line count +1). Insert scroll.
+        # Cursor row 3 changes. Only row 3.
+        # Frames: 0=initial, 1=jjj, 2=first J, 3=second J, 4=u
+        self.run_test_screen(
+            "Minimal repaint: JJ undo",
+            make_lines(15),
+            b"jjjJJu:q!\r",
+            rows=10, cols=40,
+            expect_content_rows=[(4, {3})]
+        )
+
+        # JJ redo: re-does second J (line count -1). Delete scroll.
+        # Cursor row 3 changes + bottom row 8.
+        # Frames: 0=initial, 1=jjj, 2=first J, 3=second J, 4=u, 5=space, 6=u redo
+        self.run_test_screen(
+            "Minimal repaint: JJ redo",
+            make_lines(15),
+            b"jjjJJu u:q!\r",
+            rows=10, cols=40,
+            expect_content_rows=[(6, {3, 8})]
+        )
+
+        # 3J undo: restores split (line count +2). Insert scroll of 2.
+        # Cursor row 3 changes + row 4 restored. Rows 3-4.
+        # Frames: 0=initial, 1=jjj, 2=count '3', 3=J, 4=u
+        self.run_test_screen(
+            "Minimal repaint: 3J undo",
+            make_lines(15),
+            b"jjj3Ju:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line 4"), (4, "Line 5"), (5, "Line 6"),
+                (6, "Line 7"), (7, "Line 8"), (8, "Line 9"),
+            ],
+            expect_cursor=(3, 0),
+            expect_content_rows=[(4, {3, 4})]
+        )
+
+        # 3J redo: re-joins 3 lines (line count -2). Delete scroll of 2.
+        # Cursor row 3 changes + bottom rows 7-8.
+        # Frames: 0=initial, 1=jjj, 2=count '3', 3=J, 4=u, 5=space, 6=u redo
+        self.run_test_screen(
+            "Minimal repaint: 3J redo",
+            make_lines(15),
+            b"jjj3Ju u:q!\r",
+            rows=10, cols=40,
+            expect_content_rows=[(6, {3, 7, 8})]
+        )
+
+        # o undo: removes opened blank line. Delete scroll.
+        # Cursor row content unchanged (Line 4 stays). Only bottom row 8.
+        # Frames: 0=initial, 1=jjj, 2=o (insert+scroll), 3=ESC, 4=u
+        self.run_test_screen(
+            "Minimal repaint: o undo",
+            make_lines(15),
+            b"jjjo\x1bu:q!\r",
+            rows=10, cols=40,
+            expect_content_rows=[(4, {8})]
+        )
+
+        # o redo: re-opens blank line below. Insert scroll.
+        # Only the new blank line row needs content write.
+        # Frames: 0=initial, 1=jjj, 2=o, 3=ESC, 4=u, 5=space, 6=u redo
+        self.run_test_screen(
+            "Minimal repaint: o redo",
+            make_lines(15),
+            b"jjjo\x1bu u:q!\r",
+            rows=10, cols=40,
+            expect_content_rows=[(6, {4})]
+        )
+
+        # O undo: removes opened blank line above. Delete scroll.
+        # Cursor row filled by scroll. Only bottom row 8.
+        # Frames: 0=initial, 1=jjj, 2=O (insert+scroll), 3=ESC, 4=u
+        self.run_test_screen(
+            "Minimal repaint: O undo",
+            make_lines(15),
+            b"jjjO\x1bu:q!\r",
+            rows=10, cols=40,
+            expect_content_rows=[(4, {8})]
+        )
+
+        # O redo: re-opens blank line above. Insert scroll.
+        # Only the new blank line row needs content write.
+        # Frames: 0=initial, 1=jjj, 2=O, 3=ESC, 4=u, 5=space, 6=u redo
+        self.run_test_screen(
+            "Minimal repaint: O redo",
+            make_lines(15),
+            b"jjjO\x1bu u:q!\r",
+            rows=10, cols=40,
+            expect_content_rows=[(6, {3})]
+        )
+
+        # 2cc undo: restores 2 original lines, removes 1 blank. Net +1 line.
+        # Insert scroll of 1. Rows 3-4 need content writes (restored lines).
+        # Frames: 0=initial, 1=jjj, 2=count '2', 3=cc (delete+insert), 4=ESC, 5=u
+        self.run_test_screen(
+            "Minimal repaint: 2cc undo",
+            make_lines(15),
+            b"jjj2cc\x1bu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line 4"), (4, "Line 5"), (5, "Line 6"),
+                (6, "Line 7"), (7, "Line 8"), (8, "Line 9"),
+            ],
+            expect_cursor=(3, 0),
+            expect_content_rows=[(5, {3, 4})]
+        )
+
+        # 2cc redo: re-replaces 2 lines with 1 blank. Net -1 line.
+        # Delete scroll of 1. Cursor row 3 changes + bottom row 8.
+        # Frames: 0=initial, 1=jjj, 2=count '2', 3=cc, 4=ESC, 5=u, 6=space, 7=u redo
+        self.run_test_screen(
+            "Minimal repaint: 2cc redo",
+            make_lines(15),
+            b"jjj2cc\x1bu u:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, ""), (4, "Line 6"), (5, "Line 7"),
+                (6, "Line 8"), (7, "Line 9"), (8, "Line 10"),
+            ],
+            expect_cursor=(3, 0),
+            expect_content_rows=[(7, {3, 8})]
+        )
+
+        # --- Line-mode paste: operation + undo + redo ---
+
+        # Line P operation: yyP at row 3 pastes line above.
+        # Only the pasted line row should be repainted, NOT row 2.
+        # Frames: 0=initial, 1=jjj, 2=yy, 3=P
+        self.run_test_screen(
+            "Minimal repaint: line P operation",
+            make_lines(15),
+            b"jjjyyP:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line 4"), (4, "Line 4"), (5, "Line 5"),
+                (6, "Line 6"), (7, "Line 7"), (8, "Line 8"),
+            ],
+            expect_cursor=(3, 0),
+            expect_content_rows=[(3, {3})]
+        )
+
+        # Line P undo: removes pasted line.
+        # Only bottom row should be repainted (scroll pulls content up).
+        # Frames: 0=initial, 1=jjj, 2=yy, 3=P, 4=u
+        self.run_test_screen(
+            "Minimal repaint: line P undo",
+            make_lines(15),
+            b"jjjyyPu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line 4"), (4, "Line 5"), (5, "Line 6"),
+                (6, "Line 7"), (7, "Line 8"), (8, "Line 9"),
+            ],
+            expect_cursor=(3, 0),
+            expect_content_rows=[(4, {8})]
+        )
+
+        # Line P redo: re-pastes line above.
+        # Only pasted line row should be repainted, NOT row 2.
+        # Frames: 0=initial, 1=jjj, 2=yy, 3=P, 4=u, 5=space, 6=u redo
+        self.run_test_screen(
+            "Minimal repaint: line P redo",
+            make_lines(15),
+            b"jjjyyPu u:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line 4"), (4, "Line 4"), (5, "Line 5"),
+                (6, "Line 6"), (7, "Line 7"), (8, "Line 8"),
+            ],
+            expect_cursor=(3, 0),
+            expect_content_rows=[(6, {3})]
+        )
+
+        # Line p redo: re-pastes line below.
+        # Only pasted line row should be repainted, NOT row 3.
+        # Frames: 0=initial, 1=jjj, 2=yy, 3=p, 4=u, 5=space, 6=u redo
+        self.run_test_screen(
+            "Minimal repaint: line p redo",
+            make_lines(15),
+            b"jjjyypu u:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line 4"), (4, "Line 4"), (5, "Line 5"),
+                (6, "Line 6"), (7, "Line 7"), (8, "Line 8"),
+            ],
+            expect_cursor=(4, 0),
+            expect_content_rows=[(6, {4})]
+        )
+
+        # Line 2p undo: pastes 2 copies below, undo removes both.
+        # Only bottom rows should be repainted (scroll pulls content up).
+        # Frames: 0=initial, 1=jjj, 2=yy, 3=count '2', 4=p, 5=u
+        self.run_test_screen(
+            "Minimal repaint: line 2p undo",
+            make_lines(15),
+            b"jjjyy2pu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line 4"), (4, "Line 5"), (5, "Line 6"),
+                (6, "Line 7"), (7, "Line 8"), (8, "Line 9"),
+            ],
+            expect_cursor=(3, 0),
+            expect_content_rows=[(5, {7, 8})]
+        )
+
+        # Line 2P undo: pastes 2 copies above, undo removes both.
+        # Frames: 0=initial, 1=jjj, 2=yy, 3=count '2', 4=P, 5=u
+        self.run_test_screen(
+            "Minimal repaint: line 2P undo",
+            make_lines(15),
+            b"jjjyy2Pu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line 4"), (4, "Line 5"), (5, "Line 6"),
+                (6, "Line 7"), (7, "Line 8"), (8, "Line 9"),
+            ],
+            expect_cursor=(3, 0),
+            expect_content_rows=[(5, {7, 8})]
+        )
+
+        # --- Single-line operations: no scroll, just cursor row ---
+        # These don't change line count, so undo/redo should repaint ONLY
+        # the cursor row. No scroll expected.
+
+        # x undo
+        # Frames: 0=initial, 1=jjj, 2=x, 3=u
+        self.run_test_screen(
+            "Minimal repaint: x undo",
+            make_lines(15),
+            b"jjjxu:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(3, 0),
+            expect_content_rows=[(3, {3})],
+            expect_scrolled_at_frame=[(3, False)]
+        )
+
+        # x redo
+        # Frames: 0=initial, 1=jjj, 2=x, 3=u, 4=space, 5=u redo
+        self.run_test_screen(
+            "Minimal repaint: x redo",
+            make_lines(15),
+            b"jjjxu u:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(3, 0),
+            expect_content_rows=[(5, {3})],
+            expect_scrolled_at_frame=[(5, False)]
+        )
+
+        # 3x undo
+        # Frames: 0=initial, 1=jjj, 2=count '3', 3=x, 4=u
+        self.run_test_screen(
+            "Minimal repaint: 3x undo",
+            make_lines(15),
+            b"jjj3xu:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(3, 0),
+            expect_content_rows=[(4, {3})],
+            expect_scrolled_at_frame=[(4, False)]
+        )
+
+        # r undo
+        # Frames: 0=initial, 1=jjj, 2=rZ (r waits for char), 3=u
+        self.run_test_screen(
+            "Minimal repaint: r undo",
+            make_lines(15),
+            b"jjjrZu:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(3, 0),
+            expect_content_rows=[(3, {3})],
+            expect_scrolled_at_frame=[(3, False)]
+        )
+
+        # r redo
+        # Frames: 0=initial, 1=jjj, 2=rZ, 3=u, 4=space, 5=u redo
+        self.run_test_screen(
+            "Minimal repaint: r redo",
+            make_lines(15),
+            b"jjjrZu u:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(3, 0),
+            expect_content_rows=[(5, {3})],
+            expect_scrolled_at_frame=[(5, False)]
+        )
+
+        # ~ undo: ~ toggles case and advances cursor. Undo restores char.
+        # Frames: 0=initial, 1=jjj, 2=~, 3=u
+        self.run_test_screen(
+            "Minimal repaint: ~ undo",
+            make_lines(15),
+            b"jjj~u:q!\r",
+            rows=10, cols=40,
+            expect_content_rows=[(3, {3})],
+            expect_scrolled_at_frame=[(3, False)]
+        )
+
+        # ~ redo
+        # Frames: 0=initial, 1=jjj, 2=~, 3=u, 4=space, 5=u redo
+        self.run_test_screen(
+            "Minimal repaint: ~ redo",
+            make_lines(15),
+            b"jjj~u u:q!\r",
+            rows=10, cols=40,
+            expect_content_rows=[(5, {3})],
+            expect_scrolled_at_frame=[(5, False)]
+        )
+
+        # D undo (single line, cursor at col 2)
+        # Frames: 0=initial, 1=jjj, 2=ll, 3=D, 4=u
+        self.run_test_screen(
+            "Minimal repaint: D undo",
+            make_lines(15),
+            b"jjjllDu:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(3, 2),
+            expect_content_rows=[(4, {3})],
+            expect_scrolled_at_frame=[(4, False)]
+        )
+
+        # D redo
+        # Frames: 0=initial, 1=jjj, 2=ll, 3=D, 4=u, 5=space, 6=u redo
+        self.run_test_screen(
+            "Minimal repaint: D redo",
+            make_lines(15),
+            b"jjjllDu u:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(3, 1),
+            expect_content_rows=[(6, {3})],
+            expect_scrolled_at_frame=[(6, False)]
+        )
+
+        # d$ undo
+        # Frames: 0=initial, 1=jjj, 2=ll, 3=d$, 4=u
+        self.run_test_screen(
+            "Minimal repaint: d$ undo",
+            make_lines(15),
+            b"jjjlld$u:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(3, 2),
+            expect_content_rows=[(4, {3})],
+            expect_scrolled_at_frame=[(4, False)]
+        )
+
+        # dw undo (single line)
+        # Frames: 0=initial, 1=jjj, 2=dw, 3=u
+        self.run_test_screen(
+            "Minimal repaint: dw undo",
+            make_lines(15),
+            b"jjjdwu:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(3, 0),
+            expect_content_rows=[(3, {3})],
+            expect_scrolled_at_frame=[(3, False)]
+        )
+
+        # dw redo
+        # Frames: 0=initial, 1=jjj, 2=dw, 3=u, 4=space, 5=u redo
+        self.run_test_screen(
+            "Minimal repaint: dw redo",
+            make_lines(15),
+            b"jjjdwu u:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(3, 0),
+            expect_content_rows=[(5, {3})],
+            expect_scrolled_at_frame=[(5, False)]
+        )
+
+        # db undo (move to word start first)
+        # Frames: 0=initial, 1=jjj, 2=w, 3=db, 4=u
+        self.run_test_screen(
+            "Minimal repaint: db undo",
+            make_lines(15),
+            b"jjjwdbu:q!\r",
+            rows=10, cols=40,
+            expect_content_rows=[(4, {3})],
+            expect_scrolled_at_frame=[(4, False)]
+        )
+
+        # de undo (single line)
+        # Frames: 0=initial, 1=jjj, 2=de, 3=u
+        self.run_test_screen(
+            "Minimal repaint: de undo",
+            make_lines(15),
+            b"jjjdeu:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(3, 0),
+            expect_content_rows=[(3, {3})],
+            expect_scrolled_at_frame=[(3, False)]
+        )
+
+        # s undo (substitute char)
+        # Frames: 0=initial, 1=jjj, 2=s (insert mode), 3=ESC, 4=u
+        self.run_test_screen(
+            "Minimal repaint: s undo",
+            make_lines(15),
+            b"jjjs\x1bu:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(3, 0),
+            expect_content_rows=[(4, {3})],
+            expect_scrolled_at_frame=[(4, False)]
+        )
+
+        # cc undo (single line change)
+        # Frames: 0=initial, 1=jjj, 2=cc (insert mode), 3=ESC, 4=u
+        self.run_test_screen(
+            "Minimal repaint: cc undo single line",
+            make_lines(15),
+            b"jjjcc\x1bu:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(3, 0),
+            expect_content_rows=[(4, {3})],
+            expect_scrolled_at_frame=[(4, False)]
+        )
+
+        # C undo (change to end of line)
+        # Frames: 0=initial, 1=jjj, 2=ll, 3=C (insert mode), 4=ESC, 5=u
+        self.run_test_screen(
+            "Minimal repaint: C undo",
+            make_lines(15),
+            b"jjjllC\x1bu:q!\r",
+            rows=10, cols=40,
+            expect_content_rows=[(5, {3})],
+            expect_scrolled_at_frame=[(5, False)]
+        )
+
+        # cw undo (change word)
+        # Frames: 0=initial, 1=jjj, 2=cw (insert mode), 3=ESC, 4=u
+        self.run_test_screen(
+            "Minimal repaint: cw undo",
+            make_lines(15),
+            b"jjjcw\x1bu:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(3, 0),
+            expect_content_rows=[(4, {3})],
+            expect_scrolled_at_frame=[(4, False)]
+        )
+
+        # cb undo (change back word)
+        # Frames: 0=initial, 1=jjj, 2=w, 3=cb (insert mode), 4=ESC, 5=u
+        self.run_test_screen(
+            "Minimal repaint: cb undo",
+            make_lines(15),
+            b"jjjwcb\x1bu:q!\r",
+            rows=10, cols=40,
+            expect_content_rows=[(5, {3})],
+            expect_scrolled_at_frame=[(5, False)]
+        )
+
+        # ce undo (change to end of word)
+        # Frames: 0=initial, 1=jjj, 2=ce (insert mode), 3=ESC, 4=u
+        self.run_test_screen(
+            "Minimal repaint: ce undo",
+            make_lines(15),
+            b"jjjce\x1bu:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(3, 0),
+            expect_content_rows=[(4, {3})],
+            expect_scrolled_at_frame=[(4, False)]
+        )
+
+        # >> undo (indent)
+        # Frames: 0=initial, 1=jjj, 2=>>, 3=u
+        self.run_test_screen(
+            "Minimal repaint: >> undo",
+            make_lines(15),
+            b"jjj>>u:q!\r",
+            rows=10, cols=40,
+            expect_content_rows=[(3, {3})],
+            expect_scrolled_at_frame=[(3, False)]
+        )
+
+        # << undo (dedent, need leading spaces)
+        # Frames: 0=initial, 1=jjj, 2=<<, 3=u
+        indent_content = ''.join(
+            f"  Line {i}\n" if i == 4 else f"Line {i}\n"
+            for i in range(1, 16)
+        )
+        self.run_test_screen(
+            "Minimal repaint: << undo",
+            indent_content,
+            b"jjj<<u:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(3, 0),
+            expect_content_rows=[(3, {3})],
+            expect_scrolled_at_frame=[(3, False)]
+        )
+
+        # --- Character-mode paste: undo/redo (no line count change) ---
+
+        # char p undo: x deletes char, p pastes it back, u undoes paste
+        # Frames: 0=initial, 1=jjj, 2=x, 3=p, 4=u
+        self.run_test_screen(
+            "Minimal repaint: char p undo",
+            make_lines(15),
+            b"jjjxpu:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(3, 0),
+            expect_content_rows=[(4, {3})],
+            expect_scrolled_at_frame=[(4, False)]
+        )
+
+        # char p redo
+        # Frames: 0=initial, 1=jjj, 2=x, 3=p, 4=u, 5=space, 6=u redo
+        self.run_test_screen(
+            "Minimal repaint: char p redo",
+            make_lines(15),
+            b"jjjxpu u:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(3, 1),
+            expect_content_rows=[(6, {3})],
+            expect_scrolled_at_frame=[(6, False)]
+        )
+
+        # char P undo
+        # Frames: 0=initial, 1=jjj, 2=x, 3=P, 4=u
+        self.run_test_screen(
+            "Minimal repaint: char P undo",
+            make_lines(15),
+            b"jjjxPu:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(3, 0),
+            expect_content_rows=[(4, {3})],
+            expect_scrolled_at_frame=[(4, False)]
+        )
+
+        # char P redo
+        # Frames: 0=initial, 1=jjj, 2=x, 3=P, 4=u, 5=space, 6=u redo
+        self.run_test_screen(
+            "Minimal repaint: char P redo",
+            make_lines(15),
+            b"jjjxPu u:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(3, 0),
+            expect_content_rows=[(6, {3})],
+            expect_scrolled_at_frame=[(6, False)]
+        )
+
         self._group("Scroll opt: insert mode wrap:", leading_blank=True)
 
         # Typing at end of line past screen width: line wraps, LINE_COUNT16 increases.
