@@ -4062,6 +4062,22 @@ class EditorTestRunner:
             expect_cursor=(0, 0),
         )
 
+        # 4dw crossing lines into wrapping line - joined result must wrap
+        self.run_test_screen(
+            "4dw cross-line into wrap: screen correct",
+            "This is the first line\n\nThis is the second line which is wrapping to another\n\nAnother line\n",
+            b"www4dw:q!\r",
+            rows=10, cols=36,
+            expect_lines=[
+                (0, "This is the is the second line which"),
+                (1, " is wrapping to another"),
+                (2, ""),
+                (3, "Another line"),
+                (4, "~"),
+            ],
+            expect_cursor=(0, 12),
+        )
+
         # --- db causing unwrap (deleting across newlines backward) ---
 
         # db from BOL - joins with previous line

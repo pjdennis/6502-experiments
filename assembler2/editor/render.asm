@@ -1184,8 +1184,31 @@ render_line_delete_scroll:
   LDA RENDER_FLAG
   CMP #$08
   BNE .not_charwise_del
+  LDA DELETE_SCREEN_ROWS
+  CMP #2
+  BCC .charwise_no_wrap
+  ; Joined line wraps: render all wrap rows + bottom rows (like $06 path)
+  STA RENDER_LIMIT
   LDA #0
-  STA DELETE_SCREEN_ROWS    ; reset for next frame
+  STA DELETE_SCREEN_ROWS
+  LDA SCROLL_DELTA
+  PHA
+  LDA RENDER_LIMIT
+  STA SCROLL_DELTA
+  LDA CURSOR_ROW
+  SEC
+  SBC WRAP_QUOT
+  STA RENDER_ROW
+  CP16 FILE_LINE16, RENDER_LINE16
+  LDA #0
+  STA RENDER_WRAP
+  JSR render_limited_loop
+  PLA
+  STA SCROLL_DELTA
+  JMP .del_bottom_rows
+.charwise_no_wrap:
+  LDA #0
+  STA DELETE_SCREEN_ROWS
   JMP .single_row_render    ; repaint cursor row + bottom rows
 .not_charwise_del:
   CMP #$07
