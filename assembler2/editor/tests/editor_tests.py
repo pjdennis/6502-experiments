@@ -10026,6 +10026,207 @@ class EditorTestRunner:
             expect_cursor=(2, 0),
         )
 
+        # J undo where result was wrapped: J joins "A" with
+        # "123456789012345678901" (21 chars) producing "A 123..." (23 chars)
+        # which wraps to 2 rows. Undo restores original 3 lines, cursor line
+        # "A" shrinks from 2 wrapped rows to 1 row, so lines below must
+        # scroll down to fill the gap.
+        # Frames: 0=initial, 1=J, 2=u (undo)
+        self.run_test_screen(
+            "Scroll opt: J undo unwraps result scrolls lines below",
+            "A\n123456789012345678901\nB\n",
+            b"Ju:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "A"),
+                (1, "12345678901234567890"),
+                (2, "1"),
+                (3, "B"),
+            ],
+            expect_cursor=(0, 0),
+            expect_scroll_rows=[(2, {1, 2, 3, 4, 5, 6, 7, 8})]
+        )
+
+        # J undo unwraps at mid-screen: cursor at row 3, J joins "A" with
+        # "123456789012345678901" (21 chars) producing wrapped result (2 rows).
+        # Before J: A(1) + 123...(2) = 3 rows. After J: 2 rows. Undo: back to 3.
+        # Scroll region should start below cursor row 3, not at cursor.
+        # Frames: 0=initial, 1=jjj cursor, 2=J, 3=u (undo)
+        undo_unwrap_mid = ("Short 1\nShort 2\nShort 3\n"
+                           "A\n123456789012345678901\nB\n"
+                           + ''.join(f"Short {i}\n" for i in range(7, 15)))
+        self.run_test_screen(
+            "Scroll opt: J undo unwraps at mid-screen",
+            undo_unwrap_mid,
+            b"jjjJu:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Short 1"), (1, "Short 2"), (2, "Short 3"),
+                (3, "A"),
+                (4, "12345678901234567890"),
+                (5, "1"),
+                (6, "B"),
+                (7, "Short 7"), (8, "Short 8"),
+            ],
+            expect_cursor=(3, 0),
+            expect_scroll_rows=[(3, {4, 5, 6, 7, 8})]
+        )
+
+        # J undo restores wrapped next line: J on "Short" joins with
+        # "This is a longer line!" (22 chars, wraps to 2 rows at 20 cols).
+        # Result "Short This is a longer line!" (28 chars, 2 rows).
+        # Before: 1+2=3 rows, After J: 2 rows (freed 1). Undo: back to 3 rows.
+        # Lines below must scroll down 1 to restore the wrapped line.
+        # Frames: 0=initial, 1=j cursor, 2=J, 3=u (undo)
+        undo_restore_wrap = ("Short 1\n"
+                             "Short\nThis is a longer line!\nMore\n"
+                             + ''.join(f"Short {i}\n" for i in range(5, 15)))
+        self.run_test_screen(
+            "Scroll opt: J undo restores wrapped next line",
+            undo_restore_wrap,
+            b"jJu:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Short 1"),
+                (1, "Short"),
+                (2, "This is a longer lin"),
+                (3, "e!"),
+                (4, "More"),
+                (5, "Short 5"), (6, "Short 6"),
+                (7, "Short 7"), (8, "Short 8"),
+            ],
+            expect_cursor=(1, 0),
+            expect_scroll_rows=[(3, {2, 3, 4, 5, 6, 7, 8})]
+        )
+
+        # J undo same height no scroll: J joins two non-wrapped lines
+        # "Almost full width!!" (19) + " " + "X" = 21 chars, wraps to 2 rows.
+        # Before: 1+1=2 rows. After J: 2 rows (wrap). Undo: back to 2 rows.
+        # No net height change, so no scroll needed.
+        # Frames: 0=initial, 1=jj cursor, 2=J, 3=u (undo)
+        undo_same_height = ("Short 1\nShort 2\n"
+                            "Almost full width!!\nX\n"
+                            + ''.join(f"Short {i}\n" for i in range(5, 15)))
+        self.run_test_screen(
+            "Scroll opt: J undo same height no scroll",
+            undo_same_height,
+            b"jjJu:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Short 1"), (1, "Short 2"),
+                (2, "Almost full width!!"),
+                (3, "X"),
+                (4, "Short 5"), (5, "Short 6"),
+                (6, "Short 7"), (7, "Short 8"),
+                (8, "Short 9"),
+            ],
+            expect_cursor=(2, 0),
+            expect_scroll_rows=[(3, set())]
+        )
+
+        # J undo where cursor line stays wrapped: cursor line
+        # "This is a longer line!" (22 chars, wraps to 2 rows) joins with
+        # "Short 4". Result: "This is a longer line! Short 4" (30 chars,
+        # still 2 rows). Undo restores "Short 4" as separate line.
+        # Before J: 2+1=3 rows. After J: 2 rows. Undo: back to 3 rows.
+        # Cursor line remains wrapped (2 rows), so scroll region must
+        # start below BOTH cursor wrap rows.
+        # Frames: 0=initial, 1=jj cursor, 2=J, 3=u (undo)
+        self.run_test_screen(
+            "Scroll opt: J undo cursor stays wrapped scroll region",
+            wrap_j_content,
+            b"jjJu:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Short 1"), (1, "Short 2"),
+                (2, "This is a longer lin"),
+                (3, "e!"),
+                (4, "Short 4"), (5, "Short 5"),
+                (6, "Short 6"), (7, "Short 7"),
+                (8, "Short 8"),
+            ],
+            expect_cursor=(2, 0),
+            expect_scroll_rows=[(3, {4, 5, 6, 7, 8})]
+        )
+
+        # JJ undo restores wrapped line: JJ joins Short 2 + "This is a
+        # longer line!" (wraps) + Short 4. Undo of last J restores Short 4,
+        # leaving "Short 2 This is a longer line!" (30 chars, 2 rows).
+        # Before undo: 2 rows. After undo: 2+1=3 rows. Lines below scroll down.
+        # Cursor line wraps, so scroll region must skip cursor wrap rows.
+        # Frames: 0=initial, 1=j cursor, 2=JJ, 3=u (undo of second J)
+        self.run_test_screen(
+            "Scroll opt: JJ undo restores line below wrapped result",
+            wrap_j_content,
+            b"jJJu:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Short 1"),
+                (1, "Short 2 This is a lo"),
+                (2, "nger line!"),
+                (3, "Short 4"),
+                (4, "Short 5"), (5, "Short 6"),
+                (6, "Short 7"), (7, "Short 8"),
+                (8, "Short 9"),
+            ],
+            expect_cursor=(1, 0),
+            expect_scroll_rows=[(3, {3, 4, 5, 6, 7, 8})]
+        )
+
+        # JJ undo unwraps cursor line: JJ joins A + B + "123456789012345678901"
+        # (21 chars). Result "A B 123456789012345678901" (25 chars, wraps to 2
+        # rows). Undo of last J: "A B" (3 chars, 1 row) + "123..." (21 chars,
+        # 2 rows) = 3 rows vs 2 rows before undo.
+        # Cursor line shrinks from 2 wrap rows to 1 non-wrapped row.
+        # Frames: 0=initial, 1=JJ, 2=u (undo of second J)
+        jj_undo_unwrap = ("A\nB\n123456789012345678901\nC\n"
+                          + ''.join(f"Short {i}\n" for i in range(5, 15)))
+        self.run_test_screen(
+            "Scroll opt: JJ undo unwraps cursor line",
+            jj_undo_unwrap,
+            b"JJu:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "A B"),
+                (1, "12345678901234567890"),
+                (2, "1"),
+                (3, "C"),
+                (4, "Short 5"), (5, "Short 6"),
+                (6, "Short 7"), (7, "Short 8"),
+                (8, "Short 9"),
+            ],
+            expect_cursor=(0, 0),
+            expect_scroll_rows=[(2, {1, 2, 3, 4, 5, 6, 7, 8})]
+        )
+
+        # JJ undo partially unwraps cursor line: JJ joins A +
+        # "BBBBBBBBBBBBBBBBBBB" (19 chars) + "123456789012345678901" (21 chars).
+        # Result: "A BBBBBBBBBBBBBBBBBBB 123456789012345678901" (43 chars,
+        # wraps to 3 rows). Undo of last J: "A BBBBBBBBBBBBBBBBBBB" (21 chars,
+        # 2 rows) + "123..." (21 chars, 2 rows) = 4 rows vs 3 rows before undo.
+        # Cursor line goes from 3 wrap rows to 2 wrap rows. Scroll region must
+        # skip both remaining cursor wrap rows.
+        # Frames: 0=initial, 1=JJ, 2=u (undo of second J)
+        jj_undo_partial = ("A\nBBBBBBBBBBBBBBBBBBB\n123456789012345678901\nC\n"
+                           + ''.join(f"Short {i}\n" for i in range(5, 15)))
+        self.run_test_screen(
+            "Scroll opt: JJ undo partially unwraps cursor line",
+            jj_undo_partial,
+            b"JJu:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "A BBBBBBBBBBBBBBBBBB"),
+                (1, "B"),
+                (2, "12345678901234567890"),
+                (3, "1"),
+                (4, "C"),
+                (5, "Short 5"), (6, "Short 6"),
+                (7, "Short 7"), (8, "Short 8"),
+            ],
+            expect_cursor=(0, 0),
+            expect_scroll_rows=[(2, {2, 3, 4, 5, 6, 7, 8})]
+        )
+
         # J joining next wrapped line: when B wraps, ALL of B's rows need
         # repainting since B's content reflows into A. The scroll region must
         # not include B's wrap rows — otherwise stale wrap content appears.
