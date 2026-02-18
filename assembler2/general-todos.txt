@@ -6,6 +6,8 @@ Algorithm for batch of J:
 
 Support terminal resize
 
+Toggle modified flag back when undoing the first modification to a file
+
 Update the tests that are relying on u u to break the batch to do something else like a movement key - we might at some point filter ' ' before batching since it doesn't do anything.
 When last line wraps, rows 2+ don't display at all
 When backspacing from below a wrapped line onto the wrapped line, the row that was just moved to is unnecessarily redrawn
