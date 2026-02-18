@@ -11307,7 +11307,9 @@ class EditorTestRunner:
             ],
             expect_cursor=(3, 0),
             # Frame 4 (u): scroll region should NOT include cursor row 3
-            expect_scroll_rows=[(4, {4, 5, 6, 7, 8})]
+            expect_scroll_rows=[(4, {4, 5, 6, 7, 8})],
+            # Cursor row 3 should NOT be repainted (content unchanged)
+            expect_content_rows=[(4, {8})]
         )
 
         self._group("Sub-line render optimization:", leading_blank=True)

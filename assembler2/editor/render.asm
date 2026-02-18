@@ -475,6 +475,8 @@ render_decide:
   BEQ .line_delete_scroll
   CMP #$07
   BEQ .line_delete_scroll
+  CMP #$08
+  BEQ .line_delete_scroll
   CMP #$03
   BEQ .do_line_insert
   CMP #$04
@@ -507,9 +509,11 @@ render_decide:
 
 .line_delete_scroll:
   ; LINE_COUNT16 decreased and RENDER_FLAG=$02/$06/$07 (line delete at cursor).
-  ; $07: DELETE_SCREEN_ROWS = cursor line rows (for skip), use file delta for SCROLL_DELTA
+  ; $07/$08: DELETE_SCREEN_ROWS = cursor line rows (for skip), use file delta for SCROLL_DELTA
   LDA RENDER_FLAG
   CMP #$07
+  BEQ .file_delta_scroll
+  CMP #$08
   BEQ .file_delta_scroll
   ; Use pre-computed DELETE_SCREEN_ROWS if available, else file delta.
   LDA DELETE_SCREEN_ROWS
@@ -921,13 +925,15 @@ render_line_delete_scroll:
 
   ; Set scroll region start (1-based) to SCREEN_ROWS-1 (1-based)
   ; RENDER_FLAG=$02: from CURSOR_ROW+1 (includes cursor row, for dd)
-  ; RENDER_FLAG=$06/$07: skip cursor line's rows
+  ; RENDER_FLAG=$06/$07/$08: skip cursor line's rows
   ;   first_row = CURSOR_ROW - WRAP_QUOT
   ;   scroll_start = first_row + DELETE_SCREEN_ROWS + 1 (1-based)
   LDA RENDER_FLAG
   CMP #$06
   BEQ .scroll_skip_cursor_del
   CMP #$07
+  BEQ .scroll_skip_cursor_del
+  CMP #$08
   BNE .scroll_at_cursor_del
 .scroll_skip_cursor_del:
   LDA CURSOR_ROW
@@ -960,13 +966,20 @@ render_line_delete_scroll:
   JSR ansi_reset_scroll_region
 .skip_del_scroll:
 
-  ; For $07 (paste-below undo): skip cursor row repaint entirely.
+  ; $07 (paste-below undo): cursor unchanged, skip repaint entirely.
+  ; $08 (charwise delete): cursor content changed, repaint cursor row.
   LDA RENDER_FLAG
+  CMP #$08
+  BNE .not_charwise_del
+  LDA #0
+  STA DELETE_SCREEN_ROWS    ; reset for next frame
+  JMP .single_row_render    ; repaint cursor row + bottom rows
+.not_charwise_del:
   CMP #$07
   BNE .not_skip_cursor
   LDA #0
   STA DELETE_SCREEN_ROWS    ; reset for next frame
-  JMP .del_bottom_rows
+  JMP .del_bottom_rows      ; skip cursor repaint, just bottom rows
 .not_skip_cursor:
   ; For J ($06) with wrapped combined line: render from first row to bottom.
   ; DELETE_SCREEN_ROWS holds new_total (combined line's screen rows).
