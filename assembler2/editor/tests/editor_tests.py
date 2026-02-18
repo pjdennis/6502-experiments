@@ -12408,6 +12408,111 @@ class EditorTestRunner:
             expect_content_rows=[(3, {2, 8})]
         )
 
+        # Typing the first character on the second wrap row should NOT redraw
+        # the first row. The first row is already complete (full SCREEN_COLS chars).
+        # Only the second row (where the new char appears) needs rendering.
+        # Line 0: exactly 20 chars (fills row 0 at 20 cols).
+        # $=col 19, a=append at col 20 (enters insert), X typed at col 20.
+        # Line becomes 21 chars → wraps to 2 rows. Row 0 unchanged (20 chars).
+        # Frames: 0=initial, 1=$ cursor, 2=a enter insert, 3=X typed (wrap 1→2)
+        wrap_20_content = ("A" * 20 + "\n"
+                           + ''.join(f"Line {i}\n" for i in range(2, 12)))
+        self.run_test_screen(
+            "Scroll opt: insert first char on second wrap row",
+            wrap_20_content,
+            b"$aX\x1b:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "A" * 20),
+                (1, "X"),
+                (2, "Line 2"), (3, "Line 3"), (4, "Line 4"),
+                (5, "Line 5"), (6, "Line 6"), (7, "Line 7"),
+                (8, "Line 8"),
+            ],
+            expect_cursor=(1, 0),
+            # Frame 3 (X typed): row 0 unchanged, only row 1 needs rendering
+            expect_content_rows=[(3, {1})]
+        )
+
+        # Same but typing first char on the THIRD wrap row.
+        # Line: 40 chars at 20 cols = 2 rows. $a=append at col 40, X typed.
+        # 41 chars → 3 rows. Rows 0-1 unchanged, only row 2 needs rendering.
+        # Frames: 0=initial, 1=$ cursor, 2=a enter insert, 3=X typed (wrap 2→3)
+        wrap_40_content = ("B" * 40 + "\n"
+                           + ''.join(f"Line {i}\n" for i in range(2, 12)))
+        self.run_test_screen(
+            "Scroll opt: insert first char on third wrap row",
+            wrap_40_content,
+            b"$aX\x1b:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "B" * 20),
+                (1, "B" * 20),
+                (2, "X"),
+                (3, "Line 2"), (4, "Line 3"), (5, "Line 4"),
+                (6, "Line 5"), (7, "Line 6"), (8, "Line 7"),
+            ],
+            expect_cursor=(2, 0),
+            # Frame 3 (X typed): rows 0-1 unchanged, only row 2 needs rendering
+            expect_content_rows=[(3, {2})]
+        )
+
+        # Backspace from wrap boundary (row 1, col 0) deletes the LAST char of
+        # the previous row, causing unwrap from 2→1 rows. Only the last column
+        # of row 0 changes (cleared). Row 0 should NOT be fully redrawn.
+        # Line: 21 chars ("A"*20 + "Z") at 20 cols = 2 rows.
+        # $=col 20 ('Z', row 1 col 0), a=append at col 21, BS deletes 'Z' at col 20.
+        # Line becomes "A"*20 = 20 chars = 1 row. Unwrap.
+        # Frames: 0=initial, 1=$ cursor, 2=a enter insert, 3=BS (unwrap 2→1)
+        wrap_21_content = ("A" * 20 + "Z\n"
+                           + ''.join(f"Line {i}\n" for i in range(2, 12)))
+        self.run_test_screen(
+            "Scroll opt: backspace at wrap row 1 col 0 minimal repaint",
+            wrap_21_content,
+            b"$a\x08\x1b:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "A" * 20),
+                (1, "Line 2"), (2, "Line 3"), (3, "Line 4"),
+                (4, "Line 5"), (5, "Line 6"), (6, "Line 7"),
+                (7, "Line 8"), (8, "Line 9"),
+            ],
+            expect_cursor=(0, 19),
+            # Frame 3 (BS): unwrap 2→1 rows. Scroll-up handles rows below.
+            # Row 0 only needs last col cleared (where 'Z' was), not full redraw.
+            # Row 8 = newly exposed bottom row.
+            expect_content_rows=[(3, {0, 8})],
+            # Row 0 rendering should start at col 19 (not col 0 = full redraw)
+            expect_min_col=[(3, 0, 19)]
+        )
+
+        # Backspace from wrap boundary (row 2, col 0) should NOT redraw rows 0-1.
+        # Line: 41 chars ("C"*40 + "Z") at 20 cols = 3 rows.
+        # $=col 40 ('Z', row 2 col 0), a=append at col 41, BS deletes 'Z' at col 40.
+        # Line becomes "C"*40 = 40 chars = 2 rows. Unwrap 3→2.
+        # Frames: 0=initial, 1=$ cursor, 2=a enter insert, 3=BS (unwrap 3→2)
+        wrap_41_content = ("C" * 40 + "Z\n"
+                           + ''.join(f"Line {i}\n" for i in range(2, 12)))
+        self.run_test_screen(
+            "Scroll opt: backspace at wrap row 2 col 0 minimal repaint",
+            wrap_41_content,
+            b"$a\x08\x1b:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "C" * 20),
+                (1, "C" * 20),
+                (2, "Line 2"), (3, "Line 3"), (4, "Line 4"),
+                (5, "Line 5"), (6, "Line 6"), (7, "Line 7"),
+                (8, "Line 8"),
+            ],
+            expect_cursor=(1, 19),
+            # Frame 3 (BS): unwrap 3→2 rows. Rows 0-1 unchanged by content shift.
+            # Row 1 only needs last col cleared, row 8 = bottom exposed.
+            expect_content_rows=[(3, {1, 8})],
+            # Row 1 rendering should start at col 19 (not col 0 = full redraw)
+            expect_min_col=[(3, 1, 19)]
+        )
+
         self._group("Sub-line render optimization:", leading_blank=True)
 
         # Normal r: replace at col 3, partial render from col 3
