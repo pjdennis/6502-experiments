@@ -11637,6 +11637,9 @@ class EditorTestRunner:
                 (8, "S9"),
             ],
             expect_cursor=(0, 0),
+            # Frame 2 = undo. Cursor line changes (41→20 chars) so row 0
+            # repaint is justified. Row 1 = restored line. Row 8 = scroll fill.
+            expect_content_rows=[(2, {0, 1, 8})]
         )
 
         # J redo of two lines at screen width.
@@ -11654,6 +11657,9 @@ class EditorTestRunner:
                 (6, "S6"), (7, "S7"), (8, "S8"),
             ],
             expect_cursor=(0, 0),
+            # Frame 4 = redo (frame 3 = space no-op). Cursor line changes
+            # (20→41 chars wrapping to 3 rows). Rows 0-2 = wrapped content.
+            expect_content_rows=[(4, {0, 1, 2})]
         )
 
         # o undo: removes opened blank line. Delete scroll.
