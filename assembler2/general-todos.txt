@@ -1,3 +1,5 @@
+Open with numeric prefix isn't functional
+
 Reconfirm the following are fixed:
 cc ESC u is incorrectly scrolling down the rows below the cursor row:
 2Cu incorrectly paints the line above
