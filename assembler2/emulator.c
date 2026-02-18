@@ -1083,6 +1083,11 @@ static unsigned char current_attr = 0;
 static char serial_inject_buf[32];
 static int serial_inject_pos = 0;
 static int serial_inject_len = 0;
+int show_repaints = 0;
+static struct timespec *repaint_time = NULL;
+static unsigned char *repaint_count = NULL;
+static unsigned char *repaint_displayed = NULL;  // currently displayed background color (0=none, 1-7=rainbow index+1)
+static struct timespec last_repaint_check;
 
 void get_terminal_size(int *rows, int *cols);
 void console_resize(int rows, int cols);
@@ -1143,27 +1148,48 @@ void handle_sigcont(int sig) {
 void console_resize(int rows, int cols) {
     if (rows <= 0 || cols <= 0) return;
     if (rows == screen_rows && cols == screen_cols && screen_cells != NULL) return;
-    char *new_cells = malloc((size_t)rows * (size_t)cols);
-    unsigned char *new_attr = malloc((size_t)rows * (size_t)cols);
+    size_t sz = (size_t)rows * (size_t)cols;
+    char *new_cells = malloc(sz);
+    unsigned char *new_attr = malloc(sz);
     if (!new_cells) return;
     if (!new_attr) {
         free(new_cells);
         return;
     }
-    memset(new_cells, ' ', (size_t)rows * (size_t)cols);
-    memset(new_attr, 0, (size_t)rows * (size_t)cols);
+    memset(new_cells, ' ', sz);
+    memset(new_attr, 0, sz);
+
+    struct timespec *new_rtime = NULL;
+    unsigned char *new_rcount = NULL;
+    unsigned char *new_rdisp = NULL;
+    if (show_repaints) {
+        new_rtime = calloc(sz, sizeof(struct timespec));
+        new_rcount = calloc(sz, 1);
+        new_rdisp = calloc(sz, 1);
+    }
+
     if (screen_cells) {
         int copy_rows = rows < screen_rows ? rows : screen_rows;
         int copy_cols = cols < screen_cols ? cols : screen_cols;
         for (int r = 0; r < copy_rows; r++) {
             memcpy(new_cells + r * cols, screen_cells + r * screen_cols, (size_t)copy_cols);
             memcpy(new_attr + r * cols, screen_attr + r * screen_cols, (size_t)copy_cols);
+            if (show_repaints && repaint_time && new_rtime) {
+                memcpy(new_rtime + r * cols, repaint_time + r * screen_cols, (size_t)copy_cols * sizeof(struct timespec));
+                memcpy(new_rcount + r * cols, repaint_count + r * screen_cols, (size_t)copy_cols);
+            }
         }
         free(screen_cells);
         free(screen_attr);
+        free(repaint_time);
+        free(repaint_count);
+        free(repaint_displayed);
     }
     screen_cells = new_cells;
     screen_attr = new_attr;
+    repaint_time = new_rtime;
+    repaint_count = new_rcount;
+    repaint_displayed = new_rdisp;
     screen_rows = rows;
     screen_cols = cols;
     if (cursor_row >= screen_rows) cursor_row = screen_rows - 1;
@@ -1179,43 +1205,76 @@ void console_clear_line(int mode) {
         if (end > screen_cols) end = screen_cols;
         memset(screen_cells + cursor_row * screen_cols, ' ', (size_t)end);
         memset(screen_attr + cursor_row * screen_cols, 0, (size_t)end);
+        if (repaint_time) {
+            memset(repaint_time + cursor_row * screen_cols, 0, (size_t)end * sizeof(struct timespec));
+            memset(repaint_count + cursor_row * screen_cols, 0, (size_t)end);
+        }
     } else if (mode == 2) {
         memset(screen_cells + cursor_row * screen_cols, ' ', (size_t)screen_cols);
         memset(screen_attr + cursor_row * screen_cols, 0, (size_t)screen_cols);
+        if (repaint_time) {
+            memset(repaint_time + cursor_row * screen_cols, 0, (size_t)screen_cols * sizeof(struct timespec));
+            memset(repaint_count + cursor_row * screen_cols, 0, (size_t)screen_cols);
+        }
     } else {
         int start = cursor_col;
         if (start < 0) start = 0;
         if (start < screen_cols) {
             memset(screen_cells + cursor_row * screen_cols + start, ' ', (size_t)(screen_cols - start));
             memset(screen_attr + cursor_row * screen_cols + start, 0, (size_t)(screen_cols - start));
+            if (repaint_time) {
+                memset(repaint_time + cursor_row * screen_cols + start, 0, (size_t)(screen_cols - start) * sizeof(struct timespec));
+                memset(repaint_count + cursor_row * screen_cols + start, 0, (size_t)(screen_cols - start));
+            }
         }
     }
 }
 
 void console_clear_screen(int mode) {
     if (!screen_cells || screen_rows <= 0 || screen_cols <= 0) return;
+    size_t full = (size_t)screen_rows * (size_t)screen_cols;
     if (mode == 1) {
         for (int r = 0; r < cursor_row; r++) {
             memset(screen_cells + r * screen_cols, ' ', (size_t)screen_cols);
             memset(screen_attr + r * screen_cols, 0, (size_t)screen_cols);
+            if (repaint_time) {
+                memset(repaint_time + r * screen_cols, 0, (size_t)screen_cols * sizeof(struct timespec));
+                memset(repaint_count + r * screen_cols, 0, (size_t)screen_cols);
+            }
         }
         int end = cursor_col + 1;
         if (end > screen_cols) end = screen_cols;
         memset(screen_cells + cursor_row * screen_cols, ' ', (size_t)end);
         memset(screen_attr + cursor_row * screen_cols, 0, (size_t)end);
+        if (repaint_time) {
+            memset(repaint_time + cursor_row * screen_cols, 0, (size_t)end * sizeof(struct timespec));
+            memset(repaint_count + cursor_row * screen_cols, 0, (size_t)end);
+        }
     } else if (mode == 2 || mode == 3) {
-        memset(screen_cells, ' ', (size_t)screen_rows * (size_t)screen_cols);
-        memset(screen_attr, 0, (size_t)screen_rows * (size_t)screen_cols);
+        memset(screen_cells, ' ', full);
+        memset(screen_attr, 0, full);
+        if (repaint_time) {
+            memset(repaint_time, 0, full * sizeof(struct timespec));
+            memset(repaint_count, 0, full);
+        }
     } else {
         int start = cursor_col;
         if (start < 0) start = 0;
         if (start < screen_cols) {
             memset(screen_cells + cursor_row * screen_cols + start, ' ', (size_t)(screen_cols - start));
             memset(screen_attr + cursor_row * screen_cols + start, 0, (size_t)(screen_cols - start));
+            if (repaint_time) {
+                memset(repaint_time + cursor_row * screen_cols + start, 0, (size_t)(screen_cols - start) * sizeof(struct timespec));
+                memset(repaint_count + cursor_row * screen_cols + start, 0, (size_t)(screen_cols - start));
+            }
         }
         for (int r = cursor_row + 1; r < screen_rows; r++) {
             memset(screen_cells + r * screen_cols, ' ', (size_t)screen_cols);
             memset(screen_attr + r * screen_cols, 0, (size_t)screen_cols);
+            if (repaint_time) {
+                memset(repaint_time + r * screen_cols, 0, (size_t)screen_cols * sizeof(struct timespec));
+                memset(repaint_count + r * screen_cols, 0, (size_t)screen_cols);
+            }
         }
     }
 }
@@ -1223,16 +1282,29 @@ void console_clear_screen(int mode) {
 void console_scroll_up(int lines) {
     if (!screen_cells || screen_rows <= 0 || screen_cols <= 0) return;
     if (lines <= 0) return;
+    size_t full = (size_t)screen_rows * (size_t)screen_cols;
     if (lines >= screen_rows) {
-        memset(screen_cells, ' ', (size_t)screen_rows * (size_t)screen_cols);
-        memset(screen_attr, 0, (size_t)screen_rows * (size_t)screen_cols);
+        memset(screen_cells, ' ', full);
+        memset(screen_attr, 0, full);
+        if (repaint_time) {
+            memset(repaint_time, 0, full * sizeof(struct timespec));
+            memset(repaint_count, 0, full);
+        }
         return;
     }
     size_t row_bytes = (size_t)screen_cols;
-    memmove(screen_cells, screen_cells + lines * row_bytes, (size_t)(screen_rows - lines) * row_bytes);
-    memmove(screen_attr, screen_attr + lines * row_bytes, (size_t)(screen_rows - lines) * row_bytes);
-    memset(screen_cells + (screen_rows - lines) * row_bytes, ' ', (size_t)lines * row_bytes);
-    memset(screen_attr + (screen_rows - lines) * row_bytes, 0, (size_t)lines * row_bytes);
+    size_t keep = (size_t)(screen_rows - lines) * row_bytes;
+    size_t clear = (size_t)lines * row_bytes;
+    memmove(screen_cells, screen_cells + lines * row_bytes, keep);
+    memmove(screen_attr, screen_attr + lines * row_bytes, keep);
+    memset(screen_cells + keep, ' ', clear);
+    memset(screen_attr + keep, 0, clear);
+    if (repaint_time) {
+        memmove(repaint_time, repaint_time + lines * screen_cols, keep * sizeof(struct timespec));
+        memmove(repaint_count, repaint_count + lines * screen_cols, keep);
+        memset(repaint_time + keep, 0, clear * sizeof(struct timespec));
+        memset(repaint_count + keep, 0, clear);
+    }
 }
 
 void console_put_char(unsigned char ch) {
@@ -1251,8 +1323,20 @@ void console_put_char(unsigned char ch) {
             cursor_row = screen_rows - 1;
         }
     }
-    screen_cells[cursor_row * screen_cols + cursor_col] = (char)ch;
-    screen_attr[cursor_row * screen_cols + cursor_col] = current_attr;
+    int idx = cursor_row * screen_cols + cursor_col;
+    screen_cells[idx] = (char)ch;
+    screen_attr[idx] = current_attr;
+    if (repaint_time) {
+        struct timespec now;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        double age = (now.tv_sec - repaint_time[idx].tv_sec)
+                   + (now.tv_nsec - repaint_time[idx].tv_nsec) / 1e9;
+        if (repaint_time[idx].tv_sec != 0 && age < 2.0)
+            repaint_count[idx]++;
+        else
+            repaint_count[idx] = 0;
+        repaint_time[idx] = now;
+    }
     cursor_col++;
     if (cursor_col >= screen_cols) {
         cursor_col = 0;
@@ -1536,6 +1620,71 @@ void console_handle_byte(unsigned char ch) {
     }
 }
 
+static const unsigned char rainbow_colors[7] = {196, 208, 226, 46, 51, 21, 201};
+
+void repaint_overlay_update(struct timespec *now) {
+    if (!repaint_time || !screen_cells) return;
+    // Don't inject overlay if the 6502 is mid-ANSI-sequence
+    if (parser_state != 0) return;
+
+    // Buffer all output to emit atomically
+    // Worst case per cell: cursor pos (12) + bg color (16) + reverse (4) + char (1) + unreverse (5) + bg reset (5) = ~43
+    // Plus trailer: reset (4) + restore attr (4) + cursor pos (12) = ~20
+    size_t buf_size = (size_t)screen_rows * (size_t)screen_cols * 48 + 64;
+    char *buf = malloc(buf_size);
+    if (!buf) return;
+    size_t pos = 0;
+    int any_changed = 0;
+
+    for (int r = 0; r < screen_rows; r++) {
+        for (int c = 0; c < screen_cols; c++) {
+            int idx = r * screen_cols + c;
+            unsigned char desired = 0;  // 0 = no background
+            if (repaint_time[idx].tv_sec != 0) {
+                double age = (now->tv_sec - repaint_time[idx].tv_sec)
+                           + (now->tv_nsec - repaint_time[idx].tv_nsec) / 1e9;
+                if (age < 2.0) {
+                    desired = (repaint_count[idx] % 7) + 1;  // 1-7
+                }
+            }
+            if (desired != repaint_displayed[idx]) {
+                any_changed = 1;
+                // Cursor position
+                pos += (size_t)snprintf(buf + pos, buf_size - pos, "\x1b[%d;%dH", r + 1, c + 1);
+                unsigned char attr = screen_attr[idx];
+                // Reset state before each cell to avoid attribute leakage
+                memcpy(buf + pos, "\x1b[0m", 4); pos += 4;
+                if (attr) {
+                    memcpy(buf + pos, "\x1b[7m", 4); pos += 4;
+                }
+                // For reverse-video cells, use foreground color (reverse swaps fg/bg visually)
+                if (desired) {
+                    if (attr) {
+                        pos += (size_t)snprintf(buf + pos, buf_size - pos, "\x1b[38;5;%dm", rainbow_colors[desired - 1]);
+                    } else {
+                        pos += (size_t)snprintf(buf + pos, buf_size - pos, "\x1b[48;5;%dm", rainbow_colors[desired - 1]);
+                    }
+                }
+                // Write the character
+                buf[pos++] = screen_cells[idx];
+                repaint_displayed[idx] = desired;
+            }
+        }
+    }
+
+    if (any_changed) {
+        // Reset all attributes to clean state, then restore 6502's current state
+        memcpy(buf + pos, "\x1b[0m", 4); pos += 4;
+        if (current_attr) {
+            memcpy(buf + pos, "\x1b[7m", 4); pos += 4;
+        }
+        // Restore cursor to where the 6502 expects it
+        pos += (size_t)snprintf(buf + pos, buf_size - pos, "\x1b[%d;%dH", cursor_row + 1, cursor_col + 1);
+        if (write(STDOUT_FILENO, buf, pos) < 0) {}
+    }
+    free(buf);
+}
+
 void console_redraw() {
     if (!screen_cells || screen_rows <= 0 || screen_cols <= 0) return;
     unsigned char last_attr = 0;
@@ -1580,6 +1729,9 @@ void console_redraw() {
     if (len > 0) {
         if (write(STDOUT_FILENO, cur, (size_t)len) < 0) {
         }
+    }
+    if (repaint_displayed) {
+        memset(repaint_displayed, 0, (size_t)screen_rows * (size_t)screen_cols);
     }
 }
 
@@ -2190,6 +2342,9 @@ int main(int argc, char **argv) {
                 return 1;
             }
             i += 2;
+        } else if (strcmp(argv[i], "--show-repaints") == 0) {
+            show_repaints = 1;
+            i++;
         } else {
             fprintf(stderr, "error: unknown option %s\n", argv[i]);
             return 1;
@@ -2513,7 +2668,9 @@ int main(int argc, char **argv) {
     reset6502();
 
     uint64_t next_throttle_check = 10000;
+    uint64_t next_repaint_check = 10000;
     clock_gettime(CLOCK_MONOTONIC, &start_time);
+    last_repaint_check = start_time;
 
     const int max_cycles = 100000000;
     while (!done) {
@@ -2557,6 +2714,19 @@ int main(int argc, char **argv) {
                 delay.tv_sec = 0;
                 delay.tv_nsec = (long)(ahead_us * 1000.0);
                 nanosleep(&delay, NULL);
+            }
+        }
+
+        if (show_repaints && (console_mode || terminal_mode)
+            && clockticks6502 >= next_repaint_check) {
+            next_repaint_check = clockticks6502 + 10000;
+            struct timespec now;
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            double ms = (now.tv_sec - last_repaint_check.tv_sec) * 1e3
+                      + (now.tv_nsec - last_repaint_check.tv_nsec) / 1e6;
+            if (ms >= 16.0) {
+                last_repaint_check = now;
+                repaint_overlay_update(&now);
             }
         }
 
