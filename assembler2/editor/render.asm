@@ -635,6 +635,33 @@ render_decide:
   BNE .walk_ins
 .walk_done:
 
+  ; For $04 (J undo), adjust SCROLL_DELTA for cursor line size change
+  ; The cursor line may have changed wrap count (e.g., joined 2-row line
+  ; becomes unwrapped 1-row line after undo), so net displacement differs
+  ; from the raw sum of restored line rows.
+  LDA RENDER_FLAG
+  CMP #$04
+  BNE .no_disp_adjust
+  LDAX16 FILE_LINE16
+  JSR buf_get_line_len
+  JSR line_screen_rows       ; A = new cursor line screen rows
+  PHA
+  CLC
+  ADC SCROLL_DELTA           ; + restored rows
+  SEC
+  SBC PREV_LINE_ROWS         ; - old cursor rows = net displacement
+  BEQ .disp_zero
+  BCC .disp_zero             ; underflow -> full repaint
+  STA SCROLL_DELTA
+  PLA
+  STA PREV_LINE_ROWS
+  JMP .no_disp_adjust
+.disp_zero:
+  PLA
+  STA PREV_LINE_ROWS
+  JMP .ins_full
+.no_disp_adjust:
+
   ; Check delta < available rows below cursor
   ; available = SCREEN_ROWS - 1 - CURSOR_ROW
   LDA SCROLL_DELTA
