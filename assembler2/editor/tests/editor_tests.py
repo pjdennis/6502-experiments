@@ -12479,11 +12479,9 @@ class EditorTestRunner:
             ],
             expect_cursor=(0, 19),
             # Frame 3 (BS): unwrap 2→1 rows. Scroll-up handles rows below.
-            # Row 0 only needs last col cleared (where 'Z' was), not full redraw.
-            # Row 8 = newly exposed bottom row.
-            expect_content_rows=[(3, {0, 8})],
-            # Row 0 rendering should start at col 19 (not col 0 = full redraw)
-            expect_min_col=[(3, 0, 19)]
+            # Change is at col 20 (wrap row 1) which is past the remaining 1 row,
+            # so cursor line rendering is skipped entirely. Only bottom exposed row.
+            expect_content_rows=[(3, {8})]
         )
 
         # Backspace from wrap boundary (row 2, col 0) should NOT redraw rows 0-1.
@@ -12506,11 +12504,10 @@ class EditorTestRunner:
                 (8, "Line 8"),
             ],
             expect_cursor=(1, 19),
-            # Frame 3 (BS): unwrap 3→2 rows. Rows 0-1 unchanged by content shift.
-            # Row 1 only needs last col cleared, row 8 = bottom exposed.
-            expect_content_rows=[(3, {1, 8})],
-            # Row 1 rendering should start at col 19 (not col 0 = full redraw)
-            expect_min_col=[(3, 1, 19)]
+            # Frame 3 (BS): unwrap 3→2 rows. Change is at col 40 (wrap row 2)
+            # which is past the remaining 2 rows, so cursor line rendering is
+            # skipped entirely. Only bottom exposed row.
+            expect_content_rows=[(3, {8})]
         )
 
         self._group("Sub-line render optimization:", leading_blank=True)

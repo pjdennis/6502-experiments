@@ -439,7 +439,9 @@ render_current_line_and_status:
   STA RENDER_ROW                ; first_row (0-based)
   LDA SCROLL_DELTA              ; current_rows
   CMP PREV_LINE_ROWS
-  BCS .rc_render_from_row       ; rows increased or equal: brute force
+  BCC .rc_rows_decreased         ; rows decreased: scroll up
+  JMP .rc_render_from_row        ; rows increased or equal: scroll down
+.rc_rows_decreased:
 
   ; --- Rows decreased: scroll UP ---
   STA DELETE_SCREEN_ROWS        ; current_rows (for scroll region skip)
@@ -467,15 +469,46 @@ render_current_line_and_status:
   JSR ansi_scroll_up
   JSR ansi_reset_scroll_region
 .rc_no_scroll:
-  ; Render cursor line rows
+  ; Check if cursor line rendering can be skipped/reduced
+  LDA RENDER_FROM_COL16 + 1
+  AND RENDER_FROM_COL16
+  CMP #$FF
+  BEQ .rc_render_all_cursor    ; $FFFF = unknown change, render all
+  CP16 RENDER_FROM_COL16, DIV_INPUT16
+  JSR div_mod_screen_cols_16   ; X = change_wrap_row
+  CPX DELETE_SCREEN_ROWS       ; compare with current_rows
+  BCS .rc_skip_cursor          ; change >= current: skip cursor rendering
+  ; Partial: render from change_wrap_row
+  STX RENDER_WRAP
+  LDA SCROLL_DELTA
+  PHA                          ; save displacement for bottom rows
   LDA DELETE_SCREEN_ROWS
-  STA RENDER_LIMIT
+  SEC
+  SBC RENDER_WRAP              ; current_rows - change_wrap_row
+  STA SCROLL_DELTA
+  LDA RENDER_WRAP
+  CLC
+  ADC RENDER_ROW
+  STA RENDER_ROW               ; advance to change_wrap_row screen row
+  LDA #0
+  STA DELETE_SCREEN_ROWS
+  CP16 FILE_LINE16, RENDER_LINE16
+  JSR render_limited_loop
+  PLA
+  STA SCROLL_DELTA             ; restore displacement
+  JMP .rc_bottom_rows
+.rc_skip_cursor:
+  LDA #0
+  STA DELETE_SCREEN_ROWS
+  JMP .rc_bottom_rows
+.rc_render_all_cursor:
   LDA #0
   STA DELETE_SCREEN_ROWS
   CP16 FILE_LINE16, RENDER_LINE16
   LDA #0
   STA RENDER_WRAP
   JSR render_limited_loop
+.rc_bottom_rows:
   ; Render bottom exposed rows
   LDA SCREEN_ROWS
   SEC
@@ -521,15 +554,37 @@ render_current_line_and_status:
   JSR ansi_scroll_down
   JSR ansi_reset_scroll_region
 .ri_no_scroll:
-  ; Render all cursor line rows (old rows may have pending content changes)
+  ; Check if old wrap rows can be skipped
+  LDA RENDER_FROM_COL16 + 1
+  AND RENDER_FROM_COL16
+  CMP #$FF
+  BEQ .ri_all_rows             ; $FFFF = unknown change, render all
+  CP16 RENDER_FROM_COL16, DIV_INPUT16
+  JSR div_mod_screen_cols_16   ; X = change_wrap_row
+  STX RENDER_WRAP
+  ; SCROLL_DELTA = current_rows - change_wrap_row
+  LDA SCROLL_DELTA             ; displacement
+  CLC
+  ADC PREV_LINE_ROWS           ; = current_rows
+  SEC
+  SBC RENDER_WRAP              ; - change_wrap_row
+  STA SCROLL_DELTA
+  ; RENDER_ROW += change_wrap_row
+  LDA RENDER_WRAP
+  CLC
+  ADC RENDER_ROW
+  STA RENDER_ROW
+  CP16 FILE_LINE16, RENDER_LINE16
+  JMP render_limited_rows
+.ri_all_rows:
   LDA SCROLL_DELTA
   CLC
-  ADC PREV_LINE_ROWS            ; = current_rows
+  ADC PREV_LINE_ROWS           ; = current_rows
   STA SCROLL_DELTA
   CP16 FILE_LINE16, RENDER_LINE16
   LDA #0
   STA RENDER_WRAP
-  JMP render_from_first_row_limited
+  JMP render_limited_rows
 
 .do_full:
   JMP render_screen
