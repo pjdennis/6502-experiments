@@ -11205,11 +11205,11 @@ class EditorTestRunner:
         )
 
         # Undo of 2d$: restores deleted content, line count increases.
-        # Undo uses line-insert scroll ($03) which pushes content down from cursor.
-        # Insert scroll includes cursor row (content pushed down, then cursor repainted).
+        # Undo uses line-insert scroll which pushes content down below cursor.
+        # Cursor row content changes but should NOT be in scroll region (it'll be repainted).
         # Frames: 0=initial, 1=jjj, 2=ll, 3=count '2', 4=d$ (delete scroll), 5=u (insert scroll)
         self.run_test_screen(
-            "Scroll opt: 2d$ undo uses insert scroll",
+            "Scroll opt: 2d$ undo does not scroll cursor row",
             make_lines(15),
             b"jjjll2d$u:q!\r",
             rows=10, cols=40,
@@ -11219,7 +11219,40 @@ class EditorTestRunner:
                 (6, "Line 7"), (7, "Line 8"), (8, "Line 9"),
             ],
             expect_cursor=(3, 2),
-            expect_scroll_rows=[(5, {3, 4, 5, 6, 7, 8})]
+            expect_scroll_rows=[(5, {4, 5, 6, 7, 8})]
+        )
+
+        # Undo of 2D: same as 2d$ undo, cursor row should not be scrolled.
+        # Frames: 0=initial, 1=jjj, 2=count '2', 3=D (delete scroll), 4=u (insert scroll)
+        self.run_test_screen(
+            "Scroll opt: 2D undo does not scroll cursor row",
+            make_lines(15),
+            b"jjj2Du:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line 4"), (4, "Line 5"), (5, "Line 6"),
+                (6, "Line 7"), (7, "Line 8"), (8, "Line 9"),
+            ],
+            expect_cursor=(3, 0),
+            expect_scroll_rows=[(4, {4, 5, 6, 7, 8})]
+        )
+
+        # Undo of cross-line de: cursor row should not be scrolled.
+        # Start at end of Line 4, de deletes to end of word spanning newline.
+        # Frames: 0=initial, 1=jjj, 2=$ (end), 3=de (delete scroll), 4=u (insert scroll)
+        self.run_test_screen(
+            "Scroll opt: de undo does not scroll cursor row",
+            make_lines(15),
+            b"jjj$deu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line 4"), (4, "Line 5"), (5, "Line 6"),
+                (6, "Line 7"), (7, "Line 8"), (8, "Line 9"),
+            ],
+            expect_cursor=(3, 5),
+            expect_scroll_rows=[(4, {4, 5, 6, 7, 8})]
         )
 
         # Redo of 2d$: re-deletes, line count decreases.
@@ -11241,30 +11274,25 @@ class EditorTestRunner:
         self._group("Scroll opt: charwise paste:", leading_blank=True)
 
         # Multi-line char paste p: yank with 2D (charwise, multi-line), then paste.
-        # 2D on "Line 1" yanks "Line 1\n", deletes, cursor at line 0 (now "Line 2").
-        # Then p pastes after cursor: inserts "Line 1\n" after first char of "Line 2".
-        # Result: "L" + "Line 1\n" + "ine 2\n..." = "LLine 1\nine 2\nLine 3\n..."
-        # Actually, charwise paste-below inserts after cursor char.
-        # With cursor at col 0 on "Line 2", p inserts after 'L':
-        #   "L" then "Line 1\n" then "ine 2" → "LLine 1\nine 2"
-        # Line count increases by 1 (the newline in yanked content).
+        # Cursor row content changes (line splits) but should NOT be in scroll region.
         # Frames: 0=initial, 1=count '2', 2=D (scroll: charwise delete), 3=p (insert)
         self.run_test_screen(
-            "Scroll opt: multi-line char paste p uses scroll",
+            "Scroll opt: multi-line char paste p does not scroll cursor row",
             make_lines(15),
             b"2Dp:q!\r",
             rows=10, cols=40,
-            expect_scroll_rows=[(3, {0, 1, 2, 3, 4, 5, 6, 7, 8})]
+            expect_scroll_rows=[(3, {1, 2, 3, 4, 5, 6, 7, 8})]
         )
 
         # Multi-line char paste P: same yank, P pastes before cursor.
+        # Cursor row should NOT be in scroll region.
         # Frames: 0=initial, 1=count '2', 2=D (scroll), 3=P (insert)
         self.run_test_screen(
-            "Scroll opt: multi-line char paste P uses scroll",
+            "Scroll opt: multi-line char paste P does not scroll cursor row",
             make_lines(15),
             b"2DP:q!\r",
             rows=10, cols=40,
-            expect_scroll_rows=[(3, {0, 1, 2, 3, 4, 5, 6, 7, 8})]
+            expect_scroll_rows=[(3, {1, 2, 3, 4, 5, 6, 7, 8})]
         )
 
         # Undo of multi-line char paste p: deletes pasted content, line count decreases.
@@ -11279,14 +11307,24 @@ class EditorTestRunner:
         )
 
         # Redo of multi-line char paste p: re-inserts content, line count increases.
-        # Redo uses do_char_paste which includes cursor row in insert scroll (correct).
+        # Cursor row should NOT be in scroll region (it'll be repainted).
         # Frames: ...4=u undo, 5=space noop, 6=u redo
         self.run_test_screen(
-            "Scroll opt: char paste p redo uses scroll",
+            "Scroll opt: char paste p redo does not scroll cursor row",
             make_lines(15),
             b"2Dpu u:q!\r",
             rows=10, cols=40,
-            expect_scroll_rows=[(6, {0, 1, 2, 3, 4, 5, 6, 7, 8})]
+            expect_scroll_rows=[(6, {1, 2, 3, 4, 5, 6, 7, 8})]
+        )
+
+        # Redo of multi-line char paste P: same, cursor row not in scroll region.
+        # Frames: 0=initial, 1=count '2', 2=D, 3=P, 4=u, 5=space, 6=u redo
+        self.run_test_screen(
+            "Scroll opt: char paste P redo does not scroll cursor row",
+            make_lines(15),
+            b"2DPu u:q!\r",
+            rows=10, cols=40,
+            expect_scroll_rows=[(6, {1, 2, 3, 4, 5, 6, 7, 8})]
         )
 
         self._group("Scroll opt: paste-below undo:", leading_blank=True)
