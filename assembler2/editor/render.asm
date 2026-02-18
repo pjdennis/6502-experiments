@@ -1180,59 +1180,32 @@ render_line_delete_scroll:
 .skip_del_scroll:
 
   ; $07 (paste-below undo): cursor unchanged, skip repaint entirely.
-  ; $08 (charwise delete): cursor content changed, repaint cursor row.
   LDA RENDER_FLAG
-  CMP #$08
-  BNE .not_charwise_del
-  LDA DELETE_SCREEN_ROWS
-  CMP #2
-  BCC .charwise_no_wrap
-  ; Joined line wraps: render all wrap rows + bottom rows (like $06 path)
-  STA RENDER_LIMIT
-  LDA #0
-  STA DELETE_SCREEN_ROWS
-  LDA SCROLL_DELTA
-  PHA
-  LDA RENDER_LIMIT
-  STA SCROLL_DELTA
-  LDA CURSOR_ROW
-  SEC
-  SBC WRAP_QUOT
-  STA RENDER_ROW
-  CP16 FILE_LINE16, RENDER_LINE16
-  LDA #0
-  STA RENDER_WRAP
-  JSR render_limited_loop
-  PLA
-  STA SCROLL_DELTA
-  JMP .del_bottom_rows
-.charwise_no_wrap:
-  LDA #0
-  STA DELETE_SCREEN_ROWS
-  JMP .single_row_render    ; repaint cursor row + bottom rows
-.not_charwise_del:
   CMP #$07
   BNE .not_skip_cursor
   LDA #0
   STA DELETE_SCREEN_ROWS    ; reset for next frame
   JMP .del_bottom_rows      ; skip cursor repaint, just bottom rows
 .not_skip_cursor:
-  ; For J ($06) with wrapped combined line: render cursor wrap rows + bottom rows.
+  ; $06 (J) and $08 (charwise delete): check if joined line wraps.
   ; DELETE_SCREEN_ROWS holds new_total (combined line's screen rows).
   CMP #$06
+  BEQ .check_wrap
+  CMP #$08
   BNE .single_row_render
+.check_wrap:
   LDA DELETE_SCREEN_ROWS
-  STA RENDER_LIMIT           ; save new_total
+  STA RENDER_LIMIT
   LDA #0
   STA DELETE_SCREEN_ROWS     ; reset for next frame
   LDA RENDER_LIMIT
   CMP #2
-  BCC .single_row_render     ; new_total < 2, non-wrapped: single row suffices
-  ; Render cursor wrap rows (new_total rows from first_row)
+  BCC .single_row_render     ; non-wrapped: single row suffices
+  ; Render all wrap rows + bottom rows
   LDA SCROLL_DELTA
   PHA                        ; save delete delta for bottom rows
   LDA RENDER_LIMIT
-  STA SCROLL_DELTA           ; new_total rows to render
+  STA SCROLL_DELTA           ; rows to render
   LDA CURSOR_ROW
   SEC
   SBC WRAP_QUOT
