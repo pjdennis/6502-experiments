@@ -180,8 +180,27 @@ undo_do_undo:
   STA RENDER_FLAG            ; Single line repaint
   JMP clear_count
 .undo_cc_multi:
+  ; Ncc undo: compute SCROLL_DELTA = total_screen_rows(pasted) - 1
+  ; (subtract 1 for the deleted blank line)
+  CP16 FILE_LINE16, RENDER_LINE16
+  LDA YANK_LINES16
+  JSR compute_delete_screen_rows  ; Walks YANK_LINES16 lines, sets DELETE_SCREEN_ROWS
+  LDA DELETE_SCREEN_ROWS
+  BEQ .undo_cc_full              ; Overflow or 0: fall back to full repaint
+  SEC
+  SBC #1                         ; Subtract 1 for deleted blank line
+  BEQ .undo_cc_full              ; 0 displacement: fall back
+  STA SCROLL_DELTA
+  LDA #0
+  STA DELETE_SCREEN_ROWS         ; Reset (not needed for insert-scroll)
+  LDA #$0A
+  STA RENDER_FLAG                ; Pre-computed insert-scroll
+  JMP clear_count
+.undo_cc_full:
+  LDA #0
+  STA DELETE_SCREEN_ROWS
   LDA #$FF
-  STA RENDER_FLAG            ; Full repaint (safe for wrapped lines)
+  STA RENDER_FLAG                ; Fall back to full repaint
   JMP clear_count
 .undo_line_scroll:
   LDA #$03

@@ -569,9 +569,13 @@ render_decide:
   CMP #$05
   BEQ .do_line_insert
   CMP #$09
-  BNE .not_line_insert
+  BNE .not_09
 .do_line_insert:
   JMP .line_insert_scroll
+.not_09:
+  CMP #$0A
+  BNE .not_line_insert
+  JMP .line_insert_precomputed
 .not_line_insert:
   JMP .full
 .line_count_same:
@@ -699,6 +703,11 @@ render_decide:
   STA SCROLL_DELTA            ; clamp delta to available
 .delete_scroll_ok:
   JMP render_line_delete_scroll
+
+.line_insert_precomputed:
+  ; RENDER_FLAG=$0A: insert-scroll with pre-computed SCROLL_DELTA.
+  ; SCROLL_DELTA and INSERT_LINE_COUNT already set by caller.
+  JMP .no_disp_adjust
 
 .line_insert_scroll:
   ; LINE_COUNT16 increased and RENDER_FLAG=$03 (line insert at cursor).
