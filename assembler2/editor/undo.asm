@@ -296,10 +296,11 @@ undo_do_redo:
   ; Set flags
   LDA #0
   STA UNDO_IS_REDO
+  STA DELETE_SCREEN_ROWS     ; Scroll starts at cursor row (cursor filled by scroll)
   LDA #$FF
   STA MODIFIED
-  LDA #$02
-  STA RENDER_FLAG            ; Signal line-delete for scroll optimization
+  LDA #$07
+  STA RENDER_FLAG            ; Line-delete scroll, skip cursor repaint
   JSR clamp_cursor_col
   JMP clear_count
 
@@ -474,7 +475,10 @@ undo_paste_undo:
   STA RENDER_FLAG
   JMP clear_count
 .undo_paste_above_flag:
-  LDA #$02
+  ; Cursor row filled by scroll (original line pulled up), skip repaint
+  LDA #0
+  STA DELETE_SCREEN_ROWS
+  LDA #$07
   STA RENDER_FLAG
   JMP clear_count
 
