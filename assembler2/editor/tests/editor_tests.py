@@ -11565,26 +11565,26 @@ class EditorTestRunner:
             expect_content_rows=[(5, {3, 8})]
         )
 
-        # JJ undo: undo second J only (line count +1). Insert scroll.
-        # Cursor row 3 changes. Only row 3.
-        # Frames: 0=initial, 1=jjj, 2=first J, 3=second J, 4=u
+        # JJ undo: JJ is batched into one frame. Undo restores 1 join (batching
+        # records UNDO_JOIN_COUNT=1). Cursor row + restored line need content.
+        # Frames: 0=initial, 1=jjj, 2=JJ (batched), 3=u
         self.run_test_screen(
             "Minimal repaint: JJ undo",
             make_lines(15),
             b"jjjJJu:q!\r",
             rows=10, cols=40,
-            expect_content_rows=[(4, {3})]
+            expect_content_rows=[(3, {3, 4})]
         )
 
-        # JJ redo: re-does second J (line count -1). Delete scroll.
-        # Cursor row 3 changes + bottom row 8.
-        # Frames: 0=initial, 1=jjj, 2=first J, 3=second J, 4=u, 5=space, 6=u redo
+        # JJ redo: re-does the batched join (1 join). Delete scroll.
+        # Cursor row 3 changes + bottom row 8 from below viewport.
+        # Frames: 0=initial, 1=jjj, 2=JJ (batched), 3=u, 4=space, 5=u redo
         self.run_test_screen(
             "Minimal repaint: JJ redo",
             make_lines(15),
             b"jjjJJu u:q!\r",
             rows=10, cols=40,
-            expect_content_rows=[(6, {3, 8})]
+            expect_content_rows=[(5, {3, 8})]
         )
 
         # 3J undo: restores split (line count +2). Insert scroll of 2.
