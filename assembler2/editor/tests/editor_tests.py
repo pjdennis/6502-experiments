@@ -11615,6 +11615,47 @@ class EditorTestRunner:
             expect_content_rows=[(6, {3, 7, 8})]
         )
 
+        # J undo of two lines at screen width: J adds a space, so the combined
+        # line wraps and actually increases screen rows. Undo restores the split.
+        # 20-char lines at 20 cols: "12345678901234567890" + "abcdefghijklmnopqrst"
+        # After J: "12345678901234567890 abcdefghijklmnopqrst" = 41 chars = 3 rows
+        # Undo: restores 2 lines × 1 row = 2 rows (net -1 screen row)
+        # This is the opposite displacement from normal J undo (scroll UP, not down)
+        j_width_content = ("12345678901234567890\n"
+                           "abcdefghijklmnopqrst\n"
+                           + ''.join(f"S{i}\n" for i in range(3, 14)))
+        self.run_test_screen(
+            "Minimal repaint: J undo at screen width",
+            j_width_content,
+            b"Ju:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "12345678901234567890"),
+                (1, "abcdefghijklmnopqrst"),
+                (2, "S3"), (3, "S4"), (4, "S5"),
+                (5, "S6"), (6, "S7"), (7, "S8"),
+                (8, "S9"),
+            ],
+            expect_cursor=(0, 0),
+        )
+
+        # J redo of two lines at screen width.
+        # Redo re-joins into 3-row wrapped line.
+        self.run_test_screen(
+            "Minimal repaint: J redo at screen width",
+            j_width_content,
+            b"Ju u:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "12345678901234567890"),
+                (1, " abcdefghijklmnopqrs"),
+                (2, "t"),
+                (3, "S3"), (4, "S4"), (5, "S5"),
+                (6, "S6"), (7, "S7"), (8, "S8"),
+            ],
+            expect_cursor=(0, 0),
+        )
+
         # o undo: removes opened blank line. Delete scroll.
         # Cursor row content unchanged (Line 4 stays). Only bottom row 8.
         # Frames: 0=initial, 1=jjj, 2=o (insert+scroll), 3=ESC, 4=u

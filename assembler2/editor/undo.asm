@@ -659,10 +659,8 @@ undo_char_paste_redo:
 undo_open_undo:
   ; Delete the opened line
   CP16 UNDO_LINE16, FILE_LINE16
-  LDA #1
-  STA BUF_TEMP16
+  SET16 1, BUF_TEMP16
   LDA #0
-  STA BUF_TEMP16 + 1
   STA DELETE_SCREEN_ROWS     ; Cursor row filled by scroll
   JSR delete_current_lines
   ; Restore cursor to original position
