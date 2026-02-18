@@ -11116,6 +11116,76 @@ class EditorTestRunner:
             expect_content_rows=[(5, {8})]
         )
 
+        self._group("Scroll opt: charwise delete:", leading_blank=True)
+
+        # 2d$ at row 3 with col offset: deletes "e 4\nLine 5", merging remainder.
+        # Should use line-delete scroll ($02), NOT full repaint.
+        # jjjll = line 3, col 2. 2d$ deletes from col 2 to EOL + next line.
+        # Result: "Li" on line 3, "Line 6" on line 4.
+        # Frames: 0=initial, 1=jjj cursor, 2=ll cursor, 3=count '2', 4=d$
+        self.run_test_screen(
+            "Scroll opt: 2d$ uses scroll not full repaint",
+            make_lines(15),
+            b"jjjll2d$:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Li"), (4, "Line 6"), (5, "Line 7"),
+                (6, "Line 8"), (7, "Line 9"), (8, "Line 10"),
+            ],
+            expect_cursor=(3, 1),
+            # Frame 4 (2d$): scroll rows below cursor, cursor row redrawn
+            expect_scroll_rows=[(4, {4, 5, 6, 7, 8})]
+        )
+
+        # 2D at row 3: same as 2d$ from col 0, deletes current+next line content.
+        # Result: empty line 3, "Line 6" on line 4.
+        # Frames: 0=initial, 1=jjj cursor, 2=count '2', 3=D
+        self.run_test_screen(
+            "Scroll opt: 2D uses scroll not full repaint",
+            make_lines(15),
+            b"jjj2D:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, ""), (4, "Line 6"), (5, "Line 7"),
+                (6, "Line 8"), (7, "Line 9"), (8, "Line 10"),
+            ],
+            expect_cursor=(3, 0),
+            expect_scroll_rows=[(3, {4, 5, 6, 7, 8})]
+        )
+
+        # Single d$ does NOT trigger scroll (no line count change, auto-detect handles it).
+        # Frames: 0=initial, 1=d$ frame
+        self.run_test_screen(
+            "Scroll opt: single d$ no scroll just current line",
+            make_lines(10),
+            b"lld$:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Li")],
+            expect_cursor=(0, 1),
+            expect_scrolled_at_frame=[(1, False)]
+        )
+
+        # Cross-line de: cursor at "4" in "Line 4", de deletes "4\nLine" (to end
+        # of next word), merging with " 5\n" remainder. Line count drops by 1.
+        # "Line 4" at col 5 = '4', de deletes to end of next word = "4\nLine"
+        # Result: line 3 = "Line  5"
+        # Frames: 0=initial, 1=jjj, 2=lllll, 3=de
+        self.run_test_screen(
+            "Scroll opt: cross-line de uses scroll",
+            make_lines(15),
+            b"jjjlllllde:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line  5"), (4, "Line 6"), (5, "Line 7"),
+                (6, "Line 8"), (7, "Line 9"), (8, "Line 10"),
+            ],
+            expect_cursor=(3, 5),
+            expect_scroll_rows=[(3, {4, 5, 6, 7, 8})]
+        )
+
         self._group("Sub-line render optimization:", leading_blank=True)
 
         # Normal r: replace at col 3, partial render from col 3
