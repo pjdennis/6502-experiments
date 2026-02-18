@@ -11470,6 +11470,116 @@ class EditorTestRunner:
             expect_content_rows=[(3, {0, 1})]
         )
 
+        self._group("Scroll opt: insert mode unwrap (shrink):", leading_blank=True)
+
+        # BS at EOL causing unwrap: line shrinks from 2 screen rows to 1.
+        # Line 0: 21 chars at 20 cols (2 screen rows: 20+1). $ moves to col 20,
+        # A appends at col 21 (wrap row 1 col 1), BS deletes the 'a' -> 20 chars.
+        # 20 chars = 1 screen row. Lines below should scroll up, not full repaint.
+        # Frames: 0=initial, 1=$ move, 2=A enter insert, 3=BS (unwrap occurs)
+        unwrap_content = ("12345678901234567890a\n"
+                          + ''.join(f"Line {i}\n" for i in range(2, 12)))
+        self.run_test_screen(
+            "Scroll opt: insert BS at EOL causes unwrap uses scroll",
+            unwrap_content,
+            b"$A\x08\x1b:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "12345678901234567890"),
+                (1, "Line 2"), (2, "Line 3"), (3, "Line 4"),
+                (4, "Line 5"), (5, "Line 6"), (6, "Line 7"),
+                (7, "Line 8"), (8, "Line 9"),
+            ],
+            expect_cursor=(0, 19),
+            # Frame 3 (BS): only cursor line row 0 redrawn + scroll pulls lines up.
+            # Row 0 content-rendered (cursor line), row 8 content-rendered (newly exposed).
+            expect_content_rows=[(3, {0, 8})]
+        )
+
+        # BS mid-line causing unwrap: line shrinks from 2 to 1 screen row.
+        # Line 0: 21 chars at 20 cols. lllll=col 5, i=insert, BS deletes char
+        # at col 4 -> 20 chars = 1 screen row. Content shifts, render cursor row.
+        # Frames: 0=initial, 1=lllll move, 2=i enter insert, 3=BS (unwrap)
+        self.run_test_screen(
+            "Scroll opt: insert BS mid-line causes unwrap uses scroll",
+            unwrap_content,
+            b"llllli\x08\x1b:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "1234678901234567890a"),  # char '5' deleted
+                (1, "Line 2"), (2, "Line 3"), (3, "Line 4"),
+                (4, "Line 5"), (5, "Line 6"), (6, "Line 7"),
+                (7, "Line 8"), (8, "Line 9"),
+            ],
+            expect_cursor=(0, 3),
+            # Frame 3 (BS): cursor line row redrawn + scroll pulls lines up.
+            # Only row 0 (cursor line) and row 8 (newly exposed) content-rendered.
+            expect_content_rows=[(3, {0, 8})]
+        )
+
+        # DELETE mid-line causing unwrap: line shrinks from 2 to 1 screen row.
+        # Line 0: 21 chars at 20 cols. lllll=col 5, i=insert, DELETE deletes char
+        # at col 5 -> 20 chars = 1 screen row. Content shifts.
+        # Frames: 0=initial, 1=lllll move, 2=i enter insert, 3=DEL (unwrap)
+        self.run_test_screen(
+            "Scroll opt: insert DEL mid-line causes unwrap uses scroll",
+            unwrap_content,
+            b"llllli\x1b[3~\x1b:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "1234578901234567890a"),  # char '6' deleted (at col 5)
+                (1, "Line 2"), (2, "Line 3"), (3, "Line 4"),
+                (4, "Line 5"), (5, "Line 6"), (6, "Line 7"),
+                (7, "Line 8"), (8, "Line 9"),
+            ],
+            expect_cursor=(0, 4),
+            # Frame 3 (DEL): cursor line row redrawn + scroll pulls lines up.
+            expect_content_rows=[(3, {0, 8})]
+        )
+
+        self._group("Scroll opt: insert DEL joining lines:", leading_blank=True)
+
+        # DELETE at EOL joins next line: LINE_COUNT decreases.
+        # Cursor at end of line 2 (Line 3, 6 chars), DELETE joins line 3 (Line 4).
+        # Frames: 0=initial, 1=jj move, 2=$ move, 3=A enter insert, 4=DEL join
+        self.run_test_screen(
+            "Scroll opt: insert DEL at EOL joins line uses scroll",
+            make_lines(15),
+            b"jj$A\x1b[3~\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"),
+                (2, "Line 3Line 4"), (3, "Line 5"), (4, "Line 6"),
+                (5, "Line 7"), (6, "Line 8"), (7, "Line 9"),
+                (8, "Line 10"),
+            ],
+            expect_cursor=(2, 5),
+            # Frame 4 (DEL join): cursor row redrawn + bottom row exposed.
+            # Should use scroll, not full repaint.
+            expect_content_rows=[(4, {2, 8})]
+        )
+
+        # DELETE on empty line joins it with next: LINE_COUNT decreases.
+        # Line 2 is empty. Cursor on line 2 col 0, DELETE joins with line 3.
+        # Frames: 0=initial, 1=jj move, 2=i enter insert, 3=DEL join
+        del_blank_content = ("Line 1\nLine 2\n\nLine 4\n"
+                             + ''.join(f"Line {i}\n" for i in range(5, 15)))
+        self.run_test_screen(
+            "Scroll opt: insert DEL on blank line joins uses scroll",
+            del_blank_content,
+            b"jji\x1b[3~\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"),
+                (2, "Line 4"), (3, "Line 5"), (4, "Line 6"),
+                (5, "Line 7"), (6, "Line 8"), (7, "Line 9"),
+                (8, "Line 10"),
+            ],
+            expect_cursor=(2, 0),
+            # Frame 3 (DEL): cursor row redrawn + bottom row exposed.
+            expect_content_rows=[(3, {2, 8})]
+        )
+
         self._group("Sub-line render optimization:", leading_blank=True)
 
         # Normal r: replace at col 3, partial render from col 3
