@@ -11186,6 +11186,35 @@ class EditorTestRunner:
             expect_scroll_rows=[(3, {3, 4, 5, 6, 7, 8})]
         )
 
+        self._group("Scroll opt: charwise paste:", leading_blank=True)
+
+        # Multi-line char paste p: yank with 2D (charwise, multi-line), then paste.
+        # 2D on "Line 1" yanks "Line 1\n", deletes, cursor at line 0 (now "Line 2").
+        # Then p pastes after cursor: inserts "Line 1\n" after first char of "Line 2".
+        # Result: "L" + "Line 1\n" + "ine 2\n..." = "LLine 1\nine 2\nLine 3\n..."
+        # Actually, charwise paste-below inserts after cursor char.
+        # With cursor at col 0 on "Line 2", p inserts after 'L':
+        #   "L" then "Line 1\n" then "ine 2" → "LLine 1\nine 2"
+        # Line count increases by 1 (the newline in yanked content).
+        # Frames: 0=initial, 1=count '2', 2=D (scroll: charwise delete), 3=p (insert)
+        self.run_test_screen(
+            "Scroll opt: multi-line char paste p uses scroll",
+            make_lines(15),
+            b"2Dp:q!\r",
+            rows=10, cols=40,
+            expect_scroll_rows=[(3, {0, 1, 2, 3, 4, 5, 6, 7, 8})]
+        )
+
+        # Multi-line char paste P: same yank, P pastes before cursor.
+        # Frames: 0=initial, 1=count '2', 2=D (scroll), 3=P (insert)
+        self.run_test_screen(
+            "Scroll opt: multi-line char paste P uses scroll",
+            make_lines(15),
+            b"2DP:q!\r",
+            rows=10, cols=40,
+            expect_scroll_rows=[(3, {0, 1, 2, 3, 4, 5, 6, 7, 8})]
+        )
+
         self._group("Sub-line render optimization:", leading_blank=True)
 
         # Normal r: replace at col 3, partial render from col 3
