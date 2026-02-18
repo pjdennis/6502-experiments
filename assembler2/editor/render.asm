@@ -1239,7 +1239,11 @@ render_line_insert_scroll:
   JSR ansi_reset_scroll_region
 .skip_ins_scroll:
 
-  ; Re-render row above cursor (content may have changed, e.g., Enter line split)
+  ; Re-render row above cursor ONLY for Enter line split ($05)
+  ; Other insert-scroll operations (undo, paste, etc.) don't change row above.
+  LDA RENDER_FLAG
+  CMP #$05
+  BNE .no_above_render
   LDA CURSOR_ROW
   BEQ .no_above_render     ; At top row, nothing above
   STA RENDER_ROW           ; Save cursor row
