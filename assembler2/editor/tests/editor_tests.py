@@ -11660,7 +11660,7 @@ class EditorTestRunner:
         )
 
         # 2cc undo: restores 2 original lines, removes 1 blank. Net +1 line.
-        # Insert scroll of 1. Rows 3-4 need content writes (restored lines).
+        # Uses full repaint (displacement may differ from file delta with wrapping).
         # Frames: 0=initial, 1=jjj, 2=count '2', 3=cc (delete+insert), 4=ESC, 5=u
         self.run_test_screen(
             "Minimal repaint: 2cc undo",
@@ -11673,7 +11673,6 @@ class EditorTestRunner:
                 (6, "Line 7"), (7, "Line 8"), (8, "Line 9"),
             ],
             expect_cursor=(3, 0),
-            expect_content_rows=[(5, {3, 4})]
         )
 
         # 2cc redo: re-replaces 2 lines with 1 blank. Net -1 line.

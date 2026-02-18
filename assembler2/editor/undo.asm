@@ -161,13 +161,21 @@ undo_do_undo:
   STA MODIFIED
   LDA YANK_LINES16           ; Actual lines inserted (may differ from net delta)
   STA INSERT_LINE_COUNT
-  ; cc undo deletes blank + pastes lines: file delta != screen displacement.
-  ; Use full repaint to avoid insert-scroll mismatch.
   LDA UNDO_TYPE
   CMP #UNDO_CC
   BNE .undo_line_scroll
+  ; cc undo: 1cc has net 0 line change (repaint cursor row only).
+  ; Ncc (N>1): displacement may differ from file delta if lines wrap,
+  ; so use full repaint for correctness.
+  LDA YANK_LINES16
+  CMP #2
+  BCS .undo_cc_multi
+  LDA #$01
+  STA RENDER_FLAG            ; Single line repaint
+  JMP clear_count
+.undo_cc_multi:
   LDA #$FF
-  STA RENDER_FLAG
+  STA RENDER_FLAG            ; Full repaint (safe for wrapped lines)
   JMP clear_count
 .undo_line_scroll:
   LDA #$03
