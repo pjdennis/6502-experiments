@@ -17,4 +17,5 @@ update
 set
 rebase
 log
+spread
 _tr_*.tmp

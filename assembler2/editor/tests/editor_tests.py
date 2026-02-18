@@ -12271,9 +12271,9 @@ class EditorTestRunner:
                 (8, "Line 8"),
             ],
             expect_cursor=(1, 0),
-            # Frame 2 (typing): all cursor rows redrawn + scroll pushes lines down.
-            # Both rows of the now-wrapped line are rendered (not all rows below).
-            expect_content_rows=[(2, {0, 1})]
+            # Frame 2 (typing): change starts at col 20 (wrap row 1), so only new
+            # row 1 needs rendering. Row 0 is unchanged (still full 20 chars).
+            expect_content_rows=[(2, {1})]
         )
 
         # Typing within a line past screen width: same wrap, different cursor position.
@@ -12319,9 +12319,9 @@ class EditorTestRunner:
                 (7, "Line 8"), (8, "Line 9"),
             ],
             expect_cursor=(0, 19),
-            # Frame 3 (BS): only cursor line row 0 redrawn + scroll pulls lines up.
-            # Row 0 content-rendered (cursor line), row 8 content-rendered (newly exposed).
-            expect_content_rows=[(3, {0, 8})]
+            # Frame 3 (BS): change at col 20 (wrap row 1), past remaining 1 row.
+            # Cursor line rendering skipped entirely, only bottom exposed row.
+            expect_content_rows=[(3, {8})]
         )
 
         # BS mid-line causing unwrap: line shrinks from 2 to 1 screen row.

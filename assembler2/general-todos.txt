@@ -4,6 +4,10 @@ cc ESC u is incorrectly scrolling down the rows below the cursor row:
 C on a line that wraps, redraws down to the bottom of the screen
 2C when the second line wraps, doesn't scroll the below rows up far enough
 
+There's an 8-bit limit on number of wrap rows for a line... Can we at least have some error checking to prevent bogus behavior? Or just make this 16 bit - e.g. PREV_LINE_ROWS
+
+When batched backspace or delete unwraps a line or batched typing wraps a line it triggers a full redraw of the line
+
 When undoing/redoing J with wrapped lines, a phantom empty line appers at the end
 Algorithm for batch of J:
 -Look for the line following those that are to be joined and remember it's screen row
