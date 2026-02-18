@@ -572,6 +572,11 @@ delete_at_cursor:
   LDAX16 FILE_LINE16
   SEC
   JSR mark_adjust_col
+  ; Signal line-delete scroll optimization
+  LDA #0
+  STA DELETE_SCREEN_ROWS     ; File delta fallback
+  LDA #$02
+  STA RENDER_FLAG            ; Line-delete scroll
 .done:
   LDA #$FF
   STA MODIFIED

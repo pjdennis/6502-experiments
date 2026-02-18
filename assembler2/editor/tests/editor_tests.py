@@ -11134,8 +11134,8 @@ class EditorTestRunner:
                 (6, "Line 8"), (7, "Line 9"), (8, "Line 10"),
             ],
             expect_cursor=(3, 1),
-            # Frame 4 (2d$): scroll rows below cursor, cursor row redrawn
-            expect_scroll_rows=[(4, {4, 5, 6, 7, 8})]
+            # Frame 4 (2d$): scroll region from cursor row, cursor row redrawn
+            expect_scroll_rows=[(4, {3, 4, 5, 6, 7, 8})]
         )
 
         # 2D at row 3: same as 2d$ from col 0, deletes current+next line content.
@@ -11152,7 +11152,7 @@ class EditorTestRunner:
                 (6, "Line 8"), (7, "Line 9"), (8, "Line 10"),
             ],
             expect_cursor=(3, 0),
-            expect_scroll_rows=[(3, {4, 5, 6, 7, 8})]
+            expect_scroll_rows=[(3, {3, 4, 5, 6, 7, 8})]
         )
 
         # Single d$ does NOT trigger scroll (no line count change, auto-detect handles it).
@@ -11183,7 +11183,7 @@ class EditorTestRunner:
                 (6, "Line 8"), (7, "Line 9"), (8, "Line 10"),
             ],
             expect_cursor=(3, 5),
-            expect_scroll_rows=[(3, {4, 5, 6, 7, 8})]
+            expect_scroll_rows=[(3, {3, 4, 5, 6, 7, 8})]
         )
 
         self._group("Sub-line render optimization:", leading_blank=True)
