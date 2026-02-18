@@ -140,6 +140,13 @@ do_char_paste_below:
   INX
 .mark_adj:
   JSR mark_adjust_insert
+  LDA #$03
+  STA RENDER_FLAG            ; Line-insert scroll
+  ; INSERT_LINE_COUNT = new_lines + 1 (for split cursor line)
+  LDA BUF_TEMP16
+  CLC
+  ADC #1
+  STA INSERT_LINE_COUNT
   ; Cursor at first pasted byte (BUF_PTR16 already set)
 
 .find_pos:
@@ -236,6 +243,13 @@ do_char_paste_above:
   LDAX16 FILE_LINE16
   CLC
   JSR mark_adjust_col
+  LDA #$03
+  STA RENDER_FLAG            ; Line-insert scroll
+  ; INSERT_LINE_COUNT = new_lines + 1 (for split cursor line)
+  LDA BUF_TEMP16
+  CLC
+  ADC #1
+  STA INSERT_LINE_COUNT
   ; Cursor at first pasted byte (BUF_PTR16 = insertion point)
 
 .find_pos:
