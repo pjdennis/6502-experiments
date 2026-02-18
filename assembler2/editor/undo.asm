@@ -197,15 +197,25 @@ undo_do_undo:
   LDAX16 FILE_LINE16
   CLC
   JSR mark_adjust_col
+  ; Multi-line: set scroll optimization
+  LDA #$03
+  STA RENDER_FLAG
+  ; INSERT_LINE_COUNT = new_lines + 1 (for split cursor line)
+  LDA BUF_TEMP16
+  CLC
+  ADC #1
+  STA INSERT_LINE_COUNT
+  JMP .undo_char_set_flags
 .undo_char_flags:
+  LDA #1
+  STA RENDER_FLAG
+.undo_char_set_flags:
   ; Restore cursor position (yank_paste_core may have moved things)
   CP16 UNDO_COL16, CURSOR_COL16
   ; Set flags
   LDA #$FF
   STA UNDO_IS_REDO
   STA MODIFIED
-  LDA #1
-  STA RENDER_FLAG
   JMP clear_count
 
 .undo_fail:
@@ -296,15 +306,19 @@ undo_do_redo:
   ; Get yank size for delete count
   JSR yank_get_size          ; BUF_LEN16 = yank size
   BCS .redo_fail
-  JSR delete_at_cursor       ; Delete BUF_LEN16 bytes at cursor
+  JSR delete_at_cursor       ; Delete BUF_LEN16 bytes at cursor (sets RENDER_FLAG=$02 if multi-line)
   ; Restore cursor
   CP16 UNDO_COL16, CURSOR_COL16
   JSR clamp_cursor_col
-  ; Set flags
+  ; Set flags (keep RENDER_FLAG from delete_at_cursor if > 1)
   LDA #0
   STA UNDO_IS_REDO
+  LDA RENDER_FLAG
+  CMP #2
+  BCS .redo_char_done
   LDA #1
   STA RENDER_FLAG
+.redo_char_done:
   JMP clear_count
 
 .redo_fail:
@@ -442,6 +456,20 @@ undo_paste_undo:
   LDA #$FF
   STA UNDO_IS_REDO
   STA MODIFIED
+  ; Paste-below undo: cursor row unchanged, skip it in scroll region ($07)
+  ; Paste-above undo: cursor row changes, include it ($02)
+  LDA UNDO_TYPE
+  CMP #UNDO_LINE_PASTE_BELOW
+  BNE .undo_paste_above_flag
+  ; Pre-compute cursor line screen rows for skip-scroll
+  LDAX16 UNDO_LINE16
+  JSR buf_get_line_len
+  JSR line_screen_rows
+  STA DELETE_SCREEN_ROWS
+  LDA #$07
+  STA RENDER_FLAG
+  JMP clear_count
+.undo_paste_above_flag:
   LDA #$02
   STA RENDER_FLAG
   JMP clear_count
@@ -535,8 +563,13 @@ undo_char_paste_undo:
   LDA #$FF
   STA UNDO_IS_REDO
   STA MODIFIED
+  ; Keep RENDER_FLAG from delete_at_cursor if > 1 (multi-line scroll)
+  LDA RENDER_FLAG
+  CMP #2
+  BCS .undo_cp_done
   LDA #1
   STA RENDER_FLAG
+.undo_cp_done:
   JMP clear_count
 .undo_cp_fail:
   JMP clear_count
@@ -568,7 +601,12 @@ undo_char_paste_redo:
 .redo_cp_flags:
   LDA #0
   STA UNDO_IS_REDO
+  ; Keep RENDER_FLAG from do_char_paste if > 1 (multi-line scroll)
+  LDA RENDER_FLAG
+  CMP #2
+  BCS .redo_cp_done
   LDA #1
   STA RENDER_FLAG
+.redo_cp_done:
   JMP clear_count
 

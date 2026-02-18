@@ -473,6 +473,8 @@ render_decide:
   BEQ .line_delete_scroll
   CMP #$06
   BEQ .line_delete_scroll
+  CMP #$07
+  BEQ .line_delete_scroll
   CMP #$03
   BEQ .do_line_insert
   CMP #$04
@@ -504,10 +506,15 @@ render_decide:
   JMP render_current_line_and_status
 
 .line_delete_scroll:
-  ; LINE_COUNT16 decreased and RENDER_FLAG=$02/$06 (line delete at cursor).
+  ; LINE_COUNT16 decreased and RENDER_FLAG=$02/$06/$07 (line delete at cursor).
+  ; $07: DELETE_SCREEN_ROWS = cursor line rows (for skip), use file delta for SCROLL_DELTA
+  LDA RENDER_FLAG
+  CMP #$07
+  BEQ .file_delta_scroll
   ; Use pre-computed DELETE_SCREEN_ROWS if available, else file delta.
   LDA DELETE_SCREEN_ROWS
   BNE .have_delete_rows
+.file_delta_scroll:
   ; Fall back to file line delta
   SEC
   LDA SNAP_LINE_COUNT16
@@ -914,12 +921,15 @@ render_line_delete_scroll:
 
   ; Set scroll region start (1-based) to SCREEN_ROWS-1 (1-based)
   ; RENDER_FLAG=$02: from CURSOR_ROW+1 (includes cursor row, for dd)
-  ; RENDER_FLAG=$06: skip combined line's rows (for J with wrapped lines)
+  ; RENDER_FLAG=$06/$07: skip cursor line's rows
   ;   first_row = CURSOR_ROW - WRAP_QUOT
   ;   scroll_start = first_row + DELETE_SCREEN_ROWS + 1 (1-based)
   LDA RENDER_FLAG
   CMP #$06
+  BEQ .scroll_skip_cursor_del
+  CMP #$07
   BNE .scroll_at_cursor_del
+.scroll_skip_cursor_del:
   LDA CURSOR_ROW
   SEC
   SBC WRAP_QUOT          ; first_row (0-based)
@@ -950,9 +960,16 @@ render_line_delete_scroll:
   JSR ansi_reset_scroll_region
 .skip_del_scroll:
 
+  ; For $07 (paste-below undo): skip cursor row repaint entirely.
+  LDA RENDER_FLAG
+  CMP #$07
+  BNE .not_skip_cursor
+  LDA #0
+  STA DELETE_SCREEN_ROWS    ; reset for next frame
+  JMP .del_bottom_rows
+.not_skip_cursor:
   ; For J ($06) with wrapped combined line: render from first row to bottom.
   ; DELETE_SCREEN_ROWS holds new_total (combined line's screen rows).
-  LDA RENDER_FLAG
   CMP #$06
   BNE .single_row_render
   LDA DELETE_SCREEN_ROWS
@@ -1003,6 +1020,7 @@ render_line_delete_scroll:
   JSR ansi_clear_line
 .cursor_no_clear:
 
+.del_bottom_rows:
   ; Render the bottom SCROLL_DELTA rows (newly exposed content).
   ; RENDER_ROW = SCREEN_ROWS - 1 - SCROLL_DELTA
   LDA SCREEN_ROWS
