@@ -77,6 +77,18 @@ render_screen:
   STA RENDER_WRAP
   JMP render_from_row
 
+; Set up RENDER_ROW/RENDER_LINE16/RENDER_WRAP from cursor first_row,
+; then fall through to render_from_row.
+; Expects ansi_cursor_hide already called.
+render_from_first_row:
+  LDA CURSOR_ROW
+  SEC
+  SBC WRAP_QUOT
+  STA RENDER_ROW
+  CP16 FILE_LINE16, RENDER_LINE16
+  LDA #0
+  STA RENDER_WRAP
+
 ; Render rows from RENDER_ROW/RENDER_LINE16/RENDER_WRAP to end of screen
 ; Expects ansi_cursor_hide already called
 ; Renders remaining text rows, status bar, positions cursor, shows cursor
@@ -556,16 +568,9 @@ render_decide:
   JSR ansi_scroll_down
   JSR ansi_reset_scroll_region
 .j_grow_skip_scroll:
-  ; Render from first_row to bottom
-  LDA CURSOR_ROW
-  SEC
-  SBC WRAP_QUOT
-  STA RENDER_ROW
-  CP16 FILE_LINE16, RENDER_LINE16
   LDA #0
-  STA RENDER_WRAP
   STA DELETE_SCREEN_ROWS     ; reset for next frame
-  JMP render_from_row
+  JMP render_from_first_row
 .j_really_no_scroll:
   LDA #0
   STA DELETE_SCREEN_ROWS
@@ -746,15 +751,7 @@ render_decide:
   JSR ansi_scroll_up
   JSR ansi_reset_scroll_region
 .disp_neg_skip_scroll:
-  ; Render from first_row to bottom
-  LDA CURSOR_ROW
-  SEC
-  SBC WRAP_QUOT
-  STA RENDER_ROW
-  CP16 FILE_LINE16, RENDER_LINE16
-  LDA #0
-  STA RENDER_WRAP
-  JMP render_from_row
+  JMP render_from_first_row
 .disp_neg_zero:
   JMP .ins_full
 .no_disp_adjust:
@@ -965,27 +962,13 @@ render_line_delete_scroll:
   PLA
   CMP #2
   BCC .single_row_render    ; new_total < 2, non-wrapped: single row suffices
-  LDA CURSOR_ROW
-  SEC
-  SBC WRAP_QUOT
-  STA RENDER_ROW
-  CP16 FILE_LINE16, RENDER_LINE16
-  LDA #0
-  STA RENDER_WRAP
-  JMP render_from_row
+  JMP render_from_first_row
 
 .single_row_render:
   ; For $02 when WRAP_QUOT > 0: render all wrap rows from first_row to bottom
   LDA WRAP_QUOT
   BEQ .render_cursor_row
-  LDA CURSOR_ROW
-  SEC
-  SBC WRAP_QUOT
-  STA RENDER_ROW
-  CP16 FILE_LINE16, RENDER_LINE16
-  LDA #0
-  STA RENDER_WRAP
-  JMP render_from_row
+  JMP render_from_first_row
 
 .render_cursor_row:
   ; Re-render cursor row (content may have changed, e.g., J join, cc change)
