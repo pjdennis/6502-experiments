@@ -3517,6 +3517,36 @@ class EditorTestRunner:
             expect_cursor=(0, 4),
         )
 
+        # d$ - same as D, screen shows truncated line
+        self.run_test_screen(
+            "d$ deletes to EOL: screen correct",
+            "Hello World\n",
+            b"llllld$:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello")],
+            expect_cursor=(0, 4),
+        )
+
+        # 2d$ - multi-line delete, screen updates correctly
+        self.run_test_screen(
+            "2d$ multi-line: screen correct",
+            "Hello\nWorld\nFoo\n",
+            b"ll2d$:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "He"), (1, "Foo")],
+            expect_cursor=(0, 1),
+        )
+
+        # d0 - screen shows shortened line
+        self.run_test_screen(
+            "d0 deletes to BOL: screen correct",
+            "Hello\n",
+            b"llld0:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "lo")],
+            expect_cursor=(0, 0),
+        )
+
         # C (change to EOL) - enters insert after deleting to EOL
         self.run_test_screen(
             "C changes to EOL: screen correct",
@@ -6708,6 +6738,17 @@ class EditorTestRunner:
             b"u u" +            # undo then redo: mark should be back at 1
             b"'a:q!\r",
             expect_cursor=(1, 0),  # mark shifted down by redo
+        )
+
+        # Mark below 2d$ range gets adjusted
+        # Set mark on line 2 (ccc), go to line 0, 2d$ deletes "aaa\nbbb"
+        # ccc was line 2, becomes line 1 after 1 newline removed
+        self.run_test_screen(
+            "2d$ adjusts mark below range",
+            "aaa\nbbb\nccc\nddd\n",
+            b"2jmakk2d$'a:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(1, 0),
         )
 
         # --- :marks command ---
@@ -11013,6 +11054,70 @@ class EditorTestRunner:
             "Hello\n",
             b"3xu:wq\r",
             expected_content="Hello\n"
+        )
+
+        # d$ undo
+        self.run_test(
+            "d$ undo restores deleted text",
+            "Hello\n",
+            b"lld$u:wq\r",
+            expected_content="Hello\n"
+        )
+
+        # d$ undo then redo
+        self.run_test(
+            "d$ undo then redo",
+            "Hello\n",
+            b"lld$u u:wq\r",
+            expected_content="He\n"
+        )
+
+        # 2D undo restores multi-line delete
+        self.run_test(
+            "2D undo restores multi-line",
+            "Hello\nWorld\nFoo\n",
+            b"ll2Du:wq\r",
+            expected_content="Hello\nWorld\nFoo\n"
+        )
+
+        # d0 undo
+        self.run_test(
+            "d0 undo restores deleted text",
+            "Hello\n",
+            b"llld0u:wq\r",
+            expected_content="Hello\n"
+        )
+
+        # y$ doesn't set undo (yank only)
+        self.run_test(
+            "y$ u is no-op (yank doesn't set undo)",
+            "Hello\n",
+            b"lly$u:wq\r",
+            expected_content="Hello\n"
+        )
+
+        # S undo (goes through cc path)
+        self.run_test(
+            "S ESC undo restores line",
+            "Hello\nWorld\n",
+            b"S\x1bu:wq\r",
+            expected_content="Hello\nWorld\n"
+        )
+
+        # 2S undo
+        self.run_test(
+            "2S ESC undo restores both lines",
+            "Hello\nWorld\nFoo\n",
+            b"2S\x1bu:wq\r",
+            expected_content="Hello\nWorld\nFoo\n"
+        )
+
+        # 2S undo then redo
+        self.run_test(
+            "2S ESC uu re-substitutes",
+            "Hello\nWorld\nFoo\n",
+            b"2S\x1buu:wq\r",
+            expected_content="\nFoo\n"
         )
 
         self._group("Undo change commands (clean insert exit):", leading_blank=True)
