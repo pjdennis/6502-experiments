@@ -11350,6 +11350,55 @@ class EditorTestRunner:
             expect_content_rows=[(4, {8})]
         )
 
+        self._group("Scroll opt: insert mode wrap:", leading_blank=True)
+
+        # Typing at end of line past screen width: line wraps, LINE_COUNT16 increases.
+        # Line 0: 18 chars at 20 cols (1 screen row). A=append at EOL, type "abc"
+        # makes it 21 chars → wraps to 2 screen rows. Lines below should scroll down
+        # via scroll optimization, not a full repaint.
+        # Frames: 0=initial, 1=A enter insert, 2=typed chars (wrap occurs)
+        ins_wrap_content = ("123456789012345678\n"
+                            + ''.join(f"Line {i}\n" for i in range(2, 12)))
+        self.run_test_screen(
+            "Scroll opt: insert typing at EOL causes wrap uses scroll",
+            ins_wrap_content,
+            b"Aabc\x1b:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "123456789012345678ab"),
+                (1, "c"),
+                (2, "Line 2"), (3, "Line 3"), (4, "Line 4"),
+                (5, "Line 5"), (6, "Line 6"), (7, "Line 7"),
+                (8, "Line 8"),
+            ],
+            expect_cursor=(1, 0),
+            # Frame 2 (typing): cursor row redrawn + scroll pushes lines down.
+            # Only cursor line rows (0, 1) should be content-rendered, not all rows.
+            expect_content_rows=[(2, {0, 1})]
+        )
+
+        # Typing within a line past screen width: same wrap, different cursor position.
+        # Line 0: 18 chars at 20 cols. lllll=col 5, i=insert, type 6 i's.
+        # 18+6=24 chars → wraps to 2 screen rows (20+4). Subsequent lines scroll down.
+        # After ESC, cursor backs up 1 to col 10.
+        # Frames: 0=initial, 1=lllll cursor, 2=i enter insert, 3=typed chars (wrap)
+        self.run_test_screen(
+            "Scroll opt: insert typing mid-line causes wrap uses scroll",
+            ins_wrap_content,
+            b"llllliiiiiii\x1b:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "12345iiiiii678901234"),
+                (1, "5678"),
+                (2, "Line 2"), (3, "Line 3"), (4, "Line 4"),
+                (5, "Line 5"), (6, "Line 6"), (7, "Line 7"),
+                (8, "Line 8"),
+            ],
+            expect_cursor=(0, 10),
+            # Frame 3 (typing): only cursor line rows (0, 1) content-rendered
+            expect_content_rows=[(3, {0, 1})]
+        )
+
         self._group("Sub-line render optimization:", leading_blank=True)
 
         # Normal r: replace at col 3, partial render from col 3
