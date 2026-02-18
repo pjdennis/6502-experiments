@@ -2823,13 +2823,13 @@ class EditorTestRunner:
             expect_content_rows=[(2, {0, 1})]
         )
 
-        # x unwraps line (41 chars -> 40 after first x -> 1 row), renders from first row
-        # Row count changes from 2 to 1 on the first x, so render_from_row is used
+        # x unwraps line (41 chars -> 40 after first x -> 1 row), uses scroll
+        # Row count changes from 2 to 1 on the first x, scroll handles shift
         self.run_test_screen(
-            "Render opt: x unwraps line, renders from first row",
+            "Render opt: x unwraps line uses scroll",
             "A" * 41 + "\nSecond\n",
             b"x:q!\r",
-            expect_content_rows=[(1, set(range(9)))]
+            expect_content_rows=[(1, {0, 8})]
         )
 
         # Insert newline: full repaint (multiple lines change)
@@ -12192,7 +12192,7 @@ class EditorTestRunner:
         self.run_test_screen(
             "Minimal repaint: 2C undo does not paint line above",
             'S1\nS2\nS3\nAAAA\nBBBB\nS6\nS7\nS8\nS9\nS10\nS11\n',
-            b"jjj2C\x1bu:q!\r",
+            b"j j j2C\x1bu:q!\r",
             rows=10, cols=20,
             expect_lines=[
                 (0, "S1"), (1, "S2"), (2, "S3"),
@@ -12202,7 +12202,7 @@ class EditorTestRunner:
             expect_cursor=(3, 0),
             # Frame 5 = undo. Should touch only cursor row + restored line.
             # Row 2 (line above) must NOT be in the set.
-            expect_content_rows=[(5, {3, 4})]
+            expect_content_rows=[(9, {3, 4})]
         )
 
         # C on a wrapping line: line shrinks from 2 rows to 1 row (displacement -1).

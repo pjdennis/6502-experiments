@@ -689,14 +689,20 @@ cc_have_count:
   LDAX16 FILE_LINE16
   JSR mark_insert_one
   JSR undo_record_cc         ; Upgrade line-delete undo to cc type (blank inserted)
+  LDA #$06
+  JMP .cc_set_render
 
 .cc_already_empty:
+  ; No blank inserted - next line was already empty.
+  ; Use $02 (standard delete-scroll) instead of $06 (displacement-based)
+  ; because displacement=0 would cause $06 to skip the scroll.
+  LDA #$02
+.cc_set_render:
+  STA RENDER_FLAG
   LDA #0
   STA_LH16 CURSOR_COL16
   LDA #$FF
   STA MODIFIED
-  LDA #$06
-  STA RENDER_FLAG        ; Signal line-delete with displacement-based scroll
   JMP enter_insert_mode
 
 .cc_overflow:

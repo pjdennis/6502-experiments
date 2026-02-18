@@ -2760,7 +2760,7 @@ int main(int argc, char **argv) {
     clock_gettime(CLOCK_MONOTONIC, &start_time);
     last_repaint_check = start_time;
 
-    const int max_cycles = 100000000;
+    const int max_cycles = 200000000;
     while (!done) {
         if (sigtstp_requested) {
             sigtstp_requested = 0;

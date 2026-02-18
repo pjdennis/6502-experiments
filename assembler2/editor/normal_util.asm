@@ -548,6 +548,36 @@ delete_at_cursor:
   JMP .scan_nl
 .scan_done:
   POP16 BUF_LEN16            ; Restore delete count
+  ; Pre-compute old screen rows BEFORE shift (only when newlines found)
+  LDA NORMAL_TEMP
+  BEQ .no_precompute
+  ; Walk cursor line + deleted lines to sum old screen rows
+  ; NORMAL_TEMP = number of newlines = number of extra lines
+  CP16 FILE_LINE16, RENDER_LINE16
+  LDA #0
+  STA SCROLL_DELTA            ; accumulator for old screen rows
+  LDA NORMAL_TEMP
+  STA SCROLL_AMOUNT           ; loop counter (lines after cursor)
+  ; First: cursor line
+  LDAX16 RENDER_LINE16
+  JSR buf_get_line_len
+  JSR line_screen_rows
+  STA SCROLL_DELTA
+  ; Then: each deleted line
+.precomp_walk:
+  LDA SCROLL_AMOUNT
+  BEQ .precomp_done
+  INC16 RENDER_LINE16
+  LDAX16 RENDER_LINE16
+  JSR buf_get_line_len
+  JSR line_screen_rows
+  CLC
+  ADC SCROLL_DELTA
+  STA SCROLL_DELTA
+  DEC SCROLL_AMOUNT
+  JMP .precomp_walk
+.precomp_done:
+.no_precompute:
   JSR get_cursor_buf_ptr     ; Recompute BUF_PTR16 (scan clobbered BUF_DST16)
   JSR buf_shift_left_16
   LDA NORMAL_TEMP
@@ -576,7 +606,12 @@ delete_at_cursor:
   LDAX16 FILE_LINE16
   JSR buf_get_line_len
   JSR line_screen_rows
-  STA DELETE_SCREEN_ROWS     ; Cursor line screen rows
+  STA DELETE_SCREEN_ROWS     ; Cursor line screen rows (new)
+  ; Compute SCROLL_DELTA = old_total - new_cursor_rows
+  LDA SCROLL_DELTA            ; old total screen rows
+  SEC
+  SBC DELETE_SCREEN_ROWS
+  STA SCROLL_DELTA            ; pre-computed scroll displacement
   LDA #$08
   STA RENDER_FLAG            ; Line-delete, skip cursor row, repaint cursor
 .done:
