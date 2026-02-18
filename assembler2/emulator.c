@@ -1080,6 +1080,8 @@ static int csi_param_count = 0;
 static int csi_param_value = -1;
 static int csi_private = 0;
 static unsigned char current_attr = 0;
+static int scroll_top = 0;       // 0-based top row of scroll region
+static int scroll_bot = -1;      // 0-based bottom row (-1 = use screen_rows-1)
 static char serial_inject_buf[32];
 static int serial_inject_pos = 0;
 static int serial_inject_len = 0;
@@ -1192,6 +1194,8 @@ void console_resize(int rows, int cols) {
     repaint_displayed = new_rdisp;
     screen_rows = rows;
     screen_cols = cols;
+    scroll_top = 0;
+    scroll_bot = screen_rows - 1;
     if (cursor_row >= screen_rows) cursor_row = screen_rows - 1;
     if (cursor_row < 0) cursor_row = 0;
     if (cursor_col >= screen_cols) cursor_col = screen_cols - 1;
@@ -1279,47 +1283,96 @@ void console_clear_screen(int mode) {
     }
 }
 
-void console_scroll_up(int lines) {
+void console_scroll_region_up(int top, int bot, int lines) {
     if (!screen_cells || screen_rows <= 0 || screen_cols <= 0) return;
-    if (lines <= 0) return;
-    size_t full = (size_t)screen_rows * (size_t)screen_cols;
-    if (lines >= screen_rows) {
-        memset(screen_cells, ' ', full);
-        memset(screen_attr, 0, full);
+    if (lines <= 0 || top > bot) return;
+    int region_rows = bot - top + 1;
+    size_t row_bytes = (size_t)screen_cols;
+    if (lines >= region_rows) {
+        for (int r = top; r <= bot; r++) {
+            memset(screen_cells + r * row_bytes, ' ', row_bytes);
+            memset(screen_attr + r * row_bytes, 0, row_bytes);
+        }
         if (repaint_time) {
-            memset(repaint_time, 0, full * sizeof(struct timespec));
-            memset(repaint_count, 0, full);
+            for (int r = top; r <= bot; r++) {
+                memset(repaint_time + r * screen_cols, 0, row_bytes * sizeof(struct timespec));
+                memset(repaint_count + r * screen_cols, 0, row_bytes);
+                memset(repaint_displayed + r * screen_cols, 0, row_bytes);
+            }
         }
         return;
     }
-    size_t row_bytes = (size_t)screen_cols;
-    size_t keep = (size_t)(screen_rows - lines) * row_bytes;
+    size_t keep = (size_t)(region_rows - lines) * row_bytes;
     size_t clear = (size_t)lines * row_bytes;
-    memmove(screen_cells, screen_cells + lines * row_bytes, keep);
-    memmove(screen_attr, screen_attr + lines * row_bytes, keep);
-    memset(screen_cells + keep, ' ', clear);
-    memset(screen_attr + keep, 0, clear);
+    memmove(screen_cells + top * row_bytes, screen_cells + (top + lines) * row_bytes, keep);
+    memmove(screen_attr + top * row_bytes, screen_attr + (top + lines) * row_bytes, keep);
+    memset(screen_cells + (bot - lines + 1) * row_bytes, ' ', clear);
+    memset(screen_attr + (bot - lines + 1) * row_bytes, 0, clear);
     if (repaint_time) {
-        memmove(repaint_time, repaint_time + lines * screen_cols, keep * sizeof(struct timespec));
-        memmove(repaint_count, repaint_count + lines * screen_cols, keep);
-        memset(repaint_time + keep, 0, clear * sizeof(struct timespec));
-        memset(repaint_count + keep, 0, clear);
+        memmove(repaint_time + top * screen_cols, repaint_time + (top + lines) * screen_cols, keep * sizeof(struct timespec));
+        memmove(repaint_count + top * screen_cols, repaint_count + (top + lines) * screen_cols, keep);
+        memmove(repaint_displayed + top * screen_cols, repaint_displayed + (top + lines) * screen_cols, keep);
+        memset(repaint_time + (bot - lines + 1) * screen_cols, 0, clear * sizeof(struct timespec));
+        memset(repaint_count + (bot - lines + 1) * screen_cols, 0, clear);
+        memset(repaint_displayed + (bot - lines + 1) * screen_cols, 0, clear);
     }
+}
+
+void console_scroll_region_down(int top, int bot, int lines) {
+    if (!screen_cells || screen_rows <= 0 || screen_cols <= 0) return;
+    if (lines <= 0 || top > bot) return;
+    int region_rows = bot - top + 1;
+    size_t row_bytes = (size_t)screen_cols;
+    if (lines >= region_rows) {
+        for (int r = top; r <= bot; r++) {
+            memset(screen_cells + r * row_bytes, ' ', row_bytes);
+            memset(screen_attr + r * row_bytes, 0, row_bytes);
+        }
+        if (repaint_time) {
+            for (int r = top; r <= bot; r++) {
+                memset(repaint_time + r * screen_cols, 0, row_bytes * sizeof(struct timespec));
+                memset(repaint_count + r * screen_cols, 0, row_bytes);
+                memset(repaint_displayed + r * screen_cols, 0, row_bytes);
+            }
+        }
+        return;
+    }
+    size_t keep = (size_t)(region_rows - lines) * row_bytes;
+    size_t clear = (size_t)lines * row_bytes;
+    memmove(screen_cells + (top + lines) * row_bytes, screen_cells + top * row_bytes, keep);
+    memmove(screen_attr + (top + lines) * row_bytes, screen_attr + top * row_bytes, keep);
+    memset(screen_cells + top * row_bytes, ' ', clear);
+    memset(screen_attr + top * row_bytes, 0, clear);
+    if (repaint_time) {
+        memmove(repaint_time + (top + lines) * screen_cols, repaint_time + top * screen_cols, keep * sizeof(struct timespec));
+        memmove(repaint_count + (top + lines) * screen_cols, repaint_count + top * screen_cols, keep);
+        memmove(repaint_displayed + (top + lines) * screen_cols, repaint_displayed + top * screen_cols, keep);
+        memset(repaint_time + top * screen_cols, 0, clear * sizeof(struct timespec));
+        memset(repaint_count + top * screen_cols, 0, clear);
+        memset(repaint_displayed + top * screen_cols, 0, clear);
+    }
+}
+
+void console_scroll_up(int lines) {
+    console_scroll_region_up(0, screen_rows - 1, lines);
 }
 
 void console_put_char(unsigned char ch) {
     if (!screen_cells || screen_rows <= 0 || screen_cols <= 0) return;
+    int ebot = (scroll_bot >= 0 && scroll_bot < screen_rows) ? scroll_bot : screen_rows - 1;
     if (cursor_row < 0) cursor_row = 0;
     if (cursor_row >= screen_rows) {
-        console_scroll_up(1);
+        console_scroll_region_up(scroll_top, ebot, 1);
         cursor_row = screen_rows - 1;
     }
     if (cursor_col < 0) cursor_col = 0;
     if (cursor_col >= screen_cols) {
         cursor_col = 0;
         cursor_row++;
-        if (cursor_row >= screen_rows) {
-            console_scroll_up(1);
+        if (cursor_row > ebot) {
+            console_scroll_region_up(scroll_top, ebot, 1);
+            cursor_row = ebot;
+        } else if (cursor_row >= screen_rows) {
             cursor_row = screen_rows - 1;
         }
     }
@@ -1331,18 +1384,22 @@ void console_put_char(unsigned char ch) {
         clock_gettime(CLOCK_MONOTONIC, &now);
         double age = (now.tv_sec - repaint_time[idx].tv_sec)
                    + (now.tv_nsec - repaint_time[idx].tv_nsec) / 1e9;
-        if (repaint_time[idx].tv_sec != 0 && age < 2.0)
-            repaint_count[idx]++;
-        else
+        if (repaint_time[idx].tv_sec != 0 && age < 2.0) {
+            if (repaint_count[idx] < 6)
+                repaint_count[idx]++;
+        } else
             repaint_count[idx] = 0;
         repaint_time[idx] = now;
+        repaint_displayed[idx] = 0;
     }
     cursor_col++;
     if (cursor_col >= screen_cols) {
         cursor_col = 0;
         cursor_row++;
-        if (cursor_row >= screen_rows) {
-            console_scroll_up(1);
+        if (cursor_row > ebot) {
+            console_scroll_region_up(scroll_top, ebot, 1);
+            cursor_row = ebot;
+        } else if (cursor_row >= screen_rows) {
             cursor_row = screen_rows - 1;
         }
     }
@@ -1532,6 +1589,34 @@ void console_handle_csi(unsigned char final) {
             }
             break;
         }
+        case 'r': { // DECSTBM - Set Top and Bottom Margins
+            if (count >= 2 && params[0] > 0 && params[1] > 0) {
+                scroll_top = params[0] - 1;
+                scroll_bot = params[1] - 1;
+                if (scroll_top < 0) scroll_top = 0;
+                if (scroll_bot >= screen_rows) scroll_bot = screen_rows - 1;
+                if (scroll_top > scroll_bot) {
+                    scroll_top = 0;
+                    scroll_bot = screen_rows - 1;
+                }
+            } else {
+                scroll_top = 0;
+                scroll_bot = screen_rows - 1;
+            }
+            break;
+        }
+        case 'S': { // SU - Scroll Up
+            int n = params[0] ? params[0] : 1;
+            int ebot = (scroll_bot >= 0 && scroll_bot < screen_rows) ? scroll_bot : screen_rows - 1;
+            console_scroll_region_up(scroll_top, ebot, n);
+            break;
+        }
+        case 'T': { // SD - Scroll Down
+            int n = params[0] ? params[0] : 1;
+            int ebot = (scroll_bot >= 0 && scroll_bot < screen_rows) ? scroll_bot : screen_rows - 1;
+            console_scroll_region_down(scroll_top, ebot, n);
+            break;
+        }
         case 'm': { // SGR
             for (int i = 0; i < count; i++) {
                 int p = params[i];
@@ -1561,9 +1646,12 @@ void console_handle_byte(unsigned char ch) {
             return;
         }
         if (ch == '\n') {
+            int ebot = (scroll_bot >= 0 && scroll_bot < screen_rows) ? scroll_bot : screen_rows - 1;
             cursor_row++;
-            if (cursor_row >= screen_rows) {
-                console_scroll_up(1);
+            if (cursor_row > ebot) {
+                console_scroll_region_up(scroll_top, ebot, 1);
+                cursor_row = ebot;
+            } else if (cursor_row >= screen_rows) {
                 cursor_row = screen_rows - 1;
             }
             return;
@@ -1644,7 +1732,7 @@ void repaint_overlay_update(struct timespec *now) {
                 double age = (now->tv_sec - repaint_time[idx].tv_sec)
                            + (now->tv_nsec - repaint_time[idx].tv_nsec) / 1e9;
                 if (age < 2.0) {
-                    desired = (repaint_count[idx] % 7) + 1;  // 1-7
+                    desired = repaint_count[idx] + 1;  // 1-7
                 }
             }
             if (desired != repaint_displayed[idx]) {
