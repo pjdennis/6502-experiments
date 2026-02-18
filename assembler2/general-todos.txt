@@ -1,8 +1,16 @@
+Reconfirm the following are fixed:
+cc ESC u is incorrectly scrolling down the rows below the cursor row:
+2Cu incorrectly paints the line above
+C on a line that wraps, redraws down to the bottom of the screen
+2C when the second line wraps, doesn't scroll the below rows up far enough
+
 When undoing/redoing J with wrapped lines, a phantom empty line appers at the end
 Algorithm for batch of J:
 -Look for the line following those that are to be joined and remember it's screen row
 -Do the join and calculate the new screen row for the line following the joined lines
 -Scroll from the row following the lines to be joined, up by the delta amount
+
+Add support for ensuring that the max lines is not exceeded - an error display if a command would make this happen, before doing any update. An in insert mode just prevent the enter key from creating a new line when at the max (is that sufficient?)
 
 Support terminal resize
 
