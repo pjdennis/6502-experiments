@@ -495,12 +495,41 @@ render_current_line_and_status:
   JMP io_flush
 
 .rc_render_from_row:
-  ; Rows increased or unchanged: brute force render from first row
+  ; --- Rows increased: scroll DOWN ---
+  ; displacement = current_rows - PREV_LINE_ROWS
+  LDA SCROLL_DELTA              ; current_rows (saved at .rows_changed entry)
+  SEC
+  SBC PREV_LINE_ROWS
+  STA SCROLL_DELTA
   JSR ansi_cursor_hide
+  ; Scroll region: past old line end to status bar - 1
+  LDA RENDER_ROW
+  CLC
+  ADC PREV_LINE_ROWS
+  CLC
+  ADC #1                        ; 1-based
+  STA ANSI_ROW
+  LDA SCREEN_ROWS
+  SEC
+  SBC #1
+  STA ANSI_COL
+  CMP ANSI_ROW
+  BCC .ri_no_scroll
+  BEQ .ri_no_scroll
+  JSR ansi_set_scroll_region
+  LDA SCROLL_DELTA
+  JSR ansi_scroll_down
+  JSR ansi_reset_scroll_region
+.ri_no_scroll:
+  ; Render all cursor line rows (old rows may have pending content changes)
+  LDA SCROLL_DELTA
+  CLC
+  ADC PREV_LINE_ROWS            ; = current_rows
+  STA SCROLL_DELTA
   CP16 FILE_LINE16, RENDER_LINE16
   LDA #0
   STA RENDER_WRAP
-  JMP render_from_row
+  JMP render_from_first_row_limited
 
 .do_full:
   JMP render_screen
@@ -593,7 +622,12 @@ render_decide:
   CMP #$08
   BEQ .precomputed_delta_scroll
   CMP #$07
+  BNE .not_07
+  ; $07: use SCROLL_DELTA if pre-computed, else file delta
+  LDA SCROLL_DELTA
+  BNE .precomputed_delta_scroll
   BEQ .file_delta_scroll
+.not_07:
   ; Use pre-computed DELETE_SCREEN_ROWS if available, else file delta.
   LDA DELETE_SCREEN_ROWS
   BNE .have_delete_rows

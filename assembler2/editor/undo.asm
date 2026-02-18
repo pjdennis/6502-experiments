@@ -330,6 +330,10 @@ undo_do_redo:
   STA DELETE_SCREEN_ROWS
 .redo_line_del:
   JSR delete_current_lines
+  ; Save pre-computed screen rows as SCROLL_DELTA before clearing
+  ; (accounts for wrapped lines: file delta = 1 line, but screen delta = 2+ rows)
+  LDA DELETE_SCREEN_ROWS
+  STA SCROLL_DELTA
   ; Set flags
   LDA #0
   STA UNDO_IS_REDO

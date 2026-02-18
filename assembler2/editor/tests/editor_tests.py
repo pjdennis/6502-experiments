@@ -9854,8 +9854,8 @@ class EditorTestRunner:
                 (8, "Line 8"),
             ],
             expect_cursor=(4, 0),
-            # Frame 2 (o): new line row + row above (re-rendered by handler)
-            expect_content_rows=[(2, {3, 4})]
+            # Frame 2 (o): only new line row needs rendering (row above unchanged)
+            expect_content_rows=[(2, {4})]
         )
 
         # O at mid-screen: scroll shifts cursor row and below down,
@@ -9872,8 +9872,8 @@ class EditorTestRunner:
                 (7, "Line 7"), (8, "Line 8"),
             ],
             expect_cursor=(3, 0),
-            # Frame 2 (O): new line row + row above
-            expect_content_rows=[(2, {2, 3})]
+            # Frame 2 (O): only new line row needs rendering (row above unchanged)
+            expect_content_rows=[(2, {3})]
         )
 
         # p (line paste below) at mid-screen uses scroll
@@ -9890,8 +9890,8 @@ class EditorTestRunner:
                 (8, "Line 8"),
             ],
             expect_cursor=(4, 0),
-            # Frame 3 (p): pasted row + row above
-            expect_content_rows=[(3, {3, 4})]
+            # Frame 3 (p): only pasted row needs rendering (row above unchanged)
+            expect_content_rows=[(3, {4})]
         )
 
         # J at mid-screen: join decreases LINE_COUNT16, scroll shifts up.
@@ -11002,8 +11002,8 @@ class EditorTestRunner:
                 (7, "Short 4"), (8, "Short 5"),
             ],
             expect_cursor=(5, 0),
-            # Frame 3 (p): row above cursor (4) + 2 cursor rows (5, 6)
-            expect_content_rows=[(3, {4, 5, 6})]
+            # Frame 3 (p): 2 cursor rows (5, 6) — row above unchanged
+            expect_content_rows=[(3, {5, 6})]
         )
 
         # pp batched paste of wrapped line: BATCH_EXTRA adjusts FILE_LINE16 past
@@ -11149,8 +11149,8 @@ class EditorTestRunner:
                 (8, "Line 9"),
             ],
             expect_cursor=(8, 0),
-            # Frame 3 (u): row above cursor (7) + cursor row (8)
-            expect_content_rows=[(3, {7, 8})]
+            # Frame 3 (u): cursor row (8) — row above unchanged
+            expect_content_rows=[(3, {8})]
         )
 
         # J undo on wrapped last line: no scroll should happen.
@@ -12271,10 +12271,9 @@ class EditorTestRunner:
                 (8, "Line 8"),
             ],
             expect_cursor=(1, 0),
-            # Frame 2 (typing): cursor row redrawn + scroll pushes lines down.
-            # Only the new cursor rows (1, 1) should be content-rendered, not all rows.
-            # Note that row 0 does not need to be touched since it is unmodified
-            expect_content_rows=[(2, {1, 1})]
+            # Frame 2 (typing): all cursor rows redrawn + scroll pushes lines down.
+            # Both rows of the now-wrapped line are rendered (not all rows below).
+            expect_content_rows=[(2, {0, 1})]
         )
 
         # Typing within a line past screen width: same wrap, different cursor position.
