@@ -1725,6 +1725,9 @@ void repaint_overlay_update(struct timespec *now) {
     int any_changed = 0;
 
     for (int r = 0; r < screen_rows; r++) {
+        int run_color = -1;   // current run's desired color (-1 = no active run)
+        int run_attr = -1;    // current run's attr
+        int last_col = -2;    // last column written (-2 = none)
         for (int c = 0; c < screen_cols; c++) {
             int idx = r * screen_cols + c;
             unsigned char desired = 0;  // 0 = no background
@@ -1737,25 +1740,34 @@ void repaint_overlay_update(struct timespec *now) {
             }
             if (desired != repaint_displayed[idx]) {
                 any_changed = 1;
-                // Cursor position
-                pos += (size_t)snprintf(buf + pos, buf_size - pos, "\x1b[%d;%dH", r + 1, c + 1);
                 unsigned char attr = screen_attr[idx];
-                // Reset state before each cell to avoid attribute leakage
-                memcpy(buf + pos, "\x1b[0m", 4); pos += 4;
-                if (attr) {
-                    memcpy(buf + pos, "\x1b[7m", 4); pos += 4;
-                }
-                // For reverse-video cells, use foreground color (reverse swaps fg/bg visually)
-                if (desired) {
+                // Continue current run if consecutive column with same color and attr
+                if (c == last_col + 1 && (int)desired == run_color && (int)attr == run_attr) {
+                    buf[pos++] = screen_cells[idx];
+                } else {
+                    // Start a new run: cursor pos + attributes + color
+                    pos += (size_t)snprintf(buf + pos, buf_size - pos, "\x1b[%d;%dH", r + 1, c + 1);
+                    memcpy(buf + pos, "\x1b[0m", 4); pos += 4;
                     if (attr) {
-                        pos += (size_t)snprintf(buf + pos, buf_size - pos, "\x1b[38;5;%dm", rainbow_colors[desired - 1]);
-                    } else {
-                        pos += (size_t)snprintf(buf + pos, buf_size - pos, "\x1b[48;5;%dm", rainbow_colors[desired - 1]);
+                        memcpy(buf + pos, "\x1b[7m", 4); pos += 4;
                     }
+                    if (desired) {
+                        if (attr) {
+                            pos += (size_t)snprintf(buf + pos, buf_size - pos, "\x1b[38;5;%dm", rainbow_colors[desired - 1]);
+                        } else {
+                            pos += (size_t)snprintf(buf + pos, buf_size - pos, "\x1b[48;5;%dm", rainbow_colors[desired - 1]);
+                        }
+                    }
+                    buf[pos++] = screen_cells[idx];
+                    run_color = (int)desired;
+                    run_attr = (int)attr;
                 }
-                // Write the character
-                buf[pos++] = screen_cells[idx];
+                last_col = c;
                 repaint_displayed[idx] = desired;
+            } else {
+                // Cell doesn't need updating - break the run
+                run_color = -1;
+                last_col = -2;
             }
         }
     }
