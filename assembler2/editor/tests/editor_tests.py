@@ -10124,19 +10124,39 @@ class EditorTestRunner:
             expect_scroll_rows=[(3, set())]
         )
 
-        # J undo negative displacement -> full repaint: both lines are
-        # exactly screen width (20 chars). J joins them with a space,
-        # producing a 41-char line (3 rows). Undo restores two 1-row lines.
-        # Net displacement = rows(A) + rows(B) - rows(AB) = 1 + 1 - 3 = -1.
-        # Negative displacement means undo actually frees screen space, so
-        # scroll optimization can't help — must fall back to full repaint.
-        # Frames: 0=initial, 1=jj cursor, 2=J, 3=u (undo)
-        undo_neg_disp = ("Short 1\nShort 2\n"
-                         "12345678901234567890\n12345678901234567890\n"
-                         + ''.join(f"Short {i}\n" for i in range(5, 15)))
+        # J forward scroll down when line grows: both lines are exactly
+        # screen width (20 chars). J joins them with a space, producing a
+        # 41-char line (3 rows vs original 2). Scroll DOWN to make room.
+        # Scroll region: rows below old content (0-based rows 4-8).
+        # Frames: 0=initial, 1=jj cursor, 2=J
+        j_grow_content = ("Short 1\nShort 2\n"
+                          "12345678901234567890\n12345678901234567890\n"
+                          + ''.join(f"Short {i}\n" for i in range(5, 15)))
         self.run_test_screen(
-            "Scroll opt: J undo negative displacement full repaint",
-            undo_neg_disp,
+            "Scroll opt: J forward scroll down when line grows",
+            j_grow_content,
+            b"jjJ:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Short 1"), (1, "Short 2"),
+                (2, "12345678901234567890"),
+                (3, " 1234567890123456789"),
+                (4, "0"),
+                (5, "Short 5"), (6, "Short 6"),
+                (7, "Short 7"), (8, "Short 8"),
+            ],
+            expect_cursor=(2, 0),
+            expect_scroll_rows=[(2, {4, 5, 6, 7, 8})]
+        )
+
+        # J undo negative displacement scroll up: undo of the above J.
+        # Joined line was 3 rows, restored to two 1-row lines. Scroll UP
+        # to fill freed rows. Scroll region: below old joined line end
+        # (0-based rows 5-8).
+        # Frames: 0=initial, 1=jj cursor, 2=J, 3=u (undo)
+        self.run_test_screen(
+            "Scroll opt: J undo negative displacement scroll up",
+            j_grow_content,
             b"jjJu:q!\r",
             rows=10, cols=20,
             expect_lines=[
@@ -10148,7 +10168,27 @@ class EditorTestRunner:
                 (8, "Short 9"),
             ],
             expect_cursor=(2, 0),
-            expect_scroll_rows=[(3, set())]
+            expect_scroll_rows=[(3, {5, 6, 7, 8})]
+        )
+
+        # J redo scroll down when line grows: same as J forward, but via
+        # undo then redo (J, u, space, u). Scroll DOWN on redo frame.
+        # Frames: 0=initial, 1=jj cursor, 2=J, 3=u, 4=space (noop), 5=u (redo)
+        self.run_test_screen(
+            "Scroll opt: J redo scroll down when line grows",
+            j_grow_content,
+            b"jjJu u:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Short 1"), (1, "Short 2"),
+                (2, "12345678901234567890"),
+                (3, " 1234567890123456789"),
+                (4, "0"),
+                (5, "Short 5"), (6, "Short 6"),
+                (7, "Short 7"), (8, "Short 8"),
+            ],
+            expect_cursor=(2, 0),
+            expect_scroll_rows=[(5, {4, 5, 6, 7, 8})]
         )
 
         # J undo where cursor line stays wrapped: cursor line
