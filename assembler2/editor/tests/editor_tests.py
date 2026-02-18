@@ -10121,7 +10121,9 @@ class EditorTestRunner:
                 (8, "Short 9"),
             ],
             expect_cursor=(2, 0),
-            expect_scroll_rows=[(3, set())]
+            expect_scroll_rows=[(3, set())],
+            # No scroll, only cursor line (row 2) + restored line (row 3) repainted
+            expect_content_rows=[(3, {2, 3})]
         )
 
         # J forward scroll down when line grows: both lines are exactly
@@ -10146,7 +10148,9 @@ class EditorTestRunner:
                 (7, "Short 7"), (8, "Short 8"),
             ],
             expect_cursor=(2, 0),
-            expect_scroll_rows=[(2, {4, 5, 6, 7, 8})]
+            expect_scroll_rows=[(2, {4, 5, 6, 7, 8})],
+            # Only cursor line's 3 wrap rows repainted; rows 5-8 handled by scroll
+            expect_content_rows=[(2, {2, 3, 4})]
         )
 
         # J undo negative displacement scroll up: undo of the above J.
@@ -10168,7 +10172,9 @@ class EditorTestRunner:
                 (8, "Short 9"),
             ],
             expect_cursor=(2, 0),
-            expect_scroll_rows=[(3, {5, 6, 7, 8})]
+            expect_scroll_rows=[(3, {5, 6, 7, 8})],
+            # Only cursor line (row 2) + restored line (row 3) repainted
+            expect_content_rows=[(3, {2, 3, 8})]
         )
 
         # J redo scroll down when line grows: same as J forward, but via
@@ -10188,7 +10194,9 @@ class EditorTestRunner:
                 (7, "Short 7"), (8, "Short 8"),
             ],
             expect_cursor=(2, 0),
-            expect_scroll_rows=[(5, {4, 5, 6, 7, 8})]
+            expect_scroll_rows=[(5, {4, 5, 6, 7, 8})],
+            # Only cursor line's 3 wrap rows repainted; rows 5-8 handled by scroll
+            expect_content_rows=[(5, {2, 3, 4})]
         )
 
         # J undo where cursor line stays wrapped: cursor line
@@ -10339,7 +10347,9 @@ class EditorTestRunner:
                 (8, "Short 9"),
             ],
             expect_cursor=(2, 0),
-            expect_scroll_rows=[(2, set())]
+            expect_scroll_rows=[(2, set())],
+            # No scroll, only cursor line's 2 wrap rows repainted
+            expect_content_rows=[(2, {2, 3})]
         )
 
         # JJ (2 batched joins) where first joined line B is wrapped:
@@ -10361,6 +10371,8 @@ class EditorTestRunner:
                 (7, "Short 9"), (8, "Short 10"),
             ],
             expect_cursor=(1, 0),
+            # Only cursor line's 2 wrap rows + bottom exposed rows repainted
+            expect_content_rows=[(2, {1, 2, 7, 8})]
         )
 
         # JJ (2 batched joins) where second joined line C is wrapped:
@@ -10387,6 +10399,8 @@ class EditorTestRunner:
                 (7, "Short 9"), (8, "Short 10"),
             ],
             expect_cursor=(1, 0),
+            # Only cursor line's 2 wrap rows + bottom exposed rows repainted
+            expect_content_rows=[(2, {1, 2, 7, 8})]
         )
 
         # JJ (2 batched joins) all non-wrapped, result wraps to same height:
@@ -10539,7 +10553,9 @@ class EditorTestRunner:
                 (8, "Short 9"),
             ],
             expect_cursor=(2, 0),
-            expect_scroll_rows=[(5, set())]
+            expect_scroll_rows=[(5, set())],
+            # No scroll, only cursor line's 2 wrap rows repainted
+            expect_content_rows=[(5, {2, 3})]
         )
 
         self.run_test_screen(
@@ -10556,6 +10572,8 @@ class EditorTestRunner:
                 (7, "Short 9"), (8, "Short 10"),
             ],
             expect_cursor=(1, 0),
+            # Only cursor line's 2 wrap rows + bottom exposed rows repainted
+            expect_content_rows=[(5, {1, 2, 7, 8})]
         )
 
         self.run_test_screen(
@@ -10572,6 +10590,8 @@ class EditorTestRunner:
                 (7, "Short 9"), (8, "Short 10"),
             ],
             expect_cursor=(1, 0),
+            # Only cursor line's 2 wrap rows + bottom exposed rows repainted
+            expect_content_rows=[(5, {1, 2, 7, 8})]
         )
 
         self.run_test_screen(
@@ -10588,7 +10608,9 @@ class EditorTestRunner:
                 (7, "Short 8"), (8, "Short 9"),
             ],
             expect_cursor=(2, 0),
-            expect_scroll_rows=[(5, set())]
+            expect_scroll_rows=[(5, set())],
+            # No scroll, only cursor line's 3 wrap rows repainted
+            expect_content_rows=[(5, {2, 3, 4})]
         )
 
         self.run_test_screen(
@@ -10672,6 +10694,52 @@ class EditorTestRunner:
             expect_cursor=(3, 0),
             # Frame 3 (3J): cursor row + bottom 2 rows
             expect_content_rows=[(3, {3, 7, 8})]
+        )
+
+        # 3J where result wraps: 3 non-wrapped lines (3 rows) become 1 wrapped
+        # line (2 rows). Freed 1 row, scroll shifts up by 1.
+        # "Short 3" (7) + " " + "Short 4" (7) + " " + "Short 5" (7) = 23 chars,
+        # wraps to 2 rows at 20 cols.
+        # Frames: 0=initial, 1='3' count display, 2=jj cursor, 3=J scroll
+        content_3j_wrap = ("Short 1\nShort 2\n"
+                           "Short 3\nShort 4\nShort 5\n"
+                           + ''.join(f"Short {i}\n" for i in range(6, 15)))
+        self.run_test_screen(
+            "Scroll opt: 3J wrapping result uses scroll",
+            content_3j_wrap,
+            b"jj3J:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Short 1"), (1, "Short 2"),
+                (2, "Short 3 Short 4 Shor"),
+                (3, "t 5"),
+                (4, "Short 6"), (5, "Short 7"),
+                (6, "Short 8"), (7, "Short 9"),
+                (8, "Short 10"),
+            ],
+            expect_cursor=(2, 0),
+            # Only cursor line's 2 wrap rows + bottom row exposed by scroll
+            expect_content_rows=[(3, {2, 3, 8})]
+        )
+
+        # 3J wrapping redo: same result as forward, via undo then redo.
+        # Frames: 0=initial, 1='3' count, 2=jj, 3=J, 4=u, 5=space, 6=u (redo)
+        self.run_test_screen(
+            "Redo: 3J wrapping result uses scroll",
+            content_3j_wrap,
+            b"jj3Ju u:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "Short 1"), (1, "Short 2"),
+                (2, "Short 3 Short 4 Shor"),
+                (3, "t 5"),
+                (4, "Short 6"), (5, "Short 7"),
+                (6, "Short 8"), (7, "Short 9"),
+                (8, "Short 10"),
+            ],
+            expect_cursor=(2, 0),
+            # Only cursor line's 2 wrap rows + bottom row exposed by scroll
+            expect_content_rows=[(6, {2, 3, 8})]
         )
 
         # 3cc at mid-screen: deletes 3 lines, inserts blank, scroll shifts up.
@@ -11373,8 +11441,9 @@ class EditorTestRunner:
             ],
             expect_cursor=(1, 0),
             # Frame 2 (typing): cursor row redrawn + scroll pushes lines down.
-            # Only cursor line rows (0, 1) should be content-rendered, not all rows.
-            expect_content_rows=[(2, {0, 1})]
+            # Only the new cursor rows (1, 1) should be content-rendered, not all rows.
+            # Note that row 0 does not need to be touched since it is unmodified
+            expect_content_rows=[(2, {1, 1})]
         )
 
         # Typing within a line past screen width: same wrap, different cursor position.
