@@ -520,6 +520,9 @@ insert_batch:
   ; Clean up cursor_buf_pos from stack
   PLA
   PLA
+  ; Pure fwd_nl join (no back_nl, no ins_nl) -> scroll optimization
+  LDA #$06
+  STA RENDER_FLAG            ; Line-delete with displacement-based scroll
   JMP .set_modified
 
 .case_ins_nl:
