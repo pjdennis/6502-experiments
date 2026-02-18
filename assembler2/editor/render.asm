@@ -32,6 +32,7 @@ WRAP_REM:       .byte   ; Scratch: remainder from CURSOR_COL % SCREEN_COLS
 RENDER_WRAP:    .byte   ; Current wrap row offset during rendering
 DIV_INPUT16:    .word   ; Scratch for 16-bit division
 PREV_LINE_ROWS: .byte   ; Screen rows the current line occupied before the edit
+PREV_LINE_FULL: .byte   ; Non-zero if old line's last row was full (len % cols == 0)
 SNAP_VIEW_TOP16: .word  ; Snapshot of VIEW_TOP16 before handler
 SNAP_VIEW_TOP_WRAP: .byte ; Snapshot of VIEW_TOP_WRAP before handler
 SNAP_LINE_COUNT16: .word ; Snapshot of LINE_COUNT16 before handler
@@ -427,7 +428,81 @@ render_current_line_and_status:
   JMP io_flush
 
 .rows_changed:
-  ; Different row count: render from first row of line to bottom
+  ; A = new row count, PREV_LINE_ROWS = old row count, WRAP_QUOT = cursor wrap row
+  ; Check if line grew (need scroll down)
+  CMP PREV_LINE_ROWS
+  BCC .rows_shrunk
+  ; Line grew: use scroll optimization
+  ; Save new_row_count temporarily
+  PHA                        ; stack: new_row_count
+  ; Compute first_row = CURSOR_ROW - WRAP_QUOT
+  LDA CURSOR_ROW
+  SEC
+  SBC WRAP_QUOT
+  BMI .do_full_pop           ; first row above screen
+  STA RENDER_ROW             ; first_row (used for scroll region calc)
+  JSR ansi_cursor_hide
+  ; Set scroll region: from (first_row + old_rows + 1) to (SCREEN_ROWS - 1) (1-based)
+  LDA RENDER_ROW
+  CLC
+  ADC PREV_LINE_ROWS         ; past end of old cursor line (0-based)
+  CLC
+  ADC #1                     ; 1-based
+  STA ANSI_ROW
+  LDA SCREEN_ROWS
+  SEC
+  SBC #1
+  STA ANSI_COL
+  ; Guard: skip scroll if region too small
+  CMP ANSI_ROW
+  BCC .skip_grow_scroll
+  BEQ .skip_grow_scroll
+  JSR ansi_set_scroll_region
+  ; grow_delta = new_row_count - PREV_LINE_ROWS
+  PLA                        ; new_row_count
+  PHA                        ; re-push
+  SEC
+  SBC PREV_LINE_ROWS
+  JSR ansi_scroll_down
+  JSR ansi_reset_scroll_region
+.skip_grow_scroll:
+  ; Render the cursor line's rows
+  PLA                        ; new_row_count
+  STA SCROLL_DELTA
+  LDA CURSOR_ROW
+  SEC
+  SBC WRAP_QUOT
+  STA RENDER_ROW             ; first_row
+  CP16 FILE_LINE16, RENDER_LINE16
+  ; If old last row was full AND cursor is on a new wrap row,
+  ; skip unchanged rows (render only new rows from PREV_LINE_ROWS)
+  LDA PREV_LINE_FULL
+  BNE .grow_render_all       ; non-zero = not full, must render all rows
+  LDA WRAP_QUOT
+  CMP PREV_LINE_ROWS
+  BCC .grow_render_all       ; cursor on old row, content shifted
+  ; Old rows were full and unchanged; render only new rows
+  LDA PREV_LINE_ROWS
+  STA RENDER_WRAP            ; start from this wrap offset
+  CLC
+  ADC RENDER_ROW
+  STA RENDER_ROW             ; advance screen row past unchanged rows
+  LDA SCROLL_DELTA
+  SEC
+  SBC PREV_LINE_ROWS
+  STA SCROLL_DELTA           ; only render new rows
+  JMP render_limited_rows
+.grow_render_all:
+  LDA #0
+  STA RENDER_WRAP
+  JMP render_limited_rows
+
+.do_full_pop:
+  PLA                        ; discard new_row_count
+  JMP render_screen
+
+.rows_shrunk:
+  ; Line shrunk: render from first row of line to bottom
   LDA CURSOR_ROW
   SEC
   SBC WRAP_QUOT

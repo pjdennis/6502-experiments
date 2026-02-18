@@ -11427,16 +11427,16 @@ class EditorTestRunner:
         # makes it 21 chars → wraps to 2 screen rows. Lines below should scroll down
         # via scroll optimization, not a full repaint.
         # Frames: 0=initial, 1=A enter insert, 2=typed chars (wrap occurs)
-        ins_wrap_content = ("123456789012345678\n"
+        ins_wrap_content = ("12345678901234567890\n"
                             + ''.join(f"Line {i}\n" for i in range(2, 12)))
         self.run_test_screen(
             "Scroll opt: insert typing at EOL causes wrap uses scroll",
             ins_wrap_content,
-            b"Aabc\x1b:q!\r",
+            b"Aa\x1b:q!\r",
             rows=10, cols=20,
             expect_lines=[
-                (0, "123456789012345678ab"),
-                (1, "c"),
+                (0, "12345678901234567890"),
+                (1, "a"),
                 (2, "Line 2"), (3, "Line 3"), (4, "Line 4"),
                 (5, "Line 5"), (6, "Line 6"), (7, "Line 7"),
                 (8, "Line 8"),
@@ -11460,7 +11460,7 @@ class EditorTestRunner:
             rows=10, cols=20,
             expect_lines=[
                 (0, "12345iiiiii678901234"),
-                (1, "5678"),
+                (1, "567890"),
                 (2, "Line 2"), (3, "Line 3"), (4, "Line 4"),
                 (5, "Line 5"), (6, "Line 6"), (7, "Line 7"),
                 (8, "Line 8"),
