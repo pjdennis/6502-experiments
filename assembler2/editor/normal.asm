@@ -317,7 +317,6 @@ normal_enter_insert_eol:
   JMP enter_insert_mode
 
 normal_open_below:
-  JSR undo_clear
   LDAX16 FILE_LINE16
   JSR buf_get_line_ptr
   JSR advance_past_line_end
@@ -336,8 +335,14 @@ normal_open_below:
 .mark_adj:
   JSR mark_insert_one
 
+  ; Record undo: opened line at FILE_LINE16+1, restore cursor to FILE_LINE16
+  LDA #UNDO_OPEN
+  STA UNDO_TYPE
+  CP16 FILE_LINE16, UNDO_COL16   ; Restore cursor to original line
   INC16 FILE_LINE16
+  CP16 FILE_LINE16, UNDO_LINE16  ; Opened line position
   LDA #0
+  STA UNDO_IS_REDO
   STA_LH16 CURSOR_COL16
   LDA #$FF
   STA MODIFIED
@@ -349,7 +354,6 @@ normal_open_below:
   JMP clear_count
 
 normal_open_above:
-  JSR undo_clear
   LDAX16 FILE_LINE16
   JSR buf_get_line_ptr
 
@@ -362,7 +366,13 @@ normal_open_above:
   LDAX16 FILE_LINE16
   JSR mark_insert_one
 
+  ; Record undo: opened line at FILE_LINE16, restore cursor to FILE_LINE16
+  LDA #UNDO_OPEN
+  STA UNDO_TYPE
+  CP16 FILE_LINE16, UNDO_LINE16  ; Opened line position
+  CP16 FILE_LINE16, UNDO_COL16   ; Restore cursor to same line
   LDA #0
+  STA UNDO_IS_REDO
   STA_LH16 CURSOR_COL16
   LDA #$FF
   STA MODIFIED

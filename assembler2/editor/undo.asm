@@ -14,6 +14,7 @@
 ;   6 = line-paste-above (P with line yank)
 ;   7 = char-paste-below (p with char yank)
 ;   8 = char-paste-above (P with char yank)
+;   9 = open-line (o/O opened blank line(s))
 
 UNDO_NONE = 0
 UNDO_LINE = 1
@@ -24,6 +25,7 @@ UNDO_LINE_PASTE_BELOW = 5
 UNDO_LINE_PASTE_ABOVE = 6
 UNDO_CHAR_PASTE_BELOW = 7
 UNDO_CHAR_PASTE_ABOVE = 8
+UNDO_OPEN = 9
 
 JOIN_UNDO_BUF = $D700     ; 256 bytes for 16-bit offsets
 JOIN_UNDO_MAX = 128       ; 256 / 2 bytes per entry
@@ -103,6 +105,8 @@ undo_handle:
 ; --- Undo ---
 undo_do_undo:
   LDA UNDO_TYPE
+  CMP #UNDO_OPEN
+  BEQ .undo_open
   CMP #UNDO_LINE_PASTE_BELOW
   BCS .undo_paste
   CMP #UNDO_JOIN
@@ -113,6 +117,8 @@ undo_do_undo:
   BEQ .undo_line
   JMP .undo_char
 
+.undo_open:
+  JMP undo_open_undo
 .undo_paste:
   JMP undo_paste_undo
 .undo_join:
@@ -236,6 +242,8 @@ undo_do_undo:
 ; --- Redo ---
 undo_do_redo:
   LDA UNDO_TYPE
+  CMP #UNDO_OPEN
+  BEQ .redo_open
   CMP #UNDO_LINE_PASTE_BELOW
   BCS .redo_paste
   CMP #UNDO_JOIN
@@ -246,6 +254,8 @@ undo_do_redo:
   BEQ .redo_line
   JMP .redo_char
 
+.redo_open:
+  JMP undo_open_redo
 .redo_paste:
   JMP undo_paste_redo
 .redo_join:
@@ -624,5 +634,53 @@ undo_char_paste_redo:
   LDA #1
   STA RENDER_FLAG
 .redo_cp_done:
+  JMP clear_count
+
+; --- Open-line undo: delete the opened blank line(s) ---
+undo_open_undo:
+  ; Delete the opened line
+  CP16 UNDO_LINE16, FILE_LINE16
+  LDA #1
+  STA BUF_TEMP16
+  LDA #0
+  STA BUF_TEMP16 + 1
+  STA DELETE_SCREEN_ROWS     ; Cursor row filled by scroll
+  JSR delete_current_lines
+  ; Restore cursor to original position
+  CP16 UNDO_COL16, FILE_LINE16
+  LDA #0
+  STA_LH16 CURSOR_COL16
+  JSR clamp_cursor_col
+  ; Set flags
+  LDA #$FF
+  STA UNDO_IS_REDO
+  STA MODIFIED
+  LDA #$07
+  STA RENDER_FLAG            ; Delete scroll, skip cursor repaint
+  JMP clear_count
+
+; --- Open-line redo: re-insert blank line ---
+undo_open_redo:
+  ; Insert blank line at UNDO_LINE16
+  LDAX16 UNDO_LINE16
+  JSR buf_get_line_ptr
+  LDA #'\n'
+  JSR buf_insert_char
+  BCS .redo_open_fail
+  JSR buf_rebuild_lines
+  ; Adjust marks
+  LDAX16 UNDO_LINE16
+  JSR mark_insert_one
+  ; Set cursor on opened line
+  CP16 UNDO_LINE16, FILE_LINE16
+  LDA #0
+  STA UNDO_IS_REDO
+  STA_LH16 CURSOR_COL16
+  LDA #$FF
+  STA MODIFIED
+  LDA #$03
+  STA RENDER_FLAG            ; Insert scroll
+  JMP clear_count
+.redo_open_fail:
   JMP clear_count
 
