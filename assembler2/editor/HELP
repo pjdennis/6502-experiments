@@ -18,7 +18,7 @@ MODES
 The editor has three modes:
 
   NORMAL   Default mode for navigation and commands.
-  INSERT   Text entry mode. Entered via i, a, A, o, O, s, S, C, cc, cw, cb.
+  INSERT   Text entry mode. Entered via i, a, A, o, O, s, S, C, cc, cw, cb, ce.
   COMMAND  Colon command-line mode. Entered via :.
 
 
@@ -35,14 +35,23 @@ NORMAL MODE - MOVEMENT
   w              Move to start of next word (accepts count)
   b              Move to start of previous word (accepts count)
   e              Move to end of current/next word (accepts count)
+  Ctrl-Right     Move to start of next word (same as w)
+  Ctrl-Left      Move to start of previous word (same as b)
   G              Go to last line; [N]G goes to line N
   gg             Go to first line
-  Ctrl-F, PgDn   Scroll forward one screen
-  Ctrl-B, PgUp   Scroll backward one screen
+  Ctrl-F, PgDn   Scroll forward one screen (accepts count)
+  Ctrl-B, PgUp   Scroll backward one screen (accepts count)
+  Ctrl-D         Scroll forward half a screen (accepts count)
+  Ctrl-U         Scroll backward half a screen (accepts count)
 
   Word motions cross line boundaries. Words are classified as:
   word characters (a-z, A-Z, 0-9, _), punctuation, or whitespace.
   A word boundary is a transition between classes.
+
+  Ctrl-D and Ctrl-U accept a count that becomes "sticky" - the
+  same scroll amount is reused on subsequent Ctrl-D/Ctrl-U presses
+  until a new count is given. Without a count, they scroll half a
+  screen by default.
 
 
 NORMAL MODE - EDITING
@@ -59,11 +68,17 @@ All editing commands are blocked in read-only mode.
                  Yanks deleted characters (character yank)
   D              Delete from cursor to end of line
                  Yanks deleted characters (character yank)
+  d$             Delete from cursor to end of line (accepts count)
+                 With count N, deletes through end of line N-1 below
+  d0             Delete from beginning of line to cursor
+                 Yanks deleted characters (character yank)
   dd             Delete current line (accepts count: [N]dd)
                  Yanks deleted lines first (line yank)
   dw             Delete from cursor to next word boundary (accepts count)
                  Yanks deleted characters (character yank)
   db             Delete backward to word start (accepts count)
+                 Yanks deleted characters (character yank)
+  de             Delete from cursor to end of word (accepts count)
                  Yanks deleted characters (character yank)
   cc             Delete current line, open blank line, enter insert mode
                  (accepts count: [N]cc). Yanks deleted lines (line yank)
@@ -71,8 +86,10 @@ All editing commands are blocked in read-only mode.
                  (accepts count). Yanks deleted characters (character yank)
   cb             Change backward: delete to word start, enter insert mode
                  (accepts count). Yanks deleted characters (character yank)
+  ce             Change to end of word: delete to end of word, enter
+                 insert mode (accepts count). Yanks deleted characters
   C              Delete from cursor to end of line, enter insert mode
-                 Yanks deleted characters (character yank)
+                 (accepts count). Yanks deleted characters (character yank)
   s              Delete character(s) at cursor, enter insert mode
                  (accepts count). Yanks deleted characters (character yank)
   S              Delete current line, open blank line, enter insert mode
@@ -91,12 +108,23 @@ All editing commands are blocked in read-only mode.
                  Character yank. Does not modify the file
   yb             Yank backward to word start (accepts count)
                  Character yank. Cursor moves to start of yanked region
+  ye             Yank from cursor to end of word (accepts count)
+                 Character yank. Does not modify the file
+  y$             Yank from cursor to end of line (accepts count)
+                 Character yank. Does not modify the file
+  y0             Yank from beginning of line to cursor
+                 Character yank. Cursor does not move
   p              Paste after/below cursor (accepts count: [N]p)
                  Line yank: pastes lines below current line
                  Char yank: inserts after cursor position
   P              Paste before/above cursor (accepts count: [N]P)
                  Line yank: pastes lines above current line
                  Char yank: inserts before cursor position
+  u              Undo last edit / redo (toggles between undo and redo)
+                 Single-level: undoes the most recent operation, then
+                 pressing u again redoes it. A new edit replaces the
+                 undo history. Supports undo of: dd, x, D, dw, db, de,
+                 d$, d0, cw, cb, ce, cc, s, C, S, J, o, O, p, P
 
 
 NORMAL MODE - SEARCH
@@ -137,6 +165,8 @@ NORMAL MODE - COUNT PREFIX
     3>>            Indent 3 lines
     5~             Toggle case of 5 characters
     3J             Join 3 lines (current + 2 below)
+    2dw            Delete 2 words forward
+    3de            Delete to end of 3rd word
 
   Counts are capped at 1000. ESC clears an active count.
   0 alone moves to line start; it does not start a count.
@@ -162,8 +192,9 @@ INSERT MODE
   ESC               Return to normal mode (cursor moves back one)
 
   Arrow keys, Home, End, PgUp, PgDn, Ctrl-F, Ctrl-B all work
-  for navigation within insert mode. The cursor can be positioned
-  one past the last character (for appending).
+  for navigation within insert mode. Ctrl-Right and Ctrl-Left
+  move by word. The cursor can be positioned one past the last
+  character (for appending).
 
 
 COMMAND-LINE MODE
@@ -219,7 +250,8 @@ YANK BUFFER
   Line yank (from dd, yy, cc, range commands):
     p/P paste complete lines above or below.
 
-  Character yank (from x, D, dw, db, yw, yb, cw, cb, s, C):
+  Character yank (from x, D, d$, d0, dw, db, de, yw, yb, ye,
+  y$, y0, cw, cb, ce, s, C):
     p inserts after cursor (or at line start if empty line).
     P inserts before cursor.
 

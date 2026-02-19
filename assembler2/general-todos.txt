@@ -1,3 +1,5 @@
+Add batch support for word back/forward and other movement keys?
+[n]O and [n]o will repeat the typed line n times (if only one line entered)
 Open with numeric prefix isn't functional
 
 Reconfirm the following are fixed:
