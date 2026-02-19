@@ -1,12 +1,10 @@
 Add batch support for word back/forward and other movement keys?
 [n]O and [n]o will repeat the typed line n times (if only one line entered)
-Open with numeric prefix isn't functional
-
-Reconfirm the following are fixed:
-cc ESC u is incorrectly scrolling down the rows below the cursor row:
-2Cu incorrectly paints the line above
-C on a line that wraps, redraws down to the bottom of the screen
-2C when the second line wraps, doesn't scroll the below rows up far enough
+cc / C / J, undo redo across a blank line lost that line (single dash below)
+ -Do the join and calculate the new screen row for the line following the joined lines
+ -Scroll from the row following the lines to be joined, up by the delta amount
+-
+ Add support for e
 
 There's an 8-bit limit on number of wrap rows for a line... Can we at least have some error checking to prevent bogus behavior? Or just make this 16 bit - e.g. PREV_LINE_ROWS
 
