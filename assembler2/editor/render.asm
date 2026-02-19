@@ -807,15 +807,23 @@ render_decide:
 .delta_nonzero:
 
   ; Walk lines to compute SCROLL_DELTA (screen rows to scroll).
-  ; RENDER_FLAG=$05: single Enter, compute displacement from wrapped line split
+  ; RENDER_FLAG=$05: Enter(s), compute displacement from wrapped line split
   ; RENDER_FLAG=$03/$04: walk inserted lines at FILE_LINE16
   LDA RENDER_FLAG
   CMP #$05
   BNE .do_walk
   ; --- Enter displacement: compare old vs new total screen rows ---
-  ; Get len(line_above) = FILE_LINE16 - 1
+  ; Get len(line_above) = FILE_LINE16 - file_delta
   SEC
-  SBCI16 FILE_LINE16, 1, RENDER_LINE16
+  LDA FILE_LINE16
+  SBC RENDER_LIMIT           ; file_delta
+  STA RENDER_LINE16
+  LDA FILE_LINE16 + 1
+  SBC #0
+  STA RENDER_LINE16 + 1
+  ; Save file_delta (RENDER_LIMIT will be overwritten with old_total)
+  LDA RENDER_LIMIT
+  PHA
   LDAX16 RENDER_LINE16
   JSR buf_get_line_len      ; A/X = len(above)
   STA RENDER_LINE16
@@ -843,13 +851,20 @@ render_decide:
   LDA SCROLL_DELTA
   LDX DELETE_SCREEN_ROWS
   JSR line_screen_rows      ; A = rows_cursor
-  ; new_total = rows_above + rows_cursor
+  ; new_total = rows_above + rows_cursor + (file_delta - 1) blank lines
   CLC
-  ADC RENDER_LINE16
-  CMP RENDER_LIMIT          ; new_total vs old_total
+  ADC RENDER_LINE16          ; A = rows_above + rows_cursor
+  STA SCROLL_DELTA           ; temp save
+  PLA                        ; file_delta
+  SEC
+  SBC #1                     ; file_delta - 1 (blank lines)
+  CLC
+  ADC SCROLL_DELTA           ; A = rows_above + rows_cursor + file_delta - 1
+  ; displacement = new_total - old_total
+  SEC
+  SBC RENDER_LIMIT
   BEQ .enter_no_disp
-  ; displacement = 1 (only possible non-zero value for single Enter)
-  LDA #1
+  BCC .enter_no_disp         ; safety: can't be negative
   STA SCROLL_DELTA
   LDA #0
   STA DELETE_SCREEN_ROWS
@@ -1286,7 +1301,8 @@ render_line_insert_scroll:
   JSR ansi_cursor_hide
 
   ; Set scroll region start (1-based) to SCREEN_ROWS-1 (1-based)
-  ; RENDER_FLAG=$03/$05: from CURSOR_ROW+1 (includes cursor row)
+  ; RENDER_FLAG=$03: from CURSOR_ROW+1 (includes cursor row)
+  ; RENDER_FLAG=$05: from old cursor row+1 = CURSOR_ROW-SCROLL_DELTA+2
   ; RENDER_FLAG=$04/$09: skip cursor line rows
   ;   first_row = CURSOR_ROW - WRAP_QUOT
   ;   scroll_start = first_row + PREV_LINE_ROWS + 1 (1-based)
@@ -1294,6 +1310,9 @@ render_line_insert_scroll:
   CMP #$04
   BEQ .scroll_skip_cursor_ins
   CMP #$09
+  BEQ .scroll_skip_cursor_ins
+  CMP #$05
+  BEQ .scroll_at_enter
   BNE .scroll_at_cursor
 .scroll_skip_cursor_ins:
   LDA CURSOR_ROW
@@ -1303,6 +1322,14 @@ render_line_insert_scroll:
   ADC PREV_LINE_ROWS     ; past end of cursor line (0-based)
   CLC
   ADC #1                 ; 1-based
+  JMP .set_scroll_start
+.scroll_at_enter:
+  ; scroll_start = CURSOR_ROW + 2 - SCROLL_DELTA (1-based)
+  LDA CURSOR_ROW
+  SEC
+  SBC SCROLL_DELTA
+  CLC
+  ADC #2
   JMP .set_scroll_start
 .scroll_at_cursor:
   LDA CURSOR_ROW
@@ -1324,51 +1351,19 @@ render_line_insert_scroll:
   JSR ansi_reset_scroll_region
 .skip_ins_scroll:
 
-  ; Re-render row above cursor ONLY for Enter line split ($05)
-  ; Other insert-scroll operations (undo, paste, etc.) don't change row above.
+  ; For Enter ($05): render split line + blank lines + cursor line
   LDA RENDER_FLAG
   CMP #$05
-  BNE .no_above_render
+  BNE .no_enter_render
+  ; Render SCROLL_DELTA + 1 rows starting at old cursor row
   LDA CURSOR_ROW
-  BEQ .no_above_render     ; At top row, nothing above
-  STA RENDER_ROW           ; Save cursor row
   SEC
-  SBC #1
-  CLC
-  ADC #1                   ; ANSI 1-based
-  STA ANSI_ROW
-  LDA #1
-  STA ANSI_COL
-  JSR ansi_move_cursor
-  LDA RENDER_ROW           ; restore cursor row
-  SEC
-  SBC #1
+  SBC SCROLL_DELTA
   STA RENDER_ROW
+  INC SCROLL_DELTA           ; +1 for the split line row
   JSR find_line_at_render_row
-  LDAX16 RENDER_LINE16
-  JSR buf_get_line_ptr
-  ; Advance BUF_PTR16 by RENDER_WRAP * SCREEN_COLS for wrap continuations
-  LDA RENDER_WRAP
-  BEQ .no_above_wrap
-  TAX
-.above_wrap_loop:
-  CLC
-  LDA BUF_PTR16
-  ADC SCREEN_COLS
-  STA BUF_PTR16
-  LDA BUF_PTR16 + 1
-  ADC #0
-  STA BUF_PTR16 + 1
-  DEX
-  BNE .above_wrap_loop
-.no_above_wrap:
-  JSR render_line_chars
-  LDA RENDER_COL
-  CMP SCREEN_COLS
-  BCS .above_no_clear
-  JSR ansi_clear_line
-.above_no_clear:
-.no_above_render:
+  JMP render_limited_rows
+.no_enter_render:
 
   ; If INSERT_LINE_COUNT is set, the actual repaint needs more rows than the
   ; scroll (e.g., cc undo: net file delta < inserted line count).

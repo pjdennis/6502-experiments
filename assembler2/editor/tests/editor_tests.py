@@ -10806,6 +10806,27 @@ class EditorTestRunner:
             expect_content_rows=[(4, {3, 4})]
         )
 
+        # Batched Enter (3 Enters) in insert mode: should use scroll optimization.
+        # "lll" moves to col 3 in "Line 4", then 3 Enters split:
+        # "Lin" / "" / "" / "e 4". Scroll down 3, repaint 4 rows (3-6).
+        # Frames: 0=initial, 1=jjj cursor, 2=llll cursor,
+        #         3=i mode switch, 4=Enter*3 scroll frame
+        self.run_test_screen(
+            "Scroll opt: batched Enter uses scroll not full repaint",
+            make_lines(15),
+            b"jjjllli\r\r\r\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Lin"), (4, ""), (5, ""), (6, "e 4"),
+                (7, "Line 5"), (8, "Line 6"),
+            ],
+            expect_cursor=(6, 0),
+            # Frame 4 (batched Enter*3): should NOT touch all rows 0-8
+            # Only rows 3-6 should be repainted (split line + 2 blanks + cursor)
+            expect_content_rows=[(4, {3, 4, 5, 6})]
+        )
+
         # Enter at start of wrapped line: inserts blank above, content shifts down.
         # The wrapped continuation must not be duplicated as a ghost row.
         # Frames: 0=initial, 1=i mode switch, 2=Enter scroll frame, 3=ESC

@@ -552,13 +552,10 @@ insert_batch:
   PLA
   PLA
 
-  ; Check for pure single-line insert (no back_nl, no fwd_nl, ins_nl==1) -> scroll optimization
+  ; Check for pure insert (no back_nl, no fwd_nl) -> scroll optimization
   LDA LINE_LEN16             ; back_nl
   ORA LINE_LEN16 + 1         ; fwd_nl
   BNE .set_modified           ; Complex case, fall back to current-line redraw
-  LDA NORMAL_TEMP            ; ins_nl
-  CMP #1
-  BNE .set_modified           ; Multiple newlines, fall back (scroll only handles 1)
   LDA #$05
   STA RENDER_FLAG            ; Signal line-insert above cursor for scroll optimization
   JMP .set_modified
