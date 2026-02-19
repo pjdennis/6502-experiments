@@ -129,8 +129,7 @@ diff <(hexdump -C 17/out/asm_debug.out) <(hexdump -C 17/out/asm_debug_2.out)
 echo "--- Self-hosted tests ---"
 (cd 17 && ../emulator.out out/asm.out asm.asm out/test_runner.out define:enable_test_runner define:enable_debug)
 (cd 17/tests/asm && ../../../emulator.out ../../out/test_runner.out -q)
-echo "--- Test runner directory mode tests ---"
-python3 17/tests/test_runner/test_runner_dir.py
+python3 17/tests/test_runner/test_runner_dir.py -q
 
 echo "Build chain completed OK"
 

@@ -692,12 +692,16 @@ def test_unknown_flag_ignored():
 
 
 def main():
+    quiet = "-q" in sys.argv or "--quiet" in sys.argv
+
     if not EMULATOR.exists():
         print(f"Error: Emulator not found at {EMULATOR}")
         sys.exit(1)
     if not TEST_RUNNER.exists():
         print(f"Error: Test runner not found at {TEST_RUNNER}")
         sys.exit(1)
+
+    print("Running test_runner directory mode tests")
 
     tests = [
         ("single_txt_file_in_directory", test_single_txt_file_in_directory),
@@ -737,7 +741,8 @@ def main():
     for name, test_fn in tests:
         try:
             test_fn()
-            print(f"  {Colors.GREEN}PASS{Colors.NC} {name}")
+            if not quiet:
+                print(f"  {Colors.GREEN}PASS{Colors.NC} {name}")
             passed += 1
         except Exception as e:
             print(f"  {Colors.RED}FAIL{Colors.NC} {name}: {e}")
