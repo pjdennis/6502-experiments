@@ -811,7 +811,9 @@ render_decide:
   ; RENDER_FLAG=$03/$04: walk inserted lines at FILE_LINE16
   LDA RENDER_FLAG
   CMP #$05
-  BNE .do_walk
+  BEQ .enter_disp
+  JMP .do_walk
+.enter_disp:
   ; --- Enter displacement: compare old vs new total screen rows ---
   ; Get len(line_above) = FILE_LINE16 - file_delta
   SEC
@@ -833,7 +835,29 @@ render_decide:
   JSR buf_get_line_len      ; A/X = len(cursor)
   STA SCROLL_DELTA          ; len_cursor_lo (temp)
   STX DELETE_SCREEN_ROWS    ; len_cursor_hi (temp)
+  ; Detect start/end-of-line optimization for pure Enter batches.
+  ; INSERT_LINE_COUNT is pre-set to $01 by insert.asm for pure Enter batches
+  ; (all bytes are newlines). Mixed batches leave it at $00.
+  ; bit 0 = skip content render, bit 1 = include old cursor row in scroll
+  LDA INSERT_LINE_COUNT
+  BEQ .middle_split           ; Not pure Enter, always need content render
+  LDA RENDER_LINE16          ; len_above_lo
+  ORA RENDER_LINE16 + 1      ; len_above_hi
+  BNE .check_end_of_line
+  LDA #$03                   ; start of line: skip render + adjust scroll
+  JMP .save_enter_type
+.check_end_of_line:
+  LDA SCROLL_DELTA           ; len_cursor_lo
+  ORA DELETE_SCREEN_ROWS     ; len_cursor_hi
+  BNE .middle_split
+  LDA #$01                   ; end of line: skip render only
+  JMP .save_enter_type
+.middle_split:
+  LDA #$00                   ; middle split: normal render
+.save_enter_type:
+  STA INSERT_LINE_COUNT
   ; old_length = len_above + len_cursor
+  LDA SCROLL_DELTA           ; reload len_cursor_lo
   CLC
   ADC RENDER_LINE16
   TAY
@@ -1167,8 +1191,12 @@ render_line_delete_scroll:
   LDA CURSOR_ROW
   SEC
   SBC WRAP_QUOT          ; first_row (0-based)
+  ; Pure newline join: include cursor row in scroll (content unchanged)
+  LDX INSERT_LINE_COUNT
+  BNE .skip_del_cursor_rows
   CLC
   ADC DELETE_SCREEN_ROWS ; past end of combined line (0-based)
+.skip_del_cursor_rows:
   CLC
   ADC #1                 ; 1-based
   JMP .set_del_scroll_start
@@ -1209,6 +1237,9 @@ render_line_delete_scroll:
   CMP #$08
   BNE .single_row_render
 .check_wrap:
+  ; Pure newline join (BS only deleted newlines): cursor line unchanged, skip render
+  LDA INSERT_LINE_COUNT
+  BNE .skip_join_render
   LDA DELETE_SCREEN_ROWS
   STA RENDER_LIMIT
   LDA #0
@@ -1231,6 +1262,11 @@ render_line_delete_scroll:
   JSR render_limited_loop
   PLA
   STA SCROLL_DELTA           ; restore delete delta
+  JMP .del_bottom_rows
+
+.skip_join_render:
+  LDA #0
+  STA DELETE_SCREEN_ROWS     ; reset for next frame
   JMP .del_bottom_rows
 
 .single_row_render:
@@ -1324,12 +1360,24 @@ render_line_insert_scroll:
   ADC #1                 ; 1-based
   JMP .set_scroll_start
 .scroll_at_enter:
-  ; scroll_start = CURSOR_ROW + 2 - SCROLL_DELTA (1-based)
+  ; For start-of-line Enter (bit 1 set): include old cursor row in scroll
+  ; scroll_start = CURSOR_ROW + 1 - SCROLL_DELTA (1-based)
+  ; Otherwise: scroll_start = CURSOR_ROW + 2 - SCROLL_DELTA (1-based)
+  LDA INSERT_LINE_COUNT
+  AND #$02
+  BNE .enter_start_scroll
   LDA CURSOR_ROW
   SEC
   SBC SCROLL_DELTA
   CLC
   ADC #2
+  JMP .set_scroll_start
+.enter_start_scroll:
+  LDA CURSOR_ROW
+  SEC
+  SBC SCROLL_DELTA
+  CLC
+  ADC #1
   JMP .set_scroll_start
 .scroll_at_cursor:
   LDA CURSOR_ROW
@@ -1355,6 +1403,10 @@ render_line_insert_scroll:
   LDA RENDER_FLAG
   CMP #$05
   BNE .no_enter_render
+  ; If start/end-of-line Enter, scroll handled everything - just update status
+  LDA INSERT_LINE_COUNT
+  AND #$01
+  BNE .enter_status_only
   ; Render SCROLL_DELTA + 1 rows starting at old cursor row
   LDA CURSOR_ROW
   SEC
@@ -1363,6 +1415,11 @@ render_line_insert_scroll:
   INC SCROLL_DELTA           ; +1 for the split line row
   JSR find_line_at_render_row
   JMP render_limited_rows
+.enter_status_only:
+  JSR render_status_line
+  JSR render_position_cursor
+  JSR ansi_cursor_show
+  JMP io_flush
 .no_enter_render:
 
   ; If INSERT_LINE_COUNT is set, the actual repaint needs more rows than the

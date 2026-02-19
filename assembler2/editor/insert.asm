@@ -556,6 +556,14 @@ insert_batch:
   LDA LINE_LEN16             ; back_nl
   ORA LINE_LEN16 + 1         ; fwd_nl
   BNE .set_modified           ; Complex case, fall back to current-line redraw
+  ; Signal pure Enter batch (all bytes are newlines, no printable chars)
+  ; for start/end-of-line scroll optimization in render
+  LDA BUF_DELTA              ; insert_len
+  CMP NORMAL_TEMP            ; ins_nl
+  BNE .enter_not_pure
+  LDA #$01
+  STA INSERT_LINE_COUNT      ; Flag: pure Enter batch
+.enter_not_pure:
   LDA #$05
   STA RENDER_FLAG            ; Signal line-insert above cursor for scroll optimization
   JMP .set_modified
@@ -575,8 +583,9 @@ insert_batch:
   LDAX16 FILE_LINE16
   JSR buf_get_line_ptr       ; BUF_PTR16 = start of current line
 
-  ; Pop back (discard)
+  ; Pop back
   PLA
+  STA BUF_TEMP               ; save back for pure-join check
   ; Pop cursor_buf_pos -> BUF_SRC16
   POP16 BUF_SRC16
   ; CURSOR_COL16 = cursor_buf_pos - line_start
@@ -586,6 +595,18 @@ insert_batch:
   ; Check for pure line join (no fwd_nl) -> scroll optimization
   LDA LINE_LEN16 + 1         ; fwd_nl
   BNE .set_modified           ; Complex case, fall back to current-line redraw
+  ; Check if cursor line content unchanged (pure empty-line join):
+  ; back == back_nl (all deleted bytes are newlines) AND cursor at col 0
+  ; (all joined-with lines were empty)
+  LDA BUF_TEMP               ; back
+  CMP LINE_LEN16             ; back_nl
+  BNE .bs_not_pure
+  LDA CURSOR_COL16
+  ORA CURSOR_COL16 + 1
+  BNE .bs_not_pure            ; Joined with non-empty line
+  LDA BUF_TEMP               ; reload (non-zero)
+  STA INSERT_LINE_COUNT       ; Signal pure empty-line join to render
+.bs_not_pure:
   LDA #$06
   STA RENDER_FLAG            ; Line-delete with displacement-based scroll
   JMP .set_modified

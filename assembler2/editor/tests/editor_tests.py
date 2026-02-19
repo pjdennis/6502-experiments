@@ -2832,12 +2832,12 @@ class EditorTestRunner:
             expect_content_rows=[(1, {0, 8})]
         )
 
-        # Insert newline: full repaint (multiple lines change)
+        # Insert newline at start of line: scroll only (no content repaint)
         self.run_test_screen(
-            "Render opt: Enter in insert is full repaint",
+            "Render opt: Enter at start of line is scroll only",
             "Hello\nWorld\n",
             b"i\r\x1b:q!\r",
-            expect_content_redraws=[True, False, True, False]
+            expect_content_redraws=[True, False, False, False]
         )
 
         # Backspace at col 0 (join lines): full repaint
@@ -3289,14 +3289,14 @@ class EditorTestRunner:
         # ============================================================
         self._group("Batch Enter:", leading_blank=True)
 
-        # Render optimization: batch Enter reduces redraws
+        # Render optimization: batch Enter at start of line is scroll only
         # Frame 0: initial (True), Frame 1: i enters insert (False),
-        # Frame 2: first Enter + batch Enter*2 (True), Frame 3: ESC (False)
+        # Frame 2: batch Enter*3 scroll only (False), Frame 3: ESC (False)
         self.run_test_screen(
-            "Render opt: batch Enter reduces redraws",
+            "Render opt: batch Enter at start reduces redraws",
             "Hello\n",
             b"i\r\r\r\x1b:q!\r",
-            expect_content_redraws=[True, False, True, False],
+            expect_content_redraws=[True, False, False, False],
         )
 
         # Batch Enter correctness - 3 Enters create 3 empty lines before content
@@ -10827,6 +10827,25 @@ class EditorTestRunner:
             expect_content_rows=[(4, {3, 4, 5, 6})]
         )
 
+        # Enter at start of line: original line scrolls down unchanged.
+        # Scroll creates blank row = new empty line. No content repaint needed.
+        # Frames: 0=initial, 1=jjj cursor, 2=i mode, 3=Enter scroll
+        self.run_test_screen(
+            "Scroll opt: Enter at start of line skips content repaint",
+            make_lines(15),
+            b"jjji\r\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, ""), (4, "Line 4"),
+                (5, "Line 5"), (6, "Line 6"), (7, "Line 7"),
+                (8, "Line 8"),
+            ],
+            expect_cursor=(4, 0),
+            # Frame 3 (Enter): no content rows repainted - scroll handles it
+            expect_content_rows=[(3, set())]
+        )
+
         # Enter at start of wrapped line: inserts blank above, content shifts down.
         # The wrapped continuation must not be duplicated as a ghost row.
         # Frames: 0=initial, 1=i mode switch, 2=Enter scroll frame, 3=ESC
@@ -10893,6 +10912,45 @@ class EditorTestRunner:
             expect_cursor=(2, 5),
             # Frame 3 (BS): cursor row (content changed) + bottom row
             expect_content_rows=[(3, {2, 8})]
+        )
+
+        # BS at col 0 joining with empty line above: cursor line content unchanged.
+        # The scroll moves "Line 4" up, so the cursor row doesn't need repainting.
+        # Frames: 0=initial, 1=jjj cursor, 2=i mode switch, 3=BS scroll frame
+        self.run_test_screen(
+            "Scroll opt: BS joining empty line skips cursor repaint",
+            "Line 1\nLine 2\n\nLine 4\nLine 5\nLine 6\nLine 7\nLine 8\nLine 9\nLine 10\nLine 11\n",
+            b"jjji\x08\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"),
+                (2, "Line 4"), (3, "Line 5"), (4, "Line 6"),
+                (5, "Line 7"), (6, "Line 8"), (7, "Line 9"),
+                (8, "Line 10"),
+            ],
+            expect_cursor=(2, 0),
+            # Frame 3 (BS): cursor row NOT repainted (content unchanged),
+            # only bottom row exposed by scroll
+            expect_content_rows=[(3, {8})]
+        )
+
+        # Batched BS at col 0 joining multiple empty lines: display correctness.
+        # 3 empty lines above "Hello", 3 BS keys join them all.
+        # Frames: 0=initial, 1=jjj cursor, 2=i mode switch, 3=BS*3 scroll frame
+        self.run_test_screen(
+            "Scroll opt: batched BS joining empty lines display",
+            "\n\n\nHello\nWorld\nLine 3\nLine 4\nLine 5\nLine 6\nLine 7\nLine 8\n",
+            b"jjji\x08\x08\x08\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Hello"), (1, "World"), (2, "Line 3"),
+                (3, "Line 4"), (4, "Line 5"), (5, "Line 6"),
+                (6, "Line 7"), (7, "Line 8"),
+                (8, "~"),
+            ],
+            expect_cursor=(0, 0),
+            # Cursor row NOT repainted (content unchanged), only bottom rows
+            expect_content_rows=[(3, {6, 7, 8})]
         )
 
         # BS at col 0 joining with line that creates a wrapped result.
