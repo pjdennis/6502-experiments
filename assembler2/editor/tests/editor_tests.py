@@ -16593,6 +16593,119 @@ class EditorTestRunner:
             expect_cursor=(4, 0),
         )
 
+        # Both SNAP_VIEW_TOP_WRAP and VIEW_TOP_WRAP non-zero (wrap_changed path).
+        # Line 0 wraps to 4 rows (75 chars at 20 cols), then short lines.
+        # j*2 batches (frame 1): cursor at line 2. Walk-back 4 rows:
+        #   line 1 (1, RR=3), line 0 (4 rows, VTW=3, RR=2), VTW 3→2 (RR=1),
+        #   VTW 2→1 (RR=0). Result: VIEW_TOP16=0, VTW=1. Wrap changes 0→1.
+        # Then 'l' (frame 2, no viewport change), j (frame 3): cursor at line 3.
+        # Walk-back from 3, 4: line 2 (1,3), line 1 (1,2), line 0 (4, VTW=3, 1),
+        #   VTW 3→2 (0). Result: VIEW_TOP16=0, VTW=2. SNAP_VTW=1, VTW=2.
+        # Both non-zero. Scroll up by 1, render 1 new bottom row.
+        self.run_test_screen(
+            "Scroll opt: both old and new VIEW_TOP_WRAP nonzero",
+            vtw_multi_wrap,
+            b"j" * 2 + b"l" + b"j" + b":q!\r",
+            rows=6, cols=20,
+            expect_lines=[
+                (0, "A" * 20),    # line 0, wrap row 2
+                (1, "A" * 15),    # line 0, wrap row 3
+                (2, "Short 1"),
+                (3, "Short 2"),
+                (4, "Short 3"),   # cursor
+            ],
+            expect_cursor=(4, 1),  # l moved col to 1
+            # Frame 3 (j): wrap 1→2, scroll up 1, only bottom row redrawn
+            expect_content_rows=[(3, {4})]
+        )
+
+        # Scroll direction verification: j triggers scroll UP (content moves up),
+        # k triggers scroll DOWN (content moves down).
+        # j*4 on vtw_content: VTW 0→1, scroll up. k*4 back: VTW 1→0, scroll down.
+        # Verify scroll occurred and direction via expect_scrolled_at_frame.
+        self.run_test_screen(
+            "Scroll opt: VIEW_TOP_WRAP scroll direction j=up k=down",
+            vtw_content,
+            b"j" * 4 + b"k" * 4 + b":q!\r",
+            rows=6, cols=20,
+            expect_lines=[
+                (0, "A" * 20),    # back to initial view
+                (1, "A" * 15),
+                (2, "Short 1"),
+                (3, "Short 2"),
+                (4, "Short 3"),
+            ],
+            expect_cursor=(0, 0),
+            expect_scrolled_at_frame=[(1, True), (2, True)],
+        )
+
+        # Two-phase: j*4 scroll (VTW 0→1), l (break), j scroll (VIEW_TOP changes).
+        # After j*4: VIEW_TOP (0,1). After l: unchanged. After j: cursor at line 5.
+        # Walk-back from 5: lines 4,3,2,1 → VIEW_TOP16=1, VTW=0.
+        # SNAP: (0,1). After: (1,0). VIEW_TOP changed, old wrap>0.
+        # Walk from (0,1) to (1,0): line 0 visible=2-1=1, new_wrap=0. Total=1.
+        # Scroll up by 1.
+        self.run_test_screen(
+            "Scroll opt: wrap then view change single j",
+            vtw_content,
+            b"j" * 4 + b"l" + b"j" + b":q!\r",
+            rows=6, cols=20,
+            expect_lines=[
+                (0, "Short 1"),
+                (1, "Short 2"),
+                (2, "Short 3"),
+                (3, "Short 4"),
+                (4, "Short 5"),   # cursor
+            ],
+            expect_cursor=(4, 1),
+            # Frame 3 (j): VIEW_TOP changed with old wrap, scroll up 1
+            expect_content_rows=[(3, {4})]
+        )
+
+        # Round-trip content verification: j*4 scrolls VTW 0→1, then k*4
+        # scrolls back to VTW 0→0. Verify exact content matches initial state
+        # using expect_lines_at_frame at both frames.
+        self.run_test_screen(
+            "Scroll opt: round trip content matches initial",
+            vtw_content,
+            b"j" * 4 + b"k" * 4 + b":q!\r",
+            rows=6, cols=20,
+            expect_lines_at_frame=[
+                (1, [
+                    (0, "A" * 15),
+                    (1, "Short 1"),
+                    (2, "Short 2"),
+                    (3, "Short 3"),
+                    (4, "Short 4"),
+                ]),
+                (2, [
+                    (0, "A" * 20),
+                    (1, "A" * 15),
+                    (2, "Short 1"),
+                    (3, "Short 2"),
+                    (4, "Short 3"),
+                ]),
+            ],
+            expect_cursor=(0, 0),
+        )
+
+        # Insert mode: type after VIEW_TOP_WRAP scroll to verify no corruption.
+        # j*4 (VTW 0→1), enter insert, type "X", ESC, verify content.
+        self.run_test_screen(
+            "Scroll opt: insert type after wrap scroll preserves content",
+            vtw_content,
+            b"j" * 4 + b"iX\x1b:q!\r",
+            rows=6, cols=20,
+            expect_lines=[
+                (0, "A" * 15),    # line 0, wrap 1 (unchanged)
+                (1, "Short 1"),
+                (2, "Short 2"),
+                (3, "Short 3"),
+                (4, "XShort 4"),  # cursor on line 4, typed X
+            ],
+            expect_cursor=(4, 0),
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed + self.skipped
