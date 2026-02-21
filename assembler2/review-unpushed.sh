@@ -65,7 +65,7 @@ while true; do
 
         echo "$line"
         lines_used=$new_total
-    done < <(git log --format=fuller -1 "$commit")
+    done < <(git log --format=fuller -1 "$commit"; echo; git diff-tree --no-commit-id --name-status -r "$commit")
 
     if [ "$truncated" = true ]; then
         echo "[more...]"
