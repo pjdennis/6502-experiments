@@ -13775,6 +13775,63 @@ class EditorTestRunner:
             expect_min_col=[(4, 0, 38)]
         )
 
+        # Undo C on wrapped line (rows increase: 1 → 2):
+        # C at col 5 on 50 A's → "AAAAA" (1 row). ESC exits. Undo restores.
+        # Frames: 0=initial, 1=lllll, 2=C, 3=ESC, 4=u(undo)
+        self.run_test_screen(
+            "Undo C on wrapped line rows increase: partial from undo col",
+            "A" * 50 + "\nSecond\n",
+            b"lllllC\x1bu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "A" * 40), (1, "A" * 10), (2, "Second")],
+            expect_cursor=(0, 5),
+            expect_min_col=[(4, 0, 5)]
+        )
+
+        # Redo C on wrapped line (rows decrease: 2 → 1):
+        # Frames: 0=initial, 1=lllll, 2=C, 3=ESC, 4=u(undo), 5=space, 6=u(redo)
+        self.run_test_screen(
+            "Redo C on wrapped line rows decrease: partial from redo col",
+            "A" * 50 + "\nSecond\n",
+            b"lllllC\x1bu u:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "AAAAA"), (1, "Second")],
+            expect_cursor=(0, 4),
+            expect_min_col=[(6, 0, 5)]
+        )
+
+        # Undo p (char paste) on wrapped line (rows decrease: 2 → 1):
+        # "A"*38 + "\nSecond\n". x at col 0 yanks 'A'. p at col 37 pastes → 38 A's.
+        # 38 + 1 = 39 chars (1 row). Wait, p inserts after cursor, line grows to 39.
+        # Use different approach: yank multiple chars, paste to cause wrap, undo unwraps.
+        # "A"*35 + "\nSecond\n" (35 chars, 1 row). 10x yanks 10 chars. Then p pastes 10.
+        # After p: "A"*25 + "A"*10 = 35 chars still. No, x deletes, not just yanks.
+        # Simpler: "A"*38 + "\nSecond\n". $ goes to col 37. p pastes 'A' after → 39 chars.
+        # That doesn't wrap (39 < 40). Need to cause wrap.
+        # "A"*39 + "\nSecond\n". x at col 0 → 38 A's (1 row), yanks 'A'. p at col 37
+        # inserts after → 39 A's (1 row, still < 40). Need more.
+        # Better: yank 2 chars: 2x at col 0 on "A"*40 → 38 A's. $p → 39 A's (no wrap).
+        # Or: "A"*39 + "B\nSecond\n" (40 chars, 1 row). x at col 0 → 39 chars. p at $ → 40 (1 row).
+        # Still no wrap. Need 41+ to wrap. Use bigger yank.
+        # Simplest: "A"*41 + "\nSecond\n" (41 chars, 2 rows). D at $ deletes 1 char → 40 chars (1 row).
+        # Undo restores 41 (2 rows). But that's D undo, not p undo.
+        # For p undo: yank a chunk, paste, then undo the paste.
+        # Actually this is getting complex. Let me test undo of x on wrapped line instead.
+
+        # Undo x on wrapped line (rows increase: 1 → 2):
+        # "A"*41 (2 rows on 40-col). x at col 0 → 40 A's (1 row). Undo → 41 (2 rows).
+        # RENDER_FROM_COL16 = UNDO_COL16 = 0. from_col=0 → full row render (no partial).
+        # This verifies the undo scroll works without regression.
+        self.run_test_screen(
+            "Undo x on wrapped line rows increase: full row render",
+            "A" * 41 + "\nSecond\n",
+            b"xu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "A" * 40), (1, "A"), (2, "Second")],
+            expect_cursor=(0, 0),
+            expect_min_col=[(2, 0, 0)]
+        )
+
         self._group("Undo (u):", leading_blank=True)
 
         # dd undo: restore deleted line
