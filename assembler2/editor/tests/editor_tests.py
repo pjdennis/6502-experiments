@@ -93,8 +93,107 @@ class EmulatorRunner:
         pass
 
 
+class PersistentEmulator:
+    """Runs tests through a persistent emulator --server process."""
+
+    def __init__(self, emulator_path):
+        self.emulator_path = str(emulator_path)
+        self.proc = None
+        self.current_binary = None
+        self.current_mode = None
+        self._start()
+
+    def _start(self):
+        self.proc = subprocess.Popen(
+            [self.emulator_path, '--server'],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE)
+        self.current_binary = None
+        self.current_mode = None
+
+    def _send(self, line):
+        self.proc.stdin.write((line + '\n').encode())
+        self.proc.stdin.flush()
+
+    def _read_line(self, timeout=10):
+        import select
+        fd = self.proc.stdout.fileno()
+        ready, _, _ = select.select([fd], [], [], timeout)
+        if not ready:
+            raise subprocess.TimeoutExpired(self.emulator_path, timeout)
+        line = self.proc.stdout.readline()
+        if not line:
+            raise RuntimeError("Server process died")
+        return line.decode().rstrip('\n')
+
+    def run(self, binary, keys, tmpdir, edit_file,
+            load_addr=0x0400, rows=0, cols=0,
+            mode='standard', extra_args=None):
+        """Run the emulator and return (exit_code, output_bytes)."""
+        # Console mode falls back to subprocess.run
+        if mode == 'console':
+            runner = EmulatorRunner(self.emulator_path)
+            return runner.run(binary, keys, tmpdir, edit_file,
+                              load_addr, rows, cols, mode, extra_args)
+
+        # Check if server is still alive
+        if self.proc.poll() is not None:
+            self._start()
+
+        binary_str = str(binary)
+        mode_str = 'terminal' if mode == 'terminal' else 'standard'
+
+        # Send mode before binary if it changed
+        if mode_str != self.current_mode:
+            self._send(f'MODE {mode_str}')
+            self.current_mode = mode_str
+            # Mode change invalidates cached binary
+            self.current_binary = None
+
+        self._send(f'LOAD {load_addr:04x}')
+
+        if binary_str != self.current_binary:
+            self._send(f'BINARY {binary_str}')
+            self.current_binary = binary_str
+
+        if rows > 0:
+            self._send(f'ROWS {rows}')
+        if cols > 0:
+            self._send(f'COLS {cols}')
+
+        keys_file = tmpdir / "keys.bin"
+        output_file = tmpdir / "output.bin"
+        keys_file.write_bytes(keys)
+
+        self._send(f'INPUT {keys_file}')
+        self._send(f'OUTPUT {output_file}')
+        self._send(f'ARG {edit_file}')
+        if extra_args:
+            for arg in extra_args:
+                self._send(f'ARG {arg}')
+        self._send('RUN')
+
+        response = self._read_line()
+        if not response.startswith('EXIT '):
+            raise RuntimeError(f"Unexpected server response: {response!r}")
+        exit_code = int(response.split()[1])
+
+        output = output_file.read_bytes() if output_file.exists() else b""
+        return exit_code, output
+
+    def close(self):
+        if self.proc and self.proc.poll() is None:
+            try:
+                self._send('QUIT')
+                self.proc.wait(timeout=5)
+            except Exception:
+                self.proc.kill()
+                self.proc.wait()
+
+
 class EditorTestRunner:
-    def __init__(self, base_dir: Path, verbose: bool = False, quiet: bool = False):
+    def __init__(self, base_dir: Path, verbose: bool = False,
+                 quiet: bool = False, use_server: bool = True):
         self.base_dir = base_dir
         self.verbose = verbose
         self.quiet = quiet
@@ -104,7 +203,10 @@ class EditorTestRunner:
         self.editor_bin = base_dir / "editor" / "out" / "editor.out"
         self.editor_small_bin = base_dir / "editor" / "out" / "editor_small.out"
         self.editor_terminal_bin = base_dir / "editor" / "out" / "editor_terminal.out"
-        self.emulator_runner = EmulatorRunner(self.emulator)
+        if use_server:
+            self.emulator_runner = PersistentEmulator(self.emulator)
+        else:
+            self.emulator_runner = EmulatorRunner(self.emulator)
         self.passed = 0
         self.failed = 0
         self.skipped = 0
@@ -15037,6 +15139,8 @@ class EditorTestRunner:
         if self.failed == 0:
             self.create_stable_copy()
 
+        self.emulator_runner.close()
+
 
 def main():
     parser = argparse.ArgumentParser(description="Editor test runner")
@@ -15044,6 +15148,8 @@ def main():
     parser.add_argument("-q", "--quiet", action="store_true",
                         help="Only show failures and summary")
     parser.add_argument("--no-color", action="store_true")
+    parser.add_argument("--no-server", action="store_true",
+                        help="Use subprocess.run instead of persistent server")
     args = parser.parse_args()
 
     if args.no_color:
@@ -15052,7 +15158,9 @@ def main():
     script_dir = Path(__file__).parent.resolve()
     base_dir = script_dir.parent.parent
 
-    runner = EditorTestRunner(base_dir, verbose=args.verbose, quiet=args.quiet)
+    runner = EditorTestRunner(base_dir, verbose=args.verbose,
+                              quiet=args.quiet,
+                              use_server=not args.no_server)
     runner.run_all_tests()
 
     sys.exit(1 if runner.failed > 0 else 0)
