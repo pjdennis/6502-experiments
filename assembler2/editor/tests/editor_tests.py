@@ -17,6 +17,9 @@ import sys
 import tempfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from persistent_emulator import PersistentEmulator
+
 from ansi_screen import AnsiScreen
 
 
@@ -93,130 +96,34 @@ class EmulatorRunner:
         pass
 
 
-class PersistentEmulator:
-    """Runs tests through a persistent emulator --server process."""
+class EditorPersistentEmulator:
+    """Adapter wrapping shared PersistentEmulator with editor-specific run() signature."""
 
     def __init__(self, emulator_path):
         self.emulator_path = str(emulator_path)
-        self.proc = None
-        self.current_binary = None
-        self.current_mode = None
-        self._start()
-
-    def _start(self):
-        self.proc = subprocess.Popen(
-            [self.emulator_path, '--server'],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
-        self.current_binary = None
-        self.current_mode = None
-        self._stdout_fd = self.proc.stdout.fileno()
-        self._read_buf = b''
-
-    def _send(self, line):
-        self.proc.stdin.write((line + '\n').encode())
-        self.proc.stdin.flush()
-
-    def _send_raw(self, data):
-        self.proc.stdin.write(data)
-        self.proc.stdin.flush()
-
-    def _fill_buf(self, timeout=10):
-        import select
-        ready, _, _ = select.select([self._stdout_fd], [], [], timeout)
-        if not ready:
-            raise subprocess.TimeoutExpired(self.emulator_path, timeout)
-        chunk = os.read(self._stdout_fd, 65536)
-        if not chunk:
-            raise RuntimeError("Server process died")
-        self._read_buf += chunk
-
-    def _read_line(self, timeout=10):
-        while b'\n' not in self._read_buf:
-            self._fill_buf(timeout)
-        idx = self._read_buf.index(b'\n')
-        line = self._read_buf[:idx]
-        self._read_buf = self._read_buf[idx + 1:]
-        return line.decode('latin-1')
-
-    def _read_bytes(self, count, timeout=10):
-        while len(self._read_buf) < count:
-            self._fill_buf(timeout)
-        data = self._read_buf[:count]
-        self._read_buf = self._read_buf[count:]
-        return data
+        self._emu = PersistentEmulator(emulator_path)
 
     def run(self, binary, keys, tmpdir, edit_file,
             load_addr=0x0400, rows=0, cols=0,
             mode='standard', extra_args=None):
         """Run the emulator and return (exit_code, output_bytes)."""
-        # Console mode falls back to subprocess.run
         if mode == 'console':
             runner = EmulatorRunner(self.emulator_path)
             return runner.run(binary, keys, tmpdir, edit_file,
                               load_addr, rows, cols, mode, extra_args)
 
-        # Check if server is still alive
-        if self.proc.poll() is not None:
-            self._start()
-
-        binary_str = str(binary)
-        mode_str = 'terminal' if mode == 'terminal' else 'standard'
-
-        # Send mode before binary if it changed
-        if mode_str != self.current_mode:
-            self._send(f'MODE {mode_str}')
-            self.current_mode = mode_str
-            # Mode change invalidates cached binary
-            self.current_binary = None
-
-        if binary_str != self.current_binary:
-            self._send(f'LOAD {load_addr:04x}')
-            self._send(f'BINARY {binary_str}')
-            self.current_binary = binary_str
-
-        if rows > 0:
-            self._send(f'ROWS {rows}')
-        if cols > 0:
-            self._send(f'COLS {cols}')
-
-        # Send keys inline
-        self._send(f'KEYS {len(keys)}')
-        self._send_raw(keys)
-
-        # Request inline output
-        self._send('INLINE_OUTPUT')
-
-        self._send(f'ARG {edit_file}')
+        args = [edit_file]
         if extra_args:
-            for arg in extra_args:
-                self._send(f'ARG {arg}')
-        self._send('RUN')
+            args.extend(extra_args)
 
-        # Read EXIT response
-        response = self._read_line()
-        if not response.startswith('EXIT '):
-            raise RuntimeError(f"Unexpected server response: {response!r}")
-        exit_code = int(response.split()[1])
+        exit_code, output, _ = self._emu.run(
+            binary, args=args, load_addr=load_addr, mode=mode,
+            rows=rows, cols=cols, keys=keys, inline_output=True)
 
-        # Read inline output
-        output_line = self._read_line()
-        if output_line.startswith('OUTPUT '):
-            output_len = int(output_line.split()[1])
-            output = self._read_bytes(output_len) if output_len > 0 else b""
-        else:
-            output = b""
-
-        return exit_code, output
+        return exit_code, output or b""
 
     def close(self):
-        if self.proc and self.proc.poll() is None:
-            try:
-                self._send('QUIT')
-                self.proc.wait(timeout=5)
-            except Exception:
-                self.proc.kill()
-                self.proc.wait()
+        self._emu.close()
 
 
 class EditorTestRunner:
@@ -232,7 +139,7 @@ class EditorTestRunner:
         self.editor_small_bin = base_dir / "editor" / "out" / "editor_small.out"
         self.editor_terminal_bin = base_dir / "editor" / "out" / "editor_terminal.out"
         if use_server:
-            self.emulator_runner = PersistentEmulator(self.emulator)
+            self.emulator_runner = EditorPersistentEmulator(self.emulator)
         else:
             self.emulator_runner = EmulatorRunner(self.emulator)
         self._tmpdir_obj = tempfile.TemporaryDirectory(prefix='')
