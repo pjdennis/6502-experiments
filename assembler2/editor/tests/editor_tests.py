@@ -37,6 +37,62 @@ class Colors:
         cls.RED = cls.GREEN = cls.YELLOW = cls.NC = ""
 
 
+class EmulatorRunner:
+    """Wraps emulator invocation via subprocess.run."""
+
+    def __init__(self, emulator_path):
+        self.emulator_path = str(emulator_path)
+
+    def run(self, binary, keys, tmpdir, edit_file,
+            load_addr=0x0400, rows=0, cols=0,
+            mode='standard', extra_args=None):
+        """Run the emulator and return (exit_code, output_bytes).
+
+        Args:
+            binary: path to the 6502 binary
+            keys: keystroke bytes
+            tmpdir: directory for temp files (keys.bin, output.bin)
+            edit_file: path to the file the editor opens
+            load_addr: load address (default 0x0400)
+            rows, cols: terminal size (0 = default)
+            mode: 'standard', 'terminal', or 'console'
+            extra_args: additional command-line arguments
+        """
+        keys_file = tmpdir / "keys.bin"
+        keys_file.write_bytes(keys)
+
+        cmd = [self.emulator_path, str(binary), "--no-dump",
+               "--load", f"{load_addr:04x}"]
+
+        if mode == 'console':
+            cmd.extend(["--console", edit_file])
+            with open(keys_file, "rb") as stdin_file:
+                result = subprocess.run(
+                    cmd, stdin=stdin_file, capture_output=True, timeout=10)
+            return result.returncode, b""
+
+        if mode == 'terminal':
+            cmd.append("--terminal")
+
+        if rows > 0:
+            cmd.extend(["--rows", str(rows)])
+        if cols > 0:
+            cmd.extend(["--cols", str(cols)])
+
+        output_file = tmpdir / "output.bin"
+        cmd.extend(["--input", str(keys_file), "--output", str(output_file),
+                     edit_file])
+        if extra_args:
+            cmd.extend(extra_args)
+
+        result = subprocess.run(cmd, capture_output=True, timeout=10)
+        output = output_file.read_bytes() if output_file.exists() else b""
+        return result.returncode, output
+
+    def close(self):
+        pass
+
+
 class EditorTestRunner:
     def __init__(self, base_dir: Path, verbose: bool = False, quiet: bool = False):
         self.base_dir = base_dir
@@ -48,6 +104,7 @@ class EditorTestRunner:
         self.editor_bin = base_dir / "editor" / "out" / "editor.out"
         self.editor_small_bin = base_dir / "editor" / "out" / "editor_small.out"
         self.editor_terminal_bin = base_dir / "editor" / "out" / "editor_terminal.out"
+        self.emulator_runner = EmulatorRunner(self.emulator)
         self.passed = 0
         self.failed = 0
         self.skipped = 0
@@ -111,49 +168,28 @@ class EditorTestRunner:
 
         Returns (exit_code, saved_content, ansi_output).
         """
-        keys_file = tmpdir / "keys.bin"
-        output_file = tmpdir / "output.txt"
-        keys_file.write_bytes(keys)
-
-        result = subprocess.run(
-            [str(self.emulator), str(self.editor_bin), "--no-dump",
-             "--load", "0400",
-             "--input", str(keys_file), "--output", str(output_file), input_file],
-            capture_output=True, timeout=10
-        )
+        exit_code, output = self.emulator_runner.run(
+            self.editor_bin, keys, tmpdir, input_file)
 
         saved = ""
         if Path(input_file).exists():
             saved = Path(input_file).read_text()
 
-        ansi = output_file.read_text() if output_file.exists() else ""
-
-        return result.returncode, saved, ansi
+        return exit_code, saved, output.decode('latin-1')
 
     def run_editor_console(self, input_file: str, keys: bytes, tmpdir: Path) -> tuple:
         """Run the editor with console-mode arg layout.
 
-        Uses --console as input_file arg, with the file to edit as the
-        first program argument (no output_file parameter).
-        Stdin is redirected from a keys file to simulate keystrokes.
-
         Returns (exit_code, saved_content).
         """
-        keys_file = tmpdir / "keys.bin"
-        keys_file.write_bytes(keys)
-
-        with open(keys_file, "rb") as stdin_file:
-            result = subprocess.run(
-                [str(self.emulator), str(self.editor_bin), "--no-dump",
-                 "--load", "0400", "--console", input_file],
-                stdin=stdin_file, capture_output=True, timeout=10
-            )
+        exit_code, _ = self.emulator_runner.run(
+            self.editor_bin, keys, tmpdir, input_file, mode='console')
 
         saved = ""
         if Path(input_file).exists():
             saved = Path(input_file).read_text()
 
-        return result.returncode, saved
+        return exit_code, saved
 
     def run_test_console(self, name: str, initial_content: str, keys: bytes,
                          expected_content: str = None, expect_exit: int = 0):
@@ -270,25 +306,14 @@ class EditorTestRunner:
 
         Returns (exit_code, saved_content, ansi_output).
         """
-        keys_file = tmpdir / "keys.bin"
-        output_file = tmpdir / "output.txt"
-        keys_file.write_bytes(keys)
-
-        cmd = [str(self.emulator), str(self.editor_small_bin), "--no-dump",
-               "--load", "0400",
-               "--input", str(keys_file), "--output", str(output_file), input_file]
-
-        result = subprocess.run(
-            cmd, capture_output=True, timeout=10
-        )
+        exit_code, output = self.emulator_runner.run(
+            self.editor_small_bin, keys, tmpdir, input_file)
 
         saved = ""
         if Path(input_file).exists():
             saved = Path(input_file).read_text()
 
-        ansi = output_file.read_text() if output_file.exists() else ""
-
-        return result.returncode, saved, ansi
+        return exit_code, saved, output.decode('latin-1')
 
     def run_editor_screen(self, input_file: str, keys: bytes, tmpdir: Path,
                           rows: int = 10, cols: int = 40) -> tuple:
@@ -296,17 +321,8 @@ class EditorTestRunner:
 
         Returns (exit_code, saved_content, ansi_output).
         """
-        keys_file = tmpdir / "keys.bin"
-        output_file = tmpdir / "output.txt"
-        keys_file.write_bytes(keys)
-
-        result = subprocess.run(
-            [str(self.emulator), str(self.editor_bin), "--no-dump",
-             "--load", "0400",
-             "--rows", str(rows), "--cols", str(cols),
-             "--input", str(keys_file), "--output", str(output_file), input_file],
-            capture_output=True, timeout=10
-        )
+        exit_code, output = self.emulator_runner.run(
+            self.editor_bin, keys, tmpdir, input_file, rows=rows, cols=cols)
 
         saved = ""
         if Path(input_file).exists():
@@ -315,9 +331,7 @@ class EditorTestRunner:
             except UnicodeDecodeError:
                 saved = Path(input_file).read_bytes().decode('latin-1')
 
-        ansi = output_file.read_bytes() if output_file.exists() else b""
-
-        return result.returncode, saved, ansi
+        return exit_code, saved, output
 
     def run_editor_terminal(self, input_file: str, keys: bytes, tmpdir: Path,
                             rows: int = 10, cols: int = 40,
@@ -326,19 +340,9 @@ class EditorTestRunner:
 
         Returns (exit_code, saved_content, ansi_output_bytes).
         """
-        keys_file = tmpdir / "keys.bin"
-        output_file = tmpdir / "output.bin"
-        keys_file.write_bytes(keys)
-
-        cmd = [str(self.emulator), str(self.editor_terminal_bin),
-               "--no-dump", "--load", "0400", "--terminal",
-               "--rows", str(rows), "--cols", str(cols),
-               "--input", str(keys_file), "--output", str(output_file),
-               input_file]
-        if extra_args:
-            cmd.extend(extra_args)
-
-        result = subprocess.run(cmd, capture_output=True, timeout=10)
+        exit_code, output = self.emulator_runner.run(
+            self.editor_terminal_bin, keys, tmpdir, input_file,
+            rows=rows, cols=cols, mode='terminal', extra_args=extra_args)
 
         saved = ""
         if Path(input_file).exists():
@@ -347,9 +351,7 @@ class EditorTestRunner:
             except UnicodeDecodeError:
                 saved = Path(input_file).read_bytes().decode('latin-1')
 
-        ansi = output_file.read_bytes() if output_file.exists() else b""
-
-        return result.returncode, saved, ansi
+        return exit_code, saved, output
 
     def run_test_terminal_screen(self, name: str, initial_content: str,
                                  keys: bytes, rows: int = 10, cols: int = 40,
