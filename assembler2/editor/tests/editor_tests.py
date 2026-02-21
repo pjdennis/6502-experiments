@@ -10934,6 +10934,46 @@ class EditorTestRunner:
             expect_content_rows=[(3, {8})]
         )
 
+        # BS on empty line joining to non-empty line above: cursor row not repainted.
+        # Line 0: "Hello", Line 1: "" (empty), Lines 2+.
+        # BS on empty line 1 joins to line 0, cursor at col 5 (end of "Hello").
+        # Content of line 0 unchanged, cursor row should not be repainted.
+        # Frames: 0=initial, 1=j, 2=i enter, 3=BS+ESC
+        self.run_test_screen(
+            "Scroll opt: BS on empty line joining non-empty above skips repaint",
+            "Hello\n\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6\nLine 7\nLine 8\nLine 9\nLine 10\n",
+            b"ji\x08\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Hello"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line 4"), (4, "Line 5"), (5, "Line 6"),
+                (6, "Line 7"), (7, "Line 8"), (8, "Line 9"),
+            ],
+            expect_cursor=(0, 4),
+            # Frame 3 (BS): cursor row 0 NOT repainted, only bottom row exposed
+            expect_content_rows=[(3, {8})]
+        )
+
+        # DEL at end of non-empty line joining empty line below: cursor row not repainted.
+        # Line 0: "Hello", Line 1: "" (empty), Lines 2+.
+        # DEL at end of "Hello" joins empty line below, cursor stays.
+        # Content of line 0 unchanged, cursor row should not be repainted.
+        # Frames: 0=initial, 1=$, 2=a enter insert, 3=DEL+ESC
+        self.run_test_screen(
+            "Scroll opt: DEL joining empty line below skips repaint",
+            "Hello\n\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6\nLine 7\nLine 8\nLine 9\nLine 10\n",
+            b"$a\x1b[3~\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Hello"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line 4"), (4, "Line 5"), (5, "Line 6"),
+                (6, "Line 7"), (7, "Line 8"), (8, "Line 9"),
+            ],
+            expect_cursor=(0, 4),
+            # Frame 3 (DEL): cursor row 0 NOT repainted, only bottom row exposed
+            expect_content_rows=[(3, {8})]
+        )
+
         # Batched BS at col 0 joining multiple empty lines: display correctness.
         # 3 empty lines above "Hello", 3 BS keys join them all.
         # Frames: 0=initial, 1=jjj cursor, 2=i mode switch, 3=BS*3 scroll frame

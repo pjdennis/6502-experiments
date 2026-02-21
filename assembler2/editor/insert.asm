@@ -500,7 +500,7 @@ insert_batch:
   LDA NORMAL_TEMP            ; ins_nl
   BNE .case_ins_nl
   LDA LINE_LEN16             ; back_nl
-  BNE .case_back_nl
+  BNE .jmp_case_back_nl
 
   ; --- Case: fwd_nl only (no back/insert newlines) ---
   ; FILE_LINE16 unchanged
@@ -526,10 +526,25 @@ insert_batch:
   CLC
   ADC #1                     ; + cursor line
   JSR compute_delete_screen_rows
+  ; Check if pure join (cursor at end of line = joined lines were empty)
+  LDA BUF_SRC16              ; back
+  ORA BUF_DELTA              ; insert_len
+  BNE .fwd_not_pure
+  JSR get_current_line_len    ; A = low, X = high
+  CMP CURSOR_COL16
+  BNE .fwd_not_pure
+  CPX CURSOR_COL16 + 1
+  BNE .fwd_not_pure
+  LDA #$FF
+  STA INSERT_LINE_COUNT       ; Signal: skip cursor row repaint only
+.fwd_not_pure:
   ; Pure fwd_nl join (no back_nl, no ins_nl) -> scroll optimization
   LDA #$06
   STA RENDER_FLAG            ; Line-delete with displacement-based scroll
   JMP .set_modified
+
+.jmp_case_back_nl:
+  JMP .case_back_nl
 
 .case_ins_nl:
   ; --- Case: newlines inserted ---
@@ -602,14 +617,25 @@ insert_batch:
   LDA LINE_LEN16 + 1         ; fwd_nl
   BNE .set_modified           ; Complex case, fall back to current-line redraw
   ; Check if cursor line content unchanged (pure empty-line join):
-  ; back == back_nl (all deleted bytes are newlines) AND cursor at col 0
-  ; (all joined-with lines were empty)
+  ; back == back_nl (all deleted bytes are newlines) AND
+  ; (cursor at col 0 OR cursor at end of line)
   LDA BUF_TEMP               ; back
   CMP LINE_LEN16             ; back_nl
   BNE .bs_not_pure
   LDA CURSOR_COL16
   ORA CURSOR_COL16 + 1
-  BNE .bs_not_pure            ; Joined with non-empty line
+  BEQ .bs_pure_at_start      ; Cursor at col 0: empty lines above joined
+  ; Check if cursor at end of line (empty line below joined)
+  JSR get_current_line_len    ; A = low, X = high
+  CMP CURSOR_COL16
+  BNE .bs_not_pure
+  CPX CURSOR_COL16 + 1
+  BNE .bs_not_pure
+  ; Cursor moved up: use $FF to keep normal scroll calculation
+  LDA #$FF
+  STA INSERT_LINE_COUNT
+  JMP .bs_not_pure
+.bs_pure_at_start:
   LDA BUF_TEMP               ; reload (non-zero)
   STA INSERT_LINE_COUNT       ; Signal pure empty-line join to render
 .bs_not_pure:

@@ -1193,7 +1193,10 @@ render_line_delete_scroll:
   SBC WRAP_QUOT          ; first_row (0-based)
   ; Pure newline join: include cursor row in scroll (content unchanged)
   LDX INSERT_LINE_COUNT
-  BNE .skip_del_cursor_rows
+  BEQ .add_del_rows         ; 0: normal path
+  CPX #$FF
+  BNE .skip_del_cursor_rows ; 1-254: existing (cursor in scroll region)
+.add_del_rows:               ; 0 or $FF: normal scroll with DELETE_SCREEN_ROWS
   CLC
   ADC DELETE_SCREEN_ROWS ; past end of combined line (0-based)
 .skip_del_cursor_rows:
