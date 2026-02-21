@@ -166,6 +166,65 @@ class EmulatorTestRunner:
         exit_code, _, _ = self.run_server(binary)
         self._assert_eq(name, exit_code, 1)
 
+    # ---- Stdout/stderr tests ----
+
+    def _make_write_binary(self, port, data_bytes):
+        """Build binary that writes data_bytes to a port, then exits 0.
+
+        port: target port address (e.g. 0xF001 for stdout)
+        data_bytes: bytes to write
+        """
+        code = []
+        for b in data_bytes:
+            code += [0xA9, b,                             # LDA #b
+                     0x8D, port & 0xFF, (port >> 8)]      # STA port
+        code += [0xA9, 0x00, 0x8D, 0x03, 0xF0]           # LDA #0 / STA $F003
+        return self.make_binary(code)
+
+    def test_stdout_single_byte(self):
+        """Write one byte to stdout via port $F001."""
+        name = "Stdout single byte"
+        if not self._should_run(name):
+            return
+        binary = self._make_write_binary(0xF001, b"A")
+        exit_code, output, _ = self.run_server(binary)
+        if not self._assert_eq(name, output, b"A"):
+            return
+
+    def test_stdout_string(self):
+        """Write multiple bytes to stdout."""
+        name = "Stdout string"
+        if not self._should_run(name):
+            return
+        binary = self._make_write_binary(0xF001, b"Hello")
+        exit_code, output, _ = self.run_server(binary)
+        self._assert_eq(name, output, b"Hello")
+
+    def test_stderr_single_byte(self):
+        """Write one byte to stderr via port $F002."""
+        name = "Stderr single byte"
+        if not self._should_run(name):
+            return
+        binary = self._make_write_binary(0xF002, b"E")
+        exit_code, _, stderr = self.run_server(binary)
+        self._assert_eq(name, stderr, b"E")
+
+    def test_stdout_and_stderr_separate(self):
+        """Stdout and stderr are independent streams."""
+        name = "Stdout and stderr separate"
+        if not self._should_run(name):
+            return
+        code = []
+        code += [0xA9, ord('O'), 0x8D, 0x01, 0xF0]  # 'O' to stdout
+        code += [0xA9, ord('E'), 0x8D, 0x02, 0xF0]  # 'E' to stderr
+        code += [0xA9, ord('K'), 0x8D, 0x01, 0xF0]  # 'K' to stdout
+        code += [0xA9, 0x00, 0x8D, 0x03, 0xF0]      # exit 0
+        binary = self.make_binary(code)
+        exit_code, output, stderr = self.run_server(binary)
+        if not self._assert_eq(name + " (stdout)", output, b"OK"):
+            return
+        self._assert_eq(name + " (stderr)", stderr, b"E")
+
     # ---- Test execution ----
 
     def run_all_tests(self):
@@ -182,6 +241,12 @@ class EmulatorTestRunner:
         self.test_exit_code_zero()
         self.test_exit_code_ff()
         self.test_cycle_timeout()
+
+        print("\n--- Stdout/stderr ---")
+        self.test_stdout_single_byte()
+        self.test_stdout_string()
+        self.test_stderr_single_byte()
+        self.test_stdout_and_stderr_separate()
 
         # Print results
         total = self.passed + self.failed
