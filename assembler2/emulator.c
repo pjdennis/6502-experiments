@@ -118,6 +118,7 @@
 #include <sys/ioctl.h>
 #include <sys/select.h>
 #include <time.h>
+#include <setjmp.h>
 
 #define STDIN_FILENO  0
 #define STDOUT_FILENO 1
@@ -1037,6 +1038,8 @@ uint16_t* arg_addresses;
 int done = 0;
 int exitcode_set = -1;
 int error_output_started = 0;  // Track if emulated program wrote to stderr
+int server_mode_active = 0;
+jmp_buf server_abort_jmp;
 int console_mode = 0;
 int terminal_mode = 0;
 int terminal_interactive = 0;
@@ -1863,6 +1866,8 @@ void get_terminal_size(int *rows, int *cols) {
     if (override_cols > 0) *cols = override_cols;
 }
 
+static void emulation_exit(int code);
+
 void files_init(FILE* input_file) {
     files[0] = input_file;
     for (size_t x = 1; x != 255; x++) {
@@ -1887,7 +1892,7 @@ uint8_t file_open_with_mode(const char* name, const char* mode) {
     }
     restore_terminal();
     fprintf(stderr, "could not open file: %s: too many files open\n", name);
-    exit(1);
+    emulation_exit(1);
 }
 
 uint8_t file_open(const char* name) {
@@ -1912,7 +1917,7 @@ uint8_t dir_open(const char* name) {
     if (slot == 0) {
         restore_terminal();
         fprintf(stderr, "could not open directory: %s: too many handles open\n", name);
-        exit(1);
+        emulation_exit(1);
     }
 
     struct dirent **namelist;
@@ -1962,11 +1967,19 @@ uint8_t dir_open(const char* name) {
     return slot + 1;
 }
 
+static void emulation_exit(int code) {
+    if (server_mode_active) {
+        exitcode_set = code;
+        longjmp(server_abort_jmp, 1);
+    }
+    exit(code);
+}
+
 FILE* file_handle(uint8_t file) {
     if (file == 0 || files[file - 1] == NULL) {
         restore_terminal();
         fprintf(stderr, "file %i is not open\n", (int) file);
-	exit(1);
+	emulation_exit(1);
     }
     return files[file - 1];
 }
@@ -1975,7 +1988,7 @@ void file_close(uint8_t file) {
     if (file <= 1) {
         restore_terminal();
         fprintf(stderr, "Cannot close standard file %i\n", (int) file);
-        exit(1);
+        emulation_exit(1);
     }
     if (dir_state[file - 1] != NULL) {
         DirState *ds = dir_state[file - 1];
@@ -2021,7 +2034,7 @@ uint8_t read6502(uint16_t address) {
         if (terminal_mode) {
             restore_terminal();
             fprintf(stderr, "Error: read_b not available in terminal mode, use serial_read\n");
-            exit(1);
+            emulation_exit(1);
         }
         int b = fgetc(input_file_ptr);
         if (b == EOF) {
@@ -2051,7 +2064,7 @@ uint8_t read6502(uint16_t address) {
         if (terminal_mode) {
             restore_terminal();
             fprintf(stderr, "Error: eof_b not available in terminal mode, use serial_read\n");
-            exit(1);
+            emulation_exit(1);
         }
         int b = fgetc(input_file_ptr);
         if (b == EOF) {
@@ -2082,21 +2095,21 @@ uint8_t read6502(uint16_t address) {
         if (a >= arg_count) {
             restore_terminal();
             fprintf(stderr, "Argument %i does not exist\n", (int) a);
-            exit(1);
+            emulation_exit(1);
         }
         return arg_addresses[a] & 0xff;
     } else if (address == port_argv_h) {             // argvh
         if (a >= arg_count) {
             restore_terminal();
             fprintf(stderr, "Argument %i does not exist\n", (int) a);
-            exit(1);
+            emulation_exit(1);
         }
         return arg_addresses[a] >> 8;
     } else if (address == port_con_read) {             // con_read
         if (terminal_mode) {
             restore_terminal();
             fprintf(stderr, "Error: con_read not available in terminal mode, use serial_read\n");
-            exit(1);
+            emulation_exit(1);
         }
         if (console_mode) {
             struct timespec before, after;
@@ -2140,7 +2153,7 @@ uint8_t read6502(uint16_t address) {
         if (terminal_mode) {
             restore_terminal();
             fprintf(stderr, "Error: con_ready not available in terminal mode, use serial_read\n");
-            exit(1);
+            emulation_exit(1);
         }
         if (console_mode) {
             return con_byte_ready() ? 0xFF : 0x00;
@@ -2246,7 +2259,7 @@ void write6502(uint16_t address, uint8_t value) {
         if (terminal_mode) {
             restore_terminal();
             fprintf(stderr, "Error: write_b not available in terminal mode, use serial_write\n");
-            exit(1);
+            emulation_exit(1);
         }
         if (console_mode) {
             unsigned char ch = value;
@@ -2282,7 +2295,7 @@ void write6502(uint16_t address, uint8_t value) {
         if (terminal_mode) {
             restore_terminal();
             fprintf(stderr, "Error: con_flush not available in terminal mode, use serial_write\n");
-            exit(1);
+            emulation_exit(1);
         }
         fflush(stdout);
         return;
@@ -3191,7 +3204,11 @@ static int server_main(void) {
                 loaded_address = srv_load_address;
             }
         } else if (strncmp(line, "LOAD ", 5) == 0) {
-            srv_load_address = strtol(line + 5, NULL, 16);
+            if (strcmp(line + 5, "auto") == 0) {
+                srv_load_address = -1;
+            } else {
+                srv_load_address = strtol(line + 5, NULL, 16);
+            }
         } else if (strncmp(line, "ROWS ", 5) == 0) {
             override_rows = (int)strtol(line + 5, NULL, 10);
         } else if (strncmp(line, "COLS ", 5) == 0) {
@@ -3324,16 +3341,23 @@ static int server_main(void) {
             serial_tx_next_drain_at = 0;
             reset6502();
 
-            // Run emulation
-            const int max_cycles = 200000000;
-            while (!done) {
-                step6502();
-                if (clockticks6502 > max_cycles) {
-                    fprintf(stderr, "\nserver: did not terminate within %d cycles\n", max_cycles);
-                    done = 1;
-                    if (exitcode_set == -1) exitcode_set = 1;
+            // Run emulation (setjmp catches exit(1) from emulation errors)
+            server_mode_active = 1;
+            if (setjmp(server_abort_jmp) == 0) {
+                const int max_cycles = 200000000;
+                while (!done) {
+                    step6502();
+                    if (clockticks6502 > max_cycles) {
+                        fprintf(stderr, "\nserver: did not terminate within %d cycles\n", max_cycles);
+                        done = 1;
+                        if (exitcode_set == -1) exitcode_set = 1;
+                    }
                 }
+            } else {
+                // Returned from longjmp - emulation aborted
+                if (exitcode_set == -1) exitcode_set = 1;
             }
+            server_mode_active = 0;
 
             // Clean up
             files_destroy();

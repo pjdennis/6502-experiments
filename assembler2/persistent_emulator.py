@@ -13,6 +13,7 @@ class PersistentEmulator:
         self.proc = None
         self.current_binary = None
         self.current_mode = None
+        self.current_load_addr = None
         self.current_cwd = None
         self._start()
 
@@ -23,6 +24,7 @@ class PersistentEmulator:
             stderr=subprocess.PIPE)
         self.current_binary = None
         self.current_mode = None
+        self.current_load_addr = None
         self.current_cwd = None
         self._stdout_fd = self.proc.stdout.fileno()
         self._read_buf = b''
@@ -95,7 +97,7 @@ class PersistentEmulator:
 
         return exit_code, output, stderr_data
 
-    def run(self, binary, args=None, load_addr=0, mode='standard',
+    def run(self, binary, args=None, load_addr=-1, mode='standard',
             rows=0, cols=0, cwd=None,
             keys=None, inline_output=False, inline_stderr=False):
         """Run a binary in the emulator server.
@@ -122,8 +124,15 @@ class PersistentEmulator:
             self.current_mode = mode_str
             self.current_binary = None
 
+        if load_addr != self.current_load_addr:
+            if load_addr >= 0:
+                self._send(f'LOAD {load_addr:04x}')
+            else:
+                self._send('LOAD auto')
+            self.current_load_addr = load_addr
+            self.current_binary = None
+
         if binary_str != self.current_binary:
-            self._send(f'LOAD {load_addr:04x}')
             self._send(f'BINARY {binary_str}')
             self.current_binary = binary_str
 

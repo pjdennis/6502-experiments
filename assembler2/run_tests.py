@@ -28,6 +28,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 
+from persistent_emulator import PersistentEmulator
+
 
 ASM_VERSION = "17"
 
@@ -86,11 +88,13 @@ class TestOutcome:
 
 class TestRunner:
     def __init__(self, base_dir: Path, verbose: bool = False, quiet: bool = False,
-                 asm_version: str = ASM_VERSION, python_mode: bool = False):
+                 asm_version: str = ASM_VERSION, python_mode: bool = False,
+                 use_server: bool = True):
         self.base_dir = base_dir
         self.verbose = verbose
         self.quiet = quiet
         self.python_mode = python_mode
+        self.use_server = use_server and not python_mode and int(asm_version) >= 9
         self.asm_version = asm_version
         self.emulator = base_dir / "emulator.out"
         self.assembler = self._resolve_assembler_binary(base_dir, asm_version)
@@ -101,6 +105,14 @@ class TestRunner:
         self.failed = 0
         self.skipped = 0
         self.current_test_file = None  # Track current test file for relative includes
+
+        if self.use_server:
+            self.emu = PersistentEmulator(self.emulator)
+            self._tmpdir_obj = tempfile.TemporaryDirectory(prefix='asm_tests_')
+            self.shared_tmpdir = Path(self._tmpdir_obj.name)
+        else:
+            self.emu = None
+            self.shared_tmpdir = None
 
     @staticmethod
     def _resolve_assembler_binary(base_dir: Path, asm_version: str) -> Path:
@@ -314,8 +326,12 @@ class TestRunner:
                 return TestOutcome(TestResult.SKIP, ["small_heap not applicable in python mode"])
 
         if test.test_type == TestType.ASSEMBLER:
+            if self.use_server:
+                return self._run_assembler_test_server(test)
             return self._run_assembler_test(test)
         elif test.test_type == TestType.FILE_STACK:
+            if self.use_server:
+                return self._run_file_stack_test_server(test)
             return self._run_file_stack_test(test)
         else:
             return TestOutcome(TestResult.SKIP, ["Unknown test type"])
@@ -496,8 +512,8 @@ class TestRunner:
 
     def _filter_stderr(self, stderr_text: str) -> str:
         """Filter emulator noise from stderr and return cleaned text."""
-        if self.python_mode:
-            # No emulator noise to filter in python mode
+        if self.python_mode or self.use_server:
+            # No emulator noise to filter in python or server mode
             lines = stderr_text.split("\n")
             while lines and lines[-1] == "":
                 lines.pop()
@@ -543,6 +559,100 @@ class TestRunner:
         if details:
             return TestOutcome(TestResult.FAIL, details)
         return TestOutcome(TestResult.PASS)
+
+    def _run_assembler_test_server(self, test: Test) -> TestOutcome:
+        """Run an assembler test using server mode."""
+        tmpdir = self.shared_tmpdir
+        asm_file = tmpdir / "test.asm"
+        bin_file = tmpdir / "test.bin"
+
+        # Write input file (unless testing missing input file)
+        if test.missing_input:
+            if asm_file.exists():
+                asm_file.unlink()
+        else:
+            asm_file.write_text(test.input_text + "\n")
+
+        # Remove stale output
+        if bin_file.exists():
+            bin_file.unlink()
+
+        # Build args list
+        args = [str(asm_file), str(bin_file)]
+        if test.args:
+            args.extend(test.args.split())
+        elif int(self.asm_version) >= 11:
+            args.append("debug")
+
+        test_dir = self.current_test_file.parent if self.current_test_file else None
+
+        exit_code, _, stderr_data = self.emu.run(
+            self.assembler, args=args,
+            cwd=str(test_dir) if test_dir else None,
+            inline_stderr=True)
+
+        stderr_text = stderr_data.decode('latin-1') if stderr_data else ""
+
+        if test.expect_hex:
+            return self._check_positive_assembler_test(
+                test, bin_file, stderr_text, exit_code, asm_file)
+        elif test.expect_error:
+            return self._check_negative_assembler_test(
+                test, stderr_text, exit_code, asm_file)
+        elif test.expect_stderr:
+            return self._check_stderr_test(
+                test, stderr_text, exit_code, asm_file)
+        else:
+            return TestOutcome(TestResult.SKIP, ["No expectation defined"])
+
+    def _run_file_stack_test_server(self, test: Test) -> TestOutcome:
+        """Run a file stack test using server mode."""
+        if not test.mode or not test.main_file:
+            return TestOutcome(TestResult.SKIP, ["Missing mode or file"])
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+
+            for filename, content in test.files.items():
+                if test.mode == "memory":
+                    content = re.sub(
+                        r"@include\s+(\S+)", rf"@include {tmpdir}/\1", content)
+
+                filepath = tmpdir / filename
+                filepath.parent.mkdir(parents=True, exist_ok=True)
+                filepath.write_text(content)
+
+            main_file = tmpdir / test.main_file
+
+            exit_code, output, stderr_data = self.emu.run(
+                self.file_stack_test,
+                args=[test.mode, str(main_file)],
+                load_addr=0x200,
+                cwd=str(tmpdir),
+                inline_output=True,
+                inline_stderr=True)
+
+            actual_stdout = output.decode('latin-1') if output else ""
+            actual_stderr = stderr_data.decode('latin-1') if stderr_data else ""
+
+            actual_stdout = self._normalize_text(actual_stdout)
+            actual_stderr = self._normalize_text(actual_stderr)
+            expected_stdout = self._normalize_text(test.expect_stdout)
+            expected_stderr = self._normalize_text(test.expect_stderr)
+
+            details = []
+
+            if expected_stdout or actual_stdout:
+                if actual_stdout != expected_stdout:
+                    self._add_comparison(details, "stdout", expected_stdout, actual_stdout)
+
+            if expected_stderr or actual_stderr:
+                if actual_stderr != expected_stderr:
+                    self._add_comparison(details, "stderr", expected_stderr, actual_stderr)
+
+            if details:
+                return TestOutcome(TestResult.FAIL, details)
+            return TestOutcome(TestResult.PASS)
 
     def _run_file_stack_test(self, test: Test) -> TestOutcome:
         """Run a file stack test."""
@@ -741,6 +851,10 @@ def main():
         "--python", action="store_true",
         help="Use Python assembler (pyasm.py) instead of emulator"
     )
+    parser.add_argument(
+        "--no-server", action="store_true",
+        help="Use subprocess per test instead of persistent emulator server"
+    )
 
     args = parser.parse_args()
 
@@ -752,7 +866,8 @@ def main():
     base_dir = script_dir
 
     runner = TestRunner(base_dir, verbose=args.verbose, quiet=args.quiet,
-                        asm_version=args.version, python_mode=args.python)
+                        asm_version=args.version, python_mode=args.python,
+                        use_server=not args.no_server)
 
     print("=" * 40)
     print("Test Suite")
@@ -799,6 +914,9 @@ def main():
         runner.run_test_file(filepath, args.filter)
         if not args.quiet:
             print()
+
+    if runner.emu:
+        runner.emu.close()
 
     runner.print_summary()
 
