@@ -15742,6 +15742,57 @@ class EditorTestRunner:
             expected_content="A B\nC\nD\n"
         )
 
+        # dwdwp vs 2dwp: batched dw's yank last word only, count yanks all
+        # "one two three four\n". dwdw deletes "one " then "two " -> "three four\n".
+        # Batched dw overwrites yank, so p pastes "two " (last deleted word).
+        self.run_test(
+            "dwdwp: batched yanks last word only",
+            "one two three four\n",
+            b"dwdw$p:wq\r",
+            expected_content="three fourtwo \n"
+        )
+
+        # 2dwp: count 2 dw deletes "one two " at once, p pastes all of it back
+        self.run_test(
+            "2dwp: count yanks all deleted words",
+            "one two three four\n",
+            b"2dw$p:wq\r",
+            expected_content="three fourone two \n"
+        )
+
+        # Batched BS joining non-empty lines: BS at col 0 of line 1 joins
+        # into line 0, then continued BS deletes chars from joined line
+        self.run_test(
+            "Batched BS joining non-empty lines",
+            "AB\nCD\n",
+            b"ji\x08\x08\x1b:wq\r",
+            expected_content="ACD\n"
+        )
+
+        # Tab key in batched insert: multiple tabs in sequence
+        self.run_test(
+            "Multiple tabs in batched insert",
+            "AB\n",
+            b"li\x09\x09\x1b:wq\r",
+            expected_content="A\t\tB\n"
+        )
+
+        # BATCH_MAX (32) capacity: insert 33 chars to exceed the 32-entry batch
+        self.run_test(
+            "Insert 33 chars exceeds BATCH_MAX 32",
+            "\n",
+            b"i" + b"X" * 33 + b"\x1b:wq\r",
+            expected_content="X" * 33 + "\n"
+        )
+
+        # Batched ~ undo: tilde clears undo, so u after ~~~ should be no-op
+        self.run_test(
+            "Batched tilde undo is no-op",
+            "abc\n",
+            b"~~~u:wq\r",
+            expected_content="ABC\n"
+        )
+
         # --- Insert mode specifics ---
 
         # iXYZ<ESC> at col 0: insert text at beginning of line
