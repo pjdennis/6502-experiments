@@ -1,3 +1,5 @@
+Support batching for D
+
 Batched backspace joing lines had issues and then enter to split caused issues. Saw unnecessary line repaints, and also as full repaint that I wasn't able to repro just yet.
 
 Add batch support for word back/forward and other movement keys?
