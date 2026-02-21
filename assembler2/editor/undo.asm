@@ -220,6 +220,7 @@ undo_do_undo:
   ; Restore position
   CP16 UNDO_LINE16, FILE_LINE16
   CP16 UNDO_COL16, CURSOR_COL16
+  CP16 UNDO_COL16, RENDER_FROM_COL16
   ; Set up paste: BUF_TEMP16 = 1
   LDA #1
   STA BUF_TEMP16
@@ -358,6 +359,7 @@ undo_do_redo:
   ; Restore position
   CP16 UNDO_LINE16, FILE_LINE16
   CP16 UNDO_COL16, CURSOR_COL16
+  CP16 UNDO_COL16, RENDER_FROM_COL16
   ; Get yank size for delete count
   JSR yank_get_size          ; BUF_LEN16 = yank size
   BCS .redo_fail

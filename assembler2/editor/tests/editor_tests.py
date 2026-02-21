@@ -13256,6 +13256,210 @@ class EditorTestRunner:
             expect_min_col=[(4, 1, 7)]
         )
 
+        self._group("Sub-line render opt: undo/redo char delete:", leading_blank=True)
+
+        # x undo: restore char at col 3
+        # Frames: 0=initial, 1=lll, 2=x, 3=u
+        self.run_test_screen(
+            "Undo x: partial render from undo col",
+            "Hello World\n",
+            b"lllxu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello World")],
+            expect_min_col=[(3, 0, 3)]
+        )
+
+        # x redo: re-delete char at col 3
+        # Frames: 0=initial, 1=lll, 2=x, 3=u, 4=space, 5=u(redo)
+        self.run_test_screen(
+            "Redo x: partial render from undo col",
+            "Hello World\n",
+            b"lllxu u:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Helo World")],
+            expect_min_col=[(5, 0, 3)]
+        )
+
+        # D undo: restore from col 3
+        # Frames: 0=initial, 1=lll, 2=D, 3=u
+        self.run_test_screen(
+            "Undo D: partial render from undo col",
+            "Hello World\n",
+            b"lllDu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello World")],
+            expect_min_col=[(3, 0, 3)]
+        )
+
+        # D redo: re-delete from col 3
+        # Frames: 0=initial, 1=lll, 2=D, 3=u, 4=space, 5=u(redo)
+        self.run_test_screen(
+            "Redo D: partial render from undo col",
+            "Hello World\n",
+            b"lllDu u:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hel")],
+            expect_min_col=[(5, 0, 3)]
+        )
+
+        # dw undo: restore word at col 6
+        # Frames: 0=initial, 1=w(col 6), 2=dw, 3=u
+        self.run_test_screen(
+            "Undo dw: partial render from undo col",
+            "Hello World Foo\n",
+            b"wdwu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello World Foo")],
+            expect_min_col=[(3, 0, 6)]
+        )
+
+        # dw redo: re-delete word at col 6
+        # Frames: 0=initial, 1=w, 2=dw, 3=u, 4=space, 5=u(redo)
+        self.run_test_screen(
+            "Redo dw: partial render from undo col",
+            "Hello World Foo\n",
+            b"wdwu u:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello Foo")],
+            expect_min_col=[(5, 0, 6)]
+        )
+
+        # de undo: restore word at col 6
+        # Frames: 0=initial, 1=w(col 6), 2=de, 3=u
+        self.run_test_screen(
+            "Undo de: partial render from undo col",
+            "Hello World Foo\n",
+            b"wdeu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello World Foo")],
+            expect_min_col=[(3, 0, 6)]
+        )
+
+        # de redo: re-delete word at col 6
+        # Frames: 0=initial, 1=w, 2=de, 3=u, 4=space, 5=u(redo)
+        self.run_test_screen(
+            "Redo de: partial render from undo col",
+            "Hello World Foo\n",
+            b"wdeu u:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello  Foo")],
+            expect_min_col=[(5, 0, 6)]
+        )
+
+        # db undo: restore word at col 6
+        # "Hello World Foo" → ww=col 12, db=delete "World " → cursor at col 6
+        # Frames: 0=initial, 1=ww(col 12), 2=db, 3=u
+        self.run_test_screen(
+            "Undo db: partial render from undo col",
+            "Hello World Foo\n",
+            b"wwdbu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello World Foo")],
+            expect_min_col=[(3, 0, 6)]
+        )
+
+        # db redo: re-delete word backward at col 6
+        # Frames: 0=initial, 1=ww, 2=db, 3=u, 4=space, 5=u(redo)
+        self.run_test_screen(
+            "Redo db: partial render from undo col",
+            "Hello World Foo\n",
+            b"wwdbu u:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello Foo")],
+            expect_min_col=[(5, 0, 6)]
+        )
+
+        # s undo (no typing): restore char at col 3
+        # Frames: 0=initial, 1=lll, 2=s(insert enter), 3=ESC(insert exit), 4=u
+        self.run_test_screen(
+            "Undo s (no typing): partial render from undo col",
+            "Hello World\n",
+            b"llls\x1bu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello World")],
+            expect_min_col=[(4, 0, 3)]
+        )
+
+        # s redo: re-delete char at col 3
+        # Frames: 0=initial, 1=lll, 2=s, 3=ESC, 4=u, 5=space, 6=u(redo)
+        self.run_test_screen(
+            "Redo s (no typing): partial render from undo col",
+            "Hello World\n",
+            b"llls\x1bu u:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Helo World")],
+            expect_min_col=[(6, 0, 3)]
+        )
+
+        # C undo (no typing): restore from col 3
+        # Frames: 0=initial, 1=lll, 2=C(insert enter), 3=ESC(insert exit), 4=u
+        self.run_test_screen(
+            "Undo C (no typing): partial render from undo col",
+            "Hello World\n",
+            b"lllC\x1bu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello World")],
+            expect_min_col=[(4, 0, 3)]
+        )
+
+        # C redo: re-delete from col 3
+        # Frames: 0=initial, 1=lll, 2=C, 3=ESC, 4=u, 5=space, 6=u(redo)
+        self.run_test_screen(
+            "Redo C (no typing): partial render from undo col",
+            "Hello World\n",
+            b"lllC\x1bu u:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hel")],
+            expect_min_col=[(6, 0, 3)]
+        )
+
+        # cw undo (no typing): restore word at col 6
+        # Frames: 0=initial, 1=w(col 6), 2=cw(insert enter), 3=ESC, 4=u
+        self.run_test_screen(
+            "Undo cw (no typing): partial render from undo col",
+            "Hello World Foo\n",
+            b"wcw\x1bu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello World Foo")],
+            expect_min_col=[(4, 0, 6)]
+        )
+
+        # cw redo: re-delete word at col 6 (cw = change to end of word, not trailing space)
+        # Frames: 0=initial, 1=w, 2=cw, 3=ESC, 4=u, 5=space, 6=u(redo)
+        self.run_test_screen(
+            "Redo cw (no typing): partial render from undo col",
+            "Hello World Foo\n",
+            b"wcw\x1bu u:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello  Foo")],
+            expect_min_col=[(6, 0, 6)]
+        )
+
+        # x undo on wrapped line (same row count)
+        # 50 A's + B, $ to col 50, x deletes B (49 chars left + A at end = 50 A's)
+        # Actually: 50 A's + "B" = 51 chars. $ = col 50. x deletes B = 50 A's.
+        # Undo restores B at col 50 → wrap row 1, col 10
+        # Frames: 0=initial, 1=$, 2=x, 3=u
+        self.run_test_screen(
+            "Undo x on wrapped line: partial render",
+            "A" * 50 + "B\nSecond\n",
+            b"$xu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "A" * 40), (1, "A" * 10 + "B")],
+            expect_min_col=[(3, 1, 10)]
+        )
+
+        # x redo on wrapped line (same row count)
+        # Frames: 0=initial, 1=$, 2=x, 3=u, 4=space, 5=u(redo)
+        self.run_test_screen(
+            "Redo x on wrapped line: partial render",
+            "A" * 50 + "B\nSecond\n",
+            b"$xu u:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "A" * 40), (1, "A" * 10)],
+            expect_min_col=[(5, 1, 10)]
+        )
+
         self._group("Undo (u):", leading_blank=True)
 
         # dd undo: restore deleted line
