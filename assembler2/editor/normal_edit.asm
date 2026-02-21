@@ -472,6 +472,11 @@ normal_join_lines:
   ADC #1           ; +1 for cursor line
   JSR compute_delete_screen_rows
 
+  ; Join column = current line length (content before is unchanged)
+  JSR get_current_line_len
+  STA RENDER_FROM_COL16
+  STX RENDER_FROM_COL16 + 1
+
   ; Compute undo_count: if batching → 1, else → NORMAL_TEMP
   LDA UNDO_COL16             ; batching flag
   BEQ .no_batch
