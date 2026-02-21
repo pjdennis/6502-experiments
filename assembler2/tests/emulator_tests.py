@@ -323,6 +323,51 @@ class EmulatorTestRunner:
             return
         self._pass(name)
 
+    # ---- Argument passing tests ----
+
+    def _build_args_test(self):
+        """Assemble args test program. Returns True on success."""
+        tests_dir = self.base_dir / "tests"
+        out_dir = tests_dir / "out"
+        src = tests_dir / "args_test.asm"
+        self.args_test_bin = out_dir / "args_test.out"
+        return self._assemble(src, self.args_test_bin)
+
+    def test_argc_zero(self):
+        """No args: argc returns 0."""
+        name = "Argc zero"
+        if not self._should_run(name):
+            return
+        exit_code, output, _ = self.run_server(self.args_test_bin)
+        self._assert_eq(name, output, b"\x00")
+
+    def test_argc_one(self):
+        """One arg: argc returns 1."""
+        name = "Argc one"
+        if not self._should_run(name):
+            return
+        exit_code, output, _ = self.run_server(
+            self.args_test_bin, args=["hello"])
+        self._assert_eq(name, output, b"\x01hello\n")
+
+    def test_argc_multiple(self):
+        """Multiple args: argc correct, all values accessible."""
+        name = "Argc multiple"
+        if not self._should_run(name):
+            return
+        exit_code, output, _ = self.run_server(
+            self.args_test_bin, args=["foo", "bar", "baz"])
+        self._assert_eq(name, output, b"\x03foo\nbar\nbaz\n")
+
+    def test_argv_spaces(self):
+        """Args with spaces are preserved."""
+        name = "Argv with spaces"
+        if not self._should_run(name):
+            return
+        exit_code, output, _ = self.run_server(
+            self.args_test_bin, args=["hello world"])
+        self._assert_eq(name, output, b"\x01hello world\n")
+
     # ---- Test execution ----
 
     def run_all_tests(self):
@@ -357,6 +402,15 @@ class EmulatorTestRunner:
             self.test_file_read_binary()
             self.test_file_write()
             self.test_file_unclosed()
+
+            if not self._build_args_test():
+                print("\n--- Arguments (skipped: assembly failed) ---")
+            else:
+                print("\n--- Arguments ---")
+                self.test_argc_zero()
+                self.test_argc_one()
+                self.test_argc_multiple()
+                self.test_argv_spaces()
 
         # Print results
         total = self.passed + self.failed
