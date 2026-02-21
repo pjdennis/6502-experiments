@@ -13168,6 +13168,50 @@ class EditorTestRunner:
             expect_min_col=[(2, 0, 6)]
         )
 
+        # db: delete word backward from start of "Foo"
+        # "Hello World Foo" → ww=col 12 (Foo), db deletes "World " → "Hello Foo"
+        # Cursor moves backward to col 6, renders from col 6
+        self.run_test_screen(
+            "db: partial render from cursor col",
+            "Hello World Foo\n",
+            b"wwdb:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello Foo")],
+            expect_min_col=[(2, 0, 6)]
+        )
+
+        # Batched 2db: deletes 2 words backward
+        # "Hello World Foo Bar" → www=col 16 (Bar), 2db deletes "World Foo "
+        self.run_test_screen(
+            "2db batched: partial render from cursor col",
+            "Hello World Foo Bar\n",
+            b"www2db:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello Bar")],
+            expect_min_col=[(3, 0, 6)]
+        )
+
+        # Batched db+db (db with pending db)
+        self.run_test_screen(
+            "db+db batched: partial render from cursor col",
+            "Hello World Foo Bar\n",
+            b"wwwdbdb:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello Bar")],
+            expect_min_col=[(2, 0, 6)]
+        )
+
+        # db on wrapped line
+        # 50 A's + " BB CC" = 56 chars, wraps. $=col 55, b=col 53 ("CC"), db deletes "BB "
+        # Frame 0=initial, 1=$, 2=b, 3=db
+        self.run_test_screen(
+            "db on wrapped line: partial render from cursor col",
+            "A" * 50 + " BB CC\nSecond\n",
+            b"$bdb:q!\r",
+            rows=10, cols=40,
+            expect_min_col=[(3, 1, 11)]
+        )
+
         self._group("Undo (u):", leading_blank=True)
 
         # dd undo: restore deleted line

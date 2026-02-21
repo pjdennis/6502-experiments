@@ -1234,6 +1234,7 @@ word_op_backward:
   LDX BUF_TEMP16
   JSR compute_multiline_word_range_backward
   BCS .bail
+  CP16 CURSOR_COL16, RENDER_FROM_COL16
   PLA                          ; A = operator
   CMP #OP_CHANGE
   PHA                          ; Re-save (A preserved, flags from CMP)
@@ -1364,6 +1365,7 @@ batched_word_delete_bwd:
   ; Restore S position (for yank and delete)
   CP16 BUF_TEMP16, CURSOR_COL16 ; Restore S col
   CP16 BUF_DST16, FILE_LINE16   ; Restore S line
+  CP16 CURSOR_COL16, RENDER_FROM_COL16
 
   ; Compute last_word_range = full_range - prefix_range
   SEC
