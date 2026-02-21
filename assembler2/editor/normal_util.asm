@@ -694,6 +694,8 @@ batched_char_delete:
   JSR yank_add_chars
   POP16 CURSOR_COL16             ; Restore original cursor
   POP16 BUF_LEN16               ; Restore full range
+  ; Record undo before deleting
+  JSR undo_record_char_delete
   ; Delete full range in single operation
   JSR delete_at_cursor
 

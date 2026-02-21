@@ -13526,9 +13526,14 @@ class EditorTestRunner:
 
         # J cursor at join point: in standard vi, cursor goes to the space
         # between joined lines (col 3 for "foo\nbar" -> "foo bar").
-        # This editor leaves cursor at col 0 after J.
-        self._skip("J cursor at join point",
-                    "Editor J leaves cursor at col 0 instead of join point")
+        # BUG: This editor leaves cursor at col 0 after J.
+        self.run_test_screen(
+            "J cursor at join point",
+            "foo\nbar\n",
+            b"J:q!\r",
+            expect_cursor=(0, 3),
+            expect_lines=[(0, "foo bar"), (1, "~")],
+        )
 
         # o ESC cursor on empty inserted line
         # "A\n" -> o opens below, ESC exits insert. Cursor on new empty line.
@@ -13791,9 +13796,13 @@ class EditorTestRunner:
         # --- Boundary cases ---
 
         # dd undo on single-line file (restores the only line)
-        # Editor bug: dd on single-line file + undo restores with extra blank line
-        self._skip("dd undo on single-line file",
-                    "dd undo on single-line adds extra blank line")
+        # BUG: dd on single-line file + undo restores with extra blank line
+        self.run_test(
+            "dd undo on single-line file",
+            "Hello\n",
+            b"ddu:wq\r",
+            expected_content="Hello\n"
+        )
 
         # x undo on single-char line (restores single char)
         self.run_test(
@@ -13822,10 +13831,14 @@ class EditorTestRunner:
             expected_content="ello\n"
         )
 
-        # Consecutive xx without separator: undo broken
-        # Editor bug: consecutive x keypresses corrupt undo state
-        self._skip("xx u undo after consecutive x",
-                    "consecutive x keypresses break undo")
+        # Consecutive xx without separator: undo should restore last x only
+        # BUG: consecutive x keypresses corrupt undo state
+        self.run_test(
+            "xx u undo after consecutive x",
+            "Hello\n",
+            b"xxu:wq\r",
+            expected_content="ello\n"
+        )
 
         # insert mode typing clears undo stack (dd then iX ESC then u)
         self.run_test(
@@ -14205,13 +14218,12 @@ class EditorTestRunner:
 
         # --- Batch undo behavior ---
 
-        # xxxx then undo: batched x's overwrite each other's undo entry,
-        # so u after batched xx+ has no effect (only single xu works)
+        # xxxx then undo: batched x's delete all chars, undo pastes back last char
         self.run_test(
-            "xxxx then undo: batched x undo lost",
+            "xxx then undo: batched x undo restores last char",
             "ABCDE\n",
             b"xxxu:wq\r",
-            expected_content="DE\n"
+            expected_content="CDE\n"
         )
 
         # Single x then u: undo works for non-batched x
@@ -14588,12 +14600,18 @@ class EditorTestRunner:
 
         # DEL joining wrapped next line: screen state.
         # "AB" + "C"*15 = 17 chars at 10 cols: row 0 = 10, row 1 = 7.
-        # Note: screen shows only 15 chars (row 1 = 5 C's instead of 7).
-        # This appears to be a screen rendering issue with DEL join on
-        # narrow screens where the joined result wraps. Content is correct
-        # (verified by content test above). Skipping screen verification.
-        self._skip("DEL joining wrapped next line: screen",
-                    "display shows 15/17 chars after DEL join wrap at 10 cols")
+        # BUG: screen shows only 15 chars (row 1 = 5 C's instead of 7).
+        # Content is correct (verified by content test above).
+        self.run_test_screen(
+            "DEL joining wrapped next line: screen",
+            "AB\n" + "C" * 15 + "\n",
+            b"$A\x1b[3~\x1b:q!\r",
+            rows=10, cols=10,
+            expect_lines=[
+                (0, "ABCCCCCCCC"),
+                (1, "CCCCCCC"),
+            ],
+        )
 
         # C from 3 wrap rows to 1.
         # Line 0: "A"*25 at 10 cols = 3 rows (10+10+5). Move to col 2, C deletes from col 2 to end.
