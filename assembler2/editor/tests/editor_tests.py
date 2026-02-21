@@ -16383,6 +16383,216 @@ class EditorTestRunner:
             expected_content="    abc\n"
         )
 
+        # ================================================================
+        # Vertical scroll optimization with VIEW_TOP_WRAP
+        # ================================================================
+        # When the first visible line is partially off-screen (VIEW_TOP_WRAP > 0),
+        # the editor should use scroll optimization instead of full repaint.
+
+        # Setup content: line 0 wraps to 2 rows (35 chars at 20 cols), then short lines.
+        # 6-row screen = 5 content rows + status bar.
+        # Initial view: row 0-1 = line 0 (wrapped), rows 2-4 = lines 1-3.
+        # j*4 batches: cursor at line 4. Walk-back 4 rows from line 4 lands on
+        # (VIEW_TOP16=0, VIEW_TOP_WRAP=1) — partial wrap of line 0.
+        # Viewport scrolled up by 1 row. New bottom row (row 4) exposed.
+        vtw_content = ("A" * 35 + "\n"
+                       + ''.join(f"Short {i}\n" for i in range(1, 10)))
+        self.run_test_screen(
+            "Scroll opt: j past bottom wrap increases on same VIEW_TOP",
+            vtw_content,
+            b"j" * 4 + b":q!\r",
+            rows=6, cols=20,
+            expect_lines=[
+                (0, "A" * 15),    # line 0, wrap row 1
+                (1, "Short 1"),
+                (2, "Short 2"),
+                (3, "Short 3"),
+                (4, "Short 4"),   # cursor
+            ],
+            expect_cursor=(4, 0),
+            # With scroll optimization: scroll up by 1, only bottom row redrawn
+            expect_content_rows=[(1, {4})]
+        )
+
+        # After VIEW_TOP_WRAP increased (j*4 → VTW=1), k*4 returns cursor to
+        # line 0, col 0 (WRAP_QUOT=0). Since WRAP_QUOT(0) < VIEW_TOP_WRAP(1),
+        # ensure_cursor_visible scrolls up: VIEW_TOP_WRAP goes from 1 back to 0.
+        # Viewport scrolled down by 1. New top row (line 0 wrap 0) exposed.
+        # Frames: 0=initial, 1=j*4 (VTW 0→1), 2=k*4 (VTW 1→0)
+        self.run_test_screen(
+            "Scroll opt: k wrap decreases on same VIEW_TOP",
+            vtw_content,
+            b"j" * 4 + b"k" * 4 + b":q!\r",
+            rows=6, cols=20,
+            expect_lines=[
+                (0, "A" * 20),    # line 0, wrap row 0
+                (1, "A" * 15),    # line 0, wrap row 1
+                (2, "Short 1"),
+                (3, "Short 2"),
+                (4, "Short 3"),
+            ],
+            expect_cursor=(0, 0),
+            # Frame 2 (k*4): scroll down by 1, only top row redrawn
+            expect_content_rows=[(2, {0})]
+        )
+
+        # j past bottom where VIEW_TOP changes AND new VIEW_TOP_WRAP > 0.
+        # Content: lines 0-1 short, line 2 wraps to 3 rows (55 chars at 20 cols),
+        # then short lines. 6-row screen.
+        # j*5: cursor at line 5. Walk-back 4 rows from line 5:
+        #   line 4 (1 row, RR=3), line 3 (1 row, RR=2), line 2 (3 rows, VTW=2, RR=1),
+        #   VTW 2→1, RR=0. Result: VIEW_TOP16=2, VIEW_TOP_WRAP=1.
+        # SNAP: (0,0). Scroll amount: line 0 (1) + line 1 (1) + new_wrap (1) = 3.
+        # Scroll up by 3, render 3 new bottom rows.
+        vtw_content2 = ("Short 0\nShort 1\n" + "D" * 55 + "\n"
+                        + ''.join(f"Short {i}\n" for i in range(3, 12)))
+        self.run_test_screen(
+            "Scroll opt: j past bottom VIEW_TOP changes new wrap nonzero",
+            vtw_content2,
+            b"j" * 5 + b":q!\r",
+            rows=6, cols=20,
+            expect_lines=[
+                (0, "D" * 20),    # line 2, wrap row 1
+                (1, "D" * 15),    # line 2, wrap row 2
+                (2, "Short 3"),
+                (3, "Short 4"),
+                (4, "Short 5"),   # cursor
+            ],
+            expect_cursor=(4, 0),
+            # Scroll up by 3, render 3 new bottom rows
+            expect_content_rows=[(1, {2, 3, 4})]
+        )
+
+        # j with VIEW_TOP change and SNAP_VIEW_TOP_WRAP > 0.
+        # From j*5 state: VIEW_TOP16=2, VTW=1. Use 'l' to break batching,
+        # then j*2 in a new frame.
+        # j*2 from line 5→7. Walk-back from 7, 4 rows:
+        #   line 6 (1), line 5 (1), line 4 (1), line 3 (1) → VTW=0.
+        # Result: VIEW_TOP16=3, VIEW_TOP_WRAP=0. SNAP: (2,1).
+        # Scroll amount: (screen_rows(line 2) - 1) + line 3 visible = (3-1) + 0 = 2.
+        # Wait — walk from (2,1) to (3,0): line 2 contributes 3-1=2 visible rows.
+        # But new_wrap = 0. Total = 2. Scroll up by 2, render 2 bottom rows.
+        self.run_test_screen(
+            "Scroll opt: j VIEW_TOP changes with old wrap nonzero",
+            vtw_content2,
+            b"j" * 5 + b"l" + b"j" * 2 + b":q!\r",
+            rows=6, cols=20,
+            expect_lines=[
+                (0, "Short 3"),
+                (1, "Short 4"),
+                (2, "Short 5"),
+                (3, "Short 6"),
+                (4, "Short 7"),   # cursor
+            ],
+            expect_cursor=(4, 1),   # 'l' moved col to 1
+            # Frame 3 (j*2): scroll up by 2, render 2 new bottom rows
+            expect_content_rows=[(3, {3, 4})]
+        )
+
+        # VIEW_TOP_WRAP increases by more than 1 in a single step.
+        # Content: line 0 wraps to 4 rows (75 chars at 20 cols), then short lines.
+        # 6-row screen: initial shows line 0 wrap 0-3 (4 rows) + Short 1 (1 row).
+        # j*4: cursor at line 4. Walk-back 4 rows from line 4:
+        #   line 3 (1, RR=3), line 2 (1, RR=2), line 1 (1, RR=1),
+        #   line 0 (4 rows, VTW=3, RR=0).
+        # Result: VIEW_TOP16=0, VIEW_TOP_WRAP=3. Wrap changed by 3.
+        # Scroll up by 3, render 3 new bottom rows.
+        vtw_multi_wrap = ("A" * 75 + "\n"
+                          + ''.join(f"Short {i}\n" for i in range(1, 10)))
+        self.run_test_screen(
+            "Scroll opt: VIEW_TOP_WRAP increases by 3",
+            vtw_multi_wrap,
+            b"j" * 4 + b":q!\r",
+            rows=6, cols=20,
+            expect_lines=[
+                (0, "A" * 15),    # line 0, wrap row 3
+                (1, "Short 1"),
+                (2, "Short 2"),
+                (3, "Short 3"),
+                (4, "Short 4"),   # cursor
+            ],
+            expect_cursor=(4, 0),
+            # Scroll up by 3, render 3 new bottom rows
+            expect_content_rows=[(1, {2, 3, 4})]
+        )
+
+        # Large scroll delta that exceeds SCREEN_ROWS should fall back to
+        # full repaint. j*50 on a file with many short lines where VIEW_TOP
+        # changes dramatically — delta >= SCREEN_ROWS-1.
+        # This test just ensures no crash and correct final state.
+        vtw_large = ''.join(f"Line {i}\n" for i in range(60))
+        self.run_test_screen(
+            "Scroll opt: large j scroll still renders correctly",
+            vtw_large,
+            b"j" * 50 + b":q!\r",
+            rows=6, cols=20,
+            expect_lines=[
+                (0, "Line 46"),
+                (1, "Line 47"),
+                (2, "Line 48"),
+                (3, "Line 49"),
+                (4, "Line 50"),  # cursor
+            ],
+            expect_cursor=(4, 0),
+        )
+
+        # Insert mode: arrow down past bottom with VIEW_TOP_WRAP.
+        # Same content as vtw_content (line 0 wraps to 2 rows).
+        # Enter insert mode on line 0 (i), then press down arrow 4 times.
+        # Same walk-back as normal mode: VIEW_TOP_WRAP goes from 0 to 1.
+        DOWN = b"\x1b[B"
+        self.run_test_screen(
+            "Scroll opt: insert arrow down wrap increases on same VIEW_TOP",
+            vtw_content,
+            b"i" + DOWN * 4 + b"\x1b:q!\r",
+            rows=6, cols=20,
+            expect_lines=[
+                (0, "A" * 15),    # line 0, wrap row 1
+                (1, "Short 1"),
+                (2, "Short 2"),
+                (3, "Short 3"),
+                (4, "Short 4"),   # cursor was here in insert mode
+            ],
+            expect_cursor=(4, 0),  # cursor at line 4 (col 0, ESC no decrement)
+            # Frame 2 (DOWN*4): scroll up by 1, only bottom row redrawn
+            expect_content_rows=[(2, {4})]
+        )
+
+        # Insert mode: arrow up past top with VIEW_TOP_WRAP decrease.
+        # Start with j*4 to get VTW=1, then enter insert mode, arrow up 4 times.
+        UP = b"\x1b[A"
+        self.run_test_screen(
+            "Scroll opt: insert arrow up wrap decreases on same VIEW_TOP",
+            vtw_content,
+            b"j" * 4 + b"i" + UP * 4 + b"\x1b:q!\r",
+            rows=6, cols=20,
+            expect_lines=[
+                (0, "A" * 20),    # line 0, wrap row 0
+                (1, "A" * 15),    # line 0, wrap row 1
+                (2, "Short 1"),
+                (3, "Short 2"),
+                (4, "Short 3"),
+            ],
+            expect_cursor=(0, 0),
+            # Frame 3 (UP*4): scroll down by 1, only top row redrawn
+            expect_content_rows=[(3, {0})]
+        )
+
+        # VIEW_TOP_WRAP changes but LINE_COUNT also changed: should fall back
+        # to full repaint. Enter on a partial-wrap viewport modifies the buffer.
+        # j*4 gets VTW=1, then 'o' opens new line (LINE_COUNT changes).
+        # Both VTW change and LINE_COUNT change → full repaint.
+        self.run_test_screen(
+            "Scroll opt: wrap change plus LINE_COUNT change falls back to full",
+            vtw_content,
+            b"j" * 4 + b"o\x1b:q!\r",
+            rows=6, cols=20,
+            # After o (open line below line 4), cursor on new empty line 5
+            # VTW changes and LINE_COUNT changes → full repaint expected
+            # Just verify correct final state (no scroll optimization assertion)
+            expect_cursor=(4, 0),
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed + self.skipped

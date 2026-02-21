@@ -701,10 +701,15 @@ render_decide:
   JMP .view_changed
 .view_same:
 
-  ; Check VIEW_TOP_WRAP changed -> full repaint
+  ; Check VIEW_TOP_WRAP changed -> try scroll optimization
   LDA SNAP_VIEW_TOP_WRAP
   CMP VIEW_TOP_WRAP
+  BEQ .wrap_same
+  ; VIEW_TOP_WRAP changed: require LINE_COUNT unchanged for safety
+  CMP16 SNAP_LINE_COUNT16, LINE_COUNT16
   BNE .full
+  JMP .wrap_changed
+.wrap_same:
 
   ; Check LINE_COUNT16 changed
   CMP16 SNAP_LINE_COUNT16, LINE_COUNT16
@@ -1121,28 +1126,67 @@ render_decide:
 .ins_full:
   JMP .full
 
+.wrap_changed:
+  ; VIEW_TOP16 same, VIEW_TOP_WRAP different. LINE_COUNT unchanged.
+  ; Scroll amount = |new_wrap - old_wrap|
+  LDA SNAP_VIEW_TOP_WRAP
+  CMP VIEW_TOP_WRAP
+  BCC .wrap_scrolled_down
+
+  ; old_wrap > new_wrap → viewport moved UP → scroll DOWN (new rows at top)
+  SEC
+  SBC VIEW_TOP_WRAP
+  STA SCROLL_DELTA
+  ; Safety check: delta + 1 < SCREEN_ROWS
+  CLC
+  ADC #1
+  CMP SCREEN_ROWS
+  BCS .wrap_full
+  JMP render_scroll_down
+
+.wrap_scrolled_down:
+  ; new_wrap > old_wrap → viewport moved DOWN → scroll UP (new rows at bottom)
+  LDA VIEW_TOP_WRAP
+  SEC
+  SBC SNAP_VIEW_TOP_WRAP
+  STA SCROLL_DELTA
+  ; Safety check
+  CLC
+  ADC #1
+  CMP SCREEN_ROWS
+  BCS .wrap_full
+  JMP render_scroll_up
+
+.wrap_full:
+  JMP render_screen
+
 .view_changed:
   ; VIEW_TOP16 changed. Try scroll optimization.
   ; Requirement: LINE_COUNT16 unchanged (content not structurally modified)
   CMP16 SNAP_LINE_COUNT16, LINE_COUNT16
-  BNE .ins_full
-  ; Requirement: both old and new VIEW_TOP_WRAP must be 0 (no partial wraps)
-  LDA SNAP_VIEW_TOP_WRAP
-  BNE .ins_full
-  LDA VIEW_TOP_WRAP
   BNE .ins_full
 
   ; Determine direction: new > old = scrolled down (scroll up on screen)
   CMP16 VIEW_TOP16, SNAP_VIEW_TOP16
   BCC .scroll_down_detect    ; VIEW_TOP16 < SNAP → scrolled up (screen scrolls down)
 
-  ; Scrolled down: walk from old VIEW_TOP to new VIEW_TOP, summing screen rows
+  ; Scrolled down: walk from (SNAP_VIEW_TOP16, SNAP_VIEW_TOP_WRAP) to
+  ; (VIEW_TOP16, VIEW_TOP_WRAP), summing visible screen rows.
   CP16 SNAP_VIEW_TOP16, RENDER_LINE16
-  LDA #0
+
+  ; First line: visible rows = screen_rows - SNAP_VIEW_TOP_WRAP
+  LDAX16 RENDER_LINE16
+  JSR buf_get_line_len
+  JSR line_screen_rows
+  SEC
+  SBC SNAP_VIEW_TOP_WRAP
   STA SCROLL_DELTA
+  INC16 RENDER_LINE16
+
+  ; Walk intermediate lines (full screen_rows each)
 .scroll_up_walk:
   CMP16 RENDER_LINE16, VIEW_TOP16
-  BEQ .scroll_up_ready
+  BEQ .scroll_up_add_wrap
   LDAX16 RENDER_LINE16
   JSR buf_get_line_len
   JSR line_screen_rows
@@ -1152,7 +1196,14 @@ render_decide:
   INC16 RENDER_LINE16
   JMP .scroll_up_walk
 
-.scroll_up_ready:
+.scroll_up_add_wrap:
+  ; Add hidden rows of new top line (VIEW_TOP_WRAP)
+  LDA SCROLL_DELTA
+  CLC
+  ADC VIEW_TOP_WRAP
+  BCS .scroll_full           ; overflow → full repaint
+  STA SCROLL_DELTA
+
   ; Check delta < SCREEN_ROWS - 1 (else full repaint is better)
   LDA SCROLL_DELTA
   BEQ .scroll_full           ; Delta 0 shouldn't happen, but safety
@@ -1166,13 +1217,22 @@ render_decide:
   JMP render_screen
 
 .scroll_down_detect:
-  ; Scrolled up: walk from new VIEW_TOP to old VIEW_TOP
+  ; Scrolled up: walk from (VIEW_TOP16, VIEW_TOP_WRAP) to
+  ; (SNAP_VIEW_TOP16, SNAP_VIEW_TOP_WRAP)
   CP16 VIEW_TOP16, RENDER_LINE16
-  LDA #0
+
+  ; First line: visible rows = screen_rows - VIEW_TOP_WRAP
+  LDAX16 RENDER_LINE16
+  JSR buf_get_line_len
+  JSR line_screen_rows
+  SEC
+  SBC VIEW_TOP_WRAP
   STA SCROLL_DELTA
+  INC16 RENDER_LINE16
+
 .scroll_down_walk:
   CMP16 RENDER_LINE16, SNAP_VIEW_TOP16
-  BEQ .scroll_down_ready
+  BEQ .scroll_down_add_wrap
   LDAX16 RENDER_LINE16
   JSR buf_get_line_len
   JSR line_screen_rows
@@ -1182,7 +1242,14 @@ render_decide:
   INC16 RENDER_LINE16
   JMP .scroll_down_walk
 
-.scroll_down_ready:
+.scroll_down_add_wrap:
+  ; Add hidden rows of old top line (SNAP_VIEW_TOP_WRAP)
+  LDA SCROLL_DELTA
+  CLC
+  ADC SNAP_VIEW_TOP_WRAP
+  BCS .scroll_full           ; overflow → full repaint
+  STA SCROLL_DELTA
+
   LDA SCROLL_DELTA
   BEQ .scroll_full
   CLC
@@ -1245,9 +1312,10 @@ render_scroll_down:
   JSR ansi_reset_scroll_region
 
   ; Render newly exposed top rows.
-  ; RENDER_ROW = 0, RENDER_LINE16 = VIEW_TOP16, RENDER_WRAP = 0
+  ; RENDER_ROW = 0, RENDER_LINE16 = VIEW_TOP16, RENDER_WRAP = VIEW_TOP_WRAP
   LDA #0
   STA RENDER_ROW
+  LDA VIEW_TOP_WRAP
   STA RENDER_WRAP
   LDA SCROLL_DELTA
   STA RENDER_LIMIT
@@ -1713,7 +1781,7 @@ render_limited_loop:
 ; Clobbers: A, X
 find_line_at_render_row:
   CP16 VIEW_TOP16, RENDER_LINE16
-  LDA #0
+  LDA VIEW_TOP_WRAP
   STA RENDER_WRAP
   LDA RENDER_ROW
   BEQ .found
@@ -1721,22 +1789,29 @@ find_line_at_render_row:
 .walk:
   LDAX16 RENDER_LINE16
   JSR buf_get_line_len
-  JSR line_screen_rows     ; A = screen rows for this line
+  JSR line_screen_rows     ; A = total screen rows for this line
+  SEC
+  SBC RENDER_WRAP           ; visible rows = total - RENDER_WRAP
   CMP RENDER_LIMIT
   BEQ .skip_line           ; exactly consumes remaining → next line
   BCS .within_line         ; target is within this wrapped line
 .skip_line:
-  ; Subtract A (screen rows) from RENDER_LIMIT without clobbering RENDER_WRAP
+  ; Subtract visible rows (A) from RENDER_LIMIT
   EOR #$FF
   SEC
-  ADC RENDER_LIMIT         ; RENDER_LIMIT - screen_rows
+  ADC RENDER_LIMIT         ; RENDER_LIMIT - visible_rows
   STA RENDER_LIMIT
   INC16 RENDER_LINE16
+  LDA #0
+  STA RENDER_WRAP           ; subsequent lines start at wrap 0
   LDA RENDER_LIMIT
-  BEQ .found               ; remaining=0, RENDER_WRAP is still 0 from init
+  BEQ .found
   JMP .walk
 .within_line:
-  LDA RENDER_LIMIT
+  ; Target is within this line: wrap = base_wrap + remaining
+  LDA RENDER_WRAP
+  CLC
+  ADC RENDER_LIMIT
   STA RENDER_WRAP
 .found:
   RTS
