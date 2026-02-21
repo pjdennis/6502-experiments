@@ -16222,6 +16222,108 @@ class EditorTestRunner:
             expect_cursor=(3, 0),
         )
 
+        # Batched Enter on a wrapped line causing scroll.
+        # 5-row screen (4 content + 1 status), 10 cols.
+        # Line 0: "A"*15 (wraps to 2 rows at 10 cols), Line 1: "B", Line 2: "C".
+        # Total = 4 screen rows = exactly fills content area.
+        # Move to line 0 col 5, insert Enter. The split creates 2 lines,
+        # and wrapping changes. If result doesn't fit, scroll occurs.
+        self.run_test(
+            "Batched Enter on wrapped line with scroll: content",
+            "A" * 15 + "\nB\nC\n",
+            b"l" * 5 + b"i\r\r\x1b:wq\r",
+            expected_content="AAAAA\n\n" + "A" * 10 + "\nB\nC\n"
+        )
+
+        # Enter at exact wrap boundary column.
+        # Line 0: "A"*20 at 10 cols = 2 rows. Move to col 10 (exact boundary).
+        # Insert Enter at col 10 -> splits into "A"*10 + "A"*10.
+        self.run_test(
+            "Enter at exact wrap boundary column",
+            "A" * 20 + "\n",
+            b"l" * 10 + b"i\r\x1b:wq\r",
+            expected_content="A" * 10 + "\n" + "A" * 10 + "\n"
+        )
+
+        # Enter at exact wrap boundary: screen state
+        self.run_test_screen(
+            "Enter at exact wrap boundary: screen",
+            "A" * 20 + "\nShort\n",
+            b"l" * 10 + b"i\r\x1b:q!\r",
+            rows=10, cols=10,
+            expect_lines=[
+                (0, "A" * 10),
+                (1, "A" * 10),
+                (2, "Short"),
+            ],
+            expect_cursor=(1, 0),
+        )
+
+        # dd on last wrapped line when VIEW_TOP needs adjusting.
+        # 5 rows (4 content + 1 status), 10 cols.
+        # Lines: "A\nB\n" + "C"*15 (wraps to 2 rows) = 4 screen rows.
+        # j*2 goes to last line, dd deletes it. VIEW_TOP may need adjustment
+        # since the long wrapped line is gone.
+        self.run_test_screen(
+            "dd on last wrapped line adjusts view",
+            "A\nB\n" + "C" * 15 + "\n",
+            b"jjdd:q!\r",
+            rows=5, cols=10,
+            expect_lines=[
+                (0, "A"),
+                (1, "B"),
+                (2, "~"),
+            ],
+            expect_cursor=(1, 0),
+        )
+
+        # 3+ batched paste (ppp) with wrapped lines.
+        # yy copies "A"*15 (wraps at 10 cols). ppp pastes 3 copies below.
+        self.run_test(
+            "ppp batched paste with wrapped lines: content",
+            "A" * 15 + "\nEnd\n",
+            b"yyppp:wq\r",
+            expected_content="A" * 15 + "\n" + ("A" * 15 + "\n") * 3 + "End\n"
+        )
+
+        # ppp batched paste: screen state
+        self.run_test_screen(
+            "ppp batched paste with wrapped lines: screen",
+            "A" * 15 + "\nEnd\n",
+            b"yyppp:q!\r",
+            rows=12, cols=10,
+            expect_lines=[
+                (0, "A" * 10), (1, "A" * 5),
+                (2, "A" * 10), (3, "A" * 5),
+                (4, "A" * 10), (5, "A" * 5),
+                (6, "A" * 10), (7, "A" * 5),
+                (8, "End"),
+            ],
+        )
+
+        # Batched paste_above (PP) with wrapped lines.
+        # yy copies "A"*15 (wraps at 10 cols). PP pastes 2 copies above.
+        self.run_test(
+            "PP batched paste above with wrapped lines: content",
+            "A" * 15 + "\nEnd\n",
+            b"yyPP:wq\r",
+            expected_content=("A" * 15 + "\n") * 2 + "A" * 15 + "\nEnd\n"
+        )
+
+        # PP batched paste above: screen state
+        self.run_test_screen(
+            "PP batched paste above with wrapped lines: screen",
+            "A" * 15 + "\nEnd\n",
+            b"yyPP:q!\r",
+            rows=10, cols=10,
+            expect_lines=[
+                (0, "A" * 10), (1, "A" * 5),
+                (2, "A" * 10), (3, "A" * 5),
+                (4, "A" * 10), (5, "A" * 5),
+                (6, "End"),
+            ],
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed + self.skipped
