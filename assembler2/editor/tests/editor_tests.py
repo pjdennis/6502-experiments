@@ -944,6 +944,106 @@ class EditorTestRunner:
             proc.kill()
             self._fail(name, "Server process timed out")
 
+    def _run_server_editor_tests(self):
+        """Test server mode with actual editor binary."""
+        self._group("Server mode - editor integration:", leading_blank=True)
+
+        # Test 1: Basic :wq via server matches subprocess.run
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            keys = b":wq\r"
+
+            # Run via subprocess.run (reference)
+            edit_file = tmpdir / "test.txt"
+            edit_file.write_text("Hello\n")
+            ref_exit, ref_saved, ref_ansi = self.run_editor(
+                str(edit_file), keys, tmpdir)
+
+            # Run same file via server (reset content first)
+            edit_file.write_text("Hello\n")
+            keys_file = tmpdir / "keys2.bin"
+            output_file = tmpdir / "output2.bin"
+            keys_file.write_bytes(keys)
+
+            commands = [
+                f'LOAD 0400',
+                f'BINARY {self.editor_bin}',
+                f'INPUT {keys_file}',
+                f'OUTPUT {output_file}',
+                f'ARG {edit_file}',
+                'RUN',
+                'QUIT',
+            ]
+
+            self.run_server_test(
+                "Server: editor :wq exit code",
+                commands,
+                [f'EXIT {ref_exit}'])
+
+            srv_saved = edit_file.read_text() if edit_file.exists() else ""
+            if srv_saved != ref_saved:
+                self._fail("Server: editor :wq content matches",
+                    f"Server: {srv_saved!r}\n    Subprocess: {ref_saved!r}")
+            else:
+                self._pass("Server: editor :wq content matches")
+
+            srv_ansi = output_file.read_bytes() if output_file.exists() else b""
+            ref_ansi_bytes = ref_ansi.encode('latin-1')
+            if srv_ansi != ref_ansi_bytes:
+                self._fail("Server: editor :wq output matches",
+                    f"Server output {len(srv_ansi)} bytes "
+                    f"vs subprocess {len(ref_ansi_bytes)} bytes")
+            else:
+                self._pass("Server: editor :wq output matches")
+
+        # Test 2: Multiple runs reusing server process
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            edit_file = tmpdir / "test.txt"
+            keys_file = tmpdir / "keys.bin"
+            output_file = tmpdir / "output.bin"
+
+            edit_file.write_text("ABC\n")
+            keys_file.write_bytes(b"x:wq\r")
+
+            commands = [
+                f'LOAD 0400',
+                f'BINARY {self.editor_bin}',
+                f'INPUT {keys_file}',
+                f'OUTPUT {output_file}',
+                f'ARG {edit_file}',
+                'RUN',
+            ]
+
+            # Second run in same session
+            edit_file2 = tmpdir / "test2.txt"
+            edit_file2.write_text("XYZ\n")
+            keys_file2 = tmpdir / "keys2.bin"
+            output_file2 = tmpdir / "output2.bin"
+            keys_file2.write_bytes(b"x:wq\r")
+
+            commands.extend([
+                f'INPUT {keys_file2}',
+                f'OUTPUT {output_file2}',
+                f'ARG {edit_file2}',
+                'RUN',
+                'QUIT',
+            ])
+
+            self.run_server_test(
+                "Server: two sequential runs",
+                commands,
+                ['EXIT 0', 'EXIT 0'])
+
+            saved1 = edit_file.read_text()
+            saved2 = edit_file2.read_text()
+            if saved1 != "BC\n" or saved2 != "YZ\n":
+                self._fail("Server: sequential run content",
+                    f"Run 1: {saved1!r} (expected 'BC\\n'), "
+                    f"Run 2: {saved2!r} (expected 'YZ\\n')")
+            else:
+                self._pass("Server: sequential run content")
+
     def run_all_tests(self):
         """Run all editor tests."""
         print("=" * 60)
@@ -959,12 +1059,14 @@ class EditorTestRunner:
             [])
 
         self.run_server_test(
-            "Server RUN returns EXIT 0",
+            "Server RUN without BINARY returns EXIT 1",
             ['RUN', 'QUIT'],
-            ['EXIT 0'])
+            ['EXIT 1'])
 
         if not self.build_editor():
             return
+
+        self._run_server_editor_tests()
 
         self._group("Basic operations:")
 

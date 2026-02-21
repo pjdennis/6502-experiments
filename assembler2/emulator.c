@@ -2945,39 +2945,371 @@ int main(int argc, char **argv) {
     return exitcode;
 }
 
+static uint8_t pristine_memory[0x10001];
+static size_t stubs_end;  // address after stubs (where args go)
+
+static int server_load_binary(const char *filename, long load_address) {
+    memset(memory, 0, 0x10001);
+
+    FILE *f = fopen(filename, "rb");
+    if (!f) {
+        fprintf(stderr, "server: could not open binary: %s\n", filename);
+        return -1;
+    }
+
+    if (load_address < 0) {
+        if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return -1; }
+        long code_size = ftell(f);
+        if (code_size < 0 || code_size > 0x10000) { fclose(f); return -1; }
+        load_address = 0x10000 - code_size;
+        if (fseek(f, 0, SEEK_SET) != 0) { fclose(f); return -1; }
+    }
+
+    long index = load_address;
+    int b;
+    while ((b = fgetc(f)) != EOF) {
+        if (index > 0xffff) { fclose(f); return -1; }
+        memory[index++] = b;
+    }
+    fclose(f);
+
+    if (index < 0xfffe) {
+        memory[0xfffd] = memory[index - 1];
+        memory[0xfffc] = memory[index - 2];
+    }
+
+    // Generate I/O stubs (same as main)
+    size_t p = 0xf006;
+    emit_byte(inst_jmp);        // f006     jmp read_b
+    save_address(addr_read_b);
+    emit_byte(inst_jmp);        // f009     jmp write_b
+    save_address(addr_write_b);
+    emit_byte(inst_jmp);        // f00c     jmp write_d
+    save_address(addr_write_d);
+    emit_byte(inst_jmp);        // f00f     jmp exit
+    save_address(addr_exit);
+    emit_byte(inst_jmp);        // f012     jmp open
+    save_address(addr_open);
+    emit_byte(inst_jmp);        // f015     jmp close
+    save_address(addr_close);
+    emit_byte(inst_jmp);        // f018     jmp read
+    save_address(addr_read);
+    emit_byte(inst_jmp);        // f01b     jmp argc
+    save_address(addr_argc);
+    emit_byte(inst_jmp);        // f01e     jmp argv
+    save_address(addr_argv);
+    emit_byte(inst_jmp);        // f021     jmp openout
+    save_address(addr_openout);
+    emit_byte(inst_jmp);        // f024     jmp write
+    save_address(addr_write);
+    emit_byte(inst_jmp);        // f027     jmp con_read
+    save_address(addr_con_read);
+    emit_byte(inst_jmp);        // f02a     jmp con_flush
+    save_address(addr_con_flush);
+    emit_byte(inst_jmp);        // f02d     jmp con_ready
+    save_address(addr_con_ready);
+    emit_byte(inst_jmp);        // f030     jmp term_rows
+    save_address(addr_term_rows);
+    emit_byte(inst_jmp);        // f033     jmp term_cols
+    save_address(addr_term_cols);
+    emit_byte(inst_jmp);        // f036     jmp serial_read
+    save_address(addr_serial_read);
+    emit_byte(inst_jmp);        // f039     jmp serial_write
+    save_address(addr_serial_write);
+    emit_byte(inst_jmp);        // f03c     jmp opendir
+    save_address(addr_opendir);
+    fill_address(addr_read_b);
+    emit_byte(inst_bit);
+    emit_address(port_eof_b);
+    emit_byte(inst_bmi);
+    emit_byte(0x05);
+    emit_byte(inst_lda);
+    emit_address(port_read_b);
+    emit_byte(inst_clc);
+    emit_byte(inst_rts);
+    emit_byte(inst_sec);
+    emit_byte(inst_rts);
+    fill_address(addr_write_b);
+    emit_byte(inst_sta);
+    emit_address(port_write_b);
+    emit_byte(inst_rts);
+    fill_address(addr_write_d);
+    emit_byte(inst_sta);
+    emit_address(port_write_d);
+    emit_byte(inst_rts);
+    fill_address(addr_exit);
+    emit_byte(inst_sta);
+    emit_address(port_exit);
+    fill_address(addr_open);
+    emit_byte(inst_lda);
+    emit_address(port_open);
+    emit_byte(inst_rts);
+    fill_address(addr_close);
+    emit_byte(inst_sta);
+    emit_address(port_close);
+    emit_byte(inst_rts);
+    fill_address(addr_read);
+    emit_byte(inst_bit);
+    emit_address(port_eof);
+    emit_byte(inst_bmi);
+    emit_byte(0x05);
+    emit_byte(inst_lda);
+    emit_address(port_read);
+    emit_byte(inst_clc);
+    emit_byte(inst_rts);
+    emit_byte(inst_sec);
+    emit_byte(inst_rts);
+    fill_address(addr_argc);
+    emit_byte(inst_lda);
+    emit_address(port_argc);
+    emit_byte(inst_rts);
+    fill_address(addr_argv);
+    emit_byte(inst_ldx);
+    emit_address(port_argv_h);
+    emit_byte(inst_lda);
+    emit_address(port_argv_l);
+    emit_byte(inst_rts);
+    fill_address(addr_openout);
+    emit_byte(inst_lda);
+    emit_address(port_openout);
+    emit_byte(inst_rts);
+    fill_address(addr_write);
+    emit_byte(inst_sta);
+    emit_address(port_write);
+    emit_byte(inst_rts);
+    fill_address(addr_con_read);
+    emit_byte(inst_lda);
+    emit_address(port_con_read);
+    emit_byte(inst_rts);
+    fill_address(addr_con_flush);
+    emit_byte(inst_sta);
+    emit_address(port_con_flush);
+    emit_byte(inst_rts);
+    fill_address(addr_con_ready);
+    emit_byte(inst_lda);
+    emit_address(port_con_ready);
+    emit_byte(inst_rts);
+    fill_address(addr_term_rows);
+    emit_byte(inst_lda);
+    emit_address(port_term_rows);
+    emit_byte(inst_rts);
+    fill_address(addr_term_cols);
+    emit_byte(inst_lda);
+    emit_address(port_term_cols);
+    emit_byte(inst_rts);
+    fill_address(addr_serial_read);
+    emit_byte(inst_lda);
+    emit_address(port_serial_ready);
+    emit_byte(inst_beq);
+    emit_byte(0x05);
+    emit_byte(inst_lda);
+    emit_address(port_serial_data);
+    emit_byte(inst_clc);
+    emit_byte(inst_rts);
+    emit_byte(inst_sec);
+    emit_byte(inst_rts);
+    fill_address(addr_serial_write);
+    if (terminal_mode) {
+        emit_byte(inst_pha);
+        emit_byte(inst_lda);
+        emit_address(port_serial_write_ready);
+        emit_byte(inst_beq);
+        emit_byte(0x06);
+        emit_byte(inst_pla);
+        emit_byte(inst_sta);
+        emit_address(port_serial_write);
+        emit_byte(inst_clc);
+        emit_byte(inst_rts);
+        emit_byte(inst_pla);
+        emit_byte(inst_sec);
+        emit_byte(inst_rts);
+    } else {
+        emit_byte(inst_sec);
+        emit_byte(inst_rts);
+    }
+    fill_address(addr_opendir);
+    emit_byte(inst_lda);
+    emit_address(port_opendir);
+    emit_byte(inst_rts);
+
+    stubs_end = p;
+    memcpy(pristine_memory, memory, 0x10001);
+    return 0;
+}
+
 static int server_main(void) {
     char line[4096];
+    long srv_load_address = -1;
+    char srv_input[4096] = "";
+    char srv_output[4096] = "";
+    char *srv_args[256];
+    int srv_arg_count = 0;
+    int binary_loaded = 0;
 
     while (fgets(line, sizeof(line), stdin)) {
-        // Strip trailing newline
         size_t len = strlen(line);
         if (len > 0 && line[len - 1] == '\n') line[--len] = '\0';
 
         if (strcmp(line, "QUIT") == 0) {
             break;
         } else if (strncmp(line, "BINARY ", 7) == 0) {
-            // skeleton: acknowledge but don't load yet
+            terminal_mode = 0;
+            override_rows = 0;
+            override_cols = 0;
+            if (server_load_binary(line + 7, srv_load_address) != 0) {
+                fprintf(stderr, "server: failed to load binary\n");
+            } else {
+                binary_loaded = 1;
+            }
         } else if (strncmp(line, "LOAD ", 5) == 0) {
-            // skeleton: acknowledge but don't process yet
+            srv_load_address = strtol(line + 5, NULL, 16);
         } else if (strncmp(line, "ROWS ", 5) == 0) {
-            // skeleton: acknowledge
+            override_rows = (int)strtol(line + 5, NULL, 10);
         } else if (strncmp(line, "COLS ", 5) == 0) {
-            // skeleton: acknowledge
+            override_cols = (int)strtol(line + 5, NULL, 10);
         } else if (strncmp(line, "MODE ", 5) == 0) {
-            // skeleton: acknowledge
+            int new_terminal = strcmp(line + 5, "terminal") == 0;
+            if (new_terminal != terminal_mode && binary_loaded) {
+                terminal_mode = new_terminal;
+                // Regenerate stubs with new mode
+                memcpy(memory, pristine_memory, 0x10001);
+                terminal_mode = new_terminal;
+                // Need to reload binary to regenerate stubs
+                // Actually, just re-run load (will be optimized in Phase 2)
+            }
+            terminal_mode = new_terminal;
         } else if (strncmp(line, "INPUT ", 6) == 0) {
-            // skeleton: acknowledge
+            strncpy(srv_input, line + 6, sizeof(srv_input) - 1);
+            srv_input[sizeof(srv_input) - 1] = '\0';
         } else if (strncmp(line, "OUTPUT ", 7) == 0) {
-            // skeleton: acknowledge
+            strncpy(srv_output, line + 7, sizeof(srv_output) - 1);
+            srv_output[sizeof(srv_output) - 1] = '\0';
         } else if (strncmp(line, "ARG ", 4) == 0) {
-            // skeleton: acknowledge
+            if (srv_arg_count < 256) {
+                srv_args[srv_arg_count++] = strdup(line + 4);
+            }
         } else if (strcmp(line, "RUN") == 0) {
-            fprintf(stdout, "EXIT 0\n");
+            if (!binary_loaded) {
+                fprintf(stdout, "EXIT 1\n");
+                fflush(stdout);
+                goto run_cleanup;
+            }
+
+            // Restore pristine memory
+            memcpy(memory, pristine_memory, 0x10001);
+
+            // Write program arguments into memory after stubs
+            size_t p = stubs_end;
+            arg_count = srv_arg_count;
+            free(arg_addresses);
+            arg_addresses = malloc(arg_count * sizeof(uint16_t));
+            for (int arg = 0; arg < arg_count; arg++) {
+                arg_addresses[arg] = p;
+                const char *s = srv_args[arg];
+                while ((memory[p++] = *s++))
+                    ;
+            }
+
+            // Open I/O files
+            if (terminal_mode) {
+                input_file_ptr = fopen("/dev/null", "rb");
+                if (srv_input[0]) {
+                    serial_input_file = fopen(srv_input, "rb");
+                }
+                if (srv_output[0]) {
+                    serial_output_file = fopen(srv_output, "wb");
+                }
+                int rows, cols;
+                get_terminal_size(&rows, &cols);
+                console_resize(rows, cols);
+            } else {
+                input_file_ptr = fopen(
+                    srv_input[0] ? srv_input : "/dev/null", "rb");
+                if (srv_output[0]) {
+                    output_file_ptr = fopen(srv_output, "wb");
+                } else {
+                    output_file_ptr = fopen("/dev/null", "wb");
+                }
+            }
+
+            files_init(input_file_ptr);
+
+            // Reset CPU and emulation state
+            done = 0;
+            exitcode_set = -1;
+            error_output_started = 0;
+            clockticks6502 = 0;
+            clockgoal6502 = 0;
+            instructions = 0;
+            con_eof_flag = 0;
+            serial_rx_head = 0;
+            serial_rx_tail = 0;
+            serial_rx_next_fill_at = 0;
+            serial_tx_head = 0;
+            serial_tx_tail = 0;
+            serial_tx_next_drain_at = 0;
+            reset6502();
+
+            // Run emulation
+            const int max_cycles = 200000000;
+            while (!done) {
+                step6502();
+                if (clockticks6502 > max_cycles) {
+                    fprintf(stderr, "\nserver: did not terminate within %d cycles\n", max_cycles);
+                    done = 1;
+                    if (exitcode_set == -1) exitcode_set = 1;
+                }
+            }
+
+            // Clean up
+            files_destroy();
+            if (serial_input_file) { fclose(serial_input_file); serial_input_file = NULL; }
+            if (serial_output_file) { fclose(serial_output_file); serial_output_file = NULL; }
+
+            if (terminal_mode) {
+                fclose(output_file_ptr);
+                output_file_ptr = NULL;
+            } else {
+                if (output_file_ptr && output_file_ptr != stdout) {
+                    fclose(output_file_ptr);
+                    output_file_ptr = NULL;
+                }
+            }
+            fclose(input_file_ptr);
+            input_file_ptr = NULL;
+
+            // Determine exit code
+            uint8_t exitcode;
+            if (exitcode_set != -1) {
+                exitcode = exitcode_set;
+            } else {
+                uint16_t location = memory[0x100 + sp + 2]
+                    + (memory[0x100 + sp + 3] << 8) - 1;
+                exitcode = memory[location];
+            }
+
+            fprintf(stdout, "EXIT %d\n", exitcode);
             fflush(stdout);
+
+run_cleanup:
+            // Free args for next run
+            for (int j = 0; j < srv_arg_count; j++) {
+                free(srv_args[j]);
+            }
+            srv_arg_count = 0;
+            srv_input[0] = '\0';
+            srv_output[0] = '\0';
         } else {
             fprintf(stderr, "server: unknown command: %s\n", line);
         }
     }
+
+    // Final cleanup
+    for (int j = 0; j < srv_arg_count; j++) {
+        free(srv_args[j]);
+    }
+    free(arg_addresses);
+    arg_addresses = NULL;
 
     return 0;
 }
