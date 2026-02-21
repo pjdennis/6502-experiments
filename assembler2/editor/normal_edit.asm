@@ -106,6 +106,7 @@ do_char_paste_below:
   ; Non-empty line: insert after cursor
   JSR get_cursor_buf_ptr
   INC16 BUF_PTR16
+  CP16 CURSOR_COL16, RENDER_FROM_COL16
   JMP .do_paste
 
 .empty_line:
@@ -199,6 +200,7 @@ do_char_paste_above:
 
   ; Insertion point: at cursor position
   JSR get_cursor_buf_ptr
+  CP16 CURSOR_COL16, RENDER_FROM_COL16
 
   PUSH16 BUF_PTR16           ; Save insertion point
   CP16 LINE_COUNT16, COUNT16 ; Save line count for mark adjustment

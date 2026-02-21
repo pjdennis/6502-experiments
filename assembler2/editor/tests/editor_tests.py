@@ -13212,6 +13212,50 @@ class EditorTestRunner:
             expect_min_col=[(3, 1, 11)]
         )
 
+        # p (char paste below): x at col 0 yanks 'H', lllp pastes after col 3
+        # "ello World" → after p → "elloH World" (H inserted after col 3)
+        # Frame 0=initial, 1=x, 2=lll, 3=p
+        self.run_test_screen(
+            "p char paste: partial render from cursor col",
+            "Hello World\n",
+            b"xlllp:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "elloH World")],
+            expect_min_col=[(3, 0, 3)]
+        )
+
+        # P (char paste above): x at col 0 yanks 'H', lllP pastes at col 3
+        # "ello World" → after P → "ellHo World" (H inserted at col 3)
+        self.run_test_screen(
+            "P char paste: partial render from cursor col",
+            "Hello World\n",
+            b"xlllP:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "ellHo World")],
+            expect_min_col=[(3, 0, 3)]
+        )
+
+        # Batched pp (paste with pending p)
+        self.run_test_screen(
+            "pp batched paste: partial render from cursor col",
+            "Hello World\n",
+            b"xlllpp:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "elloHH World")],
+            expect_min_col=[(3, 0, 3)]
+        )
+
+        # p on wrapped line: paste on wrap row 1
+        # 50 A's, $=col 49, x=delete→49 A's, h=col 47, p=paste after col 47
+        # RENDER_FROM_COL16=47 → wrap row 1, col 7
+        self.run_test_screen(
+            "p char paste on wrapped line: partial render",
+            "A" * 50 + "\nSecond\n",
+            b"$xhp:q!\r",
+            rows=10, cols=40,
+            expect_min_col=[(4, 1, 7)]
+        )
+
         self._group("Undo (u):", leading_blank=True)
 
         # dd undo: restore deleted line
