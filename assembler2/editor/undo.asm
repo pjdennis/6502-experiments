@@ -601,6 +601,7 @@ undo_char_paste_undo:
   ; Position at insertion point and delete pasted content
   CP16 UNDO_LINE16, FILE_LINE16
   CP16 UNDO_COL16, CURSOR_COL16
+  CP16 UNDO_COL16, RENDER_FROM_COL16
   CP16 UNDO_PASTE_COUNT16, BUF_TEMP16
   JSR yank_paste_setup         ; BUF_LEN16 = total paste size
   BCS .undo_cp_fail

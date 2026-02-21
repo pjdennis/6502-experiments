@@ -13460,6 +13460,67 @@ class EditorTestRunner:
             expect_min_col=[(5, 1, 10)]
         )
 
+        self._group("Sub-line render opt: undo/redo char paste:", leading_blank=True)
+
+        # p undo: x at col 0 yanks 'H', lll → col 3 ('o'), p pastes after col 3
+        # Content after p: "elloH World". Undo: "ello World", UNDO_COL16=4.
+        # Frames: 0=initial, 1=x, 2=lll, 3=p, 4=u
+        self.run_test_screen(
+            "Undo p char paste: partial render from undo col",
+            "Hello World\n",
+            b"xlllpu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "ello World")],
+            expect_min_col=[(4, 0, 4)]
+        )
+
+        # p redo: redo paste (calls do_char_paste_below, RENDER_FROM_COL16=cursor col=3)
+        # Frames: 0=initial, 1=x, 2=lll, 3=p, 4=u, 5=space, 6=u(redo)
+        self.run_test_screen(
+            "Redo p char paste: partial render from cursor col",
+            "Hello World\n",
+            b"xlllpu u:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "elloH World")],
+            expect_min_col=[(6, 0, 3)]
+        )
+
+        # P undo: x at col 0 yanks 'H', lll → col 3 ('o'), P pastes at col 3
+        # Content after P: "ellHo World". Undo: "ello World", UNDO_COL16=3.
+        # Frames: 0=initial, 1=x, 2=lll, 3=P, 4=u
+        self.run_test_screen(
+            "Undo P char paste: partial render from undo col",
+            "Hello World\n",
+            b"xlllPu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "ello World")],
+            expect_min_col=[(4, 0, 3)]
+        )
+
+        # P redo: redo paste (calls do_char_paste_above, RENDER_FROM_COL16=cursor col=3)
+        # Frames: 0=initial, 1=x, 2=lll, 3=P, 4=u, 5=space, 6=u(redo)
+        self.run_test_screen(
+            "Redo P char paste: partial render from cursor col",
+            "Hello World\n",
+            b"xlllPu u:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "ellHo World")],
+            expect_min_col=[(6, 0, 3)]
+        )
+
+        # p undo on wrapped line (same row count)
+        # 50 A's + B. $ → col 50, x yanks B → 50 A's, h → col 48, p pastes after 48
+        # Paste at col 49 (UNDO_COL16=49). Undo: 50 A's. Wrap row 1, col 9.
+        # Frames: 0=initial, 1=$, 2=x, 3=h, 4=p, 5=u
+        self.run_test_screen(
+            "Undo p char paste on wrapped line: partial render",
+            "A" * 50 + "B\nSecond\n",
+            b"$xhpu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "A" * 40), (1, "A" * 10)],
+            expect_min_col=[(5, 1, 9)]
+        )
+
         self._group("Undo (u):", leading_blank=True)
 
         # dd undo: restore deleted line
