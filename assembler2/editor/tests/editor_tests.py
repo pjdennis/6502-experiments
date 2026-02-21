@@ -914,12 +914,54 @@ class EditorTestRunner:
             print(f"  {name:<50} {Colors.YELLOW}SKIP{Colors.NC}{msg}")
         self.skipped += 1
 
+    def run_server_test(self, name, commands, expected_lines):
+        """Test the emulator's --server mode protocol.
+
+        Args:
+            commands: list of command strings to send
+            expected_lines: list of expected response lines
+        """
+        proc = subprocess.Popen(
+            [str(self.emulator), '--server'],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE)
+        try:
+            input_data = ''.join(cmd + '\n' for cmd in commands)
+            stdout, stderr = proc.communicate(
+                input=input_data.encode(), timeout=5)
+            actual_lines = stdout.decode().splitlines()
+            if actual_lines != expected_lines:
+                self._fail(name,
+                    f"Expected: {expected_lines!r}\n"
+                    f"    Actual:   {actual_lines!r}")
+                return
+            if proc.returncode != 0:
+                self._fail(name,
+                    f"Expected exit code 0, got {proc.returncode}")
+                return
+            self._pass(name)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            self._fail(name, "Server process timed out")
+
     def run_all_tests(self):
         """Run all editor tests."""
         print("=" * 60)
         print("Editor Test Suite")
         print("=" * 60)
         print()
+
+        self._group("Server mode protocol:")
+
+        self.run_server_test(
+            "Server QUIT",
+            ['QUIT'],
+            [])
+
+        self.run_server_test(
+            "Server RUN returns EXIT 0",
+            ['RUN', 'QUIT'],
+            ['EXIT 0'])
 
         if not self.build_editor():
             return

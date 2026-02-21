@@ -1086,6 +1086,7 @@ static char serial_inject_buf[32];
 static int serial_inject_pos = 0;
 static int serial_inject_len = 0;
 int show_repaints = 0;
+int server_mode = 0;
 static struct timespec *repaint_time = NULL;
 static unsigned char *repaint_count = NULL;
 static unsigned char *repaint_displayed = NULL;  // currently displayed background color (0=none, 1-7=rainbow index+1)
@@ -2327,10 +2328,17 @@ void show_commandline(int argc, char**argv) {
 #define inst_bit 0x2c
 #define inst_bmi 0x30
 
+static int server_main(void);
+
 int main(int argc, char **argv) {
     if (argc < 2) {
-        fprintf(stderr, "usage: emulator <code file> [--load <hex load address>] [--input <input file>] [--output <output file>] [--dump <dump file>] [--no-dump] [--console] [--terminal] [--mhz <speed>] [--cpu-mhz <speed>] [--baud <rate>] [--rows N] [--cols N] [<arguments>]\n");
+        fprintf(stderr, "usage: emulator <code file> [--load <hex load address>] [--input <input file>] [--output <output file>] [--dump <dump file>] [--no-dump] [--console] [--terminal] [--server] [--mhz <speed>] [--cpu-mhz <speed>] [--baud <rate>] [--rows N] [--cols N] [<arguments>]\n");
         return 1;
+    }
+
+    // Check for --server as first argument (before code file)
+    if (argc >= 2 && strcmp(argv[1], "--server") == 0) {
+        return server_main();
     }
 
     char* code_filename = argv[1];
@@ -2444,6 +2452,9 @@ int main(int argc, char **argv) {
             i += 2;
         } else if (strcmp(argv[i], "--show-repaints") == 0) {
             show_repaints = 1;
+            i++;
+        } else if (strcmp(argv[i], "--server") == 0) {
+            server_mode = 1;
             i++;
         } else {
             fprintf(stderr, "error: unknown option %s\n", argv[i]);
@@ -2932,4 +2943,41 @@ int main(int argc, char **argv) {
     }
 
     return exitcode;
+}
+
+static int server_main(void) {
+    char line[4096];
+
+    while (fgets(line, sizeof(line), stdin)) {
+        // Strip trailing newline
+        size_t len = strlen(line);
+        if (len > 0 && line[len - 1] == '\n') line[--len] = '\0';
+
+        if (strcmp(line, "QUIT") == 0) {
+            break;
+        } else if (strncmp(line, "BINARY ", 7) == 0) {
+            // skeleton: acknowledge but don't load yet
+        } else if (strncmp(line, "LOAD ", 5) == 0) {
+            // skeleton: acknowledge but don't process yet
+        } else if (strncmp(line, "ROWS ", 5) == 0) {
+            // skeleton: acknowledge
+        } else if (strncmp(line, "COLS ", 5) == 0) {
+            // skeleton: acknowledge
+        } else if (strncmp(line, "MODE ", 5) == 0) {
+            // skeleton: acknowledge
+        } else if (strncmp(line, "INPUT ", 6) == 0) {
+            // skeleton: acknowledge
+        } else if (strncmp(line, "OUTPUT ", 7) == 0) {
+            // skeleton: acknowledge
+        } else if (strncmp(line, "ARG ", 4) == 0) {
+            // skeleton: acknowledge
+        } else if (strcmp(line, "RUN") == 0) {
+            fprintf(stdout, "EXIT 0\n");
+            fflush(stdout);
+        } else {
+            fprintf(stderr, "server: unknown command: %s\n", line);
+        }
+    }
+
+    return 0;
 }
