@@ -13080,6 +13080,38 @@ class EditorTestRunner:
             expect_min_col=[(2, 1, 18)]
         )
 
+        # s: substitute at col 3
+        # lll=col 3, s=substitute (deletes char, enters insert), ESC=exit
+        # Frame 0=initial, 1=lll move, 2=s substitute
+        self.run_test_screen(
+            "s substitute: partial render from cursor col",
+            "Hello World\n",
+            b"llls\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Helo World")],
+            expect_min_col=[(2, 0, 3)]
+        )
+
+        # 3s at col 3: substitute 3 chars from col 3
+        self.run_test_screen(
+            "3s substitute: partial render from cursor col",
+            "Hello World\n",
+            b"lll3s\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "HelWorld")],
+            expect_min_col=[(3, 0, 3)]
+        )
+
+        # s on wrapped line, same row count
+        self.run_test_screen(
+            "s on wrapped line: partial render from cursor col",
+            "A" * 50 + "\nSecond\n",
+            b"$s\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "A" * 40), (1, "A" * 9)],
+            expect_min_col=[(2, 1, 9)]
+        )
+
         self._group("Undo (u):", leading_blank=True)
 
         # dd undo: restore deleted line

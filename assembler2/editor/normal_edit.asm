@@ -597,6 +597,7 @@ normal_substitute_char:
   CP16 BUF_LEN16, BUF_TEMP16
 .sub_count_ok:
   CP16 BUF_TEMP16, BUF_LEN16
+  CP16 CURSOR_COL16, RENDER_FROM_COL16
   LDA #OP_CHANGE
   JSR apply_char_operator
   RTS
