@@ -5,8 +5,8 @@ clean:
 	find . -type d -name "out" -exec rm -rf {} +
 	find . -type f -name "*.tmp" -delete
 
-EMU_SRCS = emulator.c file_io.c
-EMU_HDRS = file_io.h
+EMU_SRCS = emulator.c file_io.c console.c
+EMU_HDRS = file_io.h console.h
 
 emulator.out: $(EMU_SRCS) $(EMU_HDRS)
 	@mkdir -p out
