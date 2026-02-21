@@ -1044,6 +1044,97 @@ class EditorTestRunner:
             else:
                 self._pass("Server: sequential run content")
 
+        # Test 3: Terminal mode via server matches subprocess.run
+        if self.editor_terminal_bin.exists():
+            with tempfile.TemporaryDirectory() as tmpdir:
+                tmpdir = Path(tmpdir)
+                keys = b":wq\r"
+
+                # Reference via subprocess.run
+                edit_file = tmpdir / "test.txt"
+                edit_file.write_text("Hello\n")
+                ref_exit, ref_saved, ref_ansi = self.run_editor_terminal(
+                    str(edit_file), keys, tmpdir, rows=10, cols=40)
+
+                # Server mode
+                edit_file.write_text("Hello\n")
+                keys_file = tmpdir / "keys2.bin"
+                output_file = tmpdir / "output2.bin"
+                keys_file.write_bytes(keys)
+
+                commands = [
+                    f'LOAD 0400',
+                    f'MODE terminal',
+                    f'BINARY {self.editor_terminal_bin}',
+                    f'ROWS 10',
+                    f'COLS 40',
+                    f'INPUT {keys_file}',
+                    f'OUTPUT {output_file}',
+                    f'ARG {edit_file}',
+                    'RUN',
+                    'QUIT',
+                ]
+
+                self.run_server_test(
+                    "Server: terminal mode exit code",
+                    commands,
+                    [f'EXIT {ref_exit}'])
+
+                srv_saved = edit_file.read_text() if edit_file.exists() else ""
+                if srv_saved != ref_saved:
+                    self._fail("Server: terminal mode content",
+                        f"Server: {srv_saved!r}\n    Subprocess: {ref_saved!r}")
+                else:
+                    self._pass("Server: terminal mode content")
+
+                srv_ansi = output_file.read_bytes() if output_file.exists() else b""
+                if srv_ansi != ref_ansi:
+                    self._fail("Server: terminal mode output",
+                        f"Server {len(srv_ansi)} bytes "
+                        f"vs subprocess {len(ref_ansi)} bytes")
+                else:
+                    self._pass("Server: terminal mode output")
+
+        # Test 4: Screen size via server matches subprocess.run
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            keys = b":q!\r"
+
+            edit_file = tmpdir / "test.txt"
+            edit_file.write_text("Hello\n")
+            ref_exit, ref_saved, ref_ansi = self.run_editor_screen(
+                str(edit_file), keys, tmpdir, rows=5, cols=20)
+
+            edit_file.write_text("Hello\n")
+            keys_file = tmpdir / "keys2.bin"
+            output_file = tmpdir / "output2.bin"
+            keys_file.write_bytes(keys)
+
+            commands = [
+                f'LOAD 0400',
+                f'BINARY {self.editor_bin}',
+                f'ROWS 5',
+                f'COLS 20',
+                f'INPUT {keys_file}',
+                f'OUTPUT {output_file}',
+                f'ARG {edit_file}',
+                'RUN',
+                'QUIT',
+            ]
+
+            self.run_server_test(
+                "Server: screen size exit code",
+                commands,
+                [f'EXIT {ref_exit}'])
+
+            srv_ansi = output_file.read_bytes() if output_file.exists() else b""
+            if srv_ansi != ref_ansi:
+                self._fail("Server: screen size output",
+                    f"Server {len(srv_ansi)} bytes "
+                    f"vs subprocess {len(ref_ansi)} bytes")
+            else:
+                self._pass("Server: screen size output")
+
     def run_all_tests(self):
         """Run all editor tests."""
         print("=" * 60)

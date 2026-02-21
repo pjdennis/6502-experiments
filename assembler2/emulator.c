@@ -3142,6 +3142,7 @@ static int server_main(void) {
     long srv_load_address = -1;
     char srv_input[4096] = "";
     char srv_output[4096] = "";
+    char srv_binary[4096] = "";
     char *srv_args[256];
     int srv_arg_count = 0;
     int binary_loaded = 0;
@@ -3153,11 +3154,11 @@ static int server_main(void) {
         if (strcmp(line, "QUIT") == 0) {
             break;
         } else if (strncmp(line, "BINARY ", 7) == 0) {
-            terminal_mode = 0;
-            override_rows = 0;
-            override_cols = 0;
-            if (server_load_binary(line + 7, srv_load_address) != 0) {
+            strncpy(srv_binary, line + 7, sizeof(srv_binary) - 1);
+            srv_binary[sizeof(srv_binary) - 1] = '\0';
+            if (server_load_binary(srv_binary, srv_load_address) != 0) {
                 fprintf(stderr, "server: failed to load binary\n");
+                binary_loaded = 0;
             } else {
                 binary_loaded = 1;
             }
@@ -3171,11 +3172,7 @@ static int server_main(void) {
             int new_terminal = strcmp(line + 5, "terminal") == 0;
             if (new_terminal != terminal_mode && binary_loaded) {
                 terminal_mode = new_terminal;
-                // Regenerate stubs with new mode
-                memcpy(memory, pristine_memory, 0x10001);
-                terminal_mode = new_terminal;
-                // Need to reload binary to regenerate stubs
-                // Actually, just re-run load (will be optimized in Phase 2)
+                server_load_binary(srv_binary, srv_load_address);
             }
             terminal_mode = new_terminal;
         } else if (strncmp(line, "INPUT ", 6) == 0) {
@@ -3213,6 +3210,7 @@ static int server_main(void) {
             // Open I/O files
             if (terminal_mode) {
                 input_file_ptr = fopen("/dev/null", "rb");
+                output_file_ptr = fopen("/dev/null", "wb");
                 if (srv_input[0]) {
                     serial_input_file = fopen(srv_input, "rb");
                 }
@@ -3263,6 +3261,7 @@ static int server_main(void) {
 
             // Clean up
             files_destroy();
+            if (serial_baud > 0) serial_tx_flush();
             if (serial_input_file) { fclose(serial_input_file); serial_input_file = NULL; }
             if (serial_output_file) { fclose(serial_output_file); serial_output_file = NULL; }
 
