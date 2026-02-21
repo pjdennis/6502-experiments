@@ -5,9 +5,6 @@
 #include <signal.h>
 #include <errno.h>
 #include <unistd.h>
-#include <sys/stat.h>
-#include <dirent.h>
-#include <limits.h>
 #include <termios.h>
 #include <sys/ioctl.h>
 #include <sys/select.h>
