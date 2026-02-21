@@ -17,10 +17,13 @@ emulator.out: $(EMU_SRCS) $(EMU_HDRS)
 	gcc -O2 -o 00/out/asm_c.out 00/asm.c
 
 # C unit tests
-C_TESTS = tests/test_smoke
+C_TESTS = tests/test_smoke tests/test_file_io
 
 test: $(C_TESTS)
 	@for t in $(C_TESTS); do ./$$t || exit 1; done
 
 tests/test_smoke: tests/test_smoke.c tests/greatest.h
 	gcc -o $@ $<
+
+tests/test_file_io: tests/test_file_io.c file_io.c file_io.h tests/greatest.h
+	gcc -o $@ tests/test_file_io.c file_io.c
