@@ -541,6 +541,12 @@ normal_join_lines:
   JMP .join_loop
 
 .join_finish:
+  ; For batched joins, cursor goes to last join point
+  LDA UNDO_COL16             ; batching flag
+  BEQ .cursor_done
+  SEC
+  SBC16 BUF_PTR16, BUF_SRC16, CURSOR_COL16
+.cursor_done:
   ; Save join-point cursor for redo
   CP16 CURSOR_COL16, UNDO_COL16
   ; Single rebuild

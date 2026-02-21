@@ -10393,7 +10393,7 @@ class EditorTestRunner:
                 (5, "Short 7"), (6, "Short 8"),
                 (7, "Short 9"), (8, "Short 10"),
             ],
-            expect_cursor=(1, 7),
+            expect_cursor=(2, 10),
             # Only cursor line's 2 wrap rows + bottom exposed rows repainted
             expect_content_rows=[(2, {1, 2, 7, 8})]
         )
@@ -10421,7 +10421,7 @@ class EditorTestRunner:
                 (5, "Short 7"), (6, "Short 8"),
                 (7, "Short 9"), (8, "Short 10"),
             ],
-            expect_cursor=(1, 7),
+            expect_cursor=(1, 11),
             # Only cursor line's 2 wrap rows + bottom exposed rows repainted
             expect_content_rows=[(2, {1, 2, 7, 8})]
         )
@@ -10449,7 +10449,7 @@ class EditorTestRunner:
                 (5, "Short 6"), (6, "Short 7"),
                 (7, "Short 8"), (8, "Short 9"),
             ],
-            expect_cursor=(2, 19),
+            expect_cursor=(3, 19),
             expect_scroll_rows=[(2, set())]
         )
 
@@ -10476,7 +10476,7 @@ class EditorTestRunner:
                 (6, "Short 8"), (7, "Short 9"),
                 (8, "Short 10"),
             ],
-            expect_cursor=(2, 19),
+            expect_cursor=(3, 2),
         )
 
         # JJJ (3 batched joins) with wrapped line among those joined:
@@ -10499,7 +10499,7 @@ class EditorTestRunner:
                 (6, "Short 8"), (7, "Short 9"),
                 (8, "Short 10"),
             ],
-            expect_cursor=(1, 7),
+            expect_cursor=(2, 18),
         )
 
         # J with following line off-screen: cursor near bottom, joined line wraps,
@@ -10594,7 +10594,7 @@ class EditorTestRunner:
                 (5, "Short 7"), (6, "Short 8"),
                 (7, "Short 9"), (8, "Short 10"),
             ],
-            expect_cursor=(1, 7),
+            expect_cursor=(2, 10),
             # Redo re-joins 1 line (batched JJ records UNDO_JOIN_COUNT=1):
             # cursor wrap rows (1,2) + 1 bottom exposed row (8)
             expect_content_rows=[(5, {1, 2, 8})]
@@ -10613,7 +10613,7 @@ class EditorTestRunner:
                 (5, "Short 7"), (6, "Short 8"),
                 (7, "Short 9"), (8, "Short 10"),
             ],
-            expect_cursor=(1, 7),
+            expect_cursor=(1, 11),
             # Redo re-joins 1 line (batched JJ records UNDO_JOIN_COUNT=1):
             # cursor wrap rows (1,2) + 1 bottom exposed row (8)
             expect_content_rows=[(5, {1, 2, 8})]
@@ -10632,7 +10632,7 @@ class EditorTestRunner:
                 (5, "Short 6"), (6, "Short 7"),
                 (7, "Short 8"), (8, "Short 9"),
             ],
-            expect_cursor=(2, 19),
+            expect_cursor=(3, 19),
             expect_scroll_rows=[(5, set())],
             # No scroll, only cursor line's 3 wrap rows repainted
             expect_content_rows=[(5, {2, 3, 4})]
@@ -10651,7 +10651,7 @@ class EditorTestRunner:
                 (6, "Short 8"), (7, "Short 9"),
                 (8, "Short 10"),
             ],
-            expect_cursor=(2, 19),
+            expect_cursor=(3, 2),
         )
 
         self.run_test_screen(
@@ -10668,7 +10668,7 @@ class EditorTestRunner:
                 (6, "Short 8"), (7, "Short 9"),
                 (8, "Short 10"),
             ],
-            expect_cursor=(1, 7),
+            expect_cursor=(2, 18),
         )
 
         self.run_test_screen(
@@ -13543,6 +13543,27 @@ class EditorTestRunner:
             rows=10, cols=10,
             expect_cursor=(1, 2),
             expect_lines=[(0, "A" * 10), (1, "AA bar")],
+        )
+
+        # [n]J cursor at first join point: 3J on "A\nB\nC\n" -> "A B C\n"
+        # Cursor at col 1 (end of original first line "A").
+        self.run_test_screen(
+            "3J cursor at first join point",
+            "A\nB\nC\n",
+            b"3J:q!\r",
+            expect_cursor=(0, 1),
+            expect_lines=[(0, "A B C")],
+        )
+
+        # Batched JJ cursor at last join point: JJ on "A\nB\nC\n" -> "A B C\n"
+        # First J: "A B\nC\n" cursor col 1. Second J: "A B C\n" cursor col 3.
+        # Batched JJ should place cursor at col 3 (the last join point).
+        self.run_test_screen(
+            "JJ batched cursor at last join point",
+            "A\nB\nC\n",
+            b"JJ:q!\r",
+            expect_cursor=(0, 3),
+            expect_lines=[(0, "A B C")],
         )
 
         # o ESC cursor on empty inserted line
