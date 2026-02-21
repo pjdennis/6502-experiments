@@ -15811,6 +15811,33 @@ class EditorTestRunner:
             expected_content="Hello WXorld\n"
         )
 
+        # Arrow right then type in insert mode
+        # i enters at col 0, RIGHT moves to col 1, X inserted at col 1
+        self.run_test(
+            "Right arrow then type in insert mode",
+            "ABCD\n",
+            b"i\x1b[CX\x1b:wq\r",
+            expected_content="AXBCD\n"
+        )
+
+        # Arrow down then type in insert mode
+        # i enters at line 0 col 0, DOWN moves to line 1 col 0, X inserted there
+        self.run_test(
+            "Down arrow then type in insert mode",
+            "Hello\nWorld\n",
+            b"i\x1b[BX\x1b:wq\r",
+            expected_content="Hello\nXWorld\n"
+        )
+
+        # Arrow up then type in insert mode
+        # j moves to line 1, i enters at col 0, UP moves to line 0 col 0, X inserted
+        self.run_test(
+            "Up arrow then type in insert mode",
+            "Hello\nWorld\n",
+            b"ji\x1b[AX\x1b:wq\r",
+            expected_content="XHello\nWorld\n"
+        )
+
         # Verify cursor position after iXYZ<ESC>
         self.run_test_screen(
             "iXYZ cursor on last inserted char",
