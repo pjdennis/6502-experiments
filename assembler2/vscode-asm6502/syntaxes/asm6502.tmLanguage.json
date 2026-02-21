@@ -1,0 +1,106 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "6502 Assembly",
+  "scopeName": "source.asm6502",
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#string" },
+    { "include": "#char" },
+    { "include": "#directive" },
+    { "include": "#label-assignment" },
+    { "include": "#pc-assignment" },
+    { "include": "#local-label-def" },
+    { "include": "#global-label-def" },
+    { "include": "#opcode" },
+    { "include": "#local-label-ref" },
+    { "include": "#hex-number" },
+    { "include": "#decimal-number" },
+    { "include": "#immediate" },
+    { "include": "#operator" },
+    { "include": "#byte-selector" }
+  ],
+  "repository": {
+    "comment": {
+      "name": "comment.line.semicolon.asm6502",
+      "match": ";.*$"
+    },
+    "string": {
+      "name": "string.quoted.double.asm6502",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.asm6502",
+          "match": "\\\\[nrtb\\\\\"']"
+        }
+      ]
+    },
+    "char": {
+      "name": "constant.character.asm6502",
+      "match": "'(?:\\\\[nrtb\\\\']|[^'\\\\])'",
+      "captures": {
+        "0": { "name": "constant.character.asm6502" }
+      }
+    },
+    "directive": {
+      "name": "keyword.control.directive.asm6502",
+      "match": "(?i)\\.(byte|word|asciiz|include|reserve|macro|endmacro|zeropage|code|ifdef|ifndef|else|endif)\\b"
+    },
+    "label-assignment": {
+      "match": "^([a-zA-Z_][a-zA-Z0-9_]*)\\s*(=)",
+      "captures": {
+        "1": { "name": "entity.name.constant.asm6502" },
+        "2": { "name": "keyword.operator.assignment.asm6502" }
+      }
+    },
+    "pc-assignment": {
+      "match": "^(\\*)\\s*(=)",
+      "captures": {
+        "1": { "name": "variable.language.pc.asm6502" },
+        "2": { "name": "keyword.operator.assignment.asm6502" }
+      }
+    },
+    "local-label-def": {
+      "match": "^(\\.[a-zA-Z_][a-zA-Z0-9_]*)(:)?",
+      "captures": {
+        "1": { "name": "entity.name.label.local.asm6502" },
+        "2": { "name": "punctuation.separator.colon.asm6502" }
+      }
+    },
+    "global-label-def": {
+      "match": "^([a-zA-Z_][a-zA-Z0-9_]*)(:)",
+      "captures": {
+        "1": { "name": "entity.name.function.label.asm6502" },
+        "2": { "name": "punctuation.separator.colon.asm6502" }
+      }
+    },
+    "opcode": {
+      "name": "keyword.mnemonic.asm6502",
+      "match": "(?i)\\b(LDA|LDX|LDY|STA|STX|STY|TAX|TAY|TXA|TYA|TSX|TXS|PHA|PHP|PLA|PLP|ADC|SBC|INC|INX|INY|DEC|DEX|DEY|AND|ORA|EOR|ASL|LSR|ROL|ROR|CMP|CPX|CPY|BIT|BCC|BCS|BEQ|BMI|BNE|BPL|BVC|BVS|JMP|JSR|RTS|RTI|CLC|CLD|CLI|CLV|SEC|SED|SEI|BRK|NOP)\\b"
+    },
+    "local-label-ref": {
+      "name": "entity.name.label.local.asm6502",
+      "match": "(?<=\\s)\\.[a-zA-Z_][a-zA-Z0-9_]*"
+    },
+    "hex-number": {
+      "name": "constant.numeric.hex.asm6502",
+      "match": "\\$[0-9a-fA-F]+"
+    },
+    "decimal-number": {
+      "name": "constant.numeric.decimal.asm6502",
+      "match": "(?<=[#=+\\-<>, \\t(]|^)[0-9]+\\b"
+    },
+    "immediate": {
+      "name": "keyword.operator.immediate.asm6502",
+      "match": "#"
+    },
+    "operator": {
+      "name": "keyword.operator.asm6502",
+      "match": "<<|>>|[+\\-]"
+    },
+    "byte-selector": {
+      "name": "keyword.operator.byte-selector.asm6502",
+      "match": "(?<=#)[<>]"
+    }
+  }
+}
