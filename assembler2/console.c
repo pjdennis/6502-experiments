@@ -316,6 +316,8 @@ void serial_reset() {
     serial_tx_head = 0;
     serial_tx_tail = 0;
     serial_tx_next_drain_at = 0;
+    serial_inject_pos = 0;
+    serial_inject_len = 0;
 }
 
 int serial_rx_count() {
