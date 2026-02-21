@@ -14,8 +14,10 @@ emulator.out: emulator.c
 	gcc -O2 -o 00/out/asm_c.out 00/asm.c
 
 # C unit tests
-C_TESTS =
+C_TESTS = tests/test_smoke
 
 test: $(C_TESTS)
 	@for t in $(C_TESTS); do ./$$t || exit 1; done
-	@if [ -z "$(C_TESTS)" ]; then echo "No C unit tests yet"; fi
+
+tests/test_smoke: tests/test_smoke.c tests/greatest.h
+	gcc -o $@ $<
