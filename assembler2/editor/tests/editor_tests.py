@@ -110,21 +110,41 @@ class PersistentEmulator:
             stderr=subprocess.PIPE)
         self.current_binary = None
         self.current_mode = None
+        self._stdout_fd = self.proc.stdout.fileno()
+        self._read_buf = b''
 
     def _send(self, line):
         self.proc.stdin.write((line + '\n').encode())
         self.proc.stdin.flush()
 
-    def _read_line(self, timeout=10):
+    def _send_raw(self, data):
+        self.proc.stdin.write(data)
+        self.proc.stdin.flush()
+
+    def _fill_buf(self, timeout=10):
         import select
-        fd = self.proc.stdout.fileno()
-        ready, _, _ = select.select([fd], [], [], timeout)
+        ready, _, _ = select.select([self._stdout_fd], [], [], timeout)
         if not ready:
             raise subprocess.TimeoutExpired(self.emulator_path, timeout)
-        line = self.proc.stdout.readline()
-        if not line:
+        chunk = os.read(self._stdout_fd, 65536)
+        if not chunk:
             raise RuntimeError("Server process died")
-        return line.decode().rstrip('\n')
+        self._read_buf += chunk
+
+    def _read_line(self, timeout=10):
+        while b'\n' not in self._read_buf:
+            self._fill_buf(timeout)
+        idx = self._read_buf.index(b'\n')
+        line = self._read_buf[:idx]
+        self._read_buf = self._read_buf[idx + 1:]
+        return line.decode('latin-1')
+
+    def _read_bytes(self, count, timeout=10):
+        while len(self._read_buf) < count:
+            self._fill_buf(timeout)
+        data = self._read_buf[:count]
+        self._read_buf = self._read_buf[count:]
+        return data
 
     def run(self, binary, keys, tmpdir, edit_file,
             load_addr=0x0400, rows=0, cols=0,
@@ -161,24 +181,33 @@ class PersistentEmulator:
         if cols > 0:
             self._send(f'COLS {cols}')
 
-        keys_file = tmpdir / "keys.bin"
-        output_file = tmpdir / "output.bin"
-        keys_file.write_bytes(keys)
+        # Send keys inline
+        self._send(f'KEYS {len(keys)}')
+        self._send_raw(keys)
 
-        self._send(f'INPUT {keys_file}')
-        self._send(f'OUTPUT {output_file}')
+        # Request inline output
+        self._send('INLINE_OUTPUT')
+
         self._send(f'ARG {edit_file}')
         if extra_args:
             for arg in extra_args:
                 self._send(f'ARG {arg}')
         self._send('RUN')
 
+        # Read EXIT response
         response = self._read_line()
         if not response.startswith('EXIT '):
             raise RuntimeError(f"Unexpected server response: {response!r}")
         exit_code = int(response.split()[1])
 
-        output = output_file.read_bytes() if output_file.exists() else b""
+        # Read inline output
+        output_line = self._read_line()
+        if output_line.startswith('OUTPUT '):
+            output_len = int(output_line.split()[1])
+            output = self._read_bytes(output_len) if output_len > 0 else b""
+        else:
+            output = b""
+
         return exit_code, output
 
     def close(self):
@@ -207,6 +236,8 @@ class EditorTestRunner:
             self.emulator_runner = PersistentEmulator(self.emulator)
         else:
             self.emulator_runner = EmulatorRunner(self.emulator)
+        self._tmpdir_obj = tempfile.TemporaryDirectory(prefix='')
+        self.tmpdir = Path(self._tmpdir_obj.name)
         self.passed = 0
         self.failed = 0
         self.skipped = 0
@@ -296,111 +327,110 @@ class EditorTestRunner:
     def run_test_console(self, name: str, initial_content: str, keys: bytes,
                          expected_content: str = None, expect_exit: int = 0):
         """Run an editor test using console-mode argument layout."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmpdir = Path(tmpdir)
-            edit_file = tmpdir / "test.txt"
-            edit_file.write_text(initial_content)
+        tmpdir = self.tmpdir
+        edit_file = tmpdir / "test.txt"
+        edit_file.write_text(initial_content)
 
-            try:
-                exit_code, saved = self.run_editor_console(
-                    str(edit_file), keys, tmpdir
-                )
-            except subprocess.TimeoutExpired:
-                self._fail(name, "Timed out (infinite loop?)")
+        try:
+            exit_code, saved = self.run_editor_console(
+                str(edit_file), keys, tmpdir
+            )
+        except subprocess.TimeoutExpired:
+            self._fail(name, "Timed out (infinite loop?)")
+            return
+        except Exception as e:
+            self._fail(name, f"Error: {e}")
+            return
+
+        if exit_code != expect_exit:
+            self._fail(name, f"Expected exit code {expect_exit}, got {exit_code}")
+            return
+
+        if expected_content is not None:
+            if saved != expected_content:
+                self._fail(name,
+                    f"Content mismatch:\n"
+                    f"  Expected: {expected_content!r}\n"
+                    f"  Actual:   {saved!r}")
                 return
-            except Exception as e:
-                self._fail(name, f"Error: {e}")
-                return
 
-            if exit_code != expect_exit:
-                self._fail(name, f"Expected exit code {expect_exit}, got {exit_code}")
-                return
-
-            if expected_content is not None:
-                if saved != expected_content:
-                    self._fail(name,
-                        f"Content mismatch:\n"
-                        f"  Expected: {expected_content!r}\n"
-                        f"  Actual:   {saved!r}")
-                    return
-
-            self._pass(name)
+        self._pass(name)
 
     def run_test_new_file(self, name: str, keys: bytes,
                           expected_content: str = None, expect_exit: int = 0):
         """Run an editor test on a file that does not exist yet."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmpdir = Path(tmpdir)
-            edit_file = tmpdir / "newfile.txt"
-            # Do NOT create the file - it should not exist
+        tmpdir = self.tmpdir
+        edit_file = tmpdir / "newfile.txt"
+        # Ensure file does not exist
+        if edit_file.exists():
+            edit_file.unlink()
 
-            try:
-                exit_code, saved, ansi = self.run_editor(
-                    str(edit_file), keys, tmpdir
-                )
-            except subprocess.TimeoutExpired:
-                self._fail(name, "Timed out (infinite loop?)")
+        try:
+            exit_code, saved, ansi = self.run_editor(
+                str(edit_file), keys, tmpdir
+            )
+        except subprocess.TimeoutExpired:
+            self._fail(name, "Timed out (infinite loop?)")
+            return
+        except Exception as e:
+            self._fail(name, f"Error: {e}")
+            return
+
+        if exit_code != expect_exit:
+            self._fail(name, f"Expected exit code {expect_exit}, got {exit_code}")
+            return
+
+        if expected_content is not None:
+            if saved != expected_content:
+                self._fail(name,
+                    f"Content mismatch:\n"
+                    f"  Expected: {expected_content!r}\n"
+                    f"  Actual:   {saved!r}")
                 return
-            except Exception as e:
-                self._fail(name, f"Error: {e}")
-                return
 
-            if exit_code != expect_exit:
-                self._fail(name, f"Expected exit code {expect_exit}, got {exit_code}")
-                return
-
-            if expected_content is not None:
-                if saved != expected_content:
-                    self._fail(name,
-                        f"Content mismatch:\n"
-                        f"  Expected: {expected_content!r}\n"
-                        f"  Actual:   {saved!r}")
-                    return
-
-            self._pass(name)
+        self._pass(name)
 
     def run_test(self, name: str, initial_content: str, keys: bytes,
                  expected_content: str = None, expect_exit: int = 0,
                  expect_unmodified: bool = False):
         """Run a single editor test."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmpdir = Path(tmpdir)
-            edit_file = tmpdir / "test.txt"
+        tmpdir = self.tmpdir
+        edit_file = tmpdir / "test.txt"
 
-            if initial_content is not None:
-                edit_file.write_text(initial_content)
-            else:
-                edit_file.write_text("")
+        if initial_content is not None:
+            edit_file.write_text(initial_content)
+        else:
+            edit_file.write_text("")
 
-            try:
-                exit_code, saved, ansi = self.run_editor(
-                    str(edit_file), keys, tmpdir
-                )
-            except subprocess.TimeoutExpired:
-                self._fail(name, "Timed out (infinite loop?)")
+        try:
+            exit_code, saved, ansi = self.run_editor(
+                str(edit_file), keys, tmpdir
+            )
+        except subprocess.TimeoutExpired:
+            self._fail(name, "Timed out (infinite loop?)")
+            return
+        except Exception as e:
+            self._fail(name, f"Error: {e}")
+            return
+
+        if exit_code != expect_exit:
+            self._fail(name, f"Expected exit code {expect_exit}, got {exit_code}")
+            return
+
+        if expected_content is not None:
+            if saved != expected_content:
+                self._fail(name,
+                    f"Content mismatch:\n"
+                    f"  Expected: {expected_content!r}\n"
+                    f"  Actual:   {saved!r}")
                 return
-            except Exception as e:
-                self._fail(name, f"Error: {e}")
+
+        if expect_unmodified:
+            if saved != initial_content:
+                self._fail(name, f"File was modified when it shouldn't have been")
                 return
 
-            if exit_code != expect_exit:
-                self._fail(name, f"Expected exit code {expect_exit}, got {exit_code}")
-                return
-
-            if expected_content is not None:
-                if saved != expected_content:
-                    self._fail(name,
-                        f"Content mismatch:\n"
-                        f"  Expected: {expected_content!r}\n"
-                        f"  Actual:   {saved!r}")
-                    return
-
-            if expect_unmodified:
-                if saved != initial_content:
-                    self._fail(name, f"File was modified when it shouldn't have been")
-                    return
-
-            self._pass(name)
+        self._pass(name)
 
     def run_editor_small_buffer(self, input_file: str, keys: bytes,
                                tmpdir: Path) -> tuple:
@@ -465,166 +495,164 @@ class EditorTestRunner:
                                  expect_content_redraws: list = None,
                                  expect_lines_at_frame: list = None):
         """Run a terminal-mode editor test and verify screen state."""
-        with tempfile.TemporaryDirectory(prefix='') as tmpdir:
-            tmpdir = Path(tmpdir)
-            edit_file = tmpdir / "t"
+        tmpdir = self.tmpdir
+        edit_file = tmpdir / "t"
 
-            if initial_content is not None:
-                edit_file.write_text(initial_content)
-            else:
-                edit_file.write_text("")
+        if initial_content is not None:
+            edit_file.write_text(initial_content)
+        else:
+            edit_file.write_text("")
 
-            try:
-                exit_code, saved, ansi = self.run_editor_terminal(
-                    str(edit_file), keys, tmpdir, rows, cols,
-                    extra_args=extra_args
-                )
-            except subprocess.TimeoutExpired:
-                self._fail(name, "Timed out (infinite loop?)")
+        try:
+            exit_code, saved, ansi = self.run_editor_terminal(
+                str(edit_file), keys, tmpdir, rows, cols,
+                extra_args=extra_args
+            )
+        except subprocess.TimeoutExpired:
+            self._fail(name, "Timed out (infinite loop?)")
+            return
+        except Exception as e:
+            self._fail(name, f"Error: {e}")
+            return
+
+        if exit_code != 0:
+            self._fail(name, f"Expected exit code 0, got {exit_code}")
+            return
+
+        # Parse ANSI output through virtual terminal
+        screen = AnsiScreen(rows, cols)
+        screen.process(ansi.decode('latin-1'))
+
+        if screen.frame_buffer is None:
+            self._fail(name, "No rendered frame captured (no ESC[?25h)")
+            return
+
+        exp_dump = self._expected_dump(rows, expect_lines, expect_cursor)
+
+        if expect_cursor is not None:
+            actual = screen.get_cursor()
+            if actual != expect_cursor:
+                self._fail(name,
+                    f"Cursor: expected {expect_cursor}, got {actual}\n"
+                    f"    Expected:\n{exp_dump}\n"
+                    f"    Frame:\n{screen.dump()}")
                 return
-            except Exception as e:
-                self._fail(name, f"Error: {e}")
-                return
 
-            if exit_code != 0:
-                self._fail(name, f"Expected exit code 0, got {exit_code}")
-                return
-
-            # Parse ANSI output through virtual terminal
-            screen = AnsiScreen(rows, cols)
-            screen.process(ansi.decode('latin-1'))
-
-            if screen.frame_buffer is None:
-                self._fail(name, "No rendered frame captured (no ESC[?25h)")
-                return
-
-            exp_dump = self._expected_dump(rows, expect_lines, expect_cursor)
-
-            if expect_cursor is not None:
-                actual = screen.get_cursor()
-                if actual != expect_cursor:
+        if expect_lines is not None:
+            for row_idx, expected_text in expect_lines:
+                actual_text = screen.get_row_text(row_idx)
+                if actual_text != expected_text:
                     self._fail(name,
-                        f"Cursor: expected {expect_cursor}, got {actual}\n"
+                        f"Row {row_idx}: expected {expected_text!r}, "
+                        f"got {actual_text!r}\n"
                         f"    Expected:\n{exp_dump}\n"
                         f"    Frame:\n{screen.dump()}")
                     return
 
-            if expect_lines is not None:
-                for row_idx, expected_text in expect_lines:
-                    actual_text = screen.get_row_text(row_idx)
-                    if actual_text != expected_text:
-                        self._fail(name,
-                            f"Row {row_idx}: expected {expected_text!r}, "
-                            f"got {actual_text!r}\n"
-                            f"    Expected:\n{exp_dump}\n"
-                            f"    Frame:\n{screen.dump()}")
-                        return
+        if expect_status_contains is not None:
+            status_row = rows - 1
+            status_text = screen.get_row_text(status_row)
+            if expect_status_contains not in status_text:
+                self._fail(name,
+                    f"Status bar: expected substring {expect_status_contains!r} "
+                    f"in {status_text!r}\n"
+                    f"    Frame:\n{screen.dump()}")
+                return
 
-            if expect_status_contains is not None:
-                status_row = rows - 1
-                status_text = screen.get_row_text(status_row)
-                if expect_status_contains not in status_text:
-                    self._fail(name,
-                        f"Status bar: expected substring {expect_status_contains!r} "
-                        f"in {status_text!r}\n"
-                        f"    Frame:\n{screen.dump()}")
-                    return
+        if expected_content is not None:
+            if saved != expected_content:
+                self._fail(name,
+                    f"Content mismatch:\n"
+                    f"  Expected: {expected_content!r}\n"
+                    f"  Actual:   {saved!r}")
+                return
 
-            if expected_content is not None:
-                if saved != expected_content:
+        if expect_content_redraws is not None:
+            actual_count = screen.get_frame_count()
+            expected_count = len(expect_content_redraws)
+            # Build full redraw pattern for diagnostics
+            actual_pattern = [screen.was_content_redrawn(i)
+                              for i in range(actual_count)]
+            pattern_str = (
+                f"    Total frames: {actual_count}\n"
+                f"    Actual redraws:   {actual_pattern}\n"
+                f"    Expected redraws: {list(expect_content_redraws)}"
+            )
+            if actual_count < expected_count:
+                self._fail(name,
+                    f"Expected {expected_count} frames, got {actual_count}\n"
+                    f"{pattern_str}\n"
+                    f"    Frame:\n{screen.dump()}")
+                return
+            for i, expected_redraw in enumerate(expect_content_redraws):
+                actual_redraw = screen.was_content_redrawn(i)
+                if actual_redraw != expected_redraw:
                     self._fail(name,
-                        f"Content mismatch:\n"
-                        f"  Expected: {expected_content!r}\n"
-                        f"  Actual:   {saved!r}")
-                    return
-
-            if expect_content_redraws is not None:
-                actual_count = screen.get_frame_count()
-                expected_count = len(expect_content_redraws)
-                # Build full redraw pattern for diagnostics
-                actual_pattern = [screen.was_content_redrawn(i)
-                                  for i in range(actual_count)]
-                pattern_str = (
-                    f"    Total frames: {actual_count}\n"
-                    f"    Actual redraws:   {actual_pattern}\n"
-                    f"    Expected redraws: {list(expect_content_redraws)}"
-                )
-                if actual_count < expected_count:
-                    self._fail(name,
-                        f"Expected {expected_count} frames, got {actual_count}\n"
+                        f"Frame {i}: expected content_redrawn="
+                        f"{expected_redraw}, got {actual_redraw}\n"
                         f"{pattern_str}\n"
                         f"    Frame:\n{screen.dump()}")
                     return
-                for i, expected_redraw in enumerate(expect_content_redraws):
-                    actual_redraw = screen.was_content_redrawn(i)
-                    if actual_redraw != expected_redraw:
+
+        if expect_lines_at_frame is not None:
+            actual_count = screen.get_frame_count()
+            for frame_idx, line_checks in expect_lines_at_frame:
+                if frame_idx >= actual_count:
+                    self._fail(name,
+                        f"Expected frame {frame_idx} but only "
+                        f"{actual_count} frames\n"
+                        f"    Frame:\n{screen.dump()}")
+                    return
+                for row_idx, expected_text in line_checks:
+                    actual_text = screen.get_row_text_at_frame(
+                        frame_idx, row_idx)
+                    if actual_text != expected_text:
                         self._fail(name,
-                            f"Frame {i}: expected content_redrawn="
-                            f"{expected_redraw}, got {actual_redraw}\n"
-                            f"{pattern_str}\n"
+                            f"Frame {frame_idx}, row {row_idx}: "
+                            f"expected {expected_text!r}, "
+                            f"got {actual_text!r}\n"
                             f"    Frame:\n{screen.dump()}")
                         return
 
-            if expect_lines_at_frame is not None:
-                actual_count = screen.get_frame_count()
-                for frame_idx, line_checks in expect_lines_at_frame:
-                    if frame_idx >= actual_count:
-                        self._fail(name,
-                            f"Expected frame {frame_idx} but only "
-                            f"{actual_count} frames\n"
-                            f"    Frame:\n{screen.dump()}")
-                        return
-                    for row_idx, expected_text in line_checks:
-                        actual_text = screen.get_row_text_at_frame(
-                            frame_idx, row_idx)
-                        if actual_text != expected_text:
-                            self._fail(name,
-                                f"Frame {frame_idx}, row {row_idx}: "
-                                f"expected {expected_text!r}, "
-                                f"got {actual_text!r}\n"
-                                f"    Frame:\n{screen.dump()}")
-                            return
-
-            self._pass(name)
+        self._pass(name)
 
     def run_test_terminal(self, name: str, initial_content: str, keys: bytes,
                           expected_content: str = None, expect_exit: int = 0,
                           extra_args: list = None):
         """Run a terminal-mode editor test verifying file content."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmpdir = Path(tmpdir)
-            edit_file = tmpdir / "test.txt"
+        tmpdir = self.tmpdir
+        edit_file = tmpdir / "test.txt"
 
-            if initial_content is not None:
-                edit_file.write_text(initial_content)
-            else:
-                edit_file.write_text("")
+        if initial_content is not None:
+            edit_file.write_text(initial_content)
+        else:
+            edit_file.write_text("")
 
-            try:
-                exit_code, saved, ansi = self.run_editor_terminal(
-                    str(edit_file), keys, tmpdir,
-                    extra_args=extra_args
-                )
-            except subprocess.TimeoutExpired:
-                self._fail(name, "Timed out (infinite loop?)")
+        try:
+            exit_code, saved, ansi = self.run_editor_terminal(
+                str(edit_file), keys, tmpdir,
+                extra_args=extra_args
+            )
+        except subprocess.TimeoutExpired:
+            self._fail(name, "Timed out (infinite loop?)")
+            return
+        except Exception as e:
+            self._fail(name, f"Error: {e}")
+            return
+
+        if exit_code != expect_exit:
+            self._fail(name, f"Expected exit code {expect_exit}, got {exit_code}")
+            return
+
+        if expected_content is not None:
+            if saved != expected_content:
+                self._fail(name,
+                    f"Content mismatch:\n"
+                    f"  Expected: {expected_content!r}\n"
+                    f"  Actual:   {saved!r}")
                 return
-            except Exception as e:
-                self._fail(name, f"Error: {e}")
-                return
 
-            if exit_code != expect_exit:
-                self._fail(name, f"Expected exit code {expect_exit}, got {exit_code}")
-                return
-
-            if expected_content is not None:
-                if saved != expected_content:
-                    self._fail(name,
-                        f"Content mismatch:\n"
-                        f"  Expected: {expected_content!r}\n"
-                        f"  Actual:   {saved!r}")
-                    return
-
-            self._pass(name)
+        self._pass(name)
 
     def run_test_screen(self, name: str, initial_content: str, keys: bytes,
                         rows: int = 10, cols: int = 40,
@@ -672,311 +700,309 @@ class EditorTestRunner:
             expect_max_col: list of (frame_idx, row, max_col) tuples -
                 verify maximum column written on a row in a specific frame
         """
-        with tempfile.TemporaryDirectory(prefix='') as tmpdir:
-            tmpdir = Path(tmpdir)
-            edit_file = tmpdir / "t"
+        tmpdir = self.tmpdir
+        edit_file = tmpdir / "t"
 
-            if initial_bytes is not None:
-                edit_file.write_bytes(initial_bytes)
-            elif initial_content is not None:
-                edit_file.write_text(initial_content)
-            else:
-                edit_file.write_text("")
+        if initial_bytes is not None:
+            edit_file.write_bytes(initial_bytes)
+        elif initial_content is not None:
+            edit_file.write_text(initial_content)
+        else:
+            edit_file.write_text("")
 
-            try:
-                exit_code, saved, ansi = self.run_editor_screen(
-                    str(edit_file), keys, tmpdir, rows, cols
-                )
-            except subprocess.TimeoutExpired:
-                self._fail(name, "Timed out (infinite loop?)")
+        try:
+            exit_code, saved, ansi = self.run_editor_screen(
+                str(edit_file), keys, tmpdir, rows, cols
+            )
+        except subprocess.TimeoutExpired:
+            self._fail(name, "Timed out (infinite loop?)")
+            return
+        except Exception as e:
+            self._fail(name, f"Error: {e}")
+            return
+
+        if exit_code != 0:
+            self._fail(name, f"Expected exit code 0, got {exit_code}")
+            return
+
+        if expect_ansi_contains is not None:
+            ansi_text = ansi.decode('latin-1')
+            if expect_ansi_contains not in ansi_text:
+                self._fail(name,
+                    f"Raw ANSI output does not contain "
+                    f"{expect_ansi_contains!r}")
                 return
-            except Exception as e:
-                self._fail(name, f"Error: {e}")
+
+        # Parse ANSI output through virtual terminal
+        screen = AnsiScreen(rows, cols, deferred_wrap=deferred_wrap)
+        screen.process(ansi.decode('latin-1'))
+
+        if screen.frame_buffer is None:
+            self._fail(name, "No rendered frame captured (no ESC[?25h)")
+            return
+
+        exp_dump = self._expected_dump(rows, expect_lines, expect_cursor)
+
+        if expect_cursor is not None:
+            actual = screen.get_cursor()
+            if actual != expect_cursor:
+                self._fail(name,
+                    f"Cursor: expected {expect_cursor}, got {actual}\n"
+                    f"    Expected:\n{exp_dump}\n"
+                    f"    Frame:\n{screen.dump()}")
                 return
 
-            if exit_code != 0:
-                self._fail(name, f"Expected exit code 0, got {exit_code}")
-                return
-
-            if expect_ansi_contains is not None:
-                ansi_text = ansi.decode('latin-1')
-                if expect_ansi_contains not in ansi_text:
+        if expect_lines is not None:
+            for row_idx, expected_text in expect_lines:
+                actual_text = screen.get_row_text(row_idx)
+                if actual_text != expected_text:
                     self._fail(name,
-                        f"Raw ANSI output does not contain "
-                        f"{expect_ansi_contains!r}")
-                    return
-
-            # Parse ANSI output through virtual terminal
-            screen = AnsiScreen(rows, cols, deferred_wrap=deferred_wrap)
-            screen.process(ansi.decode('latin-1'))
-
-            if screen.frame_buffer is None:
-                self._fail(name, "No rendered frame captured (no ESC[?25h)")
-                return
-
-            exp_dump = self._expected_dump(rows, expect_lines, expect_cursor)
-
-            if expect_cursor is not None:
-                actual = screen.get_cursor()
-                if actual != expect_cursor:
-                    self._fail(name,
-                        f"Cursor: expected {expect_cursor}, got {actual}\n"
+                        f"Row {row_idx}: expected {expected_text!r}, "
+                        f"got {actual_text!r}\n"
                         f"    Expected:\n{exp_dump}\n"
                         f"    Frame:\n{screen.dump()}")
                     return
 
-            if expect_lines is not None:
-                for row_idx, expected_text in expect_lines:
-                    actual_text = screen.get_row_text(row_idx)
-                    if actual_text != expected_text:
-                        self._fail(name,
-                            f"Row {row_idx}: expected {expected_text!r}, "
-                            f"got {actual_text!r}\n"
-                            f"    Expected:\n{exp_dump}\n"
-                            f"    Frame:\n{screen.dump()}")
-                        return
+        if expect_status_contains is not None:
+            status_row = rows - 1
+            status_text = screen.get_row_text(status_row)
+            if expect_status_contains not in status_text:
+                self._fail(name,
+                    f"Status bar: expected substring {expect_status_contains!r} "
+                    f"in {status_text!r}\n"
+                    f"    Frame:\n{screen.dump()}")
+                return
 
-            if expect_status_contains is not None:
-                status_row = rows - 1
-                status_text = screen.get_row_text(status_row)
-                if expect_status_contains not in status_text:
-                    self._fail(name,
-                        f"Status bar: expected substring {expect_status_contains!r} "
-                        f"in {status_text!r}\n"
-                        f"    Frame:\n{screen.dump()}")
-                    return
+        if expected_content is not None:
+            if saved != expected_content:
+                self._fail(name,
+                    f"Content mismatch:\n"
+                    f"  Expected: {expected_content!r}\n"
+                    f"  Actual:   {saved!r}")
+                return
 
-            if expected_content is not None:
-                if saved != expected_content:
+        if expect_content_redraws is not None:
+            actual_count = screen.get_frame_count()
+            expected_count = len(expect_content_redraws)
+            # Build full redraw pattern for diagnostics
+            actual_pattern = [screen.was_content_redrawn(i)
+                              for i in range(actual_count)]
+            pattern_str = (
+                f"    Total frames: {actual_count}\n"
+                f"    Actual redraws:   {actual_pattern}\n"
+                f"    Expected redraws: {list(expect_content_redraws)}"
+            )
+            if actual_count < expected_count:
+                self._fail(name,
+                    f"Expected {expected_count} frames, got {actual_count}\n"
+                    f"{pattern_str}\n"
+                    f"    Frame:\n{screen.dump()}")
+                return
+            for i, expected_redraw in enumerate(expect_content_redraws):
+                actual_redraw = screen.was_content_redrawn(i)
+                if actual_redraw != expected_redraw:
                     self._fail(name,
-                        f"Content mismatch:\n"
-                        f"  Expected: {expected_content!r}\n"
-                        f"  Actual:   {saved!r}")
-                    return
-
-            if expect_content_redraws is not None:
-                actual_count = screen.get_frame_count()
-                expected_count = len(expect_content_redraws)
-                # Build full redraw pattern for diagnostics
-                actual_pattern = [screen.was_content_redrawn(i)
-                                  for i in range(actual_count)]
-                pattern_str = (
-                    f"    Total frames: {actual_count}\n"
-                    f"    Actual redraws:   {actual_pattern}\n"
-                    f"    Expected redraws: {list(expect_content_redraws)}"
-                )
-                if actual_count < expected_count:
-                    self._fail(name,
-                        f"Expected {expected_count} frames, got {actual_count}\n"
+                        f"Frame {i}: expected content_redrawn="
+                        f"{expected_redraw}, got {actual_redraw}\n"
                         f"{pattern_str}\n"
                         f"    Frame:\n{screen.dump()}")
                     return
-                for i, expected_redraw in enumerate(expect_content_redraws):
-                    actual_redraw = screen.was_content_redrawn(i)
-                    if actual_redraw != expected_redraw:
-                        self._fail(name,
-                            f"Frame {i}: expected content_redrawn="
-                            f"{expected_redraw}, got {actual_redraw}\n"
-                            f"{pattern_str}\n"
-                            f"    Frame:\n{screen.dump()}")
-                        return
 
-            if expect_content_rows is not None:
-                actual_count = screen.get_frame_count()
-                for frame_idx, expected_rows in expect_content_rows:
-                    if frame_idx >= actual_count:
-                        self._fail(name,
-                            f"Expected frame {frame_idx} but only "
-                            f"{actual_count} frames\n"
-                            f"    Frame:\n{screen.dump()}")
-                        return
-                    actual_rows = screen.content_rows_touched(frame_idx)
-                    if actual_rows != expected_rows:
-                        self._fail(name,
-                            f"Frame {frame_idx}: expected rows touched "
-                            f"{expected_rows}, got {actual_rows}\n"
-                            f"    Frame:\n{screen.dump()}")
-                        return
+        if expect_content_rows is not None:
+            actual_count = screen.get_frame_count()
+            for frame_idx, expected_rows in expect_content_rows:
+                if frame_idx >= actual_count:
+                    self._fail(name,
+                        f"Expected frame {frame_idx} but only "
+                        f"{actual_count} frames\n"
+                        f"    Frame:\n{screen.dump()}")
+                    return
+                actual_rows = screen.content_rows_touched(frame_idx)
+                if actual_rows != expected_rows:
+                    self._fail(name,
+                        f"Frame {frame_idx}: expected rows touched "
+                        f"{expected_rows}, got {actual_rows}\n"
+                        f"    Frame:\n{screen.dump()}")
+                    return
 
-            if expect_cursor_at_frame is not None:
-                actual_count = screen.get_frame_count()
-                for frame_idx, expected_pos in expect_cursor_at_frame:
-                    if frame_idx >= actual_count:
-                        self._fail(name,
-                            f"Expected frame {frame_idx} but only "
-                            f"{actual_count} frames\n"
-                            f"    Frame:\n{screen.dump()}")
-                        return
-                    actual_pos = screen.frames[frame_idx][1]
-                    if actual_pos != expected_pos:
-                        self._fail(name,
-                            f"Frame {frame_idx}: expected cursor at "
-                            f"{expected_pos}, got {actual_pos}\n"
-                            f"    Frame:\n{screen.dump()}")
-                        return
+        if expect_cursor_at_frame is not None:
+            actual_count = screen.get_frame_count()
+            for frame_idx, expected_pos in expect_cursor_at_frame:
+                if frame_idx >= actual_count:
+                    self._fail(name,
+                        f"Expected frame {frame_idx} but only "
+                        f"{actual_count} frames\n"
+                        f"    Frame:\n{screen.dump()}")
+                    return
+                actual_pos = screen.frames[frame_idx][1]
+                if actual_pos != expected_pos:
+                    self._fail(name,
+                        f"Frame {frame_idx}: expected cursor at "
+                        f"{expected_pos}, got {actual_pos}\n"
+                        f"    Frame:\n{screen.dump()}")
+                    return
 
-            if expect_lines_at_frame is not None:
-                actual_count = screen.get_frame_count()
-                for frame_idx, line_checks in expect_lines_at_frame:
-                    if frame_idx >= actual_count:
-                        self._fail(name,
-                            f"Expected frame {frame_idx} but only "
-                            f"{actual_count} frames\n"
-                            f"    Frame:\n{screen.dump()}")
-                        return
-                    for row_idx, expected_text in line_checks:
-                        actual_text = screen.get_row_text_at_frame(
-                            frame_idx, row_idx)
-                        if actual_text != expected_text:
-                            self._fail(name,
-                                f"Frame {frame_idx}, row {row_idx}: "
-                                f"expected {expected_text!r}, "
-                                f"got {actual_text!r}\n"
-                                f"    Frame:\n{screen.dump()}")
-                            return
-
-            if expect_status_at_frame is not None:
-                actual_count = screen.get_frame_count()
-                status_row = rows - 1
-                for frame_idx, expected_substr in expect_status_at_frame:
-                    if frame_idx >= actual_count:
-                        self._fail(name,
-                            f"Expected frame {frame_idx} but only "
-                            f"{actual_count} frames\n"
-                            f"    Frame:\n{screen.dump()}")
-                        return
+        if expect_lines_at_frame is not None:
+            actual_count = screen.get_frame_count()
+            for frame_idx, line_checks in expect_lines_at_frame:
+                if frame_idx >= actual_count:
+                    self._fail(name,
+                        f"Expected frame {frame_idx} but only "
+                        f"{actual_count} frames\n"
+                        f"    Frame:\n{screen.dump()}")
+                    return
+                for row_idx, expected_text in line_checks:
                     actual_text = screen.get_row_text_at_frame(
-                        frame_idx, status_row)
-                    if expected_substr not in actual_text:
+                        frame_idx, row_idx)
+                    if actual_text != expected_text:
                         self._fail(name,
-                            f"Frame {frame_idx}: status bar expected "
-                            f"substring {expected_substr!r} in "
-                            f"{actual_text!r}\n"
+                            f"Frame {frame_idx}, row {row_idx}: "
+                            f"expected {expected_text!r}, "
+                            f"got {actual_text!r}\n"
                             f"    Frame:\n{screen.dump()}")
                         return
 
-            if expect_reverse_at is not None:
-                for row, col, expected_rev in expect_reverse_at:
-                    actual_rev = screen.is_reverse_at(row, col)
-                    if actual_rev != expected_rev:
-                        self._fail(name,
-                            f"Cell ({row},{col}): expected reverse="
-                            f"{expected_rev}, got {actual_rev}\n"
-                            f"    Frame:\n{screen.dump()}")
-                        return
+        if expect_status_at_frame is not None:
+            actual_count = screen.get_frame_count()
+            status_row = rows - 1
+            for frame_idx, expected_substr in expect_status_at_frame:
+                if frame_idx >= actual_count:
+                    self._fail(name,
+                        f"Expected frame {frame_idx} but only "
+                        f"{actual_count} frames\n"
+                        f"    Frame:\n{screen.dump()}")
+                    return
+                actual_text = screen.get_row_text_at_frame(
+                    frame_idx, status_row)
+                if expected_substr not in actual_text:
+                    self._fail(name,
+                        f"Frame {frame_idx}: status bar expected "
+                        f"substring {expected_substr!r} in "
+                        f"{actual_text!r}\n"
+                        f"    Frame:\n{screen.dump()}")
+                    return
 
-            if expect_min_col is not None:
-                actual_count = screen.get_frame_count()
-                for frame_idx, row, expected_col in expect_min_col:
-                    if frame_idx >= actual_count:
-                        self._fail(name,
-                            f"Expected frame {frame_idx} but only "
-                            f"{actual_count} frames\n"
-                            f"    Frame:\n{screen.dump()}")
-                        return
-                    actual_col = screen.get_min_col(frame_idx, row)
-                    if actual_col != expected_col:
-                        self._fail(name,
-                            f"Frame {frame_idx}, row {row}: expected "
-                            f"min_col={expected_col}, got {actual_col}\n"
-                            f"    Frame:\n{screen.dump()}")
-                        return
+        if expect_reverse_at is not None:
+            for row, col, expected_rev in expect_reverse_at:
+                actual_rev = screen.is_reverse_at(row, col)
+                if actual_rev != expected_rev:
+                    self._fail(name,
+                        f"Cell ({row},{col}): expected reverse="
+                        f"{expected_rev}, got {actual_rev}\n"
+                        f"    Frame:\n{screen.dump()}")
+                    return
 
-            if expect_max_col is not None:
-                actual_count = screen.get_frame_count()
-                for frame_idx, row, expected_col in expect_max_col:
-                    if frame_idx >= actual_count:
-                        self._fail(name,
-                            f"Expected frame {frame_idx} but only "
-                            f"{actual_count} frames\n"
-                            f"    Frame:\n{screen.dump()}")
-                        return
-                    actual_col = screen.get_max_col(frame_idx, row)
-                    if actual_col != expected_col:
-                        self._fail(name,
-                            f"Frame {frame_idx}, row {row}: expected "
-                            f"max_col={expected_col}, got {actual_col}\n"
-                            f"    Frame:\n{screen.dump()}")
-                        return
+        if expect_min_col is not None:
+            actual_count = screen.get_frame_count()
+            for frame_idx, row, expected_col in expect_min_col:
+                if frame_idx >= actual_count:
+                    self._fail(name,
+                        f"Expected frame {frame_idx} but only "
+                        f"{actual_count} frames\n"
+                        f"    Frame:\n{screen.dump()}")
+                    return
+                actual_col = screen.get_min_col(frame_idx, row)
+                if actual_col != expected_col:
+                    self._fail(name,
+                        f"Frame {frame_idx}, row {row}: expected "
+                        f"min_col={expected_col}, got {actual_col}\n"
+                        f"    Frame:\n{screen.dump()}")
+                    return
 
-            if expect_scrolled_at_frame is not None:
-                actual_count = screen.get_frame_count()
-                for frame_idx, expected_scrolled in expect_scrolled_at_frame:
-                    if frame_idx >= actual_count:
-                        self._fail(name,
-                            f"Expected frame {frame_idx} but only "
-                            f"{actual_count} frames\n"
-                            f"    Frame:\n{screen.dump()}")
-                        return
-                    actual_scrolled = screen.was_scrolled(frame_idx)
-                    if actual_scrolled != expected_scrolled:
-                        self._fail(name,
-                            f"Frame {frame_idx}: expected scrolled="
-                            f"{expected_scrolled}, got {actual_scrolled}\n"
-                            f"    Frame:\n{screen.dump()}")
-                        return
+        if expect_max_col is not None:
+            actual_count = screen.get_frame_count()
+            for frame_idx, row, expected_col in expect_max_col:
+                if frame_idx >= actual_count:
+                    self._fail(name,
+                        f"Expected frame {frame_idx} but only "
+                        f"{actual_count} frames\n"
+                        f"    Frame:\n{screen.dump()}")
+                    return
+                actual_col = screen.get_max_col(frame_idx, row)
+                if actual_col != expected_col:
+                    self._fail(name,
+                        f"Frame {frame_idx}, row {row}: expected "
+                        f"max_col={expected_col}, got {actual_col}\n"
+                        f"    Frame:\n{screen.dump()}")
+                    return
 
-            if expect_scroll_rows is not None:
-                actual_count = screen.get_frame_count()
-                for frame_idx, expected_rows in expect_scroll_rows:
-                    if frame_idx >= actual_count:
-                        self._fail(name,
-                            f"Expected frame {frame_idx} but only "
-                            f"{actual_count} frames\n"
-                            f"    Frame:\n{screen.dump()}")
-                        return
-                    actual_rows = screen.scroll_rows_touched(frame_idx)
-                    if actual_rows != expected_rows:
-                        self._fail(name,
-                            f"Frame {frame_idx}: expected scroll rows "
-                            f"{expected_rows}, got {actual_rows}\n"
-                            f"    Frame:\n{screen.dump()}")
-                        return
+        if expect_scrolled_at_frame is not None:
+            actual_count = screen.get_frame_count()
+            for frame_idx, expected_scrolled in expect_scrolled_at_frame:
+                if frame_idx >= actual_count:
+                    self._fail(name,
+                        f"Expected frame {frame_idx} but only "
+                        f"{actual_count} frames\n"
+                        f"    Frame:\n{screen.dump()}")
+                    return
+                actual_scrolled = screen.was_scrolled(frame_idx)
+                if actual_scrolled != expected_scrolled:
+                    self._fail(name,
+                        f"Frame {frame_idx}: expected scrolled="
+                        f"{expected_scrolled}, got {actual_scrolled}\n"
+                        f"    Frame:\n{screen.dump()}")
+                    return
 
-            self._pass(name)
+        if expect_scroll_rows is not None:
+            actual_count = screen.get_frame_count()
+            for frame_idx, expected_rows in expect_scroll_rows:
+                if frame_idx >= actual_count:
+                    self._fail(name,
+                        f"Expected frame {frame_idx} but only "
+                        f"{actual_count} frames\n"
+                        f"    Frame:\n{screen.dump()}")
+                    return
+                actual_rows = screen.scroll_rows_touched(frame_idx)
+                if actual_rows != expected_rows:
+                    self._fail(name,
+                        f"Frame {frame_idx}: expected scroll rows "
+                        f"{expected_rows}, got {actual_rows}\n"
+                        f"    Frame:\n{screen.dump()}")
+                    return
+
+        self._pass(name)
 
     def run_test_small_buffer(self, name: str, initial_content: str, keys: bytes,
                              expected_content: str = None, expect_exit: int = 0,
                              expect_unmodified: bool = False):
         """Run a test using the small buffer editor (256 bytes)."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmpdir = Path(tmpdir)
-            edit_file = tmpdir / "test.txt"
+        tmpdir = self.tmpdir
+        edit_file = tmpdir / "test.txt"
 
-            if initial_content is not None:
-                edit_file.write_text(initial_content)
-            else:
-                edit_file.write_text("")
+        if initial_content is not None:
+            edit_file.write_text(initial_content)
+        else:
+            edit_file.write_text("")
 
-            try:
-                exit_code, saved, ansi = self.run_editor_small_buffer(
-                    str(edit_file), keys, tmpdir
-                )
-            except subprocess.TimeoutExpired:
-                self._fail(name, "Timed out (infinite loop?)")
+        try:
+            exit_code, saved, ansi = self.run_editor_small_buffer(
+                str(edit_file), keys, tmpdir
+            )
+        except subprocess.TimeoutExpired:
+            self._fail(name, "Timed out (infinite loop?)")
+            return
+        except Exception as e:
+            self._fail(name, f"Error: {e}")
+            return
+
+        if exit_code != expect_exit:
+            self._fail(name, f"Expected exit code {expect_exit}, got {exit_code}")
+            return
+
+        if expected_content is not None:
+            if saved != expected_content:
+                self._fail(name,
+                    f"Content mismatch:\n"
+                    f"  Expected: {expected_content!r}\n"
+                    f"  Actual:   {saved!r}")
                 return
-            except Exception as e:
-                self._fail(name, f"Error: {e}")
+
+        if expect_unmodified:
+            if saved != initial_content:
+                self._fail(name, f"File was modified when it shouldn't have been")
                 return
 
-            if exit_code != expect_exit:
-                self._fail(name, f"Expected exit code {expect_exit}, got {exit_code}")
-                return
-
-            if expected_content is not None:
-                if saved != expected_content:
-                    self._fail(name,
-                        f"Content mismatch:\n"
-                        f"  Expected: {expected_content!r}\n"
-                        f"  Actual:   {saved!r}")
-                    return
-
-            if expect_unmodified:
-                if saved != initial_content:
-                    self._fail(name, f"File was modified when it shouldn't have been")
-                    return
-
-            self._pass(name)
+        self._pass(name)
 
     @staticmethod
     def _expected_dump(rows, expect_lines, expect_cursor):
@@ -1020,7 +1046,8 @@ class EditorTestRunner:
         """Test the emulator's --server mode protocol.
 
         Args:
-            commands: list of command strings to send
+            commands: list of command strings (sent as text lines) or
+                      bytes objects (sent as raw data)
             expected_lines: list of expected response lines
         """
         proc = subprocess.Popen(
@@ -1028,10 +1055,15 @@ class EditorTestRunner:
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.PIPE)
         try:
-            input_data = ''.join(cmd + '\n' for cmd in commands)
+            input_data = b''
+            for cmd in commands:
+                if isinstance(cmd, bytes):
+                    input_data += cmd
+                else:
+                    input_data += (cmd + '\n').encode()
             stdout, stderr = proc.communicate(
-                input=input_data.encode(), timeout=5)
-            actual_lines = stdout.decode().splitlines()
+                input=input_data, timeout=5)
+            actual_lines = stdout.decode('latin-1').splitlines()
             if actual_lines != expected_lines:
                 self._fail(name,
                     f"Expected: {expected_lines!r}\n"
@@ -15140,6 +15172,7 @@ class EditorTestRunner:
             self.create_stable_copy()
 
         self.emulator_runner.close()
+        self._tmpdir_obj.cleanup()
 
 
 def main():

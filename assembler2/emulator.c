@@ -2946,6 +2946,10 @@ int main(int argc, char **argv) {
 }
 
 static uint8_t pristine_memory[0x10000];
+static uint8_t *keys_buffer = NULL;
+static size_t keys_buffer_len = 0;
+static char *output_buffer = NULL;
+static size_t output_buffer_len = 0;
 static size_t stubs_end;  // address after stubs (where args go)
 
 static int server_load_binary(const char *filename, long load_address) {
@@ -3143,6 +3147,8 @@ static int server_main(void) {
     char srv_input[4096] = "";
     char srv_output[4096] = "";
     char srv_binary[4096] = "";
+    int use_inline_keys = 0;
+    int use_inline_output = 0;
     char loaded_binary[4096] = "";
     int loaded_terminal_mode = -1;
     long loaded_address = -1;
@@ -3190,6 +3196,24 @@ static int server_main(void) {
         } else if (strncmp(line, "OUTPUT ", 7) == 0) {
             strncpy(srv_output, line + 7, sizeof(srv_output) - 1);
             srv_output[sizeof(srv_output) - 1] = '\0';
+        } else if (strncmp(line, "KEYS ", 5) == 0) {
+            size_t klen = (size_t)strtol(line + 5, NULL, 10);
+            free(keys_buffer);
+            keys_buffer = malloc(klen);
+            keys_buffer_len = klen;
+            // Read exactly klen raw bytes from stdin
+            size_t read_so_far = 0;
+            while (read_so_far < klen) {
+                size_t n = fread(keys_buffer + read_so_far, 1,
+                                 klen - read_so_far, stdin);
+                if (n == 0) break;
+                read_so_far += n;
+            }
+            use_inline_keys = 1;
+            srv_input[0] = '\0';
+        } else if (strcmp(line, "INLINE_OUTPUT") == 0) {
+            use_inline_output = 1;
+            srv_output[0] = '\0';
         } else if (strncmp(line, "ARG ", 4) == 0) {
             if (srv_arg_count < 256) {
                 srv_args[srv_arg_count++] = strdup(line + 4);
@@ -3216,23 +3240,43 @@ static int server_main(void) {
                     ;
             }
 
-            // Open I/O files
+            // Open I/O
             if (terminal_mode) {
                 input_file_ptr = fopen("/dev/null", "rb");
                 output_file_ptr = fopen("/dev/null", "wb");
-                if (srv_input[0]) {
+                if (use_inline_keys) {
+                    serial_input_file = fmemopen(
+                        keys_buffer, keys_buffer_len, "rb");
+                } else if (srv_input[0]) {
                     serial_input_file = fopen(srv_input, "rb");
                 }
-                if (srv_output[0]) {
+                if (use_inline_output) {
+                    free(output_buffer);
+                    output_buffer = NULL;
+                    output_buffer_len = 0;
+                    serial_output_file = open_memstream(
+                        &output_buffer, &output_buffer_len);
+                } else if (srv_output[0]) {
                     serial_output_file = fopen(srv_output, "wb");
                 }
                 int rows, cols;
                 get_terminal_size(&rows, &cols);
                 console_resize(rows, cols);
             } else {
-                input_file_ptr = fopen(
-                    srv_input[0] ? srv_input : "/dev/null", "rb");
-                if (srv_output[0]) {
+                if (use_inline_keys) {
+                    input_file_ptr = fmemopen(
+                        keys_buffer, keys_buffer_len, "rb");
+                } else {
+                    input_file_ptr = fopen(
+                        srv_input[0] ? srv_input : "/dev/null", "rb");
+                }
+                if (use_inline_output) {
+                    free(output_buffer);
+                    output_buffer = NULL;
+                    output_buffer_len = 0;
+                    output_file_ptr = open_memstream(
+                        &output_buffer, &output_buffer_len);
+                } else if (srv_output[0]) {
                     output_file_ptr = fopen(srv_output, "wb");
                 } else {
                     output_file_ptr = fopen("/dev/null", "wb");
@@ -3297,6 +3341,10 @@ static int server_main(void) {
             }
 
             fprintf(stdout, "EXIT %d\n", exitcode);
+            if (use_inline_output && output_buffer) {
+                fprintf(stdout, "OUTPUT %zu\n", output_buffer_len);
+                fwrite(output_buffer, 1, output_buffer_len, stdout);
+            }
             fflush(stdout);
 
 run_cleanup:
@@ -3307,6 +3355,8 @@ run_cleanup:
             srv_arg_count = 0;
             srv_input[0] = '\0';
             srv_output[0] = '\0';
+            use_inline_keys = 0;
+            use_inline_output = 0;
         } else {
             fprintf(stderr, "server: unknown command: %s\n", line);
         }
@@ -3318,6 +3368,10 @@ run_cleanup:
     }
     free(arg_addresses);
     arg_addresses = NULL;
+    free(keys_buffer);
+    keys_buffer = NULL;
+    free(output_buffer);
+    output_buffer = NULL;
 
     return 0;
 }
