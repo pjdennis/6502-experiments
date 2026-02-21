@@ -225,6 +225,104 @@ class EmulatorTestRunner:
             return
         self._assert_eq(name + " (stderr)", stderr, b"E")
 
+    # ---- File I/O tests ----
+
+    def _build_file_tests(self):
+        """Assemble file I/O test programs. Returns True on success."""
+        tests_dir = self.base_dir / "tests"
+        out_dir = tests_dir / "out"
+        programs = [
+            ("file_read_test", tests_dir / "file_read_test.asm",
+             out_dir / "file_read_test.out"),
+            ("file_write_test", tests_dir / "file_write_test.asm",
+             out_dir / "file_write_test.out"),
+            ("file_unclosed_test", tests_dir / "file_unclosed_test.asm",
+             out_dir / "file_unclosed_test.out"),
+        ]
+        ok = True
+        for name, src, dst in programs:
+            if not self._assemble(src, dst):
+                ok = False
+        if ok:
+            self.file_read_bin = out_dir / "file_read_test.out"
+            self.file_write_bin = out_dir / "file_write_test.out"
+            self.file_unclosed_bin = out_dir / "file_unclosed_test.out"
+        return ok
+
+    def test_file_read(self):
+        """Open file, read all bytes, write to stdout."""
+        name = "File read"
+        if not self._should_run(name):
+            return
+        test_file = self.tmpdir / "read_input.txt"
+        test_file.write_bytes(b"Hello, file!")
+        exit_code, output, _ = self.run_server(
+            self.file_read_bin, args=[str(test_file)])
+        if exit_code != 0:
+            self._fail(name, f"exit code {exit_code}")
+            return
+        self._assert_eq(name, output, b"Hello, file!")
+
+    def test_file_read_empty(self):
+        """Read from empty file produces no output."""
+        name = "File read empty"
+        if not self._should_run(name):
+            return
+        test_file = self.tmpdir / "empty.txt"
+        test_file.write_bytes(b"")
+        exit_code, output, _ = self.run_server(
+            self.file_read_bin, args=[str(test_file)])
+        if exit_code != 0:
+            self._fail(name, f"exit code {exit_code}")
+            return
+        self._assert_eq(name, output, b"")
+
+    def test_file_read_binary(self):
+        """Read file with all byte values 0-255."""
+        name = "File read binary"
+        if not self._should_run(name):
+            return
+        # Exclude 0x04 (EOT/Ctrl+D) which is the EOF sentinel
+        test_data = bytes(b for b in range(256) if b != 0x04)
+        test_file = self.tmpdir / "binary.dat"
+        test_file.write_bytes(test_data)
+        exit_code, output, _ = self.run_server(
+            self.file_read_bin, args=[str(test_file)])
+        if exit_code != 0:
+            self._fail(name, f"exit code {exit_code}")
+            return
+        self._assert_eq(name, output, test_data)
+
+    def test_file_write(self):
+        """Open file for writing, write bytes, close."""
+        name = "File write"
+        if not self._should_run(name):
+            return
+        out_file = self.tmpdir / "write_output.txt"
+        exit_code, _, _ = self.run_server(
+            self.file_write_bin, args=[str(out_file)],
+            keys=b"test data")
+        if exit_code != 0:
+            self._fail(name, f"exit code {exit_code}")
+            return
+        self._assert_eq(name, out_file.read_bytes(), b"test data")
+
+    def test_file_unclosed(self):
+        """Unclosed file handle reports error on stderr."""
+        name = "File unclosed warning"
+        if not self._should_run(name):
+            return
+        test_file = self.tmpdir / "unclosed_input.txt"
+        test_file.write_bytes(b"data")
+        result = self.run_subprocess(
+            self.file_unclosed_bin,
+            extra_args=[str(test_file)])
+        if b"not closed" not in result.stderr:
+            self._fail(name,
+                f"expected 'not closed' in stderr, got {result.stderr!r}")
+            return
+        self._pass(name)
+
     # ---- Test execution ----
 
     def run_all_tests(self):
@@ -247,6 +345,18 @@ class EmulatorTestRunner:
         self.test_stdout_string()
         self.test_stderr_single_byte()
         self.test_stdout_and_stderr_separate()
+
+        if not self.assembler.exists():
+            print("\n--- File I/O (skipped: assembler not built) ---")
+        elif not self._build_file_tests():
+            print("\n--- File I/O (skipped: assembly failed) ---")
+        else:
+            print("\n--- File I/O ---")
+            self.test_file_read()
+            self.test_file_read_empty()
+            self.test_file_read_binary()
+            self.test_file_write()
+            self.test_file_unclosed()
 
         # Print results
         total = self.passed + self.failed
