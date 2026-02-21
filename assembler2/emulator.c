@@ -2350,7 +2350,7 @@ static int server_main(void);
 
 int main(int argc, char **argv) {
     if (argc < 2) {
-        fprintf(stderr, "usage: emulator <code file> [--load <hex load address>] [--input <input file>] [--output <output file>] [--dump <dump file>] [--no-dump] [--console] [--terminal] [--server] [--mhz <speed>] [--cpu-mhz <speed>] [--baud <rate>] [--rows N] [--cols N] [<arguments>]\n");
+        fprintf(stderr, "usage: emulator <code file> [--load <hex load address>] [--input <input file>] [--output <output file>] [--error-output <file>] [--dump <dump file>] [--no-dump] [--console] [--terminal] [--server] [--mhz <speed>] [--cpu-mhz <speed>] [--baud <rate>] [--rows N] [--cols N] [<arguments>]\n");
         return 1;
     }
 
@@ -2363,6 +2363,7 @@ int main(int argc, char **argv) {
     long load_address = -1;
     char* input_filename = "/dev/null";
     char* output_filename = "/dev/null";
+    char* error_output_filename = NULL;
     char* dump_filename = NULL;
     int no_dump = 0;
     int input_specified = 0;
@@ -2402,6 +2403,13 @@ int main(int argc, char **argv) {
             }
             output_filename = argv[i + 1];
             output_specified = 1;
+            i += 2;
+        } else if (strcmp(argv[i], "--error-output") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "error: --error-output requires a value\n");
+                return 1;
+            }
+            error_output_filename = argv[i + 1];
             i += 2;
         } else if (strcmp(argv[i], "--dump") == 0) {
             if (i + 1 >= argc) {
@@ -2780,6 +2788,14 @@ int main(int argc, char **argv) {
         }
     }
 
+    if (error_output_filename) {
+        stderr_capture_file = fopen(error_output_filename, "wb");
+        if (!stderr_capture_file) {
+            fprintf(stderr, "could not open error output file: %s\n", error_output_filename);
+            return 1;
+        }
+    }
+
     files_init(input_file_ptr);
 
     arg_count = argc - arg_base;
@@ -2885,6 +2901,10 @@ int main(int argc, char **argv) {
 
     if (!console_mode) {
         fclose(input_file_ptr);
+    }
+    if (stderr_capture_file) {
+        fclose(stderr_capture_file);
+        stderr_capture_file = NULL;
     }
 
     uint8_t exitcode;

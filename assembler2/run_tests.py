@@ -370,6 +370,7 @@ class TestRunner:
                         str(self.emulator),
                         str(self.assembler),
                         "--no-dump",
+                        "--error-output", str(err_file),
                         "--load", "2000",
                         "--input", str(asm_file),
                         "--output", str(bin_file),
@@ -380,6 +381,7 @@ class TestRunner:
                         str(self.emulator),
                         str(self.assembler),
                         "--no-dump",
+                        "--error-output", str(err_file),
                         "--input", str(asm_file),
                         "--output", str(bin_file),
                     ]
@@ -389,6 +391,7 @@ class TestRunner:
                         str(self.emulator),
                         str(self.assembler),
                         "--no-dump",
+                        "--error-output", str(err_file),
                         str(asm_file),
                         str(bin_file),
                     ]
@@ -400,11 +403,14 @@ class TestRunner:
 
             # Run assembler with cwd set to test file's directory for relative includes
             test_dir = self.current_test_file.parent if self.current_test_file else None
-            with open(err_file, "w") as err_fh:
-                result = subprocess.run(cmd, stderr=err_fh, capture_output=False, cwd=test_dir)
+            if self.python_mode:
+                with open(err_file, "w") as err_fh:
+                    result = subprocess.run(cmd, stderr=err_fh, capture_output=False, cwd=test_dir)
+            else:
+                result = subprocess.run(cmd, capture_output=True, cwd=test_dir)
 
             exit_code = result.returncode
-            stderr_text = self._read_text_safe(err_file)
+            stderr_text = self._read_text_safe(err_file) if err_file.exists() else ""
 
             # Determine if this is a positive or negative test
             if test.expect_hex:
@@ -510,38 +516,19 @@ class TestRunner:
             return TestOutcome(TestResult.FAIL, details)
         return TestOutcome(TestResult.PASS)
 
-    def _filter_stderr(self, stderr_text: str) -> str:
-        """Filter emulator noise from stderr and return cleaned text."""
-        if self.python_mode or self.use_server:
-            # No emulator noise to filter in python or server mode
-            lines = stderr_text.split("\n")
-            while lines and lines[-1] == "":
-                lines.pop()
-            return "\n".join(lines)
-        actual_lines = []
-        for line in stderr_text.split("\n"):
-            # Skip emulator status lines
-            if re.match(r"^out/", line):
-                continue
-            if re.match(r"^/", line):
-                continue
-            if "cycles" in line:
-                continue
-            if "was not closed" in line:
-                continue
-            if line.startswith("Exit code"):
-                continue
-            actual_lines.append(line)
-        # Strip trailing empty lines but preserve whitespace within lines
-        while actual_lines and actual_lines[-1] == "":
-            actual_lines.pop()
-        return "\n".join(actual_lines)
+    @staticmethod
+    def _strip_trailing_empty_lines(text: str) -> str:
+        """Strip trailing empty lines but preserve whitespace within lines."""
+        lines = text.split("\n")
+        while lines and lines[-1] == "":
+            lines.pop()
+        return "\n".join(lines)
 
     def _check_stderr(
         self, test: Test, stderr_text: str, asm_file: Path, details: list[str]
     ):
         """Check stderr output matches expected. Appends failures to details list."""
-        actual_stderr = self._filter_stderr(stderr_text)
+        actual_stderr = self._strip_trailing_empty_lines(stderr_text)
 
         # Replace placeholder with actual file path
         expected_stderr = test.expect_stderr.replace("{{MAIN_FILE}}", str(asm_file))
@@ -683,35 +670,19 @@ class TestRunner:
                 str(self.emulator),
                 str(self.file_stack_test),
                 "--no-dump",
-                "--load",
-                "200",
-                "--output",
-                str(stdout_file),
+                "--load", "200",
+                "--output", str(stdout_file),
+                "--error-output", str(stderr_file),
                 test.mode,
                 str(main_file),
             ]
 
             # Run with cwd set to tmpdir so nested includes resolve correctly
-            with open(stderr_file, "w") as err_fh:
-                subprocess.run(cmd, stderr=err_fh, cwd=tmpdir)
+            subprocess.run(cmd, capture_output=True, cwd=tmpdir)
 
             # Read outputs
             actual_stdout = self._read_text_safe(stdout_file) if stdout_file.exists() else ""
             actual_stderr = self._read_text_safe(stderr_file) if stderr_file.exists() else ""
-
-            # Filter emulator noise from stderr
-            stderr_lines = []
-            for line in actual_stderr.split("\n"):
-                if re.search(r"executed \d+ cycles", line):
-                    continue
-                if "was not closed" in line:
-                    continue
-                if re.match(r"^out/", line):
-                    continue
-                if re.search(r"\.out\s+.*--load\s+\S+", line):
-                    continue
-                stderr_lines.append(line)
-            actual_stderr = "\n".join(stderr_lines)
 
             # Normalize outputs
             actual_stdout = self._normalize_text(actual_stdout)
