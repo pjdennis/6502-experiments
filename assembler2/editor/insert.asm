@@ -538,6 +538,7 @@ insert_batch:
   LDA #$FF
   STA INSERT_LINE_COUNT       ; Signal: skip cursor row repaint only
 .fwd_not_pure:
+  CP16 CURSOR_COL16, RENDER_FROM_COL16
   ; Pure fwd_nl join (no back_nl, no ins_nl) -> scroll optimization
   LDA #$06
   STA RENDER_FLAG            ; Line-delete with displacement-based scroll
@@ -639,6 +640,7 @@ insert_batch:
   LDA BUF_TEMP               ; reload (non-zero)
   STA INSERT_LINE_COUNT       ; Signal pure empty-line join to render
 .bs_not_pure:
+  CP16 CURSOR_COL16, RENDER_FROM_COL16
   LDA #$06
   STA RENDER_FLAG            ; Line-delete with displacement-based scroll
   JMP .set_modified

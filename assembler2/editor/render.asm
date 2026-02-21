@@ -1238,34 +1238,99 @@ render_line_delete_scroll:
   CMP #$06
   BEQ .check_wrap
   CMP #$08
-  BNE .single_row_render
+  BEQ .check_wrap
+  JMP .single_row_render
 .check_wrap:
   ; Pure newline join (BS only deleted newlines): cursor line unchanged, skip render
   LDA INSERT_LINE_COUNT
-  BNE .skip_join_render
+  BEQ .not_pure_join
+  JMP .skip_join_render
+.not_pure_join:
   LDA DELETE_SCREEN_ROWS
   STA RENDER_LIMIT
   LDA #0
   STA DELETE_SCREEN_ROWS     ; reset for next frame
   LDA RENDER_LIMIT
   CMP #2
-  BCC .single_row_render     ; non-wrapped: single row suffices
-  ; Render all wrap rows + bottom rows
+  BCS .wrap_path             ; wrapped: multi-row render
+  JMP .single_row_render     ; non-wrapped: single row suffices
+.wrap_path:
+  ; Save delete delta for bottom rows
   LDA SCROLL_DELTA
-  PHA                        ; save delete delta for bottom rows
-  LDA RENDER_LIMIT
-  STA SCROLL_DELTA           ; rows to render
+  PHA
+  ; Compute first_row
   LDA CURSOR_ROW
   SEC
   SBC WRAP_QUOT
   STA RENDER_ROW
   CP16 FILE_LINE16, RENDER_LINE16
+  ; Check for partial render
+  LDA RENDER_FROM_COL16 + 1
+  AND RENDER_FROM_COL16
+  CMP #$FF
+  BEQ .wrap_render_all
+  ; Partial: compute from_wrap / from_col
+  CP16 RENDER_FROM_COL16, DIV_INPUT16
+  JSR div_mod_screen_cols_16   ; X = from_wrap, A = from_col
+  STA WRAP_REM
+  CPX RENDER_LIMIT
+  BCS .wrap_partial_done       ; from_wrap >= total: skip cursor render
+  ; Advance RENDER_ROW by from_wrap, set RENDER_WRAP
+  STX RENDER_WRAP
+  TXA
+  CLC
+  ADC RENDER_ROW
+  STA RENDER_ROW
+  ; Render partial first visible wrap row
+  LDA RENDER_ROW
+  CLC
+  ADC #1
+  STA ANSI_ROW
+  LDA WRAP_REM
+  CLC
+  ADC #1
+  STA ANSI_COL
+  JSR ansi_move_cursor
+  LDAX16 FILE_LINE16
+  JSR buf_get_line_ptr
+  ; Advance BUF_PTR16 by from_wrap * SCREEN_COLS
+  LDX RENDER_WRAP
+  BEQ .wpc_no_advance
+.wpc_advance_loop:
+  CLC
+  LDA SCREEN_COLS
+  ADCA16 BUF_PTR16, BUF_PTR16
+  DEX
+  BNE .wpc_advance_loop
+.wpc_no_advance:
+  LDA WRAP_REM
+  STA RENDER_COL
+  JSR render_line_chars_from
+  LDA RENDER_COL
+  CMP SCREEN_COLS
+  BCS .wpc_no_clear
+  JSR ansi_clear_line
+.wpc_no_clear:
+  INC RENDER_ROW
+  INC RENDER_WRAP
+  ; Remaining rows = RENDER_LIMIT - RENDER_WRAP
+  LDA RENDER_LIMIT
+  SEC
+  SBC RENDER_WRAP
+  BEQ .wrap_partial_done       ; no more rows
+  STA SCROLL_DELTA
+  JSR render_limited_loop
+.wrap_partial_done:
+  PLA
+  STA SCROLL_DELTA             ; restore delete delta
+  JMP .del_bottom_rows
+.wrap_render_all:
+  LDA RENDER_LIMIT
+  STA SCROLL_DELTA
   LDA #0
   STA RENDER_WRAP
   JSR render_limited_loop
-  PLA
-  STA SCROLL_DELTA           ; restore delete delta
-  JMP .del_bottom_rows
+  JMP .wrap_partial_done
 
 .skip_join_render:
   LDA #0
@@ -1284,27 +1349,29 @@ render_line_delete_scroll:
   CLC
   ADC #1           ; ANSI 1-based
   STA ANSI_ROW
+  LDAX16 FILE_LINE16
+  JSR buf_get_line_ptr
+  ; Check for partial render
+  LDA RENDER_FROM_COL16 + 1
+  AND RENDER_FROM_COL16
+  CMP #$FF
+  BEQ .full_cursor_row
+  ; Partial: position at from_col, render from there
+  LDA RENDER_FROM_COL16
+  CLC
+  ADC #1
+  STA ANSI_COL
+  JSR ansi_move_cursor
+  LDA RENDER_FROM_COL16
+  STA RENDER_COL
+  JSR render_line_chars_from
+  JMP .cursor_check_clear
+.full_cursor_row:
   LDA #1
   STA ANSI_COL
   JSR ansi_move_cursor
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_ptr
-  ; Advance BUF_PTR16 by WRAP_QUOT * SCREEN_COLS for wrap continuations
-  LDA WRAP_QUOT
-  BEQ .no_cursor_wrap
-  TAX
-.cursor_wrap_loop:
-  CLC
-  LDA BUF_PTR16
-  ADC SCREEN_COLS
-  STA BUF_PTR16
-  LDA BUF_PTR16 + 1
-  ADC #0
-  STA BUF_PTR16 + 1
-  DEX
-  BNE .cursor_wrap_loop
-.no_cursor_wrap:
   JSR render_line_chars
+.cursor_check_clear:
   LDA RENDER_COL
   CMP SCREEN_COLS
   BCS .cursor_no_clear

@@ -10873,8 +10873,9 @@ class EditorTestRunner:
             ],
             expect_cursor=(2, 10),
             # Redo re-joins 1 line (batched JJ records UNDO_JOIN_COUNT=1):
-            # cursor wrap rows (1,2) + 1 bottom exposed row (8)
-            expect_content_rows=[(5, {1, 2, 8})]
+            # wrap row 0 unchanged, partial from col 10 on row 2 + bottom row 8
+            expect_content_rows=[(5, {2, 8})],
+            expect_min_col=[(5, 2, 10)]
         )
 
         self.run_test_screen(
@@ -13559,6 +13560,89 @@ class EditorTestRunner:
             expect_cursor=(1, 19),
             expect_content_rows=[(4, {1, 2})],
             expect_min_col=[(4, 1, 19)]
+        )
+
+        self._group("Sub-line render opt: scroll path RENDER_FROM_COL16:", leading_blank=True)
+
+        # J forward, non-wrapped result on scroll path (old_total > new_total):
+        # "Hello" (5) + "World" → "Hello World" (11 chars, 1 row on 40-col)
+        # Old = 2 rows, new = 1 row, delta = 1 → scroll up
+        # RENDER_FROM_COL16 = 5, .render_cursor_row path
+        # Frames: 0=initial, 1=J
+        self.run_test_screen(
+            "J scroll path non-wrapped: partial from join col",
+            "Hello\nWorld\nEnd\n",
+            b"J:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello World"), (1, "End")],
+            expect_cursor=(0, 5),
+            expect_min_col=[(1, 0, 5)]
+        )
+
+        # J forward wrapped result on scroll path (old_total > new_total):
+        # 3J on 5-col: joins 2 lines. "AA\nBB\nCC\n" → "AA BB CC" (8 chars, 2 rows)
+        # Old = 3 rows (3 lines × 1), new = 2 rows, delta = 1 → scroll up
+        # RENDER_FROM_COL16 = 2, .check_wrap path (new_total = 2)
+        # from_wrap = 0, from_col = 2: partial render first wrap row from col 2
+        # Frames: 0=initial, 1='3' count, 2=J
+        self.run_test_screen(
+            "J scroll path wrapped: partial from join col",
+            "AA\nBB\nCC\nEnd\n",
+            b"3J:q!\r",
+            rows=10, cols=5,
+            expect_lines=[(0, "AA BB"), (1, " CC"), (2, "End")],
+            expect_cursor=(0, 2),
+            expect_min_col=[(2, 0, 2)]
+        )
+
+        # J forward wrapped, from_wrap > 0 (skip full wrap rows):
+        # 3J on 5-col: "AAAAAAA" (7 chars, 2 rows) + "BB" + "CC"
+        # → "AAAAAAA BB CC" (13 chars, 3 rows on 5-col)
+        # Old = 2+1+1 = 4 rows, new = 3 rows, delta = 1 → scroll up
+        # RENDER_FROM_COL16 = 7, from_wrap = 7/5 = 1, from_col = 2
+        # Wrap row 0 unchanged, render from col 2 on wrap row 1, full wrap row 2
+        # Frames: 0=initial, 1='3' count, 2=J
+        self.run_test_screen(
+            "J scroll path wrapped from_wrap>0: skip unchanged rows",
+            "AAAAAAA\nBB\nCC\nEnd\n",
+            b"3J:q!\r",
+            rows=10, cols=5,
+            expect_lines=[(0, "AAAAA"), (1, "AA BB"), (2, " CC"), (3, "End")],
+            expect_cursor=(1, 2),
+            expect_min_col=[(2, 1, 2)]
+        )
+
+        self._group("Sub-line render opt: insert mode joins:", leading_blank=True)
+
+        # Insert DEL at EOL joining next line:
+        # "Hello\nWorld\n" on 40-col. $a → insert at col 5 (past last char).
+        # DEL at col 5 deletes newline → "HelloWorld"
+        # RENDER_FROM_COL16 = CURSOR_COL16 = 5
+        # Frames: 0=initial, 1=$ (EOL), 2=a (enter insert), 3=DEL (join)
+        DEL = b"\x1b[3~"
+        self.run_test_screen(
+            "Insert DEL join: partial from cursor col",
+            "Hello\nWorld\nEnd\n",
+            b"$a" + DEL + b"\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "HelloWorld"), (1, "End")],
+            expect_cursor=(0, 4),
+            expect_min_col=[(3, 0, 5)]
+        )
+
+        # Insert BS at col 0 joining with previous line:
+        # "Hello\nWorld\n" on 40-col. ji → insert at line 1, col 0.
+        # BS deletes newline at end of "Hello" → "HelloWorld", cursor at col 5
+        # RENDER_FROM_COL16 = CURSOR_COL16 = 5
+        # Frames: 0=initial, 1=j (move down), 2=i (enter insert), 3=BS (join)
+        self.run_test_screen(
+            "Insert BS join: partial from cursor col",
+            "Hello\nWorld\nEnd\n",
+            b"ji\x08\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "HelloWorld"), (1, "End")],
+            expect_cursor=(0, 4),
+            expect_min_col=[(3, 0, 5)]
         )
 
         self._group("Undo (u):", leading_blank=True)
