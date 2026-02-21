@@ -368,6 +368,67 @@ class EmulatorTestRunner:
             self.args_test_bin, args=["hello world"])
         self._assert_eq(name, output, b"\x01hello world\n")
 
+    # ---- Terminal size tests ----
+
+    def _build_term_size_test(self):
+        """Assemble term size test program. Returns True on success."""
+        tests_dir = self.base_dir / "tests"
+        out_dir = tests_dir / "out"
+        src = tests_dir / "term_size_test.asm"
+        self.term_size_bin = out_dir / "term_size_test.out"
+        return self._assemble(src, self.term_size_bin)
+
+    def test_term_size_default(self):
+        """Default terminal size is 24x80."""
+        name = "Term size default"
+        if not self._should_run(name):
+            return
+        exit_code, output, _ = self.run_server(self.term_size_bin)
+        self._assert_eq(name, output, bytes([24, 80]))
+
+    def test_term_rows_override(self):
+        """--rows override via server ROWS command."""
+        name = "Term rows override"
+        if not self._should_run(name):
+            return
+        exit_code, output, _ = self.run_server(self.term_size_bin, rows=50)
+        if len(output) >= 1:
+            self._assert_eq(name, output[0], 50)
+        else:
+            self._fail(name, f"expected 2 bytes, got {output!r}")
+
+    def test_term_cols_override(self):
+        """--cols override via server COLS command."""
+        name = "Term cols override"
+        if not self._should_run(name):
+            return
+        exit_code, output, _ = self.run_server(self.term_size_bin, cols=120)
+        if len(output) >= 2:
+            self._assert_eq(name, output[1], 120)
+        else:
+            self._fail(name, f"expected 2 bytes, got {output!r}")
+
+    # ---- Stdin read (read_b) tests ----
+
+    def test_stdin_read(self):
+        """Read bytes from stdin via read_b port."""
+        name = "Stdin read"
+        if not self._should_run(name):
+            return
+        # Build a program that reads stdin bytes and writes them to stdout
+        # Uses stubs: read_b ($F006) checks EOF, reads byte; write_b ($F009)
+        code = []
+        # .loop: JSR $F006 (read_b) / BCS .done / JSR $F009 (write_b) / JMP .loop
+        code += [0x20, 0x06, 0xF0]      # JSR read_b
+        code += [0xB0, 0x06]             # BCS .done (+6)
+        code += [0x20, 0x09, 0xF0]       # JSR write_b
+        code += [0x4C, 0x00, 0x04]       # JMP .loop
+        # .done: LDA #0 / STA $F003
+        code += [0xA9, 0x00, 0x8D, 0x03, 0xF0]
+        binary = self.make_binary(code)
+        exit_code, output, _ = self.run_server(binary, keys=b"Hello stdin")
+        self._assert_eq(name, output, b"Hello stdin")
+
     # ---- CLI argument validation tests ----
 
     def _cli_test(self, name, args, expect_exit=1, expect_stderr=None):
@@ -468,6 +529,19 @@ class EmulatorTestRunner:
                 self.test_argc_one()
                 self.test_argc_multiple()
                 self.test_argv_spaces()
+
+        if not self.assembler.exists():
+            print("\n--- Terminal size (skipped: assembler not built) ---")
+        elif not self._build_term_size_test():
+            print("\n--- Terminal size (skipped: assembly failed) ---")
+        else:
+            print("\n--- Terminal size ---")
+            self.test_term_size_default()
+            self.test_term_rows_override()
+            self.test_term_cols_override()
+
+        print("\n--- Stdin read ---")
+        self.test_stdin_read()
 
         print("\n--- CLI argument validation ---")
         self.test_cli_no_args()
