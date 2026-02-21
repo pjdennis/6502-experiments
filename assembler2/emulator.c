@@ -1042,6 +1042,7 @@ int terminal_mode = 0;
 int terminal_interactive = 0;
 FILE* serial_input_file = NULL;
 FILE* serial_output_file = NULL;
+FILE* stderr_capture_file = NULL;
 double target_mhz = 0.0;
 double cpu_mhz = 0.0;
 int serial_baud = 0;
@@ -2257,11 +2258,15 @@ void write6502(uint16_t address, uint8_t value) {
         }
         return;
     } else if (address == port_write_d) {            // write_d
-        if (!error_output_started) {
-            fputc('\n', stderr);  // End command line before first error output
-            error_output_started = 1;
+        if (stderr_capture_file) {
+            fputc(value, stderr_capture_file);
+        } else {
+            if (!error_output_started) {
+                fputc('\n', stderr);  // End command line before first error output
+                error_output_started = 1;
+            }
+            fputc(value, stderr);
         }
-        fputc(value, stderr);
         return;
     } else if (address == port_close) {              // close
         file_close(value);
@@ -2950,6 +2955,8 @@ static uint8_t *keys_buffer = NULL;
 static size_t keys_buffer_len = 0;
 static char *output_buffer = NULL;
 static size_t output_buffer_len = 0;
+static char *stderr_buffer = NULL;
+static size_t stderr_buffer_len = 0;
 static size_t stubs_end;  // address after stubs (where args go)
 
 static int server_load_binary(const char *filename, long load_address) {
@@ -3149,6 +3156,7 @@ static int server_main(void) {
     char srv_binary[4096] = "";
     int use_inline_keys = 0;
     int use_inline_output = 0;
+    int use_inline_stderr = 0;
     char loaded_binary[4096] = "";
     int loaded_terminal_mode = -1;
     long loaded_address = -1;
@@ -3214,6 +3222,12 @@ static int server_main(void) {
         } else if (strcmp(line, "INLINE_OUTPUT") == 0) {
             use_inline_output = 1;
             srv_output[0] = '\0';
+        } else if (strcmp(line, "INLINE_STDERR") == 0) {
+            use_inline_stderr = 1;
+        } else if (strncmp(line, "CWD ", 4) == 0) {
+            if (chdir(line + 4) != 0) {
+                fprintf(stderr, "server: chdir failed: %s\n", line + 4);
+            }
         } else if (strncmp(line, "ARG ", 4) == 0) {
             if (srv_arg_count < 256) {
                 srv_args[srv_arg_count++] = strdup(line + 4);
@@ -3285,6 +3299,15 @@ static int server_main(void) {
 
             files_init(input_file_ptr);
 
+            // Set up inline stderr capture
+            if (use_inline_stderr) {
+                free(stderr_buffer);
+                stderr_buffer = NULL;
+                stderr_buffer_len = 0;
+                stderr_capture_file = open_memstream(
+                    &stderr_buffer, &stderr_buffer_len);
+            }
+
             // Reset CPU and emulation state
             done = 0;
             exitcode_set = -1;
@@ -3345,6 +3368,18 @@ static int server_main(void) {
                 fprintf(stdout, "OUTPUT %zu\n", output_buffer_len);
                 fwrite(output_buffer, 1, output_buffer_len, stdout);
             }
+            if (use_inline_stderr) {
+                if (stderr_capture_file) {
+                    fclose(stderr_capture_file);
+                    stderr_capture_file = NULL;
+                }
+                if (stderr_buffer) {
+                    fprintf(stdout, "STDERR %zu\n", stderr_buffer_len);
+                    fwrite(stderr_buffer, 1, stderr_buffer_len, stdout);
+                } else {
+                    fprintf(stdout, "STDERR 0\n");
+                }
+            }
             fflush(stdout);
 
 run_cleanup:
@@ -3357,6 +3392,11 @@ run_cleanup:
             srv_output[0] = '\0';
             use_inline_keys = 0;
             use_inline_output = 0;
+            use_inline_stderr = 0;
+            if (stderr_capture_file) {
+                fclose(stderr_capture_file);
+                stderr_capture_file = NULL;
+            }
         } else {
             fprintf(stderr, "server: unknown command: %s\n", line);
         }
@@ -3372,6 +3412,8 @@ run_cleanup:
     keys_buffer = NULL;
     free(output_buffer);
     output_buffer = NULL;
+    free(stderr_buffer);
+    stderr_buffer = NULL;
 
     return 0;
 }
