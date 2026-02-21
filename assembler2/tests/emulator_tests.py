@@ -368,6 +368,63 @@ class EmulatorTestRunner:
             self.args_test_bin, args=["hello world"])
         self._assert_eq(name, output, b"\x01hello world\n")
 
+    # ---- CLI argument validation tests ----
+
+    def _cli_test(self, name, args, expect_exit=1, expect_stderr=None):
+        """Run emulator with given args, check exit code and stderr."""
+        if not self._should_run(name):
+            return
+        result = subprocess.run(
+            [str(self.emulator)] + args,
+            capture_output=True, timeout=10)
+        if result.returncode != expect_exit:
+            self._fail(name,
+                f"expected exit {expect_exit}, got {result.returncode}")
+            return
+        if expect_stderr and expect_stderr not in result.stderr.decode():
+            self._fail(name,
+                f"expected {expect_stderr!r} in stderr, "
+                f"got {result.stderr.decode()!r}")
+            return
+        self._pass(name)
+
+    def test_cli_no_args(self):
+        """No arguments shows usage."""
+        self._cli_test("CLI no args", [], expect_stderr="usage:")
+
+    def test_cli_unknown_option(self):
+        """Unknown option errors."""
+        self._cli_test("CLI unknown option",
+            ["/dev/null", "--bogus"], expect_stderr="unknown option")
+
+    def test_cli_console_terminal_exclusive(self):
+        """--console and --terminal are mutually exclusive."""
+        # Need a real binary file for this to get past file loading
+        binary = self.make_binary([0xA9, 0x00, 0x8D, 0x03, 0xF0])
+        self._cli_test("CLI console+terminal exclusive",
+            [str(binary), "--no-dump", "--load", "0400",
+             "--console", "--terminal"],
+            expect_stderr="mutually exclusive")
+
+    def test_cli_baud_without_clock(self):
+        """--baud without --cpu-mhz or --mhz errors."""
+        binary = self.make_binary([0xA9, 0x00, 0x8D, 0x03, 0xF0])
+        self._cli_test("CLI baud without clock",
+            [str(binary), "--no-dump", "--load", "0400",
+             "--terminal", "--baud", "9600"],
+            expect_stderr="--baud requires")
+
+    def test_cli_load_missing_value(self):
+        """--load without a value errors."""
+        self._cli_test("CLI load missing value",
+            ["/dev/null", "--load"], expect_stderr="--load requires")
+
+    def test_cli_missing_code_file(self):
+        """Non-existent code file errors."""
+        self._cli_test("CLI missing code file",
+            ["/tmp/nonexistent_6502_binary_xyz"],
+            expect_stderr="could not open code file")
+
     # ---- Test execution ----
 
     def run_all_tests(self):
@@ -411,6 +468,14 @@ class EmulatorTestRunner:
                 self.test_argc_one()
                 self.test_argc_multiple()
                 self.test_argv_spaces()
+
+        print("\n--- CLI argument validation ---")
+        self.test_cli_no_args()
+        self.test_cli_unknown_option()
+        self.test_cli_console_terminal_exclusive()
+        self.test_cli_baud_without_clock()
+        self.test_cli_load_missing_value()
+        self.test_cli_missing_code_file()
 
         # Print results
         total = self.passed + self.failed
