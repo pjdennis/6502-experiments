@@ -170,9 +170,8 @@ class PersistentEmulator:
             # Mode change invalidates cached binary
             self.current_binary = None
 
-        self._send(f'LOAD {load_addr:04x}')
-
         if binary_str != self.current_binary:
+            self._send(f'LOAD {load_addr:04x}')
             self._send(f'BINARY {binary_str}')
             self.current_binary = binary_str
 
