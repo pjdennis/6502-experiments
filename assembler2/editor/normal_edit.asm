@@ -611,6 +611,7 @@ normal_change_to_eol:
 
   JSR get_count
   JSR compute_dollar_range
+  CP16 CURSOR_COL16, RENDER_FROM_COL16
   LDA #OP_CHANGE
   JSR apply_char_operator
   RTS

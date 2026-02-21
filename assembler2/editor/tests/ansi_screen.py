@@ -69,6 +69,13 @@ class AnsiScreen:
         if 0 <= row < self.rows:
             if row < self.rows - 1:
                 self.content_touched.add(row)
+                col = self.cursor_col
+                if col < self.cols:
+                    if row not in self.min_content_col or col < self.min_content_col[row]:
+                        self.min_content_col[row] = col
+                    end_col = self.cols - 1
+                    if row not in self.max_content_col or end_col > self.max_content_col[row]:
+                        self.max_content_col[row] = end_col
             for c in range(self.cursor_col, self.cols):
                 self.buffer[row][c] = ' '
                 self.attrs[row][c] = 0

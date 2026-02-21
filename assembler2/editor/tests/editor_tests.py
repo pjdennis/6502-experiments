@@ -3097,7 +3097,7 @@ class EditorTestRunner:
             "Render opt: $D wrapped line stays wrapped",
             "A" * 60 + "\nSecond\n",
             b"$D:q!\r",
-            expect_content_rows=[(2, {0, 1})]
+            expect_content_rows=[(2, {1})]
         )
 
         # x unwraps line (41 chars -> 40 after first x -> 1 row), uses scroll
@@ -13011,6 +13011,73 @@ class EditorTestRunner:
             expect_lines=[(0, "HelXlo World")],
             # Frame 3 is the batched insert; first affected col is 3
             expect_min_col=[(3, 0, 3)]
+        )
+
+        # D: delete to end of line from col 3
+        # lll=col 3, D=delete to EOL
+        # Frame 0=initial, 1=lll move, 2=D delete
+        self.run_test_screen(
+            "D delete to EOL: partial render from cursor col",
+            "Hello World\n",
+            b"lllD:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hel")],
+            expect_min_col=[(2, 0, 3)]
+        )
+
+        # D at col 0 on non-wrapped line: entire line emptied
+        self.run_test_screen(
+            "D at col 0: full line render",
+            "Hello\n",
+            b"D:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "")],
+            expect_min_col=[(1, 0, 0)]
+        )
+
+        # D on wrapped line, cursor on wrap row 1: partial render from col
+        # Line is 59 'A's (2 wrap rows in 40-col term). $ goes to col 58 (wrap row 1).
+        # D deletes last char. Result: 58 chars, still 2 rows.
+        self.run_test_screen(
+            "D on wrapped line: partial render from cursor col",
+            "A" * 59 + "\nSecond\n",
+            b"$D:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "A" * 40), (1, "A" * 18)],
+            expect_min_col=[(2, 1, 18)]
+        )
+
+        # Batched 2D (D batched with pending D key)
+        # 2D from col 3 should delete to EOL (same as D with count)
+        self.run_test_screen(
+            "2D batched: partial render from cursor col",
+            "Hello World\n",
+            b"lll2D:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hel")],
+            expect_min_col=[(3, 0, 3)]
+        )
+
+        # C: change to EOL from col 3
+        # lll=col 3, C=change to EOL, ESC=exit insert
+        # Frame 0=initial, 1=lll move, 2=C change (enters insert), 3=ESC
+        self.run_test_screen(
+            "C change to EOL: partial render from cursor col",
+            "Hello World\n",
+            b"lllC\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hel")],
+            expect_min_col=[(2, 0, 3)]
+        )
+
+        # C on wrapped line, cursor on wrap row 1: partial render
+        self.run_test_screen(
+            "C on wrapped line: partial render from cursor col",
+            "A" * 59 + "\nSecond\n",
+            b"$C\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "A" * 40), (1, "A" * 18)],
+            expect_min_col=[(2, 1, 18)]
         )
 
         self._group("Undo (u):", leading_blank=True)
