@@ -120,6 +120,8 @@
 #include <time.h>
 #include <setjmp.h>
 
+#include "file_io.h"
+
 #define STDIN_FILENO  0
 #define STDOUT_FILENO 1
 
@@ -1018,16 +1020,6 @@ void hookexternal(void *funcptr) {
 
 uint8_t memory[0x10001];
 
-FILE* files[255];
-
-typedef struct {
-    char *buffer;
-    size_t buf_size;
-    size_t buf_pos;
-} DirState;
-
-DirState *dir_state[255];
-
 FILE* input_file_ptr;
 FILE* output_file_ptr;
 int con_eof_flag = 0;
@@ -1866,167 +1858,12 @@ void get_terminal_size(int *rows, int *cols) {
     if (override_cols > 0) *cols = override_cols;
 }
 
-static void emulation_exit(int code);
-
-void files_init(FILE* input_file) {
-    files[0] = input_file;
-    for (size_t x = 1; x != 255; x++) {
-        files[x] = NULL;
-    }
-    for (size_t x = 0; x != 255; x++) {
-        dir_state[x] = NULL;
-    }
-}
-
-uint8_t file_open_with_mode(const char* name, const char* mode) {
-    uint8_t x;
-    for (x = 1; x != 255; x++) {
-        if (files[x] == NULL && dir_state[x] == NULL) {
-            FILE* file = fopen(name, mode);
-            if (!file) {
-                return 0;
-            }
-	    files[x] = file;
-	    return x + 1;
-        }
-    }
-    restore_terminal();
-    fprintf(stderr, "could not open file: %s: too many files open\n", name);
-    emulation_exit(1);
-}
-
-uint8_t file_open(const char* name) {
-    return file_open_with_mode(name, "rb");
-}
-
-uint8_t file_open_for_write(const char* name) {
-    return file_open_with_mode(name, "wb");
-}
-
-static int dir_filter(const struct dirent *entry) {
-    return entry->d_name[0] != '.';
-}
-
-uint8_t dir_open(const char* name) {
-    uint8_t slot = 0;
-    for (uint8_t x = 1; x != 255; x++) {
-        if (files[x] == NULL && dir_state[x] == NULL) {
-            slot = x; break;
-        }
-    }
-    if (slot == 0) {
-        restore_terminal();
-        fprintf(stderr, "could not open directory: %s: too many handles open\n", name);
-        emulation_exit(1);
-    }
-
-    struct dirent **namelist;
-    int n = scandir(name, &namelist, dir_filter, alphasort);
-    if (n < 0) return 0;
-
-    size_t total = 0;
-    for (int i = 0; i < n; i++)
-        total += 1 + strlen(namelist[i]->d_name) + 1;
-
-    char *buf = malloc(total ? total : 1);
-    size_t pos = 0;
-    for (int i = 0; i < n; i++) {
-        uint8_t meta = 0;
-        int is_dir = 0;
-        if (namelist[i]->d_type == DT_DIR) {
-            is_dir = 1;
-        } else if (namelist[i]->d_type == DT_UNKNOWN) {
-            char fullpath[PATH_MAX];
-            snprintf(fullpath, sizeof(fullpath), "%s/%s", name, namelist[i]->d_name);
-            struct stat st;
-            if (stat(fullpath, &st) == 0 && S_ISDIR(st.st_mode))
-                is_dir = 1;
-        }
-        if (is_dir) meta |= 0x01;
-
-        if (!is_dir) {
-            char fullpath[PATH_MAX];
-            snprintf(fullpath, sizeof(fullpath), "%s/%s", name, namelist[i]->d_name);
-            if (access(fullpath, W_OK) != 0)
-                meta |= 0x02;
-        }
-
-        buf[pos++] = meta;
-        size_t namelen = strlen(namelist[i]->d_name);
-        memcpy(buf + pos, namelist[i]->d_name, namelen + 1);
-        pos += namelen + 1;
-        free(namelist[i]);
-    }
-    free(namelist);
-
-    DirState *ds = malloc(sizeof(DirState));
-    ds->buffer = buf;
-    ds->buf_size = pos;
-    ds->buf_pos = 0;
-    dir_state[slot] = ds;
-    return slot + 1;
-}
-
-static void emulation_exit(int code) {
+void emulation_exit(int code) {
     if (server_mode_active) {
         exitcode_set = code;
         longjmp(server_abort_jmp, 1);
     }
     exit(code);
-}
-
-FILE* file_handle(uint8_t file) {
-    if (file == 0 || files[file - 1] == NULL) {
-        restore_terminal();
-        fprintf(stderr, "file %i is not open\n", (int) file);
-	emulation_exit(1);
-    }
-    return files[file - 1];
-}
-
-void file_close(uint8_t file) {
-    if (file <= 1) {
-        restore_terminal();
-        fprintf(stderr, "Cannot close standard file %i\n", (int) file);
-        emulation_exit(1);
-    }
-    if (dir_state[file - 1] != NULL) {
-        DirState *ds = dir_state[file - 1];
-        free(ds->buffer);
-        free(ds);
-        dir_state[file - 1] = NULL;
-        return;
-    }
-    fclose(file_handle(file));
-    files[file - 1] = NULL;
-}
-
-int file_read(uint8_t file) {
-    return fgetc(file_handle(file));
-}
-
-int file_write(uint8_t file, uint8_t value) {
-    return fputc(value, file_handle(file));
-}
-
-int files_destroy() {
-    int unclosed_count = 0;
-    for (size_t x = 1; x != 255; x++) {
-        if (files[x] != NULL) {
-	    fprintf(stderr, "File %i was not closed\n", (int) (x + 1));
-            fclose(files[x]);
-	    files[x] = NULL;
-            unclosed_count++;
-        }
-        if (dir_state[x] != NULL) {
-            fprintf(stderr, "File %i was not closed\n", (int) (x + 1));
-            free(dir_state[x]->buffer);
-            free(dir_state[x]);
-            dir_state[x] = NULL;
-            unclosed_count++;
-        }
-    }
-    return unclosed_count;
 }
 
 uint8_t read6502(uint16_t address) {

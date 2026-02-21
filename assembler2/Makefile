@@ -5,9 +5,12 @@ clean:
 	find . -type d -name "out" -exec rm -rf {} +
 	find . -type f -name "*.tmp" -delete
 
-emulator.out: emulator.c
+EMU_SRCS = emulator.c file_io.c
+EMU_HDRS = file_io.h
+
+emulator.out: $(EMU_SRCS) $(EMU_HDRS)
 	@mkdir -p out
-	gcc -O2 -march=native -flto -DNDEBUG -o emulator.out emulator.c
+	gcc -O2 -march=native -flto -DNDEBUG -o emulator.out $(EMU_SRCS)
 
 00/out/asm_c.out: 00/asm.c
 	@mkdir -p 00/out
