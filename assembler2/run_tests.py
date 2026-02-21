@@ -516,22 +516,15 @@ class TestRunner:
             return TestOutcome(TestResult.FAIL, details)
         return TestOutcome(TestResult.PASS)
 
-    @staticmethod
-    def _strip_trailing_empty_lines(text: str) -> str:
-        """Strip trailing empty lines but preserve whitespace within lines."""
-        lines = text.split("\n")
-        while lines and lines[-1] == "":
-            lines.pop()
-        return "\n".join(lines)
-
     def _check_stderr(
         self, test: Test, stderr_text: str, asm_file: Path, details: list[str]
     ):
         """Check stderr output matches expected. Appends failures to details list."""
-        actual_stderr = self._strip_trailing_empty_lines(stderr_text)
+        actual_stderr = stderr_text
 
-        # Replace placeholder with actual file path
-        expected_stderr = test.expect_stderr.replace("{{MAIN_FILE}}", str(asm_file))
+        # Replace placeholder with actual file path; append \n since assembler
+        # always terminates stderr with a newline
+        expected_stderr = test.expect_stderr.replace("{{MAIN_FILE}}", str(asm_file)) + "\n"
 
         if actual_stderr != expected_stderr:
             self._add_comparison(details, "stderr", expected_stderr, actual_stderr,
