@@ -15021,6 +15021,47 @@ class EditorTestRunner:
             expected_content="A\n"
         )
 
+        # d$ undo at col 0 (entire line content deleted, undo restores)
+        self.run_test(
+            "d$ undo at col 0 restores full line",
+            "Hello\n",
+            b"d$u:wq\r",
+            expected_content="Hello\n"
+        )
+
+        # o undo at last line: undo removes the blank line below
+        self.run_test(
+            "o undo at last line",
+            "A\nB\n",
+            b"jo\x1bu:wq\r",
+            expected_content="A\nB\n"
+        )
+
+        # O undo at first line: undo removes the blank line above
+        self.run_test(
+            "O undo at first line",
+            "A\nB\n",
+            b"O\x1bu:wq\r",
+            expected_content="A\nB\n"
+        )
+
+        # dd undo of empty line: dd deletes empty line, undo restores it
+        self.run_test(
+            "dd undo of empty line",
+            "A\n\nB\n",
+            b"jddu:wq\r",
+            expected_content="A\n\nB\n"
+        )
+
+        # BS on only empty line in file: no-op (can't join, can't delete)
+        self.run_test_screen(
+            "BS on only empty line in file is no-op",
+            "\n",
+            b"i\x08\x1b:q!\r",
+            expect_cursor=(0, 0),
+            expect_lines=[(0, "")],
+        )
+
         # --- Interactions ---
 
         # undo-then-edit clears redo stack
