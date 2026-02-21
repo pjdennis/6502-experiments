@@ -616,9 +616,11 @@ class TestRunner:
             actual_stderr = stderr_data.decode('latin-1') if stderr_data else ""
 
             actual_stdout = self._normalize_text(actual_stdout)
-            actual_stderr = self._normalize_text(actual_stderr)
             expected_stdout = self._normalize_text(test.expect_stdout)
-            expected_stderr = self._normalize_text(test.expect_stderr)
+
+            # Compare stderr exactly; append \n since program always
+            # terminates stderr with a newline
+            expected_stderr = test.expect_stderr + "\n" if test.expect_stderr else ""
 
             details = []
 
@@ -677,11 +679,13 @@ class TestRunner:
             actual_stdout = self._read_text_safe(stdout_file) if stdout_file.exists() else ""
             actual_stderr = self._read_text_safe(stderr_file) if stderr_file.exists() else ""
 
-            # Normalize outputs
+            # Normalize stdout
             actual_stdout = self._normalize_text(actual_stdout)
-            actual_stderr = self._normalize_text(actual_stderr)
             expected_stdout = self._normalize_text(test.expect_stdout)
-            expected_stderr = self._normalize_text(test.expect_stderr)
+
+            # Compare stderr exactly; append \n since program always
+            # terminates stderr with a newline
+            expected_stderr = test.expect_stderr + "\n" if test.expect_stderr else ""
 
             details = []
 
