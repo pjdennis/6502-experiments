@@ -15165,6 +15165,112 @@ class EditorTestRunner:
             expected_content="Hello\n\nWorld\n"
         )
 
+        # --- Redo cursor position verification ---
+
+        # x redo cursor: x at col 1 deletes char, undo, redo -> cursor at col 1
+        self.run_test_screen(
+            "x redo cursor at x position",
+            "Hello\n",
+            b"lxu u:q!\r",
+            expect_cursor=(0, 1),
+        )
+
+        # dd redo cursor: dd on line 1, undo, redo -> cursor on what was line 2
+        self.run_test_screen(
+            "dd redo cursor position",
+            "A\nB\nC\n",
+            b"jddu u:q!\r",
+            expect_cursor=(1, 0),
+        )
+
+        # D redo cursor: D at col 2, undo, redo -> cursor clamps to col 1
+        self.run_test_screen(
+            "D redo cursor position",
+            "Hello\n",
+            b"llDu u:q!\r",
+            expect_cursor=(0, 1),
+        )
+
+        # dw redo cursor
+        self.run_test_screen(
+            "dw redo cursor position",
+            "Hello World\n",
+            b"dwu u:q!\r",
+            expect_cursor=(0, 0),
+        )
+
+        # db redo cursor: e to col 4, db, undo, redo
+        self.run_test_screen(
+            "db redo cursor position",
+            "Hello World\n",
+            b"edbu u:q!\r",
+            expect_cursor=(0, 0),
+        )
+
+        # de redo cursor
+        self.run_test_screen(
+            "de redo cursor position",
+            "Hello World\n",
+            b"deu u:q!\r",
+            expect_cursor=(0, 0),
+        )
+
+        # d$ redo cursor: d$ at col 2, undo, redo -> cursor clamps to col 1
+        self.run_test_screen(
+            "d$ redo cursor position",
+            "Hello\n",
+            b"lld$u u:q!\r",
+            expect_cursor=(0, 1),
+        )
+
+        # d0 redo cursor: d0 at col 3, undo, redo -> cursor at col 0
+        self.run_test_screen(
+            "d0 redo cursor position",
+            "Hello\n",
+            b"llld0u u:q!\r",
+            expect_cursor=(0, 0),
+        )
+
+        # s redo cursor: s at col 0, clean ESC, undo, redo
+        self.run_test_screen(
+            "s redo cursor position",
+            "Hello\n",
+            b"s\x1bu u:q!\r",
+            expect_cursor=(0, 0),
+        )
+
+        # C redo cursor: C at col 2, clean ESC, undo, redo -> cursor at col 1
+        self.run_test_screen(
+            "C redo cursor position",
+            "Hello\n",
+            b"llC\x1bu u:q!\r",
+            expect_cursor=(0, 1),
+        )
+
+        # cw redo cursor: cw at col 0, clean ESC, undo, redo
+        self.run_test_screen(
+            "cw redo cursor position",
+            "Hello World\n",
+            b"cw\x1bu u:q!\r",
+            expect_cursor=(0, 0),
+        )
+
+        # o redo cursor: o opens below, clean ESC, undo, redo -> cursor on new line
+        self.run_test_screen(
+            "o redo cursor position",
+            "Hello\nWorld\n",
+            b"o\x1bu u:q!\r",
+            expect_cursor=(1, 0),
+        )
+
+        # O redo cursor: O opens above on line 1, clean ESC, undo, redo
+        self.run_test_screen(
+            "O redo cursor position",
+            "Hello\nWorld\n",
+            b"jO\x1bu u:q!\r",
+            expect_cursor=(1, 0),
+        )
+
         # --- Redo render optimization: verify minimal repaint on undo/redo ---
 
         # d0 undo then redo - single row repaint
