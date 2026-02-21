@@ -33,12 +33,12 @@ class TerminalTestRunner:
     def __init__(self, base_dir: Path, verbose: bool = False):
         self.base_dir = base_dir
         self.verbose = verbose
-        self.emulator = base_dir / "emulator.out"
+        self.emulator = base_dir / "emulator" / "emulator.out"
         self.assembler = base_dir / "17" / "out" / "asm.out"
-        self.test_asm = base_dir / "tests" / "terminal_test.asm"
-        self.test_bin = base_dir / "tests" / "out" / "terminal_test.out"
-        self.dsr_test_asm = base_dir / "tests" / "terminal_dsr_test.asm"
-        self.dsr_test_bin = base_dir / "tests" / "out" / "terminal_dsr_test.out"
+        self.test_asm = base_dir / "emulator" / "tests" / "terminal_test.asm"
+        self.test_bin = base_dir / "emulator" / "tests" / "out" / "terminal_test.out"
+        self.dsr_test_asm = base_dir / "emulator" / "tests" / "terminal_dsr_test.asm"
+        self.dsr_test_bin = base_dir / "emulator" / "tests" / "out" / "terminal_dsr_test.out"
         self.passed = 0
         self.failed = 0
 
@@ -308,7 +308,7 @@ def main():
     if not sys.stdout.isatty():
         Colors.disable()
 
-    base_dir = Path(__file__).resolve().parent.parent
+    base_dir = Path(__file__).resolve().parent.parent.parent
     runner = TerminalTestRunner(base_dir, verbose=args.verbose)
     success = runner.run_all_tests()
     sys.exit(0 if success else 1)

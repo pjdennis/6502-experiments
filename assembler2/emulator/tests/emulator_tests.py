@@ -15,7 +15,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from persistent_emulator import PersistentEmulator
 
 
@@ -35,7 +35,7 @@ class EmulatorTestRunner:
         self.base_dir = base_dir
         self.verbose = verbose
         self.filter_pattern = filter_pattern
-        self.emulator = base_dir / "emulator.out"
+        self.emulator = base_dir / "emulator" / "emulator.out"
         self.assembler = base_dir / "17" / "out" / "asm.out"
         self.passed = 0
         self.failed = 0
@@ -229,7 +229,7 @@ class EmulatorTestRunner:
 
     def _build_file_tests(self):
         """Assemble file I/O test programs. Returns True on success."""
-        tests_dir = self.base_dir / "tests"
+        tests_dir = self.base_dir / "emulator" / "tests"
         out_dir = tests_dir / "out"
         programs = [
             ("file_read_test", tests_dir / "file_read_test.asm",
@@ -327,7 +327,7 @@ class EmulatorTestRunner:
 
     def _build_args_test(self):
         """Assemble args test program. Returns True on success."""
-        tests_dir = self.base_dir / "tests"
+        tests_dir = self.base_dir / "emulator" / "tests"
         out_dir = tests_dir / "out"
         src = tests_dir / "args_test.asm"
         self.args_test_bin = out_dir / "args_test.out"
@@ -372,7 +372,7 @@ class EmulatorTestRunner:
 
     def _build_term_size_test(self):
         """Assemble term size test program. Returns True on success."""
-        tests_dir = self.base_dir / "tests"
+        tests_dir = self.base_dir / "emulator" / "tests"
         out_dir = tests_dir / "out"
         src = tests_dir / "term_size_test.asm"
         self.term_size_bin = out_dir / "term_size_test.out"
@@ -587,7 +587,7 @@ def main():
     if not sys.stdout.isatty():
         Colors.disable()
 
-    base_dir = Path(__file__).resolve().parent.parent
+    base_dir = Path(__file__).resolve().parent.parent.parent
     runner = EmulatorTestRunner(base_dir, verbose=args.verbose,
                                 filter_pattern=args.filter)
     try:

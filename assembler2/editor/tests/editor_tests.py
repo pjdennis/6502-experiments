@@ -132,7 +132,7 @@ class EditorTestRunner:
         self.base_dir = base_dir
         self.verbose = verbose
         self.quiet = quiet
-        self.emulator = base_dir / "emulator.out"
+        self.emulator = base_dir / "emulator" / "emulator.out"
         self.assembler = base_dir / "17" / "out" / "asm.out"
         self.editor_asm = base_dir / "editor" / "editor.asm"
         self.editor_bin = base_dir / "editor" / "out" / "editor.out"

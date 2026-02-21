@@ -26,7 +26,7 @@ build_early() {
     local ver=$1 prev=$2
     echo "--- Version $ver ---"
     (cd "$ver" && mkdir -p out &&
-      ../emulator.out ../"$prev"/out/asm.out --load 2000 --input asm.asm --output out/asm.out)
+      ../emulator/emulator.out ../"$prev"/out/asm.out --load 2000 --input asm.asm --output out/asm.out)
 }
 
 # Build instgen with cat-based inclusion (versions 06-08)
@@ -34,10 +34,10 @@ build_cat_instgen() {
     local ver=$1 prev_asm=$2
     echo "--- Version $ver ---"
     (cd "$ver" && mkdir -p out &&
-      ../emulator.out "$prev_asm" --load 2000 --input instgen.asm --output out/instgen.out &&
-      ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
+      ../emulator/emulator.out "$prev_asm" --load 2000 --input instgen.asm --output out/instgen.out &&
+      ../emulator/emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
       cat out/inst.asm.out asm.asm > out/asmc.asm.out &&
-      ../emulator.out "$prev_asm" --load 2000 --input out/asmc.asm.out --output out/asmc.out)
+      ../emulator/emulator.out "$prev_asm" --load 2000 --input out/asmc.asm.out --output out/asmc.out)
 }
 
 # Build with instgen and .include (versions 10+)
@@ -45,16 +45,16 @@ build_standard() {
     local ver=$1 prev_asm=$2
     echo "--- Version $ver ---"
     (cd "$ver" && mkdir -p out &&
-      ../emulator.out "$prev_asm" instgen.asm out/instgen.out &&
-      ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
-      ../emulator.out "$prev_asm" asm.asm out/asm.out)
+      ../emulator/emulator.out "$prev_asm" instgen.asm out/instgen.out &&
+      ../emulator/emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
+      ../emulator/emulator.out "$prev_asm" asm.asm out/asm.out)
 }
 
 # Build standard + debug variant (versions 15+)
 build_with_debug() {
     local ver=$1 prev_asm=$2
     build_standard "$ver" "$prev_asm"
-    (cd "$ver" && ../emulator.out "$prev_asm" asm.asm out/asm_debug.out define:enable_debug)
+    (cd "$ver" && ../emulator/emulator.out "$prev_asm" asm.asm out/asm_debug.out define:enable_debug)
 }
 
 # Verify two binary files match
@@ -91,9 +91,9 @@ run_version_tests 08
 # Version 09: transitional (old flags for instgen, new arg style for asm)
 echo "--- Version 09 ---"
 (cd 09 && mkdir -p out &&
-  ../emulator.out ../08/out/asmc.out --input instgen.asm --output out/instgen.out &&
-  ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
-  ../emulator.out ../08/out/asmc.out --input asm.asm --output out/asm.out)
+  ../emulator/emulator.out ../08/out/asmc.out --input instgen.asm --output out/instgen.out &&
+  ../emulator/emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
+  ../emulator/emulator.out ../08/out/asmc.out --input asm.asm --output out/asm.out)
 run_version_tests 09
 
 # Versions 10-14: standard build
@@ -113,25 +113,25 @@ run_version_tests 14
 build_with_debug 15 ../14/out/asm.out
 run_version_tests 15
 build_with_debug 16 ../15/out/asm_debug.out
-(cd 16 && ../emulator.out ../15/out/asm_debug.out tests/file_stack_test.asm out/file_stack_test.out)
+(cd 16 && ../emulator/emulator.out ../15/out/asm_debug.out tests/file_stack_test.asm out/file_stack_test.out)
 run_version_tests 16
 build_with_debug 17 ../16/out/asm_debug.out
 (cd 17 &&
-  ../emulator.out ../16/out/asm_debug.out tests/file_stack/file_stack_test.asm out/file_stack_test.out &&
-  ../emulator.out ../16/out/asm_debug.out tests/opendir/opendir_test.asm out/opendir_test.out)
+  ../emulator/emulator.out ../16/out/asm_debug.out tests/file_stack/file_stack_test.asm out/file_stack_test.out &&
+  ../emulator/emulator.out ../16/out/asm_debug.out tests/opendir/opendir_test.asm out/opendir_test.out)
 run_version_tests 17
 
 # Additional tests
 echo "--- opendir tests ---"
 python3 17/tests/opendir/test_opendir.py
 echo "--- Self-assembly test ---"
-(cd 17 && ../emulator.out out/asm.out asm.asm out/asm_2.out)
+(cd 17 && ../emulator/emulator.out out/asm.out asm.asm out/asm_2.out)
 verify_match 17/out/asm.out 17/out/asm_2.out
-(cd 17 && ../emulator.out out/asm_debug.out asm.asm out/asm_debug_2.out define:enable_debug)
+(cd 17 && ../emulator/emulator.out out/asm_debug.out asm.asm out/asm_debug_2.out define:enable_debug)
 verify_match 17/out/asm_debug.out 17/out/asm_debug_2.out
 echo "--- Self-hosted tests ---"
-(cd 17 && ../emulator.out out/asm.out asm.asm out/test_runner.out define:enable_test_runner)
-(cd 17/tests/asm && ../../../emulator.out ../../out/test_runner.out)
+(cd 17 && ../emulator/emulator.out out/asm.out asm.asm out/test_runner.out define:enable_test_runner)
+(cd 17/tests/asm && ../../../emulator/emulator.out ../../out/test_runner.out)
 echo "--- Test runner directory mode tests ---"
 python3 17/tests/test_runner/test_runner_dir.py
 

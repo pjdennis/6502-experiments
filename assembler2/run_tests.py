@@ -96,7 +96,7 @@ class TestRunner:
         self.python_mode = python_mode
         self.use_server = use_server and not python_mode and int(asm_version) >= 9
         self.asm_version = asm_version
-        self.emulator = base_dir / "emulator.out"
+        self.emulator = base_dir / "emulator" / "emulator.out"
         self.assembler = self._resolve_assembler_binary(base_dir, asm_version)
         self.file_stack_test = base_dir / asm_version / "out" / "file_stack_test.out"
         self.python_asm = base_dir / "pyasm.py"

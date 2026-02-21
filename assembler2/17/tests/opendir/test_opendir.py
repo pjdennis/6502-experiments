@@ -26,7 +26,7 @@ class Colors:
 # Paths relative to project root
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent.parent.parent
-EMULATOR = PROJECT_ROOT / "emulator.out"
+EMULATOR = PROJECT_ROOT / "emulator" / "emulator.out"
 TEST_PROGRAM = PROJECT_ROOT / "17" / "out" / "opendir_test.out"
 
 

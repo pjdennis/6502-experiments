@@ -114,10 +114,10 @@ def set_nonblocking(fd):
 
 def run_sigtstp_redraw_test(base_dir, verbose=False):
     """Test that screen is redrawn after SIGTSTP/SIGCONT in terminal mode."""
-    emulator = base_dir / "emulator.out"
+    emulator = base_dir / "emulator" / "emulator.out"
     assembler = base_dir / "17" / "out" / "asm.out"
-    test_asm = base_dir / "tests" / "sigtstp_test.asm"
-    test_bin = base_dir / "tests" / "out" / "sigtstp_test.out"
+    test_asm = base_dir / "emulator" / "tests" / "sigtstp_test.asm"
+    test_bin = base_dir / "emulator" / "tests" / "out" / "sigtstp_test.out"
 
     if not emulator.exists():
         print(f"Error: Emulator not found at {emulator}")
@@ -254,7 +254,7 @@ def main():
     if not sys.stdout.isatty():
         Colors.disable()
 
-    base_dir = Path(__file__).resolve().parent.parent
+    base_dir = Path(__file__).resolve().parent.parent.parent
 
     print("=" * 60)
     print("SIGTSTP/SIGCONT Screen Restore Test")
