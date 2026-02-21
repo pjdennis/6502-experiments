@@ -520,6 +520,12 @@ insert_batch:
   ; Clean up cursor_buf_pos from stack
   PLA
   PLA
+  ; Pre-compute screen rows for fwd_nl join scroll optimization
+  CP16 FILE_LINE16, RENDER_LINE16
+  LDA LINE_LEN16 + 1         ; fwd_nl
+  CLC
+  ADC #1                     ; + cursor line
+  JSR compute_delete_screen_rows
   ; Pure fwd_nl join (no back_nl, no ins_nl) -> scroll optimization
   LDA #$06
   STA RENDER_FLAG            ; Line-delete with displacement-based scroll
