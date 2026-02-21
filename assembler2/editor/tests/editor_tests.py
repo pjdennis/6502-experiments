@@ -16324,6 +16324,65 @@ class EditorTestRunner:
             ],
         )
 
+        # Type at exact wrap boundary column.
+        # Line 0: "A"*9 at 10 cols (1 row, just under boundary).
+        # Move to end ($=col 8), a enters insert after last char (col 9).
+        # Type "X" -> "A"*9 + "X" = 10 chars = exactly 1 row.
+        # Type "Y" -> 11 chars = wraps to 2 rows.
+        self.run_test_screen(
+            "Type at exact wrap boundary column",
+            "A" * 9 + "\nEnd\n",
+            b"$aXY\x1b:q!\r",
+            rows=10, cols=10,
+            expect_lines=[
+                (0, "A" * 9 + "X"),
+                (1, "Y"),
+                (2, "End"),
+            ],
+        )
+
+        # Delete at exact wrap boundary column.
+        # Line 0: "A"*10 + "B" at 10 cols = 2 rows (10 + 1).
+        # Move to col 9 (last col of first wrap row). x deletes A at col 9.
+        # Result: "A"*9 + "B" = 10 chars = 1 row.
+        self.run_test_screen(
+            "Delete at exact wrap boundary column",
+            "A" * 10 + "B\nEnd\n",
+            b"l" * 9 + b"x:q!\r",
+            rows=10, cols=10,
+            expect_lines=[
+                (0, "A" * 9 + "B"),
+                (1, "End"),
+            ],
+            expect_cursor=(0, 9),
+        )
+
+        # Batched Enter producing line at exactly screen width.
+        # Line 0: "A"*10 + "B"*5 at 10 cols (wraps to 2 rows).
+        # Move to col 10 (exact boundary), insert Enter splits there.
+        # Result: "A"*10 (exactly 1 row) + "B"*5 (second line).
+        self.run_test_screen(
+            "Enter producing line at exactly screen width",
+            "A" * 10 + "B" * 5 + "\nEnd\n",
+            b"l" * 10 + b"i\r\x1b:q!\r",
+            rows=10, cols=10,
+            expect_lines=[
+                (0, "A" * 10),
+                (1, "B" * 5),
+                (2, "End"),
+            ],
+            expect_cursor=(1, 0),
+        )
+
+        # 3>>>> count + batched indent.
+        # 3>> indents up to 3 lines (2 spaces), >> batched repeat (2 more) = 4 spaces.
+        self.run_test(
+            "3>>>> count plus batched indent",
+            "abc\n",
+            b"3>>>>:wq\r",
+            expected_content="    abc\n"
+        )
+
         print()
         print("=" * 60)
         total = self.passed + self.failed + self.skipped
