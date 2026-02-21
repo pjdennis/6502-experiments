@@ -2945,11 +2945,11 @@ int main(int argc, char **argv) {
     return exitcode;
 }
 
-static uint8_t pristine_memory[0x10001];
+static uint8_t pristine_memory[0x10000];
 static size_t stubs_end;  // address after stubs (where args go)
 
 static int server_load_binary(const char *filename, long load_address) {
-    memset(memory, 0, 0x10001);
+    memset(memory, 0, 0x10000);
 
     FILE *f = fopen(filename, "rb");
     if (!f) {
@@ -3133,7 +3133,7 @@ static int server_load_binary(const char *filename, long load_address) {
     emit_byte(inst_rts);
 
     stubs_end = p;
-    memcpy(pristine_memory, memory, 0x10001);
+    memcpy(pristine_memory, memory, 0x10000);
     return 0;
 }
 
@@ -3143,6 +3143,9 @@ static int server_main(void) {
     char srv_input[4096] = "";
     char srv_output[4096] = "";
     char srv_binary[4096] = "";
+    char loaded_binary[4096] = "";
+    int loaded_terminal_mode = -1;
+    long loaded_address = -1;
     char *srv_args[256];
     int srv_arg_count = 0;
     int binary_loaded = 0;
@@ -3156,11 +3159,22 @@ static int server_main(void) {
         } else if (strncmp(line, "BINARY ", 7) == 0) {
             strncpy(srv_binary, line + 7, sizeof(srv_binary) - 1);
             srv_binary[sizeof(srv_binary) - 1] = '\0';
-            if (server_load_binary(srv_binary, srv_load_address) != 0) {
+            // Skip reload if same binary, mode, and load address
+            if (binary_loaded &&
+                strcmp(srv_binary, loaded_binary) == 0 &&
+                terminal_mode == loaded_terminal_mode &&
+                srv_load_address == loaded_address) {
+                // Already loaded - skip file I/O
+            } else if (server_load_binary(srv_binary, srv_load_address) != 0) {
                 fprintf(stderr, "server: failed to load binary\n");
                 binary_loaded = 0;
+                loaded_binary[0] = '\0';
             } else {
                 binary_loaded = 1;
+                strncpy(loaded_binary, srv_binary, sizeof(loaded_binary) - 1);
+                loaded_binary[sizeof(loaded_binary) - 1] = '\0';
+                loaded_terminal_mode = terminal_mode;
+                loaded_address = srv_load_address;
             }
         } else if (strncmp(line, "LOAD ", 5) == 0) {
             srv_load_address = strtol(line + 5, NULL, 16);
@@ -3169,12 +3183,7 @@ static int server_main(void) {
         } else if (strncmp(line, "COLS ", 5) == 0) {
             override_cols = (int)strtol(line + 5, NULL, 10);
         } else if (strncmp(line, "MODE ", 5) == 0) {
-            int new_terminal = strcmp(line + 5, "terminal") == 0;
-            if (new_terminal != terminal_mode && binary_loaded) {
-                terminal_mode = new_terminal;
-                server_load_binary(srv_binary, srv_load_address);
-            }
-            terminal_mode = new_terminal;
+            terminal_mode = strcmp(line + 5, "terminal") == 0 ? 1 : 0;
         } else if (strncmp(line, "INPUT ", 6) == 0) {
             strncpy(srv_input, line + 6, sizeof(srv_input) - 1);
             srv_input[sizeof(srv_input) - 1] = '\0';
@@ -3193,7 +3202,7 @@ static int server_main(void) {
             }
 
             // Restore pristine memory
-            memcpy(memory, pristine_memory, 0x10001);
+            memcpy(memory, pristine_memory, 0x10000);
 
             // Write program arguments into memory after stubs
             size_t p = stubs_end;
