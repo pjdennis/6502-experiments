@@ -15369,6 +15369,55 @@ class EditorTestRunner:
             expect_scrolled_at_frame=[(6, False)]
         )
 
+        # cb undo then redo - single row repaint
+        # Frames: 0=initial, 1=jjj, 2=w, 3=cb (insert), 4=ESC, 5=u, 6=space, 7=u redo
+        self.run_test_screen(
+            "Redo render: cb undo then redo single row",
+            make_lines(15),
+            b"jjjwcb\x1bu u:q!\r",
+            rows=10, cols=40,
+            expect_content_rows=[(7, {3})],
+            expect_scrolled_at_frame=[(7, False)]
+        )
+
+        # ce undo then redo - single row repaint
+        # Frames: 0=initial, 1=jjj, 2=ce (insert), 3=ESC, 4=u, 5=space, 6=u redo
+        self.run_test_screen(
+            "Redo render: ce undo then redo single row",
+            make_lines(15),
+            b"jjjce\x1bu u:q!\r",
+            rows=10, cols=40,
+            expect_content_rows=[(6, {3})],
+            expect_scrolled_at_frame=[(6, False)]
+        )
+
+        # d0 undo - single row repaint (only the affected row redrawn)
+        # Frames: 0=initial, 1=jjj, 2=lll, 3=d0, 4=u
+        self.run_test_screen(
+            "Minimal repaint: d0 undo",
+            make_lines(15),
+            b"jjjllld0u:q!\r",
+            rows=10, cols=40,
+            expect_content_rows=[(4, {3})],
+            expect_scrolled_at_frame=[(4, False)]
+        )
+
+        # 2dd undo - restores 2 lines, rows 3-4 need content writes
+        # Frames: 0=initial, 1=jjj, 2=count '2', 3=dd, 4=u
+        self.run_test_screen(
+            "Minimal repaint: 2dd undo",
+            make_lines(15),
+            b"jjj2ddu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"), (2, "Line 3"),
+                (3, "Line 4"), (4, "Line 5"), (5, "Line 6"),
+                (6, "Line 7"), (7, "Line 8"), (8, "Line 9"),
+            ],
+            expect_cursor=(3, 0),
+            expect_content_rows=[(4, {3, 4})]
+        )
+
         self._group("Render optimization edge cases:", leading_blank=True)
 
         # --- Cursor-only operations (no content redraw) ---
@@ -15402,6 +15451,31 @@ class EditorTestRunner:
             b"jj?AAA\r:q!\r",
             expect_cursor=(0, 0),
             expect_content_redraws=[True, False, False, False]
+        )
+
+        # N (find prev) without scroll: cursor-only
+        # /AAA finds at line 2. N goes backward to line 0 (still visible).
+        # Frame 0: init(T), Frame 1: /AAA\r(F), Frame 2: N(F), Frame 3: :q!(F)
+        self.run_test_screen(
+            "Render opt: N no-scroll is cursor-only",
+            "AAA\nBBB\nAAA\n",
+            b"/AAA\rN:q!\r",
+            expect_cursor=(0, 0),
+            expect_content_redraws=[True, False, False, False]
+        )
+
+        # N (find prev) with scroll: triggers repaint
+        # AAA at line 0 and line 11. /AAA finds line 11 (scrolls down).
+        # N from line 11 searches backward to line 0 (scrolls up).
+        # Frame 0: init(T), Frame 1: /AAA\r scrolls(T),
+        # Frame 2: N scrolls(T), Frame 3: :q!(F)
+        self.run_test_screen(
+            "Render opt: N with scroll triggers repaint",
+            "AAA\n" + ''.join(f"X{i}\n" for i in range(2, 12))
+            + "AAA\nY13\nY14\nY15\n",
+            b"/AAA\rN:q!\r",
+            expect_cursor=(0, 0),
+            expect_content_redraws=[True, True, True, False]
         )
 
         # y$ (yank to end) is cursor-only (yank doesn't modify content)
