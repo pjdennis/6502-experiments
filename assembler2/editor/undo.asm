@@ -447,6 +447,10 @@ undo_join_redo:
   ADC #1           ; +1 for cursor line
   JSR compute_delete_screen_rows
 
+  JSR get_current_line_len
+  STA RENDER_FROM_COL16
+  STX RENDER_FROM_COL16 + 1
+
   LDAX16 FILE_LINE16
   JSR buf_get_line_ptr          ; BUF_PTR16 = line start
   CP16 BUF_PTR16, BUF_SRC16    ; BUF_SRC16 = line start (base for offsets)

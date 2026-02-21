@@ -10911,8 +10911,9 @@ class EditorTestRunner:
             ],
             expect_cursor=(3, 19),
             expect_scroll_rows=[(5, set())],
-            # No scroll, only cursor line's 3 wrap rows repainted
-            expect_content_rows=[(5, {2, 3, 4})]
+            # No scroll; wrap row 0 unchanged, partial render from col 19 on row 3
+            expect_content_rows=[(5, {3, 4})],
+            expect_min_col=[(5, 3, 19)]
         )
 
         self.run_test_screen(
@@ -13519,6 +13520,45 @@ class EditorTestRunner:
             rows=10, cols=40,
             expect_lines=[(0, "A" * 40), (1, "A" * 10)],
             expect_min_col=[(5, 1, 9)]
+        )
+
+        self._group("Sub-line render opt: J redo:", leading_blank=True)
+
+        # J redo same height on narrow screen: "Hello" (5) + "World" (5) = 11 chars
+        # On 10-col screen: 2 lines × 1 row = 2 screen rows → 11 chars = 2 wrap rows
+        # Same height: .j_really_no_scroll → render_current_line_and_status
+        # RENDER_FROM_COL16 = 5, from_wrap = 0, from_col = 5: partial from col 5
+        # Frames: 0=initial, 1=J, 2=u, 3=space (noop), 4=u (redo)
+        self.run_test_screen(
+            "J redo same height wrapping: partial from join col",
+            "Hello\nWorld\nThird\n",
+            b"Ju u:q!\r",
+            rows=10, cols=10,
+            expect_lines=[(0, "Hello Worl"), (1, "d"), (2, "Third")],
+            expect_cursor=(0, 5),
+            expect_min_col=[(4, 0, 5)]
+        )
+
+        # J redo wrapped, same total screen rows (batched JJ):
+        # Before redo: "First longer line!! Second longer line!" (39 chars, 2 rows on 20-col)
+        #            + "Third!" (1 row) = 3 screen rows
+        # After redo:  "First longer line!! Second longer line! Third!" (46 chars, 3 rows)
+        # Same height: wrap row 0 skipped, render from col 19 on row 1
+        # Frames: 0=initial, 1=JJ (batched), 2=u, 3=space, 4=u (redo)
+        self.run_test_screen(
+            "J redo wrapped same height: partial from join col",
+            "First longer line!!\nSecond longer line!\nThird!\nEnd\n",
+            b"JJu u:q!\r",
+            rows=10, cols=20,
+            expect_lines=[
+                (0, "First longer line!!"),
+                (1, "Second longer line!"),
+                (2, "Third!"),
+                (3, "End"),
+            ],
+            expect_cursor=(1, 19),
+            expect_content_rows=[(4, {1, 2})],
+            expect_min_col=[(4, 1, 19)]
         )
 
         self._group("Undo (u):", leading_blank=True)
