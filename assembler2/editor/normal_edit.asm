@@ -1160,6 +1160,8 @@ word_op_forward:
   JSR check_cursor_in_line
   BCS .bail
 
+  CP16 CURSOR_COL16, RENDER_FROM_COL16
+
   ; Check for batched delete (OP_DELETE with BATCH_EXTRA > 0)
   TSX
   LDA $0101,X                  ; Peek operator from stack

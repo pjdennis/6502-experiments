@@ -13112,6 +13112,62 @@ class EditorTestRunner:
             expect_min_col=[(2, 1, 9)]
         )
 
+        # dw: delete word at col 6 in "Hello World Foo"
+        # w=next word (col 6), dw=delete "World "
+        # Frame 0=initial, 1=w move, 2=dw delete (batched combo)
+        self.run_test_screen(
+            "dw: partial render from cursor col",
+            "Hello World Foo\n",
+            b"wdw:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello Foo")],
+            expect_min_col=[(2, 0, 6)]
+        )
+
+        # Batched 2dw: partial render from cursor col
+        # w=next word (col 6), 2dw=delete "World Foo "
+        self.run_test_screen(
+            "2dw batched: partial render from cursor col",
+            "Hello World Foo Bar\n",
+            b"w2dw:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello Bar")],
+            expect_min_col=[(3, 0, 6)]
+        )
+
+        # dw on wrapped line, cursor on wrap row 1
+        # 50 A's + " BB" = 53 chars, wraps at col 40 into rows 0-1.
+        # $ goes to col 52 (wrap row 1, col 12). dw from col 52 deletes "BB".
+        # Partial render only touches wrap row 1 (col 12).
+        self.run_test_screen(
+            "dw on wrapped line: partial render wrap row 1",
+            "A" * 50 + " BB\nSecond\n",
+            b"wdw:q!\r",
+            rows=10, cols=40,
+            expect_min_col=[(2, 1, 11)]
+        )
+
+        # de: delete to end of word at col 6
+        # w=next word (col 6), de=delete "World" (not trailing space)
+        self.run_test_screen(
+            "de: partial render from cursor col",
+            "Hello World Foo\n",
+            b"wde:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello  Foo")],
+            expect_min_col=[(2, 0, 6)]
+        )
+
+        # Batched dw+dw (dw with pending dw)
+        self.run_test_screen(
+            "dw+dw batched: partial render from cursor col",
+            "Hello World Foo Bar\n",
+            b"wdwdw:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello Bar")],
+            expect_min_col=[(2, 0, 6)]
+        )
+
         self._group("Undo (u):", leading_blank=True)
 
         # dd undo: restore deleted line
