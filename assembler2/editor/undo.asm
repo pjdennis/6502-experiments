@@ -146,6 +146,15 @@ undo_do_undo:
 .undo_line:
   ; Restore FILE_LINE16 to saved position
   CP16 UNDO_LINE16, FILE_LINE16
+  ; If file has single empty line (synthetic from dd on all lines), remove it
+  ; so paste doesn't leave an extra blank line
+  CMPI16 LINE_COUNT16, 1
+  BNE .undo_line_paste
+  JSR get_current_line_len    ; A = low, X = high
+  BNE .undo_line_paste
+  CPX #0
+  BNE .undo_line_paste
+  SET16 TEXT_BUF, BUF_END16   ; Remove synthetic newline
 
 .undo_line_paste:
   ; Paste above: reuses existing yank_paste_above_n
