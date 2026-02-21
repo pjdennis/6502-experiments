@@ -499,6 +499,9 @@ normal_join_lines:
   CP16 BUF_PTR16, BUF_SRC16  ; BUF_SRC16 = line start (base for offsets)
 
   JSR find_line_end           ; (BUF_PTR16),Y points to '\n'
+  ; Set cursor to join point (end of original first line)
+  STY CURSOR_COL16
+  STX CURSOR_COL16 + 1
   ; Advance BUF_PTR16 by Y so BUF_PTR16 points directly to the '\n'
   TYA
   CLC
@@ -538,6 +541,8 @@ normal_join_lines:
   JMP .join_loop
 
 .join_finish:
+  ; Save join-point cursor for redo
+  CP16 CURSOR_COL16, UNDO_COL16
   ; Single rebuild
   JSR buf_rebuild_lines
 

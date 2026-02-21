@@ -419,6 +419,9 @@ undo_join_undo:
   STA INSERT_LINE_COUNT
   LDA #$04
   STA RENDER_FLAG            ; Line-insert scroll, skip cursor row
+  LDA #0
+  STA CURSOR_COL16
+  STA CURSOR_COL16 + 1
   JSR clamp_cursor_col
   JMP clear_count
 
@@ -475,6 +478,7 @@ undo_join_redo:
   STA MODIFIED
   LDA #$06
   STA RENDER_FLAG        ; Line-delete, skip cursor row scroll
+  CP16 UNDO_COL16, CURSOR_COL16
   JSR clamp_cursor_col
   JMP clear_count
 

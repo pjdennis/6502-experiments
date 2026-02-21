@@ -3621,7 +3621,7 @@ class EditorTestRunner:
             b"J:q!\r",
             rows=10, cols=40,
             expect_lines=[(0, "Hello World"), (1, "~")],
-            expect_cursor=(0, 0),
+            expect_cursor=(0, 5),
         )
 
         # 3J joins 3 lines
@@ -3631,7 +3631,7 @@ class EditorTestRunner:
             b"3J:q!\r",
             rows=10, cols=40,
             expect_lines=[(0, "AA BB CC"), (1, "DD")],
-            expect_cursor=(0, 0),
+            expect_cursor=(0, 2),
         )
 
         # cc (change line) - replaces line content
@@ -9922,7 +9922,7 @@ class EditorTestRunner:
                 (3, "Line 4 Line 5"), (4, "Line 6"), (5, "Line 7"),
                 (6, "Line 8"), (7, "Line 9"), (8, "Line 10"),
             ],
-            expect_cursor=(3, 0),
+            expect_cursor=(3, 6),
             # Frame 2 (J): cursor row (content changed) + bottom row
             expect_content_rows=[(2, {3, 8})]
         )
@@ -9942,7 +9942,7 @@ class EditorTestRunner:
                 (3, "Line 4 Line 5"), (4, "Line 6"), (5, "Line 7"),
                 (6, "Line 8"), (7, "Line 9"), (8, "Line 10"),
             ],
-            expect_cursor=(3, 0),
+            expect_cursor=(3, 6),
             # Frame 2 (J): scroll region should be rows 4-8, NOT 3-8
             expect_scroll_rows=[(2, {4, 5, 6, 7, 8})]
         )
@@ -9961,7 +9961,7 @@ class EditorTestRunner:
                 (3, "Line 4 Line 5"), (4, "Line 6"), (5, "Line 7"),
                 (6, "Line 8"), (7, "Line 9"), (8, "Line 10"),
             ],
-            expect_cursor=(3, 0),
+            expect_cursor=(3, 6),
             # Frame 5 (redo J): scroll region should be rows 4-8, NOT 3-8
             expect_scroll_rows=[(5, {4, 5, 6, 7, 8})]
         )
@@ -9986,7 +9986,7 @@ class EditorTestRunner:
                 (6, "Short 7"), (7, "Short 8"),
                 (8, "Short 9"),
             ],
-            expect_cursor=(2, 0),
+            expect_cursor=(3, 2),
         )
 
         # J on wrapped cursor line: scroll region must skip ALL cursor line rows.
@@ -10004,7 +10004,7 @@ class EditorTestRunner:
                 (6, "Short 7"), (7, "Short 8"),
                 (8, "Short 9"),
             ],
-            expect_cursor=(2, 0),
+            expect_cursor=(3, 2),
             expect_scroll_rows=[(2, {4, 5, 6, 7, 8})]
         )
 
@@ -10024,7 +10024,7 @@ class EditorTestRunner:
                 (6, "Short 7"), (7, "Short 8"),
                 (8, "Short 9"),
             ],
-            expect_cursor=(2, 0),
+            expect_cursor=(3, 2),
             expect_scroll_rows=[(5, {4, 5, 6, 7, 8})]
         )
 
@@ -10170,7 +10170,7 @@ class EditorTestRunner:
                 (5, "Short 5"), (6, "Short 6"),
                 (7, "Short 7"), (8, "Short 8"),
             ],
-            expect_cursor=(2, 0),
+            expect_cursor=(3, 0),
             expect_scroll_rows=[(2, {4, 5, 6, 7, 8})],
             # Only cursor line's 3 wrap rows repainted; rows 5-8 handled by scroll
             expect_content_rows=[(2, {2, 3, 4})]
@@ -10216,7 +10216,7 @@ class EditorTestRunner:
                 (5, "Short 5"), (6, "Short 6"),
                 (7, "Short 7"), (8, "Short 8"),
             ],
-            expect_cursor=(2, 0),
+            expect_cursor=(3, 0),
             expect_scroll_rows=[(5, {4, 5, 6, 7, 8})],
             # Only cursor line's 3 wrap rows repainted; rows 5-8 handled by scroll
             expect_content_rows=[(5, {2, 3, 4})]
@@ -10344,7 +10344,7 @@ class EditorTestRunner:
                 (5, "Short 6"), (6, "Short 7"),
                 (7, "Short 8"), (8, "Short 9"),
             ],
-            expect_cursor=(1, 0),
+            expect_cursor=(1, 7),
         )
 
         # J that causes line to wrap: joining non-wrapped A with non-wrapped B
@@ -10369,7 +10369,7 @@ class EditorTestRunner:
                 (6, "Short 7"), (7, "Short 8"),
                 (8, "Short 9"),
             ],
-            expect_cursor=(2, 0),
+            expect_cursor=(2, 19),
             expect_scroll_rows=[(2, set())],
             # No scroll, only cursor line's 2 wrap rows repainted
             expect_content_rows=[(2, {2, 3})]
@@ -10393,7 +10393,7 @@ class EditorTestRunner:
                 (5, "Short 7"), (6, "Short 8"),
                 (7, "Short 9"), (8, "Short 10"),
             ],
-            expect_cursor=(1, 0),
+            expect_cursor=(1, 7),
             # Only cursor line's 2 wrap rows + bottom exposed rows repainted
             expect_content_rows=[(2, {1, 2, 7, 8})]
         )
@@ -10421,7 +10421,7 @@ class EditorTestRunner:
                 (5, "Short 7"), (6, "Short 8"),
                 (7, "Short 9"), (8, "Short 10"),
             ],
-            expect_cursor=(1, 0),
+            expect_cursor=(1, 7),
             # Only cursor line's 2 wrap rows + bottom exposed rows repainted
             expect_content_rows=[(2, {1, 2, 7, 8})]
         )
@@ -10449,7 +10449,7 @@ class EditorTestRunner:
                 (5, "Short 6"), (6, "Short 7"),
                 (7, "Short 8"), (8, "Short 9"),
             ],
-            expect_cursor=(2, 0),
+            expect_cursor=(2, 19),
             expect_scroll_rows=[(2, set())]
         )
 
@@ -10476,7 +10476,7 @@ class EditorTestRunner:
                 (6, "Short 8"), (7, "Short 9"),
                 (8, "Short 10"),
             ],
-            expect_cursor=(2, 0),
+            expect_cursor=(2, 19),
         )
 
         # JJJ (3 batched joins) with wrapped line among those joined:
@@ -10499,7 +10499,7 @@ class EditorTestRunner:
                 (6, "Short 8"), (7, "Short 9"),
                 (8, "Short 10"),
             ],
-            expect_cursor=(1, 0),
+            expect_cursor=(1, 7),
         )
 
         # J with following line off-screen: cursor near bottom, joined line wraps,
@@ -10519,7 +10519,7 @@ class EditorTestRunner:
                 (7, "nger line!"),
                 (8, "Line 9"),
             ],
-            expect_cursor=(6, 0),
+            expect_cursor=(6, 7),
         )
 
         # J at end of file: joining the last two lines, no following line.
@@ -10539,7 +10539,7 @@ class EditorTestRunner:
                 (7, "Short 8 End"),
                 (8, "~"),
             ],
-            expect_cursor=(7, 0),
+            expect_cursor=(7, 7),
         )
 
         # --- Redo counterparts for all J scroll tests ---
@@ -10559,7 +10559,7 @@ class EditorTestRunner:
                 (5, "Short 6"), (6, "Short 7"),
                 (7, "Short 8"), (8, "Short 9"),
             ],
-            expect_cursor=(1, 0),
+            expect_cursor=(1, 7),
         )
 
         self.run_test_screen(
@@ -10575,7 +10575,7 @@ class EditorTestRunner:
                 (6, "Short 7"), (7, "Short 8"),
                 (8, "Short 9"),
             ],
-            expect_cursor=(2, 0),
+            expect_cursor=(2, 19),
             expect_scroll_rows=[(5, set())],
             # No scroll, only cursor line's 2 wrap rows repainted
             expect_content_rows=[(5, {2, 3})]
@@ -10594,7 +10594,7 @@ class EditorTestRunner:
                 (5, "Short 7"), (6, "Short 8"),
                 (7, "Short 9"), (8, "Short 10"),
             ],
-            expect_cursor=(1, 0),
+            expect_cursor=(1, 7),
             # Redo re-joins 1 line (batched JJ records UNDO_JOIN_COUNT=1):
             # cursor wrap rows (1,2) + 1 bottom exposed row (8)
             expect_content_rows=[(5, {1, 2, 8})]
@@ -10613,7 +10613,7 @@ class EditorTestRunner:
                 (5, "Short 7"), (6, "Short 8"),
                 (7, "Short 9"), (8, "Short 10"),
             ],
-            expect_cursor=(1, 0),
+            expect_cursor=(1, 7),
             # Redo re-joins 1 line (batched JJ records UNDO_JOIN_COUNT=1):
             # cursor wrap rows (1,2) + 1 bottom exposed row (8)
             expect_content_rows=[(5, {1, 2, 8})]
@@ -10632,7 +10632,7 @@ class EditorTestRunner:
                 (5, "Short 6"), (6, "Short 7"),
                 (7, "Short 8"), (8, "Short 9"),
             ],
-            expect_cursor=(2, 0),
+            expect_cursor=(2, 19),
             expect_scroll_rows=[(5, set())],
             # No scroll, only cursor line's 3 wrap rows repainted
             expect_content_rows=[(5, {2, 3, 4})]
@@ -10651,7 +10651,7 @@ class EditorTestRunner:
                 (6, "Short 8"), (7, "Short 9"),
                 (8, "Short 10"),
             ],
-            expect_cursor=(2, 0),
+            expect_cursor=(2, 19),
         )
 
         self.run_test_screen(
@@ -10668,7 +10668,7 @@ class EditorTestRunner:
                 (6, "Short 8"), (7, "Short 9"),
                 (8, "Short 10"),
             ],
-            expect_cursor=(1, 0),
+            expect_cursor=(1, 7),
         )
 
         self.run_test_screen(
@@ -10684,7 +10684,7 @@ class EditorTestRunner:
                 (7, "nger line!"),
                 (8, "Line 9"),
             ],
-            expect_cursor=(6, 0),
+            expect_cursor=(6, 7),
         )
 
         self.run_test_screen(
@@ -10700,7 +10700,7 @@ class EditorTestRunner:
                 (7, "Short 8 End"),
                 (8, "~"),
             ],
-            expect_cursor=(7, 0),
+            expect_cursor=(7, 7),
         )
 
         # 3J at mid-screen: joins 2 lines, scroll shifts up by 2.
@@ -10716,7 +10716,7 @@ class EditorTestRunner:
                 (5, "Line 8"), (6, "Line 9"), (7, "Line 10"),
                 (8, "Line 11"),
             ],
-            expect_cursor=(3, 0),
+            expect_cursor=(3, 6),
             # Frame 3 (3J): cursor row + bottom 2 rows
             expect_content_rows=[(3, {3, 7, 8})]
         )
@@ -10742,7 +10742,7 @@ class EditorTestRunner:
                 (6, "Short 8"), (7, "Short 9"),
                 (8, "Short 10"),
             ],
-            expect_cursor=(2, 0),
+            expect_cursor=(2, 7),
             # Only cursor line's 2 wrap rows + bottom row exposed by scroll
             expect_content_rows=[(3, {2, 3, 8})]
         )
@@ -10762,7 +10762,7 @@ class EditorTestRunner:
                 (6, "Short 8"), (7, "Short 9"),
                 (8, "Short 10"),
             ],
-            expect_cursor=(2, 0),
+            expect_cursor=(2, 7),
             # Only cursor line's 2 wrap rows + bottom row exposed by scroll
             expect_content_rows=[(6, {2, 3, 8})]
         )
@@ -11209,7 +11209,7 @@ class EditorTestRunner:
                 (0, "Line 1"), (7, "Line 8"),
                 (8, "Line 9 Line 10"),
             ],
-            expect_cursor=(8, 0),
+            expect_cursor=(8, 6),
             # Frame 2 (J): only cursor row 8 redrawn, no scroll needed
             expect_content_rows=[(2, {8})],
             expect_scrolled_at_frame=[(2, False)]
@@ -11283,7 +11283,7 @@ class EditorTestRunner:
                 (0, "Line 1"), (7, "Line 8"),
                 (8, "Line 9 Line 10"),
             ],
-            expect_cursor=(8, 0),
+            expect_cursor=(8, 6),
             # Frame 5 (redo): only cursor row 8 redrawn
             expect_content_rows=[(5, {8})]
         )
@@ -11751,7 +11751,7 @@ class EditorTestRunner:
                 (3, "S3"), (4, "S4"), (5, "S5"),
                 (6, "S6"), (7, "S7"), (8, "S8"),
             ],
-            expect_cursor=(0, 0),
+            expect_cursor=(1, 0),
             # Frame 4 = redo (frame 3 = space no-op). Cursor line changes
             # (20→41 chars wrapping to 3 rows). Rows 0-2 = wrapped content.
             expect_content_rows=[(4, {0, 1, 2})]
@@ -13526,13 +13526,23 @@ class EditorTestRunner:
 
         # J cursor at join point: in standard vi, cursor goes to the space
         # between joined lines (col 3 for "foo\nbar" -> "foo bar").
-        # BUG: This editor leaves cursor at col 0 after J.
         self.run_test_screen(
             "J cursor at join point",
             "foo\nbar\n",
             b"J:q!\r",
             expect_cursor=(0, 3),
             expect_lines=[(0, "foo bar"), (1, "~")],
+        )
+
+        # J cursor at join point on wrapped result: first line is 12 chars,
+        # at 10 cols the join point (col 12) wraps to screen row 1, col 2.
+        self.run_test_screen(
+            "J cursor at join point wrapped",
+            "A" * 12 + "\nbar\n",
+            b"J:q!\r",
+            rows=10, cols=10,
+            expect_cursor=(1, 2),
+            expect_lines=[(0, "A" * 10), (1, "AA bar")],
         )
 
         # o ESC cursor on empty inserted line
@@ -14503,7 +14513,7 @@ class EditorTestRunner:
                 (0, "AAAA BBBB"),
                 (1, "CCCC"),
             ],
-            expect_cursor=(0, 0),
+            expect_cursor=(0, 4),
         )
 
         # J creating a 3+ row wrapped line.
@@ -14521,7 +14531,7 @@ class EditorTestRunner:
                 (2, "CCCCCC"),
                 (3, "D"),
             ],
-            expect_cursor=(0, 0),
+            expect_cursor=(0, 8),
         )
 
         # cc when deleted line wraps: "This is a long line!" (20 chars at 10 cols = 2 rows).
