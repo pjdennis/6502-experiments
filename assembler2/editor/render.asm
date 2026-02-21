@@ -473,9 +473,12 @@ render_current_line_and_status:
   LDA RENDER_FROM_COL16 + 1
   AND RENDER_FROM_COL16
   CMP #$FF
-  BEQ .rc_render_all_cursor    ; $FFFF = unknown change, render all
+  BNE .rc_check_partial        ; not $FFFF: check for partial render
+  JMP .rc_render_all_cursor    ; $FFFF = unknown change, render all
+.rc_check_partial:
   CP16 RENDER_FROM_COL16, DIV_INPUT16
-  JSR div_mod_screen_cols_16   ; X = change_wrap_row
+  JSR div_mod_screen_cols_16   ; X = change_wrap_row, A = from_col
+  STA WRAP_REM                 ; save from_col
   CPX DELETE_SCREEN_ROWS       ; compare with current_rows
   BCS .rc_skip_cursor          ; change >= current: skip cursor rendering
   ; Partial: render from change_wrap_row
@@ -490,6 +493,47 @@ render_current_line_and_status:
   CLC
   ADC RENDER_ROW
   STA RENDER_ROW               ; advance to change_wrap_row screen row
+  ; Check for partial first row
+  LDA WRAP_REM
+  BEQ .rc_full_rows            ; from_col=0: render full rows
+  ; --- Partial first row ---
+  LDA RENDER_ROW
+  CLC
+  ADC #1
+  STA ANSI_ROW
+  LDA WRAP_REM
+  CLC
+  ADC #1
+  STA ANSI_COL
+  JSR ansi_move_cursor
+  ; Get line pointer, advance to wrap row
+  LDAX16 FILE_LINE16
+  JSR buf_get_line_ptr
+  LDX RENDER_WRAP
+  BEQ .rc_no_advance
+.rc_advance_loop:
+  CLC
+  LDA BUF_PTR16
+  ADC SCREEN_COLS
+  STA BUF_PTR16
+  LDA BUF_PTR16 + 1
+  ADC #0
+  STA BUF_PTR16 + 1
+  DEX
+  BNE .rc_advance_loop
+.rc_no_advance:
+  LDA WRAP_REM
+  STA RENDER_COL
+  JSR render_line_chars_from
+  LDA RENDER_COL
+  CMP SCREEN_COLS
+  BCS .rc_partial_no_clear
+  JSR ansi_clear_line
+.rc_partial_no_clear:
+  INC RENDER_ROW
+  INC RENDER_WRAP
+  DEC SCROLL_DELTA
+.rc_full_rows:
   LDA #0
   STA DELETE_SCREEN_ROWS
   CP16 FILE_LINE16, RENDER_LINE16
@@ -560,7 +604,8 @@ render_current_line_and_status:
   CMP #$FF
   BEQ .ri_all_rows             ; $FFFF = unknown change, render all
   CP16 RENDER_FROM_COL16, DIV_INPUT16
-  JSR div_mod_screen_cols_16   ; X = change_wrap_row
+  JSR div_mod_screen_cols_16   ; X = change_wrap_row, A = from_col
+  STA WRAP_REM                 ; save from_col
   STX RENDER_WRAP
   ; SCROLL_DELTA = current_rows - change_wrap_row
   LDA SCROLL_DELTA             ; displacement
@@ -574,6 +619,46 @@ render_current_line_and_status:
   CLC
   ADC RENDER_ROW
   STA RENDER_ROW
+  ; Check for partial first row
+  LDA WRAP_REM
+  BEQ .ri_full_rows            ; from_col=0: render full rows
+  ; --- Partial first row ---
+  LDA RENDER_ROW
+  CLC
+  ADC #1
+  STA ANSI_ROW
+  LDA WRAP_REM
+  CLC
+  ADC #1
+  STA ANSI_COL
+  JSR ansi_move_cursor
+  LDAX16 FILE_LINE16
+  JSR buf_get_line_ptr
+  LDX RENDER_WRAP
+  BEQ .ri_no_advance
+.ri_advance_loop:
+  CLC
+  LDA BUF_PTR16
+  ADC SCREEN_COLS
+  STA BUF_PTR16
+  LDA BUF_PTR16 + 1
+  ADC #0
+  STA BUF_PTR16 + 1
+  DEX
+  BNE .ri_advance_loop
+.ri_no_advance:
+  LDA WRAP_REM
+  STA RENDER_COL
+  JSR render_line_chars_from
+  LDA RENDER_COL
+  CMP SCREEN_COLS
+  BCS .ri_partial_no_clear
+  JSR ansi_clear_line
+.ri_partial_no_clear:
+  INC RENDER_ROW
+  INC RENDER_WRAP
+  DEC SCROLL_DELTA
+.ri_full_rows:
   CP16 FILE_LINE16, RENDER_LINE16
   JMP render_limited_rows
 .ri_all_rows:

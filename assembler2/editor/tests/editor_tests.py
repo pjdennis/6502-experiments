@@ -13645,6 +13645,136 @@ class EditorTestRunner:
             expect_min_col=[(3, 0, 5)]
         )
 
+        self._group("Sub-line render opt: wrapped line row change:", leading_blank=True)
+
+        # D on wrapped line causing row decrease:
+        # 50 A's on 40-col screen (2 rows). Cursor at col 5 (5 l's).
+        # D deletes from col 5 → "AAAAA" (5 chars, 1 row). Rows: 2 → 1.
+        # RENDER_FROM_COL16 = 5. .rc_rows_decreased path.
+        # Frames: 0=initial, 1=lllll, 2=D
+        self.run_test_screen(
+            "D on wrapped line rows decrease: partial from cursor col",
+            "A" * 50 + "\nSecond\n",
+            b"lllllD:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "AAAAA"), (1, "Second")],
+            expect_cursor=(0, 4),
+            expect_min_col=[(2, 0, 5)]
+        )
+
+        # C on wrapped line causing row decrease:
+        # Same setup but C enters insert mode. ESC exits without typing.
+        # Frames: 0=initial, 1=lllll, 2=C (enters insert + renders)
+        self.run_test_screen(
+            "C on wrapped line rows decrease: partial from cursor col",
+            "A" * 50 + "\nSecond\n",
+            b"lllllC\x1b:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "AAAAA"), (1, "Second")],
+            expect_cursor=(0, 4),
+            expect_min_col=[(2, 0, 5)]
+        )
+
+        # D on wrapped line, from_wrap > 0:
+        # 90 A's on 40-col screen (3 rows: 40+40+10). Cursor at col 45 (wrap row 1).
+        # D deletes from col 45 → 45 A's (2 rows: 40+5). Rows: 3 → 2.
+        # RENDER_FROM_COL16 = 45. from_wrap=1, from_col=5.
+        # Wrap row 0 unchanged, partial from col 5 on wrap row 1.
+        # Frames: 0=initial, 1="4", 2="5", 3=l(45l), 4=D
+        self.run_test_screen(
+            "D on wrapped line from_wrap>0: partial from col in second wrap row",
+            "A" * 90 + "\nSecond\n",
+            b"45lD:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "A" * 40), (1, "A" * 5), (2, "Second")],
+            expect_cursor=(1, 4),
+            expect_min_col=[(4, 1, 5)]
+        )
+
+        # Undo D on wrapped line (rows increase: 1 → 2):
+        # D at col 5 on 50 A's → "AAAAA" (1 row). Undo restores 50 A's (2 rows).
+        # .rc_render_from_row path. RENDER_FROM_COL16 = UNDO_COL16 = 5.
+        # Frames: 0=initial, 1=lllll, 2=D, 3=u
+        self.run_test_screen(
+            "Undo D on wrapped line rows increase: partial from undo col",
+            "A" * 50 + "\nSecond\n",
+            b"lllllDu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "A" * 40), (1, "A" * 10), (2, "Second")],
+            expect_cursor=(0, 5),
+            expect_min_col=[(3, 0, 5)]
+        )
+
+        # Redo D on wrapped line (rows decrease: 2 → 1):
+        # Same as D forward. .rc_rows_decreased path.
+        # Frames: 0=initial, 1=lllll, 2=D, 3=u(undo), 4=space(noop), 5=u(redo)
+        self.run_test_screen(
+            "Redo D on wrapped line rows decrease: partial from redo col",
+            "A" * 50 + "\nSecond\n",
+            b"lllllDu u:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "AAAAA"), (1, "Second")],
+            expect_cursor=(0, 4),
+            expect_min_col=[(5, 0, 5)]
+        )
+
+        # Undo D from_wrap>0 (rows increase: 2 → 3):
+        # D at col 45 on 90 A's → 45 A's (2 rows). Undo → 90 A's (3 rows).
+        # RENDER_FROM_COL16 = UNDO_COL16 = 45. from_wrap=1, from_col=5.
+        # Frames: 0=initial, 1="4", 2="5", 3=l(45l), 4=D, 5=u
+        self.run_test_screen(
+            "Undo D from_wrap>0: partial from col in second wrap row",
+            "A" * 90 + "\nSecond\n",
+            b"45lDu:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "A" * 40), (1, "A" * 40), (2, "A" * 10), (3, "Second")],
+            expect_cursor=(1, 5),
+            expect_min_col=[(5, 1, 5)]
+        )
+
+        # J on wrapped line (total rows unchanged, .j_really_no_scroll):
+        # "A"*38 + "\nBB\nThird\n" on 40-col. J → "A"*38 + " BB" = 41 chars (2 rows).
+        # Total before: 1+1+1=3. After: 2+1=3. Same total → render_current_line_and_status.
+        # RENDER_FROM_COL16 = 38 (join col). from_wrap=0, from_col=38.
+        # Frames: 0=initial, 1=J
+        self.run_test_screen(
+            "J on wrapped result same total: partial from join col",
+            "A" * 38 + "\nBB\nThird\n",
+            b"J:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "A" * 38 + " B"), (1, "B"), (2, "Third")],
+            expect_cursor=(0, 38),
+            expect_min_col=[(1, 0, 38)]
+        )
+
+        # J on non-wrapped result (total rows decrease):
+        # "AAAAA\nBBB\nThird\n" on 40-col. J → "AAAAA BBB" = 9 chars (1 row).
+        # Total before: 3. After: 2. Scroll path (RENDER_FLAG=$06).
+        # RENDER_FROM_COL16 = 5 (join col). render_line_delete_scroll partial.
+        # Frames: 0=initial, 1=J
+        self.run_test_screen(
+            "J on non-wrapped result total decrease: partial from join col",
+            "AAAAA\nBBB\nThird\n",
+            b"J:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "AAAAA BBB"), (1, "Third")],
+            expect_cursor=(0, 5),
+            expect_min_col=[(1, 0, 5)]
+        )
+
+        # Redo J on wrapped result (same total):
+        # Same setup as J wrapped test above. Ju u (undo, break, redo).
+        # Frames: 0=initial, 1=J, 2=u(undo), 3=space(noop), 4=u(redo)
+        self.run_test_screen(
+            "Redo J on wrapped result: partial from join col",
+            "A" * 38 + "\nBB\nThird\n",
+            b"Ju u:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "A" * 38 + " B"), (1, "B"), (2, "Third")],
+            expect_cursor=(0, 38),
+            expect_min_col=[(4, 0, 38)]
+        )
+
         self._group("Undo (u):", leading_blank=True)
 
         # dd undo: restore deleted line
