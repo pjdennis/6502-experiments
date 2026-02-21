@@ -14788,6 +14788,48 @@ class EditorTestRunner:
             expect_cursor=(0, 0),
         )
 
+        # $ on empty line: no-op, cursor stays at (0,0)
+        self.run_test_screen(
+            "$ on empty line is no-op",
+            "\n",
+            b"$:q!\r",
+            expect_cursor=(0, 0),
+        )
+
+        # x on empty line: no-op, cursor stays at (0,0)
+        self.run_test_screen(
+            "x on empty line is no-op",
+            "\n",
+            b"x:q!\r",
+            expect_cursor=(0, 0),
+        )
+
+        # w at end of file: cursor stays at last char
+        # "Hello\n" -> $ goes to col 4, w at end of file is no-op
+        self.run_test_screen(
+            "w at file end cursor position",
+            "Hello\n",
+            b"$w:q!\r",
+            expect_cursor=(0, 4),
+        )
+
+        # b at start of file: cursor stays at col 0
+        self.run_test_screen(
+            "b at file start cursor position",
+            "Hello\n",
+            b"b:q!\r",
+            expect_cursor=(0, 0),
+        )
+
+        # e at end of file: cursor stays at last char
+        # "Hello\n" -> $ goes to col 4, e at end of file is no-op
+        self.run_test_screen(
+            "e at file end cursor position",
+            "Hello\n",
+            b"$e:q!\r",
+            expect_cursor=(0, 4),
+        )
+
         # Enter at col 0: pushes content to next line
         # "Hello\n" -> i at col 0, Enter splits -> "\nHello\n"
         # Cursor moves to the new line 1 at col 0
