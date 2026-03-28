@@ -32,5 +32,5 @@ socket_bind   = $F039 ; Binds socket in A to port X(lo);Y(hi); returns 0=ok
 socket_listen = $F03C ; Listens on socket in A; returns 0=ok
 socket_accept = $F03F ; Accepts on socket in A; returns client handle (blocks)
 socket_recv   = $F042 ; Reads byte from socket in A; byte in A, C set on close
-socket_send   = $F045 ; Sends byte in A to socket in X
+socket_send   = $F045 ; Sends byte in A to socket in X; C set on error
 socket_close  = $F048 ; Closes socket in A

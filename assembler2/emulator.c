@@ -1119,8 +1119,14 @@ uint8_t emu_socket_recv(uint8_t handle) {
     return buf;
 }
 
+// Sends byte; sets carry flag in 6502 status on error (e.g. broken pipe)
 void emu_socket_send(uint8_t handle, uint8_t value) {
-    send(sock_fd(handle), &value, 1, 0);
+    ssize_t n = send(sock_fd(handle), &value, 1, MSG_NOSIGNAL);
+    if (n <= 0) {
+        setcarry();
+    } else {
+        clearcarry();
+    }
 }
 
 void emu_socket_close(uint8_t handle) {
