@@ -3,18 +3,13 @@
   .include 23/environment.asm
 
 start
-  ; Set bind port to 8080 ($1F90)
-  LDA #$90
-  STA port_bind_l
-  LDA #$1F
-  STA port_bind_h
-
   ; Create socket
   JSR socket_create
   STA LISTEN_HANDLE
 
-  ; Bind
-  LDA LISTEN_HANDLE
+  ; Bind to port 8080 ($1F90): A=handle, X=lo, Y=hi
+  LDX #$90
+  LDY #$1F
   JSR socket_bind
 
   ; Listen

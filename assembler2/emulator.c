@@ -1016,8 +1016,6 @@ void hookexternal(void *funcptr) {
 #define port_socket_recv    0xfea4
 #define port_socket_send    0xfea5
 #define port_socket_close   0xfea6
-#define port_socket_port_l  0xfea7
-#define port_socket_port_h  0xfea8
 
 uint8_t memory[0x10001];
 
@@ -1037,7 +1035,6 @@ int no_cycle_limit = 0;
 
 // Socket support
 int sock_fds[255];
-uint16_t socket_bind_port = 0;
 
 void sockets_init() {
     for (int i = 0; i < 255; i++) sock_fds[i] = -1;
@@ -1070,15 +1067,16 @@ int sock_fd(uint8_t handle) {
     return sock_fds[handle - 1];
 }
 
-uint8_t emu_socket_bind(uint8_t handle) {
+uint8_t emu_socket_bind(uint8_t handle, uint8_t port_lo, uint8_t port_hi) {
     int fd = sock_fd(handle);
+    uint16_t port = port_lo | (port_hi << 8);
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = INADDR_ANY;
-    addr.sin_port = htons(socket_bind_port);
+    addr.sin_port = htons(port);
     if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-        fprintf(stderr, "bind() failed on port %d\n", socket_bind_port);
+        fprintf(stderr, "bind() failed on port %d\n", port);
         exit(1);
     }
     return 0;
@@ -1726,7 +1724,7 @@ uint8_t read6502(uint16_t address) {
     } else if (address == port_socket_create) {        // socket_create
         return emu_socket_create();
     } else if (address == port_socket_bind) {          // socket_bind
-        return emu_socket_bind(a);
+        return emu_socket_bind(a, x, y);
     } else if (address == port_socket_listen) {        // socket_listen
         return emu_socket_listen(a);
     } else if (address == port_socket_accept) {        // socket_accept
@@ -1788,12 +1786,6 @@ void write6502(uint16_t address, uint8_t value) {
         return;
     } else if (address == port_socket_close) {       // socket_close
         emu_socket_close(value);
-        return;
-    } else if (address == port_socket_port_l) {      // socket port low
-        socket_bind_port = (socket_bind_port & 0xFF00) | value;
-        return;
-    } else if (address == port_socket_port_h) {      // socket port high
-        socket_bind_port = (socket_bind_port & 0x00FF) | (value << 8);
         return;
     }
 
