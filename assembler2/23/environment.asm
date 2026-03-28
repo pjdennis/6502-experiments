@@ -25,3 +25,15 @@ con_flush = $F02A ; Flush stdout
 con_ready = $F02D ; Non-blocking poll: A=$FF if byte ready, A=$00 if not
 term_rows = $F030 ; Returns terminal height in A
 term_cols = $F033 ; Returns terminal width in A
+
+; Socket API
+socket_create = $F036 ; Creates TCP socket; returns handle in A
+socket_bind   = $F039 ; Binds socket in A to pre-set port; returns 0=ok
+socket_listen = $F03C ; Listens on socket in A; returns 0=ok
+socket_accept = $F03F ; Accepts on socket in A; returns client handle (blocks)
+socket_recv   = $F042 ; Reads byte from socket in A; byte in A, C set on close
+socket_send   = $F045 ; Sends byte in A to socket in X
+socket_close  = $F048 ; Closes socket in A
+
+port_bind_l   = $FEA7 ; Write: set bind port low byte
+port_bind_h   = $FEA8 ; Write: set bind port high byte

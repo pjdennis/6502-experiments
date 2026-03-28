@@ -115,6 +115,9 @@
 #include <termios.h>
 #include <sys/ioctl.h>
 #include <sys/select.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <time.h>
 
 #define STDIN_FILENO  0
@@ -1006,6 +1009,16 @@ void hookexternal(void *funcptr) {
 #define port_term_cols 0xfe93
 #define port_con_ready 0xfe94
 
+#define port_socket_create  0xfea0
+#define port_socket_bind    0xfea1
+#define port_socket_listen  0xfea2
+#define port_socket_accept  0xfea3
+#define port_socket_recv    0xfea4
+#define port_socket_send    0xfea5
+#define port_socket_close   0xfea6
+#define port_socket_port_l  0xfea7
+#define port_socket_port_h  0xfea8
+
 uint8_t memory[0x10001];
 
 FILE* files[255];
@@ -1020,6 +1033,115 @@ int done = 0;
 int exitcode_set = -1;
 int error_output_started = 0;  // Track if emulated program wrote to stderr
 int console_mode = 0;
+int no_cycle_limit = 0;
+
+// Socket support
+int sock_fds[255];
+uint16_t socket_bind_port = 0;
+
+void sockets_init() {
+    for (int i = 0; i < 255; i++) sock_fds[i] = -1;
+}
+
+uint8_t emu_socket_create() {
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) {
+        fprintf(stderr, "socket() failed\n");
+        exit(1);
+    }
+    int opt = 1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    for (int i = 0; i < 255; i++) {
+        if (sock_fds[i] == -1) {
+            sock_fds[i] = fd;
+            return i + 1;
+        }
+    }
+    fprintf(stderr, "too many sockets open\n");
+    close(fd);
+    exit(1);
+}
+
+int sock_fd(uint8_t handle) {
+    if (handle < 1 || sock_fds[handle - 1] == -1) {
+        fprintf(stderr, "socket %i is not open\n", (int)handle);
+        exit(1);
+    }
+    return sock_fds[handle - 1];
+}
+
+uint8_t emu_socket_bind(uint8_t handle) {
+    int fd = sock_fd(handle);
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(socket_bind_port);
+    if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        fprintf(stderr, "bind() failed on port %d\n", socket_bind_port);
+        exit(1);
+    }
+    return 0;
+}
+
+uint8_t emu_socket_listen(uint8_t handle) {
+    if (listen(sock_fd(handle), 5) < 0) {
+        fprintf(stderr, "listen() failed\n");
+        exit(1);
+    }
+    return 0;
+}
+
+uint8_t emu_socket_accept(uint8_t handle) {
+    int client_fd = accept(sock_fd(handle), NULL, NULL);
+    if (client_fd < 0) {
+        fprintf(stderr, "accept() failed\n");
+        exit(1);
+    }
+    for (int i = 0; i < 255; i++) {
+        if (sock_fds[i] == -1) {
+            sock_fds[i] = client_fd;
+            return i + 1;
+        }
+    }
+    fprintf(stderr, "too many sockets open\n");
+    close(client_fd);
+    exit(1);
+}
+
+// Returns byte read; sets carry flag in 6502 status on close/error
+uint8_t emu_socket_recv(uint8_t handle) {
+    uint8_t buf;
+    ssize_t n = recv(sock_fd(handle), &buf, 1, 0);
+    if (n <= 0) {
+        setcarry();
+        return 0;
+    }
+    clearcarry();
+    return buf;
+}
+
+void emu_socket_send(uint8_t handle, uint8_t value) {
+    send(sock_fd(handle), &value, 1, 0);
+}
+
+void emu_socket_close(uint8_t handle) {
+    if (handle < 1 || sock_fds[handle - 1] == -1) {
+        fprintf(stderr, "socket %i is not open\n", (int)handle);
+        exit(1);
+    }
+    close(sock_fds[handle - 1]);
+    sock_fds[handle - 1] = -1;
+}
+
+void sockets_destroy() {
+    for (int i = 0; i < 255; i++) {
+        if (sock_fds[i] != -1) {
+            close(sock_fds[i]);
+            sock_fds[i] = -1;
+        }
+    }
+}
 double target_mhz = 0.0;
 int override_rows = 0;
 int override_cols = 0;
@@ -1601,6 +1723,16 @@ uint8_t read6502(uint16_t address) {
         } else {
             return 0xFF;  // In file mode, always ready
         }
+    } else if (address == port_socket_create) {        // socket_create
+        return emu_socket_create();
+    } else if (address == port_socket_bind) {          // socket_bind
+        return emu_socket_bind(a);
+    } else if (address == port_socket_listen) {        // socket_listen
+        return emu_socket_listen(a);
+    } else if (address == port_socket_accept) {        // socket_accept
+        return emu_socket_accept(a);
+    } else if (address == port_socket_recv) {          // socket_recv
+        return emu_socket_recv(a);
     } else if (address == 0xfffe && memory[0xfffe] == 0 && memory[0xffff] == 0) {
         done = 1;
     }/* else if (address == 0xfe) {
@@ -1651,6 +1783,18 @@ void write6502(uint16_t address, uint8_t value) {
     } else if (address == port_con_flush) {          // con_flush
         fflush(stdout);
         return;
+    } else if (address == port_socket_send) {        // socket_send
+        emu_socket_send(x, value);
+        return;
+    } else if (address == port_socket_close) {       // socket_close
+        emu_socket_close(value);
+        return;
+    } else if (address == port_socket_port_l) {      // socket port low
+        socket_bind_port = (socket_bind_port & 0xFF00) | value;
+        return;
+    } else if (address == port_socket_port_h) {      // socket port high
+        socket_bind_port = (socket_bind_port & 0x00FF) | (value << 8);
+        return;
     }
 
     memory[address] = value;
@@ -1678,7 +1822,7 @@ void show_commandline(int argc, char**argv) {
 
 int main(int argc, char **argv) {
     if (argc < 2) {
-        fprintf(stderr, "usage: emulator <code file> [--load <hex load address>] [--input <input file>] [--output <output file>] [--console] [--mhz <speed>] [--rows N] [--cols N] [<arguments>]\n");
+        fprintf(stderr, "usage: emulator <code file> [--load <hex load address>] [--input <input file>] [--output <output file>] [--console] [--mhz <speed>] [--rows N] [--cols N] [--no-cycle-limit] [<arguments>]\n");
         return 1;
     }
 
@@ -1689,7 +1833,10 @@ int main(int argc, char **argv) {
 
     int i = 2;
     while (i < argc && strncmp(argv[i], "--", 2) == 0) {
-        if (strcmp(argv[i], "--console") == 0) {
+        if (strcmp(argv[i], "--no-cycle-limit") == 0) {
+            no_cycle_limit = 1;
+            i++;
+        } else if (strcmp(argv[i], "--console") == 0) {
             console_mode = 1;
             i++;
         } else if (strcmp(argv[i], "--load") == 0) {
@@ -1845,6 +1992,20 @@ int main(int argc, char **argv) {
     save_address(addr_term_rows);
     emit_byte(inst_jmp);        // f033     jmp term_cols
     save_address(addr_term_cols);
+    emit_byte(inst_jmp);        // f036     jmp socket_create
+    save_address(addr_socket_create);
+    emit_byte(inst_jmp);        // f039     jmp socket_bind
+    save_address(addr_socket_bind);
+    emit_byte(inst_jmp);        // f03c     jmp socket_listen
+    save_address(addr_socket_listen);
+    emit_byte(inst_jmp);        // f03f     jmp socket_accept
+    save_address(addr_socket_accept);
+    emit_byte(inst_jmp);        // f042     jmp socket_recv
+    save_address(addr_socket_recv);
+    emit_byte(inst_jmp);        // f045     jmp socket_send
+    save_address(addr_socket_send);
+    emit_byte(inst_jmp);        // f048     jmp socket_close
+    save_address(addr_socket_close);
     fill_address(addr_read_b);
     emit_byte(inst_lda);        // read_b:  lda $f004
     emit_address(port_read_b);
@@ -1924,6 +2085,34 @@ int main(int argc, char **argv) {
     emit_byte(inst_lda);        // term_cols: lda $fe93
     emit_address(port_term_cols);
     emit_byte(inst_rts);        //            rts
+    fill_address(addr_socket_create);
+    emit_byte(inst_lda);        // socket_create: lda $fea0
+    emit_address(port_socket_create);
+    emit_byte(inst_rts);        //                rts
+    fill_address(addr_socket_bind);
+    emit_byte(inst_lda);        // socket_bind: lda $fea1
+    emit_address(port_socket_bind);
+    emit_byte(inst_rts);        //              rts
+    fill_address(addr_socket_listen);
+    emit_byte(inst_lda);        // socket_listen: lda $fea2
+    emit_address(port_socket_listen);
+    emit_byte(inst_rts);        //                rts
+    fill_address(addr_socket_accept);
+    emit_byte(inst_lda);        // socket_accept: lda $fea3
+    emit_address(port_socket_accept);
+    emit_byte(inst_rts);        //                rts
+    fill_address(addr_socket_recv);
+    emit_byte(inst_lda);        // socket_recv: lda $fea4
+    emit_address(port_socket_recv);
+    emit_byte(inst_rts);        //              rts
+    fill_address(addr_socket_send);
+    emit_byte(inst_sta);        // socket_send: sta $fea5
+    emit_address(port_socket_send);
+    emit_byte(inst_rts);        //              rts
+    fill_address(addr_socket_close);
+    emit_byte(inst_sta);        // socket_close: sta $fea6
+    emit_address(port_socket_close);
+    emit_byte(inst_rts);        //               rts
 
     if (console_mode) {
         input_file_ptr = stdin;
@@ -1959,6 +2148,7 @@ int main(int argc, char **argv) {
     }
 
     files_init(input_file_ptr);
+    sockets_init();
 
     arg_count = argc - arg_base;
     arg_addresses = malloc(arg_count * sizeof(uint16_t));
@@ -2022,7 +2212,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (!console_mode && clockticks6502 > max_cycles) {
+        if (!console_mode && !no_cycle_limit && clockticks6502 > max_cycles) {
             fprintf(stderr, "\ndid not terminate within %i cycles\n", max_cycles);
             free(arg_addresses);
             fclose(output_file_ptr);
@@ -2033,6 +2223,7 @@ int main(int argc, char **argv) {
 
     free(arg_addresses);
 
+    sockets_destroy();
     files_destroy();
 
     if (!console_mode && strcmp(output_filename, "-") != 0) {
