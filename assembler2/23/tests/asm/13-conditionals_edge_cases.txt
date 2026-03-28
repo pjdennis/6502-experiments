@@ -1,0 +1,169 @@
+NAME: else_mixed_ifdef_ifndef
+DESCRIPTION: Complex nesting with mixed .ifdef/.ifndef/.else
+INPUT:
+ 1: * = $0200
+ 2: a = $01
+ 3:   .ifdef a
+ 4:   LDA #$01
+ 5:     .ifndef b
+ 6:     LDA #$02
+ 7:     .else
+ 8:     LDA #$03
+ 9:     .endif
+10:   .else
+11:     .ifndef c
+12:     LDA #$04
+13:     .else
+14:     LDA #$05
+15:     .endif
+16:   .endif
+EXPECT_HEX: a9 01 a9 02
+
+---
+NAME: else_in_skipped_outer_block
+DESCRIPTION: .else in outer skipped block doesn't affect inner processing
+INPUT:
+ 1: * = $0200
+ 2: inner = $01
+ 3:   .ifdef outer
+ 4:   LDA #$01
+ 5:   .else
+ 6:     .ifdef inner
+ 7:     LDA #$02
+ 8:     .endif
+ 9:   LDA #$03
+10:   .endif
+EXPECT_HEX: a9 02 a9 03
+
+---
+NAME: ifdef_nested_ifndef
+DESCRIPTION: .ifdef outer with .ifndef inner (mixed nesting)
+INPUT:
+ 1: * = $0200
+ 2: outer = $01
+ 3:   .ifdef outer
+ 4:   LDA #$01
+ 5:     .ifndef undefined_inner
+ 6:     LDA #$02
+ 7:     .endif
+ 8:   LDA #$03
+ 9:   .endif
+EXPECT_HEX: a9 01 a9 02 a9 03
+
+---
+NAME: ifdef_nested_ifndef_inner_defined
+DESCRIPTION: .ifdef outer with .ifndef inner where inner is defined
+INPUT:
+ 1: * = $0200
+ 2: outer = $01
+ 3: inner = $02
+ 4:   .ifdef outer
+ 5:   LDA #$01
+ 6:     .ifndef inner
+ 7:     LDA #$02
+ 8:     .endif
+ 9:   LDA #$03
+10:   .endif
+EXPECT_HEX: a9 01 a9 03
+
+---
+NAME: conditional_nesting_boundary
+DESCRIPTION: Exactly 16 levels of nesting works correctly (boundary case)
+INPUT:
+ 1: * = $0200
+ 2: a=$01
+ 3: b=$01
+ 4: c=$01
+ 5: d=$01
+ 6: e=$01
+ 7: f=$01
+ 8: g=$01
+ 9: h=$01
+10: i=$01
+11: j=$01
+12: k=$01
+13: l=$01
+14: m=$01
+15: n=$01
+16: o=$01
+17: p=$01
+18:   .ifdef a
+19:     .ifdef b
+20:       .ifdef c
+21:         .ifdef d
+22:           .ifdef e
+23:             .ifdef f
+24:               .ifdef g
+25:                 .ifdef h
+26:                   .ifdef i
+27:                     .ifdef j
+28:                       .ifdef k
+29:                         .ifdef l
+30:                           .ifdef m
+31:                             .ifdef n
+32:                               .ifdef o
+33:                                 .ifdef p
+34:                                 LDA #$42
+35:                                 .endif
+36:                               .endif
+37:                             .endif
+38:                           .endif
+39:                         .endif
+40:                       .endif
+41:                     .endif
+42:                   .endif
+43:                 .endif
+44:               .endif
+45:             .endif
+46:           .endif
+47:         .endif
+48:       .endif
+49:     .endif
+50:   .endif
+EXPECT_HEX: a9 42
+
+---
+NAME: conditional_nesting_limit
+DESCRIPTION: Conditional nesting exceeds 16 levels raises error
+INPUT:
+ 1: * = $0200
+ 2:   .ifdef a
+ 3:     .ifdef b
+ 4:       .ifdef c
+ 5:         .ifdef d
+ 6:           .ifdef e
+ 7:             .ifdef f
+ 8:               .ifdef g
+ 9:                 .ifdef h
+10:                   .ifdef i
+11:                     .ifdef j
+12:                       .ifdef k
+13:                         .ifdef l
+14:                           .ifdef m
+15:                             .ifdef n
+16:                               .ifdef o
+17:                                 .ifdef p
+18:                                   .ifdef q
+19:                                   LDA #$01
+20:                                   .endif
+21:                                 .endif
+22:                               .endif
+23:                             .endif
+24:                           .endif
+25:                         .endif
+26:                       .endif
+27:                     .endif
+28:                   .endif
+29:                 .endif
+30:               .endif
+31:             .endif
+32:           .endif
+33:         .endif
+34:       .endif
+35:     .endif
+36:   .endif
+EXPECT_ERROR: 24
+EXPECT_LINE: 18
+EXPECT_MSG: Conditional nesting exceeds 16 levels
+
+---

@@ -10,7 +10,7 @@
 
   .zeropage
 
-FWDREF16    .data $0000 ; Pointer to forward reference list
+FWDREF16:    .data $0000 ; Pointer to forward reference list
 
   .code
 
@@ -19,8 +19,8 @@ FWDREF16    .data $0000 ; Pointer to forward reference list
 ; Reset forward reference pointer (call at start of pass 2)
 ; On exit: A is not preserved
 ;          X, Y are preserved
-init_fwdref_list
-reset_fwdref_ptr
+init_fwdref_list:
+reset_fwdref_ptr:
   SET16 FWDREF_LIST FWDREF16
   RTS
 
@@ -29,7 +29,7 @@ reset_fwdref_ptr
 ; Writes $FFFF terminator at current pointer position
 ; On exit: A, Y are not preserved
 ;          X is preserved
-finalize_fwdref_list
+finalize_fwdref_list:
   LDY #$00
   LDA #$FF
   STA (FWDREF16),Y
@@ -42,7 +42,7 @@ finalize_fwdref_list
 ; On exit: A, Y are not preserved
 ;          X is preserved
 ;          Jumps to err_too_many_forward_refs if list is full
-add_forward_ref
+add_forward_ref:
   ; Check if there's room (pointer must be < FWDREF_LIMIT - 2) to allow for terminator
   CMPI16 FWDREF16 FWDREF_LIMIT-$02
   BCS .too_many           ; >= FWDREF_LIMIT, no room for entry + terminator
@@ -57,7 +57,7 @@ add_forward_ref
   CLC
   ADCI16 FWDREF16 $02 FWDREF16
   RTS
-.too_many
+.too_many:
   JMP err_too_many_forward_refs
 
 
@@ -67,7 +67,7 @@ add_forward_ref
 ;          If C=1, pointer is advanced to next entry
 ;          A, Y are not preserved
 ;          X is preserved
-check_forward_ref
+check_forward_ref:
   LDY #$00
   LDA (FWDREF16),Y
   CMP PC16
@@ -81,6 +81,6 @@ check_forward_ref
   ADCI16 FWDREF16 $02 FWDREF16
   SEC
   RTS
-.no_match
+.no_match:
   CLC
   RTS

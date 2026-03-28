@@ -1,0 +1,267 @@
+# --- Memory limits (cross-cutting) ---
+# Heap, file stack, scope stack, buffer overflow tests
+
+---
+NAME: heap_overflow_many_labels
+DESCRIPTION: Out of memory when heap exhausted with small heap
+ARGS: debug small_heap
+INPUT:
+ 1: * = $0200
+ 2: a00: = $01
+ 3: a01: = $01
+ 4: a02: = $01
+ 5: a03: = $01
+ 6: a04: = $01
+ 7: a05: = $01
+ 8: a06: = $01
+ 9: a07: = $01
+10: a08: = $01
+11: a09: = $01
+12: a10: = $01
+13: a11: = $01
+14: a12: = $01
+15: a13: = $01
+16: a14: = $01
+17: a15: = $01
+18: a16: = $01
+19: a17: = $01
+20: a18: = $01
+21: a19: = $01
+22: a20: = $01
+23: a21: = $01
+24: a22: = $01
+25: a23: = $01
+26: a24: = $01
+27: a25: = $01
+28: a26: = $01
+29: a27: = $01
+30: a28: = $01
+31: a29: = $01
+32:   NOP
+EXPECT_ERROR: 35
+EXPECT_MSG: Out of memory
+
+---
+NAME: file_stack_overflow_deep_include
+DESCRIPTION: Out of memory when file stack exhausted with small heap
+ARGS: debug small_heap
+INPUT:
+ 1: * = $0200
+ 2:   .include tests/overflow/d01.asm
+EXPECT_ERROR: 35
+EXPECT_MSG: Out of memory
+
+---
+NAME: heap_normal_many_labels
+DESCRIPTION: Many labels work without small heap
+INPUT:
+ 1: * = $0200
+ 2: a00: = $01
+ 3: a01: = $01
+ 4: a02: = $01
+ 5: a03: = $01
+ 6: a04: = $01
+ 7: a05: = $01
+ 8: a06: = $01
+ 9: a07: = $01
+10: a08: = $01
+11: a09: = $01
+12: a10: = $01
+13: a11: = $01
+14: a12: = $01
+15: a13: = $01
+16: a14: = $01
+17: a15: = $01
+18: a16: = $01
+19: a17: = $01
+20: a18: = $01
+21: a19: = $01
+22: a20: = $01
+23: a21: = $01
+24: a22: = $01
+25: a23: = $01
+26: a24: = $01
+27: a25: = $01
+28: a26: = $01
+29: a27: = $01
+30: a28: = $01
+31: a29: = $01
+32:   LDA #a00
+EXPECT_HEX: a9 01
+
+---
+NAME: file_stack_normal_deep_include
+DESCRIPTION: Deep include works without small heap
+INPUT:
+ 1: * = $0200
+ 2:   .include tests/overflow/d01.asm
+ 3:   RTS
+EXPECT_HEX: ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea 60
+
+---
+NAME: scope_stack_at_limit
+DESCRIPTION: 51 nested macros at scope stack limit
+INPUT:
+ 1: * = $0200
+ 2:   .include tests/scope/s51.asm
+EXPECT_HEX: ea
+
+---
+NAME: scope_stack_overflow
+DESCRIPTION: 52 nested macros overflow scope stack
+INPUT:
+ 1: * = $0200
+ 2:   .include tests/scope/s52.asm
+EXPECT_ERROR: 34
+EXPECT_LINE: 5
+EXPECT_MSG: Macro nesting too deep
+
+---
+NAME: macro_arg_buffer_at_limit
+DESCRIPTION: 85 macro arguments at buffer limit
+INPUT:
+ 1: * = $0200
+ 2:   .macro BIG85 a00, a01, a02, a03, a04, a05, a06, a07, a08, a09, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, a54, a55, a56, a57, a58, a59, a60, a61, a62, a63, a64, a65, a66, a67, a68, a69, a70, a71, a72, a73, a74, a75, a76, a77, a78, a79, a80, a81, a82, a83, a84
+ 3:   LDA #a00
+ 4:   .endmacro
+ 5:   BIG85 $00, $01, $02, $03, $04, $05, $06, $07, $08, $09, $0A, $0B, $0C, $0D, $0E, $0F, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $1A, $1B, $1C, $1D, $1E, $1F, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $2A, $2B, $2C, $2D, $2E, $2F, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $3A, $3B, $3C, $3D, $3E, $3F, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $4A, $4B, $4C, $4D, $4E, $4F, $50, $51, $52, $53, $54
+EXPECT_HEX: a9 00
+
+---
+NAME: macro_arg_buffer_overflow
+DESCRIPTION: 86 macro arguments overflow buffer
+INPUT:
+ 1: * = $0200
+ 2:   .macro BIG86 a00, a01, a02, a03, a04, a05, a06, a07, a08, a09, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, a54, a55, a56, a57, a58, a59, a60, a61, a62, a63, a64, a65, a66, a67, a68, a69, a70, a71, a72, a73, a74, a75, a76, a77, a78, a79, a80, a81, a82, a83, a84, a85
+ 3:   LDA #a00
+ 4:   .endmacro
+ 5:   BIG86 $00, $01, $02, $03, $04, $05, $06, $07, $08, $09, $0A, $0B, $0C, $0D, $0E, $0F, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $1A, $1B, $1C, $1D, $1E, $1F, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $2A, $2B, $2C, $2D, $2E, $2F, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $3A, $3B, $3C, $3D, $3E, $3F, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $4A, $4B, $4C, $4D, $4E, $4F, $50, $51, $52, $53, $54, $55
+EXPECT_ERROR: 33
+EXPECT_LINE: 5
+EXPECT_MSG: Too many macro arguments
+
+---
+NAME: token_buffer_at_limit
+DESCRIPTION: 127 character token at buffer limit
+INPUT:
+ 1: * = $0200
+ 2: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA: = $42
+ 3:   LDA #AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+EXPECT_HEX: a9 42
+
+---
+NAME: token_buffer_overflow
+DESCRIPTION: 128 character token overflows buffer
+INPUT:
+ 1: * = $0200
+ 2: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB: = $42
+EXPECT_ERROR: 36
+EXPECT_LINE: 2
+EXPECT_MSG: Token too long
+
+---
+NAME: ifdef_decisions_at_limit
+DESCRIPTION: 255 .ifdef directives exactly at buffer limit (7x32 + 31 = 255)
+INPUT:
+ 1: * = $0200
+ 2:   .include tests/ifdefs/ifdef32.asm
+ 3:   .include tests/ifdefs/ifdef32.asm
+ 4:   .include tests/ifdefs/ifdef32.asm
+ 5:   .include tests/ifdefs/ifdef32.asm
+ 6:   .include tests/ifdefs/ifdef32.asm
+ 7:   .include tests/ifdefs/ifdef32.asm
+ 8:   .include tests/ifdefs/ifdef32.asm
+ 9:   .include tests/ifdefs/ifdef31.asm
+10:   NOP
+EXPECT_HEX: ea
+
+---
+NAME: ifdef_decisions_overflow
+DESCRIPTION: 256 .ifdef directives overflows 255-entry buffer (7x32 + 31 + 1 = 256)
+INPUT:
+ 1: * = $0200
+ 2:   .include tests/ifdefs/ifdef32.asm
+ 3:   .include tests/ifdefs/ifdef32.asm
+ 4:   .include tests/ifdefs/ifdef32.asm
+ 5:   .include tests/ifdefs/ifdef32.asm
+ 6:   .include tests/ifdefs/ifdef32.asm
+ 7:   .include tests/ifdefs/ifdef32.asm
+ 8:   .include tests/ifdefs/ifdef32.asm
+ 9:   .include tests/ifdefs/ifdef31.asm
+10:   .ifdef ONE_MORE
+11:   .endif
+EXPECT_ERROR: 21
+EXPECT_LINE: 10
+EXPECT_MSG: Too many .ifdef directives
+
+---
+NAME: macro_same_name_as_label
+DESCRIPTION: A macro and a global label can have the same name since they are in separate scopes (LABEL_TYPE_MACRO_DEF vs global)
+INPUT:
+ 1: * = $0200
+ 2: test = $42
+ 3:   .macro test val
+ 4:   LDA #val
+ 5:   .endmacro
+ 6:   test $55
+ 7:   LDA #test
+EXPECT_HEX: a9 55 a9 42
+
+---
+NAME: macro_with_label_param_same_name
+DESCRIPTION: Macro parameter shadows a global label with the same name during expansion
+INPUT:
+ 1: * = $0200
+ 2: val = $FF
+ 3:   .macro load val
+ 4:   LDA #val
+ 5:   .endmacro
+ 6:   load $42
+ 7:   LDA #val
+EXPECT_HEX: a9 42 a9 ff
+
+---
+NAME: local_label_same_name_as_macro
+DESCRIPTION: A local label inside a macro can have the same name as a macro definition
+INPUT:
+ 1: * = $0200
+ 2:   .macro inner
+ 3:   NOP
+ 4:   .endmacro
+ 5:   .macro outer
+ 6: .inner
+ 7:   NOP
+ 8:   JMP .inner
+ 9:   .endmacro
+10:   outer
+EXPECT_HEX: ea 4c 00 02
+
+---
+NAME: macro_same_name_as_directive
+DESCRIPTION: Macro named "byte" coexists with .byte directive; both work correctly
+INPUT:
+ 1: * = $0200
+ 2:   .macro byte val
+ 3:   LDA #val
+ 4:   .endmacro
+ 5:   .byte $55
+ 6:   byte $42
+EXPECT_HEX: 55 a9 42
+
+---
+NAME: macro_shadows_instruction_error
+DESCRIPTION: Defining a macro with same name as a 6502 instruction produces error
+INPUT:
+ 1: * = $0200
+ 2:   .macro LDA val
+ 3:   NOP
+ 4:   .endmacro
+EXPECT_ERROR: 26
+
+---
+NAME: unknown_directive_error
+DESCRIPTION: Using an unknown directive name produces error 14
+INPUT:
+ 1: * = $0200
+ 2:   .badname
+EXPECT_ERROR: 14

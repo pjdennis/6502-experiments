@@ -3,7 +3,7 @@ trap exit SIGINT
 
 while true
 do
-    clear && ./asmtestgen.sh && tests/run_tests.py
+    clear && ./asmtestgen.sh && ./run_tests.py
     echo "Waiting for file change..."
     fswatch -1 --event Updated --latency 0.1 \
         asmtestgen.sh emulator.c sidebyside.cpp 00/asm.c \
@@ -21,8 +21,9 @@ do
         20/asm.asm 20/instgen.asm 20/environment.asm 20/common.asm 20/hash_table.asm 20/file_stack.asm 20/to_decimal.asm 20/errors.asm 20/fwdref.asm \
         21/asm.asm 21/instgen.asm 21/environment.asm 21/common.asm 21/hash_table.asm 21/file_stack.asm 21/to_decimal.asm 21/errors.asm 21/fwdref.asm 21/label_scope.asm \
         22/asm.asm 22/instgen.asm 22/environment.asm 22/common.asm 22/hash_table.asm 22/file_stack.asm 22/to_decimal.asm 22/errors.asm 22/fwdref.asm 22/label_scope.asm 22/macros.asm \
+        23/asm.asm 23/instgen.asm 23/environment.asm 23/common.asm 23/hash_table.asm 23/file_stack.asm 23/to_decimal.asm 23/errors.asm 23/fwdref.asm 23/label_scope.asm 23/macros.asm \
         test19.asm test_inc19.asm \
-	tests/run_tests.py tests/file_stack_test22.asm tests/file_stack_tests22.txt tests/asm22_tests.txt
+	run_tests.py 23/tests/file_stack/file_stack_test.asm 23/tests/file_stack/file_stack_tests.txt 23/tests/asm/*.txt
         > /dev/null
 
     sleep 0.1

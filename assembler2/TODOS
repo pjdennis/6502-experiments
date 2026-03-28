@@ -39,3 +39,36 @@
 
 ## Performance
 - [ ] Profile the assembler - See where cycles are being spent and optimize hot paths
+
+## Following refactoring for directives to use hash table
+
+Residual Opportunities
+
+  Duplication in instgen.asm: populate_instruction_hash_table and populate_directive_hash_table share nearly identical
+  Phase 1 (copy name to TOKEN) and structure. They could be merged with a callback or flag for the Phase 3 copy loop, but
+   6502 doesn't lend itself to that pattern well, and this only runs at build time.
+
+  Extra indirection through dir_ JMP stubs*: The conditional directive stubs (dir_ifdef → JMP process_ifdef, etc.) add an
+   extra JMP when dispatched through the hash table. The handler addresses in IHASHTAB could point directly to
+  process_ifdef instead. However, the stubs provide a clean separation point if handler signatures ever change, and the
+  cost is just 3 cycles per call.
+
+  process_conditional_directive still uses string comparison: The skip-mode path does 4 compare_token calls for
+  ifdef/ifndef/else/endif. This could use a hash lookup, but it would need extra logic to distinguish conditional
+  directives from non-conditional ones (you can't just dispatch all directives during skip mode). The 4-comparison chain
+  is fast enough and keeps the skip-mode logic simple and self-contained.
+
+  Stale comment in instgen.asm header: The mode encoding comment block says MODE_END = $FF but the actual value in
+  common.asm is MODE_END = 15 ($0F). This predates my changes but I didn't fix it either. The generated output correctly
+  uses $0F.
+
+  INST_PTR16 reuse in process_directive: process_directive borrows INST_PTR16 for the JMP (INST_PTR16) indirect dispatch.
+   This works because directive and instruction paths don't overlap, but it's a subtle coupling. A dedicated temporary
+  like JUMP_TARGET16 (which exists in init.asm) would be clearer, though it would require making that variable accessible
+   from directives.asm.
+
+  Hash table load factor: Adding 13 directives brought IHASHTAB from 56 entries to 69 entries in 128 slots (~54% load
+  factor). Still reasonable, but future additions would push toward collision territory. Not actionable now, but worth
+  noting.
+
+

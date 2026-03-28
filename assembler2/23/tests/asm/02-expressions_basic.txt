@@ -1,0 +1,305 @@
+# --- Expressions (expressions.asm) ---
+# Expression evaluation, shifts, byte selectors, spaces in expressions, character literals, decimal constants
+
+---
+NAME: hex_single_char
+INPUT:
+ 1: * = $0200
+ 2: foo = $7
+ 3:   LDA #foo
+EXPECT_HEX: a9 07
+
+---
+NAME: hex_three_chars
+INPUT:
+ 1: * = $0200
+ 2: foo = $712
+ 3:   LDA #<foo
+ 4:   LDA #>foo
+EXPECT_HEX: a9 12 a9 07
+
+---
+NAME: expression_assignment
+INPUT:
+ 1: * = $0200
+ 2: addr:  = $1234
+ 3: add:   = $01
+ 4: addr2: = addr+add
+ 3:   LDA addr
+ 4:   STA addr2
+EXPECT_HEX: ad 34 12 8d 35 12
+
+---
+NAME: assignment_no_space
+INPUT:
+ 1: *=$0200
+ 2: addr=$1234
+ 3:   LDA addr
+ 4: *=$0200+$04
+ 5:   NOP
+EXPECT_HEX: ad 34 12 00 ea
+
+---
+NAME: decimal_in_immediate
+DESCRIPTION: Decimal constant in immediate mode
+INPUT:
+ 1: * = $0200
+ 2:   LDA #123
+EXPECT_HEX: a9 7b
+
+---
+NAME: assignment_low_byte_select
+INPUT:
+ 1: * = $0200
+ 2: source: = $ABCD
+ 3: low: = <source
+ 4:   LDA #low
+EXPECT_HEX: a9 cd
+EXPECT_FWDREF: 0
+
+---
+NAME: assignment_high_byte_select
+INPUT:
+ 1: * = $0200
+ 2: source: = $ABCD
+ 3: high: = >source
+ 4:   LDA #high
+EXPECT_HEX: a9 ab
+EXPECT_FWDREF: 0
+
+---
+NAME: assignment_byte_select_both
+INPUT:
+ 1: * = $0200
+ 2: source: = $1234
+ 3: low: = <source
+ 4: high: = >source
+ 5:   LDA #low
+ 6:   LDX #high
+EXPECT_HEX: a9 34 a2 12
+EXPECT_FWDREF: 0
+
+---
+NAME: assignment_byte_select_chain
+INPUT:
+ 1: * = $0200
+ 2: source: = $ABCD
+ 3: low: = <source
+ 4: copy: = low
+ 5:   LDA #copy
+EXPECT_HEX: a9 cd
+EXPECT_FWDREF: 0
+
+---
+NAME: assignment_byte_select_multiple
+INPUT:
+ 1: * = $0200
+ 2: val1: = $1234
+ 3: val2: = $5678
+ 4: low1: = <val1
+ 5: high1: = >val1
+ 6: low2: = <val2
+ 7: high2: = >val2
+ 8:   LDA #low1
+ 9:   LDX #high1
+10:   LDY #low2
+11:   .word high2
+EXPECT_HEX: a9 34 a2 12 a0 78 56 00
+EXPECT_FWDREF: 0
+
+---
+NAME: assignment_byte_select_in_data
+INPUT:
+ 1: * = $0200
+ 2: source: = $ABCD
+ 3: low: = <source
+ 4: high: = >source
+ 5:   .word low, high
+EXPECT_HEX: cd 00 ab 00
+EXPECT_FWDREF: 0
+
+---
+NAME: expr_imm_hex_add
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$10+$20
+EXPECT_HEX: a9 30
+
+---
+NAME: expr_imm_hex_subtract
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$40-$10
+EXPECT_HEX: a9 30
+
+---
+NAME: expr_imm_chain
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$50+$10-$20
+EXPECT_HEX: a9 40
+
+---
+NAME: expr_char_arithmetic
+INPUT:
+ 1: * = $0200
+ 2:   LDA #'Z'-'A'
+EXPECT_HEX: a9 19
+
+---
+NAME: expr_low_byte_add
+INPUT:
+ 1: * = $0200
+ 2: val: = $ABCD
+ 3:   LDA #<val+$10
+EXPECT_HEX: a9 dd
+
+---
+NAME: expr_low_byte_add_after
+INPUT:
+ 1: * = $0200
+ 2: val: = $ABCD
+ 3:   LDA #$10+<val
+EXPECT_HEX: a9 dd
+
+---
+NAME: expr_high_byte_add
+INPUT:
+ 1: * = $0200
+ 2: val: = $ABCD
+ 3:   LDA #>val+$0100
+EXPECT_HEX: a9 ac
+
+---
+NAME: expr_low_byte_label_only
+INPUT:
+ 1: * = $0200
+ 2: val: = $ABCD
+ 3:   LDA #<val
+EXPECT_HEX: a9 cd
+
+---
+NAME: expr_high_byte_label_only
+INPUT:
+ 1: * = $0200
+ 2: val: = $ABCD
+ 3:   LDA #>val
+EXPECT_HEX: a9 ab
+
+---
+NAME: expr_label_add_abs
+INPUT:
+ 1: * = $0200
+ 2: base: = $1000
+ 3:   LDA base+$10
+EXPECT_HEX: ad 10 10
+
+---
+NAME: expr_assignment
+INPUT:
+ 1: * = $0200
+ 2: val: = $40+$02
+ 3:   LDA #val
+EXPECT_HEX: a9 42
+
+---
+NAME: expr_fwdref_add
+INPUT:
+ 1: * = $0200
+ 2:   LDA target+$01
+ 3: target: = $42
+EXPECT_HEX: ad 43 00
+EXPECT_FWDREF: 1
+
+---
+NAME: expr_word_add
+INPUT:
+ 1: * = $0200
+ 2: base: = $10
+ 3:   .word base+$20
+EXPECT_HEX: 30 00
+
+---
+NAME: expr_byte_hex_const
+INPUT:
+ 1: * = $0200
+ 2:   .byte $10+$20
+EXPECT_HEX: 30
+
+---
+NAME: expr_byte_selector
+INPUT:
+ 1: * = $0200
+ 2: addr: = $ABCD
+ 3:   .byte <addr+$10
+EXPECT_HEX: dd
+
+---
+NAME: expr_byte_multiple_values
+INPUT:
+ 1: * = $0200
+ 2: base: = $10
+ 3:   .byte $05+$01
+ 4:   .word base+$10
+ 5:   .byte $20-$05
+EXPECT_HEX: 06 20 00 1b
+
+---
+NAME: expr_byte_char_expression
+INPUT:
+ 1: * = $0200
+ 2:   .byte 'A'+$01
+EXPECT_HEX: 42
+
+---
+NAME: byte_hex_2digit
+INPUT:
+ 1: * = $0200
+ 2:   .byte $00, $FF, $42
+EXPECT_HEX: 00 ff 42
+
+---
+NAME: word_hex_4digit
+INPUT:
+ 1: * = $0200
+ 2:   .word $0000, $0100, $FFFF
+EXPECT_HEX: 00 00 00 01 ff ff
+
+---
+NAME: word_hex_4digit_single
+INPUT:
+ 1: * = $0200
+ 2:   .word $1234
+EXPECT_HEX: 34 12
+
+---
+NAME: byte_expr_2digit_start
+INPUT:
+ 1: * = $0200
+ 2:   .byte $10+$20
+EXPECT_HEX: 30
+
+---
+NAME: word_expr_4digit_start
+INPUT:
+ 1: * = $0200
+ 2:   .word $0010+$0020
+EXPECT_HEX: 30 00
+
+---
+NAME: word_expr_4digit_zero
+INPUT:
+ 1: * = $0200
+ 2:   .word $0000+$42
+EXPECT_HEX: 42 00
+
+---
+NAME: byte_expr_overflow_error
+INPUT:
+ 1: * = $0200
+ 2:   .byte $FF+$01
+EXPECT_ERROR: 6
+EXPECT_LINE: 2
+EXPECT_MSG: Value out of range
+
+---

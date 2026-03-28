@@ -3,7 +3,7 @@
 Unified test runner for 6502 assembler project.
 
 Supports two test types:
-  - assembler: Tests the assembler (asm22) with assembly source input
+  - assembler: Tests the current assembler with assembly source input
   - file_stack: Tests the file stack component with file I/O operations
 
 Usage:
@@ -27,6 +27,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Optional
+
+
+ASM_VERSION = "23"
 
 
 class TestType(Enum):
@@ -72,6 +75,7 @@ class Test:
     expect_msg: str = ""
     args: str = ""
     skip: str = ""
+    missing_input: bool = False
 
 
 @dataclass
@@ -81,12 +85,16 @@ class TestOutcome:
 
 
 class TestRunner:
-    def __init__(self, base_dir: Path, verbose: bool = False):
+    def __init__(self, base_dir: Path, verbose: bool = False, quiet: bool = False,
+                 asm_version: str = ASM_VERSION, python_mode: bool = False):
         self.base_dir = base_dir
         self.verbose = verbose
+        self.quiet = quiet
+        self.python_mode = python_mode
         self.emulator = base_dir / "emulator.out"
-        self.assembler = base_dir / "22" / "out" / "asm_debug.out"
-        self.file_stack_test = base_dir / "out" / "file_stack_test22.out"
+        self.assembler = base_dir / asm_version / "out" / "asm_debug.out"
+        self.file_stack_test = base_dir / asm_version / "out" / "file_stack_test.out"
+        self.python_asm = base_dir / "pyasm.py"
 
         self.passed = 0
         self.failed = 0
@@ -111,6 +119,16 @@ class TestRunner:
 
     def check_prerequisites(self, test_type: TestType) -> bool:
         """Check that required executables exist."""
+        if self.python_mode:
+            if test_type == TestType.ASSEMBLER:
+                if not self.python_asm.exists():
+                    print(f"Error: Python assembler not found at {self.python_asm}")
+                    return False
+                return True
+            elif test_type == TestType.FILE_STACK:
+                return True  # Will be skipped
+            return True
+
         if not self.emulator.exists():
             print(f"Error: Emulator not found at {self.emulator}")
             print("Run the build first")
@@ -203,6 +221,9 @@ class TestRunner:
                 elif m := re.match(r"^SKIP:\s*(.*)", line):
                     current.skip = m.group(1)
                     section = ""
+                elif re.match(r"^MISSING_INPUT$", line):
+                    current.missing_input = True
+                    section = ""
                 elif section == "input":
                     # Strip line number prefix: optional spaces, digits, colon, required space
                     line = re.sub(r"^\s*\d+: ", "", line)
@@ -270,6 +291,13 @@ class TestRunner:
         if test.skip:
             return TestOutcome(TestResult.SKIP, [test.skip])
 
+        # In python mode, skip file_stack tests and small_heap tests
+        if self.python_mode:
+            if test.test_type == TestType.FILE_STACK:
+                return TestOutcome(TestResult.SKIP, ["file_stack tests not applicable in python mode"])
+            if "small_heap" in test.args:
+                return TestOutcome(TestResult.SKIP, ["small_heap not applicable in python mode"])
+
         if test.test_type == TestType.ASSEMBLER:
             return self._run_assembler_test(test)
         elif test.test_type == TestType.FILE_STACK:
@@ -285,25 +313,36 @@ class TestRunner:
             bin_file = tmpdir / "test.bin"
             err_file = tmpdir / "test.err"
 
-            # Write input file
-            asm_file.write_text(test.input_text + "\n")
+            # Write input file (unless testing missing input file)
+            if not test.missing_input:
+                asm_file.write_text(test.input_text + "\n")
 
-            # Build command
-            cmd = [
-                str(self.emulator),
-                str(self.assembler),
-                "2000",
-                "/dev/null",
-                "/dev/null",
-                str(asm_file),
-                str(bin_file),
-            ]
-
-            # Add args (ARGS overrides the default "debug" argument)
-            if test.args:
-                cmd.extend(test.args.split())
+            if self.python_mode:
+                # Python assembler mode
+                cmd = [
+                    sys.executable,
+                    str(self.python_asm),
+                    str(asm_file),
+                    str(bin_file),
+                ]
+                # Add args (ARGS overrides the default "debug" argument)
+                if test.args:
+                    cmd.extend(test.args.split())
+                else:
+                    cmd.append("debug")
             else:
-                cmd.append("debug")
+                # Emulator mode
+                cmd = [
+                    str(self.emulator),
+                    str(self.assembler),
+                    str(asm_file),
+                    str(bin_file),
+                ]
+                # Add args (ARGS overrides the default "debug" argument)
+                if test.args:
+                    cmd.extend(test.args.split())
+                else:
+                    cmd.append("debug")
 
             # Run assembler
             with open(err_file, "w") as err_fh:
@@ -405,7 +444,7 @@ class TestRunner:
         if test.expect_line and actual_line != test.expect_line:
             details.append(f"Line: expected {test.expect_line}, got {actual_line}")
 
-        if test.expect_msg and test.expect_msg not in actual_msg:
+        if test.expect_msg and test.expect_msg != actual_msg:
             details.append(f"Message: expected '{test.expect_msg}', got '{actual_msg}'")
 
         # Check full stderr if specified
@@ -418,6 +457,12 @@ class TestRunner:
 
     def _filter_stderr(self, stderr_text: str) -> str:
         """Filter emulator noise from stderr and return cleaned text."""
+        if self.python_mode:
+            # No emulator noise to filter in python mode
+            lines = stderr_text.split("\n")
+            while lines and lines[-1] == "":
+                lines.pop()
+            return "\n".join(lines)
         actual_lines = []
         for line in stderr_text.split("\n"):
             # Skip emulator status lines
@@ -471,7 +516,7 @@ class TestRunner:
             # Write input files
             for filename, content in test.files.items():
                 # Transform @include directives for nested/memory modes
-                if test.mode in ("nested", "memory"):
+                if test.mode == "memory":
                     content = re.sub(
                         r"@include\s+(\S+)", rf"@include {tmpdir}/\1", content
                     )
@@ -488,8 +533,9 @@ class TestRunner:
             cmd = [
                 str(self.emulator),
                 str(self.file_stack_test),
+                "--load",
                 "200",
-                "/dev/null",
+                "--output",
                 str(stdout_file),
                 test.mode,
                 str(main_file),
@@ -511,7 +557,7 @@ class TestRunner:
                     continue
                 if re.match(r"^out/", line):
                     continue
-                if re.match(r".*\.out \d+ /dev/null", line):
+                if re.search(r"\.out\s+--load\s+\S+", line):
                     continue
                 stderr_lines.append(line)
             actual_stderr = "\n".join(stderr_lines)
@@ -573,7 +619,8 @@ class TestRunner:
         printf_name = f"  {name:<40} "
 
         if outcome.result == TestResult.PASS:
-            print(f"{printf_name}{Colors.GREEN}PASS{Colors.NC}")
+            if not self.quiet:
+                print(f"{printf_name}{Colors.GREEN}PASS{Colors.NC}")
             self.passed += 1
         elif outcome.result == TestResult.FAIL:
             print(f"{printf_name}{Colors.RED}FAIL{Colors.NC}")
@@ -595,7 +642,11 @@ class TestRunner:
             if not self.check_prerequisites(tt):
                 return
 
-        print(f"Running tests from {filepath.name}")
+        try:
+            display_path = filepath.relative_to(self.base_dir)
+        except ValueError:
+            display_path = filepath
+        print(f"Running tests from {display_path}")
         print()
 
         for test in tests:
@@ -623,7 +674,7 @@ def main():
     parser.add_argument(
         "test_files",
         nargs="*",
-        help="Test files to run (default: asm22_tests.txt and file_stack_tests22.txt)",
+        help="Test files to run (default: <asm_version>/tests/asm_tests.txt and <asm_version>/tests/file_stack_tests.txt)",
     )
     parser.add_argument(
         "-f", "--filter", default="", help="Only run tests matching this pattern"
@@ -632,7 +683,18 @@ def main():
         "-v", "--verbose", action="store_true", help="Verbose output"
     )
     parser.add_argument(
+        "-q", "--quiet", action="store_true", help="Only show failures and summary"
+    )
+    parser.add_argument(
         "--no-color", action="store_true", help="Disable colored output"
+    )
+    parser.add_argument(
+        "--version", default=ASM_VERSION,
+        help=f"Assembler version to test (default: {ASM_VERSION})"
+    )
+    parser.add_argument(
+        "--python", action="store_true",
+        help="Use Python assembler (pyasm.py) instead of emulator"
     )
 
     args = parser.parse_args()
@@ -640,11 +702,12 @@ def main():
     if args.no_color:
         Colors.disable()
 
-    # Determine base directory
+    # Determine base directory (repo root)
     script_dir = Path(__file__).parent.resolve()
-    base_dir = script_dir.parent
+    base_dir = script_dir
 
-    runner = TestRunner(base_dir, verbose=args.verbose)
+    runner = TestRunner(base_dir, verbose=args.verbose, quiet=args.quiet,
+                        asm_version=args.version, python_mode=args.python)
 
     print("=" * 40)
     print("Test Suite")
@@ -653,10 +716,30 @@ def main():
 
     # Default test files if none specified
     if not args.test_files:
-        args.test_files = [
-            str(script_dir / "file_stack_tests22.txt"),
-            str(script_dir / "asm22_tests.txt"),
-        ]
+        latest_tests_dir = script_dir / args.version / "tests"
+
+        # Check for modular structure (v23+)
+        asm_subdir = latest_tests_dir / "asm"
+        file_stack_subdir = latest_tests_dir / "file_stack"
+
+        if asm_subdir.exists() and asm_subdir.is_dir():
+            # Modular structure: discover all .txt files
+            args.test_files = []
+
+            # Add file_stack tests first
+            if file_stack_subdir.exists():
+                for test_file in sorted(file_stack_subdir.glob("*.txt")):
+                    args.test_files.append(str(test_file))
+
+            # Add asm tests (alphabetically sorted - numeric prefixes preserve logical order)
+            for test_file in sorted(asm_subdir.glob("*.txt")):
+                args.test_files.append(str(test_file))
+        else:
+            # Legacy structure (v22 and earlier)
+            args.test_files = [
+                str(latest_tests_dir / "file_stack_tests.txt"),
+                str(latest_tests_dir / "asm_tests.txt"),
+            ]
 
     for test_file in args.test_files:
         filepath = Path(test_file)

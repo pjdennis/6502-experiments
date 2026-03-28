@@ -32,7 +32,7 @@
 
   4. Test Coverage
 
-  - Extensive test suite (asm22_tests.txt) with 140+ test cases covering:
+  - Extensive test suite (asm_tests.txt) with 140+ test cases covering:
     - All addressing modes
     - Forward reference handling
     - Conditional assembly
@@ -44,7 +44,7 @@
 
   1. Potential Bug: Incorrect Test File Reference
 
-  Location: tests/asm22_tests.txt:1
+  Location: 22/tests/asm_tests.txt:1
 
   The test file comment says "Test suite for asm21 assembler" but this is for asm22. This suggests the file was copied from asm21 without updating the header comment.
 

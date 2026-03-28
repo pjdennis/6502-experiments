@@ -31,7 +31,7 @@ HT_V16 = HEX16
 
   .zeropage
 
-MEMP16          .data $0000 ; 2 byte heap pointer
+MEMP16:          .data $0000 ; 2 byte heap pointer
 
   .code
 
@@ -54,7 +54,7 @@ MEMP16          .data $0000 ; 2 byte heap pointer
   APPEND_HEAPA
   BPL .done
   JSR advance_heap
-.done
+.done:
   .endmacro
 
   ; Append val to the heap and increment Y
@@ -89,18 +89,18 @@ MEMP16          .data $0000 ; 2 byte heap pointer
   SBC MEMP16+$01        ; A = high byte of (ptr - MEMP16)
   BNE .oom_ok           ; Non-zero means >= 256 bytes free
   JMP err_out_of_memory
-.oom_ok
+.oom_ok:
   .endmacro
 
 
-init_heap
+init_heap:
   .ifdef enable_debug
   LDA SMALL_HEAP_FLAG
   BEQ .normal_heap
   ; Small heap for testing: only ~384 bytes available
   SET16 FILE_STACK-$0180 MEMP16
   RTS
-.normal_heap
+.normal_heap:
   .endif
   SET16 HEAP MEMP16
   RTS
@@ -111,7 +111,7 @@ init_heap
 ;         Y = 0
 ;         X is preserved
 ;         A is not preserved
-advance_heap
+advance_heap:
   TYA
   LDY #$00
   CLC
@@ -119,7 +119,7 @@ advance_heap
   STA MEMP16
   BCC .done
   INC MEMP16+$01
-.done
+.done:
   ; Check for collision with file stack
   CHECK_FOR_OUT_OF_MEMORY FS_P16
   RTS
@@ -132,7 +132,7 @@ advance_heap
 ;         Y = 0
 ;         X is preserved
 ;         A is not preserved
-store_hash_value
+store_hash_value:
   LDY #$00
   LDA HT_V16
   STA (MEMP16),Y
@@ -143,7 +143,7 @@ store_hash_value
   JMP advance_heap     ; Tail call
 
 
-select_instruction_hash_table
+select_instruction_hash_table:
   LDA #LABEL_TYPE_GLOBAL
   STA LABEL_TYPE       ; Clear local label flag for instruction lookup
   SET16 IHASHTAB HTP16

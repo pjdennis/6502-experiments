@@ -106,6 +106,19 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <signal.h>
+#include <errno.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <termios.h>
+#include <sys/ioctl.h>
+#include <sys/select.h>
+#include <time.h>
+
+#define STDIN_FILENO  0
+#define STDOUT_FILENO 1
 
 //6502 defines
 #define UNDOCUMENTED //when this is defined, undocumented opcodes are handled.
@@ -433,7 +446,7 @@ static void bpl() {
     }
 }
 
-static void brk() {
+static void brk_insn() {
     pc++;
     push16(pc); //push next instruction address onto stack
     push8(status | FLAG_BREAK); //push CPU status to stack
@@ -848,28 +861,28 @@ static void tya() {
 
 
 static void (*addrtable[256])() = {
-/*        |  0  |  1  |  2  |  3  |  4  |  5  |  6  |  7  |  8  |  9  |  A  |  B  |  C  |  D  |  E  |  F  |     */
-/* 0 */     imp, indx,  imp, indx,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imm, abso, abso, abso, abso, /* 0 */
-/* 1 */     rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx, /* 1 */
-/* 2 */    abso, indx,  imp, indx,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imm, abso, abso, abso, abso, /* 2 */
-/* 3 */     rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx, /* 3 */
-/* 4 */     imp, indx,  imp, indx,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imm, abso, abso, abso, abso, /* 4 */
-/* 5 */     rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx, /* 5 */
-/* 6 */     imp, indx,  imp, indx,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imm,  ind, abso, abso, abso, /* 6 */
-/* 7 */     rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx, /* 7 */
-/* 8 */     imm, indx,  imm, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imm, abso, abso, abso, abso, /* 8 */
-/* 9 */     rel, indy,  imp, indy,  zpx,  zpx,  zpy,  zpy,  imp, absy,  imp, absy, absx, absx, absy, absy, /* 9 */
-/* A */     imm, indx,  imm, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imm, abso, abso, abso, abso, /* A */
-/* B */     rel, indy,  imp, indy,  zpx,  zpx,  zpy,  zpy,  imp, absy,  imp, absy, absx, absx, absy, absy, /* B */
-/* C */     imm, indx,  imm, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imm, abso, abso, abso, abso, /* C */
-/* D */     rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx, /* D */
-/* E */     imm, indx,  imm, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imm, abso, abso, abso, abso, /* E */
-/* F */     rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx  /* F */
+/*         |  0  |  1  |  2  |  3  |  4  |  5  |  6  |  7  |  8  |  9  |  A  |  B  |  C  |  D  |  E  |  F  |     */
+/* 0 */      imp, indx,  imp, indx,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imm, abso, abso, abso, abso, /* 0 */
+/* 1 */      rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx, /* 1 */
+/* 2 */     abso, indx,  imp, indx,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imm, abso, abso, abso, abso, /* 2 */
+/* 3 */      rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx, /* 3 */
+/* 4 */      imp, indx,  imp, indx,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imm, abso, abso, abso, abso, /* 4 */
+/* 5 */      rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx, /* 5 */
+/* 6 */      imp, indx,  imp, indx,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imm,  ind, abso, abso, abso, /* 6 */
+/* 7 */      rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx, /* 7 */
+/* 8 */      imm, indx,  imm, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imm, abso, abso, abso, abso, /* 8 */
+/* 9 */      rel, indy,  imp, indy,  zpx,  zpx,  zpy,  zpy,  imp, absy,  imp, absy, absx, absx, absy, absy, /* 9 */
+/* A */      imm, indx,  imm, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imm, abso, abso, abso, abso, /* A */
+/* B */      rel, indy,  imp, indy,  zpx,  zpx,  zpy,  zpy,  imp, absy,  imp, absy, absx, absx, absy, absy, /* B */
+/* C */      imm, indx,  imm, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imm, abso, abso, abso, abso, /* C */
+/* D */      rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx, /* D */
+/* E */      imm, indx,  imm, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imm, abso, abso, abso, abso, /* E */
+/* F */      rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx  /* F */
 };
 
 static void (*optable[256])() = {
 /*        |  0  |  1  |  2  |  3  |  4  |  5  |  6  |  7  |  8  |  9  |  A  |  B  |  C  |  D  |  E  |  F  |      */
-/* 0 */      brk,  ora,  nop,  slo,  nop,  ora,  asl,  slo,  php,  ora,  asl,  nop,  nop,  ora,  asl,  slo, /* 0 */
+/* 0 */ brk_insn,  ora,  nop,  slo,  nop,  ora,  asl,  slo,  php,  ora,  asl,  nop,  nop,  ora,  asl,  slo, /* 0 */
 /* 1 */      bpl,  ora,  nop,  slo,  nop,  ora,  asl,  slo,  clc,  ora,  nop,  slo,  nop,  ora,  asl,  slo, /* 1 */
 /* 2 */      jsr,  and,  nop,  rla,  bit,  and,  rol,  rla,  plp,  and,  rol,  nop,  bit,  and,  rol,  rla, /* 2 */
 /* 3 */      bmi,  and,  nop,  rla,  nop,  and,  rol,  rla,  sec,  and,  nop,  rla,  nop,  and,  rol,  rla, /* 3 */
@@ -888,23 +901,23 @@ static void (*optable[256])() = {
 };
 
 static const uint32_t ticktable[256] = {
-/*        |  0  |  1  |  2  |  3  |  4  |  5  |  6  |  7  |  8  |  9  |  A  |  B  |  C  |  D  |  E  |  F  |     */
-/* 0 */      7,    6,    2,    8,    3,    3,    5,    5,    3,    2,    2,    2,    4,    4,    6,    6,  /* 0 */
-/* 1 */      2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7,  /* 1 */
-/* 2 */      6,    6,    2,    8,    3,    3,    5,    5,    4,    2,    2,    2,    4,    4,    6,    6,  /* 2 */
-/* 3 */      2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7,  /* 3 */
-/* 4 */      6,    6,    2,    8,    3,    3,    5,    5,    3,    2,    2,    2,    3,    4,    6,    6,  /* 4 */
-/* 5 */      2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7,  /* 5 */
-/* 6 */      6,    6,    2,    8,    3,    3,    5,    5,    4,    2,    2,    2,    5,    4,    6,    6,  /* 6 */
-/* 7 */      2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7,  /* 7 */
-/* 8 */      2,    6,    2,    6,    3,    3,    3,    3,    2,    2,    2,    2,    4,    4,    4,    4,  /* 8 */
-/* 9 */      2,    6,    2,    6,    4,    4,    4,    4,    2,    5,    2,    5,    5,    5,    5,    5,  /* 9 */
-/* A */      2,    6,    2,    6,    3,    3,    3,    3,    2,    2,    2,    2,    4,    4,    4,    4,  /* A */
-/* B */      2,    5,    2,    5,    4,    4,    4,    4,    2,    4,    2,    4,    4,    4,    4,    4,  /* B */
-/* C */      2,    6,    2,    8,    3,    3,    5,    5,    2,    2,    2,    2,    4,    4,    6,    6,  /* C */
-/* D */      2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7,  /* D */
-/* E */      2,    6,    2,    8,    3,    3,    5,    5,    2,    2,    2,    2,    4,    4,    6,    6,  /* E */
-/* F */      2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7   /* F */
+/*         |  0  |  1  |  2  |  3  |  4  |  5  |  6  |  7  |  8  |  9  |  A  |  B  |  C  |  D  |  E  |  F  |     */
+/* 0 */       7,    6,    2,    8,    3,    3,    5,    5,    3,    2,    2,    2,    4,    4,    6,    6,  /* 0 */
+/* 1 */       2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7,  /* 1 */
+/* 2 */       6,    6,    2,    8,    3,    3,    5,    5,    4,    2,    2,    2,    4,    4,    6,    6,  /* 2 */
+/* 3 */       2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7,  /* 3 */
+/* 4 */       6,    6,    2,    8,    3,    3,    5,    5,    3,    2,    2,    2,    3,    4,    6,    6,  /* 4 */
+/* 5 */       2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7,  /* 5 */
+/* 6 */       6,    6,    2,    8,    3,    3,    5,    5,    4,    2,    2,    2,    5,    4,    6,    6,  /* 6 */
+/* 7 */       2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7,  /* 7 */
+/* 8 */       2,    6,    2,    6,    3,    3,    3,    3,    2,    2,    2,    2,    4,    4,    4,    4,  /* 8 */
+/* 9 */       2,    6,    2,    6,    4,    4,    4,    4,    2,    5,    2,    5,    5,    5,    5,    5,  /* 9 */
+/* A */       2,    6,    2,    6,    3,    3,    3,    3,    2,    2,    2,    2,    4,    4,    4,    4,  /* A */
+/* B */       2,    5,    2,    5,    4,    4,    4,    4,    2,    4,    2,    4,    4,    4,    4,    4,  /* B */
+/* C */       2,    6,    2,    8,    3,    3,    5,    5,    2,    2,    2,    2,    4,    4,    6,    6,  /* C */
+/* D */       2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7,  /* D */
+/* E */       2,    6,    2,    8,    3,    3,    5,    5,    2,    2,    2,    2,    4,    4,    6,    6,  /* E */
+/* F */       2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7   /* F */
 };
 
 
@@ -974,9 +987,6 @@ void hookexternal(void *funcptr) {
 
 ////////////////////////////////////////
 
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
 
 #define port_read_b  0xf004
 #define port_write_b 0xf001
@@ -990,6 +1000,11 @@ void hookexternal(void *funcptr) {
 #define port_argv_h  0xfe82
 #define port_openout 0xfe83
 #define port_write   0xfe84
+#define port_con_read  0xfe90
+#define port_con_flush 0xfe91
+#define port_term_rows 0xfe92
+#define port_term_cols 0xfe93
+#define port_con_ready 0xfe94
 
 uint8_t memory[0x10001];
 
@@ -1004,6 +1019,439 @@ uint16_t* arg_addresses;
 int done = 0;
 int exitcode_set = -1;
 int error_output_started = 0;  // Track if emulated program wrote to stderr
+int console_mode = 0;
+double target_mhz = 0.0;
+int override_rows = 0;
+int override_cols = 0;
+struct termios orig_termios;
+struct timespec start_time;
+static volatile sig_atomic_t sigint_requested = 0;
+static volatile sig_atomic_t sigtstp_requested = 0;
+static volatile sig_atomic_t sigcont_requested = 0;
+static int termios_saved = 0;
+static int screen_rows = 0;
+static int screen_cols = 0;
+static char *screen_cells = NULL;
+static unsigned char *screen_attr = NULL;
+static int cursor_row = 0;
+static int cursor_col = 0;
+static int parser_state = 0;
+static int csi_params[8];
+static int csi_param_count = 0;
+static int csi_param_value = -1;
+static int csi_private = 0;
+static unsigned char current_attr = 0;
+
+void get_terminal_size(int *rows, int *cols);
+void console_resize(int rows, int cols);
+void console_redraw();
+
+void restore_terminal() {
+    if (console_mode) {
+        tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
+        const char seq[] = "\x1b[?1049l\x1b[?25h\x1b[0m";
+        if (write(STDOUT_FILENO, seq, sizeof(seq) - 1) < 0) {
+        }
+    }
+}
+
+void enter_console() {
+    if (!termios_saved) {
+        tcgetattr(STDIN_FILENO, &orig_termios);
+        termios_saved = 1;
+    }
+    int rows, cols;
+    get_terminal_size(&rows, &cols);
+    console_resize(rows, cols);
+    const char enter_seq[] = "\x1b[?1049h";
+    if (write(STDOUT_FILENO, enter_seq, sizeof(enter_seq) - 1) < 0) {
+    }
+    struct termios raw = orig_termios;
+    cfmakeraw(&raw);
+    raw.c_lflag |= ISIG;  // Keep Ctrl+C working for safety
+    raw.c_cc[VMIN] = 1;
+    raw.c_cc[VTIME] = 0;
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+}
+
+void handle_sigint(int sig) {
+    (void)sig;
+    sigint_requested = 1;
+}
+
+void handle_sigtstp(int sig) {
+    (void)sig;
+    sigtstp_requested = 1;
+}
+
+void handle_sigcont(int sig) {
+    (void)sig;
+    sigcont_requested = 1;
+}
+
+void console_resize(int rows, int cols) {
+    if (rows <= 0 || cols <= 0) return;
+    if (rows == screen_rows && cols == screen_cols && screen_cells != NULL) return;
+    char *new_cells = malloc((size_t)rows * (size_t)cols);
+    unsigned char *new_attr = malloc((size_t)rows * (size_t)cols);
+    if (!new_cells) return;
+    if (!new_attr) {
+        free(new_cells);
+        return;
+    }
+    memset(new_cells, ' ', (size_t)rows * (size_t)cols);
+    memset(new_attr, 0, (size_t)rows * (size_t)cols);
+    if (screen_cells) {
+        int copy_rows = rows < screen_rows ? rows : screen_rows;
+        int copy_cols = cols < screen_cols ? cols : screen_cols;
+        for (int r = 0; r < copy_rows; r++) {
+            memcpy(new_cells + r * cols, screen_cells + r * screen_cols, (size_t)copy_cols);
+            memcpy(new_attr + r * cols, screen_attr + r * screen_cols, (size_t)copy_cols);
+        }
+        free(screen_cells);
+        free(screen_attr);
+    }
+    screen_cells = new_cells;
+    screen_attr = new_attr;
+    screen_rows = rows;
+    screen_cols = cols;
+    if (cursor_row >= screen_rows) cursor_row = screen_rows - 1;
+    if (cursor_row < 0) cursor_row = 0;
+    if (cursor_col >= screen_cols) cursor_col = screen_cols - 1;
+    if (cursor_col < 0) cursor_col = 0;
+}
+
+void console_clear_line(int mode) {
+    if (!screen_cells || screen_rows <= 0 || screen_cols <= 0) return;
+    if (mode == 1) {
+        int end = cursor_col + 1;
+        if (end > screen_cols) end = screen_cols;
+        memset(screen_cells + cursor_row * screen_cols, ' ', (size_t)end);
+        memset(screen_attr + cursor_row * screen_cols, 0, (size_t)end);
+    } else if (mode == 2) {
+        memset(screen_cells + cursor_row * screen_cols, ' ', (size_t)screen_cols);
+        memset(screen_attr + cursor_row * screen_cols, 0, (size_t)screen_cols);
+    } else {
+        int start = cursor_col;
+        if (start < 0) start = 0;
+        if (start < screen_cols) {
+            memset(screen_cells + cursor_row * screen_cols + start, ' ', (size_t)(screen_cols - start));
+            memset(screen_attr + cursor_row * screen_cols + start, 0, (size_t)(screen_cols - start));
+        }
+    }
+}
+
+void console_clear_screen(int mode) {
+    if (!screen_cells || screen_rows <= 0 || screen_cols <= 0) return;
+    if (mode == 1) {
+        for (int r = 0; r < cursor_row; r++) {
+            memset(screen_cells + r * screen_cols, ' ', (size_t)screen_cols);
+            memset(screen_attr + r * screen_cols, 0, (size_t)screen_cols);
+        }
+        int end = cursor_col + 1;
+        if (end > screen_cols) end = screen_cols;
+        memset(screen_cells + cursor_row * screen_cols, ' ', (size_t)end);
+        memset(screen_attr + cursor_row * screen_cols, 0, (size_t)end);
+    } else if (mode == 2 || mode == 3) {
+        memset(screen_cells, ' ', (size_t)screen_rows * (size_t)screen_cols);
+        memset(screen_attr, 0, (size_t)screen_rows * (size_t)screen_cols);
+    } else {
+        int start = cursor_col;
+        if (start < 0) start = 0;
+        if (start < screen_cols) {
+            memset(screen_cells + cursor_row * screen_cols + start, ' ', (size_t)(screen_cols - start));
+            memset(screen_attr + cursor_row * screen_cols + start, 0, (size_t)(screen_cols - start));
+        }
+        for (int r = cursor_row + 1; r < screen_rows; r++) {
+            memset(screen_cells + r * screen_cols, ' ', (size_t)screen_cols);
+            memset(screen_attr + r * screen_cols, 0, (size_t)screen_cols);
+        }
+    }
+}
+
+void console_scroll_up(int lines) {
+    if (!screen_cells || screen_rows <= 0 || screen_cols <= 0) return;
+    if (lines <= 0) return;
+    if (lines >= screen_rows) {
+        memset(screen_cells, ' ', (size_t)screen_rows * (size_t)screen_cols);
+        memset(screen_attr, 0, (size_t)screen_rows * (size_t)screen_cols);
+        return;
+    }
+    size_t row_bytes = (size_t)screen_cols;
+    memmove(screen_cells, screen_cells + lines * row_bytes, (size_t)(screen_rows - lines) * row_bytes);
+    memmove(screen_attr, screen_attr + lines * row_bytes, (size_t)(screen_rows - lines) * row_bytes);
+    memset(screen_cells + (screen_rows - lines) * row_bytes, ' ', (size_t)lines * row_bytes);
+    memset(screen_attr + (screen_rows - lines) * row_bytes, 0, (size_t)lines * row_bytes);
+}
+
+void console_put_char(unsigned char ch) {
+    if (!screen_cells || screen_rows <= 0 || screen_cols <= 0) return;
+    if (cursor_row < 0) cursor_row = 0;
+    if (cursor_row >= screen_rows) {
+        console_scroll_up(1);
+        cursor_row = screen_rows - 1;
+    }
+    if (cursor_col < 0) cursor_col = 0;
+    if (cursor_col >= screen_cols) {
+        cursor_col = 0;
+        cursor_row++;
+        if (cursor_row >= screen_rows) {
+            console_scroll_up(1);
+            cursor_row = screen_rows - 1;
+        }
+    }
+    screen_cells[cursor_row * screen_cols + cursor_col] = (char)ch;
+    screen_attr[cursor_row * screen_cols + cursor_col] = current_attr;
+    cursor_col++;
+    if (cursor_col >= screen_cols) {
+        cursor_col = 0;
+        cursor_row++;
+        if (cursor_row >= screen_rows) {
+            console_scroll_up(1);
+            cursor_row = screen_rows - 1;
+        }
+    }
+}
+
+void console_handle_csi(unsigned char final) {
+    if (csi_private) {
+        csi_private = 0;
+        return;
+    }
+    int params[8];
+    int count = 0;
+    for (int i = 0; i < csi_param_count && i < 8; i++) params[i] = csi_params[i];
+    count = csi_param_count;
+    if (count == 0) {
+        params[0] = 0;
+        count = 1;
+    }
+    switch (final) {
+        case 'A': { // CUU
+            int n = params[0] ? params[0] : 1;
+            cursor_row -= n;
+            if (cursor_row < 0) cursor_row = 0;
+            break;
+        }
+        case 'B': { // CUD
+            int n = params[0] ? params[0] : 1;
+            cursor_row += n;
+            if (cursor_row >= screen_rows) cursor_row = screen_rows - 1;
+            break;
+        }
+        case 'C': { // CUF
+            int n = params[0] ? params[0] : 1;
+            cursor_col += n;
+            if (cursor_col >= screen_cols) cursor_col = screen_cols - 1;
+            break;
+        }
+        case 'D': { // CUB
+            int n = params[0] ? params[0] : 1;
+            cursor_col -= n;
+            if (cursor_col < 0) cursor_col = 0;
+            break;
+        }
+        case 'E': { // CNL
+            int n = params[0] ? params[0] : 1;
+            cursor_row += n;
+            if (cursor_row >= screen_rows) cursor_row = screen_rows - 1;
+            cursor_col = 0;
+            break;
+        }
+        case 'F': { // CPL
+            int n = params[0] ? params[0] : 1;
+            cursor_row -= n;
+            if (cursor_row < 0) cursor_row = 0;
+            cursor_col = 0;
+            break;
+        }
+        case 'G': { // CHA
+            int n = params[0] ? params[0] : 1;
+            cursor_col = n - 1;
+            if (cursor_col < 0) cursor_col = 0;
+            if (cursor_col >= screen_cols) cursor_col = screen_cols - 1;
+            break;
+        }
+        case 'H':
+        case 'f': { // CUP
+            int r = (count > 0 && params[0] ? params[0] : 1) - 1;
+            int c = (count > 1 && params[1] ? params[1] : 1) - 1;
+            if (r < 0) r = 0;
+            if (c < 0) c = 0;
+            if (r >= screen_rows) r = screen_rows - 1;
+            if (c >= screen_cols) c = screen_cols - 1;
+            cursor_row = r;
+            cursor_col = c;
+            break;
+        }
+        case 'J': { // ED
+            console_clear_screen(params[0]);
+            break;
+        }
+        case 'K': { // EL
+            console_clear_line(params[0]);
+            break;
+        }
+        case 'm': { // SGR
+            for (int i = 0; i < count; i++) {
+                int p = params[i];
+                if (p == 0) {
+                    current_attr = 0;
+                } else if (p == 7) {
+                    current_attr = 1;
+                } else if (p == 27) {
+                    current_attr = 0;
+                }
+            }
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+void console_handle_byte(unsigned char ch) {
+    if (parser_state == 0) {
+        if (ch == 0x1b) {
+            parser_state = 1;
+            return;
+        }
+        if (ch == '\r') {
+            cursor_col = 0;
+            return;
+        }
+        if (ch == '\n') {
+            cursor_row++;
+            if (cursor_row >= screen_rows) {
+                console_scroll_up(1);
+                cursor_row = screen_rows - 1;
+            }
+            return;
+        }
+        if (ch == '\b') {
+            cursor_col--;
+            if (cursor_col < 0) cursor_col = 0;
+            return;
+        }
+        if (ch == '\t') {
+            int next_tab = (cursor_col + 8) & ~7;
+            if (next_tab >= screen_cols) next_tab = screen_cols - 1;
+            cursor_col = next_tab;
+            return;
+        }
+        if (ch >= 0x20) {
+            console_put_char(ch);
+        }
+        return;
+    }
+    if (parser_state == 1) {
+        if (ch == '[') {
+            parser_state = 2;
+            csi_param_count = 0;
+            csi_param_value = -1;
+            return;
+        }
+        parser_state = 0;
+        return;
+    }
+    if (parser_state == 2) {
+        if (ch == '?' && csi_param_count == 0 && csi_param_value < 0) {
+            csi_private = 1;
+            return;
+        }
+        if (ch >= '0' && ch <= '9') {
+            if (csi_param_value < 0) csi_param_value = 0;
+            csi_param_value = csi_param_value * 10 + (ch - '0');
+            return;
+        }
+        if (ch == ';') {
+            if (csi_param_count < 8) {
+                csi_params[csi_param_count++] = (csi_param_value < 0) ? 0 : csi_param_value;
+            }
+            csi_param_value = -1;
+            return;
+        }
+        if (csi_param_count < 8) {
+            csi_params[csi_param_count++] = (csi_param_value < 0) ? 0 : csi_param_value;
+        }
+        console_handle_csi(ch);
+        parser_state = 0;
+        return;
+    }
+}
+
+void console_redraw() {
+    if (!screen_cells || screen_rows <= 0 || screen_cols <= 0) return;
+    unsigned char last_attr = 0;
+    const char reset[] = "\x1b[0m";
+    if (write(STDOUT_FILENO, reset, sizeof(reset) - 1) < 0) {
+    }
+    for (int r = 0; r < screen_rows; r++) {
+        char pos[32];
+        int pos_len = snprintf(pos, sizeof(pos), "\x1b[%d;1H", r + 1);
+        if (pos_len > 0) {
+            if (write(STDOUT_FILENO, pos, (size_t)pos_len) < 0) {
+            }
+        }
+        for (int c = 0; c < screen_cols; c++) {
+            unsigned char attr = screen_attr[r * screen_cols + c];
+            if (attr != last_attr) {
+                if (attr) {
+                    const char rev[] = "\x1b[7m";
+                    if (write(STDOUT_FILENO, rev, sizeof(rev) - 1) < 0) {
+                    }
+                } else {
+                    const char norm[] = "\x1b[0m";
+                    if (write(STDOUT_FILENO, norm, sizeof(norm) - 1) < 0) {
+                    }
+                }
+                last_attr = attr;
+            }
+            if (write(STDOUT_FILENO, screen_cells + r * screen_cols + c, 1) < 0) {
+            }
+        }
+    }
+    if (current_attr) {
+        const char rev[] = "\x1b[7m";
+        if (write(STDOUT_FILENO, rev, sizeof(rev) - 1) < 0) {
+        }
+    } else {
+        if (write(STDOUT_FILENO, reset, sizeof(reset) - 1) < 0) {
+        }
+    }
+    char cur[32];
+    int len = snprintf(cur, sizeof(cur), "\x1b[%d;%dH", cursor_row + 1, cursor_col + 1);
+    if (len > 0) {
+        if (write(STDOUT_FILENO, cur, (size_t)len) < 0) {
+        }
+    }
+}
+
+void setup_console() {
+    atexit(restore_terminal);
+    enter_console();
+}
+
+int con_byte_ready() {
+    fd_set fds;
+    struct timeval tv = {0, 0};
+    FD_ZERO(&fds);
+    FD_SET(STDIN_FILENO, &fds);
+    return select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv) > 0;
+}
+
+void get_terminal_size(int *rows, int *cols) {
+    struct winsize ws;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_row > 0) {
+        *rows = ws.ws_row;
+        *cols = ws.ws_col;
+    } else {
+        *rows = 24;
+        *cols = 80;
+    }
+    if (override_rows > 0) *rows = override_rows;
+    if (override_cols > 0) *cols = override_cols;
+}
 
 void files_init(FILE* input_file) {
     files[0] = input_file;
@@ -1018,8 +1466,7 @@ uint8_t file_open_with_mode(const char* name, const char* mode) {
         if (files[x] == NULL) {
             FILE* file = fopen(name, mode);
             if (!file) {
-                fprintf(stderr, "could not open file: %s\n", name);
-		exit(1);
+                return 0;
             }
 	    files[x] = file;
 	    return x + 1;
@@ -1038,7 +1485,7 @@ uint8_t file_open_for_write(const char* name) {
 }
 
 FILE* file_handle(uint8_t file) {
-    if (files[file - 1] == NULL) {
+    if (file == 0 || files[file - 1] == NULL) {
         fprintf(stderr, "file %i is not open\n", (int) file);
 	exit(1);
     }
@@ -1107,6 +1554,53 @@ uint8_t read6502(uint16_t address) {
             exit(1);
         }
         return arg_addresses[a] >> 8;
+    } else if (address == port_con_read) {             // con_read
+        if (console_mode) {
+            struct timespec before, after;
+            if (target_mhz > 0) clock_gettime(CLOCK_MONOTONIC, &before);
+            uint8_t ch;
+            int got = read(STDIN_FILENO, &ch, 1);
+            if (got < 0 && errno == EINTR && sigint_requested) {
+                if (exitcode_set == -1) exitcode_set = 130;
+                done = 1;
+                return 0;
+            }
+            if (target_mhz > 0) {
+                clock_gettime(CLOCK_MONOTONIC, &after);
+                long sec_diff = after.tv_sec - before.tv_sec;
+                long nsec_diff = after.tv_nsec - before.tv_nsec;
+                start_time.tv_sec += sec_diff;
+                start_time.tv_nsec += nsec_diff;
+                if (start_time.tv_nsec >= 1000000000L) {
+                    start_time.tv_sec++;
+                    start_time.tv_nsec -= 1000000000L;
+                }
+                if (start_time.tv_nsec < 0) {
+                    start_time.tv_sec--;
+                    start_time.tv_nsec += 1000000000L;
+                }
+            }
+            if (got == 1) return ch;
+            return 0;
+        } else {
+            int b = fgetc(input_file_ptr);
+            if (b == EOF) return 4;
+            return b;
+        }
+    } else if (address == port_term_rows) {           // term_rows
+        int rows, cols;
+        get_terminal_size(&rows, &cols);
+        return (uint8_t)rows;
+    } else if (address == port_term_cols) {           // term_cols
+        int rows, cols;
+        get_terminal_size(&rows, &cols);
+        return (uint8_t)cols;
+    } else if (address == port_con_ready) {           // con_ready
+        if (console_mode) {
+            return con_byte_ready() ? 0xFF : 0x00;
+        } else {
+            return 0xFF;  // In file mode, always ready
+        }
     } else if (address == 0xfffe && memory[0xfffe] == 0 && memory[0xffff] == 0) {
         done = 1;
     }/* else if (address == 0xfe) {
@@ -1128,7 +1622,14 @@ uint8_t read6502(uint16_t address) {
 
 void write6502(uint16_t address, uint8_t value) {
     if (address == port_write_b) {                   // write_b
-        fputc(value, output_file_ptr);
+        if (console_mode) {
+            unsigned char ch = value;
+            console_handle_byte(ch);
+            if (write(STDOUT_FILENO, &ch, 1) < 0) {
+            }
+        } else {
+            fputc(value, output_file_ptr);
+        }
         return;
     } else if (address == port_write_d) {            // write_d
         if (!error_output_started) {
@@ -1146,6 +1647,9 @@ void write6502(uint16_t address, uint8_t value) {
 	return;
     } else if (address == port_write) {              // write
         file_write(x, value);
+        return;
+    } else if (address == port_con_flush) {          // con_flush
+        fflush(stdout);
         return;
     }
 
@@ -1173,15 +1677,86 @@ void show_commandline(int argc, char**argv) {
 #define inst_ldx 0xae
 
 int main(int argc, char **argv) {
-    if (argc < 5) {
-        fprintf(stderr, "usage emulator <code file> <hex load address> <input file> <output file> [<arguments>]\n");
+    if (argc < 2) {
+        fprintf(stderr, "usage: emulator <code file> [--load <hex load address>] [--input <input file>] [--output <output file>] [--console] [--mhz <speed>] [--rows N] [--cols N] [<arguments>]\n");
         return 1;
     }
 
     char* code_filename = argv[1];
-    long load_address = strtol(argv[2], NULL, 16);
-    char* input_filename = argv[3];
-    char* output_filename = argv[4];
+    long load_address = -1;
+    char* input_filename = "/dev/null";
+    char* output_filename = "/dev/null";
+
+    int i = 2;
+    while (i < argc && strncmp(argv[i], "--", 2) == 0) {
+        if (strcmp(argv[i], "--console") == 0) {
+            console_mode = 1;
+            i++;
+        } else if (strcmp(argv[i], "--load") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "error: --load requires a value\n");
+                return 1;
+            }
+            load_address = strtol(argv[i + 1], NULL, 16);
+            if (load_address < 0 || load_address > 0xffff) {
+                fprintf(stderr, "error: --load value must be between 0 and ffff\n");
+                return 1;
+            }
+            i += 2;
+        } else if (strcmp(argv[i], "--input") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "error: --input requires a value\n");
+                return 1;
+            }
+            input_filename = argv[i + 1];
+            i += 2;
+        } else if (strcmp(argv[i], "--output") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "error: --output requires a value\n");
+                return 1;
+            }
+            output_filename = argv[i + 1];
+            i += 2;
+        } else if (strcmp(argv[i], "--rows") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "error: --rows requires a value\n");
+                return 1;
+            }
+            override_rows = (int)strtol(argv[i + 1], NULL, 10);
+            if (override_rows <= 0) {
+                fprintf(stderr, "error: --rows value must be positive\n");
+                return 1;
+            }
+            i += 2;
+        } else if (strcmp(argv[i], "--cols") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "error: --cols requires a value\n");
+                return 1;
+            }
+            override_cols = (int)strtol(argv[i + 1], NULL, 10);
+            if (override_cols <= 0) {
+                fprintf(stderr, "error: --cols value must be positive\n");
+                return 1;
+            }
+            i += 2;
+        } else if (strcmp(argv[i], "--mhz") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "error: --mhz requires a value\n");
+                return 1;
+            }
+            target_mhz = strtod(argv[i + 1], NULL);
+            if (target_mhz <= 0.0) {
+                fprintf(stderr, "error: --mhz value must be positive\n");
+                return 1;
+            }
+            i += 2;
+        } else {
+            fprintf(stderr, "error: unknown option %s\n", argv[i]);
+            return 1;
+        }
+    }
+
+    int arg_base = i;
 
     for (size_t x = 0; x != 0x10001; x++) {
         memory[x] = 0;
@@ -1191,6 +1766,31 @@ int main(int argc, char **argv) {
     if (!code_file_ptr) {
         fprintf(stderr, "could not open code file: %s\n", code_filename);
         return 1;
+    }
+
+    if (load_address < 0) {
+        if (fseek(code_file_ptr, 0, SEEK_END) != 0) {
+            fprintf(stderr, "could not determine code file size: %s\n", code_filename);
+            fclose(code_file_ptr);
+            return 1;
+        }
+        long code_size = ftell(code_file_ptr);
+        if (code_size < 0) {
+            fprintf(stderr, "could not determine code file size: %s\n", code_filename);
+            fclose(code_file_ptr);
+            return 1;
+        }
+        if (code_size > 0x10000) {
+            fprintf(stderr, "Code file %s is too large to fit in memory\n", code_filename);
+            fclose(code_file_ptr);
+            return 1;
+        }
+        load_address = 0x10000 - code_size;
+        if (fseek(code_file_ptr, 0, SEEK_SET) != 0) {
+            fprintf(stderr, "could not rewind code file: %s\n", code_filename);
+            fclose(code_file_ptr);
+            return 1;
+        }
     }
 
     long index = load_address;
@@ -1235,6 +1835,16 @@ int main(int argc, char **argv) {
     save_address(addr_openout);
     emit_byte(inst_jmp);        // f024     jmp write
     save_address(addr_write);
+    emit_byte(inst_jmp);        // f027     jmp con_read
+    save_address(addr_con_read);
+    emit_byte(inst_jmp);        // f02a     jmp con_flush
+    save_address(addr_con_flush);
+    emit_byte(inst_jmp);        // f02d     jmp con_ready
+    save_address(addr_con_ready);
+    emit_byte(inst_jmp);        // f030     jmp term_rows
+    save_address(addr_term_rows);
+    emit_byte(inst_jmp);        // f033     jmp term_cols
+    save_address(addr_term_cols);
     fill_address(addr_read_b);
     emit_byte(inst_lda);        // read_b:  lda $f004
     emit_address(port_read_b);
@@ -1294,59 +1904,144 @@ int main(int argc, char **argv) {
     emit_byte(inst_sta);        // write:   sta $fe84
     emit_address(port_write);
     emit_byte(inst_rts);        //          rts
+    fill_address(addr_con_read);
+    emit_byte(inst_lda);        // con_read: lda $fe90
+    emit_address(port_con_read);
+    emit_byte(inst_rts);        //           rts
+    fill_address(addr_con_flush);
+    emit_byte(inst_sta);        // con_flush: sta $fe91
+    emit_address(port_con_flush);
+    emit_byte(inst_rts);        //            rts
+    fill_address(addr_con_ready);
+    emit_byte(inst_lda);        // con_ready: lda $fe94
+    emit_address(port_con_ready);
+    emit_byte(inst_rts);        //            rts
+    fill_address(addr_term_rows);
+    emit_byte(inst_lda);        // term_rows: lda $fe92
+    emit_address(port_term_rows);
+    emit_byte(inst_rts);        //            rts
+    fill_address(addr_term_cols);
+    emit_byte(inst_lda);        // term_cols: lda $fe93
+    emit_address(port_term_cols);
+    emit_byte(inst_rts);        //            rts
 
-    input_file_ptr = fopen(input_filename, "rb");
-    if (!input_file_ptr) {
-        fprintf(stderr, "could not open input file: %s\n", input_filename);
-        return 1;
+    if (console_mode) {
+        input_file_ptr = stdin;
+        setup_console();
+        struct sigaction sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_handler = handle_sigint;
+        sigemptyset(&sa.sa_mask);
+        sigaction(SIGINT, &sa, NULL);
+        sa.sa_handler = handle_sigtstp;
+        sigaction(SIGTSTP, &sa, NULL);
+        sa.sa_handler = handle_sigcont;
+        sigaction(SIGCONT, &sa, NULL);
+    } else {
+        input_file_ptr = fopen(input_filename, "rb");
+        if (!input_file_ptr) {
+            fprintf(stderr, "could not open input file: %s\n", input_filename);
+            return 1;
+        }
     }
 
-    if (strcmp(output_filename, "-") == 0) {
+    if (console_mode) {
+        output_file_ptr = stdout;
+    } else if (strcmp(output_filename, "-") == 0) {
         output_file_ptr = stdout;
     } else {
         output_file_ptr = fopen(output_filename, "wb");
         if (!output_file_ptr) {
             fprintf(stderr, "could not open output file: %s\n", output_filename);
-            fclose(input_file_ptr);
+            if (!console_mode) fclose(input_file_ptr);
             return 1;
         }
     }
 
     files_init(input_file_ptr);
 
-    arg_count = argc - 5;
+    arg_count = argc - arg_base;
     arg_addresses = malloc(arg_count * sizeof(uint16_t));
     for (int arg = 0; arg != arg_count; arg++) {
         arg_addresses[arg] = p;
-        const char* s = argv[5 + arg];
+        const char* s = argv[arg_base + arg];
         while (memory[p++] = *s++)
             ;
     }
 
-    show_commandline(argc, argv);  // Print command line before emulation (no newline yet)
+    if (!console_mode) {
+        show_commandline(argc, argv);  // Print command line before emulation (no newline yet)
+    }
     reset6502();
+
+    uint32_t next_throttle_check = 10000;
+    if (target_mhz > 0) {
+        clock_gettime(CLOCK_MONOTONIC, &start_time);
+    }
+
     const int max_cycles = 50000000;
     while (!done) {
+        if (sigtstp_requested) {
+            sigtstp_requested = 0;
+            if (console_mode) restore_terminal();
+            struct sigaction sa;
+            memset(&sa, 0, sizeof(sa));
+            sa.sa_handler = SIG_DFL;
+            sigemptyset(&sa.sa_mask);
+            sigaction(SIGTSTP, &sa, NULL);
+            raise(SIGTSTP);
+            sa.sa_handler = handle_sigtstp;
+            sigaction(SIGTSTP, &sa, NULL);
+        }
+        if (sigcont_requested) {
+            sigcont_requested = 0;
+            if (console_mode) enter_console();
+            if (console_mode) console_redraw();
+        }
+        if (sigint_requested) {
+            if (exitcode_set == -1) exitcode_set = 130;
+            if (console_mode) restore_terminal();
+            done = 1;
+            break;
+        }
         step6502();
-        if (clockticks6502 > max_cycles) {
+
+        if (target_mhz > 0 && clockticks6502 >= next_throttle_check) {
+            next_throttle_check = clockticks6502 + 10000;
+            double emulated_us = (double)clockticks6502 / target_mhz;
+            struct timespec now;
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            double wall_us = (now.tv_sec - start_time.tv_sec) * 1e6
+                           + (now.tv_nsec - start_time.tv_nsec) / 1e3;
+            double ahead_us = emulated_us - wall_us;
+            if (ahead_us > 100.0) {
+                struct timespec delay;
+                delay.tv_sec = 0;
+                delay.tv_nsec = (long)(ahead_us * 1000.0);
+                nanosleep(&delay, NULL);
+            }
+        }
+
+        if (!console_mode && clockticks6502 > max_cycles) {
             fprintf(stderr, "\ndid not terminate within %i cycles\n", max_cycles);
             free(arg_addresses);
             fclose(output_file_ptr);
             fclose(input_file_ptr);
             return 1;
         }
-        // printf("PC=%04x\n", pc);
     }
 
     free(arg_addresses);
 
     files_destroy();
 
-    if (strcmp(output_filename, "-") != 0) {
+    if (!console_mode && strcmp(output_filename, "-") != 0) {
         fclose(output_file_ptr);
     }
 
-    fclose(input_file_ptr);
+    if (!console_mode) {
+        fclose(input_file_ptr);
+    }
 
     uint8_t exitcode;
     if (exitcode_set != -1) {
@@ -1369,11 +2064,17 @@ int main(int argc, char **argv) {
         }
     }
 
-    // Print final status line
-    if (error_output_started || exitcode != 0) {
-        fprintf(stderr, "Exit code %d; Executed %i cycles\n", exitcode, clockticks6502);
-    } else {
-        fprintf(stderr, "executed %i cycles\n", clockticks6502);
+    // Print final status line (skip in console mode)
+    if (!console_mode) {
+        if (error_output_started || exitcode != 0) {
+            fprintf(stderr, "Exit code %d; Executed %i cycles\n", exitcode, clockticks6502);
+        } else {
+            fprintf(stderr, "executed %i cycles\n", clockticks6502);
+        }
+    }
+
+    if (console_mode) {
+        return exitcode;
     }
 
     char* dump_filename_base = argv[argc - 1];

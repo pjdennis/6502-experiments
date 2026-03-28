@@ -26,9 +26,9 @@ SCOPE_ENTRY_SIZE = $05
 
   .zeropage
 
-EXPANSION_ID16 .data $0000 ; 2-byte expansion counter for macro scopes
-SCOPE_PTR16    .data $0000 ; Pointer to next free slot in scope stack
-SCOPE_DEPTH    .data $00   ; Current nesting depth (0 = not in macro)
+EXPANSION_ID16: .data $0000 ; 2-byte expansion counter for macro scopes
+SCOPE_PTR16:    .data $0000 ; Pointer to next free slot in scope stack
+SCOPE_DEPTH:    .data $00   ; Current nesting depth (0 = not in macro)
 
   .code
 
@@ -37,7 +37,7 @@ SCOPE_DEPTH    .data $00   ; Current nesting depth (0 = not in macro)
 ; On exit: SCOPE_PTR16 points to SCOPE_STACK (empty stack)
 ;          EXPANSION_ID16 = 0, SCOPE_DEPTH = 0
 ;          A clobbered, X/Y preserved
-init_scope_stack
+init_scope_stack:
   SET16 SCOPE_STACK SCOPE_PTR16
   SET16 $00 EXPANSION_ID16
   LDA #$00
@@ -50,7 +50,7 @@ init_scope_stack
 ; On exit: SCOPE_PTR16 points to SCOPE_STACK (empty stack)
 ;          EXPANSION_ID16 = 0, SCOPE_DEPTH = 0
 ;          A clobbered, X/Y preserved
-reset_scope_stack
+reset_scope_stack:
   SET16 SCOPE_STACK SCOPE_PTR16
   SET16 $00 EXPANSION_ID16
   LDA #$00
@@ -73,14 +73,14 @@ reset_scope_stack
 ; On exit: New scope active (LABEL_SCOPE16 = EXPANSION_ID, CACHED_HASH set)
 ;          Previous scope saved on scope stack
 ;          A, Y clobbered, X preserved
-push_label_scope
+push_label_scope:
   ; SCOPE_STACK bounds check
   ; Check if SCOPE_PTR16 <= SCOPE_LIMIT-SCOPE_ENTRY_SIZE (room for one more entry)
   CMPI16 SCOPE_PTR16 SCOPE_LIMIT-SCOPE_ENTRY_SIZE
   BCC .scope_ok       ; Less than limit: safe
   BEQ .scope_ok       ; Equal to limit: safe
   JMP err_macro_nesting_too_deep
-.scope_ok
+.scope_ok:
   .macro APPEND_TO_SCOPE ptr
   LDA ptr
   STA (SCOPE_PTR16),Y
@@ -121,7 +121,7 @@ push_label_scope
 ;
 ; On exit: Previous scope restored from scope stack
 ;          A, Y clobbered, X preserved
-pop_label_scope
+pop_label_scope:
   ; Move scope pointer back by 5 bytes
   SEC
   SBCI16 SCOPE_PTR16 $05 SCOPE_PTR16
