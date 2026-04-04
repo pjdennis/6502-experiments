@@ -11,3 +11,5 @@ vobjdump
 *.bak
 .DS_Store
 setup.sh
+__pycache__
+commit

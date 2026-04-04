@@ -1,7 +1,7 @@
 * = $1000
 
 
-  .include environment11.asm
+  .include 11/environment.asm
 
 
 start

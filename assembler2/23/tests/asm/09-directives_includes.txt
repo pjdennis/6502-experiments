@@ -1,0 +1,222 @@
+---
+NAME: asciiz_error_word_value
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz $1234
+EXPECT_ERROR: 6
+EXPECT_LINE: 2
+EXPECT_MSG: Value out of range
+
+---
+NAME: asciiz_error_decimal_256
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz 256
+EXPECT_ERROR: 6
+EXPECT_LINE: 2
+EXPECT_MSG: Value out of range
+
+---
+NAME: word_comma_expected
+DESCRIPTION: .word with space-separated values requires comma
+INPUT:
+ 1: * = $0200
+ 2:   .word $1234 $5678
+EXPECT_ERROR: 40
+EXPECT_LINE: 2
+EXPECT_MSG: Comma expected
+
+---
+NAME: byte_string_comma_expected
+DESCRIPTION: .byte with string and value requires comma between them
+INPUT:
+ 1: * = $0200
+ 2:   .byte "Hi" $00
+EXPECT_ERROR: 40
+EXPECT_LINE: 2
+EXPECT_MSG: Comma expected
+
+---
+NAME: zeropage_byte_no_operand
+DESCRIPTION: Operand-less .byte in .zeropage allocates 1 byte
+INPUT:
+ 1:   .zeropage
+ 2: foo: .byte
+ 3: bar: .byte
+ 4:   .code
+ 5: * = $0200
+ 6:   LDA foo
+ 7:   LDA bar
+EXPECT_HEX: a5 00 a5 01
+
+---
+NAME: zeropage_word_no_operand
+DESCRIPTION: Operand-less .word in .zeropage allocates 2 bytes
+INPUT:
+ 1:   .zeropage
+ 2: ptr: .word
+ 3: val: .byte
+ 4:   .code
+ 5: * = $0200
+ 6:   LDA ptr
+ 7:   LDA val
+EXPECT_HEX: a5 00 a5 02
+
+---
+NAME: zeropage_byte_operand_error
+DESCRIPTION: .byte with operand in .zeropage triggers error
+INPUT:
+ 1:   .zeropage
+ 2: a: .byte 0
+ 3:   .code
+ 4: * = $0200
+ 5:   NOP
+EXPECT_ERROR: 42
+EXPECT_LINE: 2
+EXPECT_MSG: Operand not allowed on .byte/.word in .zeropage
+
+---
+NAME: zeropage_word_operand_error
+DESCRIPTION: .word with operand in .zeropage triggers error
+INPUT:
+ 1:   .zeropage
+ 2: a: .word 0
+ 3:   .code
+ 4: * = $0200
+ 5:   NOP
+EXPECT_ERROR: 42
+EXPECT_LINE: 2
+EXPECT_MSG: Operand not allowed on .byte/.word in .zeropage
+
+---
+NAME: zeropage_asciiz_error
+DESCRIPTION: .asciiz in .zeropage triggers error
+INPUT:
+ 1:   .zeropage
+ 2: a: .asciiz "hello"
+ 3:   .code
+ 4: * = $0200
+ 5:   NOP
+EXPECT_ERROR: 41
+EXPECT_LINE: 2
+EXPECT_MSG: .asciiz not allowed in .zeropage
+
+---
+NAME: zeropage_byte_no_operand_last
+DESCRIPTION: Operand-less .byte at $FF boundary succeeds
+INPUT:
+ 1:   .zeropage
+ 2: * = $FF
+ 3: last: .byte
+ 4:   .code
+ 5: * = $0200
+ 6:   LDA last
+EXPECT_HEX: a5 ff
+
+---
+NAME: zeropage_byte_no_operand_overflow
+DESCRIPTION: Operand-less .byte past $FF overflows
+INPUT:
+ 1:   .zeropage
+ 2: * = $FF
+ 3: a: .byte
+ 4: b: .byte
+ 5:   .code
+ 6: * = $0200
+ 7:   NOP
+EXPECT_ERROR: 38
+EXPECT_LINE: 4
+EXPECT_MSG: Zero page overflow
+
+---
+NAME: zeropage_word_no_operand_overflow
+DESCRIPTION: Operand-less .word that crosses $FF boundary overflows
+INPUT:
+ 1:   .zeropage
+ 2: * = $FF
+ 3: a: .word
+ 4:   .code
+ 5: * = $0200
+ 6:   NOP
+EXPECT_ERROR: 38
+EXPECT_LINE: 3
+EXPECT_MSG: Zero page overflow
+
+---
+NAME: reserve_basic
+DESCRIPTION: .reserve 3 in .code emits 3 zero bytes
+INPUT:
+ 1: * = $0200
+ 2:   .reserve 3
+ 3:   NOP
+EXPECT_HEX: 00 00 00 ea
+
+---
+NAME: reserve_zeropage
+DESCRIPTION: .reserve 4 in .zeropage allocates 4 bytes
+INPUT:
+ 1:   .zeropage
+ 2: a: .byte
+ 3:   .reserve 4
+ 4: b: .byte
+ 5:   .code
+ 6: * = $0200
+ 7:   LDA a
+ 8:   LDA b
+EXPECT_HEX: a5 00 a5 05
+
+---
+NAME: reserve_one
+DESCRIPTION: .reserve 1 works
+INPUT:
+ 1: * = $0200
+ 2:   .reserve 1
+ 3:   NOP
+EXPECT_HEX: 00 ea
+
+---
+NAME: reserve_zero
+DESCRIPTION: .reserve 0 is a no-op
+INPUT:
+ 1: * = $0200
+ 2:   .reserve 0
+ 3:   NOP
+EXPECT_HEX: ea
+
+---
+NAME: reserve_expression
+DESCRIPTION: .reserve with expression works
+INPUT:
+ 1: * = $0200
+ 2:   .reserve $02+$01
+ 3:   NOP
+EXPECT_HEX: 00 00 00 ea
+
+---
+NAME: reserve_with_comment
+DESCRIPTION: .reserve with trailing comment works
+INPUT:
+ 1:   .zeropage
+ 2: a: .byte
+ 3:   .reserve 4  ; reserve 4 bytes
+ 4: b: .byte
+ 5:   .code
+ 6: * = $0200
+ 7:   LDA a
+ 8:   LDA b
+EXPECT_HEX: a5 00 a5 05
+
+---
+NAME: reserve_zeropage_overflow
+DESCRIPTION: .reserve that causes ZP overflow triggers error
+INPUT:
+ 1:   .zeropage
+ 2: * = $FE
+ 3:   .reserve 3
+ 4:   .code
+ 5: * = $0200
+ 6:   NOP
+EXPECT_ERROR: 38
+EXPECT_LINE: 3
+EXPECT_MSG: Zero page overflow
+

@@ -1,0 +1,224 @@
+# --- Macros & Conditionals (macro_expansion.asm) ---
+# Conditional assembly (.ifdef/.endif), macro definition & invocation, macro parameters, scope, errors, tracebacks
+
+---
+NAME: ifdef_defined
+INPUT:
+ 1: * = $0200
+ 2: foo: = $42
+ 3:   .ifdef foo
+ 4:   LDA #$01
+ 5:   .endif
+EXPECT_HEX: a9 01
+
+---
+NAME: ifdef_undefined
+INPUT:
+ 1: * = $0200
+ 2:   .ifdef undefined_label
+ 3:   LDA #$01
+ 4:   .word $1234
+ 5:   .endif
+ 6:   LDA #$02
+EXPECT_HEX: a9 02
+
+---
+NAME: ifdef_error_in_skipped_code
+INPUT:
+ 1: * = $0200
+ 2:   .ifdef undefined_label
+ 3:   LDA #$01
+ 4:   LDA undefined_label
+ 5:   .endif
+ 6:   LDA #$02
+EXPECT_HEX: a9 02
+
+---
+NAME: ifdef_multiple_lines
+INPUT:
+ 1: * = $0200
+ 2: foo: = $42
+ 3:   .ifdef foo
+ 4:   LDA #$01
+ 5:   LDA #$02
+ 6:   LDA #$03
+ 7:   .endif
+EXPECT_HEX: a9 01 a9 02 a9 03
+
+---
+NAME: ifdef_skips_labels
+INPUT:
+ 1: * = $0200
+ 2:   .ifdef undefined
+ 3: label: = $42
+ 4:   .endif
+ 5:   LDA #label
+EXPECT_ERROR: 1
+EXPECT_LINE: 5
+EXPECT_MSG: Label not found
+
+---
+NAME: endif_without_ifdef
+INPUT:
+ 1: * = $0200
+ 2:   .endif
+EXPECT_ERROR: 19
+EXPECT_LINE: 2
+EXPECT_MSG: .endif without .ifdef
+
+---
+NAME: unclosed_ifdef
+INPUT:
+ 1: * = $0200
+ 2:   .ifdef foo
+ 3:   LDA #$01
+EXPECT_ERROR: 20
+EXPECT_MSG: Unclosed .ifdef
+
+---
+NAME: ifdef_nested_both_true
+INPUT:
+ 1: * = $0200
+ 2: outer: = $01
+ 3: inner: = $02
+ 4:   .ifdef outer
+ 5:   LDA #$01
+ 6:     .ifdef inner
+ 7:     LDA #$02
+ 8:     .endif
+ 9:   LDA #$03
+10:   .endif
+EXPECT_HEX: a9 01 a9 02 a9 03
+
+---
+NAME: ifdef_nested_outer_false
+INPUT:
+ 1: * = $0200
+ 2: inner: = $02
+ 3:   .ifdef undefined_outer
+ 4:   LDA #$01
+ 5:     .ifdef inner
+ 6:     LDA #$02
+ 7:     .endif
+ 8:   LDA #$03
+ 9:   .endif
+10:   LDA #$04
+EXPECT_HEX: a9 04
+
+---
+NAME: ifdef_nested_inner_false
+INPUT:
+ 1: * = $0200
+ 2: outer: = $01
+ 3:   .ifdef outer
+ 4:   LDA #$01
+ 5:     .ifdef undefined_inner
+ 6:     LDA #$02
+ 7:     .endif
+ 8:   LDA #$03
+ 9:   .endif
+EXPECT_HEX: a9 01 a9 03
+
+---
+NAME: ifdef_deeply_nested
+INPUT:
+ 1: * = $0200
+ 2: a: = $01
+ 3: b: = $02
+ 4: c: = $03
+ 5:   .ifdef a
+ 6:   LDA #$01
+ 7:     .ifdef b
+ 8:     LDA #$02
+ 9:       .ifdef c
+10:       LDA #$03
+11:       .endif
+12:     LDA #$04
+13:     .endif
+14:   LDA #$05
+15:   .endif
+EXPECT_HEX: a9 01 a9 02 a9 03 a9 04 a9 05
+
+---
+NAME: define_from_cmdline
+ARGS: debug define:test_symbol
+INPUT:
+ 1: * = $0200
+ 2:   .ifdef test_symbol
+ 3:   LDA #$42
+ 4:   .endif
+ 5:   LDA #$01
+EXPECT_HEX: a9 42 a9 01
+
+---
+NAME: define_cmdline_without_define
+INPUT:
+ 1: * = $0200
+ 2:   .ifdef test_symbol
+ 3:   LDA #$42
+ 4:   .endif
+ 5:   LDA #$01
+EXPECT_HEX: a9 01
+
+---
+NAME: define_multiple_from_cmdline
+ARGS: debug define:sym1 define:sym2
+INPUT:
+ 1: * = $0200
+ 2:   .ifdef sym1
+ 3:   LDA #$01
+ 4:   .endif
+ 5:   .ifdef sym2
+ 6:   LDA #$02
+ 7:   .endif
+ 8:   LDA #$FF
+EXPECT_HEX: a9 01 a9 02 a9 ff
+
+---
+NAME: define_partial_match
+ARGS: debug define:sym
+INPUT:
+ 1: * = $0200
+ 2:   .ifdef sym1
+ 3:   LDA #$01
+ 4:   .endif
+ 5:   .ifdef sym
+ 6:   LDA #$02
+ 7:   .endif
+ 8:   LDA #$FF
+EXPECT_HEX: a9 02 a9 ff
+
+---
+NAME: ifndef_undefined
+INPUT:
+ 1: * = $0200
+ 2:   .ifndef undefined_label
+ 3:   LDA #$01
+ 4:   .endif
+ 5:   LDA #$02
+EXPECT_HEX: a9 01 a9 02
+
+---
+NAME: ifndef_defined
+INPUT:
+ 1: * = $0200
+ 2: foo = $42
+ 3:   .ifndef foo
+ 4:   LDA #$01
+ 5:   .endif
+ 6:   LDA #$02
+EXPECT_HEX: a9 02
+
+---
+NAME: ifndef_error_in_skipped_code
+INPUT:
+ 1: * = $0200
+ 2: foo = $42
+ 3:   .ifndef foo
+ 4:   LDA #$01
+ 5:   LDA undefined_label
+ 6:   .endif
+ 7:   LDA #$02
+EXPECT_HEX: a9 02
+
+---

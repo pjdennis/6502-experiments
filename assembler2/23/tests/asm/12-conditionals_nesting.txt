@@ -1,0 +1,247 @@
+NAME: ifndef_multiple_lines
+INPUT:
+ 1: * = $0200
+ 2:   .ifndef undefined
+ 3:   LDA #$01
+ 4:   LDA #$02
+ 5:   LDA #$03
+ 6:   .endif
+EXPECT_HEX: a9 01 a9 02 a9 03
+
+---
+NAME: ifndef_nested_ifdef_both_true
+INPUT:
+ 1: * = $0200
+ 2: inner = $02
+ 3:   .ifndef undefined_outer
+ 4:   LDA #$01
+ 5:     .ifdef inner
+ 6:     LDA #$02
+ 7:     .endif
+ 8:   LDA #$03
+ 9:   .endif
+EXPECT_HEX: a9 01 a9 02 a9 03
+
+---
+NAME: ifndef_nested_outer_false
+INPUT:
+ 1: * = $0200
+ 2: outer = $01
+ 3: inner = $02
+ 4:   .ifndef outer
+ 5:   LDA #$01
+ 6:     .ifdef inner
+ 7:     LDA #$02
+ 8:     .endif
+ 9:   LDA #$03
+10:   .endif
+11:   LDA #$04
+EXPECT_HEX: a9 04
+
+---
+NAME: ifndef_nested_inner_false
+INPUT:
+ 1: * = $0200
+ 2: inner = $02
+ 3:   .ifndef undefined_outer
+ 4:   LDA #$01
+ 5:     .ifdef inner_undefined
+ 6:     LDA #$02
+ 7:     .endif
+ 8:   LDA #$03
+ 9:   .endif
+EXPECT_HEX: a9 01 a9 03
+
+---
+NAME: ifndef_cmdline_define
+ARGS: debug define:test_symbol
+INPUT:
+ 1: * = $0200
+ 2:   .ifndef test_symbol
+ 3:   LDA #$42
+ 4:   .endif
+ 5:   LDA #$01
+EXPECT_HEX: a9 01
+
+---
+NAME: ifndef_cmdline_undefined
+INPUT:
+ 1: * = $0200
+ 2:   .ifndef test_symbol
+ 3:   LDA #$42
+ 4:   .endif
+ 5:   LDA #$01
+EXPECT_HEX: a9 42 a9 01
+
+---
+NAME: else_condition_true
+DESCRIPTION: .else branch skipped when .ifdef condition is true
+INPUT:
+ 1: * = $0200
+ 2: foo = $42
+ 3:   .ifdef foo
+ 4:   LDA #$01
+ 5:   .else
+ 6:   LDA #$02
+ 7:   .endif
+ 8:   LDA #$03
+EXPECT_HEX: a9 01 a9 03
+
+---
+NAME: else_condition_false
+DESCRIPTION: .else branch assembled when .ifdef condition is false
+INPUT:
+ 1: * = $0200
+ 2:   .ifdef undefined
+ 3:   LDA #$01
+ 4:   .else
+ 5:   LDA #$02
+ 6:   .endif
+ 7:   LDA #$03
+EXPECT_HEX: a9 02 a9 03
+
+---
+NAME: else_with_ifndef_true
+DESCRIPTION: .else branch skipped when .ifndef condition is true
+INPUT:
+ 1: * = $0200
+ 2:   .ifndef undefined
+ 3:   LDA #$01
+ 4:   .else
+ 5:   LDA #$02
+ 6:   .endif
+ 7:   LDA #$03
+EXPECT_HEX: a9 01 a9 03
+
+---
+NAME: else_with_ifndef_false
+DESCRIPTION: .else branch assembled when .ifndef condition is false
+INPUT:
+ 1: * = $0200
+ 2: foo = $42
+ 3:   .ifndef foo
+ 4:   LDA #$01
+ 5:   .else
+ 6:   LDA #$02
+ 7:   .endif
+ 8:   LDA #$03
+EXPECT_HEX: a9 02 a9 03
+
+---
+NAME: else_nested_both_branches_true
+DESCRIPTION: Nested .else with both outer conditions true
+INPUT:
+ 1: * = $0200
+ 2: outer = $01
+ 3: inner = $02
+ 4:   .ifdef outer
+ 5:   LDA #$01
+ 6:     .ifdef inner
+ 7:     LDA #$02
+ 8:     .else
+ 9:     LDA #$03
+10:     .endif
+11:   .else
+12:   LDA #$04
+13:   .endif
+EXPECT_HEX: a9 01 a9 02
+
+---
+NAME: else_nested_outer_true_inner_false
+DESCRIPTION: Nested .else with outer true, inner false
+INPUT:
+ 1: * = $0200
+ 2: outer = $01
+ 3:   .ifdef outer
+ 4:   LDA #$01
+ 5:     .ifdef inner
+ 6:     LDA #$02
+ 7:     .else
+ 8:     LDA #$03
+ 9:     .endif
+10:   .else
+11:   LDA #$04
+12:   .endif
+EXPECT_HEX: a9 01 a9 03
+
+---
+NAME: else_nested_outer_false
+DESCRIPTION: Nested .else with outer false - inner block skipped entirely
+INPUT:
+ 1: * = $0200
+ 2: inner = $02
+ 3:   .ifdef outer
+ 4:   LDA #$01
+ 5:     .ifdef inner
+ 6:     LDA #$02
+ 7:     .else
+ 8:     LDA #$03
+ 9:     .endif
+10:   .else
+11:   LDA #$04
+12:   .endif
+EXPECT_HEX: a9 04
+
+---
+NAME: else_multiple_levels
+DESCRIPTION: Three levels of nesting with .else at each level
+INPUT:
+ 1: * = $0200
+ 2: a = $01
+ 3:   .ifdef a
+ 4:   LDA #$01
+ 5:     .ifdef b
+ 6:     LDA #$02
+ 7:     .else
+ 8:     LDA #$03
+ 9:       .ifdef c
+10:       LDA #$04
+11:       .else
+12:       LDA #$05
+13:       .endif
+14:     .endif
+15:   .else
+16:   LDA #$06
+17:   .endif
+EXPECT_HEX: a9 01 a9 03 a9 05
+
+---
+NAME: else_error_without_ifdef
+DESCRIPTION: .else without .ifdef raises error
+INPUT:
+ 1: * = $0200
+ 2:   .else
+EXPECT_ERROR: 22
+EXPECT_LINE: 2
+EXPECT_MSG: .else without .ifdef
+
+---
+NAME: else_error_duplicate
+DESCRIPTION: Duplicate .else in same conditional block raises error
+INPUT:
+ 1: * = $0200
+ 2:   .ifdef foo
+ 3:   LDA #$01
+ 4:   .else
+ 5:   LDA #$02
+ 6:   .else
+ 7:   LDA #$03
+ 8:   .endif
+EXPECT_ERROR: 23
+EXPECT_LINE: 6
+EXPECT_MSG: Duplicate .else in conditional block
+
+---
+NAME: else_error_after_endif
+DESCRIPTION: .else after .endif raises error
+INPUT:
+ 1: * = $0200
+ 2:   .ifdef foo
+ 3:   LDA #$01
+ 4:   .endif
+ 5:   .else
+EXPECT_ERROR: 22
+EXPECT_LINE: 5
+EXPECT_MSG: .else without .ifdef
+
+---

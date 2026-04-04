@@ -3,59 +3,142 @@
 set -e
 shopt -s extglob
 
-mkdir -p out dump
+mkdir -p out
 rm -f out/*.out out/*.asm.out
+rm -rf {00..99}/out
 make --quiet
-./asm0c.out asm00.asm out/asm00.out
-./emulator.out out/asm00.out 2000 asm01.asm out/asm01.out
-./emulator.out out/asm01.out 2000 asm02.asm out/asm02.out
-./emulator.out out/asm02.out 2000 asm03.asm out/asm03.out
-./emulator.out out/asm03.out 2000 asm04.asm out/asm04.out
-./emulator.out out/asm04.out 2000 asm05.asm out/asm05.out
-./emulator.out out/asm05.out 2000 asm06.asm out/asm06.out
-./emulator.out out/asm06.out 2000 instgen07.asm out/instgen07.out
-./emulator.out out/instgen07.out 2000 /dev/null out/inst07.asm.out
-cat out/inst07.asm.out asm07.asm > out/asm07c.asm.out
-./emulator.out out/asm06.out 2000 out/asm07c.asm.out out/asm07c.out
-cat out/inst07.asm.out asm08.asm > out/asm08c.asm.out
-./emulator.out out/asm07c.out 2000 out/asm08c.asm.out out/asm08c.out
-cat out/inst07.asm.out asm09.asm > out/asm09c.asm.out
-./emulator.out out/asm08c.out 2000 out/asm09c.asm.out out/asm09c.out
-cat out/inst07.asm.out asm10.asm > out/asm10c.asm.out
-./emulator.out out/asm09c.out 2000 out/asm10c.asm.out out/asm10c.out
-./emulator.out out/asm10c.out 2000 instgen11.asm out/instgen11.out
-./emulator.out out/instgen11.out 2000 /dev/null out/inst11.asm.out
-./emulator.out out/asm10c.out 2000 asm11.asm out/asm11.out
-./emulator.out out/asm11.out 2000 asm12.asm out/asm12.out
-./emulator.out out/asm12.out 2000 /dev/null /dev/null instgen13.asm out/instgen13.out
-./emulator.out out/instgen13.out 2000 /dev/null out/inst13.asm.out
-./emulator.out out/asm12.out 2000 /dev/null /dev/null asm13.asm out/asm13.out
-./emulator.out out/asm13.out 2000 /dev/null /dev/null instgen14.asm out/instgen14.out
-./emulator.out out/instgen14.out 2000 /dev/null out/inst14.asm.out
-./emulator.out out/asm13.out 2000 /dev/null /dev/null asm14.asm out/asm14.out
-./emulator.out out/asm14.out 2000 /dev/null /dev/null instgen15.asm out/instgen15.out
-./emulator.out out/instgen15.out 2000 /dev/null out/inst15.asm.out
-./emulator.out out/asm14.out 2000 /dev/null /dev/null asm15.asm out/asm15.out
-./emulator.out out/asm15.out 2000 /dev/null /dev/null instgen16.asm out/instgen16.out
-./emulator.out out/instgen16.out 2000 /dev/null out/inst16.asm.out
-./emulator.out out/asm15.out 2000 /dev/null /dev/null asm16.asm out/asm16.out
-./emulator.out out/asm16.out 2000 /dev/null /dev/null test16.asm out/test16.out
-./emulator.out out/asm16.out 2000 /dev/null /dev/null asm17.asm out/asm17.out
-diff <(hexdump -C out/asm16.out) <(hexdump -C out/asm17.out)
-./emulator.out out/asm17.out 2000 /dev/null /dev/null instgen18.asm out/instgen18.out
-./emulator.out out/instgen18.out 2000 /dev/null out/inst18.asm.out
-diff out/inst16.asm.out out/inst18.asm.out
-./emulator.out out/asm17.out 2000 /dev/null /dev/null asm18.asm out/asm18.out
-./emulator.out out/asm18.out 2000 /dev/null /dev/null instgen19.asm out/instgen19.out
-./emulator.out out/instgen19.out 2000 /dev/null out/inst19.asm.out
-./emulator.out out/asm18.out 2000 /dev/null /dev/null asm19.asm out/asm19.out
-./emulator.out out/asm19.out 2000 /dev/null /dev/null asm19.asm out/asm19_2.out
-diff <(hexdump -C out/asm19.out) <(hexdump -C out/asm19_2.out)
+echo "--- Version 00 ---"
+(cd 00 && out/asm_c.out asm.asm out/asm.out)
+echo "--- Version 01 ---"
+(cd 01 && mkdir -p out && ../emulator.out ../00/out/asm.out --load 2000 --input asm.asm --output out/asm.out)
+echo "--- Version 02 ---"
+(cd 02 && mkdir -p out && ../emulator.out ../01/out/asm.out --load 2000 --input asm.asm --output out/asm.out)
+echo "--- Version 03 ---"
+(cd 03 && mkdir -p out && ../emulator.out ../02/out/asm.out --load 2000 --input asm.asm --output out/asm.out)
+echo "--- Version 04 ---"
+(cd 04 && mkdir -p out && ../emulator.out ../03/out/asm.out --load 2000 --input asm.asm --output out/asm.out)
+echo "--- Version 05 ---"
+(cd 05 && mkdir -p out && ../emulator.out ../04/out/asm.out --load 2000 --input asm.asm --output out/asm.out)
+echo "--- Version 06 ---"
+(cd 06 && mkdir -p out && ../emulator.out ../05/out/asm.out --load 2000 --input asm.asm --output out/asm.out)
+echo "--- Version 07 ---"
+(cd 07 && mkdir -p out &&
+  ../emulator.out ../06/out/asm.out --load 2000 --input instgen.asm --output out/instgen.out &&
+  ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
+  cat out/inst.asm.out asm.asm > out/asmc.asm.out &&
+  ../emulator.out ../06/out/asm.out --load 2000 --input out/asmc.asm.out --output out/asmc.out)
+echo "--- Version 08 ---"
+(cd 08 && mkdir -p out &&
+  ../emulator.out ../06/out/asm.out --load 2000 --input instgen.asm --output out/instgen.out &&
+  ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
+  cat out/inst.asm.out asm.asm > out/asmc.asm.out &&
+  ../emulator.out ../07/out/asmc.out --load 2000 --input out/asmc.asm.out --output out/asmc.out)
+echo "--- Version 09 ---"
+(cd 09 && mkdir -p out &&
+  ../emulator.out ../06/out/asm.out --load 2000 --input instgen.asm --output out/instgen.out &&
+  ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
+  cat out/inst.asm.out asm.asm > out/asmc.asm.out &&
+  ../emulator.out ../08/out/asmc.out --load 2000 --input out/asmc.asm.out --output out/asmc.out)
+echo "--- Version 10 ---"
+(cd 10 && mkdir -p out &&
+  ../emulator.out ../06/out/asm.out --load 2000 --input instgen.asm --output out/instgen.out &&
+  ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
+  cat out/inst.asm.out asm.asm > out/asmc.asm.out &&
+  ../emulator.out ../09/out/asmc.out --input out/asmc.asm.out --output out/asmc.out)
+echo "--- Version 11 ---"
+(cd 11 && mkdir -p out &&
+  ../emulator.out ../10/out/asmc.out --input instgen.asm --output out/instgen.out &&
+  ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
+  ../emulator.out ../10/out/asmc.out --input asm.asm --output out/asm.out)
+echo "--- Version 12 ---"
+(cd 12 && mkdir -p out &&
+  ../emulator.out ../11/out/asm.out --input instgen.asm --output out/instgen.out &&
+  ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
+  ../emulator.out ../11/out/asm.out --input asm.asm --output out/asm.out)
+echo "--- Version 13 ---"
+(cd 13 && mkdir -p out &&
+  ../emulator.out ../12/out/asm.out instgen.asm out/instgen.out &&
+  ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
+  ../emulator.out ../12/out/asm.out asm.asm out/asm.out)
+echo "--- Version 14 ---"
+(cd 14 && mkdir -p out &&
+  ../emulator.out ../13/out/asm.out instgen.asm out/instgen.out &&
+  ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
+  ../emulator.out ../13/out/asm.out asm.asm out/asm.out)
+echo "--- Version 15 ---"
+(cd 15 && mkdir -p out &&
+  ../emulator.out ../14/out/asm.out instgen.asm out/instgen.out &&
+  ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
+  ../emulator.out ../14/out/asm.out asm.asm out/asm.out)
+echo "--- Version 16 ---"
+(cd 16 && mkdir -p out &&
+  ../emulator.out ../15/out/asm.out instgen.asm out/instgen.out &&
+  ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
+  ../emulator.out ../15/out/asm.out asm.asm out/asm.out)
+echo "--- Test asm16 ---"
+./emulator.out 16/out/asm.out test16.asm out/test16.out
+echo "--- Version 17 ---"
+(cd 17 && mkdir -p out &&
+  ../emulator.out ../16/out/asm.out instgen.asm out/instgen.out &&
+  ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
+  ../emulator.out ../16/out/asm.out asm.asm out/asm.out)
+diff <(hexdump -C 16/out/asm.out) <(hexdump -C 17/out/asm.out)
+echo "--- Version 18 ---"
+(cd 18 && mkdir -p out &&
+  ../emulator.out ../17/out/asm.out instgen.asm out/instgen.out &&
+  ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
+  ../emulator.out ../17/out/asm.out asm.asm out/asm.out)
+diff 16/out/inst.asm.out 18/out/inst.asm.out
+echo "--- Version 19 ---"
+(cd 19 && mkdir -p out &&
+  ../emulator.out ../18/out/asm.out instgen.asm out/instgen.out &&
+  ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
+  ../emulator.out ../18/out/asm.out asm.asm out/asm.out)
+echo "--- Version 20 ---"
+(cd 20 && mkdir -p out &&
+  ../emulator.out ../19/out/asm.out instgen.asm out/instgen.out &&
+  ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
+  ../emulator.out ../19/out/asm.out asm.asm out/asm.out)
+echo "--- Version 21 ---"
+(cd 21 && mkdir -p out &&
+  ../emulator.out ../20/out/asm.out instgen.asm out/instgen.out &&
+  ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
+  ../emulator.out ../20/out/asm.out asm.asm out/asm.out &&
+  ../emulator.out ../20/out/asm.out asm.asm out/asm_debug.out define:enable_debug)
+echo "--- Version 22 ---"
+(cd 22 && mkdir -p out &&
+  ../emulator.out ../21/out/asm_debug.out instgen.asm out/instgen.out &&
+  ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
+  ../emulator.out ../21/out/asm_debug.out asm.asm out/asm.out &&
+  ../emulator.out ../21/out/asm_debug.out asm.asm out/asm_debug.out define:enable_debug)
+echo "--- Version 23 ---"
+(cd 23 && mkdir -p out &&
+  ../emulator.out ../22/out/asm_debug.out tests/file_stack/file_stack_test.asm out/file_stack_test.out &&
+  ../emulator.out ../22/out/asm_debug.out instgen.asm out/instgen.out &&
+  ../emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
+  ../emulator.out ../22/out/asm_debug.out asm.asm out/asm.out &&
+  ../emulator.out ../22/out/asm_debug.out asm.asm out/asm_debug.out define:enable_debug)
+echo "--- Self-assembly test ---"
+# Self-assembly test (without debug - smaller)
+(cd 23 && ../emulator.out out/asm.out asm.asm out/asm_2.out)
+diff <(hexdump -C 23/out/asm.out) <(hexdump -C 23/out/asm_2.out)
+# Self-assembly test (with debug)
+(cd 23 && ../emulator.out out/asm_debug.out asm.asm out/asm_debug_2.out define:enable_debug)
+diff <(hexdump -C 23/out/asm_debug.out) <(hexdump -C 23/out/asm_debug_2.out)
 
-# hexdump -C out/asm19_2.out | ./sidebyside.out
+echo "Build chain completed OK"
 
-echo "OK"
-./emulator.out out/asm19_2.out 2000 /dev/null /dev/null test19.asm out/test19.out
+# Show actual code size difference
+# File covers $2000-$FFFF, vectors at end. Scan backwards from just before vectors.
+echo "Code size comparison:"
+SIZE1=$(perl -e 'open(F,"<","23/out/asm.out");binmode(F);read(F,$d,0xE000);for($i=0xDFFB;$i>=0;$i--){last if ord(substr($d,$i,1))!=0}print $i+1')
+SIZE2=$(perl -e 'open(F,"<","23/out/asm_debug.out");binmode(F);read(F,$d,0xE000);for($i=0xDFFB;$i>=0;$i--){last if ord(substr($d,$i,1))!=0}print $i+1')
+echo "  asm.out (no debug):     $SIZE1 bytes"
+echo "  asm_debug.out:          $SIZE2 bytes"
+echo "  Difference:             $((SIZE2 - SIZE1)) bytes"
+
+echo "--- Test asm23 ---"
+./emulator.out 23/out/asm_debug.out test19.asm out/test19.out
 # hexdump -C out/test19.out
-echo "Assembled"
-./emulator.out out/test19.out 1000 /dev/null - arg1 "arg 2"
+echo "Assembled test program"
+./emulator.out out/test19.out --load 1000 --output - arg1 "arg 2"
