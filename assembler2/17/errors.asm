@@ -229,6 +229,15 @@ err_fwdref_tracking:
   JSR show_message
   .endmacro
 
+  ; Show the name of a source-stack frame whose start address lives at ptr.
+  ; The frame's first byte is frame_size; the null-terminated name starts at
+  ; offset 1, so we increment TABP16 past the size byte before printing.
+  .macro SHOW_FRAME_NAME ptr
+  CP16 ptr, TABP16
+  INC16 TABP16
+  JSR show_message
+  .endmacro
+
   .macro SHOW_CHAR val
   LDA #val
   JSR write_d
@@ -254,6 +263,16 @@ interrupt:
 .error:
 ; Save error code
   STA TEMP
+; Close any in-flight source-file handle. push_file_source parks the
+; just-opened handle in SS_PENDING_FILE before calling push_source_frame;
+; if that frame push triggers OOM, the handle would otherwise be lost
+; (no frame holds it, so the traceback below can't reach it).
+  LDA SS_PENDING_FILE
+  BEQ .no_pending_source
+  JSR close
+  LDA #$00
+  STA SS_PENDING_FILE
+.no_pending_source:
 ; Close the ouptut file if open
   LDA CURR_OUT_FILE
   BEQ .output_not_open
@@ -281,8 +300,8 @@ interrupt:
 .in_macro:
   SHOW_MESSAGEI msg_error_macro
 .show_source_name:
-; Print the filename (at SS_P16)
-  SHOW_MESSAGE SS_P16
+; Print the source name (frame at SS_P16)
+  SHOW_FRAME_NAME SS_P16
 ; Print the " at line " message
   SHOW_MESSAGEI msg_error_line
 ; Print the current line in decimal
@@ -382,8 +401,8 @@ show_include_traceback:
   BEQ .parent_is_file
   SHOW_MESSAGEI msg_macro_prefix
 .parent_is_file:
-  ; Print name (SS_P16 points to parent entry's name)
-  SHOW_MESSAGE SS_P16
+  ; Print parent frame's name
+  SHOW_FRAME_NAME SS_P16
   ; Print ":"
   SHOW_CHAR ':'
   ; Print line number (CURR_LINE16 has line where include was)

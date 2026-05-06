@@ -712,7 +712,7 @@ FILE main.txt:
 FILE inner.txt:
  1: @memory @top_frame_size
 EXPECT_STDOUT:
-12
+13
 
 ---
 NAME: top_frame_size_include_above_file
@@ -722,7 +722,7 @@ FILE main.txt:
 FILE inner.txt:
  1: @top_frame_size
 EXPECT_STDOUT:
-15
+16
 
 ---
 NAME: top_frame_size_memory_above_memory
@@ -732,7 +732,7 @@ FILE main.txt:
 FILE inner.txt:
  1: @memory @memory @top_frame_size
 EXPECT_STDOUT:
-13
+14
 
 # Outer @memory pushes a frame whose content is the rest of line 1, which
 # is "@memory @top_frame_size\n". When the outer memory source is read, an

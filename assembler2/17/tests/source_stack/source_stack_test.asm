@@ -36,8 +36,7 @@ MARKER_TERM: .byte         ; Character that terminated the keyword ($FF = EOF)
 
 ; Frame walker state (frames mode)
 FRAME_DEPTH:     .byte
-FRAME_NAME_LEN:  .byte
-FRAME_PREV_TYPE: .byte
+FRAME_SIZE:      .byte         ; frame_size byte at offset 0 of the topmost frame
 
 ; OOM injection: minimum allowed value of SS_TEMP16 during push.
 ; Default $0000 means "no limit"; oom mode sets a tight value.
@@ -79,10 +78,29 @@ err_file_not_found:
   BRK
   .asciiz 36, "File not found"
 
-; Error handler for stack overflow (required by source_stack.asm via macro)
+; Error handler for stack overflow (required by source_stack.asm via macro).
+; Print the error, close any in-flight handle that push_file_source had
+; opened but not yet committed to a frame, then walk the source stack
+; popping every frame (which closes the file in each one) before exiting.
+; Without this the emulator reports orphaned file handles and treats the
+; run as a non-zero exit, which the in-process test harness can't tolerate.
 err_out_of_memory:
   SET16 msg_oom, TABP16
   JSR print_str_err
+  ; Close any in-flight file handle parked by push_file_source.
+  LDA SS_PENDING_FILE
+  BEQ .no_pending
+  JSR close
+  LDA #$00
+  STA SS_PENDING_FILE
+.no_pending:
+  ; Pop everything still on the source stack so its files get closed.
+.close_loop:
+  JSR source_stack_empty
+  BEQ .close_done
+  JSR pop_source
+  JMP .close_loop
+.close_done:
   LDA #2
   JMP exit
 msg_oom:
@@ -577,16 +595,14 @@ print_traceback:
   ; Check if stack is empty (no sources)
   JSR source_stack_empty
   BEQ .done
-  ; Find curr_type by scanning past the name
-  ; SS_P16 points to: name\0 | curr_type | ...
+  ; Frame layout: [0]=frame_size, [1..]=name\0, then curr_type, ...
+  ; Walk past frame_size and the name to find curr_type.
   CP16 SS_P16, TABP16
-  LDY #0
+  LDY #0                  ; INY in loop steps past frame_size first
 .find_null:
-  LDA (TABP16),Y
-  BEQ .found_null
   INY
-  JMP .find_null
-.found_null:
+  LDA (TABP16),Y
+  BNE .find_null
   ; Y points at null, curr_type is at Y+1
   INY
   LDA (TABP16),Y
@@ -600,8 +616,9 @@ print_traceback:
   SET16 str_type_memory, TABP16
   JSR print_str
 .print_name:
-  ; Print name (FS_PL points to current entry's name)
+  ; Name lives at offset 1 of the frame, so point TABP16 there.
   CP16 SS_P16, TABP16
+  INC16 TABP16
   JSR print_basename
   ; Print ":"
   LDA #':'
@@ -627,37 +644,15 @@ str_type_file:
 str_type_memory:
   .asciiz "memory:"
 
-; Print the byte size of the topmost frame on the source stack
+; Print the byte size of the topmost frame on the source stack.
+; Reads frame_size directly from offset 0 of the frame.
 ; Output: a single decimal number followed by '\n'
-; Forward-looking: lets tests verify byte-level frame layout, including
-; payload bytes that Phase 3 will attach to memory frames. Top-frame size
-; is deterministic for memory ("MEMORY") and for @include'd relative names,
-; making it suitable as a regression check.
 ; Preserves X
 print_top_frame_size:
   TXA
   PHA
-  ; Find name's null terminator (Y = name length)
-  LDY #$FF
-.scan:
-  INY
+  LDY #0
   LDA (SS_P16),Y
-  BNE .scan
-  STY FRAME_NAME_LEN
-  ; Read prev_type at offset name_len + 2 (past null and curr_type)
-  INY
-  INY
-  LDA (SS_P16),Y
-  STA FRAME_PREV_TYPE
-  ; Frame size = name_len + 6 (prev_type=file) or +7 (prev_type=memory)
-  LDA FRAME_NAME_LEN
-  CLC
-  ADC #6
-  LDX FRAME_PREV_TYPE
-  BEQ .size_done
-  CLC
-  ADC #1
-.size_done:
   STA TO_DECIMAL_VALUE16
   LDA #0
   STA TO_DECIMAL_VALUE16 + 1
@@ -668,9 +663,10 @@ print_top_frame_size:
   TAX
   RTS
 
-; Print the current frame chain non-destructively
-; Walks frames from SS_P16 upward through the downward stack until SOURCE_STACK
-; Output: one line per frame "depth:type:name" with depth 0 = top of stack
+; Print the current frame chain non-destructively.
+; Walks frames from SS_P16 upward until reaching SOURCE_STACK, advancing
+; by the frame_size byte at offset 0 of each frame.
+; Output: one line per frame "depth:type:name" with depth 0 = top of stack.
 ; Preserves X
 print_frames:
   TXA
@@ -681,6 +677,10 @@ print_frames:
 .loop:
   CMPI16 TABP16, SOURCE_STACK
   BCS .done                 ; TABP16 >= SOURCE_STACK -> walked past base
+  ; Read frame_size at offset 0 (used to advance TABP16 at end of loop body)
+  LDY #0
+  LDA (TABP16),Y
+  STA FRAME_SIZE
   ; Print depth as decimal (single byte, fits in low byte of TO_DECIMAL_VALUE16)
   LDA FRAME_DEPTH
   STA TO_DECIMAL_VALUE16
@@ -689,14 +689,13 @@ print_frames:
   JSR print_decimal
   LDA #':'
   JSR write_b
-  ; Find name's null terminator (Y = name length when found)
-  LDY #$FF
+  ; Scan name (starts at offset 1) for its null terminator. Y = 0 at this
+  ; point, so INY in the loop steps to offset 1 first.
 .find_null:
   INY
   LDA (TABP16),Y
   BNE .find_null
-  STY FRAME_NAME_LEN
-  ; Read curr_type at offset name_len+1 (one past the null)
+  ; Y = offset of null in frame. curr_type is at Y+1.
   INY
   LDA (TABP16),Y
   BEQ .is_file
@@ -705,35 +704,29 @@ print_frames:
   SET16 str_type_memory, TABP16
   JSR print_str
   POP16 TABP16
-  JMP .read_prev
+  JMP .print_name
 .is_file:
   PUSH16 TABP16
   SET16 str_type_file, TABP16
   JSR print_str
   POP16 TABP16
-.read_prev:
-  ; prev_type at offset name_len+2; recompute Y since print_str clobbers it
-  LDY FRAME_NAME_LEN
-  INY                       ; past null
-  INY                       ; past curr_type
-  LDA (TABP16),Y
-  STA FRAME_PREV_TYPE
-  ; Print basename (TABP16 still points at name start)
+.print_name:
+  ; Print basename. Names live at offset 1 of the frame, so temporarily
+  ; bump TABP16 past the frame_size byte for the call.
+  INC16 TABP16
   JSR print_basename
+  ; Restore TABP16 to frame start by subtracting 1
+  LDA TABP16
+  BNE .no_borrow
+  DEC TABP16 + 1
+.no_borrow:
+  DEC TABP16
   LDA #'\n'
   JSR write_b
-  ; Compute frame size = name_len + 6 (file prev_data) or +7 (memory prev_data)
-  LDA FRAME_NAME_LEN
+  ; Advance TABP16 by FRAME_SIZE (frames are always < 256 bytes here)
   CLC
-  ADC #6
-  LDX FRAME_PREV_TYPE       ; Z = (prev_type == 0)
-  BEQ .size_done
-  CLC
-  ADC #1
-.size_done:
-  ; Advance TABP16 by frame size (always < 256 here)
-  CLC
-  ADC TABP16
+  LDA TABP16
+  ADC FRAME_SIZE
   STA TABP16
   BCC .no_carry
   INC TABP16 + 1

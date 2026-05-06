@@ -40,11 +40,18 @@
 
   .zeropage
 
-SS_CURR_CHAR:   .byte       ; The last character read
-SS_CURR_FILE:   .byte       ; The current file handle
-SS_CURR_LINE16: .word       ; The current line number
-SS_P16:         .word       ; Pointer to the current location in the source stack
-SS_TEMP16:      .word       ; Temporary location for use in calculations
+SS_CURR_CHAR:    .byte       ; The last character read
+SS_CURR_FILE:    .byte       ; The current file handle
+SS_CURR_LINE16:  .word       ; The current line number
+SS_P16:          .word       ; Pointer to the current location in the source stack
+SS_TEMP16:       .word       ; Temporary location for use in calculations
+SS_PENDING_FILE: .byte       ; In-flight file handle: opened by push_file_source
+                             ; but not yet committed to a source-stack frame.
+                             ; Non-zero means the error path must close it
+                             ; (push_source_frame's OOM jump would otherwise
+                             ; orphan the handle, since traceback only sees
+                             ; handles that already live in a frame). Zero
+                             ; means there's no pending handle.
 
 ; Memory source support (zero-terminated buffers)
 SS_SRC_TYPE:    .byte       ; Source type: 0=file, 1=memory
@@ -61,6 +68,8 @@ source_stack_init:
   LDA #SS_SRC_TYPE_FILE
   STA SS_SRC_TYPE
   STA SS_CURR_FILE
+  ; SS_SRC_TYPE_FILE happens to be 0, which is also "no pending file"
+  STA SS_PENDING_FILE
   RTS
 
 
@@ -98,21 +107,24 @@ push_source_frame:
   LDA SS_NAME,Y
   BNE .len_loop
   ; Y = name length (without null)
-  ; Calculate frame size: name_len + 1 (null) + 1 (curr) + 1 (prev) + 2 (line) + prev_data
-  ; prev_data is 1 byte if prev_type=0 (file), 2 bytes if prev_type=1 (memory ptr only)
+  ; Calculate frame size:
+  ;   1 (frame_size) + name_len + 1 (null) + 1 (curr) + 1 (prev) + 2 (line) + prev_data
+  ; prev_data is 1 byte if prev_type=0 (file), 2 bytes if prev_type=1 (memory ptr).
   LDA SS_SRC_TYPE
   CMP #SS_SRC_TYPE_FILE
   BNE .memory
-  ; File
+  ; File parent
   TYA
   CLC
-  ADC #5 + 1            ; name + null + curr_type + prev_type + line + handle
+  ADC #5 + 1 + 1        ; +5 fixed fields + 1 handle + 1 frame_size byte
   BNE .size_done        ; Always taken
 .memory
+  ; Memory parent
   TYA
   CLC
-  ADC #5 + 2            ; name + null + curr_type + prev_type + line + memory ptr
+  ADC #5 + 2 + 1        ; +5 fixed fields + 2 mem ptr + 1 frame_size byte
 .size_done:
+  PHA                   ; Save frame_size on 6502 stack (under curr_type)
   STA SS_TEMP16
   ; Decrease stack pointer by frame size
   SEC
@@ -128,16 +140,23 @@ push_source_frame:
 
   ; Commit new stack pointer
   CP16 SS_TEMP16, SS_P16
-  ; Copy name to stack
-  LDY #$FF
+  ; Write frame_size at offset 0
+  LDY #0
+  PLA                   ; Get frame_size
+  STA (SS_P16),Y
+  ; Copy name to offsets 1..name_len in the frame.
+  ; Y indexes the frame (starts at 0, INY first); X indexes SS_NAME (starts at $FF, INX first).
+  LDX #$FF
 .copy_loop:
+  INX
   INY
-  LDA SS_NAME,Y
+  LDA SS_NAME,X
   STA (SS_P16),Y
   BNE .copy_loop
-  ; Store curr_type (saved on 6502 stack)
+  ; X = name_len, Y = name_len + 1 (offset of null in frame)
+  ; Store curr_type at next offset
   INY
-  PLA                   ; Get curr_type
+  PLA                   ; Get curr_type (saved at routine entry)
   STA (SS_P16),Y
   ; Store prev_type
   INY
@@ -190,13 +209,18 @@ push_file_source:
   BNE .file_ok
   JMP err_file_not_found
 .file_ok:
-  PHA                   ; Save new file handle
+  ; Park the new handle in SS_PENDING_FILE rather than the 6502 stack so
+  ; that an OOM jump out of push_source_frame doesn't orphan it -- the
+  ; error path closes any non-zero SS_PENDING_FILE before exiting.
+  STA SS_PENDING_FILE
   LDA #SS_SRC_TYPE_FILE
   JSR push_source_frame
   LDA #SS_SRC_TYPE_FILE
   STA SS_SRC_TYPE
-  PLA
-  STA SS_CURR_FILE      ; Set new file handle
+  LDA SS_PENDING_FILE
+  STA SS_CURR_FILE      ; Install new file handle
+  LDA #$00
+  STA SS_PENDING_FILE   ; Clear pending: handle is now owned by the frame
   PLA
   TAX                   ; Restore X
   RTS
@@ -236,8 +260,9 @@ push_memory_source:
 ;          SS_SRC_TYPE restored to prev_type
 ;          SS_CURR_LINE16 restored to prev_line
 pop_source:
-  ; Skip past name to find null terminator
-  LDY #$FF
+  ; Skip the frame_size byte at offset 0, then scan the name (which
+  ; starts at offset 1) for its null terminator.
+  LDY #0
 .skip_name:
   INY
   LDA (SS_P16),Y
