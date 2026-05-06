@@ -694,3 +694,48 @@ EXPECT_STDOUT:
 pre
 MEMTEXT
 post
+
+# ============================================================================
+# TOP FRAME SIZE - Byte-level frame layout visibility
+# ============================================================================
+# @top_frame_size prints the size in bytes of the topmost source-stack frame.
+# Frame size = name_len + 1(null) + 1(curr) + 1(prev) + 2(line) + prev_data
+#   prev_data = 1 byte if prev=file, 2 bytes if prev=memory
+# These tests pin the layout of file/memory frames so Phase 3's payload
+# extension has an explicit byte budget to work against.
+
+---
+NAME: top_frame_size_memory_above_file
+MODE: frames
+FILE main.txt:
+ 1: @include inner.txt
+FILE inner.txt:
+ 1: @memory @top_frame_size
+EXPECT_STDOUT:
+12
+
+---
+NAME: top_frame_size_include_above_file
+MODE: frames
+FILE main.txt:
+ 1: @include inner.txt
+FILE inner.txt:
+ 1: @top_frame_size
+EXPECT_STDOUT:
+15
+
+---
+NAME: top_frame_size_memory_above_memory
+MODE: frames
+FILE main.txt:
+ 1: @include inner.txt
+FILE inner.txt:
+ 1: @memory @memory @top_frame_size
+EXPECT_STDOUT:
+13
+
+# Outer @memory pushes a frame whose content is the rest of line 1, which
+# is "@memory @top_frame_size\n". When the outer memory source is read, an
+# inner @memory directive fires and pushes a second memory frame containing
+# "@top_frame_size\n". When @top_frame_size runs the inner memory frame
+# is on top with parent=memory, so prev_data=2 and size = 6+1+1+1+2+2 = 13.

@@ -316,13 +316,16 @@ check_markers:
   JSR cmp_marker
   BCC .handle_traceback
 
-  ; @frames is only recognized in frames mode (TEST_MODE=4)
+  ; @frames and @stackbytes are only recognized in frames mode (TEST_MODE=4)
   LDA TEST_MODE
   CMP #4
   BNE .no_frames_marker
   SET16 str_frames, TABP16
   JSR cmp_marker
   BCC .handle_frames
+  SET16 str_top_frame_size, TABP16
+  JSR cmp_marker
+  BCC .handle_top_frame_size
 .no_frames_marker:
 
   ; No match - flush '@' + keyword + terminator as text
@@ -412,6 +415,25 @@ check_markers:
   CLC
   RTS
 
+.handle_top_frame_size:
+  ; Consume any remaining content on the line, then print top frame size
+  LDA MARKER_TERM
+  CMP #'\n'
+  BEQ .do_tfs
+  CMP #$FF
+  BEQ .do_tfs
+.tfs_skip_eol:
+  JSR read_char
+  BCS .do_tfs
+  CMP #'\n'
+  BNE .tfs_skip_eol
+.do_tfs:
+  JSR print_top_frame_size
+  LDA #1
+  STA AT_LINE_START
+  CLC
+  RTS
+
 ; Compare null-terminated keyword in TOKEN against pattern at (TABP16)
 ; Returns: C=0 if match, C=1 if no match
 cmp_marker:
@@ -494,10 +516,11 @@ setup_memory_source:
   INY
   JMP .copy_name
 .name_done:
-  ; Set memory pointer to TOKEN_MEM (content is now zero-terminated)
-  SET16 TOKEN_MEM, FS_MEM_PTR16
-  ; Push memory source (FS_FILENAME has name, pointer is set)
+  ; Push memory source FIRST so push_source_frame can capture the parent's
+  ; FS_MEM_PTR16 (when the parent is itself a memory source). Only after the
+  ; push do we install the new memory pointer.
   JSR push_memory_source
+  SET16 TOKEN_MEM, FS_MEM_PTR16
   ; Initialize line to 1 for memory source, at start of line
   SET16 1, CURLINE16
   LDA #1
@@ -513,6 +536,8 @@ str_traceback:
   .asciiz "traceback"
 str_frames:
   .asciiz "frames"
+str_top_frame_size:
+  .asciiz "top_frame_size"
 str_memory_source:
   .asciiz "MEMORY"
 
@@ -601,6 +626,47 @@ str_type_file:
   .asciiz "file:"
 str_type_memory:
   .asciiz "memory:"
+
+; Print the byte size of the topmost frame on the source stack
+; Output: a single decimal number followed by '\n'
+; Forward-looking: lets tests verify byte-level frame layout, including
+; payload bytes that Phase 3 will attach to memory frames. Top-frame size
+; is deterministic for memory ("MEMORY") and for @include'd relative names,
+; making it suitable as a regression check.
+; Preserves X
+print_top_frame_size:
+  TXA
+  PHA
+  ; Find name's null terminator (Y = name length)
+  LDY #$FF
+.scan:
+  INY
+  LDA (FS_P16),Y
+  BNE .scan
+  STY FRAME_NAME_LEN
+  ; Read prev_type at offset name_len + 2 (past null and curr_type)
+  INY
+  INY
+  LDA (FS_P16),Y
+  STA FRAME_PREV_TYPE
+  ; Frame size = name_len + 6 (prev_type=file) or +7 (prev_type=memory)
+  LDA FRAME_NAME_LEN
+  CLC
+  ADC #6
+  LDX FRAME_PREV_TYPE
+  BEQ .size_done
+  CLC
+  ADC #1
+.size_done:
+  STA TO_DECIMAL_VALUE16
+  LDA #0
+  STA TO_DECIMAL_VALUE16 + 1
+  JSR print_decimal
+  LDA #'\n'
+  JSR write_b
+  PLA
+  TAX
+  RTS
 
 ; Print the current frame chain non-destructively
 ; Walks frames from FS_P16 upward through the downward stack until FILE_STACK
