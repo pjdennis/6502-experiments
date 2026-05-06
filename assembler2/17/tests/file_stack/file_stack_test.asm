@@ -6,6 +6,8 @@
 ;   info   - Read file, output statistics
 ;   memory - Handle @memory, @include, and @traceback markers
 ;   frames - Same as memory, plus @frames prints frame chain
+;   oom    - Same as memory, but with a tight stack limit so
+;            push_source_frame triggers err_out_of_memory after a few pushes
 ;
 ; Requires:
 ;   environment.asm vectors (argc, argv, write_b, write_d, exit)
@@ -22,7 +24,7 @@ TOKEN_MEM  = $1D80  ; Offset in TOKEN buffer for memory content
   .zeropage
 
 ; Test state
-TEST_MODE:     .byte         ; 0=echo, 1=lines, 2=info, 3=memory, 4=frames
+TEST_MODE:     .byte         ; 0=echo, 1=lines, 2=info, 3=memory, 4=frames, 5=oom
 CHAR_COUNT16:  .word         ; Character count
 LINE_COUNT16:  .word         ; Line count
 AT_LINE_START: .byte         ; Flag: at start of line (for lines mode)
@@ -36,6 +38,10 @@ MARKER_TERM: .byte         ; Character that terminated the keyword ($FF = EOF)
 FRAME_DEPTH:     .byte
 FRAME_NAME_LEN:  .byte
 FRAME_PREV_TYPE: .byte
+
+; OOM injection: minimum allowed value of FS_TEMP16 during push.
+; Default $0000 means "no limit"; oom mode sets a tight value.
+OOM_LIMIT16:     .word
 
   .code
 
@@ -51,16 +57,36 @@ FRAME_PREV_TYPE: .byte
 ; File stack configuration
 FS_FILENAME   = TOKEN
 
-; CHECK_FOR_OUT_OF_MEMORY - Macro placeholder for use by file stack
+; CHECK_FOR_OUT_OF_MEMORY - Stack-overflow check used by push_source_frame.
+; Compares the proposed new stack pointer (fs_ptr) against OOM_LIMIT16.
+; If fs_ptr < OOM_LIMIT16 the push is rejected via err_out_of_memory.
+; Default OOM_LIMIT16 is $0000, so the check is a no-op outside oom mode.
   .macro CHECK_FOR_OUT_OF_MEMORY fs_ptr
-  ; Do nothing, for the purposes of the file stack test.
-  ; TODO: Consider writing to debug output when it's called, and extend tests to confirm
+  LDA fs_ptr + 1
+  CMP OOM_LIMIT16 + 1
+  BCC .oom_fail
+  BNE .oom_ok
+  LDA fs_ptr
+  CMP OOM_LIMIT16
+  BCS .oom_ok
+.oom_fail:
+  JMP err_out_of_memory
+.oom_ok:
   .endmacro
 
 ; Error handler for file-not-found (required by file_stack.asm)
 err_file_not_found:
   BRK
   .asciiz 36, "File not found"
+
+; Error handler for stack overflow (required by file_stack.asm via macro)
+err_out_of_memory:
+  SET16 msg_oom, TABP16
+  JSR print_str_err
+  LDA #2
+  JMP exit
+msg_oom:
+  .asciiz "OUT OF MEMORY\n"
 
   .include file_stack.asm
 read_char = file_stack_read_char
@@ -69,6 +95,8 @@ CURR_CHAR = FS_CURR_CHAR
 
 
 main:
+  ; Default: no OOM injection (any fs_ptr >= $0000 passes the check)
+  SET16 0, OOM_LIMIT16
   JSR file_stack_init
   JSR parse_args
   BCC .args_ok
@@ -92,9 +120,16 @@ main:
   BEQ .go_memory
   CMP #4
   BEQ .go_memory      ; frames mode shares memory mode body; differs only in markers
+  CMP #5
+  BEQ .go_oom
   JMP error_usage
 .go_info:
   JMP mode_info
+.go_oom:
+  ; Tight stack limit so push triggers err_out_of_memory after a few frames.
+  ; FS_P16 starts at FILE_STACK ($F000) and grows down. Limit at $EF80 leaves
+  ; only $80 bytes of stack -- a handful of pushes before OOM.
+  SET16 $EF80, OOM_LIMIT16
 .go_memory:
   JMP mode_memory
 
@@ -792,6 +827,9 @@ parse_mode:
   BEQ .set_mode
   INX
   CMP #'f'
+  BEQ .set_mode
+  INX
+  CMP #'o'
   BEQ .set_mode
   SEC
   RTS

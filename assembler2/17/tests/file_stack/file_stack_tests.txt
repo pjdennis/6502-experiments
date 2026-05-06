@@ -653,3 +653,44 @@ EXPECT_STDOUT:
 chars:6
 lines:3
 stack:empty
+
+# ============================================================================
+# OOM INJECTION - Verify CHECK_FOR_OUT_OF_MEMORY triggers as expected
+# ============================================================================
+# oom mode is identical to memory mode but installs a tight stack limit
+# (OOM_LIMIT16 = $EF80) so push_source_frame triggers err_out_of_memory
+# after only a handful of frames.
+
+---
+NAME: oom_recursive_include
+MODE: oom
+FILE main.txt:
+ 1: @include main.txt
+EXPECT_STDERR:
+OUT OF MEMORY
+
+---
+NAME: oom_no_false_positive
+MODE: oom
+FILE main.txt:
+ 1: A
+ 2: @include inner.txt
+ 3: C
+FILE inner.txt:
+ 1: B
+EXPECT_STDOUT:
+A
+B
+C
+
+---
+NAME: oom_no_false_positive_with_memory
+MODE: oom
+FILE main.txt:
+ 1: pre
+ 2: @memory MEMTEXT
+ 3: post
+EXPECT_STDOUT:
+pre
+MEMTEXT
+post
