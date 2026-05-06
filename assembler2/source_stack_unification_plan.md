@@ -21,9 +21,9 @@ macro-local label work into this plan).
 - After every commit: `./asmtestgen.sh` (full self-host verification) +
   `python3 run_tests.py -q` + `python3 editor/tests/editor_tests.py -q`
   (last only if editor touched, which it shouldn't be).
-- The file_stack component test suite (`17/tests/file_stack/`) is the
-  primary verification surface for the stack refactors. Extend it
-  early and lean on it.
+- The source_stack component test suite (`17/tests/source_stack/`,
+  formerly `17/tests/file_stack/`) is the primary verification
+  surface for the stack refactors. Extend it early and lean on it.
 - Use `./commit -m"..."` not `git commit`.
 
 ## Naming
@@ -53,32 +53,55 @@ test runner references.
 
 ## Abstraction goal
 
-Today, `file_stack.asm` mixes three concerns:
+Today, `source_stack.asm` mixes three concerns:
 
 1. **Stack mechanics**: bounds check, advance pointer, copy bytes in/out
-   relative to `FS_P16`.
+   relative to `SS_P16`.
 2. **Frame layout knowledge**: where the name is, where `curr_type`
    lives, which prev-data variant follows.
 3. **Per-frame-type behavior**: open/close a file, manage a memory
-   pointer, run the (current) `FS_POP_MEMORY_HOOK`.
+   pointer, run the (current) `SS_POP_MEMORY_HOOK`.
 
 The refactor target: stack mechanics generic, frame walking driven by a
 size-byte at a fixed offset, per-type behavior dispatched from a small
 table on `curr_type`.
 
-Tentative unified frame layout (all sources):
+### Two source types, not three
+
+Earlier drafts of this plan introduced a third `curr_type=macro` for
+activation frames. That distinction is unnecessary. In the real
+assembler `push_memory_source` is called from exactly one place
+(`expand_macro`), and the test program's `@memory` directive is just
+a fixture for the same machinery. So we keep two types:
+
+- **file** — read via `read` syscall on `SS_CURR_FILE`.
+- **memory** — read via `LDA (SS_MEM_PTR16)`. May carry an optional
+  trailing **payload** region whose interpretation belongs to the code
+  that pushed the frame (Phase 3 puts scope/macro-entry there; Phase 4
+  appends parameter slots). The source stack itself never reads the
+  payload.
+
+"Macro-ness" lives entirely in (a) who installs the payload bytes at
+push time, and (b) who consumes them via the configured pop hook. The
+test program pushes memory frames with no payload; the assembler
+pushes memory frames with payload. Neither needs a distinct type tag.
+
+### Tentative unified frame layout
 
 ```
 [0]      frame_size               size in bytes of this frame
-[1]      curr_type                0=file, 1=memory (extends with macro)
+[1]      curr_type                0=file, 1=memory
 [2]      prev_type
 [3..4]   prev_line_L / prev_line_H
-[5..]    type-specific payload    (name\0 first, then the rest)
+[5..]    type-specific payload    (name\0 first, then prev_data, then
+                                   any caller-supplied payload bytes)
 ```
 
 `frame_size` at offset 0 makes both push (set up size, fill payload)
 and pop (read size, advance pointer) trivial. Frame walking from
 `SS_P16` to top of stack iterates by adding `frame_size` each step.
+Memory frames with payload have a larger `frame_size` than plain
+memory frames; nothing else differs.
 
 Generic helpers:
 
@@ -87,13 +110,14 @@ Generic helpers:
 - `ss_walk_frames callback_addr` — call callback for each frame from
   newest to oldest with frame ptr in TABP16 and Y free.
 - `ss_walk_frames_by_type type, callback_addr` — same, filtered by
-  `curr_type`. (Used by `check_macro_recursion`.)
+  `curr_type`. (Used by `check_macro_recursion` walking the chain of
+  memory frames that carry a macro payload.)
 
-Per-type vtable (tiny — addresses in a static table indexed by type):
+Per-type vtable (two entries, indexed by `curr_type`):
 
-- `on_pop` handler: file → close; memory → restore mem ptr; macro →
-  dispatch to memory-source handler for restore (since macro frames
-  are an extension of memory frames).
+- file → `close()` then standard prev_data restore.
+- memory → run `SS_POP_MEMORY_HOOK` if defined (consumes payload),
+  then standard prev_data restore.
 
 ## Phase 0 — Shore up file_stack test coverage
 
@@ -153,6 +177,40 @@ Tasks:
 
 Each commit: name change only, full chain green.
 
+## Phase 1.6 — Pre-Phase-2 cleanup
+
+Three small docs/cleanup commits that are still in the spirit of "no
+behavior change," to land before the Phase 2 abstraction work begins.
+None of these need new tests; existing tests prove they're inert.
+
+- **1.6.1** Fix the `push_memory_source` API contract. The current
+  comment says
+  ```
+  ; On entry: SS_NAME = name for this memory source
+  ;           SS_MEM_PTR16 = start of zero-terminated memory buffer
+  ```
+  which is misleading and is what caused the
+  `setup_memory_source` bug found in Phase 0.4. The actual contract
+  is: at entry, `SS_MEM_PTR16` must still hold the **parent's** read
+  position (so `push_source_frame` can save it as `prev_data` for a
+  memory→memory push); the caller installs the new buffer pointer
+  **after** `push_memory_source` returns. Document this clearly and
+  add a one-liner reminder above the call site in
+  `macro_expansion.asm`.
+- **1.6.2** Tighten the `source_stack.asm` module header: drop the
+  "filename buffer" wording on `SS_NAME` (it's any source's name),
+  reword the prev_data comment so the `(2 bytes, zero-terminated)`
+  parenthetical doesn't read as describing the field's encoding, and
+  fix the `pop_source` comment that still says `FS_MEM_PTR`.
+- **1.6.3** Mark `push_source_frame` as internal in its leading
+  comment — it's a building block called only by the two public push
+  routines, not part of the source stack's public surface.
+
+After 1.6, all of Phase 1's renames + cleanup are landed and the
+module's public docs accurately describe the current behavior. Phase 2
+can then refactor with no remaining ambiguity about how the API is
+meant to be called.
+
 ## Phase 2 — Refactor for abstraction (no behavior change)
 
 Goal: split stack mechanics from frame layout from per-type behavior.
@@ -163,22 +221,22 @@ Tasks:
 - **2.1** Introduce `frame_size` byte at offset 0 of every frame.
   Adjust `push_source_frame` to set it; adjust `pop_source` to read
   it; adjust internal navigation. The `name` field shifts by 1 byte.
-  Run full chain + file stack tests + assembler tests.
+  Run full chain + source_stack tests + assembler tests.
 - **2.2** Extract the generic stack mechanics (bounds check, allocate,
   deallocate by size) into `ss_alloc_frame` / `ss_free_frame`. The
   current push and pop call them.
 - **2.3** Replace the inline `BNE .save_memory_state` pop dispatch
-  with a tiny vtable: an array of `on_pop` handler addresses indexed
-  by `curr_type`. `pop_source` reads `curr_type`, indirects through
-  the table.
+  with a tiny vtable: a 2-entry array of `on_pop` handler addresses
+  indexed by `curr_type` (file=0, memory=1). `pop_source` reads
+  `curr_type`, indirects through the table.
 - **2.4** Add `ss_walk_frames` (generic) and `ss_walk_frames_by_type`
   (filtered) helpers using `frame_size`. Cover with unit tests via
   the `frames` mode added in Phase 0.
-- **2.5** Remove the `FS_POP_MEMORY_HOOK` indirection in favor of the
-  `on_pop` vtable. The macro pop_label_scope is still hooked, but
+- **2.5** Remove the `SS_POP_MEMORY_HOOK` indirection in favor of the
+  `on_pop` vtable. The macro `pop_label_scope` is still hooked, but
   through the vtable now. (Will be deleted in Phase 3.)
 
-Each commit: full chain + file stack tests green.
+Each commit: full chain + source_stack tests green.
 
 ## Phase 3 — Merge scope stack into source stack
 
@@ -186,28 +244,39 @@ Goal: remove `SCOPE_STACK`, `SCOPE_PTR16`, `SCOPE_LIMIT`, the entire
 `label_scope.asm` module's stack (the routines may stay during
 transition, then go).
 
+Memory frames stay `curr_type=memory`. The change is that some memory
+frames now carry a trailing **payload** region holding the activation
+state (LABEL_SCOPE16, CACHED_HASH, MACRO_ENTRY16, prev_macro_frame_L/H).
+The pop-memory hook learns to consume this payload; the source stack
+itself is unchanged.
+
 Tasks:
 
-- **3.1** **Test first.** Add file_stack tests that prove the merged
-  layout: a memory source frame carrying scope-shaped extra payload
-  (LABEL_SCOPE16, CACHED_HASH, prev_macro_frame, MACRO_ENTRY16) is
-  pushed and popped correctly, with values restored. These tests fail
-  until 3.2 lands.
-- **3.2** Extend memory-source frames with the activation header
-  fields, written by `push_memory_source`'s caller (or a new
-  `push_macro_frame` that wraps it). Pop restores them. Add the
-  `prev_macro_frame_L/H` chain pointer linking macro frames through
-  the merged stack.
+- **3.1** **Test first.** Add source_stack tests that prove the
+  merged layout: a memory frame pushed with extra payload bytes
+  trailing the standard fields is allocated, walked, and popped with
+  `frame_size` correctly accounting for the payload. The test
+  program gets a `@payload_memory <hex>` directive that exercises
+  this; `@frames` and `@top_frame_size` already report enough state
+  to verify. These tests fail until 3.2 lands.
+- **3.2** Extend `push_memory_source` (or add a thin wrapper) to
+  accept a payload size and copy payload bytes into the frame
+  immediately after the standard prev_data. `frame_size` (added in
+  Phase 2) absorbs the larger size automatically — no API outside
+  the push routine cares. The pop hook reads the same payload bytes.
 - **3.3** **Test first.** Failing test for `check_macro_recursion`
   via chain walk (the current SCOPE_STACK walk path). Then rewrite
-  `check_macro_recursion` to walk the new chain and delete the
-  fixed-stride SCOPE_STACK loop in `macro_expansion.asm`.
-- **3.4** Migrate `expand_macro` to call the new `push_macro_frame`
-  (or equivalent) instead of `push_label_scope` + `push_memory_source`
-  separately. Two pushes become one.
-- **3.5** Migrate `pop_label_scope` logic into the memory-source
-  `on_pop` (or a new macro-frame `on_pop` if we end up with separate
-  curr_type for macro vs memory — likely we will).
+  `check_macro_recursion` to walk the `prev_macro_frame_L/H` chain
+  threaded through memory-frame payloads, and delete the fixed-stride
+  SCOPE_STACK loop in `macro_expansion.asm`.
+- **3.4** Migrate `expand_macro` to call the extended
+  `push_memory_source` with the activation payload, instead of
+  `push_label_scope` + bare `push_memory_source` separately. Two
+  pushes become one.
+- **3.5** Migrate `pop_label_scope`'s logic into the memory-pop hook
+  installed via `SS_POP_MEMORY_HOOK` (which Phase 2 has already
+  routed through the per-type vtable). The hook reads the payload
+  fields and restores `LABEL_SCOPE16`, `CACHED_HASH`, etc.
 - **3.6** Delete `SCOPE_STACK`, `SCOPE_PTR16`, `SCOPE_DEPTH`,
   `SCOPE_LIMIT`, `SCOPE_ENTRY_SIZE`, `init_scope_stack`,
   `push_label_scope`, `pop_label_scope`. The `label_scope.asm` file
@@ -216,18 +285,24 @@ Tasks:
   a macro" check — moves to source_stack as `ss_in_macro_expansion`
   derived from chain head).
 - **3.7** Delete the `MACRO_ENTRY16` zero-page var if it's now
-  redundant with the macro frame field.
+  redundant with the activation-payload field.
 - **3.8** Reclaim the `$0400-$04FF` region. Choose a use or document
   it free.
 - **3.9** Replace the `err_macro_nesting_too_deep` error with the
-  out-of-memory error path (which is what the file stack already uses
-  for overflow). Update tests.
+  out-of-memory error path (which is what the source stack already
+  uses for overflow). Update tests.
 
 Commits per task. Full chain + all tests green at each.
 
 ## Phase 4 — Macro parameter activation frames
 
 Goal: parameters live in slots on the macro frame, not in `LHASHTAB`.
+
+Throughout this phase, "macro frame" is shorthand for a memory frame
+whose payload carries macro activation state (the scope/macro-entry
+fields added in Phase 3, plus the parameter slots added here). It is
+not a separate `curr_type` — the source stack still sees only files
+and memory.
 
 Tasks:
 
@@ -313,12 +388,19 @@ Each phase ends with:
   parent's scope, build the frame with the args already in place,
   then push the frame. Verify nested-macro arg evaluation against
   Phase 4's first test.
-- **The component test program reuses `file_stack.asm`**. Every
-  rename in Phase 1 must update both `asm.asm` and the test program.
-  Keep them moving together commit-by-commit.
-- **The `CHECK_FOR_OUT_OF_MEMORY` macro** is defined per-program. The
-  test program's no-op stub hides real overflow during stack tests
-  unless we add the OOM injection mode in Phase 0.
+- **The component test program reuses `source_stack.asm`** (renamed
+  from `file_stack.asm` in Phase 1). The test program and the
+  assembler must stay in sync; sweep both together for any push/pop
+  contract changes after Phase 1.6.
+- **The `CHECK_FOR_OUT_OF_MEMORY` macro** is defined per-program.
+  Phase 0.3 replaced the test program's no-op stub with a real check
+  driven by `OOM_LIMIT16`, observable via the `oom` mode.
+- **`push_memory_source` calling convention is non-obvious.** The
+  caller must leave `SS_MEM_PTR16` at the parent's value at the
+  moment of push, then install the new buffer pointer afterwards;
+  the bug found in Phase 0.4's `setup_memory_source` was caused by
+  reversing this order. Phase 1.6 documents the contract; any
+  Phase 3 push helper that wraps it must follow the same rule.
 
 ## Status (filled in as work proceeds)
 
@@ -326,7 +408,12 @@ Each phase ends with:
   tests, OOM injection mode, and top-frame-size visibility for the future
   payload work; also fixed a memory-above-memory ordering bug in the test
   program's setup_memory_source)
-- [ ] Phase 1 — rename
+- [x] Phase 1 — rename (complete; file_stack.asm -> source_stack.asm,
+  FILE_STACK -> SOURCE_STACK, FS_* -> SS_*, file_stack_* routines ->
+  source_stack_* / push_file_source, pop_source alias dropped, test
+  artifacts moved into 17/tests/source_stack/, comments and README swept)
+- [ ] Phase 1.6 — pre-Phase-2 cleanup (push_memory_source contract docs,
+  module header, push_source_frame "internal" mark)
 - [ ] Phase 2 — abstraction refactor
 - [ ] Phase 3 — stack merge
 - [ ] Phase 4 — parameter activation frames
