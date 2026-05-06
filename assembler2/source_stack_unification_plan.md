@@ -412,8 +412,11 @@ Each phase ends with:
   FILE_STACK -> SOURCE_STACK, FS_* -> SS_*, file_stack_* routines ->
   source_stack_* / push_file_source, pop_source alias dropped, test
   artifacts moved into 17/tests/source_stack/, comments and README swept)
-- [ ] Phase 1.6 — pre-Phase-2 cleanup (push_memory_source contract docs,
-  module header, push_source_frame "internal" mark)
+- [x] Phase 1.6 — pre-Phase-2 cleanup (complete; documented
+  push_memory_source's parent-pointer-on-entry contract and noted it
+  at the macro_expansion call site, tightened the source_stack.asm
+  module header, expanded push_source_frame's leading comment to
+  call out its internal status and full input preconditions)
 - [ ] Phase 2 — abstraction refactor
 - [ ] Phase 3 — stack merge
 - [ ] Phase 4 — parameter activation frames
