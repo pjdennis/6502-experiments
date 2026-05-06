@@ -11,8 +11,8 @@
 ;
 ; Requires:
 ;   environment.asm vectors (argc, argv, write_b, write_d, exit)
-;   file_stack.asm routines (file_stack_init, push_file_stack, pop_file_stack,
-;                            push_memory_source, file_stack_empty, read_char)
+;   file_stack.asm routines (source_stack_init, push_file_source, pop_source,
+;                            push_memory_source, source_stack_empty, read_char)
 ;   to_decimal.asm (TO_DECIMAL_RESULT, to_decimal)
 
 * = $0200
@@ -55,7 +55,7 @@ OOM_LIMIT16:     .word
   .endmacro
 
 ; File stack configuration
-FS_FILENAME   = TOKEN
+SS_NAME   = TOKEN
 
 ; CHECK_FOR_OUT_OF_MEMORY - Stack-overflow check used by push_source_frame.
 ; Compares the proposed new stack pointer (fs_ptr) against OOM_LIMIT16.
@@ -89,7 +89,7 @@ msg_oom:
   .asciiz "OUT OF MEMORY\n"
 
   .include source_stack.asm
-read_char = file_stack_read_char
+read_char = source_stack_read_char
 CURLINE16 = SS_CURR_LINE16
 CURR_CHAR = SS_CURR_CHAR
 
@@ -97,7 +97,7 @@ CURR_CHAR = SS_CURR_CHAR
 main:
   ; Default: no OOM injection (any fs_ptr >= $0000 passes the check)
   SET16 0, OOM_LIMIT16
-  JSR file_stack_init
+  JSR source_stack_init
   JSR parse_args
   BCC .args_ok
   JMP error_usage
@@ -232,7 +232,7 @@ mode_info:
   JSR write_b
   ; Output "stack:empty" or "stack:active"
   PRINT_STR str_stack
-  JSR file_stack_empty
+  JSR source_stack_empty
   BNE .stack_not_empty
   PRINT_STR str_empty
   JMP .info_done
@@ -340,7 +340,7 @@ check_markers:
 .include_ok:
   ; Read filename into TOKEN (overwrites keyword)
   JSR read_include_filename
-  JSR push_file_stack
+  JSR push_file_source
   ; Initialize line to 1 for included file
   SET16 1, CURLINE16
   LDA #1
@@ -490,7 +490,7 @@ flush_as_text:
 ; Set up memory source from content in TOKEN (X = length)
 setup_memory_source:
   ; TOKEN contains the content, X = length
-  ; Problem: FS_FILENAME = TOKEN, so we can't put name there without losing content
+  ; Problem: SS_NAME = TOKEN, so we can't put name there without losing content
   ; Solution: Copy content to TOKEN+$80, then put name in TOKEN
   ; Save X (content length)
   STX TEMP
@@ -507,7 +507,7 @@ setup_memory_source:
   ; Add null terminator after content (Y = length)
   LDA #0
   STA TOKEN_MEM,Y
-  ; Copy "MEMORY" to TOKEN (which is FS_FILENAME)
+  ; Copy "MEMORY" to TOKEN (which is SS_NAME)
   LDY #0
 .copy_name:
   LDA str_memory_source,Y
@@ -575,7 +575,7 @@ print_traceback:
   PHA
 .loop:
   ; Check if stack is empty (no sources)
-  JSR file_stack_empty
+  JSR source_stack_empty
   BEQ .done
   ; Find curr_type by scanning past the name
   ; SS_P16 points to: name\0 | curr_type | ...
@@ -613,7 +613,7 @@ print_traceback:
   LDA #'\n'
   JSR write_b
   ; Pop current entry (closes file, restores parent's handle and line)
-  JSR pop_file_stack
+  JSR pop_source
   ; Continue to next
   JMP .loop
 .done:
@@ -865,7 +865,7 @@ parse_args:
   JMP .copy_filename
 .filename_done:
   ; Open file via file stack (this resets line number to 0)
-  JSR push_file_stack
+  JSR push_file_source
   ; Initialize line number to 1 (first line is line 1)
   SET16 1, CURLINE16
   CLC

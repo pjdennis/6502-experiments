@@ -59,13 +59,13 @@ MACRO_PTR16:     .word        ; Pointer to macro name (for show_captured_macros)
   .include common.asm
   .include label_scope.asm
   .include forward_ref.asm
-FS_FILENAME        = TOKEN
-FS_POP_MEMORY_HOOK = pop_label_scope
+SS_NAME        = TOKEN
+SS_POP_MEMORY_HOOK = pop_label_scope
   .ifdef enable_debug
-FS_ERR_NO_FILE     = err_no_file
+SS_ERR_NO_FILE     = err_no_file
   .endif
   .include source_stack.asm
-read_char          = file_stack_read_char
+read_char          = source_stack_read_char
 CURR_CHAR          = SS_CURR_CHAR
 CURR_LINE16        = SS_CURR_LINE16
   .include errors.asm
@@ -224,7 +224,7 @@ start:
   STA SHOW_MACROS
   .endif
   ; Initialize file stack early so interrupt handler works correctly
-  JSR file_stack_init
+  JSR source_stack_init
   ; Initialize scope stack for macro expansions
   JSR init_scope_stack
   ; Check argument count (must be at least 2)

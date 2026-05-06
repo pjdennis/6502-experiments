@@ -18,7 +18,7 @@
 ;   parse_value (expressions.asm)
 ;   dir_macro (macro_capture.asm)
 ;   do_jump, JUMP_TARGET16 (init.asm)
-;   push_file_stack (file_stack.asm)
+;   push_file_source (file_stack.asm)
 ;   CMPI16 (macros.asm)
 ;   err_* (errors.asm)
 
@@ -83,7 +83,7 @@ dir_include:
 .get_name:
   JSR read_filename
   JSR skip_rest_of_line
-  JMP push_file_stack    ; Tail call
+  JMP push_file_source    ; Tail call
 dir_zeropage:
   BIT IN_ZEROPAGE
   BMI .in_zeropage

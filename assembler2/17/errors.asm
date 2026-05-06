@@ -7,8 +7,8 @@
 ;   CURR_OUT_FILE        - output file handle (asm.asm)
 ;   SS_P16               - file stack pointer (file_stack.asm)
 ;   SS_SRC_TYPE          - source type (file_stack.asm)
-;   file_stack_empty     - check if file stack is empty (file_stack.asm)
-;   pop_file_stack       - pop file stack entry (file_stack.asm)
+;   source_stack_empty     - check if file stack is empty (file_stack.asm)
+;   pop_source       - pop file stack entry (file_stack.asm)
 ;   close                - close file handles (environment.asm)
 ;   write_d              - write character to stderr (environment.asm)
 ;   exit                 - exit program (environment.asm)
@@ -270,11 +270,11 @@ interrupt:
   STA TO_DECIMAL_VALUE16 + 1
   JSR show_decimal
 ; Print the current file and line if any file is open
-  JSR file_stack_empty
+  JSR source_stack_empty
   BEQ .location_done
 ; Print " in file " or " in macro " based on source type
   LDA SS_SRC_TYPE
-  CMP #FS_SRC_TYPE_FILE
+  CMP #SS_SRC_TYPE_FILE
   BNE .in_macro
   SHOW_MESSAGEI msg_error_file
   JMP .show_source_name
@@ -300,7 +300,7 @@ interrupt:
   STA TABP16 + 1
   JSR show_message
 ; Print include traceback (if any files open)
-  JSR file_stack_empty
+  JSR source_stack_empty
   BEQ .traceback_done
   JSR show_include_traceback
 .traceback_done:
@@ -359,15 +359,15 @@ show_include_traceback:
   LDA SS_SRC_TYPE
   PHA
   ; Pop current entry (closes file, restores parent's handle and line)
-  JSR pop_file_stack
+  JSR pop_source
   ; Check if stack is now empty (no more parents)
-  JSR file_stack_empty
+  JSR source_stack_empty
   BEQ .done_cleanup
   ; Print newline
   SHOW_CHAR '\n'
   ; Print verb based on child type (saved on stack)
   PLA
-  CMP #FS_SRC_TYPE_FILE
+  CMP #SS_SRC_TYPE_FILE
   BEQ .verb_included
   ; Child was macro -> "expanded from"
   SHOW_MESSAGEI msg_expanded_from
@@ -378,7 +378,7 @@ show_include_traceback:
 .show_parent:
   ; Check parent type for "macro " prefix
   LDA SS_SRC_TYPE
-  CMP #FS_SRC_TYPE_FILE
+  CMP #SS_SRC_TYPE_FILE
   BEQ .parent_is_file
   SHOW_MESSAGEI msg_macro_prefix
 .parent_is_file:

@@ -1,8 +1,8 @@
 ; Requires:
 ;   SOURCE_STACK     - 1 past the highest address from which the stack grows down (asm.asm)
-;   FS_FILENAME    - filename buffer (asm.asm alias to TOKEN)
-;   FS_ERR_NO_FILE - error handler for read_char when no file is open (errors.asm)
-;   FS_POP_MEMORY_HOOK - optional hook for memory-source cleanup (asm.asm alias)
+;   SS_NAME    - filename buffer (asm.asm alias to TOKEN)
+;   SS_ERR_NO_FILE - error handler for read_char when no file is open (errors.asm)
+;   SS_POP_MEMORY_HOOK - optional hook for memory-source cleanup (asm.asm alias)
 ;   err_file_not_found - error handler for when open returns 0 (errors.asm)
 ;   open, close, read - file I/O functions (environment.asm)
 
@@ -35,27 +35,27 @@ SS_MEM_PTR16:   .word       ; Current read position in memory
 
   .code
 
-FS_SRC_TYPE_FILE   = 0
-FS_SRC_TYPE_MEMORY = 1
+SS_SRC_TYPE_FILE   = 0
+SS_SRC_TYPE_MEMORY = 1
 
 
-file_stack_init:
+source_stack_init:
   SET16 SOURCE_STACK, SS_P16
-  LDA #FS_SRC_TYPE_FILE
+  LDA #SS_SRC_TYPE_FILE
   STA SS_SRC_TYPE
   STA SS_CURR_FILE
   RTS
 
 
 ; On exit Z is set if file stack empty, clear otherwise
-file_stack_empty:
+source_stack_empty:
   CMPI16 SS_P16, SOURCE_STACK
   RTS
 
 
 ; Internal: Build a stack frame for a new source
 ; On entry: A = curr_type (0=file, 1=memory)
-;           FS_FILENAME contains the source name
+;           SS_NAME contains the source name
 ; On exit: Frame built with name, curr_type, prev_type, prev_line, prev_data
 ;          SS_CURR_LINE16 reset to 0
 ;          A, X, Y clobbered
@@ -65,13 +65,13 @@ push_source_frame:
   LDY #$FF
 .len_loop:
   INY
-  LDA FS_FILENAME,Y
+  LDA SS_NAME,Y
   BNE .len_loop
   ; Y = name length (without null)
   ; Calculate frame size: name_len + 1 (null) + 1 (curr) + 1 (prev) + 2 (line) + prev_data
   ; prev_data is 1 byte if prev_type=0 (file), 2 bytes if prev_type=1 (memory ptr only)
   LDA SS_SRC_TYPE
-  CMP #FS_SRC_TYPE_FILE
+  CMP #SS_SRC_TYPE_FILE
   BNE .memory
   ; File
   TYA
@@ -102,7 +102,7 @@ push_source_frame:
   LDY #$FF
 .copy_loop:
   INY
-  LDA FS_FILENAME,Y
+  LDA SS_NAME,Y
   STA (SS_P16),Y
   BNE .copy_loop
   ; Store curr_type (saved on 6502 stack)
@@ -145,25 +145,25 @@ push_source_frame:
 
 
 ; Push a file source onto the stack
-; On entry: FS_FILENAME contains the file name to open
+; On entry: SS_NAME contains the file name to open
 ;           SS_CURR_LINE16 contains the current line number
 ;           SS_CURR_FILE contains the current file handle
 ; On exit: X is preserved, new file is open and ready to read
-push_file_stack:
+push_file_source:
   TXA
   PHA                   ; Save X
   ; Open file before pushing frame so error reports parent context
-  LDA #<FS_FILENAME
-  LDX #>FS_FILENAME
+  LDA #<SS_NAME
+  LDX #>SS_NAME
   JSR open
   CMP #0
   BNE .file_ok
   JMP err_file_not_found
 .file_ok:
   PHA                   ; Save new file handle
-  LDA #FS_SRC_TYPE_FILE
+  LDA #SS_SRC_TYPE_FILE
   JSR push_source_frame
-  LDA #FS_SRC_TYPE_FILE
+  LDA #SS_SRC_TYPE_FILE
   STA SS_SRC_TYPE
   PLA
   STA SS_CURR_FILE      ; Set new file handle
@@ -173,16 +173,16 @@ push_file_stack:
 
 
 ; Push a memory source onto the stack
-; On entry: FS_FILENAME = name for this memory source (e.g., macro name)
+; On entry: SS_NAME = name for this memory source (e.g., macro name)
 ;           SS_MEM_PTR16 = start of zero-terminated memory buffer
 ; On exit: X is preserved, reading will continue from memory buffer
 push_memory_source:
   TXA
   PHA                   ; Save X
-  LDA #FS_SRC_TYPE_MEMORY
+  LDA #SS_SRC_TYPE_MEMORY
   JSR push_source_frame
   ; Set up memory source (pointers already set by caller)
-  LDA #FS_SRC_TYPE_MEMORY
+  LDA #SS_SRC_TYPE_MEMORY
   STA SS_SRC_TYPE
   PLA
   TAX                   ; Restore X
@@ -205,10 +205,10 @@ pop_source:
   LDA (SS_P16),Y
   BEQ .was_file_source
   ; curr_type=1: was memory source - pop label scope if hook defined
-  .ifdef FS_POP_MEMORY_HOOK
+  .ifdef SS_POP_MEMORY_HOOK
   TYA
   PHA                   ; Save Y (frame offset) before hook
-  JSR FS_POP_MEMORY_HOOK
+  JSR SS_POP_MEMORY_HOOK
   PLA
   TAY                   ; Restore Y
   .endif
@@ -254,16 +254,12 @@ pop_source:
   ADCA16 SS_P16, SS_P16
   RTS
 
-; Legacy names for compatibility
-pop_file_stack = pop_source
-
-
 ; Read character from current source (file or memory)
 ; On exit: A = character (also stored in SS_CURR_CHAR)
 ;          C = 0 if char read, C = 1 if all sources exhausted
 ;          X is preserved
 ;          Y is not preserved
-file_stack_read_char:
+source_stack_read_char:
   LDA SS_SRC_TYPE
   BNE .read_memory
   ; Type 0 = file source
@@ -292,13 +288,13 @@ file_stack_read_char:
   ; Source exhausted - pop and try previous source
   JSR pop_source
   ; Check if stack is empty
-  JSR file_stack_empty
+  JSR source_stack_empty
   ; Continue reading from previous source
-  BNE file_stack_read_char
+  BNE source_stack_read_char
 .all_done:
   SEC
   RTS
   .ifdef enable_debug
 .no_source:
-  JMP FS_ERR_NO_FILE
+  JMP SS_ERR_NO_FILE
   .endif

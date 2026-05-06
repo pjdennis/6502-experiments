@@ -11,7 +11,7 @@
 ;   init_heap (common.asm), init_hash_table (hash_table.asm)
 ;   select_label_hash_table (common.asm)
 ;   hash_add (hash_table.asm), store_hash_value (common.asm)
-;   push_file_stack (file_stack.asm)
+;   push_file_source (file_stack.asm)
 ;   show_message (errors.asm, debug output)
 
   .zeropage
@@ -35,7 +35,7 @@ open_input:
   PLA
   TAX
   JSR copy_string_to_token
-  JMP push_file_stack ; tail call
+  JMP push_file_source ; tail call
 
 
 MATCH_PARTIAL = 0
