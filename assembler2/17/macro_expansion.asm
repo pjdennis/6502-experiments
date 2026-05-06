@@ -183,7 +183,9 @@ expand_macro:
   JSR store_hash_value
   JMP .add_loop
 .add_done:
-  ; Push memory source and set up pointers
+  ; Push memory source first (with SS_MEM_PTR16 still at the parent's
+  ; read position so push_memory_source can save it as prev_data for
+  ; nested expansions); only THEN install the new body pointer.
   JSR push_memory_source
   ; Set memory pointer to body_ptr from macro definition
   ; Add one to MACR_DEF_PTR16 to skip 0 terminator and save to memory source

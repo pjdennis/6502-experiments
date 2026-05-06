@@ -173,15 +173,24 @@ push_file_source:
 
 
 ; Push a memory source onto the stack
-; On entry: SS_NAME = name for this memory source (e.g., macro name)
-;           SS_MEM_PTR16 = start of zero-terminated memory buffer
-; On exit: X is preserved, reading will continue from memory buffer
+; On entry: SS_NAME       = name for this memory source (e.g. macro name)
+;           SS_MEM_PTR16  = parent's read position (saved into the new
+;                           frame as prev_data when prev_type=memory).
+;                           Do NOT preload this with the new buffer
+;                           pointer -- that overwrites the value
+;                           push_source_frame is about to copy into the
+;                           parent's prev_data slot, which silently
+;                           breaks memory-above-memory pop. The new
+;                           buffer pointer must be installed by the
+;                           caller AFTER this routine returns.
+; On exit: X is preserved. SS_SRC_TYPE = memory. Caller must now
+;          assign the new buffer pointer to SS_MEM_PTR16; reads will
+;          then proceed from the new buffer.
 push_memory_source:
   TXA
   PHA                   ; Save X
   LDA #SS_SRC_TYPE_MEMORY
-  JSR push_source_frame
-  ; Set up memory source (pointers already set by caller)
+  JSR push_source_frame ; Saves SS_MEM_PTR16 (still parent's) as prev_data
   LDA #SS_SRC_TYPE_MEMORY
   STA SS_SRC_TYPE
   PLA
