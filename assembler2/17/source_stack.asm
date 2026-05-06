@@ -70,12 +70,25 @@ source_stack_empty:
   RTS
 
 
-; Internal: Build a stack frame for a new source
-; On entry: A = curr_type (0=file, 1=memory)
-;           SS_NAME contains the source name
-; On exit: Frame built with name, curr_type, prev_type, prev_line, prev_data
-;          SS_CURR_LINE16 reset to 0
-;          A, X, Y clobbered
+; INTERNAL helper -- callers should use push_file_source or
+; push_memory_source rather than calling this directly. Those two
+; routines own the calling-convention details (saving X, opening the
+; file, ordering of SS_MEM_PTR16 updates, etc.).
+;
+; Builds a stack frame for a new source. The size of the frame depends
+; on the parent's source type (read from SS_SRC_TYPE), since prev_data
+; is 1 byte for file parents and 2 bytes for memory parents.
+;
+; On entry: A          = curr_type (0=file, 1=memory) for the new frame
+;           SS_NAME    = source name (null-terminated)
+;           SS_SRC_TYPE = parent's source type (becomes prev_type)
+;           SS_CURR_FILE / SS_MEM_PTR16 = parent's read state, captured
+;                        into prev_data. SS_MEM_PTR16 must still hold
+;                        the parent's value when prev_type=memory.
+; On exit:  Frame written with name, curr_type, prev_type, prev_line,
+;           prev_data; SS_P16 advanced past it.
+;           SS_CURR_LINE16 reset to 0.
+;           A, X, Y clobbered.
 push_source_frame:
   PHA                   ; Save curr_type for later
   ; Calculate name length
