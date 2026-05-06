@@ -4,7 +4,7 @@ Unified test runner for 6502 assembler project.
 
 Supports two test types:
   - assembler: Tests the current assembler with assembly source input
-  - file_stack: Tests the file stack component with file I/O operations
+  - source_stack: Tests the source stack component with file I/O operations
 
 Usage:
     ./run_tests.py [options] [test_file...]
@@ -36,7 +36,7 @@ ASM_VERSION = "17"
 
 class TestType(Enum):
     ASSEMBLER = "assembler"
-    FILE_STACK = "file_stack"
+    SOURCE_STACK = "source_stack"
 
 
 class TestResult(Enum):
@@ -62,10 +62,10 @@ class Test:
     name: str = ""
     description: str = ""
     test_type: Optional[TestType] = None
-    mode: str = ""  # For file_stack tests
+    mode: str = ""  # For source_stack tests
     input_text: str = ""  # For assembler tests (INPUT field)
     input_text_bracketed: bool = False  # True if [line] format was used for INPUT
-    files: dict = field(default_factory=dict)  # For file_stack tests
+    files: dict = field(default_factory=dict)  # For source_stack tests
     main_file: str = ""  # First file defined
     expect_hex: str = ""
     expect_fwdref: str = ""
@@ -98,7 +98,7 @@ class TestRunner:
         self.asm_version = asm_version
         self.emulator = base_dir / "emulator" / "emulator.out"
         self.assembler = self._resolve_assembler_binary(base_dir, asm_version)
-        self.file_stack_test = base_dir / asm_version / "out" / "file_stack_test.out"
+        self.source_stack_test = base_dir / asm_version / "out" / "source_stack_test.out"
         self.python_asm = base_dir / "pyasm.py"
 
         self.passed = 0
@@ -152,7 +152,7 @@ class TestRunner:
                     print(f"Error: Python assembler not found at {self.python_asm}")
                     return False
                 return True
-            elif test_type == TestType.FILE_STACK:
+            elif test_type == TestType.SOURCE_STACK:
                 return True  # Will be skipped
             return True
 
@@ -166,9 +166,9 @@ class TestRunner:
                 print(f"Error: Assembler not found at {self.assembler}")
                 print("Run the build first")
                 return False
-        elif test_type == TestType.FILE_STACK:
-            if not self.file_stack_test.exists():
-                print(f"Error: File stack test program not found at {self.file_stack_test}")
+        elif test_type == TestType.SOURCE_STACK:
+            if not self.source_stack_test.exists():
+                print(f"Error: File stack test program not found at {self.source_stack_test}")
                 print("Run the build first")
                 return False
 
@@ -304,7 +304,7 @@ class TestRunner:
         """Infer test type if not explicitly set."""
         if test.test_type is None:
             if test.mode or test.files:
-                test.test_type = TestType.FILE_STACK
+                test.test_type = TestType.SOURCE_STACK
             else:
                 test.test_type = TestType.ASSEMBLER
 
@@ -318,10 +318,10 @@ class TestRunner:
         if test.skip:
             return TestOutcome(TestResult.SKIP, [test.skip])
 
-        # In python mode, skip file_stack tests and small_heap tests
+        # In python mode, skip source_stack tests and small_heap tests
         if self.python_mode:
-            if test.test_type == TestType.FILE_STACK:
-                return TestOutcome(TestResult.SKIP, ["file_stack tests not applicable in python mode"])
+            if test.test_type == TestType.SOURCE_STACK:
+                return TestOutcome(TestResult.SKIP, ["source_stack tests not applicable in python mode"])
             if "small_heap" in test.args:
                 return TestOutcome(TestResult.SKIP, ["small_heap not applicable in python mode"])
 
@@ -329,10 +329,10 @@ class TestRunner:
             if self.use_server:
                 return self._run_assembler_test_server(test)
             return self._run_assembler_test(test)
-        elif test.test_type == TestType.FILE_STACK:
+        elif test.test_type == TestType.SOURCE_STACK:
             if self.use_server:
-                return self._run_file_stack_test_server(test)
-            return self._run_file_stack_test(test)
+                return self._run_source_stack_test_server(test)
+            return self._run_source_stack_test(test)
         else:
             return TestOutcome(TestResult.SKIP, ["Unknown test type"])
 
@@ -585,8 +585,8 @@ class TestRunner:
         else:
             return TestOutcome(TestResult.SKIP, ["No expectation defined"])
 
-    def _run_file_stack_test_server(self, test: Test) -> TestOutcome:
-        """Run a file stack test using server mode."""
+    def _run_source_stack_test_server(self, test: Test) -> TestOutcome:
+        """Run a source stack test using server mode."""
         if not test.mode or not test.main_file:
             return TestOutcome(TestResult.SKIP, ["Missing mode or file"])
 
@@ -605,7 +605,7 @@ class TestRunner:
             main_file = tmpdir / test.main_file
 
             exit_code, output, stderr_data = self.emu.run(
-                self.file_stack_test,
+                self.source_stack_test,
                 args=[test.mode, str(main_file)],
                 load_addr=0x200,
                 cwd=str(tmpdir),
@@ -636,7 +636,7 @@ class TestRunner:
                 return TestOutcome(TestResult.FAIL, details)
             return TestOutcome(TestResult.PASS)
 
-    def _run_file_stack_test(self, test: Test) -> TestOutcome:
+    def _run_source_stack_test(self, test: Test) -> TestOutcome:
         """Run a file stack test."""
         if not test.mode or not test.main_file:
             return TestOutcome(TestResult.SKIP, ["Missing mode or file"])
@@ -663,7 +663,7 @@ class TestRunner:
             # Run test program
             cmd = [
                 str(self.emulator),
-                str(self.file_stack_test),
+                str(self.source_stack_test),
                 "--no-dump",
                 "--load", "200",
                 "--output", str(stdout_file),
@@ -797,7 +797,7 @@ def main():
     parser.add_argument(
         "test_files",
         nargs="*",
-        help="Test files to run (default: <asm_version>/tests/asm_tests.txt and <asm_version>/tests/file_stack_tests.txt)",
+        help="Test files to run (default: <asm_version>/tests/asm_tests.txt and <asm_version>/tests/source_stack_tests.txt)",
     )
     parser.add_argument(
         "-f", "--filter", default="", help="Only run tests matching this pattern"
@@ -848,15 +848,15 @@ def main():
 
         # Check for modular structure (v23+)
         asm_subdir = latest_tests_dir / "asm"
-        file_stack_subdir = latest_tests_dir / "file_stack"
+        source_stack_subdir = latest_tests_dir / "source_stack"
 
         if asm_subdir.exists() and asm_subdir.is_dir():
             # Modular structure: discover all .txt files
             args.test_files = []
 
-            # Add file_stack tests first
-            if file_stack_subdir.exists():
-                for test_file in sorted(file_stack_subdir.glob("*.txt")):
+            # Add source_stack tests first
+            if source_stack_subdir.exists():
+                for test_file in sorted(source_stack_subdir.glob("*.txt")):
                     args.test_files.append(str(test_file))
 
             # Add asm tests (alphabetically sorted - numeric prefixes preserve logical order)
@@ -865,7 +865,7 @@ def main():
         else:
             # Legacy structure (v22 and earlier)
             args.test_files = [
-                str(latest_tests_dir / "file_stack_tests.txt"),
+                str(latest_tests_dir / "source_stack_tests.txt"),
                 str(latest_tests_dir / "asm_tests.txt"),
             ]
 

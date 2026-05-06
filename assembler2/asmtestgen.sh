@@ -110,7 +110,7 @@ echo "--- Version 16 ---"
 run_version_tests 16
 echo "--- Version 17 ---"
 (cd 17 && mkdir -p out &&
-  ../emulator/emulator.out ../16/out/asm_debug.out tests/file_stack/file_stack_test.asm out/file_stack_test.out &&
+  ../emulator/emulator.out ../16/out/asm_debug.out tests/source_stack/source_stack_test.asm out/source_stack_test.out &&
   ../emulator/emulator.out ../16/out/asm_debug.out tests/opendir/opendir_test.asm out/opendir_test.out &&
   ../emulator/emulator.out ../16/out/asm_debug.out instgen.asm out/instgen.out &&
   ../emulator/emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
