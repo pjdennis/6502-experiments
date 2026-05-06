@@ -458,3 +458,76 @@ Other end
 Done
 
 # Tests that we can have file -> file -> memory -> file chain on the stack
+
+# ============================================================================
+# FRAMES MODE - Frame chain inspection
+# ============================================================================
+# Tests the @frames directive (frames mode only) which non-destructively
+# walks the stack and prints "depth:type:name" for each frame, top-of-stack
+# first. Frames mode otherwise behaves like memory mode.
+
+---
+NAME: frames_single
+MODE: frames
+FILE input.txt:
+ 1: Before
+ 2: @frames
+ 3: After
+EXPECT_STDOUT:
+Before
+0:file:input.txt
+After
+
+---
+NAME: frames_with_include
+MODE: frames
+FILE main.txt:
+ 1: Top
+ 2: @include inner.txt
+ 3: End
+FILE inner.txt:
+ 1: Inner
+ 2: @frames
+EXPECT_STDOUT:
+Top
+Inner
+0:file:inner.txt
+1:file:main.txt
+End
+
+---
+NAME: frames_with_memory
+MODE: frames
+FILE input.txt:
+ 1: A
+ 2: @memory @frames
+ 3: B
+EXPECT_STDOUT:
+A
+0:memory:MEMORY
+1:file:input.txt
+B
+
+---
+NAME: frames_deep
+MODE: frames
+FILE main.txt:
+ 1: M1
+ 2: @include middle.txt
+ 3: M3
+FILE middle.txt:
+ 1: D1
+ 2: @include inner.txt
+ 3: D3
+FILE inner.txt:
+ 1: I1
+ 2: @frames
+EXPECT_STDOUT:
+M1
+D1
+I1
+0:file:inner.txt
+1:file:middle.txt
+2:file:main.txt
+D3
+M3

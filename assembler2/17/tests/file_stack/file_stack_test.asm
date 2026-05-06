@@ -5,6 +5,7 @@
 ;   lines  - Read file, output "N:content" for each line
 ;   info   - Read file, output statistics
 ;   memory - Handle @memory, @include, and @traceback markers
+;   frames - Same as memory, plus @frames prints frame chain
 ;
 ; Requires:
 ;   environment.asm vectors (argc, argv, write_b, write_d, exit)
@@ -21,7 +22,7 @@ TOKEN_MEM  = $1D80  ; Offset in TOKEN buffer for memory content
   .zeropage
 
 ; Test state
-TEST_MODE:     .byte         ; 0=echo, 1=lines, 2=info, 3=memory
+TEST_MODE:     .byte         ; 0=echo, 1=lines, 2=info, 3=memory, 4=frames
 CHAR_COUNT16:  .word         ; Character count
 LINE_COUNT16:  .word         ; Line count
 AT_LINE_START: .byte         ; Flag: at start of line (for lines mode)
@@ -30,6 +31,11 @@ AT_LINE_START: .byte         ; Flag: at start of line (for lines mode)
 TEMP:        .byte
 TABP16:      .word
 MARKER_TERM: .byte         ; Character that terminated the keyword ($FF = EOF)
+
+; Frame walker state (frames mode)
+FRAME_DEPTH:     .byte
+FRAME_NAME_LEN:  .byte
+FRAME_PREV_TYPE: .byte
 
   .code
 
@@ -84,6 +90,8 @@ main:
   BEQ .go_info
   CMP #3
   BEQ .go_memory
+  CMP #4
+  BEQ .go_memory      ; frames mode shares memory mode body; differs only in markers
   JMP error_usage
 .go_info:
   JMP mode_info
@@ -273,6 +281,15 @@ check_markers:
   JSR cmp_marker
   BCC .handle_traceback
 
+  ; @frames is only recognized in frames mode (TEST_MODE=4)
+  LDA TEST_MODE
+  CMP #4
+  BNE .no_frames_marker
+  SET16 str_frames, TABP16
+  JSR cmp_marker
+  BCC .handle_frames
+.no_frames_marker:
+
   ; No match - flush '@' + keyword + terminator as text
   JMP flush_as_text
 
@@ -280,7 +297,9 @@ check_markers:
   ; @include requires space terminator (filename follows)
   LDA MARKER_TERM
   CMP #' '
-  BNE flush_as_text   ; Not followed by space, treat as text
+  BEQ .include_ok
+  JMP flush_as_text   ; Not followed by space, treat as text
+.include_ok:
   ; Read filename into TOKEN (overwrites keyword)
   JSR read_include_filename
   JSR push_file_stack
@@ -333,6 +352,26 @@ check_markers:
 .do_traceback:
   ; Print the traceback (pops all stack entries, closes files)
   JSR print_traceback
+  LDA #1
+  STA AT_LINE_START
+  CLC
+  RTS
+
+.handle_frames:
+  ; Consume any remaining content on the line, then print frame chain
+  LDA MARKER_TERM
+  CMP #'\n'
+  BEQ .do_frames
+  CMP #$FF
+  BEQ .do_frames
+  ; Terminator was space - skip to end of line
+.frames_skip_eol:
+  JSR read_char
+  BCS .do_frames
+  CMP #'\n'
+  BNE .frames_skip_eol
+.do_frames:
+  JSR print_frames
   LDA #1
   STA AT_LINE_START
   CLC
@@ -437,6 +476,8 @@ str_memory:
   .asciiz "memory"
 str_traceback:
   .asciiz "traceback"
+str_frames:
+  .asciiz "frames"
 str_memory_source:
   .asciiz "MEMORY"
 
@@ -525,6 +566,83 @@ str_type_file:
   .asciiz "file:"
 str_type_memory:
   .asciiz "memory:"
+
+; Print the current frame chain non-destructively
+; Walks frames from FS_P16 upward through the downward stack until FILE_STACK
+; Output: one line per frame "depth:type:name" with depth 0 = top of stack
+; Preserves X
+print_frames:
+  TXA
+  PHA
+  CP16 FS_P16, TABP16
+  LDA #0
+  STA FRAME_DEPTH
+.loop:
+  CMPI16 TABP16, FILE_STACK
+  BCS .done                 ; TABP16 >= FILE_STACK -> walked past base
+  ; Print depth as decimal (single byte, fits in low byte of TO_DECIMAL_VALUE16)
+  LDA FRAME_DEPTH
+  STA TO_DECIMAL_VALUE16
+  LDA #0
+  STA TO_DECIMAL_VALUE16 + 1
+  JSR print_decimal
+  LDA #':'
+  JSR write_b
+  ; Find name's null terminator (Y = name length when found)
+  LDY #$FF
+.find_null:
+  INY
+  LDA (TABP16),Y
+  BNE .find_null
+  STY FRAME_NAME_LEN
+  ; Read curr_type at offset name_len+1 (one past the null)
+  INY
+  LDA (TABP16),Y
+  BEQ .is_file
+  ; curr_type = 1 (memory)
+  PUSH16 TABP16
+  SET16 str_type_memory, TABP16
+  JSR print_str
+  POP16 TABP16
+  JMP .read_prev
+.is_file:
+  PUSH16 TABP16
+  SET16 str_type_file, TABP16
+  JSR print_str
+  POP16 TABP16
+.read_prev:
+  ; prev_type at offset name_len+2; recompute Y since print_str clobbers it
+  LDY FRAME_NAME_LEN
+  INY                       ; past null
+  INY                       ; past curr_type
+  LDA (TABP16),Y
+  STA FRAME_PREV_TYPE
+  ; Print basename (TABP16 still points at name start)
+  JSR print_basename
+  LDA #'\n'
+  JSR write_b
+  ; Compute frame size = name_len + 6 (file prev_data) or +7 (memory prev_data)
+  LDA FRAME_NAME_LEN
+  CLC
+  ADC #6
+  LDX FRAME_PREV_TYPE       ; Z = (prev_type == 0)
+  BEQ .size_done
+  CLC
+  ADC #1
+.size_done:
+  ; Advance TABP16 by frame size (always < 256 here)
+  CLC
+  ADC TABP16
+  STA TABP16
+  BCC .no_carry
+  INC TABP16 + 1
+.no_carry:
+  INC FRAME_DEPTH
+  JMP .loop
+.done:
+  PLA
+  TAX
+  RTS
 
 ; Print just the basename from a path at TABP16 (skips everything before last '/')
 print_basename:
@@ -671,6 +789,9 @@ parse_mode:
   BEQ .set_mode
   INX
   CMP #'m'
+  BEQ .set_mode
+  INX
+  CMP #'f'
   BEQ .set_mode
   SEC
   RTS
