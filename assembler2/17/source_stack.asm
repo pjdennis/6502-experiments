@@ -1,25 +1,42 @@
 ; Requires:
-;   SOURCE_STACK     - 1 past the highest address from which the stack grows down (asm.asm)
-;   SS_NAME    - filename buffer (asm.asm alias to TOKEN)
-;   SS_ERR_NO_FILE - error handler for read_char when no file is open (errors.asm)
-;   SS_POP_MEMORY_HOOK - optional hook for memory-source cleanup (asm.asm alias)
+;   SOURCE_STACK       - 1 past the highest address; stack grows down (asm.asm)
+;   SS_NAME            - buffer holding the source's name; alias to TOKEN
+;                        (asm.asm / source_stack_test.asm)
+;   SS_ERR_NO_FILE     - error handler for read_char when no source is
+;                        open (errors.asm; only referenced under
+;                        enable_debug)
+;   SS_POP_MEMORY_HOOK - optional hook invoked when a memory source is
+;                        popped, used by the assembler to restore label
+;                        scope (asm.asm alias to pop_label_scope; left
+;                        undefined by the test program)
 ;   err_file_not_found - error handler for when open returns 0 (errors.asm)
-;   open, close, read - file I/O functions (environment.asm)
+;   open, close, read  - source I/O syscalls (environment.asm)
 
-; The source stack grows downwards. Unified frame format (from low to high address):
+; The source stack grows downwards. Each frame is laid out from low to
+; high address (low address is closer to the top of the stack):
 ;
 ;   name\0         - Source name (null-terminated)
 ;   curr_type      - Type of THIS source: 0=file, 1=memory
 ;   prev_type      - Type we're RETURNING to: 0=file, 1=memory
 ;   prev_line_L    - Line number in parent (low byte)
 ;   prev_line_H    - Line number in parent (high byte)
-;   <prev_data>    - Depends on prev_type:
-;                    If prev_type=0 (file):   prev_handle (1 byte)
-;                    If prev_type=1 (memory): prev_ptr_L, prev_ptr_H (2 bytes, zero-terminated)
+;   <prev_data>    - Parent state to restore on pop. Size depends on
+;                    prev_type:
+;                      prev_type=0 (file):   prev_handle (1 byte)
+;                      prev_type=1 (memory): prev_ptr_L, prev_ptr_H
+;                                            (2 bytes; the parent's
+;                                            SS_MEM_PTR16 at the moment
+;                                            of this push)
 ;
-; Frame sizes: name_len + 1 (null) + 1 (curr) + 1 (prev) + 2 (line) + prev_data
+; Frame size: name_len + 1 (null) + 1 (curr) + 1 (prev) + 2 (line) + prev_data
 ;   = name_len + 6 if returning to file
 ;   = name_len + 7 if returning to memory
+;
+; Future Phase 3 work appends additional payload bytes after prev_data
+; for memory sources that need activation state (label scope, macro
+; entry, etc.); the source stack itself never reads those payload
+; bytes -- they are written and consumed by the SS_POP_MEMORY_HOOK
+; owner.
 
   .zeropage
 
@@ -198,8 +215,11 @@ push_memory_source:
   RTS
 
 
-; Unified pop function - handles both file and memory sources
-; On exit: Previous state restored (SS_CURR_FILE or FS_MEM_PTR)
+; Unified pop function - handles both file and memory sources.
+; For file sources, closes the current file handle. For memory sources,
+; calls SS_POP_MEMORY_HOOK if defined (the assembler hooks scope
+; restore here; the test program leaves it undefined).
+; On exit: Previous state restored (SS_CURR_FILE or SS_MEM_PTR16)
 ;          SS_SRC_TYPE restored to prev_type
 ;          SS_CURR_LINE16 restored to prev_line
 pop_source:
