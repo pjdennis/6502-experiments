@@ -3,17 +3,17 @@
 ; Provides: check_macro_recursion, expand_macro
 ;
 ; Requires:
-;   CURR_CHAR (asm.asm alias; backing storage in file_stack.asm)
+;   CURR_CHAR (asm.asm alias; backing storage in source_stack.asm)
 ;   TOKEN, PASS (asm.asm)
 ;   IN_MACRO_DEF (macro_capture.asm)
 ;   MACRO_ARG_BUF, MACRO_ARG_LIMIT, MACRO_ENTRY16, OPERAND16 (asm.asm)
 ;   LABEL_TYPE, LABEL_TYPE_MACRO (common.asm)
-;   read_char (asm.asm alias; implemented in file_stack.asm)
+;   read_char (asm.asm alias; implemented in source_stack.asm)
 ;   check_for_end_of_line (tokenizer.asm)
 ;   parse_expression (expressions.asm)
 ;   select_label_hash_table (common.asm)
 ;   hash_add (hash_table.asm), store_hash_value (common.asm)
-;   push_label_scope (label_scope.asm), push_memory_source (file_stack.asm)
+;   push_label_scope (label_scope.asm), push_memory_source (source_stack.asm)
 ;   err_* (errors.asm)
 
   .code

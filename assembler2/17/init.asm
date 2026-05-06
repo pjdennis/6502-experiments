@@ -11,7 +11,7 @@
 ;   init_heap (common.asm), init_hash_table (hash_table.asm)
 ;   select_label_hash_table (common.asm)
 ;   hash_add (hash_table.asm), store_hash_value (common.asm)
-;   push_file_source (file_stack.asm)
+;   push_file_source (source_stack.asm)
 ;   show_message (errors.asm, debug output)
 
   .zeropage
@@ -24,7 +24,7 @@ ARG_PTR16:       .word        ; Pointer into COMMAND_LINE_ARGS table
 
 
 ; Opens the file with name from the first command line argument, pushing
-; to the file stack
+; to the source stack
 ; On exit X is preserved
 open_input:
   TXA

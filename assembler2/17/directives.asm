@@ -5,10 +5,10 @@
 ;           dir_reserve, dir_ifdef, dir_ifndef, dir_else, dir_endif
 ;
 ; Requires:
-;   CURR_CHAR (asm.asm alias; backing storage in file_stack.asm)
+;   CURR_CHAR (asm.asm alias; backing storage in source_stack.asm)
 ;   TOKEN, PASS, PC16, PC_SAVE16, OPERAND16, IN_ZEROPAGE (asm.asm)
 ;   IFDEF_DECISIONS (asm.asm), COND_DEPTH, SKIP_DEPTH, IFDEF_INDEX (directives.asm)
-;   read_char (asm.asm alias; implemented in file_stack.asm)
+;   read_char (asm.asm alias; implemented in source_stack.asm)
 ;   read_token, read_filename (tokenizer.asm)
 ;   find_in_hash_instruction, select_instruction_hash_table (common.asm/hash_table.asm)
 ;   skip_rest_of_line, check_for_end_of_line (tokenizer.asm)
@@ -18,7 +18,7 @@
 ;   parse_value (expressions.asm)
 ;   dir_macro (macro_capture.asm)
 ;   do_jump, JUMP_TARGET16 (init.asm)
-;   push_file_source (file_stack.asm)
+;   push_file_source (source_stack.asm)
 ;   CMPI16 (macros.asm)
 ;   err_* (errors.asm)
 

@@ -1,8 +1,8 @@
-# File Stack Component Tests
+# Source Stack Component Tests
 #
 # Format:
 #   NAME: test identifier
-#   MODE: echo|lines|info|memory
+#   MODE: echo|lines|info|memory|frames|oom
 #   FILE <filename>: (multi-line content, "N: " prefix stripped)
 #   EXPECT_STDOUT: (multi-line expected output)
 #   EXPECT_STDERR: (multi-line expected stderr, for error tests)

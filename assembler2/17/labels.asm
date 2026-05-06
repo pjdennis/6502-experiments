@@ -4,12 +4,12 @@
 ;           update_label_scope_from_lookup, capture_label
 ;
 ; Requires:
-;   CURR_CHAR (asm.asm alias; backing storage in file_stack.asm)
+;   CURR_CHAR (asm.asm alias; backing storage in source_stack.asm)
 ;   TOKEN, PASS, OPERAND16 (asm.asm)
 ;   LABEL_SCOPE16 (hash_table.asm)
 ;   LABEL_TYPE, LABEL_TYPE_GLOBAL, LABEL_TYPE_LOCAL, LABEL_TYPE_MACRO_LOCAL (common.asm)
 ;   SCOPE_DEPTH (label_scope.asm)
-;   read_char (asm.asm alias; implemented in file_stack.asm)
+;   read_char (asm.asm alias; implemented in source_stack.asm)
 ;   read_token, skip_spaces, check_for_end_of_line (tokenizer.asm)
 ;   parse_value (expressions.asm), update_pc (output.asm)
 ;   find_in_hash, hash_add, commit_cached_hash (hash_table.asm)

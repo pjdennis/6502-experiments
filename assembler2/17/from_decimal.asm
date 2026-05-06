@@ -1,8 +1,8 @@
 ; Convert decimal string to 16-bit value
 ;
 ; Requires:
-;   CURR_CHAR          - current character (asm.asm alias; backing storage in file_stack.asm)
-;   read_char          - read next character (asm.asm alias; implemented in file_stack.asm)
+;   CURR_CHAR          - current character (asm.asm alias; backing storage in source_stack.asm)
+;   read_char          - read next character (asm.asm alias; implemented in source_stack.asm)
 ;   err_value_out_of_range - error handler for overflow (errors.asm)
 
   .zeropage

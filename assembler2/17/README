@@ -38,11 +38,11 @@ Memory Map
                   Instruction/directive data (from inst.asm.out)
                   Assembler code
                   HEAP (immediately after code, grows upward via MEMP16)
-  $F000         FILE_STACK (grows downward via FS_P16)
+  $F000         SOURCE_STACK (grows downward via SS_P16)
   $FFFC-$FFFF   Reset and interrupt vectors
 
 The heap (MEMP16) grows upward storing hash entries, macro definitions, and
-forward references. The file stack (FS_P16) grows downward storing
+forward references. The source stack (SS_P16) grows downward storing
 include/macro source contexts. A 256-byte safety buffer is maintained between
 them for indexed addressing; err_out_of_memory is raised on collision.
 
@@ -51,12 +51,12 @@ Key Global State
 ----------------
 
   CURR_CHAR               Last character read by read_char
-                           (alias for FS_CURR_CHAR)
+                           (alias for SS_CURR_CHAR)
   TOKEN            $0600  Buffer holding current token being parsed
   PASS                    $00 = pass 1, $FF = pass 2
   PC16                    Current program counter
   MEMP16                  Heap pointer (grows upward)
-  FS_P16                  File stack pointer (grows downward)
+  SS_P16                  Source stack pointer (grows downward)
   HEX16 / OPERAND16      Current parsed value (aliased names)
   IS_FWDREF               $FF if current value is a forward reference
   INST_PTR16 /            Instruction table entry or macro definition
@@ -141,7 +141,7 @@ body is skipped since it was already captured in pass 1.
 Expansion (macro_expansion.asm): Macro invocation parses arguments in the
 caller's scope, then pushes a new label scope with a unique expansion ID
 (EXPANSION_ID16). Parameters are added to the scope's hash table. The macro
-body is set up as a memory source on the file stack, so read_char reads from
+body is set up as a memory source on the source stack, so read_char reads from
 it transparently.
 
 Scoping: Each expansion gets a unique scope ID from the monotonic
@@ -152,10 +152,10 @@ Recursion detection: check_macro_recursion walks the scope stack comparing
 macro entry addresses. Direct and indirect recursion are both caught.
 
 
-File Stack
+Source Stack
 ----------
 
-The file stack (file_stack.asm) handles two source types transparently:
+The source stack (source_stack.asm) handles two source types transparently:
 
   File sources (type 0): Read from a file handle via the emulator's I/O.
     Used for the main input and .include files.
@@ -165,7 +165,7 @@ The file stack (file_stack.asm) handles two source types transparently:
 
 Each stack frame stores the source name, type, and enough context to restore
 the parent source when the current one is exhausted. Popping a memory source
-calls pop_label_scope (via FS_POP_MEMORY_HOOK) to restore the caller's scope.
+calls pop_label_scope (via SS_POP_MEMORY_HOOK) to restore the caller's scope.
 
 
 Conditional Assembly
@@ -196,7 +196,7 @@ Modules (included from asm.asm, in include order):
   common.asm          Mode constants, label types, heap; includes hash_table.asm
   label_scope.asm     Scope stack for macro expansions, expansion ID counter
   forward_ref.asm     Forward reference list operations
-  file_stack.asm      Unified file/memory source stack, read_char
+  source_stack.asm      Unified file/memory source stack, read_char
   errors.asm          Error messages and handlers
   from_decimal.asm    Decimal string to 16-bit value conversion
   output.asm          PC management, byte emission
@@ -209,7 +209,7 @@ Modules (included from asm.asm, in include order):
   macro_expansion.asm Macro invocation, argument parsing, scope setup
   init.asm            CLI argument processing, input file opening
 
-Foundational modules (environment, macros, common, file stack, errors) come
+Foundational modules (environment, macros, common, source stack, errors) come
 first, followed by parsing and assembly modules, with init last.
 
 
@@ -231,10 +231,10 @@ Configuration Aliases
 Several symbols are configured before their include file to customize
 behavior:
 
-  FS_FILENAME        = TOKEN              File stack uses TOKEN for filenames
-  FS_POP_MEMORY_HOOK = pop_label_scope    Popping memory source restores scope
-  read_char          = file_stack_read_char
-  CURR_CHAR          = FS_CURR_CHAR
+  SS_NAME        = TOKEN              Source stack uses TOKEN for filenames
+  SS_POP_MEMORY_HOOK = pop_label_scope    Popping memory source restores scope
+  read_char          = source_stack_read_char
+  CURR_CHAR          = SS_CURR_CHAR
   HT_KEY             = TOKEN              Hash table key source
   HT_V16             = HEX16              Hash table value source
 

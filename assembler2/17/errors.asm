@@ -5,10 +5,10 @@
 ;   TABP16               - zero page location for table pointer (hash_table.asm)
 ;   CURR_LINE16          - zero page location for current line number (asm.asm alias)
 ;   CURR_OUT_FILE        - output file handle (asm.asm)
-;   SS_P16               - file stack pointer (file_stack.asm)
-;   SS_SRC_TYPE          - source type (file_stack.asm)
-;   source_stack_empty     - check if file stack is empty (file_stack.asm)
-;   pop_source       - pop file stack entry (file_stack.asm)
+;   SS_P16               - source stack pointer (source_stack.asm)
+;   SS_SRC_TYPE          - source type (source_stack.asm)
+;   source_stack_empty     - check if source stack is empty (source_stack.asm)
+;   pop_source       - pop source stack entry (source_stack.asm)
 ;   close                - close file handles (environment.asm)
 ;   write_d              - write character to stderr (environment.asm)
 ;   exit                 - exit program (environment.asm)
@@ -348,8 +348,8 @@ show_message:
   RTS
 
 
-; Show traceback - uses file stack API to walk include/expansion chain
-; On entry SS_P16 points to current file stack entry
+; Show traceback - uses source stack API to walk include/expansion chain
+; On entry SS_P16 points to current source stack entry
 ; On exit A, X, Y not preserved
 ;         TABP16;TABP16 + 1 not preserved
 ;         All files in stack are closed

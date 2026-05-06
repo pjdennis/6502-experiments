@@ -6,7 +6,7 @@
 ;   err_file_not_found - error handler for when open returns 0 (errors.asm)
 ;   open, close, read - file I/O functions (environment.asm)
 
-; The file stack grows downwards. Unified frame format (from low to high address):
+; The source stack grows downwards. Unified frame format (from low to high address):
 ;
 ;   name\0         - Source name (null-terminated)
 ;   curr_type      - Type of THIS source: 0=file, 1=memory
@@ -26,7 +26,7 @@
 SS_CURR_CHAR:   .byte       ; The last character read
 SS_CURR_FILE:   .byte       ; The current file handle
 SS_CURR_LINE16: .word       ; The current line number
-SS_P16:         .word       ; Pointer to the current location in the file stack
+SS_P16:         .word       ; Pointer to the current location in the source stack
 SS_TEMP16:      .word       ; Temporary location for use in calculations
 
 ; Memory source support (zero-terminated buffers)
@@ -47,7 +47,7 @@ source_stack_init:
   RTS
 
 
-; On exit Z is set if file stack empty, clear otherwise
+; On exit Z is set if source stack empty, clear otherwise
 source_stack_empty:
   CMPI16 SS_P16, SOURCE_STACK
   RTS

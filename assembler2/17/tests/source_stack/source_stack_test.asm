@@ -1,5 +1,5 @@
-; File Stack Test Program
-; Usage: file_stack_test <mode> <input_file>
+; Source Stack Test Program
+; Usage: source_stack_test <mode> <input_file>
 ; Modes:
 ;   echo   - Read file char by char, write to stdout
 ;   lines  - Read file, output "N:content" for each line
@@ -11,7 +11,7 @@
 ;
 ; Requires:
 ;   environment.asm vectors (argc, argv, write_b, write_d, exit)
-;   file_stack.asm routines (source_stack_init, push_file_source, pop_source,
+;   source_stack.asm routines (source_stack_init, push_file_source, pop_source,
 ;                            push_memory_source, source_stack_empty, read_char)
 ;   to_decimal.asm (TO_DECIMAL_RESULT, to_decimal)
 
@@ -54,7 +54,7 @@ OOM_LIMIT16:     .word
   JSR print_str
   .endmacro
 
-; File stack configuration
+; Source stack configuration
 SS_NAME   = TOKEN
 
 ; CHECK_FOR_OUT_OF_MEMORY - Stack-overflow check used by push_source_frame.
@@ -74,12 +74,12 @@ SS_NAME   = TOKEN
 .oom_ok:
   .endmacro
 
-; Error handler for file-not-found (required by file_stack.asm)
+; Error handler for file-not-found (required by source_stack.asm)
 err_file_not_found:
   BRK
   .asciiz 36, "File not found"
 
-; Error handler for stack overflow (required by file_stack.asm via macro)
+; Error handler for stack overflow (required by source_stack.asm via macro)
 err_out_of_memory:
   SET16 msg_oom, TABP16
   JSR print_str_err
@@ -565,7 +565,7 @@ read_memory_content:
   INX
   RTS
 
-; Print traceback of file stack - pops all entries, closes files
+; Print traceback of source stack - pops all entries, closes files
 ; Output format: "type:name:line\n" for each entry in stack
 ; where type is "file" or "memory"
 ; Loop: check if empty -> print current -> pop -> repeat
@@ -813,7 +813,7 @@ print_decimal:
   RTS
 
 ; ============================================================================
-; Read character with line tracking (wrapper around file_stack's read_char)
+; Read character with line tracking (wrapper around source_stack's read_char)
 ; On exit: A = character, C = 0 if char read, C = 1 if all done
 ;          CURLINEL/H updated on newline
 ; ============================================================================
@@ -864,7 +864,7 @@ parse_args:
   INY
   JMP .copy_filename
 .filename_done:
-  ; Open file via file stack (this resets line number to 0)
+  ; Open file via source stack (this resets line number to 0)
   JSR push_file_source
   ; Initialize line number to 1 (first line is line 1)
   SET16 1, CURLINE16
@@ -925,7 +925,7 @@ print_str_err:
   RTS
 
 msg_usage:
-  .asciiz "Usage: file_stack_test <mode> <file>\nModes: echo, lines, info, memory\n"
+  .asciiz "Usage: source_stack_test <mode> <file>\nModes: echo, lines, info, memory, frames, oom\n"
 
 ; Emulator convention - start address is the last 2 bytes of the file
   .word main

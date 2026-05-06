@@ -29,7 +29,7 @@
 ; Addresses
 TOKEN       = $1E00     ; Buffer for the current token being read
 IHASHTAB    = $1F00     ; Instruction hash table
-SOURCE_STACK  = $F000     ; File stack (needed by advance_heap check)
+SOURCE_STACK  = $F000     ; Source stack (needed by advance_heap check)
 *           = $2000     ; Code generates here
 
 
@@ -39,7 +39,7 @@ TEMP:      .byte         ; 1 byte temporary value
 HEX16:     .word         ; 2 bytes
 P16:       .word         ; 2 byte pointer
 P2_16:     .word         ; 2 byte pointer
-SS_P16:    .word         ; File stack pointer - needed by advance_heap check
+SS_P16:    .word         ; Source stack pointer - needed by advance_heap check
 
   .code
 

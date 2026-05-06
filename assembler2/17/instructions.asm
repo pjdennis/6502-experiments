@@ -4,9 +4,9 @@
 ;           handle_fwdref_mode, parse_operand
 ;
 ; Requires:
-;   CURR_CHAR (asm.asm alias; backing storage in file_stack.asm)
+;   CURR_CHAR (asm.asm alias; backing storage in source_stack.asm)
 ;   HEX16, OPERAND16, PC16, PASS, IS_FWDREF (asm.asm)
-;   read_char (asm.asm alias; implemented in file_stack.asm)
+;   read_char (asm.asm alias; implemented in source_stack.asm)
 ;   read_token, skip_spaces, skip_rest_of_line, check_for_end_of_line (tokenizer.asm)
 ;   parse_value (expressions.asm)
 ;   emit (output.asm)

@@ -5,9 +5,9 @@
 ;           read_hex, read_token, read_filename, decode_escape
 ;
 ; Requires:
-;   CURR_CHAR (asm.asm alias; backing storage in file_stack.asm)
+;   CURR_CHAR (asm.asm alias; backing storage in source_stack.asm)
 ;   TOKEN, HEX16, TEMP (asm.asm)
-;   read_char (asm.asm alias; implemented in file_stack.asm)
+;   read_char (asm.asm alias; implemented in source_stack.asm)
 ;   err_invalid_hex, err_token_too_long (errors.asm)
 
   .code
@@ -51,7 +51,7 @@ skip_token:
   RTS
 
 
-; read_char is provided by file_stack.asm
+; read_char is provided by source_stack.asm
 
 ; Read and discard space characters
 ; On entry CURR_CHAR contains the current character
