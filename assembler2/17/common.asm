@@ -2,7 +2,7 @@
 ;
 ; Requires:
 ;   TOKEN, HEX16     - base token/value buffers for HT_KEY/HT_V16 aliases (asm.asm)
-;   HEAP, FILE_STACK - memory layout symbols for init_heap (asm.asm)
+;   HEAP, SOURCE_STACK - memory layout symbols for init_heap (asm.asm)
 ;   FS_P16           - file stack pointer for heap/stack collision checks (file_stack.asm)
 ;   SMALL_HEAP_FLAG  - debug flag for small-heap mode (asm.asm, optional)
 ;   err_out_of_memory - error handler for heap/stack collision (errors.asm)
@@ -115,7 +115,7 @@ init_heap:
   LDA SMALL_HEAP_FLAG
   BEQ .normal_heap
   ; Small heap for testing: only ~384 bytes available
-  SET16 FILE_STACK - $0180, MEMP16
+  SET16 SOURCE_STACK - $0180, MEMP16
   RTS
 .normal_heap:
   .endif

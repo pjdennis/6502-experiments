@@ -29,7 +29,7 @@
 ; Addresses
 TOKEN       = $1E00     ; Buffer for the current token being read
 IHASHTAB    = $1F00     ; Instruction hash table
-FILE_STACK  = $F000     ; File stack (needed by advance_heap check)
+SOURCE_STACK  = $F000     ; File stack (needed by advance_heap check)
 *           = $2000     ; Code generates here
 
 
@@ -496,7 +496,7 @@ start:
   LDA #LABEL_TYPE_GLOBAL
   STA LABEL_TYPE    ; Clear flag before using hash table
   JSR init_heap
-  SET16 FILE_STACK, FS_P16 ; Initialize so heap overflow check works
+  SET16 SOURCE_STACK, FS_P16 ; Initialize so heap overflow check works
   JSR select_instruction_hash_table
   JSR init_hash_table
   JSR populate_instruction_hash_table

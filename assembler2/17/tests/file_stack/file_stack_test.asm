@@ -17,7 +17,7 @@
 
 * = $0200
 
-FILE_STACK = $F000
+SOURCE_STACK = $F000
 TOKEN      = $1D00
 TOKEN_MEM  = $1D80  ; Offset in TOKEN buffer for memory content
 
@@ -127,7 +127,7 @@ main:
   JMP mode_info
 .go_oom:
   ; Tight stack limit so push triggers err_out_of_memory after a few frames.
-  ; FS_P16 starts at FILE_STACK ($F000) and grows down. Limit at $EF80 leaves
+  ; FS_P16 starts at SOURCE_STACK ($F000) and grows down. Limit at $EF80 leaves
   ; only $80 bytes of stack -- a handful of pushes before OOM.
   SET16 $EF80, OOM_LIMIT16
 .go_memory:
@@ -669,7 +669,7 @@ print_top_frame_size:
   RTS
 
 ; Print the current frame chain non-destructively
-; Walks frames from FS_P16 upward through the downward stack until FILE_STACK
+; Walks frames from FS_P16 upward through the downward stack until SOURCE_STACK
 ; Output: one line per frame "depth:type:name" with depth 0 = top of stack
 ; Preserves X
 print_frames:
@@ -679,8 +679,8 @@ print_frames:
   LDA #0
   STA FRAME_DEPTH
 .loop:
-  CMPI16 TABP16, FILE_STACK
-  BCS .done                 ; TABP16 >= FILE_STACK -> walked past base
+  CMPI16 TABP16, SOURCE_STACK
+  BCS .done                 ; TABP16 >= SOURCE_STACK -> walked past base
   ; Print depth as decimal (single byte, fits in low byte of TO_DECIMAL_VALUE16)
   LDA FRAME_DEPTH
   STA TO_DECIMAL_VALUE16

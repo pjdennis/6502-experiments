@@ -21,7 +21,7 @@ ELSE_SEEN_ARRAY = $0680  ; Array tracking .else seen per nesting level (16 bytes
 LHASHTAB        = $0700  ; Label hash table
 IFDEF_DECISIONS = $0800  ; Buffer for .ifdef decisions (256 bytes)
 *               = $2000  ; Code generates here follwed by HEAP
-FILE_STACK      = $F000  ; File stack will grow down from 1 below here
+SOURCE_STACK      = $F000  ; File stack will grow down from 1 below here
 
 
   .zeropage

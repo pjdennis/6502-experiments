@@ -1,5 +1,5 @@
 ; Requires:
-;   FILE_STACK     - 1 past the highest address from which the stack grows down (asm.asm)
+;   SOURCE_STACK     - 1 past the highest address from which the stack grows down (asm.asm)
 ;   FS_FILENAME    - filename buffer (asm.asm alias to TOKEN)
 ;   FS_ERR_NO_FILE - error handler for read_char when no file is open (errors.asm)
 ;   FS_POP_MEMORY_HOOK - optional hook for memory-source cleanup (asm.asm alias)
@@ -40,7 +40,7 @@ FS_SRC_TYPE_MEMORY = 1
 
 
 file_stack_init:
-  SET16 FILE_STACK, FS_P16
+  SET16 SOURCE_STACK, FS_P16
   LDA #FS_SRC_TYPE_FILE
   STA FS_SRC_TYPE
   STA FS_CURR_FILE
@@ -49,7 +49,7 @@ file_stack_init:
 
 ; On exit Z is set if file stack empty, clear otherwise
 file_stack_empty:
-  CMPI16 FS_P16, FILE_STACK
+  CMPI16 FS_P16, SOURCE_STACK
   RTS
 
 
