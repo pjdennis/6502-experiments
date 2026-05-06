@@ -64,7 +64,7 @@ FS_POP_MEMORY_HOOK = pop_label_scope
   .ifdef enable_debug
 FS_ERR_NO_FILE     = err_no_file
   .endif
-  .include file_stack.asm
+  .include source_stack.asm
 read_char          = file_stack_read_char
 CURR_CHAR          = FS_CURR_CHAR
 CURR_LINE16        = FS_CURR_LINE16

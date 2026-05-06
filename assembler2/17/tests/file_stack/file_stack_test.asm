@@ -88,7 +88,7 @@ err_out_of_memory:
 msg_oom:
   .asciiz "OUT OF MEMORY\n"
 
-  .include file_stack.asm
+  .include source_stack.asm
 read_char = file_stack_read_char
 CURLINE16 = FS_CURR_LINE16
 CURR_CHAR = FS_CURR_CHAR

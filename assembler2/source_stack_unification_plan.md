@@ -322,7 +322,10 @@ Each phase ends with:
 
 ## Status (filled in as work proceeds)
 
-- [ ] Phase 0 — test coverage shoring
+- [x] Phase 0 — test coverage shoring (complete; added frames mode, balance
+  tests, OOM injection mode, and top-frame-size visibility for the future
+  payload work; also fixed a memory-above-memory ordering bug in the test
+  program's setup_memory_source)
 - [ ] Phase 1 — rename
 - [ ] Phase 2 — abstraction refactor
 - [ ] Phase 3 — stack merge
