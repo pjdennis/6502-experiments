@@ -3,7 +3,7 @@
 ; Requires:
 ;   TOKEN, HEX16     - base token/value buffers for HT_KEY/HT_V16 aliases (asm.asm)
 ;   HEAP, SOURCE_STACK - memory layout symbols for init_heap (asm.asm)
-;   FS_P16           - file stack pointer for heap/stack collision checks (file_stack.asm)
+;   SS_P16           - file stack pointer for heap/stack collision checks (file_stack.asm)
 ;   SMALL_HEAP_FLAG  - debug flag for small-heap mode (asm.asm, optional)
 ;   err_out_of_memory - error handler for heap/stack collision (errors.asm)
 ;
@@ -138,7 +138,7 @@ advance_heap:
   INC MEMP16 + 1
 .done:
   ; Check for collision with file stack
-  CHECK_FOR_OUT_OF_MEMORY FS_P16
+  CHECK_FOR_OUT_OF_MEMORY SS_P16
   RTS
 
 

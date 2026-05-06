@@ -39,7 +39,7 @@ TEMP:      .byte         ; 1 byte temporary value
 HEX16:     .word         ; 2 bytes
 P16:       .word         ; 2 byte pointer
 P2_16:     .word         ; 2 byte pointer
-FS_P16:    .word         ; File stack pointer - needed by advance_heap check
+SS_P16:    .word         ; File stack pointer - needed by advance_heap check
 
   .code
 
@@ -496,7 +496,7 @@ start:
   LDA #LABEL_TYPE_GLOBAL
   STA LABEL_TYPE    ; Clear flag before using hash table
   JSR init_heap
-  SET16 SOURCE_STACK, FS_P16 ; Initialize so heap overflow check works
+  SET16 SOURCE_STACK, SS_P16 ; Initialize so heap overflow check works
   JSR select_instruction_hash_table
   JSR init_hash_table
   JSR populate_instruction_hash_table

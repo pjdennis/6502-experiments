@@ -39,7 +39,7 @@ FRAME_DEPTH:     .byte
 FRAME_NAME_LEN:  .byte
 FRAME_PREV_TYPE: .byte
 
-; OOM injection: minimum allowed value of FS_TEMP16 during push.
+; OOM injection: minimum allowed value of SS_TEMP16 during push.
 ; Default $0000 means "no limit"; oom mode sets a tight value.
 OOM_LIMIT16:     .word
 
@@ -90,8 +90,8 @@ msg_oom:
 
   .include source_stack.asm
 read_char = file_stack_read_char
-CURLINE16 = FS_CURR_LINE16
-CURR_CHAR = FS_CURR_CHAR
+CURLINE16 = SS_CURR_LINE16
+CURR_CHAR = SS_CURR_CHAR
 
 
 main:
@@ -127,7 +127,7 @@ main:
   JMP mode_info
 .go_oom:
   ; Tight stack limit so push triggers err_out_of_memory after a few frames.
-  ; FS_P16 starts at SOURCE_STACK ($F000) and grows down. Limit at $EF80 leaves
+  ; SS_P16 starts at SOURCE_STACK ($F000) and grows down. Limit at $EF80 leaves
   ; only $80 bytes of stack -- a handful of pushes before OOM.
   SET16 $EF80, OOM_LIMIT16
 .go_memory:
@@ -517,10 +517,10 @@ setup_memory_source:
   JMP .copy_name
 .name_done:
   ; Push memory source FIRST so push_source_frame can capture the parent's
-  ; FS_MEM_PTR16 (when the parent is itself a memory source). Only after the
+  ; SS_MEM_PTR16 (when the parent is itself a memory source). Only after the
   ; push do we install the new memory pointer.
   JSR push_memory_source
-  SET16 TOKEN_MEM, FS_MEM_PTR16
+  SET16 TOKEN_MEM, SS_MEM_PTR16
   ; Initialize line to 1 for memory source, at start of line
   SET16 1, CURLINE16
   LDA #1
@@ -578,8 +578,8 @@ print_traceback:
   JSR file_stack_empty
   BEQ .done
   ; Find curr_type by scanning past the name
-  ; FS_P16 points to: name\0 | curr_type | ...
-  CP16 FS_P16, TABP16
+  ; SS_P16 points to: name\0 | curr_type | ...
+  CP16 SS_P16, TABP16
   LDY #0
 .find_null:
   LDA (TABP16),Y
@@ -601,7 +601,7 @@ print_traceback:
   JSR print_str
 .print_name:
   ; Print name (FS_PL points to current entry's name)
-  CP16 FS_P16, TABP16
+  CP16 SS_P16, TABP16
   JSR print_basename
   ; Print ":"
   LDA #':'
@@ -641,13 +641,13 @@ print_top_frame_size:
   LDY #$FF
 .scan:
   INY
-  LDA (FS_P16),Y
+  LDA (SS_P16),Y
   BNE .scan
   STY FRAME_NAME_LEN
   ; Read prev_type at offset name_len + 2 (past null and curr_type)
   INY
   INY
-  LDA (FS_P16),Y
+  LDA (SS_P16),Y
   STA FRAME_PREV_TYPE
   ; Frame size = name_len + 6 (prev_type=file) or +7 (prev_type=memory)
   LDA FRAME_NAME_LEN
@@ -669,13 +669,13 @@ print_top_frame_size:
   RTS
 
 ; Print the current frame chain non-destructively
-; Walks frames from FS_P16 upward through the downward stack until SOURCE_STACK
+; Walks frames from SS_P16 upward through the downward stack until SOURCE_STACK
 ; Output: one line per frame "depth:type:name" with depth 0 = top of stack
 ; Preserves X
 print_frames:
   TXA
   PHA
-  CP16 FS_P16, TABP16
+  CP16 SS_P16, TABP16
   LDA #0
   STA FRAME_DEPTH
 .loop:

@@ -66,8 +66,8 @@ FS_ERR_NO_FILE     = err_no_file
   .endif
   .include source_stack.asm
 read_char          = file_stack_read_char
-CURR_CHAR          = FS_CURR_CHAR
-CURR_LINE16        = FS_CURR_LINE16
+CURR_CHAR          = SS_CURR_CHAR
+CURR_LINE16        = SS_CURR_LINE16
   .include errors.asm
   .include from_decimal.asm
   .include output.asm

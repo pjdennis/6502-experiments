@@ -188,7 +188,7 @@ expand_macro:
   ; Set memory pointer to body_ptr from macro definition
   ; Add one to MACR_DEF_PTR16 to skip 0 terminator and save to memory source
   CLC
-  ADCI16 MACRO_DEF_PTR16, $01, FS_MEM_PTR16
+  ADCI16 MACRO_DEF_PTR16, $01, SS_MEM_PTR16
   ; Restore X (output file handle)
   PLA
   TAX

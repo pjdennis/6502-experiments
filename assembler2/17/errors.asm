@@ -5,8 +5,8 @@
 ;   TABP16               - zero page location for table pointer (hash_table.asm)
 ;   CURR_LINE16          - zero page location for current line number (asm.asm alias)
 ;   CURR_OUT_FILE        - output file handle (asm.asm)
-;   FS_P16               - file stack pointer (file_stack.asm)
-;   FS_SRC_TYPE          - source type (file_stack.asm)
+;   SS_P16               - file stack pointer (file_stack.asm)
+;   SS_SRC_TYPE          - source type (file_stack.asm)
 ;   file_stack_empty     - check if file stack is empty (file_stack.asm)
 ;   pop_file_stack       - pop file stack entry (file_stack.asm)
 ;   close                - close file handles (environment.asm)
@@ -273,7 +273,7 @@ interrupt:
   JSR file_stack_empty
   BEQ .location_done
 ; Print " in file " or " in macro " based on source type
-  LDA FS_SRC_TYPE
+  LDA SS_SRC_TYPE
   CMP #FS_SRC_TYPE_FILE
   BNE .in_macro
   SHOW_MESSAGEI msg_error_file
@@ -281,8 +281,8 @@ interrupt:
 .in_macro:
   SHOW_MESSAGEI msg_error_macro
 .show_source_name:
-; Print the filename (at FS_P16)
-  SHOW_MESSAGE FS_P16
+; Print the filename (at SS_P16)
+  SHOW_MESSAGE SS_P16
 ; Print the " at line " message
   SHOW_MESSAGEI msg_error_line
 ; Print the current line in decimal
@@ -349,14 +349,14 @@ show_message:
 
 
 ; Show traceback - uses file stack API to walk include/expansion chain
-; On entry FS_P16 points to current file stack entry
+; On entry SS_P16 points to current file stack entry
 ; On exit A, X, Y not preserved
 ;         TABP16;TABP16 + 1 not preserved
 ;         All files in stack are closed
 show_include_traceback:
 .loop:
   ; Save child source type before popping
-  LDA FS_SRC_TYPE
+  LDA SS_SRC_TYPE
   PHA
   ; Pop current entry (closes file, restores parent's handle and line)
   JSR pop_file_stack
@@ -377,13 +377,13 @@ show_include_traceback:
   SHOW_MESSAGEI msg_included_from
 .show_parent:
   ; Check parent type for "macro " prefix
-  LDA FS_SRC_TYPE
+  LDA SS_SRC_TYPE
   CMP #FS_SRC_TYPE_FILE
   BEQ .parent_is_file
   SHOW_MESSAGEI msg_macro_prefix
 .parent_is_file:
-  ; Print name (FS_P16 points to parent entry's name)
-  SHOW_MESSAGE FS_P16
+  ; Print name (SS_P16 points to parent entry's name)
+  SHOW_MESSAGE SS_P16
   ; Print ":"
   SHOW_CHAR ':'
   ; Print line number (CURR_LINE16 has line where include was)
