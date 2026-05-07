@@ -95,13 +95,17 @@ dir_macro:
   INY
   JSR advance_heap
   ; Bump the count byte at MACRO_DEF_PTR16. (No INC indirect on 6502,
-  ; so do an explicit RMW.) The MACRO_MAX_ARGS check happens in
-  ; expand_macro -- here we just count what was supplied so the def
-  ; survives a too-many-args error at expansion time.
+  ; so do an explicit RMW.) Enforce the MACRO_MAX_ARGS cap here too:
+  ; raise err_too_many_arguments at definition time rather than letting
+  ; the count byte silently overflow if someone wrote 256+ params.
   LDY #$00
   LDA (MACRO_DEF_PTR16),Y
   CLC
   ADC #$01
+  CMP #MACRO_MAX_ARGS + 1
+  BCC .count_ok
+  JMP err_too_many_arguments
+.count_ok:
   STA (MACRO_DEF_PTR16),Y
   JSR check_for_end_of_line
   BCS .params_done

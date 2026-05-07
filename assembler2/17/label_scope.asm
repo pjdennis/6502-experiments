@@ -22,8 +22,10 @@
 ;                                       check_macro_recursion locates it via
 ;                                       frame_size - 2.
 ;
-; expand_macro stages these 7 bytes (after the parameter slots and arg_count)
-; in MACRO_ACTIVATION before calling push_memory_source_with_payload.
+; expand_macro writes these 7 bytes (after the parameter slots) directly
+; into the frame's reserved payload region after pushing via
+; push_memory_source_reserve_payload -- there is no longer a staging
+; buffer between the parser and the source-stack frame.
 ; pop_label_scope_from_frame (installed via ss_install_memory_pop at startup)
 ; reads them back when the frame is popped.
 ;

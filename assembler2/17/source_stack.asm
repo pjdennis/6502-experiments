@@ -385,6 +385,13 @@ push_source_frame:
   ; no-op outside push_*_with_payload.
   LDA SS_PAYLOAD_SIZE
   BEQ .reset_line
+  ; SS_PAYLOAD16 = $0000 means "reserve payload but don't copy" -- the
+  ; push_memory_source_reserve_payload entry point uses this so
+  ; expand_macro can write slots directly into the new frame instead
+  ; of building a staging buffer first.
+  LDA SS_PAYLOAD16
+  ORA SS_PAYLOAD16 + 1
+  BEQ .reset_line
   ; Compute frame-payload-write pointer = SS_P16 + (Y+1), parked in
   ; SS_TEMP16 (which is free at this point -- ss_alloc_frame already
   ; consumed it). Then use Y=0..N-1 to copy payload bytes through
@@ -508,6 +515,42 @@ push_memory_source_with_payload:
   STA SS_PAYLOAD_SIZE
   PLA
   TAX                   ; Restore X
+  RTS
+
+
+; Same shape as push_memory_source_with_payload, but the payload bytes
+; are RESERVED only -- the source stack does not copy any data into
+; them. The caller is expected to write directly into the frame's
+; payload region (last SS_PAYLOAD_SIZE bytes of the frame) after this
+; returns. expand_macro uses this so it can parse argument expressions
+; one at a time and store each parsed slot straight into the new
+; frame, avoiding a separate staging buffer.
+;
+; On entry: SS_NAME       = name for this memory source
+;           SS_MEM_PTR16  = parent's read position (same contract as
+;                           push_memory_source -- caller installs the
+;                           new buffer pointer AFTER this returns)
+;           A             = payload size (1..N) to reserve
+; On exit:  Same frame state as push_memory_source_with_payload, but
+;           the payload bytes are uninitialized. SS_PAYLOAD_SIZE reset
+;           to 0; SS_PAYLOAD16 left pointing at $0000 (the sentinel
+;           push_source_frame uses to skip the copy).
+push_memory_source_reserve_payload:
+  STA SS_PAYLOAD_SIZE
+  LDA #$00
+  STA SS_PAYLOAD16
+  STA SS_PAYLOAD16 + 1
+  TXA
+  PHA
+  JSR check_source_frame_room
+  LDA #SS_SRC_TYPE_MEMORY
+  JSR push_source_frame
+  LDA #SS_SRC_TYPE_MEMORY
+  STA SS_SRC_TYPE
+  LDA #$00
+  STA SS_PAYLOAD_SIZE
+  PLA
+  TAX
   RTS
 
 

@@ -16,32 +16,22 @@ FWDREF_LIMIT    = FWDREF_LIST + $0200 ; Limit for forward reference list data
                          ; activation state now lives on the source stack as
                          ; payload on each macro frame, so this region is free.
                          ; $0500-$05FF was MACRO_ARG_BUF pre-Phase-4.8;
-                         ; MACRO_ACTIVATION (below) replaces it at $0690.
+                         ; reclaimed when activation slots moved into the
+                         ; source stack frame.
+                         ; $0690-$06AF was MACRO_ACTIVATION (the activation-
+                         ; payload staging buffer) until expand_macro switched
+                         ; to writing parsed slots directly into the new
+                         ; macro frame's payload region. Now free.
 TOKEN           = $0600  ; Buffer for the current token being read
 ELSE_SEEN_ARRAY = $0680  ; Array tracking .else seen per nesting level (16 bytes)
-MACRO_ACTIVATION = $0690 ; Activation-payload staging buffer that
-                         ; expand_macro hands to push_memory_source_with_payload.
-                         ; Layout (low to high offset):
-                         ;   bytes 0..3*N-1 : parameter slots (3 bytes each:
-                         ;                    fwdref, value_L, value_H), where
-                         ;                    N = arg_count
-                         ;   byte  3*N      : arg_count
-                         ;   bytes +1..+2   : LABEL_SCOPE16 lo/hi
-                         ;   byte  +3       : CACHED_HASH
-                         ;   bytes +4..+5   : prev_macro_lookup lo/hi
-                         ;                    (snapshot of MACRO_LOOKUP_FRAME16
-                         ;                    captured here so the chain of
-                         ;                    macro frames pops back in O(1))
-                         ;   bytes +6..+7   : MACRO_ENTRY16 lo/hi (kept at the
-                         ;                    very end of the payload so
-                         ;                    check_macro_recursion's
-                         ;                    frame_size - 2 offset is unchanged)
-                         ; Max payload size = 3*8 + 8 = 32 bytes; the buffer
-                         ; reserves 32 bytes ($0690-$06AF). Macros are limited
-                         ; to MACRO_MAX_ARGS = 8 -- the assembler's source
-                         ; uses at most 3 args, and the docs already cap at 8.
-MACRO_ACTIVATION_LIMIT = MACRO_ACTIVATION + $0020
-MACRO_MAX_ARGS  = $08    ; Hard cap on parameters per macro definition
+MACRO_MAX_ARGS  = $40    ; Hard cap on parameters per macro definition (64).
+                         ; Frame_size is one byte; worst-case macro frame is
+                         ;   15 + name_len + 3*N
+                         ; (5 source-stack header + name + null + 2 prev_data
+                         ;  + payload (3*N slots + 7 scope_block)).
+                         ; With name_len up to 30 (typical), N=64 gives 237.
+                         ; expand_macro's runtime guard catches the long-name
+                         ; corner cases by raising err_too_many_arguments.
 LHASHTAB        = $0700  ; Label hash table
 IFDEF_DECISIONS = $0800  ; Buffer for .ifdef decisions (256 bytes)
 *               = $2000  ; Code generates here follwed by HEAP
