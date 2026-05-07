@@ -551,3 +551,50 @@ Each phase ends with:
   appended a status block to macro_local_design_notes.md noting
   prerequisites 1-3 are satisfied and item 4 (EXPANSION_ID removal)
   is still the deferred work's responsibility.)
+- [x] Post-Phase-5 follow-up: O(1) macro-frame lookup + delete
+  MACRO_ACTIVATION buffer + raise MACRO_MAX_ARGS.
+  Step 1: added MACRO_LOOKUP_FRAME16 (zp word) -- saved on macro
+    push, restored on pop, untouched by file pushes -- and switched
+    resolve_identifier from a per-call ss_top_memory_frame walk to
+    a direct pointer read. ss_top_memory_frame deleted. Caught a
+    latent bug where the previous "X clobbered" docstring on
+    ss_lookup_param_slot didn't actually clobber X, so callers
+    depended on it; the step-2 iteration counter would have
+    introduced real X-clobbering, fixed via TXA/PHA + PLA/TAX.
+  Step 2: macro definitions now lead with a 1-byte parameter count
+    instead of a trailing empty-string sentinel. dir_macro reserves
+    the count byte and bumps it in place per param;
+    ss_lookup_param_slot reads N from the def via MACRO_ENTRY16;
+    expand_macro reads N from the def into MACRO_ARG_REMAIN and
+    drives Phase 1 with DEC/BEQ. The redundant Phase 2 walk was
+    deleted (Phase 1 now leaves MACRO_DEF_PTR16 directly on the
+    body). show_macros (debug build) updated to walk by count.
+  Step 3: deleted MACRO_ACTIVATION (\$0690-\$06AF) entirely. The
+    activation payload (slots + scope tail) is written directly
+    into the unallocated source-stack memory at SS_P16 -
+    payload_size, then push_memory_source_reserve_payload (a new
+    source_stack.asm entry point) commits the frame in place. SS_P16
+    / SS_SRC_TYPE / SS_MEM_PTR16 / SS_CURR_LINE16 stay parent's
+    during arg parsing -- read_char keeps reading from the
+    invocation site, errors fire with the correct line. arg_count
+    dropped from the payload (frame is canonical-by-def now);
+    payload tail shrank by 1 byte. MACRO_MAX_ARGS bumped 8 -> 64
+    (binding constraint is the 1-byte frame_size: 15 + name_len +
+    3*N <= 255). dir_macro enforces the 64 cap at definition time.
+    Tests updated: macro_args_at_cap (64 args succeed),
+    macro_args_above_cap_at_def (65 params at .macro time raise
+    err_too_many_arguments), macro_max_name_args_fit_frame
+    (description rewritten -- frame_size is the upper-end
+    constraint, not the old 8-arg cap).
+  Step 4: check_macro_recursion now walks the prev_macro_lookup
+    chain instead of ss_walk_frames_by_type. File frames don't
+    appear in the chain so they're skipped for free.
+    ss_walk_frames_by_type and SS_WALK_FILTER had no callers left,
+    so deleted from source_stack.asm. ss_walk_frames stays -- the
+    test program's print_frames mode still uses it.
+  Step 5: refreshed CLAUDE.md memory map (\$0690 now free) and
+    17/README sections on macro definition / expansion / source
+    stack to describe the new push-after-write flow, the count-byte
+    def layout, and MACRO_LOOKUP_FRAME16 as the lookup anchor.
+    494/494 v17 asm tests, both regular and debug self-host clean
+    throughout.

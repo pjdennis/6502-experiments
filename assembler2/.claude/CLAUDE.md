@@ -51,12 +51,12 @@ Each version builds into its own `NN/out/` directory (e.g., `16/out/asm.out`). T
 - `$0400-$04FF`: free (was `SCOPE_STACK` before Phase 3.6 of the source-stack
   unification work; macro activation state now lives as payload on each
   macro's source-stack frame)
-- `$0500-$05FF`: free (was `MACRO_ARG_BUF` before Phase 4.8; parameter slots
-  now stage in `MACRO_ACTIVATION` and ride the macro frame)
+- `$0500-$05FF`: free (was `MACRO_ARG_BUF` before Phase 4.8)
 - `$0600`: `TOKEN` buffer (current token being read, 128 bytes)
 - `$0680`: `ELSE_SEEN_ARRAY` (per-nesting-level `.else` flags, 16 bytes)
-- `$0690-$06AF`: `MACRO_ACTIVATION` (32-byte staging buffer for the per-macro
-  payload `push_memory_source_with_payload` copies into the new frame)
+- `$0690-$06AF`: free (was `MACRO_ACTIVATION` 32-byte staging buffer until
+  `expand_macro` switched to writing parsed slots directly into the new
+  macro frame's payload region)
 - `$0700`: `LHASHTAB` (label hash table)
 - `$0800`: `IFDEF_DECISIONS` (256 bytes, deterministic pass-2 replay)
 - `$2000+`: Generated code, then the heap grows upward from `HEAP`
