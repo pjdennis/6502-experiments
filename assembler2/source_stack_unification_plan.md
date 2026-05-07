@@ -314,27 +314,26 @@ and memory.
 
 Tasks:
 
-- **4.1** **Test first.** Add assembler tests that pin down the
-  current parameter scoping rules so the migration can't drift them:
-    - *Shadowing*: outer macro has `x`, inner has `x`, body of inner
-      uses `x` — must resolve to inner.
-    - *Non-leakage (direct)*: outer macro has `y`, inner has only `z`,
-      body of inner uses `y` — must NOT see outer's `y`. Today this
-      errors as an undefined label (or resolves to a same-named global
-      if one exists); either way, outer's `y` does not bleed in.
-    - *Visibility through `.include`*: macro `M` takes `x`, body of
-      `M` does `.include foo.asm`, foo.asm references `x` — must
-      resolve to `M`'s `x`. (The included file's source is a file
-      frame, but param lookup skips past it to find `M`'s memory
-      frame.)
-    - *Non-leakage through `.include`*: outer `B` takes `y`, calls
-      inner `A` with `x`, `A`'s body does `.include foo.asm`,
-      foo.asm references `y` — must NOT see `B`'s `y`. Verifies
-      that lookup stops at the *innermost* memory frame, not any
-      enclosing one.
-  All pass under the current EXPANSION_ID-scoped hash (verified by
-  hand against asm17) and must continue to pass after the frame-slot
-  migration.
+- **4.1** Verify the parameter scoping invariants are pinned down.
+  Tests covering all four cases below have already been added to
+  `17/tests/asm/15-macros_advanced.txt` (passing under the current
+  EXPANSION_ID-scoped hash); Phase 4 must keep them green.
+    - *Shadowing* (`macro_inner_param_shadows_outer`): outer macro
+      has `x`, inner has `x`, body of inner uses `x` — must resolve
+      to inner.
+    - *Non-leakage, direct* (`macro_outer_param_not_visible_in_inner`):
+      outer macro has `y`, inner has only `z`, body of inner uses
+      `y` — must NOT see outer's `y`.
+    - *Visibility through `.include`* (`macro_param_visible_in_include`):
+      macro `M` takes `x`, body does `.include foo.asm`, foo.asm
+      references `x` — must resolve to `M`'s `x`. The included file
+      is a file frame on top of `M`'s memory frame, but param lookup
+      skips past the file frame to reach `M`.
+    - *Non-leakage through `.include`*
+      (`macro_outer_param_not_visible_via_include`): outer `B` takes
+      `y`, calls inner `A` with `z`, `A`'s body does `.include
+      foo.asm`, foo.asm references `y` — must NOT see `B`'s `y`.
+      Lookup stops at the *innermost* memory frame.
 - **4.2** **Test first.** Add a test that proves param hash entries
   do not leak. Today this fails (or is a no-op since we can't inspect
   the heap easily). Approach: a debug-mode assembler stat or a

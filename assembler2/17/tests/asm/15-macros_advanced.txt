@@ -245,3 +245,63 @@ EXPECT_STDERR:
 [ .byte $01 ';' '\'' "String with semicolon; and double  space in it ''" ]
 [ LDA #' ']
 
+---
+NAME: macro_inner_param_shadows_outer
+DESCRIPTION: When inner and outer macros have the same param name, the body of the inner resolves the name to inner's value (single-frame lookup; not a chain walk into outer's scope).
+INPUT:
+ 1: * = $0200
+ 2:   .macro inner x
+ 3:   LDA #x
+ 4:   .endmacro
+ 5:   .macro outer x
+ 6:   inner $42
+ 7:   .endmacro
+ 8:   outer $99
+EXPECT_HEX: a9 42
+
+---
+NAME: macro_outer_param_not_visible_in_inner
+DESCRIPTION: Inner macro cannot see outer macro's parameter. Param scoping is innermost-frame-only -- this is the invariant that lets the Phase 4 lookup be a single-frame access rather than a chain walk.
+INPUT:
+ 1: * = $0200
+ 2:   .macro inner z
+ 3:   LDA #y
+ 4:   .endmacro
+ 5:   .macro outer y
+ 6:   inner $42
+ 7:   .endmacro
+ 8:   outer $99
+EXPECT_STDERR:
+Error 1 in macro z at line 1: Label not found
+  expanded from macro y:1
+  expanded from {{MAIN_FILE}}:8
+
+---
+NAME: macro_param_visible_in_include
+DESCRIPTION: A file .include'd from inside a macro body sees the macro's parameter. Param lookup is source-type-agnostic -- it skips past file frames on the source stack to find the innermost macro frame's scope.
+INPUT:
+ 1: * = $0200
+ 2:   .macro M x
+ 3:   .include include/uses_macro_param.asm
+ 4:   .endmacro
+ 5:   M $42
+EXPECT_HEX: a9 42
+
+---
+NAME: macro_outer_param_not_visible_via_include
+DESCRIPTION: A file .include'd from inside the inner of two nested macros sees the inner macro's params but NOT the outer macro's. Combines source-type-agnostic visibility with single-frame scoping.
+INPUT:
+ 1: * = $0200
+ 2:   .macro inner z
+ 3:   .include include/uses_outer_macro_param.asm
+ 4:   .endmacro
+ 5:   .macro outer y
+ 6:   inner $42
+ 7:   .endmacro
+ 8:   outer $99
+EXPECT_STDERR:
+Error 1 in file include/uses_outer_macro_param.asm at line 7: Label not found
+  included from macro z:1
+  expanded from macro y:1
+  expanded from {{MAIN_FILE}}:8
+
