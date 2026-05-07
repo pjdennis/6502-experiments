@@ -108,11 +108,61 @@ EXPECT_HEX: ea
 
 ---
 NAME: scope_stack_52_no_longer_overflows
-DESCRIPTION: Post-Phase-3.4 there is no separate scope stack to overflow -- 52 nested macros assemble fine. Pre-Phase-3.4 this hit err_macro_nesting_too_deep (error 34); now that error code is unreachable for this scenario. A real deep-nesting OOM test wants many more levels and a small-heap setup; left for Phase 3.9.
+DESCRIPTION: Post-Phase-3.4 there is no separate scope stack to overflow -- 52 nested macros assemble fine. Pre-Phase-3.4 this hit err_macro_nesting_too_deep (error 34); now that error code is unreachable.
 INPUT:
  1: * = $0200
  2:   .include scope/s52.asm
 EXPECT_HEX: ea
+
+---
+NAME: macro_nesting_normal_heap
+DESCRIPTION: Five macros chained A->B->C->D->E assemble cleanly with the normal heap. The chain is paramless and contains no .include, so each invocation's only memory cost is its source-stack frame -- the same configuration as the small-heap overflow test below.
+INPUT:
+ 1: * = $0200
+ 2:   .macro A
+ 3:   NOP
+ 4:   .endmacro
+ 5:   .macro B
+ 6:   A
+ 7:   .endmacro
+ 8:   .macro C
+ 9:   B
+10:   .endmacro
+11:   .macro D
+12:   C
+13:   .endmacro
+14:   .macro E
+15:   D
+16:   .endmacro
+17:   E
+EXPECT_HEX: ea
+
+---
+NAME: macro_nesting_overflow
+DESCRIPTION: Macro nesting itself triggers source-stack OOM under small_heap. The chain is paramless and contains no .include, so during the cascade the only thing growing is the source stack -- macro definitions are all set up before invocation (heap stable thereafter), no parameters means no per-invocation hash_add (heap doesn't grow during cascade), no .include means no extra file frames. With small_heap shrinking the heap-vs-source-stack buffer to 384 bytes the cascade exhausts the buffer mid-expansion. The traceback (EXPECT_STDERR) confirms the OOM site is a macro push during a chain of expansions. The exact depth at which the limit hits depends on the input filename's length (it counts toward the input file frame's size); the test runner's tempdir prefix has fixed length so the result is stable across runs.
+ARGS: debug small_heap
+INPUT:
+ 1: * = $0200
+ 2:   .macro A
+ 3:   NOP
+ 4:   .endmacro
+ 5:   .macro B
+ 6:   A
+ 7:   .endmacro
+ 8:   .macro C
+ 9:   B
+10:   .endmacro
+11:   .macro D
+12:   C
+13:   .endmacro
+14:   .macro E
+15:   D
+16:   .endmacro
+17:   E
+EXPECT_STDERR:
+Error 35 in macro D at line 1: Out of memory
+  expanded from macro E:1
+  expanded from {{MAIN_FILE}}:17
 
 ---
 NAME: macro_arg_buffer_at_limit
