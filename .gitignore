@@ -19,3 +19,4 @@ rebase
 log
 spread
 _tr_*.tmp
+.claude/settings.local.json
