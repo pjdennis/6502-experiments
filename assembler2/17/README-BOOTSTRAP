@@ -56,7 +56,11 @@ Macro system:
 - Invocation by macro name (parsed like instructions)
 - Text substitution of parameters during expansion
 - Local labels (.label) scoped per invocation via EXPANSION_ID
-- Recursion detection by walking scope stack
+- Parameters live as activation slots on the macro's source-stack frame
+  (resolved by ss_lookup_param_slot before falling through to the global
+  hash); no per-invocation hash entries
+- Recursion detection by walking the source-stack chain
+  (ss_walk_frames_by_type filtering memory frames)
 
 Command line:
 - Variable argument count
@@ -152,5 +156,6 @@ Other source changes:
 - New macros added: ROL16, ROR16, TST16, LDAX16, STAX16
 - ELSE_SEEN_ARRAY at $0680 for conditional assembly tracking
 - LABEL_TYPE variable and constants (LABEL_TYPE_GLOBAL, LABEL_TYPE_LOCAL,
-  LABEL_TYPE_MACRO, LABEL_TYPE_MACRO_LOCAL)
+  LABEL_TYPE_MACRO_LOCAL); LABEL_TYPE_MACRO was removed when macro params
+  moved off the hash and onto activation frames
 - Note: source does NOT use .ifndef or .else in its own code

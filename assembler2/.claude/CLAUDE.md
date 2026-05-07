@@ -47,12 +47,22 @@ Each version builds into its own `NN/out/` directory (e.g., `16/out/asm.out`). T
 ### Memory Layout (asm17)
 
 - `$0000-$00FF`: Zero page variables (see `.zeropage` section)
-- `$1D00`: TOKEN buffer (current token being read)
-- `$1E00`: Label hash table
-- `$2000+`: Generated code, then heap (grows upward from HEAP)
-- `$F000`: File stack (grows downward)
+- `$0200-$03FF`: `FWDREF_LIST` (forward reference list, 512 bytes)
+- `$0400-$04FF`: free (was `SCOPE_STACK` before Phase 3.6 of the source-stack
+  unification work; macro activation state now lives as payload on each
+  macro's source-stack frame)
+- `$0500-$05FF`: free (was `MACRO_ARG_BUF` before Phase 4.8; parameter slots
+  now stage in `MACRO_ACTIVATION` and ride the macro frame)
+- `$0600`: `TOKEN` buffer (current token being read, 128 bytes)
+- `$0680`: `ELSE_SEEN_ARRAY` (per-nesting-level `.else` flags, 16 bytes)
+- `$0690-$06AF`: `MACRO_ACTIVATION` (32-byte staging buffer for the per-macro
+  payload `push_memory_source_with_payload` copies into the new frame)
+- `$0700`: `LHASHTAB` (label hash table)
+- `$0800`: `IFDEF_DECISIONS` (256 bytes, deterministic pass-2 replay)
+- `$2000+`: Generated code, then the heap grows upward from `HEAP`
+- `$F000`: Source stack (grows downward)
 
-The heap (`MEMP16`) grows upward storing hash entries, macro definitions, and forward references. The file stack (`FS_P16`) grows downward storing include file contexts. Memory protection checks ensure they don't collide, maintaining a 256-byte safety buffer for indexed addressing.
+The heap (`MEMP16`) grows upward storing hash entries, macro definitions, and forward references. The source stack (`SS_P16`) grows downward storing include-file contexts and macro activation frames; each frame begins with a 1-byte `frame_size` at offset 0 so push/pop and chain walks are O(1) per frame. Memory protection checks ensure heap and source stack don't collide, maintaining a 256-byte safety buffer for indexed addressing.
 
 ### Shared Code Pattern
 
@@ -64,7 +74,7 @@ The hash table requires caller to define `HT_KEY` and `HT_V16` before including.
 
 ### Zero Page Conventions
 
-Variables are allocated via `.byte 0` / `.word 0` in `.zeropage` section. Two-byte pointers use adjacent locations with a `16` suffix (e.g., `MEMP16`, `FS_P16`).
+Variables are allocated via `.byte 0` / `.word 0` in `.zeropage` section. Two-byte pointers use adjacent locations with a `16` suffix (e.g., `MEMP16`, `SS_P16`).
 
 ## Emulator Interface
 

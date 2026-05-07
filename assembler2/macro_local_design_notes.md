@@ -202,6 +202,19 @@ place:
 4. `EXPANSION_ID16` may still be alive at this point (still used by
    macro-locals); this work removes its last user.
 
+**Status (as of source-stack unification Phase 4 completion):**
+items 1–3 are done. The merged source stack lives in `source_stack.asm`
+with a 1-byte `frame_size` at offset 0, the per-pop vtable replaced
+`FS_POP_MEMORY_HOOK`, and `expand_macro` now pushes a single memory
+frame whose payload carries `arg_count`, parameter slots
+(`fwdref/value_L/value_H` per slot), and the scope block. Identifier
+lookup in `resolve_identifier` consults the innermost macro frame's
+slots via `ss_top_memory_frame` + `ss_lookup_param_slot` before
+falling through to LHASHTAB; `LABEL_TYPE_MACRO` is gone.
+`check_macro_recursion` walks the chain via
+`ss_walk_frames_by_type`. Item 4 still applies — `EXPANSION_ID16`
+remains for macro-locals and is the last user this work would remove.
+
 ## Order of attack when we come back
 
 1. At `.macro` definition time, pre-scan the body to collect the

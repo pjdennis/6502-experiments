@@ -522,4 +522,32 @@ Each phase ends with:
   asm.asm). Counts: 492 v17 asm tests, 55 source_stack; v17
   self-hosts; preexisting opendir readonly_file failure aside,
   every test green throughout.)
-- [ ] Phase 5 — cleanup
+- [x] Post-Phase-4 follow-up: macro-nesting / max-name tests + frame
+  layout reorg. Added macro_nesting_overflow (deep nesting now reaches
+  out-of-memory naturally), macro_max_name_max_args_at_frame_limit and
+  macro_name_too_long (verifying a 127-char name + 8 args still fits
+  the 1-byte frame_size). Then reorganized the source-stack frame:
+  pre-reorg layout was [size, name\0, curr_type, prev_type, prev_line]
+  which forced every walker (recursion check, activation lookup,
+  traceback) to scan past a variable-length name. New layout puts the
+  fixed header up front -- [size, curr_type, prev_type, prev_line_L,
+  prev_line_H, name\0, prev_data, payload] -- so curr_type reads as a
+  single (TABP16),Y at Y=1. Updated push_source_frame, pop_source's
+  prev_data scan (now starts at offset 5), ss_walk_frames_by_type,
+  ss_top_memory_frame, errors.asm's SHOW_FRAME_NAME, and the
+  source_stack test program's print_traceback / print_frame_callback.
+  494 v17 asm tests + 49 source_stack tests still green; self-host
+  (asm.out == asm_2.out) verified.
+- [x] Phase 5 — cleanup (5.1 updated CLAUDE.md memory map: corrected
+  TOKEN/LHASHTAB addresses, documented the freed $0400-$05FF regions,
+  switched "file stack" / FS_P16 references to "source stack" / SS_P16,
+  noted the frame_size-driven O(1) walk; 5.2 BOOTSTRAP-OVERVIEW only
+  references "file stack" historically in the v08 milestone row, no
+  edit needed; 5.3 swept 17/README-BOOTSTRAP -- removed
+  LABEL_TYPE_MACRO from the constants list, reworded recursion
+  detection from "walking scope stack" to "walking the source-stack
+  chain", added a line about parameters living as activation slots;
+  EXPANSION_ID16 left intact since macro-locals still use it; 5.4
+  appended a status block to macro_local_design_notes.md noting
+  prerequisites 1-3 are satisfied and item 4 (EXPANSION_ID removal)
+  is still the deferred work's responsibility.)
