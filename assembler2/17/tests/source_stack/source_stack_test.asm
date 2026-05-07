@@ -34,9 +34,9 @@ TEMP:        .byte
 TABP16:      .word
 MARKER_TERM: .byte         ; Character that terminated the keyword ($FF = EOF)
 
-; Frame walker state (frames mode)
+; Frame walker state (frames mode). FRAME_DEPTH is updated by the
+; ss_walk_frames callback, not the walker itself.
 FRAME_DEPTH:     .byte
-FRAME_SIZE:      .byte         ; frame_size byte at offset 0 of the topmost frame
 
 ; OOM injection: minimum allowed value of SS_TEMP16 during push.
 ; Default $0000 means "no limit"; oom mode sets a tight value.
@@ -659,21 +659,25 @@ print_top_frame_size:
 ; Walks frames from SS_P16 upward until reaching SOURCE_STACK, advancing
 ; by the frame_size byte at offset 0 of each frame.
 ; Output: one line per frame "depth:type:name" with depth 0 = top of stack.
-; Preserves X
+; Preserves X. The walk itself lives in source_stack.asm; this function
+; just sets depth=0 and hands ss_walk_frames a per-frame printer.
 print_frames:
   TXA
   PHA
-  CP16 SS_P16, TABP16
   LDA #0
   STA FRAME_DEPTH
-.loop:
-  CMPI16 TABP16, SOURCE_STACK
-  BCS .done                 ; TABP16 >= SOURCE_STACK -> walked past base
-  ; Read frame_size at offset 0 (used to advance TABP16 at end of loop body)
-  LDY #0
-  LDA (TABP16),Y
-  STA FRAME_SIZE
-  ; Print depth as decimal (single byte, fits in low byte of TO_DECIMAL_VALUE16)
+  LDA #<print_frame_callback
+  LDX #>print_frame_callback
+  JSR ss_walk_frames
+  PLA
+  TAX
+  RTS
+
+; ss_walk_frames callback. On entry TABP16 = current frame; Y free; must
+; leave TABP16 untouched and must not clobber SS_TEMP16 (walker uses it
+; to hold this very callback's address).
+print_frame_callback:
+  ; Print depth as decimal (single byte fits in low half of TO_DECIMAL_VALUE16).
   LDA FRAME_DEPTH
   STA TO_DECIMAL_VALUE16
   LDA #0
@@ -681,8 +685,8 @@ print_frames:
   JSR print_decimal
   LDA #':'
   JSR write_b
-  ; Scan name (starts at offset 1) for its null terminator. Y = 0 at this
-  ; point, so INY in the loop steps to offset 1 first.
+  ; Scan name (starts at offset 1) for its null terminator.
+  LDY #0
 .find_null:
   INY
   LDA (TABP16),Y
@@ -707,7 +711,7 @@ print_frames:
   ; bump TABP16 past the frame_size byte for the call.
   INC16 TABP16
   JSR print_basename
-  ; Restore TABP16 to frame start by subtracting 1
+  ; Restore TABP16 to frame start by subtracting 1 (callback contract).
   LDA TABP16
   BNE .no_borrow
   DEC TABP16 + 1
@@ -715,19 +719,7 @@ print_frames:
   DEC TABP16
   LDA #'\n'
   JSR write_b
-  ; Advance TABP16 by FRAME_SIZE (frames are always < 256 bytes here)
-  CLC
-  LDA TABP16
-  ADC FRAME_SIZE
-  STA TABP16
-  BCC .no_carry
-  INC TABP16 + 1
-.no_carry:
   INC FRAME_DEPTH
-  JMP .loop
-.done:
-  PLA
-  TAX
   RTS
 
 ; Print just the basename from a path at TABP16 (skips everything before last '/')

@@ -9,6 +9,10 @@
 ;                        popped, used by the assembler to restore label
 ;                        scope (asm.asm alias to pop_label_scope; left
 ;                        undefined by the test program)
+;   TABP16             - host-provided 2-byte zero-page scratch pointer
+;                        used by ss_walk_frames* to track the current
+;                        frame during a walk (hash_table.asm in the
+;                        assembler; locally defined in the test program)
 ;   err_file_not_found - error handler for when open returns 0 (errors.asm)
 ;   open, close, read  - source I/O syscalls (environment.asm)
 
@@ -45,6 +49,7 @@ SS_CURR_FILE:    .byte       ; The current file handle
 SS_CURR_LINE16:  .word       ; The current line number
 SS_P16:          .word       ; Pointer to the current location in the source stack
 SS_TEMP16:       .word       ; Temporary location for use in calculations
+SS_WALK_FILTER:  .byte       ; curr_type filter for ss_walk_frames_by_type
 
 ; Memory source support (zero-terminated buffers)
 SS_SRC_TYPE:    .byte       ; Source type: 0=file, 1=memory
@@ -151,6 +156,75 @@ ss_free_frame:
   RTS
 
 
+; Walk source-stack frames newest-to-oldest, calling the callback once
+; per frame. Generic stack mechanic; layout-agnostic past offset 0.
+;
+; On entry: A = callback address low byte
+;           X = callback address high byte
+; Per-callback state:
+;   TABP16 = current frame address (frame_size byte at offset 0)
+;   Y is free for the callback to clobber
+; Callback contract:
+;   - Must leave TABP16 unchanged on exit (PUSH16/POP16 if needed).
+;   - Must NOT clobber SS_TEMP16 (walker holds the callback addr there).
+; On exit:  TABP16 = SOURCE_STACK (one past the bottom frame).
+;           A, X, Y, SS_TEMP16 clobbered.
+ss_walk_frames:
+  STA SS_TEMP16
+  STX SS_TEMP16+1
+  CP16 SS_P16, TABP16
+.loop:
+  CMPI16 TABP16, SOURCE_STACK
+  BCS .done
+  JSR ss_invoke           ; callback(TABP16)
+  ; Advance TABP16 by frame_size at offset 0 (frames < 256 bytes)
+  LDY #0
+  LDA (TABP16),Y
+  CLC
+  ADCA16 TABP16, TABP16
+  JMP .loop
+.done:
+  RTS
+
+
+; Like ss_walk_frames, but only invokes the callback for frames whose
+; curr_type matches the filter. Other frames are still walked past so
+; the iteration covers the whole stack.
+;
+; On entry: A = callback addr low, X = callback addr high
+;           Y = curr_type to match (0=file, 1=memory)
+; Same callback contract as ss_walk_frames; SS_WALK_FILTER additionally
+; clobbered.
+ss_walk_frames_by_type:
+  STA SS_TEMP16
+  STX SS_TEMP16+1
+  STY SS_WALK_FILTER
+  CP16 SS_P16, TABP16
+.loop:
+  CMPI16 TABP16, SOURCE_STACK
+  BCS .done
+  ; Locate curr_type: skip frame_size at offset 0, scan name to its
+  ; null terminator, curr_type sits one byte past the null.
+  LDY #0
+.skip_name:
+  INY
+  LDA (TABP16),Y
+  BNE .skip_name
+  INY
+  LDA (TABP16),Y          ; A = curr_type
+  CMP SS_WALK_FILTER
+  BNE .skip
+  JSR ss_invoke
+.skip:
+  LDY #0
+  LDA (TABP16),Y          ; frame_size
+  CLC
+  ADCA16 TABP16, TABP16
+  JMP .loop
+.done:
+  RTS
+
+
 ; Per-curr_type pop handlers. pop_source dispatches to one of these
 ; based on curr_type, before prev_data restoration. The dispatch
 ; preserves both X and Y around the JSR; handlers may freely clobber
@@ -180,8 +254,10 @@ ss_on_pop_table_hi:
   .byte >ss_pop_file
   .byte >ss_pop_memory
 
-; Indirect-call thunk: caller stores handler in SS_TEMP16, JSRs here.
-ss_pop_invoke:
+; Indirect-call thunk: caller stores target address in SS_TEMP16, then
+; JSRs here. The target's RTS returns to the original caller. Used by
+; both pop_source's curr_type dispatch and ss_walk_frames* below.
+ss_invoke:
   JMP (SS_TEMP16)
 
 
@@ -368,7 +444,7 @@ pop_source:
   ; Y must also survive the handler call (we're mid-walk on the frame).
   TYA
   PHA
-  JSR ss_pop_invoke
+  JSR ss_invoke
   PLA
   TAY
   PLA
