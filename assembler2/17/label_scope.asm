@@ -53,6 +53,13 @@ MACRO_LOOKUP_FRAME16:  .word ; Address of the innermost macro frame on the
                              ; active. resolve_identifier uses this for
                              ; O(1) parameter-slot lookup instead of
                              ; walking the source stack each call.
+MACRO_PAYLOAD_BASE16:  .word ; Transient pointer used by expand_macro
+                             ; during arg parsing. Points at
+                             ; (SS_P16 - payload_size) -- the address
+                             ; that becomes slot[0] once the frame is
+                             ; pushed. Indirect-Y writes through it
+                             ; populate slots and the scope tail without
+                             ; needing a separate staging buffer.
 MACRO_ARG_REMAIN:      .byte ; Args still to be parsed in expand_macro's
                              ; Phase 1 loop. Initialized from the count
                              ; byte at the start of the macro definition;

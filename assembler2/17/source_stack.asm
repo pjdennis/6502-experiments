@@ -5,10 +5,6 @@
 ;   SS_ERR_NO_FILE     - error handler for read_char when no source is
 ;                        open (errors.asm; only referenced under
 ;                        enable_debug)
-;   TABP16             - host-provided 2-byte zero-page scratch pointer
-;                        used by ss_walk_frames* to track the current
-;                        frame during a walk (hash_table.asm in the
-;                        assembler; locally defined in the test program)
 ;   err_file_not_found - error handler for when open returns 0 (errors.asm)
 ;   open, close, read  - source I/O syscalls (environment.asm)
 
@@ -29,8 +25,13 @@
 ;                                            (2 bytes; the parent's
 ;                                            SS_MEM_PTR16 at the moment
 ;                                            of this push)
-;   <payload>      - Optional caller-supplied bytes (memory frames only),
-;                    sized via SS_PAYLOAD_SIZE at push time.
+;   <payload>      - Optional bytes reserved for memory frames via
+;                    push_memory_source_reserve_payload (caller writes
+;                    them after the push; the source stack itself never
+;                    inspects payload contents). Used by expand_macro
+;                    to carry per-invocation activation state; consumed
+;                    by the memory-pop handler installed via
+;                    ss_install_memory_pop.
 ;
 ; Frame size: 5 (header) + name_len + 1 (null) + prev_data + payload
 ;   = name_len + 7 + payload_size if returning to file
@@ -39,16 +40,9 @@
 ; Putting curr_type / prev_type / prev_line at fixed offsets 1..4 makes
 ; the pop_source dispatch O(1) per frame for the curr_type read;
 ; pre-reorg it had to scan past the variable-length name first.
-; prev_data still
-; lives after the name, so pop_source's restore step still pays the
-; strlen-scan cost -- but that's once per pop, not once per identifier
-; lookup.
-;
-; Future Phase 3 work appends additional payload bytes after prev_data
-; for memory sources that need activation state (label scope, macro
-; entry, etc.); the source stack itself never reads those payload
-; bytes -- they are written and consumed by the memory-pop handler
-; installed via ss_install_memory_pop.
+; prev_data still lives after the name, so pop_source's restore step
+; still pays the strlen-scan cost -- but that's once per pop, not once
+; per identifier lookup.
 
   .zeropage
 
@@ -57,11 +51,9 @@ SS_CURR_FILE:    .byte       ; The current file handle
 SS_CURR_LINE16:  .word       ; The current line number
 SS_P16:          .word       ; Pointer to the current location in the source stack
 SS_TEMP16:       .word       ; Temporary location for use in calculations
-SS_PAYLOAD_SIZE: .byte       ; Number of payload bytes to append to next push
-                             ; (0 outside push_*_with_payload calls)
-SS_PAYLOAD16:    .word       ; Pointer to payload bytes when SS_PAYLOAD_SIZE > 0
-                             ; (or $0000 sentinel when push_memory_source_reserve_payload
-                             ; wants the payload region reserved but not copied into)
+SS_PAYLOAD_SIZE: .byte       ; Number of payload bytes to reserve for the
+                             ; next push_memory_source_reserve_payload
+                             ; call. Always 0 outside of that path.
 
 ; Memory source support (zero-terminated buffers)
 SS_SRC_TYPE:    .byte       ; Source type: 0=file, 1=memory
@@ -175,52 +167,6 @@ ss_free_frame:
   RTS
 
 
-; Walk source-stack frames newest-to-oldest, calling the callback once
-; per frame. Generic stack mechanic; layout-agnostic past offset 0.
-;
-; On entry: A = callback address low byte
-;           X = callback address high byte
-; Per-callback state:
-;   TABP16 = current frame address (frame_size byte at offset 0)
-;   Y is free for the callback to clobber
-; Callback contract:
-;   - Must leave TABP16 unchanged on exit (PUSH16/POP16 if needed).
-;   - Must NOT clobber SS_TEMP16 (walker holds the callback addr there).
-; On exit:  TABP16 = SOURCE_STACK (one past the bottom frame).
-;           A, X, Y, SS_TEMP16 clobbered.
-ss_walk_frames:
-  STA SS_TEMP16
-  STX SS_TEMP16+1
-  CP16 SS_P16, TABP16
-.loop:
-  CMPI16 TABP16, SOURCE_STACK
-  BCS .done
-  JSR ss_invoke           ; callback(TABP16)
-  ; Advance TABP16 by frame_size at offset 0 (frames < 256 bytes)
-  LDY #0
-  LDA (TABP16),Y
-  CLC
-  ADCA16 TABP16, TABP16
-  JMP .loop
-.done:
-  RTS
-
-
-; ss_walk_frames_by_type was deleted along with SS_WALK_FILTER when
-; check_macro_recursion switched to walking the prev_macro_lookup
-; chain directly. The chain walk is faster (one indirect-Y per step
-; instead of frame_size + curr_type read + filter compare) and inverts
-; the responsibility cleanly: macro frames know their parent macro
-; frame; file frames don't appear in the chain at all.
-
-
-; ss_top_memory_frame was deleted when MACRO_LOOKUP_FRAME16 took over
-; resolve_identifier's "find the innermost macro frame" job. The pointer
-; is saved into each macro frame's payload at push and restored on pop,
-; so the active macro frame is now an O(1) lookup (zp word read) instead
-; of a stack walk.
-
-
 ; Per-curr_type pop handlers. pop_source dispatches to one of these
 ; based on curr_type, before prev_data restoration. The dispatch
 ; preserves both X and Y around the JSR; handlers may freely clobber
@@ -266,7 +212,8 @@ ss_install_memory_pop:
 
 ; Indirect-call thunk: caller stores target address in SS_TEMP16, then
 ; JSRs here. The target's RTS returns to the original caller. Used by
-; both pop_source's curr_type dispatch and ss_walk_frames* below.
+; pop_source's curr_type dispatch (the only remaining call site after
+; ss_walk_frames moved into the test program).
 ss_invoke:
   JMP (SS_TEMP16)
 
@@ -344,7 +291,7 @@ push_source_frame:
   INY
   LDA SS_CURR_FILE
   STA (SS_P16),Y
-  JMP .write_payload
+  JMP .reset_line
 .save_memory_state:
   ; prev_type=1: save memory pointer (zero-terminated, no end needed)
   INY
@@ -353,40 +300,12 @@ push_source_frame:
   INY
   LDA SS_MEM_PTR16 + 1
   STA (SS_P16),Y
-.write_payload:
-  ; Append SS_PAYLOAD_SIZE bytes of payload from SS_PAYLOAD16 right
-  ; after prev_data. The frame_size byte at offset 0 already accounts
-  ; for these bytes (check_source_frame_room added SS_PAYLOAD_SIZE in).
-  ; SS_PAYLOAD_SIZE is 0 for plain push_*_source paths, so this is a
-  ; no-op outside push_*_with_payload.
-  LDA SS_PAYLOAD_SIZE
-  BEQ .reset_line
-  ; SS_PAYLOAD16 = $0000 means "reserve payload but don't copy" -- the
-  ; push_memory_source_reserve_payload entry point uses this so
-  ; expand_macro can write slots directly into the new frame instead
-  ; of building a staging buffer first.
-  LDA SS_PAYLOAD16
-  ORA SS_PAYLOAD16 + 1
-  BEQ .reset_line
-  ; Compute frame-payload-write pointer = SS_P16 + (Y+1), parked in
-  ; SS_TEMP16 (which is free at this point -- ss_alloc_frame already
-  ; consumed it). Then use Y=0..N-1 to copy payload bytes through
-  ; both indirect pointers.
-  INY                   ; first payload offset within frame
-  TYA
-  CLC
-  ADC SS_P16
-  STA SS_TEMP16
-  LDA SS_P16 + 1
-  ADC #0
-  STA SS_TEMP16 + 1
-  LDY #0
-.payload_loop:
-  LDA (SS_PAYLOAD16),Y
-  STA (SS_TEMP16),Y
-  INY
-  CPY SS_PAYLOAD_SIZE
-  BNE .payload_loop
+  ; SS_PAYLOAD_SIZE bytes of payload trail prev_data; the frame_size
+  ; byte at offset 0 already accounts for them
+  ; (check_source_frame_room added SS_PAYLOAD_SIZE in). The bytes are
+  ; reserved but not initialized here -- push_memory_source_reserve_payload's
+  ; caller pre-writes them at (SS_P16 - SS_PAYLOAD_SIZE) before the push,
+  ; so they are already in place by the time SS_P16 advances over them.
 .reset_line:
   ; Reset line number for new source
   LDA #$00
@@ -431,10 +350,18 @@ push_file_source:
   RTS
 
 
-; Push a memory source onto the stack
-; On entry: SS_NAME       = name for this memory source (e.g. macro name)
-;           SS_MEM_PTR16  = parent's read position (saved into the new
-;                           frame as prev_data when prev_type=memory).
+; Push a memory source carrying a trailing payload region whose bytes
+; are RESERVED only -- the source stack does not copy any data into
+; them. The caller is expected to have written the payload contents
+; into (SS_P16 - SS_PAYLOAD_SIZE) BEFORE calling, since the push
+; advances SS_P16 over those bytes and they become the new frame's
+; payload region in place. expand_macro uses this to parse argument
+; expressions one at a time and write each parsed slot straight into
+; the soon-to-be-frame, avoiding a staging buffer entirely.
+;
+; On entry: SS_NAME       = name for this memory source
+;           SS_MEM_PTR16  = parent's read position. Saved into the new
+;                           frame as prev_data when prev_type=memory.
 ;                           Do NOT preload this with the new buffer
 ;                           pointer -- that overwrites the value
 ;                           push_source_frame is about to copy into the
@@ -442,80 +369,15 @@ push_file_source:
 ;                           breaks memory-above-memory pop. The new
 ;                           buffer pointer must be installed by the
 ;                           caller AFTER this routine returns.
-; On exit: X is preserved. SS_SRC_TYPE = memory. Caller must now
-;          assign the new buffer pointer to SS_MEM_PTR16; reads will
-;          then proceed from the new buffer.
-push_memory_source:
-  TXA
-  PHA                   ; Save X
-  JSR check_source_frame_room
-  LDA #SS_SRC_TYPE_MEMORY
-  JSR push_source_frame ; Saves SS_MEM_PTR16 (still parent's) as prev_data
-  LDA #SS_SRC_TYPE_MEMORY
-  STA SS_SRC_TYPE
-  PLA
-  TAX                   ; Restore X
-  RTS
-
-
-; Push a memory source carrying a trailing payload region.
-;
-; The payload bytes are written into the frame immediately after
-; prev_data; frame_size grows accordingly so subsequent walks/pops
-; transparently account for the larger frame. The source-stack module
-; itself never reads the payload bytes -- consumers (the memory-pop
-; hook installed via ss_install_memory_pop) own their interpretation.
-;
-; On entry: SS_NAME       = name for this memory source
-;           SS_MEM_PTR16  = parent's read position (same contract as
-;                           push_memory_source -- caller installs the
-;                           new buffer pointer AFTER this returns)
-;           SS_PAYLOAD16  = pointer to the payload bytes
-;           A             = payload size (1..N)
-; On exit:  SS_PAYLOAD_SIZE reset to 0 so a subsequent plain
-;           push_memory_source / push_file_source doesn't inherit
-;           the payload reservation.
-;           Other effects mirror push_memory_source.
-push_memory_source_with_payload:
-  STA SS_PAYLOAD_SIZE
-  TXA
-  PHA                   ; Save X
-  JSR check_source_frame_room
-  LDA #SS_SRC_TYPE_MEMORY
-  JSR push_source_frame
-  LDA #SS_SRC_TYPE_MEMORY
-  STA SS_SRC_TYPE
-  ; Reset payload size so the contract for plain pushes stays "no
-  ; payload" without each caller having to clear it.
-  LDA #0
-  STA SS_PAYLOAD_SIZE
-  PLA
-  TAX                   ; Restore X
-  RTS
-
-
-; Same shape as push_memory_source_with_payload, but the payload bytes
-; are RESERVED only -- the source stack does not copy any data into
-; them. The caller is expected to write directly into the frame's
-; payload region (last SS_PAYLOAD_SIZE bytes of the frame) after this
-; returns. expand_macro uses this so it can parse argument expressions
-; one at a time and store each parsed slot straight into the new
-; frame, avoiding a separate staging buffer.
-;
-; On entry: SS_NAME       = name for this memory source
-;           SS_MEM_PTR16  = parent's read position (same contract as
-;                           push_memory_source -- caller installs the
-;                           new buffer pointer AFTER this returns)
-;           A             = payload size (1..N) to reserve
-; On exit:  Same frame state as push_memory_source_with_payload, but
-;           the payload bytes are uninitialized. SS_PAYLOAD_SIZE reset
-;           to 0; SS_PAYLOAD16 left pointing at $0000 (the sentinel
-;           push_source_frame uses to skip the copy).
+;           A             = payload size (0..N) to reserve. 0 is fine
+;                           too -- the test program calls this from
+;                           setup_memory_source with A=0 to push a
+;                           plain (payload-less) memory frame.
+; On exit:  X preserved. SS_SRC_TYPE = MEMORY. SS_PAYLOAD_SIZE reset
+;           to 0. Caller must assign the new buffer pointer to
+;           SS_MEM_PTR16; reads will then proceed from the new buffer.
 push_memory_source_reserve_payload:
   STA SS_PAYLOAD_SIZE
-  LDA #$00
-  STA SS_PAYLOAD16
-  STA SS_PAYLOAD16 + 1
   TXA
   PHA
   JSR check_source_frame_room

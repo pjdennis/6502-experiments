@@ -8,15 +8,15 @@
 ;   IN_MACRO_DEF (macro_capture.asm)
 ;   MACRO_ENTRY16, OPERAND16, TEMP, MACRO_MAX_ARGS (asm.asm)
 ;   LABEL_SCOPE16, CACHED_HASH, scramble_table (hash_table.asm)
-;   EXPANSION_ID16, SCOPE_DEPTH, MACRO_LOOKUP_FRAME16 (label_scope.asm)
+;   EXPANSION_ID16, SCOPE_DEPTH, MACRO_LOOKUP_FRAME16,
+;     MACRO_PAYLOAD_BASE16, MACRO_ARG_REMAIN (label_scope.asm)
 ;   read_char (asm.asm alias; implemented in source_stack.asm)
 ;   check_for_end_of_line (tokenizer.asm)
 ;   parse_expression (expressions.asm)
 ;   select_label_hash_table (common.asm)
 ;   hash_add (hash_table.asm), store_hash_value (common.asm)
-;   push_memory_source_reserve_payload, SS_P16, SS_PAYLOAD16,
-;     SS_PAYLOAD_SIZE, SS_MEM_PTR16, SS_NAME, SS_SRC_TYPE_MEMORY
-;     (source_stack.asm)
+;   push_memory_source_reserve_payload, SS_P16, SS_PAYLOAD_SIZE,
+;     SS_MEM_PTR16, SS_NAME, SS_SRC_TYPE_MEMORY (source_stack.asm)
 ;   err_* (errors.asm)
 
   .code
@@ -288,11 +288,11 @@ expand_macro:
   ; payload_size + 256 bytes of buffer), and parse_expression doesn't
   ; allocate, so we can write slot data there now and push later.
   ;
-  ; SS_PAYLOAD16 = (SS_P16 - payload_size). Indirect-Y writes into
-  ; (SS_PAYLOAD16),Y populate slot[0..N-1] at offsets 0..3*N-1 and
+  ; MACRO_PAYLOAD_BASE16 = (SS_P16 - payload_size). Indirect-Y writes into
+  ; (MACRO_PAYLOAD_BASE16),Y populate slot[0..N-1] at offsets 0..3*N-1 and
   ; the scope tail at offsets 3*N..3*N+6. After the push,
   ; push_memory_source_reserve_payload skips the copy (sees the
-  ; SS_PAYLOAD16=$0000 sentinel it sets internally) and the bytes we
+  ; MACRO_PAYLOAD_BASE16=$0000 sentinel it sets internally) and the bytes we
   ; wrote here are exactly the frame's payload.
   ;
   ; Crucially, SS_P16 / SS_SRC_TYPE / SS_MEM_PTR16 / SS_CURR_LINE16
@@ -303,12 +303,12 @@ expand_macro:
   SEC
   LDA SS_P16
   SBC SS_PAYLOAD_SIZE
-  STA SS_PAYLOAD16
+  STA MACRO_PAYLOAD_BASE16
   LDA SS_P16 + 1
   SBC #$00
-  STA SS_PAYLOAD16 + 1
+  STA MACRO_PAYLOAD_BASE16 + 1
 
-  ; ----- Phase 1: parse args, writing slots into (SS_PAYLOAD16) -----
+  ; ----- Phase 1: parse args, writing slots into (MACRO_PAYLOAD_BASE16) -----
   ;
   ; X = byte offset within the payload region for the next slot. X is
   ; preserved across parse_expression (find_in_hash and
@@ -335,17 +335,17 @@ expand_macro:
   ; Parse argument expression in PARENT'S scope (MACRO_LOOKUP_FRAME16
   ; still points at the parent macro frame, or $0000 at top level).
   JSR parse_expression
-  ; Write slot at (SS_PAYLOAD16)[X..X+2] = [fwdref, value_L, value_H]
+  ; Write slot at (MACRO_PAYLOAD_BASE16)[X..X+2] = [fwdref, value_L, value_H]
   TXA
   TAY
   LDA IS_FWDREF
-  STA (SS_PAYLOAD16),Y
+  STA (MACRO_PAYLOAD_BASE16),Y
   INY
   LDA OPERAND16
-  STA (SS_PAYLOAD16),Y
+  STA (MACRO_PAYLOAD_BASE16),Y
   INY
   LDA OPERAND16 + 1
-  STA (SS_PAYLOAD16),Y
+  STA (MACRO_PAYLOAD_BASE16),Y
   ; Advance X past this slot
   INX
   INX
@@ -378,25 +378,25 @@ expand_macro:
   TXA
   TAY
   LDA LABEL_SCOPE16
-  STA (SS_PAYLOAD16),Y
+  STA (MACRO_PAYLOAD_BASE16),Y
   INY
   LDA LABEL_SCOPE16 + 1
-  STA (SS_PAYLOAD16),Y
+  STA (MACRO_PAYLOAD_BASE16),Y
   INY
   LDA CACHED_HASH
-  STA (SS_PAYLOAD16),Y
+  STA (MACRO_PAYLOAD_BASE16),Y
   INY
   LDA MACRO_LOOKUP_FRAME16
-  STA (SS_PAYLOAD16),Y
+  STA (MACRO_PAYLOAD_BASE16),Y
   INY
   LDA MACRO_LOOKUP_FRAME16 + 1
-  STA (SS_PAYLOAD16),Y
+  STA (MACRO_PAYLOAD_BASE16),Y
   INY
   LDA MACRO_ENTRY16
-  STA (SS_PAYLOAD16),Y
+  STA (MACRO_PAYLOAD_BASE16),Y
   INY
   LDA MACRO_ENTRY16 + 1
-  STA (SS_PAYLOAD16),Y
+  STA (MACRO_PAYLOAD_BASE16),Y
 
   ; ----- Switch to the new scope -----
   ;
@@ -414,7 +414,7 @@ expand_macro:
   ; ----- Push the frame -----
   ;
   ; The payload region is already populated; push_memory_source_reserve_payload
-  ; sets SS_PAYLOAD16=$0000 internally so push_source_frame's copy
+  ; sets MACRO_PAYLOAD_BASE16=$0000 internally so push_source_frame's copy
   ; loop is skipped.
   LDA SS_PAYLOAD_SIZE
   JSR push_memory_source_reserve_payload

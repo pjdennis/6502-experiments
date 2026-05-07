@@ -12,7 +12,8 @@
 ; Requires:
 ;   environment.asm vectors (argc, argv, write_b, write_d, exit)
 ;   source_stack.asm routines (source_stack_init, push_file_source, pop_source,
-;                            push_memory_source, source_stack_empty, read_char)
+;                            push_memory_source_reserve_payload,
+;                            source_stack_empty, read_char)
 ;   to_decimal.asm (TO_DECIMAL_RESULT, to_decimal)
 
 * = $0200
@@ -35,11 +36,14 @@ TABP16:      .word
 MARKER_TERM: .byte         ; Character that terminated the keyword ($FF = EOF)
 
 ; Frame walker state (frames mode). FRAME_DEPTH is updated by the
-; ss_walk_frames callback, not the walker itself.
+; print_frame_callback, not the walker itself.
 FRAME_DEPTH:     .byte
 
 ; @payload_memory state.
 PAYLOAD_REQUESTED_SIZE: .byte
+PAYLOAD_DEST16:         .word         ; Indirect-Y target for payload pre-write
+                                      ; (set to SS_P16 - PAYLOAD_REQUESTED_SIZE
+                                      ; before push_memory_source_reserve_payload)
 
 ; OOM injection: minimum allowed value of SS_TEMP16 during push.
 ; Default $0000 means "no limit"; oom mode sets a tight value.
@@ -464,7 +468,7 @@ check_markers:
 ; (the frame_size byte from offset 0 of the new frame) and then
 ; immediately pops the frame.
 ;
-; This exercises push_memory_source_with_payload's frame_size accounting:
+; This exercises push_memory_source_reserve_payload's frame_size accounting:
 ; tests verify that the printed size equals the standard memory-frame
 ; size plus the requested payload size.
 .handle_payload_memory:
@@ -490,19 +494,6 @@ check_markers:
   LDA #0
   STA PAYLOAD_REQUESTED_SIZE
 .pm_have_size:
-  ; Fill payload buffer with sentinel pattern
-  LDX PAYLOAD_REQUESTED_SIZE
-  BEQ .pm_buf_done
-  LDY #0
-.pm_fill:
-  TYA
-  CLC
-  ADC #$A0
-  STA payload_buf,Y
-  INY
-  DEX
-  BNE .pm_fill
-.pm_buf_done:
   ; Set SS_NAME = "PAYLOAD"
   LDY #0
 .pm_copy_name:
@@ -512,10 +503,37 @@ check_markers:
   INY
   JMP .pm_copy_name
 .pm_name_done:
-  ; Push payload memory source
-  SET16 payload_buf, SS_PAYLOAD16
+  ; Pre-write the payload contents into the unallocated source-stack
+  ; bytes that will become the new frame's payload region. After
+  ; push_memory_source_reserve_payload commits the frame, those bytes
+  ; sit at the end of the new frame untouched. The bytes are filled
+  ; with a sentinel pattern ($A0, $A1, ...) so they're easy to
+  ; identify if dumped.
+  LDX PAYLOAD_REQUESTED_SIZE
+  BEQ .pm_push                  ; size 0 -> nothing to pre-write
+  ; PAYLOAD_DEST16 = SS_P16 - PAYLOAD_REQUESTED_SIZE (low byte; high
+  ; byte borrows from SS_P16+1 if needed).
+  SEC
+  LDA SS_P16
+  SBC PAYLOAD_REQUESTED_SIZE
+  STA PAYLOAD_DEST16
+  LDA SS_P16 + 1
+  SBC #$00
+  STA PAYLOAD_DEST16 + 1
+  LDY #0
+.pm_fill:
+  TYA
+  CLC
+  ADC #$A0
+  STA (PAYLOAD_DEST16),Y
+  INY
+  DEX
+  BNE .pm_fill
+.pm_push:
+  ; Push the memory frame, reserving PAYLOAD_REQUESTED_SIZE bytes for
+  ; the payload we just wrote.
   LDA PAYLOAD_REQUESTED_SIZE
-  JSR push_memory_source_with_payload
+  JSR push_memory_source_reserve_payload
   ; Print "ps:" prefix
   PUSH16 TABP16
   SET16 str_pm_size_label, TABP16
@@ -621,8 +639,10 @@ setup_memory_source:
 .name_done:
   ; Push memory source FIRST so push_source_frame can capture the parent's
   ; SS_MEM_PTR16 (when the parent is itself a memory source). Only after the
-  ; push do we install the new memory pointer.
-  JSR push_memory_source
+  ; push do we install the new memory pointer. A=0 reserves no payload
+  ; (this is a plain memory source -- no activation state to carry).
+  LDA #$00
+  JSR push_memory_source_reserve_payload
   SET16 TOKEN_MEM, SS_MEM_PTR16
   ; Initialize line to 1 for memory source, at start of line
   SET16 1, CURLINE16
@@ -754,23 +774,32 @@ print_top_frame_size:
 ; Walks frames from SS_P16 upward until reaching SOURCE_STACK, advancing
 ; by the frame_size byte at offset 0 of each frame.
 ; Output: one line per frame "depth:type:name" with depth 0 = top of stack.
-; Preserves X. The walk itself lives in source_stack.asm; this function
-; just sets depth=0 and hands ss_walk_frames a per-frame printer.
+; Preserves X. The walker is inlined here -- the source-stack module no
+; longer carries a generic ss_walk_frames since this is the only caller.
 print_frames:
   TXA
   PHA
   LDA #0
   STA FRAME_DEPTH
-  LDA #<print_frame_callback
-  LDX #>print_frame_callback
-  JSR ss_walk_frames
+  CP16 SS_P16, TABP16
+.pf_loop:
+  CMPI16 TABP16, SOURCE_STACK
+  BCS .pf_done
+  JSR print_frame_callback     ; TABP16 unchanged across the call
+  ; Advance TABP16 by frame_size at offset 0.
+  LDY #0
+  LDA (TABP16),Y
+  CLC
+  ADCA16 TABP16, TABP16
+  JMP .pf_loop
+.pf_done:
   PLA
   TAX
   RTS
 
-; ss_walk_frames callback. On entry TABP16 = current frame; Y free; must
-; leave TABP16 untouched and must not clobber SS_TEMP16 (walker uses it
-; to hold this very callback's address).
+; Per-frame callback used by print_frames. On entry TABP16 = current
+; frame; Y free; must leave TABP16 untouched (PUSH16/POP16 around any
+; routine that clobbers it).
 print_frame_callback:
   ; Print depth as decimal (single byte fits in low half of TO_DECIMAL_VALUE16).
   LDA FRAME_DEPTH
