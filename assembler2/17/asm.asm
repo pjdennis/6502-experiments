@@ -18,6 +18,9 @@ MACRO_ARG_BUF   = $0500  ; Temp buffer for macro args during expansion (256 byte
 MACRO_ARG_LIMIT = MACRO_ARG_BUF + $0100 ; Limit for macro arg buffer
 TOKEN           = $0600  ; Buffer for the current token being read
 ELSE_SEEN_ARRAY = $0680  ; Array tracking .else seen per nesting level (16 bytes)
+MACRO_ACTIVATION = $0690 ; 5-byte staging buffer for the activation payload
+                         ; expand_macro hands to push_memory_source_with_payload
+                         ; (LABEL_SCOPE16 lo/hi, CACHED_HASH, MACRO_ENTRY16 lo/hi)
 LHASHTAB        = $0700  ; Label hash table
 IFDEF_DECISIONS = $0800  ; Buffer for .ifdef decisions (256 bytes)
 *               = $2000  ; Code generates here follwed by HEAP
@@ -224,12 +227,15 @@ start:
   .endif
   ; Initialize source stack early so interrupt handler works correctly
   JSR source_stack_init
-  ; Hook pop_label_scope as the memory-source pop handler so popping a
-  ; macro expansion restores the caller's scope.
-  LDA #<pop_label_scope
-  LDX #>pop_label_scope
+  ; Install pop_label_scope_from_frame as the memory-source pop hook.
+  ; Macro expansions push activation state into the memory frame's
+  ; payload region; the hook reads it back when the frame is popped.
+  LDA #<pop_label_scope_from_frame
+  LDX #>pop_label_scope_from_frame
   JSR ss_install_memory_pop
-  ; Initialize scope stack for macro expansions
+  ; Initialize scope state (EXPANSION_ID, SCOPE_DEPTH). The legacy
+  ; SCOPE_STACK is no longer pushed/popped post-Phase-3.4 -- this just
+  ; resets the counters Phase 3.6 will eventually delete with it.
   JSR init_scope_stack
   ; Check argument count (must be at least 2)
   JSR argc

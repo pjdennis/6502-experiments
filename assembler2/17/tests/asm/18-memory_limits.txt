@@ -100,21 +100,19 @@ EXPECT_HEX: ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea 60
 
 ---
 NAME: scope_stack_at_limit
-DESCRIPTION: 51 nested macros at scope stack limit
+DESCRIPTION: 51 nested macros assemble cleanly. Pre-Phase-3.4 this was at the SCOPE_STACK limit (51 entries x 5 bytes = 255 of 256 available); after the source-stack merge each macro's activation state lives in its memory frame's payload, so the limit is simply source-stack OOM. 51 is well within that.
 INPUT:
  1: * = $0200
  2:   .include scope/s51.asm
 EXPECT_HEX: ea
 
 ---
-NAME: scope_stack_overflow
-DESCRIPTION: 52 nested macros overflow scope stack
+NAME: scope_stack_52_no_longer_overflows
+DESCRIPTION: Post-Phase-3.4 there is no separate scope stack to overflow -- 52 nested macros assemble fine. Pre-Phase-3.4 this hit err_macro_nesting_too_deep (error 34); now that error code is unreachable for this scenario. A real deep-nesting OOM test wants many more levels and a small-heap setup; left for Phase 3.9.
 INPUT:
  1: * = $0200
  2:   .include scope/s52.asm
-EXPECT_ERROR: 34
-EXPECT_LINE: 5
-EXPECT_MSG: Macro nesting too deep
+EXPECT_HEX: ea
 
 ---
 NAME: macro_arg_buffer_at_limit

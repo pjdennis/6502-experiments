@@ -5,23 +5,38 @@
 ; for local label scoping. Since expansion IDs are small integers (1, 2, 3...),
 ; they won't conflict with real heap addresses.
 ;
-; Scope state is saved on a dedicated scope stack (SCOPE_STACK in memory),
-; NOT the 6502 stack. Each entry is 5 bytes:
+; Post-Phase-3.4, the per-expansion activation state lives on the source
+; stack as the trailing payload of each macro's memory frame:
 ;   - LABEL_SCOPE16 (2 bytes) - restored on pop
 ;   - CACHED_HASH (1 byte) - restored on pop
-;   - MACRO_ENTRY16 (2 bytes) - saved but NOT restored (used for recursion detection)
+;   - MACRO_ENTRY16 (2 bytes) - saved but not restored (read by
+;                               check_macro_recursion to detect recursive
+;                               expansions). Sits at the very end of the
+;                               frame; check_macro_recursion locates it
+;                               via frame_size - 2.
 ;
-; The scope stack grows upward from SCOPE_STACK.
+; expand_macro stages these 5 bytes in MACRO_ACTIVATION before calling
+; push_memory_source_with_payload. pop_label_scope_from_frame (installed
+; via ss_install_memory_pop) reads them back when the frame is popped.
+;
+; The legacy SCOPE_STACK / SCOPE_PTR16 / push_label_scope / pop_label_scope
+; routines are still defined but no longer used (Phase 3.6 deletes them).
 ;
 ; Requires (from caller):
-;   SCOPE_STACK          - base address of scope stack (asm.asm)
+;   SCOPE_STACK          - base address of legacy scope stack (asm.asm)
 ;   MACRO_ENTRY16        - macro hash table entry address (asm.asm)
 ;
-; Requires (from hash_table22.asm):
-;   LABEL_SCOPE16        - current scope for local label resolution (hash_table.asm)
-;   CACHED_HASH          - pre-computed hash for current scope (hash_table.asm)
-;   scramble_table       - hash scrambling table (hash_table.asm)
-;   err_macro_nesting_too_deep - error handler for scope overflow (errors.asm)
+; Requires (from hash_table.asm):
+;   LABEL_SCOPE16        - current scope for local label resolution
+;   CACHED_HASH          - pre-computed hash for current scope
+;   scramble_table       - hash scrambling table
+;
+; Requires (from source_stack.asm):
+;   SS_P16               - source stack pointer (read by
+;                          pop_label_scope_from_frame to locate payload)
+;
+; Requires (errors.asm):
+;   err_macro_nesting_too_deep - error handler for legacy scope overflow
 
 SCOPE_ENTRY_SIZE = 5
 
@@ -126,5 +141,37 @@ pop_label_scope:
   LDA (SCOPE_PTR16),Y
   STA CACHED_HASH
   ; Decrement scope depth
+  DEC SCOPE_DEPTH
+  RTS
+
+
+; Memory-source pop hook installed at startup via ss_install_memory_pop.
+; Called from pop_source's curr_type=memory dispatch when a macro frame
+; is popped. The frame's last 5 bytes hold the activation payload that
+; expand_macro stashed in via push_memory_source_with_payload:
+;
+;   payload offset 0..1: prev LABEL_SCOPE16 lo/hi
+;   payload offset 2:    prev CACHED_HASH
+;   payload offset 3..4: prev MACRO_ENTRY16 (saved for check_macro_recursion;
+;                                            not restored on pop, matching
+;                                            the legacy pop_label_scope)
+;
+; Restores LABEL_SCOPE16 and CACHED_HASH; decrements SCOPE_DEPTH. The
+; pop_source dispatch preserves Y/X around this call, so we can clobber
+; them freely.
+pop_label_scope_from_frame:
+  LDY #0
+  LDA (SS_P16),Y          ; frame_size
+  SEC
+  SBC #5                  ; offset of activation payload start
+  TAY
+  LDA (SS_P16),Y
+  STA LABEL_SCOPE16
+  INY
+  LDA (SS_P16),Y
+  STA LABEL_SCOPE16 + 1
+  INY
+  LDA (SS_P16),Y
+  STA CACHED_HASH
   DEC SCOPE_DEPTH
   RTS

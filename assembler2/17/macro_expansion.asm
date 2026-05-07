@@ -4,50 +4,65 @@
 ;
 ; Requires:
 ;   CURR_CHAR (asm.asm alias; backing storage in source_stack.asm)
-;   TOKEN, PASS (asm.asm)
+;   TOKEN, PASS, MACRO_ACTIVATION (asm.asm)
 ;   IN_MACRO_DEF (macro_capture.asm)
 ;   MACRO_ARG_BUF, MACRO_ARG_LIMIT, MACRO_ENTRY16, OPERAND16 (asm.asm)
 ;   LABEL_TYPE, LABEL_TYPE_MACRO (common.asm)
+;   LABEL_SCOPE16, CACHED_HASH, scramble_table (hash_table.asm)
+;   EXPANSION_ID16, SCOPE_DEPTH (label_scope.asm)
 ;   read_char (asm.asm alias; implemented in source_stack.asm)
 ;   check_for_end_of_line (tokenizer.asm)
 ;   parse_expression (expressions.asm)
 ;   select_label_hash_table (common.asm)
 ;   hash_add (hash_table.asm), store_hash_value (common.asm)
-;   push_label_scope (label_scope.asm), push_memory_source (source_stack.asm)
+;   push_memory_source_with_payload, ss_walk_frames_by_type,
+;     SS_PAYLOAD16, SS_SRC_TYPE_MEMORY (source_stack.asm)
 ;   err_* (errors.asm)
 
   .code
 
 
-; Check if macro is already being expanded (recursion check)
-; Walks the scope stack comparing 2-byte macro entry addresses
-; On entry: MACRO_ENTRY16 contains the macro's hash table entry address
-; On exit: Returns normally if no recursion, jumps to err_recursive_macro if found
-;          Uses TABP16 as walk pointer, A/Y clobbered, X preserved
+; Check if the active macro is already being expanded somewhere up the
+; source-stack chain. Walks every memory frame on the source stack via
+; ss_walk_frames_by_type and compares each one's saved MACRO_ENTRY16
+; against the active one. The saved entry is the last 2 bytes of each
+; frame's payload region (set by expand_macro before push). Walking
+; ignores file frames (file frames don't carry macro state).
+;
+; On entry: MACRO_ENTRY16 = the macro's hash table entry address.
+; On exit:  Returns normally if no recursion; jumps to err_recursive_macro
+;           on match. TABP16, A, Y clobbered; X preserved (matches the
+;           legacy contract -- expand_macro relies on it).
 check_macro_recursion:
-  ; Walk scope stack from bottom to current position
-  SET16 SCOPE_STACK, TABP16
-.loop:
-  ; Check if we've reached current scope pointer
-  CMP16 TABP16, SCOPE_PTR16
-  BEQ .done                 ; Reached current position, no recursion
-  ; Compare macro address at offset +3 with MACRO_ENTRY16
-  LDY #3
+  TXA
+  PHA                           ; ss_walk_frames_by_type clobbers X
+  LDA #<recursion_check_callback
+  LDX #>recursion_check_callback
+  LDY #SS_SRC_TYPE_MEMORY
+  JSR ss_walk_frames_by_type
+  PLA
+  TAX
+  RTS
+
+; Per-frame callback for check_macro_recursion. TABP16 = current frame
+; address. The frame's last 2 bytes are MACRO_ENTRY16 (saved by
+; expand_macro into the activation payload at offset payload+3..4 = the
+; very end of the frame).
+recursion_check_callback:
+  LDY #0
+  LDA (TABP16),Y          ; frame_size
+  SEC
+  SBC #2                  ; offset of saved MACRO_ENTRY16 lo
+  TAY
   LDA (TABP16),Y
   CMP MACRO_ENTRY16
-  BNE .next
+  BNE .rcc_no_match
   INY
   LDA (TABP16),Y
   CMP MACRO_ENTRY16 + 1
-  BNE .next
-  ; Match found - recursion detected
+  BNE .rcc_no_match
   JMP err_recursive_macro
-.next:
-  ; Advance to next entry (+5 bytes)
-  CLC
-  ADCI16 TABP16, 5, TABP16
-  JMP .loop
-.done:
+.rcc_no_match:
   RTS
 
 
@@ -130,19 +145,44 @@ expand_macro:
 .parse_done:
   ; Check for extra arguments (should be at end of line now)
   JSR check_for_end_of_line
-  BCC .too_many
-  ; NOW push label scope for the child macro
-  JSR push_label_scope
-  ; Push the memory source frame here (not at the end of expand_macro)
-  ; so the macro name still in TOKEN gets captured into the frame
-  ; before the param-copy loop below clobbers TOKEN with parameter
-  ; names. This is what makes error tracebacks report the macro name
-  ; rather than the last parameter's name. As a side benefit, if the
-  ; param hash_add path hits OOM, the error handler now sees the
-  ; memory frame on the source stack and the Phase-2.5 pop hook
-  ; cleans up the label scope -- previously SCOPE_STACK could leak
-  ; on that error path.
-  JSR push_memory_source
+  BCS .args_done_ok
+  JMP .too_many
+.args_done_ok:
+  ; ----- Build the activation payload, then push the macro's memory
+  ;       frame in a single step -----
+  ;
+  ; The 5-byte payload at MACRO_ACTIVATION holds the state the matching
+  ; pop hook (pop_label_scope_from_frame) needs: the previous scope's
+  ; LABEL_SCOPE16 + CACHED_HASH (restored on pop) and MACRO_ENTRY16
+  ; (used by check_macro_recursion to detect recursive expansions).
+  LDA LABEL_SCOPE16
+  STA MACRO_ACTIVATION + 0
+  LDA LABEL_SCOPE16 + 1
+  STA MACRO_ACTIVATION + 1
+  LDA CACHED_HASH
+  STA MACRO_ACTIVATION + 2
+  LDA MACRO_ENTRY16
+  STA MACRO_ACTIVATION + 3
+  LDA MACRO_ENTRY16 + 1
+  STA MACRO_ACTIVATION + 4
+  ; Set up the new scope (was inside push_label_scope before the
+  ; merge): EXPANSION_ID is monotonic, LABEL_SCOPE16 = expansion id,
+  ; CACHED_HASH derived from the low byte through scramble_table.
+  INC16 EXPANSION_ID16
+  CP16 EXPANSION_ID16, LABEL_SCOPE16
+  LDA EXPANSION_ID16
+  AND #$7F
+  TAY
+  LDA scramble_table,Y
+  STA CACHED_HASH
+  INC SCOPE_DEPTH
+  ; Push the memory frame carrying the activation payload. TOKEN still
+  ; holds the macro name (the param-copy loop below will clobber it,
+  ; but the push captures the name into the frame first). Tracebacks
+  ; therefore name the macro correctly.
+  SET16 MACRO_ACTIVATION, SS_PAYLOAD16
+  LDA #5
+  JSR push_memory_source_with_payload
 
   ; ----- Phase 2: Populate child macro scope with parameter values -----
   ; Restore params start to MACRO_DEF_PTR
