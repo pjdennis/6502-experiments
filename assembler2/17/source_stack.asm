@@ -152,11 +152,11 @@ ss_free_frame:
 
 
 ; Per-curr_type pop handlers. pop_source dispatches to one of these
-; based on curr_type, before prev_data restoration. Handlers must
-; preserve Y (the in-frame walk position pop_source is mid-walk on).
+; based on curr_type, before prev_data restoration. The dispatch
+; preserves both X and Y around the JSR; handlers may freely clobber
+; them.
 ss_pop_file:
-  ; curr_type=0: close the current file handle if open. close preserves
-  ; A/X/Y (per environment.asm), so no save/restore needed.
+  ; curr_type=0: close the current file handle if open.
   LDA SS_CURR_FILE
   BEQ .nothing_to_close
   JMP close             ; tail call
@@ -166,16 +166,23 @@ ss_pop_file:
 ss_pop_memory:
   ; curr_type=1: run the memory-pop hook if the host program defined
   ; one (the assembler hooks pop_label_scope; the test program leaves
-  ; SS_POP_MEMORY_HOOK undefined, making this a no-op). The hook may
-  ; clobber Y, so guard it.
+  ; SS_POP_MEMORY_HOOK undefined, making this a no-op).
   .ifdef SS_POP_MEMORY_HOOK
-  TYA
-  PHA
-  JSR SS_POP_MEMORY_HOOK
-  PLA
-  TAY
+  JMP SS_POP_MEMORY_HOOK ; tail call (RTS below is unreachable when defined)
   .endif
   RTS
+
+; Per-curr_type pop dispatch table (lo/hi split for ASL-free indexing)
+ss_on_pop_table_lo:
+  .byte <ss_pop_file
+  .byte <ss_pop_memory
+ss_on_pop_table_hi:
+  .byte >ss_pop_file
+  .byte >ss_pop_memory
+
+; Indirect-call thunk: caller stores handler in SS_TEMP16, JSRs here.
+ss_pop_invoke:
+  JMP (SS_TEMP16)
 
 
 ; On exit Z is set if source stack empty, clear otherwise
@@ -347,13 +354,25 @@ pop_source:
   BNE .skip_name
   ; Y points at null, curr_type is at Y+1
   INY
+  ; Dispatch on curr_type via ss_on_pop_table_{lo,hi} (file=0, memory=1).
+  ; Save X around the dispatch -- pop_source preserves X by external
+  ; contract (read_char's X preservation flows through here).
+  TXA
+  PHA
   LDA (SS_P16),Y
-  BNE .pop_memory
-  JSR ss_pop_file
-  JMP .pop_done
-.pop_memory:
-  JSR ss_pop_memory
-.pop_done:
+  TAX
+  LDA ss_on_pop_table_lo,X
+  STA SS_TEMP16
+  LDA ss_on_pop_table_hi,X
+  STA SS_TEMP16+1
+  ; Y must also survive the handler call (we're mid-walk on the frame).
+  TYA
+  PHA
+  JSR ss_pop_invoke
+  PLA
+  TAY
+  PLA
+  TAX
   ; Read prev_type
   INY
   LDA (SS_P16),Y
