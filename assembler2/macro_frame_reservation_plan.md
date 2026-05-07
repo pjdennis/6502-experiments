@@ -148,6 +148,111 @@ reserves the helper computes `SS_TEMP16 = SS_PEND_P16 - frame_size`
 instead. Either way, `SS_TEMP16` ends up holding the proposed new
 lowest extent, which is exactly what the OOM check wants.
 
+## Frame layout: prev_data moves before the name
+
+The current frame layout (`source_stack.asm:11-45`) places `prev_data`
+**after** the variable-length name:
+
+```
+0:    frame_size
+1:    curr_type
+2:    prev_type
+3-4:  prev_line_L, prev_line_H
+5..(5+name_len): name + null
+(after name):    prev_data (1 byte file / 2 bytes memory)
+(after that):    payload
+```
+
+A prior reorg moved `curr_type / prev_type / prev_line` to fixed
+offsets 1..4 so consumers wouldn't pay an O(name_len) scan on every
+read. `prev_data` was left after the name because it's read only once
+per pop. Nothing structural keeps it there — the prior reorg simply
+didn't need to move it.
+
+For the reserve/commit split, the variable position of `prev_data`
+forces commit to either re-walk the name on every commit or remember
+the offset across the reservation window. The first costs ~5
+cycles/byte on a hot path (~40 cycles for an 8-character name); the
+second costs a zp byte that's meaningful only between reserve and
+commit and clutters the API.
+
+A small reorder eliminates the choice. New layout:
+
+```
+0:    frame_size
+1:    curr_type
+2:    prev_type
+3-4:  prev_line_L, prev_line_H
+5-6:  prev_data           <-- moved here, FIXED 2-byte slot
+7..:  name + null
+...:  payload
+```
+
+`prev_data` becomes a **fixed 2-byte slot at offsets 5..6**, regardless
+of `prev_type`. For `prev_type=file` only byte 5 is used; byte 6 is
+unused (1 byte/frame waste for file parents).
+
+### What this enables
+
+- **`ss_commit_pending_frame` writes prev_data at constant offsets
+  5..6**, with no zp-byte handoff from reserve. The proposed
+  `SS_PEND_PREV_OFF` variable disappears entirely.
+- **`pop_source`'s `.skip_name` loop disappears**
+  (`source_stack.asm:445-448`). Today every pop walks the name once
+  to find prev_data; with prev_data at offset 5 that walk is gone.
+  Independent speedup for every pop, not just macro pops.
+- **`push_source_frame`'s prev_data write moves to a fixed offset**
+  (no name copy has to precede it). The 1-byte vs. 2-byte branch on
+  `prev_type` stays — only the *position* becomes constant.
+- **`check_source_frame_room` loses its parent-type branch.** Today's
+  `5 + 1 + 1` vs. `5 + 2 + 1` (`source_stack.asm:103/108`) collapses
+  to a single `5 + 2 + 1` since `prev_data` is always 2 bytes. The
+  `SS_SRC_TYPE` read disappears from the size computation.
+- **`expand_macro`'s "worst-case 15" comment becomes "constant 15"**
+  (`macro_expansion.asm:278-281`). The frame size formula no longer
+  depends on parent type.
+
+### What this costs
+
+- **Name moves from offset 5 to offset 7.** One consumer cares:
+  `SHOW_FRAME_NAME` in `errors.asm:235-239` (used at `:294` and
+  `:395`). One-line constant change: `ADCI16 ptr, $05, TABP16` →
+  `ADCI16 ptr, $07, TABP16`. Plus the surrounding comment.
+- **1 byte/frame wasted for file-parent frames.** Worst case in a
+  typical compile is well under 50 bytes total — trivial against the
+  128-byte `MACRO_NAME_SAVE` reclamation. The waste is transient
+  stack usage during the file frame's lifetime; freed on pop.
+
+### What stays unchanged
+
+- `pop_label_scope_from_frame` (`label_scope.asm:98-119`) anchors at
+  `frame_size - 7` (scope_block start, working backwards from the
+  end of the frame). Name moving from offset 5 to 7 doesn't touch
+  the end-of-frame layout, so this anchor is unaffected.
+- `check_macro_recursion` (`macro_expansion.asm:38-84`) anchors at
+  `frame_size - 2` (MACRO_ENTRY16). Same reasoning — unchanged.
+- `ss_lookup_param_slot` (`macro_expansion.asm:110-208`) anchors at
+  `frame_size - 7` for the scope_block. Unchanged.
+- `MACRO_PAYLOAD_BASE16 = SS_P16 - payload_size`
+  (`macro_expansion.asm:326-332`) — unchanged. Payload still trails
+  the name; only the name's offset within the frame changed, not the
+  payload's offset from the frame's end.
+
+### Variants considered and rejected
+
+- **A': variable-size `prev_data` at offset 5, name at offset 6 or
+  7.** Saves the 1-byte/file-frame waste, but `SHOW_FRAME_NAME` has
+  to read `prev_type` at offset 2 to compute the name offset. Net
+  code growth probably exceeds the byte savings, and you lose the
+  `check_source_frame_room` simplification.
+- **B: `prev_data` at the end of the frame** (after payload). Also
+  eliminates the per-commit offset problem and keeps name at offset
+  5. But three end-of-frame anchors (`pop_label_scope_from_frame`,
+  `check_macro_recursion`, `ss_lookup_param_slot`) all use
+  `frame_size - K` and would each need a `prev_data_size`
+  adjustment. Three call sites disturbed instead of one. Worse
+  trade.
+
 ## New `source_stack.asm` API
 
 Two public primitives plus an internal helper. All three are
@@ -164,33 +269,25 @@ SS_PEND_P16:           .word
 ; grows down) when a frame is reserved but not yet committed. The
 ; heap-vs-stack OOM check is performed against this pointer, so the
 ; pending region is structurally protected from heap write-ahead.
-
-SS_PEND_PREV_OFF:      .byte
-; Offset from SS_PEND_P16 of the prev_data field within the pending
-; frame. Written by ss_reserve_frame; consumed by
-; ss_commit_pending_frame so it can write prev_data without re-walking
-; the (variable-length) name. Lifetime is the reserve→commit window;
-; outside it the value is undefined and callers must not depend on it.
 ```
 
-Net zero-page delta: +3 bytes (one word, one byte). Still a clear net
-memory win once `MACRO_NAME_SAVE`'s 128 bytes go away. Zero page is
-not currently tight; if it ever becomes tight in a future
-constrained-build configuration, a non-zp variant can be introduced
-behind a build option (a separate piece of work — not part of this
-plan).
+Net zero-page delta: +2 bytes (one word). With the frame layout
+reorder, `prev_data` sits at fixed offsets 5..6, so commit no longer
+needs an offset hand-off from reserve. Clear net memory win once
+`MACRO_NAME_SAVE`'s 128 bytes go away.
 
 ### Public primitives
 
 ```
 ss_reserve_frame:
 ; Reserve a pending frame. SS_P16 does NOT advance -- only SS_PEND_P16
-; does. The frame's header fields (frame_size, curr_type, prev_type,
-; prev_line, name) are written into the pending region at SS_PEND_P16.
-; The prev_data field is left UNINITIALIZED -- the parent's read
-; cursor (SS_MEM_PTR16 in particular) typically advances during the
-; reserved window, so the canonical prev_data is captured at commit
-; time, not here.
+; does. The frame's header fields (frame_size at offset 0, curr_type
+; at 1, prev_type at 2, prev_line at 3..4, name at 7..) are written
+; into the pending region at SS_PEND_P16. Offsets 5..6 (the prev_data
+; slot) are left UNINITIALIZED -- the parent's read cursor
+; (SS_MEM_PTR16 in particular) typically advances during the reserved
+; window, so the canonical prev_data is captured at commit time, not
+; here.
 ;
 ; Until commit, parent's source remains active for read_char and
 ; visible to all stack consumers. Tracebacks for errors during the
@@ -208,7 +305,6 @@ ss_reserve_frame:
 ;                           prev_line; prev_data deferred to commit)
 ;           SS_PAYLOAD_SIZE = trailing payload bytes to reserve
 ; On exit:  SS_PEND_P16   = pending frame base
-;           SS_PEND_PREV_OFF = offset of prev_data within pending frame
 ;           SS_PAYLOAD_SIZE reset to 0
 ;           SS_P16 unchanged. SS_SRC_TYPE / SS_CURR_LINE16 /
 ;             SS_CURR_FILE / SS_MEM_PTR16 unchanged (parent still active)
@@ -216,10 +312,12 @@ ss_reserve_frame:
 
 ss_commit_pending_frame:
 ; Commit a pending frame:
-;   1. Write prev_data at offset SS_PEND_PREV_OFF within the pending
-;      frame, using the CURRENT SS_CURR_FILE (file parent) or
-;      SS_MEM_PTR16 (memory parent). This captures parent's read
-;      cursor at the moment the new source takes over.
+;   1. Write prev_data at fixed offsets 5..6 within the pending
+;      frame, using the CURRENT SS_CURR_FILE (file parent: 1 byte at
+;      offset 5; offset 6 unused) or SS_MEM_PTR16 (memory parent:
+;      lo at 5, hi at 6). prev_type at offset 2 selects which.
+;      This captures parent's read cursor at the moment the new
+;      source takes over.
 ;   2. Advance SS_P16 := SS_PEND_P16 (the pending frame becomes the
 ;      committed top).
 ;   3. Set SS_SRC_TYPE := the frame's curr_type byte at offset 1.
@@ -236,24 +334,26 @@ ss_commit_pending_frame:
 ### Internal sharing
 
 `push_source_frame` (today the inner workhorse for `push_file_source`
-and `push_memory_source_reserve_payload`) writes header + name +
-prev_data atomically. The new reserve splits that into:
+and `push_memory_source_reserve_payload`) writes the full frame
+atomically. With prev_data at fixed offsets 5..6, the natural split
+between reserve and commit is:
 
-- **header + name** (reserve)
-- **prev_data** (commit)
+- **header (offsets 0..4) + name (offsets 7..)** (reserve)
+- **prev_data (offsets 5..6)** (commit)
 
-A clean factoring is to extract `ss_write_pending_header_and_name` as
-an internal helper used by both `push_source_frame` and
-`ss_reserve_frame`. The helper records the prev_data offset (Y at the
-end of the name copy + 1) so:
+The header + name writes are identical between the atomic
+`push_source_frame` path and the new `ss_reserve_frame`. A clean
+factoring is to extract `ss_write_pending_header_and_name` as an
+internal helper used by both:
 
-- `push_source_frame` (atomic) keeps the prev_data write inline,
-  re-using the helper's exiting Y to avoid an offset recompute.
-- `ss_reserve_frame` records that same offset into
-  `SS_PEND_PREV_OFF` and returns; `ss_commit_pending_frame` reads it
-  back to write prev_data without a name walk.
+- `push_source_frame` (atomic) calls the helper, then writes prev_data
+  inline at fixed offsets 5..6 using the parent's current state, then
+  resets `SS_CURR_LINE16`.
+- `ss_reserve_frame` calls the helper and returns; the prev_data
+  write at offsets 5..6 is deferred to `ss_commit_pending_frame`.
 
-This keeps a single authoritative place for the offset arithmetic.
+No offset hand-off is needed — both writers know prev_data lives at
+offset 5 (and 6 for memory parents).
 
 ### Why prev_data is deferred to commit, not written by reserve
 
@@ -264,26 +364,11 @@ practice (args don't span lines), but for memory parents the
 invocation," we have to write `prev_data` after arg parsing finishes,
 i.e. at commit.
 
-Reserve still writes `prev_type` (parent's `SS_SRC_TYPE`, which is
+Reserve still writes `prev_type` at offset 2 (parent's `SS_SRC_TYPE`,
 stable during the reserved window because no push/pop happens), so
 commit knows whether to write 1 byte (file) or 2 bytes (memory) of
-prev_data without re-checking parent state.
-
-### Tracking `SS_PEND_PREV_OFF` vs. walking the name on commit
-
-Two viable approaches:
-
-- **zp byte (chosen).** Reserve writes `SS_PEND_PREV_OFF`; commit
-  reads it. Constant-time commit. Costs 1 byte of zp.
-- **walk the name on commit.** No zp cost, but commit pays
-  ~5 cycles per name byte. For a typical 8-character name that's
-  ~40 cycles per macro invocation, on a hot path.
-
-The chosen approach is the zp byte: minimize commit-time work on the
-hot path, and keep `expand_macro` simple. Zero page is not currently
-tight. If a future constrained-build configuration needs to relocate
-some zp variables out of zero page, the walk-on-commit variant
-remains a fallback.
+prev_data without re-checking parent state. The position is fixed
+either way.
 
 ## `expand_macro` after the refactor
 
@@ -300,9 +385,11 @@ expand_macro:
   ; Compute payload_size = 3*N + 7 -> SS_PAYLOAD_SIZE.
   ; ...same as today...
 
-  ; Worst-case frame_size sanity check (1-byte field):
+  ; Exact frame_size sanity check (1-byte field):
   ; 15 + name_len + 3*N <= 255, else jmp err_too_many_arguments.
-  ; ...same as today...
+  ; (With the layout reorder, prev_data is always 2 bytes, so 15 is
+  ; exact rather than worst-case -- the file/memory branch in
+  ; check_source_frame_room is gone.)
 
   ; Reserve the pending frame. ss_reserve_frame copies SS_NAME (=
   ; TOKEN, the macro name) into the pending frame's name region.
@@ -399,8 +486,11 @@ returns fully to the "free" state documented in `asm.asm` after Phase
 3.6. Update the comment block in `asm.asm` and the memory-map section
 in `CLAUDE.md`.
 
-Net memory: -128 bytes buffer + 3 bytes zp (`SS_PEND_P16` word +
-`SS_PEND_PREV_OFF` byte) = -125 bytes overall.
+Net memory: -128 bytes buffer + 2 bytes zp (`SS_PEND_P16` word) =
+-126 bytes overall. The frame layout reorder also adds 1 byte/frame
+of transient stack waste for file-parent frames (typically <50 bytes
+across all frames in flight; freed on pop), which doesn't affect the
+overall budget meaningfully.
 
 ## Test coverage
 
@@ -459,30 +549,45 @@ New tests to add:
   parent's line number, not just the name. Pin down that the line
   reported on arg-parse error is the invocation line, not "line 1
   of the macro."
+- **Layout-reorder pin.** Source-stack component test program: a
+  `@layout_check` directive that pushes a frame with known name and
+  prev_data, then asserts (via `@info`) that the name appears at
+  offset 7 and the prev_data byte(s) appear at offsets 5..6. Catches
+  any future reorg that accidentally reverts the layout. Should also
+  verify SHOW_FRAME_NAME's output is correct (i.e., that the offset
+  constant in the macro was updated).
 
 ## Phasing
 
 Per the project's small-commits TDD workflow:
 
-1. **Add `SS_PEND_P16` zp word**, initialize in `source_stack_init`,
+1. **Reorder the frame layout: prev_data slot to offsets 5..6, name
+   to offset 7.** Update `push_source_frame` (write prev_data at
+   fixed offset 5..6 instead of after name copy), `pop_source` (drop
+   the `.skip_name` loop, read prev_data at offset 5 directly),
+   `check_source_frame_room` (single `5 + 2 + 1` formula, drop the
+   parent-type branch), and `SHOW_FRAME_NAME` in `errors.asm`
+   (`$05` → `$07`). Update the layout comment block at the top of
+   `source_stack.asm`. Add the layout-reorder pin test. Self-host
+   verifies. Commit.
+2. **Add `SS_PEND_P16` zp word**, initialize in `source_stack_init`,
    maintain in `ss_alloc_frame` / `ss_free_frame`. Switch
    `advance_heap`'s `CHECK_FOR_OUT_OF_MEMORY` from `SS_P16` to
    `SS_PEND_P16`. No behavior change yet (since `SS_PEND_P16 ==
    SS_P16` always at this stage). Full chain green. Commit.
-2. **Refactor** — extract `ss_write_pending_header_and_name`
-   internal helper from today's `push_source_frame`. Behavior
-   unchanged. Full chain green. Commit.
-3. **Add `SS_PEND_PREV_OFF` zp byte** and have the helper record
-   the offset in it. Have `push_source_frame` continue to write
-   prev_data inline using the helper's Y. No behavior change yet.
-   Commit.
+3. **Refactor** — extract `ss_write_pending_header_and_name`
+   internal helper from today's `push_source_frame`, writing
+   header (offsets 0..4) and name (offsets 7..). prev_data write
+   stays inline in `push_source_frame`. Behavior unchanged. Full
+   chain green. Commit.
 4. **Add the heap-vs-pending collision test, the OOM-during-reserve
    test, and the pending-region-invisible test** in the source-stack
    suite. Add new directives `@reserve_then_commit` and
    `@reserve_only` exposing the new primitives. Initial state:
    primitives don't exist yet, tests fail. Commit (red).
 5. **Add `ss_reserve_frame` / `ss_commit_pending_frame` primitives.**
-   Tests from step 4 pass. Commit (green).
+   `ss_commit_pending_frame` writes prev_data at fixed offsets 5..6
+   directly. Tests from step 4 pass. Commit (green).
 6. **Migrate `expand_macro`.** Replace the save/restore + payload
    pre-write + push sequence with reserve + payload write + commit.
    Drop the `MACRO_NAME_SAVE` reference from `macro_expansion.asm`.
@@ -506,6 +611,14 @@ Each commit: build via `./asmtestgen.sh`, run `python3 run_tests.py
 -q`, and (if `source_stack.asm` is touched) the source-stack
 component suite. No editor work touches this plan.
 
+Step 1 (the layout reorder) is independent of the reserve/commit
+work and could ship on its own; landing it first gives the
+reserve/commit primitives in steps 4–5 a fixed-offset world to
+target. If step 1 reveals an unexpected dependency on the old
+layout, the rest of the plan still works against the old layout —
+revert step 1 and reintroduce a `SS_PEND_PREV_OFF` zp byte for
+commit (the variant the plan was originally drafted around).
+
 ## Risks and watchouts
 
 - **Pointer maintenance discipline.** Every push and pop must update
@@ -527,9 +640,20 @@ component suite. No editor work touches this plan.
   `push_memory_source_reserve_payload` resets it to 0 on success.
   `ss_reserve_frame` should keep that invariant so subsequent pushes
   default to no-payload.
-- **`SS_PEND_PREV_OFF` lifecycle.** Meaningful only between reserve
-  and commit. Document on the zp declaration. Don't be tempted to
-  read it outside the window — it'll be stale.
+- **Frame-layout offset constants.** With `prev_data` at fixed
+  offsets 5..6 and the name at offset 7, three constants change
+  meaning: `5` (was name start, now prev_data start), `7` (new name
+  start), and the `5 + N + 1` frame-size formula collapses to
+  `5 + 2 + 1`. Audit every literal `#5` / `#$05` / `+ 5` in
+  `source_stack.asm`, `errors.asm`, and any nearby helpers during
+  step 1 to ensure none is silently relying on the old name offset.
+  The layout comment block at `source_stack.asm:11-45` is the
+  canonical reference and must be updated in lockstep.
+- **File-parent prev_data byte 6 is unused, not zero.**
+  `push_source_frame` writes prev_data byte 5 (the file handle) for
+  file parents, but doesn't touch byte 6. Don't write code that
+  reads offset 6 expecting `$00`; only `pop_source`'s prev_type
+  branch (which reads byte 5 only for file parents) is correct.
 - **`prev_data` capture timing.** Reserving prev_data eagerly would
   capture parent's `SS_MEM_PTR16` **before** arg parsing consumes
   bytes from it, so on eventual pop the parent would re-read those
