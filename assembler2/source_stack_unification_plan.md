@@ -115,8 +115,11 @@ Generic helpers:
   looking for one whose macro identity matches.
 - `ss_top_memory_frame` (Phase 4) — return a pointer to the innermost
   memory frame, or signal "none". Phase 4's parameter lookup is a
-  single-frame access, not an iteration; this is the helper that
-  matches that shape. (Sketch only — add when 4.6 lands.)
+  single-frame access, but it must **skip past any file frames** on
+  top — `.include` from inside a macro pushes a file frame above the
+  macro's memory frame, and asm17 today still resolves the macro's
+  params from inside that included file. (Sketch only — add when 4.6
+  lands.)
 
 Per-type vtable (two entries, indexed by `curr_type`):
 
@@ -315,12 +318,23 @@ Tasks:
   current parameter scoping rules so the migration can't drift them:
     - *Shadowing*: outer macro has `x`, inner has `x`, body of inner
       uses `x` — must resolve to inner.
-    - *Non-leakage*: outer macro has `y`, inner has only `z`, body
-      of inner uses `y` — must NOT see outer's `y`. Today this errors
-      as an undefined label (or resolves to a same-named global if
-      one exists); either way, outer's `y` does not bleed in.
-  Both pass under the current EXPANSION_ID-scoped hash and must
-  continue to pass after the frame-slot migration.
+    - *Non-leakage (direct)*: outer macro has `y`, inner has only `z`,
+      body of inner uses `y` — must NOT see outer's `y`. Today this
+      errors as an undefined label (or resolves to a same-named global
+      if one exists); either way, outer's `y` does not bleed in.
+    - *Visibility through `.include`*: macro `M` takes `x`, body of
+      `M` does `.include foo.asm`, foo.asm references `x` — must
+      resolve to `M`'s `x`. (The included file's source is a file
+      frame, but param lookup skips past it to find `M`'s memory
+      frame.)
+    - *Non-leakage through `.include`*: outer `B` takes `y`, calls
+      inner `A` with `x`, `A`'s body does `.include foo.asm`,
+      foo.asm references `y` — must NOT see `B`'s `y`. Verifies
+      that lookup stops at the *innermost* memory frame, not any
+      enclosing one.
+  All pass under the current EXPANSION_ID-scoped hash (verified by
+  hand against asm17) and must continue to pass after the frame-slot
+  migration.
 - **4.2** **Test first.** Add a test that proves param hash entries
   do not leak. Today this fails (or is a no-op since we can't inspect
   the heap easily). Approach: a debug-mode assembler stat or a
@@ -352,10 +366,18 @@ Tasks:
   semantics. Today, `expand_macro` hashes parameters under the
   current `EXPANSION_ID`, so an inner macro's body sees only its own
   parameters and falls through to globals — outer-macro parameters
-  are not visible. The frame-based lookup is single-frame for the
-  same reason: only the innermost macro's params resolve, then the
-  hash takes over. (Switching to dynamic scoping where outer params
-  are visible is a separate language change and is **not** part of
+  are not visible. Two consequences worth being explicit about:
+    - Lookup is single-*memory-frame*: only the innermost macro's
+      params resolve, then the hash takes over. Outer macros'
+      parameters do not bleed in.
+    - Lookup is source-type-agnostic: `.include` inside a macro
+      pushes a file frame above the macro's memory frame, but
+      identifiers in the included file still see the macro's
+      params. `ss_top_memory_frame` is what makes this work after
+      the migration -- it walks past any file frames on top to find
+      the innermost memory frame, matching asm17's behavior.
+  (Switching to dynamic scoping where outer macros' params are
+  visible is a separate language change and is **not** part of
   Phase 4.) Commit.
 - **4.7** Flip the parallel-write switch: stop writing parameters to
   the hash. Run full chain. Macro-heavy programs still build and
