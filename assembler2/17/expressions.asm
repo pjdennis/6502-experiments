@@ -26,6 +26,45 @@ EXPR_FWDREF:     .byte        ; Accumulated forward ref flag
   .code
 
 
+; Resolve a global-style identifier (the token in TOKEN). When inside
+; a macro expansion this tries the macro-local hash first so that
+; parameters shadow same-named globals; otherwise (and on miss) it
+; falls back to the global hash. Local-label (.foo) references skip
+; this and go straight to the local-label path -- they're already
+; scoped per macro invocation via LABEL_SCOPE16.
+;
+; Phase 4 will extend this chokepoint to consult the innermost macro
+; frame's parameter slots before any hash lookup; for now it's the
+; same logic that used to be inlined in parse_term, just in one place.
+;
+; On entry: TOKEN holds a null-terminated identifier; LABEL_TYPE = the
+;           base type to use on the global path (typically
+;           LABEL_TYPE_GLOBAL).
+; On exit:  C=0 if found (HEX16 holds the value); C=1 if not found.
+;           LABEL_TYPE is left as LABEL_TYPE_MACRO when the macro-local
+;           lookup matched, otherwise restored to LABEL_TYPE_GLOBAL.
+;           HASH / CACHED_HASH side-effects per find_in_hash.
+;           A, X clobbered; Y not preserved.
+resolve_identifier:
+  ; Not in a macro expansion: just do the global lookup directly.
+  LDA SCOPE_DEPTH
+  BEQ .global
+  ; In a macro: try the macro-local hash first.
+  LDA #LABEL_TYPE_MACRO
+  STA LABEL_TYPE
+  JSR select_label_hash_table
+  JSR find_in_hash
+  BCC .done                 ; Found as parameter -- LABEL_TYPE = MACRO
+  ; Macro-local miss; restore base type and fall through to global.
+  LDA #LABEL_TYPE_GLOBAL
+  STA LABEL_TYPE
+.global:
+  JSR select_label_hash_table
+  JMP find_in_hash          ; tail call; preserves caller's C from us
+.done:
+  RTS
+
+
 ; Parse character literal: 'x' or escape sequences
 ; On entry: A contains the opening quote character '
 ; On exit: A contains current character (for garbage checking)
@@ -89,26 +128,15 @@ parse_term:
   JSR read_token       ; Current char now in CURR_CHAR
   LDA #LABEL_TYPE_GLOBAL
   STA LABEL_TYPE
-  ; If in macro expansion, try macro-local hash first for parameters
-  ; (parameters shadow globals with the same name)
-  LDA SCOPE_DEPTH
-  BEQ .do_lookup           ; Not in macro, use normal path
-  ; In macro with non-local label - try macro-local hash first for parameters
-  LDA #LABEL_TYPE_MACRO
-  STA LABEL_TYPE
-  JSR select_label_hash_table
-  JSR find_in_hash
-  BCC .label_found         ; Found as parameter
-  ; Not a parameter - restore to global lookup
-  LDA #LABEL_TYPE_GLOBAL
-  STA LABEL_TYPE
-  JMP .do_lookup
+  JSR resolve_identifier
+  BCC .label_found
+  JMP .label_not_found
 .local_ref:
   JSR read_local_label
-.do_lookup:
   JSR select_label_hash_table
   JSR find_in_hash
   BCC .label_found
+.label_not_found:
   ; Label not found - check pass
   BIT PASS
   BMI .label_not_found_pass2
