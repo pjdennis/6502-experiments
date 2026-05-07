@@ -472,15 +472,32 @@ Each phase ends with:
   compile-time alias with runtime ss_install_memory_pop, called from
   asm.asm's startup with pop_label_scope. Phase 4's macro-frame
   payload work will reuse this install API.)
-- [-] Phase 3 — stack merge (in progress; 3.1+3.2 landed: payload-bearing
+- [x] Phase 3 — stack merge (complete; 3.1+3.2 added payload-bearing
   memory frames -- SS_PAYLOAD_SIZE / SS_PAYLOAD16 zero-page params,
-  push_memory_source_with_payload entry point, and 6 new source_stack
-  tests verifying frame_size grows correctly with payload across
-  file-parented and memory-parented frames; @payload_memory <digit>
-  test directive added. 3.3 and 3.4 are coupled -- once expand_macro
-  starts pushing payload-bearing memory frames, the old SCOPE_STACK
-  goes unused and check_macro_recursion has to switch to walking the
-  source-stack memory-frame chain in the same commit. Stop here for
-  review before that change.)
+  push_memory_source_with_payload entry point, and the @payload_memory
+  test directive plus 6 new source_stack tests. 3.3+3.4 had
+  expand_macro stage a 5-byte activation payload (LABEL_SCOPE16,
+  CACHED_HASH, MACRO_ENTRY16) at MACRO_ACTIVATION and push it via
+  push_memory_source_with_payload in a single step, replacing
+  push_label_scope + push_memory_source; check_macro_recursion was
+  rewritten to walk the source-stack chain via ss_walk_frames_by_type.
+  3.5 collapsed into 3.4 (the new pop_label_scope_from_frame is the
+  hook). 3.6 deleted SCOPE_STACK / SCOPE_PTR16 / SCOPE_LIMIT /
+  SCOPE_ENTRY_SIZE / push_label_scope / pop_label_scope and renamed
+  init_scope_stack to init_scope_state. 3.7 (delete MACRO_ENTRY16)
+  was determined not yet applicable -- the var still serves
+  expand_macro's setup as a save/restore anchor for MACRO_DEF_PTR16
+  during the param parse/copy split; revisit during Phase 4. 3.8
+  reclaimed \$0400-\$04FF (documented as free in asm.asm). 3.9 deleted
+  err_macro_nesting_too_deep (error 34) and updated the test that
+  expected it -- 52-level macro recursion now assembles successfully
+  rather than overflowing a separate scope stack. Mid-migration bug
+  caught by the 489-test suite: the new check_macro_recursion
+  initially tail-called ss_walk_frames_by_type which clobbers X;
+  expand_macro relied on X surviving, so the next push_file_source
+  grabbed garbage as parent handle. Fixed by saving X around the walk
+  in check_macro_recursion. asm.out: 7315 bytes (well below the
+  pre-Phase-3 baseline -- the deletions outweigh the new payload
+  infrastructure).)
 - [ ] Phase 4 — parameter activation frames
 - [ ] Phase 5 — cleanup
