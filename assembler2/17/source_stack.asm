@@ -69,8 +69,13 @@ source_stack_init:
 ; can pre-check before any irreversible side effects (e.g. opening a
 ; file). Side-effect free on success; jumps to err_out_of_memory on
 ; failure.
-; On exit (success): SS_TEMP16 = proposed new SS_P16 (informational --
-;                    push_source_frame recomputes it; A, X, Y clobbered.
+;
+; On exit (success): SS_TEMP16 = proposed new SS_P16. push_source_frame
+;                    consumes this directly (it's the only place the
+;                    frame size is computed), so a successful return
+;                    here must be followed by push_source_frame before
+;                    any other routine clobbers SS_TEMP16.
+;                    A, X, Y clobbered.
 check_source_frame_room:
   ; Compute name length
   LDY #$FF
@@ -119,13 +124,16 @@ source_stack_empty:
 ; on the parent's source type (read from SS_SRC_TYPE), since prev_data
 ; is 1 byte for file parents and 2 bytes for memory parents.
 ;
-; PRECONDITION: caller has already verified there is room via
-; check_source_frame_room. This routine has no failure path -- it never
-; jumps to err_out_of_memory -- so it's safe to call after acquiring
-; resources (e.g. a freshly-opened file handle) that would otherwise
-; need cleanup on OOM.
+; PRECONDITION: caller has called check_source_frame_room, which leaves
+; the proposed new SS_P16 in SS_TEMP16 and verified the OOM check. That
+; result is consumed here; together the pair calculates the frame size
+; exactly once. Because the OOM check has already passed, this routine
+; has no failure path -- it never jumps to err_out_of_memory -- so it's
+; safe to call after acquiring resources (e.g. a freshly-opened file
+; handle) that would otherwise need cleanup on OOM.
 ;
 ; On entry: A          = curr_type (0=file, 1=memory) for the new frame
+;           SS_TEMP16  = proposed new SS_P16 (from check_source_frame_room)
 ;           SS_NAME    = source name (null-terminated)
 ;           SS_SRC_TYPE = parent's source type (becomes prev_type)
 ;           SS_CURR_FILE / SS_MEM_PTR16 = parent's read state, captured
@@ -137,41 +145,13 @@ source_stack_empty:
 ;           A, X, Y clobbered.
 push_source_frame:
   PHA                   ; Save curr_type for later
-  ; Calculate name length
-  LDY #$FF
-.len_loop:
-  INY
-  LDA SS_NAME,Y
-  BNE .len_loop
-  ; Y = name length (without null)
-  ; Calculate frame size:
-  ;   1 (frame_size) + name_len + 1 (null) + 1 (curr) + 1 (prev) + 2 (line) + prev_data
-  ; prev_data is 1 byte if prev_type=0 (file), 2 bytes if prev_type=1 (memory ptr).
-  LDA SS_SRC_TYPE
-  CMP #SS_SRC_TYPE_FILE
-  BNE .memory
-  ; File parent
-  TYA
-  CLC
-  ADC #5 + 1 + 1        ; +5 fixed fields + 1 handle + 1 frame_size byte
-  BNE .size_done        ; Always taken
-.memory
-  ; Memory parent
-  TYA
-  CLC
-  ADC #5 + 2 + 1        ; +5 fixed fields + 2 mem ptr + 1 frame_size byte
-.size_done:
-  PHA                   ; Save frame_size on 6502 stack (under curr_type)
-  STA SS_TEMP16
-  ; Decrease stack pointer by frame size
-  SEC
+  ; Recover frame size as SS_P16 - SS_TEMP16. Frames are always < 256
+  ; bytes, so the single-byte low-half subtract is the full size; the
+  ; high-byte borrow is irrelevant.
   LDA SS_P16
+  SEC
   SBC SS_TEMP16
-  STA SS_TEMP16
-  LDA SS_P16 + 1
-  SBC #$00
-  STA SS_TEMP16 + 1
-
+  PHA                   ; Save frame_size for the offset-0 byte below
   ; Commit new stack pointer (caller pre-checked OOM via
   ; check_source_frame_room, so this can't fail)
   CP16 SS_TEMP16, SS_P16
