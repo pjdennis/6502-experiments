@@ -110,8 +110,13 @@ Generic helpers:
 - `ss_walk_frames callback_addr` — call callback for each frame from
   newest to oldest with frame ptr in TABP16 and Y free.
 - `ss_walk_frames_by_type type, callback_addr` — same, filtered by
-  `curr_type`. (Used by `check_macro_recursion` walking the chain of
-  memory frames that carry a macro payload.)
+  `curr_type`. Sole assembler-side consumer is Phase 3.3's
+  `check_macro_recursion`, which has to visit *every* memory frame
+  looking for one whose macro identity matches.
+- `ss_top_memory_frame` (Phase 4) — return a pointer to the innermost
+  memory frame, or signal "none". Phase 4's parameter lookup is a
+  single-frame access, not an iteration; this is the helper that
+  matches that shape. (Sketch only — add when 4.6 lands.)
 
 Per-type vtable (two entries, indexed by `curr_type`):
 
@@ -306,11 +311,16 @@ and memory.
 
 Tasks:
 
-- **4.1** **Test first.** Add assembler tests that exercise parameter
-  shadowing across nested macro calls (e.g., outer macro has `x`,
-  inner has `x`, body of inner uses `x` — should resolve to inner).
-  These pass under the current implementation (params shadow via
-  EXPANSION_ID) and must continue to pass after migration.
+- **4.1** **Test first.** Add assembler tests that pin down the
+  current parameter scoping rules so the migration can't drift them:
+    - *Shadowing*: outer macro has `x`, inner has `x`, body of inner
+      uses `x` — must resolve to inner.
+    - *Non-leakage*: outer macro has `y`, inner has only `z`, body
+      of inner uses `y` — must NOT see outer's `y`. Today this errors
+      as an undefined label (or resolves to a same-named global if
+      one exists); either way, outer's `y` does not bleed in.
+  Both pass under the current EXPANSION_ID-scoped hash and must
+  continue to pass after the frame-slot migration.
 - **4.2** **Test first.** Add a test that proves param hash entries
   do not leak. Today this fails (or is a no-op since we can't inspect
   the heap easily). Approach: a debug-mode assembler stat or a
@@ -326,15 +336,27 @@ Tasks:
   instead of via `hash_add` / `store_hash_value`. Keep the hash path
   alive in parallel for now (write to both). Tests still green via
   hash. Commit.
-- **4.5** **Test first.** Add a test that resolves a parameter via
-  the frame chain when the hash entry is intentionally absent
-  (instrument `expand_macro` with a flag to skip the hash write).
-  Fails before lookup change.
-- **4.6** Update `resolve_identifier` to walk the macro-frame chain
-  innermost-first before consulting the hash. Each frame's
+- **4.5** **Test first.** Add a test that resolves a parameter from
+  the innermost macro frame's slot when the hash entry is intentionally
+  absent (instrument `expand_macro` with a flag to skip the hash
+  write). Fails before lookup change.
+- **4.6** Update `resolve_identifier` to look up parameters in the
+  innermost macro frame before consulting the hash. The frame's
   `macro_def_ptr` points at the parameter name list in the macro
   definition; lookup linear-scans the names, uses the matched index
-  to read the slot. **No copying of names.** Commit.
+  to read the slot from the frame's payload. **No copying of names.**
+  Add `ss_top_memory_frame` (a one-shot scan that returns the newest
+  memory frame's address, or signals "none") and use it here.
+
+  **Scoping note**: this preserves asm17's current parameter scoping
+  semantics. Today, `expand_macro` hashes parameters under the
+  current `EXPANSION_ID`, so an inner macro's body sees only its own
+  parameters and falls through to globals — outer-macro parameters
+  are not visible. The frame-based lookup is single-frame for the
+  same reason: only the innermost macro's params resolve, then the
+  hash takes over. (Switching to dynamic scoping where outer params
+  are visible is a separate language change and is **not** part of
+  Phase 4.) Commit.
 - **4.7** Flip the parallel-write switch: stop writing parameters to
   the hash. Run full chain. Macro-heavy programs still build and
   self-host. Commit.
