@@ -9,7 +9,7 @@
 ;   MACRO_ACTIVATION, MACRO_ACTIVATION_LIMIT, MACRO_ENTRY16, OPERAND16,
 ;   TEMP (asm.asm)
 ;   LABEL_SCOPE16, CACHED_HASH, scramble_table (hash_table.asm)
-;   EXPANSION_ID16, SCOPE_DEPTH (label_scope.asm)
+;   EXPANSION_ID16, SCOPE_DEPTH, MACRO_LOOKUP_FRAME16 (label_scope.asm)
 ;   read_char (asm.asm alias; implemented in source_stack.asm)
 ;   check_for_end_of_line (tokenizer.asm)
 ;   parse_expression (expressions.asm)
@@ -67,15 +67,17 @@ recursion_check_callback:
 
 
 ; Look up TOKEN's identifier in the parameter slots of the memory frame
-; at TABP16 (typically the innermost macro frame, located via
-; ss_top_memory_frame). Walks the macro definition's parameter name
-; list to find an index, then reads the matching slot from the frame.
+; at TABP16 (typically the innermost macro frame, supplied by
+; resolve_identifier from MACRO_LOOKUP_FRAME16). Walks the macro
+; definition's parameter name list to find an index, then reads the
+; matching slot from the frame.
 ;
 ; Frame payload (last bytes, low to high offset):
 ;   slots[0..N-1]   3 bytes each: fwdref, value_L, value_H
-;   arg_count (= N) at offset frame_size - 6
+;   arg_count (= N) at offset frame_size - 8
 ;   scope_block      LABEL_SCOPE16 lo/hi, CACHED_HASH,
-;                    MACRO_ENTRY16 lo/hi at offset frame_size - 5..-1
+;                    prev_macro_lookup lo/hi, MACRO_ENTRY16 lo/hi at
+;                    offsets frame_size - 7..-1
 ;
 ; On entry: TABP16 = memory frame address; TOKEN holds the identifier.
 ; On exit:  C=0 if found -- HEX16 (= OPERAND16) and IS_FWDREF set,
@@ -87,9 +89,9 @@ ss_lookup_param_slot:
   LDY #0
   LDA (TABP16),Y
   PHA
-  ; Read arg_count = N at offset frame_size - 6.
+  ; Read arg_count = N at offset frame_size - 8.
   SEC
-  SBC #6
+  SBC #8
   TAY
   LDA (TABP16),Y                 ; A = N
   ; Compute start_of_slots offset = (frame_size - 6) - 3*N. Result
@@ -209,15 +211,17 @@ expand_macro:
   ; Parse argument expression (using PARENT's scope for lookups)
   JSR parse_expression
   ; MACRO_ACTIVATION bounds check.
-  ; Buffer holds [slots..., arg_count, scope_block]; payload size must
-  ; be <= 32 (= MACRO_ACTIVATION_LIMIT - MACRO_ACTIVATION). After this
-  ; iteration the next 3-byte slot needs to fit too, so we require
-  ; byte_count + 3 + 6 <= 32. CPX limit = 32 - 3 - 6 + 1 = 24, which
-  ; caps args at 24/3 = 8 (MACRO_MAX_ARGS). The frame_size guard in
-  ; .args_done_ok also enforces the 1-byte frame_size limit, but for
-  ; typical short macro names that limit (~78) is much looser than
-  ; this buffer cap.
-  CPX #MACRO_ACTIVATION_LIMIT - MACRO_ACTIVATION - .ARG_SIZE - 6 + $01
+  ; Buffer holds [slots..., arg_count, scope_block, prev_macro_lookup,
+  ; macro_entry]; payload tail = 1 + 2 + 1 + 2 + 2 = 8 bytes (was 6
+  ; before MACRO_LOOKUP_FRAME16 was threaded through frames). Payload
+  ; size must be <= 32 (= MACRO_ACTIVATION_LIMIT - MACRO_ACTIVATION).
+  ; After this iteration the next 3-byte slot needs to fit too, so we
+  ; require byte_count + 3 + 8 <= 32. CPX limit = 32 - 3 - 8 + 1 = 22,
+  ; which caps args at 24/3 = 8 (MACRO_MAX_ARGS). The frame_size guard
+  ; in .args_done_ok also enforces the 1-byte frame_size limit, but for
+  ; typical short macro names that limit is much looser than this
+  ; buffer cap.
+  CPX #MACRO_ACTIVATION_LIMIT - MACRO_ACTIVATION - .ARG_SIZE - 8 + $01
   BCC .arg_ok         ; X < limit: safe
 .arg_overflow:
   JMP err_too_many_arguments
@@ -280,8 +284,8 @@ expand_macro:
   ; another memory frame is the worst case:
   ;   1 (frame_size) + name_len + 1 (null) + 1 (curr_type)
   ;   + 1 (prev_type) + 2 (line) + 2 (prev_data) + byte_count
-  ;   + 6 (arg_count + scope_block payload tail)
-  ; = 14 + name_len + byte_count
+  ;   + 8 (arg_count + scope_block + prev_macro_lookup + macro_entry)
+  ; = 16 + name_len + byte_count
   ; Bail with err_too_many_arguments if this would overflow the byte.
   ; Using the worst case (memory parent) keeps the limit independent
   ; of who's calling us.
@@ -298,7 +302,7 @@ expand_macro:
   JMP .too_many
 .frame_size_check_2:
   CLC
-  ADC #14                   ; A = name_len + byte_count + 14
+  ADC #16                   ; A = name_len + byte_count + 16
   BCC .frame_size_ok        ; fits in a byte
   JMP .too_many             ; would overflow frame_size byte
 .frame_size_ok:
@@ -319,7 +323,11 @@ expand_macro:
   LDY TEMP
   STA MACRO_ACTIVATION,Y
   INY
-  ; Append the 5-byte scope_block (current/parent scope state).
+  ; Append the 7-byte scope_block (current/parent scope state). The
+  ; prev_macro_lookup snapshot sits between CACHED_HASH and MACRO_ENTRY16
+  ; so MACRO_ENTRY16 stays at frame_size - 2..-1 (recursion check
+  ; offset unchanged) and pop_label_scope_from_frame can read the
+  ; restorable fields contiguously starting at frame_size - 7.
   LDA LABEL_SCOPE16
   STA MACRO_ACTIVATION,Y
   INY
@@ -329,13 +337,19 @@ expand_macro:
   LDA CACHED_HASH
   STA MACRO_ACTIVATION,Y
   INY
+  LDA MACRO_LOOKUP_FRAME16
+  STA MACRO_ACTIVATION,Y
+  INY
+  LDA MACRO_LOOKUP_FRAME16 + 1
+  STA MACRO_ACTIVATION,Y
+  INY
   LDA MACRO_ENTRY16
   STA MACRO_ACTIVATION,Y
   INY
   LDA MACRO_ENTRY16 + 1
   STA MACRO_ACTIVATION,Y
   INY
-  ; Y = total payload size = byte_count + 6.
+  ; Y = total payload size = byte_count + 8.
   STY TEMP
   ; Set up the new scope: EXPANSION_ID is monotonic, LABEL_SCOPE16 =
   ; expansion id, CACHED_HASH derived from the low byte through
@@ -353,8 +367,17 @@ expand_macro:
   ; but the push captures the name into the frame first). Tracebacks
   ; therefore name the macro correctly.
   SET16 MACRO_ACTIVATION, SS_PAYLOAD16
-  LDA TEMP                  ; payload size (byte_count + 6)
+  LDA TEMP                  ; payload size (byte_count + 8)
   JSR push_memory_source_with_payload
+  ; Anchor MACRO_LOOKUP_FRAME16 at the new top frame so subsequent
+  ; resolve_identifier calls (during the macro body) find this frame's
+  ; parameter slots in O(1). The previous value was already stashed
+  ; into the frame's payload above; pop_label_scope_from_frame
+  ; restores it on pop.
+  LDA SS_P16
+  STA MACRO_LOOKUP_FRAME16
+  LDA SS_P16 + 1
+  STA MACRO_LOOKUP_FRAME16 + 1
 
   ; ----- Phase 2: Walk past the param list to land on the body -----
   ;

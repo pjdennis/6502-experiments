@@ -37,9 +37,9 @@
 ;   = name_len + 8 + payload_size if returning to memory
 ;
 ; Putting curr_type / prev_type / prev_line at fixed offsets 1..4 makes
-; the hot walks (ss_top_memory_frame, ss_walk_frames_by_type, the
-; pop_source dispatch) O(1) per frame for the curr_type read; pre-reorg
-; they had to scan past the variable-length name first. prev_data still
+; the hot walks (ss_walk_frames_by_type, the pop_source dispatch) O(1)
+; per frame for the curr_type read; pre-reorg they had to scan past the
+; variable-length name first. prev_data still
 ; lives after the name, so pop_source's restore step still pays the
 ; strlen-scan cost -- but that's once per pop, not once per identifier
 ; lookup.
@@ -238,37 +238,11 @@ ss_walk_frames_by_type:
   RTS
 
 
-; Find the innermost (newest) memory frame on the source stack and
-; return its address. File frames on top of the chain are skipped --
-; an .include from inside a macro body pushes a file frame above the
-; macro's memory frame, but identifier lookup wants the macro frame.
-;
-; On exit:  C=0 if a memory frame was found, TABP16 = its address.
-;           C=1 if no memory frame exists (no macro on the stack);
-;             TABP16 may be unspecified.
-;           A, X, Y clobbered.
-ss_top_memory_frame:
-  CP16 SS_P16, TABP16
-.tmf_loop:
-  CMPI16 TABP16, SOURCE_STACK
-  BCS .tmf_none                  ; walked past the bottom
-  ; curr_type at fixed offset 1 -- O(1) read, no strlen scan.
-  LDY #1
-  LDA (TABP16),Y
-  CMP #SS_SRC_TYPE_MEMORY
-  BEQ .tmf_found
-  ; File frame -- advance past it.
-  LDY #0
-  LDA (TABP16),Y                 ; frame_size
-  CLC
-  ADCA16 TABP16, TABP16
-  JMP .tmf_loop
-.tmf_found:
-  CLC
-  RTS
-.tmf_none:
-  SEC
-  RTS
+; ss_top_memory_frame was deleted when MACRO_LOOKUP_FRAME16 took over
+; resolve_identifier's "find the innermost macro frame" job. The pointer
+; is saved into each macro frame's payload at push and restored on pop,
+; so the active macro frame is now an O(1) lookup (zp word read) instead
+; of a stack walk.
 
 
 ; Per-curr_type pop handlers. pop_source dispatches to one of these

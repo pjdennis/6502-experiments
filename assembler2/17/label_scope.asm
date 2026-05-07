@@ -6,19 +6,26 @@
 ; they won't conflict with real heap addresses.
 ;
 ; Per-expansion activation state lives on the source stack as the trailing
-; payload of each macro's memory frame:
-;   - LABEL_SCOPE16 (2 bytes) - restored on pop
-;   - CACHED_HASH (1 byte) - restored on pop
-;   - MACRO_ENTRY16 (2 bytes) - saved but not restored (read by
-;                               check_macro_recursion to detect recursive
-;                               expansions). Sits at the very end of the
-;                               frame; check_macro_recursion locates it
-;                               via frame_size - 2.
+; payload of each macro's memory frame. The payload tail (lowest-to-highest
+; offset within the frame, ending at frame_size - 1) is:
 ;
-; expand_macro stages these 5 bytes in MACRO_ACTIVATION before calling
-; push_memory_source_with_payload. pop_label_scope_from_frame (installed
-; via ss_install_memory_pop at startup) reads them back when the frame is
-; popped.
+;   LABEL_SCOPE16    lo/hi (2 bytes) - restored on pop
+;   CACHED_HASH      (1 byte)        - restored on pop
+;   prev_macro_lookup lo/hi (2 bytes) - restored on pop; threads the chain
+;                                       of macro frames so resolve_identifier
+;                                       can find the innermost macro frame in
+;                                       O(1) via MACRO_LOOKUP_FRAME16
+;   MACRO_ENTRY16    lo/hi (2 bytes) - saved but not restored (read by
+;                                       check_macro_recursion to detect
+;                                       recursive expansions). Sits at the
+;                                       very end of the frame;
+;                                       check_macro_recursion locates it via
+;                                       frame_size - 2.
+;
+; expand_macro stages these 7 bytes (after the parameter slots and arg_count)
+; in MACRO_ACTIVATION before calling push_memory_source_with_payload.
+; pop_label_scope_from_frame (installed via ss_install_memory_pop at startup)
+; reads them back when the frame is popped.
 ;
 ; Pre-Phase-3.6 there was a separate SCOPE_STACK at $0400 with its own
 ; SCOPE_PTR16, push_label_scope, pop_label_scope, and a hard 51-entry
@@ -35,10 +42,15 @@
 
   .zeropage
 
-EXPANSION_ID16: .word       ; 2-byte expansion counter for macro scopes
-SCOPE_DEPTH:    .byte       ; Current nesting depth (0 = not in macro);
-                            ; read by labels.asm and expressions.asm to
-                            ; pick local-label vs macro-local-label types
+EXPANSION_ID16:        .word ; 2-byte expansion counter for macro scopes
+SCOPE_DEPTH:           .byte ; Current nesting depth (0 = not in macro);
+                             ; read by labels.asm and expressions.asm to
+                             ; pick local-label vs macro-local-label types
+MACRO_LOOKUP_FRAME16:  .word ; Address of the innermost macro frame on the
+                             ; source stack, or $0000 when no macro is
+                             ; active. resolve_identifier uses this for
+                             ; O(1) parameter-slot lookup instead of
+                             ; walking the source stack each call.
 
   .code
 
@@ -50,6 +62,7 @@ init_scope_state:
   LDA #$00
   STA_LH16 EXPANSION_ID16
   STA SCOPE_DEPTH
+  STA_LH16 MACRO_LOOKUP_FRAME16
   RTS
 init_scope_stack = init_scope_state   ; legacy alias; remove once callers update
 reset_scope_stack = init_scope_state
@@ -57,22 +70,23 @@ reset_scope_stack = init_scope_state
 
 ; Memory-source pop hook installed at startup via ss_install_memory_pop.
 ; Called from pop_source's curr_type=memory dispatch when a macro frame
-; is popped. The frame's last 5 bytes hold the activation payload that
+; is popped. The frame's last 7 bytes hold the activation payload that
 ; expand_macro stashed in via push_memory_source_with_payload:
 ;
 ;   payload offset 0..1: prev LABEL_SCOPE16 lo/hi
 ;   payload offset 2:    prev CACHED_HASH
-;   payload offset 3..4: prev MACRO_ENTRY16 (for recursion detection;
+;   payload offset 3..4: prev MACRO_LOOKUP_FRAME16 lo/hi
+;   payload offset 5..6: prev MACRO_ENTRY16 (for recursion detection;
 ;                                            not restored on pop)
 ;
-; Restores LABEL_SCOPE16 and CACHED_HASH; decrements SCOPE_DEPTH. The
-; pop_source dispatch preserves Y/X around this call, so we can clobber
-; them freely.
+; Restores LABEL_SCOPE16, CACHED_HASH, and MACRO_LOOKUP_FRAME16;
+; decrements SCOPE_DEPTH. The pop_source dispatch preserves Y/X around
+; this call, so we can clobber them freely.
 pop_label_scope_from_frame:
   LDY #0
   LDA (SS_P16),Y          ; frame_size
   SEC
-  SBC #5                  ; offset of activation payload start
+  SBC #7                  ; offset of activation payload start
   TAY
   LDA (SS_P16),Y
   STA LABEL_SCOPE16
@@ -82,5 +96,11 @@ pop_label_scope_from_frame:
   INY
   LDA (SS_P16),Y
   STA CACHED_HASH
+  INY
+  LDA (SS_P16),Y
+  STA MACRO_LOOKUP_FRAME16
+  INY
+  LDA (SS_P16),Y
+  STA MACRO_LOOKUP_FRAME16 + 1
   DEC SCOPE_DEPTH
   RTS

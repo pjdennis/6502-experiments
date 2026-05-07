@@ -8,7 +8,7 @@
 ;   CURR_CHAR (asm.asm alias; backing storage in source_stack.asm)
 ;   TOKEN, HEX16, OPERAND16, PASS, IS_FWDREF (asm.asm)
 ;   LABEL_TYPE, LABEL_TYPE_GLOBAL (common.asm)
-;   SCOPE_DEPTH (label_scope.asm)
+;   SCOPE_DEPTH, MACRO_LOOKUP_FRAME16 (label_scope.asm)
 ;   read_char (asm.asm alias; implemented in source_stack.asm)
 ;   skip_spaces, compare_end_of_token, read_token, read_hex,
 ;   decode_escape (tokenizer.asm)
@@ -44,18 +44,25 @@ EXPR_FWDREF:     .byte        ; Accumulated forward ref flag
 ;           A, X clobbered; Y not preserved.
 resolve_identifier:
   ; Not in a macro expansion: skip straight to the global lookup.
+  ; MACRO_LOOKUP_FRAME16 is $0000 outside macros and tracks the
+  ; innermost macro frame while expanding -- saved on push, restored
+  ; on pop -- so resolve_identifier doesn't have to walk the source
+  ; stack each call. SCOPE_DEPTH is the cheaper byte test; the two
+  ; always agree (both updated by the macro push/pop path).
   LDA SCOPE_DEPTH
   BEQ .global
-  ; In a macro: find the innermost memory frame and check its
-  ; parameter slots. ss_top_memory_frame skips file frames on top
-  ; (e.g. .include from a macro body) so the innermost macro frame
-  ; gets consulted regardless of source-type stacking. The slot
-  ; carries the param's IS_FWDREF flag, so a forward-ref arg in
-  ; pass 1 propagates through the lookup the same way the legacy
-  ; "skip the hash add for fwdrefs" path did pre-Phase-4.6.
-  JSR ss_top_memory_frame
-  BCS .global                ; defensive: SCOPE_DEPTH said yes, but
-                             ; no memory frame found -- fall through
+  ; In a macro: load the innermost macro frame's address and check
+  ; its parameter slots. .include from inside a macro pushes a file
+  ; frame above the macro frame but does NOT touch
+  ; MACRO_LOOKUP_FRAME16, so the macro's params still resolve from
+  ; the included file. The slot carries the param's IS_FWDREF flag,
+  ; so a forward-ref arg in pass 1 propagates through the lookup the
+  ; same way the legacy "skip the hash add for fwdrefs" path did
+  ; pre-Phase-4.6.
+  LDA MACRO_LOOKUP_FRAME16
+  STA TABP16
+  LDA MACRO_LOOKUP_FRAME16 + 1
+  STA TABP16 + 1
   JSR ss_lookup_param_slot
   BCC .done                  ; slot found; IS_FWDREF already set
 .global:

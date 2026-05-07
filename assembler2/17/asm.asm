@@ -26,9 +26,17 @@ MACRO_ACTIVATION = $0690 ; Activation-payload staging buffer that
                          ;                    fwdref, value_L, value_H), where
                          ;                    N = arg_count
                          ;   byte  3*N      : arg_count
-                         ;   bytes +1..+5   : scope_block (LABEL_SCOPE16 lo/hi,
-                         ;                    CACHED_HASH, MACRO_ENTRY16 lo/hi)
-                         ; Max payload size = 3*8 + 6 = 30 bytes; the buffer
+                         ;   bytes +1..+2   : LABEL_SCOPE16 lo/hi
+                         ;   byte  +3       : CACHED_HASH
+                         ;   bytes +4..+5   : prev_macro_lookup lo/hi
+                         ;                    (snapshot of MACRO_LOOKUP_FRAME16
+                         ;                    captured here so the chain of
+                         ;                    macro frames pops back in O(1))
+                         ;   bytes +6..+7   : MACRO_ENTRY16 lo/hi (kept at the
+                         ;                    very end of the payload so
+                         ;                    check_macro_recursion's
+                         ;                    frame_size - 2 offset is unchanged)
+                         ; Max payload size = 3*8 + 8 = 32 bytes; the buffer
                          ; reserves 32 bytes ($0690-$06AF). Macros are limited
                          ; to MACRO_MAX_ARGS = 8 -- the assembler's source
                          ; uses at most 3 args, and the docs already cap at 8.
