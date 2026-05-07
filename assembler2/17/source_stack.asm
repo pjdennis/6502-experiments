@@ -15,11 +15,13 @@
 ; The source stack grows downwards. Each frame is laid out from low to
 ; high address (low address is closer to the top of the stack):
 ;
-;   name\0         - Source name (null-terminated)
-;   curr_type      - Type of THIS source: 0=file, 1=memory
-;   prev_type      - Type we're RETURNING to: 0=file, 1=memory
-;   prev_line_L    - Line number in parent (low byte)
-;   prev_line_H    - Line number in parent (high byte)
+;   frame_size     - Total frame size in bytes (1-byte; offset 0)
+;   curr_type      - Type of THIS source: 0=file, 1=memory (offset 1)
+;   prev_type      - Type we're RETURNING to: 0=file, 1=memory (offset 2)
+;   prev_line_L    - Line number in parent (low byte, offset 3)
+;   prev_line_H    - Line number in parent (high byte, offset 4)
+;   name\0         - Source name (null-terminated; starts at offset 5,
+;                    variable length up to 127+null = 128 bytes)
 ;   <prev_data>    - Parent state to restore on pop. Size depends on
 ;                    prev_type:
 ;                      prev_type=0 (file):   prev_handle (1 byte)
@@ -27,10 +29,20 @@
 ;                                            (2 bytes; the parent's
 ;                                            SS_MEM_PTR16 at the moment
 ;                                            of this push)
+;   <payload>      - Optional caller-supplied bytes (memory frames only),
+;                    sized via SS_PAYLOAD_SIZE at push time.
 ;
-; Frame size: name_len + 1 (null) + 1 (curr) + 1 (prev) + 2 (line) + prev_data
-;   = name_len + 6 if returning to file
-;   = name_len + 7 if returning to memory
+; Frame size: 5 (header) + name_len + 1 (null) + prev_data + payload
+;   = name_len + 7 + payload_size if returning to file
+;   = name_len + 8 + payload_size if returning to memory
+;
+; Putting curr_type / prev_type / prev_line at fixed offsets 1..4 makes
+; the hot walks (ss_top_memory_frame, ss_walk_frames_by_type, the
+; pop_source dispatch) O(1) per frame for the curr_type read; pre-reorg
+; they had to scan past the variable-length name first. prev_data still
+; lives after the name, so pop_source's restore step still pays the
+; strlen-scan cost -- but that's once per pop, not once per identifier
+; lookup.
 ;
 ; Future Phase 3 work appends additional payload bytes after prev_data
 ; for memory sources that need activation state (label scope, macro
@@ -209,15 +221,10 @@ ss_walk_frames_by_type:
 .loop:
   CMPI16 TABP16, SOURCE_STACK
   BCS .done
-  ; Locate curr_type: skip frame_size at offset 0, scan name to its
-  ; null terminator, curr_type sits one byte past the null.
-  LDY #0
-.skip_name:
-  INY
+  ; curr_type lives at fixed offset 1 of the frame -- post-reorg this
+  ; is a single (TABP16),Y read instead of an O(name_len) strlen scan.
+  LDY #1
   LDA (TABP16),Y
-  BNE .skip_name
-  INY
-  LDA (TABP16),Y          ; A = curr_type
   CMP SS_WALK_FILTER
   BNE .skip
   JSR ss_invoke
@@ -245,14 +252,8 @@ ss_top_memory_frame:
 .tmf_loop:
   CMPI16 TABP16, SOURCE_STACK
   BCS .tmf_none                  ; walked past the bottom
-  ; Read curr_type. Skip frame_size at offset 0; name starts at
-  ; offset 1 and is null-terminated; curr_type is the next byte.
-  LDY #0
-.tmf_skip_name:
-  INY
-  LDA (TABP16),Y
-  BNE .tmf_skip_name
-  INY
+  ; curr_type at fixed offset 1 -- O(1) read, no strlen scan.
+  LDY #1
   LDA (TABP16),Y
   CMP #SS_SRC_TYPE_MEMORY
   BEQ .tmf_found
@@ -359,8 +360,25 @@ push_source_frame:
   ; Allocate the frame and write its size byte at offset 0. Pure stack
   ; mechanics live in ss_alloc_frame; everything below is layout.
   JSR ss_alloc_frame    ; SS_P16 advanced; (SS_P16),0 = frame_size; Y = 0
-  ; Copy name to offsets 1..name_len in the frame.
-  ; Y indexes the frame (starts at 0, INY first); X indexes SS_NAME (starts at $FF, INX first).
+  ; Write the fixed-offset header so consumers can read curr_type /
+  ; prev_type / prev_line at known offsets without scanning past the
+  ; variable-length name.
+  INY                   ; Y = 1 (curr_type offset)
+  PLA                   ; Get curr_type (saved at routine entry)
+  STA (SS_P16),Y
+  INY                   ; Y = 2 (prev_type offset)
+  LDA SS_SRC_TYPE
+  STA (SS_P16),Y
+  PHA                   ; Save prev_type for the prev_data branch below
+  INY                   ; Y = 3 (prev_line low)
+  LDA SS_CURR_LINE16
+  STA (SS_P16),Y
+  INY                   ; Y = 4 (prev_line high)
+  LDA SS_CURR_LINE16 + 1
+  STA (SS_P16),Y
+  ; Copy name + null at offsets 5..(5+name_len). Y advances byte-by-byte;
+  ; X indexes SS_NAME (starts at $FF, INX first); the loop terminates on
+  ; the source's null terminator (which gets copied too).
   LDX #$FF
 .copy_loop:
   INX
@@ -368,24 +386,8 @@ push_source_frame:
   LDA SS_NAME,X
   STA (SS_P16),Y
   BNE .copy_loop
-  ; X = name_len, Y = name_len + 1 (offset of null in frame)
-  ; Store curr_type at next offset
-  INY
-  PLA                   ; Get curr_type (saved at routine entry)
-  STA (SS_P16),Y
-  ; Store prev_type
-  INY
-  LDA SS_SRC_TYPE
-  STA (SS_P16),Y
-  PHA                   ; Save prev_type for later
-  ; Store prev_line
-  INY
-  LDA SS_CURR_LINE16
-  STA (SS_P16),Y
-  INY
-  LDA SS_CURR_LINE16 + 1
-  STA (SS_P16),Y
-  ; Store prev_data based on prev_type
+  ; Y = offset of the null we just wrote in the frame.
+  ; Store prev_data based on prev_type.
   PLA                   ; Restore prev_type
   BNE .save_memory_state
   ; prev_type=0: save file handle
@@ -545,15 +547,10 @@ push_memory_source_with_payload:
 ;          SS_SRC_TYPE restored to prev_type
 ;          SS_CURR_LINE16 restored to prev_line
 pop_source:
-  ; Skip the frame_size byte at offset 0, then scan the name (which
-  ; starts at offset 1) for its null terminator.
-  LDY #0
-.skip_name:
-  INY
-  LDA (SS_P16),Y
-  BNE .skip_name
-  ; Y points at null, curr_type is at Y+1
-  INY
+  ; curr_type / prev_type / prev_line live at fixed offsets 1..4 of the
+  ; frame, so the dispatch on curr_type is now O(1) -- no need to scan
+  ; past the name first.
+  LDY #1                ; curr_type offset
   ; Dispatch on curr_type via ss_on_pop_table_{lo,hi} (file=0, memory=1).
   ; Save X around the dispatch -- pop_source preserves X by external
   ; contract (read_char's X preservation flows through here).
@@ -565,7 +562,8 @@ pop_source:
   STA SS_TEMP16
   LDA ss_on_pop_table_hi,X
   STA SS_TEMP16+1
-  ; Y must also survive the handler call (we're mid-walk on the frame).
+  ; Y must also survive the handler call (we still need it for the
+  ; prev_type / prev_line reads below).
   TYA
   PHA
   JSR ss_invoke
@@ -573,19 +571,28 @@ pop_source:
   TAY
   PLA
   TAX
-  ; Read prev_type
+  ; Read prev_type at offset 2.
   INY
   LDA (SS_P16),Y
   STA SS_SRC_TYPE       ; Restore source type
-  PHA                   ; Save for later
-  ; Read prev_line
+  PHA                   ; Save for the prev_data branch below
+  ; Read prev_line at offsets 3..4.
   INY
   LDA (SS_P16),Y
   STA SS_CURR_LINE16
   INY
   LDA (SS_P16),Y
   STA SS_CURR_LINE16 + 1
-  ; Restore prev_data based on prev_type
+  ; prev_data sits after the (variable-length) name, so we walk past
+  ; the name's null terminator before reading. Y is at offset 4 here;
+  ; offset 5 starts the name. Once-per-pop O(name_len) cost, vs the
+  ; pre-reorg "every walker pays it" cost.
+.skip_name:
+  INY
+  LDA (SS_P16),Y
+  BNE .skip_name
+  ; Y points at the name's null. prev_data starts at Y+1.
+  ; Restore prev_data based on prev_type.
   PLA
   BNE .restore_memory
   ; prev_type=0: restore file handle

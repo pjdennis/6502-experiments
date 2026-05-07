@@ -688,16 +688,10 @@ print_traceback:
   ; Check if stack is empty (no sources)
   JSR source_stack_empty
   BEQ .done
-  ; Frame layout: [0]=frame_size, [1..]=name\0, then curr_type, ...
-  ; Walk past frame_size and the name to find curr_type.
+  ; Frame layout: [0]=frame_size, [1]=curr_type, [2]=prev_type,
+  ; [3..4]=prev_line, [5..]=name\0, prev_data, payload.
   CP16 SS_P16, TABP16
-  LDY #0                  ; INY in loop steps past frame_size first
-.find_null:
-  INY
-  LDA (TABP16),Y
-  BNE .find_null
-  ; Y points at null, curr_type is at Y+1
-  INY
+  LDY #1
   LDA (TABP16),Y
   BNE .print_memory_type
   ; curr_type = 0: print "file:"
@@ -709,9 +703,9 @@ print_traceback:
   SET16 str_type_memory, TABP16
   JSR print_str
 .print_name:
-  ; Name lives at offset 1 of the frame, so point TABP16 there.
-  CP16 SS_P16, TABP16
-  INC16 TABP16
+  ; Name lives at offset 5 of the frame.
+  CLC
+  ADCI16 SS_P16, $05, TABP16
   JSR print_basename
   ; Print ":"
   LDA #':'
@@ -786,14 +780,8 @@ print_frame_callback:
   JSR print_decimal
   LDA #':'
   JSR write_b
-  ; Scan name (starts at offset 1) for its null terminator.
-  LDY #0
-.find_null:
-  INY
-  LDA (TABP16),Y
-  BNE .find_null
-  ; Y = offset of null in frame. curr_type is at Y+1.
-  INY
+  ; curr_type lives at fixed offset 1 (post-Phase-2.x reorg).
+  LDY #1
   LDA (TABP16),Y
   BEQ .is_file
   ; curr_type = 1 (memory)
@@ -808,16 +796,14 @@ print_frame_callback:
   JSR print_str
   POP16 TABP16
 .print_name:
-  ; Print basename. Names live at offset 1 of the frame, so temporarily
-  ; bump TABP16 past the frame_size byte for the call.
-  INC16 TABP16
+  ; Names live at offset 5 of the frame, so temporarily advance TABP16
+  ; past the [size, curr_type, prev_type, line_L, line_H] header for
+  ; the print_basename call, then restore (callback contract).
+  PUSH16 TABP16
+  CLC
+  ADCI16 TABP16, $05, TABP16
   JSR print_basename
-  ; Restore TABP16 to frame start by subtracting 1 (callback contract).
-  LDA TABP16
-  BNE .no_borrow
-  DEC TABP16 + 1
-.no_borrow:
-  DEC TABP16
+  POP16 TABP16
   LDA #'\n'
   JSR write_b
   INC FRAME_DEPTH

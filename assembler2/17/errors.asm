@@ -229,11 +229,12 @@ err_fwdref_tracking:
   .endmacro
 
   ; Show the name of a source-stack frame whose start address lives at ptr.
-  ; The frame's first byte is frame_size; the null-terminated name starts at
-  ; offset 1, so we increment TABP16 past the size byte before printing.
+  ; Frame layout (post-reorg) is [size, curr_type, prev_type, line_L,
+  ; line_H, name\0, prev_data, payload], so the null-terminated name
+  ; starts at offset 5.
   .macro SHOW_FRAME_NAME ptr
-  CP16 ptr, TABP16
-  INC16 TABP16
+  CLC
+  ADCI16 ptr, $05, TABP16
   JSR show_message
   .endmacro
 
