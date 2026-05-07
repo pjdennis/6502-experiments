@@ -27,10 +27,15 @@ Memory Map
   $0000-$00FF   Zero page variables (allocated via .zeropage sections)
   $0100-$01FF   6502 hardware stack
   $0200-$03FF   Forward reference list (512 bytes)
-  $0400-$04FF   Label scope stack for macro expansions (256 bytes)
-  $0500-$05FF   Macro argument buffer (256 bytes)
+  $0400-$04FF   Free (was a separate label scope stack pre-Phase-3.6;
+                macro activation state now lives on the source stack)
+  $0500-$05FF   Free (was a 256-byte macro argument buffer pre-Phase-4.10;
+                slots stage in MACRO_ACTIVATION instead)
   $0600-$067F   TOKEN buffer (128 bytes)
   $0680-$068F   ELSE_SEEN_ARRAY (16 bytes, one per .ifdef nesting level)
+  $0690-$06AF   MACRO_ACTIVATION (32-byte staging buffer for the per-
+                macro activation payload: parameter slots, arg_count,
+                scope_block; copied into the source-stack frame at push)
   $0700-$07FF   LHASHTAB - Label hash table (128 two-byte entries)
   $0800-$08FF   IFDEF_DECISIONS buffer (256 bytes)
   $2000+        Code section:
@@ -87,17 +92,24 @@ data, and directive handler addresses. Read-only at runtime; no initialization
 needed.
 
 LHASHTAB (Label hash table) -- Built at runtime during assembly. Stores
-global labels, local labels, macro definitions, and macro parameters. Entries
-are allocated on the heap.
+global labels, local labels (under a global scope), and macro definitions.
+Macro **parameters** are NOT in LHASHTAB -- they live in activation slots
+on the macro's source-stack frame (see Macro System / Source Stack below).
+Entries are allocated on the heap.
 
 Hash entries on the heap have the format:
 
   [next_ptr_lo] [next_ptr_hi] [key...] $00 [value_lo] [value_hi]
 
-Local and macro labels use an escape format with type byte and scope:
+Local and macro-local labels use an escape format with type byte and scope:
 
   [next_ptr_lo] [next_ptr_hi] [type] [scope_lo] [scope_hi] [name...] $00
     [value_lo] [value_hi]
+
+  type = LABEL_TYPE_LOCAL ($01)        -- local label under enclosing
+                                          global label scope
+       = LABEL_TYPE_MACRO_LOCAL ($03)  -- macro-local label scoped by
+                                          EXPANSION_ID
 
 common.asm provides select_label_hash_table and
 select_instruction_hash_table to switch between the two tables.
@@ -139,17 +151,35 @@ preserved verbatim). Nested .macro directives are rejected. In pass 2, the
 body is skipped since it was already captured in pass 1.
 
 Expansion (macro_expansion.asm): Macro invocation parses arguments in the
-caller's scope, then pushes a new label scope with a unique expansion ID
-(EXPANSION_ID16). Parameters are added to the scope's hash table. The macro
-body is set up as a memory source on the source stack, so read_char reads from
-it transparently.
+caller's scope, staging each parsed value into MACRO_ACTIVATION as a 3-byte
+slot (fwdref flag, value_L, value_H). After the slots, expand_macro appends
+arg_count and the 5-byte scope_block (LABEL_SCOPE16, CACHED_HASH,
+MACRO_ENTRY16). It then calls push_memory_source_with_payload, which copies
+the activation buffer into the new memory frame. The frame holds the
+expansion's full state: source name, prev-data, and the activation payload.
+Up to MACRO_MAX_ARGS = 8 parameters per definition; a runtime guard ensures
+name_len + payload_size still fits the 1-byte frame_size.
 
-Scoping: Each expansion gets a unique scope ID from the monotonic
+Identifier resolution (expressions.asm: resolve_identifier): when looking up
+an identifier inside a macro body, lookup first consults the innermost
+memory frame's parameter slots via ss_top_memory_frame +
+ss_lookup_param_slot. The frame's macro_def_ptr points at the parameter name
+list in the macro definition; lookup linear-scans the names and uses the
+matched index to read the slot. On miss, lookup falls through to LHASHTAB.
+This walks past any file frames on top (an .include from inside a macro
+still resolves the macro's params from the included file).
+
+Scoping: Each expansion gets a unique LABEL_SCOPE16 from the monotonic
 EXPANSION_ID16 counter. Local labels (.name) within a macro are scoped to
-that expansion. Parameters shadow global labels of the same name.
+that expansion. Parameters shadow global labels of the same name. Outer-
+macro parameters are NOT visible to an inner macro -- lookup is single-
+memory-frame.
 
-Recursion detection: check_macro_recursion walks the scope stack comparing
-macro entry addresses. Direct and indirect recursion are both caught.
+Recursion detection: check_macro_recursion walks the source-stack chain via
+ss_walk_frames_by_type (filter = memory frames), comparing each frame's
+MACRO_ENTRY16 in its scope_block payload. Direct and indirect recursion
+are both caught. Out-of-stack on deep nesting is reported as
+err_out_of_memory rather than a separate macro-nesting limit.
 
 
 Source Stack
@@ -163,13 +193,38 @@ The source stack (source_stack.asm) handles two source types transparently:
   Memory sources (type 1): Read from a null-terminated buffer on the heap.
     Used for macro expansion.
 
-Each stack frame stores the source name, type, and enough context to restore
-the parent source when the current one is exhausted. Memory frames pushed by
-the macro expansion code carry an additional 5-byte activation payload
-(LABEL_SCOPE16, CACHED_HASH, MACRO_ENTRY16) right after prev_data. The
-assembler installs pop_label_scope_from_frame as the memory-pop handler
-(via ss_install_memory_pop at startup); the hook reads the payload back
-when a macro frame is popped, restoring the caller's scope.
+Each frame begins with a 1-byte frame_size at offset 0; push allocates and
+sets it, pop reads it and advances SS_P16, and chain walks step by adding
+frame_size each iteration. Layout (low to high address within the frame):
+
+  [0]      frame_size           total bytes in this frame
+  [1]      curr_type            0 = file, 1 = memory
+  [2]      prev_type            type we return to on pop
+  [3..4]   prev_line_L/H        line number in parent
+  [5..]    name\0               null-terminated source name
+  ...      prev_data            1 byte (file handle) or 2 bytes
+                                (parent's SS_MEM_PTR16)
+  ...      payload              optional, memory frames only
+
+Putting the type/line header at fixed offsets 1..4 (rather than after the
+variable-length name) keeps ss_walk_frames_by_type, ss_top_memory_frame,
+and the pop_source dispatch O(1) per frame for the type read.
+
+For macro expansions, the payload trailing prev_data carries the macro
+activation state copied from MACRO_ACTIVATION at push time:
+
+  parameter slots [0..arg_count-1]   3 bytes each: fwdref, value_L, value_H
+  arg_count                          1 byte
+  scope_block                        5 bytes: LABEL_SCOPE16 (lo, hi),
+                                     CACHED_HASH, MACRO_ENTRY16 (lo, hi)
+
+push_memory_source_with_payload (in source_stack.asm) copies the buffer
+into the frame; the source stack itself never inspects payload contents.
+
+Memory pop is dispatched via a runtime hook installed by the assembler at
+startup -- ss_install_memory_pop registers pop_label_scope_from_frame,
+which reads the scope_block back and restores the caller's
+LABEL_SCOPE16 / CACHED_HASH state when the macro frame is popped.
 
 
 Conditional Assembly
@@ -198,7 +253,9 @@ Modules (included from asm.asm, in include order):
   environment.asm     Emulator I/O entry points: file ops, console, args
   macros.asm          16-bit utility macros (INC16, CP16, CMP16, PUSH16, ...)
   common.asm          Mode constants, label types, heap; includes hash_table.asm
-  label_scope.asm     Scope stack for macro expansions, expansion ID counter
+  label_scope.asm     Expansion ID counter, current scope state, and the
+                      pop_label_scope_from_frame hook installed on the
+                      source stack's memory-pop vtable
   forward_ref.asm     Forward reference list operations
   source_stack.asm      Unified file/memory source stack, read_char
   errors.asm          Error messages and handlers
