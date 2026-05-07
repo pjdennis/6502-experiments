@@ -38,6 +38,9 @@ MARKER_TERM: .byte         ; Character that terminated the keyword ($FF = EOF)
 ; ss_walk_frames callback, not the walker itself.
 FRAME_DEPTH:     .byte
 
+; @payload_memory state.
+PAYLOAD_REQUESTED_SIZE: .byte
+
 ; OOM injection: minimum allowed value of SS_TEMP16 during push.
 ; Default $0000 means "no limit"; oom mode sets a tight value.
 OOM_LIMIT16:     .word
@@ -326,7 +329,8 @@ check_markers:
   JSR cmp_marker
   BCC .handle_traceback
 
-  ; @frames and @stackbytes are only recognized in frames mode (TEST_MODE=4)
+  ; @frames, @top_frame_size, and @payload_memory are only recognized
+  ; in frames mode (TEST_MODE=4)
   LDA TEST_MODE
   CMP #4
   BNE .no_frames_marker
@@ -335,7 +339,14 @@ check_markers:
   BCC .handle_frames
   SET16 str_top_frame_size, TABP16
   JSR cmp_marker
-  BCC .handle_top_frame_size
+  BCS .not_tfs
+  JMP .handle_top_frame_size
+.not_tfs:
+  SET16 str_payload_memory, TABP16
+  JSR cmp_marker
+  BCS .not_pm
+  JMP .handle_payload_memory
+.not_pm:
 .no_frames_marker:
 
   ; No match - flush '@' + keyword + terminator as text
@@ -439,6 +450,88 @@ check_markers:
   BNE .tfs_skip_eol
 .do_tfs:
   JSR print_top_frame_size
+  LDA #1
+  STA AT_LINE_START
+  CLC
+  RTS
+
+; @payload_memory <decimal_digit>
+;
+; Pushes a memory source named "PAYLOAD" with N bytes of payload (N a
+; decimal digit 0-9). Payload bytes are filled with a sentinel pattern
+; ($A0, $A1, ...) so they're easy to identify if dumped. The memory
+; source carries no body content -- the directive prints "ps:<size>"
+; (the frame_size byte from offset 0 of the new frame) and then
+; immediately pops the frame.
+;
+; This exercises push_memory_source_with_payload's frame_size accounting:
+; tests verify that the printed size equals the standard memory-frame
+; size plus the requested payload size.
+.handle_payload_memory:
+  LDA MARKER_TERM
+  CMP #' '
+  BNE .pm_no_arg
+  ; Read the size digit (single decimal char, 0-9)
+  JSR read_char
+  BCS .pm_no_arg
+  CMP #'\n'
+  BEQ .pm_no_arg
+  SEC
+  SBC #'0'
+  STA PAYLOAD_REQUESTED_SIZE
+  ; Skip the rest of the line
+.pm_skip_eol:
+  JSR read_char
+  BCS .pm_have_size
+  CMP #'\n'
+  BNE .pm_skip_eol
+  JMP .pm_have_size
+.pm_no_arg:
+  LDA #0
+  STA PAYLOAD_REQUESTED_SIZE
+.pm_have_size:
+  ; Fill payload buffer with sentinel pattern
+  LDX PAYLOAD_REQUESTED_SIZE
+  BEQ .pm_buf_done
+  LDY #0
+.pm_fill:
+  TYA
+  CLC
+  ADC #$A0
+  STA payload_buf,Y
+  INY
+  DEX
+  BNE .pm_fill
+.pm_buf_done:
+  ; Set SS_NAME = "PAYLOAD"
+  LDY #0
+.pm_copy_name:
+  LDA str_payload_source,Y
+  STA TOKEN,Y
+  BEQ .pm_name_done
+  INY
+  JMP .pm_copy_name
+.pm_name_done:
+  ; Push payload memory source
+  SET16 payload_buf, SS_PAYLOAD16
+  LDA PAYLOAD_REQUESTED_SIZE
+  JSR push_memory_source_with_payload
+  ; Print "ps:" prefix
+  PUSH16 TABP16
+  SET16 str_pm_size_label, TABP16
+  JSR print_str
+  POP16 TABP16
+  ; Print frame_size (offset 0 of the new top frame) as decimal
+  LDY #0
+  LDA (SS_P16),Y
+  STA TO_DECIMAL_VALUE16
+  LDA #0
+  STA TO_DECIMAL_VALUE16 + 1
+  JSR print_decimal
+  LDA #'\n'
+  JSR write_b
+  ; Pop the frame so subsequent reads continue from the parent
+  JSR pop_source
   LDA #1
   STA AT_LINE_START
   CLC
@@ -548,8 +641,16 @@ str_frames:
   .asciiz "frames"
 str_top_frame_size:
   .asciiz "top_frame_size"
+str_payload_memory:
+  .asciiz "payload_memory"
 str_memory_source:
   .asciiz "MEMORY"
+str_payload_source:
+  .asciiz "PAYLOAD"
+str_pm_size_label:
+  .asciiz "ps:"
+payload_buf:
+  .reserve 16
 
 ; Read memory content until newline into TOKEN
 ; Returns length in X (includes trailing newline)

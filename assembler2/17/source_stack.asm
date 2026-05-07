@@ -46,6 +46,9 @@ SS_CURR_LINE16:  .word       ; The current line number
 SS_P16:          .word       ; Pointer to the current location in the source stack
 SS_TEMP16:       .word       ; Temporary location for use in calculations
 SS_WALK_FILTER:  .byte       ; curr_type filter for ss_walk_frames_by_type
+SS_PAYLOAD_SIZE: .byte       ; Number of payload bytes to append to next push
+                             ; (0 outside push_*_with_payload calls)
+SS_PAYLOAD16:    .word       ; Pointer to payload bytes when SS_PAYLOAD_SIZE > 0
 
 ; Memory source support (zero-terminated buffers)
 SS_SRC_TYPE:    .byte       ; Source type: 0=file, 1=memory
@@ -62,6 +65,8 @@ source_stack_init:
   LDA #SS_SRC_TYPE_FILE
   STA SS_SRC_TYPE
   STA SS_CURR_FILE
+  ; SS_SRC_TYPE_FILE is 0; reuse A for SS_PAYLOAD_SIZE init.
+  STA SS_PAYLOAD_SIZE
   RTS
 
 
@@ -97,7 +102,12 @@ check_source_frame_room:
   CLC
   ADC #5 + 2 + 1
 .size_done:
-  STA SS_TEMP16         ; size in low byte; high byte is scratch below
+  ; Add caller-supplied payload size (0 for plain pushes; non-zero for
+  ; push_*_with_payload). Frame_size still fits in one byte: callers
+  ; are responsible for keeping name + standard fields + payload < 256.
+  CLC
+  ADC SS_PAYLOAD_SIZE
+  STA SS_TEMP16         ; total size in low byte; high byte is scratch below
   ; Compute proposed new SS_P16 = SS_P16 - size
   SEC
   LDA SS_P16
@@ -341,7 +351,7 @@ push_source_frame:
   INY
   LDA SS_CURR_FILE
   STA (SS_P16),Y
-  JMP .reset_line
+  JMP .write_payload
 .save_memory_state:
   ; prev_type=1: save memory pointer (zero-terminated, no end needed)
   INY
@@ -350,6 +360,33 @@ push_source_frame:
   INY
   LDA SS_MEM_PTR16 + 1
   STA (SS_P16),Y
+.write_payload:
+  ; Append SS_PAYLOAD_SIZE bytes of payload from SS_PAYLOAD16 right
+  ; after prev_data. The frame_size byte at offset 0 already accounts
+  ; for these bytes (check_source_frame_room added SS_PAYLOAD_SIZE in).
+  ; SS_PAYLOAD_SIZE is 0 for plain push_*_source paths, so this is a
+  ; no-op outside push_*_with_payload.
+  LDA SS_PAYLOAD_SIZE
+  BEQ .reset_line
+  ; Compute frame-payload-write pointer = SS_P16 + (Y+1), parked in
+  ; SS_TEMP16 (which is free at this point -- ss_alloc_frame already
+  ; consumed it). Then use Y=0..N-1 to copy payload bytes through
+  ; both indirect pointers.
+  INY                   ; first payload offset within frame
+  TYA
+  CLC
+  ADC SS_P16
+  STA SS_TEMP16
+  LDA SS_P16 + 1
+  ADC #0
+  STA SS_TEMP16 + 1
+  LDY #0
+.payload_loop:
+  LDA (SS_PAYLOAD16),Y
+  STA (SS_TEMP16),Y
+  INY
+  CPY SS_PAYLOAD_SIZE
+  BNE .payload_loop
 .reset_line:
   ; Reset line number for new source
   LDA #$00
@@ -416,6 +453,42 @@ push_memory_source:
   JSR push_source_frame ; Saves SS_MEM_PTR16 (still parent's) as prev_data
   LDA #SS_SRC_TYPE_MEMORY
   STA SS_SRC_TYPE
+  PLA
+  TAX                   ; Restore X
+  RTS
+
+
+; Push a memory source carrying a trailing payload region.
+;
+; The payload bytes are written into the frame immediately after
+; prev_data; frame_size grows accordingly so subsequent walks/pops
+; transparently account for the larger frame. The source-stack module
+; itself never reads the payload bytes -- consumers (the memory-pop
+; hook installed via ss_install_memory_pop) own their interpretation.
+;
+; On entry: SS_NAME       = name for this memory source
+;           SS_MEM_PTR16  = parent's read position (same contract as
+;                           push_memory_source -- caller installs the
+;                           new buffer pointer AFTER this returns)
+;           SS_PAYLOAD16  = pointer to the payload bytes
+;           A             = payload size (1..N)
+; On exit:  SS_PAYLOAD_SIZE reset to 0 so a subsequent plain
+;           push_memory_source / push_file_source doesn't inherit
+;           the payload reservation.
+;           Other effects mirror push_memory_source.
+push_memory_source_with_payload:
+  STA SS_PAYLOAD_SIZE
+  TXA
+  PHA                   ; Save X
+  JSR check_source_frame_room
+  LDA #SS_SRC_TYPE_MEMORY
+  JSR push_source_frame
+  LDA #SS_SRC_TYPE_MEMORY
+  STA SS_SRC_TYPE
+  ; Reset payload size so the contract for plain pushes stays "no
+  ; payload" without each caller having to clear it.
+  LDA #0
+  STA SS_PAYLOAD_SIZE
   PLA
   TAX                   ; Restore X
   RTS
