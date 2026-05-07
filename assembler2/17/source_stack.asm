@@ -109,6 +109,48 @@ check_source_frame_room:
   RTS
 
 
+; Generic stack mechanic: commit a pre-checked frame allocation.
+;
+; Reads SS_TEMP16 (the proposed new SS_P16, set by
+; check_source_frame_room), commits it, recovers the frame size as the
+; one-byte difference (frames are always < 256 bytes), and writes that
+; size at offset 0 of the new frame. Layout-agnostic past offset 0.
+;
+; PRECONDITION: caller has just called check_source_frame_room and the
+; OOM check passed. ss_alloc_frame has no failure path.
+;
+; On exit:  SS_P16 = pre-call SS_TEMP16; (SS_P16),0 = frame_size;
+;           Y = 0; A and X clobbered.
+ss_alloc_frame:
+  ; Recover size as low byte of (SS_P16 - SS_TEMP16).
+  LDA SS_P16
+  SEC
+  SBC SS_TEMP16
+  PHA                       ; Save size for the offset-0 write
+  ; Commit new stack pointer
+  CP16 SS_TEMP16, SS_P16
+  ; Write frame_size at offset 0
+  LDY #0
+  PLA
+  STA (SS_P16),Y
+  RTS
+
+
+; Generic stack mechanic: free the top frame.
+;
+; Reads the frame_size byte at offset 0 of the current top frame and
+; advances SS_P16 past it, exposing the previous frame. Layout-agnostic.
+;
+; On exit:  SS_P16 advanced upward by the freed frame's size;
+;           A = freed size; Y = 0; X preserved.
+ss_free_frame:
+  LDY #0
+  LDA (SS_P16),Y
+  CLC
+  ADCA16 SS_P16, SS_P16
+  RTS
+
+
 ; On exit Z is set if source stack empty, clear otherwise
 source_stack_empty:
   CMPI16 SS_P16, SOURCE_STACK
@@ -145,20 +187,9 @@ source_stack_empty:
 ;           A, X, Y clobbered.
 push_source_frame:
   PHA                   ; Save curr_type for later
-  ; Recover frame size as SS_P16 - SS_TEMP16. Frames are always < 256
-  ; bytes, so the single-byte low-half subtract is the full size; the
-  ; high-byte borrow is irrelevant.
-  LDA SS_P16
-  SEC
-  SBC SS_TEMP16
-  PHA                   ; Save frame_size for the offset-0 byte below
-  ; Commit new stack pointer (caller pre-checked OOM via
-  ; check_source_frame_room, so this can't fail)
-  CP16 SS_TEMP16, SS_P16
-  ; Write frame_size at offset 0
-  LDY #0
-  PLA                   ; Get frame_size
-  STA (SS_P16),Y
+  ; Allocate the frame and write its size byte at offset 0. Pure stack
+  ; mechanics live in ss_alloc_frame; everything below is layout.
+  JSR ss_alloc_frame    ; SS_P16 advanced; (SS_P16),0 = frame_size; Y = 0
   ; Copy name to offsets 1..name_len in the frame.
   ; Y indexes the frame (starts at 0, INY first); X indexes SS_NAME (starts at $FF, INX first).
   LDX #$FF
@@ -325,7 +356,7 @@ pop_source:
   INY
   LDA (SS_P16),Y
   STA SS_CURR_FILE
-  JMP .adjust_stack
+  JMP ss_free_frame     ; Tail call: deallocate via offset-0 frame_size
 .restore_memory:
   ; prev_type=1: restore memory pointer (zero-terminated, no end needed)
   INY
@@ -334,12 +365,7 @@ pop_source:
   INY
   LDA (SS_P16),Y
   STA SS_MEM_PTR16 + 1
-.adjust_stack:
-  ; Y points to last byte read, add Y+1 to stack pointer
-  TYA
-  SEC                   ; +1
-  ADCA16 SS_P16, SS_P16
-  RTS
+  JMP ss_free_frame     ; Tail call: deallocate via offset-0 frame_size
 
 ; Read character from current source (file or memory)
 ; On exit: A = character (also stored in SS_CURR_CHAR)
