@@ -79,21 +79,13 @@ err_file_not_found:
   .asciiz 36, "File not found"
 
 ; Error handler for stack overflow (required by source_stack.asm via macro).
-; Print the error, close any in-flight handle that push_file_source had
-; opened but not yet committed to a frame, then walk the source stack
-; popping every frame (which closes the file in each one) before exiting.
-; Without this the emulator reports orphaned file handles and treats the
-; run as a non-zero exit, which the in-process test harness can't tolerate.
+; Print the error then walk the source stack popping every frame (which
+; closes the file in each one) before exiting. Without this the emulator
+; reports orphaned file handles and treats the run as a non-zero exit,
+; which the in-process test harness can't tolerate.
 err_out_of_memory:
   SET16 msg_oom, TABP16
   JSR print_str_err
-  ; Close any in-flight file handle parked by push_file_source.
-  LDA SS_PENDING_FILE
-  BEQ .no_pending
-  JSR close
-  LDA #$00
-  STA SS_PENDING_FILE
-.no_pending:
   ; Pop everything still on the source stack so its files get closed.
 .close_loop:
   JSR source_stack_empty

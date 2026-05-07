@@ -263,16 +263,6 @@ interrupt:
 .error:
 ; Save error code
   STA TEMP
-; Close any in-flight source-file handle. push_file_source parks the
-; just-opened handle in SS_PENDING_FILE before calling push_source_frame;
-; if that frame push triggers OOM, the handle would otherwise be lost
-; (no frame holds it, so the traceback below can't reach it).
-  LDA SS_PENDING_FILE
-  BEQ .no_pending_source
-  JSR close
-  LDA #$00
-  STA SS_PENDING_FILE
-.no_pending_source:
 ; Close the ouptut file if open
   LDA CURR_OUT_FILE
   BEQ .output_not_open

@@ -45,13 +45,6 @@ SS_CURR_FILE:    .byte       ; The current file handle
 SS_CURR_LINE16:  .word       ; The current line number
 SS_P16:          .word       ; Pointer to the current location in the source stack
 SS_TEMP16:       .word       ; Temporary location for use in calculations
-SS_PENDING_FILE: .byte       ; In-flight file handle: opened by push_file_source
-                             ; but not yet committed to a source-stack frame.
-                             ; Non-zero means the error path must close it
-                             ; (push_source_frame's OOM jump would otherwise
-                             ; orphan the handle, since traceback only sees
-                             ; handles that already live in a frame). Zero
-                             ; means there's no pending handle.
 
 ; Memory source support (zero-terminated buffers)
 SS_SRC_TYPE:    .byte       ; Source type: 0=file, 1=memory
@@ -68,8 +61,46 @@ source_stack_init:
   LDA #SS_SRC_TYPE_FILE
   STA SS_SRC_TYPE
   STA SS_CURR_FILE
-  ; SS_SRC_TYPE_FILE happens to be 0, which is also "no pending file"
-  STA SS_PENDING_FILE
+  RTS
+
+
+; Verify there's room on the source stack for the next frame. Reads the
+; same inputs push_source_frame uses (SS_NAME, SS_SRC_TYPE) so callers
+; can pre-check before any irreversible side effects (e.g. opening a
+; file). Side-effect free on success; jumps to err_out_of_memory on
+; failure.
+; On exit (success): SS_TEMP16 = proposed new SS_P16 (informational --
+;                    push_source_frame recomputes it; A, X, Y clobbered.
+check_source_frame_room:
+  ; Compute name length
+  LDY #$FF
+.len_loop:
+  INY
+  LDA SS_NAME,Y
+  BNE .len_loop
+  ; Compute frame size: name_len + 5 fixed + 1 frame_size + (1 file | 2 memory)
+  LDA SS_SRC_TYPE
+  CMP #SS_SRC_TYPE_FILE
+  BNE .memory
+  TYA
+  CLC
+  ADC #5 + 1 + 1
+  BNE .size_done        ; Always taken (size > 0)
+.memory:
+  TYA
+  CLC
+  ADC #5 + 2 + 1
+.size_done:
+  STA SS_TEMP16         ; size in low byte; high byte is scratch below
+  ; Compute proposed new SS_P16 = SS_P16 - size
+  SEC
+  LDA SS_P16
+  SBC SS_TEMP16
+  STA SS_TEMP16
+  LDA SS_P16 + 1
+  SBC #$00
+  STA SS_TEMP16 + 1
+  CHECK_FOR_OUT_OF_MEMORY SS_TEMP16
   RTS
 
 
@@ -87,6 +118,12 @@ source_stack_empty:
 ; Builds a stack frame for a new source. The size of the frame depends
 ; on the parent's source type (read from SS_SRC_TYPE), since prev_data
 ; is 1 byte for file parents and 2 bytes for memory parents.
+;
+; PRECONDITION: caller has already verified there is room via
+; check_source_frame_room. This routine has no failure path -- it never
+; jumps to err_out_of_memory -- so it's safe to call after acquiring
+; resources (e.g. a freshly-opened file handle) that would otherwise
+; need cleanup on OOM.
 ;
 ; On entry: A          = curr_type (0=file, 1=memory) for the new frame
 ;           SS_NAME    = source name (null-terminated)
@@ -135,10 +172,8 @@ push_source_frame:
   SBC #$00
   STA SS_TEMP16 + 1
 
-  ; Check for collision with heap before committing
-  CHECK_FOR_OUT_OF_MEMORY SS_TEMP16
-
-  ; Commit new stack pointer
+  ; Commit new stack pointer (caller pre-checked OOM via
+  ; check_source_frame_room, so this can't fail)
   CP16 SS_TEMP16, SS_P16
   ; Write frame_size at offset 0
   LDY #0
@@ -198,10 +233,18 @@ push_source_frame:
 ;           SS_CURR_LINE16 contains the current line number
 ;           SS_CURR_FILE contains the current file handle
 ; On exit: X is preserved, new file is open and ready to read
+;
+; Order of operations is: pre-check OOM, then open the file, then push
+; the frame. Each error exits with no resources to clean up: OOM happens
+; before open so no file is leaked; file-not-found happens before push
+; so no orphan frame is left behind.
 push_file_source:
   TXA
   PHA                   ; Save X
-  ; Open file before pushing frame so error reports parent context
+  ; Pre-check: confirm the new frame will fit before we open the file,
+  ; so an OOM here can't leak a freshly-opened handle.
+  JSR check_source_frame_room
+  ; Open file
   LDA #<SS_NAME
   LDX #>SS_NAME
   JSR open
@@ -209,18 +252,14 @@ push_file_source:
   BNE .file_ok
   JMP err_file_not_found
 .file_ok:
-  ; Park the new handle in SS_PENDING_FILE rather than the 6502 stack so
-  ; that an OOM jump out of push_source_frame doesn't orphan it -- the
-  ; error path closes any non-zero SS_PENDING_FILE before exiting.
-  STA SS_PENDING_FILE
+  PHA                   ; Stash new handle on the 6502 stack across the
+                        ; push (push_source_frame can't fail now).
   LDA #SS_SRC_TYPE_FILE
   JSR push_source_frame
   LDA #SS_SRC_TYPE_FILE
   STA SS_SRC_TYPE
-  LDA SS_PENDING_FILE
+  PLA
   STA SS_CURR_FILE      ; Install new file handle
-  LDA #$00
-  STA SS_PENDING_FILE   ; Clear pending: handle is now owned by the frame
   PLA
   TAX                   ; Restore X
   RTS
@@ -243,6 +282,7 @@ push_file_source:
 push_memory_source:
   TXA
   PHA                   ; Save X
+  JSR check_source_frame_room
   LDA #SS_SRC_TYPE_MEMORY
   JSR push_source_frame ; Saves SS_MEM_PTR16 (still parent's) as prev_data
   LDA #SS_SRC_TYPE_MEMORY
