@@ -83,8 +83,13 @@ recursion_check_callback:
 ; On exit:  C=0 if found -- HEX16 (= OPERAND16) and IS_FWDREF set,
 ;             matching find_in_hash's contract.
 ;           C=1 if no parameter matched. HEX16/IS_FWDREF unchanged.
-;           A, X, Y, HTTP16, TEMP clobbered.
+;           A, Y, HTTP16, TEMP clobbered. X preserved (the output file
+;             handle in macro bodies, the activation byte index in
+;             expand_macro Phase 1's nested-arg-parse path).
 ss_lookup_param_slot:
+  ; Save X -- callers depend on X surviving identifier lookup.
+  TXA
+  PHA
   ; Read frame_size and stash on the 6502 stack (used twice below).
   LDY #0
   LDA (TABP16),Y
@@ -94,7 +99,8 @@ ss_lookup_param_slot:
   SBC #8
   TAY
   LDA (TABP16),Y                 ; A = N
-  ; Compute start_of_slots offset = (frame_size - 6) - 3*N. Result
+  TAX                             ; X = remaining param iterations
+  ; Compute start_of_slots offset = (frame_size - 8) - 3*N. Result
   ; lives in TEMP (advanced 3 bytes per slot during the walk below).
   STA TEMP                       ; TEMP = N
   ASL                             ; 2N
@@ -115,13 +121,24 @@ ss_lookup_param_slot:
   INY
   LDA (TABP16),Y
   STA HTTP16 + 1
-  ; Walk the param-name list. For each name, compare with TOKEN; on
-  ; match, read the slot at TEMP. Otherwise advance HTTP16 past the
-  ; null terminator and bump TEMP by 3 (next slot).
+  ; The macro def now starts with a 1-byte parameter count followed by
+  ; the param-name list. MACRO_ENTRY16 still points at the count byte;
+  ; advance HTTP16 past it so the walk below sees param1 at offset 0.
+  CLC
+  LDA HTTP16
+  ADC #$01
+  STA HTTP16
+  LDA HTTP16 + 1
+  ADC #$00
+  STA HTTP16 + 1
+  ; Walk the param-name list. X is the number of names still to check;
+  ; on each miss, advance HTTP16 past the null terminator, bump TEMP by
+  ; 3 (next slot), and DEX. Termination is count-driven now that the
+  ; trailing empty-string sentinel is gone.
 .lps_iter:
+  CPX #0
+  BEQ .lps_not_found             ; walked all N names without a match
   LDY #0
-  LDA (HTTP16),Y
-  BEQ .lps_not_found             ; end of param list
 .lps_cmp:
   LDA (HTTP16),Y
   CMP TOKEN,Y
@@ -147,6 +164,7 @@ ss_lookup_param_slot:
   CLC
   ADC #3
   STA TEMP
+  DEX
   JMP .lps_iter
 .lps_match:
   ; Slot at offset TEMP holds [fwdref, value_L, value_H].
@@ -159,16 +177,21 @@ ss_lookup_param_slot:
   INY
   LDA (TABP16),Y
   STA HEX16 + 1
+  ; Restore X and return C=0 (found).
+  PLA
+  TAX
   CLC
   RTS
 .lps_not_found:
+  PLA
+  TAX
   SEC
   RTS
 
 
 ; Expand a macro invocation
-; On entry: MACRO_DEF_PTR points to the  macro entry
-;           (param1\0, param2\0, ..., \0, body\0)
+; On entry: MACRO_DEF_PTR points to the macro entry
+;           ([N], param1\0, ..., paramN\0, body\0)
 ;           TOKEN contains the macro name
 ; On exit: Memory source pushed
 expand_macro:
@@ -185,13 +208,26 @@ expand_macro:
   ; Parse arguments first, storing values in fixed buffer
 
   ; ----- Phase 1: Capture argument values -----
+  ; Read N (the count byte) from the def, stash it in MACRO_ARG_REMAIN,
+  ; and advance MACRO_DEF_PTR16 past the count byte so the param-name
+  ; walk below sees param1 at offset 0. After Phase 1, MACRO_DEF_PTR16
+  ; lands directly on the body's first byte (no terminator to skip).
+  LDY #$00
+  LDA (MACRO_DEF_PTR16),Y
+  STA MACRO_ARG_REMAIN
+  CLC
+  LDA MACRO_DEF_PTR16
+  ADC #$01
+  STA MACRO_DEF_PTR16
+  LDA MACRO_DEF_PTR16 + 1
+  ADC #$00
+  STA MACRO_DEF_PTR16 + 1
   ; X = index into MACRO_ACTIVATION for storing values
   ; Each entry: [is_fwdref][value_L][value_H] = 3 bytes
   LDX #$00
 .parse_loop:
-  ; Check if we're at end of parameter list (empty string)
-  LDY #$00
-  LDA (MACRO_DEF_PTR16),Y
+  ; Out of remaining params? Done with arg parsing.
+  LDA MACRO_ARG_REMAIN
   BEQ .parse_done
   ; Skip past parameter name
   LDY #$FF
@@ -236,10 +272,9 @@ expand_macro:
   LDA OPERAND16 + 1
   STA MACRO_ACTIVATION,X
   INX
-  ; Check if more params expected
-  LDY #$00
-  LDA (MACRO_DEF_PTR16),Y
-  BEQ .parse_done      ; Last param, skip comma check
+  ; Decrement remaining-arg count; if 0, we just consumed the last param.
+  DEC MACRO_ARG_REMAIN
+  BEQ .parse_done
   ; More params expected - require comma
   JSR check_for_end_of_line
   BCS .too_few_next    ; EOL but more params expected
@@ -379,37 +414,10 @@ expand_macro:
   LDA SS_P16 + 1
   STA MACRO_LOOKUP_FRAME16 + 1
 
-  ; ----- Phase 2: Walk past the param list to land on the body -----
-  ;
-  ; Pre-Phase-4.7 this loop also added each parameter to the
-  ; LABEL_TYPE_MACRO hash (so resolve_identifier could find params via
-  ; the hash). Now params live entirely in the frame's slot region;
-  ; resolve_identifier reads them via ss_lookup_param_slot. All this
-  ; loop has to do is advance MACRO_DEF_PTR16 past each param name
-  ; until it hits the null that separates params from body.
-  CP16 MACRO_ENTRY16, MACRO_DEF_PTR16
-.skip_params:
-  LDY #$00
-  LDA (MACRO_DEF_PTR16),Y
-  BEQ .add_done                 ; reached end-of-params null
-.skip_one_param:
-  INY
-  LDA (MACRO_DEF_PTR16),Y
-  BNE .skip_one_param
-  ; Y = offset of this param's null terminator. Advance MACRO_DEF_PTR16
-  ; past the null and onto the next param (or the end-of-params null).
-  TYA
-  SEC                            ; +1 for the null
-  ADCA16 MACRO_DEF_PTR16, MACRO_DEF_PTR16
-  JMP .skip_params
-.add_done:
-  ; Memory source was already pushed above (right after the activation
-  ; payload was built). Install the new body pointer now that param
-  ; parsing is finished. MACRO_DEF_PTR16 currently points at the null
-  ; separator between the param list and the body; +1 lands on the
-  ; body's first byte.
-  CLC
-  ADCI16 MACRO_DEF_PTR16, $01, SS_MEM_PTR16
+  ; Phase 1 already advanced MACRO_DEF_PTR16 past every param name (and
+  ; past the count byte at entry), so it now sits exactly at the body's
+  ; first byte. Install it as the new memory source pointer.
+  CP16 MACRO_DEF_PTR16, SS_MEM_PTR16
   ; Restore X (output file handle)
   PLA
   TAX

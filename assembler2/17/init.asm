@@ -197,36 +197,41 @@ show_macros:
   LDY #$03
   JSR .advance_tabp
   JSR show_message
-  ; Skip past the trailing null
+  ; Skip past the name's trailing null. TABP16 now points at the
+  ; parameter count byte (post-step-2 def layout).
   INY
   JSR .advance_tabp
-.show_params:
-  ; Output first param preceded by space
+  ; Read the count, advance past it, then print N param names. No
+  ; trailing terminator anymore -- we stop when X reaches 0.
+  LDY #$00
   LDA (TABP16),Y
-  BEQ .show_params_done    ; Empty string = end of params
+  TAX
+  INY
+  JSR .advance_tabp
+  CPX #$00
+  BEQ .show_params_done
+  ; First param prefixed with a single space
   LDA #' '
   JSR write_d
   JSR show_message
-  ; Skip past null terminator
   INY
   JSR .advance_tabp
+  DEX
 .show_more_params:
-  ; Output subsequent params preceded by comma+space
-  LDA (TABP16),Y
-  BEQ .show_params_done    ; Empty string = end of params
+  CPX #$00
+  BEQ .show_params_done
   LDA #','
   JSR write_d
   LDA #' '
   JSR write_d
   JSR show_message
-  ; Skip past null terminator
   INY
   JSR .advance_tabp
+  DEX
   JMP .show_more_params
 .show_params_done:
-  ; Advance past the trailing null
-  INY
-  JSR .advance_tabp
+  ; TABP16 already points at the body's first byte (no trailing null
+  ; to skip in the new layout).
   LDA #'\n'
   JSR write_d
   ; Output macro body

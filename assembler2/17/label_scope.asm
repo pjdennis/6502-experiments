@@ -51,6 +51,10 @@ MACRO_LOOKUP_FRAME16:  .word ; Address of the innermost macro frame on the
                              ; active. resolve_identifier uses this for
                              ; O(1) parameter-slot lookup instead of
                              ; walking the source stack each call.
+MACRO_ARG_REMAIN:      .byte ; Args still to be parsed in expand_macro's
+                             ; Phase 1 loop. Initialized from the count
+                             ; byte at the start of the macro definition;
+                             ; decremented per arg until 0.
 
   .code
 

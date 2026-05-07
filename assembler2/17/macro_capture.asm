@@ -25,7 +25,10 @@ IN_MACRO_DEF:    .byte        ; Flag: currently capturing macro body ($FF = capt
 
 ; Process .macro directive
 ; Syntax: .macro NAME [param1 param2 ...]
-; Creates entry in LHASHTAB: [escape header][name $00][params...][$00][body $00]
+; Creates entry in LHASHTAB: [escape header][name $00][N][param1 $00]...[paramN $00][body $00]
+;   The single-byte count up front lets expand_macro reserve the right
+;   amount of frame payload without walking the param list (and replaces
+;   the empty-string terminator the layout used pre-step-2).
 dir_macro:
   ; Skip spaces and read macro name
   JSR check_for_end_of_line
@@ -69,6 +72,14 @@ dir_macro:
   ; Supports the 'show_macros' debug option
   CP16 TABP16, MACRO_PTR16
   .endif
+  ; Reserve the parameter-count byte at the start of the value region
+  ; and stash its address in MACRO_DEF_PTR16. We bump (MACRO_DEF_PTR16),0
+  ; in place each time we capture a parameter, then update
+  ; MACRO_DEF_PTR16 to its body-start meaning at .params_done.
+  CP16 MEMP16, MACRO_DEF_PTR16
+  LDY #$00
+  APPEND_HEAPI $00     ; Initial count = 0
+  JSR advance_heap
 .param_loop:
   JSR check_for_end_of_line
   BCS .params_done     ; End of line, no more params
@@ -83,6 +94,15 @@ dir_macro:
   BNE .copy_param
   INY
   JSR advance_heap
+  ; Bump the count byte at MACRO_DEF_PTR16. (No INC indirect on 6502,
+  ; so do an explicit RMW.) The MACRO_MAX_ARGS check happens in
+  ; expand_macro -- here we just count what was supplied so the def
+  ; survives a too-many-args error at expansion time.
+  LDY #$00
+  LDA (MACRO_DEF_PTR16),Y
+  CLC
+  ADC #$01
+  STA (MACRO_DEF_PTR16),Y
   JSR check_for_end_of_line
   BCS .params_done
   CMP #','
@@ -92,11 +112,8 @@ dir_macro:
 .param_err_comma:
   JMP err_comma_expected
 .params_done:
-  ; Write empty string terminator for parameter list
-  LDY #$00
-  APPEND_HEAPI $00
-  JSR advance_heap
-  ; Update MACRO_DEF_PTR to point where body will be stored
+  ; Update MACRO_DEF_PTR to point where body will be stored. The count
+  ; byte already has its final value; no end-of-params terminator needed.
   CP16 MEMP16, MACRO_DEF_PTR16
   ; Set IN_MACRO_DEF flag to start capturing
   LDA #$FF

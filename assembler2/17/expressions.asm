@@ -41,7 +41,10 @@ EXPR_FWDREF:     .byte        ; Accumulated forward ref flag
 ;           C=1 if not found.
 ;           HASH / CACHED_HASH side-effects per find_in_hash on the
 ;             global path; ss_lookup_param_slot otherwise.
-;           A, X clobbered; Y not preserved.
+;           A clobbered; Y not preserved. X preserved (both
+;             ss_lookup_param_slot and find_in_hash preserve it, so
+;             callers like parse_term and emit_instruction can rely on
+;             X surviving identifier lookup).
 resolve_identifier:
   ; Not in a macro expansion: skip straight to the global lookup.
   ; MACRO_LOOKUP_FRAME16 is $0000 outside macros and tracks the
