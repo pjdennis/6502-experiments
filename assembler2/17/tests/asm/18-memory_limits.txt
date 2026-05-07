@@ -164,6 +164,47 @@ Error 35 in macro E at line 1: Out of memory
   expanded from {{MAIN_FILE}}:17
 
 ---
+NAME: macro_param_no_per_invocation_heap_leak
+DESCRIPTION: 30 invocations of a parameterised macro under small_heap assemble cleanly. Pre-Phase-4.7 each invocation added a per-param entry to the LABEL_TYPE_MACRO hash, so the heap leaked ~10 bytes per invocation; the small_heap budget would have exhausted around the 13th call. Post-Phase-4.7 parameters live in the macro frame's payload (which is freed on pop), so the heap doesn't grow across invocations.
+ARGS: debug small_heap
+INPUT:
+ 1: * = $0200
+ 2:   .macro M v
+ 3:   LDA #v
+ 4:   .endmacro
+ 5:   M $01
+ 6:   M $02
+ 7:   M $03
+ 8:   M $04
+ 9:   M $05
+10:   M $06
+11:   M $07
+12:   M $08
+13:   M $09
+14:   M $0A
+15:   M $0B
+16:   M $0C
+17:   M $0D
+18:   M $0E
+19:   M $0F
+20:   M $10
+21:   M $11
+22:   M $12
+23:   M $13
+24:   M $14
+25:   M $15
+26:   M $16
+27:   M $17
+28:   M $18
+29:   M $19
+30:   M $1A
+31:   M $1B
+32:   M $1C
+33:   M $1D
+34:   M $1E
+EXPECT_HEX: a9 01 a9 02 a9 03 a9 04 a9 05 a9 06 a9 07 a9 08 a9 09 a9 0a a9 0b a9 0c a9 0d a9 0e a9 0f a9 10 a9 11 a9 12 a9 13 a9 14 a9 15 a9 16 a9 17 a9 18 a9 19 a9 1a a9 1b a9 1c a9 1d a9 1e
+
+---
 NAME: macro_arg_buffer_at_limit
 DESCRIPTION: 78 macro arguments fit. Pre-Phase-4.4 the limit was the MACRO_ARG_BUF size (85 args). Post-Phase-4.4 each macro frame carries the args as a payload, and the 1-byte frame_size at offset 0 caps total frame size at 255 -- with a 5-char name "BIG78" this allows 78 args (5 + 78*3 + 14 = 253; the 14 is the standard fields plus the activation tail).
 INPUT:
