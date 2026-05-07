@@ -499,29 +499,27 @@ Each phase ends with:
   in check_macro_recursion. asm.out: 7315 bytes (well below the
   pre-Phase-3 baseline -- the deletions outweigh the new payload
   infrastructure).)
-- [-] Phase 4 — parameter activation frames (mostly complete; 4.1 tests
-  landed earlier (the four scoping invariants: shadowing, non-leakage
-  direct + via .include); 4.3 extracted resolve_identifier as the
-  identifier-lookup chokepoint; 4.4 staged parameter slots in
-  MACRO_ACTIVATION (= MACRO_ARG_BUF, post-Phase-1 the same buffer
-  doubles as the activation-payload staging area), enforced the
-  1-byte frame_size limit at parse time, and updated the
-  macro_arg_buffer_at_limit / overflow tests for the new ceiling
-  (78 args with a 5-char name); 4.6+4.7 added ss_top_memory_frame
-  and ss_lookup_param_slot, switched resolve_identifier to consult
-  the innermost macro frame's slots before the global hash, and
-  removed the LABEL_TYPE_MACRO hash adds in expand_macro Phase 2
-  (the user-facing motivation for this whole plan -- macro parameters
-  no longer leak per-invocation heap entries); fixed parse_term
+- [x] Phase 4 — parameter activation frames (complete; 4.1 added the
+  four scoping-invariant tests (shadowing, non-leakage direct + via
+  .include); 4.3 extracted resolve_identifier as the identifier
+  lookup chokepoint; 4.4 staged parameter slots in MACRO_ACTIVATION
+  alongside scope_block + arg_count, with a runtime guard for the
+  1-byte frame_size limit; 4.6+4.7 added ss_top_memory_frame and
+  ss_lookup_param_slot, switched resolve_identifier to consult the
+  innermost macro frame's slots before the global hash, and removed
+  the LABEL_TYPE_MACRO hash adds in expand_macro Phase 2 (the
+  user-facing motivation for this whole plan -- macro parameters no
+  longer leak per-invocation heap entries); fixed parse_term
   IS_FWDREF clobbering so forward-ref args still propagate the flag
-  through the new slot path; 4.8 partial: deleted the unused
-  LABEL_TYPE_MACRO constant. 4.9 added the leak verification test
-  (macro_param_no_per_invocation_heap_leak: 30 invocations under
-  small_heap, would OOM pre-4.7, succeeds post-4.7). 4.5
-  (instrumented test) skipped: 4.6+4.7 landed in the same commit so
-  the whole 4.1 test suite already exercises the slot-only path.
-  Remaining: 4.8 full (delete MACRO_ARG_BUF -- needs expand_macro to
-  parse args directly into the frame) and 4.10 (reclaim
-  \$0500-\$05FF). Both are memory-reclamation cleanup; the leak fix
-  is already realised.)
+  through the new slot path; 4.5 (instrumented test) skipped because
+  4.6+4.7 landed in the same commit; 4.8 deleted LABEL_TYPE_MACRO
+  and shrank MACRO_ACTIVATION to a 32-byte buffer at \$0690 (max
+  MACRO_MAX_ARGS=8 args, matching the documented cap; the
+  assembler's own source uses at most 3 args); 4.9 added the leak
+  verification test (macro_param_no_per_invocation_heap_leak: 30
+  invocations under small_heap, would OOM pre-4.7); 4.10 reclaimed
+  \$0500-\$05FF (no longer MACRO_ARG_BUF; documented as free in
+  asm.asm). Counts: 492 v17 asm tests, 55 source_stack; v17
+  self-hosts; preexisting opendir readonly_file failure aside,
+  every test green throughout.)
 - [ ] Phase 5 — cleanup

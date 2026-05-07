@@ -4,10 +4,10 @@
 ;
 ; Requires:
 ;   CURR_CHAR (asm.asm alias; backing storage in source_stack.asm)
-;   TOKEN, PASS, MACRO_ACTIVATION (asm.asm)
+;   TOKEN, PASS (asm.asm)
 ;   IN_MACRO_DEF (macro_capture.asm)
-;   MACRO_ARG_BUF, MACRO_ARG_LIMIT, MACRO_ACTIVATION, MACRO_ENTRY16,
-;   OPERAND16, TEMP (asm.asm)
+;   MACRO_ACTIVATION, MACRO_ACTIVATION_LIMIT, MACRO_ENTRY16, OPERAND16,
+;   TEMP (asm.asm)
 ;   LABEL_SCOPE16, CACHED_HASH, scramble_table (hash_table.asm)
 ;   EXPANSION_ID16, SCOPE_DEPTH (label_scope.asm)
 ;   read_char (asm.asm alias; implemented in source_stack.asm)
@@ -176,14 +176,14 @@ expand_macro:
   CP16 MACRO_DEF_PTR16, MACRO_ENTRY16
   ; Check for recursive macro invocation
   JSR check_macro_recursion
-  ; Save X (output file handle) - we'll use X as index into MACRO_ARG_BUF
+  ; Save X (output file handle) - we'll use X as index into MACRO_ACTIVATION
   TXA
   PHA
   ; DON'T push label scope yet - we need parent's scope to look up arguments
   ; Parse arguments first, storing values in fixed buffer
 
   ; ----- Phase 1: Capture argument values -----
-  ; X = index into MACRO_ARG_BUF for storing values
+  ; X = index into MACRO_ACTIVATION for storing values
   ; Each entry: [is_fwdref][value_L][value_H] = 3 bytes
   LDX #$00
 .parse_loop:
@@ -208,27 +208,29 @@ expand_macro:
 .have_arg:
   ; Parse argument expression (using PARENT's scope for lookups)
   JSR parse_expression
-  ; MACRO_ARG_BUF bounds check.
-  ; The buffer doubles as the activation-payload staging area: after
-  ; Phase 1 finishes we append a 6-byte tail (1 arg_count + 5
-  ; scope_block) starting at offset byte_count, so the limit needs to
-  ; reserve room for that as well as the next 3-byte slot we're about
-  ; to write. Limit is 256 - 3 - 6 + 1 = 248 (max 83 args; with 84+
-  ; the tail would spill out of MACRO_ARG_BUF / MACRO_ACTIVATION).
-  CPX #MACRO_ARG_LIMIT - MACRO_ARG_BUF - .ARG_SIZE - 6 + $01
+  ; MACRO_ACTIVATION bounds check.
+  ; Buffer holds [slots..., arg_count, scope_block]; payload size must
+  ; be <= 32 (= MACRO_ACTIVATION_LIMIT - MACRO_ACTIVATION). After this
+  ; iteration the next 3-byte slot needs to fit too, so we require
+  ; byte_count + 3 + 6 <= 32. CPX limit = 32 - 3 - 6 + 1 = 24, which
+  ; caps args at 24/3 = 8 (MACRO_MAX_ARGS). The frame_size guard in
+  ; .args_done_ok also enforces the 1-byte frame_size limit, but for
+  ; typical short macro names that limit (~78) is much looser than
+  ; this buffer cap.
+  CPX #MACRO_ACTIVATION_LIMIT - MACRO_ACTIVATION - .ARG_SIZE - 6 + $01
   BCC .arg_ok         ; X < limit: safe
 .arg_overflow:
   JMP err_too_many_arguments
 .arg_ok:
   ; Store fwdref flag and value in fixed buffer
   LDA IS_FWDREF
-  STA MACRO_ARG_BUF,X
+  STA MACRO_ACTIVATION,X
   INX
   LDA OPERAND16
-  STA MACRO_ARG_BUF,X
+  STA MACRO_ACTIVATION,X
   INX
   LDA OPERAND16 + 1
-  STA MACRO_ARG_BUF,X
+  STA MACRO_ACTIVATION,X
   INX
   ; Check if more params expected
   LDY #$00
@@ -255,7 +257,7 @@ expand_macro:
   ;       frame in a single step -----
   ;
   ; Payload layout (low offset to high) staged in MACRO_ACTIVATION:
-  ;   bytes 0..byte_count-1 : slots, copied verbatim from MACRO_ARG_BUF
+  ;   bytes 0..byte_count-1 : slots, copied verbatim from MACRO_ACTIVATION
   ;                           (3 bytes per slot: fwdref, value_L, value_H)
   ;   byte byte_count       : arg_count (= byte_count / 3)
   ;   bytes +1..+5          : scope_block to restore on pop --
@@ -270,7 +272,7 @@ expand_macro:
   ; path so the migration is observable and reversible.
   ;
   ; X is the arg byte count from Phase 1. The args are already in
-  ; MACRO_ARG_BUF at offsets 0..X-1 (and MACRO_ACTIVATION aliases the
+  ; MACRO_ACTIVATION at offsets 0..X-1 (and MACRO_ACTIVATION aliases the
   ; same buffer), so we just append arg_count + scope_block in place.
   STX TEMP                  ; TEMP = byte_count
   ; The frame_size byte at offset 0 is one byte, so the total frame

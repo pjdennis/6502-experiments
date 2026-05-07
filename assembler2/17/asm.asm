@@ -15,22 +15,25 @@ FWDREF_LIMIT    = FWDREF_LIST + $0200 ; Limit for forward reference list data
                          ; $0400-$04FF was SCOPE_STACK pre-Phase-3.6; macro
                          ; activation state now lives on the source stack as
                          ; payload on each macro frame, so this region is free.
-MACRO_ARG_BUF   = $0500  ; Temp buffer for macro args during expansion (256 bytes)
-MACRO_ARG_LIMIT = MACRO_ARG_BUF + $0100 ; Limit for macro arg buffer
+                         ; $0500-$05FF was MACRO_ARG_BUF pre-Phase-4.8;
+                         ; MACRO_ACTIVATION (below) replaces it at $0690.
 TOKEN           = $0600  ; Buffer for the current token being read
 ELSE_SEEN_ARRAY = $0680  ; Array tracking .else seen per nesting level (16 bytes)
-MACRO_ACTIVATION = MACRO_ARG_BUF
-                         ; The activation payload that expand_macro hands to
-                         ; push_memory_source_with_payload is staged in
-                         ; MACRO_ARG_BUF: Phase 1 fills the start of the
-                         ; buffer with the parameter slots (3 bytes each:
-                         ; fwdref, value_L, value_H), and post-Phase-1
-                         ; expand_macro appends arg_count (1 byte) and the
-                         ; scope_block (5 bytes: LABEL_SCOPE16 lo/hi,
-                         ; CACHED_HASH, MACRO_ENTRY16 lo/hi). Total payload
-                         ; size = 3*N + 6 (must fit in MACRO_ARG_BUF's 256
-                         ; bytes -- the parse-time arg limit accounts for
-                         ; the tail).
+MACRO_ACTIVATION = $0690 ; Activation-payload staging buffer that
+                         ; expand_macro hands to push_memory_source_with_payload.
+                         ; Layout (low to high offset):
+                         ;   bytes 0..3*N-1 : parameter slots (3 bytes each:
+                         ;                    fwdref, value_L, value_H), where
+                         ;                    N = arg_count
+                         ;   byte  3*N      : arg_count
+                         ;   bytes +1..+5   : scope_block (LABEL_SCOPE16 lo/hi,
+                         ;                    CACHED_HASH, MACRO_ENTRY16 lo/hi)
+                         ; Max payload size = 3*8 + 6 = 30 bytes; the buffer
+                         ; reserves 32 bytes ($0690-$06AF). Macros are limited
+                         ; to MACRO_MAX_ARGS = 8 -- the assembler's source
+                         ; uses at most 3 args, and the docs already cap at 8.
+MACRO_ACTIVATION_LIMIT = MACRO_ACTIVATION + $0020
+MACRO_MAX_ARGS  = $08    ; Hard cap on parameters per macro definition
 LHASHTAB        = $0700  ; Label hash table
 IFDEF_DECISIONS = $0800  ; Buffer for .ifdef decisions (256 bytes)
 *               = $2000  ; Code generates here follwed by HEAP
