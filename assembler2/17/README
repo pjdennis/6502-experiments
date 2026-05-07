@@ -164,8 +164,9 @@ The source stack (source_stack.asm) handles two source types transparently:
     Used for macro expansion.
 
 Each stack frame stores the source name, type, and enough context to restore
-the parent source when the current one is exhausted. Popping a memory source
-calls pop_label_scope (via SS_POP_MEMORY_HOOK) to restore the caller's scope.
+the parent source when the current one is exhausted. The assembler installs
+pop_label_scope as the memory-pop handler (via ss_install_memory_pop at
+startup), so popping a memory source restores the caller's scope.
 
 
 Conditional Assembly
@@ -232,7 +233,6 @@ Several symbols are configured before their include file to customize
 behavior:
 
   SS_NAME        = TOKEN              Source stack uses TOKEN for filenames
-  SS_POP_MEMORY_HOOK = pop_label_scope    Popping memory source restores scope
   read_char          = source_stack_read_char
   CURR_CHAR          = SS_CURR_CHAR
   HT_KEY             = TOKEN              Hash table key source

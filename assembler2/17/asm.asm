@@ -60,7 +60,6 @@ MACRO_PTR16:     .word        ; Pointer to macro name (for show_captured_macros)
   .include label_scope.asm
   .include forward_ref.asm
 SS_NAME        = TOKEN
-SS_POP_MEMORY_HOOK = pop_label_scope
   .ifdef enable_debug
 SS_ERR_NO_FILE     = err_no_file
   .endif
@@ -225,6 +224,11 @@ start:
   .endif
   ; Initialize source stack early so interrupt handler works correctly
   JSR source_stack_init
+  ; Hook pop_label_scope as the memory-source pop handler so popping a
+  ; macro expansion restores the caller's scope.
+  LDA #<pop_label_scope
+  LDX #>pop_label_scope
+  JSR ss_install_memory_pop
   ; Initialize scope stack for macro expansions
   JSR init_scope_stack
   ; Check argument count (must be at least 2)

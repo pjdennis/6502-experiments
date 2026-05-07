@@ -5,10 +5,6 @@
 ;   SS_ERR_NO_FILE     - error handler for read_char when no source is
 ;                        open (errors.asm; only referenced under
 ;                        enable_debug)
-;   SS_POP_MEMORY_HOOK - optional hook invoked when a memory source is
-;                        popped, used by the assembler to restore label
-;                        scope (asm.asm alias to pop_label_scope; left
-;                        undefined by the test program)
 ;   TABP16             - host-provided 2-byte zero-page scratch pointer
 ;                        used by ss_walk_frames* to track the current
 ;                        frame during a walk (hash_table.asm in the
@@ -39,8 +35,8 @@
 ; Future Phase 3 work appends additional payload bytes after prev_data
 ; for memory sources that need activation state (label scope, macro
 ; entry, etc.); the source stack itself never reads those payload
-; bytes -- they are written and consumed by the SS_POP_MEMORY_HOOK
-; owner.
+; bytes -- they are written and consumed by the memory-pop handler
+; installed via ss_install_memory_pop.
 
   .zeropage
 
@@ -237,22 +233,34 @@ ss_pop_file:
 .nothing_to_close:
   RTS
 
-ss_pop_memory:
-  ; curr_type=1: run the memory-pop hook if the host program defined
-  ; one (the assembler hooks pop_label_scope; the test program leaves
-  ; SS_POP_MEMORY_HOOK undefined, making this a no-op).
-  .ifdef SS_POP_MEMORY_HOOK
-  JMP SS_POP_MEMORY_HOOK ; tail call (RTS below is unreachable when defined)
-  .endif
+; Default memory pop handler: no-op. The host program installs its own
+; via ss_install_memory_pop if memory frames carry state that needs
+; restoring (the assembler installs pop_label_scope; the test program
+; leaves the default in place).
+ss_pop_memory_noop:
   RTS
 
-; Per-curr_type pop dispatch table (lo/hi split for ASL-free indexing)
+; Per-curr_type pop dispatch table (lo/hi split for ASL-free indexing).
+; The memory entry can be patched at runtime via ss_install_memory_pop.
 ss_on_pop_table_lo:
   .byte <ss_pop_file
-  .byte <ss_pop_memory
+  .byte <ss_pop_memory_noop
 ss_on_pop_table_hi:
   .byte >ss_pop_file
-  .byte >ss_pop_memory
+  .byte >ss_pop_memory_noop
+
+; Install a custom memory-pop handler. Overwrites the memory entry of
+; ss_on_pop_table_{lo,hi} so subsequent pop_source calls dispatch to
+; this handler when curr_type=memory.
+;
+; On entry: A = handler addr low byte
+;           X = handler addr high byte
+; On exit:  Y/A clobbered; X preserved (the table is patched in place).
+ss_install_memory_pop:
+  STA ss_on_pop_table_lo + 1
+  TXA
+  STA ss_on_pop_table_hi + 1
+  RTS
 
 ; Indirect-call thunk: caller stores target address in SS_TEMP16, then
 ; JSRs here. The target's RTS returns to the original caller. Used by
@@ -413,10 +421,11 @@ push_memory_source:
   RTS
 
 
-; Unified pop function - handles both file and memory sources.
-; For file sources, closes the current file handle. For memory sources,
-; calls SS_POP_MEMORY_HOOK if defined (the assembler hooks scope
-; restore here; the test program leaves it undefined).
+; Unified pop function - handles both file and memory sources via
+; ss_on_pop_table dispatch. For file sources, closes the current file
+; handle. For memory sources, runs whatever handler the host installed
+; via ss_install_memory_pop (the assembler installs pop_label_scope;
+; the test program leaves the default no-op).
 ; On exit: Previous state restored (SS_CURR_FILE or SS_MEM_PTR16)
 ;          SS_SRC_TYPE restored to prev_type
 ;          SS_CURR_LINE16 restored to prev_line

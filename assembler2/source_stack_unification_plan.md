@@ -417,7 +417,18 @@ Each phase ends with:
   at the macro_expansion call site, tightened the source_stack.asm
   module header, expanded push_source_frame's leading comment to
   call out its internal status and full input preconditions)
-- [ ] Phase 2 — abstraction refactor
+- [x] Phase 2 — abstraction refactor (complete; 2.1 added frame_size byte
+  at offset 0; 2.2 extracted ss_alloc_frame / ss_free_frame and dedup'd
+  the size calc by handing SS_TEMP16 from check_source_frame_room into
+  push_source_frame; 2.3 added the 2-entry on_pop vtable indexed by
+  curr_type, dispatched via ss_invoke -- root cause of an interim
+  regression was the dispatch's TAX clobbering X across pop_source,
+  fixed by bracketing with TXA/PHA + TYA/PHA; 2.4 added ss_walk_frames
+  / ss_walk_frames_by_type and made the test program's print_frames
+  use the generic walker; 2.5 replaced the SS_POP_MEMORY_HOOK
+  compile-time alias with runtime ss_install_memory_pop, called from
+  asm.asm's startup with pop_label_scope. Phase 4's macro-frame
+  payload work will reuse this install API.)
 - [ ] Phase 3 — stack merge
 - [ ] Phase 4 — parameter activation frames
 - [ ] Phase 5 — cleanup
