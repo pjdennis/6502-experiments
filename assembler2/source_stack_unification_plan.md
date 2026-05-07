@@ -472,6 +472,15 @@ Each phase ends with:
   compile-time alias with runtime ss_install_memory_pop, called from
   asm.asm's startup with pop_label_scope. Phase 4's macro-frame
   payload work will reuse this install API.)
-- [ ] Phase 3 — stack merge
+- [-] Phase 3 — stack merge (in progress; 3.1+3.2 landed: payload-bearing
+  memory frames -- SS_PAYLOAD_SIZE / SS_PAYLOAD16 zero-page params,
+  push_memory_source_with_payload entry point, and 6 new source_stack
+  tests verifying frame_size grows correctly with payload across
+  file-parented and memory-parented frames; @payload_memory <digit>
+  test directive added. 3.3 and 3.4 are coupled -- once expand_macro
+  starts pushing payload-bearing memory frames, the old SCOPE_STACK
+  goes unused and check_macro_recursion has to switch to walking the
+  source-stack memory-frame chain in the same commit. Stop here for
+  review before that change.)
 - [ ] Phase 4 — parameter activation frames
 - [ ] Phase 5 — cleanup
