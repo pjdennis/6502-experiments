@@ -6,7 +6,7 @@
 ;   CURR_CHAR (asm.asm alias; backing storage in source_stack.asm)
 ;   TOKEN, PASS (asm.asm)
 ;   MACRO_DEF_PTR16 (asm.asm)
-;   LABEL_TYPE, LABEL_TYPE_MACRO (common.asm)
+;   LABEL_TYPE (common.asm)
 ;   read_char (asm.asm alias; implemented in source_stack.asm)
 ;   read_token, compare_end_of_token, check_for_end_of_line (tokenizer.asm)
 ;   skip_spaces, skip_rest_of_line (tokenizer.asm)

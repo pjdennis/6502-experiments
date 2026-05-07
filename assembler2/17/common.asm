@@ -38,7 +38,9 @@ MODE_END   = 15                   ; Terminates the list of modes
 ; Label type constants (for LABEL_TYPE variable in hash table operations)
 LABEL_TYPE_GLOBAL = 0   ; Global label (no escape format)
 LABEL_TYPE_LOCAL  = 1   ; Local label under global scope (heap address)
-LABEL_TYPE_MACRO  = 2   ; Macro parameter (expansion ID)
+; (value 2 was LABEL_TYPE_MACRO before Phase 4.7 -- macro parameters
+; are now stored as slots in their macro frame's payload, not in the
+; hash table, so no LABEL_TYPE value is needed for them)
 LABEL_TYPE_MACRO_LOCAL = 3 ; Macro-local label (expansion ID)
 LABEL_TYPE_MACRO_DEF  = 4 ; Macro definition (stored in LHASHTAB)
 

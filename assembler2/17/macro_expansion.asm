@@ -6,8 +6,8 @@
 ;   CURR_CHAR (asm.asm alias; backing storage in source_stack.asm)
 ;   TOKEN, PASS, MACRO_ACTIVATION (asm.asm)
 ;   IN_MACRO_DEF (macro_capture.asm)
-;   MACRO_ARG_BUF, MACRO_ARG_LIMIT, MACRO_ENTRY16, OPERAND16 (asm.asm)
-;   LABEL_TYPE, LABEL_TYPE_MACRO (common.asm)
+;   MACRO_ARG_BUF, MACRO_ARG_LIMIT, MACRO_ACTIVATION, MACRO_ENTRY16,
+;   OPERAND16, TEMP (asm.asm)
 ;   LABEL_SCOPE16, CACHED_HASH, scramble_table (hash_table.asm)
 ;   EXPANSION_ID16, SCOPE_DEPTH (label_scope.asm)
 ;   read_char (asm.asm alias; implemented in source_stack.asm)

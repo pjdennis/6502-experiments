@@ -7,7 +7,7 @@
 ; Requires:
 ;   CURR_CHAR (asm.asm alias; backing storage in source_stack.asm)
 ;   TOKEN, HEX16, OPERAND16, PASS, IS_FWDREF (asm.asm)
-;   LABEL_TYPE, LABEL_TYPE_GLOBAL, LABEL_TYPE_MACRO (common.asm)
+;   LABEL_TYPE, LABEL_TYPE_GLOBAL (common.asm)
 ;   SCOPE_DEPTH (label_scope.asm)
 ;   read_char (asm.asm alias; implemented in source_stack.asm)
 ;   skip_spaces, compare_end_of_token, read_token, read_hex,
