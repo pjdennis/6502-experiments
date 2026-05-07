@@ -231,6 +231,45 @@ ss_walk_frames_by_type:
   RTS
 
 
+; Find the innermost (newest) memory frame on the source stack and
+; return its address. File frames on top of the chain are skipped --
+; an .include from inside a macro body pushes a file frame above the
+; macro's memory frame, but identifier lookup wants the macro frame.
+;
+; On exit:  C=0 if a memory frame was found, TABP16 = its address.
+;           C=1 if no memory frame exists (no macro on the stack);
+;             TABP16 may be unspecified.
+;           A, X, Y clobbered.
+ss_top_memory_frame:
+  CP16 SS_P16, TABP16
+.tmf_loop:
+  CMPI16 TABP16, SOURCE_STACK
+  BCS .tmf_none                  ; walked past the bottom
+  ; Read curr_type. Skip frame_size at offset 0; name starts at
+  ; offset 1 and is null-terminated; curr_type is the next byte.
+  LDY #0
+.tmf_skip_name:
+  INY
+  LDA (TABP16),Y
+  BNE .tmf_skip_name
+  INY
+  LDA (TABP16),Y
+  CMP #SS_SRC_TYPE_MEMORY
+  BEQ .tmf_found
+  ; File frame -- advance past it.
+  LDY #0
+  LDA (TABP16),Y                 ; frame_size
+  CLC
+  ADCA16 TABP16, TABP16
+  JMP .tmf_loop
+.tmf_found:
+  CLC
+  RTS
+.tmf_none:
+  SEC
+  RTS
+
+
 ; Per-curr_type pop handlers. pop_source dispatches to one of these
 ; based on curr_type, before prev_data restoration. The dispatch
 ; preserves both X and Y around the JSR; handlers may freely clobber

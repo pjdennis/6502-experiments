@@ -66,6 +66,104 @@ recursion_check_callback:
   RTS
 
 
+; Look up TOKEN's identifier in the parameter slots of the memory frame
+; at TABP16 (typically the innermost macro frame, located via
+; ss_top_memory_frame). Walks the macro definition's parameter name
+; list to find an index, then reads the matching slot from the frame.
+;
+; Frame payload (last bytes, low to high offset):
+;   slots[0..N-1]   3 bytes each: fwdref, value_L, value_H
+;   arg_count (= N) at offset frame_size - 6
+;   scope_block      LABEL_SCOPE16 lo/hi, CACHED_HASH,
+;                    MACRO_ENTRY16 lo/hi at offset frame_size - 5..-1
+;
+; On entry: TABP16 = memory frame address; TOKEN holds the identifier.
+; On exit:  C=0 if found -- HEX16 (= OPERAND16) and IS_FWDREF set,
+;             matching find_in_hash's contract.
+;           C=1 if no parameter matched. HEX16/IS_FWDREF unchanged.
+;           A, X, Y, HTTP16, TEMP clobbered.
+ss_lookup_param_slot:
+  ; Read frame_size and stash on the 6502 stack (used twice below).
+  LDY #0
+  LDA (TABP16),Y
+  PHA
+  ; Read arg_count = N at offset frame_size - 6.
+  SEC
+  SBC #6
+  TAY
+  LDA (TABP16),Y                 ; A = N
+  ; Compute start_of_slots offset = (frame_size - 6) - 3*N. Result
+  ; lives in TEMP (advanced 3 bytes per slot during the walk below).
+  STA TEMP                       ; TEMP = N
+  ASL                             ; 2N
+  CLC
+  ADC TEMP                       ; 3N
+  STA TEMP                       ; TEMP = 3N
+  TYA                            ; A = arg_count_offset
+  SEC
+  SBC TEMP                       ; A = start_of_slots offset
+  STA TEMP                       ; TEMP = current slot offset
+  ; Read MACRO_ENTRY16 from the scope_block (last 2 bytes of frame).
+  PLA                            ; A = frame_size
+  SEC
+  SBC #2                         ; offset of MACRO_ENTRY16 lo
+  TAY
+  LDA (TABP16),Y
+  STA HTTP16
+  INY
+  LDA (TABP16),Y
+  STA HTTP16 + 1
+  ; Walk the param-name list. For each name, compare with TOKEN; on
+  ; match, read the slot at TEMP. Otherwise advance HTTP16 past the
+  ; null terminator and bump TEMP by 3 (next slot).
+.lps_iter:
+  LDY #0
+  LDA (HTTP16),Y
+  BEQ .lps_not_found             ; end of param list
+.lps_cmp:
+  LDA (HTTP16),Y
+  CMP TOKEN,Y
+  BNE .lps_skip
+  CMP #0
+  BEQ .lps_match
+  INY
+  BNE .lps_cmp                    ; tokens are < 256 chars
+.lps_skip:
+  ; Names differ. Advance past this param's null and try the next one.
+  ; Y indexes into the param name; walk to its null.
+.lps_to_null:
+  LDA (HTTP16),Y
+  BEQ .lps_past_null
+  INY
+  BNE .lps_to_null
+.lps_past_null:
+  TYA
+  SEC                             ; +1 to skip the null
+  ADCA16 HTTP16, HTTP16
+  ; slot offset += 3
+  LDA TEMP
+  CLC
+  ADC #3
+  STA TEMP
+  JMP .lps_iter
+.lps_match:
+  ; Slot at offset TEMP holds [fwdref, value_L, value_H].
+  LDY TEMP
+  LDA (TABP16),Y
+  STA IS_FWDREF
+  INY
+  LDA (TABP16),Y
+  STA HEX16
+  INY
+  LDA (TABP16),Y
+  STA HEX16 + 1
+  CLC
+  RTS
+.lps_not_found:
+  SEC
+  RTS
+
+
 ; Expand a macro invocation
 ; On entry: MACRO_DEF_PTR points to the  macro entry
 ;           (param1\0, param2\0, ..., \0, body\0)
@@ -256,54 +354,29 @@ expand_macro:
   LDA TEMP                  ; payload size (byte_count + 6)
   JSR push_memory_source_with_payload
 
-  ; ----- Phase 2: Populate child macro scope with parameter values -----
-  ; Restore params start to MACRO_DEF_PTR
+  ; ----- Phase 2: Walk past the param list to land on the body -----
+  ;
+  ; Pre-Phase-4.7 this loop also added each parameter to the
+  ; LABEL_TYPE_MACRO hash (so resolve_identifier could find params via
+  ; the hash). Now params live entirely in the frame's slot region;
+  ; resolve_identifier reads them via ss_lookup_param_slot. All this
+  ; loop has to do is advance MACRO_DEF_PTR16 past each param name
+  ; until it hits the null that separates params from body.
   CP16 MACRO_ENTRY16, MACRO_DEF_PTR16
-  ; Reset X to read values from start of macro arg buffer
-  LDX #$00
-  ; Now iterate through params and add to hash with stored values
-.add_loop:
-  ; Check if at end of parameter list
+.skip_params:
   LDY #$00
   LDA (MACRO_DEF_PTR16),Y
-  BEQ .add_done
-  ; Copy param name to TOKEN
-  LDY #$FF
-.copy_param:
+  BEQ .add_done                 ; reached end-of-params null
+.skip_one_param:
   INY
   LDA (MACRO_DEF_PTR16),Y
-  STA TOKEN,Y
-  BNE .copy_param
-  ; Advance MACRO_DEF_PTR past param name
+  BNE .skip_one_param
+  ; Y = offset of this param's null terminator. Advance MACRO_DEF_PTR16
+  ; past the null and onto the next param (or the end-of-params null).
   TYA
-  SEC ; +1 for null terminator
-  ADCA16 MACRO_DEF_PTR16, MACRO_DEF_PTR16 ; MACRO_DEF_PTR + A + 1 -> MACRO_DEF_PTR
-  ; Load fwdref and value from buffer
-  LDA MACRO_ARG_BUF,X
-  STA IS_FWDREF
-  INX
-  LDA MACRO_ARG_BUF,X
-  STA OPERAND16
-  INX
-  LDA MACRO_ARG_BUF,X
-  STA OPERAND16 + 1
-  INX
-  ; Skip adding if forward ref in pass 1
-  LDA IS_FWDREF
-  BEQ .do_add
-  BIT PASS
-  BPL .add_loop         ; Pass 1 fwdref: skip
-  ; Pass 2: always add
-.do_add:
-  ; Add parameter to macro-local scope
-  LDA #LABEL_TYPE_MACRO
-  STA LABEL_TYPE
-  JSR select_label_hash_table
-  JSR hash_add
-  BCS .add_loop         ; Already exists (pass 1), skip store
-  ; Store value (OPERAND16 aliased to HEX16)
-  JSR store_hash_value
-  JMP .add_loop
+  SEC                            ; +1 for the null
+  ADCA16 MACRO_DEF_PTR16, MACRO_DEF_PTR16
+  JMP .skip_params
 .add_done:
   ; Memory source was already pushed above (right after the activation
   ; payload was built). Install the new body pointer now that param

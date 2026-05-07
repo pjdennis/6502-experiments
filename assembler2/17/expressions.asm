@@ -27,40 +27,49 @@ EXPR_FWDREF:     .byte        ; Accumulated forward ref flag
 
 
 ; Resolve a global-style identifier (the token in TOKEN). When inside
-; a macro expansion this tries the macro-local hash first so that
-; parameters shadow same-named globals; otherwise (and on miss) it
-; falls back to the global hash. Local-label (.foo) references skip
-; this and go straight to the local-label path -- they're already
-; scoped per macro invocation via LABEL_SCOPE16.
-;
-; Phase 4 will extend this chokepoint to consult the innermost macro
-; frame's parameter slots before any hash lookup; for now it's the
-; same logic that used to be inlined in parse_term, just in one place.
+; a macro expansion this consults the innermost macro frame's
+; parameter slots first so that parameters shadow same-named globals;
+; otherwise (and on miss) it falls back to the global hash.
+; Local-label (.foo) references skip this and go straight to the
+; local-label path -- they're already scoped per macro invocation via
+; LABEL_SCOPE16.
 ;
 ; On entry: TOKEN holds a null-terminated identifier; LABEL_TYPE = the
 ;           base type to use on the global path (typically
 ;           LABEL_TYPE_GLOBAL).
-; On exit:  C=0 if found (HEX16 holds the value); C=1 if not found.
-;           LABEL_TYPE is left as LABEL_TYPE_MACRO when the macro-local
-;           lookup matched, otherwise restored to LABEL_TYPE_GLOBAL.
-;           HASH / CACHED_HASH side-effects per find_in_hash.
+; On exit:  C=0 if found (HEX16 holds the value, IS_FWDREF set);
+;           C=1 if not found.
+;           HASH / CACHED_HASH side-effects per find_in_hash on the
+;             global path; ss_lookup_param_slot otherwise.
 ;           A, X clobbered; Y not preserved.
 resolve_identifier:
-  ; Not in a macro expansion: just do the global lookup directly.
+  ; Not in a macro expansion: skip straight to the global lookup.
   LDA SCOPE_DEPTH
   BEQ .global
-  ; In a macro: try the macro-local hash first.
-  LDA #LABEL_TYPE_MACRO
+  ; In a macro: find the innermost memory frame and check its
+  ; parameter slots. ss_top_memory_frame skips file frames on top
+  ; (e.g. .include from a macro body) so the innermost macro frame
+  ; gets consulted regardless of source-type stacking. The slot
+  ; carries the param's IS_FWDREF flag, so a forward-ref arg in
+  ; pass 1 propagates through the lookup the same way the legacy
+  ; "skip the hash add for fwdrefs" path did pre-Phase-4.6.
+  JSR ss_top_memory_frame
+  BCS .global                ; defensive: SCOPE_DEPTH said yes, but
+                             ; no memory frame found -- fall through
+  JSR ss_lookup_param_slot
+  BCC .done                  ; slot found; IS_FWDREF already set
+.global:
+  ; Either we're not in a macro, or no slot matched. Try the global
+  ; hash. Hash entries are never forward references, so on success
+  ; we clear IS_FWDREF here -- parse_term's .label_found path leaves
+  ; it alone now, since the slot path above needs the flag preserved.
+  LDA #LABEL_TYPE_GLOBAL
   STA LABEL_TYPE
   JSR select_label_hash_table
   JSR find_in_hash
-  BCC .done                 ; Found as parameter -- LABEL_TYPE = MACRO
-  ; Macro-local miss; restore base type and fall through to global.
-  LDA #LABEL_TYPE_GLOBAL
-  STA LABEL_TYPE
-.global:
-  JSR select_label_hash_table
-  JMP find_in_hash          ; tail call; preserves caller's C from us
+  BCS .done                  ; not found -- propagate C=1 to caller
+  LDA #$00
+  STA IS_FWDREF
 .done:
   RTS
 
@@ -135,7 +144,11 @@ parse_term:
   JSR read_local_label
   JSR select_label_hash_table
   JSR find_in_hash
-  BCC .label_found
+  BCS .label_not_found
+  ; Local label found in hash -- not a forward ref.
+  LDA #$00
+  STA IS_FWDREF
+  JMP .label_store
 .label_not_found:
   ; Label not found - check pass
   BIT PASS
@@ -149,9 +162,9 @@ parse_term:
 .label_not_found_pass2:
   JMP err_label_not_found
 .label_found:
-  ; Label found - clear forward ref flag
-  LDA #$00
-  STA IS_FWDREF
+  ; Label found. resolve_identifier already set IS_FWDREF (from the
+  ; slot's flag if the param was a fwdref, or 0 from the hash path).
+  ; Don't touch it here -- the slot path needs the flag preserved.
 .label_store:
   ; OPERAND16 already set (aliased to HEX16)
   RTS
