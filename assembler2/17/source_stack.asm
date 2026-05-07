@@ -37,9 +37,9 @@
 ;   = name_len + 8 + payload_size if returning to memory
 ;
 ; Putting curr_type / prev_type / prev_line at fixed offsets 1..4 makes
-; the hot walks (ss_walk_frames_by_type, the pop_source dispatch) O(1)
-; per frame for the curr_type read; pre-reorg they had to scan past the
-; variable-length name first. prev_data still
+; the pop_source dispatch O(1) per frame for the curr_type read;
+; pre-reorg it had to scan past the variable-length name first.
+; prev_data still
 ; lives after the name, so pop_source's restore step still pays the
 ; strlen-scan cost -- but that's once per pop, not once per identifier
 ; lookup.
@@ -57,10 +57,11 @@ SS_CURR_FILE:    .byte       ; The current file handle
 SS_CURR_LINE16:  .word       ; The current line number
 SS_P16:          .word       ; Pointer to the current location in the source stack
 SS_TEMP16:       .word       ; Temporary location for use in calculations
-SS_WALK_FILTER:  .byte       ; curr_type filter for ss_walk_frames_by_type
 SS_PAYLOAD_SIZE: .byte       ; Number of payload bytes to append to next push
                              ; (0 outside push_*_with_payload calls)
 SS_PAYLOAD16:    .word       ; Pointer to payload bytes when SS_PAYLOAD_SIZE > 0
+                             ; (or $0000 sentinel when push_memory_source_reserve_payload
+                             ; wants the payload region reserved but not copied into)
 
 ; Memory source support (zero-terminated buffers)
 SS_SRC_TYPE:    .byte       ; Source type: 0=file, 1=memory
@@ -205,37 +206,12 @@ ss_walk_frames:
   RTS
 
 
-; Like ss_walk_frames, but only invokes the callback for frames whose
-; curr_type matches the filter. Other frames are still walked past so
-; the iteration covers the whole stack.
-;
-; On entry: A = callback addr low, X = callback addr high
-;           Y = curr_type to match (0=file, 1=memory)
-; Same callback contract as ss_walk_frames; SS_WALK_FILTER additionally
-; clobbered.
-ss_walk_frames_by_type:
-  STA SS_TEMP16
-  STX SS_TEMP16+1
-  STY SS_WALK_FILTER
-  CP16 SS_P16, TABP16
-.loop:
-  CMPI16 TABP16, SOURCE_STACK
-  BCS .done
-  ; curr_type lives at fixed offset 1 of the frame -- post-reorg this
-  ; is a single (TABP16),Y read instead of an O(name_len) strlen scan.
-  LDY #1
-  LDA (TABP16),Y
-  CMP SS_WALK_FILTER
-  BNE .skip
-  JSR ss_invoke
-.skip:
-  LDY #0
-  LDA (TABP16),Y          ; frame_size
-  CLC
-  ADCA16 TABP16, TABP16
-  JMP .loop
-.done:
-  RTS
+; ss_walk_frames_by_type was deleted along with SS_WALK_FILTER when
+; check_macro_recursion switched to walking the prev_macro_lookup
+; chain directly. The chain walk is faster (one indirect-Y per step
+; instead of frame_size + curr_type read + filter compare) and inverts
+; the responsibility cleanly: macro frames know their parent macro
+; frame; file frames don't appear in the chain at all.
 
 
 ; ss_top_memory_frame was deleted when MACRO_LOOKUP_FRAME16 took over

@@ -14,40 +14,40 @@
 ;   parse_expression (expressions.asm)
 ;   select_label_hash_table (common.asm)
 ;   hash_add (hash_table.asm), store_hash_value (common.asm)
-;   push_memory_source_reserve_payload, ss_walk_frames_by_type,
-;     SS_P16, SS_MEM_PTR16, SS_NAME, SS_SRC_TYPE_MEMORY (source_stack.asm)
+;   push_memory_source_reserve_payload, SS_P16, SS_PAYLOAD16,
+;     SS_PAYLOAD_SIZE, SS_MEM_PTR16, SS_NAME, SS_SRC_TYPE_MEMORY
+;     (source_stack.asm)
 ;   err_* (errors.asm)
 
   .code
 
 
 ; Check if the active macro is already being expanded somewhere up the
-; source-stack chain. Walks every memory frame on the source stack via
-; ss_walk_frames_by_type and compares each one's saved MACRO_ENTRY16
-; against the active one. The saved entry is the last 2 bytes of each
-; frame's payload region (set by expand_macro before push). Walking
-; ignores file frames (file frames don't carry macro state).
+; macro-frame chain. Walks via the prev_macro_lookup linked list
+; threaded through each macro frame's payload, comparing each saved
+; MACRO_ENTRY16 against the active one. File frames are skipped for
+; free -- they don't sit in the chain at all. Pre-step-1 this used
+; ss_walk_frames_by_type; the linked-list walk is faster (no per-frame
+; CMPI16 against SOURCE_STACK, no curr_type filter test) and more
+; direct.
 ;
 ; On entry: MACRO_ENTRY16 = the macro's hash table entry address.
 ; On exit:  Returns normally if no recursion; jumps to err_recursive_macro
-;           on match. TABP16, A, Y clobbered; X preserved (matches the
-;           legacy contract -- expand_macro relies on it).
+;           on match. TABP16, A, Y clobbered; X preserved.
 check_macro_recursion:
-  TXA
-  PHA                           ; ss_walk_frames_by_type clobbers X
-  LDA #<recursion_check_callback
-  LDX #>recursion_check_callback
-  LDY #SS_SRC_TYPE_MEMORY
-  JSR ss_walk_frames_by_type
-  PLA
-  TAX
-  RTS
-
-; Per-frame callback for check_macro_recursion. TABP16 = current frame
-; address. The frame's last 2 bytes are MACRO_ENTRY16 (saved by
-; expand_macro into the activation payload at offset payload+3..4 = the
-; very end of the frame).
-recursion_check_callback:
+  ; TABP16 walks the chain, starting at MACRO_LOOKUP_FRAME16 (the
+  ; innermost macro frame, or $0000 outside any macro).
+  LDA MACRO_LOOKUP_FRAME16
+  STA TABP16
+  LDA MACRO_LOOKUP_FRAME16 + 1
+  STA TABP16 + 1
+.cmr_loop:
+  ; Empty chain (or end of chain) -> no recursion.
+  LDA TABP16
+  ORA TABP16 + 1
+  BEQ .cmr_done
+  ; Compare this frame's MACRO_ENTRY16 (last 2 bytes of frame) against
+  ; the active one. Match -> recursive; report and abort.
   LDY #0
   LDA (TABP16),Y          ; frame_size
   SEC
@@ -55,13 +55,31 @@ recursion_check_callback:
   TAY
   LDA (TABP16),Y
   CMP MACRO_ENTRY16
-  BNE .rcc_no_match
+  BNE .cmr_advance
   INY
   LDA (TABP16),Y
   CMP MACRO_ENTRY16 + 1
-  BNE .rcc_no_match
+  BNE .cmr_advance
   JMP err_recursive_macro
-.rcc_no_match:
+.cmr_advance:
+  ; Move to the parent macro frame via prev_macro_lookup. Layout:
+  ;   ... LABEL_SCOPE16 lo/hi, CACHED_HASH,
+  ;       prev_macro_lookup lo/hi, MACRO_ENTRY16 lo/hi
+  ; prev_macro_lookup sits at frame_size - 4..-3 (Y is currently at
+  ; frame_size - 1; back up 3 for the lo byte).
+  TYA
+  SEC
+  SBC #3                  ; offset of prev_macro_lookup lo (frame_size - 4)
+  TAY
+  LDA (TABP16),Y
+  PHA                     ; stash new TABP16 lo byte
+  INY
+  LDA (TABP16),Y          ; new TABP16 hi byte
+  STA TABP16 + 1
+  PLA
+  STA TABP16
+  JMP .cmr_loop
+.cmr_done:
   RTS
 
 
