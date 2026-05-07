@@ -19,9 +19,18 @@ MACRO_ARG_BUF   = $0500  ; Temp buffer for macro args during expansion (256 byte
 MACRO_ARG_LIMIT = MACRO_ARG_BUF + $0100 ; Limit for macro arg buffer
 TOKEN           = $0600  ; Buffer for the current token being read
 ELSE_SEEN_ARRAY = $0680  ; Array tracking .else seen per nesting level (16 bytes)
-MACRO_ACTIVATION = $0690 ; 5-byte staging buffer for the activation payload
-                         ; expand_macro hands to push_memory_source_with_payload
-                         ; (LABEL_SCOPE16 lo/hi, CACHED_HASH, MACRO_ENTRY16 lo/hi)
+MACRO_ACTIVATION = MACRO_ARG_BUF
+                         ; The activation payload that expand_macro hands to
+                         ; push_memory_source_with_payload is staged in
+                         ; MACRO_ARG_BUF: Phase 1 fills the start of the
+                         ; buffer with the parameter slots (3 bytes each:
+                         ; fwdref, value_L, value_H), and post-Phase-1
+                         ; expand_macro appends arg_count (1 byte) and the
+                         ; scope_block (5 bytes: LABEL_SCOPE16 lo/hi,
+                         ; CACHED_HASH, MACRO_ENTRY16 lo/hi). Total payload
+                         ; size = 3*N + 6 (must fit in MACRO_ARG_BUF's 256
+                         ; bytes -- the parse-time arg limit accounts for
+                         ; the tail).
 LHASHTAB        = $0700  ; Label hash table
 IFDEF_DECISIONS = $0800  ; Buffer for .ifdef decisions (256 bytes)
 *               = $2000  ; Code generates here follwed by HEAP

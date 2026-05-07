@@ -110,9 +110,14 @@ expand_macro:
 .have_arg:
   ; Parse argument expression (using PARENT's scope for lookups)
   JSR parse_expression
-  ; MACRO_ARG_BUF bounds check
-  ; Check if X < MACRO_ARG_LIMIT - MACRO_ARG_BUF - .ARG_SIZE + $01 (room for one more entry)
-  CPX #MACRO_ARG_LIMIT - MACRO_ARG_BUF - .ARG_SIZE + $01
+  ; MACRO_ARG_BUF bounds check.
+  ; The buffer doubles as the activation-payload staging area: after
+  ; Phase 1 finishes we append a 6-byte tail (1 arg_count + 5
+  ; scope_block) starting at offset byte_count, so the limit needs to
+  ; reserve room for that as well as the next 3-byte slot we're about
+  ; to write. Limit is 256 - 3 - 6 + 1 = 248 (max 83 args; with 84+
+  ; the tail would spill out of MACRO_ARG_BUF / MACRO_ACTIVATION).
+  CPX #MACRO_ARG_LIMIT - MACRO_ARG_BUF - .ARG_SIZE - 6 + $01
   BCC .arg_ok         ; X < limit: safe
 .arg_overflow:
   JMP err_too_many_arguments
@@ -151,20 +156,87 @@ expand_macro:
   ; ----- Build the activation payload, then push the macro's memory
   ;       frame in a single step -----
   ;
-  ; The 5-byte payload at MACRO_ACTIVATION holds the state the matching
-  ; pop hook (pop_label_scope_from_frame) needs: the previous scope's
-  ; LABEL_SCOPE16 + CACHED_HASH (restored on pop) and MACRO_ENTRY16
-  ; (used by check_macro_recursion to detect recursive expansions).
+  ; Payload layout (low offset to high) staged in MACRO_ACTIVATION:
+  ;   bytes 0..byte_count-1 : slots, copied verbatim from MACRO_ARG_BUF
+  ;                           (3 bytes per slot: fwdref, value_L, value_H)
+  ;   byte byte_count       : arg_count (= byte_count / 3)
+  ;   bytes +1..+5          : scope_block to restore on pop --
+  ;                             LABEL_SCOPE16 lo/hi, CACHED_HASH,
+  ;                             MACRO_ENTRY16 lo/hi
+  ;
+  ; The scope_block stays at the end of the payload so the existing
+  ; consumers (pop_label_scope_from_frame at frame_size-5..-1, and
+  ; check_macro_recursion's callback at frame_size-2..-1) keep working
+  ; without changes. Phase 4.6 will start reading arg_count + slots
+  ; here; for now they're written in parallel with the legacy hash
+  ; path so the migration is observable and reversible.
+  ;
+  ; X is the arg byte count from Phase 1. The args are already in
+  ; MACRO_ARG_BUF at offsets 0..X-1 (and MACRO_ACTIVATION aliases the
+  ; same buffer), so we just append arg_count + scope_block in place.
+  STX TEMP                  ; TEMP = byte_count
+  ; The frame_size byte at offset 0 is one byte, so the total frame
+  ; size must be <= 255. Frame layout for a memory frame on top of
+  ; another memory frame is the worst case:
+  ;   1 (frame_size) + name_len + 1 (null) + 1 (curr_type)
+  ;   + 1 (prev_type) + 2 (line) + 2 (prev_data) + byte_count
+  ;   + 6 (arg_count + scope_block payload tail)
+  ; = 14 + name_len + byte_count
+  ; Bail with err_too_many_arguments if this would overflow the byte.
+  ; Using the worst case (memory parent) keeps the limit independent
+  ; of who's calling us.
+  LDY #$FF
+.measure_name:
+  INY
+  LDA SS_NAME,Y
+  BNE .measure_name
+  ; Y = name_len
+  TYA
+  CLC
+  ADC TEMP                  ; A = name_len + byte_count
+  BCC .frame_size_check_2   ; no overflow yet
+  JMP .too_many
+.frame_size_check_2:
+  CLC
+  ADC #14                   ; A = name_len + byte_count + 14
+  BCC .frame_size_ok        ; fits in a byte
+  JMP .too_many             ; would overflow frame_size byte
+.frame_size_ok:
+  ; Compute arg_count = byte_count / 3 by repeated subtraction;
+  ; X runs down to 0, A accumulates the count.
+  LDA #0
+.div_3:
+  CPX #0
+  BEQ .div_done
+  DEX
+  DEX
+  DEX
+  CLC
+  ADC #1
+  JMP .div_3
+.div_done:
+  ; A = arg_count. Write it at offset byte_count (right after slots).
+  LDY TEMP
+  STA MACRO_ACTIVATION,Y
+  INY
+  ; Append the 5-byte scope_block (current/parent scope state).
   LDA LABEL_SCOPE16
-  STA MACRO_ACTIVATION + 0
+  STA MACRO_ACTIVATION,Y
+  INY
   LDA LABEL_SCOPE16 + 1
-  STA MACRO_ACTIVATION + 1
+  STA MACRO_ACTIVATION,Y
+  INY
   LDA CACHED_HASH
-  STA MACRO_ACTIVATION + 2
+  STA MACRO_ACTIVATION,Y
+  INY
   LDA MACRO_ENTRY16
-  STA MACRO_ACTIVATION + 3
+  STA MACRO_ACTIVATION,Y
+  INY
   LDA MACRO_ENTRY16 + 1
-  STA MACRO_ACTIVATION + 4
+  STA MACRO_ACTIVATION,Y
+  INY
+  ; Y = total payload size = byte_count + 6.
+  STY TEMP
   ; Set up the new scope: EXPANSION_ID is monotonic, LABEL_SCOPE16 =
   ; expansion id, CACHED_HASH derived from the low byte through
   ; scramble_table. Pre-Phase-3.6 this lived in push_label_scope.
@@ -181,7 +253,7 @@ expand_macro:
   ; but the push captures the name into the frame first). Tracebacks
   ; therefore name the macro correctly.
   SET16 MACRO_ACTIVATION, SS_PAYLOAD16
-  LDA #5
+  LDA TEMP                  ; payload size (byte_count + 6)
   JSR push_memory_source_with_payload
 
   ; ----- Phase 2: Populate child macro scope with parameter values -----
