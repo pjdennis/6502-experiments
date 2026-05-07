@@ -133,6 +133,16 @@ expand_macro:
   BCC .too_many
   ; NOW push label scope for the child macro
   JSR push_label_scope
+  ; Push the memory source frame here (not at the end of expand_macro)
+  ; so the macro name still in TOKEN gets captured into the frame
+  ; before the param-copy loop below clobbers TOKEN with parameter
+  ; names. This is what makes error tracebacks report the macro name
+  ; rather than the last parameter's name. As a side benefit, if the
+  ; param hash_add path hits OOM, the error handler now sees the
+  ; memory frame on the source stack and the Phase-2.5 pop hook
+  ; cleans up the label scope -- previously SCOPE_STACK could leak
+  ; on that error path.
+  JSR push_memory_source
 
   ; ----- Phase 2: Populate child macro scope with parameter values -----
   ; Restore params start to MACRO_DEF_PTR
@@ -183,12 +193,10 @@ expand_macro:
   JSR store_hash_value
   JMP .add_loop
 .add_done:
-  ; Push memory source first (with SS_MEM_PTR16 still at the parent's
-  ; read position so push_memory_source can save it as prev_data for
-  ; nested expansions); only THEN install the new body pointer.
-  JSR push_memory_source
-  ; Set memory pointer to body_ptr from macro definition
-  ; Add one to MACR_DEF_PTR16 to skip 0 terminator and save to memory source
+  ; Memory source was already pushed above (right after push_label_scope).
+  ; Install the new body pointer now that param parsing is finished.
+  ; MACRO_DEF_PTR16 currently points at the null separator between the
+  ; param list and the body; +1 lands on the body's first byte.
   CLC
   ADCI16 MACRO_DEF_PTR16, $01, SS_MEM_PTR16
   ; Restore X (output file handle)

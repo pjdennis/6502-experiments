@@ -246,6 +246,19 @@ EXPECT_STDERR:
 [ LDA #' ']
 
 ---
+NAME: macro_error_traceback_uses_macro_name_with_params
+DESCRIPTION: Error inside a parameterised macro names the macro itself in the traceback (not the first parameter's name). Regression test for a TOKEN-clobbering bug in expand_macro that has been latent since asm15 -- TOKEN held the macro name on entry, but the param-copy loop overwrote it before push_memory_source captured the frame name; pushing the memory frame earlier (right after push_label_scope) is the fix.
+INPUT:
+ 1: * = $0200
+ 2:   .macro mymac param
+ 3:   LDA undefined
+ 4:   .endmacro
+ 5:   mymac $42
+EXPECT_STDERR:
+Error 1 in macro mymac at line 1: Label not found
+  expanded from {{MAIN_FILE}}:5
+
+---
 NAME: macro_inner_param_shadows_outer
 DESCRIPTION: When inner and outer macros have the same param name, the body of the inner resolves the name to inner's value (single-frame lookup; not a chain walk into outer's scope).
 INPUT:
@@ -272,8 +285,8 @@ INPUT:
  7:   .endmacro
  8:   outer $99
 EXPECT_STDERR:
-Error 1 in macro z at line 1: Label not found
-  expanded from macro y:1
+Error 1 in macro inner at line 1: Label not found
+  expanded from macro outer:1
   expanded from {{MAIN_FILE}}:8
 
 ---
@@ -301,7 +314,7 @@ INPUT:
  8:   outer $99
 EXPECT_STDERR:
 Error 1 in file include/uses_outer_macro_param.asm at line 7: Label not found
-  included from macro z:1
-  expanded from macro y:1
+  included from macro inner:1
+  expanded from macro outer:1
   expanded from {{MAIN_FILE}}:8
 
