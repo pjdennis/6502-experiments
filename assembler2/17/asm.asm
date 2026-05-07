@@ -12,9 +12,16 @@
 ; Addresses
 FWDREF_LIST     = $0200  ; Forward reference list (512 bytes, $0200-$03FF)
 FWDREF_LIMIT    = FWDREF_LIST + $0200 ; Limit for forward reference list data
-                         ; $0400-$04FF was SCOPE_STACK pre-Phase-3.6; macro
-                         ; activation state now lives on the source stack as
-                         ; payload on each macro frame, so this region is free.
+MACRO_NAME_SAVE = $0480  ; Macro-name save buffer (128 bytes, $0480-$04FF).
+                         ; expand_macro copies TOKEN here at entry and copies
+                         ; back just before push_memory_source_reserve_payload.
+                         ; Without this, an arg like a label identifier would
+                         ; route through parse_term -> read_token -> TOKEN
+                         ; clobber, and the push would write the wrong name
+                         ; into the new frame -- tracebacks would name the
+                         ; arg instead of the macro itself. The first half of
+                         ; $0400-$04FF (was SCOPE_STACK pre-Phase-3.6) is
+                         ; otherwise still free.
                          ; $0500-$05FF was MACRO_ARG_BUF pre-Phase-4.8;
                          ; reclaimed when activation slots moved into the
                          ; source stack frame.

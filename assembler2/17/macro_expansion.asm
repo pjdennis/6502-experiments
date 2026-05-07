@@ -6,7 +6,8 @@
 ;   CURR_CHAR (asm.asm alias; backing storage in source_stack.asm)
 ;   TOKEN, PASS (asm.asm)
 ;   IN_MACRO_DEF (macro_capture.asm)
-;   MACRO_ENTRY16, OPERAND16, TEMP, MACRO_MAX_ARGS (asm.asm)
+;   MACRO_ENTRY16, OPERAND16, TEMP, MACRO_MAX_ARGS,
+;     MACRO_NAME_SAVE (asm.asm)
 ;   LABEL_SCOPE16, CACHED_HASH, scramble_table (hash_table.asm)
 ;   EXPANSION_ID16, SCOPE_DEPTH, MACRO_LOOKUP_FRAME16,
 ;     MACRO_PAYLOAD_BASE16, MACRO_ARG_REMAIN (label_scope.asm)
@@ -222,6 +223,28 @@ expand_macro:
   TXA
   PHA
 
+  ; ----- Stash the macro name -----
+  ;
+  ; SS_NAME aliases TOKEN. parse_expression for a label-shaped arg
+  ; (e.g. `MYMAC somelabel`) calls read_token, which writes the label
+  ; name into TOKEN. Without this stash, the eventual
+  ; push_memory_source_reserve_payload would copy the *clobbered*
+  ; TOKEN into the new frame's name region, and tracebacks for errors
+  ; in the macro body would name the last-seen arg instead of the
+  ; macro itself. We copy the macro name into MACRO_NAME_SAVE at
+  ; entry and copy it back just before the push below. The
+  ; intervening frame_size guard / check_source_frame_room call still
+  ; sees TOKEN's original contents (we haven't entered the parse loop
+  ; yet at that point).
+  LDY #$00
+.save_token:
+  LDA TOKEN,Y
+  STA MACRO_NAME_SAVE,Y
+  BEQ .save_token_done
+  INY
+  BNE .save_token              ; tokens are < 256 chars
+.save_token_done:
+
   ; Read N (the count byte) from the def. MACRO_MAX_ARGS was validated
   ; at definition time, so we don't recheck here.
   LDY #$00
@@ -413,9 +436,18 @@ expand_macro:
 
   ; ----- Push the frame -----
   ;
-  ; The payload region is already populated; push_memory_source_reserve_payload
-  ; sets MACRO_PAYLOAD_BASE16=$0000 internally so push_source_frame's copy
-  ; loop is skipped.
+  ; Restore TOKEN from MACRO_NAME_SAVE so push_source_frame writes the
+  ; macro name (not the last arg's identifier) into the new frame's
+  ; name region. The payload region was populated above and is left
+  ; untouched by push_memory_source_reserve_payload.
+  LDY #$00
+.restore_token:
+  LDA MACRO_NAME_SAVE,Y
+  STA TOKEN,Y
+  BEQ .restore_token_done
+  INY
+  BNE .restore_token
+.restore_token_done:
   LDA SS_PAYLOAD_SIZE
   JSR push_memory_source_reserve_payload
 

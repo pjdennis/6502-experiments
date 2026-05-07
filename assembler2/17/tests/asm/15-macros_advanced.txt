@@ -259,6 +259,20 @@ Error 1 in macro mymac at line 1: Label not found
   expanded from {{MAIN_FILE}}:5
 
 ---
+NAME: macro_error_traceback_with_identifier_arg
+DESCRIPTION: When a parameterised macro is invoked with a label (identifier) argument, parse_expression's read_token clobbers TOKEN with the label's name. The traceback for an error in the macro body must still name the macro itself, not the label. This pins down the second TOKEN-clobbering path: the original Phase-4-era regression test used a hex literal arg (read_hex doesn't touch TOKEN), so it didn't catch the identifier-arg case. Fixed by pushing the memory frame BEFORE arg parsing -- the push captures TOKEN's macro-name value into the frame's name region, after which TOKEN is free to be clobbered by anything.
+INPUT:
+ 1: somelabel = $42
+ 2: * = $0200
+ 3:   .macro mymac param
+ 4:   LDA undefined
+ 5:   .endmacro
+ 6:   mymac somelabel
+EXPECT_STDERR:
+Error 1 in macro mymac at line 1: Label not found
+  expanded from {{MAIN_FILE}}:6
+
+---
 NAME: macro_inner_param_shadows_outer
 DESCRIPTION: When inner and outer macros have the same param name, the body of the inner resolves the name to inner's value (single-frame lookup; not a chain walk into outer's scope).
 INPUT:
