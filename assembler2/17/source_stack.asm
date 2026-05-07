@@ -151,6 +151,33 @@ ss_free_frame:
   RTS
 
 
+; Per-curr_type pop handlers. pop_source dispatches to one of these
+; based on curr_type, before prev_data restoration. Handlers must
+; preserve Y (the in-frame walk position pop_source is mid-walk on).
+ss_pop_file:
+  ; curr_type=0: close the current file handle if open. close preserves
+  ; A/X/Y (per environment.asm), so no save/restore needed.
+  LDA SS_CURR_FILE
+  BEQ .nothing_to_close
+  JMP close             ; tail call
+.nothing_to_close:
+  RTS
+
+ss_pop_memory:
+  ; curr_type=1: run the memory-pop hook if the host program defined
+  ; one (the assembler hooks pop_label_scope; the test program leaves
+  ; SS_POP_MEMORY_HOOK undefined, making this a no-op). The hook may
+  ; clobber Y, so guard it.
+  .ifdef SS_POP_MEMORY_HOOK
+  TYA
+  PHA
+  JSR SS_POP_MEMORY_HOOK
+  PLA
+  TAY
+  .endif
+  RTS
+
+
 ; On exit Z is set if source stack empty, clear otherwise
 source_stack_empty:
   CMPI16 SS_P16, SOURCE_STACK
@@ -321,22 +348,12 @@ pop_source:
   ; Y points at null, curr_type is at Y+1
   INY
   LDA (SS_P16),Y
-  BEQ .was_file_source
-  ; curr_type=1: was memory source - pop label scope if hook defined
-  .ifdef SS_POP_MEMORY_HOOK
-  TYA
-  PHA                   ; Save Y (frame offset) before hook
-  JSR SS_POP_MEMORY_HOOK
-  PLA
-  TAY                   ; Restore Y
-  .endif
-  JMP .restore_prev
-.was_file_source:
-  ; curr_type=0: close the current file (if open)
-  LDA SS_CURR_FILE
-  BEQ .restore_prev     ; Handle 0 = no file to close
-  JSR close
-.restore_prev:
+  BNE .pop_memory
+  JSR ss_pop_file
+  JMP .pop_done
+.pop_memory:
+  JSR ss_pop_memory
+.pop_done:
   ; Read prev_type
   INY
   LDA (SS_P16),Y
