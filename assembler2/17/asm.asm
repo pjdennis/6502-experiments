@@ -12,8 +12,9 @@
 ; Addresses
 FWDREF_LIST     = $0200  ; Forward reference list (512 bytes, $0200-$03FF)
 FWDREF_LIMIT    = FWDREF_LIST + $0200 ; Limit for forward reference list data
-SCOPE_STACK     = $0400  ; Label scope stack for macro expansions (256 bytes, $0400-$04FF)
-SCOPE_LIMIT     = SCOPE_STACK + $0100 ; Limit for scope stack
+                         ; $0400-$04FF was SCOPE_STACK pre-Phase-3.6; macro
+                         ; activation state now lives on the source stack as
+                         ; payload on each macro frame, so this region is free.
 MACRO_ARG_BUF   = $0500  ; Temp buffer for macro args during expansion (256 bytes)
 MACRO_ARG_LIMIT = MACRO_ARG_BUF + $0100 ; Limit for macro arg buffer
 TOKEN           = $0600  ; Buffer for the current token being read
@@ -233,10 +234,8 @@ start:
   LDA #<pop_label_scope_from_frame
   LDX #>pop_label_scope_from_frame
   JSR ss_install_memory_pop
-  ; Initialize scope state (EXPANSION_ID, SCOPE_DEPTH). The legacy
-  ; SCOPE_STACK is no longer pushed/popped post-Phase-3.4 -- this just
-  ; resets the counters Phase 3.6 will eventually delete with it.
-  JSR init_scope_stack
+  ; Initialize scope state (EXPANSION_ID, SCOPE_DEPTH).
+  JSR init_scope_state
   ; Check argument count (must be at least 2)
   JSR argc
   CMP #$02

@@ -234,7 +234,9 @@ ss_walk_frames_by_type:
 ; Per-curr_type pop handlers. pop_source dispatches to one of these
 ; based on curr_type, before prev_data restoration. The dispatch
 ; preserves both X and Y around the JSR; handlers may freely clobber
-; them.
+; them. The memory entry can be patched at runtime via
+; ss_install_memory_pop -- the assembler installs
+; pop_label_scope_from_frame, the test program leaves the no-op default.
 ss_pop_file:
   ; curr_type=0: close the current file handle if open.
   LDA SS_CURR_FILE
@@ -245,8 +247,8 @@ ss_pop_file:
 
 ; Default memory pop handler: no-op. The host program installs its own
 ; via ss_install_memory_pop if memory frames carry state that needs
-; restoring (the assembler installs pop_label_scope; the test program
-; leaves the default in place).
+; restoring (the assembler installs pop_label_scope_from_frame; the
+; test program leaves the default in place).
 ss_pop_memory_noop:
   RTS
 
@@ -497,8 +499,9 @@ push_memory_source_with_payload:
 ; Unified pop function - handles both file and memory sources via
 ; ss_on_pop_table dispatch. For file sources, closes the current file
 ; handle. For memory sources, runs whatever handler the host installed
-; via ss_install_memory_pop (the assembler installs pop_label_scope;
-; the test program leaves the default no-op).
+; via ss_install_memory_pop (the assembler installs
+; pop_label_scope_from_frame; the test program leaves the default
+; no-op).
 ; On exit: Previous state restored (SS_CURR_FILE or SS_MEM_PTR16)
 ;          SS_SRC_TYPE restored to prev_type
 ;          SS_CURR_LINE16 restored to prev_line

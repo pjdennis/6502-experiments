@@ -157,9 +157,8 @@ err_too_many_arguments:
   BRK
   .asciiz 33, "Too many macro arguments"
 
-err_macro_nesting_too_deep:
-  BRK
-  .asciiz 34, "Macro nesting too deep"
+; (error code 34 retired in Phase 3.6: deep macro nesting now reaches
+; out-of-memory naturally rather than tripping a separate limit)
 
 ; --- Resource limit errors (35-37) ---
 err_out_of_memory:

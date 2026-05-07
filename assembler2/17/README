@@ -164,9 +164,12 @@ The source stack (source_stack.asm) handles two source types transparently:
     Used for macro expansion.
 
 Each stack frame stores the source name, type, and enough context to restore
-the parent source when the current one is exhausted. The assembler installs
-pop_label_scope as the memory-pop handler (via ss_install_memory_pop at
-startup), so popping a memory source restores the caller's scope.
+the parent source when the current one is exhausted. Memory frames pushed by
+the macro expansion code carry an additional 5-byte activation payload
+(LABEL_SCOPE16, CACHED_HASH, MACRO_ENTRY16) right after prev_data. The
+assembler installs pop_label_scope_from_frame as the memory-pop handler
+(via ss_install_memory_pop at startup); the hook reads the payload back
+when a macro frame is popped, restoring the caller's scope.
 
 
 Conditional Assembly

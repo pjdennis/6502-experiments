@@ -165,9 +165,9 @@ expand_macro:
   STA MACRO_ACTIVATION + 3
   LDA MACRO_ENTRY16 + 1
   STA MACRO_ACTIVATION + 4
-  ; Set up the new scope (was inside push_label_scope before the
-  ; merge): EXPANSION_ID is monotonic, LABEL_SCOPE16 = expansion id,
-  ; CACHED_HASH derived from the low byte through scramble_table.
+  ; Set up the new scope: EXPANSION_ID is monotonic, LABEL_SCOPE16 =
+  ; expansion id, CACHED_HASH derived from the low byte through
+  ; scramble_table. Pre-Phase-3.6 this lived in push_label_scope.
   INC16 EXPANSION_ID16
   CP16 EXPANSION_ID16, LABEL_SCOPE16
   LDA EXPANSION_ID16
@@ -233,10 +233,11 @@ expand_macro:
   JSR store_hash_value
   JMP .add_loop
 .add_done:
-  ; Memory source was already pushed above (right after push_label_scope).
-  ; Install the new body pointer now that param parsing is finished.
-  ; MACRO_DEF_PTR16 currently points at the null separator between the
-  ; param list and the body; +1 lands on the body's first byte.
+  ; Memory source was already pushed above (right after the activation
+  ; payload was built). Install the new body pointer now that param
+  ; parsing is finished. MACRO_DEF_PTR16 currently points at the null
+  ; separator between the param list and the body; +1 lands on the
+  ; body's first byte.
   CLC
   ADCI16 MACRO_DEF_PTR16, $01, SS_MEM_PTR16
   ; Restore X (output file handle)
