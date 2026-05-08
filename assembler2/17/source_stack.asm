@@ -16,15 +16,16 @@
 ;   prev_type      - Type we're RETURNING to: 0=file, 1=memory (offset 2)
 ;   prev_line_L    - Line number in parent (low byte, offset 3)
 ;   prev_line_H    - Line number in parent (high byte, offset 4)
-;   name\0         - Source name (null-terminated; starts at offset 5,
-;                    variable length up to 127+null = 128 bytes)
-;   <prev_data>    - Parent state to restore on pop. Size depends on
-;                    prev_type:
-;                      prev_type=0 (file):   prev_handle (1 byte)
-;                      prev_type=1 (memory): prev_ptr_L, prev_ptr_H
-;                                            (2 bytes; the parent's
+;   prev_data      - Parent state to restore on pop. Fixed 2-byte slot
+;                    at offsets 5..6, regardless of prev_type:
+;                      prev_type=0 (file):   offset 5 = prev_handle;
+;                                            offset 6 unused
+;                      prev_type=1 (memory): offsets 5..6 = prev_ptr_L,
+;                                            prev_ptr_H (parent's
 ;                                            SS_MEM_PTR16 at the moment
 ;                                            of this push)
+;   name\0         - Source name (null-terminated; starts at offset 7,
+;                    variable length up to 127+null = 128 bytes)
 ;   <payload>      - Optional bytes reserved for memory frames via
 ;                    push_memory_source_reserve_payload (caller writes
 ;                    them after the push; the source stack itself never
@@ -33,16 +34,17 @@
 ;                    by the memory-pop handler installed via
 ;                    ss_install_memory_pop.
 ;
-; Frame size: 5 (header) + name_len + 1 (null) + prev_data + payload
-;   = name_len + 7 + payload_size if returning to file
-;   = name_len + 8 + payload_size if returning to memory
+; Frame size: name_len + 8 + payload_size (1 frame_size + 1 curr_type
+;   + 1 prev_type + 2 prev_line + 2 prev_data + name + 1 null + payload).
+;   No parent-type branch: prev_data is always 2 bytes.
 ;
-; Putting curr_type / prev_type / prev_line at fixed offsets 1..4 makes
-; the pop_source dispatch O(1) per frame for the curr_type read;
-; pre-reorg it had to scan past the variable-length name first.
-; prev_data still lives after the name, so pop_source's restore step
-; still pays the strlen-scan cost -- but that's once per pop, not once
-; per identifier lookup.
+; Putting curr_type / prev_type / prev_line / prev_data at fixed
+; offsets 1..6 makes pop_source O(1) end-to-end -- the pre-reorg
+; version paid an O(name_len) skip-name walk to find prev_data on
+; every pop. With prev_data at fixed offset 5, that walk is gone.
+; File parents waste 1 byte at offset 6 in exchange for a constant
+; frame-size formula and a fixed name offset that consumers (e.g.
+; SHOW_FRAME_NAME) can use without scanning.
 
   .zeropage
 
@@ -94,22 +96,14 @@ check_source_frame_room:
   INY
   LDA SS_NAME,Y
   BNE .len_loop
-  ; Compute frame size: name_len + 5 fixed + 1 frame_size + (1 file | 2 memory)
-  LDA SS_SRC_TYPE
-  CMP #SS_SRC_TYPE_FILE
-  BNE .memory
+  ; Frame size = name_len + 8 + payload_size. The 8 covers the fixed
+  ; header (frame_size, curr_type, prev_type, prev_line lo/hi,
+  ; prev_data lo/hi) plus the name's null terminator. prev_data is a
+  ; fixed 2-byte slot regardless of parent type, so no SS_SRC_TYPE
+  ; branch is needed here.
   TYA
   CLC
-  ADC #5 + 1 + 1
-  BNE .size_done        ; Always taken (size > 0)
-.memory:
-  TYA
-  CLC
-  ADC #5 + 2 + 1
-.size_done:
-  ; Add caller-supplied payload size (0 for plain pushes; non-zero for
-  ; push_*_with_payload). Frame_size still fits in one byte: callers
-  ; are responsible for keeping name + standard fields + payload < 256.
+  ADC #$08
   CLC
   ADC SS_PAYLOAD_SIZE
   STA SS_TEMP16         ; total size in low byte; high byte is scratch below
@@ -229,9 +223,8 @@ source_stack_empty:
 ; routines own the calling-convention details (saving X, opening the
 ; file, ordering of SS_MEM_PTR16 updates, etc.).
 ;
-; Builds a stack frame for a new source. The size of the frame depends
-; on the parent's source type (read from SS_SRC_TYPE), since prev_data
-; is 1 byte for file parents and 2 bytes for memory parents.
+; Builds a stack frame for a new source. Frame size is name_len + 8 +
+; payload (fixed-size prev_data slot regardless of parent type).
 ;
 ; PRECONDITION: caller has called check_source_frame_room, which leaves
 ; the proposed new SS_P16 in SS_TEMP16 and verified the OOM check. That
@@ -248,8 +241,8 @@ source_stack_empty:
 ;           SS_CURR_FILE / SS_MEM_PTR16 = parent's read state, captured
 ;                        into prev_data. SS_MEM_PTR16 must still hold
 ;                        the parent's value when prev_type=memory.
-; On exit:  Frame written with name, curr_type, prev_type, prev_line,
-;           prev_data; SS_P16 advanced past it.
+; On exit:  Frame written with curr_type, prev_type, prev_line,
+;           prev_data, name; SS_P16 advanced past it.
 ;           SS_CURR_LINE16 reset to 0.
 ;           A, X, Y clobbered.
 push_source_frame:
@@ -257,13 +250,12 @@ push_source_frame:
   ; Allocate the frame and write its size byte at offset 0. Pure stack
   ; mechanics live in ss_alloc_frame; everything below is layout.
   JSR ss_alloc_frame    ; SS_P16 advanced; (SS_P16),0 = frame_size; Y = 0
-  ; Write the fixed-offset header so consumers can read curr_type /
-  ; prev_type / prev_line at known offsets without scanning past the
-  ; variable-length name.
-  INY                   ; Y = 1 (curr_type offset)
+  ; Write the fixed-offset header (offsets 1..6). All readers index
+  ; these by constant offset, no name scan involved.
+  INY                   ; Y = 1 (curr_type)
   PLA                   ; Get curr_type (saved at routine entry)
   STA (SS_P16),Y
-  INY                   ; Y = 2 (prev_type offset)
+  INY                   ; Y = 2 (prev_type)
   LDA SS_SRC_TYPE
   STA (SS_P16),Y
   PHA                   ; Save prev_type for the prev_data branch below
@@ -273,7 +265,28 @@ push_source_frame:
   INY                   ; Y = 4 (prev_line high)
   LDA SS_CURR_LINE16 + 1
   STA (SS_P16),Y
-  ; Copy name + null at offsets 5..(5+name_len). Y advances byte-by-byte;
+  ; prev_data at fixed offsets 5..6. prev_type selects which 1 or 2
+  ; bytes are meaningful; offset 6 is unused (left undefined) for
+  ; file parents. Both branches leave Y = 6 so .copy_name's first
+  ; INY lands on offset 7.
+  PLA                   ; Restore prev_type
+  BNE .save_memory_state
+  ; prev_type=0 (file): handle at offset 5; offset 6 unused.
+  INY                   ; Y = 5
+  LDA SS_CURR_FILE
+  STA (SS_P16),Y
+  INY                   ; Y = 6 (unused byte; not written)
+  JMP .copy_name
+.save_memory_state:
+  ; prev_type=1 (memory): SS_MEM_PTR16 lo at offset 5, hi at offset 6.
+  INY                   ; Y = 5
+  LDA SS_MEM_PTR16
+  STA (SS_P16),Y
+  INY                   ; Y = 6
+  LDA SS_MEM_PTR16 + 1
+  STA (SS_P16),Y
+.copy_name:
+  ; Copy name + null at offsets 7..(7+name_len). Y advances byte-by-byte;
   ; X indexes SS_NAME (starts at $FF, INX first); the loop terminates on
   ; the source's null terminator (which gets copied too).
   LDX #$FF
@@ -283,31 +296,12 @@ push_source_frame:
   LDA SS_NAME,X
   STA (SS_P16),Y
   BNE .copy_loop
-  ; Y = offset of the null we just wrote in the frame.
-  ; Store prev_data based on prev_type.
-  PLA                   ; Restore prev_type
-  BNE .save_memory_state
-  ; prev_type=0: save file handle
-  INY
-  LDA SS_CURR_FILE
-  STA (SS_P16),Y
-  JMP .reset_line
-.save_memory_state:
-  ; prev_type=1: save memory pointer (zero-terminated, no end needed)
-  INY
-  LDA SS_MEM_PTR16
-  STA (SS_P16),Y
-  INY
-  LDA SS_MEM_PTR16 + 1
-  STA (SS_P16),Y
-  ; SS_PAYLOAD_SIZE bytes of payload trail prev_data; the frame_size
-  ; byte at offset 0 already accounts for them
-  ; (check_source_frame_room added SS_PAYLOAD_SIZE in). The bytes are
-  ; reserved but not initialized here -- push_memory_source_reserve_payload's
+  ; SS_PAYLOAD_SIZE bytes of payload trail the name; the frame_size
+  ; byte at offset 0 already accounts for them. The bytes are reserved
+  ; but not initialized here -- push_memory_source_reserve_payload's
   ; caller pre-writes them at (SS_P16 - SS_PAYLOAD_SIZE) before the push,
   ; so they are already in place by the time SS_P16 advances over them.
-.reset_line:
-  ; Reset line number for new source
+  ; Reset line number for new source.
   LDA #$00
   STA_LH16 SS_CURR_LINE16
   RTS
@@ -402,9 +396,8 @@ push_memory_source_reserve_payload:
 ;          SS_SRC_TYPE restored to prev_type
 ;          SS_CURR_LINE16 restored to prev_line
 pop_source:
-  ; curr_type / prev_type / prev_line live at fixed offsets 1..4 of the
-  ; frame, so the dispatch on curr_type is now O(1) -- no need to scan
-  ; past the name first.
+  ; All header fields (curr_type/prev_type/prev_line/prev_data) live at
+  ; fixed offsets 1..6 -- no name scan anywhere on this path.
   LDY #1                ; curr_type offset
   ; Dispatch on curr_type via ss_on_pop_table_{lo,hi} (file=0, memory=1).
   ; Save X around the dispatch -- pop_source preserves X by external
@@ -418,7 +411,7 @@ pop_source:
   LDA ss_on_pop_table_hi,X
   STA SS_TEMP16+1
   ; Y must also survive the handler call (we still need it for the
-  ; prev_type / prev_line reads below).
+  ; prev_type / prev_line / prev_data reads below).
   TYA
   PHA
   JSR ss_invoke
@@ -438,26 +431,16 @@ pop_source:
   INY
   LDA (SS_P16),Y
   STA SS_CURR_LINE16 + 1
-  ; prev_data sits after the (variable-length) name, so we walk past
-  ; the name's null terminator before reading. Y is at offset 4 here;
-  ; offset 5 starts the name. Once-per-pop O(name_len) cost, vs the
-  ; pre-reorg "every walker pays it" cost.
-.skip_name:
-  INY
-  LDA (SS_P16),Y
-  BNE .skip_name
-  ; Y points at the name's null. prev_data starts at Y+1.
-  ; Restore prev_data based on prev_type.
+  ; prev_data at fixed offset 5 (and offset 6 for memory parents).
+  INY                   ; Y = 5
   PLA
   BNE .restore_memory
-  ; prev_type=0: restore file handle
-  INY
+  ; prev_type=0: restore file handle (offset 5; offset 6 unused).
   LDA (SS_P16),Y
   STA SS_CURR_FILE
   JMP ss_free_frame     ; Tail call: deallocate via offset-0 frame_size
 .restore_memory:
-  ; prev_type=1: restore memory pointer (zero-terminated, no end needed)
-  INY
+  ; prev_type=1: restore memory pointer lo/hi at offsets 5..6.
   LDA (SS_P16),Y
   STA SS_MEM_PTR16
   INY

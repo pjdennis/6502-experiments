@@ -699,8 +699,12 @@ post
 # TOP FRAME SIZE - Byte-level frame layout visibility
 # ============================================================================
 # @top_frame_size prints the size in bytes of the topmost source-stack frame.
-# Frame size = name_len + 1(null) + 1(curr) + 1(prev) + 2(line) + prev_data
-#   prev_data = 1 byte if prev=file, 2 bytes if prev=memory
+# Post-reorg frame size is parent-type-independent:
+#   1(size) + 1(curr) + 1(prev) + 2(line) + 2(prev_data, fixed)
+#   + name_len + 1(null) + payload
+# = name_len + 8 + payload regardless of parent. File parents waste 1
+# byte (offset 6 unused) in exchange for fixed name offset and a
+# constant frame-size formula.
 # These tests pin the layout of file/memory frames so Phase 3's payload
 # extension has an explicit byte budget to work against.
 
@@ -712,7 +716,7 @@ FILE main.txt:
 FILE inner.txt:
  1: @memory @top_frame_size
 EXPECT_STDOUT:
-13
+14
 
 ---
 NAME: top_frame_size_include_above_file
@@ -722,7 +726,7 @@ FILE main.txt:
 FILE inner.txt:
  1: @top_frame_size
 EXPECT_STDOUT:
-16
+17
 
 ---
 NAME: top_frame_size_memory_above_memory
@@ -738,16 +742,17 @@ EXPECT_STDOUT:
 # is "@memory @top_frame_size\n". When the outer memory source is read, an
 # inner @memory directive fires and pushes a second memory frame containing
 # "@top_frame_size\n". When @top_frame_size runs the inner memory frame
-# is on top with parent=memory, so prev_data=2 and size = 6+1+1+1+2+2 = 13.
+# is on top, name "MEMORY" (6) so size = 6+1+1+1+2+2+1 = 14. Memory and
+# file parents now produce the same size (both 14 here).
 
 # ============================================================================
 # Phase 3.1 / 3.2: payload-bearing memory frames
 # ============================================================================
 # @payload_memory <N> pushes a memory source named PAYLOAD with N bytes of
 # trailing payload, prints "ps:<frame_size>", then pops. Frame layout:
-#   1 (size byte) + 7 (name "PAYLOAD") + 1 (null) + 1 (curr_type)
-#   + 1 (prev_type) + 2 (line) + (1|2) (prev_data) + N (payload)
-# = 14 + N for parent=file, 15 + N for parent=memory.
+#   1 (size byte) + 1 (curr_type) + 1 (prev_type) + 2 (line)
+#   + 2 (prev_data, fixed) + 7 (name "PAYLOAD") + 1 (null) + N (payload)
+# = 15 + N regardless of parent type.
 # Verifies push_memory_source_with_payload sizes the frame correctly.
 
 ---
@@ -756,7 +761,7 @@ MODE: frames
 FILE input.txt:
  1: @payload_memory 0
 EXPECT_STDOUT:
-ps:14
+ps:15
 
 ---
 NAME: payload_memory_one
@@ -764,7 +769,7 @@ MODE: frames
 FILE input.txt:
  1: @payload_memory 1
 EXPECT_STDOUT:
-ps:15
+ps:16
 
 ---
 NAME: payload_memory_four
@@ -772,7 +777,7 @@ MODE: frames
 FILE input.txt:
  1: @payload_memory 4
 EXPECT_STDOUT:
-ps:18
+ps:19
 
 ---
 NAME: payload_memory_nine
@@ -780,7 +785,7 @@ MODE: frames
 FILE input.txt:
  1: @payload_memory 9
 EXPECT_STDOUT:
-ps:23
+ps:24
 
 ---
 NAME: payload_memory_round_trip
@@ -791,7 +796,7 @@ FILE input.txt:
  3: @frames
 EXPECT_STDOUT:
 0:file:input.txt
-ps:19
+ps:20
 0:file:input.txt
 # Push then pop leaves the chain back at just the parent file frame --
 # proves the round-trip works for payload-bearing frames.

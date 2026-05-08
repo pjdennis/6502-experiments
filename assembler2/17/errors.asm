@@ -229,12 +229,12 @@ err_fwdref_tracking:
   .endmacro
 
   ; Show the name of a source-stack frame whose start address lives at ptr.
-  ; Frame layout (post-reorg) is [size, curr_type, prev_type, line_L,
-  ; line_H, name\0, prev_data, payload], so the null-terminated name
-  ; starts at offset 5.
+  ; Frame layout is [size, curr_type, prev_type, line_L, line_H,
+  ; prev_data_L, prev_data_H, name\0, payload], so the null-terminated
+  ; name starts at offset 7.
   .macro SHOW_FRAME_NAME ptr
   CLC
-  ADCI16 ptr, $05, TABP16
+  ADCI16 ptr, $07, TABP16
   JSR show_message
   .endmacro
 

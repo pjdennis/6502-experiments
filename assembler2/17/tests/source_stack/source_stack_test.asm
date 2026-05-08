@@ -723,9 +723,9 @@ print_traceback:
   SET16 str_type_memory, TABP16
   JSR print_str
 .print_name:
-  ; Name lives at offset 5 of the frame.
+  ; Name lives at offset 7 of the frame.
   CLC
-  ADCI16 SS_P16, $05, TABP16
+  ADCI16 SS_P16, $07, TABP16
   JSR print_basename
   ; Print ":"
   LDA #':'
@@ -825,12 +825,13 @@ print_frame_callback:
   JSR print_str
   POP16 TABP16
 .print_name:
-  ; Names live at offset 5 of the frame, so temporarily advance TABP16
-  ; past the [size, curr_type, prev_type, line_L, line_H] header for
-  ; the print_basename call, then restore (callback contract).
+  ; Names live at offset 7 of the frame, so temporarily advance TABP16
+  ; past the [size, curr_type, prev_type, line_L, line_H, prev_data_L,
+  ; prev_data_H] header for the print_basename call, then restore
+  ; (callback contract).
   PUSH16 TABP16
   CLC
-  ADCI16 TABP16, $05, TABP16
+  ADCI16 TABP16, $07, TABP16
   JSR print_basename
   POP16 TABP16
   LDA #'\n'
