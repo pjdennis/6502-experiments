@@ -66,11 +66,18 @@ check_macro_recursion:
   ; Move to the parent macro frame via prev_macro_lookup. Layout:
   ;   ... LABEL_SCOPE16 lo/hi, CACHED_HASH,
   ;       prev_macro_lookup lo/hi, MACRO_ENTRY16 lo/hi
-  ; prev_macro_lookup sits at frame_size - 4..-3 (Y is currently at
-  ; frame_size - 1; back up 3 for the lo byte).
-  TYA
+  ; prev_macro_lookup sits at frame_size - 4..-3. We arrive here from
+  ; either the lo-byte or hi-byte BNE, with Y = frame_size - 2 or
+  ; frame_size - 1 respectively, so recompute the offset from
+  ; frame_size directly rather than relative to Y. (Earlier the code
+  ; assumed Y was always frame_size - 1 and did SBC #3, which silently
+  ; produced frame_size - 5 on the lo-byte path -- corrupting TABP16
+  ; with CACHED_HASH/prev_macro_lookup_lo and either looping forever
+  ; through random readable memory or finding spurious matches.)
+  LDY #$00
+  LDA (TABP16),Y          ; frame_size
   SEC
-  SBC #3                  ; offset of prev_macro_lookup lo (frame_size - 4)
+  SBC #$04                ; offset of prev_macro_lookup lo
   TAY
   LDA (TABP16),Y
   PHA                     ; stash new TABP16 lo byte
