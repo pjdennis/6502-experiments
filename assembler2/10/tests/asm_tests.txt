@@ -1,0 +1,119 @@
+# Test suite for asm14 assembler
+# Non-standard syntax, two-pass, hash tables, .include, sections, local labels
+# Features: .zeropage/.code, local labels (.label), forward refs
+
+---
+NAME: implied_rts
+INPUT:
+1: * = $0200
+2:   RTS
+EXPECT_HEX: 60
+
+---
+NAME: immediate
+INPUT:
+1: * = $0200
+2:   LDA# $42
+3:   LDX# $00
+EXPECT_HEX: a9 42 a2 00
+
+---
+NAME: zero_page
+INPUT:
+1: * = $0200
+2:   LDAZ $42
+3:   STAZ $10
+EXPECT_HEX: a5 42 85 10
+
+---
+NAME: branch_forward
+INPUT:
+1: * = $0200
+2:   BEQ skip
+3:   INX
+4: skip
+5:   RTS
+EXPECT_HEX: f0 01 e8 60
+
+---
+NAME: jsr_forward
+INPUT:
+1: * = $0200
+2:   JSR sub
+3:   RTS
+4: sub
+5:   CLC
+6:   RTS
+EXPECT_HEX: 20 04 02 60 18 60
+
+---
+NAME: sections
+INPUT:
+1:   .zeropage
+2: zp_var
+3:   DATA $00
+4:   .code
+5: * = $0200
+6:   LDAZ zp_var
+7:   RTS
+EXPECT_HEX: a5 00 60
+
+---
+NAME: local_labels
+INPUT:
+1: * = $0200
+2: global1
+3: .local
+4:   INX
+5:   BEQ .local
+6: global2
+7: .local
+8:   INX
+9:   BEQ .local
+EXPECT_HEX: e8 f0 fd e8 f0 fd
+
+---
+NAME: local_label_forward
+INPUT:
+1: * = $0200
+2: global1
+3:   BEQ .skip
+4:   INX
+5: .skip
+6:   RTS
+EXPECT_HEX: f0 01 e8 60
+
+---
+NAME: data_bytes
+INPUT:
+1: * = $0200
+2:   DATA $01 $02 $03
+EXPECT_HEX: 01 02 03
+
+---
+NAME: byte_selectors
+INPUT:
+1: * = $0200
+2: addr = $1234
+3:   LDA# <addr
+4:   LDX# >addr
+EXPECT_HEX: a9 34 a2 12
+
+---
+NAME: error_no_global_for_local
+INPUT:
+1: * = $0200
+2: .local
+3:   INX
+EXPECT_ERROR: 15
+EXPECT_LINE: 2
+EXPECT_MSG: No global label for local
+
+---
+NAME: error_label_not_found
+INPUT:
+1: * = $0200
+2:   STA undefined
+EXPECT_ERROR: 1
+EXPECT_LINE: 2
+EXPECT_MSG: Label not found

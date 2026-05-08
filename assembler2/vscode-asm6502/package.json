@@ -1,0 +1,34 @@
+{
+  "name": "asm6502",
+  "displayName": "6502 Assembly (asm17)",
+  "description": "Syntax highlighting for the asm17 6502 assembler dialect",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "asm6502",
+        "aliases": [
+          "6502 Assembly",
+          "asm6502"
+        ],
+        "extensions": [
+          ".asm"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "asm6502",
+        "scopeName": "source.asm6502",
+        "path": "./syntaxes/asm6502.tmLanguage.json"
+      }
+    ]
+  }
+}

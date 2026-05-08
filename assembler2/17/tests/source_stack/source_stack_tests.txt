@@ -1,0 +1,806 @@
+# Source Stack Component Tests
+#
+# Format:
+#   NAME: test identifier
+#   MODE: echo|lines|info|memory|frames|oom
+#   FILE <filename>: (multi-line content, "N: " prefix stripped)
+#   EXPECT_STDOUT: (multi-line expected output)
+#   EXPECT_STDERR: (multi-line expected stderr, for error tests)
+#
+# The first FILE defined is the main input file.
+# For memory mode, use @include <filename> to include other files.
+
+# ============================================================================
+# ECHO MODE - Basic character reading
+# ============================================================================
+
+---
+NAME: echo_simple
+MODE: echo
+FILE input.txt:
+ 1: Hello
+EXPECT_STDOUT:
+Hello
+
+---
+NAME: echo_multiline
+MODE: echo
+FILE input.txt:
+ 1: Line1
+ 2: Line2
+ 3: Line3
+EXPECT_STDOUT:
+Line1
+Line2
+Line3
+
+---
+NAME: echo_empty
+MODE: echo
+FILE input.txt:
+EXPECT_STDOUT:
+
+---
+NAME: echo_single_char
+MODE: echo
+FILE input.txt:
+ 1: X
+EXPECT_STDOUT:
+X
+
+---
+NAME: echo_no_trailing_newline
+MODE: echo
+FILE input.txt:
+ 1: NoNewline
+EXPECT_STDOUT:
+NoNewline
+
+# ============================================================================
+# LINES MODE - Line number tracking
+# ============================================================================
+
+---
+NAME: lines_single
+MODE: lines
+FILE input.txt:
+ 1: Hello
+EXPECT_STDOUT:
+1:Hello
+
+---
+NAME: lines_multiline
+MODE: lines
+FILE input.txt:
+ 1: First
+ 2: Second
+ 3: Third
+EXPECT_STDOUT:
+1:First
+2:Second
+3:Third
+
+---
+NAME: lines_empty_lines
+MODE: lines
+FILE input.txt:
+ 1: A
+ 2: 
+ 3: B
+EXPECT_STDOUT:
+1:A
+2:
+3:B
+
+# ============================================================================
+# MEMORY MODE - Include handling
+# ============================================================================
+
+---
+NAME: nested_no_includes
+MODE: memory
+FILE input.txt:
+ 1: Just text
+ 2: No includes
+EXPECT_STDOUT:
+Just text
+No includes
+
+---
+NAME: nested_simple
+MODE: memory
+FILE main.txt:
+ 1: Before
+ 2: @include inner.txt
+ 3: After
+FILE inner.txt:
+ 1: Inside
+EXPECT_STDOUT:
+Before
+Inside
+After
+
+---
+NAME: nested_multiple_includes
+MODE: memory
+FILE main.txt:
+ 1: A
+ 2: @include one.txt
+ 3: B
+ 4: @include two.txt
+ 5: C
+FILE one.txt:
+ 1: ONE
+FILE two.txt:
+ 1: TWO
+EXPECT_STDOUT:
+A
+ONE
+B
+TWO
+C
+
+---
+NAME: nested_deep
+MODE: memory
+FILE main.txt:
+ 1: Outer1
+ 2: @include middle.txt
+ 3: Outer2
+FILE middle.txt:
+ 1: Middle1
+ 2: @include inner.txt
+ 3: Middle2
+FILE inner.txt:
+ 1: Inner
+EXPECT_STDOUT:
+Outer1
+Middle1
+Inner
+Middle2
+Outer2
+
+---
+NAME: nested_at_not_include
+MODE: memory
+FILE input.txt:
+ 1: @other text
+ 2: Done
+EXPECT_STDOUT:
+@other text
+Done
+
+---
+NAME: nested_at_mid_line
+MODE: memory
+FILE input.txt:
+ 1: foo@bar
+ 2: Done
+EXPECT_STDOUT:
+foo@bar
+Done
+
+---
+NAME: nested_include_multiline
+MODE: memory
+FILE main.txt:
+ 1: Start
+ 2: @include multi.txt
+ 3: End
+FILE multi.txt:
+ 1: Line1
+ 2: Line2
+ 3: Line3
+EXPECT_STDOUT:
+Start
+Line1
+Line2
+Line3
+End
+
+# ============================================================================
+# LINES MODE WITH INCLUDES (not processed)
+# ============================================================================
+
+---
+NAME: nested_lines_simple
+MODE: lines
+FILE main.txt:
+ 1: A
+ 2: @include inner.txt
+ 3: B
+FILE inner.txt:
+ 1: X
+ 2: Y
+EXPECT_STDOUT:
+1:A
+2:@include inner.txt
+3:B
+
+# Note: In lines mode, @include is not processed - it's literal text
+# This tests that modes are independent
+
+# ============================================================================
+# INFO MODE - Statistics
+# ============================================================================
+
+---
+NAME: info_simple
+MODE: info
+FILE input.txt:
+ 1: Hello
+EXPECT_STDOUT:
+chars:6
+lines:1
+stack:empty
+
+---
+NAME: info_with_newline
+MODE: info
+FILE input.txt:
+ 1: Hello
+ 2: World
+EXPECT_STDOUT:
+chars:12
+lines:2
+stack:empty
+
+---
+NAME: info_empty
+MODE: info
+FILE input.txt:
+EXPECT_STDOUT:
+chars:0
+lines:0
+stack:empty
+
+---
+NAME: info_multiline
+MODE: info
+FILE input.txt:
+ 1: A
+ 2: B
+ 3: C
+EXPECT_STDOUT:
+chars:6
+lines:3
+stack:empty
+
+# ============================================================================
+# MEMORY MODE - Memory source testing
+# ============================================================================
+# Tests @memory <content> which pushes content as a memory source
+# When memory source is exhausted, reading continues from the file
+
+---
+NAME: memory_simple
+MODE: memory
+FILE input.txt:
+ 1: Before
+ 2: @memory INLINE
+ 3: After
+EXPECT_STDOUT:
+Before
+INLINE
+After
+
+---
+NAME: memory_multichar
+MODE: memory
+FILE input.txt:
+ 1: A
+ 2: @memory XYZ123
+ 3: B
+EXPECT_STDOUT:
+A
+XYZ123
+B
+
+---
+NAME: memory_empty
+MODE: memory
+FILE input.txt:
+ 1: Start
+ 2: @memory
+ 3: End
+EXPECT_STDOUT:
+Start
+
+End
+
+---
+NAME: memory_multiple
+MODE: memory
+FILE input.txt:
+ 1: A
+ 2: @memory ONE
+ 3: B
+ 4: @memory TWO
+ 5: C
+EXPECT_STDOUT:
+A
+ONE
+B
+TWO
+C
+
+---
+NAME: memory_with_file_include
+MODE: memory
+FILE main.txt:
+ 1: File
+ 2: @memory MEM
+ 3: @include other.txt
+ 4: Done
+FILE other.txt:
+ 1: Included
+EXPECT_STDOUT:
+File
+MEM
+Included
+Done
+
+# ============================================================================
+# TRACEBACK MODE - Stack traceback testing
+# ============================================================================
+# Tests @traceback which prints the file stack and pops all entries
+
+---
+NAME: trace_simple
+MODE: memory
+FILE main.txt:
+ 1: Before
+ 2: @traceback
+ 3: After
+EXPECT_STDOUT:
+Before
+file:main.txt:2
+
+# Note: After @traceback pops the stack, reading continues but finds EOF
+# so "After" is never printed
+
+---
+NAME: trace_nested
+MODE: memory
+FILE main.txt:
+ 1: Main start
+ 2: @include inner.txt
+ 3: Main end
+FILE inner.txt:
+ 1: Inner start
+ 2: @traceback
+ 3: Inner end
+EXPECT_STDOUT:
+Main start
+Inner start
+file:inner.txt:2
+file:main.txt:2
+
+---
+NAME: trace_deep
+MODE: memory
+FILE main.txt:
+ 1: Outer1
+ 2: @include middle.txt
+ 3: Outer2
+FILE middle.txt:
+ 1: Middle1
+ 2: @include inner.txt
+ 3: Middle2
+FILE inner.txt:
+ 1: Inner
+ 2: @traceback
+EXPECT_STDOUT:
+Outer1
+Middle1
+Inner
+file:inner.txt:2
+file:middle.txt:2
+file:main.txt:2
+
+---
+NAME: trace_with_memory
+MODE: memory
+FILE main.txt:
+ 1: File start
+ 2: @memory MEM_CONTENT
+ 3: @traceback
+ 4: After trace
+EXPECT_STDOUT:
+File start
+MEM_CONTENT
+file:main.txt:2
+
+# Note: Line shows 2 (where @memory was) because after memory exhausts,
+# we restore the line from when memory was pushed
+
+---
+NAME: trace_alternating
+MODE: memory
+FILE main.txt:
+ 1: Main line 1
+ 2: @include inner.txt
+ 3: Main line 3
+FILE inner.txt:
+ 1: Inner line 1
+ 2: @memory @traceback
+ 3: Inner line 3
+EXPECT_STDOUT:
+Main line 1
+Inner line 1
+memory:MEMORY:1
+file:inner.txt:2
+file:main.txt:2
+
+# This tests file -> file -> memory stack with traceback showing all types
+# The @traceback is inside the memory content, so it triggers while memory source is active
+
+# ============================================================================
+# NESTED FILES WITH MEMORY - Test alternating stack types
+# ============================================================================
+
+---
+NAME: memory_nested_with_file
+MODE: memory
+FILE main.txt:
+ 1: File
+ 2: @include other.txt
+ 3: Done
+FILE other.txt:
+ 1: Other start
+ 2: @memory INLINE_TEXT
+ 3: Other end
+EXPECT_STDOUT:
+File
+Other start
+INLINE_TEXT
+Other end
+Done
+
+# Tests that we can have file -> file -> memory -> file chain on the stack
+
+# ============================================================================
+# FRAMES MODE - Frame chain inspection
+# ============================================================================
+# Tests the @frames directive (frames mode only) which non-destructively
+# walks the stack and prints "depth:type:name" for each frame, top-of-stack
+# first. Frames mode otherwise behaves like memory mode.
+
+---
+NAME: frames_single
+MODE: frames
+FILE input.txt:
+ 1: Before
+ 2: @frames
+ 3: After
+EXPECT_STDOUT:
+Before
+0:file:input.txt
+After
+
+---
+NAME: frames_with_include
+MODE: frames
+FILE main.txt:
+ 1: Top
+ 2: @include inner.txt
+ 3: End
+FILE inner.txt:
+ 1: Inner
+ 2: @frames
+EXPECT_STDOUT:
+Top
+Inner
+0:file:inner.txt
+1:file:main.txt
+End
+
+---
+NAME: frames_with_memory
+MODE: frames
+FILE input.txt:
+ 1: A
+ 2: @memory @frames
+ 3: B
+EXPECT_STDOUT:
+A
+0:memory:MEMORY
+1:file:input.txt
+B
+
+---
+NAME: frames_deep
+MODE: frames
+FILE main.txt:
+ 1: M1
+ 2: @include middle.txt
+ 3: M3
+FILE middle.txt:
+ 1: D1
+ 2: @include inner.txt
+ 3: D3
+FILE inner.txt:
+ 1: I1
+ 2: @frames
+EXPECT_STDOUT:
+M1
+D1
+I1
+0:file:inner.txt
+1:file:middle.txt
+2:file:main.txt
+D3
+M3
+
+# ============================================================================
+# PUSH/POP BALANCE - Verify FS_P16 returns to its starting value
+# ============================================================================
+# These tests use @frames at multiple points to assert that the source stack
+# unwinds correctly. Each @frames line reports depth:type:name; balance is
+# proven when the post-pop @frames matches the pre-push @frames.
+
+---
+NAME: balance_after_include
+MODE: frames
+FILE main.txt:
+ 1: @frames
+ 2: @include inner.txt
+ 3: @frames
+FILE inner.txt:
+ 1: inner content
+EXPECT_STDOUT:
+0:file:main.txt
+inner content
+0:file:main.txt
+
+---
+NAME: balance_after_memory
+MODE: frames
+FILE input.txt:
+ 1: @frames
+ 2: @memory MEMDATA
+ 3: @frames
+EXPECT_STDOUT:
+0:file:input.txt
+MEMDATA
+0:file:input.txt
+
+---
+NAME: balance_repeated_include
+MODE: frames
+FILE main.txt:
+ 1: @include inner.txt
+ 2: @include inner.txt
+FILE inner.txt:
+ 1: @frames
+EXPECT_STDOUT:
+0:file:inner.txt
+1:file:main.txt
+0:file:inner.txt
+1:file:main.txt
+
+---
+NAME: balance_different_name_lengths
+MODE: frames
+FILE main.txt:
+ 1: @include a.txt
+ 2: @include longer_name_file.txt
+ 3: @frames
+FILE a.txt:
+ 1: @frames
+FILE longer_name_file.txt:
+ 1: @frames
+EXPECT_STDOUT:
+0:file:a.txt
+1:file:main.txt
+0:file:longer_name_file.txt
+1:file:main.txt
+0:file:main.txt
+
+---
+NAME: balance_alternating_include_memory
+MODE: frames
+FILE main.txt:
+ 1: @include inner.txt
+ 2: @memory MEM
+ 3: @frames
+FILE inner.txt:
+ 1: @frames
+EXPECT_STDOUT:
+0:file:inner.txt
+1:file:main.txt
+MEM
+0:file:main.txt
+
+---
+NAME: balance_memory_then_include
+MODE: frames
+FILE main.txt:
+ 1: @memory FIRST
+ 2: @include inner.txt
+ 3: @frames
+FILE inner.txt:
+ 1: @frames
+EXPECT_STDOUT:
+FIRST
+0:file:inner.txt
+1:file:main.txt
+0:file:main.txt
+
+---
+NAME: balance_nested_with_memory
+MODE: frames
+FILE main.txt:
+ 1: @include inner.txt
+ 2: @frames
+FILE inner.txt:
+ 1: @memory NESTED
+ 2: @frames
+EXPECT_STDOUT:
+NESTED
+0:file:inner.txt
+1:file:main.txt
+0:file:main.txt
+
+---
+NAME: balance_info_after_complex
+MODE: info
+FILE main.txt:
+ 1: A
+ 2: B
+ 3: C
+EXPECT_STDOUT:
+chars:6
+lines:3
+stack:empty
+
+# ============================================================================
+# OOM INJECTION - Verify CHECK_FOR_OUT_OF_MEMORY triggers as expected
+# ============================================================================
+# oom mode is identical to memory mode but installs a tight stack limit
+# (OOM_LIMIT16 = $EF80) so push_source_frame triggers err_out_of_memory
+# after only a handful of frames.
+
+---
+NAME: oom_recursive_include
+MODE: oom
+FILE main.txt:
+ 1: @include main.txt
+EXPECT_STDERR:
+OUT OF MEMORY
+
+---
+NAME: oom_no_false_positive
+MODE: oom
+FILE main.txt:
+ 1: A
+ 2: @include inner.txt
+ 3: C
+FILE inner.txt:
+ 1: B
+EXPECT_STDOUT:
+A
+B
+C
+
+---
+NAME: oom_no_false_positive_with_memory
+MODE: oom
+FILE main.txt:
+ 1: pre
+ 2: @memory MEMTEXT
+ 3: post
+EXPECT_STDOUT:
+pre
+MEMTEXT
+post
+
+# ============================================================================
+# TOP FRAME SIZE - Byte-level frame layout visibility
+# ============================================================================
+# @top_frame_size prints the size in bytes of the topmost source-stack frame.
+# Frame size = name_len + 1(null) + 1(curr) + 1(prev) + 2(line) + prev_data
+#   prev_data = 1 byte if prev=file, 2 bytes if prev=memory
+# These tests pin the layout of file/memory frames so Phase 3's payload
+# extension has an explicit byte budget to work against.
+
+---
+NAME: top_frame_size_memory_above_file
+MODE: frames
+FILE main.txt:
+ 1: @include inner.txt
+FILE inner.txt:
+ 1: @memory @top_frame_size
+EXPECT_STDOUT:
+13
+
+---
+NAME: top_frame_size_include_above_file
+MODE: frames
+FILE main.txt:
+ 1: @include inner.txt
+FILE inner.txt:
+ 1: @top_frame_size
+EXPECT_STDOUT:
+16
+
+---
+NAME: top_frame_size_memory_above_memory
+MODE: frames
+FILE main.txt:
+ 1: @include inner.txt
+FILE inner.txt:
+ 1: @memory @memory @top_frame_size
+EXPECT_STDOUT:
+14
+
+# Outer @memory pushes a frame whose content is the rest of line 1, which
+# is "@memory @top_frame_size\n". When the outer memory source is read, an
+# inner @memory directive fires and pushes a second memory frame containing
+# "@top_frame_size\n". When @top_frame_size runs the inner memory frame
+# is on top with parent=memory, so prev_data=2 and size = 6+1+1+1+2+2 = 13.
+
+# ============================================================================
+# Phase 3.1 / 3.2: payload-bearing memory frames
+# ============================================================================
+# @payload_memory <N> pushes a memory source named PAYLOAD with N bytes of
+# trailing payload, prints "ps:<frame_size>", then pops. Frame layout:
+#   1 (size byte) + 7 (name "PAYLOAD") + 1 (null) + 1 (curr_type)
+#   + 1 (prev_type) + 2 (line) + (1|2) (prev_data) + N (payload)
+# = 14 + N for parent=file, 15 + N for parent=memory.
+# Verifies push_memory_source_with_payload sizes the frame correctly.
+
+---
+NAME: payload_memory_zero
+MODE: frames
+FILE input.txt:
+ 1: @payload_memory 0
+EXPECT_STDOUT:
+ps:14
+
+---
+NAME: payload_memory_one
+MODE: frames
+FILE input.txt:
+ 1: @payload_memory 1
+EXPECT_STDOUT:
+ps:15
+
+---
+NAME: payload_memory_four
+MODE: frames
+FILE input.txt:
+ 1: @payload_memory 4
+EXPECT_STDOUT:
+ps:18
+
+---
+NAME: payload_memory_nine
+MODE: frames
+FILE input.txt:
+ 1: @payload_memory 9
+EXPECT_STDOUT:
+ps:23
+
+---
+NAME: payload_memory_round_trip
+MODE: frames
+FILE input.txt:
+ 1: @frames
+ 2: @payload_memory 5
+ 3: @frames
+EXPECT_STDOUT:
+0:file:input.txt
+ps:19
+0:file:input.txt
+# Push then pop leaves the chain back at just the parent file frame --
+# proves the round-trip works for payload-bearing frames.
+
+---
+NAME: payload_memory_above_memory
+MODE: frames
+FILE main.txt:
+ 1: @memory @payload_memory 3
+EXPECT_STDOUT:
+ps:18
+# Memory parent: prev_data=2 bytes; 15 + 3 = 18.

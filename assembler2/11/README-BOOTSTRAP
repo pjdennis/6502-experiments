@@ -1,0 +1,137 @@
+Assembler Version 11
+====================
+Assembled by: version 10 (both instgen and asm)
+
+Features Supported by This Assembler
+-------------------------------------
+Major upgrade: supports standard 6502 assembly syntax with all addressing modes.
+This is the first version that can assemble standard 6502 assembly language.
+
+Syntax (new standard syntax):
+- Standard 6502 mnemonic syntax: LDA #$42, STA $00, LDA ($10),Y, etc.
+- Automatic addressing mode detection from operand syntax
+- Automatic zero page detection: operand < $100 uses zero page mode
+- All 13 standard 6502 addressing modes:
+  - Implied: NOP, RTS, CLC, etc. (no operand)
+  - Accumulator: ASL A, LSR A, ROL A, ROR A
+  - Immediate: LDA #$42
+  - Zero page: LDA $00
+  - Zero page,X: LDA $00,X
+  - Zero page,Y: LDX $00,Y
+  - Absolute: LDA $1234
+  - Absolute,X: LDA $1234,X
+  - Absolute,Y: LDA $1234,Y
+  - Indirect,X: LDA ($10,X)
+  - Indirect,Y: LDA ($10),Y
+  - Relative: BEQ label (branches)
+  - Indirect: JMP ($1234)
+- Character literals: #'A', #'\n', #'\\', #'\''
+- DATA pseudo-instruction (backward compatible)
+- Hex constants: $xx (1 byte) or $xxxx (2 bytes)
+- Quoted strings with \n and \\ escapes
+- Label definitions with PC value or explicit assignment
+- PC setting via: * = $xxxx
+- Low byte (<) and high byte (>) operators on labels
+- Labels as operands in all addressing modes
+- Comments with semicolons
+- Two-pass assembly with forward reference tracking
+- Forward reference tracking: labels used before definition are forced to
+  absolute addressing mode (3 bytes) to prevent pass 1/pass 2 size mismatch
+- .include directive
+- .zeropage and .code section directives
+- Command-line arguments: <assembler> <input> <output> [debug]
+- Local labels with . prefix, scoped to enclosing global label
+
+Directives:
+- .include filename
+- .zeropage - switches to zero page section
+- .code - switches back to code section
+
+Full 6502 instruction set (56 opcodes):
+- Load/Store: LDA, LDX, LDY, STA, STX, STY
+- Arithmetic: ADC, SBC
+- Logical: AND, ORA, EOR
+- Compare: CMP, CPX, CPY
+- Bit test: BIT
+- Increment/Decrement: INC, DEC, INX, INY, DEX, DEY
+- Shift/Rotate: ASL, LSR, ROL, ROR
+- Branch: BCC, BCS, BEQ, BMI, BNE, BPL, BVC, BVS
+- Jump: JMP (absolute and indirect), JSR
+- Stack: PHA, PHP, PLA, PLP
+- Transfer: TAX, TAY, TSX, TXA, TXS, TYA
+- Flag: CLC, CLD, CLI, CLV, SEC, SED, SEI
+- Other: BRK, NOP, RTI, RTS
+- Pseudo: DATA
+
+Error handling: same as version 10 (errors 1-10), plus:
+- Invalid addressing mode (error 11): mode not supported for instruction
+- Invalid character literal (error 12): malformed character literal
+- Too many forward references (error 13): forward reference list overflow
+- Internal error - reference tracking (error 16): forward ref pointer mismatch
+  between passes (debug verification)
+
+New in this version (relative to version 10):
+- Complete rewrite of instruction processing for standard 6502 syntax
+- New instruction table format with mode:opcode pairs: each instruction
+  entry contains the mnemonic followed by pairs of (mode, opcode) terminated
+  by $FF. This replaces the old format where each mnemonic variant was a
+  separate hash table entry.
+- Addressing mode constants: MODE_NONE through MODE_IND, plus MODE_DATA
+- New zero page variables: ADDR_MODE, INST_PTR_L/H, OPERAND_L/H,
+  IS_FWDREF, FWDREF_PASS1_L/H
+- INST_FLAG removed (replaced by mode-based dispatch)
+- lookup_mnemonic: looks up 3-letter mnemonic in instruction hash table,
+  returns pointer to mode:opcode list
+- parse_operand_and_emit: parses operand to determine addressing mode and
+  operand value, then finds matching opcode
+- find_opcode_for_mode: walks mode:opcode pairs to find opcode matching
+  the detected addressing mode, with ZP/ABS fallback
+- check_if_branch: tests if instruction supports relative mode
+- emit_instruction: emits opcode plus 0, 1, or 2 operand bytes based on mode
+- Character literal parsing: #'x' syntax with escape sequences
+- Comma and closing parenthesis are now token terminators (needed for
+  parsing indexed and indirect addressing modes)
+- check_for_data_pseudo: handles DATA as special case via MODE_DATA
+- instgen generates the new-format instruction hash table
+- Forward reference tracking for correct zero page detection:
+  - IS_FWDREF flag: marks labels not yet defined in pass 1
+  - FWDREF_LIST at $0200 (512 bytes): records PCs where forward-referenced
+    labels caused zero page mode selection
+  - handle_fwdref_mode: forces absolute addressing for forward refs in pass 1,
+    uses FWDREF_LIST in pass 2 to match the same addressing mode choice
+  - fwdref.asm module: forward reference list management (init, finalize,
+    add_forward_ref, check_forward_ref, reset_fwdref_ptr)
+  - Forward reference count verified between pass 1 and pass 2
+  - Debug output includes forward reference count
+
+Features Used in This Assembler's Source Code
+----------------------------------------------
+- Non-standard mnemonic syntax (LDA#, LDAZ, STAZ, BITZ, INCZ, ASLZ, etc.)
+- DATA pseudo-instruction
+- DATA $00 for zero page variable allocation in .zeropage section
+- Hex constants ($xx and $xxxx)
+- Quoted strings with escape sequences
+- Labels and label assignments (label = value)
+- PC setting (* = $2000 and * = $FFFC for vectors)
+- Low byte (<) and high byte (>) operators
+- Labels as absolute 2-byte operands
+- Comments (;)
+- BRK with inline error code and message (BRK $xx "message" $00)
+- .include directive (out/inst.asm.out, environment.asm, common.asm,
+  file_stack.asm, to_decimal.asm, fwdref.asm)
+- .zeropage and .code section directives
+- Local labels (.label syntax)
+- Command-line arg access: argc, argv
+- File I/O: open, close, read, openout, write
+
+New syntax used in source (relative to version 10):
+- None (source is still written in non-standard mnemonic syntax because it
+  is assembled by version 10 which only supports non-standard syntax)
+
+Other source changes:
+- ADDR_MODE, INST_PTR_L/H, OPERAND_L/H added to zero page variables
+- IS_FWDREF, FWDREF_PASS1_L/H added to zero page variables
+- INST_FLAG removed (no longer needed with mode-based instruction lookup)
+- fwdref.asm module for forward reference list management
+- Substantially larger codebase due to operand parsing, mode detection,
+  character literal parsing, and forward reference tracking logic

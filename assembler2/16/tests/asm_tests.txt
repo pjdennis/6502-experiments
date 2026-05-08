@@ -1,0 +1,3882 @@
+# Test suite for asm22 assembler
+# Format:
+#   --- separates test cases
+#   NAME: test identifier
+#   DESCRIPTION: description of the test
+#   ARGS: additional arguments to provide to the assembler
+#   INPUT: assembly source (line number prefix "N: " is stripped)
+#   EXPECT_HEX: expected binary output as hex bytes (positive test)
+#   EXPECT_FWDREF: expected forward reference count (optional)
+#   EXPECT_ERROR: expected error code (negative test - first line only)
+#   EXPECT_LINE: expected line number for error
+#   EXPECT_MSG: expected error message (exact match)
+#   EXPECT_STDERR: multi-line expected stderr output (for traceback tests)
+
+# ============================================================================
+# POSITIVE TESTS - Valid assembly
+# ============================================================================
+
+---
+NAME: implied_mode
+INPUT:
+ 1: * = $0200
+ 2:   NOP
+ 3:   RTS
+EXPECT_HEX: ea 60
+
+---
+NAME: immediate_hex
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$42
+ 3:   LDX #$00
+ 4:   LDY #$FF
+EXPECT_HEX: a9 42 a2 00 a0 ff
+
+---
+NAME: immediate_char
+INPUT:
+ 1: * = $0200
+ 2:   LDA #'A'
+ 3:   LDX #'0'
+EXPECT_HEX: a9 41 a2 30
+
+---
+NAME: immediate_char_escape
+INPUT:
+ 1: * = $0200
+ 2:   LDA #'\n'
+ 3:   LDX #'\\'
+ 4:   LDY #'\''
+EXPECT_HEX: a9 0a a2 5c a0 27
+
+---
+NAME: immediate_char_escape_btr
+INPUT:
+ 1: * = $0200
+ 2:   LDA #'\b'
+ 3:   LDX #'\t'
+ 4:   LDY #'\r'
+ 5:   LDA #'\n'
+EXPECT_HEX: a9 08 a2 09 a0 0d a9 0a
+
+---
+NAME: immediate_char_special
+INPUT:
+ 1: * = $0200
+ 2:   LDA #' '
+ 3:   LDX #';'
+ 4:   LDY #','
+EXPECT_HEX: a9 20 a2 3b a0 2c
+
+---
+NAME: data_string_escape_btrn
+INPUT:
+ 1: * = $0200
+ 2:   .data "A\b\t\r\nZ"
+EXPECT_HEX: 41 08 09 0d 0a 5a
+
+---
+NAME: immediate_label
+INPUT:
+ 1: * = $0200
+ 2: val = $42
+ 3:   LDA #val
+ 4:   LDX #<val
+ 5:   LDY #>val
+EXPECT_HEX: a9 42 a2 42 a0 00
+
+---
+NAME: zero_page
+INPUT:
+ 1: * = $0200
+ 2:   LDA $42
+ 3:   STA $10
+EXPECT_HEX: a5 42 85 10
+
+---
+NAME: zero_page_x
+INPUT:
+ 1: * = $0200
+ 2:   LDA $42,X
+ 3:   STA $42,X
+EXPECT_HEX: b5 42 95 42
+
+---
+NAME: zero_page_y
+INPUT:
+ 1: * = $0200
+ 2:   LDX $42,Y
+ 3:   STX $42,Y
+EXPECT_HEX: b6 42 96 42
+
+---
+NAME: absolute
+INPUT:
+ 1: * = $0200
+ 2:   LDA $1234
+ 3:   STA $ABCD
+EXPECT_HEX: ad 34 12 8d cd ab
+
+---
+NAME: absolute_indexed
+INPUT:
+ 1: * = $0200
+ 2:   LDA $1234,X
+ 3:   LDA $1234,Y
+EXPECT_HEX: bd 34 12 b9 34 12
+
+---
+NAME: indirect_y
+INPUT:
+ 1: * = $0200
+ 2:   LDA ($42),Y
+ 3:   STA ($10),Y
+EXPECT_HEX: b1 42 91 10
+
+---
+NAME: indirect_x
+INPUT:
+ 1: * = $0200
+ 2:   LDA ($42,X)
+ 3:   STA ($10,X)
+EXPECT_HEX: a1 42 81 10
+
+---
+NAME: shift_rotate_implied
+INPUT:
+ 1: * = $0200
+ 2:   ASL
+ 3:   LSR
+ 4:   ROL
+ 5:   ROR
+EXPECT_HEX: 0a 4a 2a 6a
+
+---
+NAME: branch_forward_simple
+INPUT:
+ 1: * = $0200
+ 2:   BEQ skip
+ 3:   NOP
+ 4: skip
+ 5:   RTS
+EXPECT_HEX: f0 01 ea 60
+
+---
+NAME: branch_forward_max
+INPUT:
+ 1: * = $0200
+ 2:   BEQ target
+ 3:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 4:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 5:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 6:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 7:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 8:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 9:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+10:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+11: target
+12:   RTS
+EXPECT_HEX: f0 7f ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea 60
+
+---
+NAME: branch_forward_just_past_max
+INPUT:
+ 1: * = $0200
+ 2:   BEQ target
+ 3: * = $0282
+ 4: target
+ 5:   RTS
+EXPECT_ERROR: 8
+EXPECT_LINE: 2
+EXPECT_MSG: Branch out of range
+
+---
+NAME: branch_backward_simple
+INPUT:
+ 1: * = $0200
+ 2: loop
+ 3:   NOP
+ 4:   BNE loop
+EXPECT_HEX: ea d0 fd
+
+---
+NAME: branch_backward_max
+INPUT:
+ 1: * = $0182
+ 2: target
+ 3:   NOP
+ 4:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 5:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 6:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 7:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 8:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+ 9:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+10:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+11:   .data $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA $EA
+12:   BNE target
+EXPECT_HEX: ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea d0 80
+
+---
+NAME: branch_backward_just_past_max
+INPUT:
+ 1: * = $0181
+ 2: target
+ 3:   NOP
+ 4: * = $0200
+ 5:   BNE target
+EXPECT_ERROR: 8
+EXPECT_LINE: 5
+EXPECT_MSG: Branch out of range
+
+---
+NAME: branch_to_self
+INPUT:
+ 1: * = $0200
+ 2: loop
+ 3:   BNE loop
+EXPECT_HEX: d0 fe
+
+---
+NAME: jmp_absolute
+INPUT:
+ 1: * = $0200
+ 2:   JMP $1234
+EXPECT_HEX: 4c 34 12
+
+---
+NAME: jmp_indirect
+INPUT:
+ 1: * = $0200
+ 2:   JMP ($1234)
+EXPECT_HEX: 6c 34 12
+
+---
+NAME: jsr_rts
+INPUT:
+ 1: * = $0200
+ 2:   JSR sub
+ 3:   RTS
+ 4: sub
+ 5:   NOP
+ 6:   RTS
+EXPECT_HEX: 20 04 02 60 ea 60
+
+---
+NAME: local_labels
+INPUT:
+ 1: * = $0200
+ 2: global1
+ 3: .local
+ 4:   NOP
+ 5:   BEQ .local
+ 6: global2
+ 7: .local
+ 8:   NOP
+ 9:   BEQ .local
+EXPECT_HEX: ea f0 fd ea f0 fd
+
+---
+NAME: forward_ref_absolute
+INPUT:
+ 1: * = $0200
+ 2:   JMP target
+ 3:   NOP
+ 4: target
+ 5:   RTS
+EXPECT_HEX: 4c 04 02 ea 60
+
+---
+NAME: label_assignment
+INPUT:
+ 1: * = $0200
+ 2: addr = $1234
+ 3:   LDA addr
+ 4:   STA addr
+EXPECT_HEX: ad 34 12 8d 34 12
+
+---
+NAME: expression_assignment
+INPUT:
+ 1: * = $0200
+ 2: addr  = $1234
+ 3: add   = $01
+ 4: addr2 = addr+add
+ 3:   LDA addr
+ 4:   STA addr2
+EXPECT_HEX: ad 34 12 8d 35 12
+
+---
+NAME: assignment_no_space
+INPUT:
+ 1: *=$0200
+ 2: addr=$1234
+ 3:   LDA addr
+ 4: *=$0200+$04
+ 5:   NOP
+EXPECT_HEX: ad 34 12 00 ea
+
+---
+NAME: comment_after_instruction
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$42 ; load value
+ 3:   RTS ; return
+EXPECT_HEX: a9 42 60
+
+---
+NAME: comment_line
+INPUT:
+ 1: * = $0200
+ 2: ; this is a comment
+ 3:   NOP
+ 4: ; another comment
+ 5:   RTS
+EXPECT_HEX: ea 60
+
+---
+NAME: set_pc
+INPUT:
+ 1: * = $0300
+ 2:   NOP
+ 3: * = $0400
+ 4:   RTS
+EXPECT_HEX: ea 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 60
+
+# ============================================================================
+# NEGATIVE TESTS - Invalid assembly with expected errors
+# ============================================================================
+
+---
+NAME: invalid_operand_double_quote
+INPUT:
+ 1: * = $0200
+ 2:   LDA #"A"
+EXPECT_ERROR: 4
+EXPECT_LINE: 2
+EXPECT_MSG: Label expected
+
+---
+NAME: invalid_operand_empty_immediate
+INPUT:
+ 1: * = $0200
+ 2:   LDA #
+EXPECT_ERROR: 4
+EXPECT_LINE: 2
+EXPECT_MSG: Label expected
+
+---
+NAME: invalid_operand_empty_indirect
+INPUT:
+ 1: * = $0200
+ 2:   LDA (,X)
+EXPECT_ERROR: 4
+EXPECT_LINE: 2
+EXPECT_MSG: Label expected
+
+---
+NAME: decimal_in_immediate
+DESCRIPTION: Decimal constant in immediate mode
+INPUT:
+ 1: * = $0200
+ 2:   LDA #123
+EXPECT_HEX: a9 7b
+
+---
+NAME: invalid_operand_at_symbol
+INPUT:
+ 1: * = $0200
+ 2:   LDA #@foo
+EXPECT_ERROR: 4
+EXPECT_LINE: 2
+EXPECT_MSG: Label expected
+
+---
+NAME: trailing_expr_imm_hex
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$42+$01
+EXPECT_HEX: a9 43
+
+---
+NAME: unclosed_indirect
+INPUT:
+ 1: * = $0200
+ 2:   JMP ($1234
+EXPECT_ERROR: 9
+EXPECT_LINE: 2
+EXPECT_MSG: Invalid operand
+
+---
+NAME: incorrectly_closed_indirect
+INPUT:
+ 1: * = $0200
+ 2:   JMP ($1234]
+EXPECT_ERROR: 9
+EXPECT_LINE: 2
+EXPECT_MSG: Invalid operand
+
+---
+NAME: trailing_garbage_abs
+INPUT:
+ 1: * = $0200
+ 2:   LDA $1234garbage
+EXPECT_ERROR: 10
+EXPECT_LINE: 2
+EXPECT_MSG: Unexpected text after operand
+
+---
+NAME: trailing_garbage_abs_space
+INPUT:
+ 1: * = $0200
+ 2:   LDA $1234 garbage
+EXPECT_ERROR: 10
+EXPECT_LINE: 2
+EXPECT_MSG: Unexpected text after operand
+
+---
+NAME: trailing_expr_char
+INPUT:
+ 1: * = $0200
+ 2:   LDA #'A'+$01
+EXPECT_HEX: a9 42
+
+---
+NAME: expr_space_before_add_zp
+DESCRIPTION: Space before + in zero page expression
+INPUT:
+ 1: * = $0200
+ 2:   LDA $42 +1
+EXPECT_HEX: a5 43
+
+---
+NAME: label_not_found
+INPUT:
+ 1: * = $0200
+ 2:   LDA undefined
+EXPECT_ERROR: 1
+EXPECT_LINE: 2
+EXPECT_MSG: Label not found
+
+---
+NAME: opcode_not_found
+INPUT:
+ 1: * = $0200
+ 2:   BADOP
+EXPECT_ERROR: 5
+EXPECT_LINE: 2
+EXPECT_MSG: Opcode not found
+
+---
+NAME: immediate_label_value_out_of_range
+INPUT:
+ 1: * = $0200
+ 2: VALUE = $1234
+ 3:   LDA #VALUE
+EXPECT_ERROR: 6
+EXPECT_LINE: 3
+EXPECT_MSG: Value out of range
+
+---
+NAME: immediate_value_out_of_range
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$1234 ; Comment
+EXPECT_ERROR: 6
+EXPECT_LINE: 2
+EXPECT_MSG: Value out of range
+
+---
+NAME: invalid_hex
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$GG
+EXPECT_ERROR: 7
+EXPECT_LINE: 2
+EXPECT_MSG: Invalid hex
+
+---
+NAME: closing_quote_not_found
+INPUT:
+ 1: * = $0200
+ 2:   .data "unterminated
+EXPECT_ERROR: 18
+EXPECT_LINE: 2
+EXPECT_MSG: Closing quote not found
+
+---
+NAME: invalid_char_literal_empty
+INPUT:
+ 1: * = $0200
+ 2:   LDA #''
+EXPECT_ERROR: 12
+EXPECT_LINE: 2
+EXPECT_MSG: Invalid character literal
+
+---
+NAME: invalid_char_literal_missing_quote
+INPUT:
+ 1: * = $0200
+ 2:   LDA #'
+EXPECT_ERROR: 12
+EXPECT_LINE: 2
+EXPECT_MSG: Invalid character literal
+
+---
+NAME: invalid_char_literal_toolong
+INPUT:
+ 1: * = $0200
+ 2:   LDA #'AB'
+EXPECT_ERROR: 12
+EXPECT_LINE: 2
+EXPECT_MSG: Invalid character literal
+
+---
+NAME: indirect_value_out_of_range
+INPUT:
+ 1: * = $0200
+ 2:   LDA ($1234),Y
+EXPECT_ERROR: 6
+EXPECT_LINE: 2
+EXPECT_MSG: Value out of range
+
+---
+NAME: invalid_addressing_mode
+INPUT:
+ 1: * = $0200
+ 2:   STA #$42
+EXPECT_ERROR: 13
+EXPECT_LINE: 2
+EXPECT_MSG: Invalid addressing mode
+
+---
+NAME: no_global_for_local
+INPUT:
+ 1: * = $0200
+ 2: .local
+ 3:   NOP
+EXPECT_ERROR: 3
+EXPECT_LINE: 2
+EXPECT_MSG: No global label for local
+
+---
+NAME: duplicate_label
+INPUT:
+ 1: * = $0200
+ 2: label
+ 3:   NOP
+ 4: label
+ 5:   RTS
+EXPECT_ERROR: 2
+EXPECT_LINE: 4
+EXPECT_MSG: Duplicate label
+
+---
+NAME: error_line_number_later
+INPUT:
+ 1: * = $0200
+ 2:   NOP
+ 3:   NOP
+ 4:   NOP
+ 5:   NOP
+ 6:   FOO ; Invalid opcode
+EXPECT_ERROR: 5
+EXPECT_LINE: 6
+EXPECT_MSG: Opcode not found
+
+---
+NAME: directive_data_bytes
+INPUT:
+ 1: * = $0200
+ 2:   .data $01 $02 $03
+EXPECT_HEX: 01 02 03
+
+---
+NAME: directive_data_commas
+INPUT:
+ 1: * = $0200
+ 2:   .data $01, $02, $03
+EXPECT_HEX: 01 02 03
+
+---
+NAME: directive_data_trailig_comma
+INPUT:
+ 1: * = $0200
+ 2:   .data $01, $02, $03,
+EXPECT_HEX: 01 02 03
+
+---
+NAME: directive_data_mixed_separators
+INPUT:
+ 1: * = $0200
+ 2:   .data $01, $02 $03, $04
+EXPECT_HEX: 01 02 03 04
+
+---
+NAME: directive_data_string
+INPUT:
+ 1: * = $0200
+ 2:   .data "Hi" $00
+EXPECT_HEX: 48 69 00
+
+---
+NAME: directive_data_mixed
+INPUT:
+ 1: * = $0200
+ 2:   .data $01 "AB" $02
+EXPECT_HEX: 01 41 42 02
+
+---
+NAME: directive_data_label_bytes
+INPUT:
+ 1: * = $0200
+ 2: label
+ 3:   .data <label >label
+EXPECT_HEX: 00 02
+
+---
+NAME: directive_data_label_word_small
+INPUT:
+ 1: * = $0200
+ 2: label = $03
+ 3:   .data label
+EXPECT_HEX: 03 00
+
+---
+NAME: directive_data_label_word
+INPUT:
+ 1: * = $0200
+ 2: label
+ 3:   .data label
+EXPECT_HEX: 00 02
+
+---
+NAME: directive_data_forward_ref
+INPUT:
+ 1: * = $0200
+ 2:   .data forward_label
+ 3: forward_label = $1234
+EXPECT_HEX: 34 12
+EXPECT_FWDREF: 0
+
+---
+NAME: directive_data_mixed_label_forms
+INPUT:
+ 1: * = $0200
+ 2: label = $ABCD
+ 3:   .data <label >label label
+EXPECT_HEX: cd ab cd ab
+EXPECT_FWDREF: 0
+
+---
+NAME: directive_data_invalid
+INPUT:
+ 1: * = $0200
+ 2:   .data $00 @ $01
+EXPECT_ERROR: 4
+EXPECT_LINE: 2
+EXPECT_MSG: Label expected
+
+---
+NAME: assignment_low_byte_select
+INPUT:
+ 1: * = $0200
+ 2: source = $ABCD
+ 3: low = <source
+ 4:   LDA #low
+EXPECT_HEX: a9 cd
+EXPECT_FWDREF: 0
+
+---
+NAME: assignment_high_byte_select
+INPUT:
+ 1: * = $0200
+ 2: source = $ABCD
+ 3: high = >source
+ 4:   LDA #high
+EXPECT_HEX: a9 ab
+EXPECT_FWDREF: 0
+
+---
+NAME: assignment_byte_select_both
+INPUT:
+ 1: * = $0200
+ 2: source = $1234
+ 3: low = <source
+ 4: high = >source
+ 5:   LDA #low
+ 6:   LDX #high
+EXPECT_HEX: a9 34 a2 12
+EXPECT_FWDREF: 0
+
+---
+NAME: assignment_byte_select_chain
+INPUT:
+ 1: * = $0200
+ 2: source = $ABCD
+ 3: low = <source
+ 4: copy = low
+ 5:   LDA #copy
+EXPECT_HEX: a9 cd
+EXPECT_FWDREF: 0
+
+---
+NAME: assignment_byte_select_multiple
+INPUT:
+ 1: * = $0200
+ 2: val1 = $1234
+ 3: val2 = $5678
+ 4: low1 = <val1
+ 5: high1 = >val1
+ 6: low2 = <val2
+ 7: high2 = >val2
+ 8:   LDA #low1
+ 9:   LDX #high1
+10:   LDY #low2
+11:   .data high2
+EXPECT_HEX: a9 34 a2 12 a0 78 56 00
+EXPECT_FWDREF: 0
+
+---
+NAME: assignment_byte_select_in_data
+INPUT:
+ 1: * = $0200
+ 2: source = $ABCD
+ 3: low = <source
+ 4: high = >source
+ 5:   .data low high
+EXPECT_HEX: cd 00 ab 00
+EXPECT_FWDREF: 0
+
+---
+NAME: shift_with_operand_treats_as_label
+INPUT:
+ 1: * = $0200
+ 2:   ASL A
+EXPECT_ERROR: 1
+EXPECT_LINE: 2
+EXPECT_MSG: Label not found
+---
+NAME: fwdref_backward_zp_capable_small
+INPUT:
+ 1: * = $0200
+ 2: small = $12
+ 3:   LDA small
+EXPECT_HEX: a5 12
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_backward_zp_capable_boundary_ff
+INPUT:
+ 1: * = $0200
+ 2: boundary = $FF
+ 3:   LDA boundary
+EXPECT_HEX: a5 ff
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_backward_zp_capable_boundary_100
+INPUT:
+ 1: * = $0200
+ 2: over = $0100
+ 3:   LDA over
+EXPECT_HEX: ad 00 01
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_backward_zp_capable_large
+INPUT:
+ 1: * = $0200
+ 2: large = $1234
+ 3:   LDA large
+EXPECT_HEX: ad 34 12
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_forward_zp_capable_small
+INPUT:
+ 1: * = $0200
+ 2:   LDA target
+ 3: target = $12
+EXPECT_HEX: ad 12 00
+EXPECT_FWDREF: 1
+
+---
+NAME: fwdref_forward_zp_capable_boundary_ff
+INPUT:
+ 1: * = $0200
+ 2:   LDA target
+ 3: target = $FF
+EXPECT_HEX: ad ff 00
+EXPECT_FWDREF: 1
+
+---
+NAME: fwdref_forward_zp_capable_boundary_100
+INPUT:
+ 1: * = $0200
+ 2:   LDA target
+ 3: target = $0100
+EXPECT_HEX: ad 00 01
+EXPECT_FWDREF: 1
+
+---
+NAME: fwdref_forward_zp_capable_large
+INPUT:
+ 1: * = $0200
+ 2:   LDA target
+ 3: target = $1234
+EXPECT_HEX: ad 34 12
+EXPECT_FWDREF: 1
+
+---
+NAME: fwdref_backward_zpx_capable_small
+INPUT:
+ 1: * = $0200
+ 2: small = $12
+ 3:   LDA small,X
+EXPECT_HEX: b5 12
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_backward_zpx_capable_large
+INPUT:
+ 1: * = $0200
+ 2: large = $1234
+ 3:   LDA large,X
+EXPECT_HEX: bd 34 12
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_forward_zpx_capable_small
+INPUT:
+ 1: * = $0200
+ 2:   LDA target,X
+ 3: target = $12
+EXPECT_HEX: bd 12 00
+EXPECT_FWDREF: 1
+
+---
+NAME: fwdref_forward_zpx_capable_large
+INPUT:
+ 1: * = $0200
+ 2:   LDA target,X
+ 3: target = $1234
+EXPECT_HEX: bd 34 12
+EXPECT_FWDREF: 1
+
+---
+NAME: fwdref_backward_zpy_capable_small
+INPUT:
+ 1: * = $0200
+ 2: small = $12
+ 3:   LDX small,Y
+EXPECT_HEX: b6 12
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_backward_zpy_capable_large
+INPUT:
+ 1: * = $0200
+ 2: large = $1234
+ 3:   LDX large,Y
+EXPECT_HEX: be 34 12
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_forward_zpy_capable_small
+INPUT:
+ 1: * = $0200
+ 2:   LDX target,Y
+ 3: target = $12
+EXPECT_HEX: be 12 00
+EXPECT_FWDREF: 1
+
+---
+NAME: fwdref_forward_zpy_capable_large
+INPUT:
+ 1: * = $0200
+ 2:   LDX target,Y
+ 3: target = $1234
+EXPECT_HEX: be 34 12
+EXPECT_FWDREF: 1
+
+---
+NAME: fwdref_multiple_forward_refs
+INPUT:
+ 1: * = $0200
+ 2:   LDA target1
+ 3:   LDA target2
+ 4: target1 = $12
+ 5:   LDA target1
+ 6: target2 = $34
+ 7:   LDA target2
+EXPECT_HEX: ad 12 00 ad 34 00 a5 12 a5 34
+EXPECT_FWDREF: 2
+
+---
+NAME: fwdref_code_label_small
+INPUT:
+ 1: * = $0200
+ 2:   JMP target
+ 3:   NOP
+ 4: target
+ 5:   RTS
+EXPECT_HEX: 4c 04 02 ea 60
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_code_label_forward_ref
+INPUT:
+ 1: * = $0200
+ 2:   LDA target
+ 3:   NOP
+ 4: target
+ 5:   RTS
+EXPECT_HEX: ad 04 02 ea 60
+EXPECT_FWDREF: 1
+
+---
+NAME: fwdref_code_label_backward_ref
+INPUT:
+ 1: * = $0200
+ 2: target
+ 3:   NOP
+ 4:   LDA target
+EXPECT_HEX: ea ad 00 02
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_mixed_small_and_large
+INPUT:
+ 1: * = $0200
+ 2: zp = $50
+ 3: abs = $0300
+ 4:   LDA zp
+ 5:   LDA abs
+ 6:   LDA zp,X
+ 7:   LDA abs,X
+EXPECT_HEX: a5 50 ad 00 03 b5 50 bd 00 03
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_forward_then_backward
+INPUT:
+ 1: * = $0200
+ 2:   LDA target
+ 3: target = $42
+ 4:   LDA target
+EXPECT_HEX: ad 42 00 a5 42
+EXPECT_FWDREF: 1
+
+---
+NAME: fwdref_jsr_forward_zp_range
+INPUT:
+ 1: * = $0200
+ 2:   JSR subroutine
+ 3: subroutine = $0050
+EXPECT_HEX: 20 50 00
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_jsr_forward_high_range
+INPUT:
+ 1: * = $0200
+ 2:   JSR subroutine
+ 3: subroutine = $1234
+EXPECT_HEX: 20 34 12
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_jsr_forward_code_label
+INPUT:
+ 1: * = $0200
+ 2:   JSR subroutine
+ 3:   NOP
+ 4: subroutine
+ 5:   RTS
+EXPECT_HEX: 20 04 02 ea 60
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_jsr_backward
+INPUT:
+ 1: * = $0200
+ 2: subroutine
+ 3:   RTS
+ 4:   JSR subroutine
+EXPECT_HEX: 60 20 00 02
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_jmp_forward_zp_range
+INPUT:
+ 1: * = $0200
+ 2:   JMP target
+ 3: target = $0050
+EXPECT_HEX: 4c 50 00
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_jmp_forward_high_range
+INPUT:
+ 1: * = $0200
+ 2:   JMP target
+ 3: target = $1234
+EXPECT_HEX: 4c 34 12
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_jmp_forward_code_label
+INPUT:
+ 1: * = $0200
+ 2:   JMP destination
+ 3:   NOP
+ 4: destination
+ 5:   RTS
+EXPECT_HEX: 4c 04 02 ea 60
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_jmp_backward
+INPUT:
+ 1: * = $0200
+ 2: loop
+ 3:   NOP
+ 4:   JMP loop
+EXPECT_HEX: ea 4c 00 02
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_jmp_indirect_forward
+INPUT:
+ 1: * = $0200
+ 2:   JMP (vector)
+ 3: vector = $1234
+EXPECT_HEX: 6c 34 12
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_jmp_indirect_backward
+INPUT:
+ 1: * = $0200
+ 2: vector = $1234
+ 3:   JMP (vector)
+EXPECT_HEX: 6c 34 12
+EXPECT_FWDREF: 0
+
+---
+NAME: char_in_indirect
+INPUT:
+ 1: * = $0200
+ 2:   LDA ('a',X)
+EXPECT_HEX: a1 61
+
+---
+NAME: char_in_data
+INPUT:
+ 1: * = $0200
+ 2:   .data 'A' 'B' 'C'
+EXPECT_HEX: 41 42 43
+
+---
+NAME: expr_imm_hex_add
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$10+$20
+EXPECT_HEX: a9 30
+
+---
+NAME: expr_imm_hex_subtract
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$40-$10
+EXPECT_HEX: a9 30
+
+---
+NAME: expr_imm_chain
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$50+$10-$20
+EXPECT_HEX: a9 40
+
+---
+NAME: expr_char_arithmetic
+INPUT:
+ 1: * = $0200
+ 2:   LDA #'Z'-'A'
+EXPECT_HEX: a9 19
+
+---
+NAME: expr_low_byte_add
+INPUT:
+ 1: * = $0200
+ 2: val = $ABCD
+ 3:   LDA #<val+$10
+EXPECT_HEX: a9 dd
+
+---
+NAME: expr_low_byte_add_after
+INPUT:
+ 1: * = $0200
+ 2: val = $ABCD
+ 3:   LDA #$10+<val
+EXPECT_HEX: a9 dd
+
+---
+NAME: expr_high_byte_add
+INPUT:
+ 1: * = $0200
+ 2: val = $ABCD
+ 3:   LDA #>val+$0100
+EXPECT_HEX: a9 ac
+
+---
+NAME: expr_low_byte_label_only
+INPUT:
+ 1: * = $0200
+ 2: val = $ABCD
+ 3:   LDA #<val
+EXPECT_HEX: a9 cd
+
+---
+NAME: expr_high_byte_label_only
+INPUT:
+ 1: * = $0200
+ 2: val = $ABCD
+ 3:   LDA #>val
+EXPECT_HEX: a9 ab
+
+---
+NAME: expr_label_add_abs
+INPUT:
+ 1: * = $0200
+ 2: base = $1000
+ 3:   LDA base+$10
+EXPECT_HEX: ad 10 10
+
+---
+NAME: expr_assignment
+INPUT:
+ 1: * = $0200
+ 2: val = $40+$02
+ 3:   LDA #val
+EXPECT_HEX: a9 42
+
+---
+NAME: expr_fwdref_add
+INPUT:
+ 1: * = $0200
+ 2:   LDA target+$01
+ 3: target = $42
+EXPECT_HEX: ad 43 00
+EXPECT_FWDREF: 1
+
+---
+NAME: expr_data_add
+INPUT:
+ 1: * = $0200
+ 2: base = $10
+ 3:   .data base+$20
+EXPECT_HEX: 30 00
+
+---
+NAME: expr_data_hex_const
+INPUT:
+ 1: * = $0200
+ 2:   .data $10+$20
+EXPECT_HEX: 30
+
+---
+NAME: expr_data_byte_selector
+INPUT:
+ 1: * = $0200
+ 2: addr = $ABCD
+ 3:   .data <addr+$10
+EXPECT_HEX: dd
+
+---
+NAME: expr_data_multiple_values
+INPUT:
+ 1: * = $0200
+ 2: base = $10
+ 3:   .data $05+$01 base+$10 $20-$05
+EXPECT_HEX: 06 20 00 1b
+
+---
+NAME: expr_data_char_expression
+INPUT:
+ 1: * = $0200
+ 2:   .data 'A'+$01
+EXPECT_HEX: 42
+
+---
+NAME: data_hex_2digit
+INPUT:
+ 1: * = $0200
+ 2:   .data $00 $FF $42
+EXPECT_HEX: 00 ff 42
+
+---
+NAME: data_hex_4digit
+INPUT:
+ 1: * = $0200
+ 2:   .data $0000 $0100 $FFFF
+EXPECT_HEX: 00 00 00 01 ff ff
+
+---
+NAME: data_hex_4digit_single
+INPUT:
+ 1: * = $0200
+ 2:   .data $1234
+EXPECT_HEX: 34 12
+
+---
+NAME: data_expr_2digit_start
+INPUT:
+ 1: * = $0200
+ 2:   .data $10+$20
+EXPECT_HEX: 30
+
+---
+NAME: data_expr_4digit_start
+INPUT:
+ 1: * = $0200
+ 2:   .data $0010+$0020
+EXPECT_HEX: 30 00
+
+---
+NAME: data_expr_4digit_zero
+INPUT:
+ 1: * = $0200
+ 2:   .data $0000+$42
+EXPECT_HEX: 42 00
+
+---
+NAME: data_expr_overflow_truncate
+INPUT:
+ 1: * = $0200
+ 2:   .data $FF+$01
+EXPECT_HEX: 00
+
+---
+NAME: data_expr_overflow_4digit_workaround
+INPUT:
+ 1: * = $0200
+ 2:   .data $0000+$FF+$01
+EXPECT_HEX: 00 01
+
+---
+NAME: data_mixed_sizes
+INPUT:
+ 1: * = $0200
+ 2: label = $1234
+ 3:   .data $42 $ABCD label 'X'
+EXPECT_HEX: 42 cd ab 34 12 58
+
+---
+NAME: expr_indirect_indexed_add
+INPUT:
+ 1: * = $0200
+ 2: ptr = $40
+ 3:   LDA (ptr+$02),Y
+EXPECT_HEX: b1 42
+
+---
+NAME: expr_assign_to_label
+INPUT:
+ 1: * = $0200
+ 2: value = $01+$02
+ 3:   LDA #value
+EXPECT_HEX: a9 03
+
+---
+NAME: expr_assign_label_expr_to_label
+INPUT:
+ 1: * = $0200
+ 2: value1 = $02
+ 3: value2 = value1+$03
+ 4:   LDA #value2
+EXPECT_HEX: a9 05
+
+---
+NAME: expr_assign_label_expr_to_pc
+INPUT:
+ 1: value = $0200
+ 2: * = value
+ 3:   NOP
+ 4: * = value+$02
+ 5:   NOP
+EXPECT_HEX: ea 00 ea
+
+---
+NAME: expr_char_plus_offset
+INPUT:
+ 1: * = $0200
+ 2:   LDA #'A'+$05
+EXPECT_HEX: a9 46
+
+---
+NAME: expr_char_plus_offset
+INPUT:
+ 1: * = $0200
+ 2:   LDA #'A'+$05
+EXPECT_HEX: a9 46
+
+---
+NAME: expr_trailing_operator
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$10+
+EXPECT_ERROR: 4
+EXPECT_LINE: 2
+EXPECT_MSG: Label expected
+
+---
+NAME: expr_double_operator
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$10++$20
+EXPECT_ERROR: 4
+EXPECT_LINE: 2
+EXPECT_MSG: Label expected
+
+# ============================================================================
+# SPACES IN EXPRESSIONS TESTS
+# ============================================================================
+
+---
+NAME: expr_spaces_around_add
+DESCRIPTION: Spaces around + operator in immediate mode
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$10 + $20
+EXPECT_HEX: a9 30
+
+---
+NAME: expr_spaces_around_sub
+DESCRIPTION: Spaces around - operator in immediate mode
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$30 - $10
+EXPECT_HEX: a9 20
+
+---
+NAME: expr_space_after_left_shift
+DESCRIPTION: Space after << operator in immediate mode
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$01<< $04
+EXPECT_HEX: a9 10
+
+---
+NAME: expr_space_after_right_shift
+DESCRIPTION: Space after >> operator in immediate mode
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$80>> $02
+EXPECT_HEX: a9 20
+
+---
+NAME: expr_space_before_add
+DESCRIPTION: Space before + only
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$10 +$20
+EXPECT_HEX: a9 30
+
+---
+NAME: expr_space_after_add
+DESCRIPTION: Space after + only
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$10+ $20
+EXPECT_HEX: a9 30
+
+---
+NAME: expr_multiple_spaces
+DESCRIPTION: Multiple spaces around operator
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$10  +  $20
+EXPECT_HEX: a9 30
+
+---
+NAME: expr_space_low_byte_selector
+DESCRIPTION: Space after low byte selector
+INPUT:
+ 1: * = $0200
+ 2:   LDA #< $ABCD
+EXPECT_HEX: a9 cd
+
+---
+NAME: expr_space_high_byte_selector
+DESCRIPTION: Space after high byte selector
+INPUT:
+ 1: * = $0200
+ 2:   LDA #> $ABCD
+EXPECT_HEX: a9 ab
+
+---
+NAME: expr_byte_selector_and_spaces_in_op
+DESCRIPTION: Byte selector with spaces around operator
+INPUT:
+ 1: * = $0200
+ 2:   LDA #< $1200 + $34
+EXPECT_HEX: a9 34
+
+---
+NAME: expr_chained_ops_with_spaces
+DESCRIPTION: Chained operators with spaces
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$10 + $20 - $05
+EXPECT_HEX: a9 2b
+
+---
+NAME: expr_label_with_spaces
+DESCRIPTION: Label expression with spaces around operator
+INPUT:
+ 1: * = $0200
+ 2: base = $40
+ 3:   LDA base + $02
+EXPECT_HEX: a5 42
+
+---
+NAME: expr_fwdref_with_spaces
+DESCRIPTION: Forward reference expression with spaces
+INPUT:
+ 1: * = $0200
+ 2:   LDA target + $01
+ 3: target = $42
+EXPECT_HEX: ad 43 00
+EXPECT_FWDREF: 1
+
+---
+NAME: expr_data_with_spaces
+DESCRIPTION: .data directive with spaces around operator
+INPUT:
+ 1: * = $0200
+ 2:   .data $10 + $20
+EXPECT_HEX: 30
+
+---
+NAME: expr_data_separate_values_still_work
+DESCRIPTION: .data with separate values (no operator) still produces multiple values
+INPUT:
+ 1: * = $0200
+ 2:   .data $10 $20
+EXPECT_HEX: 10 20
+
+---
+NAME: expr_shift_selector_with_spaces
+DESCRIPTION: Byte selector in shift count with space after selector
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$01<< < $0004
+EXPECT_HEX: a9 10
+
+---
+NAME: expr_space_before_shift_operator_in_operand
+DESCRIPTION: Space before << shift operator in instruction operand
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$01 << 4
+EXPECT_HEX: a9 10
+
+---
+NAME: expr_space_before_shift_operator_in_assignment
+DESCRIPTION: Space before << shift operator in label assignment
+INPUT:
+ 1: * = $0200
+ 2: foo = 1 << 4
+ 3:   LDA #foo
+EXPECT_HEX: a9 10
+
+# ============================================================================
+# CONDITIONAL ASSEMBLY TESTS
+# ============================================================================
+
+---
+NAME: ifdef_defined
+INPUT:
+ 1: * = $0200
+ 2: foo = $42
+ 3:   .ifdef foo
+ 4:   LDA #$01
+ 5:   .endif
+EXPECT_HEX: a9 01
+
+---
+NAME: ifdef_undefined
+INPUT:
+ 1: * = $0200
+ 2:   .ifdef undefined_label
+ 3:   LDA #$01
+ 4:   .data $1234
+ 5:   .endif
+ 6:   LDA #$02
+EXPECT_HEX: a9 02
+
+---
+NAME: ifdef_error_in_skipped_code
+INPUT:
+ 1: * = $0200
+ 2:   .ifdef undefined_label
+ 3:   LDA #$01
+ 4:   LDA undefined_label
+ 5:   .endif
+ 6:   LDA #$02
+EXPECT_HEX: a9 02
+
+---
+NAME: ifdef_multiple_lines
+INPUT:
+ 1: * = $0200
+ 2: foo = $42
+ 3:   .ifdef foo
+ 4:   LDA #$01
+ 5:   LDA #$02
+ 6:   LDA #$03
+ 7:   .endif
+EXPECT_HEX: a9 01 a9 02 a9 03
+
+---
+NAME: ifdef_skips_labels
+INPUT:
+ 1: * = $0200
+ 2:   .ifdef undefined
+ 3: label = $42
+ 4:   .endif
+ 5:   LDA #label
+EXPECT_ERROR: 1
+EXPECT_LINE: 5
+EXPECT_MSG: Label not found
+
+---
+NAME: endif_without_ifdef
+INPUT:
+ 1: * = $0200
+ 2:   .endif
+EXPECT_ERROR: 19
+EXPECT_LINE: 2
+EXPECT_MSG: .endif without .ifdef
+
+---
+NAME: unclosed_ifdef
+INPUT:
+ 1: * = $0200
+ 2:   .ifdef foo
+ 3:   LDA #$01
+EXPECT_ERROR: 20
+EXPECT_MSG: Unclosed .ifdef
+
+---
+NAME: ifdef_nested_both_true
+INPUT:
+ 1: * = $0200
+ 2: outer = $01
+ 3: inner = $02
+ 4:   .ifdef outer
+ 5:   LDA #$01
+ 6:     .ifdef inner
+ 7:     LDA #$02
+ 8:     .endif
+ 9:   LDA #$03
+10:   .endif
+EXPECT_HEX: a9 01 a9 02 a9 03
+
+---
+NAME: ifdef_nested_outer_false
+INPUT:
+ 1: * = $0200
+ 2: inner = $02
+ 3:   .ifdef undefined_outer
+ 4:   LDA #$01
+ 5:     .ifdef inner
+ 6:     LDA #$02
+ 7:     .endif
+ 8:   LDA #$03
+ 9:   .endif
+10:   LDA #$04
+EXPECT_HEX: a9 04
+
+---
+NAME: ifdef_nested_inner_false
+INPUT:
+ 1: * = $0200
+ 2: outer = $01
+ 3:   .ifdef outer
+ 4:   LDA #$01
+ 5:     .ifdef undefined_inner
+ 6:     LDA #$02
+ 7:     .endif
+ 8:   LDA #$03
+ 9:   .endif
+EXPECT_HEX: a9 01 a9 03
+
+---
+NAME: ifdef_deeply_nested
+INPUT:
+ 1: * = $0200
+ 2: a = $01
+ 3: b = $02
+ 4: c = $03
+ 5:   .ifdef a
+ 6:   LDA #$01
+ 7:     .ifdef b
+ 8:     LDA #$02
+ 9:       .ifdef c
+10:       LDA #$03
+11:       .endif
+12:     LDA #$04
+13:     .endif
+14:   LDA #$05
+15:   .endif
+EXPECT_HEX: a9 01 a9 02 a9 03 a9 04 a9 05
+
+---
+NAME: define_from_cmdline
+ARGS: debug define:test_symbol
+INPUT:
+ 1: * = $0200
+ 2:   .ifdef test_symbol
+ 3:   LDA #$42
+ 4:   .endif
+ 5:   LDA #$01
+EXPECT_HEX: a9 42 a9 01
+
+---
+NAME: define_cmdline_without_define
+INPUT:
+ 1: * = $0200
+ 2:   .ifdef test_symbol
+ 3:   LDA #$42
+ 4:   .endif
+ 5:   LDA #$01
+EXPECT_HEX: a9 01
+
+---
+NAME: define_multiple_from_cmdline
+ARGS: debug define:sym1 define:sym2
+INPUT:
+ 1: * = $0200
+ 2:   .ifdef sym1
+ 3:   LDA #$01
+ 4:   .endif
+ 5:   .ifdef sym2
+ 6:   LDA #$02
+ 7:   .endif
+ 8:   LDA #$FF
+EXPECT_HEX: a9 01 a9 02 a9 ff
+
+---
+NAME: define_partial_match
+ARGS: debug define:sym
+INPUT:
+ 1: * = $0200
+ 2:   .ifdef sym1
+ 3:   LDA #$01
+ 4:   .endif
+ 5:   .ifdef sym
+ 6:   LDA #$02
+ 7:   .endif
+ 8:   LDA #$FF
+EXPECT_HEX: a9 02 a9 ff
+
+---
+NAME: shift_left_basic
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$01<<$04
+EXPECT_HEX: a9 10
+
+---
+NAME: shift_right_basic
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$80>>$04
+EXPECT_HEX: a9 08
+
+---
+NAME: shift_left_2_byte_count
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$01<<$0104
+EXPECT_HEX: a9 00
+
+---
+NAME: shift_right_2_byte_count
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$80>>$0104
+EXPECT_HEX: a9 00
+
+---
+NAME: shift_left_16bit
+INPUT:
+ 1: * = $0200
+ 2: val = $0234<<$02
+ 3:   LDA #<val
+ 4:   LDA #>val
+EXPECT_HEX: a9 d0 a9 08
+
+---
+NAME: shift_right_16bit
+INPUT:
+ 1: * = $0200
+ 2: val = $8000>>$01
+ 3:   LDA #<val
+ 4:   LDA #>val
+EXPECT_HEX: a9 00 a9 40
+
+---
+NAME: shift_with_label
+INPUT:
+ 1: * = $0200
+ 2: base = $0100
+ 3:   LDA base>>$04
+EXPECT_HEX: a5 10
+
+---
+NAME: shift_chain
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$01<<$04>>$02
+EXPECT_HEX: a9 04
+
+---
+NAME: shift_with_add
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$01<<$04+$02
+EXPECT_HEX: a9 12
+
+---
+NAME: shift_zero
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$42<<$00
+EXPECT_HEX: a9 42
+
+---
+NAME: err_single_less_than
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$10<$02
+EXPECT_ERROR: 11
+EXPECT_LINE: 2
+EXPECT_MSG: Expected << or >>
+
+---
+NAME: shift_left_with_low_byte
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$01<<<$1204
+EXPECT_HEX: a9 10
+
+---
+NAME: shift_left_with_high_byte
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$01<<>$0400
+EXPECT_HEX: a9 10
+
+---
+NAME: shift_right_with_low_byte
+INPUT:
+ 1: * = $0200
+ 2: val = $8000>><$0001
+ 3:   LDA #<val
+ 4:   LDA #>val
+EXPECT_HEX: a9 00 a9 40
+
+---
+NAME: shift_right_with_high_byte
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$FF>>>$0100
+EXPECT_HEX: a9 7f
+
+---
+NAME: label_with_colon_basic
+INPUT:
+ 1: * = $0200
+ 2: start:
+ 3:   NOP
+ 4:   JMP start
+EXPECT_HEX: ea 4c 00 02
+
+---
+NAME: label_with_colon_assignment
+INPUT:
+ 1: * = $0200
+ 2: addr: = $1234
+ 3:   LDA addr
+EXPECT_HEX: ad 34 12
+
+---
+NAME: label_with_colon_same_line_instruction
+INPUT:
+ 1: * = $0200
+ 2: loop: NOP
+ 3:   BEQ loop
+EXPECT_HEX: ea f0 fd
+
+---
+NAME: label_with_colon_same_line_data
+INPUT:
+ 1: * = $0200
+ 2: data: .data $42
+ 3:   LDA data
+EXPECT_HEX: 42 ad 00 02
+
+---
+NAME: local_label_with_colon
+INPUT:
+ 1: * = $0200
+ 2: global:
+ 3: .local:
+ 4:   NOP
+ 5:   BEQ .local
+EXPECT_HEX: ea f0 fd
+
+---
+NAME: local_label_with_colon_same_line
+INPUT:
+ 1: * = $0200
+ 2: global
+ 3: .loop: NOP
+ 4:   BEQ .loop
+EXPECT_HEX: ea f0 fd
+
+---
+NAME: mixed_colon_no_colon_labels
+INPUT:
+ 1: * = $0200
+ 2: label1:
+ 3:   NOP
+ 4: label2
+ 5:   NOP
+ 6: label3: NOP
+ 7:   JMP label1
+ 8:   JMP label2
+ 9:   JMP label3
+EXPECT_HEX: ea ea ea 4c 00 02 4c 01 02 4c 02 02
+
+# ============================================================================
+# INCLUDE TESTS
+# ============================================================================
+
+---
+NAME: include_basic
+INPUT:
+ 1: * = $0200
+ 2:   .include include/basic.asm
+ 3:   RTS
+EXPECT_HEX: ea ea 60
+
+---
+NAME: include_with_label
+INPUT:
+ 1: * = $0200
+ 2:   .include include/with_label.asm
+ 3:   LDX #included_label
+EXPECT_HEX: a9 42 a2 42
+
+---
+NAME: include_nested
+INPUT:
+ 1: * = $0200
+ 2:   .include include/nested1.asm
+ 3:   RTS
+EXPECT_HEX: ea a9 ff 85 10 ea 60
+
+---
+NAME: include_label_before
+INPUT:
+ 1: * = $0200
+ 2: before = $10
+ 3:   .include include/basic.asm
+ 4:   LDA before
+EXPECT_HEX: ea ea a5 10
+
+---
+NAME: include_label_after
+INPUT:
+ 1: * = $0200
+ 2:   .include include/basic.asm
+ 3: after = $20
+ 4:   LDA after
+EXPECT_HEX: ea ea a5 20
+
+---
+NAME: include_error_inside
+INPUT:
+ 1: * = $0200
+ 2:   .include include/error_inside.asm
+EXPECT_STDERR:
+[Error 1 in file include/error_inside.asm at line 3: Label not found]
+[  included from {{MAIN_FILE}}:2]
+
+---
+NAME: include_error_nested
+INPUT:
+ 1: * = $0200
+ 2:   .include include/nested_error1.asm
+EXPECT_STDERR:
+Error 1 in file include/nested_error2.asm at line 3: Label not found
+  included from include/nested_error1.asm:4
+  included from {{MAIN_FILE}}:2
+
+---
+NAME: include_file_not_found
+DESCRIPTION: Error when .include references a nonexistent file
+INPUT:
+ 1: * = $0200
+ 2:   .include nonexistent_file_12345.asm
+EXPECT_STDERR:
+Error 36 in file {{MAIN_FILE}} at line 2: File not found
+
+---
+NAME: include_file_not_found_nested
+DESCRIPTION: Error when an included file references a nonexistent file
+INPUT:
+ 1: * = $0200
+ 2:   .include include/includes_nonexistent.asm
+EXPECT_STDERR:
+Error 36 in file include/includes_nonexistent.asm at line 2: File not found
+  included from {{MAIN_FILE}}:2
+
+---
+NAME: input_file_not_found
+DESCRIPTION: Error when input file on command line does not exist
+MISSING_INPUT
+EXPECT_ERROR: 36
+EXPECT_MSG: File not found
+
+---
+
+# ============================================================================
+# MACRO TESTS
+# ============================================================================
+
+# Phase 1B: Body capture tests (body stored, not assembled)
+
+---
+NAME: macro_def_parses
+DESCRIPTION: Macro definition parses without error (body captured, not assembled)
+INPUT:
+ 1: * = $0200
+ 2:   .macro MYMACRO
+ 3:   NOP
+ 4:   .endmacro
+ 5:   INX
+EXPECT_HEX: e8
+
+---
+NAME: macro_def_with_params
+DESCRIPTION: Macro with parameters parses without error (body captured)
+INPUT:
+ 1: * = $0200
+ 2:   .macro INC16 addr
+ 3:   NOP
+ 4:   .endmacro
+ 5:   INY
+EXPECT_HEX: c8
+
+---
+NAME: macro_def_multi_params
+DESCRIPTION: Macro with multiple parameters parses without error (body captured)
+INPUT:
+ 1: * = $0200
+ 2:   .macro COPY src dst count
+ 3:   NOP
+ 4:   .endmacro
+ 5:   DEX
+EXPECT_HEX: ca
+
+---
+NAME: macro_def_empty_body
+DESCRIPTION: Macro with empty body parses without error
+INPUT:
+ 1: * = $0200
+ 2:   .macro EMPTY
+ 3:   .endmacro
+ 4:   NOP
+EXPECT_HEX: ea
+
+---
+NAME: macro_endmacro_without_macro
+DESCRIPTION: Error on .endmacro without .macro
+INPUT:
+ 1: * = $0200
+ 2:   .endmacro
+EXPECT_ERROR: 25
+EXPECT_MSG: .endmacro without .macro
+EXPECT_LINE: 2
+
+---
+NAME: macro_unclosed
+DESCRIPTION: Error on unclosed macro definition (no line - detected at EOF)
+INPUT:
+ 1: * = $0200
+ 2:   .macro MYMACRO
+ 3:   NOP
+EXPECT_ERROR: 26
+EXPECT_MSG: Unclosed .macro
+
+---
+NAME: macro_nested_definition
+DESCRIPTION: A nested macro definition generates an error
+INPUT:
+ 1: * = $0200
+ 2:   .macro OUTER
+ 3:   NOP
+ 4:   .macro INNER
+ 5:   INX
+ 6:   .endmacro    ; End if inner
+ 7:   INNER
+ 8:   .endmacro    ; End of outer
+ 9:   INY
+10:   OUTER
+11:   LSR
+EXPECT_ERROR: 27
+EXPECT_LINE: 4
+EXPECT_MSG: Nested macro definition
+
+---
+NAME: macro_name_expected
+DESCRIPTION: Error when macro name is missing
+INPUT:
+ 1: * = $0200
+ 2:   .macro
+EXPECT_ERROR: 22
+EXPECT_LINE: 2
+EXPECT_MSG: Macro name expected
+
+---
+NAME: macro_shadows_instruction
+DESCRIPTION: Error when macro name shadows an instruction
+INPUT:
+ 1: * = $0200
+ 2:   .macro NOP
+ 3:   .endmacro
+EXPECT_ERROR: 23
+EXPECT_LINE: 2
+EXPECT_MSG: Macro name shadows instruction
+
+---
+NAME: macro_duplicate
+DESCRIPTION: Error on duplicate macro definition
+INPUT:
+ 1: * = $0200
+ 2:   .macro MYMACRO
+ 3:   .endmacro
+ 4:   .macro MYMACRO
+ 5:   .endmacro
+EXPECT_ERROR: 24
+EXPECT_LINE: 4
+EXPECT_MSG: Duplicate macro definition
+
+---
+NAME: macro_simple
+DESCRIPTION: Simple macro invocation
+INPUT:
+ 1: * = $0200
+ 2:   .macro nop2
+ 3:   NOP
+ 4:   NOP
+ 5:   .endmacro
+ 6:   nop2
+EXPECT_HEX: ea ea
+
+---
+NAME: macro_multiple_invocations
+DESCRIPTION: Multiple invocations of same macro
+INPUT:
+ 1: * = $0200
+ 2:   .macro MYMACRO
+ 3:   NOP
+ 4:   .endmacro
+ 5:   MYMACRO
+ 6:   INX
+ 7:   MYMACRO
+ 8:   INY
+EXPECT_HEX: ea e8 ea c8
+
+---
+NAME: macro_with_code_around
+DESCRIPTION: Macro used between other code
+INPUT:
+ 1: * = $0200
+ 2:   INX
+ 3:   .macro MYMACRO
+ 4:   NOP
+ 5:   .endmacro
+ 6:   MYMACRO
+ 7:   INY
+EXPECT_HEX: e8 ea c8
+
+---
+NAME: macro_nested
+DESCRIPTION: One macro calling another
+INPUT:
+ 1: * = $0200
+ 2:   .macro inner
+ 3:   NOP
+ 4:   .endmacro
+ 5:   .macro outer
+ 6:   inner
+ 7:   INX
+ 8:   .endmacro
+ 9:   outer
+EXPECT_HEX: ea e8
+
+---
+NAME: macro_local_label
+DESCRIPTION: Macro with local label and backward branch
+INPUT:
+ 1: * = $0200
+ 2:   .macro countdown
+ 3: .loop
+ 4:   DEX
+ 5:   BNE .loop
+ 6:   .endmacro
+ 7:   countdown
+EXPECT_HEX: ca d0 fd
+
+---
+NAME: macro_local_label_multiple_invocations
+DESCRIPTION: Each macro invocation has independent local labels
+INPUT:
+ 1: * = $0200
+ 2:   .macro test
+ 3: .done
+ 4:   NOP
+ 5:   BEQ .done
+ 6:   .endmacro
+ 7:   test
+ 8:   test
+EXPECT_HEX: ea f0 fd ea f0 fd
+
+---
+NAME: macro_local_no_conflict_with_caller
+DESCRIPTION: Local label in macro doesn't conflict with same name in caller
+INPUT:
+ 1: * = $0200
+ 2: foo
+ 3: .x
+ 4:   NOP
+ 5:   .macro bar
+ 6: .x
+ 7:   INX
+ 8:   BEQ .x
+ 9:   .endmacro
+10:   bar
+11:   BNE .x
+EXPECT_HEX: ea e8 f0 fd d0 fa
+
+---
+NAME: macro_recursive_direct
+DESCRIPTION: Direct recursive macro invocation causes error
+INPUT:
+ 1: * = $0200
+ 2:   .macro recurse
+ 3:   NOP
+ 4:   recurse
+ 5:   .endmacro
+ 6:   recurse
+EXPECT_ERROR: 28
+EXPECT_LINE: 2
+EXPECT_MSG: Recursive macro invocation
+
+---
+NAME: macro_recursive_indirect
+DESCRIPTION: Indirect recursive macro invocation causes error
+INPUT:
+ 1: * = $0200
+ 2:   .macro macA
+ 3:   macB
+ 4:   .endmacro
+ 5:   .macro macB
+ 6:   macA
+ 7:   .endmacro
+ 8:   macA
+EXPECT_ERROR: 28
+EXPECT_LINE: 1
+EXPECT_MSG: Recursive macro invocation
+
+---
+NAME: macro_param_single
+DESCRIPTION: Macro with single parameter
+INPUT:
+ 1: * = $0200
+ 2:   .macro inc_zp addr
+ 3:   INC addr
+ 4:   .endmacro
+ 5:   inc_zp $50
+EXPECT_HEX: e6 50
+
+---
+NAME: macro_param_multiple
+DESCRIPTION: Macro with multiple parameters
+INPUT:
+ 1: * = $0200
+ 2:   .macro store_pair val dst
+ 3:   LDA #val
+ 4:   STA dst
+ 5:   .endmacro
+ 6:   store_pair $42 $80
+EXPECT_HEX: a9 42 85 80
+
+---
+NAME: macro_param_commas
+DESCRIPTION: Macro with comma-separated params and args
+INPUT:
+ 1: * = $0200
+ 2:   .macro store_pair val, dst
+ 3:   LDA #val
+ 4:   STA dst
+ 5:   .endmacro
+ 6:   store_pair $42, $80
+EXPECT_HEX: a9 42 85 80
+
+---
+NAME: macro_param_commas_spaces_trailing
+DESCRIPTION: Macro with comma-separated params and args
+INPUT:
+ 1: * = $0200
+ 2:   .macro store_pair val , dst ,
+ 3:   LDA #val
+ 4:   STA dst
+ 5:   .endmacro
+ 6:   store_pair $42 , $80,
+EXPECT_HEX: a9 42 85 80
+
+---
+NAME: macro_param_commas_no_params
+DESCRIPTION: Macro with comma-separated params and args
+INPUT:
+ 1: * = $0200
+ 2:   .macro store_value ,
+ 3:   LDA #$12
+ 4:   STA $13
+ 5:   .endmacro
+ 6:   store_value ,
+EXPECT_HEX: a9 12 85 13
+
+---
+NAME: macro_param_expression
+DESCRIPTION: Macro argument can be an expression
+INPUT:
+ 1: * = $0200
+ 2:   .macro load_addr val
+ 3:   LDA #val
+ 4:   .endmacro
+ 5:   load_addr $10+$20
+EXPECT_HEX: a9 30
+
+---
+NAME: macro_param_used_twice
+DESCRIPTION: Parameter used multiple times in body
+INPUT:
+ 1: * = $0200
+ 2:   .macro double_inc addr
+ 3:   INC addr
+ 4:   INC addr
+ 5:   .endmacro
+ 6:   double_inc $30
+EXPECT_HEX: e6 30 e6 30
+
+---
+NAME: macro_param_in_expression
+DESCRIPTION: Parameter used in expression within macro body
+INPUT:
+ 1: * = $0200
+ 2:   .macro ldpair base
+ 3:   LDA base
+ 4:   LDX base+$01
+ 5:   .endmacro
+ 6:   ldpair $40
+EXPECT_HEX: a5 40 a6 41
+
+---
+NAME: macro_param_multiple_invocations
+DESCRIPTION: Multiple invocations with different parameter values
+INPUT:
+ 1: * = $0200
+ 2:   .macro inc_loc addr
+ 3:   INC addr
+ 4:   .endmacro
+ 5:   inc_loc $10
+ 6:   inc_loc $20
+ 7:   inc_loc $30
+EXPECT_HEX: e6 10 e6 20 e6 30
+
+---
+NAME: macro_param_and_local_label
+DESCRIPTION: Macro with both parameters and local labels
+INPUT:
+ 1: * = $0200
+ 2:   .macro countdown start
+ 3:   LDX #start
+ 4: .loop
+ 5:   DEX
+ 6:   BNE .loop
+ 7:   .endmacro
+ 8:   countdown $05
+EXPECT_HEX: a2 05 ca d0 fd
+
+---
+NAME: macro_reference_global_label
+DESCRIPTION: Macros can reference global labels
+INPUT:
+ 1: * = $0200
+ 2: val = $42
+ 3:   .macro mac
+ 4:   LDA #val
+ 5:   .endmacro
+ 6:   mac
+EXPECT_HEX: a9 42
+
+---
+NAME: macro_global_label_param_name_conflict
+DESCRIPTION: Macro parameters should hide global labels
+INPUT:
+ 1: * = $0200
+ 2: val = $42
+ 3:   .macro mac val
+ 4:   LDA #val
+ 5:   .endmacro
+ 6:   mac $43
+EXPECT_HEX: a9 43
+
+---
+NAME: macro_param_too_few
+DESCRIPTION: Error when fewer arguments than parameters
+INPUT:
+ 1: * = $0200
+ 2:   .macro twoparams a b
+ 3:   NOP
+ 4:   .endmacro
+ 5:   twoparams $10
+EXPECT_ERROR: 29
+EXPECT_LINE: 5
+EXPECT_MSG: Too few macro arguments
+
+---
+NAME: macro_param_too_many
+DESCRIPTION: Error when more arguments than parameters
+INPUT:
+ 1: * = $0200
+ 2:   .macro oneparam a
+ 3:   NOP
+ 4:   .endmacro
+ 5:   oneparam $10 $20
+EXPECT_ERROR: 30
+EXPECT_LINE: 5
+EXPECT_MSG: Too many macro arguments
+
+---
+NAME: macro_param_noparam_extra_arg
+DESCRIPTION: Error when no-param macro gets arguments
+INPUT:
+ 1: * = $0200
+ 2:   .macro noparam
+ 3:   NOP
+ 4:   .endmacro
+ 5:   noparam $10
+EXPECT_ERROR: 30
+EXPECT_LINE: 5
+EXPECT_MSG: Too many macro arguments
+
+---
+NAME: macro_param_fwdref_arg
+DESCRIPTION: Macro argument can be a forward reference label
+INPUT:
+ 1: * = $0200
+ 2:   .macro load_addr addr
+ 3:   LDA addr
+ 4:   .endmacro
+ 5:   load_addr target
+ 6: target
+EXPECT_HEX: ad 03 02
+
+---
+NAME: macro_param_label_arg
+DESCRIPTION: Macro argument can be a defined label
+INPUT:
+ 1: * = $0200
+ 2: target
+ 3:   .macro load_addr addr
+ 4:   LDA addr
+ 5:   .endmacro
+ 6:   load_addr target
+EXPECT_HEX: ad 00 02
+
+---
+NAME: macro_nested_param_passing
+DESCRIPTION: Nested macros can pass parameters down
+INPUT:
+ 1: * = $0200
+ 2:   .macro inner val
+ 3:   LDA #val
+ 4:   .endmacro
+ 5:   .macro outer x
+ 6:   inner x
+ 7:   INX
+ 8:   .endmacro
+ 9:   outer $42
+EXPECT_HEX: a9 42 e8
+
+---
+NAME: macro_nested_param_multiple_levels
+DESCRIPTION: Parameters pass through multiple nesting levels
+INPUT:
+ 1: * = $0200
+ 2:   .macro level3 v
+ 3:   STA v
+ 4:   .endmacro
+ 5:   .macro level2 v
+ 6:   level3 v
+ 7:   .endmacro
+ 8:   .macro level1 v
+ 9:   level2 v
+10:   .endmacro
+11:   level1 $80
+EXPECT_HEX: 85 80
+
+---
+NAME: macro_nested_param_backward_ref_zp
+DESCRIPTION: Parameters pass through multiple nesting levels
+INPUT:
+ 1: * = $0200
+ 2: value = $12
+ 3:   .macro level2 v2
+ 4:   LDA v2            ; Expect zero page addressing
+ 5:   .endmacro
+ 6:   .macro level1 v1
+ 7:   level2 v1
+ 8:   .endmacro
+ 9:   level1 value
+EXPECT_HEX: a5 12
+
+---
+NAME: macro_nested_param_backward_ref_abs
+DESCRIPTION: Parameters pass through multiple nesting levels
+INPUT:
+ 1: * = $0200
+ 2: value = $1234
+ 3:   .macro level2 v2
+ 4:   LDA v2            ; Expect absolute addressing
+ 5:   .endmacro
+ 6:   .macro level1 v1
+ 7:   level2 v1
+ 8:   .endmacro
+ 9:   level1 value
+EXPECT_HEX: ad 34 12
+
+---
+NAME: macro_nested_param_forward_ref_1_byte
+DESCRIPTION: Parameters pass through multiple nesting levels
+INPUT:
+ 1: * = $0200
+ 2:   .macro level2 v2
+ 3:   LDA v2            ; Expect absolute addressing
+ 4:   .endmacro
+ 5:   .macro level1 v1
+ 6:   level2 v1
+ 7:   .endmacro
+ 8:   level1 value
+ 9: value = $12
+EXPECT_HEX: ad 12 00
+
+---
+NAME: macro_nested_param_forward_ref_2_byte
+DESCRIPTION: Parameters pass through multiple nesting levels
+INPUT:
+ 1: * = $0200
+ 2:   .macro level2 v2
+ 3:   LDA v2            ; Expect absolute addressing
+ 4:   .endmacro
+ 5:   .macro level1 v1
+ 6:   level2 v1
+ 7:   .endmacro
+ 8:   level1 value
+ 9: value = $1234
+EXPECT_HEX: ad 34 12
+
+---
+NAME: macro_nested_local_labels_isolated
+DESCRIPTION: Local labels in nested macros remain isolated
+INPUT:
+ 1: * = $0200
+ 2:   .macro inner
+ 3:   BNE .skip
+ 4:   NOP
+ 5: .skip
+ 6:   INX
+ 7:   .endmacro
+ 8:   .macro outer
+ 9:   BEQ .skip
+10:   inner
+11: .skip
+12:   INY
+13:   .endmacro
+14:   outer
+EXPECT_HEX: f0 04 d0 01 ea e8 c8
+
+---
+NAME: macro_capture_is_compressed
+DESCRIPTION: When capturing macros, comments are removed and consecutive spaces replaced with one space unless significant
+ARGS: show_captured_macros
+INPUT:
+ 1: [* = $0200]
+ 2: [  .macro test a b ]
+ 3: [  LDA  #$12  ;  Comment with trailing spaces  ]
+ 4: []
+ 5: [my_label]
+ 6: [  .data  $01  ';' '\''  "String with semicolon; and double  space in it ''"  ; Comment  ]
+ 7: [  LDA #' ']
+ 8: [  .endmacro]
+ 9: [  NOP]
+EXPECT_STDERR:
+[Macro: test a b]
+[ LDA #$12 ]
+[]
+[my_label]
+[ .data $01 ';' '\'' "String with semicolon; and double  space in it ''" ]
+[ LDA #' ']
+
+---
+NAME: small_heap_simple_include
+DESCRIPTION: Small heap allows basic include with label allocation
+ARGS: debug small_heap
+INPUT:
+ 1: * = $0200
+ 2:   .include overflow/d20.asm
+EXPECT_HEX: ea
+
+---
+NAME: heap_overflow_many_labels
+DESCRIPTION: Out of memory when heap exhausted with small heap
+ARGS: debug small_heap
+INPUT:
+ 1: * = $0200
+ 2: a00 = $01
+ 3: a01 = $01
+ 4: a02 = $01
+ 5: a03 = $01
+ 6: a04 = $01
+ 7: a05 = $01
+ 8: a06 = $01
+ 9: a07 = $01
+10: a08 = $01
+11: a09 = $01
+12: a10 = $01
+13: a11 = $01
+14: a12 = $01
+15: a13 = $01
+16: a14 = $01
+17: a15 = $01
+18: a16 = $01
+19: a17 = $01
+20: a18 = $01
+21: a19 = $01
+22: a20 = $01
+23: a21 = $01
+24: a22 = $01
+25: a23 = $01
+26: a24 = $01
+27: a25 = $01
+28: a26 = $01
+29: a27 = $01
+30: a28 = $01
+31: a29 = $01
+32:   NOP
+EXPECT_ERROR: 32
+EXPECT_MSG: Out of memory
+
+---
+NAME: file_stack_overflow_deep_include
+DESCRIPTION: Out of memory when file stack exhausted with small heap
+ARGS: debug small_heap
+INPUT:
+ 1: * = $0200
+ 2:   .include overflow/d01.asm
+EXPECT_ERROR: 32
+EXPECT_MSG: Out of memory
+
+---
+NAME: heap_normal_many_labels
+DESCRIPTION: Many labels work without small heap
+INPUT:
+ 1: * = $0200
+ 2: a00 = $01
+ 3: a01 = $01
+ 4: a02 = $01
+ 5: a03 = $01
+ 6: a04 = $01
+ 7: a05 = $01
+ 8: a06 = $01
+ 9: a07 = $01
+10: a08 = $01
+11: a09 = $01
+12: a10 = $01
+13: a11 = $01
+14: a12 = $01
+15: a13 = $01
+16: a14 = $01
+17: a15 = $01
+18: a16 = $01
+19: a17 = $01
+20: a18 = $01
+21: a19 = $01
+22: a20 = $01
+23: a21 = $01
+24: a22 = $01
+25: a23 = $01
+26: a24 = $01
+27: a25 = $01
+28: a26 = $01
+29: a27 = $01
+30: a28 = $01
+31: a29 = $01
+32:   LDA #a00
+EXPECT_HEX: a9 01
+
+---
+NAME: file_stack_normal_deep_include
+DESCRIPTION: Deep include works without small heap
+INPUT:
+ 1: * = $0200
+ 2:   .include overflow/d01.asm
+ 3:   RTS
+EXPECT_HEX: ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea 60
+
+---
+NAME: macro_long_line
+DESCRIPTION: Macro with line > 128 chars exercises batched heap advance
+INPUT:
+ 1: * = $0200
+ 2:   .macro longdata
+ 3:   .data "This is a very long string that exceeds one hundred and twenty eight characters in order to test the optimized macro body capture loop path" $00
+ 4:   .endmacro
+ 5:   longdata
+EXPECT_HEX: 54 68 69 73 20 69 73 20 61 20 76 65 72 79 20 6C 6F 6E 67 20 73 74 72 69 6E 67 20 74 68 61 74 20 65 78 63 65 65 64 73 20 6F 6E 65 20 68 75 6E 64 72 65 64 20 61 6E 64 20 74 77 65 6E 74 79 20 65 69 67 68 74 20 63 68 61 72 61 63 74 65 72 73 20 69 6E 20 6F 72 64 65 72 20 74 6F 20 74 65 73 74 20 74 68 65 20 6F 70 74 69 6D 69 7A 65 64 20 6D 61 63 72 6F 20 62 6F 64 79 20 63 61 70 74 75 72 65 20 6C 6F 6F 70 20 70 61 74 68 00
+
+---
+NAME: scope_stack_at_limit
+DESCRIPTION: 51 nested macros at scope stack limit
+INPUT:
+ 1: * = $0200
+ 2:   .include scope/s51.asm
+EXPECT_HEX: ea
+
+---
+NAME: scope_stack_overflow
+DESCRIPTION: 52 nested macros overflow scope stack
+INPUT:
+ 1: * = $0200
+ 2:   .include scope/s52.asm
+EXPECT_ERROR: 31
+EXPECT_LINE: 5
+EXPECT_MSG: Macro nesting too deep
+
+---
+NAME: macro_arg_buffer_at_limit
+DESCRIPTION: 85 macro arguments at buffer limit
+INPUT:
+ 1: * = $0200
+ 2:   .macro BIG85 a00 a01 a02 a03 a04 a05 a06 a07 a08 a09 a10 a11 a12 a13 a14 a15 a16 a17 a18 a19 a20 a21 a22 a23 a24 a25 a26 a27 a28 a29 a30 a31 a32 a33 a34 a35 a36 a37 a38 a39 a40 a41 a42 a43 a44 a45 a46 a47 a48 a49 a50 a51 a52 a53 a54 a55 a56 a57 a58 a59 a60 a61 a62 a63 a64 a65 a66 a67 a68 a69 a70 a71 a72 a73 a74 a75 a76 a77 a78 a79 a80 a81 a82 a83 a84
+ 3:   LDA #a00
+ 4:   .endmacro
+ 5:   BIG85 $00 $01 $02 $03 $04 $05 $06 $07 $08 $09 $0A $0B $0C $0D $0E $0F $10 $11 $12 $13 $14 $15 $16 $17 $18 $19 $1A $1B $1C $1D $1E $1F $20 $21 $22 $23 $24 $25 $26 $27 $28 $29 $2A $2B $2C $2D $2E $2F $30 $31 $32 $33 $34 $35 $36 $37 $38 $39 $3A $3B $3C $3D $3E $3F $40 $41 $42 $43 $44 $45 $46 $47 $48 $49 $4A $4B $4C $4D $4E $4F $50 $51 $52 $53 $54
+EXPECT_HEX: a9 00
+
+---
+NAME: macro_arg_buffer_overflow
+DESCRIPTION: 86 macro arguments overflow buffer
+INPUT:
+ 1: * = $0200
+ 2:   .macro BIG86 a00 a01 a02 a03 a04 a05 a06 a07 a08 a09 a10 a11 a12 a13 a14 a15 a16 a17 a18 a19 a20 a21 a22 a23 a24 a25 a26 a27 a28 a29 a30 a31 a32 a33 a34 a35 a36 a37 a38 a39 a40 a41 a42 a43 a44 a45 a46 a47 a48 a49 a50 a51 a52 a53 a54 a55 a56 a57 a58 a59 a60 a61 a62 a63 a64 a65 a66 a67 a68 a69 a70 a71 a72 a73 a74 a75 a76 a77 a78 a79 a80 a81 a82 a83 a84 a85
+ 3:   LDA #a00
+ 4:   .endmacro
+ 5:   BIG86 $00 $01 $02 $03 $04 $05 $06 $07 $08 $09 $0A $0B $0C $0D $0E $0F $10 $11 $12 $13 $14 $15 $16 $17 $18 $19 $1A $1B $1C $1D $1E $1F $20 $21 $22 $23 $24 $25 $26 $27 $28 $29 $2A $2B $2C $2D $2E $2F $30 $31 $32 $33 $34 $35 $36 $37 $38 $39 $3A $3B $3C $3D $3E $3F $40 $41 $42 $43 $44 $45 $46 $47 $48 $49 $4A $4B $4C $4D $4E $4F $50 $51 $52 $53 $54 $55
+EXPECT_ERROR: 30
+EXPECT_LINE: 5
+EXPECT_MSG: Too many macro arguments
+
+---
+NAME: token_buffer_at_limit
+DESCRIPTION: 127 character token at buffer limit
+INPUT:
+ 1: * = $0200
+ 2: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA = $42
+ 3:   LDA #AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+EXPECT_HEX: a9 42
+
+---
+NAME: token_buffer_overflow
+DESCRIPTION: 128 character token overflows buffer
+INPUT:
+ 1: * = $0200
+ 2: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB = $42
+EXPECT_ERROR: 33
+EXPECT_LINE: 2
+EXPECT_MSG: Token too long
+
+---
+NAME: ifdef_forward_reference_consistency
+DESCRIPTION: .ifdef with forward-defined label behaves consistently
+INPUT:
+ 1: * = $0200
+ 2:   .ifdef LATER
+ 3:   LDA #$42
+ 4:   .endif
+ 5: LATER = $01
+ 6:   NOP
+EXPECT_HEX: ea
+
+---
+NAME: ifdef_nested_forward_reference
+DESCRIPTION: Nested .ifdef with forward reference in inner block
+INPUT:
+ 1: * = $0200
+ 2: OUTER = $01
+ 3:   .ifdef OUTER
+ 4:     .ifdef INNER_LATER
+ 5:     LDA #$42
+ 6:     .endif
+ 7:   NOP
+ 8:   .endif
+ 9: INNER_LATER = $01
+10:   RTS
+EXPECT_HEX: ea 60
+
+---
+NAME: ifdef_in_macro_evaluated_at_expansion
+DESCRIPTION: .ifdef in macro body evaluated at expansion time, not definition time
+INPUT:
+ 1: * = $0200
+ 2:   .macro CONDITIONAL
+ 3:   .ifdef FLAG
+ 4:   LDA #$42
+ 5:   .endif
+ 6:   NOP
+ 7:   .endmacro
+ 8:   CONDITIONAL
+ 9: FLAG = $01
+10:   CONDITIONAL
+EXPECT_HEX: ea a9 42 ea
+
+---
+NAME: ifdef_decisions_at_limit
+DESCRIPTION: 255 .ifdef directives exactly at buffer limit (7x32 + 31 = 255)
+INPUT:
+ 1: * = $0200
+ 2:   .include ifdefs/ifdef32.asm
+ 3:   .include ifdefs/ifdef32.asm
+ 4:   .include ifdefs/ifdef32.asm
+ 5:   .include ifdefs/ifdef32.asm
+ 6:   .include ifdefs/ifdef32.asm
+ 7:   .include ifdefs/ifdef32.asm
+ 8:   .include ifdefs/ifdef32.asm
+ 9:   .include ifdefs/ifdef31.asm
+10:   NOP
+EXPECT_HEX: ea
+
+---
+NAME: ifdef_decisions_overflow
+DESCRIPTION: 256 .ifdef directives overflows 255-entry buffer (7x32 + 31 + 1 = 256)
+INPUT:
+ 1: * = $0200
+ 2:   .include ifdefs/ifdef32.asm
+ 3:   .include ifdefs/ifdef32.asm
+ 4:   .include ifdefs/ifdef32.asm
+ 5:   .include ifdefs/ifdef32.asm
+ 6:   .include ifdefs/ifdef32.asm
+ 7:   .include ifdefs/ifdef32.asm
+ 8:   .include ifdefs/ifdef32.asm
+ 9:   .include ifdefs/ifdef31.asm
+10:   .ifdef ONE_MORE
+11:   .endif
+EXPECT_ERROR: 21
+EXPECT_LINE: 10
+EXPECT_MSG: Too many .ifdef directives
+
+---
+NAME: local_macro_scope_independence
+DESCRIPTION: Local label .foo under global is independent from .foo in macro
+INPUT:
+ 1: * = $0200
+ 2: global
+ 3: .foo
+ 4:   LDA #$01
+ 5:   .macro TESTMACRO
+ 6:   LDA #$02
+ 7: .foo
+ 8:   LDA #$03
+ 9:   .endmacro
+10:   JMP .foo     ; Should jump to global's .foo at $0200
+11:   TESTMACRO
+EXPECT_HEX: a9 01 4c 00 02 a9 02 a9 03
+
+---
+NAME: macro_local_does_not_collide_with_global
+DESCRIPTION: .foo in macro resolves to macro-local, not global foo
+INPUT:
+ 1: * = $0200
+ 2: foo = $01
+ 3:   .macro TEST
+ 4: .foo
+ 5:   LDA #foo
+ 6:   BEQ .foo
+ 7:   .endmacro
+ 8:   TEST
+EXPECT_HEX: a9 01 f0 fc
+
+---
+NAME: nested_macro_local_shadowing
+DESCRIPTION: Inner macro local label shadows outer macro local label
+INPUT:
+ 1: * = $0200
+ 2:   .macro INNER
+ 3: .label
+ 4:   LDA #$02
+ 5:   .endmacro
+ 6:   .macro OUTER
+ 7: .label
+ 8:   LDA #$01
+ 9:   INNER
+10:   JMP .label    ; Should jump to OUTER's .label, not INNER's
+11:   .endmacro
+12:   OUTER
+EXPECT_HEX: a9 01 a9 02 4c 00 02
+
+---
+NAME: zeropage_last_byte
+DESCRIPTION: Can allocate the last zero page byte at $FF
+INPUT:
+ 1:   .zeropage
+ 2: * = $FF
+ 3: last .data $00
+ 4:   .code
+ 5: * = $0200
+ 6:   LDA last
+EXPECT_HEX: a5 ff
+
+---
+NAME: zeropage_overflow
+DESCRIPTION: Zero page section overflow triggers error
+INPUT:
+ 1:   .zeropage
+ 2: * = $FF
+ 3: foo .data $00
+ 4: bar .data $00
+ 5:   .code
+ 6: * = $0200
+ 7:   NOP
+EXPECT_ERROR: 35
+EXPECT_LINE: 4
+EXPECT_MSG: Zero page overflow
+
+---
+NAME: macro_param_and_local_same_name
+DESCRIPTION: Macro parameter and local label with same base name coexist
+INPUT:
+ 1: * = $0200
+ 2:   .macro TEST foo
+ 3: .foo
+ 4:   LDA #foo
+ 5:   BEQ .foo
+ 6:   .endmacro
+ 7:   TEST $42
+EXPECT_HEX: a9 42 f0 fc
+
+---
+NAME: macro_include_basic
+DESCRIPTION: Macro body can .include a file
+INPUT:
+ 1: * = $0200
+ 2:   .macro WITH_INCLUDE
+ 3:   .include include/from_macro.asm
+ 4:   .endmacro
+ 5:   WITH_INCLUDE
+ 6:   RTS
+EXPECT_HEX: ea ea 60
+
+---
+NAME: macro_include_multiple
+DESCRIPTION: Same macro with .include expanded twice produces correct output
+INPUT:
+ 1: * = $0200
+ 2:   .macro WITH_INCLUDE
+ 3:   .include include/from_macro.asm
+ 4:   .endmacro
+ 5:   WITH_INCLUDE
+ 6:   INX
+ 7:   WITH_INCLUDE
+ 8:   RTS
+EXPECT_HEX: ea ea e8 ea ea 60
+
+# ============================================================================
+# MACRO ERROR REPORTING TESTS
+# ============================================================================
+
+---
+NAME: macro_error_in_body
+DESCRIPTION: Error in macro body reports source as macro, not file
+INPUT:
+ 1: * = $0200
+ 2:   .macro MYMACRO
+ 3:   LDA undefined
+ 4:   .endmacro
+ 5:   MYMACRO
+EXPECT_STDERR:
+Error 1 in macro MYMACRO at line 1: Label not found
+  expanded from {{MAIN_FILE}}:5
+
+---
+NAME: macro_error_nested_macros
+DESCRIPTION: Error in nested macro shows macro traceback chain
+INPUT:
+ 1: * = $0200
+ 2:   .macro INNER
+ 3:   LDA undefined
+ 4:   .endmacro
+ 5:   .macro OUTER
+ 6:   INNER
+ 7:   .endmacro
+ 8:   OUTER
+EXPECT_STDERR:
+Error 1 in macro INNER at line 1: Label not found
+  expanded from macro OUTER:1
+  expanded from {{MAIN_FILE}}:8
+
+---
+NAME: macro_error_include_from_macro
+DESCRIPTION: Error in file included from macro shows mixed traceback
+INPUT:
+ 1: * = $0200
+ 2:   .macro WITHMACRO
+ 3:   NOP
+ 4:   .include include/error_inside.asm
+ 5:   .endmacro
+ 6:   WITHMACRO
+EXPECT_STDERR:
+Error 1 in file include/error_inside.asm at line 3: Label not found
+  included from macro WITHMACRO:2
+  expanded from {{MAIN_FILE}}:6
+
+---
+NAME: macro_error_in_included_file_macro
+DESCRIPTION: Error in macro defined and invoked inside an included file
+INPUT:
+ 1: * = $0200
+ 2:   .include include/error_in_macro.asm
+EXPECT_STDERR:
+Error 1 in macro HELPER at line 1: Label not found
+  expanded from include/error_in_macro.asm:5
+  included from {{MAIN_FILE}}:2
+
+---
+NAME: assignment_spaces_in_expression
+DESCRIPTION: Spaces around + in assignment expression
+INPUT:
+ 1: * = $0200
+ 2: a = $10
+ 3: x = a + $20
+ 4:   LDA x
+EXPECT_HEX: a5 30
+
+---
+NAME: pc_assignment_spaces_in_expression
+DESCRIPTION: Spaces around + in PC assignment expression
+INPUT:
+ 1: val = $0200
+ 2: * = val + $10
+ 3:   NOP
+EXPECT_HEX: ea
+
+# ============================================================================
+# DECIMAL CONSTANT TESTS
+# ============================================================================
+
+---
+NAME: decimal_zero
+DESCRIPTION: Decimal constant 0
+INPUT:
+ 1: * = $0200
+ 2:   LDA #0
+EXPECT_HEX: a9 00
+
+---
+NAME: decimal_small
+DESCRIPTION: Small decimal constant
+INPUT:
+ 1: * = $0200
+ 2:   LDA #5
+EXPECT_HEX: a9 05
+
+---
+NAME: decimal_max_1byte
+DESCRIPTION: Decimal 255 is max 1-byte value
+INPUT:
+ 1: * = $0200
+ 2:   LDA #255
+EXPECT_HEX: a9 ff
+
+---
+NAME: decimal_256
+DESCRIPTION: Decimal 256 is first 2-byte value
+INPUT:
+ 1: * = $0200
+ 2: val = 256
+ 3:   LDA #<val
+ 4:   LDA #>val
+EXPECT_HEX: a9 00 a9 01
+
+---
+NAME: decimal_1024
+DESCRIPTION: Decimal 1024 = $0400
+INPUT:
+ 1: * = $0200
+ 2: val = 1024
+ 3:   LDA #<val
+ 4:   LDA #>val
+EXPECT_HEX: a9 00 a9 04
+
+---
+NAME: decimal_65535
+DESCRIPTION: Decimal 65535 = $FFFF (max 16-bit)
+INPUT:
+ 1: * = $0200
+ 2: val = 65535
+ 3:   LDA #<val
+ 4:   LDA #>val
+EXPECT_HEX: a9 ff a9 ff
+
+---
+NAME: decimal_overflow_65536
+DESCRIPTION: Decimal 65536 overflows 16-bit
+INPUT:
+ 1: * = $0200
+ 2:   LDA #65536
+EXPECT_ERROR: 6
+EXPECT_LINE: 2
+EXPECT_MSG: Value out of range
+
+---
+NAME: decimal_overflow_99999
+DESCRIPTION: Large decimal overflows 16-bit
+INPUT:
+ 1: * = $0200
+ 2:   LDA #99999
+EXPECT_ERROR: 6
+EXPECT_LINE: 2
+EXPECT_MSG: Value out of range
+
+---
+NAME: decimal_leading_zeros
+DESCRIPTION: Leading zeros in decimal constant
+INPUT:
+ 1: * = $0200
+ 2:   LDA #00042
+EXPECT_HEX: a9 2a
+
+---
+NAME: decimal_expr_add
+DESCRIPTION: Decimal constants in addition expression
+INPUT:
+ 1: * = $0200
+ 2:   LDA #10+20
+EXPECT_HEX: a9 1e
+
+---
+NAME: decimal_expr_sub
+DESCRIPTION: Decimal constants in subtraction expression
+INPUT:
+ 1: * = $0200
+ 2:   LDA #100-50
+EXPECT_HEX: a9 32
+
+---
+NAME: decimal_expr_mixed_hex
+DESCRIPTION: Mixed hex and decimal in expression
+INPUT:
+ 1: * = $0200
+ 2:   LDA #$10+10
+EXPECT_HEX: a9 1a
+
+---
+NAME: decimal_expr_mixed_char
+DESCRIPTION: Mixed char and decimal in expression
+INPUT:
+ 1: * = $0200
+ 2:   LDA #'A'+1
+EXPECT_HEX: a9 42
+
+---
+NAME: decimal_zp_auto
+DESCRIPTION: Decimal constant auto-selects zero page mode
+INPUT:
+ 1: * = $0200
+ 2:   LDA 66
+EXPECT_HEX: a5 42
+
+---
+NAME: decimal_abs_auto
+DESCRIPTION: Decimal constant auto-selects absolute mode
+INPUT:
+ 1: * = $0200
+ 2:   LDA 1024
+EXPECT_HEX: ad 00 04
+
+---
+NAME: decimal_indirect_y
+DESCRIPTION: Decimal constant in indirect indexed Y mode
+INPUT:
+ 1: * = $0200
+ 2:   LDA (64),Y
+EXPECT_HEX: b1 40
+
+---
+NAME: decimal_indexed_x
+DESCRIPTION: Decimal constant in absolute indexed X mode
+INPUT:
+ 1: * = $0200
+ 2:   LDA 1024,X
+EXPECT_HEX: bd 00 04
+
+---
+NAME: decimal_data_1byte
+DESCRIPTION: Decimal constant in .data (1 byte)
+INPUT:
+ 1: * = $0200
+ 2:   .data 42
+EXPECT_HEX: 2a
+
+---
+NAME: decimal_data_2byte
+DESCRIPTION: Decimal constant in .data (2 bytes)
+INPUT:
+ 1: * = $0200
+ 2:   .data 1000
+EXPECT_HEX: e8 03
+
+---
+NAME: decimal_label_assignment
+DESCRIPTION: Decimal constant in label assignment
+INPUT:
+ 1: * = $0200
+ 2: foo = 42
+ 3:   LDA #foo
+EXPECT_HEX: a9 2a
+
+---
+NAME: decimal_pc_set
+DESCRIPTION: Decimal constant for setting PC
+INPUT:
+ 1: * = 512
+ 2:   NOP
+EXPECT_HEX: ea
+
+---
+NAME: decimal_low_byte_selector
+DESCRIPTION: Low byte selector with decimal
+INPUT:
+ 1: * = $0200
+ 2:   LDA #<1024
+EXPECT_HEX: a9 00
+
+---
+NAME: decimal_high_byte_selector
+DESCRIPTION: High byte selector with decimal
+INPUT:
+ 1: * = $0200
+ 2:   LDA #>1024
+EXPECT_HEX: a9 04
+
+---
+NAME: decimal_shift_left
+DESCRIPTION: Decimal constant with left shift
+INPUT:
+ 1: * = $0200
+ 2:   LDA #1<<4
+EXPECT_HEX: a9 10
+
+---
+NAME: decimal_shift_right
+DESCRIPTION: Decimal constant with right shift
+INPUT:
+ 1: * = $0200
+ 2:   LDA #128>>2
+EXPECT_HEX: a9 20
+
+---
+NAME: decimal_fwdref_expr
+DESCRIPTION: Forward reference with decimal in expression
+INPUT:
+ 1: * = $0200
+ 2:   LDA target+1
+ 3: target = $42
+EXPECT_HEX: ad 43 00
+EXPECT_FWDREF: 1
+
+---
+NAME: decimal_macro_arg
+DESCRIPTION: Decimal constant as macro argument
+INPUT:
+ 1: * = $0200
+ 2:   .macro LOAD val
+ 3:   LDA #val
+ 4:   .endmacro
+ 5:   LOAD 66
+EXPECT_HEX: a9 42
+
+# ============================================================================
+# .BYTE DIRECTIVE TESTS
+# ============================================================================
+
+---
+NAME: byte_single_hex
+INPUT:
+ 1: * = $0200
+ 2:   .byte $42
+EXPECT_HEX: 42
+
+---
+NAME: byte_multiple_hex
+INPUT:
+ 1: * = $0200
+ 2:   .byte $01 $02 $03
+EXPECT_HEX: 01 02 03
+
+---
+NAME: byte_string
+INPUT:
+ 1: * = $0200
+ 2:   .byte "Hi" $00
+EXPECT_HEX: 48 69 00
+
+---
+NAME: byte_mixed_string_values
+INPUT:
+ 1: * = $0200
+ 2:   .byte $01 "AB" $02
+EXPECT_HEX: 01 41 42 02
+
+---
+NAME: byte_char_literal
+INPUT:
+ 1: * = $0200
+ 2:   .byte 'A' 'B' 'C'
+EXPECT_HEX: 41 42 43
+
+---
+NAME: byte_decimal
+INPUT:
+ 1: * = $0200
+ 2:   .byte 42
+EXPECT_HEX: 2a
+
+---
+NAME: byte_decimal_255
+INPUT:
+ 1: * = $0200
+ 2:   .byte 255
+EXPECT_HEX: ff
+
+---
+NAME: byte_expression
+INPUT:
+ 1: * = $0200
+ 2:   .byte $10+$20
+EXPECT_HEX: 30
+
+---
+NAME: byte_byte_selectors
+INPUT:
+ 1: * = $0200
+ 2:   .byte <$ABCD, >$ABCD
+EXPECT_HEX: cd ab
+
+---
+NAME: byte_label_one_byte
+INPUT:
+ 1: * = $0200
+ 2: val = $42
+ 3:   .byte val
+EXPECT_HEX: 42
+
+---
+NAME: byte_forward_ref
+INPUT:
+ 1: * = $0200
+ 2:   .byte val
+ 3: val = $42
+EXPECT_HEX: 42
+
+---
+NAME: byte_4digit_hex_zero_high
+INPUT:
+ 1: * = $0200
+ 2:   .byte $0042
+EXPECT_HEX: 42
+
+---
+NAME: byte_mixed_from_example
+INPUT:
+ 1: * = $0200
+ 2:   .byte $00 "Hello" $AB $0012
+EXPECT_HEX: 00 48 65 6c 6c 6f ab 12
+
+---
+NAME: byte_with_commas
+INPUT:
+ 1: * = $0200
+ 2:   .byte $01, $02, $03
+EXPECT_HEX: 01 02 03
+
+---
+NAME: byte_commas_with_string
+INPUT:
+ 1: * = $0200
+ 2:   .byte $01, "AB", $02
+EXPECT_HEX: 01 41 42 02
+
+---
+NAME: byte_error_4digit_hex
+INPUT:
+ 1: * = $0200
+ 2:   .byte $1234
+EXPECT_ERROR: 6
+EXPECT_LINE: 2
+EXPECT_MSG: Value out of range
+
+---
+NAME: byte_error_decimal_256
+INPUT:
+ 1: * = $0200
+ 2:   .byte 256
+EXPECT_ERROR: 6
+EXPECT_LINE: 2
+EXPECT_MSG: Value out of range
+
+---
+NAME: byte_error_label_too_large
+INPUT:
+ 1: * = $0200
+ 2: addr = $0200
+ 3:   .byte addr
+EXPECT_ERROR: 6
+EXPECT_LINE: 3
+EXPECT_MSG: Value out of range
+
+---
+NAME: byte_error_fwdref_too_large
+INPUT:
+ 1: * = $0200
+ 2:   .byte addr
+ 3: addr = $0200
+EXPECT_ERROR: 6
+EXPECT_LINE: 2
+EXPECT_MSG: Value out of range
+
+---
+NAME: byte_error_expr_overflow
+INPUT:
+ 1: * = $0200
+ 2:   .byte $FF+$01
+EXPECT_ERROR: 6
+EXPECT_LINE: 2
+EXPECT_MSG: Value out of range
+
+# ============================================================================
+# .WORD DIRECTIVE TESTS
+# ============================================================================
+
+---
+NAME: word_basic
+INPUT:
+ 1: * = $0200
+ 2:   .word $1234
+EXPECT_HEX: 34 12
+
+---
+NAME: word_small_value
+INPUT:
+ 1: * = $0200
+ 2:   .word $42
+EXPECT_HEX: 42 00
+
+---
+NAME: word_multiple
+INPUT:
+ 1: * = $0200
+ 2:   .word $12 $0056
+EXPECT_HEX: 12 00 56 00
+
+---
+NAME: word_label
+INPUT:
+ 1: * = $0200
+ 2: label = $ABCD
+ 3:   .word label
+EXPECT_HEX: cd ab
+
+---
+NAME: word_label_small
+INPUT:
+ 1: * = $0200
+ 2: val = $03
+ 3:   .word val
+EXPECT_HEX: 03 00
+
+---
+NAME: word_forward_ref
+INPUT:
+ 1: * = $0200
+ 2:   .word target
+ 3: target = $ABCD
+EXPECT_HEX: cd ab
+
+---
+NAME: word_zero
+INPUT:
+ 1: * = $0200
+ 2:   .word $00
+EXPECT_HEX: 00 00
+
+---
+NAME: word_ffff
+INPUT:
+ 1: * = $0200
+ 2:   .word $FFFF
+EXPECT_HEX: ff ff
+
+---
+NAME: word_string_mixed
+INPUT:
+ 1: * = $0200
+ 2:   .word $1234 "ABC" $5678
+EXPECT_HEX: 34 12 41 42 43 78 56
+
+---
+NAME: word_expression
+INPUT:
+ 1: * = $0200
+ 2:   .word $10+$20
+EXPECT_HEX: 30 00
+
+---
+NAME: word_byte_selectors
+INPUT:
+ 1: * = $0200
+ 2: addr = $ABCD
+ 3:   .word <addr, >addr
+EXPECT_HEX: cd 00 ab 00
+
+---
+NAME: word_char_literal
+INPUT:
+ 1: * = $0200
+ 2:   .word 'A'
+EXPECT_HEX: 41 00
+
+---
+NAME: word_decimal
+INPUT:
+ 1: * = $0200
+ 2:   .word 1000
+EXPECT_HEX: e8 03
+
+---
+NAME: word_with_commas
+INPUT:
+ 1: * = $0200
+ 2:   .word $1234, $5678
+EXPECT_HEX: 34 12 78 56
+
+---
+NAME: word_commas_with_string
+INPUT:
+ 1: * = $0200
+ 2:   .word $1234, "AB", $5678
+EXPECT_HEX: 34 12 41 42 78 56
+
+# ============================================================================
+# .ASCIIZ DIRECTIVE TESTS
+# ============================================================================
+
+---
+NAME: asciiz_string
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz "Hello"
+EXPECT_HEX: 48 65 6c 6c 6f 00
+
+---
+NAME: asciiz_string_multiple
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz "Hi" "Ho"
+EXPECT_HEX: 48 69 00 48 6F 00
+
+---
+NAME: asciiz_string_with_byte
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz "Hi" $42
+EXPECT_HEX: 48 69 00 42
+
+---
+NAME: asciiz_empty_string
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz ""
+EXPECT_HEX: 00
+
+---
+NAME: asciiz_single_byte
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz $42
+EXPECT_HEX: 42
+
+---
+NAME: asciiz_mixed
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz 42 "Text"
+EXPECT_HEX: 2a 54 65 78 74 00
+
+---
+NAME: asciiz_multiple_bytes
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz $01 $02 $03
+EXPECT_HEX: 01 02 03
+
+---
+NAME: asciiz_char_literals
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz 'H' 'i'
+EXPECT_HEX: 48 69
+
+---
+NAME: asciiz_forward_ref
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz val
+ 3: val = $42
+EXPECT_HEX: 42
+
+---
+NAME: asciiz_escape_seq
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz "A\nB"
+EXPECT_HEX: 41 0a 42 00
+
+---
+NAME: asciiz_with_commas
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz $48, $69, $00
+EXPECT_HEX: 48 69 00
+
+---
+NAME: asciiz_error_word_value
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz $1234
+EXPECT_ERROR: 6
+EXPECT_LINE: 2
+EXPECT_MSG: Value out of range
+
+---
+NAME: asciiz_error_decimal_256
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz 256
+EXPECT_ERROR: 6
+EXPECT_LINE: 2
+EXPECT_MSG: Value out of range
+
+---
+NAME: zeropage_byte_no_operand
+DESCRIPTION: Operand-less .byte in .zeropage allocates 1 byte
+INPUT:
+ 1:   .zeropage
+ 2: foo .byte
+ 3: bar .byte
+ 4:   .code
+ 5: * = $0200
+ 6:   LDA foo
+ 7:   LDA bar
+EXPECT_HEX: a5 00 a5 01
+
+---
+NAME: zeropage_word_no_operand
+DESCRIPTION: Operand-less .word in .zeropage allocates 2 bytes
+INPUT:
+ 1:   .zeropage
+ 2: ptr .word
+ 3: val .byte
+ 4:   .code
+ 5: * = $0200
+ 6:   LDA ptr
+ 7:   LDA val
+EXPECT_HEX: a5 00 a5 02
+
+---
+NAME: zeropage_mixed_no_operand
+DESCRIPTION: Operand on .byte in .zeropage triggers error
+INPUT:
+ 1:   .zeropage
+ 2: a .byte
+ 3: b .word
+ 4: c .byte 0
+ 5:   .code
+ 6: * = $0200
+ 7:   NOP
+EXPECT_ERROR: 37
+EXPECT_LINE: 4
+EXPECT_MSG: Operand not allowed on .byte/.word in .zeropage
+
+---
+NAME: zeropage_byte_no_operand_last
+DESCRIPTION: Operand-less .byte at $FF boundary succeeds
+INPUT:
+ 1:   .zeropage
+ 2: * = $FF
+ 3: last .byte
+ 4:   .code
+ 5: * = $0200
+ 6:   LDA last
+EXPECT_HEX: a5 ff
+
+---
+NAME: zeropage_byte_no_operand_overflow
+DESCRIPTION: Operand-less .byte past $FF overflows
+INPUT:
+ 1:   .zeropage
+ 2: * = $FF
+ 3: a .byte
+ 4: b .byte
+ 5:   .code
+ 6: * = $0200
+ 7:   NOP
+EXPECT_ERROR: 35
+EXPECT_LINE: 4
+EXPECT_MSG: Zero page overflow
+
+---
+NAME: zeropage_word_no_operand_overflow
+DESCRIPTION: Operand-less .word that crosses $FF boundary overflows
+INPUT:
+ 1:   .zeropage
+ 2: * = $FF
+ 3: a .word
+ 4:   .code
+ 5: * = $0200
+ 6:   NOP
+EXPECT_ERROR: 35
+EXPECT_LINE: 3
+EXPECT_MSG: Zero page overflow
+
+---
+NAME: reserve_basic
+DESCRIPTION: .reserve 3 in .code emits 3 zero bytes
+INPUT:
+ 1: * = $0200
+ 2:   .reserve 3
+ 3:   NOP
+EXPECT_HEX: 00 00 00 ea
+
+---
+NAME: reserve_zeropage
+DESCRIPTION: .reserve 4 in .zeropage allocates 4 bytes
+INPUT:
+ 1:   .zeropage
+ 2: a .byte
+ 3:   .reserve 4
+ 4: b .byte
+ 5:   .code
+ 6: * = $0200
+ 7:   LDA a
+ 8:   LDA b
+EXPECT_HEX: a5 00 a5 05
+
+---
+NAME: reserve_one
+DESCRIPTION: .reserve 1 works
+INPUT:
+ 1: * = $0200
+ 2:   .reserve 1
+ 3:   NOP
+EXPECT_HEX: 00 ea
+
+---
+NAME: reserve_zero
+DESCRIPTION: .reserve 0 is a no-op
+INPUT:
+ 1: * = $0200
+ 2:   .reserve 0
+ 3:   NOP
+EXPECT_HEX: ea
+
+---
+NAME: reserve_expression
+DESCRIPTION: .reserve with expression works
+INPUT:
+ 1: * = $0200
+ 2:   .reserve $02+$01
+ 3:   NOP
+EXPECT_HEX: 00 00 00 ea
+
+---
+NAME: reserve_with_comment
+DESCRIPTION: .reserve with trailing comment works
+INPUT:
+ 1:   .zeropage
+ 2: a .byte
+ 3:   .reserve 4  ; reserve 4 bytes
+ 4: b .byte
+ 5:   .code
+ 6: * = $0200
+ 7:   LDA a
+ 8:   LDA b
+EXPECT_HEX: a5 00 a5 05
+
+---
+NAME: reserve_zeropage_overflow
+DESCRIPTION: .reserve that causes ZP overflow triggers error
+INPUT:
+ 1:   .zeropage
+ 2: * = $FE
+ 3:   .reserve 3
+ 4:   .code
+ 5: * = $0200
+ 6:   NOP
+EXPECT_ERROR: 35
+EXPECT_LINE: 3
+EXPECT_MSG: Zero page overflow
+
+# --- Multiple directives on one line ---
+
+---
+NAME: multi_dir_asciiz_word
+DESCRIPTION: .asciiz followed by .word on same line
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz "Hello" .word $1321
+EXPECT_HEX: 48 65 6c 6c 6f 00 21 13
+
+---
+NAME: multi_dir_byte_word
+DESCRIPTION: .byte followed by .word on same line
+INPUT:
+ 1: * = $0200
+ 2:   .byte $42 .word $1234
+EXPECT_HEX: 42 34 12
+
+---
+NAME: multi_dir_word_byte
+DESCRIPTION: .word followed by .byte on same line
+INPUT:
+ 1: * = $0200
+ 2:   .word $1234 .byte $56
+EXPECT_HEX: 34 12 56
+
+---
+NAME: multi_dir_three_bytes
+DESCRIPTION: Three .byte directives on one line
+INPUT:
+ 1: * = $0200
+ 2:   .byte $01 .byte $02 .byte $03
+EXPECT_HEX: 01 02 03
+
+---
+NAME: multi_dir_comma_then_directive
+DESCRIPTION: Comma-separated values followed by another directive
+INPUT:
+ 1: * = $0200
+ 2:   .byte $01, $02 .word $0304
+EXPECT_HEX: 01 02 04 03
+
+---
+NAME: multi_dir_asciiz_asciiz
+DESCRIPTION: Two .asciiz directives on one line
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz "A" .asciiz "B"
+EXPECT_HEX: 41 00 42 00
+
+---
+NAME: multi_dir_byte_asciiz
+DESCRIPTION: .byte followed by .asciiz on same line
+INPUT:
+ 1: * = $0200
+ 2:   .byte $42 .asciiz "Hi"
+EXPECT_HEX: 42 48 69 00
+
+---
+NAME: multi_dir_with_label
+DESCRIPTION: Label prefix with multiple directives on same line
+INPUT:
+ 1: * = $0200
+ 2: data: .byte $01 .word $0203
+EXPECT_HEX: 01 03 02
+
+---
+NAME: multi_dir_forward_ref
+DESCRIPTION: Forward reference in second directive on same line
+INPUT:
+ 1: * = $0200
+ 2:   .byte $01 .word target
+ 3: target:
+ 4:   NOP
+EXPECT_HEX: 01 03 02 ea
+
+---
+NAME: zeropage_multi_byte_word
+DESCRIPTION: Multiple zeropage allocations on one line (.byte .word)
+INPUT:
+ 1:   .zeropage
+ 2: a: .byte .word
+ 3: b: .byte
+ 4:   .code
+ 5: * = $0200
+ 6:   LDA a
+ 7:   LDA b
+EXPECT_HEX: a5 00 a5 03
+
+---
+NAME: zeropage_multi_word_byte
+DESCRIPTION: Multiple zeropage allocations on one line (.word .byte)
+INPUT:
+ 1:   .zeropage
+ 2: a: .word .byte
+ 3: b: .byte
+ 4:   .code
+ 5: * = $0200
+ 6:   LDA a
+ 7:   LDA b
+EXPECT_HEX: a5 00 a5 03
+
+---
+NAME: zeropage_multi_three
+DESCRIPTION: Three zeropage allocations on one line
+INPUT:
+ 1:   .zeropage
+ 2: a: .byte .byte .word
+ 3: b: .byte
+ 4:   .code
+ 5: * = $0200
+ 6:   LDA a
+ 7:   LDA b
+EXPECT_HEX: a5 00 a5 04

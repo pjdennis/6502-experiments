@@ -15,7 +15,7 @@ A fully self-hosting 6502 assembler built through progressive bootstrapping, wit
 ./asmtestgen.sh
 
 # Run the test suite
-./tests/run_tests.sh
+./run_tests.py
 
 # Watch mode (rebuilds on file changes)
 ./gogen.sh
@@ -23,94 +23,116 @@ A fully self-hosting 6502 assembler built through progressive bootstrapping, wit
 
 ## Bootstrap Chain Overview
 
-The assembler bootstraps through 20 progressively more capable versions:
+The assembler bootstraps through 23 progressively more capable versions:
 
 ```
-asm0c.c (C bootstrap)
+00/asm.c (C bootstrap)
     |
     v
-asm00.out -----> asm01.out -----> asm02.out ---> ... ---> asm06.out
-(DATA-only)    (asm02 in DATA)  (first "real"           (supports
-                                 assembler)              .include)
-                                                            |
-                        +-----------------------------------+
-                        |
-                        v
-                  instgen07.out ---> out/inst07.asm.out
-                        |                    |
-                        +--------------------+
-                        v
-                  asm07.out ---> asm08.out ---> asm09.out ---> asm10.out
-                  (inst07 concatenated with source)
-                        |
-                        v
-                  instgen11.out ---> out/inst11.asm.out
-                        |
-                        v
-                  asm11.out ---> asm12.out (uses .include for inst11)
-                        |
-                        v
-                  [continues through asm13-18, adding features]
-                        |
-                        v
-                  asm18.out (assembles asm19)
-                        |
-                        v
-                  asm19.out (final, self-hosting)
-                        |
-                        v
-                  asm19_2.out (self-assembled)
-                        |
-                        v
-                  Verification: asm19.out == asm19_2.out
+00/out/asm.out --> 01/out/asm.out --> 02/out/asm.out --> ... --> 06/out/asm.out
+(DATA-only)      (asm02 in DATA)   (first "real"              (supports
+                                    assembler)                  .include)
+                                                                   |
+                       +-------------------------------------------+
+                       |
+                       v
+                 07/out/instgen.out --> 07/out/inst.asm.out
+                       |                        |
+                       +------------------------+
+                       v
+                 07/out/asmc.out --> 08/out/asmc.out --> ... --> 10/out/asmc.out
+                 (inst.asm.out concatenated with source)
+                       |
+                       v
+                 11/out/instgen.out --> 11/out/inst.asm.out
+                       |
+                       v
+                 11/out/asm.out --> 12/out/asm.out (uses .include for inst.asm.out)
+                       |
+                       v
+                 [continues through 13-18, adding features]
+                       |
+                       v
+                 18/out/asm.out (assembles asm19)
+                       |
+                       v
+                 19/out/asm.out (expression evaluation)
+                       |
+                       v
+                 20/out/asm.out (conditional assembly with .ifdef/.endif)
+                       |
+                       v
+                 21/out/asm.out (conditional debug compilation, shift operators)
+                       |
+                       v
+                 22/out/asm.out (macros with parameters, memory protection)
+                       |
+                       v
+                 23/out/asm.out (baseline copy of asm22)
+                       |
+                       v
+                 23/out/asm_2.out (self-assembled)
+                       |
+                       v
+                 Verification: asm.out == asm_2.out
 ```
 
 ### Bootstrap Levels
 
-| Level | File | Key Features |
-|-------|------|--------------|
-| 0 | asm00.asm | Minimal DATA-only syntax, assembled by C program |
-| 1 | asm01.asm | asm02 translated to DATA format |
-| 2-6 | asm02-06.asm | Progressive feature additions |
-| 7-10 | asm07-10.asm | Require generated instruction tables (concatenated) |
-| 11-12 | asm11-12.asm | Use `.include` for instruction tables |
-| 13-15 | asm13-15.asm | Full-featured with local labels, hash tables, etc. |
-| 16 | asm16.asm | Enhanced error reporting with line numbers |
-| 17 | asm17.asm | Refactored (identical output to asm16) |
-| 18 | asm18.asm | Added `.data` directive alongside DATA |
-| 19 | asm19.asm | Uses `.data` exclusively, removes DATA pseudo-op |
+| Level | Directory | Key Features |
+|-------|-----------|--------------|
+| 0 | 00/ | Minimal DATA-only syntax, assembled by C program |
+| 1 | 01/ | asm02 translated to DATA format |
+| 2-6 | 02/-06/ | Progressive feature additions |
+| 7-10 | 07/-10/ | Require generated instruction tables (concatenated) |
+| 11-12 | 11/-12/ | Use `.include` for instruction tables |
+| 13-15 | 13/-15/ | Full-featured with local labels, hash tables, etc. |
+| 16 | 16/ | Enhanced error reporting with line numbers |
+| 17 | 17/ | Refactored (identical output to asm16) |
+| 18 | 18/ | Added `.data` directive alongside DATA |
+| 19 | 19/ | Uses `.data` exclusively, removes DATA pseudo-op |
+| 20 | 20/ | Conditional assembly (`.ifdef`/`.endif`), `define:label` command line |
+| 21 | 21/ | Shift operators (`<<`/`>>`), conditional debug compilation |
+| 22 | 22/ | Macros (`.macro`/`.endmacro`) with parameters, heap/stack overflow protection |
+| 23 | 23/ | Baseline copy of asm22 (no new features yet) |
 
 ## Directory Structure
 
 ```
 assembler2/
-├── out/                    # Generated outputs
-│   ├── asm00.out - asm19.out
-│   ├── inst07.asm.out - inst19.asm.out
-│   └── ...
-├── dump/                   # Memory dumps from emulator
-├── legacy/                 # Old/unused assembler versions
-├── tests/                  # Test suite
-│   ├── run_tests.sh        # Test runner script
-│   ├── asm18_tests.txt     # Tests for asm18 (reference)
-│   └── asm19_tests.txt     # Tests for asm19 (current)
+├── 00/                     # Version 0 (C bootstrap + first assembler)
+│   ├── asm.c               # C bootstrap assembler
+│   ├── asm.asm             # First assembler source
+│   └── out/                # Build outputs (asm_c.out, asm.out)
+├── 01/-23/                 # Assembler versions 1-23
+│   ├── asm.asm             # Assembler source
+│   ├── instgen.asm         # Instruction table generator (07+)
+│   ├── common.asm          # Shared code (11+)
+│   ├── environment.asm     # I/O and environment (11+)
+│   ├── hash_table.asm      # Hash table implementation (13+)
+│   ├── file_stack.asm      # Include file stack (13+)
+│   ├── to_decimal.asm      # Decimal conversion (13+)
+│   ├── errors.asm          # Error messages (18+)
+│   ├── fwdref.asm          # Forward reference handling (18+)
+│   ├── label_scope.asm     # Label scope management (21+)
+│   ├── macros.asm          # Macro support (22+)
+│   └── out/                # Build outputs (asm.out, instgen.out, inst.asm.out)
 │
-├── emulator.out            # 6502 emulator
-├── sidebyside.out          # Hexdump display utility
-├── asm0c.out               # C bootstrap assembler
+├── run_tests.py            # Test runner
+├── 23/tests/               # Latest test suite
+│   ├── asm_tests.txt     # Tests for asm23 (current, 256 tests)
+│   ├── file_stack_tests.txt  # File stack tests (30 tests)
+│   ├── file_stack_test.asm   # File stack test harness
+│   └── ...                 # Any version-specific test data
+├── tests/                  # Legacy test data and older test suites
 │
-├── asm00.asm - asm19.asm   # Assembler source chain
-├── instgen07.asm - instgen19.asm  # Instruction table generators
-├── common*.asm             # Shared code between asm and instgen
-├── hash_table*.asm         # Hash table implementation
-├── errors*.asm             # Error message definitions
-├── fwdref*.asm             # Forward reference handling
-├── file_stack*.asm         # Include file stack management
-├── to_decimal*.asm         # Decimal conversion utilities
+├── legacy/                 # Old/unused files
+├── out/                    # Root-level test outputs
 │
-├── test19.asm              # Test program
-├── Makefile
-├── asmtestgen.sh           # Main build script
+├── emulator.c              # 6502 emulator
+├── sidebyside.cpp          # Hexdump display utility
+├── Makefile                # Builds emulator, sidebyside, C bootstrap
+├── asmtestgen.sh           # Main build script (full bootstrap chain)
 └── gogen.sh                # Watch mode wrapper
 ```
 
@@ -118,8 +140,8 @@ assembler2/
 
 | File | Description |
 |------|-------------|
-| `Makefile` | Builds emulator, sidebyside, C bootstrap (asm0c), and level-0 assembler (asm00) |
-| `asmtestgen.sh` | Runs the full bootstrap chain from asm00 through asm19 |
+| `Makefile` | Builds emulator, sidebyside, and C bootstrap (`00/out/asm_c.out`) |
+| `asmtestgen.sh` | Runs the full bootstrap chain from version 00 through 23 |
 | `gogen.sh` | Watch mode - rebuilds on source file changes |
 
 ## Tools
@@ -127,31 +149,40 @@ assembler2/
 | File | Description |
 |------|-------------|
 | `emulator.c` | 6502 emulator that runs the assemblers |
-| `asm0c.c` | Minimal C assembler for bootstrapping (DATA-only syntax) |
+| `00/asm.c` | Minimal C assembler for bootstrapping (DATA-only syntax) |
 | `sidebyside.cpp` | Utility for displaying hexdump output side-by-side |
 
 ## Verification
 
 The build verifies correctness by:
 
-1. Assembling `asm19.asm` with `out/asm18.out` to produce `out/asm19.out`
-2. Assembling `asm19.asm` with `out/asm19.out` (self-assembly) to produce `out/asm19_2.out`
-3. Comparing the two outputs - they must be identical
+1. Assembling `23/asm.asm` with `22/out/asm_debug.out` to produce `23/out/asm.out` (without debug)
+2. Assembling `23/asm.asm` with `22/out/asm_debug.out` to produce `23/out/asm_debug.out` (with debug)
+3. Self-assembling `23/asm.asm` with both variants to produce `23/out/asm_2.out` and `23/out/asm_debug_2.out`
+4. Comparing outputs - each variant must self-assemble identically
 
-If the assembler can correctly assemble itself and produce an identical binary, the bootstrap is successful.
+If the assembler can correctly assemble itself and produce identical binaries, the bootstrap is successful.
+
+The build also shows code size comparison:
+```
+Code size comparison:
+  asm.out (no debug):     6382 bytes
+  asm_debug.out:          6801 bytes
+  Difference:             419 bytes
+```
 
 ## Testing
 
 ### Test Suite
 
-The project includes a comprehensive test suite:
+The project includes a comprehensive test suite (286 tests):
 
 ```bash
 # Run all tests
-./tests/run_tests.sh
+./run_tests.py
 
-# Run specific test file
-./tests/run_tests.sh tests/asm19_tests.txt
+# Run with verbose output
+./run_tests.py -v
 ```
 
 Tests verify both positive cases (correct assembly output) and negative cases (proper error detection).
@@ -161,8 +192,8 @@ Tests verify both positive cases (correct assembly output) and negative cases (p
 After a successful build, `test19.asm` is assembled and executed:
 
 ```bash
-./emulator.out out/asm19_2.out 2000 /dev/null /dev/null test19.asm out/test19.out
-./emulator.out out/test19.out 1000 /dev/null - arg1 "arg 2"
+./emulator.out 23/out/asm_debug.out test19.asm out/test19.out
+./emulator.out out/test19.out --load 1000 --output - arg1 "arg 2"
 ```
 
 ## Emulator Interface
@@ -183,7 +214,7 @@ The emulator provides these memory-mapped I/O routines (via JSR):
 | `$F021` | Open file for writing |
 | `$F024` | Write byte to file handle |
 
-## Assembler Syntax (asm19)
+## Assembler Syntax (asm23)
 
 ```asm
 ; Comments start with semicolon
@@ -198,20 +229,64 @@ label                    ; Global label
 .local                   ; Local label (scoped to previous global)
 
   LDA #$42               ; Immediate
+  LDA #$10+$20           ; Expression in immediate
+  LDA #$01<<$04          ; Left shift: $01 << 4 = $10
+  LDA #$80>>$02          ; Right shift: $80 >> 2 = $20
+  LDA #'Z'-'A'           ; Character arithmetic
   LDA $00                ; Zero page
   LDA $1234              ; Absolute
+  LDA base+$10           ; Expression in address
   LDA $1234,X            ; Absolute,X
   LDA $1234,Y            ; Absolute,Y
   LDA $00,X              ; Zero page,X
+  LDA (ptr+$02,X)        ; Expression in indexed indirect
   LDA ($00),Y            ; Indirect,Y
   LDA ($00,X)            ; Indirect,X
 
   .data $01 $02 $03      ; Raw bytes
   .data "string"         ; ASCII string
+  .data value+$05        ; Expression in data
   .data <label >label    ; Low/high byte of address
+  .data <addr+$10        ; Byte selector on expression
   .data label            ; 16-bit address (little-endian)
+  ; Commas are optional in .data lists
 
   BRK $01 "error" $00    ; BRK with inline error message
+
+  ; Conditional assembly (asm20+)
+  .ifdef SYMBOL          ; Assemble following code only if SYMBOL is defined
+    LDA #$42
+  .endif                 ; End conditional block
+
+  ; Macros (asm22+)
+  .macro ADDPTR ptr val  ; Define macro with parameters
+  CLC
+  LDA ptr
+  ADC #val
+  STA ptr
+  LDA ptr+$01
+  ADC #$00
+  STA ptr+$01
+  .endmacro
+
+  ADDPTR $10 $05         ; Invoke macro (substitutes ptr=$10, val=$05)
+  ; Commas are optional in macro parameter/argument lists
+```
+
+### Command Line
+
+```bash
+# Basic usage (run via emulator)
+./emulator.out 23/out/asm.out input.asm output.bin
+
+# With debug output
+./emulator.out 23/out/asm_debug.out input.asm output.bin debug
+
+# Pre-define symbols for conditional assembly
+./emulator.out 23/out/asm.out input.asm output.bin define:SYMBOL1 define:SYMBOL2
+
+# Enable small heap for testing (debug build only)
+./emulator.out 23/out/asm_debug.out input.asm output.bin small_heap
 ```
 
 ### Syntax Evolution
@@ -221,4 +296,32 @@ The assembler syntax has evolved through the bootstrap chain:
 - **asm00-06**: Non-standard syntax (`LDA#`, `LDAZ`, `STAZ(),Y`)
 - **asm07+**: Standard 6502 syntax (`LDA #$42`, `LDA ($00),Y`)
 - **asm18**: Added `.data` directive alongside `DATA` pseudo-op
-- **asm19**: Uses `.data` exclusively (removed `DATA` pseudo-op)
+- **asm19**: Uses `.data` exclusively (removed `DATA` pseudo-op), expression evaluation
+- **asm20**: Conditional assembly (`.ifdef`/`.endif`), `define:label` command line args
+- **asm21**: Shift operators (`<<`, `>>`), conditional compilation for optional debug support
+- **asm22**: Macros (`.macro`/`.endmacro`) with parameters, heap/stack overflow protection
+- **asm23**: Baseline copy of asm22 (no new features yet)
+
+## Adding a New Bootstrap Step
+
+To create version NN+1 from the current version NN (e.g., 23 → 24):
+
+### 1. Create New Version Directory
+
+Copy the entire version directory: `cp -r NN/ NN+1/`. Source files and tests use relative paths with no version suffixes, so nothing inside the copied directory needs changing.
+
+### 2. Update Build and Test Infrastructure
+
+All references to the version number are centralized in a few files:
+
+- **`asmtestgen.sh`**: Add build steps for NN+1 (follow the pattern of the NN block). Move the self-hosting check and code size comparison from NN to NN+1. Update the file_stack_test and test program lines to use the new assembler.
+- **`run_tests.py`**: Change `ASM_VERSION` constant from `"NN"` to `"NN+1"`.
+- **`gogen.sh`**: Add a line for NN+1's source files to the fswatch list. Include any new `.asm` files introduced in this version.
+- **`README.md`**: Update the bootstrap chain diagram, bootstrap levels table, and code size example.
+
+### 3. Build and Verify
+
+```bash
+./asmtestgen.sh    # Full bootstrap chain + self-assembly verification
+./run_tests.py     # Test suite
+```

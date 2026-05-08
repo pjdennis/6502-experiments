@@ -1,0 +1,38 @@
+Assembler Version 00
+====================
+Assembled by: C bootstrap assembler (00/asm.c, compiled to 00/out/asm_c.out)
+
+Features Supported by This Assembler
+-------------------------------------
+This is a minimal bootstrap assembler that runs on the 6502 emulator. It
+supports only enough to assemble the next version. It reads input character
+by character through memory-mapped I/O and emits raw bytes to output.
+
+- DATA directive: emit raw hex bytes (DATA $XX $XX ...)
+- Hex byte constants: 2-digit hex values prefixed with $ (e.g., $0A, $FF)
+- Semicolon comments: ; to end of line
+- Blank lines and whitespace handling (spaces, tabs)
+- Single-pass processing (no labels, no symbols, no program counter tracking)
+- Output is a raw binary stream
+- Reset vector emitted as final two DATA bytes to set entry point
+
+The assembler processes one directive per line. It skips whitespace, newlines,
+and comment lines. When it encounters 'D' (start of DATA), it reads and skips
+the remaining "ATA" characters, then parses $XX hex byte values separated by
+spaces until end of line.
+
+Features Used in This Assembler's Source Code
+----------------------------------------------
+The source is written for the C bootstrap assembler (00/asm.c), which supports:
+
+- DATA $XX: emit hex bytes (2-digit and 4-digit, little-endian for 4-digit)
+- DATA "string": emit ASCII string literals with \n escape
+- Semicolon comments
+- Blank lines
+
+The source uses only DATA with hex bytes. All 6502 instructions are manually
+encoded as hex byte sequences. Address calculations are done by hand and
+hardcoded. The reset vector at the end points to the entry address $2000.
+Comments show the intended 6502 instruction for each DATA line.
+
+Total code size: 129 bytes ($2000-$2080).

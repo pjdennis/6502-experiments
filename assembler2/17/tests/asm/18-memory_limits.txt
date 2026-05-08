@@ -1,0 +1,377 @@
+# --- Memory limits (cross-cutting) ---
+# Heap, file stack, scope stack, buffer overflow tests
+
+---
+NAME: heap_overflow_many_labels
+DESCRIPTION: Out of memory when heap exhausted with small heap
+ARGS: debug small_heap
+INPUT:
+ 1: * = $0200
+ 2: a00: = $01
+ 3: a01: = $01
+ 4: a02: = $01
+ 5: a03: = $01
+ 6: a04: = $01
+ 7: a05: = $01
+ 8: a06: = $01
+ 9: a07: = $01
+10: a08: = $01
+11: a09: = $01
+12: a10: = $01
+13: a11: = $01
+14: a12: = $01
+15: a13: = $01
+16: a14: = $01
+17: a15: = $01
+18: a16: = $01
+19: a17: = $01
+20: a18: = $01
+21: a19: = $01
+22: a20: = $01
+23: a21: = $01
+24: a22: = $01
+25: a23: = $01
+26: a24: = $01
+27: a25: = $01
+28: a26: = $01
+29: a27: = $01
+30: a28: = $01
+31: a29: = $01
+32:   NOP
+EXPECT_ERROR: 35
+EXPECT_MSG: Out of memory
+
+---
+NAME: file_stack_overflow_deep_include
+DESCRIPTION: Out of memory when file stack exhausted with small heap
+ARGS: debug small_heap
+INPUT:
+ 1: * = $0200
+ 2:   .include overflow/d01.asm
+EXPECT_ERROR: 35
+EXPECT_MSG: Out of memory
+
+---
+NAME: heap_normal_many_labels
+DESCRIPTION: Many labels work without small heap
+INPUT:
+ 1: * = $0200
+ 2: a00: = $01
+ 3: a01: = $01
+ 4: a02: = $01
+ 5: a03: = $01
+ 6: a04: = $01
+ 7: a05: = $01
+ 8: a06: = $01
+ 9: a07: = $01
+10: a08: = $01
+11: a09: = $01
+12: a10: = $01
+13: a11: = $01
+14: a12: = $01
+15: a13: = $01
+16: a14: = $01
+17: a15: = $01
+18: a16: = $01
+19: a17: = $01
+20: a18: = $01
+21: a19: = $01
+22: a20: = $01
+23: a21: = $01
+24: a22: = $01
+25: a23: = $01
+26: a24: = $01
+27: a25: = $01
+28: a26: = $01
+29: a27: = $01
+30: a28: = $01
+31: a29: = $01
+32:   LDA #a00
+EXPECT_HEX: a9 01
+
+---
+NAME: file_stack_normal_deep_include
+DESCRIPTION: Deep include works without small heap
+INPUT:
+ 1: * = $0200
+ 2:   .include overflow/d01.asm
+ 3:   RTS
+EXPECT_HEX: ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea ea 60
+
+---
+NAME: scope_stack_at_limit
+DESCRIPTION: 51 nested macros assemble cleanly. Pre-Phase-3.4 this was at the SCOPE_STACK limit (51 entries x 5 bytes = 255 of 256 available); after the source-stack merge each macro's activation state lives in its memory frame's payload, so the limit is simply source-stack OOM. 51 is well within that.
+INPUT:
+ 1: * = $0200
+ 2:   .include scope/s51.asm
+EXPECT_HEX: ea
+
+---
+NAME: scope_stack_52_no_longer_overflows
+DESCRIPTION: Post-Phase-3.4 there is no separate scope stack to overflow -- 52 nested macros assemble fine. Pre-Phase-3.4 this hit err_macro_nesting_too_deep (error 34); now that error code is unreachable.
+INPUT:
+ 1: * = $0200
+ 2:   .include scope/s52.asm
+EXPECT_HEX: ea
+
+---
+NAME: macro_nesting_normal_heap
+DESCRIPTION: Five macros chained A->B->C->D->E assemble cleanly with the normal heap. The chain is paramless and contains no .include, so each invocation's only memory cost is its source-stack frame -- the same configuration as the small-heap overflow test below.
+INPUT:
+ 1: * = $0200
+ 2:   .macro A
+ 3:   NOP
+ 4:   .endmacro
+ 5:   .macro B
+ 6:   A
+ 7:   .endmacro
+ 8:   .macro C
+ 9:   B
+10:   .endmacro
+11:   .macro D
+12:   C
+13:   .endmacro
+14:   .macro E
+15:   D
+16:   .endmacro
+17:   E
+EXPECT_HEX: ea
+
+---
+NAME: macro_nesting_overflow
+DESCRIPTION: Macro nesting itself triggers source-stack OOM under small_heap. The chain is paramless and contains no .include, so during the cascade the only thing growing is the source stack -- macro definitions are all set up before invocation (heap stable thereafter), no parameters means no per-invocation hash_add (heap doesn't grow during cascade), no .include means no extra file frames. With small_heap shrinking the heap-vs-source-stack buffer to 384 bytes the cascade exhausts the buffer mid-expansion. The traceback (EXPECT_STDERR) confirms the OOM site is a macro push during a chain of expansions. The exact depth at which the limit hits depends on the input filename's length (it counts toward the input file frame's size); the test runner's tempdir prefix has fixed length so the result is stable across runs.
+ARGS: debug small_heap
+INPUT:
+ 1: * = $0200
+ 2:   .macro A
+ 3:   NOP
+ 4:   .endmacro
+ 5:   .macro B
+ 6:   A
+ 7:   .endmacro
+ 8:   .macro C
+ 9:   B
+10:   .endmacro
+11:   .macro D
+12:   C
+13:   .endmacro
+14:   .macro E
+15:   D
+16:   .endmacro
+17:   E
+EXPECT_STDERR:
+Error 35 in macro E at line 1: Out of memory
+  expanded from {{MAIN_FILE}}:17
+
+---
+NAME: macro_param_no_per_invocation_heap_leak
+DESCRIPTION: 30 invocations of a parameterised macro under small_heap assemble cleanly. Pre-Phase-4.7 each invocation added a per-param entry to the LABEL_TYPE_MACRO hash, so the heap leaked ~10 bytes per invocation; the small_heap budget would have exhausted around the 13th call. Post-Phase-4.7 parameters live in the macro frame's payload (which is freed on pop), so the heap doesn't grow across invocations.
+ARGS: debug small_heap
+INPUT:
+ 1: * = $0200
+ 2:   .macro M v
+ 3:   LDA #v
+ 4:   .endmacro
+ 5:   M $01
+ 6:   M $02
+ 7:   M $03
+ 8:   M $04
+ 9:   M $05
+10:   M $06
+11:   M $07
+12:   M $08
+13:   M $09
+14:   M $0A
+15:   M $0B
+16:   M $0C
+17:   M $0D
+18:   M $0E
+19:   M $0F
+20:   M $10
+21:   M $11
+22:   M $12
+23:   M $13
+24:   M $14
+25:   M $15
+26:   M $16
+27:   M $17
+28:   M $18
+29:   M $19
+30:   M $1A
+31:   M $1B
+32:   M $1C
+33:   M $1D
+34:   M $1E
+EXPECT_HEX: a9 01 a9 02 a9 03 a9 04 a9 05 a9 06 a9 07 a9 08 a9 09 a9 0a a9 0b a9 0c a9 0d a9 0e a9 0f a9 10 a9 11 a9 12 a9 13 a9 14 a9 15 a9 16 a9 17 a9 18 a9 19 a9 1a a9 1b a9 1c a9 1d a9 1e
+
+---
+NAME: macro_max_name_args_fit_frame
+DESCRIPTION: 127-character macro name with 8 parameters still fits in the 1-byte frame_size at offset 0 (well under the 255 cap). MACRO_MAX_ARGS is 64 now; the binding constraint at the upper end is the frame_size byte, not the arg cap. The worst-case (memory-parented) frame is 1 (frame_size) + 127 (name) + 1 (null) + 1 (curr_type) + 1 (prev_type) + 2 (line) + 2 (prev_data, memory parent) + 31 (activation payload: 8 slots + 7-byte scope tail) = 166 bytes. macro_args_above_cap_at_def covers the arg-cap overflow path, and macro_frame_size_overflow covers the frame_size overflow path.
+INPUT:
+ 1: * = $0200
+ 2:   .macro AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA a0, a1, a2, a3, a4, a5, a6, a7
+ 3:   LDA #a0
+ 4:   .endmacro
+ 5:   AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA $42, $00, $00, $00, $00, $00, $00, $00
+EXPECT_HEX: a9 42
+
+---
+NAME: macro_name_too_long
+DESCRIPTION: 128-character macro name overflows the TOKEN buffer at definition time. read_token's 127-char cap is shared between labels and macro names; this test pins down that .macro NAME specifically routes through the same check, raising err_token_too_long (36) rather than silently truncating.
+INPUT:
+ 1: * = $0200
+ 2:   .macro BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+ 3:   NOP
+ 4:   .endmacro
+EXPECT_ERROR: 36
+EXPECT_LINE: 2
+EXPECT_MSG: Token too long
+
+---
+NAME: macro_args_at_cap
+DESCRIPTION: 64 macro arguments (the new MACRO_MAX_ARGS cap) fit. expand_macro now writes parsed slots straight into the source-stack frame's payload region instead of a fixed staging buffer, so the cap is bounded by the 1-byte frame_size rather than a 32-byte buffer. With a short macro name we fit comfortably (15 + name_len + 3*64 = 207 bytes for a 0-char name, 15 + 1 + 192 = 208 bytes here).
+INPUT:
+ 1: * = $0200
+ 2:   .macro M64 a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, a54, a55, a56, a57, a58, a59, a60, a61, a62, a63
+ 3:   LDA #a0
+ 4:   .endmacro
+ 5:   M64 $11, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+EXPECT_HEX: a9 11
+
+---
+NAME: macro_args_above_cap_at_def
+DESCRIPTION: 65 parameter names exceed MACRO_MAX_ARGS=64, raising err_too_many_arguments at definition time (in dir_macro). Catching this at .macro time -- rather than at the eventual invocation -- prevents the count byte from silently overflowing.
+INPUT:
+ 1: * = $0200
+ 2:   .macro M65 a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, a54, a55, a56, a57, a58, a59, a60, a61, a62, a63, a64
+ 3:   LDA #a0
+ 4:   .endmacro
+EXPECT_ERROR: 33
+EXPECT_LINE: 2
+EXPECT_MSG: Too many macro arguments
+
+---
+NAME: token_buffer_at_limit
+DESCRIPTION: 127 character token at buffer limit
+INPUT:
+ 1: * = $0200
+ 2: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA: = $42
+ 3:   LDA #AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+EXPECT_HEX: a9 42
+
+---
+NAME: token_buffer_overflow
+DESCRIPTION: 128 character token overflows buffer
+INPUT:
+ 1: * = $0200
+ 2: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB: = $42
+EXPECT_ERROR: 36
+EXPECT_LINE: 2
+EXPECT_MSG: Token too long
+
+---
+NAME: ifdef_decisions_at_limit
+DESCRIPTION: 255 .ifdef directives exactly at buffer limit (7x32 + 31 = 255)
+INPUT:
+ 1: * = $0200
+ 2:   .include ifdefs/ifdef32.asm
+ 3:   .include ifdefs/ifdef32.asm
+ 4:   .include ifdefs/ifdef32.asm
+ 5:   .include ifdefs/ifdef32.asm
+ 6:   .include ifdefs/ifdef32.asm
+ 7:   .include ifdefs/ifdef32.asm
+ 8:   .include ifdefs/ifdef32.asm
+ 9:   .include ifdefs/ifdef31.asm
+10:   NOP
+EXPECT_HEX: ea
+
+---
+NAME: ifdef_decisions_overflow
+DESCRIPTION: 256 .ifdef directives overflows 255-entry buffer (7x32 + 31 + 1 = 256)
+INPUT:
+ 1: * = $0200
+ 2:   .include ifdefs/ifdef32.asm
+ 3:   .include ifdefs/ifdef32.asm
+ 4:   .include ifdefs/ifdef32.asm
+ 5:   .include ifdefs/ifdef32.asm
+ 6:   .include ifdefs/ifdef32.asm
+ 7:   .include ifdefs/ifdef32.asm
+ 8:   .include ifdefs/ifdef32.asm
+ 9:   .include ifdefs/ifdef31.asm
+10:   .ifdef ONE_MORE
+11:   .endif
+EXPECT_ERROR: 21
+EXPECT_LINE: 10
+EXPECT_MSG: Too many .ifdef directives
+
+---
+NAME: macro_same_name_as_label
+DESCRIPTION: A macro and a global label can have the same name since they are in separate scopes (LABEL_TYPE_MACRO_DEF vs global)
+INPUT:
+ 1: * = $0200
+ 2: test = $42
+ 3:   .macro test val
+ 4:   LDA #val
+ 5:   .endmacro
+ 6:   test $55
+ 7:   LDA #test
+EXPECT_HEX: a9 55 a9 42
+
+---
+NAME: macro_with_label_param_same_name
+DESCRIPTION: Macro parameter shadows a global label with the same name during expansion
+INPUT:
+ 1: * = $0200
+ 2: val = $FF
+ 3:   .macro load val
+ 4:   LDA #val
+ 5:   .endmacro
+ 6:   load $42
+ 7:   LDA #val
+EXPECT_HEX: a9 42 a9 ff
+
+---
+NAME: local_label_same_name_as_macro
+DESCRIPTION: A local label inside a macro can have the same name as a macro definition
+INPUT:
+ 1: * = $0200
+ 2:   .macro inner
+ 3:   NOP
+ 4:   .endmacro
+ 5:   .macro outer
+ 6: .inner
+ 7:   NOP
+ 8:   JMP .inner
+ 9:   .endmacro
+10:   outer
+EXPECT_HEX: ea 4c 00 02
+
+---
+NAME: macro_same_name_as_directive
+DESCRIPTION: Macro named "byte" coexists with .byte directive; both work correctly
+INPUT:
+ 1: * = $0200
+ 2:   .macro byte val
+ 3:   LDA #val
+ 4:   .endmacro
+ 5:   .byte $55
+ 6:   byte $42
+EXPECT_HEX: 55 a9 42
+
+---
+NAME: macro_shadows_instruction_error
+DESCRIPTION: Defining a macro with same name as a 6502 instruction produces error
+INPUT:
+ 1: * = $0200
+ 2:   .macro LDA val
+ 3:   NOP
+ 4:   .endmacro
+EXPECT_ERROR: 26
+
+---
+NAME: unknown_directive_error
+DESCRIPTION: Using an unknown directive name produces error 14
+INPUT:
+ 1: * = $0200
+ 2:   .badname
+EXPECT_ERROR: 14

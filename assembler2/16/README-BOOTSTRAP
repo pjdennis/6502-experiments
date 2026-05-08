@@ -1,0 +1,129 @@
+Assembler Version 16
+====================
+Assembled by: version 15 debug build (asm_debug.out with define:enable_debug)
+
+Build notes: The v15 debug build is used because v16 source uses
+.ifdef enable_debug conditional compilation, which requires v15 support.
+Version 16 also produces both normal and debug builds.
+
+Features Supported by This Assembler
+-------------------------------------
+All features from version 15, plus .byte/.word/.asciiz directives,
+.reserve, decimal numbers, memory protection, and enhanced conditional
+assembly:
+
+Syntax:
+- Standard 6502 mnemonic syntax (LDA, STA, etc.)
+- All addressing modes (immediate, zero page, absolute, indexed, indirect)
+- .data directive for byte/string data (retained for compatibility)
+- Hex constants: $xx (1 byte) or $xxxx (2 bytes)
+- Decimal constants (parsed by from_decimal.asm)
+- Character literals: 'x', '\n', '\\', '\''
+- Expression evaluation with +, -, <<, >> operators (left-to-right)
+- Quoted strings with full escape sequence support (decode_escape)
+- Label definitions with PC value or explicit assignment
+- Optional colon after label definitions (label:)
+- Local labels with . prefix
+- PC setting via: * = $xxxx (with zero-fill on pass 2)
+- Low byte (<) and high byte (>) operators
+- Comments with semicolons
+- Two-pass assembly with forward reference tracking
+- Automatic zero page vs absolute addressing
+
+Directives:
+- .include filename - includes contents of another file
+- .zeropage - switch to zero page section
+- .code - switch to code section
+- .data - declare raw byte data (legacy, retained)
+- .byte expr [, expr ...] - emit byte values (comma-separated) (new)
+- .word expr [, expr ...] - emit 16-bit word values (comma-separated) (new)
+- .asciiz expr [, "string" ...] - emit null-terminated strings/values (new)
+- .reserve N - reserve N bytes (zero-fill in .code, PC advance in .zeropage) (new)
+- .byte / .word (without operand in .zeropage) - allocate zero page storage (new)
+- .ifdef label - begin conditional block if label is defined
+- .endif - end conditional block
+- .macro NAME [param1 param2 ...] - begin macro definition
+- .endmacro - end macro definition
+
+Command line:
+- Variable argument count
+- define:label - pre-define a label
+- debug - enable debug output (new)
+- small_heap - use reduced heap for testing (new)
+- show_captured_macros - display captured macro definitions (new)
+
+Memory protection:
+- CHECK_FOR_OUT_OF_MEMORY macro detects heap/stack collision
+- 256-byte safety buffer maintained between heap (MEMP16) and
+  file stack (FS_P16)
+
+Error handling: reorganized error codes into categories, plus new errors:
+- Error codes renumbered and grouped by category ($01-$FF)
+- err_too_many_ifdefs ($15): IFDEF_DECISIONS buffer full
+- err_macro_nesting_too_deep ($1F): Macro nesting limit exceeded
+- err_out_of_memory ($20): Heap/stack collision
+- err_token_too_long ($21): Token exceeds buffer
+- err_zeropage_overflow ($23): Zero page section overflow
+- err_file_not_found ($24): File not found (debug build)
+- err_operand_in_zeropage ($25): Operand on .byte/.word in .zeropage
+- err_nested_macro_definition ($1B): Nested .macro inside .macro
+- Error codes reorganized: usage errors at $F0-$F1, debug at $FE-$FF
+
+New in this version (relative to version 15):
+- .byte, .word, .asciiz directives with comma-separated values
+  - DATA_MODE tracking (0=.data, 1=.byte, 2=.word, 3=.asciiz)
+  - Comma-separated data values in .byte, .word, .asciiz
+  - .asciiz auto-appends null terminator after each string
+  - Quoted strings supported in .byte and .asciiz
+  - .byte/.word without operands in .zeropage allocates storage
+- .reserve N directive for reserving bytes
+- Decimal number parsing (from_decimal.asm module)
+- Memory protection (CHECK_FOR_OUT_OF_MEMORY macro in common.asm)
+  - Detects when heap approaches file stack
+  - 256-byte safety buffer for indexed addressing
+- decode_escape for string escape sequences (\n, \\, \', \0, etc.)
+- compare_end_of_token rewritten as positive character class matching
+  (alphanumeric + underscore) instead of negative list of terminators
+- Error codes reorganized into sequential categories
+- macros.asm module with utility macros (SET16, CP16, INC16, etc.)
+- Zero page variables use 16-suffix naming (PC16, HEX16, etc.)
+- OPERAND16 aliased to HEX16 (single 16-bit location)
+- Detailed architecture documentation in source header comments
+
+Features Used in This Assembler's Source Code
+----------------------------------------------
+- Standard 6502 mnemonic syntax
+- All addressing modes including indirect indexed
+- .data directive for byte/string data
+- Hex constants ($xx and $xxxx)
+- Character literals and character literal expressions
+- Expressions with +, -, <<, >> operators
+- Quoted strings with escape sequences
+- Labels with colon suffix (label:)
+- Label assignments (e.g., OPERAND16 = HEX16)
+- Local labels with . prefix
+- PC setting (* = $2000 and * = $FFFC)
+- Low byte (<) and high byte (>) operators
+- Comments (;)
+- BRK with inline error code and message
+- .include directive (environment.asm, macros.asm, common.asm,
+  label_scope.asm, fwdref.asm, file_stack.asm, errors.asm,
+  from_decimal.asm, to_decimal.asm, out/inst.asm.out)
+- .zeropage and .code directives
+- .ifdef enable_debug / .endif conditional compilation
+- Macro invocations (SET16, CP16, INC16, DEC16, etc.)
+
+New syntax used in source (relative to version 15):
+- Colon after label definitions (label:) - first version using
+  colon-terminated labels
+- Macro invocations (SET16, CP16, INC16, DEC16, CMP16, CMPI16,
+  ADC16, SBC16, ADCI16, SBCI16, ADCA16, etc.)
+- Macro definitions (.macro/.endmacro) in macros.asm
+- << and >> shift operators in expressions
+
+Other source changes:
+- from_decimal.asm module included
+- Zero page variables use 16-suffix naming (PC16, HEX16, MEMP16, etc.)
+  and .data $0000 for 16-bit values
+- IFDEF_DECISIONS buffer at $0800
+- Note: source still uses .data directive, NOT .byte/.word/.asciiz

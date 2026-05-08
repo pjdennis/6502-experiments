@@ -1,0 +1,150 @@
+Support batching for D
+
+Batched backspace joing lines had issues and then enter to split caused issues. Saw unnecessary line repaints, and also as full repaint that I wasn't able to repro just yet.
+
+Add batch support for word back/forward and other movement keys?
+[n]O and [n]o will repeat the typed line n times (if only one line entered)
+cc / C / J, undo redo across a blank line lost that line (single dash below)
+ -Do the join and calculate the new screen row for the line following the joined lines
+ -Scroll from the row following the lines to be joined, up by the delta amount
+-
+ Add support for e
+
+There's an 8-bit limit on number of wrap rows for a line... Can we at least have some error checking to prevent bogus behavior? Or just make this 16 bit - e.g. PREV_LINE_ROWS
+
+When batched backspace or delete unwraps a line or batched typing wraps a line it triggers a full redraw of the line
+
+When undoing/redoing J with wrapped lines, a phantom empty line appers at the end
+Algorithm for batch of J:
+-Look for the line following those that are to be joined and remember it's screen row
+-Do the join and calculate the new screen row for the line following the joined lines
+-Scroll from the row following the lines to be joined, up by the delta amount
+
+Add support for ensuring that the max lines is not exceeded - an error display if a command would make this happen, before doing any update. An in insert mode just prevent the enter key from creating a new line when at the max (is that sufficient?)
+
+Support terminal resize
+
+Toggle modified flag back when undoing the first modification to a file
+
+Update the tests that are relying on u u to break the batch to do something else like a movement key - we might at some point filter ' ' before batching since it doesn't do anything.
+When last line wraps, rows 2+ don't display at all
+When backspacing from below a wrapped line onto the wrapped line, the row that was just moved to is unnecessarily redrawn
+Implement an ability to specify a filename to write to + an e command to load a file
+Implmement y$, d$, etc.
+Line-level render optimiaztion for undo and redo
+Undo for paste operations
+Batching for undo
+Undo restore cursor position based on the operation OK?
+
+Render optimize ~ and r to render only the current character
+
+Error message in macro shows last param name vs. macro name:
+
+  .macro SBC16_8 ptr1, ptr2_8, ptr3
+  LDA ptr1
+  SBC ptr2_8
+  STA ptr3
+  LDA ptr1 + 1
+  SBC #0
+  STA ptr2 + 1
+  .endmacro
+
+Error 1 in macro ptr3 at line 6: Label not found
+                 ^^^^
+
+Move readonly checks to the destructive actions vs. the key presses?
+
+Make a variable batch limit - text entry should have a high batch limit (to support pasting) while keeping other limits as is for better visual feedback while e.g. navigating. (maybne) we could try first just bumping the limit.
+
+Batching of backspace and delete in insert mode seems to be broken
+
+Clean up some of the repeating print code in the editor via helper functions
+
+Batched enter caused scren redraw issues
+
+Optimize redraw within a line - largest difference when inserting at the end of the line.
+
+Try to centralize the buffer full message checks
+
+Addressing mode constants - decimals
+
+OPERAND_BYTES_0 = 0 << 4 
+
+why is it using hex constants e.g. $0002 e.g. for "Advance to next LINE_TBL entry"
+
+move_left_x and move_right_x - change from an addition loop to use math
+
+Add debug assembler option to print progress messages
+Add conditional compiled option for:
+  -labels without the : syntax
+  -lower-case/mixed case opcodes
+
+Allow batching of inputtext to include newlines, and handle these within the batch insert
+Increase the maximum key batch size
+Make it so that actions affetcing only the currently line don't trigger a redraw (until e.e. the line wraps) Affects many things like typing, Shift+D, x, etc.
+
+fprintf(stderr, "Code file %s is too large to fit in memory\n", code_filename); - dead code in emulator.c?
+
+normal.asm - count prefix handling - can use ADC16
+
+Tests for mnemonic in directive position and visa versa
+
+buf_get_line_len could do math based on the offset of the next line, vs. scanning.
+
+" ; Save LABEL_SCOPE16 before add_macro_to_hash clobbers it" - in a couple of places. Is there a better fix - shouldn't label scope be set before any label lookup? Otherwise use the macros for push/pop
+
+Use the symbolic constant instead of .byte $0D in the instgen output for directives
+
+directives.asm and probably elsewhere: Change hex offsets to decimal
+
+macro_expansion.asm: "; Found in IHASHTAB - check if it's a directive (directives can be shadowed)" - directives can't be shadowed, exactly, but someone could write a directive in the position for an in struction and visa versa. Maybe clarify the comment and add tests.
+
+Pasting a large block of text into the editor towards the end resulted in text going to the wrong place; in the middle of the file
+
+EMIT16 macro
+
+-Marks display has cursor visible
+-Marks display should show as much of the line as will fit
+
+Add the :'a,.d syntax to delete (assuming that's what it is)
+
+Allow $ for last line
+
+Allow $ for e.g. d$, y$
+
+ JMP do_jump not needed
+
+Allow for delete but prompt if it will not fit in the yank buffer
+
+Editor crashes when pasting a chunk of text a large number of multiples
+
+Please update the plan with the following:
+
+  -Use the definitions for the new io ports that I created in 23/environment.asm - I want two non-blocking
+  ports with the carry flag indicating if the byte was returned/accepted. In a serial environment write
+  might fill the send buffer.
+  -Clarify the wording in the intro of "connected to the host terminal via ANSI sequences over serial." - in
+  the emulated environment it's not connected over serial, but rather, serial is emulated within the
+  emulator and the emulator uses the environments console interface.
+
+io.asm query_terminal_size - use strings instead of byte by byte
+
+Attempting to run the terminal version of the editor in the terminal version of the emulator results in nothing - should error out
+
+Resuming after Ctrl+Z doesn't restore the screen, when in terminal mode
+
+Other things triggering full redraws:
+-Home and end (insert mode) when already at home/end
+-Up/down and pgup/pgdn when at top/bottom (normal and insert mode)
+
+
+normal.asm - table driven key dispatch opportunity
+
+-Cursor movement attempts at the beginning/end of a line trigger full redraw
+-Need batching for horizonal cursor movement
+-Starting command entry triggers a full redraw
+-Ctrl+arrow keys causes deletion to end of line, etc.
+-Need batching for counted version of << and >>
+-counted version of cw/cb should copy all?
+-counter version of cw/cb should be batched and should cross line boundaries
+-word move is modulo 256 - needs to be 16 bit

@@ -1,0 +1,91 @@
+Assembler Version 13
+====================
+Assembled by: version 12 (both instgen and asm)
+
+Features Supported by This Assembler
+-------------------------------------
+All features from version 12, plus expression evaluation, .data directive,
+expression-aware forward reference propagation, and error module extraction:
+
+Syntax:
+- Standard 6502 mnemonic syntax (LDA, STA, etc.)
+- All addressing modes (immediate, zero page, absolute, indexed, indirect)
+- DATA pseudo-instruction for raw byte emission
+- Hex constants: $xx (1 byte) or $xxxx (2 bytes)
+- Character literals: 'x', '\n', '\\', '\'' (in expressions and immediate mode)
+- Quoted strings in DATA with escape sequences
+- Label definitions with PC value or explicit assignment (label = value)
+- Local labels with . prefix (.label), scoped to most recent global label
+- PC setting via: * = $xxxx (with zero-fill on pass 2)
+- Low byte (<) and high byte (>) operators (applied to entire expression result)
+- Expression evaluation with + and - operators (left-to-right, no precedence)
+- Mixed expressions: hex, labels, and character literals (e.g., '9'-'0'+$01)
+- Comments with semicolons
+- Two-pass assembly with forward reference tracking (from version 12)
+- Automatic zero page vs absolute addressing based on value
+
+Directives:
+- .include filename - includes contents of another file
+- .zeropage - switch to zero page section
+- .code - switch to code section
+- .data - declare raw byte data (new)
+
+Error handling: same as version 12 (errors $01-$12, $13, $16), plus:
+- err_invalid_operand ($14): invalid operand in expression
+- err_unexpected_text ($15): unexpected text after operand
+
+New in this version (relative to version 12):
+- Expression evaluation with + and - operators
+  - parse_term: parses a single value ($hex, 'char', label)
+  - parse_expression: chains terms with + and - operators
+  - parse_value: handles < > byte selectors then calls parse_expression
+  - Left-to-right evaluation, no operator precedence
+  - Character literals supported as expression terms
+  - Forward references propagate through expressions (if any term is forward
+    ref, entire expression is treated as forward ref via EXPR_FWDREF)
+- Extended forward reference tracking for expressions
+  - Version 12 introduced basic forward ref tracking for single label operands;
+    this version extends IS_FWDREF propagation to multi-term expressions
+  - EXPR_FWDREF accumulates forward reference status across expression terms
+- .data directive: new directive form for raw byte data
+- errors.asm module: error messages and interrupt handler extracted from
+  main source into separate include file
+- OPERAND_L/OPERAND_H aliased to HEX2/HEX1 (shared storage)
+- EXPR_ACCU_L/EXPR_ACCU_H zero page variables for expression accumulator
+- EXPR_FWDREF for accumulated forward reference flag in expressions
+- EXPR_CARRY for saved carry from first term
+- + and - added as token terminators in compare_end_of_token
+
+Features Used in This Assembler's Source Code
+----------------------------------------------
+- Standard 6502 mnemonic syntax
+- All addressing modes including indirect indexed
+- DATA pseudo-instruction for byte/string data
+- Hex constants ($xx and $xxxx)
+- Character literals in immediate mode (#'x', #'\n', etc.)
+- Quoted strings with escape sequences
+- Labels and label assignments
+- Local labels with . prefix
+- PC setting (* = $2000 and * = $FFFC)
+- Low byte (<) and high byte (>) operators
+- Comments (;)
+- BRK with inline error code and message (via DATA on next line)
+- .include directive (environment.asm, common.asm, file_stack.asm,
+  errors.asm, fwdref.asm)
+- .zeropage and .code directives
+
+New syntax used in source (relative to version 12):
+- None (source uses DATA pseudo-instruction, not the new .data directive,
+  because it is assembled by version 12 which does not support .data)
+
+Note: the source does NOT use expression evaluation (no + or - operators
+in operands). Expressions are a feature this assembler SUPPORTS for programs
+it assembles. Version 14 is the first version whose source uses expressions,
+since it is assembled by version 13.
+
+Other source changes:
+- errors.asm module extracted (error messages, interrupt handler, show_message,
+  show_decimal, to_decimal include)
+- fwdref.asm module for forward reference list management
+- OPERAND_L/OPERAND_H aliased to HEX2/HEX1 via = assignment
+- Expression accumulator variables (EXPR_ACCU_L/H, EXPR_FWDREF, EXPR_CARRY)

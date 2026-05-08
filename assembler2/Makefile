@@ -1,20 +1,34 @@
-all: emulator.out sidebyside.out asm0c.out
+all: emulator/emulator.out 00/out/asm_c.out
 
 clean:
-	rm -f emulator.out
-	rm -f asm0c.out
-	rm -f sidebyside.out
-	rm -f out/*.out
-	rm -f dump/*.bin
+	rm -f emulator/emulator.out
+	find . -type d -name "out" -exec rm -rf {} +
+	find . -type f -name "*.tmp" -delete
 
-emulator.out: emulator.c
-	@mkdir -p out
-	gcc -O2 -march=native -flto -DNDEBUG -o emulator.out emulator.c
+EMU_SRCS = emulator/emulator.c emulator/file_io.c emulator/console.c emulator/cpu_core.c emulator/stubs.c
+EMU_HDRS = emulator/file_io.h emulator/console.h emulator/cpu_core.h emulator/stubs.h
 
-asm0c.out: asm0c.c
-	@mkdir -p out
-	gcc -O2 -o asm0c.out asm0c.c
+emulator/emulator.out: $(EMU_SRCS) $(EMU_HDRS)
+	gcc -O2 -march=native -flto -DNDEBUG -o emulator/emulator.out $(EMU_SRCS)
 
-sidebyside.out: sidebyside.cpp
-	@mkdir -p out
-	g++ -O2 -march=native -flto -DNDEBUG -o sidebyside.out sidebyside.cpp
+00/out/asm_c.out: 00/asm.c
+	@mkdir -p 00/out
+	gcc -O2 -o 00/out/asm_c.out 00/asm.c
+
+# C unit tests
+C_TESTS = emulator/tests/out/test_smoke.out emulator/tests/out/test_file_io.out emulator/tests/out/test_console.out
+
+test: $(C_TESTS)
+	@for t in $(C_TESTS); do ./$$t || exit 1; done
+
+emulator/tests/out/test_smoke.out: emulator/tests/test_smoke.c emulator/tests/greatest.h
+	@mkdir -p emulator/tests/out
+	gcc -o $@ $<
+
+emulator/tests/out/test_file_io.out: emulator/tests/test_file_io.c emulator/file_io.c emulator/file_io.h emulator/tests/greatest.h
+	@mkdir -p emulator/tests/out
+	gcc -o $@ emulator/tests/test_file_io.c emulator/file_io.c
+
+emulator/tests/out/test_console.out: emulator/tests/test_console.c emulator/console.c emulator/console.h emulator/tests/greatest.h
+	@mkdir -p emulator/tests/out
+	gcc -o $@ emulator/tests/test_console.c emulator/console.c

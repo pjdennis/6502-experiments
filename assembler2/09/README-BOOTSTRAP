@@ -1,0 +1,82 @@
+Assembler Version 09
+====================
+Assembled by: version 08 (both instgen and asm)
+
+Features Supported by This Assembler
+-------------------------------------
+All features from version 08, plus section directives, command-line arguments,
+parameterized hash table module, and modular source organization:
+
+Syntax:
+- Non-standard (custom) mnemonic syntax: LDA#, LDAZ, STAZ, etc.
+- DATA pseudo-instruction for raw byte emission
+- Hex constants: $xx (1 byte) or $xxxx (2 bytes)
+- Quoted strings with \n and \\ escapes
+- Label definitions with PC value or explicit assignment (including label refs)
+- PC setting via: * = $xxxx (with zero-fill on pass 2)
+- Low byte (<) and high byte (>) operators on labels
+- Relative branch labels (auto-detected via instruction flags)
+- Labels as 2-byte operands
+- Comments with semicolons
+- Two-pass assembly
+- Flag-based operand type detection
+- .include directive for including external files
+- .zeropage section directive (new)
+- .code section directive (new)
+- Command-line arguments: <assembler> <input> <output> (new)
+
+Directives:
+- .include filename - includes contents of another file
+- .zeropage - switches to zero page section (new)
+- .code - switches back to code section (new)
+
+Instruction set: same as version 08, plus:
+- ASLZ (ASL zero-page)
+
+Error handling: same errors as version 08 (errors 1-E), plus:
+- Usage error (error D): wrong number of command-line arguments
+
+New in this version (relative to version 08):
+- .zeropage and .code section directives: allows defining zero page variables
+  separately from code, with automatic PC save/restore between sections
+- IN_ZEROPAGE flag: suppresses code output during zero page section
+- PC_SAVEL/PC_SAVEH: saves/restores program counter when switching sections
+- Command-line arguments for input and output files: the assembler no longer
+  reads from stdin; instead it takes input and output filenames as arguments
+  via argc ($F01B) and argv ($F01E)
+- Usage error message when wrong number of arguments provided
+- Parameterized hash table module: common.asm extracted for shared code
+  between asm.asm and instgen.asm
+- ASLZ instruction added to instruction table
+- First version using .include in its own source code (environment.asm,
+  common.asm, out/inst.asm.out)
+- Output via file handle: openout ($F021) and write ($F024) replace stdout
+
+Features Used in This Assembler's Source Code
+----------------------------------------------
+- Non-standard mnemonic syntax (LDA#, LDAZ, STAZ, BITZ, INCZ, DECZ, etc.)
+- DATA pseudo-instruction
+- Hex constants ($xx and $xxxx)
+- Quoted strings with escape sequences
+- Labels and label assignments (label = value)
+- PC setting (* = $2000 and * = $FFFC for vectors)
+- Low byte (<) and high byte (>) operators
+- Labels as absolute 2-byte operands
+- Comments (;)
+- BRK with inline error code and message (BRK $xx "message" $00)
+- .include directive (environment.asm, common.asm, out/inst.asm.out)
+- Zero page variables via explicit = assignments (TEMP = $00, etc.)
+- File I/O: open, close, read, openout, write
+- File stack operations (push/pop) for .include handling
+- Command-line arg access: argc, argv
+
+New syntax used in source (relative to version 08):
+- .include directive (first version to use .include in its own source,
+  including environment.asm, common.asm, and out/inst.asm.out)
+
+Other source changes:
+- Source split into modules: asm.asm, common.asm, environment.asm, instgen.asm
+- Command-line argument handling via argc/argv in start routine
+- Output file opened via openout and argv (replaces stdout-only output)
+- IN_ZEROPAGE flag and PC save/restore for section directive handling
+- inst.asm.out now included via .include instead of prepended

@@ -11,3 +11,12 @@ vobjdump
 *.bak
 .DS_Store
 setup.sh
+__pycache__
+commit
+update
+set
+rebase
+log
+spread
+_tr_*.tmp
+.claude/settings.local.json
