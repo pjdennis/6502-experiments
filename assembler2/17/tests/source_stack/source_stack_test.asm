@@ -320,18 +320,24 @@ check_markers:
   LDA #0
   STA TOKEN,X         ; Null-terminate the keyword
 
-  ; Try matching against each known marker
+  ; Try matching against each known marker. Use BCS-skip / JMP rather
+  ; than direct BCC so the dispatch can grow without short-branch
+  ; range failures.
   SET16 str_include, TABP16
   JSR cmp_marker
-  BCC .handle_include
-
+  BCS .not_inc
+  JMP .handle_include
+.not_inc:
   SET16 str_memory, TABP16
   JSR cmp_marker
-  BCC .handle_memory
-
+  BCS .not_mem
+  JMP .handle_memory
+.not_mem:
   SET16 str_traceback, TABP16
   JSR cmp_marker
-  BCC .handle_traceback
+  BCS .not_tb
+  JMP .handle_traceback
+.not_tb:
 
   ; @frames, @top_frame_size, and @payload_memory are only recognized
   ; in frames mode (TEST_MODE=4)
@@ -340,7 +346,9 @@ check_markers:
   BNE .no_frames_marker
   SET16 str_frames, TABP16
   JSR cmp_marker
-  BCC .handle_frames
+  BCS .not_frames
+  JMP .handle_frames
+.not_frames:
   SET16 str_top_frame_size, TABP16
   JSR cmp_marker
   BCS .not_tfs
@@ -351,6 +359,16 @@ check_markers:
   BCS .not_pm
   JMP .handle_payload_memory
 .not_pm:
+  SET16 str_reserve_only, TABP16
+  JSR cmp_marker
+  BCS .not_ro
+  JMP .handle_reserve_only
+.not_ro:
+  SET16 str_reserve_commit_pop, TABP16
+  JSR cmp_marker
+  BCS .not_rcp
+  JMP .handle_reserve_commit_pop
+.not_rcp:
 .no_frames_marker:
 
   ; No match - flush '@' + keyword + terminator as text
@@ -555,6 +573,124 @@ check_markers:
   CLC
   RTS
 
+; @reserve_only
+;
+; Reserves a memory frame named "PENDING" (no payload) without
+; committing. Verifies that:
+;   1) SS_P16 is unchanged after the reserve (the reservation is
+;      invisible to consumers reading SS_P16).
+;   2) The committed-top frame_size still reflects the parent.
+; Prints "ps:<top_frame_size>" -- the parent's size.
+; Then discards the reservation (SS_PEND_P16 := SS_P16) so subsequent
+; pushes start from a clean steady state.
+.handle_reserve_only:
+  ; Skip remaining content on the line.
+  LDA MARKER_TERM
+  CMP #'\n'
+  BEQ .ro_have_eol
+  CMP #$FF
+  BEQ .ro_have_eol
+.ro_skip_eol:
+  JSR read_char
+  BCS .ro_have_eol
+  CMP #'\n'
+  BNE .ro_skip_eol
+.ro_have_eol:
+  ; SS_NAME = "PENDING"
+  LDY #0
+.ro_copy_name:
+  LDA str_pending_source,Y
+  STA TOKEN,Y
+  BEQ .ro_name_done
+  INY
+  JMP .ro_copy_name
+.ro_name_done:
+  ; Reserve a memory frame, no payload
+  LDA #0
+  STA SS_PAYLOAD_SIZE
+  LDA #SS_SRC_TYPE_MEMORY
+  JSR ss_reserve_frame
+  ; Print "ps:" + size byte at offset 0 of the COMMITTED top (SS_P16).
+  ; If the reservation is correctly invisible, this is the parent's
+  ; frame_size, not the reserved frame's.
+  PUSH16 TABP16
+  SET16 str_pm_size_label, TABP16
+  JSR print_str
+  POP16 TABP16
+  LDY #0
+  LDA (SS_P16),Y
+  STA TO_DECIMAL_VALUE16
+  LDA #0
+  STA TO_DECIMAL_VALUE16 + 1
+  JSR print_decimal
+  LDA #'\n'
+  JSR write_b
+  ; Discard the reservation: SS_PEND_P16 := SS_P16. Restores steady
+  ; state so subsequent pushes work normally.
+  CP16 SS_P16, SS_PEND_P16
+  LDA #1
+  STA AT_LINE_START
+  CLC
+  RTS
+
+; @reserve_commit_pop
+;
+; Reserves a memory frame named "RESERVED" (no payload), commits it,
+; installs an empty body so reads exhaust immediately, prints
+; "ps:<frame_size>" of the new top, then pops. Net effect should be a
+; round-trip equivalent to push_memory_source_reserve_payload + pop.
+.handle_reserve_commit_pop:
+  ; Skip remaining content on the line.
+  LDA MARKER_TERM
+  CMP #'\n'
+  BEQ .rcp_have_eol
+  CMP #$FF
+  BEQ .rcp_have_eol
+.rcp_skip_eol:
+  JSR read_char
+  BCS .rcp_have_eol
+  CMP #'\n'
+  BNE .rcp_skip_eol
+.rcp_have_eol:
+  ; SS_NAME = "RESERVED"
+  LDY #0
+.rcp_copy_name:
+  LDA str_reserved_source,Y
+  STA TOKEN,Y
+  BEQ .rcp_name_done
+  INY
+  JMP .rcp_copy_name
+.rcp_name_done:
+  ; Reserve a memory frame, no payload
+  LDA #0
+  STA SS_PAYLOAD_SIZE
+  LDA #SS_SRC_TYPE_MEMORY
+  JSR ss_reserve_frame
+  ; Commit
+  JSR ss_commit_pending_frame
+  ; Install an empty memory body (zero byte) so reads exhaust
+  ; immediately.
+  SET16 empty_body, SS_MEM_PTR16
+  ; Print "ps:" + frame_size of new top
+  PUSH16 TABP16
+  SET16 str_pm_size_label, TABP16
+  JSR print_str
+  POP16 TABP16
+  LDY #0
+  LDA (SS_P16),Y
+  STA TO_DECIMAL_VALUE16
+  LDA #0
+  STA TO_DECIMAL_VALUE16 + 1
+  JSR print_decimal
+  LDA #'\n'
+  JSR write_b
+  ; Pop the frame
+  JSR pop_source
+  LDA #1
+  STA AT_LINE_START
+  CLC
+  RTS
+
 ; Compare null-terminated keyword in TOKEN against pattern at (TABP16)
 ; Returns: C=0 if match, C=1 if no match
 cmp_marker:
@@ -663,12 +799,22 @@ str_top_frame_size:
   .asciiz "top_frame_size"
 str_payload_memory:
   .asciiz "payload_memory"
+str_reserve_only:
+  .asciiz "reserve_only"
+str_reserve_commit_pop:
+  .asciiz "reserve_commit_pop"
 str_memory_source:
   .asciiz "MEMORY"
 str_payload_source:
   .asciiz "PAYLOAD"
+str_pending_source:
+  .asciiz "PENDING"
+str_reserved_source:
+  .asciiz "RESERVED"
 str_pm_size_label:
   .asciiz "ps:"
+empty_body:
+  .byte 0
 payload_buf:
   .reserve 16
 

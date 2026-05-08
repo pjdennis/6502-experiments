@@ -179,6 +179,131 @@ ss_free_frame:
   RTS
 
 
+; Sibling of ss_alloc_frame for the reserve path: commits a
+; pre-checked allocation to the PENDING pointer only, leaving SS_P16
+; (the committed top) unchanged. Writes frame_size at offset 0 of the
+; new pending region.
+;
+; PRECONDITION: caller has just called check_source_frame_room and the
+; OOM check passed. Steady-state precondition: SS_P16 == SS_PEND_P16
+; (no other reservation in flight) -- enforced by usage in the
+; assembler today (only expand_macro reserves, and never re-enters
+; while a reservation is pending).
+;
+; On exit:  SS_PEND_P16 = pre-call SS_TEMP16; (SS_PEND_P16),0 = frame_size;
+;           SS_P16 unchanged; SS_TEMP16 still holds the pending base
+;           (read but not written); Y = 0; A and X clobbered.
+ss_alloc_pending_frame:
+  ; Recover size as low byte of (SS_PEND_P16 - SS_TEMP16). At entry
+  ; SS_PEND_P16 == SS_P16 (steady state), so the diff fits in a byte
+  ; (frames are always < 256).
+  LDA SS_PEND_P16
+  SEC
+  SBC SS_TEMP16
+  PHA                       ; Save size for the offset-0 write
+  ; Move the pending pointer; SS_P16 stays where it was.
+  CP16 SS_TEMP16, SS_PEND_P16
+  ; Write frame_size at offset 0 of the new pending region.
+  LDY #0
+  PLA
+  STA (SS_TEMP16),Y         ; SS_TEMP16 == SS_PEND_P16 here
+  RTS
+
+
+; Reserve a pending frame. SS_P16 does NOT advance -- only SS_PEND_P16
+; does. The frame's header (offsets 1..4) and name (offsets 7..) are
+; written into the pending region; the prev_data slot at offsets 5..6
+; is left UNINITIALIZED. Commit captures prev_data after the reserved
+; window closes -- parent's SS_MEM_PTR16 typically advances during
+; that window (e.g. expand_macro's arg parsing), so eager prev_data
+; capture would record a stale cursor.
+;
+; Until commit, parent's source remains active for read_char and
+; visible to all stack consumers. Tracebacks for errors during the
+; reserved window report parent's location.
+;
+; OOM is checked here against (SS_PEND_P16 - frame_size), so the
+; pending region is structurally protected from heap collision. On
+; OOM the routine jumps to err_out_of_memory with no state to roll
+; back (SS_PEND_P16 hasn't moved at the point of check).
+;
+; On entry: A             = curr_type for the new frame
+;           SS_NAME       = new frame's name (null-terminated)
+;           SS_SRC_TYPE / SS_CURR_LINE16 / SS_CURR_FILE / SS_MEM_PTR16
+;                         = parent's state (consumed for prev_type and
+;                           prev_line; prev_data deferred to commit)
+;           SS_PAYLOAD_SIZE = trailing payload bytes to reserve
+; On exit:  SS_PEND_P16   = pending frame base
+;           SS_PAYLOAD_SIZE reset to 0
+;           SS_P16 unchanged; SS_SRC_TYPE / SS_CURR_LINE16 /
+;             SS_CURR_FILE / SS_MEM_PTR16 unchanged
+;           A, X, Y clobbered. Caller saves X if needed.
+ss_reserve_frame:
+  PHA                       ; Save curr_type across check / alloc
+  ; OOM check: SS_TEMP16 = SS_PEND_P16 - frame_size = pending base.
+  JSR check_source_frame_room
+  ; Move SS_PEND_P16 to the pending base; write frame_size at offset 0.
+  ; SS_P16 untouched. SS_TEMP16 still holds the pending base on return.
+  JSR ss_alloc_pending_frame
+  PLA                       ; A = curr_type
+  ; Helper writes header (offsets 1..4) + name (offsets 7..) via
+  ; SS_TEMP16 (= pending base). prev_data slot at offsets 5..6 is
+  ; deliberately skipped.
+  JSR ss_write_pending_header_and_name
+  ; Reset payload size for the next caller (matches the atomic push
+  ; routine's contract).
+  LDA #$00
+  STA SS_PAYLOAD_SIZE
+  RTS
+
+
+; Commit a pending frame:
+;   1. Write prev_data at fixed offsets 5..6 of the pending frame,
+;      using parent's CURRENT SS_CURR_FILE (file parent: 1 byte at 5;
+;      offset 6 unused) or SS_MEM_PTR16 (memory parent: lo at 5, hi at
+;      6). prev_type at offset 2 selects which.
+;   2. Advance SS_P16 := SS_PEND_P16 (pending frame becomes committed
+;      top).
+;   3. Set SS_SRC_TYPE := the frame's curr_type byte at offset 1.
+;   4. Reset SS_CURR_LINE16 := 0.
+;
+; Caller is still responsible for installing SS_MEM_PTR16 (memory
+; frames -- new buffer pointer) or SS_CURR_FILE (file frames -- new
+; handle), since the source-stack module doesn't know what those
+; should be.
+;
+; A, Y clobbered. X preserved.
+ss_commit_pending_frame:
+  ; Read prev_type from the pending frame's offset 2.
+  LDY #2
+  LDA (SS_PEND_P16),Y
+  BNE .commit_memory
+  ; prev_type=0 (file): file handle at offset 5; offset 6 unused.
+  LDY #5
+  LDA SS_CURR_FILE
+  STA (SS_PEND_P16),Y
+  JMP .install_top
+.commit_memory:
+  ; prev_type=1 (memory): SS_MEM_PTR16 lo at offset 5, hi at offset 6.
+  LDY #5
+  LDA SS_MEM_PTR16
+  STA (SS_PEND_P16),Y
+  INY                       ; Y = 6
+  LDA SS_MEM_PTR16 + 1
+  STA (SS_PEND_P16),Y
+.install_top:
+  ; SS_P16 := SS_PEND_P16 (pending frame becomes committed top).
+  CP16 SS_PEND_P16, SS_P16
+  ; Set SS_SRC_TYPE from the frame's curr_type at offset 1.
+  LDY #1
+  LDA (SS_P16),Y
+  STA SS_SRC_TYPE
+  ; Reset line number for the new source.
+  LDA #$00
+  STA_LH16 SS_CURR_LINE16
+  RTS
+
+
 ; Per-curr_type pop handlers. pop_source dispatches to one of these
 ; based on curr_type, before prev_data restoration. The dispatch
 ; preserves both X and Y around the JSR; handlers may freely clobber
@@ -311,29 +436,31 @@ push_source_frame:
 ; or deferred to commit (reserve, where parent's read cursor still
 ; advances during arg parsing).
 ;
-; PRECONDITION: SS_P16 points at the frame's base address and offset 0
+; PRECONDITION: SS_TEMP16 holds the frame's base address and offset 0
 ; (frame_size) has already been written. For atomic pushes that's the
-; state ss_alloc_frame leaves behind; for reserves the caller arranges
-; equivalent state at the pending base before invoking the helper.
+; state ss_alloc_frame leaves behind (SS_TEMP16 still equals SS_P16
+; from the check_source_frame_room call). For reserves the same is
+; true after ss_alloc_pending_frame (SS_TEMP16 equals SS_PEND_P16).
 ;
 ; On entry: A             = curr_type for the new frame
+;           SS_TEMP16     = frame base
 ;           SS_NAME       = source name (null-terminated)
 ;           SS_SRC_TYPE   = parent's source type (becomes prev_type)
 ;           SS_CURR_LINE16 = parent's line number (becomes prev_line)
 ; On exit:  Y points at the offset of the name's null terminator
-;           (= 7 + name_len); A, X clobbered.
+;           (= 7 + name_len); SS_TEMP16 unchanged; A, X clobbered.
 ss_write_pending_header_and_name:
   LDY #1                ; curr_type offset
-  STA (SS_P16),Y
+  STA (SS_TEMP16),Y
   INY                   ; Y = 2 (prev_type)
   LDA SS_SRC_TYPE
-  STA (SS_P16),Y
+  STA (SS_TEMP16),Y
   INY                   ; Y = 3 (prev_line low)
   LDA SS_CURR_LINE16
-  STA (SS_P16),Y
+  STA (SS_TEMP16),Y
   INY                   ; Y = 4 (prev_line high)
   LDA SS_CURR_LINE16 + 1
-  STA (SS_P16),Y
+  STA (SS_TEMP16),Y
   ; Skip offsets 5..6 (prev_data slot). Y starts at 6 so the loop's
   ; first INY lands on offset 7.
   LDY #6
@@ -342,7 +469,7 @@ ss_write_pending_header_and_name:
   INX
   INY
   LDA SS_NAME,X
-  STA (SS_P16),Y
+  STA (SS_TEMP16),Y
   BNE .copy_loop
   RTS
 

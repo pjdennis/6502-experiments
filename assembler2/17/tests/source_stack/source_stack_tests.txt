@@ -808,4 +808,79 @@ FILE main.txt:
  1: @memory @payload_memory 3
 EXPECT_STDOUT:
 ps:18
-# Memory parent: prev_data=2 bytes; 15 + 3 = 18.
+# Memory parent: 15 + 3 = 18 (post-reorg; parent type no longer matters).
+
+# ============================================================================
+# Phase 5: ss_reserve_frame / ss_commit_pending_frame primitives
+# ============================================================================
+# @reserve_only reserves a memory frame named "PENDING" (no payload),
+# verifies SS_P16 still reflects the parent (i.e. the reservation is
+# invisible to consumers reading SS_P16), then discards the
+# reservation. Prints "ps:<committed_top_frame_size>".
+#
+# @reserve_commit_pop reserves+commits a memory frame named
+# "RESERVED" (no payload), prints "ps:<frame_size>", then pops. The
+# round-trip should produce the same observable behaviour as an
+# atomic push+pop pair.
+
+---
+NAME: reserve_only_invisible_to_top_frame_size
+MODE: frames
+FILE main.txt:
+ 1: @include inner.txt
+FILE inner.txt:
+ 1: @reserve_only
+EXPECT_STDOUT:
+ps:17
+# inner.txt is loaded via @include so its frame name is the literal
+# "inner.txt" (9 chars), giving frame_size = 9 + 8 = 17. (The
+# top-level main.txt path is the tmpdir-mangled full path and would
+# break a same-frame size assertion.)
+# After ss_reserve_frame, SS_P16 still points at inner.txt's frame.
+# The reserved pending frame ("PENDING", 7 chars, size 15) lives
+# below SS_PEND_P16 but is invisible -- ps:17 not ps:15 confirms
+# invisibility.
+
+---
+NAME: reserve_only_invisible_to_frames
+MODE: frames
+FILE main.txt:
+ 1: @include inner.txt
+FILE inner.txt:
+ 1: @reserve_only
+ 2: @frames
+EXPECT_STDOUT:
+ps:17
+0:file:inner.txt
+1:file:main.txt
+# After @reserve_only discards its reservation, @frames walks the
+# committed chain (inner.txt then main.txt). The reserved frame
+# never appears in the @frames output even momentarily because
+# @frames walks SS_P16, not SS_PEND_P16.
+
+---
+NAME: reserve_commit_pop_round_trip
+MODE: frames
+FILE input.txt:
+ 1: @reserve_commit_pop
+ 2: @frames
+EXPECT_STDOUT:
+ps:16
+0:file:input.txt
+# "RESERVED" is 8 chars; new memory frame is 8 + 8 + 0 = 16 bytes.
+# After commit the new top is the RESERVED memory frame; after pop
+# we're back to the parent (just input.txt in the chain).
+
+---
+NAME: reserve_commit_pop_matches_atomic_push_size
+MODE: frames
+FILE input.txt:
+ 1: @reserve_commit_pop
+ 2: @payload_memory 1
+EXPECT_STDOUT:
+ps:16
+ps:16
+# RESERVED is 8 chars + 0 payload = 16; PAYLOAD is 7 chars + 1 payload
+# = 16. Pins down "frame size formula is parent-type-independent and
+# the reserve/commit path produces frames structurally identical to
+# the atomic push path."
