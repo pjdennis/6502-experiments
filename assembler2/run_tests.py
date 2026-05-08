@@ -33,6 +33,15 @@ from persistent_emulator import PersistentEmulator
 
 ASM_VERSION = "17"
 
+# Test-run input/output filenames passed as argv to the assembler.
+# These match the self-hosted test runner's TR_INPUT_FILE / TR_OUTPUT_FILE
+# (test_runner.asm:91-92) so the assembler sees identical paths under
+# both harnesses -- frame_size and traceback output stay deterministic
+# across machines, OS tempdir conventions, and checkout depth.
+TR_INPUT_FILE = "_tr_in.tmp"
+TR_OUTPUT_FILE = "_tr_out.tmp"
+TR_ERR_FILE = "_tr_err.tmp"
+
 
 class TestType(Enum):
     ASSEMBLER = "assembler"
@@ -337,24 +346,42 @@ class TestRunner:
             return TestOutcome(TestResult.SKIP, ["Unknown test type"])
 
     def _run_assembler_test(self, test: Test) -> TestOutcome:
-        """Run an assembler test."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmpdir = Path(tmpdir)
-            asm_file = tmpdir / "test.asm"
-            bin_file = tmpdir / "test.bin"
-            err_file = tmpdir / "test.err"
+        """Run an assembler test.
 
+        Mirrors the self-hosted test runner's discipline: cwd is the
+        directory of the .txt test file, and the input/output paths the
+        assembler sees are the bare basenames TR_INPUT_FILE /
+        TR_OUTPUT_FILE. That keeps frame_size and traceback output
+        identical across machines, OS tempdir conventions, and checkout
+        depth, and lets `.include subdir/foo.asm` resolve naturally
+        without any symlink/tempdir setup."""
+        test_dir = self.current_test_file.parent if self.current_test_file else Path(".")
+        asm_file = test_dir / TR_INPUT_FILE
+        bin_file = test_dir / TR_OUTPUT_FILE
+        err_file = test_dir / TR_ERR_FILE
+
+        try:
             # Write input file (unless testing missing input file)
             if not test.missing_input:
                 asm_file.write_text(test.input_text + "\n")
+            elif asm_file.exists():
+                asm_file.unlink()
 
+            # Stale output from a prior crashed run could mask a real
+            # failure-to-emit; remove it.
+            if bin_file.exists():
+                bin_file.unlink()
+
+            # Pass the input/output files as basenames; the assembler
+            # runs with cwd=test_dir below, so frame name = TR_INPUT_FILE
+            # regardless of where the test repo lives.
             if self.python_mode:
                 # Python assembler mode
                 cmd = [
                     sys.executable,
                     str(self.python_asm),
-                    str(asm_file),
-                    str(bin_file),
+                    TR_INPUT_FILE,
+                    TR_OUTPUT_FILE,
                 ]
                 # Add args (ARGS overrides the default "debug" argument)
                 if test.args:
@@ -370,10 +397,10 @@ class TestRunner:
                         str(self.emulator),
                         str(self.assembler),
                         "--no-dump",
-                        "--error-output", str(err_file),
+                        "--error-output", TR_ERR_FILE,
                         "--load", "2000",
-                        "--input", str(asm_file),
-                        "--output", str(bin_file),
+                        "--input", TR_INPUT_FILE,
+                        "--output", TR_OUTPUT_FILE,
                     ]
                 elif version <= 8:
                     # v08: --input FILE --output FILE (no --load)
@@ -381,9 +408,9 @@ class TestRunner:
                         str(self.emulator),
                         str(self.assembler),
                         "--no-dump",
-                        "--error-output", str(err_file),
-                        "--input", str(asm_file),
-                        "--output", str(bin_file),
+                        "--error-output", TR_ERR_FILE,
+                        "--input", TR_INPUT_FILE,
+                        "--output", TR_OUTPUT_FILE,
                     ]
                 else:
                     # v09+: positional args
@@ -391,9 +418,9 @@ class TestRunner:
                         str(self.emulator),
                         str(self.assembler),
                         "--no-dump",
-                        "--error-output", str(err_file),
-                        str(asm_file),
-                        str(bin_file),
+                        "--error-output", TR_ERR_FILE,
+                        TR_INPUT_FILE,
+                        TR_OUTPUT_FILE,
                     ]
                     # Add args (ARGS overrides the default "debug" argument)
                     if test.args:
@@ -401,8 +428,6 @@ class TestRunner:
                     elif version >= 11:
                         cmd.append("debug")
 
-            # Run assembler with cwd set to test file's directory for relative includes
-            test_dir = self.current_test_file.parent if self.current_test_file else None
             if self.python_mode:
                 with open(err_file, "w") as err_fh:
                     result = subprocess.run(cmd, stderr=err_fh, capture_output=False, cwd=test_dir)
@@ -421,6 +446,15 @@ class TestRunner:
                 return self._check_stderr_test(test, stderr_text, exit_code, asm_file)
             else:
                 return TestOutcome(TestResult.SKIP, ["No expectation defined"])
+        finally:
+            # Clean up the temp files we created in test_dir, including
+            # any stale ones from crashed runs.
+            for f in (asm_file, bin_file, err_file):
+                if f.exists():
+                    try:
+                        f.unlink()
+                    except OSError:
+                        pass
 
     def _check_positive_assembler_test(
         self, test: Test, bin_file: Path, stderr_text: str, exit_code: int, asm_file: Path
@@ -522,9 +556,13 @@ class TestRunner:
         """Check stderr output matches expected. Appends failures to details list."""
         actual_stderr = stderr_text
 
-        # Replace placeholder with actual file path; append \n since assembler
-        # always terminates stderr with a newline
-        expected_stderr = test.expect_stderr.replace("{{MAIN_FILE}}", str(asm_file)) + "\n"
+        # Replace placeholder with the file path the assembler ACTUALLY
+        # saw (the basename, since we run with cwd=test_dir and pass
+        # TR_INPUT_FILE as argv[0]). The asm_file Path is still useful
+        # for diagnostics but isn't what gets written into tracebacks.
+        # Append \n since the assembler always terminates stderr with a
+        # newline.
+        expected_stderr = test.expect_stderr.replace("{{MAIN_FILE}}", TR_INPUT_FILE) + "\n"
 
         if actual_stderr != expected_stderr:
             self._add_comparison(details, "stderr", expected_stderr, actual_stderr,
@@ -541,49 +579,60 @@ class TestRunner:
         return TestOutcome(TestResult.PASS)
 
     def _run_assembler_test_server(self, test: Test) -> TestOutcome:
-        """Run an assembler test using server mode."""
-        tmpdir = self.shared_tmpdir
-        asm_file = tmpdir / "test.asm"
-        bin_file = tmpdir / "test.bin"
+        """Run an assembler test using server mode.
 
-        # Write input file (unless testing missing input file)
-        if test.missing_input:
-            if asm_file.exists():
-                asm_file.unlink()
-        else:
-            asm_file.write_text(test.input_text + "\n")
+        Like _run_assembler_test, this uses cwd=test_dir and basenames
+        for the input/output files so the assembler sees TR_INPUT_FILE /
+        TR_OUTPUT_FILE regardless of where the repo lives. (The shared
+        tmpdir is no longer used by this path -- temp files live in
+        test_dir alongside the test fixtures.)"""
+        test_dir = self.current_test_file.parent if self.current_test_file else Path(".")
+        asm_file = test_dir / TR_INPUT_FILE
+        bin_file = test_dir / TR_OUTPUT_FILE
 
-        # Remove stale output
-        if bin_file.exists():
-            bin_file.unlink()
+        try:
+            # Write input file (unless testing missing input file)
+            if test.missing_input:
+                if asm_file.exists():
+                    asm_file.unlink()
+            else:
+                asm_file.write_text(test.input_text + "\n")
 
-        # Build args list
-        args = [str(asm_file), str(bin_file)]
-        if test.args:
-            args.extend(test.args.split())
-        elif int(self.asm_version) >= 11:
-            args.append("debug")
+            # Remove stale output
+            if bin_file.exists():
+                bin_file.unlink()
 
-        test_dir = self.current_test_file.parent if self.current_test_file else None
+            args = [TR_INPUT_FILE, TR_OUTPUT_FILE]
+            if test.args:
+                args.extend(test.args.split())
+            elif int(self.asm_version) >= 11:
+                args.append("debug")
 
-        exit_code, _, stderr_data = self.emu.run(
-            self.assembler, args=args,
-            cwd=str(test_dir) if test_dir else None,
-            inline_stderr=True)
+            exit_code, _, stderr_data = self.emu.run(
+                self.assembler, args=args,
+                cwd=str(test_dir),
+                inline_stderr=True)
 
-        stderr_text = stderr_data.decode('latin-1') if stderr_data else ""
+            stderr_text = stderr_data.decode('latin-1') if stderr_data else ""
 
-        if test.expect_hex:
-            return self._check_positive_assembler_test(
-                test, bin_file, stderr_text, exit_code, asm_file)
-        elif test.expect_error:
-            return self._check_negative_assembler_test(
-                test, stderr_text, exit_code, asm_file)
-        elif test.expect_stderr:
-            return self._check_stderr_test(
-                test, stderr_text, exit_code, asm_file)
-        else:
-            return TestOutcome(TestResult.SKIP, ["No expectation defined"])
+            if test.expect_hex:
+                return self._check_positive_assembler_test(
+                    test, bin_file, stderr_text, exit_code, asm_file)
+            elif test.expect_error:
+                return self._check_negative_assembler_test(
+                    test, stderr_text, exit_code, asm_file)
+            elif test.expect_stderr:
+                return self._check_stderr_test(
+                    test, stderr_text, exit_code, asm_file)
+            else:
+                return TestOutcome(TestResult.SKIP, ["No expectation defined"])
+        finally:
+            for f in (asm_file, bin_file):
+                if f.exists():
+                    try:
+                        f.unlink()
+                    except OSError:
+                        pass
 
     def _run_source_stack_test_server(self, test: Test) -> TestOutcome:
         """Run a source stack test using server mode."""
