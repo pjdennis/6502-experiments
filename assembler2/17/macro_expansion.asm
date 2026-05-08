@@ -223,28 +223,6 @@ expand_macro:
   TXA
   PHA
 
-  ; ----- Stash the macro name -----
-  ;
-  ; SS_NAME aliases TOKEN. parse_expression for a label-shaped arg
-  ; (e.g. `MYMAC somelabel`) calls read_token, which writes the label
-  ; name into TOKEN. Without this stash, the eventual
-  ; push_memory_source_reserve_payload would copy the *clobbered*
-  ; TOKEN into the new frame's name region, and tracebacks for errors
-  ; in the macro body would name the last-seen arg instead of the
-  ; macro itself. We copy the macro name into MACRO_NAME_SAVE at
-  ; entry and copy it back just before the push below. The
-  ; intervening frame_size guard / check_source_frame_room call still
-  ; sees TOKEN's original contents (we haven't entered the parse loop
-  ; yet at that point).
-  LDY #$00
-.save_token:
-  LDA TOKEN,Y
-  STA MACRO_NAME_SAVE,Y
-  BEQ .save_token_done
-  INY
-  BNE .save_token              ; tokens are < 256 chars
-.save_token_done:
-
   ; Read N (the count byte) from the def. MACRO_MAX_ARGS was validated
   ; at definition time, so we don't recheck here.
   LDY #$00
@@ -273,12 +251,11 @@ expand_macro:
   STA TEMP                  ; TEMP = 3N (survives parse_expression)
   CLC
   ADC #$07                  ; A = 3N + 7 = payload_size
-  STA SS_PAYLOAD_SIZE       ; reservation size for the eventual push
+  STA SS_PAYLOAD_SIZE       ; reservation size for ss_reserve_frame
 
-  ; Worst-case frame_size = 15 + name_len + 3*N. If > 255, raise
-  ; err_too_many_arguments. (Memory parent's prev_data is 2 bytes,
-  ; file parent's 1 byte; using 15 covers the worst case so the limit
-  ; is independent of who's calling us.)
+  ; Frame_size = 15 + name_len + 3*N. With the layout reorder
+  ; prev_data is always 2 bytes, so 15 is exact (not worst-case). If
+  ; > 255, raise err_too_many_arguments.
   LDY #$FF
 .measure_name:
   INY
@@ -296,27 +273,16 @@ expand_macro:
   JMP .too_many             ; would overflow frame_size byte
 .frame_size_ok:
 
-  ; Pre-OOM-check the upcoming frame so the slot writes below are
-  ; guaranteed to land in protected memory. This sets SS_TEMP16 to
-  ; the proposed new SS_P16, but we don't need that value -- the
-  ; push at the end will recompute it.
-  JSR check_source_frame_room
-
-  ; ----- Pre-allocate the payload region without moving SS_P16 -----
+  ; Compute MACRO_PAYLOAD_BASE16 = SS_P16 - payload_size BEFORE the
+  ; reserve call (ss_reserve_frame zeroes SS_PAYLOAD_SIZE on exit, and
+  ; SS_P16 doesn't move during reserve, so this value stays valid
+  ; through the parse loop).
   ;
-  ; The future payload region will sit at (SS_P16 - payload_size) ..
-  ; (SS_P16 - 1) once the frame is pushed. Until then, that range is
-  ; unallocated source-stack memory just below SS_P16. Heap can't
-  ; reach it (the OOM check above just verified there are at least
-  ; payload_size + 256 bytes of buffer), and parse_expression doesn't
-  ; allocate, so we can write slot data there now and push later.
-  ;
-  ; MACRO_PAYLOAD_BASE16 = (SS_P16 - payload_size). Indirect-Y writes into
-  ; (MACRO_PAYLOAD_BASE16),Y populate slot[0..N-1] at offsets 0..3*N-1 and
-  ; the scope tail at offsets 3*N..3*N+6. After the push,
-  ; push_memory_source_reserve_payload skips the copy (sees the
-  ; MACRO_PAYLOAD_BASE16=$0000 sentinel it sets internally) and the bytes we
-  ; wrote here are exactly the frame's payload.
+  ; The future payload region sits at (SS_P16 - payload_size)..(SS_P16
+  ; - 1) once the frame commits. Until commit that range is the top
+  ; of the pending region (still safely below SS_P16); heap can't
+  ; reach it because advance_heap's OOM check is now against
+  ; SS_PEND_P16, which after the reserve sits below the payload.
   ;
   ; Crucially, SS_P16 / SS_SRC_TYPE / SS_MEM_PTR16 / SS_CURR_LINE16
   ; are unchanged during arg parsing -- the parent's source stays
@@ -330,6 +296,14 @@ expand_macro:
   LDA SS_P16 + 1
   SBC #$00
   STA MACRO_PAYLOAD_BASE16 + 1
+
+  ; Reserve the pending frame. ss_reserve_frame does its own OOM
+  ; check, copies SS_NAME (= TOKEN, the macro name) into the pending
+  ; region's name field at offset 7+, and zeroes SS_PAYLOAD_SIZE on
+  ; exit. After this, parse_expression / read_token may freely clobber
+  ; TOKEN -- the captured name lives in the pending frame.
+  LDA #SS_SRC_TYPE_MEMORY
+  JSR ss_reserve_frame
 
   ; ----- Phase 1: parse args, writing slots into (MACRO_PAYLOAD_BASE16) -----
   ;
@@ -434,22 +408,16 @@ expand_macro:
   STA CACHED_HASH
   INC SCOPE_DEPTH
 
-  ; ----- Push the frame -----
+  ; ----- Commit the pending frame -----
   ;
-  ; Restore TOKEN from MACRO_NAME_SAVE so push_source_frame writes the
-  ; macro name (not the last arg's identifier) into the new frame's
-  ; name region. The payload region was populated above and is left
-  ; untouched by push_memory_source_reserve_payload.
-  LDY #$00
-.restore_token:
-  LDA MACRO_NAME_SAVE,Y
-  STA TOKEN,Y
-  BEQ .restore_token_done
-  INY
-  BNE .restore_token
-.restore_token_done:
-  LDA SS_PAYLOAD_SIZE
-  JSR push_memory_source_reserve_payload
+  ; ss_commit_pending_frame writes prev_data at fixed offsets 5..6
+  ; from parent's CURRENT SS_MEM_PTR16 / SS_CURR_FILE (so a memory
+  ; parent's cursor advance during arg parsing is captured at the
+  ; right moment), advances SS_P16 := SS_PEND_P16, sets SS_SRC_TYPE
+  ; := MEMORY (the new frame's curr_type at offset 1), and resets
+  ; SS_CURR_LINE16. The payload region we wrote above was already in
+  ; place before commit and is left untouched.
+  JSR ss_commit_pending_frame
 
   ; Anchor MACRO_LOOKUP_FRAME16 at the new top frame so identifier
   ; lookups inside the body resolve from this frame's slots.
