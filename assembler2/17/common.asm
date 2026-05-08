@@ -139,8 +139,12 @@ advance_heap:
   BCC .done
   INC MEMP16 + 1
 .done:
-  ; Check for collision with source stack
-  CHECK_FOR_OUT_OF_MEMORY SS_P16
+  ; Check for collision with source stack. Use SS_PEND_P16 (the lowest
+  ; extent including any in-flight reservation) so the pending region
+  ; is structurally protected from heap write-ahead. Outside a
+  ; reserve/commit window SS_PEND_P16 == SS_P16, so behaviour matches
+  ; the pre-reserve world.
+  CHECK_FOR_OUT_OF_MEMORY SS_PEND_P16
   RTS
 
 

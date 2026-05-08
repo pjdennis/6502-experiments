@@ -40,6 +40,11 @@ HEX16:     .word         ; 2 bytes
 P16:       .word         ; 2 byte pointer
 P2_16:     .word         ; 2 byte pointer
 SS_P16:    .word         ; Source stack pointer - needed by advance_heap check
+SS_PEND_P16: .word       ; Pending top of source stack. instgen has no
+                         ; reservation flow, so this is identical to
+                         ; SS_P16 at all times -- declared here only so
+                         ; advance_heap's CHECK_FOR_OUT_OF_MEMORY (now
+                         ; against SS_PEND_P16) links cleanly.
 
   .code
 
@@ -497,6 +502,7 @@ start:
   STA LABEL_TYPE    ; Clear flag before using hash table
   JSR init_heap
   SET16 SOURCE_STACK, SS_P16 ; Initialize so heap overflow check works
+  SET16 SOURCE_STACK, SS_PEND_P16
   JSR select_instruction_hash_table
   JSR init_hash_table
   JSR populate_instruction_hash_table

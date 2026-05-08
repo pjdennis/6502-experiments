@@ -52,6 +52,14 @@ SS_CURR_CHAR:    .byte       ; The last character read
 SS_CURR_FILE:    .byte       ; The current file handle
 SS_CURR_LINE16:  .word       ; The current line number
 SS_P16:          .word       ; Pointer to the current location in the source stack
+SS_PEND_P16:     .word       ; Pending top of the source stack. Equal to
+                             ; SS_P16 outside a reserve/commit window;
+                             ; less than SS_P16 (lower address; stack
+                             ; grows down) when a frame is reserved but
+                             ; not yet committed. Heap-vs-stack OOM
+                             ; check is performed against this pointer
+                             ; so the pending region is structurally
+                             ; protected from heap write-ahead.
 SS_TEMP16:       .word       ; Temporary location for use in calculations
 SS_PAYLOAD_SIZE: .byte       ; Number of payload bytes to reserve for the
                              ; next push_memory_source_reserve_payload
@@ -69,6 +77,7 @@ SS_SRC_TYPE_MEMORY = 1
 
 source_stack_init:
   SET16 SOURCE_STACK, SS_P16
+  SET16 SOURCE_STACK, SS_PEND_P16
   LDA #SS_SRC_TYPE_FILE
   STA SS_SRC_TYPE
   STA SS_CURR_FILE
@@ -107,12 +116,16 @@ check_source_frame_room:
   CLC
   ADC SS_PAYLOAD_SIZE
   STA SS_TEMP16         ; total size in low byte; high byte is scratch below
-  ; Compute proposed new SS_P16 = SS_P16 - size
+  ; Compute proposed new lowest-extent = SS_PEND_P16 - size. For atomic
+  ; pushes SS_PEND_P16 == SS_P16, so this matches the pre-reserve
+  ; behaviour. For a reserve (when ss_reserve_frame lands) the same
+  ; computation still represents the correct lowest extent because
+  ; SS_PEND_P16 already reflects any in-flight reservation.
   SEC
-  LDA SS_P16
+  LDA SS_PEND_P16
   SBC SS_TEMP16
   STA SS_TEMP16
-  LDA SS_P16 + 1
+  LDA SS_PEND_P16 + 1
   SBC #$00
   STA SS_TEMP16 + 1
   CHECK_FOR_OUT_OF_MEMORY SS_TEMP16
@@ -137,8 +150,10 @@ ss_alloc_frame:
   SEC
   SBC SS_TEMP16
   PHA                       ; Save size for the offset-0 write
-  ; Commit new stack pointer
+  ; Commit new stack pointer. SS_PEND_P16 follows SS_P16 in lockstep
+  ; for atomic pushes (no reserve/commit window in flight).
   CP16 SS_TEMP16, SS_P16
+  CP16 SS_TEMP16, SS_PEND_P16
   ; Write frame_size at offset 0
   LDY #0
   PLA
@@ -158,6 +173,9 @@ ss_free_frame:
   LDA (SS_P16),Y
   CLC
   ADCA16 SS_P16, SS_P16
+  ; SS_PEND_P16 follows SS_P16 in lockstep when no reserve/commit
+  ; window is in flight (the steady state).
+  CP16 SS_P16, SS_PEND_P16
   RTS
 
 
