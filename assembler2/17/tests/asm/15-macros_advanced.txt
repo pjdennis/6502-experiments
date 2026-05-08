@@ -273,6 +273,18 @@ Error 1 in macro mymac at line 1: Label not found
   expanded from {{MAIN_FILE}}:6
 
 ---
+NAME: macro_arg_parse_error_reports_invocation_line
+DESCRIPTION: When parse_expression fails during arg parsing for a macro invocation, the error must report the PARENT'S line (the invocation site), NOT "line 1 of the macro". The new memory frame isn't committed (or pushed) until after arg parsing succeeds, so SS_SRC_TYPE / SS_CURR_FILE / CURR_LINE16 still describe the parent at the moment the error fires. Pins down that the line number matches the invocation site, complementing the macro-name pin in macro_error_traceback_with_identifier_arg (which only asserts the name).
+INPUT:
+ 1: * = $0200
+ 2:   .macro mymac val
+ 3:   LDA #val
+ 4:   .endmacro
+ 5:   mymac undefined_label
+EXPECT_STDERR:
+Error 1 in file {{MAIN_FILE}} at line 5: Label not found
+
+---
 NAME: macro_inner_param_shadows_outer
 DESCRIPTION: When inner and outer macros have the same param name, the body of the inner resolves the name to inner's value (single-frame lookup; not a chain walk into outer's scope).
 INPUT:
