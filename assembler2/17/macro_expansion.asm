@@ -6,8 +6,7 @@
 ;   CURR_CHAR (asm.asm alias; backing storage in source_stack.asm)
 ;   TOKEN, PASS (asm.asm)
 ;   IN_MACRO_DEF (macro_capture.asm)
-;   MACRO_ENTRY16, OPERAND16, TEMP, MACRO_MAX_ARGS,
-;     MACRO_NAME_SAVE (asm.asm)
+;   MACRO_ENTRY16, OPERAND16, TEMP, MACRO_MAX_ARGS (asm.asm)
 ;   LABEL_SCOPE16, CACHED_HASH, scramble_table (hash_table.asm)
 ;   EXPANSION_ID16, SCOPE_DEPTH, MACRO_LOOKUP_FRAME16,
 ;     MACRO_PAYLOAD_BASE16, MACRO_ARG_REMAIN (label_scope.asm)
@@ -16,8 +15,9 @@
 ;   parse_expression (expressions.asm)
 ;   select_label_hash_table (common.asm)
 ;   hash_add (hash_table.asm), store_hash_value (common.asm)
-;   push_memory_source_reserve_payload, SS_P16, SS_PAYLOAD_SIZE,
-;     SS_MEM_PTR16, SS_NAME, SS_SRC_TYPE_MEMORY (source_stack.asm)
+;   ss_reserve_frame, ss_commit_pending_frame, SS_P16,
+;     SS_PAYLOAD_SIZE, SS_MEM_PTR16, SS_NAME, SS_SRC_TYPE_MEMORY
+;     (source_stack.asm)
 ;   err_* (errors.asm)
 
   .code

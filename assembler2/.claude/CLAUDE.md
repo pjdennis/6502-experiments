@@ -48,9 +48,12 @@ Each version builds into its own `NN/out/` directory (e.g., `16/out/asm.out`). T
 
 - `$0000-$00FF`: Zero page variables (see `.zeropage` section)
 - `$0200-$03FF`: `FWDREF_LIST` (forward reference list, 512 bytes)
-- `$0400-$04FF`: free (was `SCOPE_STACK` before Phase 3.6 of the source-stack
-  unification work; macro activation state now lives as payload on each
-  macro's source-stack frame)
+- `$0400-$04FF`: free (first half was `SCOPE_STACK` before Phase 3.6 of the
+  source-stack unification work; second half was `MACRO_NAME_SAVE`, a
+  128-byte buffer used by the pre-`ss_reserve_frame` `expand_macro` to
+  stash the macro name across arg parsing -- reclaimed once expand_macro
+  switched to ss_reserve_frame, which captures the name into the pending
+  frame BEFORE arg parsing)
 - `$0500-$05FF`: free (was `MACRO_ARG_BUF` before Phase 4.8)
 - `$0600`: `TOKEN` buffer (current token being read, 128 bytes)
 - `$0680`: `ELSE_SEEN_ARRAY` (per-nesting-level `.else` flags, 16 bytes)
