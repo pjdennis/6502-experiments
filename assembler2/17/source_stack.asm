@@ -264,49 +264,79 @@ source_stack_empty:
 ;           SS_CURR_LINE16 reset to 0.
 ;           A, X, Y clobbered.
 push_source_frame:
-  PHA                   ; Save curr_type for later
+  PHA                   ; Save curr_type across ss_alloc_frame
   ; Allocate the frame and write its size byte at offset 0. Pure stack
   ; mechanics live in ss_alloc_frame; everything below is layout.
   JSR ss_alloc_frame    ; SS_P16 advanced; (SS_P16),0 = frame_size; Y = 0
-  ; Write the fixed-offset header (offsets 1..6). All readers index
-  ; these by constant offset, no name scan involved.
-  INY                   ; Y = 1 (curr_type)
-  PLA                   ; Get curr_type (saved at routine entry)
+  PLA                   ; A = curr_type
+  ; Header (offsets 1..4) + name (offsets 7..) live in the helper;
+  ; prev_data at offsets 5..6 is filled in below from parent's current
+  ; state.
+  JSR ss_write_pending_header_and_name
+  ; prev_data at offsets 5..6. prev_type selects 1 vs 2 bytes;
+  ; offset 6 is unused (left undefined) for file parents.
+  LDA SS_SRC_TYPE
+  BNE .save_memory_state
+  ; prev_type=0 (file): handle at offset 5; offset 6 unused.
+  LDY #5
+  LDA SS_CURR_FILE
+  STA (SS_P16),Y
+  JMP .reset_line
+.save_memory_state:
+  ; prev_type=1 (memory): SS_MEM_PTR16 lo at offset 5, hi at offset 6.
+  LDY #5
+  LDA SS_MEM_PTR16
+  STA (SS_P16),Y
+  INY                   ; Y = 6
+  LDA SS_MEM_PTR16 + 1
+  STA (SS_P16),Y
+.reset_line:
+  ; SS_PAYLOAD_SIZE bytes of payload trail the name; the frame_size
+  ; byte at offset 0 already accounts for them. Bytes are reserved
+  ; but not initialized here -- push_memory_source_reserve_payload's
+  ; caller pre-writes them at (SS_P16 - SS_PAYLOAD_SIZE) before the push,
+  ; so they are already in place by the time SS_P16 advances over them.
+  ; Reset line number for new source.
+  LDA #$00
+  STA_LH16 SS_CURR_LINE16
+  RTS
+
+
+; INTERNAL helper. Writes the layout fields that are identical between
+; an atomic push and a deferred (reserve) push: the fixed header at
+; offsets 1..4 (curr_type, prev_type, prev_line lo/hi) plus the name
+; (and null terminator) at offsets 7..(7+name_len). Skips the
+; prev_data slot at offsets 5..6 -- the caller is responsible for
+; those, either inline (atomic push captures parent state immediately)
+; or deferred to commit (reserve, where parent's read cursor still
+; advances during arg parsing).
+;
+; PRECONDITION: SS_P16 points at the frame's base address and offset 0
+; (frame_size) has already been written. For atomic pushes that's the
+; state ss_alloc_frame leaves behind; for reserves the caller arranges
+; equivalent state at the pending base before invoking the helper.
+;
+; On entry: A             = curr_type for the new frame
+;           SS_NAME       = source name (null-terminated)
+;           SS_SRC_TYPE   = parent's source type (becomes prev_type)
+;           SS_CURR_LINE16 = parent's line number (becomes prev_line)
+; On exit:  Y points at the offset of the name's null terminator
+;           (= 7 + name_len); A, X clobbered.
+ss_write_pending_header_and_name:
+  LDY #1                ; curr_type offset
   STA (SS_P16),Y
   INY                   ; Y = 2 (prev_type)
   LDA SS_SRC_TYPE
   STA (SS_P16),Y
-  PHA                   ; Save prev_type for the prev_data branch below
   INY                   ; Y = 3 (prev_line low)
   LDA SS_CURR_LINE16
   STA (SS_P16),Y
   INY                   ; Y = 4 (prev_line high)
   LDA SS_CURR_LINE16 + 1
   STA (SS_P16),Y
-  ; prev_data at fixed offsets 5..6. prev_type selects which 1 or 2
-  ; bytes are meaningful; offset 6 is unused (left undefined) for
-  ; file parents. Both branches leave Y = 6 so .copy_name's first
-  ; INY lands on offset 7.
-  PLA                   ; Restore prev_type
-  BNE .save_memory_state
-  ; prev_type=0 (file): handle at offset 5; offset 6 unused.
-  INY                   ; Y = 5
-  LDA SS_CURR_FILE
-  STA (SS_P16),Y
-  INY                   ; Y = 6 (unused byte; not written)
-  JMP .copy_name
-.save_memory_state:
-  ; prev_type=1 (memory): SS_MEM_PTR16 lo at offset 5, hi at offset 6.
-  INY                   ; Y = 5
-  LDA SS_MEM_PTR16
-  STA (SS_P16),Y
-  INY                   ; Y = 6
-  LDA SS_MEM_PTR16 + 1
-  STA (SS_P16),Y
-.copy_name:
-  ; Copy name + null at offsets 7..(7+name_len). Y advances byte-by-byte;
-  ; X indexes SS_NAME (starts at $FF, INX first); the loop terminates on
-  ; the source's null terminator (which gets copied too).
+  ; Skip offsets 5..6 (prev_data slot). Y starts at 6 so the loop's
+  ; first INY lands on offset 7.
+  LDY #6
   LDX #$FF
 .copy_loop:
   INX
@@ -314,14 +344,6 @@ push_source_frame:
   LDA SS_NAME,X
   STA (SS_P16),Y
   BNE .copy_loop
-  ; SS_PAYLOAD_SIZE bytes of payload trail the name; the frame_size
-  ; byte at offset 0 already accounts for them. The bytes are reserved
-  ; but not initialized here -- push_memory_source_reserve_payload's
-  ; caller pre-writes them at (SS_P16 - SS_PAYLOAD_SIZE) before the push,
-  ; so they are already in place by the time SS_P16 advances over them.
-  ; Reset line number for new source.
-  LDA #$00
-  STA_LH16 SS_CURR_LINE16
   RTS
 
 
