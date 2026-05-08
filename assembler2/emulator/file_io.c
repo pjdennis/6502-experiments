@@ -81,21 +81,29 @@ uint8_t dir_open(const char* name) {
     for (int i = 0; i < n; i++) {
         uint8_t meta = 0;
         int is_dir = 0;
+        char fullpath[PATH_MAX];
+        snprintf(fullpath, sizeof(fullpath), "%s/%s", name, namelist[i]->d_name);
+        struct stat st;
+        int have_stat = (stat(fullpath, &st) == 0);
+
         if (namelist[i]->d_type == DT_DIR) {
             is_dir = 1;
         } else if (namelist[i]->d_type == DT_UNKNOWN) {
-            char fullpath[PATH_MAX];
-            snprintf(fullpath, sizeof(fullpath), "%s/%s", name, namelist[i]->d_name);
-            struct stat st;
-            if (stat(fullpath, &st) == 0 && S_ISDIR(st.st_mode))
+            if (have_stat && S_ISDIR(st.st_mode))
                 is_dir = 1;
         }
         if (is_dir) meta |= 0x01;
 
         if (!is_dir) {
-            char fullpath[PATH_MAX];
-            snprintf(fullpath, sizeof(fullpath), "%s/%s", name, namelist[i]->d_name);
-            if (access(fullpath, W_OK) != 0)
+            /* Mark "readonly" by inspecting the file's mode bits rather
+             * than calling access(W_OK). Under root the access() check
+             * unconditionally reports writeable (root overrides mode
+             * bits), which makes this metadata wrong in any container/CI
+             * environment that runs as root. The mode bits themselves
+             * are the canonical "is this file marked readonly" signal,
+             * matching what `ls -l` and `chmod -w` operate on. */
+            if (have_stat &&
+                (st.st_mode & (S_IWUSR | S_IWGRP | S_IWOTH)) == 0)
                 meta |= 0x02;
         }
 
