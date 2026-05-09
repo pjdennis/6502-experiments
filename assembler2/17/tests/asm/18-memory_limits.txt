@@ -253,6 +253,43 @@ EXPECT_LINE: 2
 EXPECT_MSG: Too many macro arguments
 
 ---
+NAME: macro_max_args_with_name_at_frame_limit
+DESCRIPTION: 64 args (MACRO_MAX_ARGS) plus a 48-char name. Frame_size = 15 + 48 + 192 = 255 -- the largest single-byte frame_size that fits. This is the exact boundary of expand_macro's runtime guard: name_len + 3*N <= 240 fits, > 240 overflows. Pinning the boundary precisely (alongside macro_max_args_with_name_one_byte_over) catches off-by-one regressions in the BCC chain after the ADC #$0F.
+INPUT:
+ 1: * = $0200
+ 2:   .macro AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, a54, a55, a56, a57, a58, a59, a60, a61, a62, a63
+ 3:   LDA #a0
+ 4:   .endmacro
+ 5:   AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA $42, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+EXPECT_HEX: a9 42
+
+---
+NAME: macro_max_args_with_name_one_byte_over
+DESCRIPTION: Same as macro_max_args_with_name_at_frame_limit but with one extra char in the name (49 + 64 args). Frame_size would be 256, exactly one over the byte cap. expand_macro's runtime guard fires err_too_many_arguments at the invocation, NOT at definition (def time only enforces MACRO_MAX_ARGS=64; name length isn't checked there).
+INPUT:
+ 1: * = $0200
+ 2:   .macro AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, a54, a55, a56, a57, a58, a59, a60, a61, a62, a63
+ 3:   LDA #a0
+ 4:   .endmacro
+ 5:   AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA $42, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+EXPECT_ERROR: 33
+EXPECT_LINE: 5
+EXPECT_MSG: Too many macro arguments
+
+---
+NAME: macro_frame_size_overflow
+DESCRIPTION: Both axes at maximum: 127-char name (TOKEN buffer limit) and 64 args (MACRO_MAX_ARGS). Frame_size would be 15 + 127 + 192 = 334, far over the 1-byte cap. expand_macro's runtime guard catches it and raises err_too_many_arguments at invocation. Referenced by macro_max_name_args_fit_frame's description ("macro_frame_size_overflow covers the frame_size overflow path") -- without this test the def-time MACRO_MAX_ARGS check + the runtime frame-size check were unverified together.
+INPUT:
+ 1: * = $0200
+ 2:   .macro AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, a54, a55, a56, a57, a58, a59, a60, a61, a62, a63
+ 3:   LDA #a0
+ 4:   .endmacro
+ 5:   AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA $42, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+EXPECT_ERROR: 33
+EXPECT_LINE: 5
+EXPECT_MSG: Too many macro arguments
+
+---
 NAME: token_buffer_at_limit
 DESCRIPTION: 127 character token at buffer limit
 INPUT:
