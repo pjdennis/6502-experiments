@@ -437,6 +437,14 @@ class TestRunner:
             exit_code = result.returncode
             stderr_text = self._read_text_safe(err_file) if err_file.exists() else ""
 
+            # If the assembler couldn't even write to err_file (e.g.
+            # emulator-level failure: missing input, bad --error-output
+            # path, segfault) the actual diagnostic is on the emulator's
+            # own stderr. result.stderr is None in python_mode (we
+            # redirect to err_fh directly) but bytes in emulator mode.
+            if exit_code != 0 and not stderr_text and getattr(result, "stderr", None):
+                stderr_text = result.stderr.decode("latin-1", errors="replace")
+
             # Determine if this is a positive or negative test
             if test.expect_hex:
                 return self._check_positive_assembler_test(test, bin_file, stderr_text, exit_code, asm_file)
@@ -464,8 +472,13 @@ class TestRunner:
 
         if exit_code != 0:
             details.append("Unexpected error:")
+            # Show every non-empty stderr line, not just ones starting
+            # with "Error ". Emulator-level failures (e.g. "could not
+            # open input file") don't use the "Error N" prefix and were
+            # silently dropped before, leaving a bare "Unexpected error:"
+            # with no detail.
             for line in stderr_text.strip().split("\n"):
-                if line.startswith("Error "):
+                if line:
                     details.append(f"  {line}")
             return TestOutcome(TestResult.FAIL, details)
 
