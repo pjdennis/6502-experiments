@@ -53,6 +53,21 @@ MACRO_LOOKUP_FRAME16:  .word ; Address of the innermost macro frame on the
                              ; active. resolve_identifier uses this for
                              ; O(1) parameter-slot lookup instead of
                              ; walking the source stack each call.
+MACRO_LOOKUP_SLOTS16:  .word ; Absolute address of slots[0] inside the
+                             ; innermost macro frame -- equal to
+                             ; MACRO_PAYLOAD_BASE16 at the moment
+                             ; expand_macro commits. $0000 outside a
+                             ; macro. Maintained in lockstep with
+                             ; MACRO_LOOKUP_FRAME16; read by
+                             ; ss_lookup_param_slot to avoid re-deriving
+                             ; the slot offset on every call.
+MACRO_LOOKUP_PARAMS16: .word ; Absolute address of the active macro
+                             ; def's first parameter name -- equal to
+                             ; (its MACRO_ENTRY16) + 1, skipping the
+                             ; count byte. $0000 outside a macro.
+                             ; Maintained in lockstep with
+                             ; MACRO_LOOKUP_FRAME16; read by
+                             ; ss_lookup_param_slot.
 MACRO_PAYLOAD_BASE16:  .word ; Transient pointer used by expand_macro
                              ; during arg parsing. Points at
                              ; (SS_P16 - payload_size) -- the address
@@ -76,6 +91,8 @@ init_scope_state:
   STA_LH16 EXPANSION_ID16
   STA SCOPE_DEPTH
   STA_LH16 MACRO_LOOKUP_FRAME16
+  STA_LH16 MACRO_LOOKUP_SLOTS16
+  STA_LH16 MACRO_LOOKUP_PARAMS16
   RTS
 
 
