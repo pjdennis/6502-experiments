@@ -32,14 +32,19 @@ FWDREF_LIMIT    = FWDREF_LIST + $0200 ; Limit for forward reference list data
                          ; macro frame's payload region. Now free.
 TOKEN           = $0600  ; Buffer for the current token being read
 ELSE_SEEN_ARRAY = $0680  ; Array tracking .else seen per nesting level (16 bytes)
-MACRO_MAX_ARGS  = $40    ; Hard cap on parameters per macro definition (64).
-                         ; Frame_size is one byte; worst-case macro frame is
-                         ;   15 + name_len + 3*N
-                         ; (5 source-stack header + name + null + 2 prev_data
-                         ;  + payload (3*N slots + 7 scope_block)).
-                         ; With name_len up to 30 (typical), N=64 gives 237.
-                         ; expand_macro's runtime guard catches the long-name
-                         ; corner cases by raising err_too_many_arguments.
+MACRO_MAX_ARGS  = $20    ; Hard cap on parameters per macro definition (32).
+                         ; Set deliberately well below what the 1-byte
+                         ; frame_size could otherwise allow, so the
+                         ; max-args ceiling is INDEPENDENT of macro
+                         ; name length -- a macro author doesn't have
+                         ; to think about whether their name length
+                         ; eats into their arg budget. Worst case at
+                         ; this cap (using the 127-char TOKEN limit
+                         ; as the name) is 15 + 127 + 96 = 238 bytes,
+                         ; comfortably under the 256-byte frame_size
+                         ; ceiling. expand_macro's runtime frame-size
+                         ; guard remains in place as defense in case
+                         ; this constant is ever raised again.
 LHASHTAB        = $0700  ; Label hash table
 IFDEF_DECISIONS = $0800  ; Buffer for .ifdef decisions (256 bytes)
 *               = $2000  ; Code generates here follwed by HEAP

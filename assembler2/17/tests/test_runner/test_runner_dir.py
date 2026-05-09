@@ -170,18 +170,22 @@ def test_cumulative_counts_across_files():
 
 def test_long_input_lines():
     """INPUT lines longer than 255 chars should be streamed correctly."""
-    # Build a macro with many parameters - the .macro line exceeds 255 chars
-    params = ", ".join(f"a{i:02d}" for i in range(50))
-    args = ", ".join(f"${i:02X}" for i in range(50))
+    # Make the line long via a long macro name (not a long arg list);
+    # MACRO_MAX_ARGS = 32 caps the param count regardless of name length,
+    # so we use a long name (100 chars) plus 32 params to push the
+    # .macro line past 255 chars.
+    long_name = "M" + "A" * 99
+    params = ", ".join(f"a{i:02d}" for i in range(32))
+    args = ", ".join(f"${i:02X}" for i in range(32))
     long_test = f"""\
 ---
 NAME: long_input_line
 INPUT:
  1: * = $0200
- 2:   .macro BIG {params}
+ 2:   .macro {long_name} {params}
  3:   LDA #a00
  4:   .endmacro
- 5:   BIG {args}
+ 5:   {long_name} {args}
 EXPECT_HEX: a9 00
 ---
 """

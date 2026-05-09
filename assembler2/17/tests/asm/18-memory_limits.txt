@@ -208,7 +208,7 @@ EXPECT_HEX: a9 01 a9 02 a9 03 a9 04 a9 05 a9 06 a9 07 a9 08 a9 09 a9 0a a9 0b a9
 
 ---
 NAME: macro_max_name_args_fit_frame
-DESCRIPTION: 127-character macro name with 8 parameters still fits in the 1-byte frame_size at offset 0 (well under the 255 cap). MACRO_MAX_ARGS is 64 now; the binding constraint at the upper end is the frame_size byte, not the arg cap. The worst-case (memory-parented) frame is 1 (frame_size) + 127 (name) + 1 (null) + 1 (curr_type) + 1 (prev_type) + 2 (line) + 2 (prev_data, memory parent) + 31 (activation payload: 8 slots + 7-byte scope tail) = 166 bytes. macro_args_above_cap_at_def covers the arg-cap overflow path, and macro_frame_size_overflow covers the frame_size overflow path.
+DESCRIPTION: 127-character macro name (the TOKEN buffer cap) with 8 parameters fits in the 1-byte frame_size at offset 0. Worst-case frame here = 1 (frame_size) + 1 (curr_type) + 1 (prev_type) + 2 (line) + 2 (prev_data) + 127 (name) + 1 (null) + 31 (8 slots + 7-byte scope tail) = 166 bytes. With MACRO_MAX_ARGS now capped at 32, the worst-case frame across ALL legal macros is 15 + 127 + 96 = 238 bytes -- comfortably under 256 -- so the max-args ceiling is independent of name length.
 INPUT:
  1: * = $0200
  2:   .macro AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA a0, a1, a2, a3, a4, a5, a6, a7
@@ -231,86 +231,25 @@ EXPECT_MSG: Token too long
 
 ---
 NAME: macro_args_at_cap
-DESCRIPTION: 64 macro arguments (the new MACRO_MAX_ARGS cap) fit. expand_macro now writes parsed slots straight into the source-stack frame's payload region instead of a fixed staging buffer, so the cap is bounded by the 1-byte frame_size rather than a 32-byte buffer. With a short macro name we fit comfortably (15 + name_len + 3*64 = 207 bytes for a 0-char name, 15 + 1 + 192 = 208 bytes here).
+DESCRIPTION: 32 macro arguments (the MACRO_MAX_ARGS cap) fit. expand_macro writes parsed slots straight into the source-stack frame's payload region; the cap is a deliberate ceiling well below what frame_size could otherwise allow, so the answer is the same regardless of macro name length. With a 3-char name here the frame is 15 + 3 + 96 = 114 bytes.
 INPUT:
  1: * = $0200
- 2:   .macro M64 a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, a54, a55, a56, a57, a58, a59, a60, a61, a62, a63
+ 2:   .macro M32 a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31
  3:   LDA #a0
  4:   .endmacro
- 5:   M64 $11, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+ 5:   M32 $11, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
 EXPECT_HEX: a9 11
 
 ---
 NAME: macro_args_above_cap_at_def
-DESCRIPTION: 65 parameter names exceed MACRO_MAX_ARGS=64, raising err_too_many_arguments at definition time (in dir_macro). Catching this at .macro time -- rather than at the eventual invocation -- prevents the count byte from silently overflowing.
+DESCRIPTION: 33 parameter names exceed MACRO_MAX_ARGS=32, raising err_too_many_arguments at definition time (in dir_macro). Catching this at .macro time -- rather than at the eventual invocation -- prevents the count byte from silently overflowing.
 INPUT:
  1: * = $0200
- 2:   .macro M65 a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, a54, a55, a56, a57, a58, a59, a60, a61, a62, a63, a64
+ 2:   .macro M33 a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32
  3:   LDA #a0
  4:   .endmacro
 EXPECT_ERROR: 33
 EXPECT_LINE: 2
-EXPECT_MSG: Too many macro arguments
-
----
-NAME: macro_max_args_with_name_at_frame_limit
-DESCRIPTION: 64 args (MACRO_MAX_ARGS) plus a 48-char name. Frame_size = 15 + 48 + 192 = 255 -- the largest single-byte frame_size that fits. This is the exact boundary of expand_macro's runtime guard: name_len + 3*N <= 240 fits, > 240 overflows. Pinning the boundary precisely (alongside macro_max_args_with_name_one_byte_over) catches off-by-one regressions in the BCC chain after the ADC #$0F.
-INPUT:
- 1: * = $0200
- 2:   .macro AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, a54, a55, a56, a57, a58, a59, a60, a61, a62, a63
- 3:   LDA #a0
- 4:   .endmacro
- 5:   AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA $42, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-EXPECT_HEX: a9 42
-
----
-NAME: macro_max_args_with_name_one_byte_over
-DESCRIPTION: Same as macro_max_args_with_name_at_frame_limit but with one extra char in the name (49 + 64 args). Frame_size would be 256, exactly one over the byte cap. expand_macro's runtime guard fires err_too_many_arguments at the invocation, NOT at definition (def time only enforces MACRO_MAX_ARGS=64; name length isn't checked there).
-INPUT:
- 1: * = $0200
- 2:   .macro AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, a54, a55, a56, a57, a58, a59, a60, a61, a62, a63
- 3:   LDA #a0
- 4:   .endmacro
- 5:   AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA $42, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-EXPECT_ERROR: 33
-EXPECT_LINE: 5
-EXPECT_MSG: Too many macro arguments
-
----
-NAME: macro_frame_size_overflow
-DESCRIPTION: Both axes at maximum: 127-char name (TOKEN buffer limit) and 64 args (MACRO_MAX_ARGS). Frame_size would be 15 + 127 + 192 = 334, far over the 1-byte cap. expand_macro's runtime guard catches it and raises err_too_many_arguments at invocation. Referenced by macro_max_name_args_fit_frame's description ("macro_frame_size_overflow covers the frame_size overflow path") -- without this test the def-time MACRO_MAX_ARGS check + the runtime frame-size check were unverified together.
-INPUT:
- 1: * = $0200
- 2:   .macro AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37, a38, a39, a40, a41, a42, a43, a44, a45, a46, a47, a48, a49, a50, a51, a52, a53, a54, a55, a56, a57, a58, a59, a60, a61, a62, a63
- 3:   LDA #a0
- 4:   .endmacro
- 5:   AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA $42, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-EXPECT_ERROR: 33
-EXPECT_LINE: 5
-EXPECT_MSG: Too many macro arguments
-
----
-NAME: macro_max_name_with_max_fitting_args
-DESCRIPTION: 127-char name (TOKEN buffer cap) + 37 args. Frame_size = 15 + 127 + 111 = 253, the largest single-byte frame_size that fits at this name length. The runtime guard's `name_len + 3*N <= 240` constraint shifts the max-args ceiling below MACRO_MAX_ARGS=64 once name_len exceeds 48; this pins the long-name end of that sliding boundary.
-INPUT:
- 1: * = $0200
- 2:   .macro AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36
- 3:   LDA #a0
- 4:   .endmacro
- 5:   AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA $42, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-EXPECT_HEX: a9 42
-
----
-NAME: macro_max_name_with_one_extra_arg
-DESCRIPTION: 127-char name + 38 args. Frame_size would be 15 + 127 + 114 = 256, exactly one over the byte cap. Mirror of macro_max_args_with_name_one_byte_over (which fixes args at 64 and adds one to the name); this fixes the name at 127 and adds one to the args. Closes the other side of the runtime-guard boundary.
-INPUT:
- 1: * = $0200
- 2:   .macro AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37
- 3:   LDA #a0
- 4:   .endmacro
- 5:   AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA $42, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-EXPECT_ERROR: 33
-EXPECT_LINE: 5
 EXPECT_MSG: Too many macro arguments
 
 ---
