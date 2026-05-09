@@ -139,7 +139,7 @@ EXPECT_HEX: ea
 
 ---
 NAME: macro_nesting_overflow
-DESCRIPTION: Macro nesting itself triggers source-stack OOM under small_heap. The chain is paramless and contains no .include, so during the cascade the only thing growing is the source stack -- macro definitions are all set up before invocation (heap stable thereafter), no parameters means no per-invocation hash_add (heap doesn't grow during cascade), no .include means no extra file frames. With small_heap shrinking the heap-vs-source-stack buffer to 384 bytes the cascade exhausts the buffer mid-expansion. The traceback (EXPECT_STDERR) confirms the OOM site is a macro push during a chain of expansions. The exact depth at which the limit hits depends on the input filename's length (it counts toward the input file frame's size). Both runners (Python harness and self-hosted) now feed the assembler the same TR_INPUT_FILE basename, so the cascade reaches a deterministic depth across machines and runners; with that name length the limit hits during the push of B inside macro C (E -> D -> C -> push-B fails).
+DESCRIPTION: Macro nesting itself triggers source-stack OOM under small_heap. The chain is paramless and contains no .include, so during the cascade the only thing growing is the source stack -- macro definitions are all set up before invocation (heap stable thereafter), no parameters means no per-invocation hash_add (heap doesn't grow during cascade), no .include means no extra file frames. With small_heap shrinking the heap-vs-source-stack buffer to 384 bytes the cascade exhausts the buffer mid-expansion. The traceback (EXPECT_STDERR) confirms the OOM site is a macro push during a chain of expansions. The exact depth at which the limit hits depends on the input filename's length (it counts toward the input file frame's size) and on the macro frame's payload size. Both runners (Python harness and self-hosted) now feed the assembler the same TR_INPUT_FILE basename, so the cascade reaches a deterministic depth across machines and runners; with the current 11-byte scope_block the limit hits during the push of C inside macro D (E -> D -> push-C fails).
 ARGS: debug small_heap
 INPUT:
  1: * = $0200
@@ -160,8 +160,7 @@ INPUT:
 16:   .endmacro
 17:   E
 EXPECT_STDERR:
-Error 35 in macro C at line 1: Out of memory
-  expanded from macro D:1
+Error 35 in macro D at line 1: Out of memory
   expanded from macro E:1
   expanded from {{MAIN_FILE}}:17
 

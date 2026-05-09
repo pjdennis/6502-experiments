@@ -114,7 +114,7 @@ pop_label_scope_from_frame:
   LDY #0
   LDA (SS_P16),Y          ; frame_size
   SEC
-  SBC #7                  ; offset of activation payload start
+  SBC #11                 ; offset of activation payload start
   TAY
   LDA (SS_P16),Y
   STA LABEL_SCOPE16

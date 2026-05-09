@@ -63,21 +63,27 @@ check_macro_recursion:
   BNE .cmr_advance
   JMP err_recursive_macro
 .cmr_advance:
-  ; Move to the parent macro frame via prev_macro_lookup. Layout:
-  ;   ... LABEL_SCOPE16 lo/hi, CACHED_HASH,
-  ;       prev_macro_lookup lo/hi, MACRO_ENTRY16 lo/hi
-  ; prev_macro_lookup sits at frame_size - 4..-3. We arrive here from
-  ; either the lo-byte or hi-byte BNE, with Y = frame_size - 2 or
-  ; frame_size - 1 respectively, so recompute the offset from
-  ; frame_size directly rather than relative to Y. (Earlier the code
-  ; assumed Y was always frame_size - 1 and did SBC #3, which silently
-  ; produced frame_size - 5 on the lo-byte path -- corrupting TABP16
-  ; with CACHED_HASH/prev_macro_lookup_lo and either looping forever
-  ; through random readable memory or finding spurious matches.)
+  ; Move to the parent macro frame via prev_macro_lookup. Layout
+  ; (scope_block tail, low to high offset relative to frame end):
+  ;   -11 LABEL_SCOPE16 lo
+  ;   -10 LABEL_SCOPE16 hi
+  ;    -9 CACHED_HASH
+  ;    -8 prev_macro_lookup lo  <-- read here
+  ;    -7 prev_macro_lookup hi
+  ;    -6..-3 reserved (MACRO_LOOKUP_SLOTS16 / _PARAMS16, filled
+  ;           in phase 3)
+  ;    -2 MACRO_ENTRY16 lo
+  ;    -1 MACRO_ENTRY16 hi
+  ; We arrive here from either the lo-byte or hi-byte BNE on
+  ; MACRO_ENTRY16, so Y is frame_size - 2 or frame_size - 1 -- not a
+  ; reliable base for prev_macro_lookup. Recompute the offset from
+  ; frame_size directly. (Earlier the code did SBC #3 from a wrongly-
+  ; assumed-fixed Y; the lo-byte path silently produced frame_size - 5,
+  ; corrupting TABP16 with garbage.)
   LDY #$00
   LDA (TABP16),Y          ; frame_size
   SEC
-  SBC #$04                ; offset of prev_macro_lookup lo
+  SBC #$08                ; offset of prev_macro_lookup lo
   TAY
   LDA (TABP16),Y
   PHA                     ; stash new TABP16 lo byte
@@ -140,12 +146,12 @@ ss_lookup_param_slot:
   CLC
   ADC TEMP                       ; 3N
   STA TEMP                       ; TEMP = 3N
-  ; Compute start_of_slots offset = (frame_size - 7) - 3*N. The
-  ; scope_block sits at frame_size - 7..-1 so the last slot ends just
+  ; Compute start_of_slots offset = (frame_size - 11) - 3*N. The
+  ; scope_block sits at frame_size - 11..-1 so the last slot ends just
   ; before it.
   PLA                            ; A = frame_size
   SEC
-  SBC #7                         ; A = scope_block offset
+  SBC #11                        ; A = scope_block offset
   SEC
   SBC TEMP                       ; A = start_of_slots offset
   STA TEMP                       ; TEMP = current slot offset
@@ -247,22 +253,25 @@ expand_macro:
   ADC #$00
   STA MACRO_DEF_PTR16 + 1
 
-  ; Compute payload_size = 3*N + 7. TEMP = 3*N is used twice below
+  ; Compute payload_size = 3*N + 11. TEMP = 3*N is used twice below
   ; (frame-size check + slot-base computation).
-  ; Payload = N slots (3 bytes each) + 7-byte scope tail
-  ; (LABEL_SCOPE16, CACHED_HASH, prev_macro_lookup, MACRO_ENTRY16).
+  ; Payload = N slots (3 bytes each) + 11-byte scope tail
+  ; (LABEL_SCOPE16, CACHED_HASH, prev_macro_lookup,
+  ;  prev_macro_lookup_slots, prev_macro_lookup_params, MACRO_ENTRY16).
   LDA MACRO_ARG_REMAIN
   ASL                       ; 2N
   CLC
   ADC MACRO_ARG_REMAIN      ; 3N
   STA TEMP                  ; TEMP = 3N (survives parse_expression)
   CLC
-  ADC #$07                  ; A = 3N + 7 = payload_size
+  ADC #$0B                  ; A = 3N + 11 = payload_size
   STA SS_PAYLOAD_SIZE       ; reservation size for ss_reserve_frame
 
-  ; Frame_size = 15 + name_len + 3*N. With the layout reorder
-  ; prev_data is always 2 bytes, so 15 is exact (not worst-case). If
-  ; > 255, raise err_too_many_arguments.
+  ; Frame_size = 19 + name_len + 3*N (8 fixed header + 11-byte scope
+  ; tail). If > 255, raise err_too_many_arguments. With cap = 32 and
+  ; the 127-char TOKEN limit, worst case is 19 + 127 + 96 = 242 --
+  ; well under 256 -- so the runtime guard below is dead code today
+  ; but kept as defense in case MACRO_MAX_ARGS is ever raised.
   LDY #$FF
 .measure_name:
   INY
@@ -275,7 +284,7 @@ expand_macro:
   JMP .too_many
 .frame_size_check_2:
   CLC
-  ADC #$0F                  ; A = 15 + name_len + 3N
+  ADC #$13                  ; A = 19 + name_len + 3N
   BCC .frame_size_ok
   JMP .too_many             ; would overflow frame_size byte
 .frame_size_ok:
@@ -379,6 +388,16 @@ expand_macro:
   ; X currently equals 3*N (the scope-block offset within the payload)
   ; because we INX'd 3 per arg. Point Y at it for the indirect-Y
   ; stores below.
+  ;
+  ; Layout (offsets relative to scope_block start = 3*N):
+  ;   0..1 : prev LABEL_SCOPE16
+  ;   2    : prev CACHED_HASH
+  ;   3..4 : prev MACRO_LOOKUP_FRAME16
+  ;   5..8 : reserved for prev MACRO_LOOKUP_SLOTS16 / _PARAMS16
+  ;          (filled in phase 3 of the lookup-caching plan; left
+  ;           uninitialized here)
+  ;   9..10: MACRO_ENTRY16 (recursion detection; at the very end so
+  ;          check_macro_recursion's frame_size-2 anchor still works)
   TXA
   TAY
   LDA LABEL_SCOPE16
@@ -395,6 +414,11 @@ expand_macro:
   INY
   LDA MACRO_LOOKUP_FRAME16 + 1
   STA (MACRO_PAYLOAD_BASE16),Y
+  ; Skip 4 reserved bytes (offsets 5..8 from scope_block start).
+  INY
+  INY
+  INY
+  INY
   INY
   LDA MACRO_ENTRY16
   STA (MACRO_PAYLOAD_BASE16),Y
