@@ -299,6 +299,21 @@ INPUT:
 EXPECT_HEX: a9 42
 
 ---
+NAME: macro_outer_param_resolves_after_inner_pops
+DESCRIPTION: Outer macro references its own parameter AFTER an inner macro has been invoked and popped. The post-inner reference must resolve through outer's scope -- which means the cached pointer triple (MACRO_LOOKUP_FRAME16 / _SLOTS16 / _PARAMS16) was correctly restored from outer's scope_block on inner's pop. If any of the three pointers stayed at inner's value, the post-inner lookup would resolve to inner's slot or fail. Pins the lockstep restore invariant.
+INPUT:
+ 1: * = $0200
+ 2:   .macro inner y
+ 3:   LDA #y
+ 4:   .endmacro
+ 5:   .macro outer x
+ 6:   inner $99
+ 7:   LDA #x
+ 8:   .endmacro
+ 9:   outer $42
+EXPECT_HEX: a9 99 a9 42
+
+---
 NAME: macro_outer_param_not_visible_in_inner
 DESCRIPTION: Inner macro cannot see outer macro's parameter. Param scoping is innermost-frame-only -- this is the invariant that lets the Phase 4 lookup be a single-frame access rather than a chain walk.
 INPUT:
