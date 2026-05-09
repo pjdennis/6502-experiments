@@ -54,18 +54,15 @@ resolve_identifier:
   ; always agree (both updated by the macro push/pop path).
   LDA SCOPE_DEPTH
   BEQ .global
-  ; In a macro: load the innermost macro frame's address and check
-  ; its parameter slots. .include from inside a macro pushes a file
-  ; frame above the macro frame but does NOT touch
-  ; MACRO_LOOKUP_FRAME16, so the macro's params still resolve from
-  ; the included file. The slot carries the param's IS_FWDREF flag,
-  ; so a forward-ref arg in pass 1 propagates through the lookup the
-  ; same way the legacy "skip the hash add for fwdrefs" path did
-  ; pre-Phase-4.6.
-  LDA MACRO_LOOKUP_FRAME16
-  STA TABP16
-  LDA MACRO_LOOKUP_FRAME16 + 1
-  STA TABP16 + 1
+  ; In a macro: check the active macro's parameter slots through the
+  ; cached pointers (MACRO_LOOKUP_SLOTS16 / MACRO_LOOKUP_PARAMS16,
+  ; maintained in lockstep with MACRO_LOOKUP_FRAME16). .include from
+  ; inside a macro pushes a file frame above the macro frame but does
+  ; NOT touch the lookup pointer triple, so the macro's params still
+  ; resolve from inside the included file. The slot carries the
+  ; param's IS_FWDREF flag, so a forward-ref arg in pass 1 propagates
+  ; through the lookup the same way the legacy "skip the hash add for
+  ; fwdrefs" path did pre-Phase-4.6.
   JSR ss_lookup_param_slot
   BCC .done                  ; slot found; IS_FWDREF already set
 .global:

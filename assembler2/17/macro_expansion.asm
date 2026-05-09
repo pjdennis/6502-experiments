@@ -97,76 +97,55 @@ check_macro_recursion:
   RTS
 
 
-; Look up TOKEN's identifier in the parameter slots of the memory frame
-; at TABP16 (typically the innermost macro frame, supplied by
-; resolve_identifier from MACRO_LOOKUP_FRAME16). Walks the macro
-; definition's parameter name list to find an index, then reads the
-; matching slot from the frame.
+; Look up TOKEN's identifier in the parameter slots of the active
+; macro frame, using the cached MACRO_LOOKUP_PARAMS16 (def's param-
+; name list) and MACRO_LOOKUP_SLOTS16 (slot[0] address) zp pointers.
+; Walks the param-name list to find a matching index, then reads the
+; corresponding slot.
 ;
-; Frame payload (last bytes, low to high offset):
-;   slots[0..N-1]   3 bytes each: fwdref, value_L, value_H
-;   scope_block      LABEL_SCOPE16 lo/hi, CACHED_HASH,
-;                    prev_macro_lookup lo/hi, MACRO_ENTRY16 lo/hi at
-;                    offsets frame_size - 7..-1
+; The cached pointers are maintained in lockstep with
+; MACRO_LOOKUP_FRAME16 by expand_macro's commit path and
+; pop_label_scope_from_frame -- so this routine doesn't need to
+; re-derive them from the frame on every call.
 ;
-; N is read from the def itself: MACRO_ENTRY16 (at the end of the
-; payload) points at the count byte, with param names following. The
-; frame no longer carries a separate arg_count -- the def is canonical.
-;
-; On entry: TABP16 = memory frame address; TOKEN holds the identifier.
+; On entry: TOKEN holds the identifier; MACRO_LOOKUP_SLOTS16 and
+;           MACRO_LOOKUP_PARAMS16 point into the active macro frame
+;           (gated by SCOPE_DEPTH > 0 at the caller).
 ; On exit:  C=0 if found -- HEX16 (= OPERAND16) and IS_FWDREF set,
 ;             matching find_in_hash's contract.
 ;           C=1 if no parameter matched. HEX16/IS_FWDREF unchanged.
-;           A, Y, HTTP16, TEMP clobbered. X preserved (the output file
-;             handle in macro bodies, the activation byte index in
-;             expand_macro Phase 1's nested-arg-parse path).
+;           A, Y, HTTP16, TEMP clobbered. X preserved (the output
+;             file handle in macro bodies, the activation byte index
+;             in expand_macro Phase 1's nested-arg-parse path).
 ss_lookup_param_slot:
   ; Save X -- callers depend on X surviving identifier lookup.
   TXA
   PHA
-  ; Read frame_size; stash on the 6502 stack (used twice below).
-  LDY #0
-  LDA (TABP16),Y
-  PHA
-  ; Load HTTP16 = MACRO_ENTRY16 from the last 2 bytes of the frame.
+  ; HTTP16 := MACRO_LOOKUP_PARAMS16 - 1 (the def's count byte, which
+  ; sits one byte before param1). Read N at offset 0, then INC HTTP16
+  ; back to MACRO_LOOKUP_PARAMS16 for the param-name walk.
   SEC
-  SBC #2                         ; offset of MACRO_ENTRY16 lo
-  TAY
-  LDA (TABP16),Y
+  LDA MACRO_LOOKUP_PARAMS16
+  SBC #1
   STA HTTP16
-  INY
-  LDA (TABP16),Y
+  LDA MACRO_LOOKUP_PARAMS16 + 1
+  SBC #0
   STA HTTP16 + 1
-  ; Read N (the count byte) from the def. MACRO_ENTRY16 points at it.
   LDY #0
-  LDA (HTTP16),Y                 ; A = N
+  LDA (HTTP16),Y                 ; A = N (count byte)
   TAX                             ; X = remaining param iterations
-  STA TEMP                       ; TEMP = N
-  ASL                             ; 2N
-  CLC
-  ADC TEMP                       ; 3N
-  STA TEMP                       ; TEMP = 3N
-  ; Compute start_of_slots offset = (frame_size - 11) - 3*N. The
-  ; scope_block sits at frame_size - 11..-1 so the last slot ends just
-  ; before it.
-  PLA                            ; A = frame_size
-  SEC
-  SBC #11                        ; A = scope_block offset
-  SEC
-  SBC TEMP                       ; A = start_of_slots offset
-  STA TEMP                       ; TEMP = current slot offset
   ; Advance HTTP16 past the count byte to land on param1's first byte.
-  CLC
-  LDA HTTP16
-  ADC #$01
-  STA HTTP16
-  LDA HTTP16 + 1
-  ADC #$00
-  STA HTTP16 + 1
+  INC HTTP16
+  BNE .params_loaded
+  INC HTTP16 + 1
+.params_loaded:
+  ; Slot offset starts at 0; slots are at MACRO_LOOKUP_SLOTS16[0..3*N).
+  LDA #0
+  STA TEMP                       ; TEMP = current slot offset
   ; Walk the param-name list. X is the number of names still to check;
   ; on each miss, advance HTTP16 past the null terminator, bump TEMP by
-  ; 3 (next slot), and DEX. Termination is count-driven now that the
-  ; trailing empty-string sentinel is gone.
+  ; 3 (next slot), and DEX. Termination is count-driven (no trailing
+  ; empty-string sentinel in the def).
 .lps_iter:
   CPX #0
   BEQ .lps_not_found             ; walked all N names without a match
@@ -199,15 +178,17 @@ ss_lookup_param_slot:
   DEX
   JMP .lps_iter
 .lps_match:
-  ; Slot at offset TEMP holds [fwdref, value_L, value_H].
+  ; Slot at offset TEMP holds [fwdref, value_L, value_H], indexed
+  ; through the cached MACRO_LOOKUP_SLOTS16 (= absolute address of
+  ; slot[0] in the active macro frame).
   LDY TEMP
-  LDA (TABP16),Y
+  LDA (MACRO_LOOKUP_SLOTS16),Y
   STA IS_FWDREF
   INY
-  LDA (TABP16),Y
+  LDA (MACRO_LOOKUP_SLOTS16),Y
   STA HEX16
   INY
-  LDA (TABP16),Y
+  LDA (MACRO_LOOKUP_SLOTS16),Y
   STA HEX16 + 1
   ; Restore X and return C=0 (found).
   PLA
