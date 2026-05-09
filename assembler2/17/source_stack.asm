@@ -2,6 +2,13 @@
 ;   SOURCE_STACK       - 1 past the highest address; stack grows down (asm.asm)
 ;   SS_NAME            - buffer holding the source's name; alias to TOKEN
 ;                        (asm.asm / source_stack_test.asm)
+;   MEMORY_POP_HANDLER - compile-time equate naming the routine
+;                        pop_source should JSR when a memory frame is
+;                        popped. The assembler points it at
+;                        pop_label_scope_from_frame; the test program
+;                        points it at a local RTS-only stub. Replaces
+;                        the runtime-patched ss_on_pop_table that
+;                        existed before.
 ;   SS_ERR_NO_FILE     - error handler for read_char when no source is
 ;                        open (errors.asm; only referenced under
 ;                        enable_debug)
@@ -31,8 +38,8 @@
 ;                    them after the push; the source stack itself never
 ;                    inspects payload contents). Used by expand_macro
 ;                    to carry per-invocation activation state; consumed
-;                    by the memory-pop handler installed via
-;                    ss_install_memory_pop.
+;                    by the memory-pop handler the host program wires
+;                    in via the MEMORY_POP_HANDLER equate.
 ;
 ; Frame size: name_len + 8 + payload_size (1 frame_size + 1 curr_type
 ;   + 1 prev_type + 2 prev_line + 2 prev_data + name + 1 null + payload).
@@ -45,6 +52,25 @@
 ; File parents waste 1 byte at offset 6 in exchange for a constant
 ; frame-size formula and a fixed name offset that consumers (e.g.
 ; SHOW_FRAME_NAME) can use without scanning.
+;
+; SS_TEMP16 contract across the public push/reserve API:
+;   check_source_frame_room   writes SS_TEMP16 := proposed pending base
+;                             (= SS_PEND_P16 - frame_size).
+;   ss_alloc_frame            reads SS_TEMP16 as the new base; doesn't
+;                             write it. After return SS_TEMP16 still
+;                             equals SS_P16 (the new top).
+;   ss_alloc_pending_frame    same as alloc_frame but updates only
+;                             SS_PEND_P16; SS_TEMP16 still equals the
+;                             pending base after return.
+;   ss_write_pending_header_and_name
+;                             reads SS_TEMP16 as the frame base; ADVANCES
+;                             it by 7 (so the name-copy loop can use Y
+;                             as a direct SS_NAME index without needing
+;                             X). After return SS_TEMP16 is no longer
+;                             the frame base -- callers don't reuse it.
+; In short: SS_TEMP16 is a transient "where am I writing" pointer
+; threaded through a single push or reserve; outside one of those calls
+; it's free for any caller to reuse.
 
   .zeropage
 
@@ -97,7 +123,7 @@ source_stack_init:
 ;                    frame size is computed), so a successful return
 ;                    here must be followed by push_source_frame before
 ;                    any other routine clobbers SS_TEMP16.
-;                    A, X, Y clobbered.
+;                    A, Y clobbered. X preserved.
 check_source_frame_room:
   ; Compute name length
   LDY #$FF
@@ -237,7 +263,7 @@ ss_alloc_pending_frame:
 ;           SS_PAYLOAD_SIZE reset to 0
 ;           SS_P16 unchanged; SS_SRC_TYPE / SS_CURR_LINE16 /
 ;             SS_CURR_FILE / SS_MEM_PTR16 unchanged
-;           A, X, Y clobbered. Caller saves X if needed.
+;           A, Y clobbered. X preserved.
 ss_reserve_frame:
   PHA                       ; Save curr_type across check / alloc
   ; OOM check: SS_TEMP16 = SS_PEND_P16 - frame_size = pending base.
@@ -304,55 +330,20 @@ ss_commit_pending_frame:
   RTS
 
 
-; Per-curr_type pop handlers. pop_source dispatches to one of these
-; based on curr_type, before prev_data restoration. The dispatch
-; preserves both X and Y around the JSR; handlers may freely clobber
-; them. The memory entry can be patched at runtime via
-; ss_install_memory_pop -- the assembler installs
-; pop_label_scope_from_frame, the test program leaves the no-op default.
-ss_pop_file:
-  ; curr_type=0: close the current file handle if open.
-  LDA SS_CURR_FILE
-  BEQ .nothing_to_close
-  JMP close             ; tail call
-.nothing_to_close:
-  RTS
-
-; Default memory pop handler: no-op. The host program installs its own
-; via ss_install_memory_pop if memory frames carry state that needs
-; restoring (the assembler installs pop_label_scope_from_frame; the
-; test program leaves the default in place).
+; Default memory pop handler: no-op. Host programs that don't need to
+; restore any per-frame state (e.g. the source-stack component test
+; program) equate MEMORY_POP_HANDLER to this label.
 ss_pop_memory_noop:
   RTS
 
-; Per-curr_type pop dispatch table (lo/hi split for ASL-free indexing).
-; The memory entry can be patched at runtime via ss_install_memory_pop.
-ss_on_pop_table_lo:
-  .byte <ss_pop_file
-  .byte <ss_pop_memory_noop
-ss_on_pop_table_hi:
-  .byte >ss_pop_file
-  .byte >ss_pop_memory_noop
-
-; Install a custom memory-pop handler. Overwrites the memory entry of
-; ss_on_pop_table_{lo,hi} so subsequent pop_source calls dispatch to
-; this handler when curr_type=memory.
-;
-; On entry: A = handler addr low byte
-;           X = handler addr high byte
-; On exit:  Y/A clobbered; X preserved (the table is patched in place).
-ss_install_memory_pop:
-  STA ss_on_pop_table_lo + 1
-  TXA
-  STA ss_on_pop_table_hi + 1
-  RTS
-
-; Indirect-call thunk: caller stores target address in SS_TEMP16, then
-; JSRs here. The target's RTS returns to the original caller. Used by
-; pop_source's curr_type dispatch (the only remaining call site after
-; ss_walk_frames moved into the test program).
-ss_invoke:
-  JMP (SS_TEMP16)
+; Memory-frame pop dispatch is compile-time linked rather than
+; runtime-patched: the host program defines MEMORY_POP_HANDLER as an
+; equate before including this file. The assembler equates it to
+; pop_label_scope_from_frame (label_scope.asm); the source-stack test
+; program equates it to ss_pop_memory_noop above. pop_source's
+; memory-pop branch becomes a direct JSR to that address -- no table,
+; no indirect-jump thunk, no install routine. Same code path on every
+; build, just a different jump target.
 
 
 ; On exit Z is set if source stack empty, clear otherwise
@@ -367,7 +358,9 @@ source_stack_empty:
 ; file, ordering of SS_MEM_PTR16 updates, etc.).
 ;
 ; Builds a stack frame for a new source. Frame size is name_len + 8 +
-; payload (fixed-size prev_data slot regardless of parent type).
+; payload (fixed-size prev_data slot regardless of parent type). On
+; exit installs the new frame's curr_type as SS_SRC_TYPE and resets
+; SS_PAYLOAD_SIZE to 0, so callers don't need to do that themselves.
 ;
 ; PRECONDITION: caller has called check_source_frame_room, which leaves
 ; the proposed new SS_P16 in SS_TEMP16 and verified the OOM check. That
@@ -386,8 +379,10 @@ source_stack_empty:
 ;                        the parent's value when prev_type=memory.
 ; On exit:  Frame written with curr_type, prev_type, prev_line,
 ;           prev_data, name; SS_P16 advanced past it.
+;           SS_SRC_TYPE = new frame's curr_type.
 ;           SS_CURR_LINE16 reset to 0.
-;           A, X, Y clobbered.
+;           SS_PAYLOAD_SIZE reset to 0.
+;           A, Y clobbered. X preserved.
 push_source_frame:
   PHA                   ; Save curr_type across ss_alloc_frame
   ; Allocate the frame and write its size byte at offset 0. Pure stack
@@ -396,7 +391,10 @@ push_source_frame:
   PLA                   ; A = curr_type
   ; Header (offsets 1..4) + name (offsets 7..) live in the helper;
   ; prev_data at offsets 5..6 is filled in below from parent's current
-  ; state.
+  ; state. The helper preserves A; we reuse it after as the new
+  ; SS_SRC_TYPE value below.
+  PHA                   ; Save curr_type across the helper (which
+                        ; clobbers A)
   JSR ss_write_pending_header_and_name
   ; prev_data at offsets 5..6. prev_type selects 1 vs 2 bytes;
   ; offset 6 is unused (left undefined) for file parents.
@@ -406,7 +404,7 @@ push_source_frame:
   LDY #5
   LDA SS_CURR_FILE
   STA (SS_P16),Y
-  JMP .reset_line
+  JMP .install_src_type
 .save_memory_state:
   ; prev_type=1 (memory): SS_MEM_PTR16 lo at offset 5, hi at offset 6.
   LDY #5
@@ -415,14 +413,21 @@ push_source_frame:
   INY                   ; Y = 6
   LDA SS_MEM_PTR16 + 1
   STA (SS_P16),Y
-.reset_line:
+.install_src_type:
+  ; Install new frame's curr_type as the active SS_SRC_TYPE. Saves
+  ; the wrappers from doing this themselves.
+  PLA                   ; A = curr_type
+  STA SS_SRC_TYPE
   ; SS_PAYLOAD_SIZE bytes of payload trail the name; the frame_size
   ; byte at offset 0 already accounts for them. Bytes are reserved
   ; but not initialized here -- push_memory_source_reserve_payload's
   ; caller pre-writes them at (SS_P16 - SS_PAYLOAD_SIZE) before the push,
   ; so they are already in place by the time SS_P16 advances over them.
-  ; Reset line number for new source.
+  ; Reset SS_PAYLOAD_SIZE so the next plain push starts from a clean
+  ; slate (matches ss_reserve_frame's contract).
   LDA #$00
+  STA SS_PAYLOAD_SIZE
+  ; Reset line number for new source.
   STA_LH16 SS_CURR_LINE16
   RTS
 
@@ -447,8 +452,11 @@ push_source_frame:
 ;           SS_NAME       = source name (null-terminated)
 ;           SS_SRC_TYPE   = parent's source type (becomes prev_type)
 ;           SS_CURR_LINE16 = parent's line number (becomes prev_line)
-; On exit:  Y points at the offset of the name's null terminator
-;           (= 7 + name_len); SS_TEMP16 unchanged; A, X clobbered.
+; On exit:  SS_TEMP16 has been advanced by 7 (no longer the frame
+;           base; callers that depend on the frame base after this
+;           routine should restore it themselves).
+;           Y = name_len (the index at which the null terminator was
+;           copied). A clobbered. X preserved.
 ss_write_pending_header_and_name:
   LDY #1                ; curr_type offset
   STA (SS_TEMP16),Y
@@ -461,14 +469,22 @@ ss_write_pending_header_and_name:
   INY                   ; Y = 4 (prev_line high)
   LDA SS_CURR_LINE16 + 1
   STA (SS_TEMP16),Y
-  ; Skip offsets 5..6 (prev_data slot). Y starts at 6 so the loop's
-  ; first INY lands on offset 7.
-  LDY #6
-  LDX #$FF
+  ; Advance SS_TEMP16 by 7 so the name-copy loop below can use Y as a
+  ; direct SS_NAME index (SS_NAME[i] lands at frame_base + 7 + i =
+  ; (SS_TEMP16 after add) + i). Lets the loop avoid X entirely, so the
+  ; helper preserves X for callers. SS_TEMP16 is no longer needed as
+  ; the frame base by the time we return.
+  CLC
+  LDA SS_TEMP16
+  ADC #7
+  STA SS_TEMP16
+  BCC .copy_init
+  INC SS_TEMP16 + 1
+.copy_init:
+  LDY #$FF
 .copy_loop:
-  INX
   INY
-  LDA SS_NAME,X
+  LDA SS_NAME,Y
   STA (SS_TEMP16),Y
   BNE .copy_loop
   RTS
@@ -501,9 +517,7 @@ push_file_source:
   PHA                   ; Stash new handle on the 6502 stack across the
                         ; push (push_source_frame can't fail now).
   LDA #SS_SRC_TYPE_FILE
-  JSR push_source_frame
-  LDA #SS_SRC_TYPE_FILE
-  STA SS_SRC_TYPE
+  JSR push_source_frame ; installs SS_SRC_TYPE := FILE for us
   PLA
   STA SS_CURR_FILE      ; Install new file handle
   PLA
@@ -539,55 +553,51 @@ push_file_source:
 ;           SS_MEM_PTR16; reads will then proceed from the new buffer.
 push_memory_source_reserve_payload:
   STA SS_PAYLOAD_SIZE
-  TXA
-  PHA
   JSR check_source_frame_room
   LDA #SS_SRC_TYPE_MEMORY
-  JSR push_source_frame
-  LDA #SS_SRC_TYPE_MEMORY
-  STA SS_SRC_TYPE
-  LDA #$00
-  STA SS_PAYLOAD_SIZE
-  PLA
-  TAX
-  RTS
+  JMP push_source_frame ; tail call; both check_source_frame_room
+                        ; and push_source_frame preserve X, and
+                        ; push_source_frame installs SS_SRC_TYPE :=
+                        ; MEMORY and resets SS_PAYLOAD_SIZE := 0 for
+                        ; us
 
 
-; Unified pop function - handles both file and memory sources via
-; ss_on_pop_table dispatch. For file sources, closes the current file
-; handle. For memory sources, runs whatever handler the host installed
-; via ss_install_memory_pop (the assembler installs
-; pop_label_scope_from_frame; the test program leaves the default
-; no-op).
-; On exit: Previous state restored (SS_CURR_FILE or SS_MEM_PTR16)
-;          SS_SRC_TYPE restored to prev_type
-;          SS_CURR_LINE16 restored to prev_line
+; Unified pop function -- handles both file and memory sources. File
+; pops are inline (close the current handle if any); memory pops jump
+; to MEMORY_POP_HANDLER, a compile-time equate the host program
+; supplies. The assembler points it at pop_label_scope_from_frame; the
+; test program points it at ss_pop_memory_noop.
+;
+; On entry: top frame's curr_type at offset 1 selects the path.
+; On exit:  Previous state restored (SS_CURR_FILE or SS_MEM_PTR16);
+;           SS_SRC_TYPE restored to prev_type; SS_CURR_LINE16
+;           restored to prev_line. X preserved by external contract
+;           (read_char's X preservation flows through here).
 pop_source:
   ; All header fields (curr_type/prev_type/prev_line/prev_data) live at
   ; fixed offsets 1..6 -- no name scan anywhere on this path.
-  LDY #1                ; curr_type offset
-  ; Dispatch on curr_type via ss_on_pop_table_{lo,hi} (file=0, memory=1).
-  ; Save X around the dispatch -- pop_source preserves X by external
-  ; contract (read_char's X preservation flows through here).
   TXA
-  PHA
+  PHA                   ; Save X across both dispatch arms (close and
+                        ; the memory handler may both clobber it).
+  LDY #1                ; curr_type offset
   LDA (SS_P16),Y
-  TAX
-  LDA ss_on_pop_table_lo,X
-  STA SS_TEMP16
-  LDA ss_on_pop_table_hi,X
-  STA SS_TEMP16+1
-  ; Y must also survive the handler call (we still need it for the
-  ; prev_type / prev_line / prev_data reads below).
-  TYA
-  PHA
-  JSR ss_invoke
+  BEQ .pop_file
+  ; Memory: direct call to the compile-time-linked handler.
+  JSR MEMORY_POP_HANDLER
+  JMP .dispatch_done
+.pop_file:
+  ; Inline file pop: close the current handle if open. close itself
+  ; preserves X but we already saved it above to keep the two arms
+  ; symmetric.
+  LDA SS_CURR_FILE
+  BEQ .dispatch_done
+  JSR close
+.dispatch_done:
   PLA
-  TAY
-  PLA
   TAX
-  ; Read prev_type at offset 2.
-  INY
+  ; Read prev_type at offset 2. Y is unspecified after the dispatch
+  ; (the handler may have clobbered it); reload explicitly.
+  LDY #2
   LDA (SS_P16),Y
   STA SS_SRC_TYPE       ; Restore source type
   PHA                   ; Save for the prev_data branch below

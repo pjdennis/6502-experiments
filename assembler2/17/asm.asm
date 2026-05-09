@@ -86,7 +86,10 @@ MACRO_PTR16:     .word        ; Pointer to macro name (for show_captured_macros)
   .include common.asm
   .include label_scope.asm
   .include forward_ref.asm
-SS_NAME        = TOKEN
+SS_NAME             = TOKEN
+MEMORY_POP_HANDLER  = pop_label_scope_from_frame  ; called by pop_source
+                                                   ; on memory frames; restores
+                                                   ; the macro's saved scope
   .ifdef enable_debug
 SS_ERR_NO_FILE     = err_no_file
   .endif
@@ -249,14 +252,11 @@ start:
   STA SMALL_HEAP_FLAG
   STA SHOW_MACROS
   .endif
-  ; Initialize source stack early so interrupt handler works correctly
+  ; Initialize source stack early so interrupt handler works correctly.
+  ; The memory-source pop hook (pop_label_scope_from_frame) is wired in
+  ; at compile time via the MEMORY_POP_HANDLER equate above; no runtime
+  ; install step is needed.
   JSR source_stack_init
-  ; Install pop_label_scope_from_frame as the memory-source pop hook.
-  ; Macro expansions push activation state into the memory frame's
-  ; payload region; the hook reads it back when the frame is popped.
-  LDA #<pop_label_scope_from_frame
-  LDX #>pop_label_scope_from_frame
-  JSR ss_install_memory_pop
   ; Initialize scope state (EXPANSION_ID, SCOPE_DEPTH).
   JSR init_scope_state
   ; Check argument count (must be at least 2)
@@ -308,7 +308,7 @@ start:
   LDA #$FF
   STA PASS            ; Bit 7 = 1 (pass 2)
   JSR reset_fwdref_ptr
-  JSR reset_scope_stack   ; Reset so pass 2 uses same scope IDs as pass 1
+  JSR init_scope_state    ; Reset so pass 2 uses same scope IDs as pass 1
   JSR open_input
   JSR assemble_code
 

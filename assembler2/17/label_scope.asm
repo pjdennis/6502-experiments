@@ -23,9 +23,9 @@
 ;                                       frame_size - 2.
 ;
 ; expand_macro writes these 7 bytes (after the parameter slots) directly
-; into the frame's reserved payload region after pushing via
-; push_memory_source_reserve_payload -- there is no longer a staging
-; buffer between the parser and the source-stack frame.
+; into the frame's reserved payload region after reserving via
+; ss_reserve_frame -- there is no longer a staging buffer between the
+; parser and the source-stack frame.
 ; pop_label_scope_from_frame (installed via ss_install_memory_pop at startup)
 ; reads them back when the frame is popped.
 ;
@@ -77,8 +77,6 @@ init_scope_state:
   STA SCOPE_DEPTH
   STA_LH16 MACRO_LOOKUP_FRAME16
   RTS
-init_scope_stack = init_scope_state   ; legacy alias; remove once callers update
-reset_scope_stack = init_scope_state
 
 
 ; Memory-source pop hook installed at startup via ss_install_memory_pop.

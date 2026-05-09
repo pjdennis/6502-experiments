@@ -61,7 +61,7 @@ OOM_LIMIT16:     .word
   .endmacro
 
 ; Source stack configuration
-SS_NAME   = TOKEN
+SS_NAME = TOKEN
 
 ; CHECK_FOR_OUT_OF_MEMORY - Stack-overflow check used by push_source_frame.
 ; Compares the proposed new stack pointer (fs_ptr) against OOM_LIMIT16.
@@ -104,6 +104,17 @@ err_out_of_memory:
   JMP exit
 msg_oom:
   .asciiz "OUT OF MEMORY\n"
+
+; Memory-frame pop handler: a bare RTS. The test program doesn't carry
+; any per-frame state that needs restoring -- it's just exercising the
+; source-stack mechanics.
+ss_test_memory_pop:
+  RTS
+
+; Wire the handler in via the compile-time equate. Defining the equate
+; here (after the label, before the include) avoids relying on
+; forward-reference resolution in equate values.
+MEMORY_POP_HANDLER = ss_test_memory_pop
 
   .include source_stack.asm
 read_char = source_stack_read_char
