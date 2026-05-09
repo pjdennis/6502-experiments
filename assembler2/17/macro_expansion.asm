@@ -393,9 +393,8 @@ expand_macro:
   ;   0..1 : prev LABEL_SCOPE16
   ;   2    : prev CACHED_HASH
   ;   3..4 : prev MACRO_LOOKUP_FRAME16
-  ;   5..8 : reserved for prev MACRO_LOOKUP_SLOTS16 / _PARAMS16
-  ;          (filled in phase 3 of the lookup-caching plan; left
-  ;           uninitialized here)
+  ;   5..6 : prev MACRO_LOOKUP_SLOTS16
+  ;   7..8 : prev MACRO_LOOKUP_PARAMS16
   ;   9..10: MACRO_ENTRY16 (recursion detection; at the very end so
   ;          check_macro_recursion's frame_size-2 anchor still works)
   TXA
@@ -414,11 +413,18 @@ expand_macro:
   INY
   LDA MACRO_LOOKUP_FRAME16 + 1
   STA (MACRO_PAYLOAD_BASE16),Y
-  ; Skip 4 reserved bytes (offsets 5..8 from scope_block start).
   INY
+  LDA MACRO_LOOKUP_SLOTS16
+  STA (MACRO_PAYLOAD_BASE16),Y
   INY
+  LDA MACRO_LOOKUP_SLOTS16 + 1
+  STA (MACRO_PAYLOAD_BASE16),Y
   INY
+  LDA MACRO_LOOKUP_PARAMS16
+  STA (MACRO_PAYLOAD_BASE16),Y
   INY
+  LDA MACRO_LOOKUP_PARAMS16 + 1
+  STA (MACRO_PAYLOAD_BASE16),Y
   INY
   LDA MACRO_ENTRY16
   STA (MACRO_PAYLOAD_BASE16),Y
@@ -456,6 +462,25 @@ expand_macro:
   STA MACRO_LOOKUP_FRAME16
   LDA SS_P16 + 1
   STA MACRO_LOOKUP_FRAME16 + 1
+
+  ; Cache the slot-list and param-list pointers so ss_lookup_param_slot
+  ; doesn't have to re-derive them on every call inside the body.
+  ; MACRO_PAYLOAD_BASE16 still holds slot[0] from the parse-loop
+  ; setup; MACRO_ENTRY16 still holds the def's count-byte address.
+  ; These two writes are in lockstep with MACRO_LOOKUP_FRAME16 above
+  ; and with their counterparts in pop_label_scope_from_frame; the
+  ; pointer-triple invariant lives across the three sites.
+  LDA MACRO_PAYLOAD_BASE16
+  STA MACRO_LOOKUP_SLOTS16
+  LDA MACRO_PAYLOAD_BASE16 + 1
+  STA MACRO_LOOKUP_SLOTS16 + 1
+  CLC
+  LDA MACRO_ENTRY16
+  ADC #1
+  STA MACRO_LOOKUP_PARAMS16
+  LDA MACRO_ENTRY16 + 1
+  ADC #0
+  STA MACRO_LOOKUP_PARAMS16 + 1
 
   ; Install body pointer. The arg loop advanced MACRO_DEF_PTR16 past
   ; every param name; it now sits on the body's first byte.

@@ -130,5 +130,19 @@ pop_label_scope_from_frame:
   INY
   LDA (SS_P16),Y
   STA MACRO_LOOKUP_FRAME16 + 1
+  ; Restore the cached slot-list and param-list pointers in lockstep
+  ; with MACRO_LOOKUP_FRAME16 -- the pointer-triple invariant.
+  INY
+  LDA (SS_P16),Y
+  STA MACRO_LOOKUP_SLOTS16
+  INY
+  LDA (SS_P16),Y
+  STA MACRO_LOOKUP_SLOTS16 + 1
+  INY
+  LDA (SS_P16),Y
+  STA MACRO_LOOKUP_PARAMS16
+  INY
+  LDA (SS_P16),Y
+  STA MACRO_LOOKUP_PARAMS16 + 1
   DEC SCOPE_DEPTH
   RTS
