@@ -290,6 +290,30 @@ EXPECT_LINE: 5
 EXPECT_MSG: Too many macro arguments
 
 ---
+NAME: macro_max_name_with_max_fitting_args
+DESCRIPTION: 127-char name (TOKEN buffer cap) + 37 args. Frame_size = 15 + 127 + 111 = 253, the largest single-byte frame_size that fits at this name length. The runtime guard's `name_len + 3*N <= 240` constraint shifts the max-args ceiling below MACRO_MAX_ARGS=64 once name_len exceeds 48; this pins the long-name end of that sliding boundary.
+INPUT:
+ 1: * = $0200
+ 2:   .macro AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36
+ 3:   LDA #a0
+ 4:   .endmacro
+ 5:   AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA $42, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+EXPECT_HEX: a9 42
+
+---
+NAME: macro_max_name_with_one_extra_arg
+DESCRIPTION: 127-char name + 38 args. Frame_size would be 15 + 127 + 114 = 256, exactly one over the byte cap. Mirror of macro_max_args_with_name_one_byte_over (which fixes args at 64 and adds one to the name); this fixes the name at 127 and adds one to the args. Closes the other side of the runtime-guard boundary.
+INPUT:
+ 1: * = $0200
+ 2:   .macro AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, a33, a34, a35, a36, a37
+ 3:   LDA #a0
+ 4:   .endmacro
+ 5:   AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA $42, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+EXPECT_ERROR: 33
+EXPECT_LINE: 5
+EXPECT_MSG: Too many macro arguments
+
+---
 NAME: token_buffer_at_limit
 DESCRIPTION: 127 character token at buffer limit
 INPUT:
