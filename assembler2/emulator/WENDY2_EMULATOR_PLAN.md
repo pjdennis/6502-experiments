@@ -82,15 +82,18 @@ Commit: `cpu_core: 65c02 baseline fixes (jmp-ind, decimal N/Z, brk-D)`.
 3f. **Add `wai`, `stp`.** Implement `wai` by setting a `wai_pending` flag that makes `step6502` consume 1 cycle and not advance PC until an IRQ/NMI clears it. `stp` sets `stp_pending` that halts `step6502` until `reset6502`. Tests: assert WAI returns and PC advances when `irq6502()` is called; STP held until `reset6502`. Commit: `cpu_core: 65c02 wai/stp`.
 
 3g. **Klaus Dormann functional test harness.**
-- New folder `emulator/tests/dormann/` containing the prebuilt `6502_functional_test.bin` and `65C02_extended_opcodes_test.bin` (vendored from the upstream repo). Add a `tests/dormann/README` recording the upstream commit hash and noting these are licensed under the GPL/Public Domain headers in the source.
-- New `emulator/tests/test_dormann.c`: greatest test that loads each binary at $0000, sets PC=$0400, runs until PC equals the documented success trap address or hits a stuck-trap (PC unchanged for >2 instructions in a row, which Klaus's test uses as failure indicator). Reports last PC on failure.
+- New folder `emulator/tests/dormann/` containing vendored upstream sources `6502_functional_test.a65` and `65C02_extended_opcodes_test.a65c` (from the amb5l/Klaus Dormann fork that targets `ca65`). These are GPLv3+ only — add `tests/dormann/LICENSE` (GPLv3 text) and a `tests/dormann/README` recording upstream URL + commit hash and the licensing note. The repo's own license posture is unaffected since the tests link no project code.
+- Build dependency: **`cc65` toolchain (`ca65`/`ld65`)** must be installed. Add a one-line note to `assembler2/README.md` and a friendly error in the Dormann Makefile if `ca65` is missing.
+- New `tests/dormann/Makefile`: runs `ca65` + `ld65` against the vendored sources to produce `6502_functional_test.bin` and `65C02_extended_opcodes_test.bin`. The `.bin` artifacts go to `tests/dormann/out/` and are gitignored.
+- New `emulator/tests/test_dormann.c`: greatest test that loads each binary at $0000, sets PC=$0400, runs until PC equals the documented success trap address or hits a stuck-trap (PC unchanged for >2 instructions in a row, which Klaus's test uses as failure indicator). Reports last PC on failure. If the `.bin` is missing (ca65 unavailable), the test is reported as SKIP (greatest `SKIP()`) with a clear message, and `make test` stays green.
 - Wire into `make test`. Commit: `tests: klaus-dormann harness for NMOS and 65C02 cores`.
-- **Definition of done**: both Dormann binaries return success for their respective `cpu_variant`. If a fix is needed, that fix is its own follow-up commit referencing the Dormann failure PC.
+- **Definition of done**: both Dormann binaries return success for their respective `cpu_variant` when `ca65` is available. If a fix is needed, that fix is its own follow-up commit referencing the Dormann failure PC.
 
 3h. **Tom Harte ProcessorTests harness.**
 - New folder `emulator/tests/harte/` with a small README pointing to the upstream git submodule or a "download script" (do NOT vendor the 5+ GB of JSON; instead `tests/harte/fetch.sh` clones the upstream into a gitignored `harte/data/` dir, and `make harte` first runs `fetch.sh` if data missing).
 - New `emulator/tests/harte_runner.c` (linked into a `harte_runner.out`): for a given CPU variant and an opcode in `00..FF`, iterate through the JSON test cases (use a small hand-rolled JSON parser — only objects/arrays/strings/numbers needed), set up CPU regs + RAM as `initial` says, install a bus-log shim that records each `(addr, val, R/W)`, single-step one instruction, compare `final` regs + RAM + cycle log.
 - `make harte` target runs all 256 opcodes for both `6502` and `wdc65c02` JSON dirs. For now allow `HARTE_LIMIT=N` env var to test only the first N vectors per opcode for fast loops.
+- **If `harte/data/` is missing**, `make harte` prints `WARNING: Harte data not fetched; run tests/harte/fetch.sh first. Skipping.` and exits 0. Same skip-with-warning behavior in `--selftest` (phase 15c). The build never fails because Harte data is absent — explicit fetch is opt-in.
 - Commit: `tests: tom-harte processortests harness (cycle-exact)`.
 - **Definition of done**: NMOS dispatch passes Harte for the documented-opcodes set (undoc opcodes may be allow-listed against the NMOS undocumented `lax`/`sax`/etc. behavior we already implement); 65C02 passes Harte for all 256 opcodes. Document any allow-listed mismatches in `emulator/tests/harte/known-deltas.md`.
 
@@ -207,7 +210,7 @@ This is the biggest chip. Split into two commits.
 ### Phase 12 — Audio (WAV + optional SDL2)
 
 - `chips/audio_sink.c/.h`. Subscribes to PB7 writes (T1 squarewave goes through ORB bit 7 when ACR T1-output is enabled — see VIA model). At each OSC tick records the current PB7 level; on every Nth tick (where N = OSC_freq / 44100) box-downsamples the last window to one int16 sample.
-- WAV writer: opens `--audio-out wendy2c.wav` (default) and writes a streaming 16-bit PCM mono WAV with the header back-patched at close.
+- WAV writer: **lazy open** — the file at `--audio-out wendy2c.wav` is created and the WAV header reserved only on the first non-trivial PB7 activity (defined as the first PB7 level *change* observed after VIA ACR T1-output-enable is set; transient bit-wiggles before T1 is configured don't count). If the run never produces non-trivial activity, no file is written. Header back-patched at close.
 - Optional SDL2 live: `--audio-live` opens SDL2 audio, queues samples in a ring buffer. Compile SDL2 support behind `#ifdef HAVE_SDL2` and a `make` variable `EMU_AUDIO_LIVE=1`; the default `make` does NOT link SDL2 (so the bootstrap chain has no new dependency).
 - Cap: hard duration cap default 60 s, override with `--audio-duration N`.
 - Tests (`tests/test_chip_audio.c`): drive a synthetic 1 kHz square via PB7, render 1 s of audio, FFT-free assertion that the zero-crossing rate is 2000 ± 5 Hz.
@@ -232,6 +235,25 @@ This is the biggest chip. Split into two commits.
 - No DTR pulse (the socket connect already triggers reset).
 - Tests: in a Python test alongside `editor/tests/editor_tests.py` style, start emulator with a tiny test ROM that just echoes received bytes to LCD, upload a small payload, scrape the rendered LCD frame to verify.
 - **Commit**: `wendy2: wendy2_upload.py + python integration test`.
+
+13d. **Demo launch script** (`emulator/demo_wendy2c.sh`).
+- One command that takes a fresh checkout end-to-end: builds artifacts, launches the emulated wendy2c, uploads a small demo program over the socket, and shows its output on the (emulated) LCD in the terminal. Intended for human inspection — "does the whole pipeline work?"
+- Behavior:
+  1. From `assembler2/`, ensure `emulator/emulator.out` is built (`make` if stale).
+  2. Assemble the ROM-side listener `upload_and_run_ram_wendy2c.s` (from repo root) into `emulator/out/demo_rom.bin` using the existing bootstrap-asm pipeline (re-uses the same toolchain `asmtestgen.sh` uses, so no new dep).
+  3. Assemble the RAM-side payload — default `hello_ram_4000_wendy2c.s` (already in the repo) — into `emulator/out/demo_payload.bin`. Allow override via `DEMO_PAYLOAD=path/to/other.s` env var; the script picks up the chosen `.s`, finds its load address from the file name suffix (`_4000_` or `_5000_`), and passes it through to the uploader.
+  4. Pick a per-invocation socket path `${TMPDIR:-/tmp}/wendy2-demo-$$.sock` so concurrent demos don't collide. Trap EXIT to remove the socket and kill the emulator child.
+  5. Background-spawn `(sleep 0.5 && python3 emulator/wendy2_upload.py "$SOCK" emulator/out/demo_payload.bin) &` so the uploader fires once the emulator is listening.
+  6. `exec` the emulator in the foreground: `./emulator/emulator.out --machine wendy2c --rom emulator/out/demo_rom.bin --serial-socket "$SOCK" --audio-out emulator/out/demo.wav`. The user sees the LCD status-bar render live; on the demo payload `hello_ram_4000_wendy2c.s` the LCD prints its hello message, the emulator halts on `stp` or hangs visibly, user hits Ctrl-C to exit, EXIT trap cleans up.
+- Flags:
+  - `--auto-exit SECONDS` (used by the test below): after upload, send SIGTERM to the emulator after N seconds. Exit code reflects whether the expected LCD content was seen (when combined with `--expect "..."`).
+  - `--expect STRING`: when used with `--auto-exit`, scrape the final-frame LCD snapshot dump (produced via SIGUSR1 + the snapshot machinery from phase 15b — or, until 15b lands, a `--lcd-dump-on-exit` flag added in this commit) and fail if STRING isn't present.
+  - `--no-audio`: omit `--audio-out` so the run produces no WAV at all (lazy-open in phase 12 means a quiet run would skip it anyway, but this is the explicit toggle).
+- Tests:
+  - `emulator/tests/test_demo_script.sh` invokes `demo_wendy2c.sh --auto-exit 5 --expect "HELLO"` and asserts exit-0.
+  - Wire that shell test into the existing `make test` target alongside the greatest C suite (as a non-greatest sibling — same exit-code contract).
+- Documentation: phase 17 README gets a "Try the demo" section that just says `cd assembler2 && emulator/demo_wendy2c.sh`.
+- **Commit**: `wendy2: demo_wendy2c.sh end-to-end smoke launch script`.
 
 ### Phase 14 — ST7920 graphic display stub
 
@@ -296,8 +318,8 @@ Commits stay small and single-purpose. Each new C source goes in with a same-com
 
 ## Critical files for implementation
 
-- `/home/pjd1224/research/6502/assembler2/emulator/emulator.c`
-- `/home/pjd1224/research/6502/assembler2/emulator/cpu_core.c`
-- `/home/pjd1224/research/6502/assembler2/emulator/cpu_core.h`
-- `/home/pjd1224/research/6502/22V10-wendy2c.pld`
-- `/home/pjd1224/research/6502/upload_and_run.inc`
+- `assembler2/emulator/emulator.c`
+- `assembler2/emulator/cpu_core.c`
+- `assembler2/emulator/cpu_core.h`
+- `22V10-wendy2c.pld`
+- `upload_and_run.inc`
