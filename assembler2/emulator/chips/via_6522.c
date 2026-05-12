@@ -82,6 +82,12 @@ static bool via_6522_read(struct chip *self, struct bus *bus,
         case VIA_REG_SR:
             *out = s->sr;
             via_clear_ifr(s, bus, VIA_INT_SR);
+            /* Reading SR while in shift-in-T2 mode primes the shift
+             * register for the next 8 bits. The wendy2c ISR reads SR
+             * right after enabling SR_IN_T2 to start each byte. */
+            if ((s->acr & VIA_ACR_SR_MODE) == VIA_ACR_SR_IN_T2) {
+                s->sr_bits_remaining = 8;
+            }
             return true;
         case VIA_REG_ACR: *out = s->acr; return true;
         case VIA_REG_PCR: *out = s->pcr; return true;
@@ -239,7 +245,12 @@ void via_6522_set_cb2(struct via_6522_state *s, struct bus *bus, uint8_t bit) {
      * by the wendy2c upload path). */
 }
 
+void via_6522_set_cb2_quiet(struct via_6522_state *s, uint8_t bit) {
+    s->cb2_in = bit ? 1 : 0;
+}
+
 uint8_t via_6522_get_pb7(const struct via_6522_state *s) { return s->pb7; }
 uint16_t via_6522_get_t1c(const struct via_6522_state *s) { return s->t1c; }
 uint8_t via_6522_porta_pins(const struct via_6522_state *s) { return porta_pin_value(s); }
 uint8_t via_6522_portb_pins(const struct via_6522_state *s) { return portb_pin_value(s); }
+uint8_t via_6522_sr_bits_remaining(const struct via_6522_state *s) { return s->sr_bits_remaining; }

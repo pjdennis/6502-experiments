@@ -83,8 +83,13 @@ struct via_6522_state {
 
 void via_6522_init(struct chip *chip, struct via_6522_state *state);
 
-/* External CB2 driver (used by the SERIAL_USB chip in phase 13). */
+/* External CB2 driver (used by the SERIAL_USB chip in phase 13). The
+ * "edge" form runs the PCR-based IFR-edge logic; the "quiet" form
+ * just updates the cb2_in level so the next T2 underflow shifts it,
+ * without firing IFR (used to drive subsequent bits in a byte without
+ * triggering a spurious "new start bit" interrupt). */
 void via_6522_set_cb2(struct via_6522_state *state, struct bus *bus, uint8_t bit);
+void via_6522_set_cb2_quiet(struct via_6522_state *state, uint8_t bit);
 
 /* Inspectors -- handy for tests and for chips that latch port pins
  * (the LCD watches PORTA + the E line on PORTB bit 5, etc.). */
@@ -92,5 +97,10 @@ uint8_t via_6522_get_pb7(const struct via_6522_state *state);
 uint16_t via_6522_get_t1c(const struct via_6522_state *state);
 uint8_t via_6522_porta_pins(const struct via_6522_state *state);
 uint8_t via_6522_portb_pins(const struct via_6522_state *state);
+
+/* For the SERIAL_USB chip: peek the shift-register bits-remaining counter
+ * so the external driver can synchronize CB2 transitions with T2 underflows
+ * regardless of the timing model. */
+uint8_t via_6522_sr_bits_remaining(const struct via_6522_state *state);
 
 #endif

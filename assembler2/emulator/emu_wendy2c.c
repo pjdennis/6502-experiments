@@ -10,6 +10,7 @@
 #include "chips/ram_628128.h"
 #include "chips/via_6522.h"
 #include "chips/lcd_hd44780.h"
+#include "chips/serial_usb.h"
 #include "chips/cpu_65c02.h"
 
 /* Module-scope bus pointer used by the cpu_external_read/write hooks
@@ -46,14 +47,16 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
     static struct ram_628128_state  ram_state;
     static struct via_6522_state    via_state;
     static struct lcd_hd44780_state lcd_state;
+    static struct serial_usb_state  ser_state;
     static struct cpu_65c02_state   cpu_state;
-    struct chip clk_chip, rom_chip, ram_chip, via_chip, lcd_chip, cpu_chip;
+    struct chip clk_chip, rom_chip, ram_chip, via_chip, lcd_chip, ser_chip, cpu_chip;
 
     clock_22v10_init(&clk_chip, &clk_state);
     rom_28c256_init(&rom_chip, &rom_state);
     ram_628128_init(&ram_chip, &ram_state);
     via_6522_init  (&via_chip, &via_state);
     lcd_hd44780_init(&lcd_chip, &lcd_state, &via_state);
+    serial_usb_init(&ser_chip, &ser_state, &via_state);
     cpu_65c02_init (&cpu_chip, &cpu_state);
 
     /* Load ROM image. Falls back to code_filename if --rom is omitted. */
@@ -78,7 +81,23 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
     bus_add_chip(&b, &ram_chip);
     bus_add_chip(&b, &via_chip);
     bus_add_chip(&b, &lcd_chip);
+    bus_add_chip(&b, &ser_chip);
     bus_add_chip(&b, &cpu_chip);
+
+    /* Pre-load any --serial-input bytes into the SERIAL_USB queue. */
+    if (opts->serial_input_filename) {
+        FILE *sf = fopen(opts->serial_input_filename, "rb");
+        if (!sf) {
+            fprintf(stderr, "wendy2c: could not open --serial-input %s\n",
+                    opts->serial_input_filename);
+            return 1;
+        }
+        int byte;
+        while ((byte = fgetc(sf)) != EOF) {
+            if (serial_usb_queue_byte(&ser_state, (uint8_t)byte) < 0) break;
+        }
+        fclose(sf);
+    }
 
     active_bus = &b;
     cpu_external_read  = wendy2c_cpu_read;
