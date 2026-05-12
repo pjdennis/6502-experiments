@@ -14,71 +14,7 @@
 #include "file_io.h"
 #include "console.h"
 #include "cpu_core.h"
-
-/* Diagnostic facility (opt-in via E6502_TRACE env var):
- *   ring   = dump last N PCs on timeout
- *   hist   = dump top hottest PCs on timeout
- *   both   = both
- * Always-on cost is one comparison per step plus (if active) one
- * histogram-bucket increment + one ring-buffer write. Histograms are
- * 64KB of uint32 = 256KB.
- */
-#define TRACE_RING_SIZE 4096
-static int trace_mode = 0;             /* 0=off, 1=ring, 2=hist, 3=both */
-static uint16_t trace_ring[TRACE_RING_SIZE];
-static uint64_t trace_ring_pos = 0;
-static uint32_t *trace_hist = NULL;    /* 64K entries, lazy-alloc */
-
-static void trace_record(uint16_t cur_pc) {
-    if (trace_mode & 1) {
-        trace_ring[trace_ring_pos & (TRACE_RING_SIZE - 1)] = cur_pc;
-        trace_ring_pos++;
-    }
-    if (trace_mode & 2) {
-        if (trace_hist == NULL) {
-            trace_hist = (uint32_t *)calloc(65536, sizeof(uint32_t));
-        }
-        if (trace_hist) trace_hist[cur_pc]++;
-    }
-}
-
-static int hist_cmp(const void *a, const void *b) {
-    uint32_t ai = *(const uint32_t *)a;
-    uint32_t bi = *(const uint32_t *)b;
-    if (trace_hist[bi] > trace_hist[ai]) return 1;
-    if (trace_hist[bi] < trace_hist[ai]) return -1;
-    return 0;
-}
-
-static void trace_dump(const char *why) {
-    if (trace_mode & 1) {
-        uint64_t start = trace_ring_pos > TRACE_RING_SIZE
-                         ? trace_ring_pos - TRACE_RING_SIZE : 0;
-        uint64_t shown = trace_ring_pos - start;
-        if (shown > 256) { start = trace_ring_pos - 256; shown = 256; }
-        fprintf(stderr, "\n=== trace ring (%s; last %llu PCs) ===\n",
-                why, (unsigned long long)shown);
-        for (uint64_t i = start; i < trace_ring_pos; i++) {
-            fprintf(stderr, " %04X", trace_ring[i & (TRACE_RING_SIZE - 1)]);
-            if ((i - start + 1) % 16 == 0) fprintf(stderr, "\n");
-        }
-        if (shown % 16 != 0) fprintf(stderr, "\n");
-    }
-    if ((trace_mode & 2) && trace_hist) {
-        uint32_t indices[65536];
-        int n = 0;
-        for (int i = 0; i < 65536; i++) {
-            if (trace_hist[i]) indices[n++] = (uint32_t)i;
-        }
-        qsort(indices, n, sizeof(uint32_t), hist_cmp);
-        int show = n > 32 ? 32 : n;
-        fprintf(stderr, "\n=== trace hist (%s; top %d of %d distinct PCs) ===\n",
-                why, show, n);
-        for (int i = 0; i < show; i++) {
-            fprintf(stderr, "  %04X  %u\n", indices[i], trace_hist[indices[i]]);
-        }
-    }
-}
+#include "trace.h"
 #include "stubs.h"
 
 #define STDIN_FILENO  0
@@ -828,14 +764,7 @@ int main(int argc, char **argv) {
     clock_gettime(CLOCK_MONOTONIC, &start_time);
     last_repaint_check = start_time;
 
-    {
-        const char *t = getenv("E6502_TRACE");
-        if (t) {
-            if (strstr(t, "both") || (strstr(t, "ring") && strstr(t, "hist"))) trace_mode = 3;
-            else if (strstr(t, "hist")) trace_mode = 2;
-            else if (strstr(t, "ring")) trace_mode = 1;
-        }
-    }
+    trace_init_from_env();
 
     const int max_cycles = 200000000;
     while (!done) {
