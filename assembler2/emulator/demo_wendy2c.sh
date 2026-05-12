@@ -36,16 +36,31 @@ command -v "$VASM" >/dev/null 2>&1 || {
     exit 1
 }
 
+# Run vasm and fail fast on error. The previous version piped vasm output
+# to `tail -5`, which masked vasm's exit status (only `tail`'s status was
+# visible to `set -e`), so an option vasm did not recognise -- e.g. older
+# vasm releases lacking -ignore-mult-inc -- silently produced no output
+# and the emulator then failed with "could not load ROM image".
+run_vasm() {
+    out=$1
+    src=$2
+    log="$OUT_DIR/$(basename "$src").vasm.log"
+    if ! "$VASM" -wdc02 -wfail -Fbin -dotdir -ignore-mult-inc -esc \
+            -o "$out" "$src" >"$log" 2>&1; then
+        echo "error: vasm failed assembling $src (full log: $log):" >&2
+        cat "$log" >&2
+        exit 1
+    fi
+    tail -5 "$log"
+}
+
 cd "$REPO_ROOT"
 
 echo ">> assembling boot ROM (upload_and_run_eeprom_wendy2c.s)"
-"$VASM" -wdc02 -wfail -Fbin -dotdir -ignore-mult-inc -esc \
-    -o "$OUT_DIR/wendy2c_boot.bin" upload_and_run_eeprom_wendy2c.s | \
-    tail -5
+run_vasm "$OUT_DIR/wendy2c_boot.bin" upload_and_run_eeprom_wendy2c.s
 
 echo ">> assembling payload ($PAYLOAD_SRC)"
-"$VASM" -wdc02 -wfail -Fbin -dotdir -ignore-mult-inc -esc \
-    -o "$OUT_DIR/payload.bin" "$PAYLOAD_SRC" | tail -5
+run_vasm "$OUT_DIR/payload.bin" "$PAYLOAD_SRC"
 
 echo ">> framing payload"
 python3 "$ASM2/emulator/wendy2_upload.py" \
