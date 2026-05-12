@@ -1,41 +1,61 @@
-; The / 2 is because these note values represent a half period of the wave
-NOTE_C3  = CLOCK_FREQ_KHZ * 1000.0 /  130.81 / 2
-NOTE_CS3 = CLOCK_FREQ_KHZ * 1000.0 /  138.59 / 2
-NOTE_D3  = CLOCK_FREQ_KHZ * 1000.0 /  146.83 / 2
-NOTE_DS3 = CLOCK_FREQ_KHZ * 1000.0 /  155.56 / 2
-NOTE_E3  = CLOCK_FREQ_KHZ * 1000.0 /  164.81 / 2
-NOTE_F3  = CLOCK_FREQ_KHZ * 1000.0 /  174.61 / 2
-NOTE_FS3 = CLOCK_FREQ_KHZ * 1000.0 /  185.00 / 2
-NOTE_G3  = CLOCK_FREQ_KHZ * 1000.0 /  196.00 / 2
-NOTE_GS3 = CLOCK_FREQ_KHZ * 1000.0 /  207.65 / 2
-NOTE_A3  = CLOCK_FREQ_KHZ * 1000.0 /  220.00 / 2
-NOTE_AS3 = CLOCK_FREQ_KHZ * 1000.0 /  233.08 / 2
-NOTE_B3  = CLOCK_FREQ_KHZ * 1000.0 /  246.94 / 2
-NOTE_C4  = CLOCK_FREQ_KHZ * 1000.0 /  261.63 / 2
-NOTE_CS4 = CLOCK_FREQ_KHZ * 1000.0 /  277.18 / 2
-NOTE_D4  = CLOCK_FREQ_KHZ * 1000.0 /  293.66 / 2
-NOTE_DS4 = CLOCK_FREQ_KHZ * 1000.0 /  311.13 / 2
-NOTE_E4	 = CLOCK_FREQ_KHZ * 1000.0 /  329.63 / 2
-NOTE_F4	 = CLOCK_FREQ_KHZ * 1000.0 /  349.23 / 2
-NOTE_FS4 = CLOCK_FREQ_KHZ * 1000.0 /  369.99 / 2
-NOTE_G4	 = CLOCK_FREQ_KHZ * 1000.0 /  392.00 / 2
-NOTE_GS4 = CLOCK_FREQ_KHZ * 1000.0 /  415.30 / 2
-NOTE_A4  = CLOCK_FREQ_KHZ * 1000.0 /  440.00 / 2
-NOTE_AS4 = CLOCK_FREQ_KHZ * 1000.0 /  466.16 / 2
-NOTE_B4  = CLOCK_FREQ_KHZ * 1000.0 /  493.88 / 2
-NOTE_C5  = CLOCK_FREQ_KHZ * 1000.0 /  523.25 / 2
-NOTE_CS5 = CLOCK_FREQ_KHZ * 1000.0 /  554.37 / 2
-NOTE_D5  = CLOCK_FREQ_KHZ * 1000.0 /  587.33 / 2
-NOTE_DS5 = CLOCK_FREQ_KHZ * 1000.0 /  622.25 / 2
-NOTE_E5	 = CLOCK_FREQ_KHZ * 1000.0 /  659.25 / 2
-NOTE_F5	 = CLOCK_FREQ_KHZ * 1000.0 /  698.46 / 2
-NOTE_FS5 = CLOCK_FREQ_KHZ * 1000.0 /  739.99 / 2
-NOTE_G5	 = CLOCK_FREQ_KHZ * 1000.0 /  783.99 / 2
-NOTE_GS5 = CLOCK_FREQ_KHZ * 1000.0 /  830.61 / 2
-NOTE_A5  = CLOCK_FREQ_KHZ * 1000.0 /  880.00 / 2
-NOTE_AS5 = CLOCK_FREQ_KHZ * 1000.0 /  932.33 / 2
-NOTE_B5  = CLOCK_FREQ_KHZ * 1000.0 /  987.77 / 2
-NOTE_C6  = CLOCK_FREQ_KHZ * 1000.0 / 1046.50 / 2
+; Half-period of each note in CPU cycles, computed from CLOCK_FREQ_KHZ.
+;
+;   half_period = CLOCK_FREQ_KHZ * 1000 / freq_hz / 2
+;
+; Implemented in integer math (no floats) and rounded to nearest cycle:
+;
+;   half_period = (CLOCK_FREQ_KHZ * 100000 + freq_x100) / (freq_x100 * 2)
+;
+; The numerator/denominator are scaled by 100 so freq_x100 = freq_hz * 100 is
+; an integer. Adding freq_x100 (which is half the divisor) before dividing
+; gives round-to-nearest.
+;
+; Intermediate magnitudes (vasm uses 32-bit signed arithmetic, max ~2.1e9):
+;   CLOCK_FREQ_KHZ * 100000  -> max 1.00e9 at CLOCK_FREQ_KHZ = 10000 (10 MHz)
+; Max pitch error across 1..10 MHz clock range: ~1.6 cents (inaudible).
+
+  .macro NOTE_PERIOD
+\1 = (CLOCK_FREQ_KHZ * 100000 + \2) / (\2 * 2)
+  .endmacro
+
+; Macro argument is freq_hz * 100 (integer).
+  NOTE_PERIOD NOTE_C3,   13081     ;  130.81 Hz
+  NOTE_PERIOD NOTE_CS3,  13859     ;  138.59 Hz
+  NOTE_PERIOD NOTE_D3,   14683     ;  146.83 Hz
+  NOTE_PERIOD NOTE_DS3,  15556     ;  155.56 Hz
+  NOTE_PERIOD NOTE_E3,   16481     ;  164.81 Hz
+  NOTE_PERIOD NOTE_F3,   17461     ;  174.61 Hz
+  NOTE_PERIOD NOTE_FS3,  18500     ;  185.00 Hz
+  NOTE_PERIOD NOTE_G3,   19600     ;  196.00 Hz
+  NOTE_PERIOD NOTE_GS3,  20765     ;  207.65 Hz
+  NOTE_PERIOD NOTE_A3,   22000     ;  220.00 Hz
+  NOTE_PERIOD NOTE_AS3,  23308     ;  233.08 Hz
+  NOTE_PERIOD NOTE_B3,   24694     ;  246.94 Hz
+  NOTE_PERIOD NOTE_C4,   26163     ;  261.63 Hz
+  NOTE_PERIOD NOTE_CS4,  27718     ;  277.18 Hz
+  NOTE_PERIOD NOTE_D4,   29366     ;  293.66 Hz
+  NOTE_PERIOD NOTE_DS4,  31113     ;  311.13 Hz
+  NOTE_PERIOD NOTE_E4,   32963     ;  329.63 Hz
+  NOTE_PERIOD NOTE_F4,   34923     ;  349.23 Hz
+  NOTE_PERIOD NOTE_FS4,  36999     ;  369.99 Hz
+  NOTE_PERIOD NOTE_G4,   39200     ;  392.00 Hz
+  NOTE_PERIOD NOTE_GS4,  41530     ;  415.30 Hz
+  NOTE_PERIOD NOTE_A4,   44000     ;  440.00 Hz
+  NOTE_PERIOD NOTE_AS4,  46616     ;  466.16 Hz
+  NOTE_PERIOD NOTE_B4,   49388     ;  493.88 Hz
+  NOTE_PERIOD NOTE_C5,   52325     ;  523.25 Hz
+  NOTE_PERIOD NOTE_CS5,  55437     ;  554.37 Hz
+  NOTE_PERIOD NOTE_D5,   58733     ;  587.33 Hz
+  NOTE_PERIOD NOTE_DS5,  62225     ;  622.25 Hz
+  NOTE_PERIOD NOTE_E5,   65925     ;  659.25 Hz
+  NOTE_PERIOD NOTE_F5,   69846     ;  698.46 Hz
+  NOTE_PERIOD NOTE_FS5,  73999     ;  739.99 Hz
+  NOTE_PERIOD NOTE_G5,   78399     ;  783.99 Hz
+  NOTE_PERIOD NOTE_GS5,  83061     ;  830.61 Hz
+  NOTE_PERIOD NOTE_A5,   88000     ;  880.00 Hz
+  NOTE_PERIOD NOTE_AS5,  93233     ;  932.33 Hz
+  NOTE_PERIOD NOTE_B5,   98777     ;  987.77 Hz
+  NOTE_PERIOD NOTE_C6,  104650     ; 1046.50 Hz
 
 NOTE_DF3 = NOTE_CS3
 NOTE_EF3 = NOTE_DS3
