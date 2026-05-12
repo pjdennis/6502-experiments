@@ -182,6 +182,63 @@ TEST cli_rows_cols_show_repaints(void) {
     PASS();
 }
 
+TEST cli_machine_wendy2c_defaults_to_65c02(void) {
+    char *argv[] = {"emulator", "prog.bin", "--machine", "wendy2c", NULL};
+    struct emu_opts opts;
+    int rc = parse(argv, &opts);
+    ASSERT_EQ_FMT(0, rc, "%d");
+    ASSERT_EQ_FMT(MACHINE_WENDY2C, opts.machine, "%d");
+    /* CPU_65C02 is 1 in cpu_core.h */
+    ASSERT_EQ_FMT(1, opts.cpu_variant_opt, "%d");
+    PASS();
+}
+
+TEST cli_machine_default_is_nmos(void) {
+    char *argv[] = {"emulator", "prog.bin", NULL};
+    struct emu_opts opts;
+    int rc = parse(argv, &opts);
+    ASSERT_EQ_FMT(0, rc, "%d");
+    ASSERT_EQ_FMT(MACHINE_NMOS_DEFAULT, opts.machine, "%d");
+    ASSERT_EQ_FMT(0, opts.cpu_variant_opt, "%d");  /* CPU_NMOS */
+    PASS();
+}
+
+TEST cli_wendy2c_plus_nmos_rejected(void) {
+    char *argv[] = {"emulator", "prog.bin",
+                    "--machine", "wendy2c",
+                    "--cpu", "nmos", NULL};
+    struct emu_opts opts;
+    char buf[1024] = {0};
+    capture_stderr_begin();
+    int rc = parse(argv, &opts);
+    capture_stderr_end(buf, sizeof(buf));
+    ASSERT_EQ_FMT(1, rc, "%d");
+    ASSERT(strstr(buf, "wendy2c requires --cpu 65c02") != NULL);
+    PASS();
+}
+
+TEST cli_explicit_cpu_65c02_on_nmos_default(void) {
+    char *argv[] = {"emulator", "prog.bin", "--cpu", "65c02", NULL};
+    struct emu_opts opts;
+    int rc = parse(argv, &opts);
+    ASSERT_EQ_FMT(0, rc, "%d");
+    ASSERT_EQ_FMT(MACHINE_NMOS_DEFAULT, opts.machine, "%d");
+    ASSERT_EQ_FMT(1, opts.cpu_variant_opt, "%d");
+    PASS();
+}
+
+TEST cli_unknown_machine_rejected(void) {
+    char *argv[] = {"emulator", "prog.bin", "--machine", "atari2600", NULL};
+    struct emu_opts opts;
+    char buf[1024] = {0};
+    capture_stderr_begin();
+    int rc = parse(argv, &opts);
+    capture_stderr_end(buf, sizeof(buf));
+    ASSERT_EQ_FMT(1, rc, "%d");
+    ASSERT(strstr(buf, "nmos-default") != NULL);
+    PASS();
+}
+
 SUITE(cli_suite) {
     RUN_TEST(cli_empty_argv_errors);
     RUN_TEST(cli_server_first_arg_dispatches);
@@ -195,6 +252,11 @@ SUITE(cli_suite) {
     RUN_TEST(cli_load_out_of_range_errors);
     RUN_TEST(cli_positional_args_arg_base);
     RUN_TEST(cli_rows_cols_show_repaints);
+    RUN_TEST(cli_machine_wendy2c_defaults_to_65c02);
+    RUN_TEST(cli_machine_default_is_nmos);
+    RUN_TEST(cli_wendy2c_plus_nmos_rejected);
+    RUN_TEST(cli_explicit_cpu_65c02_on_nmos_default);
+    RUN_TEST(cli_unknown_machine_rejected);
 }
 
 GREATEST_MAIN_DEFS();

@@ -3,6 +3,11 @@
 
 #include <stdio.h>
 
+/* Machine selection. nmos-default keeps the original direct-memory
+ * Fake6502 path; wendy2c routes the CPU through the bus/chip model. */
+#define MACHINE_NMOS_DEFAULT  0
+#define MACHINE_WENDY2C       1
+
 /* Parsed command-line options for the default (non-server-as-first-arg)
  * code path. Numeric defaults are 0 / -1; string defaults are documented
  * per field. */
@@ -27,6 +32,8 @@ struct emu_opts {
     int serial_baud;                    /* --baud N */
     int arg_base;                       /* index in argv where positional args begin */
     int server_main_dispatch;           /* 1 if argv[1] == "--server" */
+    int machine;                        /* --machine; MACHINE_NMOS_DEFAULT or MACHINE_WENDY2C */
+    int cpu_variant_opt;                /* --cpu; CPU_NMOS or CPU_65C02 (from cpu_core.h) */
 };
 
 /* Initialize an emu_opts with the documented defaults. */

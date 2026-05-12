@@ -1,8 +1,11 @@
 #include "cli.h"
+#include "cpu_core.h"  /* CPU_NMOS / CPU_65C02 */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#define CPU_VARIANT_UNSET (-1)
 
 void emu_opts_init(struct emu_opts *opts) {
     opts->code_filename = NULL;
@@ -25,6 +28,8 @@ void emu_opts_init(struct emu_opts *opts) {
     opts->serial_baud = 0;
     opts->arg_base = 0;
     opts->server_main_dispatch = 0;
+    opts->machine = MACHINE_NMOS_DEFAULT;
+    opts->cpu_variant_opt = CPU_VARIANT_UNSET;
 }
 
 void emu_opts_usage(FILE *fp) {
@@ -153,6 +158,32 @@ int parse_args(int argc, char **argv, struct emu_opts *opts) {
         } else if (strcmp(argv[i], "--server") == 0) {
             opts->server_mode = 1;
             i++;
+        } else if (strcmp(argv[i], "--machine") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "error: --machine requires a value\n");
+                return 1;
+            }
+            const char *m = argv[i + 1];
+            if (strcmp(m, "nmos-default") == 0) opts->machine = MACHINE_NMOS_DEFAULT;
+            else if (strcmp(m, "wendy2c") == 0) opts->machine = MACHINE_WENDY2C;
+            else {
+                fprintf(stderr, "error: --machine value must be 'nmos-default' or 'wendy2c'\n");
+                return 1;
+            }
+            i += 2;
+        } else if (strcmp(argv[i], "--cpu") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "error: --cpu requires a value\n");
+                return 1;
+            }
+            const char *c = argv[i + 1];
+            if (strcmp(c, "nmos") == 0) opts->cpu_variant_opt = CPU_NMOS;
+            else if (strcmp(c, "65c02") == 0) opts->cpu_variant_opt = CPU_65C02;
+            else {
+                fprintf(stderr, "error: --cpu value must be 'nmos' or '65c02'\n");
+                return 1;
+            }
+            i += 2;
         } else {
             fprintf(stderr, "error: unknown option %s\n", argv[i]);
             return 1;
@@ -167,6 +198,20 @@ int parse_args(int argc, char **argv, struct emu_opts *opts) {
     if (opts->serial_baud > 0 && opts->cpu_mhz <= 0.0 && opts->target_mhz <= 0.0) {
         fprintf(stderr, "error: --baud requires --cpu-mhz or --mhz\n");
         return 1;
+    }
+
+    /* --machine wendy2c defaults --cpu to 65c02. */
+    if (opts->machine == MACHINE_WENDY2C && opts->cpu_variant_opt == CPU_VARIANT_UNSET) {
+        opts->cpu_variant_opt = CPU_65C02;
+    }
+    /* --machine wendy2c + --cpu nmos is invalid (wendy2c is a W65C02S board). */
+    if (opts->machine == MACHINE_WENDY2C && opts->cpu_variant_opt == CPU_NMOS) {
+        fprintf(stderr, "error: --machine wendy2c requires --cpu 65c02\n");
+        return 1;
+    }
+    /* For nmos-default, default --cpu to nmos. */
+    if (opts->cpu_variant_opt == CPU_VARIANT_UNSET) {
+        opts->cpu_variant_opt = CPU_NMOS;
     }
 
     opts->arg_base = i;
