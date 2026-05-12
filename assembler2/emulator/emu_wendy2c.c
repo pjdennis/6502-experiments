@@ -51,17 +51,17 @@ static void wendy2c_cpu_write(uint16_t addr, uint8_t data) {
 
 /* ---- live-mode renderer ---- */
 
-/* PORTA / PORTB pin labels for the wendy2c. Several pins are
- * multiplexed between LCD and graphic-display; the labels chosen here
- * reflect the most common interpretation in the existing wendy2c
- * sample programs (base_config_wendy2c.inc). */
+/* PORTA / PORTB pin labels for the wendy2c. Reflects the post-GD-disable
+ * wiring in base_config_wendy2c.inc + multitasking_test_wendy2c.s:
+ * the graphic display is no longer wired up, freeing PA1/PA2 as the
+ * CONTROL_BUTTON input and CONTROL_LED output, respectively. */
 static const char *PORTA_LABELS[8] = {
-    /* PA0 */ "RS",   /* DISPLAY RS / GD_CLK */
-    /* PA1 */ "GDR",  /* GD_RSTB */
-    /* PA2 */ "GDC",  /* GD_CSB */
-    /* PA3 */ "RW",   /* DISPLAY RW / GD_DC */
-    /* PA4 */ "D4",   /* LCD D4 / GD_MOSI */
-    /* PA5 */ "BTN",  /* control button / GD_MISO (placeholder; see led_buttons.h) */
+    /* PA0 */ "RS",   /* LCD RS */
+    /* PA1 */ "BTN",  /* CONTROL_BUTTON input */
+    /* PA2 */ "LED",  /* CONTROL_LED output */
+    /* PA3 */ "RW",   /* LCD RW */
+    /* PA4 */ "D4",   /* LCD D4 */
+    /* PA5 */ "D5",   /* LCD D5 */
     /* PA6 */ "D6",   /* LCD D6 */
     /* PA7 */ "D7",   /* LCD D7 */
 };
@@ -93,8 +93,9 @@ static void live_render(const struct bus *b,
 
     uint8_t porta = via_6522_porta_pins(via);
     uint8_t portb = via_6522_portb_pins(via);
-    int led = led_buttons_led(ledbtn);
-    int btn = led_buttons_button(ledbtn);
+    int led  = led_buttons_led(ledbtn);
+    int led2 = led_buttons_control_led(ledbtn);
+    int btn  = led_buttons_button(ledbtn);
 
     /* Cursor home, default colors. */
     int n = 0;
@@ -115,11 +116,16 @@ static void live_render(const struct bus *b,
     for (int i = 0; i < cols; i++) n += snprintf(buf + n, sizeof(buf) - n, "-");
     n += snprintf(buf + n, sizeof(buf) - n, "+\x1b[K\r\n\r\n");
 
-    /* LED + button indicators. The on-LED gets a brighter color. */
+    /* LED + button indicators. The on-LEDs get a brighter color.
+     *   morse LED on PB6 (toggled by the morse demo task)
+     *   control LED on PA2 (toggled by the led_control task on each
+     *     button press; see prg_led_control.inc)
+     *   button on PA1 (SPACE toggles its level) */
     n += snprintf(buf + n, sizeof(buf) - n,
-        "  LED PB6: %s%s\x1b[0m    BTN PA5: %s%s\x1b[0m   (SPACE)\x1b[K\r\n\r\n",
-        led ? "\x1b[1;33m" : "\x1b[2m", led ? "[*]" : "[ ]",
-        btn ? "\x1b[1;32m" : "\x1b[2m", btn ? "[*]" : "[ ]");
+        "  LED PB6: %s%s\x1b[0m   LED PA2: %s%s\x1b[0m   BTN PA1: %s%s\x1b[0m   (SPACE)\x1b[K\r\n\r\n",
+        led  ? "\x1b[1;33m" : "\x1b[2m", led  ? "[*]" : "[ ]",
+        led2 ? "\x1b[1;33m" : "\x1b[2m", led2 ? "[*]" : "[ ]",
+        btn  ? "\x1b[1;32m" : "\x1b[2m", btn  ? "[*]" : "[ ]");
 
     /* PORTA pins, MSB on the left. Each bit and each label gets a
      * 4-char column (longest label is 3 chars + 1 space of leading
