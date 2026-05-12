@@ -447,7 +447,7 @@ void show_commandline(int argc, char**argv) {
     }
 }
 
-static int server_main(void);
+static int server_main(uint64_t cycle_cap);
 
 int main(int argc, char **argv) {
     struct emu_opts opts;
@@ -456,7 +456,7 @@ int main(int argc, char **argv) {
         return rc;
     }
     if (opts.server_main_dispatch) {
-        return server_main();
+        return server_main(opts.cycle_cap);
     }
 
     if (opts.machine == MACHINE_WENDY2C) {
@@ -802,7 +802,7 @@ static int server_load_binary(const char *filename, long load_address) {
     return 0;
 }
 
-static int server_main(void) {
+static int server_main(uint64_t cycle_cap) {
     char line[4096];
     long srv_load_address = -1;
     char srv_input[4096] = "";
@@ -980,11 +980,12 @@ static int server_main(void) {
             // Run emulation (setjmp catches exit(1) from emulation errors)
             server_mode_active = 1;
             if (setjmp(server_abort_jmp) == 0) {
-                const int max_cycles = 200000000;
+                const uint64_t max_cycles = cycle_cap;
                 while (!done) {
                     step6502();
                     if (clockticks6502 > max_cycles) {
-                        fprintf(stderr, "\nserver: did not terminate within %d cycles\n", max_cycles);
+                        fprintf(stderr, "\nserver: did not terminate within %llu cycles\n",
+                                (unsigned long long)max_cycles);
                         done = 1;
                         if (exitcode_set == -1) exitcode_set = 1;
                     }

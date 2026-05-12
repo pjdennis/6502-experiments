@@ -109,10 +109,10 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
     for (int i = 0; i < 8; i++) bus_step(&b);
     b.res = 0;
 
-    /* Run until STP halts the CPU or we hit a hard cap. The cap also
+    /* Run until STP halts the CPU or we hit the cycle cap. The cap also
      * limits run-away tests; the wendy2c sample programs that use STP
-     * (e.g. wendy2c_eeprom_show.s) terminate well within it. */
-    const uint64_t cap = 200000000ULL;
+     * (e.g. wendy2c_eeprom_show.s) terminate well within the default. */
+    const uint64_t cap = opts->cycle_cap;
     while (b.osc_ticks < cap) {
         bus_step(&b);
         if (cpu_stp_pending()) break;

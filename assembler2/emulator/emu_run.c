@@ -8,10 +8,9 @@
 #include "trace.h"
 
 int emu_run_default(const struct emu_opts *opts) {
-    (void)opts;  /* future phases will need machine-specific dispatch */
     uint64_t next_throttle_check = 10000;
     uint64_t next_repaint_check = 10000;
-    const int max_cycles = 200000000;
+    const uint64_t max_cycles = opts->cycle_cap;
 
     while (!done) {
         if (sigtstp_requested) {
@@ -72,7 +71,8 @@ int emu_run_default(const struct emu_opts *opts) {
         }
 
         if (!console_mode && !terminal_mode && clockticks6502 > max_cycles) {
-            fprintf(stderr, "\ndid not terminate within %i cycles\n", max_cycles);
+            fprintf(stderr, "\ndid not terminate within %llu cycles\n",
+                    (unsigned long long)max_cycles);
             if (trace_mode) trace_dump("timeout");
             free(arg_addresses);
             fclose(output_file_ptr);

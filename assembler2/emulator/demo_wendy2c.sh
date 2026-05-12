@@ -72,7 +72,11 @@ echo "    starts; on completion the payload writes to the LCD which we"
 echo "    print on exit. Ctrl-C to stop early.)"
 echo
 cd "$ASM2"
+# Cap is in oscillator ticks (~2 per CPU cycle). ~1.5M is the minimum for
+# the payload's LCD frame to appear after the upload; 3M leaves headroom
+# while still exiting in well under a second. Override via DEMO_CYCLE_CAP.
 exec ./emulator/emulator.out \
     "$OUT_DIR/wendy2c_boot.bin" \
     --machine wendy2c \
-    --serial-input "$OUT_DIR/payload.framed"
+    --serial-input "$OUT_DIR/payload.framed" \
+    --cycle-cap "${DEMO_CYCLE_CAP:-3000000}"

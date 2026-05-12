@@ -32,10 +32,38 @@ void emu_opts_init(struct emu_opts *opts) {
     opts->cpu_variant_opt = CPU_VARIANT_UNSET;
     opts->rom_filename = NULL;
     opts->serial_input_filename = NULL;
+    opts->cycle_cap = 200000000ULL;
 }
 
 void emu_opts_usage(FILE *fp) {
-    fprintf(fp, "usage: emulator <code file> [--load <hex load address>] [--input <input file>] [--output <output file>] [--error-output <file>] [--dump <dump file>] [--no-dump] [--console] [--terminal] [--server] [--mhz <speed>] [--cpu-mhz <speed>] [--baud <rate>] [--rows N] [--cols N] [<arguments>]\n");
+    fprintf(fp,
+"usage: emulator <code file> [options] [<arguments>]\n"
+"   or: emulator --server\n"
+"\n"
+"options:\n"
+"  --load <hex addr>      load address for the code file (hexadecimal)\n"
+"  --input <path>         file read from $F006 input port (default /dev/null)\n"
+"  --output <path>        file written from $F009 output port (default /dev/null)\n"
+"  --error-output <path>  file written from $F00C error port\n"
+"  --dump <path>          memory dump path on exit\n"
+"  --no-dump              skip the dump-on-exit\n"
+"  --console              full-screen console UI\n"
+"  --terminal             terminal-emulator UI (mutually exclusive with --console)\n"
+"  --show-repaints        flash on console/terminal repaints (debug)\n"
+"  --server               long-running server: as argv[1] dispatches into\n"
+"                         server_main; after argv[1] enables one-shot reuse loop\n"
+"  --mhz <speed>          wall-clock throttle target (emulated MHz)\n"
+"  --cpu-mhz <speed>      assumed CPU MHz for --baud timing\n"
+"  --baud <rate>          serial-port baud rate (requires --mhz or --cpu-mhz)\n"
+"  --rows N               override terminal rows\n"
+"  --cols N               override terminal cols\n"
+"  --machine <name>       'nmos-default' (default) or 'wendy2c'\n"
+"  --cpu <variant>        'nmos' or '65c02' (wendy2c forces '65c02')\n"
+"  --rom <path>           wendy2c: ROM image (else falls back to <code file>)\n"
+"  --serial-input <path>  wendy2c: bytes pre-queued into the SERIAL_USB chip\n"
+"  --cycle-cap N          max cycles before forced exit (decimal; default 200000000).\n"
+"                         For wendy2c this is oscillator ticks (~2 per CPU cycle);\n"
+"                         for nmos-default and --server it is CPU cycles.\n");
 }
 
 /* Helper: --FLAG VALUE. Returns 0 on success, sets *value_out and
@@ -177,6 +205,19 @@ int parse_args(int argc, char **argv, struct emu_opts *opts) {
             if (take_str_value(argc, argv, &i, "--rom", &opts->rom_filename)) return 1;
         } else if (strcmp(argv[i], "--serial-input") == 0) {
             if (take_str_value(argc, argv, &i, "--serial-input", &opts->serial_input_filename)) return 1;
+        } else if (strcmp(argv[i], "--cycle-cap") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "error: --cycle-cap requires a value\n");
+                return 1;
+            }
+            char *end;
+            unsigned long long v = strtoull(argv[i + 1], &end, 10);
+            if (*end != '\0' || v == 0) {
+                fprintf(stderr, "error: --cycle-cap value must be a positive decimal integer\n");
+                return 1;
+            }
+            opts->cycle_cap = (uint64_t)v;
+            i += 2;
         } else if (strcmp(argv[i], "--cpu") == 0) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "error: --cpu requires a value\n");
