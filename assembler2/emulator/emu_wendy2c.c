@@ -10,6 +10,7 @@
 
 #include "bus.h"
 #include "cpu_core.h"
+#include "emu_run.h"
 #include "tty_alt_screen.h"
 #include "chips/clock_22v10.h"
 #include "chips/rom_28c256.h"
@@ -190,6 +191,13 @@ static int emu_run_wendy2c_live(struct bus *b,
                                 struct via_6522_state *via,
                                 struct led_buttons_state *ledbtn,
                                 uint64_t cap) {
+    /* Install BEFORE entering the alt screen so that a Ctrl-C arriving
+     * any time after the termios switch flows through sigint_requested
+     * (caught by the loop below) instead of taking the default action,
+     * which would kill the process with the cursor hidden and the alt
+     * screen still active. The atexit registration covers exit paths
+     * that don't go through the loop's quit checks. */
+    install_tty_cleanup_handlers();
     tty_alt_screen_enter();
     /* Hide cursor; clear screen once so the home-and-overwrite render
      * pattern starts on a clean slate. */

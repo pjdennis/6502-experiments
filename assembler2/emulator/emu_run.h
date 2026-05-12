@@ -29,6 +29,17 @@ void handle_sigtstp(int sig);
 void restore_terminal(void);
 void enter_console(void);
 
+/* Install atexit(restore_terminal) + a SIGINT handler that sets
+ * sigint_requested. Idempotent. Required for any mode that puts the
+ * terminal into raw mode + alt screen so Ctrl-C exits cleanly (i.e.
+ * tty_alt_screen_leave() runs) instead of killing the process with
+ * the cursor hidden on the alt screen. */
+void install_tty_cleanup_handlers(void);
+
+/* Install SIGTSTP/SIGCONT handlers (Ctrl-Z / fg). Used by modes whose
+ * run loop honours sigtstp_requested / sigcont_requested. */
+void install_tty_jobcontrol_handlers(void);
+
 /* Run the default emulation loop until `done` becomes non-zero or the
  * hardcoded cycle cap is hit. Returns 0 on normal exit, 1 on timeout
  * (in which case the function has already printed "did not terminate

@@ -59,9 +59,10 @@ struct timespec last_repaint_check;
 void get_terminal_size(int *rows, int *cols);
 
 void restore_terminal() {
-    if (console_mode || terminal_mode) {
-        tty_alt_screen_leave();
-    }
+    /* tty_alt_screen_leave is idempotent -- a no-op if we never entered
+     * the alt screen -- so this is safe to register via atexit() from
+     * any caller that puts the terminal into raw mode. */
+    tty_alt_screen_leave();
 }
 
 void setup_raw_terminal() {
@@ -90,9 +91,49 @@ void handle_sigcont(int sig) {
     sigcont_requested = 1;
 }
 
+/* Install the minimum signal/atexit wiring that any mode putting the
+ * terminal into raw mode + alt screen needs:
+ *  - atexit(restore_terminal) so abnormal exits (exit(), main return)
+ *    still leave the user's terminal in a usable state.
+ *  - A SIGINT handler that sets sigint_requested, so Ctrl-C reaches
+ *    the run loop and triggers a clean tty_alt_screen_leave() instead
+ *    of the default action (which would kill the process with the
+ *    cursor still hidden on the alt screen).
+ *
+ * Idempotent: safe to call from multiple setup paths. Used by
+ * --console, --terminal (interactive), and wendy2c --live. */
+void install_tty_cleanup_handlers(void) {
+    static int atexit_registered = 0;
+    if (!atexit_registered) {
+        atexit(restore_terminal);
+        atexit_registered = 1;
+    }
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sigemptyset(&sa.sa_mask);
+    sa.sa_handler = handle_sigint;
+    sigaction(SIGINT, &sa, NULL);
+}
+
+/* Install SIGTSTP/SIGCONT handlers so Ctrl-Z / fg flow through
+ * sigtstp_requested / sigcont_requested. The caller's run loop is
+ * responsible for honouring those flags (restore terminal + raise
+ * SIGTSTP with the default handler on stop; re-enter and redraw on
+ * resume). Used by --console and --terminal interactive; --live does
+ * not currently handle job control. */
+void install_tty_jobcontrol_handlers(void) {
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sigemptyset(&sa.sa_mask);
+    sa.sa_handler = handle_sigtstp;
+    sigaction(SIGTSTP, &sa, NULL);
+    sa.sa_handler = handle_sigcont;
+    sigaction(SIGCONT, &sa, NULL);
+}
+
 
 void setup_console() {
-    atexit(restore_terminal);
+    install_tty_cleanup_handlers();
     enter_console();
 }
 
@@ -532,28 +573,12 @@ int main(int argc, char **argv) {
     if (console_mode) {
         input_file_ptr = stdin;
         setup_console();
-        struct sigaction sa;
-        memset(&sa, 0, sizeof(sa));
-        sa.sa_handler = handle_sigint;
-        sigemptyset(&sa.sa_mask);
-        sigaction(SIGINT, &sa, NULL);
-        sa.sa_handler = handle_sigtstp;
-        sigaction(SIGTSTP, &sa, NULL);
-        sa.sa_handler = handle_sigcont;
-        sigaction(SIGCONT, &sa, NULL);
+        install_tty_jobcontrol_handlers();
     } else if (terminal_interactive) {
         input_file_ptr = fopen("/dev/null", "rb");
-        atexit(restore_terminal);
+        install_tty_cleanup_handlers();
         setup_raw_terminal();
-        struct sigaction sa;
-        memset(&sa, 0, sizeof(sa));
-        sa.sa_handler = handle_sigint;
-        sigemptyset(&sa.sa_mask);
-        sigaction(SIGINT, &sa, NULL);
-        sa.sa_handler = handle_sigtstp;
-        sigaction(SIGTSTP, &sa, NULL);
-        sa.sa_handler = handle_sigcont;
-        sigaction(SIGCONT, &sa, NULL);
+        install_tty_jobcontrol_handlers();
     } else if (terminal_mode) {
         // Terminal mode with file I/O
         input_file_ptr = fopen("/dev/null", "rb");
