@@ -3,13 +3,16 @@
 LED_MASK             = %01000000
 LED_PORT             = PORTB
 
-; PORTA assignments
-;MORSE_LED         = %00010000
-;CONTROL_BUTTON    = %00100000
-;CONTROL_LED       = %01000000
-
 MORSE_LED = LED_MASK
 MORSE_PORT = LED_PORT
+
+; PORTA assignments
+; PA1/PA2 are repurposed from the (disabled) graphic-display pins
+; GD_RSTB/GD_CSB; see base_config_wendy2c.inc.
+CONTROL_BUTTON      = %00000010
+CONTROL_BUTTON_PORT = PORTA
+CONTROL_LED         = %00000100
+CONTROL_LED_PORT    = PORTA
 
 ;PORTA_OUT_MASK    = BANK_MASK | CONTROL_LED | MORSE_LED | SD_CSB
 ;;PORTA_OUT_MASK     = BANK_MASK
@@ -77,7 +80,7 @@ BUFFER_DATA            = $7d00
   .include prg_play_song.inc
   .include prg_star_spangled_banner.inc
 ;  .include prg_print_ticks_counter.inc
-;  .include prg_led_control.inc
+  .include prg_led_control.inc
   .include prg_morse_demo.inc
 ;  .include prg_small_display_demo.inc
 
@@ -93,6 +96,14 @@ program_start:
   lda #LED_MASK
   trb LED_PORT
   tsb LED_PORT + DDR_OFFSET
+
+; initialize control LED (output, off) and control button (input)
+  lda #CONTROL_LED
+  trb CONTROL_LED_PORT
+  tsb CONTROL_LED_PORT + DDR_OFFSET
+
+  lda #CONTROL_BUTTON
+  trb CONTROL_BUTTON_PORT + DDR_OFFSET
 
 ; initiazlie speaker
   lda #T1_SQWAVE_OUT
@@ -150,9 +161,9 @@ program_start:
   ldx #>play_star_spangled_banner
   jsr initialize_additional_process
 
-;  lda #<led_control
-;  ldx #>led_control
-;  jsr initialize_additional_process
+  lda #<led_control
+  ldx #>led_control
+  jsr initialize_additional_process
 
   jsr add_morse_demo
 

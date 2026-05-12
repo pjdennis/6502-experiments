@@ -20,14 +20,14 @@ DISPLAY_BITS_MASK   = (DISPLAY_DATA_MASK | RW | RS)
 DISPLAY_ENABLE_PORT = PORTB
 E                   = %00100000
 
-; Graphic Display
-GD_PORT             = PORTA
-GD_CLK              = %00000001
-GD_RSTB             = %00000010
-GD_CSB              = %00000100
-GD_DC               = %00001000
-GD_MOSI             = %00010000
-GD_MISO             = %00100000
+; Graphic Display - disabled; PA1/PA2 reused for CONTROL_BUTTON/CONTROL_LED.
+;GD_PORT             = PORTA
+;GD_CLK              = %00000001
+;GD_RSTB             = %00000010
+;GD_CSB              = %00000100
+;GD_DC               = %00001000
+;GD_MOSI             = %00010000
+;GD_MISO             = %00100000
 
 DISPLAY_BITS = 4
 
