@@ -121,10 +121,12 @@ static void live_render(const struct bus *b,
         led ? "\x1b[1;33m" : "\x1b[2m", led ? "[*]" : "[ ]",
         btn ? "\x1b[1;32m" : "\x1b[2m", btn ? "[*]" : "[ ]");
 
-    /* PORTA pins, MSB on the left. */
+    /* PORTA pins, MSB on the left. Each bit and each label gets a
+     * 4-char column (longest label is 3 chars + 1 space of leading
+     * pad) so the rows line up vertically. */
     n += snprintf(buf + n, sizeof(buf) - n, "  PORTA bits: ");
     for (int i = 7; i >= 0; i--) {
-        n += snprintf(buf + n, sizeof(buf) - n, " %s%d\x1b[0m",
+        n += snprintf(buf + n, sizeof(buf) - n, "   %s%d\x1b[0m",
                       (porta & (1u << i)) ? "\x1b[1m" : "\x1b[2m",
                       (porta >> i) & 1);
     }
@@ -137,7 +139,7 @@ static void live_render(const struct bus *b,
 
     n += snprintf(buf + n, sizeof(buf) - n, "  PORTB bits: ");
     for (int i = 7; i >= 0; i--) {
-        n += snprintf(buf + n, sizeof(buf) - n, " %s%d\x1b[0m",
+        n += snprintf(buf + n, sizeof(buf) - n, "   %s%d\x1b[0m",
                       (portb & (1u << i)) ? "\x1b[1m" : "\x1b[2m",
                       (portb >> i) & 1);
     }
