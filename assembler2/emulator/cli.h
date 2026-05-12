@@ -1,0 +1,47 @@
+#ifndef EMULATOR_CLI_H
+#define EMULATOR_CLI_H
+
+#include <stdio.h>
+
+/* Parsed command-line options for the default (non-server-as-first-arg)
+ * code path. Numeric defaults are 0 / -1; string defaults are documented
+ * per field. */
+struct emu_opts {
+    const char *code_filename;          /* positional argv[1], NULL if missing */
+    long load_address;                  /* --load HEX; -1 if not specified */
+    const char *input_filename;         /* --input PATH; default "/dev/null" */
+    const char *output_filename;        /* --output PATH; default "/dev/null" */
+    const char *error_output_filename;  /* --error-output PATH; NULL default */
+    const char *dump_filename;          /* --dump PATH; NULL default */
+    int no_dump;                        /* --no-dump */
+    int input_specified;                /* set when --input given */
+    int output_specified;               /* set when --output given */
+    int console_mode;                   /* --console */
+    int terminal_mode;                  /* --terminal */
+    int show_repaints;                  /* --show-repaints */
+    int server_mode;                    /* --server seen after argv[1] */
+    int override_rows;                  /* --rows N */
+    int override_cols;                  /* --cols N */
+    double target_mhz;                  /* --mhz N */
+    double cpu_mhz;                     /* --cpu-mhz N */
+    int serial_baud;                    /* --baud N */
+    int arg_base;                       /* index in argv where positional args begin */
+    int server_main_dispatch;           /* 1 if argv[1] == "--server" */
+};
+
+/* Initialize an emu_opts with the documented defaults. */
+void emu_opts_init(struct emu_opts *opts);
+
+/* Print the usage message to the given stream. */
+void emu_opts_usage(FILE *fp);
+
+/* Parse argv[1..argc-1] into *opts.
+ *   - Returns  0 on success.
+ *   - Returns >0 (= the exit code the caller should return) on error.
+ *     Diagnostic messages are emitted to stderr.
+ *   - When argv[1] == "--server", returns 0 with opts->server_main_dispatch=1
+ *     and no other fields populated; the caller should dispatch into
+ *     server_main and ignore the rest of the struct. */
+int parse_args(int argc, char **argv, struct emu_opts *opts);
+
+#endif

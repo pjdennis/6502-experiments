@@ -15,6 +15,7 @@
 #include "console.h"
 #include "cpu_core.h"
 #include "trace.h"
+#include "cli.h"
 #include "stubs.h"
 
 #define STDIN_FILENO  0
@@ -447,154 +448,35 @@ void show_commandline(int argc, char**argv) {
 static int server_main(void);
 
 int main(int argc, char **argv) {
-    if (argc < 2) {
-        fprintf(stderr, "usage: emulator <code file> [--load <hex load address>] [--input <input file>] [--output <output file>] [--error-output <file>] [--dump <dump file>] [--no-dump] [--console] [--terminal] [--server] [--mhz <speed>] [--cpu-mhz <speed>] [--baud <rate>] [--rows N] [--cols N] [<arguments>]\n");
-        return 1;
+    struct emu_opts opts;
+    int rc = parse_args(argc, argv, &opts);
+    if (rc != 0) {
+        return rc;
     }
-
-    // Check for --server as first argument (before code file)
-    if (argc >= 2 && strcmp(argv[1], "--server") == 0) {
+    if (opts.server_main_dispatch) {
         return server_main();
     }
 
-    char* code_filename = argv[1];
-    long load_address = -1;
-    char* input_filename = "/dev/null";
-    char* output_filename = "/dev/null";
-    char* error_output_filename = NULL;
-    char* dump_filename = NULL;
-    int no_dump = 0;
-    int input_specified = 0;
-    int output_specified = 0;
-
-    int i = 2;
-    while (i < argc && strncmp(argv[i], "--", 2) == 0) {
-        if (strcmp(argv[i], "--console") == 0) {
-            console_mode = 1;
-            i++;
-        } else if (strcmp(argv[i], "--terminal") == 0) {
-            terminal_mode = 1;
-            i++;
-        } else if (strcmp(argv[i], "--load") == 0) {
-            if (i + 1 >= argc) {
-                fprintf(stderr, "error: --load requires a value\n");
-                return 1;
-            }
-            load_address = strtol(argv[i + 1], NULL, 16);
-            if (load_address < 0 || load_address > 0xffff) {
-                fprintf(stderr, "error: --load value must be between 0 and ffff\n");
-                return 1;
-            }
-            i += 2;
-        } else if (strcmp(argv[i], "--input") == 0) {
-            if (i + 1 >= argc) {
-                fprintf(stderr, "error: --input requires a value\n");
-                return 1;
-            }
-            input_filename = argv[i + 1];
-            input_specified = 1;
-            i += 2;
-        } else if (strcmp(argv[i], "--output") == 0) {
-            if (i + 1 >= argc) {
-                fprintf(stderr, "error: --output requires a value\n");
-                return 1;
-            }
-            output_filename = argv[i + 1];
-            output_specified = 1;
-            i += 2;
-        } else if (strcmp(argv[i], "--error-output") == 0) {
-            if (i + 1 >= argc) {
-                fprintf(stderr, "error: --error-output requires a value\n");
-                return 1;
-            }
-            error_output_filename = argv[i + 1];
-            i += 2;
-        } else if (strcmp(argv[i], "--dump") == 0) {
-            if (i + 1 >= argc) {
-                fprintf(stderr, "error: --dump requires a value\n");
-                return 1;
-            }
-            dump_filename = argv[i + 1];
-            i += 2;
-        } else if (strcmp(argv[i], "--no-dump") == 0) {
-            no_dump = 1;
-            i++;
-        } else if (strcmp(argv[i], "--rows") == 0) {
-            if (i + 1 >= argc) {
-                fprintf(stderr, "error: --rows requires a value\n");
-                return 1;
-            }
-            override_rows = (int)strtol(argv[i + 1], NULL, 10);
-            if (override_rows <= 0) {
-                fprintf(stderr, "error: --rows value must be positive\n");
-                return 1;
-            }
-            i += 2;
-        } else if (strcmp(argv[i], "--cols") == 0) {
-            if (i + 1 >= argc) {
-                fprintf(stderr, "error: --cols requires a value\n");
-                return 1;
-            }
-            override_cols = (int)strtol(argv[i + 1], NULL, 10);
-            if (override_cols <= 0) {
-                fprintf(stderr, "error: --cols value must be positive\n");
-                return 1;
-            }
-            i += 2;
-        } else if (strcmp(argv[i], "--mhz") == 0) {
-            if (i + 1 >= argc) {
-                fprintf(stderr, "error: --mhz requires a value\n");
-                return 1;
-            }
-            target_mhz = strtod(argv[i + 1], NULL);
-            if (target_mhz <= 0.0) {
-                fprintf(stderr, "error: --mhz value must be positive\n");
-                return 1;
-            }
-            i += 2;
-        } else if (strcmp(argv[i], "--cpu-mhz") == 0) {
-            if (i + 1 >= argc) {
-                fprintf(stderr, "error: --cpu-mhz requires a value\n");
-                return 1;
-            }
-            cpu_mhz = strtod(argv[i + 1], NULL);
-            if (cpu_mhz <= 0.0) {
-                fprintf(stderr, "error: --cpu-mhz value must be positive\n");
-                return 1;
-            }
-            i += 2;
-        } else if (strcmp(argv[i], "--baud") == 0) {
-            if (i + 1 >= argc) {
-                fprintf(stderr, "error: --baud requires a value\n");
-                return 1;
-            }
-            serial_baud = (int)strtol(argv[i + 1], NULL, 10);
-            if (serial_baud <= 0) {
-                fprintf(stderr, "error: --baud value must be positive\n");
-                return 1;
-            }
-            i += 2;
-        } else if (strcmp(argv[i], "--show-repaints") == 0) {
-            show_repaints = 1;
-            i++;
-        } else if (strcmp(argv[i], "--server") == 0) {
-            server_mode = 1;
-            i++;
-        } else {
-            fprintf(stderr, "error: unknown option %s\n", argv[i]);
-            return 1;
-        }
-    }
-
-    if (console_mode && terminal_mode) {
-        fprintf(stderr, "error: --console and --terminal are mutually exclusive\n");
-        return 1;
-    }
-
-    if (serial_baud > 0 && cpu_mhz <= 0.0 && target_mhz <= 0.0) {
-        fprintf(stderr, "error: --baud requires --cpu-mhz or --mhz\n");
-        return 1;
-    }
+    /* Mirror parsed values into the existing globals/locals so the rest
+     * of main() can stay untouched in this phase. */
+    const char *code_filename = opts.code_filename;
+    long load_address = opts.load_address;
+    const char *input_filename = opts.input_filename;
+    const char *output_filename = opts.output_filename;
+    const char *error_output_filename = opts.error_output_filename;
+    const char *dump_filename = opts.dump_filename;
+    int no_dump = opts.no_dump;
+    int input_specified = opts.input_specified;
+    int output_specified = opts.output_specified;
+    console_mode = opts.console_mode;
+    terminal_mode = opts.terminal_mode;
+    show_repaints = opts.show_repaints;
+    server_mode = opts.server_mode;
+    override_rows = opts.override_rows;
+    override_cols = opts.override_cols;
+    target_mhz = opts.target_mhz;
+    cpu_mhz = opts.cpu_mhz;
+    serial_baud = opts.serial_baud;
 
     if (serial_baud > 0) {
         double effective_cpu_mhz = cpu_mhz > 0.0 ? cpu_mhz : target_mhz;
@@ -605,7 +487,7 @@ int main(int argc, char **argv) {
         terminal_interactive = 1;
     }
 
-    int arg_base = i;
+    int arg_base = opts.arg_base;
 
     for (size_t x = 0; x != 0x10001; x++) {
         memory[x] = 0;
