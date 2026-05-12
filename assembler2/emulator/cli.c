@@ -33,6 +33,7 @@ void emu_opts_init(struct emu_opts *opts) {
     opts->rom_filename = NULL;
     opts->serial_input_filename = NULL;
     opts->cycle_cap = 200000000ULL;
+    opts->live = 0;
 }
 
 void emu_opts_usage(FILE *fp) {
@@ -61,6 +62,8 @@ void emu_opts_usage(FILE *fp) {
 "  --cpu <variant>        'nmos' or '65c02' (wendy2c forces '65c02')\n"
 "  --rom <path>           wendy2c: ROM image (else falls back to <code file>)\n"
 "  --serial-input <path>  wendy2c: bytes pre-queued into the SERIAL_USB chip\n"
+"  --live                 wendy2c: live ANSI render of LCD, LED, button, VIA pin state\n"
+"                         (saves the terminal; q/ESC/Ctrl-C to quit; space toggles button)\n"
 "  --cycle-cap N          max cycles before forced exit (decimal; default 200000000).\n"
 "                         For wendy2c this is oscillator ticks (~2 per CPU cycle);\n"
 "                         for nmos-default and --server it is CPU cycles.\n");
@@ -205,6 +208,9 @@ int parse_args(int argc, char **argv, struct emu_opts *opts) {
             if (take_str_value(argc, argv, &i, "--rom", &opts->rom_filename)) return 1;
         } else if (strcmp(argv[i], "--serial-input") == 0) {
             if (take_str_value(argc, argv, &i, "--serial-input", &opts->serial_input_filename)) return 1;
+        } else if (strcmp(argv[i], "--live") == 0) {
+            opts->live = 1;
+            i++;
         } else if (strcmp(argv[i], "--cycle-cap") == 0) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "error: --cycle-cap requires a value\n");
@@ -244,6 +250,11 @@ int parse_args(int argc, char **argv, struct emu_opts *opts) {
 
     if (opts->serial_baud > 0 && opts->cpu_mhz <= 0.0 && opts->target_mhz <= 0.0) {
         fprintf(stderr, "error: --baud requires --cpu-mhz or --mhz\n");
+        return 1;
+    }
+
+    if (opts->live && opts->machine != MACHINE_WENDY2C) {
+        fprintf(stderr, "error: --live currently requires --machine wendy2c\n");
         return 1;
     }
 
