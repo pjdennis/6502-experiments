@@ -9,6 +9,7 @@
 #include "chips/rom_28c256.h"
 #include "chips/ram_628128.h"
 #include "chips/via_6522.h"
+#include "chips/lcd_hd44780.h"
 #include "chips/cpu_65c02.h"
 
 /* Module-scope bus pointer used by the cpu_external_read/write hooks
@@ -44,13 +45,15 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
     static struct rom_28c256_state  rom_state;
     static struct ram_628128_state  ram_state;
     static struct via_6522_state    via_state;
+    static struct lcd_hd44780_state lcd_state;
     static struct cpu_65c02_state   cpu_state;
-    struct chip clk_chip, rom_chip, ram_chip, via_chip, cpu_chip;
+    struct chip clk_chip, rom_chip, ram_chip, via_chip, lcd_chip, cpu_chip;
 
     clock_22v10_init(&clk_chip, &clk_state);
     rom_28c256_init(&rom_chip, &rom_state);
     ram_628128_init(&ram_chip, &ram_state);
     via_6522_init  (&via_chip, &via_state);
+    lcd_hd44780_init(&lcd_chip, &lcd_state, &via_state);
     cpu_65c02_init (&cpu_chip, &cpu_state);
 
     /* Load ROM image. Falls back to code_filename if --rom is omitted. */
@@ -74,6 +77,7 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
     bus_add_chip(&b, &rom_chip);
     bus_add_chip(&b, &ram_chip);
     bus_add_chip(&b, &via_chip);
+    bus_add_chip(&b, &lcd_chip);
     bus_add_chip(&b, &cpu_chip);
 
     active_bus = &b;
@@ -102,6 +106,15 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
         (unsigned long long)clockticks6502,
         pc,
         halted_on_stp ? "(STP)" : "(cycle cap)");
+
+    /* Print final LCD frame so the user sees what landed. */
+    char lcd_buf[LCD_DDRAM_SIZE + 8];
+    (void)lcd_hd44780_render(&lcd_state, lcd_buf);
+    int cols = lcd_state.cols;
+    fprintf(stderr, "wendy2c: lcd:\n");
+    for (int r = 0; r < lcd_state.rows; r++) {
+        fprintf(stderr, "  |%.*s|\n", cols, lcd_buf + r * cols);
+    }
 
     /* Tear down the external hooks before returning so other code (e.g.
      * the test harness or a subsequent run) doesn't dangle on a dead

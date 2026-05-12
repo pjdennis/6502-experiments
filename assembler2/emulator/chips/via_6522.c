@@ -241,3 +241,5 @@ void via_6522_set_cb2(struct via_6522_state *s, struct bus *bus, uint8_t bit) {
 
 uint8_t via_6522_get_pb7(const struct via_6522_state *s) { return s->pb7; }
 uint16_t via_6522_get_t1c(const struct via_6522_state *s) { return s->t1c; }
+uint8_t via_6522_porta_pins(const struct via_6522_state *s) { return porta_pin_value(s); }
+uint8_t via_6522_portb_pins(const struct via_6522_state *s) { return portb_pin_value(s); }

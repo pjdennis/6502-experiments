@@ -86,8 +86,11 @@ void via_6522_init(struct chip *chip, struct via_6522_state *state);
 /* External CB2 driver (used by the SERIAL_USB chip in phase 13). */
 void via_6522_set_cb2(struct via_6522_state *state, struct bus *bus, uint8_t bit);
 
-/* Inspectors -- handy for tests. */
+/* Inspectors -- handy for tests and for chips that latch port pins
+ * (the LCD watches PORTA + the E line on PORTB bit 5, etc.). */
 uint8_t via_6522_get_pb7(const struct via_6522_state *state);
 uint16_t via_6522_get_t1c(const struct via_6522_state *state);
+uint8_t via_6522_porta_pins(const struct via_6522_state *state);
+uint8_t via_6522_portb_pins(const struct via_6522_state *state);
 
 #endif
