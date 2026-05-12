@@ -651,7 +651,9 @@ static void pla() {
 }
 
 static void plp() {
-    status = pull8() | FLAG_CONSTANT;
+    /* Real 6502: B flag (bit 4) is not a physical CPU bit; the pulled
+     * value's bit 4 is ignored. Bit 5 (constant) always reads as 1. */
+    status = (pull8() & ~FLAG_BREAK) | FLAG_CONSTANT;
 }
 
 static void rol() {
@@ -678,7 +680,8 @@ static void ror() {
 }
 
 static void rti() {
-    status = pull8();
+    /* Same B/constant treatment as PLP. */
+    status = (pull8() & ~FLAG_BREAK) | FLAG_CONSTANT;
     value = pull16();
     pc = value;
 }

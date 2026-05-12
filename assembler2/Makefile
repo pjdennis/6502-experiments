@@ -97,6 +97,15 @@ emulator/tests/out/test_chip_rom.out: emulator/tests/test_chip_rom.c emulator/ch
 	@mkdir -p emulator/tests/out
 	gcc -Wall -Werror -o $@ emulator/tests/test_chip_rom.c emulator/chips/rom_28c256.c emulator/chips/clock_22v10.c emulator/bus.c
 
-emulator/tests/out/test_chip_ram.out: emulator/tests/test_chip_ram.c emulator/chips/ram_628128.c emulator/chips/ram_628128.h emulator/chips/clock_22v10.c emulator/chips/clock_22v10.h emulator/bus.c emulator/bus.h emulator/tests/greatest.h
+# Tom Harte ProcessorTests harness (phase 3h). Opt-in: requires
+# `emulator/tests/harte/fetch.sh` to populate `emulator/tests/harte/data/`
+# first. When data is missing, harte_runner.out prints a warning and
+# exits 0 so this target is safe to wire into CI without the fetch.
+harte: emulator/tests/out/harte_runner.out
+	@./emulator/tests/out/harte_runner.out
+
+emulator/tests/out/harte_runner.out: emulator/tests/harte_runner.c emulator/cpu_core.c emulator/cpu_core.h
 	@mkdir -p emulator/tests/out
-	gcc -Wall -Werror -o $@ emulator/tests/test_chip_ram.c emulator/chips/ram_628128.c emulator/chips/clock_22v10.c emulator/bus.c
+	gcc -Wall -Werror -Wno-unused-function -o $@ emulator/tests/harte_runner.c emulator/cpu_core.c
+
+.PHONY: harte
