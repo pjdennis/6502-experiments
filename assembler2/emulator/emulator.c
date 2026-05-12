@@ -5,7 +5,6 @@
 #include <signal.h>
 #include <errno.h>
 #include <unistd.h>
-#include <termios.h>
 #include <sys/ioctl.h>
 #include <sys/select.h>
 #include <time.h>
@@ -19,6 +18,7 @@
 #include "emu_run.h"
 #include "emu_wendy2c.h"
 #include "stubs.h"
+#include "tty_alt_screen.h"
 
 #define STDIN_FILENO  0
 #define STDOUT_FILENO 1
@@ -49,45 +49,23 @@ double cpu_mhz = 0.0;
 int serial_baud = 0;
 int override_rows = 0;
 int override_cols = 0;
-struct termios orig_termios;
 struct timespec start_time;
 volatile sig_atomic_t sigint_requested = 0;
 volatile sig_atomic_t sigtstp_requested = 0;
 volatile sig_atomic_t sigcont_requested = 0;
-static int termios_saved = 0;
 int server_mode = 0;
 struct timespec last_repaint_check;
 
 void get_terminal_size(int *rows, int *cols);
 
-int terminal_restored = 0;
-
 void restore_terminal() {
-    if (terminal_restored) return;
-    terminal_restored = 1;
     if (console_mode || terminal_mode) {
-        tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
-        const char seq[] = "\x1b[?1049l\x1b[?25h\x1b[0m";
-        if (write(STDOUT_FILENO, seq, sizeof(seq) - 1) < 0) {
-        }
+        tty_alt_screen_leave();
     }
 }
 
 void setup_raw_terminal() {
-    if (!termios_saved) {
-        tcgetattr(STDIN_FILENO, &orig_termios);
-        termios_saved = 1;
-    }
-    const char enter_seq[] = "\x1b[?1049h";
-    if (write(STDOUT_FILENO, enter_seq, sizeof(enter_seq) - 1) < 0) {
-    }
-    struct termios raw = orig_termios;
-    cfmakeraw(&raw);
-    raw.c_lflag |= ISIG;  // Keep Ctrl+C working for safety
-    raw.c_cc[VMIN] = 1;
-    raw.c_cc[VTIME] = 0;
-    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
-    terminal_restored = 0;
+    tty_alt_screen_enter();
 }
 
 void enter_console() {
