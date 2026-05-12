@@ -17,6 +17,7 @@
 #include "trace.h"
 #include "cli.h"
 #include "emu_run.h"
+#include "emu_wendy2c.h"
 #include "stubs.h"
 
 #define STDIN_FILENO  0
@@ -456,6 +457,10 @@ int main(int argc, char **argv) {
     }
     if (opts.server_main_dispatch) {
         return server_main();
+    }
+
+    if (opts.machine == MACHINE_WENDY2C) {
+        return emu_run_wendy2c(&opts);
     }
 
     /* Mirror parsed values into the existing globals/locals so the rest

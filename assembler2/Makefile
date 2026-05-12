@@ -5,8 +5,8 @@ clean:
 	find . -type d -name "out" -exec rm -rf {} +
 	find . -type f -name "*.tmp" -delete
 
-EMU_SRCS = emulator/emulator.c emulator/file_io.c emulator/console.c emulator/cpu_core.c emulator/stubs.c emulator/trace.c emulator/cli.c emulator/emu_run.c emulator/bus.c
-EMU_HDRS = emulator/file_io.h emulator/console.h emulator/cpu_core.h emulator/stubs.h emulator/trace.h emulator/cli.h emulator/emu_run.h emulator/bus.h
+EMU_SRCS = emulator/emulator.c emulator/file_io.c emulator/console.c emulator/cpu_core.c emulator/stubs.c emulator/trace.c emulator/cli.c emulator/emu_run.c emulator/bus.c emulator/emu_wendy2c.c
+EMU_HDRS = emulator/file_io.h emulator/console.h emulator/cpu_core.h emulator/stubs.h emulator/trace.h emulator/cli.h emulator/emu_run.h emulator/bus.h emulator/emu_wendy2c.h
 
 emulator/emulator.out: $(EMU_SRCS) $(EMU_HDRS)
 	gcc -O2 -march=native -flto -DNDEBUG -o emulator/emulator.out $(EMU_SRCS)
@@ -16,7 +16,7 @@ emulator/emulator.out: $(EMU_SRCS) $(EMU_HDRS)
 	gcc -O2 -o 00/out/asm_c.out 00/asm.c
 
 # C unit tests
-C_TESTS = emulator/tests/out/test_smoke.out emulator/tests/out/test_file_io.out emulator/tests/out/test_console.out emulator/tests/out/test_trace.out emulator/tests/out/test_cli.out emulator/tests/out/test_emu_run.out emulator/tests/out/test_bus.out emulator/tests/out/test_cpu_variant.out emulator/tests/out/test_cpu_65c02_fixes.out emulator/tests/out/test_cpu_65c02_group_a.out emulator/tests/out/test_cpu_65c02_group_b.out emulator/tests/out/test_cpu_65c02_bit_ops.out emulator/tests/out/test_cpu_65c02_wai_stp.out emulator/tests/out/test_cpu_bus_tap.out emulator/tests/out/test_dormann.out
+C_TESTS = emulator/tests/out/test_smoke.out emulator/tests/out/test_file_io.out emulator/tests/out/test_console.out emulator/tests/out/test_trace.out emulator/tests/out/test_cli.out emulator/tests/out/test_emu_run.out emulator/tests/out/test_bus.out emulator/tests/out/test_cpu_variant.out emulator/tests/out/test_cpu_65c02_fixes.out emulator/tests/out/test_cpu_65c02_group_a.out emulator/tests/out/test_cpu_65c02_group_b.out emulator/tests/out/test_cpu_65c02_bit_ops.out emulator/tests/out/test_cpu_65c02_wai_stp.out emulator/tests/out/test_cpu_bus_tap.out emulator/tests/out/test_dormann.out emulator/tests/out/test_machine_dispatch.out
 
 test: $(C_TESTS)
 	@for t in $(C_TESTS); do ./$$t || exit 1; done
@@ -80,3 +80,7 @@ emulator/tests/out/test_cpu_bus_tap.out: emulator/tests/test_cpu_bus_tap.c emula
 emulator/tests/out/test_dormann.out: emulator/tests/test_dormann.c emulator/cpu_core.c emulator/cpu_core.h emulator/tests/greatest.h
 	@mkdir -p emulator/tests/out
 	gcc -Wall -Werror -Wno-unused-function -o $@ emulator/tests/test_dormann.c emulator/cpu_core.c
+
+emulator/tests/out/test_machine_dispatch.out: emulator/tests/test_machine_dispatch.c emulator/emu_wendy2c.c emulator/emu_wendy2c.h emulator/cli.c emulator/cli.h emulator/bus.c emulator/bus.h emulator/cpu_core.c emulator/cpu_core.h emulator/tests/greatest.h
+	@mkdir -p emulator/tests/out
+	gcc -Wall -Werror -Wno-unused-function -o $@ emulator/tests/test_machine_dispatch.c emulator/emu_wendy2c.c emulator/cli.c emulator/bus.c emulator/cpu_core.c
