@@ -18,8 +18,16 @@ emulator/emulator.out: $(EMU_SRCS) $(EMU_HDRS)
 # C unit tests
 C_TESTS = emulator/tests/out/test_smoke.out emulator/tests/out/test_file_io.out emulator/tests/out/test_console.out emulator/tests/out/test_trace.out emulator/tests/out/test_cli.out emulator/tests/out/test_emu_run.out emulator/tests/out/test_bus.out emulator/tests/out/test_cpu_variant.out emulator/tests/out/test_cpu_65c02_fixes.out emulator/tests/out/test_cpu_65c02_group_a.out emulator/tests/out/test_cpu_65c02_group_b.out emulator/tests/out/test_cpu_65c02_bit_ops.out emulator/tests/out/test_cpu_65c02_wai_stp.out emulator/tests/out/test_cpu_bus_tap.out emulator/tests/out/test_dormann.out emulator/tests/out/test_machine_dispatch.out emulator/tests/out/test_chip_osc.out emulator/tests/out/test_chip_clock.out emulator/tests/out/test_chip_rom.out emulator/tests/out/test_chip_ram.out emulator/tests/out/test_chip_cpu_65c02.out emulator/tests/out/test_chip_via.out emulator/tests/out/test_chip_lcd.out emulator/tests/out/test_chip_serial_usb.out emulator/tests/out/test_chip_led_buttons.out
 
-test: $(C_TESTS)
+test: $(C_TESTS) wendy2c-goldens
 	@for t in $(C_TESTS); do ./$$t || exit 1; done
+
+# End-to-end wendy2c golden-LCD tests. Requires vasm6502_oldstyle on
+# PATH; the script SKIPs (exits 0) if vasm is missing. Depends on the
+# emulator binary -- chained behind it to ensure it's built fresh.
+wendy2c-goldens: emulator/emulator.out
+	@emulator/tests/wendy2c_goldens.sh
+
+.PHONY: wendy2c-goldens
 
 emulator/tests/out/test_smoke.out: emulator/tests/test_smoke.c emulator/tests/greatest.h
 	@mkdir -p emulator/tests/out
@@ -101,9 +109,9 @@ emulator/tests/out/test_chip_ram.out: emulator/tests/test_chip_ram.c emulator/ch
 	@mkdir -p emulator/tests/out
 	gcc -Wall -Werror -o $@ emulator/tests/test_chip_ram.c emulator/chips/ram_628128.c emulator/chips/clock_22v10.c emulator/bus.c
 
-emulator/tests/out/test_chip_cpu_65c02.out: emulator/tests/test_chip_cpu_65c02.c emulator/chips/cpu_65c02.c emulator/chips/cpu_65c02.h emulator/emu_wendy2c.c emulator/emu_wendy2c.h emulator/cli.c emulator/cli.h emulator/cpu_core.c emulator/cpu_core.h emulator/bus.c emulator/bus.h emulator/chips/clock_22v10.c emulator/chips/clock_22v10.h emulator/chips/rom_28c256.c emulator/chips/rom_28c256.h emulator/chips/ram_628128.c emulator/chips/ram_628128.h emulator/chips/via_6522.c emulator/chips/via_6522.h emulator/chips/lcd_hd44780.c emulator/chips/lcd_hd44780.h emulator/chips/serial_usb.c emulator/chips/serial_usb.h emulator/chips/led_buttons.c emulator/chips/led_buttons.h emulator/tests/greatest.h
+emulator/tests/out/test_chip_cpu_65c02.out: emulator/tests/test_chip_cpu_65c02.c emulator/chips/cpu_65c02.c emulator/chips/cpu_65c02.h emulator/emu_wendy2c.c emulator/emu_wendy2c.h emulator/cli.c emulator/cli.h emulator/cpu_core.c emulator/cpu_core.h emulator/bus.c emulator/bus.h emulator/tty_alt_screen.c emulator/tty_alt_screen.h emulator/chips/clock_22v10.c emulator/chips/clock_22v10.h emulator/chips/rom_28c256.c emulator/chips/rom_28c256.h emulator/chips/ram_628128.c emulator/chips/ram_628128.h emulator/chips/via_6522.c emulator/chips/via_6522.h emulator/chips/lcd_hd44780.c emulator/chips/lcd_hd44780.h emulator/chips/serial_usb.c emulator/chips/serial_usb.h emulator/chips/led_buttons.c emulator/chips/led_buttons.h emulator/tests/greatest.h
 	@mkdir -p emulator/tests/out
-	gcc -Wall -Werror -Wno-unused-function -o $@ emulator/tests/test_chip_cpu_65c02.c emulator/chips/cpu_65c02.c emulator/emu_wendy2c.c emulator/cli.c emulator/cpu_core.c emulator/bus.c emulator/chips/clock_22v10.c emulator/chips/rom_28c256.c emulator/chips/ram_628128.c emulator/chips/via_6522.c emulator/chips/lcd_hd44780.c emulator/chips/serial_usb.c emulator/chips/led_buttons.c
+	gcc -Wall -Werror -Wno-unused-function -o $@ emulator/tests/test_chip_cpu_65c02.c emulator/chips/cpu_65c02.c emulator/emu_wendy2c.c emulator/cli.c emulator/cpu_core.c emulator/bus.c emulator/tty_alt_screen.c emulator/chips/clock_22v10.c emulator/chips/rom_28c256.c emulator/chips/ram_628128.c emulator/chips/via_6522.c emulator/chips/lcd_hd44780.c emulator/chips/serial_usb.c emulator/chips/led_buttons.c
 
 emulator/tests/out/test_chip_serial_usb.out: emulator/tests/test_chip_serial_usb.c emulator/chips/serial_usb.c emulator/chips/serial_usb.h emulator/chips/via_6522.c emulator/chips/via_6522.h emulator/bus.c emulator/bus.h emulator/tests/greatest.h
 	@mkdir -p emulator/tests/out

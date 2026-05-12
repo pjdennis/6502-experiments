@@ -8,6 +8,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <signal.h>
+
 #include "greatest.h"
 #include "../cli.h"
 #include "../emu_wendy2c.h"
@@ -18,6 +20,11 @@
  * through cpu_external_read/cpu_external_write instead). */
 uint8_t read6502(uint16_t addr) { (void)addr; return 0xFF; }
 void    write6502(uint16_t addr, uint8_t v) { (void)addr; (void)v; }
+
+/* emu_wendy2c.c references this global (defined in emulator.c) for
+ * the --live render loop. The smoke test never exercises live mode
+ * but still needs the symbol at link time. */
+volatile sig_atomic_t sigint_requested = 0;
 
 static const char *write_synthetic_rom(const uint8_t *prog, size_t prog_len) {
     static char path[] = "/tmp/wendy2c_test_XXXXXX";
