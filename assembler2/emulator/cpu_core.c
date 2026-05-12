@@ -69,6 +69,9 @@
 uint16_t pc;
 uint8_t sp, a, x, y, status;
 
+//CPU variant selection. Default = NMOS (legacy Fake6502 dispatch).
+int cpu_variant = CPU_NMOS;
+
 
 //helper variables
 uint32_t instructions = 0; //keep track of total instructions executed
@@ -108,8 +111,14 @@ void reset6502() {
 }
 
 
-static void (*addrtable[256])();
-static void (*optable[256])();
+/* Active dispatch tables: pointers set by step6502/exec6502 to one of
+ * the addrtable_nmos / addrtable_65c02 etc. arrays below, based on
+ * cpu_variant. The deep helpers (getvalue/putvalue) read addrtable[]
+ * through this pointer so the same "is this opcode accumulator-mode?"
+ * check works for either variant. */
+static void (**addrtable)();
+static void (**optable)();
+static const uint32_t *ticktable;
 uint8_t penaltyop, penaltyaddr;
 
 //addressing mode functions, calculates effective addresses
@@ -741,7 +750,7 @@ static void tya() {
 #endif
 
 
-static void (*addrtable[256])() = {
+static void (*addrtable_nmos[256])() = {
 /*         |  0  |  1  |  2  |  3  |  4  |  5  |  6  |  7  |  8  |  9  |  A  |  B  |  C  |  D  |  E  |  F  |     */
 /* 0 */      imp, indx,  imp, indx,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imm, abso, abso, abso, abso, /* 0 */
 /* 1 */      rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx, /* 1 */
@@ -761,7 +770,7 @@ static void (*addrtable[256])() = {
 /* F */      rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx  /* F */
 };
 
-static void (*optable[256])() = {
+static void (*optable_nmos[256])() = {
 /*        |  0  |  1  |  2  |  3  |  4  |  5  |  6  |  7  |  8  |  9  |  A  |  B  |  C  |  D  |  E  |  F  |      */
 /* 0 */ brk_insn,  ora,  nop,  slo,  nop,  ora,  asl,  slo,  php,  ora,  asl,  nop,  nop,  ora,  asl,  slo, /* 0 */
 /* 1 */      bpl,  ora,  nop,  slo,  nop,  ora,  asl,  slo,  clc,  ora,  nop,  slo,  nop,  ora,  asl,  slo, /* 1 */
@@ -781,7 +790,7 @@ static void (*optable[256])() = {
 /* F */      beq,  sbc,  nop,  isb,  nop,  sbc,  inc,  isb,  sed,  sbc,  nop,  isb,  nop,  sbc,  inc,  isb  /* F */
 };
 
-static const uint32_t ticktable[256] = {
+static const uint32_t ticktable_nmos[256] = {
 /*         |  0  |  1  |  2  |  3  |  4  |  5  |  6  |  7  |  8  |  9  |  A  |  B  |  C  |  D  |  E  |  F  |     */
 /* 0 */       7,    6,    2,    8,    3,    3,    5,    5,    3,    2,    2,    2,    4,    4,    6,    6,  /* 0 */
 /* 1 */       2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7,  /* 1 */
@@ -800,6 +809,82 @@ static const uint32_t ticktable[256] = {
 /* E */       2,    6,    2,    8,    3,    3,    5,    5,    2,    2,    2,    2,    4,    4,    6,    6,  /* E */
 /* F */       2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7   /* F */
 };
+
+/* 65C02 dispatch tables. Initialized identically to the NMOS tables;
+ * phases 3b..3f will replace selected entries with the W65C02S
+ * differences (JMP indirect page-bug fix, decimal flag handling,
+ * new opcodes bra/phx/phy/plx/ply/stz/etc., bit ops, wai/stp). */
+static void (*addrtable_65c02[256])() = {
+/* 0 */      imp, indx,  imp, indx,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imm, abso, abso, abso, abso,
+/* 1 */      rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx,
+/* 2 */     abso, indx,  imp, indx,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imm, abso, abso, abso, abso,
+/* 3 */      rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx,
+/* 4 */      imp, indx,  imp, indx,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imm, abso, abso, abso, abso,
+/* 5 */      rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx,
+/* 6 */      imp, indx,  imp, indx,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imm,  ind, abso, abso, abso,
+/* 7 */      rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx,
+/* 8 */      imm, indx,  imm, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imm, abso, abso, abso, abso,
+/* 9 */      rel, indy,  imp, indy,  zpx,  zpx,  zpy,  zpy,  imp, absy,  imp, absy, absx, absx, absy, absy,
+/* A */      imm, indx,  imm, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imm, abso, abso, abso, abso,
+/* B */      rel, indy,  imp, indy,  zpx,  zpx,  zpy,  zpy,  imp, absy,  imp, absy, absx, absx, absy, absy,
+/* C */      imm, indx,  imm, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imm, abso, abso, abso, abso,
+/* D */      rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx,
+/* E */      imm, indx,  imm, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imm, abso, abso, abso, abso,
+/* F */      rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx
+};
+
+static void (*optable_65c02[256])() = {
+/* 0 */ brk_insn,  ora,  nop,  slo,  nop,  ora,  asl,  slo,  php,  ora,  asl,  nop,  nop,  ora,  asl,  slo,
+/* 1 */      bpl,  ora,  nop,  slo,  nop,  ora,  asl,  slo,  clc,  ora,  nop,  slo,  nop,  ora,  asl,  slo,
+/* 2 */      jsr,  and,  nop,  rla,  bit,  and,  rol,  rla,  plp,  and,  rol,  nop,  bit,  and,  rol,  rla,
+/* 3 */      bmi,  and,  nop,  rla,  nop,  and,  rol,  rla,  sec,  and,  nop,  rla,  nop,  and,  rol,  rla,
+/* 4 */      rti,  eor,  nop,  sre,  nop,  eor,  lsr,  sre,  pha,  eor,  lsr,  nop,  jmp,  eor,  lsr,  sre,
+/* 5 */      bvc,  eor,  nop,  sre,  nop,  eor,  lsr,  sre,  cli,  eor,  nop,  sre,  nop,  eor,  lsr,  sre,
+/* 6 */      rts,  adc,  nop,  rra,  nop,  adc,  ror,  rra,  pla,  adc,  ror,  nop,  jmp,  adc,  ror,  rra,
+/* 7 */      bvs,  adc,  nop,  rra,  nop,  adc,  ror,  rra,  sei,  adc,  nop,  rra,  nop,  adc,  ror,  rra,
+/* 8 */      nop,  sta,  nop,  sax,  sty,  sta,  stx,  sax,  dey,  nop,  txa,  nop,  sty,  sta,  stx,  sax,
+/* 9 */      bcc,  sta,  nop,  nop,  sty,  sta,  stx,  sax,  tya,  sta,  txs,  nop,  nop,  sta,  nop,  nop,
+/* A */      ldy,  lda,  ldx,  lax,  ldy,  lda,  ldx,  lax,  tay,  lda,  tax,  nop,  ldy,  lda,  ldx,  lax,
+/* B */      bcs,  lda,  nop,  lax,  ldy,  lda,  ldx,  lax,  clv,  lda,  tsx,  lax,  ldy,  lda,  ldx,  lax,
+/* C */      cpy,  cmp,  nop,  dcp,  cpy,  cmp,  dec,  dcp,  iny,  cmp,  dex,  nop,  cpy,  cmp,  dec,  dcp,
+/* D */      bne,  cmp,  nop,  dcp,  nop,  cmp,  dec,  dcp,  cld,  cmp,  nop,  dcp,  nop,  cmp,  dec,  dcp,
+/* E */      cpx,  sbc,  nop,  isb,  cpx,  sbc,  inc,  isb,  inx,  sbc,  nop,  sbc,  cpx,  sbc,  inc,  isb,
+/* F */      beq,  sbc,  nop,  isb,  nop,  sbc,  inc,  isb,  sed,  sbc,  nop,  isb,  nop,  sbc,  inc,  isb
+};
+
+static const uint32_t ticktable_65c02[256] = {
+/* 0 */       7,    6,    2,    8,    3,    3,    5,    5,    3,    2,    2,    2,    4,    4,    6,    6,
+/* 1 */       2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7,
+/* 2 */       6,    6,    2,    8,    3,    3,    5,    5,    4,    2,    2,    2,    4,    4,    6,    6,
+/* 3 */       2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7,
+/* 4 */       6,    6,    2,    8,    3,    3,    5,    5,    3,    2,    2,    2,    3,    4,    6,    6,
+/* 5 */       2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7,
+/* 6 */       6,    6,    2,    8,    3,    3,    5,    5,    4,    2,    2,    2,    5,    4,    6,    6,
+/* 7 */       2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7,
+/* 8 */       2,    6,    2,    6,    3,    3,    3,    3,    2,    2,    2,    2,    4,    4,    4,    4,
+/* 9 */       2,    6,    2,    6,    4,    4,    4,    4,    2,    5,    2,    5,    5,    5,    5,    5,
+/* A */       2,    6,    2,    6,    3,    3,    3,    3,    2,    2,    2,    2,    4,    4,    4,    4,
+/* B */       2,    5,    2,    5,    4,    4,    4,    4,    2,    4,    2,    4,    4,    4,    4,    4,
+/* C */       2,    6,    2,    8,    3,    3,    5,    5,    2,    2,    2,    2,    4,    4,    6,    6,
+/* D */       2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7,
+/* E */       2,    6,    2,    8,    3,    3,    5,    5,    2,    2,    2,    2,    4,    4,    6,    6,
+/* F */       2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7
+};
+
+/* Set the active dispatch table pointers from cpu_variant. Called at
+ * the top of step6502/exec6502 so a mid-run change of cpu_variant
+ * takes effect at the next instruction boundary. */
+static void cpu_select_tables(void) {
+    if (cpu_variant == CPU_65C02) {
+        addrtable = addrtable_65c02;
+        optable = optable_65c02;
+        ticktable = ticktable_65c02;
+    } else {
+        addrtable = addrtable_nmos;
+        optable = optable_nmos;
+        ticktable = ticktable_nmos;
+    }
+}
 
 
 void nmi6502() {
@@ -820,6 +905,7 @@ uint8_t callexternal = 0;
 void (*loopexternal)();
 
 void exec6502(uint64_t tickcount) {
+    cpu_select_tables();
     clockgoal6502 += tickcount;
 
     while (clockticks6502 < clockgoal6502) {
@@ -842,6 +928,7 @@ void exec6502(uint64_t tickcount) {
 }
 
 void step6502() {
+    cpu_select_tables();
     opcode = read6502(pc++);
     status |= FLAG_CONSTANT;
 

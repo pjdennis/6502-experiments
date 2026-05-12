@@ -16,7 +16,7 @@ emulator/emulator.out: $(EMU_SRCS) $(EMU_HDRS)
 	gcc -O2 -o 00/out/asm_c.out 00/asm.c
 
 # C unit tests
-C_TESTS = emulator/tests/out/test_smoke.out emulator/tests/out/test_file_io.out emulator/tests/out/test_console.out emulator/tests/out/test_trace.out emulator/tests/out/test_cli.out emulator/tests/out/test_emu_run.out emulator/tests/out/test_bus.out
+C_TESTS = emulator/tests/out/test_smoke.out emulator/tests/out/test_file_io.out emulator/tests/out/test_console.out emulator/tests/out/test_trace.out emulator/tests/out/test_cli.out emulator/tests/out/test_emu_run.out emulator/tests/out/test_bus.out emulator/tests/out/test_cpu_variant.out
 
 test: $(C_TESTS)
 	@for t in $(C_TESTS); do ./$$t || exit 1; done
@@ -48,3 +48,7 @@ emulator/tests/out/test_emu_run.out: emulator/tests/test_emu_run.c emulator/emu_
 emulator/tests/out/test_bus.out: emulator/tests/test_bus.c emulator/bus.c emulator/bus.h emulator/tests/greatest.h
 	@mkdir -p emulator/tests/out
 	gcc -Wall -Werror -o $@ emulator/tests/test_bus.c emulator/bus.c
+
+emulator/tests/out/test_cpu_variant.out: emulator/tests/test_cpu_variant.c emulator/cpu_core.c emulator/cpu_core.h emulator/tests/greatest.h
+	@mkdir -p emulator/tests/out
+	gcc -Wall -Werror -Wno-unused-function -o $@ emulator/tests/test_cpu_variant.c emulator/cpu_core.c

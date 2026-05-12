@@ -3,6 +3,13 @@
 
 #include <stdint.h>
 
+// CPU variant selection. NMOS is the default; 65C02 picks an
+// alternate dispatch table (currently initialized identically to NMOS;
+// phases 3b..3f add the actual differences).
+#define CPU_NMOS  0
+#define CPU_65C02 1
+extern int cpu_variant;
+
 // 6502 CPU registers
 extern uint16_t pc;
 extern uint8_t sp, a, x, y, status;
