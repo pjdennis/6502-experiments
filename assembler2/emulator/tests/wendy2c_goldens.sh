@@ -81,5 +81,11 @@ run_case() {
 # pipeline + first LCD frame; see demo_wendy2c.sh.
 run_case hello_4000   hello_ram_4000_wendy2c.s 3000000 "Hi! I'm Wendy 2."
 run_case led_test     wendy2c_led_test.s        3000000 "LED Flashing..."
+# Multitasking exercises the WAI-wakes-on-masked-IRQ behavior: the
+# scheduler's IRQ handler runs WAI with I set, and only wakes when the
+# next T2 underflow asserts the IRQ line. Need ~150M osc ticks for the
+# counters to step past zero. 'X' is the always-on "chase" character
+# in the rightmost column of the busy_loop counter.
+run_case multitasking multitasking_test_wendy2c.s 150000000 " X "
 
 echo "wendy2c_goldens: all PASS"

@@ -101,6 +101,7 @@ static inline void cpu_write(uint16_t addr, uint8_t v) {
 }
 
 int cpu_wai_pending(void) { return wai_pending; }
+void cpu_clear_wai(void) { wai_pending = 0; }
 int cpu_stp_pending(void) { return stp_pending; }
 
 

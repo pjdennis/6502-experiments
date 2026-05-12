@@ -23,10 +23,20 @@ static void cpu_65c02_tick(struct chip *self, struct bus *bus) {
      * the I flag is clear. The 'I masked' semantic is the host's: if
      * the program has SEI'd, we still wake from WAI but don't dispatch
      * the IRQ. cpu_core's irq6502 unconditionally dispatches; we gate
-     * here so it isn't constantly re-entered. */
+     * here so it isn't constantly re-entered.
+     *
+     * WAI wakes on any asserted IRQ/NMI regardless of the I mask -- a
+     * masked interrupt still completes WAI and the CPU runs the next
+     * instruction with the interrupt staying pending. The
+     * multitasking_test_wendy2c.s scheduler relies on this: its IRQ
+     * handler executes WAI when every task is sleeping, with I set
+     * because we're inside the handler. */
     extern uint8_t status;
     extern uint16_t pc;
     (void)pc;
+    if ((bus->irq || bus->nmi) && cpu_wai_pending()) {
+        cpu_clear_wai();
+    }
     if (bus->irq && s->cycles_owed == 0 && !(status & 0x04)) {
         irq6502();
     }

@@ -50,4 +50,12 @@ extern void    (*cpu_external_write)(uint16_t addr, uint8_t data);
 extern int cpu_wai_pending(void);
 extern int cpu_stp_pending(void);
 
+// Clear the WAI-pending flag without dispatching an interrupt. The real
+// W65C02S wakes from WAI on any IRQ or NMI regardless of the I mask --
+// when the mask blocks the dispatch, WAI still completes and the CPU
+// runs the next instruction with the interrupt staying pending in the
+// peripheral. cpu_65c02_tick calls this on any asserted bus->irq /
+// bus->nmi (in addition to the I-gated dispatch) to model that.
+extern void cpu_clear_wai(void);
+
 #endif

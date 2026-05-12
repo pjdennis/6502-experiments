@@ -27,7 +27,10 @@ void    write6502(uint16_t addr, uint8_t v) { (void)addr; (void)v; }
 volatile sig_atomic_t sigint_requested = 0;
 
 static const char *write_synthetic_rom(const uint8_t *prog, size_t prog_len) {
-    static char path[] = "/tmp/wendy2c_test_XXXXXX";
+    /* Fresh template per call -- mkstemp mutates it, so a static buffer
+     * would make any second call in the same test process fail. */
+    static char path[32];
+    strcpy(path, "/tmp/wendy2c_test_XXXXXX");
     int fd = mkstemp(path);
     if (fd < 0) return NULL;
     uint8_t rom[0x8000];
@@ -42,6 +45,52 @@ static const char *write_synthetic_rom(const uint8_t *prog, size_t prog_len) {
     if (write(fd, rom, sizeof(rom)) != sizeof(rom)) { close(fd); return NULL; }
     close(fd);
     return path;
+}
+
+TEST wai_wakes_on_masked_t2_irq(void) {
+    /* Regression for the multitasking_test_wendy2c.s scheduler hang:
+     * the IRQ handler executes WAI with I set (we are inside the
+     * handler), expecting WAI to wake on the next T2 IRQ so the CPU
+     * can run again. WAI must wake on any asserted IRQ/NMI regardless
+     * of the I mask; only the dispatch is gated by I.
+     *
+     * Program (at $8000):
+     *   SEI                        ; mask IRQs
+     *   LDA #$80; STA T2CL ($F008) ; T2 low latch
+     *   LDA #$00; STA T2CH ($F009) ; T2 high (starts T2)
+     *   LDA #$A0; STA IER  ($F00E) ; IERSETCLEAR | IT2 enables T2
+     *   WAI                        ; wait for T2 underflow
+     *   STP                        ; halt cleanly
+     *
+     * If WAI honors the I mask (the pre-fix behavior) the run hits
+     * the cycle cap and emu_run_wendy2c returns; we assert STP. */
+    uint8_t prog[] = {
+        0x78,                   /* SEI */
+        0xA9, 0x80,             /* LDA #$80 */
+        0x8D, 0x08, 0xF0,       /* STA T2CL */
+        0xA9, 0x00,             /* LDA #$00 */
+        0x8D, 0x09, 0xF0,       /* STA T2CH */
+        0xA9, 0xA0,             /* LDA #$A0 (IERSETCLEAR | IT2) */
+        0x8D, 0x0E, 0xF0,       /* STA IER */
+        0xCB,                   /* WAI */
+        0xDB                    /* STP */
+    };
+    const char *path = write_synthetic_rom(prog, sizeof(prog));
+    ASSERT(path != NULL);
+
+    struct emu_opts opts;
+    emu_opts_init(&opts);
+    opts.machine = MACHINE_WENDY2C;
+    opts.cpu_variant_opt = CPU_65C02;
+    opts.rom_filename = path;
+
+    int rc = emu_run_wendy2c(&opts);
+    ASSERT_EQ_FMT(0, rc, "%d");
+    /* PC parked just past STP: 18 bytes of prog -> $8012. */
+    ASSERT_EQ_FMT((uint16_t)0x8012, pc, "%04X");
+
+    remove(path);
+    PASS();
 }
 
 TEST cpu_executes_synthetic_rom_and_halts_on_stp(void) {
@@ -71,6 +120,7 @@ TEST cpu_executes_synthetic_rom_and_halts_on_stp(void) {
 
 SUITE(cpu_65c02_chip_suite) {
     RUN_TEST(cpu_executes_synthetic_rom_and_halts_on_stp);
+    RUN_TEST(wai_wakes_on_masked_t2_irq);
 }
 
 GREATEST_MAIN_DEFS();
