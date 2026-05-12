@@ -77,6 +77,22 @@ int cpu_variant = CPU_NMOS;
 static int wai_pending = 0;
 static int stp_pending = 0;
 
+/* Optional bus-transaction taps (phase 3i). Default NULL; the
+ * per-access overhead is a null check. */
+void (*cpu_bus_read_tap)(uint16_t addr, uint8_t data) = NULL;
+void (*cpu_bus_write_tap)(uint16_t addr, uint8_t data) = NULL;
+
+static inline uint8_t cpu_read(uint16_t addr) {
+    uint8_t v = read6502(addr);
+    if (cpu_bus_read_tap) cpu_bus_read_tap(addr, v);
+    return v;
+}
+
+static inline void cpu_write(uint16_t addr, uint8_t v) {
+    write6502(addr, v);
+    if (cpu_bus_write_tap) cpu_bus_write_tap(addr, v);
+}
+
 
 //helper variables
 uint32_t instructions = 0; //keep track of total instructions executed
@@ -86,28 +102,28 @@ uint8_t opcode, oldstatus;
 
 //a few general functions used by various other functions
 void push16(uint16_t pushval) {
-    write6502(BASE_STACK + sp, (pushval >> 8) & 0xFF);
-    write6502(BASE_STACK + ((sp - 1) & 0xFF), pushval & 0xFF);
+    cpu_write(BASE_STACK + sp, (pushval >> 8) & 0xFF);
+    cpu_write(BASE_STACK + ((sp - 1) & 0xFF), pushval & 0xFF);
     sp -= 2;
 }
 
 void push8(uint8_t pushval) {
-    write6502(BASE_STACK + sp--, pushval);
+    cpu_write(BASE_STACK + sp--, pushval);
 }
 
 uint16_t pull16() {
     uint16_t temp16;
-    temp16 = read6502(BASE_STACK + ((sp + 1) & 0xFF)) | ((uint16_t)read6502(BASE_STACK + ((sp + 2) & 0xFF)) << 8);
+    temp16 = cpu_read(BASE_STACK + ((sp + 1) & 0xFF)) | ((uint16_t)cpu_read(BASE_STACK + ((sp + 2) & 0xFF)) << 8);
     sp += 2;
     return(temp16);
 }
 
 uint8_t pull8() {
-    return (read6502(BASE_STACK + ++sp));
+    return (cpu_read(BASE_STACK + ++sp));
 }
 
 void reset6502() {
-    pc = (uint16_t)read6502(0xFFFC) | ((uint16_t)read6502(0xFFFD) << 8);
+    pc = (uint16_t)cpu_read(0xFFFC) | ((uint16_t)cpu_read(0xFFFD) << 8);
     a = 0;
     x = 0;
     y = 0;
@@ -140,30 +156,30 @@ static void imm() { //immediate
 }
 
 static void zp() { //zero-page
-    ea = (uint16_t)read6502((uint16_t)pc++);
+    ea = (uint16_t)cpu_read((uint16_t)pc++);
 }
 
 static void zpx() { //zero-page,X
-    ea = ((uint16_t)read6502((uint16_t)pc++) + (uint16_t)x) & 0xFF; //zero-page wraparound
+    ea = ((uint16_t)cpu_read((uint16_t)pc++) + (uint16_t)x) & 0xFF; //zero-page wraparound
 }
 
 static void zpy() { //zero-page,Y
-    ea = ((uint16_t)read6502((uint16_t)pc++) + (uint16_t)y) & 0xFF; //zero-page wraparound
+    ea = ((uint16_t)cpu_read((uint16_t)pc++) + (uint16_t)y) & 0xFF; //zero-page wraparound
 }
 
 static void rel() { //relative for branch ops (8-bit immediate value, sign-extended)
-    reladdr = (uint16_t)read6502(pc++);
+    reladdr = (uint16_t)cpu_read(pc++);
     if (reladdr & 0x80) reladdr |= 0xFF00;
 }
 
 static void abso() { //absolute
-    ea = (uint16_t)read6502(pc) | ((uint16_t)read6502(pc+1) << 8);
+    ea = (uint16_t)cpu_read(pc) | ((uint16_t)cpu_read(pc+1) << 8);
     pc += 2;
 }
 
 static void absx() { //absolute,X
     uint16_t startpage;
-    ea = ((uint16_t)read6502(pc) | ((uint16_t)read6502(pc+1) << 8));
+    ea = ((uint16_t)cpu_read(pc) | ((uint16_t)cpu_read(pc+1) << 8));
     startpage = ea & 0xFF00;
     ea += (uint16_t)x;
 
@@ -176,7 +192,7 @@ static void absx() { //absolute,X
 
 static void absy() { //absolute,Y
     uint16_t startpage;
-    ea = ((uint16_t)read6502(pc) | ((uint16_t)read6502(pc+1) << 8));
+    ea = ((uint16_t)cpu_read(pc) | ((uint16_t)cpu_read(pc+1) << 8));
     startpage = ea & 0xFF00;
     ea += (uint16_t)y;
 
@@ -189,43 +205,43 @@ static void absy() { //absolute,Y
 
 static void ind() { //indirect (NMOS: with page-wrap bug on high-byte read)
     uint16_t eahelp, eahelp2;
-    eahelp = (uint16_t)read6502(pc) | (uint16_t)((uint16_t)read6502(pc+1) << 8);
+    eahelp = (uint16_t)cpu_read(pc) | (uint16_t)((uint16_t)cpu_read(pc+1) << 8);
     eahelp2 = (eahelp & 0xFF00) | ((eahelp + 1) & 0x00FF); //replicate 6502 page-boundary wraparound bug
-    ea = (uint16_t)read6502(eahelp) | ((uint16_t)read6502(eahelp2) << 8);
+    ea = (uint16_t)cpu_read(eahelp) | ((uint16_t)cpu_read(eahelp2) << 8);
     pc += 2;
 }
 
 static void ind_65c02() { //indirect (65C02: no page-wrap bug; reads eahelp+1 normally)
     uint16_t eahelp;
-    eahelp = (uint16_t)read6502(pc) | (uint16_t)((uint16_t)read6502(pc+1) << 8);
-    ea = (uint16_t)read6502(eahelp) | ((uint16_t)read6502(eahelp + 1) << 8);
+    eahelp = (uint16_t)cpu_read(pc) | (uint16_t)((uint16_t)cpu_read(pc+1) << 8);
+    ea = (uint16_t)cpu_read(eahelp) | ((uint16_t)cpu_read(eahelp + 1) << 8);
     pc += 2;
 }
 
 static void ind_zp() { //(zp) indirect: 65C02 LDA (zp), STA (zp), etc.
-    uint8_t zp = read6502(pc++);
+    uint8_t zp = cpu_read(pc++);
     /* zero-page wrap-around on the +1 fetch */
-    ea = (uint16_t)read6502(zp) | ((uint16_t)read6502((uint8_t)(zp + 1)) << 8);
+    ea = (uint16_t)cpu_read(zp) | ((uint16_t)cpu_read((uint8_t)(zp + 1)) << 8);
 }
 
 static void ind_absx() { //(abs,X) for 65C02 JMP -- table pre-index then dereference
-    uint16_t base = (uint16_t)read6502(pc) | ((uint16_t)read6502(pc+1) << 8);
+    uint16_t base = (uint16_t)cpu_read(pc) | ((uint16_t)cpu_read(pc+1) << 8);
     base += (uint16_t)x;
-    ea = (uint16_t)read6502(base) | ((uint16_t)read6502(base + 1) << 8);
+    ea = (uint16_t)cpu_read(base) | ((uint16_t)cpu_read(base + 1) << 8);
     pc += 2;
 }
 
 static void indx() { // (indirect,X)
     uint16_t eahelp;
-    eahelp = (uint16_t)(((uint16_t)read6502(pc++) + (uint16_t)x) & 0xFF); //zero-page wraparound for table pointer
-    ea = (uint16_t)read6502(eahelp & 0x00FF) | ((uint16_t)read6502((eahelp+1) & 0x00FF) << 8);
+    eahelp = (uint16_t)(((uint16_t)cpu_read(pc++) + (uint16_t)x) & 0xFF); //zero-page wraparound for table pointer
+    ea = (uint16_t)cpu_read(eahelp & 0x00FF) | ((uint16_t)cpu_read((eahelp+1) & 0x00FF) << 8);
 }
 
 static void indy() { // (indirect),Y
     uint16_t eahelp, eahelp2, startpage;
-    eahelp = (uint16_t)read6502(pc++);
+    eahelp = (uint16_t)cpu_read(pc++);
     eahelp2 = (eahelp & 0xFF00) | ((eahelp + 1) & 0x00FF); //zero-page wraparound
-    ea = (uint16_t)read6502(eahelp) | ((uint16_t)read6502(eahelp2) << 8);
+    ea = (uint16_t)cpu_read(eahelp) | ((uint16_t)cpu_read(eahelp2) << 8);
     startpage = ea & 0xFF00;
     ea += (uint16_t)y;
 
@@ -236,16 +252,16 @@ static void indy() { // (indirect),Y
 
 static uint16_t getvalue() {
     if (addrtable[opcode] == acc) return((uint16_t)a);
-        else return((uint16_t)read6502(ea));
+        else return((uint16_t)cpu_read(ea));
 }
 
 static uint16_t getvalue16() {
-    return((uint16_t)read6502(ea) | ((uint16_t)read6502(ea+1) << 8));
+    return((uint16_t)cpu_read(ea) | ((uint16_t)cpu_read(ea+1) << 8));
 }
 
 static void putvalue(uint16_t saveval) {
     if (addrtable[opcode] == acc) a = (uint8_t)(saveval & 0x00FF);
-        else write6502(ea, (saveval & 0x00FF));
+        else cpu_write(ea, (saveval & 0x00FF));
 }
 
 
@@ -404,7 +420,7 @@ static void brk_insn() {
     push16(pc); //push next instruction address onto stack
     push8(status | FLAG_BREAK); //push CPU status to stack
     setinterrupt(); //set interrupt flag
-    pc = (uint16_t)read6502(0xFFFE) | ((uint16_t)read6502(0xFFFF) << 8);
+    pc = (uint16_t)cpu_read(0xFFFE) | ((uint16_t)cpu_read(0xFFFF) << 8);
 }
 
 static void brk_insn_65c02() { /* 65C02: clears D after pushing status */
@@ -413,7 +429,7 @@ static void brk_insn_65c02() { /* 65C02: clears D after pushing status */
     push8(status | FLAG_BREAK);
     setinterrupt();
     cleardecimal();
-    pc = (uint16_t)read6502(0xFFFE) | ((uint16_t)read6502(0xFFFF) << 8);
+    pc = (uint16_t)cpu_read(0xFFFE) | ((uint16_t)cpu_read(0xFFFF) << 8);
 }
 
 static void bvc() {
@@ -749,25 +765,25 @@ static void tsb() {
  * zp address. 5 cycles. */
 static void rmb() {
     uint8_t bit = (opcode >> 4) & 7;
-    uint8_t v = read6502(ea);
+    uint8_t v = cpu_read(ea);
     v &= (uint8_t)~(1u << bit);
-    write6502(ea, v);
+    cpu_write(ea, v);
 }
 
 static void smb() {
     uint8_t bit = (opcode >> 4) & 7;
-    uint8_t v = read6502(ea);
+    uint8_t v = cpu_read(ea);
     v |= (uint8_t)(1u << bit);
-    write6502(ea, v);
+    cpu_write(ea, v);
 }
 
 /* BBR n,zp,rel / BBS n,zp,rel: 3-byte branch-on-bit. addrtable is zp
  * so ea = zp address; we read the rel byte ourselves. 5 cycle base
  * + branch-taken penalty handled inline. */
 static void bbr() {
-    uint8_t r = read6502(pc++);
+    uint8_t r = cpu_read(pc++);
     uint8_t bit = (opcode >> 4) & 7;
-    uint8_t v = read6502(ea);
+    uint8_t v = cpu_read(ea);
     if ((v & (uint8_t)(1u << bit)) == 0) {
         oldpc = pc;
         pc += (int8_t)r;
@@ -777,9 +793,9 @@ static void bbr() {
 }
 
 static void bbs() {
-    uint8_t r = read6502(pc++);
+    uint8_t r = cpu_read(pc++);
     uint8_t bit = (opcode >> 4) & 7;
-    uint8_t v = read6502(ea);
+    uint8_t v = cpu_read(ea);
     if ((v & (uint8_t)(1u << bit)) != 0) {
         oldpc = pc;
         pc += (int8_t)r;
@@ -1103,7 +1119,7 @@ void nmi6502() {
     push16(pc);
     push8(status);
     status |= FLAG_INTERRUPT;
-    pc = (uint16_t)read6502(0xFFFA) | ((uint16_t)read6502(0xFFFB) << 8);
+    pc = (uint16_t)cpu_read(0xFFFA) | ((uint16_t)cpu_read(0xFFFB) << 8);
 }
 
 void irq6502() {
@@ -1111,7 +1127,7 @@ void irq6502() {
     push16(pc);
     push8(status);
     status |= FLAG_INTERRUPT;
-    pc = (uint16_t)read6502(0xFFFE) | ((uint16_t)read6502(0xFFFF) << 8);
+    pc = (uint16_t)cpu_read(0xFFFE) | ((uint16_t)cpu_read(0xFFFF) << 8);
 }
 
 uint8_t callexternal = 0;
@@ -1123,7 +1139,7 @@ void exec6502(uint64_t tickcount) {
 
     while (clockticks6502 < clockgoal6502) {
         if (stp_pending || wai_pending) { clockticks6502++; continue; }
-        opcode = read6502(pc++);
+        opcode = cpu_read(pc++);
         status |= FLAG_CONSTANT;
 
         penaltyop = 0;
@@ -1148,7 +1164,7 @@ void step6502() {
         clockgoal6502 = clockticks6502;
         return;
     }
-    opcode = read6502(pc++);
+    opcode = cpu_read(pc++);
     status |= FLAG_CONSTANT;
 
     penaltyop = 0;

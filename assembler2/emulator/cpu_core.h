@@ -30,4 +30,12 @@ void hookexternal(void *funcptr);
 extern uint8_t read6502(uint16_t address);
 extern void write6502(uint16_t address, uint8_t value);
 
+// Optional bus-transaction taps. When non-NULL, every read6502/write6502
+// performed by the CPU dispatch is mirrored to the tap with the (addr,
+// data) it observed. Used by the bus-trace ring buffer (phase 15a) and
+// the Harte cycle-log harness (phase 3h). Default is NULL (no overhead
+// beyond a per-access null-pointer check).
+extern void (*cpu_bus_read_tap)(uint16_t addr, uint8_t data);
+extern void (*cpu_bus_write_tap)(uint16_t addr, uint8_t data);
+
 #endif
