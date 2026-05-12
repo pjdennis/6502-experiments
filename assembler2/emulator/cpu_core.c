@@ -72,6 +72,11 @@ uint8_t sp, a, x, y, status;
 //CPU variant selection. Default = NMOS (legacy Fake6502 dispatch).
 int cpu_variant = CPU_NMOS;
 
+/* 65C02 WAI / STP pending flags. wai_pending pauses step6502 until an
+ * IRQ/NMI clears it; stp_pending pauses indefinitely until reset6502. */
+static int wai_pending = 0;
+static int stp_pending = 0;
+
 
 //helper variables
 uint32_t instructions = 0; //keep track of total instructions executed
@@ -108,6 +113,8 @@ void reset6502() {
     y = 0;
     sp = 0xFD;
     status |= FLAG_CONSTANT;
+    wai_pending = 0;
+    stp_pending = 0;
 }
 
 
@@ -781,6 +788,12 @@ static void bbs() {
     }
 }
 
+/* WAI / STP. step6502/exec6502 read these; reset6502 clears both;
+ * irq6502/nmi6502 clear wai_pending. Declared at file scope above (with
+ * the other CPU globals) so reset6502 can see them. */
+static void wai(void) { wai_pending = 1; }
+static void stp(void) { stp_pending = 1; }
+
 /* 65C02 INC A / DEC A: re-use the existing inc / dec handlers with the
  * acc addressing mode (addrtable_65c02[$1A] = acc / [$3A] = acc).
  * No separate handler needed -- getvalue/putvalue branch on
@@ -1025,8 +1038,8 @@ static void (*addrtable_65c02[256])() = {
 /* 9 */      rel, indy, ind_zp, indy,  zpx,  zpx,  zpy,   zp,  imp, absy,  imp, absy, abso, absx, absx,   zp,
 /* A */      imm, indx,  imm, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imm, abso, abso, abso,   zp,
 /* B */      rel, indy, ind_zp, indy,  zpx,  zpx,  zpy,   zp,  imp, absy,  imp, absy, absx, absx, absy,   zp,
-/* C */      imm, indx,  imm, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imm, abso, abso, abso,   zp,
-/* D */      rel, indy, ind_zp, indy,  zpx,  zpx,  zpx,   zp,  imp, absy,  imp, absy, absx, absx, absx,   zp,
+/* C */      imm, indx,  imm, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imp, abso, abso, abso,   zp,
+/* D */      rel, indy, ind_zp, indy,  zpx,  zpx,  zpx,   zp,  imp, absy,  imp,  imp, absx, absx, absx,   zp,
 /* E */      imm, indx,  imm, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imm, abso, abso, abso,   zp,
 /* F */      rel, indy, ind_zp, indy,  zpx,  zpx,  zpx,   zp,  imp, absy,  imp, absy, absx, absx, absx,   zp
 };
@@ -1044,8 +1057,8 @@ static void (*optable_65c02[256])() = {
 /* 9 */      bcc,  sta,  sta,  nop,  sty,  sta,  stx,  smb,  tya,  sta,  txs,  nop,  stz,  sta,  stz,  bbs,
 /* A */      ldy,  lda,  ldx,  lax,  ldy,  lda,  ldx,  smb,  tay,  lda,  tax,  nop,  ldy,  lda,  ldx,  bbs,
 /* B */      bcs,  lda,  lda,  lax,  ldy,  lda,  ldx,  smb,  clv,  lda,  tsx,  lax,  ldy,  lda,  ldx,  bbs,
-/* C */      cpy,  cmp,  nop,  dcp,  cpy,  cmp,  dec,  smb,  iny,  cmp,  dex,  nop,  cpy,  cmp,  dec,  bbs,
-/* D */      bne,  cmp,  cmp,  dcp,  nop,  cmp,  dec,  smb,  cld,  cmp,  phx,  dcp,  nop,  cmp,  dec,  bbs,
+/* C */      cpy,  cmp,  nop,  dcp,  cpy,  cmp,  dec,  smb,  iny,  cmp,  dex,  wai,  cpy,  cmp,  dec,  bbs,
+/* D */      bne,  cmp,  cmp,  dcp,  nop,  cmp,  dec,  smb,  cld,  cmp,  phx,  stp,  nop,  cmp,  dec,  bbs,
 /* E */      cpx, sbc_65c02, nop, isb, cpx, sbc_65c02, inc, smb, inx, sbc_65c02, nop, sbc_65c02, cpx, sbc_65c02, inc, bbs,
 /* F */      beq, sbc_65c02, sbc_65c02, isb, nop, sbc_65c02, inc, smb, sed, sbc_65c02, plx, isb, nop, sbc_65c02, inc, bbs
 };
@@ -1063,8 +1076,8 @@ static const uint32_t ticktable_65c02[256] = {
 /* 9 */       2,    6,    5,    6,    4,    4,    4,    5,    2,    5,    2,    5,    4,    5,    5,    5,
 /* A */       2,    6,    2,    6,    3,    3,    3,    5,    2,    2,    2,    2,    4,    4,    4,    5,
 /* B */       2,    5,    5,    5,    4,    4,    4,    5,    2,    4,    2,    4,    4,    4,    4,    5,
-/* C */       2,    6,    2,    8,    3,    3,    5,    5,    2,    2,    2,    2,    4,    4,    6,    5,
-/* D */       2,    5,    5,    8,    4,    4,    6,    5,    2,    4,    3,    7,    4,    4,    7,    5,
+/* C */       2,    6,    2,    8,    3,    3,    5,    5,    2,    2,    2,    3,    4,    4,    6,    5,
+/* D */       2,    5,    5,    8,    4,    4,    6,    5,    2,    4,    3,    3,    4,    4,    7,    5,
 /* E */       2,    6,    2,    8,    3,    3,    5,    5,    2,    2,    2,    2,    4,    4,    6,    5,
 /* F */       2,    5,    5,    8,    4,    4,    6,    5,    2,    4,    4,    7,    4,    4,    7,    5
 };
@@ -1086,6 +1099,7 @@ static void cpu_select_tables(void) {
 
 
 void nmi6502() {
+    wai_pending = 0;
     push16(pc);
     push8(status);
     status |= FLAG_INTERRUPT;
@@ -1093,6 +1107,7 @@ void nmi6502() {
 }
 
 void irq6502() {
+    wai_pending = 0;
     push16(pc);
     push8(status);
     status |= FLAG_INTERRUPT;
@@ -1107,6 +1122,7 @@ void exec6502(uint64_t tickcount) {
     clockgoal6502 += tickcount;
 
     while (clockticks6502 < clockgoal6502) {
+        if (stp_pending || wai_pending) { clockticks6502++; continue; }
         opcode = read6502(pc++);
         status |= FLAG_CONSTANT;
 
@@ -1127,6 +1143,11 @@ void exec6502(uint64_t tickcount) {
 
 void step6502() {
     cpu_select_tables();
+    if (stp_pending || wai_pending) {
+        clockticks6502++;
+        clockgoal6502 = clockticks6502;
+        return;
+    }
     opcode = read6502(pc++);
     status |= FLAG_CONSTANT;
 
