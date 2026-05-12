@@ -2,4 +2,4 @@
 
 set -e
 
-./asmtestgen.sh && editor/tests/editor_tests.py -q && tests/terminal_tests.py
+./asmtestgen.sh && editor/tests/editor_tests.py -q && emulator/tests/terminal_tests.py
