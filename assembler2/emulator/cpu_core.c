@@ -195,6 +195,19 @@ static void ind_65c02() { //indirect (65C02: no page-wrap bug; reads eahelp+1 no
     pc += 2;
 }
 
+static void ind_zp() { //(zp) indirect: 65C02 LDA (zp), STA (zp), etc.
+    uint8_t zp = read6502(pc++);
+    /* zero-page wrap-around on the +1 fetch */
+    ea = (uint16_t)read6502(zp) | ((uint16_t)read6502((uint8_t)(zp + 1)) << 8);
+}
+
+static void ind_absx() { //(abs,X) for 65C02 JMP -- table pre-index then dereference
+    uint16_t base = (uint16_t)read6502(pc) | ((uint16_t)read6502(pc+1) << 8);
+    base += (uint16_t)x;
+    ea = (uint16_t)read6502(base) | ((uint16_t)read6502(base + 1) << 8);
+    pc += 2;
+}
+
 static void indx() { // (indirect,X)
     uint16_t eahelp;
     eahelp = (uint16_t)(((uint16_t)read6502(pc++) + (uint16_t)x) & 0xFF); //zero-page wraparound for table pointer
@@ -708,6 +721,21 @@ static void ply() {
  * memory-write branch. */
 static void stz() { putvalue(0); }
 
+/* TRB / TSB: test-and-clear / test-and-set bits using A as the mask.
+ * Z is set from (A & M) BEFORE the write, exactly as the W65C02S
+ * datasheet specifies. */
+static void trb() {
+    value = getvalue();
+    if ((a & value) == 0) setzero(); else clearzero();
+    putvalue(value & (uint16_t)(~a & 0xFF));
+}
+
+static void tsb() {
+    value = getvalue();
+    if ((a & value) == 0) setzero(); else clearzero();
+    putvalue(value | a);
+}
+
 /* 65C02 INC A / DEC A: re-use the existing inc / dec handlers with the
  * acc addressing mode (addrtable_65c02[$1A] = acc / [$3A] = acc).
  * No separate handler needed -- getvalue/putvalue branch on
@@ -941,59 +969,59 @@ static const uint32_t ticktable_nmos[256] = {
  * plx/ply/stz/etc., bit ops, wai/stp). */
 static void (*addrtable_65c02[256])() = {
 /* 0 */      imp, indx,  imp, indx,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imm, abso, abso, abso, abso,
-/* 1 */      rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  acc, absy, absx, absx, absx, absx,
+/* 1 */      rel, indy, ind_zp, indy,  zp,  zpx,  zpx,  zpx,  imp, absy,  acc, absy, abso, absx, absx, absx,
 /* 2 */     abso, indx,  imp, indx,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imm, abso, abso, abso, abso,
-/* 3 */      rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  acc, absy, absx, absx, absx, absx,
+/* 3 */      rel, indy, ind_zp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  acc, absy, absx, absx, absx, absx,
 /* 4 */      imp, indx,  imp, indx,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imm, abso, abso, abso, abso,
-/* 5 */      rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx,
+/* 5 */      rel, indy, ind_zp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx,
 /* 6 */      imp, indx,  imp, indx,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imm, ind_65c02, abso, abso, abso,
-/* 7 */      rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx,
+/* 7 */      rel, indy, ind_zp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, ind_absx, absx, absx, absx,
 /* 8 */      rel, indx,  imm, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imm, abso, abso, abso, abso,
-/* 9 */      rel, indy,  imp, indy,  zpx,  zpx,  zpy,  zpy,  imp, absy,  imp, absy, abso, absx, absx, absy,
+/* 9 */      rel, indy, ind_zp, indy,  zpx,  zpx,  zpy,  zpy,  imp, absy,  imp, absy, abso, absx, absx, absy,
 /* A */      imm, indx,  imm, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imm, abso, abso, abso, abso,
-/* B */      rel, indy,  imp, indy,  zpx,  zpx,  zpy,  zpy,  imp, absy,  imp, absy, absx, absx, absy, absy,
+/* B */      rel, indy, ind_zp, indy,  zpx,  zpx,  zpy,  zpy,  imp, absy,  imp, absy, absx, absx, absy, absy,
 /* C */      imm, indx,  imm, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imm, abso, abso, abso, abso,
-/* D */      rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx,
+/* D */      rel, indy, ind_zp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx,
 /* E */      imm, indx,  imm, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imm, abso, abso, abso, abso,
-/* F */      rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx
+/* F */      rel, indy, ind_zp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx
 };
 
 static void (*optable_65c02[256])() = {
-/* 0 */ brk_insn_65c02, ora, nop, slo, nop, ora, asl, slo, php, ora, asl, nop, nop, ora, asl, slo,
-/* 1 */      bpl,  ora,  nop,  slo,  nop,  ora,  asl,  slo,  clc,  ora,  inc,  slo,  nop,  ora,  asl,  slo,
+/* 0 */ brk_insn_65c02, ora, nop, slo, tsb, ora, asl, slo, php, ora, asl, nop, tsb, ora, asl, slo,
+/* 1 */      bpl,  ora,  ora,  slo,  trb,  ora,  asl,  slo,  clc,  ora,  inc,  slo,  trb,  ora,  asl,  slo,
 /* 2 */      jsr,  and,  nop,  rla,  bit,  and,  rol,  rla,  plp,  and,  rol,  nop,  bit,  and,  rol,  rla,
-/* 3 */      bmi,  and,  nop,  rla,  nop,  and,  rol,  rla,  sec,  and,  dec,  rla,  nop,  and,  rol,  rla,
+/* 3 */      bmi,  and,  and,  rla,  nop,  and,  rol,  rla,  sec,  and,  dec,  rla,  nop,  and,  rol,  rla,
 /* 4 */      rti,  eor,  nop,  sre,  nop,  eor,  lsr,  sre,  pha,  eor,  lsr,  nop,  jmp,  eor,  lsr,  sre,
-/* 5 */      bvc,  eor,  nop,  sre,  nop,  eor,  lsr,  sre,  cli,  eor,  phy,  sre,  nop,  eor,  lsr,  sre,
+/* 5 */      bvc,  eor,  eor,  sre,  nop,  eor,  lsr,  sre,  cli,  eor,  phy,  sre,  nop,  eor,  lsr,  sre,
 /* 6 */      rts, adc_65c02, nop, rra, stz, adc_65c02, ror, rra, pla, adc_65c02, ror, nop, jmp, adc_65c02, ror, rra,
-/* 7 */      bvs, adc_65c02, nop, rra, stz, adc_65c02, ror, rra, sei, adc_65c02, ply, rra, nop, adc_65c02, ror, rra,
+/* 7 */      bvs, adc_65c02, adc_65c02, rra, stz, adc_65c02, ror, rra, sei, adc_65c02, ply, rra, jmp, adc_65c02, ror, rra,
 /* 8 */      bra,  sta,  nop,  sax,  sty,  sta,  stx,  sax,  dey,  nop,  txa,  nop,  sty,  sta,  stx,  sax,
-/* 9 */      bcc,  sta,  nop,  nop,  sty,  sta,  stx,  sax,  tya,  sta,  txs,  nop,  stz,  sta,  stz,  nop,
+/* 9 */      bcc,  sta,  sta,  nop,  sty,  sta,  stx,  sax,  tya,  sta,  txs,  nop,  stz,  sta,  stz,  nop,
 /* A */      ldy,  lda,  ldx,  lax,  ldy,  lda,  ldx,  lax,  tay,  lda,  tax,  nop,  ldy,  lda,  ldx,  lax,
-/* B */      bcs,  lda,  nop,  lax,  ldy,  lda,  ldx,  lax,  clv,  lda,  tsx,  lax,  ldy,  lda,  ldx,  lax,
+/* B */      bcs,  lda,  lda,  lax,  ldy,  lda,  ldx,  lax,  clv,  lda,  tsx,  lax,  ldy,  lda,  ldx,  lax,
 /* C */      cpy,  cmp,  nop,  dcp,  cpy,  cmp,  dec,  dcp,  iny,  cmp,  dex,  nop,  cpy,  cmp,  dec,  dcp,
-/* D */      bne,  cmp,  nop,  dcp,  nop,  cmp,  dec,  dcp,  cld,  cmp,  phx,  dcp,  nop,  cmp,  dec,  dcp,
+/* D */      bne,  cmp,  cmp,  dcp,  nop,  cmp,  dec,  dcp,  cld,  cmp,  phx,  dcp,  nop,  cmp,  dec,  dcp,
 /* E */      cpx, sbc_65c02, nop, isb, cpx, sbc_65c02, inc, isb, inx, sbc_65c02, nop, sbc_65c02, cpx, sbc_65c02, inc, isb,
-/* F */      beq, sbc_65c02, nop, isb, nop, sbc_65c02, inc, isb, sed, sbc_65c02, plx, isb, nop, sbc_65c02, inc, isb
+/* F */      beq, sbc_65c02, sbc_65c02, isb, nop, sbc_65c02, inc, isb, sed, sbc_65c02, plx, isb, nop, sbc_65c02, inc, isb
 };
 
 static const uint32_t ticktable_65c02[256] = {
-/* 0 */       7,    6,    2,    8,    3,    3,    5,    5,    3,    2,    2,    2,    4,    4,    6,    6,
-/* 1 */       2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7,
+/* 0 */       7,    6,    2,    8,    5,    3,    5,    5,    3,    2,    2,    2,    6,    4,    6,    6,
+/* 1 */       2,    5,    5,    8,    5,    4,    6,    6,    2,    4,    2,    7,    6,    4,    7,    7,
 /* 2 */       6,    6,    2,    8,    3,    3,    5,    5,    4,    2,    2,    2,    4,    4,    6,    6,
-/* 3 */       2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7,
+/* 3 */       2,    5,    5,    8,    4,    4,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7,
 /* 4 */       6,    6,    2,    8,    3,    3,    5,    5,    3,    2,    2,    2,    3,    4,    6,    6,
-/* 5 */       2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    3,    7,    4,    4,    7,    7,
+/* 5 */       2,    5,    5,    8,    4,    4,    6,    6,    2,    4,    3,    7,    4,    4,    7,    7,
 /* 6 */       6,    6,    2,    8,    3,    3,    5,    5,    4,    2,    2,    2,    5,    4,    6,    6,
-/* 7 */       2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    4,    7,    4,    4,    7,    7,
+/* 7 */       2,    5,    5,    8,    4,    4,    6,    6,    2,    4,    4,    7,    6,    4,    7,    7,
 /* 8 */       2,    6,    2,    6,    3,    3,    3,    3,    2,    2,    2,    2,    4,    4,    4,    4,
-/* 9 */       2,    6,    2,    6,    4,    4,    4,    4,    2,    5,    2,    5,    4,    5,    5,    5,
+/* 9 */       2,    6,    5,    6,    4,    4,    4,    4,    2,    5,    2,    5,    4,    5,    5,    5,
 /* A */       2,    6,    2,    6,    3,    3,    3,    3,    2,    2,    2,    2,    4,    4,    4,    4,
-/* B */       2,    5,    2,    5,    4,    4,    4,    4,    2,    4,    2,    4,    4,    4,    4,    4,
+/* B */       2,    5,    5,    5,    4,    4,    4,    4,    2,    4,    2,    4,    4,    4,    4,    4,
 /* C */       2,    6,    2,    8,    3,    3,    5,    5,    2,    2,    2,    2,    4,    4,    6,    6,
-/* D */       2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    3,    7,    4,    4,    7,    7,
+/* D */       2,    5,    5,    8,    4,    4,    6,    6,    2,    4,    3,    7,    4,    4,    7,    7,
 /* E */       2,    6,    2,    8,    3,    3,    5,    5,    2,    2,    2,    2,    4,    4,    6,    6,
-/* F */       2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    4,    7,    4,    4,    7,    7
+/* F */       2,    5,    5,    8,    4,    4,    6,    6,    2,    4,    4,    7,    4,    4,    7,    7
 };
 
 /* Set the active dispatch table pointers from cpu_variant. Called at
