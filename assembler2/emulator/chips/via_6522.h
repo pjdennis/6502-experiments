@@ -79,6 +79,14 @@ struct via_6522_state {
     uint8_t sr_bits_remaining;  /* shift-in-T2 byte progress */
     uint8_t cb2_in;             /* current CB2 input level */
     uint8_t prev_cb2;           /* edge detect */
+
+    /* External pin drive for PORTA input bits (bits with DDRA=0).
+     * Read back through porta_pin_value() as
+     *   (ora & ddra) | (porta_input & ~ddra).
+     * Set/cleared by external chips, e.g. led_buttons.c for the
+     * control button. PORTB inputs aren't modeled (PB0..4 are pulled
+     * down to 0 on the wendy2c). */
+    uint8_t porta_input;
 };
 
 void via_6522_init(struct chip *chip, struct via_6522_state *state);
@@ -90,6 +98,12 @@ void via_6522_init(struct chip *chip, struct via_6522_state *state);
  * triggering a spurious "new start bit" interrupt). */
 void via_6522_set_cb2(struct via_6522_state *state, struct bus *bus, uint8_t bit);
 void via_6522_set_cb2_quiet(struct via_6522_state *state, uint8_t bit);
+
+/* External pin-input drive for PORTA. `bit_mask` is the bit to drive
+ * (e.g. 0x20 for PA5); `level` is 0 (clear) or 1 (set). Bits with
+ * DDRA=1 are output-driven and the input drive has no effect at the
+ * pin until the program flips DDRA. */
+void via_6522_set_porta_input_bit(struct via_6522_state *state, uint8_t bit_mask, int level);
 
 /* Inspectors -- handy for tests and for chips that latch port pins
  * (the LCD watches PORTA + the E line on PORTB bit 5, etc.). */

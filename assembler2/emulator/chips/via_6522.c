@@ -40,9 +40,10 @@ static uint8_t portb_pin_value(const struct via_6522_state *s) {
     return v;
 }
 
-/* PORTA pin value: same model. */
+/* PORTA pin value: same model, with externally driven input bits
+ * (e.g. the control button) feeding through the DDR=0 channels. */
 static uint8_t porta_pin_value(const struct via_6522_state *s) {
-    return (uint8_t)(s->ora & s->ddra);
+    return (uint8_t)((s->ora & s->ddra) | (s->porta_input & (uint8_t)~s->ddra));
 }
 
 static bool via_6522_read(struct chip *self, struct bus *bus,
@@ -250,6 +251,11 @@ void via_6522_set_cb2(struct via_6522_state *s, struct bus *bus, uint8_t bit) {
 
 void via_6522_set_cb2_quiet(struct via_6522_state *s, uint8_t bit) {
     s->cb2_in = bit ? 1 : 0;
+}
+
+void via_6522_set_porta_input_bit(struct via_6522_state *s, uint8_t bit_mask, int level) {
+    if (level) s->porta_input |= bit_mask;
+    else       s->porta_input &= (uint8_t)~bit_mask;
 }
 
 uint8_t via_6522_get_pb7(const struct via_6522_state *s) { return s->pb7; }
