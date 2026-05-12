@@ -82,16 +82,26 @@ static int stp_pending = 0;
 void (*cpu_bus_read_tap)(uint16_t addr, uint8_t data) = NULL;
 void (*cpu_bus_write_tap)(uint16_t addr, uint8_t data) = NULL;
 
+/* Optional external memory hooks (phase 8). When set, the CPU dispatch
+ * routes every memory access through these instead of the host's
+ * read6502/write6502. The wendy2c bus model installs these. */
+uint8_t (*cpu_external_read)(uint16_t addr) = NULL;
+void    (*cpu_external_write)(uint16_t addr, uint8_t data) = NULL;
+
 static inline uint8_t cpu_read(uint16_t addr) {
-    uint8_t v = read6502(addr);
+    uint8_t v = cpu_external_read ? cpu_external_read(addr) : read6502(addr);
     if (cpu_bus_read_tap) cpu_bus_read_tap(addr, v);
     return v;
 }
 
 static inline void cpu_write(uint16_t addr, uint8_t v) {
-    write6502(addr, v);
+    if (cpu_external_write) cpu_external_write(addr, v);
+    else write6502(addr, v);
     if (cpu_bus_write_tap) cpu_bus_write_tap(addr, v);
 }
+
+int cpu_wai_pending(void) { return wai_pending; }
+int cpu_stp_pending(void) { return stp_pending; }
 
 
 //helper variables

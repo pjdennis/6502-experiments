@@ -30,6 +30,7 @@ void emu_opts_init(struct emu_opts *opts) {
     opts->server_main_dispatch = 0;
     opts->machine = MACHINE_NMOS_DEFAULT;
     opts->cpu_variant_opt = CPU_VARIANT_UNSET;
+    opts->rom_filename = NULL;
 }
 
 void emu_opts_usage(FILE *fp) {
@@ -171,6 +172,8 @@ int parse_args(int argc, char **argv, struct emu_opts *opts) {
                 return 1;
             }
             i += 2;
+        } else if (strcmp(argv[i], "--rom") == 0) {
+            if (take_str_value(argc, argv, &i, "--rom", &opts->rom_filename)) return 1;
         } else if (strcmp(argv[i], "--cpu") == 0) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "error: --cpu requires a value\n");

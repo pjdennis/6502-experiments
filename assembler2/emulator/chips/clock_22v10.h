@@ -26,4 +26,10 @@ struct clock_22v10_state {
 
 void clock_22v10_init(struct chip *chip, struct clock_22v10_state *state);
 
+/* Update only the combinational outputs (ROMCS, RAMCS, VIACS, R15..R18,
+ * WR) from the current bus inputs. Does NOT touch CKS, CK, or
+ * cpu_cycle_due. Used by the wendy2c CPU-read/write hook to refresh
+ * chip-select lines for the address the CPU is about to drive. */
+void clock_22v10_refresh_combinational(struct bus *bus);
+
 #endif

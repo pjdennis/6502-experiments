@@ -38,4 +38,16 @@ extern void write6502(uint16_t address, uint8_t value);
 extern void (*cpu_bus_read_tap)(uint16_t addr, uint8_t data);
 extern void (*cpu_bus_write_tap)(uint16_t addr, uint8_t data);
 
+// Optional external memory hooks. When set, the CPU dispatch routes
+// every memory access through these instead of the host's read6502 /
+// write6502 (phase 8: the wendy2c bus model installs these so the CPU
+// reads/writes go to the ROM/RAM/VIA chips on the bus).
+extern uint8_t (*cpu_external_read)(uint16_t addr);
+extern void    (*cpu_external_write)(uint16_t addr, uint8_t data);
+
+// 65C02 WAI / STP pending state (read-only inspection from outside the
+// core; the wendy2c run loop polls stp_pending to know when to exit).
+extern int cpu_wai_pending(void);
+extern int cpu_stp_pending(void);
+
 #endif

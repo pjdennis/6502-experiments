@@ -34,6 +34,7 @@ struct emu_opts {
     int server_main_dispatch;           /* 1 if argv[1] == "--server" */
     int machine;                        /* --machine; MACHINE_NMOS_DEFAULT or MACHINE_WENDY2C */
     int cpu_variant_opt;                /* --cpu; CPU_NMOS or CPU_65C02 (from cpu_core.h) */
+    const char *rom_filename;           /* --rom PATH (wendy2c only); NULL falls back to code_filename */
 };
 
 /* Initialize an emu_opts with the documented defaults. */

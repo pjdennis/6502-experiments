@@ -1,36 +1,44 @@
-/* Phase 4b smoke test: emu_run_wendy2c returns 0 when invoked, and
- * the default emu_run path is reachable independently. Doesn't run
- * actual emulator binaries (those need globals from emulator.c); just
- * verifies the wendy2c shell links and exits cleanly. */
+/* Phase 4b smoke test: parse_args dispatches --machine wendy2c to
+ * MACHINE_WENDY2C and defaults --cpu to 65c02. The end-to-end
+ * "actually run a ROM through the bus" smoke test lives in
+ * test_chip_cpu_65c02.c (added in phase 8). */
 
 #include <stdint.h>
 #include <stdio.h>
 
 #include "greatest.h"
 #include "../cli.h"
-#include "../emu_wendy2c.h"
 #include "../cpu_core.h"
 
-/* Provide stubs for cpu_core.h externs that the wendy2c shell pulls in
- * transitively. */
-uint8_t read6502(uint16_t address) { (void)address; return 0; }
-void    write6502(uint16_t address, uint8_t value) { (void)address; (void)value; }
+static int parse(char **argv, struct emu_opts *opts) {
+    int argc = 0;
+    while (argv[argc] != NULL) argc++;
+    return parse_args(argc, argv, opts);
+}
 
-TEST wendy2c_shell_returns_zero(void) {
+TEST machine_wendy2c_default_cpu_65c02(void) {
+    char *argv[] = {"emulator", "rom.bin", "--machine", "wendy2c", NULL};
     struct emu_opts opts;
-    emu_opts_init(&opts);
-    opts.machine = MACHINE_WENDY2C;
-    opts.cpu_variant_opt = CPU_65C02;
-    int rc = emu_run_wendy2c(&opts);
+    int rc = parse(argv, &opts);
     ASSERT_EQ_FMT(0, rc, "%d");
-    /* The shell sets cpu_variant from opts. */
-    ASSERT_EQ_FMT(CPU_65C02, cpu_variant, "%d");
-    cpu_variant = CPU_NMOS;
+    ASSERT_EQ_FMT(MACHINE_WENDY2C, opts.machine, "%d");
+    ASSERT_EQ_FMT(CPU_65C02, opts.cpu_variant_opt, "%d");
+    PASS();
+}
+
+TEST default_machine_keeps_nmos(void) {
+    char *argv[] = {"emulator", "rom.bin", NULL};
+    struct emu_opts opts;
+    int rc = parse(argv, &opts);
+    ASSERT_EQ_FMT(0, rc, "%d");
+    ASSERT_EQ_FMT(MACHINE_NMOS_DEFAULT, opts.machine, "%d");
+    ASSERT_EQ_FMT(CPU_NMOS, opts.cpu_variant_opt, "%d");
     PASS();
 }
 
 SUITE(machine_dispatch_suite) {
-    RUN_TEST(wendy2c_shell_returns_zero);
+    RUN_TEST(machine_wendy2c_default_cpu_65c02);
+    RUN_TEST(default_machine_keeps_nmos);
 }
 
 GREATEST_MAIN_DEFS();

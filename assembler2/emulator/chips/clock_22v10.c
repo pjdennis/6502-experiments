@@ -84,9 +84,7 @@ static uint8_t compute_r_bits(uint8_t a15, uint8_t a14, uint8_t a13, uint8_t a12
     return (uint8_t)((r18 << 3) | (r17 << 2) | (r16 << 1) | r15);
 }
 
-static void clock_22v10_tick(struct chip *self, struct bus *bus) {
-    (void)self;
-
+void clock_22v10_refresh_combinational(struct bus *bus) {
     uint16_t a = bus->addr;
     uint8_t a15 = (a >> 15) & 1;
     uint8_t a14 = (a >> 14) & 1;
@@ -100,10 +98,18 @@ static void clock_22v10_tick(struct chip *self, struct bus *bus) {
     uint8_t c1 = (cb >> 1) & 1;
     uint8_t c0 = cb & 1;
 
-    uint8_t romcs = compute_romcs(a15, a14, a13, a12, a11, c4, c3, c2, c1, c0);
-    uint8_t ramcs = compute_ramcs(a15, a14, a13, a12, a11, c4, c3, c2, c1, c0);
-    uint8_t viacs = compute_viacs(a15, a14, a13, a12, a11);
-    uint8_t r_bits = compute_r_bits(a15, a14, a13, a12, a11, c4, c3, c2, c1, c0);
+    bus->romcs  = compute_romcs(a15, a14, a13, a12, a11, c4, c3, c2, c1, c0);
+    bus->ramcs  = compute_ramcs(a15, a14, a13, a12, a11, c4, c3, c2, c1, c0);
+    bus->viacs  = compute_viacs(a15, a14, a13, a12, a11);
+    bus->r_bits = compute_r_bits(a15, a14, a13, a12, a11, c4, c3, c2, c1, c0);
+    bus->wr     = (bus->rwb ? 0 : 1) & bus->ck;
+}
+
+static void clock_22v10_tick(struct chip *self, struct bus *bus) {
+    (void)self;
+
+    /* Refresh combinational outputs from the current address/RWB/bank. */
+    clock_22v10_refresh_combinational(bus);
 
     /* Registered: cks_next = NOT cks_prev. */
     uint8_t prev_cks = bus->cks;
@@ -116,21 +122,14 @@ static void clock_22v10_tick(struct chip *self, struct bus *bus) {
     uint8_t new_ck = 0;
     if (prev_ck && !prev_cks) new_ck = 1;
     if (!prev_ck && prev_cks) new_ck = 1;
-    if (!romcs && !prev_ck) new_ck = 1;
+    if (!bus->romcs && !prev_ck) new_ck = 1;
 
-    uint8_t wr = (bus->rwb ? 0 : 1) & new_ck;
-
-    if (prev_ck && !new_ck) {
-        bus->cpu_cycle_due = 1;
-    }
+    if (prev_ck && !new_ck) bus->cpu_cycle_due = 1;
 
     bus->cks = new_cks;
-    bus->ck = new_ck;
-    bus->romcs = romcs;
-    bus->ramcs = ramcs;
-    bus->viacs = viacs;
-    bus->wr = wr;
-    bus->r_bits = r_bits;
+    bus->ck  = new_ck;
+    /* WR depends on new CK; recompute. */
+    bus->wr  = (bus->rwb ? 0 : 1) & new_ck;
 }
 
 static void clock_22v10_reset(struct chip *self) {
