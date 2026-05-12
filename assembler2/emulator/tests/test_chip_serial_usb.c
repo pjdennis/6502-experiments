@@ -26,9 +26,12 @@ static void setup(void) {
     bus_add_chip(&bus_, &sch);
     bus_.viacs = 1;
 
-    /* Wendy2c init: PCR = CB2 IND NEG E, ACR = SR IN T2, T2 latch = 1. */
+    /* Wendy2c init: PCR = CB2 IND NEG E, ACR = SR IN T2, IER enables
+     * CB2+SR (so the SERIAL_USB chip sees the on-target as ready),
+     * T2 latch = 1. */
     bus_write(&bus_, 0xF00C, VIA_PCR_CB2_IND_NEG_E);  /* PCR */
     bus_write(&bus_, 0xF00B, VIA_ACR_SR_IN_T2);        /* ACR */
+    bus_write(&bus_, 0xF00E, 0x80 | VIA_INT_CB2 | VIA_INT_SR);  /* IER */
     bus_write(&bus_, 0xF008, 0x01);                    /* T2CL latch */
     bus_write(&bus_, 0xF009, 0x00);                    /* T2CH arms T2 with 0x0001 */
 }
@@ -39,6 +42,7 @@ static void shift_one_byte(void) {
     /* Wait for SERIAL_USB to drive CB2 low (start). */
     int safety = 100;
     while (safety-- > 0) {
+        bus_.cpu_cycle_due = 1;
         bus_step(&bus_);
         /* Once VIA's IFR has CB2 set, the wendy2c ISR would re-enable
          * SR_IN_T2 and read SR (we already set ACR=SR_IN_T2 above so
@@ -56,6 +60,7 @@ static void shift_one_byte(void) {
     /* Now run enough ticks to shift 8 bits. T2=1, each shift takes ~2
      * bus_steps; budget plenty of margin. */
     for (int i = 0; i < 200; i++) {
+        bus_.cpu_cycle_due = 1;
         bus_step(&bus_);
         uint8_t ifr = 0;
         bus_read(&bus_, 0xF00D, &ifr);
@@ -90,7 +95,7 @@ TEST asymmetric_byte_round_trip(void) {
 TEST queue_empty_serial_chip_does_nothing(void) {
     setup();
     /* Don't queue any byte. Tick a bit, expect no CB2 IFR fired. */
-    for (int i = 0; i < 20; i++) bus_step(&bus_);
+    for (int i = 0; i < 20; i++) { bus_.cpu_cycle_due = 1; bus_step(&bus_); }
     uint8_t ifr = 0;
     bus_read(&bus_, 0xF00D, &ifr);
     ASSERT_EQ_FMT((uint8_t)0, (uint8_t)(ifr & VIA_INT_CB2), "%02X");

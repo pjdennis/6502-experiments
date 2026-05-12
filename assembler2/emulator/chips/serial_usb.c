@@ -30,6 +30,17 @@ static void serial_usb_tick(struct chip *self, struct bus *bus) {
     switch (s->state) {
         case SERIAL_IDLE: {
             if (queue_empty(s)) return;
+            /* Wait until the on-target boot ROM has finished its init
+             * before sending the first byte: IER must have the CB2
+             * interrupt enabled (set by the wendy2c init right before
+             * cli) and any previously-pending IFR.CB2 must be cleared
+             * (= the ISR processed our previous byte). */
+            uint8_t ier = via_6522_ier(s->via);
+            if (!(ier & VIA_INT_CB2)) return;
+            uint8_t ifr = via_6522_ifr(s->via);
+            if (ifr & VIA_INT_CB2) return;
+            if (ifr & VIA_INT_SR) return;
+
             s->current_byte = queue_pop(s);
             s->bit_index = 0;
             /* Falling edge fires IFR.CB2 + arms sr_bits_remaining = 8
@@ -50,7 +61,11 @@ static void serial_usb_tick(struct chip *self, struct bus *bus) {
             break;
         case SERIAL_SHIFTING: {
             uint8_t srr = via_6522_sr_bits_remaining(s->via);
-            if (srr < s->prev_sr_remaining) {
+            if (srr > s->prev_sr_remaining) {
+                /* The on-target ISR just armed sr_bits_remaining via
+                 * SR-read in SR_IN_T2 mode (8). Resync our tracker. */
+                s->prev_sr_remaining = srr;
+            } else if (srr < s->prev_sr_remaining) {
                 /* The VIA just shifted the previous bit. Advance. */
                 s->bit_index++;
                 s->prev_sr_remaining = srr;

@@ -79,7 +79,7 @@ TEST t1_timed_one_shot_fires_irq(void) {
     w(VIA_REG_T1CH, 0x00);
     ASSERT_EQ_FMT((uint8_t)0, bus_.irq, "%u");
     /* Tick down 6 times; T1 fires when it underflows from 0. */
-    for (int i = 0; i < 6; i++) bus_step(&bus_);
+    for (int i = 0; i < 6; i++) { bus_.cpu_cycle_due = 1; bus_step(&bus_); }
     ASSERT_EQ_FMT((uint8_t)1, bus_.irq, "%u");
     /* IFR shows T1 set + bit 7 (any-IRQ). */
     uint8_t ifr = r(VIA_REG_IFR);
@@ -89,7 +89,7 @@ TEST t1_timed_one_shot_fires_irq(void) {
     (void)r(VIA_REG_T1CL);
     ASSERT_EQ_FMT((uint8_t)0, bus_.irq, "%u");
     /* T1 was one-shot, doesn't auto-rearm. Tick more, no new IRQ. */
-    for (int i = 0; i < 100; i++) bus_step(&bus_);
+    for (int i = 0; i < 100; i++) { bus_.cpu_cycle_due = 1; bus_step(&bus_); }
     ASSERT_EQ_FMT((uint8_t)0, bus_.irq, "%u");
     PASS();
 }
@@ -105,10 +105,10 @@ TEST t1_continuous_toggles_pb7(void) {
     /* PB7 starts low. */
     ASSERT_EQ_FMT((uint8_t)0, via_6522_get_pb7(&vs), "%u");
     /* Tick 3 -> first underflow -> PB7 toggles to 1. */
-    for (int i = 0; i < 3; i++) bus_step(&bus_);
+    for (int i = 0; i < 3; i++) { bus_.cpu_cycle_due = 1; bus_step(&bus_); }
     ASSERT_EQ_FMT((uint8_t)1, via_6522_get_pb7(&vs), "%u");
     /* Another 3 ticks -> toggles back to 0. */
-    for (int i = 0; i < 3; i++) bus_step(&bus_);
+    for (int i = 0; i < 3; i++) { bus_.cpu_cycle_due = 1; bus_step(&bus_); }
     ASSERT_EQ_FMT((uint8_t)0, via_6522_get_pb7(&vs), "%u");
     PASS();
 }
@@ -120,7 +120,7 @@ TEST ifr_write_clears_bits(void) {
     w(VIA_REG_T1CL, 1); w(VIA_REG_T1CH, 0);
     w(VIA_REG_T2CL, 1); w(VIA_REG_T2CH, 0);
     /* Tick enough to fire both. */
-    for (int i = 0; i < 4; i++) bus_step(&bus_);
+    for (int i = 0; i < 4; i++) { bus_.cpu_cycle_due = 1; bus_step(&bus_); }
     uint8_t ifr = r(VIA_REG_IFR);
     ASSERT(ifr & VIA_INT_T1);
     ASSERT(ifr & VIA_INT_T2);
@@ -154,8 +154,8 @@ TEST cb2_neg_edge_then_sr_in_t2_byte(void) {
     for (int i = 0; i < 8; i++) {
         via_6522_set_cb2(&vs, &bus_, bits[i]);
         /* Tick T2 down to 0; underflow on next tick. */
-        bus_step(&bus_);  /* counter 1 -> 0 */
-        bus_step(&bus_);  /* underflow, shift bit i */
+        bus_.cpu_cycle_due = 1; bus_step(&bus_);  /* counter 1 -> 0 */
+        bus_.cpu_cycle_due = 1; bus_step(&bus_);  /* underflow, shift bit i */
     }
     /* SR should now hold $AA. */
     uint8_t sr = r(VIA_REG_SR);

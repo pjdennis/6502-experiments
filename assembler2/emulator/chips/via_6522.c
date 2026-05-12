@@ -164,10 +164,13 @@ static bool via_6522_write(struct chip *self, struct bus *bus,
 static void via_6522_tick(struct chip *self, struct bus *bus) {
     struct via_6522_state *s = (struct via_6522_state *)self->state;
 
-    /* T1 countdown -- counts on every phi2; here we tick once per
-     * bus_step. (Phase 8 strategy 1 doesn't drive a per-cycle clock,
-     * so wendy2c programs that tune T1 to a specific bit-time are
-     * approximate; functionally the IFR/PB7 signals fire correctly.) */
+    /* T1/T2 count on phi2 cycles, not OSC ticks. The clock_22v10
+     * sets bus->cpu_cycle_due on each CK falling edge (= phi2 edge);
+     * we gate the timer decrements on that signal so the on-target
+     * bit-timing matches the real wendy2c boot ROM's T2 expectations.
+     * (We do NOT clear cpu_cycle_due here -- the CPU chip ticks
+     * after us and consumes it.) */
+    if (!bus->cpu_cycle_due) return;
     if (s->t1_running) {
         if (s->t1c == 0) {
             via_set_ifr(s, bus, VIA_INT_T1);
@@ -182,13 +185,14 @@ static void via_6522_tick(struct chip *self, struct bus *bus) {
         }
     }
 
-    /* T2 -- always one-shot for our purposes (we don't model the
-     * count-down-on-PB6 mode). */
+    /* T2: one-shot timer that keeps counting after underflow (per
+     * 6522 datasheet -- "after the timer has reached zero, it will
+     * continue to decrement"). In SR-IN-T2 mode, each underflow also
+     * shifts cb2_in into SR (when sr_bits_remaining > 0) and reloads
+     * T2 from the low-byte latch for the next bit-time. */
     if (s->t2_running) {
         if (s->t2c == 0) {
             via_set_ifr(s, bus, VIA_INT_T2);
-            /* In SR-in-T2 mode, T2 underflow clocks one bit into SR
-             * from the CB2 line. */
             if ((s->acr & VIA_ACR_SR_MODE) == VIA_ACR_SR_IN_T2 &&
                 s->sr_bits_remaining > 0) {
                 s->sr = (uint8_t)((s->sr << 1) | (s->cb2_in & 1));
@@ -196,10 +200,9 @@ static void via_6522_tick(struct chip *self, struct bus *bus) {
                 if (s->sr_bits_remaining == 0) {
                     via_set_ifr(s, bus, VIA_INT_SR);
                 }
-                /* Reload T2 from latch for next bit. */
-                s->t2c = s->t2l_lo;
+                s->t2c = s->t2l_lo;  /* reload for next bit */
             } else {
-                s->t2_running = 0;
+                s->t2c = 0xFFFF;  /* free-run wrap */
             }
         } else {
             s->t2c--;
@@ -254,3 +257,5 @@ uint16_t via_6522_get_t1c(const struct via_6522_state *s) { return s->t1c; }
 uint8_t via_6522_porta_pins(const struct via_6522_state *s) { return porta_pin_value(s); }
 uint8_t via_6522_portb_pins(const struct via_6522_state *s) { return portb_pin_value(s); }
 uint8_t via_6522_sr_bits_remaining(const struct via_6522_state *s) { return s->sr_bits_remaining; }
+uint8_t via_6522_ifr(const struct via_6522_state *s) { return s->ifr; }
+uint8_t via_6522_ier(const struct via_6522_state *s) { return s->ier; }

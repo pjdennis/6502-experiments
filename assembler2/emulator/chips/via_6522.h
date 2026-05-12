@@ -103,4 +103,10 @@ uint8_t via_6522_portb_pins(const struct via_6522_state *state);
  * regardless of the timing model. */
 uint8_t via_6522_sr_bits_remaining(const struct via_6522_state *state);
 
+/* IFR / IER inspectors -- used by the SERIAL_USB chip to know when the
+ * on-target boot ROM has finished its init (= IER has CB2 enabled) and
+ * to back-pressure between bytes (= IFR.CB2/SR cleared by the ISR). */
+uint8_t via_6522_ifr(const struct via_6522_state *state);
+uint8_t via_6522_ier(const struct via_6522_state *state);
+
 #endif

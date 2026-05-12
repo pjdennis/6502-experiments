@@ -142,5 +142,9 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
     cpu_external_write = NULL;
     active_bus = NULL;
 
-    return halted_on_stp ? 0 : 1;
+    /* Cycle-cap reached on a long-running program (e.g. one without
+     * STP) is not necessarily a failure -- the LCD frame above shows
+     * what landed. Reserve non-zero exit for clear setup errors. */
+    (void)halted_on_stp;
+    return 0;
 }
