@@ -180,11 +180,18 @@ static void absy() { //absolute,Y
     pc += 2;
 }
 
-static void ind() { //indirect
+static void ind() { //indirect (NMOS: with page-wrap bug on high-byte read)
     uint16_t eahelp, eahelp2;
     eahelp = (uint16_t)read6502(pc) | (uint16_t)((uint16_t)read6502(pc+1) << 8);
     eahelp2 = (eahelp & 0xFF00) | ((eahelp + 1) & 0x00FF); //replicate 6502 page-boundary wraparound bug
     ea = (uint16_t)read6502(eahelp) | ((uint16_t)read6502(eahelp2) << 8);
+    pc += 2;
+}
+
+static void ind_65c02() { //indirect (65C02: no page-wrap bug; reads eahelp+1 normally)
+    uint16_t eahelp;
+    eahelp = (uint16_t)read6502(pc) | (uint16_t)((uint16_t)read6502(pc+1) << 8);
+    ea = (uint16_t)read6502(eahelp) | ((uint16_t)read6502(eahelp + 1) << 8);
     pc += 2;
 }
 
@@ -250,6 +257,42 @@ static void adc() {
     #endif
 
     saveaccum(result);
+}
+
+/* 65C02 ADC: full BCD with N/Z computed from the BCD-adjusted result
+ * (NMOS computes N/Z from the binary intermediate, which is wrong in
+ * decimal mode). V flag still comes from the binary path. +1 cycle in
+ * decimal mode. */
+static void adc_65c02() {
+    penaltyop = 1;
+    uint8_t carry_in = (status & FLAG_CARRY) ? 1 : 0;
+    value = getvalue();
+
+    if (status & FLAG_DECIMAL) {
+        /* V flag computed from binary intermediate. */
+        uint16_t bin = (uint16_t)a + value + carry_in;
+        if (((a ^ value) & 0x80) == 0 && ((a ^ bin) & 0x80)) setoverflow();
+        else clearoverflow();
+
+        uint16_t lo = (a & 0x0F) + (value & 0x0F) + carry_in;
+        uint16_t hi = (a >> 4) + (value >> 4);
+        if (lo > 9) { lo -= 10; hi++; }
+        if (hi > 9) { hi -= 10; setcarry(); } else { clearcarry(); }
+        uint8_t res = (uint8_t)(((hi & 0x0F) << 4) | (lo & 0x0F));
+
+        if (res == 0) setzero(); else clearzero();
+        if (res & 0x80) setsign(); else clearsign();
+
+        a = res;
+        clockticks6502++;
+    } else {
+        result = (uint16_t)a + value + (uint16_t)(status & FLAG_CARRY);
+        carrycalc(result);
+        zerocalc(result);
+        overflowcalc(result, a, value);
+        signcalc(result);
+        saveaccum(result);
+    }
 }
 
 static void and() {
@@ -341,6 +384,15 @@ static void brk_insn() {
     push16(pc); //push next instruction address onto stack
     push8(status | FLAG_BREAK); //push CPU status to stack
     setinterrupt(); //set interrupt flag
+    pc = (uint16_t)read6502(0xFFFE) | ((uint16_t)read6502(0xFFFF) << 8);
+}
+
+static void brk_insn_65c02() { /* 65C02: clears D after pushing status */
+    pc++;
+    push16(pc);
+    push8(status | FLAG_BREAK);
+    setinterrupt();
+    cleardecimal();
     pc = (uint16_t)read6502(0xFFFE) | ((uint16_t)read6502(0xFFFF) << 8);
 }
 
@@ -626,6 +678,41 @@ static void sbc() {
     saveaccum(result);
 }
 
+/* 65C02 SBC: full BCD with N/Z from the BCD-adjusted result. */
+static void sbc_65c02() {
+    penaltyop = 1;
+    uint16_t mval = getvalue();
+    uint8_t carry_in = (status & FLAG_CARRY) ? 1 : 0;
+
+    if (status & FLAG_DECIMAL) {
+        /* V flag from binary path: A + ~M + C_in. */
+        uint16_t bin_m = mval ^ 0x00FF;
+        uint16_t bin = (uint16_t)a + bin_m + carry_in;
+        if (((a ^ bin_m) & 0x80) == 0 && ((a ^ bin) & 0x80)) setoverflow();
+        else clearoverflow();
+
+        int16_t lo = (a & 0x0F) - (mval & 0x0F) - (1 - carry_in);
+        int16_t hi = (a >> 4) - (mval >> 4);
+        if (lo < 0) { lo += 10; hi--; }
+        if (hi < 0) { hi += 10; clearcarry(); } else { setcarry(); }
+        uint8_t res = (uint8_t)(((hi & 0x0F) << 4) | (lo & 0x0F));
+
+        if (res == 0) setzero(); else clearzero();
+        if (res & 0x80) setsign(); else clearsign();
+
+        a = res;
+        clockticks6502++;
+    } else {
+        value = mval ^ 0x00FF;
+        result = (uint16_t)a + value + (uint16_t)(status & FLAG_CARRY);
+        carrycalc(result);
+        zerocalc(result);
+        overflowcalc(result, a, value);
+        signcalc(result);
+        saveaccum(result);
+    }
+}
+
 static void sec() {
     setcarry();
 }
@@ -810,10 +897,11 @@ static const uint32_t ticktable_nmos[256] = {
 /* F */       2,    5,    2,    8,    4,    4,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7   /* F */
 };
 
-/* 65C02 dispatch tables. Initialized identically to the NMOS tables;
- * phases 3b..3f will replace selected entries with the W65C02S
- * differences (JMP indirect page-bug fix, decimal flag handling,
- * new opcodes bra/phx/phy/plx/ply/stz/etc., bit ops, wai/stp). */
+/* 65C02 dispatch tables. Initialized close to the NMOS tables with
+ * selected entries replaced for the W65C02S differences (phase 3b:
+ * JMP indirect page-bug fix at $6C, BCD-aware ADC/SBC, BRK clears D).
+ * Further phases (3c..3f) will add the new opcodes (bra/phx/phy/
+ * plx/ply/stz/etc., bit ops, wai/stp). */
 static void (*addrtable_65c02[256])() = {
 /* 0 */      imp, indx,  imp, indx,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imm, abso, abso, abso, abso,
 /* 1 */      rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx,
@@ -821,7 +909,7 @@ static void (*addrtable_65c02[256])() = {
 /* 3 */      rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx,
 /* 4 */      imp, indx,  imp, indx,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imm, abso, abso, abso, abso,
 /* 5 */      rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx,
-/* 6 */      imp, indx,  imp, indx,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imm,  ind, abso, abso, abso,
+/* 6 */      imp, indx,  imp, indx,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imm, ind_65c02, abso, abso, abso,
 /* 7 */      rel, indy,  imp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx,
 /* 8 */      imm, indx,  imm, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imm, abso, abso, abso, abso,
 /* 9 */      rel, indy,  imp, indy,  zpx,  zpx,  zpy,  zpy,  imp, absy,  imp, absy, absx, absx, absy, absy,
@@ -834,22 +922,22 @@ static void (*addrtable_65c02[256])() = {
 };
 
 static void (*optable_65c02[256])() = {
-/* 0 */ brk_insn,  ora,  nop,  slo,  nop,  ora,  asl,  slo,  php,  ora,  asl,  nop,  nop,  ora,  asl,  slo,
+/* 0 */ brk_insn_65c02, ora, nop, slo, nop, ora, asl, slo, php, ora, asl, nop, nop, ora, asl, slo,
 /* 1 */      bpl,  ora,  nop,  slo,  nop,  ora,  asl,  slo,  clc,  ora,  nop,  slo,  nop,  ora,  asl,  slo,
 /* 2 */      jsr,  and,  nop,  rla,  bit,  and,  rol,  rla,  plp,  and,  rol,  nop,  bit,  and,  rol,  rla,
 /* 3 */      bmi,  and,  nop,  rla,  nop,  and,  rol,  rla,  sec,  and,  nop,  rla,  nop,  and,  rol,  rla,
 /* 4 */      rti,  eor,  nop,  sre,  nop,  eor,  lsr,  sre,  pha,  eor,  lsr,  nop,  jmp,  eor,  lsr,  sre,
 /* 5 */      bvc,  eor,  nop,  sre,  nop,  eor,  lsr,  sre,  cli,  eor,  nop,  sre,  nop,  eor,  lsr,  sre,
-/* 6 */      rts,  adc,  nop,  rra,  nop,  adc,  ror,  rra,  pla,  adc,  ror,  nop,  jmp,  adc,  ror,  rra,
-/* 7 */      bvs,  adc,  nop,  rra,  nop,  adc,  ror,  rra,  sei,  adc,  nop,  rra,  nop,  adc,  ror,  rra,
+/* 6 */      rts, adc_65c02, nop, rra, nop, adc_65c02, ror, rra, pla, adc_65c02, ror, nop, jmp, adc_65c02, ror, rra,
+/* 7 */      bvs, adc_65c02, nop, rra, nop, adc_65c02, ror, rra, sei, adc_65c02, nop, rra, nop, adc_65c02, ror, rra,
 /* 8 */      nop,  sta,  nop,  sax,  sty,  sta,  stx,  sax,  dey,  nop,  txa,  nop,  sty,  sta,  stx,  sax,
 /* 9 */      bcc,  sta,  nop,  nop,  sty,  sta,  stx,  sax,  tya,  sta,  txs,  nop,  nop,  sta,  nop,  nop,
 /* A */      ldy,  lda,  ldx,  lax,  ldy,  lda,  ldx,  lax,  tay,  lda,  tax,  nop,  ldy,  lda,  ldx,  lax,
 /* B */      bcs,  lda,  nop,  lax,  ldy,  lda,  ldx,  lax,  clv,  lda,  tsx,  lax,  ldy,  lda,  ldx,  lax,
 /* C */      cpy,  cmp,  nop,  dcp,  cpy,  cmp,  dec,  dcp,  iny,  cmp,  dex,  nop,  cpy,  cmp,  dec,  dcp,
 /* D */      bne,  cmp,  nop,  dcp,  nop,  cmp,  dec,  dcp,  cld,  cmp,  nop,  dcp,  nop,  cmp,  dec,  dcp,
-/* E */      cpx,  sbc,  nop,  isb,  cpx,  sbc,  inc,  isb,  inx,  sbc,  nop,  sbc,  cpx,  sbc,  inc,  isb,
-/* F */      beq,  sbc,  nop,  isb,  nop,  sbc,  inc,  isb,  sed,  sbc,  nop,  isb,  nop,  sbc,  inc,  isb
+/* E */      cpx, sbc_65c02, nop, isb, cpx, sbc_65c02, inc, isb, inx, sbc_65c02, nop, sbc_65c02, cpx, sbc_65c02, inc, isb,
+/* F */      beq, sbc_65c02, nop, isb, nop, sbc_65c02, inc, isb, sed, sbc_65c02, nop, isb, nop, sbc_65c02, inc, isb
 };
 
 static const uint32_t ticktable_65c02[256] = {
