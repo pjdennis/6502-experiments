@@ -736,6 +736,51 @@ static void tsb() {
     putvalue(value | a);
 }
 
+/* RMB n,zp / SMB n,zp: bit-clear/bit-set on a zero-page byte. Bit
+ * number (0..7) is encoded in opcode bits 4-6. RMB = $X7 with X in
+ * 0..7; SMB = $X7 with X in 8..F. addrtable[opcode] is zp so ea = the
+ * zp address. 5 cycles. */
+static void rmb() {
+    uint8_t bit = (opcode >> 4) & 7;
+    uint8_t v = read6502(ea);
+    v &= (uint8_t)~(1u << bit);
+    write6502(ea, v);
+}
+
+static void smb() {
+    uint8_t bit = (opcode >> 4) & 7;
+    uint8_t v = read6502(ea);
+    v |= (uint8_t)(1u << bit);
+    write6502(ea, v);
+}
+
+/* BBR n,zp,rel / BBS n,zp,rel: 3-byte branch-on-bit. addrtable is zp
+ * so ea = zp address; we read the rel byte ourselves. 5 cycle base
+ * + branch-taken penalty handled inline. */
+static void bbr() {
+    uint8_t r = read6502(pc++);
+    uint8_t bit = (opcode >> 4) & 7;
+    uint8_t v = read6502(ea);
+    if ((v & (uint8_t)(1u << bit)) == 0) {
+        oldpc = pc;
+        pc += (int8_t)r;
+        if ((oldpc & 0xFF00) != (pc & 0xFF00)) clockticks6502 += 2;
+        else clockticks6502++;
+    }
+}
+
+static void bbs() {
+    uint8_t r = read6502(pc++);
+    uint8_t bit = (opcode >> 4) & 7;
+    uint8_t v = read6502(ea);
+    if ((v & (uint8_t)(1u << bit)) != 0) {
+        oldpc = pc;
+        pc += (int8_t)r;
+        if ((oldpc & 0xFF00) != (pc & 0xFF00)) clockticks6502 += 2;
+        else clockticks6502++;
+    }
+}
+
 /* 65C02 INC A / DEC A: re-use the existing inc / dec handlers with the
  * acc addressing mode (addrtable_65c02[$1A] = acc / [$3A] = acc).
  * No separate handler needed -- getvalue/putvalue branch on
@@ -968,60 +1013,60 @@ static const uint32_t ticktable_nmos[256] = {
  * Further phases (3c..3f) will add the new opcodes (bra/phx/phy/
  * plx/ply/stz/etc., bit ops, wai/stp). */
 static void (*addrtable_65c02[256])() = {
-/* 0 */      imp, indx,  imp, indx,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imm, abso, abso, abso, abso,
-/* 1 */      rel, indy, ind_zp, indy,  zp,  zpx,  zpx,  zpx,  imp, absy,  acc, absy, abso, absx, absx, absx,
-/* 2 */     abso, indx,  imp, indx,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imm, abso, abso, abso, abso,
-/* 3 */      rel, indy, ind_zp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  acc, absy, absx, absx, absx, absx,
-/* 4 */      imp, indx,  imp, indx,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imm, abso, abso, abso, abso,
-/* 5 */      rel, indy, ind_zp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx,
-/* 6 */      imp, indx,  imp, indx,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imm, ind_65c02, abso, abso, abso,
-/* 7 */      rel, indy, ind_zp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, ind_absx, absx, absx, absx,
-/* 8 */      rel, indx,  imm, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imm, abso, abso, abso, abso,
-/* 9 */      rel, indy, ind_zp, indy,  zpx,  zpx,  zpy,  zpy,  imp, absy,  imp, absy, abso, absx, absx, absy,
-/* A */      imm, indx,  imm, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imm, abso, abso, abso, abso,
-/* B */      rel, indy, ind_zp, indy,  zpx,  zpx,  zpy,  zpy,  imp, absy,  imp, absy, absx, absx, absy, absy,
-/* C */      imm, indx,  imm, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imm, abso, abso, abso, abso,
-/* D */      rel, indy, ind_zp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx,
-/* E */      imm, indx,  imm, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imm, abso, abso, abso, abso,
-/* F */      rel, indy, ind_zp, indy,  zpx,  zpx,  zpx,  zpx,  imp, absy,  imp, absy, absx, absx, absx, absx
+/* 0 */      imp, indx,  imp, indx,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imm, abso, abso, abso,   zp,
+/* 1 */      rel, indy, ind_zp, indy,  zp,  zpx,  zpx,   zp,  imp, absy,  acc, absy, abso, absx, absx,   zp,
+/* 2 */     abso, indx,  imp, indx,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imm, abso, abso, abso,   zp,
+/* 3 */      rel, indy, ind_zp, indy,  zpx,  zpx,  zpx,   zp,  imp, absy,  acc, absy, absx, absx, absx,   zp,
+/* 4 */      imp, indx,  imp, indx,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imm, abso, abso, abso,   zp,
+/* 5 */      rel, indy, ind_zp, indy,  zpx,  zpx,  zpx,   zp,  imp, absy,  imp, absy, absx, absx, absx,   zp,
+/* 6 */      imp, indx,  imp, indx,   zp,   zp,   zp,   zp,  imp,  imm,  acc,  imm, ind_65c02, abso, abso, zp,
+/* 7 */      rel, indy, ind_zp, indy,  zpx,  zpx,  zpx,   zp,  imp, absy,  imp, absy, ind_absx, absx, absx, zp,
+/* 8 */      rel, indx,  imm, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imm, abso, abso, abso,   zp,
+/* 9 */      rel, indy, ind_zp, indy,  zpx,  zpx,  zpy,   zp,  imp, absy,  imp, absy, abso, absx, absx,   zp,
+/* A */      imm, indx,  imm, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imm, abso, abso, abso,   zp,
+/* B */      rel, indy, ind_zp, indy,  zpx,  zpx,  zpy,   zp,  imp, absy,  imp, absy, absx, absx, absy,   zp,
+/* C */      imm, indx,  imm, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imm, abso, abso, abso,   zp,
+/* D */      rel, indy, ind_zp, indy,  zpx,  zpx,  zpx,   zp,  imp, absy,  imp, absy, absx, absx, absx,   zp,
+/* E */      imm, indx,  imm, indx,   zp,   zp,   zp,   zp,  imp,  imm,  imp,  imm, abso, abso, abso,   zp,
+/* F */      rel, indy, ind_zp, indy,  zpx,  zpx,  zpx,   zp,  imp, absy,  imp, absy, absx, absx, absx,   zp
 };
 
 static void (*optable_65c02[256])() = {
-/* 0 */ brk_insn_65c02, ora, nop, slo, tsb, ora, asl, slo, php, ora, asl, nop, tsb, ora, asl, slo,
-/* 1 */      bpl,  ora,  ora,  slo,  trb,  ora,  asl,  slo,  clc,  ora,  inc,  slo,  trb,  ora,  asl,  slo,
-/* 2 */      jsr,  and,  nop,  rla,  bit,  and,  rol,  rla,  plp,  and,  rol,  nop,  bit,  and,  rol,  rla,
-/* 3 */      bmi,  and,  and,  rla,  nop,  and,  rol,  rla,  sec,  and,  dec,  rla,  nop,  and,  rol,  rla,
-/* 4 */      rti,  eor,  nop,  sre,  nop,  eor,  lsr,  sre,  pha,  eor,  lsr,  nop,  jmp,  eor,  lsr,  sre,
-/* 5 */      bvc,  eor,  eor,  sre,  nop,  eor,  lsr,  sre,  cli,  eor,  phy,  sre,  nop,  eor,  lsr,  sre,
-/* 6 */      rts, adc_65c02, nop, rra, stz, adc_65c02, ror, rra, pla, adc_65c02, ror, nop, jmp, adc_65c02, ror, rra,
-/* 7 */      bvs, adc_65c02, adc_65c02, rra, stz, adc_65c02, ror, rra, sei, adc_65c02, ply, rra, jmp, adc_65c02, ror, rra,
-/* 8 */      bra,  sta,  nop,  sax,  sty,  sta,  stx,  sax,  dey,  nop,  txa,  nop,  sty,  sta,  stx,  sax,
-/* 9 */      bcc,  sta,  sta,  nop,  sty,  sta,  stx,  sax,  tya,  sta,  txs,  nop,  stz,  sta,  stz,  nop,
-/* A */      ldy,  lda,  ldx,  lax,  ldy,  lda,  ldx,  lax,  tay,  lda,  tax,  nop,  ldy,  lda,  ldx,  lax,
-/* B */      bcs,  lda,  lda,  lax,  ldy,  lda,  ldx,  lax,  clv,  lda,  tsx,  lax,  ldy,  lda,  ldx,  lax,
-/* C */      cpy,  cmp,  nop,  dcp,  cpy,  cmp,  dec,  dcp,  iny,  cmp,  dex,  nop,  cpy,  cmp,  dec,  dcp,
-/* D */      bne,  cmp,  cmp,  dcp,  nop,  cmp,  dec,  dcp,  cld,  cmp,  phx,  dcp,  nop,  cmp,  dec,  dcp,
-/* E */      cpx, sbc_65c02, nop, isb, cpx, sbc_65c02, inc, isb, inx, sbc_65c02, nop, sbc_65c02, cpx, sbc_65c02, inc, isb,
-/* F */      beq, sbc_65c02, sbc_65c02, isb, nop, sbc_65c02, inc, isb, sed, sbc_65c02, plx, isb, nop, sbc_65c02, inc, isb
+/* 0 */ brk_insn_65c02, ora, nop, slo, tsb, ora, asl, rmb, php, ora, asl, nop, tsb, ora, asl, bbr,
+/* 1 */      bpl,  ora,  ora,  slo,  trb,  ora,  asl,  rmb,  clc,  ora,  inc,  slo,  trb,  ora,  asl,  bbr,
+/* 2 */      jsr,  and,  nop,  rla,  bit,  and,  rol,  rmb,  plp,  and,  rol,  nop,  bit,  and,  rol,  bbr,
+/* 3 */      bmi,  and,  and,  rla,  nop,  and,  rol,  rmb,  sec,  and,  dec,  rla,  nop,  and,  rol,  bbr,
+/* 4 */      rti,  eor,  nop,  sre,  nop,  eor,  lsr,  rmb,  pha,  eor,  lsr,  nop,  jmp,  eor,  lsr,  bbr,
+/* 5 */      bvc,  eor,  eor,  sre,  nop,  eor,  lsr,  rmb,  cli,  eor,  phy,  sre,  nop,  eor,  lsr,  bbr,
+/* 6 */      rts, adc_65c02, nop, rra, stz, adc_65c02, ror, rmb, pla, adc_65c02, ror, nop, jmp, adc_65c02, ror, bbr,
+/* 7 */      bvs, adc_65c02, adc_65c02, rra, stz, adc_65c02, ror, rmb, sei, adc_65c02, ply, rra, jmp, adc_65c02, ror, bbr,
+/* 8 */      bra,  sta,  nop,  sax,  sty,  sta,  stx,  smb,  dey,  nop,  txa,  nop,  sty,  sta,  stx,  bbs,
+/* 9 */      bcc,  sta,  sta,  nop,  sty,  sta,  stx,  smb,  tya,  sta,  txs,  nop,  stz,  sta,  stz,  bbs,
+/* A */      ldy,  lda,  ldx,  lax,  ldy,  lda,  ldx,  smb,  tay,  lda,  tax,  nop,  ldy,  lda,  ldx,  bbs,
+/* B */      bcs,  lda,  lda,  lax,  ldy,  lda,  ldx,  smb,  clv,  lda,  tsx,  lax,  ldy,  lda,  ldx,  bbs,
+/* C */      cpy,  cmp,  nop,  dcp,  cpy,  cmp,  dec,  smb,  iny,  cmp,  dex,  nop,  cpy,  cmp,  dec,  bbs,
+/* D */      bne,  cmp,  cmp,  dcp,  nop,  cmp,  dec,  smb,  cld,  cmp,  phx,  dcp,  nop,  cmp,  dec,  bbs,
+/* E */      cpx, sbc_65c02, nop, isb, cpx, sbc_65c02, inc, smb, inx, sbc_65c02, nop, sbc_65c02, cpx, sbc_65c02, inc, bbs,
+/* F */      beq, sbc_65c02, sbc_65c02, isb, nop, sbc_65c02, inc, smb, sed, sbc_65c02, plx, isb, nop, sbc_65c02, inc, bbs
 };
 
 static const uint32_t ticktable_65c02[256] = {
-/* 0 */       7,    6,    2,    8,    5,    3,    5,    5,    3,    2,    2,    2,    6,    4,    6,    6,
-/* 1 */       2,    5,    5,    8,    5,    4,    6,    6,    2,    4,    2,    7,    6,    4,    7,    7,
-/* 2 */       6,    6,    2,    8,    3,    3,    5,    5,    4,    2,    2,    2,    4,    4,    6,    6,
-/* 3 */       2,    5,    5,    8,    4,    4,    6,    6,    2,    4,    2,    7,    4,    4,    7,    7,
-/* 4 */       6,    6,    2,    8,    3,    3,    5,    5,    3,    2,    2,    2,    3,    4,    6,    6,
-/* 5 */       2,    5,    5,    8,    4,    4,    6,    6,    2,    4,    3,    7,    4,    4,    7,    7,
-/* 6 */       6,    6,    2,    8,    3,    3,    5,    5,    4,    2,    2,    2,    5,    4,    6,    6,
-/* 7 */       2,    5,    5,    8,    4,    4,    6,    6,    2,    4,    4,    7,    6,    4,    7,    7,
-/* 8 */       2,    6,    2,    6,    3,    3,    3,    3,    2,    2,    2,    2,    4,    4,    4,    4,
-/* 9 */       2,    6,    5,    6,    4,    4,    4,    4,    2,    5,    2,    5,    4,    5,    5,    5,
-/* A */       2,    6,    2,    6,    3,    3,    3,    3,    2,    2,    2,    2,    4,    4,    4,    4,
-/* B */       2,    5,    5,    5,    4,    4,    4,    4,    2,    4,    2,    4,    4,    4,    4,    4,
-/* C */       2,    6,    2,    8,    3,    3,    5,    5,    2,    2,    2,    2,    4,    4,    6,    6,
-/* D */       2,    5,    5,    8,    4,    4,    6,    6,    2,    4,    3,    7,    4,    4,    7,    7,
-/* E */       2,    6,    2,    8,    3,    3,    5,    5,    2,    2,    2,    2,    4,    4,    6,    6,
-/* F */       2,    5,    5,    8,    4,    4,    6,    6,    2,    4,    4,    7,    4,    4,    7,    7
+/* 0 */       7,    6,    2,    8,    5,    3,    5,    5,    3,    2,    2,    2,    6,    4,    6,    5,
+/* 1 */       2,    5,    5,    8,    5,    4,    6,    5,    2,    4,    2,    7,    6,    4,    7,    5,
+/* 2 */       6,    6,    2,    8,    3,    3,    5,    5,    4,    2,    2,    2,    4,    4,    6,    5,
+/* 3 */       2,    5,    5,    8,    4,    4,    6,    5,    2,    4,    2,    7,    4,    4,    7,    5,
+/* 4 */       6,    6,    2,    8,    3,    3,    5,    5,    3,    2,    2,    2,    3,    4,    6,    5,
+/* 5 */       2,    5,    5,    8,    4,    4,    6,    5,    2,    4,    3,    7,    4,    4,    7,    5,
+/* 6 */       6,    6,    2,    8,    3,    3,    5,    5,    4,    2,    2,    2,    5,    4,    6,    5,
+/* 7 */       2,    5,    5,    8,    4,    4,    6,    5,    2,    4,    4,    7,    6,    4,    7,    5,
+/* 8 */       2,    6,    2,    6,    3,    3,    3,    5,    2,    2,    2,    2,    4,    4,    4,    5,
+/* 9 */       2,    6,    5,    6,    4,    4,    4,    5,    2,    5,    2,    5,    4,    5,    5,    5,
+/* A */       2,    6,    2,    6,    3,    3,    3,    5,    2,    2,    2,    2,    4,    4,    4,    5,
+/* B */       2,    5,    5,    5,    4,    4,    4,    5,    2,    4,    2,    4,    4,    4,    4,    5,
+/* C */       2,    6,    2,    8,    3,    3,    5,    5,    2,    2,    2,    2,    4,    4,    6,    5,
+/* D */       2,    5,    5,    8,    4,    4,    6,    5,    2,    4,    3,    7,    4,    4,    7,    5,
+/* E */       2,    6,    2,    8,    3,    3,    5,    5,    2,    2,    2,    2,    4,    4,    6,    5,
+/* F */       2,    5,    5,    8,    4,    4,    6,    5,    2,    4,    4,    7,    4,    4,    7,    5
 };
 
 /* Set the active dispatch table pointers from cpu_variant. Called at
