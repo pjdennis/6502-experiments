@@ -33,6 +33,7 @@ void emu_opts_init(struct emu_opts *opts) {
     opts->rom_filename = NULL;
     opts->serial_input_filename = NULL;
     opts->cycle_cap = 200000000ULL;
+    opts->cycle_cap_set = 0;
     opts->live = 0;
 }
 
@@ -64,7 +65,8 @@ void emu_opts_usage(FILE *fp) {
 "  --serial-input <path>  wendy2c: bytes pre-queued into the SERIAL_USB chip\n"
 "  --live                 wendy2c: live ANSI render of LCD, LED, button, VIA pin state\n"
 "                         (saves the terminal; q/ESC/Ctrl-C to quit; space toggles button)\n"
-"  --cycle-cap N          max cycles before forced exit (decimal; default 200000000).\n"
+"  --cycle-cap N          max cycles before forced exit (decimal; default 200000000;\n"
+"                         no cap under --live unless this is given explicitly).\n"
 "                         For wendy2c this is oscillator ticks (~2 per CPU cycle);\n"
 "                         for nmos-default and --server it is CPU cycles.\n");
 }
@@ -223,6 +225,7 @@ int parse_args(int argc, char **argv, struct emu_opts *opts) {
                 return 1;
             }
             opts->cycle_cap = (uint64_t)v;
+            opts->cycle_cap_set = 1;
             i += 2;
         } else if (strcmp(argv[i], "--cpu") == 0) {
             if (i + 1 >= argc) {

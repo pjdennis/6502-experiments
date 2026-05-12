@@ -44,7 +44,7 @@ Common options (the full list is in `--help`):
 | `--rom <path>` | wendy2c: ROM image; falls back to the positional code file |
 | `--serial-input <path>` | wendy2c: bytes pre-queued into the SERIAL_USB chip |
 | `--live` | wendy2c: live ANSI render of LCD, LED, button, VIA pins |
-| `--cycle-cap N` | max cycles before forced exit (decimal; default 200000000). For wendy2c this is oscillator ticks (~2 per CPU cycle); for `nmos-default` and `--server` it is CPU cycles. |
+| `--cycle-cap N` | max cycles before forced exit (decimal; default 200000000; no cap under `--live` unless this is given explicitly). For wendy2c this is oscillator ticks (~2 per CPU cycle); for `nmos-default` and `--server` it is CPU cycles. |
 | `--load <hex>` | load address for the positional code file |
 | `--input` / `--output` / `--error-output` | ports `$F006` / `$F009` / `$F00C` |
 | `--dump` / `--no-dump` | memory dump on exit |
@@ -69,6 +69,16 @@ Cycle cap default is 3,000,000 oscillator ticks (~150 ms wallclock).
 Override with `DEMO_CYCLE_CAP=<N>`. The script fails fast if any
 vasm invocation errors — older vasm releases that don't recognise
 flags like `-ignore-mult-inc` will abort cleanly.
+
+Pass `--live` to launch straight into the live render instead:
+
+```sh
+bash assembler2/emulator/demo_wendy2c.sh --live
+DEMO_PAYLOAD=wendy2c_led_test.s bash assembler2/emulator/demo_wendy2c.sh --live
+```
+
+`--live` runs uncapped (`DEMO_CYCLE_CAP` still overrides if you want a
+fixed-length recording); `q` / `ESC` / `Ctrl-C` in the panel quits.
 
 ## `--live` mode
 

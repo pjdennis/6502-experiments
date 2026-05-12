@@ -40,6 +40,7 @@ struct emu_opts {
     uint64_t cycle_cap;                 /* --cycle-cap N; max cycles before forced exit. Default 200000000.
                                          * For wendy2c this counts oscillator ticks (~2 per CPU cycle);
                                          * for nmos-default and --server it counts CPU cycles. */
+    int cycle_cap_set;                  /* 1 iff --cycle-cap was given explicitly (vs. the default). */
     int live;                           /* --live (wendy2c only): live ANSI render of LCD + LED + VIA pins */
 };
 

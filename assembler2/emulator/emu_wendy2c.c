@@ -337,8 +337,15 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
 
     /* Run until STP halts the CPU or we hit the cycle cap. The cap also
      * limits run-away tests; the wendy2c sample programs that use STP
-     * (e.g. wendy2c_eeprom_show.s) terminate well within the default. */
-    const uint64_t cap = opts->cycle_cap;
+     * (e.g. wendy2c_eeprom_show.s) terminate well within the default.
+     *
+     * Under --live the cap defaults to "unlimited" -- the user quits
+     * interactively (q/ESC/Ctrl-C) -- mirroring how --console and
+     * --terminal modes in emu_run.c bypass the cap entirely. An
+     * explicit --cycle-cap still takes effect (useful for scripted
+     * recordings). */
+    uint64_t cap = opts->cycle_cap;
+    if (opts->live && !opts->cycle_cap_set) cap = UINT64_MAX;
     if (opts->live) {
         emu_run_wendy2c_live(&b, &lcd_state, &via_state, &ledbtn_state, cap);
     } else {
