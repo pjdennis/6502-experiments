@@ -8,6 +8,7 @@
 #include "chips/clock_22v10.h"
 #include "chips/rom_28c256.h"
 #include "chips/ram_628128.h"
+#include "chips/via_6522.h"
 #include "chips/cpu_65c02.h"
 
 /* Module-scope bus pointer used by the cpu_external_read/write hooks
@@ -42,12 +43,14 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
     static struct clock_22v10_state clk_state;
     static struct rom_28c256_state  rom_state;
     static struct ram_628128_state  ram_state;
+    static struct via_6522_state    via_state;
     static struct cpu_65c02_state   cpu_state;
-    struct chip clk_chip, rom_chip, ram_chip, cpu_chip;
+    struct chip clk_chip, rom_chip, ram_chip, via_chip, cpu_chip;
 
     clock_22v10_init(&clk_chip, &clk_state);
     rom_28c256_init(&rom_chip, &rom_state);
     ram_628128_init(&ram_chip, &ram_state);
+    via_6522_init  (&via_chip, &via_state);
     cpu_65c02_init (&cpu_chip, &cpu_state);
 
     /* Load ROM image. Falls back to code_filename if --rom is omitted. */
@@ -70,6 +73,7 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
     bus_add_chip(&b, &clk_chip);
     bus_add_chip(&b, &rom_chip);
     bus_add_chip(&b, &ram_chip);
+    bus_add_chip(&b, &via_chip);
     bus_add_chip(&b, &cpu_chip);
 
     active_bus = &b;

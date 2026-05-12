@@ -1,0 +1,93 @@
+#ifndef EMULATOR_CHIPS_VIA_6522_H
+#define EMULATOR_CHIPS_VIA_6522_H
+
+#include <stdint.h>
+#include "../bus.h"
+
+/* WDC 6522 VIA. Phase 9 = registers + T1/T2 + PB7 + IFR/IER + bank
+ * config feedback to the clock + CB2-edge / SR-in-T2 path that
+ * upload_and_run.inc uses for serial RX.
+ *
+ * The chip claims any access where bus->viacs is asserted; the low 4
+ * bits of the address pick the register (the clock_22v10 already
+ * decodes VIACS for $F000..$F7FF only).
+ *
+ * On the wendy2c, PB0..PB4 drive the C0..C4 bank-config bits to the
+ * 22V10 PLD. On the real board these have pull-downs so that at reset
+ * (DDRB = 0, no bits driven) the PLD sees %00000. We model that by
+ * computing bus->bank_config = (orb & ddrb) & 0x1F whenever ORB or
+ * DDRB changes.
+ *
+ * Serial RX: the SERIAL_USB chip (phase 13) drives via_set_cb2() to
+ * pulse the CB2 pin low (start bit) and then to feed bits during
+ * shift-in-T2 mode. */
+
+#define VIA_REG_ORB     0x0
+#define VIA_REG_ORA     0x1
+#define VIA_REG_DDRB    0x2
+#define VIA_REG_DDRA    0x3
+#define VIA_REG_T1CL    0x4
+#define VIA_REG_T1CH    0x5
+#define VIA_REG_T1LL    0x6
+#define VIA_REG_T1LH    0x7
+#define VIA_REG_T2CL    0x8
+#define VIA_REG_T2CH    0x9
+#define VIA_REG_SR      0xA
+#define VIA_REG_ACR     0xB
+#define VIA_REG_PCR     0xC
+#define VIA_REG_IFR     0xD
+#define VIA_REG_IER     0xE
+#define VIA_REG_ORANH   0xF
+
+/* IFR / IER bit masks (positive logic). */
+#define VIA_INT_CA2     0x01
+#define VIA_INT_CA1     0x02
+#define VIA_INT_SR      0x04
+#define VIA_INT_CB2     0x08
+#define VIA_INT_CB1     0x10
+#define VIA_INT_T2      0x20
+#define VIA_INT_T1      0x40
+
+/* ACR bit masks. */
+#define VIA_ACR_T1_CONT     0x40
+#define VIA_ACR_T1_OUT      0x80  /* PB7 squarewave when set */
+#define VIA_ACR_T2_PB6      0x20
+#define VIA_ACR_SR_MODE     0x1C
+#define VIA_ACR_SR_IN_T2    0x04
+#define VIA_ACR_SR_OUT_T2   0x14
+
+/* PCR (CB2 portion) modes for the wendy2c serial path. */
+#define VIA_PCR_CB2_MASK         0xE0
+#define VIA_PCR_CB2_IND_NEG_E    0x20
+
+struct via_6522_state {
+    /* Port latches and direction registers. */
+    uint8_t orb, ora, ddrb, ddra;
+
+    /* Timer 1 + Timer 2 (16-bit each). */
+    uint16_t t1c, t1l;
+    uint16_t t2c, t2l_lo;  /* T2 latch is only the low byte */
+
+    uint8_t sr;
+    uint8_t acr, pcr;
+    uint8_t ifr, ier;
+
+    /* Internal state. */
+    uint8_t pb7;                /* T1 squarewave output state */
+    uint8_t t1_running;         /* fires IFR.T1 then either re-arms (cont) or stops */
+    uint8_t t2_running;         /* one-shot until T2CH write re-arms */
+    uint8_t sr_bits_remaining;  /* shift-in-T2 byte progress */
+    uint8_t cb2_in;             /* current CB2 input level */
+    uint8_t prev_cb2;           /* edge detect */
+};
+
+void via_6522_init(struct chip *chip, struct via_6522_state *state);
+
+/* External CB2 driver (used by the SERIAL_USB chip in phase 13). */
+void via_6522_set_cb2(struct via_6522_state *state, struct bus *bus, uint8_t bit);
+
+/* Inspectors -- handy for tests. */
+uint8_t via_6522_get_pb7(const struct via_6522_state *state);
+uint16_t via_6522_get_t1c(const struct via_6522_state *state);
+
+#endif
