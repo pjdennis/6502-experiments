@@ -44,4 +44,10 @@ int bus_write(struct bus *b, uint16_t addr, uint8_t data) {
 
 void bus_step(struct bus *b) {
     b->osc_ticks++;
+    for (int i = 0; i < b->chip_count; i++) {
+        struct chip *c = b->chips[i];
+        if (c && c->ops && c->ops->tick) {
+            c->ops->tick(c, b);
+        }
+    }
 }

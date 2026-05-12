@@ -39,6 +39,11 @@ struct bus {
     uint8_t irq;
     uint8_t nmi;
     uint8_t res;
+    uint8_t bank_config;  /* C0..C4 (low 5 bits), driven from VIA PORTB */
+    uint8_t cks;          /* registered clock-select output (OSC/2) */
+    uint8_t ck;           /* registered CPU clock output */
+    uint8_t r_bits;       /* R15..R18 (bits 0..3); high address lines to RAM */
+    uint8_t cpu_cycle_due; /* set by clock_22v10 on each CK falling edge */
     uint64_t osc_ticks;
     struct chip *chips[BUS_MAX_CHIPS];
     int chip_count;
