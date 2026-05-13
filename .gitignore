@@ -20,3 +20,8 @@ log
 spread
 _tr_*.tmp
 .claude/settings.local.json
+
+# Greatest / sanitizer test build directory. The *.out binaries are
+# already covered by the *.out wildcard above; the build/run logs and
+# results files aren't.
+assembler2/emulator/tests/out/

@@ -163,15 +163,17 @@ static void resolve_web_root(const char *requested, char *out, size_t n) {
     }
     /* Try <dir-of-argv0>/web (binary is .../emulator/emulator.out so
      * this lands on .../emulator/web). Falls through to CWD-relative
-     * candidates below if missing. */
+     * candidates below if missing. `cand` is sized 16 bytes larger
+     * than `exe` so gcc's -Wformat-truncation check is satisfied even
+     * when the readlink path fills exe to its boundary. */
     char exe[1024];
+    char cand[1040];
     ssize_t r = readlink("/proc/self/exe", exe, sizeof(exe) - 1);
     if (r > 0) {
         exe[r] = '\0';
         char *slash = strrchr(exe, '/');
         if (slash) {
             *slash = '\0';
-            char cand[1024];
             snprintf(cand, sizeof(cand), "%s/web", exe);
             if (dir_exists(cand)) { snprintf(out, n, "%s", cand); return; }
         }

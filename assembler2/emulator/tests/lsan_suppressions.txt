@@ -1,0 +1,7 @@
+# Third-party / system leaks we don't intend to chase. Any leak whose
+# stack contains one of these substrings is silenced.
+leak:libasound
+leak:libpulse
+leak:libpipewire
+leak:_dl_init
+leak:ma_dlopen
