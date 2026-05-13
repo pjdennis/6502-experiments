@@ -132,34 +132,84 @@ TEST ifr_write_clears_bits(void) {
     PASS();
 }
 
-/* CB2 negative-edge in independent-interrupt mode arms the SR for an
- * 8-bit shift-in via T2 underflows. Drive CB2 low/then-clock 8 times
- * with known bit pattern -> SR matches the pattern. */
-TEST cb2_neg_edge_then_sr_in_t2_byte(void) {
+/* Per the W65C22 datasheet, the SR shift counter is reset by an SR
+ * read or write. The wendy2c boot ROM's CB2 ISR does an `lda SR` for
+ * exactly that reason. Verify SR read arms 8 shifts and a byte clocks
+ * in correctly. */
+TEST sr_read_arms_shift_counter(void) {
     setup();
-    /* Configure: PCR_CB2_IND_NEG_E ($20), ACR=SR_IN_T2 ($04). */
     w(VIA_REG_PCR, VIA_PCR_CB2_IND_NEG_E);
     w(VIA_REG_ACR, VIA_ACR_SR_IN_T2);
-    /* Set T2 latch to 1 cycle. */
     w(VIA_REG_T2CL, 0x01);
-    w(VIA_REG_T2CH, 0x00);  /* arm T2 with $0001 */
+    w(VIA_REG_T2CH, 0x00);
 
-    /* Pulse CB2 low to arm SR for 8 bits. CB2 high first (idle). */
-    via_6522_set_cb2(&vs, &bus_, 1);
-    via_6522_set_cb2(&vs, &bus_, 0);  /* falling edge */
+    /* No CB2 edge yet -- reading SR primes the counter from zero. */
+    ASSERT_EQ_FMT((uint8_t)0, via_6522_sr_bits_remaining(&vs), "%u");
+    (void)r(VIA_REG_SR);
+    ASSERT_EQ_FMT((uint8_t)8, via_6522_sr_bits_remaining(&vs), "%u");
 
-    /* Drive a known pattern (1,0,1,0,1,0,1,0 -> $AA) into CB2 right
-     * before each T2 underflow. Each underflow needs ~2 ticks. */
     static const uint8_t bits[8] = {1,0,1,0,1,0,1,0};
     for (int i = 0; i < 8; i++) {
         via_6522_set_cb2(&vs, &bus_, bits[i]);
-        /* Tick T2 down to 0; underflow on next tick. */
-        bus_.cpu_cycle_due = 1; bus_step(&bus_);  /* counter 1 -> 0 */
-        bus_.cpu_cycle_due = 1; bus_step(&bus_);  /* underflow, shift bit i */
+        bus_.cpu_cycle_due = 1; bus_step(&bus_);
+        bus_.cpu_cycle_due = 1; bus_step(&bus_);
     }
-    /* SR should now hold $AA. */
+    ASSERT_EQ_FMT((uint8_t)0, via_6522_sr_bits_remaining(&vs), "%u");
     uint8_t sr = r(VIA_REG_SR);
     ASSERT_EQ_FMT((uint8_t)0xAA, sr, "%02X");
+    PASS();
+}
+
+/* Convenience cheat: when SR is idle (counter == 0) and the chip is
+ * already in SR_IN_T2 mode, a CB2 falling edge also arms the counter.
+ * That's NOT datasheet behavior -- real hardware only arms on SR
+ * read/write -- but it's load-bearing for the byte-level serial_usb
+ * chip, which kicks off each byte with a single falling edge and
+ * doesn't model the on-target's `lda SR`. The remain==0 guard makes
+ * sure the cheat doesn't re-arm mid-byte. */
+TEST cb2_falling_edge_arms_sr_when_idle(void) {
+    setup();
+    w(VIA_REG_PCR, VIA_PCR_CB2_IND_NEG_E);
+    w(VIA_REG_ACR, VIA_ACR_SR_IN_T2);
+    via_6522_set_cb2(&vs, &bus_, 1);
+    via_6522_set_cb2(&vs, &bus_, 0);
+    ASSERT_EQ_FMT((uint8_t)8, via_6522_sr_bits_remaining(&vs), "%u");
+    PASS();
+}
+
+/* Real wire-level traffic: a byte's bit pattern can contain multiple
+ * 1->0 transitions on CB2 (the data bits themselves). Each falling
+ * edge sets IFR.CB2 but must NOT reset the shift counter, or the SR
+ * IRQ will fire on the wrong sample. This is a regression test for
+ * the bug that surfaced once the host-driven serial link replaced
+ * the byte-level serial_usb cheat chip. */
+TEST cb2_falling_edge_mid_byte_does_not_rearm_sr(void) {
+    setup();
+    w(VIA_REG_PCR, VIA_PCR_CB2_IND_NEG_E);
+    w(VIA_REG_ACR, VIA_ACR_SR_IN_T2);
+    w(VIA_REG_T2CL, 0x01);
+    w(VIA_REG_T2CH, 0x00);
+
+    via_6522_set_cb2(&vs, &bus_, 1);
+    via_6522_set_cb2(&vs, &bus_, 0);
+    /* Counter armed (idle->8) by either the CB2 falling edge cheat or
+     * an explicit SR read. Either way, start-of-byte is fine. */
+    ASSERT_EQ_FMT((uint8_t)8, via_6522_sr_bits_remaining(&vs), "%u");
+
+    /* Drive bit pattern 1,1,1,0,0,1,0,1 (LSB-first 0xA7 on the wire).
+     * Three falling edges (1->0 at i=3 and i=6) and several rising
+     * edges -- none should rearm the counter. */
+    static const uint8_t bits[8] = {1, 1, 1, 0, 0, 1, 0, 1};
+    for (int i = 0; i < 8; i++) {
+        via_6522_set_cb2(&vs, &bus_, bits[i]);
+        bus_.cpu_cycle_due = 1; bus_step(&bus_);
+        bus_.cpu_cycle_due = 1; bus_step(&bus_);
+    }
+    /* Check the count BEFORE reading SR (the read itself re-arms the
+     * counter). After exactly 8 underflows the counter must be 0. */
+    ASSERT_EQ_FMT((uint8_t)0, via_6522_sr_bits_remaining(&vs), "%u");
+    uint8_t sr = r(VIA_REG_SR);
+    ASSERT_EQ_FMT((uint8_t)0xE5, sr, "%02X");
     PASS();
 }
 
@@ -221,7 +271,9 @@ SUITE(via_6522_suite) {
     RUN_TEST(t1_timed_one_shot_fires_irq);
     RUN_TEST(t1_continuous_toggles_pb7);
     RUN_TEST(ifr_write_clears_bits);
-    RUN_TEST(cb2_neg_edge_then_sr_in_t2_byte);
+    RUN_TEST(sr_read_arms_shift_counter);
+    RUN_TEST(cb2_falling_edge_arms_sr_when_idle);
+    RUN_TEST(cb2_falling_edge_mid_byte_does_not_rearm_sr);
     RUN_TEST(res_rising_edge_clears_registers_and_irq);
 }
 

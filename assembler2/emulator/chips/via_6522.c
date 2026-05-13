@@ -219,16 +219,21 @@ static void via_6522_tick(struct chip *self, struct bus *bus) {
     if (s->t2_running) {
         if (s->t2c == 0) {
             via_set_ifr(s, bus, VIA_INT_T2);
-            if ((s->acr & VIA_ACR_SR_MODE) == VIA_ACR_SR_IN_T2 &&
-                s->sr_bits_remaining > 0) {
-                s->sr = (uint8_t)((s->sr << 1) | (s->cb2_in & 1));
-                s->sr_bits_remaining--;
-                if (s->sr_bits_remaining == 0) {
-                    via_set_ifr(s, bus, VIA_INT_SR);
+            if ((s->acr & VIA_ACR_SR_MODE) == VIA_ACR_SR_IN_T2) {
+                /* SR-in-T2 mode: T2 free-runs at t2l_lo cadence
+                 * regardless of the shift counter -- the shift counter
+                 * only gates whether each underflow actually shifts a
+                 * bit and fires the SR IRQ. */
+                if (s->sr_bits_remaining > 0) {
+                    s->sr = (uint8_t)((s->sr << 1) | (s->cb2_in & 1));
+                    s->sr_bits_remaining--;
+                    if (s->sr_bits_remaining == 0) {
+                        via_set_ifr(s, bus, VIA_INT_SR);
+                    }
                 }
-                s->t2c = s->t2l_lo;  /* reload for next bit */
+                s->t2c = s->t2l_lo;
             } else {
-                s->t2c = 0xFFFF;  /* free-run wrap */
+                s->t2c = 0xFFFF;  /* plain T2 one-shot: continue counting */
             }
         } else {
             s->t2c--;
@@ -264,8 +269,19 @@ void via_6522_set_cb2(struct via_6522_state *s, struct bus *bus, uint8_t bit) {
         (s->pcr & 0xC0) == 0x00 /* CB2 input neg edge non-independent */) {
         if (prev && !s->cb2_in) {
             via_set_ifr(s, bus, VIA_INT_CB2);
-            /* Arm the SR for an 8-bit read on next T2 underflows. */
-            if ((s->acr & VIA_ACR_SR_MODE) == VIA_ACR_SR_IN_T2) {
+            /* Datasheet-honest behavior: on real hardware the SR shift
+             * counter is reset only by an SR read or write, NOT by a
+             * CB2 edge. We deliberately keep a CB2-edge auto-arm here
+             * because the byte-level serial_usb chip relies on it as a
+             * cheat -- but ONLY when no shift is already in progress.
+             * That preserves the cheat's first-byte arming while
+             * matching real hardware for the in-byte case (mid-byte
+             * 1->0 bit transitions don't reset the counter and let the
+             * SR IRQ fire on the wrong sample). The on-target boot ROM
+             * arms the counter via lda SR in its ISR, so it doesn't
+             * depend on the edge-arm either way. */
+            if ((s->acr & VIA_ACR_SR_MODE) == VIA_ACR_SR_IN_T2 &&
+                s->sr_bits_remaining == 0) {
                 s->sr_bits_remaining = 8;
             }
         }
