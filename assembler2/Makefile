@@ -6,7 +6,15 @@ clean:
 	find . -type f -name "*.tmp" -delete
 
 EMU_SRCS = emulator/emulator.c emulator/file_io.c emulator/console.c emulator/cpu_core.c emulator/stubs.c emulator/trace.c emulator/cli.c emulator/emu_run.c emulator/bus.c emulator/emu_wendy2c.c emulator/tty_alt_screen.c emulator/audio.c emulator/wendy2c_web.c emulator/web_json.c emulator/serial_link.c emulator/chips/osc.c emulator/chips/clock_22v10.c emulator/chips/rom_28c256.c emulator/chips/ram_628128.c emulator/chips/via_6522.c emulator/chips/lcd_hd44780.c emulator/chips/serial_usb.c emulator/chips/led_buttons.c emulator/chips/cpu_65c02.c
-EMU_HDRS = emulator/file_io.h emulator/console.h emulator/cpu_core.h emulator/stubs.h emulator/trace.h emulator/cli.h emulator/emu_run.h emulator/bus.h emulator/emu_wendy2c.h emulator/tty_alt_screen.h emulator/audio.h emulator/wendy2c_web.h emulator/web_json.h emulator/serial_link.h emulator/chips/osc.h emulator/chips/clock_22v10.h emulator/chips/rom_28c256.h emulator/chips/ram_628128.h emulator/chips/via_6522.h emulator/chips/lcd_hd44780.h emulator/chips/serial_usb.h emulator/chips/led_buttons.h emulator/chips/cpu_65c02.h
+EMU_HDRS = emulator/file_io.h emulator/console.h emulator/cpu_core.h emulator/stubs.h emulator/trace.h emulator/cli.h emulator/emu_run.h emulator/bus.h emulator/emu_wendy2c.h emulator/tty_alt_screen.h emulator/audio.h emulator/wendy2c_web.h emulator/web_json.h emulator/serial_link.h emulator/chips/osc.h emulator/chips/clock_22v10.h emulator/chips/clock_22v10_pld_generated.h emulator/chips/rom_28c256.h emulator/chips/ram_628128.h emulator/chips/via_6522.h emulator/chips/lcd_hd44780.h emulator/chips/serial_usb.h emulator/chips/led_buttons.h emulator/chips/cpu_65c02.h
+
+# Path to the .pld source whose equations define the wendy2c memory
+# map. clock_22v10_pld_generated.h is rebuilt by pld_to_c.py whenever
+# either the .pld or the generator script changes.
+WENDY2C_PLD = ../22V10-wendy2c.pld
+
+emulator/chips/clock_22v10_pld_generated.h: $(WENDY2C_PLD) emulator/pld_to_c.py
+	emulator/pld_to_c.py $(WENDY2C_PLD) -o $@
 
 # miniaudio (vendored, used by emulator/audio.c) needs math, pthreads,
 # and dynamic loading for runtime backend probing (ALSA/PulseAudio on
