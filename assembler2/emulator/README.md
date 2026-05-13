@@ -105,12 +105,18 @@ every ~30 ms:
 
 Keys:
 - `q` / `ESC` / `Ctrl-C` — quit (terminal contents are restored)
-- `SPACE` — toggle the control button (drives PORTA bit 5)
+- `SPACE` — toggle the control button (drives PORTA bit 1)
 
-Pacing targets ~10 MHz CPU (≈ the real wendy2c board's 9.72 MHz) so
-the LED blink and morse-code timings look like the hardware. The
-alternate-screen save/restore plumbing is shared with `--console` and
-`--terminal` via `tty_alt_screen.{c,h}`.
+Default live pacing is ~20 MHz OSC (~10 MHz CPU after the 22V10
+divide) so LED blink and morse-code timings look like the hardware.
+Override with `--mhz N`, where N is the OSC (crystal) frequency in MHz
+— e.g. `--mhz 9.72` matches the real wendy2c board's
+`CLOCK_FREQ_KHZ = 9720`. `--mhz` also throttles non-live wendy2c
+runs (which otherwise run at full host speed); requesting a rate
+higher than the host can sustain just runs at host speed.
+
+The alternate-screen save/restore plumbing is shared with `--console`
+and `--terminal` via `tty_alt_screen.{c,h}`.
 
 ## File layout
 

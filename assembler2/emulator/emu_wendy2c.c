@@ -194,11 +194,38 @@ static int live_poll_input(struct led_buttons_state *ledbtn) {
     return 0;
 }
 
+/* Wall-clock pace helper: given a fixed-rate reference (t0, osc0,
+ * osc_per_us), sleep enough that emulated osc ticks track wall time.
+ * Caller has just stepped a batch; this checks whether the emulator
+ * is ahead-of-wall and sleeps if so. Returns the current wall-time
+ * delta in nanoseconds (caller may use it for render scheduling). */
+static long wendy2c_pace(const struct timespec *t0,
+                         uint64_t osc0, uint64_t osc_now,
+                         double osc_per_us) {
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    long wall_ns = (long)(now.tv_sec - t0->tv_sec) * 1000000000L
+                  + (now.tv_nsec - t0->tv_nsec);
+    if (osc_per_us <= 0.0) return wall_ns;
+    double emu_us = (double)(osc_now - osc0) / osc_per_us;
+    long emu_ns = (long)(emu_us * 1000.0);
+    long ahead_ns = emu_ns - wall_ns;
+    if (ahead_ns > 200000L /* 0.2 ms */) {
+        struct timespec ts = { ahead_ns / 1000000000L, ahead_ns % 1000000000L };
+        nanosleep(&ts, NULL);
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        wall_ns = (long)(now.tv_sec - t0->tv_sec) * 1000000000L
+                 + (now.tv_nsec - t0->tv_nsec);
+    }
+    return wall_ns;
+}
+
 static int emu_run_wendy2c_live(struct bus *b,
                                 struct lcd_hd44780_state *lcd,
                                 struct via_6522_state *via,
                                 struct led_buttons_state *ledbtn,
-                                uint64_t cap) {
+                                uint64_t cap,
+                                double osc_per_us) {
     /* Install BEFORE entering the alt screen so that a Ctrl-C arriving
      * any time after the termios switch flows through sigint_requested
      * (caught by the loop below) instead of taking the default action,
@@ -211,14 +238,14 @@ static int emu_run_wendy2c_live(struct bus *b,
      * pattern starts on a clean slate. */
     live_emit("\x1b[?25l\x1b[2J");
 
-    /* Pace at ~10 MHz CPU = ~20 MHz oscillator so the LED-blink and
-     * morse demos look right. The wendy2c board's real CLOCK_FREQ_KHZ
-     * is 9720 (from base_config_wendy2c.inc); we round up to a clean
-     * 20 osc/us. */
-    const double OSC_PER_US = 20.0;
+    /* Pacing rate: --mhz N sets the OSC clock (the 22V10 halves it
+     * for the CPU). Default to 20 osc/us (~10 MHz CPU) when --mhz is
+     * unset so the LED-blink and morse demos look right; the real
+     * board's CLOCK_FREQ_KHZ is 9720, so this is roughly 2x real. */
+    if (osc_per_us <= 0.0) osc_per_us = 20.0;
     const long FRAME_NS = 30 * 1000 * 1000; /* ~33 fps */
 
-    struct timespec t0, now;
+    struct timespec t0;
     clock_gettime(CLOCK_MONOTONIC, &t0);
     uint64_t osc0 = b->osc_ticks;
     long last_render_ns = 0;
@@ -238,22 +265,7 @@ static int emu_run_wendy2c_live(struct bus *b,
         }
         if (cpu_stp_pending() || cap_hit) break;
 
-        /* Pace: how much wall-time should have passed for the osc
-         * ticks we've burned through? Sleep the difference if we ran
-         * ahead. */
-        clock_gettime(CLOCK_MONOTONIC, &now);
-        long wall_ns = (long)(now.tv_sec - t0.tv_sec) * 1000000000L
-                      + (now.tv_nsec - t0.tv_nsec);
-        double emu_us = (double)(b->osc_ticks - osc0) / OSC_PER_US;
-        long emu_ns = (long)(emu_us * 1000.0);
-        long ahead_ns = emu_ns - wall_ns;
-        if (ahead_ns > 200000L /* 0.2 ms */) {
-            struct timespec ts = { ahead_ns / 1000000000L, ahead_ns % 1000000000L };
-            nanosleep(&ts, NULL);
-            clock_gettime(CLOCK_MONOTONIC, &now);
-            wall_ns = (long)(now.tv_sec - t0.tv_sec) * 1000000000L
-                     + (now.tv_nsec - t0.tv_nsec);
-        }
+        long wall_ns = wendy2c_pace(&t0, osc0, b->osc_ticks, osc_per_us);
 
         if (wall_ns - last_render_ns >= FRAME_NS) {
             live_render(b, lcd, via, ledbtn, 0);
@@ -362,8 +374,32 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
      * recordings). */
     uint64_t cap = opts->cycle_cap;
     if (opts->live && !opts->cycle_cap_set) cap = UINT64_MAX;
+
+    /* --mhz N pins the OSC (crystal) frequency. The 22V10 PLD halves
+     * it for the CPU clock, so a --mhz 9.72 run matches the real
+     * wendy2c board's CLOCK_FREQ_KHZ = 9720. 0 means "no throttle":
+     * non-live runs uncapped; --live falls back to a default pace
+     * inside emu_run_wendy2c_live. */
+    double osc_per_us = opts->target_mhz > 0.0 ? opts->target_mhz : 0.0;
+
     if (opts->live) {
-        emu_run_wendy2c_live(&b, &lcd_state, &via_state, &ledbtn_state, cap);
+        emu_run_wendy2c_live(&b, &lcd_state, &via_state, &ledbtn_state, cap, osc_per_us);
+    } else if (osc_per_us > 0.0) {
+        /* Throttled non-live: step in batches and sleep when ahead-
+         * of-wall so wall time tracks emulated osc time. */
+        struct timespec t0;
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+        uint64_t osc0 = b.osc_ticks;
+        while (b.osc_ticks < cap) {
+            const int BATCH = 50000;
+            int stp = 0;
+            for (int i = 0; i < BATCH && b.osc_ticks < cap; i++) {
+                bus_step(&b);
+                if (cpu_stp_pending()) { stp = 1; break; }
+            }
+            if (stp) break;
+            (void)wendy2c_pace(&t0, osc0, b.osc_ticks, osc_per_us);
+        }
     } else {
         while (b.osc_ticks < cap) {
             bus_step(&b);

@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <time.h>
 
 #include <signal.h>
 
@@ -25,6 +26,12 @@ void    write6502(uint16_t addr, uint8_t v) { (void)addr; (void)v; }
  * the --live render loop. The smoke test never exercises live mode
  * but still needs the symbol at link time. */
 volatile sig_atomic_t sigint_requested = 0;
+
+/* Same deal for install_tty_cleanup_handlers (defined in emulator.c).
+ * The live runner calls it before tty_alt_screen_enter; the tests in
+ * this file never go down that path, but the linker still wants the
+ * symbol. */
+void install_tty_cleanup_handlers(void) { /* no-op for tests */ }
 
 static const char *write_synthetic_rom(const uint8_t *prog, size_t prog_len) {
     /* Fresh template per call -- mkstemp mutates it, so a static buffer
@@ -118,9 +125,56 @@ TEST cpu_executes_synthetic_rom_and_halts_on_stp(void) {
     PASS();
 }
 
+TEST mhz_paces_osc_to_wall_clock(void) {
+    /* --mhz N pins the OSC (crystal) frequency for wendy2c. Confirm
+     * the non-live runner actually throttles to wall time: a cap of
+     * 5M osc ticks at --mhz 5 should take ~1 s, well above the
+     * uncapped throughput of ~24 MHz osc/s on a typical host. We use
+     * a wide band so this stays CI-stable: at least 600 ms (cleanly
+     * above the unthrottled ~210 ms minimum) and at most 3 s (well
+     * above the 1 s ideal). The lower bound is what catches the
+     * regression where --mhz is ignored.
+     *
+     * Program is a JMP-to-self at $8000: the CPU just spins so the
+     * runner only exits on cap. */
+    uint8_t prog[] = { 0x4C, 0x00, 0x80 };  /* JMP $8000 */
+    const char *path = write_synthetic_rom(prog, sizeof(prog));
+    ASSERT(path != NULL);
+
+    struct emu_opts opts;
+    emu_opts_init(&opts);
+    opts.machine = MACHINE_WENDY2C;
+    opts.cpu_variant_opt = CPU_65C02;
+    opts.rom_filename = path;
+    opts.cycle_cap = 5000000ULL;
+    opts.cycle_cap_set = 1;
+    opts.target_mhz = 5.0;
+
+    struct timespec t0, t1;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    int rc = emu_run_wendy2c(&opts);
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    long elapsed_ms = (t1.tv_sec - t0.tv_sec) * 1000L
+                     + (t1.tv_nsec - t0.tv_nsec) / 1000000L;
+
+    ASSERT_EQ_FMT(0, rc, "%d");
+    if (elapsed_ms < 600) {
+        FAILm("expected --mhz 5 to throttle 5M osc ticks to ~1 s; "
+              "ran far too fast (--mhz almost certainly ignored)");
+    }
+    if (elapsed_ms > 3000) {
+        FAILm("expected --mhz 5 to throttle 5M osc ticks to ~1 s; "
+              "ran far too slow");
+    }
+
+    remove(path);
+    PASS();
+}
+
 SUITE(cpu_65c02_chip_suite) {
     RUN_TEST(cpu_executes_synthetic_rom_and_halts_on_stp);
     RUN_TEST(wai_wakes_on_masked_t2_irq);
+    RUN_TEST(mhz_paces_osc_to_wall_clock);
 }
 
 GREATEST_MAIN_DEFS();
