@@ -51,10 +51,7 @@ def upload(sock_path: str,
            baud: int = 230400,
            reset_ns: int = 1_000_000,            # 1 ms reset hold
            post_reset_pad_ns: int = 50_000_000,  # 50 ms boot-ROM init pad
-           inter_byte_pad_ns: int = 50_000,      # 50 us per-byte gap so the
-                                                 # boot-ROM ISR has time to
-                                                 # re-enable CB2 IRQ before
-                                                 # the next start bit
+           inter_byte_pad_ns: int = 0,
            verbose: bool = False) -> None:
     framed = frame(payload)
     if verbose:
@@ -120,8 +117,9 @@ def main() -> int:
     p.add_argument("--post-reset-ns", type=int, default=50_000_000,
                    help="emulated-time settling delay after reset "
                         "(default 50 ms)")
-    p.add_argument("--inter-byte-ns", type=int, default=50_000,
-                   help="idle gap between bytes (default 50000 ns = 50 us)")
+    p.add_argument("--inter-byte-ns", type=int, default=0,
+                   help="optional idle gap between bytes (default 0; "
+                        "matches real-hardware pyserial behavior)")
     p.add_argument("-v", "--verbose", action="store_true")
     args = p.parse_args()
 
