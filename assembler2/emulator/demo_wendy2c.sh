@@ -13,27 +13,37 @@
 # RAM at $4000, jumps to it, and then prints to the LCD.
 #
 # Usage:
-#   demo_wendy2c.sh [--live] [--audio] [--wav PATH]
+#   demo_wendy2c.sh [--live | --web [--web-port N]] [--audio] [--wav PATH]
 #
-#   --live      Launch the emulator's live ANSI render of the LCD,
-#               LED, button, and VIA pin state. Runs uncapped;
-#               q/ESC/Ctrl-C in the live panel quits. Without this
-#               flag the emulator runs briefly under a cycle cap and
-#               prints the final LCD frame.
-#   --audio     Play the PB7 piezo line through the host audio
-#               device. On Linux/WSL needs PulseAudio/PipeWire/ALSA;
-#               macOS uses CoreAudio; Windows uses WASAPI. On a host
-#               with no audio backend, miniaudio falls back to its
-#               Null backend (a no-op, with a warning printed). Pairs
-#               naturally with --live but works without it too.
-#   --wav PATH  Record the piezo line to a WAV file (PCM mono int16
-#               @ 22050 Hz; high-passed to mimic a small piezo).
-#               Works with or without --live.
+#   --live          Launch the emulator's live ANSI render of the LCD,
+#                   LED, button, and VIA pin state. Runs uncapped;
+#                   q/ESC/Ctrl-C in the live panel quits. Without this
+#                   flag the emulator runs briefly under a cycle cap
+#                   and prints the final LCD frame.
+#   --web           Launch the embedded HTTP+WebSocket server with a
+#                   browser UI on http://127.0.0.1:8080/ (override port
+#                   with --web-port). Streams state snapshots and PB7
+#                   audio over the WS; click the button or press SPACE
+#                   in the browser to drive the control button. Runs
+#                   uncapped; Ctrl-C in the terminal stops it.
+#                   Mutually exclusive with --live.
+#   --web-port N    TCP port for --web (default 8080; 0 picks ephemeral).
+#   --audio         Play the PB7 piezo line through the host audio
+#                   device. On Linux/WSL needs PulseAudio/PipeWire/ALSA;
+#                   macOS uses CoreAudio; Windows uses WASAPI. On a host
+#                   with no audio backend, miniaudio falls back to its
+#                   Null backend (a no-op, with a warning printed).
+#                   Pairs naturally with --live but works without it too.
+#                   Redundant under --web (the browser plays its own
+#                   stream).
+#   --wav PATH      Record the piezo line to a WAV file (PCM mono int16
+#                   @ 22050 Hz; high-passed to mimic a small piezo).
+#                   Works with any of the above.
 #
 # Env overrides:
 #   DEMO_PAYLOAD     path to a wendy2c .s file (default hello_ram_4000)
-#   DEMO_CYCLE_CAP   non-live: emulator --cycle-cap (default 3000000)
-#                    live:     no cap by default; this overrides if set
+#   DEMO_CYCLE_CAP   non-live/-web: emulator --cycle-cap (default 3000000)
+#                    live/web:      no cap by default; this overrides if set
 #
 # Requires:
 #   - vasm6502_oldstyle on PATH
@@ -44,11 +54,19 @@
 set -e
 
 LIVE=0
+WEB=0
+WEB_PORT=8080
 AUDIO=0
 WAV=""
 while [ $# -gt 0 ]; do
     case $1 in
         --live)  LIVE=1; shift ;;
+        --web)   WEB=1; shift ;;
+        --web-port)
+            if [ $# -lt 2 ]; then
+                echo "error: --web-port requires a value" >&2; exit 1
+            fi
+            WEB_PORT=$2; WEB=1; shift 2 ;;
         --audio) AUDIO=1; shift ;;
         --wav)
             if [ $# -lt 2 ]; then
@@ -62,6 +80,10 @@ while [ $# -gt 0 ]; do
             echo "error: unknown option '$1' (try --help)" >&2; exit 1 ;;
     esac
 done
+
+if [ "$LIVE" -eq 1 ] && [ "$WEB" -eq 1 ]; then
+    echo "error: --live and --web are mutually exclusive" >&2; exit 1
+fi
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 ASM2="$REPO_ROOT/assembler2"
@@ -119,6 +141,24 @@ set -- "$OUT_DIR/wendy2c_boot.bin" \
        --serial-input "$OUT_DIR/payload.framed"
 [ "$AUDIO" -eq 1 ] && set -- "$@" --audio
 [ -n "$WAV" ] && set -- "$@" --wav "$WAV"
+
+if [ "$WEB" -eq 1 ]; then
+    if [ "$WEB_PORT" = "0" ]; then
+        echo ">> launching web UI on an ephemeral port"
+        echo "   (look for the 'wendy2c-web: listening on ...' line below for the URL;"
+        echo "    Ctrl-C here stops the server)"
+    else
+        echo ">> launching web UI at http://127.0.0.1:${WEB_PORT}/"
+        echo "   (open the URL in a browser; Ctrl-C here stops the server)"
+    fi
+    # Same uncapped-by-default semantics as --live; DEMO_CYCLE_CAP can
+    # force a fixed-length recording.
+    set -- "$@" --web --web-port "$WEB_PORT"
+    if [ -n "${DEMO_CYCLE_CAP:-}" ]; then
+        set -- "$@" --cycle-cap "$DEMO_CYCLE_CAP"
+    fi
+    exec ./emulator/emulator.out "$@"
+fi
 
 if [ "$LIVE" -eq 1 ]; then
     echo ">> launching live render (q / ESC / Ctrl-C to quit)"
