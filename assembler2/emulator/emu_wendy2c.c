@@ -373,6 +373,13 @@ static int emu_run_wendy2c_web(struct bus *b,
     struct wendy2c_web_server *srv = wendy2c_web_start(port, web_root);
     if (!srv) return 1;
 
+    /* Pipe PB7 audio samples through the web server. The tap also
+     * forces audio->enabled on, so samples flow even when --wav /
+     * --audio weren't given. The init msg is sent lazily on the next
+     * broadcast so JS knows the sample rate before any binary frame. */
+    audio_set_tap(audio, wendy2c_web_audio_tap, srv);
+    wendy2c_web_send_audio_rate(srv, audio->sample_rate);
+
     /* Same default pace as --live when --mhz is unset. */
     if (osc_per_us <= 0.0) osc_per_us = 19.44;
     const long SNAP_NS = 33 * 1000 * 1000;  /* ~30 fps */
@@ -408,6 +415,10 @@ static int emu_run_wendy2c_web(struct bus *b,
         if (wall_ns - last_snap_ns >= SNAP_NS) {
             build_snapshot(&snap, b, lcd, via, ledbtn, cap_hit);
             wendy2c_web_broadcast(srv, &snap);
+            /* Flush audio on the same cadence as state. ~30 fps means
+             * each binary frame carries ~735 samples @ 22050 Hz --
+             * one packet per frame, sane bandwidth, low overhead. */
+            wendy2c_web_flush_audio(srv);
             last_snap_ns = wall_ns;
         }
     }
@@ -415,7 +426,9 @@ static int emu_run_wendy2c_web(struct bus *b,
     /* Final snapshot so any connected client sees the end state. */
     build_snapshot(&snap, b, lcd, via, ledbtn, cap_hit);
     wendy2c_web_broadcast(srv, &snap);
+    wendy2c_web_flush_audio(srv);
 
+    audio_set_tap(audio, NULL, NULL);  /* detach before audio_close */
     wendy2c_web_stop(srv);
     return 0;
 }

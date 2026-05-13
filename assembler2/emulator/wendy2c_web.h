@@ -77,6 +77,28 @@ int wendy2c_web_poll(struct wendy2c_web_server *srv,
 void wendy2c_web_broadcast(struct wendy2c_web_server *srv,
                            const struct wendy2c_web_snapshot *snap);
 
+/* Push a sample-rate header to clients (sent once after each new WS
+ * upgrade so the JS audio decoder knows what rate to feed WebAudio). */
+void wendy2c_web_send_audio_rate(struct wendy2c_web_server *srv,
+                                 int sample_rate);
+
+/* Push a chunk of int16 PCM samples to every connected WS client as a
+ * binary frame (mono, little-endian, signed 16-bit). The first byte of
+ * the payload is a frame-type tag (0x01 = audio); the remainder is raw
+ * sample bytes. Silent on send errors. */
+void wendy2c_web_broadcast_audio(struct wendy2c_web_server *srv,
+                                 const int16_t *samples, int count);
+
+/* Server-side audio-tap glue: queues a single sample into an internal
+ * ring buffer. Pass as the audio_set_tap() callback (with srv as the
+ * user pointer). The run loop drains the buffer into a single WS
+ * binary frame at each snapshot tick. */
+void wendy2c_web_audio_tap(void *user, int16_t sample);
+
+/* Drain queued samples into a binary frame to all clients. Caller's
+ * responsibility (the run loop calls this every ~33 ms). */
+void wendy2c_web_flush_audio(struct wendy2c_web_server *srv);
+
 /* Number of currently-connected WebSocket clients. */
 int wendy2c_web_client_count(const struct wendy2c_web_server *srv);
 

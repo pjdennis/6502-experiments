@@ -218,10 +218,22 @@ static void emit_sample(struct audio_state *a) {
     if (a->live) {
         rb_push((struct live_state *)a->live, s);
     }
+    if (a->tap_cb) {
+        a->tap_cb(a->tap_user, s);
+    }
 
     /* Carry over the fractional remainder so timing stays exact. */
     a->time_accum  -= a->osc_per_sample;
     a->level_accum  = avg * a->time_accum;  /* preserve the bias of the leftover */
+}
+
+void audio_set_tap(struct audio_state *a,
+                   void (*cb)(void *user, int16_t sample),
+                   void *user) {
+    if (!a) return;
+    a->tap_cb = cb;
+    a->tap_user = user;
+    if (cb) a->enabled = 1;  /* tap on => keep emit_sample running */
 }
 
 void audio_step(struct audio_state *a, uint64_t osc_ticks, uint8_t portb_pins) {

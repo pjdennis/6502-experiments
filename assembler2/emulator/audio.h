@@ -42,6 +42,13 @@ struct audio_state {
     /* Live playback state (opaque ma_device + ringbuffer wrapper).
      * NULL if --audio not enabled or init failed. */
     void *live;
+
+    /* Optional sample tap. Installed via audio_set_tap(); fires for
+     * every emit_sample() with the post-HP int16. The wendy2c web
+     * server uses this to forward samples to connected browsers.
+     * NULL = disabled (no per-sample call). */
+    void (*tap_cb)(void *user, int16_t sample);
+    void *tap_user;
 };
 
 /* Initialize audio.
@@ -58,6 +65,15 @@ int audio_init(struct audio_state *a,
                const char *wav_path,
                int enable_live,
                double osc_per_us);
+
+/* Install a per-sample tap. Calling this with non-NULL cb forces the
+ * audio module's `enabled` flag on, so samples flow through emit_sample
+ * even when --wav / --audio were both off (the wendy2c web runner uses
+ * this to forward audio to browsers without writing to disk or the host
+ * device). Pass cb=NULL to detach. */
+void audio_set_tap(struct audio_state *a,
+                   void (*cb)(void *user, int16_t sample),
+                   void *user);
 
 /* Per-bus-tick hot path. `portb_pins` is via_6522_portb_pins(...),
  * we just need bit 7 (T1 squarewave / piezo line). Designed to be

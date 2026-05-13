@@ -115,9 +115,11 @@ struct client {
     int  inlen;
     char outbuf[CLIENT_OUTBUF_SIZE];
     int  outlen;
+    int  audio_init_sent;            /* 1 once we've sent the audio_init JSON */
 };
 
 #define EVENT_QUEUE_SIZE 32
+#define AUDIO_RING_CAPACITY 8192  /* int16 samples; ~0.37s @ 22050 Hz */
 
 struct wendy2c_web_server {
     int listen_fd;
@@ -128,6 +130,13 @@ struct wendy2c_web_server {
     /* FIFO of pending client-originated events. */
     struct wendy2c_web_event events[EVENT_QUEUE_SIZE];
     int evt_head, evt_tail;
+
+    /* Server-side audio ring: filled by wendy2c_web_audio_tap() from
+     * the audio module's emit_sample(); drained by
+     * wendy2c_web_flush_audio() into a single WS binary frame. */
+    int16_t audio_ring[AUDIO_RING_CAPACITY];
+    int audio_head, audio_tail;
+    int audio_sample_rate;          /* announced to new clients via init msg */
 };
 
 /* ===== Logging ===== */
@@ -186,6 +195,7 @@ static void close_client(struct client *c) {
     c->state = CS_FREE;
     c->inlen = 0;
     c->outlen = 0;
+    c->audio_init_sent = 0;
 }
 
 /* Try to drain outbuf to the wire (best-effort, non-blocking). */
@@ -746,10 +756,126 @@ void wendy2c_web_broadcast(struct wendy2c_web_server *srv,
         (unsigned)s->ddra, (unsigned)s->ddrb,
         s->osc_ticks, s->cpu_cycles, (unsigned)s->pc, s->irq, s->stopped)) return;
 
+    char initmsg[64];
+    int initlen = 0;
+    if (srv->audio_sample_rate > 0) {
+        initlen = snprintf(initmsg, sizeof(initmsg),
+            "{\"type\":\"audio_init\",\"rate\":%d}",
+            srv->audio_sample_rate);
+    }
+
+    for (int i = 0; i < WENDY2C_WEB_MAX_CLIENTS; i++) {
+        struct client *c = &srv->clients[i];
+        if (c->state != CS_WS_OPEN) continue;
+        if (initlen > 0 && !c->audio_init_sent) {
+            ws_send_text(c, initmsg, (size_t)initlen);
+            c->audio_init_sent = 1;
+        }
+        ws_send_text(c, json, (size_t)pos);
+        flush_outbuf(c);
+    }
+}
+
+/* ===== Audio ===== */
+
+/* Send a binary frame (FIN+binary, no masking; we're the server). */
+static void ws_send_binary(struct client *c, const uint8_t *data, size_t n) {
+    if (c->state != CS_WS_OPEN) return;
+    uint8_t hdr[10];
+    int hlen;
+    if (n <= 125) {
+        hdr[0] = 0x82;          /* FIN + binary */
+        hdr[1] = (uint8_t)n;
+        hlen = 2;
+    } else if (n <= 0xFFFF) {
+        hdr[0] = 0x82;
+        hdr[1] = 126;
+        hdr[2] = (uint8_t)(n >> 8);
+        hdr[3] = (uint8_t)n;
+        hlen = 4;
+    } else {
+        close_client(c);
+        return;
+    }
+    queue_bytes(c, hdr, hlen);
+    queue_bytes(c, data, (int)n);
+}
+
+void wendy2c_web_audio_tap(void *user, int16_t sample) {
+    struct wendy2c_web_server *srv = (struct wendy2c_web_server *)user;
+    if (!srv) return;
+    int next = (srv->audio_tail + 1) % AUDIO_RING_CAPACITY;
+    if (next == srv->audio_head) {
+        /* Overflow -- drop the oldest. The ring is sized for ~370 ms
+         * which is far more than the snapshot interval, so this only
+         * fires when there are no clients (and even then it's harmless). */
+        srv->audio_head = (srv->audio_head + 1) % AUDIO_RING_CAPACITY;
+    }
+    srv->audio_ring[srv->audio_tail] = sample;
+    srv->audio_tail = next;
+}
+
+void wendy2c_web_send_audio_rate(struct wendy2c_web_server *srv,
+                                 int sample_rate) {
+    if (!srv) return;
+    srv->audio_sample_rate = sample_rate;
+    /* Sent as a text frame so the client knows the rate before the
+     * first binary audio frame arrives. */
+    char msg[64];
+    int n = snprintf(msg, sizeof(msg),
+                     "{\"type\":\"audio_init\",\"rate\":%d}", sample_rate);
     for (int i = 0; i < WENDY2C_WEB_MAX_CLIENTS; i++) {
         if (srv->clients[i].state == CS_WS_OPEN) {
-            ws_send_text(&srv->clients[i], json, (size_t)pos);
+            ws_send_text(&srv->clients[i], msg, (size_t)n);
             flush_outbuf(&srv->clients[i]);
         }
+    }
+}
+
+void wendy2c_web_broadcast_audio(struct wendy2c_web_server *srv,
+                                 const int16_t *samples, int count) {
+    if (!srv || count <= 0) return;
+    /* Frame format: [0x01 = audio tag][LE int16 samples...].
+     * We cap a single frame at 4 KiB of samples (2000 int16) to stay
+     * comfortably under our 64 KiB server send cap. */
+    if (count > 2000) count = 2000;
+    uint8_t buf[1 + 2 * 2000];
+    buf[0] = 0x01;
+    for (int i = 0; i < count; i++) {
+        int16_t v = samples[i];
+        buf[1 + i * 2]     = (uint8_t)(v & 0xFF);
+        buf[1 + i * 2 + 1] = (uint8_t)((uint16_t)v >> 8);
+    }
+    size_t plen = 1 + 2 * (size_t)count;
+    int any = 0;
+    for (int i = 0; i < WENDY2C_WEB_MAX_CLIENTS; i++)
+        if (srv->clients[i].state == CS_WS_OPEN) { any = 1; break; }
+    if (!any) return;
+    for (int i = 0; i < WENDY2C_WEB_MAX_CLIENTS; i++) {
+        if (srv->clients[i].state == CS_WS_OPEN) {
+            ws_send_binary(&srv->clients[i], buf, plen);
+            flush_outbuf(&srv->clients[i]);
+        }
+    }
+}
+
+void wendy2c_web_flush_audio(struct wendy2c_web_server *srv) {
+    if (!srv) return;
+    /* No clients? Drop the queue so it doesn't fill up forever. */
+    int any = 0;
+    for (int i = 0; i < WENDY2C_WEB_MAX_CLIENTS; i++)
+        if (srv->clients[i].state == CS_WS_OPEN) { any = 1; break; }
+    if (!any) { srv->audio_head = srv->audio_tail; return; }
+
+    /* Drain the ring into one or more frames. ws_send_binary caps at
+     * 2000 samples per frame; loop until empty. */
+    while (srv->audio_head != srv->audio_tail) {
+        int n = 0;
+        int16_t batch[2000];
+        while (srv->audio_head != srv->audio_tail && n < 2000) {
+            batch[n++] = srv->audio_ring[srv->audio_head];
+            srv->audio_head = (srv->audio_head + 1) % AUDIO_RING_CAPACITY;
+        }
+        wendy2c_web_broadcast_audio(srv, batch, n);
     }
 }
