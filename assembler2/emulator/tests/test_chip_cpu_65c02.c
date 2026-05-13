@@ -45,6 +45,37 @@ void audio_step(struct audio_state *a, uint64_t osc, uint8_t pins) {
     (void)a; (void)osc; (void)pins;
 }
 void audio_close(struct audio_state *a) { (void)a; }
+void audio_set_tap(struct audio_state *a,
+                   void (*cb)(void *user, int16_t sample), void *user) {
+    (void)a; (void)cb; (void)user;
+}
+
+/* Same for the wendy2c_web symbols (defined in wendy2c_web.c). The
+ * test never hits the --web path, but the linker still resolves
+ * references in emu_run_wendy2c. Use forward-declared opaque types so
+ * we don't have to include wendy2c_web.h here. */
+struct wendy2c_web_server;
+struct wendy2c_web_event;
+struct wendy2c_web_snapshot;
+struct wendy2c_web_server *wendy2c_web_start(int port, const char *web_root) {
+    (void)port; (void)web_root; return NULL;
+}
+void wendy2c_web_stop(struct wendy2c_web_server *srv) { (void)srv; }
+int  wendy2c_web_poll(struct wendy2c_web_server *srv,
+                      struct wendy2c_web_event *out_event) {
+    (void)srv; (void)out_event; return 0;
+}
+void wendy2c_web_broadcast(struct wendy2c_web_server *srv,
+                           const struct wendy2c_web_snapshot *snap) {
+    (void)srv; (void)snap;
+}
+void wendy2c_web_send_audio_rate(struct wendy2c_web_server *srv, int sample_rate) {
+    (void)srv; (void)sample_rate;
+}
+void wendy2c_web_audio_tap(void *user, int16_t sample) {
+    (void)user; (void)sample;
+}
+void wendy2c_web_flush_audio(struct wendy2c_web_server *srv) { (void)srv; }
 
 static const char *write_synthetic_rom(const uint8_t *prog, size_t prog_len) {
     /* Fresh template per call -- mkstemp mutates it, so a static buffer
