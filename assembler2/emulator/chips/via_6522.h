@@ -79,6 +79,7 @@ struct via_6522_state {
     uint8_t sr_bits_remaining;  /* shift-in-T2 byte progress */
     uint8_t cb2_in;             /* current CB2 input level */
     uint8_t prev_cb2;           /* edge detect */
+    uint8_t prev_res;           /* for bus->res rising-edge detect */
 
     /* External pin drive for PORTA input bits (bits with DDRA=0).
      * Read back through porta_pin_value() as

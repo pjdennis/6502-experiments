@@ -251,12 +251,43 @@ def run_test(base_dir, verbose=False, keep=False):
             page.screenshot(path=str(shot2))
             page.mouse.up()
 
+            # Click the reset button. The server pulses bus->res; the
+            # CPU+VIA both reset; the boot ROM restarts. Verify by
+            # snapshotting the PC field on the status line over a
+            # short window and asserting it visits a known boot-ROM
+            # address (the upload-and-run EEPROM starts at $8000).
+            # The actual ASCII PC text is on #status-clock.
+            # Sample the pre-reset PC -- with the cgram payload running
+            # it should be parked in the $4000-range payload code.
+            pre_pc_text = page.text_content("#status-clock") or ""
+            if "pc:$4" not in pre_pc_text:
+                print(f"  {Colors.RED}FAIL{Colors.NC} pre-reset PC unexpected: '{pre_pc_text}'")
+                return False
+            page.click("#btn-reset")
+            # Wait up to 2s for PC to land back in the boot ROM (any
+            # $8xxx address). The pulse + a few cycles for the reset
+            # vector fetch + boot-ROM init completes well within this.
+            try:
+                page.wait_for_function(
+                    "(document.getElementById('status-clock') || {}).textContent && "
+                    "document.getElementById('status-clock').textContent.indexOf('pc:$8') >= 0",
+                    timeout=2000,
+                )
+            except Exception:
+                pc_now = page.text_content("#status-clock") or ""
+                print(f"  {Colors.RED}FAIL{Colors.NC} after reset, PC never re-entered the $8xxx boot ROM: "
+                      f"pre='{pre_pc_text}' post='{pc_now}'")
+                return False
+            shot3 = out_dir / "web-after-reset.png"
+            page.screenshot(path=str(shot3))
+
             browser.close()
 
         print(f"  {Colors.GREEN}PASS{Colors.NC} web UI test (screenshots in {out_dir}/)")
         if verbose:
             print(f"    {shot1}")
             print(f"    {shot2}")
+            print(f"    {shot3}")
         return True
 
     finally:

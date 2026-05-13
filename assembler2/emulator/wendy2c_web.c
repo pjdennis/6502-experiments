@@ -491,6 +491,9 @@ static void handle_text_msg(struct wendy2c_web_server *srv,
     if (web_json_parse(txt, len, &msg) != 0) return;
     if (msg.has_type && strcmp(msg.type, "button") == 0 && msg.has_down) {
         queue_event(srv, WENDY2C_WEB_EVT_BUTTON, msg.down ? 1 : 0);
+    } else if (msg.has_type && strcmp(msg.type, "reset") == 0) {
+        /* Reset is a one-shot (button_down field unused). */
+        queue_event(srv, WENDY2C_WEB_EVT_RESET, 0);
     }
 }
 

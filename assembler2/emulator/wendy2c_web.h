@@ -52,6 +52,7 @@ struct wendy2c_web_snapshot {
 enum wendy2c_web_event_type {
     WENDY2C_WEB_EVT_NONE = 0,
     WENDY2C_WEB_EVT_BUTTON,
+    WENDY2C_WEB_EVT_RESET,
 };
 
 struct wendy2c_web_event {

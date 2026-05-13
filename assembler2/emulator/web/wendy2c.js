@@ -240,9 +240,28 @@
   btn.addEventListener("pointerdown", (e) => { unlockAudio(); btn.classList.add("held"); send({ type: "button", down: 1 }); e.preventDefault(); });
   btn.addEventListener("pointerup",   () => { btn.classList.remove("held"); send({ type: "button", down: 0 }); });
   btn.addEventListener("pointerleave",() => { if (btn.classList.contains("held")) { btn.classList.remove("held"); send({ type: "button", down: 0 }); } });
-  // Keyboard: space toggles
+  // Reset button: one-shot {type:"reset"} on click. The server pulses
+  // bus->res high for several oscillator ticks; the CPU and VIA see
+  // the rising edge and clear their state.
+  const rst = $("btn-reset");
+  function fireReset() {
+    rst.classList.add("flash");
+    setTimeout(() => rst.classList.remove("flash"), 120);
+    send({ type: "reset" });
+  }
+  rst.addEventListener("click", (e) => { unlockAudio(); fireReset(); e.preventDefault(); });
+
+  // Keyboard: space toggles button; 'r' / 'R' triggers reset.
   let spaceDown = false;
-  document.addEventListener("keydown", (e) => { if (e.key === " " && !spaceDown) { spaceDown = true; unlockAudio(); btn.classList.add("held"); send({ type: "button", down: 1 }); e.preventDefault(); } });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === " " && !spaceDown) {
+      spaceDown = true; unlockAudio();
+      btn.classList.add("held"); send({ type: "button", down: 1 });
+      e.preventDefault();
+    } else if (e.key === "r" || e.key === "R") {
+      unlockAudio(); fireReset(); e.preventDefault();
+    }
+  });
   document.addEventListener("keyup",   (e) => { if (e.key === " ") { spaceDown = false; btn.classList.remove("held"); send({ type: "button", down: 0 }); e.preventDefault(); } });
   // Also: any click on the document unlocks audio (browser-gesture policy).
   document.addEventListener("click", unlockAudio, { once: false });

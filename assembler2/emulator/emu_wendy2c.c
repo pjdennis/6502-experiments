@@ -103,7 +103,7 @@ static void live_render(const struct bus *b,
     int n = 0;
     n += snprintf(buf + n, sizeof(buf) - n, "\x1b[H\x1b[0m");
     n += snprintf(buf + n, sizeof(buf) - n,
-        "\x1b[1mwendy2c live\x1b[0m  --  q/ESC/Ctrl-C quit, SPACE press button\x1b[K\r\n\r\n");
+        "\x1b[1mwendy2c live\x1b[0m  --  q/ESC/Ctrl-C quit, SPACE press button, R reset\x1b[K\r\n\r\n");
 
     /* LCD frame in a box. */
     n += snprintf(buf + n, sizeof(buf) - n, "  LCD:\x1b[K\r\n");
@@ -176,6 +176,26 @@ static void live_render(const struct bus *b,
 
 /* Returns 1 if user hit a quit key, 0 otherwise. Reads at most a few
  * bytes; SPACE toggles the button via led_buttons_press(). */
+/* Pulse RES high on the bus for a few oscillator ticks then release.
+ * Mirrors the init-time reset sequence: the CPU + VIA both sample RES
+ * rising-edge in their tick() and clear their state, then resume from
+ * the reset vector on the first cycle after RES drops. The 8-tick
+ * width is plenty for the CPU to latch the new PC and is short enough
+ * to be visually instantaneous. */
+static void pulse_reset(struct bus *b, struct audio_state *audio) {
+    b->res = 1;
+    for (int i = 0; i < 8; i++) {
+        bus_step(b);
+        if (audio) audio_step(audio, b->osc_ticks, 0);
+    }
+    b->res = 0;
+}
+
+/* Bit-flag return values for live_poll_input so the loop can react to
+ * multiple events from one keypress burst. */
+#define LIVE_INPUT_QUIT   0x1
+#define LIVE_INPUT_RESET  0x2
+
 static int live_poll_input(struct led_buttons_state *ledbtn) {
     fd_set fds;
     struct timeval tv = {0, 0};
@@ -183,17 +203,20 @@ static int live_poll_input(struct led_buttons_state *ledbtn) {
     FD_SET(0, &fds);
     if (select(1, &fds, NULL, NULL, &tv) <= 0) return 0;
 
+    int flags = 0;
     unsigned char buf[16];
     ssize_t n = read(0, buf, sizeof(buf));
     for (ssize_t i = 0; i < n; i++) {
         unsigned char c = buf[i];
         if (c == 'q' || c == 'Q' || c == 0x03 /* Ctrl-C */ || c == 0x1B /* ESC */) {
-            return 1;
+            flags |= LIVE_INPUT_QUIT;
         } else if (c == ' ') {
             led_buttons_press(ledbtn, !ledbtn->button_pressed);
+        } else if (c == 'r' || c == 'R') {
+            flags |= LIVE_INPUT_RESET;
         }
     }
-    return 0;
+    return flags;
 }
 
 /* Wall-clock pace helper: given a fixed-rate reference (t0, osc0,
@@ -278,7 +301,9 @@ static int emu_run_wendy2c_live(struct bus *b,
             last_render_ns = wall_ns;
         }
 
-        if (live_poll_input(ledbtn)) quit = 1;
+        int input_flags = live_poll_input(ledbtn);
+        if (input_flags & LIVE_INPUT_QUIT)  quit = 1;
+        if (input_flags & LIVE_INPUT_RESET) pulse_reset(b, audio);
     }
 
     /* Final render captures the last frame before tearing down the
@@ -411,6 +436,8 @@ static int emu_run_wendy2c_web(struct bus *b,
         wendy2c_web_poll(srv, &evt);
         if (evt.type == WENDY2C_WEB_EVT_BUTTON) {
             led_buttons_press(ledbtn, evt.button_down);
+        } else if (evt.type == WENDY2C_WEB_EVT_RESET) {
+            pulse_reset(b, audio);
         }
 
         if (wall_ns - last_snap_ns >= SNAP_NS) {

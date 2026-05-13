@@ -163,6 +163,57 @@ TEST cb2_neg_edge_then_sr_in_t2_byte(void) {
     PASS();
 }
 
+TEST res_rising_edge_clears_registers_and_irq(void) {
+    setup();
+    /* Configure: DDRA = output, ORA = $5A, DDRB = $1F (banks driven),
+     * ORB = $05 (banks=5), arm T1 continuous + IRQ-on-T1, set IER. */
+    w(VIA_REG_DDRA, 0xFF);
+    w(VIA_REG_ORA,  0x5A);
+    w(VIA_REG_DDRB, 0x1F);
+    w(VIA_REG_ORB,  0x05);
+    w(VIA_REG_ACR,  VIA_ACR_T1_CONT);
+    w(VIA_REG_T1LL, 0x10);
+    w(VIA_REG_T1CH, 0x00);   /* arms T1 */
+    w(VIA_REG_IER,  0x80 | VIA_INT_T1);  /* enable T1 IRQ */
+
+    /* Inject an external pull-up on PA1 -- this is the wendy2c
+     * control-button pin. RES must leave it intact. */
+    via_6522_set_porta_input_bit(&vs, 0x02, 1);
+
+    /* Run T1 down to underflow so IFR.T1 is set and the IRQ line goes
+     * high. (T1 counts on cpu_cycle_due ticks.) */
+    for (int i = 0; i < 200; i++) { bus_.cpu_cycle_due = 1; bus_step(&bus_); }
+    ASSERT(bus_.irq);
+
+    /* Pulse RES high. The VIA detects the rising edge on its next
+     * tick and clears every register; the IRQ line drops; T1 stops. */
+    bus_.res = 1;
+    bus_step(&bus_);
+
+    ASSERT_EQ_FMT((uint8_t)0, r(VIA_REG_DDRA), "%02X");
+    ASSERT_EQ_FMT((uint8_t)0, r(VIA_REG_DDRB), "%02X");
+    ASSERT_EQ_FMT((uint8_t)0, r(VIA_REG_ACR),  "%02X");
+    ASSERT_EQ_FMT((uint8_t)0, r(VIA_REG_IER) & 0x7F, "%02X");
+    ASSERT_EQ_FMT((uint8_t)0, r(VIA_REG_IFR) & 0x7F, "%02X");
+    ASSERT_EQ_FMT((uint8_t)0, bus_.irq, "%02X");
+    ASSERT_EQ_FMT((uint8_t)0, bus_.bank_config, "%02X");
+
+    /* PORTA pin value after RES: (ora & ddra) | (porta_input & ~ddra).
+     * ora and ddra are both 0; porta_input has PA1 high (pull-up), so
+     * PORTA reads back as $02 -- proving the external drive survived
+     * the reset. PORTB has no input drive modelled, so it reads 0. */
+    ASSERT_EQ_FMT((uint8_t)0x02, r(VIA_REG_ORA), "%02X");
+    ASSERT_EQ_FMT((uint8_t)0x00, r(VIA_REG_ORB), "%02X");
+
+    /* Release RES. Holding it longer would have no further effect (no
+     * re-edge); confirm the second tick doesn't disturb the cleared
+     * state. */
+    bus_.res = 0;
+    bus_step(&bus_);
+    ASSERT_EQ_FMT((uint8_t)0x02, r(VIA_REG_ORA), "%02X");
+    PASS();
+}
+
 SUITE(via_6522_suite) {
     RUN_TEST(init_state_is_zero);
     RUN_TEST(porta_input_output_direction);
@@ -171,6 +222,7 @@ SUITE(via_6522_suite) {
     RUN_TEST(t1_continuous_toggles_pb7);
     RUN_TEST(ifr_write_clears_bits);
     RUN_TEST(cb2_neg_edge_then_sr_in_t2_byte);
+    RUN_TEST(res_rising_edge_clears_registers_and_irq);
 }
 
 GREATEST_MAIN_DEFS();

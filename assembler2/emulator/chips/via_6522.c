@@ -162,8 +162,33 @@ static bool via_6522_write(struct chip *self, struct bus *bus,
     return true;
 }
 
+/* Apply a hardware reset to the VIA's internal registers, mirroring
+ * the WDC W65C22S RES behavior: all registers (DDRA/B, ORA/B, T1/T2
+ * counter+latch, SR, ACR, PCR, IFR, IER) clear; the IRQ output
+ * deasserts; timers stop. External pin drives (porta_input) and the
+ * CB2 input level are NOT touched -- they reflect what the outside
+ * world is doing, not VIA state. */
+static void via_6522_apply_reset(struct via_6522_state *s, struct bus *bus) {
+    uint8_t saved_input = s->porta_input;
+    uint8_t saved_cb2   = s->cb2_in;
+    memset(s, 0, sizeof(*s));
+    s->porta_input = saved_input;
+    s->cb2_in      = saved_cb2;
+    if (bus) {
+        bus->bank_config = 0;   /* (orb & ddrb) = 0 */
+        bus->irq         = 0;   /* IFR/IER both cleared */
+    }
+}
+
 static void via_6522_tick(struct chip *self, struct bus *bus) {
     struct via_6522_state *s = (struct via_6522_state *)self->state;
+
+    /* RES rising-edge: apply hardware reset. Held-high keeps everything
+     * cleared; the boot ROM doesn't poll while held. */
+    if (bus->res && !s->prev_res) {
+        via_6522_apply_reset(s, bus);
+    }
+    s->prev_res = bus->res;
 
     /* T1/T2 count on phi2 cycles, not OSC ticks. The clock_22v10
      * sets bus->cpu_cycle_due on each CK falling edge (= phi2 edge);
@@ -213,7 +238,7 @@ static void via_6522_tick(struct chip *self, struct bus *bus) {
 
 static void via_6522_reset(struct chip *self) {
     struct via_6522_state *s = (struct via_6522_state *)self->state;
-    memset(s, 0, sizeof(*s));
+    via_6522_apply_reset(s, NULL);
 }
 
 void via_6522_init(struct chip *chip, struct via_6522_state *state) {
