@@ -31,7 +31,7 @@ emulator/emulator.out: $(EMU_SRCS) $(EMU_HDRS) emulator/vendor/miniaudio.h
 # C unit tests
 C_TESTS = emulator/tests/out/test_smoke.out emulator/tests/out/test_file_io.out emulator/tests/out/test_console.out emulator/tests/out/test_trace.out emulator/tests/out/test_cli.out emulator/tests/out/test_emu_run.out emulator/tests/out/test_bus.out emulator/tests/out/test_cpu_variant.out emulator/tests/out/test_cpu_65c02_fixes.out emulator/tests/out/test_cpu_65c02_group_a.out emulator/tests/out/test_cpu_65c02_group_b.out emulator/tests/out/test_cpu_65c02_bit_ops.out emulator/tests/out/test_cpu_65c02_wai_stp.out emulator/tests/out/test_cpu_bus_tap.out emulator/tests/out/test_dormann.out emulator/tests/out/test_machine_dispatch.out emulator/tests/out/test_chip_osc.out emulator/tests/out/test_chip_clock.out emulator/tests/out/test_chip_rom.out emulator/tests/out/test_chip_ram.out emulator/tests/out/test_chip_cpu_65c02.out emulator/tests/out/test_chip_via.out emulator/tests/out/test_chip_lcd.out emulator/tests/out/test_chip_serial_usb.out emulator/tests/out/test_chip_led_buttons.out emulator/tests/out/test_audio.out
 
-test: $(C_TESTS) wendy2c-goldens wendy2c-live-sigint
+test: $(C_TESTS) wendy2c-goldens wendy2c-live-sigint wendy2c-web
 	@for t in $(C_TESTS); do ./$$t || exit 1; done
 
 # End-to-end wendy2c golden-LCD tests. Requires vasm6502_oldstyle on
@@ -45,7 +45,14 @@ wendy2c-goldens: emulator/emulator.out
 wendy2c-live-sigint: emulator/emulator.out
 	@python3 emulator/tests/live_sigint_test.py
 
-.PHONY: wendy2c-goldens wendy2c-live-sigint
+# Playwright test: drives the --web HTTP+WS server with headless
+# Chromium, verifies the LCD canvas renders CGRAM custom characters
+# pixel-by-pixel, that state + audio frames flow over the WS, and that
+# button clicks round-trip. SKIPs if vasm or playwright are missing.
+wendy2c-web: emulator/emulator.out
+	@python3 emulator/tests/web_playwright_test.py
+
+.PHONY: wendy2c-goldens wendy2c-live-sigint wendy2c-web
 
 emulator/tests/out/test_smoke.out: emulator/tests/test_smoke.c emulator/tests/greatest.h
 	@mkdir -p emulator/tests/out
