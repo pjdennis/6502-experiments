@@ -12,6 +12,7 @@
 #include "bus.h"
 #include "cpu_core.h"
 #include "emu_run.h"
+#include "serial_link.h"
 #include "tty_alt_screen.h"
 #include "wendy2c_web.h"
 #include "chips/clock_22v10.h"
@@ -245,11 +246,32 @@ static long wendy2c_pace(const struct timespec *t0,
     return wall_ns;
 }
 
+/* Poll the link if non-NULL; if it's stalled (TX active + current
+ * duration expired + recv buffer empty), select-wait briefly on the
+ * client fd so we don't busy-spin. Returns 1 if a stall happened (the
+ * caller may want to re-check before starting the next batch).
+ * Stall timeout is bounded so UIs (live render / web snapshots) stay
+ * responsive. */
+static int link_step(struct serial_link *link, uint64_t osc_now,
+                      struct bus *b, struct via_6522_state *via,
+                      int stall_timeout_ms) {
+    if (!link) return 0;
+    serial_link_poll(link, osc_now, b, via);
+    if (!serial_link_should_stall(link, osc_now)) return 0;
+    int fd = serial_link_client_fd(link);
+    if (fd < 0) return 0;
+    fd_set rfds; FD_ZERO(&rfds); FD_SET(fd, &rfds);
+    struct timeval tv = { 0, stall_timeout_ms * 1000 };
+    select(fd + 1, &rfds, NULL, NULL, &tv);
+    return 1;
+}
+
 static int emu_run_wendy2c_live(struct bus *b,
                                 struct lcd_hd44780_state *lcd,
                                 struct via_6522_state *via,
                                 struct led_buttons_state *ledbtn,
                                 struct audio_state *audio,
+                                struct serial_link *link,
                                 uint64_t cap,
                                 double osc_per_us) {
     /* Install BEFORE entering the alt screen so that a Ctrl-C arriving
@@ -283,6 +305,9 @@ static int emu_run_wendy2c_live(struct bus *b,
     live_render(b, lcd, via, ledbtn, 0);
 
     while (!quit && !sigint_requested) {
+        /* Drain pending link commands and stall briefly if the host
+         * is mid-TX with an empty buffer. */
+        if (link_step(link, b->osc_ticks, b, via, 5)) continue;
         /* Step a batch of osc ticks. Batch size tuned so the inner
          * loop has minimal overhead between renders. */
         const int BATCH = 2000;
@@ -291,6 +316,10 @@ static int emu_run_wendy2c_live(struct bus *b,
             bus_step(b);
             audio_step(audio, b->osc_ticks, via_6522_portb_pins(via));
             if (cpu_stp_pending()) break;
+            if (link && serial_link_needs_repoll(link, b->osc_ticks)) {
+                serial_link_poll(link, b->osc_ticks, b, via);
+                if (serial_link_should_stall(link, b->osc_ticks)) break;
+            }
         }
         if (cpu_stp_pending() || cap_hit) break;
 
@@ -389,6 +418,7 @@ static int emu_run_wendy2c_web(struct bus *b,
                                 struct via_6522_state *via,
                                 struct led_buttons_state *ledbtn,
                                 struct audio_state *audio,
+                                struct serial_link *link,
                                 uint64_t cap,
                                 double osc_per_us,
                                 int port,
@@ -421,12 +451,17 @@ static int emu_run_wendy2c_web(struct bus *b,
      * the "wait for state" message until the first message arrives). */
 
     while (!sigint_requested) {
+        if (link_step(link, b->osc_ticks, b, via, 5)) continue;
         const int BATCH = 5000;
         for (int i = 0; i < BATCH; i++) {
             if (b->osc_ticks >= cap) { cap_hit = 1; break; }
             bus_step(b);
             audio_step(audio, b->osc_ticks, via_6522_portb_pins(via));
             if (cpu_stp_pending()) break;
+            if (link && serial_link_needs_repoll(link, b->osc_ticks)) {
+                serial_link_poll(link, b->osc_ticks, b, via);
+                if (serial_link_should_stall(link, b->osc_ticks)) break;
+            }
         }
         if (cap_hit || cpu_stp_pending()) break;
 
@@ -568,13 +603,26 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
                opts->audio_live,
                audio_osc_per_us);
 
+    /* Optional host-driven serial link. The link uses the same OSC
+     * rate as the audio module (i.e. the assumed board frequency) so
+     * ns -> osc-tick conversion stays consistent with whatever the
+     * boot ROM expects, regardless of --mhz throttling. */
+    struct serial_link *link = NULL;
+    if (opts->serial_link_path) {
+        link = serial_link_start(opts->serial_link_path, audio_osc_per_us);
+        if (!link) {
+            audio_close(&audio);
+            return 1;
+        }
+    }
+
     if (opts->web) {
         emu_run_wendy2c_web(&b, &lcd_state, &via_state, &ledbtn_state,
-                            &audio, cap, osc_per_us,
+                            &audio, link, cap, osc_per_us,
                             opts->web_port, opts->web_bind, opts->web_root);
     } else if (opts->live) {
         emu_run_wendy2c_live(&b, &lcd_state, &via_state, &ledbtn_state,
-                             &audio, cap, osc_per_us);
+                             &audio, link, cap, osc_per_us);
     } else if (osc_per_us > 0.0) {
         /* Throttled non-live: step in batches and sleep when ahead-
          * of-wall so wall time tracks emulated osc time. */
@@ -582,24 +630,42 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
         clock_gettime(CLOCK_MONOTONIC, &t0);
         uint64_t osc0 = b.osc_ticks;
         while (b.osc_ticks < cap) {
+            if (link_step(link, b.osc_ticks, &b, &via_state, 10)) continue;
             const int BATCH = 50000;
             int stp = 0;
             for (int i = 0; i < BATCH && b.osc_ticks < cap; i++) {
                 bus_step(&b);
                 audio_step(&audio, b.osc_ticks, via_6522_portb_pins(&via_state));
                 if (cpu_stp_pending()) { stp = 1; break; }
+                if (link && serial_link_needs_repoll(link, b.osc_ticks)) {
+                    serial_link_poll(link, b.osc_ticks, &b, &via_state);
+                    if (serial_link_should_stall(link, b.osc_ticks)) break;
+                }
             }
             if (stp) break;
             (void)wendy2c_pace(&t0, osc0, b.osc_ticks, osc_per_us);
         }
     } else {
+        /* Free-running (no throttle): just step. Same link-stall
+         * shape as the throttled path, minus the wendy2c_pace call. */
         while (b.osc_ticks < cap) {
-            bus_step(&b);
-            audio_step(&audio, b.osc_ticks, via_6522_portb_pins(&via_state));
-            if (cpu_stp_pending()) break;
+            if (link_step(link, b.osc_ticks, &b, &via_state, 10)) continue;
+            const int BATCH = 50000;
+            int stp = 0;
+            for (int i = 0; i < BATCH && b.osc_ticks < cap; i++) {
+                bus_step(&b);
+                audio_step(&audio, b.osc_ticks, via_6522_portb_pins(&via_state));
+                if (cpu_stp_pending()) { stp = 1; break; }
+                if (link && serial_link_needs_repoll(link, b.osc_ticks)) {
+                    serial_link_poll(link, b.osc_ticks, &b, &via_state);
+                    if (serial_link_should_stall(link, b.osc_ticks)) break;
+                }
+            }
+            if (stp) break;
         }
     }
 
+    if (link) serial_link_stop(link);
     audio_close(&audio);
 
     int halted_on_stp = cpu_stp_pending();

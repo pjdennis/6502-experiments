@@ -41,6 +41,7 @@ void emu_opts_init(struct emu_opts *opts) {
     opts->web_port = 8080;
     opts->web_bind = NULL;
     opts->web_root = NULL;
+    opts->serial_link_path = NULL;
 }
 
 void emu_opts_usage(FILE *fp) {
@@ -87,6 +88,10 @@ void emu_opts_usage(FILE *fp) {
 "                         warning when bound non-loopback.\n"
 "  --web-root PATH        wendy2c: directory containing index.html/wendy2c.css/.js.\n"
 "                         Defaults to <dir-of-argv0>/web.\n"
+"  --serial-link PATH     wendy2c: Unix-domain socket for host-driven CB2 line.\n"
+"                         A Python client drives bit-level transitions and reset\n"
+"                         pulses at emulated-time resolution; see wendy2c_emu_link.py.\n"
+"                         Compatible with --web, --live, both, or neither.\n"
 "  --cycle-cap N          max cycles before forced exit (decimal; default 200000000;\n"
 "                         no cap under --live unless this is given explicitly).\n"
 "                         For wendy2c this is oscillator ticks (~2 per CPU cycle);\n"
@@ -270,6 +275,8 @@ int parse_args(int argc, char **argv, struct emu_opts *opts) {
             }
             opts->web_root = argv[i + 1];
             i += 2;
+        } else if (strcmp(argv[i], "--serial-link") == 0) {
+            if (take_str_value(argc, argv, &i, "--serial-link", &opts->serial_link_path)) return 1;
         } else if (strcmp(argv[i], "--cycle-cap") == 0) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "error: --cycle-cap requires a value\n");
@@ -329,6 +336,11 @@ int parse_args(int argc, char **argv, struct emu_opts *opts) {
     if ((opts->wav_filename || opts->audio_live)
         && opts->machine != MACHINE_WENDY2C) {
         fprintf(stderr, "error: --wav / --audio currently require --machine wendy2c\n");
+        return 1;
+    }
+
+    if (opts->serial_link_path && opts->machine != MACHINE_WENDY2C) {
+        fprintf(stderr, "error: --serial-link currently requires --machine wendy2c\n");
         return 1;
     }
 

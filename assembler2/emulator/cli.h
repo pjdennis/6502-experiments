@@ -48,6 +48,7 @@ struct emu_opts {
     int web_port;                       /* --web-port N; default 8080 */
     const char *web_bind;               /* --web-bind ADDR; NULL = 127.0.0.1 (loopback only) */
     const char *web_root;               /* --web-root PATH; NULL = auto-discover next to argv[0] */
+    const char *serial_link_path;       /* --serial-link PATH (wendy2c only): Unix socket for host-driven CB2 + reset */
 };
 
 /* Initialize an emu_opts with the documented defaults. */

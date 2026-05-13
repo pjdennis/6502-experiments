@@ -49,6 +49,29 @@ void audio_set_tap(struct audio_state *a,
                    void (*cb)(void *user, int16_t sample),
                    void *user) { (void)a; (void)cb; (void)user; }
 
+/* serial_link symbols (defined in serial_link.c). Like the others,
+ * the smoke test never opens a link, so plain no-op stubs are
+ * sufficient. */
+struct serial_link;
+struct via_6522_state;
+struct bus;
+struct serial_link *serial_link_start(const char *path, double osc_per_us) {
+    (void)path; (void)osc_per_us; return NULL;
+}
+void serial_link_poll(struct serial_link *l, uint64_t osc_now,
+                       struct bus *b, struct via_6522_state *via) {
+    (void)l; (void)osc_now; (void)b; (void)via;
+}
+int  serial_link_should_stall(const struct serial_link *l, uint64_t osc_now) {
+    (void)l; (void)osc_now; return 0;
+}
+int  serial_link_needs_repoll(const struct serial_link *l, uint64_t osc_now) {
+    (void)l; (void)osc_now; return 0;
+}
+int  serial_link_client_fd(const struct serial_link *l) { (void)l; return -1; }
+int  serial_link_has_client(const struct serial_link *l) { (void)l; return 0; }
+void serial_link_stop(struct serial_link *l) { (void)l; }
+
 static const char *write_synthetic_rom(const uint8_t *prog, size_t prog_len) {
     /* Fresh template per call -- mkstemp mutates it, so a static buffer
      * would make any second call in the same test process fail. */
