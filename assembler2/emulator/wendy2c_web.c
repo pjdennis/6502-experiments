@@ -1,4 +1,5 @@
 #include "wendy2c_web.h"
+#include "web_json.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -467,64 +468,6 @@ static int ws_parse_frame(struct client *c, char **out_text, int *out_textlen) {
     return total;
 }
 
-/* ===== Trivial JSON helpers for the client->server command parse =====
- *
- * THESE ARE INTENTIONALLY NAIVE and only safe to use against trusted
- * input from our own browser UI. The "find a `"key"` substring
- * anywhere in the buffer" scheme will get confused if a string VALUE
- * happens to contain the same characters as a key name -- e.g. the
- * payload {"x":"button","type":"foo"} would match "button" inside the
- * string value before reaching the real "type" key. Our UI only sends
- * the {"type":"button","down":0|1} shape; if this server ever accepts
- * untrusted JSON, swap these helpers for a real parser. */
-/* Find a number after "key":  ... ,] - returns 0 if found, -1 if not. */
-static int json_find_int(const char *s, int slen, const char *key, long *out) {
-    char needle[64];
-    snprintf(needle, sizeof(needle), "\"%s\"", key);
-    /* Find needle within the slen window (s isn't NUL-terminated). */
-    int nlen = (int)strlen(needle);
-    for (int i = 0; i + nlen <= slen; i++) {
-        if (memcmp(s + i, needle, (size_t)nlen) == 0) {
-            int j = i + nlen;
-            while (j < slen && (s[j] == ' ' || s[j] == ':' || s[j] == '\t')) j++;
-            int sign = 1;
-            if (j < slen && s[j] == '-') { sign = -1; j++; }
-            long v = 0;
-            int saw = 0;
-            while (j < slen && s[j] >= '0' && s[j] <= '9') {
-                v = v * 10 + (s[j] - '0');
-                j++; saw = 1;
-            }
-            if (!saw) return -1;
-            *out = sign * v;
-            return 0;
-        }
-    }
-    return -1;
-}
-
-static int json_find_str(const char *s, int slen, const char *key,
-                         char *out, int outsz) {
-    char needle[64];
-    snprintf(needle, sizeof(needle), "\"%s\"", key);
-    int nlen = (int)strlen(needle);
-    for (int i = 0; i + nlen <= slen; i++) {
-        if (memcmp(s + i, needle, (size_t)nlen) == 0) {
-            int j = i + nlen;
-            while (j < slen && (s[j] == ' ' || s[j] == ':' || s[j] == '\t')) j++;
-            if (j >= slen || s[j] != '"') return -1;
-            j++;
-            int k = 0;
-            while (j < slen && s[j] != '"' && k < outsz - 1) {
-                out[k++] = s[j++];
-            }
-            out[k] = '\0';
-            return 0;
-        }
-    }
-    return -1;
-}
-
 /* ===== Event queue ===== */
 static void queue_event(struct wendy2c_web_server *srv,
                          enum wendy2c_web_event_type t, int btn_down) {
@@ -540,13 +483,12 @@ static void queue_event(struct wendy2c_web_server *srv,
 
 static void handle_text_msg(struct wendy2c_web_server *srv,
                              const char *txt, int len) {
-    char type[32];
-    if (json_find_str(txt, len, "type", type, sizeof(type)) != 0) return;
-    if (strcmp(type, "button") == 0) {
-        long down = 0;
-        if (json_find_int(txt, len, "down", &down) == 0) {
-            queue_event(srv, WENDY2C_WEB_EVT_BUTTON, down ? 1 : 0);
-        }
+    /* Single-pass structured parse; see web_json.h for the security
+     * guarantees vs. the original "find substring" helpers. */
+    struct web_json_msg msg;
+    if (web_json_parse(txt, len, &msg) != 0) return;
+    if (msg.has_type && strcmp(msg.type, "button") == 0 && msg.has_down) {
+        queue_event(srv, WENDY2C_WEB_EVT_BUTTON, msg.down ? 1 : 0);
     }
 }
 
