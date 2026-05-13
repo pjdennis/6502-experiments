@@ -367,10 +367,11 @@ static int emu_run_wendy2c_web(struct bus *b,
                                 uint64_t cap,
                                 double osc_per_us,
                                 int port,
+                                const char *bind_addr,
                                 const char *web_root) {
     install_tty_cleanup_handlers();  /* so Ctrl-C still cleans up */
 
-    struct wendy2c_web_server *srv = wendy2c_web_start(port, web_root);
+    struct wendy2c_web_server *srv = wendy2c_web_start(port, bind_addr, web_root);
     if (!srv) return 1;
 
     /* Pipe PB7 audio samples through the web server. The tap also
@@ -542,7 +543,8 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
 
     if (opts->web) {
         emu_run_wendy2c_web(&b, &lcd_state, &via_state, &ledbtn_state,
-                            &audio, cap, osc_per_us, opts->web_port, opts->web_root);
+                            &audio, cap, osc_per_us,
+                            opts->web_port, opts->web_bind, opts->web_root);
     } else if (opts->live) {
         emu_run_wendy2c_live(&b, &lcd_state, &via_state, &ledbtn_state,
                              &audio, cap, osc_per_us);

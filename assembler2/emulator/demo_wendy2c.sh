@@ -28,6 +28,10 @@
 #                   uncapped; Ctrl-C in the terminal stops it.
 #                   Mutually exclusive with --live.
 #   --web-port N    TCP port for --web (default 8080; 0 picks ephemeral).
+#   --web-bind ADDR IPv4 bind address for --web (default 127.0.0.1).
+#                   Use 0.0.0.0 to expose to the LAN -- a warning is
+#                   printed since anyone on the network can press the
+#                   control button and stream the audio.
 #   --audio         Play the PB7 piezo line through the host audio
 #                   device. On Linux/WSL needs PulseAudio/PipeWire/ALSA;
 #                   macOS uses CoreAudio; Windows uses WASAPI. On a host
@@ -56,6 +60,7 @@ set -e
 LIVE=0
 WEB=0
 WEB_PORT=8080
+WEB_BIND=""
 AUDIO=0
 WAV=""
 while [ $# -gt 0 ]; do
@@ -67,6 +72,11 @@ while [ $# -gt 0 ]; do
                 echo "error: --web-port requires a value" >&2; exit 1
             fi
             WEB_PORT=$2; WEB=1; shift 2 ;;
+        --web-bind)
+            if [ $# -lt 2 ]; then
+                echo "error: --web-bind requires a value" >&2; exit 1
+            fi
+            WEB_BIND=$2; WEB=1; shift 2 ;;
         --audio) AUDIO=1; shift ;;
         --wav)
             if [ $# -lt 2 ]; then
@@ -154,6 +164,7 @@ if [ "$WEB" -eq 1 ]; then
     # Same uncapped-by-default semantics as --live; DEMO_CYCLE_CAP can
     # force a fixed-length recording.
     set -- "$@" --web --web-port "$WEB_PORT"
+    [ -n "$WEB_BIND" ] && set -- "$@" --web-bind "$WEB_BIND"
     if [ -n "${DEMO_CYCLE_CAP:-}" ]; then
         set -- "$@" --cycle-cap "$DEMO_CYCLE_CAP"
     fi

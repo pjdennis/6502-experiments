@@ -160,7 +160,9 @@ static void resolve_web_root(const char *requested, char *out, size_t n) {
         snprintf(out, n, "%s", requested);
         return;
     }
-    /* Try a few candidates relative to /proc/self/exe and CWD. */
+    /* Try <dir-of-argv0>/web (binary is .../emulator/emulator.out so
+     * this lands on .../emulator/web). Falls through to CWD-relative
+     * candidates below if missing. */
     char exe[1024];
     ssize_t r = readlink("/proc/self/exe", exe, sizeof(exe) - 1);
     if (r > 0) {
@@ -169,9 +171,6 @@ static void resolve_web_root(const char *requested, char *out, size_t n) {
         if (slash) {
             *slash = '\0';
             char cand[1024];
-            snprintf(cand, sizeof(cand), "%s/web", exe);
-            if (dir_exists(cand)) { snprintf(out, n, "%s", cand); return; }
-            /* binary is .../emulator/emulator.out, so .../emulator/web */
             snprintf(cand, sizeof(cand), "%s/web", exe);
             if (dir_exists(cand)) { snprintf(out, n, "%s", cand); return; }
         }
@@ -249,8 +248,17 @@ static void send_simple(struct client *c, int code, const char *status,
 }
 
 static void send_file(struct client *c, const char *web_root, const char *path) {
-    /* Sanitize: must start with '/', no '..', no leading '//'. */
-    if (path[0] != '/' || strstr(path, "..") || strstr(path, "//")) {
+    /* Sanitize. The only files we serve (index.html / wendy2c.css /
+     * wendy2c.js) need none of: parent-dir navigation, double slashes,
+     * or any URL-percent-encoding. Rejecting any '%' in the path
+     * forecloses the "encode .. as %2e%2e" bypass class without us
+     * having to write a URL decoder. If a future asset needs %20 etc.
+     * in its name, add a proper decoder here AND keep the '..' /
+     * '//' check on the decoded form. */
+    if (path[0] != '/'
+        || strstr(path, "..")
+        || strstr(path, "//")
+        || strchr(path, '%')) {
         send_simple(c, 400, "Bad Request", "bad path\n");
         return;
     }
@@ -459,7 +467,16 @@ static int ws_parse_frame(struct client *c, char **out_text, int *out_textlen) {
     return total;
 }
 
-/* ===== Trivial JSON helpers for the client->server command parse ===== */
+/* ===== Trivial JSON helpers for the client->server command parse =====
+ *
+ * THESE ARE INTENTIONALLY NAIVE and only safe to use against trusted
+ * input from our own browser UI. The "find a `"key"` substring
+ * anywhere in the buffer" scheme will get confused if a string VALUE
+ * happens to contain the same characters as a key name -- e.g. the
+ * payload {"x":"button","type":"foo"} would match "button" inside the
+ * string value before reaching the real "type" key. Our UI only sends
+ * the {"type":"button","down":0|1} shape; if this server ever accepts
+ * untrusted JSON, swap these helpers for a real parser. */
 /* Find a number after "key":  ... ,] - returns 0 if found, -1 if not. */
 static int json_find_int(const char *s, int slen, const char *key, long *out) {
     char needle[64];
@@ -534,7 +551,8 @@ static void handle_text_msg(struct wendy2c_web_server *srv,
 }
 
 /* ===== Server lifecycle ===== */
-struct wendy2c_web_server *wendy2c_web_start(int port, const char *web_root) {
+struct wendy2c_web_server *wendy2c_web_start(int port, const char *bind_addr,
+                                              const char *web_root) {
     /* Ignore SIGPIPE; we handle write errors per-connection. */
     signal(SIGPIPE, SIG_IGN);
 
@@ -544,6 +562,20 @@ struct wendy2c_web_server *wendy2c_web_start(int port, const char *web_root) {
     for (int i = 0; i < WENDY2C_WEB_MAX_CLIENTS; i++) srv->clients[i].fd = -1;
     resolve_web_root(web_root, srv->web_root, sizeof(srv->web_root));
 
+    /* Default to loopback. inet_aton accepts "0.0.0.0" / "1.2.3.4". */
+    struct in_addr ba;
+    ba.s_addr = htonl(INADDR_LOOPBACK);
+    int loopback_only = 1;
+    if (bind_addr && *bind_addr) {
+        if (inet_aton(bind_addr, &ba) == 0) {
+            web_warn("bad --web-bind address '%s' (expected IPv4 dotted-quad)",
+                     bind_addr);
+            free(srv);
+            return NULL;
+        }
+        loopback_only = (ba.s_addr == htonl(INADDR_LOOPBACK));
+    }
+
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) { web_warn("socket: %s", strerror(errno)); free(srv); return NULL; }
     int one = 1;
@@ -551,10 +583,12 @@ struct wendy2c_web_server *wendy2c_web_start(int port, const char *web_root) {
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    addr.sin_port = htons((uint16_t)port);
+    addr.sin_addr   = ba;
+    addr.sin_port   = htons((uint16_t)port);
     if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        web_warn("bind :%d: %s", port, strerror(errno));
+        web_warn("bind %s:%d: %s",
+                 bind_addr && *bind_addr ? bind_addr : "127.0.0.1",
+                 port, strerror(errno));
         close(fd); free(srv); return NULL;
     }
     if (listen(fd, 4) < 0) {
@@ -566,9 +600,24 @@ struct wendy2c_web_server *wendy2c_web_start(int port, const char *web_root) {
     srv->port = ntohs(addr.sin_port);
     set_nonblocking(fd);
     srv->listen_fd = fd;
-    fprintf(stderr, "wendy2c-web: listening on http://127.0.0.1:%d/ "
+    /* Display string for the listen banner: loopback shows
+     * "127.0.0.1"; everything else (incl. 0.0.0.0) shows the actual
+     * bind address so the user knows what's exposed. */
+    char shown[INET_ADDRSTRLEN];
+    if (loopback_only) {
+        snprintf(shown, sizeof(shown), "127.0.0.1");
+    } else {
+        inet_ntop(AF_INET, &ba, shown, sizeof(shown));
+    }
+    fprintf(stderr, "wendy2c-web: listening on http://%s:%d/ "
                     "(web_root=%s)\n",
-            srv->port, srv->web_root);
+            shown, srv->port, srv->web_root);
+    if (!loopback_only) {
+        web_warn("WARNING: bound to %s -- the wendy2c control button "
+                 "and audio stream are reachable from anyone who can "
+                 "connect to this port. Use --web-bind 127.0.0.1 to "
+                 "restrict to localhost.", shown);
+    }
     return srv;
 }
 

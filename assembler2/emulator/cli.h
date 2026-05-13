@@ -46,6 +46,7 @@ struct emu_opts {
     int audio_live;                     /* --audio (wendy2c only): play piezo audio through the host's audio device */
     int web;                            /* --web (wendy2c only): embedded HTTP+WS server with browser UI */
     int web_port;                       /* --web-port N; default 8080 */
+    const char *web_bind;               /* --web-bind ADDR; NULL = 127.0.0.1 (loopback only) */
     const char *web_root;               /* --web-root PATH; NULL = auto-discover next to argv[0] */
 };
 

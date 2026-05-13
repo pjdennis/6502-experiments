@@ -60,10 +60,13 @@ struct wendy2c_web_event {
 };
 
 /* Start listening on the given TCP port. Returns NULL on error
- * (diagnostic printed to stderr). `web_root` is the directory holding
- * index.html / wendy2c.css / wendy2c.js; pass NULL to fall back to
- * "<dirname(argv[0])>/web" via realpath. */
-struct wendy2c_web_server *wendy2c_web_start(int port, const char *web_root);
+ * (diagnostic printed to stderr). `bind_addr` is the IPv4 address to
+ * bind to (NULL or "127.0.0.1" = loopback only; "0.0.0.0" = all
+ * interfaces, reachable from the LAN). `web_root` is the directory
+ * holding index.html / wendy2c.css / wendy2c.js; pass NULL to fall
+ * back to "<dirname(argv[0])>/web" via realpath. */
+struct wendy2c_web_server *wendy2c_web_start(int port, const char *bind_addr,
+                                              const char *web_root);
 
 /* Service network I/O. Accepts any new connections, finishes any
  * pending HTTP requests / WS handshakes, and drains incoming WS

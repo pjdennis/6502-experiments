@@ -39,6 +39,7 @@ void emu_opts_init(struct emu_opts *opts) {
     opts->audio_live = 0;
     opts->web = 0;
     opts->web_port = 8080;
+    opts->web_bind = NULL;
     opts->web_root = NULL;
 }
 
@@ -80,6 +81,10 @@ void emu_opts_usage(FILE *fp) {
 "  --web                  wendy2c: embedded HTTP+WS server with a browser UI on\n"
 "                         http://127.0.0.1:8080/ (override port with --web-port).\n"
 "  --web-port N           wendy2c: TCP port for --web (default 8080).\n"
+"  --web-bind ADDR        wendy2c: IPv4 bind address for --web (default\n"
+"                         127.0.0.1, loopback only). Use 0.0.0.0 to also accept\n"
+"                         connections from the LAN; the listen banner prints a\n"
+"                         warning when bound non-loopback.\n"
 "  --web-root PATH        wendy2c: directory containing index.html/wendy2c.css/.js.\n"
 "                         Defaults to <dir-of-argv0>/web.\n"
 "  --cycle-cap N          max cycles before forced exit (decimal; default 200000000;\n"
@@ -249,6 +254,14 @@ int parse_args(int argc, char **argv, struct emu_opts *opts) {
                 return 1;
             }
             opts->web = 1;  /* setting a port implies --web */
+            i += 2;
+        } else if (strcmp(argv[i], "--web-bind") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "error: --web-bind requires a value\n");
+                return 1;
+            }
+            opts->web_bind = argv[i + 1];
+            opts->web = 1;  /* setting a bind implies --web */
             i += 2;
         } else if (strcmp(argv[i], "--web-root") == 0) {
             if (i + 1 >= argc) {
