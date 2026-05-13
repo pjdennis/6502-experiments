@@ -13,12 +13,22 @@
 # RAM at $4000, jumps to it, and then prints to the LCD.
 #
 # Usage:
-#   demo_wendy2c.sh [--live]
+#   demo_wendy2c.sh [--live] [--audio] [--wav PATH]
 #
-#   --live  Launch the emulator's live ANSI render of the LCD, LED,
-#           button, and VIA pin state. Runs uncapped; q/ESC/Ctrl-C in
-#           the live panel quits. Without this flag the emulator runs
-#           briefly under a cycle cap and prints the final LCD frame.
+#   --live      Launch the emulator's live ANSI render of the LCD,
+#               LED, button, and VIA pin state. Runs uncapped;
+#               q/ESC/Ctrl-C in the live panel quits. Without this
+#               flag the emulator runs briefly under a cycle cap and
+#               prints the final LCD frame.
+#   --audio     Play the PB7 piezo line through the host audio
+#               device. On Linux/WSL needs PulseAudio/PipeWire/ALSA;
+#               macOS uses CoreAudio; Windows uses WASAPI. On a host
+#               with no audio backend, miniaudio falls back to its
+#               Null backend (a no-op, with a warning printed). Pairs
+#               naturally with --live but works without it too.
+#   --wav PATH  Record the piezo line to a WAV file (PCM mono int16
+#               @ 22050 Hz; high-passed to mimic a small piezo).
+#               Works with or without --live.
 #
 # Env overrides:
 #   DEMO_PAYLOAD     path to a wendy2c .s file (default hello_ram_4000)
@@ -34,9 +44,17 @@
 set -e
 
 LIVE=0
+AUDIO=0
+WAV=""
 while [ $# -gt 0 ]; do
     case $1 in
-        --live) LIVE=1; shift ;;
+        --live)  LIVE=1; shift ;;
+        --audio) AUDIO=1; shift ;;
+        --wav)
+            if [ $# -lt 2 ]; then
+                echo "error: --wav requires a path" >&2; exit 1
+            fi
+            WAV=$2; shift 2 ;;
         -h|--help)
             awk 'NR>1 && /^#/ {sub(/^# ?/, ""); print; next} NR>1 {exit}' "$0"
             exit 0 ;;
@@ -93,25 +111,25 @@ python3 "$ASM2/emulator/wendy2_upload.py" \
 
 cd "$ASM2"
 
+# Build common emulator args. POSIX sh doesn't have arrays, but `set --`
+# rebuilds the positional parameters and "$@" preserves arg boundaries
+# (so a WAV path with spaces survives).
+set -- "$OUT_DIR/wendy2c_boot.bin" \
+       --machine wendy2c \
+       --serial-input "$OUT_DIR/payload.framed"
+[ "$AUDIO" -eq 1 ] && set -- "$@" --audio
+[ -n "$WAV" ] && set -- "$@" --wav "$WAV"
+
 if [ "$LIVE" -eq 1 ]; then
     echo ">> launching live render (q / ESC / Ctrl-C to quit)"
     # In live mode the emulator defaults to no cycle cap, just like the
     # nmos-default --console / --terminal modes. DEMO_CYCLE_CAP can
     # override if you want a recording of fixed length.
+    set -- "$@" --live
     if [ -n "${DEMO_CYCLE_CAP:-}" ]; then
-        exec ./emulator/emulator.out \
-            "$OUT_DIR/wendy2c_boot.bin" \
-            --machine wendy2c \
-            --serial-input "$OUT_DIR/payload.framed" \
-            --live \
-            --cycle-cap "$DEMO_CYCLE_CAP"
-    else
-        exec ./emulator/emulator.out \
-            "$OUT_DIR/wendy2c_boot.bin" \
-            --machine wendy2c \
-            --serial-input "$OUT_DIR/payload.framed" \
-            --live
+        set -- "$@" --cycle-cap "$DEMO_CYCLE_CAP"
     fi
+    exec ./emulator/emulator.out "$@"
 fi
 
 echo ">> running emulator"
@@ -122,8 +140,4 @@ echo
 # Cap is in oscillator ticks (~2 per CPU cycle). ~1.5M is the minimum for
 # the payload's LCD frame to appear after the upload; 3M leaves headroom
 # while still exiting in well under a second. Override via DEMO_CYCLE_CAP.
-exec ./emulator/emulator.out \
-    "$OUT_DIR/wendy2c_boot.bin" \
-    --machine wendy2c \
-    --serial-input "$OUT_DIR/payload.framed" \
-    --cycle-cap "${DEMO_CYCLE_CAP:-3000000}"
+exec ./emulator/emulator.out "$@" --cycle-cap "${DEMO_CYCLE_CAP:-3000000}"

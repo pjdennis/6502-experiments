@@ -8,6 +8,7 @@
 #include <signal.h>
 #include <sys/select.h>
 
+#include "audio.h"
 #include "bus.h"
 #include "cpu_core.h"
 #include "emu_run.h"
@@ -224,6 +225,7 @@ static int emu_run_wendy2c_live(struct bus *b,
                                 struct lcd_hd44780_state *lcd,
                                 struct via_6522_state *via,
                                 struct led_buttons_state *ledbtn,
+                                struct audio_state *audio,
                                 uint64_t cap,
                                 double osc_per_us) {
     /* Install BEFORE entering the alt screen so that a Ctrl-C arriving
@@ -263,6 +265,7 @@ static int emu_run_wendy2c_live(struct bus *b,
         for (int i = 0; i < BATCH; i++) {
             if (b->osc_ticks >= cap) { cap_hit = 1; break; }
             bus_step(b);
+            audio_step(audio, b->osc_ticks, via_6522_portb_pins(via));
             if (cpu_stp_pending()) break;
         }
         if (cpu_stp_pending() || cap_hit) break;
@@ -384,8 +387,24 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
      * inside emu_run_wendy2c_live. */
     double osc_per_us = opts->target_mhz > 0.0 ? opts->target_mhz : 0.0;
 
+    /* Audio uses a fixed "board" rate so the WAV plays at the real-
+     * board pitch regardless of whether the emulation is throttled.
+     * Default to the wendy2c's 19.44 MHz OSC; if --mhz was given, use
+     * that instead so a deliberately-overclocked run captures what
+     * actually came out of PB7. audio_init is a near-no-op when
+     * neither --wav nor --audio is given (enabled stays 0 and
+     * audio_step short-circuits on the first branch). */
+    double audio_osc_per_us = osc_per_us > 0.0 ? osc_per_us : 19.44;
+    struct audio_state audio;
+    audio_init(&audio,
+               AUDIO_DEFAULT_SAMPLE_RATE,
+               opts->wav_filename,
+               opts->audio_live,
+               audio_osc_per_us);
+
     if (opts->live) {
-        emu_run_wendy2c_live(&b, &lcd_state, &via_state, &ledbtn_state, cap, osc_per_us);
+        emu_run_wendy2c_live(&b, &lcd_state, &via_state, &ledbtn_state,
+                             &audio, cap, osc_per_us);
     } else if (osc_per_us > 0.0) {
         /* Throttled non-live: step in batches and sleep when ahead-
          * of-wall so wall time tracks emulated osc time. */
@@ -397,6 +416,7 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
             int stp = 0;
             for (int i = 0; i < BATCH && b.osc_ticks < cap; i++) {
                 bus_step(&b);
+                audio_step(&audio, b.osc_ticks, via_6522_portb_pins(&via_state));
                 if (cpu_stp_pending()) { stp = 1; break; }
             }
             if (stp) break;
@@ -405,9 +425,12 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
     } else {
         while (b.osc_ticks < cap) {
             bus_step(&b);
+            audio_step(&audio, b.osc_ticks, via_6522_portb_pins(&via_state));
             if (cpu_stp_pending()) break;
         }
     }
+
+    audio_close(&audio);
 
     int halted_on_stp = cpu_stp_pending();
     fprintf(stderr,

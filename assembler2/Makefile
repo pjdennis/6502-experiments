@@ -5,18 +5,31 @@ clean:
 	find . -type d -name "out" -exec rm -rf {} +
 	find . -type f -name "*.tmp" -delete
 
-EMU_SRCS = emulator/emulator.c emulator/file_io.c emulator/console.c emulator/cpu_core.c emulator/stubs.c emulator/trace.c emulator/cli.c emulator/emu_run.c emulator/bus.c emulator/emu_wendy2c.c emulator/tty_alt_screen.c emulator/chips/osc.c emulator/chips/clock_22v10.c emulator/chips/rom_28c256.c emulator/chips/ram_628128.c emulator/chips/via_6522.c emulator/chips/lcd_hd44780.c emulator/chips/serial_usb.c emulator/chips/led_buttons.c emulator/chips/cpu_65c02.c
-EMU_HDRS = emulator/file_io.h emulator/console.h emulator/cpu_core.h emulator/stubs.h emulator/trace.h emulator/cli.h emulator/emu_run.h emulator/bus.h emulator/emu_wendy2c.h emulator/tty_alt_screen.h emulator/chips/osc.h emulator/chips/clock_22v10.h emulator/chips/rom_28c256.h emulator/chips/ram_628128.h emulator/chips/via_6522.h emulator/chips/lcd_hd44780.h emulator/chips/serial_usb.h emulator/chips/led_buttons.h emulator/chips/cpu_65c02.h
+EMU_SRCS = emulator/emulator.c emulator/file_io.c emulator/console.c emulator/cpu_core.c emulator/stubs.c emulator/trace.c emulator/cli.c emulator/emu_run.c emulator/bus.c emulator/emu_wendy2c.c emulator/tty_alt_screen.c emulator/audio.c emulator/chips/osc.c emulator/chips/clock_22v10.c emulator/chips/rom_28c256.c emulator/chips/ram_628128.c emulator/chips/via_6522.c emulator/chips/lcd_hd44780.c emulator/chips/serial_usb.c emulator/chips/led_buttons.c emulator/chips/cpu_65c02.c
+EMU_HDRS = emulator/file_io.h emulator/console.h emulator/cpu_core.h emulator/stubs.h emulator/trace.h emulator/cli.h emulator/emu_run.h emulator/bus.h emulator/emu_wendy2c.h emulator/tty_alt_screen.h emulator/audio.h emulator/chips/osc.h emulator/chips/clock_22v10.h emulator/chips/rom_28c256.h emulator/chips/ram_628128.h emulator/chips/via_6522.h emulator/chips/lcd_hd44780.h emulator/chips/serial_usb.h emulator/chips/led_buttons.h emulator/chips/cpu_65c02.h
 
-emulator/emulator.out: $(EMU_SRCS) $(EMU_HDRS)
-	gcc -O2 -march=native -flto -DNDEBUG -o emulator/emulator.out $(EMU_SRCS)
+# miniaudio (vendored, used by emulator/audio.c) needs math, pthreads,
+# and dynamic loading for runtime backend probing (ALSA/PulseAudio on
+# Linux). macOS picks CoreAudio frameworks; Windows links built-in libs
+# automatically.
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+  AUDIO_LDLIBS = -lm -lpthread -framework CoreFoundation -framework CoreAudio -framework AudioUnit
+else ifeq ($(UNAME_S),Linux)
+  AUDIO_LDLIBS = -lm -lpthread -ldl
+else
+  AUDIO_LDLIBS = -lm -lpthread
+endif
+
+emulator/emulator.out: $(EMU_SRCS) $(EMU_HDRS) emulator/vendor/miniaudio.h
+	gcc -O2 -march=native -flto -DNDEBUG -o emulator/emulator.out $(EMU_SRCS) $(AUDIO_LDLIBS)
 
 00/out/asm_c.out: 00/asm.c
 	@mkdir -p 00/out
 	gcc -O2 -o 00/out/asm_c.out 00/asm.c
 
 # C unit tests
-C_TESTS = emulator/tests/out/test_smoke.out emulator/tests/out/test_file_io.out emulator/tests/out/test_console.out emulator/tests/out/test_trace.out emulator/tests/out/test_cli.out emulator/tests/out/test_emu_run.out emulator/tests/out/test_bus.out emulator/tests/out/test_cpu_variant.out emulator/tests/out/test_cpu_65c02_fixes.out emulator/tests/out/test_cpu_65c02_group_a.out emulator/tests/out/test_cpu_65c02_group_b.out emulator/tests/out/test_cpu_65c02_bit_ops.out emulator/tests/out/test_cpu_65c02_wai_stp.out emulator/tests/out/test_cpu_bus_tap.out emulator/tests/out/test_dormann.out emulator/tests/out/test_machine_dispatch.out emulator/tests/out/test_chip_osc.out emulator/tests/out/test_chip_clock.out emulator/tests/out/test_chip_rom.out emulator/tests/out/test_chip_ram.out emulator/tests/out/test_chip_cpu_65c02.out emulator/tests/out/test_chip_via.out emulator/tests/out/test_chip_lcd.out emulator/tests/out/test_chip_serial_usb.out emulator/tests/out/test_chip_led_buttons.out
+C_TESTS = emulator/tests/out/test_smoke.out emulator/tests/out/test_file_io.out emulator/tests/out/test_console.out emulator/tests/out/test_trace.out emulator/tests/out/test_cli.out emulator/tests/out/test_emu_run.out emulator/tests/out/test_bus.out emulator/tests/out/test_cpu_variant.out emulator/tests/out/test_cpu_65c02_fixes.out emulator/tests/out/test_cpu_65c02_group_a.out emulator/tests/out/test_cpu_65c02_group_b.out emulator/tests/out/test_cpu_65c02_bit_ops.out emulator/tests/out/test_cpu_65c02_wai_stp.out emulator/tests/out/test_cpu_bus_tap.out emulator/tests/out/test_dormann.out emulator/tests/out/test_machine_dispatch.out emulator/tests/out/test_chip_osc.out emulator/tests/out/test_chip_clock.out emulator/tests/out/test_chip_rom.out emulator/tests/out/test_chip_ram.out emulator/tests/out/test_chip_cpu_65c02.out emulator/tests/out/test_chip_via.out emulator/tests/out/test_chip_lcd.out emulator/tests/out/test_chip_serial_usb.out emulator/tests/out/test_chip_led_buttons.out emulator/tests/out/test_audio.out
 
 test: $(C_TESTS) wendy2c-goldens wendy2c-live-sigint
 	@for t in $(C_TESTS); do ./$$t || exit 1; done
@@ -133,6 +146,12 @@ emulator/tests/out/test_chip_lcd.out: emulator/tests/test_chip_lcd.c emulator/ch
 emulator/tests/out/test_chip_led_buttons.out: emulator/tests/test_chip_led_buttons.c emulator/chips/led_buttons.c emulator/chips/led_buttons.h emulator/chips/via_6522.c emulator/chips/via_6522.h emulator/bus.c emulator/bus.h emulator/tests/greatest.h
 	@mkdir -p emulator/tests/out
 	gcc -Wall -Werror -o $@ emulator/tests/test_chip_led_buttons.c emulator/chips/led_buttons.c emulator/chips/via_6522.c emulator/bus.c
+
+# audio.c pulls in miniaudio (vendored); needs system audio libs even
+# in the test, since miniaudio_init resolves backends at runtime.
+emulator/tests/out/test_audio.out: emulator/tests/test_audio.c emulator/audio.c emulator/audio.h emulator/vendor/miniaudio.h emulator/tests/greatest.h
+	@mkdir -p emulator/tests/out
+	gcc -Wall -Werror -o $@ emulator/tests/test_audio.c emulator/audio.c $(AUDIO_LDLIBS)
 
 # Tom Harte ProcessorTests harness (phase 3h). Opt-in: requires
 # `emulator/tests/harte/fetch.sh` to populate `emulator/tests/harte/data/`

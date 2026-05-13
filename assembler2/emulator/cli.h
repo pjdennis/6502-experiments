@@ -42,6 +42,8 @@ struct emu_opts {
                                          * for nmos-default and --server it counts CPU cycles. */
     int cycle_cap_set;                  /* 1 iff --cycle-cap was given explicitly (vs. the default). */
     int live;                           /* --live (wendy2c only): live ANSI render of LCD + LED + VIA pins */
+    const char *wav_filename;           /* --wav PATH (wendy2c only): write a WAV recording of the PB7 piezo line */
+    int audio_live;                     /* --audio (wendy2c only): play piezo audio through the host's audio device */
 };
 
 /* Initialize an emu_opts with the documented defaults. */

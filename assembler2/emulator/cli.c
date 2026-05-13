@@ -35,6 +35,8 @@ void emu_opts_init(struct emu_opts *opts) {
     opts->cycle_cap = 200000000ULL;
     opts->cycle_cap_set = 0;
     opts->live = 0;
+    opts->wav_filename = NULL;
+    opts->audio_live = 0;
 }
 
 void emu_opts_usage(FILE *fp) {
@@ -69,6 +71,9 @@ void emu_opts_usage(FILE *fp) {
 "  --serial-input <path>  wendy2c: bytes pre-queued into the SERIAL_USB chip\n"
 "  --live                 wendy2c: live ANSI render of LCD, LED, button, VIA pin state\n"
 "                         (saves the terminal; q/ESC/Ctrl-C to quit; space toggles button)\n"
+"  --wav <path>           wendy2c: record the PB7 piezo line to a WAV file\n"
+"                         (PCM mono int16 @22050 Hz, high-passed to mimic a small piezo)\n"
+"  --audio                wendy2c: play the piezo line live through the host audio device\n"
 "  --cycle-cap N          max cycles before forced exit (decimal; default 200000000;\n"
 "                         no cap under --live unless this is given explicitly).\n"
 "                         For wendy2c this is oscillator ticks (~2 per CPU cycle);\n"
@@ -217,6 +222,11 @@ int parse_args(int argc, char **argv, struct emu_opts *opts) {
         } else if (strcmp(argv[i], "--live") == 0) {
             opts->live = 1;
             i++;
+        } else if (strcmp(argv[i], "--wav") == 0) {
+            if (take_str_value(argc, argv, &i, "--wav", &opts->wav_filename)) return 1;
+        } else if (strcmp(argv[i], "--audio") == 0) {
+            opts->audio_live = 1;
+            i++;
         } else if (strcmp(argv[i], "--cycle-cap") == 0) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "error: --cycle-cap requires a value\n");
@@ -262,6 +272,12 @@ int parse_args(int argc, char **argv, struct emu_opts *opts) {
 
     if (opts->live && opts->machine != MACHINE_WENDY2C) {
         fprintf(stderr, "error: --live currently requires --machine wendy2c\n");
+        return 1;
+    }
+
+    if ((opts->wav_filename || opts->audio_live)
+        && opts->machine != MACHINE_WENDY2C) {
+        fprintf(stderr, "error: --wav / --audio currently require --machine wendy2c\n");
         return 1;
     }
 

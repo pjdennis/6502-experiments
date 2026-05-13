@@ -12,6 +12,7 @@
 #include <signal.h>
 
 #include "greatest.h"
+#include "../audio.h"
 #include "../cli.h"
 #include "../emu_wendy2c.h"
 #include "../cpu_core.h"
@@ -27,11 +28,23 @@ void    write6502(uint16_t addr, uint8_t v) { (void)addr; (void)v; }
  * but still needs the symbol at link time. */
 volatile sig_atomic_t sigint_requested = 0;
 
-/* Same deal for install_tty_cleanup_handlers (defined in emulator.c).
- * The live runner calls it before tty_alt_screen_enter; the tests in
- * this file never go down that path, but the linker still wants the
- * symbol. */
+/* Same deal for install_tty_cleanup_handlers (defined in emulator.c)
+ * and audio_init/audio_step/audio_close (defined in audio.c). The
+ * live runner / --wav / --audio paths call these; the tests in this
+ * file never go down those paths, but the linker still wants the
+ * symbols. Stubs keep the test lean (no miniaudio drag-in, no
+ * terminal-mode wiring). */
 void install_tty_cleanup_handlers(void) { /* no-op for tests */ }
+int  audio_init(struct audio_state *a, int sample_rate,
+                const char *wav_path, int enable_live, double osc_per_us) {
+    (void)sample_rate; (void)wav_path; (void)enable_live; (void)osc_per_us;
+    if (a) memset(a, 0, sizeof(*a));   /* enabled=0 -> audio_step no-op */
+    return 0;
+}
+void audio_step(struct audio_state *a, uint64_t osc, uint8_t pins) {
+    (void)a; (void)osc; (void)pins;
+}
+void audio_close(struct audio_state *a) { (void)a; }
 
 static const char *write_synthetic_rom(const uint8_t *prog, size_t prog_len) {
     /* Fresh template per call -- mkstemp mutates it, so a static buffer
