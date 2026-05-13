@@ -239,10 +239,12 @@ static int emu_run_wendy2c_live(struct bus *b,
     live_emit("\x1b[?25l\x1b[2J");
 
     /* Pacing rate: --mhz N sets the OSC clock (the 22V10 halves it
-     * for the CPU). Default to 20 osc/us (~10 MHz CPU) when --mhz is
-     * unset so the LED-blink and morse demos look right; the real
-     * board's CLOCK_FREQ_KHZ is 9720, so this is roughly 2x real. */
-    if (osc_per_us <= 0.0) osc_per_us = 20.0;
+     * for the CPU). Default matches the real wendy2c board:
+     * base_config_wendy2c.inc has CLOCK_FREQ_KHZ = 9720 (the CPU
+     * clock; delay_routines.inc and the T2-driven DELAY constants in
+     * multitasking_test_wendy2c.s scale off it), so OSC = 9.72 * 2
+     * = 19.44 MHz. */
+    if (osc_per_us <= 0.0) osc_per_us = 19.44;
     const long FRAME_NS = 30 * 1000 * 1000; /* ~33 fps */
 
     struct timespec t0;
