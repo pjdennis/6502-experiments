@@ -1,0 +1,89 @@
+#ifndef EMULATOR_WENDY2C_WEB_H
+#define EMULATOR_WENDY2C_WEB_H
+
+#include <stdint.h>
+
+/* Tiny embedded HTTP + WebSocket server for the wendy2c live web UI.
+ *
+ * Design:
+ *   - Single-threaded, driven by emu_run_wendy2c_web's batch loop.
+ *   - Non-blocking listening socket + per-client fds.
+ *   - HTTP: serves a few static files from web_root (index.html, css, js).
+ *   - WebSocket: text frames only (JSON state snapshots + commands).
+ *     Frames up to 64 KiB; longer payloads close the connection.
+ *
+ * State direction:
+ *   server -> client: wendy2c_web_broadcast() pushes a JSON snapshot
+ *   client -> server: wendy2c_web_poll() returns queued events
+ *
+ * Up to WENDY2C_WEB_MAX_CLIENTS concurrent WS clients. New connects
+ * past the cap get HTTP 503. */
+
+#define WENDY2C_WEB_MAX_CLIENTS 4
+
+struct wendy2c_web_server;
+
+/* Snapshot of everything the UI renders. Filled by the run loop and
+ * passed to wendy2c_web_broadcast(). The DDRAM buffer is rows*cols
+ * raw bytes (e.g. character codes 0x00..0x07 = CGRAM); the JS side
+ * picks the glyph based on these. */
+struct wendy2c_web_snapshot {
+    int lcd_rows, lcd_cols;
+    uint8_t ddram_visible[80];   /* rows*cols (16*4 max) raw bytes */
+    uint8_t cgram[64];           /* 8 chars x 8 rows; low 5 bits = pixels */
+    int cursor_row, cursor_col;
+    int cursor_on, blink_on, display_on;
+
+    int morse_led;
+    int control_led;
+    int button_pressed;
+
+    uint8_t porta, portb;
+    uint8_t ddra, ddrb;
+
+    unsigned long long osc_ticks;
+    unsigned long long cpu_cycles;
+    uint16_t pc;
+    int irq;
+    int stopped;                 /* 1 if CPU halted on STP */
+};
+
+/* Events the client sends back. WENDY2C_WEB_EVT_NONE if nothing queued. */
+enum wendy2c_web_event_type {
+    WENDY2C_WEB_EVT_NONE = 0,
+    WENDY2C_WEB_EVT_BUTTON,
+};
+
+struct wendy2c_web_event {
+    enum wendy2c_web_event_type type;
+    int button_down;             /* 0 or 1 when type == BUTTON */
+};
+
+/* Start listening on the given TCP port. Returns NULL on error
+ * (diagnostic printed to stderr). `web_root` is the directory holding
+ * index.html / wendy2c.css / wendy2c.js; pass NULL to fall back to
+ * "<dirname(argv[0])>/web" via realpath. */
+struct wendy2c_web_server *wendy2c_web_start(int port, const char *web_root);
+
+/* Service network I/O. Accepts any new connections, finishes any
+ * pending HTTP requests / WS handshakes, and drains incoming WS
+ * frames. Fills *out_event with at most one queued client event per
+ * call (FIFO across all clients). Returns 0 on success. */
+int wendy2c_web_poll(struct wendy2c_web_server *srv,
+                     struct wendy2c_web_event *out_event);
+
+/* Push the snapshot to every connected WS client as a single JSON
+ * text frame. Silent on send errors (the connection is just dropped). */
+void wendy2c_web_broadcast(struct wendy2c_web_server *srv,
+                           const struct wendy2c_web_snapshot *snap);
+
+/* Number of currently-connected WebSocket clients. */
+int wendy2c_web_client_count(const struct wendy2c_web_server *srv);
+
+/* The port we actually bound to (handy when 0 was requested for an
+ * ephemeral port; we still return the kernel-assigned one). */
+int wendy2c_web_port(const struct wendy2c_web_server *srv);
+
+void wendy2c_web_stop(struct wendy2c_web_server *srv);
+
+#endif

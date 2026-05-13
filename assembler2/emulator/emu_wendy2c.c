@@ -13,6 +13,7 @@
 #include "cpu_core.h"
 #include "emu_run.h"
 #include "tty_alt_screen.h"
+#include "wendy2c_web.h"
 #include "chips/clock_22v10.h"
 #include "chips/rom_28c256.h"
 #include "chips/ram_628128.h"
@@ -295,6 +296,130 @@ static int emu_run_wendy2c_live(struct bus *b,
     return cap_hit ? 0 : 0; /* cap is normal exit for live mode */
 }
 
+/* ===== web-mode runner ===== */
+
+static void build_snapshot(struct wendy2c_web_snapshot *snap,
+                            const struct bus *b,
+                            struct lcd_hd44780_state *lcd,
+                            const struct via_6522_state *via,
+                            const struct led_buttons_state *ledbtn,
+                            int cap_hit) {
+    /* Render-into refreshes the dirty bit but otherwise just reads
+     * ddram + cgram; we bypass the ASCII fallback and copy raw bytes. */
+    (void)cap_hit;
+    snap->lcd_rows = lcd->rows;
+    snap->lcd_cols = lcd->cols;
+    int n = lcd->rows * lcd->cols;
+    if (n > (int)sizeof(snap->ddram_visible)) n = (int)sizeof(snap->ddram_visible);
+    /* DDRAM layout: line 0 starts at $00; line 1 at $40; line 2 at $10
+     * (16x4) / $14 (20x4); line 3 at $50 / $54. For 2-line mode we
+     * just take $00..(cols-1) and $40..($40+cols-1). */
+    for (int r = 0; r < lcd->rows; r++) {
+        int base;
+        switch (r) {
+            case 0: base = 0x00; break;
+            case 1: base = 0x40; break;
+            case 2: base = (lcd->cols == 20) ? 0x14 : 0x10; break;
+            case 3: base = (lcd->cols == 20) ? 0x54 : 0x50; break;
+            default: base = 0;
+        }
+        for (int c = 0; c < lcd->cols; c++) {
+            snap->ddram_visible[r * lcd->cols + c] =
+                lcd->ddram[(base + c) & 0x7F];
+        }
+    }
+    memcpy(snap->cgram, lcd->cgram, 64);
+    /* Cursor position derived from address counter; if AC is in CGRAM
+     * mode, the cursor isn't on DDRAM -- park it at (0,0). */
+    if (lcd->cgram_mode) {
+        snap->cursor_row = 0; snap->cursor_col = 0;
+    } else {
+        uint8_t ac = lcd->ac & 0x7F;
+        if (ac >= 0x40) { snap->cursor_row = 1; snap->cursor_col = ac - 0x40; }
+        else            { snap->cursor_row = 0; snap->cursor_col = ac; }
+        if (snap->cursor_col >= lcd->cols) snap->cursor_col = lcd->cols - 1;
+    }
+    snap->cursor_on  = lcd->cursor_on;
+    snap->blink_on   = lcd->blink_on;
+    snap->display_on = lcd->display_on;
+
+    snap->morse_led      = led_buttons_led(ledbtn);
+    snap->control_led    = led_buttons_control_led(ledbtn);
+    snap->button_pressed = led_buttons_button(ledbtn);
+
+    snap->porta = via_6522_porta_pins(via);
+    snap->portb = via_6522_portb_pins(via);
+    snap->ddra  = via->ddra;
+    snap->ddrb  = via->ddrb;
+
+    snap->osc_ticks  = b->osc_ticks;
+    snap->cpu_cycles = clockticks6502;
+    snap->pc         = pc;
+    snap->irq        = b->irq;
+    snap->stopped    = cpu_stp_pending() ? 1 : 0;
+}
+
+static int emu_run_wendy2c_web(struct bus *b,
+                                struct lcd_hd44780_state *lcd,
+                                struct via_6522_state *via,
+                                struct led_buttons_state *ledbtn,
+                                struct audio_state *audio,
+                                uint64_t cap,
+                                double osc_per_us,
+                                int port,
+                                const char *web_root) {
+    install_tty_cleanup_handlers();  /* so Ctrl-C still cleans up */
+
+    struct wendy2c_web_server *srv = wendy2c_web_start(port, web_root);
+    if (!srv) return 1;
+
+    /* Same default pace as --live when --mhz is unset. */
+    if (osc_per_us <= 0.0) osc_per_us = 19.44;
+    const long SNAP_NS = 33 * 1000 * 1000;  /* ~30 fps */
+
+    struct timespec t0;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    uint64_t osc0 = b->osc_ticks;
+    long last_snap_ns = 0;
+    int cap_hit = 0;
+    struct wendy2c_web_snapshot snap;
+
+    /* Push an initial snapshot once a client connects (the WS UI shows
+     * the "wait for state" message until the first message arrives). */
+
+    while (!sigint_requested) {
+        const int BATCH = 5000;
+        for (int i = 0; i < BATCH; i++) {
+            if (b->osc_ticks >= cap) { cap_hit = 1; break; }
+            bus_step(b);
+            audio_step(audio, b->osc_ticks, via_6522_portb_pins(via));
+            if (cpu_stp_pending()) break;
+        }
+        if (cap_hit || cpu_stp_pending()) break;
+
+        long wall_ns = wendy2c_pace(&t0, osc0, b->osc_ticks, osc_per_us);
+
+        struct wendy2c_web_event evt;
+        wendy2c_web_poll(srv, &evt);
+        if (evt.type == WENDY2C_WEB_EVT_BUTTON) {
+            led_buttons_press(ledbtn, evt.button_down);
+        }
+
+        if (wall_ns - last_snap_ns >= SNAP_NS) {
+            build_snapshot(&snap, b, lcd, via, ledbtn, cap_hit);
+            wendy2c_web_broadcast(srv, &snap);
+            last_snap_ns = wall_ns;
+        }
+    }
+
+    /* Final snapshot so any connected client sees the end state. */
+    build_snapshot(&snap, b, lcd, via, ledbtn, cap_hit);
+    wendy2c_web_broadcast(srv, &snap);
+
+    wendy2c_web_stop(srv);
+    return 0;
+}
+
 int emu_run_wendy2c(const struct emu_opts *opts) {
     cpu_variant = opts->cpu_variant_opt;
 
@@ -378,7 +503,7 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
      * explicit --cycle-cap still takes effect (useful for scripted
      * recordings). */
     uint64_t cap = opts->cycle_cap;
-    if (opts->live && !opts->cycle_cap_set) cap = UINT64_MAX;
+    if ((opts->live || opts->web) && !opts->cycle_cap_set) cap = UINT64_MAX;
 
     /* --mhz N pins the OSC (crystal) frequency. The 22V10 PLD halves
      * it for the CPU clock, so a --mhz 9.72 run matches the real
@@ -402,7 +527,10 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
                opts->audio_live,
                audio_osc_per_us);
 
-    if (opts->live) {
+    if (opts->web) {
+        emu_run_wendy2c_web(&b, &lcd_state, &via_state, &ledbtn_state,
+                            &audio, cap, osc_per_us, opts->web_port, opts->web_root);
+    } else if (opts->live) {
         emu_run_wendy2c_live(&b, &lcd_state, &via_state, &ledbtn_state,
                              &audio, cap, osc_per_us);
     } else if (osc_per_us > 0.0) {

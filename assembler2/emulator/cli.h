@@ -44,6 +44,9 @@ struct emu_opts {
     int live;                           /* --live (wendy2c only): live ANSI render of LCD + LED + VIA pins */
     const char *wav_filename;           /* --wav PATH (wendy2c only): write a WAV recording of the PB7 piezo line */
     int audio_live;                     /* --audio (wendy2c only): play piezo audio through the host's audio device */
+    int web;                            /* --web (wendy2c only): embedded HTTP+WS server with browser UI */
+    int web_port;                       /* --web-port N; default 8080 */
+    const char *web_root;               /* --web-root PATH; NULL = auto-discover next to argv[0] */
 };
 
 /* Initialize an emu_opts with the documented defaults. */

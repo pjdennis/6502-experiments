@@ -1,0 +1,15 @@
+/* placeholder; polished in the next commit */
+body { background: #1a1d20; color: #ddd; font-family: monospace; }
+#board { max-width: 720px; margin: 24px auto; padding: 16px; background: #2a2d31; border-radius: 10px; }
+#lcd-frame { background: #4c5e2a; padding: 12px; border-radius: 6px; }
+#lcd { display: block; background: #6f8a3a; image-rendering: pixelated; }
+.led { display: inline-block; width: 18px; height: 18px; border-radius: 50%; background: #333; margin: 8px; vertical-align: middle; }
+.led.on { background: #ffd34d; box-shadow: 0 0 10px #ffd34d; }
+.btn { padding: 10px 16px; background: #444; color: #fff; border: 1px solid #666; border-radius: 8px; cursor: pointer; }
+.btn:active, .btn.held { background: #666; }
+#pins { margin-top: 12px; font-size: 12px; }
+.pinrow { display: flex; gap: 12px; padding: 2px 0; }
+.pinlbl { width: 60px; }
+.pinbits { font-family: monospace; letter-spacing: 4px; }
+.pinmeta { color: #888; }
+#status { margin-top: 8px; font-size: 12px; color: #888; }

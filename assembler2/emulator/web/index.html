@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>wendy2c</title>
+  <link rel="stylesheet" href="/wendy2c.css">
+</head>
+<body>
+  <main id="board">
+    <h1>wendy2c</h1>
+    <section id="lcd-frame" aria-label="LCD display">
+      <canvas id="lcd" width="320" height="64"></canvas>
+    </section>
+    <section id="controls" aria-label="controls">
+      <div class="led" id="led-morse"   data-name="LED PB6"></div>
+      <div class="led" id="led-control" data-name="LED PA2"></div>
+      <button class="btn" id="btn-press" aria-label="control button">
+        <span class="btn-label">BUTTON</span>
+      </button>
+    </section>
+    <section id="pins" aria-label="VIA pin state">
+      <div class="pinrow"><span class="pinlbl">PORTA</span><span class="pinbits" id="porta-bits"></span><span class="pinmeta" id="porta-meta"></span></div>
+      <div class="pinrow"><span class="pinlbl">PORTB</span><span class="pinbits" id="portb-bits"></span><span class="pinmeta" id="portb-meta"></span></div>
+    </section>
+    <section id="status">
+      <span id="status-text">connecting…</span>
+    </section>
+  </main>
+  <script src="/wendy2c.js"></script>
+</body>
+</html>

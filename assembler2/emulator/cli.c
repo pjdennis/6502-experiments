@@ -37,6 +37,9 @@ void emu_opts_init(struct emu_opts *opts) {
     opts->live = 0;
     opts->wav_filename = NULL;
     opts->audio_live = 0;
+    opts->web = 0;
+    opts->web_port = 8080;
+    opts->web_root = NULL;
 }
 
 void emu_opts_usage(FILE *fp) {
@@ -74,6 +77,11 @@ void emu_opts_usage(FILE *fp) {
 "  --wav <path>           wendy2c: record the PB7 piezo line to a WAV file\n"
 "                         (PCM mono int16 @22050 Hz, high-passed to mimic a small piezo)\n"
 "  --audio                wendy2c: play the piezo line live through the host audio device\n"
+"  --web                  wendy2c: embedded HTTP+WS server with a browser UI on\n"
+"                         http://127.0.0.1:8080/ (override port with --web-port).\n"
+"  --web-port N           wendy2c: TCP port for --web (default 8080).\n"
+"  --web-root PATH        wendy2c: directory containing index.html/wendy2c.css/.js.\n"
+"                         Defaults to <dir-of-argv0>/web.\n"
 "  --cycle-cap N          max cycles before forced exit (decimal; default 200000000;\n"
 "                         no cap under --live unless this is given explicitly).\n"
 "                         For wendy2c this is oscillator ticks (~2 per CPU cycle);\n"
@@ -227,6 +235,28 @@ int parse_args(int argc, char **argv, struct emu_opts *opts) {
         } else if (strcmp(argv[i], "--audio") == 0) {
             opts->audio_live = 1;
             i++;
+        } else if (strcmp(argv[i], "--web") == 0) {
+            opts->web = 1;
+            i++;
+        } else if (strcmp(argv[i], "--web-port") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "error: --web-port requires a value\n");
+                return 1;
+            }
+            opts->web_port = (int)strtol(argv[i + 1], NULL, 10);
+            if (opts->web_port < 0 || opts->web_port > 65535) {
+                fprintf(stderr, "error: --web-port must be 0..65535\n");
+                return 1;
+            }
+            opts->web = 1;  /* setting a port implies --web */
+            i += 2;
+        } else if (strcmp(argv[i], "--web-root") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "error: --web-root requires a value\n");
+                return 1;
+            }
+            opts->web_root = argv[i + 1];
+            i += 2;
         } else if (strcmp(argv[i], "--cycle-cap") == 0) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "error: --cycle-cap requires a value\n");
@@ -272,6 +302,14 @@ int parse_args(int argc, char **argv, struct emu_opts *opts) {
 
     if (opts->live && opts->machine != MACHINE_WENDY2C) {
         fprintf(stderr, "error: --live currently requires --machine wendy2c\n");
+        return 1;
+    }
+    if (opts->web && opts->machine != MACHINE_WENDY2C) {
+        fprintf(stderr, "error: --web currently requires --machine wendy2c\n");
+        return 1;
+    }
+    if (opts->web && opts->live) {
+        fprintf(stderr, "error: --web and --live are mutually exclusive\n");
         return 1;
     }
 
