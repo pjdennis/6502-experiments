@@ -10,10 +10,12 @@
  * mark a start bit, then feeds each bit on cb2_in as the VIA's T2
  * underflows shift them into SR.
  *
- * The driver here is timing-agnostic: it watches via_6522_sr_bits_remaining()
- * to know when the VIA has shifted a bit, then advances cb2_in to the
- * next bit. This avoids dependence on the (currently approximate) T2
- * tick rate in the emulator.
+ * The driver here is timing-agnostic: it watches via_6522_sr_shift_total()
+ * to detect each shift the VIA performs and advances cb2_in to the
+ * next bit on the next tick. Tracking the monotonic shift counter (not
+ * sr_bits_remaining directly) means we don't race the on-target's
+ * `lda SR` that re-arms the counter to 8 in the same tick a shift
+ * happens.
  *
  * Bits are shifted MSB-first into the LSB position of SR; so to send
  * the host byte X, the wire value the VIA captures is bit-reversed X.
@@ -34,7 +36,7 @@ struct serial_usb_state {
     } state;
     uint8_t current_byte;
     uint8_t bit_index;       /* 0..7; which bit we're driving on cb2 */
-    uint8_t prev_sr_remaining;
+    uint32_t prev_shift_total;
 
     /* External hookup. */
     struct via_6522_state *via;  /* non-const because we drive cb2_in */

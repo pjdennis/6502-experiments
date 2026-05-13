@@ -77,6 +77,9 @@ struct via_6522_state {
     uint8_t t1_running;         /* fires IFR.T1 then either re-arms (cont) or stops */
     uint8_t t2_running;         /* one-shot until T2CH write re-arms */
     uint8_t sr_bits_remaining;  /* shift-in-T2 byte progress */
+    uint32_t sr_shift_total;    /* monotonic count of SR shifts so far;
+                                 * external chips watch this to observe
+                                 * each shift without racing the arm */
     uint8_t cb2_in;             /* current CB2 input level */
     uint8_t prev_cb2;           /* edge detect */
     uint8_t prev_res;           /* for bus->res rising-edge detect */
@@ -117,6 +120,13 @@ uint8_t via_6522_portb_pins(const struct via_6522_state *state);
  * so the external driver can synchronize CB2 transitions with T2 underflows
  * regardless of the timing model. */
 uint8_t via_6522_sr_bits_remaining(const struct via_6522_state *state);
+
+/* Monotonic count of bits shifted through the SR. Increments once per
+ * T2 underflow that actually shifts (= sr_bits_remaining was positive).
+ * External drivers track deltas to advance their byte stream one bit
+ * per actual shift -- robust against the on-target arming the counter
+ * in the same tick a shift happens. */
+uint32_t via_6522_sr_shift_total(const struct via_6522_state *state);
 
 /* IFR / IER inspectors -- used by the SERIAL_USB chip to know when the
  * on-target boot ROM has finished its init (= IER has CB2 enabled) and

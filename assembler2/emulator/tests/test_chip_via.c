@@ -160,20 +160,43 @@ TEST sr_read_arms_shift_counter(void) {
     PASS();
 }
 
-/* Convenience cheat: when SR is idle (counter == 0) and the chip is
- * already in SR_IN_T2 mode, a CB2 falling edge also arms the counter.
- * That's NOT datasheet behavior -- real hardware only arms on SR
- * read/write -- but it's load-bearing for the byte-level serial_usb
- * chip, which kicks off each byte with a single falling edge and
- * doesn't model the on-target's `lda SR`. The remain==0 guard makes
- * sure the cheat doesn't re-arm mid-byte. */
-TEST cb2_falling_edge_arms_sr_when_idle(void) {
+/* Datasheet: CB2 falling edges are pure interrupt sources -- they do
+ * NOT touch the SR shift counter, even when the chip is in SR_IN_T2
+ * mode with no shift in progress. The on-target boot ROM's CB2 ISR is
+ * responsible for arming the counter (via `lda SR`). */
+TEST cb2_falling_edge_does_not_arm_sr(void) {
     setup();
     w(VIA_REG_PCR, VIA_PCR_CB2_IND_NEG_E);
     w(VIA_REG_ACR, VIA_ACR_SR_IN_T2);
     via_6522_set_cb2(&vs, &bus_, 1);
     via_6522_set_cb2(&vs, &bus_, 0);
-    ASSERT_EQ_FMT((uint8_t)8, via_6522_sr_bits_remaining(&vs), "%u");
+    ASSERT(vs.ifr & VIA_INT_CB2);
+    ASSERT_EQ_FMT((uint8_t)0, via_6522_sr_bits_remaining(&vs), "%u");
+    PASS();
+}
+
+/* sr_shift_total increments once per actual SR shift and is robust
+ * against simultaneous arming. */
+TEST sr_shift_total_counts_actual_shifts(void) {
+    setup();
+    w(VIA_REG_PCR, VIA_PCR_CB2_IND_NEG_E);
+    w(VIA_REG_ACR, VIA_ACR_SR_IN_T2);
+    w(VIA_REG_T2CL, 0x01);
+    w(VIA_REG_T2CH, 0x00);
+
+    ASSERT_EQ_FMT((uint32_t)0, via_6522_sr_shift_total(&vs), "%u");
+    /* Arm via SR read. */
+    (void)r(VIA_REG_SR);
+    /* No shift yet; counter is still 0. */
+    ASSERT_EQ_FMT((uint32_t)0, via_6522_sr_shift_total(&vs), "%u");
+    /* Two ticks: t2c 1->0 then 0->fire. */
+    bus_.cpu_cycle_due = 1; bus_step(&bus_);
+    bus_.cpu_cycle_due = 1; bus_step(&bus_);
+    ASSERT_EQ_FMT((uint32_t)1, via_6522_sr_shift_total(&vs), "%u");
+    /* Another underflow -> another shift. */
+    bus_.cpu_cycle_due = 1; bus_step(&bus_);
+    bus_.cpu_cycle_due = 1; bus_step(&bus_);
+    ASSERT_EQ_FMT((uint32_t)2, via_6522_sr_shift_total(&vs), "%u");
     PASS();
 }
 
@@ -192,8 +215,8 @@ TEST cb2_falling_edge_mid_byte_does_not_rearm_sr(void) {
 
     via_6522_set_cb2(&vs, &bus_, 1);
     via_6522_set_cb2(&vs, &bus_, 0);
-    /* Counter armed (idle->8) by either the CB2 falling edge cheat or
-     * an explicit SR read. Either way, start-of-byte is fine. */
+    /* Arm via SR read -- the real-hardware path. */
+    (void)r(VIA_REG_SR);
     ASSERT_EQ_FMT((uint8_t)8, via_6522_sr_bits_remaining(&vs), "%u");
 
     /* Drive bit pattern 1,1,1,0,0,1,0,1 (LSB-first 0xA7 on the wire).
@@ -272,7 +295,8 @@ SUITE(via_6522_suite) {
     RUN_TEST(t1_continuous_toggles_pb7);
     RUN_TEST(ifr_write_clears_bits);
     RUN_TEST(sr_read_arms_shift_counter);
-    RUN_TEST(cb2_falling_edge_arms_sr_when_idle);
+    RUN_TEST(cb2_falling_edge_does_not_arm_sr);
+    RUN_TEST(sr_shift_total_counts_actual_shifts);
     RUN_TEST(cb2_falling_edge_mid_byte_does_not_rearm_sr);
     RUN_TEST(res_rising_edge_clears_registers_and_irq);
 }

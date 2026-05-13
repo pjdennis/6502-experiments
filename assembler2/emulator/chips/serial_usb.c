@@ -33,8 +33,8 @@ static void serial_usb_tick(struct chip *self, struct bus *bus) {
             /* Wait until the on-target boot ROM has finished its init
              * before sending the first byte: IER must have the CB2
              * interrupt enabled (set by the wendy2c init right before
-             * cli) and any previously-pending IFR.CB2 must be cleared
-             * (= the ISR processed our previous byte). */
+             * cli) and any previously-pending IFR.CB2 / IFR.SR must be
+             * cleared (= the ISR processed our previous byte). */
             uint8_t ier = via_6522_ier(s->via);
             if (!(ier & VIA_INT_CB2)) return;
             uint8_t ifr = via_6522_ifr(s->via);
@@ -43,15 +43,17 @@ static void serial_usb_tick(struct chip *self, struct bus *bus) {
 
             s->current_byte = queue_pop(s);
             s->bit_index = 0;
-            /* Falling edge fires IFR.CB2 + arms sr_bits_remaining = 8
-             * (when ACR is already SR_IN_T2 -- the on-target ISR may
-             * also arm it via the SR-read in its handler). */
+            /* Snapshot the shift counter BEFORE the falling edge so
+             * our first-shift detection is exact. */
+            s->prev_shift_total = via_6522_sr_shift_total(s->via);
+            /* Drop CB2 (start bit edge -- fires IFR.CB2). On real
+             * hardware the SR shift counter is NOT armed by this edge;
+             * the on-target ISR arms it via `lda SR`. */
             via_6522_set_cb2(s->via, bus, 0);
-            /* Drive bit 0 (MSB of the byte) onto cb2_in so the very
-             * first T2 underflow shifts a data bit -- not the start
-             * bit -- into SR. */
+            /* Place bit 0 (LSB) on cb2_in immediately so the very
+             * first T2 underflow after the on-target arms the counter
+             * shifts bit 0 -- not the start bit -- into SR. */
             via_6522_set_cb2_quiet(s->via, byte_bit(s->current_byte, 0));
-            s->prev_sr_remaining = via_6522_sr_bits_remaining(s->via);
             s->state = SERIAL_SHIFTING;
             break;
         }
@@ -60,22 +62,22 @@ static void serial_usb_tick(struct chip *self, struct bus *bus) {
             s->state = SERIAL_IDLE;
             break;
         case SERIAL_SHIFTING: {
-            uint8_t srr = via_6522_sr_bits_remaining(s->via);
-            if (srr > s->prev_sr_remaining) {
-                /* The on-target ISR just armed sr_bits_remaining via
-                 * SR-read in SR_IN_T2 mode (8). Resync our tracker. */
-                s->prev_sr_remaining = srr;
-            } else if (srr < s->prev_sr_remaining) {
-                /* The VIA just shifted the previous bit. Advance. */
+            uint32_t shifts = via_6522_sr_shift_total(s->via);
+            /* Handle every shift that occurred since our last tick.
+             * In practice this is 0 or 1 per tick, but a loop keeps
+             * us correct under coarse-grained ticking too. */
+            while (shifts > s->prev_shift_total) {
+                s->prev_shift_total++;
                 s->bit_index++;
-                s->prev_sr_remaining = srr;
                 if (s->bit_index < 8) {
-                    via_6522_set_cb2_quiet(s->via, byte_bit(s->current_byte, s->bit_index));
+                    via_6522_set_cb2_quiet(s->via,
+                        byte_bit(s->current_byte, s->bit_index));
                 } else {
                     /* Byte fully shifted -- return CB2 to idle high
                      * so the next start edge will be detected. */
                     via_6522_set_cb2_quiet(s->via, 1);
                     s->state = SERIAL_IDLE;
+                    break;
                 }
             }
             break;
@@ -90,7 +92,7 @@ static void serial_usb_reset(struct chip *self) {
     s->state = SERIAL_IDLE;
     s->current_byte = 0;
     s->bit_index = 0;
-    s->prev_sr_remaining = 0;
+    s->prev_shift_total = 0;
     if (s->via) via_6522_set_cb2_quiet(s->via, 1);  /* idle high */
 }
 
