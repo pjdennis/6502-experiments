@@ -632,6 +632,14 @@ sort_phase:
   rts
 
 .do_pass:
+  ; LCD pass progress: "Pass NN/16 L=NNNN" on line 1 so the user can
+  ; watch the demo work. Display routines run with whatever cfg is
+  ; active when we get here -- safe because clear_display, move_cursor,
+  ; display_string_immediate and display_decimal only touch VIA, LCD,
+  ; and ZP $00..$0E (the helper scratch in the lower banked region,
+  ; which stays valid as long as we're in cfgs $18..$1F).
+  jsr show_pass_header
+
   ; --- set up cursors for this pass ---
   ; SRC_A points at start of the source side; SRC_B at SRC_A + RUN_LEN
   ; elements; TGT at start of the target side.
@@ -803,6 +811,30 @@ SKIP_COUNT = $31  ; 2 bytes
 ; verify_phase and show_final.
 VERIFY_RESULT    = $33  ; 1 byte: 1 = PASS, 0 = FAIL
 VERIFY_FAIL_POS  = $34  ; 2 bytes (only meaningful on FAIL)
+
+
+; show_pass_header: paint "Pass NN L=NNNN" on line 1 of the LCD so
+; the user can watch the demo advance. Clears the line first so
+; longer prior text (e.g. "Pass 16 L=32768" -> "Pass 1 L=2") doesn't
+; leave stale characters behind.
+show_pass_header:
+  jsr clear_display
+  jsr display_string_immediate
+  .asciiz "Pass "
+  ; PASS_NUM is 1-based for display; PASS_NUM in ZP starts at 0 and
+  ; gets incremented at the end of each pass, but we want to display
+  ; the current (0-indexed) pass + 1 here.
+  lda PASS_NUM
+  clc
+  adc #1
+  ldx #0
+  jsr display_decimal
+  jsr display_string_immediate
+  .asciiz " L="
+  lda RUN_LEN
+  ldx RUN_LEN+1
+  jsr display_decimal
+  rts
 
 
 ; verify_phase: walk the sorted result side once, comparing each
@@ -1078,11 +1110,13 @@ sort_selftest:
   bra .verify_loop
 
 .pass:
+  jsr clear_display
   jsr display_string_immediate
   .asciiz "Sort: OK"
   stp
 
 .fail:
+  jsr clear_display
   jsr display_string_immediate
   .asciiz "Sort: FAIL@"
   lda CHUNK_REM+1

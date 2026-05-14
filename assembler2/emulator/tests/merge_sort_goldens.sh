@@ -169,10 +169,14 @@ rm -f "$TRACE"
     --cycle-cap 50000000 \
     >"$OUT/e2e.stdout" 2>"$OUT/e2e.stderr" || true
 
+# We don't assert on the banner -- it can get overwritten by the first
+# sort_phase pass header within the same batch as it's drawn, so no
+# trace frame captures it alone. Instead we check that the run passed
+# through at least one pass header, ended with "Sort: complete", and
+# the line-2 result starts with "OK T=" (PASS branch of show_final).
 assert_trace_contains_in_order "$TRACE" \
-    "|Merge Sort      |" \
+    "|Pass " \
     "|Sort: complete  |"
-# Line-2 result is "OK T=NNNNNms" on PASS -- we look for the prefix.
 if ! grep -q "^|OK T=" "$TRACE"; then
     echo "merge_sort_goldens: FAIL end_to_end_n64 -- expected 'OK T=' line in trace"
     sed 's/^/    /' "$TRACE" | tail -10
