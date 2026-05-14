@@ -94,9 +94,9 @@ program_entry:
   jmp sort_selftest
   .endif
 
+  ; Banner: "Merge Sort" on line 1, "N=NNNNN" on line 2.
   jsr display_string_immediate
   .asciiz "Merge Sort"
-
   lda #DISPLAY_SECOND_LINE
   jsr move_cursor
   jsr display_string_immediate
@@ -104,9 +104,26 @@ program_entry:
   lda #<N_ELEMENTS
   ldx #>N_ELEMENTS
   jsr display_decimal
-  jsr display_string_immediate
-  .asciiz " Ready"
 
+  ; --- fill phase ---
+  lda #<LFSR_SEED
+  sta LFSR
+  lda #>LFSR_SEED
+  sta LFSR+1
+  lda #SIDE_A_CFG
+  sta TGT_CFG
+  stz TGT_PTR
+  lda #$80
+  sta TGT_PTR+1
+  jsr fill_phase
+
+  ; --- sort phase ---
+  jsr sort_phase
+
+  ; --- verify phase ---
+  jsr verify_phase
+
+  jsr show_final
   stp
 
 
@@ -775,6 +792,114 @@ sort_phase:
 ; SKIP_COUNT lives just past the existing ZP slots used during the
 ; merge inner loop, so the merge-time and skip-time uses don't overlap.
 SKIP_COUNT = $31  ; 2 bytes
+
+; verify_phase result + failure position. Survives between
+; verify_phase and show_final.
+VERIFY_RESULT    = $33  ; 1 byte: 1 = PASS, 0 = FAIL
+VERIFY_FAIL_POS  = $34  ; 2 bytes (only meaningful on FAIL)
+
+
+; verify_phase: walk the sorted result side once, comparing each
+; element to the previous. On the first out-of-order pair, store the
+; offending position in VERIFY_FAIL_POS, clear VERIFY_RESULT, and
+; return. On full success leave VERIFY_RESULT = 1.
+;
+; CURRENT_SIDE_IS_A names the side holding the sorted result (sort_phase
+; sets this before returning).
+verify_phase:
+  lda CURRENT_SIDE_IS_A
+  beq .v_b
+  lda #SIDE_A_CFG
+  bra .v_set
+.v_b:
+  lda #SIDE_B_CFG
+.v_set:
+  sta SRC_A_CFG
+  stz SRC_A_PTR
+  lda #$80
+  sta SRC_A_PTR+1
+
+  lda #1
+  sta VERIFY_RESULT       ; optimistic
+  stz VERIFY_FAIL_POS
+  stz VERIFY_FAIL_POS+1
+
+  ; Read element 0 into PREV_ELEM. Nothing to compare yet.
+  jsr src_a_read_advance
+  lda NEXT_A
+  sta PREV_ELEM
+  lda NEXT_A+1
+  sta PREV_ELEM+1
+
+  ; position counter (starts at 1; element 0 is already read).
+  lda #1
+  sta CHUNK_REM
+  stz CHUNK_REM+1
+
+.v_loop:
+  ; if CHUNK_REM >= N_ELEMENTS: done.
+  lda CHUNK_REM+1
+  cmp #>N_ELEMENTS
+  bcc .v_continue
+  bne .v_done
+  lda CHUNK_REM
+  cmp #<N_ELEMENTS
+  bcs .v_done
+.v_continue:
+  jsr src_a_read_advance
+  ; NEXT_A < PREV_ELEM ?
+  lda NEXT_A+1
+  cmp PREV_ELEM+1
+  bcc .v_fail
+  bne .v_ok
+  lda NEXT_A
+  cmp PREV_ELEM
+  bcc .v_fail
+.v_ok:
+  lda NEXT_A
+  sta PREV_ELEM
+  lda NEXT_A+1
+  sta PREV_ELEM+1
+  inc CHUNK_REM
+  bne .v_loop
+  inc CHUNK_REM+1
+  bra .v_loop
+
+.v_fail:
+  stz VERIFY_RESULT
+  lda CHUNK_REM
+  sta VERIFY_FAIL_POS
+  lda CHUNK_REM+1
+  sta VERIFY_FAIL_POS+1
+
+.v_done:
+  rts
+
+
+; show_final: paints the result on the LCD.
+;   line 1: "Sort: complete"
+;   line 2: "Verify: PASS"   or   "FAIL@HHHH"
+show_final:
+  jsr clear_display
+  jsr display_string_immediate
+  .asciiz "Sort: complete"
+
+  lda #DISPLAY_SECOND_LINE
+  jsr move_cursor
+  lda VERIFY_RESULT
+  beq .show_fail
+  jsr display_string_immediate
+  .asciiz "Verify: PASS"
+  rts
+
+.show_fail:
+  jsr display_string_immediate
+  .asciiz "FAIL@"
+  lda VERIFY_FAIL_POS+1
+  jsr display_hex
+  lda VERIFY_FAIL_POS
+  jsr display_hex
+  rts
 
 
 ; ----- sort selftest (built with -DSELFTEST_SORT=1) -----

@@ -66,30 +66,6 @@ assert_trace_contains_in_order() {
     done
 }
 
-# ---- skeleton-phase test ----
-# At this stage the program just shows a startup banner and stops.
-# The trace must contain a frame with both 'Merge Sort' (line 1) and
-# the 'N=64' marker (line 2) -- we assert in order so layout matters.
-echo "merge_sort_goldens: case skeleton"
-run_vasm "$OUT/skeleton.bin" "$REPO_ROOT/wendy2_merge_sort.s" \
-    -DN_ELEMENTS=64
-python3 "$REPO_ROOT/assembler2/emulator/wendy2_upload.py" \
-    "$OUT/skeleton.bin" -o "$OUT/skeleton.framed" >"$OUT/skeleton.upload.log"
-
-TRACE="$OUT/skeleton.lcd-trace"
-rm -f "$TRACE"
-"$EMU" "$OUT/boot.bin" \
-    --machine wendy2c \
-    --serial-input "$OUT/skeleton.framed" \
-    --lcd-trace "$TRACE" \
-    --cycle-cap 10000000 \
-    >"$OUT/skeleton.stdout" 2>"$OUT/skeleton.stderr" || true
-
-assert_trace_contains_in_order "$TRACE" \
-    "|Merge Sort      |" \
-    "|N=64 Ready      |"
-echo "  PASS skeleton (banner + N=64)"
-
 # ---- cursor-selftest case ----
 # Built with -DSELFTEST_CURSORS=1, the program exercises the cursor
 # primitives (read/write/advance with $EFFE -> $8000/cfg++ wraparound)
@@ -173,5 +149,30 @@ run_sort_selftest() {
 
 run_sort_selftest 64
 run_sort_selftest 20
+
+# ---- end-to-end case ----
+# Default build (no -DSELFTEST_*) runs fill -> sort -> verify ->
+# show_final. With a small N the trace should pass through the banner,
+# a sorting screen, and finish with 'Verify: PASS'.
+echo "merge_sort_goldens: case end_to_end_n64"
+run_vasm "$OUT/e2e.bin" "$REPO_ROOT/wendy2_merge_sort.s" \
+    -DN_ELEMENTS=64
+python3 "$REPO_ROOT/assembler2/emulator/wendy2_upload.py" \
+    "$OUT/e2e.bin" -o "$OUT/e2e.framed" >"$OUT/e2e.upload.log"
+
+TRACE="$OUT/e2e.lcd-trace"
+rm -f "$TRACE"
+"$EMU" "$OUT/boot.bin" \
+    --machine wendy2c \
+    --serial-input "$OUT/e2e.framed" \
+    --lcd-trace "$TRACE" \
+    --cycle-cap 50000000 \
+    >"$OUT/e2e.stdout" 2>"$OUT/e2e.stderr" || true
+
+assert_trace_contains_in_order "$TRACE" \
+    "|Merge Sort      |" \
+    "|Sort: complete  |" \
+    "|Verify: PASS    |"
+echo "  PASS end_to_end_n64"
 
 echo "merge_sort_goldens: all PASS"
