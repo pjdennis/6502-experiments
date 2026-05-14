@@ -171,8 +171,13 @@ rm -f "$TRACE"
 
 assert_trace_contains_in_order "$TRACE" \
     "|Merge Sort      |" \
-    "|Sort: complete  |" \
-    "|Verify: PASS    |"
+    "|Sort: complete  |"
+# Line-2 result is "OK T=NNNNNms" on PASS -- we look for the prefix.
+if ! grep -q "^|OK T=" "$TRACE"; then
+    echo "merge_sort_goldens: FAIL end_to_end_n64 -- expected 'OK T=' line in trace"
+    sed 's/^/    /' "$TRACE" | tail -10
+    exit 1
+fi
 echo "  PASS end_to_end_n64"
 
 echo "merge_sort_goldens: all PASS"

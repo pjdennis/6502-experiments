@@ -105,6 +105,9 @@ program_entry:
   ldx #>N_ELEMENTS
   jsr display_decimal
 
+  ; --- start T1 ms-tick timer ---
+  jsr timer_start
+
   ; --- fill phase ---
   lda #<LFSR_SEED
   sta LFSR
@@ -122,6 +125,9 @@ program_entry:
 
   ; --- verify phase ---
   jsr verify_phase
+
+  ; --- stop timer, snapshot elapsed ---
+  jsr timer_stop
 
   jsr show_final
   stp
@@ -878,7 +884,8 @@ verify_phase:
 
 ; show_final: paints the result on the LCD.
 ;   line 1: "Sort: complete"
-;   line 2: "Verify: PASS"   or   "FAIL@HHHH"
+;   line 2: "OK T=NNNNNms"   (on PASS)
+;           "FAIL@HHHH"      (on verify failure)
 show_final:
   jsr clear_display
   jsr display_string_immediate
@@ -889,7 +896,12 @@ show_final:
   lda VERIFY_RESULT
   beq .show_fail
   jsr display_string_immediate
-  .asciiz "Verify: PASS"
+  .asciiz "OK T="
+  lda ELAPSED_MS
+  ldx ELAPSED_MS+1
+  jsr display_decimal
+  jsr display_string_immediate
+  .asciiz "ms"
   rts
 
 .show_fail:
@@ -900,6 +912,89 @@ show_final:
   lda VERIFY_FAIL_POS
   jsr display_hex
   rts
+
+
+; ----- elapsed-time timer (T1 IRQ, ~1ms per tick) -----
+;
+; T1 latched at CLOCK_FREQ_KHZ-1 = 9719 cycles ≈ 1 ms per underflow.
+; The handler increments a 16-bit ms counter at $F800 -- in upper
+; fixed RAM bank 1, which is mapped consistently across cfg=$10..$1F
+; so the same physical bytes are seen no matter which upper bank the
+; main code happens to be visiting when the IRQ fires.
+;
+; The 6522 IRQ vector at $FFFE/$FFFF lives in that same bank 1; we
+; overwrite it (the boot ROM had pointed it at $3F00 in lower-banked
+; RAM, which would land on garbage in our lower-bank-2 cfgs).
+
+T1_LATCH        = CLOCK_FREQ_KHZ - 1   ; 9719 cycles ≈ 1ms at 9.72 MHz
+OVERFLOW_COUNT  = $F800                ; 2 bytes (ms-tick counter)
+IRQ_VECTOR_LO   = $FFFE
+IRQ_VECTOR_HI   = $FFFF
+
+; timer_start: install IRQ handler, zero the ms counter, latch and
+; start T1, enable T1 interrupts, allow IRQs.
+timer_start:
+  sei
+  lda #<irq_handler
+  sta IRQ_VECTOR_LO
+  lda #>irq_handler
+  sta IRQ_VECTOR_HI
+
+  stz OVERFLOW_COUNT
+  stz OVERFLOW_COUNT+1
+
+  ; T1 continuous-counter mode, PB7 disabled. Preserve other ACR bits.
+  lda ACR
+  and #%00111111            ; mask out the T1 mode bits (6 and 7)
+  ora #ACR_T1_CONT
+  sta ACR
+
+  ; Load latch + start counter (writing T1CH transfers latch into the
+  ; counter and starts decrementing).
+  lda #<T1_LATCH
+  sta T1CL
+  lda #>T1_LATCH
+  sta T1CH
+
+  ; Clear any stale T1 IRQ, then enable T1 IRQ.
+  lda #IT1
+  sta IFR
+  lda #(IERSETCLEAR | IT1)
+  sta IER
+
+  cli
+  rts
+
+; timer_stop: SEI, disable T1 IRQ, capture the current ms counter
+; into ELAPSED_MS so show_final can display it later.
+timer_stop:
+  sei
+  lda #IT1
+  sta IER                 ; bit-7 clear -> "clear these IER bits" -> disables T1 IRQ
+  lda OVERFLOW_COUNT
+  sta ELAPSED_MS
+  lda OVERFLOW_COUNT+1
+  sta ELAPSED_MS+1
+  rts
+
+; irq_handler: minimal -- only services T1, ignores any other source.
+; Preserves A only (X and Y aren't touched).
+irq_handler:
+  pha
+  lda IFR
+  and #IT1
+  beq .ih_done
+  lda T1CL              ; clear T1 IRQ flag by reading T1CL
+  inc OVERFLOW_COUNT
+  bne .ih_done
+  inc OVERFLOW_COUNT+1
+.ih_done:
+  pla
+  rti
+
+; ELAPSED_MS lives in fixed RAM (not ZP) so it survives all bank
+; switches without needing the ZP layout to be valid.
+ELAPSED_MS: .word 0
 
 
 ; ----- sort selftest (built with -DSELFTEST_SORT=1) -----
