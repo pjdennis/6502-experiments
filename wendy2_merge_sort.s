@@ -789,17 +789,22 @@ sort_phase:
   jmp .chunk_loop
 
 .pass_done:
-  ; RUN_LEN *= 2
-  asl RUN_LEN
-  rol RUN_LEN+1
-  ; Toggle source side.
+  ; Toggle source side. After flip CURRENT_SIDE_IS_A names the side
+  ; we just wrote to (= source of the next pass; = side holding the
+  ; up-to-date partial sort, which verify_phase will read).
   lda CURRENT_SIDE_IS_A
   eor #1
   sta CURRENT_SIDE_IS_A
-  ; After flip, CURRENT_SIDE_IS_A names the side we will read from
-  ; next -- which is the side we just wrote to (i.e. the side that
-  ; holds the up-to-date partial sort).
   inc PASS_NUM
+  ; RUN_LEN *= 2. If the doubling overflows 16-bit (e.g. the last
+  ; pass for N>=32768 takes RUN_LEN from $8000 to $10000), we've
+  ; finished sorting -- 2*RUN_LEN is conceptually >= N_ELEMENTS so
+  ; the .pass_loop check would otherwise loop forever on RUN_LEN=0.
+  asl RUN_LEN
+  rol RUN_LEN+1
+  bcc .pass_loop_relay    ; no overflow -> continue with next pass
+  jmp .all_done           ; overflow -> sort complete
+.pass_loop_relay:
   jmp .pass_loop
 
 

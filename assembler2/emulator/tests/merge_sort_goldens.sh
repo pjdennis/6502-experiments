@@ -184,4 +184,41 @@ if ! grep -q "^|OK T=" "$TRACE"; then
 fi
 echo "  PASS end_to_end_n64"
 
+# ---- full-N stress case (opt-in) ----
+# N=57344 = 0xE000, the demo's design point: 4 source banks + 4 target
+# banks, 16 passes, exercises every edge case the algorithm has. The
+# emulator needs ~60 s of wall time to chew through ~400M CPU cycles,
+# so it's gated behind MERGE_SORT_FULL_N=1 to keep `make test` snappy.
+if [ "${MERGE_SORT_FULL_N:-0}" = "1" ]; then
+    echo "merge_sort_goldens: case full_n57344 (slow)"
+    run_vasm "$OUT/full.bin" "$REPO_ROOT/wendy2_merge_sort.s"
+    python3 "$REPO_ROOT/assembler2/emulator/wendy2_upload.py" \
+        "$OUT/full.bin" -o "$OUT/full.framed" >"$OUT/full.upload.log"
+
+    TRACE="$OUT/full.lcd-trace"
+    rm -f "$TRACE"
+    "$EMU" "$OUT/boot.bin" \
+        --machine wendy2c \
+        --serial-input "$OUT/full.framed" \
+        --lcd-trace "$TRACE" \
+        --cycle-cap 3000000000 \
+        >"$OUT/full.stdout" 2>"$OUT/full.stderr" || true
+
+    # Spot-check the first, a middle, and the last pass header all
+    # made it into the trace, plus the final result.
+    assert_trace_contains_in_order "$TRACE" \
+        "|Pass 1 L=1" \
+        "|Pass 8 L=128" \
+        "|Pass 16 L=32768" \
+        "|Sort: complete  |"
+    if ! grep -q "^|OK T=" "$TRACE"; then
+        echo "merge_sort_goldens: FAIL full_n57344 -- expected 'OK T=' line in trace"
+        sed 's/^/    /' "$TRACE" | tail -10
+        exit 1
+    fi
+    echo "  PASS full_n57344"
+else
+    echo "merge_sort_goldens: skip full_n57344 (set MERGE_SORT_FULL_N=1 to run; ~60s)"
+fi
+
 echo "merge_sort_goldens: all PASS"
