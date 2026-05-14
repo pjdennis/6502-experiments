@@ -113,4 +113,29 @@ assert_trace_contains_in_order "$TRACE" \
     "|Cursor: OK"
 echo "  PASS cursor_selftest"
 
+# ---- fill-selftest case ----
+# Built with -DSELFTEST_FILL=1, the program runs fill_phase (LFSR
+# seeded with $ACE1, poly $B400), reads back via SRC_A, compares each
+# element to a re-seeded LFSR, and shows 'Fill: OK' or 'Fill: FAIL'.
+# Default N for this build is 8 (overrides the file-level default of
+# 57344) -- enough to exercise fill+verify in a few thousand cycles.
+echo "merge_sort_goldens: case fill_selftest"
+run_vasm "$OUT/fill.bin" "$REPO_ROOT/wendy2_merge_sort.s" \
+    -DSELFTEST_FILL=1 -DN_ELEMENTS=8
+python3 "$REPO_ROOT/assembler2/emulator/wendy2_upload.py" \
+    "$OUT/fill.bin" -o "$OUT/fill.framed" >"$OUT/fill.upload.log"
+
+TRACE="$OUT/fill.lcd-trace"
+rm -f "$TRACE"
+"$EMU" "$OUT/boot.bin" \
+    --machine wendy2c \
+    --serial-input "$OUT/fill.framed" \
+    --lcd-trace "$TRACE" \
+    --cycle-cap 10000000 \
+    >"$OUT/fill.stdout" 2>"$OUT/fill.stderr" || true
+
+assert_trace_contains_in_order "$TRACE" \
+    "|Fill: OK"
+echo "  PASS fill_selftest"
+
 echo "merge_sort_goldens: all PASS"

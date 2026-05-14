@@ -87,6 +87,9 @@ program_entry:
   .ifdef SELFTEST_CURSORS
   jmp cursor_selftest
   .endif
+  .ifdef SELFTEST_FILL
+  jmp fill_selftest
+  .endif
 
   jsr display_string_immediate
   .asciiz "Merge Sort"
@@ -281,6 +284,138 @@ cursor_selftest:
   .asciiz "Cursor: FAIL@"
   plx
   txa
+  jsr display_hex
+  stp
+
+  .endif
+
+
+; ----- pseudo-random fill -----
+;
+; 16-bit Galois LFSR, polynomial $B400. Caller seeds LFSR before
+; calling lfsr_step or fill_phase.
+LFSR_SEED = $ACE1
+LFSR_POLY_HI = $B4
+
+; Step the LFSR by one bit. Cycles through all 65535 non-zero states.
+; Preserves nothing.
+lfsr_step:
+  lsr LFSR+1
+  ror LFSR
+  bcc .skip_xor
+  lda LFSR+1
+  eor #LFSR_POLY_HI
+  sta LFSR+1
+.skip_xor:
+  rts
+
+; fill_phase: write N_ELEMENTS LFSR-sequence words through the TGT
+; cursor (which the caller has positioned to the start of side A).
+; Uses TOTAL_REM as a 16-bit countdown.
+fill_phase:
+  lda #<N_ELEMENTS
+  sta TOTAL_REM
+  lda #>N_ELEMENTS
+  sta TOTAL_REM+1
+.loop:
+  lda TOTAL_REM
+  ora TOTAL_REM+1
+  beq .done
+  ; emit current LFSR value as the next element
+  lda LFSR
+  sta EMIT_VAL
+  lda LFSR+1
+  sta EMIT_VAL+1
+  jsr tgt_write_advance
+  jsr lfsr_step
+  ; decrement 16-bit TOTAL_REM
+  lda TOTAL_REM
+  bne .lo_nz
+  dec TOTAL_REM+1
+.lo_nz:
+  dec TOTAL_REM
+  bra .loop
+.done:
+  rts
+
+
+; ----- fill selftest (built with -DSELFTEST_FILL=1) -----
+;
+; Runs fill_phase, then re-seeds the LFSR and walks the same side via
+; SRC_A, comparing each element. On any mismatch displays
+; 'Fill: FAIL@HHHH' (16-bit position); on full match 'Fill: OK'.
+  .ifdef SELFTEST_FILL
+
+fill_selftest:
+  ; seed LFSR
+  lda #<LFSR_SEED
+  sta LFSR
+  lda #>LFSR_SEED
+  sta LFSR+1
+
+  ; init TGT to start of side A (cfg=$18, ptr=$8000)
+  lda #$18
+  sta TGT_CFG
+  stz TGT_PTR
+  lda #$80
+  sta TGT_PTR+1
+
+  jsr fill_phase
+
+  ; -- verify --
+  ; re-seed LFSR, init SRC_A to side A start
+  lda #<LFSR_SEED
+  sta LFSR
+  lda #>LFSR_SEED
+  sta LFSR+1
+  lda #$18
+  sta SRC_A_CFG
+  stz SRC_A_PTR
+  lda #$80
+  sta SRC_A_PTR+1
+  ; reset counter, plus a separate position counter for FAIL display
+  lda #<N_ELEMENTS
+  sta TOTAL_REM
+  lda #>N_ELEMENTS
+  sta TOTAL_REM+1
+  stz CHUNK_REM            ; 16-bit position counter
+  stz CHUNK_REM+1
+.verify_loop:
+  lda TOTAL_REM
+  ora TOTAL_REM+1
+  beq .pass
+  jsr src_a_read_advance
+  lda NEXT_A
+  cmp LFSR
+  bne .fail
+  lda NEXT_A+1
+  cmp LFSR+1
+  bne .fail
+  jsr lfsr_step
+  ; advance position
+  inc CHUNK_REM
+  bne .pos_no_carry
+  inc CHUNK_REM+1
+.pos_no_carry:
+  ; decrement counter
+  lda TOTAL_REM
+  bne .lo_nz_v
+  dec TOTAL_REM+1
+.lo_nz_v:
+  dec TOTAL_REM
+  bra .verify_loop
+
+.pass:
+  jsr display_string_immediate
+  .asciiz "Fill: OK"
+  stp
+
+.fail:
+  jsr display_string_immediate
+  .asciiz "Fill: FAIL@"
+  lda CHUNK_REM+1
+  jsr display_hex
+  lda CHUNK_REM
   jsr display_hex
   stp
 
