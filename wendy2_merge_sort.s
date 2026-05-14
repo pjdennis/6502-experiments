@@ -19,12 +19,39 @@ N_ELEMENTS = 57344
   .include base_config_wendy2c.inc
 
 ; ----- zero page layout -----
-; $00..$0C reserved for the display helpers (display_string_immediate,
+; $00..$0E reserved for the display helpers (display_string_immediate,
 ; display_decimal, display_string). $10+ is ours.
 D_S_I_P              = $00 ; 2 bytes -- display_string_immediate
-TEMP                 = $02 ; 1 byte  -- switch_to_space + display helpers
+TEMP                 = $02 ; 1 byte  -- switch_to_space scratch (pre-bank-switch only)
 TO_DECIMAL_PARAM     = $03 ; 10 bytes -- display_decimal (incl. result buf)
 DISPLAY_STRING_PARAM = $0D ; 2 bytes -- display_string
+
+; Merge-sort state. Cursors are laid out in three back-to-back 3-byte
+; slots starting at $16 (offsets 0, 3, 6) so that advance_cursor_x can
+; share one routine across all three via X-indexed ZP addressing.
+LFSR                 = $10 ; 2 bytes
+NEXT_A               = $12 ; 2 bytes -- cached element from source A
+NEXT_B               = $14 ; 2 bytes -- cached element from source B
+SRC_A_CFG            = $16 ; 1 byte
+SRC_A_PTR            = $17 ; 2 bytes (16-bit address in $8000..$EFFE)
+SRC_B_CFG            = $19 ; 1 byte  (= SRC_A_CFG + 3)
+SRC_B_PTR            = $1A ; 2 bytes
+TGT_CFG              = $1C ; 1 byte  (= SRC_A_CFG + 6)
+TGT_PTR              = $1D ; 2 bytes
+A_REM                = $1F ; 2 bytes -- elements left in current run-A
+B_REM                = $21 ; 2 bytes
+PASS_NUM             = $23 ; 1 byte
+RUN_LEN              = $24 ; 2 bytes -- current L
+CURRENT_SIDE_IS_A    = $26 ; 1 byte  -- 1 if pass reads from side A
+CHUNK_REM            = $27 ; 2 bytes -- elements left in current 2L chunk
+TOTAL_REM            = $29 ; 2 bytes -- elements left in pass
+PROGRESS_TICK        = $2B ; 2 bytes -- counter for progress bar
+PREV_ELEM            = $2D ; 2 bytes -- verify pass: previous element
+EMIT_VAL             = $2F ; 2 bytes -- value to write through TGT cursor
+
+CUR_OFFSET_SRC_A     = 0
+CUR_OFFSET_SRC_B     = 3
+CUR_OFFSET_TGT       = 6
 
   .org $4000
   jmp program_entry
@@ -56,6 +83,10 @@ program_entry:
   txs
 
   jsr clear_display
+
+  .ifdef SELFTEST_CURSORS
+  jmp cursor_selftest
+  .endif
 
   jsr display_string_immediate
   .asciiz "Merge Sort"
@@ -96,3 +127,161 @@ switch_to_space:
   pha
   lda switch_to_space_space
   rts
+
+
+; ----- cursor primitives -----
+;
+; A cursor is a 3-byte ZP triple (CFG, PTR_LO, PTR_HI) that names an
+; element-aligned position within a side's 4-bank region. PTR walks
+; $8000..$EFFE within the current cfg; after the last element in a
+; bank (PTR == $EFFE) the next advance produces PTR=$8000, CFG++.
+
+; advance_cursor_x: advance the cursor at zero-page offset X by one
+; 16-bit element. X must be 0 (SRC_A), 3 (SRC_B), or 6 (TGT).
+; Wraps PTR=$F000 -> PTR=$8000 with CFG++.
+advance_cursor_x:
+  inc SRC_A_PTR,X
+  bne .lo_no_carry
+  inc SRC_A_PTR+1,X
+.lo_no_carry:
+  inc SRC_A_PTR,X
+  bne .check_wrap
+  inc SRC_A_PTR+1,X
+.check_wrap:
+  lda SRC_A_PTR+1,X
+  cmp #$F0
+  bne .done
+  stz SRC_A_PTR,X
+  lda #$80
+  sta SRC_A_PTR+1,X
+  inc SRC_A_CFG,X
+.done:
+  rts
+
+; src_a_read_advance: switch to SRC_A's cfg, read 16-bit word at
+; SRC_A_PTR into NEXT_A, then advance the cursor.
+src_a_read_advance:
+  lda SRC_A_CFG
+  jsr switch_to_space
+  ldy #0
+  lda (SRC_A_PTR),Y
+  sta NEXT_A
+  iny
+  lda (SRC_A_PTR),Y
+  sta NEXT_A+1
+  ldx #CUR_OFFSET_SRC_A
+  jmp advance_cursor_x
+
+src_b_read_advance:
+  lda SRC_B_CFG
+  jsr switch_to_space
+  ldy #0
+  lda (SRC_B_PTR),Y
+  sta NEXT_B
+  iny
+  lda (SRC_B_PTR),Y
+  sta NEXT_B+1
+  ldx #CUR_OFFSET_SRC_B
+  jmp advance_cursor_x
+
+; tgt_write_advance: switch to TGT's cfg, write the 16-bit value in
+; EMIT_VAL to *TGT_PTR, then advance the cursor.
+tgt_write_advance:
+  lda TGT_CFG
+  jsr switch_to_space
+  ldy #0
+  lda EMIT_VAL
+  sta (TGT_PTR),Y
+  iny
+  lda EMIT_VAL+1
+  sta (TGT_PTR),Y
+  ldx #CUR_OFFSET_TGT
+  jmp advance_cursor_x
+
+
+; ----- cursor selftest (built with -DSELFTEST_CURSORS=1) -----
+;
+; Exercises the wraparound case: write 4 distinct 16-bit values
+; starting at cfg=$18, ptr=$EFFE (so the second write crosses into
+; cfg=$19, ptr=$8000). Then read them back from the same start
+; position and verify each one matches.
+;
+; Writes use the TGT cursor; reads use the SRC_A cursor.
+  .ifdef SELFTEST_CURSORS
+
+SELFTEST_START_CFG = $18
+SELFTEST_START_PTR = $EFFE   ; deliberately near the bank boundary
+
+cursor_selftest:
+  ; -- write phase --
+  lda #SELFTEST_START_CFG
+  sta TGT_CFG
+  lda #<SELFTEST_START_PTR
+  sta TGT_PTR
+  lda #>SELFTEST_START_PTR
+  sta TGT_PTR+1
+
+  ldx #0
+.write_loop:
+  ; EMIT_VAL = $ABCD + X (low byte gets X, high byte is $AB+X)
+  txa
+  clc
+  adc #$CD
+  sta EMIT_VAL
+  txa
+  clc
+  adc #$AB
+  sta EMIT_VAL+1
+  phx
+  jsr tgt_write_advance
+  plx
+  inx
+  cpx #4
+  bne .write_loop
+
+  ; -- read-back phase --
+  lda #SELFTEST_START_CFG
+  sta SRC_A_CFG
+  lda #<SELFTEST_START_PTR
+  sta SRC_A_PTR
+  lda #>SELFTEST_START_PTR
+  sta SRC_A_PTR+1
+
+  ldx #0
+.read_loop:
+  phx
+  jsr src_a_read_advance
+  plx
+
+  ; Compare NEXT_A vs expected = $ABCD + X
+  txa
+  clc
+  adc #$CD
+  cmp NEXT_A
+  bne .fail
+  txa
+  clc
+  adc #$AB
+  cmp NEXT_A+1
+  bne .fail
+
+  inx
+  cpx #4
+  bne .read_loop
+
+  ; -- report PASS --
+  jsr display_string_immediate
+  .asciiz "Cursor: OK"
+  stp
+
+.fail:
+  ; Clobbers X (= failure index) which we want to display.
+  phx
+  jsr display_string_immediate
+  .asciiz "Cursor: FAIL@"
+  plx
+  txa
+  jsr display_hex
+  stp
+
+  .endif

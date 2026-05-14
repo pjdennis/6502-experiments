@@ -90,4 +90,27 @@ assert_trace_contains_in_order "$TRACE" \
     "|N=64 Ready      |"
 echo "  PASS skeleton (banner + N=64)"
 
+# ---- cursor-selftest case ----
+# Built with -DSELFTEST_CURSORS=1, the program exercises the cursor
+# primitives (read/write/advance with $EFFE -> $8000/cfg++ wraparound)
+# and displays "Cursor: OK" on PASS or "Cursor: FAIL@..." on failure.
+echo "merge_sort_goldens: case cursor_selftest"
+run_vasm "$OUT/cursor.bin" "$REPO_ROOT/wendy2_merge_sort.s" \
+    -DSELFTEST_CURSORS=1
+python3 "$REPO_ROOT/assembler2/emulator/wendy2_upload.py" \
+    "$OUT/cursor.bin" -o "$OUT/cursor.framed" >"$OUT/cursor.upload.log"
+
+TRACE="$OUT/cursor.lcd-trace"
+rm -f "$TRACE"
+"$EMU" "$OUT/boot.bin" \
+    --machine wendy2c \
+    --serial-input "$OUT/cursor.framed" \
+    --lcd-trace "$TRACE" \
+    --cycle-cap 10000000 \
+    >"$OUT/cursor.stdout" 2>"$OUT/cursor.stderr" || true
+
+assert_trace_contains_in_order "$TRACE" \
+    "|Cursor: OK"
+echo "  PASS cursor_selftest"
+
 echo "merge_sort_goldens: all PASS"
