@@ -18,11 +18,53 @@ N_ELEMENTS = 57344
 
   .include base_config_wendy2c.inc
 
+; ----- switch_to_space macro -----
+;
+; Update the low 5 bits of BANK_PORT (PORTB) to the new cfg in A,
+; preserving the upper 3 bits (LCD-E, LED, T1 squarewave). Inlined
+; because the merge inner loop calls this twice per emitted element
+; (once for the target write, once for the source read), so a JSR-
+; based version's overhead costs ~20% of the demo's total runtime.
+;
+; Critical property: BANK_PORT is updated with a SINGLE write that
+; transitions directly from the old cfg to the new cfg. There is no
+; transient cfg=$00 window where the bank bits are cleared -- at
+; cfg=$00 the upper region maps to ROM whose IRQ vector at \$FFFE is
+; \$0000, so an interrupt arriving mid-switch would jump to lower
+; bank 1's \$0000 (uninitialised) and crash the machine.
+;
+; The macro uses ZP \$02 (TEMP) for the one byte of scratch needed to
+; combine the preserved upper bits with the new bank bits before the
+; single write. ZP is in the banked lower 16K, but this is fine:
+;   - All sustained-state switches happen between cfgs $18..$1F,
+;     which share lower bank 2, so ZP doesn't change across them.
+;   - On the very first switch (boot ROM's cfg $01 -> our cfg $18),
+;     the lower bank does change, but only AFTER the sta BANK_PORT.
+;     Both the sta TEMP and the ora TEMP execute with BANK_PORT
+;     still holding the old cfg, so they see the same ZP \$02 in the
+;     OLD lower bank. The post-switch reader (if any) would see a
+;     different physical location, but we don't read TEMP again.
+;   - Our T1 IRQ handler doesn't touch ZP, so an interrupt arriving
+;     between sta TEMP and ora TEMP doesn't corrupt the scratch.
+;
+; Clobbers A, Y. Preserves X.
+INV_BANK_MASK = BANK_MASK ^ $FF
+  .macro switch_to_space
+  tay                         ; stash new cfg in Y
+  lda BANK_PORT
+  and #INV_BANK_MASK          ; A = upper 3 bits of BANK_PORT only
+  sta TEMP                    ; ZP scratch
+  tya
+  and #BANK_MASK              ; A = new bank bits only
+  ora TEMP                    ; A = preserved upper bits | new bank bits
+  sta BANK_PORT               ; single atomic write to the bank-select reg
+  .endmacro
+
 ; ----- zero page layout -----
 ; $00..$0E reserved for the display helpers (display_string_immediate,
 ; display_decimal, display_string). $10+ is ours.
 D_S_I_P              = $00 ; 2 bytes -- display_string_immediate
-TEMP                 = $02 ; 1 byte  -- switch_to_space scratch (pre-bank-switch only)
+TEMP                 = $02 ; 1 byte  -- switch_to_space inline scratch
 TO_DECIMAL_PARAM     = $03 ; 10 bytes -- display_decimal (incl. result buf)
 DISPLAY_STRING_PARAM = $0D ; 2 bytes -- display_string
 
@@ -64,21 +106,14 @@ CUR_OFFSET_TGT       = 6
   .include display_decimal.inc
   .include display_string_immediate.inc
 
-; switch_to_space scratch lives in fixed RAM ($4000-$7FFF), NOT in ZP.
-; ZP is part of the banked lower 16K and gets wiped on bank changes,
-; which would clobber a return address mid-routine.
-switch_to_space_return: .word 0
-switch_to_space_space:  .byte 0
-
-
 program_entry:
   ; Pick a stable lower bank (bank 2) + upper bank 0. cfg %11000 = $18.
   ; This is the C3=1 group, the one the PLD fix in commit 8a8eb82 made
   ; valid for upper-RAM access. The fill/sort phases will only ever
-  ; touch cfgs $18..$1F, so the lower 16K mapping stays put and ZP
-  ; remains stable across every switch_to_space call.
+  ; touch cfgs $18..$1F, so the lower 16K mapping stays put after this
+  ; initial switch.
   lda #%11000
-  jsr switch_to_space
+  switch_to_space
   ldx #$ff
   txs
 
@@ -133,31 +168,6 @@ program_entry:
   stp
 
 
-; switch_to_space: change the bank-select register to the cfg in A,
-; preserving A, X, Y. Lifted from verification_wendy2c.s.
-switch_to_space:
-  sta switch_to_space_space
-  pla
-  sta switch_to_space_return
-  pla
-  sta switch_to_space_return + 1
-
-  lda switch_to_space_space
-  and #BANK_MASK
-  sta TEMP
-  lda BANK_PORT
-  and #~BANK_MASK
-  ora TEMP
-  sta BANK_PORT
-
-  lda switch_to_space_return + 1
-  pha
-  lda switch_to_space_return
-  pha
-  lda switch_to_space_space
-  rts
-
-
 ; ----- cursor primitives -----
 ;
 ; A cursor is a 3-byte ZP triple (CFG, PTR_LO, PTR_HI) that names an
@@ -191,7 +201,7 @@ advance_cursor_x:
 ; SRC_A_PTR into NEXT_A, then advance the cursor.
 src_a_read_advance:
   lda SRC_A_CFG
-  jsr switch_to_space
+  switch_to_space
   ldy #0
   lda (SRC_A_PTR),Y
   sta NEXT_A
@@ -203,7 +213,7 @@ src_a_read_advance:
 
 src_b_read_advance:
   lda SRC_B_CFG
-  jsr switch_to_space
+  switch_to_space
   ldy #0
   lda (SRC_B_PTR),Y
   sta NEXT_B
@@ -217,7 +227,7 @@ src_b_read_advance:
 ; EMIT_VAL to *TGT_PTR, then advance the cursor.
 tgt_write_advance:
   lda TGT_CFG
-  jsr switch_to_space
+  switch_to_space
   ldy #0
   lda EMIT_VAL
   sta (TGT_PTR),Y
