@@ -39,7 +39,7 @@ emulator/emulator.out: $(EMU_SRCS) $(EMU_HDRS) emulator/vendor/miniaudio.h
 # C unit tests
 C_TESTS = emulator/tests/out/test_smoke.out emulator/tests/out/test_file_io.out emulator/tests/out/test_console.out emulator/tests/out/test_trace.out emulator/tests/out/test_cli.out emulator/tests/out/test_emu_run.out emulator/tests/out/test_bus.out emulator/tests/out/test_cpu_variant.out emulator/tests/out/test_cpu_65c02_fixes.out emulator/tests/out/test_cpu_65c02_group_a.out emulator/tests/out/test_cpu_65c02_group_b.out emulator/tests/out/test_cpu_65c02_bit_ops.out emulator/tests/out/test_cpu_65c02_wai_stp.out emulator/tests/out/test_cpu_bus_tap.out emulator/tests/out/test_dormann.out emulator/tests/out/test_machine_dispatch.out emulator/tests/out/test_chip_osc.out emulator/tests/out/test_chip_clock.out emulator/tests/out/test_chip_rom.out emulator/tests/out/test_chip_ram.out emulator/tests/out/test_chip_cpu_65c02.out emulator/tests/out/test_chip_via.out emulator/tests/out/test_pld_literal.out emulator/tests/out/test_pld_config_map.out emulator/tests/out/test_serial_link.out emulator/tests/out/test_chip_lcd.out emulator/tests/out/test_hd44780_font.out emulator/tests/out/test_chip_serial_usb.out emulator/tests/out/test_chip_led_buttons.out emulator/tests/out/test_audio.out emulator/tests/out/test_web_json.out emulator/tests/out/test_web_smoke.out
 
-test: $(C_TESTS) wendy2c-goldens wendy2c-lcd-trace wendy2c-serial-link wendy2c-live-sigint wendy2c-web wendy2c-lcd5x10
+test: $(C_TESTS) wendy2c-goldens wendy2c-lcd-trace wendy2c-merge-sort wendy2c-serial-link wendy2c-live-sigint wendy2c-web wendy2c-lcd5x10
 	@for t in $(C_TESTS); do ./$$t || exit 1; done
 
 # End-to-end wendy2c golden-LCD tests. Requires vasm6502_oldstyle on
@@ -53,6 +53,12 @@ wendy2c-goldens: emulator/emulator.out
 # a sequence of LCD frames. Same vasm-skip pattern as the goldens.
 wendy2c-lcd-trace: emulator/emulator.out
 	@emulator/tests/lcd_trace_test.sh
+
+# End-to-end goldens for the wendy2 merge-sort demo. Uses --lcd-trace
+# to assert on intermediate LCD frames (init -> fill -> sort -> verify
+# -> final), not just the closing frame. Same vasm-skip pattern.
+wendy2c-merge-sort: emulator/emulator.out
+	@emulator/tests/merge_sort_goldens.sh
 
 # End-to-end test of the host-driven --serial-link transport: a Python
 # client uploads a framed payload bit-by-bit over the Unix socket, the
@@ -79,7 +85,7 @@ wendy2c-web: emulator/emulator.out
 wendy2c-lcd5x10: emulator/emulator.out
 	@python3 emulator/tests/lcd_5x10_playwright_test.py
 
-.PHONY: wendy2c-goldens wendy2c-lcd-trace wendy2c-live-sigint wendy2c-web wendy2c-lcd5x10
+.PHONY: wendy2c-goldens wendy2c-lcd-trace wendy2c-merge-sort wendy2c-live-sigint wendy2c-web wendy2c-lcd5x10
 
 emulator/tests/out/test_smoke.out: emulator/tests/test_smoke.c emulator/tests/greatest.h
 	@mkdir -p emulator/tests/out
