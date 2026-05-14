@@ -1,5 +1,6 @@
 import getopt
 import serial
+import serial.tools.list_ports
 import sys
 import pause
 from datetime import datetime, timedelta
@@ -38,8 +39,16 @@ for option, value in options:
       sys.exit(2)
 
 if port is None:
-  print("Error: the --port argument must be specified")
-  sys.exit(2)
+  usb_ports = [p for p in serial.tools.list_ports.comports() if p.vid is not None]
+  if len(usb_ports) == 0:
+    print("Error: no USB to serial device found; specify --port")
+    sys.exit(2)
+  if len(usb_ports) > 1:
+    print("Error: multiple USB to serial devices found; specify --port. Found:")
+    for p in usb_ports:
+      print("  {} ({})".format(p.device, p.description))
+    sys.exit(2)
+  port = usb_ports[0].device
 
 if baudrate is None:
   print("Error: the --baudrate argment must be specified")
