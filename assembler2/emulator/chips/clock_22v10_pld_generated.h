@@ -8,7 +8,7 @@
 #define EMULATOR_CHIPS_CLOCK_22V10_PLD_GENERATED_H
 
 static inline int pld_romcs(int a15, int a14, int a13, int a12, int a11, int c4, int c3, int c2, int c1, int c0) {
-    return (((!c4) & (!c3) & (!c2) & (!c1) & (!c0) & a15 & a14 & a13 & a12 & a11) | ((!c4) & (!c3) & (!c2) & (!c1) & (!c0) & a15 & (!a14)) | ((!c4) & (!c3) & (!c2) & (!c1) & (!c0) & a15 & a14 & (!a13)) | ((!c4) & (!c3) & (!c2) & (!c1) & (!c0) & a15 & a14 & a13 & (!a12)) | (c4 & (!c2) & (!c1) & (!c0) & a15 & (!a14)) | (c4 & (!c2) & (!c1) & (!c0) & a15 & a14 & (!a13)) | (c4 & (!c2) & (!c1) & (!c0) & a15 & a14 & a13 & (!a12))) ? 1 : 0;
+    return (((!c4) & (!c3) & (!c2) & (!c1) & (!c0) & a15 & a14 & a13 & a12 & a11) | ((!c4) & (!c3) & (!c2) & (!c1) & (!c0) & a15 & (!a14)) | ((!c4) & (!c3) & (!c2) & (!c1) & (!c0) & a15 & a14 & (!a13)) | ((!c4) & (!c3) & (!c2) & (!c1) & (!c0) & a15 & a14 & a13 & (!a12)) | (c4 & (!c3) & (!c2) & (!c1) & (!c0) & a15 & (!a14)) | (c4 & (!c3) & (!c2) & (!c1) & (!c0) & a15 & a14 & (!a13)) | (c4 & (!c3) & (!c2) & (!c1) & (!c0) & a15 & a14 & a13 & (!a12))) ? 1 : 0;
 }
 
 static inline int pld_viacs(int a15, int a14, int a13, int a12, int a11, int c4, int c3, int c2, int c1, int c0) {
@@ -17,7 +17,7 @@ static inline int pld_viacs(int a15, int a14, int a13, int a12, int a11, int c4,
 }
 
 static inline int pld_ramcs(int a15, int a14, int a13, int a12, int a11, int c4, int c3, int c2, int c1, int c0) {
-    return (((!c4) & (!c3) & (!c2) & (!c1) & (!c0) & a15 & a14 & a13 & a12 & a11) | ((!c4) & (!c3) & (!c2) & (!c1) & (!c0) & a15 & (!a14)) | ((!c4) & (!c3) & (!c2) & (!c1) & (!c0) & a15 & a14 & (!a13)) | ((!c4) & (!c3) & (!c2) & (!c1) & (!c0) & a15 & a14 & a13 & (!a12)) | (c4 & (!c2) & (!c1) & (!c0) & a15 & (!a14)) | (c4 & (!c2) & (!c1) & (!c0) & a15 & a14 & (!a13)) | (c4 & (!c2) & (!c1) & (!c0) & a15 & a14 & a13 & (!a12)) | (a15 & a14 & a13 & a12 & (!a11))) ? 0 : 1;
+    return (((!c4) & (!c3) & (!c2) & (!c1) & (!c0) & a15 & a14 & a13 & a12 & a11) | ((!c4) & (!c3) & (!c2) & (!c1) & (!c0) & a15 & (!a14)) | ((!c4) & (!c3) & (!c2) & (!c1) & (!c0) & a15 & a14 & (!a13)) | ((!c4) & (!c3) & (!c2) & (!c1) & (!c0) & a15 & a14 & a13 & (!a12)) | (c4 & (!c3) & (!c2) & (!c1) & (!c0) & a15 & (!a14)) | (c4 & (!c3) & (!c2) & (!c1) & (!c0) & a15 & a14 & (!a13)) | (c4 & (!c3) & (!c2) & (!c1) & (!c0) & a15 & a14 & a13 & (!a12)) | (a15 & a14 & a13 & a12 & (!a11))) ? 0 : 1;
 }
 
 static inline int pld_r15(int a15, int a14, int a13, int a12, int a11, int c4, int c3, int c2, int c1, int c0) {

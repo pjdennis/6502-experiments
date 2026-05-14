@@ -51,6 +51,19 @@ OUTPUT_SPECS = [
 ]
 
 
+# Per-pin product-term limit for the GAL/ATF22V10 macrocells. The 22V10
+# has the symmetric "wedge" topology with macrocells running 8/10/12/14/16
+# product terms (output pins 14-18, mirrored on 19-23). Outputs that
+# exceed their pin's limit cannot be fitted; this script fails with a
+# diagnostic in that case so the .pld author gets the error at generation
+# time rather than weeks later when burning hardware. See e.g. the
+# Lattice GAL22V10 datasheet.
+PIN_TERM_LIMITS = {
+    14: 8,  15: 10, 16: 12, 17: 14, 18: 16,
+    19: 16, 20: 14, 21: 12, 22: 10, 23: 8,
+}
+
+
 # ---------------------------------------------------------------------------
 # Parsing
 
@@ -96,6 +109,84 @@ def parse_pld(text: str) -> dict[str, str]:
         equations[current_name] = current_expr.strip()
 
     return equations
+
+
+def parse_pin_assignments(text: str) -> dict[str, int]:
+    """Return {pin_name: pin_number} for the .pld's two pin-list rows.
+
+    The .pld pin map looks like:
+        ;1     2    3    4    5    6    7   8   9   10  11   12
+         OSC   A15  A14  A13  A12  A11  C4  C3  C2  C1  C0   GND
+         RWRB  /WR  R15  R16  R17  R18  /ROMCS /RAMCS /VIACS CK CKS VCC
+        ;13    14   15   16   17   18   19      20      21      22  23   24
+
+    The first non-comment, non-equation line after the GAL header is the
+    top row (pins 1-12); the next is the bottom row (pins 13-24). VCC /
+    GND / unused pin labels (NC) are recorded too but only matter for
+    the term-count check on actual outputs.
+    """
+    if 'DESCRIPTION' in text:
+        text = text[:text.index('DESCRIPTION')]
+    rows: list[list[str]] = []
+    for raw in text.split('\n'):
+        line = _strip_comment(raw).strip()
+        if not line:
+            continue
+        if '=' in line or line.startswith('+'):
+            # Equations start here -- pin-list section is done.
+            break
+        toks = line.split()
+        # Skip the GAL header lines that aren't pin lists (e.g. the
+        # first two lines: "GAL22V10   ; Logic ..." and the name).
+        if len(toks) < 8:
+            continue
+        rows.append(toks)
+        if len(rows) == 2:
+            break
+    if len(rows) != 2:
+        return {}
+    pins: dict[str, int] = {}
+    for idx, name in enumerate(rows[0]):
+        pins[name] = idx + 1            # pins 1..12
+    for idx, name in enumerate(rows[1]):
+        pins[name] = idx + 13           # pins 13..24
+    return pins
+
+
+def count_terms(expr: str) -> int:
+    """Number of product terms in a sum-of-products expression."""
+    return len(_split_terms(expr))
+
+
+def check_22v10_term_limits(equations: dict[str, str], pins: dict[str, int]) -> list[str]:
+    """Return a list of human-readable error strings for any output whose
+    term count exceeds its pin's 22V10 limit. Empty list = all good."""
+    errors: list[str] = []
+    for lhs, rhs in equations.items():
+        # Output name in equations may be "/X" (active-low) or "X.R"
+        # (registered). Pin map keys use the same forms.
+        name = lhs
+        if name.endswith('.R'):
+            name = name[:-2]
+        pin = pins.get(name)
+        if pin is None:
+            # Try the active-low variant if it's in the pin map.
+            pin = pins.get('/' + name) if not name.startswith('/') else pins.get(name[1:])
+        if pin is None:
+            # Not on a pin (could be a buried node or unknown name).
+            continue
+        limit = PIN_TERM_LIMITS.get(pin)
+        if limit is None:
+            # Not an output pin (could be VCC/GND/input pin).
+            continue
+        terms = count_terms(rhs)
+        if terms > limit:
+            errors.append(
+                f"22V10 fit error: {lhs} on pin {pin} has {terms} product "
+                f"terms but the macrocell allows at most {limit}. Reduce "
+                f"the sum-of-products or move the signal to a different pin."
+            )
+    return errors
 
 
 # ---------------------------------------------------------------------------
@@ -227,6 +318,14 @@ def main() -> int:
 
     text = Path(args.pld).read_text()
     equations = parse_pld(text)
+
+    pins = parse_pin_assignments(text)
+    errors = check_22v10_term_limits(equations, pins)
+    if errors:
+        for e in errors:
+            print(e, file=sys.stderr)
+        return 1
+
     header = generate_header(equations, args.pld)
 
     if args.output == '-':
