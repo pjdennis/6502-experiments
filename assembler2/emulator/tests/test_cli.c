@@ -239,6 +239,54 @@ TEST cli_unknown_machine_rejected(void) {
     PASS();
 }
 
+TEST cli_lcd_trace_path_parsed(void) {
+    char *argv[] = {"emulator", "prog.bin",
+                    "--machine", "wendy2c",
+                    "--lcd-trace", "/tmp/lcd.trace", NULL};
+    struct emu_opts opts;
+    int rc = parse(argv, &opts);
+    ASSERT_EQ_FMT(0, rc, "%d");
+    ASSERT_STR_EQ("/tmp/lcd.trace", opts.lcd_trace_filename);
+    PASS();
+}
+
+TEST cli_lcd_trace_default_null(void) {
+    char *argv[] = {"emulator", "prog.bin", "--machine", "wendy2c", NULL};
+    struct emu_opts opts;
+    int rc = parse(argv, &opts);
+    ASSERT_EQ_FMT(0, rc, "%d");
+    ASSERT(opts.lcd_trace_filename == NULL);
+    PASS();
+}
+
+TEST cli_lcd_trace_missing_value_errors(void) {
+    char *argv[] = {"emulator", "prog.bin",
+                    "--machine", "wendy2c",
+                    "--lcd-trace", NULL};
+    struct emu_opts opts;
+    char buf[1024] = {0};
+    capture_stderr_begin();
+    int rc = parse(argv, &opts);
+    capture_stderr_end(buf, sizeof(buf));
+    ASSERT_EQ_FMT(1, rc, "%d");
+    ASSERT(strstr(buf, "--lcd-trace requires a value") != NULL);
+    PASS();
+}
+
+TEST cli_lcd_trace_requires_wendy2c(void) {
+    char *argv[] = {"emulator", "prog.bin",
+                    "--lcd-trace", "/tmp/lcd.trace", NULL};
+    struct emu_opts opts;
+    char buf[1024] = {0};
+    capture_stderr_begin();
+    int rc = parse(argv, &opts);
+    capture_stderr_end(buf, sizeof(buf));
+    ASSERT_EQ_FMT(1, rc, "%d");
+    ASSERT(strstr(buf, "--lcd-trace") != NULL);
+    ASSERT(strstr(buf, "wendy2c") != NULL);
+    PASS();
+}
+
 SUITE(cli_suite) {
     RUN_TEST(cli_empty_argv_errors);
     RUN_TEST(cli_server_first_arg_dispatches);
@@ -257,6 +305,10 @@ SUITE(cli_suite) {
     RUN_TEST(cli_wendy2c_plus_nmos_rejected);
     RUN_TEST(cli_explicit_cpu_65c02_on_nmos_default);
     RUN_TEST(cli_unknown_machine_rejected);
+    RUN_TEST(cli_lcd_trace_path_parsed);
+    RUN_TEST(cli_lcd_trace_default_null);
+    RUN_TEST(cli_lcd_trace_missing_value_errors);
+    RUN_TEST(cli_lcd_trace_requires_wendy2c);
 }
 
 GREATEST_MAIN_DEFS();

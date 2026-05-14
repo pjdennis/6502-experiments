@@ -52,6 +52,38 @@ static void wendy2c_cpu_write(uint16_t addr, uint8_t data) {
     bus_write(active_bus, addr, data);
 }
 
+/* ---- LCD trace file (--lcd-trace) ----
+ *
+ * When the user passes --lcd-trace PATH on a non-live, non-web wendy2c
+ * run, we append a frame to PATH each time the LCD changed during a
+ * batch. Format (so tests can grep / split by separator):
+ *
+ *   --- osc=<N> cpu=<N> pc=$<HHHH> ---
+ *   |row0|
+ *   |row1|
+ *   ...
+ *
+ * Hooking on a "dirty since last render" basis means an LCD that
+ * settles between batches captures one frame per stable state, which
+ * is what tests want -- not one per character write. */
+static void lcd_trace_emit_if_changed(FILE *fp,
+                                       struct lcd_hd44780_state *lcd,
+                                       const struct bus *b) {
+    if (!fp) return;
+    char lcdbuf[LCD_DDRAM_SIZE + 8];
+    int dirty = lcd_hd44780_render(lcd, lcdbuf);
+    if (!dirty) return;
+    fprintf(fp, "--- osc=%llu cpu=%llu pc=$%04X ---\n",
+            (unsigned long long)b->osc_ticks,
+            (unsigned long long)clockticks6502,
+            pc);
+    int cols = lcd->cols;
+    for (int r = 0; r < lcd->rows; r++) {
+        fprintf(fp, "|%.*s|\n", cols, lcdbuf + r * cols);
+    }
+    fflush(fp);
+}
+
 /* ---- live-mode renderer ---- */
 
 /* PORTA / PORTB pin labels for the wendy2c. Reflects the post-GD-disable
@@ -617,6 +649,21 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
         }
     }
 
+    /* --lcd-trace: open the file once before entering the run loop. CLI
+     * rejects this flag for --live / --web, so only the non-live paths
+     * below need to check it. */
+    FILE *lcd_trace_fp = NULL;
+    if (opts->lcd_trace_filename) {
+        lcd_trace_fp = fopen(opts->lcd_trace_filename, "w");
+        if (!lcd_trace_fp) {
+            fprintf(stderr, "wendy2c: could not open --lcd-trace %s\n",
+                    opts->lcd_trace_filename);
+            if (link) serial_link_stop(link);
+            audio_close(&audio);
+            return 1;
+        }
+    }
+
     if (opts->web) {
         emu_run_wendy2c_web(&b, &lcd_state, &via_state, &ledbtn_state,
                             &audio, link, cap, osc_per_us,
@@ -644,6 +691,7 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
                 }
             }
             if (stp) break;
+            lcd_trace_emit_if_changed(lcd_trace_fp, &lcd_state, &b);
             (void)wendy2c_pace(&t0, osc0, b.osc_ticks, osc_per_us);
         }
     } else {
@@ -663,7 +711,15 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
                 }
             }
             if (stp) break;
+            lcd_trace_emit_if_changed(lcd_trace_fp, &lcd_state, &b);
         }
+    }
+
+    /* Final LCD frame after STP/cap: ensure trace captures the end state. */
+    if (lcd_trace_fp) {
+        lcd_trace_emit_if_changed(lcd_trace_fp, &lcd_state, &b);
+        fclose(lcd_trace_fp);
+        lcd_trace_fp = NULL;
     }
 
     if (link) serial_link_stop(link);

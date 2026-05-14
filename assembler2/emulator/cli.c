@@ -42,6 +42,7 @@ void emu_opts_init(struct emu_opts *opts) {
     opts->web_bind = NULL;
     opts->web_root = NULL;
     opts->serial_link_path = NULL;
+    opts->lcd_trace_filename = NULL;
 }
 
 void emu_opts_usage(FILE *fp) {
@@ -95,7 +96,10 @@ void emu_opts_usage(FILE *fp) {
 "  --cycle-cap N          max cycles before forced exit (decimal; default 200000000;\n"
 "                         no cap under --live unless this is given explicitly).\n"
 "                         For wendy2c this is oscillator ticks (~2 per CPU cycle);\n"
-"                         for nmos-default and --server it is CPU cycles.\n");
+"                         for nmos-default and --server it is CPU cycles.\n"
+"  --lcd-trace PATH       wendy2c (non-live, non-web): append a timestamped LCD frame to\n"
+"                         PATH every time the LCD changes during the run. Lets tests assert\n"
+"                         on intermediate display states, not just the final frame.\n");
 }
 
 /* Helper: --FLAG VALUE. Returns 0 on success, sets *value_out and
@@ -277,6 +281,8 @@ int parse_args(int argc, char **argv, struct emu_opts *opts) {
             i += 2;
         } else if (strcmp(argv[i], "--serial-link") == 0) {
             if (take_str_value(argc, argv, &i, "--serial-link", &opts->serial_link_path)) return 1;
+        } else if (strcmp(argv[i], "--lcd-trace") == 0) {
+            if (take_str_value(argc, argv, &i, "--lcd-trace", &opts->lcd_trace_filename)) return 1;
         } else if (strcmp(argv[i], "--cycle-cap") == 0) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "error: --cycle-cap requires a value\n");
@@ -341,6 +347,15 @@ int parse_args(int argc, char **argv, struct emu_opts *opts) {
 
     if (opts->serial_link_path && opts->machine != MACHINE_WENDY2C) {
         fprintf(stderr, "error: --serial-link currently requires --machine wendy2c\n");
+        return 1;
+    }
+
+    if (opts->lcd_trace_filename && opts->machine != MACHINE_WENDY2C) {
+        fprintf(stderr, "error: --lcd-trace currently requires --machine wendy2c\n");
+        return 1;
+    }
+    if (opts->lcd_trace_filename && (opts->live || opts->web)) {
+        fprintf(stderr, "error: --lcd-trace is incompatible with --live and --web\n");
         return 1;
     }
 

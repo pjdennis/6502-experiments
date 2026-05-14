@@ -49,6 +49,10 @@ struct emu_opts {
     const char *web_bind;               /* --web-bind ADDR; NULL = 127.0.0.1 (loopback only) */
     const char *web_root;               /* --web-root PATH; NULL = auto-discover next to argv[0] */
     const char *serial_link_path;       /* --serial-link PATH (wendy2c only): Unix socket for host-driven CB2 + reset */
+    const char *lcd_trace_filename;     /* --lcd-trace PATH (wendy2c only, non-live, non-web): append a
+                                         * timestamped LCD frame to PATH every time the LCD changes during
+                                         * the run loop. Format: a "--- osc=N cpu=N pc=$NNNN ---" header
+                                         * line followed by one "|...|"-bracketed row per LCD row. */
 };
 
 /* Initialize an emu_opts with the documented defaults. */
