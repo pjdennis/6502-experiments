@@ -138,4 +138,40 @@ assert_trace_contains_in_order "$TRACE" \
     "|Fill: OK"
 echo "  PASS fill_selftest"
 
+# ---- sort-selftest cases ----
+# Built with -DSELFTEST_SORT=1, the program runs fill -> sort, walks
+# the final result side comparing each element to the previous, and
+# displays 'Sort: OK' on success or 'Sort: FAIL@HHHH' on the first
+# out-of-order position.
+#
+# Two N values, chosen for coverage:
+#   * N=64  -- power of 2, every chunk is even -> the simple path.
+#   * N=20  -- non-power-of-2 -> exercises the uneven-last-chunk path
+#             (e.g. at L=4 the last chunk has len_a=4, len_b=0).
+run_sort_selftest() {
+    n=$1
+    echo "merge_sort_goldens: case sort_selftest_n${n}"
+    run_vasm "$OUT/sort_n${n}.bin" "$REPO_ROOT/wendy2_merge_sort.s" \
+        -DSELFTEST_SORT=1 -DN_ELEMENTS=$n
+    python3 "$REPO_ROOT/assembler2/emulator/wendy2_upload.py" \
+        "$OUT/sort_n${n}.bin" -o "$OUT/sort_n${n}.framed" \
+        >"$OUT/sort_n${n}.upload.log"
+
+    TRACE="$OUT/sort_n${n}.lcd-trace"
+    rm -f "$TRACE"
+    "$EMU" "$OUT/boot.bin" \
+        --machine wendy2c \
+        --serial-input "$OUT/sort_n${n}.framed" \
+        --lcd-trace "$TRACE" \
+        --cycle-cap 50000000 \
+        >"$OUT/sort_n${n}.stdout" 2>"$OUT/sort_n${n}.stderr" || true
+
+    assert_trace_contains_in_order "$TRACE" \
+        "|Sort: OK"
+    echo "  PASS sort_selftest_n${n}"
+}
+
+run_sort_selftest 64
+run_sort_selftest 20
+
 echo "merge_sort_goldens: all PASS"

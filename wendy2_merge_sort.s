@@ -90,6 +90,9 @@ program_entry:
   .ifdef SELFTEST_FILL
   jmp fill_selftest
   .endif
+  .ifdef SELFTEST_SORT
+  jmp sort_selftest
+  .endif
 
   jsr display_string_immediate
   .asciiz "Merge Sort"
@@ -413,6 +416,455 @@ fill_selftest:
 .fail:
   jsr display_string_immediate
   .asciiz "Fill: FAIL@"
+  lda CHUNK_REM+1
+  jsr display_hex
+  lda CHUNK_REM
+  jsr display_hex
+  stp
+
+  .endif
+
+
+; ----- bottom-up merge sort -----
+;
+; Each pass walks the current source side front-to-back in chunks of
+; 2L elements (a run-A of L followed by a run-B of L) and merges each
+; chunk into a single sorted 2L run on the target side. Source/target
+; roles swap after every pass. The last chunk of a pass may be partial
+; when N is not a multiple of 2L.
+;
+; Side A occupies cfgs $18..$1B (4 banks); side B occupies $1C..$1F.
+; Cursors walk $8000..$EFFE within each cfg, wrapping to the next.
+
+SIDE_A_CFG = $18
+SIDE_B_CFG = $1C
+
+; advance_skip_x: advance cursor at offset X by RUN_LEN elements.
+; A simple per-element loop -- correct across multi-bank skips, and
+; the amortised count is bounded (~N per pass across both cursors).
+; Clobbers A; preserves X, Y.
+advance_skip_x:
+  ; SKIP_COUNT = RUN_LEN, used as countdown
+  lda RUN_LEN
+  sta SKIP_COUNT
+  lda RUN_LEN+1
+  sta SKIP_COUNT+1
+.skip_loop:
+  lda SKIP_COUNT
+  ora SKIP_COUNT+1
+  beq .skip_done
+  phx
+  jsr advance_cursor_x
+  plx
+  lda SKIP_COUNT
+  bne .skip_lo_nz
+  dec SKIP_COUNT+1
+.skip_lo_nz:
+  dec SKIP_COUNT
+  bra .skip_loop
+.skip_done:
+  rts
+
+; merge_one_chunk: merge a chunk pair using the cursors as currently
+; positioned. On entry A_REM and B_REM hold the run lengths (each <=
+; RUN_LEN; B_REM may be 0 for a degenerate trailing chunk).
+;
+; Walks A_REM elements from SRC_A and B_REM elements from SRC_B in
+; ascending order, writing through TGT. Leaves the cursors advanced
+; past everything consumed.
+merge_one_chunk:
+  ; Pre-fill NEXT_A if A run is non-empty.
+  lda A_REM
+  ora A_REM+1
+  beq .pre_b
+  jsr src_a_read_advance
+.pre_b:
+  ; Pre-fill NEXT_B if B run is non-empty.
+  lda B_REM
+  ora B_REM+1
+  beq .drain_a
+  jsr src_b_read_advance
+  ; fall through
+
+.compare_loop:
+  ; Both NEXT_A and NEXT_B valid; emit the smaller.
+  lda NEXT_A+1
+  cmp NEXT_B+1
+  bcc .emit_a
+  bne .emit_b
+  lda NEXT_A
+  cmp NEXT_B
+  bcc .emit_a
+  ; NEXT_A >= NEXT_B: emit B
+.emit_b:
+  lda NEXT_B
+  sta EMIT_VAL
+  lda NEXT_B+1
+  sta EMIT_VAL+1
+  jsr tgt_write_advance
+  lda B_REM
+  bne .b_lo_nz
+  dec B_REM+1
+.b_lo_nz:
+  dec B_REM
+  lda B_REM
+  ora B_REM+1
+  beq .drain_a
+  jsr src_b_read_advance
+  bra .compare_loop
+
+.emit_a:
+  lda NEXT_A
+  sta EMIT_VAL
+  lda NEXT_A+1
+  sta EMIT_VAL+1
+  jsr tgt_write_advance
+  lda A_REM
+  bne .a_lo_nz
+  dec A_REM+1
+.a_lo_nz:
+  dec A_REM
+  lda A_REM
+  ora A_REM+1
+  beq .drain_b
+  jsr src_a_read_advance
+  bra .compare_loop
+
+.drain_a:
+  ; B exhausted; emit remaining A_REM elements (NEXT_A is the first if A_REM>0).
+  lda A_REM
+  ora A_REM+1
+  beq .done
+.drain_a_loop:
+  lda NEXT_A
+  sta EMIT_VAL
+  lda NEXT_A+1
+  sta EMIT_VAL+1
+  jsr tgt_write_advance
+  lda A_REM
+  bne .a_lo_nz2
+  dec A_REM+1
+.a_lo_nz2:
+  dec A_REM
+  lda A_REM
+  ora A_REM+1
+  beq .done
+  jsr src_a_read_advance
+  bra .drain_a_loop
+
+.drain_b:
+  ; A exhausted; emit remaining B_REM elements.
+  lda B_REM
+  ora B_REM+1
+  beq .done
+.drain_b_loop:
+  lda NEXT_B
+  sta EMIT_VAL
+  lda NEXT_B+1
+  sta EMIT_VAL+1
+  jsr tgt_write_advance
+  lda B_REM
+  bne .b_lo_nz2
+  dec B_REM+1
+.b_lo_nz2:
+  dec B_REM
+  lda B_REM
+  ora B_REM+1
+  beq .done
+  jsr src_b_read_advance
+  bra .drain_b_loop
+
+.done:
+  rts
+
+
+; sort_phase: full bottom-up sort. Caller has filled side A; on return
+; the sorted result lives on the side identified by CURRENT_SIDE_IS_A
+; (1 -> side A, 0 -> side B). 16 passes for N=57344 (RUN_LEN doubles
+; until >= N_ELEMENTS); on each pass we set cursors at the side starts
+; and walk through chunks of 2*RUN_LEN.
+sort_phase:
+  ; Initial RUN_LEN = 1; source = side A.
+  lda #1
+  sta RUN_LEN
+  stz RUN_LEN+1
+  lda #1
+  sta CURRENT_SIDE_IS_A   ; source side is A
+  stz PASS_NUM
+
+.pass_loop:
+  ; Exit when RUN_LEN >= N_ELEMENTS (no more merging possible).
+  lda RUN_LEN+1
+  cmp #>N_ELEMENTS
+  bcc .do_pass            ; RUN_LEN_HI < N_ELEMENTS_HI
+  bne .all_done           ; RUN_LEN_HI > N_ELEMENTS_HI
+  lda RUN_LEN
+  cmp #<N_ELEMENTS
+  bcc .do_pass
+.all_done:
+  ; Source side now holds the sorted data. CURRENT_SIDE_IS_A points
+  ; to it because we flipped *after* every pass (so this flag still
+  ; matches the last pass's source -> the next pass's source -> the
+  ; current sorted side).
+  rts
+
+.do_pass:
+  ; --- set up cursors for this pass ---
+  ; SRC_A points at start of the source side; SRC_B at SRC_A + RUN_LEN
+  ; elements; TGT at start of the target side.
+  lda CURRENT_SIDE_IS_A
+  beq .src_is_b
+
+  ; source = side A, target = side B
+  lda #SIDE_A_CFG
+  sta SRC_A_CFG
+  lda #SIDE_B_CFG
+  sta TGT_CFG
+  bra .ptrs
+
+.src_is_b:
+  lda #SIDE_B_CFG
+  sta SRC_A_CFG
+  lda #SIDE_A_CFG
+  sta TGT_CFG
+
+.ptrs:
+  stz SRC_A_PTR
+  lda #$80
+  sta SRC_A_PTR+1
+  stz TGT_PTR
+  lda #$80
+  sta TGT_PTR+1
+
+  ; SRC_B = SRC_A advanced by RUN_LEN elements.
+  ; First copy SRC_A's full cursor (cfg + ptr) to SRC_B.
+  lda SRC_A_CFG
+  sta SRC_B_CFG
+  lda SRC_A_PTR
+  sta SRC_B_PTR
+  lda SRC_A_PTR+1
+  sta SRC_B_PTR+1
+  ldx #CUR_OFFSET_SRC_B
+  jsr advance_skip_x      ; advance SRC_B by RUN_LEN
+
+  ; --- chunk walk ---
+  lda #<N_ELEMENTS
+  sta TOTAL_REM
+  lda #>N_ELEMENTS
+  sta TOTAL_REM+1
+
+.chunk_loop:
+  ; If TOTAL_REM == 0, pass done.
+  lda TOTAL_REM
+  ora TOTAL_REM+1
+  bne .chunk_continue
+  jmp .pass_done
+.chunk_continue:
+
+  ; len_a = min(RUN_LEN, TOTAL_REM)
+  ; len_b = min(RUN_LEN, max(0, TOTAL_REM - RUN_LEN))
+  ; Compute by saturating subtraction.
+  ;
+  ; If TOTAL_REM <= RUN_LEN: len_a = TOTAL_REM; len_b = 0.
+  ; Else: len_a = RUN_LEN; rem = TOTAL_REM - RUN_LEN; len_b = min(rem, RUN_LEN).
+
+  ; Compare TOTAL_REM vs RUN_LEN (unsigned 16-bit).
+  lda TOTAL_REM+1
+  cmp RUN_LEN+1
+  bcc .total_le_run
+  bne .total_gt_run
+  lda TOTAL_REM
+  cmp RUN_LEN
+  bcc .total_le_run
+  beq .total_le_run
+
+.total_gt_run:
+  ; len_a = RUN_LEN
+  lda RUN_LEN
+  sta A_REM
+  lda RUN_LEN+1
+  sta A_REM+1
+  ; rem = TOTAL_REM - RUN_LEN
+  sec
+  lda TOTAL_REM
+  sbc RUN_LEN
+  sta CHUNK_REM
+  lda TOTAL_REM+1
+  sbc RUN_LEN+1
+  sta CHUNK_REM+1
+  ; len_b = min(CHUNK_REM, RUN_LEN)
+  lda CHUNK_REM+1
+  cmp RUN_LEN+1
+  bcc .b_is_rem
+  bne .b_is_run
+  lda CHUNK_REM
+  cmp RUN_LEN
+  bcc .b_is_rem
+.b_is_run:
+  lda RUN_LEN
+  sta B_REM
+  lda RUN_LEN+1
+  sta B_REM+1
+  bra .have_lens
+.b_is_rem:
+  lda CHUNK_REM
+  sta B_REM
+  lda CHUNK_REM+1
+  sta B_REM+1
+  bra .have_lens
+
+.total_le_run:
+  ; len_a = TOTAL_REM, len_b = 0
+  lda TOTAL_REM
+  sta A_REM
+  lda TOTAL_REM+1
+  sta A_REM+1
+  stz B_REM
+  stz B_REM+1
+
+.have_lens:
+  ; Save the consumed count (A_REM + B_REM) so we can decrement
+  ; TOTAL_REM after merge_one_chunk clobbers A_REM and B_REM.
+  clc
+  lda A_REM
+  adc B_REM
+  sta CHUNK_REM
+  lda A_REM+1
+  adc B_REM+1
+  sta CHUNK_REM+1
+
+  jsr merge_one_chunk
+
+  ; TOTAL_REM -= CHUNK_REM
+  sec
+  lda TOTAL_REM
+  sbc CHUNK_REM
+  sta TOTAL_REM
+  lda TOTAL_REM+1
+  sbc CHUNK_REM+1
+  sta TOTAL_REM+1
+
+  ; If more chunks remain, advance SRC_A and SRC_B by RUN_LEN each
+  ; so they're positioned at the start of the NEXT chunk's runs.
+  lda TOTAL_REM
+  ora TOTAL_REM+1
+  bne .keep_going
+  jmp .pass_done
+.keep_going:
+  ldx #CUR_OFFSET_SRC_A
+  jsr advance_skip_x
+  ldx #CUR_OFFSET_SRC_B
+  jsr advance_skip_x
+  jmp .chunk_loop
+
+.pass_done:
+  ; RUN_LEN *= 2
+  asl RUN_LEN
+  rol RUN_LEN+1
+  ; Toggle source side.
+  lda CURRENT_SIDE_IS_A
+  eor #1
+  sta CURRENT_SIDE_IS_A
+  ; After flip, CURRENT_SIDE_IS_A names the side we will read from
+  ; next -- which is the side we just wrote to (i.e. the side that
+  ; holds the up-to-date partial sort).
+  inc PASS_NUM
+  jmp .pass_loop
+
+
+; SKIP_COUNT lives just past the existing ZP slots used during the
+; merge inner loop, so the merge-time and skip-time uses don't overlap.
+SKIP_COUNT = $31  ; 2 bytes
+
+
+; ----- sort selftest (built with -DSELFTEST_SORT=1) -----
+;
+; Runs fill_phase + sort_phase, then walks the final sorted side
+; comparing each element to the previous. On any out-of-order pair,
+; displays 'Sort: FAIL@HHHH' with the offending position; otherwise
+; 'Sort: OK'.
+  .ifdef SELFTEST_SORT
+
+sort_selftest:
+  ; seed LFSR + init TGT to side A start, then fill.
+  lda #<LFSR_SEED
+  sta LFSR
+  lda #>LFSR_SEED
+  sta LFSR+1
+  lda #SIDE_A_CFG
+  sta TGT_CFG
+  stz TGT_PTR
+  lda #$80
+  sta TGT_PTR+1
+  jsr fill_phase
+
+  ; sort.
+  jsr sort_phase
+
+  ; -- verify sortedness --
+  ; SRC_A positioned at the start of the SORTED side. CURRENT_SIDE_IS_A
+  ; tells us which one.
+  lda CURRENT_SIDE_IS_A
+  beq .src_b
+  lda #SIDE_A_CFG
+  bra .src_set
+.src_b:
+  lda #SIDE_B_CFG
+.src_set:
+  sta SRC_A_CFG
+  stz SRC_A_PTR
+  lda #$80
+  sta SRC_A_PTR+1
+
+  ; Read first element; nothing to compare against yet.
+  jsr src_a_read_advance
+  lda NEXT_A
+  sta PREV_ELEM
+  lda NEXT_A+1
+  sta PREV_ELEM+1
+
+  ; Counter: position of currently-read element (start at 1 since
+  ; we already read element 0). Loop until pos == N_ELEMENTS.
+  lda #1
+  sta CHUNK_REM
+  stz CHUNK_REM+1
+.verify_loop:
+  ; if CHUNK_REM >= N_ELEMENTS: done
+  lda CHUNK_REM+1
+  cmp #>N_ELEMENTS
+  bcc .read_next
+  bne .pass
+  lda CHUNK_REM
+  cmp #<N_ELEMENTS
+  bcs .pass
+.read_next:
+  jsr src_a_read_advance
+  ; Compare NEXT_A vs PREV_ELEM. Out-of-order iff NEXT_A < PREV_ELEM.
+  lda NEXT_A+1
+  cmp PREV_ELEM+1
+  bcc .fail
+  bne .ok
+  lda NEXT_A
+  cmp PREV_ELEM
+  bcc .fail
+.ok:
+  lda NEXT_A
+  sta PREV_ELEM
+  lda NEXT_A+1
+  sta PREV_ELEM+1
+  inc CHUNK_REM
+  bne .verify_loop
+  inc CHUNK_REM+1
+  bra .verify_loop
+
+.pass:
+  jsr display_string_immediate
+  .asciiz "Sort: OK"
+  stp
+
+.fail:
+  jsr display_string_immediate
+  .asciiz "Sort: FAIL@"
   lda CHUNK_REM+1
   jsr display_hex
   lda CHUNK_REM
