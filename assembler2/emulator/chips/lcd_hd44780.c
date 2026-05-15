@@ -86,9 +86,12 @@ static void execute_byte(struct lcd_hd44780_state *s, uint8_t rs, uint8_t byte) 
         s->ac = (uint8_t)(byte & 0x3F);
         s->cgram_mode = 1;
     } else if (byte & INST_FUNCTION_SET) {
-        /* DL=bit4, N=bit3, F=bit2. DL=0 -> 4-bit mode. */
+        /* DL=bit4, N=bit3, F=bit2. DL=0 -> 4-bit mode.
+         * Per datasheet, F (5x10 mode) is honored only when N=0; in
+         * 2-line mode the controller ignores F and always uses 5x8. */
         s->four_bit_mode = (byte & 0x10) ? 0 : 1;
         s->two_line_mode = (byte & 0x08) ? 1 : 0;
+        s->font_5x10 = (!s->two_line_mode && (byte & 0x04)) ? 1 : 0;
     } else if (byte & INST_CURSOR_SHIFT) {
         /* Not modeled. */
     } else if (byte & INST_DISPLAY_CTL) {
@@ -122,6 +125,7 @@ static void lcd_hd44780_reset(struct chip *self) {
     s->blink_on = 0;
     s->two_line_mode = 0;
     s->four_bit_mode = 0;  /* power-on default = 8-bit */
+    s->font_5x10 = 0;
     s->high_nibble = 0;
     s->high_nibble_pending = 0;
     s->prev_e = 0;

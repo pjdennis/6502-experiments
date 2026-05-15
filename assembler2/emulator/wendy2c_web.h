@@ -33,6 +33,7 @@ struct wendy2c_web_snapshot {
     uint8_t cgram[64];           /* 8 chars x 8 rows; low 5 bits = pixels */
     int cursor_row, cursor_col;
     int cursor_on, blink_on, display_on;
+    int font_5x10;               /* 1 = HD44780 F-bit set; render glyphs as 5x10 */
 
     int morse_led;
     int control_led;

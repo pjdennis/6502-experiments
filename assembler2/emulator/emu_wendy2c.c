@@ -396,6 +396,7 @@ static void build_snapshot(struct wendy2c_web_snapshot *snap,
     snap->cursor_on  = lcd->cursor_on;
     snap->blink_on   = lcd->blink_on;
     snap->display_on = lcd->display_on;
+    snap->font_5x10  = lcd->font_5x10;
 
     snap->morse_led      = led_buttons_led(ledbtn);
     snap->control_led    = led_buttons_control_led(ledbtn);

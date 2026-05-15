@@ -42,6 +42,7 @@ struct lcd_hd44780_state {
     uint8_t blink_on;
     uint8_t two_line_mode;
     uint8_t four_bit_mode;   /* 0 = 8-bit (default after reset), 1 = 4-bit */
+    uint8_t font_5x10;       /* 0 = 5x8 (default), 1 = 5x10 (only valid in 1-line mode) */
 
     /* 4-bit nibble assembly state. */
     uint8_t high_nibble;

@@ -124,10 +124,112 @@ TEST line2_address_starts_at_40(void) {
     PASS();
 }
 
+TEST function_set_5x10_mode(void) {
+    setup();
+
+    /* 4-bit init. */
+    send_cmd_8bit(0x2);
+
+    /* Function set: DL=1 (4-bit handled by prior step; now we're in
+     * 4-bit interface mode so DL bit in the second byte still controls
+     * the 4/8-bit-mode setting; in 4-bit mode we keep DL=0 means stay
+     * 4-bit, but the F bit is what we care about here).
+     *
+     * Send 0x24 ($20 | F=1, N=0, DL=0): 4-bit, 1-line, 5x10 font.
+     * We expect font_5x10 = 1 and two_line_mode = 0. */
+    send_byte(0x24, 0);
+    ASSERT_EQ_FMT(0, (int)ls.two_line_mode, "%d");
+    ASSERT_EQ_FMT(1, (int)ls.font_5x10, "%d");
+
+    /* In 2-line mode the controller must IGNORE F. Send $2C
+     * (N=1, F=1): expect two_line_mode=1, font_5x10=0. */
+    send_byte(0x2C, 0);
+    ASSERT_EQ_FMT(1, (int)ls.two_line_mode, "%d");
+    ASSERT_EQ_FMT(0, (int)ls.font_5x10, "%d");
+
+    /* Back to 1-line, 5x8 ($20 | N=0, F=0). */
+    send_byte(0x20, 0);
+    ASSERT_EQ_FMT(0, (int)ls.two_line_mode, "%d");
+    ASSERT_EQ_FMT(0, (int)ls.font_5x10, "%d");
+
+    PASS();
+}
+
+TEST cgram_5x10_slot_holds_10_byte_glyph(void) {
+    /* In 5x10 mode the HD44780 stores 4 character patterns of 10 dot
+     * rows each. The controller still exposes CGRAM as a flat 64-byte
+     * memory accessed via Set-CGRAM-Address + write-data; the bytes for
+     * slot 0 occupy addresses $00..$0A (10 rows + 1 cursor row, the
+     * cursor row is ignored by the renderer). This test confirms that
+     * writes through the 4-bit interface land in CGRAM unchanged. */
+    setup();
+    send_cmd_8bit(0x2);                     /* enter 4-bit */
+    send_byte(0x24, 0);                     /* 4-bit, 1-line, 5x10 */
+    send_byte(0x40, 0);                     /* Set CGRAM addr = $00 */
+
+    static const uint8_t glyph[10] = {
+        0x1F, 0x11, 0x11, 0x11, 0x11,
+        0x11, 0x11, 0x11, 0x11, 0x1F,
+    };
+    for (int i = 0; i < 10; i++) send_byte(glyph[i], 1);
+
+    for (int i = 0; i < 10; i++) {
+        ASSERT_EQ_FMT(glyph[i], ls.cgram[i], "%u");
+    }
+    PASS();
+}
+
+TEST blink_underline_cursor_state_tracks_display_ctl(void) {
+    setup();
+    send_cmd_8bit(0x2);
+    send_byte(0x24, 0);                     /* 1-line, 5x10 */
+    /* Display ON + cursor ON + blink ON -> $0F. */
+    send_byte(0x0F, 0);
+    ASSERT_EQ_FMT(1, (int)ls.display_on, "%d");
+    ASSERT_EQ_FMT(1, (int)ls.cursor_on,  "%d");
+    ASSERT_EQ_FMT(1, (int)ls.blink_on,   "%d");
+
+    /* Display ON + cursor ON + blink OFF -> $0E. */
+    send_byte(0x0E, 0);
+    ASSERT_EQ_FMT(1, (int)ls.cursor_on, "%d");
+    ASSERT_EQ_FMT(0, (int)ls.blink_on,  "%d");
+
+    /* Display ON, all cursor visuals off -> $0C. */
+    send_byte(0x0C, 0);
+    ASSERT_EQ_FMT(0, (int)ls.cursor_on, "%d");
+    ASSERT_EQ_FMT(0, (int)ls.blink_on,  "%d");
+    PASS();
+}
+
+TEST cursor_position_5x10_tracks_dd_address(void) {
+    /* 5x10 mode is 1-line only, so all writes stay on row 0 and the
+     * cursor row in the snapshot should always be 0. The column is
+     * just AC. */
+    setup();
+    send_cmd_8bit(0x2);
+    send_byte(0x24, 0);                     /* 1-line, 5x10 */
+    send_byte(0x06, 0);                     /* entry: increment */
+    send_byte(0x80, 0);                     /* DDRAM addr = 0 */
+    send_byte('H', 1);
+    send_byte('I', 1);
+    /* AC has advanced past 'I' to position 2. */
+    ASSERT_EQ_FMT(2, (int)(ls.ac & 0x7F), "%d");
+    ASSERT_EQ_FMT(0, (int)ls.cgram_mode,  "%d");
+    /* Now move cursor: shift-right cursor: $14 (cursor shift, S/C=0, R/L=1). */
+    /* But we don't implement cursor shift; instead use Set DDRAM. */
+    send_byte(0x80 | 0x10, 0);              /* AC = $10 (col 16) */
+    ASSERT_EQ_FMT(0x10, (int)(ls.ac & 0x7F), "%d");
+    PASS();
+}
+
 SUITE(lcd_hd44780_suite) {
     RUN_TEST(init_4bit_then_write_hello);
     RUN_TEST(cgram_slot_6_renders_as_tilde);
     RUN_TEST(line2_address_starts_at_40);
+    RUN_TEST(function_set_5x10_mode);
+    RUN_TEST(cgram_5x10_slot_holds_10_byte_glyph);
+    RUN_TEST(blink_underline_cursor_state_tracks_display_ctl);
+    RUN_TEST(cursor_position_5x10_tracks_dd_address);
 }
 
 GREATEST_MAIN_DEFS();
