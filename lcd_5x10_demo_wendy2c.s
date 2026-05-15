@@ -75,7 +75,7 @@ walk_step:
   tya
   jsr move_cursor
   lda #20                              ; ~200 ms (delay_10_thousandths units)
-  jsr delay_10_thousandths
+  jsr delay_hundredths
   iny
   cpy #16
   bne walk_step
@@ -85,7 +85,7 @@ walk_back:
   tya
   jsr move_cursor
   lda #20
-  jsr delay_10_thousandths
+  jsr delay_hundredths
   dey
   bpl walk_back
   bra walk_loop
