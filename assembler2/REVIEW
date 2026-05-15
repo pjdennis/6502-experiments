@@ -1,0 +1,212 @@
+ Comprehensive Code Review: asm22.asm and Supporting Files
+
+  Overview
+
+  This is a well-designed self-hosting 6502 assembler implementing:
+  - Two-pass assembly with forward reference tracking
+  - Macro definitions with parameters and local label scoping
+  - Conditional assembly (.ifdef/.endif)
+  - Expression evaluation with operators (+, -, <<, >>)
+  - Nested file includes
+  - Local labels with scope isolation
+
+  ---
+  Strengths
+
+  1. Architecture & Organization
+
+  - Clear tiered structure in asm22.asm (lines 67-2050) making the code easy to navigate
+  - Modular design with well-separated concerns (hash_table, file_stack, errors, etc.)
+  - Self-documenting memory layout at file top (lines 1-11)
+
+  2. Error Handling
+
+  - Comprehensive error messages with file/line tracking and include tracebacks (errors22.asm:263-296)
+  - Clean BRK-based error mechanism with inline error codes
+
+  3. Macro System
+
+  - Sophisticated macro expansion with parameter passing and local label isolation
+  - Recursion detection (check_macro_recursion, lines 1595-1628)
+  - Proper scope stacking for nested macro calls
+
+  4. Test Coverage
+
+  - Extensive test suite (asm_tests.txt) with 140+ test cases covering:
+    - All addressing modes
+    - Forward reference handling
+    - Conditional assembly
+    - Macro functionality
+    - Error conditions
+
+  ---
+  Issues and Concerns
+
+  1. Potential Bug: Incorrect Test File Reference
+
+  Location: 22/tests/asm_tests.txt:1
+
+  The test file comment says "Test suite for asm21 assembler" but this is for asm22. This suggests the file was copied from asm21 without updating the header comment.
+
+  2. Forward Reference in Data Directive Mismatch
+
+  Location: asm22.asm:1410-1422
+
+  .data_value
+    ; Parse value: handles $hex, 'char', label, <expr, >expr, and expressions
+    JSR parse_value      ; Returns C=1 for bare label, C=0 otherwise
+    BCS .data_emit_two_bytes
+
+  The logic emits 2 bytes for bare labels, but a forward reference to a 1-byte constant (e.g., foo = $12) will still emit 2 bytes. This is correct behavior but could be confusing since comments don't fully explain this is intentional for consistency.
+
+  3. Zero Page Variable Collision Risk
+
+  Location: asm22.asm:13-44 vs common22.asm:20-24
+
+  Zero page variables are allocated via .data $00 in .zeropage sections across multiple files. There's no explicit verification these don't overlap. The code relies on careful manual ordering.
+
+  Recommendation: Consider adding explicit address assignments or a verification mechanism.
+
+  4. Heap Overflow Not Checked
+
+  Location: common22.asm:40-49
+
+  advance_heap
+    TYA
+    LDY #$00
+    CLC
+    ADC MEMP16
+    STA MEMP16
+    TYA
+    ADC MEMP16+$01
+    STA MEMP16+$01
+    RTS
+
+  Unlike forward reference list which checks FWDREF_LIMIT, heap growth is unbounded. A complex program with many labels/macros could overwrite the file stack area.
+
+  Recommendation: Add bounds checking against FILE_STACK.
+
+  5. Comment Typo
+
+  Location: asm22.asm:240-241
+
+  ;         A is ot preserved
+  ; Rasises 'Invalid hex' error
+
+  Should be "A is not preserved" and "Raises 'Invalid hex' error".
+
+  6. Potential Stack Depth Issue in Nested Macros
+
+  Location: label_scope22.asm
+
+  The scope stack grows upward from SCOPE_STACK (256 bytes at $0400-$04FF). Each entry is 5 bytes, allowing ~51 nesting levels. No overflow check exists.
+
+  Recommendation: Add bounds checking against SCOPE_LIMIT.
+
+  7. Instruction Generator Version Mismatch
+
+  Location: instgen22.asm:1
+
+  ; instgen19.asm - Instruction table generator for new conventional syntax
+
+  The comment says "instgen19" but the file is instgen22.asm. Header wasn't updated during migration.
+
+  8. Inconsistent Y Preservation Documentation
+
+  Location: file_stack22.asm:241
+
+  ;          Y is not preserverd
+
+  Typo: "preserverd" should be "preserved".
+
+  9. Debug Flag Compile-Time Conditional
+
+  Location: asm22.asm:41-44, asm22.asm:2057-2060
+
+  The enable_debug conditional controls debug code compilation. However, the DEBUG_FLAG zero-page variable is only defined when debug is enabled, which is good. But consider documenting this more prominently.
+
+  10. Magic Number in Macro Arg Buffer
+
+  Location: asm22.asm:6
+
+  MACRO_ARG_BUF = $0500             ; Temp buffer for macro args during expansion (256 bytes)
+
+  With 3 bytes per argument and 256 bytes buffer, maximum ~85 arguments per macro. This should be documented.
+
+  ---
+  Code Quality Observations
+
+  Hash Table Implementation (hash_table22.asm)
+
+  The implementation is solid with:
+  - Good scrambling for hash distribution (lines 23-31)
+  - Clean separation of global vs local label hashing
+  - Escape format ($01 <ptr> <ptr> .local $00) for local labels with scope verification
+
+  Macro Expansion (asm22.asm:1637-1756)
+
+  The macro expansion handles complex scenarios well:
+  - Arguments evaluated in parent scope before pushing child scope
+  - Forward references properly tracked per-pass
+  - Clean recursion detection
+
+  Forward Reference Handling (fwdref22.asm)
+
+  Well-implemented with:
+  - Pass 1: Records PC locations needing absolute mode
+  - Pass 2: Consumes list entries to enforce consistent mode selection
+  - Proper terminator ($FFFF) handling
+
+  ---
+  Memory Map Analysis
+
+  $0000-$00FF  Zero page variables
+  $0200-$03FF  Forward reference list (512 bytes)
+  $0400-$04FF  Scope stack (256 bytes)
+  $0500-$05FF  Macro argument buffer (256 bytes)
+  $0600-$06FF  TOKEN buffer (256 bytes)
+  $0700-$07FF  Label hash table (256 bytes)
+  $2000+       Generated code (grows upward)
+  ~$F000       File stack (grows downward)
+
+  The layout is sensible. Gap between $0800 and $2000 could potentially be reclaimed if more hash table entries were needed.
+
+  ---
+  Recommendations Summary
+
+  1. High Priority:
+    - Add heap overflow protection (check against FILE_STACK)
+    - Add scope stack overflow protection
+  2. Medium Priority:
+    - Fix comment typos and version headers
+    - Document magic numbers (macro arg limit, scope depth limit)
+  3. Low Priority:
+    - Consider explicit zero-page address assignments for safety
+    - Add more inline documentation for complex macro expansion flow
+
+  ---
+  Test Coverage Assessment
+
+  The test suite is comprehensive, covering:
+  - All 6502 addressing modes ✓
+  - Forward/backward references ✓
+  - Expression evaluation (all operators) ✓
+  - Conditional assembly ✓
+  - Macro features (params, locals, nesting, recursion detection) ✓
+  - Error conditions ✓
+  - Include files with tracebacks ✓
+
+  Missing tests:
+  - Heap exhaustion scenario
+  - Scope stack exhaustion
+  - Very long macro argument lists
+  - Hash collision stress tests
+
+  ---
+  Conclusion
+
+  This is a well-engineered, mature assembler implementation. The code is clean, well-organized, and follows consistent patterns. The main concerns are:
+  1. Missing bounds checks on heap and scope stack
+  2. Minor documentation issues (typos, outdated headers)
+
+  The macro system and forward reference handling are particularly well-designed. The test suite provides excellent coverage of both positive and negative cases.

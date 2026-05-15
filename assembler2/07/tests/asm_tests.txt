@@ -1,0 +1,170 @@
+# Test suite for asm08 assembler
+# Non-standard syntax with hash table instruction lookup, two-pass assembly
+# Features: labels with forward refs, branches with labels, DATA, < > selectors
+# Has: origin (*=), label assignments, character literals ('A')
+
+---
+NAME: implied_rts
+INPUT:
+1: * = $0200
+2:   RTS
+EXPECT_HEX: 60
+
+---
+NAME: immediate
+INPUT:
+1: * = $0200
+2:   LDA# $42
+3:   LDX# $00
+4:   LDY# $FF
+EXPECT_HEX: a9 42 a2 00 a0 ff
+
+---
+NAME: zero_page
+INPUT:
+1: * = $0200
+2:   LDAZ $42
+3:   STAZ $10
+EXPECT_HEX: a5 42 85 10
+
+---
+NAME: absolute
+INPUT:
+1: * = $0200
+2:   STA $1234
+EXPECT_HEX: 8d 34 12
+
+---
+NAME: zero_page_x
+INPUT:
+1: * = $0200
+2:   LDAZ,X $20
+3:   STAZ,X $30
+EXPECT_HEX: b5 20 95 30
+
+---
+NAME: absolute_indexed
+INPUT:
+1: * = $0200
+2:   LDA,X $1234
+3:   LDA,Y $5678
+EXPECT_HEX: bd 34 12 b9 78 56
+
+---
+NAME: indirect_y
+INPUT:
+1: * = $0200
+2:   LDAZ(),Y $10
+3:   STAZ(),Y $20
+EXPECT_HEX: b1 10 91 20
+
+---
+NAME: accumulator
+INPUT:
+1: * = $0200
+2:   ASLA
+3:   LSRA
+EXPECT_HEX: 0a 4a
+
+---
+NAME: branch_forward
+INPUT:
+1: * = $0200
+2:   BEQ skip
+3:   INX
+4: skip
+5:   RTS
+EXPECT_HEX: f0 01 e8 60
+
+---
+NAME: branch_backward
+INPUT:
+1: * = $0200
+2: loop
+3:   INX
+4:   BNE loop
+EXPECT_HEX: e8 d0 fd
+
+---
+NAME: jmp_jsr_forward
+INPUT:
+1: * = $0200
+2:   JSR sub
+3:   RTS
+4: sub
+5:   CLC
+6:   RTS
+EXPECT_HEX: 20 04 02 60 18 60
+
+---
+NAME: data_hex
+INPUT:
+1: * = $0200
+2:   DATA $01 $02 $03
+EXPECT_HEX: 01 02 03
+
+---
+NAME: data_string
+INPUT:
+1: * = $0200
+2:   DATA "Hi" $00
+EXPECT_HEX: 48 69 00
+
+---
+NAME: label_assignment
+INPUT:
+1: * = $0200
+2: addr = $1234
+3:   STA addr
+EXPECT_HEX: 8d 34 12
+
+---
+NAME: byte_selectors
+INPUT:
+1: * = $0200
+2: addr = $1234
+3:   LDA# <addr
+4:   LDX# >addr
+EXPECT_HEX: a9 34 a2 12
+
+---
+NAME: comment
+INPUT:
+1: * = $0200
+2: ; comment line
+3:   RTS ; inline comment
+EXPECT_HEX: 60
+
+---
+NAME: all_branches
+INPUT:
+1: * = $0200
+2: loop
+3:   BCC loop
+4:   BCS loop
+5:   BEQ loop
+6:   BNE loop
+7:   BMI loop
+8:   BPL loop
+EXPECT_HEX: 90 fe b0 fc f0 fa d0 f8 30 f6 10 f4
+
+---
+NAME: stack_operations
+INPUT:
+1: * = $0200
+2:   PHA
+3:   PLA
+4:   TAX
+5:   TXA
+6:   TAY
+7:   TYA
+8:   TSX
+EXPECT_HEX: 48 68 aa 8a a8 98 ba
+
+---
+NAME: data_label_bytes
+INPUT:
+1: * = $0200
+2: start
+3:   DATA <start >start
+EXPECT_HEX: 00 02

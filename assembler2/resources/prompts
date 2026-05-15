@@ -1,0 +1,7 @@
+ -Reuse code as much as possible - either existing code, or new code. Refactor e.g. to extract common helper routines,  tto enable reuse.
+
+ -For each step of the plan, follow TDD best practice - refactor -> add tests (make sure the failure messages are correct and useful) -> make change-> refactor, running the test suite regularly
+
+ -Commit after each step. Note: adding tests and then making them pass can go together in a commit to ideally avoid committing failing tests. IMPORTANT Use the ./commit -m"message" [-m"message"...] helper script for all commits
+
+ -In the plan, include accurate info on how to build and run tests: running editor/tests/editor_tests.py -q builds the editor and runs tests in quiet mode (only failures are shown)

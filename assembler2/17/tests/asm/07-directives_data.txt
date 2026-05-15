@@ -1,0 +1,260 @@
+# --- Directives (directives.asm) ---
+# .byte, .word, .asciiz, .include, .zeropage/.code, .reserve
+
+---
+NAME: directive_byte_values
+INPUT:
+ 1: * = $0200
+ 2:   .byte $01, $02, $03
+EXPECT_HEX: 01 02 03
+
+---
+NAME: directive_byte_trailing_comma
+INPUT:
+ 1: * = $0200
+ 2:   .byte $01, $02, $03,
+EXPECT_HEX: 01 02 03
+
+---
+NAME: directive_byte_comma_expected
+DESCRIPTION: .byte with space-separated values requires comma
+INPUT:
+ 1: * = $0200
+ 2:   .byte $01, $02 $03
+EXPECT_ERROR: 40
+EXPECT_LINE: 2
+EXPECT_MSG: Comma expected
+
+---
+NAME: directive_asciiz_string
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz "Hi"
+EXPECT_HEX: 48 69 00
+
+---
+NAME: directive_asciiz_string_mulitple
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz "Hi", "Ho"
+EXPECT_HEX: 48 69 00 48 6f 00
+
+---
+NAME: directive_asciiz_string_with_byte
+INPUT:
+ 1: * = $0200
+ 2:   .asciiz "Hi", $42
+EXPECT_HEX: 48 69 00 42
+
+---
+NAME: directive_byte_mixed
+INPUT:
+ 1: * = $0200
+ 2:   .byte $01, "AB", $02
+EXPECT_HEX: 01 41 42 02
+
+---
+NAME: directive_byte_label_selectors
+INPUT:
+ 1: * = $0200
+ 2: label:
+ 3:   .byte <label, >label
+EXPECT_HEX: 00 02
+
+---
+NAME: directive_word_label_small
+INPUT:
+ 1: * = $0200
+ 2: label: = $03
+ 3:   .word label
+EXPECT_HEX: 03 00
+
+---
+NAME: directive_word_label
+INPUT:
+ 1: * = $0200
+ 2: label:
+ 3:   .word label
+EXPECT_HEX: 00 02
+
+---
+NAME: directive_word_forward_ref
+INPUT:
+ 1: * = $0200
+ 2:   .word forward_label
+ 3: forward_label: = $1234
+EXPECT_HEX: 34 12
+EXPECT_FWDREF: 0
+
+---
+NAME: directive_mixed_label_forms
+INPUT:
+ 1: * = $0200
+ 2: label: = $ABCD
+ 3:   .byte <label, >label
+ 4:   .word label
+EXPECT_HEX: cd ab cd ab
+EXPECT_FWDREF: 0
+
+---
+NAME: directive_byte_invalid
+INPUT:
+ 1: * = $0200
+ 2:   .byte $00, @ $01
+EXPECT_ERROR: 4
+EXPECT_LINE: 2
+EXPECT_MSG: Label expected
+
+---
+NAME: byte_separate_values_error
+DESCRIPTION: .byte with separate values requires comma
+INPUT:
+ 1: * = $0200
+ 2:   .byte $10 $20
+EXPECT_ERROR: 40
+EXPECT_LINE: 2
+EXPECT_MSG: Comma expected
+
+---
+NAME: include_basic
+INPUT:
+ 1: * = $0200
+ 2:   .include include/basic.asm
+ 3:   RTS
+EXPECT_HEX: ea ea 60
+
+---
+NAME: include_with_label
+INPUT:
+ 1: * = $0200
+ 2:   .include include/with_label.asm
+ 3:   LDX #included_label
+EXPECT_HEX: a9 42 a2 42
+
+---
+NAME: include_nested
+INPUT:
+ 1: * = $0200
+ 2:   .include include/nested1.asm
+ 3:   RTS
+EXPECT_HEX: ea a9 ff 85 10 ea 60
+
+---
+NAME: include_label_before
+INPUT:
+ 1: * = $0200
+ 2: before: = $10
+ 3:   .include include/basic.asm
+ 4:   LDA before
+EXPECT_HEX: ea ea a5 10
+
+---
+NAME: include_label_after
+INPUT:
+ 1: * = $0200
+ 2:   .include include/basic.asm
+ 3: after: = $20
+ 4:   LDA after
+EXPECT_HEX: ea ea a5 20
+
+---
+NAME: include_error_inside
+INPUT:
+ 1: * = $0200
+ 2:   .include include/error_inside.asm
+EXPECT_STDERR:
+[Error 1 in file include/error_inside.asm at line 3: Label not found]
+[  included from {{MAIN_FILE}}:2]
+
+---
+NAME: include_error_nested
+INPUT:
+ 1: * = $0200
+ 2:   .include include/nested_error1.asm
+EXPECT_STDERR:
+Error 1 in file include/nested_error2.asm at line 3: Label not found
+  included from include/nested_error1.asm:4
+  included from {{MAIN_FILE}}:2
+
+---
+NAME: include_file_not_found
+DESCRIPTION: Error when .include references a nonexistent file
+INPUT:
+ 1: * = $0200
+ 2:   .include nonexistent_file_12345.asm
+EXPECT_STDERR:
+Error 39 in file {{MAIN_FILE}} at line 2: File not found
+
+---
+NAME: include_file_not_found_nested
+DESCRIPTION: Error when an included file references a nonexistent file
+INPUT:
+ 1: * = $0200
+ 2:   .include include/includes_nonexistent.asm
+EXPECT_STDERR:
+Error 39 in file include/includes_nonexistent.asm at line 2: File not found
+  included from {{MAIN_FILE}}:2
+
+---
+NAME: input_file_not_found
+DESCRIPTION: Error when input file on command line does not exist
+MISSING_INPUT
+EXPECT_ERROR: 39
+EXPECT_MSG: File not found
+
+---
+NAME: zeropage_last_byte
+DESCRIPTION: Can allocate the last zero page byte at $FF
+INPUT:
+ 1:   .zeropage
+ 2: * = $FF
+ 3: last: .byte
+ 4:   .code
+ 5: * = $0200
+ 6:   LDA last
+EXPECT_HEX: a5 ff
+
+---
+NAME: zeropage_overflow
+DESCRIPTION: Zero page section overflow triggers error
+INPUT:
+ 1:   .zeropage
+ 2: * = $FF
+ 3: foo: .byte
+ 4: bar: .byte
+ 5:   .code
+ 6: * = $0200
+ 7:   NOP
+EXPECT_ERROR: 38
+EXPECT_LINE: 4
+EXPECT_MSG: Zero page overflow
+
+---
+NAME: byte_single_hex
+INPUT:
+ 1: * = $0200
+ 2:   .byte $42
+EXPECT_HEX: 42
+
+---
+NAME: byte_multiple_hex_comma_expected
+INPUT:
+ 1: * = $0200
+ 2:   .byte $01 $02 $03
+EXPECT_ERROR: 40
+EXPECT_LINE: 2
+EXPECT_MSG: Comma expected
+
+---
+NAME: byte_string
+INPUT:
+ 1: * = $0200
+ 2:   .byte "Hi", $00
+EXPECT_HEX: 48 69 00
+
+---
+NAME: byte_mixed_string_values
+INPUT:
+ 1: * = $0200
+ 2:   .byte $01, "AB", $02
+EXPECT_HEX: 01 41 42 02

@@ -1,0 +1,69 @@
+Assembler Version 01
+====================
+Assembled by: Version 00
+
+Features Supported by This Assembler
+-------------------------------------
+This is a single-pass assembler that introduces non-standard 6502 mnemonics,
+labels, and operand types. It reads tokens from the input and looks up
+mnemonics in a built-in instruction table using linear search.
+
+Instruction mnemonics (non-standard syntax, addressing mode encoded in name):
+  ADC# ADCZ ASLA BCC BCS BEQ BNE BRK CLC CMPZ,X CMP# CMP,Y DEY INCZ INX
+  INY JMP JSR LDAZ LDA# LDA(),Y LDA,Y LDX# LDY# ORAZ RTS SBC# SEC STA
+  STA(),Y STAZ STAZ,X TYA
+
+DATA directive:
+  DATA $XX ...        - emit hex bytes
+  DATA "string"       - emit ASCII string literals with \n and \\ escapes
+  DATA $XXXX          - emit 16-bit value (little-endian)
+  Mixed: DATA $XX "string" $XXXX on same line
+
+Operand types in instruction arguments:
+  $XX                 - 8-bit hex value
+  $XXXX               - 16-bit hex value (little-endian)
+  "string"            - ASCII string with \n and \\ escape sequences
+  label               - 16-bit label reference (little-endian)
+
+Labels:
+  - Labels are defined at column 0 (start of line, no leading whitespace)
+  - Labels receive the current program counter value
+  - Label lookup uses linear search through a label table at $3000
+  - Forward references are NOT supported (single-pass)
+  - Duplicate label detection with error
+
+Error handling:
+  - BRK with inline error code and message string
+  - Error 01: Duplicate label
+  - Error 02: Opcode not found
+  - Error 03: Label not found
+
+Semicolon comments (to end of line).
+Output starts at $2000 (hardcoded).
+
+New in this version (relative to version 00):
+- Non-standard 6502 instruction mnemonics with built-in instruction table
+- Labels defined at start of line (bound to program counter)
+- Label references as 16-bit operands
+- Hex operands ($XX and $XXXX) with automatic 1 or 2 byte emission
+- String literal operands ("string") with escape sequences (\n, \\)
+- DATA directive supporting mixed hex, string, and label arguments
+- Error reporting via BRK with inline messages
+
+Features Used in This Assembler's Source Code
+----------------------------------------------
+The source is written entirely in DATA directives with hex bytes, which is
+the only feature version 00 supports. All 6502 instructions are manually
+encoded as hex byte sequences. The instruction mnemonic table, subroutine
+addresses, branch targets, and error messages are all encoded as raw hex
+values. The reset vector entry point address is emitted as the final two
+DATA bytes.
+
+Source features used:
+  - DATA $XX $XX ... (hex byte emission only)
+  - Semicolon comments (documenting the intended mnemonics)
+
+New source features (relative to version 00):
+- None. The source uses the same DATA-with-hex-bytes format as version 00.
+  The comments are more detailed, showing the equivalent mnemonic source,
+  but these are still just comments.

@@ -1,0 +1,112 @@
+# Test suite for asm12 assembler
+# Non-standard syntax, two-pass, hash tables, .include support
+# Features: .zeropage/.code sections, labels, forward refs, branches
+
+---
+NAME: implied_rts
+INPUT:
+1: * = $0200
+2:   RTS
+EXPECT_HEX: 60
+
+---
+NAME: immediate
+INPUT:
+1: * = $0200
+2:   LDA# $42
+3:   LDX# $00
+4:   LDY# $FF
+EXPECT_HEX: a9 42 a2 00 a0 ff
+
+---
+NAME: zero_page
+INPUT:
+1: * = $0200
+2:   LDAZ $42
+3:   STAZ $10
+EXPECT_HEX: a5 42 85 10
+
+---
+NAME: branch_forward
+INPUT:
+1: * = $0200
+2:   BEQ skip
+3:   INX
+4: skip
+5:   RTS
+EXPECT_HEX: f0 01 e8 60
+
+---
+NAME: jsr_forward
+INPUT:
+1: * = $0200
+2:   JSR sub
+3:   RTS
+4: sub
+5:   CLC
+6:   RTS
+EXPECT_HEX: 20 04 02 60 18 60
+
+---
+NAME: sections
+INPUT:
+1:   .zeropage
+2: zp_var
+3:   DATA $00
+4:   .code
+5: * = $0200
+6:   LDAZ zp_var
+7:   RTS
+EXPECT_HEX: a5 00 60
+
+---
+NAME: data_bytes
+INPUT:
+1: * = $0200
+2:   DATA $01 $02 $03
+EXPECT_HEX: 01 02 03
+
+---
+NAME: data_string
+INPUT:
+1: * = $0200
+2:   DATA "Hello" $00
+EXPECT_HEX: 48 65 6c 6c 6f 00
+
+---
+NAME: label_assignment
+INPUT:
+1: * = $0200
+2: val = $1234
+3:   STA val
+EXPECT_HEX: 8d 34 12
+
+---
+NAME: byte_selectors
+INPUT:
+1: * = $0200
+2: addr = $1234
+3:   LDA# <addr
+4:   LDX# >addr
+EXPECT_HEX: a9 34 a2 12
+
+---
+NAME: error_label_not_found
+INPUT:
+1: * = $0200
+2:   STA undefined
+EXPECT_ERROR: 1
+EXPECT_LINE: 2
+EXPECT_MSG: Label not found
+
+---
+NAME: error_duplicate_label
+INPUT:
+1: * = $0200
+2: label
+3:   INX
+4: label
+5:   RTS
+EXPECT_ERROR: 2
+EXPECT_LINE: 4
+EXPECT_MSG: Duplicate label

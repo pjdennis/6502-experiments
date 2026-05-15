@@ -1,0 +1,214 @@
+# --- Labels (labels.asm) ---
+# Label definitions & assignments, labels with colons, local labels, forward references
+
+---
+NAME: local_labels
+INPUT:
+ 1: * = $0200
+ 2: global1:
+ 3: .local
+ 4:   NOP
+ 5:   BEQ .local
+ 6: global2:
+ 7: .local
+ 8:   NOP
+ 9:   BEQ .local
+EXPECT_HEX: ea f0 fd ea f0 fd
+
+---
+NAME: forward_ref_absolute
+INPUT:
+ 1: * = $0200
+ 2:   JMP target
+ 3:   NOP
+ 4: target:
+ 5:   RTS
+EXPECT_HEX: 4c 04 02 ea 60
+
+---
+NAME: label_assignment
+INPUT:
+ 1: * = $0200
+ 2: addr: = $1234
+ 3:   LDA addr
+ 4:   STA addr
+EXPECT_HEX: ad 34 12 8d 34 12
+
+---
+NAME: label_not_found
+INPUT:
+ 1: * = $0200
+ 2:   LDA undefined
+EXPECT_ERROR: 1
+EXPECT_LINE: 2
+EXPECT_MSG: Label not found
+
+---
+NAME: no_global_for_local
+INPUT:
+ 1: * = $0200
+ 2: .local
+ 3:   NOP
+EXPECT_ERROR: 3
+EXPECT_LINE: 2
+EXPECT_MSG: No global label for local
+
+---
+NAME: duplicate_label
+INPUT:
+ 1: * = $0200
+ 2: label:
+ 3:   NOP
+ 4: label:
+ 5:   RTS
+EXPECT_ERROR: 2
+EXPECT_LINE: 4
+EXPECT_MSG: Duplicate label
+
+---
+NAME: error_line_number_later
+INPUT:
+ 1: * = $0200
+ 2:   NOP
+ 3:   NOP
+ 4:   NOP
+ 5:   NOP
+ 6:   FOO ; Invalid opcode
+EXPECT_ERROR: 5
+EXPECT_LINE: 6
+EXPECT_MSG: Opcode not found
+
+---
+NAME: fwdref_backward_zp_capable_small
+INPUT:
+ 1: * = $0200
+ 2: small: = $12
+ 3:   LDA small
+EXPECT_HEX: a5 12
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_backward_zp_capable_boundary_ff
+INPUT:
+ 1: * = $0200
+ 2: boundary: = $FF
+ 3:   LDA boundary
+EXPECT_HEX: a5 ff
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_backward_zp_capable_boundary_100
+INPUT:
+ 1: * = $0200
+ 2: over: = $0100
+ 3:   LDA over
+EXPECT_HEX: ad 00 01
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_backward_zp_capable_large
+INPUT:
+ 1: * = $0200
+ 2: large: = $1234
+ 3:   LDA large
+EXPECT_HEX: ad 34 12
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_forward_zp_capable_small
+INPUT:
+ 1: * = $0200
+ 2:   LDA target
+ 3: target: = $12
+EXPECT_HEX: ad 12 00
+EXPECT_FWDREF: 1
+
+---
+NAME: fwdref_forward_zp_capable_boundary_ff
+INPUT:
+ 1: * = $0200
+ 2:   LDA target
+ 3: target: = $FF
+EXPECT_HEX: ad ff 00
+EXPECT_FWDREF: 1
+
+---
+NAME: fwdref_forward_zp_capable_boundary_100
+INPUT:
+ 1: * = $0200
+ 2:   LDA target
+ 3: target: = $0100
+EXPECT_HEX: ad 00 01
+EXPECT_FWDREF: 1
+
+---
+NAME: fwdref_forward_zp_capable_large
+INPUT:
+ 1: * = $0200
+ 2:   LDA target
+ 3: target: = $1234
+EXPECT_HEX: ad 34 12
+EXPECT_FWDREF: 1
+
+---
+NAME: fwdref_backward_zpx_capable_small
+INPUT:
+ 1: * = $0200
+ 2: small: = $12
+ 3:   LDA small,X
+EXPECT_HEX: b5 12
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_backward_zpx_capable_large
+INPUT:
+ 1: * = $0200
+ 2: large: = $1234
+ 3:   LDA large,X
+EXPECT_HEX: bd 34 12
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_forward_zpx_capable_small
+INPUT:
+ 1: * = $0200
+ 2:   LDA target,X
+ 3: target: = $12
+EXPECT_HEX: bd 12 00
+EXPECT_FWDREF: 1
+
+---
+NAME: fwdref_forward_zpx_capable_large
+INPUT:
+ 1: * = $0200
+ 2:   LDA target,X
+ 3: target: = $1234
+EXPECT_HEX: bd 34 12
+EXPECT_FWDREF: 1
+
+---
+NAME: fwdref_backward_zpy_capable_small
+INPUT:
+ 1: * = $0200
+ 2: small: = $12
+ 3:   LDX small,Y
+EXPECT_HEX: b6 12
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_backward_zpy_capable_large
+INPUT:
+ 1: * = $0200
+ 2: large: = $1234
+ 3:   LDX large,Y
+EXPECT_HEX: be 34 12
+EXPECT_FWDREF: 0
+
+---
+NAME: fwdref_forward_zpy_capable_small
+INPUT:
+ 1: * = $0200
+ 2:   LDX target,Y
+ 3: target: = $12
+EXPECT_HEX: be 12 00
+EXPECT_FWDREF: 1

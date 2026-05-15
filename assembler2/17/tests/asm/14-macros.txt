@@ -1,0 +1,326 @@
+NAME: macro_def_parses
+DESCRIPTION: Macro definition parses without error (body captured, not assembled)
+INPUT:
+ 1: * = $0200
+ 2:   .macro MYMACRO
+ 3:   NOP
+ 4:   .endmacro
+ 5:   INX
+EXPECT_HEX: e8
+
+---
+NAME: macro_def_with_params
+DESCRIPTION: Macro with parameters parses without error (body captured)
+INPUT:
+ 1: * = $0200
+ 2:   .macro INC16 addr
+ 3:   NOP
+ 4:   .endmacro
+ 5:   INY
+EXPECT_HEX: c8
+
+---
+NAME: macro_def_multi_params
+DESCRIPTION: Macro with multiple parameters parses without error (body captured)
+INPUT:
+ 1: * = $0200
+ 2:   .macro COPY src, dst, count
+ 3:   NOP
+ 4:   .endmacro
+ 5:   DEX
+EXPECT_HEX: ca
+
+---
+NAME: macro_def_empty_body
+DESCRIPTION: Macro with empty body parses without error
+INPUT:
+ 1: * = $0200
+ 2:   .macro EMPTY
+ 3:   .endmacro
+ 4:   NOP
+EXPECT_HEX: ea
+
+---
+NAME: macro_endmacro_without_macro
+DESCRIPTION: Error on .endmacro without .macro
+INPUT:
+ 1: * = $0200
+ 2:   .endmacro
+EXPECT_ERROR: 28
+EXPECT_MSG: .endmacro without .macro
+EXPECT_LINE: 2
+
+---
+NAME: macro_unclosed
+DESCRIPTION: Error on unclosed macro definition (no line - detected at EOF)
+INPUT:
+ 1: * = $0200
+ 2:   .macro MYMACRO
+ 3:   NOP
+EXPECT_ERROR: 29
+EXPECT_MSG: Unclosed .macro
+
+---
+NAME: macro_nested_definition
+DESCRIPTION: A nested macro definition generates an error
+INPUT:
+ 1: * = $0200
+ 2:   .macro OUTER
+ 3:   NOP
+ 4:   .macro INNER
+ 5:   INX
+ 6:   .endmacro    ; End if inner
+ 7:   INNER
+ 8:   .endmacro    ; End of outer
+ 9:   INY
+10:   OUTER
+11:   LSR
+EXPECT_ERROR: 30
+EXPECT_LINE: 4
+EXPECT_MSG: Nested macro definition
+
+---
+NAME: macro_name_expected
+DESCRIPTION: Error when macro name is missing
+INPUT:
+ 1: * = $0200
+ 2:   .macro
+EXPECT_ERROR: 25
+EXPECT_LINE: 2
+EXPECT_MSG: Macro name expected
+
+---
+NAME: macro_shadows_instruction
+DESCRIPTION: Error when macro name shadows an instruction
+INPUT:
+ 1: * = $0200
+ 2:   .macro NOP
+ 3:   .endmacro
+EXPECT_ERROR: 26
+EXPECT_LINE: 2
+EXPECT_MSG: Macro name shadows instruction
+
+---
+NAME: macro_duplicate
+DESCRIPTION: Error on duplicate macro definition
+INPUT:
+ 1: * = $0200
+ 2:   .macro MYMACRO
+ 3:   .endmacro
+ 4:   .macro MYMACRO
+ 5:   .endmacro
+EXPECT_ERROR: 27
+EXPECT_LINE: 4
+EXPECT_MSG: Duplicate macro definition
+
+---
+NAME: macro_simple
+DESCRIPTION: Simple macro invocation
+INPUT:
+ 1: * = $0200
+ 2:   .macro nop2
+ 3:   NOP
+ 4:   NOP
+ 5:   .endmacro
+ 6:   nop2
+EXPECT_HEX: ea ea
+
+---
+NAME: macro_multiple_invocations
+DESCRIPTION: Multiple invocations of same macro
+INPUT:
+ 1: * = $0200
+ 2:   .macro MYMACRO
+ 3:   NOP
+ 4:   .endmacro
+ 5:   MYMACRO
+ 6:   INX
+ 7:   MYMACRO
+ 8:   INY
+EXPECT_HEX: ea e8 ea c8
+
+---
+NAME: macro_with_code_around
+DESCRIPTION: Macro used between other code
+INPUT:
+ 1: * = $0200
+ 2:   INX
+ 3:   .macro MYMACRO
+ 4:   NOP
+ 5:   .endmacro
+ 6:   MYMACRO
+ 7:   INY
+EXPECT_HEX: e8 ea c8
+
+---
+NAME: macro_nested
+DESCRIPTION: One macro calling another
+INPUT:
+ 1: * = $0200
+ 2:   .macro inner
+ 3:   NOP
+ 4:   .endmacro
+ 5:   .macro outer
+ 6:   inner
+ 7:   INX
+ 8:   .endmacro
+ 9:   outer
+EXPECT_HEX: ea e8
+
+---
+NAME: macro_local_label
+DESCRIPTION: Macro with local label and backward branch
+INPUT:
+ 1: * = $0200
+ 2:   .macro countdown
+ 3: .loop
+ 4:   DEX
+ 5:   BNE .loop
+ 6:   .endmacro
+ 7:   countdown
+EXPECT_HEX: ca d0 fd
+
+---
+NAME: macro_local_label_multiple_invocations
+DESCRIPTION: Each macro invocation has independent local labels
+INPUT:
+ 1: * = $0200
+ 2:   .macro test
+ 3: .done
+ 4:   NOP
+ 5:   BEQ .done
+ 6:   .endmacro
+ 7:   test
+ 8:   test
+EXPECT_HEX: ea f0 fd ea f0 fd
+
+---
+NAME: macro_local_no_conflict_with_caller
+DESCRIPTION: Local label in macro doesn't conflict with same name in caller
+INPUT:
+ 1: * = $0200
+ 2: foo:
+ 3: .x
+ 4:   NOP
+ 5:   .macro bar
+ 6: .x
+ 7:   INX
+ 8:   BEQ .x
+ 9:   .endmacro
+10:   bar
+11:   BNE .x
+EXPECT_HEX: ea e8 f0 fd d0 fa
+
+---
+NAME: macro_recursive_direct
+DESCRIPTION: Direct recursive macro invocation causes error
+INPUT:
+ 1: * = $0200
+ 2:   .macro recurse
+ 3:   NOP
+ 4:   recurse
+ 5:   .endmacro
+ 6:   recurse
+EXPECT_ERROR: 31
+EXPECT_LINE: 2
+EXPECT_MSG: Recursive macro invocation
+
+---
+NAME: macro_recursive_indirect
+DESCRIPTION: Indirect recursive macro invocation causes error
+INPUT:
+ 1: * = $0200
+ 2:   .macro macA
+ 3:   macB
+ 4:   .endmacro
+ 5:   .macro macB
+ 6:   macA
+ 7:   .endmacro
+ 8:   macA
+EXPECT_ERROR: 31
+EXPECT_LINE: 1
+EXPECT_MSG: Recursive macro invocation
+
+---
+NAME: macro_param_single
+DESCRIPTION: Macro with single parameter
+INPUT:
+ 1: * = $0200
+ 2:   .macro inc_zp addr
+ 3:   INC addr
+ 4:   .endmacro
+ 5:   inc_zp $50
+EXPECT_HEX: e6 50
+
+---
+NAME: macro_param_multiple
+DESCRIPTION: Macro with multiple parameters
+INPUT:
+ 1: * = $0200
+ 2:   .macro store_pair val, dst
+ 3:   LDA #val
+ 4:   STA dst
+ 5:   .endmacro
+ 6:   store_pair $42, $80
+EXPECT_HEX: a9 42 85 80
+
+---
+NAME: macro_param_commas
+DESCRIPTION: Macro with comma-separated params and args
+INPUT:
+ 1: * = $0200
+ 2:   .macro store_pair val, dst
+ 3:   LDA #val
+ 4:   STA dst
+ 5:   .endmacro
+ 6:   store_pair $42, $80
+EXPECT_HEX: a9 42 85 80
+
+---
+NAME: macro_param_commas_spaces_trailing
+DESCRIPTION: Macro with trailing comma in definition and spaces around commas
+INPUT:
+ 1: * = $0200
+ 2:   .macro store_pair val , dst ,
+ 3:   LDA #val
+ 4:   STA dst
+ 5:   .endmacro
+ 6:   store_pair $42 , $80
+EXPECT_HEX: a9 42 85 80
+
+---
+NAME: macro_param_expression
+DESCRIPTION: Macro argument can be an expression
+INPUT:
+ 1: * = $0200
+ 2:   .macro load_addr val
+ 3:   LDA #val
+ 4:   .endmacro
+ 5:   load_addr $10+$20
+EXPECT_HEX: a9 30
+
+---
+NAME: macro_param_used_twice
+DESCRIPTION: Parameter used multiple times in body
+INPUT:
+ 1: * = $0200
+ 2:   .macro double_inc addr
+ 3:   INC addr
+ 4:   INC addr
+ 5:   .endmacro
+ 6:   double_inc $30
+EXPECT_HEX: e6 30 e6 30
+
+---
+NAME: macro_param_in_expression
+DESCRIPTION: Parameter used in expression within macro body
+INPUT:
+ 1: * = $0200
+ 2:   .macro ldpair base
+ 3:   LDA base
+ 4:   LDX base+$01
+ 5:   .endmacro
+ 6:   ldpair $40
+EXPECT_HEX: a5 40 a6 41
+
+---

@@ -1,0 +1,5 @@
+ Overall rules for implementation
+  -Use a TDD approach for both the buffer content and screen redraw behavior. Be thorough to cover corner cases.
+  -Create failing tests for an increment of change, make the tests pass and then commit
+  -Refactor before and after an increment of change, to make the change easier and consolidate after the change
+  -Reuse existing logic as much as possible, e.g. by extracting helper methods

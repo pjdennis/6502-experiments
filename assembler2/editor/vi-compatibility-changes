@@ -1,0 +1,27 @@
+ Commands that differ from vi
+
+  'a (mark jump) - Goes to column 0, not the first non-blank character as vi does. The HELP currently says "cursor goes
+  to column 0" which is accurate to the implementation, but users familiar with vi might expect first-non-blank behavior.
+
+  / search - A match later on the same line (after the cursor) is not found immediately. The forward search starts from
+  the next line and only finds same-line matches after wrapping all the way around. In vi, /foo finds the next foo even
+  if it's later on the current line.
+
+  Ctrl-F/Ctrl-B - Moves by SCREEN_ROWS-1 (no overlap). Vi moves by SCREEN_ROWS-2, keeping 2 lines of context overlap.
+  Also doesn't accept a count (vi does).
+
+  r with count at end of line - If you do 5ra but only 3 characters remain, the editor replaces those 3. Vi would do
+  nothing if there aren't enough characters.
+
+  Missing count support
+
+  gg - Always goes to line 1. In vi, 5gg goes to line 5 (like 5G). The count is completely ignored.
+
+  $ - Always goes to end of current line. In vi, 3$ goes to the end of the line 2 below.
+
+  Ctrl-F/Ctrl-B - No count support (vi allows 3Ctrl-F).
+
+  Not wrong, but worth noting
+
+  ~ - Accepts a count, which matches vim but not traditional vi. This is probably fine — most users expect vim behavior
+  now.

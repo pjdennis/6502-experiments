@@ -1,0 +1,70 @@
+Assembler Version 02
+====================
+Assembled by: Version 01
+
+Features Supported by This Assembler
+-------------------------------------
+This version is a clean rewrite of version 01 in version 01's own mnemonic
+syntax. It supports the same feature set as version 01: non-standard 6502
+mnemonics, labels, DATA directive, and operand types. The main improvement
+is that the source code is now human-readable assembly rather than raw hex
+DATA bytes.
+
+Instruction mnemonics (same set as version 01):
+  ADC# ADCZ ASLA BCC BCS BEQ BNE BRK CLC CMPZ,X CMP# CMP,Y DEY INCZ INX
+  INY JMP JSR LDAZ LDA# LDA(),Y LDA,Y LDX# LDY# ORAZ RTS SBC# SEC STA
+  STA(),Y STAZ STAZ,X TYA
+
+DATA directive:
+  DATA $XX ...        - emit hex bytes
+  DATA "string"       - emit ASCII string literals with \n and \\ escapes
+  DATA $XXXX          - emit 16-bit value (little-endian)
+  Mixed: DATA $XX "string" $XXXX on same line
+
+Operand types in instruction arguments:
+  $XX                 - 8-bit hex value
+  $XXXX               - 16-bit hex value (little-endian)
+  "string"            - ASCII string with \n and \\ escape sequences
+  label               - 16-bit label reference (little-endian)
+
+Labels:
+  - Defined at column 0 (no leading whitespace), bound to program counter
+  - Linear search through label table at $3000
+  - Forward references NOT supported (single-pass)
+  - Duplicate label detection
+
+Error handling:
+  - Error 01: Duplicate label
+  - Error 02: Opcode not found
+  - Error 03: Label not found
+
+Semicolon comments (to end of line).
+Output starts at $2000 (hardcoded).
+
+New in this version (relative to version 01):
+- No new assembler features. This version has identical capabilities to
+  version 01. The value is in the source code migration: the assembler is
+  now written in its own mnemonic syntax rather than raw hex bytes,
+  making it maintainable and extensible for future versions.
+
+Features Used in This Assembler's Source Code
+----------------------------------------------
+The source uses version 01's mnemonic syntax throughout, replacing the raw
+hex DATA bytes of version 01's source. This is the first version whose
+source code is human-readable 6502 assembly.
+
+Source features used:
+  - Non-standard instruction mnemonics (from version 01's table)
+  - Labels at column 0, bound to current program counter
+  - Label references as 16-bit operands in instructions and DATA
+  - DATA directive with hex bytes and string literals
+  - Hex operands ($XX and $XXXX)
+  - String operands ("string") with \n and \\ escapes
+  - Semicolon comments
+  - Branch targets as hardcoded hex offsets (e.g., BNE $06, BEQ $03)
+
+New syntax used in source (relative to version 01):
+- Non-standard instruction mnemonics (LDAZ, LDA#, STAZ, CMP#, etc.)
+  instead of raw hex DATA bytes
+- Named labels for code locations instead of hardcoded addresses
+- Label references in instruction operands (e.g., JSR read, JMP lnloop)
