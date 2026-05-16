@@ -45,6 +45,7 @@ WORKDIR = lcd_ocr.WORKDIR
 
 GEOMETRY_SRC = REPO_ROOT / "lcd_calibrate.s"
 FONT_SRC = REPO_ROOT / "lcd_calibrate_font.s"
+FONT_5X10_SRC = REPO_ROOT / "lcd_calibrate_font_5x10.s"
 BUILD_OUT = REPO_ROOT / "a.out"
 
 VASM = "vasm6502_oldstyle"
@@ -58,6 +59,10 @@ TRANSFER_BAUD = "115200"
 FONT_PAGE_COUNT = 7        # 7 pages of 32 chars cover 0x20..0xFF
 CHARS_PER_PAGE = 32
 PAGE_BASE_OFFSET = 0x20    # first char on page 0
+
+FONT_5X10_PAGE_COUNT = 2   # 2 pages of 16 chars cover 0xE0..0xFF
+CHARS_PER_5X10_PAGE = 16
+FONT_5X10_BASE = 0xE0
 
 
 def build_and_upload(src: Path, defines: dict[str, int] | None = None) -> None:
@@ -124,6 +129,32 @@ def extract_cells_from(path: Path, corners: np.ndarray) -> list[list[list[int]]]
     return lcd_ocr.extract_cells(warped, None)
 
 
+def calibrate_font_5x10(corners: np.ndarray) -> dict[int, list[int]]:
+    """Cycle through 2 pages of 16 codes (0xE0..0xFF) in 5x10 mode.
+    For each page, switch the panel to 1-line 5x10, snap, and pull
+    a 10-row glyph from each of the 16 visible cells. Bottom 2 rows
+    of each glyph come from the physical row-1 cells per HD44780
+    layout."""
+    font: dict[int, list[int]] = {}
+    for page in range(FONT_5X10_PAGE_COUNT):
+        base = FONT_5X10_BASE + page * CHARS_PER_5X10_PAGE
+        print(f"--- 5x10 page {page}: codes 0x{base:02x}..0x{base + 15:02x}")
+        build_and_upload(FONT_5X10_SRC, defines={"FONT_PAGE_5X10": page})
+        time.sleep(2.0)
+        out = WORKDIR / f"calib_font5x10_p{page}.jpg"
+        snap(out)
+        img = cv2.imread(str(out))
+        if img is None:
+            raise RuntimeError(f"snapshot missing: {out}")
+        warped = lcd_ocr.warp_to_canvas(img, corners)
+        cells_5x10 = lcd_ocr.extract_cells_5x10(warped)
+        for col in range(lcd_ocr.LCD_COLS):
+            code = base + col
+            font[code] = cells_5x10[col]
+        print(f"     captured 16 glyphs")
+    return font
+
+
 def calibrate_font(corners: np.ndarray) -> dict[int, list[int]]:
     """Cycle through 3 ASCII pages, capture each, and harvest the
     rendered glyph for every character code."""
@@ -154,11 +185,15 @@ def main() -> int:
     ap.add_argument("--geometry", action="store_true",
                     help="Run only the geometry stage.")
     ap.add_argument("--font", action="store_true",
-                    help="Run only the font stage (geometry must already exist).")
+                    help="Run only the 5x8 font stage (geometry must already exist).")
+    ap.add_argument("--font5x10", action="store_true",
+                    help="Run only the 5x10 font stage for codes 0xE0..0xFF.")
     args = ap.parse_args()
 
-    run_geometry = args.geometry or not args.font
-    run_font = args.font or not args.geometry
+    any_explicit = args.geometry or args.font or args.font5x10
+    run_geometry = args.geometry or not any_explicit
+    run_font = args.font or not any_explicit
+    run_font5x10 = args.font5x10 or not any_explicit
 
     calib = load_calib()
 
@@ -180,6 +215,18 @@ def main() -> int:
         calib["font"] = {str(code): glyph for code, glyph in sorted(font.items())}
         save_calib(calib)
         print(f"--- font: saved {len(font)} glyphs")
+
+    if run_font5x10:
+        if "corners" not in calib:
+            print("error: geometry not calibrated yet; run --geometry first",
+                  file=sys.stderr)
+            return 1
+        corners = np.array(calib["corners"], dtype=np.float32)
+        font5x10 = calibrate_font_5x10(corners)
+        calib["font5x10"] = {str(code): glyph
+                              for code, glyph in sorted(font5x10.items())}
+        save_calib(calib)
+        print(f"--- font5x10: saved {len(font5x10)} glyphs")
 
     return 0
 

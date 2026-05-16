@@ -4,12 +4,12 @@ apply_font_to_emulator.py -- push the per-LCD captured font into the
 emulator's HD44780 A00 ROM tables so the emulator renders text exactly
 the way the physical panel does.
 
-Updates the 5x8 ROM array in:
+Updates the 5x8 and 5x10 ROM arrays in:
   assembler2/emulator/chips/hd44780_a00_font.h
   assembler2/emulator/web/hd44780_a00_font.js
 
-The 5x10 array stays untouched; capturing it needs a separate pass
-in 5x10 single-line mode (TODO).
+5x8 covers codes 0x20..0xFF; 5x10 covers codes 0xE0..0xFF (only valid
+range in HD44780 5x10 single-line mode).
 
 Preserves codes 0x00..0x1F (CGRAM and undefined) as their existing
 zero entries, and preserves the original /* 0xNN ... */ trailing
@@ -27,28 +27,21 @@ CALIB_JSON = REPO_ROOT / "lcd_calibration.json"
 C_HEADER = REPO_ROOT / "assembler2/emulator/chips/hd44780_a00_font.h"
 JS_FILE = REPO_ROOT / "assembler2/emulator/web/hd44780_a00_font.js"
 
-ROW_PATTERN = re.compile(
-    r"(\s*\{\s*)"
-    r"0x[0-9a-fA-F]{2}\s*,\s*0x[0-9a-fA-F]{2}\s*,\s*"
-    r"0x[0-9a-fA-F]{2}\s*,\s*0x[0-9a-fA-F]{2}\s*,\s*"
-    r"0x[0-9a-fA-F]{2}\s*,\s*0x[0-9a-fA-F]{2}\s*,\s*"
-    r"0x[0-9a-fA-F]{2}\s*,\s*0x[0-9a-fA-F]{2}"
-    r"(\s*\}\s*,\s*/\*\s*)(0x[0-9a-fA-F]{2})([^*]*\*/)"
-)
+def _row_pattern(n_bytes: int) -> re.Pattern:
+    byte_re = r"0x[0-9a-fA-F]{2}"
+    bytes_re = r"\s*,\s*".join([byte_re] * n_bytes)
+    return re.compile(
+        r"(\s*\{\s*)" + bytes_re +
+        r"(\s*\}\s*,\s*/\*\s*)(0x[0-9a-fA-F]{2})([^*]*\*/)"
+    )
 
 
-def update_c_header(font_bytes: dict[int, tuple[int, ...]]) -> None:
-    """Replace 5x8 byte sequences in the C header, preserve format
-    and trailing comments. Only the 5x8 array gets rewritten; the
-    5x10 array (codes 0xE0..0xFF, 10 bytes each) is left alone."""
-    text = C_HEADER.read_text()
-    # The 5x8 array ends at "};" before the 5x10 declaration. Split.
-    marker = "/* 5x10 patterns"
-    if marker not in text:
-        raise RuntimeError("could not locate 5x10 section marker in header")
-    head, tail = text.split(marker, 1)
-    tail = marker + tail
+ROW_PATTERN_5X8 = _row_pattern(8)
+ROW_PATTERN_5X10 = _row_pattern(10)
 
+
+def _rewrite_array(text: str, pattern: re.Pattern,
+                   font_bytes: dict[int, tuple[int, ...]]) -> str:
     def repl(m: re.Match) -> str:
         open_brace = m.group(1)
         close_brace_and_comment_start = m.group(2)
@@ -57,13 +50,27 @@ def update_c_header(font_bytes: dict[int, tuple[int, ...]]) -> None:
         code = int(code_str, 16)
         glyph = font_bytes.get(code)
         if glyph is None:
-            return m.group(0)  # untouched
+            return m.group(0)
         hex_bytes = ", ".join(f"0x{b:02x}" for b in glyph)
         return (open_brace + hex_bytes
                 + close_brace_and_comment_start + code_str + comment_tail)
+    return pattern.sub(repl, text)
 
-    new_head = ROW_PATTERN.sub(repl, head)
-    new_text = new_head + tail
+
+def update_c_header(font_bytes_5x8: dict[int, tuple[int, ...]],
+                    font_bytes_5x10: dict[int, tuple[int, ...]]) -> None:
+    """Replace 5x8 and 5x10 byte sequences in the C header, preserving
+    format and trailing comments."""
+    text = C_HEADER.read_text()
+    # The 5x8 array ends at "};" before the 5x10 declaration. Split so
+    # the 5x8 regex only matches inside the 5x8 array.
+    marker = "/* 5x10 patterns"
+    if marker not in text:
+        raise RuntimeError("could not locate 5x10 section marker in header")
+    head, tail = text.split(marker, 1)
+    head = _rewrite_array(head, ROW_PATTERN_5X8, font_bytes_5x8)
+    tail = marker + _rewrite_array(tail, ROW_PATTERN_5X10, font_bytes_5x10)
+    new_text = head + tail
 
     # Also rewrite the file-level generator header so anyone reading
     # the file can tell it came from a captured panel.
@@ -78,22 +85,38 @@ def update_c_header(font_bytes: dict[int, tuple[int, ...]]) -> None:
     print(f"wrote: {C_HEADER}")
 
 
-def update_js(font_bytes: dict[int, tuple[int, ...]]) -> None:
-    """Rebuild the base64-encoded b64_5x8 string in the JS file from
-    the captured glyphs. b64_5x10 stays as-is."""
-    raw = bytearray(256 * 8)
+def update_js(font_bytes_5x8: dict[int, tuple[int, ...]],
+              font_bytes_5x10: dict[int, tuple[int, ...]]) -> None:
+    """Rebuild both base64-encoded font strings in the JS file."""
+    raw_5x8 = bytearray(256 * 8)
     for code in range(256):
-        glyph = font_bytes.get(code)
+        glyph = font_bytes_5x8.get(code)
         if glyph is None:
-            continue   # leaves zeros in place
+            continue
         for i, b in enumerate(glyph):
-            raw[code * 8 + i] = b
-    b64 = base64.b64encode(bytes(raw)).decode("ascii")
+            raw_5x8[code * 8 + i] = b
+    b64_5x8 = base64.b64encode(bytes(raw_5x8)).decode("ascii")
+
+    # 5x10 array is 32 entries indexed (code - 0xE0).
+    raw_5x10 = bytearray(32 * 10)
+    for code in range(0xE0, 0x100):
+        glyph = font_bytes_5x10.get(code)
+        if glyph is None:
+            continue
+        for i, b in enumerate(glyph):
+            raw_5x10[(code - 0xE0) * 10 + i] = b
+    b64_5x10 = base64.b64encode(bytes(raw_5x10)).decode("ascii")
 
     text = JS_FILE.read_text()
     text = re.sub(
         r'(const b64_5x8 = ")[^"]*(";)',
-        r'\1' + b64 + r'\2',
+        r'\1' + b64_5x8 + r'\2',
+        text,
+        count=1,
+    )
+    text = re.sub(
+        r'(const b64_5x10 = ")[^"]*(";)',
+        r'\1' + b64_5x10 + r'\2',
         text,
         count=1,
     )
@@ -117,12 +140,17 @@ def main() -> int:
     if not font_dict:
         print("calibration JSON has no captured font", file=sys.stderr)
         return 1
-    font_bytes = {int(code_s): tuple(glyph)
-                  for code_s, glyph in font_dict.items()}
+    font_bytes_5x8 = {int(code_s): tuple(glyph)
+                      for code_s, glyph in font_dict.items()}
 
-    update_c_header(font_bytes)
-    update_js(font_bytes)
-    print(f"updated {sum(1 for c in range(256) if c in font_bytes)} of 256 codes")
+    font5x10_dict = calib.get("font5x10", {})
+    font_bytes_5x10 = {int(code_s): tuple(glyph)
+                       for code_s, glyph in font5x10_dict.items()}
+
+    update_c_header(font_bytes_5x8, font_bytes_5x10)
+    update_js(font_bytes_5x8, font_bytes_5x10)
+    print(f"updated 5x8: {sum(1 for c in range(256) if c in font_bytes_5x8)} of 256 codes")
+    print(f"updated 5x10: {sum(1 for c in range(0xE0, 0x100) if c in font_bytes_5x10)} of 32 codes")
     print("(codes 0x00..0x1F left as zeros -- CGRAM placeholders)")
     return 0
 

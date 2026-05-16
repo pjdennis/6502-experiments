@@ -214,6 +214,57 @@ def render_cell_ascii(glyph: list[int]) -> str:
     return "\n".join(lines)
 
 
+def extract_cells_5x10(warped: np.ndarray) -> list[list[int]]:
+    """Sample 5x10 mode glyphs from a warped LCD that was driven in
+    1-line 5x10 mode. Returns cells[col] -- 16 entries, each a list
+    of 10 row-bytes.
+
+    Physical layout in 5x10 mode: the same 16x2 panel where the top
+    8 dot-rows of each glyph occupy the physical row-0 cells, and
+    the bottom 2 rows occupy the top 2 dot-rows of the physical
+    row-1 cells (separated by the panel's inter-row gap). Using the
+    same warp + dot_centre as 5x8 capture: dot rows 0..7 of the
+    glyph come from row=0 dy=0..7, and dot rows 8..9 from row=1
+    dy=0..1."""
+    gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
+    otsu_thr, mask = cv2.threshold(gray, 0, 255,
+                                    cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    bright = gray[gray >= otsu_thr]
+    dim = gray[gray < otsu_thr]
+    if (len(bright) == 0 or len(dim) == 0
+            or bright.mean() - dim.mean() < 30):
+        mask = np.zeros_like(gray)
+
+    half_w = max(1, PX_PER_DOT_W // 2 - 1)
+    half_h = max(1, PX_PER_DOT_H // 2 - 1)
+
+    def sample(row: int, col: int, dy: int, dx: int) -> bool:
+        cx, cy = dot_centre(row, col, dy, dx)
+        patch = mask[max(0, cy-half_h):cy+half_h+1,
+                     max(0, cx-half_w):cx+half_w+1]
+        return patch.mean() > 127
+
+    cells: list[list[int]] = []
+    for col in range(LCD_COLS):
+        glyph10: list[int] = []
+        # Top 8 dot-rows live in physical row 0's cell.
+        for dy in range(DOT_ROWS):
+            bits = 0
+            for dx in range(DOT_COLS):
+                if sample(0, col, dy, dx):
+                    bits |= 1 << (4 - dx)
+            glyph10.append(bits)
+        # Bottom 2 dot-rows spill into physical row 1, dy = 0, 1.
+        for dy in (0, 1):
+            bits = 0
+            for dx in range(DOT_COLS):
+                if sample(1, col, dy, dx):
+                    bits |= 1 << (4 - dx)
+            glyph10.append(bits)
+        cells.append(glyph10)
+    return cells
+
+
 # ---------------------------------------------------------------------------
 # Font lookup
 # ---------------------------------------------------------------------------
