@@ -76,15 +76,21 @@
     const { rows, cols, ddram, cgram, cur, cur_on, blink_on, disp_on,
             panel_5x10 } = lcd;
     // Cell layout is driven by the panel choice (a hardware decision
-    // baked in by --lcd-panel), not by the controller's F-bit. The
-    // 16x2 5x8 module always renders 5x8 cells; the 16x1 5x10 module
-    // renders 5x10 cells with a 1-pixel blank row between the glyph
-    // and the underline cursor row.
+    // baked in by --lcd-panel), not by the controller's F-bit.
+    //
+    // 16x2 5x8 panel: each cell is 5x8 dots. The cursor is rendered as
+    //   an underline at row 7 (the bottom row of the 8-row cell) by
+    //   overlaying the glyph data there -- HD44780 ROM glyphs leave
+    //   row 7 blank for exactly this reason.
+    //
+    // 16x1 5x10 panel: each cell is 5x10 dots for the glyph, plus one
+    //   blank backlight row (not drawn as off-pixels), plus a 1-pixel
+    //   underline cursor row at the very bottom.
     const font5x10 = !!panel_5x10;
     const glyphRows = font5x10 ? 10 : 8;
-    const cursorGap = font5x10 ? 1 : 0;          // blank row before cursor
-    // 8+1 = 9 for 5x8 (cursor row only), 10+1+1 = 12 for 5x10 (gap + cursor).
-    const rowsPerCell = glyphRows + cursorGap + 1;
+    const cursorGap = font5x10 ? 1 : 0;          // backlight row before cursor
+    const cursorRow = font5x10 ? 1 : 0;          // extra dot row for cursor
+    const rowsPerCell = glyphRows + cursorGap + cursorRow;
     const cellW = COLS_PER_CHAR * (DOT + GAP);
     const cellH = rowsPerCell * (DOT + GAP);
     const padX  = CELL_PAD_X * DOT;
@@ -119,15 +125,20 @@
         const blinkInvert = cursorHere && blink_on && blinkPhase === 0;
 
         for (let yy = 0; yy < rowsPerCell; yy++) {
+          // Backlight gap row (5x10 panel only) -- leave the backlight
+          // fill showing through, so no grey unlit-dot pattern appears
+          // between the glyph and the cursor row.
+          const isGapRow = font5x10 && yy >= glyphRows && yy < glyphRows + cursorGap;
+          if (isGapRow) continue;
           for (let xx = 0; xx < COLS_PER_CHAR; xx++) {
             let on;
             if (yy < glyphRows) {
               on = bitmap[yy * COLS_PER_CHAR + xx];
-            } else if (yy < glyphRows + cursorGap) {
-              // Blank gap row between glyph and cursor (5x10 panel only).
-              on = 0;
+              // 5x8 panel: cursor is the underline on the last glyph
+              // row (HD44780 leaves row 7 blank). OR it in here.
+              if (!font5x10 && yy === glyphRows - 1 && cursorHere && cur_on) on = 1;
             } else {
-              // Underline cursor row.
+              // Dedicated cursor row (5x10 panel only).
               on = (cursorHere && cur_on) ? 1 : 0;
             }
             if (blinkInvert) on = 1;
