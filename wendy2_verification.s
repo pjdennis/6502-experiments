@@ -36,6 +36,7 @@ program_entry:
   jsr move_cursor
 
   jsr test_all                   ; 6
+  jsr test_upper_lower_bank_2    ; 7
  
   lda tests_failed
   bne .failed
@@ -295,10 +296,10 @@ test_access_eeprom:
   stz $a000
   stz $a000 + 3
 
+  ; Only cfg=$10 (%10000) still maps upper memory to ROM. cfg=$18
+  ; (%11000) now exposes upper RAM (see test 7 below), so it is no
+  ; longer a valid EEPROM-access config.
   lda #%10000
-  jsr test_access_eeprom_2
-
-  lda #%11000
   jsr test_access_eeprom_2
 
   rts
@@ -326,6 +327,66 @@ test_access_eeprom_2:
   sta tests_failed
 
 .done:
+  lda #1
+  jsr switch_to_space
+  rts
+
+
+; Test 7: write/read-back at $a000 and $e000 for cfgs %11000..%11111
+; (the "lower bank 2" upper-bank-select group). Mirrors the test_all
+; upper-L / upper-H sub-tests but for the C3=1 group. Currently
+; cfg=%11000 fails because the .pld maps its upper memory to ROM
+; instead of RAM bank 0 (writes silently dropped, readback returns
+; ROM contents). After the PLD fix (drop $18 from the C4-mode ROM
+; terms), all 8 cfgs should pass.
+test_upper_lower_bank_2:
+  lda #'7'
+  jsr display_character
+
+  ; Fill phase: each cfg in $18..$1F writes the cfg byte to $a000
+  ; and (cfg + $20) to $e000.
+  ldx #%11000               ; $18
+  lda #%11000
+.t7_fill:
+  jsr switch_to_space
+  stx $a000
+  txa
+  clc
+  adc #$20
+  sta $e000
+  inx
+  txa
+  cmp #%100000              ; $20 -- one past the last cfg
+  bne .t7_fill
+
+  ; Check phase: same loop but read and compare.
+  ldx #%11000
+  lda #%11000
+.t7_check:
+  jsr switch_to_space
+  cpx $a000
+  bne .t7_failed
+  txa
+  clc
+  adc #$20
+  cmp $e000
+  bne .t7_failed
+  inx
+  txa
+  cmp #%100000
+  bne .t7_check
+
+  lda #'Y'
+  jsr display_character
+  bra .t7_done
+
+.t7_failed:
+  lda #'N'
+  jsr display_character
+  lda #1
+  sta tests_failed
+
+.t7_done:
   lda #1
   jsr switch_to_space
   rts
