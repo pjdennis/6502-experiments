@@ -145,18 +145,32 @@ def dot_centre(row: int, col: int, dy: int, dx: int) -> tuple[int, int]:
 def extract_cells(warped: np.ndarray, debug_dir: Path | None
                   ) -> list[list[list[int]]]:
     """Return cells[row][col][dy] -- each entry an int with bit-4 as the
-    leftmost dot in row dy of the cell at (row, col)."""
+    leftmost dot in row dy of the cell at (row, col).
+
+    Sampling: for each dot we take the brightness mean of a 5x5 patch
+    centred on the dot. Thresholding is global-Otsu over the entire
+    warped image; per-cell Otsu over-fires on cells with few lit
+    dots because the minority bright/dim class gets a too-permissive
+    threshold."""
     gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
-    # The bright dots are typically ~220+ in luma vs the cyan background
-    # ~140. Otsu picks the threshold automatically.
+    if debug_dir:
+        cv2.imwrite(str(debug_dir / "warp_gray.png"), gray)
+
+    # Global Otsu over the whole rectified LCD -- the lit dots are
+    # ~230+ in luma vs the cyan background ~150, so a global split is
+    # reliable and stable cell-to-cell.
     _, mask = cv2.threshold(gray, 0, 255,
                             cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     if debug_dir:
         cv2.imwrite(str(debug_dir / "warp_mask.png"), mask)
 
-    # Build an overlay for sanity checking.
-    overlay = warped.copy()
+    overlay = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
     cells: list[list[list[int]]] = []
+    # 5x5 patch within the 6x6 dot pitch (1px margin on each side
+    # avoids picking up the inter-dot dark gap when the warp is a
+    # fraction off-grid).
+    half_w = max(1, PX_PER_DOT_W // 2 - 1)
+    half_h = max(1, PX_PER_DOT_H // 2 - 1)
     for row in range(LCD_ROWS):
         row_cells = []
         for col in range(LCD_COLS):
@@ -165,10 +179,8 @@ def extract_cells(warped: np.ndarray, debug_dir: Path | None
                 bits = 0
                 for dx in range(DOT_COLS):
                     cx, cy = dot_centre(row, col, dy, dx)
-                    # Sample a tiny 3x3 patch around the dot centre and
-                    # take the mean -- single-pixel sampling is too
-                    # sensitive to the dot edge.
-                    patch = mask[max(0, cy-1):cy+2, max(0, cx-1):cx+2]
+                    patch = mask[max(0, cy-half_h):cy+half_h+1,
+                                 max(0, cx-half_w):cx+half_w+1]
                     on = patch.mean() > 127
                     if on:
                         bits |= 1 << (4 - dx)
@@ -199,10 +211,23 @@ def render_cell_ascii(glyph: list[int]) -> str:
 
 _FONT_CACHE: dict[int, tuple[int, ...]] | None = None
 def load_font() -> dict[int, tuple[int, ...]]:
-    """Parse hd44780_a00_font.h into {char_code: (row0..row7)}."""
+    """Return {char_code: (row0..row7)} for character recognition.
+
+    Prefers the per-LCD font captured by calibrate.py (if present),
+    which is what the actual panel renders -- the wendy2 LCD module
+    differs from the canonical HD44780 A00 ROM in a few cells (e.g.
+    '7'). Falls back to parsing the A00 ROM header otherwise."""
     global _FONT_CACHE
     if _FONT_CACHE is not None:
         return _FONT_CACHE
+
+    if CALIB_JSON.exists():
+        calib = json.loads(CALIB_JSON.read_text())
+        font_data = calib.get("font")
+        if font_data:
+            _FONT_CACHE = {int(k): tuple(v) for k, v in font_data.items()}
+            return _FONT_CACHE
+
     text = FONT_HEADER.read_text()
     # Look for rows like:  { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },  /* 0xNN */
     # Match an 8-byte glyph row whose trailing comment starts with
