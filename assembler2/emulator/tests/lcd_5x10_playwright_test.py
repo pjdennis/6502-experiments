@@ -103,6 +103,7 @@ def run_test(base_dir, verbose=False):
         [str(emulator), str(boot_rom),
          "--machine", "wendy2c",
          "--serial-input", str(framed),
+         "--lcd-panel", "16x1-5x10",
          "--web", "--web-port", "0"],
         stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
         stderr=subprocess.PIPE, text=True,
@@ -126,9 +127,10 @@ def run_test(base_dir, verbose=False):
             ctx = browser.new_context(viewport={"width": 900, "height": 700})
             page = ctx.new_page()
 
-            # Capture the most recent f5x10 value from each state frame.
+            # Capture the most recent panel_5x10 / f5x10 / panel_rows
+            # from each state frame.
             page.add_init_script("""
-                window._lastF5x10 = null;
+                window._lastLcd = null;
                 const origWS = window.WebSocket;
                 window.WebSocket = function(...args) {
                     const ws = new origWS(...args);
@@ -136,9 +138,7 @@ def run_test(base_dir, verbose=False):
                         if (typeof e.data === 'string') {
                             try {
                                 const obj = JSON.parse(e.data);
-                                if (obj.lcd && 'f5x10' in obj.lcd) {
-                                    window._lastF5x10 = obj.lcd.f5x10;
-                                }
+                                if (obj.lcd) window._lastLcd = obj.lcd;
                             } catch {}
                         }
                     });
@@ -152,26 +152,66 @@ def run_test(base_dir, verbose=False):
                 "document.getElementById('status-text')?.textContent.includes('connected')",
                 timeout=5000,
             )
-            # Give the payload time to finish reset_display + the second
-            # function-set that flips into 5x10 mode.
             page.wait_for_timeout(2500)
 
-            f5x10 = page.evaluate("window._lastF5x10")
-            if verbose: print(f"  f5x10 reported by server = {f5x10}")
-            if f5x10 != 1:
-                print(f"  {Colors.RED}FAIL{Colors.NC} 5x10 LCD test: f5x10 in snapshot = {f5x10}, want 1")
+            lcd = page.evaluate("window._lastLcd")
+            if verbose:
+                print(f"  panel_5x10={lcd.get('panel_5x10')}  panel_rows={lcd.get('panel_rows')}  "
+                      f"f5x10={lcd.get('f5x10')}  rows={lcd.get('rows')}")
+            if lcd.get("panel_5x10") != 1:
+                print(f"  {Colors.RED}FAIL{Colors.NC} 5x10 LCD test: panel_5x10 = {lcd.get('panel_5x10')}, want 1")
+                return False
+            if lcd.get("panel_rows") != 1:
+                print(f"  {Colors.RED}FAIL{Colors.NC} 5x10 LCD test: panel_rows = {lcd.get('panel_rows')}, want 1")
+                return False
+            if lcd.get("f5x10") != 1:
+                print(f"  {Colors.RED}FAIL{Colors.NC} 5x10 LCD test: f5x10 = {lcd.get('f5x10')}, want 1 "
+                      f"(firmware should have set the F bit)")
                 return False
 
-            # Verify canvas size: in 5x10 mode each cell is 5x(10+1)=55 px
-            # tall (DOT=3 + GAP=1 = 4 per dot * 11 rows = 44 + 11 gaps,
-            # actually 11*(3+1)=44). With one display row that's 44 + 2*8
-            # margin = 60. In 5x8 mode it would be 9*(3+1) + 16 = 52.
-            # We just sanity-check that height grew beyond the 5x8 size.
+            # In 16x1 5x10 panel mode each cell is 12 rows tall (10 glyph
+            # + 1 gap + 1 cursor) * (DOT=3 + GAP=1) = 48 px. With one
+            # display row that's 48 + 2*8 margin = 64. (For comparison
+            # a 5x8 cell is 9*(3+1) = 36 px which would total 52.) We
+            # just sanity-check height landed above the 5x8 size.
             canvas_h = page.evaluate("document.getElementById('lcd').height")
             if verbose: print(f"  canvas height = {canvas_h}")
-            if canvas_h < 55:
+            if canvas_h < 60:
                 print(f"  {Colors.RED}FAIL{Colors.NC} 5x10 LCD test: canvas height={canvas_h}, "
-                      f"expected >= 55 (rows-per-cell should rise from 9 to 11)")
+                      f"expected >= 60 for a 1-row 5x10 panel")
+                return False
+
+            # Sample the cursor-gap pixel: column 0, row 0 cell, at
+            # y_rel = glyphRows*DOT_PITCH + 1 (the +1 lands inside the
+            # blank gap row, not the dot). For DOT=3, GAP=1, pitch=4:
+            # gap row is at y_rel = 10*4 = 40..42 (3 px tall).
+            # Cell top-left is at (LCD_MARGIN, LCD_MARGIN) = (8, 8).
+            # Sample (8+1, 8+40+1) — should be OFF (backlight color).
+            # Cursor row is just below at y_rel = 11*4 = 44..46.
+            samples = page.evaluate("""
+                () => {
+                    const c = document.getElementById('lcd');
+                    const ctx = c.getContext('2d');
+                    const pick = (x, y) => Array.from(ctx.getImageData(x, y, 1, 1).data).slice(0,3);
+                    return {
+                        // Column 0 cell. Gap row sits at y_rel = 10*4 = 40..42.
+                        gap:    pick(8 + 1, 8 + 40 + 1),
+                        // First glyph row of '5' should have dots (any column lit).
+                        glyph0: pick(8 + 4 + 1, 8 + 0 + 1),
+                    };
+                }
+            """)
+            if verbose:
+                print(f"  gap rgb = {samples['gap']}")
+                print(f"  glyph0 rgb = {samples['glyph0']}")
+            # The gap row must always be OFF -- noticeably brighter than
+            # an ON pixel. Same delta threshold as the existing web
+            # playwright test: ~50+ brightness units.
+            br = lambda rgb: rgb[0] + rgb[1] + rgb[2]
+            if br(samples["gap"]) - br(samples["glyph0"]) < 50:
+                print(f"  {Colors.RED}FAIL{Colors.NC} 5x10 LCD test: gap row not OFF: "
+                      f"gap rgb={samples['gap']} (brightness {br(samples['gap'])}), "
+                      f"glyph rgb={samples['glyph0']} (brightness {br(samples['glyph0'])})")
                 return False
 
             shot = out_dir / "lcd5x10.png"

@@ -389,7 +389,8 @@ static void build_snapshot(struct wendy2c_web_snapshot *snap,
                             struct lcd_hd44780_state *lcd,
                             const struct via_6522_state *via,
                             const struct led_buttons_state *ledbtn,
-                            int cap_hit) {
+                            int cap_hit,
+                            int panel_5x10) {
     /* Render-into refreshes the dirty bit but otherwise just reads
      * ddram + cgram; we bypass the ASCII fallback and copy raw bytes. */
     (void)cap_hit;
@@ -429,6 +430,8 @@ static void build_snapshot(struct wendy2c_web_snapshot *snap,
     snap->blink_on   = lcd->blink_on;
     snap->display_on = lcd->display_on;
     snap->font_5x10  = lcd->font_5x10;
+    snap->panel_rows = lcd->rows;
+    snap->panel_5x10 = panel_5x10 ? 1 : 0;
 
     snap->morse_led      = led_buttons_led(ledbtn);
     snap->control_led    = led_buttons_control_led(ledbtn);
@@ -456,7 +459,8 @@ static int emu_run_wendy2c_web(struct bus *b,
                                 double osc_per_us,
                                 int port,
                                 const char *bind_addr,
-                                const char *web_root) {
+                                const char *web_root,
+                                int panel_5x10) {
     install_tty_cleanup_handlers();  /* so Ctrl-C still cleans up */
 
     struct wendy2c_web_server *srv = wendy2c_web_start(port, bind_addr, web_root);
@@ -509,7 +513,7 @@ static int emu_run_wendy2c_web(struct bus *b,
         }
 
         if (wall_ns - last_snap_ns >= SNAP_NS) {
-            build_snapshot(&snap, b, lcd, via, ledbtn, cap_hit);
+            build_snapshot(&snap, b, lcd, via, ledbtn, cap_hit, panel_5x10);
             wendy2c_web_broadcast(srv, &snap);
             /* Flush audio on the same cadence as state. ~30 fps means
              * each binary frame carries ~735 samples @ 22050 Hz --
@@ -520,7 +524,7 @@ static int emu_run_wendy2c_web(struct bus *b,
     }
 
     /* Final snapshot so any connected client sees the end state. */
-    build_snapshot(&snap, b, lcd, via, ledbtn, cap_hit);
+    build_snapshot(&snap, b, lcd, via, ledbtn, cap_hit, panel_5x10);
     wendy2c_web_broadcast(srv, &snap);
     wendy2c_web_flush_audio(srv);
 
@@ -547,6 +551,12 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
     ram_628128_init(&ram_chip, &ram_state);
     via_6522_init  (&via_chip, &via_state);
     lcd_hd44780_init(&lcd_chip, &lcd_state, &via_state);
+    /* Apply --lcd-panel: the 16x1-5x10 panel is physically a single-row
+     * module, so we drop rows to 1; the rendering side picks up the
+     * 5x10/cursor-gap layout from the snapshot's panel_5x10 flag. */
+    if (opts->lcd_panel == LCD_PANEL_16X1_5X10) {
+        lcd_hd44780_set_geometry(&lcd_state, 1, 16);
+    }
     serial_usb_init(&ser_chip, &ser_state, &via_state);
     led_buttons_init(&ledbtn_chip, &ledbtn_state, &via_state);
     cpu_65c02_init (&cpu_chip, &cpu_state);
@@ -667,7 +677,8 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
     if (opts->web) {
         emu_run_wendy2c_web(&b, &lcd_state, &via_state, &ledbtn_state,
                             &audio, link, cap, osc_per_us,
-                            opts->web_port, opts->web_bind, opts->web_root);
+                            opts->web_port, opts->web_bind, opts->web_root,
+                            opts->lcd_panel == LCD_PANEL_16X1_5X10);
     } else if (opts->live) {
         emu_run_wendy2c_live(&b, &lcd_state, &via_state, &ledbtn_state,
                              &audio, link, cap, osc_per_us);

@@ -73,12 +73,18 @@
   }
 
   function renderLcd(canvas, lcd) {
-    const { rows, cols, ddram, cgram, cur, cur_on, blink_on, disp_on, f5x10 } = lcd;
-    const font5x10 = !!f5x10;
+    const { rows, cols, ddram, cgram, cur, cur_on, blink_on, disp_on,
+            panel_5x10 } = lcd;
+    // Cell layout is driven by the panel choice (a hardware decision
+    // baked in by --lcd-panel), not by the controller's F-bit. The
+    // 16x2 5x8 module always renders 5x8 cells; the 16x1 5x10 module
+    // renders 5x10 cells with a 1-pixel blank row between the glyph
+    // and the underline cursor row.
+    const font5x10 = !!panel_5x10;
     const glyphRows = font5x10 ? 10 : 8;
-    // Each cell on a real HD44780 LCD has one extra row below the glyph
-    // for the underline cursor: 8+1 = 9 for 5x8, 10+1 = 11 for 5x10.
-    const rowsPerCell = glyphRows + 1;
+    const cursorGap = font5x10 ? 1 : 0;          // blank row before cursor
+    // 8+1 = 9 for 5x8 (cursor row only), 10+1+1 = 12 for 5x10 (gap + cursor).
+    const rowsPerCell = glyphRows + cursorGap + 1;
     const cellW = COLS_PER_CHAR * (DOT + GAP);
     const cellH = rowsPerCell * (DOT + GAP);
     const padX  = CELL_PAD_X * DOT;
@@ -117,6 +123,9 @@
             let on;
             if (yy < glyphRows) {
               on = bitmap[yy * COLS_PER_CHAR + xx];
+            } else if (yy < glyphRows + cursorGap) {
+              // Blank gap row between glyph and cursor (5x10 panel only).
+              on = 0;
             } else {
               // Underline cursor row.
               on = (cursorHere && cur_on) ? 1 : 0;

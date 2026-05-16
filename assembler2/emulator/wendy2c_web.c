@@ -740,12 +740,14 @@ void wendy2c_web_broadcast(struct wendy2c_web_server *srv,
                       i ? "," : "", (unsigned)(s->cgram[i] & 0x1F))) return;
     }
     if (sj_printf(json, sizeof(json), &pos,
-        "],\"cur\":[%d,%d],\"cur_on\":%d,\"blink_on\":%d,\"disp_on\":%d,\"f5x10\":%d},"
+        "],\"cur\":[%d,%d],\"cur_on\":%d,\"blink_on\":%d,\"disp_on\":%d,"
+        "\"f5x10\":%d,\"panel_rows\":%d,\"panel_5x10\":%d},"
         "\"led\":{\"morse\":%d,\"control\":%d},"
         "\"btn\":{\"pressed\":%d},"
         "\"porta\":%u,\"portb\":%u,\"ddra\":%u,\"ddrb\":%u,"
         "\"osc\":%llu,\"cpu\":%llu,\"pc\":%u,\"irq\":%d,\"stp\":%d}",
-        s->cursor_row, s->cursor_col, s->cursor_on, s->blink_on, s->display_on, s->font_5x10,
+        s->cursor_row, s->cursor_col, s->cursor_on, s->blink_on, s->display_on,
+        s->font_5x10, s->panel_rows, s->panel_5x10,
         s->morse_led, s->control_led,
         s->button_pressed,
         (unsigned)s->porta, (unsigned)s->portb,

@@ -9,6 +9,16 @@
 #define MACHINE_NMOS_DEFAULT  0
 #define MACHINE_WENDY2C       1
 
+/* LCD panel selection for the wendy2c web/live render. Defaults to
+ * the standard 16x2 5x8 module shipped on the breadboard; the 16x1
+ * 5x10 selection asks the renderer to draw a single-line panel with
+ * tall (5x10) cells and a 1-pixel gap between the glyph and the
+ * underline cursor row -- the layout of common 16x1 LCD modules.
+ * The firmware's chosen F bit (5x10 vs 5x8 font) is independent of
+ * this and is reported in the snapshot for diagnostics. */
+#define LCD_PANEL_16X2_5X8  0
+#define LCD_PANEL_16X1_5X10 1
+
 /* Parsed command-line options for the default (non-server-as-first-arg)
  * code path. Numeric defaults are 0 / -1; string defaults are documented
  * per field. */
@@ -53,6 +63,7 @@ struct emu_opts {
                                          * timestamped LCD frame to PATH every time the LCD changes during
                                          * the run loop. Format: a "--- osc=N cpu=N pc=$NNNN ---" header
                                          * line followed by one "|...|"-bracketed row per LCD row. */
+    int lcd_panel;                      /* --lcd-panel; LCD_PANEL_* constants. Default = 16x2 5x8. */
 };
 
 /* Initialize an emu_opts with the documented defaults. */

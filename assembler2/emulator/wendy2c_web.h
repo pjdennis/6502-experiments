@@ -34,6 +34,11 @@ struct wendy2c_web_snapshot {
     int cursor_row, cursor_col;
     int cursor_on, blink_on, display_on;
     int font_5x10;               /* 1 = HD44780 F-bit set; render glyphs as 5x10 */
+    int panel_rows;              /* physical-panel row count (1 or 2) */
+    int panel_5x10;              /* 1 = render glyphs as 5x10 cells with a 1-pixel
+                                  *     cursor-row gap (16x1-5x10 module).
+                                  * 0 = render as 5x8 cells with cursor row directly
+                                  *     below (standard 16x2 module). */
 
     int morse_led;
     int control_led;

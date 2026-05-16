@@ -43,6 +43,7 @@ void emu_opts_init(struct emu_opts *opts) {
     opts->web_root = NULL;
     opts->serial_link_path = NULL;
     opts->lcd_trace_filename = NULL;
+    opts->lcd_panel = LCD_PANEL_16X2_5X8;
 }
 
 void emu_opts_usage(FILE *fp) {
@@ -99,7 +100,14 @@ void emu_opts_usage(FILE *fp) {
 "                         for nmos-default and --server it is CPU cycles.\n"
 "  --lcd-trace PATH       wendy2c (non-live, non-web): append a timestamped LCD frame to\n"
 "                         PATH every time the LCD changes during the run. Lets tests assert\n"
-"                         on intermediate display states, not just the final frame.\n");
+"                         on intermediate display states, not just the final frame.\n"
+"  --lcd-panel TYPE       wendy2c: which LCD panel to model for the live/web render.\n"
+"                         '16x2' (default) -- standard 16-col x 2-row 5x8 module, what\n"
+"                         the breadboard ships with. '16x1-5x10' -- 16-col x 1-row module\n"
+"                         with 5x10 cells and a 1-pixel gap between the glyph and the\n"
+"                         underline cursor row (typical for tall-character 16x1 LCDs).\n"
+"                         The firmware still picks its own F-bit; this controls how the\n"
+"                         renderer lays out cells, not what the controller stores.\n");
 }
 
 /* Helper: --FLAG VALUE. Returns 0 on success, sets *value_out and
@@ -283,6 +291,21 @@ int parse_args(int argc, char **argv, struct emu_opts *opts) {
             if (take_str_value(argc, argv, &i, "--serial-link", &opts->serial_link_path)) return 1;
         } else if (strcmp(argv[i], "--lcd-trace") == 0) {
             if (take_str_value(argc, argv, &i, "--lcd-trace", &opts->lcd_trace_filename)) return 1;
+        } else if (strcmp(argv[i], "--lcd-panel") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "error: --lcd-panel requires a value\n");
+                return 1;
+            }
+            const char *t = argv[i + 1];
+            if (strcmp(t, "16x2") == 0 || strcmp(t, "16x2-5x8") == 0) {
+                opts->lcd_panel = LCD_PANEL_16X2_5X8;
+            } else if (strcmp(t, "16x1") == 0 || strcmp(t, "16x1-5x10") == 0) {
+                opts->lcd_panel = LCD_PANEL_16X1_5X10;
+            } else {
+                fprintf(stderr, "error: --lcd-panel value must be '16x2' or '16x1-5x10'\n");
+                return 1;
+            }
+            i += 2;
         } else if (strcmp(argv[i], "--cycle-cap") == 0) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "error: --cycle-cap requires a value\n");
@@ -356,6 +379,11 @@ int parse_args(int argc, char **argv, struct emu_opts *opts) {
     }
     if (opts->lcd_trace_filename && (opts->live || opts->web)) {
         fprintf(stderr, "error: --lcd-trace is incompatible with --live and --web\n");
+        return 1;
+    }
+
+    if (opts->lcd_panel != LCD_PANEL_16X2_5X8 && opts->machine != MACHINE_WENDY2C) {
+        fprintf(stderr, "error: --lcd-panel currently requires --machine wendy2c\n");
         return 1;
     }
 

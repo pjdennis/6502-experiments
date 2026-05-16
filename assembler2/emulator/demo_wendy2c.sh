@@ -63,6 +63,7 @@ WEB_PORT=8080
 WEB_BIND=""
 AUDIO=0
 WAV=""
+LCD_PANEL=""
 while [ $# -gt 0 ]; do
     case $1 in
         --live)  LIVE=1; shift ;;
@@ -83,6 +84,11 @@ while [ $# -gt 0 ]; do
                 echo "error: --wav requires a path" >&2; exit 1
             fi
             WAV=$2; shift 2 ;;
+        --lcd-panel)
+            if [ $# -lt 2 ]; then
+                echo "error: --lcd-panel requires a value" >&2; exit 1
+            fi
+            LCD_PANEL=$2; shift 2 ;;
         -h|--help)
             awk 'NR>1 && /^#/ {sub(/^# ?/, ""); print; next} NR>1 {exit}' "$0"
             exit 0 ;;
@@ -151,6 +157,7 @@ set -- "$OUT_DIR/wendy2c_boot.bin" \
        --serial-input "$OUT_DIR/payload.framed"
 [ "$AUDIO" -eq 1 ] && set -- "$@" --audio
 [ -n "$WAV" ] && set -- "$@" --wav "$WAV"
+[ -n "$LCD_PANEL" ] && set -- "$@" --lcd-panel "$LCD_PANEL"
 
 if [ "$WEB" -eq 1 ]; then
     if [ "$WEB_PORT" = "0" ]; then
