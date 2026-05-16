@@ -25,3 +25,11 @@ _tr_*.tmp
 # already covered by the *.out wildcard above; the build/run logs and
 # results files aren't.
 assembler2/emulator/tests/out/
+
+# Local-only webcam capture helper -- paths and camera names are
+# specific to one machine; not appropriate to version.
+/snap.sh
+
+# Per-machine LCD vision calibration (corner positions in the captured
+# image -- depend on the camera mount, so not portable).
+/lcd_calibration.json

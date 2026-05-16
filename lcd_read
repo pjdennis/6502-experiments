@@ -1,0 +1,20 @@
+#!/bin/bash
+# lcd_read -- end-to-end: snapshot the wendy2 board's LCD via webcam,
+# extract per-cell pixels, and decode to text.
+#
+# Outputs (under /tmp/lcd-ocr/):
+#   raw.jpg         the captured image
+#   warp.png        the LCD active area, perspective-rectified
+#   cells.txt       hex bytes + ASCII-art for each of the 32 cells
+#   text.txt        the decoded 16x2 string
+#
+# Also prints the decoded text to stdout.
+#
+# Calibration is required once before first use:
+#   ./compile_and_upload_wendy2.sh lcd_calibrate.s   # all 32 cells lit
+#   ./lcd_read --calibrate                            # save corners
+# After that, ./lcd_read just captures + decodes.
+
+set -euo pipefail
+cd "$(dirname "$0")"
+exec python3 lcd_ocr.py --capture --debug "$@"
