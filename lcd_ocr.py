@@ -156,11 +156,20 @@ def extract_cells(warped: np.ndarray, debug_dir: Path | None
     if debug_dir:
         cv2.imwrite(str(debug_dir / "warp_gray.png"), gray)
 
-    # Global Otsu over the whole rectified LCD -- the lit dots are
-    # ~230+ in luma vs the cyan background ~150, so a global split is
-    # reliable and stable cell-to-cell.
-    _, mask = cv2.threshold(gray, 0, 255,
-                            cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    # Global Otsu over the whole rectified LCD -- lit dots are ~230+
+    # in luma vs the cyan background ~150 so the split is reliable.
+    # BUT if the LCD is entirely blank (codes the panel renders as
+    # nothing, e.g. 0x80..0x9F on a clone with no upper-ROM), Otsu
+    # splits the uniform cyan background arbitrarily. Check the gap
+    # between the two clusters' means: a real lit-vs-dim split is
+    # ~80 luma; a uniform-background split is ~10.
+    otsu_thr, mask = cv2.threshold(gray, 0, 255,
+                                    cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    bright_pixels = gray[gray >= otsu_thr]
+    dim_pixels = gray[gray < otsu_thr]
+    if (len(bright_pixels) == 0 or len(dim_pixels) == 0
+            or bright_pixels.mean() - dim_pixels.mean() < 30):
+        mask = np.zeros_like(gray)
     if debug_dir:
         cv2.imwrite(str(debug_dir / "warp_mask.png"), mask)
 

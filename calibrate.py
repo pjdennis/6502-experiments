@@ -55,7 +55,7 @@ VASM_FLAGS = [
 TRANSFER = REPO_ROOT / "transfer.py"
 TRANSFER_BAUD = "115200"
 
-FONT_PAGE_COUNT = 3        # 3 pages of 32 chars cover 0x20..0x7F
+FONT_PAGE_COUNT = 7        # 7 pages of 32 chars cover 0x20..0xFF
 CHARS_PER_PAGE = 32
 PAGE_BASE_OFFSET = 0x20    # first char on page 0
 

@@ -178,7 +178,8 @@ def inspect_font():
 
     cells_per_row = 8
     panels_per_glyph = []
-    codes = sorted(int(k) for k in font.keys() if 0x20 <= int(k) <= 0x7e)
+    # Show every captured code (0x20..0xFF in the current pipeline).
+    codes = sorted(int(k) for k in font.keys() if 0x20 <= int(k) <= 0xFF)
     for code in codes:
         cap = font[str(code)]
         rom_g = rom.get(code, [0]*8)
