@@ -22,16 +22,15 @@ from __future__ import annotations
 from typing import Optional
 
 from .ast import (
-    Assign, BinOp, Block, BoolLit, Break, Call, Continue, ExprStmt, Ident,
-    If, InlineAsm, IntLit, Loc, Node, Program, Repeat, StrLit, Sub, UnaryOp,
-    VarDecl, While, type_from_name,
+    Assign, BinOp, Block, BoolLit, Break, Call, Continue, ExprStmt, For,
+    Ident, If, InlineAsm, IntLit, Loc, Node, Program, Repeat, StrLit, Sub,
+    UnaryOp, VarDecl, While, type_from_name,
 )
 from .lex import Token
 
 
-# Type keywords accepted by VarDecl in Phase 2 (just ubyte for now;
-# Phase 3 widens this).
-_TYPE_KWS = {"ubyte"}
+# Type keywords accepted by VarDecl in Phase 2.
+_TYPE_KWS = {"ubyte", "uword"}
 
 # Binary-op precedence ladder, lowest precedence first. Each entry is
 # (precedence-name, set-of-tokens-at-this-level). Higher index = higher
@@ -188,6 +187,8 @@ class Parser:
                 return self.parse_while()
             if t.value == "repeat":
                 return self.parse_repeat()
+            if t.value == "for":
+                return self.parse_for()
             if t.value == "break":
                 self.pos += 1
                 return Break(loc=self.loc(t))
@@ -221,6 +222,16 @@ class Parser:
             count = self.parse_expr()
         body = self.parse_block()
         return Repeat(loc=self.loc(kw), count=count, body=body)
+
+    def parse_for(self) -> For:
+        kw = self.eat("KW", "for")
+        name = self.eat("IDENT")
+        self.eat("KW", "in")
+        lo = self.parse_expr()
+        self.eat("KW", "to")
+        hi = self.parse_expr()
+        body = self.parse_block()
+        return For(loc=self.loc(kw), var_name=name.value, lo=lo, hi=hi, body=body)
 
     def parse_assign_or_expr(self) -> Node:
         # Phase 2: only `IDENT = expr` and `IDENT <aug>= expr` are

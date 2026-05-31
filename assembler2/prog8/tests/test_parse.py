@@ -9,7 +9,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from p8c.ast import (  # noqa: E402
-    Assign, BinOp, Call, If, IntLit, Program, Repeat, StrLit, Sub, VarDecl, While,
+    Assign, BinOp, Call, For, If, IntLit, Program, Repeat, StrLit, Sub,
+    VarDecl, While,
 )
 from p8c.lex import lex  # noqa: E402
 from p8c.parse import ParseError, parse  # noqa: E402
@@ -129,6 +130,27 @@ class ParsePhase2(unittest.TestCase):
         rhs = prog.subs[0].body.stmts[0].rhs
         self.assertEqual(rhs.op, "&")
         self.assertEqual(rhs.lhs.op, "+")
+
+    def test_uword_var_decl(self):
+        prog = p8("uword addr = $1234\nmain { }")
+        vd = prog.module_vars[0]
+        self.assertEqual(vd.type_name, "uword")
+        self.assertEqual(vd.init.value, 0x1234)
+
+    def test_for_loop_parses(self):
+        prog = p8("ubyte i\nmain { for i in 0 to 7 { } }")
+        n = prog.subs[0].body.stmts[0]
+        self.assertIsInstance(n, For)
+        self.assertEqual(n.var_name, "i")
+        self.assertEqual(n.lo.value, 0)
+        self.assertEqual(n.hi.value, 7)
+
+    def test_peek_call_parses(self):
+        prog = p8("ubyte x\nmain { x = peek($8000) }")
+        rhs = prog.subs[0].body.stmts[0].rhs
+        self.assertIsInstance(rhs, Call)
+        self.assertEqual(rhs.path, ["peek"])
+        self.assertEqual(rhs.args[0].value, 0x8000)
 
 
 if __name__ == "__main__":

@@ -124,6 +124,35 @@ class CodeGenPhase2(unittest.TestCase):
         self.assertIn("lda p8v_x", s)
         self.assertIn("jsr display_hex", s)
 
+    def test_uword_init_emits_lo_and_hi_stores(self):
+        s = compile_text("uword w = $1234\nmain { }")
+        self.assertIn("lda #$34", s)
+        self.assertIn("ldy #$12", s)
+        self.assertIn("sta p8v_w", s)
+        self.assertIn("sty p8v_w+1", s)
+
+    def test_for_loop_emits_init_cmp_beq_inc(self):
+        s = compile_text("ubyte i\nmain { for i in 0 to 3 { } }")
+        self.assertIn("sta p8v_i", s)
+        self.assertIn("cmp #$03", s)
+        self.assertIn("beq ", s)
+        self.assertIn("inc p8v_i", s)
+
+    def test_peek_lowers_to_absolute_load(self):
+        s = compile_text("ubyte x\nmain { x = peek($f001) }")
+        self.assertIn("lda $f001", s)
+        self.assertIn("sta p8v_x", s)
+
+    def test_poke_lowers_to_absolute_store(self):
+        s = compile_text("main { poke($f001, $55) }")
+        self.assertIn("lda #$55", s)
+        self.assertIn("sta $f001", s)
+
+    def test_print_uw_high_then_low(self):
+        s = compile_text("%import txt\nuword w = $abcd\nmain { txt.print_uw(w) }")
+        # Two display_hex calls.
+        self.assertEqual(s.count("jsr display_hex"), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

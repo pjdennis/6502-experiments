@@ -32,9 +32,9 @@ exit()).
 from __future__ import annotations
 
 from .ast import (
-    Assign, BinOp, Block, BoolLit, Break, Call, Continue, ExprStmt, Ident,
-    If, InlineAsm, IntLit, Program, Repeat, StrLit, Sub, UnaryOp, VarDecl,
-    While, BOOL, UBYTE,
+    Assign, BinOp, Block, BoolLit, Break, Call, Continue, ExprStmt, For,
+    Ident, If, InlineAsm, IntLit, Program, Repeat, StrLit, Sub, UnaryOp,
+    VarDecl, While, BOOL, UBYTE, UWORD,
 )
 
 
@@ -132,6 +132,20 @@ class CodeGen:
         self._loop_break_stack: list[str] = []
         self._loop_cont_stack: list[str] = []
         self._label_id = 0
+        # Module-var initializers run at the top of main(): they would
+        # otherwise never execute, since module-level VarDecl nodes are
+        # not part of any sub body. (Without this, `uword w = $1234`
+        # at module level silently produces uninitialized w.)
+        if s.is_main:
+            for vd in self.prog.module_vars:
+                if vd.init is not None:
+                    if vd.sym.type is UBYTE:
+                        self._emit_byte_expr_into_a(vd.init)
+                        self.emit(f"  sta {vd.sym.mangled}")
+                    else:  # UWORD
+                        self._emit_word_expr_into_ay(vd.init)
+                        self.emit(f"  sta {vd.sym.mangled}")
+                        self.emit(f"  sty {vd.sym.mangled}+1")
         self._emit_block(s.body)
         if s.is_main:
             # Fall off the end into a halt loop so the emulator's LCD
@@ -161,8 +175,13 @@ class CodeGen:
             # the top of the .s by `<mangled> = $XX`). If there's an
             # initializer, lower it to a store.
             if st.init is not None:
-                self._emit_byte_expr_into_a(st.init)
-                self.emit(f"  sta {st.sym.mangled}")
+                if st.sym.type is UBYTE:
+                    self._emit_byte_expr_into_a(st.init)
+                    self.emit(f"  sta {st.sym.mangled}")
+                else:  # UWORD
+                    self._emit_word_expr_into_ay(st.init)
+                    self.emit(f"  sta {st.sym.mangled}")
+                    self.emit(f"  sty {st.sym.mangled}+1")
         elif isinstance(st, Assign):
             self._emit_assign(st)
         elif isinstance(st, If):
@@ -171,6 +190,8 @@ class CodeGen:
             self._emit_while(st)
         elif isinstance(st, Repeat):
             self._emit_repeat(st)
+        elif isinstance(st, For):
+            self._emit_for(st)
         elif isinstance(st, Break):
             if not self._loop_break_stack:
                 raise CodeGenError(
@@ -192,6 +213,11 @@ class CodeGen:
         assert isinstance(a.target, Ident) and a.target.sym is not None
         sym = a.target.sym
         if a.op == "=":
+            if sym.type is UWORD:
+                self._emit_word_expr_into_ay(a.rhs)
+                self.emit(f"  sta {sym.mangled}")
+                self.emit(f"  sty {sym.mangled}+1")
+                return
             self._emit_byte_expr_into_a(a.rhs)
             self.emit(f"  sta {sym.mangled}")
             return
@@ -299,6 +325,52 @@ class CodeGen:
         self._loop_break_stack.pop()
         self._loop_cont_stack.pop()
 
+    def _emit_for(self, n: For) -> None:
+        """`for i in lo to hi` -- inclusive range, ubyte only.
+
+        Lowered shape:
+            <eval lo>; sta i
+          top:
+            <body>
+            lda i; cmp #hi    (or cmp hi_addr for variable hi)
+            beq end           ; i == hi -> last iteration already ran
+            inc i
+            jmp top
+          end:
+        """
+        sym = n.sym
+        assert sym is not None
+        top = self._new_label("for_top")
+        end = self._new_label("for_end")
+        cont = self._new_label("for_cont")
+        self._loop_break_stack.append(end)
+        self._loop_cont_stack.append(cont)
+        # Initialize loop var = lo.
+        self._emit_byte_expr_into_a(n.lo)
+        self.emit(f"  sta {sym.mangled}")
+        self.emit(f"{top}:")
+        self._emit_block(n.body)
+        self.emit(f"{cont}:")
+        # Compare against hi.
+        self.emit(f"  lda {sym.mangled}")
+        if isinstance(n.hi, IntLit):
+            self.emit(f"  cmp #${n.hi.value & 0xFF:02x}")
+        elif isinstance(n.hi, Ident):
+            self.emit(f"  cmp {n.hi.sym.mangled}")
+        else:
+            # Evaluate hi into A (spilling i to a temp first).
+            self.emit(f"  sta __p8c_tmp0")
+            self._emit_byte_expr_into_a(n.hi)
+            self.emit(f"  sta __p8c_tmp1")
+            self.emit(f"  lda __p8c_tmp0")
+            self.emit(f"  cmp __p8c_tmp1")
+        self.emit(f"  beq {end}")
+        self.emit(f"  inc {sym.mangled}")
+        self.emit(f"  jmp {top}")
+        self.emit(f"{end}:")
+        self._loop_break_stack.pop()
+        self._loop_cont_stack.pop()
+
     def _emit_expr(self, e, drop_value: bool) -> None:
         if isinstance(e, Call):
             self._emit_call(e)
@@ -307,6 +379,41 @@ class CodeGen:
             return  # bare literal/var as a statement is a no-op
         # Bare expression used as a statement (rare) -- compute and discard.
         self._emit_byte_expr_into_a(e)
+
+    # ---- uword expression codegen (Phase 2 minimal: load, store, print) ----
+
+    def _emit_word_expr_into_ay(self, e) -> None:
+        """Evaluate a uword expression; result: low byte in A, high in Y.
+
+        Phase 2 supports literals, variables, and ubyte->uword widening.
+        Arithmetic on uwords lands in the next push.
+        """
+        if isinstance(e, IntLit):
+            v = e.value & 0xFFFF
+            self.emit(f"  lda #${v & 0xFF:02x}")
+            self.emit(f"  ldy #${(v >> 8) & 0xFF:02x}")
+            return
+        if isinstance(e, Ident):
+            assert e.sym is not None
+            if e.sym.type is UWORD:
+                self.emit(f"  lda {e.sym.mangled}")
+                self.emit(f"  ldy {e.sym.mangled}+1")
+                return
+            if e.sym.type is UBYTE:
+                # Widen ubyte -> uword: high byte is 0.
+                self.emit(f"  lda {e.sym.mangled}")
+                self.emit(f"  ldy #$00")
+                return
+        if isinstance(e, Call):
+            # peek($XXXX) is the one builtin that produces a ubyte; widen.
+            # Currently we don't have uword-returning calls.
+            self._emit_call(e)
+            self.emit(f"  ldy #$00")
+            return
+        raise CodeGenError(
+            f"codegen: cannot evaluate {type(e).__name__} as uword "
+            f"(Phase 2 supports literals / vars / ubyte widening only)"
+        )
 
     # ---- byte-expression codegen ----
 
@@ -597,9 +704,50 @@ class CodeGen:
                 self._emit_byte_expr_into_a(c.args[0])
                 self.emit(f"  jsr {target}")
                 return
+            if target == "__p8c_print_uw":
+                # txt.print_uw(uw) -- print 4 hex chars (high byte first).
+                if len(c.args) != 1:
+                    raise CodeGenError("txt.print_uw expects exactly one arg")
+                self._emit_word_expr_into_ay(c.args[0])
+                self.emit("  pha")                 # save low byte
+                self.emit("  tya")                 # high byte -> A
+                self.emit("  jsr display_hex")
+                self.emit("  pla")                 # restore low byte
+                self.emit("  jsr display_hex")
+                return
             raise CodeGenError(f"unknown extsub target {target!r}")
 
+        if sym.kind == "builtin":
+            return self._emit_builtin_call(c)
+
         raise CodeGenError(f"call kind {sym.kind!r} not implemented")
+
+    def _emit_builtin_call(self, c: Call) -> None:
+        """Lower a builtin call (peek/poke/etc.) to inline asm.
+
+        Phase 2 builtins:
+          * peek(addr_const)   -> ubyte in A (the loaded byte)
+          * poke(addr_const, byte_expr)
+        Both addresses are limited to integer literals here; variable
+        addresses come with `@(uword_expr)` syntax later.
+        """
+        name = c.sym.name
+        if name == "peek":
+            if len(c.args) != 1 or not isinstance(c.args[0], IntLit):
+                raise CodeGenError("peek expects one literal address argument")
+            addr = c.args[0].value & 0xFFFF
+            self.emit(f"  lda ${addr:04x}")
+            return
+        if name == "poke":
+            if len(c.args) != 2 or not isinstance(c.args[0], IntLit):
+                raise CodeGenError(
+                    "poke expects (literal_address, byte_expr)"
+                )
+            addr = c.args[0].value & 0xFFFF
+            self._emit_byte_expr_into_a(c.args[1])
+            self.emit(f"  sta ${addr:04x}")
+            return
+        raise CodeGenError(f"unknown builtin {name!r}")
 
 
 def _aug_to_op(aug: str) -> str:

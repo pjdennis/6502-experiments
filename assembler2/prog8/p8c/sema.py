@@ -12,11 +12,12 @@ Phase 1 jobs:
 from __future__ import annotations
 
 from .ast import (
-    Assign, BinOp, Block, BoolLit, Break, Call, Continue, ExprStmt, Ident,
-    If, InlineAsm, IntLit, Program, Repeat, StrLit, Sub, Symbol, Type,
-    UnaryOp, VarDecl, While, BOOL, STR, UBYTE, UWORD, VOID, type_from_name,
+    Assign, BinOp, Block, BoolLit, Break, Call, Continue, ExprStmt, For,
+    Ident, If, InlineAsm, IntLit, Program, Repeat, StrLit, Sub, Symbol,
+    Type, UnaryOp, VarDecl, While, BOOL, STR, UBYTE, UWORD, VOID,
+    type_from_name,
 )
-from .stdlib_decls import STDLIB_SYMBOLS
+from .stdlib_decls import STDLIB_SYMBOLS, get_builtin
 
 
 class SemaError(Exception):
@@ -105,31 +106,36 @@ class Sema:
                 f"variable {vd.name!r} already declared in this scope"
             )
         t = type_from_name(vd.type_name)
-        if t is None or t is not UBYTE:
-            # Phase 2 only does ubyte; widening to uword/byte/word in Phase 3.
+        if t is None or t not in (UBYTE, UWORD):
             raise SemaError(
                 f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: "
-                f"type {vd.type_name!r} not supported yet (Phase 2 = ubyte only)"
+                f"type {vd.type_name!r} not supported yet "
+                f"(Phase 2 = ubyte | uword)"
             )
-        if self._zp_next >= ZP_VAR_TOP:
+        size = 1 if t is UBYTE else 2
+        if self._zp_next + size > ZP_VAR_TOP:
             raise SemaError(
                 f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: out of ZP variable space"
             )
         mangled = f"{mangled_prefix}{vd.name}"
         sym = Symbol(name=vd.name, mangled=mangled, type=t, kind="var",
                      address=self._zp_next)
-        self._zp_next += 1
+        self._zp_next += size
         scope[vd.name] = sym
         vd.sym = sym
         self.prog.all_vars.append(sym)
-        # Type-check the initializer (codegen will lower it as if it
-        # were an assignment statement in stream-order).
         if vd.init is not None:
             self._walk_expr(vd.init)
-            if vd.init.type is not UBYTE:
+            if t is UBYTE and vd.init.type is not UBYTE:
                 raise SemaError(
                     f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: "
                     f"initializer type mismatch for ubyte {vd.name!r}"
+                )
+            if t is UWORD and vd.init.type not in (UBYTE, UWORD):
+                # ubyte literal auto-widens to uword on assignment.
+                raise SemaError(
+                    f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: "
+                    f"initializer type mismatch for uword {vd.name!r}"
                 )
         return sym
 
@@ -159,10 +165,24 @@ class Sema:
                     f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
                     f"assignment target must be a variable"
                 )
-            if st.rhs.type is not UBYTE and st.rhs.type is not BOOL:
+            tgt_t = st.target.sym.type
+            rhs_t = st.rhs.type
+            if tgt_t is UBYTE and rhs_t not in (UBYTE, BOOL):
                 raise SemaError(
                     f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
-                    f"RHS type {st.rhs.type!r} not assignable to ubyte"
+                    f"RHS type {rhs_t!r} not assignable to ubyte"
+                )
+            if tgt_t is UWORD and rhs_t not in (UBYTE, UWORD):
+                # ubyte -> uword widens; bigger types are caught above.
+                raise SemaError(
+                    f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
+                    f"RHS type {rhs_t!r} not assignable to uword"
+                )
+            if tgt_t is UWORD and st.op != "=":
+                raise SemaError(
+                    f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
+                    f"augmented assignment on uword not yet supported "
+                    f"(use `x = x + 1` form)"
                 )
             return
         if isinstance(st, If):
@@ -200,6 +220,31 @@ class Sema:
             self._next_repeat_id += 1
             st.id = st_id  # type: ignore[attr-defined]
             return
+        if isinstance(st, For):
+            # The loop variable must be declared in scope (Phase 2; the
+            # `for ubyte i in ...` shorthand comes later).
+            sym = self._lookup(st.var_name)
+            if sym is None:
+                raise SemaError(
+                    f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
+                    f"for-loop variable {st.var_name!r} must be declared "
+                    f"before the loop"
+                )
+            if sym.kind != "var" or sym.type is not UBYTE:
+                raise SemaError(
+                    f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
+                    f"for-loop variable {st.var_name!r} must be a ubyte var"
+                )
+            st.sym = sym
+            self._walk_expr(st.lo)
+            self._walk_expr(st.hi)
+            if st.lo.type is not UBYTE or st.hi.type is not UBYTE:
+                raise SemaError(
+                    f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
+                    f"for-loop range must be ubyte"
+                )
+            self._walk_block(st.body, sub_name=sub_name)
+            return
         if isinstance(st, (Break, Continue)):
             # Validity (must be inside a loop) checked at codegen time.
             return
@@ -229,6 +274,8 @@ class Sema:
             sym = self.dotted.get(key)
             if sym is None and len(e.path) == 1:
                 sym = self.globals.get(e.path[0])
+            if sym is None and len(e.path) == 1:
+                sym = get_builtin(e.path[0])
             if sym is None:
                 raise SemaError(
                     f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "

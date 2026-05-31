@@ -202,6 +202,19 @@ class Repeat(Node):
 
 
 @dataclass
+class For(Node):
+    """`for var in lo to hi { ... }` -- inclusive range. Phase 2 only
+    supports ubyte ranges; the var must already exist OR be declared
+    inline as `for ubyte i in 0 to 15`. We require pre-declaration for
+    Phase 2 to keep the grammar tiny."""
+    var_name: str
+    lo: Node
+    hi: Node
+    body: Block
+    sym: Optional["Symbol"] = None      # filled by sema
+
+
+@dataclass
 class Break(Node):
     pass
 

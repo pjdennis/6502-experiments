@@ -85,6 +85,32 @@ class SemaPhase2(unittest.TestCase):
         with self.assertRaises(SemaError):
             compile_to_sema('%import txt\nmain { repeat "boom" { } }')
 
+    def test_uword_allocates_two_zp_bytes(self):
+        prog = compile_to_sema("uword a\nuword b\nmain { }")
+        sym_a = prog.module_vars[0].sym
+        sym_b = prog.module_vars[1].sym
+        self.assertEqual(sym_a.type.__repr__(), "uword")
+        self.assertEqual(sym_b.address - sym_a.address, 2)
+
+    def test_uword_can_be_initialized_from_ubyte_literal(self):
+        prog = compile_to_sema("uword w = $42\nmain { }")
+        self.assertEqual(prog.module_vars[0].sym.type.__repr__(), "uword")
+
+    def test_uword_aug_assign_rejected(self):
+        with self.assertRaises(SemaError):
+            compile_to_sema("uword w\nmain { w += $1 }")
+
+    def test_for_loop_var_must_pre_exist(self):
+        with self.assertRaises(SemaError) as ctx:
+            compile_to_sema("main { for nope in 0 to 3 { } }")
+        self.assertIn("must be declared", str(ctx.exception))
+
+    def test_builtin_peek_resolves_without_import(self):
+        prog = compile_to_sema("ubyte x\nmain { x = peek($f001) }")
+        rhs = prog.subs[0].body.stmts[0].rhs
+        self.assertEqual(rhs.sym.kind, "builtin")
+        self.assertEqual(rhs.sym.name, "peek")
+
 
 if __name__ == "__main__":
     unittest.main()

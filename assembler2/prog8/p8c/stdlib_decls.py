@@ -8,7 +8,7 @@ files.
 """
 from __future__ import annotations
 
-from .ast import Symbol, STR, UBYTE, VOID
+from .ast import Symbol, STR, UBYTE, UWORD, VOID
 
 
 # txt.print(str) -- print zero-terminated string at the LCD cursor.
@@ -32,7 +32,34 @@ TXT_PRINT_UB = Symbol(
 )
 
 
+# txt.print_uw(w) -- print uword as 4 hex chars (high byte first).
+# No standalone .inc helper; codegen inlines a two-call sequence using
+# display_hex twice.
+TXT_PRINT_UW = Symbol(
+    name="print_uw", mangled="__p8c_print_uw", type=VOID, kind="extsub",
+    asm_target="__p8c_print_uw",
+)
+
+
+# Builtins (kind="builtin") -- codegen has special-cased lowering for
+# each. Calls look like `peek($f001)` etc. (unqualified, not dotted).
+# `type` is the return type (UBYTE for peek; VOID for poke / for the
+# stmt-only forms).
+BUILTINS = [
+    Symbol(name="peek", mangled="peek", type=UBYTE, kind="builtin"),
+    Symbol(name="poke", mangled="poke", type=VOID,  kind="builtin"),
+]
+
+
 STDLIB_SYMBOLS: dict[str, list[Symbol]] = {
-    "txt": [TXT_PRINT, TXT_PRINT_UB],
+    "txt": [TXT_PRINT, TXT_PRINT_UB, TXT_PRINT_UW],
     "lcd": [LCD_CLEAR],
 }
+
+
+def get_builtin(name: str) -> Symbol | None:
+    """Builtins are always in scope (no `%import` needed)."""
+    for sym in BUILTINS:
+        if sym.name == name:
+            return sym
+    return None

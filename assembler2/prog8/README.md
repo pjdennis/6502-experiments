@@ -69,10 +69,24 @@ wendy2c, mirroring the asm00..asm17 chain.
   * Demo `examples/counter.p8` exercises all of the above:
     `total=0606 OK` on the LCD.
 
-Phase 2 still to do (next push): `byte`/`uword`/`word` types, casts,
-`const`, `enum`, arrays, `for x in 0 to N`, `when`, memory-mapped
-vars, builtins (`peek`/`poke`/`lsb`/`msb`/...), more stdlib
-(`lcd.cursor_at`, `lcd.putc`, `button.pressed`, `txt.print_uw`).
+**Phase 2** (continued):
+
+  * `uword` type with 2-byte ZP storage; literals + var load/store +
+    ubyte-widens-to-uword. (uword arithmetic comes in the next push.)
+  * `for var in lo to hi { ... }` -- inclusive range over a ubyte var;
+    var must be pre-declared.
+  * `peek($addr)` and `poke($addr, byte_expr)` builtins for direct
+    memory access (literal addresses only for now).
+  * `txt.print_uw(uword)` -- 4 hex chars, high byte first.
+  * Module-level var initializers now run at the top of `main()`
+    (previously silently skipped).
+  * `examples/peek_demo.p8` exercises all of the above and prints
+    `00010203 1234 4C` to the LCD.
+
+Phase 2 still to do (next push): `byte`/`word` (signed), uword
+arithmetic, casts via `as`, `const`, `enum`, arrays, `when`,
+memory-mapped vars via `&type x = $addr` + `@(uword_expr)`, more
+stdlib (`lcd.cursor_at`, `lcd.putc`, `button.pressed`).
 
 See the plan in conversation history for Phases 3-6, including the
 on-emulator emit-equivalence test tier that activates at Phase 5 when
