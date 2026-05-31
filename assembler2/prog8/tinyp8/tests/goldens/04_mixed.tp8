@@ -1,0 +1,8 @@
+; Mixing strings, bytes, blank lines, and comments.
+print "tinyp8 v0"
+
+; the byte is 0x42 = 66 = 'B'
+print_ub $42
+
+print "compiled on 6502"
+end

@@ -1,0 +1,5 @@
+; print three different byte values as 2-digit hex.
+print_ub $00
+print_ub $7f
+print_ub $ff
+end

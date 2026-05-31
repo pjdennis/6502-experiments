@@ -3,5 +3,8 @@
 # so we only ignore .s under examples/, goldens/, and any local stems.
 examples/*.s
 tests/goldens/*.s
+tinyp8/out/
+tinyp8/**/*.body
+tinyp8/**/*.runnable
 __pycache__/
 *.pyc
