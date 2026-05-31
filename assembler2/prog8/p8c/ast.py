@@ -74,6 +74,31 @@ class Node:
 # Expressions
 
 @dataclass
+class BinOp(Node):
+    """Binary operator on byte values.
+
+    op is the source-level operator string ('+', '-', '&', '|', '^',
+    '<<', '>>', '==', '!=', '<', '<=', '>', '>=', 'and', 'or').
+
+    Comparison and logical ops produce BOOL; the others propagate the
+    operand type. sema fills `type` and (for arith ops on mixed sizes)
+    inserts widening if/when we add wider types.
+    """
+    op: str
+    lhs: "Node"
+    rhs: "Node"
+    type: Type = UBYTE
+
+
+@dataclass
+class UnaryOp(Node):
+    """Unary operator: 'not' (logical), '~' (bitwise), '-' (negate)."""
+    op: str
+    operand: "Node"
+    type: Type = UBYTE
+
+
+@dataclass
 class IntLit(Node):
     value: int
     type: Type = UBYTE          # narrowed by sema
@@ -130,6 +155,62 @@ class InlineAsm(Node):
     text: str
 
 
+@dataclass
+class VarDecl(Node):
+    """`ubyte x` or `ubyte x = expr`. Phase 2 supports ubyte only.
+
+    Sema mangles the name (p8v_<sub>_<name> for sub-scoped, p8v_<name>
+    for module-scoped) and allocates a ZP byte for it. If init is set
+    we lower it to an assignment statement during sema; codegen then
+    emits the assignment in stream-order with the rest of the body.
+    """
+    type_name: str
+    name: str
+    init: Optional[Node] = None
+    sym: Optional["Symbol"] = None
+
+
+@dataclass
+class Assign(Node):
+    """target = expr, plus augmented forms (+=, -=, |=, &=, ^=, <<=, >>=)."""
+    target: Node          # always an Ident in Phase 2
+    op: str               # '=', '+=', '-=', ...
+    rhs: Node
+
+
+@dataclass
+class If(Node):
+    cond: Node
+    then_block: Block
+    else_block: Optional[Block] = None
+
+
+@dataclass
+class While(Node):
+    cond: Node
+    body: Block
+
+
+@dataclass
+class Repeat(Node):
+    """`repeat N { ... }` -- iterate the body N times (N is a constant
+    or ubyte expression). N == 0 means 256 iterations to match the
+    natural 6502 wrap; we'll document that in the language docs and
+    test it explicitly."""
+    count: Optional[Node]    # None means "forever"
+    body: Block
+
+
+@dataclass
+class Break(Node):
+    pass
+
+
+@dataclass
+class Continue(Node):
+    pass
+
+
 # Top-level
 
 @dataclass
@@ -147,6 +228,12 @@ class Program(Node):
     output_format: str = "raw"  # %output raw|prg|...
     subs: list[Sub] = field(default_factory=list)
     imports: list[str] = field(default_factory=list)
+    # Module-level variables collected by sema.
+    module_vars: list[VarDecl] = field(default_factory=list)
+    # All variables across the program (module + per-sub) with the
+    # address sema assigned. Codegen emits `<mangled> = $XX` definitions
+    # for each, then references them by name.
+    all_vars: list["Symbol"] = field(default_factory=list)
     # Filled by sema during string lifting:
     strings: list[StrLit] = field(default_factory=list)
 
@@ -158,8 +245,10 @@ class Symbol:
     name: str            # source name
     mangled: str         # codegen name
     type: Type
-    kind: str            # 'sub', 'asmsub', 'var', 'const', 'string', 'builtin'
+    kind: str            # 'sub', 'asmsub', 'extsub', 'var', 'const', 'string', 'builtin'
     # For asmsub/extsub: the address or label to call:
     asm_target: Optional[str] = None
+    # For vars: the absolute address (we statically allocate from ZP).
+    address: Optional[int] = None
     # For builtins, the callable that lowers them:
     lower_call: Optional[object] = None

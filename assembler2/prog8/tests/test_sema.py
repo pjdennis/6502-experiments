@@ -52,5 +52,39 @@ class SemaBasics(unittest.TestCase):
         self.assertEqual({s.label for s in prog.strings}, {"p8c_str_0", "p8c_str_1"})
 
 
+class SemaPhase2(unittest.TestCase):
+    def test_var_gets_zp_address_and_mangled_name(self):
+        prog = compile_to_sema("ubyte counter\nmain { }")
+        sym = prog.module_vars[0].sym
+        self.assertIsNotNone(sym)
+        self.assertEqual(sym.mangled, "p8v_counter")
+        self.assertIsNotNone(sym.address)
+        self.assertGreaterEqual(sym.address, 0x40)
+
+    def test_sub_local_mangled_with_sub_name(self):
+        prog = compile_to_sema("main { ubyte tmp }")
+        body = prog.subs[0].body.stmts
+        sym = body[0].sym
+        self.assertEqual(sym.mangled, "p8v_main_tmp")
+
+    def test_duplicate_var_in_same_scope_errors(self):
+        with self.assertRaises(SemaError):
+            compile_to_sema("ubyte x\nubyte x\nmain { }")
+
+    def test_comparison_requires_ubyte_operands(self):
+        # Bool == ubyte is a type error.
+        with self.assertRaises(SemaError):
+            compile_to_sema("main { if true == 0 { } }")
+
+    def test_assignment_type_mismatch_errors(self):
+        # Cannot assign string to ubyte.
+        with self.assertRaises(SemaError):
+            compile_to_sema('%import txt\nubyte x\nmain { x = "abc" }')
+
+    def test_repeat_count_must_be_ubyte(self):
+        with self.assertRaises(SemaError):
+            compile_to_sema('%import txt\nmain { repeat "boom" { } }')
+
+
 if __name__ == "__main__":
     unittest.main()

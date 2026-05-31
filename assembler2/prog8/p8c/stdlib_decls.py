@@ -25,7 +25,14 @@ LCD_CLEAR = Symbol(
 )
 
 
+# txt.print_ub(b) -- print byte as 2 ASCII hex chars (display_hex.inc).
+TXT_PRINT_UB = Symbol(
+    name="print_ub", mangled="display_hex", type=VOID, kind="extsub",
+    asm_target="display_hex",
+)
+
+
 STDLIB_SYMBOLS: dict[str, list[Symbol]] = {
-    "txt": [TXT_PRINT],
+    "txt": [TXT_PRINT, TXT_PRINT_UB],
     "lcd": [LCD_CLEAR],
 }

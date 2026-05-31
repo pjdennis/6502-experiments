@@ -12,8 +12,9 @@ Phase 1 jobs:
 from __future__ import annotations
 
 from .ast import (
-    Block, BoolLit, Call, ExprStmt, Ident, InlineAsm, IntLit, Program,
-    StrLit, Sub, Symbol, UBYTE, UWORD, STR, VOID,
+    Assign, BinOp, Block, BoolLit, Break, Call, Continue, ExprStmt, Ident,
+    If, InlineAsm, IntLit, Program, Repeat, StrLit, Sub, Symbol, Type,
+    UnaryOp, VarDecl, While, BOOL, STR, UBYTE, UWORD, VOID, type_from_name,
 )
 from .stdlib_decls import STDLIB_SYMBOLS
 
@@ -22,23 +23,45 @@ class SemaError(Exception):
     pass
 
 
+# Zero-page reservations:
+#   $00..$01  DISPLAY_STRING_PARAM (display_string ABI -- already used by
+#             the existing .inc routines, see display_string.inc)
+#   $02..$03  COUNTER scratch borrowed by some demos; we leave it alone
+#   $04..$1F  spare (room for the existing display_hex_indirect helpers,
+#             multi-byte arithmetic temps, etc.)
+#   $20..$3F  __p8c_temp0..__p8c_tempN -- compiler-managed scratch
+#   $40..$7F  Prog8 user variables (the next 64 bytes)
+# The variable allocator starts at $40; codegen reserves three fixed
+# scratch bytes at $20/$21/$22 for nested expression temps and loop
+# counters.
+ZP_VAR_BASE = 0x40
+ZP_VAR_TOP = 0x80
+
+
 class Sema:
     def __init__(self, prog: Program):
         self.prog = prog
         self.globals: dict[str, Symbol] = {}
         self.dotted: dict[tuple[str, ...], Symbol] = {}
         self._next_str_id = 0
+        self._zp_next = ZP_VAR_BASE
+        # Per-block locals stack -- index 0 is module scope, then per
+        # sub. Phase 2 doesn't have nested blocks-as-scopes, so the
+        # stack reflects only [module] or [module, sub].
+        self._scope_stack: list[dict[str, Symbol]] = []
+        # repeat-counter id allocator: each Repeat gets a unique label
+        # suffix so nested loops don't collide.
+        self._next_repeat_id = 0
 
     def run(self) -> None:
-        # 1. Pull in stdlib declarations for every module that the program
-        #    imports. Phase 1 imports are flat: %import txt, %import lcd.
+        # 1. stdlib imports.
         for mod in self.prog.imports:
             if mod not in STDLIB_SYMBOLS:
                 raise SemaError(f"unknown import {mod!r}")
             for sym in STDLIB_SYMBOLS[mod]:
                 self.dotted[(mod, sym.name)] = sym
 
-        # 2. Mangle sub names and add to globals.
+        # 2. Module-scope: register sub names + allocate module-var slots.
         seen_main = False
         for s in self.prog.subs:
             s.mangled = f"p8s_{s.name}"
@@ -52,35 +75,148 @@ class Sema:
         if not seen_main:
             raise SemaError("program has no `main { ... }` or `sub main()`")
 
-        # 3. Walk each sub's body.
+        # Module-level vars (visible to every sub).
+        self._scope_stack.append(self.globals)
+        for vd in self.prog.module_vars:
+            self._declare_var(vd, mangled_prefix="p8v_", scope=self.globals)
+
+        # 3. Per-sub: push a sub-scope, declare sub-locals as we hit them.
         for s in self.prog.subs:
-            self._walk_block(s.body)
+            sub_scope: dict[str, Symbol] = {}
+            self._scope_stack.append(sub_scope)
+            self._walk_block(s.body, sub_name=s.name)
+            self._scope_stack.pop()
 
-    def _walk_block(self, blk: Block) -> None:
+        self._scope_stack.pop()
+
+    # ---- declaration / scope ----
+
+    def _lookup(self, name: str) -> Symbol | None:
+        for scope in reversed(self._scope_stack):
+            if name in scope:
+                return scope[name]
+        return None
+
+    def _declare_var(self, vd: VarDecl, mangled_prefix: str,
+                     scope: dict[str, Symbol]) -> Symbol:
+        if vd.name in scope:
+            raise SemaError(
+                f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: "
+                f"variable {vd.name!r} already declared in this scope"
+            )
+        t = type_from_name(vd.type_name)
+        if t is None or t is not UBYTE:
+            # Phase 2 only does ubyte; widening to uword/byte/word in Phase 3.
+            raise SemaError(
+                f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: "
+                f"type {vd.type_name!r} not supported yet (Phase 2 = ubyte only)"
+            )
+        if self._zp_next >= ZP_VAR_TOP:
+            raise SemaError(
+                f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: out of ZP variable space"
+            )
+        mangled = f"{mangled_prefix}{vd.name}"
+        sym = Symbol(name=vd.name, mangled=mangled, type=t, kind="var",
+                     address=self._zp_next)
+        self._zp_next += 1
+        scope[vd.name] = sym
+        vd.sym = sym
+        self.prog.all_vars.append(sym)
+        # Type-check the initializer (codegen will lower it as if it
+        # were an assignment statement in stream-order).
+        if vd.init is not None:
+            self._walk_expr(vd.init)
+            if vd.init.type is not UBYTE:
+                raise SemaError(
+                    f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: "
+                    f"initializer type mismatch for ubyte {vd.name!r}"
+                )
+        return sym
+
+    # ---- statement / expression walks ----
+
+    def _walk_block(self, blk: Block, sub_name: str) -> None:
         for st in blk.stmts:
-            self._walk_stmt(st)
+            self._walk_stmt(st, sub_name=sub_name)
 
-    def _walk_stmt(self, st) -> None:
+    def _walk_stmt(self, st, sub_name: str) -> None:
         if isinstance(st, ExprStmt):
             self._walk_expr(st.expr)
-        elif isinstance(st, InlineAsm):
-            pass
-        else:
-            raise SemaError(f"sema: unhandled statement {type(st).__name__}")
+            return
+        if isinstance(st, InlineAsm):
+            return
+        if isinstance(st, VarDecl):
+            self._declare_var(st, mangled_prefix=f"p8v_{sub_name}_",
+                              scope=self._scope_stack[-1])
+            return
+        if isinstance(st, Assign):
+            # Phase 2 assigns: target is Ident only.
+            assert isinstance(st.target, Ident)
+            self._walk_expr(st.target)
+            self._walk_expr(st.rhs)
+            if st.target.sym is None or st.target.sym.kind != "var":
+                raise SemaError(
+                    f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
+                    f"assignment target must be a variable"
+                )
+            if st.rhs.type is not UBYTE and st.rhs.type is not BOOL:
+                raise SemaError(
+                    f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
+                    f"RHS type {st.rhs.type!r} not assignable to ubyte"
+                )
+            return
+        if isinstance(st, If):
+            self._walk_expr(st.cond)
+            if st.cond.type is not BOOL and st.cond.type is not UBYTE:
+                raise SemaError(
+                    f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
+                    f"if condition must be bool or ubyte"
+                )
+            self._walk_block(st.then_block, sub_name=sub_name)
+            if st.else_block is not None:
+                self._walk_block(st.else_block, sub_name=sub_name)
+            return
+        if isinstance(st, While):
+            self._walk_expr(st.cond)
+            if st.cond.type is not BOOL and st.cond.type is not UBYTE:
+                raise SemaError(
+                    f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
+                    f"while condition must be bool or ubyte"
+                )
+            self._walk_block(st.body, sub_name=sub_name)
+            return
+        if isinstance(st, Repeat):
+            if st.count is not None:
+                self._walk_expr(st.count)
+                if st.count.type is not UBYTE:
+                    raise SemaError(
+                        f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
+                        f"repeat count must be a ubyte expression"
+                    )
+            self._walk_block(st.body, sub_name=sub_name)
+            # Assign a unique id so codegen can label this loop's branch
+            # targets without collisions across nested repeats.
+            st_id = self._next_repeat_id
+            self._next_repeat_id += 1
+            st.id = st_id  # type: ignore[attr-defined]
+            return
+        if isinstance(st, (Break, Continue)):
+            # Validity (must be inside a loop) checked at codegen time.
+            return
+        raise SemaError(f"sema: unhandled statement {type(st).__name__}")
 
     def _walk_expr(self, e) -> None:
         if isinstance(e, IntLit):
-            # Phase 1: <= 0xFF stays ubyte, otherwise uword.
             e.type = UBYTE if 0 <= e.value <= 0xFF else UWORD
         elif isinstance(e, BoolLit):
-            pass
+            e.type = BOOL
         elif isinstance(e, StrLit):
             e.label = f"p8c_str_{self._next_str_id}"
             self._next_str_id += 1
             self.prog.strings.append(e)
             e.type = STR
         elif isinstance(e, Ident):
-            sym = self.globals.get(e.name)
+            sym = self._lookup(e.name)
             if sym is None:
                 raise SemaError(
                     f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
@@ -107,6 +243,52 @@ class Sema:
             e.type = sym.type
             for a in e.args:
                 self._walk_expr(a)
+        elif isinstance(e, BinOp):
+            self._walk_expr(e.lhs)
+            self._walk_expr(e.rhs)
+            cmp_ops = {"==", "!=", "<", "<=", ">", ">="}
+            logical_ops = {"and", "or", "xor"}
+            if e.op in cmp_ops:
+                if e.lhs.type is not UBYTE or e.rhs.type is not UBYTE:
+                    raise SemaError(
+                        f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
+                        f"comparison operands must both be ubyte"
+                    )
+                e.type = BOOL
+            elif e.op in logical_ops:
+                if e.lhs.type is not BOOL or e.rhs.type is not BOOL:
+                    raise SemaError(
+                        f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
+                        f"logical operands must both be bool"
+                    )
+                e.type = BOOL
+            else:
+                # Arithmetic / bitwise / shift: ubyte.
+                if e.lhs.type is not UBYTE or e.rhs.type is not UBYTE:
+                    raise SemaError(
+                        f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
+                        f"binary op {e.op!r} needs ubyte operands "
+                        f"(got {e.lhs.type!r} and {e.rhs.type!r})"
+                    )
+                e.type = UBYTE
+        elif isinstance(e, UnaryOp):
+            self._walk_expr(e.operand)
+            if e.op == "not":
+                if e.operand.type is not BOOL:
+                    raise SemaError(
+                        f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
+                        f"`not` operand must be bool"
+                    )
+                e.type = BOOL
+            elif e.op in ("~", "-"):
+                if e.operand.type is not UBYTE:
+                    raise SemaError(
+                        f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
+                        f"unary {e.op!r} operand must be ubyte"
+                    )
+                e.type = UBYTE
+            else:
+                raise SemaError(f"unknown unary {e.op!r}")
         else:
             raise SemaError(f"sema: unhandled expr {type(e).__name__}")
 

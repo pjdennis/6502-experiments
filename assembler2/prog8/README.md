@@ -42,7 +42,7 @@ wendy2c, mirroring the asm00..asm17 chain.
 
 ## Phase status
 
-Phase 0 (scaffolding) and Phase 1 (walking skeleton) -- done:
+**Phase 0** (scaffolding) and **Phase 1** (walking skeleton) -- done:
 
   * lex/parse/sema/codegen for `main { ... }`, `%address`, `%import`,
     `%output`, `txt.print("...")`, `lcd.clear()`.
@@ -50,10 +50,33 @@ Phase 0 (scaffolding) and Phase 1 (walking skeleton) -- done:
   * `hello.p8` compiles, lands at `$4000` via the wendy2c boot ROM,
     prints to the HD44780.
 
-Phase 2 (useful subset -- byte/word vars, control flow, more stdlib)
-is the next push. See the plan in conversation history for the full
-roadmap, including the on-emulator emit-equivalence test tier that
-activates at Phase 5 when the compiler first runs on wendy2c.
+**Phase 2** (start) -- done in this commit:
+
+  * Module-level + sub-local `ubyte` variable declarations with
+    optional initializers; ZP allocator starting at `$40` (variables)
+    with `$20/$21` reserved as codegen scratch.
+  * Assignment + augmented assignment (`+=`, `-=`, `&=`, `|=`, `^=`,
+    `<<=`, `>>=`).
+  * Binary expressions on `ubyte`: `+`, `-`, `&`, `|`, `^`, `<<`, `>>`
+    plus comparison (`==`, `!=`, `<`, `<=`, `>`, `>=`) and logical
+    (`and`, `or`, `xor`, `not`) operators with C-like precedence.
+  * Unary `~`, `-`, `not`.
+  * Control flow: `if`/`else`, `while`, `repeat N`, `repeat` (forever),
+    `break`, `continue`. Comparison conditions branch directly --
+    no 0/1 materialization.
+  * `txt.print_ub(byte)` -- prints two hex chars via the existing
+    `display_hex.inc` helper.
+  * Demo `examples/counter.p8` exercises all of the above:
+    `total=0606 OK` on the LCD.
+
+Phase 2 still to do (next push): `byte`/`uword`/`word` types, casts,
+`const`, `enum`, arrays, `for x in 0 to N`, `when`, memory-mapped
+vars, builtins (`peek`/`poke`/`lsb`/`msb`/...), more stdlib
+(`lcd.cursor_at`, `lcd.putc`, `button.pressed`, `txt.print_uw`).
+
+See the plan in conversation history for Phases 3-6, including the
+on-emulator emit-equivalence test tier that activates at Phase 5 when
+the compiler first runs on wendy2c.
 
 ## ABI notes (Phase 1)
 

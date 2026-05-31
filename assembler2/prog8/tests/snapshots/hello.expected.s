@@ -3,6 +3,8 @@
   .include base_config_wendy2c.inc
 
 DISPLAY_STRING_PARAM = $00              ; 2 bytes scratch (display_string ABI)
+__p8c_tmp0 = $20                     ; codegen scratch (byte)
+__p8c_tmp1 = $21                     ; codegen scratch (byte)
 
   .org $4000
   jmp p8s_main
@@ -10,6 +12,7 @@ DISPLAY_STRING_PARAM = $00              ; 2 bytes scratch (display_string ABI)
   .include delay_routines.inc
   .include display_routines_4bit.inc
   .include display_string.inc
+  .include display_hex.inc
 
 
 ; ---- sub main ----

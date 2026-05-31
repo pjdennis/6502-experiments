@@ -22,10 +22,38 @@ from __future__ import annotations
 from typing import Optional
 
 from .ast import (
-    Block, BoolLit, Call, ExprStmt, Ident, InlineAsm, IntLit, Loc, Node,
-    Program, StrLit, Sub, type_from_name,
+    Assign, BinOp, Block, BoolLit, Break, Call, Continue, ExprStmt, Ident,
+    If, InlineAsm, IntLit, Loc, Node, Program, Repeat, StrLit, Sub, UnaryOp,
+    VarDecl, While, type_from_name,
 )
 from .lex import Token
+
+
+# Type keywords accepted by VarDecl in Phase 2 (just ubyte for now;
+# Phase 3 widens this).
+_TYPE_KWS = {"ubyte"}
+
+# Binary-op precedence ladder, lowest precedence first. Each entry is
+# (precedence-name, set-of-tokens-at-this-level). Higher index = higher
+# precedence -- so we climb from the bottom of this list when parsing.
+_OP_LEVELS = [
+    ("logical_or",  {"or", "xor"}),
+    ("logical_and", {"and"}),
+    ("equality",    {"==", "!="}),
+    ("comparison",  {"<", "<=", ">", ">="}),
+    ("bitor",       {"|"}),
+    ("bitxor",      {"^"}),
+    ("bitand",      {"&"}),
+    ("shift",       {"<<", ">>"}),
+    ("additive",    {"+", "-"}),
+]
+# Build (token_kind -> level_index) for O(1) lookups.
+_OP_PRECEDENCE: dict[str, int] = {}
+for _idx, (_name, _tokens) in enumerate(_OP_LEVELS):
+    for _t in _tokens:
+        _OP_PRECEDENCE[_t] = _idx
+
+_AUG_OPS = {"+=", "-=", "&=", "|=", "^=", "<<=", ">>="}
 
 
 class ParseError(Exception):
@@ -80,10 +108,13 @@ class Parser:
                 body = self.parse_block()
                 sub = Sub(loc=self.loc(t), name="main", body=body, is_main=True)
                 prog.subs.append(sub)
+            elif t.kind == "KW" and t.value in _TYPE_KWS:
+                # Module-level variable declaration.
+                prog.module_vars.append(self.parse_var_decl())
             else:
                 raise ParseError(
-                    f"{self.filename}:{t.line}:{t.col}: expected sub or directive, "
-                    f"got {t.kind} {t.value!r}"
+                    f"{self.filename}:{t.line}:{t.col}: expected sub, directive, "
+                    f"or variable declaration, got {t.kind} {t.value!r}"
                 )
         return prog
 
@@ -132,11 +163,86 @@ class Parser:
 
     # ---- statements ----
 
+    def parse_var_decl(self) -> VarDecl:
+        t = self.eat("KW")
+        if t.value not in _TYPE_KWS:
+            raise ParseError(
+                f"{self.filename}:{t.line}:{t.col}: expected type keyword, got {t.value!r}"
+            )
+        name = self.eat("IDENT")
+        init = None
+        if self.match("="):
+            init = self.parse_expr()
+        return VarDecl(loc=self.loc(t), type_name=t.value, name=name.value, init=init)
+
     def parse_stmt(self) -> Node:
         t = self.peek()
         if t.kind == "DIRECTIVE" and t.value == "asm":
             return self.parse_inline_asm()
-        # Otherwise: a call statement (the only stmt form in Phase 1).
+        if t.kind == "KW":
+            if t.value in _TYPE_KWS:
+                return self.parse_var_decl()
+            if t.value == "if":
+                return self.parse_if()
+            if t.value == "while":
+                return self.parse_while()
+            if t.value == "repeat":
+                return self.parse_repeat()
+            if t.value == "break":
+                self.pos += 1
+                return Break(loc=self.loc(t))
+            if t.value == "continue":
+                self.pos += 1
+                return Continue(loc=self.loc(t))
+        # Otherwise: assignment statement or expression statement.
+        return self.parse_assign_or_expr()
+
+    def parse_if(self) -> If:
+        kw = self.eat("KW", "if")
+        cond = self.parse_expr()
+        then_blk = self.parse_block()
+        else_blk = None
+        if self.match("KW", "else"):
+            else_blk = self.parse_block()
+        return If(loc=self.loc(kw), cond=cond, then_block=then_blk, else_block=else_blk)
+
+    def parse_while(self) -> While:
+        kw = self.eat("KW", "while")
+        cond = self.parse_expr()
+        body = self.parse_block()
+        return While(loc=self.loc(kw), cond=cond, body=body)
+
+    def parse_repeat(self) -> Repeat:
+        kw = self.eat("KW", "repeat")
+        # `repeat { ... }` -- forever.
+        # `repeat N { ... }` -- N times (N a ubyte expression or const).
+        count = None
+        if self.peek().kind != "{":
+            count = self.parse_expr()
+        body = self.parse_block()
+        return Repeat(loc=self.loc(kw), count=count, body=body)
+
+    def parse_assign_or_expr(self) -> Node:
+        # Phase 2: only `IDENT = expr` and `IDENT <aug>= expr` are
+        # assignments; everything else is an expression statement (e.g.
+        # a call). We peek for "IDENT { '=' | aug-op }" and dispatch.
+        if self.peek().kind == "IDENT":
+            # Lookahead: peek past dotted path to see if we have an `=`.
+            save = self.pos
+            ident = self.eat("IDENT")
+            # No dotted assigns in Phase 2; if we see one, fall back to call/expr.
+            if self.peek().kind == "=":
+                self.eat("=")
+                rhs = self.parse_expr()
+                target = Ident(loc=self.loc(ident), name=ident.value)
+                return Assign(loc=self.loc(ident), target=target, op="=", rhs=rhs)
+            if self.peek().kind in _AUG_OPS:
+                op_tok = self.eat(self.peek().kind)
+                rhs = self.parse_expr()
+                target = Ident(loc=self.loc(ident), name=ident.value)
+                return Assign(loc=self.loc(ident), target=target, op=op_tok.kind, rhs=rhs)
+            # Rewind; fall through to expression parsing.
+            self.pos = save
         return self.parse_call_stmt()
 
     def parse_inline_asm(self) -> InlineAsm:
@@ -164,7 +270,46 @@ class Parser:
     # ---- expressions ----
 
     def parse_expr(self) -> Node:
+        """Top of the expression precedence ladder."""
+        return self._parse_binop(level=0)
+
+    def _parse_binop(self, level: int) -> Node:
+        if level >= len(_OP_LEVELS):
+            return self.parse_unary()
+        left = self._parse_binop(level + 1)
+        while True:
+            t = self.peek()
+            # Accept both punctuation tokens ('+', '<<', etc.) and
+            # keyword operators ('and', 'or', 'xor') at this level.
+            op = t.value if (t.kind == "KW" and t.value in _OP_PRECEDENCE) else (
+                t.kind if t.kind in _OP_PRECEDENCE else None
+            )
+            if op is None or _OP_PRECEDENCE[op] != level:
+                return left
+            self.pos += 1
+            right = self._parse_binop(level + 1)
+            left = BinOp(loc=left.loc, op=op, lhs=left, rhs=right)
+
+    def parse_unary(self) -> Node:
         t = self.peek()
+        if t.kind == "KW" and t.value == "not":
+            self.pos += 1
+            return UnaryOp(loc=self.loc(t), op="not", operand=self.parse_unary())
+        if t.kind == "~":
+            self.pos += 1
+            return UnaryOp(loc=self.loc(t), op="~", operand=self.parse_unary())
+        if t.kind == "-":
+            self.pos += 1
+            return UnaryOp(loc=self.loc(t), op="-", operand=self.parse_unary())
+        return self.parse_primary()
+
+    def parse_primary(self) -> Node:
+        t = self.peek()
+        if t.kind == "(":
+            self.pos += 1
+            inner = self.parse_expr()
+            self.eat(")")
+            return inner
         if t.kind == "STR":
             self.pos += 1
             return StrLit(loc=self.loc(t), value=t.value)

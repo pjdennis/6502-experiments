@@ -60,5 +60,70 @@ class CodeGenBasics(unittest.TestCase):
         self.assertNotIn("string pool", compile_text("main { }"))
 
 
+class CodeGenPhase2(unittest.TestCase):
+    def test_var_address_bindings_emitted_in_prologue(self):
+        s = compile_text("ubyte counter\nmain { }")
+        self.assertIn("p8v_counter = $40", s)
+
+    def test_assignment_loads_immediate_and_stores(self):
+        s = compile_text("ubyte x\nmain { x = $7B }")
+        # The immediate-load + store pair is the smoke signal.
+        self.assertIn("lda #$7b", s)
+        self.assertIn("sta p8v_x", s)
+
+    def test_addition_uses_clc_adc(self):
+        s = compile_text("ubyte x\nubyte y\nmain { x = x + y }")
+        self.assertIn("lda p8v_x", s)
+        self.assertIn("clc", s)
+        self.assertIn("adc p8v_y", s)
+
+    def test_subtraction_uses_sec_sbc(self):
+        s = compile_text("ubyte x\nubyte y\nmain { x = x - y }")
+        self.assertIn("sec", s)
+        self.assertIn("sbc p8v_y", s)
+
+    def test_aug_assign_or_emits_ora(self):
+        s = compile_text("ubyte x\nmain { x |= $80 }")
+        self.assertIn("ora #$80", s)
+
+    def test_if_comparison_branches_with_bne_when_negated(self):
+        # `if x == 0` -> bne to else/end (negated branch).
+        s = compile_text("ubyte x\nmain { if x == 0 { x = 1 } }")
+        self.assertIn("bne ", s)
+        self.assertIn("lda #$01", s)
+
+    def test_if_else_has_both_branches(self):
+        s = compile_text("ubyte x\nmain { if x == 0 { x = 1 } else { x = 2 } }")
+        self.assertIn(".Lelse_", s)
+        self.assertIn(".Lendif_", s)
+
+    def test_while_emits_top_and_end_labels(self):
+        s = compile_text("ubyte x\nmain { while x < 4 { x = x + 1 } }")
+        self.assertIn(".Lwhile_top_", s)
+        self.assertIn(".Lwhile_end_", s)
+        # `<` (unsigned) negates to `bcs` for the loop-exit branch.
+        self.assertIn("bcs ", s)
+
+    def test_repeat_pushes_counter_pulls_and_decrements(self):
+        s = compile_text("main { repeat 3 { } }")
+        self.assertIn("pha", s)
+        self.assertIn("pla", s)
+        self.assertIn("sbc #1", s)
+
+    def test_break_inside_loop_emits_jmp(self):
+        s = compile_text("ubyte x\nmain { while x < 4 { break } }")
+        self.assertIn("jmp .Lwhile_end_", s)
+
+    def test_break_outside_loop_errors(self):
+        from p8c.codegen import CodeGenError
+        with self.assertRaises(CodeGenError):
+            compile_text("main { break }")
+
+    def test_print_ub_loads_then_jsrs_display_hex(self):
+        s = compile_text("%import txt\nubyte x\nmain { txt.print_ub(x) }")
+        self.assertIn("lda p8v_x", s)
+        self.assertIn("jsr display_hex", s)
+
+
 if __name__ == "__main__":
     unittest.main()
