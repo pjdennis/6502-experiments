@@ -1,0 +1,7 @@
+# Compiled .s output drops in next to each .p8 by default (`p8c foo.p8`).
+# Snapshot .expected.s under tests/snapshots/ is intentionally tracked,
+# so we only ignore .s under examples/, goldens/, and any local stems.
+examples/*.s
+tests/goldens/*.s
+__pycache__/
+*.pyc
