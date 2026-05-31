@@ -13,9 +13,9 @@ from __future__ import annotations
 
 from .ast import (
     Assign, BinOp, Block, BoolLit, Break, Call, Continue, ExprStmt, For,
-    Ident, If, InlineAsm, IntLit, Program, Repeat, StrLit, Sub, Symbol,
-    Type, UnaryOp, VarDecl, While, BOOL, STR, UBYTE, UWORD, VOID,
-    type_from_name,
+    Ident, If, InlineAsm, IntLit, Param, Program, Repeat, Return, StrLit,
+    Sub, Symbol, Type, UnaryOp, VarDecl, While, BOOL, STR, UBYTE, UWORD,
+    VOID, type_from_name,
 )
 from .stdlib_decls import STDLIB_SYMBOLS, get_builtin
 
@@ -68,8 +68,15 @@ class Sema:
             s.mangled = f"p8s_{s.name}"
             if s.name in self.globals:
                 raise SemaError(f"duplicate sub {s.name!r}")
+            ret_t = type_from_name(s.return_type_name)
+            if ret_t is None:
+                raise SemaError(f"sub {s.name!r}: bad return type "
+                                f"{s.return_type_name!r}")
+            kind = "asmsub" if s.is_asmsub else "sub"
+            asm_target = s.asm_target if s.is_asmsub else None
             self.globals[s.name] = Symbol(
-                name=s.name, mangled=s.mangled, type=VOID, kind="sub",
+                name=s.name, mangled=s.mangled, type=ret_t, kind=kind,
+                asm_target=asm_target,
             )
             if s.is_main:
                 seen_main = True
@@ -81,11 +88,34 @@ class Sema:
         for vd in self.prog.module_vars:
             self._declare_var(vd, mangled_prefix="p8v_", scope=self.globals)
 
-        # 3. Per-sub: push a sub-scope, declare sub-locals as we hit them.
+        # 3. Per-sub: push a sub-scope, declare params + sub-locals.
         for s in self.prog.subs:
+            if s.is_asmsub:
+                # asmsubs are pure declarations -- no body to walk.
+                continue
             sub_scope: dict[str, Symbol] = {}
             self._scope_stack.append(sub_scope)
+            # Params first: each becomes a ZP byte/word that the caller
+            # populates before JSR.
+            for p in s.params:
+                pt = type_from_name(p.type_name)
+                if pt is None or pt not in (UBYTE, UWORD):
+                    raise SemaError(
+                        f"{p.loc.file}:{p.loc.line}:{p.loc.col}: "
+                        f"param type {p.type_name!r} not supported"
+                    )
+                size = 1 if pt is UBYTE else 2
+                mangled = f"p8v_{s.name}_arg_{p.name}"
+                sym = Symbol(name=p.name, mangled=mangled, type=pt,
+                             kind="var", address=self._zp_next)
+                self._zp_next += size
+                sub_scope[p.name] = sym
+                p.sym = sym
+                self.prog.all_vars.append(sym)
+            # Remember current sub for `return` typechecking.
+            self._current_sub = s
             self._walk_block(s.body, sub_name=s.name)
+            self._current_sub = None
             self._scope_stack.pop()
 
         self._scope_stack.pop()
@@ -178,12 +208,6 @@ class Sema:
                     f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
                     f"RHS type {rhs_t!r} not assignable to uword"
                 )
-            if tgt_t is UWORD and st.op != "=":
-                raise SemaError(
-                    f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
-                    f"augmented assignment on uword not yet supported "
-                    f"(use `x = x + 1` form)"
-                )
             return
         if isinstance(st, If):
             self._walk_expr(st.cond)
@@ -248,6 +272,36 @@ class Sema:
         if isinstance(st, (Break, Continue)):
             # Validity (must be inside a loop) checked at codegen time.
             return
+        if isinstance(st, Return):
+            cur = getattr(self, "_current_sub", None)
+            assert cur is not None
+            ret_t = type_from_name(cur.return_type_name)
+            if ret_t is VOID:
+                if st.value is not None:
+                    raise SemaError(
+                        f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
+                        f"sub {cur.name!r} returns void; can't return a value"
+                    )
+                return
+            if st.value is None:
+                raise SemaError(
+                    f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
+                    f"sub {cur.name!r} declares -> {cur.return_type_name}; "
+                    f"must return a value"
+                )
+            self._walk_expr(st.value)
+            vt = st.value.type
+            if ret_t is UBYTE and vt is not UBYTE:
+                raise SemaError(
+                    f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
+                    f"return type mismatch: want ubyte, got {vt!r}"
+                )
+            if ret_t is UWORD and vt not in (UBYTE, UWORD):
+                raise SemaError(
+                    f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
+                    f"return type mismatch: want uword, got {vt!r}"
+                )
+            return
         raise SemaError(f"sema: unhandled statement {type(st).__name__}")
 
     def _walk_expr(self, e) -> None:
@@ -290,16 +344,41 @@ class Sema:
             e.type = sym.type
             for a in e.args:
                 self._walk_expr(a)
+            # For user-defined subs / asmsubs we can type-check arg count
+            # + arg types against the declared params.
+            if sym.kind in ("sub", "asmsub") and len(e.path) == 1:
+                target = next((s for s in self.prog.subs if s.name == sym.name), None)
+                if target is not None:
+                    if len(e.args) != len(target.params):
+                        raise SemaError(
+                            f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
+                            f"{sym.name!r} takes {len(target.params)} args, "
+                            f"got {len(e.args)}"
+                        )
+                    for arg, p in zip(e.args, target.params):
+                        pt = type_from_name(p.type_name)
+                        if pt is UBYTE and arg.type is not UBYTE:
+                            raise SemaError(
+                                f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
+                                f"arg {p.name!r} wants ubyte, got {arg.type!r}"
+                            )
+                        if pt is UWORD and arg.type not in (UBYTE, UWORD):
+                            raise SemaError(
+                                f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
+                                f"arg {p.name!r} wants uword, got {arg.type!r}"
+                            )
         elif isinstance(e, BinOp):
             self._walk_expr(e.lhs)
             self._walk_expr(e.rhs)
             cmp_ops = {"==", "!=", "<", "<=", ">", ">="}
             logical_ops = {"and", "or", "xor"}
             if e.op in cmp_ops:
-                if e.lhs.type is not UBYTE or e.rhs.type is not UBYTE:
+                # Both ubyte, both uword, or ubyte vs uword (auto-widen ubyte).
+                ok = ({e.lhs.type, e.rhs.type} <= {UBYTE, UWORD})
+                if not ok:
                     raise SemaError(
                         f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
-                        f"comparison operands must both be ubyte"
+                        f"comparison operands must both be ubyte or uword"
                     )
                 e.type = BOOL
             elif e.op in logical_ops:
@@ -310,14 +389,19 @@ class Sema:
                     )
                 e.type = BOOL
             else:
-                # Arithmetic / bitwise / shift: ubyte.
-                if e.lhs.type is not UBYTE or e.rhs.type is not UBYTE:
+                # Arithmetic / bitwise / shift: ubyte or uword. Mixed
+                # produces uword (ubyte auto-widens).
+                lt, rt = e.lhs.type, e.rhs.type
+                if {lt, rt} == {UBYTE}:
+                    e.type = UBYTE
+                elif {lt, rt} <= {UBYTE, UWORD}:
+                    e.type = UWORD
+                else:
                     raise SemaError(
                         f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
-                        f"binary op {e.op!r} needs ubyte operands "
-                        f"(got {e.lhs.type!r} and {e.rhs.type!r})"
+                        f"binary op {e.op!r} needs ubyte/uword operands "
+                        f"(got {lt!r} and {rt!r})"
                     )
-                e.type = UBYTE
         elif isinstance(e, UnaryOp):
             self._walk_expr(e.operand)
             if e.op == "not":

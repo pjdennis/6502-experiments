@@ -227,12 +227,27 @@ class Continue(Node):
 # Top-level
 
 @dataclass
+class Param(Node):
+    type_name: str       # 'ubyte' | 'uword'
+    name: str
+    sym: Optional["Symbol"] = None
+
+
+@dataclass
 class Sub(Node):
     name: str
     body: Block
-    # Phase 1: no params, no return. Just main() {}.
-    mangled: str = ""           # filled by sema, e.g. "p8s_main_main"
+    params: list[Param] = field(default_factory=list)
+    return_type_name: str = "void"      # 'void' | 'ubyte' | 'uword'
+    mangled: str = ""                   # filled by sema, e.g. "p8s_main"
     is_main: bool = False
+    is_asmsub: bool = False             # True iff `asmsub` declaration
+    asm_target: Optional[str] = None    # for asmsub: the asm symbol to JSR to
+
+
+@dataclass
+class Return(Node):
+    value: Optional[Node]    # None => no return value (void)
 
 
 @dataclass

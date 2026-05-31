@@ -23,8 +23,8 @@ from typing import Optional
 
 from .ast import (
     Assign, BinOp, Block, BoolLit, Break, Call, Continue, ExprStmt, For,
-    Ident, If, InlineAsm, IntLit, Loc, Node, Program, Repeat, StrLit, Sub,
-    UnaryOp, VarDecl, While, type_from_name,
+    Ident, If, InlineAsm, IntLit, Loc, Node, Param, Program, Repeat, Return,
+    StrLit, Sub, UnaryOp, VarDecl, While, type_from_name,
 )
 from .lex import Token
 
@@ -101,6 +101,8 @@ class Parser:
                 self.parse_directive(prog)
             elif t.kind == "KW" and t.value == "sub":
                 prog.subs.append(self.parse_sub())
+            elif t.kind == "KW" and t.value == "asmsub":
+                prog.subs.append(self.parse_asmsub())
             elif t.kind == "KW" and t.value == "main":
                 # `main { ... }` is shorthand for `sub main() -> void { ... }`.
                 self.pos += 1
@@ -144,13 +146,56 @@ class Parser:
         kw = self.eat("KW", "sub")
         name_tok = self.eat("IDENT")
         self.eat("(")
+        params: list[Param] = []
+        if self.peek().kind != ")":
+            params.append(self._parse_param())
+            while self.match(","):
+                params.append(self._parse_param())
         self.eat(")")
-        # Optional `-> typename`
+        ret = "void"
         if self.match("->"):
-            self.eat("KW")  # consume the type keyword; we ignore it for Phase 1
+            t = self.eat("KW")
+            ret = t.value
         body = self.parse_block()
         return Sub(loc=self.loc(kw), name=name_tok.value, body=body,
+                   params=params, return_type_name=ret,
                    is_main=(name_tok.value == "main"))
+
+    def _parse_param(self) -> Param:
+        t = self.eat("KW")
+        if t.value not in _TYPE_KWS:
+            raise ParseError(
+                f"{self.filename}:{t.line}:{t.col}: expected type in param list"
+            )
+        n = self.eat("IDENT")
+        return Param(loc=self.loc(t), type_name=t.value, name=n.value)
+
+    def parse_asmsub(self) -> Sub:
+        """`asmsub name(params) -> rt = $ADDR` -- declaration only.
+
+        Just declares that calling `name(...)` should JSR $ADDR. Useful
+        for binding existing 6502 routines (display_string, exit, etc.).
+        Params and return type are parsed but only used by sema for
+        type-checking the call site; codegen just JSRs to the address.
+        """
+        kw = self.eat("KW", "asmsub")
+        name_tok = self.eat("IDENT")
+        self.eat("(")
+        params: list[Param] = []
+        if self.peek().kind != ")":
+            params.append(self._parse_param())
+            while self.match(","):
+                params.append(self._parse_param())
+        self.eat(")")
+        ret = "void"
+        if self.match("->"):
+            t = self.eat("KW")
+            ret = t.value
+        self.eat("=")
+        addr_tok = self.eat("INT")
+        return Sub(loc=self.loc(kw), name=name_tok.value, body=Block(loc=self.loc(kw), stmts=[]),
+                   params=params, return_type_name=ret,
+                   is_asmsub=True, asm_target=f"${addr_tok.value:04x}")
 
     def parse_block(self) -> Block:
         ob = self.eat("{")
@@ -195,6 +240,16 @@ class Parser:
             if t.value == "continue":
                 self.pos += 1
                 return Continue(loc=self.loc(t))
+            if t.value == "return":
+                self.pos += 1
+                value = None
+                # If next token starts an expression, parse it.
+                nxt = self.peek()
+                if nxt.kind not in ("}", "KW") or (
+                    nxt.kind == "KW" and nxt.value in ("true", "false")
+                ):
+                    value = self.parse_expr()
+                return Return(loc=self.loc(t), value=value)
         # Otherwise: assignment statement or expression statement.
         return self.parse_assign_or_expr()
 

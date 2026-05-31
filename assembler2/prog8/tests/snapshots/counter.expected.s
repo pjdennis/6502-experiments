@@ -5,6 +5,8 @@
 DISPLAY_STRING_PARAM = $00              ; 2 bytes scratch (display_string ABI)
 __p8c_tmp0 = $20                     ; codegen scratch (byte)
 __p8c_tmp1 = $21                     ; codegen scratch (byte)
+__p8c_wtmp0 = $22                   ; codegen scratch (word, 2 bytes)
+__p8c_wtmp1 = $24                   ; codegen scratch (word, 2 bytes)
 
   .org $4000
   jmp p8s_main
@@ -76,6 +78,7 @@ p8s_main:
   ldx #>p8c_str_2
   jsr display_string
 .Lendif_7:
+.Lp8s_main_ret:
 .Lhalt_p8s_main:
   bra .Lhalt_p8s_main
 

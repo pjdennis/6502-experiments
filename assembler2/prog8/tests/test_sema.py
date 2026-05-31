@@ -96,9 +96,10 @@ class SemaPhase2(unittest.TestCase):
         prog = compile_to_sema("uword w = $42\nmain { }")
         self.assertEqual(prog.module_vars[0].sym.type.__repr__(), "uword")
 
-    def test_uword_aug_assign_rejected(self):
-        with self.assertRaises(SemaError):
-            compile_to_sema("uword w\nmain { w += $1 }")
+    def test_uword_aug_assign_works(self):
+        # +=/-= on uword now lowers to `w = w + rhs`.
+        prog = compile_to_sema("uword w\nmain { w += $1 }")
+        self.assertEqual(prog.subs[0].body.stmts[0].op, "+=")
 
     def test_for_loop_var_must_pre_exist(self):
         with self.assertRaises(SemaError) as ctx:
