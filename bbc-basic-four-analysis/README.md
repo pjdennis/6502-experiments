@@ -21,7 +21,54 @@ assembler, the expression evaluator, I/O, and so on.
   handful of lines (`OPT`, `SAVE`, `DEF FN` helpers) are the build harness and
   are excluded from the ROM totals below.
 
-## Method & caveat
+## Two metrics: source lines and ROM bytes
+
+This analysis is given **both** ways:
+
+1. **Source lines per region** — readable, easy to follow in the listing.
+2. **Assembled ROM bytes per region** — the "true" footprint in the 16 KB image.
+
+The byte figures are exact, not estimated, and they did **not** require a BBC
+BASIC interpreter to assemble. This disassembly labels every routine `L<hexaddr>`
+where the hex *is* the assembled address (verified: `.L800E` lands exactly where
+the header byte arithmetic predicts). So the byte size of each routine is simply
+the delta to the next label. All 1,286 numeric labels run monotonically from
+`&8000` to `&BFCE`, and the per-region byte spans sum to **exactly 16,384**.
+[`bytes.py`](./bytes.py) reproduces this against [`Basic4.src`](./Basic4.src);
+the assembled image `Basic4` (16,384 bytes) from mdfs.net was used only to
+confirm the total.
+
+**The ROM is essentially 100% full** — the only slack is **10 bytes**: a 5-byte
+`"Roger"` string (an Easter egg that also seeds `RND`) and a 5-byte zero pad to
+the final page boundary.
+
+## Byte-accurate breakdown (% of the 16,384-byte ROM)
+
+| Capability area | Bytes | % ROM | (line %) |
+|---|---:|---:|---:|
+| **Floating-point & math** | 2,789 | **17.0%** | 16.6% |
+| **Expression evaluator** | 2,116 | **12.9%** | 14.0% |
+| **Control flow** | 1,699 | **10.4%** | 9.8% |
+| **I/O, OS interface & graphics** | 1,630 | **9.9%** | 11.6% |
+| **Variables & arrays** | 1,481 | **9.0%** | 9.0% |
+| **Built-in 6502 assembler** | 1,381 | **8.4%** | 8.8% |
+| **Tokeniser & keyword tables** | 1,309 | **8.0%** | 5.2% |
+| **Number ↔ string conversion** | 987 | **6.0%** | 6.3% |
+| **Program editing & management** | 966 | **5.9%** | 5.9% |
+| **Interpreter core & dispatch** | 857 | **5.2%** | 5.3% |
+| **Strings & string functions** | 466 | **2.8%** | 2.9% |
+| **Misc built-in functions** | 348 | **2.1%** | 2.8% |
+| **Startup / ROM header / init** | 200 | **1.2%** | 0.8% |
+| **Error-handling machinery** | 145 | **0.9%** | 0.8% |
+| **Unused padding** | 10 | **0.1%** | — |
+
+The two metrics agree closely, cross-validating the categorisation. The notable
+mover is the **tokeniser (5.2% line → 8.0% byte)**: the keyword table is
+line-cheap but byte-heavy — ~129 keyword strings, each a name plus a token and a
+flag byte, is roughly 1 KB of pure data. Floating point's lead widens slightly
+too because its polynomial-coefficient tables are byte-dense.
+
+## Method & caveat (line metric)
 
 Every routine in the 8,237-line source was read and assigned to one capability
 area by line range; [`categorize.py`](./categorize.py) sums those ranges.
