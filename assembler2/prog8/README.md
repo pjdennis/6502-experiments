@@ -72,21 +72,44 @@ wendy2c, mirroring the asm00..asm17 chain.
 **Phase 2** (continued):
 
   * `uword` type with 2-byte ZP storage; literals + var load/store +
-    ubyte-widens-to-uword. (uword arithmetic comes in the next push.)
-  * `for var in lo to hi { ... }` -- inclusive range over a ubyte var;
-    var must be pre-declared.
-  * `peek($addr)` and `poke($addr, byte_expr)` builtins for direct
-    memory access (literal addresses only for now).
+    ubyte-widens-to-uword.
+  * `for var in lo to hi { ... }` -- inclusive range over a ubyte var.
+  * `peek($addr)` and `poke($addr, byte_expr)` builtins.
   * `txt.print_uw(uword)` -- 4 hex chars, high byte first.
-  * Module-level var initializers now run at the top of `main()`
-    (previously silently skipped).
-  * `examples/peek_demo.p8` exercises all of the above and prints
-    `00010203 1234 4C` to the LCD.
+  * Module-level var initializers run at the top of `main()`.
+  * `examples/peek_demo.p8` -> `00010203 1234 4C` on the LCD.
 
-Phase 2 still to do (next push): `byte`/`word` (signed), uword
-arithmetic, casts via `as`, `const`, `enum`, arrays, `when`,
-memory-mapped vars via `&type x = $addr` + `@(uword_expr)`, more
-stdlib (`lcd.cursor_at`, `lcd.putc`, `button.pressed`).
+**Phase 2.5 -- uword arithmetic + subs with params/returns:**
+
+  * Full uword arithmetic: + - & | ^ << >> with carry chains, ==
+    != < <= > >= via the 16-bit unsigned-compare idiom.
+  * `sub foo(ubyte x, uword y) -> ubyte { ... }` with parameter
+    passing (caller stores into mangled ZP slot, then JSR) and
+    `return value` (jmp to per-sub epilogue).
+  * `asmsub name(...) -> rt = $ADDR` -- declare bindings to existing
+    6502 routines; codegen JSRs the literal address.
+  * Char literals: `'h'` lexes as an INT token.
+  * `examples/uword_arith.p8`, `examples/subs.p8`.
+
+**Phase 3 -- nmos target + self-host milestone:**
+
+  * `%target nmos` switches the prologue: no wendy2c-specific includes,
+    reset vector emitted at `$FFFC`, `main()` ends with `jsr $F00F`
+    (exit syscall) on the nmos-default machine.
+  * `tinyp8/tinyp8.p8` -- the hand-written `tinyp8.s` rewritten in
+    Prog8, using asmsubs for the file-I/O stubs and a small inline-asm
+    helper for the `read` carry-EOF signal.
+  * **Self-host equivalence test**: for every `.tp8` in
+    `tinyp8/tests/goldens/`, both `tinyp8.s` (hand-asm) and
+    `tinyp8.p8` (compiled by p8c) produce **byte-identical** output.
+    4/4 cases pass: a real working compiler, written in Prog8,
+    compiled by our own host compiler, agrees bit-for-bit with the
+    reference assembly version.
+
+Next pushes: extend tinyp8.p8 to cover more language (variables,
+if-print, hex constants), then start growing toward a richer p8c
+self-host. Also: byte/word (signed), const, enum, arrays,
+memory-mapped vars (`&type x = $addr`, `@(uword_expr)`).
 
 See the plan in conversation history for Phases 3-6, including the
 on-emulator emit-equivalence test tier that activates at Phase 5 when

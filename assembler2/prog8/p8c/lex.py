@@ -126,6 +126,37 @@ def lex(src: str, filename: str = "<input>") -> list[Token]:
             advance(j - i)
             out.append(Token("INT", int(text, 10), l0, c0))
             continue
+        # character literal: 'X' or '\n' -> INT token with ASCII value.
+        if c == "'":
+            l0, c0 = loc()
+            advance()
+            if i >= n:
+                raise LexError(f"{filename}:{l0}:{c0}: unterminated char literal")
+            ch = src[i]
+            if ch == "\\":
+                if i + 1 >= n:
+                    raise LexError(f"{filename}:{line}:{col}: bad escape in char")
+                e = src[i + 1]
+                advance(2)
+                m = {"n": "\n", "r": "\r", "t": "\t", "0": "\0",
+                     "'": "'", "\\": "\\", '"': '"'}
+                if e in m:
+                    val = ord(m[e])
+                elif e == "x":
+                    if i + 2 > n:
+                        raise LexError(f"{filename}:{line}:{col}: \\x needs 2 hex")
+                    val = int(src[i:i + 2], 16)
+                    advance(2)
+                else:
+                    raise LexError(f"{filename}:{line}:{col}: bad char escape \\{e}")
+            else:
+                val = ord(ch)
+                advance()
+            if i >= n or src[i] != "'":
+                raise LexError(f"{filename}:{line}:{col}: char literal not closed")
+            advance()
+            out.append(Token("INT", val, l0, c0))
+            continue
         # string literal
         if c == '"':
             l0, c0 = loc()

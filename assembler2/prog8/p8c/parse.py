@@ -131,6 +131,17 @@ class Parser:
         elif name == "import":
             v = self.eat("IDENT")
             prog.imports.append(v.value)
+        elif name == "target":
+            v = self.eat("IDENT")
+            if v.value not in ("wendy2c", "nmos"):
+                raise ParseError(
+                    f"{self.filename}:{v.line}:{v.col}: "
+                    f"unknown %target {v.value!r} (expected wendy2c or nmos)"
+                )
+            prog.target = v.value
+            # nmos target wants a different default load address.
+            if v.value == "nmos" and prog.address == 0x4000:
+                prog.address = 0x0200
         elif name == "option":
             # bare list of options; we accept and ignore for now.
             while self.peek().kind == "IDENT":

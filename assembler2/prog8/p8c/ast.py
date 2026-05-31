@@ -254,6 +254,7 @@ class Return(Node):
 class Program(Node):
     address: int = 0x4000       # default load address; %address overrides
     output_format: str = "raw"  # %output raw|prg|...
+    target: str = "wendy2c"     # %target wendy2c|nmos
     subs: list[Sub] = field(default_factory=list)
     imports: list[str] = field(default_factory=list)
     # Module-level variables collected by sema.

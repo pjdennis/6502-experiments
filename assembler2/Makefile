@@ -51,14 +51,19 @@ test: $(C_TESTS) wendy2c-goldens wendy2c-lcd-trace wendy2c-merge-sort wendy2c-se
 prog8-test: emulator/emulator.out
 	@cd prog8 && python3 -m unittest discover -s tests -v
 
-# tinyp8: the 6502-native compiler proof-of-concept. tinyp8.s is a
-# hand-written compiler binary that runs INSIDE the emulator on
-# nmos-default, reads .tp8 source from a file (read syscall @ $F018),
-# emits machine code to another file (write @ $F024), and produces a
-# runnable 6502 binary -- which the test harness then runs separately
-# and diffs against an expected stdout. SKIPs same as prog8-test.
+# tinyp8: the 6502-native compiler proof-of-concept. Two tests:
+#   * test_e2e        -- the hand-written tinyp8.s compiles each .tp8
+#                        and the resulting binary's stdout matches a
+#                        golden. Proves: on-target compilation works.
+#   * test_self_host  -- additionally, tinyp8.p8 (the SAME compiler
+#                        rewritten in Prog8 and compiled by our host
+#                        p8c) produces byte-identical output for the
+#                        same inputs. Proves: a useful compiler can be
+#                        written in our language and compiled by us.
+# SKIPs cleanly if vasm6502_oldstyle or the emulator binary are
+# missing.
 tinyp8-test: emulator/emulator.out
-	@cd prog8 && python3 -m unittest tinyp8.tests.test_e2e -v
+	@cd prog8 && python3 -m unittest tinyp8.tests.test_e2e tinyp8.tests.test_self_host -v
 
 # End-to-end wendy2c golden-LCD tests. Requires vasm6502_oldstyle on
 # PATH; the script SKIPs (exits 0) if vasm is missing. Depends on the

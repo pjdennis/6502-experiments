@@ -90,13 +90,10 @@ class Sema:
 
         # 3. Per-sub: push a sub-scope, declare params + sub-locals.
         for s in self.prog.subs:
-            if s.is_asmsub:
-                # asmsubs are pure declarations -- no body to walk.
-                continue
             sub_scope: dict[str, Symbol] = {}
+            # asmsubs need their params resolved too -- callers need
+            # the mangled-name slots to drop arg values into.
             self._scope_stack.append(sub_scope)
-            # Params first: each becomes a ZP byte/word that the caller
-            # populates before JSR.
             for p in s.params:
                 pt = type_from_name(p.type_name)
                 if pt is None or pt not in (UBYTE, UWORD):
@@ -112,7 +109,10 @@ class Sema:
                 sub_scope[p.name] = sym
                 p.sym = sym
                 self.prog.all_vars.append(sym)
-            # Remember current sub for `return` typechecking.
+            if s.is_asmsub:
+                # No body to walk.
+                self._scope_stack.pop()
+                continue
             self._current_sub = s
             self._walk_block(s.body, sub_name=s.name)
             self._current_sub = None
