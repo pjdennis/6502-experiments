@@ -133,13 +133,17 @@ class Parser:
                 # Module-level variable declaration.
                 prog.module_vars.append(self.parse_var_decl())
             elif (t.kind == "IDENT"
-                  and self.peek(1).kind == "IDENT"
                   and any(s.name == t.value for s in prog.structs)):
-                # `StructName instance_name` -- struct-typed module var.
+                # `StructName instance` OR `StructName[N] arr_name`.
                 self.pos += 1
+                array_size = None
+                if self.match("["):
+                    sz = self.eat("INT")
+                    self.eat("]")
+                    array_size = sz.value
                 name_tok = self.eat("IDENT")
                 vd = VarDecl(loc=self.loc(t), type_name=t.value,
-                             name=name_tok.value)
+                             name=name_tok.value, array_size=array_size)
                 prog.module_vars.append(vd)
             else:
                 raise ParseError(
@@ -454,12 +458,17 @@ class Parser:
                 m = self.eat("IDENT")
                 name += "." + m.value
             target: Node = Ident(loc=self.loc(ident), name=name)
-            # Optional `[idx]` -- array element target.
+            # Optional `[idx]` -- array element target; optional `.field`.
             if self.peek().kind == "[":
                 self.eat("[")
                 idx = self.parse_expr()
                 self.eat("]")
-                target = Index(loc=self.loc(ident), array=target, index=idx)
+                field = None
+                if self.match("."):
+                    f = self.eat("IDENT")
+                    field = f.value
+                target = Index(loc=self.loc(ident), array=target, index=idx,
+                               field=field)
             if self.peek().kind == "=":
                 self.eat("=")
                 rhs = self.parse_expr()
@@ -580,12 +589,17 @@ class Parser:
         # Bare identifier (or dotted path).
         name = path[0] if len(path) == 1 else ".".join(path)
         node: Node = Ident(loc=self.loc(first), name=name)
-        # Optional `[idx]` -- array element read.
+        # Optional `[idx]` -- array element read; optionally followed
+        # by `.field` for arrays of structs.
         if self.peek().kind == "[":
             self.eat("[")
             idx = self.parse_expr()
             self.eat("]")
-            node = Index(loc=self.loc(first), array=node, index=idx)
+            field = None
+            if self.match("."):
+                f = self.eat("IDENT")
+                field = f.value
+            node = Index(loc=self.loc(first), array=node, index=idx, field=field)
         return node
 
 

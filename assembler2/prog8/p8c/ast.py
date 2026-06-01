@@ -148,10 +148,11 @@ class Ident(Node):
 @dataclass
 class Index(Node):
     """`arr[idx]` -- read or write target. Both `arr` and `idx` are
-    arbitrary expressions; for Phase 3 we require `arr` to resolve to
-    a ubyte[] variable and `idx` to be ubyte."""
+    arbitrary expressions; sema also handles `arr[idx].field` for
+    arrays of structs (field name stored on the node)."""
     array: Node
     index: Node
+    field: Optional[str] = None       # `arr[i].field` if non-None
     type: Type = UBYTE
     sym: Optional["Symbol"] = None    # filled by sema (array's symbol)
 

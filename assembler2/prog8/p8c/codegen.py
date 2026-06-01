@@ -119,9 +119,11 @@ class CodeGen:
         # resolve regardless of declaration order. Arrays are emitted
         # later as labeled .byte blocks (main memory, not ZP).
         scalar_vars = [s for s in self.prog.all_vars
-                       if s.kind not in ("array", "struct_instance")]
+                       if s.kind not in ("array", "struct_instance",
+                                          "struct_array")]
         array_vars = [s for s in self.prog.all_vars if s.kind == "array"]
         struct_vars = [s for s in self.prog.all_vars if s.kind == "struct_instance"]
+        struct_arrays = [s for s in self.prog.all_vars if s.kind == "struct_array"]
         if scalar_vars:
             self.emit("; ---- ZP variable allocations ----")
             for sym in scalar_vars:
@@ -162,6 +164,13 @@ class CodeGen:
                 size = sym.struct_size                 # type: ignore[attr-defined]
                 self.emit(f"{sym.mangled}:")
                 self.emit(f"  .byte " + ", ".join(["0"] * size))
+        if struct_arrays:
+            self.emit("")
+            self.emit("; ---- struct arrays ----")
+            for sym in struct_arrays:
+                total = sym.total_bytes               # type: ignore[attr-defined]
+                self.emit(f"{sym.mangled}:")
+                self.emit(f"  .byte " + ", ".join(["0"] * total))
         if self.prog.strings:
             self.emit("")
             self.emit("; ---- string pool ----")
@@ -364,12 +373,34 @@ class CodeGen:
             self.emit("  lda __p8c_tmp0")
             self.emit("  sta (__p8c_ptr0),y")
             return
-        # Array element write: arr[idx] = expr.
+        # Array element write: arr[idx] = expr; also arr[idx].field.
         if isinstance(a.target, Index):
             tgt = a.target
             assert tgt.sym is not None
-            # Evaluate RHS into A; save to TMP0. Evaluate index into Y.
-            # Then STA arr,Y.
+            if tgt.sym.kind == "struct_array":
+                fo = getattr(tgt, "field_offset", 0)
+                # We need to evaluate the RHS *and* compute the index in
+                # Y. The index computation clobbers TMP0/TMP1 via the
+                # mul helper, so park the RHS on the hardware stack
+                # instead of in ZP scratch.
+                if tgt.type is UWORD:
+                    self._emit_word_expr_into_ay(a.rhs)
+                    self.emit("  pha")       # low
+                    self.emit("  tya")
+                    self.emit("  pha")       # high
+                    self._emit_struct_array_index_into_y(tgt)
+                    self.emit("  pla")       # high back
+                    self.emit(f"  sta {tgt.sym.mangled}+{fo + 1},y")
+                    self.emit("  pla")       # low back
+                    self.emit(f"  sta {tgt.sym.mangled}+{fo},y")
+                else:
+                    self._emit_byte_expr_into_a(a.rhs)
+                    self.emit("  pha")
+                    self._emit_struct_array_index_into_y(tgt)
+                    self.emit("  pla")
+                    self.emit(f"  sta {tgt.sym.mangled}+{fo},y")
+                return
+            # ubyte[] arr -- simple indexed byte write.
             self._emit_byte_expr_into_a(a.rhs)
             self.emit("  sta __p8c_tmp0")
             self._emit_byte_expr_into_a(tgt.index)
@@ -659,6 +690,22 @@ class CodeGen:
                 self.emit(f"  lda #<{e.sym.mangled}")
                 self.emit(f"  ldy #>{e.sym.mangled}")
             return
+        if isinstance(e, Index):
+            assert e.sym is not None
+            if e.sym.kind == "struct_array":
+                fo = getattr(e, "field_offset", 0)
+                self._emit_struct_array_index_into_y(e)
+                # Y already holds i*size; need to load both bytes.
+                # Save Y so the high-byte load can use Y+1; we use
+                # absolute,Y twice with adjacent offsets.
+                self.emit(f"  lda {e.sym.mangled}+{fo + 1},y")
+                self.emit("  pha")
+                self.emit(f"  lda {e.sym.mangled}+{fo},y")
+                self.emit("  tax")
+                self.emit("  pla")
+                self.emit("  tay")
+                self.emit("  txa")
+                return
         if isinstance(e, BinOp):
             self._emit_word_binop_into_ay(e)
             return
@@ -913,6 +960,11 @@ class CodeGen:
             return
         if isinstance(e, Index):
             assert e.sym is not None
+            if e.sym.kind == "struct_array":
+                self._emit_struct_array_index_into_y(e)
+                fo = getattr(e, "field_offset", 0)
+                self.emit(f"  lda {e.sym.mangled}+{fo},y")
+                return
             self._emit_byte_expr_into_a(e.index)
             self.emit("  tay")
             self.emit(f"  lda {e.sym.mangled},y")
@@ -1252,6 +1304,38 @@ class CodeGen:
         # Generic: evaluate to 0/1 in A, branch on zero.
         self._emit_byte_expr_into_a(cond)
         self._br("beq", target)
+
+    def _emit_struct_array_index_into_y(self, idx_node) -> None:
+        """For `arr[i]` where arr is a struct array, compute i*struct_size
+        and leave the result in Y. The struct_size comes from the array
+        symbol. Uses shifts for powers of two; otherwise the mul helper."""
+        struct_size = idx_node.sym.struct_size      # type: ignore[attr-defined]
+        self._emit_byte_expr_into_a(idx_node.index)
+        if struct_size == 1:
+            self.emit("  tay")
+            return
+        if struct_size == 2:
+            self.emit("  asl a")
+            self.emit("  tay")
+            return
+        if struct_size == 4:
+            self.emit("  asl a")
+            self.emit("  asl a")
+            self.emit("  tay")
+            return
+        if struct_size == 8:
+            self.emit("  asl a")
+            self.emit("  asl a")
+            self.emit("  asl a")
+            self.emit("  tay")
+            return
+        # General case: use the mul helper.
+        self.emit("  sta __p8c_tmp0")
+        self.emit(f"  lda #${struct_size:02x}")
+        self.emit("  sta __p8c_tmp1")
+        self.emit("  jsr __p8c_mul_u8")
+        self.emit("  tay")
+        self._mul_used = True
 
     def _emit_call(self, c: Call) -> None:
         sym = c.sym

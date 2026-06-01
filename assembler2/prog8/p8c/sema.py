@@ -180,11 +180,27 @@ class Sema:
         if vd.type_name in self._structs:
             info = self._structs[vd.type_name]
             mangled = f"p8st_{vd.name}"
-            sym = Symbol(name=vd.name, mangled=mangled, type=UBYTE,
-                         kind="struct_instance")
-            sym.struct_type = vd.type_name        # type: ignore[attr-defined]
-            sym.struct_info = info                # type: ignore[attr-defined]
-            sym.struct_size = info["size"]        # type: ignore[attr-defined]
+            if vd.array_size is not None:
+                # Array of structs.
+                total = vd.array_size * info["size"]
+                if total > 256:
+                    raise SemaError(
+                        f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: "
+                        f"struct array too large ({total} bytes; max 256)"
+                    )
+                sym = Symbol(name=vd.name, mangled=mangled, type=UBYTE,
+                             kind="struct_array")
+                sym.struct_type = vd.type_name    # type: ignore[attr-defined]
+                sym.struct_info = info            # type: ignore[attr-defined]
+                sym.struct_size = info["size"]    # type: ignore[attr-defined]
+                sym.array_count = vd.array_size   # type: ignore[attr-defined]
+                sym.total_bytes = total           # type: ignore[attr-defined]
+            else:
+                sym = Symbol(name=vd.name, mangled=mangled, type=UBYTE,
+                             kind="struct_instance")
+                sym.struct_type = vd.type_name    # type: ignore[attr-defined]
+                sym.struct_info = info            # type: ignore[attr-defined]
+                sym.struct_size = info["size"]    # type: ignore[attr-defined]
             scope[vd.name] = sym
             vd.sym = sym
             self.prog.all_vars.append(sym)
@@ -307,10 +323,16 @@ class Sema:
             if isinstance(st.target, Index):
                 self._walk_expr(st.target)
                 self._walk_expr(st.rhs)
-                if st.rhs.type is not UBYTE:
+                tgt_t = st.target.type
+                if tgt_t is UBYTE and st.rhs.type not in (UBYTE, BYTE):
                     raise SemaError(
                         f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
                         f"array element assign rhs must be ubyte (got {st.rhs.type!r})"
+                    )
+                if tgt_t is UWORD and st.rhs.type not in (UBYTE, UWORD, BYTE):
+                    raise SemaError(
+                        f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
+                        f"array element assign rhs must be uword (got {st.rhs.type!r})"
                     )
                 if st.op != "=":
                     raise SemaError(
@@ -510,7 +532,6 @@ class Sema:
             e.sym = sym
             e.type = UWORD
         elif isinstance(e, Index):
-            # arr[idx]: arr is an Ident bound to an array sym.
             if not isinstance(e.array, Ident):
                 raise SemaError(
                     f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
@@ -518,19 +539,38 @@ class Sema:
                 )
             self._walk_expr(e.array)
             asym = e.array.sym
-            if asym is None or asym.kind != "array":
+            if asym is None or asym.kind not in ("array", "struct_array"):
                 raise SemaError(
                     f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
                     f"{e.array.name!r} is not an array"
                 )
             e.sym = asym
             self._walk_expr(e.index)
-            if e.index.type is not UBYTE:
+            if e.index.type not in (UBYTE, BYTE):
                 raise SemaError(
                     f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
-                    f"array index must be ubyte (got {e.index.type!r})"
+                    f"array index must be byte/ubyte (got {e.index.type!r})"
                 )
-            e.type = UBYTE
+            if asym.kind == "struct_array":
+                if e.field is None:
+                    raise SemaError(
+                        f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
+                        f"struct-array element access needs a .field"
+                    )
+                info = asym.struct_info       # type: ignore[attr-defined]
+                if e.field not in info["fields"]:
+                    raise SemaError(
+                        f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
+                        f"struct has no field {e.field!r}"
+                    )
+                e.field_offset, e.type = info["fields"][e.field]   # type: ignore[attr-defined]
+            else:
+                if e.field is not None:
+                    raise SemaError(
+                        f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
+                        f"{e.array.name!r} is not a struct array"
+                    )
+                e.type = UBYTE
         elif isinstance(e, Call):
             key = tuple(e.path)
             sym = self.dotted.get(key)
