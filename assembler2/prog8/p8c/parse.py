@@ -67,10 +67,18 @@ class ParseError(Exception):
 
 
 class Parser:
-    def __init__(self, tokens: list[Token], filename: str):
+    def __init__(self, tokens: list[Token], filename: str,
+                 iter_expr: bool = False):
         self.toks = tokens
         self.pos = 0
         self.filename = filename
+        # When True, expression parsing is delegated to the iterative
+        # (non-recursive) parser in iter_parse.py instead of the
+        # recursive-descent ladder below. The two are proven equivalent
+        # by tests/test_iter_parse.py; this flag lets the whole compiler
+        # run under either, which is how the iterative parser is being
+        # validated on the way to the Prog8 self-host (Phase 6).
+        self.iter_expr = iter_expr
 
     # ---- token helpers ----
 
@@ -507,6 +515,15 @@ class Parser:
 
     def parse_expr(self) -> Node:
         """Top of the expression precedence ladder."""
+        if self.iter_expr:
+            # Delegate to the iterative parser, sharing this parser's
+            # token stream and cursor so it consumes the same span.
+            from .iter_parse import IterParser
+            ip = IterParser(self.toks, self.filename)
+            ip.pos = self.pos
+            node = ip.parse_expr()
+            self.pos = ip.pos
+            return node
         return self._parse_binop(level=0)
 
     def _parse_binop(self, level: int) -> Node:
@@ -603,5 +620,6 @@ class Parser:
         return node
 
 
-def parse(tokens: list[Token], filename: str) -> Program:
-    return Parser(tokens, filename).parse_program()
+def parse(tokens: list[Token], filename: str,
+          iter_expr: bool = False) -> Program:
+    return Parser(tokens, filename, iter_expr=iter_expr).parse_program()

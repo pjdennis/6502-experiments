@@ -59,12 +59,13 @@ is the source of truth across sessions.
   stays intact.
 
 * **Test counts (as of HEAD)**:
-  * 76 host p8c tests (`prog8/tests/` -- lex / parse / sema /
-    codegen / snapshot / e2e LCD goldens).
+  * 80 host p8c tests (`prog8/tests/` -- lex / parse / sema /
+    codegen / snapshot / e2e LCD goldens, plus the iterative-parser
+    equivalence + integration tests).
   * 5 v0/v1 e2e (`tinyp8/tests/test_e2e.py`).
   * 5 v0/v1 self-host equivalence (`test_self_host.py`).
   * 12 v2..v9 .p8-only (`test_v2.py`, sources in `goldens_v2/`).
-  * **98 total, all green** (the 22 tinyp8 cases need vasm; see the
+  * **102 total, all green** (the 22 tinyp8 cases need vasm; see the
     environment note above).
 
 Run:
@@ -202,32 +203,39 @@ Smaller in scope than A/B but unlocks "real input -> output"
 demos and stress-tests the on-target compiler against actual
 streaming use.
 
-### Option D: BIG -- host p8c iterative parser rewrite (3+ pushes)
+### Option D: BIG -- host p8c iterative parser rewrite (step 1 DONE)
 
 The standing item for *real* Prog8-in-Prog8 self-host. Host
-`p8c/parse.py` is recursive descent in Python (~500 lines).
+`p8c/parse.py` is recursive descent in Python (~600 lines).
 Prog8 forbids recursion, so porting requires rewriting the
-parser around an explicit AST stack.
+parser around explicit stacks.
 
-tinyp8.p8 already demonstrates the iterative shape: a flat
-dispatcher over tokens, with parse_X functions that read state
-from globals. Apply the same pattern to host p8c.
+Progress:
+  1. **DONE** -- `p8c/iter_parse.py`: an iterative *expression* parser
+     (shunting-yard over explicit operand/operator stacks; binary
+     precedence ladder, prefix unary, parens, calls with comma args,
+     postfix `arr[idx]`/`.field`). Markers carry an operand-stack
+     "floor" so reductions never reach past their own sub-expression;
+     an `index_ok` flag matches the recursive parser's rule that only
+     a bare ident may be indexed. Proven equivalent in
+     `tests/test_iter_parse.py` (hand corpus + trailer-stop cases +
+     4000-sample randomized differential). Wired into `parse.py`
+     behind `parse(..., iter_expr=True)`;
+     `tests/test_iter_parse_integration.py` compiles the whole
+     example/snapshot corpus (22 files incl. tinyp8.p8) under both
+     parsers and asserts byte-identical codegen.
+  2. **NEXT** -- extend to statements: a statement stack + the
+     expression engine above, dispatching by current-token kind.
+     The hard part is block bodies (`{ ... }`) without recursion --
+     likely a stack of "pending statement" frames with explicit
+     resume points (parse cond -> parse block -> attach). Keep the
+     `iter_expr`-style flag so the whole suite can run under it, then
+     diff codegen across the corpus exactly like step 1.
+  3. Then switch over and delete the recursive parser.
+  4. Eventually port `iter_parse.py` to Prog8 itself.
 
-Plan sketch:
-  1. Write a separate `p8c/iter_parse.py` next to the existing
-     `parse.py`. Implement just expression parsing (shunting-yard
-     algorithm). Add tests proving the resulting AST matches the
-     recursive parser's output for a corpus of inputs.
-  2. Extend to statements (one stmt stack, one expression stack,
-     dispatch by current-token kind).
-  3. Hook in via a flag, then switch over and delete the
-     recursive parser.
-  4. Eventually port `iter_parse.py` to Prog8 itself for the
-     real self-host.
-
-Estimated effort: 3 pushes minimum, possibly 5. This is THE
-strategic item but it's a big design-and-implementation job;
-do it when you have fresh context and uninterrupted time.
+Estimated remaining effort: 2-4 pushes. The expression engine is the
+reusable core; statements reuse it for every sub-expression.
 
 ### Option E: more host language features (varies)
 

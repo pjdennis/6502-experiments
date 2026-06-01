@@ -231,10 +231,14 @@ language and remains byte-identical to the reference asm.
   * Multi-file `%import` with namespacing.
   * Iterative parser architecture -- the host p8c is recursive-descent
     in Python; Prog8 forbids recursion, so the *real* self-host needs
-    that parser rewritten around an explicit AST stack. tinyp8.p8
-    shows the iterative shape (state-machine dispatch over tokens);
-    porting host p8c's parser is the next major design+implementation
-    push.
+    that parser rebuilt around explicit stacks. **In progress:**
+    `p8c/iter_parse.py` is an iterative *expression* parser
+    (shunting-yard over operand/operator stacks -- no recursion),
+    proven equivalent to the recursive one by unit tests, a
+    4000-sample randomized differential fuzzer, and a whole-corpus
+    codegen diff (`parse(..., iter_expr=True)` produces byte-identical
+    assembly on all 22 example/snapshot programs). Still to do: the
+    statement parser, then switch over and port to Prog8.
 
 See the plan in conversation history for Phases 3-6, including the
 on-emulator emit-equivalence test tier that activates at Phase 5 when

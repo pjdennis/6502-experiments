@@ -126,7 +126,7 @@ parse its own grammar without restrictions on control-flow body
 shape and expression depth. (The identifier-length restriction is
 gone as of v9.)
 
-### Phase 6 -- Host p8c iterative-parser rewrite `[todo]` (THE strategic item)
+### Phase 6 -- Host p8c iterative-parser rewrite `[in progress]` (THE strategic item)
 
 Host `p8c/parse.py` is recursive-descent in Python. Prog8 forbids
 recursion (subs are non-reentrant by design), so the host parser
@@ -140,21 +140,31 @@ understood; the work is mechanical but voluminous.
 
 Recommended approach:
 
-1. Write `p8c/iter_parse.py` next to `parse.py`. Implement just
-   expression parsing first (shunting-yard / Pratt). Add tests
-   proving its AST output matches the recursive parser's on a
-   corpus of expression inputs.
-2. Extend to statements (statement stack, expression stack,
+1. `[done]` Write `p8c/iter_parse.py` next to `parse.py`. Expression
+   parsing via shunting-yard over explicit operand/operator stacks
+   (no recursion): binary precedence ladder, prefix unary, parens,
+   calls with comma args, and postfix `arr[idx]` / `.field`. Each
+   nested marker records its operand-stack floor so reductions stay
+   within their sub-expression. `tests/test_iter_parse.py` proves AST
+   + stop-position equivalence with the recursive parser over a
+   hand-written corpus, trailer cases, and 4000 randomized
+   differential samples. Also wired into `parse.py` behind an
+   `iter_expr` flag; `tests/test_iter_parse_integration.py` compiles
+   the whole example/snapshot corpus (22 files incl. tinyp8.p8) under
+   both parsers and asserts byte-identical codegen.
+2. `[todo]` Extend to statements (statement stack, expression stack,
    token-kind dispatch).
-3. Wire in via a CLI flag, run the entire host test suite under
-   both parsers in parallel.
-4. Once they're equivalent, delete the recursive parser.
-5. Port `iter_parse.py` to Prog8 itself.
+3. `[partial]` Wire in via a flag, run the host test suite under both
+   parsers. Done for expressions (the integration test above); the
+   statement parser still recurses, so the flag only swaps expression
+   parsing for now.
+4. `[todo]` Once they're equivalent, delete the recursive parser.
+5. `[todo]` Port `iter_parse.py` to Prog8 itself.
 
-Estimated effort: **3-5 sessions**. Biggest design risk: how to
-represent and walk Prog8's AST in a fully-iterative way without
-recursion (state-machine over a tagged-union node array, most
-likely). Worth a design doc before the first push.
+Estimated effort: **3-5 sessions** (step 1 landed). Biggest remaining
+design risk: representing and walking Prog8's statement AST fully
+iteratively without recursion (a statement stack with explicit
+"resume points" for block bodies, most likely).
 
 ### Phase 7 -- Self-hosting bootstrap proof `[todo]`
 
@@ -198,11 +208,14 @@ Branch `claude/prog8-bootstrap-continue-6Pzo0` (continues the
   arithmetic, comparisons, and now **multi-character variable names**
   via a symbol table. Next surface items: stdin input (v10),
   multi-statement bodies, deeper expressions.
-* Phase 6 (iterative parser rewrite): **not started**. This is
-  the strategic next item; deserves a fresh session.
+* Phase 6 (iterative parser rewrite): **step 1 done** -- the
+  iterative *expression* parser exists, is proven equivalent to the
+  recursive one (unit + 4000-sample fuzz + whole-corpus codegen
+  diff), and is wired in behind an `iter_expr` flag. Next: the
+  statement parser.
 * Phase 7-8: blocked on Phase 6.
 
-98 tests green. Self-host equivalence holds for the v0/v1 corpus.
+102 tests green. Self-host equivalence holds for the v0/v1 corpus.
 
 ---
 
