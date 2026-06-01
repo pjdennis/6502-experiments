@@ -274,9 +274,13 @@ Each milestone is a few pushes; each diffs `p1`'s `.s` against `p8c`'s.
       the comparison tail runs after the operands evaluate, so label numbering
       matches p8c. Signedness from both leaf operands being `byte` (symbol-
       table resolved; nested-operand typing is a tracked gap). Makes `not`
-      test-reachable. Diffed against `p8c -o`. (Remaining M3: logical
-      and/or/xor + branches, `@()`, `&`, indexing, calls, `txt.print*`; then
-      the word evaluator.)
+      test-reachable. Diffed against `p8c -o`.
+    * **Byte logical slice DONE:** short-circuit `and`/`or` (label pair
+      allocated mid-evaluation, after the lhs, consumed by the tail; nesting
+      via a LIFO label-id stack) and `xor` (bitwise on 0/1). Diffed against
+      `p8c -o`. (Remaining M3: the invert-branch long-branch idiom (`_br`,
+      for if/while), `@()`, `&`, indexing, calls, `txt.print*`; then the word
+      evaluator.)
 * **P7-M4 -- control flow.** if/else, while, for, repeat, break/continue/
   return, when, defer; long branches.
 * **P7-M5 -- decls + trailers.** arrays, consts, enums, structs, asmsub,

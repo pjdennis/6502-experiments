@@ -188,6 +188,26 @@ M3_CMP_PROGRAMS = [
     "main {\n    a = not (b < c)\n    a = (b + 1) < c\n    a = b > (c - 1)\n}\n",
 ]
 
+# Phase-7 byte logical slice: short-circuit `and` / `or` (port of
+# _emit_logical_into_a -- the label pair allocated mid-evaluation, after the
+# lhs, and consumed by the tail after the rhs; nesting via a LIFO label-id
+# stack) and `xor` (bitwise on 0/1: eval lhs / pha / eval rhs / sta tmp0 / pla
+# / eor __p8c_tmp0). Operands must be bool (p8c), so they are comparisons here;
+# also exercises nested and/or and `not` of a logical.
+M3_LOGICAL_PROGRAMS = [
+    # and / or / xor, each over two comparison operands
+    "%target nmos\nubyte a\nubyte b\nubyte c\nubyte d\n\n"
+    "main {\n    a = (b < c) and (b > d)\n    a = (b < c) or (b > d)\n"
+    "    a = (b == c) xor (c == d)\n}\n",
+    # nested and/or (LIFO label-stack discipline) + mixed
+    "%target nmos\nubyte a\nubyte b\nubyte c\nubyte d\n\n"
+    "main {\n    a = (b < c) and (c < d) and (b != d)\n"
+    "    a = (b < c) or ((c < d) and (b != d))\n}\n",
+    # not of a logical
+    "%target nmos\nubyte a\nubyte b\nubyte c\nubyte d\n\n"
+    "main {\n    a = not ((b < c) and (c < d))\n}\n",
+]
+
 
 def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
@@ -276,6 +296,12 @@ class P1Equivalence(unittest.TestCase):
 
     def test_m3_cmp_programs(self):
         for src in M3_CMP_PROGRAMS:
+            with self.subTest(src=src):
+                self.assertEqual(self._oracle(src), self._ontarget(src),
+                                 msg=f"codegen .s differs for {src!r}")
+
+    def test_m3_logical_programs(self):
+        for src in M3_LOGICAL_PROGRAMS:
             with self.subTest(src=src):
                 self.assertEqual(self._oracle(src), self._ontarget(src),
                                  msg=f"codegen .s differs for {src!r}")

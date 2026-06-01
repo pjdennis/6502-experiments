@@ -712,6 +712,16 @@ sub is_cmp_op(ubyte op) -> ubyte {{
     }}
     return 1
 }}
+; the short-circuit logical operators `and` / `or` (the keyword tokens).
+sub is_logical_op(ubyte op) -> ubyte {{
+    if op == TK_KAND {{
+        return 1
+    }}
+    if op == TK_KOR {{
+        return 1
+    }}
+    return 0
+}}
 ; Is a byte operand signed? p8c marks a comparison signed only when BOTH
 ; operands are exactly the BYTE type; here we resolve a leaf ident's type via
 ; the symbol table (literals are unsigned). NOTE: nested byte-arith operands
@@ -864,6 +874,85 @@ sub emit_cmp_tail(uword e, ubyte op) {{
     out_byte($3a)
     o_nl()
 }}
+
+; ---- logical and/or (short-circuit, port of _emit_logical_into_a) -----
+; emit the open-label name for the current op (and -> .Land_false_, or ->
+; .Lor_true_) and the close-label name (and -> .Land_end_, or -> .Lor_end_).
+sub emit_logic_open_name(ubyte op, uword id) {{
+    if op == TK_KAND {{
+        out_text(".Land_false_")
+    }} else {{
+        out_text(".Lor_true_")
+    }}
+    out_dec(id)
+}}
+sub emit_logic_end_name(ubyte op, uword id) {{
+    if op == TK_KAND {{
+        out_text(".Land_end_")
+    }} else {{
+        out_text(".Lor_end_")
+    }}
+    out_dec(id)
+}}
+; the short-circuit branch on a freshly-evaluated operand in A: `and` falls
+; through on true and bails to false on zero (beq); `or` bails to true on
+; non-zero (bne).
+sub emit_logic_branch(ubyte op, uword id) {{
+    if op == TK_KAND {{
+        out_text("  beq ")
+    }} else {{
+        out_text("  bne ")
+    }}
+    emit_logic_open_name(op, id)
+    o_nl()
+}}
+; mid task: after the lhs, allocate the label pair (matching p8c's order --
+; after lhs eval) and emit the lhs short-circuit branch.
+sub emit_logic_mid(ubyte op) {{
+    uword id1
+    uword id2
+    id1 = label_seq
+    label_seq = label_seq + 1
+    id2 = label_seq
+    label_seq = label_seq + 1
+    lstk_id1[lstk_sp] = id1
+    lstk_id2[lstk_sp] = id2
+    lstk_sp = lstk_sp + 1
+    emit_logic_branch(op, id1)
+}}
+; tail task: after the rhs, emit the rhs short-circuit branch and materialize
+; 0/1 (and -> rhs true => 1; or -> rhs false => 0).
+sub emit_logic_tail(ubyte op) {{
+    lstk_sp = lstk_sp - 1
+    uword id1
+    uword id2
+    id1 = lstk_id1[lstk_sp]
+    id2 = lstk_id2[lstk_sp]
+    emit_logic_branch(op, id1)
+    if op == TK_KAND {{
+        out_text("  lda #$01")
+        o_nl()
+    }} else {{
+        out_text("  lda #$00")
+        o_nl()
+    }}
+    out_text("  jmp ")
+    emit_logic_end_name(op, id2)
+    o_nl()
+    emit_logic_open_name(op, id1)
+    out_byte($3a)
+    o_nl()
+    if op == TK_KAND {{
+        out_text("  lda #$00")
+        o_nl()
+    }} else {{
+        out_text("  lda #$01")
+        o_nl()
+    }}
+    emit_logic_end_name(op, id2)
+    out_byte($3a)
+    o_nl()
+}}
 ; evaluate a byte expression into A.
 sub codegen_byte_expr(uword root) {{
     cws_sp = 0
@@ -893,18 +982,36 @@ sub codegen_byte_expr(uword root) {{
                     cws_push(8, 0, 0)
                     cws_push(0, lhs, 0)
                 }} else {{
-                    if is_leaf_rhs(rhs) != 0 {{
-                        ; eval(lhs); binop_leaf(op, rhs)
-                        cws_push(1, rhs, node_op[nd])
+                    if is_logical_op(node_op[nd]) != 0 {{
+                        ; eval(lhs); logic-mid; eval(rhs); logic-tail
+                        cws_push(10, 0, node_op[nd])
+                        cws_push(0, rhs, 0)
+                        cws_push(9, 0, node_op[nd])
                         cws_push(0, lhs, 0)
                     }} else {{
-                        ; eval(lhs); pha; eval(rhs); sta tmp1; pla; binop_tmp1(op)
-                        cws_push(5, 0, node_op[nd])
-                        cws_push(4, 0, 0)
-                        cws_push(3, 0, 0)
-                        cws_push(0, rhs, 0)
-                        cws_push(2, 0, 0)
-                        cws_push(0, lhs, 0)
+                        if node_op[nd] == TK_KXOR {{
+                            ; eval(lhs); pha; eval(rhs); sta tmp0; pla; eor tmp0
+                            cws_push(11, 0, 0)
+                            cws_push(4, 0, 0)
+                            cws_push(8, 0, 0)
+                            cws_push(0, rhs, 0)
+                            cws_push(2, 0, 0)
+                            cws_push(0, lhs, 0)
+                        }} else {{
+                            if is_leaf_rhs(rhs) != 0 {{
+                                ; eval(lhs); binop_leaf(op, rhs)
+                                cws_push(1, rhs, node_op[nd])
+                                cws_push(0, lhs, 0)
+                            }} else {{
+                                ; eval(lhs); pha; eval(rhs); sta tmp1; pla; binop_tmp1
+                                cws_push(5, 0, node_op[nd])
+                                cws_push(4, 0, 0)
+                                cws_push(3, 0, 0)
+                                cws_push(0, rhs, 0)
+                                cws_push(2, 0, 0)
+                                cws_push(0, lhs, 0)
+                            }}
+                        }}
                     }}
                 }}
             }} else {{
@@ -941,8 +1048,21 @@ sub codegen_byte_expr(uword root) {{
                                     if ty == 7 {{
                                         emit_cmp_tail(nd, op)
                                     }} else {{
-                                        out_text("  sta __p8c_tmp0")
-                                        o_nl()
+                                        if ty == 8 {{
+                                            out_text("  sta __p8c_tmp0")
+                                            o_nl()
+                                        }} else {{
+                                            if ty == 9 {{
+                                                emit_logic_mid(op)
+                                            }} else {{
+                                                if ty == 10 {{
+                                                    emit_logic_tail(op)
+                                                }} else {{
+                                                    out_text("  eor __p8c_tmp0")
+                                                    o_nl()
+                                                }}
+                                            }}
+                                        }}
                                     }}
                                 }}
                             }}
@@ -1115,6 +1235,7 @@ main {{
     strpool_count = 0
     mul_used = 0
     label_seq = 0
+    lstk_sp = 0
     uword mainbody
     mainbody = 0
     repeat {{
@@ -1198,6 +1319,12 @@ def main():
         "uword[96] cws_node\n"
         "ubyte[96] cws_op\n"
         "ubyte cws_sp\n"
+        "; short-circuit and/or label stack: a label-id pair is allocated mid-\n"
+        "; evaluation (after the lhs) and consumed by the tail (after the rhs);\n"
+        "; LIFO nesting matches the work-stack task order.\n"
+        "uword[32] lstk_id1\n"
+        "uword[32] lstk_id2\n"
+        "ubyte lstk_sp\n"
         "; codegen scratch flags/counters (reset before pass M):\n"
         "ubyte mul_used           ; `*` was emitted -> emit __p8c_mul_u8 trailer\n"
         "uword label_seq          ; global local-label counter (p8c's _label_id)\n\n"

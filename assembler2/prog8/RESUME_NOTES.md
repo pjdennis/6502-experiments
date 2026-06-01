@@ -85,10 +85,10 @@ PHASE7_DESIGN.md section 10.
   * 5 v0/v1 e2e (`tinyp8/tests/test_e2e.py`).
   * 5 v0/v1 self-host equivalence (`test_self_host.py`).
   * 12 v2..v9 .p8-only (`test_v2.py`, sources in `goldens_v2/`).
-  * **161 total, all green** (the 22 tinyp8 + 34 p1 cases need vasm; see the
+  * **162 total, all green** (the 22 tinyp8 + 35 p1 cases need vasm; see the
     environment note above). The p1 codegen cases live in
     `p1/tests/test_p1.py` (Phase 7: P7-M1 + P7-M2 + the M3 strings,
-    byte-arithmetic, mul/shift, unary, and comparison slices).
+    byte-arithmetic, mul/shift, unary, comparison, and logical slices).
 
 Run:
 
@@ -421,11 +421,20 @@ Progress:
          leaf operands). This also makes `not` test-reachable
          (`a = not (b < c)`). `test_p1.py::test_m3_cmp_programs`.
          p1.bin ~56 KB code.
-       * **NEXT: rest of P7-M3** -- the logical `and`/`or`/`xor` (TK_KAND/
-         TK_KOR/TK_KXOR, short-circuit -- more bool producers); the
-         invert-branch long-branch idiom (`_br`, needed before `if`/`while`);
-         then `@()`, `&name`, indexing, calls, `txt.print*`; then the WORD
-         evaluator (`_emit_word_expr_into_ay`
+       * **P7-M3 byte logical slice DONE.** Short-circuit `and`/`or` (port of
+         `_emit_logical_into_a`) and `xor` (bitwise on 0/1). For `and`/`or` the
+         label pair (`.Land_false_`/`.Land_end_`, `.Lor_true_`/`.Lor_end_`) is
+         allocated MID-evaluation (after the lhs, before the rhs -- matching
+         p8c) and consumed by the tail after the rhs; a LIFO label-id stack
+         (`lstk_*`) handles nesting. Work-stack tasks: ty 9 logic-mid, ty 10
+         logic-tail, ty 11 `eor __p8c_tmp0` (xor reuses ty 2 pha / ty 8 sta
+         tmp0 / ty 4 pla). Operands are bool (comparisons). Diffed vs `p8c -o`
+         over `test_p1.py::test_m3_logical_programs` (and/or/xor, nested,
+         not-of-logical). p1.bin ~57 KB code.
+       * **NEXT: rest of P7-M3** -- the invert-branch long-branch idiom
+         (`_br`, needed before `if`/`while`); then `@()`, `&name`, indexing,
+         calls, `txt.print*`; then the WORD evaluator
+         (`_emit_word_expr_into_ay`
          proper -- the work-stack pattern generalizes, mind the mkword
          Y-clobber fix). Smallest-first, each diffed against `p8c -o`. Keep
          wrapping distinct fixed fragments in o_*/out_text helpers (one
