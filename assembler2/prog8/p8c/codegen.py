@@ -35,7 +35,7 @@ from .ast import (
     AddressOf, Assign, BinOp, Block, BoolLit, Break, Call, Continue,
     ExprStmt, For, Ident, If, Index, InlineAsm, IntLit, MemAt, Param,
     Program, Repeat, Return, StrLit, Sub, TUByteArray, UnaryOp, VarDecl,
-    When, WhenChoice, While, BOOL, UBYTE, UWORD, type_from_name,
+    When, WhenChoice, While, BOOL, BYTE, UBYTE, UWORD, type_from_name,
 )
 
 
@@ -1007,36 +1007,58 @@ class CodeGen:
     # ---- comparison / logical ----
 
     def _emit_cmp_into_a(self, e: BinOp) -> None:
-        """Compare ubyte LHS vs RHS, leave 1 in A if true else 0."""
-        # Evaluate LHS into A, save to TMP0; evaluate RHS into A; compare
-        # TMP0 vs A. Branch sense depends on op.
+        """Compare LHS vs RHS, leave 1 in A if true else 0."""
+        is_signed = getattr(e, "signed", False)
         self._emit_byte_expr_into_a(e.lhs)
         self.emit("  sta __p8c_tmp0")
         self._emit_byte_expr_into_a(e.rhs)
         self.emit("  sta __p8c_tmp1")
         self.emit("  lda __p8c_tmp0")
-        self.emit("  cmp __p8c_tmp1")
         true_label = self._new_label("cmp_true")
         end_label = self._new_label("cmp_end")
-        branch = {
-            "==": "beq", "!=": "bne",
-            "<":  "bcc", ">=": "bcs",
-            ">":  None,  # synthesized below
-            "<=": None,
-        }[e.op]
-        if branch is not None:
-            self.emit(f"  {branch} {true_label}")
-        elif e.op == ">":
-            # A > B  <=>  B < A  -- already did cmp A,B, so:
-            # carry set AND not equal => A > B.
-            no = self._new_label("gt_no")
-            self.emit(f"  beq {no}")
-            self.emit(f"  bcs {true_label}")
-            self.emit(f"{no}:")
-        elif e.op == "<=":
-            # A <= B  <=>  A < B or A == B.
-            self.emit(f"  beq {true_label}")
-            self.emit(f"  bcc {true_label}")
+        if not is_signed:
+            # Unsigned compare: use CMP + standard carry/zero branches.
+            self.emit("  cmp __p8c_tmp1")
+            branch = {
+                "==": "beq", "!=": "bne",
+                "<":  "bcc", ">=": "bcs",
+                ">":  None, "<=": None,
+            }[e.op]
+            if branch is not None:
+                self.emit(f"  {branch} {true_label}")
+            elif e.op == ">":
+                no = self._new_label("gt_no")
+                self.emit(f"  beq {no}")
+                self.emit(f"  bcs {true_label}")
+                self.emit(f"{no}:")
+            else:  # "<="
+                self.emit(f"  beq {true_label}")
+                self.emit(f"  bcc {true_label}")
+        else:
+            # Signed compare: SBC + overflow-corrected N flag.
+            if e.op in ("==", "!="):
+                self.emit("  cmp __p8c_tmp1")
+                self.emit(f"  {'beq' if e.op == '==' else 'bne'} {true_label}")
+            else:
+                self.emit("  sec")
+                self.emit("  sbc __p8c_tmp1")
+                skip = self._new_label("sgn_ok")
+                self.emit(f"  bvc {skip}")
+                self.emit("  eor #$80")
+                self.emit(f"{skip}:")
+                # N=1 -> A<B; N=0 -> A>=B; Z=1 -> A==B.
+                if e.op == "<":
+                    self.emit(f"  bmi {true_label}")
+                elif e.op == ">=":
+                    self.emit(f"  bpl {true_label}")
+                elif e.op == ">":
+                    no = self._new_label("sgt_no")
+                    self.emit(f"  beq {no}")
+                    self.emit(f"  bpl {true_label}")
+                    self.emit(f"{no}:")
+                else:  # "<="
+                    self.emit(f"  beq {true_label}")
+                    self.emit(f"  bmi {true_label}")
         self.emit("  lda #$00")
         self.emit(f"  jmp {end_label}")
         self.emit(f"{true_label}:")
@@ -1097,6 +1119,7 @@ class CodeGen:
         """
         if isinstance(cond, BinOp) and cond.op in {"==", "!=", "<", "<=", ">", ">="}:
             is_word = (cond.lhs.type is UWORD or cond.rhs.type is UWORD)
+            is_signed = getattr(cond, "signed", False)
             if is_word:
                 self._emit_word_into_wtmp(cond.lhs, "__p8c_wtmp0")
                 self._emit_word_into_wtmp(cond.rhs, "__p8c_wtmp1")
@@ -1113,25 +1136,52 @@ class CodeGen:
                 self._emit_byte_expr_into_a(cond.rhs)
                 self.emit("  sta __p8c_tmp1")
                 self.emit("  lda __p8c_tmp0")
-                self.emit("  cmp __p8c_tmp1")
-            # We want to branch to `target` if condition is FALSE,
-            # i.e. NEGATED branch sense.
-            negated = {
-                "==": "bne", "!=": "beq",
-                "<":  "bcs", ">=": "bcc",
-                ">":  None, "<=": None,
-            }[cond.op]
-            if negated is not None:
-                self._br(negated, target)
-            elif cond.op == ">":
-                # NOT (A > B): A <= B
+                if is_signed and cond.op not in ("==", "!="):
+                    # Signed compare via overflow-corrected SBC.
+                    self.emit("  sec")
+                    self.emit("  sbc __p8c_tmp1")
+                    skip = self._new_label("sgn_ok")
+                    self.emit(f"  bvc {skip}")
+                    self.emit("  eor #$80")
+                    self.emit(f"{skip}:")
+                else:
+                    self.emit("  cmp __p8c_tmp1")
+            if not is_signed:
+                negated = {
+                    "==": "bne", "!=": "beq",
+                    "<":  "bcs", ">=": "bcc",
+                    ">":  None, "<=": None,
+                }[cond.op]
+                if negated is not None:
+                    self._br(negated, target)
+                elif cond.op == ">":
+                    self._br("beq", target)
+                    self._br("bcc", target)
+                else:
+                    skip = self._new_label("le_skip")
+                    self.emit(f"  beq {skip}")
+                    self._br("bcs", target)
+                    self.emit(f"{skip}:")
+                return
+            # Signed: branch on N/Z. Negated = "if false".
+            if cond.op == "==":
+                self._br("bne", target)
+            elif cond.op == "!=":
                 self._br("beq", target)
-                self._br("bcc", target)
-            else:
-                # NOT (A <= B): A > B
-                skip = self._new_label("le_skip")
+            elif cond.op == "<":
+                # NOT (A < B): A >= B  -> bpl target
+                self._br("bpl", target)
+            elif cond.op == ">=":
+                self._br("bmi", target)
+            elif cond.op == ">":
+                # NOT (A > B): A <= B; A == B OR A < B.
+                self._br("beq", target)
+                self._br("bmi", target)
+            else:  # "<="
+                # NOT (A <= B): A > B; A != B AND A >= B.
+                skip = self._new_label("sle_skip")
                 self.emit(f"  beq {skip}")
-                self._br("bcs", target)
+                self._br("bpl", target)
                 self.emit(f"{skip}:")
             return
         # Generic: evaluate to 0/1 in A, branch on zero.

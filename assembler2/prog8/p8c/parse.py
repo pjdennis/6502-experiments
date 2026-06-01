@@ -31,7 +31,7 @@ from .lex import Token
 
 
 # Type keywords accepted by VarDecl in Phase 2.
-_TYPE_KWS = {"ubyte", "uword"}
+_TYPE_KWS = {"ubyte", "byte", "uword"}
 
 # Binary-op precedence ladder, lowest precedence first. Each entry is
 # (precedence-name, set-of-tokens-at-this-level). Higher index = higher

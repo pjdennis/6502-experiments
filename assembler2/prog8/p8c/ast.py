@@ -27,6 +27,13 @@ class TUByte(Type):
 
 
 @dataclass(frozen=True)
+class TByte(Type):
+    """Signed 8-bit. Same storage as ubyte; affects comparison codegen
+    and (later) multiplication / division."""
+    def __repr__(self) -> str: return "byte"
+
+
+@dataclass(frozen=True)
 class TUByteArray(Type):
     """ubyte[N] -- a fixed-size byte array. Stored in main memory
     (not ZP), addressed by an absolute label."""
@@ -55,6 +62,7 @@ class TVoid(Type):
 
 
 UBYTE = TUByte()
+BYTE = TByte()
 UWORD = TUWord()
 BOOL = TBool()
 STR = TStr()
@@ -62,7 +70,8 @@ VOID = TVoid()
 
 
 def type_from_name(name: str) -> Optional[Type]:
-    return {"ubyte": UBYTE, "uword": UWORD, "bool": BOOL, "str": STR, "void": VOID}.get(name)
+    return {"ubyte": UBYTE, "byte": BYTE, "uword": UWORD, "bool": BOOL,
+            "str": STR, "void": VOID}.get(name)
 
 
 # ---- Nodes ----------------------------------------------------------------

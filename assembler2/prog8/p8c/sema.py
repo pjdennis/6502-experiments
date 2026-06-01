@@ -15,9 +15,14 @@ from .ast import (
     AddressOf, Assign, BinOp, Block, BoolLit, Break, Call, Continue,
     ExprStmt, For, Ident, If, Index, InlineAsm, IntLit, MemAt, Param,
     Program, Repeat, Return, StrLit, Sub, Symbol, TUByteArray, Type,
-    UnaryOp, VarDecl, When, WhenChoice, While, BOOL, STR, UBYTE, UWORD,
-    VOID, type_from_name,
+    UnaryOp, VarDecl, When, WhenChoice, While, BOOL, BYTE, STR, UBYTE,
+    UWORD, VOID, type_from_name,
 )
+
+
+# Single-byte types that share ZP storage and most arithmetic codegen.
+_BYTE_TYPES = (UBYTE, BYTE)
+_BYTE_TYPE_SET = {UBYTE, BYTE}
 from .stdlib_decls import STDLIB_SYMBOLS, get_builtin
 
 
@@ -183,13 +188,13 @@ class Sema:
                 )
             return sym
         t = type_from_name(vd.type_name)
-        if t is None or t not in (UBYTE, UWORD):
+        if t is None or t not in (UBYTE, BYTE, UWORD):
             raise SemaError(
                 f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: "
                 f"type {vd.type_name!r} not supported yet "
-                f"(Phase 2 = ubyte | uword)"
+                f"(have ubyte | byte | uword)"
             )
-        size = 1 if t is UBYTE else 2
+        size = 2 if t is UWORD else 1
         if self._zp_next + size > ZP_VAR_TOP:
             raise SemaError(
                 f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: out of ZP variable space"
@@ -203,13 +208,12 @@ class Sema:
         self.prog.all_vars.append(sym)
         if vd.init is not None:
             self._walk_expr(vd.init)
-            if t is UBYTE and vd.init.type is not UBYTE:
+            if t in _BYTE_TYPES and vd.init.type not in _BYTE_TYPES:
                 raise SemaError(
                     f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: "
-                    f"initializer type mismatch for ubyte {vd.name!r}"
+                    f"initializer type mismatch for {vd.type_name} {vd.name!r}"
                 )
-            if t is UWORD and vd.init.type not in (UBYTE, UWORD):
-                # ubyte literal auto-widens to uword on assignment.
+            if t is UWORD and vd.init.type not in _BYTE_TYPES and vd.init.type is not UWORD:
                 raise SemaError(
                     f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: "
                     f"initializer type mismatch for uword {vd.name!r}"
@@ -271,13 +275,12 @@ class Sema:
                 )
             tgt_t = st.target.sym.type
             rhs_t = st.rhs.type
-            if tgt_t is UBYTE and rhs_t not in (UBYTE, BOOL):
+            if tgt_t in _BYTE_TYPES and rhs_t not in _BYTE_TYPES and rhs_t is not BOOL:
                 raise SemaError(
                     f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
-                    f"RHS type {rhs_t!r} not assignable to ubyte"
+                    f"RHS type {rhs_t!r} not assignable to {tgt_t!r}"
                 )
-            if tgt_t is UWORD and rhs_t not in (UBYTE, UWORD):
-                # ubyte -> uword widens; bigger types are caught above.
+            if tgt_t is UWORD and rhs_t not in _BYTE_TYPES and rhs_t is not UWORD:
                 raise SemaError(
                     f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
                     f"RHS type {rhs_t!r} not assignable to uword"
@@ -503,13 +506,17 @@ class Sema:
             cmp_ops = {"==", "!=", "<", "<=", ">", ">="}
             logical_ops = {"and", "or", "xor"}
             if e.op in cmp_ops:
-                # Both ubyte, both uword, or ubyte vs uword (auto-widen ubyte).
-                ok = ({e.lhs.type, e.rhs.type} <= {UBYTE, UWORD})
+                ok = ({e.lhs.type, e.rhs.type} <= {UBYTE, BYTE, UWORD})
                 if not ok:
                     raise SemaError(
                         f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
-                        f"comparison operands must both be ubyte or uword"
+                        f"comparison operands must both be byte/ubyte/uword"
                     )
+                # If both operands are signed bytes, the comparison is
+                # signed; sema marks the BinOp with a hint so codegen
+                # can pick the right branch sequence.
+                if e.lhs.type is BYTE and e.rhs.type is BYTE:
+                    e.signed = True   # type: ignore[attr-defined]
                 e.type = BOOL
             elif e.op in logical_ops:
                 if e.lhs.type is not BOOL or e.rhs.type is not BOOL:
@@ -519,17 +526,20 @@ class Sema:
                     )
                 e.type = BOOL
             else:
-                # Arithmetic / bitwise / shift: ubyte or uword. Mixed
-                # produces uword (ubyte auto-widens).
+                # Arithmetic / bitwise / shift.
+                # Result is signed byte if both operands are byte;
+                # otherwise unsigned. ubyte widens to uword.
                 lt, rt = e.lhs.type, e.rhs.type
-                if {lt, rt} == {UBYTE}:
+                if {lt, rt} == {BYTE}:
+                    e.type = BYTE
+                elif {lt, rt} <= _BYTE_TYPE_SET:
                     e.type = UBYTE
-                elif {lt, rt} <= {UBYTE, UWORD}:
+                elif {lt, rt} <= _BYTE_TYPE_SET | {UWORD}:
                     e.type = UWORD
                 else:
                     raise SemaError(
                         f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
-                        f"binary op {e.op!r} needs ubyte/uword operands "
+                        f"binary op {e.op!r} needs byte/ubyte/uword operands "
                         f"(got {lt!r} and {rt!r})"
                     )
         elif isinstance(e, UnaryOp):
@@ -542,12 +552,17 @@ class Sema:
                     )
                 e.type = BOOL
             elif e.op in ("~", "-"):
-                if e.operand.type is not UBYTE:
+                if e.operand.type not in _BYTE_TYPES:
                     raise SemaError(
                         f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
-                        f"unary {e.op!r} operand must be ubyte"
+                        f"unary {e.op!r} operand must be byte/ubyte"
                     )
-                e.type = UBYTE
+                # `- ubyte` -> signed byte; `- byte` stays byte;
+                # `~ x` keeps operand signedness.
+                if e.op == "-":
+                    e.type = BYTE
+                else:
+                    e.type = e.operand.type
             else:
                 raise SemaError(f"unknown unary {e.op!r}")
         else:
