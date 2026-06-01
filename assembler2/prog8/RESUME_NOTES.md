@@ -59,14 +59,14 @@ is the source of truth across sessions.
   stays intact.
 
 * **Test counts (as of HEAD)**:
-  * 99 host p8c tests (`prog8/tests/` -- lex / parse / sema /
+  * 102 host p8c tests (`prog8/tests/` -- lex / parse / sema /
     codegen / snapshot / e2e LCD goldens, the iterative-parser
     equivalence + integration tests, and the new serializer freeze
     suite `test_serialize.py`).
   * 5 v0/v1 e2e (`tinyp8/tests/test_e2e.py`).
   * 5 v0/v1 self-host equivalence (`test_self_host.py`).
   * 12 v2..v9 .p8-only (`test_v2.py`, sources in `goldens_v2/`).
-  * **121 total, all green** (the 22 tinyp8 cases need vasm; see the
+  * **124 total, all green** (the 22 tinyp8 cases need vasm; see the
     environment note above).
 
 Run:
@@ -261,8 +261,14 @@ Progress:
        gate over the whole corpus + on-disk goldens in
        `tests/goldens_sexp/`). Regenerate goldens after an intentional
        format change with `UPDATE_GOLDENS=1`.
-     * **M1 NEXT:** lexer port to `p1/` (source bytes -> token arrays +
-       text pools), built + diffed through the emulator like `tinyp8/`.
+     * **M1 IN PROGRESS -- lexer port.** Oracle done: `serialize_tokens`
+       + `p8c --dump-tokens` define the canonical token-dump (one token
+       per line; positions dropped, like the AST contract), frozen by
+       `test_serialize.py` (`TokenDumpFormat` + the `LEXER_CORPUS`
+       golden `goldens_sexp/tokens.dump`, covering every base, escape,
+       keyword trap, and multi-char-op maximal munch). NEXT: write
+       `p1/lexer.p8` emitting that dump on-target (the first on-target
+       push, built + diffed through the emulator like `tinyp8/`).
        Then M2 expr, M3 stmt, M4 whole-program on-target, M5 capacity.
 
 The caveat below (fixed frame layout) is addressed in the design doc's

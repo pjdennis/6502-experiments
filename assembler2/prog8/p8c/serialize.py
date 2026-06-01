@@ -203,3 +203,44 @@ def serialize(node) -> str:
     node) to the canonical S-expression text, newline-terminated."""
     lines = _ser_program(node) if isinstance(node, Program) else ser(node)
     return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# Token-stream serialization (Phase 6, M1 contract).
+#
+# The lexer port (`p1/lexer.p8`) is verified by dumping its token stream
+# and diffing against this Python dump -- the same oracle pattern M0 set
+# up for the AST. One token per line:
+#
+#     INT <decimal>            ; value already normalized ($ff/%1010/'A')
+#     STR <escaped>            ; same escape set as string-literal AST
+#     IDENT <text>             KW <text>            DIRECTIVE <text>
+#     PUNCT <spelling>         ; punctuation/operator (kind == value)
+#     EOF
+#
+# Source line/col are intentionally omitted: positions are not part of
+# the structural contract (consistent with the AST serializer dropping
+# Loc). M1 verifies *tokenization* -- bases, char/string escapes,
+# keyword classification, and multi-char-operator maximal munch -- which
+# is the hard part of the lexer. Position tracking, if verified later,
+# gets its own dump.
+# ---------------------------------------------------------------------------
+
+def _tok_line(t) -> str:
+    k = t.kind
+    if k == "INT":
+        return f"INT {t.value}"
+    if k == "STR":
+        return f"STR {_esc(t.value)}"
+    if k in ("IDENT", "KW", "DIRECTIVE"):
+        return f"{k} {t.value}"
+    if k == "EOF":
+        return "EOF"
+    # Punctuation/operator token: kind is the source spelling.
+    return f"PUNCT {t.kind}"
+
+
+def serialize_tokens(tokens) -> str:
+    """Serialize a lexer token list to the canonical token-dump text,
+    newline-terminated."""
+    return "".join(_tok_line(t) + "\n" for t in tokens)

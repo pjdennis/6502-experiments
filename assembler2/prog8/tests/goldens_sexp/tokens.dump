@@ -1,0 +1,158 @@
+;;; '42  $ff  %1010  $DE_AD  1_000  %1111_0000'
+INT 42
+INT 255
+INT 10
+INT 57005
+INT 1000
+INT 240
+EOF
+
+;;; "'A'  '0'  '\\n'  '\\t'  '\\r'  '\\0'  '\\''  '\\\\'  '\\x41'"
+INT 65
+INT 48
+INT 10
+INT 9
+INT 13
+INT 0
+INT 39
+INT 92
+INT 65
+EOF
+
+;;; '"plain"  "a\\tb\\nc"  "q\\"q"  "back\\\\slash"  "\\x7e"'
+STR "plain"
+STR "a\tb\nc"
+STR "q\"q"
+STR "back\\slash"
+STR "~"
+EOF
+
+;;; 'if else when while for in to repeat break continue return defer sub asmsub inline const enum struct main and or xor not true false ubyte byte uword bool void  into forth ored xored notable mainline'
+KW if
+KW else
+KW when
+KW while
+KW for
+KW in
+KW to
+KW repeat
+KW break
+KW continue
+KW return
+KW defer
+KW sub
+KW asmsub
+KW inline
+KW const
+KW enum
+KW struct
+KW main
+KW and
+KW or
+KW xor
+KW not
+KW true
+KW false
+KW ubyte
+KW byte
+KW uword
+KW bool
+KW void
+IDENT into
+IDENT forth
+IDENT ored
+IDENT xored
+IDENT notable
+IDENT mainline
+EOF
+
+;;; '%address %output %import %target %option %asm'
+DIRECTIVE address
+DIRECTIVE output
+DIRECTIVE import
+DIRECTIVE target
+DIRECTIVE option
+DIRECTIVE asm
+EOF
+
+;;; '<<= >>= == != <= >= << >> ++ -- += -= *= /= &= |= ^= -> &&'
+PUNCT <<=
+PUNCT >>=
+PUNCT ==
+PUNCT !=
+PUNCT <=
+PUNCT >=
+PUNCT <<
+PUNCT >>
+PUNCT ++
+PUNCT --
+PUNCT +=
+PUNCT -=
+PUNCT *=
+PUNCT /=
+PUNCT &=
+PUNCT |=
+PUNCT ^=
+PUNCT ->
+PUNCT &&
+EOF
+
+;;; '( ) [ ] { } , . : ; + - * / % & | ^ ~ < > = ! @ ?'
+PUNCT (
+PUNCT )
+PUNCT [
+PUNCT ]
+PUNCT {
+PUNCT }
+PUNCT ,
+PUNCT .
+PUNCT :
+EOF
+
+;;; 'x<<=1 a==b c->d e.f.g h(i,j) k[l]'
+IDENT x
+PUNCT <<=
+INT 1
+IDENT a
+PUNCT ==
+IDENT b
+IDENT c
+PUNCT ->
+IDENT d
+IDENT e
+PUNCT .
+IDENT f
+PUNCT .
+IDENT g
+IDENT h
+PUNCT (
+IDENT i
+PUNCT ,
+IDENT j
+PUNCT )
+IDENT k
+PUNCT [
+IDENT l
+PUNCT ]
+EOF
+
+;;; 'main { txt.print("hi") x <<= $0f i = i + 1 }'
+KW main
+PUNCT {
+IDENT txt
+PUNCT .
+IDENT print
+PUNCT (
+STR "hi"
+PUNCT )
+IDENT x
+PUNCT <<=
+INT 15
+IDENT i
+PUNCT =
+IDENT i
+PUNCT +
+INT 1
+PUNCT }
+EOF
+

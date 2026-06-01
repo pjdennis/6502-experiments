@@ -28,7 +28,7 @@ from .codegen import CodeGenError, generate
 from .lex import LexError, lex
 from .parse import ParseError, parse
 from .sema import SemaError, analyze
-from .serialize import serialize
+from .serialize import serialize, serialize_tokens
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -108,6 +108,10 @@ def main(argv: list[str] | None = None) -> int:
                         "S-expression serialization to stdout (the golden "
                         "the Prog8 on-target parser is diffed against); "
                         "skips sema/codegen")
+    p.add_argument("--dump-tokens", action="store_true",
+                   help="lex only and print the canonical token-stream "
+                        "dump to stdout (the golden the Prog8 on-target "
+                        "lexer is diffed against); skips parse/sema/codegen")
     p.add_argument("--run", action="store_true",
                    help="compile, assemble, and run on the emulator")
     p.add_argument("--cycle-cap", type=int, default=3_000_000,
@@ -117,6 +121,15 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
 
     src = Path(args.source).resolve()
+
+    if args.dump_tokens:
+        try:
+            toks = lex(src.read_text(), str(src))
+        except LexError as e:
+            sys.stderr.write(f"p8c: {e}\n")
+            return 1
+        sys.stdout.write(serialize_tokens(toks))
+        return 0
 
     if args.dump_ast:
         # Parser-only path: serialize exactly what parsing yields (no

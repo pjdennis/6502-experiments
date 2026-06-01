@@ -33,7 +33,7 @@ sys.path.insert(0, str(ROOT))
 from p8c.iter_parse import IterParser  # noqa: E402
 from p8c.lex import lex  # noqa: E402
 from p8c.parse import Parser, parse  # noqa: E402
-from p8c.serialize import serialize, ser  # noqa: E402
+from p8c.serialize import serialize, serialize_tokens, ser  # noqa: E402
 
 # Reuse the very corpora the iterative-parser equivalence tests use, so
 # the serializer is frozen over exactly the inputs the port will exercise.
@@ -48,6 +48,38 @@ GOLDENS = ROOT / "tests" / "goldens_sexp"
 def _ser_expr(src: str) -> str:
     node = IterParser(lex(src, "<t>"), "<t>").parse_expr()
     return "\n".join(ser(node)) + "\n"
+
+
+def _ser_toks(src: str) -> str:
+    return serialize_tokens(lex(src, "<t>"))
+
+
+# A lexer-focused corpus exercising every token class the on-target
+# lexer (M1) must reproduce: all numeric bases, char literals with
+# escapes, string escapes, keyword vs identifier classification,
+# directives, and maximal-munch for every multi-char operator.
+LEXER_CORPUS = [
+    # numeric bases + underscore separators, normalized to decimal
+    "42  $ff  %1010  $DE_AD  1_000  %1111_0000",
+    # char literals -> INT (ascii / escapes)
+    r"'A'  '0'  '\n'  '\t'  '\r'  '\0'  '\''  '\\'  '\x41'",
+    # string escapes
+    r'"plain"  "a\tb\nc"  "q\"q"  "back\\slash"  "\x7e"',
+    # keyword vs identifier (substring traps: 'into', 'forth', 'ored')
+    "if else when while for in to repeat break continue return defer "
+    "sub asmsub inline const enum struct main and or xor not true false "
+    "ubyte byte uword bool void  into forth ored xored notable mainline",
+    # directives
+    "%address %output %import %target %option %asm",
+    # every multi-char operator -- maximal munch must pick the longest
+    "<<= >>= == != <= >= << >> ++ -- += -= *= /= &= |= ^= -> &&",
+    # single-char punctuation / operators
+    "( ) [ ] { } , . : ; + - * / % & | ^ ~ < > = ! @ ?",
+    # adjacency: no spaces, the lexer must still split correctly
+    "x<<=1 a==b c->d e.f.g h(i,j) k[l]",
+    # a realistic mixed line
+    'main { txt.print("hi") x <<= $0f i = i + 1 }',
+]
 
 
 def _corpus_files() -> list[Path]:
@@ -232,6 +264,27 @@ class SerializeFormat(unittest.TestCase):
         ]), got)
 
 
+class TokenDumpFormat(unittest.TestCase):
+    def test_kinds_and_values(self):
+        self.assertEqual(_ser_toks("42 $ff %1010 'A'"),
+                         "INT 42\nINT 255\nINT 10\nINT 65\nEOF\n")
+        self.assertEqual(_ser_toks('foo sub %import'),
+                         "IDENT foo\nKW sub\nDIRECTIVE import\nEOF\n")
+        self.assertEqual(_ser_toks('"a\\tb"'), 'STR "a\\tb"\nEOF\n')
+
+    def test_punctuation_and_maximal_munch(self):
+        # '<<=' is one token, not '<<' '='; '->' not '-' '>'.
+        self.assertEqual(_ser_toks("<<= ->"),
+                         "PUNCT <<=\nPUNCT ->\nEOF\n")
+        self.assertEqual(_ser_toks("a.b"),
+                         "IDENT a\nPUNCT .\nIDENT b\nEOF\n")
+
+    def test_keyword_substring_not_misclassified(self):
+        # 'into' contains 'in'+'to' but is a single identifier.
+        self.assertEqual(_ser_toks("into"), "IDENT into\nEOF\n")
+        self.assertEqual(_ser_toks("in to"), "KW in\nKW to\nEOF\n")
+
+
 # ---------------------------------------------------------------------------
 # 2. Serializer equivalence gate -- recursive vs iterative parser.
 # ---------------------------------------------------------------------------
@@ -291,9 +344,19 @@ def _stmt_corpus_text() -> str:
     return "".join(parts)
 
 
+def _tokens_corpus_text() -> str:
+    parts = []
+    for src in LEXER_CORPUS:
+        parts.append(f";;; {src!r}\n")
+        parts.append(_ser_toks(src))
+        parts.append("\n")
+    return "".join(parts)
+
+
 _GOLDEN_GENERATORS = {
     "expressions.sexp": _expr_corpus_text,
     "programs.sexp": _stmt_corpus_text,
+    "tokens.dump": _tokens_corpus_text,
 }
 
 

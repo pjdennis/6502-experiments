@@ -301,6 +301,16 @@ the command later milestones diff their on-target output against.
   text pools. Golden: dump the token stream for a corpus and diff
   against a Python token-dump. The lexer is non-recursive already, so
   this is mostly transcription + the pools.
+  * `[done]` **M1 oracle.** `serialize_tokens()` + `p8c --dump-tokens`
+    define the canonical token-dump (one token per line: `INT n`,
+    `STR "..."`, `IDENT/KW/DIRECTIVE text`, `PUNCT spelling`, `EOF`;
+    positions dropped, like the AST contract). Frozen by
+    `tests/test_serialize.py` (`TokenDumpFormat` + the `LEXER_CORPUS`
+    golden `tests/goldens_sexp/tokens.dump`, exercising every numeric
+    base, char/string escape, keyword-vs-identifier trap, and
+    multi-char-operator maximal munch).
+  * `[todo]` **M1 on-target.** `p1/lexer.p8` emitting that dump, built
+    + diffed through the emulator like `tinyp8/`.
 
 * **M2 -- expression parser port.** `p1/expr.p8`: the shunting-yard
   engine over the stacks of 3.5, building nodes in the arena. Driver
