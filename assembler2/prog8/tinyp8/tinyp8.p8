@@ -13,6 +13,11 @@
 %target nmos
 %address $0200
 
+; Load address constant -- used to compute absolute addresses for the
+; in-output __hex_print helper that v2 emits when a variable is
+; referenced from print_ub.
+const uword LOAD_ADDR = $0200
+
 ; ---- syscall asmsubs ----
 asmsub _exit(ubyte code) = $F00F
 asmsub _close(ubyte handle) = $F015
@@ -24,6 +29,22 @@ ubyte peek_buf
 ubyte peek_ok
 ubyte src_eof
 ubyte tmp_byte
+
+; v2 (variables) state:
+;   var_addrs[c-'a'] = ZP address allocated for variable named `c`,
+;                      or 0 if undeclared.
+;   next_var_addr   = next free ZP slot, starts at $60 (above tinyp8's
+;                      own state which lives below $40 in compiled
+;                      programs that use this scheme).
+;   helper_emitted  = 0 until __hex_print is emitted into the output;
+;                     then 1, and helper_addr is its absolute address.
+;   bytes_emitted   = count of bytes written to the output file so far;
+;                     load_addr + bytes_emitted is the current output PC.
+ubyte[26] var_addrs
+ubyte next_var_addr
+ubyte helper_emitted
+uword bytes_emitted
+uword helper_addr
 
 ; ---- low-level I/O helpers (inline asm wrappers) ----
 ;
@@ -91,6 +112,7 @@ sub peek_src() -> ubyte {
 
 sub write_dst(ubyte b) {
     _write(b, dst_hand)
+    bytes_emitted = bytes_emitted + 1
 }
 
 
@@ -226,17 +248,34 @@ sub parse_print_string() {
 
 sub parse_print_ub() {
     ubyte c
-    ; Find the '$' sigil.
+    ; Scan past whitespace. The next non-ws byte is either '$' for a
+    ; literal byte value or a lowercase letter for a variable reference.
     repeat {
         c = read_src()
         if src_eof != 0 {
             return
         }
-        if c == $24 {                                    ; '$'
+        if c == $24 {                                    ; '$' -- literal
             break
         }
+        if c >= $61 {                                    ; lowercase letter -- v2 var ref
+            if c <= $7a {
+                ; Look up the variable's ZP address and emit a runtime
+                ; hex-print sequence against it. If the variable was
+                ; never declared (var_addrs[slot] == 0) we emit nothing
+                ; useful, but the parse is still well-formed.
+                ubyte addr
+                addr = var_addrs[c - $61]
+                if addr != 0 {
+                    emit_print_ub_var(addr)
+                }
+                skip_to_nl()
+                return
+            }
+        }
+        ; otherwise keep scanning (skip ws / other chars)
     }
-    ; Two hex digits.
+    ; Two hex digits (literal form).
     c = read_src()
     if src_eof != 0 {
         return
@@ -313,6 +352,162 @@ sub parse_print() {
 }
 
 
+; ---- v2: variable declarations + the runtime hex-print helper ----
+;
+; emit_hex_helper writes a position-relative byte-to-2-hex-chars
+; routine inline into the output, wrapped in a JMP that branches over
+; it so it isn't executed by accident. After this runs:
+;   helper_addr = absolute address (load_addr + offset) callable via JSR
+;   helper_emitted = 1
+; The helper itself only uses BCC/BNE for branching and JSR/JMP $F009
+; (write_b) for output, so its bytes are position-independent except
+; for the wrapping JMP.
+
+inline sub emit_hex_helper() {
+    if helper_emitted != 0 {
+        return
+    }
+    ; Compute where the helper will live and where to branch around
+    ; it: JMP-around starts at the current position, the helper proper
+    ; starts 3 bytes later (after the JMP), the user code resumes 38
+    ; bytes after that.
+    uword start = LOAD_ADDR + bytes_emitted
+    helper_addr = start + 3                              ; helper starts here
+    uword after = helper_addr + 38                       ; user code resumes here
+    ; JMP <after>
+    write_dst($4c)
+    write_dst(lsb(after))
+    write_dst(msb(after))
+    ; --- the 38-byte helper itself (position-independent) ---
+    write_dst($48)                                       ; pha
+    write_dst($4a)                                       ; lsr a
+    write_dst($4a)                                       ; lsr a
+    write_dst($4a)                                       ; lsr a
+    write_dst($4a)                                       ; lsr a
+    write_dst($c9)                                       ; cmp #
+    write_dst($0a)                                       ;   #$0a
+    write_dst($90)                                       ; bcc
+    write_dst($05)                                       ;   +5 -> digit1
+    write_dst($18)                                       ; clc
+    write_dst($69)                                       ; adc #
+    write_dst($57)                                       ;   'a' - 10
+    write_dst($d0)                                       ; bne
+    write_dst($03)                                       ;   +3 -> print1
+    write_dst($18)                                       ; clc        (.digit1)
+    write_dst($69)                                       ; adc #
+    write_dst($30)                                       ;   '0'
+    write_dst($20)                                       ; jsr        (.print1)
+    write_dst($09)                                       ;   low byte of $F009
+    write_dst($f0)                                       ;   high byte
+    write_dst($68)                                       ; pla
+    write_dst($29)                                       ; and #
+    write_dst($0f)                                       ;   $0f -- low nibble
+    write_dst($c9)                                       ; cmp #
+    write_dst($0a)                                       ;   #$0a
+    write_dst($90)                                       ; bcc
+    write_dst($05)                                       ;   +5 -> digit2
+    write_dst($18)                                       ; clc
+    write_dst($69)                                       ; adc #
+    write_dst($57)                                       ;   'a' - 10
+    write_dst($d0)                                       ; bne
+    write_dst($03)                                       ;   +3 -> print2
+    write_dst($18)                                       ; clc        (.digit2)
+    write_dst($69)                                       ; adc #
+    write_dst($30)                                       ;   '0'
+    write_dst($4c)                                       ; jmp        (.print2 -- tail call)
+    write_dst($09)                                       ;   $F009
+    write_dst($f0)
+    helper_emitted = 1
+}
+
+; parse_let -- handles a single `let X = $YY` statement. The 'l' has
+; already been read; we expect "et " then the variable name (one
+; lowercase letter) then ' = $XX'. Emits code that stores $YY into
+; the variable's ZP slot.
+sub parse_let() {
+    ubyte c
+    ; skip "et"
+    c = read_src()
+    c = read_src()
+    if src_eof != 0 {
+        return
+    }
+    ; skip whitespace
+    repeat {
+        c = read_src()
+        if src_eof != 0 {
+            return
+        }
+        if c != $20 {                                    ; not space
+            if c != $09 {                                ; not tab
+                break
+            }
+        }
+    }
+    ; c is the variable name (single char). Index into var_addrs.
+    ubyte slot
+    slot = c - $61                                       ; 'a'
+    if var_addrs[slot] == 0 {
+        var_addrs[slot] = next_var_addr
+        next_var_addr = next_var_addr + 1
+    }
+    ubyte addr
+    addr = var_addrs[slot]
+    ; skip ws + '='
+    repeat {
+        c = read_src()
+        if src_eof != 0 {
+            return
+        }
+        if c == $3d {                                    ; '='
+            break
+        }
+    }
+    ; skip ws to '$'
+    repeat {
+        c = read_src()
+        if src_eof != 0 {
+            return
+        }
+        if c == $24 {                                    ; '$'
+            break
+        }
+    }
+    ; two hex digits -> value
+    c = read_src()
+    if src_eof != 0 {
+        return
+    }
+    tmp_byte = hex_nibble(c) << 4
+    c = read_src()
+    if src_eof != 0 {
+        return
+    }
+    tmp_byte = tmp_byte | hex_nibble(c)
+    ; Emit: lda #<value> ; sta <addr>  (5 bytes total)
+    write_dst($a9)                                       ; LDA #
+    write_dst(tmp_byte)
+    write_dst($85)                                       ; STA zp
+    write_dst(addr)
+    skip_to_nl()
+}
+
+; Emit a print_ub call against a variable reference (single letter).
+; The byte at `addr` is loaded into A and then JSR'd to the in-output
+; hex-print helper, which writes 2 ASCII hex chars. A trailing newline
+; matches the literal-form output.
+sub emit_print_ub_var(ubyte addr) {
+    emit_hex_helper()
+    write_dst($a5)                                       ; LDA zp
+    write_dst(addr)
+    write_dst($20)                                       ; JSR
+    write_dst(lsb(helper_addr))
+    write_dst(msb(helper_addr))
+    ; trailing newline
+    emit_print_char($0a)
+}
+
+
 ; ---- main compile loop ----
 
 main {
@@ -325,6 +520,10 @@ main {
 
     peek_ok = 0
     src_eof = 0
+    next_var_addr = $60
+    helper_emitted = 0
+    bytes_emitted = 0
+    ; var_addrs[] zeroed by BSS init.
 
     repeat {
         skip_ws_comments()
@@ -339,11 +538,15 @@ main {
         if c == $70 {                                    ; 'p'
             parse_print()
         } else {
-            if c == $65 {                                ; 'e' -- "end"
-                skip_to_nl()
-                break
+            if c == $6c {                                ; 'l' -- "let"
+                parse_let()
             } else {
-                skip_to_nl()
+                if c == $65 {                                ; 'e' -- "end"
+                    skip_to_nl()
+                    break
+                } else {
+                    skip_to_nl()
+                }
             }
         }
     }

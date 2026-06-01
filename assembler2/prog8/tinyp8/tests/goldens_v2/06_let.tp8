@@ -1,0 +1,8 @@
+; v2 -- variable declarations and references.
+let a = $42
+let b = $99
+let z = $ff
+print_ub a
+print_ub b
+print_ub z
+end

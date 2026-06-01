@@ -1,0 +1,7 @@
+; Mix literal and variable prints.
+print "boot:"
+print_ub $80
+let x = $aa
+print_ub x
+print "fin"
+end

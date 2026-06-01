@@ -63,7 +63,7 @@ prog8-test: emulator/emulator.out
 # SKIPs cleanly if vasm6502_oldstyle or the emulator binary are
 # missing.
 tinyp8-test: emulator/emulator.out
-	@cd prog8 && python3 -m unittest tinyp8.tests.test_e2e tinyp8.tests.test_self_host -v
+	@cd prog8 && python3 -m unittest tinyp8.tests.test_e2e tinyp8.tests.test_self_host tinyp8.tests.test_v2 -v
 
 # End-to-end wendy2c golden-LCD tests. Requires vasm6502_oldstyle on
 # PATH; the script SKIPs (exits 0) if vasm is missing. Depends on the

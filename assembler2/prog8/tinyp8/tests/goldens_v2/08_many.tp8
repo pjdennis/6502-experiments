@@ -1,0 +1,14 @@
+; Six distinct variables, printed in different orders.
+let a = $01
+let b = $02
+let c = $04
+let d = $08
+let e = $10
+let f = $20
+print_ub f
+print_ub e
+print_ub d
+print_ub c
+print_ub b
+print_ub a
+end
