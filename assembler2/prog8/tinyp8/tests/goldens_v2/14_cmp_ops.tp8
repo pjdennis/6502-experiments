@@ -1,0 +1,14 @@
+; v7: full comparison operators in if and while.
+; - `while X < $YY` -- exit when X >= YY
+; - `if X >= $YY then` and `if X > $YY then`
+; - `if X <= $YY then`
+let n = $00
+while n < $05
+    let n = n + $01
+let r = n              ; r = 05 after the while
+let s = $77
+if r < $10 then print_ub r       ; 05 (r=5 < 10)
+if s >= $77 then print_ub s      ; 77 (77 >= 77)
+if s > $77 then print_ub r       ; suppressed (77 not > 77)
+if s <= $77 then print_ub r      ; 05 (77 <= 77)
+end

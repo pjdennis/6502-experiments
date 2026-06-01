@@ -18,6 +18,128 @@
 ; referenced from print_ub.
 const uword LOAD_ADDR = $0200
 
+; ---- v7: comparison-operator decoding + branch emission ----
+;
+; Op codes used by read_cmp_op and emit_skip_branch:
+;   0 = ==    skip body on !=    -> bne +N
+;   1 = !=    skip body on ==    -> beq +N
+;   2 = <     skip body on >=    -> bcs +N
+;   3 = <=    skip body on >     -> beq +2; bcs +N    (2-step)
+;   4 = >     skip body on <=    -> beq +(N+2); bcc +N (2-step)
+;   5 = >=    skip body on <     -> bcc +N
+const ubyte OP_EQ = 0
+const ubyte OP_NE = 1
+const ubyte OP_LT = 2
+const ubyte OP_LE = 3
+const ubyte OP_GT = 4
+const ubyte OP_GE = 5
+
+; Branch-emission opcode constants.
+const ubyte OPC_BNE = $d0
+const ubyte OPC_BEQ = $f0
+const ubyte OPC_BCC = $90
+const ubyte OPC_BCS = $b0
+
+; read_cmp_op: skips whitespace then reads a 1- or 2-char comparison
+; operator from the source. Returns the OP_* code. On EOF, returns 0
+; (caller should re-check src_eof).
+sub read_cmp_op() -> ubyte {
+    ubyte c
+    ; skip whitespace
+    repeat {
+        c = peek_src()
+        if src_eof != 0 {
+            return 0
+        }
+        if c == $20 {                                    ; space
+            c = read_src()
+        } else {
+            if c == $09 {                                ; tab
+                c = read_src()
+            } else {
+                break
+            }
+        }
+    }
+    c = read_src()
+    if src_eof != 0 {
+        return 0
+    }
+    if c == $3d {                                        ; '=' -> "=="
+        c = read_src()                                   ; consume second '='
+        return OP_EQ
+    }
+    if c == $21 {                                        ; '!' -> "!="
+        c = read_src()                                   ; consume '='
+        return OP_NE
+    }
+    if c == $3c {                                        ; '<' or "<="
+        c = peek_src()
+        if c == $3d {
+            c = read_src()
+            return OP_LE
+        }
+        return OP_LT
+    }
+    if c == $3e {                                        ; '>' or ">="
+        c = peek_src()
+        if c == $3d {
+            c = read_src()
+            return OP_GE
+        }
+        return OP_GT
+    }
+    return 0                                             ; unknown -- fallback to ==
+}
+
+; emit_skip_branch: emits the conditional branch sequence that BRANCHES
+; OVER `skip_size` bytes when the comparison is FALSE. Used by both
+; parse_if (over the then-block) and parse_while (over body+jmp).
+; Single-op variants emit 2 bytes; LE/GT emit 4 bytes (two branches).
+sub emit_skip_branch(ubyte op, ubyte skip_size) {
+    when op {
+        OP_EQ -> {
+            write_dst(OPC_BNE)
+            write_dst(skip_size)
+        }
+        OP_NE -> {
+            write_dst(OPC_BEQ)
+            write_dst(skip_size)
+        }
+        OP_LT -> {
+            write_dst(OPC_BCS)
+            write_dst(skip_size)
+        }
+        OP_GE -> {
+            write_dst(OPC_BCC)
+            write_dst(skip_size)
+        }
+        OP_LE -> {
+            ; A <= B  ==  (A == B) || (A < B). Skip body iff A > B,
+            ; i.e. !Z && C set. We branch to the body on equality
+            ; (jump over the bcs that would skip), then bcs the body.
+            write_dst(OPC_BEQ)
+            write_dst($02)                               ; over the bcs
+            write_dst(OPC_BCS)
+            write_dst(skip_size)
+        }
+        OP_GT -> {
+            ; A > B  ==  !Z && C set. Skip body on Z OR !C.
+            ; First branch over the second branch + body on equality.
+            write_dst(OPC_BEQ)
+            write_dst(skip_size + 2)                     ; over bcc + body
+            write_dst(OPC_BCC)
+            write_dst(skip_size)
+        }
+        else -> {
+            ; Unknown op -- emit a hard skip (jmp +N) to be safe.
+            write_dst(OPC_BNE)
+            write_dst(skip_size)
+        }
+    }
+}
+
+
 ; ---- syscall asmsubs ----
 asmsub _exit(ubyte code) = $F00F
 asmsub _close(ubyte handle) = $F015
@@ -649,17 +771,9 @@ sub parse_while() {
     }
     ubyte x_addr
     x_addr = var_addrs[c - $61]
-    ; skip ws to '!='
-    repeat {
-        c = read_src()
-        if src_eof != 0 {
-            return
-        }
-        if c == $21 {                                    ; '!'
-            break
-        }
-    }
-    c = read_src()                                       ; '='
+    ; Read the comparison operator: ==, !=, <, <=, >, >=.
+    ubyte op
+    op = read_cmp_op()
     if src_eof != 0 {
         return
     }
@@ -772,8 +886,7 @@ sub parse_while() {
     write_dst(x_addr)
     write_dst($c9)                                       ; CMP #
     write_dst(cmp_val)
-    write_dst($f0)                                       ; BEQ
-    write_dst($0a)                                       ;   +10
+    emit_skip_branch(op, $0a)                            ; exit branch (skip body+jmp=10)
     write_dst($a5)                                       ; LDA zp
     write_dst(x_addr)
     write_dst($18)                                       ; CLC
@@ -824,18 +937,9 @@ sub parse_if() {
     x_slot = c - $61
     ubyte x_addr
     x_addr = var_addrs[x_slot]
-    ; skip ws to '=='
-    repeat {
-        c = read_src()
-        if src_eof != 0 {
-            return
-        }
-        if c == $3d {                                    ; '='
-            break
-        }
-    }
-    ; skip second '='
-    c = read_src()
+    ; Read the comparison operator: ==, !=, <, <=, >, >=.
+    ubyte op
+    op = read_cmp_op()
     if src_eof != 0 {
         return
     }
@@ -916,17 +1020,15 @@ sub parse_if() {
     z_slot = c - $61
     ubyte z_addr
     z_addr = var_addrs[z_slot]
-    ; Ensure the helper exists in the output -- before we emit the
-    ; conditional, so its size doesn't shift our hard-coded BNE
-    ; displacement.
+    ; Ensure the helper exists in the output before we emit the
+    ; conditional, so its size doesn't shift our hard-coded displacements.
     emit_hex_helper()
-    ; Emit the 16-byte conditional.
+    ; Emit: lda <X>; cmp #YY; <conditional skip over 10-byte body>.
     write_dst($a5)                                       ; LDA zp x_addr
     write_dst(x_addr)
     write_dst($c9)                                       ; CMP #
     write_dst(cmp_val)
-    write_dst($d0)                                       ; BNE
-    write_dst($0a)                                       ;   +10 (skip then-block)
+    emit_skip_branch(op, $0a)                            ; skip 10-byte body on false
     ; then-block: print_ub Z (10 bytes)
     write_dst($a5)                                       ; LDA zp z_addr
     write_dst(z_addr)
