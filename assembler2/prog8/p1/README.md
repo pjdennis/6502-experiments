@@ -65,6 +65,31 @@ The arenas are tuned for tinyp8.p8 + the examples; p1's own larger
 sources need bigger arenas than fit alongside the current serializer
 code (a future code-size refinement, not on the critical path).
 
+## Phase 7 -- the self-hosting compiler (`p1.p8`)
+
+`p1.p8` is the real compiler: it reuses the streaming front-end above but
+**drops the AST serializer** and emits 6502 assembly text, byte-identical
+to the host oracle `python3 -m p8c source.p8 -o`. See
+[`../PHASE7_DESIGN.md`](../PHASE7_DESIGN.md) for the multi-pass plan
+(symbol table, ZP allocation, passes S / M / B, trailers) and the
+milestone map P7-M1..M6.
+
+* **P7-M1 (done)** -- skeleton. `main { }` (nmos) compiles to the fixed
+  prologue (ZP scratch bindings + `.org` + `jmp p8s_main`), an empty
+  `p8s_main` + the nmos exit epilogue (`lda #$00 / jsr $f00f / brk`), and
+  the reset-vector trailer at `$FFFC`. The codegen tail (`emit_prologue`
+  / `emit_main` / `emit_trailers`, plus `codegen_block` / `codegen_stmt`
+  stubs) spells the fixed asm text with `out_byte()` runs (p8c has no
+  string-literal-as-data). The driver runs pass A (directives -> target +
+  address), the prologue, pass M (find + codegen `main`), then the
+  trailers. Byte-identical to `p8c -o` (the `; source:` line normalized)
+  over the empty-main corpus at several load addresses --
+  `tests/test_p1.py`, `make p1-test`.
+
+The front-end of `p1.p8` was copied from `stmt.p8` at the start of Phase
+7; the two now diverge (stmt.p8 is the frozen parser-milestone artifact;
+p1.p8 grows codegen). `codegen_stmt` is a stub until P7-M2.
+
 ## Running
 
     # all p1 milestone tests (SKIPs without vasm6502_oldstyle + emulator):

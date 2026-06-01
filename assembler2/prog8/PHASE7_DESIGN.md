@@ -194,9 +194,23 @@ matters for the self-host), then widens to the examples.
 
 Each milestone is a few pushes; each diffs `p1`'s `.s` against `p8c`'s.
 
-* **P7-M1 -- skeleton.** `main { }` (nmos): prologue + ZP bindings (none)
-  + `p8s_main:` + the return/exit epilogue + reset vector. Establishes
-  passes S / prologue / M / trailers end-to-end with an empty body.
+* **P7-M1 -- skeleton. DONE.** `main { }` (nmos): prologue + ZP bindings
+  (none) + `p8s_main:` + the return/exit epilogue + reset vector.
+  Establishes passes S / prologue / M / trailers end-to-end with an empty
+  body. `p1/p1.p8` reuses stmt.p8's streaming front-end (lexer + expr +
+  statement driver + node arena), DROPS the AST serializer, and adds a
+  codegen tail: `emit_prologue` / `emit_main` / `emit_trailers`, with the
+  fixed asm text spelled out via `out_byte()` runs (p8c has no
+  string-literal-as-data). The driver runs pass A (directives -> target +
+  address), emits the prologue, runs pass M (find `main`, codegen its
+  body), and emits the trailers. Byte-identical to `p8c -o` (the
+  `; source:` line normalized) over the empty-main corpus at several load
+  addresses. `p1/tests/test_p1.py`, `make p1-test`.
+    * Code-size read: p1.bin is ~50 KB (front-end + the per-byte prologue
+      text). Fits comfortably in 64 KB now, but confirms the design's
+      "table-drive the literal text" mitigation will be needed before the
+      corpus grows much -- the fixed-text `out_byte` runs are the dominant
+      cost, exactly as the serializer milestone predicted.
 * **P7-M2 -- module vars + simple assignment.** `ubyte x` ... `x = 1`,
   `x = y`, augmented. Exercises the symbol table + ZP bindings +
   `_emit_byte_expr` leaves + store.

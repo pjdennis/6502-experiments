@@ -66,8 +66,9 @@ is the source of truth across sessions.
   * 5 v0/v1 e2e (`tinyp8/tests/test_e2e.py`).
   * 5 v0/v1 self-host equivalence (`test_self_host.py`).
   * 12 v2..v9 .p8-only (`test_v2.py`, sources in `goldens_v2/`).
-  * **153 total, all green** (the 22 tinyp8 + 27 p1 cases need vasm; see the
-    environment note above).
+  * **154 total, all green** (the 22 tinyp8 + 28 p1 cases need vasm; see the
+    environment note above). The 28th p1 case is `p1/tests/test_p1.py`
+    (Phase 7 codegen, P7-M1).
 
 Run:
 
@@ -305,7 +306,7 @@ Progress:
        1289-line `tinyp8.p8` (~2300 AST lines) parses byte-identical to
        the host (`test_stmt.py::test_tinyp8_capacity`). **Step 5 COMPLETE
        -- M0..M5 all done; the Prog8 parser runs on the 6502.**
-     * **NEXT: Phase 7 -- sema + codegen port (design done).** See
+     * **Phase 7 -- sema + codegen port (IN PROGRESS).** See
        [`PHASE7_DESIGN.md`](./PHASE7_DESIGN.md). `p1.p8` = the streaming
        front-end (reused) with the AST serializer DROPPED and replaced by
        sema + codegen, emitting `.s` byte-identical to `p8c -o` (the
@@ -314,11 +315,26 @@ Progress:
        vars first, then per-sub params+locals in sub order, overflow to
        memory), then emit prologue + ZP bindings, then main (parse+sema+
        codegen+reset), then the other subs, then trailers (mul helper /
-       arrays / structs / memvars / string pool / reset vector). Start at
-       **P7-M1**: `main { }` -> prologue + empty `p8s_main` + nmos exit +
-       reset vector, diffed against `p8c -o` (normalize the `; source:`
-       line, as the snapshot tests do). 64 KB is the main risk -- measure
-       at M1; table-drive the literal asm text if tight.
+       arrays / structs / memvars / string pool / reset vector).
+       * **P7-M1 DONE.** `p1/p1.p8` exists: front-end copied from stmt.p8,
+         serializer dropped, codegen tail added (`emit_prologue` /
+         `emit_main` / `emit_trailers`, `codegen_block` / `codegen_stmt`
+         stubs). Fixed asm text is spelled via `out_byte()` runs. Driver:
+         pass A (directives -> target+address) -> prologue -> pass M (find
+         + codegen `main`) -> trailers. `main { }` (nmos) at several load
+         addresses is byte-identical to `p8c -o` (the `; source:` line
+         normalized on both sides). `p1/tests/test_p1.py`, `make p1-test`.
+         **Capacity read: p1.bin is ~50 KB** -- fits 64 KB now, but the
+         per-byte fixed-text `out_byte` runs dominate, so table-driving the
+         literal asm text (design section 8) will be needed before the
+         corpus grows much.
+       * **NEXT: P7-M2** -- module vars + simple assignment: pass S builds
+         the symbol table (ZP bump from $40, overflow to main memory), emit
+         the `p8v_<name> = $XX` ZP bindings after the prologue, and
+         `codegen_stmt` gains var-decl/assignment (`x = 1`, `x = y`,
+         augmented) over `_emit_byte_expr` leaves + store. Mirror
+         `p8c/codegen.py` allocation ORDER exactly (sema.py's ZP allocator)
+         -- byte identity needs the same addresses.
 
 The caveat below (fixed frame layout) is addressed in the design doc's
 section 3.6 -- parallel arrays sized for the widest frame kind.
