@@ -68,7 +68,7 @@ class ParseError(Exception):
 
 class Parser:
     def __init__(self, tokens: list[Token], filename: str,
-                 iter_expr: bool = False):
+                 iter_expr: bool = False, iter_stmt: bool = False):
         self.toks = tokens
         self.pos = 0
         self.filename = filename
@@ -78,7 +78,13 @@ class Parser:
         # by tests/test_iter_parse.py; this flag lets the whole compiler
         # run under either, which is how the iterative parser is being
         # validated on the way to the Prog8 self-host (Phase 6).
-        self.iter_expr = iter_expr
+        #
+        # iter_stmt additionally routes block / statement parsing through
+        # the frame-stack driver `parse_block_iter` (no recursion over
+        # nested blocks). It implies iter_expr, so a run with iter_stmt=True
+        # uses the iterative parser end to end.
+        self.iter_stmt = iter_stmt
+        self.iter_expr = iter_expr or iter_stmt
 
     # ---- token helpers ----
 
@@ -255,12 +261,224 @@ class Parser:
                    is_asmsub=True, asm_target=f"${addr_tok.value:04x}")
 
     def parse_block(self) -> Block:
+        if self.iter_stmt:
+            return self.parse_block_iter()
         ob = self.eat("{")
         stmts: list[Node] = []
         while self.peek().kind != "}":
             stmts.append(self.parse_stmt())
         self.eat("}")
         return Block(loc=self.loc(ob), stmts=stmts)
+
+    # ---- iterative (non-recursive) block / statement parsing ----
+    #
+    # The recursive `parse_block` / `parse_stmt` / parse_if|while|... chain
+    # nests via Python's call stack, which can't be ported to Prog8. This
+    # driver replaces that nesting with an explicit stack of block frames.
+    # Leaf statements (var decls, assignments, calls, break/continue/return,
+    # inline asm) are still parsed by the existing helpers -- they don't
+    # recurse into blocks, and their sub-expressions go through the
+    # iterative expression parser (iter_stmt implies iter_expr). Only the
+    # block-nesting dimension becomes a loop here.
+    #
+    # Each frame is a dict:
+    #   kind:   'root'|'then'|'else'|'while'|'for'|'repeat'|'when'|'when_choice'
+    #   mode:   'stmts' (a normal block) or 'choices' (a `when` body)
+    #   stmts:  accumulated statements (stmts-mode)
+    #   ob_loc: Loc of the opening '{' (for the Block node)
+    #   defer:  Loc if this statement was prefixed with `defer`, else None
+    #   plus per-kind header data (cond / count / var,lo,hi / expr / etc.)
+    def parse_block_iter(self) -> Block:
+        ob = self.eat("{")
+        frames: list[dict] = [
+            {"kind": "root", "mode": "stmts", "stmts": [],
+             "ob_loc": self.loc(ob), "defer": None}
+        ]
+        result: Optional[Block] = None
+        pending_defer: Optional[Loc] = None
+
+        def attach(node: Node) -> None:
+            # Append a freshly built statement to the current block frame.
+            frames[-1]["stmts"].append(node)
+
+        while frames:
+            fr = frames[-1]
+
+            # `when` body: a sequence of choices, not statements.
+            if fr["mode"] == "choices":
+                t = self.peek()
+                if t.kind == "}":
+                    self.eat("}")
+                    node: Node = When(loc=fr["loc"], expr=fr["expr"],
+                                      choices=fr["choices"])
+                    if fr["defer"] is not None:
+                        node = Defer(loc=fr["defer"], stmt=node)
+                    frames.pop()
+                    if not frames:
+                        result = node  # unreachable: when is never the root
+                    else:
+                        attach(node)
+                    continue
+                values: list[Node] = []
+                if t.kind == "KW" and t.value == "else":
+                    self.pos += 1
+                else:
+                    values.append(self.parse_expr())
+                    while self.match(","):
+                        values.append(self.parse_expr())
+                self.eat("->")
+                cob = self.eat("{")
+                frames.append({"kind": "when_choice", "mode": "stmts",
+                               "stmts": [], "ob_loc": self.loc(cob),
+                               "defer": None, "when_loc": fr["loc"],
+                               "values": values})
+                continue
+
+            # Normal block frame.
+            t = self.peek()
+            if t.kind == "}":
+                self.eat("}")
+                block = Block(loc=fr["ob_loc"], stmts=fr["stmts"])
+                kind = fr["kind"]
+                frames.pop()
+                if kind == "root":
+                    result = block
+                    continue
+                if kind == "when_choice":
+                    # Attach a choice to the enclosing `when` frame.
+                    frames[-1]["choices"].append(
+                        WhenChoice(loc=fr["when_loc"], values=fr["values"],
+                                   body=block))
+                    continue
+                # Build the compound node this block belongs to.
+                if kind == "then":
+                    # Peek for an `else` -- if present, open its block and
+                    # defer building the If until the else-block closes.
+                    if self.peek().kind == "KW" and self.peek().value == "else":
+                        self.pos += 1
+                        eob = self.eat("{")
+                        frames.append({"kind": "else", "mode": "stmts",
+                                       "stmts": [], "ob_loc": self.loc(eob),
+                                       "defer": fr["defer"], "loc": fr["loc"],
+                                       "cond": fr["cond"], "then_block": block})
+                        continue
+                    node = If(loc=fr["loc"], cond=fr["cond"],
+                              then_block=block, else_block=None)
+                elif kind == "else":
+                    node = If(loc=fr["loc"], cond=fr["cond"],
+                              then_block=fr["then_block"], else_block=block)
+                elif kind == "while":
+                    node = While(loc=fr["loc"], cond=fr["cond"], body=block)
+                elif kind == "for":
+                    node = For(loc=fr["loc"], var_name=fr["var"], lo=fr["lo"],
+                               hi=fr["hi"], body=block)
+                elif kind == "repeat":
+                    node = Repeat(loc=fr["loc"], count=fr["count"], body=block)
+                else:
+                    raise ParseError(
+                        f"{self.filename}: internal: bad frame kind {kind!r}")
+                if fr["defer"] is not None:
+                    node = Defer(loc=fr["defer"], stmt=node)
+                attach(node)
+                continue
+
+            # A statement. First peel off any `defer` prefix.
+            if t.kind == "KW" and t.value == "defer":
+                self.pos += 1
+                pending_defer = self.loc(t)
+                continue
+            mod, pending_defer = pending_defer, None
+            opened = self._iter_stmt_dispatch(t, frames, mod)
+            if not opened:
+                # A simple (leaf) statement was parsed; wrap + attach it.
+                node = self._last_simple
+                if mod is not None:
+                    node = Defer(loc=mod, stmt=node)
+                attach(node)
+
+        assert result is not None
+        return result
+
+    def _iter_stmt_dispatch(self, t: Token, frames: list[dict],
+                            mod: Optional[Loc]) -> bool:
+        """Parse one statement. If it opens a compound (pushing a block
+        frame), return True. Otherwise parse a leaf statement, stash it in
+        self._last_simple, and return False."""
+        if t.kind == "DIRECTIVE" and t.value == "asm":
+            self._last_simple = self.parse_inline_asm()
+            return False
+        if t.kind == "KW":
+            if t.value in _TYPE_KWS:
+                self._last_simple = self.parse_var_decl()
+                return False
+            if t.value == "if":
+                self.pos += 1
+                cond = self.parse_expr()
+                ob = self.eat("{")
+                frames.append({"kind": "then", "mode": "stmts", "stmts": [],
+                               "ob_loc": self.loc(ob), "defer": mod,
+                               "loc": self.loc(t), "cond": cond})
+                return True
+            if t.value == "while":
+                self.pos += 1
+                cond = self.parse_expr()
+                ob = self.eat("{")
+                frames.append({"kind": "while", "mode": "stmts", "stmts": [],
+                               "ob_loc": self.loc(ob), "defer": mod,
+                               "loc": self.loc(t), "cond": cond})
+                return True
+            if t.value == "when":
+                self.pos += 1
+                expr = self.parse_expr()
+                self.eat("{")
+                frames.append({"kind": "when", "mode": "choices",
+                               "choices": [], "defer": mod,
+                               "loc": self.loc(t), "expr": expr})
+                return True
+            if t.value == "repeat":
+                self.pos += 1
+                count = None
+                if self.peek().kind != "{":
+                    count = self.parse_expr()
+                ob = self.eat("{")
+                frames.append({"kind": "repeat", "mode": "stmts", "stmts": [],
+                               "ob_loc": self.loc(ob), "defer": mod,
+                               "loc": self.loc(t), "count": count})
+                return True
+            if t.value == "for":
+                self.pos += 1
+                name = self.eat("IDENT")
+                self.eat("KW", "in")
+                lo = self.parse_expr()
+                self.eat("KW", "to")
+                hi = self.parse_expr()
+                ob = self.eat("{")
+                frames.append({"kind": "for", "mode": "stmts", "stmts": [],
+                               "ob_loc": self.loc(ob), "defer": mod,
+                               "loc": self.loc(t), "var": name.value,
+                               "lo": lo, "hi": hi})
+                return True
+            if t.value == "break":
+                self.pos += 1
+                self._last_simple = Break(loc=self.loc(t))
+                return False
+            if t.value == "continue":
+                self.pos += 1
+                self._last_simple = Continue(loc=self.loc(t))
+                return False
+            if t.value == "return":
+                self.pos += 1
+                value = None
+                nxt = self.peek()
+                if nxt.kind not in ("}", "KW") or (
+                    nxt.kind == "KW" and nxt.value in ("true", "false")
+                ):
+                    value = self.parse_expr()
+                self._last_simple = Return(loc=self.loc(t), value=value)
+                return False
+        # Anything else: assignment or expression statement.
+        self._last_simple = self.parse_assign_or_expr()
+        return False
 
     # ---- statements ----
 
@@ -621,5 +839,6 @@ class Parser:
 
 
 def parse(tokens: list[Token], filename: str,
-          iter_expr: bool = False) -> Program:
-    return Parser(tokens, filename, iter_expr=iter_expr).parse_program()
+          iter_expr: bool = False, iter_stmt: bool = False) -> Program:
+    return Parser(tokens, filename, iter_expr=iter_expr,
+                  iter_stmt=iter_stmt).parse_program()

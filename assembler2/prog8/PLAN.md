@@ -126,7 +126,7 @@ parse its own grammar without restrictions on control-flow body
 shape and expression depth. (The identifier-length restriction is
 gone as of v9.)
 
-### Phase 6 -- Host p8c iterative-parser rewrite `[in progress]` (THE strategic item)
+### Phase 6 -- Host p8c iterative-parser rewrite `[in progress: steps 1-3 done]` (THE strategic item)
 
 Host `p8c/parse.py` is recursive-descent in Python. Prog8 forbids
 recursion (subs are non-reentrant by design), so the host parser
@@ -152,19 +152,27 @@ Recommended approach:
    `iter_expr` flag; `tests/test_iter_parse_integration.py` compiles
    the whole example/snapshot corpus (22 files incl. tinyp8.p8) under
    both parsers and asserts byte-identical codegen.
-2. `[todo]` Extend to statements (statement stack, expression stack,
-   token-kind dispatch).
-3. `[partial]` Wire in via a flag, run the host test suite under both
-   parsers. Done for expressions (the integration test above); the
-   statement parser still recurses, so the flag only swaps expression
-   parsing for now.
-4. `[todo]` Once they're equivalent, delete the recursive parser.
-5. `[todo]` Port `iter_parse.py` to Prog8 itself.
+2. `[done]` Extend to statements. `parse.py` now has `parse_block_iter`,
+   a frame-stack driver that replaces the recursive block-nesting:
+   each open block / compound is a frame on an explicit stack, leaf
+   statements reuse the existing (non-recursive) helpers, and `defer`
+   is handled as a modifier that attaches to the next statement
+   (simple or compound). `if/else`, `while`, `for`, `repeat`, and
+   `when` (choice list + else) are all built on close. Gated by an
+   `iter_stmt` flag (which implies `iter_expr`).
+3. `[done]` Wire in via flags, run the host suite under both parsers.
+   `tests/test_iter_parse_integration.py` compiles the whole corpus
+   (22 files incl. tinyp8.p8) under `iter_expr=True` and `iter_stmt=True`
+   and asserts byte-identical codegen; `tests/test_iter_parse.py` also
+   diffs full-program ASTs under `iter_stmt`.
+4. `[todo]` Once confident, make the iterative parser the default and
+   remove the recursive descent (parse_if/while/for/when/repeat/block
+   + the precedence ladder).
+5. `[todo]` Port `iter_parse.py` + `parse_block_iter` to Prog8 itself.
 
-Estimated effort: **3-5 sessions** (step 1 landed). Biggest remaining
-design risk: representing and walking Prog8's statement AST fully
-iteratively without recursion (a statement stack with explicit
-"resume points" for block bodies, most likely).
+Estimated remaining effort: 1-2 sessions (steps 1-3 landed). The
+iterative parser now runs the entire compiler end to end behind a
+flag; what's left is making it the default and the eventual Prog8 port.
 
 ### Phase 7 -- Self-hosting bootstrap proof `[todo]`
 
@@ -208,14 +216,16 @@ Branch `claude/prog8-bootstrap-continue-6Pzo0` (continues the
   arithmetic, comparisons, and now **multi-character variable names**
   via a symbol table. Next surface items: stdin input (v10),
   multi-statement bodies, deeper expressions.
-* Phase 6 (iterative parser rewrite): **step 1 done** -- the
-  iterative *expression* parser exists, is proven equivalent to the
-  recursive one (unit + 4000-sample fuzz + whole-corpus codegen
-  diff), and is wired in behind an `iter_expr` flag. Next: the
-  statement parser.
+* Phase 6 (iterative parser rewrite): **steps 1-3 done** -- the
+  iterative parser handles both expressions and statements, runs the
+  entire compiler end to end behind `iter_expr` / `iter_stmt` flags,
+  and is proven equivalent to the recursive one (unit + 4000-sample
+  fuzz + full-program AST diff + whole-corpus byte-identical codegen).
+  Next: make it the default + remove the recursive descent, then port
+  to Prog8.
 * Phase 7-8: blocked on Phase 6.
 
-102 tests green. Self-host equivalence holds for the v0/v1 corpus.
+104 tests green. Self-host equivalence holds for the v0/v1 corpus.
 
 ---
 

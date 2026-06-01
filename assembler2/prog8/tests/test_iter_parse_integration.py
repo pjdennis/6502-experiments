@@ -31,9 +31,9 @@ SNAPS = ROOT / "tests" / "snapshots"
 TINYP8 = ROOT / "tinyp8" / "tinyp8.p8"
 
 
-def _compile(p8_path: Path, iter_expr: bool) -> str:
+def _compile(p8_path: Path, **flags) -> str:
     src = p8_path.read_text()
-    prog = parse(lex(src, str(p8_path)), str(p8_path), iter_expr=iter_expr)
+    prog = parse(lex(src, str(p8_path)), str(p8_path), **flags)
     analyze(prog)
     return generate(prog, p8_path.name)
 
@@ -49,16 +49,30 @@ def _corpus() -> list[Path]:
 
 
 class IterParseIntegration(unittest.TestCase):
-    def test_codegen_identical_under_both_parsers(self):
+    def test_iter_expr_codegen_identical(self):
         corpus = _corpus()
         self.assertGreater(len(corpus), 0, "no .p8 corpus found")
         for p8 in corpus:
             with self.subTest(p8=p8.name):
-                recursive = _compile(p8, iter_expr=False)
+                recursive = _compile(p8)
                 iterative = _compile(p8, iter_expr=True)
                 self.assertEqual(recursive, iterative,
                                  msg=f"codegen differs for {p8.name} "
-                                     f"between recursive and iterative parsers")
+                                     f"with the iterative expression parser")
+
+    def test_iter_stmt_codegen_identical(self):
+        # iter_stmt routes the whole block/statement chain through the
+        # frame-stack driver (and implies iter_expr), so this exercises
+        # the iterative parser end to end.
+        corpus = _corpus()
+        self.assertGreater(len(corpus), 0, "no .p8 corpus found")
+        for p8 in corpus:
+            with self.subTest(p8=p8.name):
+                recursive = _compile(p8)
+                iterative = _compile(p8, iter_stmt=True)
+                self.assertEqual(recursive, iterative,
+                                 msg=f"codegen differs for {p8.name} "
+                                     f"with the iterative statement parser")
 
 
 if __name__ == "__main__":

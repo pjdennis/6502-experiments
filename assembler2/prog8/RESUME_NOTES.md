@@ -59,13 +59,13 @@ is the source of truth across sessions.
   stays intact.
 
 * **Test counts (as of HEAD)**:
-  * 80 host p8c tests (`prog8/tests/` -- lex / parse / sema /
+  * 82 host p8c tests (`prog8/tests/` -- lex / parse / sema /
     codegen / snapshot / e2e LCD goldens, plus the iterative-parser
     equivalence + integration tests).
   * 5 v0/v1 e2e (`tinyp8/tests/test_e2e.py`).
   * 5 v0/v1 self-host equivalence (`test_self_host.py`).
   * 12 v2..v9 .p8-only (`test_v2.py`, sources in `goldens_v2/`).
-  * **102 total, all green** (the 22 tinyp8 cases need vasm; see the
+  * **104 total, all green** (the 22 tinyp8 cases need vasm; see the
     environment note above).
 
 Run:
@@ -203,39 +203,50 @@ Smaller in scope than A/B but unlocks "real input -> output"
 demos and stress-tests the on-target compiler against actual
 streaming use.
 
-### Option D: BIG -- host p8c iterative parser rewrite (step 1 DONE)
+### Option D: BIG -- host p8c iterative parser rewrite (steps 1-3 DONE)
 
 The standing item for *real* Prog8-in-Prog8 self-host. Host
-`p8c/parse.py` is recursive descent in Python (~600 lines).
-Prog8 forbids recursion, so porting requires rewriting the
-parser around explicit stacks.
+`p8c/parse.py` is recursive descent in Python; Prog8 forbids
+recursion, so porting requires rewriting it around explicit stacks.
 
 Progress:
-  1. **DONE** -- `p8c/iter_parse.py`: an iterative *expression* parser
-     (shunting-yard over explicit operand/operator stacks; binary
-     precedence ladder, prefix unary, parens, calls with comma args,
-     postfix `arr[idx]`/`.field`). Markers carry an operand-stack
-     "floor" so reductions never reach past their own sub-expression;
-     an `index_ok` flag matches the recursive parser's rule that only
-     a bare ident may be indexed. Proven equivalent in
-     `tests/test_iter_parse.py` (hand corpus + trailer-stop cases +
-     4000-sample randomized differential). Wired into `parse.py`
-     behind `parse(..., iter_expr=True)`;
-     `tests/test_iter_parse_integration.py` compiles the whole
-     example/snapshot corpus (22 files incl. tinyp8.p8) under both
-     parsers and asserts byte-identical codegen.
-  2. **NEXT** -- extend to statements: a statement stack + the
-     expression engine above, dispatching by current-token kind.
-     The hard part is block bodies (`{ ... }`) without recursion --
-     likely a stack of "pending statement" frames with explicit
-     resume points (parse cond -> parse block -> attach). Keep the
-     `iter_expr`-style flag so the whole suite can run under it, then
-     diff codegen across the corpus exactly like step 1.
-  3. Then switch over and delete the recursive parser.
-  4. Eventually port `iter_parse.py` to Prog8 itself.
+  1. **DONE** -- `p8c/iter_parse.py`: iterative *expression* parser
+     (shunting-yard over operand/operator stacks; binary precedence
+     ladder, prefix unary, parens, calls with comma args, postfix
+     `arr[idx]`/`.field`). Markers carry an operand-stack "floor" so
+     reductions never reach past their sub-expression; an `index_ok`
+     flag matches the recursive rule that only a bare ident may be
+     indexed.
+  2. **DONE** -- iterative *statement* parser: `Parser.parse_block_iter`
+     in `parse.py`, a frame-stack driver. Each open block / compound
+     is a frame; leaf statements reuse the existing non-recursive
+     helpers; `defer` is a modifier that attaches to the next
+     statement (simple or compound). `if/else`, `while`, `for`,
+     `repeat`, and `when` (choice list + else) build their node on
+     close. The `when` body runs in a separate 'choices' frame mode.
+  3. **DONE** -- wired behind flags. `parse(..., iter_expr=True)`
+     swaps just expressions; `parse(..., iter_stmt=True)` runs the
+     whole parser iteratively (implies iter_expr). Equivalence proven
+     by `tests/test_iter_parse.py` (expr: hand corpus + trailer cases
+     + 4000-sample fuzz; stmt: full-program AST diff over a corpus)
+     and `tests/test_iter_parse_integration.py` (byte-identical
+     codegen over all 22 example/snapshot programs under both flags).
 
-Estimated remaining effort: 2-4 pushes. The expression engine is the
-reusable core; statements reuse it for every sub-expression.
+  NEXT (steps 4-5):
+  4. Make the iterative parser the default and delete the recursive
+     descent (`_parse_binop` ladder + parse_if/while/for/when/repeat
+     + the recursive `parse_block`/`parse_stmt`). Flip the flag
+     defaults, run the full suite, then remove the dead code and the
+     now-redundant `iter_*` flags.
+  5. Port `iter_parse.py` + `parse_block_iter` to Prog8 itself -- the
+     frame structs become `ubyte[]` parallel arrays / a tagged-union
+     node array (the tinyp8.p8 idiom, scaled up). THIS is what unlocks
+     Phase 7 (writing p1.p8).
+
+Caveat worth noting for step 5: the frame dicts here lean on Python
+dynamic typing (heterogeneous per-kind fields). The Prog8 port will
+need a fixed frame layout -- size it for the widest frame kind, or
+split per-kind state into parallel arrays indexed by frame depth.
 
 ### Option E: more host language features (varies)
 

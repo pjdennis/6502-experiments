@@ -27,7 +27,7 @@ sys.path.insert(0, str(ROOT))
 
 from p8c.ast import Node  # noqa: E402
 from p8c.lex import lex  # noqa: E402
-from p8c.parse import Parser  # noqa: E402
+from p8c.parse import Parser, parse  # noqa: E402
 from p8c.iter_parse import IterParser  # noqa: E402
 
 
@@ -246,6 +246,51 @@ class IterParseEquivalence(unittest.TestCase):
                              msg=f"end-position mismatch for {src!r}")
             self.assertEqual(it.toks[it.pos].kind, "EOF",
                              msg=f"did not reach EOF for {src!r}")
+
+
+# Full programs exercising the statement surface. Parsed with the
+# recursive statement parser and the iterative frame-stack driver
+# (iter_stmt=True); the resulting whole-program ASTs must be identical.
+STMT_PROGRAMS = [
+    "main { }",
+    "main { txt.print(\"hi\") }",
+    "ubyte x\nmain { x = 1 x += 2 x <<= 1 }",
+    "ubyte x\nmain { if x == 0 { x = 1 } }",
+    "ubyte x\nmain { if x == 0 { x = 1 } else { x = 2 } }",
+    # nested if / else
+    "ubyte x\nubyte y\nmain { if x { if y { x = 1 } else { x = 2 } } else { y = 3 } }",
+    "ubyte i\nmain { while i < 10 { i = i + 1 } }",
+    "ubyte i\nmain { for i in 0 to 7 { txt.print(\"x\") } }",
+    "main { repeat { break } }",
+    "main { repeat 5 { txt.print(\".\") } }",
+    "ubyte i\nmain { for i in 0 to 3 { if i == 2 { continue } txt.print(\"y\") } }",
+    # when: multi-value choices + else
+    "sub f(ubyte c) { when c { $61 -> { txt.print(\"a\") } $62, $63 -> { txt.print(\"bc\") } else -> { txt.print(\"?\") } } }",
+    # defer (simple) and defer before a compound
+    "ubyte x\nsub g() { defer txt.print(\"3\") defer txt.print(\"2\") txt.print(\"body\") }",
+    "ubyte x\nsub h() { defer if x { txt.print(\"z\") } x = 1 }",
+    # returns
+    "sub r() -> ubyte { return 5 }",
+    "sub r2() -> bool { return true }",
+    "sub r3() { return }",
+    # memory + array statements
+    "main { @($f001) = 7 }",
+    "ubyte[4] arr\nmain { arr[0] = 1 arr[1] = arr[0] + 2 }",
+    # inline asm
+    "main { %asm{{ \"nop\" }} }",
+    # deeply nested mix
+    "ubyte a\nubyte b\nmain { while a < 8 { for b in 0 to a { if b == 3 { break } } a = a + 1 } }",
+]
+
+
+class IterStmtEquivalence(unittest.TestCase):
+    def test_full_program_asts_match(self):
+        for src in STMT_PROGRAMS:
+            with self.subTest(src=src):
+                rec = parse(lex(src, "<t>"), "<t>")
+                it = parse(lex(src, "<t>"), "<t>", iter_stmt=True)
+                self.assertEqual(dump(rec), dump(it),
+                                 msg=f"program AST mismatch for {src!r}")
 
 
 if __name__ == "__main__":
