@@ -1,0 +1,6 @@
+; v6: while loop with increment.
+let x = $00
+while x != $05
+    let x = x + $01
+print_ub x
+end

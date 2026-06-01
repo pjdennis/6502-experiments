@@ -42,7 +42,7 @@ class SemaError(Exception):
 # scratch bytes at $20/$21/$22 for nested expression temps and loop
 # counters.
 ZP_VAR_BASE = 0x40
-ZP_VAR_TOP = 0x80
+ZP_VAR_TOP = 0xff
 
 
 class Sema:

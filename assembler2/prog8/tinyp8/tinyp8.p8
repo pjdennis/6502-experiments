@@ -605,6 +605,188 @@ sub emit_print_ub_var(ubyte addr) {
     emit_print_char($0a)
 }
 
+; ---- v6: `while X != $YY` loop with a fixed-shape increment body ----
+;
+; The body is restricted to `let X = X + $ZZ` (variable += literal),
+; which compiles to a known 7 bytes; that lets us hard-code both the
+; BEQ skip displacement (10 bytes = body + jmp) and the JMP-back
+; target (recorded as bytes_emitted at the loop top).
+;
+;   while X != $YY
+;       let X = X + $ZZ
+;
+; Compiled output (14 bytes per while):
+;   loop_top: lda <X>        ; 2
+;             cmp #$YY       ; 2
+;             beq +10        ; 2  -- skip body + jmp on equal
+;             lda <X>        ; 2
+;             clc            ; 1
+;             adc #$ZZ       ; 2
+;             sta <X>        ; 2
+;             jmp loop_top   ; 3
+;   loop_exit:
+sub parse_while() {
+    ubyte c
+    ; skip 'h','i','l','e'
+    c = read_src()
+    c = read_src()
+    c = read_src()
+    c = read_src()
+    if src_eof != 0 {
+        return
+    }
+    ; skip ws to variable name
+    repeat {
+        c = read_src()
+        if src_eof != 0 {
+            return
+        }
+        if c >= $61 {
+            if c <= $7a {
+                break
+            }
+        }
+    }
+    ubyte x_addr
+    x_addr = var_addrs[c - $61]
+    ; skip ws to '!='
+    repeat {
+        c = read_src()
+        if src_eof != 0 {
+            return
+        }
+        if c == $21 {                                    ; '!'
+            break
+        }
+    }
+    c = read_src()                                       ; '='
+    if src_eof != 0 {
+        return
+    }
+    ; skip ws to '$'
+    repeat {
+        c = read_src()
+        if src_eof != 0 {
+            return
+        }
+        if c == $24 {
+            break
+        }
+    }
+    c = read_src()
+    if src_eof != 0 {
+        return
+    }
+    tmp_byte = hex_nibble(c) << 4
+    c = read_src()
+    if src_eof != 0 {
+        return
+    }
+    tmp_byte = tmp_byte | hex_nibble(c)
+    ubyte cmp_val
+    cmp_val = tmp_byte
+    skip_to_nl()
+    ; ---- Read the body: `let X = X + $ZZ` ----
+    repeat {
+        c = read_src()
+        if src_eof != 0 {
+            return
+        }
+        if c == $6c {                                    ; 'l' of "let"
+            break
+        }
+    }
+    c = read_src()                                       ; 'e'
+    c = read_src()                                       ; 't'
+    ; loop var
+    repeat {
+        c = read_src()
+        if src_eof != 0 {
+            return
+        }
+        if c >= $61 {
+            if c <= $7a {
+                break
+            }
+        }
+    }
+    ; '='
+    repeat {
+        c = read_src()
+        if src_eof != 0 {
+            return
+        }
+        if c == $3d {
+            break
+        }
+    }
+    ; loop var on RHS (not validated)
+    repeat {
+        c = read_src()
+        if src_eof != 0 {
+            return
+        }
+        if c >= $61 {
+            if c <= $7a {
+                break
+            }
+        }
+    }
+    ; '+'
+    repeat {
+        c = read_src()
+        if src_eof != 0 {
+            return
+        }
+        if c == $2b {
+            break
+        }
+    }
+    ; '$'
+    repeat {
+        c = read_src()
+        if src_eof != 0 {
+            return
+        }
+        if c == $24 {
+            break
+        }
+    }
+    c = read_src()
+    if src_eof != 0 {
+        return
+    }
+    tmp_byte = hex_nibble(c) << 4
+    c = read_src()
+    if src_eof != 0 {
+        return
+    }
+    tmp_byte = tmp_byte | hex_nibble(c)
+    ubyte incr
+    incr = tmp_byte
+    skip_to_nl()
+    ; ---- Emit the loop ----
+    uword loop_top
+    loop_top = LOAD_ADDR + bytes_emitted
+    write_dst($a5)                                       ; LDA zp <X>
+    write_dst(x_addr)
+    write_dst($c9)                                       ; CMP #
+    write_dst(cmp_val)
+    write_dst($f0)                                       ; BEQ
+    write_dst($0a)                                       ;   +10
+    write_dst($a5)                                       ; LDA zp
+    write_dst(x_addr)
+    write_dst($18)                                       ; CLC
+    write_dst($69)                                       ; ADC #
+    write_dst(incr)
+    write_dst($85)                                       ; STA zp
+    write_dst(x_addr)
+    write_dst($4c)                                       ; JMP
+    write_dst(lsb(loop_top))
+    write_dst(msb(loop_top))
+}
+
+
 ; ---- v3: conditional `if X == $YY then print_ub Z` ----
 ;
 ; Restricted form: the then-clause must be exactly `print_ub <letter>`
@@ -796,11 +978,15 @@ main {
                 if c == $69 {                                ; 'i' -- "if"
                     parse_if()
                 } else {
-                    if c == $65 {                                ; 'e' -- "end"
-                        skip_to_nl()
-                        break
+                    if c == $77 {                                ; 'w' -- "while"
+                        parse_while()
                     } else {
-                        skip_to_nl()
+                        if c == $65 {                                ; 'e' -- "end"
+                            skip_to_nl()
+                            break
+                        } else {
+                            skip_to_nl()
+                        }
                     }
                 }
             }
