@@ -305,11 +305,20 @@ Progress:
        1289-line `tinyp8.p8` (~2300 AST lines) parses byte-identical to
        the host (`test_stmt.py::test_tinyp8_capacity`). **Step 5 COMPLETE
        -- M0..M5 all done; the Prog8 parser runs on the 6502.**
-     * **NEXT: Phase 7.** Port sema + codegen to Prog8 on top of this AST
-       arena, assemble `p1.p8`, and prove `p0(p1.p8) == p1(p1.p8)`. (Also
-       optional: shrink stmt.p8's serializer code -- per-byte string
-       emission -> a data table -- so the arenas can grow enough to parse
-       p1's own larger sources; not on the critical path.)
+     * **NEXT: Phase 7 -- sema + codegen port (design done).** See
+       [`PHASE7_DESIGN.md`](./PHASE7_DESIGN.md). `p1.p8` = the streaming
+       front-end (reused) with the AST serializer DROPPED and replaced by
+       sema + codegen, emitting `.s` byte-identical to `p8c -o` (the
+       oracle -- no freeze step). Multi-pass driver: pass S builds the
+       whole-program symbol table with byte-exact ZP allocation (module
+       vars first, then per-sub params+locals in sub order, overflow to
+       memory), then emit prologue + ZP bindings, then main (parse+sema+
+       codegen+reset), then the other subs, then trailers (mul helper /
+       arrays / structs / memvars / string pool / reset vector). Start at
+       **P7-M1**: `main { }` -> prologue + empty `p8s_main` + nmos exit +
+       reset vector, diffed against `p8c -o` (normalize the `; source:`
+       line, as the snapshot tests do). 64 KB is the main risk -- measure
+       at M1; table-drive the literal asm text if tight.
 
 The caveat below (fixed frame layout) is addressed in the design doc's
 section 3.6 -- parallel arrays sized for the widest frame kind.

@@ -231,10 +231,25 @@ and it feeds directly into Phase 7. The iterative parser is now the
 production path; the recursive descent survives only as a test oracle.
 M0 is done (the format is frozen); M1 (the lexer port) is next.
 
-### Phase 7 -- Self-hosting bootstrap proof `[todo]`
+### Phase 7 -- Self-hosting bootstrap proof `[in progress: design done]`
 
-Once the host has an iterative parser AND the language is wide
-enough:
+The Phase 6 parser port is complete (`p1/` M0..M5: lexer, expression
+parser, statement/whole-program parser, streaming -- parses the whole
+tinyp8.p8 byte-identically on the 6502). Phase 7 adds the back half:
+**sema + codegen**, so `p1.p8` compiles `.p8` -> `.s` on the 6502,
+byte-identical to host `p8c`.
+
+Design doc: [`PHASE7_DESIGN.md`](./PHASE7_DESIGN.md) -- the contract is
+`p8c -o` (no freeze step); the real `p1.p8` drops the AST serializer
+(parser-verification scaffolding) and reuses the streaming front-end; a
+multi-pass driver (pass S builds the whole-program symbol table with
+byte-exact ZP allocation, then prologue, then main, then the other subs,
+then trailers) reconciles streaming with the global symbol table and
+main-first emission; milestones P7-M1 (`main { }` skeleton) .. P7-M6
+(corpus + `p0(p1.p8)==p1(p1.p8)`). 64 KB capacity is the main risk
+(mitigated by dropping the serializer + table-driving the literal text).
+
+Original plan:
 
 1. Port host p8c to Prog8. Call it `p1.p8`.
 2. Aim for ≤32 KiB compiled so it fits in one wendy2c bank, OR
