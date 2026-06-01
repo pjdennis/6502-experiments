@@ -184,6 +184,12 @@ wendy2c, mirroring the asm00..asm17 chain.
     tight `lda label,y` path; uword elements, >256 arrays, or a uword
     index use a ZP element pointer (`label + index*esize`, then
     `(ptr),y`). ubyte elements widen to uword on read.
+  * Scalars that overflow the ZP variable window ($40..$ff) spill into
+    main memory as labeled reservations (absolute addressing) -- a big
+    program's locals no longer hit "out of ZP variable space".
+  * Sub calls pass arguments via the hardware stack into the callee's
+    (non-reentrant) param slots, so `f(.., g())` where `g` transitively
+    calls `f` is correct.
   * `*` ubyte multiplication via a runtime helper (shift-and-add).
   * `@(addr_expr)` byte read/write at arbitrary addresses (via the
     `__p8c_ptr0` indirect-Y pointer in ZP); literal addresses use

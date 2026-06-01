@@ -144,9 +144,13 @@ class Sema:
                     )
                 size = 1 if pt is UBYTE else 2
                 mangled = f"p8v_{s.name}_arg_{p.name}"
-                sym = Symbol(name=p.name, mangled=mangled, type=pt,
-                             kind="var", address=self._zp_next)
-                self._zp_next += size
+                if self._zp_next + size > ZP_VAR_TOP:
+                    sym = Symbol(name=p.name, mangled=mangled, type=pt,
+                                 kind="var", address=None)
+                else:
+                    sym = Symbol(name=p.name, mangled=mangled, type=pt,
+                                 kind="var", address=self._zp_next)
+                    self._zp_next += size
                 sub_scope[p.name] = sym
                 p.sym = sym
                 self.prog.all_vars.append(sym)
@@ -265,14 +269,21 @@ class Sema:
                 f"(have ubyte | byte | uword)"
             )
         size = 2 if t is UWORD else 1
-        if self._zp_next + size > ZP_VAR_TOP:
-            raise SemaError(
-                f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: out of ZP variable space"
-            )
         mangled = f"{mangled_prefix}{vd.name}"
-        sym = Symbol(name=vd.name, mangled=mangled, type=t, kind="var",
-                     address=self._zp_next)
-        self._zp_next += size
+        if self._zp_next + size > ZP_VAR_TOP:
+            # ZP is full: overflow this scalar into main memory as a
+            # labeled byte/word reservation (address=None marks it). The
+            # ZP allocator is a global bump allocator (never reset across
+            # subs, for non-reentrancy safety), so a big program exhausts
+            # the 192-byte ZP window; codegen references a memvar by its
+            # label (absolute addressing) -- `lda <mangled>` works for
+            # both. Programs that fit in ZP are unaffected.
+            sym = Symbol(name=vd.name, mangled=mangled, type=t, kind="var",
+                         address=None)
+        else:
+            sym = Symbol(name=vd.name, mangled=mangled, type=t, kind="var",
+                         address=self._zp_next)
+            self._zp_next += size
         scope[vd.name] = sym
         vd.sym = sym
         self.prog.all_vars.append(sym)

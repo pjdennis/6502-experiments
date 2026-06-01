@@ -350,9 +350,23 @@ the command later milestones diff their on-target output against.
   lo/hi split.
 
 
-* **M3 -- statement parser port.** `p1/stmt.p8`: the frame-stack driver
-  of 3.6. Golden: full programs (the `STMT_PROGRAMS` corpus + the
-  `examples/` files), serialized and diffed.
+* **M3 -- statement parser port. DONE.** `p1/stmt.p8`: the top-level
+  program parser + the frame-stack statement driver (3.6) + the full
+  `(program ...)` serializer, all no-recursion, with uword arenas (p8c's
+  16-bit arrays) so node/token counts exceed 256. Covers module var
+  decls, subs (sub/main with params + return), blocks, if/else, while,
+  for-in-to, repeat, when (multi-value choices + else), defer,
+  break/continue/return, assignments (incl. augmented, `@()=`,
+  `arr[i]=`), call statements, and inline `%asm`. Byte-identical to the
+  oracle over the entire `STMT_PROGRAMS` corpus (`p1/tests/test_stmt.py`,
+  `make p1-test`). Three host enhancements were needed and made: scalars
+  overflow ZP into main memory (the global ZP allocator can't hold a big
+  program's locals); the sub calling convention evaluates args onto the
+  stack before filling the (non-reentrant) param slots, so `f(.., g())`
+  with `g` transitively calling `f` is correct; and a serializer
+  `ws_sp`-increment ordering bug was fixed. Directives, const/enum/
+  struct, and asmsub are not yet handled -- that is M4 (the `examples/`
+  corpus).
 
 * **M4 -- whole-program parse on-target.** Wire lexer+parser+serializer
   into one `p1/parse_main.p8` that takes a `.p8` path and writes the

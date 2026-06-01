@@ -34,13 +34,20 @@ milestones M0..M5).
   to the Python oracle over the entire `EXPRESSIONS` corpus plus a
   randomized-fuzz sample (`tests/test_expr.py`).
 
-* M3 (statements) .. M5 (capacity) -- to come.
+* **M3 (done)** -- `stmt.p8`: the on-target statement + whole-program
+  parser. Ports the top-level program parser plus the frame-stack
+  statement driver (parse.py::parse_block_iter) -- module var decls,
+  subs (sub/main with params + return), blocks, if/else, while,
+  for-in-to, repeat, when (multi-value choices + else), defer,
+  break/continue/return, assignments (incl. augmented, `@()=`,
+  `arr[i]=`), call statements, inline `%asm` -- and emits the full
+  `(program ...)` serialization. No recursion; uword arenas (p8c's
+  16-bit arrays) so node/token counts exceed 256. Byte-identical to the
+  oracle over the entire `STMT_PROGRAMS` corpus (`tests/test_stmt.py`).
 
-  **Array limit:** host p8c arrays are <=256 ubyte elements with a ubyte
-  index, so `expr.p8` keeps one expression's arenas in <=256-element
-  byte arrays (16-bit values split into `_lo`/`_hi`). Whole-program
-  parsing (M3/M4) exceeds 256 nodes, so it first needs real 16-bit
-  arrays added to p8c.
+* M4 (extend to the `examples/` corpus: directives, const/enum/struct,
+  asmsub) .. M5 (capacity / per-sub streaming for tinyp8.p8-sized
+  inputs; stmt.p8's arenas are sized for small programs) -- to come.
 
 ## Running
 

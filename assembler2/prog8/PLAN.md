@@ -202,10 +202,17 @@ Recommended approach:
      Two host-p8c bugs fixed en route (mkword Y-clobber; I/O
      EOF-stickiness vs the emulator's rewind-on-EOF); one gap worked
      around (ubyte array element -> uword widening).
-   * `[todo]` M3 stmt -> M4 whole-program on-target -> M5
-     capacity/streaming. NB: M3/M4 exceed 256 nodes/tokens, so they
-     first need real 16-bit arrays (uword elements + uword/large index)
-     added to p8c -- the next host-track enhancement.
+   * `[done]` **M3 -- statement parser port.** `p1/stmt.p8` ports the
+     top-level program parser + the frame-stack statement driver +
+     the full `(program ...)` serializer (uword arenas), byte-identical
+     to the oracle over the whole `STMT_PROGRAMS` corpus
+     (`p1/tests/test_stmt.py`). Three host enhancements made en route:
+     ZP-overflow scalars -> main memory; reentrant-safe sub calling
+     convention (args via the stack); a serializer ordering-bug fix.
+   * `[todo]` M4 (extend to the `examples/` corpus: directives, const,
+     enum, struct, asmsub) -> M5 capacity/streaming (tinyp8.p8-sized
+     inputs need per-sub streaming; the M3 arenas are sized for small
+     programs).
 
 Estimated remaining effort: the Prog8 port (step 5) is the last piece,
 and it feeds directly into Phase 7. The iterative parser is now the
@@ -266,7 +273,7 @@ Branch `claude/prog8-bootstrap-continue-6Pzo0` (continues the
   on-disk goldens. M1 (lexer port to `p1/`) is next.
 * Phase 7-8: blocked on the rest of the Phase 6 Prog8 port (M1-M4).
 
-150 tests green (host p8c 104, tinyp8 22, p1 24). Self-host equivalence holds for the v0/v1 corpus.
+151 tests green (host p8c 104, tinyp8 22, p1 25). Self-host equivalence holds for the v0/v1 corpus.
 
 ---
 

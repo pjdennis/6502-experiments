@@ -127,10 +127,15 @@ class CodeGen:
         array_vars = [s for s in self.prog.all_vars if s.kind == "array"]
         struct_vars = [s for s in self.prog.all_vars if s.kind == "struct_instance"]
         struct_arrays = [s for s in self.prog.all_vars if s.kind == "struct_array"]
-        if scalar_vars:
+        # Scalars with a ZP address get a zero-page binding; scalars that
+        # overflowed ZP (address is None) are emitted as labeled main-
+        # memory reservations further down (memvars) and referenced by
+        # label (absolute addressing) -- `lda <mangled>` works for both.
+        zp_scalars = [s for s in scalar_vars if s.address is not None]
+        mem_scalars = [s for s in scalar_vars if s.address is None]
+        if zp_scalars:
             self.emit("; ---- ZP variable allocations ----")
-            for sym in scalar_vars:
-                assert sym.address is not None
+            for sym in zp_scalars:
                 self.emit(f"{sym.mangled} = ${sym.address:02x}")
             self.emit("")
         # main() must be emitted first (the prologue's JMP points at it).
@@ -160,6 +165,13 @@ class CodeGen:
                 assert isinstance(sym.type, (TUByteArray, TUWordArray))
                 esize = 2 if isinstance(sym.type, TUWordArray) else 1
                 nbytes = sym.type.size * esize
+                self.emit(f"{sym.mangled}:")
+                self.emit(f"  .byte " + ", ".join(["0"] * nbytes))
+        if mem_scalars:
+            self.emit("")
+            self.emit("; ---- scalars overflowed from ZP into main memory ----")
+            for sym in mem_scalars:
+                nbytes = 2 if sym.type is UWORD else 1
                 self.emit(f"{sym.mangled}:")
                 self.emit(f"  .byte " + ", ".join(["0"] * nbytes))
         if struct_vars:
@@ -1496,18 +1508,37 @@ class CodeGen:
                     )
                 self.emit(f"  jsr {sym.asm_target}")
                 return
-            # Regular sub: store each arg in its param slot.
+            # Regular sub: pass args via the callee's static param slots.
+            # Param slots are NOT reentrant, so we must not write them
+            # while a later argument is still being evaluated -- that
+            # argument's evaluation may itself call this (or a transitively
+            # shared) sub and clobber the slots. So evaluate every argument
+            # onto the hardware stack first, then pop them into the param
+            # slots immediately before the JSR.
+            arg_slots = []   # (param sym, is_word) in arg order
             for arg, p in zip(c.args, params):
                 if p.sym is None:
                     raise CodeGenError(f"param {p.name!r} not resolved by sema")
                 pt = type_from_name(p.type_name)
                 if pt is UBYTE:
                     self._emit_byte_expr_into_a(arg)
-                    self.emit(f"  sta {p.sym.mangled}")
+                    self.emit("  pha")
+                    arg_slots.append((p.sym, False))
                 else:
                     self._emit_word_expr_into_ay(arg)
-                    self.emit(f"  sta {p.sym.mangled}")
-                    self.emit(f"  sty {p.sym.mangled}+1")
+                    self.emit("  pha")            # low
+                    self.emit("  tya")
+                    self.emit("  pha")            # high
+                    arg_slots.append((p.sym, True))
+            for p_sym, is_word in reversed(arg_slots):
+                if is_word:
+                    self.emit("  pla")            # high
+                    self.emit(f"  sta {p_sym.mangled}+1")
+                    self.emit("  pla")            # low
+                    self.emit(f"  sta {p_sym.mangled}")
+                else:
+                    self.emit("  pla")
+                    self.emit(f"  sta {p_sym.mangled}")
             # Inline sub: splice the body in place instead of JSR.
             if target is not None and target.is_inline:
                 # Save the caller's return label (each inline-call gets

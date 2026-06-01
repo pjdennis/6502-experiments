@@ -66,7 +66,7 @@ is the source of truth across sessions.
   * 5 v0/v1 e2e (`tinyp8/tests/test_e2e.py`).
   * 5 v0/v1 self-host equivalence (`test_self_host.py`).
   * 12 v2..v9 .p8-only (`test_v2.py`, sources in `goldens_v2/`).
-  * **150 total, all green** (the 22 tinyp8 + 24 p1 cases need vasm; see the
+  * **151 total, all green** (the 22 tinyp8 + 25 p1 cases need vasm; see the
     environment note above).
 
 Run:
@@ -283,14 +283,21 @@ Progress:
        handled en route (mkword Y-clobber + I/O EOF-stickiness fixed;
        ubyte-array-element->uword widening worked around) -- pitfalls
        below.
-     * **M3 NEXT -- statement parser port.** Port `parse_block_iter`
-       (the frame-stack driver, design 3.6) + the top-level
-       `parse_program` to `p1/stmt.p8`, building the whole-program AST
-       and emitting the full `(program ...)` serialization. The M3/M4
-       array blocker is now CLEARED -- p8c has 16-bit arrays, so the
-       token/node arenas can be `uword[N]` with uword indices (no more
-       <=256 cap / lo-hi split). Golden: the `STMT_PROGRAMS` corpus
-       (M3), then all examples + tinyp8.p8 (M4).
+     * **M3 DONE -- statement + whole-program parser port.** `p1/stmt.p8`
+       ports the top-level program parser + the frame-stack statement
+       driver (parse_block_iter) + the full `(program ...)` serializer,
+       no recursion, uword arenas. Byte-identical to the oracle over the
+       whole `STMT_PROGRAMS` corpus (`p1/tests/test_stmt.py`,
+       `make p1-test`). Three host enhancements made en route (see
+       pitfalls): ZP-overflow scalars -> main memory; reentrant-safe sub
+       calling convention; a serializer ordering-bug fix.
+     * **M4 NEXT -- extend to the `examples/` corpus.** stmt.p8 currently
+       handles statements + basic top-level (vars, sub/main); the
+       examples add directives (`%import`/`%output`/`%target` -> the
+       imports/output/target fields), `const`, `enum`, `struct`, and
+       `asmsub`. Then M5 = capacity/streaming (tinyp8.p8-sized inputs;
+       the M3 arenas are sized for small programs -- a whole big program
+       + arenas would exceed 64 KB, so per-sub streaming is needed).
 
 The caveat below (fixed frame layout) is addressed in the design doc's
 section 3.6 -- parallel arrays sized for the widest frame kind.
@@ -317,6 +324,41 @@ when a demo or tinyp8 push needs them.
 ---
 
 ## Pitfalls / gotchas observed this session
+
+* **Host p8c: sub calling convention was not reentrant -- FIXED.** Args
+  were stored straight into the callee's static param slots as each was
+  evaluated; if a LATER arg's evaluation called the same sub (directly
+  or transitively), it clobbered the already-stored earlier args. So
+  `new_node(KIND, 0, parse_expr(), 0)` got the wrong KIND because
+  `parse_expr` calls `new_node` internally. Fix (`p8c/codegen.py`
+  `_emit_call`): evaluate every arg onto the hardware stack first, then
+  pop them into the param slots immediately before the JSR. This is
+  essential for the self-host (nested calls are everywhere). Changed
+  codegen for all regular-sub calls but snapshots/tinyp8 stayed green
+  (they don't use regular-sub multi-arg calls / the behavioral tests
+  pass).
+
+* **Host p8c: ZP variable space is a hard 192-byte global pool.** The
+  ZP allocator (`$40..$ff`) is a global bump allocator, never reset
+  across subs (sub locals can't overlap callees' locals -- non-
+  reentrant). A big program (stmt.p8) exhausts it. Fix: scalars that
+  overflow ZP now spill into main memory as labeled reservations
+  (`address=None` in sema; emitted like arrays; referenced by label /
+  absolute addressing). Proper per-sub ZP reuse would need call-graph
+  coloring -- future work.
+
+* **64 KB capacity.** stmt.p8 + generously-sized arenas overflowed
+  $FFFF (the overflow scalars landed past the address space). The M3
+  arenas were shrunk (tok 600, nodes 512, pools ~1.5 KB) to fit small
+  programs. Parsing a whole big program (tinyp8.p8) in one shot won't
+  fit -- M5 needs per-sub streaming.
+
+* **On-target serializer: capture work-stack fields BEFORE pushing.**
+  In stmt.p8's `(vals ...)` handler, `ws_push_simple(1)` incremented
+  `ws_sp`, so a following `emit_cons_children(ws_node[ws_sp], ...)` read
+  the WRONG (shifted) slot -- a stale value from a previous item. Always
+  copy `ws_node[ws_sp]`/`ws_depth[ws_sp]` into locals before any
+  `ws_push_*`. (Cost: a one-choice-delayed `when`-values bug.)
 
 * **Host p8c codegen: `mkword` Y-clobber -- FIXED.** `mkword(hi, lo)`
   stashed the high byte in Y, then evaluated the low arg; if that arg
