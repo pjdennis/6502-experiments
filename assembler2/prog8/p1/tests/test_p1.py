@@ -248,6 +248,26 @@ M3_WORDARITH_PROGRAMS = [
     "    w ^= x\n}\n",
 ]
 
+# Phase-7 WORD shift slice (16-bit): uword << / >> (port of _emit_word_shl /
+# _emit_word_shr). A constant count in [0,16] unrolls the asl/rol (resp.
+# lsr/ror) step n&15 times (with the n>=8 "shift a whole byte" special case);
+# a variable count stashes the lhs into __p8c_wtmp0 and loops with a
+# .Lwshl_top_N / .Lwshl_end_N (resp. wshr) label pair. Includes augmented
+# <<= / >>= (the synthetic word binop path).
+M3_WORDSHIFT_PROGRAMS = [
+    # constant counts: <8, ==8, >8, ==16 (n&15==0 -> no-op), for both directions
+    "%target nmos\nuword w\nuword x\n\n"
+    "main {\n    w = x << 1\n    w = x << 3\n    w = x << 8\n    w = x << 9\n"
+    "    w = x << 16\n    w = x >> 1\n    w = x >> 4\n    w = x >> 8\n"
+    "    w = x >> 12\n}\n",
+    # variable counts (loop) + a nested lhs
+    "%target nmos\nuword w\nuword x\nubyte n\n\n"
+    "main {\n    w = x << n\n    w = x >> n\n    w = (x + 1) << 2\n}\n",
+    # augmented word shifts (synthetic binop, const + variable)
+    "%target nmos\nuword w\nubyte n\n\n"
+    "main {\n    w = $0100\n    w <<= 2\n    w >>= 1\n    w <<= n\n    w >>= n\n}\n",
+]
+
 
 def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
@@ -354,6 +374,12 @@ class P1Equivalence(unittest.TestCase):
 
     def test_m3_wordarith_programs(self):
         for src in M3_WORDARITH_PROGRAMS:
+            with self.subTest(src=src):
+                self.assertEqual(self._oracle(src), self._ontarget(src),
+                                 msg=f"codegen .s differs for {src!r}")
+
+    def test_m3_wordshift_programs(self):
+        for src in M3_WORDSHIFT_PROGRAMS:
             with self.subTest(src=src):
                 self.assertEqual(self._oracle(src), self._ontarget(src),
                                  msg=f"codegen .s differs for {src!r}")

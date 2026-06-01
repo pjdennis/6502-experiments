@@ -1289,6 +1289,202 @@ sub emit_word_unary(ubyte uncode) {{
     }}
 }}
 ; dispatch a word-expression node onto the word work stack.
+; ---- word shifts (port of _emit_word_shl / _emit_word_shr) ----
+; one A:Y<<1 step (lo in A, hi in Y): asl low, rol high, through wtmp0.
+sub emit_wshl_step() {{
+    out_text("  asl a")
+    o_nl()
+    out_text("  sta __p8c_wtmp0")
+    o_nl()
+    out_text("  tya")
+    o_nl()
+    out_text("  rol a")
+    o_nl()
+    out_text("  tay")
+    o_nl()
+    out_text("  lda __p8c_wtmp0")
+    o_nl()
+}}
+; A:Y << n for a constant n (operand already in A:Y). n is value & $0f.
+sub emit_wshl_const(ubyte n) {{
+    if n == 0 {{
+        return
+    }}
+    ubyte i
+    if n >= 8 {{
+        out_text("  tay")              ; low -> high
+        o_nl()
+        out_text("  lda #$00")         ; new low = 0
+        o_nl()
+        i = 8
+        repeat {{
+            if i >= n {{
+                break
+            }}
+            emit_wshl_step()
+            i = i + 1
+        }}
+        return
+    }}
+    i = 0
+    repeat {{
+        if i >= n {{
+            break
+        }}
+        emit_wshl_step()
+        i = i + 1
+    }}
+}}
+; one A:Y>>1 step for the 1<=n<8 case (sty wtmp0+1; sta wtmp0; lsr/ror; reload).
+sub emit_wshr_step_lo() {{
+    out_text("  sty __p8c_wtmp0+1")
+    o_nl()
+    out_text("  sta __p8c_wtmp0")
+    o_nl()
+    out_text("  lsr __p8c_wtmp0+1")
+    o_nl()
+    out_text("  ror __p8c_wtmp0")
+    o_nl()
+    out_text("  lda __p8c_wtmp0")
+    o_nl()
+    out_text("  ldy __p8c_wtmp0+1")
+    o_nl()
+}}
+; one A:Y>>1 step for the n>=8 case (note p8c's swapped sty/sta order here).
+sub emit_wshr_step_hi() {{
+    out_text("  sty __p8c_wtmp0")
+    o_nl()
+    out_text("  sta __p8c_wtmp0+1")
+    o_nl()
+    out_text("  lsr __p8c_wtmp0+1")
+    o_nl()
+    out_text("  ror __p8c_wtmp0")
+    o_nl()
+    out_text("  lda __p8c_wtmp0")
+    o_nl()
+    out_text("  ldy __p8c_wtmp0+1")
+    o_nl()
+}}
+; A:Y >> n for a constant n (operand already in A:Y). Logical shift right.
+sub emit_wshr_const(ubyte n) {{
+    if n == 0 {{
+        return
+    }}
+    ubyte i
+    if n >= 8 {{
+        out_text("  tya")              ; high -> low
+        o_nl()
+        out_text("  ldy #$00")         ; new high = 0
+        o_nl()
+        i = 8
+        repeat {{
+            if i >= n {{
+                break
+            }}
+            emit_wshr_step_hi()
+            i = i + 1
+        }}
+        return
+    }}
+    i = 0
+    repeat {{
+        if i >= n {{
+            break
+        }}
+        emit_wshr_step_lo()
+        i = i + 1
+    }}
+}}
+; ".Lwshl_top_N" / ".Lwshr_end_N" etc.
+sub emit_wshift_label(ubyte is_left, ubyte is_top, uword id) {{
+    if is_left != 0 {{
+        if is_top != 0 {{
+            out_text(".Lwshl_top_")
+        }} else {{
+            out_text(".Lwshl_end_")
+        }}
+    }} else {{
+        if is_top != 0 {{
+            out_text(".Lwshr_top_")
+        }} else {{
+            out_text(".Lwshr_end_")
+        }}
+    }}
+    out_dec(id)
+}}
+; variable-count shift tail: LHS already in __p8c_wtmp0 (lo,hi). Evaluate the
+; count into A (-> X) and loop. NOTE: the count goes through codegen_byte_expr,
+; which resets the byte work stack -- safe at top level, but a word shift with
+; a non-leaf count nested inside a byte expr's @() address would corrupt it.
+sub emit_wshift_var_tail(uword nd, ubyte is_left) {{
+    codegen_byte_expr(node_b[nd])
+    out_text("  tax")
+    o_nl()
+    uword top_id
+    uword end_id
+    top_id = label_seq
+    label_seq = label_seq + 1
+    end_id = label_seq
+    label_seq = label_seq + 1
+    out_text("  cpx #$00")
+    o_nl()
+    out_text("  beq ")
+    emit_wshift_label(is_left, 0, end_id)
+    o_nl()
+    emit_wshift_label(is_left, 1, top_id)
+    out_byte($3a)
+    o_nl()
+    if is_left != 0 {{
+        out_text("  asl __p8c_wtmp0")
+        o_nl()
+        out_text("  rol __p8c_wtmp0+1")
+        o_nl()
+    }} else {{
+        out_text("  lsr __p8c_wtmp0+1")
+        o_nl()
+        out_text("  ror __p8c_wtmp0")
+        o_nl()
+    }}
+    out_text("  dex")
+    o_nl()
+    out_text("  bne ")
+    emit_wshift_label(is_left, 1, top_id)
+    o_nl()
+    emit_wshift_label(is_left, 0, end_id)
+    out_byte($3a)
+    o_nl()
+    out_text("  lda __p8c_wtmp0")
+    o_nl()
+    out_text("  ldy __p8c_wtmp0+1")
+    o_nl()
+}}
+; dispatch a word shift: const count (IntLit 0..16) unrolls; else loop. The
+; const path evaluates the lhs then unrolls; the variable path stashes the lhs
+; into wtmp0 first (STA_WTMP0 task), then the tail evaluates the count + loops.
+sub word_dispatch_shift(uword nd, ubyte is_left) {{
+    uword rhsn
+    rhsn = node_b[nd]
+    if node_kind[rhsn] == ND_INT {{
+        if node_a[rhsn] <= 16 {{
+            ubyte n
+            n = lsb(node_a[rhsn]) & $0f
+            if is_left != 0 {{
+                wws_push(5, 0, n)
+            }} else {{
+                wws_push(6, 0, n)
+            }}
+            wws_push(0, node_a[nd], 0)
+            return
+        }}
+    }}
+    if is_left != 0 {{
+        wws_push(7, nd, 0)
+    }} else {{
+        wws_push(8, nd, 0)
+    }}
+    wws_push(4, 0, 0)
+    wws_push(0, node_a[nd], 0)
+}}
 sub word_dispatch(uword nd) {{
     ubyte k
     k = node_kind[nd]
@@ -1299,6 +1495,14 @@ sub word_dispatch(uword nd) {{
     if k == ND_BINOP {{
         ubyte bop
         bop = node_op[nd]
+        if bop == TK_SHL {{
+            word_dispatch_shift(nd, 1)
+            return
+        }}
+        if bop == TK_SHR {{
+            word_dispatch_shift(nd, 0)
+            return
+        }}
         ; arithmetic / bitwise: eval lhs; save; eval rhs; stash; combine.
         wws_push(3, 0, bop)
         wws_push(2, 0, 0)
@@ -1361,7 +1565,31 @@ sub codegen_word_expr(uword root) {{
                     if ty == 3 {{
                         emit_word_combine(op)
                     }} else {{
-                        emit_word_unary(op)
+                        if ty == 4 {{
+                            ; LHS -> wtmp0 (for the variable-shift loop)
+                            out_text("  sta __p8c_wtmp0")
+                            o_nl()
+                            out_text("  sty __p8c_wtmp0+1")
+                            o_nl()
+                        }} else {{
+                            if ty == 5 {{
+                                emit_wshl_const(op)
+                            }} else {{
+                                if ty == 6 {{
+                                    emit_wshr_const(op)
+                                }} else {{
+                                    if ty == 7 {{
+                                        emit_wshift_var_tail(nd, 1)
+                                    }} else {{
+                                        if ty == 8 {{
+                                            emit_wshift_var_tail(nd, 0)
+                                        }} else {{
+                                            emit_word_unary(op)
+                                        }}
+                                    }}
+                                }}
+                            }}
+                        }}
                     }}
                 }}
             }}

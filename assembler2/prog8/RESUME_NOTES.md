@@ -85,11 +85,11 @@ PHASE7_DESIGN.md section 10.
   * 5 v0/v1 e2e (`tinyp8/tests/test_e2e.py`).
   * 5 v0/v1 self-host equivalence (`test_self_host.py`).
   * 12 v2..v9 .p8-only (`test_v2.py`, sources in `goldens_v2/`).
-  * **164 total, all green** (the 22 tinyp8 + 37 p1 cases need vasm; see the
+  * **165 total, all green** (the 22 tinyp8 + 38 p1 cases need vasm; see the
     environment note above). The p1 codegen cases live in
     `p1/tests/test_p1.py` (Phase 7: P7-M1 + P7-M2 + the M3 strings,
     byte-arithmetic, mul/shift, unary, comparison, logical, @()/&name, and
-    16-bit word-arithmetic slices).
+    16-bit word-arithmetic + word-shift slices).
 
 Run:
 
@@ -463,10 +463,20 @@ Progress:
          synthetic `w = w op e` binop p8c does. (Word unary `~`/`-` is a
          faithful port but p8c's sema rejects it -> unreachable/untested.)
          `test_p1.py::test_m3_wordarith_programs`. p1.bin ~52 KB code.
-       * **NEXT: rest of the WORD evaluator** -- word shifts (`<< >>`, const-
-         unrolled + variable-loop; mind the leaf-only count to avoid byte/word
-         stack re-entrancy), word comparison (`_emit_word_cmp_into_a`, the
-         16-bit compare idiom), then array indexing (`arr[i]`, needs array
+       * **P7-M3 WORD shift slice DONE (16-bit).** uword `<< >>` (port of
+         `_emit_word_shl` / `_emit_word_shr`): a constant count in [0,16]
+         unrolls the asl/rol (resp. lsr/ror) step n&15 times (with the n>=8
+         "shift a whole byte" special case + p8c's swapped sty/sta in that
+         arm); a variable count stashes the lhs into `__p8c_wtmp0` (wws task 4)
+         and loops with a `.Lwshl_top_N`/`.Lwshl_end_N` (resp. wshr) pair. The
+         variable count goes through `codegen_byte_expr` (matches p8c) -- safe
+         at top level; a word shift with a non-leaf count nested in a byte
+         expr's `@()` address would corrupt the byte stack (documented gap).
+         Augmented `<<= >>=` via the synthetic word binop. wws tasks 4-8.
+         `test_p1.py::test_m3_wordshift_programs`. p1.bin ~55 KB code.
+       * **NEXT: rest of the WORD evaluator** -- word comparison
+         (`_emit_word_cmp_into_a`, the 16-bit compare idiom), then array
+         indexing (`arr[i]`, needs array
          symbols + storage trailers -- M5 territory), calls, `txt.print*`.
          (was: grow codegen_word_expr -- port of `_emit_word_expr_into_ay` /
          `_emit_word_binop_into_ay`
