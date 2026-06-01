@@ -205,14 +205,19 @@ class CodeGen:
         # Module-var initializers run at the top of main().
         if s.is_main:
             for vd in self.prog.module_vars:
-                if vd.init is not None:
-                    if vd.sym.type is UBYTE:
-                        self._emit_byte_expr_into_a(vd.init)
-                        self.emit(f"  sta {vd.sym.mangled}")
-                    else:
-                        self._emit_word_expr_into_ay(vd.init)
-                        self.emit(f"  sta {vd.sym.mangled}")
-                        self.emit(f"  sty {vd.sym.mangled}+1")
+                # const decls are compile-time only; the value is folded
+                # at every use site, no runtime store needed.
+                if vd.sym is None or vd.sym.kind == "const":
+                    continue
+                if vd.init is None:
+                    continue
+                if vd.sym.type is UBYTE:
+                    self._emit_byte_expr_into_a(vd.init)
+                    self.emit(f"  sta {vd.sym.mangled}")
+                else:
+                    self._emit_word_expr_into_ay(vd.init)
+                    self.emit(f"  sta {vd.sym.mangled}")
+                    self.emit(f"  sty {vd.sym.mangled}+1")
         self._emit_block(s.body)
         self.emit(f"{self._return_label}:")
         if s.is_main:
@@ -440,7 +445,7 @@ class CodeGen:
         self.emit("  pla")
         self.emit("  sec")
         self.emit("  sbc #1")
-        self.emit(f"  beq {end}")
+        self._br("beq", end)
         self.emit("  pha")
         self.emit(f"  jmp {top}")
         self.emit(f"{break_label}:")
@@ -489,7 +494,7 @@ class CodeGen:
             self.emit(f"  sta __p8c_tmp1")
             self.emit(f"  lda __p8c_tmp0")
             self.emit(f"  cmp __p8c_tmp1")
-        self.emit(f"  beq {end}")
+        self._br("beq", end)
         self.emit(f"  inc {sym.mangled}")
         self.emit(f"  jmp {top}")
         self.emit(f"{end}:")
@@ -519,6 +524,11 @@ class CodeGen:
             return
         if isinstance(e, Ident):
             assert e.sym is not None
+            if e.sym.kind == "const":
+                v = e.sym.const_value & 0xFFFF
+                self.emit(f"  lda #${v & 0xFF:02x}")
+                self.emit(f"  ldy #${(v >> 8) & 0xFF:02x}")
+                return
             if e.sym.type is UWORD:
                 self.emit(f"  lda {e.sym.mangled}")
                 self.emit(f"  ldy {e.sym.mangled}+1")
@@ -777,7 +787,12 @@ class CodeGen:
             self.emit(f"  lda #${1 if e.value else 0:02x}")
             return
         if isinstance(e, Ident):
-            assert e.sym is not None and e.sym.kind == "var"
+            assert e.sym is not None
+            if e.sym.kind == "const":
+                # Fold to immediate load.
+                self.emit(f"  lda #${e.sym.const_value & 0xFF:02x}")
+                return
+            assert e.sym.kind == "var"
             self.emit(f"  lda {e.sym.mangled}")
             return
         if isinstance(e, Index):
@@ -1003,6 +1018,25 @@ class CodeGen:
             self.emit("  lda #$01")
             self.emit(f"{end_label}:")
 
+    def _br(self, mnemonic: str, target: str) -> None:
+        """Branch to a possibly-distant `target`.
+
+        6502 conditional branches are signed 8-bit; we can't know the
+        distance to `target` until vasm assembles. To stay safe, always
+        emit the inverted-branch + JMP pattern, which costs 3 extra
+        bytes but works at any distance.
+        """
+        inv = {
+            "bne": "beq", "beq": "bne",
+            "bcc": "bcs", "bcs": "bcc",
+            "bmi": "bpl", "bpl": "bmi",
+            "bvc": "bvs", "bvs": "bvc",
+        }[mnemonic]
+        skip = self._new_label("brs")
+        self.emit(f"  {inv} {skip}")
+        self.emit(f"  jmp {target}")
+        self.emit(f"{skip}:")
+
     def _emit_bool_test_branch_if_false(self, cond, target: str) -> None:
         """Evaluate cond as bool, branch to `target` if FALSE.
 
@@ -1037,21 +1071,21 @@ class CodeGen:
                 ">":  None, "<=": None,
             }[cond.op]
             if negated is not None:
-                self.emit(f"  {negated} {target}")
+                self._br(negated, target)
             elif cond.op == ">":
                 # NOT (A > B): A <= B
-                self.emit(f"  beq {target}")
-                self.emit(f"  bcc {target}")
+                self._br("beq", target)
+                self._br("bcc", target)
             else:
                 # NOT (A <= B): A > B
                 skip = self._new_label("le_skip")
                 self.emit(f"  beq {skip}")
-                self.emit(f"  bcs {target}")
+                self._br("bcs", target)
                 self.emit(f"{skip}:")
             return
         # Generic: evaluate to 0/1 in A, branch on zero.
         self._emit_byte_expr_into_a(cond)
-        self.emit(f"  beq {target}")
+        self._br("beq", target)
 
     def _emit_call(self, c: Call) -> None:
         sym = c.sym
@@ -1143,14 +1177,7 @@ class CodeGen:
         raise CodeGenError(f"call kind {sym.kind!r} not implemented")
 
     def _emit_builtin_call(self, c: Call) -> None:
-        """Lower a builtin call (peek/poke/etc.) to inline asm.
-
-        Phase 2 builtins:
-          * peek(addr_const)   -> ubyte in A (the loaded byte)
-          * poke(addr_const, byte_expr)
-        Both addresses are limited to integer literals here; variable
-        addresses come with `@(uword_expr)` syntax later.
-        """
+        """Lower a builtin call (peek/poke/lsb/msb/...) to inline asm."""
         name = c.sym.name
         if name == "peek":
             if len(c.args) != 1 or not isinstance(c.args[0], IntLit):
@@ -1166,6 +1193,54 @@ class CodeGen:
             addr = c.args[0].value & 0xFFFF
             self._emit_byte_expr_into_a(c.args[1])
             self.emit(f"  sta ${addr:04x}")
+            return
+        if name == "lsb":
+            # lsb(uword) -> ubyte: just the low byte.
+            if len(c.args) != 1:
+                raise CodeGenError("lsb takes 1 arg")
+            self._emit_word_expr_into_ay(c.args[0])
+            # Low byte already in A; discard Y.
+            return
+        if name == "msb":
+            if len(c.args) != 1:
+                raise CodeGenError("msb takes 1 arg")
+            self._emit_word_expr_into_ay(c.args[0])
+            self.emit("  tya")
+            return
+        if name == "mkword":
+            # mkword(msb_byte, lsb_byte) -> uword.
+            if len(c.args) != 2:
+                raise CodeGenError("mkword takes 2 args (msb, lsb)")
+            self._emit_byte_expr_into_a(c.args[0])
+            self.emit("  tay")            # high byte to Y
+            self._emit_byte_expr_into_a(c.args[1])  # low byte to A
+            return
+        if name == "len":
+            # len(arr) -- compile-time array length as a ubyte literal.
+            if len(c.args) != 1 or not isinstance(c.args[0], Ident):
+                raise CodeGenError("len takes one array identifier")
+            sym = c.args[0].sym
+            if sym is None or sym.kind != "array":
+                raise CodeGenError("len(): arg must be an array")
+            sz = sym.type.size & 0xFF
+            self.emit(f"  lda #${sz:02x}")
+            return
+        if name == "sizeof":
+            # sizeof(name) -- bytes occupied by an identifier (compile-time).
+            if len(c.args) != 1 or not isinstance(c.args[0], Ident):
+                raise CodeGenError("sizeof takes one identifier")
+            sym = c.args[0].sym
+            if sym is None:
+                raise CodeGenError("sizeof: unknown symbol")
+            if sym.kind == "array":
+                sz = sym.type.size & 0xFF
+            elif sym.type is UBYTE:
+                sz = 1
+            elif sym.type is UWORD:
+                sz = 2
+            else:
+                raise CodeGenError(f"sizeof({c.args[0].name!r}): unknown size")
+            self.emit(f"  lda #${sz:02x}")
             return
         raise CodeGenError(f"unknown builtin {name!r}")
 

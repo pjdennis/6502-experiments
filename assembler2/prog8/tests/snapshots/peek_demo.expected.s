@@ -34,7 +34,9 @@ p8s_main:
 .Lfor_cont_2:
   lda p8v_main_i
   cmp #$03
-  beq .Lfor_end_1
+  bne .Lbrs_3
+  jmp .Lfor_end_1
+.Lbrs_3:
   inc p8v_main_i
   jmp .Lfor_top_0
 .Lfor_end_1:

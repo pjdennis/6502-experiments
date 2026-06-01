@@ -86,10 +86,14 @@ class CodeGenPhase2(unittest.TestCase):
         s = compile_text("ubyte x\nmain { x |= $80 }")
         self.assertIn("ora #$80", s)
 
-    def test_if_comparison_branches_with_bne_when_negated(self):
-        # `if x == 0` -> bne to else/end (negated branch).
+    def test_if_comparison_emits_branch_and_jmp(self):
+        # `if x == 0` -- equivalence-jumps through the long-form
+        # pattern: cmp ; beq <skip> ; jmp <else/end>.
         s = compile_text("ubyte x\nmain { if x == 0 { x = 1 } }")
-        self.assertIn("bne ", s)
+        # The condition is `==`; "if false (i.e., NE)" -> branch out.
+        # With long-branch handling we now see `beq <skip>; jmp <target>`.
+        self.assertIn("cmp ", s)
+        self.assertIn("jmp .Lendif_", s)
         self.assertIn("lda #$01", s)
 
     def test_if_else_has_both_branches(self):
@@ -101,8 +105,10 @@ class CodeGenPhase2(unittest.TestCase):
         s = compile_text("ubyte x\nmain { while x < 4 { x = x + 1 } }")
         self.assertIn(".Lwhile_top_", s)
         self.assertIn(".Lwhile_end_", s)
-        # `<` (unsigned) negates to `bcs` for the loop-exit branch.
-        self.assertIn("bcs ", s)
+        # `<` (unsigned) negates to `bcs`-equivalent; long-branch path
+        # rewrites to `bcc <skip>; jmp <end>`.
+        self.assertIn("bcc ", s)
+        self.assertIn("jmp .Lwhile_end_", s)
 
     def test_repeat_pushes_counter_pulls_and_decrements(self):
         s = compile_text("main { repeat 3 { } }")
@@ -131,11 +137,13 @@ class CodeGenPhase2(unittest.TestCase):
         self.assertIn("sta p8v_w", s)
         self.assertIn("sty p8v_w+1", s)
 
-    def test_for_loop_emits_init_cmp_beq_inc(self):
+    def test_for_loop_emits_init_cmp_branch_inc(self):
         s = compile_text("ubyte i\nmain { for i in 0 to 3 { } }")
         self.assertIn("sta p8v_i", s)
         self.assertIn("cmp #$03", s)
-        self.assertIn("beq ", s)
+        # Long-branch form: bne <skip>; jmp <end>.
+        self.assertIn("bne ", s)
+        self.assertIn("jmp .Lfor_end_", s)
         self.assertIn("inc p8v_i", s)
 
     def test_peek_lowers_to_absolute_load(self):

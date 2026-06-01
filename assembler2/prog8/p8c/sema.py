@@ -135,6 +135,28 @@ class Sema:
                 f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: "
                 f"variable {vd.name!r} already declared in this scope"
             )
+        # const form: type_name is "const-<base>". The initializer must
+        # be a literal that we resolve here.
+        if vd.type_name.startswith("const-"):
+            base = vd.type_name[len("const-"):]
+            t = type_from_name(base)
+            if t not in (UBYTE, UWORD):
+                raise SemaError(
+                    f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: "
+                    f"const of type {base!r} not supported"
+                )
+            if vd.init is None or not isinstance(vd.init, IntLit):
+                raise SemaError(
+                    f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: "
+                    f"const must be initialized to an integer literal"
+                )
+            mangled = f"p8c_{vd.name}"
+            sym = Symbol(name=vd.name, mangled=mangled, type=t, kind="const",
+                         const_value=vd.init.value)
+            scope[vd.name] = sym
+            vd.sym = sym
+            # No ZP allocation, no .all_vars entry -- it's pure compile-time.
+            return sym
         # Array form: `ubyte[N] name` -- only ubyte arrays for Phase 3.
         if vd.array_size is not None:
             if vd.type_name != "ubyte":

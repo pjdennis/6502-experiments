@@ -105,6 +105,8 @@ class Parser:
                 prog.subs.append(self.parse_sub())
             elif t.kind == "KW" and t.value == "asmsub":
                 prog.subs.append(self.parse_asmsub())
+            elif t.kind == "KW" and t.value == "const":
+                prog.module_vars.append(self.parse_const_decl())
             elif t.kind == "KW" and t.value == "main":
                 # `main { ... }` is shorthand for `sub main() -> void { ... }`.
                 self.pos += 1
@@ -219,6 +221,27 @@ class Parser:
         return Block(loc=self.loc(ob), stmts=stmts)
 
     # ---- statements ----
+
+    def parse_const_decl(self) -> VarDecl:
+        """`const ubyte NAME = $42` -- compile-time constant.
+
+        Lowered into a VarDecl with a "const" type-name marker so sema
+        knows to fold uses into the literal value instead of generating
+        a load. The initializer MUST be a literal for Phase 3.
+        """
+        c = self.eat("KW", "const")
+        t = self.eat("KW")
+        if t.value not in _TYPE_KWS:
+            raise ParseError(
+                f"{self.filename}:{t.line}:{t.col}: expected type after const"
+            )
+        name = self.eat("IDENT")
+        self.eat("=")
+        init = self.parse_expr()
+        # Use a synthetic type_name so sema can spot const decls.
+        vd = VarDecl(loc=self.loc(c), type_name=f"const-{t.value}",
+                     name=name.value, init=init)
+        return vd
 
     def parse_var_decl(self) -> VarDecl:
         t = self.eat("KW")

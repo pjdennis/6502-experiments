@@ -46,8 +46,13 @@ TXT_PRINT_UW = Symbol(
 # `type` is the return type (UBYTE for peek; VOID for poke / for the
 # stmt-only forms).
 BUILTINS = [
-    Symbol(name="peek", mangled="peek", type=UBYTE, kind="builtin"),
-    Symbol(name="poke", mangled="poke", type=VOID,  kind="builtin"),
+    Symbol(name="peek",   mangled="peek",   type=UBYTE, kind="builtin"),
+    Symbol(name="poke",   mangled="poke",   type=VOID,  kind="builtin"),
+    Symbol(name="lsb",    mangled="lsb",    type=UBYTE, kind="builtin"),
+    Symbol(name="msb",    mangled="msb",    type=UBYTE, kind="builtin"),
+    Symbol(name="mkword", mangled="mkword", type=UWORD, kind="builtin"),
+    Symbol(name="len",    mangled="len",    type=UBYTE, kind="builtin"),
+    Symbol(name="sizeof", mangled="sizeof", type=UBYTE, kind="builtin"),
 ]
 
 

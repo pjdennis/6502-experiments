@@ -35,7 +35,9 @@ p8s_main:
   sta __p8c_tmp1
   lda __p8c_tmp0
   cmp __p8c_tmp1
-  bcs .Lwhile_end_1
+  bcc .Lbrs_2
+  jmp .Lwhile_end_1
+.Lbrs_2:
   lda p8v_total
   clc
   adc p8v_main_i
@@ -51,35 +53,39 @@ p8s_main:
   jsr display_string
   lda #$02
   pha
-.Lrep_top_2:
+.Lrep_top_3:
   lda p8v_total
   jsr display_hex
-.Lrep_dec_3:
+.Lrep_dec_4:
   pla
   sec
   sbc #1
-  beq .Lrep_end_4
+  bne .Lbrs_7
+  jmp .Lrep_end_5
+.Lbrs_7:
   pha
-  jmp .Lrep_top_2
-.Lrep_break_5:
+  jmp .Lrep_top_3
+.Lrep_break_6:
   pla
-.Lrep_end_4:
+.Lrep_end_5:
   lda p8v_total
   sta __p8c_tmp0
   lda #$06
   sta __p8c_tmp1
   lda __p8c_tmp0
   cmp __p8c_tmp1
-  bne .Lelse_6
+  beq .Lbrs_10
+  jmp .Lelse_8
+.Lbrs_10:
   lda #<p8c_str_1
   ldx #>p8c_str_1
   jsr display_string
-  jmp .Lendif_7
-.Lelse_6:
+  jmp .Lendif_9
+.Lelse_8:
   lda #<p8c_str_2
   ldx #>p8c_str_2
   jsr display_string
-.Lendif_7:
+.Lendif_9:
 .Lp8s_main_ret:
 .Lhalt_p8s_main:
   bra .Lhalt_p8s_main

@@ -308,10 +308,12 @@ class Symbol:
     name: str            # source name
     mangled: str         # codegen name
     type: Type
-    kind: str            # 'sub', 'asmsub', 'extsub', 'var', 'const', 'string', 'builtin'
+    kind: str            # 'sub', 'asmsub', 'extsub', 'var', 'const', 'string', 'builtin', 'array'
     # For asmsub/extsub: the address or label to call:
     asm_target: Optional[str] = None
     # For vars: the absolute address (we statically allocate from ZP).
     address: Optional[int] = None
+    # For constants: the literal integer value.
+    const_value: Optional[int] = None
     # For builtins, the callable that lowers them:
     lower_call: Optional[object] = None
