@@ -309,8 +309,16 @@ the command later milestones diff their on-target output against.
     golden `tests/goldens_sexp/tokens.dump`, exercising every numeric
     base, char/string escape, keyword-vs-identifier trap, and
     multi-char-operator maximal munch).
-  * `[todo]` **M1 on-target.** `p1/lexer.p8` emitting that dump, built
-    + diffed through the emulator like `tinyp8/`.
+  * `[done]` **M1 on-target.** `p1/lexer.p8` emits that dump, built +
+    diffed through the emulator like `tinyp8/`. Verified byte-identical
+    over every `examples/*.p8`, the snapshot corpus, `tinyp8.p8` (1289
+    lines), `lexer.p8` lexing its own source, and the edge-case corpus
+    (`p1/tests/test_lexer.py`, wired as `make p1-test`). Reuses the
+    tinyp8 file-I/O shim; decimal output via power-of-ten subtraction
+    (host p8c has no `/`). NB: an arithmetic-codegen bug in host p8c
+    (both operands of one binary op needing a scratch temp clobber each
+    other) is worked around by never nesting a shift inside an add --
+    see `p1/README.md`.
 
 * **M2 -- expression parser port.** `p1/expr.p8`: the shunting-yard
   engine over the stacks of 3.5, building nodes in the arena. Driver

@@ -66,7 +66,7 @@ is the source of truth across sessions.
   * 5 v0/v1 e2e (`tinyp8/tests/test_e2e.py`).
   * 5 v0/v1 self-host equivalence (`test_self_host.py`).
   * 12 v2..v9 .p8-only (`test_v2.py`, sources in `goldens_v2/`).
-  * **124 total, all green** (the 22 tinyp8 cases need vasm; see the
+  * **145 total, all green** (the 22 tinyp8 + 21 p1 cases need vasm; see the
     environment note above).
 
 Run:
@@ -261,15 +261,21 @@ Progress:
        gate over the whole corpus + on-disk goldens in
        `tests/goldens_sexp/`). Regenerate goldens after an intentional
        format change with `UPDATE_GOLDENS=1`.
-     * **M1 IN PROGRESS -- lexer port.** Oracle done: `serialize_tokens`
-       + `p8c --dump-tokens` define the canonical token-dump (one token
+     * **M1 DONE -- lexer port.** Oracle: `serialize_tokens` +
+       `p8c --dump-tokens` define the canonical token-dump (one token
        per line; positions dropped, like the AST contract), frozen by
        `test_serialize.py` (`TokenDumpFormat` + the `LEXER_CORPUS`
-       golden `goldens_sexp/tokens.dump`, covering every base, escape,
-       keyword trap, and multi-char-op maximal munch). NEXT: write
-       `p1/lexer.p8` emitting that dump on-target (the first on-target
-       push, built + diffed through the emulator like `tinyp8/`).
-       Then M2 expr, M3 stmt, M4 whole-program on-target, M5 capacity.
+       golden `goldens_sexp/tokens.dump`). On-target: `p1/lexer.p8`
+       emits that dump on the 6502 -- argv[0] source -> argv[1] dump,
+       same file-I/O shim as tinyp8. Verified byte-identical over
+       examples + snapshots + `tinyp8.p8` + the lexer lexing its OWN
+       source + the edge-case corpus (`p1/tests/test_lexer.py`,
+       `make p1-test`, 21 tests). See `p1/README.md`.
+     * **M2 NEXT -- expression parser port.** `p1/expr.p8`: the
+       shunting-yard engine (PARSER_PORT_DESIGN section 3.5) over the
+       node arena + operand/operator stacks, driver serializes one
+       expression. Golden: the `EXPRESSIONS` corpus, serialized.
+       Then M3 stmt, M4 whole-program on-target, M5 capacity.
 
 The caveat below (fixed frame layout) is addressed in the design doc's
 section 3.6 -- parallel arrays sized for the widest frame kind.
@@ -296,6 +302,20 @@ when a demo or tinyp8 push needs them.
 ---
 
 ## Pitfalls / gotchas observed this session
+
+* **Host p8c codegen: dual-scratch binary expression bug.** An
+  expression where BOTH operands of a binary op each need a scratch
+  temp is mis-compiled -- e.g. `(v << 3) + (v << 1)` yields the wrong
+  value (the left operand's temp is clobbered while computing the
+  right). `(v << 3) + 9` (only one side needs a temp) is fine. Found
+  while porting the lexer's decimal accumulator. **Workaround used in
+  `p1/lexer.p8`:** never nest a shift inside an add -- put each shift in
+  its own local on its own statement (see `umul10`), then combine plain
+  var+var. This is a genuine codegen bug worth fixing in
+  `p8c/codegen.py` eventually (look at how binary-op operands allocate /
+  reuse the `__p8c_tmp*` scratch); until then keep on-target arithmetic
+  decomposed. NB it does not affect the host-compiled corpus today
+  because no existing `.p8` happened to hit the pattern.
 
 * **ZP allocator size**: `p8c/sema.py` has `ZP_VAR_TOP`; tinyp8.p8
   v6 hit the original 0x80 cap, was bumped to 0xff. If tinyp8.p8

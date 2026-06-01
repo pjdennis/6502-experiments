@@ -245,10 +245,15 @@ language and remains byte-identical to the reference asm.
     oracle (`parse(..., iter_expr=False, iter_stmt=False)`). Remaining:
     port the iterative parser to Prog8 itself -- planned in
     [`PARSER_PORT_DESIGN.md`](./PARSER_PORT_DESIGN.md), milestones
-    M0..M5. **M0 done:** `p8c/serialize.py` + `p8c --dump-ast` emit the
-    canonical AST S-expression (the on-target equivalence contract),
-    frozen by `tests/test_serialize.py` and on-disk goldens. M1 (the
-    lexer port to `p1/`) is the first on-target push.
+    M0..M5. **M0 done:** `p8c/serialize.py` + `p8c --dump-ast` /
+    `--dump-tokens` emit the canonical AST and token serializations
+    (the on-target equivalence contracts), frozen by
+    `tests/test_serialize.py` and on-disk goldens. **M1 done:**
+    `p1/lexer.p8` is the on-target lexer -- it runs on the 6502 and
+    produces a token-stream dump byte-identical to the host lexer over
+    examples + snapshots + tinyp8.p8 + its own source (`make p1-test`;
+    see [`p1/README.md`](./p1/README.md)). M2 (the expression parser
+    port) is next.
 
 See the plan in conversation history for Phases 3-6, including the
 on-emulator emit-equivalence test tier that activates at Phase 5 when

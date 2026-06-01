@@ -186,14 +186,14 @@ Recommended approach:
      with format assertions, a recursive-vs-iterative serialization
      equivalence gate over the whole corpus, and on-disk goldens
      (`tests/goldens_sexp/`).
-   * `[in progress]` **M1 -- lexer port.** Oracle done:
-     `serialize_tokens()` + `p8c --dump-tokens` define the canonical
-     token-dump, frozen by `test_serialize.py` (`TokenDumpFormat` + the
-     `LEXER_CORPUS` golden). Remaining: `p1/lexer.p8` emitting that dump
-     on-target (the first on-target push, built + diffed through the
-     emulator like `tinyp8/`).
+   * `[done]` **M1 -- lexer port.** Oracle: `serialize_tokens()` +
+     `p8c --dump-tokens` define the canonical token-dump, frozen by
+     `test_serialize.py`. On-target: `p1/lexer.p8` emits that dump on
+     the 6502, verified byte-identical over examples + snapshots +
+     `tinyp8.p8` + the lexer lexing its own source + the edge-case
+     corpus (`p1/tests/test_lexer.py`, `make p1-test`).
    * `[todo]` M2 expr -> M3 stmt -> M4 whole-program on-target -> M5
-     capacity/streaming.
+     capacity/streaming. M2 is next.
 
 Estimated remaining effort: the Prog8 port (step 5) is the last piece,
 and it feeds directly into Phase 7. The iterative parser is now the
@@ -254,7 +254,7 @@ Branch `claude/prog8-bootstrap-continue-6Pzo0` (continues the
   on-disk goldens. M1 (lexer port to `p1/`) is next.
 * Phase 7-8: blocked on the rest of the Phase 6 Prog8 port (M1-M4).
 
-124 tests green. Self-host equivalence holds for the v0/v1 corpus.
+145 tests green (host p8c 102, tinyp8 22, p1 21). Self-host equivalence holds for the v0/v1 corpus.
 
 ---
 
