@@ -266,6 +266,13 @@ uword zp_next            ; ZP bump allocator (from $40)
 ; recorded str id indexes the parser's str_pool for the trailer.
 uword[64] strpool_sid    ; str id for label N (p8c_str_N)
 uword strpool_count
+; byte-expression codegen work stack (replaces p8c's recursion):
+; per entry a task -- 0 eval node, 1 binop-leaf, 2 pha, 3 sta tmp1,
+; 4 pla, 5 binop-tmp1.
+ubyte[96] cws_type
+uword[96] cws_node
+ubyte[96] cws_op
+ubyte cws_sp
 
 ; serializer work stack
 ubyte[256] ws_type       ; 0=node,1=close,2=newline,3=field line,4=literal text
@@ -2345,9 +2352,33 @@ sub codegen_stmt(uword st) {
     ; other statement kinds arrive at P7-M3+.
 }
 
-; ---- leaf expression codegen (M2: literals + var refs) ------
+; ---- byte expression codegen (work-stack; no recursion) -----
+; p8c's _emit_byte_expr_into_a recurses on operands; p1 can't recurse, so
+; the tree walk runs on an explicit work stack of tasks (cws_*). The
+; leaf-RHS fast path (left-nested chains like a+b+c) needs no spill; a
+; non-leaf RHS holds the LHS on the CPU stack across the RHS's evaluation
+; (-> __p8c_tmp1), matching the host's dual-scratch-safe sequence.
+sub cws_push(ubyte ty, uword nd, ubyte op) {
+    cws_type[cws_sp] = ty
+    cws_node[cws_sp] = nd
+    cws_op[cws_sp] = op
+    cws_sp = cws_sp + 1
+}
+; a binop RHS that needs no evaluation (matches p8c's isinstance(rhs,
+; (IntLit, Ident)) leaf-path test -- note: NOT BoolLit).
+sub is_leaf_rhs(uword e) -> ubyte {
+    ubyte k
+    k = node_kind[e]
+    if k == ND_INT {
+        return 1
+    }
+    if k == ND_IDENT {
+        return 1
+    }
+    return 0
+}
 ; byte expression leaf -> A.
-sub codegen_byte_leaf(uword e) {
+sub emit_byte_leaf_load(uword e) {
     ubyte k
     k = node_kind[e]
     if k == ND_INT {
@@ -2368,6 +2399,131 @@ sub codegen_byte_leaf(uword e) {
         o_nl()
         return
     }
+}
+; emit a byte binop (TK_PLUS/MINUS/AMP/PIPE/CARET) against a leaf operand
+; rhs ("#$XX" or "p8v_<name>").
+sub emit_byte_binop_leaf(ubyte op, uword rhs) {
+    if op == TK_PLUS {
+        out_text("  clc")
+        o_nl()
+        out_text("  adc ")
+    }
+    if op == TK_MINUS {
+        out_text("  sec")
+        o_nl()
+        out_text("  sbc ")
+    }
+    if op == TK_AMP {
+        out_text("  and ")
+    }
+    if op == TK_PIPE {
+        out_text("  ora ")
+    }
+    if op == TK_CARET {
+        out_text("  eor ")
+    }
+    emit_binop_operand(rhs)
+    o_nl()
+}
+; same op against the __p8c_tmp1 spill slot.
+sub emit_byte_binop_zp(ubyte op) {
+    if op == TK_PLUS {
+        out_text("  clc")
+        o_nl()
+        out_text("  adc __p8c_tmp1")
+    }
+    if op == TK_MINUS {
+        out_text("  sec")
+        o_nl()
+        out_text("  sbc __p8c_tmp1")
+    }
+    if op == TK_AMP {
+        out_text("  and __p8c_tmp1")
+    }
+    if op == TK_PIPE {
+        out_text("  ora __p8c_tmp1")
+    }
+    if op == TK_CARET {
+        out_text("  eor __p8c_tmp1")
+    }
+    o_nl()
+}
+; evaluate a byte expression into A.
+sub codegen_byte_expr(uword root) {
+    cws_sp = 0
+    cws_push(0, root, 0)
+    repeat {
+        if cws_sp == 0 {
+            break
+        }
+        cws_sp = cws_sp - 1
+        ubyte ty
+        uword nd
+        ubyte op
+        ty = cws_type[cws_sp]
+        nd = cws_node[cws_sp]
+        op = cws_op[cws_sp]
+        if ty == 0 {
+            if node_kind[nd] == ND_BINOP {
+                uword lhs
+                uword rhs
+                lhs = node_a[nd]
+                rhs = node_b[nd]
+                if is_leaf_rhs(rhs) != 0 {
+                    ; eval(lhs); binop_leaf(op, rhs)
+                    cws_push(1, rhs, node_op[nd])
+                    cws_push(0, lhs, 0)
+                } else {
+                    ; eval(lhs); pha; eval(rhs); sta tmp1; pla; binop_tmp1(op)
+                    cws_push(5, 0, node_op[nd])
+                    cws_push(4, 0, 0)
+                    cws_push(3, 0, 0)
+                    cws_push(0, rhs, 0)
+                    cws_push(2, 0, 0)
+                    cws_push(0, lhs, 0)
+                }
+            } else {
+                emit_byte_leaf_load(nd)
+            }
+        } else {
+            if ty == 1 {
+                emit_byte_binop_leaf(op, nd)
+            } else {
+                if ty == 2 {
+                    out_text("  pha")
+                    o_nl()
+                } else {
+                    if ty == 3 {
+                        out_text("  sta __p8c_tmp1")
+                        o_nl()
+                    } else {
+                        if ty == 4 {
+                            out_text("  pla")
+                            o_nl()
+                        } else {
+                            emit_byte_binop_zp(op)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+; map an augmented-assignment token to its binop token.
+sub aug_to_binop(ubyte op) -> ubyte {
+    if op == TK_PLUSEQ {
+        return TK_PLUS
+    }
+    if op == TK_MINUSEQ {
+        return TK_MINUS
+    }
+    if op == TK_ANDEQ {
+        return TK_AMP
+    }
+    if op == TK_OREQ {
+        return TK_PIPE
+    }
+    return TK_CARET     ; TK_XOREQ
 }
 ; word expression leaf -> A (low) / Y (high), widening ubyte to uword.
 sub codegen_word_leaf(uword e) {
@@ -2447,8 +2603,9 @@ sub emit_sty_sym_hi(uword si) {
 }
 
 ; ---- assignment codegen -------------------------------------
-; M2: target is a plain (module) var. `=` of a leaf, with ubyte->uword
-; widening; byte augmented (+ - & | ^) with a leaf operand.
+; target is a plain (module) var. `=` of a byte expression (M3: arithmetic
+; + - & | ^, leaf or nested) with ubyte->uword widening on word stores;
+; `=` of a word leaf; byte augmented (+= -= &= |= ^=) with a leaf operand.
 sub codegen_assign(uword st) {
     uword target
     uword rhs
@@ -2466,42 +2623,14 @@ sub codegen_assign(uword st) {
             emit_sta_sym(si)
             emit_sty_sym_hi(si)
         } else {
-            codegen_byte_leaf(rhs)
+            codegen_byte_expr(rhs)
             emit_sta_sym(si)
         }
         return
     }
-    ; augmented (byte): lda LHS; <op> operand; sta LHS.
+    ; augmented (byte): lda LHS; <op> leaf-operand; sta LHS.
     emit_lda_sym(si)
-    if op == TK_PLUSEQ {
-        out_text("  clc")
-        o_nl()
-        out_text("  adc ")
-        emit_binop_operand(rhs)
-        o_nl()
-    }
-    if op == TK_MINUSEQ {
-        out_text("  sec")
-        o_nl()
-        out_text("  sbc ")
-        emit_binop_operand(rhs)
-        o_nl()
-    }
-    if op == TK_ANDEQ {
-        out_text("  and ")
-        emit_binop_operand(rhs)
-        o_nl()
-    }
-    if op == TK_OREQ {
-        out_text("  ora ")
-        emit_binop_operand(rhs)
-        o_nl()
-    }
-    if op == TK_XOREQ {
-        out_text("  eor ")
-        emit_binop_operand(rhs)
-        o_nl()
-    }
+    emit_byte_binop_leaf(aug_to_binop(op), rhs)
     emit_sta_sym(si)
 }
 

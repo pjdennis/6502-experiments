@@ -100,6 +100,30 @@ M3_STR_PROGRAMS = [
     'main {\n    s = "tab\\there\\"q\\\\b\\r"\n}\n',
 ]
 
+# Phase-7 byte-expression slice: arithmetic / bitwise binops (+ - & | ^) in a
+# byte assignment RHS, evaluated on p1's explicit work stack (p8c recurses;
+# p1 can't). Covers the leaf-RHS fast path (left-nested chains a+b+c) and the
+# generic CPU-stack spill path (a non-leaf RHS, e.g. b + (c + d)), which must
+# match the host's dual-scratch-safe sequence (pha / sta __p8c_tmp1 / pla).
+# Augmented assignment now shares the same binop emitter.
+M3_EXPR_PROGRAMS = [
+    # flat leaf op leaf, every supported op, literal + var operands
+    "%target nmos\nubyte a\nubyte b\nubyte c\n\n"
+    "main {\n    a = b + 1\n    a = b + c\n    a = b - c\n    a = b & c\n"
+    "    a = b | 3\n    a = b ^ c\n}\n",
+    # left-nested chains (leaf-RHS fast path, no spill)
+    "%target nmos\nubyte a\nubyte b\nubyte c\nubyte d\n\n"
+    "main {\n    a = b + c + a\n    a = b + c - d\n    a = ((b | c) & d) ^ a\n}\n",
+    # right-nested / parenthesized RHS (generic spill path)
+    "%target nmos\nubyte a\nubyte b\nubyte c\nubyte d\n\n"
+    "main {\n    a = (b + c) - (a + 1)\n    a = b + (c + (d + 1))\n"
+    "    a = (b - c) + (d - 1)\n}\n",
+    # augmented assignment shares the binop emitter
+    "%target nmos\nubyte x\nubyte y\n\n"
+    "main {\n    x = $10\n    y = 2\n    x += 3\n    x -= y\n    x &= $0f\n"
+    "    x |= y\n    x ^= 2\n}\n",
+]
+
 
 def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
@@ -164,6 +188,12 @@ class P1Equivalence(unittest.TestCase):
 
     def test_m3_str_programs(self):
         for src in M3_STR_PROGRAMS:
+            with self.subTest(src=src):
+                self.assertEqual(self._oracle(src), self._ontarget(src),
+                                 msg=f"codegen .s differs for {src!r}")
+
+    def test_m3_expr_programs(self):
+        for src in M3_EXPR_PROGRAMS:
             with self.subTest(src=src):
                 self.assertEqual(self._oracle(src), self._ontarget(src),
                                  msg=f"codegen .s differs for {src!r}")

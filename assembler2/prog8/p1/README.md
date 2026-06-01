@@ -102,8 +102,17 @@ milestone map P7-M1..M6.
   p1.bin 54.6 KB -> ~48 KB), and (b) gained codegen for string literals as
   values (`lda #</ldy #>` the label, numbered in encounter order) + the
   string-pool trailer (the `_escape` byte-list policy). Verified against
-  `p8c -o` over an M3 string corpus. (The rest of M3 -- expression trees,
-  calls, indexing -- is still to come.)
+  `p8c -o` over an M3 string corpus.
+
+* **P7-M3 byte-arithmetic slice (done)** -- byte `+ - & | ^` in a byte
+  assignment RHS, evaluated on an explicit **work stack** (`cws_*`) rather
+  than recursion (p8c recurses on operands; p1 can't). Handles the leaf-RHS
+  fast path (left-nested chains `a+b+c`) and the generic CPU-stack spill
+  path for a non-leaf RHS (`pha / sta __p8c_tmp1 / pla`, the host's
+  dual-scratch-safe sequence). Augmented assignment now shares the same
+  binop emitter. Verified against `p8c -o`. (Still to come in M3: `*`,
+  shifts, comparisons + branches, unary, `@()`, `&`, indexing, calls, and
+  the word-expression evaluator.)
 
 `p1.p8` is **generated** by [`build_p1.py`](./build_p1.py), which splices
 stmt.p8's current front-end with the codegen back-end and renders fixed

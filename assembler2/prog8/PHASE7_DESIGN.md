@@ -246,8 +246,17 @@ Each milestone is a few pushes; each diffs `p1`'s `.s` against `p8c`'s.
       (`; ---- string pool ----` / `p8c_str_N:` / `.byte <escaped>, 0`, a
       port of `_escape`: printable runs, `$XX` for control / `"` / `\`, `"0"`
       for the empty string), positioned between the last sub and the reset
-      vector. Diffed against `p8c -o` over an M3 string corpus. (Remaining
-      M3: the arithmetic/comparison/unary expression trees, calls, indexing.)
+      vector. Diffed against `p8c -o` over an M3 string corpus.
+    * **Byte-arithmetic slice DONE:** byte `+ - & | ^` in a byte-assignment
+      RHS, evaluated on an explicit **work stack** (`cws_*`) since p8c
+      recurses on operands and p1 cannot. Covers the leaf-RHS fast path
+      (left-nested chains `a+b+c`) and the generic CPU-stack spill path (a
+      non-leaf RHS -> `pha / ... / sta __p8c_tmp1 / pla / op __p8c_tmp1`,
+      matching the host's dual-scratch-safe sequence). Augmented assignment
+      now shares the same `emit_byte_binop_*` emitter (via `aug_to_binop`).
+      Diffed against `p8c -o` over a byte-expr corpus. (Remaining M3: `*` +
+      the mul helper, shifts, comparisons + branches, unary, `@()`, `&`,
+      indexing, calls, `txt.print*`; then the word-expression evaluator.)
 * **P7-M4 -- control flow.** if/else, while, for, repeat, break/continue/
   return, when, defer; long branches.
 * **P7-M5 -- decls + trailers.** arrays, consts, enums, structs, asmsub,

@@ -85,9 +85,10 @@ PHASE7_DESIGN.md section 10.
   * 5 v0/v1 e2e (`tinyp8/tests/test_e2e.py`).
   * 5 v0/v1 self-host equivalence (`test_self_host.py`).
   * 12 v2..v9 .p8-only (`test_v2.py`, sources in `goldens_v2/`).
-  * **157 total, all green** (the 22 tinyp8 + 30 p1 cases need vasm; see the
+  * **158 total, all green** (the 22 tinyp8 + 31 p1 cases need vasm; see the
     environment note above). The p1 codegen cases live in
-    `p1/tests/test_p1.py` (Phase 7: P7-M1 + P7-M2 + the M3 strings slice).
+    `p1/tests/test_p1.py` (Phase 7: P7-M1 + P7-M2 + the M3 strings and
+    byte-arithmetic slices).
 
 Run:
 
@@ -373,14 +374,23 @@ Progress:
          control/`"`/`\`, `, 0` terminator, `0` for the empty string),
          between main and the reset vector. Diffed vs `p8c -o` over an M3
          string corpus (`test_p1.py::test_m3_str_programs`).
-       * **NEXT: rest of P7-M3** -- the expression trees: port
-         `_emit_byte_expr_into_a` / `_emit_word_expr_into_ay` proper (binop
-         precedence ladder incl. the dual-scratch + mkword fixes already in
-         the host), unary, `@()`, `&name`, indexing, calls, `txt.print*`;
-         uword/shift augmented assignment. Go smallest-first, each construct
-         diffed against `p8c -o`. The out_text refactor reclaimed the budget,
-         but keep wrapping distinct fixed fragments in o_*/out_text helpers
-         so each pooled string + call site appears once.
+       * **P7-M3 byte-arithmetic slice DONE.** Byte `+ - & | ^` in a byte
+         assignment RHS, on an explicit work stack (`cws_*`: tasks 0 eval /
+         1 binop-leaf / 2 pha / 3 sta tmp1 / 4 pla / 5 binop-tmp1) since p8c
+         recurses and p1 can't. Leaf-RHS fast path (left chains a+b+c) +
+         generic CPU-stack spill (non-leaf RHS -> pha/sta __p8c_tmp1/pla,
+         the host's dual-scratch-safe form). Augmented assignment now shares
+         `emit_byte_binop_leaf` via `aug_to_binop`.
+         `test_p1.py::test_m3_expr_programs`. p1.bin ~50 KB.
+       * **NEXT: rest of P7-M3** -- still on the byte/word expr trees:
+         `*` (+ the `__p8c_mul_u8` trailer helper), shifts (`<< >>`,
+         immediate-unrolled + variable-loop), comparisons + the
+         invert-branch long-branch idiom (needed before `if`/`while`),
+         unary (`- ~ not`), `@()`, `&name`, indexing, calls, `txt.print*`;
+         then the WORD evaluator (`_emit_word_expr_into_ay` proper -- the
+         work-stack pattern generalizes, mind the mkword Y-clobber fix).
+         Smallest-first, each diffed against `p8c -o`. Keep wrapping distinct
+         fixed fragments in o_*/out_text helpers (one pooled string each).
 
 The caveat below (fixed frame layout) is addressed in the design doc's
 section 3.6 -- parallel arrays sized for the widest frame kind.
