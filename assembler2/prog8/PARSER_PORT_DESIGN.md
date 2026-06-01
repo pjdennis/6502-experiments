@@ -1,0 +1,342 @@
+# Design: porting the iterative parser to Prog8 (Phase 6, step 5)
+
+Status: **design** -- no code yet. This is the document PLAN.md's
+Phase 6 asks for "before the first push" of the Prog8 port.
+
+For the strategic context see [`PLAN.md`](./PLAN.md) (Phase 6/7) and
+[`RESUME_NOTES.md`](./RESUME_NOTES.md) (Option D). The Python side of
+the rewrite is done: `p8c/iter_parse.py` (expressions) and
+`Parser.parse_block_iter` in `p8c/parse.py` (statements) are the
+default parser and are proven equivalent to the recursive descent.
+This doc plans porting **that** parser -- and the lexer it depends on
+-- to Prog8, so it can run on the 6502 and become part of `p1.p8`
+(Phase 7).
+
+---
+
+## 1. Goal and success criterion
+
+A Prog8 program (call the directory `p1/`) that, running on the
+emulator's nmos-default machine, reads a `.p8` source file and emits a
+**canonical AST serialization** byte-identical to the one the Python
+parser produces for the same input, across a growing corpus.
+
+This mirrors the existing tinyp8 methodology exactly: compile/run on
+the emulator, diff stdout against a golden. The Python iterative parser
+is the oracle; the golden is its serialized output.
+
+Non-goals here: sema and codegen. Those are later Phase-7 work. But the
+AST representation chosen here is shared infrastructure the whole
+Phase-7 compiler will reuse, so it is designed with that in mind.
+
+---
+
+## 2. The core problem
+
+Python leans on three things the 6502 port cannot: recursion,
+heap-allocated heterogeneous records (the AST dataclasses + the
+operator-stack/frame dicts), and growable lists. The algorithm is
+*already* non-recursive (that was the whole point of step 1-2), so the
+work is purely **data-representation**: replace every Python object and
+list with fixed-layout arrays in 6502 RAM.
+
+Prog8 subs are non-reentrant, so the port must keep the iterative
+shape -- no parser sub may call itself or form a call cycle. The
+explicit stacks below are what make that possible.
+
+---
+
+## 3. Data representations
+
+All sizes below are first-cut budgets to be tuned once we measure
+against real inputs. The nmos-default machine has RAM from `$0200`
+upward; arrays live in main memory (not ZP), as in tinyp8.p8.
+
+### 3.1 Interned text pool (identifiers + string literals)
+
+Identifiers (`foo`, `a.b.c`) and string-literal contents are stored
+once in a byte pool; everything else refers to them by a small id.
+
+    ubyte[POOL]  text_pool        ; raw bytes, append-only
+    uword[NIDENT] ident_off       ; start offset of ident i
+    ubyte[NIDENT] ident_len       ; its length
+    uword         ident_count
+
+`intern(start,len) -> id`: linear scan for an existing match (same
+idiom as tinyp8 v9 `find_var`), else append. Dotted paths (`a.b`) are
+interned as the full dotted text, exactly as the Python parser stores
+`Ident.name = "a.b"` -- so the serializer prints them identically.
+
+String literals get their own parallel pool (`str_off/str_len`) so an
+`StrLit`'s id namespace is distinct from idents.
+
+### 3.2 AST node arena (struct-of-arrays)
+
+One arena, indexed by a 16-bit node id. Id 0 is the null node.
+
+    ubyte[NNODE]  node_kind       ; tag -- see kinds below
+    ubyte[NNODE]  node_op         ; operator id (BinOp/UnaryOp), else 0
+    uword[NNODE]  node_a          ; first field (child id / value / text id)
+    uword[NNODE]  node_b          ; second field
+    uword[NNODE]  node_c          ; third field
+    uword         node_count      ; bump allocator; new_node() returns id
+
+Per-kind field meaning (mirrors `p8c/ast.py`):
+
+| kind        | node_op | node_a            | node_b        | node_c          |
+|-------------|---------|-------------------|---------------|-----------------|
+| INTLIT      | --      | value (uword)     | --            | --              |
+| STRLIT      | --      | str id            | --            | --              |
+| BOOLLIT     | --      | 0/1               | --            | --              |
+| IDENT       | --      | ident id          | --            | --              |
+| BINOP       | op id   | lhs node          | rhs node      | --              |
+| UNARYOP     | op id   | operand node      | --            | --              |
+| ADDRESSOF   | --      | ident id          | --            | --              |
+| MEMAT       | --      | addr node         | --            | --              |
+| INDEX       | --      | array node        | index node    | field ident id  |
+| CALL        | --      | path ident id     | arg list head | --              |
+| EXPRSTMT    | --      | expr node         | --            | --              |
+| ASSIGN      | op id   | target node       | rhs node      | --              |
+| VARDECL     | --      | type tag          | name ident id | init node       |
+| INLINEASM   | --      | str id            | --            | --              |
+| IF          | --      | cond node         | then list     | else list       |
+| WHILE       | --      | cond node         | body list     | --              |
+| FOR         | --      | var ident id      | lo node | hi  | body list (see 3.4) |
+| REPEAT      | --      | count node (0=∞)  | body list     | --              |
+| WHEN        | --      | expr node         | choice list   | --              |
+| WHENCHOICE  | --      | value list        | body list     | --              |
+| BREAK       | --      | --                | --            | --              |
+| CONTINUE    | --      | --                | --            | --              |
+| RETURN      | --      | value node (0=none)| --           | --              |
+| DEFER       | --      | stmt node         | --            | --              |
+| BLOCK       | --      | stmt list head    | --            | --              |
+
+`FOR` needs four operands (var, lo, hi, body); it overflows the three
+field slots. Options: (a) widen the arena to `node_d`, or (b) give FOR
+a side-record `for_lo[]/for_hi[]` indexed by a small for-id stored in
+node_b. Recommend (a) `node_d` -- one extra `uword[NNODE]` is cheap and
+keeps everything uniform. (Decision to confirm at implementation; the
+table above assumes node_d exists for FOR.)
+
+`type tag` for VARDECL is a small enum byte (ubyte/byte/uword/... and
+the `const-`/array variants); the Python side encodes these as strings,
+so the serializer maps tag -> the same string.
+
+Loc (line/col) is **dropped** from AST nodes. The Python serializer
+ignores loc already (see `tests/test_iter_parse.py::dump`), so parity
+holds. Error messages on-target can recover position from the current
+token (tokens keep line/col -- see 3.3), which is enough for a first
+port.
+
+### 3.3 Token stream
+
+The lexer (ported separately -- it is already a non-recursive `while`
+loop, the easy part) fills parallel arrays:
+
+    ubyte[NTOK]  tok_kind         ; enum: EOF/INT/STR/IDENT/KW/DIRECTIVE
+                                  ;       + one tag per punctuation/op token
+    uword[NTOK]  tok_val          ; INT: value; IDENT/KW/DIRECTIVE: ident id;
+                                  ; STR: str id; operators: 0
+    uword[NTOK]  tok_line
+    ubyte[NTOK]  tok_col
+
+The parser holds a cursor `pos` and the helpers `peek/eat/match` over
+these arrays -- a direct transcription of `IterParser.peek/eat/match`.
+
+Token-kind enum: assign a fixed ubyte to each kind the Python lexer
+emits, including every punctuation/multi-char operator token
+(`"+","==","<<=", ...`). This is a flat table; the lexer port and the
+parser port must agree on it. Keep it in one shared `.p8` include.
+
+### 3.4 Lists (block stmts, call args, when choices/values)
+
+Variable-length sequences are built as singly-linked cons cells:
+
+    uword[NCONS]  cons_val        ; a node id
+    uword[NCONS]  cons_next       ; next cons, 0 = nil
+    uword         cons_count
+
+A "list" is the id of its head cell (0 = empty). The parser builds each
+list by **prepending** (O(1), head-only -- no tail bookkeeping needed),
+then **reverses it in place** at finalize (walk re-linking `cons_next`;
+no allocation). Prepend+reverse keeps each accumulator down to a single
+`uword` head, which matters because frames (3.6) carry several.
+
+Nested lists are independent (each has its own head), so nesting -- a
+block inside a when-choice inside a for body -- just works; contrast
+with a single shared span pool, which breaks under interleaving.
+
+### 3.5 Expression stacks (port of `iter_parse.py`)
+
+Two stacks. Operands are node ids; operators/markers are a
+struct-of-arrays indexed by `op_sp`:
+
+    uword[ESTK]  operand_stack    ; node ids;  operand_sp
+    ubyte[OSTK]  op_kind          ; binop/unop/lparen/memat/call/lbracket
+    ubyte[OSTK]  op_op            ; operator id (binop/unop)
+    ubyte[OSTK]  op_prec          ; precedence (binop)
+    ubyte[OSTK]  op_floor         ; operand_sp when a marker opened
+    uword[OSTK]  op_path          ; call: path ident id
+    uword[OSTK]  op_args          ; call: arg-list head (prepend; reverse on close)
+    uword        op_sp
+
+This is a transcription of the dict entries in `IterParser.parse_expr`.
+`_is_op/_is_marker/_op_prec` become trivial comparisons on `op_kind`.
+The `index_ok` flag and `expect_operand` state become two ubytes. The
+precedence table `_OP_PRECEDENCE` becomes a const `ubyte[]` indexed by
+operator id; unary precedence is the `_UNARY_PREC` constant.
+
+`apply()`, `reduce_to_marker()` and the main dispatch loop port
+one-to-one; "pop two operands, push BinOp" becomes
+`new_node(BINOP, op, operand_stack[--sp], operand_stack[--sp]...)`.
+
+### 3.6 Statement frame stack (port of `parse_block_iter`)
+
+Frames become parallel arrays indexed by `fr_sp`, sized for the widest
+frame kind (the RESUME_NOTES caveat made concrete):
+
+    ubyte[FSTK]  fr_kind          ; root/then/else/while/for/repeat/when/when_choice
+    ubyte[FSTK]  fr_mode          ; stmts / choices
+    uword[FSTK]  fr_stmts         ; accumulated-stmt list head (stmts mode)
+    ubyte[FSTK]  fr_defer         ; 1 if this stmt was `defer`-prefixed
+    uword[FSTK]  fr_cond          ; cond / when-expr / repeat-count node
+    uword[FSTK]  fr_then          ; saved then-list (else frame)
+    uword[FSTK]  fr_var           ; for: loop var ident id
+    uword[FSTK]  fr_lo            ; for: lo node
+    uword[FSTK]  fr_hi            ; for: hi node
+    uword[FSTK]  fr_choices       ; when: choice list head
+    uword[FSTK]  fr_values        ; when_choice: value list head
+    uword        fr_sp
+
+`pending_defer` is a single ubyte (+ no loc, since loc is dropped). The
+main loop, the `mode == choices` branch, the close-and-attach logic,
+and `_iter_stmt_dispatch` port directly. "Attach to parent" =
+prepend the built node onto `fr_stmts[fr_sp-1]` after popping.
+
+### 3.7 Memory budget (first cut, to measure)
+
+For a tinyp8.p8-sized input (~1300 lines): tokens dominate. Rough
+order-of-magnitude per arena element x count -> bytes; we will measure,
+but the plan is to keep each arena independently sized and bump-checked
+(like tinyp8's ZP allocator guard) so overflow is a clean error, not
+corruption. If a single input won't fit, the parser streams per-sub
+(parse one sub, hand its AST to the next stage, reset arenas) -- the
+asm-chain already proves per-unit streaming works. Capacity tuning is
+its own milestone (M5 below).
+
+---
+
+## 4. Canonical serialization (the equivalence contract)
+
+Both parsers emit the AST as a deterministic prefix S-expression. The
+Python serializer is the reference (add it next to `iter_parse.py`);
+the Prog8 serializer must match it byte-for-byte. Format:
+
+    (int 42)                 (str "hi")          (bool true)
+    (id foo)                 (id a.b.c)
+    (+ E E)  (== E E)  ...   (u- E)  (~ E)  (not E)
+    (addr foo)               (mem E)
+    (idx E E)                (idx E E .field)
+    (call a.b E E ...)       (call f)            ; zero args
+    (block S S ...)
+    (var ubyte x E?)         (assign = T E)      (exprstmt E)
+    (asm "...")
+    (if E (block...) (block...)?)
+    (while E (block...))     (for x E E (block...))
+    (repeat E? (block...))
+    (when E (choice (E E ...) (block...)) (choice () (block...)) ...)
+    (break) (continue) (return E?) (defer S)
+
+Operator tokens print as their source spelling (`+`, `<<`, `and`,
+...). Whitespace/indentation is fixed and minimal (single spaces,
+newraw per statement) so the diff is exact. The format is intentionally
+human-readable to make on-target mismatches debuggable.
+
+A `serialize(node)` walk is itself recursion in Python; on-target it is
+a second iterative tree-walk over the node arena using an explicit
+work stack (same toolkit as the parser). It is small and can come
+after M3.
+
+---
+
+## 5. Milestones (each is one or a few pushes, each with a golden tier)
+
+* **M0 -- serializer + format freeze (Python only).** Add
+  `serialize()` to the Python side and a test that round-trips the
+  existing corpus through `parse -> serialize`. Freezes the contract.
+  No on-target code. *(pure Python; runs without vasm.)*
+
+* **M1 -- lexer port.** `p1/lexer.p8`: source bytes -> token arrays +
+  text pools. Golden: dump the token stream for a corpus and diff
+  against a Python token-dump. The lexer is non-recursive already, so
+  this is mostly transcription + the pools.
+
+* **M2 -- expression parser port.** `p1/expr.p8`: the shunting-yard
+  engine over the stacks of 3.5, building nodes in the arena. Driver
+  reads one expression, serializes it. Golden: the expression corpus
+  from `tests/test_iter_parse.py` (reuse `EXPRESSIONS`), serialized by
+  Python, diffed against on-target output.
+
+* **M3 -- statement parser port.** `p1/stmt.p8`: the frame-stack driver
+  of 3.6. Golden: full programs (the `STMT_PROGRAMS` corpus + the
+  `examples/` files), serialized and diffed.
+
+* **M4 -- whole-program parse on-target.** Wire lexer+parser+serializer
+  into one `p1/parse_main.p8` that takes a `.p8` path and writes the
+  serialization. Golden corpus = every `examples/*.p8` and tinyp8.p8.
+  This is the step-5 success criterion (section 1).
+
+* **M5 -- capacity + streaming.** Measure arena high-water marks on the
+  largest inputs; size the arenas; add bump-guards; if needed, switch
+  to per-sub streaming. Document the limits.
+
+After M4, the Prog8 parser exists and is proven equivalent; Phase 7
+(porting sema+codegen, assembling `p1.p8`) can begin on top of this AST
+representation.
+
+---
+
+## 6. Verification strategy (why this is trustworthy)
+
+Three independent oracles already guard the Python iterative parser
+(unit equivalence, 4000-sample fuzz, whole-corpus codegen diff). The
+Prog8 port adds a fourth gate of the same kind: **serialization diff
+against the Python parser** at every milestone (M1-M4). Because the
+Python parser is the default production parser and is itself checked
+against the recursive descent, a green serialization diff transitively
+ties the on-target parser back to the original recursive grammar.
+
+The randomized differential fuzzer (3.x in the test) can be reused: it
+already emits valid expression strings; feed the same strings to the
+on-target parser via a batch driver and diff serializations. That gives
+the Prog8 expression parser the same fuzz coverage the Python one has.
+
+---
+
+## 7. Open questions / risks
+
+* **`node_d` for FOR.** Confirm widening the arena vs. a side-record.
+  Leaning to widen (uniform, cheap).
+* **Arena sizing for real p8c.** tinyp8.p8 is ~1300 lines; the eventual
+  p1.p8 is larger. M5 decides fixed sizes vs. per-sub streaming. This
+  is the biggest unknown and is deliberately last.
+* **Token-kind enum sharing.** The lexer and parser ports must share
+  one kind table; keep it in a single include both `%import`.
+* **Operator-id encoding.** Map each operator token-kind to a small id
+  with a const lookup; the precedence table indexes by that id.
+* **Where this lives.** Proposed `assembler2/prog8/p1/`, built and
+  tested through the emulator exactly like `tinyp8/` (vasm -> bin ->
+  emulator -> diff golden). Reuses the tinyp8 runtime-I/O shim.
+* **Self-reference.** Eventually p1.p8 must parse *its own* source.
+  Nothing here precludes it, but the grammar subset p1 accepts must
+  cover the subset p1 is written in -- track that as the parser grows,
+  the same way tinyp8's versions did.
+
+---
+
+## 8. What to do first
+
+M0: add the Python `serialize()` and freeze the format. It is pure
+Python (no vasm/emulator needed), it pins down the contract every later
+milestone diffs against, and it is small. Then M1 (lexer) is the first
+on-target push.

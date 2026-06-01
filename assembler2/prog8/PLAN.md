@@ -175,10 +175,16 @@ Recommended approach:
    purpose: deleting it would remove that oracle. Drop it only once the
    Prog8 port is itself the working reference.
 5. `[todo]` Port `iter_parse.py` + `parse_block_iter` to Prog8 itself.
+   Design doc: [`PARSER_PORT_DESIGN.md`](./PARSER_PORT_DESIGN.md) --
+   node-arena AST, parallel-array stacks/frames, a canonical AST
+   serialization as the equivalence contract, and milestones M0
+   (Python serializer) through M5 (capacity/streaming).
 
 Estimated remaining effort: the Prog8 port (step 5) is the last piece,
 and it feeds directly into Phase 7. The iterative parser is now the
 production path; the recursive descent survives only as a test oracle.
+Start with M0 in the design doc (pure-Python serializer; freezes the
+format every later milestone diffs against).
 
 ### Phase 7 -- Self-hosting bootstrap proof `[todo]`
 

@@ -248,7 +248,16 @@ Progress:
   5. Port `iter_parse.py` + `parse_block_iter` to Prog8 itself -- the
      frame structs become `ubyte[]` parallel arrays / a tagged-union
      node array (the tinyp8.p8 idiom, scaled up). THIS is what unlocks
-     Phase 7 (writing p1.p8).
+     Phase 7 (writing p1.p8). **Design doc:**
+     [`PARSER_PORT_DESIGN.md`](./PARSER_PORT_DESIGN.md) -- covers the
+     node arena, the parallel-array stacks/frames, a canonical AST
+     serialization as the equivalence contract, and milestones M0..M5.
+     Start at M0: add a pure-Python `serialize()` next to iter_parse.py
+     and freeze the dump format (no vasm needed); then M1 is the lexer
+     port.
+
+The caveat below (fixed frame layout) is addressed in the design doc's
+section 3.6 -- parallel arrays sized for the widest frame kind.
 
 Caveat worth noting for step 5: the frame dicts here lean on Python
 dynamic typing (heterogeneous per-kind fields). The Prog8 port will
