@@ -77,18 +77,34 @@ milestone map P7-M1..M6.
 * **P7-M1 (done)** -- skeleton. `main { }` (nmos) compiles to the fixed
   prologue (ZP scratch bindings + `.org` + `jmp p8s_main`), an empty
   `p8s_main` + the nmos exit epilogue (`lda #$00 / jsr $f00f / brk`), and
-  the reset-vector trailer at `$FFFC`. The codegen tail (`emit_prologue`
-  / `emit_main` / `emit_trailers`, plus `codegen_block` / `codegen_stmt`
-  stubs) spells the fixed asm text with `out_byte()` runs (p8c has no
-  string-literal-as-data). The driver runs pass A (directives -> target +
-  address), the prologue, pass M (find + codegen `main`), then the
-  trailers. Byte-identical to `p8c -o` (the `; source:` line normalized)
-  over the empty-main corpus at several load addresses --
-  `tests/test_p1.py`, `make p1-test`.
+  the reset-vector trailer at `$FFFC`. The driver runs pass A (directives
+  -> target + address), the prologue, pass M (find + codegen `main`),
+  then the trailers. Byte-identical to `p8c -o` (the `; source:` line
+  normalized) over the empty-main corpus at several load addresses.
 
-The front-end of `p1.p8` was copied from `stmt.p8` at the start of Phase
-7; the two now diverge (stmt.p8 is the frozen parser-milestone artifact;
-p1.p8 grows codegen). `codegen_stmt` is a stub until P7-M2.
+* **P7-M2 (done)** -- module vars + simple assignment. Pass S
+  (`build_symbols`) walks the module var decls and allocates each scalar a
+  ZP address with the same bump allocator p8c's sema uses (`$40` up,
+  ubyte/byte = 1, uword = 2). `emit_zp_bindings` emits the
+  `; ---- ZP variable allocations ----` block (`p8v_<name> = $XX`) after
+  the prologue. `codegen_stmt` handles assignment: `=` of a leaf (literal
+  / var) with ubyte->uword widening on word stores, and byte augmented
+  assignment (`+= -= &= |= ^=`) with a leaf operand. The symbol table is
+  persistent across passes -- the ident pool is kept across the pass-A ->
+  pass-M reset, so its ident ids stay valid when `main` is re-lexed.
+  Verified against `p8c -o` over an M2 corpus (`tests/test_p1.py`).
+
+`p1.p8` is **generated** by [`build_p1.py`](./build_p1.py), which splices
+stmt.p8's current front-end with the codegen back-end (p8c has no
+string-literal-as-data, so emitted asm text must be spelled byte by byte
+via `out_byte()` runs -- the generator turns Python strings into those
+runs). Regenerate after editing the generator:
+
+    python3 p1/build_p1.py
+
+Sourcing the front-end from stmt.p8 keeps the two in lockstep (a parser
+fix in stmt.p8 flows into p1 on the next regenerate); only the back half
+differs (stmt.p8 serializes the AST, p1.p8 emits assembly).
 
 ## Running
 

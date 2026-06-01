@@ -66,9 +66,9 @@ is the source of truth across sessions.
   * 5 v0/v1 e2e (`tinyp8/tests/test_e2e.py`).
   * 5 v0/v1 self-host equivalence (`test_self_host.py`).
   * 12 v2..v9 .p8-only (`test_v2.py`, sources in `goldens_v2/`).
-  * **154 total, all green** (the 22 tinyp8 + 28 p1 cases need vasm; see the
-    environment note above). The 28th p1 case is `p1/tests/test_p1.py`
-    (Phase 7 codegen, P7-M1).
+  * **155 total, all green** (the 22 tinyp8 + 29 p1 cases need vasm; see the
+    environment note above). The last two p1 cases are
+    `p1/tests/test_p1.py` (Phase 7 codegen, P7-M1 + P7-M2).
 
 Run:
 
@@ -316,25 +316,41 @@ Progress:
        memory), then emit prologue + ZP bindings, then main (parse+sema+
        codegen+reset), then the other subs, then trailers (mul helper /
        arrays / structs / memvars / string pool / reset vector).
-       * **P7-M1 DONE.** `p1/p1.p8` exists: front-end copied from stmt.p8,
-         serializer dropped, codegen tail added (`emit_prologue` /
-         `emit_main` / `emit_trailers`, `codegen_block` / `codegen_stmt`
-         stubs). Fixed asm text is spelled via `out_byte()` runs. Driver:
-         pass A (directives -> target+address) -> prologue -> pass M (find
-         + codegen `main`) -> trailers. `main { }` (nmos) at several load
-         addresses is byte-identical to `p8c -o` (the `; source:` line
-         normalized on both sides). `p1/tests/test_p1.py`, `make p1-test`.
-         **Capacity read: p1.bin is ~50 KB** -- fits 64 KB now, but the
-         per-byte fixed-text `out_byte` runs dominate, so table-driving the
-         literal asm text (design section 8) will be needed before the
-         corpus grows much.
-       * **NEXT: P7-M2** -- module vars + simple assignment: pass S builds
-         the symbol table (ZP bump from $40, overflow to main memory), emit
-         the `p8v_<name> = $XX` ZP bindings after the prologue, and
-         `codegen_stmt` gains var-decl/assignment (`x = 1`, `x = y`,
-         augmented) over `_emit_byte_expr` leaves + store. Mirror
-         `p8c/codegen.py` allocation ORDER exactly (sema.py's ZP allocator)
-         -- byte identity needs the same addresses.
+       * **p1.p8 is GENERATED** by `p1/build_p1.py`: it splices stmt.p8's
+         front-end (everything before its `; ---- serialization ----`
+         section) with a codegen back-end. Reason: p8c has no
+         string-literal-as-data, so emitted asm text must be spelled byte
+         by byte via `out_byte()` runs -- the generator turns Python
+         strings into those runs. Edit the generator, then
+         `python3 p1/build_p1.py`. Sourcing the front-end from stmt.p8
+         keeps the parser in lockstep across both.
+       * **P7-M1 DONE.** Skeleton. Codegen tail (`emit_prologue` /
+         `emit_main` / `emit_trailers`). Driver: pass A (directives ->
+         target+address) -> prologue -> pass M (find + codegen `main`) ->
+         trailers. `main { }` (nmos) at several load addresses is
+         byte-identical to `p8c -o` (the `; source:` line normalized on
+         both sides). `p1/tests/test_p1.py`, `make p1-test`.
+       * **P7-M2 DONE.** Module vars + simple assignment. Pass S
+         (`build_symbols`) allocates each module scalar a ZP address with
+         p8c's exact bump allocator ($40 up; ubyte/byte=1, uword=2) into a
+         persistent symbol table (sym_ident/sym_type/sym_addr/sym_count +
+         zp_next). `emit_zp_bindings` emits the ZP block
+         (`p8v_<name> = $XX`) after the prologue. `codegen_stmt` does
+         assignment: `=` of a leaf (literal/var) with ubyte->uword
+         widening, and byte augmented (`+= -= &= |= ^=`) with a leaf
+         operand. KEY: the ident pool persists across the pass-A -> pass-M
+         reset (`reset_nodes`, NOT `reset_arena`) so symbol-table ident ids
+         stay valid when main is re-lexed (intern_name dedups). Capacity:
+         p1.bin ~55 KB -- still fits, but table-driving the literal asm
+         text (design section 8) is coming due as codegen grows.
+       * **NEXT: P7-M3** -- expressions. Port `_emit_byte_expr_into_a` /
+         `_emit_word_expr_into_ay` proper (binop ladder incl. the
+         dual-scratch + mkword fixes already in the host), unary, `@()`,
+         `&name`, indexing, calls, `txt.print*`; uword/shift augmented.
+         This is the bulk of codegen -- go smallest-first, each construct
+         diffed against `p8c -o`. Watch p1.bin size (the out_byte runs
+         dominate; factor shared fragments into o_* subs as M2 did, or
+         start the section-8 table-driving).
 
 The caveat below (fixed frame layout) is addressed in the design doc's
 section 3.6 -- parallel arrays sized for the widest frame kind.

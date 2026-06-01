@@ -211,9 +211,20 @@ Each milestone is a few pushes; each diffs `p1`'s `.s` against `p8c`'s.
       "table-drive the literal text" mitigation will be needed before the
       corpus grows much -- the fixed-text `out_byte` runs are the dominant
       cost, exactly as the serializer milestone predicted.
-* **P7-M2 -- module vars + simple assignment.** `ubyte x` ... `x = 1`,
-  `x = y`, augmented. Exercises the symbol table + ZP bindings +
-  `_emit_byte_expr` leaves + store.
+* **P7-M2 -- module vars + simple assignment. DONE.** Pass S
+  (`build_symbols`) allocates each module scalar a ZP address with p8c's
+  exact bump allocator (`$40` up; ubyte/byte = 1, uword = 2), into a
+  persistent struct-of-arrays symbol table (ident id -> type + addr).
+  `emit_zp_bindings` emits the `; ---- ZP variable allocations ----` block
+  after the prologue. `codegen_stmt` handles assignment: `=` of a leaf
+  (literal / var) with ubyte->uword widening on word stores, and byte
+  augmented assignment (`+= -= &= |= ^=`) with a leaf operand
+  (`_emit_byte_expr` leaves + store). The ident pool is kept across the
+  pass-A -> pass-M arena reset (`reset_nodes`, not `reset_arena`) so the
+  symbol table's ident ids stay valid when `main` is re-lexed. Verified
+  against `p8c -o` over an M2 corpus. Two scopes deferred to M3: general
+  expression trees in the RHS (binops), and uword/shift augmented
+  assignment.
 * **P7-M3 -- expressions.** byte + uword arithmetic / comparison / unary,
   `@()`, `&`, indexing, calls, `txt.print*`.
 * **P7-M4 -- control flow.** if/else, while, for, repeat, break/continue/

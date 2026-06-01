@@ -54,6 +54,31 @@ M1_PROGRAMS = [
     "%target nmos\n%address $c000\n\nmain {\n}\n",
 ]
 
+# P7-M2 corpus: module scalar vars (ubyte / byte / uword, in various
+# declaration orders) + simple assignment -- leaf RHS (`= literal`,
+# `= var`), ubyte/uword widening on word stores, and byte augmented
+# assignment (+= -= &= |= ^=) with a leaf operand. Exercises pass S
+# (symbol table + ZP bump allocation), the ZP-binding block, and the
+# byte/word leaf-expression + store codegen.
+M2_PROGRAMS = [
+    # all three scalar types, plain leaf assignment + widening
+    "%target nmos\n\nubyte x\nubyte y\nuword w\n\n"
+    "main {\n    x = 1\n    y = x\n    w = $1234\n    w = x\n    w = y\n}\n",
+    # byte type + augmented add of a var
+    "%target nmos\n\nbyte a\nbyte b\n\n"
+    "main {\n    a = 5\n    b = a\n    a += b\n}\n",
+    # every supported byte augmented op, literal + var operands
+    "%target nmos\n\nubyte x\nubyte y\n\n"
+    "main {\n    x = $10\n    y = 2\n    x += 3\n    x -= 1\n    x += y\n"
+    "    x -= y\n    x &= $0f\n    x |= y\n    x ^= 2\n}\n",
+    # uword-only program (2-byte ZP slots), word leaf copy
+    "%target nmos\n\nuword p\nuword q\n\n"
+    "main {\n    p = $beef\n    q = p\n}\n",
+    # interleaved types -> non-trivial ZP addresses ($40 ub, $41 uw, $43 ub)
+    "%target nmos\n\nubyte a\nuword b\nubyte c\n\n"
+    "main {\n    a = 1\n    b = a\n    c = 9\n}\n",
+]
+
 
 def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
@@ -106,6 +131,12 @@ class P1Equivalence(unittest.TestCase):
 
     def test_m1_programs(self):
         for src in M1_PROGRAMS:
+            with self.subTest(src=src):
+                self.assertEqual(self._oracle(src), self._ontarget(src),
+                                 msg=f"codegen .s differs for {src!r}")
+
+    def test_m2_programs(self):
+        for src in M2_PROGRAMS:
             with self.subTest(src=src):
                 self.assertEqual(self._oracle(src), self._ontarget(src),
                                  msg=f"codegen .s differs for {src!r}")
