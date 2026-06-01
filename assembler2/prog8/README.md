@@ -102,9 +102,29 @@ wendy2c, mirroring the asm00..asm17 chain.
   * **Self-host equivalence test**: for every `.tp8` in
     `tinyp8/tests/goldens/`, both `tinyp8.s` (hand-asm) and
     `tinyp8.p8` (compiled by p8c) produce **byte-identical** output.
-    4/4 cases pass: a real working compiler, written in Prog8,
+    5/5 cases pass: a real working compiler, written in Prog8,
     compiled by our own host compiler, agrees bit-for-bit with the
     reference assembly version.
+
+**Phase 4 -- tinyp8.p8 grows beyond the reference (v2..v6):**
+
+  * v2: `let X = $XX` declarations + `print_ub X` references. The
+    on-target compiler now maintains a 26-slot symbol table and emits
+    a 38-byte position-independent hex-print helper lazily on first
+    variable reference.
+  * v3: `if X == $YY then print_ub Z` -- restricted conditional that
+    hard-codes the BNE displacement.
+  * v4: `let X = Y` -- variable copy.
+  * v5: `let X = Y + Z` / `let X = Y - $ZZ` -- arithmetic with mixed
+    variable and literal operands.
+  * v6: `while X != $YY` loop with fixed-shape body `let X = X + $ZZ`.
+    The loop-top is recorded as `bytes_emitted` so the back-jump
+    target is known when needed.
+
+  v0/v1 byte-equivalence with `tinyp8.s` stays intact because the new
+  syntax/state only activates when the new constructs appear. The
+  combined corpus is 5 e2e + 5 equivalence + 8 v2..v6 = 18 tinyp8
+  cases, all green.
 
 **Phase 3 cont -- language built out toward Prog8 parity:**
 
@@ -136,14 +156,34 @@ Self-host equivalence (tinyp8.s == tinyp8.p8) still 4/4 -- new
 features are additive, the tinyp8 corpus uses the original v0
 language and remains byte-identical to the reference asm.
 
-Still ahead for *full* Prog8 self-host:
-  * `byte` / `word` signed types
-  * `enum`, structs, defer
-  * Strings as proper iterable buffers (currently only literal
-    -> address; need string compare, length, slicing)
-  * Iterative parser architecture -- Prog8 forbids recursion, so
-    porting p8c (currently recursive-descent in Python) requires
-    rewriting the parser around an explicit AST stack.
+**Phase 5 -- the language gap to upstream Prog8 mostly closed:**
+
+  * `byte` signed type (Phase 4 push, host) with signed-aware compare
+  * `enum` declarations
+  * `defer` statement
+  * `struct` declarations (single instance)
+  * Arrays of structs with indexed field access (`arr[i].field`)
+  * Plus everything else from prior phases.
+
+  Combined with the language built out earlier (uword arithmetic,
+  arrays, @() / &var, sub/asmsub/inline-sub, when, for-in-to, peek/
+  poke, lsb/msb/mkword/len/sizeof, long-branch handling, char
+  literals, ...) the host p8c surface is now wide enough to express
+  a non-trivial compiler. Tokenizer demo (`examples/tokenizer.p8`)
+  proves the shape.
+
+**Still ahead for *full* p8c-in-Prog8 self-host:**
+
+  * Pointer-to-struct (`^^Token`) and struct-as-param.
+  * String operations as proper iterable buffers (strlen, strcmp,
+    slicing). Building on what we have wouldn't be hard.
+  * Multi-file `%import` with namespacing.
+  * Iterative parser architecture -- the host p8c is recursive-descent
+    in Python; Prog8 forbids recursion, so the *real* self-host needs
+    that parser rewritten around an explicit AST stack. tinyp8.p8
+    shows the iterative shape (state-machine dispatch over tokens);
+    porting host p8c's parser is the next major design+implementation
+    push.
 
 See the plan in conversation history for Phases 3-6, including the
 on-emulator emit-equivalence test tier that activates at Phase 5 when
