@@ -22,15 +22,17 @@ milestones M0..M5).
   focused edge-case corpus (every numeric base, every char/string
   escape, keyword traps, multi-char-operator maximal munch).
 
-* **M2a (done)** -- `expr.p8`: the on-target expression parser. Lexes a
+* **M2 (done)** -- `expr.p8`: the on-target expression parser. Lexes a
   single expression into in-memory token arrays, parses it with the
   shunting-yard algorithm over explicit operand/operator stacks into a
   struct-of-arrays node arena, and serializes the arena with an explicit
-  work-stack tree walk (no recursion anywhere). Covers atoms
-  (int/str/bool/ident incl. dotted), prefix unary (`- ~ not`), the full
-  binary precedence ladder, and parentheses. Verified byte-identical to
-  the Python oracle over the M2a subset of the `EXPRESSIONS` corpus
-  (`tests/test_expr.py`). M2b adds calls, indexing, `@()`, `&name`.
+  work-stack tree walk (no recursion anywhere). Covers the full
+  expression grammar: atoms (int/str/bool/ident incl. dotted), prefix
+  unary (`- ~ not`), the binary precedence ladder, parentheses, function
+  calls (nested + dotted, via a reversed cons-cell arg list), indexing
+  `arr[i]` / `arr[i].field`, `@()`, and `&name`. Verified byte-identical
+  to the Python oracle over the entire `EXPRESSIONS` corpus plus a
+  randomized-fuzz sample (`tests/test_expr.py`).
 
 * M3 (statements) .. M5 (capacity) -- to come.
 

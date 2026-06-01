@@ -38,6 +38,10 @@ const ubyte TK_KXOR   = 10        ; 'xor'
 const ubyte TK_LPAREN = 11
 const ubyte TK_RPAREN = 12
 const ubyte TK_DOT    = 13
+const ubyte TK_COMMA  = 14
+const ubyte TK_LBRACK = 15
+const ubyte TK_RBRACK = 16
+const ubyte TK_AT     = 17        ; @
 ; binary/unary operator punctuation -- the value is also the op-id used
 ; by the serializer's spelling table.
 const ubyte TK_PLUS   = 20
@@ -64,16 +68,23 @@ const ubyte ND_BOOL  = 3
 const ubyte ND_IDENT = 4
 const ubyte ND_BINOP = 5
 const ubyte ND_UNOP  = 6
+const ubyte ND_CALL  = 7    ; node_a_lo=path id, node_b=arg cons head (reversed)
+const ubyte ND_INDEX = 8    ; node_a_lo=array, node_b=index, node_op=has_field, node_a_hi=field id
+const ubyte ND_MEMAT = 9    ; node_a_lo=addr node
+const ubyte ND_ADDROF= 10   ; node_a_lo=name id
 
 ; ---- unary op-ids ----
 const ubyte UN_NEG = 0    ; u-
 const ubyte UN_NOT = 1    ; not
 const ubyte UN_INV = 2    ; ~
 
-; ---- op-stack record kinds ----
+; ---- op-stack record kinds (markers are >= OPK_LPAREN) ----
 const ubyte OPK_BINOP  = 0
 const ubyte OPK_UNOP   = 1
 const ubyte OPK_LPAREN = 2
+const ubyte OPK_MEMAT  = 3
+const ubyte OPK_CALL   = 4
+const ubyte OPK_LBRACK = 5
 
 const ubyte UNARY_PREC = 110
 
@@ -126,7 +137,17 @@ ubyte operand_sp
 ubyte[128] op_kind
 ubyte[128] op_op
 ubyte[128] op_prec
+ubyte[128] op_a         ; marker: call path ident id
+ubyte[128] op_b         ; marker: call arg cons-list head (0 = nil)
+ubyte[128] op_floor     ; marker: operand_sp when the marker was opened
 ubyte op_sp
+
+; cons cells for call argument lists (index 0 = nil; built by prepend,
+; so a list is in reverse argument order -- the serializer accounts for
+; that by walking head->tail and emitting via the work stack)
+ubyte[256] cons_val
+ubyte[256] cons_next
+ubyte cons_count
 
 ; serializer work stack (parallel arrays)
 ubyte[256] ws_type       ; 0=node, 1=close-paren, 2=newline
@@ -570,6 +591,10 @@ sub lex_operator(ubyte c) {
     ubyte c2
     if c == $28 { push_token(TK_LPAREN, 0)  return }
     if c == $29 { push_token(TK_RPAREN, 0)  return }
+    if c == $5b { push_token(TK_LBRACK, 0)  return }
+    if c == $5d { push_token(TK_RBRACK, 0)  return }
+    if c == $2c { push_token(TK_COMMA, 0)  return }
+    if c == $40 { push_token(TK_AT, 0)  return }
     if c == $2e { push_token(TK_DOT, 0)  return }
     if c == $2b { push_token(TK_PLUS, 0)  return }
     if c == $2a { push_token(TK_STAR, 0)  return }
@@ -689,6 +714,20 @@ sub push_op(ubyte k, ubyte op, ubyte prec) {
     op_prec[op_sp] = prec
     op_sp = op_sp + 1
 }
+sub push_marker(ubyte k, ubyte floor) {
+    op_kind[op_sp] = k
+    op_floor[op_sp] = floor
+    op_b[op_sp] = 0                ; nil arg list (call)
+    op_sp = op_sp + 1
+}
+sub cons_prepend(ubyte head, ubyte val) -> ubyte {
+    ubyte c
+    c = cons_count
+    cons_val[c] = val
+    cons_next[c] = head
+    cons_count = cons_count + 1
+    return c
+}
 
 sub apply_top() {
     op_sp = op_sp - 1
@@ -724,7 +763,7 @@ sub reduce_to_marker() {
         if op_sp == 0 {
             return
         }
-        if op_kind[op_sp - 1] == OPK_LPAREN {
+        if op_kind[op_sp - 1] >= OPK_LPAREN {     ; any marker
             return
         }
         apply_top()
@@ -749,7 +788,9 @@ sub append_ident_to_namebuf(ubyte id) {
         j = j + 1
     }
 }
-sub parse_ident_node() -> ubyte {
+; consume IDENT (DOT IDENT)* at the cursor, returning the interned id of
+; the (possibly dotted) full text.
+sub read_dotted_path() -> ubyte {
     name_len = 0
     append_ident_to_namebuf(lsb(cur_val_word()))
     advance()
@@ -766,35 +807,135 @@ sub parse_ident_node() -> ubyte {
         append_ident_to_namebuf(lsb(cur_val_word()))
         advance()                                  ; consume IDENT
     }
-    return new_node(ND_IDENT, 0, intern_name(), 0)
+    return intern_name()
 }
 
+
+; close an Index: pop the lbracket marker, pop index + array operands,
+; consume an optional `.field`, push the ND_INDEX node.
+sub close_index() {
+    op_sp = op_sp - 1                              ; drop the lbracket marker
+    operand_sp = operand_sp - 1
+    ubyte index
+    index = operand_stack[operand_sp]
+    operand_sp = operand_sp - 1
+    ubyte array
+    array = operand_stack[operand_sp]
+    advance()                                      ; consume ']'
+    ubyte fieldflag
+    ubyte fieldid
+    fieldflag = 0
+    fieldid = 0
+    if cur_kind() == TK_DOT {
+        if tok_kind[tok_pos + 1] == TK_IDENT {
+            advance()                              ; '.'
+            fieldid = lsb(cur_val_word())
+            advance()                              ; IDENT
+            fieldflag = 1
+        }
+    }
+    ubyte node
+    node = new_node(ND_INDEX, fieldflag, array, index)
+    node_a_hi[node] = fieldid
+    push_operand(node)
+}
+
+; close a Call: pop the trailing operand (if any) as the last arg, pop
+; the call marker, push the ND_CALL node (args are a reversed cons list).
+sub close_call() {
+    ubyte head
+    ubyte path
+    ubyte floor
+    head = op_b[op_sp - 1]
+    path = op_a[op_sp - 1]
+    floor = op_floor[op_sp - 1]
+    if operand_sp > floor {
+        operand_sp = operand_sp - 1
+        head = cons_prepend(head, operand_stack[operand_sp])
+    }
+    op_sp = op_sp - 1
+    push_operand(new_node(ND_CALL, 0, path, head))
+}
 
 sub parse_expr() -> ubyte {
     operand_sp = 0
     op_sp = 0
     ubyte expect_operand
+    ubyte index_ok
     expect_operand = 1
+    index_ok = 0
 
     repeat {
         ubyte t
         t = cur_kind()
 
+        ; ---- closing / separator tokens ----
         if t == TK_RPAREN {
             reduce_to_marker()
             if op_sp == 0 {
                 break
             }
-            if op_kind[op_sp - 1] == OPK_LPAREN {
-                op_sp = op_sp - 1
+            ubyte mk
+            mk = op_kind[op_sp - 1]
+            if mk == OPK_LPAREN {
+                op_sp = op_sp - 1                  ; group value stays on operand stack
                 advance()
                 expect_operand = 0
+                index_ok = 0
+                continue
+            }
+            if mk == OPK_MEMAT {
+                op_sp = op_sp - 1
+                operand_sp = operand_sp - 1
+                ubyte addr
+                addr = operand_stack[operand_sp]   ; ubyte local (avoids
+                                                   ; widening an array read)
+                push_operand(new_node(ND_MEMAT, 0, addr, 0))
+                advance()
+                expect_operand = 0
+                index_ok = 0
+                continue
+            }
+            if mk == OPK_CALL {
+                close_call()
+                advance()
+                expect_operand = 0
+                index_ok = 0
                 continue
             }
             break
         }
+        if t == TK_RBRACK {
+            reduce_to_marker()
+            if op_sp == 0 {
+                break
+            }
+            if op_kind[op_sp - 1] != OPK_LBRACK {
+                break
+            }
+            close_index()
+            expect_operand = 0
+            index_ok = 0
+            continue
+        }
+        if t == TK_COMMA {
+            reduce_to_marker()
+            if op_sp == 0 {
+                break
+            }
+            if op_kind[op_sp - 1] != OPK_CALL {
+                break
+            }
+            operand_sp = operand_sp - 1
+            op_b[op_sp - 1] = cons_prepend(op_b[op_sp - 1], operand_stack[operand_sp])
+            advance()
+            expect_operand = 1
+            index_ok = 0
+            continue
+        }
 
         if expect_operand != 0 {
+            index_ok = 0
             if t == TK_INT {
                 push_operand(new_node(ND_INT, 0, cur_val_word(), 0))
                 advance()
@@ -834,20 +975,49 @@ sub parse_expr() -> ubyte {
                 advance()
                 continue
             }
+            if t == TK_AMP {                       ; &name -- address-of
+                advance()
+                if cur_kind() == TK_IDENT {
+                    ubyte nid
+                    nid = lsb(cur_val_word())
+                    advance()
+                    push_operand(new_node(ND_ADDROF, 0, nid, 0))
+                    expect_operand = 0
+                }
+                continue
+            }
+            if t == TK_AT {                        ; @( expr )
+                advance()
+                if cur_kind() == TK_LPAREN {
+                    advance()
+                }
+                push_marker(OPK_MEMAT, operand_sp)
+                continue
+            }
             if t == TK_LPAREN {
-                push_op(OPK_LPAREN, 0, 0)
+                push_marker(OPK_LPAREN, operand_sp)
                 advance()
                 continue
             }
             if t == TK_IDENT {
-                push_operand(parse_ident_node())
-                expect_operand = 0
+                ubyte path
+                path = read_dotted_path()
+                if cur_kind() == TK_LPAREN {
+                    advance()                      ; consume '('
+                    push_marker(OPK_CALL, operand_sp)
+                    op_a[op_sp - 1] = path
+                    ; expect_operand stays 1 (first arg)
+                } else {
+                    push_operand(new_node(ND_IDENT, 0, path, 0))
+                    expect_operand = 0
+                    index_ok = 1
+                }
                 continue
             }
             break
         }
 
-        ; infix position
+        ; ---- infix position ----
         if is_binop(t) != 0 {
             ubyte prec
             prec = bin_prec(t)
@@ -855,7 +1025,7 @@ sub parse_expr() -> ubyte {
                 if op_sp == 0 {
                     break
                 }
-                if op_kind[op_sp - 1] == OPK_LPAREN {
+                if op_kind[op_sp - 1] >= OPK_LPAREN {   ; stop at any marker
                     break
                 }
                 if top_prec() < prec {
@@ -866,7 +1036,18 @@ sub parse_expr() -> ubyte {
             push_op(OPK_BINOP, t, prec)
             advance()
             expect_operand = 1
+            index_ok = 0
             continue
+        }
+        if t == TK_LBRACK {
+            if index_ok != 0 {
+                push_marker(OPK_LBRACK, operand_sp)
+                advance()
+                expect_operand = 1
+                index_ok = 0
+                continue
+            }
+            break
         }
         break
     }
@@ -891,6 +1072,13 @@ sub ws_push_node(ubyte node, ubyte depth) {
 }
 sub ws_push_simple(ubyte typ) {
     ws_type[ws_sp] = typ
+    ws_sp = ws_sp + 1
+}
+; type 3: a ".field" line -- indent(depth) then '.' then the ident text.
+sub ws_push_field(ubyte field_id, ubyte depth) {
+    ws_type[ws_sp] = 3
+    ws_node[ws_sp] = field_id
+    ws_depth[ws_sp] = depth
     ws_sp = ws_sp + 1
 }
 
@@ -1030,6 +1218,50 @@ sub emit_node(ubyte node, ubyte depth) {
         ws_push_simple(2)
         return
     }
+    if k == ND_ADDROF {
+        out_byte($61) out_byte($64) out_byte($64) out_byte($72) out_byte($20)  ; "addr "
+        out_ident_text(node_a_lo[node])
+        out_byte($29)
+        return
+    }
+    if k == ND_MEMAT {
+        out_byte($6d) out_byte($65) out_byte($6d)                  ; "mem"
+        ws_push_simple(1)
+        ws_push_node(node_a_lo[node], depth + 1)   ; addr
+        ws_push_simple(2)
+        return
+    }
+    if k == ND_INDEX {
+        out_byte($69) out_byte($64) out_byte($78)                  ; "idx"
+        ws_push_simple(1)                          ; close paren
+        if node_op[node] != 0 {                    ; has .field
+            ws_push_field(node_a_hi[node], depth + 1)
+            ws_push_simple(2)                      ; newline
+        }
+        ws_push_node(node_b[node], depth + 1)      ; index
+        ws_push_simple(2)
+        ws_push_node(node_a_lo[node], depth + 1)   ; array
+        ws_push_simple(2)
+        return
+    }
+    if k == ND_CALL {
+        out_byte($63) out_byte($61) out_byte($6c) out_byte($6c) out_byte($20)  ; "call "
+        out_ident_text(node_a_lo[node])
+        ws_push_simple(1)                          ; close paren
+        ; args are a reversed cons list (head = last arg); walking
+        ; head->tail and pushing node+newline yields forward pop order.
+        ubyte cell
+        cell = node_b[node]
+        repeat {
+            if cell == 0 {
+                break
+            }
+            ws_push_node(cons_val[cell], depth + 1)
+            ws_push_simple(2)                      ; newline
+            cell = cons_next[cell]
+        }
+        return
+    }
 }
 
 sub serialize(ubyte root) {
@@ -1048,7 +1280,13 @@ sub serialize(ubyte root) {
             if typ == 1 {
                 out_byte($29)
             } else {
-                out_byte($0a)
+                if typ == 2 {
+                    out_byte($0a)
+                } else {
+                    out_indent(ws_depth[ws_sp])        ; type 3: ".field"
+                    out_byte($2e)
+                    out_ident_text(ws_node[ws_sp])
+                }
             }
         }
     }
@@ -1075,6 +1313,7 @@ main {
     node_count = 1                                 ; node 0 = null
     operand_sp = 0
     op_sp = 0
+    cons_count = 1                                 ; cons 0 = nil
 
     lex_all()
     ubyte root

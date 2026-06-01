@@ -321,24 +321,28 @@ the command later milestones diff their on-target output against.
     operand on the CPU stack (`p8c/codegen.py::_emit_word_operands`),
     guarded by `tests/test_codegen_arith_e2e.py`.
 
-* **M2 -- expression parser port.** `[M2a done]` `p1/expr.p8` lexes a
-  single expression into in-memory token arrays, parses it with the
+* **M2 -- expression parser port. DONE.** `p1/expr.p8` lexes a single
+  expression into in-memory token arrays, parses it with the
   shunting-yard engine over explicit operand/operator stacks into a
-  struct-of-arrays node arena, and serializes the arena with an
-  explicit work-stack tree walk -- all no-recursion. M2a covers atoms
-  (int/str/bool/ident incl. dotted), prefix unary (`- ~ not`), the full
-  binary precedence ladder, and parentheses; verified byte-identical to
-  the Python oracle over the M2a subset of `EXPRESSIONS`
-  (`p1/tests/test_expr.py`, `make p1-test`). `[M2b todo]` calls,
-  indexing, `@()`, `&name` (need the cons-cell arg list of 3.4 and the
-  remaining node kinds).
-  Two host-p8c bugs were found and fixed doing M2a: `mkword(hi, lo)`
-  stashed the high byte in Y, which an array-read low arg clobbered (now
-  shuffled through the stack); and the I/O shim looped forever on a
-  token ending at EOF because the emulator rewinds the input on EOF
-  (now EOF is made sticky in software -- see `p1/lexer.p8`).
+  struct-of-arrays node arena, and serializes the arena with an explicit
+  work-stack tree walk -- all no-recursion. Covers the full expression
+  grammar: atoms (int/str/bool/ident incl. dotted), prefix unary
+  (`- ~ not`), the binary precedence ladder, parentheses, function calls
+  (nested + dotted, via a reversed cons-cell arg list -- 3.4), indexing
+  `arr[i]` / `arr[i].field`, `@()`, and `&name`. Verified byte-identical
+  to the Python oracle over the **entire** `EXPRESSIONS` corpus plus a
+  randomized-fuzz sample (`p1/tests/test_expr.py`, `make p1-test`).
+  Three host-p8c issues found + handled doing M2: `mkword(hi, lo)`
+  stashed the high byte in Y, which an array-read low arg clobbered
+  (fixed in codegen); the I/O shim looped forever on a token ending at
+  EOF because the emulator rewinds the input on EOF (now EOF is made
+  sticky in software); and a ubyte *array element* can't be widened to
+  uword by codegen, so expr.p8 copies such values through a ubyte local
+  before passing them where a uword is expected (a clean p8c codegen fix
+  -- teaching `_emit_word_expr_into_ay` to handle plain array reads --
+  is a good future cleanup).
   **Representation limit:** host p8c arrays are <=256 ubyte elements with
-  a ubyte index, so M2a holds one expression's arenas in <=256-element
+  a ubyte index, so M2 holds one expression's arenas in <=256-element
   byte arrays (16-bit values split lo/hi). Whole-program parsing
   (M3/M4) exceeds 256 nodes/tokens and so needs real 16-bit arrays
   (uword elements, uword/large index) added to p8c first -- the next

@@ -1,21 +1,23 @@
-"""On-target expression parser equivalence test (Phase 6, M2a).
+"""On-target expression parser equivalence test (Phase 6, M2).
 
 Builds `p1/expr.p8` (the Prog8 expression-parser port) with the host p8c
 + vasm, runs it on the emulator over single-expression inputs, and
 asserts the AST S-expression it writes is byte-identical to the Python
 oracle (p8c/serialize.py::ser applied to IterParser.parse_expr).
 
-M2a covers atoms (int/str/bool/ident incl. dotted), prefix unary
-(- ~ not), binary operators with the full precedence ladder, and
-parentheses. Calls, indexing, @() and &name are M2b; the EXPRESSIONS
-corpus entries that use them are filtered out here and re-enabled when
-expr.p8 grows.
+The on-target parser now covers the full expression grammar: atoms
+(int/str/bool/ident incl. dotted), prefix unary (- ~ not), the binary
+precedence ladder, parentheses, function calls (incl. nested + dotted
+paths), indexing `arr[i]` / `arr[i].field`, `@(expr)`, and `&name`. It
+is checked against the entire `EXPRESSIONS` corpus plus a sample of the
+randomized differential fuzzer's expressions (same generator the Python
+parser-equivalence test uses).
 
 SKIPs cleanly if vasm6502_oldstyle or the emulator binary are missing.
 """
 from __future__ import annotations
 
-import re
+import random
 import shutil
 import subprocess
 import sys
@@ -36,21 +38,7 @@ sys.path.insert(0, str(PROG8 / "tests"))
 from p8c.lex import lex  # noqa: E402
 from p8c.iter_parse import IterParser  # noqa: E402
 from p8c.serialize import ser  # noqa: E402
-from test_iter_parse import EXPRESSIONS  # noqa: E402
-
-_CALL = re.compile(r"[A-Za-z_]\w*\s*\(")
-
-
-def _m2a_subset() -> list[str]:
-    """EXPRESSIONS entries within the M2a grammar (no call/index/@/&)."""
-    out = []
-    for e in EXPRESSIONS:
-        if "[" in e or "@" in e or "&" in e:
-            continue
-        if _CALL.search(e):
-            continue
-        out.append(e)
-    return out
+from test_iter_parse import EXPRESSIONS, _gen_expr  # noqa: E402
 
 
 def _have_vasm() -> bool:
@@ -95,10 +83,18 @@ class ExprEquivalence(unittest.TestCase):
                              f"{r.stdout}\n{r.stderr}")
         return out.read_text()
 
-    def test_m2a_expressions(self):
-        subset = _m2a_subset()
-        self.assertGreater(len(subset), 20, "M2a subset unexpectedly small")
-        for src in subset:
+    def test_expressions_corpus(self):
+        for src in EXPRESSIONS:
+            with self.subTest(src=src):
+                self.assertEqual(self._oracle(src), self._ontarget(src),
+                                 msg=f"AST serialization differs for {src!r}")
+
+    def test_randomized_fuzz(self):
+        # Same generator the Python parser-equivalence fuzzer uses; a
+        # modest sample keeps the emulator round-trips bounded.
+        rng = random.Random(0x5EED)
+        for _ in range(150):
+            src = _gen_expr(rng, rng.randint(0, 4))
             with self.subTest(src=src):
                 self.assertEqual(self._oracle(src), self._ontarget(src),
                                  msg=f"AST serialization differs for {src!r}")
