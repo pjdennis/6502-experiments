@@ -1,0 +1,9 @@
+; v4: variable-to-variable assignment.
+let a = $55
+let b = a
+let c = b
+let a = $aa
+print_ub a
+print_ub b
+print_ub c
+end

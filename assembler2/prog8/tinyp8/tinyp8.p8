@@ -463,14 +463,28 @@ sub parse_let() {
             break
         }
     }
-    ; skip ws to '$'
+    ; skip ws to RHS -- either '$' (literal) or a lowercase letter
+    ; (variable-copy: `let x = y`).
     repeat {
         c = read_src()
         if src_eof != 0 {
             return
         }
-        if c == $24 {                                    ; '$'
+        if c == $24 {                                    ; '$' -- literal
             break
+        }
+        if c >= $61 {
+            if c <= $7a {
+                ; Variable-copy form: `let x = y` -> emit lda <y>; sta <x>.
+                ubyte src_addr
+                src_addr = var_addrs[c - $61]
+                write_dst($a5)                           ; LDA zp
+                write_dst(src_addr)
+                write_dst($85)                           ; STA zp
+                write_dst(addr)
+                skip_to_nl()
+                return
+            }
         }
     }
     ; two hex digits -> value
@@ -484,7 +498,7 @@ sub parse_let() {
         return
     }
     tmp_byte = tmp_byte | hex_nibble(c)
-    ; Emit: lda #<value> ; sta <addr>  (5 bytes total)
+    ; Emit: lda #<value> ; sta <addr>  (4 bytes total)
     write_dst($a9)                                       ; LDA #
     write_dst(tmp_byte)
     write_dst($85)                                       ; STA zp
