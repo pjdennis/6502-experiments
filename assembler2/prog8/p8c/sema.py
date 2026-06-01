@@ -294,7 +294,9 @@ class Sema:
                     f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: "
                     f"initializer type mismatch for {vd.type_name} {vd.name!r}"
                 )
-            if t is UWORD and vd.init.type not in _BYTE_TYPES and vd.init.type is not UWORD:
+            if (t is UWORD and vd.init.type not in _BYTE_TYPES
+                    and vd.init.type is not UWORD and vd.init.type is not STR):
+                # A string literal coerces to uword (its pool address).
                 raise SemaError(
                     f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: "
                     f"initializer type mismatch for uword {vd.name!r}"
@@ -367,7 +369,9 @@ class Sema:
                     f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
                     f"RHS type {rhs_t!r} not assignable to {tgt_t!r}"
                 )
-            if tgt_t is UWORD and rhs_t not in _BYTE_TYPES and rhs_t is not UWORD:
+            if (tgt_t is UWORD and rhs_t not in _BYTE_TYPES
+                    and rhs_t is not UWORD and rhs_t is not STR):
+                # A string literal coerces to uword (its pool address).
                 raise SemaError(
                     f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
                     f"RHS type {rhs_t!r} not assignable to uword"
@@ -622,7 +626,8 @@ class Sema:
                                 f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
                                 f"arg {p.name!r} wants ubyte, got {arg.type!r}"
                             )
-                        if pt is UWORD and arg.type not in (UBYTE, UWORD):
+                        if pt is UWORD and arg.type not in (UBYTE, UWORD, STR):
+                            # A string literal coerces to uword (its address).
                             raise SemaError(
                                 f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
                                 f"arg {p.name!r} wants uword, got {arg.type!r}"

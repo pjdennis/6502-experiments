@@ -94,11 +94,21 @@ milestone map P7-M1..M6.
   pass-M reset, so its ident ids stay valid when `main` is re-lexed.
   Verified against `p8c -o` over an M2 corpus (`tests/test_p1.py`).
 
+* **P7-M3 strings slice (done)** -- p8c gained string-literal-as-data (a
+  bare `"..."` is the address of its pool label, a uword), and p1.p8 both
+  (a) emits its own fixed assembly text via an `out_text(uword)` copy loop
+  over pooled string literals instead of per-character `out_byte` runs
+  (output-identical, but ~9 KB of code becomes ~1 byte/char in the pool --
+  p1.bin 54.6 KB -> ~48 KB), and (b) gained codegen for string literals as
+  values (`lda #</ldy #>` the label, numbered in encounter order) + the
+  string-pool trailer (the `_escape` byte-list policy). Verified against
+  `p8c -o` over an M3 string corpus. (The rest of M3 -- expression trees,
+  calls, indexing -- is still to come.)
+
 `p1.p8` is **generated** by [`build_p1.py`](./build_p1.py), which splices
-stmt.p8's current front-end with the codegen back-end (p8c has no
-string-literal-as-data, so emitted asm text must be spelled byte by byte
-via `out_byte()` runs -- the generator turns Python strings into those
-runs). Regenerate after editing the generator:
+stmt.p8's current front-end with the codegen back-end and renders fixed
+assembly text as `out_text("...")` calls over pooled string literals.
+Regenerate after editing the generator:
 
     python3 p1/build_p1.py
 

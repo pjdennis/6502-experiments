@@ -79,6 +79,27 @@ M2_PROGRAMS = [
     "main {\n    a = 1\n    b = a\n    c = 9\n}\n",
 ]
 
+# Phase-7 "strings" slice (the p8c string-literal-as-data feature dogfooded
+# by p1.p8 itself): a bare string literal assigned to a uword is its pool
+# address. Exercises the ND_STR word-leaf codegen (lda #</ldy #> the label,
+# numbered in encounter order) and the string-pool trailer (the _escape
+# byte-list policy: printable runs, $XX for control / `"` / `\`, ", 0"
+# terminator, "0" for the empty string), positioned between main and the
+# reset vector.
+M3_STR_PROGRAMS = [
+    # one string
+    "%target nmos\n\nuword s\n\nmain {\n    s = \"hi\"\n}\n",
+    # several, in order; escapes (newline) and the empty string
+    "%target nmos\n\nuword s\nuword t\n\n"
+    'main {\n    s = "hi"\n    t = "a\\nb"\n    s = ""\n}\n',
+    # strings interleaved with scalar assignments (label order = encounter)
+    "%target nmos\n\nubyte x\nuword msg\n\n"
+    'main {\n    x = 1\n    msg = "result: "\n    x += 2\n    msg = "done\\n"\n}\n',
+    # every escape the pool emitter special-cases: \\ " \t \r plus a high byte
+    "%target nmos\n\nuword s\n\n"
+    'main {\n    s = "tab\\there\\"q\\\\b\\r"\n}\n',
+]
+
 
 def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
@@ -137,6 +158,12 @@ class P1Equivalence(unittest.TestCase):
 
     def test_m2_programs(self):
         for src in M2_PROGRAMS:
+            with self.subTest(src=src):
+                self.assertEqual(self._oracle(src), self._ontarget(src),
+                                 msg=f"codegen .s differs for {src!r}")
+
+    def test_m3_str_programs(self):
+        for src in M3_STR_PROGRAMS:
             with self.subTest(src=src):
                 self.assertEqual(self._oracle(src), self._ontarget(src),
                                  msg=f"codegen .s differs for {src!r}")

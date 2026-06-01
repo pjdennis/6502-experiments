@@ -699,6 +699,13 @@ class CodeGen:
             self.emit(f"  lda #${v & 0xFF:02x}")
             self.emit(f"  ldy #${(v >> 8) & 0xFF:02x}")
             return
+        if isinstance(e, StrLit):
+            # A string literal is a uword: the address of its pool label
+            # (low byte in A, high in Y). sema assigned the label and
+            # collected the literal into the string pool.
+            self.emit(f"  lda #<{e.label}")
+            self.emit(f"  ldy #>{e.label}")
+            return
         if isinstance(e, Ident):
             assert e.sym is not None
             if e.sym.kind == "const":

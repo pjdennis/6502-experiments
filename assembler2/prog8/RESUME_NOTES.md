@@ -37,7 +37,9 @@ is the source of truth across sessions.
   `inline sub`, `for`/`while`/`repeat`/`break`/`continue`/`return`,
   `if`/`else`, full arithmetic + comparisons + signed support,
   `@(addr)`, `&var`, `peek`/`poke`/`lsb`/`msb`/`mkword`/`len`/`sizeof`,
-  long-branch handling, `%target wendy2c` and `%target nmos`. See
+  long-branch handling, `%target wendy2c` and `%target nmos`,
+  string-literal-as-data (a bare `"..."` is the address of its pool label,
+  a uword -- assignable to / passable to / initializing a uword). See
   `assembler2/prog8/p8c/` and the README for the full surface.
 
 * **tinyp8.s (hand-written 6502)** -- a tiny on-target compiler.
@@ -59,16 +61,17 @@ is the source of truth across sessions.
   stays intact.
 
 * **Test counts (as of HEAD)**:
-  * 104 host p8c tests (`prog8/tests/` -- lex / parse / sema /
+  * 105 host p8c tests (`prog8/tests/` -- lex / parse / sema /
     codegen / snapshot / e2e LCD goldens, the iterative-parser
-    equivalence + integration tests, and the new serializer freeze
-    suite `test_serialize.py`).
+    equivalence + integration tests, the serializer freeze suite
+    `test_serialize.py`, and `test_str_data_e2e.py` for
+    string-literal-as-data).
   * 5 v0/v1 e2e (`tinyp8/tests/test_e2e.py`).
   * 5 v0/v1 self-host equivalence (`test_self_host.py`).
   * 12 v2..v9 .p8-only (`test_v2.py`, sources in `goldens_v2/`).
-  * **155 total, all green** (the 22 tinyp8 + 29 p1 cases need vasm; see the
-    environment note above). The last two p1 cases are
-    `p1/tests/test_p1.py` (Phase 7 codegen, P7-M1 + P7-M2).
+  * **157 total, all green** (the 22 tinyp8 + 30 p1 cases need vasm; see the
+    environment note above). The p1 codegen cases live in
+    `p1/tests/test_p1.py` (Phase 7: P7-M1 + P7-M2 + the M3 strings slice).
 
 Run:
 
@@ -318,12 +321,10 @@ Progress:
        arrays / structs / memvars / string pool / reset vector).
        * **p1.p8 is GENERATED** by `p1/build_p1.py`: it splices stmt.p8's
          front-end (everything before its `; ---- serialization ----`
-         section) with a codegen back-end. Reason: p8c has no
-         string-literal-as-data, so emitted asm text must be spelled byte
-         by byte via `out_byte()` runs -- the generator turns Python
-         strings into those runs. Edit the generator, then
-         `python3 p1/build_p1.py`. Sourcing the front-end from stmt.p8
-         keeps the parser in lockstep across both.
+         section) with a codegen back-end, rendering fixed asm text as
+         `out_text("...")` calls over pooled string literals. Edit the
+         generator, then `python3 p1/build_p1.py`. Sourcing the front-end
+         from stmt.p8 keeps the parser in lockstep across both.
        * **P7-M1 DONE.** Skeleton. Codegen tail (`emit_prologue` /
          `emit_main` / `emit_trailers`). Driver: pass A (directives ->
          target+address) -> prologue -> pass M (find + codegen `main`) ->
@@ -340,17 +341,30 @@ Progress:
          widening, and byte augmented (`+= -= &= |= ^=`) with a leaf
          operand. KEY: the ident pool persists across the pass-A -> pass-M
          reset (`reset_nodes`, NOT `reset_arena`) so symbol-table ident ids
-         stay valid when main is re-lexed (intern_name dedups). Capacity:
-         p1.bin ~55 KB -- still fits, but table-driving the literal asm
-         text (design section 8) is coming due as codegen grows.
-       * **NEXT: P7-M3** -- expressions. Port `_emit_byte_expr_into_a` /
-         `_emit_word_expr_into_ay` proper (binop ladder incl. the
-         dual-scratch + mkword fixes already in the host), unary, `@()`,
-         `&name`, indexing, calls, `txt.print*`; uword/shift augmented.
-         This is the bulk of codegen -- go smallest-first, each construct
-         diffed against `p8c -o`. Watch p1.bin size (the out_byte runs
-         dominate; factor shared fragments into o_* subs as M2 did, or
-         start the section-8 table-driving).
+         stay valid when main is re-lexed (intern_name dedups).
+       * **String-literals-as-data (enabling work) + P7-M3 strings slice
+         DONE.** p8c gained string-literal-as-data: a bare `"..."` is the
+         address of its pool label (a uword), assignable to / passable to /
+         initializing a uword (sema: STR coerces to UWORD; codegen:
+         `_emit_word_expr_into_ay(StrLit)` -> `lda #</ldy #>` the label;
+         additive -- existing snapshots unchanged; `tests/test_str_data_e2e.py`).
+         p1.p8 then (a) emits ALL its fixed asm text via an `out_text(uword)`
+         copy loop over pooled string literals instead of per-char `out_byte`
+         runs (output-identical; out_byte call sites 962 -> 9; p1.bin 54.6 KB
+         -> ~48 KB), and (b) gained codegen for string literals as values
+         (`lda #</ldy #>p8c_str_N`, labels numbered in encounter order) + the
+         string-pool trailer (port of `_escape`: printable runs, `$XX` for
+         control/`"`/`\`, `, 0` terminator, `0` for the empty string),
+         between main and the reset vector. Diffed vs `p8c -o` over an M3
+         string corpus (`test_p1.py::test_m3_str_programs`).
+       * **NEXT: rest of P7-M3** -- the expression trees: port
+         `_emit_byte_expr_into_a` / `_emit_word_expr_into_ay` proper (binop
+         precedence ladder incl. the dual-scratch + mkword fixes already in
+         the host), unary, `@()`, `&name`, indexing, calls, `txt.print*`;
+         uword/shift augmented assignment. Go smallest-first, each construct
+         diffed against `p8c -o`. The out_text refactor reclaimed the budget,
+         but keep wrapping distinct fixed fragments in o_*/out_text helpers
+         so each pooled string + call site appears once.
 
 The caveat below (fixed frame layout) is addressed in the design doc's
 section 3.6 -- parallel arrays sized for the widest frame kind.

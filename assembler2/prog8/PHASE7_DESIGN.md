@@ -206,11 +206,24 @@ Each milestone is a few pushes; each diffs `p1`'s `.s` against `p8c`'s.
   body), and emits the trailers. Byte-identical to `p8c -o` (the
   `; source:` line normalized) over the empty-main corpus at several load
   addresses. `p1/tests/test_p1.py`, `make p1-test`.
-    * Code-size read: p1.bin is ~50 KB (front-end + the per-byte prologue
-      text). Fits comfortably in 64 KB now, but confirms the design's
-      "table-drive the literal text" mitigation will be needed before the
-      corpus grows much -- the fixed-text `out_byte` runs are the dominant
-      cost, exactly as the serializer milestone predicted.
+    * Code-size read: p1.bin was ~50 KB (front-end + the per-byte prologue
+      text). The fixed-text `out_byte` runs were the dominant cost (962 call
+      sites at M2, ~9 bytes each), exactly as predicted -- since addressed
+      by the string-literal-as-data enabling work below.
+
+* **Enabling work (between M2 and M3): string literals as data.** p8c gained
+  string-literal-as-data: a bare `"..."` in value position evaluates to the
+  address of its pool label (a uword), so it can be assigned to / passed to /
+  initialize a uword. (sema: STR coerces to UWORD in those three contexts;
+  codegen: `_emit_word_expr_into_ay(StrLit)` -> `lda #<label / ldy #>label`;
+  the pool + `_escape` machinery already existed. Additive -- existing
+  snapshots unchanged. Tests: `tests/test_str_data_e2e.py`.) p1.p8 then
+  emits its fixed assembly text with an `out_text(uword)` copy loop over
+  pooled string literals instead of per-character `out_byte` runs -- the
+  same output, but ~9 KB of code becomes ~1 byte/char in the pool. This is
+  the section-8 "table-drive the literal text" mitigation, realized via the
+  language rather than a hand-rolled table; p1.bin dropped 54.6 KB -> 47.5 KB
+  at M2, reclaiming the budget for the rest of codegen.
 * **P7-M2 -- module vars + simple assignment. DONE.** Pass S
   (`build_symbols`) allocates each module scalar a ZP address with p8c's
   exact bump allocator (`$40` up; ubyte/byte = 1, uword = 2), into a
@@ -227,6 +240,14 @@ Each milestone is a few pushes; each diffs `p1`'s `.s` against `p8c`'s.
   assignment.
 * **P7-M3 -- expressions.** byte + uword arithmetic / comparison / unary,
   `@()`, `&`, indexing, calls, `txt.print*`.
+    * **Strings slice DONE** (alongside the enabling work above): p1 codegen
+      for a string literal as a uword value (`lda #<p8c_str_N / ldy #>p8c_str_N`,
+      labels numbered in codegen encounter order) + the string-pool trailer
+      (`; ---- string pool ----` / `p8c_str_N:` / `.byte <escaped>, 0`, a
+      port of `_escape`: printable runs, `$XX` for control / `"` / `\`, `"0"`
+      for the empty string), positioned between the last sub and the reset
+      vector. Diffed against `p8c -o` over an M3 string corpus. (Remaining
+      M3: the arithmetic/comparison/unary expression trees, calls, indexing.)
 * **P7-M4 -- control flow.** if/else, while, for, repeat, break/continue/
   return, when, defer; long branches.
 * **P7-M5 -- decls + trailers.** arrays, consts, enums, structs, asmsub,
