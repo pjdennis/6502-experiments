@@ -149,6 +149,23 @@ M3_MULSHIFT_PROGRAMS = [
     "    x >>= y\n    y = x * x\n}\n",
 ]
 
+# Phase-7 byte unary slice: ~ (eor #$ff), - (two's complement: eor #$ff / clc /
+# adc #$01). Integrated into the work-stack as a post-operand "apply" task, so
+# the operand may itself be a nested expression (~(b+c), -(b*c), ~b+c). (`not`
+# is also ported but needs a bool operand -- not reachable until comparisons
+# land, so it is not in this corpus.)
+M3_UNARY_PROGRAMS = [
+    # ~ and - on a leaf operand
+    "%target nmos\nubyte a\nubyte b\n\n"
+    "main {\n    a = ~b\n    a = -b\n}\n",
+    # operand is a nested expression (the work-stack handles the recursion)
+    "%target nmos\nubyte a\nubyte b\nubyte c\n\n"
+    "main {\n    a = ~(b + c)\n    a = -(b * c)\n    a = ~b + c\n}\n",
+    # nested unary + unary mixed with mul/shift
+    "%target nmos\nubyte a\nubyte b\nubyte c\n\n"
+    "main {\n    a = - -b\n    a = ~b * c\n    a = -(b << 2)\n}\n",
+]
+
 
 def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
@@ -225,6 +242,12 @@ class P1Equivalence(unittest.TestCase):
 
     def test_m3_mulshift_programs(self):
         for src in M3_MULSHIFT_PROGRAMS:
+            with self.subTest(src=src):
+                self.assertEqual(self._oracle(src), self._ontarget(src),
+                                 msg=f"codegen .s differs for {src!r}")
+
+    def test_m3_unary_programs(self):
+        for src in M3_UNARY_PROGRAMS:
             with self.subTest(src=src):
                 self.assertEqual(self._oracle(src), self._ontarget(src),
                                  msg=f"codegen .s differs for {src!r}")

@@ -262,8 +262,13 @@ Each milestone is a few pushes; each diffs `p1`'s `.s` against `p8c`'s.
       `.Lshr_*`) label pair driven by a global `label_seq` (= p8c's
       `_label_id`). The two binop emitters were unified into
       `emit_byte_binop_core(op, mode, rhs)`; `aug_to_binop` gained `<<=`/`>>=`.
-      Diffed against `p8c -o`. (Remaining M3: comparisons + branches, unary,
-      `@()`, `&`, indexing, calls, `txt.print*`; then the word evaluator.)
+      Diffed against `p8c -o`.
+    * **Byte unary slice DONE:** `~` and `-` (two's complement), integrated
+      into the work stack as a post-operand "apply" task so the operand may
+      nest. `not` is ported but needs a bool operand (only produced by
+      comparisons/logical) so it is not yet test-reachable. Diffed against
+      `p8c -o`. (Remaining M3: comparisons + logical + branches, `@()`, `&`,
+      indexing, calls, `txt.print*`; then the word evaluator.)
 * **P7-M4 -- control flow.** if/else, while, for, repeat, break/continue/
   return, when, defer; long branches.
 * **P7-M5 -- decls + trailers.** arrays, consts, enums, structs, asmsub,

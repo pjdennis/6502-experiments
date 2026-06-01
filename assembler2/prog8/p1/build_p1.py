@@ -653,6 +653,53 @@ sub emit_byte_binop_leaf(ubyte op, uword rhs) {{
 sub emit_byte_binop_zp(ubyte op) {{
     emit_byte_binop_core(op, 1, 0)
 }}
+; apply a unary op to A (operand already evaluated): ~ (eor #$ff), - (two's
+; complement), not (bool 0->1 else 0, with a label pair allocated end-first
+; to match p8c's _new_label order: .Lnot_end_N then .Lnot_zero_N+1). The
+; `not` path is a faithful port but not yet test-reachable: its operand must
+; be bool, and the only bool sources (comparisons / logical ops) arrive with
+; the next M3 slice -- exercised then.
+sub emit_unary_apply(ubyte uncode) {{
+    if uncode == UN_INV {{
+        out_text("  eor #$ff")
+        o_nl()
+        return
+    }}
+    if uncode == UN_NEG {{
+        out_text("  eor #$ff")
+        o_nl()
+        out_text("  clc")
+        o_nl()
+        out_text("  adc #$01")
+        o_nl()
+        return
+    }}
+    ; UN_NOT
+    uword end_id
+    uword zero_id
+    end_id = label_seq
+    label_seq = label_seq + 1
+    zero_id = label_seq
+    label_seq = label_seq + 1
+    out_text("  beq .Lnot_zero_")
+    out_dec(zero_id)
+    o_nl()
+    out_text("  lda #$00")
+    o_nl()
+    out_text("  jmp .Lnot_end_")
+    out_dec(end_id)
+    o_nl()
+    out_text(".Lnot_zero_")
+    out_dec(zero_id)
+    out_byte($3a)
+    o_nl()
+    out_text("  lda #$01")
+    o_nl()
+    out_text(".Lnot_end_")
+    out_dec(end_id)
+    out_byte($3a)
+    o_nl()
+}}
 ; evaluate a byte expression into A.
 sub codegen_byte_expr(uword root) {{
     cws_sp = 0
@@ -688,7 +735,13 @@ sub codegen_byte_expr(uword root) {{
                     cws_push(0, lhs, 0)
                 }}
             }} else {{
-                emit_byte_leaf_load(nd)
+                if node_kind[nd] == ND_UNOP {{
+                    ; eval(operand); apply-unary(op)
+                    cws_push(6, 0, node_op[nd])
+                    cws_push(0, node_a[nd], 0)
+                }} else {{
+                    emit_byte_leaf_load(nd)
+                }}
             }}
         }} else {{
             if ty == 1 {{
@@ -706,7 +759,11 @@ sub codegen_byte_expr(uword root) {{
                             out_text("  pla")
                             o_nl()
                         }} else {{
-                            emit_byte_binop_zp(op)
+                            if ty == 5 {{
+                                emit_byte_binop_zp(op)
+                            }} else {{
+                                emit_unary_apply(op)
+                            }}
                         }}
                     }}
                 }}
