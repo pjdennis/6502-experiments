@@ -700,6 +700,170 @@ sub emit_unary_apply(ubyte uncode) {{
     out_byte($3a)
     o_nl()
 }}
+
+; ---- comparison codegen (port of _emit_cmp_into_a) -----------
+; A comparison op token (TK_EQ..TK_GE are contiguous 78..83).
+sub is_cmp_op(ubyte op) -> ubyte {{
+    if op < TK_EQ {{
+        return 0
+    }}
+    if op > TK_GE {{
+        return 0
+    }}
+    return 1
+}}
+; Is a byte operand signed? p8c marks a comparison signed only when BOTH
+; operands are exactly the BYTE type; here we resolve a leaf ident's type via
+; the symbol table (literals are unsigned). NOTE: nested byte-arith operands
+; that p8c would infer as BYTE are treated as unsigned here -- a known gap
+; until p1 does full expression typing; the corpus uses leaf operands.
+sub is_byte_signed(uword nd) -> ubyte {{
+    if node_kind[nd] == ND_IDENT {{
+        uword si
+        si = find_sym(node_a[nd])
+        if si == $ffff {{
+            return 0
+        }}
+        if sym_type[si] == TY_BYTE {{
+            return 1
+        }}
+    }}
+    return 0
+}}
+sub cmp_is_signed(uword e) -> ubyte {{
+    if is_byte_signed(node_a[e]) == 0 {{
+        return 0
+    }}
+    if is_byte_signed(node_b[e]) == 0 {{
+        return 0
+    }}
+    return 1
+}}
+; emit a branch-to-cmp_true line: "  <mnem> .Lcmp_true_<id>".
+sub emit_br_true(uword mnem, uword true_id) {{
+    out_text("  ")
+    out_text(mnem)
+    out_byte($20)
+    out_text(".Lcmp_true_")
+    out_dec(true_id)
+    o_nl()
+}}
+; The comparison tail (operands already in __p8c_tmp0 / __p8c_tmp1): compare
+; and materialize 0/1 in A. Labels are allocated here (after the operand eval),
+; matching p8c's _new_label order: cmp_true, cmp_end, then any op-specific
+; extra (gt_no / sgn_ok / sgt_no).
+sub emit_cmp_tail(uword e, ubyte op) {{
+    ubyte is_signed
+    is_signed = cmp_is_signed(e)
+    out_text("  lda __p8c_tmp0")
+    o_nl()
+    uword true_id
+    uword end_id
+    uword no_id
+    true_id = label_seq
+    label_seq = label_seq + 1
+    end_id = label_seq
+    label_seq = label_seq + 1
+    if is_signed == 0 {{
+        out_text("  cmp __p8c_tmp1")
+        o_nl()
+        if op == TK_EQ {{
+            emit_br_true("beq", true_id)
+        }}
+        if op == TK_NE {{
+            emit_br_true("bne", true_id)
+        }}
+        if op == TK_LT {{
+            emit_br_true("bcc", true_id)
+        }}
+        if op == TK_GE {{
+            emit_br_true("bcs", true_id)
+        }}
+        if op == TK_GT {{
+            no_id = label_seq
+            label_seq = label_seq + 1
+            out_text("  beq .Lgt_no_")
+            out_dec(no_id)
+            o_nl()
+            emit_br_true("bcs", true_id)
+            out_text(".Lgt_no_")
+            out_dec(no_id)
+            out_byte($3a)
+            o_nl()
+        }}
+        if op == TK_LE {{
+            emit_br_true("beq", true_id)
+            emit_br_true("bcc", true_id)
+        }}
+    }} else {{
+        if op == TK_EQ {{
+            out_text("  cmp __p8c_tmp1")
+            o_nl()
+            emit_br_true("beq", true_id)
+        }} else {{
+            if op == TK_NE {{
+                out_text("  cmp __p8c_tmp1")
+                o_nl()
+                emit_br_true("bne", true_id)
+            }} else {{
+                out_text("  sec")
+                o_nl()
+                out_text("  sbc __p8c_tmp1")
+                o_nl()
+                uword skip_id
+                skip_id = label_seq
+                label_seq = label_seq + 1
+                out_text("  bvc .Lsgn_ok_")
+                out_dec(skip_id)
+                o_nl()
+                out_text("  eor #$80")
+                o_nl()
+                out_text(".Lsgn_ok_")
+                out_dec(skip_id)
+                out_byte($3a)
+                o_nl()
+                if op == TK_LT {{
+                    emit_br_true("bmi", true_id)
+                }}
+                if op == TK_GE {{
+                    emit_br_true("bpl", true_id)
+                }}
+                if op == TK_GT {{
+
+                    no_id = label_seq
+                    label_seq = label_seq + 1
+                    out_text("  beq .Lsgt_no_")
+                    out_dec(no_id)
+                    o_nl()
+                    emit_br_true("bpl", true_id)
+                    out_text(".Lsgt_no_")
+                    out_dec(no_id)
+                    out_byte($3a)
+                    o_nl()
+                }}
+                if op == TK_LE {{
+                    emit_br_true("beq", true_id)
+                    emit_br_true("bmi", true_id)
+                }}
+            }}
+        }}
+    }}
+    out_text("  lda #$00")
+    o_nl()
+    out_text("  jmp .Lcmp_end_")
+    out_dec(end_id)
+    o_nl()
+    out_text(".Lcmp_true_")
+    out_dec(true_id)
+    out_byte($3a)
+    o_nl()
+    out_text("  lda #$01")
+    o_nl()
+    out_text(".Lcmp_end_")
+    out_dec(end_id)
+    out_byte($3a)
+    o_nl()
+}}
 ; evaluate a byte expression into A.
 sub codegen_byte_expr(uword root) {{
     cws_sp = 0
@@ -721,18 +885,27 @@ sub codegen_byte_expr(uword root) {{
                 uword rhs
                 lhs = node_a[nd]
                 rhs = node_b[nd]
-                if is_leaf_rhs(rhs) != 0 {{
-                    ; eval(lhs); binop_leaf(op, rhs)
-                    cws_push(1, rhs, node_op[nd])
-                    cws_push(0, lhs, 0)
-                }} else {{
-                    ; eval(lhs); pha; eval(rhs); sta tmp1; pla; binop_tmp1(op)
-                    cws_push(5, 0, node_op[nd])
-                    cws_push(4, 0, 0)
+                if is_cmp_op(node_op[nd]) != 0 {{
+                    ; eval(lhs); sta tmp0; eval(rhs); sta tmp1; cmp-tail
+                    cws_push(7, nd, node_op[nd])
                     cws_push(3, 0, 0)
                     cws_push(0, rhs, 0)
-                    cws_push(2, 0, 0)
+                    cws_push(8, 0, 0)
                     cws_push(0, lhs, 0)
+                }} else {{
+                    if is_leaf_rhs(rhs) != 0 {{
+                        ; eval(lhs); binop_leaf(op, rhs)
+                        cws_push(1, rhs, node_op[nd])
+                        cws_push(0, lhs, 0)
+                    }} else {{
+                        ; eval(lhs); pha; eval(rhs); sta tmp1; pla; binop_tmp1(op)
+                        cws_push(5, 0, node_op[nd])
+                        cws_push(4, 0, 0)
+                        cws_push(3, 0, 0)
+                        cws_push(0, rhs, 0)
+                        cws_push(2, 0, 0)
+                        cws_push(0, lhs, 0)
+                    }}
                 }}
             }} else {{
                 if node_kind[nd] == ND_UNOP {{
@@ -762,7 +935,16 @@ sub codegen_byte_expr(uword root) {{
                             if ty == 5 {{
                                 emit_byte_binop_zp(op)
                             }} else {{
-                                emit_unary_apply(op)
+                                if ty == 6 {{
+                                    emit_unary_apply(op)
+                                }} else {{
+                                    if ty == 7 {{
+                                        emit_cmp_tail(nd, op)
+                                    }} else {{
+                                        out_text("  sta __p8c_tmp0")
+                                        o_nl()
+                                    }}
+                                }}
                             }}
                         }}
                     }}

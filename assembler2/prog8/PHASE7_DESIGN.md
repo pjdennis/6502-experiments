@@ -267,8 +267,16 @@ Each milestone is a few pushes; each diffs `p1`'s `.s` against `p8c`'s.
       into the work stack as a post-operand "apply" task so the operand may
       nest. `not` is ported but needs a bool operand (only produced by
       comparisons/logical) so it is not yet test-reachable. Diffed against
-      `p8c -o`. (Remaining M3: comparisons + logical + branches, `@()`, `&`,
-      indexing, calls, `txt.print*`; then the word evaluator.)
+      `p8c -o`.
+    * **Byte comparison slice DONE:** `== != < <= > >=` -> a 0/1 byte value
+      (port of `_emit_cmp_into_a`: unsigned + signed branch sequences with the
+      `.Lcmp_true_/cmp_end_/gt_no_/sgn_ok_/sgt_no_` labels). On the work stack
+      the comparison tail runs after the operands evaluate, so label numbering
+      matches p8c. Signedness from both leaf operands being `byte` (symbol-
+      table resolved; nested-operand typing is a tracked gap). Makes `not`
+      test-reachable. Diffed against `p8c -o`. (Remaining M3: logical
+      and/or/xor + branches, `@()`, `&`, indexing, calls, `txt.print*`; then
+      the word evaluator.)
 * **P7-M4 -- control flow.** if/else, while, for, repeat, break/continue/
   return, when, defer; long branches.
 * **P7-M5 -- decls + trailers.** arrays, consts, enums, structs, asmsub,

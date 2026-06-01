@@ -85,10 +85,10 @@ PHASE7_DESIGN.md section 10.
   * 5 v0/v1 e2e (`tinyp8/tests/test_e2e.py`).
   * 5 v0/v1 self-host equivalence (`test_self_host.py`).
   * 12 v2..v9 .p8-only (`test_v2.py`, sources in `goldens_v2/`).
-  * **160 total, all green** (the 22 tinyp8 + 33 p1 cases need vasm; see the
+  * **161 total, all green** (the 22 tinyp8 + 34 p1 cases need vasm; see the
     environment note above). The p1 codegen cases live in
     `p1/tests/test_p1.py` (Phase 7: P7-M1 + P7-M2 + the M3 strings,
-    byte-arithmetic, mul/shift, and unary slices).
+    byte-arithmetic, mul/shift, unary, and comparison slices).
 
 Run:
 
@@ -406,13 +406,26 @@ Progress:
          only accepts ubyte/byte/uword as var types (NOT bool/str), so bool
          module vars are unsupported on both sides -- keep p1 in lockstep.
          `test_p1.py::test_m3_unary_programs`. p1.bin ~53 KB code.
-       * **NEXT: rest of P7-M3** -- still on the byte/word expr trees:
-         comparisons (`== != < <= > >=`, signed + unsigned) producing a 0/1
-         byte value, the logical `and`/`or`/`xor` (short-circuit) -- these
-         create the bool values `not` consumes -- and the invert-branch
-         long-branch idiom (`_br`, needed before `if`/`while`); then `@()`,
-         `&name`, indexing, calls, `txt.print*`; then the WORD evaluator
-         (`_emit_word_expr_into_ay`
+       * **P7-M3 byte comparison slice DONE.** `== != < <= > >=` producing a
+         0/1 byte value (assigned to a ubyte), port of `_emit_cmp_into_a`:
+         unsigned branch sequences (incl. the extra `.Lgt_no_N` for `>`) and
+         the signed paths (SBC + overflow-corrected N flag, `.Lsgn_ok_N` /
+         `.Lsgt_no_N`). On the byte work stack: a comparison binop pushes
+         eval-lhs / sta tmp0 (ty 8) / eval-rhs / sta tmp1 (ty 3) / cmp-tail
+         (ty 7); the tail allocates `cmp_true`/`cmp_end` (+ extras) AFTER the
+         operands evaluate, matching p8c's `_label_id` order. Signedness:
+         p8c marks a comparison signed iff BOTH operands are exactly `byte`;
+         `cmp_is_signed` resolves leaf-ident types via the symbol table
+         (KNOWN GAP: a nested byte-arith operand p8c infers as `byte` is
+         treated unsigned here -- needs full expr typing; the corpus uses
+         leaf operands). This also makes `not` test-reachable
+         (`a = not (b < c)`). `test_p1.py::test_m3_cmp_programs`.
+         p1.bin ~56 KB code.
+       * **NEXT: rest of P7-M3** -- the logical `and`/`or`/`xor` (TK_KAND/
+         TK_KOR/TK_KXOR, short-circuit -- more bool producers); the
+         invert-branch long-branch idiom (`_br`, needed before `if`/`while`);
+         then `@()`, `&name`, indexing, calls, `txt.print*`; then the WORD
+         evaluator (`_emit_word_expr_into_ay`
          proper -- the work-stack pattern generalizes, mind the mkword
          Y-clobber fix). Smallest-first, each diffed against `p8c -o`. Keep
          wrapping distinct fixed fragments in o_*/out_text helpers (one

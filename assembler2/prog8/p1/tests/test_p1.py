@@ -166,6 +166,28 @@ M3_UNARY_PROGRAMS = [
     "main {\n    a = - -b\n    a = ~b * c\n    a = -(b << 2)\n}\n",
 ]
 
+# Phase-7 byte comparison slice: == != < <= > >= producing a 0/1 byte value
+# (assigned to a ubyte), with the full unsigned branch sequences (incl. the
+# extra .Lgt_no_N label for `>`) and the signed paths (SBC + overflow-corrected
+# N flag, with .Lsgn_ok_N / .Lsgt_no_N). Signedness comes from BOTH leaf
+# operands being the BYTE type (resolved via the symbol table). Also exercises
+# `not` of a comparison (now that comparisons produce the bool `not` consumes)
+# and a comparison with a nested (non-leaf) operand. Each label pair is
+# allocated after the operands evaluate, matching p8c's _label_id order.
+M3_CMP_PROGRAMS = [
+    # unsigned, every op, leaf operands (var/var and var/literal)
+    "%target nmos\nubyte a\nubyte b\nubyte c\n\n"
+    "main {\n    a = b == c\n    a = b != c\n    a = b < c\n    a = b <= c\n"
+    "    a = b > c\n    a = b >= c\n    a = b < 5\n}\n",
+    # signed (both operands byte) -- the SBC / overflow path
+    "%target nmos\nubyte a\nbyte s\nbyte t\n\n"
+    "main {\n    a = s == t\n    a = s != t\n    a = s < t\n    a = s <= t\n"
+    "    a = s > t\n    a = s >= t\n}\n",
+    # not of a comparison (bool -> not) + nested (non-leaf) operand
+    "%target nmos\nubyte a\nubyte b\nubyte c\n\n"
+    "main {\n    a = not (b < c)\n    a = (b + 1) < c\n    a = b > (c - 1)\n}\n",
+]
+
 
 def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
@@ -248,6 +270,12 @@ class P1Equivalence(unittest.TestCase):
 
     def test_m3_unary_programs(self):
         for src in M3_UNARY_PROGRAMS:
+            with self.subTest(src=src):
+                self.assertEqual(self._oracle(src), self._ontarget(src),
+                                 msg=f"codegen .s differs for {src!r}")
+
+    def test_m3_cmp_programs(self):
+        for src in M3_CMP_PROGRAMS:
             with self.subTest(src=src):
                 self.assertEqual(self._oracle(src), self._ontarget(src),
                                  msg=f"codegen .s differs for {src!r}")
