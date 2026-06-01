@@ -13,9 +13,9 @@ from __future__ import annotations
 
 from .ast import (
     Assign, BinOp, Block, BoolLit, Break, Call, Continue, ExprStmt, For,
-    Ident, If, InlineAsm, IntLit, Param, Program, Repeat, Return, StrLit,
-    Sub, Symbol, Type, UnaryOp, VarDecl, While, BOOL, STR, UBYTE, UWORD,
-    VOID, type_from_name,
+    Ident, If, Index, InlineAsm, IntLit, Param, Program, Repeat, Return,
+    StrLit, Sub, Symbol, TUByteArray, Type, UnaryOp, VarDecl, While, BOOL,
+    STR, UBYTE, UWORD, VOID, type_from_name,
 )
 from .stdlib_decls import STDLIB_SYMBOLS, get_builtin
 
@@ -135,6 +135,30 @@ class Sema:
                 f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: "
                 f"variable {vd.name!r} already declared in this scope"
             )
+        # Array form: `ubyte[N] name` -- only ubyte arrays for Phase 3.
+        if vd.array_size is not None:
+            if vd.type_name != "ubyte":
+                raise SemaError(
+                    f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: "
+                    f"only ubyte arrays supported (got {vd.type_name!r}[])"
+                )
+            if vd.array_size <= 0 or vd.array_size > 256:
+                raise SemaError(
+                    f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: "
+                    f"array size must be 1..256 (got {vd.array_size})"
+                )
+            t = TUByteArray(vd.array_size)
+            mangled = f"{mangled_prefix.replace('p8v_', 'p8a_')}{vd.name}"
+            sym = Symbol(name=vd.name, mangled=mangled, type=t, kind="array")
+            scope[vd.name] = sym
+            vd.sym = sym
+            self.prog.all_vars.append(sym)
+            if vd.init is not None:
+                raise SemaError(
+                    f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: "
+                    f"array initializers not supported yet"
+                )
+            return sym
         t = type_from_name(vd.type_name)
         if t is None or t not in (UBYTE, UWORD):
             raise SemaError(
@@ -186,7 +210,20 @@ class Sema:
                               scope=self._scope_stack[-1])
             return
         if isinstance(st, Assign):
-            # Phase 2 assigns: target is Ident only.
+            if isinstance(st.target, Index):
+                self._walk_expr(st.target)
+                self._walk_expr(st.rhs)
+                if st.rhs.type is not UBYTE:
+                    raise SemaError(
+                        f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
+                        f"array element assign rhs must be ubyte (got {st.rhs.type!r})"
+                    )
+                if st.op != "=":
+                    raise SemaError(
+                        f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
+                        f"augmented assignment on arr[i] not supported yet"
+                    )
+                return
             assert isinstance(st.target, Ident)
             self._walk_expr(st.target)
             self._walk_expr(st.rhs)
@@ -323,6 +360,28 @@ class Sema:
                 )
             e.sym = sym
             e.type = sym.type
+        elif isinstance(e, Index):
+            # arr[idx]: arr is an Ident bound to an array sym.
+            if not isinstance(e.array, Ident):
+                raise SemaError(
+                    f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
+                    f"only `name[idx]` array indexing supported"
+                )
+            self._walk_expr(e.array)
+            asym = e.array.sym
+            if asym is None or asym.kind != "array":
+                raise SemaError(
+                    f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
+                    f"{e.array.name!r} is not an array"
+                )
+            e.sym = asym
+            self._walk_expr(e.index)
+            if e.index.type is not UBYTE:
+                raise SemaError(
+                    f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
+                    f"array index must be ubyte (got {e.index.type!r})"
+                )
+            e.type = UBYTE
         elif isinstance(e, Call):
             key = tuple(e.path)
             sym = self.dotted.get(key)

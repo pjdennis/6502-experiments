@@ -27,6 +27,14 @@ class TUByte(Type):
 
 
 @dataclass(frozen=True)
+class TUByteArray(Type):
+    """ubyte[N] -- a fixed-size byte array. Stored in main memory
+    (not ZP), addressed by an absolute label."""
+    size: int
+    def __repr__(self) -> str: return f"ubyte[{self.size}]"
+
+
+@dataclass(frozen=True)
 class TUWord(Type):
     def __repr__(self) -> str: return "uword"
 
@@ -129,6 +137,17 @@ class Ident(Node):
 
 
 @dataclass
+class Index(Node):
+    """`arr[idx]` -- read or write target. Both `arr` and `idx` are
+    arbitrary expressions; for Phase 3 we require `arr` to resolve to
+    a ubyte[] variable and `idx` to be ubyte."""
+    array: Node
+    index: Node
+    type: Type = UBYTE
+    sym: Optional["Symbol"] = None    # filled by sema (array's symbol)
+
+
+@dataclass
 class Call(Node):
     # callee can be `a.b.c` -> we keep it as a dotted path list.
     path: list[str]
@@ -157,15 +176,15 @@ class InlineAsm(Node):
 
 @dataclass
 class VarDecl(Node):
-    """`ubyte x` or `ubyte x = expr`. Phase 2 supports ubyte only.
+    """`ubyte x` or `ubyte x = expr`. Also `ubyte[N] arr` for arrays.
 
     Sema mangles the name (p8v_<sub>_<name> for sub-scoped, p8v_<name>
-    for module-scoped) and allocates a ZP byte for it. If init is set
-    we lower it to an assignment statement during sema; codegen then
-    emits the assignment in stream-order with the rest of the body.
+    for module-scoped) and allocates storage. Scalars go in ZP; arrays
+    are emitted as labeled .byte blocks in the program tail.
     """
     type_name: str
     name: str
+    array_size: Optional[int] = None    # set if this is `ubyte[N] x`
     init: Optional[Node] = None
     sym: Optional["Symbol"] = None
 

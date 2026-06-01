@@ -33,8 +33,9 @@ from __future__ import annotations
 
 from .ast import (
     Assign, BinOp, Block, BoolLit, Break, Call, Continue, ExprStmt, For,
-    Ident, If, InlineAsm, IntLit, Param, Program, Repeat, Return, StrLit,
-    Sub, UnaryOp, VarDecl, While, BOOL, UBYTE, UWORD, type_from_name,
+    Ident, If, Index, InlineAsm, IntLit, Param, Program, Repeat, Return,
+    StrLit, Sub, TUByteArray, UnaryOp, VarDecl, While, BOOL, UBYTE, UWORD,
+    type_from_name,
 )
 
 
@@ -110,10 +111,13 @@ class CodeGen:
             tmp0=TMP0, tmp1=TMP1, wtmp0=WTMP0_LO, wtmp1=WTMP1_LO,
         ))
         # Emit ZP variable address bindings before any code so labels
-        # resolve regardless of declaration order.
-        if self.prog.all_vars:
+        # resolve regardless of declaration order. Arrays are emitted
+        # later as labeled .byte blocks (main memory, not ZP).
+        scalar_vars = [s for s in self.prog.all_vars if s.kind != "array"]
+        array_vars = [s for s in self.prog.all_vars if s.kind == "array"]
+        if scalar_vars:
             self.emit("; ---- ZP variable allocations ----")
-            for sym in self.prog.all_vars:
+            for sym in scalar_vars:
                 assert sym.address is not None
                 self.emit(f"{sym.mangled} = ${sym.address:02x}")
             self.emit("")
@@ -121,6 +125,13 @@ class CodeGen:
         subs_sorted = sorted(self.prog.subs, key=lambda s: 0 if s.is_main else 1)
         for s in subs_sorted:
             self._emit_sub(s)
+        if array_vars:
+            self.emit("")
+            self.emit("; ---- arrays ----")
+            for sym in array_vars:
+                assert isinstance(sym.type, TUByteArray)
+                self.emit(f"{sym.mangled}:")
+                self.emit(f"  .byte " + ", ".join(["0"] * sym.type.size))
         if self.prog.strings:
             self.emit("")
             self.emit("; ---- string pool ----")
@@ -262,6 +273,19 @@ class CodeGen:
     # ---- assignment ----
 
     def _emit_assign(self, a: Assign) -> None:
+        # Array element write: arr[idx] = expr.
+        if isinstance(a.target, Index):
+            tgt = a.target
+            assert tgt.sym is not None
+            # Evaluate RHS into A; save to TMP0. Evaluate index into Y.
+            # Then STA arr,Y.
+            self._emit_byte_expr_into_a(a.rhs)
+            self.emit("  sta __p8c_tmp0")
+            self._emit_byte_expr_into_a(tgt.index)
+            self.emit("  tay")
+            self.emit("  lda __p8c_tmp0")
+            self.emit(f"  sta {tgt.sym.mangled},y")
+            return
         assert isinstance(a.target, Ident) and a.target.sym is not None
         sym = a.target.sym
         if a.op == "=":
@@ -705,6 +729,12 @@ class CodeGen:
         if isinstance(e, Ident):
             assert e.sym is not None and e.sym.kind == "var"
             self.emit(f"  lda {e.sym.mangled}")
+            return
+        if isinstance(e, Index):
+            assert e.sym is not None
+            self._emit_byte_expr_into_a(e.index)
+            self.emit("  tay")
+            self.emit(f"  lda {e.sym.mangled},y")
             return
         if isinstance(e, UnaryOp):
             self._emit_byte_expr_into_a(e.operand)

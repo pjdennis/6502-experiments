@@ -23,8 +23,8 @@ from typing import Optional
 
 from .ast import (
     Assign, BinOp, Block, BoolLit, Break, Call, Continue, ExprStmt, For,
-    Ident, If, InlineAsm, IntLit, Loc, Node, Param, Program, Repeat, Return,
-    StrLit, Sub, UnaryOp, VarDecl, While, type_from_name,
+    Ident, If, Index, InlineAsm, IntLit, Loc, Node, Param, Program, Repeat,
+    Return, StrLit, Sub, UnaryOp, VarDecl, While, type_from_name,
 )
 from .lex import Token
 
@@ -224,11 +224,18 @@ class Parser:
             raise ParseError(
                 f"{self.filename}:{t.line}:{t.col}: expected type keyword, got {t.value!r}"
             )
+        # Optional `[N]` -- array form.
+        array_size = None
+        if self.match("["):
+            sz = self.eat("INT")
+            self.eat("]")
+            array_size = sz.value
         name = self.eat("IDENT")
         init = None
         if self.match("="):
             init = self.parse_expr()
-        return VarDecl(loc=self.loc(t), type_name=t.value, name=name.value, init=init)
+        return VarDecl(loc=self.loc(t), type_name=t.value, name=name.value,
+                       array_size=array_size, init=init)
 
     def parse_stmt(self) -> Node:
         t = self.peek()
@@ -300,25 +307,27 @@ class Parser:
         return For(loc=self.loc(kw), var_name=name.value, lo=lo, hi=hi, body=body)
 
     def parse_assign_or_expr(self) -> Node:
-        # Phase 2: only `IDENT = expr` and `IDENT <aug>= expr` are
-        # assignments; everything else is an expression statement (e.g.
-        # a call). We peek for "IDENT { '=' | aug-op }" and dispatch.
+        # Assignments: `IDENT = ...`, `IDENT[idx] = ...`, plus their
+        # augmented forms. Anything else is an expression statement.
         if self.peek().kind == "IDENT":
-            # Lookahead: peek past dotted path to see if we have an `=`.
             save = self.pos
             ident = self.eat("IDENT")
-            # No dotted assigns in Phase 2; if we see one, fall back to call/expr.
+            target: Node = Ident(loc=self.loc(ident), name=ident.value)
+            # Optional `[idx]` -- array element target.
+            if self.peek().kind == "[":
+                self.eat("[")
+                idx = self.parse_expr()
+                self.eat("]")
+                target = Index(loc=self.loc(ident), array=target, index=idx)
             if self.peek().kind == "=":
                 self.eat("=")
                 rhs = self.parse_expr()
-                target = Ident(loc=self.loc(ident), name=ident.value)
                 return Assign(loc=self.loc(ident), target=target, op="=", rhs=rhs)
             if self.peek().kind in _AUG_OPS:
                 op_tok = self.eat(self.peek().kind)
                 rhs = self.parse_expr()
-                target = Ident(loc=self.loc(ident), name=ident.value)
                 return Assign(loc=self.loc(ident), target=target, op=op_tok.kind, rhs=rhs)
-            # Rewind; fall through to expression parsing.
+            # Not an assign; rewind for call/expr parsing.
             self.pos = save
         return self.parse_call_stmt()
 
@@ -417,11 +426,16 @@ class Parser:
                     args.append(self.parse_expr())
             self.eat(")")
             return Call(loc=self.loc(first), path=path, args=args)
-        # Bare identifier (rare in Phase 1; will be common later).
-        if len(path) == 1:
-            return Ident(loc=self.loc(first), name=path[0])
-        # Dotted-but-not-called: treat as an Ident with the dotted name.
-        return Ident(loc=self.loc(first), name=".".join(path))
+        # Bare identifier (or dotted path).
+        name = path[0] if len(path) == 1 else ".".join(path)
+        node: Node = Ident(loc=self.loc(first), name=name)
+        # Optional `[idx]` -- array element read.
+        if self.peek().kind == "[":
+            self.eat("[")
+            idx = self.parse_expr()
+            self.eat("]")
+            node = Index(loc=self.loc(first), array=node, index=idx)
+        return node
 
 
 def parse(tokens: list[Token], filename: str) -> Program:
