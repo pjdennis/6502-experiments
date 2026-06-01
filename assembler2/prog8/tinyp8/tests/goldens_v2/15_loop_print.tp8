@@ -1,0 +1,7 @@
+; v8: while body can include `print_ub Y` before the let increment.
+; Counts n from 0..4 and prints each step.
+let n = $00
+while n < $05
+    print_ub n
+    let n = n + $01
+end

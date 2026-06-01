@@ -800,7 +800,67 @@ sub parse_while() {
     ubyte cmp_val
     cmp_val = tmp_byte
     skip_to_nl()
-    ; ---- Read the body: `let X = X + $ZZ` ----
+    ; ---- v8: optional `print_ub Y` body statement before the let ----
+    ; Peek the first non-ws byte of the next line. 'p' -> print + let
+    ; body; 'l' -> let-only body (v6 behavior).
+    ubyte has_print
+    has_print = 0
+    ubyte print_addr
+    print_addr = 0
+    repeat {
+        c = peek_src()
+        if src_eof != 0 {
+            return
+        }
+        if c == $20 {
+            c = read_src()
+        } else {
+            if c == $09 {
+                c = read_src()
+            } else {
+                if c == $0a {
+                    c = read_src()
+                } else {
+                    if c == $0d {
+                        c = read_src()
+                    } else {
+                        break
+                    }
+                }
+            }
+        }
+    }
+    c = peek_src()
+    if c == $70 {                                        ; 'p' of "print_ub Y"
+        has_print = 1
+        ; Consume "print_ub"
+        c = read_src()                                   ; 'p'
+        c = read_src()                                   ; 'r'
+        c = read_src()                                   ; 'i'
+        c = read_src()                                   ; 'n'
+        c = read_src()                                   ; 't'
+        c = read_src()                                   ; '_'
+        c = read_src()                                   ; 'u'
+        c = read_src()                                   ; 'b'
+        if src_eof != 0 {
+            return
+        }
+        ; skip ws then read variable letter
+        repeat {
+            c = read_src()
+            if src_eof != 0 {
+                return
+            }
+            if c >= $61 {
+                if c <= $7a {
+                    break
+                }
+            }
+        }
+        print_addr = var_addrs[c - $61]
+        skip_to_nl()
+    }
+    ; ---- Read the let body: `let X = X + $ZZ` ----
     repeat {
         c = read_src()
         if src_eof != 0 {
@@ -880,13 +940,39 @@ sub parse_while() {
     incr = tmp_byte
     skip_to_nl()
     ; ---- Emit the loop ----
+    ; If the body includes print_ub Y, ensure the hex helper exists
+    ; in the output BEFORE we capture loop_top so the back-jump
+    ; targets the loop header, not the (already-emitted) helper.
+    if has_print != 0 {
+        emit_hex_helper()
+    }
+    ubyte skip_size
+    if has_print != 0 {
+        skip_size = $14                                  ; 10 print + 7 let + 3 jmp
+    } else {
+        skip_size = $0a                                  ; 7 let + 3 jmp
+    }
     uword loop_top
     loop_top = LOAD_ADDR + bytes_emitted
     write_dst($a5)                                       ; LDA zp <X>
     write_dst(x_addr)
     write_dst($c9)                                       ; CMP #
     write_dst(cmp_val)
-    emit_skip_branch(op, $0a)                            ; exit branch (skip body+jmp=10)
+    emit_skip_branch(op, skip_size)
+    ; --- optional print_ub Y body (10 bytes) ---
+    if has_print != 0 {
+        write_dst($a5)                                   ; LDA zp
+        write_dst(print_addr)
+        write_dst($20)                                   ; JSR
+        write_dst(lsb(helper_addr))
+        write_dst(msb(helper_addr))
+        write_dst($a9)                                   ; LDA #
+        write_dst($0a)                                   ;   '\n'
+        write_dst($20)                                   ; JSR
+        write_dst($09)                                   ;   $F009
+        write_dst($f0)
+    }
+    ; --- let X = X + $ZZ body (7 bytes) ---
     write_dst($a5)                                       ; LDA zp
     write_dst(x_addr)
     write_dst($18)                                       ; CLC
