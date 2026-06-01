@@ -152,21 +152,154 @@ ubyte peek_ok
 ubyte src_eof
 ubyte tmp_byte
 
-; v2 (variables) state:
-;   var_addrs[c-'a'] = ZP address allocated for variable named `c`,
-;                      or 0 if undeclared.
-;   next_var_addr   = next free ZP slot, starts at $60 (above tinyp8's
-;                      own state which lives below $40 in compiled
-;                      programs that use this scheme).
-;   helper_emitted  = 0 until __hex_print is emitted into the output;
-;                     then 1, and helper_addr is its absolute address.
-;   bytes_emitted   = count of bytes written to the output file so far;
-;                     load_addr + bytes_emitted is the current output PC.
-ubyte[26] var_addrs
+; v2/v9 (variables) state -- a small symbol table that supports
+; multi-character variable names (v9; up to 8 chars each, 16 vars max).
+;   sym_names[]  = packed name bytes, 16 entries x 8 bytes each. The
+;                  name for slot i lives at sym_names[i*8 .. i*8+len-1].
+;   sym_lens[i]  = length of the name in slot i (1..8).
+;   sym_addrs[i] = ZP address allocated for the variable in slot i.
+;   sym_count    = number of live slots.
+;   name_buf[]   = scratch for the identifier currently being read.
+;   name_len     = its length (set by read_ident).
+;   next_var_addr = next free ZP slot, starts at $60 (above tinyp8's
+;                   own state which lives below $40 in compiled
+;                   programs that use this scheme).
+;   helper_emitted = 0 until __hex_print is emitted into the output;
+;                    then 1, and helper_addr is its absolute address.
+;   bytes_emitted  = count of bytes written to the output file so far;
+;                    load_addr + bytes_emitted is the current output PC.
+ubyte[128] sym_names
+ubyte[16] sym_lens
+ubyte[16] sym_addrs
+ubyte sym_count
+ubyte[8] name_buf
+ubyte name_len
 ubyte next_var_addr
 ubyte helper_emitted
 uword bytes_emitted
 uword helper_addr
+
+; ---- v9: identifier reading + symbol-table lookup/declare ----
+;
+; read_ident: skip leading whitespace, then read a run of lowercase
+; letters [a-z]+ into name_buf, setting name_len. The terminating
+; non-letter is left unconsumed (peeked), so callers' existing skip
+; loops still see it. Names longer than 8 chars are truncated in the
+; buffer but fully consumed from the source.
+sub read_ident() {
+    ubyte c
+    name_len = 0
+    ; skip whitespace (space, tab, newline, cr)
+    repeat {
+        c = peek_src()
+        if src_eof != 0 {
+            return
+        }
+        if c == $20 {
+            c = read_src()
+        } else {
+            if c == $09 {
+                c = read_src()
+            } else {
+                if c == $0a {
+                    c = read_src()
+                } else {
+                    if c == $0d {
+                        c = read_src()
+                    } else {
+                        break
+                    }
+                }
+            }
+        }
+    }
+    ; read the run of lowercase letters
+    repeat {
+        c = peek_src()
+        if src_eof != 0 {
+            return
+        }
+        if c >= $61 {                                    ; 'a'
+            if c <= $7a {                                ; 'z'
+                if name_len < 8 {
+                    name_buf[name_len] = c
+                    name_len = name_len + 1
+                }
+                c = read_src()
+            } else {
+                return
+            }
+        } else {
+            return
+        }
+    }
+}
+
+; find_var: linear scan of the symbol table for the name currently in
+; name_buf[0..name_len-1]. Returns the variable's ZP address, or 0 if
+; the name is not declared (0 is never a real address -- allocation
+; starts at $60).
+sub find_var() -> ubyte {
+    ubyte i
+    ubyte off
+    i = 0
+    off = 0
+    repeat {
+        if i >= sym_count {
+            return 0
+        }
+        if sym_lens[i] == name_len {
+            ubyte j
+            ubyte match
+            match = 1
+            j = 0
+            repeat {
+                if j >= name_len {
+                    break
+                }
+                if sym_names[off + j] != name_buf[j] {
+                    match = 0
+                    break
+                }
+                j = j + 1
+            }
+            if match != 0 {
+                return sym_addrs[i]
+            }
+        }
+        off = off + 8
+        i = i + 1
+    }
+}
+
+; declare_var: return the existing ZP address for the name in name_buf,
+; or allocate a fresh slot (and ZP byte) if it is new. Returns the
+; address either way.
+sub declare_var() -> ubyte {
+    ubyte a
+    a = find_var()
+    if a != 0 {
+        return a
+    }
+    ; allocate a new slot: copy name_buf into sym_names[sym_count*8].
+    ubyte off
+    off = sym_count << 3
+    ubyte j
+    j = 0
+    repeat {
+        if j >= name_len {
+            break
+        }
+        sym_names[off + j] = name_buf[j]
+        j = j + 1
+    }
+    sym_lens[sym_count] = name_len
+    sym_addrs[sym_count] = next_var_addr
+    a = next_var_addr
+    next_var_addr = next_var_addr + 1
+    sym_count = sym_count + 1
+    return a
+}
 
 ; ---- low-level I/O helpers (inline asm wrappers) ----
 ;
@@ -370,33 +503,38 @@ sub parse_print_string() {
 
 sub parse_print_ub() {
     ubyte c
-    ; Scan past whitespace. The next non-ws byte is either '$' for a
-    ; literal byte value or a lowercase letter for a variable reference.
+    ; Skip whitespace. The next non-ws byte is either '$' for a literal
+    ; byte value or a lowercase letter for a variable reference (v9:
+    ; multi-character names).
     repeat {
-        c = read_src()
+        c = peek_src()
         if src_eof != 0 {
             return
         }
-        if c == $24 {                                    ; '$' -- literal
-            break
-        }
-        if c >= $61 {                                    ; lowercase letter -- v2 var ref
-            if c <= $7a {
-                ; Look up the variable's ZP address and emit a runtime
-                ; hex-print sequence against it. If the variable was
-                ; never declared (var_addrs[slot] == 0) we emit nothing
-                ; useful, but the parse is still well-formed.
-                ubyte addr
-                addr = var_addrs[c - $61]
-                if addr != 0 {
-                    emit_print_ub_var(addr)
-                }
-                skip_to_nl()
-                return
+        if c == $20 {                                    ; space
+            c = read_src()
+        } else {
+            if c == $09 {                                ; tab
+                c = read_src()
+            } else {
+                break
             }
         }
-        ; otherwise keep scanning (skip ws / other chars)
     }
+    if c != $24 {                                        ; not '$' -> var ref
+        ; Look up the variable's ZP address and emit a runtime hex-print
+        ; sequence against it. If the variable was never declared
+        ; (find_var == 0) we emit nothing, but the parse stays well-formed.
+        read_ident()
+        ubyte addr
+        addr = find_var()
+        if addr != 0 {
+            emit_print_ub_var(addr)
+        }
+        skip_to_nl()
+        return
+    }
+    c = read_src()                                       ; consume '$'
     ; Two hex digits (literal form).
     c = read_src()
     if src_eof != 0 {
@@ -554,27 +692,14 @@ sub parse_let() {
     if src_eof != 0 {
         return
     }
-    ; skip whitespace
-    repeat {
-        c = read_src()
-        if src_eof != 0 {
-            return
-        }
-        if c != $20 {                                    ; not space
-            if c != $09 {                                ; not tab
-                break
-            }
-        }
-    }
-    ; c is the variable name (single char). Index into var_addrs.
-    ubyte slot
-    slot = c - $61                                       ; 'a'
-    if var_addrs[slot] == 0 {
-        var_addrs[slot] = next_var_addr
-        next_var_addr = next_var_addr + 1
+    ; Read the variable name (v9: multi-character) and declare it,
+    ; allocating a ZP slot on first sight.
+    read_ident()
+    if src_eof != 0 {
+        return
     }
     ubyte addr
-    addr = var_addrs[slot]
+    addr = declare_var()
     ; skip ws + '='
     repeat {
         c = read_src()
@@ -629,34 +754,42 @@ sub parse_let() {
 ; (no arithmetic) or chains an ADC/SBC against the second operand.
 sub parse_let_emit_load_first() {
     ubyte c
+    ; skip whitespace to the operand
     repeat {
+        c = peek_src()
+        if src_eof != 0 {
+            return
+        }
+        if c == $20 {                                    ; space
+            c = read_src()
+        } else {
+            if c == $09 {                                ; tab
+                c = read_src()
+            } else {
+                break
+            }
+        }
+    }
+    if c == $24 {                                        ; '$' literal
+        c = read_src()                                   ; consume '$'
         c = read_src()
         if src_eof != 0 {
             return
         }
-        if c == $24 {                                    ; '$' literal
-            c = read_src()
-            if src_eof != 0 {
-                return
-            }
-            tmp_byte = hex_nibble(c) << 4
-            c = read_src()
-            if src_eof != 0 {
-                return
-            }
-            tmp_byte = tmp_byte | hex_nibble(c)
-            write_dst($a9)                               ; LDA #
-            write_dst(tmp_byte)
+        tmp_byte = hex_nibble(c) << 4
+        c = read_src()
+        if src_eof != 0 {
             return
         }
-        if c >= $61 {
-            if c <= $7a {
-                write_dst($a5)                           ; LDA zp
-                write_dst(var_addrs[c - $61])
-                return
-            }
-        }
+        tmp_byte = tmp_byte | hex_nibble(c)
+        write_dst($a9)                                   ; LDA #
+        write_dst(tmp_byte)
+        return
     }
+    ; variable (v9: multi-character)
+    read_ident()
+    write_dst($a5)                                       ; LDA zp
+    write_dst(find_var())
 }
 
 ; Helper: emit CLC/SEC + ADC/SBC against the second operand.
@@ -688,11 +821,8 @@ sub parse_let_emit_arith(ubyte first_op) {
             }
         }
     }
-    c = read_src()
-    if src_eof != 0 {
-        return
-    }
     if c == $24 {                                        ; '$' literal
+        c = read_src()                                   ; consume '$'
         c = read_src()
         if src_eof != 0 {
             return
@@ -707,9 +837,10 @@ sub parse_let_emit_arith(ubyte first_op) {
         write_dst(tmp_byte)
         return
     }
-    ; variable
+    ; variable (v9: multi-character)
+    read_ident()
     write_dst(zp_op)
-    write_dst(var_addrs[c - $61])
+    write_dst(find_var())
 }
 
 ; Emit a print_ub call against a variable reference (single letter).
@@ -757,20 +888,13 @@ sub parse_while() {
     if src_eof != 0 {
         return
     }
-    ; skip ws to variable name
-    repeat {
-        c = read_src()
-        if src_eof != 0 {
-            return
-        }
-        if c >= $61 {
-            if c <= $7a {
-                break
-            }
-        }
+    ; Read the loop variable name (v9: multi-character).
+    read_ident()
+    if src_eof != 0 {
+        return
     }
     ubyte x_addr
-    x_addr = var_addrs[c - $61]
+    x_addr = find_var()
     ; Read the comparison operator: ==, !=, <, <=, >, >=.
     ubyte op
     op = read_cmp_op()
@@ -845,19 +969,12 @@ sub parse_while() {
         if src_eof != 0 {
             return
         }
-        ; skip ws then read variable letter
-        repeat {
-            c = read_src()
-            if src_eof != 0 {
-                return
-            }
-            if c >= $61 {
-                if c <= $7a {
-                    break
-                }
-            }
+        ; read the variable name (v9: multi-character)
+        read_ident()
+        if src_eof != 0 {
+            return
         }
-        print_addr = var_addrs[c - $61]
+        print_addr = find_var()
         skip_to_nl()
     }
     ; ---- Read the let body: `let X = X + $ZZ` ----
@@ -1007,22 +1124,13 @@ sub parse_if() {
     if src_eof != 0 {
         return
     }
-    ; skip ws to variable name (1 char)
-    repeat {
-        c = read_src()
-        if src_eof != 0 {
-            return
-        }
-        if c >= $61 {
-            if c <= $7a {
-                break
-            }
-        }
+    ; Read the variable name (v9: multi-character).
+    read_ident()
+    if src_eof != 0 {
+        return
     }
-    ubyte x_slot
-    x_slot = c - $61
     ubyte x_addr
-    x_addr = var_addrs[x_slot]
+    x_addr = find_var()
     ; Read the comparison operator: ==, !=, <, <=, >, >=.
     ubyte op
     op = read_cmp_op()
@@ -1090,22 +1198,13 @@ sub parse_if() {
     if src_eof != 0 {
         return
     }
-    ; skip ws to variable letter
-    repeat {
-        c = read_src()
-        if src_eof != 0 {
-            return
-        }
-        if c >= $61 {
-            if c <= $7a {
-                break
-            }
-        }
+    ; Read the variable name (v9: multi-character).
+    read_ident()
+    if src_eof != 0 {
+        return
     }
-    ubyte z_slot
-    z_slot = c - $61
     ubyte z_addr
-    z_addr = var_addrs[z_slot]
+    z_addr = find_var()
     ; Ensure the helper exists in the output before we emit the
     ; conditional, so its size doesn't shift our hard-coded displacements.
     emit_hex_helper()
@@ -1145,7 +1244,9 @@ main {
     next_var_addr = $60
     helper_emitted = 0
     bytes_emitted = 0
-    ; var_addrs[] zeroed by BSS init.
+    sym_count = 0
+    ; The symbol table grows on demand; only slots < sym_count are read,
+    ; so the sym_* arrays need no explicit zeroing.
 
     repeat {
         skip_ws_comments()

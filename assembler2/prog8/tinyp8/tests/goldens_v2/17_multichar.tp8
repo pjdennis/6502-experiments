@@ -1,0 +1,16 @@
+; v9: multi-character variable names across the full statement set.
+; Exercises names of different lengths (idx vs index) and same-length
+; distinct names (idx vs sum) to stress the symbol-table compare.
+let index = $04
+let idx = $20
+let sum = index + idx           ; 24
+print_ub sum
+let sum = sum - index           ; 20
+print_ub sum
+print_ub idx
+print_ub index
+if sum == $20 then print_ub idx
+while index < $08
+    print_ub index
+    let index = index + $02
+end

@@ -112,7 +112,8 @@ Each tinyp8.p8 version adds one capability:
 * `v7` `[done]` -- full comparison ops (`< <= > >= == !=`).
 * `v8` `[done]` -- while body can include `print_ub Y` before the
   let increment.
-* `v9` `[todo]` -- multi-character variable names.
+* `v9` `[done]` -- multi-character variable names (symbol table with
+  `read_ident` / `find_var` / `declare_var`; up to 8 chars, 16 vars).
 * `v10` `[todo]` -- input from stdin via `$F006`.
 * `v11`..`vN` `[todo]` -- progressively more of Prog8's surface
   (multi-statement if-then bodies, expressions deeper than two
@@ -121,8 +122,9 @@ Each tinyp8.p8 version adds one capability:
 
 Open question for Phase 5: at what version does tinyp8.p8 cross
 the line from "tiny" to "real Prog8 subset"? Probably when it can
-parse its own grammar without restrictions on identifier length,
-control-flow body shape, and expression depth.
+parse its own grammar without restrictions on control-flow body
+shape and expression depth. (The identifier-length restriction is
+gone as of v9.)
 
 ### Phase 6 -- Host p8c iterative-parser rewrite `[todo]` (THE strategic item)
 
@@ -188,17 +190,19 @@ This is the long-term steady-state.
 
 ## Where we are right now
 
-Commit `1231140`, branch `claude/review-wendy2-plan-MOfnA`.
+Branch `claude/prog8-bootstrap-continue-6Pzo0` (continues the
+`claude/review-wendy2-plan-MOfnA` work).
 
 * Phases 0-4: **done**.
-* Phase 5 (tinyp8.p8 growth): at **v8**, with about half of the
-  planned surface accepted. Real loops, conditionals, arithmetic,
-  comparisons. Still single-char identifiers.
+* Phase 5 (tinyp8.p8 growth): at **v9**. Real loops, conditionals,
+  arithmetic, comparisons, and now **multi-character variable names**
+  via a symbol table. Next surface items: stdin input (v10),
+  multi-statement bodies, deeper expressions.
 * Phase 6 (iterative parser rewrite): **not started**. This is
   the strategic next item; deserves a fresh session.
 * Phase 7-8: blocked on Phase 6.
 
-97 tests green. Self-host equivalence holds for the v0/v1 corpus.
+98 tests green. Self-host equivalence holds for the v0/v1 corpus.
 
 ---
 

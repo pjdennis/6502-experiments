@@ -117,12 +117,12 @@ wendy2c, mirroring the asm00..asm17 chain.
     compiled by our own host compiler, agrees bit-for-bit with the
     reference assembly version.
 
-**Phase 4 -- tinyp8.p8 grows beyond the reference (v2..v8):**
+**Phase 4 -- tinyp8.p8 grows beyond the reference (v2..v9):**
 
   * v2: `let X = $XX` declarations + `print_ub X` references. The
-    on-target compiler now maintains a 26-slot symbol table and emits
-    a 38-byte position-independent hex-print helper lazily on first
-    variable reference.
+    on-target compiler tracks declared variables in a symbol table and
+    emits a 38-byte position-independent hex-print helper lazily on
+    first variable reference.
   * v3: `if X == $YY then print_ub Z` -- restricted conditional that
     hard-codes the BNE displacement.
   * v4: `let X = Y` -- variable copy.
@@ -139,10 +139,17 @@ wendy2c, mirroring the asm00..asm17 chain.
     Detected by peeking the first char of the next line; emits
     the right `skip_size` to the conditional branch and ensures the
     hex helper is in place before `loop_top` is captured.
+  * v9: **multi-character variable names** (up to 8 chars, 16 vars).
+    The single-char-indexed `var_addrs[26]` table is replaced by a
+    small symbol table (`sym_names`/`sym_lens`/`sym_addrs`); a shared
+    `read_ident` reads `[a-z]+` into a scratch buffer and
+    `find_var`/`declare_var` do a linear-scan lookup/allocate. Names
+    only exist at compile time, so emitted code size is unchanged and
+    every hard-coded branch displacement stays valid.
 
   v0/v1 byte-equivalence with `tinyp8.s` stays intact because new
   syntax/state only activates when the new constructs appear. Combined
-  corpus is 5 e2e + 5 equivalence + 11 v2..v8 = 21 tinyp8 cases,
+  corpus is 5 e2e + 5 equivalence + 12 v2..v9 = 22 tinyp8 cases,
   all green.
 
   Programs the on-target compiler accepts now:
@@ -159,8 +166,16 @@ wendy2c, mirroring the asm00..asm17 chain.
       if s >= $40 then print_ub s
       -> 42 42
 
-      ...etc. Real loops, real conditionals, real arithmetic, all
-      compiled by a Prog8 program running inside the emulator.
+      let count = $00
+      while count < $06
+          print_ub count
+          let count = count + $02
+      end
+      -> 00 02 04
+
+      ...etc. Real loops, real conditionals, real arithmetic, named
+      variables, all compiled by a Prog8 program running inside the
+      emulator.
 
 **Phase 3 cont -- language built out toward Prog8 parity:**
 

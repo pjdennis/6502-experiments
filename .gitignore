@@ -33,3 +33,6 @@ assembler2/emulator/tests/out/
 # Per-machine LCD vision calibration (corner positions in the captured
 # image -- depend on the camera mount, so not portable).
 /lcd_calibration.json
+
+# Emulator debug symbol dumps (generated at runtime).
+symbols.dbg

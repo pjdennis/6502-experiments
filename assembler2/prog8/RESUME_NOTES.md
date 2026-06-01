@@ -1,7 +1,7 @@
 # Session Resume Notes -- Prog8 bootstrap project
 
 This file is a session-handoff note. It captures the state of the
-project after the v2..v8 tinyp8 growth sessions so a fresh
+project after the v2..v9 tinyp8 growth sessions so a fresh
 conversation can pick up productively without re-reading prior
 chat history. Update it (or replace it wholesale) at the end of
 each session.
@@ -10,12 +10,26 @@ For the strategic plan (goal, phase map, critical path), see
 [`PLAN.md`](./PLAN.md). For per-feature language-surface details,
 see [`README.md`](./README.md).
 
-Branch: `claude/review-wendy2-plan-MOfnA`. Push as you go; the
-remote is the source of truth across sessions.
+Branch: `claude/prog8-bootstrap-continue-6Pzo0` (continuing the
+`claude/review-wendy2-plan-MOfnA` work). Push as you go; the remote
+is the source of truth across sessions.
+
+> **Environment note (web sessions):** `vasm6502_oldstyle` is not
+> preinstalled and `sun.hasenbraten.de` is blocked by the network
+> policy, so the tinyp8 e2e/self-host/v2 tests *skip* unless vasm is
+> on PATH. The host p8c suite (76 tests) runs without it. To build
+> vasm in a session (github.com is reachable):
+>
+>     git clone --depth 1 https://github.com/ArchUsr64/vasm.git /tmp/vasm
+>     make -C /tmp/vasm CPU=6502 SYNTAX=oldstyle
+>     cp /tmp/vasm/vasm6502_oldstyle /usr/local/bin/
+>
+> That's a faithful upstream vasm 1.9f / 6502 backend 0.12 / oldstyle
+> 0.19a; with it on PATH all 22 tinyp8 cases run.
 
 ---
 
-## High-level status (as of commit `4758df7`)
+## High-level status (tinyp8 at v9)
 
 * **Host p8c (Python)** -- recursive-descent compiler from `.p8`
   source to 6502 asm. Wide language coverage: `ubyte`/`byte`/`uword`,
@@ -32,10 +46,11 @@ remote is the source of truth across sessions.
   assembled by vasm).
 
 * **tinyp8.p8 (Prog8, compiled by host p8c)** -- the same compiler
-  rewritten in our language. Currently at **v8**: supports `let`,
+  rewritten in our language. Currently at **v9**: supports `let`,
   variable references in `print_ub`, `if X OP \$YY then print_ub Z`
   with the full comparison set, `while X OP \$YY` loops with an
-  optional `print_ub Y` body before the let increment.
+  optional `print_ub Y` body before the let increment, and (v9)
+  **multi-character variable names** via an on-target symbol table.
 
 * **Self-host equivalence** -- for the v0/v1 corpus (5 inputs in
   `tinyp8/tests/goldens/`), tinyp8.s and tinyp8.p8 produce
@@ -48,8 +63,9 @@ remote is the source of truth across sessions.
     codegen / snapshot / e2e LCD goldens).
   * 5 v0/v1 e2e (`tinyp8/tests/test_e2e.py`).
   * 5 v0/v1 self-host equivalence (`test_self_host.py`).
-  * 11 v2..v8 .p8-only (`test_v2.py`, sources in `goldens_v2/`).
-  * **97 total, all green.**
+  * 12 v2..v9 .p8-only (`test_v2.py`, sources in `goldens_v2/`).
+  * **98 total, all green** (the 22 tinyp8 cases need vasm; see the
+    environment note above).
 
 Run:
 
@@ -90,7 +106,10 @@ at $F006-$F03C; see `assembler2/emulator/stubs.c` for the ABI.
 
 ---
 
-## What the on-target compiler currently accepts (tinyp8 v8)
+## What the on-target compiler currently accepts (tinyp8 v9)
+
+Variable names (`X`, `Y`, `Z` below) may now be **multi-character**
+lowercase identifiers (`count`, `idx`, ...), up to 8 chars, 16 vars.
 
     let X = $XX            ; declare and assign a literal
     let X = Y              ; copy from another var
@@ -113,13 +132,19 @@ at $F006-$F03C; see `assembler2/emulator/stubs.c` for the ABI.
     ; comments + blank lines OK
 
 Restrictions worth remembering:
-  * Variable names are SINGLE LOWERCASE LETTERS (a..z). Backed
-    by a 26-slot `var_addrs[]` array in tinyp8.p8.
-  * `if`'s then-clause must be exactly `print_ub <letter>` (10
+  * Variable names are lowercase `[a-z]+`, up to 8 chars, 16 vars
+    max. Backed by a symbol table (`sym_names`/`sym_lens`/`sym_addrs`)
+    read via `read_ident` + `find_var` / `declare_var`. Names exist
+    only at compile time -- a var reference still emits a 2-byte
+    `lda <zp>`, so emitted code size (and every hard-coded branch
+    displacement) is unaffected by name length.
+  * `if`'s then-clause must be exactly `print_ub <var>` (10
     bytes); the BNE displacement is hard-coded.
   * `while`'s let-body must be exactly `let X = X +/- \$ZZ` (7
     bytes); the print-body, when present, must be exactly
-    `print_ub <letter>` (10 bytes).
+    `print_ub <var>` (10 bytes). (The let-body var names aren't
+    validated -- they're skipped past, since the loop header already
+    captured the loop var's address.)
   * The compiled output's hex-print helper (38 bytes + 3-byte
     JMP-around) is emitted lazily on first var-reference print.
 
@@ -129,42 +154,32 @@ Restrictions worth remembering:
 
 Listed roughly by impact / risk, biggest payoff first.
 
-### Option A: tinyp8 v9 -- multi-character variable names (1 push)
+### Option A: tinyp8 v9 -- multi-character variable names -- DONE
 
-The biggest single UX win for the on-target compiler. Replaces
-the 26-slot `var_addrs[]` table with a parallel-array symbol
-table that supports names up to ~8 chars. Concrete design:
+Landed this session. The 26-slot `var_addrs[]` table was replaced by
+a symbol table:
 
-* New state:
-      ubyte[128] sym_names   ; packed (16 entries x 8 bytes)
+      ubyte[128] sym_names    ; packed, 16 entries x 8 bytes
       ubyte[16]  sym_lens
       ubyte[16]  sym_addrs
       ubyte      sym_count
-      ubyte[8]   name_buf    ; scratch for the current ident
+      ubyte[8]   name_buf     ; scratch for the current ident
+      ubyte      name_len
 
-* New subs:
-      sub read_ident(uword buf_ptr) -> ubyte
-          ; reads `[a..z]+` from source into buf_ptr; returns length
-      sub find_var(uword name, ubyte len) -> ubyte
-          ; linear scan over sym_names/lens; returns ZP addr or $FF
-      sub declare_var(uword name, ubyte len) -> ubyte
-          ; returns existing addr if found, else allocates a new slot
+with three helpers near the top of tinyp8.p8:
 
-* Update each call site that currently does
-  `var_addrs[c - $61]` (about 8 sites in tinyp8.p8) to read into
-  `name_buf` first, then look up via `find_var` /
-  `declare_var`. Single-char names continue to work -- they just
-  have `len == 1`.
+      sub read_ident()        ; skip ws, read [a-z]+ into name_buf (cap 8),
+                              ; set name_len; leaves the terminator peeked
+      sub find_var() -> ubyte ; linear scan; returns ZP addr or 0
+      sub declare_var() -> ubyte ; find-or-allocate; bumps next_var_addr
 
-* Add a v9 golden that uses multi-char names (`count`, `index`,
-  `total`...). Verify v0/v1 equivalence still holds (it should:
-  single-char inputs only ever store length-1 names, and the
-  v8 layout is unaffected for them).
-
-Estimated effort: 1 focused push. The refactor pattern is mechanical
-once the helpers are written. Watch out for: ZP allocator (already
-bumped to 0xff this session), and the name_buf interaction with
-the existing `tmp_byte` scratch.
+All ~8 var-reading call sites now call `read_ident` + `find_var`
+(or `declare_var` for the `let` LHS). The `while` let-body var names
+are still skipped past unchanged (the loop header already captured
+the loop var's address). Golden: `goldens_v2/17_multichar.tp8`
+(exercises `idx` vs `index` -- different lengths -- and `idx` vs
+`sum` -- same length, different bytes). v0/v1 equivalence intact;
+ZP high-water is ~$90, well under the $ff cap.
 
 ### Option B: tinyp8 v9b -- expand if-then to a multi-statement block (1 push)
 
