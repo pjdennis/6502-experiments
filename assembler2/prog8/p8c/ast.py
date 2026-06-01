@@ -292,6 +292,15 @@ class Param(Node):
 
 
 @dataclass
+class EnumDecl(Node):
+    """`enum Name { A, B = 5, C }` -- a set of ubyte constants accessed
+    as Name.A. Auto-assigns sequential values starting from 0 (or from
+    the most recent explicit value)."""
+    name: str
+    members: list = field(default_factory=list)   # list of (member_name, IntLit | None)
+
+
+@dataclass
 class Sub(Node):
     name: str
     body: Block
@@ -310,6 +319,13 @@ class Return(Node):
 
 
 @dataclass
+class Defer(Node):
+    """`defer stmt` -- run stmt just before each return path of the
+    enclosing sub. Multiple defers run in LIFO order."""
+    stmt: Node
+
+
+@dataclass
 class Program(Node):
     address: int = 0x4000       # default load address; %address overrides
     output_format: str = "raw"  # %output raw|prg|...
@@ -318,6 +334,8 @@ class Program(Node):
     imports: list[str] = field(default_factory=list)
     # Module-level variables collected by sema.
     module_vars: list[VarDecl] = field(default_factory=list)
+    # Module-level enum declarations.
+    enums: list[EnumDecl] = field(default_factory=list)
     # All variables across the program (module + per-sub) with the
     # address sema assigned. Codegen emits `<mangled> = $XX` definitions
     # for each, then references them by name.

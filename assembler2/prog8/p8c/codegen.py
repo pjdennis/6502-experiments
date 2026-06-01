@@ -32,7 +32,7 @@ exit()).
 from __future__ import annotations
 
 from .ast import (
-    AddressOf, Assign, BinOp, Block, BoolLit, Break, Call, Continue,
+    AddressOf, Assign, BinOp, Block, BoolLit, Break, Call, Continue, Defer,
     ExprStmt, For, Ident, If, Index, InlineAsm, IntLit, MemAt, Param,
     Program, Repeat, Return, StrLit, Sub, TUByteArray, UnaryOp, VarDecl,
     When, WhenChoice, While, BOOL, BYTE, UBYTE, UWORD, type_from_name,
@@ -204,6 +204,11 @@ class CodeGen:
         self._label_id = 0
         self._current_sub = s
         self._return_label = f".L{s.mangled}_ret"
+        # Track defers registered in this sub: LIFO list of body stmts.
+        # When a `return` (or fall-through) is encountered, codegen
+        # emits the registered defer bodies in REVERSE registration
+        # order, then jumps to the per-sub epilogue label.
+        self._defer_stack: list = []
         # Module-var initializers run at the top of main().
         if s.is_main:
             for vd in self.prog.module_vars:
@@ -221,6 +226,11 @@ class CodeGen:
                     self.emit(f"  sta {vd.sym.mangled}")
                     self.emit(f"  sty {vd.sym.mangled}+1")
         self._emit_block(s.body)
+        # Fall-through to return path: emit defers in LIFO order before
+        # the epilogue label (so the epilogue itself stays just one
+        # instruction).
+        for ds in reversed(self._defer_stack):
+            self._emit_stmt(ds)
         self.emit(f"{self._return_label}:")
         if s.is_main:
             if self.prog.target == "nmos":
@@ -288,14 +298,38 @@ class CodeGen:
                     f"{st.loc.file}:{st.loc.line}:{st.loc.col}: `continue` outside loop"
                 )
             self.emit(f"  jmp {self._loop_cont_stack[-1]}")
+        elif isinstance(st, Defer):
+            # Push: the body will be re-emitted at every return path.
+            self._defer_stack.append(st.stmt)
         elif isinstance(st, Return):
             cur = self._current_sub
             ret_t = type_from_name(cur.return_type_name)
+            # Emit defers in LIFO order BEFORE evaluating the return
+            # value? Upstream Prog8 says defers run "after the return
+            # expression has been computed but before the actual jump".
+            # The cleanest is: evaluate return value, save to scratch,
+            # run defers (which can mutate state but the return value
+            # is already captured), restore, jump to epilogue.
             if st.value is not None:
-                if ret_t is UBYTE:
+                if ret_t is UBYTE or ret_t is BYTE:
                     self._emit_byte_expr_into_a(st.value)
+                    self.emit("  pha")
+                    for ds in reversed(self._defer_stack):
+                        self._emit_stmt(ds)
+                    self.emit("  pla")
                 else:
                     self._emit_word_expr_into_ay(st.value)
+                    self.emit("  pha")
+                    self.emit("  tya")
+                    self.emit("  pha")
+                    for ds in reversed(self._defer_stack):
+                        self._emit_stmt(ds)
+                    self.emit("  pla")
+                    self.emit("  tay")
+                    self.emit("  pla")
+            else:
+                for ds in reversed(self._defer_stack):
+                    self._emit_stmt(ds)
             self.emit(f"  jmp {self._return_label}")
         else:
             raise CodeGenError(f"codegen: unhandled stmt {type(st).__name__}")

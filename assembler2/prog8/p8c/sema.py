@@ -12,7 +12,7 @@ Phase 1 jobs:
 from __future__ import annotations
 
 from .ast import (
-    AddressOf, Assign, BinOp, Block, BoolLit, Break, Call, Continue,
+    AddressOf, Assign, BinOp, Block, BoolLit, Break, Call, Continue, Defer,
     ExprStmt, For, Ident, If, Index, InlineAsm, IntLit, MemAt, Param,
     Program, Repeat, Return, StrLit, Sub, Symbol, TUByteArray, Type,
     UnaryOp, VarDecl, When, WhenChoice, While, BOOL, BYTE, STR, UBYTE,
@@ -91,6 +91,24 @@ class Sema:
 
         # Module-level vars (visible to every sub).
         self._scope_stack.append(self.globals)
+        # Enum members come in as ubyte consts named `Enum.MEMBER`.
+        for ed in self.prog.enums:
+            next_val = 0
+            for mname, mval in ed.members:
+                if mval is not None:
+                    next_val = mval
+                qname = f"{ed.name}.{mname}"
+                if qname in self.globals:
+                    raise SemaError(
+                        f"{ed.loc.file}:{ed.loc.line}:{ed.loc.col}: "
+                        f"duplicate enum member {qname!r}"
+                    )
+                mangled = f"p8c_{ed.name}_{mname}"
+                self.globals[qname] = Symbol(
+                    name=qname, mangled=mangled, type=UBYTE, kind="const",
+                    const_value=next_val & 0xFF,
+                )
+                next_val += 1
         for vd in self.prog.module_vars:
             self._declare_var(vd, mangled_prefix="p8v_", scope=self.globals)
 
@@ -360,6 +378,9 @@ class Sema:
             return
         if isinstance(st, (Break, Continue)):
             # Validity (must be inside a loop) checked at codegen time.
+            return
+        if isinstance(st, Defer):
+            self._walk_stmt(st.stmt, sub_name=sub_name)
             return
         if isinstance(st, Return):
             cur = getattr(self, "_current_sub", None)

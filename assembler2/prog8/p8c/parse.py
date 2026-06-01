@@ -22,11 +22,16 @@ from __future__ import annotations
 from typing import Optional
 
 from .ast import (
-    AddressOf, Assign, BinOp, Block, BoolLit, Break, Call, Continue,
-    ExprStmt, For, Ident, If, Index, InlineAsm, IntLit, Loc, MemAt, Node,
-    Param, Program, Repeat, Return, StrLit, Sub, UnaryOp, VarDecl, When,
-    WhenChoice, While, type_from_name,
+    AddressOf, Assign, BinOp, Block, BoolLit, Break, Call, Continue, Defer,
+    EnumDecl, ExprStmt, For, Ident, If, Index, InlineAsm, IntLit, Loc,
+    MemAt, Node, Param, Program, Repeat, Return, StrLit, Sub, UnaryOp,
+    VarDecl, When, WhenChoice, While, type_from_name,
 )
+
+
+# Keywords that introduce a statement we know how to parse.
+_STMT_KW = {"if", "while", "when", "repeat", "for", "break", "continue",
+            "return", "defer"}
 from .lex import Token
 
 
@@ -114,6 +119,8 @@ class Parser:
                 prog.subs.append(self.parse_asmsub())
             elif t.kind == "KW" and t.value == "const":
                 prog.module_vars.append(self.parse_const_decl())
+            elif t.kind == "KW" and t.value == "enum":
+                prog.enums.append(self.parse_enum_decl())
             elif t.kind == "KW" and t.value == "main":
                 # `main { ... }` is shorthand for `sub main() -> void { ... }`.
                 self.pos += 1
@@ -234,6 +241,24 @@ class Parser:
 
     # ---- statements ----
 
+    def parse_enum_decl(self) -> EnumDecl:
+        """`enum Name { A, B = $10, C }` -- ubyte constants accessed
+        as Name.A. Missing values auto-increment from the previous."""
+        kw = self.eat("KW", "enum")
+        name_tok = self.eat("IDENT")
+        self.eat("{")
+        members: list = []
+        while self.peek().kind != "}":
+            mname = self.eat("IDENT")
+            value = None
+            if self.match("="):
+                value = self.eat("INT").value
+            members.append((mname.value, value))
+            if not self.match(","):
+                break
+        self.eat("}")
+        return EnumDecl(loc=self.loc(kw), name=name_tok.value, members=members)
+
     def parse_const_decl(self) -> VarDecl:
         """`const ubyte NAME = $42` -- compile-time constant.
 
@@ -297,6 +322,10 @@ class Parser:
             if t.value == "continue":
                 self.pos += 1
                 return Continue(loc=self.loc(t))
+            if t.value == "defer":
+                self.pos += 1
+                body_stmt = self.parse_stmt()
+                return Defer(loc=self.loc(t), stmt=body_stmt)
             if t.value == "return":
                 self.pos += 1
                 value = None

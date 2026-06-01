@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 
 KEYWORDS = {
-    "sub", "asmsub", "extsub", "inline", "private",
+    "sub", "asmsub", "extsub", "inline", "private", "defer",
     "if", "else", "when", "while", "do", "until", "for", "in", "to",
     "downto", "step", "repeat", "break", "continue", "return", "goto",
     "as", "and", "or", "xor", "not",
