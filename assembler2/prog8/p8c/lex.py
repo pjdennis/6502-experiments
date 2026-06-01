@@ -20,7 +20,7 @@ KEYWORDS = {
     "as", "and", "or", "xor", "not",
     "true", "false",
     "ubyte", "byte", "uword", "word", "bool", "str", "void",
-    "const", "enum",
+    "const", "enum", "struct",
     "main",
 }
 

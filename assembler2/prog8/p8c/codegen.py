@@ -118,8 +118,10 @@ class CodeGen:
         # Emit ZP variable address bindings before any code so labels
         # resolve regardless of declaration order. Arrays are emitted
         # later as labeled .byte blocks (main memory, not ZP).
-        scalar_vars = [s for s in self.prog.all_vars if s.kind != "array"]
+        scalar_vars = [s for s in self.prog.all_vars
+                       if s.kind not in ("array", "struct_instance")]
         array_vars = [s for s in self.prog.all_vars if s.kind == "array"]
+        struct_vars = [s for s in self.prog.all_vars if s.kind == "struct_instance"]
         if scalar_vars:
             self.emit("; ---- ZP variable allocations ----")
             for sym in scalar_vars:
@@ -153,6 +155,13 @@ class CodeGen:
                 assert isinstance(sym.type, TUByteArray)
                 self.emit(f"{sym.mangled}:")
                 self.emit(f"  .byte " + ", ".join(["0"] * sym.type.size))
+        if struct_vars:
+            self.emit("")
+            self.emit("; ---- struct instances ----")
+            for sym in struct_vars:
+                size = sym.struct_size                 # type: ignore[attr-defined]
+                self.emit(f"{sym.mangled}:")
+                self.emit(f"  .byte " + ", ".join(["0"] * size))
         if self.prog.strings:
             self.emit("")
             self.emit("; ---- string pool ----")
@@ -370,6 +379,18 @@ class CodeGen:
             return
         assert isinstance(a.target, Ident) and a.target.sym is not None
         sym = a.target.sym
+        # Struct-instance write: `instance.field = expr`. sema marked
+        # the Ident with field_offset and set its type to the field's type.
+        if sym.kind == "struct_instance":
+            off = getattr(a.target, "field_offset", 0)
+            if a.target.type is UWORD:
+                self._emit_word_expr_into_ay(a.rhs)
+                self.emit(f"  sta {sym.mangled}+{off}")
+                self.emit(f"  sty {sym.mangled}+{off + 1}")
+            else:
+                self._emit_byte_expr_into_a(a.rhs)
+                self.emit(f"  sta {sym.mangled}+{off}")
+            return
         if a.op == "=":
             if sym.type is UWORD:
                 self._emit_word_expr_into_ay(a.rhs)
@@ -614,11 +635,16 @@ class CodeGen:
                 self.emit(f"  lda #${v & 0xFF:02x}")
                 self.emit(f"  ldy #${(v >> 8) & 0xFF:02x}")
                 return
+            if e.sym.kind == "struct_instance":
+                off = getattr(e, "field_offset", 0)
+                self.emit(f"  lda {e.sym.mangled}+{off}")
+                self.emit(f"  ldy {e.sym.mangled}+{off + 1}")
+                return
             if e.sym.type is UWORD:
                 self.emit(f"  lda {e.sym.mangled}")
                 self.emit(f"  ldy {e.sym.mangled}+1")
                 return
-            if e.sym.type is UBYTE:
+            if e.sym.type in (UBYTE, BYTE):
                 self.emit(f"  lda {e.sym.mangled}")
                 self.emit(f"  ldy #$00")
                 return
@@ -876,6 +902,11 @@ class CodeGen:
             if e.sym.kind == "const":
                 # Fold to immediate load.
                 self.emit(f"  lda #${e.sym.const_value & 0xFF:02x}")
+                return
+            if e.sym.kind == "struct_instance":
+                # `instance.field` read -- field_offset is set by sema.
+                off = getattr(e, "field_offset", 0)
+                self.emit(f"  lda {e.sym.mangled}+{off}")
                 return
             assert e.sym.kind == "var"
             self.emit(f"  lda {e.sym.mangled}")

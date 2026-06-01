@@ -14,9 +14,9 @@ from __future__ import annotations
 from .ast import (
     AddressOf, Assign, BinOp, Block, BoolLit, Break, Call, Continue, Defer,
     ExprStmt, For, Ident, If, Index, InlineAsm, IntLit, MemAt, Param,
-    Program, Repeat, Return, StrLit, Sub, Symbol, TUByteArray, Type,
-    UnaryOp, VarDecl, When, WhenChoice, While, BOOL, BYTE, STR, UBYTE,
-    UWORD, VOID, type_from_name,
+    Program, Repeat, Return, StrLit, StructDecl, Sub, Symbol, TUByteArray,
+    Type, UnaryOp, VarDecl, When, WhenChoice, While, BOOL, BYTE, STR,
+    UBYTE, UWORD, VOID, type_from_name,
 )
 
 
@@ -61,6 +61,23 @@ class Sema:
         self._next_repeat_id = 0
 
     def run(self) -> None:
+        # 0. Index struct decls by name and compute field offsets.
+        self._structs: dict[str, dict] = {}
+        for sd in self.prog.structs:
+            offset = 0
+            fields: dict[str, tuple] = {}    # name -> (offset, type)
+            for ftype, fname in sd.fields:
+                t = type_from_name(ftype)
+                if t not in (UBYTE, BYTE, UWORD):
+                    raise SemaError(
+                        f"{sd.loc.file}:{sd.loc.line}:{sd.loc.col}: "
+                        f"struct field {fname!r} of unsupported type {ftype!r}"
+                    )
+                size = 2 if t is UWORD else 1
+                fields[fname] = (offset, t)
+                offset += size
+            self._structs[sd.name] = {"fields": fields, "size": offset}
+
         # 1. stdlib imports.
         for mod in self.prog.imports:
             if mod not in STDLIB_SYMBOLS:
@@ -159,6 +176,24 @@ class Sema:
                 f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: "
                 f"variable {vd.name!r} already declared in this scope"
             )
+        # struct-typed declaration: type_name is a user-defined struct.
+        if vd.type_name in self._structs:
+            info = self._structs[vd.type_name]
+            mangled = f"p8st_{vd.name}"
+            sym = Symbol(name=vd.name, mangled=mangled, type=UBYTE,
+                         kind="struct_instance")
+            sym.struct_type = vd.type_name        # type: ignore[attr-defined]
+            sym.struct_info = info                # type: ignore[attr-defined]
+            sym.struct_size = info["size"]        # type: ignore[attr-defined]
+            scope[vd.name] = sym
+            vd.sym = sym
+            self.prog.all_vars.append(sym)
+            if vd.init is not None:
+                raise SemaError(
+                    f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: "
+                    f"struct initializers not supported yet"
+                )
+            return sym
         # const form: type_name is "const-<base>". The initializer must
         # be a literal that we resolve here.
         if vd.type_name.startswith("const-"):
@@ -286,12 +321,12 @@ class Sema:
             assert isinstance(st.target, Ident)
             self._walk_expr(st.target)
             self._walk_expr(st.rhs)
-            if st.target.sym is None or st.target.sym.kind != "var":
+            if st.target.sym is None or st.target.sym.kind not in ("var", "struct_instance"):
                 raise SemaError(
                     f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
-                    f"assignment target must be a variable"
+                    f"assignment target must be a variable or struct field"
                 )
-            tgt_t = st.target.sym.type
+            tgt_t = st.target.type
             rhs_t = st.rhs.type
             if tgt_t in _BYTE_TYPES and rhs_t not in _BYTE_TYPES and rhs_t is not BOOL:
                 raise SemaError(
@@ -426,6 +461,25 @@ class Sema:
             e.type = STR
         elif isinstance(e, Ident):
             sym = self._lookup(e.name)
+            if sym is None and "." in e.name:
+                # Maybe `instance.field` -- look up the instance and
+                # resolve the field offset.
+                head, _, tail = e.name.partition(".")
+                inst = self._lookup(head)
+                if inst is not None and inst.kind == "struct_instance":
+                    info = inst.struct_info       # type: ignore[attr-defined]
+                    if tail not in info["fields"]:
+                        raise SemaError(
+                            f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
+                            f"struct {inst.struct_type!r} has no field {tail!r}"
+                        )
+                    offset, ft = info["fields"][tail]
+                    # Synthesize a "field" symbol: the instance label
+                    # plus an offset is its address; codegen reads it.
+                    e.sym = inst
+                    e.field_offset = offset       # type: ignore[attr-defined]
+                    e.type = ft
+                    return
             if sym is None:
                 raise SemaError(
                     f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "

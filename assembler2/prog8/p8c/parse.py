@@ -24,8 +24,8 @@ from typing import Optional
 from .ast import (
     AddressOf, Assign, BinOp, Block, BoolLit, Break, Call, Continue, Defer,
     EnumDecl, ExprStmt, For, Ident, If, Index, InlineAsm, IntLit, Loc,
-    MemAt, Node, Param, Program, Repeat, Return, StrLit, Sub, UnaryOp,
-    VarDecl, When, WhenChoice, While, type_from_name,
+    MemAt, Node, Param, Program, Repeat, Return, StrLit, StructDecl, Sub,
+    UnaryOp, VarDecl, When, WhenChoice, While, type_from_name,
 )
 
 
@@ -121,6 +121,8 @@ class Parser:
                 prog.module_vars.append(self.parse_const_decl())
             elif t.kind == "KW" and t.value == "enum":
                 prog.enums.append(self.parse_enum_decl())
+            elif t.kind == "KW" and t.value == "struct":
+                prog.structs.append(self.parse_struct_decl())
             elif t.kind == "KW" and t.value == "main":
                 # `main { ... }` is shorthand for `sub main() -> void { ... }`.
                 self.pos += 1
@@ -130,6 +132,15 @@ class Parser:
             elif t.kind == "KW" and t.value in _TYPE_KWS:
                 # Module-level variable declaration.
                 prog.module_vars.append(self.parse_var_decl())
+            elif (t.kind == "IDENT"
+                  and self.peek(1).kind == "IDENT"
+                  and any(s.name == t.value for s in prog.structs)):
+                # `StructName instance_name` -- struct-typed module var.
+                self.pos += 1
+                name_tok = self.eat("IDENT")
+                vd = VarDecl(loc=self.loc(t), type_name=t.value,
+                             name=name_tok.value)
+                prog.module_vars.append(vd)
             else:
                 raise ParseError(
                     f"{self.filename}:{t.line}:{t.col}: expected sub, directive, "
@@ -240,6 +251,27 @@ class Parser:
         return Block(loc=self.loc(ob), stmts=stmts)
 
     # ---- statements ----
+
+    def parse_struct_decl(self) -> StructDecl:
+        """`struct Name { ubyte fa; uword fb }` -- ubyte/uword fields."""
+        kw = self.eat("KW", "struct")
+        name_tok = self.eat("IDENT")
+        self.eat("{")
+        fields: list = []
+        while self.peek().kind != "}":
+            ft = self.eat("KW")
+            if ft.value not in _TYPE_KWS:
+                raise ParseError(
+                    f"{self.filename}:{ft.line}:{ft.col}: "
+                    f"field type {ft.value!r} not supported in struct"
+                )
+            fn = self.eat("IDENT")
+            fields.append((ft.value, fn.value))
+            # Allow ; or , as separators; both optional before }.
+            self.match(";")
+            self.match(",")
+        self.eat("}")
+        return StructDecl(loc=self.loc(kw), name=name_tok.value, fields=fields)
 
     def parse_enum_decl(self) -> EnumDecl:
         """`enum Name { A, B = $10, C }` -- ubyte constants accessed
@@ -416,7 +448,12 @@ class Parser:
         if self.peek().kind == "IDENT":
             save = self.pos
             ident = self.eat("IDENT")
-            target: Node = Ident(loc=self.loc(ident), name=ident.value)
+            # Allow `instance.field` for struct-field assignment.
+            name = ident.value
+            while self.match("."):
+                m = self.eat("IDENT")
+                name += "." + m.value
+            target: Node = Ident(loc=self.loc(ident), name=name)
             # Optional `[idx]` -- array element target.
             if self.peek().kind == "[":
                 self.eat("[")

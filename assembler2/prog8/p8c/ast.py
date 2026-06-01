@@ -301,6 +301,15 @@ class EnumDecl(Node):
 
 
 @dataclass
+class StructDecl(Node):
+    """`struct Name { ubyte field1; uword field2 }` -- a fixed layout
+    of named ubyte/uword fields. Each instance is stored as a
+    contiguous block in main memory (like an array)."""
+    name: str
+    fields: list = field(default_factory=list)   # list of (type_name, field_name)
+
+
+@dataclass
 class Sub(Node):
     name: str
     body: Block
@@ -336,6 +345,8 @@ class Program(Node):
     module_vars: list[VarDecl] = field(default_factory=list)
     # Module-level enum declarations.
     enums: list[EnumDecl] = field(default_factory=list)
+    # Module-level struct declarations + instances.
+    structs: list[StructDecl] = field(default_factory=list)
     # All variables across the program (module + per-sub) with the
     # address sema assigned. Codegen emits `<mangled> = $XX` definitions
     # for each, then references them by name.
