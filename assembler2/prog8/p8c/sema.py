@@ -12,10 +12,10 @@ Phase 1 jobs:
 from __future__ import annotations
 
 from .ast import (
-    Assign, BinOp, Block, BoolLit, Break, Call, Continue, ExprStmt, For,
-    Ident, If, Index, InlineAsm, IntLit, Param, Program, Repeat, Return,
-    StrLit, Sub, Symbol, TUByteArray, Type, UnaryOp, VarDecl, While, BOOL,
-    STR, UBYTE, UWORD, VOID, type_from_name,
+    AddressOf, Assign, BinOp, Block, BoolLit, Break, Call, Continue,
+    ExprStmt, For, Ident, If, Index, InlineAsm, IntLit, MemAt, Param,
+    Program, Repeat, Return, StrLit, Sub, Symbol, TUByteArray, Type,
+    UnaryOp, VarDecl, While, BOOL, STR, UBYTE, UWORD, VOID, type_from_name,
 )
 from .stdlib_decls import STDLIB_SYMBOLS, get_builtin
 
@@ -210,6 +210,20 @@ class Sema:
                               scope=self._scope_stack[-1])
             return
         if isinstance(st, Assign):
+            if isinstance(st.target, MemAt):
+                self._walk_expr(st.target)
+                self._walk_expr(st.rhs)
+                if st.rhs.type is not UBYTE:
+                    raise SemaError(
+                        f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
+                        f"@(addr) write rhs must be ubyte (got {st.rhs.type!r})"
+                    )
+                if st.op != "=":
+                    raise SemaError(
+                        f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
+                        f"augmented @(addr) writes not supported"
+                    )
+                return
             if isinstance(st.target, Index):
                 self._walk_expr(st.target)
                 self._walk_expr(st.rhs)
@@ -360,6 +374,28 @@ class Sema:
                 )
             e.sym = sym
             e.type = sym.type
+        elif isinstance(e, MemAt):
+            self._walk_expr(e.addr)
+            if e.addr.type not in (UBYTE, UWORD):
+                raise SemaError(
+                    f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
+                    f"@(addr) address must be uword (got {e.addr.type!r})"
+                )
+            e.type = UBYTE
+        elif isinstance(e, AddressOf):
+            sym = self._lookup(e.name)
+            if sym is None:
+                raise SemaError(
+                    f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
+                    f"unknown identifier &{e.name}"
+                )
+            if sym.kind not in ("var", "array"):
+                raise SemaError(
+                    f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
+                    f"can't take address of {sym.kind} {e.name!r}"
+                )
+            e.sym = sym
+            e.type = UWORD
         elif isinstance(e, Index):
             # arr[idx]: arr is an Ident bound to an array sym.
             if not isinstance(e.array, Ident):

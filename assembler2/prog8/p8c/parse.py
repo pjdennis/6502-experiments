@@ -22,9 +22,10 @@ from __future__ import annotations
 from typing import Optional
 
 from .ast import (
-    Assign, BinOp, Block, BoolLit, Break, Call, Continue, ExprStmt, For,
-    Ident, If, Index, InlineAsm, IntLit, Loc, Node, Param, Program, Repeat,
-    Return, StrLit, Sub, UnaryOp, VarDecl, While, type_from_name,
+    AddressOf, Assign, BinOp, Block, BoolLit, Break, Call, Continue,
+    ExprStmt, For, Ident, If, Index, InlineAsm, IntLit, Loc, MemAt, Node,
+    Param, Program, Repeat, Return, StrLit, Sub, UnaryOp, VarDecl, While,
+    type_from_name,
 )
 from .lex import Token
 
@@ -45,6 +46,7 @@ _OP_LEVELS = [
     ("bitand",      {"&"}),
     ("shift",       {"<<", ">>"}),
     ("additive",    {"+", "-"}),
+    ("multiplicative", {"*"}),
 ]
 # Build (token_kind -> level_index) for O(1) lookups.
 _OP_PRECEDENCE: dict[str, int] = {}
@@ -307,6 +309,21 @@ class Parser:
         return For(loc=self.loc(kw), var_name=name.value, lo=lo, hi=hi, body=body)
 
     def parse_assign_or_expr(self) -> Node:
+        # `@(addr) = byte` -- write a byte to a runtime-computed addr.
+        if self.peek().kind == "@":
+            save = self.pos
+            self.pos += 1
+            self.eat("(")
+            addr = self.parse_expr()
+            self.eat(")")
+            target = MemAt(loc=self.loc(self.toks[save]), addr=addr)
+            if self.peek().kind == "=":
+                self.eat("=")
+                rhs = self.parse_expr()
+                return Assign(loc=self.loc(self.toks[save]),
+                              target=target, op="=", rhs=rhs)
+            # Otherwise an expression statement that reads memory.
+            return ExprStmt(loc=target.loc, expr=target)
         # Assignments: `IDENT = ...`, `IDENT[idx] = ...`, plus their
         # augmented forms. Anything else is an expression statement.
         if self.peek().kind == "IDENT":
@@ -387,6 +404,16 @@ class Parser:
         if t.kind == "-":
             self.pos += 1
             return UnaryOp(loc=self.loc(t), op="-", operand=self.parse_unary())
+        if t.kind == "&":
+            self.pos += 1
+            n = self.eat("IDENT")
+            return AddressOf(loc=self.loc(t), name=n.value)
+        if t.kind == "@":
+            self.pos += 1
+            self.eat("(")
+            addr = self.parse_expr()
+            self.eat(")")
+            return MemAt(loc=self.loc(t), addr=addr)
         return self.parse_primary()
 
     def parse_primary(self) -> Node:

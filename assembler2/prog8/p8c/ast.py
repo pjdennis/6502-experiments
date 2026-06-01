@@ -148,6 +148,21 @@ class Index(Node):
 
 
 @dataclass
+class MemAt(Node):
+    """`@(expr)` -- read or write a byte at the address `expr` (uword)."""
+    addr: Node
+    type: Type = UBYTE
+
+
+@dataclass
+class AddressOf(Node):
+    """`&name` -- the address (uword) of a named variable / array."""
+    name: str
+    sym: Optional["Symbol"] = None
+    type: Type = UWORD
+
+
+@dataclass
 class Call(Node):
     # callee can be `a.b.c` -> we keep it as a dotted path list.
     path: list[str]
