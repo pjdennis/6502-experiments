@@ -321,11 +321,29 @@ the command later milestones diff their on-target output against.
     operand on the CPU stack (`p8c/codegen.py::_emit_word_operands`),
     guarded by `tests/test_codegen_arith_e2e.py`.
 
-* **M2 -- expression parser port.** `p1/expr.p8`: the shunting-yard
-  engine over the stacks of 3.5, building nodes in the arena. Driver
-  reads one expression, serializes it. Golden: the expression corpus
-  from `tests/test_iter_parse.py` (reuse `EXPRESSIONS`), serialized by
-  Python, diffed against on-target output.
+* **M2 -- expression parser port.** `[M2a done]` `p1/expr.p8` lexes a
+  single expression into in-memory token arrays, parses it with the
+  shunting-yard engine over explicit operand/operator stacks into a
+  struct-of-arrays node arena, and serializes the arena with an
+  explicit work-stack tree walk -- all no-recursion. M2a covers atoms
+  (int/str/bool/ident incl. dotted), prefix unary (`- ~ not`), the full
+  binary precedence ladder, and parentheses; verified byte-identical to
+  the Python oracle over the M2a subset of `EXPRESSIONS`
+  (`p1/tests/test_expr.py`, `make p1-test`). `[M2b todo]` calls,
+  indexing, `@()`, `&name` (need the cons-cell arg list of 3.4 and the
+  remaining node kinds).
+  Two host-p8c bugs were found and fixed doing M2a: `mkword(hi, lo)`
+  stashed the high byte in Y, which an array-read low arg clobbered (now
+  shuffled through the stack); and the I/O shim looped forever on a
+  token ending at EOF because the emulator rewinds the input on EOF
+  (now EOF is made sticky in software -- see `p1/lexer.p8`).
+  **Representation limit:** host p8c arrays are <=256 ubyte elements with
+  a ubyte index, so M2a holds one expression's arenas in <=256-element
+  byte arrays (16-bit values split lo/hi). Whole-program parsing
+  (M3/M4) exceeds 256 nodes/tokens and so needs real 16-bit arrays
+  (uword elements, uword/large index) added to p8c first -- the next
+  host-track enhancement.
+
 
 * **M3 -- statement parser port.** `p1/stmt.p8`: the frame-stack driver
   of 3.6. Golden: full programs (the `STMT_PROGRAMS` corpus + the

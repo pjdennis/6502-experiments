@@ -1506,12 +1506,20 @@ class CodeGen:
             self.emit("  tya")
             return
         if name == "mkword":
-            # mkword(msb_byte, lsb_byte) -> uword.
+            # mkword(msb_byte, lsb_byte) -> uword, result lo in A, hi in Y.
             if len(c.args) != 2:
                 raise CodeGenError("mkword takes 2 args (msb, lsb)")
-            self._emit_byte_expr_into_a(c.args[0])
-            self.emit("  tay")            # high byte to Y
-            self._emit_byte_expr_into_a(c.args[1])  # low byte to A
+            # The high byte can't simply live in Y across the low-byte
+            # evaluation: an array read (or any Y-using expr) on the low
+            # side would clobber it. Hold the high byte on the stack and
+            # shuffle through X at the end so A=low, Y=high regardless.
+            self._emit_byte_expr_into_a(c.args[0])  # high byte
+            self.emit("  pha")
+            self._emit_byte_expr_into_a(c.args[1])  # low byte
+            self.emit("  tax")            # low -> X
+            self.emit("  pla")            # high -> A
+            self.emit("  tay")            # high -> Y
+            self.emit("  txa")            # low -> A
             return
         if name == "len":
             # len(arr) -- compile-time array length as a ubyte literal.

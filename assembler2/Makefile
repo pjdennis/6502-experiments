@@ -71,7 +71,7 @@ tinyp8-test: emulator/emulator.out
 # oracle (p8c --dump-tokens). SKIPs cleanly if vasm or the emulator are
 # missing.
 p1-test: emulator/emulator.out
-	@cd prog8 && python3 -m unittest p1.tests.test_lexer -v
+	@cd prog8 && python3 -m unittest p1.tests.test_lexer p1.tests.test_expr -v
 
 # End-to-end wendy2c golden-LCD tests. Requires vasm6502_oldstyle on
 # PATH; the script SKIPs (exits 0) if vasm is missing. Depends on the

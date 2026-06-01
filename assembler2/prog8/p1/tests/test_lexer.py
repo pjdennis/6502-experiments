@@ -104,6 +104,18 @@ class LexerEquivalence(unittest.TestCase):
         self.assertEqual(self._python_dump(src), self._ontarget_dump(src),
                          msg=f"token dump differs for {src.name}")
 
+    def test_no_trailing_newline(self):
+        # A token ending exactly at EOF (no trailing newline) must not
+        # loop: the emulator rewinds the input on EOF, so the lexer's
+        # software-sticky EOF is what stops it. Regression for that fix.
+        for snippet in ("5", "foo", "$ff", "x + 1"):
+            with self.subTest(snippet=snippet):
+                src = self.workdir / "noeol.p8"
+                src.write_bytes(snippet.encode())   # deliberately no '\n'
+                self.assertEqual(self._python_dump(src),
+                                 self._ontarget_dump(src),
+                                 msg=f"token dump differs for {snippet!r}")
+
     def test_lexer_corpus_edge_cases(self):
         # The thorough token-class corpus (every numeric base, every
         # char/string escape, keyword traps, multi-char-operator maximal

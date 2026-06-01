@@ -22,7 +22,23 @@ milestones M0..M5).
   focused edge-case corpus (every numeric base, every char/string
   escape, keyword traps, multi-char-operator maximal munch).
 
-* M2 (expressions) .. M5 (capacity) -- to come.
+* **M2a (done)** -- `expr.p8`: the on-target expression parser. Lexes a
+  single expression into in-memory token arrays, parses it with the
+  shunting-yard algorithm over explicit operand/operator stacks into a
+  struct-of-arrays node arena, and serializes the arena with an explicit
+  work-stack tree walk (no recursion anywhere). Covers atoms
+  (int/str/bool/ident incl. dotted), prefix unary (`- ~ not`), the full
+  binary precedence ladder, and parentheses. Verified byte-identical to
+  the Python oracle over the M2a subset of the `EXPRESSIONS` corpus
+  (`tests/test_expr.py`). M2b adds calls, indexing, `@()`, `&name`.
+
+* M3 (statements) .. M5 (capacity) -- to come.
+
+  **Array limit:** host p8c arrays are <=256 ubyte elements with a ubyte
+  index, so `expr.p8` keeps one expression's arenas in <=256-element
+  byte arrays (16-bit values split into `_lo`/`_hi`). Whole-program
+  parsing (M3/M4) exceeds 256 nodes, so it first needs real 16-bit
+  arrays added to p8c.
 
 ## Running
 

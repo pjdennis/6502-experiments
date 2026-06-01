@@ -1,0 +1,1086 @@
+; expr.p8 -- the Prog8 expression parser port (Phase 6, M2, on-target).
+;
+; Reads a .p8 source containing a single expression (argv[0]) and writes
+; the canonical AST S-expression (argv[1]), byte-identical to the Python
+; oracle (p8c/serialize.py::ser applied to IterParser.parse_expr).
+; Verified against the EXPRESSIONS corpus.
+;
+; Pipeline, all on the 6502:
+;   1. lex the source into in-memory token arrays (+ text/string pools),
+;   2. parse via the shunting-yard algorithm (port of iter_parse.py) over
+;      explicit operand/operator stacks, building nodes in a struct-of-
+;      arrays arena -- no recursion (Prog8 forbids it),
+;   3. serialize the arena with an explicit work-stack tree walk.
+;
+; See ../PARSER_PORT_DESIGN.md sections 3 and 4.
+;
+; Representation note: host p8c arrays are <=256 ubyte elements with a
+; ubyte index, which is plenty for ONE expression. The two arrays that
+; hold 16-bit values (a token's value and a node's value-field) are split
+; into _lo/_hi byte arrays; everything else (ids, counters, indices) fits
+; in a byte. Whole-program parsing (M3/M4) will need real 16-bit arrays
+; added to p8c -- tracked in PARSER_PORT_DESIGN / RESUME_NOTES.
+
+%target nmos
+%address $0200
+
+; ---- token kinds ----
+const ubyte TK_EOF    = 0
+const ubyte TK_INT    = 1
+const ubyte TK_STR    = 2
+const ubyte TK_IDENT  = 3
+const ubyte TK_TRUE   = 5
+const ubyte TK_FALSE  = 6
+const ubyte TK_KNOT   = 7         ; 'not'
+const ubyte TK_KAND   = 8         ; 'and'
+const ubyte TK_KOR    = 9         ; 'or'
+const ubyte TK_KXOR   = 10        ; 'xor'
+const ubyte TK_LPAREN = 11
+const ubyte TK_RPAREN = 12
+const ubyte TK_DOT    = 13
+; binary/unary operator punctuation -- the value is also the op-id used
+; by the serializer's spelling table.
+const ubyte TK_PLUS   = 20
+const ubyte TK_MINUS  = 21
+const ubyte TK_STAR   = 22
+const ubyte TK_AMP    = 23        ; &
+const ubyte TK_PIPE   = 24        ; |
+const ubyte TK_CARET  = 25        ; ^
+const ubyte TK_SHL    = 26        ; <<
+const ubyte TK_SHR    = 27        ; >>
+const ubyte TK_EQ     = 28        ; ==
+const ubyte TK_NE     = 29        ; !=
+const ubyte TK_LT     = 30        ; <
+const ubyte TK_LE     = 31        ; <=
+const ubyte TK_GT     = 32        ; >
+const ubyte TK_GE     = 33        ; >=
+const ubyte TK_TILDE  = 34        ; ~
+const ubyte TK_OTHER  = 60        ; any other punctuation (stops an expr)
+
+; ---- node kinds ----
+const ubyte ND_INT   = 1
+const ubyte ND_STR   = 2
+const ubyte ND_BOOL  = 3
+const ubyte ND_IDENT = 4
+const ubyte ND_BINOP = 5
+const ubyte ND_UNOP  = 6
+
+; ---- unary op-ids ----
+const ubyte UN_NEG = 0    ; u-
+const ubyte UN_NOT = 1    ; not
+const ubyte UN_INV = 2    ; ~
+
+; ---- op-stack record kinds ----
+const ubyte OPK_BINOP  = 0
+const ubyte OPK_UNOP   = 1
+const ubyte OPK_LPAREN = 2
+
+const ubyte UNARY_PREC = 110
+
+; ---- module state ----
+ubyte src_hand
+ubyte dst_hand
+ubyte peek_buf
+ubyte peek_ok
+ubyte src_eof
+
+; token arrays (value split lo/hi; INT holds a 16-bit value, IDENT/STR
+; hold a small id in the low byte)
+ubyte[256] tok_kind
+ubyte[256] tok_val_lo
+ubyte[256] tok_val_hi
+ubyte tok_count
+ubyte tok_pos
+
+; identifier text pool
+ubyte[256] ident_pool
+ubyte[64]  ident_off
+ubyte[64]  ident_len
+ubyte ident_count
+ubyte ident_pool_len
+
+; string literal pool (decoded bytes)
+ubyte[256] str_pool
+ubyte[32]  str_off
+ubyte[32]  str_len
+ubyte str_count
+ubyte str_pool_len
+
+; scratch for the identifier / dotted path currently being built
+ubyte[64] name_buf
+ubyte name_len
+
+uword int_val            ; current numeric literal value
+
+; node arena (struct of arrays; value-field split lo/hi)
+ubyte[256] node_kind
+ubyte[256] node_op
+ubyte[256] node_a_lo
+ubyte[256] node_a_hi
+ubyte[256] node_b
+ubyte node_count
+
+; expression stacks
+ubyte[128] operand_stack
+ubyte operand_sp
+ubyte[128] op_kind
+ubyte[128] op_op
+ubyte[128] op_prec
+ubyte op_sp
+
+; serializer work stack (parallel arrays)
+ubyte[256] ws_type       ; 0=node, 1=close-paren, 2=newline
+ubyte[256] ws_node
+ubyte[256] ws_depth
+ubyte ws_sp
+
+uword dec_v              ; out_dec scratch
+ubyte dec_started
+
+
+; ---- syscall asmsubs (nmos file I/O) ----
+asmsub _exit(ubyte code) = $F00F
+asmsub _close(ubyte handle) = $F015
+
+sub _argv(ubyte i) -> uword {
+    %asm{{ "lda p8v__argv_arg_i\njsr $f01e\npha\ntxa\ntay\npla\nrts" }}
+}
+sub _open(uword filename) -> ubyte {
+    %asm{{ "lda p8v__open_arg_filename\nldx p8v__open_arg_filename+1\njsr $f012\nrts" }}
+}
+sub _openout(uword filename) -> ubyte {
+    %asm{{ "lda p8v__openout_arg_filename\nldx p8v__openout_arg_filename+1\njsr $f021\nrts" }}
+}
+sub _read(ubyte handle) -> ubyte {
+    %asm{{ "lda p8v__read_arg_handle\njsr $f018\nbcc .ok\nlda #1\nsta p8v_src_eof\nlda #0\nrts\n.ok:\nsta __p8c_tmp0\nlda #0\nsta p8v_src_eof\nlda __p8c_tmp0\nrts" }}
+}
+sub _write(ubyte b, ubyte handle) {
+    %asm{{ "ldx p8v__write_arg_handle\nlda p8v__write_arg_b\njsr $f024\nrts" }}
+}
+
+
+; ---- source / dest I/O ----
+; The emulator rewinds the input to offset 0 on EOF (to support two-pass
+; readers), so EOF must be made sticky in software -- otherwise a token
+; ending exactly at EOF (no trailing newline) re-reads the rewound file
+; forever. See p1/lexer.p8 for the same shim.
+sub read_src() -> ubyte {
+    if peek_ok != 0 {
+        peek_ok = 0
+        return peek_buf
+    }
+    if src_eof != 0 {
+        return 0
+    }
+    return _read(src_hand)
+}
+sub peek_src() -> ubyte {
+    if peek_ok != 0 {
+        return peek_buf
+    }
+    if src_eof != 0 {
+        return 0
+    }
+    ubyte b
+    b = _read(src_hand)
+    if src_eof != 0 {
+        return 0
+    }
+    peek_buf = b
+    peek_ok = 1
+    return peek_buf
+}
+sub out_byte(ubyte b) {
+    _write(b, dst_hand)
+}
+
+
+; ---- character classes ----
+sub is_digit(ubyte c) -> ubyte {
+    if c >= $30 {
+        if c <= $39 {
+            return 1
+        }
+    }
+    return 0
+}
+sub is_alpha_us(ubyte c) -> ubyte {
+    if c >= $61 {
+        if c <= $7a {
+            return 1
+        }
+    }
+    if c >= $41 {
+        if c <= $5a {
+            return 1
+        }
+    }
+    if c == $5f {
+        return 1
+    }
+    return 0
+}
+sub is_alnum_us(ubyte c) -> ubyte {
+    if is_alpha_us(c) != 0 {
+        return 1
+    }
+    return is_digit(c)
+}
+sub is_hexdig(ubyte c) -> ubyte {
+    if is_digit(c) != 0 {
+        return 1
+    }
+    if c >= $61 {
+        if c <= $66 {
+            return 1
+        }
+    }
+    if c >= $41 {
+        if c <= $46 {
+            return 1
+        }
+    }
+    return 0
+}
+sub hex_nibble(ubyte c) -> ubyte {
+    if c >= $61 {
+        return c - $57
+    }
+    if c >= $41 {
+        return c - $37
+    }
+    return c - $30
+}
+
+
+; ---- decimal output (power-of-ten subtraction) ----
+sub out_dec_place(uword p) {
+    ubyte d
+    d = 0
+    repeat {
+        if dec_v < p {
+            break
+        }
+        dec_v = dec_v - p
+        d = d + 1
+    }
+    if d != 0 {
+        dec_started = 1
+    }
+    if dec_started != 0 {
+        out_byte(d + $30)
+    }
+}
+sub out_dec(uword v) {
+    dec_v = v
+    dec_started = 0
+    out_dec_place(10000)
+    out_dec_place(1000)
+    out_dec_place(100)
+    out_dec_place(10)
+    out_byte(lsb(dec_v) + $30)
+}
+
+
+; ---- numeric scanners ----
+sub read_hex() {
+    int_val = 0
+    repeat {
+        ubyte c
+        c = peek_src()
+        if src_eof != 0 {
+            return
+        }
+        if c == $5f {
+            c = read_src()
+        } else {
+            if is_hexdig(c) != 0 {
+                c = read_src()
+                int_val = (int_val << 4) + hex_nibble(c)
+            } else {
+                return
+            }
+        }
+    }
+}
+sub read_bin() {
+    int_val = 0
+    repeat {
+        ubyte c
+        c = peek_src()
+        if src_eof != 0 {
+            return
+        }
+        if c == $5f {
+            c = read_src()
+        } else {
+            if c == $30 {
+                c = read_src()
+                int_val = int_val << 1
+            } else {
+                if c == $31 {
+                    c = read_src()
+                    int_val = (int_val << 1) + 1
+                } else {
+                    return
+                }
+            }
+        }
+    }
+}
+sub read_dec() {
+    int_val = 0
+    repeat {
+        ubyte c
+        c = peek_src()
+        if src_eof != 0 {
+            return
+        }
+        if c == $5f {
+            c = read_src()
+        } else {
+            if is_digit(c) != 0 {
+                c = read_src()
+                int_val = (int_val << 3) + (int_val << 1) + (c - $30)
+            } else {
+                return
+            }
+        }
+    }
+}
+
+sub decode_escape_val(ubyte e) -> ubyte {
+    if e == $6e { return $0a }
+    if e == $72 { return $0d }
+    if e == $74 { return $09 }
+    if e == $30 { return $00 }
+    if e == $27 { return $27 }
+    if e == $5c { return $5c }
+    if e == $22 { return $22 }
+    if e == $78 {
+        ubyte h1
+        ubyte h2
+        h1 = read_src()
+        h2 = read_src()
+        return (hex_nibble(h1) << 4) + hex_nibble(h2)
+    }
+    return e
+}
+
+
+; ---- identifier read + keyword classification ----
+sub read_ident() {
+    name_len = 0
+    repeat {
+        ubyte c
+        c = peek_src()
+        if src_eof != 0 {
+            return
+        }
+        if is_alnum_us(c) != 0 {
+            c = read_src()
+            if name_len < 64 {
+                name_buf[name_len] = c
+                name_len = name_len + 1
+            }
+        } else {
+            return
+        }
+    }
+}
+
+; intern name_buf[0..name_len-1] into the ident pool, returning its id.
+sub intern_name() -> ubyte {
+    ubyte i
+    i = 0
+    repeat {
+        if i >= ident_count {
+            break
+        }
+        if ident_len[i] == name_len {
+            ubyte off
+            ubyte j
+            ubyte match
+            off = ident_off[i]
+            match = 1
+            j = 0
+            repeat {
+                if j >= name_len {
+                    break
+                }
+                if ident_pool[off + j] != name_buf[j] {
+                    match = 0
+                    break
+                }
+                j = j + 1
+            }
+            if match != 0 {
+                return i
+            }
+        }
+        i = i + 1
+    }
+    ; append
+    ident_off[ident_count] = ident_pool_len
+    ident_len[ident_count] = name_len
+    ubyte k
+    k = 0
+    repeat {
+        if k >= name_len {
+            break
+        }
+        ident_pool[ident_pool_len] = name_buf[k]
+        ident_pool_len = ident_pool_len + 1
+        k = k + 1
+    }
+    ubyte id
+    id = ident_count
+    ident_count = ident_count + 1
+    return id
+}
+
+; classify name_buf as a token kind (operator/literal keywords get their
+; own kinds; everything else -> identifier, which simply stops the expr
+; if it isn't a valid operand here).
+sub classify_name() -> ubyte {
+    if name_len == 2 {
+        if name_buf[0]==$6f and name_buf[1]==$72 { return TK_KOR }
+    }
+    if name_len == 3 {
+        if name_buf[0]==$61 and name_buf[1]==$6e and name_buf[2]==$64 { return TK_KAND }
+        if name_buf[0]==$6e and name_buf[1]==$6f and name_buf[2]==$74 { return TK_KNOT }
+        if name_buf[0]==$78 and name_buf[1]==$6f and name_buf[2]==$72 { return TK_KXOR }
+    }
+    if name_len == 4 {
+        if name_buf[0]==$74 and name_buf[1]==$72 and name_buf[2]==$75 and name_buf[3]==$65 { return TK_TRUE }
+    }
+    if name_len == 5 {
+        if name_buf[0]==$66 and name_buf[1]==$61 and name_buf[2]==$6c and name_buf[3]==$73 and name_buf[4]==$65 { return TK_FALSE }
+    }
+    return TK_IDENT
+}
+
+
+; ---- token storage ----
+sub push_token(ubyte kind, uword val) {
+    tok_kind[tok_count] = kind
+    tok_val_lo[tok_count] = lsb(val)
+    tok_val_hi[tok_count] = msb(val)
+    tok_count = tok_count + 1
+}
+
+
+; ---- the lexer: source -> token arrays ----
+sub lex_all() {
+    repeat {
+        ubyte c
+        c = peek_src()
+        if src_eof != 0 {
+            break
+        }
+        if c == $20 { c = read_src()  continue }
+        if c == $09 { c = read_src()  continue }
+        if c == $0a { c = read_src()  continue }
+        if c == $0d { c = read_src()  continue }
+        if c == $3b {
+            repeat {
+                c = read_src()
+                if src_eof != 0 { break }
+                if c == $0a { break }
+            }
+            continue
+        }
+        if c == $25 {                              ; '%'
+            c = read_src()
+            ubyte c2
+            c2 = peek_src()
+            if src_eof == 0 {
+                if c2 == $30 { read_bin()  push_token(TK_INT, int_val)  continue }
+                if c2 == $31 { read_bin()  push_token(TK_INT, int_val)  continue }
+            }
+            push_token(TK_OTHER, 0)
+            continue
+        }
+        if c == $24 {                              ; '$' hex
+            c = read_src()
+            read_hex()
+            push_token(TK_INT, int_val)
+            continue
+        }
+        if is_digit(c) != 0 {
+            read_dec()
+            push_token(TK_INT, int_val)
+            continue
+        }
+        if c == $27 {                              ; char literal -> INT
+            c = read_src()
+            c = read_src()
+            if c == $5c {
+                ubyte e
+                e = read_src()
+                int_val = decode_escape_val(e)
+            } else {
+                int_val = c
+            }
+            c = read_src()
+            push_token(TK_INT, int_val)
+            continue
+        }
+        if c == $22 {                              ; string literal
+            c = read_src()
+            str_off[str_count] = str_pool_len
+            repeat {
+                c = read_src()
+                if src_eof != 0 { break }
+                if c == $22 { break }
+                ubyte rb
+                if c == $5c {
+                    ubyte se
+                    se = read_src()
+                    rb = decode_escape_val(se)
+                } else {
+                    rb = c
+                }
+                str_pool[str_pool_len] = rb
+                str_pool_len = str_pool_len + 1
+            }
+            str_len[str_count] = str_pool_len - str_off[str_count]
+            push_token(TK_STR, str_count)
+            str_count = str_count + 1
+            continue
+        }
+        if is_alpha_us(c) != 0 {
+            read_ident()
+            ubyte k
+            k = classify_name()
+            if k == TK_IDENT {
+                push_token(TK_IDENT, intern_name())
+            } else {
+                push_token(k, 0)
+            }
+            continue
+        }
+        c = read_src()
+        lex_operator(c)
+    }
+    push_token(TK_EOF, 0)
+}
+
+sub lex_operator(ubyte c) {
+    ubyte c2
+    if c == $28 { push_token(TK_LPAREN, 0)  return }
+    if c == $29 { push_token(TK_RPAREN, 0)  return }
+    if c == $2e { push_token(TK_DOT, 0)  return }
+    if c == $2b { push_token(TK_PLUS, 0)  return }
+    if c == $2a { push_token(TK_STAR, 0)  return }
+    if c == $7e { push_token(TK_TILDE, 0)  return }
+    if c == $26 {
+        c2 = peek_src()
+        if c2 == $26 { c2 = read_src()  push_token(TK_OTHER, 0)  return }
+        push_token(TK_AMP, 0)
+        return
+    }
+    if c == $7c { push_token(TK_PIPE, 0)  return }
+    if c == $5e { push_token(TK_CARET, 0)  return }
+    if c == $2d {
+        c2 = peek_src()
+        if c2 == $2d { c2 = read_src()  push_token(TK_OTHER, 0)  return }
+        if c2 == $3e { c2 = read_src()  push_token(TK_OTHER, 0)  return }
+        if c2 == $3d { c2 = read_src()  push_token(TK_OTHER, 0)  return }
+        push_token(TK_MINUS, 0)
+        return
+    }
+    if c == $3c {
+        c2 = peek_src()
+        if c2 == $3c { c2 = read_src()  push_token(TK_SHL, 0)  return }
+        if c2 == $3d { c2 = read_src()  push_token(TK_LE, 0)  return }
+        push_token(TK_LT, 0)
+        return
+    }
+    if c == $3e {
+        c2 = peek_src()
+        if c2 == $3e { c2 = read_src()  push_token(TK_SHR, 0)  return }
+        if c2 == $3d { c2 = read_src()  push_token(TK_GE, 0)  return }
+        push_token(TK_GT, 0)
+        return
+    }
+    if c == $3d {
+        c2 = peek_src()
+        if c2 == $3d { c2 = read_src()  push_token(TK_EQ, 0)  return }
+        push_token(TK_OTHER, 0)
+        return
+    }
+    if c == $21 {
+        c2 = peek_src()
+        if c2 == $3d { c2 = read_src()  push_token(TK_NE, 0)  return }
+        push_token(TK_OTHER, 0)
+        return
+    }
+    push_token(TK_OTHER, 0)
+}
+
+
+; ---- token cursor ----
+sub cur_kind() -> ubyte {
+    return tok_kind[tok_pos]
+}
+sub cur_val_word() -> uword {
+    return mkword(tok_val_hi[tok_pos], tok_val_lo[tok_pos])
+}
+sub advance() {
+    tok_pos = tok_pos + 1
+}
+
+
+; ---- node arena ----
+sub new_node(ubyte kind, ubyte op, uword a, ubyte b) -> ubyte {
+    ubyte id
+    id = node_count
+    node_kind[id] = kind
+    node_op[id] = op
+    node_a_lo[id] = lsb(a)
+    node_a_hi[id] = msb(a)
+    node_b[id] = b
+    node_count = node_count + 1
+    return id
+}
+sub node_a_word(ubyte id) -> uword {
+    return mkword(node_a_hi[id], node_a_lo[id])
+}
+
+
+; ---- operator precedence (matches p8c._OP_PRECEDENCE) ----
+sub bin_prec(ubyte k) -> ubyte {
+    if k == TK_KOR { return 0 }
+    if k == TK_KXOR { return 0 }
+    if k == TK_KAND { return 1 }
+    if k == TK_EQ { return 2 }
+    if k == TK_NE { return 2 }
+    if k == TK_LT { return 3 }
+    if k == TK_LE { return 3 }
+    if k == TK_GT { return 3 }
+    if k == TK_GE { return 3 }
+    if k == TK_PIPE { return 4 }
+    if k == TK_CARET { return 5 }
+    if k == TK_AMP { return 6 }
+    if k == TK_SHL { return 7 }
+    if k == TK_SHR { return 7 }
+    if k == TK_PLUS { return 8 }
+    if k == TK_MINUS { return 8 }
+    if k == TK_STAR { return 9 }
+    return 255
+}
+sub is_binop(ubyte k) -> ubyte {
+    if bin_prec(k) == 255 {
+        return 0
+    }
+    return 1
+}
+
+
+; ---- shunting-yard ----
+sub push_operand(ubyte node) {
+    operand_stack[operand_sp] = node
+    operand_sp = operand_sp + 1
+}
+sub push_op(ubyte k, ubyte op, ubyte prec) {
+    op_kind[op_sp] = k
+    op_op[op_sp] = op
+    op_prec[op_sp] = prec
+    op_sp = op_sp + 1
+}
+
+sub apply_top() {
+    op_sp = op_sp - 1
+    ubyte k
+    k = op_kind[op_sp]
+    if k == OPK_BINOP {
+        operand_sp = operand_sp - 1
+        ubyte rhs
+        rhs = operand_stack[operand_sp]
+        operand_sp = operand_sp - 1
+        ubyte lhs
+        lhs = operand_stack[operand_sp]
+        operand_stack[operand_sp] = new_node(ND_BINOP, op_op[op_sp], lhs, rhs)
+        operand_sp = operand_sp + 1
+    } else {
+        operand_sp = operand_sp - 1
+        ubyte operand
+        operand = operand_stack[operand_sp]
+        operand_stack[operand_sp] = new_node(ND_UNOP, op_op[op_sp], operand, 0)
+        operand_sp = operand_sp + 1
+    }
+}
+
+sub top_prec() -> ubyte {
+    if op_kind[op_sp - 1] == OPK_UNOP {
+        return UNARY_PREC
+    }
+    return op_prec[op_sp - 1]
+}
+
+sub reduce_to_marker() {
+    repeat {
+        if op_sp == 0 {
+            return
+        }
+        if op_kind[op_sp - 1] == OPK_LPAREN {
+            return
+        }
+        apply_top()
+    }
+}
+
+
+; build a dotted identifier node from IDENT (DOT IDENT)* at the cursor.
+sub append_ident_to_namebuf(ubyte id) {
+    ubyte off
+    ubyte n
+    ubyte j
+    off = ident_off[id]
+    n = ident_len[id]
+    j = 0
+    repeat {
+        if j >= n {
+            break
+        }
+        name_buf[name_len] = ident_pool[off + j]
+        name_len = name_len + 1
+        j = j + 1
+    }
+}
+sub parse_ident_node() -> ubyte {
+    name_len = 0
+    append_ident_to_namebuf(lsb(cur_val_word()))
+    advance()
+    repeat {
+        if cur_kind() != TK_DOT {
+            break
+        }
+        if tok_kind[tok_pos + 1] != TK_IDENT {
+            break
+        }
+        advance()                                  ; consume '.'
+        name_buf[name_len] = $2e
+        name_len = name_len + 1
+        append_ident_to_namebuf(lsb(cur_val_word()))
+        advance()                                  ; consume IDENT
+    }
+    return new_node(ND_IDENT, 0, intern_name(), 0)
+}
+
+
+sub parse_expr() -> ubyte {
+    operand_sp = 0
+    op_sp = 0
+    ubyte expect_operand
+    expect_operand = 1
+
+    repeat {
+        ubyte t
+        t = cur_kind()
+
+        if t == TK_RPAREN {
+            reduce_to_marker()
+            if op_sp == 0 {
+                break
+            }
+            if op_kind[op_sp - 1] == OPK_LPAREN {
+                op_sp = op_sp - 1
+                advance()
+                expect_operand = 0
+                continue
+            }
+            break
+        }
+
+        if expect_operand != 0 {
+            if t == TK_INT {
+                push_operand(new_node(ND_INT, 0, cur_val_word(), 0))
+                advance()
+                expect_operand = 0
+                continue
+            }
+            if t == TK_STR {
+                push_operand(new_node(ND_STR, 0, cur_val_word(), 0))
+                advance()
+                expect_operand = 0
+                continue
+            }
+            if t == TK_TRUE {
+                push_operand(new_node(ND_BOOL, 0, 1, 0))
+                advance()
+                expect_operand = 0
+                continue
+            }
+            if t == TK_FALSE {
+                push_operand(new_node(ND_BOOL, 0, 0, 0))
+                advance()
+                expect_operand = 0
+                continue
+            }
+            if t == TK_KNOT {
+                push_op(OPK_UNOP, UN_NOT, 0)
+                advance()
+                continue
+            }
+            if t == TK_TILDE {
+                push_op(OPK_UNOP, UN_INV, 0)
+                advance()
+                continue
+            }
+            if t == TK_MINUS {
+                push_op(OPK_UNOP, UN_NEG, 0)
+                advance()
+                continue
+            }
+            if t == TK_LPAREN {
+                push_op(OPK_LPAREN, 0, 0)
+                advance()
+                continue
+            }
+            if t == TK_IDENT {
+                push_operand(parse_ident_node())
+                expect_operand = 0
+                continue
+            }
+            break
+        }
+
+        ; infix position
+        if is_binop(t) != 0 {
+            ubyte prec
+            prec = bin_prec(t)
+            repeat {
+                if op_sp == 0 {
+                    break
+                }
+                if op_kind[op_sp - 1] == OPK_LPAREN {
+                    break
+                }
+                if top_prec() < prec {
+                    break
+                }
+                apply_top()
+            }
+            push_op(OPK_BINOP, t, prec)
+            advance()
+            expect_operand = 1
+            continue
+        }
+        break
+    }
+
+    repeat {
+        if op_sp == 0 {
+            break
+        }
+        apply_top()
+    }
+    operand_sp = operand_sp - 1
+    return operand_stack[operand_sp]
+}
+
+
+; ---- serialization (iterative tree walk over the arena) ----
+sub ws_push_node(ubyte node, ubyte depth) {
+    ws_type[ws_sp] = 0
+    ws_node[ws_sp] = node
+    ws_depth[ws_sp] = depth
+    ws_sp = ws_sp + 1
+}
+sub ws_push_simple(ubyte typ) {
+    ws_type[ws_sp] = typ
+    ws_sp = ws_sp + 1
+}
+
+sub out_indent(ubyte depth) {
+    ubyte i
+    i = 0
+    repeat {
+        if i >= depth {
+            break
+        }
+        out_byte($20)
+        out_byte($20)
+        i = i + 1
+    }
+}
+
+sub out_binop_spelling(ubyte op) {
+    if op == TK_PLUS  { out_byte($2b)  return }
+    if op == TK_MINUS { out_byte($2d)  return }
+    if op == TK_STAR  { out_byte($2a)  return }
+    if op == TK_AMP   { out_byte($26)  return }
+    if op == TK_PIPE  { out_byte($7c)  return }
+    if op == TK_CARET { out_byte($5e)  return }
+    if op == TK_SHL   { out_byte($3c)  out_byte($3c)  return }
+    if op == TK_SHR   { out_byte($3e)  out_byte($3e)  return }
+    if op == TK_EQ    { out_byte($3d)  out_byte($3d)  return }
+    if op == TK_NE    { out_byte($21)  out_byte($3d)  return }
+    if op == TK_LT    { out_byte($3c)  return }
+    if op == TK_LE    { out_byte($3c)  out_byte($3d)  return }
+    if op == TK_GT    { out_byte($3e)  return }
+    if op == TK_GE    { out_byte($3e)  out_byte($3d)  return }
+    if op == TK_KAND  { out_byte($61) out_byte($6e) out_byte($64)  return }
+    if op == TK_KOR   { out_byte($6f) out_byte($72)  return }
+    if op == TK_KXOR  { out_byte($78) out_byte($6f) out_byte($72)  return }
+}
+
+sub out_unop_spelling(ubyte op) {
+    if op == UN_NEG { out_byte($75)  out_byte($2d)  return }
+    if op == UN_INV { out_byte($7e)  return }
+    if op == UN_NOT { out_byte($6e) out_byte($6f) out_byte($74)  return }
+}
+
+sub out_ident_text(ubyte id) {
+    ubyte off
+    ubyte n
+    ubyte j
+    off = ident_off[id]
+    n = ident_len[id]
+    j = 0
+    repeat {
+        if j >= n {
+            break
+        }
+        out_byte(ident_pool[off + j])
+        j = j + 1
+    }
+}
+
+sub out_str_escaped(ubyte id) {
+    ubyte off
+    ubyte n
+    ubyte j
+    off = str_off[id]
+    n = str_len[id]
+    j = 0
+    repeat {
+        if j >= n {
+            break
+        }
+        ubyte rb
+        rb = str_pool[off + j]
+        if rb == $5c { out_byte($5c)  out_byte($5c) }
+        else {
+            if rb == $22 { out_byte($5c)  out_byte($22) }
+            else {
+                if rb == $0a { out_byte($5c)  out_byte($6e) }
+                else {
+                    if rb == $0d { out_byte($5c)  out_byte($72) }
+                    else {
+                        if rb == $09 { out_byte($5c)  out_byte($74) }
+                        else { out_byte(rb) }
+                    }
+                }
+            }
+        }
+        j = j + 1
+    }
+}
+
+sub emit_node(ubyte node, ubyte depth) {
+    out_indent(depth)
+    out_byte($28)                                  ; '('
+    ubyte k
+    k = node_kind[node]
+    if k == ND_INT {
+        out_byte($69) out_byte($6e) out_byte($74) out_byte($20)   ; "int "
+        out_dec(node_a_word(node))
+        out_byte($29)
+        return
+    }
+    if k == ND_BOOL {
+        out_byte($62) out_byte($6f) out_byte($6f) out_byte($6c) out_byte($20)  ; "bool "
+        if node_a_lo[node] != 0 {
+            out_byte($74) out_byte($72) out_byte($75) out_byte($65)
+        } else {
+            out_byte($66) out_byte($61) out_byte($6c) out_byte($73) out_byte($65)
+        }
+        out_byte($29)
+        return
+    }
+    if k == ND_IDENT {
+        out_byte($69) out_byte($64) out_byte($20)                  ; "id "
+        out_ident_text(node_a_lo[node])
+        out_byte($29)
+        return
+    }
+    if k == ND_STR {
+        out_byte($73) out_byte($74) out_byte($72) out_byte($20) out_byte($22)  ; str "
+        out_str_escaped(node_a_lo[node])
+        out_byte($22)
+        out_byte($29)
+        return
+    }
+    if k == ND_BINOP {
+        out_binop_spelling(node_op[node])
+        ws_push_simple(1)                          ; close paren
+        ws_push_node(node_b[node], depth + 1)      ; rhs
+        ws_push_simple(2)                          ; newline
+        ws_push_node(node_a_lo[node], depth + 1)   ; lhs
+        ws_push_simple(2)                          ; newline
+        return
+    }
+    if k == ND_UNOP {
+        out_unop_spelling(node_op[node])
+        ws_push_simple(1)
+        ws_push_node(node_a_lo[node], depth + 1)   ; operand
+        ws_push_simple(2)
+        return
+    }
+}
+
+sub serialize(ubyte root) {
+    ws_sp = 0
+    ws_push_node(root, 0)
+    repeat {
+        if ws_sp == 0 {
+            break
+        }
+        ws_sp = ws_sp - 1
+        ubyte typ
+        typ = ws_type[ws_sp]
+        if typ == 0 {
+            emit_node(ws_node[ws_sp], ws_depth[ws_sp])
+        } else {
+            if typ == 1 {
+                out_byte($29)
+            } else {
+                out_byte($0a)
+            }
+        }
+    }
+    out_byte($0a)
+}
+
+
+; ---- main ----
+main {
+    uword fn
+    fn = _argv(0)
+    src_hand = _open(fn)
+    fn = _argv(1)
+    dst_hand = _openout(fn)
+
+    peek_ok = 0
+    src_eof = 0
+    tok_count = 0
+    tok_pos = 0
+    ident_count = 0
+    ident_pool_len = 0
+    str_count = 0
+    str_pool_len = 0
+    node_count = 1                                 ; node 0 = null
+    operand_sp = 0
+    op_sp = 0
+
+    lex_all()
+    ubyte root
+    root = parse_expr()
+    serialize(root)
+
+    _close(src_hand)
+    _close(dst_hand)
+}

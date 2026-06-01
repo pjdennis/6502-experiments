@@ -34,6 +34,7 @@ ubyte p
 ubyte q
 ubyte r
 ubyte s
+ubyte[4] arr
 asmsub _close(ubyte handle) = $F015
 sub _argv(ubyte i) -> uword {
     %asm{{ "lda p8v__argv_arg_i\\njsr $f01e\\npha\\ntxa\\ntay\\npla\\nrts" }}
@@ -65,6 +66,10 @@ _CASES = [
     ("p = 1  q = 2  r = 3  s = 4  b = (p + q) + (r + s)  _write(b, dst)", [10]),
     # byte multiply with a non-leaf RHS (exercises the tmp1 slot fix)
     ("p = 3  q = 2  r = 2  b = p * (q + r)  _write(b, dst)", [12]),
+    # mkword whose low-byte arg is an array read: the array index uses Y,
+    # which must not clobber the stashed high byte.
+    ("arr[0] = 1  arr[1] = 2  w = mkword(arr[0], arr[1])  "
+     "_write(msb(w), dst)  _write(lsb(w), dst)", [1, 2]),
 ]
 
 

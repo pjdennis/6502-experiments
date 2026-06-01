@@ -192,8 +192,18 @@ Recommended approach:
      the 6502, verified byte-identical over examples + snapshots +
      `tinyp8.p8` + the lexer lexing its own source + the edge-case
      corpus (`p1/tests/test_lexer.py`, `make p1-test`).
-   * `[todo]` M2 expr -> M3 stmt -> M4 whole-program on-target -> M5
-     capacity/streaming. M2 is next.
+   * `[in progress]` **M2 -- expression parser port.** M2a done:
+     `p1/expr.p8` lexes one expression to token arrays, parses it
+     (shunting-yard over explicit stacks into a node arena), and
+     serializes it (explicit work-stack walk) byte-identical to the
+     oracle over the M2a subset of `EXPRESSIONS` (atoms, unary, binary
+     ladder, parens; `p1/tests/test_expr.py`). M2b (calls, indexing,
+     `@()`, `&name`) remains. Two host-p8c bugs fixed en route (mkword
+     Y-clobber; I/O EOF-stickiness vs the emulator's rewind-on-EOF).
+   * `[todo]` M3 stmt -> M4 whole-program on-target -> M5
+     capacity/streaming. NB: M3/M4 exceed 256 nodes/tokens, so they
+     first need real 16-bit arrays (uword elements + uword/large index)
+     added to p8c -- the next host-track enhancement.
 
 Estimated remaining effort: the Prog8 port (step 5) is the last piece,
 and it feeds directly into Phase 7. The iterative parser is now the
@@ -254,7 +264,7 @@ Branch `claude/prog8-bootstrap-continue-6Pzo0` (continues the
   on-disk goldens. M1 (lexer port to `p1/`) is next.
 * Phase 7-8: blocked on the rest of the Phase 6 Prog8 port (M1-M4).
 
-146 tests green (host p8c 103, tinyp8 22, p1 21). Self-host equivalence holds for the v0/v1 corpus.
+148 tests green (host p8c 103, tinyp8 22, p1 23). Self-host equivalence holds for the v0/v1 corpus.
 
 ---
 

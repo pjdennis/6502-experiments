@@ -72,24 +72,38 @@ sub _write(ubyte b, ubyte handle) {
 
 ; ---- source / destination I/O ----
 
+; NB: the emulator REWINDS the input file to offset 0 when a read hits
+; EOF (it supports two-pass tools re-reading their input). So EOF is not
+; sticky at the syscall level -- read again and you get the file from the
+; top. We make it sticky in software: once src_eof is set, never call
+; _read again. Without this, a token that ends exactly at EOF (e.g. a
+; file with no trailing newline) loops forever re-reading the rewound
+; source.
 sub read_src() -> ubyte {
     if peek_ok != 0 {
         peek_ok = 0
         return peek_buf
     }
+    if src_eof != 0 {
+        return 0
+    }
     return _read(src_hand)
 }
 
 sub peek_src() -> ubyte {
-    if peek_ok == 0 {
-        ubyte b
-        b = _read(src_hand)
-        if src_eof != 0 {
-            return 0
-        }
-        peek_buf = b
-        peek_ok = 1
+    if peek_ok != 0 {
+        return peek_buf
     }
+    if src_eof != 0 {
+        return 0
+    }
+    ubyte b
+    b = _read(src_hand)
+    if src_eof != 0 {
+        return 0
+    }
+    peek_buf = b
+    peek_ok = 1
     return peek_buf
 }
 

@@ -66,7 +66,7 @@ is the source of truth across sessions.
   * 5 v0/v1 e2e (`tinyp8/tests/test_e2e.py`).
   * 5 v0/v1 self-host equivalence (`test_self_host.py`).
   * 12 v2..v9 .p8-only (`test_v2.py`, sources in `goldens_v2/`).
-  * **146 total, all green** (the 22 tinyp8 + 21 p1 cases need vasm; see the
+  * **148 total, all green** (the 22 tinyp8 + 23 p1 cases need vasm; see the
     environment note above).
 
 Run:
@@ -271,11 +271,21 @@ Progress:
        examples + snapshots + `tinyp8.p8` + the lexer lexing its OWN
        source + the edge-case corpus (`p1/tests/test_lexer.py`,
        `make p1-test`, 21 tests). See `p1/README.md`.
-     * **M2 NEXT -- expression parser port.** `p1/expr.p8`: the
-       shunting-yard engine (PARSER_PORT_DESIGN section 3.5) over the
-       node arena + operand/operator stacks, driver serializes one
-       expression. Golden: the `EXPRESSIONS` corpus, serialized.
-       Then M3 stmt, M4 whole-program on-target, M5 capacity.
+     * **M2a DONE -- expression parser port (core).** `p1/expr.p8`
+       lexes one expression to token arrays, parses it (shunting-yard
+       over explicit operand/operator stacks into a struct-of-arrays
+       node arena), and serializes it (explicit work-stack walk) --
+       byte-identical to the oracle over the M2a subset of `EXPRESSIONS`
+       (atoms, prefix unary, binary ladder, parens). `p1/tests/test_expr.py`,
+       `make p1-test`. Two host-p8c bugs fixed en route (mkword
+       Y-clobber; I/O EOF-stickiness) -- see pitfalls below.
+     * **M2b NEXT -- calls, indexing, `@()`, `&name`.** Adds the
+       cons-cell arg list (design 3.4) and the CALL/INDEX/MEMAT/ADDROF
+       node kinds + their serialization, re-enabling the filtered-out
+       `EXPRESSIONS` entries.
+     * **M3/M4 blocker:** whole-program parsing exceeds 256 nodes/tokens,
+       so it needs real 16-bit arrays (uword elements + uword/large
+       index) added to p8c first -- the next host-track enhancement.
 
 The caveat below (fixed frame layout) is addressed in the design doc's
 section 3.6 -- parallel arrays sized for the widest frame kind.
@@ -302,6 +312,28 @@ when a demo or tinyp8 push needs them.
 ---
 
 ## Pitfalls / gotchas observed this session
+
+* **Host p8c codegen: `mkword` Y-clobber -- FIXED.** `mkword(hi, lo)`
+  stashed the high byte in Y, then evaluated the low arg; if that arg
+  was an array read (which uses Y for indexing) the high byte was lost.
+  Fix in `p8c/codegen.py`: hold the high byte on the stack and shuffle
+  through X so A=low, Y=high regardless. Guarded by a case in
+  `tests/test_codegen_arith_e2e.py`.
+
+* **Emulator rewinds input on EOF (by design, not a bug).** The read
+  syscall does `fseek(f, 0, SEEK_SET)` at EOF (so two-pass tools like
+  asm17 can re-read their input). EOF is therefore NOT sticky at the
+  syscall level: read past EOF and you get the file from the top again.
+  A single-pass reader must make EOF sticky in software (once `src_eof`
+  is set, never call `_read` again) -- see `p1/lexer.p8` / `p1/expr.p8`
+  peek_src/read_src. Without it, a token ending exactly at EOF (input
+  with no trailing newline) loops forever. Latent in lexer.p8 too,
+  masked because the test corpus files all end in newline.
+
+* **Host p8c arrays are <=256 ubyte elements, ubyte index.** No uword
+  elements, no >256 arrays, no uword index. `p1/expr.p8` works within
+  this (one expression: split 16-bit values lo/hi, cap at 256). M3/M4
+  whole-program parsing needs real 16-bit arrays added to p8c first.
 
 * **Host p8c codegen: dual-scratch binary expression bug -- FIXED.** An
   expression where BOTH operands of a binary op each need a scratch temp
