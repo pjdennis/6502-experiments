@@ -24,8 +24,8 @@ from typing import Optional
 from .ast import (
     AddressOf, Assign, BinOp, Block, BoolLit, Break, Call, Continue,
     ExprStmt, For, Ident, If, Index, InlineAsm, IntLit, Loc, MemAt, Node,
-    Param, Program, Repeat, Return, StrLit, Sub, UnaryOp, VarDecl, While,
-    type_from_name,
+    Param, Program, Repeat, Return, StrLit, Sub, UnaryOp, VarDecl, When,
+    WhenChoice, While, type_from_name,
 )
 from .lex import Token
 
@@ -103,6 +103,13 @@ class Parser:
                 self.parse_directive(prog)
             elif t.kind == "KW" and t.value == "sub":
                 prog.subs.append(self.parse_sub())
+            elif t.kind == "KW" and t.value == "inline":
+                # `inline sub ...` -- inlined at every call site.
+                self.pos += 1
+                self.eat("KW", "sub")
+                s = self.parse_sub_body_after_kw()
+                s.is_inline = True
+                prog.subs.append(s)
             elif t.kind == "KW" and t.value == "asmsub":
                 prog.subs.append(self.parse_asmsub())
             elif t.kind == "KW" and t.value == "const":
@@ -158,7 +165,12 @@ class Parser:
             )
 
     def parse_sub(self) -> Sub:
-        kw = self.eat("KW", "sub")
+        self.eat("KW", "sub")
+        return self.parse_sub_body_after_kw()
+
+    def parse_sub_body_after_kw(self) -> Sub:
+        """Parse a sub's `name(...) -> rt { body }` after the leading
+        `sub` / `inline sub` keywords have already been consumed."""
         name_tok = self.eat("IDENT")
         self.eat("(")
         params: list[Param] = []
@@ -172,7 +184,7 @@ class Parser:
             t = self.eat("KW")
             ret = t.value
         body = self.parse_block()
-        return Sub(loc=self.loc(kw), name=name_tok.value, body=body,
+        return Sub(loc=self.loc(name_tok), name=name_tok.value, body=body,
                    params=params, return_type_name=ret,
                    is_main=(name_tok.value == "main"))
 
@@ -273,6 +285,8 @@ class Parser:
                 return self.parse_if()
             if t.value == "while":
                 return self.parse_while()
+            if t.value == "when":
+                return self.parse_when()
             if t.value == "repeat":
                 return self.parse_repeat()
             if t.value == "for":
@@ -310,6 +324,27 @@ class Parser:
         cond = self.parse_expr()
         body = self.parse_block()
         return While(loc=self.loc(kw), cond=cond, body=body)
+
+    def parse_when(self) -> When:
+        kw = self.eat("KW", "when")
+        expr = self.parse_expr()
+        self.eat("{")
+        choices: list[WhenChoice] = []
+        while self.peek().kind != "}":
+            values: list[Node] = []
+            # 'else -> body' has no values; everything else is a comma
+            # list of expressions terminated by '->'.
+            if self.peek().kind == "KW" and self.peek().value == "else":
+                self.pos += 1
+            else:
+                values.append(self.parse_expr())
+                while self.match(","):
+                    values.append(self.parse_expr())
+            self.eat("->")
+            body = self.parse_block()
+            choices.append(WhenChoice(loc=self.loc(kw), values=values, body=body))
+        self.eat("}")
+        return When(loc=self.loc(kw), expr=expr, choices=choices)
 
     def parse_repeat(self) -> Repeat:
         kw = self.eat("KW", "repeat")

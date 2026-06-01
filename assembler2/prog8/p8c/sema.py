@@ -15,7 +15,8 @@ from .ast import (
     AddressOf, Assign, BinOp, Block, BoolLit, Break, Call, Continue,
     ExprStmt, For, Ident, If, Index, InlineAsm, IntLit, MemAt, Param,
     Program, Repeat, Return, StrLit, Sub, Symbol, TUByteArray, Type,
-    UnaryOp, VarDecl, While, BOOL, STR, UBYTE, UWORD, VOID, type_from_name,
+    UnaryOp, VarDecl, When, WhenChoice, While, BOOL, STR, UBYTE, UWORD,
+    VOID, type_from_name,
 )
 from .stdlib_decls import STDLIB_SYMBOLS, get_builtin
 
@@ -292,6 +293,18 @@ class Sema:
             self._walk_block(st.then_block, sub_name=sub_name)
             if st.else_block is not None:
                 self._walk_block(st.else_block, sub_name=sub_name)
+            return
+        if isinstance(st, When):
+            self._walk_expr(st.expr)
+            if st.expr.type not in (UBYTE, UWORD):
+                raise SemaError(
+                    f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
+                    f"when expression must be ubyte/uword (got {st.expr.type!r})"
+                )
+            for ch in st.choices:
+                for v in ch.values:
+                    self._walk_expr(v)
+                self._walk_block(ch.body, sub_name=sub_name)
             return
         if isinstance(st, While):
             self._walk_expr(st.cond)

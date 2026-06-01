@@ -236,6 +236,21 @@ class Repeat(Node):
 
 
 @dataclass
+class WhenChoice(Node):
+    """One arm of a `when` statement: `value, value, ... -> block` or
+    `else -> block`."""
+    values: list[Node]            # empty list = else branch
+    body: Block
+
+
+@dataclass
+class When(Node):
+    """when expr { v1, v2 -> body; else -> body }"""
+    expr: Node
+    choices: list[WhenChoice]
+
+
+@dataclass
 class For(Node):
     """`for var in lo to hi { ... }` -- inclusive range. Phase 2 only
     supports ubyte ranges; the var must already exist OR be declared
@@ -276,6 +291,7 @@ class Sub(Node):
     mangled: str = ""                   # filled by sema, e.g. "p8s_main"
     is_main: bool = False
     is_asmsub: bool = False             # True iff `asmsub` declaration
+    is_inline: bool = False             # `inline sub` -- emit body at call site, no JSR
     asm_target: Optional[str] = None    # for asmsub: the asm symbol to JSR to
 
 

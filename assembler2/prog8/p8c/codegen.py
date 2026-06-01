@@ -35,7 +35,7 @@ from .ast import (
     AddressOf, Assign, BinOp, Block, BoolLit, Break, Call, Continue,
     ExprStmt, For, Ident, If, Index, InlineAsm, IntLit, MemAt, Param,
     Program, Repeat, Return, StrLit, Sub, TUByteArray, UnaryOp, VarDecl,
-    While, BOOL, UBYTE, UWORD, type_from_name,
+    When, WhenChoice, While, BOOL, UBYTE, UWORD, type_from_name,
 )
 
 
@@ -191,6 +191,8 @@ class CodeGen:
     def _emit_sub(self, s: Sub) -> None:
         if s.is_asmsub:
             return       # declarations don't emit a body
+        if s.is_inline:
+            return       # body is spliced at each call site
         self.emit("")
         self.emit(f"; ---- sub {s.name} ----")
         self.emit(f"{s.mangled}:")
@@ -270,6 +272,8 @@ class CodeGen:
             self._emit_while(st)
         elif isinstance(st, Repeat):
             self._emit_repeat(st)
+        elif isinstance(st, When):
+            self._emit_when(st)
         elif isinstance(st, For):
             self._emit_for(st)
         elif isinstance(st, Break):
@@ -454,6 +458,53 @@ class CodeGen:
 
         self._loop_break_stack.pop()
         self._loop_cont_stack.pop()
+
+    def _emit_when(self, n: When) -> None:
+        """when expr { v1, v2 -> body; else -> body }
+
+        Lowered as a linear chain of comparisons. ubyte only for now;
+        each arm's body, then jmp to end. else arm at the end runs if
+        no arms match.
+        """
+        end = self._new_label("when_end")
+        # Evaluate `expr` once; cache in TMP0.
+        is_word = (n.expr.type is UWORD)
+        if is_word:
+            self._emit_word_into_wtmp(n.expr, "__p8c_wtmp0")
+        else:
+            self._emit_byte_expr_into_a(n.expr)
+            self.emit("  sta __p8c_tmp0")
+        for ch in n.choices:
+            body_label = self._new_label("when_body")
+            next_label = self._new_label("when_next")
+            if not ch.values:
+                # else arm: just emit body, fall through to end.
+                self._emit_block(ch.body)
+                self.emit(f"  jmp {end}")
+                continue
+            # Try each value; on match, jump to body_label.
+            for v in ch.values:
+                if is_word:
+                    self._emit_word_into_wtmp(v, "__p8c_wtmp1")
+                    self.emit("  lda __p8c_wtmp0+1")
+                    self.emit("  cmp __p8c_wtmp1+1")
+                    not_this = self._new_label("when_skip")
+                    self._br("bne", not_this)
+                    self.emit("  lda __p8c_wtmp0")
+                    self.emit("  cmp __p8c_wtmp1")
+                    self._br("beq", body_label)
+                    self.emit(f"{not_this}:")
+                else:
+                    self._emit_byte_expr_into_a(v)
+                    self.emit("  cmp __p8c_tmp0")
+                    self._br("beq", body_label)
+            # No value matched -- fall through to next arm.
+            self.emit(f"  jmp {next_label}")
+            self.emit(f"{body_label}:")
+            self._emit_block(ch.body)
+            self.emit(f"  jmp {end}")
+            self.emit(f"{next_label}:")
+        self.emit(f"{end}:")
 
     def _emit_for(self, n: For) -> None:
         """`for i in lo to hi` -- inclusive range, ubyte only.
@@ -1117,7 +1168,7 @@ class CodeGen:
                     )
                 self.emit(f"  jsr {sym.asm_target}")
                 return
-            # Regular sub: store each arg in its param slot, then jsr.
+            # Regular sub: store each arg in its param slot.
             for arg, p in zip(c.args, params):
                 if p.sym is None:
                     raise CodeGenError(f"param {p.name!r} not resolved by sema")
@@ -1129,6 +1180,19 @@ class CodeGen:
                     self._emit_word_expr_into_ay(arg)
                     self.emit(f"  sta {p.sym.mangled}")
                     self.emit(f"  sty {p.sym.mangled}+1")
+            # Inline sub: splice the body in place instead of JSR.
+            if target is not None and target.is_inline:
+                # Save the caller's return label (each inline-call gets
+                # its own per-site epilogue so `return` jumps locally).
+                saved_ret = self._return_label
+                saved_sub = self._current_sub
+                self._return_label = self._new_label(f"inline_{target.name}_ret")
+                self._current_sub = target
+                self._emit_block(target.body)
+                self.emit(f"{self._return_label}:")
+                self._current_sub = saved_sub
+                self._return_label = saved_ret
+                return
             self.emit(f"  jsr {sym.mangled}")
             return
 
