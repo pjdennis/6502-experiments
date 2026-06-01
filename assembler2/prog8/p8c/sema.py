@@ -15,7 +15,7 @@ from .ast import (
     AddressOf, Assign, BinOp, Block, BoolLit, Break, Call, Continue, Defer,
     ExprStmt, For, Ident, If, Index, InlineAsm, IntLit, MemAt, Param,
     Program, Repeat, Return, StrLit, StructDecl, Sub, Symbol, TUByteArray,
-    Type, UnaryOp, VarDecl, When, WhenChoice, While, BOOL, BYTE, STR,
+    TUWordArray, Type, UnaryOp, VarDecl, When, WhenChoice, While, BOOL, BYTE, STR,
     UBYTE, UWORD, VOID, type_from_name,
 )
 
@@ -232,19 +232,20 @@ class Sema:
             vd.sym = sym
             # No ZP allocation, no .all_vars entry -- it's pure compile-time.
             return sym
-        # Array form: `ubyte[N] name` -- only ubyte arrays for Phase 3.
+        # Array form: `ubyte[N] name` / `uword[N] name`.
         if vd.array_size is not None:
-            if vd.type_name != "ubyte":
+            if vd.type_name not in ("ubyte", "uword"):
                 raise SemaError(
                     f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: "
-                    f"only ubyte arrays supported (got {vd.type_name!r}[])"
+                    f"only ubyte/uword arrays supported (got {vd.type_name!r}[])"
                 )
-            if vd.array_size <= 0 or vd.array_size > 256:
+            if vd.array_size <= 0 or vd.array_size > 8192:
                 raise SemaError(
                     f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: "
-                    f"array size must be 1..256 (got {vd.array_size})"
+                    f"array size must be 1..8192 (got {vd.array_size})"
                 )
-            t = TUByteArray(vd.array_size)
+            t = (TUWordArray(vd.array_size) if vd.type_name == "uword"
+                 else TUByteArray(vd.array_size))
             mangled = f"{mangled_prefix.replace('p8v_', 'p8a_')}{vd.name}"
             sym = Symbol(name=vd.name, mangled=mangled, type=t, kind="array")
             scope[vd.name] = sym
@@ -546,10 +547,10 @@ class Sema:
                 )
             e.sym = asym
             self._walk_expr(e.index)
-            if e.index.type not in (UBYTE, BYTE):
+            if e.index.type not in (UBYTE, BYTE, UWORD):
                 raise SemaError(
                     f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
-                    f"array index must be byte/ubyte (got {e.index.type!r})"
+                    f"array index must be byte/ubyte/uword (got {e.index.type!r})"
                 )
             if asym.kind == "struct_array":
                 if e.field is None:
@@ -570,7 +571,7 @@ class Sema:
                         f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
                         f"{e.array.name!r} is not a struct array"
                     )
-                e.type = UBYTE
+                e.type = UWORD if isinstance(asym.type, TUWordArray) else UBYTE
         elif isinstance(e, Call):
             key = tuple(e.path)
             sym = self.dotted.get(key)

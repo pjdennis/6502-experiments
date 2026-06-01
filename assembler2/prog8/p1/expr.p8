@@ -887,10 +887,7 @@ sub parse_expr() -> ubyte {
             if mk == OPK_MEMAT {
                 op_sp = op_sp - 1
                 operand_sp = operand_sp - 1
-                ubyte addr
-                addr = operand_stack[operand_sp]   ; ubyte local (avoids
-                                                   ; widening an array read)
-                push_operand(new_node(ND_MEMAT, 0, addr, 0))
+                push_operand(new_node(ND_MEMAT, 0, operand_stack[operand_sp], 0))
                 advance()
                 expect_operand = 0
                 index_ok = 0

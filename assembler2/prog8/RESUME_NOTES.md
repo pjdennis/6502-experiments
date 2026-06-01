@@ -59,14 +59,14 @@ is the source of truth across sessions.
   stays intact.
 
 * **Test counts (as of HEAD)**:
-  * 103 host p8c tests (`prog8/tests/` -- lex / parse / sema /
+  * 104 host p8c tests (`prog8/tests/` -- lex / parse / sema /
     codegen / snapshot / e2e LCD goldens, the iterative-parser
     equivalence + integration tests, and the new serializer freeze
     suite `test_serialize.py`).
   * 5 v0/v1 e2e (`tinyp8/tests/test_e2e.py`).
   * 5 v0/v1 self-host equivalence (`test_self_host.py`).
   * 12 v2..v9 .p8-only (`test_v2.py`, sources in `goldens_v2/`).
-  * **149 total, all green** (the 22 tinyp8 + 24 p1 cases need vasm; see the
+  * **150 total, all green** (the 22 tinyp8 + 24 p1 cases need vasm; see the
     environment note above).
 
 Run:
@@ -284,15 +284,13 @@ Progress:
        ubyte-array-element->uword widening worked around) -- pitfalls
        below.
      * **M3 NEXT -- statement parser port.** Port `parse_block_iter`
-       (the frame-stack driver, design 3.6) to `p1/stmt.p8`: blocks,
-       if/else, while, for, repeat, when, defer, leaf statements. BUT
-       first the M3/M4 blocker:
-     * **M3/M4 blocker:** whole-program parsing exceeds 256 nodes/tokens,
-       so it needs real 16-bit arrays (uword elements + uword/large
-       index) added to p8c first -- the next host-track enhancement.
-       (A single statement might fit in 256, but realistic programs and
-       the M4 corpus won't. Recommend doing the 16-bit-array host
-       feature before/with M3.)
+       (the frame-stack driver, design 3.6) + the top-level
+       `parse_program` to `p1/stmt.p8`, building the whole-program AST
+       and emitting the full `(program ...)` serialization. The M3/M4
+       array blocker is now CLEARED -- p8c has 16-bit arrays, so the
+       token/node arenas can be `uword[N]` with uword indices (no more
+       <=256 cap / lo-hi split). Golden: the `STMT_PROGRAMS` corpus
+       (M3), then all examples + tinyp8.p8 (M4).
 
 The caveat below (fixed frame layout) is addressed in the design doc's
 section 3.6 -- parallel arrays sized for the widest frame kind.
@@ -337,19 +335,22 @@ when a demo or tinyp8 push needs them.
   with no trailing newline) loops forever. Latent in lexer.p8 too,
   masked because the test corpus files all end in newline.
 
-* **Host p8c arrays are <=256 ubyte elements, ubyte index.** No uword
-  elements, no >256 arrays, no uword index. `p1/expr.p8` works within
-  this (one expression: split 16-bit values lo/hi, cap at 256). M3/M4
-  whole-program parsing needs real 16-bit arrays added to p8c first.
+* **16-bit arrays -- ADDED to p8c.** `uword[N]` arrays (2 bytes/element,
+  little-endian), arrays up to 8192 elements, and uword indices are now
+  supported. The original tight `lda label,y` path is kept for ubyte
+  arrays that are <=256 elements with a ubyte index (so all pre-existing
+  arrays / snapshot goldens are byte-identical); everything else uses a
+  ZP element pointer (`__p8c_aptr` = $28) computed as `label + index*esize`
+  and `(__p8c_aptr),y` loads/stores. See `_emit_array_addr_into_aptr`,
+  `_array_fast_byte` in `p8c/codegen.py`; behavioral test
+  `tests/test_arrays16_e2e.py`. (`len()` on a >256 array still truncates
+  to a ubyte -- a known minor gap; the parser doesn't `len` the big
+  arenas.)
 
-* **Host p8c can't widen a ubyte ARRAY ELEMENT to uword.**
-  `_emit_word_expr_into_ay` handles Index only for struct arrays, so
-  `some_uword = ubyte_arr[i]` (or passing `ubyte_arr[i]` to a uword
-  param) raises "cannot evaluate Index as uword". Workaround in
-  `p1/expr.p8`: copy the element into a ubyte local first, then pass the
-  local (a plain ubyte var widens fine). Clean fix for later: extend
-  `_emit_word_expr_into_ay` to load a plain ubyte/uword array element
-  (esp. once 16-bit arrays land).
+* **ubyte ARRAY ELEMENT -> uword widening -- FIXED.** `some_uword =
+  ubyte_arr[i]` (and passing `ubyte_arr[i]` to a uword param) now loads
+  the byte and zero-extends, in `_emit_word_expr_into_ay`'s Index case.
+  The earlier `p1/expr.p8` local-copy workaround was removed.
 
 * **Host p8c codegen: dual-scratch binary expression bug -- FIXED.** An
   expression where BOTH operands of a binary op each need a scratch temp

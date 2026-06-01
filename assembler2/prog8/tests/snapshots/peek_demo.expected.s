@@ -9,6 +9,7 @@ __p8c_tmp1 = $21                     ; codegen scratch (byte)
 __p8c_wtmp0 = $22                   ; codegen scratch (word, 2 bytes)
 __p8c_wtmp1 = $24                   ; codegen scratch (word, 2 bytes)
 __p8c_ptr0  = $26                    ; indirect-Y pointer (2 bytes)
+__p8c_aptr  = $28                    ; array element pointer (2 bytes)
 
   .org $4000
   jmp p8s_main

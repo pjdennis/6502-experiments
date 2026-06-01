@@ -179,7 +179,11 @@ wendy2c, mirroring the asm00..asm17 chain.
 
 **Phase 3 cont -- language built out toward Prog8 parity:**
 
-  * Fixed-size `ubyte[N]` arrays (1..256) with indexed read/write.
+  * Fixed-size `ubyte[N]` and `uword[N]` arrays (1..8192) with indexed
+    read/write. Arrays <=256 ubyte elements with a ubyte index use the
+    tight `lda label,y` path; uword elements, >256 arrays, or a uword
+    index use a ZP element pointer (`label + index*esize`, then
+    `(ptr),y`). ubyte elements widen to uword on read.
   * `*` ubyte multiplication via a runtime helper (shift-and-add).
   * `@(addr_expr)` byte read/write at arbitrary addresses (via the
     `__p8c_ptr0` indirect-Y pointer in ZP); literal addresses use

@@ -1,0 +1,117 @@
+"""Behavioral tests for 16-bit array support (uword elements, arrays
+larger than 256, uword indices) and the ubyte-element -> uword widening
+fix.
+
+Each case compiles a tiny program that writes computed result bytes to
+its output file (the nmos file-I/O shim tinyp8 uses), runs it on the
+emulator, and checks the bytes. SKIPs without vasm + the emulator.
+"""
+from __future__ import annotations
+
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+PROG8 = HERE.parent
+REPO = PROG8.parents[1]
+EMU = REPO / "assembler2" / "emulator" / "emulator.out"
+
+_SHIM = """%target nmos
+%address $0200
+ubyte dst
+uword[8] w
+ubyte[300] big
+ubyte[8] sb
+uword idx
+uword s
+ubyte b
+asmsub _close(ubyte handle) = $F015
+sub _argv(ubyte i) -> uword {
+    %asm{{ "lda p8v__argv_arg_i\\njsr $f01e\\npha\\ntxa\\ntay\\npla\\nrts" }}
+}
+sub _openout(uword filename) -> ubyte {
+    %asm{{ "lda p8v__openout_arg_filename\\nldx p8v__openout_arg_filename+1\\njsr $f021\\nrts" }}
+}
+sub _write(ubyte v, ubyte handle) {
+    %asm{{ "ldx p8v__write_arg_handle\\nlda p8v__write_arg_v\\njsr $f024\\nrts" }}
+}
+"""
+
+_CASES = [
+    # uword array element write + read, little-endian
+    ("w[0] = $1234  w[1] = $5678  "
+     "_write(lsb(w[0]), dst)  _write(msb(w[0]), dst)  "
+     "_write(lsb(w[1]), dst)  _write(msb(w[1]), dst)",
+     [0x34, 0x12, 0x78, 0x56]),
+    # uword array indexed by a uword variable
+    ("idx = 3  w[idx] = $abcd  "
+     "_write(lsb(w[idx]), dst)  _write(msb(w[idx]), dst)",
+     [0xcd, 0xab]),
+    # uword-array arithmetic: s = w[0] + w[1]
+    ("w[0] = $0102  w[1] = $0304  s = w[0] + w[1]  "
+     "_write(lsb(s), dst)  _write(msb(s), dst)",
+     [0x06, 0x04]),
+    # ubyte array > 256, written and read at a high (uword) index
+    ("idx = 290  big[idx] = $42  _write(big[idx], dst)", [0x42]),
+    ("idx = 257  big[idx] = 99  _write(big[idx], dst)", [99]),
+    # ubyte element widened to uword (the widening fix): high byte = 0
+    ("sb[2] = 200  s = sb[2]  _write(lsb(s), dst)  _write(msb(s), dst)",
+     [200, 0]),
+    # ubyte element of a >256 array widened to uword
+    ("idx = 280  big[idx] = 170  s = big[idx]  "
+     "_write(lsb(s), dst)  _write(msb(s), dst)",
+     [170, 0]),
+]
+
+
+def _have_vasm() -> bool:
+    return shutil.which("vasm6502_oldstyle") is not None
+
+
+@unittest.skipUnless(_have_vasm(), "vasm6502_oldstyle not on PATH")
+@unittest.skipUnless(EMU.exists(), f"emulator not built at {EMU}")
+class Arrays16(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.workdir = Path(tempfile.mkdtemp(prefix="p8c_arr16_"))
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.workdir, ignore_errors=True)
+
+    def _run_case(self, body: str, expected: list[int]) -> None:
+        src = (_SHIM + "main {\n    dst = _openout(_argv(1))\n    "
+               + body + "\n    _close(dst)\n}\n")
+        stem = f"arr_{abs(hash(body)) & 0xffffff:06x}"
+        p8 = self.workdir / f"{stem}.p8"
+        s = self.workdir / f"{stem}.s"
+        binf = self.workdir / f"{stem}.bin"
+        out = self.workdir / f"{stem}.out"
+        p8.write_text(src)
+        r = subprocess.run(
+            [sys.executable, "-m", "p8c", str(p8), "-o", str(s)],
+            capture_output=True, text=True, cwd=str(PROG8))
+        self.assertEqual(r.returncode, 0, msg=f"p8c:\n{r.stdout}\n{r.stderr}")
+        r = subprocess.run(
+            ["vasm6502_oldstyle", "-Fbin", "-dotdir", "-ignore-mult-inc",
+             "-esc", "-wfail", "-o", str(binf), str(s)],
+            capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, msg=f"vasm:\n{r.stdout}\n{r.stderr}")
+        r = subprocess.run([str(EMU), str(binf), "/dev/null", str(out),
+                            "--no-dump"], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, msg=f"emulator:\n{r.stdout}\n{r.stderr}")
+        self.assertEqual(list(out.read_bytes()), expected,
+                         msg=f"wrong result for: {body}")
+
+    def test_cases(self):
+        for body, expected in _CASES:
+            with self.subTest(body=body):
+                self._run_case(body, expected)
+
+
+if __name__ == "__main__":
+    unittest.main()

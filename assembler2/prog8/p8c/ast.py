@@ -42,6 +42,15 @@ class TUByteArray(Type):
 
 
 @dataclass(frozen=True)
+class TUWordArray(Type):
+    """uword[N] -- a fixed-size word array (2 bytes/element, little-endian).
+    Stored in main memory, addressed by an absolute label. Supports
+    >256 elements and a uword index (16-bit pointer addressing)."""
+    size: int
+    def __repr__(self) -> str: return f"uword[{self.size}]"
+
+
+@dataclass(frozen=True)
 class TUWord(Type):
     def __repr__(self) -> str: return "uword"
 

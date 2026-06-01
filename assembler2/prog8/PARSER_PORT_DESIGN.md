@@ -341,12 +341,13 @@ the command later milestones diff their on-target output against.
   before passing them where a uword is expected (a clean p8c codegen fix
   -- teaching `_emit_word_expr_into_ay` to handle plain array reads --
   is a good future cleanup).
-  **Representation limit:** host p8c arrays are <=256 ubyte elements with
-  a ubyte index, so M2 holds one expression's arenas in <=256-element
-  byte arrays (16-bit values split lo/hi). Whole-program parsing
-  (M3/M4) exceeds 256 nodes/tokens and so needs real 16-bit arrays
-  (uword elements, uword/large index) added to p8c first -- the next
-  host-track enhancement.
+  **Representation note:** M2 (`p1/expr.p8`) holds one expression's
+  arenas in <=256-element byte arrays (16-bit values split lo/hi)
+  because that was all p8c supported at the time. Since then p8c gained
+  real 16-bit arrays (`uword[N]`, up to 8192 elements, uword index --
+  see `_emit_array_addr_into_aptr`), plus ubyte-element->uword widening,
+  so M3+ can use full uword arenas/indices without the <=256 cap or the
+  lo/hi split.
 
 
 * **M3 -- statement parser port.** `p1/stmt.p8`: the frame-stack driver
