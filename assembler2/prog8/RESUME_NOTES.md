@@ -1,0 +1,309 @@
+# Session Resume Notes -- Prog8 bootstrap project
+
+This file is a session-handoff note. It captures the state of the
+project after the v2..v8 tinyp8 growth sessions so a fresh
+conversation can pick up productively without re-reading prior
+chat history. Update it (or replace it wholesale) at the end of
+each session.
+
+Branch: `claude/review-wendy2-plan-MOfnA`. Push as you go; the
+remote is the source of truth across sessions.
+
+---
+
+## High-level status (as of commit `4758df7`)
+
+* **Host p8c (Python)** -- recursive-descent compiler from `.p8`
+  source to 6502 asm. Wide language coverage: `ubyte`/`byte`/`uword`,
+  arrays, struct + struct arrays, `enum`, `const`, `defer`, `when`,
+  `inline sub`, `for`/`while`/`repeat`/`break`/`continue`/`return`,
+  `if`/`else`, full arithmetic + comparisons + signed support,
+  `@(addr)`, `&var`, `peek`/`poke`/`lsb`/`msb`/`mkword`/`len`/`sizeof`,
+  long-branch handling, `%target wendy2c` and `%target nmos`. See
+  `assembler2/prog8/p8c/` and the README for the full surface.
+
+* **tinyp8.s (hand-written 6502)** -- a tiny on-target compiler.
+  Accepts `print "..."`, `print_ub $XX`, `print_uw $XXXX`, `end`.
+  Lives at `assembler2/prog8/tinyp8/tinyp8.s` (~500 bytes of asm,
+  assembled by vasm).
+
+* **tinyp8.p8 (Prog8, compiled by host p8c)** -- the same compiler
+  rewritten in our language. Currently at **v8**: supports `let`,
+  variable references in `print_ub`, `if X OP \$YY then print_ub Z`
+  with the full comparison set, `while X OP \$YY` loops with an
+  optional `print_ub Y` body before the let increment.
+
+* **Self-host equivalence** -- for the v0/v1 corpus (5 inputs in
+  `tinyp8/tests/goldens/`), tinyp8.s and tinyp8.p8 produce
+  byte-identical output. tinyp8.p8 has grown well past v1 but its
+  new features only kick in for new syntax, so the equivalence
+  stays intact.
+
+* **Test counts (as of HEAD)**:
+  * 76 host p8c tests (`prog8/tests/` -- lex / parse / sema /
+    codegen / snapshot / e2e LCD goldens).
+  * 5 v0/v1 e2e (`tinyp8/tests/test_e2e.py`).
+  * 5 v0/v1 self-host equivalence (`test_self_host.py`).
+  * 11 v2..v8 .p8-only (`test_v2.py`, sources in `goldens_v2/`).
+  * **97 total, all green.**
+
+Run:
+
+    cd assembler2 && make prog8-test tinyp8-test
+
+---
+
+## Repo layout you need to know
+
+    assembler2/prog8/
+        p8c/                # host compiler (Python)
+            __main__.py     # `python3 -m p8c source.p8 [-o out.s] [--run]`
+            lex.py
+            parse.py        # recursive-descent (the big rewrite candidate)
+            sema.py
+            codegen.py
+            stdlib_decls.py # wendy2c stdlib symbol declarations
+        examples/           # demo .p8 files (hello, counter, sieve,
+                            # tokenizer, structs, ...)
+        tests/              # host p8c tests
+            goldens/        # .p8 + .expected.lcd (wendy2c output)
+            snapshots/      # .p8 + .expected.s (codegen oracle)
+        tinyp8/
+            tinyp8.s        # v1 hand-asm compiler
+            tinyp8.p8       # v8 Prog8 compiler (grows each push)
+            __main__.py     # `python3 -m tinyp8` driver
+            out/tinyp8.bin  # cached vasm output for tinyp8.s
+            tests/
+                test_e2e.py         # v0/v1 goldens via tinyp8.s
+                test_self_host.py   # v0/v1 byte equivalence
+                test_v2.py          # v2..v8 goldens via tinyp8.p8
+                goldens/            # v0/v1 .tp8 + .expected.stdout
+                goldens_v2/         # v2..v8 .tp8 + .expected.stdout
+
+The emulator is at `assembler2/emulator/emulator.out`. The
+nmos-default machine (the one tinyp8 targets) exposes file I/O
+at $F006-$F03C; see `assembler2/emulator/stubs.c` for the ABI.
+
+---
+
+## What the on-target compiler currently accepts (tinyp8 v8)
+
+    let X = $XX            ; declare and assign a literal
+    let X = Y              ; copy from another var
+    let X = Y + $ZZ        ; arith with literal
+    let X = Y + Z          ; arith with variable
+    let X = Y - $ZZ        ; ditto with subtract
+    let X = Y - Z
+    print "string"
+    print_ub $XX           ; literal byte as 2 hex chars + \n
+    print_ub X             ; variable byte (uses an in-output 38-byte
+                           ; hex helper, emitted lazily on first ref)
+    print_uw $XXXX         ; literal word as 4 hex chars + \n
+    if X OP $YY then print_ub Z    ; OP in { == != < <= > >= }
+    while X OP $YY                 ; same OP set
+        let X = X + $ZZ            ; body, fixed shape
+    while X OP $YY                 ; body with optional print first
+        print_ub Y
+        let X = X + $ZZ
+    end                    ; emit exit (lda #0; jsr $F00F)
+    ; comments + blank lines OK
+
+Restrictions worth remembering:
+  * Variable names are SINGLE LOWERCASE LETTERS (a..z). Backed
+    by a 26-slot `var_addrs[]` array in tinyp8.p8.
+  * `if`'s then-clause must be exactly `print_ub <letter>` (10
+    bytes); the BNE displacement is hard-coded.
+  * `while`'s let-body must be exactly `let X = X +/- \$ZZ` (7
+    bytes); the print-body, when present, must be exactly
+    `print_ub <letter>` (10 bytes).
+  * The compiled output's hex-print helper (38 bytes + 3-byte
+    JMP-around) is emitted lazily on first var-reference print.
+
+---
+
+## Recommended next pushes
+
+Listed roughly by impact / risk, biggest payoff first.
+
+### Option A: tinyp8 v9 -- multi-character variable names (1 push)
+
+The biggest single UX win for the on-target compiler. Replaces
+the 26-slot `var_addrs[]` table with a parallel-array symbol
+table that supports names up to ~8 chars. Concrete design:
+
+* New state:
+      ubyte[128] sym_names   ; packed (16 entries x 8 bytes)
+      ubyte[16]  sym_lens
+      ubyte[16]  sym_addrs
+      ubyte      sym_count
+      ubyte[8]   name_buf    ; scratch for the current ident
+
+* New subs:
+      sub read_ident(uword buf_ptr) -> ubyte
+          ; reads `[a..z]+` from source into buf_ptr; returns length
+      sub find_var(uword name, ubyte len) -> ubyte
+          ; linear scan over sym_names/lens; returns ZP addr or $FF
+      sub declare_var(uword name, ubyte len) -> ubyte
+          ; returns existing addr if found, else allocates a new slot
+
+* Update each call site that currently does
+  `var_addrs[c - $61]` (about 8 sites in tinyp8.p8) to read into
+  `name_buf` first, then look up via `find_var` /
+  `declare_var`. Single-char names continue to work -- they just
+  have `len == 1`.
+
+* Add a v9 golden that uses multi-char names (`count`, `index`,
+  `total`...). Verify v0/v1 equivalence still holds (it should:
+  single-char inputs only ever store length-1 names, and the
+  v8 layout is unaffected for them).
+
+Estimated effort: 1 focused push. The refactor pattern is mechanical
+once the helpers are written. Watch out for: ZP allocator (already
+bumped to 0xff this session), and the name_buf interaction with
+the existing `tmp_byte` scratch.
+
+### Option B: tinyp8 v9b -- expand if-then to a multi-statement block (1 push)
+
+Removes the "then must be exactly `print_ub Z`" restriction.
+Implementation requires buffering the body bytes during
+compilation (since the BNE displacement needs to know body
+size). Add `ubyte[32] body_buf` plus a mode flag on `write_dst`
+that switches output to the buffer.
+
+Less impactful than A but unblocks more interesting demos
+(if-then with multiple prints, nested arithmetic, etc.).
+
+### Option C: tinyp8 v10 -- read input from stdin (1 push)
+
+`input X` reads one byte from the nmos read_b stub ($F006) into
+variable X. Compiles to `jsr $F006; sta <X>`. Watch out for the
+EOF carry flag -- can be ignored for v0 (read returns 0 on EOF).
+
+Smaller in scope than A/B but unlocks "real input -> output"
+demos and stress-tests the on-target compiler against actual
+streaming use.
+
+### Option D: BIG -- host p8c iterative parser rewrite (3+ pushes)
+
+The standing item for *real* Prog8-in-Prog8 self-host. Host
+`p8c/parse.py` is recursive descent in Python (~500 lines).
+Prog8 forbids recursion, so porting requires rewriting the
+parser around an explicit AST stack.
+
+tinyp8.p8 already demonstrates the iterative shape: a flat
+dispatcher over tokens, with parse_X functions that read state
+from globals. Apply the same pattern to host p8c.
+
+Plan sketch:
+  1. Write a separate `p8c/iter_parse.py` next to the existing
+     `parse.py`. Implement just expression parsing (shunting-yard
+     algorithm). Add tests proving the resulting AST matches the
+     recursive parser's output for a corpus of inputs.
+  2. Extend to statements (one stmt stack, one expression stack,
+     dispatch by current-token kind).
+  3. Hook in via a flag, then switch over and delete the
+     recursive parser.
+  4. Eventually port `iter_parse.py` to Prog8 itself for the
+     real self-host.
+
+Estimated effort: 3 pushes minimum, possibly 5. This is THE
+strategic item but it's a big design-and-implementation job;
+do it when you have fresh context and uninterrupted time.
+
+### Option E: more host language features (varies)
+
+Other gaps toward full upstream Prog8 parity:
+  * Pointer-to-struct `^^Token`, struct-as-param, struct arrays
+    in subs.
+  * Multi-file `%import "name"` with namespacing.
+  * Strings as proper iterable buffers (currently only literal
+    -> address; need `strlen`, `strcmp`, slicing).
+  * Word-size signed type (`word`).
+  * Multi-dim arrays.
+
+Each is its own 1-2 push effort. Do these opportunistically
+when a demo or tinyp8 push needs them.
+
+---
+
+## Pitfalls / gotchas observed this session
+
+* **ZP allocator size**: `p8c/sema.py` has `ZP_VAR_TOP`; tinyp8.p8
+  v6 hit the original 0x80 cap, was bumped to 0xff. If tinyp8.p8
+  v9 (multi-char names) adds more module-level state, that may
+  need attention again -- or you may need to move some state
+  into main memory (`ubyte[N]` arrays live there, not ZP).
+
+* **Branch displacements in tinyp8.p8**: every conditional branch
+  in the COMPILED OUTPUT has hard-coded displacement bytes. When
+  you change the body size (e.g., adding instructions to a
+  fixed-shape block), every dependent displacement needs
+  recomputing. Tests catch most of these by failing to halt or
+  jumping into garbage.
+
+* **The hex-print helper position-independence**: the 38-byte
+  `__hex_print` helper emitted into the output uses only relative
+  branches (BCC/BNE) inside; the only absolute reference is
+  `jmp $F009`. So it can be placed anywhere. But its skip-around
+  `JMP <after>` target IS absolute -- if you change the helper
+  size, recompute that.
+
+* **Symbol naming for stdlib calls**: host p8c mangles user-defined
+  subs as `p8s_<name>` and asmsub args as `p8v_<sub>_arg_<name>`.
+  Inline asm in tinyp8.p8 references these mangled names directly
+  (e.g., `p8v__read_arg_handle`). When refactoring, watch for
+  inline-asm strings that hard-code mangled names.
+
+* **The `_argv` shuffle**: nmos's `argv` returns A=lo, X=hi but
+  Prog8 expects uword in A:Y. tinyp8.p8 wraps it with an inline-asm
+  helper that does `pha; txa; tay; pla`. Same applies for any
+  other syscall that returns into X.
+
+---
+
+## Quick-resume cheatsheet
+
+    # 1. Get to clean state
+    cd assembler2/prog8
+    git pull --rebase origin claude/review-wendy2-plan-MOfnA
+
+    # 2. Verify everything's green
+    cd ..
+    make prog8-test tinyp8-test
+
+    # 3. Look at the most recent commits to see what just landed
+    git log --oneline -15
+
+    # 4. The on-target compiler is built fresh each test run, but
+    #    if you want to inspect it manually:
+    cd prog8
+    python3 -m p8c tinyp8/tinyp8.p8 -o /tmp/tinyp8_p8.s
+    vasm6502_oldstyle -Fbin -dotdir -ignore-mult-inc -esc -wfail \
+        -o /tmp/tinyp8_p8.bin /tmp/tinyp8_p8.s
+    echo 'let n = $42
+    print_ub n
+    end' > /tmp/demo.tp8
+    ../emulator/emulator.out /tmp/tinyp8_p8.bin /tmp/demo.tp8 \
+        /tmp/demo.body --no-dump
+    # then wrap and run via tinyp8/__main__.py's helpers, or by hand.
+
+    # 5. To add a new v9 test:
+    #    write tinyp8/tests/goldens_v2/NN_name.tp8 and
+    #    tinyp8/tests/goldens_v2/NN_name.expected.stdout, then
+    #    `python3 -m unittest tinyp8.tests.test_v2 -v` from prog8/.
+
+---
+
+## Conventions that have proven themselves
+
+* Each tinyp8 growth push adds ONE feature, with ONE new golden
+  test in `goldens_v2/`. Commit with a clear "v8 -- xxx" message.
+* Never modify tinyp8.s without thinking hard about the v0/v1
+  equivalence guarantee. The right move is to grow tinyp8.p8
+  alone for any feature that isn't trivial to retrofit into asm.
+* Run all three test suites (`test_e2e`, `test_self_host`,
+  `test_v2`) plus the host p8c suite before each commit -- the
+  feedback loop is cheap.
+* Push after every commit. The remote is the source of truth.
+* When a session is ending, refresh this file or replace it
+  wholesale.
