@@ -209,10 +209,15 @@ Recommended approach:
      (`p1/tests/test_stmt.py`). Three host enhancements made en route:
      ZP-overflow scalars -> main memory; reentrant-safe sub calling
      convention (args via the stack); a serializer ordering-bug fix.
-   * `[todo]` M4 (extend to the `examples/` corpus: directives, const,
-     enum, struct, asmsub) -> M5 capacity/streaming (tinyp8.p8-sized
-     inputs need per-sub streaming; the M3 arenas are sized for small
-     programs).
+   * `[done]` **M4 -- whole-program parse on-target.** stmt.p8 extended
+     to the full top-level surface (directives + imports, const, enum,
+     struct + struct instances/arrays, asmsub, inline sub), byte-identical
+     to the oracle over the ENTIRE `examples/` corpus (18 files incl.
+     tokenizer.p8). `p1/tests/test_stmt.py::test_examples`.
+   * `[todo]` M5 -- capacity / per-sub streaming. tinyp8.p8 (~2300 AST
+     lines) overflows the small fixed arenas / 64 KB; parse per-sub and
+     reset the arenas between units (the asm-chain proves per-unit
+     streaming). This is the last step before Phase 7.
 
 Estimated remaining effort: the Prog8 port (step 5) is the last piece,
 and it feeds directly into Phase 7. The iterative parser is now the
@@ -273,7 +278,7 @@ Branch `claude/prog8-bootstrap-continue-6Pzo0` (continues the
   on-disk goldens. M1 (lexer port to `p1/`) is next.
 * Phase 7-8: blocked on the rest of the Phase 6 Prog8 port (M1-M4).
 
-151 tests green (host p8c 104, tinyp8 22, p1 25). Self-host equivalence holds for the v0/v1 corpus.
+152 tests green (host p8c 104, tinyp8 22, p1 26). Self-host equivalence holds for the v0/v1 corpus.
 
 ---
 

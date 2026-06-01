@@ -45,9 +45,15 @@ milestones M0..M5).
   16-bit arrays) so node/token counts exceed 256. Byte-identical to the
   oracle over the entire `STMT_PROGRAMS` corpus (`tests/test_stmt.py`).
 
-* M4 (extend to the `examples/` corpus: directives, const/enum/struct,
-  asmsub) .. M5 (capacity / per-sub streaming for tinyp8.p8-sized
-  inputs; stmt.p8's arenas are sized for small programs) -- to come.
+* **M4 (done)** -- `stmt.p8` extended to the full top-level surface:
+  directives (`%address` / `%output` / `%import` -> imports / `%target`),
+  `const` decls, `enum` decls, `struct` decls + struct instances/arrays,
+  `asmsub`, and `inline sub`. Byte-identical to the oracle over the
+  entire `examples/` corpus (18 files incl. `tokenizer.p8`).
+
+* M5 (capacity / per-sub streaming) -- to come. The arenas are sized for
+  small programs; tinyp8.p8 (~2300 AST lines) overflows them / 64 KB, so
+  the parser must stream per-sub and reset the arenas between units.
 
 ## Running
 

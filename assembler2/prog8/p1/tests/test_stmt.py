@@ -95,6 +95,19 @@ class StmtEquivalence(unittest.TestCase):
                                  msg=f"program AST serialization differs "
                                      f"for {src!r}")
 
+    def test_examples(self):
+        # M4: the whole examples/ corpus -- directives (imports / output /
+        # target), const, enum, struct (+ struct instances/arrays),
+        # asmsub, inline sub, on top of the M3 statement surface.
+        examples = sorted((PROG8 / "examples").glob("*.p8"))
+        self.assertGreater(len(examples), 0, "no examples found")
+        for p8 in examples:
+            with self.subTest(example=p8.name):
+                src = p8.read_text()
+                self.assertEqual(self._oracle(src), self._ontarget(src),
+                                 msg=f"program AST serialization differs "
+                                     f"for {p8.name}")
+
 
 if __name__ == "__main__":
     unittest.main()

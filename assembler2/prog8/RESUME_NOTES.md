@@ -66,7 +66,7 @@ is the source of truth across sessions.
   * 5 v0/v1 e2e (`tinyp8/tests/test_e2e.py`).
   * 5 v0/v1 self-host equivalence (`test_self_host.py`).
   * 12 v2..v9 .p8-only (`test_v2.py`, sources in `goldens_v2/`).
-  * **151 total, all green** (the 22 tinyp8 + 25 p1 cases need vasm; see the
+  * **152 total, all green** (the 22 tinyp8 + 26 p1 cases need vasm; see the
     environment note above).
 
 Run:
@@ -291,13 +291,18 @@ Progress:
        `make p1-test`). Three host enhancements made en route (see
        pitfalls): ZP-overflow scalars -> main memory; reentrant-safe sub
        calling convention; a serializer ordering-bug fix.
-     * **M4 NEXT -- extend to the `examples/` corpus.** stmt.p8 currently
-       handles statements + basic top-level (vars, sub/main); the
-       examples add directives (`%import`/`%output`/`%target` -> the
-       imports/output/target fields), `const`, `enum`, `struct`, and
-       `asmsub`. Then M5 = capacity/streaming (tinyp8.p8-sized inputs;
-       the M3 arenas are sized for small programs -- a whole big program
-       + arenas would exceed 64 KB, so per-sub streaming is needed).
+     * **M4 DONE -- whole-program parse on-target.** stmt.p8 extended to
+       the full top-level surface: directives + imports list, `const`,
+       `enum`, `struct` (+ struct instances/arrays `Point p` /
+       `Token[4] toks`), `asmsub`, `inline sub`. Byte-identical to the
+       oracle over the ENTIRE `examples/` corpus (18 files incl.
+       tokenizer.p8 = enum+struct+inline). `p1/tests/test_stmt.py::test_examples`.
+     * **M5 NEXT -- capacity / per-sub streaming.** tinyp8.p8 (~2300 AST
+       lines) overflows the small fixed arenas (tok 600, nodes 512) and,
+       at full size, code+arenas exceed 64 KB. Stream per-sub: parse one
+       top-level unit, serialize it, reset the arenas, repeat -- the
+       asm-chain proves per-unit streaming. After M5, p1 parses its own
+       source / tinyp8.p8 and Phase 7 (sema+codegen port) can begin.
 
 The caveat below (fixed frame layout) is addressed in the design doc's
 section 3.6 -- parallel arrays sized for the widest frame kind.

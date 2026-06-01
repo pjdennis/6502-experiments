@@ -117,6 +117,10 @@ const ubyte ND_DEFER = 24   ; a=stmt
 const ubyte ND_INLINEASM = 25 ; a=str id
 const ubyte ND_SUB   = 26   ; op=kind, a=name id, b=params cons head, c=body, d=ret tag
 const ubyte ND_PARAM = 27   ; op=type tag, a=name id
+const ubyte ND_ENUM  = 28   ; a=name id, b=members cons head
+const ubyte ND_ENUMMEMBER = 29 ; op=has_value, a=name id, b=value
+const ubyte ND_STRUCT= 30   ; a=name id, b=fields cons head
+const ubyte ND_FIELD = 31   ; op=type tag, a=field name id
 
 ; type tags
 const ubyte TY_UBYTE = 0
@@ -125,6 +129,10 @@ const ubyte TY_UWORD = 2
 const ubyte TY_BOOL  = 3
 const ubyte TY_VOID  = 4
 const ubyte TY_STR   = 5
+const ubyte TY_CONST_UBYTE = 6
+const ubyte TY_CONST_BYTE  = 7
+const ubyte TY_CONST_UWORD = 8
+const ubyte TY_STRUCT      = 9   ; struct-typed var; struct name id in node_d
 
 ; sub kinds
 const ubyte SUBK_SUB    = 0
@@ -234,6 +242,8 @@ uword prog_address
 ubyte prog_target        ; 0=wendy2c, 1=nmos
 uword prog_imports       ; cons of ident ids (reversed)
 uword prog_vars          ; cons of vardecl node ids (reversed)
+uword prog_enums         ; cons of enum node ids (reversed)
+uword prog_structs       ; cons of struct node ids (reversed)
 uword prog_subs          ; cons of sub node ids (reversed)
 
 ; serializer work stack
@@ -580,6 +590,22 @@ sub classify_name() -> ubyte {
         }
     }
     return TK_IDENT
+}
+
+; classify a directive name (already copied into name_buf):
+; 0=address, 1=output, 2=import, 3=target, 4=other.
+sub dir_classify() -> ubyte {
+    when name_len {
+        6 -> {
+            if name_buf[0]==$69 and name_buf[1]==$6d and name_buf[2]==$70 and name_buf[3]==$6f and name_buf[4]==$72 and name_buf[5]==$74 { return 2 }   ; import
+            if name_buf[0]==$6f and name_buf[1]==$75 and name_buf[2]==$74 and name_buf[3]==$70 and name_buf[4]==$75 and name_buf[5]==$74 { return 1 }   ; output
+            if name_buf[0]==$74 and name_buf[1]==$61 and name_buf[2]==$72 and name_buf[3]==$67 and name_buf[4]==$65 and name_buf[5]==$74 { return 3 }   ; target
+        }
+        7 -> {
+            if name_buf[0]==$61 and name_buf[1]==$64 and name_buf[2]==$64 and name_buf[3]==$72 and name_buf[4]==$65 and name_buf[5]==$73 and name_buf[6]==$73 { return 0 }   ; address
+        }
+    }
+    return 4
 }
 
 ; ---- token storage + lexer ----
@@ -1618,6 +1644,165 @@ sub parse_sub(ubyte kind) -> uword {
     return node
 }
 
+sub const_type_tag(ubyte k) -> ubyte {
+    if k == TK_KBYTE { return TY_CONST_BYTE }
+    if k == TK_KUWORD { return TY_CONST_UWORD }
+    return TY_CONST_UBYTE
+}
+
+sub parse_const_decl() -> uword {
+    advance()                               ; 'const'
+    ubyte ctag
+    ctag = const_type_tag(cur_kind())
+    advance()                               ; type
+    uword nameid
+    nameid = cur_val()
+    advance()                               ; name
+    advance()                               ; '='
+    return new_node(ND_VARDECL, ctag, nameid, parse_expr())
+}
+
+sub parse_enum_decl() -> uword {
+    advance()                               ; 'enum'
+    uword ename
+    ename = cur_val()
+    advance()                               ; name
+    advance()                               ; '{'
+    uword members
+    members = 0
+    repeat {
+        if cur_kind() == TK_RBRACE {
+            break
+        }
+        uword mname
+        mname = cur_val()
+        advance()                           ; member name
+        ubyte hasval
+        uword mval
+        hasval = 0
+        mval = 0
+        if cur_kind() == TK_ASSIGN {
+            advance()
+            mval = cur_val()
+            advance()
+            hasval = 1
+        }
+        members = cons_prepend(members, new_node(ND_ENUMMEMBER, hasval, mname, mval))
+        if cur_kind() != TK_COMMA {
+            break
+        }
+        advance()
+    }
+    advance()                               ; '}'
+    return new_node(ND_ENUM, 0, ename, members)
+}
+
+sub parse_struct_decl() -> uword {
+    advance()                               ; 'struct'
+    uword sname
+    sname = cur_val()
+    advance()                               ; name
+    advance()                               ; '{'
+    uword fields
+    fields = 0
+    repeat {
+        if cur_kind() == TK_RBRACE {
+            break
+        }
+        ubyte ftag
+        ftag = type_tag(cur_kind())
+        advance()                           ; field type
+        uword fname
+        fname = cur_val()
+        advance()                           ; field name
+        fields = cons_prepend(fields, new_node(ND_FIELD, ftag, fname, 0))
+        if cur_kind() == TK_COMMA {         ; ';' is a comment in the lexer
+            advance()
+        }
+    }
+    advance()                               ; '}'
+    return new_node(ND_STRUCT, 0, sname, fields)
+}
+
+sub parse_asmsub() -> uword {
+    advance()                               ; 'asmsub'
+    uword nameid
+    nameid = cur_val()
+    advance()                               ; name
+    advance()                               ; '('
+    uword params
+    params = 0
+    repeat {
+        if cur_kind() == TK_RPAREN {
+            break
+        }
+        ubyte ptag
+        ptag = type_tag(cur_kind())
+        advance()
+        uword pname
+        pname = cur_val()
+        advance()
+        params = cons_prepend(params, new_node(ND_PARAM, ptag, pname, 0))
+        if cur_kind() != TK_COMMA {
+            break
+        }
+        advance()
+    }
+    advance()                               ; ')'
+    ubyte rettag
+    rettag = TY_VOID
+    if cur_kind() == TK_ARROW {
+        advance()
+        rettag = type_tag(cur_kind())
+        advance()
+    }
+    advance()                               ; '='
+    uword addr
+    addr = cur_val()                        ; $ADDR (INT)
+    advance()
+    uword node
+    node = new_node(ND_SUB, SUBK_ASMSUB, nameid, params)
+    node_c[node] = addr
+    node_d[node] = rettag
+    return node
+}
+
+sub is_struct_name(uword id) -> ubyte {
+    uword cell
+    cell = prog_structs
+    repeat {
+        if cell == 0 {
+            return 0
+        }
+        if node_a[cons_val[cell]] == id {
+            return 1
+        }
+        cell = cons_next[cell]
+    }
+}
+
+sub parse_struct_var() -> uword {
+    uword sname
+    sname = cur_val()                       ; struct type name (IDENT)
+    advance()
+    uword arrsize
+    arrsize = 0
+    if cur_kind() == TK_LBRACK {
+        advance()
+        arrsize = cur_val()
+        advance()                           ; INT
+        advance()                           ; ']'
+    }
+    uword nameid
+    nameid = cur_val()
+    advance()                               ; instance name
+    uword node
+    node = new_node(ND_VARDECL, TY_STRUCT, nameid, 0)
+    node_c[node] = arrsize
+    node_d[node] = sname
+    return node
+}
+
 sub parse_program() {
     repeat {
         ubyte t
@@ -1626,23 +1811,39 @@ sub parse_program() {
             break
         }
         if t == TK_DIRECTIVE {
-            ; %address $XXXX / %output X / %target X / %import X
-            ; (compare the directive name)
-            advance()
-            ; read the directive argument(s) by kind
-            ubyte a
-            a = cur_kind()
-            if a == TK_INT {
+            ; %address $XXXX / %output X / %import X / %target X
+            name_len = 0
+            append_ident_to_namebuf(cur_val())
+            ubyte dk
+            dk = dir_classify()
+            advance()                           ; consume the directive
+            if dk == 0 {                        ; %address
                 prog_address = cur_val()
                 advance()
-            } else {
-                if a == TK_IDENT {
-                    advance()
-                } else {
-                    if a == TK_KUWORD {
-                        advance()
+                continue
+            }
+            if dk == 2 {                        ; %import
+                prog_imports = cons_prepend(prog_imports, cur_val())
+                advance()
+                continue
+            }
+            if dk == 3 {                        ; %target
+                name_len = 0
+                append_ident_to_namebuf(cur_val())
+                if name_len == 4 {              ; "nmos"
+                    if name_buf[0]==$6e and name_buf[1]==$6d and name_buf[2]==$6f and name_buf[3]==$73 {
+                        prog_target = 1
+                        if prog_address == $4000 {
+                            prog_address = $0200
+                        }
                     }
                 }
+                advance()
+                continue
+            }
+            ; %output (or other): consume a single ident arg if present
+            if cur_kind() == TK_IDENT {
+                advance()
             }
             continue
         }
@@ -1650,8 +1851,19 @@ sub parse_program() {
             prog_vars = cons_prepend(prog_vars, parse_var_decl())
             continue
         }
+        if t == TK_KCONST {
+            prog_vars = cons_prepend(prog_vars, parse_const_decl())
+            continue
+        }
+        if t == TK_KENUM {
+            prog_enums = cons_prepend(prog_enums, parse_enum_decl())
+            continue
+        }
+        if t == TK_KSTRUCT {
+            prog_structs = cons_prepend(prog_structs, parse_struct_decl())
+            continue
+        }
         if t == TK_KMAIN {
-            ; main { ... }  -- name is "main"; synthesize via read_dotted_path
             prog_subs = cons_prepend(prog_subs, parse_main())
             continue
         }
@@ -1659,6 +1871,24 @@ sub parse_program() {
             advance()
             prog_subs = cons_prepend(prog_subs, parse_sub(SUBK_SUB))
             continue
+        }
+        if t == TK_KINLINE {
+            advance()                           ; 'inline'
+            advance()                           ; 'sub'
+            prog_subs = cons_prepend(prog_subs, parse_sub(SUBK_INLINE))
+            continue
+        }
+        if t == TK_KASMSUB {
+            prog_subs = cons_prepend(prog_subs, parse_asmsub())
+            continue
+        }
+        if t == TK_IDENT {
+            ; `StructName instance` or `StructName[N] arr` -- a var whose
+            ; type is a previously-declared struct.
+            if is_struct_name(cur_val()) != 0 {
+                prog_vars = cons_prepend(prog_vars, parse_struct_var())
+                continue
+            }
         }
         ; unknown top-level token -- skip it to avoid an infinite loop
         advance()
@@ -1802,6 +2032,13 @@ sub out_type_name(ubyte tag) {
     if tag == TY_BOOL  { out_byte($62) out_byte($6f) out_byte($6f) out_byte($6c)  return }                 ; bool
     if tag == TY_VOID  { out_byte($76) out_byte($6f) out_byte($69) out_byte($64)  return }                 ; void
     if tag == TY_STR   { out_byte($73) out_byte($74) out_byte($72)  return }                               ; str
+    if tag == TY_CONST_UBYTE { out_str_lit_const() out_byte($75) out_byte($62) out_byte($79) out_byte($74) out_byte($65)  return }  ; const-ubyte
+    if tag == TY_CONST_BYTE  { out_str_lit_const() out_byte($62) out_byte($79) out_byte($74) out_byte($65)  return }                ; const-byte
+    if tag == TY_CONST_UWORD { out_str_lit_const() out_byte($75) out_byte($77) out_byte($6f) out_byte($72) out_byte($64)  return }  ; const-uword
+}
+; "const-" prefix
+sub out_str_lit_const() {
+    out_byte($63) out_byte($6f) out_byte($6e) out_byte($73) out_byte($74) out_byte($2d)
 }
 
 ; emit one node's opening; push children/close onto the work stack.
@@ -1912,7 +2149,11 @@ sub emit_node(uword node, ubyte depth) {
     }
     if k == ND_VARDECL {
         out_byte($76) out_byte($61) out_byte($72) out_byte($20)               ; "var "
-        out_type_name(node_op[node])
+        if node_op[node] == TY_STRUCT {
+            out_ident_text(node_d[node])                                      ; struct type name
+        } else {
+            out_type_name(node_op[node])
+        }
         if node_c[node] != 0 {
             out_byte($5b)                                                     ; '['
             out_dec(node_c[node])
@@ -2128,17 +2369,12 @@ sub serialize_program() {
         out_byte($77) out_byte($65) out_byte($6e) out_byte($64) out_byte($79) out_byte($32) out_byte($63)  ; wendy2c
     }
     out_byte($29) out_byte($0a)
-    ; (imports)  -- empty for M3
-    out_byte($20) out_byte($20)
-    out_byte($28) out_byte($69) out_byte($6d) out_byte($70) out_byte($6f) out_byte($72) out_byte($74) out_byte($73) out_byte($29) out_byte($0a)
+    ; (imports (import NAME) ...)
+    serialize_imports()
     ; (vars VARDECL ...)
     serialize_list_section(prog_vars, 1)
-    ; (enums)  empty
-    out_byte($20) out_byte($20)
-    out_byte($28) out_byte($65) out_byte($6e) out_byte($75) out_byte($6d) out_byte($73) out_byte($29) out_byte($0a)
-    ; (structs)  empty
-    out_byte($20) out_byte($20)
-    out_byte($28) out_byte($73) out_byte($74) out_byte($72) out_byte($75) out_byte($63) out_byte($74) out_byte($73) out_byte($29) out_byte($0a)
+    serialize_enums()
+    serialize_structs()
     ; (subs SUBDEF ...)
     serialize_subs_section()
     ; close (program  -- the last section's close already emitted a paren
@@ -2172,6 +2408,151 @@ sub serialize_list_section(uword head, ubyte which) {
         cell = cons_next[cell]
     }
     out_byte($29) out_byte($0a)
+}
+
+sub serialize_imports() {
+    out_byte($20) out_byte($20)
+    if prog_imports == 0 {
+        out_byte($28) out_byte($69) out_byte($6d) out_byte($70) out_byte($6f) out_byte($72) out_byte($74) out_byte($73) out_byte($29) out_byte($0a)  ; "(imports)\n"
+        return
+    }
+    out_byte($28) out_byte($69) out_byte($6d) out_byte($70) out_byte($6f) out_byte($72) out_byte($74) out_byte($73)  ; "(imports"
+    uword rev
+    rev = reverse_cons(prog_imports)
+    uword cell
+    cell = rev
+    repeat {
+        if cell == 0 {
+            break
+        }
+        out_byte($0a)
+        out_indent(2)
+        out_byte($28) out_byte($69) out_byte($6d) out_byte($70) out_byte($6f) out_byte($72) out_byte($74) out_byte($20)  ; "(import "
+        out_ident_text(cons_val[cell])
+        out_byte($29)
+        cell = cons_next[cell]
+    }
+    out_byte($29) out_byte($0a)
+}
+
+sub serialize_enums() {
+    out_byte($20) out_byte($20)
+    if prog_enums == 0 {
+        out_byte($28) out_byte($65) out_byte($6e) out_byte($75) out_byte($6d) out_byte($73) out_byte($29) out_byte($0a)  ; "(enums)\n"
+        return
+    }
+    out_byte($28) out_byte($65) out_byte($6e) out_byte($75) out_byte($6d) out_byte($73)  ; "(enums"
+    uword rev
+    rev = reverse_cons(prog_enums)
+    uword cell
+    cell = rev
+    repeat {
+        if cell == 0 {
+            break
+        }
+        out_byte($0a)
+        serialize_enum(cons_val[cell], 2)
+        cell = cons_next[cell]
+    }
+    out_byte($29) out_byte($0a)
+}
+
+sub serialize_enum(uword node, ubyte depth) {
+    out_indent(depth)
+    out_byte($28) out_byte($65) out_byte($6e) out_byte($75) out_byte($6d) out_byte($20)  ; "(enum "
+    out_ident_text(node_a[node])
+    out_byte($0a)
+    out_indent(depth + 1)
+    uword mhead
+    mhead = node_b[node]
+    if mhead == 0 {
+        out_byte($28) out_byte($6d) out_byte($65) out_byte($6d) out_byte($62) out_byte($65) out_byte($72) out_byte($73) out_byte($29)  ; "(members)"
+    } else {
+        out_byte($28) out_byte($6d) out_byte($65) out_byte($6d) out_byte($62) out_byte($65) out_byte($72) out_byte($73)  ; "(members"
+        uword rev
+        rev = reverse_cons(mhead)
+        uword cell
+        cell = rev
+        repeat {
+            if cell == 0 {
+                break
+            }
+            out_byte($0a)
+            uword m
+            m = cons_val[cell]
+            out_indent(depth + 2)
+            out_byte($28)
+            out_ident_text(node_a[m])
+            out_byte($20)
+            if node_op[m] != 0 {
+                out_dec(node_b[m])
+            } else {
+                out_byte($2d)               ; '-'
+            }
+            out_byte($29)
+            cell = cons_next[cell]
+        }
+        out_byte($29)                       ; close (members
+    }
+    out_byte($29)                           ; close (enum
+}
+
+sub serialize_structs() {
+    out_byte($20) out_byte($20)
+    if prog_structs == 0 {
+        out_byte($28) out_byte($73) out_byte($74) out_byte($72) out_byte($75) out_byte($63) out_byte($74) out_byte($73) out_byte($29) out_byte($0a)  ; "(structs)\n"
+        return
+    }
+    out_byte($28) out_byte($73) out_byte($74) out_byte($72) out_byte($75) out_byte($63) out_byte($74) out_byte($73)  ; "(structs"
+    uword rev
+    rev = reverse_cons(prog_structs)
+    uword cell
+    cell = rev
+    repeat {
+        if cell == 0 {
+            break
+        }
+        out_byte($0a)
+        serialize_struct(cons_val[cell], 2)
+        cell = cons_next[cell]
+    }
+    out_byte($29) out_byte($0a)
+}
+
+sub serialize_struct(uword node, ubyte depth) {
+    out_indent(depth)
+    out_byte($28) out_byte($73) out_byte($74) out_byte($72) out_byte($75) out_byte($63) out_byte($74) out_byte($20)  ; "(struct "
+    out_ident_text(node_a[node])
+    out_byte($0a)
+    out_indent(depth + 1)
+    uword fhead
+    fhead = node_b[node]
+    if fhead == 0 {
+        out_byte($28) out_byte($66) out_byte($69) out_byte($65) out_byte($6c) out_byte($64) out_byte($73) out_byte($29)  ; "(fields)"
+    } else {
+        out_byte($28) out_byte($66) out_byte($69) out_byte($65) out_byte($6c) out_byte($64) out_byte($73)  ; "(fields"
+        uword rev
+        rev = reverse_cons(fhead)
+        uword cell
+        cell = rev
+        repeat {
+            if cell == 0 {
+                break
+            }
+            out_byte($0a)
+            uword fnode
+            fnode = cons_val[cell]
+            out_indent(depth + 2)
+            out_byte($28)
+            out_type_name(node_op[fnode])
+            out_byte($20)
+            out_ident_text(node_a[fnode])
+            out_byte($29)
+            cell = cons_next[cell]
+        }
+        out_byte($29)                       ; close (fields
+    }
+    out_byte($29)                           ; close (struct
 }
 
 sub serialize_subs_section() {
@@ -2217,11 +2598,19 @@ sub serialize_sub(uword node, ubyte depth) {
     ; (params ...) at depth+1
     out_byte($0a)
     serialize_params(node_b[node], depth + 1)
-    ; body at depth+1
     out_byte($0a)
-    ws_sp = 0
-    ws_push_node(node_c[node], depth + 1)
-    drain_ws()
+    if sk == SUBK_ASMSUB {
+        ; (asmtarget $XXXX) instead of a body
+        out_indent(depth + 1)
+        out_byte($28) out_byte($61) out_byte($73) out_byte($6d) out_byte($74) out_byte($61) out_byte($72) out_byte($67) out_byte($65) out_byte($74) out_byte($20) out_byte($24)  ; "(asmtarget $"
+        out_hex4(node_c[node])
+        out_byte($29)
+    } else {
+        ; body at depth+1
+        ws_sp = 0
+        ws_push_node(node_c[node], depth + 1)
+        drain_ws()
+    }
     out_byte($29)                            ; close (subdef
 }
 
@@ -2308,6 +2697,8 @@ main {
     prog_target = 0
     prog_imports = 0
     prog_vars = 0
+    prog_enums = 0
+    prog_structs = 0
     prog_subs = 0
 
     lex_all()

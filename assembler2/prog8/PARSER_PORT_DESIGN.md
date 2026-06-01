@@ -368,10 +368,16 @@ the command later milestones diff their on-target output against.
   struct, and asmsub are not yet handled -- that is M4 (the `examples/`
   corpus).
 
-* **M4 -- whole-program parse on-target.** Wire lexer+parser+serializer
-  into one `p1/parse_main.p8` that takes a `.p8` path and writes the
-  serialization. Golden corpus = every `examples/*.p8` and tinyp8.p8.
-  This is the step-5 success criterion (section 1).
+* **M4 -- whole-program parse on-target. DONE.** `p1/stmt.p8` extended
+  to the full top-level surface: directives (`%address` / `%output` /
+  `%import` -> the imports list / `%target` -> target + nmos address
+  default), `const` decls, `enum` decls (members with optional values),
+  `struct` decls + struct instances/arrays (`Point p`, `Token[4] toks`),
+  `asmsub` (`(asmtarget $XXXX)`), and `inline sub`. Byte-identical to the
+  oracle over the **entire `examples/` corpus** (18 files, incl.
+  `tokenizer.p8` = enum + struct + inline), `p1/tests/test_stmt.py`.
+  tinyp8.p8 itself (1289 lines, ~2300 AST lines) does not yet fit the
+  arenas / 64 KB -- that is M5.
 
 * **M5 -- capacity + streaming.** Measure arena high-water marks on the
   largest inputs; size the arenas; add bump-guards; if needed, switch
