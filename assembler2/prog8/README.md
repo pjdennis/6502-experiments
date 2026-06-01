@@ -106,7 +106,7 @@ wendy2c, mirroring the asm00..asm17 chain.
     compiled by our own host compiler, agrees bit-for-bit with the
     reference assembly version.
 
-**Phase 4 -- tinyp8.p8 grows beyond the reference (v2..v6):**
+**Phase 4 -- tinyp8.p8 grows beyond the reference (v2..v8):**
 
   * v2: `let X = $XX` declarations + `print_ub X` references. The
     on-target compiler now maintains a 26-slot symbol table and emits
@@ -120,11 +120,36 @@ wendy2c, mirroring the asm00..asm17 chain.
   * v6: `while X != $YY` loop with fixed-shape body `let X = X + $ZZ`.
     The loop-top is recorded as `bytes_emitted` so the back-jump
     target is known when needed.
+  * v7: full comparison ops (`<`, `<=`, `>`, `>=`, plus existing
+    `==` and `!=`) via a shared op-code decoder + branch emitter.
+    `<=` and `>` use two-step branch sequences (4 bytes) where
+    `==`/`!=`/`<`/`>=` use single-step (2 bytes).
+  * v8: while body can include `print_ub Y` before the let increment.
+    Detected by peeking the first char of the next line; emits
+    the right `skip_size` to the conditional branch and ensures the
+    hex helper is in place before `loop_top` is captured.
 
-  v0/v1 byte-equivalence with `tinyp8.s` stays intact because the new
-  syntax/state only activates when the new constructs appear. The
-  combined corpus is 5 e2e + 5 equivalence + 8 v2..v6 = 18 tinyp8
-  cases, all green.
+  v0/v1 byte-equivalence with `tinyp8.s` stays intact because new
+  syntax/state only activates when the new constructs appear. Combined
+  corpus is 5 e2e + 5 equivalence + 11 v2..v8 = 21 tinyp8 cases,
+  all green.
+
+  Programs the on-target compiler accepts now:
+
+      let i = $00
+      while i < $10
+          print_ub i
+          let i = i + $02
+      end
+      -> 00 02 04 06 08 0a 0c 0e
+
+      let s = $42
+      if s == $42 then print_ub s
+      if s >= $40 then print_ub s
+      -> 42 42
+
+      ...etc. Real loops, real conditionals, real arithmetic, all
+      compiled by a Prog8 program running inside the emulator.
 
 **Phase 3 cont -- language built out toward Prog8 parity:**
 
