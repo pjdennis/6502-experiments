@@ -106,10 +106,44 @@ wendy2c, mirroring the asm00..asm17 chain.
     compiled by our own host compiler, agrees bit-for-bit with the
     reference assembly version.
 
-Next pushes: extend tinyp8.p8 to cover more language (variables,
-if-print, hex constants), then start growing toward a richer p8c
-self-host. Also: byte/word (signed), const, enum, arrays,
-memory-mapped vars (`&type x = $addr`, `@(uword_expr)`).
+**Phase 3 cont -- language built out toward Prog8 parity:**
+
+  * Fixed-size `ubyte[N]` arrays (1..256) with indexed read/write.
+  * `*` ubyte multiplication via a runtime helper (shift-and-add).
+  * `@(addr_expr)` byte read/write at arbitrary addresses (via the
+    `__p8c_ptr0` indirect-Y pointer in ZP); literal addresses use
+    direct absolute load/store.
+  * `&name` address-of operator (returns a uword).
+  * `const ubyte/uword NAME = LITERAL` -- compile-time constants
+    folded to immediate loads at every use site.
+  * Builtins: `lsb`, `msb`, `mkword`, `len`, `sizeof` (all
+    statically lowered).
+  * `when expr { v1, v2 -> body; else -> body }` -- linear
+    cmp-and-branch dispatch, ubyte or uword.
+  * `inline sub` -- body spliced at each call site; per-callsite
+    return label so `return` jumps locally.
+  * **Long-branch handling**: all forward conditional branches in
+    if/while/for/repeat now emit as `invert-branch + JMP` so they
+    work at any distance. Costs +3 bytes per branch; always-safe.
+
+Real-program demos in examples/:
+  * arrays.p8, memptr.p8, squares.p8, consts.p8, when.p8,
+    inline_demo.p8, **sieve.p8** (Sieve of Eratosthenes, exercises
+    arrays + multiplication + nested loops + when -- prints primes
+    < 64 in hex).
+
+Self-host equivalence (tinyp8.s == tinyp8.p8) still 4/4 -- new
+features are additive, the tinyp8 corpus uses the original v0
+language and remains byte-identical to the reference asm.
+
+Still ahead for *full* Prog8 self-host:
+  * `byte` / `word` signed types
+  * `enum`, structs, defer
+  * Strings as proper iterable buffers (currently only literal
+    -> address; need string compare, length, slicing)
+  * Iterative parser architecture -- Prog8 forbids recursion, so
+    porting p8c (currently recursive-descent in Python) requires
+    rewriting the parser around an explicit AST stack.
 
 See the plan in conversation history for Phases 3-6, including the
 on-emulator emit-equivalence test tier that activates at Phase 5 when
