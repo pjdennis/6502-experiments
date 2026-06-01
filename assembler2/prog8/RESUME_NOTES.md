@@ -6,6 +6,10 @@ conversation can pick up productively without re-reading prior
 chat history. Update it (or replace it wholesale) at the end of
 each session.
 
+For the strategic plan (goal, phase map, critical path), see
+[`PLAN.md`](./PLAN.md). For per-feature language-surface details,
+see [`README.md`](./README.md).
+
 Branch: `claude/review-wendy2-plan-MOfnA`. Push as you go; the
 remote is the source of truth across sessions.
 

@@ -3,6 +3,17 @@
 Bootstrap chain for a Prog8 compiler that eventually self-hosts on
 wendy2c, mirroring the asm00..asm17 chain.
 
+**Three companion documents:**
+
+* [`PLAN.md`](./PLAN.md) -- strategic plan: goal, phase map, what's
+  done, what remains, critical-path summary. Read this first when
+  picking the project up.
+* [`RESUME_NOTES.md`](./RESUME_NOTES.md) -- session-handoff notes:
+  exactly where the last session stopped, ready-to-pick-up next
+  pushes, pitfalls observed, quick-resume cheatsheet.
+* This file (README) -- per-feature language-surface checklist and
+  layout reference.
+
 ## Layout
 
     prog8/
