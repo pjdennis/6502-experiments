@@ -29,6 +29,22 @@ is the source of truth across sessions.
 
 ---
 
+## Standing constraint: p1.p8 must compile under upstream Prog8
+
+The finished `p1.p8` must be **compilable by the upstream Java/Kotlin Prog8
+compiler** (its OUTPUT need not match -- only that upstream accepts the
+source). So `p1.p8` must stay in the **intersection** of our p8c and upstream
+Prog8; p8c may remain a superset. Biggest gap is the platform I/O shim
+(`asmsub ... = $F0xx`, `%asm{{ "quoted" }}`, `%target nmos`) -- upstream uses
+`romsub`/`extsub`, raw `%asm {{ }}`, and real targets; isolate it behind a
+small read/write/argv/exit interface. The string idiom (`out_text(uword)` +
+`@()`) should become a `str` param + `s[i]` (call sites unchanged -> a
+one-signature change). Reconcile in a dedicated **upstream-compat pass**
+around P7-M6; build codegen in the common subset meanwhile. See
+PHASE7_DESIGN.md section 10.
+
+---
+
 ## High-level status (tinyp8 at v9)
 
 * **Host p8c (Python)** -- recursive-descent compiler from `.p8`

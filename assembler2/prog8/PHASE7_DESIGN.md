@@ -301,3 +301,52 @@ the return/exit epilogue, and the reset vector -- diffed against
 and the per-sub emission loop, and it gives the first real read on the
 code-size budget. Then P7-M2 (vars + assignment) is the first codegen of
 actual statements.
+
+---
+
+## 10. Constraint: p1.p8 must compile under upstream Prog8
+
+**Requirement (added later):** the finished self-hosting compiler `p1.p8`
+must be *compilable* by the upstream Java/Kotlin Prog8 compiler. Its **output
+need not match** -- p1 targets our nmos emulator and p8c's asm conventions,
+whereas upstream targets c64/cx16/etc. -- only that upstream *accepts the
+source*. (Rationale: keep `p1.p8` honest Prog8, not a dialect that drifted
+into whatever our subset compiler happened to allow.)
+
+**Implication:** `p1.p8` must be written in the **intersection** of our p8c's
+language and upstream Prog8. p8c may stay a *superset* (extra conveniences are
+fine for compiling other programs), but `p1.p8` itself uses only constructs
+valid in both. Track this subset discipline the way tinyp8's v-series did.
+
+**Known divergences to reconcile** (where `p1.p8` / the spliced front-end
+currently use p8c-only or non-upstream forms):
+
+1. **The platform I/O shim -- the big one.** p1.p8's file I/O uses
+   `asmsub name(...) = $F0xx` declarations + `%asm{{ "...quoted text..." }}`
+   inline blocks that call emulator syscalls, plus `%target nmos` /
+   `%address`. Upstream spells these differently: external routines are
+   `romsub $addr = name(...)` / `extsub`; inline asm is `%asm {{ ...raw
+   text... }}` (raw, not a quoted string); targets are c64/cx16/virtual/etc.
+   To compile under upstream, the shim must be **isolated behind a small
+   interface** (read byte / write byte / argv / exit) with an upstream-valid
+   implementation chosen per target. The compiler *logic* above the shim
+   already aims for the common subset.
+
+2. **String idiom.** p1.p8 emits fixed text via `out_text(uword p)` + `@(p)`,
+   relying on p8c's string-literal->uword coercion (section "Enabling work").
+   The upstream-canonical form is a `str` parameter with `s[i]` indexing.
+   Crucially the **call sites are identical** (`out_text("...")`) regardless
+   of whether the param is `uword` or `str`, so this is a *one-signature*
+   change -- deferred to the reconciliation pass, no compounding cost. p8c
+   keeps the coercion as a convenience.
+
+3. **Misc syntax to vet.** `%target` / `%address` / `%output` directives,
+   the `when` form, augmented-assignment operators, `defer`, etc. -- each
+   construct p1.p8 uses must be confirmed against the upstream grammar.
+
+**Strategy:** keep building codegen in the common subset; isolate anything
+platform-specific behind the I/O interface; then run a dedicated
+**upstream-compat pass** (around P7-M6, once `p1.p8` is whole) that swaps the
+shim for an upstream-valid backend and vets every construct against the
+upstream grammar. Because this pass does not need byte-identical output, it
+can be validated simply by *upstream accepting the source* (compile-only).
