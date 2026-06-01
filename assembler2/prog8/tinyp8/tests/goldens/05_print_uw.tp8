@@ -1,0 +1,6 @@
+; v1 feature: print_uw $XXXX prints a 4-digit hex value.
+print "values:"
+print_uw $abcd
+print_uw $0042
+print_uw $ffff
+end

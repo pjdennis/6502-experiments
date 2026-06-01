@@ -252,6 +252,32 @@ sub parse_print_ub() {
     skip_to_nl()
 }
 
+sub parse_print_uw() {
+    ubyte c
+    ; Find the '$' sigil.
+    repeat {
+        c = read_src()
+        if src_eof != 0 {
+            return
+        }
+        if c == $24 {                                    ; '$'
+            break
+        }
+    }
+    ; Four hex digits -- emit one print_char per nibble (no need to
+    ; reassemble into a uword; each digit is independently printable).
+    ubyte i
+    for i in 0 to 3 {
+        c = read_src()
+        if src_eof != 0 {
+            return
+        }
+        emit_print_char(nibble_to_ascii(hex_nibble(c)))
+    }
+    emit_print_char($0a)
+    skip_to_nl()
+}
+
 sub parse_print() {
     ubyte c
     ; Skip "rint"
@@ -262,16 +288,22 @@ sub parse_print() {
     if src_eof != 0 {
         return
     }
-    ; Peek the next char: '_' means print_ub, otherwise string form.
+    ; Peek the next char: '_' means print_ub/print_uw, else string form.
     c = read_src()
     if src_eof != 0 {
         return
     }
     if c == $5f {                                        ; '_'
-        ; Skip "ub"
-        c = read_src()
-        c = read_src()
-        parse_print_ub()
+        c = read_src()                                   ; 'u'
+        c = read_src()                                   ; 'b' or 'w'
+        if src_eof != 0 {
+            return
+        }
+        if c == $77 {                                    ; 'w'
+            parse_print_uw()
+        } else {
+            parse_print_ub()
+        }
     } else {
         ; The byte we already consumed should be ws or the leading
         ; quote; parse_print_string will scan forward to '"' so

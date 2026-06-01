@@ -123,9 +123,13 @@ parse_print:
   jsr read_src           ; i
   jsr read_src           ; n
   jsr read_src           ; t
-  bcs .err
+  bcc .pp_t_ok
+  jmp .err
+.pp_t_ok:
   jsr read_src           ; either '_' or whitespace
-  bcs .err
+  bcc .pp_pre_ok
+  jmp .err
+.pp_pre_ok:
   cmp #'_'
   beq .ub_form
 
@@ -133,12 +137,16 @@ parse_print:
   cmp #'"'
   beq .got_quote
   jsr read_src
-  bcs .err
+  bcc .fq_ok
+  jmp .err
+.fq_ok:
   jmp .find_quote
 .got_quote:
 .s_loop:
   jsr read_src
-  bcs .err
+  bcc .sl_ok
+  jmp .err
+.sl_ok:
   cmp #'"'
   beq .s_end
   jsr emit_print_char
@@ -151,8 +159,12 @@ parse_print:
 
 .ub_form:
   jsr read_src           ; 'u'
-  jsr read_src           ; 'b'
   bcs .err
+  jsr read_src           ; 'b' or 'w'
+  bcs .err
+  cmp #'w'
+  beq .uw_seek_dollar
+  ; fall through: 'b' (ubyte form)
 .ub_seek_dollar:
   jsr read_src
   bcs .err
@@ -182,6 +194,42 @@ parse_print:
   jsr emit_print_char
   jsr skip_to_nl
   rts
+.uw_seek_dollar:
+  jsr read_src
+  bcs .err
+  cmp #'$'
+  beq .uw_got_dollar
+  cmp #' '
+  beq .uw_seek_dollar
+  cmp #$09
+  beq .uw_seek_dollar
+  jmp .err
+.uw_got_dollar:
+  ; Read 4 hex digits, emit a print_char sequence for each (precomputed
+  ; ASCII), plus a trailing newline. We don't bother packing the digits
+  ; into a 16-bit value -- since each nibble is independently emitted,
+  ; the 4 read_src + nibble_to_ascii + emit_print_char invocations are
+  ; the loop.
+  ldx #$04
+.uw_digit_loop:
+  txa
+  pha                    ; preserve loop counter
+  jsr read_src
+  bcs .uw_err_pop
+  jsr hex_nibble
+  jsr nibble_to_ascii
+  jsr emit_print_char
+  pla
+  tax
+  dex
+  bne .uw_digit_loop
+  lda #$0A
+  jsr emit_print_char
+  jsr skip_to_nl
+  rts
+.uw_err_pop:
+  pla
+  jmp .err
 
 .err:
   ; Forgiving: emit exit and return cleanly. A real compiler would
