@@ -474,9 +474,13 @@ Progress:
          expr's `@()` address would corrupt the byte stack (documented gap).
          Augmented `<<= >>=` via the synthetic word binop. wws tasks 4-8.
          `test_p1.py::test_m3_wordshift_programs`. p1.bin ~55 KB code.
-       * **NEXT: rest of the WORD evaluator** -- word comparison
-         (`_emit_word_cmp_into_a`, the 16-bit compare idiom), then array
-         indexing (`arr[i]`, needs array
+       * **WORD comparison: NO PORT NEEDED.** p8c's `_emit_cmp_into_a` always
+         evaluates comparison operands as BYTES (it compares only the low
+         bytes even for uword operands -- a p8c limitation;
+         `_emit_word_cmp_into_a` is unreachable for comparison-as-value). So
+         p1's existing byte cmp path already matches `p8c -o` for uword
+         operands -- locked in by a uword case in `test_m3_cmp_programs`.
+       * **NEXT: array indexing** (`arr[i]`, needs array
          symbols + storage trailers -- M5 territory), calls, `txt.print*`.
          (was: grow codegen_word_expr -- port of `_emit_word_expr_into_ay` /
          `_emit_word_binop_into_ay`

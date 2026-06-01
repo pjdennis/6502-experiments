@@ -186,6 +186,12 @@ M3_CMP_PROGRAMS = [
     # not of a comparison (bool -> not) + nested (non-leaf) operand
     "%target nmos\nubyte a\nubyte b\nubyte c\n\n"
     "main {\n    a = not (b < c)\n    a = (b + 1) < c\n    a = b > (c - 1)\n}\n",
+    # uword operands: p8c's comparison codegen evaluates operands as BYTES
+    # (it compares only low bytes -- a p8c limitation; _emit_word_cmp_into_a
+    # is unreachable for comparison-as-value), so the existing byte cmp path
+    # already matches. Locks that equivalence in.
+    "%target nmos\nubyte a\nuword x\nuword y\n\n"
+    "main {\n    a = x < y\n    a = x == y\n    a = x >= y\n}\n",
 ]
 
 # Phase-7 byte logical slice: short-circuit `and` / `or` (port of
