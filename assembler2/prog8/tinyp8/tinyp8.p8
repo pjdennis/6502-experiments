@@ -463,47 +463,131 @@ sub parse_let() {
             break
         }
     }
-    ; skip ws to RHS -- either '$' (literal) or a lowercase letter
-    ; (variable-copy: `let x = y`).
+    ; ---- RHS: parse first operand and emit its load. Then check for
+    ;       an optional `+` or `-` followed by a second operand.
+    parse_let_emit_load_first()
+    if src_eof != 0 {
+        return
+    }
+    ; Skip whitespace; if next non-ws is '+' or '-', emit arithmetic.
+    repeat {
+        c = peek_src()
+        if src_eof != 0 {
+            break
+        }
+        if c == $20 {                                    ; space
+            c = read_src()
+        } else {
+            if c == $09 {                                ; tab
+                c = read_src()
+            } else {
+                break
+            }
+        }
+    }
+    c = peek_src()
+    if src_eof == 0 {
+        if c == $2b {                                    ; '+'
+            c = read_src()
+            parse_let_emit_arith($18)                    ; CLC/ADC path
+        } else {
+            if c == $2d {                                ; '-'
+                c = read_src()
+                parse_let_emit_arith($38)                ; SEC/SBC path
+            }
+        }
+    }
+    write_dst($85)                                       ; STA zp
+    write_dst(addr)
+    skip_to_nl()
+}
+
+; Helper: parse + emit the LDA for the first RHS operand. The value
+; ends up in A at runtime; the caller then either stores it directly
+; (no arithmetic) or chains an ADC/SBC against the second operand.
+sub parse_let_emit_load_first() {
+    ubyte c
     repeat {
         c = read_src()
         if src_eof != 0 {
             return
         }
-        if c == $24 {                                    ; '$' -- literal
-            break
+        if c == $24 {                                    ; '$' literal
+            c = read_src()
+            if src_eof != 0 {
+                return
+            }
+            tmp_byte = hex_nibble(c) << 4
+            c = read_src()
+            if src_eof != 0 {
+                return
+            }
+            tmp_byte = tmp_byte | hex_nibble(c)
+            write_dst($a9)                               ; LDA #
+            write_dst(tmp_byte)
+            return
         }
         if c >= $61 {
             if c <= $7a {
-                ; Variable-copy form: `let x = y` -> emit lda <y>; sta <x>.
-                ubyte src_addr
-                src_addr = var_addrs[c - $61]
                 write_dst($a5)                           ; LDA zp
-                write_dst(src_addr)
-                write_dst($85)                           ; STA zp
-                write_dst(addr)
-                skip_to_nl()
+                write_dst(var_addrs[c - $61])
                 return
             }
         }
     }
-    ; two hex digits -> value
+}
+
+; Helper: emit CLC/SEC + ADC/SBC against the second operand.
+; first_op = $18 (CLC) for ADD path, $38 (SEC) for SUB path.
+sub parse_let_emit_arith(ubyte first_op) {
+    write_dst(first_op)
+    ubyte zp_op
+    ubyte imm_op
+    if first_op == $18 {
+        zp_op = $65                                      ; ADC zp
+        imm_op = $69                                     ; ADC #
+    } else {
+        zp_op = $e5                                      ; SBC zp
+        imm_op = $e9                                     ; SBC #
+    }
+    ubyte c
+    repeat {
+        c = peek_src()
+        if src_eof != 0 {
+            return
+        }
+        if c == $20 {
+            c = read_src()
+        } else {
+            if c == $09 {
+                c = read_src()
+            } else {
+                break
+            }
+        }
+    }
     c = read_src()
     if src_eof != 0 {
         return
     }
-    tmp_byte = hex_nibble(c) << 4
-    c = read_src()
-    if src_eof != 0 {
+    if c == $24 {                                        ; '$' literal
+        c = read_src()
+        if src_eof != 0 {
+            return
+        }
+        tmp_byte = hex_nibble(c) << 4
+        c = read_src()
+        if src_eof != 0 {
+            return
+        }
+        tmp_byte = tmp_byte | hex_nibble(c)
+        write_dst(imm_op)
+        write_dst(tmp_byte)
         return
     }
-    tmp_byte = tmp_byte | hex_nibble(c)
-    ; Emit: lda #<value> ; sta <addr>  (4 bytes total)
-    write_dst($a9)                                       ; LDA #
-    write_dst(tmp_byte)
-    write_dst($85)                                       ; STA zp
-    write_dst(addr)
-    skip_to_nl()
+    ; variable
+    write_dst(zp_op)
+    write_dst(var_addrs[c - $61])
 }
 
 ; Emit a print_ub call against a variable reference (single letter).

@@ -1,0 +1,12 @@
+; v5: simple arithmetic in let.
+let a = $10
+let b = $20
+let c = a + b           ; 30
+let d = c + $05         ; 35
+let e = c - $03         ; 2d
+let f = b - a           ; 10
+print_ub c
+print_ub d
+print_ub e
+print_ub f
+end
