@@ -85,10 +85,10 @@ PHASE7_DESIGN.md section 10.
   * 5 v0/v1 e2e (`tinyp8/tests/test_e2e.py`).
   * 5 v0/v1 self-host equivalence (`test_self_host.py`).
   * 12 v2..v9 .p8-only (`test_v2.py`, sources in `goldens_v2/`).
-  * **158 total, all green** (the 22 tinyp8 + 31 p1 cases need vasm; see the
+  * **159 total, all green** (the 22 tinyp8 + 32 p1 cases need vasm; see the
     environment note above). The p1 codegen cases live in
-    `p1/tests/test_p1.py` (Phase 7: P7-M1 + P7-M2 + the M3 strings and
-    byte-arithmetic slices).
+    `p1/tests/test_p1.py` (Phase 7: P7-M1 + P7-M2 + the M3 strings,
+    byte-arithmetic, and mul/shift slices).
 
 Run:
 
@@ -382,15 +382,28 @@ Progress:
          the host's dual-scratch-safe form). Augmented assignment now shares
          `emit_byte_binop_leaf` via `aug_to_binop`.
          `test_p1.py::test_m3_expr_programs`. p1.bin ~50 KB.
+       * **P7-M3 byte mul + shift slice DONE.** `*` via the `__p8c_mul_u8`
+         runtime helper (emitted between main and the string pool, only when
+         `mul_used` was set), and the shifts `<< >>` -- an immediate count
+         unrolls to repeated `asl a`/`lsr a` (count & 7), a variable count
+         emits a runtime loop with a `.Lshl_top_N` / `.Lshl_end_N` (resp.
+         `.Lshr_*`) label pair. Added a global `label_seq` counter (= p8c's
+         `_label_id`, alloc order top-then-end) and a `mul_used` flag, both
+         reset before pass M. The two binop emitters were unified into
+         `emit_byte_binop_core(op, mode, rhs)` (mode 0 = leaf rhs node,
+         mode 1 = `__p8c_tmp1` spill) sharing one `emit_byte_operand`; the
+         leaf/zp wrappers delegate. `aug_to_binop` now maps `<<=`/`>>=`.
+         Covers leaf-RHS, the generic spill path, the dual-scratch pattern
+         `(b<<3)+(b<<1)`, and augmented `<<= >>=`. `p8c -o` byte-identical
+         over `test_p1.py::test_m3_mulshift_programs`. p1.bin ~52 KB code.
        * **NEXT: rest of P7-M3** -- still on the byte/word expr trees:
-         `*` (+ the `__p8c_mul_u8` trailer helper), shifts (`<< >>`,
-         immediate-unrolled + variable-loop), comparisons + the
-         invert-branch long-branch idiom (needed before `if`/`while`),
-         unary (`- ~ not`), `@()`, `&name`, indexing, calls, `txt.print*`;
-         then the WORD evaluator (`_emit_word_expr_into_ay` proper -- the
-         work-stack pattern generalizes, mind the mkword Y-clobber fix).
-         Smallest-first, each diffed against `p8c -o`. Keep wrapping distinct
-         fixed fragments in o_*/out_text helpers (one pooled string each).
+         comparisons + the invert-branch long-branch idiom (needed before
+         `if`/`while`), unary (`- ~ not`), `@()`, `&name`, indexing, calls,
+         `txt.print*`; then the WORD evaluator (`_emit_word_expr_into_ay`
+         proper -- the work-stack pattern generalizes, mind the mkword
+         Y-clobber fix). Smallest-first, each diffed against `p8c -o`. Keep
+         wrapping distinct fixed fragments in o_*/out_text helpers (one
+         pooled string each).
 
 The caveat below (fixed frame layout) is addressed in the design doc's
 section 3.6 -- parallel arrays sized for the widest frame kind.

@@ -254,9 +254,16 @@ Each milestone is a few pushes; each diffs `p1`'s `.s` against `p8c`'s.
       non-leaf RHS -> `pha / ... / sta __p8c_tmp1 / pla / op __p8c_tmp1`,
       matching the host's dual-scratch-safe sequence). Augmented assignment
       now shares the same `emit_byte_binop_*` emitter (via `aug_to_binop`).
-      Diffed against `p8c -o` over a byte-expr corpus. (Remaining M3: `*` +
-      the mul helper, shifts, comparisons + branches, unary, `@()`, `&`,
-      indexing, calls, `txt.print*`; then the word-expression evaluator.)
+      Diffed against `p8c -o` over a byte-expr corpus.
+    * **Byte mul + shift slice DONE:** `*` via the `__p8c_mul_u8` runtime
+      helper (emitted between main and the string pool when `mul_used`), and
+      `<< >>` -- immediate counts unroll (`asl a`/`lsr a`, count & 7), variable
+      counts emit a runtime loop with a `.Lshl_top_N`/`.Lshl_end_N` (resp.
+      `.Lshr_*`) label pair driven by a global `label_seq` (= p8c's
+      `_label_id`). The two binop emitters were unified into
+      `emit_byte_binop_core(op, mode, rhs)`; `aug_to_binop` gained `<<=`/`>>=`.
+      Diffed against `p8c -o`. (Remaining M3: comparisons + branches, unary,
+      `@()`, `&`, indexing, calls, `txt.print*`; then the word evaluator.)
 * **P7-M4 -- control flow.** if/else, while, for, repeat, break/continue/
   return, when, defer; long branches.
 * **P7-M5 -- decls + trailers.** arrays, consts, enums, structs, asmsub,

@@ -124,6 +124,31 @@ M3_EXPR_PROGRAMS = [
     "    x |= y\n    x ^= 2\n}\n",
 ]
 
+# Phase-7 byte mul + shift slice: `*` (via the __p8c_mul_u8 runtime helper,
+# emitted between main and the string pool only when used) and the shifts
+# `<< >>` -- immediate counts unroll to repeated asl/lsr, variable counts emit
+# a runtime loop with a .Lshl_top_N / .Lshl_end_N label pair (the global label
+# counter must match p8c's _label_id sequence). Exercises the leaf-RHS path,
+# the generic spill path, the dual-scratch pattern, and augmented <<= / >>=.
+M3_MULSHIFT_PROGRAMS = [
+    # mul: leaf-RHS (literal + var) and the generic spill path
+    "%target nmos\nubyte a\nubyte b\nubyte c\nubyte d\n\n"
+    "main {\n    a = b * c\n    a = b * 3\n    a = (b + c) * d\n"
+    "    a = d * (b + c)\n}\n",
+    # shifts: immediate (unrolled) and variable (loop, label pairs) counts
+    "%target nmos\nubyte a\nubyte b\nubyte c\nubyte d\n\n"
+    "main {\n    a = b << 2\n    a = b >> 1\n    a = b << c\n    a = b >> d\n"
+    "    a = b << 0\n}\n",
+    # the dual-scratch pattern (two shift sub-expressions in one binop) +
+    # variable-count shifts in a binop (two label pairs, sequential ids)
+    "%target nmos\nubyte a\nubyte b\nubyte c\nubyte d\n\n"
+    "main {\n    a = (b << 3) + (b << 1)\n    a = (b << c) - (b >> d)\n}\n",
+    # augmented <<= / >>= (leaf + variable count) alongside mul
+    "%target nmos\nubyte x\nubyte y\n\n"
+    "main {\n    x = $10\n    y = 2\n    x <<= 3\n    x >>= 1\n    x <<= y\n"
+    "    x >>= y\n    y = x * x\n}\n",
+]
+
 
 def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
@@ -194,6 +219,12 @@ class P1Equivalence(unittest.TestCase):
 
     def test_m3_expr_programs(self):
         for src in M3_EXPR_PROGRAMS:
+            with self.subTest(src=src):
+                self.assertEqual(self._oracle(src), self._ontarget(src),
+                                 msg=f"codegen .s differs for {src!r}")
+
+    def test_m3_mulshift_programs(self):
+        for src in M3_MULSHIFT_PROGRAMS:
             with self.subTest(src=src):
                 self.assertEqual(self._oracle(src), self._ontarget(src),
                                  msg=f"codegen .s differs for {src!r}")

@@ -89,6 +89,25 @@ PROLOGUE_POST = "\n  jmp p8s_main\n"
 ZP_HEADER = "; ---- ZP variable allocations ----\n"
 MAIN_HEAD = "\n\n; ---- sub main ----\np8s_main:\n"
 MAIN_RET = ".Lp8s_main_ret:\n  lda #$00\n  jsr $f00f\n  brk\n"
+# The ubyte*ubyte runtime helper (port of p8c's __p8c_mul_u8). Emitted between
+# the last sub and the string pool, only when `*` was used (mul_used). The
+# leading blank line matches p8c's `self.emit("")` before the comment.
+MUL_HELPER = (
+    "\n; ---- runtime: ubyte * ubyte -> A ----\n"
+    "__p8c_mul_u8:\n"
+    "  lda #0\n"
+    "  ldx #8\n"
+    ".__mul_loop:\n"
+    "  lsr __p8c_tmp1\n"
+    "  bcc .__mul_skip\n"
+    "  clc\n"
+    "  adc __p8c_tmp0\n"
+    ".__mul_skip:\n"
+    "  asl __p8c_tmp0\n"
+    "  dex\n"
+    "  bne .__mul_loop\n"
+    "  rts\n"
+)
 TRAILERS = (
     "\n  ; ---- reset vector ----\n"
     "  .org $FFFC\n"
@@ -283,6 +302,15 @@ sub emit_trailers() {{
 {emit_text(TRAILERS)}
 }}
 
+; the ubyte*ubyte helper, emitted only when `*` codegen set mul_used. Goes
+; between the last sub and the string pool (matching p8c's tail order).
+sub emit_mul_helper() {{
+    if mul_used == 0 {{
+        return
+    }}
+{emit_text(MUL_HELPER)}
+}}
+
 ; ---- string pool trailer (port of p8c/codegen.py::_escape) ----
 ; A "plain" char goes inside a "..." run; everything else (control chars,
 ; `"`, `\\`) is emitted as $XX; parts are joined by ", "; an empty string
@@ -454,53 +482,176 @@ sub emit_byte_leaf_load(uword e) {{
         return
     }}
 }}
-; emit a byte binop (TK_PLUS/MINUS/AMP/PIPE/CARET) against a leaf operand
-; rhs ("#$XX" or "p8v_<name>").
-sub emit_byte_binop_leaf(ubyte op, uword rhs) {{
+; emit the right-hand operand text of a byte binop. mode 0: a leaf rhs node
+; ("#$XX" for an ND_INT, "p8v_<name>" for a var); mode 1: the __p8c_tmp1
+; spill slot (the rhs node is ignored).
+sub emit_byte_operand(ubyte mode, uword rhs) {{
+    if mode == 0 {{
+        if node_kind[rhs] == ND_INT {{
+            o_imm()
+            out_hex2(lsb(node_a[rhs]))
+        }} else {{
+            emit_mangled(node_a[rhs])
+        }}
+    }} else {{
+        out_text("__p8c_tmp1")
+    }}
+}}
+; one shift label: ".Lshl_top_<id>" / ".Lshr_end_<id>" etc. (matching p8c's
+; _new_label format `.L<prefix>_<id>`). is_left selects shl/shr; is_top top/end.
+sub emit_shift_label(ubyte is_left, ubyte is_top, uword id) {{
+    if is_left != 0 {{
+        if is_top != 0 {{
+            out_text(".Lshl_top_")
+        }} else {{
+            out_text(".Lshl_end_")
+        }}
+    }} else {{
+        if is_top != 0 {{
+            out_text(".Lshr_top_")
+        }} else {{
+            out_text(".Lshr_end_")
+        }}
+    }}
+    out_dec(id)
+}}
+; A << / >> by a count. Immediate count -> unrolled asl/lsr (count & 7);
+; otherwise a runtime loop over the operand (var or __p8c_tmp1), allocating a
+; top/end label pair (label_seq, in alloc order top-then-end, like p8c).
+sub emit_shift_op(ubyte is_left, ubyte is_imm, ubyte imm_val, ubyte mode, uword rhs) {{
+    if is_imm != 0 {{
+        ubyte cnt
+        cnt = imm_val & 7
+        ubyte i
+        i = 0
+        repeat {{
+            if i >= cnt {{
+                break
+            }}
+            if is_left != 0 {{
+                out_text("  asl a")
+            }} else {{
+                out_text("  lsr a")
+            }}
+            o_nl()
+            i = i + 1
+        }}
+        return
+    }}
+    uword top_id
+    uword end_id
+    top_id = label_seq
+    label_seq = label_seq + 1
+    end_id = label_seq
+    label_seq = label_seq + 1
+    out_text("  pha")
+    o_nl()
+    o_lda()
+    emit_byte_operand(mode, rhs)
+    o_nl()
+    out_text("  tay")
+    o_nl()
+    out_text("  pla")
+    o_nl()
+    out_text("  cpy #0")
+    o_nl()
+    out_text("  beq ")
+    emit_shift_label(is_left, 0, end_id)
+    o_nl()
+    emit_shift_label(is_left, 1, top_id)
+    out_byte($3a)
+    o_nl()
+    if is_left != 0 {{
+        out_text("  asl a")
+    }} else {{
+        out_text("  lsr a")
+    }}
+    o_nl()
+    out_text("  dey")
+    o_nl()
+    out_text("  bne ")
+    emit_shift_label(is_left, 1, top_id)
+    o_nl()
+    emit_shift_label(is_left, 0, end_id)
+    out_byte($3a)
+    o_nl()
+}}
+; the byte-binop core: A op <operand>, where the operand is selected by `mode`
+; (0 = leaf rhs node, 1 = __p8c_tmp1 spill). Covers + - & | ^ (carry-correct
+; add/sub, bitwise), * (the __p8c_mul_u8 helper -- sets mul_used), and the
+; shifts << >>. p8c recurses on operands; p1 reaches this via the work stack.
+sub emit_byte_binop_core(ubyte op, ubyte mode, uword rhs) {{
     if op == TK_PLUS {{
         out_text("  clc")
         o_nl()
         out_text("  adc ")
+        emit_byte_operand(mode, rhs)
+        o_nl()
+        return
     }}
     if op == TK_MINUS {{
         out_text("  sec")
         o_nl()
         out_text("  sbc ")
+        emit_byte_operand(mode, rhs)
+        o_nl()
+        return
     }}
     if op == TK_AMP {{
         out_text("  and ")
+        emit_byte_operand(mode, rhs)
+        o_nl()
+        return
     }}
     if op == TK_PIPE {{
         out_text("  ora ")
+        emit_byte_operand(mode, rhs)
+        o_nl()
+        return
     }}
     if op == TK_CARET {{
         out_text("  eor ")
+        emit_byte_operand(mode, rhs)
+        o_nl()
+        return
     }}
-    emit_binop_operand(rhs)
-    o_nl()
+    if op == TK_STAR {{
+        out_text("  sta __p8c_tmp0")
+        o_nl()
+        o_lda()
+        emit_byte_operand(mode, rhs)
+        o_nl()
+        out_text("  sta __p8c_tmp1")
+        o_nl()
+        out_text("  jsr __p8c_mul_u8")
+        o_nl()
+        mul_used = 1
+        return
+    }}
+    ; shifts: an immediate count (leaf ND_INT) unrolls; everything else loops.
+    ubyte is_imm
+    ubyte imm_val
+    is_imm = 0
+    imm_val = 0
+    if mode == 0 {{
+        if node_kind[rhs] == ND_INT {{
+            is_imm = 1
+            imm_val = lsb(node_a[rhs])
+        }}
+    }}
+    if op == TK_SHL {{
+        emit_shift_op(1, is_imm, imm_val, mode, rhs)
+    }} else {{
+        emit_shift_op(0, is_imm, imm_val, mode, rhs)
+    }}
+}}
+; emit a byte binop against a leaf operand rhs ("#$XX" or "p8v_<name>").
+sub emit_byte_binop_leaf(ubyte op, uword rhs) {{
+    emit_byte_binop_core(op, 0, rhs)
 }}
 ; same op against the __p8c_tmp1 spill slot.
 sub emit_byte_binop_zp(ubyte op) {{
-    if op == TK_PLUS {{
-        out_text("  clc")
-        o_nl()
-        out_text("  adc __p8c_tmp1")
-    }}
-    if op == TK_MINUS {{
-        out_text("  sec")
-        o_nl()
-        out_text("  sbc __p8c_tmp1")
-    }}
-    if op == TK_AMP {{
-        out_text("  and __p8c_tmp1")
-    }}
-    if op == TK_PIPE {{
-        out_text("  ora __p8c_tmp1")
-    }}
-    if op == TK_CARET {{
-        out_text("  eor __p8c_tmp1")
-    }}
-    o_nl()
+    emit_byte_binop_core(op, 1, 0)
 }}
 ; evaluate a byte expression into A.
 sub codegen_byte_expr(uword root) {{
@@ -577,7 +728,13 @@ sub aug_to_binop(ubyte op) -> ubyte {{
     if op == TK_OREQ {{
         return TK_PIPE
     }}
-    return TK_CARET     ; TK_XOREQ
+    if op == TK_XOREQ {{
+        return TK_CARET
+    }}
+    if op == TK_SHLEQ {{
+        return TK_SHL
+    }}
+    return TK_SHR       ; TK_SHREQ
 }}
 ; word expression leaf -> A (low) / Y (high), widening ubyte to uword.
 sub codegen_word_leaf(uword e) {{
@@ -624,17 +781,6 @@ sub codegen_word_leaf(uword e) {{
         out_dec(lbl)
         o_nl()
         return
-    }}
-}}
-
-; emit the operand text of an augmented binop: "#$XX" (literal) or
-; "p8v_<name>" (var leaf).
-sub emit_binop_operand(uword rhs) {{
-    if node_kind[rhs] == ND_INT {{
-        o_imm()
-        out_hex2(lsb(node_a[rhs]))
-    }} else {{
-        emit_mangled(node_a[rhs])
     }}
 }}
 
@@ -728,6 +874,8 @@ main {{
     reset_nodes()
     lex_init()
     strpool_count = 0
+    mul_used = 0
+    label_seq = 0
     uword mainbody
     mainbody = 0
     repeat {{
@@ -746,7 +894,8 @@ main {{
     }}
     emit_main(mainbody)
 
-    ; ---- string pool + trailers ----
+    ; ---- mul helper + string pool + trailers ----
+    emit_mul_helper()
     emit_string_pool()
     emit_trailers()
 
@@ -809,7 +958,10 @@ def main():
         "ubyte[96] cws_type\n"
         "uword[96] cws_node\n"
         "ubyte[96] cws_op\n"
-        "ubyte cws_sp\n\n"
+        "ubyte cws_sp\n"
+        "; codegen scratch flags/counters (reset before pass M):\n"
+        "ubyte mul_used           ; `*` was emitted -> emit __p8c_mul_u8 trailer\n"
+        "uword label_seq          ; global local-label counter (p8c's _label_id)\n\n"
     )
     assert marker in frontend_body, "could not find serializer-state marker"
     frontend_body = frontend_body.replace(marker, sym_state + marker, 1)
