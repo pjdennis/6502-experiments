@@ -1020,7 +1020,12 @@ sub codegen_byte_expr(uword root) {{
                     cws_push(6, 0, node_op[nd])
                     cws_push(0, node_a[nd], 0)
                 }} else {{
-                    emit_byte_leaf_load(nd)
+                    if node_kind[nd] == ND_MEMAT {{
+                        ; @(addr) byte read -- self-contained (result in A)
+                        emit_memat_read(nd)
+                    }} else {{
+                        emit_byte_leaf_load(nd)
+                    }}
                 }}
             }}
         }} else {{
@@ -1143,6 +1148,47 @@ sub codegen_word_leaf(uword e) {{
     }}
 }}
 
+; evaluate a uword expression into A (low) / Y (high). For now: leaves
+; (int / uword|byte var / string) + `&name` (address-of). The full word
+; binop/unary/comparison evaluator is the 16-bit work below; this entry is
+; what `@()` addresses and uword assignments route through, so it grows in
+; place.
+sub codegen_word_expr(uword e) {{
+    if node_kind[e] == ND_ADDROF {{
+        out_text("  lda #<")
+        emit_mangled(node_a[e])
+        o_nl()
+        out_text("  ldy #>")
+        emit_mangled(node_a[e])
+        o_nl()
+        return
+    }}
+    codegen_word_leaf(e)
+}}
+
+; ---- @() memory read (byte) ---------------------------------
+; @(IntLit) -> a direct absolute load; @(<word expr>) -> evaluate the address
+; into __p8c_ptr0 and load via (ptr0),y.
+sub emit_memat_read(uword nd) {{
+    uword addr
+    addr = node_a[nd]
+    if node_kind[addr] == ND_INT {{
+        out_text("  lda $")
+        out_hex4(node_a[addr])
+        o_nl()
+        return
+    }}
+    codegen_word_expr(addr)
+    out_text("  sta __p8c_ptr0")
+    o_nl()
+    out_text("  sty __p8c_ptr0+1")
+    o_nl()
+    out_text("  ldy #$00")
+    o_nl()
+    out_text("  lda (__p8c_ptr0),y")
+    o_nl()
+}}
+
 ; sym-addressed loads/stores.
 sub emit_lda_sym(uword si) {{
     o_lda()
@@ -1161,10 +1207,42 @@ sub emit_sty_sym_hi(uword si) {{
     o_nl()
 }}
 
+; ---- @() memory write (byte): @(addr) = byteexpr -----------
+; @(IntLit) = e  -> eval e, sta absolute. @(<word expr>) = e -> eval e into
+; __p8c_tmp0, evaluate the address into __p8c_ptr0, sta (ptr0),y.
+sub codegen_assign_memat(uword st, uword target) {{
+    uword rhs
+    uword addr
+    rhs = node_b[st]
+    addr = node_a[target]
+    if node_kind[addr] == ND_INT {{
+        codegen_byte_expr(rhs)
+        out_text("  sta $")
+        out_hex4(node_a[addr])
+        o_nl()
+        return
+    }}
+    codegen_byte_expr(rhs)
+    out_text("  sta __p8c_tmp0")
+    o_nl()
+    codegen_word_expr(addr)
+    out_text("  sta __p8c_ptr0")
+    o_nl()
+    out_text("  sty __p8c_ptr0+1")
+    o_nl()
+    out_text("  ldy #$00")
+    o_nl()
+    out_text("  lda __p8c_tmp0")
+    o_nl()
+    out_text("  sta (__p8c_ptr0),y")
+    o_nl()
+}}
+
 ; ---- assignment codegen -------------------------------------
-; target is a plain (module) var. `=` of a byte expression (M3: arithmetic
-; + - & | ^, leaf or nested) with ubyte->uword widening on word stores;
-; `=` of a word leaf; byte augmented (+= -= &= |= ^=) with a leaf operand.
+; target is a plain (module) var or @(addr). `=` of a byte expression
+; (arithmetic + - & | ^ * << >> cmp logical, leaf or nested) with
+; ubyte->uword widening on word stores; `=` of a word expr; byte augmented
+; (+= -= &= |= ^= <<= >>=) with a leaf operand.
 sub codegen_assign(uword st) {{
     uword target
     uword rhs
@@ -1172,13 +1250,17 @@ sub codegen_assign(uword st) {{
     target = node_a[st]
     op = node_op[st]
     rhs = node_b[st]
+    if node_kind[target] == ND_MEMAT {{
+        codegen_assign_memat(st, target)
+        return
+    }}
     uword si
     si = find_sym(node_a[target])
     ubyte ttype
     ttype = sym_type[si]
     if op == TK_ASSIGN {{
         if ttype == TY_UWORD {{
-            codegen_word_leaf(rhs)
+            codegen_word_expr(rhs)
             emit_sta_sym(si)
             emit_sty_sym_hi(si)
         }} else {{

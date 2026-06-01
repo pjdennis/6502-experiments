@@ -85,10 +85,11 @@ PHASE7_DESIGN.md section 10.
   * 5 v0/v1 e2e (`tinyp8/tests/test_e2e.py`).
   * 5 v0/v1 self-host equivalence (`test_self_host.py`).
   * 12 v2..v9 .p8-only (`test_v2.py`, sources in `goldens_v2/`).
-  * **162 total, all green** (the 22 tinyp8 + 35 p1 cases need vasm; see the
+  * **163 total, all green** (the 22 tinyp8 + 36 p1 cases need vasm; see the
     environment note above). The p1 codegen cases live in
     `p1/tests/test_p1.py` (Phase 7: P7-M1 + P7-M2 + the M3 strings,
-    byte-arithmetic, mul/shift, unary, comparison, and logical slices).
+    byte-arithmetic, mul/shift, unary, comparison, logical, and @()/&name
+    slices).
 
 Run:
 
@@ -431,10 +432,19 @@ Progress:
          tmp0 / ty 4 pla). Operands are bool (comparisons). Diffed vs `p8c -o`
          over `test_p1.py::test_m3_logical_programs` (and/or/xor, nested,
          not-of-logical). p1.bin ~57 KB code.
-       * **NEXT: rest of P7-M3** -- the invert-branch long-branch idiom
-         (`_br`, needed before `if`/`while`); then `@()`, `&name`, indexing,
-         calls, `txt.print*`; then the WORD evaluator
-         (`_emit_word_expr_into_ay`
+       * **P7-M3 @() memory + &name slice DONE (8-bit memory).** `@(IntLit)`
+         read/write -> direct `lda`/`sta $XXXX`; `@(<word>)` read/write ->
+         address into `__p8c_ptr0`, `(ptr0),y` indirect; `&name` -> `lda #< /
+         ldy #>` the mangled label (a uword value). Added `codegen_word_expr`
+         (the uword-eval entry: leaves + `&name` for now; it GROWS into the
+         full word evaluator in the 16-bit work) which `@()` addresses and
+         uword assignment RHS route through. `@()` read is a self-contained
+         byte leaf so it nests as a binop operand (`a = @(p) + 1`).
+         `emit_memat_read` / `codegen_assign_memat`.
+         `test_p1.py::test_m3_memat_programs`. p1.bin ~59 KB code.
+       * **NEXT: the WORD evaluator (16-bit)** -- grow `codegen_word_expr` into
+         a full work-stack uword evaluator (port of `_emit_word_expr_into_ay` /
+         `_emit_word_binop_into_ay`
          proper -- the work-stack pattern generalizes, mind the mkword
          Y-clobber fix). Smallest-first, each diffed against `p8c -o`. Keep
          wrapping distinct fixed fragments in o_*/out_text helpers (one

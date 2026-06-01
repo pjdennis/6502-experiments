@@ -208,6 +208,25 @@ M3_LOGICAL_PROGRAMS = [
     "main {\n    a = not ((b < c) and (c < d))\n}\n",
 ]
 
+# Phase-7 @() memory + &name slice (8-bit memory ops):
+#   * @(IntLit) read/write -> direct absolute lda/sta $XXXX.
+#   * @(<word leaf>) read/write -> address into __p8c_ptr0, (ptr0),y indirect.
+#   * &name (address-of) as a uword value: lda #< / ldy #> the mangled label.
+# The address word expression routes through codegen_word_expr (leaves + &name
+# for now; the full word evaluator is the 16-bit slice). @() may appear as a
+# binop operand (a = @(p) + 1) since the read is a self-contained byte leaf.
+M3_MEMAT_PROGRAMS = [
+    # @() read: literal, uword-var, and &var addresses
+    "%target nmos\nubyte a\nubyte b\nuword p\n\n"
+    "main {\n    a = @($d020)\n    a = @(p)\n    a = @(&b)\n}\n",
+    # @() write: literal, uword-var, &var; literal and computed RHS
+    "%target nmos\nubyte a\nubyte b\nuword p\n\n"
+    "main {\n    @($d020) = a\n    @(p) = a\n    @(&b) = 7\n    @(p) = a + 1\n}\n",
+    # @() as a binop operand + &name assigned to a uword
+    "%target nmos\nubyte a\nubyte b\nuword p\n\n"
+    "main {\n    a = @(p) + 1\n    p = &b\n    p = &a\n}\n",
+]
+
 
 def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
@@ -302,6 +321,12 @@ class P1Equivalence(unittest.TestCase):
 
     def test_m3_logical_programs(self):
         for src in M3_LOGICAL_PROGRAMS:
+            with self.subTest(src=src):
+                self.assertEqual(self._oracle(src), self._ontarget(src),
+                                 msg=f"codegen .s differs for {src!r}")
+
+    def test_m3_memat_programs(self):
+        for src in M3_MEMAT_PROGRAMS:
             with self.subTest(src=src):
                 self.assertEqual(self._oracle(src), self._ontarget(src),
                                  msg=f"codegen .s differs for {src!r}")
