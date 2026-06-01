@@ -1,0 +1,7 @@
+; v3: simple if-then conditional.
+let a = $42
+let b = $99
+let x = $42
+if x == $42 then print_ub a
+if x == $99 then print_ub b
+end

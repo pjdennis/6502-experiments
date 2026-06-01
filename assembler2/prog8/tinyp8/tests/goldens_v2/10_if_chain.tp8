@@ -1,0 +1,12 @@
+; v3: dispatch on a value -- the on-target compiler can now compile
+; conditionals that match a value against several alternatives.
+let v = $b3
+let a = $0a
+let b = $0b
+let c = $0c
+let d = $0d
+if v == $a3 then print_ub a
+if v == $b3 then print_ub b
+if v == $c3 then print_ub c
+if v == $d3 then print_ub d
+end

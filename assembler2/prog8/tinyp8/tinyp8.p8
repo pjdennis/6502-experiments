@@ -507,6 +507,160 @@ sub emit_print_ub_var(ubyte addr) {
     emit_print_char($0a)
 }
 
+; ---- v3: conditional `if X == $YY then print_ub Z` ----
+;
+; Restricted form: the then-clause must be exactly `print_ub <letter>`
+; which compiles to a known 10-byte sequence. That lets us hard-code
+; the BNE displacement and avoid any forward-reference back-patching.
+;
+; Compiled output for `if X == $YY then print_ub Z`:
+;   lda <X_addr>      ; 2 bytes
+;   cmp #$YY          ; 2 bytes
+;   bne +10           ; 2 bytes  -- skip over the then-block
+;   lda <Z_addr>      ; 2  (print_ub var)
+;   jsr <hex_helper>  ; 3
+;   lda #$0a; jsr write_b ; 5 (newline)
+; Total: 16 bytes per if.
+sub parse_if() {
+    ubyte c
+    ; skip 'f' (the 'i' was consumed by the dispatcher)
+    c = read_src()
+    if src_eof != 0 {
+        return
+    }
+    ; skip ws to variable name (1 char)
+    repeat {
+        c = read_src()
+        if src_eof != 0 {
+            return
+        }
+        if c >= $61 {
+            if c <= $7a {
+                break
+            }
+        }
+    }
+    ubyte x_slot
+    x_slot = c - $61
+    ubyte x_addr
+    x_addr = var_addrs[x_slot]
+    ; skip ws to '=='
+    repeat {
+        c = read_src()
+        if src_eof != 0 {
+            return
+        }
+        if c == $3d {                                    ; '='
+            break
+        }
+    }
+    ; skip second '='
+    c = read_src()
+    if src_eof != 0 {
+        return
+    }
+    ; skip ws to '$'
+    repeat {
+        c = read_src()
+        if src_eof != 0 {
+            return
+        }
+        if c == $24 {                                    ; '$'
+            break
+        }
+    }
+    ; two hex digits -> compare value
+    c = read_src()
+    if src_eof != 0 {
+        return
+    }
+    tmp_byte = hex_nibble(c) << 4
+    c = read_src()
+    if src_eof != 0 {
+        return
+    }
+    tmp_byte = tmp_byte | hex_nibble(c)
+    ubyte cmp_val
+    cmp_val = tmp_byte
+    ; skip ws then "then"
+    repeat {
+        c = read_src()
+        if src_eof != 0 {
+            return
+        }
+        if c == $74 {                                    ; 't'
+            break
+        }
+    }
+    ; consume "hen"
+    c = read_src()
+    c = read_src()
+    c = read_src()
+    if src_eof != 0 {
+        return
+    }
+    ; skip ws to "print_ub <z>"
+    repeat {
+        c = read_src()
+        if src_eof != 0 {
+            return
+        }
+        if c == $70 {                                    ; 'p'
+            break
+        }
+    }
+    ; consume "rint_ub"
+    c = read_src()  ; r
+    c = read_src()  ; i
+    c = read_src()  ; n
+    c = read_src()  ; t
+    c = read_src()  ; _
+    c = read_src()  ; u
+    c = read_src()  ; b
+    if src_eof != 0 {
+        return
+    }
+    ; skip ws to variable letter
+    repeat {
+        c = read_src()
+        if src_eof != 0 {
+            return
+        }
+        if c >= $61 {
+            if c <= $7a {
+                break
+            }
+        }
+    }
+    ubyte z_slot
+    z_slot = c - $61
+    ubyte z_addr
+    z_addr = var_addrs[z_slot]
+    ; Ensure the helper exists in the output -- before we emit the
+    ; conditional, so its size doesn't shift our hard-coded BNE
+    ; displacement.
+    emit_hex_helper()
+    ; Emit the 16-byte conditional.
+    write_dst($a5)                                       ; LDA zp x_addr
+    write_dst(x_addr)
+    write_dst($c9)                                       ; CMP #
+    write_dst(cmp_val)
+    write_dst($d0)                                       ; BNE
+    write_dst($0a)                                       ;   +10 (skip then-block)
+    ; then-block: print_ub Z (10 bytes)
+    write_dst($a5)                                       ; LDA zp z_addr
+    write_dst(z_addr)
+    write_dst($20)                                       ; JSR
+    write_dst(lsb(helper_addr))
+    write_dst(msb(helper_addr))
+    write_dst($a9)                                       ; LDA #
+    write_dst($0a)                                       ;   '\n'
+    write_dst($20)                                       ; JSR
+    write_dst($09)                                       ;   $F009
+    write_dst($f0)
+    skip_to_nl()
+}
+
 
 ; ---- main compile loop ----
 
@@ -541,11 +695,15 @@ main {
             if c == $6c {                                ; 'l' -- "let"
                 parse_let()
             } else {
-                if c == $65 {                                ; 'e' -- "end"
-                    skip_to_nl()
-                    break
+                if c == $69 {                                ; 'i' -- "if"
+                    parse_if()
                 } else {
-                    skip_to_nl()
+                    if c == $65 {                                ; 'e' -- "end"
+                        skip_to_nl()
+                        break
+                    } else {
+                        skip_to_nl()
+                    }
                 }
             }
         }
