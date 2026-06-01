@@ -59,14 +59,14 @@ is the source of truth across sessions.
   stays intact.
 
 * **Test counts (as of HEAD)**:
-  * 102 host p8c tests (`prog8/tests/` -- lex / parse / sema /
+  * 103 host p8c tests (`prog8/tests/` -- lex / parse / sema /
     codegen / snapshot / e2e LCD goldens, the iterative-parser
     equivalence + integration tests, and the new serializer freeze
     suite `test_serialize.py`).
   * 5 v0/v1 e2e (`tinyp8/tests/test_e2e.py`).
   * 5 v0/v1 self-host equivalence (`test_self_host.py`).
   * 12 v2..v9 .p8-only (`test_v2.py`, sources in `goldens_v2/`).
-  * **145 total, all green** (the 22 tinyp8 + 21 p1 cases need vasm; see the
+  * **146 total, all green** (the 22 tinyp8 + 21 p1 cases need vasm; see the
     environment note above).
 
 Run:
@@ -303,19 +303,22 @@ when a demo or tinyp8 push needs them.
 
 ## Pitfalls / gotchas observed this session
 
-* **Host p8c codegen: dual-scratch binary expression bug.** An
-  expression where BOTH operands of a binary op each need a scratch
-  temp is mis-compiled -- e.g. `(v << 3) + (v << 1)` yields the wrong
-  value (the left operand's temp is clobbered while computing the
-  right). `(v << 3) + 9` (only one side needs a temp) is fine. Found
-  while porting the lexer's decimal accumulator. **Workaround used in
-  `p1/lexer.p8`:** never nest a shift inside an add -- put each shift in
-  its own local on its own statement (see `umul10`), then combine plain
-  var+var. This is a genuine codegen bug worth fixing in
-  `p8c/codegen.py` eventually (look at how binary-op operands allocate /
-  reuse the `__p8c_tmp*` scratch); until then keep on-target arithmetic
-  decomposed. NB it does not affect the host-compiled corpus today
-  because no existing `.p8` happened to hit the pattern.
+* **Host p8c codegen: dual-scratch binary expression bug -- FIXED.** An
+  expression where BOTH operands of a binary op each need a scratch temp
+  was mis-compiled -- e.g. `(v << 3) + (v << 1)` gave the wrong value
+  (the left operand's fixed scratch slot was clobbered while computing
+  the right). Found while porting the lexer's decimal accumulator. Fix
+  (`p8c/codegen.py`): the first-evaluated operand is now held on the CPU
+  stack across the second operand's evaluation, so the wtmp/tmp scratch
+  is never aliased across the two sides -- nesting-safe to any depth.
+  Touched `_emit_word_operands` (new helper for word `+`/`-`/`&|^`),
+  `_emit_word_cmp_into_a`, and the byte generic binop path (RHS now in
+  `__p8c_tmp1`, since `*` uses `tmp0`). Guarded by
+  `tests/test_codegen_arith_e2e.py` (behavioral, on emulator) and by
+  `p1/lexer.p8`'s decimal accumulator, which now uses the naive
+  `(int_val<<3)+(int_val<<1)+(c-$30)` form. Snapshot goldens were
+  unaffected (no existing snapshot hit the pattern); tinyp8 self-host
+  equivalence still holds.
 
 * **ZP allocator size**: `p8c/sema.py` has `ZP_VAR_TOP`; tinyp8.p8
   v6 hit the original 0x80 cap, was bumped to 0xff. If tinyp8.p8

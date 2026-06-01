@@ -46,11 +46,11 @@ milestones M0..M5).
   16 bits (the realistic corpus does). Decimal output uses power-of-ten
   subtraction because host p8c has no `/` or `%`.
 
-* **Host p8c codegen caveat (worked around here):** an expression in
-  which *both* operands of a binary op each need a scratch temp is
-  mis-compiled -- e.g. `(v << 3) + (v << 1)` yields the wrong value (the
-  first operand's temp is clobbered by the second). `lexer.p8` therefore
-  never nests a shift inside an add: shifts go into their own locals on
-  their own statements (see `umul10`), then plain var+var adds combine
-  them. Worth fixing in p8c codegen eventually; until then, keep
-  on-target arithmetic decomposed.
+* The decimal accumulator `(int_val << 3) + (int_val << 1) + (c - $30)`
+  nests two shifts inside adds on purpose: it is a live regression test
+  for a host-p8c codegen fix. Previously an expression in which *both*
+  operands of a binary op each needed a scratch temp was mis-compiled
+  (the first operand's temp was clobbered by the second); the fix holds
+  the first operand on the CPU stack across the second's evaluation. See
+  `p8c/codegen.py::_emit_word_operands` and
+  `tests/test_codegen_arith_e2e.py`.

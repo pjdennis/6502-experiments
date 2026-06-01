@@ -254,7 +254,7 @@ Branch `claude/prog8-bootstrap-continue-6Pzo0` (continues the
   on-disk goldens. M1 (lexer port to `p1/`) is next.
 * Phase 7-8: blocked on the rest of the Phase 6 Prog8 port (M1-M4).
 
-145 tests green (host p8c 102, tinyp8 22, p1 21). Self-host equivalence holds for the v0/v1 corpus.
+146 tests green (host p8c 103, tinyp8 22, p1 21). Self-host equivalence holds for the v0/v1 corpus.
 
 ---
 

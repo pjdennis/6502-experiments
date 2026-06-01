@@ -315,10 +315,11 @@ the command later milestones diff their on-target output against.
     lines), `lexer.p8` lexing its own source, and the edge-case corpus
     (`p1/tests/test_lexer.py`, wired as `make p1-test`). Reuses the
     tinyp8 file-I/O shim; decimal output via power-of-ten subtraction
-    (host p8c has no `/`). NB: an arithmetic-codegen bug in host p8c
-    (both operands of one binary op needing a scratch temp clobber each
-    other) is worked around by never nesting a shift inside an add --
-    see `p1/README.md`.
+    (host p8c has no `/`). Porting this surfaced and fixed a host-p8c
+    codegen bug: a binary op whose two operands each need a scratch temp
+    (e.g. `(v<<3)+(v<<1)`) clobbered itself; the fix holds the first
+    operand on the CPU stack (`p8c/codegen.py::_emit_word_operands`),
+    guarded by `tests/test_codegen_arith_e2e.py`.
 
 * **M2 -- expression parser port.** `p1/expr.p8`: the shunting-yard
   engine over the stacks of 3.5, building nodes in the arena. Driver

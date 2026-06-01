@@ -18,7 +18,10 @@
 ;
 ; Integer values are accumulated into a uword, so literals must fit in
 ; 16 bits (the realistic corpus does); decimal output uses power-of-ten
-; subtraction because host p8c has no '/' or '%'.
+; subtraction because host p8c has no '/' or '%'. The decimal accumulator
+; `(int_val << 3) + (int_val << 1) + (c - $30)` doubles as a regression
+; test for the host-p8c codegen fix that lets both operands of a binary
+; op each use scratch without clobbering each other.
 
 %target nmos
 %address $0200
@@ -161,20 +164,6 @@ sub hex_nibble(ubyte c) -> ubyte {
     return c - $30
 }
 
-; umul10: v * 10, computed as (v<<3) + (v<<1). The two shifts are placed
-; in separate locals on separate statements on purpose: host p8c's
-; codegen mis-evaluates a single expression in which BOTH operands of a
-; binary op each need a scratch temp (e.g. `(v<<3) + (v<<1)` yields the
-; wrong value), so we never nest a shift inside an add anywhere in this
-; file. Plain var+var adds are fine.
-sub umul10(uword v) -> uword {
-    uword a
-    uword b
-    a = v << 3
-    b = v << 1
-    return a + b
-}
-
 
 ; ---- decimal output (power-of-ten subtraction; no '/' in host p8c) ----
 
@@ -222,10 +211,7 @@ sub read_hex() {                                         ; '$' already consumed
         } else {
             if is_hexdig(c) != 0 {
                 c = read_src()
-                ubyte nib
-                nib = hex_nibble(c)
-                int_val = int_val << 4
-                int_val = int_val + nib
+                int_val = (int_val << 4) + hex_nibble(c)
             } else {
                 return
             }
@@ -250,8 +236,7 @@ sub read_bin() {                                         ; '%' already consumed
             } else {
                 if c == $31 {
                     c = read_src()
-                    int_val = int_val << 1
-                    int_val = int_val + 1
+                    int_val = (int_val << 1) + 1
                 } else {
                     return
                 }
@@ -273,10 +258,7 @@ sub read_dec() {                                         ; first digit still pee
         } else {
             if is_digit(c) != 0 {
                 c = read_src()
-                ubyte d
-                d = c - $30
-                int_val = umul10(int_val)
-                int_val = int_val + d
+                int_val = (int_val << 3) + (int_val << 1) + (c - $30)
             } else {
                 return
             }
@@ -303,12 +285,7 @@ sub decode_escape_val(ubyte e) -> ubyte {
         ubyte h2
         h1 = read_src()
         h2 = read_src()
-        ubyte n1
-        ubyte n2
-        n1 = hex_nibble(h1)
-        n2 = hex_nibble(h2)
-        n1 = n1 << 4
-        return n1 + n2
+        return (hex_nibble(h1) << 4) + hex_nibble(h2)
     }
     return e                                             ; fallback: literal
 }

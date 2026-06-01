@@ -751,42 +751,59 @@ class CodeGen:
         self.emit(f"  sta {slot}")
         self.emit(f"  sty {slot}+1")
 
+    def _emit_word_operands(self, e: BinOp) -> None:
+        """Evaluate both operands of a uword BinOp, leaving LHS in A:Y and
+        RHS in __p8c_wtmp0 (lo, hi).
+
+        LHS is held on the CPU stack while RHS is evaluated, so a RHS that
+        itself reuses the wtmp scratch (a nested binop, a shift, a unary)
+        cannot clobber the saved LHS. This is what makes nesting like
+        `(v<<3) + (v<<1)` correct -- a fixed wtmp slot for LHS would be
+        overwritten by the RHS shift. The hardware stack nests for free.
+        """
+        self._emit_word_expr_into_ay(e.lhs)
+        self.emit("  pha")                  # LHS lo
+        self.emit("  tya")
+        self.emit("  pha")                  # LHS hi
+        self._emit_word_expr_into_ay(e.rhs)
+        self.emit("  sta __p8c_wtmp0")      # RHS lo
+        self.emit("  sty __p8c_wtmp0+1")    # RHS hi
+        self.emit("  pla")                  # LHS hi -> Y
+        self.emit("  tay")
+        self.emit("  pla")                  # LHS lo -> A
+
     def _emit_word_binop_into_ay(self, e: BinOp) -> None:
         """Compile a uword BinOp; result lo in A, hi in Y."""
         if e.op == "+":
-            # LHS -> wtmp0, RHS -> A:Y, add wtmp0 + A:Y -> A:Y.
-            self._emit_word_into_wtmp(e.lhs, "__p8c_wtmp0")
-            self._emit_word_expr_into_ay(e.rhs)
+            self._emit_word_operands(e)         # LHS -> A:Y, RHS -> wtmp0
             self.emit("  clc")
             self.emit("  adc __p8c_wtmp0")     # low + low
-            self.emit("  sta __p8c_wtmp1")     # save low result
-            self.emit("  tya")                  # high RHS -> A
+            self.emit("  pha")                  # save low result
+            self.emit("  tya")                  # high LHS -> A
             self.emit("  adc __p8c_wtmp0+1")    # high + high + carry
             self.emit("  tay")                  # high result -> Y
-            self.emit("  lda __p8c_wtmp1")     # low result -> A
+            self.emit("  pla")                  # low result -> A
             return
         if e.op == "-":
-            self._emit_word_into_wtmp(e.rhs, "__p8c_wtmp0")  # RHS to wtmp0
-            self._emit_word_expr_into_ay(e.lhs)              # LHS to A:Y
+            self._emit_word_operands(e)         # LHS -> A:Y, RHS -> wtmp0
             self.emit("  sec")
             self.emit("  sbc __p8c_wtmp0")
-            self.emit("  sta __p8c_wtmp1")
+            self.emit("  pha")
             self.emit("  tya")
             self.emit("  sbc __p8c_wtmp0+1")
             self.emit("  tay")
-            self.emit("  lda __p8c_wtmp1")
+            self.emit("  pla")
             return
         if e.op in ("&", "|", "^"):
             # Bitwise: low&low, high&high.
-            self._emit_word_into_wtmp(e.lhs, "__p8c_wtmp0")
-            self._emit_word_expr_into_ay(e.rhs)
+            self._emit_word_operands(e)         # LHS -> A:Y, RHS -> wtmp0
             op_mnem = {"&": "and", "|": "ora", "^": "eor"}[e.op]
             self.emit(f"  {op_mnem} __p8c_wtmp0")
-            self.emit("  sta __p8c_wtmp1")
+            self.emit("  pha")
             self.emit("  tya")
             self.emit(f"  {op_mnem} __p8c_wtmp0+1")
             self.emit("  tay")
-            self.emit("  lda __p8c_wtmp1")
+            self.emit("  pla")
             return
         if e.op in ("==", "!=", "<", "<=", ">", ">="):
             # Comparison returns 0/1 in A. uword-uword compare needs to
@@ -900,8 +917,20 @@ class CodeGen:
           hi_diff:
           ; flags now reflect a 16-bit unsigned compare.
         """
-        self._emit_word_into_wtmp(e.lhs, "__p8c_wtmp0")
-        self._emit_word_into_wtmp(e.rhs, "__p8c_wtmp1")
+        # LHS -> wtmp0, RHS -> wtmp1, with LHS held on the CPU stack across
+        # RHS evaluation so a RHS that reuses the wtmp scratch can't clobber
+        # it (same nesting-safety fix as _emit_word_operands).
+        self._emit_word_expr_into_ay(e.lhs)
+        self.emit("  pha")                  # LHS lo
+        self.emit("  tya")
+        self.emit("  pha")                  # LHS hi
+        self._emit_word_expr_into_ay(e.rhs)
+        self.emit("  sta __p8c_wtmp1")      # RHS lo
+        self.emit("  sty __p8c_wtmp1+1")    # RHS hi
+        self.emit("  pla")                  # LHS hi
+        self.emit("  sta __p8c_wtmp0+1")
+        self.emit("  pla")                  # LHS lo
+        self.emit("  sta __p8c_wtmp0")
         # 16-bit unsigned compare.
         self.emit("  lda __p8c_wtmp0+1")
         self.emit("  cmp __p8c_wtmp1+1")
@@ -1036,11 +1065,17 @@ class CodeGen:
             self._emit_byte_expr_into_a(e.lhs)
             self._emit_byte_binop_leaf(e.op, e.rhs)
             return
-        # Generic: eval RHS first, save, eval LHS, op with saved.
-        self._emit_byte_expr_into_a(e.rhs)
-        self.emit("  sta __p8c_tmp0")
+        # Generic (non-leaf RHS): eval LHS, hold it on the CPU stack while
+        # evaluating RHS, then combine. The stack keeps LHS safe even if the
+        # RHS expression reuses the tmp scratch (nested binop, indexed load,
+        # ...). RHS lands in __p8c_tmp1 because the `*` helper uses tmp0 as
+        # its multiplicand slot.
         self._emit_byte_expr_into_a(e.lhs)
-        self._emit_byte_binop_zp(e.op, "__p8c_tmp0")
+        self.emit("  pha")
+        self._emit_byte_expr_into_a(e.rhs)
+        self.emit("  sta __p8c_tmp1")
+        self.emit("  pla")
+        self._emit_byte_binop_zp(e.op, "__p8c_tmp1")
 
     def _emit_byte_binop_leaf(self, op: str, rhs) -> None:
         """Emit op A, <rhs> where rhs is an IntLit or Ident (no eval needed)."""
