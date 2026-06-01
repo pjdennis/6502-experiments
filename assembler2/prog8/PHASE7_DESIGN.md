@@ -279,8 +279,19 @@ Each milestone is a few pushes; each diffs `p1`'s `.s` against `p8c`'s.
       allocated mid-evaluation, after the lhs, consumed by the tail; nesting
       via a LIFO label-id stack) and `xor` (bitwise on 0/1). Diffed against
       `p8c -o`. (Remaining M3: the invert-branch long-branch idiom (`_br`,
-      for if/while), `@()`, `&`, indexing, calls, `txt.print*`; then the word
-      evaluator.)
+      for if/while), indexing, calls, `txt.print*`.)
+    * **@() memory + &name slice DONE (8-bit memory):** `@(IntLit)` ->
+      `lda`/`sta $XXXX`; `@(<word>)` -> address into `__p8c_ptr0`, `(ptr0),y`;
+      `&name` -> `lda #< / ldy #>`. `codegen_word_expr` is the uword-eval entry
+      `@()` addresses and uword RHS route through. Diffed against `p8c -o`.
+    * **WORD arithmetic/bitwise DONE (16-bit):** `codegen_word_expr` grew into a
+      work-stack uword evaluator (separate `wws_*` stack): leaves + `&name` +
+      `+ - & | ^` (LHS on the CPU stack across the RHS eval, RHS -> wtmp0).
+      Word augmented `w op= e` via the synthetic `w = w op e` binop. Capacity:
+      `build_p1.py` shrinks p1.p8's arenas to the codegen corpus's needs (the
+      growing reservations had pushed the string pool past $FFFF). Diffed
+      against `p8c -o`. (Remaining: word shifts, word comparison, indexing,
+      calls.)
 * **P7-M4 -- control flow.** if/else, while, for, repeat, break/continue/
   return, when, defer; long branches.
 * **P7-M5 -- decls + trailers.** arrays, consts, enums, structs, asmsub,

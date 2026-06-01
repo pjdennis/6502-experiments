@@ -85,11 +85,11 @@ PHASE7_DESIGN.md section 10.
   * 5 v0/v1 e2e (`tinyp8/tests/test_e2e.py`).
   * 5 v0/v1 self-host equivalence (`test_self_host.py`).
   * 12 v2..v9 .p8-only (`test_v2.py`, sources in `goldens_v2/`).
-  * **163 total, all green** (the 22 tinyp8 + 36 p1 cases need vasm; see the
+  * **164 total, all green** (the 22 tinyp8 + 37 p1 cases need vasm; see the
     environment note above). The p1 codegen cases live in
     `p1/tests/test_p1.py` (Phase 7: P7-M1 + P7-M2 + the M3 strings,
-    byte-arithmetic, mul/shift, unary, comparison, logical, and @()/&name
-    slices).
+    byte-arithmetic, mul/shift, unary, comparison, logical, @()/&name, and
+    16-bit word-arithmetic slices).
 
 Run:
 
@@ -442,8 +442,33 @@ Progress:
          byte leaf so it nests as a binop operand (`a = @(p) + 1`).
          `emit_memat_read` / `codegen_assign_memat`.
          `test_p1.py::test_m3_memat_programs`. p1.bin ~59 KB code.
-       * **NEXT: the WORD evaluator (16-bit)** -- grow `codegen_word_expr` into
-         a full work-stack uword evaluator (port of `_emit_word_expr_into_ay` /
+       * **CAPACITY FIX (build_p1.py `shrink_arenas`).** The spliced front-end
+         sizes its arenas for the parser milestone (whole-program parse of
+         tinyp8.p8), but p1.bin is exercised only on the SMALL codegen-test
+         corpus. As codegen grew, the cumulative `.byte` reservations pushed
+         the string pool's ADDRESSES past $FFFF, where the labels wrapped into
+         the code and `out_text()` read garbage (symptom: `jmp $f0xx` bytes in
+         the emitted `.s`). `build_p1.py` now rewrites p1.p8's array sizes down
+         to M-corpus needs (nodes/cons 640->256, pools 1024->512, the dead
+         serializer `ws_*` ->2, etc.), reclaiming ~9 KB (p1.bin code+data
+         61->52 KB). Bump `ARENA_SIZES` if a future codegen test needs a bigger
+         program. (stmt.p8 keeps its own sizes.)
+       * **P7-M3 WORD arithmetic/bitwise slice DONE (16-bit).** `codegen_word_expr`
+         is now a work-stack uword evaluator (separate `wws_*` stack so a byte
+         expr's `@()` address can drive it without corrupting the byte stack):
+         leaves + `&name`, and `+ - & | ^` (port of `_emit_word_operands` +
+         `_emit_word_binop_into_ay` -- LHS held on the CPU stack across the RHS
+         eval, RHS -> `__p8c_wtmp0`, carry-correct add/sub + per-byte bitwise;
+         ubyte widens). Word augmented assignment (`w += e`) builds the same
+         synthetic `w = w op e` binop p8c does. (Word unary `~`/`-` is a
+         faithful port but p8c's sema rejects it -> unreachable/untested.)
+         `test_p1.py::test_m3_wordarith_programs`. p1.bin ~52 KB code.
+       * **NEXT: rest of the WORD evaluator** -- word shifts (`<< >>`, const-
+         unrolled + variable-loop; mind the leaf-only count to avoid byte/word
+         stack re-entrancy), word comparison (`_emit_word_cmp_into_a`, the
+         16-bit compare idiom), then array indexing (`arr[i]`, needs array
+         symbols + storage trailers -- M5 territory), calls, `txt.print*`.
+         (was: grow codegen_word_expr -- port of `_emit_word_expr_into_ay` /
          `_emit_word_binop_into_ay`
          proper -- the work-stack pattern generalizes, mind the mkword
          Y-clobber fix). Smallest-first, each diffed against `p8c -o`. Keep

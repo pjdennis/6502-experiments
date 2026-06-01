@@ -186,16 +186,16 @@ ubyte ntok_kind
 uword ntok_val
 
 ; identifier text pool (reset per top-level unit while streaming)
-ubyte[1024] ident_pool
-uword[320]  ident_off
-uword[320]  ident_len
+ubyte[512] ident_pool
+uword[128]  ident_off
+uword[128]  ident_len
 uword ident_count
 uword ident_pool_len
 
 ; string literal pool
-ubyte[1024] str_pool
-uword[160]  str_off
-uword[160]  str_len
+ubyte[512] str_pool
+uword[64]  str_off
+uword[64]  str_len
 uword str_count
 uword str_pool_len
 
@@ -207,28 +207,28 @@ uword name_len
 uword int_val
 
 ; node arena
-ubyte[640] node_kind
-ubyte[640] node_op
-uword[640] node_a
-uword[640] node_b
-uword[640] node_c
-uword[640] node_d
+ubyte[256] node_kind
+ubyte[256] node_op
+uword[256] node_a
+uword[256] node_b
+uword[256] node_c
+uword[256] node_d
 uword node_count
 
 ; expression stacks
-uword[128] operand_stack
+uword[64] operand_stack
 uword operand_sp
-ubyte[128] op_kind
-ubyte[128] op_op
-ubyte[128] op_prec
-uword[128] op_a
-uword[128] op_b
-uword[128] op_floor
+ubyte[64] op_kind
+ubyte[64] op_op
+ubyte[64] op_prec
+uword[64] op_a
+uword[64] op_b
+uword[64] op_floor
 uword op_sp
 
 ; cons cells
-uword[640] cons_val
-uword[640] cons_next
+uword[256] cons_val
+uword[256] cons_next
 uword cons_count
 
 ; statement frame stack
@@ -273,6 +273,13 @@ ubyte[96] cws_type
 uword[96] cws_node
 ubyte[96] cws_op
 ubyte cws_sp
+; word-expression codegen work stack (separate from the byte stack so
+; a byte expression's @() address can drive a word eval without
+; corrupting the byte stack -- the two never share state).
+ubyte[96] wws_type
+uword[96] wws_node
+ubyte[96] wws_op
+ubyte wws_sp
 ; short-circuit and/or label stack: a label-id pair is allocated mid-
 ; evaluation (after the lhs) and consumed by the tail (after the rhs);
 ; LIFO nesting matches the work-stack task order.
@@ -284,9 +291,9 @@ ubyte mul_used           ; `*` was emitted -> emit __p8c_mul_u8 trailer
 uword label_seq          ; global local-label counter (p8c's _label_id)
 
 ; serializer work stack
-ubyte[256] ws_type       ; 0=node,1=close,2=newline,3=field line,4=literal text
-uword[256] ws_node
-ubyte[256] ws_depth
+ubyte[2] ws_type       ; 0=node,1=close,2=newline,3=field line,4=literal text
+uword[2] ws_node
+ubyte[2] ws_depth
 uword ws_sp
 
 uword dec_v
@@ -3084,22 +3091,192 @@ sub codegen_word_leaf(uword e) {
     }
 }
 
-; evaluate a uword expression into A (low) / Y (high). For now: leaves
-; (int / uword|byte var / string) + `&name` (address-of). The full word
-; binop/unary/comparison evaluator is the 16-bit work below; this entry is
-; what `@()` addresses and uword assignments route through, so it grows in
-; place.
-sub codegen_word_expr(uword e) {
-    if node_kind[e] == ND_ADDROF {
-        out_text("  lda #<")
-        emit_mangled(node_a[e])
+sub wws_push(ubyte ty, uword nd, ubyte op) {
+    wws_type[wws_sp] = ty
+    wws_node[wws_sp] = nd
+    wws_op[wws_sp] = op
+    wws_sp = wws_sp + 1
+}
+; &name (address-of) -> a uword value (lda #< / ldy #> the mangled label).
+sub emit_addrof(uword e) {
+    out_text("  lda #<")
+    emit_mangled(node_a[e])
+    o_nl()
+    out_text("  ldy #>")
+    emit_mangled(node_a[e])
+    o_nl()
+}
+; the combine tail of a word + / - / & | ^ binop: LHS in A:Y, RHS in
+; __p8c_wtmp0; result back into A:Y. (Port of _emit_word_binop_into_ay's
+; arithmetic/bitwise arms.)
+sub emit_word_combine(ubyte op) {
+    if op == TK_PLUS {
+        out_text("  clc")
         o_nl()
-        out_text("  ldy #>")
-        emit_mangled(node_a[e])
+        out_text("  adc __p8c_wtmp0")
+        o_nl()
+        out_text("  pha")
+        o_nl()
+        out_text("  tya")
+        o_nl()
+        out_text("  adc __p8c_wtmp0+1")
+        o_nl()
+        out_text("  tay")
+        o_nl()
+        out_text("  pla")
         o_nl()
         return
     }
-    codegen_word_leaf(e)
+    if op == TK_MINUS {
+        out_text("  sec")
+        o_nl()
+        out_text("  sbc __p8c_wtmp0")
+        o_nl()
+        out_text("  pha")
+        o_nl()
+        out_text("  tya")
+        o_nl()
+        out_text("  sbc __p8c_wtmp0+1")
+        o_nl()
+        out_text("  tay")
+        o_nl()
+        out_text("  pla")
+        o_nl()
+        return
+    }
+    ; bitwise & | ^ : and / ora / eor on both bytes.
+    out_text("  ")
+    emit_bitwise_mnem(op)
+    out_text(" __p8c_wtmp0")
+    o_nl()
+    out_text("  pha")
+    o_nl()
+    out_text("  tya")
+    o_nl()
+    out_text("  ")
+    emit_bitwise_mnem(op)
+    out_text(" __p8c_wtmp0+1")
+    o_nl()
+    out_text("  tay")
+    o_nl()
+    out_text("  pla")
+    o_nl()
+}
+sub emit_bitwise_mnem(ubyte op) {
+    if op == TK_AMP {
+        out_text("and")
+    } else {
+        if op == TK_PIPE {
+            out_text("ora")
+        } else {
+            out_text("eor")
+        }
+    }
+}
+; apply a word unary op (~ or -) to A:Y (operand already evaluated).
+sub emit_word_unary(ubyte uncode) {
+    out_text("  eor #$ff")
+    o_nl()
+    out_text("  sta __p8c_wtmp0")
+    o_nl()
+    out_text("  tya")
+    o_nl()
+    out_text("  eor #$ff")
+    o_nl()
+    out_text("  tay")
+    o_nl()
+    out_text("  lda __p8c_wtmp0")
+    o_nl()
+    if uncode == UN_NEG {
+        out_text("  clc")
+        o_nl()
+        out_text("  adc #$01")
+        o_nl()
+        out_text("  bcc *+3")
+        o_nl()
+        out_text("  iny")
+        o_nl()
+    }
+}
+; dispatch a word-expression node onto the word work stack.
+sub word_dispatch(uword nd) {
+    ubyte k
+    k = node_kind[nd]
+    if k == ND_ADDROF {
+        emit_addrof(nd)
+        return
+    }
+    if k == ND_BINOP {
+        ubyte bop
+        bop = node_op[nd]
+        ; arithmetic / bitwise: eval lhs; save; eval rhs; stash; combine.
+        wws_push(3, 0, bop)
+        wws_push(2, 0, 0)
+        wws_push(0, node_b[nd], 0)
+        wws_push(1, 0, 0)
+        wws_push(0, node_a[nd], 0)
+        return
+    }
+    if k == ND_UNOP {
+        wws_push(11, 0, node_op[nd])
+        wws_push(0, node_a[nd], 0)
+        return
+    }
+    ; leaf: int / ident / string
+    codegen_word_leaf(nd)
+}
+; evaluate a uword expression into A (low) / Y (high), on the word work stack
+; (no recursion). Port of _emit_word_expr_into_ay + _emit_word_binop_into_ay.
+; Covers leaves, `&name`, the arithmetic/bitwise binops (+ - & | ^), and the
+; word unary ~ / -. (Shifts, comparison, indexing, calls arrive next.)
+sub codegen_word_expr(uword root) {
+    wws_sp = 0
+    wws_push(0, root, 0)
+    repeat {
+        if wws_sp == 0 {
+            break
+        }
+        wws_sp = wws_sp - 1
+        ubyte ty
+        uword nd
+        ubyte op
+        ty = wws_type[wws_sp]
+        nd = wws_node[wws_sp]
+        op = wws_op[wws_sp]
+        if ty == 0 {
+            word_dispatch(nd)
+        } else {
+            if ty == 1 {
+                ; save LHS (A:Y) on the CPU stack across the RHS eval
+                out_text("  pha")
+                o_nl()
+                out_text("  tya")
+                o_nl()
+                out_text("  pha")
+                o_nl()
+            } else {
+                if ty == 2 {
+                    ; RHS -> wtmp0; restore LHS to A:Y
+                    out_text("  sta __p8c_wtmp0")
+                    o_nl()
+                    out_text("  sty __p8c_wtmp0+1")
+                    o_nl()
+                    out_text("  pla")
+                    o_nl()
+                    out_text("  tay")
+                    o_nl()
+                    out_text("  pla")
+                    o_nl()
+                } else {
+                    if ty == 3 {
+                        emit_word_combine(op)
+                    } else {
+                        emit_word_unary(op)
+                    }
+                }
+            }
+        }
+    }
 }
 
 ; ---- @() memory read (byte) ---------------------------------
@@ -3205,7 +3382,18 @@ sub codegen_assign(uword st) {
         }
         return
     }
-    ; augmented (byte): lda LHS; <op> leaf-operand; sta LHS.
+    ; augmented. For a uword target, p8c rewrites `w op= e` to `w = w op e`
+    ; and runs the word evaluator on that synthetic binop (matching its
+    ; _emit_assign); build the same node and store the A:Y result.
+    if ttype == TY_UWORD {
+        uword synth
+        synth = new_node(ND_BINOP, aug_to_binop(op), target, rhs)
+        codegen_word_expr(synth)
+        emit_sta_sym(si)
+        emit_sty_sym_hi(si)
+        return
+    }
+    ; byte augmented: lda LHS; <op> leaf-operand; sta LHS.
     emit_lda_sym(si)
     emit_byte_binop_leaf(aug_to_binop(op), rhs)
     emit_sta_sym(si)

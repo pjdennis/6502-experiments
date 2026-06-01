@@ -227,6 +227,27 @@ M3_MEMAT_PROGRAMS = [
     "main {\n    a = @(p) + 1\n    p = &b\n    p = &a\n}\n",
 ]
 
+# Phase-7 WORD arithmetic/bitwise slice (16-bit): uword + - & | ^ on the word
+# work stack (port of _emit_word_operands + _emit_word_binop_into_ay). The LHS
+# is held on the CPU stack across the RHS eval (so a RHS reusing the wtmp
+# scratch can't clobber it), RHS lands in __p8c_wtmp0, then the op combines
+# both bytes with carry (+/-) or per-byte (&|^). ubyte operands widen to uword.
+# (Word unary ~/- is a faithful port but p8c's sema rejects it, so untested.)
+M3_WORDARITH_PROGRAMS = [
+    # each binop, var/var and var/ubyte (widening)
+    "%target nmos\nuword w\nuword x\nuword y\nubyte b\n\n"
+    "main {\n    w = x + y\n    w = x - y\n    w = x & y\n    w = x | y\n"
+    "    w = x ^ y\n    w = x + b\n}\n",
+    # left-nested chains and parenthesized (nesting-safety of the CPU-stack LHS)
+    "%target nmos\nuword w\nuword x\nuword y\n\n"
+    "main {\n    w = x + y + w\n    w = (x + y) - (w + 1)\n"
+    "    w = x + (y - w)\n}\n",
+    # word augmented assignment (synthetic binop: w op= e -> w = w op e)
+    "%target nmos\nuword w\nuword x\n\n"
+    "main {\n    w = $1000\n    w += x\n    w -= 1\n    w &= x\n    w |= $00ff\n"
+    "    w ^= x\n}\n",
+]
+
 
 def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
@@ -327,6 +348,12 @@ class P1Equivalence(unittest.TestCase):
 
     def test_m3_memat_programs(self):
         for src in M3_MEMAT_PROGRAMS:
+            with self.subTest(src=src):
+                self.assertEqual(self._oracle(src), self._ontarget(src),
+                                 msg=f"codegen .s differs for {src!r}")
+
+    def test_m3_wordarith_programs(self):
+        for src in M3_WORDARITH_PROGRAMS:
             with self.subTest(src=src):
                 self.assertEqual(self._oracle(src), self._ontarget(src),
                                  msg=f"codegen .s differs for {src!r}")
