@@ -68,21 +68,20 @@ class ParseError(Exception):
 
 class Parser:
     def __init__(self, tokens: list[Token], filename: str,
-                 iter_expr: bool = False, iter_stmt: bool = False):
+                 iter_expr: bool = True, iter_stmt: bool = True):
         self.toks = tokens
         self.pos = 0
         self.filename = filename
-        # When True, expression parsing is delegated to the iterative
-        # (non-recursive) parser in iter_parse.py instead of the
-        # recursive-descent ladder below. The two are proven equivalent
-        # by tests/test_iter_parse.py; this flag lets the whole compiler
-        # run under either, which is how the iterative parser is being
-        # validated on the way to the Prog8 self-host (Phase 6).
+        # The iterative (non-recursive) parser is now the DEFAULT path:
+        # expression parsing goes through iter_parse.IterParser and block
+        # parsing through parse_block_iter. The recursive-descent code
+        # below is retained as the equivalence oracle that
+        # tests/test_iter_parse.py checks the iterative parser against
+        # (and as the reference for the eventual Prog8 port); pass
+        # iter_expr=False / iter_stmt=False to select it.
         #
-        # iter_stmt additionally routes block / statement parsing through
-        # the frame-stack driver `parse_block_iter` (no recursion over
-        # nested blocks). It implies iter_expr, so a run with iter_stmt=True
-        # uses the iterative parser end to end.
+        # iter_stmt implies iter_expr, so a fully-recursive parse needs
+        # both flags off.
         self.iter_stmt = iter_stmt
         self.iter_expr = iter_expr or iter_stmt
 
@@ -839,6 +838,6 @@ class Parser:
 
 
 def parse(tokens: list[Token], filename: str,
-          iter_expr: bool = False, iter_stmt: bool = False) -> Program:
+          iter_expr: bool = True, iter_stmt: bool = True) -> Program:
     return Parser(tokens, filename, iter_expr=iter_expr,
                   iter_stmt=iter_stmt).parse_program()

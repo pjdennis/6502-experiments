@@ -203,7 +203,7 @@ Smaller in scope than A/B but unlocks "real input -> output"
 demos and stress-tests the on-target compiler against actual
 streaming use.
 
-### Option D: BIG -- host p8c iterative parser rewrite (steps 1-3 DONE)
+### Option D: BIG -- host p8c iterative parser rewrite (steps 1-4 DONE; only the Prog8 port remains)
 
 The standing item for *real* Prog8-in-Prog8 self-host. Host
 `p8c/parse.py` is recursive descent in Python; Prog8 forbids
@@ -232,12 +232,19 @@ Progress:
      and `tests/test_iter_parse_integration.py` (byte-identical
      codegen over all 22 example/snapshot programs under both flags).
 
-  NEXT (steps 4-5):
-  4. Make the iterative parser the default and delete the recursive
-     descent (`_parse_binop` ladder + parse_if/while/for/when/repeat
-     + the recursive `parse_block`/`parse_stmt`). Flip the flag
-     defaults, run the full suite, then remove the dead code and the
-     now-redundant `iter_*` flags.
+  4. **DONE** -- iterative parser is the DEFAULT. `parse()` now defaults
+     to `iter_expr=True, iter_stmt=True`, so the CLI (`python3 -m p8c`),
+     every existing test tier (parse/sema/codegen/snapshots/e2e), and
+     the tinyp8 self-host build all run on the iterative parser --
+     byte-identical output throughout (verified: in-process
+     recursive == iterative codegen for tinyp8.p8, and the CLI output
+     matches modulo the source-path header comment). The recursive
+     descent is NOT deleted: it is retained as the equivalence oracle
+     the tests check against (select it with `iter_expr=False,
+     iter_stmt=False`). Removing it would remove that oracle -- defer
+     until the Prog8 port is itself the working reference.
+
+  NEXT (step 5):
   5. Port `iter_parse.py` + `parse_block_iter` to Prog8 itself -- the
      frame structs become `ubyte[]` parallel arrays / a tagged-union
      node array (the tinyp8.p8 idiom, scaled up). THIS is what unlocks

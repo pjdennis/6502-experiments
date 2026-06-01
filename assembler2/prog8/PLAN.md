@@ -126,7 +126,7 @@ parse its own grammar without restrictions on control-flow body
 shape and expression depth. (The identifier-length restriction is
 gone as of v9.)
 
-### Phase 6 -- Host p8c iterative-parser rewrite `[in progress: steps 1-3 done]` (THE strategic item)
+### Phase 6 -- Host p8c iterative-parser rewrite `[in progress: steps 1-4 done; only the Prog8 port remains]` (THE strategic item)
 
 Host `p8c/parse.py` is recursive-descent in Python. Prog8 forbids
 recursion (subs are non-reentrant by design), so the host parser
@@ -165,14 +165,20 @@ Recommended approach:
    (22 files incl. tinyp8.p8) under `iter_expr=True` and `iter_stmt=True`
    and asserts byte-identical codegen; `tests/test_iter_parse.py` also
    diffs full-program ASTs under `iter_stmt`.
-4. `[todo]` Once confident, make the iterative parser the default and
-   remove the recursive descent (parse_if/while/for/when/repeat/block
-   + the precedence ladder).
+4. `[done]` Make the iterative parser the **default**. `parse()` now
+   defaults to `iter_expr=True, iter_stmt=True`, so the CLI, every
+   existing test tier (parse/sema/codegen/snapshots), and the tinyp8
+   self-host build all run on the iterative parser. The recursive
+   descent is *retained* (selectable via `iter_expr=False,
+   iter_stmt=False`) as the equivalence oracle the tests check against
+   and as the reference for the Prog8 port -- it is NOT deleted yet on
+   purpose: deleting it would remove that oracle. Drop it only once the
+   Prog8 port is itself the working reference.
 5. `[todo]` Port `iter_parse.py` + `parse_block_iter` to Prog8 itself.
 
-Estimated remaining effort: 1-2 sessions (steps 1-3 landed). The
-iterative parser now runs the entire compiler end to end behind a
-flag; what's left is making it the default and the eventual Prog8 port.
+Estimated remaining effort: the Prog8 port (step 5) is the last piece,
+and it feeds directly into Phase 7. The iterative parser is now the
+production path; the recursive descent survives only as a test oracle.
 
 ### Phase 7 -- Self-hosting bootstrap proof `[todo]`
 
@@ -216,14 +222,14 @@ Branch `claude/prog8-bootstrap-continue-6Pzo0` (continues the
   arithmetic, comparisons, and now **multi-character variable names**
   via a symbol table. Next surface items: stdin input (v10),
   multi-statement bodies, deeper expressions.
-* Phase 6 (iterative parser rewrite): **steps 1-3 done** -- the
-  iterative parser handles both expressions and statements, runs the
-  entire compiler end to end behind `iter_expr` / `iter_stmt` flags,
-  and is proven equivalent to the recursive one (unit + 4000-sample
-  fuzz + full-program AST diff + whole-corpus byte-identical codegen).
-  Next: make it the default + remove the recursive descent, then port
-  to Prog8.
-* Phase 7-8: blocked on Phase 6.
+* Phase 6 (iterative parser rewrite): **steps 1-4 done** -- the
+  iterative parser handles both expressions and statements and is now
+  the DEFAULT path (CLI + all test tiers + the tinyp8 self-host build
+  run on it). Proven equivalent to the recursive descent (unit +
+  4000-sample fuzz + full-program AST diff + whole-corpus
+  byte-identical codegen); the recursive parser is kept as the test
+  oracle. Only the Prog8 port (step 5) remains before Phase 7.
+* Phase 7-8: blocked on the Phase 6 Prog8 port.
 
 104 tests green. Self-host equivalence holds for the v0/v1 corpus.
 

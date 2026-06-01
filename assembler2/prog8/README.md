@@ -229,20 +229,21 @@ language and remains byte-identical to the reference asm.
   * String operations as proper iterable buffers (strlen, strcmp,
     slicing). Building on what we have wouldn't be hard.
   * Multi-file `%import` with namespacing.
-  * Iterative parser architecture -- the host p8c is recursive-descent
+  * Iterative parser architecture -- the host p8c was recursive-descent
     in Python; Prog8 forbids recursion, so the *real* self-host needs
-    that parser rebuilt around explicit stacks. **Mostly done:**
+    that parser rebuilt around explicit stacks. **Done (Python side):**
     `p8c/iter_parse.py` is an iterative *expression* parser
     (shunting-yard over operand/operator stacks), and
     `Parser.parse_block_iter` is an iterative *statement* parser (a
-    frame stack replacing block-nesting recursion). Both run the whole
-    compiler end to end behind flags -- `parse(..., iter_expr=True)`
-    and `parse(..., iter_stmt=True)` -- and are proven equivalent to
-    the recursive parser by unit tests, a 4000-sample randomized
+    frame stack replacing block-nesting recursion). This is now the
+    **default** parser -- the CLI, every test tier, and the tinyp8
+    self-host build all run on it. It is proven equivalent to the
+    recursive descent by unit tests, a 4000-sample randomized
     expression fuzzer, full-program AST diffs, and a whole-corpus
-    codegen diff that produces byte-identical assembly on all 22
-    example/snapshot programs. Still to do: make the iterative parser
-    the default, delete the recursive descent, and port to Prog8.
+    codegen diff (byte-identical assembly on all 22 example/snapshot
+    programs); the recursive parser is retained as that equivalence
+    oracle (`parse(..., iter_expr=False, iter_stmt=False)`). Remaining:
+    port the iterative parser to Prog8 itself.
 
 See the plan in conversation history for Phases 3-6, including the
 on-emulator emit-equivalence test tier that activates at Phase 5 when

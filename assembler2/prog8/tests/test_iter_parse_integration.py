@@ -54,8 +54,8 @@ class IterParseIntegration(unittest.TestCase):
         self.assertGreater(len(corpus), 0, "no .p8 corpus found")
         for p8 in corpus:
             with self.subTest(p8=p8.name):
-                recursive = _compile(p8)
-                iterative = _compile(p8, iter_expr=True)
+                recursive = _compile(p8, iter_expr=False, iter_stmt=False)
+                iterative = _compile(p8, iter_expr=True, iter_stmt=False)
                 self.assertEqual(recursive, iterative,
                                  msg=f"codegen differs for {p8.name} "
                                      f"with the iterative expression parser")
@@ -63,12 +63,12 @@ class IterParseIntegration(unittest.TestCase):
     def test_iter_stmt_codegen_identical(self):
         # iter_stmt routes the whole block/statement chain through the
         # frame-stack driver (and implies iter_expr), so this exercises
-        # the iterative parser end to end.
+        # the iterative parser end to end -- now the default path.
         corpus = _corpus()
         self.assertGreater(len(corpus), 0, "no .p8 corpus found")
         for p8 in corpus:
             with self.subTest(p8=p8.name):
-                recursive = _compile(p8)
+                recursive = _compile(p8, iter_expr=False, iter_stmt=False)
                 iterative = _compile(p8, iter_stmt=True)
                 self.assertEqual(recursive, iterative,
                                  msg=f"codegen differs for {p8.name} "

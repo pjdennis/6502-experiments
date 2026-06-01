@@ -205,7 +205,9 @@ def _gen_expr(rng: random.Random, depth: int) -> str:
 class IterParseEquivalence(unittest.TestCase):
     def _both(self, src: str):
         toks = lex(src, "<test>")
-        rec = Parser(toks, "<test>")
+        # Force the recursive descent for the baseline (it is now opt-in,
+        # since the iterative parser is the default).
+        rec = Parser(toks, "<test>", iter_expr=False, iter_stmt=False)
         rec_node = rec.parse_expr()
         it = IterParser(toks, "<test>")
         it_node = it.parse_expr()
@@ -287,7 +289,8 @@ class IterStmtEquivalence(unittest.TestCase):
     def test_full_program_asts_match(self):
         for src in STMT_PROGRAMS:
             with self.subTest(src=src):
-                rec = parse(lex(src, "<t>"), "<t>")
+                rec = parse(lex(src, "<t>"), "<t>",
+                            iter_expr=False, iter_stmt=False)
                 it = parse(lex(src, "<t>"), "<t>", iter_stmt=True)
                 self.assertEqual(dump(rec), dump(it),
                                  msg=f"program AST mismatch for {src!r}")
