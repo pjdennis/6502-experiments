@@ -228,9 +228,15 @@ its own milestone (M5 below).
 
 ## 4. Canonical serialization (the equivalence contract)
 
-Both parsers emit the AST as a deterministic prefix S-expression. The
-Python serializer is the reference (add it next to `iter_parse.py`);
-the Prog8 serializer must match it byte-for-byte. Format:
+**Implemented (M0): `p8c/serialize.py`.** Both parsers emit the AST as a
+deterministic, indented prefix S-expression; the Python serializer is
+the reference and the Prog8 serializer must match it byte-for-byte. The
+format below is the one frozen by `serialize.py` and the goldens in
+`tests/goldens_sexp/`; the snippets show the *flat* shape, but the real
+output puts one head per line with children indented two spaces and
+closing parens trailing (see the goldens for exact whitespace).
+
+Expressions:
 
     (int 42)                 (str "hi")          (bool true)
     (id foo)                 (id a.b.c)
@@ -238,33 +244,58 @@ the Prog8 serializer must match it byte-for-byte. Format:
     (addr foo)               (mem E)
     (idx E E)                (idx E E .field)
     (call a.b E E ...)       (call f)            ; zero args
-    (block S S ...)
-    (var ubyte x E?)         (assign = T E)      (exprstmt E)
+
+Statements:
+
+    (block S S ...)          (block)             ; empty
+    (var ubyte x E?)         (var ubyte[4] arr)  (var const-ubyte K E)
+    (assign = T E)           (assign += T E)     (exprstmt E)
     (asm "...")
     (if E (block...) (block...)?)
     (while E (block...))     (for x E E (block...))
-    (repeat E? (block...))
-    (when E (choice (E E ...) (block...)) (choice () (block...)) ...)
+    (repeat (block...))      (repeat E (block...))
+    (when E (choice (vals E E ...) (block...)) (choice (vals) (block...)) ...)
     (break) (continue) (return E?) (defer S)
 
-Operator tokens print as their source spelling (`+`, `<<`, `and`,
-...). Whitespace/indentation is fixed and minimal (single spaces,
-newraw per statement) so the diff is exact. The format is intentionally
-human-readable to make on-target mismatches debuggable.
+Top level (what the parser, pre-sema, actually produces):
+
+    (program
+      (address $XXXX) (output FMT) (target TGT)
+      (imports (import NAME) ...)
+      (vars VARDECL ...)
+      (enums (enum NAME (members (M VAL) (M -) ...)) ...)
+      (structs (struct NAME (fields (TYPE FN) ...)) ...)
+      (subs SUBDEF ...))
+
+    SUBDEF := (subdef NAME KIND RET (params (param TYPE NAME) ...) BODY)
+              KIND := sub | main | inline | asmsub
+              BODY := (block ...)            for sub/main/inline
+                    | (asmtarget $XXXX)      for asmsub
+
+Operator tokens print as their source spelling (`+`, `<<`, `and`, ...);
+unary `-` prints as `u-` to stay distinct from binary `-`. String
+literals are escaped with a tiny, 6502-reproducible escape set (`\\`,
+`\"`, `\n`, `\r`, `\t`). Sema-assigned fields (`sym`/`type`/`mangled`/
+addresses/labels) and source `Loc` are **not** serialized -- the
+contract describes exactly what *parsing* yields, which is what the
+on-target parser will have.
 
 A `serialize(node)` walk is itself recursion in Python; on-target it is
 a second iterative tree-walk over the node arena using an explicit
 work stack (same toolkit as the parser). It is small and can come
-after M3.
+after M3. The Python CLI exposes it as `p8c --dump-ast` (parser-only),
+the command later milestones diff their on-target output against.
 
 ---
 
 ## 5. Milestones (each is one or a few pushes, each with a golden tier)
 
-* **M0 -- serializer + format freeze (Python only).** Add
-  `serialize()` to the Python side and a test that round-trips the
-  existing corpus through `parse -> serialize`. Freezes the contract.
-  No on-target code. *(pure Python; runs without vasm.)*
+* **M0 -- serializer + format freeze (Python only). DONE.**
+  `p8c/serialize.py` + `p8c --dump-ast` + `tests/test_serialize.py`
+  (format assertions, a recursive-vs-iterative serialization
+  equivalence gate over the whole corpus, and on-disk goldens in
+  `tests/goldens_sexp/`). The contract is frozen. *(pure Python; runs
+  without vasm.)*
 
 * **M1 -- lexer port.** `p1/lexer.p8`: source bytes -> token arrays +
   text pools. Golden: dump the token stream for a corpus and diff

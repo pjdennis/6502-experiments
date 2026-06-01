@@ -243,7 +243,12 @@ language and remains byte-identical to the reference asm.
     codegen diff (byte-identical assembly on all 22 example/snapshot
     programs); the recursive parser is retained as that equivalence
     oracle (`parse(..., iter_expr=False, iter_stmt=False)`). Remaining:
-    port the iterative parser to Prog8 itself.
+    port the iterative parser to Prog8 itself -- planned in
+    [`PARSER_PORT_DESIGN.md`](./PARSER_PORT_DESIGN.md), milestones
+    M0..M5. **M0 done:** `p8c/serialize.py` + `p8c --dump-ast` emit the
+    canonical AST S-expression (the on-target equivalence contract),
+    frozen by `tests/test_serialize.py` and on-disk goldens. M1 (the
+    lexer port to `p1/`) is the first on-target push.
 
 See the plan in conversation history for Phases 3-6, including the
 on-emulator emit-equivalence test tier that activates at Phase 5 when

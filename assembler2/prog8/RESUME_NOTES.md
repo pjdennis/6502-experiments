@@ -59,13 +59,14 @@ is the source of truth across sessions.
   stays intact.
 
 * **Test counts (as of HEAD)**:
-  * 82 host p8c tests (`prog8/tests/` -- lex / parse / sema /
-    codegen / snapshot / e2e LCD goldens, plus the iterative-parser
-    equivalence + integration tests).
+  * 99 host p8c tests (`prog8/tests/` -- lex / parse / sema /
+    codegen / snapshot / e2e LCD goldens, the iterative-parser
+    equivalence + integration tests, and the new serializer freeze
+    suite `test_serialize.py`).
   * 5 v0/v1 e2e (`tinyp8/tests/test_e2e.py`).
   * 5 v0/v1 self-host equivalence (`test_self_host.py`).
   * 12 v2..v9 .p8-only (`test_v2.py`, sources in `goldens_v2/`).
-  * **104 total, all green** (the 22 tinyp8 cases need vasm; see the
+  * **121 total, all green** (the 22 tinyp8 cases need vasm; see the
     environment note above).
 
 Run:
@@ -244,7 +245,7 @@ Progress:
      iter_stmt=False`). Removing it would remove that oracle -- defer
      until the Prog8 port is itself the working reference.
 
-  NEXT (step 5):
+  IN PROGRESS (step 5):
   5. Port `iter_parse.py` + `parse_block_iter` to Prog8 itself -- the
      frame structs become `ubyte[]` parallel arrays / a tagged-union
      node array (the tinyp8.p8 idiom, scaled up). THIS is what unlocks
@@ -252,9 +253,17 @@ Progress:
      [`PARSER_PORT_DESIGN.md`](./PARSER_PORT_DESIGN.md) -- covers the
      node arena, the parallel-array stacks/frames, a canonical AST
      serialization as the equivalence contract, and milestones M0..M5.
-     Start at M0: add a pure-Python `serialize()` next to iter_parse.py
-     and freeze the dump format (no vasm needed); then M1 is the lexer
-     port.
+     * **M0 DONE.** `p8c/serialize.py` is the canonical AST
+       S-expression serializer; `p8c --dump-ast` prints it (parser
+       only -- no sema/codegen, matching what the on-target parser
+       yields). Format frozen by `tests/test_serialize.py` (format
+       assertions + a recursive-vs-iterative serialization equivalence
+       gate over the whole corpus + on-disk goldens in
+       `tests/goldens_sexp/`). Regenerate goldens after an intentional
+       format change with `UPDATE_GOLDENS=1`.
+     * **M1 NEXT:** lexer port to `p1/` (source bytes -> token arrays +
+       text pools), built + diffed through the emulator like `tinyp8/`.
+       Then M2 expr, M3 stmt, M4 whole-program on-target, M5 capacity.
 
 The caveat below (fixed frame layout) is addressed in the design doc's
 section 3.6 -- parallel arrays sized for the widest frame kind.

@@ -28,6 +28,7 @@ from .codegen import CodeGenError, generate
 from .lex import LexError, lex
 from .parse import ParseError, parse
 from .sema import SemaError, analyze
+from .serialize import serialize
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -102,6 +103,11 @@ def main(argv: list[str] | None = None) -> int:
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("source", help="path to .p8 source")
     p.add_argument("-o", "--output", help="output .s path (default: <source>.s)")
+    p.add_argument("--dump-ast", action="store_true",
+                   help="parse only and print the canonical AST "
+                        "S-expression serialization to stdout (the golden "
+                        "the Prog8 on-target parser is diffed against); "
+                        "skips sema/codegen")
     p.add_argument("--run", action="store_true",
                    help="compile, assemble, and run on the emulator")
     p.add_argument("--cycle-cap", type=int, default=3_000_000,
@@ -111,6 +117,18 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
 
     src = Path(args.source).resolve()
+
+    if args.dump_ast:
+        # Parser-only path: serialize exactly what parsing yields (no
+        # sema, no codegen), matching what the on-target p1 parser emits.
+        try:
+            prog = parse(lex(src.read_text(), str(src)), str(src))
+        except (LexError, ParseError) as e:
+            sys.stderr.write(f"p8c: {e}\n")
+            return 1
+        sys.stdout.write(serialize(prog))
+        return 0
+
     try:
         s_text = compile_source(src)
     except (LexError, ParseError, SemaError, CodeGenError) as e:

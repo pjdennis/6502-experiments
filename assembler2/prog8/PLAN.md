@@ -174,17 +174,26 @@ Recommended approach:
    and as the reference for the Prog8 port -- it is NOT deleted yet on
    purpose: deleting it would remove that oracle. Drop it only once the
    Prog8 port is itself the working reference.
-5. `[todo]` Port `iter_parse.py` + `parse_block_iter` to Prog8 itself.
-   Design doc: [`PARSER_PORT_DESIGN.md`](./PARSER_PORT_DESIGN.md) --
-   node-arena AST, parallel-array stacks/frames, a canonical AST
+5. `[in progress]` Port `iter_parse.py` + `parse_block_iter` to Prog8
+   itself. Design doc: [`PARSER_PORT_DESIGN.md`](./PARSER_PORT_DESIGN.md)
+   -- node-arena AST, parallel-array stacks/frames, a canonical AST
    serialization as the equivalence contract, and milestones M0
    (Python serializer) through M5 (capacity/streaming).
+   * `[done]` **M0 -- serializer + format freeze (Python only).**
+     `p8c/serialize.py` emits the canonical AST S-expression;
+     `p8c --dump-ast` exposes it (parser-only, the golden the on-target
+     parser is diffed against). `tests/test_serialize.py` freezes it
+     with format assertions, a recursive-vs-iterative serialization
+     equivalence gate over the whole corpus, and on-disk goldens
+     (`tests/goldens_sexp/`).
+   * `[todo]` M1 lexer port -> M2 expr -> M3 stmt -> M4 whole-program
+     on-target -> M5 capacity/streaming. M1 is the first on-target push
+     (`p1/`, built + diffed through the emulator like `tinyp8/`).
 
 Estimated remaining effort: the Prog8 port (step 5) is the last piece,
 and it feeds directly into Phase 7. The iterative parser is now the
 production path; the recursive descent survives only as a test oracle.
-Start with M0 in the design doc (pure-Python serializer; freezes the
-format every later milestone diffs against).
+M0 is done (the format is frozen); M1 (the lexer port) is next.
 
 ### Phase 7 -- Self-hosting bootstrap proof `[todo]`
 
@@ -234,10 +243,13 @@ Branch `claude/prog8-bootstrap-continue-6Pzo0` (continues the
   run on it). Proven equivalent to the recursive descent (unit +
   4000-sample fuzz + full-program AST diff + whole-corpus
   byte-identical codegen); the recursive parser is kept as the test
-  oracle. Only the Prog8 port (step 5) remains before Phase 7.
-* Phase 7-8: blocked on the Phase 6 Prog8 port.
+  oracle. Step 5 (the Prog8 port) is **in progress**: M0 done -- the
+  canonical AST serializer (`p8c/serialize.py` + `--dump-ast`) is
+  written and the format is frozen by `tests/test_serialize.py` +
+  on-disk goldens. M1 (lexer port to `p1/`) is next.
+* Phase 7-8: blocked on the rest of the Phase 6 Prog8 port (M1-M4).
 
-104 tests green. Self-host equivalence holds for the v0/v1 corpus.
+121 tests green. Self-host equivalence holds for the v0/v1 corpus.
 
 ---
 
