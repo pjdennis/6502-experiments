@@ -379,13 +379,36 @@ the command later milestones diff their on-target output against.
   tinyp8.p8 itself (1289 lines, ~2300 AST lines) does not yet fit the
   arenas / 64 KB -- that is M5.
 
-* **M5 -- capacity + streaming.** Measure arena high-water marks on the
-  largest inputs; size the arenas; add bump-guards; if needed, switch
-  to per-sub streaming. Document the limits.
+* **M5 -- capacity + streaming. DONE.** The on-target parser streams
+  per top-level unit so a compiler-sized program fits in the 64 KB
+  address space (whole-program token + node arenas would not). The
+  lexer became a streaming source with a 2-token lookahead window (no
+  token array); `parse_assign_or_expr` was made rewind-free (parse the
+  LHS as an expression, then check for an assignment operator) so the
+  streaming lexer needs no backtracking. Two passes over the (rewound)
+  source: pass A collects directives + module decls (skipping sub
+  bodies by brace-matching) and emits the program head + vars/enums/
+  structs; pass B streams each sub -- parse, serialize, reset the node
+  arena -- so only the biggest single sub's nodes ever coexist. The
+  text pools persist across pass B (their union fits; ids dedupe),
+  which the lookahead window relies on. Result: the **whole 1289-line
+  `tinyp8.p8`** (~2300 AST lines) parses byte-identically to the host
+  (`p1/tests/test_stmt.py::test_tinyp8_capacity`). NB a streaming pitfall
+  fixed here: the lexer and parser share `name_buf`, and the parser's
+  dotted-path read must use a separate `path_buf`, since each `advance()`
+  lexes a lookahead token that clobbers `name_buf`.
 
-After M4, the Prog8 parser exists and is proven equivalent; Phase 7
-(porting sema+codegen, assembling `p1.p8`) can begin on top of this AST
-representation.
+  Arena sizes are tuned for tinyp8.p8 + the examples (biggest sub ~470
+  nodes). p1's own larger sources (`stmt.p8`: 415 idents / 1083-node
+  sub) need bigger arenas than fit alongside the current code; shrinking
+  the serializer's per-byte string emission (table-driven) would buy the
+  room -- a later refinement, not on the critical path.
+
+**Phase 6 step 5 is COMPLETE.** The Prog8 parser exists on-target,
+proven byte-identical to the host across the token, expression, and
+whole-program contracts (M1-M5) and transitively back to the recursive
+grammar (M0). Phase 7 (porting sema+codegen, assembling `p1.p8`) can
+begin on top of this AST representation.
 
 ---
 

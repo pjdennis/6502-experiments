@@ -66,7 +66,7 @@ is the source of truth across sessions.
   * 5 v0/v1 e2e (`tinyp8/tests/test_e2e.py`).
   * 5 v0/v1 self-host equivalence (`test_self_host.py`).
   * 12 v2..v9 .p8-only (`test_v2.py`, sources in `goldens_v2/`).
-  * **152 total, all green** (the 22 tinyp8 + 26 p1 cases need vasm; see the
+  * **153 total, all green** (the 22 tinyp8 + 27 p1 cases need vasm; see the
     environment note above).
 
 Run:
@@ -297,12 +297,19 @@ Progress:
        `Token[4] toks`), `asmsub`, `inline sub`. Byte-identical to the
        oracle over the ENTIRE `examples/` corpus (18 files incl.
        tokenizer.p8 = enum+struct+inline). `p1/tests/test_stmt.py::test_examples`.
-     * **M5 NEXT -- capacity / per-sub streaming.** tinyp8.p8 (~2300 AST
-       lines) overflows the small fixed arenas (tok 600, nodes 512) and,
-       at full size, code+arenas exceed 64 KB. Stream per-sub: parse one
-       top-level unit, serialize it, reset the arenas, repeat -- the
-       asm-chain proves per-unit streaming. After M5, p1 parses its own
-       source / tinyp8.p8 and Phase 7 (sema+codegen port) can begin.
+     * **M5 DONE -- capacity / streaming.** Streaming lexer (2-token
+       window, no token array) + rewind-free statement parse + two
+       passes over the rewound source (pass A: directives + module
+       decls, skipping sub bodies by brace-match; pass B: stream each
+       sub -- parse, serialize, reset the node arena). The whole
+       1289-line `tinyp8.p8` (~2300 AST lines) parses byte-identical to
+       the host (`test_stmt.py::test_tinyp8_capacity`). **Step 5 COMPLETE
+       -- M0..M5 all done; the Prog8 parser runs on the 6502.**
+     * **NEXT: Phase 7.** Port sema + codegen to Prog8 on top of this AST
+       arena, assemble `p1.p8`, and prove `p0(p1.p8) == p1(p1.p8)`. (Also
+       optional: shrink stmt.p8's serializer code -- per-byte string
+       emission -> a data table -- so the arenas can grow enough to parse
+       p1's own larger sources; not on the critical path.)
 
 The caveat below (fixed frame layout) is addressed in the design doc's
 section 3.6 -- parallel arrays sized for the widest frame kind.
@@ -329,6 +336,29 @@ when a demo or tinyp8 push needs them.
 ---
 
 ## Pitfalls / gotchas observed this session
+
+* **Streaming lexer shares `name_buf` with the parser.** In `p1/stmt.p8`
+  (M5) the lexer runs one token ahead (the 2-token window), and
+  `next_raw_token` writes the lexer's scratch `name_buf` (via
+  `read_ident` / `classify_name`). The parser's `read_dotted_path` was
+  also using `name_buf`: it built the name, then `advance()` (which lexes
+  a lookahead token, clobbering `name_buf`), then `intern_name()` --
+  interning the WRONG (clobbered) text. Fix: give the parser its own
+  `path_buf`, and copy it into `name_buf` only at the moment of
+  interning. Symptom was off-by-a-token idents (`(id x)` -> `(id if)`).
+  Capture-the-id-before-advance is fine (ids stay valid because the
+  ident pool persists); only name_buf-across-advance is unsafe.
+
+* **Per-unit reset must NOT reset the text pools.** When streaming subs,
+  the lookahead window holds tokens whose ident/str ids were interned
+  during the previous sub. Resetting the pools per sub invalidates them.
+  So per-sub reset clears only the node arena + cons cells; the pools
+  persist across the whole pass (their union fits; idents dedupe).
+
+* **64 KB ceiling.** stmt.p8's code is ~38 KB, so the arenas + memvars
+  must fit in the remaining ~25 KB. Arenas are tuned for tinyp8.p8 +
+  examples (biggest sub ~470 nodes). Bigger inputs (p1's own sources)
+  need either smaller code (table-driven serializer) or finer streaming.
 
 * **Host p8c: sub calling convention was not reentrant -- FIXED.** Args
   were stored straight into the callee's static param slots as each was

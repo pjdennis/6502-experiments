@@ -108,6 +108,18 @@ class StmtEquivalence(unittest.TestCase):
                                  msg=f"program AST serialization differs "
                                      f"for {p8.name}")
 
+    def test_tinyp8_capacity(self):
+        # M5: the on-target parser streams per top-level unit (two passes,
+        # arenas reset between subs), so a compiler-sized input fits. The
+        # whole 1289-line tinyp8.p8 (~2300 AST lines, biggest sub ~470
+        # nodes) parses byte-identically to the host -- the step-5 success
+        # criterion (parse the asm-chain-style self-host target).
+        tinyp8 = PROG8 / "tinyp8" / "tinyp8.p8"
+        self.assertTrue(tinyp8.exists())
+        src = tinyp8.read_text()
+        self.assertEqual(self._oracle(src), self._ontarget(src),
+                         msg="program AST serialization differs for tinyp8.p8")
+
 
 if __name__ == "__main__":
     unittest.main()

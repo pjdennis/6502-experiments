@@ -172,38 +172,44 @@ ubyte peek_buf
 ubyte peek_ok
 ubyte src_eof
 
-; tokens (kind is a byte; value is 16-bit; uword index)
-ubyte[600] tok_kind
-uword[600] tok_val
-uword tok_count
-uword tok_pos
+; streaming lexer: a 2-token lookahead window (tk0 = current, tk1 = next)
+; instead of a whole-program token array, so arbitrarily large programs
+; fit. next_raw_token() produces one token into ntok_*.
+ubyte tk0_kind
+uword tk0_val
+ubyte tk1_kind
+uword tk1_val
+ubyte ntok_kind
+uword ntok_val
 
-; identifier text pool
-ubyte[1536] ident_pool
-uword[256]  ident_off
-uword[256]  ident_len
+; identifier text pool (reset per top-level unit while streaming)
+ubyte[1024] ident_pool
+uword[320]  ident_off
+uword[320]  ident_len
 uword ident_count
 uword ident_pool_len
 
 ; string literal pool
-ubyte[768] str_pool
-uword[128]  str_off
-uword[128]  str_len
+ubyte[1024] str_pool
+uword[160]  str_off
+uword[160]  str_len
 uword str_count
 uword str_pool_len
 
 ubyte[64] name_buf
+ubyte[96] path_buf       ; parser's dotted-path buffer (lexer owns name_buf)
+uword path_len
 uword name_len
 
 uword int_val
 
 ; node arena
-ubyte[512] node_kind
-ubyte[512] node_op
-uword[512] node_a
-uword[512] node_b
-uword[512] node_c
-uword[512] node_d
+ubyte[640] node_kind
+ubyte[640] node_op
+uword[640] node_a
+uword[640] node_b
+uword[640] node_c
+uword[640] node_d
 uword node_count
 
 ; expression stacks
@@ -218,8 +224,8 @@ uword[128] op_floor
 uword op_sp
 
 ; cons cells
-uword[512] cons_val
-uword[512] cons_next
+uword[640] cons_val
+uword[640] cons_next
 uword cons_count
 
 ; statement frame stack
@@ -610,17 +616,19 @@ sub dir_classify() -> ubyte {
 
 ; ---- token storage + lexer ----
 sub push_token(ubyte kind, uword val) {
-    tok_kind[tok_count] = kind
-    tok_val[tok_count] = val
-    tok_count = tok_count + 1
+    ntok_kind = kind
+    ntok_val = val
 }
 
-sub lex_all() {
+; produce one token into ntok_kind / ntok_val (TK_EOF at end of input).
+sub next_raw_token() {
     repeat {
         ubyte c
         c = peek_src()
         if src_eof != 0 {
-            break
+            ntok_kind = TK_EOF
+            ntok_val = 0
+            return
         }
         if c == $20 { c = read_src()  continue }
         if c == $09 { c = read_src()  continue }
@@ -639,27 +647,27 @@ sub lex_all() {
             ubyte c2
             c2 = peek_src()
             if src_eof == 0 {
-                if c2 == $30 { read_bin()  push_token(TK_INT, int_val)  continue }
-                if c2 == $31 { read_bin()  push_token(TK_INT, int_val)  continue }
+                if c2 == $30 { read_bin()  push_token(TK_INT, int_val)  return }
+                if c2 == $31 { read_bin()  push_token(TK_INT, int_val)  return }
                 if is_alpha_us(c2) != 0 {
                     read_ident()
                     push_token(TK_DIRECTIVE, intern_name())
-                    continue
+                    return
                 }
             }
             push_token(TK_OTHER, 0)
-            continue
+            return
         }
         if c == $24 {
             c = read_src()
             read_hex()
             push_token(TK_INT, int_val)
-            continue
+            return
         }
         if is_digit(c) != 0 {
             read_dec()
             push_token(TK_INT, int_val)
-            continue
+            return
         }
         if c == $27 {
             c = read_src()
@@ -673,7 +681,7 @@ sub lex_all() {
             }
             c = read_src()
             push_token(TK_INT, int_val)
-            continue
+            return
         }
         if c == $22 {
             c = read_src()
@@ -696,7 +704,7 @@ sub lex_all() {
             str_len[str_count] = str_pool_len - str_off[str_count]
             push_token(TK_STR, str_count)
             str_count = str_count + 1
-            continue
+            return
         }
         if is_alpha_us(c) != 0 {
             read_ident()
@@ -707,12 +715,12 @@ sub lex_all() {
             } else {
                 push_token(k, 0)
             }
-            continue
+            return
         }
         c = read_src()
         lex_operator(c)
+        return
     }
-    push_token(TK_EOF, 0)
 }
 
 sub lex_operator(ubyte c) {
@@ -808,18 +816,30 @@ sub lex_operator(ubyte c) {
     push_token(TK_OTHER, 0)
 }
 
-; ---- token cursor ----
+; ---- token cursor (over the streaming 2-token window) ----
 sub cur_kind() -> ubyte {
-    return tok_kind[tok_pos]
+    return tk0_kind
 }
 sub cur_val() -> uword {
-    return tok_val[tok_pos]
+    return tk0_val
 }
-sub kind_at(uword p) -> ubyte {
-    return tok_kind[p]
+sub peek1_kind() -> ubyte {
+    return tk1_kind
 }
 sub advance() {
-    tok_pos = tok_pos + 1
+    tk0_kind = tk1_kind
+    tk0_val = tk1_val
+    next_raw_token()
+    tk1_kind = ntok_kind
+    tk1_val = ntok_val
+}
+sub lex_init() {
+    next_raw_token()
+    tk0_kind = ntok_kind
+    tk0_val = ntok_val
+    next_raw_token()
+    tk1_kind = ntok_kind
+    tk1_val = ntok_val
 }
 
 ; ---- node arena ----
@@ -946,22 +966,54 @@ sub append_ident_to_namebuf(uword id) {
         j = j + 1
     }
 }
+; append the (possibly dotted) ident currently at the cursor into path_buf.
+sub append_ident_to_pathbuf(uword id) {
+    uword off
+    uword n
+    uword j
+    off = ident_off[id]
+    n = ident_len[id]
+    j = 0
+    repeat {
+        if j >= n {
+            break
+        }
+        path_buf[path_len] = ident_pool[off + j]
+        path_len = path_len + 1
+        j = j + 1
+    }
+}
+; Read IDENT (DOT IDENT)* at the cursor, returning the interned id of the
+; full (possibly dotted) text. Builds into path_buf, NOT name_buf: each
+; advance() lexes a token ahead, and the lexer reuses name_buf, so using
+; name_buf across the advances would intern a clobbered (wrong) name.
 sub read_dotted_path() -> uword {
-    name_len = 0
-    append_ident_to_namebuf(cur_val())
+    path_len = 0
+    append_ident_to_pathbuf(cur_val())
     advance()
     repeat {
         if cur_kind() != TK_DOT {
             break
         }
-        if kind_at(tok_pos + 1) != TK_IDENT {
+        if peek1_kind() != TK_IDENT {
             break
         }
         advance()
-        name_buf[name_len] = $2e
-        name_len = name_len + 1
-        append_ident_to_namebuf(cur_val())
+        path_buf[path_len] = $2e
+        path_len = path_len + 1
+        append_ident_to_pathbuf(cur_val())
         advance()
+    }
+    ; copy into name_buf right before interning (now immune to lookahead)
+    name_len = path_len
+    uword i
+    i = 0
+    repeat {
+        if i >= path_len {
+            break
+        }
+        name_buf[i] = path_buf[i]
+        i = i + 1
     }
     return intern_name()
 }
@@ -978,7 +1030,7 @@ sub close_index() {
     uword node
     node = new_node(ND_INDEX, 0, array, index)
     if cur_kind() == TK_DOT {
-        if kind_at(tok_pos + 1) == TK_IDENT {
+        if peek1_kind() == TK_IDENT {
             advance()
             node_c[node] = cur_val()
             node_op[node] = 1
@@ -1269,57 +1321,27 @@ sub parse_inline_asm() -> uword {
 }
 
 ; parse assignment-or-expression statement -> node (Assign or ExprStmt).
+; Rewind-free: parse the whole LHS as an expression (which already yields
+; an Ident / Index / MemAt target, or a Call etc.), then check whether an
+; assignment operator follows. Assignment operators are not expression
+; operators, so parse_expr stops right before them -- no backtracking
+; needed (the streaming lexer has no rewind).
 sub parse_assign_or_expr() -> uword {
-    uword target
-    uword save
-    ; @(addr) = ... or expression statement
-    if cur_kind() == TK_AT {
+    uword e
+    e = parse_expr()
+    ubyte k
+    k = cur_kind()
+    if k == TK_ASSIGN {
         advance()
-        advance()                           ; '('
-        target = new_node(ND_MEMAT, 0, parse_expr(), 0)
-        advance()                           ; ')'
-        if cur_kind() == TK_ASSIGN {
-            advance()
-            return new_node(ND_ASSIGN, TK_ASSIGN, target, parse_expr())
-        }
-        return new_node(ND_EXPRSTMT, 0, target, 0)
+        return new_node(ND_ASSIGN, TK_ASSIGN, e, parse_expr())
     }
-    if cur_kind() == TK_IDENT {
-        save = tok_pos
-        target = new_node(ND_IDENT, 0, read_dotted_path(), 0)
-        if cur_kind() == TK_LBRACK {
+    if k >= TK_PLUSEQ {
+        if k <= TK_SHREQ {
             advance()
-            uword idx
-            idx = parse_expr()
-            advance()                       ; ']'
-            uword inode
-            inode = new_node(ND_INDEX, 0, target, idx)
-            if cur_kind() == TK_DOT {
-                if kind_at(tok_pos + 1) == TK_IDENT {
-                    advance()
-                    node_c[inode] = cur_val()
-                    node_op[inode] = 1
-                    advance()
-                }
-            }
-            target = inode
+            return new_node(ND_ASSIGN, k, e, parse_expr())
         }
-        ubyte k
-        k = cur_kind()
-        if k == TK_ASSIGN {
-            advance()
-            return new_node(ND_ASSIGN, TK_ASSIGN, target, parse_expr())
-        }
-        if k >= TK_PLUSEQ {
-            if k <= TK_SHREQ {
-                advance()
-                return new_node(ND_ASSIGN, k, target, parse_expr())
-            }
-        }
-        ; not an assignment -- rewind and parse as expression
-        tok_pos = save
     }
-    return new_node(ND_EXPRSTMT, 0, parse_expr(), 0)
+    return new_node(ND_EXPRSTMT, 0, e, 0)
 }
 
 ; ---- frame stack ----
@@ -1803,7 +1825,132 @@ sub parse_struct_var() -> uword {
     return node
 }
 
-sub parse_program() {
+; ---- streaming support ----
+; Full reset (between passes): node arena + cons + text pools.
+sub reset_arena() {
+    reset_nodes()
+    ident_count = 0
+    ident_pool_len = 0
+    str_count = 0
+    str_pool_len = 0
+}
+; Per-unit reset (between subs in pass B): only the node arena + cons
+; cells. The text pools are NOT reset -- the 2-token lookahead window
+; holds tokens whose ident/str ids were interned during the previous
+; unit, so resetting the pools would invalidate them. The pools persist
+; across pass B (their total fits; idents dedupe).
+sub reset_nodes() {
+    node_count = 1
+    cons_count = 1
+}
+sub reset_source() {
+    ; the emulator rewinds the input to offset 0 on EOF, so clearing the
+    ; sticky-EOF / peek flags makes the next read start over from the top.
+    peek_ok = 0
+    src_eof = 0
+}
+
+; process one directive (cursor on the DIRECTIVE token), updating program
+; header state.
+sub handle_directive() {
+    name_len = 0
+    append_ident_to_namebuf(cur_val())
+    ubyte dk
+    dk = dir_classify()
+    advance()                               ; consume the directive
+    if dk == 0 {                            ; %address
+        prog_address = cur_val()
+        advance()
+        return
+    }
+    if dk == 2 {                            ; %import
+        prog_imports = cons_prepend(prog_imports, cur_val())
+        advance()
+        return
+    }
+    if dk == 3 {                            ; %target
+        name_len = 0
+        append_ident_to_namebuf(cur_val())
+        if name_len == 4 {                  ; "nmos"
+            if name_buf[0]==$6e and name_buf[1]==$6d and name_buf[2]==$6f and name_buf[3]==$73 {
+                prog_target = 1
+                if prog_address == $4000 {
+                    prog_address = $0200
+                }
+            }
+        }
+        advance()
+        return
+    }
+    ; %output (or other): consume a single ident arg if present
+    if cur_kind() == TK_IDENT {
+        advance()
+    }
+}
+
+; skip a `{ ... }` block (cursor on the opening '{'), brace-matched.
+sub skip_braced_block() {
+    advance()                               ; consume '{'
+    uword depth
+    depth = 1
+    repeat {
+        ubyte t
+        t = cur_kind()
+        if t == TK_EOF {
+            return
+        }
+        if t == TK_LBRACE {
+            depth = depth + 1
+        }
+        if t == TK_RBRACE {
+            depth = depth - 1
+            if depth == 0 {
+                advance()                   ; consume the matching '}'
+                return
+            }
+        }
+        advance()
+    }
+}
+; skip a sub: advance to its body '{', then skip the braced block.
+sub skip_sub_body() {
+    repeat {
+        ubyte t
+        t = cur_kind()
+        if t == TK_EOF {
+            return
+        }
+        if t == TK_LBRACE {
+            break
+        }
+        advance()
+    }
+    skip_braced_block()
+}
+; skip an asmsub (no body): advance to '=', then past it and the $ADDR.
+sub skip_asmsub() {
+    advance()                               ; 'asmsub'
+    repeat {
+        ubyte t
+        t = cur_kind()
+        if t == TK_EOF {
+            return
+        }
+        if t == TK_ASSIGN {
+            break
+        }
+        if t == TK_LBRACE {
+            return
+        }
+        advance()
+    }
+    advance()                               ; '='
+    advance()                               ; $ADDR
+}
+
+; PASS A: collect directives + module decls into the program lists;
+; skip sub / main / inline-sub / asmsub bodies.
+sub parse_decls_pass() {
     repeat {
         ubyte t
         t = cur_kind()
@@ -1811,40 +1958,7 @@ sub parse_program() {
             break
         }
         if t == TK_DIRECTIVE {
-            ; %address $XXXX / %output X / %import X / %target X
-            name_len = 0
-            append_ident_to_namebuf(cur_val())
-            ubyte dk
-            dk = dir_classify()
-            advance()                           ; consume the directive
-            if dk == 0 {                        ; %address
-                prog_address = cur_val()
-                advance()
-                continue
-            }
-            if dk == 2 {                        ; %import
-                prog_imports = cons_prepend(prog_imports, cur_val())
-                advance()
-                continue
-            }
-            if dk == 3 {                        ; %target
-                name_len = 0
-                append_ident_to_namebuf(cur_val())
-                if name_len == 4 {              ; "nmos"
-                    if name_buf[0]==$6e and name_buf[1]==$6d and name_buf[2]==$6f and name_buf[3]==$73 {
-                        prog_target = 1
-                        if prog_address == $4000 {
-                            prog_address = $0200
-                        }
-                    }
-                }
-                advance()
-                continue
-            }
-            ; %output (or other): consume a single ident arg if present
-            if cur_kind() == TK_IDENT {
-                advance()
-            }
+            handle_directive()
             continue
         }
         if is_type_kw(t) != 0 {
@@ -1864,34 +1978,28 @@ sub parse_program() {
             continue
         }
         if t == TK_KMAIN {
-            prog_subs = cons_prepend(prog_subs, parse_main())
+            skip_sub_body()
             continue
         }
         if t == TK_KSUB {
-            advance()
-            prog_subs = cons_prepend(prog_subs, parse_sub(SUBK_SUB))
+            skip_sub_body()
             continue
         }
         if t == TK_KINLINE {
-            advance()                           ; 'inline'
-            advance()                           ; 'sub'
-            prog_subs = cons_prepend(prog_subs, parse_sub(SUBK_INLINE))
+            skip_sub_body()
             continue
         }
         if t == TK_KASMSUB {
-            prog_subs = cons_prepend(prog_subs, parse_asmsub())
+            skip_asmsub()
             continue
         }
         if t == TK_IDENT {
-            ; `StructName instance` or `StructName[N] arr` -- a var whose
-            ; type is a previously-declared struct.
             if is_struct_name(cur_val()) != 0 {
                 prog_vars = cons_prepend(prog_vars, parse_struct_var())
                 continue
             }
         }
-        ; unknown top-level token -- skip it to avoid an infinite loop
-        advance()
+        advance()                           ; skip an unknown token
     }
 }
 
@@ -2348,8 +2456,11 @@ sub drain_ws() {
     }
 }
 
-; ---- whole-program serialization ----
-sub serialize_program() {
+; ---- whole-program serialization (streaming) ----
+; emit (program (address)(output)(target)(imports)(vars)(enums)(structs);
+; the (subs ...) section and the closing ')' are emitted separately
+; (pass B) so the big sub bodies never coexist in the arena.
+sub serialize_head_and_decls() {
     ; (program
     out_byte($28) out_byte($70) out_byte($72) out_byte($6f) out_byte($67) out_byte($72) out_byte($61) out_byte($6d) out_byte($0a)
     ; (address $XXXX)
@@ -2375,10 +2486,95 @@ sub serialize_program() {
     serialize_list_section(prog_vars, 1)
     serialize_enums()
     serialize_structs()
-    ; (subs SUBDEF ...)
-    serialize_subs_section()
-    ; close (program  -- the last section's close already emitted a paren
-    out_byte($29) out_byte($0a)
+}
+
+; PASS B: emit `(subs SUBDEF ...)`, parsing + serializing each sub in
+; turn and resetting the arena between, so only one sub's nodes (the
+; biggest) ever live at once. Non-sub top-level units are re-parsed and
+; discarded. The cursor starts at the top of the (rewound) source.
+sub serialize_subs_streaming() {
+    out_byte($20) out_byte($20)
+    out_byte($28) out_byte($73) out_byte($75) out_byte($62) out_byte($73)    ; "(subs"
+    repeat {
+        ubyte t
+        t = cur_kind()
+        if t == TK_EOF {
+            break
+        }
+        uword snode
+        ubyte issub
+        issub = 1
+        if t == TK_KMAIN {
+            snode = parse_main()
+        } else {
+            if t == TK_KSUB {
+                advance()
+                snode = parse_sub(SUBK_SUB)
+            } else {
+                if t == TK_KINLINE {
+                    advance()
+                    advance()
+                    snode = parse_sub(SUBK_INLINE)
+                } else {
+                    if t == TK_KASMSUB {
+                        snode = parse_asmsub()
+                    } else {
+                        issub = 0
+                        skip_decl_pass_b()
+                    }
+                }
+            }
+        }
+        if issub != 0 {
+            out_byte($0a)
+            serialize_sub(snode, 2)
+            reset_nodes()
+        }
+    }
+    out_byte($29)                           ; close (subs
+}
+
+; pass B: consume one non-sub top-level unit (directive / var / const /
+; enum / struct / struct-var) without emitting it; reset the arena after
+; any that allocated nodes.
+sub skip_decl_pass_b() {
+    ubyte t
+    uword dummy
+    t = cur_kind()
+    if t == TK_DIRECTIVE {
+        advance()                           ; directive
+        ubyte a
+        a = cur_kind()
+        if a == TK_INT {
+            advance()
+        } else {
+            if a == TK_IDENT {
+                advance()
+            }
+        }
+        return
+    }
+    if is_type_kw(t) != 0 {
+        dummy = parse_var_decl()
+        reset_nodes()
+        return
+    }
+    if t == TK_KCONST {
+        dummy = parse_const_decl()
+        reset_nodes()
+        return
+    }
+    if t == TK_KENUM {
+        dummy = parse_enum_decl()
+        reset_nodes()
+        return
+    }
+    if t == TK_KSTRUCT {
+        dummy = parse_struct_decl()
+        reset_nodes()
+        return
+    }
+    advance()                               ; struct-var idents / unknowns
 }
 
 ; helper: emit a `(<kw>` section header whose children are a reversed
@@ -2555,28 +2751,6 @@ sub serialize_struct(uword node, ubyte depth) {
     out_byte($29)                           ; close (struct
 }
 
-sub serialize_subs_section() {
-    out_byte($20) out_byte($20)
-    if prog_subs == 0 {
-        out_byte($28) out_byte($73) out_byte($75) out_byte($62) out_byte($73) out_byte($29)
-        return
-    }
-    out_byte($28) out_byte($73) out_byte($75) out_byte($62) out_byte($73)    ; "(subs"
-    uword rev
-    rev = reverse_cons(prog_subs)
-    uword cell
-    cell = rev
-    repeat {
-        if cell == 0 {
-            break
-        }
-        out_byte($0a)
-        serialize_sub(cons_val[cell], 2)
-        cell = cons_next[cell]
-    }
-    out_byte($29)
-}
-
 ; serialize one (subdef NAME KIND RET (params ...) BODY) at `depth`.
 sub serialize_sub(uword node, ubyte depth) {
     out_indent(depth)
@@ -2683,16 +2857,7 @@ main {
     fn = _argv(1)
     dst_hand = _openout(fn)
 
-    peek_ok = 0
-    src_eof = 0
-    tok_count = 0
-    tok_pos = 0
-    ident_count = 0
-    ident_pool_len = 0
-    str_count = 0
-    str_pool_len = 0
-    node_count = 1
-    cons_count = 1
+    reset_arena()
     prog_address = $4000
     prog_target = 0
     prog_imports = 0
@@ -2701,9 +2866,20 @@ main {
     prog_structs = 0
     prog_subs = 0
 
-    lex_all()
-    parse_program()
-    serialize_program()
+    ; ---- pass A: directives + module decls (sub bodies skipped) ----
+    reset_source()
+    lex_init()
+    parse_decls_pass()
+    serialize_head_and_decls()
+
+    ; ---- pass B: stream the subs (the emulator rewound the file at EOF) ----
+    reset_source()
+    reset_arena()
+    lex_init()
+    serialize_subs_streaming()
+
+    ; close (program
+    out_byte($29) out_byte($0a)
 
     _close(src_hand)
     _close(dst_hand)

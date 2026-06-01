@@ -51,9 +51,19 @@ milestones M0..M5).
   `asmsub`, and `inline sub`. Byte-identical to the oracle over the
   entire `examples/` corpus (18 files incl. `tokenizer.p8`).
 
-* M5 (capacity / per-sub streaming) -- to come. The arenas are sized for
-  small programs; tinyp8.p8 (~2300 AST lines) overflows them / 64 KB, so
-  the parser must stream per-sub and reset the arenas between units.
+* **M5 (done)** -- capacity / streaming. The lexer is a streaming source
+  with a 2-token lookahead window (no token array); statement parsing is
+  rewind-free; and the driver makes two passes over the (rewound)
+  source: pass A collects directives + module decls (skipping sub bodies
+  by brace-matching), pass B streams each sub -- parse, serialize, reset
+  the node arena -- so only the biggest single sub's nodes coexist. The
+  whole 1289-line `tinyp8.p8` (~2300 AST lines) now parses byte-identical
+  to the host (`tests/test_stmt.py::test_tinyp8_capacity`).
+
+**Phase 6 step 5 (the Prog8 parser port) is COMPLETE -- M0..M5 all done.**
+The arenas are tuned for tinyp8.p8 + the examples; p1's own larger
+sources need bigger arenas than fit alongside the current serializer
+code (a future code-size refinement, not on the critical path).
 
 ## Running
 
