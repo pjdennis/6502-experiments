@@ -226,6 +226,12 @@ sub out_ident_text(uword id) {{
 ; emit a symbol's mangled name from its table entry: module -> p8v_<name>,
 ; param -> p8v_<sub>_arg_<name>, local -> p8v_<sub>_<name>.
 sub emit_sym_mangled(uword si) {{
+    ; arrays live in main memory under a p8a_ label; everything else is p8v_.
+    if sym_arr_size[si] != 0 {{
+        out_text("p8a_")
+        out_ident_text(sym_ident[si])
+        return
+    }}
     out_text("p8v_")
     if sym_mkind[si] == 0 {{
         out_ident_text(sym_ident[si])
@@ -364,6 +370,7 @@ sub build_symbols() {{
                     sym_scope[sym_count] = 0
                     sym_mkind[sym_count] = 0
                     sym_is_const[sym_count] = 0
+                    sym_arr_size[sym_count] = 0
                     sym_count = sym_count + 1
                     if tag == TY_UWORD {{
                         zp_next = zp_next + 2
@@ -389,8 +396,25 @@ sub build_symbols() {{
                         sym_mkind[sym_count] = 0
                         sym_is_const[sym_count] = 1
                         sym_cval[sym_count] = node_a[node_b[vd]]
+                        sym_arr_size[sym_count] = 0
                         sym_count = sym_count + 1
                     }}
+                }}
+            }} else {{
+                ; array: `ubyte[N] / uword[N] name`. Storage is a labeled .byte
+                ; block (p8a_<name>) in main memory, not ZP. Element type tag in
+                ; node_op, count in node_c. (Only ubyte/uword element types.)
+                ubyte etag
+                etag = node_op[vd]
+                if etag <= TY_UWORD {{
+                    sym_ident[sym_count] = node_a[vd]
+                    sym_type[sym_count] = etag
+                    sym_addr[sym_count] = 0
+                    sym_scope[sym_count] = 0
+                    sym_mkind[sym_count] = 0
+                    sym_is_const[sym_count] = 0
+                    sym_arr_size[sym_count] = node_c[vd]
+                    sym_count = sym_count + 1
                 }}
             }}
         }}
@@ -422,8 +446,10 @@ sub emit_zp_bindings() {{
             break
         }}
         if sym_is_const[j] == 0 {{
-            any = 1
-            break
+            if sym_arr_size[j] == 0 {{
+                any = 1
+                break
+            }}
         }}
         j = j + 1
     }}
@@ -439,10 +465,12 @@ sub emit_zp_bindings() {{
             break
         }}
         if sym_is_const[i] == 0 {{
-            emit_sym_mangled(i)
-            out_text(" = $")
-            out_hex2(lsb(sym_addr[i]))
-            o_nl()
+            if sym_arr_size[i] == 0 {{
+                emit_sym_mangled(i)
+                out_text(" = $")
+                out_hex2(lsb(sym_addr[i]))
+                o_nl()
+            }}
         }}
         i = i + 1
     }}
@@ -456,6 +484,66 @@ sub emit_main(uword body) {{
 
 sub emit_trailers() {{
 {emit_text(TRAILERS)}
+}}
+
+; emit the `; ---- arrays ----` storage block: one `p8a_<name>:` label + a
+; `.byte 0, 0, ...` reservation (count*esize zero bytes) per module array, in
+; source order. Goes between the mul helper and the string pool (matching p8c).
+; Empty -> nothing (not even the header).
+sub emit_arrays() {{
+    ubyte any
+    any = 0
+    uword j
+    j = 0
+    repeat {{
+        if j >= sym_count {{
+            break
+        }}
+        if sym_arr_size[j] != 0 {{
+            any = 1
+            break
+        }}
+        j = j + 1
+    }}
+    if any == 0 {{
+        return
+    }}
+    out_byte($0a)
+    out_text("; ---- arrays ----")
+    o_nl()
+    uword i
+    i = 0
+    repeat {{
+        if i >= sym_count {{
+            break
+        }}
+        if sym_arr_size[i] != 0 {{
+            emit_sym_mangled(i)
+            out_byte($3a)               ; :
+            o_nl()
+            ; nbytes = count * esize (uword element -> 2 bytes each)
+            uword nbytes
+            nbytes = sym_arr_size[i]
+            if sym_type[i] == TY_UWORD {{
+                nbytes = nbytes + nbytes
+            }}
+            out_text("  .byte ")
+            uword b
+            b = 0
+            repeat {{
+                if b >= nbytes {{
+                    break
+                }}
+                if b != 0 {{
+                    out_text(", ")
+                }}
+                out_byte($30)           ; 0
+                b = b + 1
+            }}
+            o_nl()
+        }}
+        i = i + 1
+    }}
 }}
 
 ; the ubyte*ubyte helper, emitted only when `*` codegen set mul_used. Goes
@@ -3253,8 +3341,9 @@ main {{
     ; ---- pass B: emit the non-main subs in source order ----
     emit_subs()
 
-    ; ---- mul helper + string pool + trailers ----
+    ; ---- mul helper + arrays + string pool + trailers ----
     emit_mul_helper()
+    emit_arrays()
     emit_string_pool()
     emit_trailers()
 
@@ -3308,6 +3397,8 @@ def main():
         "ubyte[64] sym_mkind      ; 0 = module var, 1 = param, 2 = local\n"
         "ubyte[64] sym_is_const   ; 1 = compile-time const (no storage); folded\n"
         "uword[64] sym_cval       ; const value (when sym_is_const)\n"
+        "uword[64] sym_arr_size   ; element count if an array (0 = scalar); the\n"
+        "                         ; element type is in sym_type; mangle is p8a_\n"
         "ubyte sym_count\n"
         "uword zp_next            ; ZP bump allocator (from $40)\n"
         "uword cur_scope          ; the sub being codegen'd (for var resolution)\n"

@@ -415,6 +415,23 @@ CONST_PROGRAMS = [
     "main {\n    if A == B {\n    }\n}\n",
 ]
 
+# P7 array DECLARATION slice: `ubyte[N] / uword[N] name` reserves a labeled
+# `.byte 0,...` storage block (p8a_<name>, count*esize bytes) in the arrays
+# trailer (between the mul helper and the string pool), with NO ZP binding.
+# (Element INDEXING -- ND_INDEX read/store -- is not folded in yet; it needs
+# low-window headroom this build does not have, so this corpus declares arrays
+# but does not index them, which is byte-identical to p8c.)
+ARRAY_DECL_PROGRAMS = [
+    # ubyte + uword arrays interleaved with scalars: trailer order = source
+    # order, scalars still get ZP bindings, arrays do not.
+    "%target nmos\nubyte[4] buf\nubyte x\nuword[3] tab\n\n"
+    "main {\n    x = 1\n}\n",
+    # an array as the only module symbol -> ZP-binding block omitted, trailer
+    # present.
+    "%target nmos\nubyte[8] mem\n\n"
+    "main {\n}\n",
+]
+
 # P7-M5 subs (slice 2): return values + call-as-value (still no params/locals).
 # `return [v]` evaluates v (byte -> A, word -> A:Y) with p8c's pha/pla dance,
 # then jmps the per-sub .Lp8s_<name>_ret label; a call in an expression leaves
@@ -709,6 +726,12 @@ class P1Equivalence(unittest.TestCase):
 
     def test_const_programs(self):
         for src in CONST_PROGRAMS:
+            with self.subTest(src=src):
+                self.assertEqual(self._oracle(src), self._ontarget(src),
+                                 msg=f"codegen .s differs for {src!r}")
+
+    def test_array_decl_programs(self):
+        for src in ARRAY_DECL_PROGRAMS:
             with self.subTest(src=src):
                 self.assertEqual(self._oracle(src), self._ontarget(src),
                                  msg=f"codegen .s differs for {src!r}")

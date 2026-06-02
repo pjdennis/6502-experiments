@@ -107,14 +107,34 @@ guard: test_const_programs. Cost ~1.2 KB code (code+arena top $E442 -> $E91F,
 self-host -> the sym_* arrays (currently [64]) must grow to ~256+ then, ~1-2 KB
 more arena. The freed ~3 KB (pool relocation) covers it but watch the ceiling.
 
-**NEXT: arrays.** p8c reference: `_emit_array_addr_into_aptr`, `_array_fast_byte`,
-the arrays/struct/memvar trailer sections in generate(), and the Index cases in
-`_emit_byte_expr_into_a` / `_emit_word_expr_into_ay` / the assign path. p1 has
-NO array codegen yet (build_symbols + the store path gate on `node_c[vd]==0`
-i.e. scalar-only; ND_INDEX is unhandled). Fast path: ubyte array <=256 elems +
-ubyte index -> `lda arr,y`; const index -> absolute `lda arr+const`; else the
-`__p8c_aptr` ($28) element-pointer path. Watch the ~1.7 KB ceiling -- arrays +
-indexing may need a compaction lever (#1) or arena right-sizing (#2) alongside.
+**DONE -- array declaration + storage trailer** (this commit). p1 now
+registers `ubyte[N] / uword[N] name` arrays (sym_arr_size, element type in
+sym_type, mangle `p8a_<name>`), emits the `; ---- arrays ----` trailer (between
+the mul helper and the string pool: `p8a_<name>:` + `.byte 0,...` of count*esize
+zeros, source order), and skips arrays/consts in emit_zp_bindings. Corpus guard:
+test_array_decl_programs. Cost ~1.4 KB code -> **code+arena top $EE9F, only
+359 B under $F006**.
+
+**BLOCKED -- array INDEXING (ND_INDEX read/store).** Implemented and verified
+byte-identical (ubyte-array fast `,y` path: const index -> `lda arr+N`; byte-var
+index -> `lda idx / tay / lda arr,y`; store mirrors p8c's eval-rhs/sta tmp0/
+tay/sta arr,y) BUT it pushed p1.bin's code top to ~$F395, ~900 B OVER $F006 ->
+section overlap. REVERTED to keep green. The full indexing port also needs the
+`__p8c_aptr` path (uword arrays -- which p1.p8 uses pervasively -- + >256 elems
++ uword/complex indices, the latter needing work-stack tasks not re-entrant
+codegen_byte_expr) and len/sizeof. THE CRITICAL PATH IS NOW HEADROOM, not more
+features: with 359 B of margin, the NEXT thing must be a low-window reclamation:
+  * p8c codegen-compaction lever #1 (shared-compare chain for consecutive
+    `if v == const` over one var -- p1.p8's lexer/classify/node-dispatch are
+    full of these; est. 1-2 KB; coordinated p8c + p1 change, corpus-verified), or
+  * arena right-sizing #2 (the node/ident/str/cons arenas are corpus-tuned but
+    ident_pool/str_pool 224 each may be over-provisioned; est. only ~300-400 B
+    -- not enough alone), or
+  * structurally rewriting p1.p8's if-chains as `when` (upstream-compatible;
+    `when` codegen evals once -> more compact; big manual refactor).
+The reverted indexing code (read in emit_byte_leaf_load, codegen_assign_index +
+its dispatch) is in git history at the commit BEFORE this one's parent if needed
+to re-apply once headroom exists.
 
 **DONE -- string-literal pool ordering across subs.** p8c used to assign
 `p8c_str_N` labels during the sema walk (source order); p1 interns them during
