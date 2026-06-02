@@ -206,42 +206,42 @@ uword name_len
 uword int_val
 
 ; node arena
-ubyte[512] node_kind
-ubyte[512] node_op
-uword[512] node_a
-uword[512] node_b
-uword[512] node_c
-uword[512] node_d
+ubyte[544] node_kind
+ubyte[544] node_op
+uword[544] node_a
+uword[544] node_b
+uword[544] node_c
+uword[544] node_d
 uword node_count
 
 ; expression stacks
-uword[20] operand_stack
+uword[16] operand_stack
 uword operand_sp
-ubyte[20] op_kind
-ubyte[20] op_op
-ubyte[20] op_prec
-uword[20] op_a
-uword[20] op_b
-uword[20] op_floor
+ubyte[16] op_kind
+ubyte[16] op_op
+ubyte[16] op_prec
+uword[16] op_a
+uword[16] op_b
+uword[16] op_floor
 uword op_sp
 
 ; cons cells
-uword[256] cons_val
-uword[256] cons_next
+uword[288] cons_val
+uword[288] cons_next
 uword cons_count
 
 ; statement frame stack
-ubyte[24] fr_kind
-ubyte[24] fr_mode        ; 0=stmts, 1=choices
-uword[24] fr_stmts       ; cons head (reversed)
-ubyte[24] fr_defer       ; 1 if defer-prefixed
-uword[24] fr_cond        ; cond / when-expr / repeat-count
-uword[24] fr_then        ; saved then block (else frame)
-uword[24] fr_var
-uword[24] fr_lo
-uword[24] fr_hi
-uword[24] fr_choices     ; when: choices cons head
-uword[24] fr_values      ; when_choice: values cons head
+ubyte[18] fr_kind
+ubyte[18] fr_mode        ; 0=stmts, 1=choices
+uword[18] fr_stmts       ; cons head (reversed)
+ubyte[18] fr_defer       ; 1 if defer-prefixed
+uword[18] fr_cond        ; cond / when-expr / repeat-count
+uword[18] fr_then        ; saved then block (else frame)
+uword[18] fr_var
+uword[18] fr_lo
+uword[18] fr_hi
+uword[18] fr_choices     ; when: choices cons head
+uword[18] fr_values      ; when_choice: values cons head
 ubyte fr_sp
 ubyte pending_defer
 
@@ -255,14 +255,14 @@ uword prog_structs       ; cons of struct node ids (reversed)
 uword prog_subs          ; cons of sub node ids (reversed)
 
 ; ---- codegen symbol table (persistent across passes) ----
-uword[560] sym_ident      ; var name ident id
-ubyte[560] sym_type       ; type tag (TY_UBYTE / TY_BYTE / TY_UWORD)
-uword[560] sym_addr       ; ZP address
-uword[560] sym_scope      ; owning sub name ident (0 = module scope)
-ubyte[560] sym_mkind      ; 0 = module var, 1 = param, 2 = local
-ubyte[560] sym_is_const   ; 1 = compile-time const (no storage); folded
-uword[560] sym_cval       ; const value (when sym_is_const)
-uword[560] sym_arr_size   ; element count if an array (0 = scalar); the
+uword[540] sym_ident      ; var name ident id
+ubyte[540] sym_type       ; type tag (TY_UBYTE / TY_BYTE / TY_UWORD)
+uword[540] sym_addr       ; ZP address
+uword[540] sym_scope      ; owning sub name ident (0 = module scope)
+ubyte[540] sym_mkind      ; 0 = module var, 1 = param, 2 = local
+ubyte[540] sym_is_const   ; 1 = compile-time const (no storage); folded
+uword[540] sym_cval       ; const value (when sym_is_const)
+uword[540] sym_arr_size   ; element count if an array (0 = scalar); the
                          ; element type is in sym_type; mangle is p8a_
 uword sym_count
 uword zp_next            ; ZP bump allocator (from $40)
@@ -299,23 +299,23 @@ uword strpool_count
 ; byte-expression codegen work stack (replaces p8c's recursion):
 ; per entry a task -- 0 eval node, 1 binop-leaf, 2 pha, 3 sta tmp1,
 ; 4 pla, 5 binop-tmp1.
-ubyte[48] cws_type
-uword[48] cws_node
-ubyte[48] cws_op
+ubyte[36] cws_type
+uword[36] cws_node
+ubyte[36] cws_op
 ubyte cws_sp
 ; word-expression codegen work stack (separate from the byte stack so
 ; a byte expression's @() address can drive a word eval without
 ; corrupting the byte stack -- the two never share state).
-ubyte[48] wws_type
-uword[48] wws_node
-ubyte[48] wws_op
+ubyte[36] wws_type
+uword[36] wws_node
+ubyte[36] wws_op
 ubyte wws_sp
 ; statement work stack (control flow without recursion): a task is
 ; 0=emit stmt node, 1=emit label .L<kind>_<id>:, 2=emit jmp to it,
 ; 3=pop the loop-label stack.
-ubyte[96] sws_type
-uword[96] sws_a
-uword[96] sws_b
+ubyte[64] sws_type
+uword[64] sws_a
+uword[64] sws_b
 ubyte sws_sp
 ; loop-label stack for break/continue (break -> bk kind/id, continue
 ; -> ck kind/id), pushed per loop.
@@ -3451,6 +3451,19 @@ sub skip_zp_text() {
         if b == 0 { break }
     }
 }
+sub copy_memvar_text() {
+    repeat { ubyte b
+        b = read_src()
+        if b == 0 { break }
+        out_byte(b)
+    }
+}
+sub skip_memvar_text() {
+    repeat { ubyte b
+        b = read_src()
+        if b == 0 { break }
+    }
+}
 
 
 sub register_subs() { return }
@@ -3471,6 +3484,7 @@ main {
     lstk_sp = 0
     emit_prologue()
     copy_zp_text()
+    skip_memvar_text()
     ; stream 1: main
     repeat {
         load_record()
@@ -3492,6 +3506,7 @@ main {
     reset_source()
     load_global()
     skip_zp_text()
+    skip_memvar_text()
     repeat {
         load_record()
         if rec_kind == $ff { break }
@@ -3501,6 +3516,14 @@ main {
     }
     emit_mul_helper()
     emit_arrays()
+    repeat {
+        junk = read_src()
+        if src_eof != 0 { break }
+    }
+    reset_source()
+    load_global()
+    skip_zp_text()
+    copy_memvar_text()
     emit_string_pool()
     emit_trailers()
     _close(src_hand)
