@@ -356,12 +356,27 @@ main {
 }
 """
 
+
+def reachable(subs_dict, driver_text):
+    """names of subs reachable from the main driver (transitive)."""
+    import re as _re
+    seeds = set(_re.findall(r'\b(\w+)\s*\(', driver_text))
+    live=set(); work=[x for x in seeds if x in subs_dict]
+    while work:
+        n=work.pop()
+        if n in live: continue
+        live.add(n)
+        for c in set(_re.findall(r'\b(\w+)\s*\(', subs_dict[n])):
+            if c in subs_dict and c not in live: work.append(c)
+    return live
+
 def emit_pass2():
+    pool = dict(fe_shared) | dict(cg_pure)
+    live = reachable(pool, PASS2_DRIVERS + PASS2_MAIN + DUMP_LOAD_COMMON + LOAD_STATE)
     parts = [HEADER, pass2_preamble]
-    for _, body in fe_shared:
-        parts.append(body)
-    for _, body in cg_pure:
-        parts.append(body)
+    for n, body in fe_shared + cg_pure:
+        if n in live:
+            parts.append(body)
     parts.append(DUMP_LOAD_COMMON)
     parts.append(LOAD_STATE)
     parts.append(PASS2_DRIVERS)
