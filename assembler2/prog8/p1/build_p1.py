@@ -2253,15 +2253,16 @@ sub word_dispatch(uword nd) {{
     }}
     if k == ND_CALL {{
         ; word-returning call -> A:Y; a ubyte-returning call widens (ldy #0).
+        ; codegen_call re-enters word_dispatch (the call's own arg eval), so
+        ; stack the widen flag rather than re-reading the clobbered `nd`.
+        wdn_stack[wdn_sp] = call_returns_ubyte(nd)
+        wdn_sp = wdn_sp + 1
         codegen_call(nd)
-        uword si
-        si = find_sub(node_a[nd])
-        if si != $ffff {{
-            if sub_ret[si] == TY_UBYTE {{
-                o_ldy() o_imm()
-                out_text("00")
-                o_nl()
-            }}
+        wdn_sp = wdn_sp - 1
+        if wdn_stack[wdn_sp] != 0 {{
+            o_ldy() o_imm()
+            out_text("00")
+            o_nl()
         }}
         return
     }}
@@ -2539,6 +2540,116 @@ sub find_sub(uword identid) -> uword {{
     }}
     return $ffff
 }}
+; does ident `identid` spell the NUL-terminated string at `s`?
+sub ident_eq(uword identid, uword s) -> ubyte {{
+    uword off
+    uword n
+    off = ident_off[identid]
+    n = ident_len[identid]
+    uword j
+    j = 0
+    repeat {{
+        ubyte ch
+        ch = @(s + j)
+        if ch == 0 {{
+            if j == n {{
+                return 1
+            }}
+            return 0
+        }}
+        if j >= n {{
+            return 0
+        }}
+        if ident_pool[off + j] != ch {{
+            return 0
+        }}
+        j = j + 1
+    }}
+}}
+; builtin code for a callee name: 0 = not a builtin, 1 lsb, 2 msb, 3 peek,
+; 4 poke, 5 mkword. (len / sizeof arrive with arrays.)
+sub builtin_kind(uword identid) -> ubyte {{
+    if ident_eq(identid, "lsb") != 0 {{ return 1 }}
+    if ident_eq(identid, "msb") != 0 {{ return 2 }}
+    if ident_eq(identid, "peek") != 0 {{ return 3 }}
+    if ident_eq(identid, "poke") != 0 {{ return 4 }}
+    if ident_eq(identid, "mkword") != 0 {{ return 5 }}
+    return 0
+}}
+; the 1st / 2nd argument of the builtin whose callnode is on top of bi_cn.
+; node_b is the reversed args cons (last pushed = head), so for f(x,y) the
+; head is y and head.next is x. Re-derived fresh each call so re-entrant
+; nested-builtin codegen can't leave a stale node id.
+sub bi_arg0() -> uword {{
+    uword h
+    h = node_b[bi_cn[bi_sp - 1]]
+    if cons_next[h] == 0 {{
+        return cons_val[h]              ; single arg
+    }}
+    return cons_val[cons_next[h]]       ; first of two
+}}
+sub bi_arg1() -> uword {{
+    return cons_val[node_b[bi_cn[bi_sp - 1]]]   ; second (= head)
+}}
+; lower a builtin call to inline asm (port of _emit_builtin_call).
+sub emit_builtin(uword callnode, ubyte bk) {{
+    bi_cn[bi_sp] = callnode
+    bi_sp = bi_sp + 1
+    if bk == 1 {{                       ; lsb(uword) -> low byte in A
+        codegen_word_expr(bi_arg0())
+    }} else {{
+        if bk == 2 {{                   ; msb(uword) -> high byte in A
+            codegen_word_expr(bi_arg0())
+            o_tya()
+        }} else {{
+            if bk == 3 {{               ; peek(literal) -> lda $XXXX
+                out_text("  lda $")
+                out_hex4(node_a[bi_arg0()])
+                o_nl()
+            }} else {{
+                if bk == 4 {{           ; poke(literal, byteexpr) -> sta $XXXX
+                    codegen_byte_expr(bi_arg1())
+                    out_text("  sta $")
+                    out_hex4(node_a[bi_arg0()])
+                    o_nl()
+                }} else {{
+                    ; mkword(msb, lsb) -> A=low, Y=high (Y-safe via X).
+                    codegen_byte_expr(bi_arg0())
+                    o_pha()
+                    codegen_byte_expr(bi_arg1())
+                    out_text("  tax")
+                    o_nl()
+                    o_pla()
+                    o_tay()
+                    out_text("  txa")
+                    o_nl()
+                }}
+            }}
+        }}
+    }}
+    bi_sp = bi_sp - 1
+}}
+; does a call's result type widen as ubyte in word context?
+sub call_returns_ubyte(uword callnode) -> ubyte {{
+    uword callee
+    callee = node_a[callnode]
+    ubyte bk
+    bk = builtin_kind(callee)
+    if bk != 0 {{
+        if bk == 5 {{                   ; mkword -> uword
+            return 0
+        }}
+        return 1                        ; lsb / msb / peek -> ubyte
+    }}
+    uword si
+    si = find_sub(callee)
+    if si != $ffff {{
+        if sub_ret[si] == TY_UBYTE {{
+            return 1
+        }}
+    }}
+    return 0
+}}
 ; collect the callee's params (sym indices, in source order) into call_slot,
 ; setting call_n. Params are the syms with scope == callee and mkind == param,
 ; stored in allocation (source) order.
@@ -2572,6 +2683,12 @@ sub collect_params(uword callee) {{
 sub codegen_call(uword callnode) {{
     uword callee
     callee = node_a[callnode]
+    ubyte bk
+    bk = builtin_kind(callee)
+    if bk != 0 {{
+        emit_builtin(callnode, bk)
+        return
+    }}
     collect_params(callee)
     if call_n == 1 {{
         ; single arg: store straight into the slot after eval (no reentrancy
@@ -3034,6 +3151,15 @@ def main():
         "ubyte[32] sub_kind       ; SUBK_SUB / MAIN / INLINE / ASMSUB\n"
         "ubyte[32] sub_ret        ; return type tag\n"
         "uword sub_count\n"
+        "; builtin-call node stack: emit_builtin is non-reentrant (static\n"
+        "; locals), but a builtin arg may itself be a builtin, so the callnode\n"
+        "; is stacked and args re-derived after each nested codegen.\n"
+        "uword[8] bi_cn\n"
+        "ubyte bi_sp\n"
+        "; word-context call widening flag stack (word_dispatch is re-entered\n"
+        "; by a ubyte-returning call's own arg eval, clobbering its locals).\n"
+        "ubyte[8] wdn_stack\n"
+        "ubyte wdn_sp\n"
         "; the sub currently being codegen'd -- its return type + name ident,\n"
         "; for `return` (the per-sub .Lp8s_<name>_ret label).\n"
         "ubyte cur_ret            ; current sub's return type tag\n"

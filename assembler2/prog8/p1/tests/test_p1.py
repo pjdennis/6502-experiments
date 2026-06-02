@@ -437,6 +437,23 @@ M5_LOCAL_PROGRAMS = [
     "main {\n    nested()\n}\n",
 ]
 
+# P7-M5 builtins: lsb / msb (uword -> ubyte), peek / poke (literal address),
+# mkword (msb,lsb -> uword). Lowered to inline asm, not a jsr. Includes nested
+# builtins in another's argument (exercises the reentrancy-safe bi_cn stack)
+# and ubyte-result widening in word context.
+M5_BUILTIN_PROGRAMS = [
+    # lsb / msb / peek / poke / mkword, plain
+    "%target nmos\nubyte b\nuword w\n\n"
+    "main {\n    w = $1234\n    b = lsb(w)\n    b = msb(w)\n    b = peek($d020)\n"
+    "    poke($d021, b)\n    w = mkword($ab, $cd)\n}\n",
+    # nested builtins (poke value + mkword arg contain lsb) -- reentrancy
+    "%target nmos\nubyte b\nuword w\n\n"
+    "main {\n    w = $beef\n    poke($c000, lsb(w) + 1)\n    w = mkword(msb(w), lsb(w))\n}\n",
+    # lsb in word context (ubyte result widens with ldy #0)
+    "%target nmos\nuword w\nuword v\n\n"
+    "main {\n    v = $0102\n    w = lsb(v)\n    w = mkword($00, msb(v))\n}\n",
+]
+
 
 def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
@@ -618,6 +635,12 @@ class P1Equivalence(unittest.TestCase):
 
     def test_m5_local_programs(self):
         for src in M5_LOCAL_PROGRAMS:
+            with self.subTest(src=src):
+                self.assertEqual(self._oracle(src), self._ontarget(src),
+                                 msg=f"codegen .s differs for {src!r}")
+
+    def test_m5_builtin_programs(self):
+        for src in M5_BUILTIN_PROGRAMS:
             with self.subTest(src=src):
                 self.assertEqual(self._oracle(src), self._ontarget(src),
                                  msg=f"codegen .s differs for {src!r}")
