@@ -795,5 +795,76 @@ class P1Equivalence(unittest.TestCase):
                                  msg=f"codegen .s differs for {src!r}")
 
 
+PASS1_SRC = P1 / "p1_pass1_sh.p8"
+PASS2_SRC = P1 / "p1_pass2_sh.p8"
+
+
+@unittest.skipUnless(_have_vasm(), "vasm6502_oldstyle not on PATH")
+@unittest.skipUnless(EMU.exists(), f"emulator not built at {EMU}")
+class P1SelfHost(unittest.TestCase):
+    """The strict self-host test: the two-pass on-target pipeline
+    (p1_pass1_sh.p8 parse+symbols+AST-dump, then p1_pass2_sh.p8
+    AST-load+codegen), built with p8c+vasm and run on the emulator,
+    compiles p1.p8 ITSELF to assembly byte-identical to `p8c -o p1.p8`.
+
+    The only normalization is the `; source:` comment line (_norm), exactly
+    as the snapshot/equivalence tests do: the on-target compiler echoes the
+    `SRC` placeholder while host p8c echoes the resolved absolute path.
+    """
+
+    @classmethod
+    def _build(cls, src: Path, name: str) -> Path:
+        s_path = cls.workdir / f"{name}.s"
+        bin_path = cls.workdir / f"{name}.bin"
+        r = subprocess.run(
+            [sys.executable, "-m", "p8c", str(src), "-o", str(s_path)],
+            capture_output=True, text=True, cwd=str(PROG8))
+        assert r.returncode == 0, f"p8c {name} failed:\n{r.stdout}\n{r.stderr}"
+        r = subprocess.run(
+            ["vasm6502_oldstyle", "-Fbin", "-dotdir", "-ignore-mult-inc",
+             "-esc", "-wfail", "-o", str(bin_path), str(s_path)],
+            capture_output=True, text=True)
+        assert r.returncode == 0, f"vasm {name} failed:\n{r.stdout}\n{r.stderr}"
+        return bin_path
+
+    @classmethod
+    def setUpClass(cls):
+        cls.workdir = Path(tempfile.mkdtemp(prefix="p1_selfhost_"))
+        cls.pass1_bin = cls._build(PASS1_SRC, "pass1")
+        cls.pass2_bin = cls._build(PASS2_SRC, "pass2")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.workdir, ignore_errors=True)
+
+    def test_pipeline_compiles_p1_byte_identical(self):
+        dump = self.workdir / "p1.dump"
+        out = self.workdir / "pipeline.s"
+        # pass 1: parse + build symbols + dump the AST (binary).
+        r = subprocess.run(
+            [str(EMU), str(self.pass1_bin), "--cycle-cap", "30000000000",
+             str(P1_SRC), str(dump)],
+            capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0,
+                         msg=f"pass1 failed:\n{r.stdout}\n{r.stderr}")
+        # pass 2: load the AST + codegen the .s.
+        r = subprocess.run(
+            [str(EMU), str(self.pass2_bin), "--cycle-cap", "30000000000",
+             "--no-dump", str(dump), str(out)],
+            capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0,
+                         msg=f"pass2 failed:\n{r.stdout}\n{r.stderr}")
+        # oracle: host p8c compiling the same source.
+        oracle = self.workdir / "oracle.s"
+        r = subprocess.run(
+            [sys.executable, "-m", "p8c", str(P1_SRC), "-o", str(oracle)],
+            capture_output=True, text=True, cwd=str(PROG8))
+        self.assertEqual(r.returncode, 0,
+                         msg=f"oracle failed:\n{r.stdout}\n{r.stderr}")
+        self.assertEqual(_norm(out.read_text()), _norm(oracle.read_text()),
+                         msg="self-host pipeline output diverged from p8c on "
+                             "p1.p8 (see RESUME_NOTES.md self-host section)")
+
+
 if __name__ == "__main__":
     unittest.main()
