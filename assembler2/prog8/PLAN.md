@@ -12,7 +12,7 @@ session, update `RESUME_NOTES.md`.
 
 ---
 
-## Goal
+## Goal -- *** REACHED (2026-06) ***
 
 Bring up a Prog8 compiler that runs natively on the 6502, mirroring
 the asm00..asm17 bootstrap pattern. The end-state is:
@@ -23,6 +23,20 @@ the asm00..asm17 bootstrap pattern. The end-state is:
   `$F006..$F03C` stubs).
 * The output is byte-identical to its host-compiled binary --
   the strict self-hosting test, copied from the asm chain.
+
+**STATUS: achieved.** The two-pass self-host pipeline
+(`p1/p1_pass1_sh.p8` parse+symbols+AST-dump, then `p1/p1_pass2_sh.p8`
+AST-load+codegen) running on the emulator compiles `p1/p1.p8` to
+output **byte-identical** to `p8c -o p1/p1.p8` (545 KB), the only
+difference being the `; source:` comment line that `test_p1.py`
+normalizes (the on-target compiler has no host realpath to echo --
+the same normalization the snapshot tests use). The monolith p1.p8
+didn't fit one 64 KB binary (front-end ~22 KB + codegen ~33 KB +
+program-wide arenas ~15 KB), so the front-end and back-end were split
+across two passes that exchange the AST through a file -- the same
+<=64 KB pipeline pattern as the asm00..asm17 chain. See RESUME_NOTES.md
+for the closing fixes (str_pool transient overflow, binop word-typing,
+byte-context binop array index, single-arg call high-byte store).
 
 We pursue this in two parallel tracks that meet in the middle:
 

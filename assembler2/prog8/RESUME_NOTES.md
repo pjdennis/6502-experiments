@@ -29,12 +29,16 @@ is the source of truth across sessions.
 
 ---
 
-## SELF-HOST PIPELINE STATUS (2026-06 session -- read this first)
+## *** SELF-HOST REACHED (2026-06) -- read this first ***
 
 The two-pass self-host pipeline (`p1/p1_pass1_sh.p8` + `p1/p1_pass2_sh.p8`,
-built with `p8c` then `vasm`, run on the emulator) now compiles **p1.p8
-itself** end-to-end. Driving it to byte-identity with `p8c -o p1/p1.p8` is the
-remaining goal. Run it with:
+built with `p8c` then `vasm`, run on the emulator) **compiles p1.p8 itself to
+output byte-identical to `p8c -o p1/p1.p8`** -- the strict self-host test, the
+same one the asm00..asm17 chain uses. The full 545 KB of generated 6502
+assembly matches; the ONLY difference is the `; source:` comment line (the
+pipeline emits the `SRC` placeholder, p8c emits the resolved absolute path),
+which `p1/tests/test_p1.py` normalizes exactly as the snapshot tests do (the
+on-target compiler has no host realpath to echo). Reproduce:
 
 ```
 # from assembler2/prog8, with vasm on PATH and ../emulator/emulator.out built
@@ -44,18 +48,55 @@ EMU=../emulator/emulator.out
 $EMU /tmp/p1.bin --cycle-cap 30000000000 p1/p1.p8 /tmp/p1dump.bin       # pass1 -> binary dump
 $EMU /tmp/p2.bin --cycle-cap 30000000000 --no-dump /tmp/p1dump.bin /tmp/p1out.s   # pass2 -> .s
 python3 -m p8c p1/p1.p8 -o /tmp/p1_oracle.s                              # the oracle
-diff <(sed 's/^; source:.*/; source: X/' /tmp/p1out.s) <(sed 's/^; source:.*/; source: X/' /tmp/p1_oracle.s)
+diff <(sed 's/^; source:.*/X/' /tmp/p1out.s) <(sed 's/^; source:.*/X/' /tmp/p1_oracle.s)   # -> 0 lines
 ```
 
-**What works now (COMMITTED, builds + runs):** pass1 produces a clean 208 KB
-dump; pass2 runs to completion. The diff vs the oracle is down to **~1.5 K
-lines** (was 5.7 K at the start of this session; output 542752 / 545074 bytes,
-~97 % byte-identical). Progress this session, each committed and verified:
-  * if/while short-circuit conditions: 5.7 K -> 3.3 K
-  * `reverse_cons_ip` in pass2 codegen (args reversed in place, no cons growth
-    during emission -> no cons-arena overflow into the sym table): 3.3 K -> 2.3 K
-  * `expr_is_word` recognises uword[] elements (ND_INDEX) as words: 2.3 K -> 1.5 K
-The hard capacity/correctness bugs are fixed:
+### How the last gap was closed (this session, each committed + verified)
+
+The diff went **2322 -> 424 -> 64 -> 2 -> 0** (normalized) via four fixes:
+
+  1. **pass1 `str_pool` transient overflow** (2322->424, the big one). The
+     lexer appends a literal's bytes at `str_pool_len` BEFORE the dedup scan
+     rolls it back for a duplicate. Re-lexing a long duplicate (the ~671 B
+     emit_prologue header, hit when `str_pool_len` is already its full ~3381)
+     transiently wrote past the `[3456]` cap into the adjacent
+     `str_pool_len`/`name_buf`/`path_buf`, clobbering the just-read callee
+     ident -- so emit_prologue's first `out_text(...)` compiled to a garbage
+     `jsr p8s_      at` and EVERY later `p8c_str_N` label shifted by one
+     (~1900 cascade lines). Fix: `str_pool` 3456 -> **4096** (> 3381+671).
+  2. **binop word-typing in `expr_is_word`** (424->64). An arith/bitwise/shift
+     binop (TK_PLUS..TK_SHR) now types word if either operand is word, matching
+     p8c's `zp_next + sz -> UWORD`. Fixes the `if zp_next + sz > $ff` ZP-overflow
+     compares (and their label cascade). Cost ~223 B; reclaimed by routing 18
+     raw `out_text("  pha")`-style sites through the existing `o_*` helpers.
+  3. **byte-context array read by a binop index** (64->2). The fast `lda arr,y`
+     path special-cased only ND_INT / ND_IDENT indices; `arr[sp-1]` fell to the
+     word/aptr path. Replaced the ND_IDENT case with general
+     `codegen_byte_expr(idx)` (byte-identical for idents, correct for binops).
+     Net **-68 B** (restored pass2 margin to ~94 B).
+  4. **single-arg call high-byte store** (2->0). `isw1` (a static-ZP local) was
+     read before the arg eval; a nested-call arg (`out2(lsb(helper(sp)))`)
+     re-enters codegen_call and clobbers it, so a ubyte param wrongly got a
+     `sty arg+1`. Re-derive `isw1` from `call_isw[0]` after the post-eval
+     `collect_params`.
+
+### Remaining (OPTIONAL polish, not required for the self-host criterion)
+
+  * **The `; source:` line.** To make even that line match without
+    normalization, pass1 would capture `_argv(0)` and dump it, pass2's
+    emit_prologue emit it in place of `SRC`. But p8c does `Path(src).resolve()`
+    (absolute), which the emulator can't replicate, so exact match still needs
+    the harness to pass the same absolute path to both. The normalized compare
+    is the accepted criterion (same as the snapshot tests) -- left as-is.
+  * Pass2 margin is ~94 B again after fix #3, but the design remains tight; any
+    future codegen feature still wants the pass-2-code-reduction / 3-pass-split
+    headroom discussed below.
+
+---
+
+## (historical) pre-self-host pipeline notes
+
+**The hard capacity/correctness bugs that were fixed earlier:**
   * **if/while CONDITION codegen** -- general `emit_cond_branch(cond, tkind,
     tid, jit)` with short-circuit `and`/`or`/`not` (recursion frame saved on a
     `cb` stack), `emit_cmp_cond`, `emit_pos_unsigned`, label kinds 15/16
