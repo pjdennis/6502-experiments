@@ -54,10 +54,18 @@ arith / single-comparison conditions) or p1's port is co-updated.
   tests still pass; p1 compiling 40 programs byte-identically exercises
   classify_name's many constant indexes. Freed another ~0.5 KB: p1.bin
   57195 -> 56687 B, pool top $E156 -> $DF5A, margin ~3.8 KB -> ~4.3 KB.
-* Bigger levers if needed: leaf-operand comparison without the tmp0/tmp1 spill
-  (p1 ports+tests the condition comparison, so co-update p1), table-driving
-  classify_name (p1.p8 source change, upstream-compat via the existing
-  string-as-data idiom).
+* **Opt 3 DONE -- leaf-operand comparison in conditions.** `_emit_cmp_cond`
+  (and p1's `emit_cond_branch_if_false`) now skip the tmp0/tmp1 spill when the
+  rhs is a leaf (literal / var): just `<eval lhs> ; cmp #imm | cmp p8v_x` (or
+  `sec / sbc operand` for signed ordering). A 4-`and` keyword check dropped
+  42 -> 18 instructions. This IS in p1's tested path (single-comparison
+  conditions), so it was a coordinated p8c + p1 change, verified byte-identical
+  by the M4 corpus; the `counter` snapshot golden was regenerated (the only
+  exact-output test that uses an `if` comparison). Freed ~2.5 KB: p1.bin pool
+  top $EE8E -> $E49B, margin ~376 B -> ~2.9 KB.
+* Further levers if needed: leaf comparison in VALUE context (`a = x<y`,
+  `_emit_cmp_into_a`; co-update p1's `emit_cmp_tail`), table-driving
+  classify_name (p1.p8 source change).
 
 ---
 

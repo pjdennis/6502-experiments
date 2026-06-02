@@ -629,6 +629,46 @@ sub emit_cond_branch_if_false(uword cond, ubyte tkind, uword tid) {{
             ; byte compare
             ubyte iss
             iss = cmp_is_signed(cond)
+            if is_leaf_rhs(rhs) != 0 {{
+                ; leaf rhs (literal / var): no tmp0/tmp1 spill -- eval lhs into
+                ; A and compare directly. (Matches p8c's _emit_cmp_cond.)
+                codegen_byte_expr(lhs)
+                ubyte do_signed
+                do_signed = 0
+                if iss != 0 {{
+                    if op != TK_EQ {{
+                        if op != TK_NE {{
+                            do_signed = 1
+                        }}
+                    }}
+                }}
+                if do_signed != 0 {{
+                    out_text("  sec")
+                    o_nl()
+                    out_text("  sbc ")
+                    emit_byte_operand(0, rhs)
+                    o_nl()
+                    uword sg2
+                    sg2 = label_seq
+                    label_seq = label_seq + 1
+                    out_text("  bvc .Lsgn_ok_")
+                    out_dec(sg2)
+                    o_nl()
+                    out_text("  eor #$80")
+                    o_nl()
+                    out_text(".Lsgn_ok_")
+                    out_dec(sg2)
+                    out_byte($3a)
+                    o_nl()
+                    emit_neg_signed(op, tkind, tid)
+                    return
+                }}
+                out_text("  cmp ")
+                emit_byte_operand(0, rhs)
+                o_nl()
+                emit_neg_unsigned(op, tkind, tid)
+                return
+            }}
             codegen_byte_expr(lhs)
             out_text("  sta __p8c_tmp0")
             o_nl()

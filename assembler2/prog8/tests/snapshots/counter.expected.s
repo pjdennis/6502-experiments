@@ -31,11 +31,7 @@ p8s_main:
   sta p8v_main_i
 .Lwhile_top_0:
   lda p8v_main_i
-  sta __p8c_tmp0
-  lda #$04
-  sta __p8c_tmp1
-  lda __p8c_tmp0
-  cmp __p8c_tmp1
+  cmp #$04
   bcc .Lbrs_2
   jmp .Lwhile_end_1
 .Lbrs_2:
@@ -70,11 +66,7 @@ p8s_main:
   pla
 .Lrep_end_5:
   lda p8v_total
-  sta __p8c_tmp0
-  lda #$06
-  sta __p8c_tmp1
-  lda __p8c_tmp0
-  cmp __p8c_tmp1
+  cmp #$06
   beq .Lbrs_10
   jmp .Lelse_8
 .Lbrs_10:

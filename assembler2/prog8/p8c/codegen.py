@@ -1413,6 +1413,23 @@ class CodeGen:
             self.emit(f"{bne_lo}:")
             is_signed = False  # word compare is unsigned
         else:
+            operand = self._cmp_leaf_operand(cond.rhs)
+            if operand is not None:
+                # Leaf rhs (literal / var): no tmp0/tmp1 spill -- evaluate the
+                # lhs into A and compare directly.
+                self._emit_byte_expr_into_a(cond.lhs)
+                if is_signed and cond.op not in ("==", "!="):
+                    self.emit("  sec")
+                    self.emit(f"  sbc {operand}")
+                    skip = self._new_label("sgn_ok")
+                    self.emit(f"  bvc {skip}")
+                    self.emit("  eor #$80")
+                    self.emit(f"{skip}:")
+                    self._emit_cmp_branches(cond.op, target, jump_if_true, signed=True)
+                    return
+                self.emit(f"  cmp {operand}")
+                self._emit_cmp_branches(cond.op, target, jump_if_true, signed=False)
+                return
             self._emit_byte_expr_into_a(cond.lhs)
             self.emit("  sta __p8c_tmp0")
             self._emit_byte_expr_into_a(cond.rhs)
@@ -1430,6 +1447,16 @@ class CodeGen:
                 return
             self.emit("  cmp __p8c_tmp1")
         self._emit_cmp_branches(cond.op, target, jump_if_true, signed=False)
+
+    def _cmp_leaf_operand(self, rhs):
+        """Operand string for a comparison whose rhs needs no evaluation -- a
+        literal `#$XX` or a plain var's address. None otherwise (-> spill path).
+        Restricted to IntLit / var Ident to match the p1 port exactly."""
+        if isinstance(rhs, IntLit):
+            return f"#${rhs.value & 0xFF:02x}"
+        if isinstance(rhs, Ident) and rhs.sym is not None and rhs.sym.kind == "var":
+            return rhs.sym.mangled
+        return None
 
     def _emit_cmp_branches(self, op: str, target: str, jump_if_true: bool,
                            signed: bool) -> None:
