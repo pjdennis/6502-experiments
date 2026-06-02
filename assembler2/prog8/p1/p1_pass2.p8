@@ -266,7 +266,7 @@ ubyte[40] sym_is_const   ; 1 = compile-time const (no storage); folded
 uword[40] sym_cval       ; const value (when sym_is_const)
 uword[40] sym_arr_size   ; element count if an array (0 = scalar); the
                          ; element type is in sym_type; mangle is p8a_
-ubyte sym_count
+uword sym_count
 uword zp_next            ; ZP bump allocator (from $40)
 uword cur_scope          ; the sub being codegen'd (for var resolution)
 ; call-arg scratch (push args -> pop into param slots before the jsr).
@@ -336,7 +336,10 @@ ubyte lstk_sp
 ubyte mul_used           ; `*` was emitted -> emit __p8c_mul_u8 trailer
 uword label_seq          ; global local-label counter (p8c's _label_id)
 
-uword[32] sub_snode      ; each sub's parsed node (pipeline)
+uword[32] sub_snode
+uword resident_sym_count
+uword rec_kind
+uword rec_snode
 ; serializer work stack
 ubyte[2] ws_type       ; 0=node,1=close,2=newline,3=field line,4=literal text
 uword[2] ws_node
@@ -671,49 +674,6 @@ sub emit_prologue() {
 ; `p8v_<name> = $XX` line per ZP scalar. Leading blank line, no trailing
 ; blank -- emit_main's leading "\n\n" supplies the two-blank gap. (Empty
 ; when there are no module vars, matching p8c.)
-
-sub emit_zp_bindings() {
-    ; consts have no storage (folded at use sites), so they get no binding --
-    ; only the ZP scalars do. Emit nothing (not even the header) if every
-    ; module symbol is a const, matching p8c's empty zp_scalars case.
-    ubyte any
-    any = 0
-    uword j
-    j = 0
-    repeat {
-        if j >= sym_count {
-            break
-        }
-        if sym_is_const[j] == 0 {
-            if sym_arr_size[j] == 0 {
-                any = 1
-                break
-            }
-        }
-        j = j + 1
-    }
-    if any == 0 {
-        return
-    }
-    out_byte($0a)
-    out_text("; ---- ZP variable allocations ----\n")
-    uword i
-    i = 0
-    repeat {
-        if i >= sym_count {
-            break
-        }
-        if sym_is_const[i] == 0 {
-            if sym_arr_size[i] == 0 {
-                emit_sym_mangled(i)
-                out_text(" = $")
-                out_hex2(lsb(sym_addr[i]))
-                o_nl()
-            }
-        }
-        i = i + 1
-    }
-}
 
 sub emit_main(uword body) {
     out_text("\n\n; ---- sub main ----\np8s_main:\n")
@@ -3401,7 +3361,7 @@ sub load_global() {
     prog_address = l16()
     prog_target = read_src()
     uword i
-    sym_count = lsb(l16())
+    sym_count = l16()
     i = 0
     repeat {
         if i >= sym_count { break }
@@ -3409,6 +3369,7 @@ sub load_global() {
         sym_mkind[i] = read_src() sym_is_const[i] = read_src() sym_cval[i] = l16() sym_arr_size[i] = l16()
         i = i + 1
     }
+    resident_sym_count = sym_count
     sub_count = l16()
     i = 0
     repeat {
@@ -3430,13 +3391,22 @@ sub load_global() {
     repeat { if i >= str_count { break } str_off[i] = l16() str_len[i] = l16() i = i + 1 }
 }
 ; load one record's nodes into the (reset) node arena; returns the snode.
-uword rec_snode
-uword rec_kind
 sub load_record() {
     rec_kind = read_src()
     if rec_kind == $ff { return }
     rec_snode = l16()
     uword i
+    sym_count = resident_sym_count
+    uword lc
+    lc = l16()
+    i = 0
+    repeat {
+        if i >= lc { break }
+        sym_ident[sym_count] = l16() sym_type[sym_count] = read_src() sym_addr[sym_count] = l16() sym_scope[sym_count] = l16()
+        sym_mkind[sym_count] = read_src() sym_is_const[sym_count] = read_src() sym_cval[sym_count] = l16() sym_arr_size[sym_count] = l16()
+        sym_count = sym_count + 1
+        i = i + 1
+    }
     node_count = l16()
     i = 0
     repeat {
@@ -3451,6 +3421,21 @@ sub load_record() {
         if i >= cons_count { break }
         cons_val[i] = l16() cons_next[i] = l16()
         i = i + 1
+    }
+}
+
+
+sub copy_zp_text() {
+    repeat { ubyte b
+        b = read_src()
+        if b == 0 { break }
+        out_byte(b)
+    }
+}
+sub skip_zp_text() {
+    repeat { ubyte b
+        b = read_src()
+        if b == 0 { break }
     }
 }
 
@@ -3472,7 +3457,7 @@ main {
     label_seq = 0
     lstk_sp = 0
     emit_prologue()
-    emit_zp_bindings()
+    copy_zp_text()
     ; stream 1: main
     repeat {
         load_record()
@@ -3493,6 +3478,7 @@ main {
     }
     reset_source()
     load_global()
+    skip_zp_text()
     repeat {
         load_record()
         if rec_kind == $ff { break }

@@ -92,10 +92,10 @@ print(f"codegen: {len(cg_pure)} pure subs reused, {len(CG_REPLACE)} replaced")
 p1_text = (HERE / "p1.p8").read_text()
 ss_start = p1_text.index("; ---- codegen symbol table (persistent across passes) ----")
 ss_end = p1_text.index("; serializer work stack")
-sym_state = p1_text[ss_start:ss_end]
+sym_state = p1_text[ss_start:ss_end].replace("ubyte sym_count","uword sym_count")
 # the pipeline needs one extra per-sub array: each sub's parsed node ptr, so
 # pass 2 can emit_sub(sub_snode[i]) from the loaded AST.
-sym_state += "uword[32] sub_snode      ; each sub's parsed node (pipeline)\n"
+sym_state += "uword[32] sub_snode\nuword resident_sym_count\nuword rec_kind\nuword rec_snode\n"
 
 MARKER = "; serializer work stack"
 assert MARKER in fe_preamble, "marker not in stmt.p8 preamble"
@@ -116,12 +116,22 @@ sub dump_global() {
     d16(prog_address)
     out_byte(prog_target)
     uword i
-    d16(sym_count)
+    uword rc
+    rc = 0
+    i = 0
+    repeat { if i >= sym_count { break } if sym_scope[i] == 0 { rc = rc + 1 } else { if sym_mkind[i] == 1 { rc = rc + 1 } } i = i + 1 }
+    d16(rc)
     i = 0
     repeat {
         if i >= sym_count { break }
-        d16(sym_ident[i]) out_byte(sym_type[i]) d16(sym_addr[i]) d16(sym_scope[i])
-        out_byte(sym_mkind[i]) out_byte(sym_is_const[i]) d16(sym_cval[i]) d16(sym_arr_size[i])
+        ubyte keep
+        keep = 0
+        if sym_scope[i] == 0 { keep = 1 }
+        if sym_mkind[i] == 1 { keep = 1 }
+        if keep != 0 {
+            d16(sym_ident[i]) out_byte(sym_type[i]) d16(sym_addr[i]) d16(sym_scope[i])
+            out_byte(sym_mkind[i]) out_byte(sym_is_const[i]) d16(sym_cval[i]) d16(sym_arr_size[i])
+        }
         i = i + 1
     }
     d16(sub_count)
@@ -149,6 +159,24 @@ sub dump_record(ubyte kind, uword snode) {
     out_byte(kind)
     d16(snode)
     uword i
+    uword nm
+    nm = node_a[snode]
+    uword lc
+    lc = 0
+    i = 0
+    repeat { if i >= sym_count { break } if sym_scope[i] == nm { if sym_mkind[i] == 2 { lc = lc + 1 } } i = i + 1 }
+    d16(lc)
+    i = 0
+    repeat {
+        if i >= sym_count { break }
+        if sym_scope[i] == nm {
+            if sym_mkind[i] == 2 {
+                d16(sym_ident[i]) out_byte(sym_type[i]) d16(sym_addr[i]) d16(sym_scope[i])
+                out_byte(sym_mkind[i]) out_byte(sym_is_const[i]) d16(sym_cval[i]) d16(sym_arr_size[i])
+            }
+        }
+        i = i + 1
+    }
     d16(node_count)
     i = 0
     repeat {
@@ -167,6 +195,22 @@ sub dump_record(ubyte kind, uword snode) {
 }
 """
 
+ZP_TEXT = """
+sub copy_zp_text() {
+    repeat { ubyte b
+        b = read_src()
+        if b == 0 { break }
+        out_byte(b)
+    }
+}
+sub skip_zp_text() {
+    repeat { ubyte b
+        b = read_src()
+        if b == 0 { break }
+    }
+}
+"""
+
 LOAD_STATE = """
 sub l16() -> uword {
     uword lo
@@ -179,7 +223,7 @@ sub load_global() {
     prog_address = l16()
     prog_target = read_src()
     uword i
-    sym_count = lsb(l16())
+    sym_count = l16()
     i = 0
     repeat {
         if i >= sym_count { break }
@@ -187,6 +231,7 @@ sub load_global() {
         sym_mkind[i] = read_src() sym_is_const[i] = read_src() sym_cval[i] = l16() sym_arr_size[i] = l16()
         i = i + 1
     }
+    resident_sym_count = sym_count
     sub_count = l16()
     i = 0
     repeat {
@@ -208,13 +253,22 @@ sub load_global() {
     repeat { if i >= str_count { break } str_off[i] = l16() str_len[i] = l16() i = i + 1 }
 }
 ; load one record's nodes into the (reset) node arena; returns the snode.
-uword rec_snode
-uword rec_kind
 sub load_record() {
     rec_kind = read_src()
     if rec_kind == $ff { return }
     rec_snode = l16()
     uword i
+    sym_count = resident_sym_count
+    uword lc
+    lc = l16()
+    i = 0
+    repeat {
+        if i >= lc { break }
+        sym_ident[sym_count] = l16() sym_type[sym_count] = read_src() sym_addr[sym_count] = l16() sym_scope[sym_count] = l16()
+        sym_mkind[sym_count] = read_src() sym_is_const[sym_count] = read_src() sym_cval[sym_count] = l16() sym_arr_size[sym_count] = l16()
+        sym_count = sym_count + 1
+        i = i + 1
+    }
     node_count = l16()
     i = 0
     repeat {
@@ -255,6 +309,8 @@ main {
     build_symbols()
     register_subs()
     dump_global()
+    emit_zp_bindings()
+    out_byte(0)
     ; re-parse from a clean arena so the record ids match the dumped pool.
     reset_arena()
     reset_source()
@@ -319,7 +375,7 @@ main {
     label_seq = 0
     lstk_sp = 0
     emit_prologue()
-    emit_zp_bindings()
+    copy_zp_text()
     ; stream 1: main
     repeat {
         load_record()
@@ -340,6 +396,7 @@ main {
     }
     reset_source()
     load_global()
+    skip_zp_text()
     repeat {
         load_record()
         if rec_kind == $ff { break }
@@ -372,13 +429,14 @@ def reachable(subs_dict, driver_text):
 
 def emit_pass2():
     pool = dict(fe_shared) | dict(cg_pure)
-    live = reachable(pool, PASS2_DRIVERS + PASS2_MAIN + DUMP_LOAD_COMMON + LOAD_STATE)
+    live = reachable(pool, PASS2_DRIVERS + PASS2_MAIN + DUMP_LOAD_COMMON + LOAD_STATE + ZP_TEXT)
     parts = [HEADER, pass2_preamble]
     for n, body in fe_shared + cg_pure:
         if n in live:
             parts.append(body)
     parts.append(DUMP_LOAD_COMMON)
     parts.append(LOAD_STATE)
+    parts.append(ZP_TEXT)
     parts.append(PASS2_DRIVERS)
     parts.append(PASS2_MAIN)
     text = "\n".join(parts)
@@ -392,9 +450,11 @@ def emit_pass1():
     parts = [HEADER.replace("pass 2", "pass 1"), p1_preamble]
     for _, body in fe_subs:
         parts.append(body)
-    for n in ("build_symbols", "walk_locals", "push_walk_block", "push_walk_when",
-              "find_sym", "reverse_cons", "cg_skip_decl"):
-        parts.append(cg_map[n])
+    p1_seeds = "build_symbols() walk_locals() push_walk_block() push_walk_when() find_sym() reverse_cons() cg_skip_decl() emit_zp_bindings() emit_sym_mangled() " + cg_map["register_subs"]
+    p1_live = reachable(cg_map, p1_seeds)
+    for n, body in cg_subs:
+        if n in p1_live and n != "register_subs":
+            parts.append(body)
     parts.append(DUMP_LOAD_COMMON)
     parts.append(cg_map["register_subs"])
     parts.append(DUMP_STATE)

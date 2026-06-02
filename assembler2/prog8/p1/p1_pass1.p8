@@ -266,7 +266,7 @@ ubyte[40] sym_is_const   ; 1 = compile-time const (no storage); folded
 uword[40] sym_cval       ; const value (when sym_is_const)
 uword[40] sym_arr_size   ; element count if an array (0 = scalar); the
                          ; element type is in sym_type; mangle is p8a_
-ubyte sym_count
+uword sym_count
 uword zp_next            ; ZP bump allocator (from $40)
 uword cur_scope          ; the sub being codegen'd (for var resolution)
 ; call-arg scratch (push args -> pop into param slots before the jsr).
@@ -336,7 +336,10 @@ ubyte lstk_sp
 ubyte mul_used           ; `*` was emitted -> emit __p8c_mul_u8 trailer
 uword label_seq          ; global local-label counter (p8c's _label_id)
 
-uword[32] sub_snode      ; each sub's parsed node (pipeline)
+uword[32] sub_snode
+uword resident_sym_count
+uword rec_kind
+uword rec_snode
 ; serializer work stack
 ubyte[2] ws_type       ; 0=node,1=close,2=newline,3=field line,4=literal text
 uword[2] ws_node
@@ -2194,6 +2197,131 @@ sub parse_main() -> uword {
     return node
 }
 
+sub out_text(uword p) {
+    uword q
+    q = p
+    repeat {
+        ubyte c
+        c = @(q)
+        if c == 0 {
+            break
+        }
+        out_byte(c)
+        q = q + 1
+    }
+}
+
+sub out_hex2(ubyte v) {
+    out_hex_nib(lsb(v >> 4))
+    out_hex_nib(v)
+}
+
+sub out_hex_nib(ubyte n) {
+    n = n & $0f
+    if n >= $0a {
+        out_byte(n + $57)
+    } else {
+        out_byte(n + $30)
+    }
+}
+
+sub out_ident_text(uword id) {
+    uword off
+    uword n
+    uword j
+    off = ident_off[id]
+    n = ident_len[id]
+    j = 0
+    repeat {
+        if j >= n {
+            break
+        }
+        out_byte(ident_pool[off + j])
+        j = j + 1
+    }
+}
+; emit a symbol's mangled name from its table entry: module -> p8v_<name>,
+; param -> p8v_<sub>_arg_<name>, local -> p8v_<sub>_<name>.
+
+sub emit_sym_mangled(uword si) {
+    ; arrays live in main memory under a p8a_ label; everything else is p8v_.
+    if sym_arr_size[si] != 0 {
+        out_text("p8a_")
+        out_ident_text(sym_ident[si])
+        return
+    }
+    out_text("p8v_")
+    if sym_mkind[si] == 0 {
+        out_ident_text(sym_ident[si])
+        return
+    }
+    out_ident_text(sym_scope[si])
+    if sym_mkind[si] == 1 {
+        out_text("_arg_")
+    } else {
+        out_byte($5f)
+    }
+    out_ident_text(sym_ident[si])
+}
+; emit a var reference by ident, resolved in the current scope.
+
+sub o_nl()    { out_byte($0a) }
+
+sub reverse_cons(uword head) -> uword {
+    uword rev
+    rev = 0
+    uword cell
+    cell = head
+    repeat {
+        if cell == 0 {
+            break
+        }
+        rev = cons_prepend(rev, cons_val[cell])
+        cell = cons_next[cell]
+    }
+    return rev
+}
+
+; ---- pass S: the symbol table -------------------------------
+; A persistent (across passes) struct-of-arrays mapping a module var's
+; ident id to its type tag + ZP address. Built from prog_vars right after
+; pass A, BEFORE the arena is reset for pass M -- so the ident ids stay
+; valid (the ident pool persists; pass M re-lexes the same names and
+; intern_name dedups them to the same ids).
+; resolve a var: the current sub's param/local (shadows) first, else module.
+
+sub find_sym(uword identid) -> uword {
+    uword i
+    i = 0
+    repeat {
+        if i >= sym_count {
+            break
+        }
+        if sym_ident[i] == identid {
+            if sym_scope[i] == cur_scope {
+                return i
+            }
+        }
+        i = i + 1
+    }
+    i = 0
+    repeat {
+        if i >= sym_count {
+            break
+        }
+        if sym_ident[i] == identid {
+            if sym_scope[i] == 0 {
+                return i
+            }
+        }
+        i = i + 1
+    }
+    return $ffff
+}
+; A compile-time const folds to its literal value at every use site (p8c does
+; this in its Ident codegen; p1 mirrors it). ident_is_const tells a use site to
+; emit an immediate; ident_const_val gives the value.
+
 sub build_symbols() {
     sym_count = 0
     zp_next = $40
@@ -2272,6 +2400,121 @@ sub build_symbols() {
 
 ; ---- prologue / ZP bindings / trailers ----------------------
 
+sub emit_zp_bindings() {
+    ; consts have no storage (folded at use sites), so they get no binding --
+    ; only the ZP scalars do. Emit nothing (not even the header) if every
+    ; module symbol is a const, matching p8c's empty zp_scalars case.
+    ubyte any
+    any = 0
+    uword j
+    j = 0
+    repeat {
+        if j >= sym_count {
+            break
+        }
+        if sym_is_const[j] == 0 {
+            if sym_arr_size[j] == 0 {
+                any = 1
+                break
+            }
+        }
+        j = j + 1
+    }
+    if any == 0 {
+        return
+    }
+    out_byte($0a)
+    out_text("; ---- ZP variable allocations ----\n")
+    uword i
+    i = 0
+    repeat {
+        if i >= sym_count {
+            break
+        }
+        if sym_is_const[i] == 0 {
+            if sym_arr_size[i] == 0 {
+                emit_sym_mangled(i)
+                out_text(" = $")
+                out_hex2(lsb(sym_addr[i]))
+                o_nl()
+            }
+        }
+        i = i + 1
+    }
+}
+
+sub cg_skip_decl() {
+    ubyte t
+    uword dummy
+    t = cur_kind()
+    if t == TK_DIRECTIVE {
+        advance()
+        ubyte a
+        a = cur_kind()
+        if a == TK_INT {
+            advance()
+        } else {
+            if a == TK_IDENT {
+                advance()
+            }
+        }
+        return
+    }
+    if is_type_kw(t) != 0 {
+        dummy = parse_var_decl()
+        reset_nodes()
+        return
+    }
+    if t == TK_KCONST {
+        dummy = parse_const_decl()
+        reset_nodes()
+        return
+    }
+    if t == TK_KENUM {
+        dummy = parse_enum_decl()
+        reset_nodes()
+        return
+    }
+    if t == TK_KSTRUCT {
+        dummy = parse_struct_decl()
+        reset_nodes()
+        return
+    }
+    advance()
+}
+; "p8s_<name>" -- the mangled label for a user sub.
+
+sub push_walk_block(uword blk) {
+    if blk == 0 {
+        return
+    }
+    uword cell
+    cell = node_a[blk]
+    repeat {
+        if cell == 0 {
+            break
+        }
+        sws_a[sws_sp] = cons_val[cell]
+        sws_sp = sws_sp + 1
+        cell = cons_next[cell]
+    }
+}
+
+sub push_walk_when(uword st) {
+    uword cell
+    cell = node_b[st]
+    repeat {
+        if cell == 0 {
+            break
+        }
+        push_walk_block(node_b[cons_val[cell]])
+        cell = cons_next[cell]
+    }
+}
+; allocate a sub's local vardecls (p8v_<sub>_<name>), in p8c's _walk_block
+; order: depth-first, source order, recursing into if (then/else), while, for,
+; repeat, and when (per-arm) bodies. Continues the ZP bump.
+
 sub walk_locals(uword body, uword subname) {
     sws_sp = 0
     push_walk_block(body)
@@ -2323,133 +2566,6 @@ sub walk_locals(uword body, uword subname) {
 }
 ; register every sub (in source order) so calls resolve and pass B emits the
 ; non-main subs in p8c's order. Streaming dispatch, mirroring stmt.p8's pass B.
-
-sub push_walk_block(uword blk) {
-    if blk == 0 {
-        return
-    }
-    uword cell
-    cell = node_a[blk]
-    repeat {
-        if cell == 0 {
-            break
-        }
-        sws_a[sws_sp] = cons_val[cell]
-        sws_sp = sws_sp + 1
-        cell = cons_next[cell]
-    }
-}
-
-sub push_walk_when(uword st) {
-    uword cell
-    cell = node_b[st]
-    repeat {
-        if cell == 0 {
-            break
-        }
-        push_walk_block(node_b[cons_val[cell]])
-        cell = cons_next[cell]
-    }
-}
-; allocate a sub's local vardecls (p8v_<sub>_<name>), in p8c's _walk_block
-; order: depth-first, source order, recursing into if (then/else), while, for,
-; repeat, and when (per-arm) bodies. Continues the ZP bump.
-
-sub find_sym(uword identid) -> uword {
-    uword i
-    i = 0
-    repeat {
-        if i >= sym_count {
-            break
-        }
-        if sym_ident[i] == identid {
-            if sym_scope[i] == cur_scope {
-                return i
-            }
-        }
-        i = i + 1
-    }
-    i = 0
-    repeat {
-        if i >= sym_count {
-            break
-        }
-        if sym_ident[i] == identid {
-            if sym_scope[i] == 0 {
-                return i
-            }
-        }
-        i = i + 1
-    }
-    return $ffff
-}
-; A compile-time const folds to its literal value at every use site (p8c does
-; this in its Ident codegen; p1 mirrors it). ident_is_const tells a use site to
-; emit an immediate; ident_const_val gives the value.
-
-sub reverse_cons(uword head) -> uword {
-    uword rev
-    rev = 0
-    uword cell
-    cell = head
-    repeat {
-        if cell == 0 {
-            break
-        }
-        rev = cons_prepend(rev, cons_val[cell])
-        cell = cons_next[cell]
-    }
-    return rev
-}
-
-; ---- pass S: the symbol table -------------------------------
-; A persistent (across passes) struct-of-arrays mapping a module var's
-; ident id to its type tag + ZP address. Built from prog_vars right after
-; pass A, BEFORE the arena is reset for pass M -- so the ident ids stay
-; valid (the ident pool persists; pass M re-lexes the same names and
-; intern_name dedups them to the same ids).
-; resolve a var: the current sub's param/local (shadows) first, else module.
-
-sub cg_skip_decl() {
-    ubyte t
-    uword dummy
-    t = cur_kind()
-    if t == TK_DIRECTIVE {
-        advance()
-        ubyte a
-        a = cur_kind()
-        if a == TK_INT {
-            advance()
-        } else {
-            if a == TK_IDENT {
-                advance()
-            }
-        }
-        return
-    }
-    if is_type_kw(t) != 0 {
-        dummy = parse_var_decl()
-        reset_nodes()
-        return
-    }
-    if t == TK_KCONST {
-        dummy = parse_const_decl()
-        reset_nodes()
-        return
-    }
-    if t == TK_KENUM {
-        dummy = parse_enum_decl()
-        reset_nodes()
-        return
-    }
-    if t == TK_KSTRUCT {
-        dummy = parse_struct_decl()
-        reset_nodes()
-        return
-    }
-    advance()
-}
-; "p8s_<name>" -- the mangled label for a user sub.
 
 
 sub d16(uword v) { out_byte(lsb(v)) out_byte(lsb(v >> 8)) }
@@ -2541,12 +2657,22 @@ sub dump_global() {
     d16(prog_address)
     out_byte(prog_target)
     uword i
-    d16(sym_count)
+    uword rc
+    rc = 0
+    i = 0
+    repeat { if i >= sym_count { break } if sym_scope[i] == 0 { rc = rc + 1 } else { if sym_mkind[i] == 1 { rc = rc + 1 } } i = i + 1 }
+    d16(rc)
     i = 0
     repeat {
         if i >= sym_count { break }
-        d16(sym_ident[i]) out_byte(sym_type[i]) d16(sym_addr[i]) d16(sym_scope[i])
-        out_byte(sym_mkind[i]) out_byte(sym_is_const[i]) d16(sym_cval[i]) d16(sym_arr_size[i])
+        ubyte keep
+        keep = 0
+        if sym_scope[i] == 0 { keep = 1 }
+        if sym_mkind[i] == 1 { keep = 1 }
+        if keep != 0 {
+            d16(sym_ident[i]) out_byte(sym_type[i]) d16(sym_addr[i]) d16(sym_scope[i])
+            out_byte(sym_mkind[i]) out_byte(sym_is_const[i]) d16(sym_cval[i]) d16(sym_arr_size[i])
+        }
         i = i + 1
     }
     d16(sub_count)
@@ -2574,6 +2700,24 @@ sub dump_record(ubyte kind, uword snode) {
     out_byte(kind)
     d16(snode)
     uword i
+    uword nm
+    nm = node_a[snode]
+    uword lc
+    lc = 0
+    i = 0
+    repeat { if i >= sym_count { break } if sym_scope[i] == nm { if sym_mkind[i] == 2 { lc = lc + 1 } } i = i + 1 }
+    d16(lc)
+    i = 0
+    repeat {
+        if i >= sym_count { break }
+        if sym_scope[i] == nm {
+            if sym_mkind[i] == 2 {
+                d16(sym_ident[i]) out_byte(sym_type[i]) d16(sym_addr[i]) d16(sym_scope[i])
+                out_byte(sym_mkind[i]) out_byte(sym_is_const[i]) d16(sym_cval[i]) d16(sym_arr_size[i])
+            }
+        }
+        i = i + 1
+    }
     d16(node_count)
     i = 0
     repeat {
@@ -2612,6 +2756,8 @@ main {
     build_symbols()
     register_subs()
     dump_global()
+    emit_zp_bindings()
+    out_byte(0)
     ; re-parse from a clean arena so the record ids match the dumped pool.
     reset_arena()
     reset_source()
