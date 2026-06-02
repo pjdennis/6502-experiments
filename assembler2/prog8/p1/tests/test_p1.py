@@ -394,6 +394,26 @@ M5_RET_PROGRAMS = [
     "main {\n    maybe()\n}\n",
 ]
 
+# P7-M5 subs (slice 3): params + call-with-args. Pass S now allocates each
+# sub's params (p8v_<sub>_arg_<name>) in source order, continuing the ZP bump
+# after module vars; the symbol table is scope-aware (a sub's params shadow
+# module vars). A call evaluates each arg onto the CPU stack, then pops them
+# into the param slots in reverse before the jsr (the reentrant-safe order).
+M5_PARAM_PROGRAMS = [
+    # one ubyte param, used in the body + returned
+    "%target nmos\nubyte g\n\n"
+    "sub addone(ubyte v) -> ubyte {\n    return v + 1\n}\n"
+    "main {\n    g = addone(5)\n}\n",
+    # two ubyte params + a uword param
+    "%target nmos\nubyte g\nuword gw\n\n"
+    "sub store2(ubyte a, ubyte b) {\n    g = a + b\n}\nsub setw(uword w) {\n    gw = w\n}\n"
+    "main {\n    store2(3, 4)\n    setw($abcd)\n}\n",
+    # three params, arg is an expression / a module var (shadowing check)
+    "%target nmos\nubyte g\n\n"
+    "sub add3(ubyte a, ubyte b, ubyte c) -> ubyte {\n    return a + b + c\n}\n"
+    "main {\n    g = add3(1, 2, g)\n}\n",
+]
+
 
 def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
@@ -563,6 +583,12 @@ class P1Equivalence(unittest.TestCase):
 
     def test_m5_ret_programs(self):
         for src in M5_RET_PROGRAMS:
+            with self.subTest(src=src):
+                self.assertEqual(self._oracle(src), self._ontarget(src),
+                                 msg=f"codegen .s differs for {src!r}")
+
+    def test_m5_param_programs(self):
+        for src in M5_PARAM_PROGRAMS:
             with self.subTest(src=src):
                 self.assertEqual(self._oracle(src), self._ontarget(src),
                                  msg=f"codegen .s differs for {src!r}")

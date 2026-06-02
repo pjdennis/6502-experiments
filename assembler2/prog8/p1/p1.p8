@@ -186,16 +186,16 @@ ubyte ntok_kind
 uword ntok_val
 
 ; identifier text pool (reset per top-level unit while streaming)
-ubyte[320] ident_pool
-uword[64]  ident_off
-uword[64]  ident_len
+ubyte[256] ident_pool
+uword[48]  ident_off
+uword[48]  ident_len
 uword ident_count
 uword ident_pool_len
 
 ; string literal pool
-ubyte[320] str_pool
-uword[32]  str_off
-uword[32]  str_len
+ubyte[256] str_pool
+uword[24]  str_off
+uword[24]  str_len
 uword str_count
 uword str_pool_len
 
@@ -207,28 +207,28 @@ uword name_len
 uword int_val
 
 ; node arena
-ubyte[128] node_kind
-ubyte[128] node_op
-uword[128] node_a
-uword[128] node_b
-uword[128] node_c
-uword[128] node_d
+ubyte[96] node_kind
+ubyte[96] node_op
+uword[96] node_a
+uword[96] node_b
+uword[96] node_c
+uword[96] node_d
 uword node_count
 
 ; expression stacks
-uword[40] operand_stack
+uword[32] operand_stack
 uword operand_sp
-ubyte[40] op_kind
-ubyte[40] op_op
-ubyte[40] op_prec
-uword[40] op_a
-uword[40] op_b
-uword[40] op_floor
+ubyte[32] op_kind
+ubyte[32] op_op
+ubyte[32] op_prec
+uword[32] op_a
+uword[32] op_b
+uword[32] op_floor
 uword op_sp
 
 ; cons cells
-uword[128] cons_val
-uword[128] cons_next
+uword[96] cons_val
+uword[96] cons_next
 uword cons_count
 
 ; statement frame stack
@@ -256,16 +256,23 @@ uword prog_structs       ; cons of struct node ids (reversed)
 uword prog_subs          ; cons of sub node ids (reversed)
 
 ; ---- codegen symbol table (persistent across passes) ----
-uword[96] sym_ident      ; module var ident id
-ubyte[96] sym_type       ; type tag (TY_UBYTE / TY_BYTE / TY_UWORD)
-uword[96] sym_addr       ; ZP address
+uword[64] sym_ident      ; var name ident id
+ubyte[64] sym_type       ; type tag (TY_UBYTE / TY_BYTE / TY_UWORD)
+uword[64] sym_addr       ; ZP address
+uword[64] sym_scope      ; owning sub name ident (0 = module scope)
+ubyte[64] sym_mkind      ; 0 = module var, 1 = param, 2 = local
 ubyte sym_count
 uword zp_next            ; ZP bump allocator (from $40)
+uword cur_scope          ; the sub being codegen'd (for var resolution)
+; call-arg scratch (push args -> pop into param slots before the jsr).
+uword[16] call_slot      ; param sym index per arg
+ubyte[16] call_isw       ; 1 if that arg/param is uword
+ubyte call_n
 ; sub table (registered in source order before codegen, so calls
 ; resolve and pass B emits non-main subs in p8c's order).
-uword[48] sub_name       ; sub name ident id
-ubyte[48] sub_kind       ; SUBK_SUB / MAIN / INLINE / ASMSUB
-ubyte[48] sub_ret        ; return type tag
+uword[32] sub_name       ; sub name ident id
+ubyte[32] sub_kind       ; SUBK_SUB / MAIN / INLINE / ASMSUB
+ubyte[32] sub_ret        ; return type tag
 uword sub_count
 ; the sub currently being codegen'd -- its return type + name ident,
 ; for `return` (the per-sub .Lp8s_<name>_ret label).
@@ -274,28 +281,28 @@ uword cur_ret_name       ; current sub's name ident id
 ; string pool: one label per string-literal *occurrence*, numbered
 ; in codegen encounter order (matching p8c's sema-walk order); the
 ; recorded str id indexes the parser's str_pool for the trailer.
-uword[64] strpool_sid    ; str id for label N (p8c_str_N)
+uword[48] strpool_sid    ; str id for label N (p8c_str_N)
 uword strpool_count
 ; byte-expression codegen work stack (replaces p8c's recursion):
 ; per entry a task -- 0 eval node, 1 binop-leaf, 2 pha, 3 sta tmp1,
 ; 4 pla, 5 binop-tmp1.
-ubyte[96] cws_type
-uword[96] cws_node
-ubyte[96] cws_op
+ubyte[48] cws_type
+uword[48] cws_node
+ubyte[48] cws_op
 ubyte cws_sp
 ; word-expression codegen work stack (separate from the byte stack so
 ; a byte expression's @() address can drive a word eval without
 ; corrupting the byte stack -- the two never share state).
-ubyte[96] wws_type
-uword[96] wws_node
-ubyte[96] wws_op
+ubyte[48] wws_type
+uword[48] wws_node
+ubyte[48] wws_op
 ubyte wws_sp
 ; statement work stack (control flow without recursion): a task is
 ; 0=emit stmt node, 1=emit label .L<kind>_<id>:, 2=emit jmp to it,
 ; 3=pop the loop-label stack.
-ubyte[128] sws_type
-uword[128] sws_a
-uword[128] sws_b
+ubyte[96] sws_type
+uword[96] sws_a
+uword[96] sws_b
 ubyte sws_sp
 ; loop-label stack for break/continue (break -> bk kind/id, continue
 ; -> ck kind/id), pushed per loop.
@@ -2142,10 +2149,25 @@ sub out_ident_text(uword id) {
         j = j + 1
     }
 }
-; "p8v_<name>" -- the mangled label for a user var.
-sub emit_mangled(uword identid) {
+; emit a symbol's mangled name from its table entry: module -> p8v_<name>,
+; param -> p8v_<sub>_arg_<name>, local -> p8v_<sub>_<name>.
+sub emit_sym_mangled(uword si) {
     out_text("p8v_")
-    out_ident_text(identid)
+    if sym_mkind[si] == 0 {
+        out_ident_text(sym_ident[si])
+        return
+    }
+    out_ident_text(sym_scope[si])
+    if sym_mkind[si] == 1 {
+        out_text("_arg_")
+    } else {
+        out_byte($5f)
+    }
+    out_ident_text(sym_ident[si])
+}
+; emit a var reference by ident, resolved in the current scope.
+sub emit_mangled(uword identid) {
+    emit_sym_mangled(find_sym(identid))
 }
 
 ; shared instruction-prefix fragments (leading 2-space indent included)
@@ -2156,6 +2178,22 @@ sub o_sta()   { out_text("  sta ") }
 sub o_sty()   { out_text("  sty ") }
 sub o_imm()   { out_text("#$") }
 sub o_plus1() { out_text("+1") }
+; common single-instruction emitters (a 3-byte jsr beats an 8-byte out_text
+; call at each of the many sites that push/pop or shuffle A/Y).
+sub o_pha()   { out_text("  pha") o_nl() }
+sub o_pla()   { out_text("  pla") o_nl() }
+sub o_tay()   { out_text("  tay") o_nl() }
+sub o_tya()   { out_text("  tya") o_nl() }
+sub o_clc()   { out_text("  clc") o_nl() }
+sub o_sec()   { out_text("  sec") o_nl() }
+sub o_sta_wtmp0() { out_text("  sta __p8c_wtmp0") o_nl() }
+sub o_lda_wtmp0() { out_text("  lda __p8c_wtmp0") o_nl() }
+sub o_sty_wtmp0h() { out_text("  sty __p8c_wtmp0+1") o_nl() }
+sub o_sta_tmp0()  { out_text("  sta __p8c_tmp0") o_nl() }
+sub o_lda_tmp0()  { out_text("  lda __p8c_tmp0") o_nl() }
+sub o_sta_tmp1()  { out_text("  sta __p8c_tmp1") o_nl() }
+sub o_lda_imm0()  { out_text("  lda #$00") o_nl() }
+sub o_lda_imm1()  { out_text("  lda #$01") o_nl() }
 
 sub reverse_cons(uword head) -> uword {
     uword rev
@@ -2178,6 +2216,7 @@ sub reverse_cons(uword head) -> uword {
 ; pass A, BEFORE the arena is reset for pass M -- so the ident ids stay
 ; valid (the ident pool persists; pass M re-lexes the same names and
 ; intern_name dedups them to the same ids).
+; resolve a var: the current sub's param/local (shadows) first, else module.
 sub find_sym(uword identid) -> uword {
     uword i
     i = 0
@@ -2186,7 +2225,21 @@ sub find_sym(uword identid) -> uword {
             break
         }
         if sym_ident[i] == identid {
-            return i
+            if sym_scope[i] == cur_scope {
+                return i
+            }
+        }
+        i = i + 1
+    }
+    i = 0
+    repeat {
+        if i >= sym_count {
+            break
+        }
+        if sym_ident[i] == identid {
+            if sym_scope[i] == 0 {
+                return i
+            }
         }
         i = i + 1
     }
@@ -2215,6 +2268,8 @@ sub build_symbols() {
                     sym_ident[sym_count] = node_a[vd]
                     sym_type[sym_count] = tag
                     sym_addr[sym_count] = zp_next
+                    sym_scope[sym_count] = 0
+                    sym_mkind[sym_count] = 0
                     sym_count = sym_count + 1
                     if tag == TY_UWORD {
                         zp_next = zp_next + 2
@@ -2251,7 +2306,7 @@ sub emit_zp_bindings() {
         if i >= sym_count {
             break
         }
-        emit_mangled(sym_ident[i])
+        emit_sym_mangled(i)
         out_text(" = $")
         out_hex2(lsb(sym_addr[i]))
         o_nl()
@@ -2515,10 +2570,8 @@ sub emit_cond_branch_if_false(uword cond, ubyte tkind, uword tid) {
             if isw != 0 {
                 ; 16-bit compare (always unsigned)
                 codegen_word_expr(lhs)
-                out_text("  sta __p8c_wtmp0")
-                o_nl()
-                out_text("  sty __p8c_wtmp0+1")
-                o_nl()
+                o_sta_wtmp0()
+                o_sty_wtmp0h()
                 codegen_word_expr(rhs)
                 out_text("  sta __p8c_wtmp1")
                 o_nl()
@@ -2534,8 +2587,7 @@ sub emit_cond_branch_if_false(uword cond, ubyte tkind, uword tid) {
                 out_text("  bne .Lwcmp_lo_")
                 out_dec(wlo)
                 o_nl()
-                out_text("  lda __p8c_wtmp0")
-                o_nl()
+                o_lda_wtmp0()
                 out_text("  cmp __p8c_wtmp1")
                 o_nl()
                 out_text(".Lwcmp_lo_")
@@ -2562,8 +2614,7 @@ sub emit_cond_branch_if_false(uword cond, ubyte tkind, uword tid) {
                     }
                 }
                 if do_signed != 0 {
-                    out_text("  sec")
-                    o_nl()
+                    o_sec()
                     out_text("  sbc ")
                     emit_byte_operand(0, rhs)
                     o_nl()
@@ -2589,18 +2640,14 @@ sub emit_cond_branch_if_false(uword cond, ubyte tkind, uword tid) {
                 return
             }
             codegen_byte_expr(lhs)
-            out_text("  sta __p8c_tmp0")
-            o_nl()
+            o_sta_tmp0()
             codegen_byte_expr(rhs)
-            out_text("  sta __p8c_tmp1")
-            o_nl()
-            out_text("  lda __p8c_tmp0")
-            o_nl()
+            o_sta_tmp1()
+            o_lda_tmp0()
             if iss != 0 {
                 if op != TK_EQ {
                     if op != TK_NE {
-                        out_text("  sec")
-                        o_nl()
+                        o_sec()
                         out_text("  sbc __p8c_tmp1")
                         o_nl()
                         uword sg
@@ -2861,8 +2908,7 @@ sub codegen_repeat(uword st) {
     break_id = label_seq
     label_seq = label_seq + 1
     codegen_byte_expr(count)
-    out_text("  pha")
-    o_nl()
+    o_pha()
     emit_ctrl_label_ref(7, top_id)
     out_byte($3a)
     o_nl()
@@ -2886,23 +2932,19 @@ sub emit_rep_tail(uword top_id) {
     emit_ctrl_label_ref(8, dec_id)
     out_byte($3a)
     o_nl()
-    out_text("  pla")
-    o_nl()
-    out_text("  sec")
-    o_nl()
+    o_pla()
+    o_sec()
     out_text("  sbc #1")
     o_nl()
     emit_br(1, 9, end_id)               ; beq rep_end
-    out_text("  pha")
-    o_nl()
+    o_pha()
     out_text("  jmp ")
     emit_ctrl_label_ref(7, top_id)
     o_nl()
     emit_ctrl_label_ref(10, break_id)
     out_byte($3a)
     o_nl()
-    out_text("  pla")
-    o_nl()
+    o_pla()
     emit_ctrl_label_ref(9, end_id)
     out_byte($3a)
     o_nl()
@@ -2973,13 +3015,10 @@ sub emit_for_cont(uword st, uword end_id) {
             emit_mangled(node_a[hi])
             o_nl()
         } else {
-            out_text("  sta __p8c_tmp0")
-            o_nl()
+            o_sta_tmp0()
             codegen_byte_expr(hi)
-            out_text("  sta __p8c_tmp1")
-            o_nl()
-            out_text("  lda __p8c_tmp0")
-            o_nl()
+            o_sta_tmp1()
+            o_lda_tmp0()
             out_text("  cmp __p8c_tmp1")
             o_nl()
         }
@@ -3009,14 +3048,11 @@ sub codegen_when(uword st) {
     isw = expr_is_word(expr)
     if isw != 0 {
         codegen_word_expr(expr)
-        out_text("  sta __p8c_wtmp0")
-        o_nl()
-        out_text("  sty __p8c_wtmp0+1")
-        o_nl()
+        o_sta_wtmp0()
+        o_sty_wtmp0h()
     } else {
         codegen_byte_expr(expr)
-        out_text("  sta __p8c_tmp0")
-        o_nl()
+        o_sta_tmp0()
     }
     uword packed
     packed = endw_id
@@ -3089,8 +3125,7 @@ sub emit_when_choice(uword choice, uword packed) {
             skip_id = label_seq
             label_seq = label_seq + 1
             emit_br(0, 14, skip_id)     ; bne when_skip
-            out_text("  lda __p8c_wtmp0")
-            o_nl()
+            o_lda_wtmp0()
             out_text("  cmp __p8c_wtmp1")
             o_nl()
             emit_br(1, 12, body_id)     ; beq when_body
@@ -3227,15 +3262,12 @@ sub emit_shift_op(ubyte is_left, ubyte is_imm, ubyte imm_val, ubyte mode, uword 
     label_seq = label_seq + 1
     end_id = label_seq
     label_seq = label_seq + 1
-    out_text("  pha")
-    o_nl()
+    o_pha()
     o_lda()
     emit_byte_operand(mode, rhs)
     o_nl()
-    out_text("  tay")
-    o_nl()
-    out_text("  pla")
-    o_nl()
+    o_tay()
+    o_pla()
     out_text("  cpy #0")
     o_nl()
     out_text("  beq ")
@@ -3265,16 +3297,14 @@ sub emit_shift_op(ubyte is_left, ubyte is_imm, ubyte imm_val, ubyte mode, uword 
 ; shifts << >>. p8c recurses on operands; p1 reaches this via the work stack.
 sub emit_byte_binop_core(ubyte op, ubyte mode, uword rhs) {
     if op == TK_PLUS {
-        out_text("  clc")
-        o_nl()
+        o_clc()
         out_text("  adc ")
         emit_byte_operand(mode, rhs)
         o_nl()
         return
     }
     if op == TK_MINUS {
-        out_text("  sec")
-        o_nl()
+        o_sec()
         out_text("  sbc ")
         emit_byte_operand(mode, rhs)
         o_nl()
@@ -3299,13 +3329,11 @@ sub emit_byte_binop_core(ubyte op, ubyte mode, uword rhs) {
         return
     }
     if op == TK_STAR {
-        out_text("  sta __p8c_tmp0")
-        o_nl()
+        o_sta_tmp0()
         o_lda()
         emit_byte_operand(mode, rhs)
         o_nl()
-        out_text("  sta __p8c_tmp1")
-        o_nl()
+        o_sta_tmp1()
         out_text("  jsr __p8c_mul_u8")
         o_nl()
         mul_used = 1
@@ -3351,8 +3379,7 @@ sub emit_unary_apply(ubyte uncode) {
     if uncode == UN_NEG {
         out_text("  eor #$ff")
         o_nl()
-        out_text("  clc")
-        o_nl()
+        o_clc()
         out_text("  adc #$01")
         o_nl()
         return
@@ -3367,8 +3394,7 @@ sub emit_unary_apply(ubyte uncode) {
     out_text("  beq .Lnot_zero_")
     out_dec(zero_id)
     o_nl()
-    out_text("  lda #$00")
-    o_nl()
+    o_lda_imm0()
     out_text("  jmp .Lnot_end_")
     out_dec(end_id)
     o_nl()
@@ -3376,8 +3402,7 @@ sub emit_unary_apply(ubyte uncode) {
     out_dec(zero_id)
     out_byte($3a)
     o_nl()
-    out_text("  lda #$01")
-    o_nl()
+    o_lda_imm1()
     out_text(".Lnot_end_")
     out_dec(end_id)
     out_byte($3a)
@@ -3445,11 +3470,23 @@ sub emit_br_true(uword mnem, uword true_id) {
 ; and materialize 0/1 in A. Labels are allocated here (after the operand eval),
 ; matching p8c's _new_label order: cmp_true, cmp_end, then any op-specific
 ; extra (gt_no / sgn_ok / sgt_no).
-sub emit_cmp_tail(uword e, ubyte op) {
+; emit the rhs operand of a value-context compare: spill (opmode 1) -> the
+; __p8c_tmp1 slot; leaf (opmode 0) -> the leaf rhs directly (#imm / p8v_x).
+sub emit_cmp_operand(ubyte opmode, uword rhs) {
+    if opmode != 0 {
+        out_text("__p8c_tmp1")
+    } else {
+        emit_byte_operand(0, rhs)
+    }
+}
+; value-context comparison materializing 0/1 in A. opmode 1 = spill (lhs in
+; __p8c_tmp0, rhs in __p8c_tmp1); opmode 0 = leaf (lhs already in A, rhs a leaf).
+sub emit_cmp_tail(uword e, ubyte op, ubyte opmode, uword rhs) {
     ubyte is_signed
     is_signed = cmp_is_signed(e)
-    out_text("  lda __p8c_tmp0")
-    o_nl()
+    if opmode != 0 {
+        o_lda_tmp0()
+    }
     uword true_id
     uword end_id
     uword no_id
@@ -3458,7 +3495,8 @@ sub emit_cmp_tail(uword e, ubyte op) {
     end_id = label_seq
     label_seq = label_seq + 1
     if is_signed == 0 {
-        out_text("  cmp __p8c_tmp1")
+        out_text("  cmp ")
+        emit_cmp_operand(opmode, rhs)
         o_nl()
         if op == TK_EQ {
             emit_br_true("beq", true_id)
@@ -3490,18 +3528,20 @@ sub emit_cmp_tail(uword e, ubyte op) {
         }
     } else {
         if op == TK_EQ {
-            out_text("  cmp __p8c_tmp1")
+            out_text("  cmp ")
+            emit_cmp_operand(opmode, rhs)
             o_nl()
             emit_br_true("beq", true_id)
         } else {
             if op == TK_NE {
-                out_text("  cmp __p8c_tmp1")
+                out_text("  cmp ")
+                emit_cmp_operand(opmode, rhs)
                 o_nl()
                 emit_br_true("bne", true_id)
             } else {
-                out_text("  sec")
-                o_nl()
-                out_text("  sbc __p8c_tmp1")
+                o_sec()
+                out_text("  sbc ")
+                emit_cmp_operand(opmode, rhs)
                 o_nl()
                 uword skip_id
                 skip_id = label_seq
@@ -3541,8 +3581,7 @@ sub emit_cmp_tail(uword e, ubyte op) {
             }
         }
     }
-    out_text("  lda #$00")
-    o_nl()
+    o_lda_imm0()
     out_text("  jmp .Lcmp_end_")
     out_dec(end_id)
     o_nl()
@@ -3550,8 +3589,7 @@ sub emit_cmp_tail(uword e, ubyte op) {
     out_dec(true_id)
     out_byte($3a)
     o_nl()
-    out_text("  lda #$01")
-    o_nl()
+    o_lda_imm1()
     out_text(".Lcmp_end_")
     out_dec(end_id)
     out_byte($3a)
@@ -3613,11 +3651,9 @@ sub emit_logic_tail(ubyte op) {
     id2 = lstk_id2[lstk_sp]
     emit_logic_branch(op, id1)
     if op == TK_KAND {
-        out_text("  lda #$01")
-        o_nl()
+        o_lda_imm1()
     } else {
-        out_text("  lda #$00")
-        o_nl()
+        o_lda_imm0()
     }
     out_text("  jmp ")
     emit_logic_end_name(op, id2)
@@ -3626,11 +3662,9 @@ sub emit_logic_tail(ubyte op) {
     out_byte($3a)
     o_nl()
     if op == TK_KAND {
-        out_text("  lda #$00")
-        o_nl()
+        o_lda_imm0()
     } else {
-        out_text("  lda #$01")
-        o_nl()
+        o_lda_imm1()
     }
     emit_logic_end_name(op, id2)
     out_byte($3a)
@@ -3658,12 +3692,18 @@ sub codegen_byte_expr(uword root) {
                 lhs = node_a[nd]
                 rhs = node_b[nd]
                 if is_cmp_op(node_op[nd]) != 0 {
-                    ; eval(lhs); sta tmp0; eval(rhs); sta tmp1; cmp-tail
-                    cws_push(7, nd, node_op[nd])
-                    cws_push(3, 0, 0)
-                    cws_push(0, rhs, 0)
-                    cws_push(8, 0, 0)
-                    cws_push(0, lhs, 0)
+                    if is_leaf_rhs(rhs) != 0 {
+                        ; leaf rhs: eval(lhs) -> A; leaf cmp-tail (no spill)
+                        cws_push(12, nd, node_op[nd])
+                        cws_push(0, lhs, 0)
+                    } else {
+                        ; eval(lhs); sta tmp0; eval(rhs); sta tmp1; cmp-tail
+                        cws_push(7, nd, node_op[nd])
+                        cws_push(3, 0, 0)
+                        cws_push(0, rhs, 0)
+                        cws_push(8, 0, 0)
+                        cws_push(0, lhs, 0)
+                    }
                 } else {
                     if is_logical_op(node_op[nd]) != 0 {
                         ; eval(lhs); logic-mid; eval(rhs); logic-tail
@@ -3720,16 +3760,13 @@ sub codegen_byte_expr(uword root) {
                 emit_byte_binop_leaf(op, nd)
             } else {
                 if ty == 2 {
-                    out_text("  pha")
-                    o_nl()
+                    o_pha()
                 } else {
                     if ty == 3 {
-                        out_text("  sta __p8c_tmp1")
-                        o_nl()
+                        o_sta_tmp1()
                     } else {
                         if ty == 4 {
-                            out_text("  pla")
-                            o_nl()
+                            o_pla()
                         } else {
                             if ty == 5 {
                                 emit_byte_binop_zp(op)
@@ -3738,11 +3775,10 @@ sub codegen_byte_expr(uword root) {
                                     emit_unary_apply(op)
                                 } else {
                                     if ty == 7 {
-                                        emit_cmp_tail(nd, op)
+                                        emit_cmp_tail(nd, op, 1, 0)
                                     } else {
                                         if ty == 8 {
-                                            out_text("  sta __p8c_tmp0")
-                                            o_nl()
+                                            o_sta_tmp0()
                                         } else {
                                             if ty == 9 {
                                                 emit_logic_mid(op)
@@ -3750,8 +3786,12 @@ sub codegen_byte_expr(uword root) {
                                                 if ty == 10 {
                                                     emit_logic_tail(op)
                                                 } else {
-                                                    out_text("  eor __p8c_tmp0")
-                                                    o_nl()
+                                                    if ty == 11 {
+                                                        out_text("  eor __p8c_tmp0")
+                                                        o_nl()
+                                                    } else {
+                                                        emit_cmp_tail(nd, op, 0, node_b[nd])
+                                                    }
                                                 }
                                             }
                                         }
@@ -3855,37 +3895,27 @@ sub emit_addrof(uword e) {
 ; arithmetic/bitwise arms.)
 sub emit_word_combine(ubyte op) {
     if op == TK_PLUS {
-        out_text("  clc")
-        o_nl()
+        o_clc()
         out_text("  adc __p8c_wtmp0")
         o_nl()
-        out_text("  pha")
-        o_nl()
-        out_text("  tya")
-        o_nl()
+        o_pha()
+        o_tya()
         out_text("  adc __p8c_wtmp0+1")
         o_nl()
-        out_text("  tay")
-        o_nl()
-        out_text("  pla")
-        o_nl()
+        o_tay()
+        o_pla()
         return
     }
     if op == TK_MINUS {
-        out_text("  sec")
-        o_nl()
+        o_sec()
         out_text("  sbc __p8c_wtmp0")
         o_nl()
-        out_text("  pha")
-        o_nl()
-        out_text("  tya")
-        o_nl()
+        o_pha()
+        o_tya()
         out_text("  sbc __p8c_wtmp0+1")
         o_nl()
-        out_text("  tay")
-        o_nl()
-        out_text("  pla")
-        o_nl()
+        o_tay()
+        o_pla()
         return
     }
     ; bitwise & | ^ : and / ora / eor on both bytes.
@@ -3893,18 +3923,14 @@ sub emit_word_combine(ubyte op) {
     emit_bitwise_mnem(op)
     out_text(" __p8c_wtmp0")
     o_nl()
-    out_text("  pha")
-    o_nl()
-    out_text("  tya")
-    o_nl()
+    o_pha()
+    o_tya()
     out_text("  ")
     emit_bitwise_mnem(op)
     out_text(" __p8c_wtmp0+1")
     o_nl()
-    out_text("  tay")
-    o_nl()
-    out_text("  pla")
-    o_nl()
+    o_tay()
+    o_pla()
 }
 sub emit_bitwise_mnem(ubyte op) {
     if op == TK_AMP {
@@ -3921,19 +3947,14 @@ sub emit_bitwise_mnem(ubyte op) {
 sub emit_word_unary(ubyte uncode) {
     out_text("  eor #$ff")
     o_nl()
-    out_text("  sta __p8c_wtmp0")
-    o_nl()
-    out_text("  tya")
-    o_nl()
+    o_sta_wtmp0()
+    o_tya()
     out_text("  eor #$ff")
     o_nl()
-    out_text("  tay")
-    o_nl()
-    out_text("  lda __p8c_wtmp0")
-    o_nl()
+    o_tay()
+    o_lda_wtmp0()
     if uncode == UN_NEG {
-        out_text("  clc")
-        o_nl()
+        o_clc()
         out_text("  adc #$01")
         o_nl()
         out_text("  bcc *+3")
@@ -3948,16 +3969,12 @@ sub emit_word_unary(ubyte uncode) {
 sub emit_wshl_step() {
     out_text("  asl a")
     o_nl()
-    out_text("  sta __p8c_wtmp0")
-    o_nl()
-    out_text("  tya")
-    o_nl()
+    o_sta_wtmp0()
+    o_tya()
     out_text("  rol a")
     o_nl()
-    out_text("  tay")
-    o_nl()
-    out_text("  lda __p8c_wtmp0")
-    o_nl()
+    o_tay()
+    o_lda_wtmp0()
 }
 ; A:Y << n for a constant n (operand already in A:Y). n is value & $0f.
 sub emit_wshl_const(ubyte n) {
@@ -3991,16 +4008,13 @@ sub emit_wshl_const(ubyte n) {
 }
 ; one A:Y>>1 step for the 1<=n<8 case (sty wtmp0+1; sta wtmp0; lsr/ror; reload).
 sub emit_wshr_step_lo() {
-    out_text("  sty __p8c_wtmp0+1")
-    o_nl()
-    out_text("  sta __p8c_wtmp0")
-    o_nl()
+    o_sty_wtmp0h()
+    o_sta_wtmp0()
     out_text("  lsr __p8c_wtmp0+1")
     o_nl()
     out_text("  ror __p8c_wtmp0")
     o_nl()
-    out_text("  lda __p8c_wtmp0")
-    o_nl()
+    o_lda_wtmp0()
     out_text("  ldy __p8c_wtmp0+1")
     o_nl()
 }
@@ -4014,8 +4028,7 @@ sub emit_wshr_step_hi() {
     o_nl()
     out_text("  ror __p8c_wtmp0")
     o_nl()
-    out_text("  lda __p8c_wtmp0")
-    o_nl()
+    o_lda_wtmp0()
     out_text("  ldy __p8c_wtmp0+1")
     o_nl()
 }
@@ -4107,8 +4120,7 @@ sub emit_wshift_var_tail(uword nd, ubyte is_left) {
     emit_wshift_label(is_left, 0, end_id)
     out_byte($3a)
     o_nl()
-    out_text("  lda __p8c_wtmp0")
-    o_nl()
+    o_lda_wtmp0()
     out_text("  ldy __p8c_wtmp0+1")
     o_nl()
 }
@@ -4210,35 +4222,25 @@ sub codegen_word_expr(uword root) {
         } else {
             if ty == 1 {
                 ; save LHS (A:Y) on the CPU stack across the RHS eval
-                out_text("  pha")
-                o_nl()
-                out_text("  tya")
-                o_nl()
-                out_text("  pha")
-                o_nl()
+                o_pha()
+                o_tya()
+                o_pha()
             } else {
                 if ty == 2 {
                     ; RHS -> wtmp0; restore LHS to A:Y
-                    out_text("  sta __p8c_wtmp0")
-                    o_nl()
-                    out_text("  sty __p8c_wtmp0+1")
-                    o_nl()
-                    out_text("  pla")
-                    o_nl()
-                    out_text("  tay")
-                    o_nl()
-                    out_text("  pla")
-                    o_nl()
+                    o_sta_wtmp0()
+                    o_sty_wtmp0h()
+                    o_pla()
+                    o_tay()
+                    o_pla()
                 } else {
                     if ty == 3 {
                         emit_word_combine(op)
                     } else {
                         if ty == 4 {
                             ; LHS -> wtmp0 (for the variable-shift loop)
-                            out_text("  sta __p8c_wtmp0")
-                            o_nl()
-                            out_text("  sty __p8c_wtmp0+1")
-                            o_nl()
+                            o_sta_wtmp0()
+                            o_sty_wtmp0h()
                         } else {
                             if ty == 5 {
                                 emit_wshl_const(op)
@@ -4288,20 +4290,20 @@ sub emit_memat_read(uword nd) {
     o_nl()
 }
 
-; sym-addressed loads/stores.
+; sym-addressed loads/stores (the sym index is already resolved).
 sub emit_lda_sym(uword si) {
     o_lda()
-    emit_mangled(sym_ident[si])
+    emit_sym_mangled(si)
     o_nl()
 }
 sub emit_sta_sym(uword si) {
     o_sta()
-    emit_mangled(sym_ident[si])
+    emit_sym_mangled(si)
     o_nl()
 }
 sub emit_sty_sym_hi(uword si) {
     o_sty()
-    emit_mangled(sym_ident[si])
+    emit_sym_mangled(si)
     o_plus1()
     o_nl()
 }
@@ -4322,8 +4324,7 @@ sub codegen_assign_memat(uword st, uword target) {
         return
     }
     codegen_byte_expr(rhs)
-    out_text("  sta __p8c_tmp0")
-    o_nl()
+    o_sta_tmp0()
     codegen_word_expr(addr)
     out_text("  sta __p8c_ptr0")
     o_nl()
@@ -4331,8 +4332,7 @@ sub codegen_assign_memat(uword st, uword target) {
     o_nl()
     out_text("  ldy #$00")
     o_nl()
-    out_text("  lda __p8c_tmp0")
-    o_nl()
+    o_lda_tmp0()
     out_text("  sta (__p8c_ptr0),y")
     o_nl()
 }
@@ -4446,11 +4446,92 @@ sub find_sub(uword identid) -> uword {
     }
     return $ffff
 }
-; codegen a call expression. (M5 slice 1/2: regular sub, no args -> jsr; the
-; result is left in A (ubyte/byte) or A:Y (uword) by the callee.)
+; collect the callee's params (sym indices, in source order) into call_slot,
+; setting call_n. Params are the syms with scope == callee and mkind == param,
+; stored in allocation (source) order.
+sub collect_params(uword callee) {
+    call_n = 0
+    uword i
+    i = 0
+    repeat {
+        if i >= sym_count {
+            break
+        }
+        if sym_scope[i] == callee {
+            if sym_mkind[i] == 1 {
+                call_slot[call_n] = i
+                if sym_type[i] == TY_UWORD {
+                    call_isw[call_n] = 1
+                } else {
+                    call_isw[call_n] = 0
+                }
+                call_n = call_n + 1
+            }
+        }
+        i = i + 1
+    }
+}
+; codegen a call. Regular sub: evaluate every arg onto the CPU stack (so a
+; later arg's evaluation can't clobber an earlier arg's param slot -- the slots
+; are not reentrant), then pop them into the param slots in reverse and jsr.
+; Result: A (ubyte/byte) or A:Y (uword). (NOTE: call_slot is global, so an arg
+; that is itself a call would corrupt it -- not yet handled; args are simple.)
 sub codegen_call(uword callnode) {
+    uword callee
+    callee = node_a[callnode]
+    collect_params(callee)
+    if call_n != 0 {
+        ; push each arg (source order) onto the CPU stack.
+        uword ahead
+        ahead = reverse_cons(node_b[callnode])
+        uword acell
+        acell = ahead
+        ubyte j
+        j = 0
+        repeat {
+            if acell == 0 {
+                break
+            }
+            uword arg
+            arg = cons_val[acell]
+            if call_isw[j] != 0 {
+                codegen_word_expr(arg)
+                o_pha()
+                o_tya()
+                o_pha()
+            } else {
+                codegen_byte_expr(arg)
+                o_pha()
+            }
+            j = j + 1
+            acell = cons_next[acell]
+        }
+        ; pop into param slots in reverse order.
+        repeat {
+            if j == 0 {
+                break
+            }
+            j = j - 1
+            uword psi
+            psi = call_slot[j]
+            if call_isw[j] != 0 {
+                out_text("  pla")          ; high byte
+                o_nl()
+                o_sta()
+                emit_sym_mangled(psi)
+                o_plus1()
+                o_nl()
+                out_text("  pla")          ; low byte
+                o_nl()
+                emit_sta_sym(psi)
+            } else {
+                o_pla()
+                emit_sta_sym(psi)
+            }
+        }
+    }
     out_text("  jsr ")
-    emit_sub_label(node_a[callnode])
+    emit_sub_label(callee)
     o_nl()
 }
 ; `return [value]` (port of _emit_stmt's Return). With a value, evaluate it
@@ -4462,24 +4543,16 @@ sub codegen_return(uword st) {
     if value != 0 {
         if cur_ret == TY_UWORD {
             codegen_word_expr(value)
-            out_text("  pha")
-            o_nl()
-            out_text("  tya")
-            o_nl()
-            out_text("  pha")
-            o_nl()
-            out_text("  pla")
-            o_nl()
-            out_text("  tay")
-            o_nl()
-            out_text("  pla")
-            o_nl()
+            o_pha()
+            o_tya()
+            o_pha()
+            o_pla()
+            o_tay()
+            o_pla()
         } else {
             codegen_byte_expr(value)
-            out_text("  pha")
-            o_nl()
-            out_text("  pla")
-            o_nl()
+            o_pha()
+            o_pla()
         }
     }
     out_text("  jmp .Lp8s_")
@@ -4529,6 +4602,32 @@ sub register_subs() {
             sub_kind[sub_count] = node_op[snode]
             sub_ret[sub_count] = lsb(node_d[snode])
             sub_count = sub_count + 1
+            ; allocate this sub's params (source order), continuing zp_next.
+            uword phead
+            phead = reverse_cons(node_b[snode])
+            uword pcell
+            pcell = phead
+            repeat {
+                if pcell == 0 {
+                    break
+                }
+                uword pnode
+                pnode = cons_val[pcell]
+                ubyte ptag
+                ptag = node_op[pnode]
+                sym_ident[sym_count] = node_a[pnode]
+                sym_type[sym_count] = ptag
+                sym_addr[sym_count] = zp_next
+                sym_scope[sym_count] = node_a[snode]
+                sym_mkind[sym_count] = 1
+                sym_count = sym_count + 1
+                if ptag == TY_UWORD {
+                    zp_next = zp_next + 2
+                } else {
+                    zp_next = zp_next + 1
+                }
+                pcell = cons_next[pcell]
+            }
             reset_nodes()
         }
     }
@@ -4538,6 +4637,7 @@ sub emit_sub(uword snode) {
     label_seq = 0
     cur_ret = lsb(node_d[snode])
     cur_ret_name = node_a[snode]
+    cur_scope = node_a[snode]
     o_nl()
     out_text("; ---- sub ")
     out_ident_text(node_a[snode])
@@ -4663,6 +4763,7 @@ main {
             mainbody = node_c[mnode]
             cur_ret = TY_VOID
             cur_ret_name = node_a[mnode]
+            cur_scope = node_a[mnode]
             break
         }
         advance()

@@ -1246,24 +1246,34 @@ class CodeGen:
     def _emit_cmp_into_a(self, e: BinOp) -> None:
         """Compare LHS vs RHS, leave 1 in A if true else 0."""
         is_signed = getattr(e, "signed", False)
+        operand = self._cmp_leaf_operand(e.rhs)
+        if operand is not None:
+            # Leaf rhs: no tmp0/tmp1 spill -- eval lhs into A, compare directly.
+            self._emit_byte_expr_into_a(e.lhs)
+            self._emit_cmp_value_tail(e.op, is_signed, operand)
+            return
         self._emit_byte_expr_into_a(e.lhs)
         self.emit("  sta __p8c_tmp0")
         self._emit_byte_expr_into_a(e.rhs)
         self.emit("  sta __p8c_tmp1")
         self.emit("  lda __p8c_tmp0")
+        self._emit_cmp_value_tail(e.op, is_signed, "__p8c_tmp1")
+
+    def _emit_cmp_value_tail(self, op: str, is_signed: bool, operand: str) -> None:
+        """After lhs is in A: compare against `operand`, materialize 0/1 in A."""
         true_label = self._new_label("cmp_true")
         end_label = self._new_label("cmp_end")
         if not is_signed:
             # Unsigned compare: use CMP + standard carry/zero branches.
-            self.emit("  cmp __p8c_tmp1")
+            self.emit(f"  cmp {operand}")
             branch = {
                 "==": "beq", "!=": "bne",
                 "<":  "bcc", ">=": "bcs",
                 ">":  None, "<=": None,
-            }[e.op]
+            }[op]
             if branch is not None:
                 self.emit(f"  {branch} {true_label}")
-            elif e.op == ">":
+            elif op == ">":
                 no = self._new_label("gt_no")
                 self.emit(f"  beq {no}")
                 self.emit(f"  bcs {true_label}")
@@ -1273,22 +1283,22 @@ class CodeGen:
                 self.emit(f"  bcc {true_label}")
         else:
             # Signed compare: SBC + overflow-corrected N flag.
-            if e.op in ("==", "!="):
-                self.emit("  cmp __p8c_tmp1")
-                self.emit(f"  {'beq' if e.op == '==' else 'bne'} {true_label}")
+            if op in ("==", "!="):
+                self.emit(f"  cmp {operand}")
+                self.emit(f"  {'beq' if op == '==' else 'bne'} {true_label}")
             else:
                 self.emit("  sec")
-                self.emit("  sbc __p8c_tmp1")
+                self.emit(f"  sbc {operand}")
                 skip = self._new_label("sgn_ok")
                 self.emit(f"  bvc {skip}")
                 self.emit("  eor #$80")
                 self.emit(f"{skip}:")
                 # N=1 -> A<B; N=0 -> A>=B; Z=1 -> A==B.
-                if e.op == "<":
+                if op == "<":
                     self.emit(f"  bmi {true_label}")
-                elif e.op == ">=":
+                elif op == ">=":
                     self.emit(f"  bpl {true_label}")
-                elif e.op == ">":
+                elif op == ">":
                     no = self._new_label("sgt_no")
                     self.emit(f"  beq {no}")
                     self.emit(f"  bpl {true_label}")
