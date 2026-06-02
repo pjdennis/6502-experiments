@@ -388,6 +388,33 @@ M5_SUB_PROGRAMS = [
     'main {\n    s = "M"\n    first()\n    second()\n}\n',
 ]
 
+# P7 const slice: `const ubyte/uword NAME = <int>` declares a compile-time
+# constant -- no ZP binding, no storage; every use site folds in the literal
+# value (p8c does this in its Ident codegen; p1 mirrors it). Folding happens
+# only where p8c folds: byte-leaf load (`x = C`), word-leaf load (`w = C`,
+# ubyte const widened), and the comparison SPILL path (`if x == C` -> p8c's
+# _cmp_leaf_operand returns None for a const, so it spills and folds during the
+# full byte-expr eval). p8c does NOT fold a const in arithmetic operands or a
+# for-bound (it emits the undefined mangled name there -- a p8c limitation), so
+# this corpus avoids those, matching what p1.p8 itself can use.
+CONST_PROGRAMS = [
+    # byte-leaf + word-leaf folding, no ZP binding for the consts
+    "%target nmos\nconst ubyte LO = 5\nconst ubyte HI = 200\n"
+    "ubyte a\nuword w\n\n"
+    "main {\n    a = LO\n    w = HI\n    a = HI\n}\n",
+    # const in comparison conditions (if / while -> spill path folds the const)
+    "%target nmos\nconst ubyte K = 7\nubyte a\n\n"
+    "main {\n    a = 0\n    if a == K {\n        a = K\n    }\n"
+    "    while a == K {\n        a = K\n    }\n}\n",
+    # const passed as a call arg (folds via the arg's byte/word leaf eval)
+    "%target nmos\nconst ubyte N = 42\nubyte a\n\n"
+    "sub id(ubyte v) -> ubyte {\n    return v\n}\n"
+    "main {\n    a = id(N)\n}\n",
+    # a program whose ONLY module symbols are consts -> no ZP-binding block
+    "%target nmos\nconst ubyte A = 1\nconst ubyte B = 2\n\n"
+    "main {\n    if A == B {\n    }\n}\n",
+]
+
 # P7-M5 subs (slice 2): return values + call-as-value (still no params/locals).
 # `return [v]` evaluates v (byte -> A, word -> A:Y) with p8c's pha/pla dance,
 # then jmps the per-sub .Lp8s_<name>_ret label; a call in an expression leaves
@@ -676,6 +703,12 @@ class P1Equivalence(unittest.TestCase):
 
     def test_m5_sub_programs(self):
         for src in M5_SUB_PROGRAMS:
+            with self.subTest(src=src):
+                self.assertEqual(self._oracle(src), self._ontarget(src),
+                                 msg=f"codegen .s differs for {src!r}")
+
+    def test_const_programs(self):
+        for src in CONST_PROGRAMS:
             with self.subTest(src=src):
                 self.assertEqual(self._oracle(src), self._ontarget(src),
                                  msg=f"codegen .s differs for {src!r}")

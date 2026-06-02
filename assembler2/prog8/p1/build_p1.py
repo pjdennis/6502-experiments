@@ -324,6 +324,20 @@ sub find_sym(uword identid) -> uword {{
     }}
     return $ffff
 }}
+; A compile-time const folds to its literal value at every use site (p8c does
+; this in its Ident codegen; p1 mirrors it). ident_is_const tells a use site to
+; emit an immediate; ident_const_val gives the value.
+sub ident_is_const(uword identid) -> ubyte {{
+    uword si
+    si = find_sym(identid)
+    if si == $ffff {{
+        return 0
+    }}
+    return sym_is_const[si]
+}}
+sub ident_const_val(uword identid) -> uword {{
+    return sym_cval[find_sym(identid)]
+}}
 ; allocate ZP for every scalar module var, in declaration order, exactly
 ; as p8c's sema does (bump from $40; ubyte/byte = 1 byte, uword = 2).
 sub build_symbols() {{
@@ -349,11 +363,33 @@ sub build_symbols() {{
                     sym_addr[sym_count] = zp_next
                     sym_scope[sym_count] = 0
                     sym_mkind[sym_count] = 0
+                    sym_is_const[sym_count] = 0
                     sym_count = sym_count + 1
                     if tag == TY_UWORD {{
                         zp_next = zp_next + 2
                     }} else {{
                         zp_next = zp_next + 1
+                    }}
+                }} else {{
+                    ; const ubyte/byte/uword: TY_CONST_* (6/7/8) -> base type.
+                    ; No ZP storage; the int-literal init (node_b) is folded in
+                    ; at every use site, matching p8c. (Map the tag with explicit
+                    ; compares, not arithmetic: p8c only folds a const in leaf /
+                    ; comparison positions, not as a `-` operand.) Tags above
+                    ; TY_CONST_UWORD (e.g. TY_STRUCT) are not consts -> skip.
+                    if tag <= TY_CONST_UWORD {{
+                        ubyte bt
+                        bt = TY_UBYTE
+                        if tag == TY_CONST_BYTE {{ bt = TY_BYTE }}
+                        if tag == TY_CONST_UWORD {{ bt = TY_UWORD }}
+                        sym_ident[sym_count] = node_a[vd]
+                        sym_type[sym_count] = bt
+                        sym_addr[sym_count] = 0
+                        sym_scope[sym_count] = 0
+                        sym_mkind[sym_count] = 0
+                        sym_is_const[sym_count] = 1
+                        sym_cval[sym_count] = node_a[node_b[vd]]
+                        sym_count = sym_count + 1
                     }}
                 }}
             }}
@@ -374,7 +410,24 @@ sub emit_prologue() {{
 ; blank -- emit_main's leading "\\n\\n" supplies the two-blank gap. (Empty
 ; when there are no module vars, matching p8c.)
 sub emit_zp_bindings() {{
-    if sym_count == 0 {{
+    ; consts have no storage (folded at use sites), so they get no binding --
+    ; only the ZP scalars do. Emit nothing (not even the header) if every
+    ; module symbol is a const, matching p8c's empty zp_scalars case.
+    ubyte any
+    any = 0
+    uword j
+    j = 0
+    repeat {{
+        if j >= sym_count {{
+            break
+        }}
+        if sym_is_const[j] == 0 {{
+            any = 1
+            break
+        }}
+        j = j + 1
+    }}
+    if any == 0 {{
         return
     }}
     out_byte($0a)
@@ -385,10 +438,12 @@ sub emit_zp_bindings() {{
         if i >= sym_count {{
             break
         }}
-        emit_sym_mangled(i)
-        out_text(" = $")
-        out_hex2(lsb(sym_addr[i]))
-        o_nl()
+        if sym_is_const[i] == 0 {{
+            emit_sym_mangled(i)
+            out_text(" = $")
+            out_hex2(lsb(sym_addr[i]))
+            o_nl()
+        }}
         i = i + 1
     }}
 }}
@@ -728,7 +783,7 @@ sub emit_cond_branch_if_false(uword cond, ubyte tkind, uword tid) {{
             ; byte compare
             ubyte iss
             iss = cmp_is_signed(cond)
-            if is_leaf_rhs(rhs) != 0 {{
+            if is_cmp_leaf_rhs(rhs) != 0 {{
                 ; leaf rhs (literal / var): no tmp0/tmp1 spill -- eval lhs into
                 ; A and compare directly. (Matches p8c's _emit_cmp_cond.)
                 codegen_byte_expr(lhs)
@@ -1328,6 +1383,24 @@ sub is_leaf_rhs(uword e) -> ubyte {{
     }}
     return 0
 }}
+; a comparison RHS that p8c's _cmp_leaf_operand treats as a no-spill leaf:
+; an int literal or a *non-const* var. A const is NOT a cmp leaf in p8c (it
+; returns None -> the spill path, where the const folds during full byte-expr
+; eval), so we exclude it here to stay byte-identical.
+sub is_cmp_leaf_rhs(uword e) -> ubyte {{
+    ubyte k
+    k = node_kind[e]
+    if k == ND_INT {{
+        return 1
+    }}
+    if k == ND_IDENT {{
+        if ident_is_const(node_a[e]) != 0 {{
+            return 0
+        }}
+        return 1
+    }}
+    return 0
+}}
 ; byte expression leaf -> A.
 sub emit_byte_leaf_load(uword e) {{
     ubyte k
@@ -1345,6 +1418,12 @@ sub emit_byte_leaf_load(uword e) {{
         return
     }}
     if k == ND_IDENT {{
+        if ident_is_const(node_a[e]) != 0 {{
+            o_lda() o_imm()
+            out_hex2(lsb(ident_const_val(node_a[e])))
+            o_nl()
+            return
+        }}
         o_lda()
         emit_mangled(node_a[e])
         o_nl()
@@ -1967,6 +2046,14 @@ sub codegen_word_leaf(uword e) {{
     if k == ND_IDENT {{
         uword si
         si = find_sym(node_a[e])
+        if sym_is_const[si] != 0 {{
+            ; const folds to its literal (lo in A, hi in Y), matching p8c.
+            uword cv
+            cv = sym_cval[si]
+            o_lda() o_imm() out_hex2(lsb(cv)) o_nl()
+            o_ldy() o_imm() out_hex2(lsb(cv >> 8)) o_nl()
+            return
+        }}
         o_lda()
         emit_mangled(node_a[e])
         o_nl()
@@ -3219,6 +3306,8 @@ def main():
         "uword[64] sym_addr       ; ZP address\n"
         "uword[64] sym_scope      ; owning sub name ident (0 = module scope)\n"
         "ubyte[64] sym_mkind      ; 0 = module var, 1 = param, 2 = local\n"
+        "ubyte[64] sym_is_const   ; 1 = compile-time const (no storage); folded\n"
+        "uword[64] sym_cval       ; const value (when sym_is_const)\n"
         "ubyte sym_count\n"
         "uword zp_next            ; ZP bump allocator (from $40)\n"
         "uword cur_scope          ; the sub being codegen'd (for var resolution)\n"
