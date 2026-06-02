@@ -1237,3 +1237,37 @@ nodes as a record) -- do the corpus version first to prove the mechanism.
 I/O: pass1 dumps via out_byte (to dump file = argv[1]); pass2 loads via read_src
 (dump file = argv[0]) and writes .s via out_byte (argv[1]). Verify pipeline .s
 == `p8c -o` on the corpus, then p1.p8.
+
+## MILESTONE 2 BUILT: streaming two-pass pipeline byte-identical on FULL corpus
+build_pipeline.py generates p1_pass1.p8 (front-end + symbols + per-sub AST dump)
+and p1_pass2.p8 (load + codegen). The two-pass pipeline is BYTE-IDENTICAL to
+`p8c -o` on all 81 corpus programs. Key techniques:
+  * partition: 32 shared stmt subs + 131 reused codegen subs (verbatim); 3
+    parser-driven codegen subs replaced by load-driven versions; +DCE prunes
+    the unreachable subs from each pass (~5.5 KB off pass 2 -> top $95E8).
+  * streaming: dump_global (sym/sub tables + ident/str pools) then per-sub
+    records (kind + snode + node/cons arrays). Pass 1 parses twice from a clean
+    arena so record ids match the dumped pool. Pass 2 loads global, then
+    STREAMS records twice (drain-to-EOF rewind) to get p8c's main-first emit
+    order without holding the whole program resident.
+
+THE FIXPOINT pipeline(p1.p8)==p8c(p1.p8) IS NOT YET CLOSED -- pass 2 is ~3 KB
+over its budget for p1.p8. pass 2 = ~38 KB code + p1.p8's program-wide arenas
+(ident/str pools ~11.7 KB + node/cons for the biggest sub ~7-8 KB + the symbol
+table). pass 2's budget is $0200..$F006 (~60 KB, the stub floor). With the
+sym table at full size (~850 entries ~11 KB) it is ~7 KB over; the documented
+reductions to close it (all upstream-compatible, est. each):
+  1. PER-SUB-TRANSIENT symbol table: dump module syms in dump_global, params/
+     locals PER RECORD; pass 2 loads module syms once + each sub's params/locals
+     transiently (roll back sym_count after emit_sub). Cuts the sym arena from
+     ~11 KB (~850) to ~4.5 KB (~350 module syms + one sub's ~50). Saves ~6 KB.
+  2. arena relocation: place one big arena (e.g. str_pool ~3.5 KB) at a fixed
+     high address via Prog8 `@$F0C0` (the $F0C0..$FE00 window is free at runtime,
+     as the OUTPUT pool relocation already established). Frees ~3.5 KB low-window.
+  3. tighter node/cons (biggest p1.p8 sub ~513 -> node 576) + exact pools.
+  4. more DCE / a 3rd codegen sub-pass if still short.
+With #1 alone pass 2 is ~within 1 KB; #1+#2 fits comfortably. Then run
+pass1.bin p1.p8 dump ; pass2.bin dump out.s ; diff out.s `p8c -o p1.p8` =
+SELF-HOST. The pass binaries must also be sized for p1.p8 (pools/sym/sub arrays,
+sym_count->uword) -- a sed-style bump in build_pipeline (see the /tmp/p2sh
+experiments). pass 1 has plenty of room (it sheds the 33 KB codegen).
