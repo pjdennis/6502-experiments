@@ -29,6 +29,42 @@ is the source of truth across sessions.
 
 ---
 
+## P7-M5 status + THE CAPACITY WALL (read this first)
+
+The on-target compiler **p1.p8 now has the whole core**: all byte+word
+expressions, all control flow (if/else/while/repeat/for/when/break/continue),
+**subs** (void / return values / params / locals / single- and multi-arg
+calls), **builtins** (lsb/msb/peek/poke/mkword), **inline %asm**, and
+**asmsub** declarations + call ABI. Each was added byte-identical to `p8c -o`
+(49 p1 cases). That is essentially everything p1.p8 itself is *written with*
+EXCEPT: arrays (decl + storage trailer + variable indexing + len/sizeof),
+`const`, `enum`, `struct`, `defer`, and the `%target/%address/%output`
+directive surface beyond the nmos prologue.
+
+**THE BLOCKER is the $F006 ceiling.** p1.bin is at pool top ~$EF6A -- only
+**~150 bytes** under $F006 (the emulator injects its file-I/O stubs there,
+over p1.bin; the floor is the $F006 jmp table + the $F001 port, and p1.bin is
+contiguous from $0200, so it cannot skip them). The remaining features each
+add ~0.5-1.5 KB of p1.bin code, AND self-hosting needs the parser arenas
+sized for p1.p8's OWN subs (they are currently shrunk to the tiny test corpus:
+node/cons 80, pools 224 -- way too small to parse p1.p8). So **full self-host
+needs several KB more headroom than exists.** This is the documented "THE
+risk" materialized.
+
+Paths forward (a dedicated next effort):
+  1. A bigger codegen-compaction lever in p8c (all SAFE, p1.p8-source-free,
+     verified by the corpus): e.g. detect consecutive `if v == const`
+     statements over the same var and emit a shared-compare chain (eval v once)
+     -- the lexer/parser are full of these; estimate ~1-2 KB. Or a more compact
+     uword-array-index path (the arena accesses dominate p1.p8).
+  2. Reduce p1.p8 structurally (fewer/smaller subs; the table-drive idea is
+     subsumed by the comparison opts, so look elsewhere).
+  3. Accept that p1 compiles a bounded program size first and grow the ceiling
+     story later.
+The string-literal pool ordering across subs (p8c assigns labels in sema-walk
+order; p1 in codegen encounter order) must also be verified for multi-sub
+programs that use strings before the self-host diff will close.
+
 ## Size optimization: compact codegen in p8c (Phase 7 sub-goal)
 
 p1.bin's hard ceiling is **$F006** (emulator stubs). To free space for the
@@ -37,6 +73,13 @@ remaining milestones, the strategy is to make **p8c emit more compact 6502**
 upstream-Prog8-compatible by construction, and is safe for the p1-vs-oracle
 tests as long as the changed pattern isn't in p1's small corpus (scalars /
 arith / single-comparison conditions) or p1's port is co-updated.
+
+* **Opt: single-arg calls** store the arg straight into the param slot (no
+  push/pop) -- the common case (out_text), freed ~2.0 KB. **Opt 1/2** (and/or/
+  not short-circuit; constant array index) freed ~2.7 KB. (Opt 3 leaf
+  comparison in conditions is in; Opt 3b in VALUE context was reverted -- p1's
+  sources have ~no value-context comparisons.) The o_* single-instruction emit
+  helpers collapse ~110 `out_text("  x")+o_nl()` sites into 3-byte jsrs.
 
 * **Opt 1 DONE -- short-circuit `and`/`or`/`not` in if/while conditions.**
   `_emit_bool_test_branch_if_false` -> `_emit_cond_branch(cond, target,
