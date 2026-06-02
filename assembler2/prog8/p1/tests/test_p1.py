@@ -571,7 +571,11 @@ class P1Equivalence(unittest.TestCase):
     # its own ceiling: the emulator's argv-string window at $FE00 (ARGV_BASE in
     # stubs.h). We enforce both from the vasm listing. See build_p1.py's
     # ARENA_SIZES note.
-    STUB_FLOOR = 0xF006       # code + arenas must end below this
+    STUB_FLOOR = 0xF000       # code + arenas must end below this -- the lowest
+                              # emulator I/O port is $F000 (close), so a var or
+                              # code byte at $F000+ is a port: storing to it
+                              # triggers the stub. (The stub jmp table is $F006+
+                              # but the ports it dispatches are $F000-$F005.)
     POOL_CEIL  = 0xFE00       # the relocated pool must end below ARGV_BASE
 
     @classmethod

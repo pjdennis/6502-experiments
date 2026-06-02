@@ -48,9 +48,17 @@ diff <(sed 's/^; source:.*/; source: X/' /tmp/p1out.s) <(sed 's/^; source:.*/; s
 ```
 
 **What works now (COMMITTED, builds + runs):** pass1 produces a clean 208 KB
-dump; pass2 runs to completion and emits **~84 % byte-identical** output
-(the ZP block, prologue, arrays, calls-with-call-args, nested shift/add all
-match). The hard capacity/correctness bugs are fixed:
+dump; pass2 runs to completion. With the if/while short-circuit condition
+codegen now landed, the diff vs the oracle is down to **~3.3 K lines** (was
+5.7 K), i.e. pass2 emits ~93 % of the bytes correctly. The hard
+capacity/correctness bugs are fixed:
+  * **if/while CONDITION codegen** -- general `emit_cond_branch(cond, tkind,
+    tid, jit)` with short-circuit `and`/`or`/`not` (recursion frame saved on a
+    `cb` stack), `emit_cmp_cond`, `emit_pos_unsigned`, label kinds 15/16
+    (`.Land_skip_`/`.Lor_skip_`). Signed compare paths are omitted (p1.p8 is
+    all-unsigned) to save space; dead parser-only arenas (fr_*, op_*, lexer
+    state) were removed from pass2 to fit. Byte-identical on the small
+    condition test.
   * lexer string pool is value-deduped + **null-terminated** (id = pool offset;
     no str_off/str_len/str_count arrays). p1.p8 has 512 literal occurrences but
     only ~183 distinct -> str_pool ~3.4 KB not 7.6 KB.
@@ -69,46 +77,38 @@ match). The hard capacity/correctness bugs are fixed:
     invocation with a sentinel (ty 255) instead of resetting sp to 0, so a
     call-arg eval that re-enters them doesn't wipe the outer pending stack.
 
-**THE TWO BLOCKERS (next session):**
+**THE $F000 PORT FLOOR (important, was a latent bug):** code+arenas must END
+(label + array extent) **below $F000**, not $F006. The emulator's file-I/O
+*ports* live at $F000-$F005 (close=$F000, write_b=$F001, write_d=$F002,
+exit=$F003, read_b=$F004, open=$F005); the stub *jmp table* is $F006+. A
+variable or code byte at $F000+ IS a port -- `sta` to it triggers the stub.
+The condition codegen first "fit" at $F002 and pass2 instantly died
+(`sta p8v_main_junk` at $F000 = `_close(A)`); trimming to true-top $EFBD fixed
+it. The test guard STUB_FLOOR is now $F000. **Arena margins are now razor-thin
+(1-3 entries each); there is essentially no room left in pass2.**
 
-1. **if/while CONDITION codegen (the big remaining diff)** -- p1's
-   `emit_cond_branch_if_false` handles a bare comparison but NOT short-circuit
-   `and`/`or`/`not`; for `if a==X and b==Y` it falls to the generic path and
-   materialises a 0/1 bool then branches, where p8c emits direct cmp+branch with
-   short-circuit (`_emit_cond_branch`). This accounts for most of the remaining
-   ~5.7 K diff lines. A COMPLETE, design-correct port is saved at
-   **`p1/wip/p1_pass2_sh.conditions-wip.p8`** (general `emit_cond_branch(cond,
-   tkind, tid, jit)` with `and`/`or`/`not` recursion saved on a `cb` stack;
-   `emit_cmp_cond`; `emit_pos_unsigned`; label kinds 15/16 = `.Land_skip_` /
-   `.Lor_skip_`; signed paths stripped since p1.p8 is all-unsigned; dead
-   parser-only arenas removed to make room). It BUILDS and fits ($F002, true
-   top incl. array extents verified < $F006), and produces the CORRECT
-   short-circuit codegen on the tiny oracle test -- BUT it **crashes at
-   runtime**: pass2 writes exactly 1 output byte (reaches emit_prologue) then
-   the emulator reports "Cannot close standard file 0" (a `_close(0)` from
-   corrupted control flow). The crash reproduces even on a trivial
-   no-conditional program (`t0: a=1; a=a+2`), and is NOT: memory layout
-   (true top $F002 < stub floor; pool top $FC6C < $FE00 argv), the dead-var
-   removal alone, the arena trims alone, the stack shrink alone, or the added
-   module vars alone -- each tested in isolation and works. So the bug is in the
-   condition CODE itself yet manifests on code that never calls it -- needs a
-   PC-level trace (the emulator's `--dump` only dumps memory). Strong lead:
-   "1 byte then _close(0)" = crashes during/just-after emit_prologue's first
-   out_byte.
+**REMAINING WORK (next session):**
 
-2. **pass2 CAPACITY** -- even with signed-paths stripped and all dead
-   parser-only arenas removed, pass2 + the condition code sits at $F002 (4 bytes
-   under the $F006 stub floor) with arena margins of only 2-3 entries. There is
-   no room for the *next* codegen gap. The 2-pass split has hit its ceiling; the
-   real fix is a **3-pass split** (or substantial pass2 code reduction) before
-   more codegen features land. Note arenas must END (label + extent) below
-   $F006, not just start there -- the emulator injects file-I/O stubs over
-   $F006-$F0B0 and silently clobbers anything underneath.
+1. **More codegen gaps (~3.3 K diff lines).** First divergence is at oracle
+   line ~4031: a module CONST used as a call argument (`push_token(TK_ARROW,
+   0)`) emits `lda p8v_L` instead of the folded `lda #$14` (TK_ARROW=20). The
+   mangled name renders as a bogus 1-char "L" and the const-ness is lost, even
+   though ident_pool (6052) covers the measured 6051 bytes -- so it is a real
+   const-fold / sym-resolution gap in a specific arg position, not an overflow.
+   Investigate emit_byte_leaf_load / ident_is_const / find_sym for the call-arg
+   path. Expect further gaps after that (comparison-as-value materialisation is
+   used at 3 sites and DOES match; others unknown).
 
-After conditions, expect more codegen gaps in the remaining diff (the 5.7 K
-lines include comparison-as-value materialisation -- 3 sites -- and likely
-others). The source-path line (`; source: SRC`) also still differs: pass1 must
-dump argv[0] and pass2 emit it in the prologue.
+2. **The source-path line** (`; source: SRC`) still differs from the oracle's
+   absolute path: pass1 must capture argv[0] (it already has the pointer in
+   `fn`) and dump it; pass2 emit it in the prologue in place of "SRC".
+
+3. **pass2 CAPACITY / 3-pass split.** pass2 is at $EFBD with ~no margin. Each
+   further codegen gap fixed will need ~hundreds of bytes that aren't there.
+   The 2-pass split has hit its ceiling; the next structural step is a **3-pass
+   split** (or substantial pass2 code reduction). Until then, fixing gap #1 may
+   require trimming elsewhere or stealing from the work stacks (cws/wws/sws are
+   at 48; their true max depth on p1.p8 is unmeasured -- could free a little).
 
 ---
 
