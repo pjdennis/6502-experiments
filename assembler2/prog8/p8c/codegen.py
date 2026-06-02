@@ -1339,82 +1339,155 @@ class CodeGen:
         self.emit(f"{skip}:")
 
     def _emit_bool_test_branch_if_false(self, cond, target: str) -> None:
-        """Evaluate cond as bool, branch to `target` if FALSE.
+        """Evaluate cond as bool, branch to `target` if FALSE."""
+        self._emit_cond_branch(cond, target, jump_if_true=False)
 
-        Special-cases comparison conditions so we don't materialize a
-        0/1 byte just to branch on it: emits the comparison directly
-        into a conditional branch.
+    def _emit_cond_branch(self, cond, target: str, jump_if_true: bool) -> None:
+        """Branch to `target` when cond is (jump_if_true ? true : false).
+
+        and/or/not are short-circuited recursively -- branching per operand
+        rather than materializing the whole boolean to a 0/1 byte and then
+        testing it (which costs ~3x the code). Comparison leaves branch
+        directly; any other expression is materialized to A and tested for
+        (non)zero. The jump_if_true=False comparison/generic output is kept
+        byte-identical to the previous implementation.
         """
-        if isinstance(cond, BinOp) and cond.op in {"==", "!=", "<", "<=", ">", ">="}:
-            is_word = (cond.lhs.type is UWORD or cond.rhs.type is UWORD)
-            is_signed = getattr(cond, "signed", False)
-            if is_word:
-                self._emit_word_into_wtmp(cond.lhs, "__p8c_wtmp0")
-                self._emit_word_into_wtmp(cond.rhs, "__p8c_wtmp1")
-                self.emit("  lda __p8c_wtmp0+1")
-                self.emit("  cmp __p8c_wtmp1+1")
-                bne_lo = self._new_label("wcmp_lo")
-                self.emit(f"  bne {bne_lo}")
-                self.emit("  lda __p8c_wtmp0")
-                self.emit("  cmp __p8c_wtmp1")
-                self.emit(f"{bne_lo}:")
+        # not: flip the polarity.
+        if isinstance(cond, UnaryOp) and cond.op == "not":
+            self._emit_cond_branch(cond.operand, target, not jump_if_true)
+            return
+        if isinstance(cond, BinOp) and cond.op == "and":
+            if jump_if_true:
+                # jump iff both true: if lhs is false skip; else jump iff rhs true.
+                skip = self._new_label("and_skip")
+                self._emit_cond_branch(cond.lhs, skip, False)
+                self._emit_cond_branch(cond.rhs, target, True)
+                self.emit(f"{skip}:")
             else:
-                self._emit_byte_expr_into_a(cond.lhs)
-                self.emit("  sta __p8c_tmp0")
-                self._emit_byte_expr_into_a(cond.rhs)
-                self.emit("  sta __p8c_tmp1")
-                self.emit("  lda __p8c_tmp0")
-                if is_signed and cond.op not in ("==", "!="):
-                    # Signed compare via overflow-corrected SBC.
-                    self.emit("  sec")
-                    self.emit("  sbc __p8c_tmp1")
-                    skip = self._new_label("sgn_ok")
-                    self.emit(f"  bvc {skip}")
-                    self.emit("  eor #$80")
-                    self.emit(f"{skip}:")
-                else:
-                    self.emit("  cmp __p8c_tmp1")
-            if not is_signed:
-                negated = {
-                    "==": "bne", "!=": "beq",
-                    "<":  "bcs", ">=": "bcc",
-                    ">":  None, "<=": None,
-                }[cond.op]
-                if negated is not None:
-                    self._br(negated, target)
-                elif cond.op == ">":
+                # jump iff and is false: either operand false -> target.
+                self._emit_cond_branch(cond.lhs, target, False)
+                self._emit_cond_branch(cond.rhs, target, False)
+            return
+        if isinstance(cond, BinOp) and cond.op == "or":
+            if jump_if_true:
+                # jump iff either true.
+                self._emit_cond_branch(cond.lhs, target, True)
+                self._emit_cond_branch(cond.rhs, target, True)
+            else:
+                # jump iff both false: if lhs true skip; else jump iff rhs false.
+                skip = self._new_label("or_skip")
+                self._emit_cond_branch(cond.lhs, skip, True)
+                self._emit_cond_branch(cond.rhs, target, False)
+                self.emit(f"{skip}:")
+            return
+        if isinstance(cond, BinOp) and cond.op in {"==", "!=", "<", "<=", ">", ">="}:
+            self._emit_cmp_cond(cond, target, jump_if_true)
+            return
+        # Generic: evaluate to 0/1 in A, branch on (non)zero.
+        self._emit_byte_expr_into_a(cond)
+        self._br("bne" if jump_if_true else "beq", target)
+
+    def _emit_cmp_cond(self, cond: BinOp, target: str, jump_if_true: bool) -> None:
+        """Compare cond.lhs vs cond.rhs and branch to `target` on the wanted
+        truth value, without materializing a 0/1 byte."""
+        is_word = (cond.lhs.type is UWORD or cond.rhs.type is UWORD)
+        is_signed = getattr(cond, "signed", False)
+        if is_word:
+            self._emit_word_into_wtmp(cond.lhs, "__p8c_wtmp0")
+            self._emit_word_into_wtmp(cond.rhs, "__p8c_wtmp1")
+            self.emit("  lda __p8c_wtmp0+1")
+            self.emit("  cmp __p8c_wtmp1+1")
+            bne_lo = self._new_label("wcmp_lo")
+            self.emit(f"  bne {bne_lo}")
+            self.emit("  lda __p8c_wtmp0")
+            self.emit("  cmp __p8c_wtmp1")
+            self.emit(f"{bne_lo}:")
+            is_signed = False  # word compare is unsigned
+        else:
+            self._emit_byte_expr_into_a(cond.lhs)
+            self.emit("  sta __p8c_tmp0")
+            self._emit_byte_expr_into_a(cond.rhs)
+            self.emit("  sta __p8c_tmp1")
+            self.emit("  lda __p8c_tmp0")
+            if is_signed and cond.op not in ("==", "!="):
+                # Signed compare via overflow-corrected SBC.
+                self.emit("  sec")
+                self.emit("  sbc __p8c_tmp1")
+                skip = self._new_label("sgn_ok")
+                self.emit(f"  bvc {skip}")
+                self.emit("  eor #$80")
+                self.emit(f"{skip}:")
+                self._emit_cmp_branches(cond.op, target, jump_if_true, signed=True)
+                return
+            self.emit("  cmp __p8c_tmp1")
+        self._emit_cmp_branches(cond.op, target, jump_if_true, signed=False)
+
+    def _emit_cmp_branches(self, op: str, target: str, jump_if_true: bool,
+                           signed: bool) -> None:
+        """Emit the conditional branch(es) to `target` after a CMP (unsigned)
+        or overflow-corrected SBC (signed) has set the flags."""
+        if not signed:
+            if jump_if_true:
+                direct = {"==": "beq", "!=": "bne", "<": "bcc", ">=": "bcs"}.get(op)
+                if direct is not None:
+                    self._br(direct, target)
+                elif op == ">":
+                    no = self._new_label("gt_no")
+                    self.emit(f"  beq {no}")
+                    self._br("bcs", target)
+                    self.emit(f"{no}:")
+                else:  # "<="
                     self._br("beq", target)
                     self._br("bcc", target)
-                else:
+            else:
+                negated = {"==": "bne", "!=": "beq", "<": "bcs", ">=": "bcc"}.get(op)
+                if negated is not None:
+                    self._br(negated, target)
+                elif op == ">":
+                    self._br("beq", target)
+                    self._br("bcc", target)
+                else:  # "<="
                     skip = self._new_label("le_skip")
                     self.emit(f"  beq {skip}")
                     self._br("bcs", target)
                     self.emit(f"{skip}:")
-                return
-            # Signed: branch on N/Z. Negated = "if false".
-            if cond.op == "==":
-                self._br("bne", target)
-            elif cond.op == "!=":
+            return
+        # Signed: N reflects sign (Z still equality).
+        if jump_if_true:
+            if op == "==":
                 self._br("beq", target)
-            elif cond.op == "<":
-                # NOT (A < B): A >= B  -> bpl target
-                self._br("bpl", target)
-            elif cond.op == ">=":
+            elif op == "!=":
+                self._br("bne", target)
+            elif op == "<":
                 self._br("bmi", target)
-            elif cond.op == ">":
-                # NOT (A > B): A <= B; A == B OR A < B.
+            elif op == ">=":
+                self._br("bpl", target)
+            elif op == ">":
+                no = self._new_label("sgt_no")
+                self.emit(f"  beq {no}")
+                self._br("bpl", target)
+                self.emit(f"{no}:")
+            else:  # "<="
+                self._br("beq", target)
+                self._br("bmi", target)
+        else:
+            if op == "==":
+                self._br("bne", target)
+            elif op == "!=":
+                self._br("beq", target)
+            elif op == "<":
+                self._br("bpl", target)
+            elif op == ">=":
+                self._br("bmi", target)
+            elif op == ">":
                 self._br("beq", target)
                 self._br("bmi", target)
             else:  # "<="
-                # NOT (A <= B): A > B; A != B AND A >= B.
                 skip = self._new_label("sle_skip")
                 self.emit(f"  beq {skip}")
                 self._br("bpl", target)
                 self.emit(f"{skip}:")
-            return
-        # Generic: evaluate to 0/1 in A, branch on zero.
-        self._emit_byte_expr_into_a(cond)
-        self._br("beq", target)
+
 
     def _emit_struct_array_index_into_y(self, idx_node) -> None:
         """For `arr[i]` where arr is a struct array, compute i*struct_size

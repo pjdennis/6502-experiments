@@ -29,6 +29,33 @@ is the source of truth across sessions.
 
 ---
 
+## Size optimization: compact codegen in p8c (Phase 7 sub-goal)
+
+p1.bin's hard ceiling is **$F006** (emulator stubs). To free space for the
+remaining milestones, the strategy is to make **p8c emit more compact 6502**
+(p1.bin IS p8c's output), with NO p1.p8 source change -- so it stays
+upstream-Prog8-compatible by construction, and is safe for the p1-vs-oracle
+tests as long as the changed pattern isn't in p1's small corpus (scalars /
+arith / single-comparison conditions) or p1's port is co-updated.
+
+* **Opt 1 DONE -- short-circuit `and`/`or`/`not` in if/while conditions.**
+  `_emit_bool_test_branch_if_false` -> `_emit_cond_branch(cond, target,
+  jump_if_true)`: and/or/not recurse and branch per operand instead of
+  materializing the whole boolean to 0/1 then testing it (a 4-`and` keyword
+  check went 67 -> 42 instructions). The single-comparison + generic paths are
+  byte-IDENTICAL to before (p1 ports/tests those); only the compound-condition
+  path changed (p1's corpus has none). Behaviorally verified (and/or/not + nested
+  + while-and). Freed ~2.2 KB: p1.bin 59379 -> 57195 B, pool top $E9DE -> $E156,
+  margin ~1.5 KB -> ~3.8 KB. All host (105) + tinyp8 (22) + p1 (40) tests green.
+* **Opt 2 -- constant array index** `arr[const]`: `lda #const / tay / lda arr,y`
+  -> `ldy #const / lda arr,y`. (p1.p8 indexes arrays constantly.) In progress.
+* Bigger levers if needed: leaf-operand comparison without the tmp0/tmp1 spill
+  (p1 ports+tests the condition comparison, so co-update p1), table-driving
+  classify_name (p1.p8 source change, upstream-compat via the existing
+  string-as-data idiom).
+
+---
+
 ## Standing constraint: p1.p8 must compile under upstream Prog8
 
 The finished `p1.p8` must be **compilable by the upstream Java/Kotlin Prog8
