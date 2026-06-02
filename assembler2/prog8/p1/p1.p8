@@ -256,14 +256,14 @@ uword prog_structs       ; cons of struct node ids (reversed)
 uword prog_subs          ; cons of sub node ids (reversed)
 
 ; ---- codegen symbol table (persistent across passes) ----
-uword[64] sym_ident      ; var name ident id
-ubyte[64] sym_type       ; type tag (TY_UBYTE / TY_BYTE / TY_UWORD)
-uword[64] sym_addr       ; ZP address
-uword[64] sym_scope      ; owning sub name ident (0 = module scope)
-ubyte[64] sym_mkind      ; 0 = module var, 1 = param, 2 = local
-ubyte[64] sym_is_const   ; 1 = compile-time const (no storage); folded
-uword[64] sym_cval       ; const value (when sym_is_const)
-uword[64] sym_arr_size   ; element count if an array (0 = scalar); the
+uword[40] sym_ident      ; var name ident id
+ubyte[40] sym_type       ; type tag (TY_UBYTE / TY_BYTE / TY_UWORD)
+uword[40] sym_addr       ; ZP address
+uword[40] sym_scope      ; owning sub name ident (0 = module scope)
+ubyte[40] sym_mkind      ; 0 = module var, 1 = param, 2 = local
+ubyte[40] sym_is_const   ; 1 = compile-time const (no storage); folded
+uword[40] sym_cval       ; const value (when sym_is_const)
+uword[40] sym_arr_size   ; element count if an array (0 = scalar); the
                          ; element type is in sym_type; mangle is p8a_
 ubyte sym_count
 uword zp_next            ; ZP bump allocator (from $40)
