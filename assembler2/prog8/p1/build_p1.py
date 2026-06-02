@@ -456,12 +456,16 @@ sub emit_string_pool() {{
 
 ; ---- control-flow labels + long branches -------------------
 ; control label kinds: 0 else, 1 endif, 2 while_top, 3 while_end,
-; 7 rep_top, 8 rep_dec, 9 rep_end, 10 rep_break (4-6 reserved for for_*).
+; 4 for_top, 5 for_cont, 6 for_end, 7 rep_top, 8 rep_dec, 9 rep_end,
+; 10 rep_break.
 sub emit_ctrl_label_ref(ubyte kind, uword id) {{
     if kind == 0 {{ out_text(".Lelse_") }}
     if kind == 1 {{ out_text(".Lendif_") }}
     if kind == 2 {{ out_text(".Lwhile_top_") }}
     if kind == 3 {{ out_text(".Lwhile_end_") }}
+    if kind == 4 {{ out_text(".Lfor_top_") }}
+    if kind == 5 {{ out_text(".Lfor_cont_") }}
+    if kind == 6 {{ out_text(".Lfor_end_") }}
     if kind == 7 {{ out_text(".Lrep_top_") }}
     if kind == 8 {{ out_text(".Lrep_dec_") }}
     if kind == 9 {{ out_text(".Lrep_end_") }}
@@ -726,7 +730,11 @@ sub codegen_body(uword body) {{
                     if ty == 3 {{
                         lp_sp = lp_sp - 1
                     }} else {{
-                        emit_rep_tail(b)         ; ty == 5: counted-repeat tail
+                        if ty == 5 {{
+                            emit_rep_tail(b)          ; counted-repeat tail
+                        }} else {{
+                            emit_for_cont(a, b)       ; ty == 6: for cont/test/inc tail
+                        }}
                     }}
                 }}
             }}
@@ -751,6 +759,10 @@ sub codegen_stmt(uword st) {{
     }}
     if k == ND_REPEAT {{
         codegen_repeat(st)
+        return
+    }}
+    if k == ND_FOR {{
+        codegen_for(st)
         return
     }}
     if k == ND_BREAK {{
@@ -910,6 +922,91 @@ sub emit_rep_tail(uword top_id) {{
     o_nl()
     emit_ctrl_label_ref(9, end_id)
     out_byte($3a)
+    o_nl()
+}}
+; `for v in lo to hi` (inclusive, ubyte; port of _emit_for). The loop var must
+; be pre-declared (it is already in the symbol table). Init v=lo; for_top:; body;
+; for_cont:; compare v to hi, exit if equal; inc v; jmp for_top; for_end:.
+; The 3 labels are allocated top, end, cont (matching p8c) so the deferred cont
+; tail derives top=end-1, cont=end+1 from end_id.
+sub codegen_for(uword st) {{
+    uword var
+    uword lo
+    uword body
+    var = node_a[st]
+    lo = node_b[st]
+    body = node_d[st]
+    uword si
+    si = find_sym(var)
+    uword top_id
+    uword end_id
+    top_id = label_seq
+    label_seq = label_seq + 1
+    end_id = label_seq
+    label_seq = label_seq + 1
+    uword cont_id
+    cont_id = label_seq
+    label_seq = label_seq + 1
+    ; init: v = lo
+    codegen_byte_expr(lo)
+    emit_sta_sym(si)
+    ; for_top:
+    emit_ctrl_label_ref(4, top_id)
+    out_byte($3a)
+    o_nl()
+    lp_bk[lp_sp] = 6                     ; break -> for_end
+    lp_bi[lp_sp] = end_id
+    lp_ck[lp_sp] = 5                     ; continue -> for_cont
+    lp_ci[lp_sp] = cont_id
+    lp_sp = lp_sp + 1
+    sws_push(3, 0, 0)                    ; pop loop
+    sws_push(1, 6, end_id)             ; for_end label
+    sws_push(6, st, end_id)            ; cont/test/inc tail
+    push_block_stmts(body)
+}}
+; for-loop continue/test/increment tail. labels: top=end-1, cont=end+1.
+sub emit_for_cont(uword st, uword end_id) {{
+    uword top_id
+    uword cont_id
+    top_id = end_id - 1
+    cont_id = end_id + 1
+    uword si
+    si = find_sym(node_a[st])
+    uword hi
+    hi = node_c[st]
+    emit_ctrl_label_ref(5, cont_id)
+    out_byte($3a)
+    o_nl()
+    out_text("  lda ")
+    emit_mangled(node_a[st])
+    o_nl()
+    if node_kind[hi] == ND_INT {{
+        out_text("  cmp #$")
+        out_hex2(lsb(node_a[hi]))
+        o_nl()
+    }} else {{
+        if node_kind[hi] == ND_IDENT {{
+            out_text("  cmp ")
+            emit_mangled(node_a[hi])
+            o_nl()
+        }} else {{
+            out_text("  sta __p8c_tmp0")
+            o_nl()
+            codegen_byte_expr(hi)
+            out_text("  sta __p8c_tmp1")
+            o_nl()
+            out_text("  lda __p8c_tmp0")
+            o_nl()
+            out_text("  cmp __p8c_tmp1")
+            o_nl()
+        }}
+    }}
+    emit_br(1, 6, end_id)               ; beq for_end
+    out_text("  inc ")
+    emit_mangled(node_a[st])
+    o_nl()
+    out_text("  jmp ")
+    emit_ctrl_label_ref(4, top_id)
     o_nl()
 }}
 

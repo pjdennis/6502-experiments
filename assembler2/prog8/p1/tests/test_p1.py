@@ -317,6 +317,21 @@ M4_REPEAT_PROGRAMS = [
     "        if b == a {\n            continue\n        }\n        a = a + 1\n    }\n}\n",
 ]
 
+# P7-M4 for: `for v in lo to hi` (inclusive ubyte range; v is a pre-declared
+# var). Init v=lo; compare against hi at for_cont; inc; loop. Literal range,
+# variable range, computed hi (the tmp0/tmp1 spill path), break/continue.
+M4_FOR_PROGRAMS = [
+    # literal range
+    "%target nmos\nubyte i\nubyte s\n\n"
+    "main {\n    for i in 0 to 9 {\n        s = s + i\n    }\n}\n",
+    # variable range + break
+    "%target nmos\nubyte i\nubyte s\nubyte lo\nubyte hi\nubyte a\n\n"
+    "main {\n    for i in lo to hi {\n        s = s + 1\n        if s == a {\n            break\n        }\n    }\n}\n",
+    # computed hi (spill path) + continue
+    "%target nmos\nubyte i\nubyte s\nubyte hi\nubyte a\n\n"
+    "main {\n    for i in 1 to (hi - 1) {\n        s = s + i\n        if i == 3 {\n            continue\n        }\n        a = a + 1\n    }\n}\n",
+]
+
 
 def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
@@ -462,6 +477,12 @@ class P1Equivalence(unittest.TestCase):
 
     def test_m4_repeat_programs(self):
         for src in M4_REPEAT_PROGRAMS:
+            with self.subTest(src=src):
+                self.assertEqual(self._oracle(src), self._ontarget(src),
+                                 msg=f"codegen .s differs for {src!r}")
+
+    def test_m4_for_programs(self):
+        for src in M4_FOR_PROGRAMS:
             with self.subTest(src=src):
                 self.assertEqual(self._oracle(src), self._ontarget(src),
                                  msg=f"codegen .s differs for {src!r}")

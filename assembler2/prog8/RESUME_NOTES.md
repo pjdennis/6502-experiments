@@ -117,12 +117,12 @@ PHASE7_DESIGN.md section 10.
   * 5 v0/v1 e2e (`tinyp8/tests/test_e2e.py`).
   * 5 v0/v1 self-host equivalence (`test_self_host.py`).
   * 12 v2..v9 .p8-only (`test_v2.py`, sources in `goldens_v2/`).
-  * **167 total, all green** (the 22 tinyp8 + 40 p1 cases need vasm; see the
+  * **168 total, all green** (the 22 tinyp8 + 41 p1 cases need vasm; see the
     environment note above). The p1 codegen cases live in
     `p1/tests/test_p1.py` (Phase 7: P7-M1 + P7-M2 + the M3 strings,
     byte-arithmetic, mul/shift, unary, comparison, logical, @()/&name, and
     16-bit word-arithmetic + word-shift slices; P7-M4 if/else/while +
-    break/continue + repeat).
+    break/continue + repeat + for).
 
 Run:
 
@@ -542,7 +542,14 @@ Progress:
          rep_break). The 4 counted labels (rep_top/dec/end/break) are allocated
          sequentially so the deferred tail recovers them from rep_top alone
          (sws task 5). Literal + variable counts, break/continue.
-         `test_p1.py::test_m4_repeat_programs`. (Arenas shrunk again -- fr_* to
+         `test_p1.py::test_m4_repeat_programs`.
+       * **P7-M4 for slice DONE.** `for v in lo to hi` (inclusive ubyte; v is a
+         pre-declared var, already in the symbol table -- no local allocation
+         needed). Init v=lo; for_top; body; for_cont: compare v to hi (literal /
+         ident / spill), exit if equal, inc v, jmp for_top; for_end. The 3 labels
+         (for_top/end/cont) are allocated so the deferred cont tail (sws task 6)
+         derives top=end-1, cont=end+1. Literal/variable/computed range,
+         break/continue. `test_p1.py::test_m4_for_programs`. (Arenas shrunk again -- fr_* to
          32, pools/nodes smaller -- to hold the top at ~$E9DE, ~1.5 KB under
          the $F006 stub ceiling.)
        * **NEXT (rest of M4/M5):** `for` (needs the loop var allocated -- the
