@@ -188,30 +188,30 @@ ubyte src_eof
 ; fit. next_raw_token() produces one token into ntok_*.
 
 ; identifier text pool (reset per top-level unit while streaming)
-ubyte[6052] ident_pool
+ubyte[6056] ident_pool
 uword ident_pool_len
 
 ; string literal pool (null-terminated; a string's id is its start offset)
-ubyte[3384] str_pool
+ubyte[3388] str_pool
 uword str_pool_len
 
 ubyte[64] name_buf
 
 
 ; node arena
-ubyte[515] node_kind
-ubyte[515] node_op
-uword[515] node_a
-uword[515] node_b
-uword[515] node_c
-uword[515] node_d
+ubyte[518] node_kind
+ubyte[518] node_op
+uword[518] node_a
+uword[518] node_b
+uword[518] node_c
+uword[518] node_d
 uword node_count
 
 ; expression stacks
 
 ; cons cells
-uword[240] cons_val
-uword[240] cons_next
+uword[232] cons_val
+uword[232] cons_next
 uword cons_count
 
 ; statement frame stack
@@ -226,14 +226,14 @@ uword prog_structs       ; cons of struct node ids (reversed)
 uword prog_subs          ; cons of sub node ids (reversed)
 
 ; ---- codegen symbol table (persistent across passes) ----
-uword[448] sym_ident      ; var name ident id
-ubyte[448] sym_type       ; type tag (TY_UBYTE / TY_BYTE / TY_UWORD)
-uword[448] sym_addr       ; ZP address
-uword[448] sym_scope      ; owning sub name ident (0 = module scope)
-ubyte[448] sym_mkind      ; 0 = module var, 1 = param, 2 = local
-ubyte[448] sym_is_const   ; 1 = compile-time const (no storage); folded
-uword[448] sym_cval       ; const value (when sym_is_const)
-uword[448] sym_arr_size   ; element count if an array (0 = scalar); the
+uword[452] sym_ident      ; var name ident id
+ubyte[452] sym_type       ; type tag (TY_UBYTE / TY_BYTE / TY_UWORD)
+uword[452] sym_addr       ; ZP address
+uword[452] sym_scope      ; owning sub name ident (0 = module scope)
+ubyte[452] sym_mkind      ; 0 = module var, 1 = param, 2 = local
+ubyte[452] sym_is_const   ; 1 = compile-time const (no storage); folded
+uword[452] sym_cval       ; const value (when sym_is_const)
+uword[452] sym_arr_size   ; element count if an array (0 = scalar); the
                          ; element type is in sym_type; mangle is p8a_
 uword sym_count
 uword zp_next            ; ZP bump allocator (from $40)
@@ -265,10 +265,10 @@ uword cbr_tid
 uword cbr_skip
 ; sub table (registered in source order before codegen, so calls
 ; resolve and pass B emits non-main subs in p8c's order).
-uword[221] sub_name       ; sub name ident id
-ubyte[221] sub_kind       ; SUBK_SUB / MAIN / INLINE / ASMSUB
-ubyte[221] sub_ret        ; return type tag
-uword[221] sub_addr       ; asmsub target address ($F0xx); else 0
+uword[222] sub_name       ; sub name ident id
+ubyte[222] sub_kind       ; SUBK_SUB / MAIN / INLINE / ASMSUB
+ubyte[222] sub_ret        ; return type tag
+uword[222] sub_addr       ; asmsub target address ($F0xx); else 0
 uword sub_count
 ; builtin-call node stack: emit_builtin is non-reentrant (static
 ; locals), but a builtin arg may itself be a builtin, so the callnode
@@ -286,21 +286,21 @@ uword cur_ret_name       ; current sub's name ident id
 ; string pool: one label per string-literal *occurrence*, numbered
 ; in codegen encounter order (matching p8c's sema-walk order); the
 ; recorded str id indexes the parser's str_pool for the trailer.
-uword[186] strpool_sid    ; str id for label N (p8c_str_N)
+uword[188] strpool_sid    ; str id for label N (p8c_str_N)
 uword strpool_count
 ; byte-expression codegen work stack (replaces p8c's recursion):
 ; per entry a task -- 0 eval node, 1 binop-leaf, 2 pha, 3 sta tmp1,
 ; 4 pla, 5 binop-tmp1.
-ubyte[48] cws_type
-uword[48] cws_node
-ubyte[48] cws_op
+ubyte[16] cws_type
+uword[16] cws_node
+ubyte[16] cws_op
 ubyte cws_sp
 ; word-expression codegen work stack (separate from the byte stack so
 ; a byte expression's @() address can drive a word eval without
 ; corrupting the byte stack -- the two never share state).
-ubyte[48] wws_type
-uword[48] wws_node
-ubyte[48] wws_op
+ubyte[16] wws_type
+uword[16] wws_node
+ubyte[16] wws_op
 ubyte wws_sp
 ; statement work stack (control flow without recursion): a task is
 ; 0=emit stmt node, 1=emit label .L<kind>_<id>:, 2=emit jmp to it,
@@ -994,6 +994,16 @@ sub expr_is_word(uword e) -> ubyte {
         si = find_sym(node_a[e])
         if si != $ffff {
             if sym_type[si] == TY_UWORD {
+                return 1
+            }
+        }
+    }
+    if node_kind[e] == ND_INDEX {
+        ; arr[i] has the array's element type; a uword[] element is a word.
+        uword ai
+        ai = find_sym(node_a[node_a[e]])
+        if ai != $ffff {
+            if sym_type[ai] == TY_UWORD {
                 return 1
             }
         }
