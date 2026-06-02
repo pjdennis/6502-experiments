@@ -1326,3 +1326,37 @@ binding block, (3) param signature table for calls. Resident then ~= module
 with shrinking the node arena (split p1.p8's biggest codegen subs) this closes the
 ~4 KB pass-2 gap. (Reverted to the committed full-sym 81/81 pipeline; all three
 parts are characterized but unbuilt -- a substantial multi-part effort.)
+
+## PIPELINE RUNS ON p1.p8 -- last gap is ZP OVERFLOW (measured)
+With null-term idents (saving ~2.5 KB) + the params-resident/locals-transient
+sym table, both passes now fit AND pass 1 runs on p1.p8: pass1 (sym 860 full
+table, node 544) emits a 209 KB AST dump in 13.2 B cycles; pass2 (node 512,
+sym 560, $EEAD under $F006) loads it and codegens. BUT the output diverges at
+the ZP-binding block (byte 719): the oracle has p8v_src_hand=$40... while the
+pipeline emits a LOCAL (p8v_last_simple) as a module $40 binding.
+ROOT CAUSE: p1.p8 needs ZP-OVERFLOW-TO-MEMVARS. The oracle (p8c) allocates only
+127 scalars in ZP ($40..$FF, ~192 B) and overflows the other **429** to labeled
+main-memory memvars. p1's build_symbols/register_subs do NOT implement overflow
+(it was reverted earlier for lack of monolith margin) -- so they wrap past $FF,
+giving wrong addresses. null-term idents FREED ~2.5 KB in the monolith, so ZP
+overflow now fits.
+REMAINING WORK (the genuine last piece):
+  1. Re-add ZP overflow to build_p1.py: build_symbols + register_subs +
+     walk_locals mark a scalar overflowed (sentinel addr $FFFF) when
+     zp_next+size > $FF; emit_zp_bindings skips overflowed; emit_memvars emits
+     them as labeled .byte reservations (between arrays and the string pool).
+     Verify monolith fits (now has room) + corpus green.
+  2. Pipeline memvar streaming: the memvar block (all overflowed scalars, source
+     order) is emitted at the TRAILER but locals are transient. So pass 1 emits
+     the memvar-block TEXT (full sym table) into the dump (like the ZP-text);
+     pass 2 copies it at the trailer via a 3rd drain-to-EOF rewind (dump order:
+     global, ZP-text, memvar-text, records; pass2 skips memvar-text on the
+     record streams, copies it after stream 2, before emit_string_pool).
+  3. Re-size + run: pass1.bin p1.p8 dump ; pass2.bin dump out.s ;
+     diff out.s `p8c -o p1.p8`. node must be >= parse_expr's count (~513) -- use
+     node 544+ (pass2 fits at node 512/sym 560 with null-term; bump node, trim
+     sym to ~520 since module+params ~= 127-overflow... measure).
+This is the FINAL gap: the pipeline mechanism + sizing all work on p1.p8; only
+the ZP-overflow feature (and its trailer streaming) stands between here and the
+literal fixpoint. The pass-sizing experiments are in /tmp/p1.bin (pass1, sym860
+node544) and /tmp/p2.bin (pass2, node512 sym560).

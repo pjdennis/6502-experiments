@@ -187,14 +187,12 @@ ubyte ntok_kind
 uword ntok_val
 
 ; identifier text pool (reset per top-level unit while streaming)
-ubyte[4544] ident_pool
-uword[640] ident_off
-uword[640] ident_len
+ubyte[5120] ident_pool
 uword ident_count
 uword ident_pool_len
 
 ; string literal pool
-ubyte[3520] str_pool
+ubyte[3584] str_pool
 uword[256] str_off
 uword[256] str_len
 uword str_count
@@ -208,12 +206,12 @@ uword name_len
 uword int_val
 
 ; node arena
-ubyte[560] node_kind
-ubyte[560] node_op
-uword[560] node_a
-uword[560] node_b
-uword[560] node_c
-uword[560] node_d
+ubyte[512] node_kind
+ubyte[512] node_op
+uword[512] node_a
+uword[512] node_b
+uword[512] node_c
+uword[512] node_d
 uword node_count
 
 ; expression stacks
@@ -228,8 +226,8 @@ uword[20] op_floor
 uword op_sp
 
 ; cons cells
-uword[320] cons_val
-uword[320] cons_next
+uword[256] cons_val
+uword[256] cons_next
 uword cons_count
 
 ; statement frame stack
@@ -257,14 +255,14 @@ uword prog_structs       ; cons of struct node ids (reversed)
 uword prog_subs          ; cons of sub node ids (reversed)
 
 ; ---- codegen symbol table (persistent across passes) ----
-uword[640] sym_ident      ; var name ident id
-ubyte[640] sym_type       ; type tag (TY_UBYTE / TY_BYTE / TY_UWORD)
-uword[640] sym_addr       ; ZP address
-uword[640] sym_scope      ; owning sub name ident (0 = module scope)
-ubyte[640] sym_mkind      ; 0 = module var, 1 = param, 2 = local
-ubyte[640] sym_is_const   ; 1 = compile-time const (no storage); folded
-uword[640] sym_cval       ; const value (when sym_is_const)
-uword[640] sym_arr_size   ; element count if an array (0 = scalar); the
+uword[560] sym_ident      ; var name ident id
+ubyte[560] sym_type       ; type tag (TY_UBYTE / TY_BYTE / TY_UWORD)
+uword[560] sym_addr       ; ZP address
+uword[560] sym_scope      ; owning sub name ident (0 = module scope)
+ubyte[560] sym_mkind      ; 0 = module var, 1 = param, 2 = local
+ubyte[560] sym_is_const   ; 1 = compile-time const (no storage); folded
+uword[560] sym_cval       ; const value (when sym_is_const)
+uword[560] sym_arr_size   ; element count if an array (0 = scalar); the
                          ; element type is in sym_type; mangle is p8a_
 uword sym_count
 uword zp_next            ; ZP bump allocator (from $40)
@@ -423,6 +421,24 @@ sub out_dec(uword v) {
 
 ; ---- numeric scanners ----
 
+sub ident_len_at(uword id) -> uword {
+    uword n
+    n = 0
+    repeat {
+        if ident_pool[id + n] == 0 {
+            break
+        }
+        n = n + 1
+    }
+    return n
+}
+
+; classify_name dispatches by length to a per-length helper. Splitting the
+; keyword if-chains out of one big `when` keeps every sub's node count well
+; under the per-unit node arena, so the self-host front-end (pass 1) can parse
+; this file itself without overflowing. (Behaviour is identical; the helpers
+; return TK_IDENT when no keyword matches, which classify_name passes through.)
+
 sub new_node(ubyte kind, ubyte op, uword a, uword b) -> uword {
     uword id
     id = node_count
@@ -498,8 +514,8 @@ sub out_ident_text(uword id) {
     uword off
     uword n
     uword j
-    off = ident_off[id]
-    n = ident_len[id]
+    off = id
+    n = ident_len_at(id)
     j = 0
     repeat {
         if j >= n {
@@ -3008,8 +3024,8 @@ sub find_sub(uword identid) -> uword {
 sub ident_eq(uword identid, uword s) -> ubyte {
     uword off
     uword n
-    off = ident_off[identid]
-    n = ident_len[identid]
+    off = identid
+    n = ident_len_at(identid)
     uword j
     j = 0
     repeat {
@@ -3380,9 +3396,6 @@ sub load_global() {
     ident_pool_len = l16()
     i = 0
     repeat { if i >= ident_pool_len { break } ident_pool[i] = read_src() i = i + 1 }
-    ident_count = l16()
-    i = 0
-    repeat { if i >= ident_count { break } ident_off[i] = l16() ident_len[i] = l16() i = i + 1 }
     str_pool_len = l16()
     i = 0
     repeat { if i >= str_pool_len { break } str_pool[i] = read_src() i = i + 1 }
