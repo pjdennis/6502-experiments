@@ -2816,6 +2816,10 @@ sub codegen_stmt(uword st) {
         codegen_return(st)
         return
     }
+    if k == ND_INLINEASM {
+        codegen_inline_asm(st)
+        return
+    }
     if k == ND_VARDECL {
         ; a local declaration is storage only; an initializer lowers to a
         ; store. (p8c: UBYTE -> byte path, everything else -> word path.)
@@ -4698,6 +4702,37 @@ sub codegen_call(uword callnode) {
     out_text("  jsr ")
     emit_sub_label(callee)
     o_nl()
+}
+; inline `%asm{ "..." }` -> emit each line of the (str-pooled) text with a
+; 2-space indent (port of _emit_stmt's InlineAsm; splitlines semantics).
+sub codegen_inline_asm(uword st) {
+    uword sid
+    sid = node_a[st]
+    uword off
+    uword n
+    off = str_off[sid]
+    n = str_len[sid]
+    uword j
+    j = 0
+    repeat {
+        if j >= n {
+            break
+        }
+        out_text("  ")
+        repeat {
+            if j >= n {
+                break
+            }
+            ubyte c
+            c = str_pool[off + j]
+            j = j + 1
+            if c == $0a {
+                break
+            }
+            out_byte(c)
+        }
+        o_nl()
+    }
 }
 ; `return [value]` (port of _emit_stmt's Return). With a value, evaluate it
 ; (byte -> A, word -> A:Y) and run the pha/pla dance p8c emits (defers go
