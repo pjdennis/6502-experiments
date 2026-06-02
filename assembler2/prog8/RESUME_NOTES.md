@@ -105,7 +105,64 @@ was wrong; the real gap is ~15 KB).** Measured/counted at this HEAD:
          (smaller than p1.p8) now; pursue A/B/C later for the true fixpoint.
     THIS IS A DIRECTION DECISION FOR THE USER (esp. A, which re-architects the
     shared emulator). Until it's made, adding more p1 features just consumes the
-    last ~80 B of corpus-compile margin without approaching the fixpoint.
+    last ~390 B of corpus-compile margin without approaching the fixpoint.
+
+  ### CONCRETE STAGED PLAN for option B (recommended -- stays in 64 KB AND
+  ### keeps p1.p8 upstream-compatible; no emulator change). The single biggest
+  ### resident arena is the symbol table (~9 KB at self-host: ~250 module syms
+  ### + ~510 params/locals, all held at once). KEY INSIGHT: the params/locals
+  ### are held resident only so a CALL can resolve the callee's param slot
+  ### addresses. Replace that with a compact per-sub SIGNATURE table so
+  ### params/locals become per-sub TRANSIENT (registered at codegen, rolled
+  ### back after). This cuts the sym table ~9 KB -> ~4 KB (~5 KB reclaimed),
+  ### and the same pattern then applies to ident/str pools.
+  ###   Stage 1 (CORRECTNESS, corpus-verifiable, NO self-host run needed):
+  ###     introduce sub_param_base[sub] + a per-sub param-type list, computed
+  ###     in the existing source-order registration sweep (line ~3196). Make
+  ###     codegen_call resolve callee param slots from THIS table instead of
+  ###     find_sym over the global sym entries. Corpus M5_PARAM/M5_SUB calls
+  ###     must stay byte-identical -> proves call resolution is correct.
+  ###   Stage 2: stop registering params/locals up-front; register the CURRENT
+  ###     sub's (at their precomputed base addresses, source order) at the top
+  ###     of its codegen and roll sym_count back after. Module syms + consts +
+  ###     arrays stay resident. Corpus (multi-sub, params, locals, calls) must
+  ###     stay byte-identical -> proves transient resolution is correct.
+  ###   Stage 3: shrink the now-much-smaller sym_* arrays for the corpus
+  ###     (reclaim margin) AND raise them toward self-host sizes; re-attempt
+  ###     the array STORE + the aptr path + remaining features in the reclaimed
+  ###     room. Repeat measure-build-test each step against the $F006 guard.
+  ### CATCH-22 to plan around: stages add code while corpus margin is ~390 B.
+  ### Sequence so each stage's NET (reclaim from rollback - new code) is >= 0:
+  ### land Stage 1+2 together (the rollback reclaim should offset the signature
+  ### table + pre-pass), verified only by corpus byte-identity (the self-host
+  ### arena BENEFIT is not directly runnable until the whole gap closes, but
+  ### the corpus proves CORRECTNESS, which is what de-risks it).
+  ### INTERACTING FEATURE (also required for self-host, found while planning):
+  ### ZP OVERFLOW. p1 currently assumes every scalar/param/local gets a ZP slot
+  ### ($40..$FF = ~192 B). p1.p8 has ~250 module syms + ~510 params/locals --
+  ### far more than 192 ZP bytes -- so p1 MUST implement p8c's "overflow ZP into
+  ### main-memory memvars" (a scalar/param/local whose address is None becomes a
+  ### labeled `.byte` reservation, referenced absolute; see p8c generate()'s
+  ### "scalars overflowed from ZP into main memory" section + sema's zp_next cap
+  ### ZP_VAR_TOP). The per-sub signature table (Stage 1) must therefore store
+  ### each param's ACTUAL address (ZP or memvar label), not base+offset. Do ZP
+  ### overflow FIRST (corpus-testable: force a program past ZP_VAR_TOP), then the
+  ### signature-table/transient-registration streaming. These two together are
+  ### the real path to self-host; both are corpus-verifiable for correctness.
+  ### ATTEMPTED ZP overflow this session: implemented build_symbols overflow
+  ### marking (sentinel addr $FFFF, no zp_next bump) + emit_memvars trailer
+  ### (`; ---- scalars overflowed from ZP into main memory ----`, p8v_<name>: /
+  ### .byte 0[, 0], between emit_arrays and emit_string_pool) + emit_zp_bindings
+  ### skip. It is CORRECT in shape but cost ~820 B -> p1.bin $F1B3, ~430 B OVER
+  ### $F006. Reverted. DOUBLE catch-22: not only does the code not fit the ~390 B
+  ### margin, but a TEST that forces overflow needs ~96+ scalars, which forces
+  ### the sym_* arrays from [40] up to ~[100] (+~780 B) -- so even the test
+  ### doesn't fit. CONCLUSION: the 60 KB window is full; NO further p1 feature
+  ### or streaming-infra increment fits without first executing option A (bank
+  ### switching / >64 KB) or a codegen-size reduction large enough to reopen a
+  ### multi-KB margin. The interlock (every increment needs margin that only an
+  ### architectural change provides) is now proven from three directions
+  ### (array store, ZP overflow, streaming infra).
   * RULED-OUT incremental levers (measured, so the next session doesn't chase
     them): (i) o_* / source-idiom factoring -- only ~30 raw emits left, tens of
     bytes. (ii) a register calling convention -- p1.p8 has ~948 helper call
