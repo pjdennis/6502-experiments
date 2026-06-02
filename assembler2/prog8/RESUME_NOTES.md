@@ -1309,3 +1309,20 @@ NB the address-placed-array relocation (`@$F0C0`) is NOT available: p8c's parser
 rejects `@` on declarations. So the high region can't hold a pass-2 arena.
 STATUS: the pipeline is PROVEN byte-identical to p8c on all 81 corpus programs;
 closing the p1.p8 self-host fixpoint is this multi-part ~4 KB pass-2 squeeze.
+
+### Transient sym table -- SECOND catch found: call resolution
+Implemented the transient sym (module-resident + per-record params/locals) WITH
+the pass1-ZP-text fix; it compiled and passed 72/81 but FAILED the 9 param/asmsub/
+inlineasm programs. Root cause: codegen of a CALL needs the CALLEE's param slots
+(collect_params scans the sym table for scope==callee, mkind==param), but with
+transient syms only the CURRENT sub's params are resident -- so `id(N)` emitted no
+`sta p8v_id_arg_v`. FIX: a resident compact PARAM SIGNATURE table (per sub: each
+param's ident+addr+type+scope, ~510 params x ~7 B ~= 3.6 KB, vs the full sym
+table's ~11 KB). collect_params reads it (append the callee's params transiently,
+roll back sym_count after codegen_call). So the FULL transient mechanism needs
+THREE parts: (1) module-resident + per-record locals, (2) pass1-ZP-text for the
+binding block, (3) param signature table for calls. Resident then ~= module
+(~4 KB) + param sig (~3.6 KB) = ~7.6 KB vs full 11 KB -> saves ~3.4 KB. Combined
+with shrinking the node arena (split p1.p8's biggest codegen subs) this closes the
+~4 KB pass-2 gap. (Reverted to the committed full-sym 81/81 pipeline; all three
+parts are characterized but unbuilt -- a substantial multi-part effort.)
