@@ -598,19 +598,26 @@ sub o_ror_wtmp0() { out_text("  ror __p8c_wtmp0") o_nl() }
 
 sub o_ldy_wtmp0h(){ out_text("  ldy __p8c_wtmp0+1") o_nl() }
 
-sub reverse_cons(uword head) -> uword {
-    uword rev
-    rev = 0
+; in-place list reversal (flips next pointers, allocates no cons cells). Safe
+; in codegen where each arg/value list is reversed exactly once and not read
+; again -- avoids growing cons_count past the per-record load during emission
+; of call-heavy subs (which would overflow the cons arena into the sym table).
+sub reverse_cons_ip(uword head) -> uword {
+    uword prev
+    prev = 0
     uword cell
     cell = head
     repeat {
         if cell == 0 {
             break
         }
-        rev = cons_prepend(rev, cons_val[cell])
-        cell = cons_next[cell]
+        uword nxt
+        nxt = cons_next[cell]
+        cons_next[cell] = prev
+        prev = cell
+        cell = nxt
     }
-    return rev
+    return prev
 }
 
 ; ---- pass S: the symbol table -------------------------------
@@ -1668,7 +1675,7 @@ sub emit_when_choice(uword choice, uword packed) {
     }
     ; value matches (source order -> reverse the cons).
     uword head
-    head = reverse_cons(values)
+    head = reverse_cons_ip(values)
     uword cell
     cell = head
     repeat {
@@ -3346,7 +3353,7 @@ sub codegen_asmsub_call(uword callnode, uword cs) {
     collect_params(node_a[callnode])
     if call_n == 1 {
         uword arg1
-        arg1 = cons_val[reverse_cons(node_b[callnode])]
+        arg1 = cons_val[reverse_cons_ip(node_b[callnode])]
         if call_isw[0] != 0 {
             codegen_word_expr(arg1)
         } else {
@@ -3384,7 +3391,7 @@ sub codegen_call(uword callnode) {
         ; static-ZP locals (callee, call_slot, ...), so save callee across the
         ; eval and re-derive the slot afterwards (collect_params is pure).
         uword arg1
-        arg1 = cons_val[reverse_cons(node_b[callnode])]
+        arg1 = cons_val[reverse_cons_ip(node_b[callnode])]
         ubyte isw1
         isw1 = call_isw[0]
         ccs_callee[ccs_sp] = callee
@@ -3413,7 +3420,7 @@ sub codegen_call(uword callnode) {
         ; re-enter codegen_call and clobber callee/acell/j, so save them on the
         ; ccs stack around each eval and re-collect_params (refills call_isw).
         uword acell
-        acell = reverse_cons(node_b[callnode])
+        acell = reverse_cons_ip(node_b[callnode])
         ubyte j
         j = 0
         repeat {
