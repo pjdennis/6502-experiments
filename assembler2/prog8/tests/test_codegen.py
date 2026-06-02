@@ -52,6 +52,24 @@ class CodeGenBasics(unittest.TestCase):
         self.assertIn('"hi"', s)
         self.assertIn(", 0", s)
 
+    def test_string_labels_are_main_first(self):
+        # Labels are interned in emission (main-first) order, NOT source
+        # order, so p1's single-pass codegen stays byte-identical. Here
+        # `helper` is declared before `main` but main's string is labeled
+        # first because main is emitted first.
+        src = (
+            '%import txt\n'
+            'sub helper() { txt.print("H") }\n'
+            'main { txt.print("M") helper() }\n'
+        )
+        s = compile_text(src)
+        # p8c_str_0 is main's "M"; p8c_str_1 is helper's "H".
+        i0 = s.index('p8c_str_0:')
+        i1 = s.index('p8c_str_1:')
+        self.assertLess(i0, i1)
+        self.assertIn('"M", 0', s[i0:i1])
+        self.assertIn('"H", 0', s[i1:])
+
     def test_lcd_clear_emits_jsr_only(self):
         s = compile_text('%import lcd\nmain { lcd.clear() }')
         self.assertIn("jsr clear_display", s)

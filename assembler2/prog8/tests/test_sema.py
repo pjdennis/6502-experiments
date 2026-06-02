@@ -46,10 +46,15 @@ class SemaBasics(unittest.TestCase):
         prog = compile_to_sema("main { }")
         self.assertEqual(prog.subs[0].mangled, "p8s_main")
 
-    def test_strings_collected_with_labels(self):
+    def test_strings_typed_but_not_yet_labeled(self):
+        # Labels + Program.strings are now owned by codegen (assigned
+        # lazily, main-first, to stay byte-identical with p1). Sema only
+        # fixes the type.
         prog = compile_to_sema('%import txt\nmain { txt.print("a") txt.print("b") }')
-        self.assertEqual(len(prog.strings), 2)
-        self.assertEqual({s.label for s in prog.strings}, {"p8c_str_0", "p8c_str_1"})
+        self.assertEqual(len(prog.strings), 0)
+        lit = prog.subs[0].body.stmts[0].expr.args[0]
+        self.assertIsNone(lit.label)
+        self.assertEqual(lit.type.__class__.__name__, "TStr")
 
 
 class SemaPhase2(unittest.TestCase):

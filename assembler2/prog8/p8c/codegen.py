@@ -109,6 +109,19 @@ class CodeGen:
     def emit(self, line: str = "") -> None:
         self.out.append(line)
 
+    def _str_label(self, lit: StrLit) -> str:
+        """Assign (lazily) and return a string literal's pool label.
+
+        Labels are handed out on first reference during emission, which --
+        because subs are emitted main-first -- matches the order p1 interns
+        its string labels in its single codegen pass. This keeps the two
+        compilers byte-identical without p1 needing a separate pre-pass.
+        """
+        if getattr(lit, "label", None) is None:
+            lit.label = f"p8c_str_{len(self.prog.strings)}"
+            self.prog.strings.append(lit)
+        return lit.label
+
     def generate(self) -> str:
         self.out.clear()
         self._mul_used = False
@@ -706,10 +719,10 @@ class CodeGen:
             return
         if isinstance(e, StrLit):
             # A string literal is a uword: the address of its pool label
-            # (low byte in A, high in Y). sema assigned the label and
-            # collected the literal into the string pool.
-            self.emit(f"  lda #<{e.label}")
-            self.emit(f"  ldy #>{e.label}")
+            # (low byte in A, high in Y). The label is interned lazily here.
+            lbl = self._str_label(e)
+            self.emit(f"  lda #<{lbl}")
+            self.emit(f"  ldy #>{lbl}")
             return
         if isinstance(e, Ident):
             assert e.sym is not None
@@ -1702,8 +1715,9 @@ class CodeGen:
                         "txt.print expects exactly one string literal"
                     )
                 lit: StrLit = c.args[0]
-                self.emit(f"  lda #<{lit.label}")
-                self.emit(f"  ldx #>{lit.label}")
+                lbl = self._str_label(lit)
+                self.emit(f"  lda #<{lbl}")
+                self.emit(f"  ldx #>{lbl}")
                 self.emit(f"  jsr {target}")
                 return
             if target == "clear_display":

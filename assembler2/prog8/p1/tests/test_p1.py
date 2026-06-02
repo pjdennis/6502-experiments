@@ -372,6 +372,13 @@ M5_SUB_PROGRAMS = [
     "%target nmos\nubyte x\n\n"
     "sub foo() {\n    x = 1\n}\nsub baz() {\n    x = x + 2\n}\nsub qux() {\n    x = x * 3\n}\n"
     "main {\n    foo()\n    baz()\n    qux()\n}\n",
+    # string literals in subs declared BEFORE main: pool labels must be
+    # numbered in main-first EMISSION order (main's "M"=str_0, then first's
+    # "F"=str_1, second's "S"=str_2), not source order. Regression guard
+    # for the p8c/p1 string-label ordering divergence.
+    "%target nmos\nuword s\n\n"
+    'sub first() {\n    s = "F"\n}\nsub second() {\n    s = "S"\n}\n'
+    'main {\n    s = "M"\n    first()\n    second()\n}\n',
 ]
 
 # P7-M5 subs (slice 2): return values + call-as-value (still no params/locals).

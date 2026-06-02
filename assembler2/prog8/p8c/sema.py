@@ -4,8 +4,8 @@ Phase 1 jobs:
   * Validate that exactly one `sub main` exists.
   * Resolve dotted call paths (e.g. `txt.print`) against the stdlib
     symbol table; flag unknown calls.
-  * Assign string-literal labels and collect them on Program.strings
-    so codegen can emit a single .data block.
+  * Type string literals; their pool labels are assigned later, lazily,
+    by codegen (main-first encounter order) so p1 stays byte-identical.
   * Mangle subroutine names to `p8s_<sub>` (Phase 1: no blocks-as-namespaces
     yet, so `p8s_main` is enough).
 """
@@ -493,9 +493,12 @@ class Sema:
         elif isinstance(e, BoolLit):
             e.type = BOOL
         elif isinstance(e, StrLit):
-            e.label = f"p8c_str_{self._next_str_id}"
-            self._next_str_id += 1
-            self.prog.strings.append(e)
+            # String labels are assigned lazily in codegen, on first
+            # reference, in main-first emission order -- so that p1 (which
+            # interns string labels during its single codegen pass, main
+            # first) produces byte-identical label numbering. Here we only
+            # fix the type; codegen owns Program.strings + e.label.
+            e.label = None
             e.type = STR
         elif isinstance(e, Ident):
             sym = self._lookup(e.name)
