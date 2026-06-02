@@ -86,10 +86,35 @@ Paths forward:
   2. Right-size the arenas: profile p1.p8's actual peak node/cons/pool usage
      (instrument p8c or count) and size each arena to that + margin, rather
      than the worst-case estimate. Could save 1-2 KB vs a generous guess.
-  3. Implement the remaining self-host features in p1 (arrays decl+storage+
-     variable-index+len/sizeof, const, enum, struct, defer, %target/%address/
-     %output surface, multi-arg call reentrancy) -- each byte-identical to
+  3. Implement the remaining self-host features in p1 -- each byte-identical to
      p8c -o via the corpus, each watching the (now relieved) ceilings.
+     STILL MISSING IN p1 (codegen back-end): **arrays** (decl + storage trailer
+     + ND_INDEX read/store + len/sizeof; 66 array decls + pervasive indexing in
+     p1.p8 -- THE BIG ONE), **defer** (26 uses), **struct** (3), **enum** (1),
+     the `%target/%address/%output` directive surface beyond the nmos prologue,
+     and **multi-arg call reentrancy**. (`const` and `when` are DONE.)
+
+**DONE -- const support in p1** (commit e79f229). `const ubyte/byte/uword
+NAME = <int>` -> storage-free symbol (sym_is_const / sym_cval); folds the
+literal at every site p8c folds: byte-leaf load, word-leaf load (ubyte const
+widened), and comparison conditions via the SPILL path (p8c's
+_cmp_leaf_operand returns None for a const, so p1's new is_cmp_leaf_rhs
+excludes consts -> spill -> fold during full byte eval). emit_zp_bindings
+skips consts. NOT folded (matching p8c, which emits the undefined mangled name
+there): const in arithmetic operands / for-bounds -- p1.p8 avoids those. Corpus
+guard: test_const_programs. Cost ~1.2 KB code (code+arena top $E442 -> $E91F,
+~1.7 KB under $F006). NOTE: 133 consts will become 133 sym-table entries at
+self-host -> the sym_* arrays (currently [64]) must grow to ~256+ then, ~1-2 KB
+more arena. The freed ~3 KB (pool relocation) covers it but watch the ceiling.
+
+**NEXT: arrays.** p8c reference: `_emit_array_addr_into_aptr`, `_array_fast_byte`,
+the arrays/struct/memvar trailer sections in generate(), and the Index cases in
+`_emit_byte_expr_into_a` / `_emit_word_expr_into_ay` / the assign path. p1 has
+NO array codegen yet (build_symbols + the store path gate on `node_c[vd]==0`
+i.e. scalar-only; ND_INDEX is unhandled). Fast path: ubyte array <=256 elems +
+ubyte index -> `lda arr,y`; const index -> absolute `lda arr+const`; else the
+`__p8c_aptr` ($28) element-pointer path. Watch the ~1.7 KB ceiling -- arrays +
+indexing may need a compaction lever (#1) or arena right-sizing (#2) alongside.
 
 **DONE -- string-literal pool ordering across subs.** p8c used to assign
 `p8c_str_N` labels during the sema walk (source order); p1 interns them during
