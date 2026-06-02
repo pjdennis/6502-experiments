@@ -374,6 +374,26 @@ M5_SUB_PROGRAMS = [
     "main {\n    foo()\n    baz()\n    qux()\n}\n",
 ]
 
+# P7-M5 subs (slice 2): return values + call-as-value (still no params/locals).
+# `return [v]` evaluates v (byte -> A, word -> A:Y) with p8c's pha/pla dance,
+# then jmps the per-sub .Lp8s_<name>_ret label; a call in an expression leaves
+# its result in A (byte) or A:Y (word, ubyte-returning calls widen with ldy #0).
+M5_RET_PROGRAMS = [
+    # byte + word returns, call as a value (byte and word context)
+    "%target nmos\nubyte a\nuword w\n\n"
+    "sub get5() -> ubyte {\n    return 5\n}\nsub dbl() -> ubyte {\n    return a + a\n}\n"
+    "sub bigw() -> uword {\n    return $1234\n}\n"
+    "main {\n    a = get5()\n    a = dbl() + 1\n    w = bigw()\n    w = get5()\n}\n",
+    # conditional return (return inside an if, plus a fall-through return)
+    "%target nmos\nubyte a\n\n"
+    "sub cls() -> ubyte {\n    if a > 3 {\n        return 1\n    }\n    return 0\n}\n"
+    "main {\n    a = cls()\n}\n",
+    # void sub with a bare `return` (early exit)
+    "%target nmos\nubyte a\nubyte b\n\n"
+    "sub maybe() {\n    if a == 0 {\n        return\n    }\n    b = b + 1\n}\n"
+    "main {\n    maybe()\n}\n",
+]
+
 
 def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
@@ -537,6 +557,12 @@ class P1Equivalence(unittest.TestCase):
 
     def test_m5_sub_programs(self):
         for src in M5_SUB_PROGRAMS:
+            with self.subTest(src=src):
+                self.assertEqual(self._oracle(src), self._ontarget(src),
+                                 msg=f"codegen .s differs for {src!r}")
+
+    def test_m5_ret_programs(self):
+        for src in M5_RET_PROGRAMS:
             with self.subTest(src=src):
                 self.assertEqual(self._oracle(src), self._ontarget(src),
                                  msg=f"codegen .s differs for {src!r}")

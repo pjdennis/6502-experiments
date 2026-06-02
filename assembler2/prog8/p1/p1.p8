@@ -267,6 +267,10 @@ uword[48] sub_name       ; sub name ident id
 ubyte[48] sub_kind       ; SUBK_SUB / MAIN / INLINE / ASMSUB
 ubyte[48] sub_ret        ; return type tag
 uword sub_count
+; the sub currently being codegen'd -- its return type + name ident,
+; for `return` (the per-sub .Lp8s_<name>_ret label).
+ubyte cur_ret            ; current sub's return type tag
+uword cur_ret_name       ; current sub's name ident id
 ; string pool: one label per string-literal *occurrence*, numbered
 ; in codegen encounter order (matching p8c's sema-walk order); the
 ; recorded str id indexes the parser's str_pool for the trailer.
@@ -2752,6 +2756,10 @@ sub codegen_stmt(uword st) {
         }
         return
     }
+    if k == ND_RETURN {
+        codegen_return(st)
+        return
+    }
     ; other statement kinds arrive at later milestones.
 }
 sub codegen_if(uword st) {
@@ -3699,7 +3707,11 @@ sub codegen_byte_expr(uword root) {
                         ; @(addr) byte read -- self-contained (result in A)
                         emit_memat_read(nd)
                     } else {
-                        emit_byte_leaf_load(nd)
+                        if node_kind[nd] == ND_CALL {
+                            codegen_call(nd)   ; byte-returning call -> A
+                        } else {
+                            emit_byte_leaf_load(nd)
+                        }
                     }
                 }
             }
@@ -4134,6 +4146,20 @@ sub word_dispatch(uword nd) {
         emit_addrof(nd)
         return
     }
+    if k == ND_CALL {
+        ; word-returning call -> A:Y; a ubyte-returning call widens (ldy #0).
+        codegen_call(nd)
+        uword si
+        si = find_sub(node_a[nd])
+        if si != $ffff {
+            if sub_ret[si] == TY_UBYTE {
+                o_ldy() o_imm()
+                out_text("00")
+                o_nl()
+            }
+        }
+        return
+    }
     if k == ND_BINOP {
         ubyte bop
         bop = node_op[nd]
@@ -4420,10 +4446,45 @@ sub find_sub(uword identid) -> uword {
     }
     return $ffff
 }
-; codegen a call expression. (M5 slice 1: regular sub, no args -> jsr.)
+; codegen a call expression. (M5 slice 1/2: regular sub, no args -> jsr; the
+; result is left in A (ubyte/byte) or A:Y (uword) by the callee.)
 sub codegen_call(uword callnode) {
     out_text("  jsr ")
     emit_sub_label(node_a[callnode])
+    o_nl()
+}
+; `return [value]` (port of _emit_stmt's Return). With a value, evaluate it
+; (byte -> A, word -> A:Y) and run the pha/pla dance p8c emits (defers go
+; between -- none yet), then jmp the per-sub return label.
+sub codegen_return(uword st) {
+    uword value
+    value = node_a[st]
+    if value != 0 {
+        if cur_ret == TY_UWORD {
+            codegen_word_expr(value)
+            out_text("  pha")
+            o_nl()
+            out_text("  tya")
+            o_nl()
+            out_text("  pha")
+            o_nl()
+            out_text("  pla")
+            o_nl()
+            out_text("  tay")
+            o_nl()
+            out_text("  pla")
+            o_nl()
+        } else {
+            codegen_byte_expr(value)
+            out_text("  pha")
+            o_nl()
+            out_text("  pla")
+            o_nl()
+        }
+    }
+    out_text("  jmp .Lp8s_")
+    out_ident_text(cur_ret_name)
+    out_text("_ret")
     o_nl()
 }
 ; register every sub (in source order) so calls resolve and pass B emits the
@@ -4475,6 +4536,8 @@ sub register_subs() {
 ; emit one non-main sub: header, body, per-sub return label + rts.
 sub emit_sub(uword snode) {
     label_seq = 0
+    cur_ret = lsb(node_d[snode])
+    cur_ret_name = node_a[snode]
     o_nl()
     out_text("; ---- sub ")
     out_ident_text(node_a[snode])
@@ -4598,6 +4661,8 @@ main {
             uword mnode
             mnode = parse_main()
             mainbody = node_c[mnode]
+            cur_ret = TY_VOID
+            cur_ret_name = node_a[mnode]
             break
         }
         advance()
