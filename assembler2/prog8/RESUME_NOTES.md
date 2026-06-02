@@ -184,6 +184,26 @@ was wrong; the real gap is ~15 KB).** Measured/counted at this HEAD:
     *** serializer STAYS (test_stmt's oracle proves the AST is built correctly);
     *** add a parallel binary emitter for the pipeline. Verify END-TO-END: the
     *** pipeline's final .s == `p8c -o`, on the corpus first, then p1.p8.
+    *** LOADER = inverse of stmt.p8's serialize_node_tree. It parses the text
+    *** S-expr and rebuilds node_kind/a/b/c/d (+cons, +interned ident/str via
+    *** intern_name/the str pool, +sub/prog tables). EXACT forms to handle (from
+    *** the p1.p8 AST, with frequencies as a coverage checklist):
+    ***   header: (program (address $X)(output raw|...)(target nmos|...)(imports
+    ***     [(import name)...]) (vars (var TYPE name [INIT])...) (structs ...)
+    ***     (enums ...) (subs (subdef NAME sub RET (params [(param TYPE name)...])
+    ***     (block ...))...))
+    ***   stmts: (block STMT...) (exprstmt E) (assign TARGET E) (if C THEN [ELSE])
+    ***     (when E (choice (vals (int N)...) (block...))...) (repeat ...)
+    ***     (return [E]) (break) (continue) (asm "text") (defer ...)
+    ***   exprs: (id name) (int N) (str "..") (call CALLEE ARG...) (idx ARR IDX)
+    ***     (and A B)/(or ..)(binops) (word E) (byte E) (mem E) (asmtarget $X)
+    ***   ~35 forms total; (id 3665) (int 1634) (call 1626) (exprstmt 1262)
+    ***   (block 1066) (assign 864) (if 660) (idx 646) (var 576) (return 377)
+    ***   (str 248) (subdef/params 217) (param 181) (and 124) (break 82)
+    ***   (repeat 70) (continue 40) (when/choice/vals 8) (asm 5) dominate.
+    *** Each form -> a builder that allocates a node (new_node) with the right
+    *** ND_* kind + a/b/c/d, exactly as parse_* does -- so the SAME codegen runs.
+    *** Verify: pipeline .s == `p8c -o` on the corpus, then p1.p8.
     *** SIZING: pass 2 = codegen back-end (~33 KB) + a small array LOADER (~3-5 KB,
     *** replacing the ~22 KB Prog8 front-end the monolith carries) + sym table +
     *** pools sized to p1.p8 (~17 KB) + per-unit node arena. ~38 KB code + ~20 KB
