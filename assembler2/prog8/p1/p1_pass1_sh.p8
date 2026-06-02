@@ -191,8 +191,15 @@ ubyte[6144] ident_pool
 uword ident_count
 uword ident_pool_len
 
-; string literal pool (null-terminated; a string's id is its start offset)
-ubyte[3456] str_pool
+; string literal pool (null-terminated; a string's id is its start offset).
+; Cap must exceed the TRANSIENT peak, not just the final deduped size: the
+; lexer appends a literal's bytes at str_pool_len BEFORE the dedup scan rolls
+; str_pool_len back for a duplicate. So re-lexing a long duplicate (e.g. the
+; ~671-byte emit_prologue header, encountered when str_pool_len is already at
+; its full ~3381) transiently writes to ~4052 -- which must stay inside the
+; array, or it clobbers str_pool_len / name_buf / path_buf and corrupts the
+; just-read callee ident (the "out_text -> garbage" self-host bug).
+ubyte[4096] str_pool
 uword str_pool_len
 
 ubyte[64] name_buf
