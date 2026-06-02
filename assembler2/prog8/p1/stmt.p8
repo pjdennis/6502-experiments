@@ -190,7 +190,7 @@ uword ident_count
 uword ident_pool_len
 
 ; string literal pool
-ubyte[3072] str_pool
+ubyte[4096] str_pool
 uword[256]  str_off
 uword[256]  str_len
 uword str_count
@@ -549,51 +549,68 @@ sub intern_name() -> uword {
     return id
 }
 
+; classify_name dispatches by length to a per-length helper. Splitting the
+; keyword if-chains out of one big `when` keeps every sub's node count well
+; under the per-unit node arena, so the self-host front-end (pass 1) can parse
+; this file itself without overflowing. (Behaviour is identical; the helpers
+; return TK_IDENT when no keyword matches, which classify_name passes through.)
+sub cn_len2() -> ubyte {
+    if name_buf[0]==$69 and name_buf[1]==$66 { return TK_KIF }   ; if
+    if name_buf[0]==$69 and name_buf[1]==$6e { return TK_KIN }   ; in
+    if name_buf[0]==$6f and name_buf[1]==$72 { return TK_KOR }   ; or
+    if name_buf[0]==$74 and name_buf[1]==$6f { return TK_KTO }   ; to
+    return TK_IDENT
+}
+sub cn_len3() -> ubyte {
+    if name_buf[0]==$61 and name_buf[1]==$6e and name_buf[2]==$64 { return TK_KAND }   ; and
+    if name_buf[0]==$66 and name_buf[1]==$6f and name_buf[2]==$72 { return TK_KFOR }   ; for
+    if name_buf[0]==$6e and name_buf[1]==$6f and name_buf[2]==$74 { return TK_KNOT }   ; not
+    if name_buf[0]==$73 and name_buf[1]==$74 and name_buf[2]==$72 { return TK_KSTR }   ; str
+    if name_buf[0]==$73 and name_buf[1]==$75 and name_buf[2]==$62 { return TK_KSUB }   ; sub
+    if name_buf[0]==$78 and name_buf[1]==$6f and name_buf[2]==$72 { return TK_KXOR }   ; xor
+    return TK_IDENT
+}
+sub cn_len4() -> ubyte {
+    if name_buf[0]==$62 and name_buf[1]==$6f and name_buf[2]==$6f and name_buf[3]==$6c { return TK_KBOOL }   ; bool
+    if name_buf[0]==$62 and name_buf[1]==$79 and name_buf[2]==$74 and name_buf[3]==$65 { return TK_KBYTE }   ; byte
+    if name_buf[0]==$65 and name_buf[1]==$6c and name_buf[2]==$73 and name_buf[3]==$65 { return TK_KELSE }   ; else
+    if name_buf[0]==$65 and name_buf[1]==$6e and name_buf[2]==$75 and name_buf[3]==$6d { return TK_KENUM }   ; enum
+    if name_buf[0]==$6d and name_buf[1]==$61 and name_buf[2]==$69 and name_buf[3]==$6e { return TK_KMAIN }   ; main
+    if name_buf[0]==$74 and name_buf[1]==$72 and name_buf[2]==$75 and name_buf[3]==$65 { return TK_TRUE }   ; true
+    if name_buf[0]==$76 and name_buf[1]==$6f and name_buf[2]==$69 and name_buf[3]==$64 { return TK_KVOID }   ; void
+    if name_buf[0]==$77 and name_buf[1]==$68 and name_buf[2]==$65 and name_buf[3]==$6e { return TK_KWHEN }   ; when
+    return TK_IDENT
+}
+sub cn_len5() -> ubyte {
+    if name_buf[0]==$62 and name_buf[1]==$72 and name_buf[2]==$65 and name_buf[3]==$61 and name_buf[4]==$6b { return TK_KBREAK }   ; break
+    if name_buf[0]==$63 and name_buf[1]==$6f and name_buf[2]==$6e and name_buf[3]==$73 and name_buf[4]==$74 { return TK_KCONST }   ; const
+    if name_buf[0]==$64 and name_buf[1]==$65 and name_buf[2]==$66 and name_buf[3]==$65 and name_buf[4]==$72 { return TK_KDEFER }   ; defer
+    if name_buf[0]==$66 and name_buf[1]==$61 and name_buf[2]==$6c and name_buf[3]==$73 and name_buf[4]==$65 { return TK_FALSE }   ; false
+    if name_buf[0]==$75 and name_buf[1]==$62 and name_buf[2]==$79 and name_buf[3]==$74 and name_buf[4]==$65 { return TK_KUBYTE }   ; ubyte
+    if name_buf[0]==$75 and name_buf[1]==$77 and name_buf[2]==$6f and name_buf[3]==$72 and name_buf[4]==$64 { return TK_KUWORD }   ; uword
+    if name_buf[0]==$77 and name_buf[1]==$68 and name_buf[2]==$69 and name_buf[3]==$6c and name_buf[4]==$65 { return TK_KWHILE }   ; while
+    return TK_IDENT
+}
+sub cn_len6() -> ubyte {
+    if name_buf[0]==$61 and name_buf[1]==$73 and name_buf[2]==$6d and name_buf[3]==$73 and name_buf[4]==$75 and name_buf[5]==$62 { return TK_KASMSUB }   ; asmsub
+    if name_buf[0]==$69 and name_buf[1]==$6e and name_buf[2]==$6c and name_buf[3]==$69 and name_buf[4]==$6e and name_buf[5]==$65 { return TK_KINLINE }   ; inline
+    if name_buf[0]==$72 and name_buf[1]==$65 and name_buf[2]==$70 and name_buf[3]==$65 and name_buf[4]==$61 and name_buf[5]==$74 { return TK_KREPEAT }   ; repeat
+    if name_buf[0]==$72 and name_buf[1]==$65 and name_buf[2]==$74 and name_buf[3]==$75 and name_buf[4]==$72 and name_buf[5]==$6e { return TK_KRETURN }   ; return
+    if name_buf[0]==$73 and name_buf[1]==$74 and name_buf[2]==$72 and name_buf[3]==$75 and name_buf[4]==$63 and name_buf[5]==$74 { return TK_KSTRUCT }   ; struct
+    return TK_IDENT
+}
+sub cn_len8() -> ubyte {
+    if name_buf[0]==$63 and name_buf[1]==$6f and name_buf[2]==$6e and name_buf[3]==$74 and name_buf[4]==$69 and name_buf[5]==$6e and name_buf[6]==$75 and name_buf[7]==$65 { return TK_KCONTINUE }   ; continue
+    return TK_IDENT
+}
 sub classify_name() -> ubyte {
     when name_len {
-        2 -> {
-            if name_buf[0]==$69 and name_buf[1]==$66 { return TK_KIF }   ; if
-            if name_buf[0]==$69 and name_buf[1]==$6e { return TK_KIN }   ; in
-            if name_buf[0]==$6f and name_buf[1]==$72 { return TK_KOR }   ; or
-            if name_buf[0]==$74 and name_buf[1]==$6f { return TK_KTO }   ; to
-        }
-        3 -> {
-            if name_buf[0]==$61 and name_buf[1]==$6e and name_buf[2]==$64 { return TK_KAND }   ; and
-            if name_buf[0]==$66 and name_buf[1]==$6f and name_buf[2]==$72 { return TK_KFOR }   ; for
-            if name_buf[0]==$6e and name_buf[1]==$6f and name_buf[2]==$74 { return TK_KNOT }   ; not
-            if name_buf[0]==$73 and name_buf[1]==$74 and name_buf[2]==$72 { return TK_KSTR }   ; str
-            if name_buf[0]==$73 and name_buf[1]==$75 and name_buf[2]==$62 { return TK_KSUB }   ; sub
-            if name_buf[0]==$78 and name_buf[1]==$6f and name_buf[2]==$72 { return TK_KXOR }   ; xor
-        }
-        4 -> {
-            if name_buf[0]==$62 and name_buf[1]==$6f and name_buf[2]==$6f and name_buf[3]==$6c { return TK_KBOOL }   ; bool
-            if name_buf[0]==$62 and name_buf[1]==$79 and name_buf[2]==$74 and name_buf[3]==$65 { return TK_KBYTE }   ; byte
-            if name_buf[0]==$65 and name_buf[1]==$6c and name_buf[2]==$73 and name_buf[3]==$65 { return TK_KELSE }   ; else
-            if name_buf[0]==$65 and name_buf[1]==$6e and name_buf[2]==$75 and name_buf[3]==$6d { return TK_KENUM }   ; enum
-            if name_buf[0]==$6d and name_buf[1]==$61 and name_buf[2]==$69 and name_buf[3]==$6e { return TK_KMAIN }   ; main
-            if name_buf[0]==$74 and name_buf[1]==$72 and name_buf[2]==$75 and name_buf[3]==$65 { return TK_TRUE }   ; true
-            if name_buf[0]==$76 and name_buf[1]==$6f and name_buf[2]==$69 and name_buf[3]==$64 { return TK_KVOID }   ; void
-            if name_buf[0]==$77 and name_buf[1]==$68 and name_buf[2]==$65 and name_buf[3]==$6e { return TK_KWHEN }   ; when
-        }
-        5 -> {
-            if name_buf[0]==$62 and name_buf[1]==$72 and name_buf[2]==$65 and name_buf[3]==$61 and name_buf[4]==$6b { return TK_KBREAK }   ; break
-            if name_buf[0]==$63 and name_buf[1]==$6f and name_buf[2]==$6e and name_buf[3]==$73 and name_buf[4]==$74 { return TK_KCONST }   ; const
-            if name_buf[0]==$64 and name_buf[1]==$65 and name_buf[2]==$66 and name_buf[3]==$65 and name_buf[4]==$72 { return TK_KDEFER }   ; defer
-            if name_buf[0]==$66 and name_buf[1]==$61 and name_buf[2]==$6c and name_buf[3]==$73 and name_buf[4]==$65 { return TK_FALSE }   ; false
-            if name_buf[0]==$75 and name_buf[1]==$62 and name_buf[2]==$79 and name_buf[3]==$74 and name_buf[4]==$65 { return TK_KUBYTE }   ; ubyte
-            if name_buf[0]==$75 and name_buf[1]==$77 and name_buf[2]==$6f and name_buf[3]==$72 and name_buf[4]==$64 { return TK_KUWORD }   ; uword
-            if name_buf[0]==$77 and name_buf[1]==$68 and name_buf[2]==$69 and name_buf[3]==$6c and name_buf[4]==$65 { return TK_KWHILE }   ; while
-        }
-        6 -> {
-            if name_buf[0]==$61 and name_buf[1]==$73 and name_buf[2]==$6d and name_buf[3]==$73 and name_buf[4]==$75 and name_buf[5]==$62 { return TK_KASMSUB }   ; asmsub
-            if name_buf[0]==$69 and name_buf[1]==$6e and name_buf[2]==$6c and name_buf[3]==$69 and name_buf[4]==$6e and name_buf[5]==$65 { return TK_KINLINE }   ; inline
-            if name_buf[0]==$72 and name_buf[1]==$65 and name_buf[2]==$70 and name_buf[3]==$65 and name_buf[4]==$61 and name_buf[5]==$74 { return TK_KREPEAT }   ; repeat
-            if name_buf[0]==$72 and name_buf[1]==$65 and name_buf[2]==$74 and name_buf[3]==$75 and name_buf[4]==$72 and name_buf[5]==$6e { return TK_KRETURN }   ; return
-            if name_buf[0]==$73 and name_buf[1]==$74 and name_buf[2]==$72 and name_buf[3]==$75 and name_buf[4]==$63 and name_buf[5]==$74 { return TK_KSTRUCT }   ; struct
-        }
-        8 -> {
-            if name_buf[0]==$63 and name_buf[1]==$6f and name_buf[2]==$6e and name_buf[3]==$74 and name_buf[4]==$69 and name_buf[5]==$6e and name_buf[6]==$75 and name_buf[7]==$65 { return TK_KCONTINUE }   ; continue
-        }
+        2 -> { return cn_len2() }
+        3 -> { return cn_len3() }
+        4 -> { return cn_len4() }
+        5 -> { return cn_len5() }
+        6 -> { return cn_len6() }
+        8 -> { return cn_len8() }
     }
     return TK_IDENT
 }

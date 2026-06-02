@@ -160,7 +160,30 @@ was wrong; the real gap is ~15 KB).** Measured/counted at this HEAD:
         in a newline. Getting stmt.bin to emit p1.p8's AST byte-identically to
         `p8c --dump-ast` is pipeline MILESTONE 1 (pass 1 proven on the real
         self-host input). Then build pass 2 (S-expr reader + existing codegen).
-    MILESTONE 1 PROGRESS (this session -- pass 1 now RUNS on p1.p8):
+    *** MILESTONE 1 DONE: pass 1 serializes p1.p8 BYTE-IDENTICAL to the oracle
+    *** (stmt.bin --cycle-cap 3000000000 p1.p8 out  ==  p8c --dump-ast p1.p8,
+    *** both 377725 B). The self-host pipeline's FRONT-END is proven on the
+    *** real self-host input. Fixes that got there:
+    ***   - grew stmt.p8 pools (ident_pool 6144, ident_off/len 768, str_pool
+    ***     4096, str_off/len 256) -- they persist program-wide, so they must
+    ***     hold ALL of p1.p8's ~585 idents / ~242 strings, not one unit's.
+    ***   - SPLIT classify_name (was ~909 nodes -> overflowed the per-unit
+    ***     640-node arena, corrupting an ident) into per-length helpers
+    ***     cn_len2..cn_len8; now every sub is well under 640 nodes. This is an
+    ***     upstream-compatible refactor (behaviour identical). stmt.bin $EE0E
+    ***     (504 B under $F006). All suites green (p1 52, prog8 106, tinyp8 22);
+    ***     p1.bin still fits ($EEDE, 296 B under $F006).
+    *** REMAINING for self-host: MILESTONE 2 = pass 2 (S-expr reader that
+    *** repopulates node_*/sym arrays from the `(program ...)` text, then runs
+    *** the EXISTING build_p1.py codegen back-end) producing .s == p8c. Then the
+    *** pipeline (pass1 | pass2) compiling p1.p8 == p8c(p1.p8) IS self-host. Note
+    *** pass 2 is the bigger half (it has the ~33 KB codegen back-end + the sym
+    *** table + needs the S-expr reader); size its arenas the same way (program-
+    *** wide pools sized to p1.p8; per-unit node arena; watch big subs). The
+    *** key technique is proven: grow program-wide pools, keep node arena per-
+    *** unit by splitting any >640-node sub.
+
+    MILESTONE 1 PROGRESS LOG (how it was reached):
       * ROOT CAUSE of the earlier hang: stmt.p8's reset_nodes (per-unit) resets
         ONLY nodes+cons; the ident/str POOLS persist program-wide ("their total
         fits; idents dedupe" -- true for tinyp8's 34 subs, FALSE for p1.p8's
