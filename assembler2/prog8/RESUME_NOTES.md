@@ -29,6 +29,89 @@ is the source of truth across sessions.
 
 ---
 
+## SELF-HOST PIPELINE STATUS (2026-06 session -- read this first)
+
+The two-pass self-host pipeline (`p1/p1_pass1_sh.p8` + `p1/p1_pass2_sh.p8`,
+built with `p8c` then `vasm`, run on the emulator) now compiles **p1.p8
+itself** end-to-end. Driving it to byte-identity with `p8c -o p1/p1.p8` is the
+remaining goal. Run it with:
+
+```
+# from assembler2/prog8, with vasm on PATH and ../emulator/emulator.out built
+python3 -m p8c p1/p1_pass1_sh.p8 -o /tmp/_p1.s && vasm6502_oldstyle -Fbin -dotdir -ignore-mult-inc -esc -wfail -o /tmp/p1.bin /tmp/_p1.s
+python3 -m p8c p1/p1_pass2_sh.p8 -o /tmp/_p2.s && vasm6502_oldstyle -Fbin -dotdir -ignore-mult-inc -esc -wfail -o /tmp/p2.bin /tmp/_p2.s
+EMU=../emulator/emulator.out
+$EMU /tmp/p1.bin --cycle-cap 30000000000 p1/p1.p8 /tmp/p1dump.bin       # pass1 -> binary dump
+$EMU /tmp/p2.bin --cycle-cap 30000000000 --no-dump /tmp/p1dump.bin /tmp/p1out.s   # pass2 -> .s
+python3 -m p8c p1/p1.p8 -o /tmp/p1_oracle.s                              # the oracle
+diff <(sed 's/^; source:.*/; source: X/' /tmp/p1out.s) <(sed 's/^; source:.*/; source: X/' /tmp/p1_oracle.s)
+```
+
+**What works now (COMMITTED, builds + runs):** pass1 produces a clean 208 KB
+dump; pass2 runs to completion and emits **~84 % byte-identical** output
+(the ZP block, prologue, arrays, calls-with-call-args, nested shift/add all
+match). The hard capacity/correctness bugs are fixed:
+  * lexer string pool is value-deduped + **null-terminated** (id = pool offset;
+    no str_off/str_len/str_count arrays). p1.p8 has 512 literal occurrences but
+    only ~183 distinct -> str_pool ~3.4 KB not 7.6 KB.
+  * `reverse_cons_ip` (in-place list reversal) for the build_symbols spike that
+    was overflowing cons and scrambling the ZP allocation order.
+  * arenas sized from MEASURED p1.p8 maxima: resident_sym 434, max_locals/sub
+    **13**, max_node/sub **514**, max_cons/sub **226**, sub_count **219**,
+    ident 6051, str 3381, distinct strings 183.
+  * **array indexing codegen** (port of p8c `_emit_array_addr_into_aptr` + Index
+    read/write arms): uword[] and large/uword-indexed ubyte[] via `__p8c_aptr`;
+    word-context reads use work-stack continuations (wws ty 12/13).
+  * **call re-entrancy**: codegen_call's static-ZP locals (callee/acell/j) are
+    saved on a `ccs` stack across each arg eval (args can be calls), slots
+    re-derived with collect_params.
+  * **work-stack re-entrancy**: codegen_byte_expr / codegen_word_expr frame each
+    invocation with a sentinel (ty 255) instead of resetting sp to 0, so a
+    call-arg eval that re-enters them doesn't wipe the outer pending stack.
+
+**THE TWO BLOCKERS (next session):**
+
+1. **if/while CONDITION codegen (the big remaining diff)** -- p1's
+   `emit_cond_branch_if_false` handles a bare comparison but NOT short-circuit
+   `and`/`or`/`not`; for `if a==X and b==Y` it falls to the generic path and
+   materialises a 0/1 bool then branches, where p8c emits direct cmp+branch with
+   short-circuit (`_emit_cond_branch`). This accounts for most of the remaining
+   ~5.7 K diff lines. A COMPLETE, design-correct port is saved at
+   **`p1/wip/p1_pass2_sh.conditions-wip.p8`** (general `emit_cond_branch(cond,
+   tkind, tid, jit)` with `and`/`or`/`not` recursion saved on a `cb` stack;
+   `emit_cmp_cond`; `emit_pos_unsigned`; label kinds 15/16 = `.Land_skip_` /
+   `.Lor_skip_`; signed paths stripped since p1.p8 is all-unsigned; dead
+   parser-only arenas removed to make room). It BUILDS and fits ($F002, true
+   top incl. array extents verified < $F006), and produces the CORRECT
+   short-circuit codegen on the tiny oracle test -- BUT it **crashes at
+   runtime**: pass2 writes exactly 1 output byte (reaches emit_prologue) then
+   the emulator reports "Cannot close standard file 0" (a `_close(0)` from
+   corrupted control flow). The crash reproduces even on a trivial
+   no-conditional program (`t0: a=1; a=a+2`), and is NOT: memory layout
+   (true top $F002 < stub floor; pool top $FC6C < $FE00 argv), the dead-var
+   removal alone, the arena trims alone, the stack shrink alone, or the added
+   module vars alone -- each tested in isolation and works. So the bug is in the
+   condition CODE itself yet manifests on code that never calls it -- needs a
+   PC-level trace (the emulator's `--dump` only dumps memory). Strong lead:
+   "1 byte then _close(0)" = crashes during/just-after emit_prologue's first
+   out_byte.
+
+2. **pass2 CAPACITY** -- even with signed-paths stripped and all dead
+   parser-only arenas removed, pass2 + the condition code sits at $F002 (4 bytes
+   under the $F006 stub floor) with arena margins of only 2-3 entries. There is
+   no room for the *next* codegen gap. The 2-pass split has hit its ceiling; the
+   real fix is a **3-pass split** (or substantial pass2 code reduction) before
+   more codegen features land. Note arenas must END (label + extent) below
+   $F006, not just start there -- the emulator injects file-I/O stubs over
+   $F006-$F0B0 and silently clobbers anything underneath.
+
+After conditions, expect more codegen gaps in the remaining diff (the 5.7 K
+lines include comparison-as-value materialisation -- 3 sites -- and likely
+others). The source-path line (`; source: SRC`) also still differs: pass1 must
+dump argv[0] and pass2 emit it in the prologue.
+
+---
+
 ## P7-M5 status + THE CAPACITY WALL (read this first)
 
 The on-target compiler **p1.p8 now has the whole core**: all byte+word
