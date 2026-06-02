@@ -301,6 +301,22 @@ M4_CONTROL_PROGRAMS = [
     "        }\n        a = a - 1\n    }\n}\n",
 ]
 
+# P7-M4 repeat: forever (count 0 -> top/jmp/end) and counted (push count on the
+# CPU stack, decrement per iteration via the rep_dec tail, exit at 0; break pops
+# the saved counter first). Literal and variable counts, with break/continue.
+M4_REPEAT_PROGRAMS = [
+    # forever loop with a break
+    "%target nmos\nubyte a\nubyte b\n\n"
+    "main {\n    repeat {\n        a = a + 1\n        if a == b {\n            break\n        }\n    }\n}\n",
+    # counted (literal) loop
+    "%target nmos\nubyte a\n\n"
+    "main {\n    repeat 10 {\n        a = a + 1\n    }\n}\n",
+    # counted (variable) loop with break + continue
+    "%target nmos\nubyte a\nubyte b\nubyte n\n\n"
+    "main {\n    repeat n {\n        b = b - 1\n        if b == 0 {\n            break\n        }\n"
+    "        if b == a {\n            continue\n        }\n        a = a + 1\n    }\n}\n",
+]
+
 
 def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
@@ -440,6 +456,12 @@ class P1Equivalence(unittest.TestCase):
 
     def test_m4_control_programs(self):
         for src in M4_CONTROL_PROGRAMS:
+            with self.subTest(src=src):
+                self.assertEqual(self._oracle(src), self._ontarget(src),
+                                 msg=f"codegen .s differs for {src!r}")
+
+    def test_m4_repeat_programs(self):
+        for src in M4_REPEAT_PROGRAMS:
             with self.subTest(src=src):
                 self.assertEqual(self._oracle(src), self._ontarget(src),
                                  msg=f"codegen .s differs for {src!r}")

@@ -61,13 +61,18 @@ OUT = HERE / "p1.p8"
 # needs a bigger program -- but then also reclaim space elsewhere so the top
 # stays < $F006. (stmt.p8 keeps its own sizes; this only rewrites p1.p8.)
 ARENA_SIZES = {
-    "ident_pool": 384, "ident_off": 80, "ident_len": 80,
-    "str_pool": 384, "str_off": 40, "str_len": 40,
-    "node_kind": 160, "node_op": 160,
-    "node_a": 160, "node_b": 160, "node_c": 160, "node_d": 160,
-    "operand_stack": 48, "op_kind": 48, "op_op": 48, "op_prec": 48,
-    "op_a": 48, "op_b": 48, "op_floor": 48,
-    "cons_val": 160, "cons_next": 160,
+    "ident_pool": 320, "ident_off": 64, "ident_len": 64,
+    "str_pool": 320, "str_off": 32, "str_len": 32,
+    "node_kind": 128, "node_op": 128,
+    "node_a": 128, "node_b": 128, "node_c": 128, "node_d": 128,
+    "operand_stack": 40, "op_kind": 40, "op_op": 40, "op_prec": 40,
+    "op_a": 40, "op_b": 40, "op_floor": 40,
+    "cons_val": 128, "cons_next": 128,
+    # fr_* (the parser's frame stack) defaults to 64; the codegen corpus's
+    # programs are shallow so 32 is ample and reclaims a bit more headroom.
+    "fr_kind": 32, "fr_mode": 32, "fr_stmts": 32, "fr_defer": 32,
+    "fr_cond": 32, "fr_then": 32, "fr_var": 32, "fr_lo": 32, "fr_hi": 32,
+    "fr_choices": 32, "fr_values": 32,
     # ws_* is the AST serializer's work stack -- dropped from p1, so dead.
     "ws_type": 2, "ws_node": 2, "ws_depth": 2,
 }
@@ -450,21 +455,17 @@ sub emit_string_pool() {{
 }}
 
 ; ---- control-flow labels + long branches -------------------
-; control label kinds: 0 else, 1 endif, 2 while_top, 3 while_end.
+; control label kinds: 0 else, 1 endif, 2 while_top, 3 while_end,
+; 7 rep_top, 8 rep_dec, 9 rep_end, 10 rep_break (4-6 reserved for for_*).
 sub emit_ctrl_label_ref(ubyte kind, uword id) {{
-    if kind == 0 {{
-        out_text(".Lelse_")
-    }} else {{
-        if kind == 1 {{
-            out_text(".Lendif_")
-        }} else {{
-            if kind == 2 {{
-                out_text(".Lwhile_top_")
-            }} else {{
-                out_text(".Lwhile_end_")
-            }}
-        }}
-    }}
+    if kind == 0 {{ out_text(".Lelse_") }}
+    if kind == 1 {{ out_text(".Lendif_") }}
+    if kind == 2 {{ out_text(".Lwhile_top_") }}
+    if kind == 3 {{ out_text(".Lwhile_end_") }}
+    if kind == 7 {{ out_text(".Lrep_top_") }}
+    if kind == 8 {{ out_text(".Lrep_dec_") }}
+    if kind == 9 {{ out_text(".Lrep_end_") }}
+    if kind == 10 {{ out_text(".Lrep_break_") }}
     out_dec(id)
 }}
 ; branch mnemonics by code: 0 bne 1 beq 2 bcc 3 bcs 4 bmi 5 bpl 6 bvc 7 bvs.
@@ -722,7 +723,11 @@ sub codegen_body(uword body) {{
                     emit_ctrl_label_ref(lsb(a), b)
                     o_nl()
                 }} else {{
-                    lp_sp = lp_sp - 1
+                    if ty == 3 {{
+                        lp_sp = lp_sp - 1
+                    }} else {{
+                        emit_rep_tail(b)         ; ty == 5: counted-repeat tail
+                    }}
                 }}
             }}
         }}
@@ -742,6 +747,10 @@ sub codegen_stmt(uword st) {{
     }}
     if k == ND_WHILE {{
         codegen_while(st)
+        return
+    }}
+    if k == ND_REPEAT {{
+        codegen_repeat(st)
         return
     }}
     if k == ND_BREAK {{
@@ -810,6 +819,98 @@ sub codegen_while(uword st) {{
     sws_push(1, 3, end_id)               ; while_end label
     sws_push(2, 2, top_id)               ; jmp while_top
     push_block_stmts(body)               ; body (top)
+}}
+; `repeat` (port of _emit_repeat). Forever (count 0) is a plain top/jmp/end
+; loop. Counted pushes the count on the CPU stack, decrements per iteration,
+; exits at 0; break pops the saved counter first. The 4 counted labels are
+; allocated sequentially (rep_top, rep_dec, rep_end, rep_break) so the tail
+; recovers them from rep_top alone.
+sub codegen_repeat(uword st) {{
+    uword count
+    uword body
+    count = node_a[st]
+    body = node_b[st]
+    uword top_id
+    uword end_id
+    top_id = label_seq
+    label_seq = label_seq + 1
+    end_id = label_seq
+    label_seq = label_seq + 1
+    if count == 0 {{
+        ; forever: break -> rep_end, continue -> rep_top
+        emit_ctrl_label_ref(7, top_id)
+        out_byte($3a)
+        o_nl()
+        lp_bk[lp_sp] = 9
+        lp_bi[lp_sp] = end_id
+        lp_ck[lp_sp] = 7
+        lp_ci[lp_sp] = top_id
+        lp_sp = lp_sp + 1
+        sws_push(3, 0, 0)                 ; pop loop
+        sws_push(1, 9, end_id)           ; rep_end label
+        sws_push(2, 7, top_id)           ; jmp rep_top
+        push_block_stmts(body)
+        return
+    }}
+    ; counted. top_id, end_id already allocated; allocate dec + break so the
+    ; four are top, end, dec, break -- but the tail wants them sequential from
+    ; rep_top. Re-derive: we use top_id (=N), dec=N+1, end=N+2, break=N+3.
+    ; (Undo the end_id we took as N+1 and re-allocate in the canonical order.)
+    label_seq = top_id + 1               ; rewind to just after rep_top
+    uword dec_id
+    uword break_id
+    dec_id = label_seq
+    label_seq = label_seq + 1
+    end_id = label_seq
+    label_seq = label_seq + 1
+    break_id = label_seq
+    label_seq = label_seq + 1
+    codegen_byte_expr(count)
+    out_text("  pha")
+    o_nl()
+    emit_ctrl_label_ref(7, top_id)
+    out_byte($3a)
+    o_nl()
+    lp_bk[lp_sp] = 10                    ; break -> rep_break
+    lp_bi[lp_sp] = break_id
+    lp_ck[lp_sp] = 8                     ; continue -> rep_dec
+    lp_ci[lp_sp] = dec_id
+    lp_sp = lp_sp + 1
+    sws_push(3, 0, 0)                    ; pop loop
+    sws_push(5, 0, top_id)              ; rep tail (dec/pla/.../break/end)
+    push_block_stmts(body)
+}}
+; counted-repeat tail: dec_id=top+1, end_id=top+2, break_id=top+3.
+sub emit_rep_tail(uword top_id) {{
+    uword dec_id
+    uword end_id
+    uword break_id
+    dec_id = top_id + 1
+    end_id = top_id + 2
+    break_id = top_id + 3
+    emit_ctrl_label_ref(8, dec_id)
+    out_byte($3a)
+    o_nl()
+    out_text("  pla")
+    o_nl()
+    out_text("  sec")
+    o_nl()
+    out_text("  sbc #1")
+    o_nl()
+    emit_br(1, 9, end_id)               ; beq rep_end
+    out_text("  pha")
+    o_nl()
+    out_text("  jmp ")
+    emit_ctrl_label_ref(7, top_id)
+    o_nl()
+    emit_ctrl_label_ref(10, break_id)
+    out_byte($3a)
+    o_nl()
+    out_text("  pla")
+    o_nl()
+    emit_ctrl_label_ref(9, end_id)
+    out_byte($3a)
+    o_nl()
 }}
 
 ; ---- byte expression codegen (work-stack; no recursion) -----
