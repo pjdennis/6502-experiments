@@ -274,6 +274,33 @@ M3_WORDSHIFT_PROGRAMS = [
     "main {\n    w = $0100\n    w <<= 2\n    w >>= 1\n    w <<= n\n    w >>= n\n}\n",
 ]
 
+# P7-M4 control flow: if / if-else / while + break / continue. Conditions emit
+# the compare straight into a (long-safe, inverted-branch) branch -- byte
+# unsigned + signed and the 16-bit word compare -- or, for a non-comparison
+# cond, materialize 0/1 and branch on zero. The statement driver is a work
+# stack (no recursion), so blocks nest arbitrarily.
+M4_CONTROL_PROGRAMS = [
+    # if (no else), every byte comparison op as the condition
+    "%target nmos\nubyte a\nubyte b\nubyte c\n\n"
+    "main {\n    if a == b {\n        c = 1\n    }\n    if a < b {\n        c = 2\n    }\n"
+    "    if a >= b {\n        c = 3\n    }\n    if a > b {\n        c = 4\n    }\n"
+    "    if a <= b {\n        c = 5\n    }\n    if a != b {\n        c = 6\n    }\n}\n",
+    # if / else, signed-byte and uword conditions
+    "%target nmos\nubyte a\nbyte s\nbyte t\nuword x\nuword y\n\n"
+    "main {\n    if s < t {\n        a = 1\n    } else {\n        a = 2\n    }\n"
+    "    if x < y {\n        a = 3\n    } else {\n        a = 4\n    }\n}\n",
+    # while + break + continue, and a non-comparison condition (a plain var)
+    "%target nmos\nubyte a\nubyte b\nubyte c\n\n"
+    "main {\n    while a < b {\n        a = a + 1\n        if a == c {\n            break\n        }\n"
+    "        if a == 9 {\n            continue\n        }\n        b = b - 1\n    }\n"
+    "    while c {\n        c = c - 1\n    }\n}\n",
+    # nested if inside if/else inside while
+    "%target nmos\nubyte a\nubyte b\nubyte c\n\n"
+    "main {\n    while a > b {\n        if c != 0 {\n            if a == b {\n"
+    "                a = 7\n            } else {\n                a = 8\n            }\n"
+    "        }\n        a = a - 1\n    }\n}\n",
+]
+
 
 def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
@@ -282,10 +309,18 @@ def _have_vasm() -> bool:
 @unittest.skipUnless(_have_vasm(), "vasm6502_oldstyle not on PATH")
 @unittest.skipUnless(EMU.exists(), f"emulator not built at {EMU}")
 class P1Equivalence(unittest.TestCase):
+    # The emulator injects its file-I/O syscall stubs at $F006 and up (over
+    # p1.bin once loaded), so p1.bin's code + arenas + string pool MUST end
+    # below $F006 -- otherwise the stubs clobber the top of the pool (and vice
+    # versa), giving corrupted out_text() output and wild jumps. See
+    # build_p1.py's ARENA_SIZES note. We enforce it here from the vasm listing.
+    STUB_FLOOR = 0xF006
+
     @classmethod
     def setUpClass(cls):
         cls.workdir = Path(tempfile.mkdtemp(prefix="p1_codegen_"))
         s_path = cls.workdir / "p1.s"
+        lst_path = cls.workdir / "p1.lst"
         cls.p1_bin = cls.workdir / "p1.bin"
         r = subprocess.run(
             [sys.executable, "-m", "p8c", str(P1_SRC), "-o", str(s_path)],
@@ -293,9 +328,22 @@ class P1Equivalence(unittest.TestCase):
         assert r.returncode == 0, f"p8c failed:\n{r.stdout}\n{r.stderr}"
         r = subprocess.run(
             ["vasm6502_oldstyle", "-Fbin", "-dotdir", "-ignore-mult-inc",
-             "-esc", "-wfail", "-o", str(cls.p1_bin), str(s_path)],
+             "-esc", "-wfail", "-L", str(lst_path), "-o", str(cls.p1_bin),
+             str(s_path)],
             capture_output=True, text=True)
         assert r.returncode == 0, f"vasm failed:\n{r.stdout}\n{r.stderr}"
+        # Ceiling guard: the highest p1.bin data label (the string pool top)
+        # must stay below the emulator's stub floor. Exclude the reset-vector
+        # org at $FFFx.
+        top = 0
+        for m in re.finditer(r"^([0-9A-Fa-f]{4})\s+(p8a_|p8c_str_|p8s_|p8v_)",
+                             lst_path.read_text(), re.MULTILINE):
+            a = int(m.group(1), 16)
+            if a < 0xFFF0 and a > top:
+                top = a
+        assert 0 < top < cls.STUB_FLOOR, (
+            f"p1.bin data top ${top:04X} reached the emulator stub floor "
+            f"${cls.STUB_FLOOR:04X}; shrink ARENA_SIZES in build_p1.py")
 
     @classmethod
     def tearDownClass(cls):
@@ -386,6 +434,12 @@ class P1Equivalence(unittest.TestCase):
 
     def test_m3_wordshift_programs(self):
         for src in M3_WORDSHIFT_PROGRAMS:
+            with self.subTest(src=src):
+                self.assertEqual(self._oracle(src), self._ontarget(src),
+                                 msg=f"codegen .s differs for {src!r}")
+
+    def test_m4_control_programs(self):
+        for src in M4_CONTROL_PROGRAMS:
             with self.subTest(src=src):
                 self.assertEqual(self._oracle(src), self._ontarget(src),
                                  msg=f"codegen .s differs for {src!r}")

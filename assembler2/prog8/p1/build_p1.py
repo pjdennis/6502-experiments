@@ -43,21 +43,31 @@ OUT = HERE / "p1.p8"
 # Arena-size overrides for p1.p8. The spliced front-end sizes its arenas for
 # the parser milestone (whole-program parse of tinyp8.p8 etc.), but p1.bin is
 # exercised only on the SMALL codegen-test corpus, so those arenas are wildly
-# oversized -- and as codegen grows, the cumulative .byte reservations push the
-# string pool's addresses past $FFFF, where the labels wrap into the code and
-# out_text() reads garbage. Shrinking the unused headroom (and the now-dead
-# serializer work stack, ws_*) keeps everything well under 64 KB. These sizes
-# stay generous for the M-corpus (a few vardecls + a short main); bump them if
-# a future codegen test needs a bigger program. (stmt.p8 keeps its own sizes;
-# this only rewrites p1.p8.)
+# oversized.
+#
+# THE REAL CEILING IS ~$F006, NOT $FFFF. The emulator injects its file-I/O
+# syscall stubs (the routines reached via the $F006 jmp table -- argv, open,
+# read, write, ...) starting at $F006 and growing UP to ~$F0C0, OVER p1.bin
+# once it is loaded. So if p1.bin's code + arenas + string pool extend past
+# ~$F006, the stub injection clobbers the top of the string pool (and the
+# pool clobbers the stubs) -> corrupted out_text() strings AND wild jumps when
+# a syscall's return address lands in stub bytes overwritten by pool data.
+# Keep p1.bin's top comfortably below $F006: build_p1.py checks this after
+# generating (see assert_fits, run by the test harness / `make p1-test`).
+#
+# Shrinking the unused arena headroom (and the now-dead serializer work stack,
+# ws_*) keeps the top under the ceiling. These sizes stay generous for the
+# M-corpus (a few vardecls + a short main); bump them if a future codegen test
+# needs a bigger program -- but then also reclaim space elsewhere so the top
+# stays < $F006. (stmt.p8 keeps its own sizes; this only rewrites p1.p8.)
 ARENA_SIZES = {
-    "ident_pool": 512, "ident_off": 128, "ident_len": 128,
-    "str_pool": 512, "str_off": 64, "str_len": 64,
-    "node_kind": 256, "node_op": 256,
-    "node_a": 256, "node_b": 256, "node_c": 256, "node_d": 256,
-    "operand_stack": 64, "op_kind": 64, "op_op": 64, "op_prec": 64,
-    "op_a": 64, "op_b": 64, "op_floor": 64,
-    "cons_val": 256, "cons_next": 256,
+    "ident_pool": 384, "ident_off": 80, "ident_len": 80,
+    "str_pool": 384, "str_off": 40, "str_len": 40,
+    "node_kind": 160, "node_op": 160,
+    "node_a": 160, "node_b": 160, "node_c": 160, "node_d": 160,
+    "operand_stack": 48, "op_kind": 48, "op_op": 48, "op_prec": 48,
+    "op_a": 48, "op_b": 48, "op_floor": 48,
+    "cons_val": 160, "cons_next": 160,
     # ws_* is the AST serializer's work stack -- dropped from p1, so dead.
     "ws_type": 2, "ws_node": 2, "ws_depth": 2,
 }
@@ -327,7 +337,7 @@ sub emit_zp_bindings() {{
 
 sub emit_main(uword body) {{
 {emit_text(MAIN_HEAD)}
-    codegen_block(body)
+    codegen_body(body)
 {emit_text(MAIN_RET)}
 }}
 
@@ -439,21 +449,283 @@ sub emit_string_pool() {{
     }}
 }}
 
-; ---- statement codegen --------------------------------------
-sub codegen_block(uword blk) {{
+; ---- control-flow labels + long branches -------------------
+; control label kinds: 0 else, 1 endif, 2 while_top, 3 while_end.
+sub emit_ctrl_label_ref(ubyte kind, uword id) {{
+    if kind == 0 {{
+        out_text(".Lelse_")
+    }} else {{
+        if kind == 1 {{
+            out_text(".Lendif_")
+        }} else {{
+            if kind == 2 {{
+                out_text(".Lwhile_top_")
+            }} else {{
+                out_text(".Lwhile_end_")
+            }}
+        }}
+    }}
+    out_dec(id)
+}}
+; branch mnemonics by code: 0 bne 1 beq 2 bcc 3 bcs 4 bmi 5 bpl 6 bvc 7 bvs.
+sub out_br_mnem(ubyte code) {{
+    if code == 0 {{ out_text("bne") return }}
+    if code == 1 {{ out_text("beq") return }}
+    if code == 2 {{ out_text("bcc") return }}
+    if code == 3 {{ out_text("bcs") return }}
+    if code == 4 {{ out_text("bmi") return }}
+    if code == 5 {{ out_text("bpl") return }}
+    if code == 6 {{ out_text("bvc") return }}
+    out_text("bvs")
+}}
+; _br: branch to a (possibly distant) control label when `brcode` is TRUE,
+; via the inverted-branch + jmp pattern (works at any distance).
+sub emit_br(ubyte brcode, ubyte tkind, uword tid) {{
+    ubyte inv
+    inv = brcode ^ 1
+    uword sk
+    sk = label_seq
+    label_seq = label_seq + 1
+    out_text("  ")
+    out_br_mnem(inv)
+    out_text(" .Lbrs_")
+    out_dec(sk)
+    o_nl()
+    out_text("  jmp ")
+    emit_ctrl_label_ref(tkind, tid)
+    o_nl()
+    out_text(".Lbrs_")
+    out_dec(sk)
+    out_byte($3a)
+    o_nl()
+}}
+
+; ---- condition codegen (branch to target if FALSE) ----------
+; is this expression a uword (for the word-compare condition path)? Leaf
+; idents resolve via the symbol table; &name is a uword. (Nested expr typing
+; is a tracked gap, as in the byte comparison signedness.)
+sub expr_is_word(uword e) -> ubyte {{
+    if node_kind[e] == ND_ADDROF {{
+        return 1
+    }}
+    if node_kind[e] == ND_IDENT {{
+        uword si
+        si = find_sym(node_a[e])
+        if si != $ffff {{
+            if sym_type[si] == TY_UWORD {{
+                return 1
+            }}
+        }}
+    }}
+    return 0
+}}
+; the negated (branch-if-false) sequence for an UNSIGNED compare op.
+sub emit_neg_unsigned(ubyte op, ubyte tkind, uword tid) {{
+    if op == TK_EQ {{ emit_br(0, tkind, tid) return }}      ; bne
+    if op == TK_NE {{ emit_br(1, tkind, tid) return }}      ; beq
+    if op == TK_LT {{ emit_br(3, tkind, tid) return }}      ; bcs
+    if op == TK_GE {{ emit_br(2, tkind, tid) return }}      ; bcc
+    if op == TK_GT {{                                        ; beq + bcc
+        emit_br(1, tkind, tid)
+        emit_br(2, tkind, tid)
+        return
+    }}
+    ; TK_LE: beq <skip> (short); bcs target; skip:
+    uword sk
+    sk = label_seq
+    label_seq = label_seq + 1
+    out_text("  beq .Lle_skip_")
+    out_dec(sk)
+    o_nl()
+    emit_br(3, tkind, tid)
+    out_text(".Lle_skip_")
+    out_dec(sk)
+    out_byte($3a)
+    o_nl()
+}}
+; the negated (branch-if-false) sequence for a SIGNED compare op (after the
+; overflow-corrected SBC has set N/Z).
+sub emit_neg_signed(ubyte op, ubyte tkind, uword tid) {{
+    if op == TK_EQ {{ emit_br(0, tkind, tid) return }}      ; bne
+    if op == TK_NE {{ emit_br(1, tkind, tid) return }}      ; beq
+    if op == TK_LT {{ emit_br(5, tkind, tid) return }}      ; bpl
+    if op == TK_GE {{ emit_br(4, tkind, tid) return }}      ; bmi
+    if op == TK_GT {{                                        ; beq + bmi
+        emit_br(1, tkind, tid)
+        emit_br(4, tkind, tid)
+        return
+    }}
+    ; TK_LE: beq <skip> (short); bpl target; skip:
+    uword sk
+    sk = label_seq
+    label_seq = label_seq + 1
+    out_text("  beq .Lsle_skip_")
+    out_dec(sk)
+    o_nl()
+    emit_br(5, tkind, tid)
+    out_text(".Lsle_skip_")
+    out_dec(sk)
+    out_byte($3a)
+    o_nl()
+}}
+; evaluate `cond` as bool and branch to the control label (tkind,tid) if it
+; is FALSE. Comparison conditions emit the compare straight into the branch
+; (no 0/1 materialized); anything else evaluates to A and branches on zero.
+sub emit_cond_branch_if_false(uword cond, ubyte tkind, uword tid) {{
+    if node_kind[cond] == ND_BINOP {{
+        ubyte op
+        op = node_op[cond]
+        if is_cmp_op(op) != 0 {{
+            uword lhs
+            uword rhs
+            lhs = node_a[cond]
+            rhs = node_b[cond]
+            ubyte isw
+            isw = 0
+            if expr_is_word(lhs) != 0 {{ isw = 1 }}
+            if expr_is_word(rhs) != 0 {{ isw = 1 }}
+            if isw != 0 {{
+                ; 16-bit compare (always unsigned)
+                codegen_word_expr(lhs)
+                out_text("  sta __p8c_wtmp0")
+                o_nl()
+                out_text("  sty __p8c_wtmp0+1")
+                o_nl()
+                codegen_word_expr(rhs)
+                out_text("  sta __p8c_wtmp1")
+                o_nl()
+                out_text("  sty __p8c_wtmp1+1")
+                o_nl()
+                out_text("  lda __p8c_wtmp0+1")
+                o_nl()
+                out_text("  cmp __p8c_wtmp1+1")
+                o_nl()
+                uword wlo
+                wlo = label_seq
+                label_seq = label_seq + 1
+                out_text("  bne .Lwcmp_lo_")
+                out_dec(wlo)
+                o_nl()
+                out_text("  lda __p8c_wtmp0")
+                o_nl()
+                out_text("  cmp __p8c_wtmp1")
+                o_nl()
+                out_text(".Lwcmp_lo_")
+                out_dec(wlo)
+                out_byte($3a)
+                o_nl()
+                emit_neg_unsigned(op, tkind, tid)
+                return
+            }}
+            ; byte compare
+            ubyte iss
+            iss = cmp_is_signed(cond)
+            codegen_byte_expr(lhs)
+            out_text("  sta __p8c_tmp0")
+            o_nl()
+            codegen_byte_expr(rhs)
+            out_text("  sta __p8c_tmp1")
+            o_nl()
+            out_text("  lda __p8c_tmp0")
+            o_nl()
+            if iss != 0 {{
+                if op != TK_EQ {{
+                    if op != TK_NE {{
+                        out_text("  sec")
+                        o_nl()
+                        out_text("  sbc __p8c_tmp1")
+                        o_nl()
+                        uword sg
+                        sg = label_seq
+                        label_seq = label_seq + 1
+                        out_text("  bvc .Lsgn_ok_")
+                        out_dec(sg)
+                        o_nl()
+                        out_text("  eor #$80")
+                        o_nl()
+                        out_text(".Lsgn_ok_")
+                        out_dec(sg)
+                        out_byte($3a)
+                        o_nl()
+                        emit_neg_signed(op, tkind, tid)
+                        return
+                    }}
+                }}
+                ; signed == / != still use cmp
+                out_text("  cmp __p8c_tmp1")
+                o_nl()
+                emit_neg_signed(op, tkind, tid)
+                return
+            }}
+            out_text("  cmp __p8c_tmp1")
+            o_nl()
+            emit_neg_unsigned(op, tkind, tid)
+            return
+        }}
+    }}
+    ; generic: evaluate to 0/1 in A, branch to target on zero.
+    codegen_byte_expr(cond)
+    emit_br(1, tkind, tid)
+}}
+
+; ---- statement codegen (work stack; control flow w/o recursion) ----
+sub sws_push(ubyte ty, uword a, uword b) {{
+    sws_type[sws_sp] = ty
+    sws_a[sws_sp] = a
+    sws_b[sws_sp] = b
+    sws_sp = sws_sp + 1
+}}
+; push a block's statements so they pop in source order. node_a[blk] is the
+; reversed cons (last stmt first), so pushing it directly puts the first stmt
+; on top.
+sub push_block_stmts(uword blk) {{
     if blk == 0 {{
         return
     }}
-    uword head
-    head = reverse_cons(node_a[blk])
     uword cell
-    cell = head
+    cell = node_a[blk]
     repeat {{
         if cell == 0 {{
             break
         }}
-        codegen_stmt(cons_val[cell])
+        sws_push(0, cons_val[cell], 0)
         cell = cons_next[cell]
+    }}
+}}
+; the statement-driver entry: emit a whole block (and everything nested) with
+; no recursion.
+sub codegen_body(uword body) {{
+    sws_sp = 0
+    lp_sp = 0
+    push_block_stmts(body)
+    repeat {{
+        if sws_sp == 0 {{
+            break
+        }}
+        sws_sp = sws_sp - 1
+        ubyte ty
+        uword a
+        uword b
+        ty = sws_type[sws_sp]
+        a = sws_a[sws_sp]
+        b = sws_b[sws_sp]
+        if ty == 0 {{
+            codegen_stmt(a)
+        }} else {{
+            if ty == 1 {{
+                emit_ctrl_label_ref(lsb(a), b)
+                out_byte($3a)
+                o_nl()
+            }} else {{
+                if ty == 2 {{
+                    out_text("  jmp ")
+                    emit_ctrl_label_ref(lsb(a), b)
+                    o_nl()
+                }} else {{
+                    lp_sp = lp_sp - 1
+                }}
+            }}
+        }}
     }}
 }}
 
@@ -464,7 +736,80 @@ sub codegen_stmt(uword st) {{
         codegen_assign(st)
         return
     }}
-    ; other statement kinds arrive at P7-M3+.
+    if k == ND_IF {{
+        codegen_if(st)
+        return
+    }}
+    if k == ND_WHILE {{
+        codegen_while(st)
+        return
+    }}
+    if k == ND_BREAK {{
+        out_text("  jmp ")
+        emit_ctrl_label_ref(lp_bk[lp_sp - 1], lp_bi[lp_sp - 1])
+        o_nl()
+        return
+    }}
+    if k == ND_CONTINUE {{
+        out_text("  jmp ")
+        emit_ctrl_label_ref(lp_ck[lp_sp - 1], lp_ci[lp_sp - 1])
+        o_nl()
+        return
+    }}
+    ; other statement kinds arrive at later milestones.
+}}
+sub codegen_if(uword st) {{
+    uword cond
+    uword thenb
+    uword elseb
+    uword endif_id
+    cond = node_a[st]
+    thenb = node_b[st]
+    elseb = node_c[st]
+    if elseb != 0 {{
+        uword else_id
+        else_id = label_seq
+        label_seq = label_seq + 1
+        endif_id = label_seq
+        label_seq = label_seq + 1
+        emit_cond_branch_if_false(cond, 0, else_id)
+        sws_push(1, 1, endif_id)          ; endif label (bottom)
+        push_block_stmts(elseb)
+        sws_push(1, 0, else_id)           ; else label
+        sws_push(2, 1, endif_id)          ; jmp endif
+        push_block_stmts(thenb)           ; then stmts (top)
+        return
+    }}
+    endif_id = label_seq
+    label_seq = label_seq + 1
+    emit_cond_branch_if_false(cond, 1, endif_id)
+    sws_push(1, 1, endif_id)
+    push_block_stmts(thenb)
+}}
+sub codegen_while(uword st) {{
+    uword cond
+    uword body
+    cond = node_a[st]
+    body = node_b[st]
+    uword top_id
+    uword end_id
+    top_id = label_seq
+    label_seq = label_seq + 1
+    end_id = label_seq
+    label_seq = label_seq + 1
+    emit_ctrl_label_ref(2, top_id)
+    out_byte($3a)
+    o_nl()
+    lp_bk[lp_sp] = 3
+    lp_bi[lp_sp] = end_id
+    lp_ck[lp_sp] = 2
+    lp_ci[lp_sp] = top_id
+    lp_sp = lp_sp + 1
+    emit_cond_branch_if_false(cond, 3, end_id)
+    sws_push(3, 0, 0)                     ; pop loop stack (bottom)
+    sws_push(1, 3, end_id)               ; while_end label
+    sws_push(2, 2, top_id)               ; jmp while_top
+    push_block_stmts(body)               ; body (top)
 }}
 
 ; ---- byte expression codegen (work-stack; no recursion) -----
@@ -1850,6 +2195,20 @@ def main():
         "uword[96] wws_node\n"
         "ubyte[96] wws_op\n"
         "ubyte wws_sp\n"
+        "; statement work stack (control flow without recursion): a task is\n"
+        "; 0=emit stmt node, 1=emit label .L<kind>_<id>:, 2=emit jmp to it,\n"
+        "; 3=pop the loop-label stack.\n"
+        "ubyte[128] sws_type\n"
+        "uword[128] sws_a\n"
+        "uword[128] sws_b\n"
+        "ubyte sws_sp\n"
+        "; loop-label stack for break/continue (break -> bk kind/id, continue\n"
+        "; -> ck kind/id), pushed per loop.\n"
+        "ubyte[16] lp_bk\n"
+        "uword[16] lp_bi\n"
+        "ubyte[16] lp_ck\n"
+        "uword[16] lp_ci\n"
+        "ubyte lp_sp\n"
         "; short-circuit and/or label stack: a label-id pair is allocated mid-\n"
         "; evaluation (after the lhs) and consumed by the tail (after the rhs);\n"
         "; LIFO nesting matches the work-stack task order.\n"

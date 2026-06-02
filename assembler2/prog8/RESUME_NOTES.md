@@ -85,11 +85,12 @@ PHASE7_DESIGN.md section 10.
   * 5 v0/v1 e2e (`tinyp8/tests/test_e2e.py`).
   * 5 v0/v1 self-host equivalence (`test_self_host.py`).
   * 12 v2..v9 .p8-only (`test_v2.py`, sources in `goldens_v2/`).
-  * **165 total, all green** (the 22 tinyp8 + 38 p1 cases need vasm; see the
+  * **166 total, all green** (the 22 tinyp8 + 39 p1 cases need vasm; see the
     environment note above). The p1 codegen cases live in
     `p1/tests/test_p1.py` (Phase 7: P7-M1 + P7-M2 + the M3 strings,
     byte-arithmetic, mul/shift, unary, comparison, logical, @()/&name, and
-    16-bit word-arithmetic + word-shift slices).
+    16-bit word-arithmetic + word-shift slices; P7-M4 if/else/while +
+    break/continue).
 
 Run:
 
@@ -474,6 +475,40 @@ Progress:
          expr's `@()` address would corrupt the byte stack (documented gap).
          Augmented `<<= >>=` via the synthetic word binop. wws tasks 4-8.
          `test_p1.py::test_m3_wordshift_programs`. p1.bin ~55 KB code.
+       * **STUB-CEILING BUG (root-caused + guarded).** The emulator injects
+         its file-I/O syscall stub routines (reached via the $F006 jmp table:
+         argv/open/read/write/...) starting at **$F006** and growing UP, OVER
+         p1.bin once loaded. So p1.bin's code+arenas+string pool must end below
+         ~$F006 -- otherwise the stub injection clobbers the top of the string
+         pool (and pool data clobbers the stubs), giving corrupted `out_text()`
+         strings AND wild jumps (a syscall RTS lands in stub bytes overwritten
+         by pool data). This -- NOT the $FFFF wrap theorized earlier -- was the
+         real cause of the "garbage out_text" symptom both times. Fixed by
+         shrinking p1.p8's arenas further (pool top now ~$E88B); guarded by a
+         new ceiling assert in `test_p1.py::setUpClass` (parses the vasm
+         listing, fails if the top reaches $F006). Diagnosed with a temporary
+         emulator write/jump watchpoint (reverted). KEEP THE TOP < $F006.
+       * **P7-M4 control flow slice DONE (if / if-else / while + break /
+         continue).** Block emission is now a non-recursive statement work
+         stack (`sws_*` tasks: emit-stmt / emit-label / emit-jmp / pop-loop;
+         `push_block_stmts` pushes a block's stmts in source order) since p8c
+         recurses via `_emit_block` and p1 can't. Conditions go through
+         `emit_cond_branch_if_false` (port of `_emit_bool_test_branch_if_false`)
+         -- a comparison emits the compare straight into a long-safe
+         inverted-branch (`emit_br`, the `_br` idiom), byte unsigned/signed +
+         the 16-bit word compare; a non-comparison cond materializes 0/1 and
+         branches on zero. `if`/`while` allocate else/endif/while_top/while_end
+         labels (shared `label_seq`); `break`/`continue` jump to the current
+         loop's labels via a small loop-label stack (`lp_*`). Nesting is
+         arbitrary (work stack). Byte-identical to `p8c -o` over
+         `test_p1.py::test_m4_control_programs` (every byte cmp op, signed +
+         uword conds, non-comparison cond, break/continue, nested). p1.bin
+         ~57 KB code, top ~$E88B.
+       * **NEXT (rest of M3/M5):** `for`, `repeat`, `when`, `defer`; then array
+         indexing (`arr[i]` -- needs array symbols + storage trailers), calls
+         (needs pass B: emit non-main subs + their params/locals in the symbol
+         table), `txt.print*`. Watch the $F006 ceiling as code grows (shrink
+         arenas / table-drive text / stream).
        * **WORD comparison: NO PORT NEEDED.** p8c's `_emit_cmp_into_a` always
          evaluates comparison operands as BYTES (it compares only the low
          bytes even for uword operands -- a p8c limitation;
