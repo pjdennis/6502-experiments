@@ -67,15 +67,45 @@ MEASURED HEADROOM AT THIS HEAD (p8c p1/p1.p8):
     the pool small enough to fit; if it ever outgrows $F0C0..$FE00, raise
     ARGV_BASE/ports further (argv only needs ~100 B for short self-host paths).
 
-REMAINING CAPACITY MATH FOR FULL SELF-HOST:
+REMAINING CAPACITY MATH FOR FULL SELF-HOST -- **REVISED (the ~2 KB estimate
+was wrong; the real gap is ~15 KB).** Measured/counted at this HEAD:
   * The low window is now $0200..$F006 (~60 KB) for code+arenas ONLY (pool is
-    out). Self-host needs the arenas grown to p1.p8's own subs (node arena
-    ~512*6 + cons + pools ~= 10 KB vs the ~1.5 KB shrunk-for-corpus now) and
-    the remaining features add ~5 KB code. Rough budget: ~52 KB code + ~10 KB
-    arenas ~= 62 KB vs 60 KB window. **Residual ~2 KB over** -- close with a
-    SAFE p8c codegen-compaction lever (#1 below) and/or arena right-sizing.
-  * The ~3 KB just freed offsets most of the arena growth; the pool relocation
-    converted a ~5-8 KB overrun into a ~2 KB one.
+    out). p1.bin code alone is ~58 KB (corpus arenas shrunk to ~1.4 KB; top
+    $ED93). To SELF-HOST, p1 must hold, IN THAT SAME LOW WINDOW, arenas sized
+    for p1.p8 itself. Crucially, p1 resets only the NODE/cons arenas per-sub
+    (line ~3311: "reset_nodes ... keep the persistent ident/str pools"); the
+    ident pool, string pool, and symbol table are PROGRAM-WIDE and cannot be
+    reset (the sym table stores interned ident IDs that index the persistent
+    ident pool). Counted in p1.p8:
+      - distinct identifier name bytes (ident_pool): ~4-6 KB (the raw grep is
+        ~12 KB incl. in-string mnemonics; genuine interned idents ~300-500).
+      - ident_off/ident_len: ~400 entries x 2 x 2 = ~1.6 KB.
+      - string pool (parser side): ~2.9 KB (same text as the output pool).
+      - symbol table: 254 module syms (consts+vars+arrays) + ~510 params/locals.
+        If params/locals accumulate (sym_count is NOT rolled back per sub) that
+        is ~760 entries x ~12 B = ~9 KB; even reset-per-sub it is ~3 KB.
+      - node + cons (per-sub, biggest sub ~470 nodes): ~4.7 KB + ~2 KB.
+    TOTAL self-host arenas ~= 15-20 KB. code ~58 KB + arenas ~15-20 KB
+    ~= 73-78 KB vs the 60 KB low window. **~13-18 KB OVER.**
+  * **This is a FUNDAMENTAL constraint, not an incremental gap.** The pool
+    relocation (~3 KB) and arena right-sizing (~0.3 KB) and the exhausted o_*
+    helper compaction (~0.2 KB) are drops in a ~15 KB bucket. The easy levers
+    are spent. Closing ~15 KB needs an ARCHITECTURAL change:
+      A. BANK SWITCHING -- give the emulator >64 KB (banked RAM) and have p1
+         place its program-wide arenas (ident/str/sym) in a high bank. Large
+         emulator + p1 change; the cleanest real fix.
+      B. STREAMING / SPILL -- p1 spills the symbol/ident tables to a scratch
+         FILE via the existing file-I/O stubs (open/read/write), or runs extra
+         passes over the source, so program-wide state need not be resident.
+         Major p1 redesign.
+      C. SHRINK THE TARGET -- reduce p1.p8 itself (fewer subs/features, a more
+         compact codegen model) so code+arenas fit 60 KB. Changes what
+         "self-host" means.
+      D. BOUNDED self-host -- accept that p1 compiles programs up to some size
+         (smaller than p1.p8) now; pursue A/B/C later for the true fixpoint.
+    THIS IS A DIRECTION DECISION FOR THE USER (esp. A, which re-architects the
+    shared emulator). Until it's made, adding more p1 features just consumes the
+    last ~600 B of corpus-compile margin without approaching the fixpoint.
 
 Paths forward:
   1. A bigger codegen-compaction lever in p8c (all SAFE, p1.p8-source-free,
