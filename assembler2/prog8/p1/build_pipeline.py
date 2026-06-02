@@ -111,8 +111,8 @@ sub d16(uword v) { out_byte(lsb(v)) out_byte(lsb(v >> 8)) }
 """
 
 DUMP_STATE = """
-; pass 1: write the whole parsed compiler state to the dump file (dst_hand).
-sub dump_state() {
+; pass 1: program-wide state (no nodes -- those stream per-sub afterwards).
+sub dump_global() {
     d16(prog_address)
     out_byte(prog_target)
     uword i
@@ -128,22 +128,7 @@ sub dump_state() {
     i = 0
     repeat {
         if i >= sub_count { break }
-        d16(sub_name[i]) out_byte(sub_kind[i]) out_byte(sub_ret[i]) d16(sub_addr[i]) d16(sub_snode[i])
-        i = i + 1
-    }
-    d16(node_count)
-    i = 0
-    repeat {
-        if i >= node_count { break }
-        out_byte(node_kind[i]) out_byte(node_op[i])
-        d16(node_a[i]) d16(node_b[i]) d16(node_c[i]) d16(node_d[i])
-        i = i + 1
-    }
-    d16(cons_count)
-    i = 0
-    repeat {
-        if i >= cons_count { break }
-        d16(cons_val[i]) d16(cons_next[i])
+        d16(sub_name[i]) out_byte(sub_kind[i]) out_byte(sub_ret[i]) d16(sub_addr[i])
         i = i + 1
     }
     d16(ident_pool_len)
@@ -159,10 +144,30 @@ sub dump_state() {
     i = 0
     repeat { if i >= str_count { break } d16(str_off[i]) d16(str_len[i]) i = i + 1 }
 }
+; one sub's AST record: kind(1) snode(2) node_count(2) nodes cons_count(2) cons.
+sub dump_record(ubyte kind, uword snode) {
+    out_byte(kind)
+    d16(snode)
+    uword i
+    d16(node_count)
+    i = 0
+    repeat {
+        if i >= node_count { break }
+        out_byte(node_kind[i]) out_byte(node_op[i])
+        d16(node_a[i]) d16(node_b[i]) d16(node_c[i]) d16(node_d[i])
+        i = i + 1
+    }
+    d16(cons_count)
+    i = 0
+    repeat {
+        if i >= cons_count { break }
+        d16(cons_val[i]) d16(cons_next[i])
+        i = i + 1
+    }
+}
 """
 
 LOAD_STATE = """
-; pass 2: read the dump file (src_hand) back into the codegen arrays.
 sub l16() -> uword {
     uword lo
     lo = read_src()
@@ -170,7 +175,7 @@ sub l16() -> uword {
     hi = read_src()
     return lo | (hi << 8)
 }
-sub load_state() {
+sub load_global() {
     prog_address = l16()
     prog_target = read_src()
     uword i
@@ -186,22 +191,7 @@ sub load_state() {
     i = 0
     repeat {
         if i >= sub_count { break }
-        sub_name[i] = l16() sub_kind[i] = read_src() sub_ret[i] = read_src() sub_addr[i] = l16() sub_snode[i] = l16()
-        i = i + 1
-    }
-    node_count = l16()
-    i = 0
-    repeat {
-        if i >= node_count { break }
-        node_kind[i] = read_src() node_op[i] = read_src()
-        node_a[i] = l16() node_b[i] = l16() node_c[i] = l16() node_d[i] = l16()
-        i = i + 1
-    }
-    cons_count = l16()
-    i = 0
-    repeat {
-        if i >= cons_count { break }
-        cons_val[i] = l16() cons_next[i] = l16()
+        sub_name[i] = l16() sub_kind[i] = read_src() sub_ret[i] = read_src() sub_addr[i] = l16()
         i = i + 1
     }
     ident_pool_len = l16()
@@ -217,21 +207,32 @@ sub load_state() {
     i = 0
     repeat { if i >= str_count { break } str_off[i] = l16() str_len[i] = l16() i = i + 1 }
 }
+; load one record's nodes into the (reset) node arena; returns the snode.
+uword rec_snode
+uword rec_kind
+sub load_record() {
+    rec_kind = read_src()
+    if rec_kind == $ff { return }
+    rec_snode = l16()
+    uword i
+    node_count = l16()
+    i = 0
+    repeat {
+        if i >= node_count { break }
+        node_kind[i] = read_src() node_op[i] = read_src()
+        node_a[i] = l16() node_b[i] = l16() node_c[i] = l16() node_d[i] = l16()
+        i = i + 1
+    }
+    cons_count = l16()
+    i = 0
+    repeat {
+        if i >= cons_count { break }
+        cons_val[i] = l16() cons_next[i] = l16()
+        i = i + 1
+    }
+}
 """
 
-_reg = dict(cg_subs)["register_subs"]
-_reg = _reg.replace(
-    "            if node_op[snode] != SUBK_ASMSUB {\n"
-    "                walk_locals(node_c[snode], node_a[snode])\n"
-    "            }\n"
-    "            reset_nodes()\n",
-    "            if node_op[snode] != SUBK_ASMSUB {\n"
-    "                walk_locals(node_c[snode], node_a[snode])\n"
-    "            }\n", 1)
-_reg = _reg.replace("            sub_count = sub_count + 1\n",
-                    "            sub_snode[sub_count] = snode\n"
-                    "            sub_count = sub_count + 1\n", 1)
-PASS1_REGISTER = _reg
 
 PASS1_MAIN = """
 main {
@@ -253,7 +254,47 @@ main {
     parse_decls_pass()
     build_symbols()
     register_subs()
-    dump_state()
+    dump_global()
+    ; re-parse from a clean arena so the record ids match the dumped pool.
+    reset_arena()
+    reset_source()
+    lex_init()
+    parse_decls_pass()
+    uword snode
+    ubyte t
+    reset_source()
+    lex_init()
+    repeat {
+        t = cur_kind()
+        if t == TK_EOF { break }
+        if t == TK_KMAIN {
+            reset_nodes()
+            snode = parse_main()
+            dump_record(0, snode)
+        } else {
+            if t == TK_KSUB {
+                advance()
+                reset_nodes()
+                snode = parse_sub(SUBK_SUB)
+                dump_record(1, snode)
+            } else {
+                if t == TK_KINLINE {
+                    advance()
+                    advance()
+                    reset_nodes()
+                    snode = parse_sub(SUBK_INLINE)
+                } else {
+                    if t == TK_KASMSUB {
+                        reset_nodes()
+                        snode = parse_asmsub()
+                    } else {
+                        cg_skip_decl()
+                    }
+                }
+            }
+        }
+    }
+    out_byte($ff)
     _close(src_hand)
     _close(dst_hand)
 }
@@ -262,17 +303,7 @@ main {
 PASS2_DRIVERS = """
 sub register_subs() { return }
 sub cg_skip_decl() { return }
-sub emit_subs() {
-    uword i
-    i = 0
-    repeat {
-        if i >= sub_count { break }
-        if sub_kind[i] == SUBK_SUB {
-            emit_sub(sub_snode[i])
-        }
-        i = i + 1
-    }
-}
+sub emit_subs() { return }
 """
 
 PASS2_MAIN = """
@@ -282,27 +313,40 @@ main {
     src_hand = _open(fn)
     fn = _argv(1)
     dst_hand = _openout(fn)
-    load_state()
+    load_global()
     strpool_count = 0
     mul_used = 0
     label_seq = 0
     lstk_sp = 0
     emit_prologue()
     emit_zp_bindings()
-    uword i
-    i = 0
+    ; stream 1: main
     repeat {
-        if i >= sub_count { break }
-        if sub_kind[i] == SUBK_MAIN {
+        load_record()
+        if rec_kind == $ff { break }
+        if rec_kind == 0 {
             cur_ret = TY_VOID
-            cur_ret_name = sub_name[i]
-            cur_scope = sub_name[i]
-            emit_main(node_c[sub_snode[i]])
-            break
+            cur_ret_name = node_a[rec_snode]
+            cur_scope = node_a[rec_snode]
+            emit_main(node_c[rec_snode])
         }
-        i = i + 1
     }
-    emit_subs()
+    ; drain to EOF so the emulator rewinds the dump to offset 0, then re-read
+    ; (and discard) the global block to reach the records again.
+    ubyte junk
+    repeat {
+        junk = read_src()
+        if src_eof != 0 { break }
+    }
+    reset_source()
+    load_global()
+    repeat {
+        load_record()
+        if rec_kind == $ff { break }
+        if rec_kind == 1 {
+            emit_sub(rec_snode)
+        }
+    }
     emit_mul_helper()
     emit_arrays()
     emit_string_pool()
@@ -337,7 +381,7 @@ def emit_pass1():
               "find_sym", "reverse_cons", "cg_skip_decl"):
         parts.append(cg_map[n])
     parts.append(DUMP_LOAD_COMMON)
-    parts.append(PASS1_REGISTER)
+    parts.append(cg_map["register_subs"])
     parts.append(DUMP_STATE)
     parts.append(PASS1_MAIN)
     text = "\n".join(parts)

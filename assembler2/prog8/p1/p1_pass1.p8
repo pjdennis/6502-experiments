@@ -2497,7 +2497,6 @@ sub register_subs() {
             if node_op[snode] == SUBK_ASMSUB {
                 sub_addr[sub_count] = node_c[snode]   ; node_c is the $F0xx addr
             }
-            sub_snode[sub_count] = snode
             sub_count = sub_count + 1
             ; allocate this sub's params (source order), continuing zp_next.
             uword phead
@@ -2530,14 +2529,15 @@ sub register_subs() {
             if node_op[snode] != SUBK_ASMSUB {
                 walk_locals(node_c[snode], node_a[snode])
             }
+            reset_nodes()
         }
     }
 }
 ; emit one non-main sub: header, body, per-sub return label + rts.
 
 
-; pass 1: write the whole parsed compiler state to the dump file (dst_hand).
-sub dump_state() {
+; pass 1: program-wide state (no nodes -- those stream per-sub afterwards).
+sub dump_global() {
     d16(prog_address)
     out_byte(prog_target)
     uword i
@@ -2553,9 +2553,27 @@ sub dump_state() {
     i = 0
     repeat {
         if i >= sub_count { break }
-        d16(sub_name[i]) out_byte(sub_kind[i]) out_byte(sub_ret[i]) d16(sub_addr[i]) d16(sub_snode[i])
+        d16(sub_name[i]) out_byte(sub_kind[i]) out_byte(sub_ret[i]) d16(sub_addr[i])
         i = i + 1
     }
+    d16(ident_pool_len)
+    i = 0
+    repeat { if i >= ident_pool_len { break } out_byte(ident_pool[i]) i = i + 1 }
+    d16(ident_count)
+    i = 0
+    repeat { if i >= ident_count { break } d16(ident_off[i]) d16(ident_len[i]) i = i + 1 }
+    d16(str_pool_len)
+    i = 0
+    repeat { if i >= str_pool_len { break } out_byte(str_pool[i]) i = i + 1 }
+    d16(str_count)
+    i = 0
+    repeat { if i >= str_count { break } d16(str_off[i]) d16(str_len[i]) i = i + 1 }
+}
+; one sub's AST record: kind(1) snode(2) node_count(2) nodes cons_count(2) cons.
+sub dump_record(ubyte kind, uword snode) {
+    out_byte(kind)
+    d16(snode)
+    uword i
     d16(node_count)
     i = 0
     repeat {
@@ -2571,18 +2589,6 @@ sub dump_state() {
         d16(cons_val[i]) d16(cons_next[i])
         i = i + 1
     }
-    d16(ident_pool_len)
-    i = 0
-    repeat { if i >= ident_pool_len { break } out_byte(ident_pool[i]) i = i + 1 }
-    d16(ident_count)
-    i = 0
-    repeat { if i >= ident_count { break } d16(ident_off[i]) d16(ident_len[i]) i = i + 1 }
-    d16(str_pool_len)
-    i = 0
-    repeat { if i >= str_pool_len { break } out_byte(str_pool[i]) i = i + 1 }
-    d16(str_count)
-    i = 0
-    repeat { if i >= str_count { break } d16(str_off[i]) d16(str_len[i]) i = i + 1 }
 }
 
 
@@ -2605,7 +2611,47 @@ main {
     parse_decls_pass()
     build_symbols()
     register_subs()
-    dump_state()
+    dump_global()
+    ; re-parse from a clean arena so the record ids match the dumped pool.
+    reset_arena()
+    reset_source()
+    lex_init()
+    parse_decls_pass()
+    uword snode
+    ubyte t
+    reset_source()
+    lex_init()
+    repeat {
+        t = cur_kind()
+        if t == TK_EOF { break }
+        if t == TK_KMAIN {
+            reset_nodes()
+            snode = parse_main()
+            dump_record(0, snode)
+        } else {
+            if t == TK_KSUB {
+                advance()
+                reset_nodes()
+                snode = parse_sub(SUBK_SUB)
+                dump_record(1, snode)
+            } else {
+                if t == TK_KINLINE {
+                    advance()
+                    advance()
+                    reset_nodes()
+                    snode = parse_sub(SUBK_INLINE)
+                } else {
+                    if t == TK_KASMSUB {
+                        reset_nodes()
+                        snode = parse_asmsub()
+                    } else {
+                        cg_skip_decl()
+                    }
+                }
+            }
+        }
+    }
+    out_byte($ff)
     _close(src_hand)
     _close(dst_hand)
 }

@@ -3778,7 +3778,6 @@ sub emit_sub(uword snode) {
 sub d16(uword v) { out_byte(lsb(v)) out_byte(lsb(v >> 8)) }
 
 
-; pass 2: read the dump file (src_hand) back into the codegen arrays.
 sub l16() -> uword {
     uword lo
     lo = read_src()
@@ -3786,7 +3785,7 @@ sub l16() -> uword {
     hi = read_src()
     return lo | (hi << 8)
 }
-sub load_state() {
+sub load_global() {
     prog_address = l16()
     prog_target = read_src()
     uword i
@@ -3802,22 +3801,7 @@ sub load_state() {
     i = 0
     repeat {
         if i >= sub_count { break }
-        sub_name[i] = l16() sub_kind[i] = read_src() sub_ret[i] = read_src() sub_addr[i] = l16() sub_snode[i] = l16()
-        i = i + 1
-    }
-    node_count = l16()
-    i = 0
-    repeat {
-        if i >= node_count { break }
-        node_kind[i] = read_src() node_op[i] = read_src()
-        node_a[i] = l16() node_b[i] = l16() node_c[i] = l16() node_d[i] = l16()
-        i = i + 1
-    }
-    cons_count = l16()
-    i = 0
-    repeat {
-        if i >= cons_count { break }
-        cons_val[i] = l16() cons_next[i] = l16()
+        sub_name[i] = l16() sub_kind[i] = read_src() sub_ret[i] = read_src() sub_addr[i] = l16()
         i = i + 1
     }
     ident_pool_len = l16()
@@ -3833,21 +3817,35 @@ sub load_state() {
     i = 0
     repeat { if i >= str_count { break } str_off[i] = l16() str_len[i] = l16() i = i + 1 }
 }
+; load one record's nodes into the (reset) node arena; returns the snode.
+uword rec_snode
+uword rec_kind
+sub load_record() {
+    rec_kind = read_src()
+    if rec_kind == $ff { return }
+    rec_snode = l16()
+    uword i
+    node_count = l16()
+    i = 0
+    repeat {
+        if i >= node_count { break }
+        node_kind[i] = read_src() node_op[i] = read_src()
+        node_a[i] = l16() node_b[i] = l16() node_c[i] = l16() node_d[i] = l16()
+        i = i + 1
+    }
+    cons_count = l16()
+    i = 0
+    repeat {
+        if i >= cons_count { break }
+        cons_val[i] = l16() cons_next[i] = l16()
+        i = i + 1
+    }
+}
 
 
 sub register_subs() { return }
 sub cg_skip_decl() { return }
-sub emit_subs() {
-    uword i
-    i = 0
-    repeat {
-        if i >= sub_count { break }
-        if sub_kind[i] == SUBK_SUB {
-            emit_sub(sub_snode[i])
-        }
-        i = i + 1
-    }
-}
+sub emit_subs() { return }
 
 
 main {
@@ -3856,27 +3854,40 @@ main {
     src_hand = _open(fn)
     fn = _argv(1)
     dst_hand = _openout(fn)
-    load_state()
+    load_global()
     strpool_count = 0
     mul_used = 0
     label_seq = 0
     lstk_sp = 0
     emit_prologue()
     emit_zp_bindings()
-    uword i
-    i = 0
+    ; stream 1: main
     repeat {
-        if i >= sub_count { break }
-        if sub_kind[i] == SUBK_MAIN {
+        load_record()
+        if rec_kind == $ff { break }
+        if rec_kind == 0 {
             cur_ret = TY_VOID
-            cur_ret_name = sub_name[i]
-            cur_scope = sub_name[i]
-            emit_main(node_c[sub_snode[i]])
-            break
+            cur_ret_name = node_a[rec_snode]
+            cur_scope = node_a[rec_snode]
+            emit_main(node_c[rec_snode])
         }
-        i = i + 1
     }
-    emit_subs()
+    ; drain to EOF so the emulator rewinds the dump to offset 0, then re-read
+    ; (and discard) the global block to reach the records again.
+    ubyte junk
+    repeat {
+        junk = read_src()
+        if src_eof != 0 { break }
+    }
+    reset_source()
+    load_global()
+    repeat {
+        load_record()
+        if rec_kind == $ff { break }
+        if rec_kind == 1 {
+            emit_sub(rec_snode)
+        }
+    }
     emit_mul_helper()
     emit_arrays()
     emit_string_pool()
