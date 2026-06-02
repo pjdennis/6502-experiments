@@ -188,8 +188,6 @@ uword ntok_val
 
 ; identifier text pool (reset per top-level unit while streaming)
 ubyte[224] ident_pool
-uword[40]  ident_off
-uword[40]  ident_len
 uword ident_count
 uword ident_pool_len
 
@@ -423,6 +421,24 @@ sub out_dec(uword v) {
 
 ; ---- numeric scanners ----
 
+sub ident_len_at(uword id) -> uword {
+    uword n
+    n = 0
+    repeat {
+        if ident_pool[id + n] == 0 {
+            break
+        }
+        n = n + 1
+    }
+    return n
+}
+
+; classify_name dispatches by length to a per-length helper. Splitting the
+; keyword if-chains out of one big `when` keeps every sub's node count well
+; under the per-unit node arena, so the self-host front-end (pass 1) can parse
+; this file itself without overflowing. (Behaviour is identical; the helpers
+; return TK_IDENT when no keyword matches, which classify_name passes through.)
+
 sub new_node(ubyte kind, ubyte op, uword a, uword b) -> uword {
     uword id
     id = node_count
@@ -498,8 +514,8 @@ sub out_ident_text(uword id) {
     uword off
     uword n
     uword j
-    off = ident_off[id]
-    n = ident_len[id]
+    off = id
+    n = ident_len_at(id)
     j = 0
     repeat {
         if j >= n {
@@ -3008,8 +3024,8 @@ sub find_sub(uword identid) -> uword {
 sub ident_eq(uword identid, uword s) -> ubyte {
     uword off
     uword n
-    off = ident_off[identid]
-    n = ident_len[identid]
+    off = identid
+    n = ident_len_at(identid)
     uword j
     j = 0
     repeat {
@@ -3380,9 +3396,6 @@ sub load_global() {
     ident_pool_len = l16()
     i = 0
     repeat { if i >= ident_pool_len { break } ident_pool[i] = read_src() i = i + 1 }
-    ident_count = l16()
-    i = 0
-    repeat { if i >= ident_count { break } ident_off[i] = l16() ident_len[i] = l16() i = i + 1 }
     str_pool_len = l16()
     i = 0
     repeat { if i >= str_pool_len { break } str_pool[i] = read_src() i = i + 1 }

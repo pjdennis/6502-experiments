@@ -144,9 +144,6 @@ sub dump_global() {
     d16(ident_pool_len)
     i = 0
     repeat { if i >= ident_pool_len { break } out_byte(ident_pool[i]) i = i + 1 }
-    d16(ident_count)
-    i = 0
-    repeat { if i >= ident_count { break } d16(ident_off[i]) d16(ident_len[i]) i = i + 1 }
     d16(str_pool_len)
     i = 0
     repeat { if i >= str_pool_len { break } out_byte(str_pool[i]) i = i + 1 }
@@ -242,9 +239,6 @@ sub load_global() {
     ident_pool_len = l16()
     i = 0
     repeat { if i >= ident_pool_len { break } ident_pool[i] = read_src() i = i + 1 }
-    ident_count = l16()
-    i = 0
-    repeat { if i >= ident_count { break } ident_off[i] = l16() ident_len[i] = l16() i = i + 1 }
     str_pool_len = l16()
     i = 0
     repeat { if i >= str_pool_len { break } str_pool[i] = read_src() i = i + 1 }

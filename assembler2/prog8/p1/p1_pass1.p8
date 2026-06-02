@@ -188,8 +188,6 @@ uword ntok_val
 
 ; identifier text pool (reset per top-level unit while streaming)
 ubyte[224] ident_pool
-uword[40]  ident_off
-uword[40]  ident_len
 uword ident_count
 uword ident_pool_len
 
@@ -611,37 +609,43 @@ sub read_ident() {
 }
 
 sub intern_name() -> uword {
-    uword i
-    i = 0
+    ; null-terminated ident pool: each name is bytes + a $00; the "id" is the
+    ; pool OFFSET where the name starts (same name dedups to the same offset).
+    uword off
+    off = 0
     repeat {
-        if i >= ident_count {
+        if off >= ident_pool_len {
             break
         }
-        if ident_len[i] == name_len {
-            uword off
-            uword j
-            ubyte match
-            off = ident_off[i]
-            match = 1
-            j = 0
-            repeat {
-                if j >= name_len {
-                    break
-                }
-                if ident_pool[off + j] != name_buf[j] {
-                    match = 0
-                    break
-                }
-                j = j + 1
+        uword j
+        ubyte match
+        match = 1
+        j = 0
+        repeat {
+            if j >= name_len {
+                break
             }
-            if match != 0 {
-                return i
+            if ident_pool[off + j] != name_buf[j] {
+                match = 0
+                break
+            }
+            j = j + 1
+        }
+        if match != 0 {
+            if ident_pool[off + name_len] == 0 {
+                return off
             }
         }
-        i = i + 1
+        repeat {
+            if ident_pool[off] == 0 {
+                off = off + 1
+                break
+            }
+            off = off + 1
+        }
     }
-    ident_off[ident_count] = ident_pool_len
-    ident_len[ident_count] = name_len
+    uword id
+    id = ident_pool_len
     uword k
     k = 0
     repeat {
@@ -652,10 +656,22 @@ sub intern_name() -> uword {
         ident_pool_len = ident_pool_len + 1
         k = k + 1
     }
-    uword id
-    id = ident_count
-    ident_count = ident_count + 1
+    ident_pool[ident_pool_len] = 0
+    ident_pool_len = ident_pool_len + 1
     return id
+}
+; length of the null-terminated ident at pool offset `id`.
+
+sub ident_len_at(uword id) -> uword {
+    uword n
+    n = 0
+    repeat {
+        if ident_pool[id + n] == 0 {
+            break
+        }
+        n = n + 1
+    }
+    return n
 }
 
 ; classify_name dispatches by length to a per-length helper. Splitting the
@@ -1105,8 +1121,8 @@ sub append_ident_to_namebuf(uword id) {
     uword off
     uword n
     uword j
-    off = ident_off[id]
-    n = ident_len[id]
+    off = id
+    n = ident_len_at(id)
     j = 0
     repeat {
         if j >= n {
@@ -1123,8 +1139,8 @@ sub append_ident_to_pathbuf(uword id) {
     uword off
     uword n
     uword j
-    off = ident_off[id]
-    n = ident_len[id]
+    off = id
+    n = ident_len_at(id)
     j = 0
     repeat {
         if j >= n {
@@ -2229,8 +2245,8 @@ sub out_ident_text(uword id) {
     uword off
     uword n
     uword j
-    off = ident_off[id]
-    n = ident_len[id]
+    off = id
+    n = ident_len_at(id)
     j = 0
     repeat {
         if j >= n {
@@ -2685,9 +2701,6 @@ sub dump_global() {
     d16(ident_pool_len)
     i = 0
     repeat { if i >= ident_pool_len { break } out_byte(ident_pool[i]) i = i + 1 }
-    d16(ident_count)
-    i = 0
-    repeat { if i >= ident_count { break } d16(ident_off[i]) d16(ident_len[i]) i = i + 1 }
     d16(str_pool_len)
     i = 0
     repeat { if i >= str_pool_len { break } out_byte(str_pool[i]) i = i + 1 }
