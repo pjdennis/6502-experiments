@@ -1008,6 +1008,17 @@ sub expr_is_word(uword e) -> ubyte {
             }
         }
     }
+    if node_kind[e] == ND_BINOP {
+        ; arith/bitwise/shift binop (TK_PLUS..TK_SHR) widens to word if either
+        ; operand is word (e.g. zp_next + sz -> uword); comparison ops stay
+        ; bool. Matches p8c's `result type is UWORD` typing of the condition.
+        if node_op[e] >= TK_PLUS {
+            if node_op[e] <= TK_SHR {
+                if expr_is_word(node_a[e]) != 0 { return 1 }
+                if expr_is_word(node_b[e]) != 0 { return 1 }
+            }
+        }
+    }
     return 0
 }
 ; the negated (branch-if-false) sequence for an UNSIGNED compare op.
@@ -2825,15 +2836,15 @@ sub emit_aptr_arith(uword asi) {
     if sym_type[asi] == TY_UWORD {
         out_text("  asl a") o_nl()
         out_text("  sta __p8c_aptr") o_nl()
-        out_text("  tya") o_nl()
+        o_tya()
         out_text("  rol a") o_nl()
-        out_text("  tay") o_nl()
+        o_tay()
         out_text("  lda __p8c_aptr") o_nl()
     }
-    out_text("  clc") o_nl()
+    o_clc()
     out_text("  adc #<") emit_sym_mangled(asi) o_nl()
     out_text("  sta __p8c_aptr") o_nl()
-    out_text("  tya") o_nl()
+    o_tya()
     out_text("  adc #>") emit_sym_mangled(asi) o_nl()
     out_text("  sta __p8c_aptr+1") o_nl()
 }
@@ -2845,11 +2856,11 @@ sub emit_word_arr_load(uword e) {
     emit_aptr_arith(asi)
     out_text("  ldy #$00") o_nl()
     out_text("  lda (__p8c_aptr),y") o_nl()
-    out_text("  pha") o_nl()
+    o_pha()
     out_text("  ldy #$01") o_nl()
     out_text("  lda (__p8c_aptr),y") o_nl()
-    out_text("  tay") o_nl()
-    out_text("  pla") o_nl()
+    o_tay()
+    o_pla()
 }
 
 ; continuation (word work stack): A:Y = index -> load ubyte element, widen.
@@ -2866,7 +2877,7 @@ sub emit_byte_arr_load_widened(uword e) {
 ; the byte index runs on the byte work stack, separate from wws.
 sub emit_word_arr_fast(uword asi, uword idx) {
     codegen_byte_expr(idx)
-    out_text("  tay") o_nl()
+    o_tay()
     out_text("  lda ") emit_sym_mangled(asi) out_text(",y") o_nl()
     out_text("  ldy #$00") o_nl()
 }
@@ -3106,15 +3117,15 @@ sub codegen_assign_index(uword target, uword rhs) {
         ; uword[] write: rhs (widened) -> A:Y, parked on the CPU stack while
         ; the element address is computed, then stored hi then lo.
         codegen_word_expr(rhs)
-        out_text("  pha") o_nl()
-        out_text("  tya") o_nl()
-        out_text("  pha") o_nl()
+        o_pha()
+        o_tya()
+        o_pha()
         codegen_word_expr(idx)
         emit_aptr_arith(asi)
-        out_text("  pla") o_nl()
+        o_pla()
         out_text("  ldy #$01") o_nl()
         out_text("  sta (__p8c_aptr),y") o_nl()
-        out_text("  pla") o_nl()
+        o_pla()
         out_text("  ldy #$00") o_nl()
         out_text("  sta (__p8c_aptr),y") o_nl()
         return
@@ -3126,19 +3137,19 @@ sub codegen_assign_index(uword target, uword rhs) {
             return
         }
         codegen_byte_expr(rhs)
-        out_text("  sta __p8c_tmp0") o_nl()
+        o_sta_tmp0()
         codegen_byte_expr(idx)
-        out_text("  tay") o_nl()
-        out_text("  lda __p8c_tmp0") o_nl()
+        o_tay()
+        o_lda_tmp0()
         out_text("  sta ") emit_sym_mangled(asi) out_text(",y") o_nl()
         return
     }
     ; ubyte element, large array / uword index -> pointer path.
     codegen_byte_expr(rhs)
-    out_text("  pha") o_nl()
+    o_pha()
     codegen_word_expr(idx)
     emit_aptr_arith(asi)
-    out_text("  pla") o_nl()
+    o_pla()
     out_text("  ldy #$00") o_nl()
     out_text("  sta (__p8c_aptr),y") o_nl()
 }
