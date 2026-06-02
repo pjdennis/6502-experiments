@@ -193,6 +193,19 @@ was wrong; the real gap is ~15 KB).** Measured/counted at this HEAD:
     *** New code ~= a dump writer + a load reader (~400-800 lines of generic
     *** array I/O) + the pass-2 driver. No node-kind-specific code. The text
     *** S-expr serializer stays only as test_stmt's correctness oracle.
+    *** STRUCTURAL NOTE (from reading build_p1.py): build_p1.py assembles
+    *** OUT = header + frontend_body(stmt.p8 up to "; ---- serialization ----",
+    *** + injected sym_state) + codegen(the big f-string with build_symbols,
+    *** register_subs, emit_*/codegen_*, and `main {{...}}` driver). To make the
+    *** two passes, build_p1.py must emit TWO files: pass1 = frontend_body +
+    *** {build_symbols, register_subs, DUMP, pass-1 driver}; pass2 = {the node
+    *** DATA STRUCTURES + new_node/reset_nodes from stmt.p8 ONLY -- NOT its
+    *** lexer/parser, that's the ~22 KB pass 2 sheds} + {emit_*/codegen_* + LOAD
+    *** + pass-2 driver}. So stmt.p8's front-end must be PARTITIONED into (a)
+    *** arena decls + node helpers (both passes need them) and (b) lexer+parser
+    *** (pass 1 only). Cleanest: add a second splice marker in stmt.p8 separating
+    *** "; ---- node arena + helpers ----" from "; ---- lexer ----", so
+    *** build_p1.py can take part (a) for pass 2 and (a)+(b) for pass 1.
     *** (The S-expr-text loader below is the ALTERNATIVE -- more code, only worth
     *** it if a text intermediate is wanted for debugging.)
     *** ----
