@@ -533,6 +533,11 @@ sub emit_string_pool() {{
     out_byte($0a)
     out_text("; ---- string pool ----")
     o_nl()
+    ; park the read-only pool above the emulator's I/O stub routines (~$F0B0)
+    ; and below its argv window / ports, freeing the low $0200..$F006 window
+    ; for code + arenas. p1 only targets nmos, so this is unconditional.
+    out_text("  .org $F0C0")
+    o_nl()
     uword i
     i = 0
     repeat {{

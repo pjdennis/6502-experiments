@@ -41,50 +41,55 @@ EXCEPT: arrays (decl + storage trailer + variable indexing + len/sizeof),
 `const`, `enum`, `struct`, `defer`, and the `%target/%address/%output`
 directive surface beyond the nmos prologue.
 
-**THE BLOCKER is the $F006 ceiling.** p1.bin is at pool top ~$EF6A -- only
-**~150 bytes** under $F006 (the emulator injects its file-I/O stubs there,
-over p1.bin; the floor is the $F006 jmp table + the $F001 port, and p1.bin is
-contiguous from $0200, so it cannot skip them). The remaining features each
-add ~0.5-1.5 KB of p1.bin code, AND self-hosting needs the parser arenas
-sized for p1.p8's OWN subs (they are currently shrunk to the tiny test corpus:
-node/cons 80, pools 224 -- way too small to parse p1.p8). So **full self-host
-needs several KB more headroom than exists.** This is the documented "THE
-risk" materialized.
+**THE BLOCKER (the $F006 ceiling) IS NOW SUBSTANTIALLY RELIEVED -- pool +
+port relocation DONE.** The read-only string pool no longer sits in the low
+$0200..$F006 window: p8c (nmos) and p1's emit_string_pool both emit `.org
+$F0C0` before the pool, parking it in the freed high region. To make room for
+it there, the emulator's high I/O ports moved from the $FE80 block up to $FFE0
+(stubs.h), and the command-line argv strings moved from `stubs_end` (~$F0A3)
+to a dedicated ARGV_BASE=$FE00 window (emulator.c). NEW HIGH-MEMORY MAP:
+  * $F006..$F0B0  stub jmp table + routines (unchanged)
+  * $F0C0..$FE00  string pool (read-only; p1.bin's own pool now $F0C0..$FC06)
+  * $FE00..$FFE0  argv strings (ARGV_BASE..ARGV_TOP; programs fetch via argv stub)
+  * $FFE0..$FFFB  high I/O ports (argc/argv/read/write/openout/con/term/serial/eof/opendir)
+  * $FFFC..$FFFF  reset vector
+The move is transparent: no program references the $FE80/$FFE0 ports directly
+(they go through the $F006 jmp table -> stub routines), so only stubs.h +
+emulator.c (the two arg-writing sites + the port interception, all via the
+#defines) changed. VERIFIED non-breaking across the WHOLE repo: asm bootstrap
+self-host chain (442+30, self-assembly OK), all wendy2c goldens, p1 49,
+prog8 106, tinyp8 22.
 
-CONCRETE CAPACITY MATH (measured at this HEAD):
-  * Usable address window is $0200..$F000 (the low I/O ports are $F000-$F005,
-    the jmp table $F006-$F03E) = ~60 KB, contiguous (p1.bin can't skip the
-    ports). High free regions exist ($F0B2 after the stub routines .. $FE80
-    where the argc/argv/term/serial ports sit, ~3.5 KB; and $FE9C..$FFFB).
-  * p1.bin now: code ~47 KB, arenas (shrunk to the tiny test corpus) ~1.5 KB,
-    string pool **3.6 KB** ($E1AA..$EF6A). Top ~$EF6A, ~150 B under $F006.
-  * For SELF-HOST the arenas must grow to p1.p8's own subs (~470-node biggest
-    sub -> node arena ~512*6 + cons + pools ~= 10 KB) and the code grows with
-    the remaining features (+~5 KB). So code+arenas ~= 62 KB and the pool ~=
-    5-6 KB -> ~68 KB total, vs ~63 KB usable. **~5-8 KB over.**
-  * **Pool-relocation plan** (the most promising lever): change p8c (nmos
-    target only) to emit `.org $F0C0` before the `; ---- string pool ----`
-    block, and mirror it in p1's emit_string_pool. That moves the ~4 KB pool
-    OUT of the low window (freeing it for code+arenas) into the high free
-    region. To fit a growing pool there, ALSO relocate the emulator's
-    argc/argv/... ports from $FE80 up to ~$FF80 (transparent: programs reach
-    them only via the $F006 jmp table -> routines, so only stubs.c + the
-    port-interception addresses change; the jmp table stays at $F006). That
-    yields ~$F0C0..$FF7F (~3.8 KB) for the pool and the full $0200..$F000
-    (~60 KB) for code+arenas. Residual gap then ~2 KB -> close it with a
-    SAFE p8c codegen-compaction lever (see #1 below). Verify byte-identity
-    via the corpus after each step; regen any nmos snapshot goldens.
+MEASURED HEADROOM AT THIS HEAD (p8c p1/p1.p8):
+  * code+arena top **$E442** -> **~3.0 KB free** below the $F006 stub floor
+    (was ~150 B). This is the budget the self-host arena growth draws on.
+  * pool top **$FC06** -> ~506 B free below the $FE00 argv window. Dedup keeps
+    the pool small enough to fit; if it ever outgrows $F0C0..$FE00, raise
+    ARGV_BASE/ports further (argv only needs ~100 B for short self-host paths).
 
-Paths forward (a dedicated next effort):
+REMAINING CAPACITY MATH FOR FULL SELF-HOST:
+  * The low window is now $0200..$F006 (~60 KB) for code+arenas ONLY (pool is
+    out). Self-host needs the arenas grown to p1.p8's own subs (node arena
+    ~512*6 + cons + pools ~= 10 KB vs the ~1.5 KB shrunk-for-corpus now) and
+    the remaining features add ~5 KB code. Rough budget: ~52 KB code + ~10 KB
+    arenas ~= 62 KB vs 60 KB window. **Residual ~2 KB over** -- close with a
+    SAFE p8c codegen-compaction lever (#1 below) and/or arena right-sizing.
+  * The ~3 KB just freed offsets most of the arena growth; the pool relocation
+    converted a ~5-8 KB overrun into a ~2 KB one.
+
+Paths forward:
   1. A bigger codegen-compaction lever in p8c (all SAFE, p1.p8-source-free,
      verified by the corpus): e.g. detect consecutive `if v == const`
      statements over the same var and emit a shared-compare chain (eval v once)
      -- the lexer/parser are full of these; estimate ~1-2 KB. Or a more compact
      uword-array-index path (the arena accesses dominate p1.p8).
-  2. Reduce p1.p8 structurally (fewer/smaller subs; the table-drive idea is
-     subsumed by the comparison opts, so look elsewhere).
-  3. Accept that p1 compiles a bounded program size first and grow the ceiling
-     story later.
+  2. Right-size the arenas: profile p1.p8's actual peak node/cons/pool usage
+     (instrument p8c or count) and size each arena to that + margin, rather
+     than the worst-case estimate. Could save 1-2 KB vs a generous guess.
+  3. Implement the remaining self-host features in p1 (arrays decl+storage+
+     variable-index+len/sizeof, const, enum, struct, defer, %target/%address/
+     %output surface, multi-arg call reentrancy) -- each byte-identical to
+     p8c -o via the corpus, each watching the (now relieved) ceilings.
 
 **DONE -- string-literal pool ordering across subs.** p8c used to assign
 `p8c_str_N` labels during the sema walk (source order); p1 interns them during

@@ -638,11 +638,18 @@ int main(int argc, char **argv) {
 
     arg_count = argc - arg_base;
     arg_addresses = malloc(arg_count * sizeof(uint16_t));
+    p = ARGV_BASE;   // argv strings live in their own window, not over the stubs
     for (int arg = 0; arg != arg_count; arg++) {
         arg_addresses[arg] = p;
         const char* s = argv[arg_base + arg];
         while (memory[p++] = *s++)
             ;
+        if (p > ARGV_TOP) {
+            fprintf(stderr,
+                    "command-line args too long: argv strings overflow the "
+                    "$%04X..$%04X window\n", ARGV_BASE, ARGV_TOP);
+            return 1;
+        }
     }
 
     if (!console_mode && !terminal_mode) {
@@ -903,8 +910,9 @@ static int server_main(uint64_t cycle_cap) {
             // Restore pristine memory
             memcpy(memory, pristine_memory, 0x10000);
 
-            // Write program arguments into memory after stubs
-            size_t p = stubs_end;
+            // Write program arguments into their own RAM window (not over
+            // the stubs), matching the one-shot load path above.
+            size_t p = ARGV_BASE;
             arg_count = srv_arg_count;
             free(arg_addresses);
             arg_addresses = malloc(arg_count * sizeof(uint16_t));
@@ -913,6 +921,13 @@ static int server_main(uint64_t cycle_cap) {
                 const char *s = srv_args[arg];
                 while ((memory[p++] = *s++))
                     ;
+                if (p > ARGV_TOP) {
+                    fprintf(stderr, "server: argv strings overflow the "
+                            "$%04X..$%04X window\n", ARGV_BASE, ARGV_TOP);
+                    fprintf(stdout, "EXIT 1\n");
+                    fflush(stdout);
+                    goto run_cleanup;
+                }
             }
 
             // Open I/O

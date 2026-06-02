@@ -508,12 +508,15 @@ def _have_vasm() -> bool:
 @unittest.skipUnless(_have_vasm(), "vasm6502_oldstyle not on PATH")
 @unittest.skipUnless(EMU.exists(), f"emulator not built at {EMU}")
 class P1Equivalence(unittest.TestCase):
-    # The emulator injects its file-I/O syscall stubs at $F006 and up (over
-    # p1.bin once loaded), so p1.bin's code + arenas + string pool MUST end
-    # below $F006 -- otherwise the stubs clobber the top of the pool (and vice
-    # versa), giving corrupted out_text() output and wild jumps. See
-    # build_p1.py's ARENA_SIZES note. We enforce it here from the vasm listing.
-    STUB_FLOOR = 0xF006
+    # The emulator injects its file-I/O syscall stub jmp table + routines from
+    # $F006 up to ~$F0B0 (over p1.bin once loaded), so p1.bin's code + arenas
+    # MUST end below $F006. The read-only string pool is parked ABOVE the stub
+    # routines at $F0C0 (see emit_string_pool / p8c's nmos pool .org), so it has
+    # its own ceiling: the emulator's argv-string window at $FE00 (ARGV_BASE in
+    # stubs.h). We enforce both from the vasm listing. See build_p1.py's
+    # ARENA_SIZES note.
+    STUB_FLOOR = 0xF006       # code + arenas must end below this
+    POOL_CEIL  = 0xFE00       # the relocated pool must end below ARGV_BASE
 
     @classmethod
     def setUpClass(cls):
@@ -531,18 +534,28 @@ class P1Equivalence(unittest.TestCase):
              str(s_path)],
             capture_output=True, text=True)
         assert r.returncode == 0, f"vasm failed:\n{r.stdout}\n{r.stderr}"
-        # Ceiling guard: the highest p1.bin data label (the string pool top)
-        # must stay below the emulator's stub floor. Exclude the reset-vector
-        # org at $FFFx.
-        top = 0
+        # Ceiling guard, two regions: code + arenas (p8a_/p8s_/p8v_) must end
+        # below the stub floor $F006; the relocated string pool (p8c_str_) must
+        # end below ARGV_BASE ($FE00). Exclude the reset-vector org at $FFFx.
+        code_top = 0
+        pool_top = 0
         for m in re.finditer(r"^([0-9A-Fa-f]{4})\s+(p8a_|p8c_str_|p8s_|p8v_)",
                              lst_path.read_text(), re.MULTILINE):
             a = int(m.group(1), 16)
-            if a < 0xFFF0 and a > top:
-                top = a
-        assert 0 < top < cls.STUB_FLOOR, (
-            f"p1.bin data top ${top:04X} reached the emulator stub floor "
-            f"${cls.STUB_FLOOR:04X}; shrink ARENA_SIZES in build_p1.py")
+            if a >= 0xFFF0:
+                continue
+            if m.group(2) == "p8c_str_":
+                if a > pool_top:
+                    pool_top = a
+            elif a > code_top:
+                code_top = a
+        assert 0 < code_top < cls.STUB_FLOOR, (
+            f"p1.bin code+arena top ${code_top:04X} reached the emulator stub "
+            f"floor ${cls.STUB_FLOOR:04X}; shrink ARENA_SIZES in build_p1.py")
+        assert pool_top < cls.POOL_CEIL, (
+            f"p1.bin string-pool top ${pool_top:04X} reached the argv window "
+            f"${cls.POOL_CEIL:04X}; the pool outgrew its $F0C0..$FE00 window -- "
+            f"raise ARGV_BASE/ports in the emulator, or dedup the pool more")
 
     @classmethod
     def tearDownClass(cls):

@@ -214,6 +214,14 @@ class CodeGen:
         if self.prog.strings:
             self.emit("")
             self.emit("; ---- string pool ----")
+            if self.prog.target == "nmos":
+                # Park the read-only string pool above the emulator's I/O stub
+                # routines (which end ~$F0B0) and below its argv window / ports,
+                # freeing the low $0200..$F006 window entirely for code +
+                # arenas. The binary still spans $0200..$FFFF (the reset vector
+                # pins the top), so the load address is unchanged -- only the
+                # pool's position within the image moves. See RESUME_NOTES.
+                self.emit("  .org $F0C0")
             for lit in self.prog.strings:
                 self.emit(f"{lit.label}:")
                 escaped = self._escape(lit.value)
