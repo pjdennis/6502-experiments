@@ -47,8 +47,13 @@ arith / single-comparison conditions) or p1's port is co-updated.
   path changed (p1's corpus has none). Behaviorally verified (and/or/not + nested
   + while-and). Freed ~2.2 KB: p1.bin 59379 -> 57195 B, pool top $E9DE -> $E156,
   margin ~1.5 KB -> ~3.8 KB. All host (105) + tinyp8 (22) + p1 (40) tests green.
-* **Opt 2 -- constant array index** `arr[const]`: `lda #const / tay / lda arr,y`
-  -> `ldy #const / lda arr,y`. (p1.p8 indexes arrays constantly.) In progress.
+* **Opt 2 DONE -- constant array index.** `arr[const]` (fast ubyte-array path,
+  read + write) now emits an absolute `lda arr+const` / `sta arr+const` instead
+  of `lda #const / tay / lda arr,y` (read) or the tmp0/tay dance (write) -- no Y
+  setup. p1's corpus has no arrays (oracle unchanged); host array e2e + snapshot
+  tests still pass; p1 compiling 40 programs byte-identically exercises
+  classify_name's many constant indexes. Freed another ~0.5 KB: p1.bin
+  57195 -> 56687 B, pool top $E156 -> $DF5A, margin ~3.8 KB -> ~4.3 KB.
 * Bigger levers if needed: leaf-operand comparison without the tmp0/tmp1 spill
   (p1 ports+tests the condition comparison, so co-update p1), table-driving
   classify_name (p1.p8 source change, upstream-compat via the existing

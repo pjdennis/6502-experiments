@@ -433,6 +433,11 @@ class CodeGen:
                 return
             # ubyte[] arr -- simple indexed byte write (fast `,y` path).
             if self._array_fast_byte(tgt.sym, tgt.index):
+                if isinstance(tgt.index, IntLit):
+                    # constant index -> absolute store, no scratch/Y setup.
+                    self._emit_byte_expr_into_a(a.rhs)
+                    self.emit(f"  sta {tgt.sym.mangled}+{tgt.index.value & 0xFF}")
+                    return
                 self._emit_byte_expr_into_a(a.rhs)
                 self.emit("  sta __p8c_tmp0")
                 self._emit_byte_expr_into_a(tgt.index)
@@ -1065,6 +1070,10 @@ class CodeGen:
                 self.emit(f"  lda {e.sym.mangled}+{fo},y")
                 return
             if self._array_fast_byte(e.sym, e.index):
+                if isinstance(e.index, IntLit):
+                    # constant index -> absolute address, no Y setup.
+                    self.emit(f"  lda {e.sym.mangled}+{e.index.value & 0xFF}")
+                    return
                 self._emit_byte_expr_into_a(e.index)
                 self.emit("  tay")
                 self.emit(f"  lda {e.sym.mangled},y")
