@@ -1635,8 +1635,25 @@ class CodeGen:
                 self.emit(f"  jsr {sym.asm_target}")
                 return
             # Regular sub: pass args via the callee's static param slots.
-            # Param slots are NOT reentrant, so we must not write them
-            # while a later argument is still being evaluated -- that
+            # Single arg: store it straight into the slot after evaluating it
+            # (nothing else writes the slot between the store and the JSR, so
+            # there is no reentrancy hazard even if the arg's own evaluation
+            # called this sub). This is the common case (out_text, etc.) and
+            # avoids the push/pop dance.
+            if len(c.args) == 1 and target is not None and not target.is_inline:
+                p = params[0]
+                pt = type_from_name(p.type_name)
+                if pt is UBYTE:
+                    self._emit_byte_expr_into_a(c.args[0])
+                    self.emit(f"  sta {p.sym.mangled}")
+                else:
+                    self._emit_word_expr_into_ay(c.args[0])
+                    self.emit(f"  sta {p.sym.mangled}")
+                    self.emit(f"  sty {p.sym.mangled}+1")
+                self.emit(f"  jsr {sym.mangled}")
+                return
+            # Multiple args: param slots are NOT reentrant, so we must not write
+            # one while a later argument is still being evaluated -- that
             # argument's evaluation may itself call this (or a transitively
             # shared) sub and clobber the slots. So evaluate every argument
             # onto the hardware stack first, then pop them into the param

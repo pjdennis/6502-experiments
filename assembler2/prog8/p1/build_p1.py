@@ -2573,6 +2573,26 @@ sub codegen_call(uword callnode) {{
     uword callee
     callee = node_a[callnode]
     collect_params(callee)
+    if call_n == 1 {{
+        ; single arg: store straight into the slot after eval (no reentrancy
+        ; hazard -- nothing writes the slot between the store and the jsr).
+        uword arg1
+        arg1 = cons_val[reverse_cons(node_b[callnode])]
+        uword psi1
+        psi1 = call_slot[0]
+        if call_isw[0] != 0 {{
+            codegen_word_expr(arg1)
+            emit_sta_sym(psi1)
+            emit_sty_sym_hi(psi1)
+        }} else {{
+            codegen_byte_expr(arg1)
+            emit_sta_sym(psi1)
+        }}
+        out_text("  jsr ")
+        emit_sub_label(callee)
+        o_nl()
+        return
+    }}
     if call_n != 0 {{
         ; push each arg (source order) onto the CPU stack.
         uword ahead
