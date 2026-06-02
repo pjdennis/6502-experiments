@@ -117,12 +117,12 @@ PHASE7_DESIGN.md section 10.
   * 5 v0/v1 e2e (`tinyp8/tests/test_e2e.py`).
   * 5 v0/v1 self-host equivalence (`test_self_host.py`).
   * 12 v2..v9 .p8-only (`test_v2.py`, sources in `goldens_v2/`).
-  * **168 total, all green** (the 22 tinyp8 + 41 p1 cases need vasm; see the
+  * **169 total, all green** (the 22 tinyp8 + 42 p1 cases need vasm; see the
     environment note above). The p1 codegen cases live in
     `p1/tests/test_p1.py` (Phase 7: P7-M1 + P7-M2 + the M3 strings,
     byte-arithmetic, mul/shift, unary, comparison, logical, @()/&name, and
     16-bit word-arithmetic + word-shift slices; P7-M4 if/else/while +
-    break/continue + repeat + for).
+    break/continue + repeat + for + when).
 
 Run:
 

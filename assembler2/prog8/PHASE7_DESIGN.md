@@ -293,12 +293,12 @@ Each milestone is a few pushes; each diffs `p1`'s `.s` against `p8c`'s.
       against `p8c -o`. (Remaining: word shifts, word comparison, indexing,
       calls.)
 * **P7-M4 -- control flow. IN PROGRESS.** if/else, while, repeat (forever +
-  counted), for, break/continue **DONE** -- block emission is a non-recursive
+  counted), for, when, break/continue **DONE** -- block emission is a non-recursive
   statement work stack (`sws_*`);
   conditions emit the compare straight into the long-safe inverted-branch
   (`emit_br` = the `_br` idiom), byte unsigned/signed + the 16-bit word compare,
   else materialize 0/1 and branch on zero; loop-label stack for break/continue.
-  Diffed against `p8c -o`. (Remaining: when, defer.)
+  Diffed against `p8c -o`. (Remaining: defer.)
   NOTE: the real memory ceiling for p1.bin is **$F006** (the emulator injects
   its syscall stubs there, over p1.bin) -- not $FFFF; keep code+arenas+pool
   below it (guarded in `test_p1.py::setUpClass`).

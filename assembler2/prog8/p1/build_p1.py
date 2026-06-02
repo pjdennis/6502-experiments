@@ -470,6 +470,10 @@ sub emit_ctrl_label_ref(ubyte kind, uword id) {{
     if kind == 8 {{ out_text(".Lrep_dec_") }}
     if kind == 9 {{ out_text(".Lrep_end_") }}
     if kind == 10 {{ out_text(".Lrep_break_") }}
+    if kind == 11 {{ out_text(".Lwhen_end_") }}
+    if kind == 12 {{ out_text(".Lwhen_body_") }}
+    if kind == 13 {{ out_text(".Lwhen_next_") }}
+    if kind == 14 {{ out_text(".Lwhen_skip_") }}
     out_dec(id)
 }}
 ; branch mnemonics by code: 0 bne 1 beq 2 bcc 3 bcs 4 bmi 5 bpl 6 bvc 7 bvs.
@@ -733,7 +737,11 @@ sub codegen_body(uword body) {{
                         if ty == 5 {{
                             emit_rep_tail(b)          ; counted-repeat tail
                         }} else {{
-                            emit_for_cont(a, b)       ; ty == 6: for cont/test/inc tail
+                            if ty == 6 {{
+                                emit_for_cont(a, b)   ; for cont/test/inc tail
+                            }} else {{
+                                emit_when_choice(a, b) ; ty == 7: a when arm
+                            }}
                         }}
                     }}
                 }}
@@ -763,6 +771,10 @@ sub codegen_stmt(uword st) {{
     }}
     if k == ND_FOR {{
         codegen_for(st)
+        return
+    }}
+    if k == ND_WHEN {{
+        codegen_when(st)
         return
     }}
     if k == ND_BREAK {{
@@ -1008,6 +1020,130 @@ sub emit_for_cont(uword st, uword end_id) {{
     out_text("  jmp ")
     emit_ctrl_label_ref(4, top_id)
     o_nl()
+}}
+; `when` (port of _emit_when): when expr, a list of value-arms and an optional
+; else arm. The expr is evaluated once (byte -> __p8c_tmp0, word -> __p8c_wtmp0);
+; each arm compares
+; its value(s) and jumps to its body on a match, else to the next arm. Each arm
+; is a deferred sws task (ty 7) so its body (a nested block) and trailers
+; interleave per-arm exactly as p8c emits them. is_word is packed into the high
+; bit of the task's end_id field (whens may nest; a global would be clobbered).
+sub codegen_when(uword st) {{
+    uword endw_id
+    endw_id = label_seq
+    label_seq = label_seq + 1
+    uword expr
+    expr = node_a[st]
+    ubyte isw
+    isw = expr_is_word(expr)
+    if isw != 0 {{
+        codegen_word_expr(expr)
+        out_text("  sta __p8c_wtmp0")
+        o_nl()
+        out_text("  sty __p8c_wtmp0+1")
+        o_nl()
+    }} else {{
+        codegen_byte_expr(expr)
+        out_text("  sta __p8c_tmp0")
+        o_nl()
+    }}
+    uword packed
+    packed = endw_id
+    if isw != 0 {{
+        packed = endw_id | $8000
+    }}
+    ; end label (bottom), then choices. node_b[st] is the reversed cons (last
+    ; arm first); pushing it directly pops the arms in source order.
+    sws_push(1, 11, endw_id)            ; when_end label
+    uword cell
+    cell = node_b[st]
+    repeat {{
+        if cell == 0 {{
+            break
+        }}
+        sws_push(7, cons_val[cell], packed)
+        cell = cons_next[cell]
+    }}
+}}
+; emit one when arm. Allocates body+next labels (always, even for else, to
+; match p8c's label numbering); emits the value matches immediately, then
+; defers the body + trailers.
+sub emit_when_choice(uword choice, uword packed) {{
+    ubyte isw
+    uword endw_id
+    isw = 0
+    endw_id = packed
+    if (packed & $8000) != 0 {{
+        isw = 1
+        endw_id = packed & $7fff
+    }}
+    uword body_id
+    uword next_id
+    body_id = label_seq
+    label_seq = label_seq + 1
+    next_id = label_seq
+    label_seq = label_seq + 1
+    uword values
+    uword body
+    values = node_a[choice]
+    body = node_b[choice]
+    if values == 0 {{
+        ; else arm: body, jmp when_end (no next label).
+        sws_push(2, 11, endw_id)        ; jmp when_end
+        push_block_stmts(body)
+        return
+    }}
+    ; value matches (source order -> reverse the cons).
+    uword head
+    head = reverse_cons(values)
+    uword cell
+    cell = head
+    repeat {{
+        if cell == 0 {{
+            break
+        }}
+        uword v
+        v = cons_val[cell]
+        if isw != 0 {{
+            codegen_word_expr(v)
+            out_text("  sta __p8c_wtmp1")
+            o_nl()
+            out_text("  sty __p8c_wtmp1+1")
+            o_nl()
+            out_text("  lda __p8c_wtmp0+1")
+            o_nl()
+            out_text("  cmp __p8c_wtmp1+1")
+            o_nl()
+            uword skip_id
+            skip_id = label_seq
+            label_seq = label_seq + 1
+            emit_br(0, 14, skip_id)     ; bne when_skip
+            out_text("  lda __p8c_wtmp0")
+            o_nl()
+            out_text("  cmp __p8c_wtmp1")
+            o_nl()
+            emit_br(1, 12, body_id)     ; beq when_body
+            emit_ctrl_label_ref(14, skip_id)
+            out_byte($3a)
+            o_nl()
+        }} else {{
+            codegen_byte_expr(v)
+            out_text("  cmp __p8c_tmp0")
+            o_nl()
+            emit_br(1, 12, body_id)     ; beq when_body
+        }}
+        cell = cons_next[cell]
+    }}
+    out_text("  jmp ")
+    emit_ctrl_label_ref(13, next_id)    ; jmp when_next
+    o_nl()
+    emit_ctrl_label_ref(12, body_id)    ; when_body:
+    out_byte($3a)
+    o_nl()
+    ; deferred: body stmts, jmp when_end, when_next label.
+    sws_push(1, 13, next_id)            ; when_next label (bottom)
+    sws_push(2, 11, endw_id)           ; jmp when_end
+    push_block_stmts(body)             ; body (top)
 }}
 
 ; ---- byte expression codegen (work-stack; no recursion) -----

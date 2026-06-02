@@ -332,6 +332,29 @@ M4_FOR_PROGRAMS = [
     "main {\n    for i in 1 to (hi - 1) {\n        s = s + i\n        if i == 3 {\n            continue\n        }\n        a = a + 1\n    }\n}\n",
 ]
 
+# P7-M4 when: `when expr { v -> body  v1,v2 -> body  else -> body }`. expr is
+# evaluated once (byte -> tmp0, word -> wtmp0); each arm matches its value(s)
+# and jumps to its body, else to the next arm; else arm runs on no match.
+# Byte + word selectors, multi-value arms, with/without else, and an arm body
+# with a nested if (the classify_name shape).
+M4_WHEN_PROGRAMS = [
+    # byte selector: single + multi-value arms + else
+    "%target nmos\nubyte x\nubyte r\n\n"
+    "main {\n    when x {\n        1 -> { r = 10 }\n        2, 3 -> { r = 20 }\n"
+    "        else -> { r = 99 }\n    }\n}\n",
+    # byte selector, no else
+    "%target nmos\nubyte x\nubyte r\n\n"
+    "main {\n    when x {\n        5 -> { r = 1 }\n        6 -> { r = 2 }\n    }\n}\n",
+    # word selector (16-bit value compare) + multi-value + else
+    "%target nmos\nuword w\nuword wr\n\n"
+    "main {\n    when w {\n        $1000 -> { wr = 1 }\n        $2000, $3000 -> { wr = 2 }\n"
+    "        else -> { wr = 9 }\n    }\n}\n",
+    # arm bodies with nested control flow
+    "%target nmos\nubyte x\nubyte a\nubyte b\nubyte r\n\n"
+    "main {\n    when x {\n        1 -> { if a == b { r = 1 } else { r = 2 } }\n"
+    "        2 -> { while a < b { a = a + 1 } }\n        else -> { r = 0 }\n    }\n}\n",
+]
+
 
 def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
@@ -483,6 +506,12 @@ class P1Equivalence(unittest.TestCase):
 
     def test_m4_for_programs(self):
         for src in M4_FOR_PROGRAMS:
+            with self.subTest(src=src):
+                self.assertEqual(self._oracle(src), self._ontarget(src),
+                                 msg=f"codegen .s differs for {src!r}")
+
+    def test_m4_when_programs(self):
+        for src in M4_WHEN_PROGRAMS:
             with self.subTest(src=src):
                 self.assertEqual(self._oracle(src), self._ontarget(src),
                                  msg=f"codegen .s differs for {src!r}")
