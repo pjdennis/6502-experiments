@@ -183,16 +183,16 @@ ubyte ntok_kind
 uword ntok_val
 
 ; identifier text pool (reset per top-level unit while streaming)
-ubyte[1024] ident_pool
-uword[320]  ident_off
-uword[320]  ident_len
+ubyte[6144] ident_pool
+uword[768]  ident_off
+uword[768]  ident_len
 uword ident_count
 uword ident_pool_len
 
 ; string literal pool
-ubyte[1024] str_pool
-uword[160]  str_off
-uword[160]  str_len
+ubyte[3072] str_pool
+uword[256]  str_off
+uword[256]  str_len
 uword str_count
 uword str_pool_len
 

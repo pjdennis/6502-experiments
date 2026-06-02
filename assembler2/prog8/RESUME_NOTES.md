@@ -160,8 +160,40 @@ was wrong; the real gap is ~15 KB).** Measured/counted at this HEAD:
         in a newline. Getting stmt.bin to emit p1.p8's AST byte-identically to
         `p8c --dump-ast` is pipeline MILESTONE 1 (pass 1 proven on the real
         self-host input). Then build pass 2 (S-expr reader + existing codegen).
-      * (`/tmp/stmt.p8.bak` was a scratch copy; stmt.p8 is back at its tested
-        baseline -- grow its arenas as part of Milestone 1, it has the room.)
+    MILESTONE 1 PROGRESS (this session -- pass 1 now RUNS on p1.p8):
+      * ROOT CAUSE of the earlier hang: stmt.p8's reset_nodes (per-unit) resets
+        ONLY nodes+cons; the ident/str POOLS persist program-wide ("their total
+        fits; idents dedupe" -- true for tinyp8's 34 subs, FALSE for p1.p8's
+        210). p1.p8 has ~600-1700 distinct identifiers -> the 1024-byte
+        ident_pool + 320-entry ident_off/len OVERFLOW -> corruption.
+      * FIX APPLIED (committed): grew stmt.p8's pools -- ident_pool 1024->6144,
+        ident_off/len 320->768, str_pool 1024->3072, str_off/len 160->256.
+        stmt.bin now $E9AE (1.6 KB under $F006). All front-end tests green
+        (test_stmt/expr/lexer, 27). VALIDATED: stmt.bin is byte-IDENTICAL to
+        `p8c --dump-ast` on tinyp8.p8 (1289 lines, 34 subs) -- pass 1 is correct
+        on a real medium program.
+      * STATE on p1.p8: stmt.bin now runs to completion (1.53 BILLION cycles --
+        it was the 200 M cycle CAP, not a hang; use
+        `emulator stmt.bin --cycle-cap 3000000000 p1.p8 out` -- flags go right
+        AFTER the code file, before the positional in/out args) and writes
+        475787 B, but DIFFERS from the 382069 B oracle at byte 26361:
+        p1 `(id target)` vs oracle `(id name_len)`. The +93 KB + the wrong-ident
+        symptom = ident_off/pool STILL too small (768 < p1.p8's true unique
+        count) -> interning corruption past the overflow point.
+    MILESTONE 1 REMAINING (next session, tractable arena-balancing in the SMALL
+    pass): size pass-1's arenas to p1.p8's EXACT needs within 60 KB --
+      - measure p1.p8's true unique interned ident count + total ident bytes and
+        biggest-sub node count (instrument stmt.p8 or count precisely);
+      - set ident_off/len + ident_pool to that (likely ~1000 entries / ~8 KB)
+        and str pools to ~p1.p8's strings, while SHRINKING node/cons from 640 to
+        the biggest-sub peak to make room (node/cons is per-unit, so it only
+        needs one sub's worth). stmt.bin's budget is ~60 KB; pass-1 = front-end
+        +serializer code (~30 KB) + node/cons (~6-8 KB) + pools (~12-15 KB) ~=
+        50-53 KB, so it FITS with correct sizing.
+      - re-run vs `p8c --dump-ast` on p1.p8 until BYTE-IDENTICAL = Milestone 1.
+    THEN Milestone 2: pass 2 = S-expr reader (parse the `(program ...)` text back
+    into node_*/sym arrays) + the EXISTING codegen back-end; diff .s vs p8c.
+    (`/tmp/stmt.p8.bak` is a scratch copy of the pre-growth stmt.p8.)
 
   ### CONCRETE STAGED PLAN for option B (recommended -- stays in 64 KB AND
   ### keeps p1.p8 upstream-compatible; no emulator change). The single biggest
