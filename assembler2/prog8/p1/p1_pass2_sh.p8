@@ -1840,17 +1840,17 @@ sub emit_byte_leaf_load(uword e) {
                 o_nl()
                 return
             }
-            if node_kind[idx] == ND_IDENT {
-                o_lda()
-                emit_mangled(node_a[idx])
-                o_nl()
-                o_tay()
-                o_lda()
-                emit_sym_mangled(asi)
-                out_text(",y")
-                o_nl()
-                return
-            }
+            ; general byte index (ident / binop / ...): evaluate it to A, then
+            ; `lda arr,y` (matches p8c _array_fast_byte, which accepts any
+            ; UBYTE/BYTE-typed index, not just a bare var). For an ND_IDENT this
+            ; is byte-identical to the old `lda idx / tay` special case.
+            codegen_byte_expr(idx)
+            o_tay()
+            o_lda()
+            emit_sym_mangled(asi)
+            out_text(",y")
+            o_nl()
+            return
         }
         codegen_word_expr(idx)
         emit_aptr_arith(asi)
@@ -3425,6 +3425,10 @@ sub codegen_call(uword callnode) {
         ccs_sp = ccs_sp - 1
         callee = ccs_callee[ccs_sp]
         collect_params(callee)
+        ; the arg eval may have been a nested call that clobbered the static-ZP
+        ; local isw1; re-derive it from the just-refilled call_isw so the high-
+        ; byte store matches THIS callee's param width (e.g. out_hex2 is ubyte).
+        isw1 = call_isw[0]
         uword psi1
         psi1 = call_slot[0]
         emit_sta_sym(psi1)
