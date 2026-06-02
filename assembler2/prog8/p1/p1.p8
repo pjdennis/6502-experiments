@@ -186,16 +186,16 @@ ubyte ntok_kind
 uword ntok_val
 
 ; identifier text pool (reset per top-level unit while streaming)
-ubyte[256] ident_pool
-uword[48]  ident_off
-uword[48]  ident_len
+ubyte[224] ident_pool
+uword[40]  ident_off
+uword[40]  ident_len
 uword ident_count
 uword ident_pool_len
 
 ; string literal pool
-ubyte[256] str_pool
-uword[24]  str_off
-uword[24]  str_len
+ubyte[224] str_pool
+uword[20]  str_off
+uword[20]  str_len
 uword str_count
 uword str_pool_len
 
@@ -207,42 +207,42 @@ uword name_len
 uword int_val
 
 ; node arena
-ubyte[96] node_kind
-ubyte[96] node_op
-uword[96] node_a
-uword[96] node_b
-uword[96] node_c
-uword[96] node_d
+ubyte[80] node_kind
+ubyte[80] node_op
+uword[80] node_a
+uword[80] node_b
+uword[80] node_c
+uword[80] node_d
 uword node_count
 
 ; expression stacks
-uword[32] operand_stack
+uword[24] operand_stack
 uword operand_sp
-ubyte[32] op_kind
-ubyte[32] op_op
-ubyte[32] op_prec
-uword[32] op_a
-uword[32] op_b
-uword[32] op_floor
+ubyte[24] op_kind
+ubyte[24] op_op
+ubyte[24] op_prec
+uword[24] op_a
+uword[24] op_b
+uword[24] op_floor
 uword op_sp
 
 ; cons cells
-uword[96] cons_val
-uword[96] cons_next
+uword[80] cons_val
+uword[80] cons_next
 uword cons_count
 
 ; statement frame stack
-ubyte[32] fr_kind
-ubyte[32] fr_mode        ; 0=stmts, 1=choices
-uword[32] fr_stmts       ; cons head (reversed)
-ubyte[32] fr_defer       ; 1 if defer-prefixed
-uword[32] fr_cond        ; cond / when-expr / repeat-count
-uword[32] fr_then        ; saved then block (else frame)
-uword[32] fr_var
-uword[32] fr_lo
-uword[32] fr_hi
-uword[32] fr_choices     ; when: choices cons head
-uword[32] fr_values      ; when_choice: values cons head
+ubyte[24] fr_kind
+ubyte[24] fr_mode        ; 0=stmts, 1=choices
+uword[24] fr_stmts       ; cons head (reversed)
+ubyte[24] fr_defer       ; 1 if defer-prefixed
+uword[24] fr_cond        ; cond / when-expr / repeat-count
+uword[24] fr_then        ; saved then block (else frame)
+uword[24] fr_var
+uword[24] fr_lo
+uword[24] fr_hi
+uword[24] fr_choices     ; when: choices cons head
+uword[24] fr_values      ; when_choice: values cons head
 ubyte fr_sp
 ubyte pending_defer
 
@@ -2807,6 +2807,25 @@ sub codegen_stmt(uword st) {
         codegen_return(st)
         return
     }
+    if k == ND_VARDECL {
+        ; a local declaration is storage only; an initializer lowers to a
+        ; store. (p8c: UBYTE -> byte path, everything else -> word path.)
+        uword init
+        init = node_b[st]
+        if init != 0 {
+            uword si
+            si = find_sym(node_a[st])
+            if sym_type[si] == TY_UBYTE {
+                codegen_byte_expr(init)
+                emit_sta_sym(si)
+            } else {
+                codegen_word_expr(init)
+                emit_sta_sym(si)
+                emit_sty_sym_hi(si)
+            }
+        }
+        return
+    }
     ; other statement kinds arrive at later milestones.
 }
 sub codegen_if(uword st) {
@@ -4560,6 +4579,86 @@ sub codegen_return(uword st) {
     out_text("_ret")
     o_nl()
 }
+; push a block's statements onto the (pass-S-only) walk stack -- reuses sws_a,
+; which is free until codegen.
+sub push_walk_block(uword blk) {
+    if blk == 0 {
+        return
+    }
+    uword cell
+    cell = node_a[blk]
+    repeat {
+        if cell == 0 {
+            break
+        }
+        sws_a[sws_sp] = cons_val[cell]
+        sws_sp = sws_sp + 1
+        cell = cons_next[cell]
+    }
+}
+sub push_walk_when(uword st) {
+    uword cell
+    cell = node_b[st]
+    repeat {
+        if cell == 0 {
+            break
+        }
+        push_walk_block(node_b[cons_val[cell]])
+        cell = cons_next[cell]
+    }
+}
+; allocate a sub's local vardecls (p8v_<sub>_<name>), in p8c's _walk_block
+; order: depth-first, source order, recursing into if (then/else), while, for,
+; repeat, and when (per-arm) bodies. Continues the ZP bump.
+sub walk_locals(uword body, uword subname) {
+    sws_sp = 0
+    push_walk_block(body)
+    repeat {
+        if sws_sp == 0 {
+            break
+        }
+        sws_sp = sws_sp - 1
+        uword st
+        st = sws_a[sws_sp]
+        ubyte k
+        k = node_kind[st]
+        if k == ND_VARDECL {
+            if node_c[st] == 0 {               ; scalar (not an array)
+                ubyte tag
+                tag = node_op[st]
+                if tag <= TY_UWORD {
+                    sym_ident[sym_count] = node_a[st]
+                    sym_type[sym_count] = tag
+                    sym_addr[sym_count] = zp_next
+                    sym_scope[sym_count] = subname
+                    sym_mkind[sym_count] = 2
+                    sym_count = sym_count + 1
+                    if tag == TY_UWORD {
+                        zp_next = zp_next + 2
+                    } else {
+                        zp_next = zp_next + 1
+                    }
+                }
+            }
+        }
+        if k == ND_IF {
+            push_walk_block(node_c[st])         ; else (bottom)
+            push_walk_block(node_b[st])         ; then (top)
+        }
+        if k == ND_WHILE {
+            push_walk_block(node_b[st])
+        }
+        if k == ND_FOR {
+            push_walk_block(node_d[st])
+        }
+        if k == ND_REPEAT {
+            push_walk_block(node_b[st])
+        }
+        if k == ND_WHEN {
+            push_walk_when(st)
+        }
+    }
+}
 ; register every sub (in source order) so calls resolve and pass B emits the
 ; non-main subs in p8c's order. Streaming dispatch, mirroring stmt.p8's pass B.
 sub register_subs() {
@@ -4628,6 +4727,8 @@ sub register_subs() {
                 }
                 pcell = cons_next[pcell]
             }
+            ; then this sub's locals (walk the body), continuing zp_next.
+            walk_locals(node_c[snode], node_a[snode])
             reset_nodes()
         }
     }

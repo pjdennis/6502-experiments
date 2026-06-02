@@ -61,18 +61,18 @@ OUT = HERE / "p1.p8"
 # needs a bigger program -- but then also reclaim space elsewhere so the top
 # stays < $F006. (stmt.p8 keeps its own sizes; this only rewrites p1.p8.)
 ARENA_SIZES = {
-    "ident_pool": 256, "ident_off": 48, "ident_len": 48,
-    "str_pool": 256, "str_off": 24, "str_len": 24,
-    "node_kind": 96, "node_op": 96,
-    "node_a": 96, "node_b": 96, "node_c": 96, "node_d": 96,
-    "operand_stack": 32, "op_kind": 32, "op_op": 32, "op_prec": 32,
-    "op_a": 32, "op_b": 32, "op_floor": 32,
-    "cons_val": 96, "cons_next": 96,
-    # fr_* (the parser's frame stack) defaults to 64; the codegen corpus's
-    # programs are shallow so 32 is ample and reclaims a bit more headroom.
-    "fr_kind": 32, "fr_mode": 32, "fr_stmts": 32, "fr_defer": 32,
-    "fr_cond": 32, "fr_then": 32, "fr_var": 32, "fr_lo": 32, "fr_hi": 32,
-    "fr_choices": 32, "fr_values": 32,
+    "ident_pool": 224, "ident_off": 40, "ident_len": 40,
+    "str_pool": 224, "str_off": 20, "str_len": 20,
+    "node_kind": 80, "node_op": 80,
+    "node_a": 80, "node_b": 80, "node_c": 80, "node_d": 80,
+    "operand_stack": 24, "op_kind": 24, "op_op": 24, "op_prec": 24,
+    "op_a": 24, "op_b": 24, "op_floor": 24,
+    "cons_val": 80, "cons_next": 80,
+    # fr_* (the parser's frame stack); the codegen corpus's programs are
+    # shallow so 24 is ample and reclaims a bit more headroom.
+    "fr_kind": 24, "fr_mode": 24, "fr_stmts": 24, "fr_defer": 24,
+    "fr_cond": 24, "fr_then": 24, "fr_var": 24, "fr_lo": 24, "fr_hi": 24,
+    "fr_choices": 24, "fr_values": 24,
     # ws_* is the AST serializer's work stack -- dropped from p1, so dead.
     "ws_type": 2, "ws_node": 2, "ws_depth": 2,
 }
@@ -879,6 +879,25 @@ sub codegen_stmt(uword st) {{
     }}
     if k == ND_RETURN {{
         codegen_return(st)
+        return
+    }}
+    if k == ND_VARDECL {{
+        ; a local declaration is storage only; an initializer lowers to a
+        ; store. (p8c: UBYTE -> byte path, everything else -> word path.)
+        uword init
+        init = node_b[st]
+        if init != 0 {{
+            uword si
+            si = find_sym(node_a[st])
+            if sym_type[si] == TY_UBYTE {{
+                codegen_byte_expr(init)
+                emit_sta_sym(si)
+            }} else {{
+                codegen_word_expr(init)
+                emit_sta_sym(si)
+                emit_sty_sym_hi(si)
+            }}
+        }}
         return
     }}
     ; other statement kinds arrive at later milestones.
@@ -2634,6 +2653,86 @@ sub codegen_return(uword st) {{
     out_text("_ret")
     o_nl()
 }}
+; push a block's statements onto the (pass-S-only) walk stack -- reuses sws_a,
+; which is free until codegen.
+sub push_walk_block(uword blk) {{
+    if blk == 0 {{
+        return
+    }}
+    uword cell
+    cell = node_a[blk]
+    repeat {{
+        if cell == 0 {{
+            break
+        }}
+        sws_a[sws_sp] = cons_val[cell]
+        sws_sp = sws_sp + 1
+        cell = cons_next[cell]
+    }}
+}}
+sub push_walk_when(uword st) {{
+    uword cell
+    cell = node_b[st]
+    repeat {{
+        if cell == 0 {{
+            break
+        }}
+        push_walk_block(node_b[cons_val[cell]])
+        cell = cons_next[cell]
+    }}
+}}
+; allocate a sub's local vardecls (p8v_<sub>_<name>), in p8c's _walk_block
+; order: depth-first, source order, recursing into if (then/else), while, for,
+; repeat, and when (per-arm) bodies. Continues the ZP bump.
+sub walk_locals(uword body, uword subname) {{
+    sws_sp = 0
+    push_walk_block(body)
+    repeat {{
+        if sws_sp == 0 {{
+            break
+        }}
+        sws_sp = sws_sp - 1
+        uword st
+        st = sws_a[sws_sp]
+        ubyte k
+        k = node_kind[st]
+        if k == ND_VARDECL {{
+            if node_c[st] == 0 {{               ; scalar (not an array)
+                ubyte tag
+                tag = node_op[st]
+                if tag <= TY_UWORD {{
+                    sym_ident[sym_count] = node_a[st]
+                    sym_type[sym_count] = tag
+                    sym_addr[sym_count] = zp_next
+                    sym_scope[sym_count] = subname
+                    sym_mkind[sym_count] = 2
+                    sym_count = sym_count + 1
+                    if tag == TY_UWORD {{
+                        zp_next = zp_next + 2
+                    }} else {{
+                        zp_next = zp_next + 1
+                    }}
+                }}
+            }}
+        }}
+        if k == ND_IF {{
+            push_walk_block(node_c[st])         ; else (bottom)
+            push_walk_block(node_b[st])         ; then (top)
+        }}
+        if k == ND_WHILE {{
+            push_walk_block(node_b[st])
+        }}
+        if k == ND_FOR {{
+            push_walk_block(node_d[st])
+        }}
+        if k == ND_REPEAT {{
+            push_walk_block(node_b[st])
+        }}
+        if k == ND_WHEN {{
+            push_walk_when(st)
+        }}
+    }}
+}}
 ; register every sub (in source order) so calls resolve and pass B emits the
 ; non-main subs in p8c's order. Streaming dispatch, mirroring stmt.p8's pass B.
 sub register_subs() {{
@@ -2702,6 +2801,8 @@ sub register_subs() {{
                 }}
                 pcell = cons_next[pcell]
             }}
+            ; then this sub's locals (walk the body), continuing zp_next.
+            walk_locals(node_c[snode], node_a[snode])
             reset_nodes()
         }}
     }}

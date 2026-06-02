@@ -414,6 +414,29 @@ M5_PARAM_PROGRAMS = [
     "main {\n    g = add3(1, 2, g)\n}\n",
 ]
 
+# P7-M5 subs (slice 4): local variables. Pass S walks each sub body in p8c's
+# _walk_block order (depth-first, source order, recursing into if/while/for/
+# repeat/when bodies) and allocates each local (p8v_<sub>_<name>) continuing
+# the ZP bump after the sub's params. A local declaration with an initializer
+# lowers to a store; locals (and params) shadow module vars by scope.
+M5_LOCAL_PROGRAMS = [
+    # top-level locals in main + a sub, init + use
+    "%target nmos\nubyte g\n\n"
+    "sub twice(ubyte v) -> ubyte {\n    ubyte r\n    r = v + v\n    return r\n}\n"
+    "main {\n    ubyte x\n    x = 3\n    g = twice(x)\n}\n",
+    # a local loop var + a local accumulator (for-loop body)
+    "%target nmos\nubyte g\n\n"
+    "sub compute(ubyte n) -> ubyte {\n    ubyte sum\n    sum = 0\n    ubyte i\n"
+    "    for i in 0 to n {\n        sum = sum + i\n    }\n    return sum\n}\n"
+    "main {\n    g = compute(5)\n}\n",
+    # locals declared INSIDE nested blocks (if / while) -- allocation order
+    "%target nmos\nubyte g\nuword gw\n\n"
+    "sub nested() {\n    ubyte a\n    a = 1\n    if g > 0 {\n        ubyte b\n"
+    "        b = a + g\n        while b > 0 {\n            uword w\n            w = gw + 1\n"
+    "            gw = w\n            b = b - 1\n        }\n    }\n    g = a\n}\n"
+    "main {\n    nested()\n}\n",
+]
+
 
 def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
@@ -589,6 +612,12 @@ class P1Equivalence(unittest.TestCase):
 
     def test_m5_param_programs(self):
         for src in M5_PARAM_PROGRAMS:
+            with self.subTest(src=src):
+                self.assertEqual(self._oracle(src), self._ontarget(src),
+                                 msg=f"codegen .s differs for {src!r}")
+
+    def test_m5_local_programs(self):
+        for src in M5_LOCAL_PROGRAMS:
             with self.subTest(src=src):
                 self.assertEqual(self._oracle(src), self._ontarget(src),
                                  msg=f"codegen .s differs for {src!r}")
