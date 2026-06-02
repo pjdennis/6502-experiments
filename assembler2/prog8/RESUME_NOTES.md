@@ -105,7 +105,28 @@ was wrong; the real gap is ~15 KB).** Measured/counted at this HEAD:
          (smaller than p1.p8) now; pursue A/B/C later for the true fixpoint.
     THIS IS A DIRECTION DECISION FOR THE USER (esp. A, which re-architects the
     shared emulator). Until it's made, adding more p1 features just consumes the
-    last ~600 B of corpus-compile margin without approaching the fixpoint.
+    last ~80 B of corpus-compile margin without approaching the fixpoint.
+  * RULED-OUT incremental levers (measured, so the next session doesn't chase
+    them): (i) o_* / source-idiom factoring -- only ~30 raw emits left, tens of
+    bytes. (ii) a register calling convention -- p1.p8 has ~948 helper call
+    sites but only ~338 are single-arg; arg-in-A saves ~2 B/site gross (~700 B)
+    minus per-sub callee prologue (~134 subs) -> ~300 B NET. (iii) arena
+    right-sizing -- already done (~270 B); node/cons can't drop below the
+    corpus peak (~50 nodes). NONE of these approach 15 KB. The gap is the SUM
+    of inherent feature-logic code (~58 KB) + inherent program-wide arenas
+    (~15-20 KB); only options A-D move it. RECOMMENDED next major effort:
+    decide A vs B vs D, then commit to it -- piecemeal feature/compaction work
+    on the current model cannot reach the fixpoint.
+
+## Session log (this branch, newest first)
+  * ubyte-array element READ (fast `,y` path); margin now ~80 B.
+  * Quantified the ~15 KB self-host capacity gap (this is the headline finding).
+  * Arena right-sizing (~270 B reclaimed).
+  * Array declaration + storage trailer (byte-identical).
+  * const support (byte-identical; folds where p8c folds).
+  * Pool + I/O-port relocation -- the major capacity unblock (~3 KB freed,
+    transparent across the whole repo).
+  * String-pool dedup; string-pool label ordering fix (both byte-identical).
 
 Paths forward:
   1. A bigger codegen-compaction lever in p8c (all SAFE, p1.p8-source-free,
