@@ -207,28 +207,28 @@ uword name_len
 uword int_val
 
 ; node arena
-ubyte[80] node_kind
-ubyte[80] node_op
-uword[80] node_a
-uword[80] node_b
-uword[80] node_c
-uword[80] node_d
+ubyte[64] node_kind
+ubyte[64] node_op
+uword[64] node_a
+uword[64] node_b
+uword[64] node_c
+uword[64] node_d
 uword node_count
 
 ; expression stacks
-uword[24] operand_stack
+uword[20] operand_stack
 uword operand_sp
-ubyte[24] op_kind
-ubyte[24] op_op
-ubyte[24] op_prec
-uword[24] op_a
-uword[24] op_b
-uword[24] op_floor
+ubyte[20] op_kind
+ubyte[20] op_op
+ubyte[20] op_prec
+uword[20] op_a
+uword[20] op_b
+uword[20] op_floor
 uword op_sp
 
 ; cons cells
-uword[80] cons_val
-uword[80] cons_next
+uword[64] cons_val
+uword[64] cons_next
 uword cons_count
 
 ; statement frame stack

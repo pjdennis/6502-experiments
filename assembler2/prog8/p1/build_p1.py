@@ -63,11 +63,11 @@ OUT = HERE / "p1.p8"
 ARENA_SIZES = {
     "ident_pool": 224, "ident_off": 40, "ident_len": 40,
     "str_pool": 224, "str_off": 20, "str_len": 20,
-    "node_kind": 80, "node_op": 80,
-    "node_a": 80, "node_b": 80, "node_c": 80, "node_d": 80,
-    "operand_stack": 24, "op_kind": 24, "op_op": 24, "op_prec": 24,
-    "op_a": 24, "op_b": 24, "op_floor": 24,
-    "cons_val": 80, "cons_next": 80,
+    "node_kind": 64, "node_op": 64,
+    "node_a": 64, "node_b": 64, "node_c": 64, "node_d": 64,
+    "operand_stack": 20, "op_kind": 20, "op_op": 20, "op_prec": 20,
+    "op_a": 20, "op_b": 20, "op_floor": 20,
+    "cons_val": 64, "cons_next": 64,
     # fr_* (the parser's frame stack); the codegen corpus's programs are
     # shallow so 24 is ample and reclaims a bit more headroom.
     "fr_kind": 24, "fr_mode": 24, "fr_stmts": 24, "fr_defer": 24,
