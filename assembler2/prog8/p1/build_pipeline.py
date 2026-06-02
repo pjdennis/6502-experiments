@@ -206,6 +206,19 @@ sub skip_zp_text() {
         if b == 0 { break }
     }
 }
+sub copy_memvar_text() {
+    repeat { ubyte b
+        b = read_src()
+        if b == 0 { break }
+        out_byte(b)
+    }
+}
+sub skip_memvar_text() {
+    repeat { ubyte b
+        b = read_src()
+        if b == 0 { break }
+    }
+}
 """
 
 LOAD_STATE = """
@@ -305,6 +318,8 @@ main {
     dump_global()
     emit_zp_bindings()
     out_byte(0)
+    emit_memvars()
+    out_byte(0)
     ; re-parse from a clean arena so the record ids match the dumped pool.
     reset_arena()
     reset_source()
@@ -370,6 +385,7 @@ main {
     lstk_sp = 0
     emit_prologue()
     copy_zp_text()
+    skip_memvar_text()
     ; stream 1: main
     repeat {
         load_record()
@@ -391,6 +407,7 @@ main {
     reset_source()
     load_global()
     skip_zp_text()
+    skip_memvar_text()
     repeat {
         load_record()
         if rec_kind == $ff { break }
@@ -400,6 +417,14 @@ main {
     }
     emit_mul_helper()
     emit_arrays()
+    repeat {
+        junk = read_src()
+        if src_eof != 0 { break }
+    }
+    reset_source()
+    load_global()
+    skip_zp_text()
+    copy_memvar_text()
     emit_string_pool()
     emit_trailers()
     _close(src_hand)
@@ -444,7 +469,7 @@ def emit_pass1():
     parts = [HEADER.replace("pass 2", "pass 1"), p1_preamble]
     for _, body in fe_subs:
         parts.append(body)
-    p1_seeds = "build_symbols() walk_locals() push_walk_block() push_walk_when() find_sym() reverse_cons() cg_skip_decl() emit_zp_bindings() emit_sym_mangled() " + cg_map["register_subs"]
+    p1_seeds = "build_symbols() walk_locals() push_walk_block() push_walk_when() find_sym() reverse_cons() cg_skip_decl() emit_zp_bindings() emit_memvars() emit_sym_mangled() " + cg_map["register_subs"]
     p1_live = reachable(cg_map, p1_seeds)
     for n, body in cg_subs:
         if n in p1_live and n != "register_subs":

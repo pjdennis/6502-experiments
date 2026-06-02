@@ -187,12 +187,12 @@ ubyte ntok_kind
 uword ntok_val
 
 ; identifier text pool (reset per top-level unit while streaming)
-ubyte[224] ident_pool
+ubyte[120] ident_pool
 uword ident_count
 uword ident_pool_len
 
 ; string literal pool
-ubyte[224] str_pool
+ubyte[208] str_pool
 uword[20]  str_off
 uword[20]  str_len
 uword str_count
@@ -206,42 +206,42 @@ uword name_len
 uword int_val
 
 ; node arena
-ubyte[64] node_kind
-ubyte[64] node_op
-uword[64] node_a
-uword[64] node_b
-uword[64] node_c
-uword[64] node_d
+ubyte[60] node_kind
+ubyte[60] node_op
+uword[60] node_a
+uword[60] node_b
+uword[60] node_c
+uword[60] node_d
 uword node_count
 
 ; expression stacks
-uword[20] operand_stack
+uword[16] operand_stack
 uword operand_sp
-ubyte[20] op_kind
-ubyte[20] op_op
-ubyte[20] op_prec
-uword[20] op_a
-uword[20] op_b
-uword[20] op_floor
+ubyte[16] op_kind
+ubyte[16] op_op
+ubyte[16] op_prec
+uword[16] op_a
+uword[16] op_b
+uword[16] op_floor
 uword op_sp
 
 ; cons cells
-uword[64] cons_val
-uword[64] cons_next
+uword[60] cons_val
+uword[60] cons_next
 uword cons_count
 
 ; statement frame stack
-ubyte[24] fr_kind
-ubyte[24] fr_mode        ; 0=stmts, 1=choices
-uword[24] fr_stmts       ; cons head (reversed)
-ubyte[24] fr_defer       ; 1 if defer-prefixed
-uword[24] fr_cond        ; cond / when-expr / repeat-count
-uword[24] fr_then        ; saved then block (else frame)
-uword[24] fr_var
-uword[24] fr_lo
-uword[24] fr_hi
-uword[24] fr_choices     ; when: choices cons head
-uword[24] fr_values      ; when_choice: values cons head
+ubyte[18] fr_kind
+ubyte[18] fr_mode        ; 0=stmts, 1=choices
+uword[18] fr_stmts       ; cons head (reversed)
+ubyte[18] fr_defer       ; 1 if defer-prefixed
+uword[18] fr_cond        ; cond / when-expr / repeat-count
+uword[18] fr_then        ; saved then block (else frame)
+uword[18] fr_var
+uword[18] fr_lo
+uword[18] fr_hi
+uword[18] fr_choices     ; when: choices cons head
+uword[18] fr_values      ; when_choice: values cons head
 ubyte fr_sp
 ubyte pending_defer
 
@@ -255,14 +255,14 @@ uword prog_structs       ; cons of struct node ids (reversed)
 uword prog_subs          ; cons of sub node ids (reversed)
 
 ; ---- codegen symbol table (persistent across passes) ----
-uword[40] sym_ident      ; var name ident id
-ubyte[40] sym_type       ; type tag (TY_UBYTE / TY_BYTE / TY_UWORD)
-uword[40] sym_addr       ; ZP address
-uword[40] sym_scope      ; owning sub name ident (0 = module scope)
-ubyte[40] sym_mkind      ; 0 = module var, 1 = param, 2 = local
-ubyte[40] sym_is_const   ; 1 = compile-time const (no storage); folded
-uword[40] sym_cval       ; const value (when sym_is_const)
-uword[40] sym_arr_size   ; element count if an array (0 = scalar); the
+uword[32] sym_ident      ; var name ident id
+ubyte[32] sym_type       ; type tag (TY_UBYTE / TY_BYTE / TY_UWORD)
+uword[32] sym_addr       ; ZP address
+uword[32] sym_scope      ; owning sub name ident (0 = module scope)
+ubyte[32] sym_mkind      ; 0 = module var, 1 = param, 2 = local
+ubyte[32] sym_is_const   ; 1 = compile-time const (no storage); folded
+uword[32] sym_cval       ; const value (when sym_is_const)
+uword[32] sym_arr_size   ; element count if an array (0 = scalar); the
                          ; element type is in sym_type; mangle is p8a_
 uword sym_count
 uword zp_next            ; ZP bump allocator (from $40)
@@ -299,23 +299,23 @@ uword strpool_count
 ; byte-expression codegen work stack (replaces p8c's recursion):
 ; per entry a task -- 0 eval node, 1 binop-leaf, 2 pha, 3 sta tmp1,
 ; 4 pla, 5 binop-tmp1.
-ubyte[48] cws_type
-uword[48] cws_node
-ubyte[48] cws_op
+ubyte[36] cws_type
+uword[36] cws_node
+ubyte[36] cws_op
 ubyte cws_sp
 ; word-expression codegen work stack (separate from the byte stack so
 ; a byte expression's @() address can drive a word eval without
 ; corrupting the byte stack -- the two never share state).
-ubyte[48] wws_type
-uword[48] wws_node
-ubyte[48] wws_op
+ubyte[36] wws_type
+uword[36] wws_node
+ubyte[36] wws_op
 ubyte wws_sp
 ; statement work stack (control flow without recursion): a task is
 ; 0=emit stmt node, 1=emit label .L<kind>_<id>:, 2=emit jmp to it,
 ; 3=pop the loop-label stack.
-ubyte[96] sws_type
-uword[96] sws_a
-uword[96] sws_b
+ubyte[64] sws_type
+uword[64] sws_a
+uword[64] sws_b
 ubyte sws_sp
 ; loop-label stack for break/continue (break -> bk kind/id, continue
 ; -> ck kind/id), pushed per loop.
@@ -2356,19 +2356,24 @@ sub build_symbols() {
                 ubyte tag
                 tag = node_op[vd]
                 if tag <= TY_UWORD {           ; ubyte / byte / uword
+                    ubyte sz
+                    sz = 1
+                    if tag == TY_UWORD { sz = 2 }
                     sym_ident[sym_count] = node_a[vd]
                     sym_type[sym_count] = tag
-                    sym_addr[sym_count] = zp_next
                     sym_scope[sym_count] = 0
                     sym_mkind[sym_count] = 0
                     sym_is_const[sym_count] = 0
                     sym_arr_size[sym_count] = 0
-                    sym_count = sym_count + 1
-                    if tag == TY_UWORD {
-                        zp_next = zp_next + 2
+                    ; ZP runs $40..$FF; a scalar that won't fit overflows into
+                    ; main memory (sentinel $FFFF -> emit_memvars), matching p8c.
+                    if zp_next + sz > $ff {
+                        sym_addr[sym_count] = $ffff
                     } else {
-                        zp_next = zp_next + 1
+                        sym_addr[sym_count] = zp_next
+                        zp_next = zp_next + sz
                     }
+                    sym_count = sym_count + 1
                 } else {
                     ; const ubyte/byte/uword: TY_CONST_* (6/7/8) -> base type.
                     ; No ZP storage; the int-literal init (node_b) is folded in
@@ -2430,8 +2435,10 @@ sub emit_zp_bindings() {
         }
         if sym_is_const[j] == 0 {
             if sym_arr_size[j] == 0 {
-                any = 1
-                break
+                if sym_addr[j] != $ffff {
+                    any = 1
+                    break
+                }
             }
         }
         j = j + 1
@@ -2449,10 +2456,65 @@ sub emit_zp_bindings() {
         }
         if sym_is_const[i] == 0 {
             if sym_arr_size[i] == 0 {
-                emit_sym_mangled(i)
-                out_text(" = $")
-                out_hex2(lsb(sym_addr[i]))
-                o_nl()
+                if sym_addr[i] != $ffff {
+                    emit_sym_mangled(i)
+                    out_text(" = $")
+                    out_hex2(lsb(sym_addr[i]))
+                    o_nl()
+                }
+            }
+        }
+        i = i + 1
+    }
+}
+; emit the `; ---- scalars overflowed from ZP into main memory ----` block:
+; one `p8v_<name>:` label + `.byte 0`(ubyte) / `.byte 0, 0`(uword) per scalar
+; that did not fit ZP (sym_addr == $FFFF), source order. Between arrays and the
+; string pool (matching p8c). Empty -> none.
+
+sub emit_memvars() {
+    ubyte any
+    any = 0
+    uword j
+    j = 0
+    repeat {
+        if j >= sym_count {
+            break
+        }
+        if sym_arr_size[j] == 0 {
+            if sym_is_const[j] == 0 {
+                if sym_addr[j] == $ffff {
+                    any = 1
+                    break
+                }
+            }
+        }
+        j = j + 1
+    }
+    if any == 0 {
+        return
+    }
+    out_byte($0a)
+    out_text("; ---- scalars overflowed from ZP into main memory ----")
+    o_nl()
+    uword i
+    i = 0
+    repeat {
+        if i >= sym_count {
+            break
+        }
+        if sym_arr_size[i] == 0 {
+            if sym_is_const[i] == 0 {
+                if sym_addr[i] == $ffff {
+                    emit_sym_mangled(i)
+                    out_byte($3a)
+                    o_nl()
+                    out_text("  .byte 0")
+                    if sym_type[i] == TY_UWORD {
+                        out_text(", 0")
+                    }
+                    o_nl()
+                }
             }
         }
         i = i + 1
@@ -2548,17 +2610,22 @@ sub walk_locals(uword body, uword subname) {
                 ubyte tag
                 tag = node_op[st]
                 if tag <= TY_UWORD {
+                    ubyte sz
+                    sz = 1
+                    if tag == TY_UWORD { sz = 2 }
                     sym_ident[sym_count] = node_a[st]
                     sym_type[sym_count] = tag
-                    sym_addr[sym_count] = zp_next
                     sym_scope[sym_count] = subname
                     sym_mkind[sym_count] = 2
-                    sym_count = sym_count + 1
-                    if tag == TY_UWORD {
-                        zp_next = zp_next + 2
+                    sym_is_const[sym_count] = 0
+                    sym_arr_size[sym_count] = 0
+                    if zp_next + sz > $ff {
+                        sym_addr[sym_count] = $ffff
                     } else {
-                        zp_next = zp_next + 1
+                        sym_addr[sym_count] = zp_next
+                        zp_next = zp_next + sz
                     }
+                    sym_count = sym_count + 1
                 }
             }
         }
@@ -2643,17 +2710,22 @@ sub register_subs() {
                 pnode = cons_val[pcell]
                 ubyte ptag
                 ptag = node_op[pnode]
+                ubyte psz
+                psz = 1
+                if ptag == TY_UWORD { psz = 2 }
                 sym_ident[sym_count] = node_a[pnode]
                 sym_type[sym_count] = ptag
-                sym_addr[sym_count] = zp_next
                 sym_scope[sym_count] = node_a[snode]
                 sym_mkind[sym_count] = 1
-                sym_count = sym_count + 1
-                if ptag == TY_UWORD {
-                    zp_next = zp_next + 2
+                sym_is_const[sym_count] = 0
+                sym_arr_size[sym_count] = 0
+                if zp_next + psz > $ff {
+                    sym_addr[sym_count] = $ffff
                 } else {
-                    zp_next = zp_next + 1
+                    sym_addr[sym_count] = zp_next
+                    zp_next = zp_next + psz
                 }
+                sym_count = sym_count + 1
                 pcell = cons_next[pcell]
             }
             ; then this sub's locals (walk the body), continuing zp_next.
@@ -2770,6 +2842,8 @@ main {
     register_subs()
     dump_global()
     emit_zp_bindings()
+    out_byte(0)
+    emit_memvars()
     out_byte(0)
     ; re-parse from a clean arena so the record ids match the dumped pool.
     reset_arena()
