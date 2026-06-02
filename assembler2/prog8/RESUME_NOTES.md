@@ -173,15 +173,26 @@ was wrong; the real gap is ~15 KB).** Measured/counted at this HEAD:
     ***     upstream-compatible refactor (behaviour identical). stmt.bin $EE0E
     ***     (504 B under $F006). All suites green (p1 52, prog8 106, tinyp8 22);
     ***     p1.bin still fits ($EEDE, 296 B under $F006).
-    *** REMAINING for self-host: MILESTONE 2 = pass 2 (S-expr reader that
-    *** repopulates node_*/sym arrays from the `(program ...)` text, then runs
-    *** the EXISTING build_p1.py codegen back-end) producing .s == p8c. Then the
-    *** pipeline (pass1 | pass2) compiling p1.p8 == p8c(p1.p8) IS self-host. Note
-    *** pass 2 is the bigger half (it has the ~33 KB codegen back-end + the sym
-    *** table + needs the S-expr reader); size its arenas the same way (program-
-    *** wide pools sized to p1.p8; per-unit node arena; watch big subs). The
-    *** key technique is proven: grow program-wide pools, keep node arena per-
-    *** unit by splitting any >640-node sub.
+    *** REMAINING for self-host: MILESTONE 2 = pass 2 (read the serialized AST,
+    *** then run the EXISTING build_p1.py codegen back-end) producing .s == p8c.
+    *** Then pipeline(p1.p8) = pass1 | pass2 == p8c(p1.p8) IS self-host.
+    *** DESIGN REFINEMENT (simpler than an S-expr text parser): make pass 1 emit
+    *** a BINARY dump of the arrays the codegen consumes -- node_kind/op (ubyte),
+    *** node_a/b/c/d (uword), cons_val/next, ident_pool + ident_off/len, str_pool
+    *** + str_off/len, and the sub/prog tables -- and pass 2 just LOADS them and
+    *** runs codegen. No re-parsing, no S-expr reader. The text `(program ...)`
+    *** serializer STAYS (test_stmt's oracle proves the AST is built correctly);
+    *** add a parallel binary emitter for the pipeline. Verify END-TO-END: the
+    *** pipeline's final .s == `p8c -o`, on the corpus first, then p1.p8.
+    *** SIZING: pass 2 = codegen back-end (~33 KB) + a small array LOADER (~3-5 KB,
+    *** replacing the ~22 KB Prog8 front-end the monolith carries) + sym table +
+    *** pools sized to p1.p8 (~17 KB) + per-unit node arena. ~38 KB code + ~20 KB
+    *** arenas ~= 58 KB -- fits 60 KB, tight; split any >640-node codegen sub the
+    *** same way classify_name was split. CAVEAT to resolve: codegen currently
+    *** RE-READS the source (pass M / pass B re-lex); pass 2 must instead iterate
+    *** the loaded AST (the node arrays already hold it) -- restructure the
+    *** pass-M/pass-B drivers in build_p1.py to walk the deserialized sub list
+    *** rather than re-lexing. That driver change is the bulk of Milestone 2.
 
     MILESTONE 1 PROGRESS LOG (how it was reached):
       * ROOT CAUSE of the earlier hang: stmt.p8's reset_nodes (per-unit) resets
