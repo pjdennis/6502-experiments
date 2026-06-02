@@ -187,15 +187,12 @@ ubyte ntok_kind
 uword ntok_val
 
 ; identifier text pool (reset per top-level unit while streaming)
-ubyte[5120] ident_pool
+ubyte[6144] ident_pool
 uword ident_count
 uword ident_pool_len
 
-; string literal pool
-ubyte[3584] str_pool
-uword[256] str_off
-uword[256] str_len
-uword str_count
+; string literal pool (null-terminated; a string's id is its start offset)
+ubyte[3456] str_pool
 uword str_pool_len
 
 ubyte[64] name_buf
@@ -273,10 +270,10 @@ ubyte[16] call_isw       ; 1 if that arg/param is uword
 ubyte call_n
 ; sub table (registered in source order before codegen, so calls
 ; resolve and pass B emits non-main subs in p8c's order).
-uword[256] sub_name       ; sub name ident id
-ubyte[256] sub_kind       ; SUBK_SUB / MAIN / INLINE / ASMSUB
-ubyte[256] sub_ret        ; return type tag
-uword[256] sub_addr       ; asmsub target address ($F0xx); else 0
+uword[232] sub_name       ; sub name ident id
+ubyte[232] sub_kind       ; SUBK_SUB / MAIN / INLINE / ASMSUB
+ubyte[232] sub_ret        ; return type tag
+uword[232] sub_addr       ; asmsub target address ($F0xx); else 0
 uword sub_count
 ; builtin-call node stack: emit_builtin is non-reentrant (static
 ; locals), but a builtin arg may itself be a builtin, so the callnode
@@ -294,7 +291,7 @@ uword cur_ret_name       ; current sub's name ident id
 ; string pool: one label per string-literal *occurrence*, numbered
 ; in codegen encounter order (matching p8c's sema-walk order); the
 ; recorded str id indexes the parser's str_pool for the trailer.
-uword[48] strpool_sid    ; str id for label N (p8c_str_N)
+uword[208] strpool_sid    ; str id for label N (p8c_str_N)
 uword strpool_count
 ; byte-expression codegen work stack (replaces p8c's recursion):
 ; per entry a task -- 0 eval node, 1 binop-leaf, 2 pha, 3 sta tmp1,
@@ -334,7 +331,7 @@ ubyte lstk_sp
 ubyte mul_used           ; `*` was emitted -> emit __p8c_mul_u8 trailer
 uword label_seq          ; global local-label counter (p8c's _label_id)
 
-uword[256] sub_snode
+uword[2] sub_snode
 uword resident_sym_count
 uword rec_kind
 uword rec_snode
@@ -793,11 +790,22 @@ sub str_char_plain(ubyte c) -> ubyte {
     return 1
 }
 
+; length of the null-terminated string at pool offset `off`.
+sub str_len_at(uword off) -> uword {
+    uword n
+    n = 0
+    repeat {
+        if str_pool[off + n] == 0 { break }
+        n = n + 1
+    }
+    return n
+}
+
 sub emit_string_byte_list(uword sid) {
     uword off
     uword n
-    off = str_off[sid]
-    n = str_len[sid]
+    off = sid
+    n = str_len_at(sid)
     ubyte in_run        ; inside an open "..." run
     ubyte any           ; emitted at least one part (need ", " before next)
     in_run = 0
@@ -844,27 +852,20 @@ sub emit_string_byte_list(uword sid) {
 ; two string-pool ids are equal iff same length and same bytes.
 
 sub str_sid_equal(uword a, uword b) -> ubyte {
-    if str_len[a] != str_len[b] {
-        return 0
-    }
-    uword n
-    n = str_len[a]
-    uword oa
-    uword ob
-    oa = str_off[a]
-    ob = str_off[b]
-    uword j
-    j = 0
     repeat {
-        if j >= n {
-            break
-        }
-        if str_pool[oa + j] != str_pool[ob + j] {
+        ubyte ca
+        ubyte cb
+        ca = str_pool[a]
+        cb = str_pool[b]
+        if ca != cb {
             return 0
         }
-        j = j + 1
+        if ca == 0 {
+            return 1
+        }
+        a = a + 1
+        b = b + 1
     }
-    return 1
 }
 ; intern a string id into the pool, returning its p8c_str_N label number.
 ; Identical string content reuses an existing label (matches p8c's value
@@ -3283,8 +3284,8 @@ sub codegen_inline_asm(uword st) {
     sid = node_a[st]
     uword off
     uword n
-    off = str_off[sid]
-    n = str_len[sid]
+    off = sid
+    n = str_len_at(sid)
     uword j
     j = 0
     repeat {
@@ -3399,9 +3400,6 @@ sub load_global() {
     str_pool_len = l16()
     i = 0
     repeat { if i >= str_pool_len { break } str_pool[i] = read_src() i = i + 1 }
-    str_count = l16()
-    i = 0
-    repeat { if i >= str_count { break } str_off[i] = l16() str_len[i] = l16() i = i + 1 }
 }
 ; load one record's nodes into the (reset) node arena; returns the snode.
 sub load_record() {

@@ -187,15 +187,12 @@ ubyte ntok_kind
 uword ntok_val
 
 ; identifier text pool (reset per top-level unit while streaming)
-ubyte[4640] ident_pool
+ubyte[6144] ident_pool
 uword ident_count
 uword ident_pool_len
 
-; string literal pool
-ubyte[3480] str_pool
-uword[256] str_off
-uword[256] str_len
-uword str_count
+; string literal pool (null-terminated; a string's id is its start offset)
+ubyte[3456] str_pool
 uword str_pool_len
 
 ubyte[64] name_buf
@@ -206,12 +203,12 @@ uword name_len
 uword int_val
 
 ; node arena
-ubyte[544] node_kind
-ubyte[544] node_op
-uword[544] node_a
-uword[544] node_b
-uword[544] node_c
-uword[544] node_d
+ubyte[524] node_kind
+ubyte[524] node_op
+uword[524] node_a
+uword[524] node_b
+uword[524] node_c
+uword[524] node_d
 uword node_count
 
 ; expression stacks
@@ -226,8 +223,8 @@ uword[16] op_floor
 uword op_sp
 
 ; cons cells
-uword[320] cons_val
-uword[320] cons_next
+uword[272] cons_val
+uword[272] cons_next
 uword cons_count
 
 ; statement frame stack
@@ -255,14 +252,14 @@ uword prog_structs       ; cons of struct node ids (reversed)
 uword prog_subs          ; cons of sub node ids (reversed)
 
 ; ---- codegen symbol table (persistent across passes) ----
-uword[810] sym_ident      ; var name ident id
-ubyte[810] sym_type       ; type tag (TY_UBYTE / TY_BYTE / TY_UWORD)
-uword[810] sym_addr       ; ZP address
-uword[810] sym_scope      ; owning sub name ident (0 = module scope)
-ubyte[810] sym_mkind      ; 0 = module var, 1 = param, 2 = local
-ubyte[810] sym_is_const   ; 1 = compile-time const (no storage); folded
-uword[810] sym_cval       ; const value (when sym_is_const)
-uword[810] sym_arr_size   ; element count if an array (0 = scalar); the
+uword[780] sym_ident      ; var name ident id
+ubyte[780] sym_type       ; type tag (TY_UBYTE / TY_BYTE / TY_UWORD)
+uword[780] sym_addr       ; ZP address
+uword[780] sym_scope      ; owning sub name ident (0 = module scope)
+ubyte[780] sym_mkind      ; 0 = module var, 1 = param, 2 = local
+ubyte[780] sym_is_const   ; 1 = compile-time const (no storage); folded
+uword[780] sym_cval       ; const value (when sym_is_const)
+uword[780] sym_arr_size   ; element count if an array (0 = scalar); the
                          ; element type is in sym_type; mangle is p8a_
 uword sym_count
 uword zp_next            ; ZP bump allocator (from $40)
@@ -273,10 +270,10 @@ ubyte[16] call_isw       ; 1 if that arg/param is uword
 ubyte call_n
 ; sub table (registered in source order before codegen, so calls
 ; resolve and pass B emits non-main subs in p8c's order).
-uword[256] sub_name       ; sub name ident id
-ubyte[256] sub_kind       ; SUBK_SUB / MAIN / INLINE / ASMSUB
-ubyte[256] sub_ret        ; return type tag
-uword[256] sub_addr       ; asmsub target address ($F0xx); else 0
+uword[232] sub_name       ; sub name ident id
+ubyte[232] sub_kind       ; SUBK_SUB / MAIN / INLINE / ASMSUB
+ubyte[232] sub_ret        ; return type tag
+uword[232] sub_addr       ; asmsub target address ($F0xx); else 0
 uword sub_count
 ; builtin-call node stack: emit_builtin is non-reentrant (static
 ; locals), but a builtin arg may itself be a builtin, so the callnode
@@ -334,7 +331,7 @@ ubyte lstk_sp
 ubyte mul_used           ; `*` was emitted -> emit __p8c_mul_u8 trailer
 uword label_seq          ; global local-label counter (p8c's _label_id)
 
-uword[256] sub_snode
+uword[2] sub_snode
 uword resident_sym_count
 uword rec_kind
 uword rec_snode
@@ -837,7 +834,15 @@ sub next_raw_token() {
         }
         if c == $22 {
             c = read_src()
-            str_off[str_count] = str_pool_len
+            ; null-terminated string pool: a literal's "id" is the pool OFFSET
+            ; where it starts; identical content dedups to that same offset, so
+            ; the pool holds each distinct value once and needs no str_off/len
+            ; index arrays. (The emitted p8c_str_N label is still assigned at
+            ; codegen-encounter order by intern_str_label, so this is transparent
+            ; to output -- it only shrinks the pass-1 str arenas: p1.p8 has 512
+            ; literal occurrences but only ~183 distinct values.)
+            uword start
+            start = str_pool_len
             repeat {
                 c = read_src()
                 if src_eof != 0 { break }
@@ -853,9 +858,36 @@ sub next_raw_token() {
                 str_pool[str_pool_len] = rb
                 str_pool_len = str_pool_len + 1
             }
-            str_len[str_count] = str_pool_len - str_off[str_count]
-            push_token(TK_STR, str_count)
-            str_count = str_count + 1
+            uword slen
+            slen = str_pool_len - start
+            uword off
+            off = 0
+            repeat {
+                if off >= start { break }
+                uword sk
+                ubyte sm
+                sm = 1
+                sk = 0
+                repeat {
+                    if sk >= slen { break }
+                    if str_pool[off + sk] != str_pool[start + sk] { sm = 0 break }
+                    sk = sk + 1
+                }
+                if sm != 0 {
+                    if str_pool[off + slen] == 0 {
+                        str_pool_len = start
+                        push_token(TK_STR, off)
+                        return
+                    }
+                }
+                repeat {
+                    if str_pool[off] == 0 { off = off + 1 break }
+                    off = off + 1
+                }
+            }
+            str_pool[str_pool_len] = 0
+            str_pool_len = str_pool_len + 1
+            push_token(TK_STR, start)
             return
         }
         if is_alpha_us(c) != 0 {
@@ -2013,7 +2045,6 @@ sub reset_arena() {
     reset_nodes()
     ident_count = 0
     ident_pool_len = 0
-    str_count = 0
     str_pool_len = 0
 }
 ; Per-unit reset (between subs in pass B): only the node arena + cons
@@ -2298,6 +2329,28 @@ sub reverse_cons(uword head) -> uword {
     return rev
 }
 
+; in-place list reversal (flips next pointers, allocates no cons cells). Only
+; safe where the original list is not read again after the call -- used for the
+; one big spike (build_symbols reversing prog_vars, ~250 cells), which would
+; otherwise double the cons high-water during pass 1.
+sub reverse_cons_ip(uword head) -> uword {
+    uword prev
+    prev = 0
+    uword cell
+    cell = head
+    repeat {
+        if cell == 0 {
+            break
+        }
+        uword nxt
+        nxt = cons_next[cell]
+        cons_next[cell] = prev
+        prev = cell
+        cell = nxt
+    }
+    return prev
+}
+
 ; ---- pass S: the symbol table -------------------------------
 ; A persistent (across passes) struct-of-arrays mapping a module var's
 ; ident id to its type tag + ZP address. Built from prog_vars right after
@@ -2342,7 +2395,7 @@ sub build_symbols() {
     sym_count = 0
     zp_next = $40
     uword head
-    head = reverse_cons(prog_vars)
+    head = reverse_cons_ip(prog_vars)
     uword cell
     cell = head
     repeat {
@@ -2776,9 +2829,6 @@ sub dump_global() {
     d16(str_pool_len)
     i = 0
     repeat { if i >= str_pool_len { break } out_byte(str_pool[i]) i = i + 1 }
-    d16(str_count)
-    i = 0
-    repeat { if i >= str_count { break } d16(str_off[i]) d16(str_len[i]) i = i + 1 }
 }
 ; one sub's AST record: kind(1) snode(2) node_count(2) nodes cons_count(2) cons.
 sub dump_record(ubyte kind, uword snode) {
