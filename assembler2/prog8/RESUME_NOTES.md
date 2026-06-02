@@ -1216,3 +1216,24 @@ when a demo or tinyp8 push needs them.
 * Push after every commit. The remote is the source of truth.
 * When a session is ending, refresh this file or replace it
   wholesale.
+
+## MILESTONE 2 DE-RISKED (measured): only 3 codegen subs touch the parser
+Of build_p1.py's 134 codegen subs, **131 are PURE** (operate only on the node
+arrays + emit; reusable in pass 2 VERBATIM). Only 3 call the parser:
+  * register_subs -- re-parses to build the sym table + sub table. Pass 1 keeps
+    it (modified to also STORE each sub's snode + NOT reset_nodes, so the AST
+    stays resident to dump). Pass 2 DROPS it (loads the sym/sub tables instead).
+  * emit_subs -- re-parses each sub then calls emit_sub(snode). emit_sub is PURE.
+    Pass-2 emit_subs becomes: for each loaded sub, emit_sub(sub_snode[i]).
+  * cg_skip_decl -- only used by emit_subs; pass 2 doesn't need it.
+So pass 2 = {131 pure codegen subs unchanged} + {load routine} + {load-driven
+register/emit drivers + pass-2 main} + {stmt.p8 DATA + helpers, NO lexer/parser}.
+emit_sub(snode)/emit_main(body) already take a NODE, so feeding them loaded
+nodes "just works". KEY DATA to dump/load: node_*/cons arrays (the resident
+AST), sub table + a new sub_snode[] (each sub's node ptr), the full sym table,
+ident/str pools, prog_* metadata. For the CORPUS (small) pass 1 can keep the
+whole AST resident; p1.p8 needs per-sub streaming of the dump (dump each sub's
+nodes as a record) -- do the corpus version first to prove the mechanism.
+I/O: pass1 dumps via out_byte (to dump file = argv[1]); pass2 loads via read_src
+(dump file = argv[0]) and writes .s via out_byte (argv[1]). Verify pipeline .s
+== `p8c -o` on the corpus, then p1.p8.
