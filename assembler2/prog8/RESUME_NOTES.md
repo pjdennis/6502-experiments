@@ -90,22 +90,78 @@ was wrong; the real gap is ~15 KB).** Measured/counted at this HEAD:
   * **This is a FUNDAMENTAL constraint, not an incremental gap.** The pool
     relocation (~3 KB) and arena right-sizing (~0.3 KB) and the exhausted o_*
     helper compaction (~0.2 KB) are drops in a ~15 KB bucket. The easy levers
-    are spent. Closing ~15 KB needs an ARCHITECTURAL change:
-      A. BANK SWITCHING -- give the emulator >64 KB (banked RAM) and have p1
-         place its program-wide arenas (ident/str/sym) in a high bank. Large
-         emulator + p1 change; the cleanest real fix.
-      B. STREAMING / SPILL -- p1 spills the symbol/ident tables to a scratch
-         FILE via the existing file-I/O stubs (open/read/write), or runs extra
-         passes over the source, so program-wide state need not be resident.
-         Major p1 redesign.
-      C. SHRINK THE TARGET -- reduce p1.p8 itself (fewer subs/features, a more
-         compact codegen model) so code+arenas fit 60 KB. Changes what
-         "self-host" means.
-      D. BOUNDED self-host -- accept that p1 compiles programs up to some size
-         (smaller than p1.p8) now; pursue A/B/C later for the true fixpoint.
-    THIS IS A DIRECTION DECISION FOR THE USER (esp. A, which re-architects the
-    shared emulator). Until it's made, adding more p1 features just consumes the
-    last ~390 B of corpus-compile margin without approaching the fixpoint.
+    are spent. Closing ~15 KB in a SINGLE binary needs an architectural change.
+
+  ### >>> THE ANSWER: a MULTI-PASS PIPELINE (this resolves the feasibility AND
+  ### the upstream-comparability question -- no banking, ordinary Prog8). <<<
+    The monolith doesn't fit because the front-end AND back-end code are
+    resident TOGETHER (~55 KB) plus all arenas. The repo's OWN proof-of-concept
+    is the asm00->asm17 bootstrap chain: a pipeline of separate <=64 KB binaries.
+    Do the same for p1. MEASURED split point in p1.bin (vasm listing):
+      - front-end (lexer + parser, from stmt.p8): $0203..~$598A  ~= 22 KB
+      - back-end  (codegen, from build_p1.py):     ~$598A..$D983 ~= 33 KB
+    Two passes, each fits the 60 KB window:
+      * PASS 1 (parse + serialize AST to a file): ~22 KB code + per-sub node
+        arena (~5 KB) + ident/str pools (~8 KB) ~= 35 KB.  **ALREADY EXISTS as
+        stmt.p8** -- its parser handles EVERY construct p1.p8 uses (arrays,
+        const, struct, enum, defer, when; verified by p1.tests.test_stmt), and
+        it already has the `(program ...)` AST serializer that p1 replaced with
+        codegen. So pass 1 is essentially done.
+      * PASS 2 (read serialized AST -> codegen .s): a small S-expression reader
+        (~5 KB, replaces the 22 KB Prog8 front-end) + the codegen back-end
+        (~33 KB) + symbol table + pools (~22 KB) ~= 55-60 KB. Tight but fits;
+        split into 2 codegen sub-passes if it doesn't.
+    The fixpoint becomes: pipeline(p1.p8) == p8c(p1.p8) (same .s output). The
+    pipeline self-hosts; internal binary count doesn't affect the .s compare.
+    Pass-to-pass data lives in FILES (via the I/O shim p1.p8 already uses), so
+    program-wide arenas need not be resident in any single pass.
+
+    FALLBACKS if the pipeline is undesired: (A) bank-switching -- but banking
+    constructs in p1.p8 source diverge from upstream -> violates comparability;
+    (C) shrink p1.p8 -- changes the target; (D) bounded self-host now. The
+    pipeline is strictly better than A/C/D for the stated goal.
+
+    REMAINING WORK for the pipeline (the focused multi-session task):
+      1. Define the intermediate format. Cheapest: REUSE stmt.p8's existing
+         `(program ...)` serialization as pass-1 output (no new code in pass 1).
+      2. Build pass 2 = an S-expr reader that repopulates node_*/ident/str/sub
+         arrays from the serialized AST (streaming sub-by-sub where possible),
+         then runs the EXISTING codegen back-end (build_p1.py) unchanged.
+      3. Rebuild the symbol table in pass 2 from the AST (build_symbols already
+         does this from parsed decls; feed it the deserialized decls).
+      4. Harness: p1 = run pass-1 binary then pass-2 binary; diff .s vs p8c.
+         Verify byte-identical on the existing corpus FIRST (small ASTs), then
+         scale to p1.p8 itself.
+    Each step is corpus-verifiable. The earlier "spill the sym table to a file"
+    idea is SUBSUMED by this -- the file-based pass boundary IS the spill, but
+    clean (whole AST), not ad-hoc.
+
+    VALIDATED THIS SESSION (measurements, not estimates):
+      * Built stmt.p8 directly (pass-1 candidate): code+arena top **$C52E,
+        ~11 KB UNDER $F006** -- vs the monolith p1.bin's ~80-390 B. The split
+        gives pass 1 huge headroom, confirming the architecture fits.
+      * stmt.p8 ALREADY STREAMS (2-token lexer window; ident/str pools + node
+        arena reset per top-level unit -- see its lines 175/185/1828/2459). So
+        pass 1 does NOT hold the whole program resident; it is the right shape.
+      * p8c --dump-ast on p1.p8 = the oracle intermediate (382 KB of
+        `(program ...)` text); this is the exact format pass 1 must emit and
+        pass 2 must read.
+    OPEN (the concrete FIRST implementation task for next session):
+      * stmt.bin does NOT yet serialize p1.p8 -- it produced 0 bytes and ran to
+        the cycle cap. Cause not yet isolated: could be (a) a sub bigger than
+        stmt.p8's 640-node arena (growing node/cons to 1024 did NOT fix it, and
+        still fit at $DA2E ~5.5 KB under $F006 -- so likely NOT just node size),
+        (b) an ident/str pool overflow on some unit, (c) the latent EOF
+        infinite-loop if p1.p8 lacks a trailing newline (see the EOF note
+        elsewhere in this file), or (d) buffered output hiding partial progress.
+        NEXT: bisect -- run stmt.bin on progressively larger prefixes of p1.p8
+        (or individual big subs) to find the first unit it hangs on; check
+        whether output is per-unit-flushed or end-buffered; confirm p1.p8 ends
+        in a newline. Getting stmt.bin to emit p1.p8's AST byte-identically to
+        `p8c --dump-ast` is pipeline MILESTONE 1 (pass 1 proven on the real
+        self-host input). Then build pass 2 (S-expr reader + existing codegen).
+      * (`/tmp/stmt.p8.bak` was a scratch copy; stmt.p8 is back at its tested
+        baseline -- grow its arenas as part of Milestone 1, it has the room.)
 
   ### CONCRETE STAGED PLAN for option B (recommended -- stays in 64 KB AND
   ### keeps p1.p8 upstream-compatible; no emulator change). The single biggest
