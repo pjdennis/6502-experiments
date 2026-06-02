@@ -55,8 +55,8 @@ p8s_main:
   jsr display_hex
   pla
   jsr display_hex
-  lda #<p8c_str_1
-  ldx #>p8c_str_1
+  lda #<p8c_str_0
+  ldx #>p8c_str_0
   jsr display_string
   lda $8000
   jsr display_hex
@@ -66,6 +66,4 @@ p8s_main:
 
 ; ---- string pool ----
 p8c_str_0:
-  .byte " ", 0
-p8c_str_1:
   .byte " ", 0

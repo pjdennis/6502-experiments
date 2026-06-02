@@ -116,10 +116,20 @@ class CodeGen:
         because subs are emitted main-first -- matches the order p1 interns
         its string labels in its single codegen pass. This keeps the two
         compilers byte-identical without p1 needing a separate pre-pass.
+
+        Identical string content is deduplicated: a literal whose value
+        already appears in the pool reuses that label, so the pool holds
+        each distinct string once. p1's intern_str_label does the same
+        (compares pool bytes), so the two stay byte-identical.
         """
-        if getattr(lit, "label", None) is None:
-            lit.label = f"p8c_str_{len(self.prog.strings)}"
-            self.prog.strings.append(lit)
+        if getattr(lit, "label", None) is not None:
+            return lit.label
+        for prior in self.prog.strings:
+            if prior.value == lit.value:
+                lit.label = prior.label
+                return lit.label
+        lit.label = f"p8c_str_{len(self.prog.strings)}"
+        self.prog.strings.append(lit)
         return lit.label
 
     def generate(self) -> str:

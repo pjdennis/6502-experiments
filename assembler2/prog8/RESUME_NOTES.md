@@ -85,9 +85,29 @@ Paths forward (a dedicated next effort):
      subsumed by the comparison opts, so look elsewhere).
   3. Accept that p1 compiles a bounded program size first and grow the ceiling
      story later.
-The string-literal pool ordering across subs (p8c assigns labels in sema-walk
-order; p1 in codegen encounter order) must also be verified for multi-sub
-programs that use strings before the self-host diff will close.
+
+**DONE -- string-literal pool ordering across subs.** p8c used to assign
+`p8c_str_N` labels during the sema walk (source order); p1 interns them during
+its single codegen pass (main emitted first). A non-main sub declaring a string
+before main therefore got divergent label numbers. FIXED by moving p8c's label
+assignment out of sema into codegen `_str_label()` (lazy, on first reference,
+main-first emission order) -- p1 needs no new code, no $F006 cost. Regression
+guards: `test_codegen.test_string_labels_are_main_first`, the new p1 corpus
+case (strings in subs before main).
+
+**DONE (but ~size-neutral now) -- string-pool dedup.** Identical string content
+now interns to one pool label in BOTH compilers (p8c `_str_label` value-dedup;
+p1 `intern_str_label` + `str_sid_equal` byte-compare). p1.p8's own pool: 242
+literals -> 172 labels, pool 3493 -> 2873 B. BUT the intern/compare subs add
+~650 B of low-window code to p1.bin, so the pool-top ceiling barely moved
+($EF6A -> $EF6D). HONEST ACCOUNTING: dedup trades ~620 B of (post-relocation
+SLACK) high-region pool for ~650 B of (post-relocation BINDING) low-window code,
+so it is net-neutral pre-relocation and slightly NEGATIVE for the binding
+low-window budget post-relocation. KEPT anyway because (a) it is the obviously
+correct behavior, (b) it is insurance that the self-host pool stays within the
+~3.8 KB high region after the port relocation (undeduped it would be ~3.5 KB,
+deduped ~2.9 KB), and (c) the 650 B code cost is recoverable via the low-window
+compaction levers below. Corpus guard: M3_STR dedup case ("x"/"y"/"z" repeated).
 
 ## Size optimization: compact codegen in p8c (Phase 7 sub-goal)
 

@@ -98,6 +98,13 @@ M3_STR_PROGRAMS = [
     # every escape the pool emitter special-cases: \\ " \t \r plus a high byte
     "%target nmos\n\nuword s\n\n"
     'main {\n    s = "tab\\there\\"q\\\\b\\r"\n}\n',
+    # DUPLICATE strings dedup to one pool label: "x" appears 3x and "y" 2x,
+    # interleaved with a unique "z". Labels: x=str_0, y=str_1, z=str_2 (each
+    # distinct content interned once, in first-encounter order). Guards that
+    # p8c's value-dedup and p1's intern_str_label agree.
+    "%target nmos\n\nuword s\n\n"
+    'main {\n    s = "x"\n    s = "y"\n    s = "x"\n    s = "z"\n'
+    '    s = "y"\n    s = "x"\n}\n',
 ]
 
 # Phase-7 byte-expression slice: arithmetic / bitwise binops (+ - & | ^) in a

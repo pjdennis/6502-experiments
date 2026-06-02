@@ -479,6 +479,50 @@ sub emit_string_byte_list(uword sid) {{
         out_byte($30)                   ; "0" for the empty string
     }}
 }}
+; two string-pool ids are equal iff same length and same bytes.
+sub str_sid_equal(uword a, uword b) -> ubyte {{
+    if str_len[a] != str_len[b] {{
+        return 0
+    }}
+    uword n
+    n = str_len[a]
+    uword oa
+    uword ob
+    oa = str_off[a]
+    ob = str_off[b]
+    uword j
+    j = 0
+    repeat {{
+        if j >= n {{
+            break
+        }}
+        if str_pool[oa + j] != str_pool[ob + j] {{
+            return 0
+        }}
+        j = j + 1
+    }}
+    return 1
+}}
+; intern a string id into the pool, returning its p8c_str_N label number.
+; Identical string content reuses an existing label (matches p8c's value
+; dedup), so the pool holds each distinct string once.
+sub intern_str_label(uword sid) -> uword {{
+    uword di
+    di = 0
+    repeat {{
+        if di >= strpool_count {{
+            break
+        }}
+        if str_sid_equal(strpool_sid[di], sid) != 0 {{
+            return di
+        }}
+        di = di + 1
+    }}
+    strpool_sid[strpool_count] = sid
+    di = strpool_count
+    strpool_count = strpool_count + 1
+    return di
+}}
 ; emit `; ---- string pool ----` + one `p8c_str_N:` / `.byte ..., 0` per
 ; label, in encounter order. Goes between the last sub and the reset vector
 ; (matching p8c). Empty -> nothing.
@@ -1934,12 +1978,10 @@ sub codegen_word_leaf(uword e) {{
         return
     }}
     if k == ND_STR {{
-        ; a string literal is its pool address. Assign the next label number
-        ; (encounter order) and record its str id for the pool trailer.
+        ; a string literal is its pool address. Intern its content (dedup),
+        ; getting the p8c_str_N label number for the pool trailer.
         uword lbl
-        lbl = strpool_count
-        strpool_sid[lbl] = node_a[e]
-        strpool_count = strpool_count + 1
+        lbl = intern_str_label(node_a[e])
         out_text("  lda #<p8c_str_")
         out_dec(lbl)
         o_nl()
