@@ -432,6 +432,18 @@ ARRAY_DECL_PROGRAMS = [
     "main {\n}\n",
 ]
 
+# P7 array READ slice (ubyte fast `,y` path, matching p8c _array_fast_byte):
+# const index -> `lda arr+N`; simple byte-var index -> `lda idx / tay /
+# lda arr,y`. (Element STORE, uword arrays, >256 elems, and uword/complex
+# indices are not folded in yet -- they need low-window headroom this build
+# does not have.) So these read only, with const and byte-var indices.
+ARRAY_READ_PROGRAMS = [
+    # const index (absolute) and byte-var index (tay / ,y), plus a read feeding
+    # an arithmetic op (the read is the leaf of `buf[i] + 1`).
+    "%target nmos\nubyte[8] buf\nubyte i\nubyte x\n\n"
+    "main {\n    i = 3\n    x = buf[2]\n    x = buf[i]\n    x = buf[i] + 1\n}\n",
+]
+
 # P7-M5 subs (slice 2): return values + call-as-value (still no params/locals).
 # `return [v]` evaluates v (byte -> A, word -> A:Y) with p8c's pha/pla dance,
 # then jmps the per-sub .Lp8s_<name>_ret label; a call in an expression leaves
@@ -732,6 +744,12 @@ class P1Equivalence(unittest.TestCase):
 
     def test_array_decl_programs(self):
         for src in ARRAY_DECL_PROGRAMS:
+            with self.subTest(src=src):
+                self.assertEqual(self._oracle(src), self._ontarget(src),
+                                 msg=f"codegen .s differs for {src!r}")
+
+    def test_array_read_programs(self):
+        for src in ARRAY_READ_PROGRAMS:
             with self.subTest(src=src):
                 self.assertEqual(self._oracle(src), self._ontarget(src),
                                  msg=f"codegen .s differs for {src!r}")

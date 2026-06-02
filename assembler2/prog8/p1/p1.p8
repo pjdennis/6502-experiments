@@ -3457,6 +3457,43 @@ sub emit_byte_leaf_load(uword e) {
         o_nl()
         return
     }
+    if k == ND_INDEX {
+        ; ubyte-array read, fast `,y` path (matches p8c _array_fast_byte: ubyte
+        ; element, <=256 elems, byte index). Const index -> absolute; simple
+        ; byte-var index -> lda idx / tay / lda arr,y. (uword arrays, >256, and
+        ; uword/complex indices need the __p8c_aptr path -- not here yet.)
+        uword asi
+        asi = find_sym(node_a[node_a[e]])
+        uword idx
+        idx = node_b[e]
+        if sym_type[asi] == TY_UBYTE {
+            if sym_arr_size[asi] <= 256 {
+                if node_kind[idx] == ND_INT {
+                    o_lda()
+                    emit_sym_mangled(asi)
+                    out_byte($2b)
+                    out_dec(node_a[idx])
+                    o_nl()
+                    return
+                }
+                if node_kind[idx] == ND_IDENT {
+                    if ident_is_const(node_a[idx]) == 0 {
+                        if expr_is_word(idx) == 0 {
+                            o_lda()
+                            emit_mangled(node_a[idx])
+                            o_nl()
+                            o_tay()
+                            o_lda()
+                            emit_sym_mangled(asi)
+                            out_text(",y")
+                            o_nl()
+                            return
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 ; emit the right-hand operand text of a byte binop. mode 0: a leaf rhs node
 ; ("#$XX" for an ND_INT, "p8v_<name>" for a var); mode 1: the __p8c_tmp1
