@@ -1271,3 +1271,18 @@ pass1.bin p1.p8 dump ; pass2.bin dump out.s ; diff out.s `p8c -o p1.p8` =
 SELF-HOST. The pass binaries must also be sized for p1.p8 (pools/sym/sub arrays,
 sym_count->uword) -- a sed-style bump in build_pipeline (see the /tmp/p2sh
 experiments). pass 1 has plenty of room (it sheds the 33 KB codegen).
+
+### Per-sub-transient sym table -- ATTEMPTED, found the emit_zp_bindings catch
+Implemented #1 (dump module syms in dump_global; params/locals per record; pass 2
+loads module-only + appends each sub's transiently). It compiled and passed 71/81
+but FAILED the 10 param/asmsub programs: emit_zp_bindings emits a SINGLE upfront
+ZP-binding block for ALL ZP scalars -- module vars THEN every sub's params/locals
+in SOURCE order -- but the transient table only has module syms at that point, and
+the records stream MAIN-FIRST (not source order). FIX for the next attempt: in
+dump_global also dump a SOURCE-ORDER list of the param/local sym entries (enough
+for emit_sym_mangled: ident, scope, mkind, arr_size, addr). Pass 2's
+emit_zp_bindings emits the module bindings (resident) then STREAMS that list
+(emit each `p8v_<sub>_arg_<name> = $XX`, no storage) -- giving p8c's exact
+source-order binding block with zero resident cost. The per-record transient syms
+remain only for find_sym during codegen. (Reverted to the committed full-sym 81/81
+version; this list refinement is the clean way to keep the sym arena ~4 KB.)
