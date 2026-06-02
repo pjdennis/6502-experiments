@@ -203,12 +203,12 @@ uword name_len
 uword int_val
 
 ; node arena
-ubyte[544] node_kind
-ubyte[544] node_op
-uword[544] node_a
-uword[544] node_b
-uword[544] node_c
-uword[544] node_d
+ubyte[524] node_kind
+ubyte[524] node_op
+uword[524] node_a
+uword[524] node_b
+uword[524] node_c
+uword[524] node_d
 uword node_count
 
 ; expression stacks
@@ -223,8 +223,8 @@ uword[16] op_floor
 uword op_sp
 
 ; cons cells
-uword[288] cons_val
-uword[288] cons_next
+uword[240] cons_val
+uword[240] cons_next
 uword cons_count
 
 ; statement frame stack
@@ -252,14 +252,14 @@ uword prog_structs       ; cons of struct node ids (reversed)
 uword prog_subs          ; cons of sub node ids (reversed)
 
 ; ---- codegen symbol table (persistent across passes) ----
-uword[540] sym_ident      ; var name ident id
-ubyte[540] sym_type       ; type tag (TY_UBYTE / TY_BYTE / TY_UWORD)
-uword[540] sym_addr       ; ZP address
-uword[540] sym_scope      ; owning sub name ident (0 = module scope)
-ubyte[540] sym_mkind      ; 0 = module var, 1 = param, 2 = local
-ubyte[540] sym_is_const   ; 1 = compile-time const (no storage); folded
-uword[540] sym_cval       ; const value (when sym_is_const)
-uword[540] sym_arr_size   ; element count if an array (0 = scalar); the
+uword[460] sym_ident      ; var name ident id
+ubyte[460] sym_type       ; type tag (TY_UBYTE / TY_BYTE / TY_UWORD)
+uword[460] sym_addr       ; ZP address
+uword[460] sym_scope      ; owning sub name ident (0 = module scope)
+ubyte[460] sym_mkind      ; 0 = module var, 1 = param, 2 = local
+ubyte[460] sym_is_const   ; 1 = compile-time const (no storage); folded
+uword[460] sym_cval       ; const value (when sym_is_const)
+uword[460] sym_arr_size   ; element count if an array (0 = scalar); the
                          ; element type is in sym_type; mangle is p8a_
 uword sym_count
 uword zp_next            ; ZP bump allocator (from $40)
@@ -268,6 +268,14 @@ uword cur_scope          ; the sub being codegen'd (for var resolution)
 uword[16] call_slot      ; param sym index per arg
 ubyte[16] call_isw       ; 1 if that arg/param is uword
 ubyte call_n
+; codegen_call's locals (callee/callnode) live in static ZP, so a nested call
+; arg (e.g. out_byte(lsb(x))) would clobber them; save them on this stack
+; across each arg evaluation. call_slot/call_n are re-derived (collect_params)
+; after the args, so they need no saving.
+uword[16] ccs_callee
+uword[16] ccs_node
+ubyte[16] ccs_j
+ubyte ccs_sp
 ; sub table (registered in source order before codegen, so calls
 ; resolve and pass B emits non-main subs in p8c's order).
 uword[232] sub_name       ; sub name ident id
@@ -296,16 +304,16 @@ uword strpool_count
 ; byte-expression codegen work stack (replaces p8c's recursion):
 ; per entry a task -- 0 eval node, 1 binop-leaf, 2 pha, 3 sta tmp1,
 ; 4 pla, 5 binop-tmp1.
-ubyte[36] cws_type
-uword[36] cws_node
-ubyte[36] cws_op
+ubyte[64] cws_type
+uword[64] cws_node
+ubyte[64] cws_op
 ubyte cws_sp
 ; word-expression codegen work stack (separate from the byte stack so
 ; a byte expression's @() address can drive a word eval without
 ; corrupting the byte stack -- the two never share state).
-ubyte[36] wws_type
-uword[36] wws_node
-ubyte[36] wws_op
+ubyte[64] wws_type
+uword[64] wws_node
+ubyte[64] wws_op
 ubyte wws_sp
 ; statement work stack (control flow without recursion): a task is
 ; 0=emit stmt node, 1=emit label .L<kind>_<id>:, 2=emit jmp to it,
@@ -1763,41 +1771,41 @@ sub emit_byte_leaf_load(uword e) {
         return
     }
     if k == ND_INDEX {
-        ; ubyte-array read, fast `,y` path (matches p8c _array_fast_byte: ubyte
-        ; element, <=256 elems, byte index). Const index -> absolute; simple
-        ; byte-var index -> lda idx / tay / lda arr,y. (uword arrays, >256, and
-        ; uword/complex indices need the __p8c_aptr path -- not here yet.)
+        ; byte-context array read. Fast `,y` path for ubyte element, <=256
+        ; elems, byte index (matches p8c _array_fast_byte): const index ->
+        ; absolute; simple byte-var index -> lda idx / tay / lda arr,y.
+        ; Everything else (uword[], >256, word index) -> __p8c_aptr pointer
+        ; path, loading the low byte.
         uword asi
         asi = find_sym(node_a[node_a[e]])
         uword idx
         idx = node_b[e]
-        if sym_type[asi] == TY_UBYTE {
-            if sym_arr_size[asi] <= 256 {
-                if node_kind[idx] == ND_INT {
-                    o_lda()
-                    emit_sym_mangled(asi)
-                    out_byte($2b)
-                    out_dec(node_a[idx])
-                    o_nl()
-                    return
-                }
-                if node_kind[idx] == ND_IDENT {
-                    if ident_is_const(node_a[idx]) == 0 {
-                        if expr_is_word(idx) == 0 {
-                            o_lda()
-                            emit_mangled(node_a[idx])
-                            o_nl()
-                            o_tay()
-                            o_lda()
-                            emit_sym_mangled(asi)
-                            out_text(",y")
-                            o_nl()
-                            return
-                        }
-                    }
-                }
+        if array_fast(asi, idx) != 0 {
+            if node_kind[idx] == ND_INT {
+                o_lda()
+                emit_sym_mangled(asi)
+                out_byte($2b)
+                out_dec(node_a[idx])
+                o_nl()
+                return
+            }
+            if node_kind[idx] == ND_IDENT {
+                o_lda()
+                emit_mangled(node_a[idx])
+                o_nl()
+                o_tay()
+                o_lda()
+                emit_sym_mangled(asi)
+                out_text(",y")
+                o_nl()
+                return
             }
         }
+        codegen_word_expr(idx)
+        emit_aptr_arith(asi)
+        out_text("  ldy #$00") o_nl()
+        out_text("  lda (__p8c_aptr),y") o_nl()
+        return
     }
 }
 ; emit the right-hand operand text of a byte binop. mode 0: a leaf rhs node
@@ -2274,12 +2282,13 @@ sub emit_logic_tail(ubyte op) {
 ; evaluate a byte expression into A.
 
 sub codegen_byte_expr(uword root) {
-    cws_sp = 0
+    ; the work stack must nest: evaluating a call arg re-enters this sub. A
+    ; per-invocation base sp can't live in a (static-ZP) local without being
+    ; clobbered by the re-entry, so mark the bottom of this frame with a
+    ; sentinel entry (ty 255) and unwind until it is popped.
+    cws_push(255, 0, 0)
     cws_push(0, root, 0)
     repeat {
-        if cws_sp == 0 {
-            break
-        }
         cws_sp = cws_sp - 1
         ubyte ty
         uword nd
@@ -2287,6 +2296,9 @@ sub codegen_byte_expr(uword root) {
         ty = cws_type[cws_sp]
         nd = cws_node[cws_sp]
         op = cws_op[cws_sp]
+        if ty == 255 {
+            break
+        }
         if ty == 0 {
             if node_kind[nd] == ND_BINOP {
                 uword lhs
@@ -2755,9 +2767,89 @@ sub word_dispatch_shift(uword nd, ubyte is_left) {
     wws_push(0, node_a[nd], 0)
 }
 
+; ---- array element addressing (port of p8c _array_fast_byte /
+; _emit_array_addr_into_aptr and the Index read/write arms) -----------------
+; `arr[i]` uses the tight `lda label,y` path iff ubyte element, <=256 elems,
+; and a byte-typed index (matches _array_fast_byte). Otherwise the element
+; address `label + i*esize` is built into __p8c_aptr.
+
+sub array_fast(uword asi, uword idx) -> ubyte {
+    if sym_type[asi] != TY_UBYTE { return 0 }
+    if sym_arr_size[asi] > 256 { return 0 }
+    if expr_is_word(idx) != 0 { return 0 }
+    return 1
+}
+
+; A:Y holds the (already widened) index; leave &arr[index] in __p8c_aptr.
+sub emit_aptr_arith(uword asi) {
+    if sym_type[asi] == TY_UWORD {
+        out_text("  asl a") o_nl()
+        out_text("  sta __p8c_aptr") o_nl()
+        out_text("  tya") o_nl()
+        out_text("  rol a") o_nl()
+        out_text("  tay") o_nl()
+        out_text("  lda __p8c_aptr") o_nl()
+    }
+    out_text("  clc") o_nl()
+    out_text("  adc #<") emit_sym_mangled(asi) o_nl()
+    out_text("  sta __p8c_aptr") o_nl()
+    out_text("  tya") o_nl()
+    out_text("  adc #>") emit_sym_mangled(asi) o_nl()
+    out_text("  sta __p8c_aptr+1") o_nl()
+}
+
+; continuation (word work stack): A:Y = index -> load uword element into A:Y.
+sub emit_word_arr_load(uword e) {
+    uword asi
+    asi = find_sym(node_a[node_a[e]])
+    emit_aptr_arith(asi)
+    out_text("  ldy #$00") o_nl()
+    out_text("  lda (__p8c_aptr),y") o_nl()
+    out_text("  pha") o_nl()
+    out_text("  ldy #$01") o_nl()
+    out_text("  lda (__p8c_aptr),y") o_nl()
+    out_text("  tay") o_nl()
+    out_text("  pla") o_nl()
+}
+
+; continuation (word work stack): A:Y = index -> load ubyte element, widen.
+sub emit_byte_arr_load_widened(uword e) {
+    uword asi
+    asi = find_sym(node_a[node_a[e]])
+    emit_aptr_arith(asi)
+    out_text("  ldy #$00") o_nl()
+    out_text("  lda (__p8c_aptr),y") o_nl()
+    out_text("  ldy #$00") o_nl()
+}
+
+; fast ubyte[] read in word context (byte index -> A, widen). Self-contained:
+; the byte index runs on the byte work stack, separate from wws.
+sub emit_word_arr_fast(uword asi, uword idx) {
+    codegen_byte_expr(idx)
+    out_text("  tay") o_nl()
+    out_text("  lda ") emit_sym_mangled(asi) out_text(",y") o_nl()
+    out_text("  ldy #$00") o_nl()
+}
+
 sub word_dispatch(uword nd) {
     ubyte k
     k = node_kind[nd]
+    if k == ND_INDEX {
+        uword asi
+        asi = find_sym(node_a[node_a[nd]])
+        if sym_type[asi] == TY_UWORD {
+            wws_push(12, nd, 0)
+            wws_push(0, node_b[nd], 0)
+            return
+        }
+        if array_fast(asi, node_b[nd]) != 0 {
+            emit_word_arr_fast(asi, node_b[nd])
+            return
+        }
+        wws_push(13, nd, 0)
+        wws_push(0, node_b[nd], 0)
+        return
+    }
     if k == ND_ADDROF {
         emit_addrof(nd)
         return
@@ -2810,12 +2902,11 @@ sub word_dispatch(uword nd) {
 ; word unary ~ / -. (Shifts, comparison, indexing, calls arrive next.)
 
 sub codegen_word_expr(uword root) {
-    wws_sp = 0
+    ; nestable work stack (see codegen_byte_expr): a call arg re-enters this
+    ; evaluator, so frame it with a sentinel (ty 255) and unwind to it.
+    wws_push(255, 0, 0)
     wws_push(0, root, 0)
     repeat {
-        if wws_sp == 0 {
-            break
-        }
         wws_sp = wws_sp - 1
         ubyte ty
         uword nd
@@ -2823,6 +2914,9 @@ sub codegen_word_expr(uword root) {
         ty = wws_type[wws_sp]
         nd = wws_node[wws_sp]
         op = wws_op[wws_sp]
+        if ty == 255 {
+            break
+        }
         if ty == 0 {
             word_dispatch(nd)
         } else {
@@ -2860,7 +2954,15 @@ sub codegen_word_expr(uword root) {
                                         if ty == 8 {
                                             emit_wshift_var_tail(nd, 0)
                                         } else {
-                                            emit_word_unary(op)
+                                            if ty == 12 {
+                                                emit_word_arr_load(nd)
+                                            } else {
+                                                if ty == 13 {
+                                                    emit_byte_arr_load_widened(nd)
+                                                } else {
+                                                    emit_word_unary(op)
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -2954,6 +3056,53 @@ sub codegen_assign_memat(uword st, uword target) {
 ; ubyte->uword widening on word stores; `=` of a word expr; byte augmented
 ; (+= -= &= |= ^= <<= >>=) with a leaf operand.
 
+; arr[idx] = expr  (port of _emit_assign's Index-target arm; plain `=` only).
+sub codegen_assign_index(uword target, uword rhs) {
+    uword asi
+    asi = find_sym(node_a[node_a[target]])
+    uword idx
+    idx = node_b[target]
+    if sym_type[asi] == TY_UWORD {
+        ; uword[] write: rhs (widened) -> A:Y, parked on the CPU stack while
+        ; the element address is computed, then stored hi then lo.
+        codegen_word_expr(rhs)
+        out_text("  pha") o_nl()
+        out_text("  tya") o_nl()
+        out_text("  pha") o_nl()
+        codegen_word_expr(idx)
+        emit_aptr_arith(asi)
+        out_text("  pla") o_nl()
+        out_text("  ldy #$01") o_nl()
+        out_text("  sta (__p8c_aptr),y") o_nl()
+        out_text("  pla") o_nl()
+        out_text("  ldy #$00") o_nl()
+        out_text("  sta (__p8c_aptr),y") o_nl()
+        return
+    }
+    if array_fast(asi, idx) != 0 {
+        if node_kind[idx] == ND_INT {
+            codegen_byte_expr(rhs)
+            out_text("  sta ") emit_sym_mangled(asi) out_byte($2b) out_dec(node_a[idx]) o_nl()
+            return
+        }
+        codegen_byte_expr(rhs)
+        out_text("  sta __p8c_tmp0") o_nl()
+        codegen_byte_expr(idx)
+        out_text("  tay") o_nl()
+        out_text("  lda __p8c_tmp0") o_nl()
+        out_text("  sta ") emit_sym_mangled(asi) out_text(",y") o_nl()
+        return
+    }
+    ; ubyte element, large array / uword index -> pointer path.
+    codegen_byte_expr(rhs)
+    out_text("  pha") o_nl()
+    codegen_word_expr(idx)
+    emit_aptr_arith(asi)
+    out_text("  pla") o_nl()
+    out_text("  ldy #$00") o_nl()
+    out_text("  sta (__p8c_aptr),y") o_nl()
+}
+
 sub codegen_assign(uword st) {
     uword target
     uword rhs
@@ -2963,6 +3112,10 @@ sub codegen_assign(uword st) {
     rhs = node_b[st]
     if node_kind[target] == ND_MEMAT {
         codegen_assign_memat(st, target)
+        return
+    }
+    if node_kind[target] == ND_INDEX {
+        codegen_assign_index(target, rhs)
         return
     }
     uword si
@@ -3203,19 +3356,29 @@ sub codegen_call(uword callnode) {
     }
     collect_params(callee)
     if call_n == 1 {
-        ; single arg: store straight into the slot after eval (no reentrancy
-        ; hazard -- nothing writes the slot between the store and the jsr).
+        ; single arg: evaluate it (result in A / A:Y), then store into the slot
+        ; and jsr. The arg may itself be a call, which clobbers codegen_call's
+        ; static-ZP locals (callee, call_slot, ...), so save callee across the
+        ; eval and re-derive the slot afterwards (collect_params is pure).
         uword arg1
         arg1 = cons_val[reverse_cons(node_b[callnode])]
-        uword psi1
-        psi1 = call_slot[0]
-        if call_isw[0] != 0 {
+        ubyte isw1
+        isw1 = call_isw[0]
+        ccs_callee[ccs_sp] = callee
+        ccs_sp = ccs_sp + 1
+        if isw1 != 0 {
             codegen_word_expr(arg1)
-            emit_sta_sym(psi1)
-            emit_sty_sym_hi(psi1)
         } else {
             codegen_byte_expr(arg1)
-            emit_sta_sym(psi1)
+        }
+        ccs_sp = ccs_sp - 1
+        callee = ccs_callee[ccs_sp]
+        collect_params(callee)
+        uword psi1
+        psi1 = call_slot[0]
+        emit_sta_sym(psi1)
+        if isw1 != 0 {
+            emit_sty_sym_hi(psi1)
         }
         out_text("  jsr ")
         emit_sub_label(callee)
@@ -3223,11 +3386,11 @@ sub codegen_call(uword callnode) {
         return
     }
     if call_n != 0 {
-        ; push each arg (source order) onto the CPU stack.
-        uword ahead
-        ahead = reverse_cons(node_b[callnode])
+        ; push each arg (source order) onto the CPU stack. Every arg eval can
+        ; re-enter codegen_call and clobber callee/acell/j, so save them on the
+        ; ccs stack around each eval and re-collect_params (refills call_isw).
         uword acell
-        acell = ahead
+        acell = reverse_cons(node_b[callnode])
         ubyte j
         j = 0
         repeat {
@@ -3236,6 +3399,10 @@ sub codegen_call(uword callnode) {
             }
             uword arg
             arg = cons_val[acell]
+            ccs_callee[ccs_sp] = callee
+            ccs_node[ccs_sp] = acell
+            ccs_j[ccs_sp] = j
+            ccs_sp = ccs_sp + 1
             if call_isw[j] != 0 {
                 codegen_word_expr(arg)
                 o_pha()
@@ -3245,10 +3412,15 @@ sub codegen_call(uword callnode) {
                 codegen_byte_expr(arg)
                 o_pha()
             }
+            ccs_sp = ccs_sp - 1
+            callee = ccs_callee[ccs_sp]
+            acell = ccs_node[ccs_sp]
+            j = ccs_j[ccs_sp]
+            collect_params(callee)
             j = j + 1
             acell = cons_next[acell]
         }
-        ; pop into param slots in reverse order.
+        ; pop into param slots in reverse order (j == call_n here).
         repeat {
             if j == 0 {
                 break
@@ -3479,6 +3651,7 @@ main {
     strpool_count = 0
     mul_used = 0
     label_seq = 0
+    ccs_sp = 0
     lstk_sp = 0
     emit_prologue()
     copy_zp_text()
