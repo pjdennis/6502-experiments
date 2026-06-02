@@ -829,6 +829,14 @@ sub codegen_stmt(uword st) {{
         o_nl()
         return
     }}
+    if k == ND_EXPRSTMT {{
+        uword e
+        e = node_a[st]
+        if node_kind[e] == ND_CALL {{
+            codegen_call(e)
+        }}
+        return
+    }}
     ; other statement kinds arrive at later milestones.
 }}
 sub codegen_if(uword st) {{
@@ -2436,6 +2444,189 @@ sub codegen_assign(uword st) {{
     emit_sta_sym(si)
 }}
 
+; ---- subs + calls -------------------------------------------
+; consume one non-sub top-level unit without emitting it (the parser's
+; skip_decl_pass_b lives past the splice boundary, so it is replicated here).
+sub cg_skip_decl() {{
+    ubyte t
+    uword dummy
+    t = cur_kind()
+    if t == TK_DIRECTIVE {{
+        advance()
+        ubyte a
+        a = cur_kind()
+        if a == TK_INT {{
+            advance()
+        }} else {{
+            if a == TK_IDENT {{
+                advance()
+            }}
+        }}
+        return
+    }}
+    if is_type_kw(t) != 0 {{
+        dummy = parse_var_decl()
+        reset_nodes()
+        return
+    }}
+    if t == TK_KCONST {{
+        dummy = parse_const_decl()
+        reset_nodes()
+        return
+    }}
+    if t == TK_KENUM {{
+        dummy = parse_enum_decl()
+        reset_nodes()
+        return
+    }}
+    if t == TK_KSTRUCT {{
+        dummy = parse_struct_decl()
+        reset_nodes()
+        return
+    }}
+    advance()
+}}
+; "p8s_<name>" -- the mangled label for a user sub.
+sub emit_sub_label(uword identid) {{
+    out_text("p8s_")
+    out_ident_text(identid)
+}}
+sub find_sub(uword identid) -> uword {{
+    uword i
+    i = 0
+    repeat {{
+        if i >= sub_count {{
+            break
+        }}
+        if sub_name[i] == identid {{
+            return i
+        }}
+        i = i + 1
+    }}
+    return $ffff
+}}
+; codegen a call expression. (M5 slice 1: regular sub, no args -> jsr.)
+sub codegen_call(uword callnode) {{
+    out_text("  jsr ")
+    emit_sub_label(node_a[callnode])
+    o_nl()
+}}
+; register every sub (in source order) so calls resolve and pass B emits the
+; non-main subs in p8c's order. Streaming dispatch, mirroring stmt.p8's pass B.
+sub register_subs() {{
+    sub_count = 0
+    reset_source()
+    reset_nodes()
+    lex_init()
+    repeat {{
+        ubyte t
+        t = cur_kind()
+        if t == TK_EOF {{
+            break
+        }}
+        uword snode
+        ubyte issub
+        issub = 1
+        if t == TK_KMAIN {{
+            snode = parse_main()
+        }} else {{
+            if t == TK_KSUB {{
+                advance()
+                snode = parse_sub(SUBK_SUB)
+            }} else {{
+                if t == TK_KINLINE {{
+                    advance()
+                    advance()
+                    snode = parse_sub(SUBK_INLINE)
+                }} else {{
+                    if t == TK_KASMSUB {{
+                        snode = parse_asmsub()
+                    }} else {{
+                        issub = 0
+                        cg_skip_decl()
+                    }}
+                }}
+            }}
+        }}
+        if issub != 0 {{
+            sub_name[sub_count] = node_a[snode]
+            sub_kind[sub_count] = node_op[snode]
+            sub_ret[sub_count] = lsb(node_d[snode])
+            sub_count = sub_count + 1
+            reset_nodes()
+        }}
+    }}
+}}
+; emit one non-main sub: header, body, per-sub return label + rts.
+sub emit_sub(uword snode) {{
+    label_seq = 0
+    o_nl()
+    out_text("; ---- sub ")
+    out_ident_text(node_a[snode])
+    out_text(" ----")
+    o_nl()
+    emit_sub_label(node_a[snode])
+    out_byte($3a)
+    o_nl()
+    codegen_body(node_c[snode])
+    out_text(".Lp8s_")
+    out_ident_text(node_a[snode])
+    out_text("_ret:")
+    o_nl()
+    out_text("  rts")
+    o_nl()
+}}
+; pass B: re-scan the source and codegen every non-main regular sub in source
+; order (main was emitted by pass M; asmsub has no body; inline is spliced at
+; the call site, handled later).
+sub emit_subs() {{
+    reset_source()
+    reset_nodes()
+    lex_init()
+    repeat {{
+        ubyte t
+        t = cur_kind()
+        if t == TK_EOF {{
+            break
+        }}
+        uword snode
+        ubyte kind
+        ubyte issub
+        issub = 1
+        if t == TK_KMAIN {{
+            snode = parse_main()
+            kind = SUBK_MAIN
+        }} else {{
+            if t == TK_KSUB {{
+                advance()
+                snode = parse_sub(SUBK_SUB)
+                kind = SUBK_SUB
+            }} else {{
+                if t == TK_KINLINE {{
+                    advance()
+                    advance()
+                    snode = parse_sub(SUBK_INLINE)
+                    kind = SUBK_INLINE
+                }} else {{
+                    if t == TK_KASMSUB {{
+                        snode = parse_asmsub()
+                        kind = SUBK_ASMSUB
+                    }} else {{
+                        issub = 0
+                        cg_skip_decl()
+                    }}
+                }}
+            }}
+        }}
+        if issub != 0 {{
+            if kind == SUBK_SUB {{
+                emit_sub(snode)
+            }}
+            reset_nodes()
+        }}
+    }}
+}}
+
 ; ---- main: the multi-pass codegen driver --------------------
 ; Pass A parses directives + module decls. Pass S (build_symbols) fixes
 ; every module var's ZP address. Then: prologue, ZP bindings, pass M
@@ -2464,6 +2655,7 @@ main {{
 
     ; ---- pass S: symbol table + ZP allocation ----
     build_symbols()
+    register_subs()
 
     ; ---- prologue + ZP bindings ----
     emit_prologue()
@@ -2496,6 +2688,9 @@ main {{
         advance()
     }}
     emit_main(mainbody)
+
+    ; ---- pass B: emit the non-main subs in source order ----
+    emit_subs()
 
     ; ---- mul helper + string pool + trailers ----
     emit_mul_helper()
@@ -2550,6 +2745,12 @@ def main():
         "uword[96] sym_addr       ; ZP address\n"
         "ubyte sym_count\n"
         "uword zp_next            ; ZP bump allocator (from $40)\n"
+        "; sub table (registered in source order before codegen, so calls\n"
+        "; resolve and pass B emits non-main subs in p8c's order).\n"
+        "uword[48] sub_name       ; sub name ident id\n"
+        "ubyte[48] sub_kind       ; SUBK_SUB / MAIN / INLINE / ASMSUB\n"
+        "ubyte[48] sub_ret        ; return type tag\n"
+        "uword sub_count\n"
         "; string pool: one label per string-literal *occurrence*, numbered\n"
         "; in codegen encounter order (matching p8c's sema-walk order); the\n"
         "; recorded str id indexes the parser's str_pool for the trailer.\n"

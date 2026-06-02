@@ -355,6 +355,25 @@ M4_WHEN_PROGRAMS = [
     "        2 -> { while a < b { a = a + 1 } }\n        else -> { r = 0 }\n    }\n}\n",
 ]
 
+# P7-M5 subs (slice 1): regular void subs with no params/locals, called as
+# statements. Exercises the sub table (register_subs), pass B emission of
+# non-main subs in source order, the per-sub return label + rts, and the call
+# (jsr p8s_<name>). Bodies use module vars + control flow.
+M5_SUB_PROGRAMS = [
+    # two subs called from main, bodies touch module vars
+    "%target nmos\nubyte x\nubyte y\n\n"
+    "sub foo() {\n    x = 5\n}\nsub bar() {\n    y = x + 1\n}\n"
+    "main {\n    foo()\n    bar()\n}\n",
+    # a sub whose body has control flow + a call from inside a loop
+    "%target nmos\nubyte a\nubyte b\n\n"
+    "sub bump() {\n    if a < b {\n        a = a + 1\n    }\n}\n"
+    "main {\n    a = 0\n    b = 5\n    while a < b {\n        bump()\n    }\n}\n",
+    # subs in source order foo, baz, qux -- emission order must match
+    "%target nmos\nubyte x\n\n"
+    "sub foo() {\n    x = 1\n}\nsub baz() {\n    x = x + 2\n}\nsub qux() {\n    x = x * 3\n}\n"
+    "main {\n    foo()\n    baz()\n    qux()\n}\n",
+]
+
 
 def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
@@ -512,6 +531,12 @@ class P1Equivalence(unittest.TestCase):
 
     def test_m4_when_programs(self):
         for src in M4_WHEN_PROGRAMS:
+            with self.subTest(src=src):
+                self.assertEqual(self._oracle(src), self._ontarget(src),
+                                 msg=f"codegen .s differs for {src!r}")
+
+    def test_m5_sub_programs(self):
+        for src in M5_SUB_PROGRAMS:
             with self.subTest(src=src):
                 self.assertEqual(self._oracle(src), self._ontarget(src),
                                  msg=f"codegen .s differs for {src!r}")
