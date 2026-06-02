@@ -48,10 +48,14 @@ diff <(sed 's/^; source:.*/; source: X/' /tmp/p1out.s) <(sed 's/^; source:.*/; s
 ```
 
 **What works now (COMMITTED, builds + runs):** pass1 produces a clean 208 KB
-dump; pass2 runs to completion. With the if/while short-circuit condition
-codegen now landed, the diff vs the oracle is down to **~3.3 K lines** (was
-5.7 K), i.e. pass2 emits ~93 % of the bytes correctly. The hard
-capacity/correctness bugs are fixed:
+dump; pass2 runs to completion. The diff vs the oracle is down to **~1.5 K
+lines** (was 5.7 K at the start of this session; output 542752 / 545074 bytes,
+~97 % byte-identical). Progress this session, each committed and verified:
+  * if/while short-circuit conditions: 5.7 K -> 3.3 K
+  * `reverse_cons_ip` in pass2 codegen (args reversed in place, no cons growth
+    during emission -> no cons-arena overflow into the sym table): 3.3 K -> 2.3 K
+  * `expr_is_word` recognises uword[] elements (ND_INDEX) as words: 2.3 K -> 1.5 K
+The hard capacity/correctness bugs are fixed:
   * **if/while CONDITION codegen** -- general `emit_cond_branch(cond, tkind,
     tid, jit)` with short-circuit `and`/`or`/`not` (recursion frame saved on a
     `cb` stack), `emit_cmp_cond`, `emit_pos_unsigned`, label kinds 15/16
@@ -89,26 +93,32 @@ it. The test guard STUB_FLOOR is now $F000. **Arena margins are now razor-thin
 
 **REMAINING WORK (next session):**
 
-1. **More codegen gaps (~3.3 K diff lines).** First divergence is at oracle
-   line ~4031: a module CONST used as a call argument (`push_token(TK_ARROW,
-   0)`) emits `lda p8v_L` instead of the folded `lda #$14` (TK_ARROW=20). The
-   mangled name renders as a bogus 1-char "L" and the const-ness is lost, even
-   though ident_pool (6052) covers the measured 6051 bytes -- so it is a real
-   const-fold / sym-resolution gap in a specific arg position, not an overflow.
-   Investigate emit_byte_leaf_load / ident_is_const / find_sym for the call-arg
-   path. Expect further gaps after that (comparison-as-value materialisation is
-   used at 3 sites and DOES match; others unknown).
+1. **pass2 CAPACITY is now THE critical path / 3-pass split.** pass2 sits right
+   under the $F000 port floor with razor-thin arena margins. Measured max work-
+   stack depths on p1.p8 are tiny (cws=8, wws=10, sws=44), so cws/wws were cut
+   48->16 to free ~256 B for the ND_INDEX typing fix -- but that headroom is now
+   spent. **The very next codegen gap (gap #2) already does NOT fit**: its fix
+   pushes pass2's overflow-scalar (memvar) block from ~$EFC6 up to ~$F094, i.e.
+   ~160 B into the ports/stubs (the memvar block floats on top of the code, so
+   any added codegen pushes it up). Even tightening every arena to margin-1
+   (~150 B) is ~30 B short. So **further codegen progress requires a 3-pass
+   split** (move part of pass2's codegen into a pass3) or a real pass2 code
+   reduction. This is the blocker to plan first.
 
-2. **The source-path line** (`; source: SRC`) still differs from the oracle's
+2. **Arithmetic-binop word typing (next diff, line ~13687).** `zp_next + sz`
+   (uword + ubyte) is typed byte because `expr_is_word` only handles leaves
+   (IDENT / uword[]-INDEX / ADDROF), not `ND_BINOP`. p8c types an
+   arithmetic/bitwise/shift binop as word if either operand is word. The fix is
+   written and CORRECT (an `operand_word(n)` leaf helper + `expr_is_word`
+   checking both binop operands; comparison/logical ops stay bool) but does NOT
+   fit (see #1) -- it was reverted. Land it once there is room.
+
+3. **The source-path line** (`; source: SRC`) still differs from the oracle's
    absolute path: pass1 must capture argv[0] (it already has the pointer in
    `fn`) and dump it; pass2 emit it in the prologue in place of "SRC".
 
-3. **pass2 CAPACITY / 3-pass split.** pass2 is at $EFBD with ~no margin. Each
-   further codegen gap fixed will need ~hundreds of bytes that aren't there.
-   The 2-pass split has hit its ceiling; the next structural step is a **3-pass
-   split** (or substantial pass2 code reduction). Until then, fixing gap #1 may
-   require trimming elsewhere or stealing from the work stacks (cws/wws/sws are
-   at 48; their true max depth on p1.p8 is unmeasured -- could free a little).
+4. After #2, expect more codegen gaps in the remaining ~1.5 K diff lines.
+   Comparison-as-value materialisation (3 sites) already matches.
 
 ---
 
