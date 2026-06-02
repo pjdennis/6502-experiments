@@ -1286,3 +1286,26 @@ emit_zp_bindings emits the module bindings (resident) then STREAMS that list
 source-order binding block with zero resident cost. The per-record transient syms
 remain only for find_sym during codegen. (Reverted to the committed full-sym 81/81
 version; this list refinement is the clean way to keep the sym arena ~4 KB.)
+
+### PRECISE p1.p8 GAP (measured): pass 2 is ~4 KB over even optimized
+Tried p1.p8-sized pass 2 (full sym 700-820): OVER the 64 KB address space.
+Composition: codegen ~38 KB + program-wide pools (ident 4.5 KB + str 3.5 KB +
+index arrays ~3.6 KB = ~11.6 KB) + node/cons for the biggest sub (~8 KB at 560)
++ sym table + sub table. code+pools+node alone = ~57.6 KB, leaving only ~2.4 KB
+under the $F006 floor (60 KB) for sym+sub. Even a TRANSIENT sym table (~4.5 KB,
+module-only) + sub (~1.8 KB) = 6.3 KB > 2.4 KB -> ~4 KB over.
+TO CLOSE (needs SEVERAL, not one):
+  * transient sym table (saves ~6 KB vs full) -- with the streamed/pass1-text
+    ZP-binding fix (the emit_zp_bindings catch above). REQUIRED.
+  * shrink the node arena by SPLITTING p1.p8's biggest subs to <~320 nodes
+    (like classify_name was split for Milestone 1): node 320 ~= 4.5 KB saves
+    ~3.5 KB. The codegen back-end has several big subs (codegen_byte_expr,
+    emit_cond_branch_if_false, the when/for emitters) -- split them in
+    build_p1.py (upstream-compatible; corpus stays byte-identical).
+  * exact pool sizing (ident_pool to ~4.5 KB, str_pool to ~3.5 KB).
+  * if still short: a 3rd pass splitting the codegen subs (complex -- the string
+    pool trailer couples them).
+NB the address-placed-array relocation (`@$F0C0`) is NOT available: p8c's parser
+rejects `@` on declarations. So the high region can't hold a pass-2 arena.
+STATUS: the pipeline is PROVEN byte-identical to p8c on all 81 corpus programs;
+closing the p1.p8 self-host fixpoint is this multi-part ~4 KB pass-2 squeeze.
