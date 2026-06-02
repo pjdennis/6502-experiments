@@ -51,6 +51,30 @@ node/cons 80, pools 224 -- way too small to parse p1.p8). So **full self-host
 needs several KB more headroom than exists.** This is the documented "THE
 risk" materialized.
 
+CONCRETE CAPACITY MATH (measured at this HEAD):
+  * Usable address window is $0200..$F000 (the low I/O ports are $F000-$F005,
+    the jmp table $F006-$F03E) = ~60 KB, contiguous (p1.bin can't skip the
+    ports). High free regions exist ($F0B2 after the stub routines .. $FE80
+    where the argc/argv/term/serial ports sit, ~3.5 KB; and $FE9C..$FFFB).
+  * p1.bin now: code ~47 KB, arenas (shrunk to the tiny test corpus) ~1.5 KB,
+    string pool **3.6 KB** ($E1AA..$EF6A). Top ~$EF6A, ~150 B under $F006.
+  * For SELF-HOST the arenas must grow to p1.p8's own subs (~470-node biggest
+    sub -> node arena ~512*6 + cons + pools ~= 10 KB) and the code grows with
+    the remaining features (+~5 KB). So code+arenas ~= 62 KB and the pool ~=
+    5-6 KB -> ~68 KB total, vs ~63 KB usable. **~5-8 KB over.**
+  * **Pool-relocation plan** (the most promising lever): change p8c (nmos
+    target only) to emit `.org $F0C0` before the `; ---- string pool ----`
+    block, and mirror it in p1's emit_string_pool. That moves the ~4 KB pool
+    OUT of the low window (freeing it for code+arenas) into the high free
+    region. To fit a growing pool there, ALSO relocate the emulator's
+    argc/argv/... ports from $FE80 up to ~$FF80 (transparent: programs reach
+    them only via the $F006 jmp table -> routines, so only stubs.c + the
+    port-interception addresses change; the jmp table stays at $F006). That
+    yields ~$F0C0..$FF7F (~3.8 KB) for the pool and the full $0200..$F000
+    (~60 KB) for code+arenas. Residual gap then ~2 KB -> close it with a
+    SAFE p8c codegen-compaction lever (see #1 below). Verify byte-identity
+    via the corpus after each step; regen any nmos snapshot goldens.
+
 Paths forward (a dedicated next effort):
   1. A bigger codegen-compaction lever in p8c (all SAFE, p1.p8-source-free,
      verified by the corpus): e.g. detect consecutive `if v == const`
