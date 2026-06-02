@@ -176,7 +176,27 @@ was wrong; the real gap is ~15 KB).** Measured/counted at this HEAD:
     *** REMAINING for self-host: MILESTONE 2 = pass 2 (read the serialized AST,
     *** then run the EXISTING build_p1.py codegen back-end) producing .s == p8c.
     *** Then pipeline(p1.p8) = pass1 | pass2 == p8c(p1.p8) IS self-host.
-    *** DESIGN REFINEMENT (simpler than an S-expr text parser): make pass 1 emit
+    *** >>> RECOMMENDED (much less code than the 35-form S-expr loader below):
+    *** the BINARY array dump is GENERIC. The node arrays (node_kind/op/a/b/c/d,
+    *** cons_val/next) are UNIFORM regardless of node kind, so dumping/loading
+    *** them is one generic loop -- it handles ALL ~35 node kinds at once, with
+    *** ZERO per-form handler code. Plan:
+    ***   pass 1 = existing front-end: parse + build_symbols + register_subs to
+    ***     build the full compiler state, then DUMP (generic byte I/O): the
+    ***     ident_pool+ident_off/len, str_pool+str_off/len, the sym_* tables, the
+    ***     sub/prog tables, and -- per top-level unit, matching the streaming --
+    ***     each unit's node_*/cons arrays (node_count then the array slices).
+    ***   pass 2 = LOAD those arrays (generic byte I/O), then run ONLY the emit
+    ***     passes (emit_prologue/emit_zp_bindings/emit_main/emit_subs/trailers)
+    ***     -- emit_main/emit_subs read each unit's node arrays from the dump
+    ***     instead of re-lexing source. The codegen back-end is UNCHANGED.
+    *** New code ~= a dump writer + a load reader (~400-800 lines of generic
+    *** array I/O) + the pass-2 driver. No node-kind-specific code. The text
+    *** S-expr serializer stays only as test_stmt's correctness oracle.
+    *** (The S-expr-text loader below is the ALTERNATIVE -- more code, only worth
+    *** it if a text intermediate is wanted for debugging.)
+    *** ----
+    *** ALTERNATIVE -- S-expr text parser: make pass 1 emit
     *** a BINARY dump of the arrays the codegen consumes -- node_kind/op (ubyte),
     *** node_a/b/c/d (uword), cons_val/next, ident_pool + ident_off/len, str_pool
     *** + str_off/len, and the sub/prog tables -- and pass 2 just LOADS them and
