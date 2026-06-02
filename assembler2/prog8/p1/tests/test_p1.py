@@ -468,6 +468,24 @@ M5_INLINEASM_PROGRAMS = [
     "main {\n    putc($41)\n    raw()\n    g = 0\n}\n",
 ]
 
+# P7-M5 asmsub: `asmsub name(params) [-> ret] = $F0xx` declarations + their
+# call ABI (0 args -> just jsr; 1 arg -> load into A (ubyte) / A:Y (uword);
+# then jsr the $F0xx target). Pass S allocates the asmsub's param slots
+# (matching p8c's ZP bump) but does NOT walk a body (there is none).
+M5_ASMSUB_PROGRAMS = [
+    # void asmsubs with a ubyte arg, and a ubyte-returning one called as a value
+    "%target nmos\nubyte g\n\n"
+    "asmsub _exit(ubyte code) = $f00f\nasmsub _close(ubyte handle) = $f015\n"
+    "asmsub getbyte() -> ubyte = $f006\n"
+    "main {\n    g = getbyte()\n    _close(3)\n    _exit(0)\n}\n",
+    # a uword-arg asmsub + an asmsub interleaved with a regular inline-asm sub
+    "%target nmos\nuword g\n\n"
+    "asmsub setw(uword w) = $f024\n"
+    "sub helper() {\n"
+    '    %asm{{ "nop\\nrts" }}\n}\n'
+    "main {\n    setw($1234)\n    helper()\n}\n",
+]
+
 
 def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
@@ -661,6 +679,12 @@ class P1Equivalence(unittest.TestCase):
 
     def test_m5_inlineasm_programs(self):
         for src in M5_INLINEASM_PROGRAMS:
+            with self.subTest(src=src):
+                self.assertEqual(self._oracle(src), self._ontarget(src),
+                                 msg=f"codegen .s differs for {src!r}")
+
+    def test_m5_asmsub_programs(self):
+        for src in M5_ASMSUB_PROGRAMS:
             with self.subTest(src=src):
                 self.assertEqual(self._oracle(src), self._ontarget(src),
                                  msg=f"codegen .s differs for {src!r}")

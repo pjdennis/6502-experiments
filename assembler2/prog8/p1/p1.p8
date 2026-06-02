@@ -273,6 +273,7 @@ ubyte call_n
 uword[32] sub_name       ; sub name ident id
 ubyte[32] sub_kind       ; SUBK_SUB / MAIN / INLINE / ASMSUB
 ubyte[32] sub_ret        ; return type tag
+uword[32] sub_addr       ; asmsub target address ($F0xx); else 0
 uword sub_count
 ; builtin-call node stack: emit_builtin is non-reentrant (static
 ; locals), but a builtin arg may itself be a builtin, so the callnode
@@ -2203,6 +2204,11 @@ sub o_lda_tmp0()  { out_text("  lda __p8c_tmp0") o_nl() }
 sub o_sta_tmp1()  { out_text("  sta __p8c_tmp1") o_nl() }
 sub o_lda_imm0()  { out_text("  lda #$00") o_nl() }
 sub o_lda_imm1()  { out_text("  lda #$01") o_nl() }
+sub o_eor_ff()    { out_text("  eor #$ff") o_nl() }
+sub o_tax()       { out_text("  tax") o_nl() }
+sub o_txa()       { out_text("  txa") o_nl() }
+sub o_ror_wtmp0() { out_text("  ror __p8c_wtmp0") o_nl() }
+sub o_ldy_wtmp0h(){ out_text("  ldy __p8c_wtmp0+1") o_nl() }
 
 sub reverse_cons(uword head) -> uword {
     uword rev
@@ -3404,13 +3410,11 @@ sub emit_byte_binop_zp(ubyte op) {
 ; the next M3 slice -- exercised then.
 sub emit_unary_apply(ubyte uncode) {
     if uncode == UN_INV {
-        out_text("  eor #$ff")
-        o_nl()
+        o_eor_ff()
         return
     }
     if uncode == UN_NEG {
-        out_text("  eor #$ff")
-        o_nl()
+        o_eor_ff()
         o_clc()
         out_text("  adc #$01")
         o_nl()
@@ -3502,23 +3506,12 @@ sub emit_br_true(uword mnem, uword true_id) {
 ; and materialize 0/1 in A. Labels are allocated here (after the operand eval),
 ; matching p8c's _new_label order: cmp_true, cmp_end, then any op-specific
 ; extra (gt_no / sgn_ok / sgt_no).
-; emit the rhs operand of a value-context compare: spill (opmode 1) -> the
-; __p8c_tmp1 slot; leaf (opmode 0) -> the leaf rhs directly (#imm / p8v_x).
-sub emit_cmp_operand(ubyte opmode, uword rhs) {
-    if opmode != 0 {
-        out_text("__p8c_tmp1")
-    } else {
-        emit_byte_operand(0, rhs)
-    }
-}
-; value-context comparison materializing 0/1 in A. opmode 1 = spill (lhs in
-; __p8c_tmp0, rhs in __p8c_tmp1); opmode 0 = leaf (lhs already in A, rhs a leaf).
-sub emit_cmp_tail(uword e, ubyte op, ubyte opmode, uword rhs) {
+; value-context comparison materializing 0/1 in A (lhs in __p8c_tmp0, rhs in
+; __p8c_tmp1; result in A).
+sub emit_cmp_tail(uword e, ubyte op) {
     ubyte is_signed
     is_signed = cmp_is_signed(e)
-    if opmode != 0 {
-        o_lda_tmp0()
-    }
+    o_lda_tmp0()
     uword true_id
     uword end_id
     uword no_id
@@ -3527,8 +3520,7 @@ sub emit_cmp_tail(uword e, ubyte op, ubyte opmode, uword rhs) {
     end_id = label_seq
     label_seq = label_seq + 1
     if is_signed == 0 {
-        out_text("  cmp ")
-        emit_cmp_operand(opmode, rhs)
+        out_text("  cmp __p8c_tmp1")
         o_nl()
         if op == TK_EQ {
             emit_br_true("beq", true_id)
@@ -3560,20 +3552,17 @@ sub emit_cmp_tail(uword e, ubyte op, ubyte opmode, uword rhs) {
         }
     } else {
         if op == TK_EQ {
-            out_text("  cmp ")
-            emit_cmp_operand(opmode, rhs)
+            out_text("  cmp __p8c_tmp1")
             o_nl()
             emit_br_true("beq", true_id)
         } else {
             if op == TK_NE {
-                out_text("  cmp ")
-                emit_cmp_operand(opmode, rhs)
+                out_text("  cmp __p8c_tmp1")
                 o_nl()
                 emit_br_true("bne", true_id)
             } else {
                 o_sec()
-                out_text("  sbc ")
-                emit_cmp_operand(opmode, rhs)
+                out_text("  sbc __p8c_tmp1")
                 o_nl()
                 uword skip_id
                 skip_id = label_seq
@@ -3724,18 +3713,12 @@ sub codegen_byte_expr(uword root) {
                 lhs = node_a[nd]
                 rhs = node_b[nd]
                 if is_cmp_op(node_op[nd]) != 0 {
-                    if is_leaf_rhs(rhs) != 0 {
-                        ; leaf rhs: eval(lhs) -> A; leaf cmp-tail (no spill)
-                        cws_push(12, nd, node_op[nd])
-                        cws_push(0, lhs, 0)
-                    } else {
-                        ; eval(lhs); sta tmp0; eval(rhs); sta tmp1; cmp-tail
-                        cws_push(7, nd, node_op[nd])
-                        cws_push(3, 0, 0)
-                        cws_push(0, rhs, 0)
-                        cws_push(8, 0, 0)
-                        cws_push(0, lhs, 0)
-                    }
+                    ; eval(lhs); sta tmp0; eval(rhs); sta tmp1; cmp-tail
+                    cws_push(7, nd, node_op[nd])
+                    cws_push(3, 0, 0)
+                    cws_push(0, rhs, 0)
+                    cws_push(8, 0, 0)
+                    cws_push(0, lhs, 0)
                 } else {
                     if is_logical_op(node_op[nd]) != 0 {
                         ; eval(lhs); logic-mid; eval(rhs); logic-tail
@@ -3807,7 +3790,7 @@ sub codegen_byte_expr(uword root) {
                                     emit_unary_apply(op)
                                 } else {
                                     if ty == 7 {
-                                        emit_cmp_tail(nd, op, 1, 0)
+                                        emit_cmp_tail(nd, op)
                                     } else {
                                         if ty == 8 {
                                             o_sta_tmp0()
@@ -3818,12 +3801,8 @@ sub codegen_byte_expr(uword root) {
                                                 if ty == 10 {
                                                     emit_logic_tail(op)
                                                 } else {
-                                                    if ty == 11 {
-                                                        out_text("  eor __p8c_tmp0")
-                                                        o_nl()
-                                                    } else {
-                                                        emit_cmp_tail(nd, op, 0, node_b[nd])
-                                                    }
+                                                    out_text("  eor __p8c_tmp0")
+                                                    o_nl()
                                                 }
                                             }
                                         }
@@ -3977,12 +3956,10 @@ sub emit_bitwise_mnem(ubyte op) {
 }
 ; apply a word unary op (~ or -) to A:Y (operand already evaluated).
 sub emit_word_unary(ubyte uncode) {
-    out_text("  eor #$ff")
-    o_nl()
+    o_eor_ff()
     o_sta_wtmp0()
     o_tya()
-    out_text("  eor #$ff")
-    o_nl()
+    o_eor_ff()
     o_tay()
     o_lda_wtmp0()
     if uncode == UN_NEG {
@@ -4044,11 +4021,9 @@ sub emit_wshr_step_lo() {
     o_sta_wtmp0()
     out_text("  lsr __p8c_wtmp0+1")
     o_nl()
-    out_text("  ror __p8c_wtmp0")
-    o_nl()
+    o_ror_wtmp0()
     o_lda_wtmp0()
-    out_text("  ldy __p8c_wtmp0+1")
-    o_nl()
+    o_ldy_wtmp0h()
 }
 ; one A:Y>>1 step for the n>=8 case (note p8c's swapped sty/sta order here).
 sub emit_wshr_step_hi() {
@@ -4058,11 +4033,9 @@ sub emit_wshr_step_hi() {
     o_nl()
     out_text("  lsr __p8c_wtmp0+1")
     o_nl()
-    out_text("  ror __p8c_wtmp0")
-    o_nl()
+    o_ror_wtmp0()
     o_lda_wtmp0()
-    out_text("  ldy __p8c_wtmp0+1")
-    o_nl()
+    o_ldy_wtmp0h()
 }
 ; A:Y >> n for a constant n (operand already in A:Y). Logical shift right.
 sub emit_wshr_const(ubyte n) {
@@ -4117,8 +4090,7 @@ sub emit_wshift_label(ubyte is_left, ubyte is_top, uword id) {
 ; a non-leaf count nested inside a byte expr's @() address would corrupt it.
 sub emit_wshift_var_tail(uword nd, ubyte is_left) {
     codegen_byte_expr(node_b[nd])
-    out_text("  tax")
-    o_nl()
+    o_tax()
     uword top_id
     uword end_id
     top_id = label_seq
@@ -4141,8 +4113,7 @@ sub emit_wshift_var_tail(uword nd, ubyte is_left) {
     } else {
         out_text("  lsr __p8c_wtmp0+1")
         o_nl()
-        out_text("  ror __p8c_wtmp0")
-        o_nl()
+        o_ror_wtmp0()
     }
     out_text("  dex")
     o_nl()
@@ -4153,8 +4124,7 @@ sub emit_wshift_var_tail(uword nd, ubyte is_left) {
     out_byte($3a)
     o_nl()
     o_lda_wtmp0()
-    out_text("  ldy __p8c_wtmp0+1")
-    o_nl()
+    o_ldy_wtmp0h()
 }
 ; dispatch a word shift: const count (IntLit 0..16) unrolls; else loop. The
 ; const path evaluates the lhs then unrolls; the variable path stashes the lhs
@@ -4556,12 +4526,10 @@ sub emit_builtin(uword callnode, ubyte bk) {
                     codegen_byte_expr(bi_arg0())
                     o_pha()
                     codegen_byte_expr(bi_arg1())
-                    out_text("  tax")
-                    o_nl()
+                    o_tax()
                     o_pla()
                     o_tay()
-                    out_text("  txa")
-                    o_nl()
+                    o_txa()
                 }
             }
         }
@@ -4617,6 +4585,23 @@ sub collect_params(uword callee) {
 ; codegen a call. Regular sub: evaluate every arg onto the CPU stack (so a
 ; later arg's evaluation can't clobber an earlier arg's param slot -- the slots
 ; are not reentrant), then pop them into the param slots in reverse and jsr.
+; asmsub call ABI (port of _emit_call's asmsub arm): 0 args -> just jsr; 1 arg
+; -> load it into A (ubyte) or A:Y (uword); then jsr the $F0xx target.
+sub codegen_asmsub_call(uword callnode, uword cs) {
+    collect_params(node_a[callnode])
+    if call_n == 1 {
+        uword arg1
+        arg1 = cons_val[reverse_cons(node_b[callnode])]
+        if call_isw[0] != 0 {
+            codegen_word_expr(arg1)
+        } else {
+            codegen_byte_expr(arg1)
+        }
+    }
+    out_text("  jsr $")
+    out_hex4(sub_addr[cs])
+    o_nl()
+}
 ; Result: A (ubyte/byte) or A:Y (uword). (NOTE: call_slot is global, so an arg
 ; that is itself a call would corrupt it -- not yet handled; args are simple.)
 sub codegen_call(uword callnode) {
@@ -4627,6 +4612,14 @@ sub codegen_call(uword callnode) {
     if bk != 0 {
         emit_builtin(callnode, bk)
         return
+    }
+    uword cs
+    cs = find_sub(callee)
+    if cs != $ffff {
+        if sub_kind[cs] == SUBK_ASMSUB {
+            codegen_asmsub_call(callnode, cs)
+            return
+        }
     }
     collect_params(callee)
     if call_n == 1 {
@@ -4881,6 +4874,10 @@ sub register_subs() {
             sub_name[sub_count] = node_a[snode]
             sub_kind[sub_count] = node_op[snode]
             sub_ret[sub_count] = lsb(node_d[snode])
+            sub_addr[sub_count] = 0
+            if node_op[snode] == SUBK_ASMSUB {
+                sub_addr[sub_count] = node_c[snode]   ; node_c is the $F0xx addr
+            }
             sub_count = sub_count + 1
             ; allocate this sub's params (source order), continuing zp_next.
             uword phead
@@ -4909,7 +4906,10 @@ sub register_subs() {
                 pcell = cons_next[pcell]
             }
             ; then this sub's locals (walk the body), continuing zp_next.
-            walk_locals(node_c[snode], node_a[snode])
+            ; (asmsub has no body -- node_c is its address -- so skip the walk.)
+            if node_op[snode] != SUBK_ASMSUB {
+                walk_locals(node_c[snode], node_a[snode])
+            }
             reset_nodes()
         }
     }

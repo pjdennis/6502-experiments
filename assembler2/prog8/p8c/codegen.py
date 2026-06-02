@@ -1246,12 +1246,6 @@ class CodeGen:
     def _emit_cmp_into_a(self, e: BinOp) -> None:
         """Compare LHS vs RHS, leave 1 in A if true else 0."""
         is_signed = getattr(e, "signed", False)
-        operand = self._cmp_leaf_operand(e.rhs)
-        if operand is not None:
-            # Leaf rhs: no tmp0/tmp1 spill -- eval lhs into A, compare directly.
-            self._emit_byte_expr_into_a(e.lhs)
-            self._emit_cmp_value_tail(e.op, is_signed, operand)
-            return
         self._emit_byte_expr_into_a(e.lhs)
         self.emit("  sta __p8c_tmp0")
         self._emit_byte_expr_into_a(e.rhs)
