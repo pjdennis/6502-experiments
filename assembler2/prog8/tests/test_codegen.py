@@ -211,5 +211,28 @@ class InitializedArrays(unittest.TestCase):
             compile_text("ubyte[] t = 5\nmain { }")
 
 
+class StringCompare(unittest.TestCase):
+    def test_compare_lowers_to_helper_and_emits_it_once(self):
+        s = compile_text('%import strings\n'
+                         'main { if strings.compare("a", "b") == 0 { } }')
+        self.assertIn("jsr __p8c_strcmp", s)
+        self.assertEqual(s.count("__p8c_strcmp:"), 1)
+
+    def test_no_helper_when_unused(self):
+        s = compile_text('%import strings\nmain { }')
+        self.assertNotIn("__p8c_strcmp:", s)
+
+    def test_compare_parks_both_pointers(self):
+        s = compile_text('%import strings\n'
+                         'main { ubyte x x = 0 if strings.compare("a","b")==0 {x=1} }')
+        self.assertIn("sta __p8c_wtmp0", s)
+        self.assertIn("sta __p8c_wtmp1", s)
+
+    def test_compare_requires_import(self):
+        from p8c.sema import SemaError
+        with self.assertRaises(SemaError):
+            compile_text('main { if strings.compare("a","b")==0 { } }')
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -8,7 +8,7 @@ files.
 """
 from __future__ import annotations
 
-from .ast import Symbol, STR, UBYTE, UWORD, VOID
+from .ast import Symbol, BYTE, STR, UBYTE, UWORD, VOID
 
 
 # txt.print(str) -- print zero-terminated string at the LCD cursor.
@@ -56,9 +56,19 @@ BUILTINS = [
 ]
 
 
+# strings.compare(a, b) -> byte: idiomatic zero-terminated string compare,
+# returning -1 / 0 / 1 (a<b / a==b / a>b), like upstream Prog8. Operands are
+# uword addresses (string literals, &buffer, or a uword pointer). kind="builtin"
+# so codegen lowers it to a JSR to the lazily-emitted __p8c_strcmp helper.
+STRINGS_COMPARE = Symbol(
+    name="compare", mangled="__p8c_strcmp", type=BYTE, kind="builtin",
+)
+
+
 STDLIB_SYMBOLS: dict[str, list[Symbol]] = {
     "txt": [TXT_PRINT, TXT_PRINT_UB, TXT_PRINT_UW],
     "lcd": [LCD_CLEAR],
+    "strings": [STRINGS_COMPARE],
 }
 
 

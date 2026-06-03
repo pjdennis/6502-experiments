@@ -153,6 +153,7 @@ class CodeGen:
     def generate(self) -> str:
         self.out.clear()
         self._mul_used = False
+        self._strcmp_used = False
         prologue = PROLOGUE_NMOS if self.prog.target == "nmos" else PROLOGUE_WENDY2C
         self.emit(prologue.format(
             source=self.source_path, addr=self.prog.address,
@@ -198,6 +199,30 @@ class CodeGen:
             self.emit("  asl __p8c_tmp0")
             self.emit("  dex")
             self.emit("  bne .__mul_loop")
+            self.emit("  rts")
+        if self._strcmp_used:
+            self.emit("")
+            self.emit("; ---- runtime: strings.compare -> A (-1/0/1) ----")
+            self.emit("; args in __p8c_wtmp0 / __p8c_wtmp1 (zero-terminated)")
+            self.emit("__p8c_strcmp:")
+            self.emit("  ldy #0")
+            self.emit(".__strcmp_loop:")
+            self.emit("  lda (__p8c_wtmp0),y")
+            self.emit("  cmp (__p8c_wtmp1),y")
+            self.emit("  bne .__strcmp_diff")
+            self.emit("  lda (__p8c_wtmp0),y")    # equal bytes; at terminator?
+            self.emit("  beq .__strcmp_eq")
+            self.emit("  iny")
+            self.emit("  bne .__strcmp_loop")
+            self.emit(".__strcmp_eq:")
+            self.emit("  lda #0")
+            self.emit("  rts")
+            self.emit(".__strcmp_diff:")
+            self.emit("  bcc .__strcmp_less")
+            self.emit("  lda #1")
+            self.emit("  rts")
+            self.emit(".__strcmp_less:")
+            self.emit("  lda #$ff")
             self.emit("  rts")
         if array_vars:
             self.emit("")
@@ -1796,6 +1821,27 @@ class CodeGen:
     def _emit_builtin_call(self, c: Call) -> None:
         """Lower a builtin call (peek/poke/lsb/msb/...) to inline asm."""
         name = c.sym.name
+        if name == "compare":
+            # strings.compare(a, b): both args are uword addresses. Park them
+            # in the two ZP word pointers, then jsr the shared helper (result
+            # -1/0/1 in A). Stack-shuffle the first pointer so evaluating the
+            # second arg can't clobber it.
+            if len(c.args) != 2:
+                raise CodeGenError("strings.compare takes 2 args")
+            self._emit_word_expr_into_ay(c.args[0])
+            self.emit("  pha")
+            self.emit("  tya")
+            self.emit("  pha")
+            self._emit_word_expr_into_ay(c.args[1])
+            self.emit("  sta __p8c_wtmp1")
+            self.emit("  sty __p8c_wtmp1+1")
+            self.emit("  pla")
+            self.emit("  sta __p8c_wtmp0+1")
+            self.emit("  pla")
+            self.emit("  sta __p8c_wtmp0")
+            self.emit("  jsr __p8c_strcmp")
+            self._strcmp_used = True
+            return
         if name == "peek":
             if len(c.args) != 1 or not isinstance(c.args[0], IntLit):
                 raise CodeGenError("peek expects one literal address argument")
