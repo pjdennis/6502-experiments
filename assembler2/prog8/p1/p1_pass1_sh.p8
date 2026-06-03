@@ -714,16 +714,16 @@ sub classify_name() -> ubyte {
 ; classify a directive name (already copied into name_buf):
 ; 0=address, 1=output, 2=import, 3=target, 4=other.
 
+uword[4] dir_strs = ["address", "output", "import", "target"]
+ubyte[4] dir_codes = [0, 1, 2, 3]
 sub dir_classify() -> ubyte {
-    when name_len {
-        6 -> {
-            if name_buf[0]==$69 and name_buf[1]==$6d and name_buf[2]==$70 and name_buf[3]==$6f and name_buf[4]==$72 and name_buf[5]==$74 { return 2 }   ; import
-            if name_buf[0]==$6f and name_buf[1]==$75 and name_buf[2]==$74 and name_buf[3]==$70 and name_buf[4]==$75 and name_buf[5]==$74 { return 1 }   ; output
-            if name_buf[0]==$74 and name_buf[1]==$61 and name_buf[2]==$72 and name_buf[3]==$67 and name_buf[4]==$65 and name_buf[5]==$74 { return 3 }   ; target
-        }
-        7 -> {
-            if name_buf[0]==$61 and name_buf[1]==$64 and name_buf[2]==$64 and name_buf[3]==$72 and name_buf[4]==$65 and name_buf[5]==$73 and name_buf[6]==$73 { return 0 }   ; address
-        }
+    name_buf[name_len] = 0                  ; NUL-terminate for strings.compare
+    ubyte i
+    i = 0
+    repeat {
+        if i >= 4 { break }
+        if strings.compare(&name_buf, dir_strs[i]) == 0 { return dir_codes[i] }
+        i = i + 1
     }
     return 4
 }
@@ -2054,12 +2054,11 @@ sub handle_directive() {
     if dk == 3 {                            ; %target
         name_len = 0
         append_ident_to_namebuf(cur_val())
-        if name_len == 4 {                  ; "nmos"
-            if name_buf[0]==$6e and name_buf[1]==$6d and name_buf[2]==$6f and name_buf[3]==$73 {
-                prog_target = 1
-                if prog_address == $4000 {
-                    prog_address = $0200
-                }
+        name_buf[name_len] = 0              ; NUL-terminate for strings.compare
+        if strings.compare(&name_buf, "nmos") == 0 {
+            prog_target = 1
+            if prog_address == $4000 {
+                prog_address = $0200
             }
         }
         advance()

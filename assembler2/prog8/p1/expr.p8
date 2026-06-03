@@ -23,6 +23,7 @@
 
 %target nmos
 %address $0200
+%import strings
 
 ; ---- token kinds ----
 const ubyte TK_EOF    = 0
@@ -118,7 +119,7 @@ ubyte str_count
 ubyte str_pool_len
 
 ; scratch for the identifier / dotted path currently being built
-ubyte[64] name_buf
+ubyte[65] name_buf      ; +1 for the NUL terminator classify_name writes
 ubyte name_len
 
 uword int_val            ; current numeric literal value
@@ -460,23 +461,22 @@ sub intern_name() -> ubyte {
     return id
 }
 
+; the operator/literal keywords the expression grammar recognizes, paired with
+; their token kinds; anything else is an identifier.
+uword[6] kw_strs = ["or", "and", "not", "xor", "true", "false"]
+ubyte[6] kw_toks = [TK_KOR, TK_KAND, TK_KNOT, TK_KXOR, TK_TRUE, TK_FALSE]
+
 ; classify name_buf as a token kind (operator/literal keywords get their
 ; own kinds; everything else -> identifier, which simply stops the expr
 ; if it isn't a valid operand here).
 sub classify_name() -> ubyte {
-    if name_len == 2 {
-        if name_buf[0]==$6f and name_buf[1]==$72 { return TK_KOR }
-    }
-    if name_len == 3 {
-        if name_buf[0]==$61 and name_buf[1]==$6e and name_buf[2]==$64 { return TK_KAND }
-        if name_buf[0]==$6e and name_buf[1]==$6f and name_buf[2]==$74 { return TK_KNOT }
-        if name_buf[0]==$78 and name_buf[1]==$6f and name_buf[2]==$72 { return TK_KXOR }
-    }
-    if name_len == 4 {
-        if name_buf[0]==$74 and name_buf[1]==$72 and name_buf[2]==$75 and name_buf[3]==$65 { return TK_TRUE }
-    }
-    if name_len == 5 {
-        if name_buf[0]==$66 and name_buf[1]==$61 and name_buf[2]==$6c and name_buf[3]==$73 and name_buf[4]==$65 { return TK_FALSE }
+    name_buf[name_len] = 0                  ; NUL-terminate for strings.compare
+    ubyte i
+    i = 0
+    repeat {
+        if i >= 6 { break }
+        if strings.compare(&name_buf, kw_strs[i]) == 0 { return kw_toks[i] }
+        i = i + 1
     }
     return TK_IDENT
 }

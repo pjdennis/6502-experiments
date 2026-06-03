@@ -25,6 +25,7 @@
 
 %target nmos
 %address $0200
+%import strings
 
 ; ---- module-level state ----
 ubyte src_hand
@@ -33,7 +34,7 @@ ubyte peek_buf
 ubyte peek_ok
 ubyte src_eof
 
-ubyte[40] name_buf      ; current identifier / directive name
+ubyte[41] name_buf      ; current identifier / directive name (+1 for NUL term)
 ubyte name_len
 
 uword int_val           ; accumulated value of the current numeric literal
@@ -327,65 +328,27 @@ sub read_ident() {                                       ; next peeked char star
     }
 }
 
-; kw_match: returns 1 if name_buf[0..name_len-1] is a Prog8
-; keyword, else 0. Generated from p8c.lex.KEYWORDS, grouped by
-; length; each arm is a flat list of full char-by-char compares.
+; The Prog8 reserved words (from p8c.lex.KEYWORDS). kw_match tests membership
+; against this table with strings.compare, so adding a keyword is a one-line
+; table edit rather than a hand-written char-by-char compare.
+uword[40] keywords = [
+    "as", "do", "if", "in", "or", "to",
+    "and", "for", "not", "str", "sub", "xor",
+    "bool", "byte", "else", "enum", "goto", "main", "step", "true", "void",
+    "when", "word",
+    "break", "const", "defer", "false", "ubyte", "until", "uword", "while",
+    "asmsub", "downto", "extsub", "inline", "repeat", "return", "struct",
+    "private", "continue" ]
+
+; kw_match: returns 1 if name_buf[0..name_len-1] is a Prog8 keyword, else 0.
 sub kw_match() -> ubyte {
-    when name_len {
-        2 -> {
-            if name_buf[0]==$61 and name_buf[1]==$73 { return 1 }   ; as
-            if name_buf[0]==$64 and name_buf[1]==$6f { return 1 }   ; do
-            if name_buf[0]==$69 and name_buf[1]==$66 { return 1 }   ; if
-            if name_buf[0]==$69 and name_buf[1]==$6e { return 1 }   ; in
-            if name_buf[0]==$6f and name_buf[1]==$72 { return 1 }   ; or
-            if name_buf[0]==$74 and name_buf[1]==$6f { return 1 }   ; to
-        }
-        3 -> {
-            if name_buf[0]==$61 and name_buf[1]==$6e and name_buf[2]==$64 { return 1 }   ; and
-            if name_buf[0]==$66 and name_buf[1]==$6f and name_buf[2]==$72 { return 1 }   ; for
-            if name_buf[0]==$6e and name_buf[1]==$6f and name_buf[2]==$74 { return 1 }   ; not
-            if name_buf[0]==$73 and name_buf[1]==$74 and name_buf[2]==$72 { return 1 }   ; str
-            if name_buf[0]==$73 and name_buf[1]==$75 and name_buf[2]==$62 { return 1 }   ; sub
-            if name_buf[0]==$78 and name_buf[1]==$6f and name_buf[2]==$72 { return 1 }   ; xor
-        }
-        4 -> {
-            if name_buf[0]==$62 and name_buf[1]==$6f and name_buf[2]==$6f and name_buf[3]==$6c { return 1 }   ; bool
-            if name_buf[0]==$62 and name_buf[1]==$79 and name_buf[2]==$74 and name_buf[3]==$65 { return 1 }   ; byte
-            if name_buf[0]==$65 and name_buf[1]==$6c and name_buf[2]==$73 and name_buf[3]==$65 { return 1 }   ; else
-            if name_buf[0]==$65 and name_buf[1]==$6e and name_buf[2]==$75 and name_buf[3]==$6d { return 1 }   ; enum
-            if name_buf[0]==$67 and name_buf[1]==$6f and name_buf[2]==$74 and name_buf[3]==$6f { return 1 }   ; goto
-            if name_buf[0]==$6d and name_buf[1]==$61 and name_buf[2]==$69 and name_buf[3]==$6e { return 1 }   ; main
-            if name_buf[0]==$73 and name_buf[1]==$74 and name_buf[2]==$65 and name_buf[3]==$70 { return 1 }   ; step
-            if name_buf[0]==$74 and name_buf[1]==$72 and name_buf[2]==$75 and name_buf[3]==$65 { return 1 }   ; true
-            if name_buf[0]==$76 and name_buf[1]==$6f and name_buf[2]==$69 and name_buf[3]==$64 { return 1 }   ; void
-            if name_buf[0]==$77 and name_buf[1]==$68 and name_buf[2]==$65 and name_buf[3]==$6e { return 1 }   ; when
-            if name_buf[0]==$77 and name_buf[1]==$6f and name_buf[2]==$72 and name_buf[3]==$64 { return 1 }   ; word
-        }
-        5 -> {
-            if name_buf[0]==$62 and name_buf[1]==$72 and name_buf[2]==$65 and name_buf[3]==$61 and name_buf[4]==$6b { return 1 }   ; break
-            if name_buf[0]==$63 and name_buf[1]==$6f and name_buf[2]==$6e and name_buf[3]==$73 and name_buf[4]==$74 { return 1 }   ; const
-            if name_buf[0]==$64 and name_buf[1]==$65 and name_buf[2]==$66 and name_buf[3]==$65 and name_buf[4]==$72 { return 1 }   ; defer
-            if name_buf[0]==$66 and name_buf[1]==$61 and name_buf[2]==$6c and name_buf[3]==$73 and name_buf[4]==$65 { return 1 }   ; false
-            if name_buf[0]==$75 and name_buf[1]==$62 and name_buf[2]==$79 and name_buf[3]==$74 and name_buf[4]==$65 { return 1 }   ; ubyte
-            if name_buf[0]==$75 and name_buf[1]==$6e and name_buf[2]==$74 and name_buf[3]==$69 and name_buf[4]==$6c { return 1 }   ; until
-            if name_buf[0]==$75 and name_buf[1]==$77 and name_buf[2]==$6f and name_buf[3]==$72 and name_buf[4]==$64 { return 1 }   ; uword
-            if name_buf[0]==$77 and name_buf[1]==$68 and name_buf[2]==$69 and name_buf[3]==$6c and name_buf[4]==$65 { return 1 }   ; while
-        }
-        6 -> {
-            if name_buf[0]==$61 and name_buf[1]==$73 and name_buf[2]==$6d and name_buf[3]==$73 and name_buf[4]==$75 and name_buf[5]==$62 { return 1 }   ; asmsub
-            if name_buf[0]==$64 and name_buf[1]==$6f and name_buf[2]==$77 and name_buf[3]==$6e and name_buf[4]==$74 and name_buf[5]==$6f { return 1 }   ; downto
-            if name_buf[0]==$65 and name_buf[1]==$78 and name_buf[2]==$74 and name_buf[3]==$73 and name_buf[4]==$75 and name_buf[5]==$62 { return 1 }   ; extsub
-            if name_buf[0]==$69 and name_buf[1]==$6e and name_buf[2]==$6c and name_buf[3]==$69 and name_buf[4]==$6e and name_buf[5]==$65 { return 1 }   ; inline
-            if name_buf[0]==$72 and name_buf[1]==$65 and name_buf[2]==$70 and name_buf[3]==$65 and name_buf[4]==$61 and name_buf[5]==$74 { return 1 }   ; repeat
-            if name_buf[0]==$72 and name_buf[1]==$65 and name_buf[2]==$74 and name_buf[3]==$75 and name_buf[4]==$72 and name_buf[5]==$6e { return 1 }   ; return
-            if name_buf[0]==$73 and name_buf[1]==$74 and name_buf[2]==$72 and name_buf[3]==$75 and name_buf[4]==$63 and name_buf[5]==$74 { return 1 }   ; struct
-        }
-        7 -> {
-            if name_buf[0]==$70 and name_buf[1]==$72 and name_buf[2]==$69 and name_buf[3]==$76 and name_buf[4]==$61 and name_buf[5]==$74 and name_buf[6]==$65 { return 1 }   ; private
-        }
-        8 -> {
-            if name_buf[0]==$63 and name_buf[1]==$6f and name_buf[2]==$6e and name_buf[3]==$74 and name_buf[4]==$69 and name_buf[5]==$6e and name_buf[6]==$75 and name_buf[7]==$65 { return 1 }   ; continue
-        }
+    name_buf[name_len] = 0                  ; NUL-terminate for strings.compare
+    ubyte i
+    i = 0
+    repeat {
+        if i >= 40 { break }
+        if strings.compare(&name_buf, keywords[i]) == 0 { return 1 }
+        i = i + 1
     }
     return 0
 }
