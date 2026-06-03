@@ -12,8 +12,8 @@ Phase 1 jobs:
 from __future__ import annotations
 
 from .ast import (
-    AddressOf, Assign, BinOp, Block, BoolLit, Break, Call, Continue, Defer,
-    ExprStmt, For, Ident, If, Index, InlineAsm, IntLit, MemAt, Param,
+    AddressOf, ArrayLit, Assign, BinOp, Block, BoolLit, Break, Call, Continue,
+    Defer, ExprStmt, For, Ident, If, Index, InlineAsm, IntLit, MemAt, Param,
     Program, Repeat, Return, StrLit, StructDecl, Sub, Symbol, TUByteArray,
     TUWordArray, Type, UnaryOp, VarDecl, When, WhenChoice, While, BOOL, BYTE, STR,
     UBYTE, UWORD, VOID, type_from_name,
@@ -256,10 +256,22 @@ class Sema:
             vd.sym = sym
             self.prog.all_vars.append(sym)
             if vd.init is not None:
-                raise SemaError(
-                    f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: "
-                    f"array initializers not supported yet"
-                )
+                if not isinstance(vd.init, ArrayLit):
+                    raise SemaError(
+                        f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: "
+                        f"array initializer must be a list `[...]`"
+                    )
+                if len(vd.init.elements) != vd.array_size:
+                    raise SemaError(
+                        f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: "
+                        f"array has {vd.array_size} elements but initializer "
+                        f"has {len(vd.init.elements)}"
+                    )
+                for el in vd.init.elements:
+                    self._walk_expr(el)
+                # codegen reads sym.init_lit to emit the .byte/.word values
+                # (resolving any string-literal elements to their pool labels).
+                sym.init_lit = vd.init           # type: ignore[attr-defined]
             return sym
         t = type_from_name(vd.type_name)
         if t is None or t not in (UBYTE, BYTE, UWORD):

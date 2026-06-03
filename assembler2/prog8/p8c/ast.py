@@ -147,6 +147,15 @@ class BoolLit(Node):
 
 
 @dataclass
+class ArrayLit(Node):
+    """`[e0, e1, ...]` initializer for an array variable. Sema resolves the
+    elements to constant values (ints, or string-literal / &ident addresses
+    for uword arrays) and attaches them to the array Symbol for emission."""
+    elements: list = field(default_factory=list)
+    type: Type = UBYTE          # element type context, set by sema
+
+
+@dataclass
 class Ident(Node):
     name: str
     # Resolved by sema:

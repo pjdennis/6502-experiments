@@ -109,6 +109,24 @@ class CodeGen:
     def emit(self, line: str = "") -> None:
         self.out.append(line)
 
+    def _array_elem_asm(self, el) -> str:
+        """One array-initializer element as an asm operand for `.byte`/`.word`:
+        an int literal -> its number; a string literal -> its pool label (the
+        string's address); a const ident -> its folded value; a var/array
+        ident or &name -> the symbol's label (its address)."""
+        if isinstance(el, IntLit):
+            return str(el.value)
+        if isinstance(el, StrLit):
+            return self._str_label(el)
+        if isinstance(el, AddressOf):
+            return el.sym.mangled if el.sym is not None else el.name
+        if isinstance(el, Ident):
+            if el.sym is not None and el.sym.kind == "const":
+                return str(el.sym.const_value)
+            if el.sym is not None:
+                return el.sym.mangled
+        raise CodeGenError(f"unsupported array initializer element: {el!r}")
+
     def _str_label(self, lit: StrLit) -> str:
         """Assign (lazily) and return a string literal's pool label.
 
@@ -187,9 +205,15 @@ class CodeGen:
             for sym in array_vars:
                 assert isinstance(sym.type, (TUByteArray, TUWordArray))
                 esize = 2 if isinstance(sym.type, TUWordArray) else 1
-                nbytes = sym.type.size * esize
                 self.emit(f"{sym.mangled}:")
-                self.emit(f"  .byte " + ", ".join(["0"] * nbytes))
+                init = getattr(sym, "init_lit", None)
+                if init is not None:
+                    vals = [self._array_elem_asm(el) for el in init.elements]
+                    directive = "  .word " if esize == 2 else "  .byte "
+                    self.emit(directive + ", ".join(vals))
+                else:
+                    nbytes = sym.type.size * esize
+                    self.emit(f"  .byte " + ", ".join(["0"] * nbytes))
         if mem_scalars:
             self.emit("")
             self.emit("; ---- scalars overflowed from ZP into main memory ----")
@@ -279,8 +303,9 @@ class CodeGen:
         if s.is_main:
             for vd in self.prog.module_vars:
                 # const decls are compile-time only; the value is folded
-                # at every use site, no runtime store needed.
-                if vd.sym is None or vd.sym.kind == "const":
+                # at every use site, no runtime store needed. array initializers
+                # are emitted statically in the `; ---- arrays ----` data block.
+                if vd.sym is None or vd.sym.kind in ("const", "array"):
                     continue
                 if vd.init is None:
                     continue

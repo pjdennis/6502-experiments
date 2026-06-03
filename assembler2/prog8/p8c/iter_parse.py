@@ -29,7 +29,7 @@ from __future__ import annotations
 from typing import Optional
 
 from .ast import (
-    AddressOf, BinOp, BoolLit, Call, Ident, Index, IntLit, Loc, MemAt,
+    AddressOf, ArrayLit, BinOp, BoolLit, Call, Ident, Index, IntLit, Loc, MemAt,
     Node, StrLit, UnaryOp,
 )
 from .lex import Token
@@ -224,6 +224,20 @@ class IterParser:
                 elif t.kind == "(":
                     ops.append({"k": "lparen", "floor": len(operands)})
                     self.pos += 1
+                elif t.kind == "[":
+                    # array literal `[e0, e1, ...]` (an array variable
+                    # initializer). Each element is a full expression; a plain
+                    # parse_expr stops at the separating ',' / closing ']'.
+                    self.pos += 1
+                    elems: list[Node] = []
+                    if self.peek().kind != "]":
+                        elems.append(self.parse_expr())
+                        while self.peek().kind == ",":
+                            self.pos += 1
+                            elems.append(self.parse_expr())
+                    self.eat("]")
+                    operands.append(ArrayLit(loc=self.loc(t), elements=elems))
+                    expect_operand = False
                 elif t.kind == "IDENT":
                     first = t
                     path = [self.eat("IDENT").value]

@@ -180,5 +180,36 @@ class CodeGenPhase2(unittest.TestCase):
         self.assertEqual(s.count("jsr display_hex"), 2)
 
 
+class InitializedArrays(unittest.TestCase):
+    def test_ubyte_array_literal(self):
+        s = compile_text("ubyte[] t = [10, 20, 30]\nmain { ubyte x x = t[0] }")
+        self.assertIn("p8a_t:", s)
+        self.assertIn("  .byte 10, 20, 30", s)
+
+    def test_ubyte_array_explicit_size_and_consts(self):
+        s = compile_text("const ubyte A = 7\nubyte[3] t = [A, A, 9]\n"
+                         "main { ubyte x x = t[2] }")
+        self.assertIn("  .byte 7, 7, 9", s)
+
+    def test_uword_array_of_ints(self):
+        s = compile_text("uword[] t = [$1234, 7]\nmain { uword w w = t[1] }")
+        self.assertIn("  .word 4660, 7", s)
+
+    def test_uword_array_of_strings_uses_pool_labels(self):
+        s = compile_text('uword[] t = ["ab", "cd"]\nmain { uword w w = t[0] }')
+        self.assertIn("  .word p8c_str_0, p8c_str_1", s)
+        self.assertIn('p8c_str_0:', s)
+
+    def test_size_mismatch_is_error(self):
+        from p8c.sema import SemaError
+        with self.assertRaises(SemaError):
+            compile_text("ubyte[3] t = [1, 2]\nmain { }")
+
+    def test_inferred_size_needs_list(self):
+        from p8c.parse import ParseError
+        with self.assertRaises(ParseError):
+            compile_text("ubyte[] t = 5\nmain { }")
+
+
 if __name__ == "__main__":
     unittest.main()

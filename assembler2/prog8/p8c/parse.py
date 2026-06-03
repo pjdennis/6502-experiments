@@ -22,8 +22,8 @@ from __future__ import annotations
 from typing import Optional
 
 from .ast import (
-    AddressOf, Assign, BinOp, Block, BoolLit, Break, Call, Continue, Defer,
-    EnumDecl, ExprStmt, For, Ident, If, Index, InlineAsm, IntLit, Loc,
+    AddressOf, ArrayLit, Assign, BinOp, Block, BoolLit, Break, Call, Continue,
+    Defer, EnumDecl, ExprStmt, For, Ident, If, Index, InlineAsm, IntLit, Loc,
     MemAt, Node, Param, Program, Repeat, Return, StrLit, StructDecl, Sub,
     UnaryOp, VarDecl, When, WhenChoice, While, type_from_name,
 )
@@ -547,16 +547,27 @@ class Parser:
             raise ParseError(
                 f"{self.filename}:{t.line}:{t.col}: expected type keyword, got {t.value!r}"
             )
-        # Optional `[N]` -- array form.
+        # Optional `[N]` (explicit size) or `[]` (size inferred from the
+        # initializer) -- array form.
         array_size = None
+        inferred = False
         if self.match("["):
-            sz = self.eat("INT")
+            if self.peek().kind == "]":
+                inferred = True          # `ubyte[] x = [...]`
+            else:
+                array_size = self.eat("INT").value
             self.eat("]")
-            array_size = sz.value
         name = self.eat("IDENT")
         init = None
         if self.match("="):
             init = self.parse_expr()
+        if inferred:
+            if not isinstance(init, ArrayLit):
+                raise ParseError(
+                    f"{self.filename}:{t.line}:{t.col}: `{t.value}[]` needs an "
+                    f"array initializer `[...]`"
+                )
+            array_size = len(init.elements)
         return VarDecl(loc=self.loc(t), type_name=t.value, name=name.value,
                        array_size=array_size, init=init)
 
@@ -799,6 +810,16 @@ class Parser:
         if t.kind == "KW" and t.value in ("true", "false"):
             self.pos += 1
             return BoolLit(loc=self.loc(t), value=(t.value == "true"))
+        if t.kind == "[":
+            # array literal: [e0, e1, ...]  (used as an array variable initializer)
+            self.pos += 1
+            elems: list[Node] = []
+            if self.peek().kind != "]":
+                elems.append(self.parse_expr())
+                while self.match(","):
+                    elems.append(self.parse_expr())
+            self.eat("]")
+            return ArrayLit(loc=self.loc(t), elements=elems)
         if t.kind == "IDENT":
             return self.parse_dotted_or_call()
         raise ParseError(
