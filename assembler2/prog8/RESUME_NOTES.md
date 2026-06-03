@@ -55,15 +55,25 @@ grew pass2 106 B and pushed a var onto the $F000 port (crash). So do NOT
 when-ify the codegen; the if-chains there are compact by design. (`when` is
 fine for readability in code that isn't memory-critical, but this compiler is.)
 
+  7. **strings.compare in the PIPELINE + canonical p1.p8.** pass2_sh now lowers
+     strings.compare (builtin_kind code 6 + emit_builtin arm + emit_strcmp_helper,
+     byte-identical to p8c), so stmt.p8's classify_name (now a kw_is(uword)
+     helper + `if kw_is("if")..` chain), dir_classify, and the %target nmos
+     check all use strings.compare -- and the regenerated p1.p8 self-hosts
+     0-diff. p1.p8 SHRANK ~1.2 KB (kw_is calls < char-by-char compares).
+     Gotchas hit + fixed: strpool_sid 188->256 (p1.p8 now has 213 distinct
+     strings); pass1 str_pool 4096->5120 (the extra keyword literals pushed the
+     header's dedup temp-append past 4096, clobbering name_buf/path_buf -- the
+     classic corruption its own comment warns about); p8c __p8c_strcmp helper
+     comments dropped + labels shortened (.__sc_*) so pass2_sh's helper-text
+     string stays under the $FE00 argv-window pool ceiling.
+
 REMAINING (next session):
   * **String comparison sugar (optional):** `s1 == s2` / `!=` lowering to
-    `strings.compare(...) == 0` for ergonomics. The primitive (strings.compare)
-    is DONE and used by the lexer; this is just surface sugar. Would need sema
-    to detect string-typed operands (StrLit, or a str/uword value) and route
-    `==`/`!=` to the helper -- careful not to break numeric `uword == uword`.
-    strings.compare is host-only so far; the pipeline (pass1_sh/pass2_sh) only
-    needs it if p1.p8 (canonical) starts calling it -- pass2_sh would gain the
-    same ~50 B helper + builtin lowering (it already has the mul_used pattern).
+    `strings.compare(...) == 0` for ergonomics. The primitive is fully wired
+    (host + pipeline + canonical p1.p8); this is just surface sugar. Would need
+    sema to detect string-typed operands and route `==`/`!=` to the helper --
+    careful not to break numeric `uword == uword`.
   * **Full pipeline initialized-array support** so the CANONICAL p1.p8 (not
     just pass2_sh) can use the tables. ATTEMPTED this session and the design
     works end-to-end, BUT it does not fit the memory budget -- see the wall
