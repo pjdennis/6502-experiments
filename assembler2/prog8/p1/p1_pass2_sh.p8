@@ -925,37 +925,20 @@ sub emit_string_pool() {
 ; 4 for_top, 5 for_cont, 6 for_end, 7 rep_top, 8 rep_dec, 9 rep_end,
 ; 10 rep_break.
 
+uword[] ctrl_label_strs = [
+    ".Lelse_", ".Lendif_", ".Lwhile_top_", ".Lwhile_end_", ".Lfor_top_",
+    ".Lfor_cont_", ".Lfor_end_", ".Lrep_top_", ".Lrep_dec_", ".Lrep_end_",
+    ".Lrep_break_", ".Lwhen_end_", ".Lwhen_body_", ".Lwhen_next_",
+    ".Lwhen_skip_", ".Land_skip_", ".Lor_skip_" ]
 sub emit_ctrl_label_ref(ubyte kind, uword id) {
-    if kind == 0 { out_text(".Lelse_") }
-    if kind == 1 { out_text(".Lendif_") }
-    if kind == 2 { out_text(".Lwhile_top_") }
-    if kind == 3 { out_text(".Lwhile_end_") }
-    if kind == 4 { out_text(".Lfor_top_") }
-    if kind == 5 { out_text(".Lfor_cont_") }
-    if kind == 6 { out_text(".Lfor_end_") }
-    if kind == 7 { out_text(".Lrep_top_") }
-    if kind == 8 { out_text(".Lrep_dec_") }
-    if kind == 9 { out_text(".Lrep_end_") }
-    if kind == 10 { out_text(".Lrep_break_") }
-    if kind == 11 { out_text(".Lwhen_end_") }
-    if kind == 12 { out_text(".Lwhen_body_") }
-    if kind == 13 { out_text(".Lwhen_next_") }
-    if kind == 14 { out_text(".Lwhen_skip_") }
-    if kind == 15 { out_text(".Land_skip_") }
-    if kind == 16 { out_text(".Lor_skip_") }
+    out_text(ctrl_label_strs[kind])
     out_dec(id)
 }
 ; branch mnemonics by code: 0 bne 1 beq 2 bcc 3 bcs 4 bmi 5 bpl 6 bvc 7 bvs.
 
+uword[] br_mnems = ["bne", "beq", "bcc", "bcs", "bmi", "bpl", "bvc", "bvs"]
 sub out_br_mnem(ubyte code) {
-    if code == 0 { out_text("bne") return }
-    if code == 1 { out_text("beq") return }
-    if code == 2 { out_text("bcc") return }
-    if code == 3 { out_text("bcs") return }
-    if code == 4 { out_text("bmi") return }
-    if code == 5 { out_text("bpl") return }
-    if code == 6 { out_text("bvc") return }
-    out_text("bvs")
+    out_text(br_mnems[code])
 }
 ; _br: branch to a (possibly distant) control label when `brcode` is TRUE,
 ; via the inverted-branch + jmp pattern (works at any distance).
