@@ -573,14 +573,14 @@ sub read_dec() {
 }
 
 sub decode_escape_val(ubyte e) -> ubyte {
-    if e == $6e { return $0a }
-    if e == $72 { return $0d }
-    if e == $74 { return $09 }
-    if e == $30 { return $00 }
-    if e == $27 { return $27 }
-    if e == $5c { return $5c }
-    if e == $22 { return $22 }
-    if e == $78 {
+    if e == 'n' { return '\n' }
+    if e == 'r' { return '\r' }
+    if e == 't' { return '\t' }
+    if e == '0' { return $00 }
+    if e == '\'' { return '\'' }
+    if e == '\\' { return '\\' }
+    if e == '"' { return '"' }
+    if e == 'x' {
         ubyte h1
         ubyte h2
         h1 = read_src()
@@ -685,57 +685,57 @@ sub ident_len_at(uword id) -> uword {
 ; return TK_IDENT when no keyword matches, which classify_name passes through.)
 
 sub cn_len2() -> ubyte {
-    if name_buf[0]==$69 and name_buf[1]==$66 { return TK_KIF }   ; if
-    if name_buf[0]==$69 and name_buf[1]==$6e { return TK_KIN }   ; in
-    if name_buf[0]==$6f and name_buf[1]==$72 { return TK_KOR }   ; or
-    if name_buf[0]==$74 and name_buf[1]==$6f { return TK_KTO }   ; to
+    if name_buf[0]=='i' and name_buf[1]=='f' { return TK_KIF }   ; if
+    if name_buf[0]=='i' and name_buf[1]=='n' { return TK_KIN }   ; in
+    if name_buf[0]=='o' and name_buf[1]=='r' { return TK_KOR }   ; or
+    if name_buf[0]=='t' and name_buf[1]=='o' { return TK_KTO }   ; to
     return TK_IDENT
 }
 
 sub cn_len3() -> ubyte {
-    if name_buf[0]==$61 and name_buf[1]==$6e and name_buf[2]==$64 { return TK_KAND }   ; and
-    if name_buf[0]==$66 and name_buf[1]==$6f and name_buf[2]==$72 { return TK_KFOR }   ; for
-    if name_buf[0]==$6e and name_buf[1]==$6f and name_buf[2]==$74 { return TK_KNOT }   ; not
-    if name_buf[0]==$73 and name_buf[1]==$74 and name_buf[2]==$72 { return TK_KSTR }   ; str
-    if name_buf[0]==$73 and name_buf[1]==$75 and name_buf[2]==$62 { return TK_KSUB }   ; sub
-    if name_buf[0]==$78 and name_buf[1]==$6f and name_buf[2]==$72 { return TK_KXOR }   ; xor
+    if name_buf[0]=='a' and name_buf[1]=='n' and name_buf[2]=='d' { return TK_KAND }   ; and
+    if name_buf[0]=='f' and name_buf[1]=='o' and name_buf[2]=='r' { return TK_KFOR }   ; for
+    if name_buf[0]=='n' and name_buf[1]=='o' and name_buf[2]=='t' { return TK_KNOT }   ; not
+    if name_buf[0]=='s' and name_buf[1]=='t' and name_buf[2]=='r' { return TK_KSTR }   ; str
+    if name_buf[0]=='s' and name_buf[1]=='u' and name_buf[2]=='b' { return TK_KSUB }   ; sub
+    if name_buf[0]=='x' and name_buf[1]=='o' and name_buf[2]=='r' { return TK_KXOR }   ; xor
     return TK_IDENT
 }
 
 sub cn_len4() -> ubyte {
-    if name_buf[0]==$62 and name_buf[1]==$6f and name_buf[2]==$6f and name_buf[3]==$6c { return TK_KBOOL }   ; bool
-    if name_buf[0]==$62 and name_buf[1]==$79 and name_buf[2]==$74 and name_buf[3]==$65 { return TK_KBYTE }   ; byte
-    if name_buf[0]==$65 and name_buf[1]==$6c and name_buf[2]==$73 and name_buf[3]==$65 { return TK_KELSE }   ; else
-    if name_buf[0]==$65 and name_buf[1]==$6e and name_buf[2]==$75 and name_buf[3]==$6d { return TK_KENUM }   ; enum
-    if name_buf[0]==$6d and name_buf[1]==$61 and name_buf[2]==$69 and name_buf[3]==$6e { return TK_KMAIN }   ; main
-    if name_buf[0]==$74 and name_buf[1]==$72 and name_buf[2]==$75 and name_buf[3]==$65 { return TK_TRUE }   ; true
-    if name_buf[0]==$76 and name_buf[1]==$6f and name_buf[2]==$69 and name_buf[3]==$64 { return TK_KVOID }   ; void
-    if name_buf[0]==$77 and name_buf[1]==$68 and name_buf[2]==$65 and name_buf[3]==$6e { return TK_KWHEN }   ; when
+    if name_buf[0]=='b' and name_buf[1]=='o' and name_buf[2]=='o' and name_buf[3]=='l' { return TK_KBOOL }   ; bool
+    if name_buf[0]=='b' and name_buf[1]=='y' and name_buf[2]=='t' and name_buf[3]=='e' { return TK_KBYTE }   ; byte
+    if name_buf[0]=='e' and name_buf[1]=='l' and name_buf[2]=='s' and name_buf[3]=='e' { return TK_KELSE }   ; else
+    if name_buf[0]=='e' and name_buf[1]=='n' and name_buf[2]=='u' and name_buf[3]=='m' { return TK_KENUM }   ; enum
+    if name_buf[0]=='m' and name_buf[1]=='a' and name_buf[2]=='i' and name_buf[3]=='n' { return TK_KMAIN }   ; main
+    if name_buf[0]=='t' and name_buf[1]=='r' and name_buf[2]=='u' and name_buf[3]=='e' { return TK_TRUE }   ; true
+    if name_buf[0]=='v' and name_buf[1]=='o' and name_buf[2]=='i' and name_buf[3]=='d' { return TK_KVOID }   ; void
+    if name_buf[0]=='w' and name_buf[1]=='h' and name_buf[2]=='e' and name_buf[3]=='n' { return TK_KWHEN }   ; when
     return TK_IDENT
 }
 
 sub cn_len5() -> ubyte {
-    if name_buf[0]==$62 and name_buf[1]==$72 and name_buf[2]==$65 and name_buf[3]==$61 and name_buf[4]==$6b { return TK_KBREAK }   ; break
-    if name_buf[0]==$63 and name_buf[1]==$6f and name_buf[2]==$6e and name_buf[3]==$73 and name_buf[4]==$74 { return TK_KCONST }   ; const
-    if name_buf[0]==$64 and name_buf[1]==$65 and name_buf[2]==$66 and name_buf[3]==$65 and name_buf[4]==$72 { return TK_KDEFER }   ; defer
-    if name_buf[0]==$66 and name_buf[1]==$61 and name_buf[2]==$6c and name_buf[3]==$73 and name_buf[4]==$65 { return TK_FALSE }   ; false
-    if name_buf[0]==$75 and name_buf[1]==$62 and name_buf[2]==$79 and name_buf[3]==$74 and name_buf[4]==$65 { return TK_KUBYTE }   ; ubyte
-    if name_buf[0]==$75 and name_buf[1]==$77 and name_buf[2]==$6f and name_buf[3]==$72 and name_buf[4]==$64 { return TK_KUWORD }   ; uword
-    if name_buf[0]==$77 and name_buf[1]==$68 and name_buf[2]==$69 and name_buf[3]==$6c and name_buf[4]==$65 { return TK_KWHILE }   ; while
+    if name_buf[0]=='b' and name_buf[1]=='r' and name_buf[2]=='e' and name_buf[3]=='a' and name_buf[4]=='k' { return TK_KBREAK }   ; break
+    if name_buf[0]=='c' and name_buf[1]=='o' and name_buf[2]=='n' and name_buf[3]=='s' and name_buf[4]=='t' { return TK_KCONST }   ; const
+    if name_buf[0]=='d' and name_buf[1]=='e' and name_buf[2]=='f' and name_buf[3]=='e' and name_buf[4]=='r' { return TK_KDEFER }   ; defer
+    if name_buf[0]=='f' and name_buf[1]=='a' and name_buf[2]=='l' and name_buf[3]=='s' and name_buf[4]=='e' { return TK_FALSE }   ; false
+    if name_buf[0]=='u' and name_buf[1]=='b' and name_buf[2]=='y' and name_buf[3]=='t' and name_buf[4]=='e' { return TK_KUBYTE }   ; ubyte
+    if name_buf[0]=='u' and name_buf[1]=='w' and name_buf[2]=='o' and name_buf[3]=='r' and name_buf[4]=='d' { return TK_KUWORD }   ; uword
+    if name_buf[0]=='w' and name_buf[1]=='h' and name_buf[2]=='i' and name_buf[3]=='l' and name_buf[4]=='e' { return TK_KWHILE }   ; while
     return TK_IDENT
 }
 
 sub cn_len6() -> ubyte {
-    if name_buf[0]==$61 and name_buf[1]==$73 and name_buf[2]==$6d and name_buf[3]==$73 and name_buf[4]==$75 and name_buf[5]==$62 { return TK_KASMSUB }   ; asmsub
-    if name_buf[0]==$69 and name_buf[1]==$6e and name_buf[2]==$6c and name_buf[3]==$69 and name_buf[4]==$6e and name_buf[5]==$65 { return TK_KINLINE }   ; inline
-    if name_buf[0]==$72 and name_buf[1]==$65 and name_buf[2]==$70 and name_buf[3]==$65 and name_buf[4]==$61 and name_buf[5]==$74 { return TK_KREPEAT }   ; repeat
-    if name_buf[0]==$72 and name_buf[1]==$65 and name_buf[2]==$74 and name_buf[3]==$75 and name_buf[4]==$72 and name_buf[5]==$6e { return TK_KRETURN }   ; return
-    if name_buf[0]==$73 and name_buf[1]==$74 and name_buf[2]==$72 and name_buf[3]==$75 and name_buf[4]==$63 and name_buf[5]==$74 { return TK_KSTRUCT }   ; struct
+    if name_buf[0]=='a' and name_buf[1]=='s' and name_buf[2]=='m' and name_buf[3]=='s' and name_buf[4]=='u' and name_buf[5]=='b' { return TK_KASMSUB }   ; asmsub
+    if name_buf[0]=='i' and name_buf[1]=='n' and name_buf[2]=='l' and name_buf[3]=='i' and name_buf[4]=='n' and name_buf[5]=='e' { return TK_KINLINE }   ; inline
+    if name_buf[0]=='r' and name_buf[1]=='e' and name_buf[2]=='p' and name_buf[3]=='e' and name_buf[4]=='a' and name_buf[5]=='t' { return TK_KREPEAT }   ; repeat
+    if name_buf[0]=='r' and name_buf[1]=='e' and name_buf[2]=='t' and name_buf[3]=='u' and name_buf[4]=='r' and name_buf[5]=='n' { return TK_KRETURN }   ; return
+    if name_buf[0]=='s' and name_buf[1]=='t' and name_buf[2]=='r' and name_buf[3]=='u' and name_buf[4]=='c' and name_buf[5]=='t' { return TK_KSTRUCT }   ; struct
     return TK_IDENT
 }
 
 sub cn_len8() -> ubyte {
-    if name_buf[0]==$63 and name_buf[1]==$6f and name_buf[2]==$6e and name_buf[3]==$74 and name_buf[4]==$69 and name_buf[5]==$6e and name_buf[6]==$75 and name_buf[7]==$65 { return TK_KCONTINUE }   ; continue
+    if name_buf[0]=='c' and name_buf[1]=='o' and name_buf[2]=='n' and name_buf[3]=='t' and name_buf[4]=='i' and name_buf[5]=='n' and name_buf[6]=='u' and name_buf[7]=='e' { return TK_KCONTINUE }   ; continue
     return TK_IDENT
 }
 
@@ -786,25 +786,25 @@ sub next_raw_token() {
             ntok_val = 0
             return
         }
-        if c == $20 { c = read_src()  continue }
-        if c == $09 { c = read_src()  continue }
-        if c == $0a { c = read_src()  continue }
-        if c == $0d { c = read_src()  continue }
-        if c == $3b {
+        if c == ' ' { c = read_src()  continue }
+        if c == '\t' { c = read_src()  continue }
+        if c == '\n' { c = read_src()  continue }
+        if c == '\r' { c = read_src()  continue }
+        if c == ';' {
             repeat {
                 c = read_src()
                 if src_eof != 0 { break }
-                if c == $0a { break }
+                if c == '\n' { break }
             }
             continue
         }
-        if c == $25 {                              ; '%'
+        if c == '%' {                              ; '%'
             c = read_src()
             ubyte c2
             c2 = peek_src()
             if src_eof == 0 {
-                if c2 == $30 { read_bin()  push_token(TK_INT, int_val)  return }
-                if c2 == $31 { read_bin()  push_token(TK_INT, int_val)  return }
+                if c2 == '0' { read_bin()  push_token(TK_INT, int_val)  return }
+                if c2 == '1' { read_bin()  push_token(TK_INT, int_val)  return }
                 if is_alpha_us(c2) != 0 {
                     read_ident()
                     push_token(TK_DIRECTIVE, intern_name())
@@ -814,7 +814,7 @@ sub next_raw_token() {
             push_token(TK_OTHER, 0)
             return
         }
-        if c == $24 {
+        if c == '$' {
             c = read_src()
             read_hex()
             push_token(TK_INT, int_val)
@@ -825,10 +825,10 @@ sub next_raw_token() {
             push_token(TK_INT, int_val)
             return
         }
-        if c == $27 {
+        if c == '\'' {
             c = read_src()
             c = read_src()
-            if c == $5c {
+            if c == '\\' {
                 ubyte e
                 e = read_src()
                 int_val = decode_escape_val(e)
@@ -839,7 +839,7 @@ sub next_raw_token() {
             push_token(TK_INT, int_val)
             return
         }
-        if c == $22 {
+        if c == '"' {
             c = read_src()
             ; null-terminated string pool: a literal's "id" is the pool OFFSET
             ; where it starts; identical content dedups to that same offset, so
@@ -853,9 +853,9 @@ sub next_raw_token() {
             repeat {
                 c = read_src()
                 if src_eof != 0 { break }
-                if c == $22 { break }
+                if c == '"' { break }
                 ubyte rb
-                if c == $5c {
+                if c == '\\' {
                     ubyte se
                     se = read_src()
                     rb = decode_escape_val(se)
@@ -916,91 +916,91 @@ sub next_raw_token() {
 
 sub lex_operator(ubyte c) {
     ubyte c2
-    if c == $28 { push_token(TK_LPAREN, 0)  return }
-    if c == $29 { push_token(TK_RPAREN, 0)  return }
-    if c == $5b { push_token(TK_LBRACK, 0)  return }
-    if c == $5d { push_token(TK_RBRACK, 0)  return }
-    if c == $7b { push_token(TK_LBRACE, 0)  return }
-    if c == $7d { push_token(TK_RBRACE, 0)  return }
-    if c == $2c { push_token(TK_COMMA, 0)  return }
-    if c == $40 { push_token(TK_AT, 0)  return }
-    if c == $2e { push_token(TK_DOT, 0)  return }
-    if c == $7e { push_token(TK_TILDE, 0)  return }
-    if c == $2a {
+    if c == '(' { push_token(TK_LPAREN, 0)  return }
+    if c == ')' { push_token(TK_RPAREN, 0)  return }
+    if c == '[' { push_token(TK_LBRACK, 0)  return }
+    if c == ']' { push_token(TK_RBRACK, 0)  return }
+    if c == '{' { push_token(TK_LBRACE, 0)  return }
+    if c == '}' { push_token(TK_RBRACE, 0)  return }
+    if c == ',' { push_token(TK_COMMA, 0)  return }
+    if c == '@' { push_token(TK_AT, 0)  return }
+    if c == '.' { push_token(TK_DOT, 0)  return }
+    if c == '~' { push_token(TK_TILDE, 0)  return }
+    if c == '*' {
         c2 = peek_src()
-        if c2 == $3d { c2 = read_src()  push_token(TK_OTHER, 0)  return }   ; *=
+        if c2 == '=' { c2 = read_src()  push_token(TK_OTHER, 0)  return }   ; *=
         push_token(TK_STAR, 0)
         return
     }
-    if c == $2b {
+    if c == '+' {
         c2 = peek_src()
-        if c2 == $3d { c2 = read_src()  push_token(TK_PLUSEQ, 0)  return }
-        if c2 == $2b { c2 = read_src()  push_token(TK_OTHER, 0)  return }
+        if c2 == '=' { c2 = read_src()  push_token(TK_PLUSEQ, 0)  return }
+        if c2 == '+' { c2 = read_src()  push_token(TK_OTHER, 0)  return }
         push_token(TK_PLUS, 0)
         return
     }
-    if c == $26 {
+    if c == '&' {
         c2 = peek_src()
-        if c2 == $26 { c2 = read_src()  push_token(TK_OTHER, 0)  return }
-        if c2 == $3d { c2 = read_src()  push_token(TK_ANDEQ, 0)  return }
+        if c2 == '&' { c2 = read_src()  push_token(TK_OTHER, 0)  return }
+        if c2 == '=' { c2 = read_src()  push_token(TK_ANDEQ, 0)  return }
         push_token(TK_AMP, 0)
         return
     }
-    if c == $7c {
+    if c == '|' {
         c2 = peek_src()
-        if c2 == $3d { c2 = read_src()  push_token(TK_OREQ, 0)  return }
+        if c2 == '=' { c2 = read_src()  push_token(TK_OREQ, 0)  return }
         push_token(TK_PIPE, 0)
         return
     }
-    if c == $5e {
+    if c == '^' {
         c2 = peek_src()
-        if c2 == $3d { c2 = read_src()  push_token(TK_XOREQ, 0)  return }
+        if c2 == '=' { c2 = read_src()  push_token(TK_XOREQ, 0)  return }
         push_token(TK_CARET, 0)
         return
     }
-    if c == $2d {
+    if c == '-' {
         c2 = peek_src()
-        if c2 == $3d { c2 = read_src()  push_token(TK_MINUSEQ, 0)  return }
-        if c2 == $3e { c2 = read_src()  push_token(TK_ARROW, 0)  return }
-        if c2 == $2d { c2 = read_src()  push_token(TK_OTHER, 0)  return }
+        if c2 == '=' { c2 = read_src()  push_token(TK_MINUSEQ, 0)  return }
+        if c2 == '>' { c2 = read_src()  push_token(TK_ARROW, 0)  return }
+        if c2 == '-' { c2 = read_src()  push_token(TK_OTHER, 0)  return }
         push_token(TK_MINUS, 0)
         return
     }
-    if c == $3c {
+    if c == '<' {
         c2 = peek_src()
-        if c2 == $3c {
+        if c2 == '<' {
             c2 = read_src()
             c2 = peek_src()
-            if c2 == $3d { c2 = read_src()  push_token(TK_SHLEQ, 0)  return }
+            if c2 == '=' { c2 = read_src()  push_token(TK_SHLEQ, 0)  return }
             push_token(TK_SHL, 0)
             return
         }
-        if c2 == $3d { c2 = read_src()  push_token(TK_LE, 0)  return }
+        if c2 == '=' { c2 = read_src()  push_token(TK_LE, 0)  return }
         push_token(TK_LT, 0)
         return
     }
-    if c == $3e {
+    if c == '>' {
         c2 = peek_src()
-        if c2 == $3e {
+        if c2 == '>' {
             c2 = read_src()
             c2 = peek_src()
-            if c2 == $3d { c2 = read_src()  push_token(TK_SHREQ, 0)  return }
+            if c2 == '=' { c2 = read_src()  push_token(TK_SHREQ, 0)  return }
             push_token(TK_SHR, 0)
             return
         }
-        if c2 == $3d { c2 = read_src()  push_token(TK_GE, 0)  return }
+        if c2 == '=' { c2 = read_src()  push_token(TK_GE, 0)  return }
         push_token(TK_GT, 0)
         return
     }
-    if c == $3d {
+    if c == '=' {
         c2 = peek_src()
-        if c2 == $3d { c2 = read_src()  push_token(TK_EQ, 0)  return }
+        if c2 == '=' { c2 = read_src()  push_token(TK_EQ, 0)  return }
         push_token(TK_ASSIGN, 0)
         return
     }
-    if c == $21 {
+    if c == '!' {
         c2 = peek_src()
-        if c2 == $3d { c2 = read_src()  push_token(TK_NE, 0)  return }
+        if c2 == '=' { c2 = read_src()  push_token(TK_NE, 0)  return }
         push_token(TK_OTHER, 0)
         return
     }
