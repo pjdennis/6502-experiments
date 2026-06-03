@@ -17,6 +17,7 @@
 
 %target nmos
 %address $0200
+%import strings
 
 ; ---- token kinds ----
 const ubyte TK_EOF    = 0
@@ -202,7 +203,7 @@ uword ident_pool_len
 ubyte[4096] str_pool
 uword str_pool_len
 
-ubyte[64] name_buf
+ubyte[65] name_buf       ; 64 chars + room for a NUL terminator (classify_name)
 ubyte[96] path_buf       ; parser's dotted-path buffer (lexer owns name_buf)
 uword path_len
 uword name_len
@@ -698,29 +699,13 @@ ubyte[31] kw_toks = [
     TK_KUBYTE, TK_KUWORD, TK_KWHILE, TK_KASMSUB, TK_KINLINE, TK_KREPEAT,
     TK_KRETURN, TK_KSTRUCT, TK_KCONTINUE ]
 
-; true iff the null-terminated keyword at address `kw` equals name_buf[0..name_len].
-sub kw_match(uword kw) -> ubyte {
-    uword i
-    i = 0
-    repeat {
-        ubyte c
-        c = @(kw + i)
-        if c == 0 {
-            if i == name_len { return 1 }
-            return 0
-        }
-        if i >= name_len { return 0 }
-        if c != name_buf[i] { return 0 }
-        i = i + 1
-    }
-}
-
 sub classify_name() -> ubyte {
+    name_buf[name_len] = 0                  ; NUL-terminate for strings.compare
     ubyte i
     i = 0
     repeat {
         if i >= 31 { break }
-        if kw_match(kw_strs[i]) != 0 { return kw_toks[i] }
+        if strings.compare(&name_buf, kw_strs[i]) == 0 { return kw_toks[i] }
         i = i + 1
     }
     return TK_IDENT
