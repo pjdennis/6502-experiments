@@ -27,7 +27,7 @@ version is an explicit-stack tree walk that emits the identical bytes
 from __future__ import annotations
 
 from .ast import (
-    AddressOf, Assign, BinOp, Block, BoolLit, Break, Call, Continue, Defer,
+    AddressOf, ArrayLit, Assign, BinOp, Block, BoolLit, Break, Call, Continue, Defer,
     EnumDecl, ExprStmt, For, Ident, If, Index, InlineAsm, IntLit, MemAt,
     Node, Program, Repeat, Return, StrLit, StructDecl, Sub, UnaryOp,
     VarDecl, When, WhenChoice, While,
@@ -87,6 +87,8 @@ def ser(node: Node) -> list[str]:
         return _form(f"(str {_esc(node.value)}", [])
     if isinstance(node, BoolLit):
         return _form(f"(bool {'true' if node.value else 'false'}", [])
+    if isinstance(node, ArrayLit):
+        return _form("(arr", [ser(e) for e in node.elements])
     if isinstance(node, Ident):
         return _form(f"(id {node.name}", [])
     if isinstance(node, AddressOf):

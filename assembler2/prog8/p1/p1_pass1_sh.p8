@@ -678,75 +678,50 @@ sub ident_len_at(uword id) -> uword {
     return n
 }
 
-; classify_name dispatches by length to a per-length helper. Splitting the
-; keyword if-chains out of one big `when` keeps every sub's node count well
-; under the per-unit node arena, so the self-host front-end (pass 1) can parse
-; this file itself without overflowing. (Behaviour is identical; the helpers
-; return TK_IDENT when no keyword matches, which classify_name passes through.)
+; classify_name: is the just-lexed identifier (name_buf, name_len bytes) a
+; keyword? A parallel pair of initialized tables -- the keyword strings and
+; their token codes -- replaces the old per-length if-chains; kw_match does the
+; counted-buffer compare (name_buf has a length, the keyword is
+; null-terminated). Behaviour is identical (no match -> TK_IDENT). The tables
+; are static data the host compiler lays down once, so this is far smaller than
+; the ~50 inline byte compares it replaces.
 
-sub cn_len2() -> ubyte {
-    if name_buf[0]=='i' and name_buf[1]=='f' { return TK_KIF }   ; if
-    if name_buf[0]=='i' and name_buf[1]=='n' { return TK_KIN }   ; in
-    if name_buf[0]=='o' and name_buf[1]=='r' { return TK_KOR }   ; or
-    if name_buf[0]=='t' and name_buf[1]=='o' { return TK_KTO }   ; to
-    return TK_IDENT
-}
+uword[31] kw_strs = [
+    "if", "in", "or", "to", "and", "for", "not", "str", "sub", "xor",
+    "bool", "byte", "else", "enum", "main", "true", "void", "when",
+    "break", "const", "defer", "false", "ubyte", "uword", "while",
+    "asmsub", "inline", "repeat", "return", "struct", "continue" ]
+ubyte[31] kw_toks = [
+    TK_KIF, TK_KIN, TK_KOR, TK_KTO, TK_KAND, TK_KFOR, TK_KNOT, TK_KSTR,
+    TK_KSUB, TK_KXOR, TK_KBOOL, TK_KBYTE, TK_KELSE, TK_KENUM, TK_KMAIN,
+    TK_TRUE, TK_KVOID, TK_KWHEN, TK_KBREAK, TK_KCONST, TK_KDEFER, TK_FALSE,
+    TK_KUBYTE, TK_KUWORD, TK_KWHILE, TK_KASMSUB, TK_KINLINE, TK_KREPEAT,
+    TK_KRETURN, TK_KSTRUCT, TK_KCONTINUE ]
 
-sub cn_len3() -> ubyte {
-    if name_buf[0]=='a' and name_buf[1]=='n' and name_buf[2]=='d' { return TK_KAND }   ; and
-    if name_buf[0]=='f' and name_buf[1]=='o' and name_buf[2]=='r' { return TK_KFOR }   ; for
-    if name_buf[0]=='n' and name_buf[1]=='o' and name_buf[2]=='t' { return TK_KNOT }   ; not
-    if name_buf[0]=='s' and name_buf[1]=='t' and name_buf[2]=='r' { return TK_KSTR }   ; str
-    if name_buf[0]=='s' and name_buf[1]=='u' and name_buf[2]=='b' { return TK_KSUB }   ; sub
-    if name_buf[0]=='x' and name_buf[1]=='o' and name_buf[2]=='r' { return TK_KXOR }   ; xor
-    return TK_IDENT
-}
-
-sub cn_len4() -> ubyte {
-    if name_buf[0]=='b' and name_buf[1]=='o' and name_buf[2]=='o' and name_buf[3]=='l' { return TK_KBOOL }   ; bool
-    if name_buf[0]=='b' and name_buf[1]=='y' and name_buf[2]=='t' and name_buf[3]=='e' { return TK_KBYTE }   ; byte
-    if name_buf[0]=='e' and name_buf[1]=='l' and name_buf[2]=='s' and name_buf[3]=='e' { return TK_KELSE }   ; else
-    if name_buf[0]=='e' and name_buf[1]=='n' and name_buf[2]=='u' and name_buf[3]=='m' { return TK_KENUM }   ; enum
-    if name_buf[0]=='m' and name_buf[1]=='a' and name_buf[2]=='i' and name_buf[3]=='n' { return TK_KMAIN }   ; main
-    if name_buf[0]=='t' and name_buf[1]=='r' and name_buf[2]=='u' and name_buf[3]=='e' { return TK_TRUE }   ; true
-    if name_buf[0]=='v' and name_buf[1]=='o' and name_buf[2]=='i' and name_buf[3]=='d' { return TK_KVOID }   ; void
-    if name_buf[0]=='w' and name_buf[1]=='h' and name_buf[2]=='e' and name_buf[3]=='n' { return TK_KWHEN }   ; when
-    return TK_IDENT
-}
-
-sub cn_len5() -> ubyte {
-    if name_buf[0]=='b' and name_buf[1]=='r' and name_buf[2]=='e' and name_buf[3]=='a' and name_buf[4]=='k' { return TK_KBREAK }   ; break
-    if name_buf[0]=='c' and name_buf[1]=='o' and name_buf[2]=='n' and name_buf[3]=='s' and name_buf[4]=='t' { return TK_KCONST }   ; const
-    if name_buf[0]=='d' and name_buf[1]=='e' and name_buf[2]=='f' and name_buf[3]=='e' and name_buf[4]=='r' { return TK_KDEFER }   ; defer
-    if name_buf[0]=='f' and name_buf[1]=='a' and name_buf[2]=='l' and name_buf[3]=='s' and name_buf[4]=='e' { return TK_FALSE }   ; false
-    if name_buf[0]=='u' and name_buf[1]=='b' and name_buf[2]=='y' and name_buf[3]=='t' and name_buf[4]=='e' { return TK_KUBYTE }   ; ubyte
-    if name_buf[0]=='u' and name_buf[1]=='w' and name_buf[2]=='o' and name_buf[3]=='r' and name_buf[4]=='d' { return TK_KUWORD }   ; uword
-    if name_buf[0]=='w' and name_buf[1]=='h' and name_buf[2]=='i' and name_buf[3]=='l' and name_buf[4]=='e' { return TK_KWHILE }   ; while
-    return TK_IDENT
-}
-
-sub cn_len6() -> ubyte {
-    if name_buf[0]=='a' and name_buf[1]=='s' and name_buf[2]=='m' and name_buf[3]=='s' and name_buf[4]=='u' and name_buf[5]=='b' { return TK_KASMSUB }   ; asmsub
-    if name_buf[0]=='i' and name_buf[1]=='n' and name_buf[2]=='l' and name_buf[3]=='i' and name_buf[4]=='n' and name_buf[5]=='e' { return TK_KINLINE }   ; inline
-    if name_buf[0]=='r' and name_buf[1]=='e' and name_buf[2]=='p' and name_buf[3]=='e' and name_buf[4]=='a' and name_buf[5]=='t' { return TK_KREPEAT }   ; repeat
-    if name_buf[0]=='r' and name_buf[1]=='e' and name_buf[2]=='t' and name_buf[3]=='u' and name_buf[4]=='r' and name_buf[5]=='n' { return TK_KRETURN }   ; return
-    if name_buf[0]=='s' and name_buf[1]=='t' and name_buf[2]=='r' and name_buf[3]=='u' and name_buf[4]=='c' and name_buf[5]=='t' { return TK_KSTRUCT }   ; struct
-    return TK_IDENT
-}
-
-sub cn_len8() -> ubyte {
-    if name_buf[0]=='c' and name_buf[1]=='o' and name_buf[2]=='n' and name_buf[3]=='t' and name_buf[4]=='i' and name_buf[5]=='n' and name_buf[6]=='u' and name_buf[7]=='e' { return TK_KCONTINUE }   ; continue
-    return TK_IDENT
+; true iff the null-terminated keyword at address `kw` equals name_buf[0..name_len].
+sub kw_match(uword kw) -> ubyte {
+    uword i
+    i = 0
+    repeat {
+        ubyte c
+        c = @(kw + i)
+        if c == 0 {
+            if i == name_len { return 1 }
+            return 0
+        }
+        if i >= name_len { return 0 }
+        if c != name_buf[i] { return 0 }
+        i = i + 1
+    }
 }
 
 sub classify_name() -> ubyte {
-    when name_len {
-        2 -> { return cn_len2() }
-        3 -> { return cn_len3() }
-        4 -> { return cn_len4() }
-        5 -> { return cn_len5() }
-        6 -> { return cn_len6() }
-        8 -> { return cn_len8() }
+    ubyte i
+    i = 0
+    repeat {
+        if i >= 31 { break }
+        if kw_match(kw_strs[i]) != 0 { return kw_toks[i] }
+        i = i + 1
     }
     return TK_IDENT
 }
