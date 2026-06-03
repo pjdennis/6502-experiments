@@ -25,6 +25,17 @@ DONE + committed:
      `uword[]` tables of the pooled label/mnemonic strings. This is the
      "offset in pass2": freed **382 B** (pass2 top $EFA2 -> $EE24, headroom
      94 -> 476 B). Self-host unaffected (p1.p8 not modified).
+  4. **Table-drove classify_name in pass1** (p1_pass1_sh.p8) -- the user's
+     motivating example. The cn_len2..cn_len8 per-length keyword if-chains
+     (~50 inline `name_buf[k]=='c'` compares) became two parallel initialized
+     tables + a counted-buffer compare:
+         uword[31] kw_strs = ["if", ..., "continue"]
+         ubyte[31] kw_toks = [TK_KIF, ..., TK_KCONTINUE]
+         sub kw_match(uword kw) -> ubyte   ; name_buf[0..name_len] == kw
+     kw_match is the "string comparison capability" the old code lacked. Freed
+     **1406 B** (pass1 top $EF1D -> $E99F, headroom 227 -> 1633 B). Self-host
+     unaffected (p1.p8 classifies byte-identically). Also adds ArrayLit to
+     p8c/serialize.py (the AST-dump oracle) for future pipeline use.
 
 FINDING -- **`when` is COUNTERPRODUCTIVE here.** p8c's `when` codegen emits
 per-case `jmp body`/`jmp next`/`jmp end` framing, which is LARGER than a
@@ -41,16 +52,46 @@ REMAINING (next session):
     null-terminated keyword), so a small `kw_match(uword kw)->ubyte` helper +
     a keyword table is the upstream-compatible idiom (no str-var type needed).
   * **Full pipeline initialized-array support** so the CANONICAL p1.p8 (not
-    just pass2_sh) can use the tables. Needs: pass1 (stmt.p8 parser) to parse
-    `[...]` initializers + an ND_ARRAYLIT node; build_symbols to record the
-    element list; pass1_sh dump_global to serialize it; pass2_sh load + an
-    emit_arrays that emits init values. The 476 B pass2 headroom now makes
-    this affordable. THEN table-drive classify_name + emit_ctrl_label_ref in
-    stmt.p8/build_p1.py (canonical) and remove the cn_len2..8 split.
+    just pass2_sh) can use the tables. ATTEMPTED this session and the design
+    works end-to-end, BUT it does not fit the memory budget -- see the wall
+    finding below. The full mechanism (all verified individually before the
+    revert):
+      - pass1 (p1_pass1_sh.p8): ND_ARRAYLIT node (a=elements cons head); a
+        mini element parser `parse_array_elem` (INT/STR/IDENT -- the shunting
+        yard's operand stack is SHARED/non-reentrant, so no recursive
+        parse_expr); a `[` operand case; build_symbols `capture_array_init`
+        resolving each element to (kind 0=int/const-folded, 1=str-id) into a
+        flat pool; `dump_sym_init` appends `count, (kind,val)*` after each
+        global symbol's 8 fields in dump_global.
+      - pass2 (p1_pass2_sh.p8): matching `load_sym_init` after the 8 fields in
+        load_global (reset the pool at the top -- load_global runs twice); an
+        emit_arrays that, per array symbol, emits `.byte`/`.word` of the
+        values, calling intern_str_label(sid) for kind-1 elements.
+      - Oracle string-order contract (verified with /tmp/ord.p8): code strings
+        are labelled first in code order, THEN array-init strings during
+        emit_arrays in array-decl x element order, DEDUPED against existing
+        ones. pass2's emit_arrays must intern in exactly that order. The flow
+        already matches (subs -> emit_mul_helper -> emit_arrays -> string pool).
+  * **WALL FINDING -- canonical pipeline init does not fit.** Both pass
+    binaries are pinned under the string pool's fixed `.org $F0C0` (nmos
+    target parks the read-only pool just above the emulator I/O stubs). The
+    init machinery (state arrays ainit_kind[128]/ainit_val[128]/slice tables
+    ~480 B, plus capture/dump/load/emit code) overflows BOTH: pass1 code top
+    -> $F2CC and pass2 -> $F139, each ~520 B past $F0C0. pass2's 476 B free is
+    consumed by the state arrays ALONE. To proceed you must FIRST claw back
+    ~600 B in EACH pass. Levers: make the init machinery use ubyte indices
+    (ainit_len/start/loop counters as ubyte, <=255 elements) so array writes
+    take the fast `,y` path instead of the verbose __p8c_aptr uword path
+    (p8c emits ~30-40 B per uword-indexed access -- this is most of the bulk);
+    shrink the pools to the real need (ctrl_label_strs[17]+br_mnems[8]=25
+    elements if only those two tables move to p1.p8); and/or free more space
+    by table-driving another pass2 chain. The patch set above is the starting
+    point -- re-apply, then optimize for size.
   * NB the _sh pipeline files are HAND-tuned divergent copies; front-end edits
     must be applied to BOTH stmt.p8 (regenerates p1.p8 via `python3 -m
     p1.build_p1`) and p1_pass1_sh.p8; codegen edits to build_p1.py and
-    p1_pass2_sh.p8.
+    p1_pass2_sh.p8. Quick per-program pipeline check: /tmp/ptest.sh <file.p8>
+    (compares pipeline output to p8c); self-host check: /tmp/verify.sh.
 
 ---
 
