@@ -28,14 +28,25 @@ DONE + committed:
   4. **Table-drove classify_name in pass1** (p1_pass1_sh.p8) -- the user's
      motivating example. The cn_len2..cn_len8 per-length keyword if-chains
      (~50 inline `name_buf[k]=='c'` compares) became two parallel initialized
-     tables + a counted-buffer compare:
+     tables + a keyword compare:
          uword[31] kw_strs = ["if", ..., "continue"]
          ubyte[31] kw_toks = [TK_KIF, ..., TK_KCONTINUE]
-         sub kw_match(uword kw) -> ubyte   ; name_buf[0..name_len] == kw
-     kw_match is the "string comparison capability" the old code lacked. Freed
-     **1406 B** (pass1 top $EF1D -> $E99F, headroom 227 -> 1633 B). Self-host
-     unaffected (p1.p8 classifies byte-identically). Also adds ArrayLit to
-     p8c/serialize.py (the AST-dump oracle) for future pipeline use.
+     Freed **1406 B** (pass1 top $EF1D -> $E99F, headroom 227 -> 1633 B).
+     Self-host unaffected (p1.p8 classifies byte-identically). Also adds
+     ArrayLit to p8c/serialize.py (the AST-dump oracle) for future pipeline use.
+  5. **String comparison: `strings.compare(a,b) -> byte` builtin in p8c**
+     (the idiomatic Prog8 primitive). `%import strings`; returns -1/0/1 for two
+     zero-terminated strings; operands are uword addresses (string literals,
+     &buffer, uword pointer), so equality is `compare(a,b)==0`. stdlib_decls.py
+     (STRINGS_COMPARE builtin) + codegen.py (_emit_builtin_call parks both
+     pointers in __p8c_wtmp0/1, jsr's a lazily-emitted __p8c_strcmp byte loop,
+     gated by _strcmp_used like __p8c_mul_u8). Tests: test_codegen.py::
+     StringCompare + test_strcmp_e2e.py (6 emulator cases).
+  6. **Lexer now USES strings.compare.** classify_name (p1_pass1_sh.p8, host-
+     compiled) NUL-terminates name_buf (grown to ubyte[65]) and calls
+     `strings.compare(&name_buf, kw_strs[i]) == 0`, replacing the bespoke
+     kw_match. Freed a further 188 B (pass1 -> $E8E3, 1821 B free); self-host 0.
+     So a real string-comparison primitive is in place AND used by the lexer.
 
 FINDING -- **`when` is COUNTERPRODUCTIVE here.** p8c's `when` codegen emits
 per-case `jmp body`/`jmp next`/`jmp end` framing, which is LARGER than a
@@ -45,12 +56,14 @@ when-ify the codegen; the if-chains there are compact by design. (`when` is
 fine for readability in code that isn't memory-critical, but this compiler is.)
 
 REMAINING (next session):
-  * **String comparison** as a language feature. Upstream syntax (verified
-    against prog8.readthedocs.io): `s1 == s2` / `!=` work directly on string
-    values; library `strings.compare(a,b)->ubyte` (-1/0/1). For classify_name
-    the real need is a COUNTED-buffer compare (name_buf + name_len vs a
-    null-terminated keyword), so a small `kw_match(uword kw)->ubyte` helper +
-    a keyword table is the upstream-compatible idiom (no str-var type needed).
+  * **String comparison sugar (optional):** `s1 == s2` / `!=` lowering to
+    `strings.compare(...) == 0` for ergonomics. The primitive (strings.compare)
+    is DONE and used by the lexer; this is just surface sugar. Would need sema
+    to detect string-typed operands (StrLit, or a str/uword value) and route
+    `==`/`!=` to the helper -- careful not to break numeric `uword == uword`.
+    strings.compare is host-only so far; the pipeline (pass1_sh/pass2_sh) only
+    needs it if p1.p8 (canonical) starts calling it -- pass2_sh would gain the
+    same ~50 B helper + builtin lowering (it already has the mul_used pattern).
   * **Full pipeline initialized-array support** so the CANONICAL p1.p8 (not
     just pass2_sh) can use the tables. ATTEMPTED this session and the design
     works end-to-end, BUT it does not fit the memory budget -- see the wall
