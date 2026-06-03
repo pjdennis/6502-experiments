@@ -1,5 +1,59 @@
 # Session Resume Notes -- Prog8 bootstrap project
 
+## *** LANGUAGE-CLEANUP PASS (2026-06, after self-host) -- read this first ***
+
+Post-self-host work to clean up the compiler with richer language features.
+Self-host stays byte-identical (0 diff) throughout; verify with `/tmp/verify.sh`
+or `python3 -m unittest prog8.p1.tests.test_p1.P1SelfHost`.
+
+DONE + committed:
+  1. **Character constants** in the lexer. `$69`/`$30`/`$28` -> `'i'`/`'0'`/`'('`
+     in is_digit/is_alpha_us/is_hexdig, next_raw_token, lex_operator,
+     decode_escape_val, and cn_len2..cn_len8 (the keyword matchers). A char
+     literal lexes to the same byte, so byte-neutral. Applied to stmt.p8
+     (-> p1.p8 via build_p1) and p1_pass1_sh.p8.
+  2. **Initialized arrays / static tables in p8c** (the host compiler):
+     `ubyte[] t = [1,2,3]`, `ubyte[4] t=[A,B,9]` (const idents fold),
+     `uword[] w=[$1234,7]`, `uword[] labels=["a","b"]` (string literals ->
+     pool-label addresses). ast.ArrayLit; parse.py + iter_parse.py (the
+     DEFAULT parser is the iterative one -- both needed); sema attaches
+     sym.init_lit; codegen emit_arrays emits .byte/.word of resolved values.
+     Tests: tests/test_codegen.py::InitializedArrays.
+  3. **Used the array feature to table-drive pass2's codegen dispatch**
+     (p1_pass2_sh.p8, compiled by host p8c): emit_ctrl_label_ref's 17-way
+     if-chain and out_br_mnem's 8-way became `out_text(table[kind])` with
+     `uword[]` tables of the pooled label/mnemonic strings. This is the
+     "offset in pass2": freed **382 B** (pass2 top $EFA2 -> $EE24, headroom
+     94 -> 476 B). Self-host unaffected (p1.p8 not modified).
+
+FINDING -- **`when` is COUNTERPRODUCTIVE here.** p8c's `when` codegen emits
+per-case `jmp body`/`jmp next`/`jmp end` framing, which is LARGER than a
+compact fall-through `if`-chain. Converting emit_ctrl_label_ref to `when`
+grew pass2 106 B and pushed a var onto the $F000 port (crash). So do NOT
+when-ify the codegen; the if-chains there are compact by design. (`when` is
+fine for readability in code that isn't memory-critical, but this compiler is.)
+
+REMAINING (next session):
+  * **String comparison** as a language feature. Upstream syntax (verified
+    against prog8.readthedocs.io): `s1 == s2` / `!=` work directly on string
+    values; library `strings.compare(a,b)->ubyte` (-1/0/1). For classify_name
+    the real need is a COUNTED-buffer compare (name_buf + name_len vs a
+    null-terminated keyword), so a small `kw_match(uword kw)->ubyte` helper +
+    a keyword table is the upstream-compatible idiom (no str-var type needed).
+  * **Full pipeline initialized-array support** so the CANONICAL p1.p8 (not
+    just pass2_sh) can use the tables. Needs: pass1 (stmt.p8 parser) to parse
+    `[...]` initializers + an ND_ARRAYLIT node; build_symbols to record the
+    element list; pass1_sh dump_global to serialize it; pass2_sh load + an
+    emit_arrays that emits init values. The 476 B pass2 headroom now makes
+    this affordable. THEN table-drive classify_name + emit_ctrl_label_ref in
+    stmt.p8/build_p1.py (canonical) and remove the cn_len2..8 split.
+  * NB the _sh pipeline files are HAND-tuned divergent copies; front-end edits
+    must be applied to BOTH stmt.p8 (regenerates p1.p8 via `python3 -m
+    p1.build_p1`) and p1_pass1_sh.p8; codegen edits to build_p1.py and
+    p1_pass2_sh.p8.
+
+---
+
 This file is a session-handoff note. It captures the state of the
 project after the v2..v9 tinyp8 growth sessions so a fresh
 conversation can pick up productively without re-reading prior
