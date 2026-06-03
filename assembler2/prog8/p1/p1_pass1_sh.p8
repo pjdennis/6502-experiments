@@ -200,7 +200,7 @@ uword ident_pool_len
 ; its full ~3381) transiently writes to ~4052 -- which must stay inside the
 ; array, or it clobbers str_pool_len / name_buf / path_buf and corrupts the
 ; just-read callee ident (the "out_text -> garbage" self-host bug).
-ubyte[4096] str_pool
+ubyte[5120] str_pool
 uword str_pool_len
 
 ubyte[65] name_buf       ; 64 chars + room for a NUL terminator (classify_name)

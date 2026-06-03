@@ -13,6 +13,7 @@
 
 %target nmos
 %address $0200
+%import strings
 
 ; ---- token kinds ----
 const ubyte TK_EOF    = 0
@@ -194,7 +195,7 @@ uword[256]  str_len
 uword str_count
 uword str_pool_len
 
-ubyte[64] name_buf
+ubyte[65] name_buf      ; +1 for the NUL terminator classify_name writes
 ubyte[96] path_buf       ; parser's dotted-path buffer (lexer owns name_buf)
 uword path_len
 uword name_len
@@ -569,80 +570,58 @@ sub ident_len_at(uword id) -> uword {
 ; under the per-unit node arena, so the self-host front-end (pass 1) can parse
 ; this file itself without overflowing. (Behaviour is identical; the helpers
 ; return TK_IDENT when no keyword matches, which classify_name passes through.)
-sub cn_len2() -> ubyte {
-    if name_buf[0]=='i' and name_buf[1]=='f' { return TK_KIF }   ; if
-    if name_buf[0]=='i' and name_buf[1]=='n' { return TK_KIN }   ; in
-    if name_buf[0]=='o' and name_buf[1]=='r' { return TK_KOR }   ; or
-    if name_buf[0]=='t' and name_buf[1]=='o' { return TK_KTO }   ; to
-    return TK_IDENT
-}
-sub cn_len3() -> ubyte {
-    if name_buf[0]=='a' and name_buf[1]=='n' and name_buf[2]=='d' { return TK_KAND }   ; and
-    if name_buf[0]=='f' and name_buf[1]=='o' and name_buf[2]=='r' { return TK_KFOR }   ; for
-    if name_buf[0]=='n' and name_buf[1]=='o' and name_buf[2]=='t' { return TK_KNOT }   ; not
-    if name_buf[0]=='s' and name_buf[1]=='t' and name_buf[2]=='r' { return TK_KSTR }   ; str
-    if name_buf[0]=='s' and name_buf[1]=='u' and name_buf[2]=='b' { return TK_KSUB }   ; sub
-    if name_buf[0]=='x' and name_buf[1]=='o' and name_buf[2]=='r' { return TK_KXOR }   ; xor
-    return TK_IDENT
-}
-sub cn_len4() -> ubyte {
-    if name_buf[0]=='b' and name_buf[1]=='o' and name_buf[2]=='o' and name_buf[3]=='l' { return TK_KBOOL }   ; bool
-    if name_buf[0]=='b' and name_buf[1]=='y' and name_buf[2]=='t' and name_buf[3]=='e' { return TK_KBYTE }   ; byte
-    if name_buf[0]=='e' and name_buf[1]=='l' and name_buf[2]=='s' and name_buf[3]=='e' { return TK_KELSE }   ; else
-    if name_buf[0]=='e' and name_buf[1]=='n' and name_buf[2]=='u' and name_buf[3]=='m' { return TK_KENUM }   ; enum
-    if name_buf[0]=='m' and name_buf[1]=='a' and name_buf[2]=='i' and name_buf[3]=='n' { return TK_KMAIN }   ; main
-    if name_buf[0]=='t' and name_buf[1]=='r' and name_buf[2]=='u' and name_buf[3]=='e' { return TK_TRUE }   ; true
-    if name_buf[0]=='v' and name_buf[1]=='o' and name_buf[2]=='i' and name_buf[3]=='d' { return TK_KVOID }   ; void
-    if name_buf[0]=='w' and name_buf[1]=='h' and name_buf[2]=='e' and name_buf[3]=='n' { return TK_KWHEN }   ; when
-    return TK_IDENT
-}
-sub cn_len5() -> ubyte {
-    if name_buf[0]=='b' and name_buf[1]=='r' and name_buf[2]=='e' and name_buf[3]=='a' and name_buf[4]=='k' { return TK_KBREAK }   ; break
-    if name_buf[0]=='c' and name_buf[1]=='o' and name_buf[2]=='n' and name_buf[3]=='s' and name_buf[4]=='t' { return TK_KCONST }   ; const
-    if name_buf[0]=='d' and name_buf[1]=='e' and name_buf[2]=='f' and name_buf[3]=='e' and name_buf[4]=='r' { return TK_KDEFER }   ; defer
-    if name_buf[0]=='f' and name_buf[1]=='a' and name_buf[2]=='l' and name_buf[3]=='s' and name_buf[4]=='e' { return TK_FALSE }   ; false
-    if name_buf[0]=='u' and name_buf[1]=='b' and name_buf[2]=='y' and name_buf[3]=='t' and name_buf[4]=='e' { return TK_KUBYTE }   ; ubyte
-    if name_buf[0]=='u' and name_buf[1]=='w' and name_buf[2]=='o' and name_buf[3]=='r' and name_buf[4]=='d' { return TK_KUWORD }   ; uword
-    if name_buf[0]=='w' and name_buf[1]=='h' and name_buf[2]=='i' and name_buf[3]=='l' and name_buf[4]=='e' { return TK_KWHILE }   ; while
-    return TK_IDENT
-}
-sub cn_len6() -> ubyte {
-    if name_buf[0]=='a' and name_buf[1]=='s' and name_buf[2]=='m' and name_buf[3]=='s' and name_buf[4]=='u' and name_buf[5]=='b' { return TK_KASMSUB }   ; asmsub
-    if name_buf[0]=='i' and name_buf[1]=='n' and name_buf[2]=='l' and name_buf[3]=='i' and name_buf[4]=='n' and name_buf[5]=='e' { return TK_KINLINE }   ; inline
-    if name_buf[0]=='r' and name_buf[1]=='e' and name_buf[2]=='p' and name_buf[3]=='e' and name_buf[4]=='a' and name_buf[5]=='t' { return TK_KREPEAT }   ; repeat
-    if name_buf[0]=='r' and name_buf[1]=='e' and name_buf[2]=='t' and name_buf[3]=='u' and name_buf[4]=='r' and name_buf[5]=='n' { return TK_KRETURN }   ; return
-    if name_buf[0]=='s' and name_buf[1]=='t' and name_buf[2]=='r' and name_buf[3]=='u' and name_buf[4]=='c' and name_buf[5]=='t' { return TK_KSTRUCT }   ; struct
-    return TK_IDENT
-}
-sub cn_len8() -> ubyte {
-    if name_buf[0]=='c' and name_buf[1]=='o' and name_buf[2]=='n' and name_buf[3]=='t' and name_buf[4]=='i' and name_buf[5]=='n' and name_buf[6]=='u' and name_buf[7]=='e' { return TK_KCONTINUE }   ; continue
-    return TK_IDENT
-}
-sub classify_name() -> ubyte {
-    when name_len {
-        2 -> { return cn_len2() }
-        3 -> { return cn_len3() }
-        4 -> { return cn_len4() }
-        5 -> { return cn_len5() }
-        6 -> { return cn_len6() }
-        8 -> { return cn_len8() }
+; true iff name_buf (NUL-terminated by the caller) equals the keyword `kw`.
+sub kw_is(uword kw) -> ubyte {
+    if strings.compare(&name_buf, kw) == 0 {
+        return 1
     }
+    return 0
+}
+
+sub classify_name() -> ubyte {
+    name_buf[name_len] = 0                  ; NUL-terminate for strings.compare
+    if kw_is("if") != 0 { return TK_KIF }
+    if kw_is("in") != 0 { return TK_KIN }
+    if kw_is("or") != 0 { return TK_KOR }
+    if kw_is("to") != 0 { return TK_KTO }
+    if kw_is("and") != 0 { return TK_KAND }
+    if kw_is("for") != 0 { return TK_KFOR }
+    if kw_is("not") != 0 { return TK_KNOT }
+    if kw_is("str") != 0 { return TK_KSTR }
+    if kw_is("sub") != 0 { return TK_KSUB }
+    if kw_is("xor") != 0 { return TK_KXOR }
+    if kw_is("bool") != 0 { return TK_KBOOL }
+    if kw_is("byte") != 0 { return TK_KBYTE }
+    if kw_is("else") != 0 { return TK_KELSE }
+    if kw_is("enum") != 0 { return TK_KENUM }
+    if kw_is("main") != 0 { return TK_KMAIN }
+    if kw_is("true") != 0 { return TK_TRUE }
+    if kw_is("void") != 0 { return TK_KVOID }
+    if kw_is("when") != 0 { return TK_KWHEN }
+    if kw_is("break") != 0 { return TK_KBREAK }
+    if kw_is("const") != 0 { return TK_KCONST }
+    if kw_is("defer") != 0 { return TK_KDEFER }
+    if kw_is("false") != 0 { return TK_FALSE }
+    if kw_is("ubyte") != 0 { return TK_KUBYTE }
+    if kw_is("uword") != 0 { return TK_KUWORD }
+    if kw_is("while") != 0 { return TK_KWHILE }
+    if kw_is("asmsub") != 0 { return TK_KASMSUB }
+    if kw_is("inline") != 0 { return TK_KINLINE }
+    if kw_is("repeat") != 0 { return TK_KREPEAT }
+    if kw_is("return") != 0 { return TK_KRETURN }
+    if kw_is("struct") != 0 { return TK_KSTRUCT }
+    if kw_is("continue") != 0 { return TK_KCONTINUE }
     return TK_IDENT
 }
 
 ; classify a directive name (already copied into name_buf):
 ; 0=address, 1=output, 2=import, 3=target, 4=other.
 sub dir_classify() -> ubyte {
-    when name_len {
-        6 -> {
-            if name_buf[0]==$69 and name_buf[1]==$6d and name_buf[2]==$70 and name_buf[3]==$6f and name_buf[4]==$72 and name_buf[5]==$74 { return 2 }   ; import
-            if name_buf[0]==$6f and name_buf[1]==$75 and name_buf[2]==$74 and name_buf[3]==$70 and name_buf[4]==$75 and name_buf[5]==$74 { return 1 }   ; output
-            if name_buf[0]==$74 and name_buf[1]==$61 and name_buf[2]==$72 and name_buf[3]==$67 and name_buf[4]==$65 and name_buf[5]==$74 { return 3 }   ; target
-        }
-        7 -> {
-            if name_buf[0]==$61 and name_buf[1]==$64 and name_buf[2]==$64 and name_buf[3]==$72 and name_buf[4]==$65 and name_buf[5]==$73 and name_buf[6]==$73 { return 0 }   ; address
-        }
-    }
+    name_buf[name_len] = 0                  ; NUL-terminate for strings.compare
+    if kw_is("import") != 0 { return 2 }
+    if kw_is("output") != 0 { return 1 }
+    if kw_is("target") != 0 { return 3 }
+    if kw_is("address") != 0 { return 0 }
     return 4
 }
 
@@ -1903,12 +1882,11 @@ sub handle_directive() {
     if dk == 3 {                            ; %target
         name_len = 0
         append_ident_to_namebuf(cur_val())
-        if name_len == 4 {                  ; "nmos"
-            if name_buf[0]==$6e and name_buf[1]==$6d and name_buf[2]==$6f and name_buf[3]==$73 {
-                prog_target = 1
-                if prog_address == $4000 {
-                    prog_address = $0200
-                }
+        name_buf[name_len] = 0              ; NUL-terminate for strings.compare
+        if kw_is("nmos") != 0 {
+            prog_target = 1
+            if prog_address == $4000 {
+                prog_address = $0200
             }
         }
         advance()

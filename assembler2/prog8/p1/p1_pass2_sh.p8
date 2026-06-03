@@ -286,7 +286,7 @@ uword cur_ret_name       ; current sub's name ident id
 ; string pool: one label per string-literal *occurrence*, numbered
 ; in codegen encounter order (matching p8c's sema-walk order); the
 ; recorded str id indexes the parser's str_pool for the trailer.
-uword[188] strpool_sid    ; str id for label N (p8c_str_N)
+uword[256] strpool_sid    ; str id for label N (p8c_str_N)
 uword strpool_count
 ; byte-expression codegen work stack (replaces p8c's recursion):
 ; per entry a task -- 0 eval node, 1 binop-leaf, 2 pha, 3 sta tmp1,
@@ -324,6 +324,7 @@ uword[32] lstk_id2
 ubyte lstk_sp
 ; codegen scratch flags/counters (reset before pass M):
 ubyte mul_used           ; `*` was emitted -> emit __p8c_mul_u8 trailer
+ubyte strcmp_used        ; strings.compare used -> emit __p8c_strcmp trailer
 uword label_seq          ; global local-label counter (p8c's _label_id)
 
 uword[2] sub_snode
@@ -765,6 +766,15 @@ sub emit_mul_helper() {
         return
     }
     out_text("\n; ---- runtime: ubyte * ubyte -> A ----\n__p8c_mul_u8:\n  lda #0\n  ldx #8\n.__mul_loop:\n  lsr __p8c_tmp1\n  bcc .__mul_skip\n  clc\n  adc __p8c_tmp0\n.__mul_skip:\n  asl __p8c_tmp0\n  dex\n  bne .__mul_loop\n  rts\n")
+}
+
+; the strings.compare helper (port of p8c's _strcmp_used trailer). Goes between
+; the mul helper and the arrays block, matching p8c's emission order.
+sub emit_strcmp_helper() {
+    if strcmp_used == 0 {
+        return
+    }
+    out_text("\n__p8c_strcmp:\n  ldy #0\n.__sc_loop:\n  lda (__p8c_wtmp0),y\n  cmp (__p8c_wtmp1),y\n  bne .__sc_diff\n  lda (__p8c_wtmp0),y\n  beq .__sc_eq\n  iny\n  bne .__sc_loop\n.__sc_eq:\n  lda #0\n  rts\n.__sc_diff:\n  bcc .__sc_less\n  lda #1\n  rts\n.__sc_less:\n  lda #$ff\n  rts\n")
 }
 
 ; ---- string pool trailer (port of p8c/codegen.py::_escape) ----
@@ -3243,6 +3253,7 @@ sub builtin_kind(uword identid) -> ubyte {
     if ident_eq(identid, "peek") != 0 { return 3 }
     if ident_eq(identid, "poke") != 0 { return 4 }
     if ident_eq(identid, "mkword") != 0 { return 5 }
+    if ident_eq(identid, "strings.compare") != 0 { return 6 }
     return 0
 }
 ; the 1st / 2nd argument of the builtin whose callnode is on top of bi_cn.
@@ -3285,14 +3296,31 @@ sub emit_builtin(uword callnode, ubyte bk) {
                     out_hex4(node_a[bi_arg0()])
                     o_nl()
                 } else {
-                    ; mkword(msb, lsb) -> A=low, Y=high (Y-safe via X).
-                    codegen_byte_expr(bi_arg0())
-                    o_pha()
-                    codegen_byte_expr(bi_arg1())
-                    o_tax()
-                    o_pla()
-                    o_tay()
-                    o_txa()
+                    if bk == 5 {
+                        ; mkword(msb, lsb) -> A=low, Y=high (Y-safe via X).
+                        codegen_byte_expr(bi_arg0())
+                        o_pha()
+                        codegen_byte_expr(bi_arg1())
+                        o_tax()
+                        o_pla()
+                        o_tay()
+                        o_txa()
+                    } else {
+                        ; strings.compare(a, b) -> A = -1/0/1. Park both pointers
+                        ; in __p8c_wtmp0/1 (stack-shuffling the first so arg1's
+                        ; eval can't clobber it), then jsr the shared helper.
+                        codegen_word_expr(bi_arg0())
+                        o_pha()
+                        o_tya()
+                        o_pha()
+                        codegen_word_expr(bi_arg1())
+                        out_text("  sta __p8c_wtmp1\n  sty __p8c_wtmp1+1\n")
+                        o_pla()
+                        out_text("  sta __p8c_wtmp0+1\n")
+                        o_pla()
+                        out_text("  sta __p8c_wtmp0\n  jsr __p8c_strcmp\n")
+                        strcmp_used = 1
+                    }
                 }
             }
         }
@@ -3688,6 +3716,7 @@ main {
     load_global()
     strpool_count = 0
     mul_used = 0
+    strcmp_used = 0
     label_seq = 0
     ccs_sp = 0
     cb_sp = 0
@@ -3725,6 +3754,7 @@ main {
         }
     }
     emit_mul_helper()
+    emit_strcmp_helper()
     emit_arrays()
     repeat {
         junk = read_src()
