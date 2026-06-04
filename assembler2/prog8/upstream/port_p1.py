@@ -145,13 +145,20 @@ def _split_long(m):
     return "\n".join(out)
 
 
-def port(src, extra_main_decls=""):
+def port(src, extra_main_decls="", io_transform=True):
     """Run the full upstream fixup pipeline. extra_main_decls is injected at the
-    top of the wrapped main block (the pipeline porter uses it for slab bases)."""
-    # ---- replace the I/O wrapper block (p8c %asm) with upstream asmsubs ----
-    src = re.sub(
-        r'asmsub _exit\(ubyte code\) = \$F00F.*?sub _write\(ubyte b, ubyte handle\) \{.*?\n\}\n',
-        IO_NEW, src, count=1, flags=re.S)
+    top of the wrapped main block (the pipeline porter uses it for slab bases).
+
+    io_transform: when True (the monolith p1.p8, still in the legacy %asm-string
+    I/O form), rewrite the I/O block to upstream register-ABI asmsubs and rename
+    the leading-underscore `_argv`.. wrappers. The PIPELINE source is already
+    written in the converged form (sys_* register-ABI asmsubs), so it passes
+    io_transform=False and neither step applies."""
+    if io_transform:
+        # ---- replace the I/O wrapper block (p8c %asm) with upstream asmsubs ----
+        src = re.sub(
+            r'asmsub _exit\(ubyte code\) = \$F00F.*?sub _write\(ubyte b, ubyte handle\) \{.*?\n\}\n',
+            IO_NEW, src, count=1, flags=re.S)
 
     # ---- newline: the target uses `encoding = cp437`, whose encoder does NOT
     #      translate the `\n` escape to CR (unlike iso/petscii). So `\n` stays LF
@@ -169,8 +176,9 @@ def port(src, extra_main_decls=""):
     #      leading-underscore rename below -- both Step 4 (I/O register-ABI). ----
 
     # ---- upstream forbids leading-underscore identifiers: rename the wrappers ----
-    final = re.sub(r"\b_(exit|close|argv|open|openout|read|write)\b", r"sys_\1", src)
-    return final
+    if io_transform:
+        src = re.sub(r"\b_(exit|close|argv|open|openout|read|write)\b", r"sys_\1", src)
+    return src
 
 
 if __name__ == "__main__":

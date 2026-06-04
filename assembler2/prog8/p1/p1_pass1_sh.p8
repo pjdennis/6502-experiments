@@ -365,28 +365,71 @@ uword dec_v
 ubyte dec_started
 
 
-; ---- syscall asmsubs ----
-asmsub _exit(ubyte code) = $F00F
-asmsub _close(ubyte handle) = $F015
+; ---- syscall asmsubs (register ABI; emulator $F006+ stubs) ----
+extsub $F00F = sys_exit(ubyte code @A)
+extsub $F015 = sys_close(ubyte handle @A)
 
-sub _argv(ubyte i) -> uword {
-    %asm{{ "lda p8v__argv_arg_i\njsr $f01e\npha\ntxa\ntay\npla\nrts" }}
+asmsub sys_argv(ubyte i @A) -> uword @AY {
+    %asm {{
+        jsr  $f01e
+        pha
+        txa
+        tay
+        pla
+        rts
+    }}
 }
 
-sub _open(uword filename) -> ubyte {
-    %asm{{ "lda p8v__open_arg_filename\nldx p8v__open_arg_filename+1\njsr $f012\nrts" }}
+asmsub sys_open(uword filename @AY) -> ubyte @A {
+    %asm {{
+        pha
+        tya
+        tax
+        pla
+        jsr  $f012
+        rts
+    }}
 }
 
-sub _openout(uword filename) -> ubyte {
-    %asm{{ "lda p8v__openout_arg_filename\nldx p8v__openout_arg_filename+1\njsr $f021\nrts" }}
+asmsub sys_openout(uword filename @AY) -> ubyte @A {
+    %asm {{
+        pha
+        tya
+        tax
+        pla
+        jsr  $f021
+        rts
+    }}
 }
 
-sub _read(ubyte handle) -> ubyte {
-    %asm{{ "lda p8v__read_arg_handle\njsr $f018\nbcc .ok\nlda #1\nsta p8v_src_eof\nlda #0\nrts\n.ok:\nsta __p8c_tmp0\nlda #0\nsta p8v_src_eof\nlda __p8c_tmp0\nrts" }}
+; sys_read_raw returns A=byte, Y=EOF flag (Y!=0 => EOF). The prog8 wrapper
+; sys_read sets src_eof from Y, so no asm body references the (per-compiler
+; mangled) src_eof symbol -- one source form both compilers build.
+asmsub sys_read_raw(ubyte handle @A) -> uword @AY {
+    %asm {{
+        jsr  $f018
+        bcc  sys_read_ok
+        lda  #0
+        ldy  #1
+        rts
+        sys_read_ok:
+        ldy  #0
+        rts
+    }}
 }
 
-sub _write(ubyte b, ubyte handle) {
-    %asm{{ "ldx p8v__write_arg_handle\nlda p8v__write_arg_b\njsr $f024\nrts" }}
+sub sys_read(ubyte handle) -> ubyte {
+    uword r
+    r = sys_read_raw(handle)
+    src_eof = msb(r)
+    return lsb(r)
+}
+
+asmsub sys_write(ubyte b @A, ubyte handle @X) {
+    %asm {{
+        jsr  $f024
+        rts
+    }}
 }
 
 ; ---- I/O (sticky-EOF; emulator rewinds on EOF) ----
@@ -399,7 +442,7 @@ sub read_src() -> ubyte {
     if src_eof != 0 {
         return 0
     }
-    return _read(src_hand)
+    return sys_read(src_hand)
 }
 
 sub peek_src() -> ubyte {
@@ -410,7 +453,7 @@ sub peek_src() -> ubyte {
         return 0
     }
     ubyte b
-    b = _read(src_hand)
+    b = sys_read(src_hand)
     if src_eof != 0 {
         return 0
     }
@@ -420,7 +463,7 @@ sub peek_src() -> ubyte {
 }
 
 sub out_byte(ubyte b) {
-    _write(b, dst_hand)
+    sys_write(b, dst_hand)
 }
 
 ; ---- character classes ----
@@ -2848,10 +2891,10 @@ sub dump_record(ubyte kind, uword snode) {
 
 sub start() {
     uword fn
-    fn = _argv(0)
-    src_hand = _open(fn)
-    fn = _argv(1)
-    dst_hand = _openout(fn)
+    fn = sys_argv(0)
+    src_hand = sys_open(fn)
+    fn = sys_argv(1)
+    dst_hand = sys_openout(fn)
     reset_arena()
     prog_address = $0200            ; nmos default load address (no %target needed)
     prog_target = 1                 ; this pipeline only ever targets nmos
@@ -2910,7 +2953,7 @@ sub start() {
         }
     }
     out_byte($ff)
-    _close(src_hand)
-    _close(dst_hand)
+    sys_close(src_hand)
+    sys_close(dst_hand)
 }
 }

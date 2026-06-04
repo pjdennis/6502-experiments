@@ -81,7 +81,10 @@ slab_addrs = [a for a in slab_addrs if a >= SLAB_LO]
 slab_base = min(slab_addrs) if slab_addrs else IO_FLOOR
 
 # ---- 3. run the shared upstream fixups ----
-final = port_p1.port(src)
+# The pipeline source is already written in the converged register-ABI I/O
+# form (sys_* asmsubs), so the I/O rewrite + leading-underscore rename are
+# not applied here -- only the slab/array fixups upstream still requires.
+final = port_p1.port(src, io_transform=False)
 open(out_p8, "w").write(final)
 
 # ---- 4. emit a .properties whose memtop is the slab base ----
