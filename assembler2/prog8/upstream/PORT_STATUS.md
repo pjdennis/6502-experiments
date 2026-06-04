@@ -78,3 +78,30 @@ Toolchain proven; p1.p8 COMPILES under upstream (0 errors, 31 KB) and RUNS
 [needs emulator trace], then (b) codegen recursion (Prog8 forbids it; de-recurse
 via work-stack), then (c) pipeline `_sh` port (>256 arenas -> slabs) for true
 self-host. port_p1.py reproduces the whole port.
+
+## Update 2: cpu=6502 fix -> lexer works; now register_subs hangs
+Root-caused the "hang on any content": the target had `cpu = 65C02`, so prog8
+emitted `bra` for loop-backs, but the emulator's NMOS machine mis-executes `bra`
+(its NMOS addr-mode table maps $80 to `imm`, not `rel`, while the opcode table
+has `bra` at $80 -> stale relative offset -> every loop breaks). Our p8c avoids
+`bra` for loops, which is why p8c-compiled code never tripped it. **Fixed: set
+`cpu = 6502`** in nmos.properties (committed). Now:
+- minimal `repeat{}` loops run correctly (verified),
+- the upstream-compiled p1.p8 LEXES input without hanging (a 1-char program
+  compiles and terminates).
+
+Next hang (exit-bisected): a program containing a `main` block hangs in
+`register_subs` (specifically `parse_main` / its decl loop) -- parse_decls_pass
+and build_symbols complete. Likely a port-transform interaction in the parser
+loop (index-cast or the `!= 0` rewrite) OR the work-stack parser hitting an
+edge; bisect `parse_main` next. After that: codegen recursion (still warned),
+then the pipeline `_sh` port for true self-host.
+
+### How to reproduce / continue
+  bash upstream/setup.sh                       # prog8c.jar + 64tass
+  python3 upstream/port_p1.py p1/p1.p8 /tmp/p1_up.p8
+  (cd upstream && java -jar /tmp/prog8c.jar -target nmos.properties -out /tmp/up /tmp/p1_up.p8)
+  python3 upstream/mkimage.py /tmp/up/p1_up.bin /tmp/up/img.bin
+  emulator/emulator.out /tmp/up/img.bin <in.p8> <out.s> --no-dump
+Exit-bisection: inject `sys_exit(7)` after a phase in start() to see if it's
+reached. Compare output to `python3 -m p8c <in.p8> -o oracle.s`.
