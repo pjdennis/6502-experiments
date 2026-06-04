@@ -67,6 +67,19 @@ fine for readability in code that isn't memory-critical, but this compiler is.)
      classic corruption its own comment warns about); p8c __p8c_strcmp helper
      comments dropped + labels shortened (.__sc_*) so pass2_sh's helper-text
      string stays under the $FE00 argv-window pool ceiling.
+  8. **Readability pass: char constants + string emitters.** Across lexer.p8,
+     expr.p8, p1_pass1_sh.p8, p1_pass2_sh.p8, and stmt.p8's serializer: ASCII
+     `$XX` hex -> char literals in char contexts (`c >= '0'`, `out_byte(':')`,
+     `return '\n'`, `c == '"'`); and consecutive `out_byte($..)` runs spelling
+     text -> `out_text("...")` (e.g. emit_int_head, the operator-spelling
+     tables). Added an `out_text(uword)` helper to lexer.p8/expr.p8 (they only
+     had out_byte) and to stmt.p8 BELOW the `; ---- serialization ----` splice
+     marker (the codegen back-end already defines out_text -- putting it above
+     the marker duplicates it in p1.p8). All byte-identical: value hex (sizes,
+     sentinels like $ff, the `$37`/`$57` hex_nibble offsets, `n >= $0a` = the
+     integer 10) was left alone -- comparison conversion was applied only to
+     clearly-char operands, never blindly. Self-host 0-diff; test_p1 26 OK;
+     front-end 27 + host suite green.
 
 REMAINING (next session):
   * **String comparison sugar (optional):** `s1 == s2` / `!=` lowering to

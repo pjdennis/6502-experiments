@@ -2035,6 +2035,16 @@ sub parse_main() -> uword {
 
 
 ; ---- serialization ----
+; write every byte of the NUL-terminated string at `p`. (p1.p8's codegen
+; back-end supplies its own out_text, so this lives below the splice point.)
+sub out_text(uword p) {
+    uword q
+    q = p
+    while @(q) != 0 {
+        out_byte(@(q))
+        q = q + 1
+    }
+}
 sub ws_push_node(uword node, ubyte depth) {
     ws_type[ws_sp] = 0
     ws_node[ws_sp] = node
@@ -2059,8 +2069,8 @@ sub out_indent(ubyte depth) {
         if i >= depth {
             break
         }
-        out_byte($20)
-        out_byte($20)
+        out_byte(' ')
+        out_byte(' ')
         i = i + 1
     }
 }
@@ -2092,15 +2102,15 @@ sub out_str_escaped(uword id) {
         }
         ubyte rb
         rb = str_pool[off + j]
-        if rb == $5c { out_byte($5c)  out_byte($5c) }
+        if rb == $5c { out_text("\\\\") }
         else {
-            if rb == $22 { out_byte($5c)  out_byte($22) }
+            if rb == $22 { out_text("\\\"") }
             else {
-                if rb == $0a { out_byte($5c)  out_byte($6e) }
+                if rb == $0a { out_text("\\n") }
                 else {
-                    if rb == $0d { out_byte($5c)  out_byte($72) }
+                    if rb == $0d { out_text("\\r") }
                     else {
-                        if rb == $09 { out_byte($5c)  out_byte($74) }
+                        if rb == $09 { out_text("\\t") }
                         else { out_byte(rb) }
                     }
                 }
@@ -2110,94 +2120,94 @@ sub out_str_escaped(uword id) {
     }
 }
 sub out_binop_spelling(ubyte op) {
-    if op == TK_PLUS  { out_byte($2b)  return }
-    if op == TK_MINUS { out_byte($2d)  return }
-    if op == TK_STAR  { out_byte($2a)  return }
-    if op == TK_AMP   { out_byte($26)  return }
-    if op == TK_PIPE  { out_byte($7c)  return }
-    if op == TK_CARET { out_byte($5e)  return }
-    if op == TK_SHL   { out_byte($3c)  out_byte($3c)  return }
-    if op == TK_SHR   { out_byte($3e)  out_byte($3e)  return }
-    if op == TK_EQ    { out_byte($3d)  out_byte($3d)  return }
-    if op == TK_NE    { out_byte($21)  out_byte($3d)  return }
-    if op == TK_LT    { out_byte($3c)  return }
-    if op == TK_LE    { out_byte($3c)  out_byte($3d)  return }
-    if op == TK_GT    { out_byte($3e)  return }
-    if op == TK_GE    { out_byte($3e)  out_byte($3d)  return }
-    if op == TK_KAND  { out_byte($61) out_byte($6e) out_byte($64)  return }
-    if op == TK_KOR   { out_byte($6f) out_byte($72)  return }
-    if op == TK_KXOR  { out_byte($78) out_byte($6f) out_byte($72)  return }
+    if op == TK_PLUS  { out_byte('+')  return }
+    if op == TK_MINUS { out_byte('-')  return }
+    if op == TK_STAR  { out_byte('*')  return }
+    if op == TK_AMP   { out_byte('&')  return }
+    if op == TK_PIPE  { out_byte('|')  return }
+    if op == TK_CARET { out_byte('^')  return }
+    if op == TK_SHL   { out_text("<<")  return }
+    if op == TK_SHR   { out_text(">>")  return }
+    if op == TK_EQ    { out_text("==")  return }
+    if op == TK_NE    { out_text("!=")  return }
+    if op == TK_LT    { out_byte('<')  return }
+    if op == TK_LE    { out_text("<=")  return }
+    if op == TK_GT    { out_byte('>')  return }
+    if op == TK_GE    { out_text(">=")  return }
+    if op == TK_KAND  { out_text("and")  return }
+    if op == TK_KOR   { out_text("or")  return }
+    if op == TK_KXOR  { out_text("xor")  return }
 }
 sub out_assign_spelling(ubyte op) {
-    if op == TK_ASSIGN { out_byte($3d)  return }
-    if op == TK_PLUSEQ { out_byte($2b) out_byte($3d)  return }
-    if op == TK_MINUSEQ{ out_byte($2d) out_byte($3d)  return }
-    if op == TK_ANDEQ  { out_byte($26) out_byte($3d)  return }
-    if op == TK_OREQ   { out_byte($7c) out_byte($3d)  return }
-    if op == TK_XOREQ  { out_byte($5e) out_byte($3d)  return }
-    if op == TK_SHLEQ  { out_byte($3c) out_byte($3c) out_byte($3d)  return }
-    if op == TK_SHREQ  { out_byte($3e) out_byte($3e) out_byte($3d)  return }
+    if op == TK_ASSIGN { out_byte('=')  return }
+    if op == TK_PLUSEQ { out_text("+=")  return }
+    if op == TK_MINUSEQ{ out_text("-=")  return }
+    if op == TK_ANDEQ  { out_text("&=")  return }
+    if op == TK_OREQ   { out_text("|=")  return }
+    if op == TK_XOREQ  { out_text("^=")  return }
+    if op == TK_SHLEQ  { out_text("<<=")  return }
+    if op == TK_SHREQ  { out_text(">>=")  return }
 }
 sub out_unop_spelling(ubyte op) {
-    if op == UN_NEG { out_byte($75)  out_byte($2d)  return }
-    if op == UN_INV { out_byte($7e)  return }
-    if op == UN_NOT { out_byte($6e) out_byte($6f) out_byte($74)  return }
+    if op == UN_NEG { out_text("u-")  return }
+    if op == UN_INV { out_byte('~')  return }
+    if op == UN_NOT { out_text("not")  return }
 }
 sub out_type_name(ubyte tag) {
-    if tag == TY_UBYTE { out_byte($75) out_byte($62) out_byte($79) out_byte($74) out_byte($65)  return }   ; ubyte
-    if tag == TY_BYTE  { out_byte($62) out_byte($79) out_byte($74) out_byte($65)  return }                 ; byte
-    if tag == TY_UWORD { out_byte($75) out_byte($77) out_byte($6f) out_byte($72) out_byte($64)  return }   ; uword
-    if tag == TY_BOOL  { out_byte($62) out_byte($6f) out_byte($6f) out_byte($6c)  return }                 ; bool
-    if tag == TY_VOID  { out_byte($76) out_byte($6f) out_byte($69) out_byte($64)  return }                 ; void
-    if tag == TY_STR   { out_byte($73) out_byte($74) out_byte($72)  return }                               ; str
-    if tag == TY_CONST_UBYTE { out_str_lit_const() out_byte($75) out_byte($62) out_byte($79) out_byte($74) out_byte($65)  return }  ; const-ubyte
-    if tag == TY_CONST_BYTE  { out_str_lit_const() out_byte($62) out_byte($79) out_byte($74) out_byte($65)  return }                ; const-byte
-    if tag == TY_CONST_UWORD { out_str_lit_const() out_byte($75) out_byte($77) out_byte($6f) out_byte($72) out_byte($64)  return }  ; const-uword
+    if tag == TY_UBYTE { out_text("ubyte")  return }   ; ubyte
+    if tag == TY_BYTE  { out_text("byte")  return }                 ; byte
+    if tag == TY_UWORD { out_text("uword")  return }   ; uword
+    if tag == TY_BOOL  { out_text("bool")  return }                 ; bool
+    if tag == TY_VOID  { out_text("void")  return }                 ; void
+    if tag == TY_STR   { out_text("str")  return }                               ; str
+    if tag == TY_CONST_UBYTE { out_str_lit_const() out_text("ubyte")  return }  ; const-ubyte
+    if tag == TY_CONST_BYTE  { out_str_lit_const() out_text("byte")  return }                ; const-byte
+    if tag == TY_CONST_UWORD { out_str_lit_const() out_text("uword")  return }  ; const-uword
 }
 ; "const-" prefix
 sub out_str_lit_const() {
-    out_byte($63) out_byte($6f) out_byte($6e) out_byte($73) out_byte($74) out_byte($2d)
+    out_text("const-")
 }
 
 ; emit one node's opening; push children/close onto the work stack.
 sub emit_node(uword node, ubyte depth) {
     out_indent(depth)
-    out_byte($28)
+    out_byte('(')
     ubyte k
     k = node_kind[node]
     if k == ND_INT {
-        out_byte($69) out_byte($6e) out_byte($74) out_byte($20)
+        out_text("int ")
         out_dec(node_a[node])
-        out_byte($29)
+        out_byte(')')
         return
     }
     if k == ND_BOOL {
-        out_byte($62) out_byte($6f) out_byte($6f) out_byte($6c) out_byte($20)
+        out_text("bool ")
         if node_a[node] != 0 {
-            out_byte($74) out_byte($72) out_byte($75) out_byte($65)
+            out_text("true")
         } else {
-            out_byte($66) out_byte($61) out_byte($6c) out_byte($73) out_byte($65)
+            out_text("false")
         }
-        out_byte($29)
+        out_byte(')')
         return
     }
     if k == ND_IDENT {
-        out_byte($69) out_byte($64) out_byte($20)
+        out_text("id ")
         out_ident_text(node_a[node])
-        out_byte($29)
+        out_byte(')')
         return
     }
     if k == ND_STR {
-        out_byte($73) out_byte($74) out_byte($72) out_byte($20) out_byte($22)
+        out_text("str \"")
         out_str_escaped(node_a[node])
-        out_byte($22)
-        out_byte($29)
+        out_byte('"')
+        out_byte(')')
         return
     }
     if k == ND_ADDROF {
-        out_byte($61) out_byte($64) out_byte($64) out_byte($72) out_byte($20)
+        out_text("addr ")
         out_ident_text(node_a[node])
-        out_byte($29)
+        out_byte(')')
         return
     }
     if k == ND_BINOP {
@@ -2217,14 +2227,14 @@ sub emit_node(uword node, ubyte depth) {
         return
     }
     if k == ND_MEMAT {
-        out_byte($6d) out_byte($65) out_byte($6d)
+        out_text("mem")
         ws_push_simple(1)
         ws_push_node(node_a[node], depth + 1)
         ws_push_simple(2)
         return
     }
     if k == ND_INDEX {
-        out_byte($69) out_byte($64) out_byte($78)
+        out_text("idx")
         ws_push_simple(1)
         if node_op[node] != 0 {
             ws_push_field(node_c[node], depth + 1)
@@ -2237,7 +2247,7 @@ sub emit_node(uword node, ubyte depth) {
         return
     }
     if k == ND_CALL {
-        out_byte($63) out_byte($61) out_byte($6c) out_byte($6c) out_byte($20)
+        out_text("call ")
         out_ident_text(node_a[node])
         ws_push_simple(1)
         uword cell
@@ -2253,43 +2263,43 @@ sub emit_node(uword node, ubyte depth) {
         return
     }
     if k == ND_BLOCK {
-        out_byte($62) out_byte($6c) out_byte($6f) out_byte($63) out_byte($6b)  ; block
+        out_text("block")  ; block
         ws_push_simple(1)
         emit_cons_children(node_a[node], depth)
         return
     }
     if k == ND_EXPRSTMT {
-        out_byte($65) out_byte($78) out_byte($70) out_byte($72) out_byte($73) out_byte($74) out_byte($6d) out_byte($74)  ; exprstmt
+        out_text("exprstmt")  ; exprstmt
         ws_push_simple(1)
         ws_push_node(node_a[node], depth + 1)
         ws_push_simple(2)
         return
     }
     if k == ND_VARDECL {
-        out_byte($76) out_byte($61) out_byte($72) out_byte($20)               ; "var "
+        out_text("var ")               ; "var "
         if node_op[node] == TY_STRUCT {
             out_ident_text(node_d[node])                                      ; struct type name
         } else {
             out_type_name(node_op[node])
         }
         if node_c[node] != 0 {
-            out_byte($5b)                                                     ; '['
+            out_byte('[')                                                     ; '['
             out_dec(node_c[node])
-            out_byte($5d)                                                     ; ']'
+            out_byte(']')                                                     ; ']'
         }
-        out_byte($20)
+        out_byte(' ')
         out_ident_text(node_a[node])
         if node_b[node] != 0 {
             ws_push_simple(1)
             ws_push_node(node_b[node], depth + 1)
             ws_push_simple(2)
         } else {
-            out_byte($29)
+            out_byte(')')
         }
         return
     }
     if k == ND_ASSIGN {
-        out_byte($61) out_byte($73) out_byte($73) out_byte($69) out_byte($67) out_byte($6e) out_byte($20)  ; "assign "
+        out_text("assign ")  ; "assign "
         out_assign_spelling(node_op[node])
         ws_push_simple(1)
         ws_push_node(node_b[node], depth + 1)
@@ -2299,7 +2309,7 @@ sub emit_node(uword node, ubyte depth) {
         return
     }
     if k == ND_IF {
-        out_byte($69) out_byte($66)                                          ; "if"
+        out_text("if")                                          ; "if"
         ws_push_simple(1)
         if node_c[node] != 0 {
             ws_push_node(node_c[node], depth + 1)
@@ -2312,7 +2322,7 @@ sub emit_node(uword node, ubyte depth) {
         return
     }
     if k == ND_WHILE {
-        out_byte($77) out_byte($68) out_byte($69) out_byte($6c) out_byte($65)  ; "while"
+        out_text("while")  ; "while"
         ws_push_simple(1)
         ws_push_node(node_b[node], depth + 1)
         ws_push_simple(2)
@@ -2321,7 +2331,7 @@ sub emit_node(uword node, ubyte depth) {
         return
     }
     if k == ND_FOR {
-        out_byte($66) out_byte($6f) out_byte($72) out_byte($20)              ; "for "
+        out_text("for ")              ; "for "
         out_ident_text(node_a[node])
         ws_push_simple(1)
         ws_push_node(node_d[node], depth + 1)                                ; body
@@ -2333,7 +2343,7 @@ sub emit_node(uword node, ubyte depth) {
         return
     }
     if k == ND_REPEAT {
-        out_byte($72) out_byte($65) out_byte($70) out_byte($65) out_byte($61) out_byte($74)  ; "repeat"
+        out_text("repeat")  ; "repeat"
         ws_push_simple(1)
         ws_push_node(node_b[node], depth + 1)                                ; body
         ws_push_simple(2)
@@ -2344,7 +2354,7 @@ sub emit_node(uword node, ubyte depth) {
         return
     }
     if k == ND_WHEN {
-        out_byte($77) out_byte($68) out_byte($65) out_byte($6e)              ; "when"
+        out_text("when")              ; "when"
         ws_push_simple(1)
         emit_cons_children(node_b[node], depth)                              ; choices
         ws_push_node(node_a[node], depth + 1)                               ; expr
@@ -2352,7 +2362,7 @@ sub emit_node(uword node, ubyte depth) {
         return
     }
     if k == ND_WHENCHOICE {
-        out_byte($63) out_byte($68) out_byte($6f) out_byte($69) out_byte($63) out_byte($65)  ; "choice"
+        out_text("choice")  ; "choice"
         ws_push_simple(1)
         ws_push_node(node_b[node], depth + 1)                                ; body block
         ws_push_simple(2)
@@ -2362,36 +2372,36 @@ sub emit_node(uword node, ubyte depth) {
         return
     }
     if k == ND_BREAK {
-        out_byte($62) out_byte($72) out_byte($65) out_byte($61) out_byte($6b) out_byte($29)  ; "break)"
+        out_text("break)")  ; "break)"
         return
     }
     if k == ND_CONTINUE {
-        out_byte($63) out_byte($6f) out_byte($6e) out_byte($74) out_byte($69) out_byte($6e) out_byte($75) out_byte($65) out_byte($29)
+        out_text("continue)")
         return
     }
     if k == ND_RETURN {
-        out_byte($72) out_byte($65) out_byte($74) out_byte($75) out_byte($72) out_byte($6e)  ; "return"
+        out_text("return")  ; "return"
         if node_a[node] != 0 {
             ws_push_simple(1)
             ws_push_node(node_a[node], depth + 1)
             ws_push_simple(2)
         } else {
-            out_byte($29)
+            out_byte(')')
         }
         return
     }
     if k == ND_DEFER {
-        out_byte($64) out_byte($65) out_byte($66) out_byte($65) out_byte($72)  ; "defer"
+        out_text("defer")  ; "defer"
         ws_push_simple(1)
         ws_push_node(node_a[node], depth + 1)
         ws_push_simple(2)
         return
     }
     if k == ND_INLINEASM {
-        out_byte($61) out_byte($73) out_byte($6d) out_byte($20) out_byte($22)  ; asm "
+        out_text("asm \"")  ; asm "
         out_str_escaped(node_a[node])
-        out_byte($22)
-        out_byte($29)
+        out_byte('"')
+        out_byte(')')
         return
     }
 }
@@ -2438,14 +2448,14 @@ sub drain_ws() {
             emit_node(ws_node[ws_sp], ws_depth[ws_sp])
         } else {
             if typ == 1 {
-                out_byte($29)
+                out_byte(')')
             } else {
                 if typ == 2 {
-                    out_byte($0a)
+                    out_byte('\n')
                 } else {
                     if typ == 3 {
                         out_indent(ws_depth[ws_sp])
-                        out_byte($2e)
+                        out_byte('.')
                         out_ident_text(ws_node[ws_sp])
                     } else {
                         ; typ == 5: (vals E E ...) group. Capture head and
@@ -2456,7 +2466,7 @@ sub drain_ws() {
                         d = ws_depth[ws_sp]
                         head = ws_node[ws_sp]
                         out_indent(d)
-                        out_byte($28) out_byte($76) out_byte($61) out_byte($6c) out_byte($73)  ; "(vals"
+                        out_text("(vals")  ; "(vals"
                         ws_push_simple(1)
                         emit_cons_children(head, d)
                     }
@@ -2472,24 +2482,24 @@ sub drain_ws() {
 ; (pass B) so the big sub bodies never coexist in the arena.
 sub serialize_head_and_decls() {
     ; (program
-    out_byte($28) out_byte($70) out_byte($72) out_byte($6f) out_byte($67) out_byte($72) out_byte($61) out_byte($6d) out_byte($0a)
+    out_text("(program\n")
     ; (address $XXXX)
-    out_byte($20) out_byte($20)
-    out_byte($28) out_byte($61) out_byte($64) out_byte($64) out_byte($72) out_byte($65) out_byte($73) out_byte($73) out_byte($20) out_byte($24)
+    out_text("  ")
+    out_text("(address $")
     out_hex4(prog_address)
-    out_byte($29) out_byte($0a)
+    out_text(")\n")
     ; (output raw)
-    out_byte($20) out_byte($20)
-    out_byte($28) out_byte($6f) out_byte($75) out_byte($74) out_byte($70) out_byte($75) out_byte($74) out_byte($20) out_byte($72) out_byte($61) out_byte($77) out_byte($29) out_byte($0a)
+    out_text("  ")
+    out_text("(output raw)\n")
     ; (target X)
-    out_byte($20) out_byte($20)
-    out_byte($28) out_byte($74) out_byte($61) out_byte($72) out_byte($67) out_byte($65) out_byte($74) out_byte($20)
+    out_text("  ")
+    out_text("(target ")
     if prog_target == 1 {
-        out_byte($6e) out_byte($6d) out_byte($6f) out_byte($73)              ; nmos
+        out_text("nmos")              ; nmos
     } else {
-        out_byte($77) out_byte($65) out_byte($6e) out_byte($64) out_byte($79) out_byte($32) out_byte($63)  ; wendy2c
+        out_text("wendy2c")  ; wendy2c
     }
-    out_byte($29) out_byte($0a)
+    out_text(")\n")
     ; (imports (import NAME) ...)
     serialize_imports()
     ; (vars VARDECL ...)
@@ -2503,8 +2513,8 @@ sub serialize_head_and_decls() {
 ; biggest) ever live at once. Non-sub top-level units are re-parsed and
 ; discarded. The cursor starts at the top of the (rewound) source.
 sub serialize_subs_streaming() {
-    out_byte($20) out_byte($20)
-    out_byte($28) out_byte($73) out_byte($75) out_byte($62) out_byte($73)    ; "(subs"
+    out_text("  ")
+    out_text("(subs")    ; "(subs"
     repeat {
         ubyte t
         t = cur_kind()
@@ -2536,12 +2546,12 @@ sub serialize_subs_streaming() {
             }
         }
         if issub != 0 {
-            out_byte($0a)
+            out_byte('\n')
             serialize_sub(snode, 2)
             reset_nodes()
         }
     }
-    out_byte($29)                           ; close (subs
+    out_byte(')')                           ; close (subs
 }
 
 ; pass B: consume one non-sub top-level unit (directive / var / const /
@@ -2591,13 +2601,13 @@ sub skip_decl_pass_b() {
 ; cons list of nodes, then the nodes (each indented), then close.
 ; section_kw: 1 = "vars".
 sub serialize_list_section(uword head, ubyte which) {
-    out_byte($20) out_byte($20)
+    out_text("  ")
     if head == 0 {
         ; empty -> "(vars)\n"
-        out_byte($28) out_byte($76) out_byte($61) out_byte($72) out_byte($73) out_byte($29) out_byte($0a)
+        out_text("(vars)\n")
         return
     }
-    out_byte($28) out_byte($76) out_byte($61) out_byte($72) out_byte($73)    ; "(vars"
+    out_text("(vars")    ; "(vars"
     ; reverse the cons list into source order, then serialize each at depth 2
     uword rev
     rev = reverse_cons(head)
@@ -2607,22 +2617,22 @@ sub serialize_list_section(uword head, ubyte which) {
         if cell == 0 {
             break
         }
-        out_byte($0a)
+        out_byte('\n')
         ws_sp = 0
         ws_push_node(cons_val[cell], 2)
         drain_ws()
         cell = cons_next[cell]
     }
-    out_byte($29) out_byte($0a)
+    out_text(")\n")
 }
 
 sub serialize_imports() {
-    out_byte($20) out_byte($20)
+    out_text("  ")
     if prog_imports == 0 {
-        out_byte($28) out_byte($69) out_byte($6d) out_byte($70) out_byte($6f) out_byte($72) out_byte($74) out_byte($73) out_byte($29) out_byte($0a)  ; "(imports)\n"
+        out_text("(imports)\n")  ; "(imports)\n"
         return
     }
-    out_byte($28) out_byte($69) out_byte($6d) out_byte($70) out_byte($6f) out_byte($72) out_byte($74) out_byte($73)  ; "(imports"
+    out_text("(imports")  ; "(imports"
     uword rev
     rev = reverse_cons(prog_imports)
     uword cell
@@ -2631,23 +2641,23 @@ sub serialize_imports() {
         if cell == 0 {
             break
         }
-        out_byte($0a)
+        out_byte('\n')
         out_indent(2)
-        out_byte($28) out_byte($69) out_byte($6d) out_byte($70) out_byte($6f) out_byte($72) out_byte($74) out_byte($20)  ; "(import "
+        out_text("(import ")  ; "(import "
         out_ident_text(cons_val[cell])
-        out_byte($29)
+        out_byte(')')
         cell = cons_next[cell]
     }
-    out_byte($29) out_byte($0a)
+    out_text(")\n")
 }
 
 sub serialize_enums() {
-    out_byte($20) out_byte($20)
+    out_text("  ")
     if prog_enums == 0 {
-        out_byte($28) out_byte($65) out_byte($6e) out_byte($75) out_byte($6d) out_byte($73) out_byte($29) out_byte($0a)  ; "(enums)\n"
+        out_text("(enums)\n")  ; "(enums)\n"
         return
     }
-    out_byte($28) out_byte($65) out_byte($6e) out_byte($75) out_byte($6d) out_byte($73)  ; "(enums"
+    out_text("(enums")  ; "(enums"
     uword rev
     rev = reverse_cons(prog_enums)
     uword cell
@@ -2656,25 +2666,25 @@ sub serialize_enums() {
         if cell == 0 {
             break
         }
-        out_byte($0a)
+        out_byte('\n')
         serialize_enum(cons_val[cell], 2)
         cell = cons_next[cell]
     }
-    out_byte($29) out_byte($0a)
+    out_text(")\n")
 }
 
 sub serialize_enum(uword node, ubyte depth) {
     out_indent(depth)
-    out_byte($28) out_byte($65) out_byte($6e) out_byte($75) out_byte($6d) out_byte($20)  ; "(enum "
+    out_text("(enum ")  ; "(enum "
     out_ident_text(node_a[node])
-    out_byte($0a)
+    out_byte('\n')
     out_indent(depth + 1)
     uword mhead
     mhead = node_b[node]
     if mhead == 0 {
-        out_byte($28) out_byte($6d) out_byte($65) out_byte($6d) out_byte($62) out_byte($65) out_byte($72) out_byte($73) out_byte($29)  ; "(members)"
+        out_text("(members)")  ; "(members)"
     } else {
-        out_byte($28) out_byte($6d) out_byte($65) out_byte($6d) out_byte($62) out_byte($65) out_byte($72) out_byte($73)  ; "(members"
+        out_text("(members")  ; "(members"
         uword rev
         rev = reverse_cons(mhead)
         uword cell
@@ -2683,33 +2693,33 @@ sub serialize_enum(uword node, ubyte depth) {
             if cell == 0 {
                 break
             }
-            out_byte($0a)
+            out_byte('\n')
             uword m
             m = cons_val[cell]
             out_indent(depth + 2)
-            out_byte($28)
+            out_byte('(')
             out_ident_text(node_a[m])
-            out_byte($20)
+            out_byte(' ')
             if node_op[m] != 0 {
                 out_dec(node_b[m])
             } else {
-                out_byte($2d)               ; '-'
+                out_byte('-')               ; '-'
             }
-            out_byte($29)
+            out_byte(')')
             cell = cons_next[cell]
         }
-        out_byte($29)                       ; close (members
+        out_byte(')')                       ; close (members
     }
-    out_byte($29)                           ; close (enum
+    out_byte(')')                           ; close (enum
 }
 
 sub serialize_structs() {
-    out_byte($20) out_byte($20)
+    out_text("  ")
     if prog_structs == 0 {
-        out_byte($28) out_byte($73) out_byte($74) out_byte($72) out_byte($75) out_byte($63) out_byte($74) out_byte($73) out_byte($29) out_byte($0a)  ; "(structs)\n"
+        out_text("(structs)\n")  ; "(structs)\n"
         return
     }
-    out_byte($28) out_byte($73) out_byte($74) out_byte($72) out_byte($75) out_byte($63) out_byte($74) out_byte($73)  ; "(structs"
+    out_text("(structs")  ; "(structs"
     uword rev
     rev = reverse_cons(prog_structs)
     uword cell
@@ -2718,25 +2728,25 @@ sub serialize_structs() {
         if cell == 0 {
             break
         }
-        out_byte($0a)
+        out_byte('\n')
         serialize_struct(cons_val[cell], 2)
         cell = cons_next[cell]
     }
-    out_byte($29) out_byte($0a)
+    out_text(")\n")
 }
 
 sub serialize_struct(uword node, ubyte depth) {
     out_indent(depth)
-    out_byte($28) out_byte($73) out_byte($74) out_byte($72) out_byte($75) out_byte($63) out_byte($74) out_byte($20)  ; "(struct "
+    out_text("(struct ")  ; "(struct "
     out_ident_text(node_a[node])
-    out_byte($0a)
+    out_byte('\n')
     out_indent(depth + 1)
     uword fhead
     fhead = node_b[node]
     if fhead == 0 {
-        out_byte($28) out_byte($66) out_byte($69) out_byte($65) out_byte($6c) out_byte($64) out_byte($73) out_byte($29)  ; "(fields)"
+        out_text("(fields)")  ; "(fields)"
     } else {
-        out_byte($28) out_byte($66) out_byte($69) out_byte($65) out_byte($6c) out_byte($64) out_byte($73)  ; "(fields"
+        out_text("(fields")  ; "(fields"
         uword rev
         rev = reverse_cons(fhead)
         uword cell
@@ -2745,66 +2755,66 @@ sub serialize_struct(uword node, ubyte depth) {
             if cell == 0 {
                 break
             }
-            out_byte($0a)
+            out_byte('\n')
             uword fnode
             fnode = cons_val[cell]
             out_indent(depth + 2)
-            out_byte($28)
+            out_byte('(')
             out_type_name(node_op[fnode])
-            out_byte($20)
+            out_byte(' ')
             out_ident_text(node_a[fnode])
-            out_byte($29)
+            out_byte(')')
             cell = cons_next[cell]
         }
-        out_byte($29)                       ; close (fields
+        out_byte(')')                       ; close (fields
     }
-    out_byte($29)                           ; close (struct
+    out_byte(')')                           ; close (struct
 }
 
 ; serialize one (subdef NAME KIND RET (params ...) BODY) at `depth`.
 sub serialize_sub(uword node, ubyte depth) {
     out_indent(depth)
-    out_byte($28) out_byte($73) out_byte($75) out_byte($62) out_byte($64) out_byte($65) out_byte($66) out_byte($20)  ; "(subdef "
+    out_text("(subdef ")  ; "(subdef "
     out_ident_text(node_a[node])
-    out_byte($20)
+    out_byte(' ')
     ubyte sk
     sk = node_op[node]
-    if sk == SUBK_MAIN { out_byte($6d) out_byte($61) out_byte($69) out_byte($6e) }
+    if sk == SUBK_MAIN { out_text("main") }
     else {
-        if sk == SUBK_INLINE { out_byte($69) out_byte($6e) out_byte($6c) out_byte($69) out_byte($6e) out_byte($65) }
+        if sk == SUBK_INLINE { out_text("inline") }
         else {
-            if sk == SUBK_ASMSUB { out_byte($61) out_byte($73) out_byte($6d) out_byte($73) out_byte($75) out_byte($62) }
-            else { out_byte($73) out_byte($75) out_byte($62) }
+            if sk == SUBK_ASMSUB { out_text("asmsub") }
+            else { out_text("sub") }
         }
     }
-    out_byte($20)
+    out_byte(' ')
     out_type_name(lsb(node_d[node]))
     ; (params ...) at depth+1
-    out_byte($0a)
+    out_byte('\n')
     serialize_params(node_b[node], depth + 1)
-    out_byte($0a)
+    out_byte('\n')
     if sk == SUBK_ASMSUB {
         ; (asmtarget $XXXX) instead of a body
         out_indent(depth + 1)
-        out_byte($28) out_byte($61) out_byte($73) out_byte($6d) out_byte($74) out_byte($61) out_byte($72) out_byte($67) out_byte($65) out_byte($74) out_byte($20) out_byte($24)  ; "(asmtarget $"
+        out_text("(asmtarget $")  ; "(asmtarget $"
         out_hex4(node_c[node])
-        out_byte($29)
+        out_byte(')')
     } else {
         ; body at depth+1
         ws_sp = 0
         ws_push_node(node_c[node], depth + 1)
         drain_ws()
     }
-    out_byte($29)                            ; close (subdef
+    out_byte(')')                            ; close (subdef
 }
 
 sub serialize_params(uword head, ubyte depth) {
     out_indent(depth)
     if head == 0 {
-        out_byte($28) out_byte($70) out_byte($61) out_byte($72) out_byte($61) out_byte($6d) out_byte($73) out_byte($29)  ; "(params)"
+        out_text("(params)")  ; "(params)"
         return
     }
-    out_byte($28) out_byte($70) out_byte($61) out_byte($72) out_byte($61) out_byte($6d) out_byte($73)  ; "(params"
+    out_text("(params")  ; "(params"
     uword rev
     rev = reverse_cons(head)
     uword cell
@@ -2813,18 +2823,18 @@ sub serialize_params(uword head, ubyte depth) {
         if cell == 0 {
             break
         }
-        out_byte($0a)
+        out_byte('\n')
         uword pn
         pn = cons_val[cell]
         out_indent(depth + 1)
-        out_byte($28) out_byte($70) out_byte($61) out_byte($72) out_byte($61) out_byte($6d) out_byte($20)  ; "(param "
+        out_text("(param ")  ; "(param "
         out_type_name(node_op[pn])
-        out_byte($20)
+        out_byte(' ')
         out_ident_text(node_a[pn])
-        out_byte($29)
+        out_byte(')')
         cell = cons_next[cell]
     }
-    out_byte($29)
+    out_byte(')')
 }
 
 ; reverse a cons list (returns new head; consumes fresh cells).
@@ -2889,7 +2899,7 @@ main {
     serialize_subs_streaming()
 
     ; close (program
-    out_byte($29) out_byte($0a)
+    out_text(")\n")
 
     _close(src_hand)
     _close(dst_hand)

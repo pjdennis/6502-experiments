@@ -2272,13 +2272,13 @@ sub emit_sym_mangled(uword si) {
     if sym_mkind[si] == 1 {
         out_text("_arg_")
     } else {
-        out_byte($5f)
+        out_byte('_')
     }
     out_ident_text(sym_ident[si])
 }
 ; emit a var reference by ident, resolved in the current scope.
 
-sub o_nl()    { out_byte($0a) }
+sub o_nl()    { out_byte('\n') }
 
 sub reverse_cons(uword head) -> uword {
     uword rev
@@ -2465,7 +2465,7 @@ sub emit_zp_bindings() {
     if any == 0 {
         return
     }
-    out_byte($0a)
+    out_byte('\n')
     out_text("; ---- ZP variable allocations ----\n")
     uword i
     i = 0
@@ -2513,7 +2513,7 @@ sub emit_memvars() {
     if any == 0 {
         return
     }
-    out_byte($0a)
+    out_byte('\n')
     out_text("; ---- scalars overflowed from ZP into main memory ----")
     o_nl()
     uword i
@@ -2526,7 +2526,7 @@ sub emit_memvars() {
             if sym_is_const[i] == 0 {
                 if sym_addr[i] == $ffff {
                     emit_sym_mangled(i)
-                    out_byte($3a)
+                    out_byte(':')
                     o_nl()
                     out_text("  .byte 0")
                     if sym_type[i] == TY_UWORD {

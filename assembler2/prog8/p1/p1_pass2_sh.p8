@@ -533,7 +533,7 @@ sub emit_sym_mangled(uword si) {
     if sym_mkind[si] == 1 {
         out_text("_arg_")
     } else {
-        out_byte($5f)
+        out_byte('_')
     }
     out_ident_text(sym_ident[si])
 }
@@ -545,7 +545,7 @@ sub emit_mangled(uword identid) {
 
 ; shared instruction-prefix fragments (leading 2-space indent included)
 
-sub o_nl()    { out_byte($0a) }
+sub o_nl()    { out_byte('\n') }
 
 sub o_lda()   { out_text("  lda ") }
 
@@ -720,7 +720,7 @@ sub emit_arrays() {
     if any == 0 {
         return
     }
-    out_byte($0a)
+    out_byte('\n')
     out_text("; ---- arrays ----")
     o_nl()
     uword i
@@ -731,7 +731,7 @@ sub emit_arrays() {
         }
         if sym_arr_size[i] != 0 {
             emit_sym_mangled(i)
-            out_byte($3a)               ; :
+            out_byte(':')               ; :
             o_nl()
             ; nbytes = count * esize (uword element -> 2 bytes each)
             uword nbytes
@@ -749,7 +749,7 @@ sub emit_arrays() {
                 if b != 0 {
                     out_text(", ")
                 }
-                out_byte($30)           ; 0
+                out_byte('0')           ; 0
                 b = b + 1
             }
             o_nl()
@@ -783,16 +783,16 @@ sub emit_strcmp_helper() {
 ; emits the single part "0".
 
 sub str_char_plain(ubyte c) -> ubyte {
-    if c < $20 {
+    if c < ' ' {
         return 0
     }
-    if c >= $7f {
+    if c >= $7f {                    ; DEL and above: not printable
         return 0
     }
-    if c == $22 {        ; "
+    if c == '"' {
         return 0
     }
-    if c == $5c {        ; backslash
+    if c == '\\' {
         return 0
     }
     return 1
@@ -831,30 +831,30 @@ sub emit_string_byte_list(uword sid) {
                 if any != 0 {
                     out_text(", ")
                 }
-                out_byte($22)           ; open "
+                out_byte('"')           ; open "
                 in_run = 1
                 any = 1
             }
             out_byte(c)
         } else {
             if in_run != 0 {
-                out_byte($22)           ; close "
+                out_byte('"')           ; close "
                 in_run = 0
             }
             if any != 0 {
                 out_text(", ")
             }
-            out_byte($24)               ; $
+            out_byte('$')               ; $
             out_hex2(c)
             any = 1
         }
         j = j + 1
     }
     if in_run != 0 {
-        out_byte($22)
+        out_byte('"')
     }
     if any == 0 {
-        out_byte($30)                   ; "0" for the empty string
+        out_byte('0')                   ; "0" for the empty string
     }
 }
 ; two string-pool ids are equal iff same length and same bytes.
@@ -904,7 +904,7 @@ sub emit_string_pool() {
     if strpool_count == 0 {
         return
     }
-    out_byte($0a)
+    out_byte('\n')
     out_text("; ---- string pool ----")
     o_nl()
     ; park the read-only pool above the emulator's I/O stub routines (~$F0B0)
@@ -920,7 +920,7 @@ sub emit_string_pool() {
         }
         out_text("p8c_str_")
         out_dec(i)
-        out_byte($3a)                   ; :
+        out_byte(':')                   ; :
         o_nl()
         out_text("  .byte ")
         emit_string_byte_list(strpool_sid[i])
@@ -969,7 +969,7 @@ sub emit_br(ubyte brcode, ubyte tkind, uword tid) {
     o_nl()
     out_text(".Lbrs_")
     out_dec(sk)
-    out_byte($3a)
+    out_byte(':')
     o_nl()
 }
 
@@ -1036,7 +1036,7 @@ sub emit_neg_unsigned(ubyte op, ubyte tkind, uword tid) {
     emit_br(3, tkind, tid)
     out_text(".Lle_skip_")
     out_dec(sk)
-    out_byte($3a)
+    out_byte(':')
     o_nl()
 }
 ; the negated (branch-if-false) sequence for a SIGNED compare op (after the
@@ -1062,7 +1062,7 @@ sub emit_pos_unsigned(ubyte op, ubyte tkind, uword tid) {
         emit_br(3, tkind, tid)
         out_text(".Lgt_no_")
         out_dec(sk)
-        out_byte($3a)
+        out_byte(':')
         o_nl()
         return
     }
@@ -1114,7 +1114,7 @@ sub emit_cmp_cond(uword cond, ubyte tkind, uword tid, ubyte jit) {
         o_nl()
         out_text(".Lwcmp_lo_")
         out_dec(wlo)
-        out_byte($3a)
+        out_byte(':')
         o_nl()
         emit_cmp_u(op, tkind, tid, jit)
         return
@@ -1184,7 +1184,7 @@ sub emit_cond_branch(uword cond, ubyte tkind, uword tid, ubyte jit) {
                 emit_cond_branch(node_b[cbr_cond], cbr_tkind, cbr_tid, 1)
                 cb_pop()
                 emit_ctrl_label_ref(15, cbr_skip)
-                out_byte($3a)
+                out_byte(':')
                 o_nl()
             } else {
                 ; jump iff and is false: either operand false -> target.
@@ -1213,7 +1213,7 @@ sub emit_cond_branch(uword cond, ubyte tkind, uword tid, ubyte jit) {
                 emit_cond_branch(node_b[cbr_cond], cbr_tkind, cbr_tid, 0)
                 cb_pop()
                 emit_ctrl_label_ref(16, cbr_skip)
-                out_byte($3a)
+                out_byte(':')
                 o_nl()
             }
             return
@@ -1285,7 +1285,7 @@ sub codegen_body(uword body) {
         } else {
             if ty == 1 {
                 emit_ctrl_label_ref(lsb(a), b)
-                out_byte($3a)
+                out_byte(':')
                 o_nl()
             } else {
                 if ty == 2 {
@@ -1430,7 +1430,7 @@ sub codegen_while(uword st) {
     end_id = label_seq
     label_seq = label_seq + 1
     emit_ctrl_label_ref(2, top_id)
-    out_byte($3a)
+    out_byte(':')
     o_nl()
     lp_bk[lp_sp] = 3
     lp_bi[lp_sp] = end_id
@@ -1463,7 +1463,7 @@ sub codegen_repeat(uword st) {
     if count == 0 {
         ; forever: break -> rep_end, continue -> rep_top
         emit_ctrl_label_ref(7, top_id)
-        out_byte($3a)
+        out_byte(':')
         o_nl()
         lp_bk[lp_sp] = 9
         lp_bi[lp_sp] = end_id
@@ -1492,7 +1492,7 @@ sub codegen_repeat(uword st) {
     codegen_byte_expr(count)
     o_pha()
     emit_ctrl_label_ref(7, top_id)
-    out_byte($3a)
+    out_byte(':')
     o_nl()
     lp_bk[lp_sp] = 10                    ; break -> rep_break
     lp_bi[lp_sp] = break_id
@@ -1513,7 +1513,7 @@ sub emit_rep_tail(uword top_id) {
     end_id = top_id + 2
     break_id = top_id + 3
     emit_ctrl_label_ref(8, dec_id)
-    out_byte($3a)
+    out_byte(':')
     o_nl()
     o_pla()
     o_sec()
@@ -1525,11 +1525,11 @@ sub emit_rep_tail(uword top_id) {
     emit_ctrl_label_ref(7, top_id)
     o_nl()
     emit_ctrl_label_ref(10, break_id)
-    out_byte($3a)
+    out_byte(':')
     o_nl()
     o_pla()
     emit_ctrl_label_ref(9, end_id)
-    out_byte($3a)
+    out_byte(':')
     o_nl()
 }
 ; `for v in lo to hi` (inclusive, ubyte; port of _emit_for). The loop var must
@@ -1561,7 +1561,7 @@ sub codegen_for(uword st) {
     emit_sta_sym(si)
     ; for_top:
     emit_ctrl_label_ref(4, top_id)
-    out_byte($3a)
+    out_byte(':')
     o_nl()
     lp_bk[lp_sp] = 6                     ; break -> for_end
     lp_bi[lp_sp] = end_id
@@ -1585,7 +1585,7 @@ sub emit_for_cont(uword st, uword end_id) {
     uword hi
     hi = node_c[st]
     emit_ctrl_label_ref(5, cont_id)
-    out_byte($3a)
+    out_byte(':')
     o_nl()
     out_text("  lda ")
     emit_mangled(node_a[st])
@@ -1717,7 +1717,7 @@ sub emit_when_choice(uword choice, uword packed) {
             o_nl()
             emit_br(1, 12, body_id)     ; beq when_body
             emit_ctrl_label_ref(14, skip_id)
-            out_byte($3a)
+            out_byte(':')
             o_nl()
         } else {
             codegen_byte_expr(v)
@@ -1731,7 +1731,7 @@ sub emit_when_choice(uword choice, uword packed) {
     emit_ctrl_label_ref(13, next_id)    ; jmp when_next
     o_nl()
     emit_ctrl_label_ref(12, body_id)    ; when_body:
-    out_byte($3a)
+    out_byte(':')
     o_nl()
     ; deferred: body stmts, jmp when_end, when_next label.
     sws_push(1, 13, next_id)            ; when_next label (bottom)
@@ -1828,7 +1828,7 @@ sub emit_byte_leaf_load(uword e) {
             if node_kind[idx] == ND_INT {
                 o_lda()
                 emit_sym_mangled(asi)
-                out_byte($2b)
+                out_byte('+')
                 out_dec(node_a[idx])
                 o_nl()
                 return
@@ -1929,7 +1929,7 @@ sub emit_shift_op(ubyte is_left, ubyte is_imm, ubyte imm_val, ubyte mode, uword 
     emit_shift_label(is_left, 0, end_id)
     o_nl()
     emit_shift_label(is_left, 1, top_id)
-    out_byte($3a)
+    out_byte(':')
     o_nl()
     if is_left != 0 {
         out_text("  asl a")
@@ -1943,7 +1943,7 @@ sub emit_shift_op(ubyte is_left, ubyte is_imm, ubyte imm_val, ubyte mode, uword 
     emit_shift_label(is_left, 1, top_id)
     o_nl()
     emit_shift_label(is_left, 0, end_id)
-    out_byte($3a)
+    out_byte(':')
     o_nl()
 }
 ; the byte-binop core: A op <operand>, where the operand is selected by `mode`
@@ -2057,12 +2057,12 @@ sub emit_unary_apply(ubyte uncode) {
     o_nl()
     out_text(".Lnot_zero_")
     out_dec(zero_id)
-    out_byte($3a)
+    out_byte(':')
     o_nl()
     o_lda_imm1()
     out_text(".Lnot_end_")
     out_dec(end_id)
-    out_byte($3a)
+    out_byte(':')
     o_nl()
 }
 
@@ -2123,7 +2123,7 @@ sub cmp_is_signed(uword e) -> ubyte {
 sub emit_br_true(uword mnem, uword true_id) {
     out_text("  ")
     out_text(mnem)
-    out_byte($20)
+    out_byte(' ')
     out_text(".Lcmp_true_")
     out_dec(true_id)
     o_nl()
@@ -2170,7 +2170,7 @@ sub emit_cmp_tail(uword e, ubyte op) {
             emit_br_true("bcs", true_id)
             out_text(".Lgt_no_")
             out_dec(no_id)
-            out_byte($3a)
+            out_byte(':')
             o_nl()
         }
         if op == TK_LE {
@@ -2201,7 +2201,7 @@ sub emit_cmp_tail(uword e, ubyte op) {
                 o_nl()
                 out_text(".Lsgn_ok_")
                 out_dec(skip_id)
-                out_byte($3a)
+                out_byte(':')
                 o_nl()
                 if op == TK_LT {
                     emit_br_true("bmi", true_id)
@@ -2219,7 +2219,7 @@ sub emit_cmp_tail(uword e, ubyte op) {
                     emit_br_true("bpl", true_id)
                     out_text(".Lsgt_no_")
                     out_dec(no_id)
-                    out_byte($3a)
+                    out_byte(':')
                     o_nl()
                 }
                 if op == TK_LE {
@@ -2235,12 +2235,12 @@ sub emit_cmp_tail(uword e, ubyte op) {
     o_nl()
     out_text(".Lcmp_true_")
     out_dec(true_id)
-    out_byte($3a)
+    out_byte(':')
     o_nl()
     o_lda_imm1()
     out_text(".Lcmp_end_")
     out_dec(end_id)
-    out_byte($3a)
+    out_byte(':')
     o_nl()
 }
 
@@ -2312,7 +2312,7 @@ sub emit_logic_tail(ubyte op) {
     emit_logic_end_name(op, id2)
     o_nl()
     emit_logic_open_name(op, id1)
-    out_byte($3a)
+    out_byte(':')
     o_nl()
     if op == TK_KAND {
         o_lda_imm0()
@@ -2320,7 +2320,7 @@ sub emit_logic_tail(ubyte op) {
         o_lda_imm1()
     }
     emit_logic_end_name(op, id2)
-    out_byte($3a)
+    out_byte(':')
     o_nl()
 }
 ; evaluate a byte expression into A.
@@ -2759,7 +2759,7 @@ sub emit_wshift_var_tail(uword nd, ubyte is_left) {
     emit_wshift_label(is_left, 0, end_id)
     o_nl()
     emit_wshift_label(is_left, 1, top_id)
-    out_byte($3a)
+    out_byte(':')
     o_nl()
     if is_left != 0 {
         out_text("  asl __p8c_wtmp0")
@@ -2777,7 +2777,7 @@ sub emit_wshift_var_tail(uword nd, ubyte is_left) {
     emit_wshift_label(is_left, 1, top_id)
     o_nl()
     emit_wshift_label(is_left, 0, end_id)
-    out_byte($3a)
+    out_byte(':')
     o_nl()
     o_lda_wtmp0()
     o_ldy_wtmp0h()
@@ -3126,7 +3126,7 @@ sub codegen_assign_index(uword target, uword rhs) {
     if array_fast(asi, idx) != 0 {
         if node_kind[idx] == ND_INT {
             codegen_byte_expr(rhs)
-            out_text("  sta ") emit_sym_mangled(asi) out_byte($2b) out_dec(node_a[idx]) o_nl()
+            out_text("  sta ") emit_sym_mangled(asi) out_byte('+') out_dec(node_a[idx]) o_nl()
             return
         }
         codegen_byte_expr(rhs)
@@ -3587,7 +3587,7 @@ sub emit_sub(uword snode) {
     out_text(" ----")
     o_nl()
     emit_sub_label(node_a[snode])
-    out_byte($3a)
+    out_byte(':')
     o_nl()
     codegen_body(node_c[snode])
     out_text(".Lp8s_")
