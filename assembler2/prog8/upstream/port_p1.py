@@ -153,21 +153,10 @@ def port(src, extra_main_decls=""):
         r'asmsub _exit\(ubyte code\) = \$F00F.*?sub _write\(ubyte b, ubyte handle\) \{.*?\n\}\n',
         IO_NEW, src, count=1, flags=re.S)
 
-    # ---- newline fix: upstream translates the `\n` escape in string literals to
-    #      CR ($0d) at parse time (hardcoded newlineToCarriageReturn=true for
-    #      config-file targets), whereas p1's out_byte($0a) emits a real LF. p1's
-    #      output is pure asm and never needs a CR, so normalize CR->LF as
-    #      out_text streams bytes. No-op under p8c (its strings store \n as $0a). --
-    src = src.replace(
-        "        out_byte(c)\n        q = q + 1\n",
-        "        if c == $0d { c = $0a }   ; upstream stores \\n as CR; emit LF\n"
-        "        out_byte(c)\n        q = q + 1\n",
-        1)
-
-    # ---- same `\n`->CR mistranslation hits the '\n' CHAR literal (compiles to
-    #      $0d), so the lexer's `c == '\n'` never matches a real LF byte read from
-    #      the input -> any multi-line program hangs. Rewrite it to $0a. ----
-    src = src.replace("'\\n'", "$0a")
+    # ---- newline: the target uses `encoding = cp437`, whose encoder does NOT
+    #      translate the `\n` escape to CR (unlike iso/petscii). So `\n` stays LF
+    #      ($0a) in both string and char literals -- matching p8c and the
+    #      emulator. No CR->LF normalization or `'\n'`->$0a rewrite needed. ----
 
     # ---- hoist call-arguments out of new_node()/cons_prepend() calls ----
     # Upstream passes args by writing them left-to-right into the callee's STATIC
