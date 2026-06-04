@@ -306,6 +306,30 @@ class MainNamespaceForm(unittest.TestCase):
         # Regression: a plain `main { stmts }` is unchanged (entry = main).
         self.assertIn("jmp p8s_main", compile_text("main { }"))
 
+    def test_launcher_directive_ignored(self):
+        # `%launcher none` (upstream directive) parses and emits nothing extra.
+        self.assertEqual(compile_text("%output raw\nmain { }"),
+                         compile_text("%output raw\n%launcher none\nmain { }"))
+
+    def test_external_target_without_directive(self):
+        # Compiling with an external target (no %target) matches the directive.
+        from p8c.codegen import generate
+        from p8c.lex import lex
+        from p8c.parse import parse
+        from p8c.sema import analyze
+
+        def compile_ext(src, target):
+            prog = parse(lex(src, "<test>"), "<test>")
+            prog.target = target
+            if target == "nmos" and prog.address == 0x4000:
+                prog.address = 0x0200
+            analyze(prog)
+            return generate(prog, "<test>")
+
+        ext = compile_ext("main { }", "nmos")
+        directive = compile_text("%target nmos\nmain { }")
+        self.assertEqual(ext, directive)
+
 
 if __name__ == "__main__":
     unittest.main()

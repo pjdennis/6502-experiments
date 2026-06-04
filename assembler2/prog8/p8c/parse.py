@@ -227,6 +227,10 @@ class Parser:
         elif name == "output":
             v = self.eat("IDENT")
             prog.output_format = v.value
+        elif name == "launcher":
+            # `%launcher none` -- upstream directive; p8c emits no launcher, so
+            # accept and ignore it (keeps the converged source one-dialect).
+            self.eat("IDENT")
         elif name == "import":
             v = self.eat("IDENT")
             prog.imports.append(v.value)

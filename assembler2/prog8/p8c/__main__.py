@@ -90,10 +90,17 @@ def run_on_emulator(boot: Path, framed: Path, cycle_cap: int) -> str:
     return r.stderr
 
 
-def compile_source(src_path: Path) -> str:
+def compile_source(src_path: Path, target: str | None = None) -> str:
     text = src_path.read_text()
     toks = lex(text, str(src_path))
     prog = parse(toks, str(src_path))
+    if target is not None:
+        # External target selection (like upstream's -target / the .properties
+        # file), so the source needs no `%target` directive. Overrides any
+        # `%target` and applies the nmos default-address shift if unset.
+        prog.target = target
+        if target == "nmos" and prog.address == 0x4000:
+            prog.address = 0x0200
     analyze(prog)
     return generate(prog, str(src_path))
 
@@ -103,6 +110,9 @@ def main(argv: list[str] | None = None) -> int:
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("source", help="path to .p8 source")
     p.add_argument("-o", "--output", help="output .s path (default: <source>.s)")
+    p.add_argument("--target", choices=("nmos", "wendy2c"), default=None,
+                   help="select the compilation target externally (like "
+                        "upstream's -target); overrides any %%target directive")
     p.add_argument("--dump-ast", action="store_true",
                    help="parse only and print the canonical AST "
                         "S-expression serialization to stdout (the golden "
@@ -143,7 +153,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     try:
-        s_text = compile_source(src)
+        s_text = compile_source(src, target=args.target)
     except (LexError, ParseError, SemaError, CodeGenError) as e:
         sys.stderr.write(f"p8c: {e}\n")
         return 1
