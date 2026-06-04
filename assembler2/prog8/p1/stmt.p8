@@ -614,12 +614,11 @@ sub classify_name() -> ubyte {
 }
 
 ; classify a directive name (already copied into name_buf):
-; 0=address, 1=output, 2=import, 3=target, 4=other.
+; 0=address, 1=output, 2=import, 4=other.
 sub dir_classify() -> ubyte {
     name_buf[name_len] = 0                  ; NUL-terminate for strings.compare
     if kw_is("import") { return 2 }
     if kw_is("output") { return 1 }
-    if kw_is("target") { return 3 }
     if kw_is("address") { return 0 }
     return 4
 }
@@ -1875,19 +1874,6 @@ sub handle_directive() {
     }
     if dk == 2 {                            ; %import
         prog_imports = cons_prepend(prog_imports, cur_val())
-        advance()
-        return
-    }
-    if dk == 3 {                            ; %target
-        name_len = 0
-        append_ident_to_namebuf(cur_val())
-        name_buf[name_len] = 0              ; NUL-terminate for strings.compare
-        if kw_is("nmos") {
-            prog_target = 1
-            if prog_address == $4000 {
-                prog_address = $0200
-            }
-        }
         advance()
         return
     }
