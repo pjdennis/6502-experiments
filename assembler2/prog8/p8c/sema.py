@@ -12,7 +12,8 @@ Phase 1 jobs:
 from __future__ import annotations
 
 from .ast import (
-    AddressOf, ArrayLit, Assign, BinOp, Block, BoolLit, Break, Call, Continue,
+    AddressOf, ArrayLit, Assign, BinOp, Block, BoolLit, Break, Call, Cast,
+    Continue,
     Defer, ExprStmt, For, Ident, If, Index, InlineAsm, IntLit, MemAt, Param,
     Program, Repeat, Return, StrLit, StructDecl, Sub, Symbol, TUByteArray,
     TUWordArray, Type, UnaryOp, VarDecl, When, WhenChoice, While, BOOL, BYTE, STR,
@@ -694,6 +695,20 @@ class Sema:
                         f"binary op {e.op!r} needs byte/ubyte/uword operands "
                         f"(got {lt!r} and {rt!r})"
                     )
+        elif isinstance(e, Cast):
+            self._walk_expr(e.operand)
+            t = type_from_name(e.type_name)
+            if t not in (UBYTE, BYTE, UWORD):
+                raise SemaError(
+                    f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
+                    f"cannot cast to {e.type_name!r}"
+                )
+            if e.operand.type not in (UBYTE, BYTE, UWORD):
+                raise SemaError(
+                    f"{e.loc.file}:{e.loc.line}:{e.loc.col}: "
+                    f"cannot cast {e.operand.type!r} to {e.type_name!r}"
+                )
+            e.type = t
         elif isinstance(e, UnaryOp):
             self._walk_expr(e.operand)
             if e.op == "not":

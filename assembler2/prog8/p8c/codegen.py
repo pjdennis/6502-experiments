@@ -32,7 +32,7 @@ exit()).
 from __future__ import annotations
 
 from .ast import (
-    AddressOf, Assign, BinOp, Block, BoolLit, Break, Call, Continue, Defer,
+    AddressOf, Assign, BinOp, Block, BoolLit, Break, Call, Cast, Continue, Defer,
     ExprStmt, For, Ident, If, Index, InlineAsm, IntLit, MemAt, Param,
     Program, Repeat, Return, StrLit, Sub, TUByteArray, TUWordArray, UnaryOp, VarDecl,
     When, WhenChoice, While, BOOL, BYTE, UBYTE, UWORD, type_from_name,
@@ -874,6 +874,18 @@ class CodeGen:
             self.emit(f"  lda {e.sym.mangled},y")
             self.emit("  ldy #$00")
             return
+        if isinstance(e, Cast):
+            if e.type is UWORD:
+                # widen / identity to uword (handles ubyte->uword high=0).
+                self._emit_word_expr_into_ay(e.operand)
+            elif e.operand.type is UWORD:
+                # narrow uword to (u)byte, then re-widen for word context.
+                self._emit_word_expr_into_ay(e.operand)   # A=low, Y=high
+                self.emit("  ldy #$00")                    # high byte = 0
+            else:
+                self._emit_byte_expr_into_a(e.operand)
+                self.emit("  ldy #$00")
+            return
         if isinstance(e, BinOp):
             self._emit_word_binop_into_ay(e)
             return
@@ -1192,6 +1204,13 @@ class CodeGen:
             self.emit("  sty __p8c_ptr0+1")
             self.emit("  ldy #$00")
             self.emit("  lda (__p8c_ptr0),y")
+            return
+        if isinstance(e, Cast):
+            # Result is a byte: the low byte of the operand in A.
+            if e.operand.type is UWORD:
+                self._emit_word_expr_into_ay(e.operand)   # A = low byte
+            else:
+                self._emit_byte_expr_into_a(e.operand)
             return
         if isinstance(e, UnaryOp):
             self._emit_byte_expr_into_a(e.operand)

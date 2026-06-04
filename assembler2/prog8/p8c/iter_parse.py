@@ -29,8 +29,8 @@ from __future__ import annotations
 from typing import Optional
 
 from .ast import (
-    AddressOf, ArrayLit, BinOp, BoolLit, Call, Ident, Index, IntLit, Loc, MemAt,
-    Node, StrLit, UnaryOp,
+    AddressOf, ArrayLit, BinOp, BoolLit, Call, Cast, Ident, Index, IntLit, Loc,
+    MemAt, Node, StrLit, UnaryOp,
 )
 from .lex import Token
 from .parse import ParseError, _OP_PRECEDENCE
@@ -261,6 +261,22 @@ class IterParser:
                 continue
 
             # ---- infix position ----
+            # `expr as TYPE` -- type cast. Lowest precedence: it applies to the
+            # whole sub-expression in the current grouping, so first reduce all
+            # pending operators (down to the nearest marker), then wrap the
+            # resulting operand. (The transform only ever emits a parenthesized
+            # `(inner as ubyte)`, so this binds to all of `inner`.)
+            if t.kind == "KW" and t.value == "as":
+                self.pos += 1
+                tn = self.eat("KW")          # a type keyword: ubyte/uword/...
+                while ops and self._is_op(ops[-1]):
+                    apply(ops.pop())
+                operand = operands.pop()
+                operands.append(Cast(loc=operand.loc, operand=operand,
+                                     type_name=tn.value))
+                expect_operand = False
+                index_ok = False
+                continue
             op = (t.value if (t.kind == "KW" and t.value in _OP_PRECEDENCE)
                   else (t.kind if t.kind in _OP_PRECEDENCE else None))
             if op is not None:

@@ -125,6 +125,17 @@ class UnaryOp(Node):
 
 
 @dataclass
+class Cast(Node):
+    """`expr as TYPE` -- a type cast. The only forms the compiler needs are
+    narrowing a uword to ubyte (low byte) and widening ubyte to uword (high
+    byte = 0); these match upstream Prog8's `as` operator. sema sets `type`
+    from `type_name`."""
+    operand: "Node"
+    type_name: str
+    type: Type = UBYTE
+
+
+@dataclass
 class IntLit(Node):
     value: int
     type: Type = UBYTE          # narrowed by sema

@@ -158,13 +158,10 @@ def port(src, extra_main_decls=""):
     #      ($0a) in both string and char literals -- matching p8c and the
     #      emulator. No CR->LF normalization or `'\n'`->$0a rewrite needed. ----
 
-    # ---- NOTE: the arg-hoist, long-literal split, and truthy `!= 0` fixups are
-    #      now BAKED into the pipeline source (they are equivalence-preserving and
-    #      p8c compiles them identically), so they are no longer applied here. ----
-
-    # ---- cast remaining (<=256) array indices to ubyte (upstream is byte-indexed);
-    #      slabbed arenas were already rewritten to peek/poke and have no `[`. ----
-    src = "".join(_map_code(l, _cast_indices) for l in src.splitlines(keepends=True))
+    # ---- NOTE: the arg-hoist, long-literal split, truthy `!= 0`, and the
+    #      `arr[i]` -> `arr[(i as ubyte)]` byte-index casts are now BAKED into the
+    #      pipeline source (all equivalence-preserving; p8c gained an `as` cast and
+    #      compiles them identically), so they are no longer applied here. ----
 
     # ---- structural wrap ----
     # Keep the leading directives/comments (incl. %import / %address) above the

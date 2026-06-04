@@ -445,8 +445,8 @@ sub new_node(ubyte kind, ubyte op, uword a, uword b) -> uword {
 sub cons_prepend(uword head, uword val) -> uword {
     uword c
     c = cons_count
-    cons_val[c] = val
-    cons_next[c] = head
+    cons_val[(c as ubyte)] = val
+    cons_next[(c as ubyte)] = head
     cons_count = cons_count + 1
     return c
 }
@@ -612,8 +612,8 @@ sub reverse_cons_ip(uword head) -> uword {
             break
         }
         uword nxt
-        nxt = cons_next[cell]
-        cons_next[cell] = prev
+        nxt = cons_next[(cell as ubyte)]
+        cons_next[(cell as ubyte)] = prev
         prev = cell
         cell = nxt
     }
@@ -900,12 +900,12 @@ sub intern_str_label(uword sid) -> uword {
         if di >= strpool_count {
             break
         }
-        if str_sid_equal(strpool_sid[di], sid) != 0 {
+        if str_sid_equal(strpool_sid[(di as ubyte)], sid) != 0 {
             return di
         }
         di = di + 1
     }
-    strpool_sid[strpool_count] = sid
+    strpool_sid[(strpool_count as ubyte)] = sid
     di = strpool_count
     strpool_count = strpool_count + 1
     return di
@@ -937,7 +937,7 @@ sub emit_string_pool() {
         out_byte(':')                   ; :
         o_nl()
         out_text("  .byte ")
-        emit_string_byte_list(strpool_sid[i])
+        emit_string_byte_list(strpool_sid[(i as ubyte)])
         out_text(", 0")
         o_nl()
         i = i + 1
@@ -955,14 +955,14 @@ uword[] ctrl_label_strs = [
     ".Lrep_break_", ".Lwhen_end_", ".Lwhen_body_", ".Lwhen_next_",
     ".Lwhen_skip_", ".Land_skip_", ".Lor_skip_" ]
 sub emit_ctrl_label_ref(ubyte kind, uword id) {
-    out_text(ctrl_label_strs[kind])
+    out_text(ctrl_label_strs[(kind as ubyte)])
     out_dec(id)
 }
 ; branch mnemonics by code: 0 bne 1 beq 2 bcc 3 bcs 4 bmi 5 bpl 6 bvc 7 bvs.
 
 uword[] br_mnems = ["bne", "beq", "bcc", "bcs", "bmi", "bpl", "bvc", "bvs"]
 sub out_br_mnem(ubyte code) {
-    out_text(br_mnems[code])
+    out_text(br_mnems[(code as ubyte)])
 }
 ; _br: branch to a (possibly distant) control label when `brcode` is TRUE,
 ; via the inverted-branch + jmp pattern (works at any distance).
@@ -1159,18 +1159,18 @@ sub emit_cmp_cond(uword cond, ubyte tkind, uword tid, ubyte jit) {
 ; p8c _emit_cond_branch. codegen_call etc. clobber the static-ZP params, so the
 ; frame is saved on the cb stack around each recursive call.
 sub cb_push(uword cond, ubyte tkind, uword tid, uword skip) {
-    cb_cond[cb_sp] = cond
-    cb_tkind[cb_sp] = tkind
-    cb_tid[cb_sp] = tid
-    cb_skip[cb_sp] = skip
+    cb_cond[(cb_sp as ubyte)] = cond
+    cb_tkind[(cb_sp as ubyte)] = tkind
+    cb_tid[(cb_sp as ubyte)] = tid
+    cb_skip[(cb_sp as ubyte)] = skip
     cb_sp = cb_sp + 1
 }
 sub cb_pop() {
     cb_sp = cb_sp - 1
-    cbr_cond = cb_cond[cb_sp]
-    cbr_tkind = cb_tkind[cb_sp]
-    cbr_tid = cb_tid[cb_sp]
-    cbr_skip = cb_skip[cb_sp]
+    cbr_cond = cb_cond[(cb_sp as ubyte)]
+    cbr_tkind = cb_tkind[(cb_sp as ubyte)]
+    cbr_tid = cb_tid[(cb_sp as ubyte)]
+    cbr_skip = cb_skip[(cb_sp as ubyte)]
 }
 
 sub emit_cond_branch(uword cond, ubyte tkind, uword tid, ubyte jit) {
@@ -1262,9 +1262,9 @@ sub emit_cond_branch_if_false(uword cond, ubyte tkind, uword tid) {
 ; ---- statement codegen (work stack; control flow w/o recursion) ----
 
 sub sws_push(ubyte ty, uword a, uword b) {
-    sws_type[sws_sp] = ty
-    sws_a[sws_sp] = a
-    sws_b[sws_sp] = b
+    sws_type[(sws_sp as ubyte)] = ty
+    sws_a[(sws_sp as ubyte)] = a
+    sws_b[(sws_sp as ubyte)] = b
     sws_sp = sws_sp + 1
 }
 ; push a block's statements so they pop in source order. node_a[blk] is the
@@ -1281,8 +1281,8 @@ sub push_block_stmts(uword blk) {
         if cell == 0 {
             break
         }
-        sws_push(0, cons_val[cell], 0)
-        cell = cons_next[cell]
+        sws_push(0, cons_val[(cell as ubyte)], 0)
+        cell = cons_next[(cell as ubyte)]
     }
 }
 ; the statement-driver entry: emit a whole block (and everything nested) with
@@ -1300,9 +1300,9 @@ sub codegen_body(uword body) {
         ubyte ty
         uword a
         uword b
-        ty = sws_type[sws_sp]
-        a = sws_a[sws_sp]
-        b = sws_b[sws_sp]
+        ty = sws_type[(sws_sp as ubyte)]
+        a = sws_a[(sws_sp as ubyte)]
+        b = sws_b[(sws_sp as ubyte)]
         if ty == 0 {
             codegen_stmt(a)
         } else {
@@ -1364,13 +1364,13 @@ sub codegen_stmt(uword st) {
     }
     if k == ND_BREAK {
         out_text("  jmp ")
-        emit_ctrl_label_ref(lp_bk[lp_sp - 1], lp_bi[lp_sp - 1])
+        emit_ctrl_label_ref(lp_bk[(lp_sp - 1 as ubyte)], lp_bi[(lp_sp - 1 as ubyte)])
         o_nl()
         return
     }
     if k == ND_CONTINUE {
         out_text("  jmp ")
-        emit_ctrl_label_ref(lp_ck[lp_sp - 1], lp_ci[lp_sp - 1])
+        emit_ctrl_label_ref(lp_ck[(lp_sp - 1 as ubyte)], lp_ci[(lp_sp - 1 as ubyte)])
         o_nl()
         return
     }
@@ -1455,10 +1455,10 @@ sub codegen_while(uword st) {
     emit_ctrl_label_ref(2, top_id)
     out_byte(':')
     o_nl()
-    lp_bk[lp_sp] = 3
-    lp_bi[lp_sp] = end_id
-    lp_ck[lp_sp] = 2
-    lp_ci[lp_sp] = top_id
+    lp_bk[(lp_sp as ubyte)] = 3
+    lp_bi[(lp_sp as ubyte)] = end_id
+    lp_ck[(lp_sp as ubyte)] = 2
+    lp_ci[(lp_sp as ubyte)] = top_id
     lp_sp = lp_sp + 1
     emit_cond_branch_if_false(cond, 3, end_id)
     sws_push(3, 0, 0)                     ; pop loop stack (bottom)
@@ -1488,10 +1488,10 @@ sub codegen_repeat(uword st) {
         emit_ctrl_label_ref(7, top_id)
         out_byte(':')
         o_nl()
-        lp_bk[lp_sp] = 9
-        lp_bi[lp_sp] = end_id
-        lp_ck[lp_sp] = 7
-        lp_ci[lp_sp] = top_id
+        lp_bk[(lp_sp as ubyte)] = 9
+        lp_bi[(lp_sp as ubyte)] = end_id
+        lp_ck[(lp_sp as ubyte)] = 7
+        lp_ci[(lp_sp as ubyte)] = top_id
         lp_sp = lp_sp + 1
         sws_push(3, 0, 0)                 ; pop loop
         sws_push(1, 9, end_id)           ; rep_end label
@@ -1517,10 +1517,10 @@ sub codegen_repeat(uword st) {
     emit_ctrl_label_ref(7, top_id)
     out_byte(':')
     o_nl()
-    lp_bk[lp_sp] = 10                    ; break -> rep_break
-    lp_bi[lp_sp] = break_id
-    lp_ck[lp_sp] = 8                     ; continue -> rep_dec
-    lp_ci[lp_sp] = dec_id
+    lp_bk[(lp_sp as ubyte)] = 10                    ; break -> rep_break
+    lp_bi[(lp_sp as ubyte)] = break_id
+    lp_ck[(lp_sp as ubyte)] = 8                     ; continue -> rep_dec
+    lp_ci[(lp_sp as ubyte)] = dec_id
     lp_sp = lp_sp + 1
     sws_push(3, 0, 0)                    ; pop loop
     sws_push(5, 0, top_id)              ; rep tail (dec/pla/.../break/end)
@@ -1586,10 +1586,10 @@ sub codegen_for(uword st) {
     emit_ctrl_label_ref(4, top_id)
     out_byte(':')
     o_nl()
-    lp_bk[lp_sp] = 6                     ; break -> for_end
-    lp_bi[lp_sp] = end_id
-    lp_ck[lp_sp] = 5                     ; continue -> for_cont
-    lp_ci[lp_sp] = cont_id
+    lp_bk[(lp_sp as ubyte)] = 6                     ; break -> for_end
+    lp_bi[(lp_sp as ubyte)] = end_id
+    lp_ck[(lp_sp as ubyte)] = 5                     ; continue -> for_cont
+    lp_ci[(lp_sp as ubyte)] = cont_id
     lp_sp = lp_sp + 1
     sws_push(3, 0, 0)                    ; pop loop
     sws_push(1, 6, end_id)             ; for_end label
@@ -1677,8 +1677,8 @@ sub codegen_when(uword st) {
         if cell == 0 {
             break
         }
-        sws_push(7, cons_val[cell], packed)
-        cell = cons_next[cell]
+        sws_push(7, cons_val[(cell as ubyte)], packed)
+        cell = cons_next[(cell as ubyte)]
     }
 }
 ; emit one when arm. Allocates body+next labels (always, even for else, to
@@ -1720,7 +1720,7 @@ sub emit_when_choice(uword choice, uword packed) {
             break
         }
         uword v
-        v = cons_val[cell]
+        v = cons_val[(cell as ubyte)]
         if isw != 0 {
             codegen_word_expr(v)
             out_text("  sta __p8c_wtmp1")
@@ -1748,7 +1748,7 @@ sub emit_when_choice(uword choice, uword packed) {
             o_nl()
             emit_br(1, 12, body_id)     ; beq when_body
         }
-        cell = cons_next[cell]
+        cell = cons_next[(cell as ubyte)]
     }
     out_text("  jmp ")
     emit_ctrl_label_ref(13, next_id)    ; jmp when_next
@@ -1770,9 +1770,9 @@ sub emit_when_choice(uword choice, uword packed) {
 ; (-> __p8c_tmp1), matching the host's dual-scratch-safe sequence.
 
 sub cws_push(ubyte ty, uword nd, ubyte op) {
-    cws_type[cws_sp] = ty
-    cws_node[cws_sp] = nd
-    cws_op[cws_sp] = op
+    cws_type[(cws_sp as ubyte)] = ty
+    cws_node[(cws_sp as ubyte)] = nd
+    cws_op[(cws_sp as ubyte)] = op
     cws_sp = cws_sp + 1
 }
 ; a binop RHS that needs no evaluation (matches p8c's isinstance(rhs,
@@ -2325,8 +2325,8 @@ sub emit_logic_mid(ubyte op) {
     label_seq = label_seq + 1
     id2 = label_seq
     label_seq = label_seq + 1
-    lstk_id1[lstk_sp] = id1
-    lstk_id2[lstk_sp] = id2
+    lstk_id1[(lstk_sp as ubyte)] = id1
+    lstk_id2[(lstk_sp as ubyte)] = id2
     lstk_sp = lstk_sp + 1
     emit_logic_branch(op, id1)
 }
@@ -2337,8 +2337,8 @@ sub emit_logic_tail(ubyte op) {
     lstk_sp = lstk_sp - 1
     uword id1
     uword id2
-    id1 = lstk_id1[lstk_sp]
-    id2 = lstk_id2[lstk_sp]
+    id1 = lstk_id1[(lstk_sp as ubyte)]
+    id2 = lstk_id2[(lstk_sp as ubyte)]
     emit_logic_branch(op, id1)
     if op == TK_KAND {
         o_lda_imm1()
@@ -2374,9 +2374,9 @@ sub codegen_byte_expr(uword root) {
         ubyte ty
         uword nd
         ubyte op
-        ty = cws_type[cws_sp]
-        nd = cws_node[cws_sp]
-        op = cws_op[cws_sp]
+        ty = cws_type[(cws_sp as ubyte)]
+        nd = cws_node[(cws_sp as ubyte)]
+        op = cws_op[(cws_sp as ubyte)]
         if ty == 255 {
             break
         }
@@ -2569,9 +2569,9 @@ sub codegen_word_leaf(uword e) {
 }
 
 sub wws_push(ubyte ty, uword nd, ubyte op) {
-    wws_type[wws_sp] = ty
-    wws_node[wws_sp] = nd
-    wws_op[wws_sp] = op
+    wws_type[(wws_sp as ubyte)] = ty
+    wws_node[(wws_sp as ubyte)] = nd
+    wws_op[(wws_sp as ubyte)] = op
     wws_sp = wws_sp + 1
 }
 ; &name (address-of) -> a uword value (lda #< / ldy #> the mangled label).
@@ -2920,11 +2920,11 @@ sub word_dispatch(uword nd) {
         ; word-returning call -> A:Y; a ubyte-returning call widens (ldy #0).
         ; codegen_call re-enters word_dispatch (the call's own arg eval), so
         ; stack the widen flag rather than re-reading the clobbered `nd`.
-        wdn_stack[wdn_sp] = call_returns_ubyte(nd)
+        wdn_stack[(wdn_sp as ubyte)] = call_returns_ubyte(nd)
         wdn_sp = wdn_sp + 1
         codegen_call(nd)
         wdn_sp = wdn_sp - 1
-        if wdn_stack[wdn_sp] != 0 {
+        if wdn_stack[(wdn_sp as ubyte)] != 0 {
             o_ldy() o_imm()
             out_text("00")
             o_nl()
@@ -2973,9 +2973,9 @@ sub codegen_word_expr(uword root) {
         ubyte ty
         uword nd
         ubyte op
-        ty = wws_type[wws_sp]
-        nd = wws_node[wws_sp]
-        op = wws_op[wws_sp]
+        ty = wws_type[(wws_sp as ubyte)]
+        nd = wws_node[(wws_sp as ubyte)]
+        op = wws_op[(wws_sp as ubyte)]
         if ty == 255 {
             break
         }
@@ -3225,7 +3225,7 @@ sub find_sub(uword identid) -> uword {
         if i >= sub_count {
             break
         }
-        if sub_name[i] == identid {
+        if sub_name[(i as ubyte)] == identid {
             return i
         }
         i = i + 1
@@ -3278,20 +3278,20 @@ sub builtin_kind(uword identid) -> ubyte {
 
 sub bi_arg0() -> uword {
     uword h
-    h = peekw($cbfc + ((bi_cn[bi_sp - 1]) << 1))
-    if cons_next[h] == 0 {
-        return cons_val[h]              ; single arg
+    h = peekw($cbfc + ((bi_cn[(bi_sp - 1 as ubyte)]) << 1))
+    if cons_next[(h as ubyte)] == 0 {
+        return cons_val[(h as ubyte)]              ; single arg
     }
-    return cons_val[cons_next[h]]       ; first of two
+    return cons_val[(cons_next[(h as ubyte)] as ubyte)]       ; first of two
 }
 
 sub bi_arg1() -> uword {
-    return cons_val[peekw($cbfc + ((bi_cn[bi_sp - 1]) << 1))]   ; second (= head)
+    return cons_val[(peekw($cbfc + ((bi_cn[(bi_sp - 1 as ubyte)]) << 1)) as ubyte)]   ; second (= head)
 }
 ; lower a builtin call to inline asm (port of _emit_builtin_call).
 
 sub emit_builtin(uword callnode, ubyte bk) {
-    bi_cn[bi_sp] = callnode
+    bi_cn[(bi_sp as ubyte)] = callnode
     bi_sp = bi_sp + 1
     if bk == 1 {                       ; lsb(uword) -> low byte in A
         codegen_word_expr(bi_arg0())
@@ -3358,7 +3358,7 @@ sub call_returns_ubyte(uword callnode) -> ubyte {
     uword si
     si = find_sub(callee)
     if si != $ffff {
-        if sub_ret[si] == TY_UBYTE {
+        if sub_ret[(si as ubyte)] == TY_UBYTE {
             return 1
         }
     }
@@ -3378,11 +3378,11 @@ sub collect_params(uword callee) {
         }
         if peekw($e0f4 + ((i) << 1)) == callee {
             if peek($e47c + (i)) == 1 {
-                call_slot[call_n] = i
+                call_slot[(call_n as ubyte)] = i
                 if peek($dba8 + (i)) == TY_UWORD {
-                    call_isw[call_n] = 1
+                    call_isw[(call_n as ubyte)] = 1
                 } else {
-                    call_isw[call_n] = 0
+                    call_isw[(call_n as ubyte)] = 0
                 }
                 call_n = call_n + 1
             }
@@ -3400,7 +3400,7 @@ sub codegen_asmsub_call(uword callnode, uword cs) {
     collect_params(peekw($c7f0 + ((callnode) << 1)))
     if call_n == 1 {
         uword arg1
-        arg1 = cons_val[reverse_cons_ip(peekw($cbfc + ((callnode) << 1)))]
+        arg1 = cons_val[(reverse_cons_ip(peekw($cbfc + ((callnode) << 1))) as ubyte)]
         if call_isw[0] != 0 {
             codegen_word_expr(arg1)
         } else {
@@ -3408,7 +3408,7 @@ sub codegen_asmsub_call(uword callnode, uword cs) {
         }
     }
     out_text("  jsr $")
-    out_hex4(sub_addr[cs])
+    out_hex4(sub_addr[(cs as ubyte)])
     o_nl()
 }
 ; Result: A (ubyte/byte) or A:Y (uword). (NOTE: call_slot is global, so an arg
@@ -3426,7 +3426,7 @@ sub codegen_call(uword callnode) {
     uword cs
     cs = find_sub(callee)
     if cs != $ffff {
-        if sub_kind[cs] == SUBK_ASMSUB {
+        if sub_kind[(cs as ubyte)] == SUBK_ASMSUB {
             codegen_asmsub_call(callnode, cs)
             return
         }
@@ -3438,10 +3438,10 @@ sub codegen_call(uword callnode) {
         ; static-ZP locals (callee, call_slot, ...), so save callee across the
         ; eval and re-derive the slot afterwards (collect_params is pure).
         uword arg1
-        arg1 = cons_val[reverse_cons_ip(peekw($cbfc + ((callnode) << 1)))]
+        arg1 = cons_val[(reverse_cons_ip(peekw($cbfc + ((callnode) << 1))) as ubyte)]
         ubyte isw1
         isw1 = call_isw[0]
-        ccs_callee[ccs_sp] = callee
+        ccs_callee[(ccs_sp as ubyte)] = callee
         ccs_sp = ccs_sp + 1
         if isw1 != 0 {
             codegen_word_expr(arg1)
@@ -3449,7 +3449,7 @@ sub codegen_call(uword callnode) {
             codegen_byte_expr(arg1)
         }
         ccs_sp = ccs_sp - 1
-        callee = ccs_callee[ccs_sp]
+        callee = ccs_callee[(ccs_sp as ubyte)]
         collect_params(callee)
         ; the arg eval may have been a nested call that clobbered the static-ZP
         ; local isw1; re-derive it from the just-refilled call_isw so the high-
@@ -3479,12 +3479,12 @@ sub codegen_call(uword callnode) {
                 break
             }
             uword arg
-            arg = cons_val[acell]
-            ccs_callee[ccs_sp] = callee
-            ccs_node[ccs_sp] = acell
-            ccs_j[ccs_sp] = j
+            arg = cons_val[(acell as ubyte)]
+            ccs_callee[(ccs_sp as ubyte)] = callee
+            ccs_node[(ccs_sp as ubyte)] = acell
+            ccs_j[(ccs_sp as ubyte)] = j
             ccs_sp = ccs_sp + 1
-            if call_isw[j] != 0 {
+            if call_isw[(j as ubyte)] != 0 {
                 codegen_word_expr(arg)
                 o_pha()
                 o_tya()
@@ -3494,12 +3494,12 @@ sub codegen_call(uword callnode) {
                 o_pha()
             }
             ccs_sp = ccs_sp - 1
-            callee = ccs_callee[ccs_sp]
-            acell = ccs_node[ccs_sp]
-            j = ccs_j[ccs_sp]
+            callee = ccs_callee[(ccs_sp as ubyte)]
+            acell = ccs_node[(ccs_sp as ubyte)]
+            j = ccs_j[(ccs_sp as ubyte)]
             collect_params(callee)
             j = j + 1
-            acell = cons_next[acell]
+            acell = cons_next[(acell as ubyte)]
         }
         ; pop into param slots in reverse order (j == call_n here).
         repeat {
@@ -3508,8 +3508,8 @@ sub codegen_call(uword callnode) {
             }
             j = j - 1
             uword psi
-            psi = call_slot[j]
-            if call_isw[j] != 0 {
+            psi = call_slot[(j as ubyte)]
+            if call_isw[(j as ubyte)] != 0 {
                 out_text("  pla")          ; high byte
                 o_nl()
                 o_sta()
@@ -3644,7 +3644,7 @@ sub load_global() {
     i = 0
     repeat {
         if i >= sub_count { break }
-        sub_name[i] = l16() sub_kind[i] = read_src() sub_ret[i] = read_src() sub_addr[i] = l16()
+        sub_name[(i as ubyte)] = l16() sub_kind[(i as ubyte)] = read_src() sub_ret[(i as ubyte)] = read_src() sub_addr[(i as ubyte)] = l16()
         i = i + 1
     }
     ident_pool_len = l16()
@@ -3683,7 +3683,7 @@ sub load_record() {
     i = 0
     repeat {
         if i >= cons_count { break }
-        cons_val[i] = l16() cons_next[i] = l16()
+        cons_val[(i as ubyte)] = l16() cons_next[(i as ubyte)] = l16()
         i = i + 1
     }
 }

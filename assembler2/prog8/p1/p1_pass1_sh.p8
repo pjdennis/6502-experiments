@@ -612,7 +612,7 @@ sub read_ident() {
         if is_alnum_us(c) != 0 {
             c = read_src()
             if name_len < 64 {
-                name_buf[name_len] = c
+                name_buf[(name_len as ubyte)] = c
                 name_len = name_len + 1
             }
         } else {
@@ -638,7 +638,7 @@ sub intern_name() -> uword {
             if j >= name_len {
                 break
             }
-            if peek($8300 + (off + j)) != name_buf[j] {
+            if peek($8300 + (off + j)) != name_buf[(j as ubyte)] {
                 match = 0
                 break
             }
@@ -665,7 +665,7 @@ sub intern_name() -> uword {
         if k >= name_len {
             break
         }
-        poke($8300 + (ident_pool_len), name_buf[k])
+        poke($8300 + (ident_pool_len), name_buf[(k as ubyte)])
         ident_pool_len = ident_pool_len + 1
         k = k + 1
     }
@@ -708,12 +708,12 @@ ubyte[31] kw_toks = [
     TK_KRETURN, TK_KSTRUCT, TK_KCONTINUE ]
 
 sub classify_name() -> ubyte {
-    name_buf[name_len] = 0                  ; NUL-terminate for strings.compare
+    name_buf[(name_len as ubyte)] = 0                  ; NUL-terminate for strings.compare
     ubyte i
     i = 0
     repeat {
         if i >= 31 { break }
-        if strings.compare(&name_buf, kw_strs[i]) == 0 { return kw_toks[i] }
+        if strings.compare(&name_buf, kw_strs[(i as ubyte)]) == 0 { return kw_toks[(i as ubyte)] }
         i = i + 1
     }
     return TK_IDENT
@@ -725,12 +725,12 @@ sub classify_name() -> ubyte {
 uword[4] dir_strs = ["address", "output", "import", "target"]
 ubyte[4] dir_codes = [0, 1, 2, 3]
 sub dir_classify() -> ubyte {
-    name_buf[name_len] = 0                  ; NUL-terminate for strings.compare
+    name_buf[(name_len as ubyte)] = 0                  ; NUL-terminate for strings.compare
     ubyte i
     i = 0
     repeat {
         if i >= 4 { break }
-        if strings.compare(&name_buf, dir_strs[i]) == 0 { return dir_codes[i] }
+        if strings.compare(&name_buf, dir_strs[(i as ubyte)]) == 0 { return dir_codes[(i as ubyte)] }
         i = i + 1
     }
     return 4
@@ -1065,51 +1065,51 @@ sub is_binop(ubyte k) -> ubyte {
 ; ---- shunting-yard ----
 
 sub push_operand(uword node) {
-    operand_stack[operand_sp] = node
+    operand_stack[(operand_sp as ubyte)] = node
     operand_sp = operand_sp + 1
 }
 
 sub push_op(ubyte k, ubyte op, ubyte prec) {
-    op_kind[op_sp] = k
-    op_op[op_sp] = op
-    op_prec[op_sp] = prec
+    op_kind[(op_sp as ubyte)] = k
+    op_op[(op_sp as ubyte)] = op
+    op_prec[(op_sp as ubyte)] = prec
     op_sp = op_sp + 1
 }
 
 sub push_marker(ubyte k, uword floor) {
-    op_kind[op_sp] = k
-    op_floor[op_sp] = floor
-    op_b[op_sp] = 0
+    op_kind[(op_sp as ubyte)] = k
+    op_floor[(op_sp as ubyte)] = floor
+    op_b[(op_sp as ubyte)] = 0
     op_sp = op_sp + 1
 }
 
 sub apply_top() {
     op_sp = op_sp - 1
     ubyte k
-    k = op_kind[op_sp]
+    k = op_kind[(op_sp as ubyte)]
     if k == OPK_BINOP {
         operand_sp = operand_sp - 1
         uword rhs
-        rhs = operand_stack[operand_sp]
+        rhs = operand_stack[(operand_sp as ubyte)]
         operand_sp = operand_sp - 1
         uword lhs
-        lhs = operand_stack[operand_sp]
-        operand_stack[operand_sp] = new_node(ND_BINOP, op_op[op_sp], lhs, rhs)
+        lhs = operand_stack[(operand_sp as ubyte)]
+        operand_stack[(operand_sp as ubyte)] = new_node(ND_BINOP, op_op[(op_sp as ubyte)], lhs, rhs)
         operand_sp = operand_sp + 1
     } else {
         operand_sp = operand_sp - 1
         uword operand
-        operand = operand_stack[operand_sp]
-        operand_stack[operand_sp] = new_node(ND_UNOP, op_op[op_sp], operand, 0)
+        operand = operand_stack[(operand_sp as ubyte)]
+        operand_stack[(operand_sp as ubyte)] = new_node(ND_UNOP, op_op[(op_sp as ubyte)], operand, 0)
         operand_sp = operand_sp + 1
     }
 }
 
 sub top_prec() -> ubyte {
-    if op_kind[op_sp - 1] == OPK_UNOP {
+    if op_kind[(op_sp - 1 as ubyte)] == OPK_UNOP {
         return UNARY_PREC
     }
-    return op_prec[op_sp - 1]
+    return op_prec[(op_sp - 1 as ubyte)]
 }
 
 sub reduce_to_marker() {
@@ -1117,7 +1117,7 @@ sub reduce_to_marker() {
         if op_sp == 0 {
             return
         }
-        if op_kind[op_sp - 1] >= OPK_LPAREN {
+        if op_kind[(op_sp - 1 as ubyte)] >= OPK_LPAREN {
             return
         }
         apply_top()
@@ -1135,7 +1135,7 @@ sub append_ident_to_namebuf(uword id) {
         if j >= n {
             break
         }
-        name_buf[name_len] = peek($8300 + (off + j))
+        name_buf[(name_len as ubyte)] = peek($8300 + (off + j))
         name_len = name_len + 1
         j = j + 1
     }
@@ -1153,7 +1153,7 @@ sub append_ident_to_pathbuf(uword id) {
         if j >= n {
             break
         }
-        path_buf[path_len] = peek($8300 + (off + j))
+        path_buf[(path_len as ubyte)] = peek($8300 + (off + j))
         path_len = path_len + 1
         j = j + 1
     }
@@ -1175,7 +1175,7 @@ sub read_dotted_path() -> uword {
             break
         }
         advance()
-        path_buf[path_len] = $2e
+        path_buf[(path_len as ubyte)] = $2e
         path_len = path_len + 1
         append_ident_to_pathbuf(cur_val())
         advance()
@@ -1188,7 +1188,7 @@ sub read_dotted_path() -> uword {
         if i >= path_len {
             break
         }
-        name_buf[i] = path_buf[i]
+        name_buf[(i as ubyte)] = path_buf[(i as ubyte)]
         i = i + 1
     }
     return intern_name()
@@ -1198,10 +1198,10 @@ sub close_index() {
     op_sp = op_sp - 1
     operand_sp = operand_sp - 1
     uword index
-    index = operand_stack[operand_sp]
+    index = operand_stack[(operand_sp as ubyte)]
     operand_sp = operand_sp - 1
     uword array
-    array = operand_stack[operand_sp]
+    array = operand_stack[(operand_sp as ubyte)]
     advance()
     uword node
     node = new_node(ND_INDEX, 0, array, index)
@@ -1220,12 +1220,12 @@ sub close_call() {
     uword head
     uword path
     uword floor
-    head = op_b[op_sp - 1]
-    path = op_a[op_sp - 1]
-    floor = op_floor[op_sp - 1]
+    head = op_b[(op_sp - 1 as ubyte)]
+    path = op_a[(op_sp - 1 as ubyte)]
+    floor = op_floor[(op_sp - 1 as ubyte)]
     if operand_sp > floor {
         operand_sp = operand_sp - 1
-        head = cons_prepend(head, operand_stack[operand_sp])
+        head = cons_prepend(head, operand_stack[(operand_sp as ubyte)])
     }
     op_sp = op_sp - 1
     uword node
@@ -1251,7 +1251,7 @@ sub parse_expr() -> uword {
                 break
             }
             ubyte mk
-            mk = op_kind[op_sp - 1]
+            mk = op_kind[(op_sp - 1 as ubyte)]
             if mk == OPK_LPAREN {
                 op_sp = op_sp - 1
                 advance()
@@ -1262,7 +1262,7 @@ sub parse_expr() -> uword {
             if mk == OPK_MEMAT {
                 op_sp = op_sp - 1
                 operand_sp = operand_sp - 1
-                push_operand(new_node(ND_MEMAT, 0, operand_stack[operand_sp], 0))
+                push_operand(new_node(ND_MEMAT, 0, operand_stack[(operand_sp as ubyte)], 0))
                 advance()
                 expect_operand = 0
                 index_ok = 0
@@ -1282,7 +1282,7 @@ sub parse_expr() -> uword {
             if op_sp == 0 {
                 break
             }
-            if op_kind[op_sp - 1] != OPK_LBRACK {
+            if op_kind[(op_sp - 1 as ubyte)] != OPK_LBRACK {
                 break
             }
             close_index()
@@ -1295,11 +1295,11 @@ sub parse_expr() -> uword {
             if op_sp == 0 {
                 break
             }
-            if op_kind[op_sp - 1] != OPK_CALL {
+            if op_kind[(op_sp - 1 as ubyte)] != OPK_CALL {
                 break
             }
             operand_sp = operand_sp - 1
-            op_b[op_sp - 1] = cons_prepend(op_b[op_sp - 1], operand_stack[operand_sp])
+            op_b[(op_sp - 1 as ubyte)] = cons_prepend(op_b[(op_sp - 1 as ubyte)], operand_stack[(operand_sp as ubyte)])
             advance()
             expect_operand = 1
             index_ok = 0
@@ -1377,7 +1377,7 @@ sub parse_expr() -> uword {
                 if cur_kind() == TK_LPAREN {
                     advance()
                     push_marker(OPK_CALL, operand_sp)
-                    op_a[op_sp - 1] = path
+                    op_a[(op_sp - 1 as ubyte)] = path
                 } else {
                     push_operand(new_node(ND_IDENT, 0, path, 0))
                     expect_operand = 0
@@ -1395,7 +1395,7 @@ sub parse_expr() -> uword {
                 if op_sp == 0 {
                     break
                 }
-                if op_kind[op_sp - 1] >= OPK_LPAREN {
+                if op_kind[(op_sp - 1 as ubyte)] >= OPK_LPAREN {
                     break
                 }
                 if top_prec() < prec {
@@ -1429,7 +1429,7 @@ sub parse_expr() -> uword {
         apply_top()
     }
     operand_sp = operand_sp - 1
-    return operand_stack[operand_sp]
+    return operand_stack[(operand_sp as ubyte)]
 }
 
 
@@ -1532,14 +1532,14 @@ sub parse_assign_or_expr() -> uword {
 ; ---- frame stack ----
 
 sub fr_attach(uword node) {
-    fr_stmts[fr_sp - 1] = cons_prepend(fr_stmts[fr_sp - 1], node)
+    fr_stmts[(fr_sp - 1 as ubyte)] = cons_prepend(fr_stmts[(fr_sp - 1 as ubyte)], node)
 }
 
 sub fr_push_block(ubyte kind, ubyte deferflag) {
-    fr_kind[fr_sp] = kind
-    fr_mode[fr_sp] = 0
-    fr_stmts[fr_sp] = 0
-    fr_defer[fr_sp] = deferflag
+    fr_kind[(fr_sp as ubyte)] = kind
+    fr_mode[(fr_sp as ubyte)] = 0
+    fr_stmts[(fr_sp as ubyte)] = 0
+    fr_defer[(fr_sp as ubyte)] = deferflag
     fr_sp = fr_sp + 1
 }
 
@@ -1563,7 +1563,7 @@ sub stmt_dispatch(ubyte deferflag) -> ubyte {
         cond = parse_expr()
         advance()                           ; '{'
         fr_push_block(FR_THEN, deferflag)
-        fr_cond[fr_sp - 1] = cond
+        fr_cond[(fr_sp - 1 as ubyte)] = cond
         return 1
     }
     if t == TK_KWHILE {
@@ -1572,7 +1572,7 @@ sub stmt_dispatch(ubyte deferflag) -> ubyte {
         wcond = parse_expr()
         advance()
         fr_push_block(FR_WHILE, deferflag)
-        fr_cond[fr_sp - 1] = wcond
+        fr_cond[(fr_sp - 1 as ubyte)] = wcond
         return 1
     }
     if t == TK_KWHEN {
@@ -1580,11 +1580,11 @@ sub stmt_dispatch(ubyte deferflag) -> ubyte {
         uword wexpr
         wexpr = parse_expr()
         advance()                           ; '{'
-        fr_kind[fr_sp] = FR_WHEN
-        fr_mode[fr_sp] = 1
-        fr_defer[fr_sp] = deferflag
-        fr_cond[fr_sp] = wexpr
-        fr_choices[fr_sp] = 0
+        fr_kind[(fr_sp as ubyte)] = FR_WHEN
+        fr_mode[(fr_sp as ubyte)] = 1
+        fr_defer[(fr_sp as ubyte)] = deferflag
+        fr_cond[(fr_sp as ubyte)] = wexpr
+        fr_choices[(fr_sp as ubyte)] = 0
         fr_sp = fr_sp + 1
         return 1
     }
@@ -1597,7 +1597,7 @@ sub stmt_dispatch(ubyte deferflag) -> ubyte {
         }
         advance()                           ; '{'
         fr_push_block(FR_REPEAT, deferflag)
-        fr_cond[fr_sp - 1] = count
+        fr_cond[(fr_sp - 1 as ubyte)] = count
         return 1
     }
     if t == TK_KFOR {
@@ -1613,9 +1613,9 @@ sub stmt_dispatch(ubyte deferflag) -> ubyte {
         hi = parse_expr()
         advance()                           ; '{'
         fr_push_block(FR_FOR, deferflag)
-        fr_var[fr_sp - 1] = varid
-        fr_lo[fr_sp - 1] = lo
-        fr_hi[fr_sp - 1] = hi
+        fr_var[(fr_sp - 1 as ubyte)] = varid
+        fr_lo[(fr_sp - 1 as ubyte)] = lo
+        fr_hi[(fr_sp - 1 as ubyte)] = hi
         return 1
     }
     if t == TK_KBREAK {
@@ -1667,10 +1667,10 @@ sub parse_block() -> uword {
     advance()                               ; consume opening '{'
     fr_sp = 0
     pending_defer = 0
-    fr_kind[fr_sp] = FR_ROOT
-    fr_mode[fr_sp] = 0
-    fr_stmts[fr_sp] = 0
-    fr_defer[fr_sp] = 0
+    fr_kind[(fr_sp as ubyte)] = FR_ROOT
+    fr_mode[(fr_sp as ubyte)] = 0
+    fr_stmts[(fr_sp as ubyte)] = 0
+    fr_defer[(fr_sp as ubyte)] = 0
     fr_sp = fr_sp + 1
     uword result
     result = 0
@@ -1684,13 +1684,13 @@ sub parse_block() -> uword {
         ubyte t
         uword node
 
-        if fr_mode[fi] == 1 {               ; when body (choices)
+        if fr_mode[(fi as ubyte)] == 1 {               ; when body (choices)
             t = cur_kind()
             if t == TK_RBRACE {
                 advance()
-                node = new_node(ND_WHEN, 0, fr_cond[fi], fr_choices[fi])
+                node = new_node(ND_WHEN, 0, fr_cond[(fi as ubyte)], fr_choices[(fi as ubyte)])
                 ubyte df
-                df = fr_defer[fi]
+                df = fr_defer[(fi as ubyte)]
                 fr_sp = fr_sp - 1
                 if df != 0 {
                     node = new_node(ND_DEFER, 0, node, 0)
@@ -1716,11 +1716,11 @@ sub parse_block() -> uword {
             }
             advance()                       ; '->'
             advance()                       ; '{'
-            fr_kind[fr_sp] = FR_CHOICE
-            fr_mode[fr_sp] = 0
-            fr_stmts[fr_sp] = 0
-            fr_defer[fr_sp] = 0
-            fr_values[fr_sp] = vals
+            fr_kind[(fr_sp as ubyte)] = FR_CHOICE
+            fr_mode[(fr_sp as ubyte)] = 0
+            fr_stmts[(fr_sp as ubyte)] = 0
+            fr_defer[(fr_sp as ubyte)] = 0
+            fr_values[(fr_sp as ubyte)] = vals
             fr_sp = fr_sp + 1
             continue
         }
@@ -1729,9 +1729,9 @@ sub parse_block() -> uword {
         if t == TK_RBRACE {
             advance()
             uword block
-            block = new_node(ND_BLOCK, 0, fr_stmts[fi], 0)
+            block = new_node(ND_BLOCK, 0, fr_stmts[(fi as ubyte)], 0)
             ubyte kind
-            kind = fr_kind[fi]
+            kind = fr_kind[(fi as ubyte)]
             fr_sp = fr_sp - 1
             if kind == FR_ROOT {
                 result = block
@@ -1739,12 +1739,12 @@ sub parse_block() -> uword {
             }
             if kind == FR_CHOICE {
                 uword chvals
-                chvals = fr_values[fi]
+                chvals = fr_values[(fi as ubyte)]
                 uword ch
                 ch = new_node(ND_WHENCHOICE, 0, chvals, block)
                 uword pch
-                pch = cons_prepend(fr_choices[fr_sp - 1], ch)
-                fr_choices[fr_sp - 1] = pch
+                pch = cons_prepend(fr_choices[(fr_sp - 1 as ubyte)], ch)
+                fr_choices[(fr_sp - 1 as ubyte)] = pch
                 continue
             }
             node = 0
@@ -1752,36 +1752,36 @@ sub parse_block() -> uword {
                 if cur_kind() == TK_KELSE {
                     advance()
                     advance()               ; '{'
-                    fr_kind[fr_sp] = FR_ELSE
-                    fr_mode[fr_sp] = 0
-                    fr_stmts[fr_sp] = 0
-                    fr_defer[fr_sp] = fr_defer[fi]
-                    fr_cond[fr_sp] = fr_cond[fi]
-                    fr_then[fr_sp] = block
+                    fr_kind[(fr_sp as ubyte)] = FR_ELSE
+                    fr_mode[(fr_sp as ubyte)] = 0
+                    fr_stmts[(fr_sp as ubyte)] = 0
+                    fr_defer[(fr_sp as ubyte)] = fr_defer[(fi as ubyte)]
+                    fr_cond[(fr_sp as ubyte)] = fr_cond[(fi as ubyte)]
+                    fr_then[(fr_sp as ubyte)] = block
                     fr_sp = fr_sp + 1
                     continue
                 }
-                node = new_node(ND_IF, 0, fr_cond[fi], block)
+                node = new_node(ND_IF, 0, fr_cond[(fi as ubyte)], block)
             } else {
                 if kind == FR_ELSE {
-                    node = new_node(ND_IF, 0, fr_cond[fi], fr_then[fi])
+                    node = new_node(ND_IF, 0, fr_cond[(fi as ubyte)], fr_then[(fi as ubyte)])
                     pokew($bb48 + ((node) << 1), block)
                 } else {
                     if kind == FR_WHILE {
-                        node = new_node(ND_WHILE, 0, fr_cond[fi], block)
+                        node = new_node(ND_WHILE, 0, fr_cond[(fi as ubyte)], block)
                     } else {
                         if kind == FR_FOR {
-                            node = new_node(ND_FOR, 0, fr_var[fi], fr_lo[fi])
-                            pokew($bb48 + ((node) << 1), fr_hi[fi])
+                            node = new_node(ND_FOR, 0, fr_var[(fi as ubyte)], fr_lo[(fi as ubyte)])
+                            pokew($bb48 + ((node) << 1), fr_hi[(fi as ubyte)])
                             pokew($bf60 + ((node) << 1), block)
                         } else {
                             ; FR_REPEAT
-                            node = new_node(ND_REPEAT, 0, fr_cond[fi], block)
+                            node = new_node(ND_REPEAT, 0, fr_cond[(fi as ubyte)], block)
                         }
                     }
                 }
             }
-            if fr_defer[fi] != 0 {
+            if fr_defer[(fi as ubyte)] != 0 {
                 node = new_node(ND_DEFER, 0, node, 0)
             }
             fr_attach(node)
@@ -2067,7 +2067,7 @@ sub handle_directive() {
     if dk == 3 {                            ; %target
         name_len = 0
         append_ident_to_namebuf(cur_val())
-        name_buf[name_len] = 0              ; NUL-terminate for strings.compare
+        name_buf[(name_len as ubyte)] = 0              ; NUL-terminate for strings.compare
         if strings.compare(&name_buf, "nmos") == 0 {
             prog_target = 1
             if prog_address == $4000 {
@@ -2609,7 +2609,7 @@ sub push_walk_block(uword blk) {
         if cell == 0 {
             break
         }
-        sws_a[sws_sp] = peekw($c378 + ((cell) << 1))
+        sws_a[(sws_sp as ubyte)] = peekw($c378 + ((cell) << 1))
         sws_sp = sws_sp + 1
         cell = peekw($c598 + ((cell) << 1))
     }
@@ -2639,7 +2639,7 @@ sub walk_locals(uword body, uword subname) {
         }
         sws_sp = sws_sp - 1
         uword st
-        st = sws_a[sws_sp]
+        st = sws_a[(sws_sp as ubyte)]
         ubyte k
         k = peek($af00 + (st))
         if k == ND_VARDECL {
@@ -2726,12 +2726,12 @@ sub register_subs() {
             }
         }
         if issub != 0 {
-            sub_name[sub_count] = peekw($b318 + ((snode) << 1))
-            sub_kind[sub_count] = peek($b10c + (snode))
-            sub_ret[sub_count] = lsb(peekw($bf60 + ((snode) << 1)))
-            sub_addr[sub_count] = 0
+            sub_name[(sub_count as ubyte)] = peekw($b318 + ((snode) << 1))
+            sub_kind[(sub_count as ubyte)] = peek($b10c + (snode))
+            sub_ret[(sub_count as ubyte)] = lsb(peekw($bf60 + ((snode) << 1)))
+            sub_addr[(sub_count as ubyte)] = 0
             if peek($b10c + (snode)) == SUBK_ASMSUB {
-                sub_addr[sub_count] = peekw($bb48 + ((snode) << 1))   ; node_c is the $F0xx addr
+                sub_addr[(sub_count as ubyte)] = peekw($bb48 + ((snode) << 1))   ; node_c is the $F0xx addr
             }
             sub_count = sub_count + 1
             ; allocate this sub's params (source order), continuing zp_next.
@@ -2804,7 +2804,7 @@ sub dump_global() {
     i = 0
     repeat {
         if i >= sub_count { break }
-        d16(sub_name[i]) out_byte(sub_kind[i]) out_byte(sub_ret[i]) d16(sub_addr[i])
+        d16(sub_name[(i as ubyte)]) out_byte(sub_kind[(i as ubyte)]) out_byte(sub_ret[(i as ubyte)]) d16(sub_addr[(i as ubyte)])
         i = i + 1
     }
     d16(ident_pool_len)
