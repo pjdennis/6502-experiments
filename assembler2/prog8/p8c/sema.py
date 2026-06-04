@@ -243,10 +243,15 @@ class Sema:
                     f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: "
                     f"only ubyte/uword arrays supported (got {vd.type_name!r}[])"
                 )
-            if vd.array_size <= 0 or vd.array_size > 8192:
+            # Arrays are byte-indexed (upstream's model): a uword array stores
+            # its halves in two parallel byte arrays and a ubyte array uses
+            # `lda label,y`, so the element count must fit a byte. Arenas larger
+            # than this live as peek/poke slabs at fixed addresses instead.
+            if vd.array_size <= 0 or vd.array_size > 256:
                 raise SemaError(
                     f"{vd.loc.file}:{vd.loc.line}:{vd.loc.col}: "
-                    f"array size must be 1..8192 (got {vd.array_size})"
+                    f"array size must be 1..256 (got {vd.array_size}); "
+                    f"larger arenas must use peek/poke slabs"
                 )
             t = (TUWordArray(vd.array_size) if vd.type_name == "uword"
                  else TUByteArray(vd.array_size))

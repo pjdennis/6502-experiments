@@ -52,8 +52,18 @@ class StmtEquivalence(unittest.TestCase):
         cls.workdir = Path(tempfile.mkdtemp(prefix="p1_stmt_"))
         s_path = cls.workdir / "stmt.s"
         cls.stmt_bin = cls.workdir / "stmt.bin"
+        # stmt.p8 keeps its >256-element arenas as the un-slabbed master (so
+        # build_p1.py can resize them for p1.p8). p8c no longer compiles arrays
+        # larger than 256, so bake those arenas into peek/poke slabs on a temp
+        # copy first -- the same transform the committed pipeline passes use.
+        baked = cls.workdir / "stmt.p8"
+        baked.write_text(STMT_SRC.read_text())
         r = subprocess.run(
-            [sys.executable, "-m", "p8c", str(STMT_SRC), "-o", str(s_path)],
+            [sys.executable, str(PROG8 / "upstream" / "bake_slabs.py"),
+             str(baked)], capture_output=True, text=True)
+        assert r.returncode == 0, f"bake_slabs failed:\n{r.stdout}\n{r.stderr}"
+        r = subprocess.run(
+            [sys.executable, "-m", "p8c", str(baked), "-o", str(s_path)],
             capture_output=True, text=True, cwd=str(PROG8))
         assert r.returncode == 0, f"p8c failed:\n{r.stdout}\n{r.stderr}"
         r = subprocess.run(

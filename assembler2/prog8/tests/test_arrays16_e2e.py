@@ -1,6 +1,7 @@
-"""Behavioral tests for 16-bit array support (uword elements, arrays
-larger than 256, uword indices) and the ubyte-element -> uword widening
-fix.
+"""Behavioral tests for uword (16-bit element) arrays -- split lo/hi
+storage, uword indices (truncated to a byte for <=256 arrays) -- and the
+ubyte-element -> uword widening fix. Arrays are capped at 256 elements
+(upstream's model); larger arenas use peek/poke slabs instead.
 
 Each case compiles a tiny program that writes computed result bytes to
 its output file (the nmos file-I/O shim tinyp8 uses), runs it on the
@@ -24,7 +25,6 @@ _SHIM = """%target nmos
 %address $0200
 ubyte dst
 uword[8] w
-ubyte[300] big
 ubyte[8] sb
 uword idx
 uword s
@@ -55,14 +55,11 @@ _CASES = [
     ("w[0] = $0102  w[1] = $0304  s = w[0] + w[1]  "
      "_write(lsb(s), dst)  _write(msb(s), dst)",
      [0x06, 0x04]),
-    # ubyte array > 256, written and read at a high (uword) index
-    ("idx = 290  big[idx] = $42  _write(big[idx], dst)", [0x42]),
-    ("idx = 257  big[idx] = 99  _write(big[idx], dst)", [99]),
     # ubyte element widened to uword (the widening fix): high byte = 0
     ("sb[2] = 200  s = sb[2]  _write(lsb(s), dst)  _write(msb(s), dst)",
      [200, 0]),
-    # ubyte element of a >256 array widened to uword
-    ("idx = 280  big[idx] = 170  s = big[idx]  "
+    # ubyte element read at a uword variable index (truncated to a byte)
+    ("idx = 5  sb[idx] = 170  s = sb[idx]  "
      "_write(lsb(s), dst)  _write(msb(s), dst)",
      [170, 0]),
 ]

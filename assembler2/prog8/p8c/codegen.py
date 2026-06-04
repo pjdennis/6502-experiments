@@ -537,13 +537,14 @@ class CodeGen:
                 self.emit("  lda __p8c_tmp0")
                 self.emit(f"  sta {tgt.sym.mangled},y")
                 return
-            # ubyte element, large array / uword index -> pointer path.
+            # ubyte element, uword index (<=256 array): byte-index store,
+            # truncating the index to its low byte.
             self._emit_byte_expr_into_a(a.rhs)
             self.emit("  pha")
-            self._emit_array_addr_into_aptr(tgt.sym, tgt.index)
+            self._emit_word_expr_into_ay(tgt.index)
+            self.emit("  tay")
             self.emit("  pla")
-            self.emit("  ldy #$00")
-            self.emit("  sta (__p8c_aptr),y")
+            self.emit(f"  sta {tgt.sym.mangled},y")
             return
         assert isinstance(a.target, Ident) and a.target.sym is not None
         sym = a.target.sym
@@ -867,9 +868,10 @@ class CodeGen:
                 self.emit(f"  lda {e.sym.mangled},y")
                 self.emit("  ldy #$00")
                 return
-            self._emit_array_addr_into_aptr(e.sym, e.index)
-            self.emit("  ldy #$00")
-            self.emit("  lda (__p8c_aptr),y")
+            # ubyte element, uword index (<=256): byte-index load, widened.
+            self._emit_word_expr_into_ay(e.index)
+            self.emit("  tay")
+            self.emit(f"  lda {e.sym.mangled},y")
             self.emit("  ldy #$00")
             return
         if isinstance(e, BinOp):
@@ -1175,10 +1177,10 @@ class CodeGen:
                 self.emit("  tay")
                 self.emit(f"  lda {e.sym.mangled},y")
                 return
-            # ubyte element, but large array or uword index -> pointer.
-            self._emit_array_addr_into_aptr(e.sym, e.index)
-            self.emit("  ldy #$00")
-            self.emit("  lda (__p8c_aptr),y")
+            # ubyte element, uword index (<=256): byte-index load.
+            self._emit_word_expr_into_ay(e.index)
+            self.emit("  tay")
+            self.emit(f"  lda {e.sym.mangled},y")
             return
         if isinstance(e, MemAt):
             if isinstance(e.addr, IntLit):
@@ -1666,9 +1668,6 @@ class CodeGen:
 
     # ---- plain (non-struct) array element addressing ----
 
-    def _array_esize(self, sym) -> int:
-        return 2 if isinstance(sym.type, TUWordArray) else 1
-
     def _array_fast_byte(self, sym, index_node) -> bool:
         """True if `arr[i]` can use the tight `lda label,y` path: ubyte
         element, <=256 elements, ubyte/byte index. This is exactly the
@@ -1681,10 +1680,10 @@ class CodeGen:
     def _emit_addr_into_aptr(self, addr_node) -> None:
         """Compute a uword address expression into __p8c_aptr. Recognizes the
         slab form `<const_base> + <offset>` and folds the constant base into
-        the final adc (same shape as _emit_array_addr_into_aptr), so peek/poke
-        on a fixed-base arena are as tight as the old array pointer path. The
-        offset (`idx` for byte slabs, `idx << 1` for word slabs) is evaluated
-        by the general word path, so the `<< 1` lowers to asl/rol as usual."""
+        the final adc (index*scale + base in one pass), so peek/poke on a
+        fixed-base arena are tight. The offset (`idx` for byte slabs,
+        `idx << 1` for word slabs) is evaluated by the general word path, so
+        the `<< 1` lowers to asl/rol as usual."""
         if (isinstance(addr_node, BinOp) and addr_node.op == "+"
                 and isinstance(addr_node.lhs, IntLit)):
             base = addr_node.lhs.value & 0xFFFF
@@ -1700,29 +1699,6 @@ class CodeGen:
         self._emit_word_expr_into_ay(addr_node)
         self.emit("  sta __p8c_aptr")
         self.emit("  sty __p8c_aptr+1")
-
-    def _emit_array_addr_into_aptr(self, sym, index_node) -> None:
-        """Compute &arr[index] = label + index*esize into __p8c_aptr.
-
-        Used for arrays that can't use the 8-bit `,y` path: uword
-        elements (esize 2), arrays larger than 256, or a uword index.
-        The index is evaluated (and widened) into A:Y first, so a nested
-        array read in the index is fully consumed before __p8c_aptr is
-        written."""
-        self._emit_word_expr_into_ay(index_node)        # index -> A:Y
-        if self._array_esize(sym) == 2:
-            self.emit("  asl a")                         # index *= 2
-            self.emit("  sta __p8c_aptr")
-            self.emit("  tya")
-            self.emit("  rol a")
-            self.emit("  tay")
-            self.emit("  lda __p8c_aptr")
-        self.emit("  clc")
-        self.emit(f"  adc #<{sym.mangled}")
-        self.emit("  sta __p8c_aptr")
-        self.emit("  tya")
-        self.emit(f"  adc #>{sym.mangled}")
-        self.emit("  sta __p8c_aptr+1")
 
     def _emit_call(self, c: Call) -> None:
         sym = c.sym

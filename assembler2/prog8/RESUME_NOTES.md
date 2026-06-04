@@ -1730,3 +1730,21 @@ NEXT: Phase B (split lo/hi storage in p8c + pass2_sh; sema forbid size>256).
 NEXT: Phase C -- convert any ubyte uword-index to byte fast path; remove
 _emit_array_addr_into_aptr (p8c) + emit_aptr_arith (pass2_sh) if dead; sema
 forbid array size >256; drop >256/16-bit-index corpus tests; final verify all.
+
+### Phase C DONE + committed (remove the 16-bit-index pointer path)
+ - ubyte arrays with a uword index (<=256) now use the byte `,y` path (index
+   truncated to its low byte via `_emit_word_expr_into_ay; tay`), matching
+   upstream. The array pointer path is GONE: removed _emit_array_addr_into_aptr
+   + _array_esize (p8c), emit_aptr_arith + emit_byte_arr_load_widened's pointer
+   body (pass2_sh). __p8c_aptr stays (peek/poke still use it).
+ - sema: array size capped at 1..256 (was 1..8192); larger arenas must slab.
+ - tests/test_arrays16_e2e.py: dropped the ubyte[300]/>256 cases (the removed
+   feature), kept uword split + uword-index-on-<=256 + widening coverage.
+ - stmt.p8 stays the un-slabbed >256 master (build_p1.shrink_arenas resizes it
+   for p1.p8). test_stmt.py now bakes a temp slab copy before compiling (p8c no
+   longer accepts >256). It's the ONLY .p8 in the tree with >256 arrays.
+ - build_p1.py: embedded emit_arrays updated to split; regenerates p1.p8
+   byte-identically to the committed (hand-edited) file -- back in sync.
+ - Green: verify.sh 0, upstream selfhost 0 PASS, make prog8-test+p1-test = 53 OK.
+DONE: the compiler has no 16-bit indexed arrays; arrays are <=256 byte-indexed
+(uword via split lo/hi), big arenas are peek/poke slabs -- upstream's model.

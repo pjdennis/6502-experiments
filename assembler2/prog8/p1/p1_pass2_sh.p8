@@ -1876,10 +1876,13 @@ sub emit_byte_leaf_load(uword e) {
             o_nl()
             return
         }
+        ; ubyte element, uword index (<=256): byte-index load.
         codegen_word_expr(idx)
-        emit_aptr_arith(asi)
-        out_text("  ldy #$00") o_nl()
-        out_text("  lda (__p8c_aptr),y") o_nl()
+        o_tay()
+        o_lda()
+        emit_sym_mangled(asi)
+        out_text(",y")
+        o_nl()
         return
     }
 }
@@ -2842,35 +2845,17 @@ sub word_dispatch_shift(uword nd, ubyte is_left) {
     wws_push(0, peekw($c7f0 + ((nd) << 1)), 0)
 }
 
-; ---- array element addressing (port of p8c _array_fast_byte /
-; _emit_array_addr_into_aptr and the Index read/write arms) -----------------
-; `arr[i]` uses the tight `lda label,y` path iff ubyte element, <=256 elems,
-; and a byte-typed index (matches _array_fast_byte). Otherwise the element
-; address `label + i*esize` is built into __p8c_aptr.
+; ---- array element addressing (port of p8c _array_fast_byte and the Index
+; read/write arms) ----------------------------------------------------------
+; A ubyte `arr[i]` uses the tight `lda label,y` path with a byte-typed index
+; (matches _array_fast_byte). A uword index is truncated to its low byte (the
+; array is <=256 elements); uword arrays use split lo/hi byte arrays.
 
 sub array_fast(uword asi, uword idx) -> ubyte {
     if peek($dba8 + (asi)) != TY_UBYTE { return 0 }
     if peekw($eb8c + ((asi) << 1)) > 256 { return 0 }
     if expr_is_word(idx) { return 0 }
     return 1
-}
-
-; A:Y holds the (already widened) index; leave &arr[index] in __p8c_aptr.
-sub emit_aptr_arith(uword asi) {
-    if peek($dba8 + (asi)) == TY_UWORD {
-        out_text("  asl a") o_nl()
-        out_text("  sta __p8c_aptr") o_nl()
-        o_tya()
-        out_text("  rol a") o_nl()
-        o_tay()
-        out_text("  lda __p8c_aptr") o_nl()
-    }
-    o_clc()
-    out_text("  adc #<") emit_sym_mangled(asi) o_nl()
-    out_text("  sta __p8c_aptr") o_nl()
-    o_tya()
-    out_text("  adc #>") emit_sym_mangled(asi) o_nl()
-    out_text("  sta __p8c_aptr+1") o_nl()
 }
 
 ; continuation (word work stack): A:Y = index -> load uword element into A:Y.
@@ -2886,13 +2871,13 @@ sub emit_word_arr_load(uword e) {
     o_pla()
 }
 
-; continuation (word work stack): A:Y = index -> load ubyte element, widen.
+; continuation (word work stack): A:Y = index -> ubyte element, byte-indexed
+; (low byte of index), widened to uword.
 sub emit_byte_arr_load_widened(uword e) {
     uword asi
     asi = find_sym(peekw($c7f0 + ((peekw($c7f0 + ((e) << 1))) << 1)))
-    emit_aptr_arith(asi)
-    out_text("  ldy #$00") o_nl()
-    out_text("  lda (__p8c_aptr),y") o_nl()
+    o_tay()
+    out_text("  lda ") emit_sym_mangled(asi) out_text(",y") o_nl()
     out_text("  ldy #$00") o_nl()
 }
 
@@ -3165,14 +3150,13 @@ sub codegen_assign_index(uword target, uword rhs) {
         out_text("  sta ") emit_sym_mangled(asi) out_text(",y") o_nl()
         return
     }
-    ; ubyte element, large array / uword index -> pointer path.
+    ; ubyte element, uword index (<=256): byte-index store.
     codegen_byte_expr(rhs)
     o_pha()
     codegen_word_expr(idx)
-    emit_aptr_arith(asi)
+    o_tay()
     o_pla()
-    out_text("  ldy #$00") o_nl()
-    out_text("  sta (__p8c_aptr),y") o_nl()
+    out_text("  sta ") emit_sym_mangled(asi) out_text(",y") o_nl()
 }
 
 sub codegen_assign(uword st) {
