@@ -6,6 +6,7 @@ custom target. Layered fixups:
   2. I/O wrappers: replace the p8c-style %asm syscall subs with upstream asmsubs
      (register ABI; symbols mangled the upstream way: main vars -> p8b_main.p8v_*)."""
 import re, sys
+HOIST = "hoist_arg"   # scratch global for the call-argument hoist (see below)
 src = open(sys.argv[1]).read()
 
 # ---- 2. replace the I/O wrapper block (p8c %asm) with upstream asmsubs ----
@@ -67,6 +68,44 @@ asmsub _write(ubyte b @A, ubyte handle @X) {
 src = re.sub(
     r'asmsub _exit\(ubyte code\) = \$F00F.*?sub _write\(ubyte b, ubyte handle\) \{.*?\n\}\n',
     IO_NEW, src, count=1, flags=re.S)
+
+# ---- newline fix: upstream Prog8 translates the `\n` escape in string literals
+#      to CR ($0d) at parse time (hardcoded `newlineToCarriageReturn=true` for
+#      config-file targets, unavoidable via the .properties), whereas p1's
+#      out_byte($0a) emits a real LF. p1's text output is pure 6502 asm and never
+#      needs a literal CR, so normalize every CR back to LF as out_text streams
+#      bytes. No-op under p8c (its strings already store \n as $0a). ----
+src = src.replace(
+    "        out_byte(c)\n        q = q + 1\n",
+    "        if c == $0d { c = $0a }   ; upstream stores \\n as CR; emit LF\n"
+    "        out_byte(c)\n        q = q + 1\n",
+    1)
+
+# ---- same `\n`->CR mistranslation hits CHAR literals: upstream compiles the
+#      '\n' char literal to $0d, so the lexer's `c == '\n'` never matches a real
+#      LF byte read from the input file -> any multi-line program hangs. Rewrite
+#      the '\n' char literal to its true ASCII byte ($0a). ('\r','\t','\'','\\'
+#      all compile correctly, so only '\n' needs this.) ----
+src = src.replace("'\\n'", "$0a")
+
+# ---- hoist call-arguments out of new_node()/cons_prepend() calls ----
+# Upstream Prog8 passes arguments by writing them, left-to-right, directly into
+# the callee's STATIC param variables, then evaluating the call. So in
+#     new_node(ND_ASSIGN, TK_ASSIGN, e, parse_expr())
+# it stores p8v_kind=ND_ASSIGN ... then evaluates parse_expr(), which (deep in
+# the shunting-yard) calls new_node ITSELF and overwrites p8v_kind -- so the
+# outer new_node reads a stale kind. (p8c evaluates all args to temps first, so
+# it's immune; this is effectively Prog8's no-recursion rule biting through an
+# argument expression.) Every offending site has the call as the LAST argument,
+# so hoist it into a scratch global evaluated on its own line first. A single
+# shared `hoist_arg` is safe: each hoist is consumed by the very next line, and
+# nested parse_*() calls finish (storing their own final result) before the
+# outer assignment to hoist_arg runs.
+src = re.sub(
+    r'(?m)^([ \t]*)(.*\b(?:new_node|cons_prepend)\(.*), (parse_\w+\(\))\)\s*$',
+    lambda m: "%s%s = %s\n%s%s, %s)" % (
+        m.group(1), HOIST, m.group(3), m.group(1), m.group(2), HOIST),
+    src)
 
 # ---- split out_text("...") literals longer than 255 into multiple calls ----
 def _split_long(m):
@@ -144,7 +183,7 @@ for line in lines:
     if line.startswith("%target"):
         continue
     if line.startswith("%import") and not wrapped:
-        out.append(line); out.append("\n%output raw\n%launcher none\n\nmain {\n"); wrapped = True; continue
+        out.append(line); out.append("\n%output raw\n%launcher none\n\nmain {\nuword " + HOIST + "\n"); wrapped = True; continue
     if line.rstrip() == "main {":
         out.append("sub start() {\n"); continue
     out.append(line)
