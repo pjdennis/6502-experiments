@@ -158,32 +158,18 @@ def port(src, extra_main_decls=""):
     #      ($0a) in both string and char literals -- matching p8c and the
     #      emulator. No CR->LF normalization or `'\n'`->$0a rewrite needed. ----
 
-    # ---- NOTE: the arg-hoist, long-literal split, truthy `!= 0`, and the
-    #      `arr[i]` -> `arr[(i as ubyte)]` byte-index casts are now BAKED into the
-    #      pipeline source (all equivalence-preserving; p8c gained an `as` cast and
-    #      compiles them identically), so they are no longer applied here. ----
+    # ---- NOTE: the following fixups are now BAKED into the pipeline source and
+    #      are no longer applied here:
+    #        - arg-hoist, long-literal split, truthy `!= 0`;
+    #        - `arr[i]` -> `arr[(i as ubyte)]` byte-index casts (p8c gained `as`);
+    #        - structural wrap: `%target` dropped, decls wrapped in `main { }`,
+    #          entry `main {` -> `sub start()`, `%output raw`/`%launcher none`
+    #          added (p8c gained the `main`/`start` namespace form + --target).
+    #      What remains is the I/O block rewrite (IO_NEW, above) and the
+    #      leading-underscore rename below -- both Step 4 (I/O register-ABI). ----
 
-    # ---- structural wrap ----
-    # Keep the leading directives/comments (incl. %import / %address) above the
-    # block; open `main {` at the FIRST declaration. (Triggering on %import was
-    # too fragile -- pass2_sh has no %import.)
-    _DECL = re.compile(r'^(const|ubyte|uword|byte|word|bool|str|sub|asmsub|inline)\b')
-    lines = src.splitlines(keepends=True)
-    out, wrapped = [], False
-    for line in lines:
-        if line.startswith("%target"):
-            continue
-        if not wrapped and _DECL.match(line):
-            out.append("\n%output raw\n%launcher none\n\nmain {\n" + extra_main_decls)
-            wrapped = True
-            # fall through to emit this declaration inside the block
-        if line.rstrip() == "main {":
-            out.append("sub start() {\n"); continue
-        out.append(line)
-    out.append("}\n")
     # ---- upstream forbids leading-underscore identifiers: rename the wrappers ----
-    final = "".join(out)
-    final = re.sub(r"\b_(exit|close|argv|open|openout|read|write)\b", r"sys_\1", final)
+    final = re.sub(r"\b_(exit|close|argv|open|openout|read|write)\b", r"sys_\1", src)
     return final
 
 

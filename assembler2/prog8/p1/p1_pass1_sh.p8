@@ -18,13 +18,17 @@
 ; keyword set, a top-level program parser, and the frame-stack statement
 ; driver (port of parse.py::parse_block_iter).
 
-%target nmos
 %address $0200
 %import strings
 
 ; scratch global for the call-argument hoist out of new_node()/cons_prepend():
 ; upstream writes args left-to-right into the callee's STATIC param vars before
 ; evaluating the call, so a `parse_*()` last-arg must be hoisted to its own line.
+
+%output raw
+%launcher none
+
+main {
 uword hoist_arg
 
 ; ---- token kinds ----
@@ -2855,7 +2859,7 @@ sub dump_record(ubyte kind, uword snode) {
 }
 
 
-main {
+sub start() {
     uword fn
     fn = _argv(0)
     src_hand = _open(fn)
@@ -2921,4 +2925,5 @@ main {
     out_byte($ff)
     _close(src_hand)
     _close(dst_hand)
+}
 }

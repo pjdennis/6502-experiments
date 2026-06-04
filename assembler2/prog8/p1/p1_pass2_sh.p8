@@ -19,10 +19,14 @@
 ; keyword set, a top-level program parser, and the frame-stack statement
 ; driver (port of parse.py::parse_block_iter).
 
-%target nmos
 %address $0200
 
 ; ---- token kinds ----
+
+%output raw
+%launcher none
+
+main {
 const ubyte TK_EOF    = 0
 const ubyte TK_INT    = 1
 const ubyte TK_STR    = 2
@@ -3722,7 +3726,7 @@ sub cg_skip_decl() { return }
 sub emit_subs() { return }
 
 
-main {
+sub start() {
     uword fn
     fn = _argv(0)
     src_hand = _open(fn)
@@ -3783,4 +3787,5 @@ main {
     emit_trailers()
     _close(src_hand)
     _close(dst_hand)
+}
 }
