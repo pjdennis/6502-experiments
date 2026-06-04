@@ -351,3 +351,60 @@ Use the owner's bootstrap when the PIPELINE itself must parse the new asm syntax
 build a temporary old-written/new-accepting compiler, test it, then use it to
 compile the final new-written/new-accepting pipeline -- avoiding dual-syntax
 bloat against the memory cap.
+
+## Update 9: Step 4 (I/O register-ABI) -- pipeline CONVERGED (A + B done)
+
+The two-step bootstrap from Update 6 is realized for the PIPELINE. The key
+relaxation that made it tractable: the convergence bar is functionally-
+equivalent I/O (the generated p1.s stays 0-diff), NOT byte-identical pipeline
+binaries -- so the new-form asmsubs just have to do the same I/O at runtime.
+
+**Step A -- p8c is "new-accepting" (additive; legacy forms untouched, all
+self-hosts stay 0-diff during the build-out).** Committed in two pieces:
+  - **4.A1 raw `%asm {{ ... }}`.** The lexer captures the interior verbatim
+    as one ASMRAW token *only* when the body is not a string, so every legacy
+    `%asm{{ "..." }}` block lexes byte-for-byte as before; the parser dedents
+    the raw body and codegen re-indents by two spaces (a raw block emits the
+    same asm as the equivalent quoted one).
+  - **4.A2-A4 register-ABI asmsubs.** AST `Param.reg` + `Sub.ret_reg`; parser
+    `@A/@X/@Y/@AY` param + `-> rt @REG` annotations, the `extsub $ADDR =
+    name(...)` form, and the asmsub *body* form; sema gives register params no
+    storage; codegen emits asmsub bodies under their label and loads call args
+    into the annotated registers (X/Y first via A, the A/AY arg last), incl.
+    multi-arg, JSRing the address or the body label. Proven to compile AND
+    assemble (vasm) with the right register conventions (test_codegen
+    RawInlineAsm + RegisterAbiAsmsub, host p8c 138).
+
+**Step B -- the pipeline source is now the ONE converged form.**
+`p1_pass1_sh.p8` / `p1_pass2_sh.p8` carry their file-I/O wrappers as
+register-ABI `extsub`/`asmsub`s named `sys_*` (no leading underscore), built
+untransformed by BOTH p8c (verify.sh) and upstream prog8c (selfhost.sh).
+  - **src_eof decoupling:** the read syscall is `sys_read_raw` (asmsub ->
+    A=byte, Y=EOF) + a thin prog8 `sys_read` wrapper doing `src_eof = msb(r)`,
+    so NO asm body references the per-compiler-mangled src_eof. A plain named
+    label (`sys_read_ok`) replaces 64tass's `+` anonymous label so the body
+    assembles under both vasm and 64tass.
+  - **port transform retired for the pipeline:** `port_pipeline.py` calls
+    `port_p1.port(io_transform=False)` -- the I/O rewrite + leading-underscore
+    rename no longer apply to the (already converged) pipeline source. They
+    remain (gated) only for the legacy monolith `p1.p8` path.
+  - Verified byte-identical: p8c self-host 0-diff, upstream self-host 0-diff,
+    upstream corpus 80+1+0, host p8c 138, test_p1 26.
+
+### Remaining for FULL I/O convergence (the on-target half)
+The PIPELINE is converged, but `p1.p8` (the self-host INPUT) still has its own
+I/O wrappers in the LEGACY `%asm{{ "..." }}` + regular-sub form, so the
+on-target parser (stmt.p8 / pass1_sh's parser that parses p1.p8 at runtime)
+still only handles the legacy form. To finish:
+1. Teach the **on-target parser** (`stmt.p8` -> regenerated `p1.p8`, and
+   `p1_pass1_sh.p8`) to parse register-ABI asmsubs: `@REG` param/return
+   annotations, the `extsub $ADDR = name(...)` form, the asmsub body form, and
+   raw `%asm {{ }}` blocks -- plus the on-target codegen to compile them (the
+   Prog8 mirror of Step A, with the self-host byte-identity + 64 KB
+   constraints). This is the largest remaining piece.
+2. Converge `p1.p8`'s (i.e. `build_p1.py`'s) own I/O block to the `sys_*`
+   register-ABI form + src_eof decoupling.
+3. Once p1.p8 is converged, drop the legacy `%asm`-string + asmsub-decl paths
+   from the on-target parser/codegen and from p8c (retire the quoted-string
+   inline-asm form), and DELETE `port_p1.py`'s I/O transform entirely (the
+   `io_transform` flag and IO_NEW).
