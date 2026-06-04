@@ -162,3 +162,35 @@ allocation for ~10 arenas totalling ~28 KB across $0200..$F000, plus applying
 all the other port fixups to the two `_sh` files). It is the last piece needed
 for upstream-bootstrapped self-host; the monolith result above proves the
 codegen is faithful.
+
+## Update 4: GOAL ACHIEVED -- upstream-bootstrapped self-host (byte-identical)
+The full self-host now works with UPSTREAM prog8c as the bootstrap compiler:
+`upstream/selfhost.sh` builds the pipeline (p1_pass1_sh.p8 + p1_pass2_sh.p8) with
+prog8c for the custom nmos target, runs both passes on the emulator to compile
+p1.p8, and the emitted p1.s is **byte-identical** (0-line normalized diff) to the
+p8c host oracle. The p8c self-host (/tmp/verify.sh) still passes 0-diff too.
+
+Two pieces beyond the monolith fixes:
+
+1. **Memory-slab port (`upstream/port_pipeline.py`).** The pipeline arenas are
+   word arrays of 272..780 elements indexed by uword -- impossible under upstream
+   (split word arrays <=256, regular <=128, byte indices only). The porter
+   auto-detects every array > 256 elements (18 in pass1, 16 in pass2), turns its
+   declaration into a `const uword <name> = $BASE` raw RAM address, and rewrites
+   every `<name>[idx]` into peek/peekw/poke/pokew on `base + idx*esize` (writes
+   detected by the `=` after `]`, RHS bounded to one primary; reads recursive for
+   nested indexing). The slabs are laid out just under the $F000 I/O floor and
+   `memtop` is lowered to the slab base so the compiler keeps code/data/BSS below.
+   It reuses every monolith fixup via port_p1.port(). pass1 code+data ends ~$4EA0
+   (slabs $8300-$EFFF); pass2 fits likewise -- comfortably.
+
+2. **One codegen fix in p1_pass2_sh.p8.** emit_byte_leaf_load's ubyte fast `,y`
+   path parked the array's sym index in a (static) LOCAL `asi` across a call to
+   the recursive codegen_byte_expr -- upstream's local-storage allocator overlaps
+   that local with a variable the recursive call writes (p8c's allocator happens
+   not to), so `asi` came back 0 (-> p8v_TK_EOF). Parking it in a module scratch
+   `cg_arr_si` survives the re-entry. Output-identical under p8c (verify.sh still
+   0-diff), correct under upstream. (The monolith p1.p8 has a simpler fast path
+   with no such recursive call, so it was already fine.)
+
+Reproduce: `bash upstream/setup.sh && bash upstream/selfhost.sh`.

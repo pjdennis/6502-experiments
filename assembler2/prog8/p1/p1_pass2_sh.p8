@@ -235,6 +235,8 @@ uword[452] sym_arr_size   ; element count if an array (0 = scalar); the
 uword sym_count
 uword zp_next            ; ZP bump allocator (from $40)
 uword cur_scope          ; the sub being codegen'd (for var resolution)
+uword cg_arr_si          ; fast-path array sym index, parked across the
+                         ; recursive byte-index codegen (see emit_byte_leaf_load)
 ; call-arg scratch (push args -> pop into param slots before the jsr).
 uword[16] call_slot      ; param sym index per arg
 ubyte[16] call_isw       ; 1 if that arg/param is uword
@@ -1843,10 +1845,11 @@ sub emit_byte_leaf_load(uword e) {
             ; `lda arr,y` (matches p8c _array_fast_byte, which accepts any
             ; UBYTE/BYTE-typed index, not just a bare var). For an ND_IDENT this
             ; is byte-identical to the old `lda idx / tay` special case.
-            codegen_byte_expr(idx)
-            o_tay()
+            cg_arr_si = asi          ; survive codegen_byte_expr (asi is a
+            codegen_byte_expr(idx)   ; static local; the recursive byte-expr
+            o_tay()                  ; codegen can reuse its storage)
             o_lda()
-            emit_sym_mangled(asi)
+            emit_sym_mangled(cg_arr_si)
             out_text(",y")
             o_nl()
             return
