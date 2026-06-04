@@ -320,7 +320,21 @@ class CodeGen:
 
     def _emit_sub(self, s: Sub) -> None:
         if s.is_asmsub:
-            return       # declarations don't emit a body
+            # `asmsub name(..) = $ADDR` / `extsub` are pure declarations (no
+            # body). The register-ABI form with an inline %asm body emits a
+            # label + the raw asm (no static-param prologue: args arrived in
+            # registers, and the body has its own rts).
+            if s.asm_target is None and s.body.stmts:
+                self.emit("")
+                self.emit(f"; ---- asmsub {s.name} ----")
+                self.emit(f"{s.mangled}:")
+                for st in s.body.stmts:
+                    if not isinstance(st, InlineAsm):
+                        raise CodeGenError(
+                            f"asmsub {s.name!r} body must be a single %asm block")
+                    for line in st.text.splitlines():
+                        self.emit("  " + line)
+            return
         if s.is_inline:
             return       # body is spliced at each call site
         self.emit("")
@@ -1723,6 +1737,28 @@ class CodeGen:
         self.emit("  sta __p8c_aptr")
         self.emit("  sty __p8c_aptr+1")
 
+    def _emit_regabi_args(self, args, params) -> None:
+        """Load each call arg into its annotated register (A / X / Y / AY).
+        X/Y-bound args go first (evaluated via A, then transferred); the
+        A/AY-bound arg goes LAST so the evaluator's use of A doesn't clobber
+        an already-loaded register."""
+        order = sorted(range(len(args)),
+                       key=lambda k: params[k].reg in ("A", "AY"))
+        for k in order:
+            arg, reg = args[k], params[k].reg
+            if reg == "A":
+                self._emit_byte_expr_into_a(arg)
+            elif reg == "AY":
+                self._emit_word_expr_into_ay(arg)
+            elif reg == "X":
+                self._emit_byte_expr_into_a(arg)
+                self.emit("  tax")
+            elif reg == "Y":
+                self._emit_byte_expr_into_a(arg)
+                self.emit("  tay")
+            else:
+                raise CodeGenError(f"unsupported arg register {reg!r}")
+
     def _emit_call(self, c: Call) -> None:
         sym = c.sym
         assert sym is not None
@@ -1738,7 +1774,12 @@ class CodeGen:
             #   any other shape: caller must use a %asm{{...}} wrapper.
             # Per upstream Prog8, ubyte returns in A and uword in A:Y.
             if sym.kind == "asmsub":
-                if len(c.args) == 0:
+                # Register-ABI: a sub whose params carry @REG annotations takes
+                # its args in the named registers (A / X / Y / AY); JSR the
+                # address (= $ADDR / extsub) or the body label.
+                if params and all(p.reg for p in params):
+                    self._emit_regabi_args(c.args, params)
+                elif len(c.args) == 0:
                     pass
                 elif len(c.args) == 1:
                     pt = type_from_name(params[0].type_name)
@@ -1748,10 +1789,10 @@ class CodeGen:
                         self._emit_word_expr_into_ay(c.args[0])
                 else:
                     raise CodeGenError(
-                        f"asmsub {sym.name!r}: multi-arg calls not supported "
-                        f"in v0; wrap with %asm{{{{ ... }}}} instead"
+                        f"asmsub {sym.name!r}: multi-arg calls need @REG "
+                        f"annotations, or wrap with %asm{{{{ ... }}}} instead"
                     )
-                self.emit(f"  jsr {sym.asm_target}")
+                self.emit(f"  jsr {sym.asm_target or sym.mangled}")
                 return
             # Regular sub: pass args via the callee's static param slots.
             # Single arg: store it straight into the slot after evaluating it

@@ -357,5 +357,44 @@ class RawInlineAsm(unittest.TestCase):
         self.assertIn("\n  inx\n", s)
 
 
+class RegisterAbiAsmsub(unittest.TestCase):
+    """Upstream register-ABI asmsubs: `@A/@X/@Y/@AY` params + `-> rt @REG`,
+    the `extsub $ADDR = name(...)` form, and asmsub bodies."""
+
+    IO = ('%output raw\n'
+          'extsub $F00F = _exit(ubyte code @A)\n'
+          'asmsub _argv(ubyte i @A) -> uword @AY { %asm {{\n'
+          '        jsr  $f01e\n        rts\n}} }\n'
+          'asmsub _write(ubyte b @A, ubyte handle @X) { %asm {{\n'
+          '        jsr  $f024\n        rts\n}} }\n'
+          'main {\n  ubyte h\n  uword p\n'
+          '  sub start() { h = 3  p = _argv(1)  _write(65, h)  _exit(0) }\n}\n')
+
+    def test_extsub_call_jsrs_address(self):
+        s = compile_text(self.IO, target="nmos")
+        self.assertIn("  lda #$00\n  jsr $f00f", s)   # _exit(0) -> A=0, jsr addr
+
+    def test_asmsub_body_emitted_under_label(self):
+        s = compile_text(self.IO, target="nmos")
+        self.assertIn("p8s__argv:\n  jsr  $f01e", s)
+        self.assertIn("p8s__write:\n  jsr  $f024", s)
+
+    def test_word_return_in_ay(self):
+        s = compile_text(self.IO, target="nmos")
+        # p = _argv(1): arg in A, result word in A:Y stored lo/hi.
+        self.assertIn("  lda #$01\n  jsr p8s__argv\n  sta p8v_p\n  sty p8v_p+1", s)
+
+    def test_multi_reg_args_ordered(self):
+        # _write(65, h): handle (@X) loaded first via A->X, b (@A) loaded last.
+        s = compile_text(self.IO, target="nmos")
+        self.assertIn("  lda p8v_h\n  tax\n  lda #$41\n  jsr p8s__write", s)
+
+    def test_reg_params_have_no_storage(self):
+        # register-ABI params get no ZP/memvar slot.
+        s = compile_text(self.IO, target="nmos")
+        self.assertNotIn("p8v__write_arg_b", s)
+        self.assertNotIn("p8v__argv_arg_i", s)
+
+
 if __name__ == "__main__":
     unittest.main()

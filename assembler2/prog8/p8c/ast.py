@@ -319,6 +319,7 @@ class Param(Node):
     type_name: str       # 'ubyte' | 'uword'
     name: str
     sym: Optional["Symbol"] = None
+    reg: Optional[str] = None   # register-ABI annotation: 'A'|'X'|'Y'|'AY' (asmsub)
 
 
 @dataclass
@@ -350,6 +351,7 @@ class Sub(Node):
     is_asmsub: bool = False             # True iff `asmsub` declaration
     is_inline: bool = False             # `inline sub` -- emit body at call site, no JSR
     asm_target: Optional[str] = None    # for asmsub: the asm symbol to JSR to
+    ret_reg: Optional[str] = None       # register-ABI return: 'A'|'X'|'Y'|'AY'
 
 
 @dataclass

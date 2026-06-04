@@ -168,6 +168,8 @@ class Parser:
             prog.subs.append(s)
         elif t.kind == "KW" and t.value == "asmsub":
             prog.subs.append(self.parse_asmsub())
+        elif t.kind == "KW" and t.value == "extsub":
+            prog.subs.append(self.parse_extsub())
         elif t.kind == "KW" and t.value == "const":
             prog.module_vars.append(self.parse_const_decl())
         elif t.kind == "KW" and t.value == "enum":
@@ -290,18 +292,70 @@ class Parser:
                 f"{self.filename}:{t.line}:{t.col}: expected type in param list"
             )
         n = self.eat("IDENT")
-        return Param(loc=self.loc(t), type_name=t.value, name=n.value)
+        reg = self._parse_reg_annotation()
+        return Param(loc=self.loc(t), type_name=t.value, name=n.value, reg=reg)
+
+    def _parse_reg_annotation(self) -> Optional[str]:
+        """Optional `@A` / `@X` / `@Y` / `@AY` register-ABI annotation."""
+        if self.peek().kind != "@":
+            return None
+        self.eat("@")
+        r = self.eat("IDENT")
+        if r.value not in ("A", "X", "Y", "AY"):
+            raise ParseError(
+                f"{self.filename}:{r.line}:{r.col}: "
+                f"bad register {r.value!r} (expected A, X, Y, or AY)")
+        return r.value
 
     def parse_asmsub(self) -> Sub:
-        """`asmsub name(params) -> rt = $ADDR` -- declaration only.
-
-        Just declares that calling `name(...)` should JSR $ADDR. Useful
-        for binding existing 6502 routines (display_string, exit, etc.).
-        Params and return type are parsed but only used by sema for
-        type-checking the call site; codegen just JSRs to the address.
+        """Two forms:
+          - `asmsub name(params) -> rt = $ADDR` -- declaration only; calling
+            `name(...)` JSRs $ADDR.
+          - `asmsub name(params @REG) -> rt @REG { %asm {{ ... }} }` -- the
+            register-ABI form with an inline body: args arrive in the named
+            registers, the body is emitted under the sub label, no static-param
+            prologue. (Upstream's register-ABI asmsub.)
         """
         kw = self.eat("KW", "asmsub")
         name_tok = self.eat("IDENT")
+        params = self._parse_param_list()
+        ret = "void"
+        ret_reg = None
+        if self.match("->"):
+            ret = self.eat("KW").value
+            ret_reg = self._parse_reg_annotation()
+        if self.match("="):
+            addr_tok = self.eat("INT")
+            return Sub(loc=self.loc(kw), name=name_tok.value,
+                       body=Block(loc=self.loc(kw), stmts=[]),
+                       params=params, return_type_name=ret,
+                       is_asmsub=True, asm_target=f"${addr_tok.value:04x}")
+        body = self.parse_block()
+        return Sub(loc=self.loc(kw), name=name_tok.value, body=body,
+                   params=params, return_type_name=ret, ret_reg=ret_reg,
+                   is_asmsub=True)
+
+    def parse_extsub(self) -> Sub:
+        """`extsub $ADDR = name(params @REG) -> rt @REG` -- upstream's
+        address-first external-sub declaration; calling `name(...)` JSRs
+        $ADDR with args in the annotated registers. Equivalent to the
+        `asmsub name(...) = $ADDR` form."""
+        kw = self.eat("KW", "extsub")
+        addr_tok = self.eat("INT")
+        self.eat("=")
+        name_tok = self.eat("IDENT")
+        params = self._parse_param_list()
+        ret = "void"
+        ret_reg = None
+        if self.match("->"):
+            ret = self.eat("KW").value
+            ret_reg = self._parse_reg_annotation()
+        return Sub(loc=self.loc(kw), name=name_tok.value,
+                   body=Block(loc=self.loc(kw), stmts=[]),
+                   params=params, return_type_name=ret, ret_reg=ret_reg,
+                   is_asmsub=True, asm_target=f"${addr_tok.value:04x}")
+
+    def _parse_param_list(self) -> list[Param]:
         self.eat("(")
         params: list[Param] = []
         if self.peek().kind != ")":
@@ -309,15 +363,7 @@ class Parser:
             while self.match(","):
                 params.append(self._parse_param())
         self.eat(")")
-        ret = "void"
-        if self.match("->"):
-            t = self.eat("KW")
-            ret = t.value
-        self.eat("=")
-        addr_tok = self.eat("INT")
-        return Sub(loc=self.loc(kw), name=name_tok.value, body=Block(loc=self.loc(kw), stmts=[]),
-                   params=params, return_type_name=ret,
-                   is_asmsub=True, asm_target=f"${addr_tok.value:04x}")
+        return params
 
     def parse_block(self) -> Block:
         if self.iter_stmt:

@@ -145,6 +145,14 @@ class Sema:
                     )
                 size = 1 if pt is UBYTE else 2
                 mangled = f"p8v_{s.name}_arg_{p.name}"
+                if p.reg is not None:
+                    # register-ABI param (asmsub): the arg arrives in a CPU
+                    # register, so it gets no memory slot and emits no storage.
+                    sym = Symbol(name=p.name, mangled=mangled, type=pt,
+                                 kind="var", address=None)
+                    sub_scope[p.name] = sym
+                    p.sym = sym
+                    continue
                 if self._zp_next + size > ZP_VAR_TOP:
                     sym = Symbol(name=p.name, mangled=mangled, type=pt,
                                  kind="var", address=None)
