@@ -9,7 +9,7 @@ Generated layout:
     .include base_config_wendy2c.inc
     DISPLAY_STRING_PARAM = $00
     .org <address>
-    jmp p8s_main
+    jmp p8s_main             ; entry sub (`start` for a main-block program)
     .include delay_routines.inc
     .include display_routines_4bit.inc
     .include display_string.inc
@@ -62,7 +62,7 @@ __p8c_ptr0  = {ptr0}                    ; indirect-Y pointer (2 bytes)
 __p8c_aptr  = {aptr}                    ; array element pointer (2 bytes)
 
   .org ${addr:04x}
-  jmp p8s_main
+  jmp {entry}
 
   .include delay_routines.inc
   .include display_routines_4bit.inc
@@ -85,13 +85,13 @@ __p8c_ptr0  = {ptr0}                    ; indirect-Y pointer (2 bytes)
 __p8c_aptr  = {aptr}                    ; array element pointer (2 bytes)
 
   .org ${addr:04x}
-  jmp p8s_main
+  jmp {entry}
 """
 
 NMOS_EPILOGUE = """\
   ; ---- reset vector ----
   .org $FFFC
-  .word p8s_main
+  .word {entry}
   .word $0000
 """
 
@@ -154,9 +154,13 @@ class CodeGen:
         self.out.clear()
         self._mul_used = False
         self._strcmp_used = False
+        # The entry is the `is_main` sub: `main` for the entry-body form, or
+        # `start` for an upstream-style `main { ... }` namespace block.
+        entry_sub = next((s for s in self.prog.subs if s.is_main), None)
+        self._entry_mangled = entry_sub.mangled if entry_sub else "p8s_main"
         prologue = PROLOGUE_NMOS if self.prog.target == "nmos" else PROLOGUE_WENDY2C
         self.emit(prologue.format(
-            source=self.source_path, addr=self.prog.address,
+            source=self.source_path, addr=self.prog.address, entry=self._entry_mangled,
             tmp0=TMP0, tmp1=TMP1, wtmp0=WTMP0_LO, wtmp1=WTMP1_LO,
             ptr0=PTR0_LO, aptr=APTR_LO,
         ))
@@ -288,7 +292,7 @@ class CodeGen:
                 self.emit(f'  .byte {escaped}, 0')
         if self.prog.target == "nmos":
             self.emit("")
-            self.emit(NMOS_EPILOGUE)
+            self.emit(NMOS_EPILOGUE.format(entry=self._entry_mangled))
         return "\n".join(self.out) + "\n"
 
     def _escape(self, s: str) -> str:

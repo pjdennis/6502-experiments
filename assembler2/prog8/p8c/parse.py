@@ -119,51 +119,104 @@ class Parser:
             t = self.peek()
             if t.kind == "DIRECTIVE":
                 self.parse_directive(prog)
-            elif t.kind == "KW" and t.value == "sub":
-                prog.subs.append(self.parse_sub())
-            elif t.kind == "KW" and t.value == "inline":
-                # `inline sub ...` -- inlined at every call site.
-                self.pos += 1
-                self.eat("KW", "sub")
-                s = self.parse_sub_body_after_kw()
-                s.is_inline = True
-                prog.subs.append(s)
-            elif t.kind == "KW" and t.value == "asmsub":
-                prog.subs.append(self.parse_asmsub())
-            elif t.kind == "KW" and t.value == "const":
-                prog.module_vars.append(self.parse_const_decl())
-            elif t.kind == "KW" and t.value == "enum":
-                prog.enums.append(self.parse_enum_decl())
-            elif t.kind == "KW" and t.value == "struct":
-                prog.structs.append(self.parse_struct_decl())
             elif t.kind == "KW" and t.value == "main":
-                # `main { ... }` is shorthand for `sub main() -> void { ... }`.
-                self.pos += 1
-                body = self.parse_block()
-                sub = Sub(loc=self.loc(t), name="main", body=body, is_main=True)
-                prog.subs.append(sub)
-            elif t.kind == "KW" and t.value in _TYPE_KWS:
-                # Module-level variable declaration.
-                prog.module_vars.append(self.parse_var_decl())
-            elif (t.kind == "IDENT"
-                  and any(s.name == t.value for s in prog.structs)):
-                # `StructName instance` OR `StructName[N] arr_name`.
-                self.pos += 1
-                array_size = None
-                if self.match("["):
-                    sz = self.eat("INT")
-                    self.eat("]")
-                    array_size = sz.value
-                name_tok = self.eat("IDENT")
-                vd = VarDecl(loc=self.loc(t), type_name=t.value,
-                             name=name_tok.value, array_size=array_size)
-                prog.module_vars.append(vd)
+                # `main { ... }` has two accepted shapes:
+                #   - entry-body form (p8c's own): a block of STATEMENTS; it is
+                #     the `sub main()` entry directly.
+                #   - upstream namespace form: a block of DECLARATIONS (subs,
+                #     vars, consts) containing a `sub start()` entry. `main` is
+                #     just a namespace; its members flatten into the program and
+                #     `start` becomes the entry sub.
+                self.pos += 1                       # consume 'main'
+                if self._main_block_is_namespace():
+                    self._parse_main_namespace(prog)
+                else:
+                    body = self.parse_block()
+                    prog.subs.append(Sub(loc=self.loc(t), name="main",
+                                         body=body, is_main=True))
             else:
-                raise ParseError(
-                    f"{self.filename}:{t.line}:{t.col}: expected sub, directive, "
-                    f"or variable declaration, got {t.kind} {t.value!r}"
-                )
+                self._parse_toplevel_decl(prog)
         return prog
+
+    def _parse_toplevel_decl(self, prog: Program) -> None:
+        """Parse one top-level declaration (sub / asmsub / const / enum / struct
+        / var / struct-instance) and append it to `prog`. Shared by the program
+        loop and the `main { ... }` namespace body."""
+        t = self.peek()
+        if t.kind == "KW" and t.value == "sub":
+            prog.subs.append(self.parse_sub())
+        elif t.kind == "KW" and t.value == "inline":
+            # `inline sub ...` -- inlined at every call site.
+            self.pos += 1
+            self.eat("KW", "sub")
+            s = self.parse_sub_body_after_kw()
+            s.is_inline = True
+            prog.subs.append(s)
+        elif t.kind == "KW" and t.value == "asmsub":
+            prog.subs.append(self.parse_asmsub())
+        elif t.kind == "KW" and t.value == "const":
+            prog.module_vars.append(self.parse_const_decl())
+        elif t.kind == "KW" and t.value == "enum":
+            prog.enums.append(self.parse_enum_decl())
+        elif t.kind == "KW" and t.value == "struct":
+            prog.structs.append(self.parse_struct_decl())
+        elif t.kind == "KW" and t.value in _TYPE_KWS:
+            # Module-level variable declaration.
+            prog.module_vars.append(self.parse_var_decl())
+        elif (t.kind == "IDENT"
+              and any(s.name == t.value for s in prog.structs)):
+            # `StructName instance` OR `StructName[N] arr_name`.
+            self.pos += 1
+            array_size = None
+            if self.match("["):
+                sz = self.eat("INT")
+                self.eat("]")
+                array_size = sz.value
+            name_tok = self.eat("IDENT")
+            vd = VarDecl(loc=self.loc(t), type_name=t.value,
+                         name=name_tok.value, array_size=array_size)
+            prog.module_vars.append(vd)
+        else:
+            raise ParseError(
+                f"{self.filename}:{t.line}:{t.col}: expected sub, directive, "
+                f"or variable declaration, got {t.kind} {t.value!r}"
+            )
+
+    def _main_block_is_namespace(self) -> bool:
+        """With pos at the `{` after `main`, decide whether the block is the
+        upstream namespace form (contains a top-level `sub`/`asmsub` decl) vs
+        the entry-body form (plain statements). Scans the matching braces
+        without consuming."""
+        i = self.pos
+        if self.toks[i].kind != "{":
+            return False
+        depth = 0
+        while i < len(self.toks):
+            k = self.toks[i].kind
+            if k == "{":
+                depth += 1
+            elif k == "}":
+                depth -= 1
+                if depth == 0:
+                    return False
+            elif (depth == 1 and k == "KW"
+                  and self.toks[i].value in ("sub", "asmsub", "inline")):
+                return True
+            i += 1
+        return False
+
+    def _parse_main_namespace(self, prog: Program) -> None:
+        """Parse `main { <decls incl. `sub start()`> }`: flatten the members
+        into `prog` and mark `start` as the entry (`is_main`)."""
+        self.eat("{")
+        while self.peek().kind != "}":
+            self._parse_toplevel_decl(prog)
+        self.eat("}")
+        start = next((s for s in prog.subs if s.name == "start"), None)
+        if start is None:
+            raise ParseError(
+                f"{self.filename}: `main` block has no `sub start()` entry")
+        start.is_main = True
 
     def parse_directive(self, prog: Program) -> None:
         t = self.eat("DIRECTIVE")

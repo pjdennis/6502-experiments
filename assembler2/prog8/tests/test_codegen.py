@@ -261,5 +261,51 @@ class TruthyConditions(unittest.TestCase):
         self.assertNotIn("cmp #$00", s)
 
 
+class MainNamespaceForm(unittest.TestCase):
+    """Upstream-style `main { <decls + sub start()> }`: `main` is a namespace
+    whose members flatten into the program and `start` is the entry sub."""
+
+    NS = ("%target nmos\nmain {\n"
+          "    ubyte counter\n"
+          "    sub helper() -> ubyte { return 42 }\n"
+          "    sub start() { counter = helper() }\n}\n")
+
+    def test_entry_is_start(self):
+        s = compile_text(self.NS)
+        self.assertIn("jmp p8s_start", s)        # prologue jumps to start
+        self.assertNotIn("jmp p8s_main", s)
+
+    def test_reset_vector_points_to_start(self):
+        self.assertIn("  .word p8s_start", compile_text(self.NS))
+
+    def test_members_flattened(self):
+        s = compile_text(self.NS)
+        self.assertIn("; ---- sub start ----", s)
+        self.assertIn("; ---- sub helper ----", s)
+        self.assertIn("jsr p8s_helper", s)        # start calls the member sub
+
+    def test_start_gets_nmos_exit(self):
+        # the entry sub (start) ends in the nmos exit syscall, not a bare rts.
+        self.assertIn("jsr $f00f", compile_text(self.NS))
+
+    def test_equivalent_to_entry_body_form(self):
+        # The namespace form must be byte-identical to the equivalent
+        # entry-body form, modulo the entry sub's name (start vs main).
+        old = ("%target nmos\nubyte counter\n"
+               "sub helper() -> ubyte { return 42 }\n"
+               "main { counter = helper() }\n")
+        ns = compile_text(self.NS).replace("start", "main")
+        self.assertEqual(ns, compile_text(old))
+
+    def test_missing_start_is_an_error(self):
+        from p8c.parse import ParseError
+        with self.assertRaises(ParseError):
+            compile_text("main {\n  sub helper() { }\n}\n")
+
+    def test_entry_body_form_still_uses_main(self):
+        # Regression: a plain `main { stmts }` is unchanged (entry = main).
+        self.assertIn("jmp p8s_main", compile_text("main { }"))
+
+
 if __name__ == "__main__":
     unittest.main()
