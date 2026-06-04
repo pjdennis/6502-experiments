@@ -44,14 +44,14 @@ def _norm(s: str) -> str:
 
 # P7-M1 corpus: empty `main { }` (nmos) at a few load addresses, exercising
 # the prologue (incl. the .org address), the empty-main skeleton, the nmos
-# exit epilogue, and the reset-vector trailer. (The default target is
-# wendy2c, whose prologue M1 codegen does not yet emit, so every program
-# here is explicitly `%target nmos`.)
+# exit epilogue, and the reset-vector trailer. The target is selected
+# externally (the oracle passes `--target nmos`; the on-target p1 parser
+# defaults to nmos/$0200) -- the source carries no `%target` directive.
 M1_PROGRAMS = [
-    "%target nmos\n%address $0200\n\nmain {\n}\n",
-    "%target nmos\n\nmain {\n}\n",                      # nmos default address -> $0200
-    "%target nmos\n%address $1000\n\nmain {\n}\n",
-    "%target nmos\n%address $c000\n\nmain {\n}\n",
+    "%address $0200\n\nmain {\n}\n",
+    "\nmain {\n}\n",                      # nmos default address -> $0200
+    "%address $1000\n\nmain {\n}\n",
+    "%address $c000\n\nmain {\n}\n",
 ]
 
 # P7-M2 corpus: module scalar vars (ubyte / byte / uword, in various
@@ -62,20 +62,20 @@ M1_PROGRAMS = [
 # byte/word leaf-expression + store codegen.
 M2_PROGRAMS = [
     # all three scalar types, plain leaf assignment + widening
-    "%target nmos\n\nubyte x\nubyte y\nuword w\n\n"
+    "\nubyte x\nubyte y\nuword w\n\n"
     "main {\n    x = 1\n    y = x\n    w = $1234\n    w = x\n    w = y\n}\n",
     # byte type + augmented add of a var
-    "%target nmos\n\nbyte a\nbyte b\n\n"
+    "\nbyte a\nbyte b\n\n"
     "main {\n    a = 5\n    b = a\n    a += b\n}\n",
     # every supported byte augmented op, literal + var operands
-    "%target nmos\n\nubyte x\nubyte y\n\n"
+    "\nubyte x\nubyte y\n\n"
     "main {\n    x = $10\n    y = 2\n    x += 3\n    x -= 1\n    x += y\n"
     "    x -= y\n    x &= $0f\n    x |= y\n    x ^= 2\n}\n",
     # uword-only program (2-byte ZP slots), word leaf copy
-    "%target nmos\n\nuword p\nuword q\n\n"
+    "\nuword p\nuword q\n\n"
     "main {\n    p = $beef\n    q = p\n}\n",
     # interleaved types -> non-trivial ZP addresses ($40 ub, $41 uw, $43 ub)
-    "%target nmos\n\nubyte a\nuword b\nubyte c\n\n"
+    "\nubyte a\nuword b\nubyte c\n\n"
     "main {\n    a = 1\n    b = a\n    c = 9\n}\n",
 ]
 
@@ -88,21 +88,21 @@ M2_PROGRAMS = [
 # reset vector.
 M3_STR_PROGRAMS = [
     # one string
-    "%target nmos\n\nuword s\n\nmain {\n    s = \"hi\"\n}\n",
+    "\nuword s\n\nmain {\n    s = \"hi\"\n}\n",
     # several, in order; escapes (newline) and the empty string
-    "%target nmos\n\nuword s\nuword t\n\n"
+    "\nuword s\nuword t\n\n"
     'main {\n    s = "hi"\n    t = "a\\nb"\n    s = ""\n}\n',
     # strings interleaved with scalar assignments (label order = encounter)
-    "%target nmos\n\nubyte x\nuword msg\n\n"
+    "\nubyte x\nuword msg\n\n"
     'main {\n    x = 1\n    msg = "result: "\n    x += 2\n    msg = "done\\n"\n}\n',
     # every escape the pool emitter special-cases: \\ " \t \r plus a high byte
-    "%target nmos\n\nuword s\n\n"
+    "\nuword s\n\n"
     'main {\n    s = "tab\\there\\"q\\\\b\\r"\n}\n',
     # DUPLICATE strings dedup to one pool label: "x" appears 3x and "y" 2x,
     # interleaved with a unique "z". Labels: x=str_0, y=str_1, z=str_2 (each
     # distinct content interned once, in first-encounter order). Guards that
     # p8c's value-dedup and p1's intern_str_label agree.
-    "%target nmos\n\nuword s\n\n"
+    "\nuword s\n\n"
     'main {\n    s = "x"\n    s = "y"\n    s = "x"\n    s = "z"\n'
     '    s = "y"\n    s = "x"\n}\n',
 ]
@@ -115,18 +115,18 @@ M3_STR_PROGRAMS = [
 # Augmented assignment now shares the same binop emitter.
 M3_EXPR_PROGRAMS = [
     # flat leaf op leaf, every supported op, literal + var operands
-    "%target nmos\nubyte a\nubyte b\nubyte c\n\n"
+    "ubyte a\nubyte b\nubyte c\n\n"
     "main {\n    a = b + 1\n    a = b + c\n    a = b - c\n    a = b & c\n"
     "    a = b | 3\n    a = b ^ c\n}\n",
     # left-nested chains (leaf-RHS fast path, no spill)
-    "%target nmos\nubyte a\nubyte b\nubyte c\nubyte d\n\n"
+    "ubyte a\nubyte b\nubyte c\nubyte d\n\n"
     "main {\n    a = b + c + a\n    a = b + c - d\n    a = ((b | c) & d) ^ a\n}\n",
     # right-nested / parenthesized RHS (generic spill path)
-    "%target nmos\nubyte a\nubyte b\nubyte c\nubyte d\n\n"
+    "ubyte a\nubyte b\nubyte c\nubyte d\n\n"
     "main {\n    a = (b + c) - (a + 1)\n    a = b + (c + (d + 1))\n"
     "    a = (b - c) + (d - 1)\n}\n",
     # augmented assignment shares the binop emitter
-    "%target nmos\nubyte x\nubyte y\n\n"
+    "ubyte x\nubyte y\n\n"
     "main {\n    x = $10\n    y = 2\n    x += 3\n    x -= y\n    x &= $0f\n"
     "    x |= y\n    x ^= 2\n}\n",
 ]
@@ -139,19 +139,19 @@ M3_EXPR_PROGRAMS = [
 # the generic spill path, the dual-scratch pattern, and augmented <<= / >>=.
 M3_MULSHIFT_PROGRAMS = [
     # mul: leaf-RHS (literal + var) and the generic spill path
-    "%target nmos\nubyte a\nubyte b\nubyte c\nubyte d\n\n"
+    "ubyte a\nubyte b\nubyte c\nubyte d\n\n"
     "main {\n    a = b * c\n    a = b * 3\n    a = (b + c) * d\n"
     "    a = d * (b + c)\n}\n",
     # shifts: immediate (unrolled) and variable (loop, label pairs) counts
-    "%target nmos\nubyte a\nubyte b\nubyte c\nubyte d\n\n"
+    "ubyte a\nubyte b\nubyte c\nubyte d\n\n"
     "main {\n    a = b << 2\n    a = b >> 1\n    a = b << c\n    a = b >> d\n"
     "    a = b << 0\n}\n",
     # the dual-scratch pattern (two shift sub-expressions in one binop) +
     # variable-count shifts in a binop (two label pairs, sequential ids)
-    "%target nmos\nubyte a\nubyte b\nubyte c\nubyte d\n\n"
+    "ubyte a\nubyte b\nubyte c\nubyte d\n\n"
     "main {\n    a = (b << 3) + (b << 1)\n    a = (b << c) - (b >> d)\n}\n",
     # augmented <<= / >>= (leaf + variable count) alongside mul
-    "%target nmos\nubyte x\nubyte y\n\n"
+    "ubyte x\nubyte y\n\n"
     "main {\n    x = $10\n    y = 2\n    x <<= 3\n    x >>= 1\n    x <<= y\n"
     "    x >>= y\n    y = x * x\n}\n",
 ]
@@ -163,13 +163,13 @@ M3_MULSHIFT_PROGRAMS = [
 # land, so it is not in this corpus.)
 M3_UNARY_PROGRAMS = [
     # ~ and - on a leaf operand
-    "%target nmos\nubyte a\nubyte b\n\n"
+    "ubyte a\nubyte b\n\n"
     "main {\n    a = ~b\n    a = -b\n}\n",
     # operand is a nested expression (the work-stack handles the recursion)
-    "%target nmos\nubyte a\nubyte b\nubyte c\n\n"
+    "ubyte a\nubyte b\nubyte c\n\n"
     "main {\n    a = ~(b + c)\n    a = -(b * c)\n    a = ~b + c\n}\n",
     # nested unary + unary mixed with mul/shift
-    "%target nmos\nubyte a\nubyte b\nubyte c\n\n"
+    "ubyte a\nubyte b\nubyte c\n\n"
     "main {\n    a = - -b\n    a = ~b * c\n    a = -(b << 2)\n}\n",
 ]
 
@@ -183,21 +183,21 @@ M3_UNARY_PROGRAMS = [
 # allocated after the operands evaluate, matching p8c's _label_id order.
 M3_CMP_PROGRAMS = [
     # unsigned, every op, leaf operands (var/var and var/literal)
-    "%target nmos\nubyte a\nubyte b\nubyte c\n\n"
+    "ubyte a\nubyte b\nubyte c\n\n"
     "main {\n    a = b == c\n    a = b != c\n    a = b < c\n    a = b <= c\n"
     "    a = b > c\n    a = b >= c\n    a = b < 5\n}\n",
     # signed (both operands byte) -- the SBC / overflow path
-    "%target nmos\nubyte a\nbyte s\nbyte t\n\n"
+    "ubyte a\nbyte s\nbyte t\n\n"
     "main {\n    a = s == t\n    a = s != t\n    a = s < t\n    a = s <= t\n"
     "    a = s > t\n    a = s >= t\n}\n",
     # not of a comparison (bool -> not) + nested (non-leaf) operand
-    "%target nmos\nubyte a\nubyte b\nubyte c\n\n"
+    "ubyte a\nubyte b\nubyte c\n\n"
     "main {\n    a = not (b < c)\n    a = (b + 1) < c\n    a = b > (c - 1)\n}\n",
     # uword operands: p8c's comparison codegen evaluates operands as BYTES
     # (it compares only low bytes -- a p8c limitation; _emit_word_cmp_into_a
     # is unreachable for comparison-as-value), so the existing byte cmp path
     # already matches. Locks that equivalence in.
-    "%target nmos\nubyte a\nuword x\nuword y\n\n"
+    "ubyte a\nuword x\nuword y\n\n"
     "main {\n    a = x < y\n    a = x == y\n    a = x >= y\n}\n",
 ]
 
@@ -209,15 +209,15 @@ M3_CMP_PROGRAMS = [
 # also exercises nested and/or and `not` of a logical.
 M3_LOGICAL_PROGRAMS = [
     # and / or / xor, each over two comparison operands
-    "%target nmos\nubyte a\nubyte b\nubyte c\nubyte d\n\n"
+    "ubyte a\nubyte b\nubyte c\nubyte d\n\n"
     "main {\n    a = (b < c) and (b > d)\n    a = (b < c) or (b > d)\n"
     "    a = (b == c) xor (c == d)\n}\n",
     # nested and/or (LIFO label-stack discipline) + mixed
-    "%target nmos\nubyte a\nubyte b\nubyte c\nubyte d\n\n"
+    "ubyte a\nubyte b\nubyte c\nubyte d\n\n"
     "main {\n    a = (b < c) and (c < d) and (b != d)\n"
     "    a = (b < c) or ((c < d) and (b != d))\n}\n",
     # not of a logical
-    "%target nmos\nubyte a\nubyte b\nubyte c\nubyte d\n\n"
+    "ubyte a\nubyte b\nubyte c\nubyte d\n\n"
     "main {\n    a = not ((b < c) and (c < d))\n}\n",
 ]
 
@@ -230,13 +230,13 @@ M3_LOGICAL_PROGRAMS = [
 # binop operand (a = @(p) + 1) since the read is a self-contained byte leaf.
 M3_MEMAT_PROGRAMS = [
     # @() read: literal, uword-var, and &var addresses
-    "%target nmos\nubyte a\nubyte b\nuword p\n\n"
+    "ubyte a\nubyte b\nuword p\n\n"
     "main {\n    a = @($d020)\n    a = @(p)\n    a = @(&b)\n}\n",
     # @() write: literal, uword-var, &var; literal and computed RHS
-    "%target nmos\nubyte a\nubyte b\nuword p\n\n"
+    "ubyte a\nubyte b\nuword p\n\n"
     "main {\n    @($d020) = a\n    @(p) = a\n    @(&b) = 7\n    @(p) = a + 1\n}\n",
     # @() as a binop operand + &name assigned to a uword
-    "%target nmos\nubyte a\nubyte b\nuword p\n\n"
+    "ubyte a\nubyte b\nuword p\n\n"
     "main {\n    a = @(p) + 1\n    p = &b\n    p = &a\n}\n",
 ]
 
@@ -248,15 +248,15 @@ M3_MEMAT_PROGRAMS = [
 # (Word unary ~/- is a faithful port but p8c's sema rejects it, so untested.)
 M3_WORDARITH_PROGRAMS = [
     # each binop, var/var and var/ubyte (widening)
-    "%target nmos\nuword w\nuword x\nuword y\nubyte b\n\n"
+    "uword w\nuword x\nuword y\nubyte b\n\n"
     "main {\n    w = x + y\n    w = x - y\n    w = x & y\n    w = x | y\n"
     "    w = x ^ y\n    w = x + b\n}\n",
     # left-nested chains and parenthesized (nesting-safety of the CPU-stack LHS)
-    "%target nmos\nuword w\nuword x\nuword y\n\n"
+    "uword w\nuword x\nuword y\n\n"
     "main {\n    w = x + y + w\n    w = (x + y) - (w + 1)\n"
     "    w = x + (y - w)\n}\n",
     # word augmented assignment (synthetic binop: w op= e -> w = w op e)
-    "%target nmos\nuword w\nuword x\n\n"
+    "uword w\nuword x\n\n"
     "main {\n    w = $1000\n    w += x\n    w -= 1\n    w &= x\n    w |= $00ff\n"
     "    w ^= x\n}\n",
 ]
@@ -269,15 +269,15 @@ M3_WORDARITH_PROGRAMS = [
 # <<= / >>= (the synthetic word binop path).
 M3_WORDSHIFT_PROGRAMS = [
     # constant counts: <8, ==8, >8, ==16 (n&15==0 -> no-op), for both directions
-    "%target nmos\nuword w\nuword x\n\n"
+    "uword w\nuword x\n\n"
     "main {\n    w = x << 1\n    w = x << 3\n    w = x << 8\n    w = x << 9\n"
     "    w = x << 16\n    w = x >> 1\n    w = x >> 4\n    w = x >> 8\n"
     "    w = x >> 12\n}\n",
     # variable counts (loop) + a nested lhs
-    "%target nmos\nuword w\nuword x\nubyte n\n\n"
+    "uword w\nuword x\nubyte n\n\n"
     "main {\n    w = x << n\n    w = x >> n\n    w = (x + 1) << 2\n}\n",
     # augmented word shifts (synthetic binop, const + variable)
-    "%target nmos\nuword w\nubyte n\n\n"
+    "uword w\nubyte n\n\n"
     "main {\n    w = $0100\n    w <<= 2\n    w >>= 1\n    w <<= n\n    w >>= n\n}\n",
 ]
 
@@ -288,21 +288,21 @@ M3_WORDSHIFT_PROGRAMS = [
 # stack (no recursion), so blocks nest arbitrarily.
 M4_CONTROL_PROGRAMS = [
     # if (no else), every byte comparison op as the condition
-    "%target nmos\nubyte a\nubyte b\nubyte c\n\n"
+    "ubyte a\nubyte b\nubyte c\n\n"
     "main {\n    if a == b {\n        c = 1\n    }\n    if a < b {\n        c = 2\n    }\n"
     "    if a >= b {\n        c = 3\n    }\n    if a > b {\n        c = 4\n    }\n"
     "    if a <= b {\n        c = 5\n    }\n    if a != b {\n        c = 6\n    }\n}\n",
     # if / else, signed-byte and uword conditions
-    "%target nmos\nubyte a\nbyte s\nbyte t\nuword x\nuword y\n\n"
+    "ubyte a\nbyte s\nbyte t\nuword x\nuword y\n\n"
     "main {\n    if s < t {\n        a = 1\n    } else {\n        a = 2\n    }\n"
     "    if x < y {\n        a = 3\n    } else {\n        a = 4\n    }\n}\n",
     # while + break + continue, and a non-comparison condition (a plain var)
-    "%target nmos\nubyte a\nubyte b\nubyte c\n\n"
+    "ubyte a\nubyte b\nubyte c\n\n"
     "main {\n    while a < b {\n        a = a + 1\n        if a == c {\n            break\n        }\n"
     "        if a == 9 {\n            continue\n        }\n        b = b - 1\n    }\n"
     "    while c {\n        c = c - 1\n    }\n}\n",
     # nested if inside if/else inside while
-    "%target nmos\nubyte a\nubyte b\nubyte c\n\n"
+    "ubyte a\nubyte b\nubyte c\n\n"
     "main {\n    while a > b {\n        if c != 0 {\n            if a == b {\n"
     "                a = 7\n            } else {\n                a = 8\n            }\n"
     "        }\n        a = a - 1\n    }\n}\n",
@@ -313,13 +313,13 @@ M4_CONTROL_PROGRAMS = [
 # the saved counter first). Literal and variable counts, with break/continue.
 M4_REPEAT_PROGRAMS = [
     # forever loop with a break
-    "%target nmos\nubyte a\nubyte b\n\n"
+    "ubyte a\nubyte b\n\n"
     "main {\n    repeat {\n        a = a + 1\n        if a == b {\n            break\n        }\n    }\n}\n",
     # counted (literal) loop
-    "%target nmos\nubyte a\n\n"
+    "ubyte a\n\n"
     "main {\n    repeat 10 {\n        a = a + 1\n    }\n}\n",
     # counted (variable) loop with break + continue
-    "%target nmos\nubyte a\nubyte b\nubyte n\n\n"
+    "ubyte a\nubyte b\nubyte n\n\n"
     "main {\n    repeat n {\n        b = b - 1\n        if b == 0 {\n            break\n        }\n"
     "        if b == a {\n            continue\n        }\n        a = a + 1\n    }\n}\n",
 ]
@@ -329,13 +329,13 @@ M4_REPEAT_PROGRAMS = [
 # variable range, computed hi (the tmp0/tmp1 spill path), break/continue.
 M4_FOR_PROGRAMS = [
     # literal range
-    "%target nmos\nubyte i\nubyte s\n\n"
+    "ubyte i\nubyte s\n\n"
     "main {\n    for i in 0 to 9 {\n        s = s + i\n    }\n}\n",
     # variable range + break
-    "%target nmos\nubyte i\nubyte s\nubyte lo\nubyte hi\nubyte a\n\n"
+    "ubyte i\nubyte s\nubyte lo\nubyte hi\nubyte a\n\n"
     "main {\n    for i in lo to hi {\n        s = s + 1\n        if s == a {\n            break\n        }\n    }\n}\n",
     # computed hi (spill path) + continue
-    "%target nmos\nubyte i\nubyte s\nubyte hi\nubyte a\n\n"
+    "ubyte i\nubyte s\nubyte hi\nubyte a\n\n"
     "main {\n    for i in 1 to (hi - 1) {\n        s = s + i\n        if i == 3 {\n            continue\n        }\n        a = a + 1\n    }\n}\n",
 ]
 
@@ -346,18 +346,18 @@ M4_FOR_PROGRAMS = [
 # with a nested if (the classify_name shape).
 M4_WHEN_PROGRAMS = [
     # byte selector: single + multi-value arms + else
-    "%target nmos\nubyte x\nubyte r\n\n"
+    "ubyte x\nubyte r\n\n"
     "main {\n    when x {\n        1 -> { r = 10 }\n        2, 3 -> { r = 20 }\n"
     "        else -> { r = 99 }\n    }\n}\n",
     # byte selector, no else
-    "%target nmos\nubyte x\nubyte r\n\n"
+    "ubyte x\nubyte r\n\n"
     "main {\n    when x {\n        5 -> { r = 1 }\n        6 -> { r = 2 }\n    }\n}\n",
     # word selector (16-bit value compare) + multi-value + else
-    "%target nmos\nuword w\nuword wr\n\n"
+    "uword w\nuword wr\n\n"
     "main {\n    when w {\n        $1000 -> { wr = 1 }\n        $2000, $3000 -> { wr = 2 }\n"
     "        else -> { wr = 9 }\n    }\n}\n",
     # arm bodies with nested control flow
-    "%target nmos\nubyte x\nubyte a\nubyte b\nubyte r\n\n"
+    "ubyte x\nubyte a\nubyte b\nubyte r\n\n"
     "main {\n    when x {\n        1 -> { if a == b { r = 1 } else { r = 2 } }\n"
     "        2 -> { while a < b { a = a + 1 } }\n        else -> { r = 0 }\n    }\n}\n",
 ]
@@ -368,22 +368,22 @@ M4_WHEN_PROGRAMS = [
 # (jsr p8s_<name>). Bodies use module vars + control flow.
 M5_SUB_PROGRAMS = [
     # two subs called from main, bodies touch module vars
-    "%target nmos\nubyte x\nubyte y\n\n"
+    "ubyte x\nubyte y\n\n"
     "sub foo() {\n    x = 5\n}\nsub bar() {\n    y = x + 1\n}\n"
     "main {\n    foo()\n    bar()\n}\n",
     # a sub whose body has control flow + a call from inside a loop
-    "%target nmos\nubyte a\nubyte b\n\n"
+    "ubyte a\nubyte b\n\n"
     "sub bump() {\n    if a < b {\n        a = a + 1\n    }\n}\n"
     "main {\n    a = 0\n    b = 5\n    while a < b {\n        bump()\n    }\n}\n",
     # subs in source order foo, baz, qux -- emission order must match
-    "%target nmos\nubyte x\n\n"
+    "ubyte x\n\n"
     "sub foo() {\n    x = 1\n}\nsub baz() {\n    x = x + 2\n}\nsub qux() {\n    x = x * 3\n}\n"
     "main {\n    foo()\n    baz()\n    qux()\n}\n",
     # string literals in subs declared BEFORE main: pool labels must be
     # numbered in main-first EMISSION order (main's "M"=str_0, then first's
     # "F"=str_1, second's "S"=str_2), not source order. Regression guard
     # for the p8c/p1 string-label ordering divergence.
-    "%target nmos\nuword s\n\n"
+    "uword s\n\n"
     'sub first() {\n    s = "F"\n}\nsub second() {\n    s = "S"\n}\n'
     'main {\n    s = "M"\n    first()\n    second()\n}\n',
 ]
@@ -399,19 +399,19 @@ M5_SUB_PROGRAMS = [
 # this corpus avoids those, matching what p1.p8 itself can use.
 CONST_PROGRAMS = [
     # byte-leaf + word-leaf folding, no ZP binding for the consts
-    "%target nmos\nconst ubyte LO = 5\nconst ubyte HI = 200\n"
+    "const ubyte LO = 5\nconst ubyte HI = 200\n"
     "ubyte a\nuword w\n\n"
     "main {\n    a = LO\n    w = HI\n    a = HI\n}\n",
     # const in comparison conditions (if / while -> spill path folds the const)
-    "%target nmos\nconst ubyte K = 7\nubyte a\n\n"
+    "const ubyte K = 7\nubyte a\n\n"
     "main {\n    a = 0\n    if a == K {\n        a = K\n    }\n"
     "    while a == K {\n        a = K\n    }\n}\n",
     # const passed as a call arg (folds via the arg's byte/word leaf eval)
-    "%target nmos\nconst ubyte N = 42\nubyte a\n\n"
+    "const ubyte N = 42\nubyte a\n\n"
     "sub id(ubyte v) -> ubyte {\n    return v\n}\n"
     "main {\n    a = id(N)\n}\n",
     # a program whose ONLY module symbols are consts -> no ZP-binding block
-    "%target nmos\nconst ubyte A = 1\nconst ubyte B = 2\n\n"
+    "const ubyte A = 1\nconst ubyte B = 2\n\n"
     "main {\n    if A == B {\n    }\n}\n",
 ]
 
@@ -424,11 +424,11 @@ CONST_PROGRAMS = [
 ARRAY_DECL_PROGRAMS = [
     # ubyte + uword arrays interleaved with scalars: trailer order = source
     # order, scalars still get ZP bindings, arrays do not.
-    "%target nmos\nubyte[4] buf\nubyte x\nuword[3] tab\n\n"
+    "ubyte[4] buf\nubyte x\nuword[3] tab\n\n"
     "main {\n    x = 1\n}\n",
     # an array as the only module symbol -> ZP-binding block omitted, trailer
     # present.
-    "%target nmos\nubyte[8] mem\n\n"
+    "ubyte[8] mem\n\n"
     "main {\n}\n",
 ]
 
@@ -440,7 +440,7 @@ ARRAY_DECL_PROGRAMS = [
 ARRAY_READ_PROGRAMS = [
     # const index (absolute) and byte-var index (tay / ,y), plus a read feeding
     # an arithmetic op (the read is the leaf of `buf[i] + 1`).
-    "%target nmos\nubyte[8] buf\nubyte i\nubyte x\n\n"
+    "ubyte[8] buf\nubyte i\nubyte x\n\n"
     "main {\n    i = 3\n    x = buf[2]\n    x = buf[i]\n    x = buf[i] + 1\n}\n",
 ]
 
@@ -450,16 +450,16 @@ ARRAY_READ_PROGRAMS = [
 # its result in A (byte) or A:Y (word, ubyte-returning calls widen with ldy #0).
 M5_RET_PROGRAMS = [
     # byte + word returns, call as a value (byte and word context)
-    "%target nmos\nubyte a\nuword w\n\n"
+    "ubyte a\nuword w\n\n"
     "sub get5() -> ubyte {\n    return 5\n}\nsub dbl() -> ubyte {\n    return a + a\n}\n"
     "sub bigw() -> uword {\n    return $1234\n}\n"
     "main {\n    a = get5()\n    a = dbl() + 1\n    w = bigw()\n    w = get5()\n}\n",
     # conditional return (return inside an if, plus a fall-through return)
-    "%target nmos\nubyte a\n\n"
+    "ubyte a\n\n"
     "sub cls() -> ubyte {\n    if a > 3 {\n        return 1\n    }\n    return 0\n}\n"
     "main {\n    a = cls()\n}\n",
     # void sub with a bare `return` (early exit)
-    "%target nmos\nubyte a\nubyte b\n\n"
+    "ubyte a\nubyte b\n\n"
     "sub maybe() {\n    if a == 0 {\n        return\n    }\n    b = b + 1\n}\n"
     "main {\n    maybe()\n}\n",
 ]
@@ -471,15 +471,15 @@ M5_RET_PROGRAMS = [
 # into the param slots in reverse before the jsr (the reentrant-safe order).
 M5_PARAM_PROGRAMS = [
     # one ubyte param, used in the body + returned
-    "%target nmos\nubyte g\n\n"
+    "ubyte g\n\n"
     "sub addone(ubyte v) -> ubyte {\n    return v + 1\n}\n"
     "main {\n    g = addone(5)\n}\n",
     # two ubyte params + a uword param
-    "%target nmos\nubyte g\nuword gw\n\n"
+    "ubyte g\nuword gw\n\n"
     "sub store2(ubyte a, ubyte b) {\n    g = a + b\n}\nsub setw(uword w) {\n    gw = w\n}\n"
     "main {\n    store2(3, 4)\n    setw($abcd)\n}\n",
     # three params, arg is an expression / a module var (shadowing check)
-    "%target nmos\nubyte g\n\n"
+    "ubyte g\n\n"
     "sub add3(ubyte a, ubyte b, ubyte c) -> ubyte {\n    return a + b + c\n}\n"
     "main {\n    g = add3(1, 2, g)\n}\n",
 ]
@@ -491,16 +491,16 @@ M5_PARAM_PROGRAMS = [
 # lowers to a store; locals (and params) shadow module vars by scope.
 M5_LOCAL_PROGRAMS = [
     # top-level locals in main + a sub, init + use
-    "%target nmos\nubyte g\n\n"
+    "ubyte g\n\n"
     "sub twice(ubyte v) -> ubyte {\n    ubyte r\n    r = v + v\n    return r\n}\n"
     "main {\n    ubyte x\n    x = 3\n    g = twice(x)\n}\n",
     # a local loop var + a local accumulator (for-loop body)
-    "%target nmos\nubyte g\n\n"
+    "ubyte g\n\n"
     "sub compute(ubyte n) -> ubyte {\n    ubyte sum\n    sum = 0\n    ubyte i\n"
     "    for i in 0 to n {\n        sum = sum + i\n    }\n    return sum\n}\n"
     "main {\n    g = compute(5)\n}\n",
     # locals declared INSIDE nested blocks (if / while) -- allocation order
-    "%target nmos\nubyte g\nuword gw\n\n"
+    "ubyte g\nuword gw\n\n"
     "sub nested() {\n    ubyte a\n    a = 1\n    if g > 0 {\n        ubyte b\n"
     "        b = a + g\n        while b > 0 {\n            uword w\n            w = gw + 1\n"
     "            gw = w\n            b = b - 1\n        }\n    }\n    g = a\n}\n"
@@ -513,14 +513,14 @@ M5_LOCAL_PROGRAMS = [
 # and ubyte-result widening in word context.
 M5_BUILTIN_PROGRAMS = [
     # lsb / msb / peek / poke / mkword, plain
-    "%target nmos\nubyte b\nuword w\n\n"
+    "ubyte b\nuword w\n\n"
     "main {\n    w = $1234\n    b = lsb(w)\n    b = msb(w)\n    b = peek($d020)\n"
     "    poke($d021, b)\n    w = mkword($ab, $cd)\n}\n",
     # nested builtins (poke value + mkword arg contain lsb) -- reentrancy
-    "%target nmos\nubyte b\nuword w\n\n"
+    "ubyte b\nuword w\n\n"
     "main {\n    w = $beef\n    poke($c000, lsb(w) + 1)\n    w = mkword(msb(w), lsb(w))\n}\n",
     # lsb in word context (ubyte result widens with ldy #0)
-    "%target nmos\nuword w\nuword v\n\n"
+    "uword w\nuword v\n\n"
     "main {\n    v = $0102\n    w = lsb(v)\n    w = mkword($00, msb(v))\n}\n",
 ]
 
@@ -530,7 +530,7 @@ M5_BUILTIN_PROGRAMS = [
 # (p8v_<sub>_arg_<name>) resolve to p1's param ZP allocation.
 M5_INLINEASM_PROGRAMS = [
     # a shim-style sub whose body is one inline-asm block + a bare two-liner
-    "%target nmos\nubyte g\n\n"
+    "ubyte g\n\n"
     "sub putc(ubyte ch) {\n"
     '    %asm{{ "lda p8v_putc_arg_ch\\nldx #1\\njsr $f024\\nrts" }}\n}\n'
     "sub raw() {\n"
@@ -544,12 +544,12 @@ M5_INLINEASM_PROGRAMS = [
 # (matching p8c's ZP bump) but does NOT walk a body (there is none).
 M5_ASMSUB_PROGRAMS = [
     # void asmsubs with a ubyte arg, and a ubyte-returning one called as a value
-    "%target nmos\nubyte g\n\n"
+    "ubyte g\n\n"
     "asmsub _exit(ubyte code) = $f00f\nasmsub _close(ubyte handle) = $f015\n"
     "asmsub getbyte() -> ubyte = $f006\n"
     "main {\n    g = getbyte()\n    _close(3)\n    _exit(0)\n}\n",
     # a uword-arg asmsub + an asmsub interleaved with a regular inline-asm sub
-    "%target nmos\nuword g\n\n"
+    "uword g\n\n"
     "asmsub setw(uword w) = $f024\n"
     "sub helper() {\n"
     '    %asm{{ "nop\\nrts" }}\n}\n'
@@ -627,7 +627,8 @@ class P1Equivalence(unittest.TestCase):
         out = self.workdir / "oracle.s"
         inp.write_text(src)
         r = subprocess.run(
-            [sys.executable, "-m", "p8c", str(inp), "-o", str(out)],
+            [sys.executable, "-m", "p8c", "--target", "nmos",
+             str(inp), "-o", str(out)],
             capture_output=True, text=True, cwd=str(PROG8))
         self.assertEqual(r.returncode, 0,
                          msg=f"oracle failed on {src!r}:\n{r.stdout}\n{r.stderr}")

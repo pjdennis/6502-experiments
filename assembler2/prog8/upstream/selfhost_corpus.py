@@ -29,7 +29,8 @@ SIGNED = re.compile(r"(?m)^\s*(byte|word)\s+\w")
 
 def oracle(src):
     inp = wd / "in.p8"; out = wd / "o.s"; inp.write_text(src)
-    r = subprocess.run([sys.executable, "-m", "p8c", str(inp), "-o", str(out)],
+    r = subprocess.run([sys.executable, "-m", "p8c", "--target", "nmos",
+                        str(inp), "-o", str(out)],
                        capture_output=True, text=True, cwd=str(PROG8))
     return None if r.returncode else norm(out.read_text())
 
