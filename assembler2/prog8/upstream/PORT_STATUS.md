@@ -194,3 +194,13 @@ Two pieces beyond the monolith fixes:
    with no such recursive call, so it was already fine.)
 
 Reproduce: `bash upstream/setup.sh && bash upstream/selfhost.sh`.
+
+## Update 5: corpus hardening of the slab port
+`upstream/selfhost_corpus.py` runs the full p1 test corpus (81 programs) through
+the upstream-compiled pipeline and diffs each against the p8c oracle:
+**80 byte-identical, 1 known, 0 unexpected.** The one "known" is a signed-`byte`
+comparison: p1_pass2_sh.p8's `emit_cmp_cond` is hand-specialized to p1.p8 (only
+ubyte/uword) and omits p8c's signed compare arm, so it differs from the full
+oracle -- but on that program the upstream pipeline matches the *p8c pipeline*
+byte-for-byte (verified), confirming the slab port is a faithful reproduction of
+the pipeline, not a divergence. (Run selfhost.sh first to build the images.)
