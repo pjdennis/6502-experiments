@@ -91,6 +91,28 @@ def lex(src: str, filename: str = "<input>") -> list[Token]:
             name = src[i:j]
             advance(j - i)
             out.append(Token("DIRECTIVE", name, l0, c0))
+            # `%asm {{ ... }}` -- the upstream / register-ABI raw form: capture
+            # the interior verbatim as one ASMRAW token. The LEGACY quoted form
+            # (`%asm{{ "..." }}`) is left to normal tokenization (its body is a
+            # string), so it lexes byte-for-byte as before -- this is additive.
+            if name == "asm":
+                k = i
+                while k < n and src[k] in " \t\r\n":
+                    k += 1
+                if src.startswith("{{", k):
+                    m = k + 2
+                    while m < n and src[m] in " \t\r\n":
+                        m += 1
+                    if m >= n or src[m] != '"':
+                        advance(k - i + 2)          # consume up to + incl `{{`
+                        bl, bc = loc()
+                        end = src.find("}}", i)
+                        if end == -1:
+                            raise LexError(
+                                f"{filename}:{bl}:{bc}: unterminated %asm {{{{ block")
+                        raw = src[i:end]
+                        advance(end - i + 2)        # consume body + `}}`
+                        out.append(Token("ASMRAW", raw, bl, bc))
             continue
         # numeric literal: $ff, %1010, 42
         if c == "$" and i + 1 < n and src[i + 1] in "0123456789abcdefABCDEF":

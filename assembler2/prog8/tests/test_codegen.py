@@ -327,5 +327,35 @@ class MainNamespaceForm(unittest.TestCase):
         self.assertNotIn("jsr $f00f", compile_text("main { }"))
 
 
+class RawInlineAsm(unittest.TestCase):
+    """The upstream / register-ABI raw `%asm {{ ... }}` form (unquoted body)
+    is accepted additively, byte-equivalent to the legacy quoted form."""
+
+    def test_raw_matches_legacy(self):
+        raw = compile_text(
+            "main {\n  sub start() {\n"
+            "    %asm {{\n        lda #1\n        sta $f001\n    }}\n"
+            "  }\n}\n", target="nmos")
+        legacy = compile_text(
+            'main {\n  sub start() {\n'
+            '    %asm{{ "lda #1\\nsta $f001" }}\n'
+            "  }\n}\n", target="nmos")
+        self.assertEqual(raw, legacy)
+
+    def test_raw_dedents_and_indents(self):
+        s = compile_text(
+            "main {\n  sub start() {\n"
+            "    %asm {{\n        nop\n        rts\n    }}\n"
+            "  }\n}\n", target="nmos")
+        self.assertIn("\n  nop\n", s)        # dedented, then re-indented by 2
+        self.assertIn("\n  rts\n", s)
+
+    def test_legacy_quoted_still_works(self):
+        s = compile_text(
+            'main {\n  sub start() {\n'
+            '    %asm{{ "inx" }}\n  }\n}\n', target="nmos")
+        self.assertIn("\n  inx\n", s)
+
+
 if __name__ == "__main__":
     unittest.main()

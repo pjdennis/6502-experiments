@@ -66,6 +66,20 @@ class ParseError(Exception):
     pass
 
 
+def _dedent_asm(raw: str) -> str:
+    """Normalize a raw `%asm {{ ... }}` body: drop leading/trailing blank
+    lines and strip the common indentation, so codegen emits clean asm
+    (it re-indents each line by two spaces)."""
+    lines = raw.split("\n")
+    while lines and lines[0].strip() == "":
+        lines.pop(0)
+    while lines and lines[-1].strip() == "":
+        lines.pop()
+    indents = [len(ln) - len(ln.lstrip()) for ln in lines if ln.strip()]
+    cut = min(indents) if indents else 0
+    return "\n".join(ln[cut:].rstrip() for ln in lines)
+
+
 class Parser:
     def __init__(self, tokens: list[Token], filename: str,
                  iter_expr: bool = True, iter_stmt: bool = True):
@@ -765,17 +779,17 @@ class Parser:
 
     def parse_inline_asm(self) -> InlineAsm:
         d = self.eat("DIRECTIVE", "asm")
-        # Expect `{{ ... }}` -- but our lexer split { and { individually,
-        # so peek for two consecutive `{` tokens.
+        # NEW / upstream raw form: `%asm {{ <raw asm text> }}` -- the lexer
+        # captured the interior as one ASMRAW token (verbatim, with newlines).
+        if self.peek().kind == "ASMRAW":
+            raw = self.eat("ASMRAW").value
+            return InlineAsm(loc=self.loc(d), text=_dedent_asm(raw))
+        # LEGACY form: `%asm{{ "lda #1\nsta $f001" }}` -- the body is a single
+        # string literal; the lexer split it into { { STR } } tokens.
         if self.peek(0).kind != "{" or self.peek(1).kind != "{":
             raise ParseError(
                 f"{self.filename}:{d.line}:{d.col}: %asm must be followed by {{{{ ... }}}}"
             )
-        # The %asm block contains raw assembly text. Our lexer already
-        # consumed it as tokens, which loses whitespace. For Phase 1 we
-        # demand the user write inline asm as plain text inside a string
-        # literal: `%asm{{ "lda #1\nsta $f001" }}`. That keeps the lexer
-        # simple. We'll switch to a raw-text scan in a later phase.
         self.eat("{"); self.eat("{")
         body = self.eat("STR").value
         self.eat("}"); self.eat("}")
