@@ -28,7 +28,7 @@ $EMU /tmp/pass1/img.bin --cycle-cap $CAP p1/p1.p8 /tmp/p1dump.bin >/dev/null 2>&
 echo "running pass2(dump) -> p1.s..."
 $EMU /tmp/pass2/img.bin --cycle-cap $CAP --no-dump /tmp/p1dump.bin /tmp/p1out.s >/dev/null 2>&1
 
-python3 -m p8c p1/p1.p8 -o /tmp/p1oracle.s >/dev/null 2>&1
+python3 -m p8c --target nmos p1/p1.p8 -o /tmp/p1oracle.s >/dev/null 2>&1
 n=$(diff <(sed 's/^; source:.*/X/' /tmp/p1out.s) <(sed 's/^; source:.*/X/' /tmp/p1oracle.s) | wc -l)
 echo "upstream-pipeline output: $(wc -c </tmp/p1out.s) B   p8c oracle: $(wc -c </tmp/p1oracle.s) B"
 echo "UPSTREAM-BOOTSTRAP SELF-HOST normalized diff: $n lines"

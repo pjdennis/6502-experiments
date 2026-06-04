@@ -2866,8 +2866,8 @@ sub start() {
     fn = _argv(1)
     dst_hand = _openout(fn)
     reset_arena()
-    prog_address = $4000
-    prog_target = 0
+    prog_address = $0200            ; nmos default load address (no %target needed)
+    prog_target = 1                 ; this pipeline only ever targets nmos
     prog_imports = 0
     prog_vars = 0
     prog_enums = 0

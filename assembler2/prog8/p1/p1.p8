@@ -14,7 +14,6 @@
 ; + empty p8s_main + nmos exit + reset vector); P7-M2 module vars + simple
 ; assignment (symbol table + ZP bindings + leaf/augmented assignment).
 
-%target nmos
 %address $0200
 %import strings
 

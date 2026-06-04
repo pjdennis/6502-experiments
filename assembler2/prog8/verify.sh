@@ -24,7 +24,7 @@ $EMU /tmp/p1.bin --cycle-cap $CAP p1/p1.p8 /tmp/p1dump.bin >/dev/null 2>&1 \
    || { echo "PASS1 RUN FAIL"; exit 1; }
 $EMU /tmp/p2.bin --cycle-cap $CAP --no-dump /tmp/p1dump.bin /tmp/p1out.s >/dev/null 2>&1 \
    || { echo "PASS2 RUN FAIL"; exit 1; }
-python3 -m p8c p1/p1.p8 -o /tmp/p1_oracle.s >/dev/null 2>&1
+python3 -m p8c --target nmos p1/p1.p8 -o /tmp/p1_oracle.s >/dev/null 2>&1
 n=$(diff <(sed 's/^; source:.*/X/' /tmp/p1out.s) <(sed 's/^; source:.*/X/' /tmp/p1_oracle.s) | wc -l)
 python3 -c "print(f'pass1 top \${0x200+$s1:04X} ({0xF000-0x200-$s1} B free)  pass2 top \${0x200+$s2:04X} ({0xF000-0x200-$s2} B free)')"
 echo "SELF-HOST normalized diff: $n lines"
