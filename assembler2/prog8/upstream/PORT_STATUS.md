@@ -298,8 +298,7 @@ on the upstream `main`/`start` form:
   oracle calls that compile them pass `--target nmos` (verify.sh, selfhost.sh,
   test_p1.py). All self-hosts 0-diff; corpus 80+1; test_p1.py 26 OK.
 
-### Remaining to FULLY remove `%target` (larger than it first looked)
-`%target` is parsed by FIVE compilers and used by ~90 inputs. To delete it:
+### Remaining to FULLY remove `%target` -- *** DONE (see Update 8) ***
 1. **Port the 82-program corpus** (`%target nmos` strings in `p1/tests/test_p1.py`):
    strip the directive; the `_oracle` (p8c) + `selfhost_corpus.py` oracle calls
    pass `--target nmos`; the **monolith `p1.p8`** parser must default nmos/$0200
@@ -311,6 +310,41 @@ on the upstream `main`/`start` form:
    the pipeline (`p1_pass1_sh.p8` dir handler) and the monolith/earlier sources'
    parsers -- each kept self-host/test 0-diff (the directive becomes dead once no
    input uses it; default stays nmos).
+
+## Update 8: `%target` FULLY REMOVED (the four steps above, all 0-diff)
+
+The `%target` directive is gone from the entire corpus AND every parser. The
+target is now selected purely externally (`p8c --target nmos`, the on-target
+compilers' nmos/$0200 defaults), exactly like upstream's `-target`. Done in
+four committed steps, each verified byte-identical:
+
+1. **p1 corpus** (`p1/tests/test_p1.py`): stripped `%target nmos` from all 81
+   programs; the p8c oracle (`_oracle`) and the upstream corpus oracle
+   (`selfhost_corpus.py`) pass `--target nmos`; the monolith `p1.p8` driver
+   defaults to nmos/$0200.
+2. **The four parser-port sources** (`p1/stmt.p8`, `p1/expr.p8`, `p1/lexer.p8`,
+   `tinyp8/tinyp8.p8`): dropped their own `%target nmos` directive; each test
+   harness that host-compiles them now passes `--target nmos`. `build_p1.py`'s
+   generated driver also moved to nmos/$0200 (regenerating `p1.p8` from the
+   now-directive-free `stmt.p8` reproduces the committed file).
+3. **Host p8c test inputs** (`test_codegen` MainNamespaceForm + the four e2e
+   shims + `test_serialize`): stripped the directive; `compile_text()` gained an
+   external `target=` param; the e2e shims pass `--target nmos`.
+4. **Every parser**: removed the directive's handling from `p8c/parse.py`
+   (`parse_directive`), `p1/stmt.p8` (`dir_classify` + the dk==3 block, ->
+   regenerated `p1.p8`), and `p1/p1_pass1_sh.p8` (`dir_strs`/`dir_codes` 4->3 +
+   the dk==3 block). pass1 even freed ~125 B.
+
+The serializer's `(target ...)` form is KEPT (it serializes the parser's
+default/external target -- the `goldens_sexp/programs.sexp` goldens already
+show `(target wendy2c)`); it is test-only scaffolding (the parser-equivalence
+oracle), not part of the shipped self-host pipeline. The lexer still tokenizes
+any `%word` generically, so `%target` still LEXES (the `tokens.dump` golden is
+unchanged); only the parser stopped giving it meaning.
+
+Verification (all green, all byte-identical): p8c self-host 0-diff, upstream
+self-host 0-diff, upstream corpus 80 + 1 known-signed + 0 unexpected, test_p1
+26, test_stmt/expr/lexer 27, host p8c 130, tinyp8 22.
 
 ### Then Step 4 (I/O register-ABI) -- unchanged design in Update 6
 Use the owner's bootstrap when the PIPELINE itself must parse the new asm syntax:
