@@ -70,8 +70,7 @@ def _wrap_truthy(text):
     return "".join(out)
 
 
-# ---- 1. wrap baked truthy peek/peekw conditions ----
-src = _wrap_truthy(src)
+# ---- 1. (truthy peek/peekw conditions are now baked into the source) ----
 
 # ---- 2. derive memtop from the baked slab consts (lowest high-RAM base) ----
 slab_addrs = [

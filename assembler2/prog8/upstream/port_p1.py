@@ -158,32 +158,13 @@ def port(src, extra_main_decls=""):
     #      ($0a) in both string and char literals -- matching p8c and the
     #      emulator. No CR->LF normalization or `'\n'`->$0a rewrite needed. ----
 
-    # ---- hoist call-arguments out of new_node()/cons_prepend() calls ----
-    # Upstream passes args by writing them left-to-right into the callee's STATIC
-    # param vars, then evaluating the call. So new_node(K, OP, e, parse_expr())
-    # stores p8v_kind=K, then parse_expr() (which calls new_node) overwrites it ->
-    # the outer node gets a stale kind. (p8c evaluates args to temps first.) The
-    # offending call is always the LAST arg; hoist it into a scratch global on its
-    # own line. A single shared hoist_arg is safe: each hoist is consumed by the
-    # next line, and nested parse_*() finish before the outer assignment runs.
-    src = re.sub(
-        r'(?m)^([ \t]*)(.*\b(?:new_node|cons_prepend)\(.*), (parse_\w+\(\))\)\s*$',
-        lambda m: "%s%s = %s\n%s%s, %s)" % (
-            m.group(1), HOIST, m.group(3), m.group(1), m.group(2), HOIST),
-        src)
-
-    # ---- split out_text("...") literals longer than 255 into multiple calls ----
-    src = re.sub(r'(?m)^([ \t]*)out_text\("((?:[^"\\]|\\.)*)"\)\s*$', _split_long, src)
+    # ---- NOTE: the arg-hoist, long-literal split, and truthy `!= 0` fixups are
+    #      now BAKED into the pipeline source (they are equivalence-preserving and
+    #      p8c compiles them identically), so they are no longer applied here. ----
 
     # ---- cast remaining (<=256) array indices to ubyte (upstream is byte-indexed);
     #      slabbed arenas were already rewritten to peek/poke and have no `[`. ----
     src = "".join(_map_code(l, _cast_indices) for l in src.splitlines(keepends=True))
-
-    # ---- upstream requires boolean conditions: re-add `!= 0` to truthy
-    #      single-operand if/while conditions (p1 has no bool-typed conditions) ----
-    src = re.sub(
-        r'\b(if|while) ([A-Za-z_@][\w.]*(?:\([^()]*\))?(?:\[[^\]]*\])?) \{',
-        r'\1 \2 != 0 {', src)
 
     # ---- structural wrap ----
     # Keep the leading directives/comments (incl. %import / %address) above the
@@ -196,8 +177,7 @@ def port(src, extra_main_decls=""):
         if line.startswith("%target"):
             continue
         if not wrapped and _DECL.match(line):
-            out.append("\n%output raw\n%launcher none\n\nmain {\nuword " + HOIST + "\n"
-                       + extra_main_decls)
+            out.append("\n%output raw\n%launcher none\n\nmain {\n" + extra_main_decls)
             wrapped = True
             # fall through to emit this declaration inside the block
         if line.rstrip() == "main {":

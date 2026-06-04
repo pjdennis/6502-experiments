@@ -22,6 +22,11 @@
 %address $0200
 %import strings
 
+; scratch global for the call-argument hoist out of new_node()/cons_prepend():
+; upstream writes args left-to-right into the callee's STATIC param vars before
+; evaluating the call, so a `parse_*()` last-arg must be hoisted to its own line.
+uword hoist_arg
+
 ; ---- token kinds ----
 const ubyte TK_EOF    = 0
 const ubyte TK_INT    = 1
@@ -383,26 +388,26 @@ sub _write(ubyte b, ubyte handle) {
 ; ---- I/O (sticky-EOF; emulator rewinds on EOF) ----
 
 sub read_src() -> ubyte {
-    if peek_ok {
+    if peek_ok != 0 {
         peek_ok = 0
         return peek_buf
     }
-    if src_eof {
+    if src_eof != 0 {
         return 0
     }
     return _read(src_hand)
 }
 
 sub peek_src() -> ubyte {
-    if peek_ok {
+    if peek_ok != 0 {
         return peek_buf
     }
-    if src_eof {
+    if src_eof != 0 {
         return 0
     }
     ubyte b
     b = _read(src_hand)
-    if src_eof {
+    if src_eof != 0 {
         return 0
     }
     peek_buf = b
@@ -443,14 +448,14 @@ sub is_alpha_us(ubyte c) -> ubyte {
 }
 
 sub is_alnum_us(ubyte c) -> ubyte {
-    if is_alpha_us(c) {
+    if is_alpha_us(c) != 0 {
         return 1
     }
     return is_digit(c)
 }
 
 sub is_hexdig(ubyte c) -> ubyte {
-    if is_digit(c) {
+    if is_digit(c) != 0 {
         return 1
     }
     if c >= $61 {
@@ -488,10 +493,10 @@ sub out_dec_place(uword p) {
         dec_v = dec_v - p
         d = d + 1
     }
-    if d {
+    if d != 0 {
         dec_started = 1
     }
-    if dec_started {
+    if dec_started != 0 {
         out_byte(d + $30)
     }
 }
@@ -513,13 +518,13 @@ sub read_hex() {
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof {
+        if src_eof != 0 {
             return
         }
         if c == $5f {
             c = read_src()
         } else {
-            if is_hexdig(c) {
+            if is_hexdig(c) != 0 {
                 c = read_src()
                 int_val = (int_val << 4) + hex_nibble(c)
             } else {
@@ -534,7 +539,7 @@ sub read_bin() {
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof {
+        if src_eof != 0 {
             return
         }
         if c == $5f {
@@ -560,13 +565,13 @@ sub read_dec() {
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof {
+        if src_eof != 0 {
             return
         }
         if c == $5f {
             c = read_src()
         } else {
-            if is_digit(c) {
+            if is_digit(c) != 0 {
                 c = read_src()
                 int_val = (int_val << 3) + (int_val << 1) + (c - $30)
             } else {
@@ -601,10 +606,10 @@ sub read_ident() {
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof {
+        if src_eof != 0 {
             return
         }
-        if is_alnum_us(c) {
+        if is_alnum_us(c) != 0 {
             c = read_src()
             if name_len < 64 {
                 name_buf[name_len] = c
@@ -639,7 +644,7 @@ sub intern_name() -> uword {
             }
             j = j + 1
         }
-        if match {
+        if match != 0 {
             if peek($8300 + (off + name_len)) == 0 {
                 return off
             }
@@ -744,7 +749,7 @@ sub next_raw_token() {
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof {
+        if src_eof != 0 {
             ntok_kind = TK_EOF
             ntok_val = 0
             return
@@ -756,7 +761,7 @@ sub next_raw_token() {
         if c == ';' {
             repeat {
                 c = read_src()
-                if src_eof { break }
+                if src_eof != 0 { break }
                 if c == '\n' { break }
             }
             continue
@@ -768,7 +773,7 @@ sub next_raw_token() {
             if src_eof == 0 {
                 if c2 == '0' { read_bin()  push_token(TK_INT, int_val)  return }
                 if c2 == '1' { read_bin()  push_token(TK_INT, int_val)  return }
-                if is_alpha_us(c2) {
+                if is_alpha_us(c2) != 0 {
                     read_ident()
                     push_token(TK_DIRECTIVE, intern_name())
                     return
@@ -783,7 +788,7 @@ sub next_raw_token() {
             push_token(TK_INT, int_val)
             return
         }
-        if is_digit(c) {
+        if is_digit(c) != 0 {
             read_dec()
             push_token(TK_INT, int_val)
             return
@@ -815,7 +820,7 @@ sub next_raw_token() {
             start = str_pool_len
             repeat {
                 c = read_src()
-                if src_eof { break }
+                if src_eof != 0 { break }
                 if c == '"' { break }
                 ubyte rb
                 if c == '\\' {
@@ -843,7 +848,7 @@ sub next_raw_token() {
                     if peek($9b00 + (off + sk)) != peek($9b00 + (start + sk)) { sm = 0 break }
                     sk = sk + 1
                 }
-                if sm {
+                if sm != 0 {
                     if peek($9b00 + (off + slen)) == 0 {
                         str_pool_len = start
                         push_token(TK_STR, off)
@@ -860,7 +865,7 @@ sub next_raw_token() {
             push_token(TK_STR, start)
             return
         }
-        if is_alpha_us(c) {
+        if is_alpha_us(c) != 0 {
             read_ident()
             ubyte k
             k = classify_name()
@@ -1301,7 +1306,7 @@ sub parse_expr() -> uword {
             continue
         }
 
-        if expect_operand {
+        if expect_operand != 0 {
             index_ok = 0
             if t == TK_INT {
                 push_operand(new_node(ND_INT, 0, cur_val(), 0))
@@ -1383,7 +1388,7 @@ sub parse_expr() -> uword {
             break
         }
 
-        if is_binop(t) {
+        if is_binop(t) != 0 {
             ubyte prec
             prec = bin_prec(t)
             repeat {
@@ -1405,7 +1410,7 @@ sub parse_expr() -> uword {
             continue
         }
         if t == TK_LBRACK {
-            if index_ok {
+            if index_ok != 0 {
                 push_marker(OPK_LBRACK, operand_sp)
                 advance()
                 expect_operand = 1
@@ -1511,12 +1516,14 @@ sub parse_assign_or_expr() -> uword {
     k = cur_kind()
     if k == TK_ASSIGN {
         advance()
-        return new_node(ND_ASSIGN, TK_ASSIGN, e, parse_expr())
+        hoist_arg = parse_expr()
+        return new_node(ND_ASSIGN, TK_ASSIGN, e, hoist_arg)
     }
     if k >= TK_PLUSEQ {
         if k <= TK_SHREQ {
             advance()
-            return new_node(ND_ASSIGN, k, e, parse_expr())
+            hoist_arg = parse_expr()
+            return new_node(ND_ASSIGN, k, e, hoist_arg)
         }
     }
     return new_node(ND_EXPRSTMT, 0, e, 0)
@@ -1546,7 +1553,7 @@ sub stmt_dispatch(ubyte deferflag) -> ubyte {
         last_simple = parse_inline_asm()
         return 0
     }
-    if is_type_kw(t) {
+    if is_type_kw(t) != 0 {
         last_simple = parse_var_decl()
         return 0
     }
@@ -1685,7 +1692,7 @@ sub parse_block() -> uword {
                 ubyte df
                 df = fr_defer[fi]
                 fr_sp = fr_sp - 1
-                if df {
+                if df != 0 {
                     node = new_node(ND_DEFER, 0, node, 0)
                 }
                 fr_attach(node)
@@ -1696,13 +1703,15 @@ sub parse_block() -> uword {
             if t == TK_KELSE {
                 advance()
             } else {
-                vals = cons_prepend(vals, parse_expr())
+                hoist_arg = parse_expr()
+                vals = cons_prepend(vals, hoist_arg)
                 repeat {
                     if cur_kind() != TK_COMMA {
                         break
                     }
                     advance()
-                    vals = cons_prepend(vals, parse_expr())
+                    hoist_arg = parse_expr()
+                    vals = cons_prepend(vals, hoist_arg)
                 }
             }
             advance()                       ; '->'
@@ -1772,7 +1781,7 @@ sub parse_block() -> uword {
                     }
                 }
             }
-            if fr_defer[fi] {
+            if fr_defer[fi] != 0 {
                 node = new_node(ND_DEFER, 0, node, 0)
             }
             fr_attach(node)
@@ -1791,7 +1800,7 @@ sub parse_block() -> uword {
         opened = stmt_dispatch(mod)
         if opened == 0 {
             node = last_simple
-            if mod {
+            if mod != 0 {
                 node = new_node(ND_DEFER, 0, node, 0)
             }
             fr_attach(node)
@@ -1864,7 +1873,8 @@ sub parse_const_decl() -> uword {
     nameid = cur_val()
     advance()                               ; name
     advance()                               ; '='
-    return new_node(ND_VARDECL, ctag, nameid, parse_expr())
+    hoist_arg = parse_expr()
+    return new_node(ND_VARDECL, ctag, nameid, hoist_arg)
 }
 
 sub parse_enum_decl() -> uword {
@@ -2150,20 +2160,24 @@ sub parse_decls_pass() {
             handle_directive()
             continue
         }
-        if is_type_kw(t) {
-            prog_vars = cons_prepend(prog_vars, parse_var_decl())
+        if is_type_kw(t) != 0 {
+            hoist_arg = parse_var_decl()
+            prog_vars = cons_prepend(prog_vars, hoist_arg)
             continue
         }
         if t == TK_KCONST {
-            prog_vars = cons_prepend(prog_vars, parse_const_decl())
+            hoist_arg = parse_const_decl()
+            prog_vars = cons_prepend(prog_vars, hoist_arg)
             continue
         }
         if t == TK_KENUM {
-            prog_enums = cons_prepend(prog_enums, parse_enum_decl())
+            hoist_arg = parse_enum_decl()
+            prog_enums = cons_prepend(prog_enums, hoist_arg)
             continue
         }
         if t == TK_KSTRUCT {
-            prog_structs = cons_prepend(prog_structs, parse_struct_decl())
+            hoist_arg = parse_struct_decl()
+            prog_structs = cons_prepend(prog_structs, hoist_arg)
             continue
         }
         if t == TK_KMAIN {
@@ -2184,7 +2198,8 @@ sub parse_decls_pass() {
         }
         if t == TK_IDENT {
             if is_struct_name(cur_val()) != 0 {
-                prog_vars = cons_prepend(prog_vars, parse_struct_var())
+                hoist_arg = parse_struct_var()
+                prog_vars = cons_prepend(prog_vars, hoist_arg)
                 continue
             }
         }
@@ -2261,7 +2276,7 @@ sub out_ident_text(uword id) {
 
 sub emit_sym_mangled(uword si) {
     ; arrays live in main memory under a p8a_ label; everything else is p8v_.
-    if peekw($e93c + ((si) << 1)) {
+    if peekw($e93c + ((si) << 1)) != 0 {
         out_text("p8a_")
         out_ident_text(peekw($c7b8 + ((si) << 1)))
         return
@@ -2560,7 +2575,7 @@ sub cg_skip_decl() {
         }
         return
     }
-    if is_type_kw(t) {
+    if is_type_kw(t) != 0 {
         dummy = parse_var_decl()
         reset_nodes()
         return
@@ -2710,7 +2725,7 @@ sub register_subs() {
                 }
             }
         }
-        if issub {
+        if issub != 0 {
             sub_name[sub_count] = peekw($b318 + ((snode) << 1))
             sub_kind[sub_count] = peek($b10c + (snode))
             sub_ret[sub_count] = lsb(peekw($bf60 + ((snode) << 1)))
@@ -2779,7 +2794,7 @@ sub dump_global() {
         keep = 0
         if peekw($d6f4 + ((i) << 1)) == 0 { keep = 1 }
         if peek($dd0c + (i)) == 1 { keep = 1 }
-        if keep {
+        if keep != 0 {
             d16(peekw($c7b8 + ((i) << 1))) out_byte(peek($cdd0 + (i))) d16(peekw($d0dc + ((i) << 1))) d16(peekw($d6f4 + ((i) << 1)))
             out_byte(peek($dd0c + (i))) out_byte(peek($e018 + (i))) d16(peekw($e324 + ((i) << 1))) d16(peekw($e93c + ((i) << 1)))
         }
