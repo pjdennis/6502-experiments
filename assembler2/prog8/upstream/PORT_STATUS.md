@@ -279,3 +279,41 @@ Each transform fixup is resolved one of three ways: config, bake-into-source
 verify.sh (p8c self-host) 0-diff; selfhost.sh (upstream self-host) 0-diff;
 selfhost_corpus.py 80 match + 1 known + 0 unexpected -- all on the single
 untransformed source.
+
+## Update 7: Step 5 mostly done; %target removal scope mapped
+
+Step 5 (structural convergence) is implemented and the pipeline source is fully
+on the upstream `main`/`start` form:
+- **p8c parses the `main { ... sub start() }` namespace form** (additive; the
+  old `main { stmts }` entry-body form still works for the corpus). The prologue
+  jmp + nmos reset vector target the real entry sub. 7 tests; suite 130/130.
+- **p8c `--target {nmos,wendy2c}` flag + `%launcher none` directive** -- target
+  routed externally like upstream's `-target`, so the source needs no `%target`.
+- **pipeline source baked to `main`/`start`** (drop `%target`, wrap decls in
+  `main { }`, entry `main {` -> `sub start()`, add `%output raw`/`%launcher
+  none`); the structural wrap left `port_p1.py`. Committed `verify.sh` builds the
+  pipeline with `--target nmos`.
+- **p1.p8 + the pipeline are off `%target`**: `p1_pass1_sh.p8` defaults
+  prog_target/prog_address to nmos/$0200; `p1.p8` dropped `%target`; all build/
+  oracle calls that compile them pass `--target nmos` (verify.sh, selfhost.sh,
+  test_p1.py). All self-hosts 0-diff; corpus 80+1; test_p1.py 26 OK.
+
+### Remaining to FULLY remove `%target` (larger than it first looked)
+`%target` is parsed by FIVE compilers and used by ~90 inputs. To delete it:
+1. **Port the 82-program corpus** (`%target nmos` strings in `p1/tests/test_p1.py`):
+   strip the directive; the `_oracle` (p8c) + `selfhost_corpus.py` oracle calls
+   pass `--target nmos`; the **monolith `p1.p8`** parser must default nmos/$0200
+   (it has its own `prog_target=0`/`prog_address=$4000` defaults at ~line 5358).
+2. **Port the other four sources** that carry `%target` and have their own
+   parsers + test suites: `p1/expr.p8`, `p1/stmt.p8`, `p1/lexer.p8`
+   (test_expr/test_stmt/test_lexer) and `tinyp8/tinyp8.p8` (tinyp8 tests).
+3. **Remove the `%target` directive** from every parser: p8c (`parse_directive`),
+   the pipeline (`p1_pass1_sh.p8` dir handler) and the monolith/earlier sources'
+   parsers -- each kept self-host/test 0-diff (the directive becomes dead once no
+   input uses it; default stays nmos).
+
+### Then Step 4 (I/O register-ABI) -- unchanged design in Update 6
+Use the owner's bootstrap when the PIPELINE itself must parse the new asm syntax:
+build a temporary old-written/new-accepting compiler, test it, then use it to
+compile the final new-written/new-accepting pipeline -- avoiding dual-syntax
+bloat against the memory cap.
