@@ -68,6 +68,39 @@ line-cheap but byte-heavy — ~129 keyword strings, each a name plus a token and
 flag byte, is roughly 1 KB of pure data. Floating point's lead widens slightly
 too because its polynomial-coefficient tables are byte-dense.
 
+### I/O, OS interface & graphics — 9.9% (1,630 bytes), decomposed
+
+A natural assumption is that this bucket is mostly thin pass-throughs to the BBC
+MOS. That's true for *part* of it — but roughly half is genuine console
+formatting/parsing logic that never touches the OS beyond a final `OSWRCH`.
+
+| Routine group | Bytes | % of I/O | Shim or logic? |
+|---|---:|---:|---|
+| `PRINT` + print-field formatting (`@%`, `TAB(x,y)`, `SPC`, comma fields, `~`, `'`, `;`) | 296 | 18.2% | **logic** — field widths, padding, layout |
+| `INPUT` / `INPUT#` | 288 | 17.7% | **logic** — prompts, comma/line splitting, per-field convert |
+| Graphics/screen verbs: `GCOL COLOUR MODE MOVE DRAW PLOT CLG CLS VDU REPORT` | 260 | 16.0% | mostly **shim** (`VDU 18/22/25/16/12…`); only `MODE` has real memory-limit logic |
+| Output helpers: print-char (`LISTO`), **detokeniser**, hex out, space padding | 185 | 11.3% | **logic** — esp. token→keyword expansion for `LIST`/`REPORT` |
+| Line input (`OSWORD 0`) + newline | 123 | 7.5% | mostly **shim** (control-block setup + `OSWORD 0`) |
+| `SAVE OSCLI EXT= PTR= CLOSE BPUT` | 122 | 7.5% | **shim** — marshal args → `OSFILE/OS_CLI/OSARGS/OSFIND/OSBPUT` |
+| `SOUND ENVELOPE WIDTH` | 93 | 5.7% | **shim-ish** — evaluate N params into a block → `OSWORD` |
+| `PRINT#` (write to file) | 85 | 5.2% | logic-ish — marshal each value → `OSBPUT` |
+| `PRINT` inline ROM text + `OSWORD 5` byte read + `NEW`-prog | 69 | 4.2% | mixed |
+| File *functions*: `PTR BGET OPENIN OPENOUT OPENUP` (+`PI`) | 58 | 3.6% | **shim** → `OSFIND/OSBGET/OSARGS` |
+| Functions: `NOT POS USR VPOS` | 51 | 3.1% | mixed (`POS/VPOS`→`OSBYTE`; `USR` calls code) |
+
+**Takeaway:** the graphics verbs really *are* thin (~260 bytes for 10
+statements, ≈26 bytes each — evaluate operands, emit a `VDU` sequence), and the
+file/`SAVE`/`OSCLI` plumbing is pure marshalling. But the bucket is large mainly
+because of `PRINT` field formatting, `INPUT` parsing, and the output helpers
+(incl. the **detokeniser** that rebuilds keyword text for `LIST`) — together
+~770 bytes (~47% of the bucket) of real interpreter logic with no OS pass-through
+involved. If "console formatting/parsing" were split out from "OS shims," the
+true thin-shim portion of this bucket is only ~5% of the ROM, not ~10%.
+
+> Note: a couple of general-purpose helpers in the "output helpers" span
+> (a BASIC-stack space check, a zero-page copy) aren't strictly I/O — ~30 bytes
+> that inflate this bucket slightly.
+
 ## Method & caveat (line metric)
 
 Every routine in the 8,237-line source was read and assigned to one capability
