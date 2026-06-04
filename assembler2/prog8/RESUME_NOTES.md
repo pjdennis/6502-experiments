@@ -1518,8 +1518,19 @@ I/O: pass1 dumps via out_byte (to dump file = argv[1]); pass2 loads via read_src
 (dump file = argv[0]) and writes .s via out_byte (argv[1]). Verify pipeline .s
 == `p8c -o` on the corpus, then p1.p8.
 
+## *** HISTORICAL (self-host ACHIEVED) -- everything below is the build saga ***
+The self-hosting pipeline is DONE: it compiles p1.p8 byte-identically to
+`p8c -o` (0 diff). The LIVE pipeline is the HAND-MAINTAINED p1_pass1_sh.p8 /
+p1_pass2_sh.p8 (built into pass1.bin/pass2.bin; see /tmp/verify.sh +
+p1/tests/test_p1.py). The original generator `build_pipeline.py` and its
+output `p1_pass1.p8` / `p1_pass2.p8` were SUPERSEDED by the _sh forks (which
+fixed the runtime crash + ZP-overflow gaps described below) and have been
+REMOVED (recoverable from git history if a single-source regenerator is ever
+revived -- the "Tier 2" consolidation). The sections below are kept only as
+the historical record of how self-host was reached.
+
 ## MILESTONE 2 BUILT: streaming two-pass pipeline byte-identical on FULL corpus
-build_pipeline.py generates p1_pass1.p8 (front-end + symbols + per-sub AST dump)
+build_pipeline.py generated p1_pass1.p8 (front-end + symbols + per-sub AST dump)
 and p1_pass2.p8 (load + codegen). The two-pass pipeline is BYTE-IDENTICAL to
 `p8c -o` on all 81 corpus programs. Key techniques:
   * partition: 32 shared stmt subs + 131 reused codegen subs (verbatim); 3
