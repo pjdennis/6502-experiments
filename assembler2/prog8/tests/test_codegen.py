@@ -342,12 +342,12 @@ class RawInlineAsm(unittest.TestCase):
             "  }\n}\n", target="nmos")
         self.assertEqual(raw, legacy)
 
-    def test_raw_dedents_and_indents(self):
+    def test_raw_normalized_and_indented(self):
         s = compile_text(
             "main {\n  sub start() {\n"
             "    %asm {{\n        nop\n        rts\n    }}\n"
             "  }\n}\n", target="nmos")
-        self.assertIn("\n  nop\n", s)        # dedented, then re-indented by 2
+        self.assertIn("\n  nop\n", s)        # per-line stripped, re-indented by 2
         self.assertIn("\n  rts\n", s)
 
     def test_legacy_quoted_still_works(self):

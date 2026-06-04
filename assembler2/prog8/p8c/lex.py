@@ -91,10 +91,12 @@ def lex(src: str, filename: str = "<input>") -> list[Token]:
             name = src[i:j]
             advance(j - i)
             out.append(Token("DIRECTIVE", name, l0, c0))
-            # `%asm {{ ... }}` -- the upstream / register-ABI raw form: capture
-            # the interior verbatim as one ASMRAW token. The LEGACY quoted form
-            # (`%asm{{ "..." }}`) is left to normal tokenization (its body is a
-            # string), so it lexes byte-for-byte as before -- this is additive.
+            # `%asm {{ ... }}` -- the upstream / register-ABI raw form: when the
+            # `{{` body is NOT a quoted string, capture it and normalize it
+            # (strip each line, drop blank lines) into a single STR token, then
+            # synthesize the `{{ STR }}` token shape the parser already expects.
+            # The LEGACY quoted form (`%asm{{ "..." }}`, body IS a string) is
+            # left to normal tokenization, so it lexes byte-for-byte as before.
             if name == "asm":
                 k = i
                 while k < n and src[k] in " \t\r\n":
@@ -110,9 +112,15 @@ def lex(src: str, filename: str = "<input>") -> list[Token]:
                         if end == -1:
                             raise LexError(
                                 f"{filename}:{bl}:{bc}: unterminated %asm {{{{ block")
-                        raw = src[i:end]
+                        body = "\n".join(
+                            ln.strip() for ln in src[i:end].split("\n")
+                            if ln.strip())
                         advance(end - i + 2)        # consume body + `}}`
-                        out.append(Token("ASMRAW", raw, bl, bc))
+                        out.append(Token("{", "{", bl, bc))
+                        out.append(Token("{", "{", bl, bc))
+                        out.append(Token("STR", body, bl, bc))
+                        out.append(Token("}", "}", bl, bc))
+                        out.append(Token("}", "}", bl, bc))
             continue
         # numeric literal: $ff, %1010, 42
         if c == "$" and i + 1 < n and src[i + 1] in "0123456789abcdefABCDEF":
