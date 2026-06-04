@@ -11,7 +11,6 @@
 ; keyword set, a top-level program parser, and the frame-stack statement
 ; driver (port of parse.py::parse_block_iter).
 
-%target nmos
 %address $0200
 %import strings
 

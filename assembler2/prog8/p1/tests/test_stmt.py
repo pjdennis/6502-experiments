@@ -63,7 +63,8 @@ class StmtEquivalence(unittest.TestCase):
              str(baked)], capture_output=True, text=True)
         assert r.returncode == 0, f"bake_slabs failed:\n{r.stdout}\n{r.stderr}"
         r = subprocess.run(
-            [sys.executable, "-m", "p8c", str(baked), "-o", str(s_path)],
+            [sys.executable, "-m", "p8c", "--target", "nmos",
+             str(baked), "-o", str(s_path)],
             capture_output=True, text=True, cwd=str(PROG8))
         assert r.returncode == 0, f"p8c failed:\n{r.stdout}\n{r.stderr}"
         r = subprocess.run(

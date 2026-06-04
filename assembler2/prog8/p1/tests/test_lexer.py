@@ -64,7 +64,8 @@ class LexerEquivalence(unittest.TestCase):
         s_path = cls.workdir / "lexer.s"
         cls.lexer_bin = cls.workdir / "lexer.bin"
         r = subprocess.run(
-            [sys.executable, "-m", "p8c", str(LEXER_SRC), "-o", str(s_path)],
+            [sys.executable, "-m", "p8c", "--target", "nmos",
+             str(LEXER_SRC), "-o", str(s_path)],
             capture_output=True, text=True, cwd=str(PROG8),
         )
         assert r.returncode == 0, f"p8c failed:\n{r.stdout}\n{r.stderr}"

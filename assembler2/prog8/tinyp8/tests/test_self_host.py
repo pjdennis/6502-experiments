@@ -58,8 +58,8 @@ class SelfHostEquivalence(unittest.TestCase):
         s_path = self.workdir / "tinyp8_p8.s"
 
         r = subprocess.run(
-            [sys.executable, "-m", "p8c", str(TINYP8_P8_SRC),
-             "-o", str(s_path)],
+            [sys.executable, "-m", "p8c", "--target", "nmos",
+             str(TINYP8_P8_SRC), "-o", str(s_path)],
             capture_output=True, text=True, cwd=str(PROG8),
         )
         self.assertEqual(r.returncode, 0,

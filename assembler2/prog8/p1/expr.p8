@@ -21,7 +21,6 @@
 ; in a byte. Whole-program parsing (M3/M4) will need real 16-bit arrays
 ; added to p8c -- tracked in PARSER_PORT_DESIGN / RESUME_NOTES.
 
-%target nmos
 %address $0200
 %import strings
 

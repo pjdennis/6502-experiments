@@ -23,7 +23,6 @@
 ; test for the host-p8c codegen fix that lets both operands of a binary
 ; op each use scratch without clobbering each other.
 
-%target nmos
 %address $0200
 %import strings
 

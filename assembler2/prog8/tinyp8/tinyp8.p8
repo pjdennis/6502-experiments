@@ -10,7 +10,6 @@
 ; is captured via a small inline-asm helper that stashes the EOF state
 ; in a module-level `src_eof` byte.
 
-%target nmos
 %address $0200
 
 ; Load address constant -- used to compute absolute addresses for the

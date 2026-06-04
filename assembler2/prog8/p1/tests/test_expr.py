@@ -54,7 +54,8 @@ class ExprEquivalence(unittest.TestCase):
         s_path = cls.workdir / "expr.s"
         cls.expr_bin = cls.workdir / "expr.bin"
         r = subprocess.run(
-            [sys.executable, "-m", "p8c", str(EXPR_SRC), "-o", str(s_path)],
+            [sys.executable, "-m", "p8c", "--target", "nmos",
+             str(EXPR_SRC), "-o", str(s_path)],
             capture_output=True, text=True, cwd=str(PROG8))
         assert r.returncode == 0, f"p8c failed:\n{r.stdout}\n{r.stderr}"
         r = subprocess.run(
