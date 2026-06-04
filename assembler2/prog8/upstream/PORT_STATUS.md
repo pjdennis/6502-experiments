@@ -52,3 +52,29 @@ exceed 256 -- those need the large-array -> memory-slab + `@()`/`peekw` rewrite
    the parser/serializer already do) so it's upstream-legal. Then the monolith
    should compile small programs correctly under upstream.
 3. For full self-host: port the pipeline `_sh` files (big arrays -> slabs).
+
+## Update: localized the runtime hang to handle-based reads
+The upstream-compiled binary terminates on EMPTY input but hangs on any
+content. Bisected (via `sys_exit` markers) to the lexer's first
+`next_raw_token`, then isolated with a minimal echo program: a handle-based
+read loop (`sys_open(argv0)` -> `sys_read` via `jsr $f018`) reads only the
+FIRST byte, then `$f018` returns carry-set (spurious EOF) -- so the lexer's
+sticky-EOF logic stops/loops immediately.
+
+The puzzle: the generated `peek_src`/`next_raw_token`/`sys_read` asm is verified
+correct, the open returns a valid distinct handle (src=2, dst=3, no collision),
+and the `$f018` stub-call sequence is byte-identical to our p8c-compiled
+monolith -- which reads multi-byte files fine (test_p1 passes). Yet the
+upstream binary gets EOF after one byte. The difference is some subtle runtime
+interaction (the emulator's `bit port_eof` peek = `fgetc`+`ungetc`, or a CPU
+flag/register state) that diverges for the upstream binary's exact call pattern.
+Pinning it needs a CPU/PC trace, which `emulator.out` does not provide -- adding
+a minimal instruction-trace (or single-byte `--trace` flag) to the emulator is
+the fastest way to nail it.
+
+### Net status
+Toolchain proven; p1.p8 COMPILES under upstream (0 errors, 31 KB) and RUNS
+(empty input terminates). Remaining: (a) the handle-read EOF divergence above
+[needs emulator trace], then (b) codegen recursion (Prog8 forbids it; de-recurse
+via work-stack), then (c) pipeline `_sh` port (>256 arenas -> slabs) for true
+self-host. port_p1.py reproduces the whole port.
