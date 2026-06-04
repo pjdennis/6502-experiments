@@ -1475,8 +1475,14 @@ class CodeGen:
         if isinstance(cond, BinOp) and cond.op in {"==", "!=", "<", "<=", ">", ">="}:
             self._emit_cmp_cond(cond, target, jump_if_true)
             return
-        # Generic: evaluate to 0/1 in A, branch on (non)zero.
-        self._emit_byte_expr_into_a(cond)
+        # Generic: evaluate to A and branch on (non)zero. A uword is true iff
+        # either byte is nonzero, so OR the two halves together first.
+        if getattr(cond, "type", None) is UWORD:
+            self._emit_word_expr_into_ay(cond)
+            self.emit("  sty __p8c_tmp0")
+            self.emit("  ora __p8c_tmp0")
+        else:
+            self._emit_byte_expr_into_a(cond)
         self._br("bne" if jump_if_true else "beq", target)
 
     def _emit_cmp_cond(self, cond: BinOp, target: str, jump_if_true: bool) -> None:

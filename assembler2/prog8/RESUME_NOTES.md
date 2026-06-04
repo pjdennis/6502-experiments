@@ -81,6 +81,21 @@ fine for readability in code that isn't memory-critical, but this compiler is.)
      clearly-char operands, never blindly. Self-host 0-diff; test_p1 26 OK;
      front-end 27 + host suite green.
 
+  9. **Truthy `if`/`while` conditions + `!= 0` simplification.** p8c already
+     accepted `if <bool|ubyte>`; extended sema + codegen to accept `if/while
+     <uword>` too (matching upstream Prog8's "nonzero integer = true"): the
+     generic condition path ORs the two halves (`sty __p8c_tmp0` / `ora
+     __p8c_tmp0`) before the branch. Mirrored byte-identically in pass2_sh.
+     Then simplified `if/while X != 0` -> `if/while X` across lexer.p8,
+     expr.p8, stmt.p8, p1_pass1_sh.p8, p1_pass2_sh.p8 (238 sites) -- only
+     single-operand conditions (never `and`/`or` operands, which still require
+     bool). `if f()` is `if f()!=0` minus the redundant `cmp #$00`, so this
+     also FREED space: pass2 170->356 B, pass1 1018->1106 B free. Also lexer.p8:
+     emit_punct1/2/3 -> a single `emit_punct(uword s)` taking the spelling
+     string ("<<=", "=="), and emit_dir_head emits "DIRECTIVE " in one call.
+     Tests: test_codegen.py::TruthyConditions. Self-host 0; test_p1 26 OK;
+     host suite 121 green.
+
 REMAINING (next session):
   * **String comparison sugar (optional):** `s1 == s2` / `!=` lowering to
     `strings.compare(...) == 0` for ergonomics. The primitive is fully wired

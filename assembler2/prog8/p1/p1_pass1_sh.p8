@@ -380,26 +380,26 @@ sub _write(ubyte b, ubyte handle) {
 ; ---- I/O (sticky-EOF; emulator rewinds on EOF) ----
 
 sub read_src() -> ubyte {
-    if peek_ok != 0 {
+    if peek_ok {
         peek_ok = 0
         return peek_buf
     }
-    if src_eof != 0 {
+    if src_eof {
         return 0
     }
     return _read(src_hand)
 }
 
 sub peek_src() -> ubyte {
-    if peek_ok != 0 {
+    if peek_ok {
         return peek_buf
     }
-    if src_eof != 0 {
+    if src_eof {
         return 0
     }
     ubyte b
     b = _read(src_hand)
-    if src_eof != 0 {
+    if src_eof {
         return 0
     }
     peek_buf = b
@@ -440,14 +440,14 @@ sub is_alpha_us(ubyte c) -> ubyte {
 }
 
 sub is_alnum_us(ubyte c) -> ubyte {
-    if is_alpha_us(c) != 0 {
+    if is_alpha_us(c) {
         return 1
     }
     return is_digit(c)
 }
 
 sub is_hexdig(ubyte c) -> ubyte {
-    if is_digit(c) != 0 {
+    if is_digit(c) {
         return 1
     }
     if c >= $61 {
@@ -485,10 +485,10 @@ sub out_dec_place(uword p) {
         dec_v = dec_v - p
         d = d + 1
     }
-    if d != 0 {
+    if d {
         dec_started = 1
     }
-    if dec_started != 0 {
+    if dec_started {
         out_byte(d + $30)
     }
 }
@@ -510,13 +510,13 @@ sub read_hex() {
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof != 0 {
+        if src_eof {
             return
         }
         if c == $5f {
             c = read_src()
         } else {
-            if is_hexdig(c) != 0 {
+            if is_hexdig(c) {
                 c = read_src()
                 int_val = (int_val << 4) + hex_nibble(c)
             } else {
@@ -531,7 +531,7 @@ sub read_bin() {
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof != 0 {
+        if src_eof {
             return
         }
         if c == $5f {
@@ -557,13 +557,13 @@ sub read_dec() {
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof != 0 {
+        if src_eof {
             return
         }
         if c == $5f {
             c = read_src()
         } else {
-            if is_digit(c) != 0 {
+            if is_digit(c) {
                 c = read_src()
                 int_val = (int_val << 3) + (int_val << 1) + (c - $30)
             } else {
@@ -598,10 +598,10 @@ sub read_ident() {
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof != 0 {
+        if src_eof {
             return
         }
-        if is_alnum_us(c) != 0 {
+        if is_alnum_us(c) {
             c = read_src()
             if name_len < 64 {
                 name_buf[name_len] = c
@@ -636,7 +636,7 @@ sub intern_name() -> uword {
             }
             j = j + 1
         }
-        if match != 0 {
+        if match {
             if ident_pool[off + name_len] == 0 {
                 return off
             }
@@ -741,7 +741,7 @@ sub next_raw_token() {
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof != 0 {
+        if src_eof {
             ntok_kind = TK_EOF
             ntok_val = 0
             return
@@ -753,7 +753,7 @@ sub next_raw_token() {
         if c == ';' {
             repeat {
                 c = read_src()
-                if src_eof != 0 { break }
+                if src_eof { break }
                 if c == '\n' { break }
             }
             continue
@@ -765,7 +765,7 @@ sub next_raw_token() {
             if src_eof == 0 {
                 if c2 == '0' { read_bin()  push_token(TK_INT, int_val)  return }
                 if c2 == '1' { read_bin()  push_token(TK_INT, int_val)  return }
-                if is_alpha_us(c2) != 0 {
+                if is_alpha_us(c2) {
                     read_ident()
                     push_token(TK_DIRECTIVE, intern_name())
                     return
@@ -780,7 +780,7 @@ sub next_raw_token() {
             push_token(TK_INT, int_val)
             return
         }
-        if is_digit(c) != 0 {
+        if is_digit(c) {
             read_dec()
             push_token(TK_INT, int_val)
             return
@@ -812,7 +812,7 @@ sub next_raw_token() {
             start = str_pool_len
             repeat {
                 c = read_src()
-                if src_eof != 0 { break }
+                if src_eof { break }
                 if c == '"' { break }
                 ubyte rb
                 if c == '\\' {
@@ -840,7 +840,7 @@ sub next_raw_token() {
                     if str_pool[off + sk] != str_pool[start + sk] { sm = 0 break }
                     sk = sk + 1
                 }
-                if sm != 0 {
+                if sm {
                     if str_pool[off + slen] == 0 {
                         str_pool_len = start
                         push_token(TK_STR, off)
@@ -857,7 +857,7 @@ sub next_raw_token() {
             push_token(TK_STR, start)
             return
         }
-        if is_alpha_us(c) != 0 {
+        if is_alpha_us(c) {
             read_ident()
             ubyte k
             k = classify_name()
@@ -1298,7 +1298,7 @@ sub parse_expr() -> uword {
             continue
         }
 
-        if expect_operand != 0 {
+        if expect_operand {
             index_ok = 0
             if t == TK_INT {
                 push_operand(new_node(ND_INT, 0, cur_val(), 0))
@@ -1380,7 +1380,7 @@ sub parse_expr() -> uword {
             break
         }
 
-        if is_binop(t) != 0 {
+        if is_binop(t) {
             ubyte prec
             prec = bin_prec(t)
             repeat {
@@ -1402,7 +1402,7 @@ sub parse_expr() -> uword {
             continue
         }
         if t == TK_LBRACK {
-            if index_ok != 0 {
+            if index_ok {
                 push_marker(OPK_LBRACK, operand_sp)
                 advance()
                 expect_operand = 1
@@ -1543,7 +1543,7 @@ sub stmt_dispatch(ubyte deferflag) -> ubyte {
         last_simple = parse_inline_asm()
         return 0
     }
-    if is_type_kw(t) != 0 {
+    if is_type_kw(t) {
         last_simple = parse_var_decl()
         return 0
     }
@@ -1682,7 +1682,7 @@ sub parse_block() -> uword {
                 ubyte df
                 df = fr_defer[fi]
                 fr_sp = fr_sp - 1
-                if df != 0 {
+                if df {
                     node = new_node(ND_DEFER, 0, node, 0)
                 }
                 fr_attach(node)
@@ -1769,7 +1769,7 @@ sub parse_block() -> uword {
                     }
                 }
             }
-            if fr_defer[fi] != 0 {
+            if fr_defer[fi] {
                 node = new_node(ND_DEFER, 0, node, 0)
             }
             fr_attach(node)
@@ -1788,7 +1788,7 @@ sub parse_block() -> uword {
         opened = stmt_dispatch(mod)
         if opened == 0 {
             node = last_simple
-            if mod != 0 {
+            if mod {
                 node = new_node(ND_DEFER, 0, node, 0)
             }
             fr_attach(node)
@@ -2147,7 +2147,7 @@ sub parse_decls_pass() {
             handle_directive()
             continue
         }
-        if is_type_kw(t) != 0 {
+        if is_type_kw(t) {
             prog_vars = cons_prepend(prog_vars, parse_var_decl())
             continue
         }
@@ -2258,7 +2258,7 @@ sub out_ident_text(uword id) {
 
 sub emit_sym_mangled(uword si) {
     ; arrays live in main memory under a p8a_ label; everything else is p8v_.
-    if sym_arr_size[si] != 0 {
+    if sym_arr_size[si] {
         out_text("p8a_")
         out_ident_text(sym_ident[si])
         return
@@ -2557,7 +2557,7 @@ sub cg_skip_decl() {
         }
         return
     }
-    if is_type_kw(t) != 0 {
+    if is_type_kw(t) {
         dummy = parse_var_decl()
         reset_nodes()
         return
@@ -2707,7 +2707,7 @@ sub register_subs() {
                 }
             }
         }
-        if issub != 0 {
+        if issub {
             sub_name[sub_count] = node_a[snode]
             sub_kind[sub_count] = node_op[snode]
             sub_ret[sub_count] = lsb(node_d[snode])
@@ -2776,7 +2776,7 @@ sub dump_global() {
         keep = 0
         if sym_scope[i] == 0 { keep = 1 }
         if sym_mkind[i] == 1 { keep = 1 }
-        if keep != 0 {
+        if keep {
             d16(sym_ident[i]) out_byte(sym_type[i]) d16(sym_addr[i]) d16(sym_scope[i])
             out_byte(sym_mkind[i]) out_byte(sym_is_const[i]) d16(sym_cval[i]) d16(sym_arr_size[i])
         }

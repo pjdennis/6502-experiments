@@ -81,26 +81,26 @@ sub _write(ubyte b, ubyte handle) {
 ; file with no trailing newline) loops forever re-reading the rewound
 ; source.
 sub read_src() -> ubyte {
-    if peek_ok != 0 {
+    if peek_ok {
         peek_ok = 0
         return peek_buf
     }
-    if src_eof != 0 {
+    if src_eof {
         return 0
     }
     return _read(src_hand)
 }
 
 sub peek_src() -> ubyte {
-    if peek_ok != 0 {
+    if peek_ok {
         return peek_buf
     }
-    if src_eof != 0 {
+    if src_eof {
         return 0
     }
     ubyte b
     b = _read(src_hand)
-    if src_eof != 0 {
+    if src_eof {
         return 0
     }
     peek_buf = b
@@ -120,7 +120,7 @@ sub out_nl() {
 sub out_text(uword p) {
     uword q
     q = p
-    while @(q) != 0 {
+    while @(q) {
         out_byte(@(q))
         q = q + 1
     }
@@ -156,14 +156,14 @@ sub is_alpha_us(ubyte c) -> ubyte {
 }
 
 sub is_alnum_us(ubyte c) -> ubyte {
-    if is_alpha_us(c) != 0 {
+    if is_alpha_us(c) {
         return 1
     }
     return is_digit(c)
 }
 
 sub is_hexdig(ubyte c) -> ubyte {
-    if is_digit(c) != 0 {
+    if is_digit(c) {
         return 1
     }
     if c >= 'a' {
@@ -202,10 +202,10 @@ sub out_dec_place(uword p) {
         dec_v = dec_v - p
         d = d + 1
     }
-    if d != 0 {
+    if d {
         dec_started = 1
     }
-    if dec_started != 0 {
+    if dec_started {
         out_byte(d + '0')
     }
 }
@@ -228,13 +228,13 @@ sub read_hex() {                                         ; '$' already consumed
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof != 0 {
+        if src_eof {
             return
         }
         if c == '_' {                                    ; '_' separator
             c = read_src()
         } else {
-            if is_hexdig(c) != 0 {
+            if is_hexdig(c) {
                 c = read_src()
                 int_val = (int_val << 4) + hex_nibble(c)
             } else {
@@ -249,7 +249,7 @@ sub read_bin() {                                         ; '%' already consumed
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof != 0 {
+        if src_eof {
             return
         }
         if c == '_' {
@@ -275,13 +275,13 @@ sub read_dec() {                                         ; first digit still pee
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof != 0 {
+        if src_eof {
             return
         }
         if c == '_' {
             c = read_src()
         } else {
-            if is_digit(c) != 0 {
+            if is_digit(c) {
                 c = read_src()
                 int_val = (int_val << 3) + (int_val << 1) + (c - '0')
             } else {
@@ -323,10 +323,10 @@ sub read_ident() {                                       ; next peeked char star
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof != 0 {
+        if src_eof {
             return
         }
-        if is_alnum_us(c) != 0 {
+        if is_alnum_us(c) {
             c = read_src()
             if name_len < 40 {
                 name_buf[name_len] = c
@@ -383,32 +383,13 @@ sub emit_kw_head() {                                     ; "KW "
 }
 
 sub emit_dir_head() {                                    ; "DIRECTIVE "
-    out_text("DIREC")
-    out_text("TIVE ")
+    out_text("DIRECTIVE ")
 }
 
-sub emit_punct_head() {                                  ; "PUNCT "
+; PUNCT <spelling>\n -- spelling is a string ("<<=", "==", "+", ...).
+sub emit_punct(uword s) {
     out_text("PUNCT ")
-}
-
-sub emit_punct1(ubyte a) {
-    emit_punct_head()
-    out_byte(a)
-    out_nl()
-}
-
-sub emit_punct2(ubyte a, ubyte b) {
-    emit_punct_head()
-    out_byte(a)
-    out_byte(b)
-    out_nl()
-}
-
-sub emit_punct3(ubyte a, ubyte b, ubyte c) {
-    emit_punct_head()
-    out_byte(a)
-    out_byte(b)
-    out_byte(c)
+    out_text(s)
     out_nl()
 }
 
@@ -459,7 +440,7 @@ sub out_escaped(ubyte rb) {
 sub lex_char() {                                         ; opening ' already consumed
     ubyte c
     c = read_src()
-    if src_eof != 0 {
+    if src_eof {
         return
     }
     if c == '\\' {                                        ; escape
@@ -480,7 +461,7 @@ sub lex_string() {                                       ; opening " already con
     repeat {
         ubyte c
         c = read_src()
-        if src_eof != 0 {
+        if src_eof {
             break
         }
         if c == '"' {                                    ; closing "
@@ -504,7 +485,7 @@ sub skip_to_nl() {
     repeat {
         ubyte c
         c = read_src()
-        if src_eof != 0 {
+        if src_eof {
             break
         }
         if c == '\n' {
@@ -525,16 +506,16 @@ sub lex_operator(ubyte c) {
             c2 = peek_src()
             if c2 == '=' {
                 c2 = read_src()
-                emit_punct3($3c, $3c, $3d)
+                emit_punct("<<=")
             } else {
-                emit_punct2($3c, $3c)
+                emit_punct("<<")
             }
         } else {
             if c2 == '=' {
                 c2 = read_src()
-                emit_punct2($3c, $3d)
+                emit_punct("<=")
             } else {
-                emit_punct1($3c)
+                emit_punct("<")
             }
         }
         return
@@ -546,16 +527,16 @@ sub lex_operator(ubyte c) {
             c2 = peek_src()
             if c2 == '=' {
                 c2 = read_src()
-                emit_punct3($3e, $3e, $3d)
+                emit_punct(">>=")
             } else {
-                emit_punct2($3e, $3e)
+                emit_punct(">>")
             }
         } else {
             if c2 == '=' {
                 c2 = read_src()
-                emit_punct2($3e, $3d)
+                emit_punct(">=")
             } else {
-                emit_punct1($3e)
+                emit_punct(">")
             }
         }
         return
@@ -564,9 +545,9 @@ sub lex_operator(ubyte c) {
         c2 = peek_src()
         if c2 == '=' {
             c2 = read_src()
-            emit_punct2($3d, $3d)
+            emit_punct("==")
         } else {
-            emit_punct1($3d)
+            emit_punct("=")
         }
         return
     }
@@ -574,9 +555,9 @@ sub lex_operator(ubyte c) {
         c2 = peek_src()
         if c2 == '=' {
             c2 = read_src()
-            emit_punct2($21, $3d)
+            emit_punct("!=")
         } else {
-            emit_punct1($21)
+            emit_punct("!")
         }
         return
     }
@@ -584,13 +565,13 @@ sub lex_operator(ubyte c) {
         c2 = peek_src()
         if c2 == '+' {
             c2 = read_src()
-            emit_punct2($2b, $2b)
+            emit_punct("++")
         } else {
             if c2 == '=' {
                 c2 = read_src()
-                emit_punct2($2b, $3d)
+                emit_punct("+=")
             } else {
-                emit_punct1($2b)
+                emit_punct("+")
             }
         }
         return
@@ -599,17 +580,17 @@ sub lex_operator(ubyte c) {
         c2 = peek_src()
         if c2 == '-' {
             c2 = read_src()
-            emit_punct2($2d, $2d)
+            emit_punct("--")
         } else {
             if c2 == '=' {
                 c2 = read_src()
-                emit_punct2($2d, $3d)
+                emit_punct("-=")
             } else {
                 if c2 == '>' {
                     c2 = read_src()
-                    emit_punct2($2d, $3e)
+                    emit_punct("->")
                 } else {
-                    emit_punct1($2d)
+                    emit_punct("-")
                 }
             }
         }
@@ -619,9 +600,9 @@ sub lex_operator(ubyte c) {
         c2 = peek_src()
         if c2 == '=' {
             c2 = read_src()
-            emit_punct2($2a, $3d)
+            emit_punct("*=")
         } else {
-            emit_punct1($2a)
+            emit_punct("*")
         }
         return
     }
@@ -629,9 +610,9 @@ sub lex_operator(ubyte c) {
         c2 = peek_src()
         if c2 == '=' {
             c2 = read_src()
-            emit_punct2($2f, $3d)
+            emit_punct("/=")
         } else {
-            emit_punct1($2f)
+            emit_punct("/")
         }
         return
     }
@@ -639,13 +620,13 @@ sub lex_operator(ubyte c) {
         c2 = peek_src()
         if c2 == '&' {
             c2 = read_src()
-            emit_punct2($26, $26)
+            emit_punct("&&")
         } else {
             if c2 == '=' {
                 c2 = read_src()
-                emit_punct2($26, $3d)
+                emit_punct("&=")
             } else {
-                emit_punct1($26)
+                emit_punct("&")
             }
         }
         return
@@ -654,9 +635,9 @@ sub lex_operator(ubyte c) {
         c2 = peek_src()
         if c2 == '=' {
             c2 = read_src()
-            emit_punct2($7c, $3d)
+            emit_punct("|=")
         } else {
-            emit_punct1($7c)
+            emit_punct("|")
         }
         return
     }
@@ -664,14 +645,16 @@ sub lex_operator(ubyte c) {
         c2 = peek_src()
         if c2 == '=' {
             c2 = read_src()
-            emit_punct2($5e, $3d)
+            emit_punct("^=")
         } else {
-            emit_punct1($5e)
+            emit_punct("^")
         }
         return
     }
     ; pure single-char punctuation: ( ) [ ] { } , . : ~ @ ?
-    emit_punct1(c)
+    out_text("PUNCT ")
+    out_byte(c)
+    out_nl()
 }
 
 
@@ -690,7 +673,7 @@ main {
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof != 0 {
+        if src_eof {
             break
         }
 
@@ -722,11 +705,11 @@ main {
             c = read_src()                               ; consume '%'
             ubyte c2
             c2 = peek_src()
-            if src_eof != 0 {
-                emit_punct1($25)
+            if src_eof {
+                emit_punct("%")
                 continue
             }
-            if is_alpha_us(c2) != 0 {
+            if is_alpha_us(c2) {
                 read_ident()
                 emit_dir_head()
                 out_ident()
@@ -747,7 +730,7 @@ main {
                 out_nl()
                 continue
             }
-            emit_punct1($25)
+            emit_punct("%")
             continue
         }
 
@@ -762,7 +745,7 @@ main {
         }
 
         ; decimal literal
-        if is_digit(c) != 0 {
+        if is_digit(c) {
             read_dec()
             emit_int_head()
             out_dec(int_val)
@@ -785,9 +768,9 @@ main {
         }
 
         ; identifier / keyword
-        if is_alpha_us(c) != 0 {
+        if is_alpha_us(c) {
             read_ident()
-            if kw_match() != 0 {
+            if kw_match() {
                 emit_kw_head()
             } else {
                 emit_ident_head()

@@ -391,10 +391,10 @@ class Sema:
             return
         if isinstance(st, If):
             self._walk_expr(st.cond)
-            if st.cond.type is not BOOL and st.cond.type is not UBYTE:
+            if st.cond.type not in (BOOL, UBYTE, UWORD):
                 raise SemaError(
                     f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
-                    f"if condition must be bool or ubyte"
+                    f"if condition must be bool or integer"
                 )
             self._walk_block(st.then_block, sub_name=sub_name)
             if st.else_block is not None:
@@ -414,10 +414,10 @@ class Sema:
             return
         if isinstance(st, While):
             self._walk_expr(st.cond)
-            if st.cond.type is not BOOL and st.cond.type is not UBYTE:
+            if st.cond.type not in (BOOL, UBYTE, UWORD):
                 raise SemaError(
                     f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
-                    f"while condition must be bool or ubyte"
+                    f"while condition must be bool or integer"
                 )
             self._walk_block(st.body, sub_name=sub_name)
             return

@@ -364,11 +364,11 @@ sub _write(ubyte b, ubyte handle) {
 ; ---- I/O (sticky-EOF; emulator rewinds on EOF) ----
 
 sub read_src() -> ubyte {
-    if peek_ok != 0 {
+    if peek_ok {
         peek_ok = 0
         return peek_buf
     }
-    if src_eof != 0 {
+    if src_eof {
         return 0
     }
     return _read(src_hand)
@@ -390,10 +390,10 @@ sub out_dec_place(uword p) {
         dec_v = dec_v - p
         d = d + 1
     }
-    if d != 0 {
+    if d {
         dec_started = 1
     }
-    if dec_started != 0 {
+    if dec_started {
         out_byte(d + $30)
     }
 }
@@ -519,7 +519,7 @@ sub out_ident_text(uword id) {
 
 sub emit_sym_mangled(uword si) {
     ; arrays live in main memory under a p8a_ label; everything else is p8v_.
-    if sym_arr_size[si] != 0 {
+    if sym_arr_size[si] {
         out_text("p8a_")
         out_ident_text(sym_ident[si])
         return
@@ -711,7 +711,7 @@ sub emit_arrays() {
         if j >= sym_count {
             break
         }
-        if sym_arr_size[j] != 0 {
+        if sym_arr_size[j] {
             any = 1
             break
         }
@@ -729,7 +729,7 @@ sub emit_arrays() {
         if i >= sym_count {
             break
         }
-        if sym_arr_size[i] != 0 {
+        if sym_arr_size[i] {
             emit_sym_mangled(i)
             out_byte(':')               ; :
             o_nl()
@@ -746,7 +746,7 @@ sub emit_arrays() {
                 if b >= nbytes {
                     break
                 }
-                if b != 0 {
+                if b {
                     out_text(", ")
                 }
                 out_byte('0')           ; 0
@@ -826,9 +826,9 @@ sub emit_string_byte_list(uword sid) {
         }
         ubyte c
         c = str_pool[off + j]
-        if str_char_plain(c) != 0 {
+        if str_char_plain(c) {
             if in_run == 0 {
-                if any != 0 {
+                if any {
                     out_text(", ")
                 }
                 out_byte('"')           ; open "
@@ -837,11 +837,11 @@ sub emit_string_byte_list(uword sid) {
             }
             out_byte(c)
         } else {
-            if in_run != 0 {
+            if in_run {
                 out_byte('"')           ; close "
                 in_run = 0
             }
-            if any != 0 {
+            if any {
                 out_text(", ")
             }
             out_byte('$')               ; $
@@ -850,7 +850,7 @@ sub emit_string_byte_list(uword sid) {
         }
         j = j + 1
     }
-    if in_run != 0 {
+    if in_run {
         out_byte('"')
     }
     if any == 0 {
@@ -886,7 +886,7 @@ sub intern_str_label(uword sid) -> uword {
         if di >= strpool_count {
             break
         }
-        if str_sid_equal(strpool_sid[di], sid) != 0 {
+        if str_sid_equal(strpool_sid[di], sid) {
             return di
         }
         di = di + 1
@@ -1007,8 +1007,8 @@ sub expr_is_word(uword e) -> ubyte {
         ; bool. Matches p8c's `result type is UWORD` typing of the condition.
         if node_op[e] >= TK_PLUS {
             if node_op[e] <= TK_SHR {
-                if expr_is_word(node_a[e]) != 0 { return 1 }
-                if expr_is_word(node_b[e]) != 0 { return 1 }
+                if expr_is_word(node_a[e]) { return 1 }
+                if expr_is_word(node_b[e]) { return 1 }
             }
         }
     }
@@ -1071,7 +1071,7 @@ sub emit_pos_unsigned(ubyte op, ubyte tkind, uword tid) {
     emit_br(2, tkind, tid)
 }
 sub emit_cmp_u(ubyte op, ubyte tkind, uword tid, ubyte jit) {
-    if jit != 0 { emit_pos_unsigned(op, tkind, tid) } else { emit_neg_unsigned(op, tkind, tid) }
+    if jit { emit_pos_unsigned(op, tkind, tid) } else { emit_neg_unsigned(op, tkind, tid) }
 }
 
 ; compare cond.lhs vs cond.rhs and branch to (tkind,tid) on the wanted truth
@@ -1087,9 +1087,9 @@ sub emit_cmp_cond(uword cond, ubyte tkind, uword tid, ubyte jit) {
     rhs = node_b[cond]
     ubyte isw
     isw = 0
-    if expr_is_word(lhs) != 0 { isw = 1 }
-    if expr_is_word(rhs) != 0 { isw = 1 }
-    if isw != 0 {
+    if expr_is_word(lhs) { isw = 1 }
+    if expr_is_word(rhs) { isw = 1 }
+    if isw {
         ; 16-bit compare (always unsigned)
         codegen_word_expr(lhs)
         o_sta_wtmp0()
@@ -1120,7 +1120,7 @@ sub emit_cmp_cond(uword cond, ubyte tkind, uword tid, ubyte jit) {
         return
     }
     ; byte compare (unsigned only)
-    if is_cmp_leaf_rhs(rhs) != 0 {
+    if is_cmp_leaf_rhs(rhs) {
         ; leaf rhs (literal / var): no tmp0/tmp1 spill -- eval lhs into A and
         ; compare directly. (Matches p8c's _emit_cmp_cond.)
         codegen_byte_expr(lhs)
@@ -1173,7 +1173,7 @@ sub emit_cond_branch(uword cond, ubyte tkind, uword tid, ubyte jit) {
         ubyte bop
         bop = node_op[cond]
         if bop == TK_KAND {
-            if jit != 0 {
+            if jit {
                 ; jump iff both true: lhs false -> skip; else jump iff rhs true.
                 skip = label_seq
                 label_seq = label_seq + 1
@@ -1196,7 +1196,7 @@ sub emit_cond_branch(uword cond, ubyte tkind, uword tid, ubyte jit) {
             return
         }
         if bop == TK_KOR {
-            if jit != 0 {
+            if jit {
                 ; jump iff either true.
                 cb_push(cond, tkind, tid, 0)
                 emit_cond_branch(node_a[cond], tkind, tid, 1)
@@ -1218,14 +1218,23 @@ sub emit_cond_branch(uword cond, ubyte tkind, uword tid, ubyte jit) {
             }
             return
         }
-        if is_cmp_op(bop) != 0 {
+        if is_cmp_op(bop) {
             emit_cmp_cond(cond, tkind, tid, jit)
             return
         }
     }
-    ; generic: evaluate to 0/1 in A, branch on (non)zero.
-    codegen_byte_expr(cond)
-    if jit != 0 {
+    ; generic: evaluate to A and branch on (non)zero. A uword is true iff
+    ; either byte is nonzero, so OR the two halves together first.
+    if expr_is_word(cond) {
+        codegen_word_expr(cond)
+        out_text("  sty __p8c_tmp0")
+        o_nl()
+        out_text("  ora __p8c_tmp0")
+        o_nl()
+    } else {
+        codegen_byte_expr(cond)
+    }
+    if jit {
         emit_br(0, tkind, tid)
     } else {
         emit_br(1, tkind, tid)
@@ -1372,7 +1381,7 @@ sub codegen_stmt(uword st) {
         ; store. (p8c: UBYTE -> byte path, everything else -> word path.)
         uword init
         init = node_b[st]
-        if init != 0 {
+        if init {
             uword si
             si = find_sym(node_a[st])
             if sym_type[si] == TY_UBYTE {
@@ -1397,7 +1406,7 @@ sub codegen_if(uword st) {
     cond = node_a[st]
     thenb = node_b[st]
     elseb = node_c[st]
-    if elseb != 0 {
+    if elseb {
         uword else_id
         else_id = label_seq
         label_seq = label_seq + 1
@@ -1632,7 +1641,7 @@ sub codegen_when(uword st) {
     expr = node_a[st]
     ubyte isw
     isw = expr_is_word(expr)
-    if isw != 0 {
+    if isw {
         codegen_word_expr(expr)
         o_sta_wtmp0()
         o_sty_wtmp0h()
@@ -1642,7 +1651,7 @@ sub codegen_when(uword st) {
     }
     uword packed
     packed = endw_id
-    if isw != 0 {
+    if isw {
         packed = endw_id | $8000
     }
     ; end label (bottom), then choices. node_b[st] is the reversed cons (last
@@ -1698,7 +1707,7 @@ sub emit_when_choice(uword choice, uword packed) {
         }
         uword v
         v = cons_val[cell]
-        if isw != 0 {
+        if isw {
             codegen_word_expr(v)
             out_text("  sta __p8c_wtmp1")
             o_nl()
@@ -1778,7 +1787,7 @@ sub is_cmp_leaf_rhs(uword e) -> ubyte {
         return 1
     }
     if k == ND_IDENT {
-        if ident_is_const(node_a[e]) != 0 {
+        if ident_is_const(node_a[e]) {
             return 0
         }
         return 1
@@ -1803,7 +1812,7 @@ sub emit_byte_leaf_load(uword e) {
         return
     }
     if k == ND_IDENT {
-        if ident_is_const(node_a[e]) != 0 {
+        if ident_is_const(node_a[e]) {
             o_lda() o_imm()
             out_hex2(lsb(ident_const_val(node_a[e])))
             o_nl()
@@ -1824,7 +1833,7 @@ sub emit_byte_leaf_load(uword e) {
         asi = find_sym(node_a[node_a[e]])
         uword idx
         idx = node_b[e]
-        if array_fast(asi, idx) != 0 {
+        if array_fast(asi, idx) {
             if node_kind[idx] == ND_INT {
                 o_lda()
                 emit_sym_mangled(asi)
@@ -1872,14 +1881,14 @@ sub emit_byte_operand(ubyte mode, uword rhs) {
 ; _new_label format `.L<prefix>_<id>`). is_left selects shl/shr; is_top top/end.
 
 sub emit_shift_label(ubyte is_left, ubyte is_top, uword id) {
-    if is_left != 0 {
-        if is_top != 0 {
+    if is_left {
+        if is_top {
             out_text(".Lshl_top_")
         } else {
             out_text(".Lshl_end_")
         }
     } else {
-        if is_top != 0 {
+        if is_top {
             out_text(".Lshr_top_")
         } else {
             out_text(".Lshr_end_")
@@ -1892,7 +1901,7 @@ sub emit_shift_label(ubyte is_left, ubyte is_top, uword id) {
 ; top/end label pair (label_seq, in alloc order top-then-end, like p8c).
 
 sub emit_shift_op(ubyte is_left, ubyte is_imm, ubyte imm_val, ubyte mode, uword rhs) {
-    if is_imm != 0 {
+    if is_imm {
         ubyte cnt
         cnt = imm_val & 7
         ubyte i
@@ -1901,7 +1910,7 @@ sub emit_shift_op(ubyte is_left, ubyte is_imm, ubyte imm_val, ubyte mode, uword 
             if i >= cnt {
                 break
             }
-            if is_left != 0 {
+            if is_left {
                 out_text("  asl a")
             } else {
                 out_text("  lsr a")
@@ -1931,7 +1940,7 @@ sub emit_shift_op(ubyte is_left, ubyte is_imm, ubyte imm_val, ubyte mode, uword 
     emit_shift_label(is_left, 1, top_id)
     out_byte(':')
     o_nl()
-    if is_left != 0 {
+    if is_left {
         out_text("  asl a")
     } else {
         out_text("  lsr a")
@@ -2349,7 +2358,7 @@ sub codegen_byte_expr(uword root) {
                 uword rhs
                 lhs = node_a[nd]
                 rhs = node_b[nd]
-                if is_cmp_op(node_op[nd]) != 0 {
+                if is_cmp_op(node_op[nd]) {
                     ; eval(lhs); sta tmp0; eval(rhs); sta tmp1; cmp-tail
                     cws_push(7, nd, node_op[nd])
                     cws_push(3, 0, 0)
@@ -2357,7 +2366,7 @@ sub codegen_byte_expr(uword root) {
                     cws_push(8, 0, 0)
                     cws_push(0, lhs, 0)
                 } else {
-                    if is_logical_op(node_op[nd]) != 0 {
+                    if is_logical_op(node_op[nd]) {
                         ; eval(lhs); logic-mid; eval(rhs); logic-tail
                         cws_push(10, 0, node_op[nd])
                         cws_push(0, rhs, 0)
@@ -2373,7 +2382,7 @@ sub codegen_byte_expr(uword root) {
                             cws_push(2, 0, 0)
                             cws_push(0, lhs, 0)
                         } else {
-                            if is_leaf_rhs(rhs) != 0 {
+                            if is_leaf_rhs(rhs) {
                                 ; eval(lhs); binop_leaf(op, rhs)
                                 cws_push(1, rhs, node_op[nd])
                                 cws_push(0, lhs, 0)
@@ -2493,7 +2502,7 @@ sub codegen_word_leaf(uword e) {
     if k == ND_IDENT {
         uword si
         si = find_sym(node_a[e])
-        if sym_is_const[si] != 0 {
+        if sym_is_const[si] {
             ; const folds to its literal (lo in A, hi in Y), matching p8c.
             uword cv
             cv = sym_cval[si]
@@ -2724,14 +2733,14 @@ sub emit_wshr_const(ubyte n) {
 ; ".Lwshl_top_N" / ".Lwshr_end_N" etc.
 
 sub emit_wshift_label(ubyte is_left, ubyte is_top, uword id) {
-    if is_left != 0 {
-        if is_top != 0 {
+    if is_left {
+        if is_top {
             out_text(".Lwshl_top_")
         } else {
             out_text(".Lwshl_end_")
         }
     } else {
-        if is_top != 0 {
+        if is_top {
             out_text(".Lwshr_top_")
         } else {
             out_text(".Lwshr_end_")
@@ -2761,7 +2770,7 @@ sub emit_wshift_var_tail(uword nd, ubyte is_left) {
     emit_wshift_label(is_left, 1, top_id)
     out_byte(':')
     o_nl()
-    if is_left != 0 {
+    if is_left {
         out_text("  asl __p8c_wtmp0")
         o_nl()
         out_text("  rol __p8c_wtmp0+1")
@@ -2793,7 +2802,7 @@ sub word_dispatch_shift(uword nd, ubyte is_left) {
         if node_a[rhsn] <= 16 {
             ubyte n
             n = lsb(node_a[rhsn]) & $0f
-            if is_left != 0 {
+            if is_left {
                 wws_push(5, 0, n)
             } else {
                 wws_push(6, 0, n)
@@ -2802,7 +2811,7 @@ sub word_dispatch_shift(uword nd, ubyte is_left) {
             return
         }
     }
-    if is_left != 0 {
+    if is_left {
         wws_push(7, nd, 0)
     } else {
         wws_push(8, nd, 0)
@@ -2820,7 +2829,7 @@ sub word_dispatch_shift(uword nd, ubyte is_left) {
 sub array_fast(uword asi, uword idx) -> ubyte {
     if sym_type[asi] != TY_UBYTE { return 0 }
     if sym_arr_size[asi] > 256 { return 0 }
-    if expr_is_word(idx) != 0 { return 0 }
+    if expr_is_word(idx) { return 0 }
     return 1
 }
 
@@ -2886,7 +2895,7 @@ sub word_dispatch(uword nd) {
             wws_push(0, node_b[nd], 0)
             return
         }
-        if array_fast(asi, node_b[nd]) != 0 {
+        if array_fast(asi, node_b[nd]) {
             emit_word_arr_fast(asi, node_b[nd])
             return
         }
@@ -2906,7 +2915,7 @@ sub word_dispatch(uword nd) {
         wdn_sp = wdn_sp + 1
         codegen_call(nd)
         wdn_sp = wdn_sp - 1
-        if wdn_stack[wdn_sp] != 0 {
+        if wdn_stack[wdn_sp] {
             o_ldy() o_imm()
             out_text("00")
             o_nl()
@@ -3123,7 +3132,7 @@ sub codegen_assign_index(uword target, uword rhs) {
         out_text("  sta (__p8c_aptr),y") o_nl()
         return
     }
-    if array_fast(asi, idx) != 0 {
+    if array_fast(asi, idx) {
         if node_kind[idx] == ND_INT {
             codegen_byte_expr(rhs)
             out_text("  sta ") emit_sym_mangled(asi) out_byte('+') out_dec(node_a[idx]) o_nl()
@@ -3248,12 +3257,12 @@ sub ident_eq(uword identid, uword s) -> ubyte {
 ; 4 poke, 5 mkword. (len / sizeof arrive with arrays.)
 
 sub builtin_kind(uword identid) -> ubyte {
-    if ident_eq(identid, "lsb") != 0 { return 1 }
-    if ident_eq(identid, "msb") != 0 { return 2 }
-    if ident_eq(identid, "peek") != 0 { return 3 }
-    if ident_eq(identid, "poke") != 0 { return 4 }
-    if ident_eq(identid, "mkword") != 0 { return 5 }
-    if ident_eq(identid, "strings.compare") != 0 { return 6 }
+    if ident_eq(identid, "lsb") { return 1 }
+    if ident_eq(identid, "msb") { return 2 }
+    if ident_eq(identid, "peek") { return 3 }
+    if ident_eq(identid, "poke") { return 4 }
+    if ident_eq(identid, "mkword") { return 5 }
+    if ident_eq(identid, "strings.compare") { return 6 }
     return 0
 }
 ; the 1st / 2nd argument of the builtin whose callnode is on top of bi_cn.
@@ -3334,7 +3343,7 @@ sub call_returns_ubyte(uword callnode) -> ubyte {
     callee = node_a[callnode]
     ubyte bk
     bk = builtin_kind(callee)
-    if bk != 0 {
+    if bk {
         if bk == 5 {                   ; mkword -> uword
             return 0
         }
@@ -3386,7 +3395,7 @@ sub codegen_asmsub_call(uword callnode, uword cs) {
     if call_n == 1 {
         uword arg1
         arg1 = cons_val[reverse_cons_ip(node_b[callnode])]
-        if call_isw[0] != 0 {
+        if call_isw[0] {
             codegen_word_expr(arg1)
         } else {
             codegen_byte_expr(arg1)
@@ -3404,7 +3413,7 @@ sub codegen_call(uword callnode) {
     callee = node_a[callnode]
     ubyte bk
     bk = builtin_kind(callee)
-    if bk != 0 {
+    if bk {
         emit_builtin(callnode, bk)
         return
     }
@@ -3428,7 +3437,7 @@ sub codegen_call(uword callnode) {
         isw1 = call_isw[0]
         ccs_callee[ccs_sp] = callee
         ccs_sp = ccs_sp + 1
-        if isw1 != 0 {
+        if isw1 {
             codegen_word_expr(arg1)
         } else {
             codegen_byte_expr(arg1)
@@ -3443,7 +3452,7 @@ sub codegen_call(uword callnode) {
         uword psi1
         psi1 = call_slot[0]
         emit_sta_sym(psi1)
-        if isw1 != 0 {
+        if isw1 {
             emit_sty_sym_hi(psi1)
         }
         out_text("  jsr ")
@@ -3451,7 +3460,7 @@ sub codegen_call(uword callnode) {
         o_nl()
         return
     }
-    if call_n != 0 {
+    if call_n {
         ; push each arg (source order) onto the CPU stack. Every arg eval can
         ; re-enter codegen_call and clobber callee/acell/j, so save them on the
         ; ccs stack around each eval and re-collect_params (refills call_isw).
@@ -3469,7 +3478,7 @@ sub codegen_call(uword callnode) {
             ccs_node[ccs_sp] = acell
             ccs_j[ccs_sp] = j
             ccs_sp = ccs_sp + 1
-            if call_isw[j] != 0 {
+            if call_isw[j] {
                 codegen_word_expr(arg)
                 o_pha()
                 o_tya()
@@ -3494,7 +3503,7 @@ sub codegen_call(uword callnode) {
             j = j - 1
             uword psi
             psi = call_slot[j]
-            if call_isw[j] != 0 {
+            if call_isw[j] {
                 out_text("  pla")          ; high byte
                 o_nl()
                 o_sta()
@@ -3553,7 +3562,7 @@ sub codegen_inline_asm(uword st) {
 sub codegen_return(uword st) {
     uword value
     value = node_a[st]
-    if value != 0 {
+    if value {
         if cur_ret == TY_UWORD {
             codegen_word_expr(value)
             o_pha()
@@ -3740,7 +3749,7 @@ main {
     ubyte junk
     repeat {
         junk = read_src()
-        if src_eof != 0 { break }
+        if src_eof { break }
     }
     reset_source()
     load_global()
@@ -3758,7 +3767,7 @@ main {
     emit_arrays()
     repeat {
         junk = read_src()
-        if src_eof != 0 { break }
+        if src_eof { break }
     }
     reset_source()
     load_global()

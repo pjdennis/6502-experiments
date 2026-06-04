@@ -234,5 +234,29 @@ class StringCompare(unittest.TestCase):
             compile_text('main { if strings.compare("a","b")==0 { } }')
 
 
+class TruthyConditions(unittest.TestCase):
+    def test_ubyte_truthy_skips_cmp(self):
+        # `if x` (x ubyte) branches on the value directly -- no `cmp #$00`.
+        s = compile_text("main { ubyte x x = 1 if x { x = 2 } }")
+        self.assertNotIn("cmp #$00", s)
+        self.assertIn("lda p8v_main_x", s)
+        self.assertIn("bne ", s)
+
+    def test_ubyte_truthy_matches_neq_zero_minus_cmp(self):
+        a = compile_text("sub f()->ubyte{return 1}\nmain{ if f()!=0 {} }")
+        b = compile_text("sub f()->ubyte{return 1}\nmain{ if f() {} }")
+        # `if f()` is `if f()!=0` minus the redundant compare.
+        self.assertEqual(a.replace("  cmp #$00\n", ""), b)
+
+    def test_uword_truthy_ors_halves(self):
+        s = compile_text("main { uword w w = $1234 if w { w = 0 } }")
+        self.assertIn("sty __p8c_tmp0", s)
+        self.assertIn("ora __p8c_tmp0", s)
+
+    def test_while_truthy(self):
+        s = compile_text("main { ubyte x x = 3 while x { x = x - 1 } }")
+        self.assertNotIn("cmp #$00", s)
+
+
 if __name__ == "__main__":
     unittest.main()

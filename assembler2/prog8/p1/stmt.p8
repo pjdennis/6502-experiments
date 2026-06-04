@@ -282,25 +282,25 @@ sub _write(ubyte b, ubyte handle) {
 
 ; ---- I/O (sticky-EOF; emulator rewinds on EOF) ----
 sub read_src() -> ubyte {
-    if peek_ok != 0 {
+    if peek_ok {
         peek_ok = 0
         return peek_buf
     }
-    if src_eof != 0 {
+    if src_eof {
         return 0
     }
     return _read(src_hand)
 }
 sub peek_src() -> ubyte {
-    if peek_ok != 0 {
+    if peek_ok {
         return peek_buf
     }
-    if src_eof != 0 {
+    if src_eof {
         return 0
     }
     ubyte b
     b = _read(src_hand)
-    if src_eof != 0 {
+    if src_eof {
         return 0
     }
     peek_buf = b
@@ -337,13 +337,13 @@ sub is_alpha_us(ubyte c) -> ubyte {
     return 0
 }
 sub is_alnum_us(ubyte c) -> ubyte {
-    if is_alpha_us(c) != 0 {
+    if is_alpha_us(c) {
         return 1
     }
     return is_digit(c)
 }
 sub is_hexdig(ubyte c) -> ubyte {
-    if is_digit(c) != 0 {
+    if is_digit(c) {
         return 1
     }
     if c >= 'a' {
@@ -379,10 +379,10 @@ sub out_dec_place(uword p) {
         dec_v = dec_v - p
         d = d + 1
     }
-    if d != 0 {
+    if d {
         dec_started = 1
     }
-    if dec_started != 0 {
+    if dec_started {
         out_byte(d + $30)
     }
 }
@@ -402,13 +402,13 @@ sub read_hex() {
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof != 0 {
+        if src_eof {
             return
         }
         if c == $5f {
             c = read_src()
         } else {
-            if is_hexdig(c) != 0 {
+            if is_hexdig(c) {
                 c = read_src()
                 int_val = (int_val << 4) + hex_nibble(c)
             } else {
@@ -422,7 +422,7 @@ sub read_bin() {
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof != 0 {
+        if src_eof {
             return
         }
         if c == $5f {
@@ -447,13 +447,13 @@ sub read_dec() {
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof != 0 {
+        if src_eof {
             return
         }
         if c == $5f {
             c = read_src()
         } else {
-            if is_digit(c) != 0 {
+            if is_digit(c) {
                 c = read_src()
                 int_val = (int_val << 3) + (int_val << 1) + (c - $30)
             } else {
@@ -486,10 +486,10 @@ sub read_ident() {
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof != 0 {
+        if src_eof {
             return
         }
-        if is_alnum_us(c) != 0 {
+        if is_alnum_us(c) {
             c = read_src()
             if name_len < 64 {
                 name_buf[name_len] = c
@@ -523,7 +523,7 @@ sub intern_name() -> uword {
             }
             j = j + 1
         }
-        if match != 0 {
+        if match {
             if ident_pool[off + name_len] == 0 {
                 return off
             }
@@ -580,37 +580,37 @@ sub kw_is(uword kw) -> ubyte {
 
 sub classify_name() -> ubyte {
     name_buf[name_len] = 0                  ; NUL-terminate for strings.compare
-    if kw_is("if") != 0 { return TK_KIF }
-    if kw_is("in") != 0 { return TK_KIN }
-    if kw_is("or") != 0 { return TK_KOR }
-    if kw_is("to") != 0 { return TK_KTO }
-    if kw_is("and") != 0 { return TK_KAND }
-    if kw_is("for") != 0 { return TK_KFOR }
-    if kw_is("not") != 0 { return TK_KNOT }
-    if kw_is("str") != 0 { return TK_KSTR }
-    if kw_is("sub") != 0 { return TK_KSUB }
-    if kw_is("xor") != 0 { return TK_KXOR }
-    if kw_is("bool") != 0 { return TK_KBOOL }
-    if kw_is("byte") != 0 { return TK_KBYTE }
-    if kw_is("else") != 0 { return TK_KELSE }
-    if kw_is("enum") != 0 { return TK_KENUM }
-    if kw_is("main") != 0 { return TK_KMAIN }
-    if kw_is("true") != 0 { return TK_TRUE }
-    if kw_is("void") != 0 { return TK_KVOID }
-    if kw_is("when") != 0 { return TK_KWHEN }
-    if kw_is("break") != 0 { return TK_KBREAK }
-    if kw_is("const") != 0 { return TK_KCONST }
-    if kw_is("defer") != 0 { return TK_KDEFER }
-    if kw_is("false") != 0 { return TK_FALSE }
-    if kw_is("ubyte") != 0 { return TK_KUBYTE }
-    if kw_is("uword") != 0 { return TK_KUWORD }
-    if kw_is("while") != 0 { return TK_KWHILE }
-    if kw_is("asmsub") != 0 { return TK_KASMSUB }
-    if kw_is("inline") != 0 { return TK_KINLINE }
-    if kw_is("repeat") != 0 { return TK_KREPEAT }
-    if kw_is("return") != 0 { return TK_KRETURN }
-    if kw_is("struct") != 0 { return TK_KSTRUCT }
-    if kw_is("continue") != 0 { return TK_KCONTINUE }
+    if kw_is("if") { return TK_KIF }
+    if kw_is("in") { return TK_KIN }
+    if kw_is("or") { return TK_KOR }
+    if kw_is("to") { return TK_KTO }
+    if kw_is("and") { return TK_KAND }
+    if kw_is("for") { return TK_KFOR }
+    if kw_is("not") { return TK_KNOT }
+    if kw_is("str") { return TK_KSTR }
+    if kw_is("sub") { return TK_KSUB }
+    if kw_is("xor") { return TK_KXOR }
+    if kw_is("bool") { return TK_KBOOL }
+    if kw_is("byte") { return TK_KBYTE }
+    if kw_is("else") { return TK_KELSE }
+    if kw_is("enum") { return TK_KENUM }
+    if kw_is("main") { return TK_KMAIN }
+    if kw_is("true") { return TK_TRUE }
+    if kw_is("void") { return TK_KVOID }
+    if kw_is("when") { return TK_KWHEN }
+    if kw_is("break") { return TK_KBREAK }
+    if kw_is("const") { return TK_KCONST }
+    if kw_is("defer") { return TK_KDEFER }
+    if kw_is("false") { return TK_FALSE }
+    if kw_is("ubyte") { return TK_KUBYTE }
+    if kw_is("uword") { return TK_KUWORD }
+    if kw_is("while") { return TK_KWHILE }
+    if kw_is("asmsub") { return TK_KASMSUB }
+    if kw_is("inline") { return TK_KINLINE }
+    if kw_is("repeat") { return TK_KREPEAT }
+    if kw_is("return") { return TK_KRETURN }
+    if kw_is("struct") { return TK_KSTRUCT }
+    if kw_is("continue") { return TK_KCONTINUE }
     return TK_IDENT
 }
 
@@ -618,10 +618,10 @@ sub classify_name() -> ubyte {
 ; 0=address, 1=output, 2=import, 3=target, 4=other.
 sub dir_classify() -> ubyte {
     name_buf[name_len] = 0                  ; NUL-terminate for strings.compare
-    if kw_is("import") != 0 { return 2 }
-    if kw_is("output") != 0 { return 1 }
-    if kw_is("target") != 0 { return 3 }
-    if kw_is("address") != 0 { return 0 }
+    if kw_is("import") { return 2 }
+    if kw_is("output") { return 1 }
+    if kw_is("target") { return 3 }
+    if kw_is("address") { return 0 }
     return 4
 }
 
@@ -636,7 +636,7 @@ sub next_raw_token() {
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof != 0 {
+        if src_eof {
             ntok_kind = TK_EOF
             ntok_val = 0
             return
@@ -648,7 +648,7 @@ sub next_raw_token() {
         if c == ';' {
             repeat {
                 c = read_src()
-                if src_eof != 0 { break }
+                if src_eof { break }
                 if c == '\n' { break }
             }
             continue
@@ -660,7 +660,7 @@ sub next_raw_token() {
             if src_eof == 0 {
                 if c2 == '0' { read_bin()  push_token(TK_INT, int_val)  return }
                 if c2 == '1' { read_bin()  push_token(TK_INT, int_val)  return }
-                if is_alpha_us(c2) != 0 {
+                if is_alpha_us(c2) {
                     read_ident()
                     push_token(TK_DIRECTIVE, intern_name())
                     return
@@ -675,7 +675,7 @@ sub next_raw_token() {
             push_token(TK_INT, int_val)
             return
         }
-        if is_digit(c) != 0 {
+        if is_digit(c) {
             read_dec()
             push_token(TK_INT, int_val)
             return
@@ -699,7 +699,7 @@ sub next_raw_token() {
             str_off[str_count] = str_pool_len
             repeat {
                 c = read_src()
-                if src_eof != 0 { break }
+                if src_eof { break }
                 if c == '"' { break }
                 ubyte rb
                 if c == '\\' {
@@ -717,7 +717,7 @@ sub next_raw_token() {
             str_count = str_count + 1
             return
         }
-        if is_alpha_us(c) != 0 {
+        if is_alpha_us(c) {
             read_ident()
             ubyte k
             k = classify_name()
@@ -1140,7 +1140,7 @@ sub parse_expr() -> uword {
             continue
         }
 
-        if expect_operand != 0 {
+        if expect_operand {
             index_ok = 0
             if t == TK_INT {
                 push_operand(new_node(ND_INT, 0, cur_val(), 0))
@@ -1222,7 +1222,7 @@ sub parse_expr() -> uword {
             break
         }
 
-        if is_binop(t) != 0 {
+        if is_binop(t) {
             ubyte prec
             prec = bin_prec(t)
             repeat {
@@ -1244,7 +1244,7 @@ sub parse_expr() -> uword {
             continue
         }
         if t == TK_LBRACK {
-            if index_ok != 0 {
+            if index_ok {
                 push_marker(OPK_LBRACK, operand_sp)
                 advance()
                 expect_operand = 1
@@ -1376,7 +1376,7 @@ sub stmt_dispatch(ubyte deferflag) -> ubyte {
         last_simple = parse_inline_asm()
         return 0
     }
-    if is_type_kw(t) != 0 {
+    if is_type_kw(t) {
         last_simple = parse_var_decl()
         return 0
     }
@@ -1514,7 +1514,7 @@ sub parse_block() -> uword {
                 ubyte df
                 df = fr_defer[fi]
                 fr_sp = fr_sp - 1
-                if df != 0 {
+                if df {
                     node = new_node(ND_DEFER, 0, node, 0)
                 }
                 fr_attach(node)
@@ -1601,7 +1601,7 @@ sub parse_block() -> uword {
                     }
                 }
             }
-            if fr_defer[fi] != 0 {
+            if fr_defer[fi] {
                 node = new_node(ND_DEFER, 0, node, 0)
             }
             fr_attach(node)
@@ -1620,7 +1620,7 @@ sub parse_block() -> uword {
         opened = stmt_dispatch(mod)
         if opened == 0 {
             node = last_simple
-            if mod != 0 {
+            if mod {
                 node = new_node(ND_DEFER, 0, node, 0)
             }
             fr_attach(node)
@@ -1883,7 +1883,7 @@ sub handle_directive() {
         name_len = 0
         append_ident_to_namebuf(cur_val())
         name_buf[name_len] = 0              ; NUL-terminate for strings.compare
-        if kw_is("nmos") != 0 {
+        if kw_is("nmos") {
             prog_target = 1
             if prog_address == $4000 {
                 prog_address = $0200
@@ -1971,7 +1971,7 @@ sub parse_decls_pass() {
             handle_directive()
             continue
         }
-        if is_type_kw(t) != 0 {
+        if is_type_kw(t) {
             prog_vars = cons_prepend(prog_vars, parse_var_decl())
             continue
         }
@@ -2040,7 +2040,7 @@ sub parse_main() -> uword {
 sub out_text(uword p) {
     uword q
     q = p
-    while @(q) != 0 {
+    while @(q) {
         out_byte(@(q))
         q = q + 1
     }
@@ -2183,7 +2183,7 @@ sub emit_node(uword node, ubyte depth) {
     }
     if k == ND_BOOL {
         out_text("bool ")
-        if node_a[node] != 0 {
+        if node_a[node] {
             out_text("true")
         } else {
             out_text("false")
@@ -2236,7 +2236,7 @@ sub emit_node(uword node, ubyte depth) {
     if k == ND_INDEX {
         out_text("idx")
         ws_push_simple(1)
-        if node_op[node] != 0 {
+        if node_op[node] {
             ws_push_field(node_c[node], depth + 1)
             ws_push_simple(2)
         }
@@ -2282,14 +2282,14 @@ sub emit_node(uword node, ubyte depth) {
         } else {
             out_type_name(node_op[node])
         }
-        if node_c[node] != 0 {
+        if node_c[node] {
             out_byte('[')                                                     ; '['
             out_dec(node_c[node])
             out_byte(']')                                                     ; ']'
         }
         out_byte(' ')
         out_ident_text(node_a[node])
-        if node_b[node] != 0 {
+        if node_b[node] {
             ws_push_simple(1)
             ws_push_node(node_b[node], depth + 1)
             ws_push_simple(2)
@@ -2311,7 +2311,7 @@ sub emit_node(uword node, ubyte depth) {
     if k == ND_IF {
         out_text("if")                                          ; "if"
         ws_push_simple(1)
-        if node_c[node] != 0 {
+        if node_c[node] {
             ws_push_node(node_c[node], depth + 1)
             ws_push_simple(2)
         }
@@ -2347,7 +2347,7 @@ sub emit_node(uword node, ubyte depth) {
         ws_push_simple(1)
         ws_push_node(node_b[node], depth + 1)                                ; body
         ws_push_simple(2)
-        if node_a[node] != 0 {
+        if node_a[node] {
             ws_push_node(node_a[node], depth + 1)                            ; count
             ws_push_simple(2)
         }
@@ -2381,7 +2381,7 @@ sub emit_node(uword node, ubyte depth) {
     }
     if k == ND_RETURN {
         out_text("return")  ; "return"
-        if node_a[node] != 0 {
+        if node_a[node] {
             ws_push_simple(1)
             ws_push_node(node_a[node], depth + 1)
             ws_push_simple(2)
@@ -2545,7 +2545,7 @@ sub serialize_subs_streaming() {
                 }
             }
         }
-        if issub != 0 {
+        if issub {
             out_byte('\n')
             serialize_sub(snode, 2)
             reset_nodes()
@@ -2574,7 +2574,7 @@ sub skip_decl_pass_b() {
         }
         return
     }
-    if is_type_kw(t) != 0 {
+    if is_type_kw(t) {
         dummy = parse_var_decl()
         reset_nodes()
         return
@@ -2700,7 +2700,7 @@ sub serialize_enum(uword node, ubyte depth) {
             out_byte('(')
             out_ident_text(node_a[m])
             out_byte(' ')
-            if node_op[m] != 0 {
+            if node_op[m] {
                 out_dec(node_b[m])
             } else {
                 out_byte('-')               ; '-'

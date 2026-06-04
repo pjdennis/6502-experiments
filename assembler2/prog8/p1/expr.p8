@@ -187,25 +187,25 @@ sub _write(ubyte b, ubyte handle) {
 ; ending exactly at EOF (no trailing newline) re-reads the rewound file
 ; forever. See p1/lexer.p8 for the same shim.
 sub read_src() -> ubyte {
-    if peek_ok != 0 {
+    if peek_ok {
         peek_ok = 0
         return peek_buf
     }
-    if src_eof != 0 {
+    if src_eof {
         return 0
     }
     return _read(src_hand)
 }
 sub peek_src() -> ubyte {
-    if peek_ok != 0 {
+    if peek_ok {
         return peek_buf
     }
-    if src_eof != 0 {
+    if src_eof {
         return 0
     }
     ubyte b
     b = _read(src_hand)
-    if src_eof != 0 {
+    if src_eof {
         return 0
     }
     peek_buf = b
@@ -220,7 +220,7 @@ sub out_byte(ubyte b) {
 sub out_text(uword p) {
     uword q
     q = p
-    while @(q) != 0 {
+    while @(q) {
         out_byte(@(q))
         q = q + 1
     }
@@ -253,13 +253,13 @@ sub is_alpha_us(ubyte c) -> ubyte {
     return 0
 }
 sub is_alnum_us(ubyte c) -> ubyte {
-    if is_alpha_us(c) != 0 {
+    if is_alpha_us(c) {
         return 1
     }
     return is_digit(c)
 }
 sub is_hexdig(ubyte c) -> ubyte {
-    if is_digit(c) != 0 {
+    if is_digit(c) {
         return 1
     }
     if c >= 'a' {
@@ -296,10 +296,10 @@ sub out_dec_place(uword p) {
         dec_v = dec_v - p
         d = d + 1
     }
-    if d != 0 {
+    if d {
         dec_started = 1
     }
-    if dec_started != 0 {
+    if dec_started {
         out_byte(d + '0')
     }
 }
@@ -320,13 +320,13 @@ sub read_hex() {
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof != 0 {
+        if src_eof {
             return
         }
         if c == '_' {
             c = read_src()
         } else {
-            if is_hexdig(c) != 0 {
+            if is_hexdig(c) {
                 c = read_src()
                 int_val = (int_val << 4) + hex_nibble(c)
             } else {
@@ -340,7 +340,7 @@ sub read_bin() {
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof != 0 {
+        if src_eof {
             return
         }
         if c == '_' {
@@ -365,13 +365,13 @@ sub read_dec() {
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof != 0 {
+        if src_eof {
             return
         }
         if c == '_' {
             c = read_src()
         } else {
-            if is_digit(c) != 0 {
+            if is_digit(c) {
                 c = read_src()
                 int_val = (int_val << 3) + (int_val << 1) + (c - '0')
             } else {
@@ -406,10 +406,10 @@ sub read_ident() {
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof != 0 {
+        if src_eof {
             return
         }
-        if is_alnum_us(c) != 0 {
+        if is_alnum_us(c) {
             c = read_src()
             if name_len < 64 {
                 name_buf[name_len] = c
@@ -446,7 +446,7 @@ sub intern_name() -> ubyte {
                 }
                 j = j + 1
             }
-            if match != 0 {
+            if match {
                 return i
             }
         }
@@ -506,7 +506,7 @@ sub lex_all() {
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof != 0 {
+        if src_eof {
             break
         }
         if c == ' ' { c = read_src()  continue }
@@ -516,7 +516,7 @@ sub lex_all() {
         if c == ';' {
             repeat {
                 c = read_src()
-                if src_eof != 0 { break }
+                if src_eof { break }
                 if c == '\n' { break }
             }
             continue
@@ -538,7 +538,7 @@ sub lex_all() {
             push_token(TK_INT, int_val)
             continue
         }
-        if is_digit(c) != 0 {
+        if is_digit(c) {
             read_dec()
             push_token(TK_INT, int_val)
             continue
@@ -562,7 +562,7 @@ sub lex_all() {
             str_off[str_count] = str_pool_len
             repeat {
                 c = read_src()
-                if src_eof != 0 { break }
+                if src_eof { break }
                 if c == '"' { break }
                 ubyte rb
                 if c == '\\' {
@@ -580,7 +580,7 @@ sub lex_all() {
             str_count = str_count + 1
             continue
         }
-        if is_alpha_us(c) != 0 {
+        if is_alpha_us(c) {
             read_ident()
             ubyte k
             k = classify_name()
@@ -941,7 +941,7 @@ sub parse_expr() -> ubyte {
             continue
         }
 
-        if expect_operand != 0 {
+        if expect_operand {
             index_ok = 0
             if t == TK_INT {
                 push_operand(new_node(ND_INT, 0, cur_val_word(), 0))
@@ -1025,7 +1025,7 @@ sub parse_expr() -> ubyte {
         }
 
         ; ---- infix position ----
-        if is_binop(t) != 0 {
+        if is_binop(t) {
             ubyte prec
             prec = bin_prec(t)
             repeat {
@@ -1047,7 +1047,7 @@ sub parse_expr() -> ubyte {
             continue
         }
         if t == TK_LBRACK {
-            if index_ok != 0 {
+            if index_ok {
                 push_marker(OPK_LBRACK, operand_sp)
                 advance()
                 expect_operand = 1
@@ -1188,7 +1188,7 @@ sub emit_node(ubyte node, ubyte depth) {
     }
     if k == ND_BOOL {
         out_text("bool ")  ; "bool "
-        if node_a_lo[node] != 0 {
+        if node_a_lo[node] {
             out_text("true")
         } else {
             out_text("false")
@@ -1241,7 +1241,7 @@ sub emit_node(ubyte node, ubyte depth) {
     if k == ND_INDEX {
         out_text("idx")                  ; "idx"
         ws_push_simple(1)                          ; close paren
-        if node_op[node] != 0 {                    ; has .field
+        if node_op[node] {                    ; has .field
             ws_push_field(node_a_hi[node], depth + 1)
             ws_push_simple(2)                      ; newline
         }
