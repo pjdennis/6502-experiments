@@ -216,28 +216,38 @@ sub out_byte(ubyte b) {
     _write(b, dst_hand)
 }
 
+; write every byte of the NUL-terminated string at `p`.
+sub out_text(uword p) {
+    uword q
+    q = p
+    while @(q) != 0 {
+        out_byte(@(q))
+        q = q + 1
+    }
+}
+
 
 ; ---- character classes ----
 sub is_digit(ubyte c) -> ubyte {
-    if c >= $30 {
-        if c <= $39 {
+    if c >= '0' {
+        if c <= '9' {
             return 1
         }
     }
     return 0
 }
 sub is_alpha_us(ubyte c) -> ubyte {
-    if c >= $61 {
-        if c <= $7a {
+    if c >= 'a' {
+        if c <= 'z' {
             return 1
         }
     }
-    if c >= $41 {
-        if c <= $5a {
+    if c >= 'A' {
+        if c <= 'Z' {
             return 1
         }
     }
-    if c == $5f {
+    if c == '_' {
         return 1
     }
     return 0
@@ -252,26 +262,26 @@ sub is_hexdig(ubyte c) -> ubyte {
     if is_digit(c) != 0 {
         return 1
     }
-    if c >= $61 {
-        if c <= $66 {
+    if c >= 'a' {
+        if c <= 'f' {
             return 1
         }
     }
-    if c >= $41 {
-        if c <= $46 {
+    if c >= 'A' {
+        if c <= 'F' {
             return 1
         }
     }
     return 0
 }
 sub hex_nibble(ubyte c) -> ubyte {
-    if c >= $61 {
+    if c >= 'a' {
         return c - $57
     }
-    if c >= $41 {
+    if c >= 'A' {
         return c - $37
     }
-    return c - $30
+    return c - '0'
 }
 
 
@@ -290,7 +300,7 @@ sub out_dec_place(uword p) {
         dec_started = 1
     }
     if dec_started != 0 {
-        out_byte(d + $30)
+        out_byte(d + '0')
     }
 }
 sub out_dec(uword v) {
@@ -300,7 +310,7 @@ sub out_dec(uword v) {
     out_dec_place(1000)
     out_dec_place(100)
     out_dec_place(10)
-    out_byte(lsb(dec_v) + $30)
+    out_byte(lsb(dec_v) + '0')
 }
 
 
@@ -313,7 +323,7 @@ sub read_hex() {
         if src_eof != 0 {
             return
         }
-        if c == $5f {
+        if c == '_' {
             c = read_src()
         } else {
             if is_hexdig(c) != 0 {
@@ -333,14 +343,14 @@ sub read_bin() {
         if src_eof != 0 {
             return
         }
-        if c == $5f {
+        if c == '_' {
             c = read_src()
         } else {
-            if c == $30 {
+            if c == '0' {
                 c = read_src()
                 int_val = int_val << 1
             } else {
-                if c == $31 {
+                if c == '1' {
                     c = read_src()
                     int_val = (int_val << 1) + 1
                 } else {
@@ -358,12 +368,12 @@ sub read_dec() {
         if src_eof != 0 {
             return
         }
-        if c == $5f {
+        if c == '_' {
             c = read_src()
         } else {
             if is_digit(c) != 0 {
                 c = read_src()
-                int_val = (int_val << 3) + (int_val << 1) + (c - $30)
+                int_val = (int_val << 3) + (int_val << 1) + (c - '0')
             } else {
                 return
             }
@@ -372,14 +382,14 @@ sub read_dec() {
 }
 
 sub decode_escape_val(ubyte e) -> ubyte {
-    if e == $6e { return $0a }
-    if e == $72 { return $0d }
-    if e == $74 { return $09 }
-    if e == $30 { return $00 }
-    if e == $27 { return $27 }
-    if e == $5c { return $5c }
-    if e == $22 { return $22 }
-    if e == $78 {
+    if e == 'n' { return '\n' }
+    if e == 'r' { return '\r' }
+    if e == 't' { return '\t' }
+    if e == '0' { return $00 }
+    if e == '\'' { return '\'' }
+    if e == '\\' { return '\\' }
+    if e == '"' { return '"' }
+    if e == 'x' {
         ubyte h1
         ubyte h2
         h1 = read_src()
@@ -499,30 +509,30 @@ sub lex_all() {
         if src_eof != 0 {
             break
         }
-        if c == $20 { c = read_src()  continue }
-        if c == $09 { c = read_src()  continue }
-        if c == $0a { c = read_src()  continue }
-        if c == $0d { c = read_src()  continue }
-        if c == $3b {
+        if c == ' ' { c = read_src()  continue }
+        if c == '\t' { c = read_src()  continue }
+        if c == '\n' { c = read_src()  continue }
+        if c == '\r' { c = read_src()  continue }
+        if c == ';' {
             repeat {
                 c = read_src()
                 if src_eof != 0 { break }
-                if c == $0a { break }
+                if c == '\n' { break }
             }
             continue
         }
-        if c == $25 {                              ; '%'
+        if c == '%' {                              ; '%'
             c = read_src()
             ubyte c2
             c2 = peek_src()
             if src_eof == 0 {
-                if c2 == $30 { read_bin()  push_token(TK_INT, int_val)  continue }
-                if c2 == $31 { read_bin()  push_token(TK_INT, int_val)  continue }
+                if c2 == '0' { read_bin()  push_token(TK_INT, int_val)  continue }
+                if c2 == '1' { read_bin()  push_token(TK_INT, int_val)  continue }
             }
             push_token(TK_OTHER, 0)
             continue
         }
-        if c == $24 {                              ; '$' hex
+        if c == '$' {                              ; '$' hex
             c = read_src()
             read_hex()
             push_token(TK_INT, int_val)
@@ -533,10 +543,10 @@ sub lex_all() {
             push_token(TK_INT, int_val)
             continue
         }
-        if c == $27 {                              ; char literal -> INT
+        if c == '\'' {                              ; char literal -> INT
             c = read_src()
             c = read_src()
-            if c == $5c {
+            if c == '\\' {
                 ubyte e
                 e = read_src()
                 int_val = decode_escape_val(e)
@@ -547,15 +557,15 @@ sub lex_all() {
             push_token(TK_INT, int_val)
             continue
         }
-        if c == $22 {                              ; string literal
+        if c == '"' {                              ; string literal
             c = read_src()
             str_off[str_count] = str_pool_len
             repeat {
                 c = read_src()
                 if src_eof != 0 { break }
-                if c == $22 { break }
+                if c == '"' { break }
                 ubyte rb
-                if c == $5c {
+                if c == '\\' {
                     ubyte se
                     se = read_src()
                     rb = decode_escape_val(se)
@@ -589,55 +599,55 @@ sub lex_all() {
 
 sub lex_operator(ubyte c) {
     ubyte c2
-    if c == $28 { push_token(TK_LPAREN, 0)  return }
-    if c == $29 { push_token(TK_RPAREN, 0)  return }
-    if c == $5b { push_token(TK_LBRACK, 0)  return }
-    if c == $5d { push_token(TK_RBRACK, 0)  return }
-    if c == $2c { push_token(TK_COMMA, 0)  return }
-    if c == $40 { push_token(TK_AT, 0)  return }
-    if c == $2e { push_token(TK_DOT, 0)  return }
-    if c == $2b { push_token(TK_PLUS, 0)  return }
-    if c == $2a { push_token(TK_STAR, 0)  return }
-    if c == $7e { push_token(TK_TILDE, 0)  return }
-    if c == $26 {
+    if c == '(' { push_token(TK_LPAREN, 0)  return }
+    if c == ')' { push_token(TK_RPAREN, 0)  return }
+    if c == '[' { push_token(TK_LBRACK, 0)  return }
+    if c == ']' { push_token(TK_RBRACK, 0)  return }
+    if c == ',' { push_token(TK_COMMA, 0)  return }
+    if c == '@' { push_token(TK_AT, 0)  return }
+    if c == '.' { push_token(TK_DOT, 0)  return }
+    if c == '+' { push_token(TK_PLUS, 0)  return }
+    if c == '*' { push_token(TK_STAR, 0)  return }
+    if c == '~' { push_token(TK_TILDE, 0)  return }
+    if c == '&' {
         c2 = peek_src()
-        if c2 == $26 { c2 = read_src()  push_token(TK_OTHER, 0)  return }
+        if c2 == '&' { c2 = read_src()  push_token(TK_OTHER, 0)  return }
         push_token(TK_AMP, 0)
         return
     }
-    if c == $7c { push_token(TK_PIPE, 0)  return }
-    if c == $5e { push_token(TK_CARET, 0)  return }
-    if c == $2d {
+    if c == '|' { push_token(TK_PIPE, 0)  return }
+    if c == '^' { push_token(TK_CARET, 0)  return }
+    if c == '-' {
         c2 = peek_src()
-        if c2 == $2d { c2 = read_src()  push_token(TK_OTHER, 0)  return }
-        if c2 == $3e { c2 = read_src()  push_token(TK_OTHER, 0)  return }
-        if c2 == $3d { c2 = read_src()  push_token(TK_OTHER, 0)  return }
+        if c2 == '-' { c2 = read_src()  push_token(TK_OTHER, 0)  return }
+        if c2 == '>' { c2 = read_src()  push_token(TK_OTHER, 0)  return }
+        if c2 == '=' { c2 = read_src()  push_token(TK_OTHER, 0)  return }
         push_token(TK_MINUS, 0)
         return
     }
-    if c == $3c {
+    if c == '<' {
         c2 = peek_src()
-        if c2 == $3c { c2 = read_src()  push_token(TK_SHL, 0)  return }
-        if c2 == $3d { c2 = read_src()  push_token(TK_LE, 0)  return }
+        if c2 == '<' { c2 = read_src()  push_token(TK_SHL, 0)  return }
+        if c2 == '=' { c2 = read_src()  push_token(TK_LE, 0)  return }
         push_token(TK_LT, 0)
         return
     }
-    if c == $3e {
+    if c == '>' {
         c2 = peek_src()
-        if c2 == $3e { c2 = read_src()  push_token(TK_SHR, 0)  return }
-        if c2 == $3d { c2 = read_src()  push_token(TK_GE, 0)  return }
+        if c2 == '>' { c2 = read_src()  push_token(TK_SHR, 0)  return }
+        if c2 == '=' { c2 = read_src()  push_token(TK_GE, 0)  return }
         push_token(TK_GT, 0)
         return
     }
-    if c == $3d {
+    if c == '=' {
         c2 = peek_src()
-        if c2 == $3d { c2 = read_src()  push_token(TK_EQ, 0)  return }
+        if c2 == '=' { c2 = read_src()  push_token(TK_EQ, 0)  return }
         push_token(TK_OTHER, 0)
         return
     }
-    if c == $21 {
+    if c == '!' {
         c2 = peek_src()
-        if c2 == $3d { c2 = read_src()  push_token(TK_NE, 0)  return }
+        if c2 == '=' { c2 = read_src()  push_token(TK_NE, 0)  return }
         push_token(TK_OTHER, 0)
         return
     }
@@ -1086,36 +1096,36 @@ sub out_indent(ubyte depth) {
         if i >= depth {
             break
         }
-        out_byte($20)
-        out_byte($20)
+        out_byte(' ')
+        out_byte(' ')
         i = i + 1
     }
 }
 
 sub out_binop_spelling(ubyte op) {
-    if op == TK_PLUS  { out_byte($2b)  return }
-    if op == TK_MINUS { out_byte($2d)  return }
-    if op == TK_STAR  { out_byte($2a)  return }
-    if op == TK_AMP   { out_byte($26)  return }
-    if op == TK_PIPE  { out_byte($7c)  return }
-    if op == TK_CARET { out_byte($5e)  return }
-    if op == TK_SHL   { out_byte($3c)  out_byte($3c)  return }
-    if op == TK_SHR   { out_byte($3e)  out_byte($3e)  return }
-    if op == TK_EQ    { out_byte($3d)  out_byte($3d)  return }
-    if op == TK_NE    { out_byte($21)  out_byte($3d)  return }
-    if op == TK_LT    { out_byte($3c)  return }
-    if op == TK_LE    { out_byte($3c)  out_byte($3d)  return }
-    if op == TK_GT    { out_byte($3e)  return }
-    if op == TK_GE    { out_byte($3e)  out_byte($3d)  return }
-    if op == TK_KAND  { out_byte($61) out_byte($6e) out_byte($64)  return }
-    if op == TK_KOR   { out_byte($6f) out_byte($72)  return }
-    if op == TK_KXOR  { out_byte($78) out_byte($6f) out_byte($72)  return }
+    if op == TK_PLUS  { out_byte('+')  return }
+    if op == TK_MINUS { out_byte('-')  return }
+    if op == TK_STAR  { out_byte('*')  return }
+    if op == TK_AMP   { out_byte('&')  return }
+    if op == TK_PIPE  { out_byte('|')  return }
+    if op == TK_CARET { out_byte('^')  return }
+    if op == TK_SHL   { out_text("<<")  return }
+    if op == TK_SHR   { out_text(">>")  return }
+    if op == TK_EQ    { out_text("==")  return }
+    if op == TK_NE    { out_text("!=")  return }
+    if op == TK_LT    { out_byte('<')  return }
+    if op == TK_LE    { out_text("<=")  return }
+    if op == TK_GT    { out_byte('>')  return }
+    if op == TK_GE    { out_text(">=")  return }
+    if op == TK_KAND  { out_text("and")  return }
+    if op == TK_KOR   { out_text("or")  return }
+    if op == TK_KXOR  { out_text("xor")  return }
 }
 
 sub out_unop_spelling(ubyte op) {
-    if op == UN_NEG { out_byte($75)  out_byte($2d)  return }
-    if op == UN_INV { out_byte($7e)  return }
-    if op == UN_NOT { out_byte($6e) out_byte($6f) out_byte($74)  return }
+    if op == UN_NEG { out_text("u-")  return }
+    if op == UN_INV { out_byte('~')  return }
+    if op == UN_NOT { out_text("not")  return }
 }
 
 sub out_ident_text(ubyte id) {
@@ -1147,15 +1157,15 @@ sub out_str_escaped(ubyte id) {
         }
         ubyte rb
         rb = str_pool[off + j]
-        if rb == $5c { out_byte($5c)  out_byte($5c) }
+        if rb == '\\' { out_text("\\\\") }
         else {
-            if rb == $22 { out_byte($5c)  out_byte($22) }
+            if rb == '"' { out_text("\\\"") }
             else {
-                if rb == $0a { out_byte($5c)  out_byte($6e) }
+                if rb == '\n' { out_text("\\n") }
                 else {
-                    if rb == $0d { out_byte($5c)  out_byte($72) }
+                    if rb == '\r' { out_text("\\r") }
                     else {
-                        if rb == $09 { out_byte($5c)  out_byte($74) }
+                        if rb == '\t' { out_text("\\t") }
                         else { out_byte(rb) }
                     }
                 }
@@ -1167,36 +1177,36 @@ sub out_str_escaped(ubyte id) {
 
 sub emit_node(ubyte node, ubyte depth) {
     out_indent(depth)
-    out_byte($28)                                  ; '('
+    out_byte('(')                                  ; '('
     ubyte k
     k = node_kind[node]
     if k == ND_INT {
-        out_byte($69) out_byte($6e) out_byte($74) out_byte($20)   ; "int "
+        out_text("int ")   ; "int "
         out_dec(node_a_word(node))
-        out_byte($29)
+        out_byte(')')
         return
     }
     if k == ND_BOOL {
-        out_byte($62) out_byte($6f) out_byte($6f) out_byte($6c) out_byte($20)  ; "bool "
+        out_text("bool ")  ; "bool "
         if node_a_lo[node] != 0 {
-            out_byte($74) out_byte($72) out_byte($75) out_byte($65)
+            out_text("true")
         } else {
-            out_byte($66) out_byte($61) out_byte($6c) out_byte($73) out_byte($65)
+            out_text("false")
         }
-        out_byte($29)
+        out_byte(')')
         return
     }
     if k == ND_IDENT {
-        out_byte($69) out_byte($64) out_byte($20)                  ; "id "
+        out_text("id ")                  ; "id "
         out_ident_text(node_a_lo[node])
-        out_byte($29)
+        out_byte(')')
         return
     }
     if k == ND_STR {
-        out_byte($73) out_byte($74) out_byte($72) out_byte($20) out_byte($22)  ; str "
+        out_text("str \"")  ; str "
         out_str_escaped(node_a_lo[node])
-        out_byte($22)
-        out_byte($29)
+        out_byte('"')
+        out_byte(')')
         return
     }
     if k == ND_BINOP {
@@ -1216,20 +1226,20 @@ sub emit_node(ubyte node, ubyte depth) {
         return
     }
     if k == ND_ADDROF {
-        out_byte($61) out_byte($64) out_byte($64) out_byte($72) out_byte($20)  ; "addr "
+        out_text("addr ")  ; "addr "
         out_ident_text(node_a_lo[node])
-        out_byte($29)
+        out_byte(')')
         return
     }
     if k == ND_MEMAT {
-        out_byte($6d) out_byte($65) out_byte($6d)                  ; "mem"
+        out_text("mem")                  ; "mem"
         ws_push_simple(1)
         ws_push_node(node_a_lo[node], depth + 1)   ; addr
         ws_push_simple(2)
         return
     }
     if k == ND_INDEX {
-        out_byte($69) out_byte($64) out_byte($78)                  ; "idx"
+        out_text("idx")                  ; "idx"
         ws_push_simple(1)                          ; close paren
         if node_op[node] != 0 {                    ; has .field
             ws_push_field(node_a_hi[node], depth + 1)
@@ -1242,7 +1252,7 @@ sub emit_node(ubyte node, ubyte depth) {
         return
     }
     if k == ND_CALL {
-        out_byte($63) out_byte($61) out_byte($6c) out_byte($6c) out_byte($20)  ; "call "
+        out_text("call ")  ; "call "
         out_ident_text(node_a_lo[node])
         ws_push_simple(1)                          ; close paren
         ; args are a reversed cons list (head = last arg); walking
@@ -1275,19 +1285,19 @@ sub serialize(ubyte root) {
             emit_node(ws_node[ws_sp], ws_depth[ws_sp])
         } else {
             if typ == 1 {
-                out_byte($29)
+                out_byte(')')
             } else {
                 if typ == 2 {
-                    out_byte($0a)
+                    out_byte('\n')
                 } else {
                     out_indent(ws_depth[ws_sp])        ; type 3: ".field"
-                    out_byte($2e)
+                    out_byte('.')
                     out_ident_text(ws_node[ws_sp])
                 }
             }
         }
     }
-    out_byte($0a)
+    out_byte('\n')
 }
 
 
