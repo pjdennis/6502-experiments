@@ -2501,6 +2501,23 @@ sub emit_trailers() {
 ; `.byte 0, 0, ...` reservation (count*esize zero bytes) per module array, in
 ; source order. Goes between the mul helper and the string pool (matching p8c).
 ; Empty -> nothing (not even the header).
+sub emit_array_zeros(uword count) {
+    out_text("  .byte ")
+    uword b
+    b = 0
+    repeat {
+        if b >= count {
+            break
+        }
+        if b != 0 {
+            out_text(", ")
+        }
+        out_byte($30)           ; 0
+        b = b + 1
+    }
+    o_nl()
+}
+
 sub emit_arrays() {
     ubyte any
     any = 0
@@ -2529,29 +2546,24 @@ sub emit_arrays() {
             break
         }
         if sym_arr_size[i] != 0 {
-            emit_sym_mangled(i)
-            out_byte($3a)               ; :
-            o_nl()
-            ; nbytes = count * esize (uword element -> 2 bytes each)
-            uword nbytes
-            nbytes = sym_arr_size[i]
+            uword count
+            count = sym_arr_size[i]
             if sym_type[i] == TY_UWORD {
-                nbytes = nbytes + nbytes
+                ; split lo/hi byte storage (upstream @split model)
+                emit_sym_mangled(i)
+                out_text("_lo:")
+                o_nl()
+                emit_array_zeros(count)
+                emit_sym_mangled(i)
+                out_text("_hi:")
+                o_nl()
+                emit_array_zeros(count)
+            } else {
+                emit_sym_mangled(i)
+                out_byte($3a)               ; :
+                o_nl()
+                emit_array_zeros(count)
             }
-            out_text("  .byte ")
-            uword b
-            b = 0
-            repeat {
-                if b >= nbytes {
-                    break
-                }
-                if b != 0 {
-                    out_text(", ")
-                }
-                out_byte($30)           ; 0
-                b = b + 1
-            }
-            o_nl()
         }
         i = i + 1
     }

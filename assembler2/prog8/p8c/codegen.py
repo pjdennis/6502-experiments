@@ -227,16 +227,29 @@ class CodeGen:
             self.emit("; ---- arrays ----")
             for sym in array_vars:
                 assert isinstance(sym.type, (TUByteArray, TUWordArray))
-                esize = 2 if isinstance(sym.type, TUWordArray) else 1
-                self.emit(f"{sym.mangled}:")
                 init = getattr(sym, "init_lit", None)
-                if init is not None:
-                    vals = [self._array_elem_asm(el) for el in init.elements]
-                    directive = "  .word " if esize == 2 else "  .byte "
-                    self.emit(directive + ", ".join(vals))
+                if isinstance(sym.type, TUWordArray):
+                    # Split lo/hi byte storage (upstream @split model): two
+                    # parallel byte arrays so `a[i]` is byte-indexed
+                    # (lda a_lo,y / lda a_hi,y) with no 16-bit pointer math.
+                    if init is not None:
+                        elems = [self._array_elem_asm(el) for el in init.elements]
+                        los = ["<" + v for v in elems]
+                        his = [">" + v for v in elems]
+                    else:
+                        los = ["0"] * sym.type.size
+                        his = ["0"] * sym.type.size
+                    self.emit(f"{sym.mangled}_lo:")
+                    self.emit("  .byte " + ", ".join(los))
+                    self.emit(f"{sym.mangled}_hi:")
+                    self.emit("  .byte " + ", ".join(his))
                 else:
-                    nbytes = sym.type.size * esize
-                    self.emit(f"  .byte " + ", ".join(["0"] * nbytes))
+                    self.emit(f"{sym.mangled}:")
+                    if init is not None:
+                        vals = [self._array_elem_asm(el) for el in init.elements]
+                        self.emit("  .byte " + ", ".join(vals))
+                    else:
+                        self.emit("  .byte " + ", ".join(["0"] * sym.type.size))
         if mem_scalars:
             self.emit("")
             self.emit("; ---- scalars overflowed from ZP into main memory ----")
@@ -498,17 +511,17 @@ class CodeGen:
                 return
             # uword[] arr -- indexed word write (rhs widened to uword).
             if isinstance(tgt.sym.type, TUWordArray):
+                # split lo/hi: byte-indexed store of the two halves.
                 self._emit_word_expr_into_ay(a.rhs)
                 self.emit("  pha")               # lo
                 self.emit("  tya")
                 self.emit("  pha")               # hi
-                self._emit_array_addr_into_aptr(tgt.sym, tgt.index)
+                self._emit_word_expr_into_ay(tgt.index)
+                self.emit("  tay")               # byte index -> Y
                 self.emit("  pla")               # hi
-                self.emit("  ldy #$01")
-                self.emit("  sta (__p8c_aptr),y")
+                self.emit(f"  sta {tgt.sym.mangled}_hi,y")
                 self.emit("  pla")               # lo
-                self.emit("  ldy #$00")
-                self.emit("  sta (__p8c_aptr),y")
+                self.emit(f"  sta {tgt.sym.mangled}_lo,y")
                 return
             # ubyte[] arr -- simple indexed byte write (fast `,y` path).
             if self._array_fast_byte(tgt.sym, tgt.index):
@@ -838,13 +851,12 @@ class CodeGen:
                 self.emit("  txa")
                 return
             if isinstance(e.sym.type, TUWordArray):
-                # uword element: load lo and hi via the element pointer.
-                self._emit_array_addr_into_aptr(e.sym, e.index)
-                self.emit("  ldy #$00")
-                self.emit("  lda (__p8c_aptr),y")   # lo
+                # split lo/hi: byte-indexed load of the two halves.
+                self._emit_word_expr_into_ay(e.index)   # index -> A:Y
+                self.emit("  tay")                       # byte index -> Y
+                self.emit(f"  lda {e.sym.mangled}_lo,y")
                 self.emit("  pha")
-                self.emit("  ldy #$01")
-                self.emit("  lda (__p8c_aptr),y")   # hi
+                self.emit(f"  lda {e.sym.mangled}_hi,y")
                 self.emit("  tay")
                 self.emit("  pla")                  # lo -> A, hi in Y
                 return
@@ -1147,6 +1159,12 @@ class CodeGen:
                 self._emit_struct_array_index_into_y(e)
                 fo = getattr(e, "field_offset", 0)
                 self.emit(f"  lda {e.sym.mangled}+{fo},y")
+                return
+            if isinstance(e.sym.type, TUWordArray):
+                # uword element read in byte context: low half only.
+                self._emit_word_expr_into_ay(e.index)
+                self.emit("  tay")
+                self.emit(f"  lda {e.sym.mangled}_lo,y")
                 return
             if self._array_fast_byte(e.sym, e.index):
                 if isinstance(e.index, IntLit):

@@ -192,12 +192,15 @@ class InitializedArrays(unittest.TestCase):
         self.assertIn("  .byte 7, 7, 9", s)
 
     def test_uword_array_of_ints(self):
+        # Split lo/hi storage (upstream @split model).
         s = compile_text("uword[] t = [$1234, 7]\nmain { uword w w = t[1] }")
-        self.assertIn("  .word 4660, 7", s)
+        self.assertIn("  .byte <4660, <7", s)
+        self.assertIn("  .byte >4660, >7", s)
 
     def test_uword_array_of_strings_uses_pool_labels(self):
         s = compile_text('uword[] t = ["ab", "cd"]\nmain { uword w w = t[0] }')
-        self.assertIn("  .word p8c_str_0, p8c_str_1", s)
+        self.assertIn("  .byte <p8c_str_0, <p8c_str_1", s)
+        self.assertIn("  .byte >p8c_str_0, >p8c_str_1", s)
         self.assertIn('p8c_str_0:', s)
 
     def test_size_mismatch_is_error(self):

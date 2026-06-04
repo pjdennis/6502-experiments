@@ -1709,3 +1709,24 @@ pass2 $EEAE, self-host 0 diff, 121 p8c tests OK.
 NOTE: verify.sh "B free" is now misleading (counts slab region as free); real
 headroom is the gap below slab_base (pass1 934 B, pass2 102 B).
 NEXT: Phase B (split lo/hi storage in p8c + pass2_sh; sema forbid size>256).
+
+### Phase B DONE + committed (split lo/hi storage)
+ - uword arrays now stored as two parallel byte arrays `{mangled}_lo` /
+   `{mangled}_hi` (upstream @split model); `a[i]` is byte-indexed
+   (lda lo,y / lda hi,y), index = low byte of the (full uword) index expr via
+   `_emit_word_expr_into_ay; tay`. No 16-bit pointer math for uword arrays.
+ - Mirrored in THREE codegen impls (all must match): p8c/codegen.py (storage,
+   word-read, byte-ctx-read, write); p1_pass2_sh.p8 (emit_arrays split-zeros via
+   new emit_array_zeros, emit_word_arr_load, codegen_assign_index, byte-ctx read);
+   p1.p8 MONOLITH (emit_arrays only -- it has no uword read/write "not here yet";
+   tested by P1Equivalence which runs p8c(p1.p8) as p1.bin on the M-corpus).
+ - Init split (value arrays) uses `<expr`/`>expr` byte selectors -- only p8c
+   needs it (pass2_sh tables); p1.p8 has only zero-init uword arrays.
+ - aptr path still present for ubyte uword-index/large (none after slabbing in
+   p1.p8) -- Phase C removes it. emit_aptr_arith TY_UWORD branch now dead.
+ - Tests updated: tests/test_codegen.py uword-init asserts -> split format.
+ - Space clawed back: pass2 headroom 102 B -> ~1228 B (split tighter than aptr).
+ - Green: verify.sh 0, selfhost.sh 0 PASS, 121 p8c, 26 p1, arrays16 e2e.
+NEXT: Phase C -- convert any ubyte uword-index to byte fast path; remove
+_emit_array_addr_into_aptr (p8c) + emit_aptr_arith (pass2_sh) if dead; sema
+forbid array size >256; drop >256/16-bit-index corpus tests; final verify all.

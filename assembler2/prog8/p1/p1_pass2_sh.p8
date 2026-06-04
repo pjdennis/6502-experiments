@@ -701,6 +701,23 @@ sub emit_trailers() {
 ; source order. Goes between the mul helper and the string pool (matching p8c).
 ; Empty -> nothing (not even the header).
 
+sub emit_array_zeros(uword count) {
+    out_text("  .byte ")
+    uword b
+    b = 0
+    repeat {
+        if b >= count {
+            break
+        }
+        if b {
+            out_text(", ")
+        }
+        out_byte('0')
+        b = b + 1
+    }
+    o_nl()
+}
+
 sub emit_arrays() {
     ubyte any
     any = 0
@@ -729,29 +746,24 @@ sub emit_arrays() {
             break
         }
         if peekw($eb8c + ((i) << 1)) {
-            emit_sym_mangled(i)
-            out_byte(':')               ; :
-            o_nl()
-            ; nbytes = count * esize (uword element -> 2 bytes each)
-            uword nbytes
-            nbytes = peekw($eb8c + ((i) << 1))
+            uword count
+            count = peekw($eb8c + ((i) << 1))
             if peek($dba8 + (i)) == TY_UWORD {
-                nbytes = nbytes + nbytes
+                ; split lo/hi byte storage (upstream @split model)
+                emit_sym_mangled(i)
+                out_text("_lo:")
+                o_nl()
+                emit_array_zeros(count)
+                emit_sym_mangled(i)
+                out_text("_hi:")
+                o_nl()
+                emit_array_zeros(count)
+            } else {
+                emit_sym_mangled(i)
+                out_byte(':')
+                o_nl()
+                emit_array_zeros(count)
             }
-            out_text("  .byte ")
-            uword b
-            b = 0
-            repeat {
-                if b >= nbytes {
-                    break
-                }
-                if b {
-                    out_text(", ")
-                }
-                out_byte('0')           ; 0
-                b = b + 1
-            }
-            o_nl()
         }
         i = i + 1
     }
@@ -1832,6 +1844,16 @@ sub emit_byte_leaf_load(uword e) {
         asi = find_sym(peekw($c7f0 + ((peekw($c7f0 + ((e) << 1))) << 1)))
         uword idx
         idx = peekw($cbfc + ((e) << 1))
+        if peek($dba8 + (asi)) == TY_UWORD {
+            ; uword[] read in byte context: low half only (split lo array).
+            codegen_word_expr(idx)
+            o_tay()
+            o_lda()
+            emit_sym_mangled(asi)
+            out_text("_lo,y")
+            o_nl()
+            return
+        }
         if array_fast(asi, idx) {
             if peek($c3e4 + (idx)) == ND_INT {
                 o_lda()
@@ -2855,12 +2877,11 @@ sub emit_aptr_arith(uword asi) {
 sub emit_word_arr_load(uword e) {
     uword asi
     asi = find_sym(peekw($c7f0 + ((peekw($c7f0 + ((e) << 1))) << 1)))
-    emit_aptr_arith(asi)
-    out_text("  ldy #$00") o_nl()
-    out_text("  lda (__p8c_aptr),y") o_nl()
+    ; split lo/hi: A:Y holds the index; low byte -> Y, byte-indexed load.
+    o_tay()
+    out_text("  lda ") emit_sym_mangled(asi) out_text("_lo,y") o_nl()
     o_pha()
-    out_text("  ldy #$01") o_nl()
-    out_text("  lda (__p8c_aptr),y") o_nl()
+    out_text("  lda ") emit_sym_mangled(asi) out_text("_hi,y") o_nl()
     o_tay()
     o_pla()
 }
@@ -3116,20 +3137,18 @@ sub codegen_assign_index(uword target, uword rhs) {
     uword idx
     idx = peekw($cbfc + ((target) << 1))
     if peek($dba8 + (asi)) == TY_UWORD {
-        ; uword[] write: rhs (widened) -> A:Y, parked on the CPU stack while
-        ; the element address is computed, then stored hi then lo.
+        ; split lo/hi uword[] write: rhs (widened) -> A:Y, parked on the CPU
+        ; stack while the byte index is computed, then stored hi then lo.
         codegen_word_expr(rhs)
         o_pha()
         o_tya()
         o_pha()
         codegen_word_expr(idx)
-        emit_aptr_arith(asi)
+        o_tay()
         o_pla()
-        out_text("  ldy #$01") o_nl()
-        out_text("  sta (__p8c_aptr),y") o_nl()
+        out_text("  sta ") emit_sym_mangled(asi) out_text("_hi,y") o_nl()
         o_pla()
-        out_text("  ldy #$00") o_nl()
-        out_text("  sta (__p8c_aptr),y") o_nl()
+        out_text("  sta ") emit_sym_mangled(asi) out_text("_lo,y") o_nl()
         return
     }
     if array_fast(asi, idx) {
