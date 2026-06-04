@@ -1660,6 +1660,29 @@ class CodeGen:
                 and sym.type.size <= 256
                 and index_node.type in (UBYTE, BYTE))
 
+    def _emit_addr_into_aptr(self, addr_node) -> None:
+        """Compute a uword address expression into __p8c_aptr. Recognizes the
+        slab form `<const_base> + <offset>` and folds the constant base into
+        the final adc (same shape as _emit_array_addr_into_aptr), so peek/poke
+        on a fixed-base arena are as tight as the old array pointer path. The
+        offset (`idx` for byte slabs, `idx << 1` for word slabs) is evaluated
+        by the general word path, so the `<< 1` lowers to asl/rol as usual."""
+        if (isinstance(addr_node, BinOp) and addr_node.op == "+"
+                and isinstance(addr_node.lhs, IntLit)):
+            base = addr_node.lhs.value & 0xFFFF
+            self._emit_word_expr_into_ay(addr_node.rhs)   # offset -> A:Y
+            self.emit("  clc")
+            self.emit(f"  adc #<${base:04x}")
+            self.emit("  sta __p8c_aptr")
+            self.emit("  tya")
+            self.emit(f"  adc #>${base:04x}")
+            self.emit("  sta __p8c_aptr+1")
+            return
+        # General address: evaluate into A:Y, then park in the pointer.
+        self._emit_word_expr_into_ay(addr_node)
+        self.emit("  sta __p8c_aptr")
+        self.emit("  sty __p8c_aptr+1")
+
     def _emit_array_addr_into_aptr(self, sym, index_node) -> None:
         """Compute &arr[index] = label + index*esize into __p8c_aptr.
 
@@ -1847,19 +1870,60 @@ class CodeGen:
             self._strcmp_used = True
             return
         if name == "peek":
-            if len(c.args) != 1 or not isinstance(c.args[0], IntLit):
-                raise CodeGenError("peek expects one literal address argument")
-            addr = c.args[0].value & 0xFFFF
-            self.emit(f"  lda ${addr:04x}")
+            if len(c.args) != 1:
+                raise CodeGenError("peek expects one address argument")
+            if isinstance(c.args[0], IntLit):
+                addr = c.args[0].value & 0xFFFF
+                self.emit(f"  lda ${addr:04x}")
+                return
+            # Computed address: park it in __p8c_aptr, then lda (aptr),y.
+            self._emit_addr_into_aptr(c.args[0])
+            self.emit("  ldy #$00")
+            self.emit("  lda (__p8c_aptr),y")
             return
         if name == "poke":
-            if len(c.args) != 2 or not isinstance(c.args[0], IntLit):
-                raise CodeGenError(
-                    "poke expects (literal_address, byte_expr)"
-                )
-            addr = c.args[0].value & 0xFFFF
+            if len(c.args) != 2:
+                raise CodeGenError("poke expects (address, byte_expr)")
+            if isinstance(c.args[0], IntLit):
+                addr = c.args[0].value & 0xFFFF
+                self._emit_byte_expr_into_a(c.args[1])
+                self.emit(f"  sta ${addr:04x}")
+                return
+            # Computed address: eval value first (stash on stack), then the
+            # address into __p8c_aptr, then store.
             self._emit_byte_expr_into_a(c.args[1])
-            self.emit(f"  sta ${addr:04x}")
+            self.emit("  pha")
+            self._emit_addr_into_aptr(c.args[0])
+            self.emit("  pla")
+            self.emit("  ldy #$00")
+            self.emit("  sta (__p8c_aptr),y")
+            return
+        if name == "peekw":
+            if len(c.args) != 1:
+                raise CodeGenError("peekw expects one address argument")
+            self._emit_addr_into_aptr(c.args[0])
+            self.emit("  ldy #$00")
+            self.emit("  lda (__p8c_aptr),y")   # lo
+            self.emit("  pha")
+            self.emit("  ldy #$01")
+            self.emit("  lda (__p8c_aptr),y")   # hi
+            self.emit("  tay")
+            self.emit("  pla")                  # lo -> A, hi in Y
+            return
+        if name == "pokew":
+            if len(c.args) != 2:
+                raise CodeGenError("pokew expects (address, word_expr)")
+            self._emit_word_expr_into_ay(c.args[1])   # value lo=A, hi=Y
+            self.emit("  pha")               # lo
+            self.emit("  tya")
+            self.emit("  pha")               # hi
+            self._emit_addr_into_aptr(c.args[0])      # address
+            self.emit("  pla")               # hi
+            self.emit("  ldy #$01")
+            self.emit("  sta (__p8c_aptr),y")
+            self.emit("  pla")               # lo
+            self.emit("  ldy #$00")
+            self.emit("  sta (__p8c_aptr),y")
             return
         if name == "lsb":
             # lsb(uword) -> ubyte: just the low byte.

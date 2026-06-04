@@ -191,7 +191,7 @@ ubyte ntok_kind
 uword ntok_val
 
 ; identifier text pool (reset per top-level unit while streaming)
-ubyte[6144] ident_pool
+const uword ident_pool = $8300
 uword ident_count
 uword ident_pool_len
 
@@ -203,7 +203,7 @@ uword ident_pool_len
 ; its full ~3381) transiently writes to ~4052 -- which must stay inside the
 ; array, or it clobbers str_pool_len / name_buf / path_buf and corrupts the
 ; just-read callee ident (the "out_text -> garbage" self-host bug).
-ubyte[5120] str_pool
+const uword str_pool = $9b00
 uword str_pool_len
 
 ubyte[65] name_buf       ; 64 chars + room for a NUL terminator (classify_name)
@@ -214,12 +214,12 @@ uword name_len
 uword int_val
 
 ; node arena
-ubyte[524] node_kind
-ubyte[524] node_op
-uword[524] node_a
-uword[524] node_b
-uword[524] node_c
-uword[524] node_d
+const uword node_kind = $af00
+const uword node_op = $b10c
+const uword node_a = $b318
+const uword node_b = $b730
+const uword node_c = $bb48
+const uword node_d = $bf60
 uword node_count
 
 ; expression stacks
@@ -234,8 +234,8 @@ uword[16] op_floor
 uword op_sp
 
 ; cons cells
-uword[272] cons_val
-uword[272] cons_next
+const uword cons_val = $c378
+const uword cons_next = $c598
 uword cons_count
 
 ; statement frame stack
@@ -263,14 +263,14 @@ uword prog_structs       ; cons of struct node ids (reversed)
 uword prog_subs          ; cons of sub node ids (reversed)
 
 ; ---- codegen symbol table (persistent across passes) ----
-uword[780] sym_ident      ; var name ident id
-ubyte[780] sym_type       ; type tag (TY_UBYTE / TY_BYTE / TY_UWORD)
-uword[780] sym_addr       ; ZP address
-uword[780] sym_scope      ; owning sub name ident (0 = module scope)
-ubyte[780] sym_mkind      ; 0 = module var, 1 = param, 2 = local
-ubyte[780] sym_is_const   ; 1 = compile-time const (no storage); folded
-uword[780] sym_cval       ; const value (when sym_is_const)
-uword[780] sym_arr_size   ; element count if an array (0 = scalar); the
+const uword sym_ident = $c7b8      ; var name ident id
+const uword sym_type = $cdd0       ; type tag (TY_UBYTE / TY_BYTE / TY_UWORD)
+const uword sym_addr = $d0dc       ; ZP address
+const uword sym_scope = $d6f4      ; owning sub name ident (0 = module scope)
+const uword sym_mkind = $dd0c      ; 0 = module var, 1 = param, 2 = local
+const uword sym_is_const = $e018   ; 1 = compile-time const (no storage); folded
+const uword sym_cval = $e324       ; const value (when sym_is_const)
+const uword sym_arr_size = $e93c   ; element count if an array (0 = scalar); the
                          ; element type is in sym_type; mangle is p8a_
 uword sym_count
 uword zp_next            ; ZP bump allocator (from $40)
@@ -633,19 +633,19 @@ sub intern_name() -> uword {
             if j >= name_len {
                 break
             }
-            if ident_pool[off + j] != name_buf[j] {
+            if peek($8300 + (off + j)) != name_buf[j] {
                 match = 0
                 break
             }
             j = j + 1
         }
         if match {
-            if ident_pool[off + name_len] == 0 {
+            if peek($8300 + (off + name_len)) == 0 {
                 return off
             }
         }
         repeat {
-            if ident_pool[off] == 0 {
+            if peek($8300 + (off)) == 0 {
                 off = off + 1
                 break
             }
@@ -660,11 +660,11 @@ sub intern_name() -> uword {
         if k >= name_len {
             break
         }
-        ident_pool[ident_pool_len] = name_buf[k]
+        poke($8300 + (ident_pool_len), name_buf[k])
         ident_pool_len = ident_pool_len + 1
         k = k + 1
     }
-    ident_pool[ident_pool_len] = 0
+    poke($8300 + (ident_pool_len), 0)
     ident_pool_len = ident_pool_len + 1
     return id
 }
@@ -674,7 +674,7 @@ sub ident_len_at(uword id) -> uword {
     uword n
     n = 0
     repeat {
-        if ident_pool[id + n] == 0 {
+        if peek($8300 + (id + n)) == 0 {
             break
         }
         n = n + 1
@@ -825,7 +825,7 @@ sub next_raw_token() {
                 } else {
                     rb = c
                 }
-                str_pool[str_pool_len] = rb
+                poke($9b00 + (str_pool_len), rb)
                 str_pool_len = str_pool_len + 1
             }
             uword slen
@@ -840,22 +840,22 @@ sub next_raw_token() {
                 sk = 0
                 repeat {
                     if sk >= slen { break }
-                    if str_pool[off + sk] != str_pool[start + sk] { sm = 0 break }
+                    if peek($9b00 + (off + sk)) != peek($9b00 + (start + sk)) { sm = 0 break }
                     sk = sk + 1
                 }
                 if sm {
-                    if str_pool[off + slen] == 0 {
+                    if peek($9b00 + (off + slen)) == 0 {
                         str_pool_len = start
                         push_token(TK_STR, off)
                         return
                     }
                 }
                 repeat {
-                    if str_pool[off] == 0 { off = off + 1 break }
+                    if peek($9b00 + (off)) == 0 { off = off + 1 break }
                     off = off + 1
                 }
             }
-            str_pool[str_pool_len] = 0
+            poke($9b00 + (str_pool_len), 0)
             str_pool_len = str_pool_len + 1
             push_token(TK_STR, start)
             return
@@ -1006,12 +1006,12 @@ sub lex_init() {
 sub new_node(ubyte kind, ubyte op, uword a, uword b) -> uword {
     uword id
     id = node_count
-    node_kind[id] = kind
-    node_op[id] = op
-    node_a[id] = a
-    node_b[id] = b
-    node_c[id] = 0
-    node_d[id] = 0
+    poke($af00 + (id), kind)
+    poke($b10c + (id), op)
+    pokew($b318 + ((id) << 1), a)
+    pokew($b730 + ((id) << 1), b)
+    pokew($bb48 + ((id) << 1), 0)
+    pokew($bf60 + ((id) << 1), 0)
     node_count = node_count + 1
     return id
 }
@@ -1021,8 +1021,8 @@ sub new_node(ubyte kind, ubyte op, uword a, uword b) -> uword {
 sub cons_prepend(uword head, uword val) -> uword {
     uword c
     c = cons_count
-    cons_val[c] = val
-    cons_next[c] = head
+    pokew($c378 + ((c) << 1), val)
+    pokew($c598 + ((c) << 1), head)
     cons_count = cons_count + 1
     return c
 }
@@ -1130,7 +1130,7 @@ sub append_ident_to_namebuf(uword id) {
         if j >= n {
             break
         }
-        name_buf[name_len] = ident_pool[off + j]
+        name_buf[name_len] = peek($8300 + (off + j))
         name_len = name_len + 1
         j = j + 1
     }
@@ -1148,7 +1148,7 @@ sub append_ident_to_pathbuf(uword id) {
         if j >= n {
             break
         }
-        path_buf[path_len] = ident_pool[off + j]
+        path_buf[path_len] = peek($8300 + (off + j))
         path_len = path_len + 1
         j = j + 1
     }
@@ -1203,8 +1203,8 @@ sub close_index() {
     if cur_kind() == TK_DOT {
         if peek1_kind() == TK_IDENT {
             advance()
-            node_c[node] = cur_val()
-            node_op[node] = 1
+            pokew($bb48 + ((node) << 1), cur_val())
+            poke($b10c + (node), 1)
             advance()
         }
     }
@@ -1479,7 +1479,7 @@ sub parse_var_decl() -> uword {
     }
     uword node
     node = new_node(ND_VARDECL, tag, nameid, init)
-    node_c[node] = arrsize
+    pokew($bb48 + ((node) << 1), arrsize)
     return node
 }
 
@@ -1756,15 +1756,15 @@ sub parse_block() -> uword {
             } else {
                 if kind == FR_ELSE {
                     node = new_node(ND_IF, 0, fr_cond[fi], fr_then[fi])
-                    node_c[node] = block
+                    pokew($bb48 + ((node) << 1), block)
                 } else {
                     if kind == FR_WHILE {
                         node = new_node(ND_WHILE, 0, fr_cond[fi], block)
                     } else {
                         if kind == FR_FOR {
                             node = new_node(ND_FOR, 0, fr_var[fi], fr_lo[fi])
-                            node_c[node] = fr_hi[fi]
-                            node_d[node] = block
+                            pokew($bb48 + ((node) << 1), fr_hi[fi])
+                            pokew($bf60 + ((node) << 1), block)
                         } else {
                             ; FR_REPEAT
                             node = new_node(ND_REPEAT, 0, fr_cond[fi], block)
@@ -1844,8 +1844,8 @@ sub parse_sub(ubyte kind) -> uword {
     body = parse_block()
     uword node
     node = new_node(ND_SUB, kind, nameid, params)
-    node_c[node] = body
-    node_d[node] = rettag
+    pokew($bb48 + ((node) << 1), body)
+    pokew($bf60 + ((node) << 1), rettag)
     return node
 }
 
@@ -1967,8 +1967,8 @@ sub parse_asmsub() -> uword {
     advance()
     uword node
     node = new_node(ND_SUB, SUBK_ASMSUB, nameid, params)
-    node_c[node] = addr
-    node_d[node] = rettag
+    pokew($bb48 + ((node) << 1), addr)
+    pokew($bf60 + ((node) << 1), rettag)
     return node
 }
 
@@ -1979,10 +1979,10 @@ sub is_struct_name(uword id) -> ubyte {
         if cell == 0 {
             return 0
         }
-        if node_a[cons_val[cell]] == id {
+        if peekw($b318 + ((peekw($c378 + ((cell) << 1))) << 1)) == id {
             return 1
         }
-        cell = cons_next[cell]
+        cell = peekw($c598 + ((cell) << 1))
     }
 }
 
@@ -2003,8 +2003,8 @@ sub parse_struct_var() -> uword {
     advance()                               ; instance name
     uword node
     node = new_node(ND_VARDECL, TY_STRUCT, nameid, 0)
-    node_c[node] = arrsize
-    node_d[node] = sname
+    pokew($bb48 + ((node) << 1), arrsize)
+    pokew($bf60 + ((node) << 1), sname)
     return node
 }
 
@@ -2208,8 +2208,8 @@ sub parse_main() -> uword {
     body = parse_block()
     uword node
     node = new_node(ND_SUB, SUBK_MAIN, nameid, 0)
-    node_c[node] = body
-    node_d[node] = TY_VOID
+    pokew($bb48 + ((node) << 1), body)
+    pokew($bf60 + ((node) << 1), TY_VOID)
     return node
 }
 
@@ -2252,7 +2252,7 @@ sub out_ident_text(uword id) {
         if j >= n {
             break
         }
-        out_byte(ident_pool[off + j])
+        out_byte(peek($8300 + (off + j)))
         j = j + 1
     }
 }
@@ -2261,23 +2261,23 @@ sub out_ident_text(uword id) {
 
 sub emit_sym_mangled(uword si) {
     ; arrays live in main memory under a p8a_ label; everything else is p8v_.
-    if sym_arr_size[si] {
+    if peekw($e93c + ((si) << 1)) {
         out_text("p8a_")
-        out_ident_text(sym_ident[si])
+        out_ident_text(peekw($c7b8 + ((si) << 1)))
         return
     }
     out_text("p8v_")
-    if sym_mkind[si] == 0 {
-        out_ident_text(sym_ident[si])
+    if peek($dd0c + (si)) == 0 {
+        out_ident_text(peekw($c7b8 + ((si) << 1)))
         return
     }
-    out_ident_text(sym_scope[si])
-    if sym_mkind[si] == 1 {
+    out_ident_text(peekw($d6f4 + ((si) << 1)))
+    if peek($dd0c + (si)) == 1 {
         out_text("_arg_")
     } else {
         out_byte('_')
     }
-    out_ident_text(sym_ident[si])
+    out_ident_text(peekw($c7b8 + ((si) << 1)))
 }
 ; emit a var reference by ident, resolved in the current scope.
 
@@ -2292,8 +2292,8 @@ sub reverse_cons(uword head) -> uword {
         if cell == 0 {
             break
         }
-        rev = cons_prepend(rev, cons_val[cell])
-        cell = cons_next[cell]
+        rev = cons_prepend(rev, peekw($c378 + ((cell) << 1)))
+        cell = peekw($c598 + ((cell) << 1))
     }
     return rev
 }
@@ -2312,8 +2312,8 @@ sub reverse_cons_ip(uword head) -> uword {
             break
         }
         uword nxt
-        nxt = cons_next[cell]
-        cons_next[cell] = prev
+        nxt = peekw($c598 + ((cell) << 1))
+        pokew($c598 + ((cell) << 1), prev)
         prev = cell
         cell = nxt
     }
@@ -2335,8 +2335,8 @@ sub find_sym(uword identid) -> uword {
         if i >= sym_count {
             break
         }
-        if sym_ident[i] == identid {
-            if sym_scope[i] == cur_scope {
+        if peekw($c7b8 + ((i) << 1)) == identid {
+            if peekw($d6f4 + ((i) << 1)) == cur_scope {
                 return i
             }
         }
@@ -2347,8 +2347,8 @@ sub find_sym(uword identid) -> uword {
         if i >= sym_count {
             break
         }
-        if sym_ident[i] == identid {
-            if sym_scope[i] == 0 {
+        if peekw($c7b8 + ((i) << 1)) == identid {
+            if peekw($d6f4 + ((i) << 1)) == 0 {
                 return i
             }
         }
@@ -2372,27 +2372,27 @@ sub build_symbols() {
             break
         }
         uword vd
-        vd = cons_val[cell]
-        if node_kind[vd] == ND_VARDECL {
-            if node_c[vd] == 0 {               ; scalar (not an array)
+        vd = peekw($c378 + ((cell) << 1))
+        if peek($af00 + (vd)) == ND_VARDECL {
+            if peekw($bb48 + ((vd) << 1)) == 0 {               ; scalar (not an array)
                 ubyte tag
-                tag = node_op[vd]
+                tag = peek($b10c + (vd))
                 if tag <= TY_UWORD {           ; ubyte / byte / uword
                     ubyte sz
                     sz = 1
                     if tag == TY_UWORD { sz = 2 }
-                    sym_ident[sym_count] = node_a[vd]
-                    sym_type[sym_count] = tag
-                    sym_scope[sym_count] = 0
-                    sym_mkind[sym_count] = 0
-                    sym_is_const[sym_count] = 0
-                    sym_arr_size[sym_count] = 0
+                    pokew($c7b8 + ((sym_count) << 1), peekw($b318 + ((vd) << 1)))
+                    poke($cdd0 + (sym_count), tag)
+                    pokew($d6f4 + ((sym_count) << 1), 0)
+                    poke($dd0c + (sym_count), 0)
+                    poke($e018 + (sym_count), 0)
+                    pokew($e93c + ((sym_count) << 1), 0)
                     ; ZP runs $40..$FF; a scalar that won't fit overflows into
                     ; main memory (sentinel $FFFF -> emit_memvars), matching p8c.
                     if zp_next + sz > $ff {
-                        sym_addr[sym_count] = $ffff
+                        pokew($d0dc + ((sym_count) << 1), $ffff)
                     } else {
-                        sym_addr[sym_count] = zp_next
+                        pokew($d0dc + ((sym_count) << 1), zp_next)
                         zp_next = zp_next + sz
                     }
                     sym_count = sym_count + 1
@@ -2408,14 +2408,14 @@ sub build_symbols() {
                         bt = TY_UBYTE
                         if tag == TY_CONST_BYTE { bt = TY_BYTE }
                         if tag == TY_CONST_UWORD { bt = TY_UWORD }
-                        sym_ident[sym_count] = node_a[vd]
-                        sym_type[sym_count] = bt
-                        sym_addr[sym_count] = 0
-                        sym_scope[sym_count] = 0
-                        sym_mkind[sym_count] = 0
-                        sym_is_const[sym_count] = 1
-                        sym_cval[sym_count] = node_a[node_b[vd]]
-                        sym_arr_size[sym_count] = 0
+                        pokew($c7b8 + ((sym_count) << 1), peekw($b318 + ((vd) << 1)))
+                        poke($cdd0 + (sym_count), bt)
+                        pokew($d0dc + ((sym_count) << 1), 0)
+                        pokew($d6f4 + ((sym_count) << 1), 0)
+                        poke($dd0c + (sym_count), 0)
+                        poke($e018 + (sym_count), 1)
+                        pokew($e324 + ((sym_count) << 1), peekw($b318 + ((peekw($b730 + ((vd) << 1))) << 1)))
+                        pokew($e93c + ((sym_count) << 1), 0)
                         sym_count = sym_count + 1
                     }
                 }
@@ -2424,20 +2424,20 @@ sub build_symbols() {
                 ; block (p8a_<name>) in main memory, not ZP. Element type tag in
                 ; node_op, count in node_c. (Only ubyte/uword element types.)
                 ubyte etag
-                etag = node_op[vd]
+                etag = peek($b10c + (vd))
                 if etag <= TY_UWORD {
-                    sym_ident[sym_count] = node_a[vd]
-                    sym_type[sym_count] = etag
-                    sym_addr[sym_count] = 0
-                    sym_scope[sym_count] = 0
-                    sym_mkind[sym_count] = 0
-                    sym_is_const[sym_count] = 0
-                    sym_arr_size[sym_count] = node_c[vd]
+                    pokew($c7b8 + ((sym_count) << 1), peekw($b318 + ((vd) << 1)))
+                    poke($cdd0 + (sym_count), etag)
+                    pokew($d0dc + ((sym_count) << 1), 0)
+                    pokew($d6f4 + ((sym_count) << 1), 0)
+                    poke($dd0c + (sym_count), 0)
+                    poke($e018 + (sym_count), 0)
+                    pokew($e93c + ((sym_count) << 1), peekw($bb48 + ((vd) << 1)))
                     sym_count = sym_count + 1
                 }
             }
         }
-        cell = cons_next[cell]
+        cell = peekw($c598 + ((cell) << 1))
     }
 }
 
@@ -2455,9 +2455,9 @@ sub emit_zp_bindings() {
         if j >= sym_count {
             break
         }
-        if sym_is_const[j] == 0 {
-            if sym_arr_size[j] == 0 {
-                if sym_addr[j] != $ffff {
+        if peek($e018 + (j)) == 0 {
+            if peekw($e93c + ((j) << 1)) == 0 {
+                if peekw($d0dc + ((j) << 1)) != $ffff {
                     any = 1
                     break
                 }
@@ -2476,12 +2476,12 @@ sub emit_zp_bindings() {
         if i >= sym_count {
             break
         }
-        if sym_is_const[i] == 0 {
-            if sym_arr_size[i] == 0 {
-                if sym_addr[i] != $ffff {
+        if peek($e018 + (i)) == 0 {
+            if peekw($e93c + ((i) << 1)) == 0 {
+                if peekw($d0dc + ((i) << 1)) != $ffff {
                     emit_sym_mangled(i)
                     out_text(" = $")
-                    out_hex2(lsb(sym_addr[i]))
+                    out_hex2(lsb(peekw($d0dc + ((i) << 1))))
                     o_nl()
                 }
             }
@@ -2503,9 +2503,9 @@ sub emit_memvars() {
         if j >= sym_count {
             break
         }
-        if sym_arr_size[j] == 0 {
-            if sym_is_const[j] == 0 {
-                if sym_addr[j] == $ffff {
+        if peekw($e93c + ((j) << 1)) == 0 {
+            if peek($e018 + (j)) == 0 {
+                if peekw($d0dc + ((j) << 1)) == $ffff {
                     any = 1
                     break
                 }
@@ -2525,14 +2525,14 @@ sub emit_memvars() {
         if i >= sym_count {
             break
         }
-        if sym_arr_size[i] == 0 {
-            if sym_is_const[i] == 0 {
-                if sym_addr[i] == $ffff {
+        if peekw($e93c + ((i) << 1)) == 0 {
+            if peek($e018 + (i)) == 0 {
+                if peekw($d0dc + ((i) << 1)) == $ffff {
                     emit_sym_mangled(i)
                     out_byte(':')
                     o_nl()
                     out_text("  .byte 0")
-                    if sym_type[i] == TY_UWORD {
+                    if peek($cdd0 + (i)) == TY_UWORD {
                         out_text(", 0")
                     }
                     o_nl()
@@ -2589,26 +2589,26 @@ sub push_walk_block(uword blk) {
         return
     }
     uword cell
-    cell = node_a[blk]
+    cell = peekw($b318 + ((blk) << 1))
     repeat {
         if cell == 0 {
             break
         }
-        sws_a[sws_sp] = cons_val[cell]
+        sws_a[sws_sp] = peekw($c378 + ((cell) << 1))
         sws_sp = sws_sp + 1
-        cell = cons_next[cell]
+        cell = peekw($c598 + ((cell) << 1))
     }
 }
 
 sub push_walk_when(uword st) {
     uword cell
-    cell = node_b[st]
+    cell = peekw($b730 + ((st) << 1))
     repeat {
         if cell == 0 {
             break
         }
-        push_walk_block(node_b[cons_val[cell]])
-        cell = cons_next[cell]
+        push_walk_block(peekw($b730 + ((peekw($c378 + ((cell) << 1))) << 1)))
+        cell = peekw($c598 + ((cell) << 1))
     }
 }
 ; allocate a sub's local vardecls (p8v_<sub>_<name>), in p8c's _walk_block
@@ -2626,25 +2626,25 @@ sub walk_locals(uword body, uword subname) {
         uword st
         st = sws_a[sws_sp]
         ubyte k
-        k = node_kind[st]
+        k = peek($af00 + (st))
         if k == ND_VARDECL {
-            if node_c[st] == 0 {               ; scalar (not an array)
+            if peekw($bb48 + ((st) << 1)) == 0 {               ; scalar (not an array)
                 ubyte tag
-                tag = node_op[st]
+                tag = peek($b10c + (st))
                 if tag <= TY_UWORD {
                     ubyte sz
                     sz = 1
                     if tag == TY_UWORD { sz = 2 }
-                    sym_ident[sym_count] = node_a[st]
-                    sym_type[sym_count] = tag
-                    sym_scope[sym_count] = subname
-                    sym_mkind[sym_count] = 2
-                    sym_is_const[sym_count] = 0
-                    sym_arr_size[sym_count] = 0
+                    pokew($c7b8 + ((sym_count) << 1), peekw($b318 + ((st) << 1)))
+                    poke($cdd0 + (sym_count), tag)
+                    pokew($d6f4 + ((sym_count) << 1), subname)
+                    poke($dd0c + (sym_count), 2)
+                    poke($e018 + (sym_count), 0)
+                    pokew($e93c + ((sym_count) << 1), 0)
                     if zp_next + sz > $ff {
-                        sym_addr[sym_count] = $ffff
+                        pokew($d0dc + ((sym_count) << 1), $ffff)
                     } else {
-                        sym_addr[sym_count] = zp_next
+                        pokew($d0dc + ((sym_count) << 1), zp_next)
                         zp_next = zp_next + sz
                     }
                     sym_count = sym_count + 1
@@ -2652,17 +2652,17 @@ sub walk_locals(uword body, uword subname) {
             }
         }
         if k == ND_IF {
-            push_walk_block(node_c[st])         ; else (bottom)
-            push_walk_block(node_b[st])         ; then (top)
+            push_walk_block(peekw($bb48 + ((st) << 1)))         ; else (bottom)
+            push_walk_block(peekw($b730 + ((st) << 1)))         ; then (top)
         }
         if k == ND_WHILE {
-            push_walk_block(node_b[st])
+            push_walk_block(peekw($b730 + ((st) << 1)))
         }
         if k == ND_FOR {
-            push_walk_block(node_d[st])
+            push_walk_block(peekw($bf60 + ((st) << 1)))
         }
         if k == ND_REPEAT {
-            push_walk_block(node_b[st])
+            push_walk_block(peekw($b730 + ((st) << 1)))
         }
         if k == ND_WHEN {
             push_walk_when(st)
@@ -2711,17 +2711,17 @@ sub register_subs() {
             }
         }
         if issub {
-            sub_name[sub_count] = node_a[snode]
-            sub_kind[sub_count] = node_op[snode]
-            sub_ret[sub_count] = lsb(node_d[snode])
+            sub_name[sub_count] = peekw($b318 + ((snode) << 1))
+            sub_kind[sub_count] = peek($b10c + (snode))
+            sub_ret[sub_count] = lsb(peekw($bf60 + ((snode) << 1)))
             sub_addr[sub_count] = 0
-            if node_op[snode] == SUBK_ASMSUB {
-                sub_addr[sub_count] = node_c[snode]   ; node_c is the $F0xx addr
+            if peek($b10c + (snode)) == SUBK_ASMSUB {
+                sub_addr[sub_count] = peekw($bb48 + ((snode) << 1))   ; node_c is the $F0xx addr
             }
             sub_count = sub_count + 1
             ; allocate this sub's params (source order), continuing zp_next.
             uword phead
-            phead = reverse_cons(node_b[snode])
+            phead = reverse_cons(peekw($b730 + ((snode) << 1)))
             uword pcell
             pcell = phead
             repeat {
@@ -2729,31 +2729,31 @@ sub register_subs() {
                     break
                 }
                 uword pnode
-                pnode = cons_val[pcell]
+                pnode = peekw($c378 + ((pcell) << 1))
                 ubyte ptag
-                ptag = node_op[pnode]
+                ptag = peek($b10c + (pnode))
                 ubyte psz
                 psz = 1
                 if ptag == TY_UWORD { psz = 2 }
-                sym_ident[sym_count] = node_a[pnode]
-                sym_type[sym_count] = ptag
-                sym_scope[sym_count] = node_a[snode]
-                sym_mkind[sym_count] = 1
-                sym_is_const[sym_count] = 0
-                sym_arr_size[sym_count] = 0
+                pokew($c7b8 + ((sym_count) << 1), peekw($b318 + ((pnode) << 1)))
+                poke($cdd0 + (sym_count), ptag)
+                pokew($d6f4 + ((sym_count) << 1), peekw($b318 + ((snode) << 1)))
+                poke($dd0c + (sym_count), 1)
+                poke($e018 + (sym_count), 0)
+                pokew($e93c + ((sym_count) << 1), 0)
                 if zp_next + psz > $ff {
-                    sym_addr[sym_count] = $ffff
+                    pokew($d0dc + ((sym_count) << 1), $ffff)
                 } else {
-                    sym_addr[sym_count] = zp_next
+                    pokew($d0dc + ((sym_count) << 1), zp_next)
                     zp_next = zp_next + psz
                 }
                 sym_count = sym_count + 1
-                pcell = cons_next[pcell]
+                pcell = peekw($c598 + ((pcell) << 1))
             }
             ; then this sub's locals (walk the body), continuing zp_next.
             ; (asmsub has no body -- node_c is its address -- so skip the walk.)
-            if node_op[snode] != SUBK_ASMSUB {
-                walk_locals(node_c[snode], node_a[snode])
+            if peek($b10c + (snode)) != SUBK_ASMSUB {
+                walk_locals(peekw($bb48 + ((snode) << 1)), peekw($b318 + ((snode) << 1)))
             }
             reset_nodes()
         }
@@ -2770,18 +2770,18 @@ sub dump_global() {
     uword rc
     rc = 0
     i = 0
-    repeat { if i >= sym_count { break } if sym_scope[i] == 0 { rc = rc + 1 } else { if sym_mkind[i] == 1 { rc = rc + 1 } } i = i + 1 }
+    repeat { if i >= sym_count { break } if peekw($d6f4 + ((i) << 1)) == 0 { rc = rc + 1 } else { if peek($dd0c + (i)) == 1 { rc = rc + 1 } } i = i + 1 }
     d16(rc)
     i = 0
     repeat {
         if i >= sym_count { break }
         ubyte keep
         keep = 0
-        if sym_scope[i] == 0 { keep = 1 }
-        if sym_mkind[i] == 1 { keep = 1 }
+        if peekw($d6f4 + ((i) << 1)) == 0 { keep = 1 }
+        if peek($dd0c + (i)) == 1 { keep = 1 }
         if keep {
-            d16(sym_ident[i]) out_byte(sym_type[i]) d16(sym_addr[i]) d16(sym_scope[i])
-            out_byte(sym_mkind[i]) out_byte(sym_is_const[i]) d16(sym_cval[i]) d16(sym_arr_size[i])
+            d16(peekw($c7b8 + ((i) << 1))) out_byte(peek($cdd0 + (i))) d16(peekw($d0dc + ((i) << 1))) d16(peekw($d6f4 + ((i) << 1)))
+            out_byte(peek($dd0c + (i))) out_byte(peek($e018 + (i))) d16(peekw($e324 + ((i) << 1))) d16(peekw($e93c + ((i) << 1)))
         }
         i = i + 1
     }
@@ -2794,10 +2794,10 @@ sub dump_global() {
     }
     d16(ident_pool_len)
     i = 0
-    repeat { if i >= ident_pool_len { break } out_byte(ident_pool[i]) i = i + 1 }
+    repeat { if i >= ident_pool_len { break } out_byte(peek($8300 + (i))) i = i + 1 }
     d16(str_pool_len)
     i = 0
-    repeat { if i >= str_pool_len { break } out_byte(str_pool[i]) i = i + 1 }
+    repeat { if i >= str_pool_len { break } out_byte(peek($9b00 + (i))) i = i + 1 }
 }
 ; one sub's AST record: kind(1) snode(2) node_count(2) nodes cons_count(2) cons.
 sub dump_record(ubyte kind, uword snode) {
@@ -2805,19 +2805,19 @@ sub dump_record(ubyte kind, uword snode) {
     d16(snode)
     uword i
     uword nm
-    nm = node_a[snode]
+    nm = peekw($b318 + ((snode) << 1))
     uword lc
     lc = 0
     i = 0
-    repeat { if i >= sym_count { break } if sym_scope[i] == nm { if sym_mkind[i] == 2 { lc = lc + 1 } } i = i + 1 }
+    repeat { if i >= sym_count { break } if peekw($d6f4 + ((i) << 1)) == nm { if peek($dd0c + (i)) == 2 { lc = lc + 1 } } i = i + 1 }
     d16(lc)
     i = 0
     repeat {
         if i >= sym_count { break }
-        if sym_scope[i] == nm {
-            if sym_mkind[i] == 2 {
-                d16(sym_ident[i]) out_byte(sym_type[i]) d16(sym_addr[i]) d16(sym_scope[i])
-                out_byte(sym_mkind[i]) out_byte(sym_is_const[i]) d16(sym_cval[i]) d16(sym_arr_size[i])
+        if peekw($d6f4 + ((i) << 1)) == nm {
+            if peek($dd0c + (i)) == 2 {
+                d16(peekw($c7b8 + ((i) << 1))) out_byte(peek($cdd0 + (i))) d16(peekw($d0dc + ((i) << 1))) d16(peekw($d6f4 + ((i) << 1)))
+                out_byte(peek($dd0c + (i))) out_byte(peek($e018 + (i))) d16(peekw($e324 + ((i) << 1))) d16(peekw($e93c + ((i) << 1)))
             }
         }
         i = i + 1
@@ -2826,15 +2826,15 @@ sub dump_record(ubyte kind, uword snode) {
     i = 0
     repeat {
         if i >= node_count { break }
-        out_byte(node_kind[i]) out_byte(node_op[i])
-        d16(node_a[i]) d16(node_b[i]) d16(node_c[i]) d16(node_d[i])
+        out_byte(peek($af00 + (i))) out_byte(peek($b10c + (i)))
+        d16(peekw($b318 + ((i) << 1))) d16(peekw($b730 + ((i) << 1))) d16(peekw($bb48 + ((i) << 1))) d16(peekw($bf60 + ((i) << 1)))
         i = i + 1
     }
     d16(cons_count)
     i = 0
     repeat {
         if i >= cons_count { break }
-        d16(cons_val[i]) d16(cons_next[i])
+        d16(peekw($c378 + ((i) << 1))) d16(peekw($c598 + ((i) << 1)))
         i = i + 1
     }
 }

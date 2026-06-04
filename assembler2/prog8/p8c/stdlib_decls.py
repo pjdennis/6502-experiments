@@ -48,6 +48,8 @@ TXT_PRINT_UW = Symbol(
 BUILTINS = [
     Symbol(name="peek",   mangled="peek",   type=UBYTE, kind="builtin"),
     Symbol(name="poke",   mangled="poke",   type=VOID,  kind="builtin"),
+    Symbol(name="peekw",  mangled="peekw",  type=UWORD, kind="builtin"),
+    Symbol(name="pokew",  mangled="pokew",  type=VOID,  kind="builtin"),
     Symbol(name="lsb",    mangled="lsb",    type=UBYTE, kind="builtin"),
     Symbol(name="msb",    mangled="msb",    type=UBYTE, kind="builtin"),
     Symbol(name="mkword", mangled="mkword", type=UWORD, kind="builtin"),

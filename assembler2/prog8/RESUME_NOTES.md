@@ -1651,3 +1651,61 @@ This is the FINAL gap: the pipeline mechanism + sizing all work on p1.p8; only
 the ZP-overflow feature (and its trailer streaming) stands between here and the
 literal fixpoint. The pass-sizing experiments are in /tmp/p1.bin (pass1, sym860
 node544) and /tmp/p2.bin (pass2, node512 sym560).
+
+## ARRAY RE-ARCHITECTURE: split lo/hi storage + slab the pipeline (2026-06)
+
+GOAL (user): remove 16-bit-INDEXED array support (match upstream prog8, which
+caps arrays at 256 elements with byte indices and uses @split lo/hi storage),
+and migrate the pipeline's >256 arenas to peek/poke slabs. Upstream's port
+already does this; bake it natively.
+
+KEY FACTS (verified):
+ - Byte-identity anchor is the PIPELINE self-host: pass2_sh(p1.p8) == p8c(p1.p8)
+   (verify.sh, 0 diff). Every uword-array codegen change goes into BOTH
+   p8c/codegen.py AND p1/p1_pass2_sh.p8, identically. p1.p8 is the INPUT.
+ - p1.p8 (input): max array 208 elems, ZERO >256 arrays. Only needs split.
+ - pass1_sh: 18 arrays >256 ; pass2_sh: 16 arrays >256. These get SLABBED.
+   (port_pipeline.py already does this transform for upstream; addrs proven.)
+ - After slabbing, ALL remaining arrays are <=256 -> every index value <256 ->
+   byte-indexed access (low byte of index). Remove the aptr pointer path.
+ - p8c peek/poke are LITERAL-only today; need computed peek/poke + peekw/pokew.
+   pass2_sh does NOT need peek/poke emit (p1.p8 has none); only p8c does.
+
+p8c array codegen sites: storage 225-239; uword read 840-850; uword write
+500-512; ubyte fast 514-525/852-857; aptr helper 1663-1684; rvalue-index 1151.
+pass2_sh sites: emit_arrays 704-758; emit_word_arr_load 2854-2876; assign_index
+3113-3134; ubyte fast 1825-1856/3135-3147; emit_aptr_arith 2836-2852.
+TY_UWORD=2, TY_UBYTE=0; sym_type[], sym_arr_size[]. ZP ptr __p8c_aptr.
+
+PHASES (each ends green + committed):
+ A. Slab the pipeline. Add computed peek/poke + peekw/pokew to p8c (additive).
+    Bake slab transform (const uword name=$ADDR + peek/poke) into pass1_sh.p8 &
+    pass2_sh.p8 for all >256 arenas. OUTPUT-PRESERVING -> verify.sh stays 0.
+ B. Split storage. In p8c + pass2_sh: uword array storage -> two .byte lo/hi
+    blocks ({mangled}_lo / {mangled}_hi); read -> lda lo,y / lda hi,y; write ->
+    split sta; uword-index ubyte arrays -> fast ,y low byte. sema: forbid size
+    >256. Regen corpus goldens. New oracle; verify byte-identity + corpus.
+ C. Remove aptr array path from p8c + pass2_sh. Remove >256 corpus tests.
+    Reconcile port_pipeline.py (slab step now no-op; set memtop from baked
+    consts/manifest). Verify all: prog8-test, verify.sh, upstream selfhost.sh.
+
+Verify cmds: bash /tmp/verify.sh (0 diff); python3 -m unittest discover -s tests;
+cd upstream && bash selfhost.sh. Baseline before this work: pass1 $EBAE,
+pass2 $EEAE, self-host 0 diff, 121 p8c tests OK.
+
+### Phase A DONE + committed (slab the pipeline)
+ - p8c: computed peek/poke + new peekw/pokew (stdlib_decls.py, codegen.py).
+   _emit_addr_into_aptr folds `<const> + <offset>` into the fused adc so slab
+   access is as TIGHT as the old array path (naive form bloated pass1 ~2.6 KB
+   and collided with the slab region). Literal peek/poke unchanged (golden-safe).
+ - upstream/bake_slabs.py: one-shot, baked >256 arenas in pass1_sh/pass2_sh into
+   `const uword name=$BASE` + peek/poke (offset `(idx << 1)` since p8c has no *).
+   pass1 slabs $8300..$efff (code top $7F5A, 934 B gap); pass2 $9f00..$efff
+   (code top $9E9A, 102 B gap -- TIGHT).
+ - upstream/port_pipeline.py: rewritten -- source is pre-baked now, so it only
+   _wrap_truthy (add !=0 to bare if/while CALL/index conds, balanced-paren scan)
+   + derives memtop from baked consts. selfhost.sh PASS 0 diff.
+ - Green: verify.sh 0, selfhost.sh 0, 121 p8c tests, 26 p1 tests.
+NOTE: verify.sh "B free" is now misleading (counts slab region as free); real
+headroom is the gap below slab_base (pass1 934 B, pass2 102 B).
+NEXT: Phase B (split lo/hi storage in p8c + pass2_sh; sema forbid size>256).
