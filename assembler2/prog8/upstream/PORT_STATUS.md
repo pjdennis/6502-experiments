@@ -204,3 +204,78 @@ ubyte/uword) and omits p8c's signed compare arm, so it differs from the full
 oracle -- but on that program the upstream pipeline matches the *p8c pipeline*
 byte-for-byte (verified), confirming the slab port is a faithful reproduction of
 the pipeline, not a divergence. (Run selfhost.sh first to build the images.)
+
+## Update 6: syntax convergence -- one dialect, two compilers (in progress)
+
+Goal (per project owner): stop maintaining two dialects bridged by the
+`port_p1.py` / `port_pipeline.py` transform. Instead make the pipeline source
+(`p1/p1_pass1_sh.p8`, `p1/p1_pass2_sh.p8`) **native upstream Prog8**, and update
+the **p8c reference compiler** to accept that same upstream syntax (and keep
+producing byte-identical output) -- so both compilers build the *one*
+untransformed source. p1.p8 is deprecated as the flagship (the pipeline is the
+definitive prog8) but stays as the self-host input/oracle. Self-host must stay
+0-diff at every step (verify.sh = p8c, selfhost.sh = upstream).
+
+Each transform fixup is resolved one of three ways: config, bake-into-source
+(equivalence-preserving + p8c already accepts), or change-p8c-then-bake.
+
+### Done (committed, both self-hosts 0-diff, corpus 80+1)
+1. **Newline = cp437.** The `\n`->CR mangling is NOT inherent: verified in
+   prog8c v12.1.1 that `ConfigFileTarget` hardcodes `Encoder(true)`, but the
+   translation is applied per-encoding *at encode time* -- `iso`/`petscii`/...
+   opt in, `cp437`/`atascii`/`c64os` do NOT. (At unescape time `\n`->10 (LF),
+   `\r`->13 (CR), for all.) So `encoding = cp437` in `nmos.properties` keeps `\n`
+   as LF (`$0a`) in string AND char literals, matching p8c + the emulator;
+   cp437==iso==ASCII over `$00-$7f` (the only range the pipeline's asm-text
+   strings use). Deleted both newline fixups from the transform.
+2. **Baked equivalence-preserving fixups:** truthy `if/while X` -> `X != 0`
+   (37 pass1 / 72 pass2); `new_node/cons_prepend(.., parse_*())` last-arg hoist
+   to a `uword hoist_arg` scratch (10, pass1); `out_text("...")>255` pre-split.
+   Removed from the transform (and its `hoist_arg` injection).
+3. **`as` type-cast in p8c + baked byte-index casts.** Added a `Cast` AST node
+   (parsed in `iter_parse` at lowest precedence; typed in sema; lowered in both
+   byte/word codegen as low-byte narrow / high=0 widen). Baked
+   `arr[i]`->`arr[(i as ubyte)]` (112 pass1 / 104 pass2). For p8c the cast flips
+   the index onto the tight `lda label,y` fast path (same runtime index), so
+   pass1 even shrank slightly. NOTE: a follow-up "index narrowing" pass should
+   narrow vestigial `uword` index vars to `ubyte` where they only ever index a
+   <=256 array (deletes most casts + cheaper byte arithmetic); the genuinely
+   `uword` values are slab OFFSETS (`poke(base+off)`, not `[]`), already uncast.
+
+### Remaining (the two hard transform steps -- each a multi-layer p8c change)
+
+4. **I/O register-ABI block.** The I/O subs cannot share one source form as
+   *regular* subs: their `%asm` bodies reference compiler-specific mangled names
+   (p8c `p8v__read_arg_handle` / `__p8c_tmp0` / `p8v_src_eof`; upstream
+   `p8b_main.p8v_*`). The convergence is upstream's **register-ABI `asmsub`**
+   (args in A/X/Y/AY -> no static-param mangling). p8c must gain:
+     - lexer/parser: raw `%asm {{ ... }}` bodies (today p8c demands a *quoted
+       string* body, `%asm{{ "...\n..." }}`);
+     - parser: register annotations `@A`/`@AY`/`@X`/`@Y` on params and `-> ret
+       @REG`; the `extsub $ADDR = name(params)` form (today only the builtin
+       table makes extsubs; source-level uses `asmsub name(..) = $ADDR`);
+     - AST: `Param.reg`, `Sub.ret_reg`, asmsub body;
+     - codegen: emit asmsub bodies (label + raw asm, no static-param prologue);
+       register-ABI calls incl. **multi-arg** (`_write(b @A, handle @X)`);
+     - sema: register params + extsub-with-address.
+   The one non-register reference, the `src_eof` global in `_read`, is decoupled
+   by having the read asmsub return EOF in a register (e.g. `-> uword @AY` with
+   Y=EOF flag, A=byte) and setting `src_eof` from a thin prog8 wrapper -- which
+   each compiler mangles correctly. Behavior-preserving, so 0-diff holds.
+   Safe build order: add the p8c capability ADDITIVELY (current source keeps
+   compiling identically -> verify.sh stays 0-diff) + a unit test, THEN
+   restructure `src_eof` and bake the I/O block in `asmsub` form.
+
+5. **`main`/`start` structural wrap.** p8c treats `main {}` as the entry *sub
+   body*; upstream treats `main` as a *block/namespace* of decls + a `sub
+   start()` entry, with `%output raw` + `%launcher none` (and no `%target`).
+   p8c must parse `main` as a block of declarations (vars/consts/subs), pick
+   `start` as the program entry, and accept/ignore those directives. After this,
+   the structural wrap + leading-`_`->`sys_` rename leave the transform, and
+   `port_p1.py`/`port_pipeline.py` can be deleted (memtop/encoding become static
+   `nmos.properties` values; verify.sh + selfhost.sh compile the one source).
+
+### Verification gates (unchanged)
+verify.sh (p8c self-host) 0-diff; selfhost.sh (upstream self-host) 0-diff;
+selfhost_corpus.py 80 match + 1 known + 0 unexpected -- all on the single
+untransformed source.
