@@ -229,11 +229,13 @@ class SerializeFormat(unittest.TestCase):
 
     def test_enum_struct_imports_directives(self):
         got = self._ser_prog(
-            "%target nmos\n%import textio\n"
+            "%import textio\n"
             "enum E { A, B = 5 }\n"
             "struct P { ubyte x uword y }\n"
             "main { }")
-        self.assertIn("  (target nmos)", got)
+        # target is selected externally now (no %target directive); the parser
+        # serializes its default.
+        self.assertIn("  (target wendy2c)", got)
         self.assertIn("    (import textio)", got)
         self.assertIn("\n".join([
             "    (enum E",

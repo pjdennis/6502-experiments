@@ -23,8 +23,7 @@ _spec = _ilu.spec_from_file_location(
     "_strdata_sibling", HERE.parent / "test_str_data_e2e.py")
 _sib = _ilu.module_from_spec(_spec)
 _spec.loader.exec_module(_sib)
-_SHIM_STR = _sib._SHIM.replace(
-    "%target nmos\n", "%target nmos\n%import strings\n", 1)
+_SHIM_STR = "%import strings\n" + _sib._SHIM
 
 # body -> expected output bytes
 _CASES = [
@@ -63,7 +62,7 @@ class StrCompare(unittest.TestCase):
         binf = self.workdir / f"{stem}.bin"
         out = self.workdir / f"{stem}.out"
         p8.write_text(src)
-        r = subprocess.run([sys.executable, "-m", "p8c", str(p8), "-o", str(s)],
+        r = subprocess.run([sys.executable, "-m", "p8c", "--target", "nmos", str(p8), "-o", str(s)],
                            capture_output=True, text=True, cwd=str(PROG8))
         self.assertEqual(r.returncode, 0, msg=f"p8c:\n{r.stdout}\n{r.stderr}")
         r = subprocess.run(

@@ -25,8 +25,7 @@ PROG8 = HERE.parent
 REPO = PROG8.parents[1]
 EMU = REPO / "assembler2" / "emulator" / "emulator.out"
 
-_SHIM = """%target nmos
-%address $0200
+_SHIM = """%address $0200
 ubyte dst
 uword w
 ubyte b
@@ -98,7 +97,7 @@ class DualScratchArith(unittest.TestCase):
         out = self.workdir / f"{stem}.out"
         p8.write_text(src)
         r = subprocess.run(
-            [sys.executable, "-m", "p8c", str(p8), "-o", str(s)],
+            [sys.executable, "-m", "p8c", "--target", "nmos", str(p8), "-o", str(s)],
             capture_output=True, text=True, cwd=str(PROG8))
         self.assertEqual(r.returncode, 0, msg=f"p8c:\n{r.stdout}\n{r.stderr}")
         r = subprocess.run(

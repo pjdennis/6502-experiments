@@ -20,8 +20,14 @@ from p8c.parse import parse  # noqa: E402
 from p8c.sema import analyze  # noqa: E402
 
 
-def compile_text(src: str) -> str:
+def compile_text(src: str, target: str | None = None) -> str:
     prog = parse(lex(src, "<test>"), "<test>")
+    if target is not None:
+        # External target selection (like the CLI's --target), so the source
+        # needs no %target directive. Applies the nmos default-address shift.
+        prog.target = target
+        if target == "nmos" and prog.address == 0x4000:
+            prog.address = 0x0200
     analyze(prog)
     return generate(prog, "<test>")
 
@@ -265,37 +271,37 @@ class MainNamespaceForm(unittest.TestCase):
     """Upstream-style `main { <decls + sub start()> }`: `main` is a namespace
     whose members flatten into the program and `start` is the entry sub."""
 
-    NS = ("%target nmos\nmain {\n"
+    NS = ("main {\n"
           "    ubyte counter\n"
           "    sub helper() -> ubyte { return 42 }\n"
           "    sub start() { counter = helper() }\n}\n")
 
     def test_entry_is_start(self):
-        s = compile_text(self.NS)
+        s = compile_text(self.NS, target="nmos")
         self.assertIn("jmp p8s_start", s)        # prologue jumps to start
         self.assertNotIn("jmp p8s_main", s)
 
     def test_reset_vector_points_to_start(self):
-        self.assertIn("  .word p8s_start", compile_text(self.NS))
+        self.assertIn("  .word p8s_start", compile_text(self.NS, target="nmos"))
 
     def test_members_flattened(self):
-        s = compile_text(self.NS)
+        s = compile_text(self.NS, target="nmos")
         self.assertIn("; ---- sub start ----", s)
         self.assertIn("; ---- sub helper ----", s)
         self.assertIn("jsr p8s_helper", s)        # start calls the member sub
 
     def test_start_gets_nmos_exit(self):
         # the entry sub (start) ends in the nmos exit syscall, not a bare rts.
-        self.assertIn("jsr $f00f", compile_text(self.NS))
+        self.assertIn("jsr $f00f", compile_text(self.NS, target="nmos"))
 
     def test_equivalent_to_entry_body_form(self):
         # The namespace form must be byte-identical to the equivalent
         # entry-body form, modulo the entry sub's name (start vs main).
-        old = ("%target nmos\nubyte counter\n"
+        old = ("ubyte counter\n"
                "sub helper() -> ubyte { return 42 }\n"
                "main { counter = helper() }\n")
-        ns = compile_text(self.NS).replace("start", "main")
-        self.assertEqual(ns, compile_text(old))
+        ns = compile_text(self.NS, target="nmos").replace("start", "main")
+        self.assertEqual(ns, compile_text(old, target="nmos"))
 
     def test_missing_start_is_an_error(self):
         from p8c.parse import ParseError
@@ -311,24 +317,14 @@ class MainNamespaceForm(unittest.TestCase):
         self.assertEqual(compile_text("%output raw\nmain { }"),
                          compile_text("%output raw\n%launcher none\nmain { }"))
 
-    def test_external_target_without_directive(self):
-        # Compiling with an external target (no %target) matches the directive.
-        from p8c.codegen import generate
-        from p8c.lex import lex
-        from p8c.parse import parse
-        from p8c.sema import analyze
-
-        def compile_ext(src, target):
-            prog = parse(lex(src, "<test>"), "<test>")
-            prog.target = target
-            if target == "nmos" and prog.address == 0x4000:
-                prog.address = 0x0200
-            analyze(prog)
-            return generate(prog, "<test>")
-
-        ext = compile_ext("main { }", "nmos")
-        directive = compile_text("%target nmos\nmain { }")
-        self.assertEqual(ext, directive)
+    def test_external_target_selects_nmos(self):
+        # The target is selected externally (no %target directive): nmos
+        # codegen emits the $0200 load address + the nmos exit syscall.
+        ext = compile_text("main { }", target="nmos")
+        self.assertIn("  .org $0200", ext)
+        self.assertIn("jsr $f00f", ext)
+        # wendy2c (the default) does not emit the nmos exit syscall.
+        self.assertNotIn("jsr $f00f", compile_text("main { }"))
 
 
 if __name__ == "__main__":
