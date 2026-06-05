@@ -28,7 +28,6 @@
 %output raw
 %launcher none
 
-main {
 uword hoist_arg
 
 ; ---- token kinds ----
@@ -213,7 +212,7 @@ ubyte pend_i
 ubyte pend_n
 
 ; identifier text pool (reset per top-level unit while streaming)
-const uword ident_pool = $8300
+const uword ident_pool = $8100
 uword ident_count
 uword ident_pool_len
 
@@ -225,7 +224,7 @@ uword ident_pool_len
 ; its full ~3381) transiently writes to ~4052 -- which must stay inside the
 ; array, or it clobbers str_pool_len / name_buf / path_buf and corrupts the
 ; just-read callee ident (the "out_text -> garbage" self-host bug).
-const uword str_pool = $9b00
+const uword str_pool = $9700
 uword str_pool_len
 
 ubyte[65] name_buf       ; 64 chars + room for a NUL terminator (classify_name)
@@ -236,12 +235,12 @@ uword name_len
 uword int_val
 
 ; node arena
-const uword node_kind = $af00
-const uword node_op = $b10c
-const uword node_a = $b318
-const uword node_b = $b730
-const uword node_c = $bb48
-const uword node_d = $bf60
+const uword node_kind = $a700
+const uword node_op = $a9d0
+const uword node_a = $aca0
+const uword node_b = $b240
+const uword node_c = $b7e0
+const uword node_d = $bd80
 uword node_count
 
 ; expression stacks
@@ -256,8 +255,8 @@ uword[16] op_floor
 uword op_sp
 
 ; cons cells
-const uword cons_val = $c378
-const uword cons_next = $c598
+const uword cons_val = $c320
+const uword cons_next = $c540
 uword cons_count
 
 ; statement frame stack
@@ -285,14 +284,14 @@ uword prog_structs       ; cons of struct node ids (reversed)
 uword prog_subs          ; cons of sub node ids (reversed)
 
 ; ---- codegen symbol table (persistent across passes) ----
-const uword sym_ident = $c7b8      ; var name ident id
-const uword sym_type = $cdd0       ; type tag (TY_UBYTE / TY_BYTE / TY_UWORD)
-const uword sym_addr = $d0dc       ; ZP address
-const uword sym_scope = $d6f4      ; owning sub name ident (0 = module scope)
-const uword sym_mkind = $dd0c      ; 0 = module var, 1 = param, 2 = local
-const uword sym_is_const = $e018   ; 1 = compile-time const (no storage); folded
-const uword sym_cval = $e324       ; const value (when sym_is_const)
-const uword sym_arr_size = $e93c   ; element count if an array (0 = scalar); the
+const uword sym_ident = $c760      ; var name ident id
+const uword sym_type = $cd78       ; type tag (TY_UBYTE / TY_BYTE / TY_UWORD)
+const uword sym_addr = $d084       ; ZP address
+const uword sym_scope = $d69c      ; owning sub name ident (0 = module scope)
+const uword sym_mkind = $dcb4      ; 0 = module var, 1 = param, 2 = local
+const uword sym_is_const = $dfc0   ; 1 = compile-time const (no storage); folded
+const uword sym_cval = $e2cc       ; const value (when sym_is_const)
+const uword sym_arr_size = $e8e4   ; element count if an array (0 = scalar); the
                          ; element type is in sym_type; mangle is p8a_
 uword sym_count
 uword zp_next            ; ZP bump allocator (from $40)
@@ -698,19 +697,19 @@ sub intern_name() -> uword {
             if j >= name_len {
                 break
             }
-            if peek($8300 + (off + j)) != name_buf[(j as ubyte)] {
+            if peek($8100 + (off + j)) != name_buf[(j as ubyte)] {
                 match = 0
                 break
             }
             j = j + 1
         }
         if match != 0 {
-            if peek($8300 + (off + name_len)) == 0 {
+            if peek($8100 + (off + name_len)) == 0 {
                 return off
             }
         }
         repeat {
-            if peek($8300 + (off)) == 0 {
+            if peek($8100 + (off)) == 0 {
                 off = off + 1
                 break
             }
@@ -725,11 +724,11 @@ sub intern_name() -> uword {
         if k >= name_len {
             break
         }
-        poke($8300 + (ident_pool_len), name_buf[(k as ubyte)])
+        poke($8100 + (ident_pool_len), name_buf[(k as ubyte)])
         ident_pool_len = ident_pool_len + 1
         k = k + 1
     }
-    poke($8300 + (ident_pool_len), 0)
+    poke($8100 + (ident_pool_len), 0)
     ident_pool_len = ident_pool_len + 1
     return id
 }
@@ -739,7 +738,7 @@ sub ident_len_at(uword id) -> uword {
     uword n
     n = 0
     repeat {
-        if peek($8300 + (id + n)) == 0 {
+        if peek($8100 + (id + n)) == 0 {
             break
         }
         n = n + 1
@@ -820,21 +819,21 @@ sub intern_strpool(uword start) -> uword {
         sk = 0
         repeat {
             if sk >= slen { break }
-            if peek($9b00 + (off + sk)) != peek($9b00 + (start + sk)) { sm = 0 break }
+            if peek($9700 + (off + sk)) != peek($9700 + (start + sk)) { sm = 0 break }
             sk = sk + 1
         }
         if sm != 0 {
-            if peek($9b00 + (off + slen)) == 0 {
+            if peek($9700 + (off + slen)) == 0 {
                 str_pool_len = start
                 return off
             }
         }
         repeat {
-            if peek($9b00 + (off)) == 0 { off = off + 1 break }
+            if peek($9700 + (off)) == 0 { off = off + 1 break }
             off = off + 1
         }
     }
-    poke($9b00 + (str_pool_len), 0)
+    poke($9700 + (str_pool_len), 0)
     str_pool_len = str_pool_len + 1
     return start
 }
@@ -878,19 +877,19 @@ sub build_asm_body() -> uword {
         }
         if sol != 0 {
             if started != 0 {
-                poke($9b00 + (str_pool_len), '\n')
+                poke($9700 + (str_pool_len), '\n')
                 str_pool_len = str_pool_len + 1
             }
             sol = 0
         } else {
             repeat {
                 if sp == 0 { break }
-                poke($9b00 + (str_pool_len), ' ')
+                poke($9700 + (str_pool_len), ' ')
                 str_pool_len = str_pool_len + 1
                 sp = sp - 1
             }
         }
-        poke($9b00 + (str_pool_len), c)
+        poke($9700 + (str_pool_len), c)
         str_pool_len = str_pool_len + 1
         started = 1
     }
@@ -1040,7 +1039,7 @@ sub next_raw_token() {
                 } else {
                     rb = c
                 }
-                poke($9b00 + (str_pool_len), rb)
+                poke($9700 + (str_pool_len), rb)
                 str_pool_len = str_pool_len + 1
             }
             push_token(TK_STR, intern_strpool(start))
@@ -1194,12 +1193,12 @@ sub lex_init() {
 sub new_node(ubyte kind, ubyte op, uword a, uword b) -> uword {
     uword id
     id = node_count
-    poke($af00 + (id), kind)
-    poke($b10c + (id), op)
-    pokew($b318 + ((id) << 1), a)
-    pokew($b730 + ((id) << 1), b)
-    pokew($bb48 + ((id) << 1), 0)
-    pokew($bf60 + ((id) << 1), 0)
+    poke($a700 + (id), kind)
+    poke($a9d0 + (id), op)
+    pokew($aca0 + ((id) << 1), a)
+    pokew($b240 + ((id) << 1), b)
+    pokew($b7e0 + ((id) << 1), 0)
+    pokew($bd80 + ((id) << 1), 0)
     node_count = node_count + 1
     return id
 }
@@ -1209,8 +1208,8 @@ sub new_node(ubyte kind, ubyte op, uword a, uword b) -> uword {
 sub cons_prepend(uword head, uword val) -> uword {
     uword c
     c = cons_count
-    pokew($c378 + ((c) << 1), val)
-    pokew($c598 + ((c) << 1), head)
+    pokew($c320 + ((c) << 1), val)
+    pokew($c540 + ((c) << 1), head)
     cons_count = cons_count + 1
     return c
 }
@@ -1318,7 +1317,7 @@ sub append_ident_to_namebuf(uword id) {
         if j >= n {
             break
         }
-        name_buf[(name_len as ubyte)] = peek($8300 + (off + j))
+        name_buf[(name_len as ubyte)] = peek($8100 + (off + j))
         name_len = name_len + 1
         j = j + 1
     }
@@ -1336,7 +1335,7 @@ sub append_ident_to_pathbuf(uword id) {
         if j >= n {
             break
         }
-        path_buf[(path_len as ubyte)] = peek($8300 + (off + j))
+        path_buf[(path_len as ubyte)] = peek($8100 + (off + j))
         path_len = path_len + 1
         j = j + 1
     }
@@ -1391,8 +1390,8 @@ sub close_index() {
     if cur_kind() == TK_DOT {
         if peek1_kind() == TK_IDENT {
             advance()
-            pokew($bb48 + ((node) << 1), cur_val())
-            poke($b10c + (node), 1)
+            pokew($b7e0 + ((node) << 1), cur_val())
+            poke($a9d0 + (node), 1)
             advance()
         }
     }
@@ -1685,7 +1684,7 @@ sub parse_var_decl() -> uword {
     }
     uword node
     node = new_node(ND_VARDECL, tag, nameid, init)
-    pokew($bb48 + ((node) << 1), arrsize)
+    pokew($b7e0 + ((node) << 1), arrsize)
     return node
 }
 
@@ -1966,15 +1965,15 @@ sub parse_block() -> uword {
             } else {
                 if kind == FR_ELSE {
                     node = new_node(ND_IF, 0, fr_cond[(fi as ubyte)], fr_then[(fi as ubyte)])
-                    pokew($bb48 + ((node) << 1), block)
+                    pokew($b7e0 + ((node) << 1), block)
                 } else {
                     if kind == FR_WHILE {
                         node = new_node(ND_WHILE, 0, fr_cond[(fi as ubyte)], block)
                     } else {
                         if kind == FR_FOR {
                             node = new_node(ND_FOR, 0, fr_var[(fi as ubyte)], fr_lo[(fi as ubyte)])
-                            pokew($bb48 + ((node) << 1), fr_hi[(fi as ubyte)])
-                            pokew($bf60 + ((node) << 1), block)
+                            pokew($b7e0 + ((node) << 1), fr_hi[(fi as ubyte)])
+                            pokew($bd80 + ((node) << 1), block)
                         } else {
                             ; FR_REPEAT
                             node = new_node(ND_REPEAT, 0, fr_cond[(fi as ubyte)], block)
@@ -2020,9 +2019,9 @@ sub parse_block() -> uword {
 ; 0=none, 1=A, 2=X, 3=Y, 4=AY.
 sub reg_code(uword id) -> ubyte {
     ubyte b0
-    b0 = peek($8300 + (id))
+    b0 = peek($8100 + (id))
     if b0 == 'A' {
-        if peek($8300 + (id + 1)) == 'Y' { return 4 }
+        if peek($8100 + (id + 1)) == 'Y' { return 4 }
         return 1
     }
     if b0 == 'X' { return 2 }
@@ -2100,8 +2099,8 @@ sub parse_sub(ubyte kind) -> uword {
     body = parse_block()
     uword node
     node = new_node(ND_SUB, kind, nameid, params)
-    pokew($bb48 + ((node) << 1), body)
-    pokew($bf60 + ((node) << 1), retpacked)
+    pokew($b7e0 + ((node) << 1), body)
+    pokew($bd80 + ((node) << 1), retpacked)
     return node
 }
 
@@ -2203,8 +2202,8 @@ sub parse_asmsub() -> uword {
     body = parse_block()
     uword bnode
     bnode = new_node(ND_SUB, SUBK_ASMSUB_BODY, nameid, params)
-    pokew($bb48 + ((bnode) << 1), body)
-    pokew($bf60 + ((bnode) << 1), retpacked)
+    pokew($b7e0 + ((bnode) << 1), body)
+    pokew($bd80 + ((bnode) << 1), retpacked)
     return bnode
 }
 
@@ -2224,8 +2223,8 @@ sub parse_extsub() -> uword {
     retpacked = parse_ret()
     uword node
     node = new_node(ND_SUB, SUBK_ASMSUB, nameid, params)
-    pokew($bb48 + ((node) << 1), addr)
-    pokew($bf60 + ((node) << 1), retpacked)
+    pokew($b7e0 + ((node) << 1), addr)
+    pokew($bd80 + ((node) << 1), retpacked)
     return node
 }
 
@@ -2236,10 +2235,10 @@ sub is_struct_name(uword id) -> ubyte {
         if cell == 0 {
             return 0
         }
-        if peekw($b318 + ((peekw($c378 + ((cell) << 1))) << 1)) == id {
+        if peekw($aca0 + ((peekw($c320 + ((cell) << 1))) << 1)) == id {
             return 1
         }
-        cell = peekw($c598 + ((cell) << 1))
+        cell = peekw($c540 + ((cell) << 1))
     }
 }
 
@@ -2260,8 +2259,8 @@ sub parse_struct_var() -> uword {
     advance()                               ; instance name
     uword node
     node = new_node(ND_VARDECL, TY_STRUCT, nameid, 0)
-    pokew($bb48 + ((node) << 1), arrsize)
-    pokew($bf60 + ((node) << 1), sname)
+    pokew($b7e0 + ((node) << 1), arrsize)
+    pokew($bd80 + ((node) << 1), sname)
     return node
 }
 
@@ -2487,8 +2486,8 @@ sub parse_main() -> uword {
     body = parse_block()
     uword node
     node = new_node(ND_SUB, SUBK_MAIN, nameid, 0)
-    pokew($bb48 + ((node) << 1), body)
-    pokew($bf60 + ((node) << 1), TY_VOID)
+    pokew($b7e0 + ((node) << 1), body)
+    pokew($bd80 + ((node) << 1), TY_VOID)
     return node
 }
 
@@ -2531,7 +2530,7 @@ sub out_ident_text(uword id) {
         if j >= n {
             break
         }
-        out_byte(peek($8300 + (off + j)))
+        out_byte(peek($8100 + (off + j)))
         j = j + 1
     }
 }
@@ -2540,23 +2539,23 @@ sub out_ident_text(uword id) {
 
 sub emit_sym_mangled(uword si) {
     ; arrays live in main memory under a p8a_ label; everything else is p8v_.
-    if peekw($e93c + ((si) << 1)) != 0 {
+    if peekw($e8e4 + ((si) << 1)) != 0 {
         out_text("p8a_")
-        out_ident_text(peekw($c7b8 + ((si) << 1)))
+        out_ident_text(peekw($c760 + ((si) << 1)))
         return
     }
     out_text("p8v_")
-    if peek($dd0c + (si)) == 0 {
-        out_ident_text(peekw($c7b8 + ((si) << 1)))
+    if peek($dcb4 + (si)) == 0 {
+        out_ident_text(peekw($c760 + ((si) << 1)))
         return
     }
-    out_ident_text(peekw($d6f4 + ((si) << 1)))
-    if peek($dd0c + (si)) == 1 {
+    out_ident_text(peekw($d69c + ((si) << 1)))
+    if peek($dcb4 + (si)) == 1 {
         out_text("_arg_")
     } else {
         out_byte('_')
     }
-    out_ident_text(peekw($c7b8 + ((si) << 1)))
+    out_ident_text(peekw($c760 + ((si) << 1)))
 }
 ; emit a var reference by ident, resolved in the current scope.
 
@@ -2571,8 +2570,8 @@ sub reverse_cons(uword head) -> uword {
         if cell == 0 {
             break
         }
-        rev = cons_prepend(rev, peekw($c378 + ((cell) << 1)))
-        cell = peekw($c598 + ((cell) << 1))
+        rev = cons_prepend(rev, peekw($c320 + ((cell) << 1)))
+        cell = peekw($c540 + ((cell) << 1))
     }
     return rev
 }
@@ -2591,8 +2590,8 @@ sub reverse_cons_ip(uword head) -> uword {
             break
         }
         uword nxt
-        nxt = peekw($c598 + ((cell) << 1))
-        pokew($c598 + ((cell) << 1), prev)
+        nxt = peekw($c540 + ((cell) << 1))
+        pokew($c540 + ((cell) << 1), prev)
         prev = cell
         cell = nxt
     }
@@ -2614,8 +2613,8 @@ sub find_sym(uword identid) -> uword {
         if i >= sym_count {
             break
         }
-        if peekw($c7b8 + ((i) << 1)) == identid {
-            if peekw($d6f4 + ((i) << 1)) == cur_scope {
+        if peekw($c760 + ((i) << 1)) == identid {
+            if peekw($d69c + ((i) << 1)) == cur_scope {
                 return i
             }
         }
@@ -2626,8 +2625,8 @@ sub find_sym(uword identid) -> uword {
         if i >= sym_count {
             break
         }
-        if peekw($c7b8 + ((i) << 1)) == identid {
-            if peekw($d6f4 + ((i) << 1)) == 0 {
+        if peekw($c760 + ((i) << 1)) == identid {
+            if peekw($d69c + ((i) << 1)) == 0 {
                 return i
             }
         }
@@ -2651,27 +2650,27 @@ sub build_symbols() {
             break
         }
         uword vd
-        vd = peekw($c378 + ((cell) << 1))
-        if peek($af00 + (vd)) == ND_VARDECL {
-            if peekw($bb48 + ((vd) << 1)) == 0 {               ; scalar (not an array)
+        vd = peekw($c320 + ((cell) << 1))
+        if peek($a700 + (vd)) == ND_VARDECL {
+            if peekw($b7e0 + ((vd) << 1)) == 0 {               ; scalar (not an array)
                 ubyte tag
-                tag = peek($b10c + (vd))
+                tag = peek($a9d0 + (vd))
                 if tag <= TY_UWORD {           ; ubyte / byte / uword
                     ubyte sz
                     sz = 1
                     if tag == TY_UWORD { sz = 2 }
-                    pokew($c7b8 + ((sym_count) << 1), peekw($b318 + ((vd) << 1)))
-                    poke($cdd0 + (sym_count), tag)
-                    pokew($d6f4 + ((sym_count) << 1), 0)
-                    poke($dd0c + (sym_count), 0)
-                    poke($e018 + (sym_count), 0)
-                    pokew($e93c + ((sym_count) << 1), 0)
+                    pokew($c760 + ((sym_count) << 1), peekw($aca0 + ((vd) << 1)))
+                    poke($cd78 + (sym_count), tag)
+                    pokew($d69c + ((sym_count) << 1), 0)
+                    poke($dcb4 + (sym_count), 0)
+                    poke($dfc0 + (sym_count), 0)
+                    pokew($e8e4 + ((sym_count) << 1), 0)
                     ; ZP runs $40..$FF; a scalar that won't fit overflows into
                     ; main memory (sentinel $FFFF -> emit_memvars), matching p8c.
                     if zp_next + sz > $ff {
-                        pokew($d0dc + ((sym_count) << 1), $ffff)
+                        pokew($d084 + ((sym_count) << 1), $ffff)
                     } else {
-                        pokew($d0dc + ((sym_count) << 1), zp_next)
+                        pokew($d084 + ((sym_count) << 1), zp_next)
                         zp_next = zp_next + sz
                     }
                     sym_count = sym_count + 1
@@ -2687,14 +2686,14 @@ sub build_symbols() {
                         bt = TY_UBYTE
                         if tag == TY_CONST_BYTE { bt = TY_BYTE }
                         if tag == TY_CONST_UWORD { bt = TY_UWORD }
-                        pokew($c7b8 + ((sym_count) << 1), peekw($b318 + ((vd) << 1)))
-                        poke($cdd0 + (sym_count), bt)
-                        pokew($d0dc + ((sym_count) << 1), 0)
-                        pokew($d6f4 + ((sym_count) << 1), 0)
-                        poke($dd0c + (sym_count), 0)
-                        poke($e018 + (sym_count), 1)
-                        pokew($e324 + ((sym_count) << 1), peekw($b318 + ((peekw($b730 + ((vd) << 1))) << 1)))
-                        pokew($e93c + ((sym_count) << 1), 0)
+                        pokew($c760 + ((sym_count) << 1), peekw($aca0 + ((vd) << 1)))
+                        poke($cd78 + (sym_count), bt)
+                        pokew($d084 + ((sym_count) << 1), 0)
+                        pokew($d69c + ((sym_count) << 1), 0)
+                        poke($dcb4 + (sym_count), 0)
+                        poke($dfc0 + (sym_count), 1)
+                        pokew($e2cc + ((sym_count) << 1), peekw($aca0 + ((peekw($b240 + ((vd) << 1))) << 1)))
+                        pokew($e8e4 + ((sym_count) << 1), 0)
                         sym_count = sym_count + 1
                     }
                 }
@@ -2703,20 +2702,20 @@ sub build_symbols() {
                 ; block (p8a_<name>) in main memory, not ZP. Element type tag in
                 ; node_op, count in node_c. (Only ubyte/uword element types.)
                 ubyte etag
-                etag = peek($b10c + (vd))
+                etag = peek($a9d0 + (vd))
                 if etag <= TY_UWORD {
-                    pokew($c7b8 + ((sym_count) << 1), peekw($b318 + ((vd) << 1)))
-                    poke($cdd0 + (sym_count), etag)
-                    pokew($d0dc + ((sym_count) << 1), 0)
-                    pokew($d6f4 + ((sym_count) << 1), 0)
-                    poke($dd0c + (sym_count), 0)
-                    poke($e018 + (sym_count), 0)
-                    pokew($e93c + ((sym_count) << 1), peekw($bb48 + ((vd) << 1)))
+                    pokew($c760 + ((sym_count) << 1), peekw($aca0 + ((vd) << 1)))
+                    poke($cd78 + (sym_count), etag)
+                    pokew($d084 + ((sym_count) << 1), 0)
+                    pokew($d69c + ((sym_count) << 1), 0)
+                    poke($dcb4 + (sym_count), 0)
+                    poke($dfc0 + (sym_count), 0)
+                    pokew($e8e4 + ((sym_count) << 1), peekw($b7e0 + ((vd) << 1)))
                     sym_count = sym_count + 1
                 }
             }
         }
-        cell = peekw($c598 + ((cell) << 1))
+        cell = peekw($c540 + ((cell) << 1))
     }
 }
 
@@ -2734,9 +2733,9 @@ sub emit_zp_bindings() {
         if j >= sym_count {
             break
         }
-        if peek($e018 + (j)) == 0 {
-            if peekw($e93c + ((j) << 1)) == 0 {
-                if peekw($d0dc + ((j) << 1)) < $0100 {     ; real ZP only
+        if peek($dfc0 + (j)) == 0 {
+            if peekw($e8e4 + ((j) << 1)) == 0 {
+                if peekw($d084 + ((j) << 1)) < $0100 {     ; real ZP only
                     any = 1
                     break
                 }
@@ -2755,12 +2754,12 @@ sub emit_zp_bindings() {
         if i >= sym_count {
             break
         }
-        if peek($e018 + (i)) == 0 {
-            if peekw($e93c + ((i) << 1)) == 0 {
-                if peekw($d0dc + ((i) << 1)) < $0100 {     ; skip $ffff overflow + $fffe reg
+        if peek($dfc0 + (i)) == 0 {
+            if peekw($e8e4 + ((i) << 1)) == 0 {
+                if peekw($d084 + ((i) << 1)) < $0100 {     ; skip $ffff overflow + $fffe reg
                     emit_sym_mangled(i)
                     out_text(" = $")
-                    out_hex2(lsb(peekw($d0dc + ((i) << 1))))
+                    out_hex2(lsb(peekw($d084 + ((i) << 1))))
                     o_nl()
                 }
             }
@@ -2782,9 +2781,9 @@ sub emit_memvars() {
         if j >= sym_count {
             break
         }
-        if peekw($e93c + ((j) << 1)) == 0 {
-            if peek($e018 + (j)) == 0 {
-                if peekw($d0dc + ((j) << 1)) == $ffff {
+        if peekw($e8e4 + ((j) << 1)) == 0 {
+            if peek($dfc0 + (j)) == 0 {
+                if peekw($d084 + ((j) << 1)) == $ffff {
                     any = 1
                     break
                 }
@@ -2804,14 +2803,14 @@ sub emit_memvars() {
         if i >= sym_count {
             break
         }
-        if peekw($e93c + ((i) << 1)) == 0 {
-            if peek($e018 + (i)) == 0 {
-                if peekw($d0dc + ((i) << 1)) == $ffff {
+        if peekw($e8e4 + ((i) << 1)) == 0 {
+            if peek($dfc0 + (i)) == 0 {
+                if peekw($d084 + ((i) << 1)) == $ffff {
                     emit_sym_mangled(i)
                     out_byte(':')
                     o_nl()
                     out_text("  .byte 0")
-                    if peek($cdd0 + (i)) == TY_UWORD {
+                    if peek($cd78 + (i)) == TY_UWORD {
                         out_text(", 0")
                     }
                     o_nl()
@@ -2868,26 +2867,26 @@ sub push_walk_block(uword blk) {
         return
     }
     uword cell
-    cell = peekw($b318 + ((blk) << 1))
+    cell = peekw($aca0 + ((blk) << 1))
     repeat {
         if cell == 0 {
             break
         }
-        sws_a[(sws_sp as ubyte)] = peekw($c378 + ((cell) << 1))
+        sws_a[(sws_sp as ubyte)] = peekw($c320 + ((cell) << 1))
         sws_sp = sws_sp + 1
-        cell = peekw($c598 + ((cell) << 1))
+        cell = peekw($c540 + ((cell) << 1))
     }
 }
 
 sub push_walk_when(uword st) {
     uword cell
-    cell = peekw($b730 + ((st) << 1))
+    cell = peekw($b240 + ((st) << 1))
     repeat {
         if cell == 0 {
             break
         }
-        push_walk_block(peekw($b730 + ((peekw($c378 + ((cell) << 1))) << 1)))
-        cell = peekw($c598 + ((cell) << 1))
+        push_walk_block(peekw($b240 + ((peekw($c320 + ((cell) << 1))) << 1)))
+        cell = peekw($c540 + ((cell) << 1))
     }
 }
 ; allocate a sub's local vardecls (p8v_<sub>_<name>), in p8c's _walk_block
@@ -2905,25 +2904,25 @@ sub walk_locals(uword body, uword subname) {
         uword st
         st = sws_a[(sws_sp as ubyte)]
         ubyte k
-        k = peek($af00 + (st))
+        k = peek($a700 + (st))
         if k == ND_VARDECL {
-            if peekw($bb48 + ((st) << 1)) == 0 {               ; scalar (not an array)
+            if peekw($b7e0 + ((st) << 1)) == 0 {               ; scalar (not an array)
                 ubyte tag
-                tag = peek($b10c + (st))
+                tag = peek($a9d0 + (st))
                 if tag <= TY_UWORD {
                     ubyte sz
                     sz = 1
                     if tag == TY_UWORD { sz = 2 }
-                    pokew($c7b8 + ((sym_count) << 1), peekw($b318 + ((st) << 1)))
-                    poke($cdd0 + (sym_count), tag)
-                    pokew($d6f4 + ((sym_count) << 1), subname)
-                    poke($dd0c + (sym_count), 2)
-                    poke($e018 + (sym_count), 0)
-                    pokew($e93c + ((sym_count) << 1), 0)
+                    pokew($c760 + ((sym_count) << 1), peekw($aca0 + ((st) << 1)))
+                    poke($cd78 + (sym_count), tag)
+                    pokew($d69c + ((sym_count) << 1), subname)
+                    poke($dcb4 + (sym_count), 2)
+                    poke($dfc0 + (sym_count), 0)
+                    pokew($e8e4 + ((sym_count) << 1), 0)
                     if zp_next + sz > $ff {
-                        pokew($d0dc + ((sym_count) << 1), $ffff)
+                        pokew($d084 + ((sym_count) << 1), $ffff)
                     } else {
-                        pokew($d0dc + ((sym_count) << 1), zp_next)
+                        pokew($d084 + ((sym_count) << 1), zp_next)
                         zp_next = zp_next + sz
                     }
                     sym_count = sym_count + 1
@@ -2931,17 +2930,17 @@ sub walk_locals(uword body, uword subname) {
             }
         }
         if k == ND_IF {
-            push_walk_block(peekw($bb48 + ((st) << 1)))         ; else (bottom)
-            push_walk_block(peekw($b730 + ((st) << 1)))         ; then (top)
+            push_walk_block(peekw($b7e0 + ((st) << 1)))         ; else (bottom)
+            push_walk_block(peekw($b240 + ((st) << 1)))         ; then (top)
         }
         if k == ND_WHILE {
-            push_walk_block(peekw($b730 + ((st) << 1)))
+            push_walk_block(peekw($b240 + ((st) << 1)))
         }
         if k == ND_FOR {
-            push_walk_block(peekw($bf60 + ((st) << 1)))
+            push_walk_block(peekw($bd80 + ((st) << 1)))
         }
         if k == ND_REPEAT {
-            push_walk_block(peekw($b730 + ((st) << 1)))
+            push_walk_block(peekw($b240 + ((st) << 1)))
         }
         if k == ND_WHEN {
             push_walk_when(st)
@@ -2995,20 +2994,20 @@ sub register_subs() {
         }
         if issub != 0 {
             ubyte sk
-            sk = peek($b10c + (snode))
-            sub_name[(sub_count as ubyte)] = peekw($b318 + ((snode) << 1))
+            sk = peek($a9d0 + (snode))
+            sub_name[(sub_count as ubyte)] = peekw($aca0 + ((snode) << 1))
             sub_kind[(sub_count as ubyte)] = sk
-            sub_ret[(sub_count as ubyte)] = lsb(peekw($bf60 + ((snode) << 1)))
+            sub_ret[(sub_count as ubyte)] = lsb(peekw($bd80 + ((snode) << 1)))
             sub_addr[(sub_count as ubyte)] = 0
             if sk == SUBK_ASMSUB {
-                sub_addr[(sub_count as ubyte)] = peekw($bb48 + ((snode) << 1))   ; node_c is the $F0xx addr
+                sub_addr[(sub_count as ubyte)] = peekw($b7e0 + ((snode) << 1))   ; node_c is the $F0xx addr
             }
             sub_count = sub_count + 1
             ; allocate this sub's params (source order), continuing zp_next.
             ; a register-ABI param (reg code in ND_PARAM node_b) gets NO storage
             ; (the call passes it in a register); the reg code rides sym_cval.
             uword phead
-            phead = reverse_cons(peekw($b730 + ((snode) << 1)))
+            phead = reverse_cons(peekw($b240 + ((snode) << 1)))
             uword pcell
             pcell = phead
             repeat {
@@ -3016,39 +3015,39 @@ sub register_subs() {
                     break
                 }
                 uword pnode
-                pnode = peekw($c378 + ((pcell) << 1))
+                pnode = peekw($c320 + ((pcell) << 1))
                 ubyte ptag
-                ptag = peek($b10c + (pnode))
+                ptag = peek($a9d0 + (pnode))
                 ubyte preg
-                preg = lsb(peekw($b730 + ((pnode) << 1)))
+                preg = lsb(peekw($b240 + ((pnode) << 1)))
                 ubyte psz
                 psz = 1
                 if ptag == TY_UWORD { psz = 2 }
-                pokew($c7b8 + ((sym_count) << 1), peekw($b318 + ((pnode) << 1)))
-                poke($cdd0 + (sym_count), ptag)
-                pokew($d6f4 + ((sym_count) << 1), peekw($b318 + ((snode) << 1)))
-                poke($dd0c + (sym_count), 1)
-                poke($e018 + (sym_count), 0)
-                pokew($e324 + ((sym_count) << 1), preg)
-                pokew($e93c + ((sym_count) << 1), 0)
+                pokew($c760 + ((sym_count) << 1), peekw($aca0 + ((pnode) << 1)))
+                poke($cd78 + (sym_count), ptag)
+                pokew($d69c + ((sym_count) << 1), peekw($aca0 + ((snode) << 1)))
+                poke($dcb4 + (sym_count), 1)
+                poke($dfc0 + (sym_count), 0)
+                pokew($e2cc + ((sym_count) << 1), preg)
+                pokew($e8e4 + ((sym_count) << 1), 0)
                 if preg != 0 {
-                    pokew($d0dc + ((sym_count) << 1), $fffe)   ; reg param: no storage
+                    pokew($d084 + ((sym_count) << 1), $fffe)   ; reg param: no storage
                 } else {
                     if zp_next + psz > $ff {
-                        pokew($d0dc + ((sym_count) << 1), $ffff)
+                        pokew($d084 + ((sym_count) << 1), $ffff)
                     } else {
-                        pokew($d0dc + ((sym_count) << 1), zp_next)
+                        pokew($d084 + ((sym_count) << 1), zp_next)
                         zp_next = zp_next + psz
                     }
                 }
                 sym_count = sym_count + 1
-                pcell = peekw($c598 + ((pcell) << 1))
+                pcell = peekw($c540 + ((pcell) << 1))
             }
             ; then this sub's locals (walk the body), continuing zp_next.
             ; (asmsubs have no var locals -- raw asm body / address -- so skip.)
             if sk != SUBK_ASMSUB {
                 if sk != SUBK_ASMSUB_BODY {
-                    walk_locals(peekw($bb48 + ((snode) << 1)), peekw($b318 + ((snode) << 1)))
+                    walk_locals(peekw($b7e0 + ((snode) << 1)), peekw($aca0 + ((snode) << 1)))
                 }
             }
             reset_nodes()
@@ -3066,18 +3065,18 @@ sub dump_global() {
     uword rc
     rc = 0
     i = 0
-    repeat { if i >= sym_count { break } if peekw($d6f4 + ((i) << 1)) == 0 { rc = rc + 1 } else { if peek($dd0c + (i)) == 1 { rc = rc + 1 } } i = i + 1 }
+    repeat { if i >= sym_count { break } if peekw($d69c + ((i) << 1)) == 0 { rc = rc + 1 } else { if peek($dcb4 + (i)) == 1 { rc = rc + 1 } } i = i + 1 }
     d16(rc)
     i = 0
     repeat {
         if i >= sym_count { break }
         ubyte keep
         keep = 0
-        if peekw($d6f4 + ((i) << 1)) == 0 { keep = 1 }
-        if peek($dd0c + (i)) == 1 { keep = 1 }
+        if peekw($d69c + ((i) << 1)) == 0 { keep = 1 }
+        if peek($dcb4 + (i)) == 1 { keep = 1 }
         if keep != 0 {
-            d16(peekw($c7b8 + ((i) << 1))) out_byte(peek($cdd0 + (i))) d16(peekw($d0dc + ((i) << 1))) d16(peekw($d6f4 + ((i) << 1)))
-            out_byte(peek($dd0c + (i))) out_byte(peek($e018 + (i))) d16(peekw($e324 + ((i) << 1))) d16(peekw($e93c + ((i) << 1)))
+            d16(peekw($c760 + ((i) << 1))) out_byte(peek($cd78 + (i))) d16(peekw($d084 + ((i) << 1))) d16(peekw($d69c + ((i) << 1)))
+            out_byte(peek($dcb4 + (i))) out_byte(peek($dfc0 + (i))) d16(peekw($e2cc + ((i) << 1))) d16(peekw($e8e4 + ((i) << 1)))
         }
         i = i + 1
     }
@@ -3090,10 +3089,10 @@ sub dump_global() {
     }
     d16(ident_pool_len)
     i = 0
-    repeat { if i >= ident_pool_len { break } out_byte(peek($8300 + (i))) i = i + 1 }
+    repeat { if i >= ident_pool_len { break } out_byte(peek($8100 + (i))) i = i + 1 }
     d16(str_pool_len)
     i = 0
-    repeat { if i >= str_pool_len { break } out_byte(peek($9b00 + (i))) i = i + 1 }
+    repeat { if i >= str_pool_len { break } out_byte(peek($9700 + (i))) i = i + 1 }
 }
 ; one sub's AST record: kind(1) snode(2) node_count(2) nodes cons_count(2) cons.
 sub dump_record(ubyte kind, uword snode) {
@@ -3101,19 +3100,19 @@ sub dump_record(ubyte kind, uword snode) {
     d16(snode)
     uword i
     uword nm
-    nm = peekw($b318 + ((snode) << 1))
+    nm = peekw($aca0 + ((snode) << 1))
     uword lc
     lc = 0
     i = 0
-    repeat { if i >= sym_count { break } if peekw($d6f4 + ((i) << 1)) == nm { if peek($dd0c + (i)) == 2 { lc = lc + 1 } } i = i + 1 }
+    repeat { if i >= sym_count { break } if peekw($d69c + ((i) << 1)) == nm { if peek($dcb4 + (i)) == 2 { lc = lc + 1 } } i = i + 1 }
     d16(lc)
     i = 0
     repeat {
         if i >= sym_count { break }
-        if peekw($d6f4 + ((i) << 1)) == nm {
-            if peek($dd0c + (i)) == 2 {
-                d16(peekw($c7b8 + ((i) << 1))) out_byte(peek($cdd0 + (i))) d16(peekw($d0dc + ((i) << 1))) d16(peekw($d6f4 + ((i) << 1)))
-                out_byte(peek($dd0c + (i))) out_byte(peek($e018 + (i))) d16(peekw($e324 + ((i) << 1))) d16(peekw($e93c + ((i) << 1)))
+        if peekw($d69c + ((i) << 1)) == nm {
+            if peek($dcb4 + (i)) == 2 {
+                d16(peekw($c760 + ((i) << 1))) out_byte(peek($cd78 + (i))) d16(peekw($d084 + ((i) << 1))) d16(peekw($d69c + ((i) << 1)))
+                out_byte(peek($dcb4 + (i))) out_byte(peek($dfc0 + (i))) d16(peekw($e2cc + ((i) << 1))) d16(peekw($e8e4 + ((i) << 1)))
             }
         }
         i = i + 1
@@ -3122,21 +3121,21 @@ sub dump_record(ubyte kind, uword snode) {
     i = 0
     repeat {
         if i >= node_count { break }
-        out_byte(peek($af00 + (i))) out_byte(peek($b10c + (i)))
-        d16(peekw($b318 + ((i) << 1))) d16(peekw($b730 + ((i) << 1))) d16(peekw($bb48 + ((i) << 1))) d16(peekw($bf60 + ((i) << 1)))
+        out_byte(peek($a700 + (i))) out_byte(peek($a9d0 + (i)))
+        d16(peekw($aca0 + ((i) << 1))) d16(peekw($b240 + ((i) << 1))) d16(peekw($b7e0 + ((i) << 1))) d16(peekw($bd80 + ((i) << 1)))
         i = i + 1
     }
     d16(cons_count)
     i = 0
     repeat {
         if i >= cons_count { break }
-        d16(peekw($c378 + ((i) << 1))) d16(peekw($c598 + ((i) << 1)))
+        d16(peekw($c320 + ((i) << 1))) d16(peekw($c540 + ((i) << 1)))
         i = i + 1
     }
 }
 
 
-sub start() {
+main {
     uword fn
     fn = sys_argv(0)
     src_hand = sys_open(fn)
@@ -3194,7 +3193,7 @@ sub start() {
                         snode = parse_asmsub()
                         ; inline-body asmsubs stream a record (emitted in pass B);
                         ; the `= $ADDR` decl form has no body, so no record.
-                        if peek($b10c + (snode)) == SUBK_ASMSUB_BODY {
+                        if peek($a9d0 + (snode)) == SUBK_ASMSUB_BODY {
                             dump_record(1, snode)
                         }
                     } else {
@@ -3213,4 +3212,4 @@ sub start() {
     sys_close(src_hand)
     sys_close(dst_hand)
 }
-}
+
