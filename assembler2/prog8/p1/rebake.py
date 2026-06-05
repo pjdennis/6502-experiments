@@ -14,8 +14,12 @@ Packing order = current ascending base order (= declaration order).
 import re, sys
 
 path = sys.argv[1]
+tight = False
 overrides = {}
 for a in sys.argv[2:]:
+    if a == "--tight":            # pack the bottom slab to $F000-total (no page-align)
+        tight = True
+        continue
     n, v = a.split("=")
     overrides[n] = int(v, 0)
 
@@ -35,7 +39,7 @@ for n, v in overrides.items():
     size[n] = v
 
 total = sum(size[n] for n in order)
-floor = (IO - total) & 0xFF00
+floor = (IO - total) if tight else ((IO - total) & 0xFF00)
 newbase = {}
 addr = floor
 for n in order:

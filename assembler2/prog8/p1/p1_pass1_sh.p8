@@ -1415,11 +1415,100 @@ sub close_call() {
     push_operand(node)
 }
 
+; parser shunting-yard state shared with parse_operand (promoted from
+; parse_expr locals so the operand cases can live in their own sub, keeping
+; each sub's node count under the per-sub arena cap).
+ubyte expect_operand
+ubyte index_ok
+
+; the operand-position cases of parse_expr's shunting yard (leaf operands and
+; prefix operators). Returns 1 if the current token is not a valid operand
+; start (caller breaks the expression loop), else 0 (caller continues).
+sub parse_operand(ubyte t) -> ubyte {
+    index_ok = 0
+    if t == TK_INT {
+        push_operand(new_node(ND_INT, 0, cur_val(), 0))
+        advance()
+        expect_operand = 0
+        return 0
+    }
+    if t == TK_STR {
+        push_operand(new_node(ND_STR, 0, cur_val(), 0))
+        advance()
+        expect_operand = 0
+        return 0
+    }
+    if t == TK_TRUE {
+        push_operand(new_node(ND_BOOL, 0, 1, 0))
+        advance()
+        expect_operand = 0
+        return 0
+    }
+    if t == TK_FALSE {
+        push_operand(new_node(ND_BOOL, 0, 0, 0))
+        advance()
+        expect_operand = 0
+        return 0
+    }
+    if t == TK_KNOT {
+        push_op(OPK_UNOP, UN_NOT, 0)
+        advance()
+        return 0
+    }
+    if t == TK_TILDE {
+        push_op(OPK_UNOP, UN_INV, 0)
+        advance()
+        return 0
+    }
+    if t == TK_MINUS {
+        push_op(OPK_UNOP, UN_NEG, 0)
+        advance()
+        return 0
+    }
+    if t == TK_AMP {
+        advance()
+        if cur_kind() == TK_IDENT {
+            uword nid
+            nid = cur_val()
+            advance()
+            push_operand(new_node(ND_ADDROF, 0, nid, 0))
+            expect_operand = 0
+        }
+        return 0
+    }
+    if t == TK_AT {
+        advance()
+        if cur_kind() == TK_LPAREN {
+            advance()
+        }
+        push_marker(OPK_MEMAT, operand_sp)
+        return 0
+    }
+    if t == TK_LPAREN {
+        push_marker(OPK_LPAREN, operand_sp)
+        advance()
+        return 0
+    }
+    if t == TK_IDENT {
+        uword path
+        path = read_dotted_path()
+        if cur_kind() == TK_LPAREN {
+            advance()
+            push_marker(OPK_CALL, operand_sp)
+            op_a[(op_sp - 1 as ubyte)] = path
+        } else {
+            push_operand(new_node(ND_IDENT, 0, path, 0))
+            expect_operand = 0
+            index_ok = 1
+        }
+        return 0
+    }
+    return 1
+}
+
 sub parse_expr() -> uword {
     operand_sp = 0
     op_sp = 0
-    ubyte expect_operand
-    ubyte index_ok
     expect_operand = 1
     index_ok = 0
 
@@ -1489,85 +1578,10 @@ sub parse_expr() -> uword {
         }
 
         if expect_operand != 0 {
-            index_ok = 0
-            if t == TK_INT {
-                push_operand(new_node(ND_INT, 0, cur_val(), 0))
-                advance()
-                expect_operand = 0
-                continue
+            if parse_operand(t) != 0 {
+                break
             }
-            if t == TK_STR {
-                push_operand(new_node(ND_STR, 0, cur_val(), 0))
-                advance()
-                expect_operand = 0
-                continue
-            }
-            if t == TK_TRUE {
-                push_operand(new_node(ND_BOOL, 0, 1, 0))
-                advance()
-                expect_operand = 0
-                continue
-            }
-            if t == TK_FALSE {
-                push_operand(new_node(ND_BOOL, 0, 0, 0))
-                advance()
-                expect_operand = 0
-                continue
-            }
-            if t == TK_KNOT {
-                push_op(OPK_UNOP, UN_NOT, 0)
-                advance()
-                continue
-            }
-            if t == TK_TILDE {
-                push_op(OPK_UNOP, UN_INV, 0)
-                advance()
-                continue
-            }
-            if t == TK_MINUS {
-                push_op(OPK_UNOP, UN_NEG, 0)
-                advance()
-                continue
-            }
-            if t == TK_AMP {
-                advance()
-                if cur_kind() == TK_IDENT {
-                    uword nid
-                    nid = cur_val()
-                    advance()
-                    push_operand(new_node(ND_ADDROF, 0, nid, 0))
-                    expect_operand = 0
-                }
-                continue
-            }
-            if t == TK_AT {
-                advance()
-                if cur_kind() == TK_LPAREN {
-                    advance()
-                }
-                push_marker(OPK_MEMAT, operand_sp)
-                continue
-            }
-            if t == TK_LPAREN {
-                push_marker(OPK_LPAREN, operand_sp)
-                advance()
-                continue
-            }
-            if t == TK_IDENT {
-                uword path
-                path = read_dotted_path()
-                if cur_kind() == TK_LPAREN {
-                    advance()
-                    push_marker(OPK_CALL, operand_sp)
-                    op_a[(op_sp - 1 as ubyte)] = path
-                } else {
-                    push_operand(new_node(ND_IDENT, 0, path, 0))
-                    expect_operand = 0
-                    index_ok = 1
-                }
-                continue
-            }
-            break
+            continue
         }
 
         if t == TK_KAS {
@@ -1863,6 +1877,51 @@ sub stmt_dispatch(ubyte deferflag) -> ubyte {
 ; the frame-stack block driver: parse a `{ ... }` block (and everything
 ; nested) into a Block node; returns its node id.
 
+; one iteration of a `when` body (mode 1): close the when on '}', else parse a
+; choice's value list and push its FR_CHOICE frame. Split out of parse_block to
+; keep each sub's node count under the per-sub arena cap.
+sub parse_when_choice(ubyte fi) {
+    ubyte t
+    uword node
+    t = cur_kind()
+    if t == TK_RBRACE {
+        advance()
+        node = new_node(ND_WHEN, 0, fr_cond[(fi as ubyte)], fr_choices[(fi as ubyte)])
+        ubyte df
+        df = fr_defer[(fi as ubyte)]
+        fr_sp = fr_sp - 1
+        if df != 0 {
+            node = new_node(ND_DEFER, 0, node, 0)
+        }
+        fr_attach(node)
+        return
+    }
+    uword vals
+    vals = 0
+    if t == TK_KELSE {
+        advance()
+    } else {
+        hoist_arg = parse_expr()
+        vals = cons_prepend(vals, hoist_arg)
+        repeat {
+            if cur_kind() != TK_COMMA {
+                break
+            }
+            advance()
+            hoist_arg = parse_expr()
+            vals = cons_prepend(vals, hoist_arg)
+        }
+    }
+    advance()                       ; '->'
+    advance()                       ; '{'
+    fr_kind[(fr_sp as ubyte)] = FR_CHOICE
+    fr_mode[(fr_sp as ubyte)] = 0
+    fr_stmts[(fr_sp as ubyte)] = 0
+    fr_defer[(fr_sp as ubyte)] = 0
+    fr_values[(fr_sp as ubyte)] = vals
+    fr_sp = fr_sp + 1
+}
+
 sub parse_block() -> uword {
     advance()                               ; consume opening '{'
     fr_sp = 0
@@ -1885,43 +1944,7 @@ sub parse_block() -> uword {
         uword node
 
         if fr_mode[(fi as ubyte)] == 1 {               ; when body (choices)
-            t = cur_kind()
-            if t == TK_RBRACE {
-                advance()
-                node = new_node(ND_WHEN, 0, fr_cond[(fi as ubyte)], fr_choices[(fi as ubyte)])
-                ubyte df
-                df = fr_defer[(fi as ubyte)]
-                fr_sp = fr_sp - 1
-                if df != 0 {
-                    node = new_node(ND_DEFER, 0, node, 0)
-                }
-                fr_attach(node)
-                continue
-            }
-            uword vals
-            vals = 0
-            if t == TK_KELSE {
-                advance()
-            } else {
-                hoist_arg = parse_expr()
-                vals = cons_prepend(vals, hoist_arg)
-                repeat {
-                    if cur_kind() != TK_COMMA {
-                        break
-                    }
-                    advance()
-                    hoist_arg = parse_expr()
-                    vals = cons_prepend(vals, hoist_arg)
-                }
-            }
-            advance()                       ; '->'
-            advance()                       ; '{'
-            fr_kind[(fr_sp as ubyte)] = FR_CHOICE
-            fr_mode[(fr_sp as ubyte)] = 0
-            fr_stmts[(fr_sp as ubyte)] = 0
-            fr_defer[(fr_sp as ubyte)] = 0
-            fr_values[(fr_sp as ubyte)] = vals
-            fr_sp = fr_sp + 1
+            parse_when_choice(fi)
             continue
         }
 
