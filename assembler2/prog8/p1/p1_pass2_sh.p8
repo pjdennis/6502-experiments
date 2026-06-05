@@ -190,7 +190,7 @@ ubyte src_eof
 ; fit. next_raw_token() produces one token into ntok_*.
 
 ; identifier text pool (reset per top-level unit while streaming)
-const uword ident_pool = $9f00
+const uword ident_pool = $9e00
 uword ident_pool_len
 
 ; string literal pool (null-terminated; a string's id is its start offset)
@@ -466,7 +466,7 @@ sub ident_len_at(uword id) -> uword {
     uword n
     n = 0
     repeat {
-        if peek($9f00 + (id + n)) == 0 {
+        if peek($9e00 + (id + n)) == 0 {
             break
         }
         n = n + 1
@@ -562,7 +562,7 @@ sub out_ident_text(uword id) {
         if j >= n {
             break
         }
-        out_byte(peek($9f00 + (off + j)))
+        out_byte(peek($9e00 + (off + j)))
         j = j + 1
     }
 }
@@ -3306,7 +3306,7 @@ sub ident_eq(uword identid, uword s) -> ubyte {
         if j >= n {
             return 0
         }
-        if peek($9f00 + (off + j)) != ch {
+        if peek($9e00 + (off + j)) != ch {
             return 0
         }
         j = j + 1
@@ -3783,7 +3783,7 @@ sub load_global() {
     }
     ident_pool_len = l16()
     i = 0
-    repeat { if i >= ident_pool_len { break } poke($9f00 + (i), read_src()) i = i + 1 }
+    repeat { if i >= ident_pool_len { break } poke($9e00 + (i), read_src()) i = i + 1 }
     str_pool_len = l16()
     i = 0
     repeat { if i >= str_pool_len { break } poke($b6a8 + (i), read_src()) i = i + 1 }

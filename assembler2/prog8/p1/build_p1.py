@@ -3400,10 +3400,10 @@ sub emit_subs() {{
 ; symbol-table per-sub locals arrive at later milestones.)
 main {{
     uword fn
-    fn = _argv(0)
-    src_hand = _open(fn)
-    fn = _argv(1)
-    dst_hand = _openout(fn)
+    fn = sys_argv(0)
+    src_hand = sys_open(fn)
+    fn = sys_argv(1)
+    dst_hand = sys_openout(fn)
 
     reset_arena()
     prog_address = $0200                     ; nmos default load address
@@ -3468,8 +3468,8 @@ main {{
     emit_string_pool()
     emit_trailers()
 
-    _close(src_hand)
-    _close(dst_hand)
+    sys_close(src_hand)
+    sys_close(dst_hand)
 }}
 """
 
