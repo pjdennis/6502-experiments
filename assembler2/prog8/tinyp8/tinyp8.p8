@@ -139,9 +139,9 @@ sub emit_skip_branch(ubyte op, ubyte skip_size) {
 }
 
 
-; ---- syscall asmsubs ----
-asmsub _exit(ubyte code) = $F00F
-asmsub _close(ubyte handle) = $F015
+; ---- syscall asmsubs (register ABI; emulator $F006+ stubs) ----
+extsub $F00F = sys_exit(ubyte code @A)
+extsub $F015 = sys_close(ubyte handle @A)
 
 ; ---- module-level state ----
 ubyte src_hand
@@ -306,35 +306,66 @@ sub declare_var() -> ubyte {
 ; We deliberately reference the mangled p8v_<sub>_arg_<name> slots
 ; so the wrappers see the same parameter values the caller wrote.
 
-; argv(i) -> uword: the emulator returns A=low, X=high.
-; Prog8 expects uword in A:Y; we shuffle X -> Y via A (NMOS-compatible).
-sub _argv(ubyte i) -> uword {
-    %asm{{ "lda p8v__argv_arg_i\njsr $f01e\npha\ntxa\ntay\npla\nrts" }}
+asmsub sys_argv(ubyte i @A) -> uword @AY {
+    %asm {{
+        jsr  $f01e
+        pha
+        txa
+        tay
+        pla
+        rts
+    }}
 }
 
-sub _argc() -> ubyte {
-    %asm{{ "jsr $f01b\nrts" }}
+extsub $f01b = sys_argc() -> ubyte @A
+
+asmsub sys_open(uword filename @AY) -> ubyte @A {
+    %asm {{
+        pha
+        tya
+        tax
+        pla
+        jsr  $f012
+        rts
+    }}
 }
 
-; open(uword filename) -> ubyte handle. Emulator: A=low, X=high. Our
-; uword in A:Y -- so we move Y -> X before the JSR.
-sub _open(uword filename) -> ubyte {
-    %asm{{ "lda p8v__open_arg_filename\nldx p8v__open_arg_filename+1\njsr $f012\nrts" }}
+asmsub sys_openout(uword filename @AY) -> ubyte @A {
+    %asm {{
+        pha
+        tya
+        tax
+        pla
+        jsr  $f021
+        rts
+    }}
 }
 
-sub _openout(uword filename) -> ubyte {
-    %asm{{ "lda p8v__openout_arg_filename\nldx p8v__openout_arg_filename+1\njsr $f021\nrts" }}
+asmsub sys_read_raw(ubyte handle @A) -> uword @AY {
+    %asm {{
+        jsr  $f018
+        bcc  sys_read_ok
+        lda  #0
+        ldy  #1
+        rts
+        sys_read_ok:
+        ldy  #0
+        rts
+    }}
 }
 
-; read(handle) -> byte. EOF is signalled via carry; we stash it in
-; the module-level src_eof byte (0 = data valid, 1 = EOF).
-sub _read(ubyte handle) -> ubyte {
-    %asm{{ "lda p8v__read_arg_handle\njsr $f018\nbcc .ok\nlda #1\nsta p8v_src_eof\nlda #0\nrts\n.ok:\nsta __p8c_tmp0\nlda #0\nsta p8v_src_eof\nlda __p8c_tmp0\nrts" }}
+sub sys_read(ubyte handle) -> ubyte {
+    uword r
+    r = sys_read_raw(handle)
+    src_eof = msb(r)
+    return lsb(r)
 }
 
-; write(byte, handle). Emulator: A=byte, X=handle.
-sub _write(ubyte b, ubyte handle) {
-    %asm{{ "ldx p8v__write_arg_handle\nlda p8v__write_arg_b\njsr $f024\nrts" }}
+asmsub sys_write(ubyte b @A, ubyte handle @X) {
+    %asm {{
+        jsr  $f024
+        rts
+    }}
 }
 
 
@@ -345,13 +376,13 @@ sub read_src() -> ubyte {
         peek_ok = 0
         return peek_buf
     }
-    return _read(src_hand)
+    return sys_read(src_hand)
 }
 
 sub peek_src() -> ubyte {
     if peek_ok == 0 {
         ubyte b
-        b = _read(src_hand)
+        b = sys_read(src_hand)
         if src_eof != 0 {
             return 0
         }
@@ -365,7 +396,7 @@ sub peek_src() -> ubyte {
 ; ---- destination I/O ----
 
 sub write_dst(ubyte b) {
-    _write(b, dst_hand)
+    sys_write(b, dst_hand)
     bytes_emitted = bytes_emitted + 1
 }
 
@@ -1233,10 +1264,10 @@ sub parse_if() {
 main {
     ; arg[0] = input file, arg[1] = output file
     uword fn
-    fn = _argv(0)
-    src_hand = _open(fn)
-    fn = _argv(1)
-    dst_hand = _openout(fn)
+    fn = sys_argv(0)
+    src_hand = sys_open(fn)
+    fn = sys_argv(1)
+    dst_hand = sys_openout(fn)
 
     peek_ok = 0
     src_eof = 0
@@ -1283,6 +1314,6 @@ main {
 
     emit_exit_seq()
 
-    _close(src_hand)
-    _close(dst_hand)
+    sys_close(src_hand)
+    sys_close(dst_hand)
 }

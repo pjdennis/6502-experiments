@@ -42,31 +42,68 @@ uword dec_v             ; out_dec scratch
 ubyte dec_started
 
 
-; ---- syscall asmsubs (nmos-default file I/O stubs) ----
-asmsub _exit(ubyte code) = $F00F
-asmsub _close(ubyte handle) = $F015
+; ---- syscall asmsubs (register ABI; emulator $F006+ stubs) ----
+extsub $F00F = sys_exit(ubyte code @A)
+extsub $F015 = sys_close(ubyte handle @A)
 
-; argv(i) -> uword: emulator returns A=low, X=high; Prog8 wants A:Y.
-sub _argv(ubyte i) -> uword {
-    %asm{{ "lda p8v__argv_arg_i\njsr $f01e\npha\ntxa\ntay\npla\nrts" }}
+asmsub sys_argv(ubyte i @A) -> uword @AY {
+    %asm {{
+        jsr  $f01e
+        pha
+        txa
+        tay
+        pla
+        rts
+    }}
 }
 
-sub _open(uword filename) -> ubyte {
-    %asm{{ "lda p8v__open_arg_filename\nldx p8v__open_arg_filename+1\njsr $f012\nrts" }}
+asmsub sys_open(uword filename @AY) -> ubyte @A {
+    %asm {{
+        pha
+        tya
+        tax
+        pla
+        jsr  $f012
+        rts
+    }}
 }
 
-sub _openout(uword filename) -> ubyte {
-    %asm{{ "lda p8v__openout_arg_filename\nldx p8v__openout_arg_filename+1\njsr $f021\nrts" }}
+asmsub sys_openout(uword filename @AY) -> ubyte @A {
+    %asm {{
+        pha
+        tya
+        tax
+        pla
+        jsr  $f021
+        rts
+    }}
 }
 
-; read(handle) -> byte. EOF via carry -> stash in src_eof (0=ok, 1=eof).
-sub _read(ubyte handle) -> ubyte {
-    %asm{{ "lda p8v__read_arg_handle\njsr $f018\nbcc .ok\nlda #1\nsta p8v_src_eof\nlda #0\nrts\n.ok:\nsta __p8c_tmp0\nlda #0\nsta p8v_src_eof\nlda __p8c_tmp0\nrts" }}
+asmsub sys_read_raw(ubyte handle @A) -> uword @AY {
+    %asm {{
+        jsr  $f018
+        bcc  sys_read_ok
+        lda  #0
+        ldy  #1
+        rts
+        sys_read_ok:
+        ldy  #0
+        rts
+    }}
 }
 
-; write(byte, handle). Emulator: A=byte, X=handle.
-sub _write(ubyte b, ubyte handle) {
-    %asm{{ "ldx p8v__write_arg_handle\nlda p8v__write_arg_b\njsr $f024\nrts" }}
+sub sys_read(ubyte handle) -> ubyte {
+    uword r
+    r = sys_read_raw(handle)
+    src_eof = msb(r)
+    return lsb(r)
+}
+
+asmsub sys_write(ubyte b @A, ubyte handle @X) {
+    %asm {{
+        jsr  $f024
+        rts
+    }}
 }
 
 
@@ -87,7 +124,7 @@ sub read_src() -> ubyte {
     if src_eof {
         return 0
     }
-    return _read(src_hand)
+    return sys_read(src_hand)
 }
 
 sub peek_src() -> ubyte {
@@ -98,7 +135,7 @@ sub peek_src() -> ubyte {
         return 0
     }
     ubyte b
-    b = _read(src_hand)
+    b = sys_read(src_hand)
     if src_eof {
         return 0
     }
@@ -108,7 +145,7 @@ sub peek_src() -> ubyte {
 }
 
 sub out_byte(ubyte b) {
-    _write(b, dst_hand)
+    sys_write(b, dst_hand)
 }
 
 sub out_nl() {
@@ -433,6 +470,87 @@ sub out_escaped(ubyte rb) {
     out_byte(rb)
 }
 
+; ---- raw %asm normalization (mirrors the Python oracle) ----
+; is c asm-line horizontal whitespace (stripped at line ends)?
+sub asm_ws(ubyte c) -> ubyte {
+    if c == ' ' { return 1 }
+    if c == '\t' { return 1 }
+    if c == '\r' { return 1 }
+    return 0
+}
+
+sub skip_asm_ws() {
+    repeat {
+        ubyte c
+        c = peek_src()
+        if src_eof { break }
+        if asm_ws(c) == 0 {
+            if c != '\n' { break }
+        }
+        c = read_src()
+    }
+}
+
+; A raw `%asm {{ ... }}` block (the `DIRECTIVE asm` token already emitted): skip
+; to and consume `{{`, emit the two `{` puncts, then -- if the body is a quoted
+; string (legacy form) -- return and let the main loop lex the STR + `}}`;
+; otherwise capture the body, normalize it (strip each line, drop blank lines,
+; join with '\n'), and emit it as one STR token followed by the two `}` puncts.
+sub lex_asm_raw() {
+    skip_asm_ws()
+    if peek_src() != '{' { return }          ; bare `%asm` (no body): just the directive
+    ubyte b
+    b = read_src()                           ; first '{'
+    if peek_src() != '{' {                   ; a lone `{`: emit it as a normal punct
+        emit_punct("{")
+        return
+    }
+    b = read_src()                           ; second '{'
+    emit_punct("{")
+    emit_punct("{")
+    skip_asm_ws()
+    if peek_src() == '"' {
+        return                               ; legacy quoted body: main loop lexes it
+    }
+    emit_str_head()
+    ubyte started
+    ubyte sol
+    uword sp
+    started = 0
+    sol = 1
+    sp = 0
+    repeat {
+        ubyte c
+        c = read_src()
+        if src_eof { break }
+        if c == '}' {
+            if peek_src() == '}' { c = read_src()  break }
+        }
+        if c == '\n' { sol = 1  sp = 0  continue }
+        if c == '\r' { continue }
+        if asm_ws(c) != 0 {
+            if sol == 0 { sp = sp + 1 }
+            continue
+        }
+        if sol != 0 {
+            if started != 0 { out_escaped('\n') }
+            sol = 0
+        } else {
+            repeat {
+                if sp == 0 { break }
+                out_escaped(' ')
+                sp = sp - 1
+            }
+        }
+        out_escaped(c)
+        started = 1
+    }
+    out_byte('"')
+    out_nl()
+    emit_punct("}")
+    emit_punct("}")
+}
+
 
 ; ---- composite literal lexers ----
 
@@ -661,10 +779,10 @@ sub lex_operator(ubyte c) {
 
 main {
     uword fn
-    fn = _argv(0)
-    src_hand = _open(fn)
-    fn = _argv(1)
-    dst_hand = _openout(fn)
+    fn = sys_argv(0)
+    src_hand = sys_open(fn)
+    fn = sys_argv(1)
+    dst_hand = sys_openout(fn)
 
     peek_ok = 0
     src_eof = 0
@@ -713,6 +831,14 @@ main {
                 emit_dir_head()
                 out_ident()
                 out_nl()
+                ; raw `%asm {{ ... }}` -> one normalized STR (Python-oracle parity)
+                if name_len == 3 {
+                    if name_buf[0] == 'a' {
+                        if name_buf[1] == 's' {
+                            if name_buf[2] == 'm' { lex_asm_raw() }
+                        }
+                    }
+                }
                 continue
             }
             if c2 == '0' {
@@ -786,6 +912,6 @@ main {
 
     emit_eof()
 
-    _close(src_hand)
-    _close(dst_hand)
+    sys_close(src_hand)
+    sys_close(dst_hand)
 }

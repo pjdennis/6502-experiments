@@ -28,15 +28,32 @@ ubyte[8] sb
 uword idx
 uword s
 ubyte b
-asmsub _close(ubyte handle) = $F015
-sub _argv(ubyte i) -> uword {
-    %asm{{ "lda p8v__argv_arg_i\\njsr $f01e\\npha\\ntxa\\ntay\\npla\\nrts" }}
+extsub $F015 = _close(ubyte handle @A)
+asmsub _argv(ubyte i @A) -> uword @AY {
+    %asm {{
+        jsr  $f01e
+        pha
+        txa
+        tay
+        pla
+        rts
+    }}
 }
-sub _openout(uword filename) -> ubyte {
-    %asm{{ "lda p8v__openout_arg_filename\\nldx p8v__openout_arg_filename+1\\njsr $f021\\nrts" }}
+asmsub _openout(uword filename @AY) -> ubyte @A {
+    %asm {{
+        pha
+        tya
+        tax
+        pla
+        jsr  $f021
+        rts
+    }}
 }
-sub _write(ubyte v, ubyte handle) {
-    %asm{{ "ldx p8v__write_arg_handle\\nlda p8v__write_arg_v\\njsr $f024\\nrts" }}
+asmsub _write(ubyte v @A, ubyte handle @X) {
+    %asm {{
+        jsr  $f024
+        rts
+    }}
 }
 """
 
