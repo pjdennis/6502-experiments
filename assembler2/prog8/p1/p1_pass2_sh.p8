@@ -133,6 +133,7 @@ const ubyte ND_ENUM  = 28   ; a=name id, b=members cons head
 const ubyte ND_ENUMMEMBER = 29 ; op=has_value, a=name id, b=value
 const ubyte ND_STRUCT= 30   ; a=name id, b=fields cons head
 const ubyte ND_FIELD = 31   ; op=type tag, a=field name id
+const ubyte ND_CAST  = 32   ; op=target type tag, a=operand node (expr as TYPE)
 
 ; type tags
 const ubyte TY_UBYTE = 0
@@ -1046,6 +1047,13 @@ sub emit_br(ubyte brcode, ubyte tkind, uword tid) {
 ; is a tracked gap, as in the byte comparison signedness.)
 
 sub expr_is_word(uword e) -> ubyte {
+    if peek($c3e4 + (e)) == ND_CAST {
+        ; (operand as TYPE): the cast's target type (node_op) decides.
+        if peek($c5ea + (e)) == TY_UWORD {
+            return 1
+        }
+        return 0
+    }
     if peek($c3e4 + (e)) == ND_ADDROF {
         return 1
     }
@@ -2480,6 +2488,16 @@ sub codegen_byte_expr(uword root) {
                     }
                 }
             } else {
+                if peek($c3e4 + (nd)) == ND_CAST {
+                    ; (operand as TYPE) in byte context: low byte of operand -> A.
+                    uword cop
+                    cop = peekw($c7f0 + ((nd) << 1))
+                    if expr_is_word(cop) != 0 {
+                        codegen_word_expr(cop)     ; narrow word: low byte in A
+                    } else {
+                        cws_push(0, cop, 0)        ; byte operand: eval transparently
+                    }
+                } else {
                 if peek($c3e4 + (nd)) == ND_UNOP {
                     ; eval(operand); apply-unary(op)
                     cws_push(6, 0, peek($c5ea + (nd)))
@@ -2495,6 +2513,7 @@ sub codegen_byte_expr(uword root) {
                             emit_byte_leaf_load(nd)
                         }
                     }
+                }
                 }
             }
         } else {
@@ -2949,6 +2968,22 @@ sub emit_word_arr_fast(uword asi, uword idx) {
 sub word_dispatch(uword nd) {
     ubyte k
     k = peek($c3e4 + (nd))
+    if k == ND_CAST {
+        ; (operand as TYPE) in word context (port of p8c's word-ctx Cast).
+        uword cop
+        cop = peekw($c7f0 + ((nd) << 1))
+        if peek($c5ea + (nd)) == TY_UWORD {
+            codegen_word_expr(cop)             ; widen / identity to uword
+        } else {
+            if expr_is_word(cop) != 0 {
+                codegen_word_expr(cop)         ; narrow uword -> low byte
+            } else {
+                codegen_byte_expr(cop)         ; byte operand -> A
+            }
+            out_text("  ldy #$00") o_nl()      ; high byte = 0
+        }
+        return
+    }
     if k == ND_INDEX {
         uword asi
         asi = find_sym(peekw($c7f0 + ((peekw($c7f0 + ((nd) << 1))) << 1)))
@@ -3322,6 +3357,8 @@ sub builtin_kind(uword identid) -> ubyte {
     if ident_eq(identid, "poke") != 0 { return 4 }
     if ident_eq(identid, "mkword") != 0 { return 5 }
     if ident_eq(identid, "strings.compare") != 0 { return 6 }
+    if ident_eq(identid, "peekw") != 0 { return 7 }
+    if ident_eq(identid, "pokew") != 0 { return 8 }
     return 0
 }
 ; the 1st / 2nd argument of the builtin whose callnode is on top of bi_cn.
@@ -3341,6 +3378,33 @@ sub bi_arg0() -> uword {
 sub bi_arg1() -> uword {
     return cons_val[(peekw($cbfc + ((bi_cn[(bi_sp - 1 as ubyte)]) << 1)) as ubyte)]   ; second (= head)
 }
+; compute a uword address expression into __p8c_aptr. Recognizes the slab form
+; `<int base> + <offset>` and folds the base into the final adc (matching p8c's
+; _emit_addr_into_aptr), so peek/poke/peekw/pokew on a fixed-base arena are tight.
+
+sub emit_addr_into_aptr(uword addr) {
+    if peek($c3e4 + (addr)) == ND_BINOP {
+        if peek($c5ea + (addr)) == TK_PLUS {
+            uword lhs
+            lhs = peekw($c7f0 + ((addr) << 1))
+            if peek($c3e4 + (lhs)) == ND_INT {
+                uword base
+                base = peekw($c7f0 + ((lhs) << 1))
+                codegen_word_expr(peekw($cbfc + ((addr) << 1)))   ; offset -> A:Y
+                o_clc()
+                out_text("  adc #<$") out_hex4(base) o_nl()
+                out_text("  sta __p8c_aptr") o_nl()
+                o_tya()
+                out_text("  adc #>$") out_hex4(base) o_nl()
+                out_text("  sta __p8c_aptr+1") o_nl()
+                return
+            }
+        }
+    }
+    codegen_word_expr(addr)
+    out_text("  sta __p8c_aptr") o_nl()
+    out_text("  sty __p8c_aptr+1") o_nl()
+}
 ; lower a builtin call to inline asm (port of _emit_builtin_call).
 
 sub emit_builtin(uword callnode, ubyte bk) {
@@ -3353,16 +3417,31 @@ sub emit_builtin(uword callnode, ubyte bk) {
             codegen_word_expr(bi_arg0())
             o_tya()
         } else {
-            if bk == 3 {               ; peek(literal) -> lda $XXXX
-                out_text("  lda $")
-                out_hex4(peekw($c7f0 + ((bi_arg0()) << 1)))
-                o_nl()
-            } else {
-                if bk == 4 {           ; poke(literal, byteexpr) -> sta $XXXX
-                    codegen_byte_expr(bi_arg1())
-                    out_text("  sta $")
+            if bk == 3 {               ; peek(addr) -> ubyte in A
+                if peek($c3e4 + (bi_arg0())) == ND_INT {
+                    out_text("  lda $")
                     out_hex4(peekw($c7f0 + ((bi_arg0()) << 1)))
                     o_nl()
+                } else {
+                    emit_addr_into_aptr(bi_arg0())
+                    out_text("  ldy #$00") o_nl()
+                    out_text("  lda (__p8c_aptr),y") o_nl()
+                }
+            } else {
+                if bk == 4 {           ; poke(addr, byteexpr)
+                    if peek($c3e4 + (bi_arg0())) == ND_INT {
+                        codegen_byte_expr(bi_arg1())
+                        out_text("  sta $")
+                        out_hex4(peekw($c7f0 + ((bi_arg0()) << 1)))
+                        o_nl()
+                    } else {
+                        codegen_byte_expr(bi_arg1())
+                        o_pha()
+                        emit_addr_into_aptr(bi_arg0())
+                        o_pla()
+                        out_text("  ldy #$00") o_nl()
+                        out_text("  sta (__p8c_aptr),y") o_nl()
+                    }
                 } else {
                     if bk == 5 {
                         ; mkword(msb, lsb) -> A=low, Y=high (Y-safe via X).
@@ -3374,6 +3453,7 @@ sub emit_builtin(uword callnode, ubyte bk) {
                         o_tay()
                         o_txa()
                     } else {
+                        if bk == 6 {
                         ; strings.compare(a, b) -> A = -1/0/1. Park both pointers
                         ; in __p8c_wtmp0/1 (stack-shuffling the first so arg1's
                         ; eval can't clobber it), then jsr the shared helper.
@@ -3388,6 +3468,33 @@ sub emit_builtin(uword callnode, ubyte bk) {
                         o_pla()
                         out_text("  sta __p8c_wtmp0\n  jsr __p8c_strcmp\n")
                         strcmp_used = 1
+                        } else {
+                            if bk == 7 {
+                                ; peekw(addr) -> uword, A=lo Y=hi
+                                emit_addr_into_aptr(bi_arg0())
+                                out_text("  ldy #$00") o_nl()
+                                out_text("  lda (__p8c_aptr),y") o_nl()
+                                o_pha()
+                                out_text("  ldy #$01") o_nl()
+                                out_text("  lda (__p8c_aptr),y") o_nl()
+                                o_tay()
+                                o_pla()
+                            } else {
+                                ; pokew(addr, wordexpr): value lo=A hi=Y, stack
+                                ; it, addr -> aptr, store hi then lo.
+                                codegen_word_expr(bi_arg1())
+                                o_pha()
+                                o_tya()
+                                o_pha()
+                                emit_addr_into_aptr(bi_arg0())
+                                o_pla()
+                                out_text("  ldy #$01") o_nl()
+                                out_text("  sta (__p8c_aptr),y") o_nl()
+                                o_pla()
+                                out_text("  ldy #$00") o_nl()
+                                out_text("  sta (__p8c_aptr),y") o_nl()
+                            }
+                        }
                     }
                 }
             }
@@ -3404,6 +3511,9 @@ sub call_returns_ubyte(uword callnode) -> ubyte {
     bk = builtin_kind(callee)
     if bk != 0 {
         if bk == 5 {                   ; mkword -> uword
+            return 0
+        }
+        if bk == 7 {                   ; peekw -> uword
             return 0
         }
         return 1                        ; lsb / msb / peek -> ubyte

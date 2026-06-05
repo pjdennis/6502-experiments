@@ -80,6 +80,7 @@ const ubyte TK_KCONST = 62
 const ubyte TK_KENUM  = 63
 const ubyte TK_KSTRUCT= 64
 const ubyte TK_KEXTSUB= 65
+const ubyte TK_KAS    = 66
 ; operator punctuation
 const ubyte TK_PLUS   = 70
 const ubyte TK_MINUS  = 71
@@ -139,6 +140,7 @@ const ubyte ND_ENUM  = 28   ; a=name id, b=members cons head
 const ubyte ND_ENUMMEMBER = 29 ; op=has_value, a=name id, b=value
 const ubyte ND_STRUCT= 30   ; a=name id, b=fields cons head
 const ubyte ND_FIELD = 31   ; op=type tag, a=field name id
+const ubyte ND_CAST  = 32   ; op=target type tag, a=operand node (expr as TYPE)
 
 ; type tags
 const ubyte TY_UBYTE = 0
@@ -753,24 +755,25 @@ sub ident_len_at(uword id) -> uword {
 ; are static data the host compiler lays down once, so this is far smaller than
 ; the ~50 inline byte compares it replaces.
 
-uword[32] kw_strs = [
+uword[33] kw_strs = [
     "if", "in", "or", "to", "and", "for", "not", "str", "sub", "xor",
     "bool", "byte", "else", "enum", "main", "true", "void", "when",
     "break", "const", "defer", "false", "ubyte", "uword", "while",
-    "asmsub", "inline", "repeat", "return", "struct", "continue", "extsub" ]
-ubyte[32] kw_toks = [
+    "asmsub", "inline", "repeat", "return", "struct", "continue", "extsub",
+    "as" ]
+ubyte[33] kw_toks = [
     TK_KIF, TK_KIN, TK_KOR, TK_KTO, TK_KAND, TK_KFOR, TK_KNOT, TK_KSTR,
     TK_KSUB, TK_KXOR, TK_KBOOL, TK_KBYTE, TK_KELSE, TK_KENUM, TK_KMAIN,
     TK_TRUE, TK_KVOID, TK_KWHEN, TK_KBREAK, TK_KCONST, TK_KDEFER, TK_FALSE,
     TK_KUBYTE, TK_KUWORD, TK_KWHILE, TK_KASMSUB, TK_KINLINE, TK_KREPEAT,
-    TK_KRETURN, TK_KSTRUCT, TK_KCONTINUE, TK_KEXTSUB ]
+    TK_KRETURN, TK_KSTRUCT, TK_KCONTINUE, TK_KEXTSUB, TK_KAS ]
 
 sub classify_name() -> ubyte {
     name_buf[(name_len as ubyte)] = 0                  ; NUL-terminate for strings.compare
     ubyte i
     i = 0
     repeat {
-        if i >= 32 { break }
+        if i >= 33 { break }
         if strings.compare(&name_buf, kw_strs[(i as ubyte)]) == 0 { return kw_toks[(i as ubyte)] }
         i = i + 1
     }
@@ -1568,6 +1571,24 @@ sub parse_expr() -> uword {
             break
         }
 
+        if t == TK_KAS {
+            ; `expr as TYPE`: lowest precedence -- reduce everything down to the
+            ; enclosing marker, then wrap the resulting operand in an ND_CAST.
+            repeat {
+                if op_sp == 0 { break }
+                if op_kind[(op_sp - 1 as ubyte)] >= OPK_LPAREN { break }
+                apply_top()
+            }
+            advance()                              ; 'as'
+            ubyte tt
+            tt = type_tag(cur_kind())
+            advance()                              ; type keyword
+            operand_sp = operand_sp - 1
+            push_operand(new_node(ND_CAST, tt, operand_stack[(operand_sp as ubyte)], 0))
+            expect_operand = 0
+            index_ok = 0
+            continue
+        }
         if is_binop(t) != 0 {
             ubyte prec
             prec = bin_prec(t)
