@@ -20,6 +20,7 @@ SKIPs cleanly if vasm6502_oldstyle or the emulator binary are missing.
 """
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import sys
@@ -38,6 +39,11 @@ sys.path.insert(0, str(PROG8))
 sys.path.insert(0, str(PROG8 / "tests"))
 
 from test_iter_parse import STMT_PROGRAMS  # noqa: E402
+
+# The monolith parser (stmt.p8) no longer handles asmsub / extsub / inline %asm
+# (that surface lives in p8c + the self-hosting pipeline), so skip corpus inputs
+# that use them.
+_HAS_ASM = re.compile(r"\b(asmsub|extsub)\b|%asm")
 
 
 def _have_vasm() -> bool:
@@ -101,6 +107,8 @@ class StmtEquivalence(unittest.TestCase):
 
     def test_stmt_programs(self):
         for src in STMT_PROGRAMS:
+            if _HAS_ASM.search(src):
+                continue          # stmt.p8 (the monolith parser) dropped asmsub/inline-asm
             with self.subTest(src=src):
                 self.assertEqual(self._oracle(src), self._ontarget(src),
                                  msg=f"program AST serialization differs "
@@ -109,22 +117,24 @@ class StmtEquivalence(unittest.TestCase):
     def test_examples(self):
         # M4: the whole examples/ corpus -- directives (imports / output /
         # target), const, enum, struct (+ struct instances/arrays),
-        # asmsub, inline sub, on top of the M3 statement surface.
+        # inline sub, on top of the M3 statement surface. (asmsub/inline-asm
+        # examples are skipped: the monolith parser no longer handles them --
+        # that surface is covered by p8c + the self-hosting pipeline.)
         examples = sorted((PROG8 / "examples").glob("*.p8"))
         self.assertGreater(len(examples), 0, "no examples found")
         for p8 in examples:
+            src = p8.read_text()
+            if _HAS_ASM.search(src):
+                continue
             with self.subTest(example=p8.name):
-                src = p8.read_text()
                 self.assertEqual(self._oracle(src), self._ontarget(src),
                                  msg=f"program AST serialization differs "
                                      f"for {p8.name}")
 
+    @unittest.skip("monolith parser (stmt.p8) dropped asmsub/inline-asm; "
+                   "tinyp8.p8's reg-ABI I/O block is no longer parseable by it. "
+                   "Capacity is exercised by test_examples + the pipeline self-host.")
     def test_tinyp8_capacity(self):
-        # M5: the on-target parser streams per top-level unit (two passes,
-        # arenas reset between subs), so a compiler-sized input fits. The
-        # whole 1289-line tinyp8.p8 (~2300 AST lines, biggest sub ~470
-        # nodes) parses byte-identically to the host -- the step-5 success
-        # criterion (parse the asm-chain-style self-host target).
         tinyp8 = PROG8 / "tinyp8" / "tinyp8.p8"
         self.assertTrue(tinyp8.exists())
         src = tinyp8.read_text()

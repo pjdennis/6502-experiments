@@ -652,7 +652,6 @@ sub classify_name() -> ubyte {
     if kw_is("ubyte") { return TK_KUBYTE }
     if kw_is("uword") { return TK_KUWORD }
     if kw_is("while") { return TK_KWHILE }
-    if kw_is("asmsub") { return TK_KASMSUB }
     if kw_is("inline") { return TK_KINLINE }
     if kw_is("repeat") { return TK_KREPEAT }
     if kw_is("return") { return TK_KRETURN }
@@ -1364,19 +1363,6 @@ sub parse_var_decl() -> uword {
     return node
 }
 
-; parse `%asm{{ "text" }}` -> inline asm node.
-sub parse_inline_asm() -> uword {
-    advance()                               ; consume DIRECTIVE asm
-    advance()                               ; {
-    advance()                               ; {
-    uword sid
-    sid = cur_val()                         ; STR
-    advance()
-    advance()                               ; }
-    advance()                               ; }
-    return new_node(ND_INLINEASM, 0, sid, 0)
-}
-
 ; parse assignment-or-expression statement -> node (Assign or ExprStmt).
 ; Rewind-free: parse the whole LHS as an expression (which already yields
 ; an Ident / Index / MemAt target, or a Call etc.), then check whether an
@@ -1418,10 +1404,6 @@ sub fr_push_block(ubyte kind, ubyte deferflag) {
 sub stmt_dispatch(ubyte deferflag) -> ubyte {
     ubyte t
     t = cur_kind()
-    if t == TK_DIRECTIVE {
-        last_simple = parse_inline_asm()
-        return 0
-    }
     if is_type_kw(t) {
         last_simple = parse_var_decl()
         return 0
@@ -1803,48 +1785,6 @@ sub parse_struct_decl() -> uword {
     return new_node(ND_STRUCT, 0, sname, fields)
 }
 
-sub parse_asmsub() -> uword {
-    advance()                               ; 'asmsub'
-    uword nameid
-    nameid = cur_val()
-    advance()                               ; name
-    advance()                               ; '('
-    uword params
-    params = 0
-    repeat {
-        if cur_kind() == TK_RPAREN {
-            break
-        }
-        ubyte ptag
-        ptag = type_tag(cur_kind())
-        advance()
-        uword pname
-        pname = cur_val()
-        advance()
-        params = cons_prepend(params, new_node(ND_PARAM, ptag, pname, 0))
-        if cur_kind() != TK_COMMA {
-            break
-        }
-        advance()
-    }
-    advance()                               ; ')'
-    ubyte rettag
-    rettag = TY_VOID
-    if cur_kind() == TK_ARROW {
-        advance()
-        rettag = type_tag(cur_kind())
-        advance()
-    }
-    advance()                               ; '='
-    uword addr
-    addr = cur_val()                        ; $ADDR (INT)
-    advance()
-    uword node
-    node = new_node(ND_SUB, SUBK_ASMSUB, nameid, params)
-    node_c[node] = addr
-    node_d[node] = rettag
-    return node
-}
 
 sub is_struct_name(uword id) -> ubyte {
     uword cell
@@ -1970,26 +1910,6 @@ sub skip_sub_body() {
     }
     skip_braced_block()
 }
-; skip an asmsub (no body): advance to '=', then past it and the $ADDR.
-sub skip_asmsub() {
-    advance()                               ; 'asmsub'
-    repeat {
-        ubyte t
-        t = cur_kind()
-        if t == TK_EOF {
-            return
-        }
-        if t == TK_ASSIGN {
-            break
-        }
-        if t == TK_LBRACE {
-            return
-        }
-        advance()
-    }
-    advance()                               ; '='
-    advance()                               ; $ADDR
-}
 
 ; PASS A: collect directives + module decls into the program lists;
 ; skip sub / main / inline-sub / asmsub bodies.
@@ -2030,10 +1950,6 @@ sub parse_decls_pass() {
         }
         if t == TK_KINLINE {
             skip_sub_body()
-            continue
-        }
-        if t == TK_KASMSUB {
-            skip_asmsub()
             continue
         }
         if t == TK_IDENT {
@@ -2569,12 +2485,8 @@ sub serialize_subs_streaming() {
                     advance()
                     snode = parse_sub(SUBK_INLINE)
                 } else {
-                    if t == TK_KASMSUB {
-                        snode = parse_asmsub()
-                    } else {
-                        issub = 0
-                        skip_decl_pass_b()
-                    }
+                    issub = 0
+                    skip_decl_pass_b()
                 }
             }
         }

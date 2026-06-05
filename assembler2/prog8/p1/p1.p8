@@ -735,7 +735,6 @@ sub classify_name() -> ubyte {
     if kw_is("ubyte") { return TK_KUBYTE }
     if kw_is("uword") { return TK_KUWORD }
     if kw_is("while") { return TK_KWHILE }
-    if kw_is("asmsub") { return TK_KASMSUB }
     if kw_is("inline") { return TK_KINLINE }
     if kw_is("repeat") { return TK_KREPEAT }
     if kw_is("return") { return TK_KRETURN }
@@ -1447,19 +1446,6 @@ sub parse_var_decl() -> uword {
     return node
 }
 
-; parse `%asm{{ "text" }}` -> inline asm node.
-sub parse_inline_asm() -> uword {
-    advance()                               ; consume DIRECTIVE asm
-    advance()                               ; {
-    advance()                               ; {
-    uword sid
-    sid = cur_val()                         ; STR
-    advance()
-    advance()                               ; }
-    advance()                               ; }
-    return new_node(ND_INLINEASM, 0, sid, 0)
-}
-
 ; parse assignment-or-expression statement -> node (Assign or ExprStmt).
 ; Rewind-free: parse the whole LHS as an expression (which already yields
 ; an Ident / Index / MemAt target, or a Call etc.), then check whether an
@@ -1501,10 +1487,6 @@ sub fr_push_block(ubyte kind, ubyte deferflag) {
 sub stmt_dispatch(ubyte deferflag) -> ubyte {
     ubyte t
     t = cur_kind()
-    if t == TK_DIRECTIVE {
-        last_simple = parse_inline_asm()
-        return 0
-    }
     if is_type_kw(t) {
         last_simple = parse_var_decl()
         return 0
@@ -1886,48 +1868,6 @@ sub parse_struct_decl() -> uword {
     return new_node(ND_STRUCT, 0, sname, fields)
 }
 
-sub parse_asmsub() -> uword {
-    advance()                               ; 'asmsub'
-    uword nameid
-    nameid = cur_val()
-    advance()                               ; name
-    advance()                               ; '('
-    uword params
-    params = 0
-    repeat {
-        if cur_kind() == TK_RPAREN {
-            break
-        }
-        ubyte ptag
-        ptag = type_tag(cur_kind())
-        advance()
-        uword pname
-        pname = cur_val()
-        advance()
-        params = cons_prepend(params, new_node(ND_PARAM, ptag, pname, 0))
-        if cur_kind() != TK_COMMA {
-            break
-        }
-        advance()
-    }
-    advance()                               ; ')'
-    ubyte rettag
-    rettag = TY_VOID
-    if cur_kind() == TK_ARROW {
-        advance()
-        rettag = type_tag(cur_kind())
-        advance()
-    }
-    advance()                               ; '='
-    uword addr
-    addr = cur_val()                        ; $ADDR (INT)
-    advance()
-    uword node
-    node = new_node(ND_SUB, SUBK_ASMSUB, nameid, params)
-    node_c[node] = addr
-    node_d[node] = rettag
-    return node
-}
 
 sub is_struct_name(uword id) -> ubyte {
     uword cell
@@ -2053,26 +1993,6 @@ sub skip_sub_body() {
     }
     skip_braced_block()
 }
-; skip an asmsub (no body): advance to '=', then past it and the $ADDR.
-sub skip_asmsub() {
-    advance()                               ; 'asmsub'
-    repeat {
-        ubyte t
-        t = cur_kind()
-        if t == TK_EOF {
-            return
-        }
-        if t == TK_ASSIGN {
-            break
-        }
-        if t == TK_LBRACE {
-            return
-        }
-        advance()
-    }
-    advance()                               ; '='
-    advance()                               ; $ADDR
-}
 
 ; PASS A: collect directives + module decls into the program lists;
 ; skip sub / main / inline-sub / asmsub bodies.
@@ -2113,10 +2033,6 @@ sub parse_decls_pass() {
         }
         if t == TK_KINLINE {
             skip_sub_body()
-            continue
-        }
-        if t == TK_KASMSUB {
-            skip_asmsub()
             continue
         }
         if t == TK_IDENT {
@@ -3132,10 +3048,6 @@ sub codegen_stmt(uword st) {
     }
     if k == ND_RETURN {
         codegen_return(st)
-        return
-    }
-    if k == ND_INLINEASM {
-        codegen_inline_asm(st)
         return
     }
     if k == ND_VARDECL {
@@ -4964,23 +4876,6 @@ sub collect_params(uword callee) {
 ; codegen a call. Regular sub: evaluate every arg onto the CPU stack (so a
 ; later arg's evaluation can't clobber an earlier arg's param slot -- the slots
 ; are not reentrant), then pop them into the param slots in reverse and jsr.
-; asmsub call ABI (port of _emit_call's asmsub arm): 0 args -> just jsr; 1 arg
-; -> load it into A (ubyte) or A:Y (uword); then jsr the $F0xx target.
-sub codegen_asmsub_call(uword callnode, uword cs) {
-    collect_params(node_a[callnode])
-    if call_n == 1 {
-        uword arg1
-        arg1 = cons_val[reverse_cons(node_b[callnode])]
-        if call_isw[0] != 0 {
-            codegen_word_expr(arg1)
-        } else {
-            codegen_byte_expr(arg1)
-        }
-    }
-    out_text("  jsr $")
-    out_hex4(sub_addr[cs])
-    o_nl()
-}
 ; Result: A (ubyte/byte) or A:Y (uword). (NOTE: call_slot is global, so an arg
 ; that is itself a call would corrupt it -- not yet handled; args are simple.)
 sub codegen_call(uword callnode) {
@@ -4994,12 +4889,6 @@ sub codegen_call(uword callnode) {
     }
     uword cs
     cs = find_sub(callee)
-    if cs != $ffff {
-        if sub_kind[cs] == SUBK_ASMSUB {
-            codegen_asmsub_call(callnode, cs)
-            return
-        }
-    }
     collect_params(callee)
     if call_n == 1 {
         ; single arg: store straight into the slot after eval (no reentrancy
@@ -5077,35 +4966,6 @@ sub codegen_call(uword callnode) {
 }
 ; inline `%asm{ "..." }` -> emit each line of the (str-pooled) text with a
 ; 2-space indent (port of _emit_stmt's InlineAsm; splitlines semantics).
-sub codegen_inline_asm(uword st) {
-    uword sid
-    sid = node_a[st]
-    uword off
-    uword n
-    off = str_off[sid]
-    n = str_len[sid]
-    uword j
-    j = 0
-    repeat {
-        if j >= n {
-            break
-        }
-        out_text("  ")
-        repeat {
-            if j >= n {
-                break
-            }
-            ubyte c
-            c = str_pool[off + j]
-            j = j + 1
-            if c == $0a {
-                break
-            }
-            out_byte(c)
-        }
-        o_nl()
-    }
-}
 ; `return [value]` (port of _emit_stmt's Return). With a value, evaluate it
 ; (byte -> A, word -> A:Y) and run the pha/pla dance p8c emits (defers go
 ; between -- none yet), then jmp the per-sub return label.
@@ -5245,12 +5105,8 @@ sub register_subs() {
                     advance()
                     snode = parse_sub(SUBK_INLINE)
                 } else {
-                    if t == TK_KASMSUB {
-                        snode = parse_asmsub()
-                    } else {
-                        issub = 0
-                        cg_skip_decl()
-                    }
+                    issub = 0
+                    cg_skip_decl()
                 }
             }
         }
@@ -5357,13 +5213,8 @@ sub emit_subs() {
                     snode = parse_sub(SUBK_INLINE)
                     kind = SUBK_INLINE
                 } else {
-                    if t == TK_KASMSUB {
-                        snode = parse_asmsub()
-                        kind = SUBK_ASMSUB
-                    } else {
-                        issub = 0
-                        cg_skip_decl()
-                    }
+                    issub = 0
+                    cg_skip_decl()
                 }
             }
         }

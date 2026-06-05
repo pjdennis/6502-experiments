@@ -1151,10 +1151,6 @@ sub codegen_stmt(uword st) {{
         codegen_return(st)
         return
     }}
-    if k == ND_INLINEASM {{
-        codegen_inline_asm(st)
-        return
-    }}
     if k == ND_VARDECL {{
         ; a local declaration is storage only; an initializer lowers to a
         ; store. (p8c: UBYTE -> byte path, everything else -> word path.)
@@ -2981,23 +2977,6 @@ sub collect_params(uword callee) {{
 ; codegen a call. Regular sub: evaluate every arg onto the CPU stack (so a
 ; later arg's evaluation can't clobber an earlier arg's param slot -- the slots
 ; are not reentrant), then pop them into the param slots in reverse and jsr.
-; asmsub call ABI (port of _emit_call's asmsub arm): 0 args -> just jsr; 1 arg
-; -> load it into A (ubyte) or A:Y (uword); then jsr the $F0xx target.
-sub codegen_asmsub_call(uword callnode, uword cs) {{
-    collect_params(node_a[callnode])
-    if call_n == 1 {{
-        uword arg1
-        arg1 = cons_val[reverse_cons(node_b[callnode])]
-        if call_isw[0] != 0 {{
-            codegen_word_expr(arg1)
-        }} else {{
-            codegen_byte_expr(arg1)
-        }}
-    }}
-    out_text("  jsr $")
-    out_hex4(sub_addr[cs])
-    o_nl()
-}}
 ; Result: A (ubyte/byte) or A:Y (uword). (NOTE: call_slot is global, so an arg
 ; that is itself a call would corrupt it -- not yet handled; args are simple.)
 sub codegen_call(uword callnode) {{
@@ -3011,12 +2990,6 @@ sub codegen_call(uword callnode) {{
     }}
     uword cs
     cs = find_sub(callee)
-    if cs != $ffff {{
-        if sub_kind[cs] == SUBK_ASMSUB {{
-            codegen_asmsub_call(callnode, cs)
-            return
-        }}
-    }}
     collect_params(callee)
     if call_n == 1 {{
         ; single arg: store straight into the slot after eval (no reentrancy
@@ -3094,35 +3067,6 @@ sub codegen_call(uword callnode) {{
 }}
 ; inline `%asm{{ "..." }}` -> emit each line of the (str-pooled) text with a
 ; 2-space indent (port of _emit_stmt's InlineAsm; splitlines semantics).
-sub codegen_inline_asm(uword st) {{
-    uword sid
-    sid = node_a[st]
-    uword off
-    uword n
-    off = str_off[sid]
-    n = str_len[sid]
-    uword j
-    j = 0
-    repeat {{
-        if j >= n {{
-            break
-        }}
-        out_text("  ")
-        repeat {{
-            if j >= n {{
-                break
-            }}
-            ubyte c
-            c = str_pool[off + j]
-            j = j + 1
-            if c == $0a {{
-                break
-            }}
-            out_byte(c)
-        }}
-        o_nl()
-    }}
-}}
 ; `return [value]` (port of _emit_stmt's Return). With a value, evaluate it
 ; (byte -> A, word -> A:Y) and run the pha/pla dance p8c emits (defers go
 ; between -- none yet), then jmp the per-sub return label.
@@ -3262,12 +3206,8 @@ sub register_subs() {{
                     advance()
                     snode = parse_sub(SUBK_INLINE)
                 }} else {{
-                    if t == TK_KASMSUB {{
-                        snode = parse_asmsub()
-                    }} else {{
-                        issub = 0
-                        cg_skip_decl()
-                    }}
+                    issub = 0
+                    cg_skip_decl()
                 }}
             }}
         }}
@@ -3374,13 +3314,8 @@ sub emit_subs() {{
                     snode = parse_sub(SUBK_INLINE)
                     kind = SUBK_INLINE
                 }} else {{
-                    if t == TK_KASMSUB {{
-                        snode = parse_asmsub()
-                        kind = SUBK_ASMSUB
-                    }} else {{
-                        issub = 0
-                        cg_skip_decl()
-                    }}
+                    issub = 0
+                    cg_skip_decl()
                 }}
             }}
         }}
