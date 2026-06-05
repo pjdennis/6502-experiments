@@ -408,3 +408,57 @@ still only handles the legacy form. To finish:
    from the on-target parser/codegen and from p8c (retire the quoted-string
    inline-asm form), and DELETE `port_p1.py`'s I/O transform entirely (the
    `io_transform` flag and IO_NEW).
+
+## Update 10: on-target convergence -- ORACLE validated; pipeline reg-ABI scoped
+
+Also landed (committed): p8c's raw `%asm` was simplified to a lexer-normalized
+STR token (the lexer strips each line + drops blank lines into one STR and
+synthesizes the `{{ STR }}` shape; legacy quoted bodies are untouched). This
+removed the ASMRAW token + parser dedent and makes the on-target mirror cheap
+(the Prog8 lexer can reuse its existing `{{ STR }}` parse path -- no new token
+kind, no serializer/golden changes).
+
+**ORACLE validated (then reverted to keep self-host green).** Converging
+`stmt.p8`'s I/O block to the `sys_*` register-ABI form (the same block the
+pipeline uses) + renaming the call sites in `stmt.p8` and `build_p1.py`,
+then regenerating `p1.p8`, gives a `p1.p8` that:
+  - **p8c compiles cleanly** (27634 lines) -- p8c's Step-A reg-ABI codegen
+    emits the asmsub bodies + the `sys_read` wrapper + reg-ABI calls; and
+  - **the monolith p1.bin builds, fits, and passes the whole corpus (25/25)**.
+So the target form + the new oracle are proven good. The exact target I/O block
+is the `sys_*` register-ABI block in `p1_pass1_sh.p8` (lines ~368-432) +
+`sys_read`/`sys_read_raw` src_eof decoupling.
+
+**BLOCKER = the pipeline can't yet compile the reg-ABI `p1.p8`.** Running the
+converged p1.p8 through the pipeline gives a 716-line diff (a ZP-allocation
+cascade): pass1_sh allocates ZP slots for the reg-ABI params (`p8v_sys_argv_arg_i`
+..) that the oracle does NOT, because pass1_sh doesn't recognize the new syntax.
+Concretely the pipeline needs the Step-A mirror, byte-identical, under the 64 KB
++ self-host constraints:
+  1. **`p1_pass1_sh.p8` lexer:** raw `%asm {{ }}` capture -- read to `}}`,
+     normalize (strip each line, drop blank lines), intern into the `$9b00`
+     dedup STR pool, emit it as a `TK_STR` so `parse_inline_asm` is unchanged.
+     (`@` already lexes as `TK_AT`; `extsub` does NOT yet -- add it to
+     `classify_name`, e.g. `TK_KEXTSUB`.)
+  2. **`p1_pass1_sh.p8` parser:** `extsub $ADDR = name(params)` (top-level
+     dispatch + a parse_extsub); `@A/@X/@Y/@AY` on params (store the reg code in
+     a spare ND_PARAM field) and `-> rt @REG` (store ret_reg on the ND_SUB); the
+     asmsub *body* form (`asmsub .. { %asm {{ }} }`, no `= $ADDR`) -- the body
+     parses as a normal block holding one ND_INLINEASM.
+  3. **`p1_pass1_sh.p8` build_symbols/sema:** a param carrying a reg code gets
+     NO ZP/memvar slot and emits no storage (this is the fix for the cascade).
+  4. **dump (`dump_global`/`register_subs`):** carry each param's reg code (rides
+     the generic ND_PARAM node-array dump) + a per-sub `ret_reg`. The asmsub body
+     rides the generic per-sub node-array dump already.
+  5. **`p1_pass2_sh.p8` load + codegen:** load ret_reg/param-reg; `emit_sub` for a
+     body-form asmsub emits `; ---- asmsub NAME ----` + `p8s_NAME:` + the body
+     lines; `emit_call` for a reg-ABI asmsub loads each arg into its register
+     (X/Y first via A, the A/AY arg last) and JSRs the address-or-label -- all
+     byte-identical to p8c codegen.p8 `_emit_sub`/`_emit_call`/`_emit_regabi_args`.
+  6. **converge `stmt.p8` + `build_p1.py`** to the `sys_*` reg-ABI block (the
+     reverted edit) and regenerate p1.p8.
+Debugging is tractable: diff the pipeline output against the validated oracle
+(`p8c --target nmos p1/p1.p8`) -- the ZP cascade collapses to 0 once #3 lands,
+then the asmsub-body + reg-call emission must match #5. Land #1-#6 together (the
+self-host is red between converging p1.p8 and finishing pass2_sh) and commit
+only at 0-diff.
