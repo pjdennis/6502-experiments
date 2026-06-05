@@ -7,6 +7,16 @@ session and what should I do this push" view, see
 [`RESUME_NOTES.md`](./RESUME_NOTES.md). For the per-feature
 language-surface checklist, see [`README.md`](./README.md).
 
+**Side investigations (analysis only, not on the critical path):**
+
+* [`ASM_MIGRATION_PLAN.md`](./ASM_MIGRATION_PLAN.md) -- gap analysis +
+  plan for swapping vasm out for the in-tree on-host assembler
+  (`assembler2/17/`), so pass 1 + pass 2 + assembler all run on target.
+* [`CODEGEN_SIZE_COMPARISON.md`](./CODEGEN_SIZE_COMPARISON.md) -- measured
+  p8c vs. upstream prog8 binary sizes (p8c emits ~1.5-1.65x the code).
+* [`CODEGEN_LOW_HANGING_FRUIT.md`](./CODEGEN_LOW_HANGING_FRUIT.md) -- ranked
+  peephole/branch-relaxation wins (~2.4 KB cheap) for the p8c backend.
+
 When you finish a feature, update this file. When you finish a
 session, update `RESUME_NOTES.md`.
 
