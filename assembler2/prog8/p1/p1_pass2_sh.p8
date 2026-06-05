@@ -150,7 +150,8 @@ const ubyte TY_STRUCT      = 9   ; struct-typed var; struct name id in node_d
 const ubyte SUBK_SUB    = 0
 const ubyte SUBK_MAIN   = 1
 const ubyte SUBK_INLINE = 2
-const ubyte SUBK_ASMSUB = 3
+const ubyte SUBK_ASMSUB = 3        ; `= $ADDR` / extsub decl (no body; jsr $ADDR)
+const ubyte SUBK_ASMSUB_BODY = 4   ; inline-body asmsub (emit label + raw asm)
 
 ; unary op-ids
 const ubyte UN_NEG = 0
@@ -245,6 +246,11 @@ uword cg_arr_si          ; fast-path array sym index, parked across the
 uword[16] call_slot      ; param sym index per arg
 ubyte[16] call_isw       ; 1 if that arg/param is uword
 ubyte call_n
+; register-ABI asmsub call scratch (captured before evaluating args, since the
+; args are loaded out of source order: X/Y first, A/AY last).
+uword[8] rb_arg          ; arg expr node per param (source order)
+ubyte[8] rb_reg          ; param register code (1=A 2=X 3=Y 4=AY)
+ubyte[8] rb_isw          ; 1 if uword param
 ; codegen_call's locals (callee/callnode) live in static ZP, so a nested call
 ; arg (e.g. out_byte(lsb(x))) would clobber them; save them on this stack
 ; across each arg evaluation. call_slot/call_n are re-derived (collect_params)
@@ -269,7 +275,7 @@ uword cbr_skip
 ; sub table (registered in source order before codegen, so calls
 ; resolve and pass B emits non-main subs in p8c's order).
 uword[222] sub_name       ; sub name ident id
-ubyte[222] sub_kind       ; SUBK_SUB / MAIN / INLINE / ASMSUB
+ubyte[222] sub_kind       ; SUBK_SUB / MAIN / INLINE / ASMSUB / ASMSUB_BODY
 ubyte[222] sub_ret        ; return type tag
 uword[222] sub_addr       ; asmsub target address ($F0xx); else 0
 uword sub_count
@@ -3443,20 +3449,76 @@ sub collect_params(uword callee) {
 ; asmsub call ABI (port of _emit_call's asmsub arm): 0 args -> just jsr; 1 arg
 ; -> load it into A (ubyte) or A:Y (uword); then jsr the $F0xx target.
 
+; load each reg-ABI arg whose register's "is A/AY" classification matches
+; want_a (0 => emit the X/Y args, 1 => emit the A/AY args). p8c loads the
+; A/AY-bound arg LAST so the evaluator's use of A can't clobber X/Y.
+sub emit_regabi_pass(ubyte n, ubyte want_a) {
+    ubyte j
+    j = 0
+    repeat {
+        if j >= n { break }
+        ubyte r
+        r = rb_reg[(j as ubyte)]
+        ubyte is_a
+        is_a = 0
+        if r == 1 { is_a = 1 }
+        if r == 4 { is_a = 1 }
+        if is_a == want_a {
+            if r == 4 {
+                codegen_word_expr(rb_arg[(j as ubyte)])
+            } else {
+                codegen_byte_expr(rb_arg[(j as ubyte)])
+                if r == 2 { out_text("  tax")  o_nl() }
+                if r == 3 { out_text("  tay")  o_nl() }
+            }
+        }
+        j = j + 1
+    }
+}
+
 sub codegen_asmsub_call(uword callnode, uword cs) {
-    collect_params(peekw($c7f0 + ((callnode) << 1)))
-    if call_n == 1 {
-        uword arg1
-        arg1 = cons_val[(reverse_cons_ip(peekw($cbfc + ((callnode) << 1))) as ubyte)]
-        if call_isw[0] != 0 {
-            codegen_word_expr(arg1)
-        } else {
-            codegen_byte_expr(arg1)
+    uword callee
+    callee = peekw($c7f0 + ((callnode) << 1))
+    collect_params(callee)
+    ubyte n
+    n = call_n
+    ; capture each arg's expr + its param's register/width (source order).
+    uword acell
+    acell = reverse_cons_ip(peekw($cbfc + ((callnode) << 1)))
+    ubyte j
+    j = 0
+    repeat {
+        if j >= n { break }
+        rb_arg[(j as ubyte)] = cons_val[(acell as ubyte)]
+        rb_reg[(j as ubyte)] = lsb(peekw($e804 + ((call_slot[(j as ubyte)]) << 1)))
+        rb_isw[(j as ubyte)] = call_isw[(j as ubyte)]
+        acell = cons_next[(acell as ubyte)]
+        j = j + 1
+    }
+    ubyte regabi
+    regabi = 0
+    if n != 0 { if rb_reg[0] != 0 { regabi = 1 } }
+    if regabi != 0 {
+        emit_regabi_pass(n, 0)              ; X / Y args first
+        emit_regabi_pass(n, 1)              ; A / AY arg last
+    } else {
+        if n == 1 {                         ; legacy ABI: one arg into A / A:Y
+            if rb_isw[0] != 0 {
+                codegen_word_expr(rb_arg[0])
+            } else {
+                codegen_byte_expr(rb_arg[0])
+            }
         }
     }
-    out_text("  jsr $")
-    out_hex4(sub_addr[(cs as ubyte)])
-    o_nl()
+    if sub_kind[(cs as ubyte)] == SUBK_ASMSUB_BODY {
+        out_text("  jsr ")
+        emit_sub_label(callee)
+        o_nl()
+    } else {
+        out_text("  jsr $")
+        out_hex4(sub_addr[(cs as ubyte)])
+        o_nl()
+    }
 }
 ; Result: A (ubyte/byte) or A:Y (uword). (NOTE: call_slot is global, so an arg
 ; that is itself a call would corrupt it -- not yet handled; args are simple.)
@@ -3474,6 +3536,10 @@ sub codegen_call(uword callnode) {
     cs = find_sub(callee)
     if cs != $ffff {
         if sub_kind[(cs as ubyte)] == SUBK_ASMSUB {
+            codegen_asmsub_call(callnode, cs)
+            return
+        }
+        if sub_kind[(cs as ubyte)] == SUBK_ASMSUB_BODY {
             codegen_asmsub_call(callnode, cs)
             return
         }
@@ -3640,6 +3706,27 @@ sub codegen_return(uword st) {
 
 sub emit_sub(uword snode) {
     label_seq = 0
+    uword nm
+    nm = peekw($c7f0 + ((snode) << 1))
+    ; an inline-body asmsub emits `; ---- asmsub NAME ----` + label + the raw
+    ; %asm lines (the body has its own rts); no prologue/epilogue.
+    uword acs
+    acs = find_sub(nm)
+    if acs != $ffff {
+        if sub_kind[(acs as ubyte)] == SUBK_ASMSUB_BODY {
+            o_nl()
+            out_text("; ---- asmsub ")
+            out_ident_text(nm)
+            out_text(" ----")
+            o_nl()
+            emit_sub_label(nm)
+            out_byte(':')
+            o_nl()
+            cur_scope = nm
+            codegen_body(peekw($d008 + ((snode) << 1)))
+            return
+        }
+    }
     cur_ret = lsb(peekw($d414 + ((snode) << 1)))
     cur_ret_name = peekw($c7f0 + ((snode) << 1))
     cur_scope = peekw($c7f0 + ((snode) << 1))

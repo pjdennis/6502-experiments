@@ -79,6 +79,7 @@ const ubyte TK_KWHEN  = 61
 const ubyte TK_KCONST = 62
 const ubyte TK_KENUM  = 63
 const ubyte TK_KSTRUCT= 64
+const ubyte TK_KEXTSUB= 65
 ; operator punctuation
 const ubyte TK_PLUS   = 70
 const ubyte TK_MINUS  = 71
@@ -155,7 +156,8 @@ const ubyte TY_STRUCT      = 9   ; struct-typed var; struct name id in node_d
 const ubyte SUBK_SUB    = 0
 const ubyte SUBK_MAIN   = 1
 const ubyte SUBK_INLINE = 2
-const ubyte SUBK_ASMSUB = 3
+const ubyte SUBK_ASMSUB = 3        ; `= $ADDR` / extsub decl (no body; jsr $ADDR)
+const ubyte SUBK_ASMSUB_BODY = 4   ; inline-body asmsub (emit label + raw asm)
 
 ; unary op-ids
 const ubyte UN_NEG = 0
@@ -198,6 +200,15 @@ ubyte tk1_kind
 uword tk1_val
 ubyte ntok_kind
 uword ntok_val
+
+; pending-token queue: a raw `%asm {{ ... }}` block is lexed in one shot (the
+; body captured + normalized into a STR), then the synthesized `{ { STR } }`
+; tokens are emitted from here so parse_inline_asm's `{{ STR }}` path is reused
+; unchanged (mirrors p8c's lexer normalization). pend_i >= pend_n => empty.
+ubyte[6] pendk
+uword[6] pendv
+ubyte pend_i
+ubyte pend_n
 
 ; identifier text pool (reset per top-level unit while streaming)
 const uword ident_pool = $8300
@@ -291,7 +302,7 @@ ubyte call_n
 ; sub table (registered in source order before codegen, so calls
 ; resolve and pass B emits non-main subs in p8c's order).
 uword[232] sub_name       ; sub name ident id
-ubyte[232] sub_kind       ; SUBK_SUB / MAIN / INLINE / ASMSUB
+ubyte[232] sub_kind       ; SUBK_SUB / MAIN / INLINE / ASMSUB / ASMSUB_BODY
 ubyte[232] sub_ret        ; return type tag
 uword[232] sub_addr       ; asmsub target address ($F0xx); else 0
 uword sub_count
@@ -742,24 +753,24 @@ sub ident_len_at(uword id) -> uword {
 ; are static data the host compiler lays down once, so this is far smaller than
 ; the ~50 inline byte compares it replaces.
 
-uword[31] kw_strs = [
+uword[32] kw_strs = [
     "if", "in", "or", "to", "and", "for", "not", "str", "sub", "xor",
     "bool", "byte", "else", "enum", "main", "true", "void", "when",
     "break", "const", "defer", "false", "ubyte", "uword", "while",
-    "asmsub", "inline", "repeat", "return", "struct", "continue" ]
-ubyte[31] kw_toks = [
+    "asmsub", "inline", "repeat", "return", "struct", "continue", "extsub" ]
+ubyte[32] kw_toks = [
     TK_KIF, TK_KIN, TK_KOR, TK_KTO, TK_KAND, TK_KFOR, TK_KNOT, TK_KSTR,
     TK_KSUB, TK_KXOR, TK_KBOOL, TK_KBYTE, TK_KELSE, TK_KENUM, TK_KMAIN,
     TK_TRUE, TK_KVOID, TK_KWHEN, TK_KBREAK, TK_KCONST, TK_KDEFER, TK_FALSE,
     TK_KUBYTE, TK_KUWORD, TK_KWHILE, TK_KASMSUB, TK_KINLINE, TK_KREPEAT,
-    TK_KRETURN, TK_KSTRUCT, TK_KCONTINUE ]
+    TK_KRETURN, TK_KSTRUCT, TK_KCONTINUE, TK_KEXTSUB ]
 
 sub classify_name() -> ubyte {
     name_buf[(name_len as ubyte)] = 0                  ; NUL-terminate for strings.compare
     ubyte i
     i = 0
     repeat {
-        if i >= 31 { break }
+        if i >= 32 { break }
         if strings.compare(&name_buf, kw_strs[(i as ubyte)]) == 0 { return kw_toks[(i as ubyte)] }
         i = i + 1
     }
@@ -790,9 +801,147 @@ sub push_token(ubyte kind, uword val) {
     ntok_val = val
 }
 
+; intern the candidate bytes at [start, str_pool_len) into the null-terminated
+; string pool: if they match an existing entry, roll str_pool_len back and
+; return its offset; else NUL-terminate the new entry and return start.
+sub intern_strpool(uword start) -> uword {
+    uword slen
+    slen = str_pool_len - start
+    uword off
+    off = 0
+    repeat {
+        if off >= start { break }
+        uword sk
+        ubyte sm
+        sm = 1
+        sk = 0
+        repeat {
+            if sk >= slen { break }
+            if peek($9b00 + (off + sk)) != peek($9b00 + (start + sk)) { sm = 0 break }
+            sk = sk + 1
+        }
+        if sm != 0 {
+            if peek($9b00 + (off + slen)) == 0 {
+                str_pool_len = start
+                return off
+            }
+        }
+        repeat {
+            if peek($9b00 + (off)) == 0 { off = off + 1 break }
+            off = off + 1
+        }
+    }
+    poke($9b00 + (str_pool_len), 0)
+    str_pool_len = str_pool_len + 1
+    return start
+}
+
+; is c an asm-line "horizontal whitespace" byte (stripped at line ends)?
+sub asm_ws(ubyte c) -> ubyte {
+    if c == ' ' { return 1 }
+    if c == '\t' { return 1 }
+    if c == '\r' { return 1 }
+    return 0
+}
+
+; capture a raw `%asm {{ ... }}` body (the leading `{{` already consumed) up to
+; the closing `}}` (consumed), normalize it (strip each line, drop blank lines,
+; join with '\n') into the string pool at [start..), and return the interned
+; offset. Mirrors p8c's lexer normalization so a raw block emits the same asm
+; as the equivalent quoted one. Streamed (no line buffer): leading whitespace is
+; skipped, intra-line whitespace runs are deferred (emitted only before the next
+; content byte), and a deferred run dropped at end-of-line strips trailing ws.
+sub build_asm_body() -> uword {
+    uword start
+    start = str_pool_len
+    ubyte started      ; any content byte emitted overall (for the '\n' joiner)
+    ubyte sol          ; before any content byte on the current line
+    uword sp           ; deferred intra-line whitespace count
+    started = 0
+    sol = 1
+    sp = 0
+    repeat {
+        ubyte c
+        c = read_src()
+        if src_eof != 0 { break }
+        if c == '}' {
+            if peek_src() == '}' { c = read_src()  break }    ; closing `}}`
+        }
+        if c == '\n' { sol = 1  sp = 0  continue }
+        if c == '\r' { continue }
+        if asm_ws(c) != 0 {
+            if sol == 0 { sp = sp + 1 }                       ; defer (skip if leading)
+            continue
+        }
+        if sol != 0 {
+            if started != 0 {
+                poke($9b00 + (str_pool_len), '\n')
+                str_pool_len = str_pool_len + 1
+            }
+            sol = 0
+        } else {
+            repeat {
+                if sp == 0 { break }
+                poke($9b00 + (str_pool_len), ' ')
+                str_pool_len = str_pool_len + 1
+                sp = sp - 1
+            }
+        }
+        poke($9b00 + (str_pool_len), c)
+        str_pool_len = str_pool_len + 1
+        started = 1
+    }
+    return intern_strpool(start)
+}
+
+; lex `%asm` whose body is `{{ ... }}`: skip to and consume `{{`; if the body is
+; a quoted string (legacy form) queue just `{ {` and let the normal lexer read
+; the STR + `}}`; otherwise capture the raw body and queue `{ { STR } }`. The
+; DIRECTIVE token itself is returned by this call (ntok_*).
+sub skip_asm_ws() {
+    repeat {
+        ubyte c
+        c = peek_src()
+        if src_eof != 0 { break }
+        if asm_ws(c) == 0 {
+            if c != '\n' { break }
+        }
+        c = read_src()
+    }
+}
+
+sub lex_asm_directive(uword nameid) {
+    ntok_kind = TK_DIRECTIVE
+    ntok_val = nameid
+    skip_asm_ws()                           ; up to `{{`
+    ubyte b
+    b = read_src()                          ; first '{'
+    b = read_src()                          ; second '{'
+    skip_asm_ws()                           ; to inspect the body's first byte
+    pend_i = 0
+    pendk[0] = TK_LBRACE  pendv[0] = 0
+    pendk[1] = TK_LBRACE  pendv[1] = 0
+    if peek_src() == '"' {
+        pend_n = 2                          ; legacy: STR + `}}` lex normally
+        return
+    }
+    uword off
+    off = build_asm_body()
+    pendk[2] = TK_STR     pendv[2] = off
+    pendk[3] = TK_RBRACE  pendv[3] = 0
+    pendk[4] = TK_RBRACE  pendv[4] = 0
+    pend_n = 5
+}
+
 ; produce one token into ntok_kind / ntok_val (TK_EOF at end of input).
 
 sub next_raw_token() {
+    if pend_i < pend_n {
+        ntok_kind = pendk[(pend_i as ubyte)]
+        ntok_val = pendv[(pend_i as ubyte)]
+        pend_i = pend_i + 1
+        return
+    }
     repeat {
         ubyte c
         c = peek_src()
@@ -822,7 +971,22 @@ sub next_raw_token() {
                 if c2 == '1' { read_bin()  push_token(TK_INT, int_val)  return }
                 if is_alpha_us(c2) != 0 {
                     read_ident()
-                    push_token(TK_DIRECTIVE, intern_name())
+                    ubyte is_asm
+                    is_asm = 0
+                    if name_len == 3 {
+                        if name_buf[0] == 'a' {
+                            if name_buf[1] == 's' {
+                                if name_buf[2] == 'm' { is_asm = 1 }
+                            }
+                        }
+                    }
+                    uword nameid
+                    nameid = intern_name()
+                    if is_asm != 0 {
+                        lex_asm_directive(nameid)
+                        return
+                    }
+                    push_token(TK_DIRECTIVE, nameid)
                     return
                 }
             }
@@ -880,36 +1044,7 @@ sub next_raw_token() {
                 poke($9b00 + (str_pool_len), rb)
                 str_pool_len = str_pool_len + 1
             }
-            uword slen
-            slen = str_pool_len - start
-            uword off
-            off = 0
-            repeat {
-                if off >= start { break }
-                uword sk
-                ubyte sm
-                sm = 1
-                sk = 0
-                repeat {
-                    if sk >= slen { break }
-                    if peek($9b00 + (off + sk)) != peek($9b00 + (start + sk)) { sm = 0 break }
-                    sk = sk + 1
-                }
-                if sm != 0 {
-                    if peek($9b00 + (off + slen)) == 0 {
-                        str_pool_len = start
-                        push_token(TK_STR, off)
-                        return
-                    }
-                }
-                repeat {
-                    if peek($9b00 + (off)) == 0 { off = off + 1 break }
-                    off = off + 1
-                }
-            }
-            poke($9b00 + (str_pool_len), 0)
-            str_pool_len = str_pool_len + 1
-            push_token(TK_STR, start)
+            push_token(TK_STR, intern_strpool(start))
             return
         }
         if is_alpha_us(c) != 0 {
@@ -1045,6 +1180,8 @@ sub advance() {
 }
 
 sub lex_init() {
+    pend_i = 0
+    pend_n = 0
     next_raw_token()
     tk0_kind = ntok_kind
     tk0_val = ntok_val
@@ -1862,11 +1999,42 @@ sub parse_block() -> uword {
 
 ; ---- top-level program parser ----
 
-sub parse_sub(ubyte kind) -> uword {
-    ; current token is the name (IDENT or main keyword handled by caller)
-    uword nameid
-    nameid = cur_val()
-    advance()                               ; consume name
+; map a register-ABI annotation ident (A / X / Y / AY) to a code:
+; 0=none, 1=A, 2=X, 3=Y, 4=AY.
+sub reg_code(uword id) -> ubyte {
+    ubyte b0
+    b0 = peek($8300 + (id))
+    if b0 == 'A' {
+        if peek($8300 + (id + 1)) == 'Y' { return 4 }
+        return 1
+    }
+    if b0 == 'X' { return 2 }
+    if b0 == 'Y' { return 3 }
+    return 0
+}
+
+; parse one parameter: `type name` with an optional `@REG` annotation. The reg
+; code rides ND_PARAM's node_b (0 = no register / static-param slot).
+sub parse_param() -> uword {
+    ubyte ptag
+    ptag = type_tag(cur_kind())
+    advance()                               ; type
+    uword pname
+    pname = cur_val()
+    advance()                               ; name
+    uword reg
+    reg = 0
+    if cur_kind() == TK_AT {
+        advance()                           ; @
+        reg = reg_code(cur_val())
+        advance()                           ; REG ident
+    }
+    return new_node(ND_PARAM, ptag, pname, reg)
+}
+
+; parse a `( p, p, ... )` parameter list -> cons head (reversed source order,
+; matching cons_prepend); cursor left just past the `)`.
+sub parse_param_list() -> uword {
     advance()                               ; '('
     uword params
     params = 0
@@ -1874,34 +2042,49 @@ sub parse_sub(ubyte kind) -> uword {
         if cur_kind() == TK_RPAREN {
             break
         }
-        ubyte ptag
-        ptag = type_tag(cur_kind())
-        advance()                           ; type
-        uword pname
-        pname = cur_val()
-        advance()                           ; name
-        uword pnode
-        pnode = new_node(ND_PARAM, ptag, pname, 0)
-        params = cons_prepend(params, pnode)
+        params = cons_prepend(params, parse_param())
         if cur_kind() != TK_COMMA {
             break
         }
         advance()
     }
     advance()                               ; ')'
-    ubyte rettag
-    rettag = TY_VOID
+    return params
+}
+
+; parse an optional `-> rt @REG` return annotation -> the return type tag. The
+; `@REG` is consumed but not stored: an asmsub returns its value by the standard
+; convention (ubyte -> A, uword -> A:Y), so the return register is implied by rt.
+sub parse_ret() -> uword {
+    uword tag
+    tag = TY_VOID
     if cur_kind() == TK_ARROW {
-        advance()
-        rettag = type_tag(cur_kind())
-        advance()
+        advance()                           ; ->
+        tag = type_tag(cur_kind())
+        advance()                           ; rt
+        if cur_kind() == TK_AT {
+            advance()                       ; @
+            advance()                       ; REG ident
+        }
     }
+    return tag
+}
+
+sub parse_sub(ubyte kind) -> uword {
+    ; current token is the name (IDENT or main keyword handled by caller)
+    uword nameid
+    nameid = cur_val()
+    advance()                               ; consume name
+    uword params
+    params = parse_param_list()
+    uword retpacked
+    retpacked = parse_ret()
     uword body
     body = parse_block()
     uword node
     node = new_node(ND_SUB, kind, nameid, params)
     pokew($bb48 + ((node) << 1), body)
-    pokew($bf60 + ((node) << 1), rettag)
+    pokew($bf60 + ((node) << 1), retpacked)
     return node
 }
 
@@ -1986,46 +2169,56 @@ sub parse_struct_decl() -> uword {
     return new_node(ND_STRUCT, 0, sname, fields)
 }
 
+; `asmsub name(params @REG) -> rt @REG = $ADDR`  (decl: jsr $ADDR), or
+; `asmsub name(params @REG) -> rt @REG { %asm {{ ... }} }`  (inline body).
 sub parse_asmsub() -> uword {
     advance()                               ; 'asmsub'
     uword nameid
     nameid = cur_val()
     advance()                               ; name
-    advance()                               ; '('
     uword params
-    params = 0
-    repeat {
-        if cur_kind() == TK_RPAREN {
-            break
-        }
-        ubyte ptag
-        ptag = type_tag(cur_kind())
+    params = parse_param_list()
+    uword retpacked
+    retpacked = parse_ret()
+    if cur_kind() == TK_ASSIGN {
+        advance()                           ; '='
+        uword addr
+        addr = cur_val()                    ; $ADDR (INT)
         advance()
-        uword pname
-        pname = cur_val()
-        advance()
-        params = cons_prepend(params, new_node(ND_PARAM, ptag, pname, 0))
-        if cur_kind() != TK_COMMA {
-            break
-        }
-        advance()
+        uword node
+        node = new_node(ND_SUB, SUBK_ASMSUB, nameid, params)
+        pokew($bb48 + ((node) << 1), addr)
+        pokew($bf60 + ((node) << 1), retpacked)
+        return node
     }
-    advance()                               ; ')'
-    ubyte rettag
-    rettag = TY_VOID
-    if cur_kind() == TK_ARROW {
-        advance()
-        rettag = type_tag(cur_kind())
-        advance()
-    }
-    advance()                               ; '='
+    ; inline-body form: the block holds one ND_INLINEASM.
+    uword body
+    body = parse_block()
+    uword bnode
+    bnode = new_node(ND_SUB, SUBK_ASMSUB_BODY, nameid, params)
+    pokew($bb48 + ((bnode) << 1), body)
+    pokew($bf60 + ((bnode) << 1), retpacked)
+    return bnode
+}
+
+; `extsub $ADDR = name(params @REG) -> rt @REG`  (address-first decl form).
+sub parse_extsub() -> uword {
+    advance()                               ; 'extsub'
     uword addr
     addr = cur_val()                        ; $ADDR (INT)
     advance()
+    advance()                               ; '='
+    uword nameid
+    nameid = cur_val()
+    advance()                               ; name
+    uword params
+    params = parse_param_list()
+    uword retpacked
+    retpacked = parse_ret()
     uword node
     node = new_node(ND_SUB, SUBK_ASMSUB, nameid, params)
     pokew($bb48 + ((node) << 1), addr)
-    pokew($bf60 + ((node) << 1), rettag)
+    pokew($bf60 + ((node) << 1), retpacked)
     return node
 }
 
@@ -2158,8 +2351,8 @@ sub skip_sub_body() {
     }
     skip_braced_block()
 }
-; skip an asmsub (no body): advance to '=', then past it and the $ADDR.
-
+; skip an asmsub: the `= $ADDR` decl form (advance past '=' and the address),
+; or the inline-body form (skip the braced `{ %asm {{ ... }} }` block).
 sub skip_asmsub() {
     advance()                               ; 'asmsub'
     repeat {
@@ -2172,12 +2365,38 @@ sub skip_asmsub() {
             break
         }
         if t == TK_LBRACE {
+            skip_braced_block()             ; body form
             return
         }
         advance()
     }
     advance()                               ; '='
     advance()                               ; $ADDR
+}
+
+; skip an `extsub $ADDR = name(params)` declaration (no body).
+sub skip_extsub() {
+    repeat {
+        ubyte t
+        t = cur_kind()
+        if t == TK_EOF {
+            return
+        }
+        if t == TK_RPAREN {
+            break
+        }
+        advance()
+    }
+    advance()                               ; ')'
+    ; optional `-> rt @REG`
+    if cur_kind() == TK_ARROW {
+        advance()                           ; ->
+        advance()                           ; rt
+        if cur_kind() == TK_AT {
+            advance()                       ; @
+            advance()                       ; REG
+        }
+    }
 }
 
 ; PASS A: collect directives + module decls into the program lists;
@@ -2228,6 +2447,10 @@ sub parse_decls_pass() {
         }
         if t == TK_KASMSUB {
             skip_asmsub()
+            continue
+        }
+        if t == TK_KEXTSUB {
+            skip_extsub()
             continue
         }
         if t == TK_IDENT {
@@ -2506,7 +2729,7 @@ sub emit_zp_bindings() {
         }
         if peek($e018 + (j)) == 0 {
             if peekw($e93c + ((j) << 1)) == 0 {
-                if peekw($d0dc + ((j) << 1)) != $ffff {
+                if peekw($d0dc + ((j) << 1)) < $0100 {     ; real ZP only
                     any = 1
                     break
                 }
@@ -2527,7 +2750,7 @@ sub emit_zp_bindings() {
         }
         if peek($e018 + (i)) == 0 {
             if peekw($e93c + ((i) << 1)) == 0 {
-                if peekw($d0dc + ((i) << 1)) != $ffff {
+                if peekw($d0dc + ((i) << 1)) < $0100 {     ; skip $ffff overflow + $fffe reg
                     emit_sym_mangled(i)
                     out_text(" = $")
                     out_hex2(lsb(peekw($d0dc + ((i) << 1))))
@@ -2753,22 +2976,30 @@ sub register_subs() {
                     if t == TK_KASMSUB {
                         snode = parse_asmsub()
                     } else {
-                        issub = 0
-                        cg_skip_decl()
+                        if t == TK_KEXTSUB {
+                            snode = parse_extsub()
+                        } else {
+                            issub = 0
+                            cg_skip_decl()
+                        }
                     }
                 }
             }
         }
         if issub != 0 {
+            ubyte sk
+            sk = peek($b10c + (snode))
             sub_name[(sub_count as ubyte)] = peekw($b318 + ((snode) << 1))
-            sub_kind[(sub_count as ubyte)] = peek($b10c + (snode))
+            sub_kind[(sub_count as ubyte)] = sk
             sub_ret[(sub_count as ubyte)] = lsb(peekw($bf60 + ((snode) << 1)))
             sub_addr[(sub_count as ubyte)] = 0
-            if peek($b10c + (snode)) == SUBK_ASMSUB {
+            if sk == SUBK_ASMSUB {
                 sub_addr[(sub_count as ubyte)] = peekw($bb48 + ((snode) << 1))   ; node_c is the $F0xx addr
             }
             sub_count = sub_count + 1
             ; allocate this sub's params (source order), continuing zp_next.
+            ; a register-ABI param (reg code in ND_PARAM node_b) gets NO storage
+            ; (the call passes it in a register); the reg code rides sym_cval.
             uword phead
             phead = reverse_cons(peekw($b730 + ((snode) << 1)))
             uword pcell
@@ -2781,6 +3012,8 @@ sub register_subs() {
                 pnode = peekw($c378 + ((pcell) << 1))
                 ubyte ptag
                 ptag = peek($b10c + (pnode))
+                ubyte preg
+                preg = lsb(peekw($b730 + ((pnode) << 1)))
                 ubyte psz
                 psz = 1
                 if ptag == TY_UWORD { psz = 2 }
@@ -2789,20 +3022,27 @@ sub register_subs() {
                 pokew($d6f4 + ((sym_count) << 1), peekw($b318 + ((snode) << 1)))
                 poke($dd0c + (sym_count), 1)
                 poke($e018 + (sym_count), 0)
+                pokew($e324 + ((sym_count) << 1), preg)
                 pokew($e93c + ((sym_count) << 1), 0)
-                if zp_next + psz > $ff {
-                    pokew($d0dc + ((sym_count) << 1), $ffff)
+                if preg != 0 {
+                    pokew($d0dc + ((sym_count) << 1), $fffe)   ; reg param: no storage
                 } else {
-                    pokew($d0dc + ((sym_count) << 1), zp_next)
-                    zp_next = zp_next + psz
+                    if zp_next + psz > $ff {
+                        pokew($d0dc + ((sym_count) << 1), $ffff)
+                    } else {
+                        pokew($d0dc + ((sym_count) << 1), zp_next)
+                        zp_next = zp_next + psz
+                    }
                 }
                 sym_count = sym_count + 1
                 pcell = peekw($c598 + ((pcell) << 1))
             }
             ; then this sub's locals (walk the body), continuing zp_next.
-            ; (asmsub has no body -- node_c is its address -- so skip the walk.)
-            if peek($b10c + (snode)) != SUBK_ASMSUB {
-                walk_locals(peekw($bb48 + ((snode) << 1)), peekw($b318 + ((snode) << 1)))
+            ; (asmsubs have no var locals -- raw asm body / address -- so skip.)
+            if sk != SUBK_ASMSUB {
+                if sk != SUBK_ASMSUB_BODY {
+                    walk_locals(peekw($bb48 + ((snode) << 1)), peekw($b318 + ((snode) << 1)))
+                }
             }
             reset_nodes()
         }
@@ -2945,8 +3185,18 @@ sub start() {
                     if t == TK_KASMSUB {
                         reset_nodes()
                         snode = parse_asmsub()
+                        ; inline-body asmsubs stream a record (emitted in pass B);
+                        ; the `= $ADDR` decl form has no body, so no record.
+                        if peek($b10c + (snode)) == SUBK_ASMSUB_BODY {
+                            dump_record(1, snode)
+                        }
                     } else {
-                        cg_skip_decl()
+                        if t == TK_KEXTSUB {
+                            reset_nodes()
+                            snode = parse_extsub()
+                        } else {
+                            cg_skip_decl()
+                        }
                     }
                 }
             }
