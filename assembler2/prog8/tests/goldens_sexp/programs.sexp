@@ -431,7 +431,7 @@
               (int 0))
             (int 2)))))))
 
-;;; 'main { %asm{{ "nop" }} }'
+;;; 'main { %asm {{\nnop\n}} }'
 (program
   (address $4000)
   (output raw)

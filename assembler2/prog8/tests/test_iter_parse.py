@@ -279,7 +279,7 @@ STMT_PROGRAMS = [
     "main { @($f001) = 7 }",
     "ubyte[4] arr\nmain { arr[0] = 1 arr[1] = arr[0] + 2 }",
     # inline asm
-    "main { %asm{{ \"nop\" }} }",
+    "main { %asm {{\nnop\n}} }",
     # deeply nested mix
     "ubyte a\nubyte b\nmain { while a < 8 { for b in 0 to a { if b == 3 { break } } a = a + 1 } }",
 ]

@@ -105,22 +105,26 @@ def lex(src: str, filename: str = "<input>") -> list[Token]:
                     m = k + 2
                     while m < n and src[m] in " \t\r\n":
                         m += 1
-                    if m >= n or src[m] != '"':
-                        advance(k - i + 2)          # consume up to + incl `{{`
-                        bl, bc = loc()
-                        end = src.find("}}", i)
-                        if end == -1:
-                            raise LexError(
-                                f"{filename}:{bl}:{bc}: unterminated %asm {{{{ block")
-                        body = "\n".join(
-                            ln.strip() for ln in src[i:end].split("\n")
-                            if ln.strip())
-                        advance(end - i + 2)        # consume body + `}}`
-                        out.append(Token("{", "{", bl, bc))
-                        out.append(Token("{", "{", bl, bc))
-                        out.append(Token("STR", body, bl, bc))
-                        out.append(Token("}", "}", bl, bc))
-                        out.append(Token("}", "}", bl, bc))
+                    if m < n and src[m] == '"':
+                        raise LexError(
+                            f"{filename}:{l0}:{c0}: the quoted inline-asm form "
+                            f'`%asm{{{{ \"...\" }}}}` is retired; use the raw '
+                            f"`%asm {{{{ ... }}}}` form")
+                    advance(k - i + 2)              # consume up to + incl `{{`
+                    bl, bc = loc()
+                    end = src.find("}}", i)
+                    if end == -1:
+                        raise LexError(
+                            f"{filename}:{bl}:{bc}: unterminated %asm {{{{ block")
+                    body = "\n".join(
+                        ln.strip() for ln in src[i:end].split("\n")
+                        if ln.strip())
+                    advance(end - i + 2)            # consume body + `}}`
+                    out.append(Token("{", "{", bl, bc))
+                    out.append(Token("{", "{", bl, bc))
+                    out.append(Token("STR", body, bl, bc))
+                    out.append(Token("}", "}", bl, bc))
+                    out.append(Token("}", "}", bl, bc))
             continue
         # numeric literal: $ff, %1010, 42
         if c == "$" and i + 1 < n and src[i + 1] in "0123456789abcdefABCDEF":

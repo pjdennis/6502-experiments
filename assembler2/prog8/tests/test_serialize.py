@@ -252,7 +252,7 @@ class SerializeFormat(unittest.TestCase):
 
     def test_asmsub_and_array_var(self):
         got = self._ser_prog(
-            "asmsub putc(ubyte c) = $f009\n"
+            "extsub $f009 = putc(ubyte c @A)\n"
             "ubyte[4] buf\n"
             "main { }")
         self.assertIn("\n".join([

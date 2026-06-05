@@ -917,14 +917,10 @@ sub lex_asm_directive(uword nameid) {
     ubyte b
     b = read_src()                          ; first '{'
     b = read_src()                          ; second '{'
-    skip_asm_ws()                           ; to inspect the body's first byte
+    skip_asm_ws()                           ; to the raw body
     pend_i = 0
     pendk[0] = TK_LBRACE  pendv[0] = 0
     pendk[1] = TK_LBRACE  pendv[1] = 0
-    if peek_src() == '"' {
-        pend_n = 2                          ; legacy: STR + `}}` lex normally
-        return
-    }
     uword off
     off = build_asm_body()
     pendk[2] = TK_STR     pendv[2] = off
@@ -2180,18 +2176,8 @@ sub parse_asmsub() -> uword {
     params = parse_param_list()
     uword retpacked
     retpacked = parse_ret()
-    if cur_kind() == TK_ASSIGN {
-        advance()                           ; '='
-        uword addr
-        addr = cur_val()                    ; $ADDR (INT)
-        advance()
-        uword node
-        node = new_node(ND_SUB, SUBK_ASMSUB, nameid, params)
-        pokew($bb48 + ((node) << 1), addr)
-        pokew($bf60 + ((node) << 1), retpacked)
-        return node
-    }
-    ; inline-body form: the block holds one ND_INLINEASM.
+    ; inline-body form only (an address decl uses `extsub $ADDR = name(...)`);
+    ; the block holds one ND_INLINEASM.
     uword body
     body = parse_block()
     uword bnode

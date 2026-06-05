@@ -294,13 +294,11 @@ class Parser:
         return r.value
 
     def parse_asmsub(self) -> Sub:
-        """Two forms:
-          - `asmsub name(params) -> rt = $ADDR` -- declaration only; calling
-            `name(...)` JSRs $ADDR.
-          - `asmsub name(params @REG) -> rt @REG { %asm {{ ... }} }` -- the
-            register-ABI form with an inline body: args arrive in the named
-            registers, the body is emitted under the sub label, no static-param
-            prologue. (Upstream's register-ABI asmsub.)
+        """`asmsub name(params @REG) -> rt @REG { %asm {{ ... }} }` -- the
+        register-ABI inline-body form: args arrive in the named registers, the
+        body is emitted under the sub label, no static-param prologue. (An
+        address-only external sub is declared with `extsub $ADDR = name(...)`;
+        the retired `asmsub name(...) = $ADDR` form is no longer accepted.)
         """
         kw = self.eat("KW", "asmsub")
         name_tok = self.eat("IDENT")
@@ -310,12 +308,11 @@ class Parser:
         if self.match("->"):
             ret = self.eat("KW").value
             ret_reg = self._parse_reg_annotation()
-        if self.match("="):
-            addr_tok = self.eat("INT")
-            return Sub(loc=self.loc(kw), name=name_tok.value,
-                       body=Block(loc=self.loc(kw), stmts=[]),
-                       params=params, return_type_name=ret,
-                       is_asmsub=True, asm_target=f"${addr_tok.value:04x}")
+        if self.peek().kind == "=":
+            raise ParseError(
+                f"{self.filename}:{kw.line}:{kw.col}: the `asmsub {name_tok.value}"
+                f"(...) = $ADDR` form is retired; use `extsub $ADDR = "
+                f"{name_tok.value}(...)`")
         body = self.parse_block()
         return Sub(loc=self.loc(kw), name=name_tok.value, body=body,
                    params=params, return_type_name=ret, ret_reg=ret_reg,
