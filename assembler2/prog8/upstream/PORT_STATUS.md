@@ -462,3 +462,62 @@ Debugging is tractable: diff the pipeline output against the validated oracle
 then the asmsub-body + reg-call emission must match #5. Land #1-#6 together (the
 self-host is red between converging p1.p8 and finishing pass2_sh) and commit
 only at 0-diff.
+
+## Update 11: on-target I/O register-ABI convergence -- DONE (all #1-6, 0-diff)
+
+The on-target convergence scoped in Update 10 is COMPLETE. p1.p8 (the self-host
+input + oracle) now carries its file I/O in the SAME register-ABI `sys_*` form
+the pipeline uses, and BOTH the p8c reference compiler AND the self-hosting
+pipeline (p8c- and upstream-bootstrapped) build the one converged source
+byte-identically. Done in two commits:
+
+1. **On-target pipeline accepts register-ABI asmsubs (#1-5, additive).** The
+   Prog8 mirror of p8c's Step A, landed in `p1_pass1_sh.p8` (parser/sema/dump) +
+   `p1_pass2_sh.p8` (codegen) while p1.p8 still used the legacy form, so every
+   self-host stayed 0-diff during build-out:
+   - **lexer:** `extsub` keyword; raw `%asm {{ ... }}` capture -- the body is
+     normalized (strip each line, drop blank lines, join with `\n`), interned
+     into the string pool, and re-emitted as the `{ { STR } }` token shape via a
+     small pending-token queue, so `parse_inline_asm` is reused unchanged. The
+     legacy quoted `%asm{{ "..." }}` form lexes byte-for-byte as before; the
+     string-pool dedup is factored into `intern_strpool`. Streamed normalization
+     (no line buffer) to stay under the $8300 ident-pool slab.
+   - **parser:** `@A/@X/@Y/@AY` param annotations (reg code rides ND_PARAM
+     node_b); the `extsub $ADDR = name(...)` form; the inline-body asmsub form
+     (`SUBK_ASMSUB_BODY`, body block holds one ND_INLINEASM); `-> rt @REG`
+     consumed but not stored (the return register is implied by the type:
+     ubyte->A, uword->A:Y -- so NO `sub_ret_reg` array/dump field is needed,
+     which also keeps pass1 under its slab). `parse_param`/`parse_param_list`/
+     `parse_ret` factored and shared by sub/asmsub/extsub.
+   - **sema (`register_subs`):** a register param gets NO storage (sym_addr
+     sentinel $fffe, skipped by `emit_zp_bindings`+`emit_memvars`) -- this is
+     the fix for the ZP-allocation cascade; its reg code rides `sym_cval`.
+   - **dump/codegen:** inline-body asmsubs stream an AST record (pass B);
+     `emit_sub` emits `; ---- asmsub NAME ----` + label + the raw %asm lines (own
+     rts, no prologue/epilogue); `codegen_asmsub_call` loads each reg-ABI arg
+     into its register (X/Y first via A, the A/AY arg last) and JSRs the address
+     ($ADDR/extsub) or the body label.
+   Validated against the p8c oracle on standalone reg-ABI programs incl. the
+   exact converged `sys_*` block (uword @AY returns, named asm labels, the
+   sys_read/src_eof wrapper, multi-arg @A/@X calls): byte-identical.
+
+2. **Converge p1.p8 (#6).** `stmt.p8`'s legacy syscall block -> the reg-ABI
+   `sys_*` block (extsub sys_exit/sys_close; asmsub sys_argv/sys_open/
+   sys_openout/sys_read_raw/sys_write; the `sys_read` wrapper decoupling
+   src_eof); call sites in `stmt.p8` + `build_p1.py` renamed; `p1.p8`
+   regenerated (idempotent). The converged source shifts bytes from the string
+   pool into the ident pool (the `sys_*` names are longer; the asm bodies leave
+   the string literals), overflowing `p1_pass2_sh.p8`'s ident-pool slab -- fixed
+   by lowering its base $9f00 -> $9e00 into the gap above the code (6056 ->
+   6312 B; load-address only, output-transparent).
+
+Gates (all on the single converged source): verify.sh (p8c self-host) 0-diff;
+upstream selfhost.sh 0-diff; selfhost_corpus 80 match + 1 known-signed + 0
+unexpected; test_p1 26 OK; test_stmt 3 OK.
+
+### Remaining (optional polish -- NOT blocking; the legacy form is still in use)
+Retiring the legacy `%asm{{ "..." }}` quoted-string + `asmsub ..=$ADDR`
+static-param paths from the on-target parser/codegen + p8c (Update 9 #3) is
+deferred: the test_p1 corpus and the sibling tools `expr.p8`/`lexer.p8`/
+`tinyp8.p8` still author both forms, so the legacy paths must stay until those
+are converged too. Deleting `port_p1.py`'s I/O transform waits on the same.
