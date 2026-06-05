@@ -515,9 +515,34 @@ Gates (all on the single converged source): verify.sh (p8c self-host) 0-diff;
 upstream selfhost.sh 0-diff; selfhost_corpus 80 match + 1 known-signed + 0
 unexpected; test_p1 26 OK; test_stmt 3 OK.
 
-### Remaining (optional polish -- NOT blocking; the legacy form is still in use)
-Retiring the legacy `%asm{{ "..." }}` quoted-string + `asmsub ..=$ADDR`
-static-param paths from the on-target parser/codegen + p8c (Update 9 #3) is
-deferred: the test_p1 corpus and the sibling tools `expr.p8`/`lexer.p8`/
-`tinyp8.p8` still author both forms, so the legacy paths must stay until those
-are converged too. Deleting `port_p1.py`'s I/O transform waits on the same.
+## Update 12: legacy `%asm`-string + `asmsub=$ADDR` forms RETIRED
+
+The deferred cleanup (Update 9 #3) is done: the codebase now has ONE inline-asm
+form (raw `%asm {{ ... }}`) and ONE address-decl form (`extsub $ADDR =
+name(...)`). Five committed steps:
+
+1. **port_p1.py's dual-dialect I/O transform deleted.** p1.p8 + the `_sh`
+   pipeline are authored in the one converged dialect, so the transform (IO_NEW,
+   the `io_transform` flag, the index/literal helpers) is dead; only the shared
+   `_split_comment` utility remains. port_pipeline.py no longer calls port().
+2. **Sibling tools + p8c e2e shims converged.** `expr.p8`/`lexer.p8`/
+   `tinyp8.p8`'s syscall I/O blocks -> register-ABI `sys_*` (extsub + asmsub
+   bodies); the 3 e2e shims likewise. `lexer.p8` gained raw-`%asm` STR
+   normalization (its equivalence corpus now includes the converged sources).
+3. **Monolith dropped asmsub/inline-asm.** Rather than bloat p1.p8 past the
+   pipeline's tight ident-pool slabs (the wall hit when mirroring reg-ABI into
+   the monolith), the deprecated monolith (`stmt.p8` parser + `build_p1.py`
+   codegen) DROPS asmsub + inline-asm entirely -- that surface lives only in p8c
+   + the pipeline. p1.p8 shrank (5456 -> 5307 lines). The M5 corpus + the
+   tinyp8 capacity test (test_stmt) are removed/skipped accordingly.
+4. **Legacy deleted from the compilers.** p8c rejects quoted `%asm{{ "..." }}`
+   (lex.py) and `asmsub ..=$ADDR` (parse.py); `p1_pass1_sh.p8` drops the
+   quoted-body + `=$ADDR` branches (output-neutral on the reg-ABI corpus,
+   pass1 shrank to $7FC0). pass2_sh is form-agnostic (no change).
+5. **Test inputs moved off the retired forms** (test_iter_parse, test_serialize,
+   test_codegen) + the one serializer golden regenerated (AST unchanged).
+
+Gates (all green): verify.sh 0-diff; upstream selfhost.sh 0-diff;
+selfhost_corpus 77 match + 1 known-signed + 0 unexpected; test_p1 24;
+test_stmt OK (1 skip); host p8c 137; test_lexer 22; test_expr 2; tinyp8
+e2e/v2/self_host OK.
