@@ -30,10 +30,11 @@ banking helpers use that table; `bit 5` (LCD E) is preserved on every switch.
 
 ## Banking API (`%import banking`)
 
-    banking.set_upper_bank(n)            ; select logical bank 0..7
-    banking.bank_peek(n, win) -> ubyte   ; read $8000-$EFFF in bank n (auto-restore)
-    banking.bank_poke(n, win, val)       ; write   "          "
-    banking.bank_call(n, win) -> ubyte   ; JSR a routine in bank n, restore, return A
+    banking.set_upper_bank(n)              ; select logical bank 0..7
+    banking.bank_peek(n, win) -> ubyte     ; read $8000-$EFFF in bank n (auto-restore)
+    banking.bank_poke(n, win, val)         ; write   "          "
+    banking.bank_store(n, win, src, count) ; bulk-install a code/data overlay into bank n
+    banking.bank_call(n, win) -> ubyte     ; JSR a routine in bank n, restore, return A
 
 `win` is an absolute address in `$8000-$EFFF`. `bank_call`'s callee must end
 in `RTS`; the trampoline lives in the fixed lower 32K so the return works.
@@ -61,6 +62,8 @@ any are missing.
 | `t2_banked_data` | banked arrays across 2 banks: `sum=7F80 / a+b=255 OK` |
 | `t3_banked_code` | **banked code** via far-call: `far ret=2A / banked code OK` |
 | `t4_bank_counters` | 8 independent per-bank counters: `33333333` |
+| `t5_multibank_code` | **code in 3 banks**, self-installed by the binary, executed across: `123 n=3` |
+| `t6_overlays` | **code in 3 banks** loaded from disk (LOAD-into-bank), executed across: `abc n=3` |
 
 ## Disk boot (file I/O OS calls + monitor ROM)
 

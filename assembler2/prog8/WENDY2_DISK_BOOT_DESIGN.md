@@ -6,12 +6,13 @@ the design doc for that subsystem; it resolves and consumes the `$F800+`
 OS-call file I/O from
 [`WENDY2_BANKING_TARGET_PLAN.md`](./WENDY2_BANKING_TARGET_PLAN.md) S2.6 (M5).
 
-> **Status: D1-D2 + D4 built and green.** The `$F800+` OS-call port chip +
-> `--disk` (D1), the monitor ROM with autoexec load+run (D2), and
-> return-to-monitor + multi-command autoexec (D4) are implemented and tested
-> (`make -C assembler2 wendy2-test`: 9 e2e goldens). Implementation:
+> **Status: D1-D2 + D4 built and green, plus banked-code loading (T5/T6).**
+> The `$F800+` OS-call port chip + `--disk` (D1), the monitor ROM with autoexec
+> load+run (D2), return-to-monitor + multi-command autoexec (D4), and loading
+> code into multiple banks + executing across them (T5/T6) are implemented and
+> tested (`make -C assembler2 wendy2-test`: 11 e2e goldens). Implementation:
 > `assembler2/emulator/chips/syscall_ports.{c,h}`, `wendy2c_monitor.s`,
-> `assembler2/prog8/upstream/libraries/wendy2/os.p8`, demos `d1_*`/`d2_*`/`d4_*`.
+> `assembler2/prog8/upstream/libraries/wendy2/os.p8`, demos `d1_*`/`d2_*`/`d4_*`/`t5_*`/`t6_*`.
 > Remaining: D3 (interactive serial commands), D5 (program header for banked
 > programs), D6 (real SPI-flash backing).
 
@@ -205,6 +206,49 @@ The monitor ROM is built once with vasm (like the upload ROM).
 * `tests/test_wendy2_disk.py`: golden test -- autoexec runs a known program;
   assert its LCD output. Skips if toolchain/emulator missing. Wire into
   `make wendy2-test`.
+
+## 9b. Loading code into upper banks (the two models) -- BUILT
+
+How does banked *code* get into the upper banks? Upstream Prog8 shows two
+patterns, and wendy2 supports both (demos T5 and T6). In all cases the
+resident program in the fixed lower 32K is the **conductor**: banked code is
+an *overlay* it `bank_call`s into (the overlay's own code is switched out of
+the window the moment it would switch banks, so cross-bank control flow is
+orchestrated from the fixed region, never overlay-to-overlay directly).
+
+The two ways to get the bytes into a bank:
+
+1. **Self-installing binary** (T5 `t5_multibank_code.p8`). The compiled
+   program carries the routines as data (byte arrays) and copies them into
+   banks at startup with `banking.bank_store(n, win, &blob, len)`. This is
+   the analog of a program copying overlays into HIRAM with byte stores --
+   on the C128, `INDSTA` ($FF77) stores into another bank; our `bank_poke` /
+   `bank_store` are the same idea. Self-contained: no storage needed, runs
+   under the plain upload boot ROM. Good for small, fixed overlays baked into
+   the build.
+
+2. **Storage-driven / environment loads** (T6 `t6_overlays.p8`). The program
+   streams overlay *files* from the disk straight into banks
+   (`os.openfile` + `set_upper_bank` + read loop = "LOAD-into-bank"). This is
+   the analog of how a real banked program gets code on upstream targets: the
+   **kernal/loader** places a file into a chosen bank -- C128 `SETBNK`
+   ($FF68) selects the bank, then `LOAD` streams the file in; cx16 likewise
+   `LOAD`s a file into a HIRAM bank. The banked code lives outside the main
+   binary, supplied by the environment, and can be swapped/updated without
+   rebuilding the program. This is the model to grow toward for real overlay
+   management (and the natural home for a future `loadbank NAME N` monitor
+   command).
+
+Both demos install three routines into banks 1/2/3 and `bank_call` across
+them; each routine also bumps a shared counter in fixed lower RAM (banked
+code reaching back into the always-mapped lower 32K), proving distinct code
+really executes in each bank (T5 -> `123 n=3`, T6 -> `abc n=3`).
+
+Far-call mechanism: `banking.bank_call(n, win)` saves the current bank,
+selects bank n, `jsr`s the overlay via a zero-page vector, restores the bank
+on return -- the wendy2 analog of cx16 `callfar` / C128 `JSRFAR` ($FF6E),
+with the trampoline resident in the fixed lower 32K so the return survives
+the switch.
 
 ## 10. Milestones
 
