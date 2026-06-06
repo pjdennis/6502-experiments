@@ -49,4 +49,27 @@ banking {
         @(win) = val
         set_raw(saved)
     }
+
+    ; far-call: switch the window to logical bank n, JSR the routine at `win`
+    ; ($8000-$EFFF), then restore the previous bank. The routine must end with
+    ; RTS; its A-register result is returned. The trampoline itself lives in
+    ; the fixed lower 32K (this is ordinary program code), so it survives the
+    ; switch. The callee runs with bank n mapped; the hardware stack
+    ; ($0100-$01FF) and zero page are fixed, so RTS returns here correctly.
+    sub bank_call(ubyte n, uword win) -> ubyte {
+        ubyte saved = get_raw()
+        set_raw(cfgtab[n])
+        ubyte result = call_indirect(win)
+        set_raw(saved)
+        return result
+    }
+
+    ; JSR an arbitrary address via a zero-page vector; returns the callee's A.
+    asmsub call_indirect(uword addr @AY) -> ubyte @A {
+        %asm {{
+            sta  cx16.r15
+            sty  cx16.r15+1
+            jmp  (cx16.r15)     ; callee's RTS returns to callfar (our caller)
+        }}
+    }
 }
