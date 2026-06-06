@@ -5,10 +5,11 @@
 %output raw
 %import txt
 %import lcd
+%launcher none
+main {
 
 ubyte total
 
-main {
   sub start() {
     lcd.clear()
 

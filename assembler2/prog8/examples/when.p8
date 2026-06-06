@@ -4,6 +4,8 @@
 %output raw
 %import txt
 %import lcd
+%launcher none
+main {
 
 sub classify(ubyte c) {
     when c {
@@ -19,7 +21,6 @@ sub classify(ubyte c) {
     }
 }
 
-main {
   sub start() {
     lcd.clear()
     classify($61)               ; -> "A "

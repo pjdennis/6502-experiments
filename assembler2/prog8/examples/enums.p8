@@ -4,6 +4,8 @@
 %output raw
 %import txt
 %import lcd
+%launcher none
+main {
 
 enum Token {
     NONE,             ; 0
@@ -26,7 +28,6 @@ sub kind_to_letter(ubyte k) -> ubyte {
     }
 }
 
-main {
   sub start() {
     lcd.clear()
     txt.print_ub(kind_to_letter(Token.NONE))

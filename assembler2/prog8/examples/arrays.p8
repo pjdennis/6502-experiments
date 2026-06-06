@@ -4,10 +4,11 @@
 %output raw
 %import txt
 %import lcd
+%launcher none
+main {
 
 ubyte[8] buf
 
-main {
   sub start() {
     lcd.clear()
 

@@ -4,6 +4,8 @@
 %output raw
 %import txt
 %import lcd
+%launcher none
+main {
 
 sub work() {
     defer txt.print("3")           ; runs 3rd at exit
@@ -12,7 +14,6 @@ sub work() {
     txt.print("body ")
 }
 
-main {
   sub start() {
     lcd.clear()
     work()

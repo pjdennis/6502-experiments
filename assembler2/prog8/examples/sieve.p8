@@ -11,11 +11,12 @@
 %output raw
 %import txt
 %import lcd
+%launcher none
+main {
 
 const ubyte N = 64
 ubyte[64] sieve
 
-main {
   sub start() {
     lcd.clear()
 

@@ -15,6 +15,8 @@
 %output raw
 %import txt
 %import lcd
+%launcher none
+main {
 
 enum TK {
     NUM = $4E,      ; 'N'
@@ -50,7 +52,6 @@ inline sub hex_value(ubyte c) -> ubyte {
     return c - $30                   ; '0'..'9'
 }
 
-main {
   sub start() {
     lcd.clear()
 

@@ -4,6 +4,8 @@
 %output raw
 %import txt
 %import lcd
+%launcher none
+main {
 
 struct Point {
     ubyte x
@@ -13,7 +15,6 @@ struct Point {
 
 Point p
 
-main {
   sub start() {
     lcd.clear()
     p.x = $1a

@@ -4,6 +4,8 @@
 %output raw
 %import txt
 %import lcd
+%launcher none
+main {
 
 const ubyte LO = $cd
 const ubyte HI = $ab
@@ -11,7 +13,6 @@ const uword ADDR = $4080
 
 ubyte[10] tab
 
-main {
   sub start() {
     lcd.clear()
 

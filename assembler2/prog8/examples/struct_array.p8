@@ -4,6 +4,8 @@
 %output raw
 %import txt
 %import lcd
+%launcher none
+main {
 
 struct Token {
     ubyte kind
@@ -12,7 +14,6 @@ struct Token {
 
 Token[4] toks
 
-main {
   sub start() {
     lcd.clear()
 

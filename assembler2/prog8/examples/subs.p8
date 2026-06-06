@@ -7,6 +7,8 @@
 %output raw
 %import txt
 %import lcd
+%launcher none
+main {
 
 ; Re-declare the existing display_hex (display_hex.inc, $XXXX) as an
 ; asmsub so we can call it as `hex(b)` instead of the builtin
@@ -28,7 +30,6 @@ sub combine(ubyte lo, ubyte hi) -> uword {
     return w | lo
 }
 
-main {
   sub start() {
     lcd.clear()
     txt.print("d=")

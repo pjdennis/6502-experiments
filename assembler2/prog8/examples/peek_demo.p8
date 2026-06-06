@@ -11,8 +11,9 @@
 %output raw
 %import txt
 %import lcd
-
+%launcher none
 main {
+
   sub start() {
     lcd.clear()
 

@@ -4,6 +4,8 @@
 %output raw
 %import txt
 %import lcd
+%launcher none
+main {
 
 inline sub print_bracket(ubyte ch) {
     txt.print("[")
@@ -11,7 +13,6 @@ inline sub print_bracket(ubyte ch) {
     txt.print("]")
 }
 
-main {
   sub start() {
     lcd.clear()
     print_bracket($1a)
