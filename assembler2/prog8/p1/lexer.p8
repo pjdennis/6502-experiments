@@ -25,6 +25,9 @@
 
 %address $0200
 %import strings
+%output raw
+%launcher none
+main {
 
 ; ---- module-level state ----
 ubyte src_hand
@@ -117,26 +120,26 @@ asmsub sys_write(ubyte b @A, ubyte handle @X) {
 ; file with no trailing newline) loops forever re-reading the rewound
 ; source.
 sub read_src() -> ubyte {
-    if peek_ok {
+    if peek_ok != 0 {
         peek_ok = 0
         return peek_buf
     }
-    if src_eof {
+    if src_eof != 0 {
         return 0
     }
     return sys_read(src_hand)
 }
 
 sub peek_src() -> ubyte {
-    if peek_ok {
+    if peek_ok != 0 {
         return peek_buf
     }
-    if src_eof {
+    if src_eof != 0 {
         return 0
     }
     ubyte b
     b = sys_read(src_hand)
-    if src_eof {
+    if src_eof != 0 {
         return 0
     }
     peek_buf = b
@@ -156,7 +159,7 @@ sub out_nl() {
 sub out_text(uword p) {
     uword q
     q = p
-    while @(q) {
+    while @(q) != 0 {
         out_byte(@(q))
         q = q + 1
     }
@@ -192,14 +195,14 @@ sub is_alpha_us(ubyte c) -> ubyte {
 }
 
 sub is_alnum_us(ubyte c) -> ubyte {
-    if is_alpha_us(c) {
+    if is_alpha_us(c) != 0 {
         return 1
     }
     return is_digit(c)
 }
 
 sub is_hexdig(ubyte c) -> ubyte {
-    if is_digit(c) {
+    if is_digit(c) != 0 {
         return 1
     }
     if c >= 'a' {
@@ -238,10 +241,10 @@ sub out_dec_place(uword p) {
         dec_v = dec_v - p
         d = d + 1
     }
-    if d {
+    if d != 0 {
         dec_started = 1
     }
-    if dec_started {
+    if dec_started != 0 {
         out_byte(d + '0')
     }
 }
@@ -264,13 +267,13 @@ sub read_hex() {                                         ; '$' already consumed
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof {
+        if src_eof != 0 {
             return
         }
         if c == '_' {                                    ; '_' separator
             c = read_src()
         } else {
-            if is_hexdig(c) {
+            if is_hexdig(c) != 0 {
                 c = read_src()
                 int_val = (int_val << 4) + hex_nibble(c)
             } else {
@@ -285,7 +288,7 @@ sub read_bin() {                                         ; '%' already consumed
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof {
+        if src_eof != 0 {
             return
         }
         if c == '_' {
@@ -311,13 +314,13 @@ sub read_dec() {                                         ; first digit still pee
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof {
+        if src_eof != 0 {
             return
         }
         if c == '_' {
             c = read_src()
         } else {
-            if is_digit(c) {
+            if is_digit(c) != 0 {
                 c = read_src()
                 int_val = (int_val << 3) + (int_val << 1) + (c - '0')
             } else {
@@ -359,10 +362,10 @@ sub read_ident() {                                       ; next peeked char star
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof {
+        if src_eof != 0 {
             return
         }
-        if is_alnum_us(c) {
+        if is_alnum_us(c) != 0 {
             c = read_src()
             if name_len < 40 {
                 name_buf[name_len] = c
@@ -483,7 +486,7 @@ sub skip_asm_ws() {
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof { break }
+        if src_eof != 0 { break }
         if asm_ws(c) == 0 {
             if c != '\n' { break }
         }
@@ -522,7 +525,7 @@ sub lex_asm_raw() {
     repeat {
         ubyte c
         c = read_src()
-        if src_eof { break }
+        if src_eof != 0 { break }
         if c == '}' {
             if peek_src() == '}' { c = read_src()  break }
         }
@@ -557,7 +560,7 @@ sub lex_asm_raw() {
 sub lex_char() {                                         ; opening ' already consumed
     ubyte c
     c = read_src()
-    if src_eof {
+    if src_eof != 0 {
         return
     }
     if c == '\\' {                                        ; escape
@@ -578,7 +581,7 @@ sub lex_string() {                                       ; opening " already con
     repeat {
         ubyte c
         c = read_src()
-        if src_eof {
+        if src_eof != 0 {
             break
         }
         if c == '"' {                                    ; closing "
@@ -602,7 +605,7 @@ sub skip_to_nl() {
     repeat {
         ubyte c
         c = read_src()
-        if src_eof {
+        if src_eof != 0 {
             break
         }
         if c == '\n' {
@@ -777,7 +780,6 @@ sub lex_operator(ubyte c) {
 
 ; ---- main lex loop ----
 
-main {
   sub start() {
     uword fn
     fn = sys_argv(0)
@@ -791,7 +793,7 @@ main {
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof {
+        if src_eof != 0 {
             break
         }
 
@@ -823,11 +825,11 @@ main {
             c = read_src()                               ; consume '%'
             ubyte c2
             c2 = peek_src()
-            if src_eof {
+            if src_eof != 0 {
                 emit_punct("%")
                 continue
             }
-            if is_alpha_us(c2) {
+            if is_alpha_us(c2) != 0 {
                 read_ident()
                 emit_dir_head()
                 out_ident()
@@ -871,7 +873,7 @@ main {
         }
 
         ; decimal literal
-        if is_digit(c) {
+        if is_digit(c) != 0 {
             read_dec()
             emit_int_head()
             out_dec(int_val)
@@ -894,9 +896,9 @@ main {
         }
 
         ; identifier / keyword
-        if is_alpha_us(c) {
+        if is_alpha_us(c) != 0 {
             read_ident()
-            if kw_match() {
+            if kw_match() != 0 {
                 emit_kw_head()
             } else {
                 emit_ident_head()
