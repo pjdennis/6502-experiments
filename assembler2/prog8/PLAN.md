@@ -22,6 +22,9 @@ language-surface checklist, see [`README.md`](./README.md).
 * [`WENDY2_DISK_BOOT_DESIGN.md`](./WENDY2_DISK_BOOT_DESIGN.md) -- design for an
   alternate monitor boot ROM + simulated SPI storage that loads/runs programs
   over the file-I/O OS calls (with autoexec); folds in the M5 OS-call ABI.
+* [`WENDY2_SELFHOST_BANKING_PLAN.md`](./WENDY2_SELFHOST_BANKING_PLAN.md) -- plan
+  to self-host `p1.p8` on wendy2c using a mapped RAM bank as high RAM (the two
+  passes' code fits the 32K fixed region; only data overflows into the bank).
 
 When you finish a feature, update this file. When you finish a
 session, update `RESUME_NOTES.md`.
