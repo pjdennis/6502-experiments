@@ -1095,16 +1095,6 @@ sub next_raw_token() {
 
 sub lex_operator(ubyte c) {
     ubyte c2
-    if c == '(' { push_token(TK_LPAREN, 0)  return }
-    if c == ')' { push_token(TK_RPAREN, 0)  return }
-    if c == '[' { push_token(TK_LBRACK, 0)  return }
-    if c == ']' { push_token(TK_RBRACK, 0)  return }
-    if c == '{' { push_token(TK_LBRACE, 0)  return }
-    if c == '}' { push_token(TK_RBRACE, 0)  return }
-    if c == ',' { push_token(TK_COMMA, 0)  return }
-    if c == '@' { push_token(TK_AT, 0)  return }
-    if c == '.' { push_token(TK_DOT, 0)  return }
-    if c == '~' { push_token(TK_TILDE, 0)  return }
     if c == '*' {
         c2 = peek_src()
         if c2 == '=' { c2 = read_src()  push_token(TK_OTHER, 0)  return }   ; *=
@@ -1152,6 +1142,16 @@ sub lex_operator(ubyte c) {
 ; sub's node count under the per-sub arena cap.
 sub lex_operator2(ubyte c) {
     ubyte c2
+    if c == '(' { push_token(TK_LPAREN, 0)  return }
+    if c == ')' { push_token(TK_RPAREN, 0)  return }
+    if c == '[' { push_token(TK_LBRACK, 0)  return }
+    if c == ']' { push_token(TK_RBRACK, 0)  return }
+    if c == '{' { push_token(TK_LBRACE, 0)  return }
+    if c == '}' { push_token(TK_RBRACE, 0)  return }
+    if c == ',' { push_token(TK_COMMA, 0)  return }
+    if c == '@' { push_token(TK_AT, 0)  return }
+    if c == '.' { push_token(TK_DOT, 0)  return }
+    if c == '~' { push_token(TK_TILDE, 0)  return }
     if c == '<' {
         c2 = peek_src()
         if c2 == '<' {
@@ -1544,6 +1544,61 @@ sub parse_operand(ubyte t) -> ubyte {
     return 1
 }
 
+; handle a `)` in the shunting-yard loop: reduce to the open marker and close
+; it (grouping paren / @() memat / call arglist). Returns 1 if parse_expr should
+; stop (unbalanced / not our paren), 0 to continue. Split out for the arena cap.
+sub pe_rparen() -> ubyte {
+    reduce_to_marker()
+    if op_sp == 0 {
+        return 1
+    }
+    ubyte mk
+    mk = op_kind[(op_sp - 1 as ubyte)]
+    if mk == OPK_LPAREN {
+        op_sp = op_sp - 1
+        advance()
+        expect_operand = 0
+        index_ok = 0
+        return 0
+    }
+    if mk == OPK_MEMAT {
+        op_sp = op_sp - 1
+        operand_sp = operand_sp - 1
+        push_operand(new_node(ND_MEMAT, 0, operand_stack[(operand_sp as ubyte)], 0))
+        advance()
+        expect_operand = 0
+        index_ok = 0
+        return 0
+    }
+    if mk == OPK_CALL {
+        close_call()
+        advance()
+        expect_operand = 0
+        index_ok = 0
+        return 0
+    }
+    return 1
+}
+
+; handle `expr as TYPE` in the shunting-yard loop: lowest precedence -- reduce
+; everything down to the enclosing marker, then wrap the resulting operand in an
+; ND_CAST. Split out of parse_expr for the per-sub arena cap.
+sub pe_cast() {
+    repeat {
+        if op_sp == 0 { break }
+        if op_kind[(op_sp - 1 as ubyte)] >= OPK_LPAREN { break }
+        apply_top()
+    }
+    advance()                              ; 'as'
+    ubyte tt
+    tt = type_tag(cur_kind())
+    advance()                              ; type keyword
+    operand_sp = operand_sp - 1
+    push_operand(new_node(ND_CAST, tt, operand_stack[(operand_sp as ubyte)], 0))
+    expect_operand = 0
+    index_ok = 0
+}
+
 sub parse_expr() -> uword {
     operand_sp = 0
     op_sp = 0
@@ -1555,36 +1610,8 @@ sub parse_expr() -> uword {
         t = cur_kind()
 
         if t == TK_RPAREN {
-            reduce_to_marker()
-            if op_sp == 0 {
-                break
-            }
-            ubyte mk
-            mk = op_kind[(op_sp - 1 as ubyte)]
-            if mk == OPK_LPAREN {
-                op_sp = op_sp - 1
-                advance()
-                expect_operand = 0
-                index_ok = 0
-                continue
-            }
-            if mk == OPK_MEMAT {
-                op_sp = op_sp - 1
-                operand_sp = operand_sp - 1
-                push_operand(new_node(ND_MEMAT, 0, operand_stack[(operand_sp as ubyte)], 0))
-                advance()
-                expect_operand = 0
-                index_ok = 0
-                continue
-            }
-            if mk == OPK_CALL {
-                close_call()
-                advance()
-                expect_operand = 0
-                index_ok = 0
-                continue
-            }
-            break
+            if pe_rparen() != 0 { break }
+            continue
         }
         if t == TK_RBRACK {
             reduce_to_marker()
@@ -1623,21 +1650,7 @@ sub parse_expr() -> uword {
         }
 
         if t == TK_KAS {
-            ; `expr as TYPE`: lowest precedence -- reduce everything down to the
-            ; enclosing marker, then wrap the resulting operand in an ND_CAST.
-            repeat {
-                if op_sp == 0 { break }
-                if op_kind[(op_sp - 1 as ubyte)] >= OPK_LPAREN { break }
-                apply_top()
-            }
-            advance()                              ; 'as'
-            ubyte tt
-            tt = type_tag(cur_kind())
-            advance()                              ; type keyword
-            operand_sp = operand_sp - 1
-            push_operand(new_node(ND_CAST, tt, operand_stack[(operand_sp as ubyte)], 0))
-            expect_operand = 0
-            index_ok = 0
+            pe_cast()
             continue
         }
         if is_binop(t) != 0 {
@@ -1824,6 +1837,56 @@ sub fr_push_block(ubyte kind, ubyte deferflag) {
 ; dispatch one statement; returns 1 if it opened a compound (pushed a
 ; frame), else parses a leaf into last_simple and returns 0.
 
+; parse a `for VAR in LO to HI {` header and push its FR_FOR frame. Split out
+; of stmt_dispatch for the per-sub arena cap.
+sub sd_for(ubyte deferflag) {
+    advance()
+    uword varid
+    varid = cur_val()
+    advance()                           ; IDENT
+    advance()                           ; 'in'
+    uword lo
+    lo = parse_expr()
+    advance()                           ; 'to'
+    uword hi
+    hi = parse_expr()
+    advance()                           ; '{'
+    fr_push_block(FR_FOR, deferflag)
+    fr_var[(fr_sp - 1 as ubyte)] = varid
+    fr_lo[(fr_sp - 1 as ubyte)] = lo
+    fr_hi[(fr_sp - 1 as ubyte)] = hi
+}
+
+; parse a `return [value]` statement into last_simple. A value follows unless
+; the next token is '}' or a keyword other than true/false. Split out of
+; stmt_dispatch for the per-sub arena cap.
+sub sd_return() {
+    advance()
+    uword val
+    val = 0
+    ubyte nk
+    nk = cur_kind()
+    if nk == TK_RBRACE {
+        last_simple = new_node(ND_RETURN, 0, 0, 0)
+        return
+    }
+    if nk == TK_TRUE {
+        val = parse_expr()
+    } else {
+        if nk == TK_FALSE {
+            val = parse_expr()
+        } else {
+            if nk >= TK_KUBYTE {
+                ; a keyword that isn't true/false ends the return
+                last_simple = new_node(ND_RETURN, 0, 0, 0)
+                return
+            }
+            val = parse_expr()
+        }
+    }
+    last_simple = new_node(ND_RETURN, 0, val, 0)
+}
+
 sub stmt_dispatch(ubyte deferflag) -> ubyte {
     ubyte t
     t = cur_kind()
@@ -1879,21 +1942,7 @@ sub stmt_dispatch(ubyte deferflag) -> ubyte {
         return 1
     }
     if t == TK_KFOR {
-        advance()
-        uword varid
-        varid = cur_val()
-        advance()                           ; IDENT
-        advance()                           ; 'in'
-        uword lo
-        lo = parse_expr()
-        advance()                           ; 'to'
-        uword hi
-        hi = parse_expr()
-        advance()                           ; '{'
-        fr_push_block(FR_FOR, deferflag)
-        fr_var[(fr_sp - 1 as ubyte)] = varid
-        fr_lo[(fr_sp - 1 as ubyte)] = lo
-        fr_hi[(fr_sp - 1 as ubyte)] = hi
+        sd_for(deferflag)
         return 1
     }
     if t == TK_KBREAK {
@@ -1907,31 +1956,7 @@ sub stmt_dispatch(ubyte deferflag) -> ubyte {
         return 0
     }
     if t == TK_KRETURN {
-        advance()
-        uword val
-        val = 0
-        ubyte nk
-        nk = cur_kind()
-        ; a value follows unless next is '}' or a keyword (except true/false)
-        if nk == TK_RBRACE {
-            last_simple = new_node(ND_RETURN, 0, 0, 0)
-            return 0
-        }
-        if nk == TK_TRUE {
-            val = parse_expr()
-        } else {
-            if nk == TK_FALSE {
-                val = parse_expr()
-            } else {
-                if nk >= TK_KUBYTE {
-                    ; a keyword that isn't true/false ends the return
-                    last_simple = new_node(ND_RETURN, 0, 0, 0)
-                    return 0
-                }
-                val = parse_expr()
-            }
-        }
-        last_simple = new_node(ND_RETURN, 0, val, 0)
+        sd_return()
         return 0
     }
     last_simple = parse_assign_or_expr()
@@ -3250,6 +3275,37 @@ sub register_subs() {
 
 
 ; pass 1: program-wide state (no nodes -- those stream per-sub afterwards).
+; serialize one symbol-table entry's 8 fields (name ident, type, ZP addr, owner
+; sub, mkind, is_const, cval/reg, arr_size). Shared by dump_global (module syms)
+; and dump_record (per-sub locals) -- split out for the per-sub arena cap.
+sub dump_sym(uword i) {
+    d16(peekw($c6e0 + ((i) << 1))) out_byte(peek($ccf8 + (i))) d16(peekw($d004 + ((i) << 1))) d16(peekw($d61c + ((i) << 1)))
+    out_byte(peek($dc34 + (i))) out_byte(peek($df40 + (i))) d16(peekw($e24c + ((i) << 1))) d16(peekw($e864 + ((i) << 1)))
+}
+
+; serialize the data-initialized array tables: count, then per array
+; { sym index, is_str flag, element count, element values }. Split out of
+; dump_global for the per-sub arena cap.
+sub dump_array_init() {
+    d16(ai_count)
+    uword i
+    i = 0
+    repeat {
+        if i >= ai_count { break }
+        d16(ai_sym[(i as ubyte)])
+        out_byte(ai_isstr[(i as ubyte)])
+        d16(ai_n[(i as ubyte)])
+        uword j
+        j = 0
+        repeat {
+            if j >= ai_n[(i as ubyte)] { break }
+            d16(ai_vals[((ai_off[(i as ubyte)] + j) as ubyte)])
+            j = j + 1
+        }
+        i = i + 1
+    }
+}
+
 sub dump_global() {
     d16(prog_address)
     out_byte(prog_target)
@@ -3267,8 +3323,7 @@ sub dump_global() {
         if peekw($d61c + ((i) << 1)) == 0 { keep = 1 }
         if peek($dc34 + (i)) == 1 { keep = 1 }
         if keep != 0 {
-            d16(peekw($c6e0 + ((i) << 1))) out_byte(peek($ccf8 + (i))) d16(peekw($d004 + ((i) << 1))) d16(peekw($d61c + ((i) << 1)))
-            out_byte(peek($dc34 + (i))) out_byte(peek($df40 + (i))) d16(peekw($e24c + ((i) << 1))) d16(peekw($e864 + ((i) << 1)))
+            dump_sym(i)
         }
         i = i + 1
     }
@@ -3285,24 +3340,7 @@ sub dump_global() {
     d16(str_pool_len)
     i = 0
     repeat { if i >= str_pool_len { break } out_byte(peek($a300 + (i))) i = i + 1 }
-    ; data-initialized array tables: count, then per array
-    ; { sym index, is_str flag, element count, element values }.
-    d16(ai_count)
-    i = 0
-    repeat {
-        if i >= ai_count { break }
-        d16(ai_sym[(i as ubyte)])
-        out_byte(ai_isstr[(i as ubyte)])
-        d16(ai_n[(i as ubyte)])
-        uword j
-        j = 0
-        repeat {
-            if j >= ai_n[(i as ubyte)] { break }
-            d16(ai_vals[((ai_off[(i as ubyte)] + j) as ubyte)])
-            j = j + 1
-        }
-        i = i + 1
-    }
+    dump_array_init()
 }
 ; one sub's AST record: kind(1) snode(2) node_count(2) nodes cons_count(2) cons.
 sub dump_record(ubyte kind, uword snode) {
@@ -3321,8 +3359,7 @@ sub dump_record(ubyte kind, uword snode) {
         if i >= sym_count { break }
         if peekw($d61c + ((i) << 1)) == nm {
             if peek($dc34 + (i)) == 2 {
-                d16(peekw($c6e0 + ((i) << 1))) out_byte(peek($ccf8 + (i))) d16(peekw($d004 + ((i) << 1))) d16(peekw($d61c + ((i) << 1)))
-                out_byte(peek($dc34 + (i))) out_byte(peek($df40 + (i))) d16(peekw($e24c + ((i) << 1))) d16(peekw($e864 + ((i) << 1)))
+                dump_sym(i)
             }
         }
         i = i + 1
