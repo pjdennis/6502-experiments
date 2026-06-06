@@ -6,7 +6,16 @@ the design doc for that subsystem; it resolves and consumes the `$F800+`
 OS-call file I/O from
 [`WENDY2_BANKING_TARGET_PLAN.md`](./WENDY2_BANKING_TARGET_PLAN.md) S2.6 (M5).
 
-Planning doc only -- no code yet. Companion:
+> **Status: D1-D2 + D4 built and green.** The `$F800+` OS-call port chip +
+> `--disk` (D1), the monitor ROM with autoexec load+run (D2), and
+> return-to-monitor + multi-command autoexec (D4) are implemented and tested
+> (`make -C assembler2 wendy2-test`: 9 e2e goldens). Implementation:
+> `assembler2/emulator/chips/syscall_ports.{c,h}`, `wendy2c_monitor.s`,
+> `assembler2/prog8/upstream/libraries/wendy2/os.p8`, demos `d1_*`/`d2_*`/`d4_*`.
+> Remaining: D3 (interactive serial commands), D5 (program header for banked
+> programs), D6 (real SPI-flash backing).
+
+Companion:
 [`upstream/libraries/wendy2/README.md`](./upstream/libraries/wendy2/README.md)
 (the working banked target).
 

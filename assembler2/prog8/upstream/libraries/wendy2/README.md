@@ -62,10 +62,29 @@ any are missing.
 | `t3_banked_code` | **banked code** via far-call: `far ret=2A / banked code OK` |
 | `t4_bank_counters` | 8 independent per-bank counters: `33333333` |
 
-## Status / not yet done
+## Disk boot (file I/O OS calls + monitor ROM)
 
-The `$F800+` OS-call read/write ABI (plan S2.6, milestone M5) is not yet
-implemented -- it needs an emulator enhancement (a host-I/O port block
-above the VIA) and is the prerequisite for running a file-I/O toolchain on
-wendy2c. The banking demos here don't need it (output is the LCD).
+The `$F800+` file-I/O OS calls are implemented (emulator `--disk DIR` installs
+a syscall-port chip backed by a host directory = the simulated SPI disk):
+
+    os.openfile/createfile/select/readbyte/at_eof/writebyte/closefile   (os.p8)
+
+An alternate boot ROM (`../../../../wendy2c_monitor.s`) reads a disk file
+`autoexec`, and for each line loads that program from disk into `$4000` and
+runs it; programs return to the monitor on exit, so multiple commands run in
+turn. See [`../../WENDY2_DISK_BOOT_DESIGN.md`](../../WENDY2_DISK_BOOT_DESIGN.md).
+
+    # one program from disk to LCD:
+    ./wendy2_disk_run.sh demos/d1_catfile.p8 /path/to/diskdir
+    # monitor autoexec (program named in <disk>/autoexec):
+    ./wendy2_monitor_run.sh demos/d2_autoexec.p8
+
+Demos: `d1_catfile` (read a file), `d2_autoexec` (monitor loads+runs one
+program), `d4_first`/`d4_second` (two-line autoexec, return-to-monitor).
+
+## Not yet done
+
+D3 interactive serial commands (`run`/`load`/`dir`), D5 program header for
+banked programs, D6 real SPI-flash image backing -- all behind the same OS-call
+ABI. (Plan milestone M5/the disk-boot design.)
 </content>
