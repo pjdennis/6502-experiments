@@ -120,7 +120,52 @@ The HD44780 LCD (4-bit, via PORTA/PORTB). The emulator prints the final
 LCD frame on **stderr** at end-of-run (`emu_wendy2c.c:748-754`,
 `  |row|` lines); `--lcd-trace PATH` dumps a frame per change. The
 existing `prog8/tests/test_e2e_lcd.py` already asserts on those `|...|`
-rows -- the wendy2 test runner reuses that mechanism.
+rows -- the wendy2 test runner reuses that mechanism. (Once the OS-call
+read/write exists -- S2.6 -- tests can instead capture a host stream,
+which is easier to golden than the LCD.)
+
+### 2.6 OS calls (read/write) in fixed high RAM -- emulator enhancement
+**Direction:** expose OS read/write (and the file-I/O primitives needed
+for a self-hosting toolchain) as fixed entry points in the `$F800+`
+region, callable from any bank.
+
+Why fixed high RAM works: `$F800-$FFFF` is fixed across all configs
+(S2.3), so a jump table / stub block there is reachable identically
+whether the program is in bank 0 or bank 7 -- the natural home for an OS
+ABI. (The nmos machine already does the analogous thing with injected
+stub code at `$F006+`, `stubs.c` -- but those ports sit in the `$F000`
+page, which on wendy2c is the **VIA**, so the wendy2 stubs must live
+above it.)
+
+What's missing today: the wendy2c emulator wires the real VIA/RAM/ROM/LCD
+chips and **does not** install the `generate_stubs` host-I/O ports, so
+there is currently no read/write/open/close syscall path in `wendy2c`
+mode. Adding one is an **emulator enhancement**.
+
+Proposed shape (mirrors the nmos stub design, relocated above the VIA):
+* **Host-I/O port block, bus-trapped, `$F800-$F80F`** (a handful of
+  addresses the wendy2c bus intercepts *before* the RAM chip): read-byte +
+  EOF flag, write-byte, write-stderr, exit, open/close/read-handle/
+  write-handle, argc/argv. Same host semantics as `stubs.c`'s ports.
+* **Stub/jump table in fixed RAM at `$F810+`**, installed at machine init
+  (the wendy2 analog of `generate_stubs`): the `jsr`-able OS entry points
+  banked code calls. Stays clear of the vectors at `$FFFA-$FFFF`.
+* The `$F800-$F80F` carve-out is the only RAM lost from the 2 KB fixed
+  window; `$F810-$FFF9` remains RAM for the stub bodies + any resident OS
+  state.
+
+Alternative (no RAM carve-out): a PC/execution hook that traps `jsr` to a
+small fixed address set and performs the host call directly. Cleaner on
+memory, but less consistent with the existing port-based `stubs.c`
+mechanism -- decide at implementation time.
+
+Payoff: (a) tests capture a host stream instead of OCR-ing the LCD;
+(b) it's the prerequisite for ever running the **self-hosting toolchain**
+(compiler reading a source file, writing output) on `wendy2c` -- the same
+file-I/O surface the nmos target already enjoys, now bank-safe. On real
+hardware these entry points would be a small resident kernel doing serial
+I/O; the emulator provides them directly. The ABI (fixed `$F800+` entry
+points) is identical either way.
 
 ---
 
@@ -188,14 +233,19 @@ VIA shadow + bank state + the runtime's pointers.
 ### 4.2 `upstream/libraries/wendy2/syslib.p8`
 Start from `libraries/nmos/syslib.p8` and change:
 * **`sys.exit*` / `p8_sys_startup.cleanup_at_exit`** end with `STP` (the
-  wendy2c "halt"; the emulator dumps the LCD on STP / cycle cap). There is
-  no `$F00F` exit syscall in wendy2c mode (that's the nmos machine).
+  wendy2c "halt"; the emulator dumps the LCD on STP / cycle cap), or
+  `jmp` the `$F800+` OS exit stub once S2.6 lands. There is no `$F00F`
+  exit syscall in wendy2c mode (that's the nmos machine).
+* **I/O binding.** Route byte read/write (and the file primitives) at the
+  fixed `$F800+` OS-call entry points (S2.6) -- the nmos syslib's
+  `$F006+` references, retargeted above the VIA. Until that enhancement
+  lands, `txt.*` output goes to the LCD driver (S4.3) only.
 * **`init_system`**: set VIA DDRA/DDRB for the 4-bit LCD + bank bits
   (mirror `base_config_wendy2c.inc` + the existing init), HD44780 4-bit
-  init, and **switch away from config `$00`** to a known default (e.g.
-  bank 0 = config `$01`, or `$10` to keep boot-ROM services visible). Keep
-  a **PORTB shadow byte in ZP** so bank/LCD-E bits compose without
-  read-back surprises.
+  init, and **switch from config `$00` to the default working bank
+  `$01` (logical bank 0)** so the upper window is RAM that code/data can be
+  loaded into. Keep a **PORTB shadow byte in ZP** so bank/LCD-E bits
+  compose without read-back surprises.
 
 ### 4.3 `upstream/libraries/wendy2/textio.p8` (output)
 Port the 4-bit HD44780 driver (`display_routines_4bit.inc`,
@@ -246,8 +296,9 @@ Mirror `p8c --run` (`p8c/__main__.py:81-90,179-182`):
    `upload_and_run_eeprom_wendy2c.s`, as `build_boot_rom` does) ->
    `wendy2c_boot.bin`.
 4. Run: `emulator.out wendy2c_boot.bin --machine wendy2c
-   --serial-input demo.framed --cycle-cap N` -> capture LCD frame from
-   stderr.
+   --serial-input demo.framed --cycle-cap N` -> capture the LCD frame from
+   stderr (and, once S2.6 lands, the OS-write host stream / output file --
+   easier to golden).
 
 (64tass + the prog8 jar + the emulator are the only host deps; all were
 installed/built in this session's container -- see `setup`-style notes in
@@ -306,11 +357,17 @@ wired into `make prog8-test` (or a new `make wendy2-test`).
   `bank_peek`/`bank_poke`; T1 green; the usable bank set is recorded.
 * **M3 -- banked data.** T2, T4 green.
 * **M4 -- banked code.** `callfar` trampoline; T3 green.
-* **M5 -- docs + CI.** README for the target; `make wendy2-test`; link
+* **M5 -- OS calls (emulator enhancement, S2.6).** Add the `$F800+`
+  host-I/O ports + stub table to the wendy2c emulator; retarget the syslib
+  I/O to them; switch the demos/runner to host-stream goldens. Optional for
+  the banking demos (they work LCD-only), but the prerequisite for a
+  self-hosting toolchain on `wendy2c`.
+* **M6 -- docs + CI.** README for the target; `make wendy2-test`; link
   from `PLAN.md`.
 
-Critical path is **M1** (the LCD driver port) -- it's the only large piece;
-banking itself (M2-M4) is small once output works.
+Critical path is **M1** (the LCD driver port) -- the only large piece for
+the banking demos; banking itself (M2-M4) is small once output works. M5
+(OS calls) is a separable workstream gated on the emulator change.
 
 ---
 
@@ -329,6 +386,13 @@ banking itself (M2-M4) is small once output works.
   once; it then holds across all bank switches. Interrupt-driven banked
   programs are fully supported (a banking ISR should still save/restore the
   current bank itself).
+* **OS-call emulator enhancement (S2.6 / M5).** Carving the `$F800-$F80F`
+  port block out of the fixed RAM window must not break the vectors
+  (`$FFFA-$FFFF`) or any resident OS state, and the wendy2c bus must trap
+  those addresses ahead of the RAM chip. Scope is contained (mirrors the
+  existing `stubs.c` ports), but it is a C/emulator change, separate from
+  the prog8-side work. Real hardware would implement the same ABI as a
+  resident serial-I/O kernel.
 * **Assembler coupling.** This target uses 64tass (upstream's fixed
   assembler). It does not depend on the on-host-assembler migration
   ([`ASM_MIGRATION_PLAN.md`](./ASM_MIGRATION_PLAN.md)); the two are
