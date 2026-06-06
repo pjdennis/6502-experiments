@@ -50,6 +50,22 @@ banking {
         set_raw(saved)
     }
 
+    ; bulk-install `len` bytes from lower-RAM `src` into bank n at window `win`
+    ; (one switch for the whole copy, then restore). Use this to load a code or
+    ; data overlay into an upper bank. `src` is in the fixed lower 32K, which
+    ; stays mapped while bank n is selected. The C128/cx16 analog is the
+    ; kernal copying/LOADing a file into a bank (INDSTA / LOAD-into-HIRAM).
+    sub bank_store(ubyte n, uword win, uword src, uword count) {
+        ubyte saved = get_raw()
+        set_raw(cfgtab[n])
+        uword i = 0
+        while i < count {
+            @(win + i) = @(src + i)
+            i++
+        }
+        set_raw(saved)
+    }
+
     ; far-call: switch the window to logical bank n, JSR the routine at `win`
     ; ($8000-$EFFF), then restore the previous bank. The routine must end with
     ; RTS; its A-register result is returned. The trampoline itself lives in

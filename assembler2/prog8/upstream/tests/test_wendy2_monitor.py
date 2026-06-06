@@ -23,10 +23,20 @@ MON_SRC = REPO / "wendy2c_monitor.s"
 GOLDENS = HERE / "goldens"
 OUT = UP / "out"
 
-# golden name -> (autoexec text, {disk filename: demo basename})
+# An overlay routine for the storage-driven multibank demo (T6):
+#   inc $0200 ; lda #'x' ; rts   -- bumps a shared counter, returns its tag
+def _ov(tag: str) -> bytes:
+    return bytes([0xEE, 0x00, 0x02, 0xA9, ord(tag), 0x60])
+
+# golden name -> (autoexec text,
+#                 {disk filename: demo basename to compile},
+#                 {disk filename: raw bytes})
 CASES = {
-    "d2_autoexec": ("d2_autoexec\n", {"d2_autoexec": "d2_autoexec"}),
-    "d4_multi":    ("first\nsecond\n", {"first": "d4_first", "second": "d4_second"}),
+    "d2_autoexec": ("d2_autoexec\n", {"d2_autoexec": "d2_autoexec"}, {}),
+    "d4_multi":    ("first\nsecond\n",
+                    {"first": "d4_first", "second": "d4_second"}, {}),
+    "t6_overlays": ("t6_overlays\n", {"t6_overlays": "t6_overlays"},
+                    {"ov1": _ov("a"), "ov2": _ov("b"), "ov3": _ov("c")}),
 }
 
 
@@ -66,12 +76,14 @@ def _monitor_rom() -> Path:
     return rom
 
 
-def _run(autoexec: str, files: dict) -> str:
+def _run(autoexec: str, files: dict, raw: dict) -> str:
     rom = _monitor_rom()
     disk = Path(tempfile.mkdtemp(prefix="wdisk_mon_"))
     try:
         for diskname, demo in files.items():
             shutil.copy(_compile(demo), disk / diskname)
+        for diskname, data in raw.items():
+            (disk / diskname).write_bytes(data)
         (disk / "autoexec").write_text(autoexec)
         r = subprocess.run(
             [str(EMU), str(rom), "--machine", "wendy2c", "--disk", str(disk),
@@ -93,16 +105,16 @@ class Wendy2MonitorGoldens(unittest.TestCase):
     pass
 
 
-def _make(autoexec, files, golden):
+def _make(autoexec, files, raw, golden):
     def t(self):
-        self.assertEqual(_run(autoexec, files), golden.read_text())
+        self.assertEqual(_run(autoexec, files, raw), golden.read_text())
     return t
 
 
-for _name, (_ax, _files) in CASES.items():
+for _name, (_ax, _files, _raw) in CASES.items():
     _g = GOLDENS / f"{_name}.expected.lcd"
     if _g.exists():
-        setattr(Wendy2MonitorGoldens, f"test_{_name}", _make(_ax, _files, _g))
+        setattr(Wendy2MonitorGoldens, f"test_{_name}", _make(_ax, _files, _raw, _g))
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

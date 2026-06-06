@@ -71,7 +71,7 @@ def _make(name: str, golden: Path):
 # Plain demos run via the serial-upload boot ROM (no --disk). The disk- and
 # monitor-backed demos have their own suites (test_wendy2_disk / _monitor).
 PLAIN = ["m0_exit", "m1_hello", "t1_bank_probe", "t2_banked_data",
-         "t3_banked_code", "t4_bank_counters"]
+         "t3_banked_code", "t4_bank_counters", "t5_multibank_code"]
 
 for name in PLAIN:
     g = GOLDENS / f"{name}.expected.lcd"
