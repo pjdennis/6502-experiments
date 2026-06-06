@@ -3832,7 +3832,14 @@ sub codegen_call(uword callnode) {
         return
     }
     if call_n != 0 {
+        ; a multi-arg eval may be a nested call that clobbers codegen_call's
+        ; static-ZP `callee`/`callnode` (codegen_call_args only preserves its own
+        ; param copies); save callee on the ccs stack across the arg evaluation.
+        ccs_callee[(ccs_sp as ubyte)] = callee
+        ccs_sp = ccs_sp + 1
         codegen_call_args(callnode, callee)
+        ccs_sp = ccs_sp - 1
+        callee = ccs_callee[(ccs_sp as ubyte)]
     }
     out_text("  jsr ")
     emit_sub_label(callee)
