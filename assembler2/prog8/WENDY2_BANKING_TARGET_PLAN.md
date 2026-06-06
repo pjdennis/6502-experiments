@@ -154,10 +154,9 @@ Proposed shape (mirrors the nmos stub design, relocated above the VIA):
   window; `$F810-$FFF9` remains RAM for the stub bodies + any resident OS
   state.
 
-Alternative (no RAM carve-out): a PC/execution hook that traps `jsr` to a
-small fixed address set and performs the host call directly. Cleaner on
-memory, but less consistent with the existing port-based `stubs.c`
-mechanism -- decide at implementation time.
+**Chosen approach: the port-block carve-out above**, for consistency with
+the existing `stubs.c` port-based mechanism (a PC/execution-hook variant
+was considered and rejected to keep one syscall mechanism across machines).
 
 Payoff: (a) tests capture a host stream instead of OCR-ing the LCD;
 (b) it's the prerequisite for ever running the **self-hosting toolchain**
