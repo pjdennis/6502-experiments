@@ -51,6 +51,7 @@ inline sub hex_value(ubyte c) -> ubyte {
 }
 
 main {
+  sub start() {
     lcd.clear()
 
     ; Hard-code the source: "12+34-56 ab" + terminator
@@ -116,4 +117,5 @@ main {
         txt.print_ub(tokens[i].value)
         txt.print(" ")
     }
+  }
 }

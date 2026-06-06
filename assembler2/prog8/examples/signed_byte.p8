@@ -10,6 +10,7 @@
 %import lcd
 
 main {
+  sub start() {
     lcd.clear()
 
     byte a = -1
@@ -28,4 +29,5 @@ main {
     } else {
         txt.print("LE")
     }
+  }
 }

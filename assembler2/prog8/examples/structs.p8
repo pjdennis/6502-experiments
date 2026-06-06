@@ -14,6 +14,7 @@ struct Point {
 Point p
 
 main {
+  sub start() {
     lcd.clear()
     p.x = $1a
     p.y = $b2
@@ -25,4 +26,5 @@ main {
     txt.print_ub(p.y)
     txt.print(" t=")
     txt.print_uw(p.tag)
+  }
 }

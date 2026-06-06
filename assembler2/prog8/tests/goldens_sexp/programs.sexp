@@ -1,4 +1,4 @@
-;;; 'main { }'
+;;; 'main {\n  sub start() {   }\n}'
 (program
   (address $4000)
   (output raw)
@@ -8,11 +8,11 @@
   (enums)
   (structs)
   (subs
-    (subdef main main void
+    (subdef start main void
       (params)
       (block))))
 
-;;; 'main { txt.print("hi") }'
+;;; 'main {\n  sub start() { txt.print("hi")   }\n}'
 (program
   (address $4000)
   (output raw)
@@ -22,14 +22,14 @@
   (enums)
   (structs)
   (subs
-    (subdef main main void
+    (subdef start main void
       (params)
       (block
         (exprstmt
           (call txt.print
             (str "hi")))))))
 
-;;; 'ubyte x\nmain { x = 1 x += 2 x <<= 1 }'
+;;; 'ubyte x\nmain {\n  sub start() { x = 1 x += 2 x <<= 1   }\n}'
 (program
   (address $4000)
   (output raw)
@@ -40,7 +40,7 @@
   (enums)
   (structs)
   (subs
-    (subdef main main void
+    (subdef start main void
       (params)
       (block
         (assign =
@@ -53,7 +53,7 @@
           (id x)
           (int 1))))))
 
-;;; 'ubyte x\nmain { if x == 0 { x = 1 } }'
+;;; 'ubyte x\nmain {\n  sub start() { if x == 0 { x = 1 }   }\n}'
 (program
   (address $4000)
   (output raw)
@@ -64,7 +64,7 @@
   (enums)
   (structs)
   (subs
-    (subdef main main void
+    (subdef start main void
       (params)
       (block
         (if
@@ -76,7 +76,7 @@
               (id x)
               (int 1))))))))
 
-;;; 'ubyte x\nmain { if x == 0 { x = 1 } else { x = 2 } }'
+;;; 'ubyte x\nmain {\n  sub start() { if x == 0 { x = 1 } else { x = 2 }   }\n}'
 (program
   (address $4000)
   (output raw)
@@ -87,7 +87,7 @@
   (enums)
   (structs)
   (subs
-    (subdef main main void
+    (subdef start main void
       (params)
       (block
         (if
@@ -103,7 +103,7 @@
               (id x)
               (int 2))))))))
 
-;;; 'ubyte x\nubyte y\nmain { if x { if y { x = 1 } else { x = 2 } } else { y = 3 } }'
+;;; 'ubyte x\nubyte y\nmain {\n  sub start() { if x { if y { x = 1 } else { x = 2 } } else { y = 3 }   }\n}'
 (program
   (address $4000)
   (output raw)
@@ -115,7 +115,7 @@
   (enums)
   (structs)
   (subs
-    (subdef main main void
+    (subdef start main void
       (params)
       (block
         (if
@@ -136,7 +136,7 @@
               (id y)
               (int 3))))))))
 
-;;; 'ubyte i\nmain { while i < 10 { i = i + 1 } }'
+;;; 'ubyte i\nmain {\n  sub start() { while i < 10 { i = i + 1 }   }\n}'
 (program
   (address $4000)
   (output raw)
@@ -147,7 +147,7 @@
   (enums)
   (structs)
   (subs
-    (subdef main main void
+    (subdef start main void
       (params)
       (block
         (while
@@ -161,7 +161,7 @@
                 (id i)
                 (int 1)))))))))
 
-;;; 'ubyte i\nmain { for i in 0 to 7 { txt.print("x") } }'
+;;; 'ubyte i\nmain {\n  sub start() { for i in 0 to 7 { txt.print("x") }   }\n}'
 (program
   (address $4000)
   (output raw)
@@ -172,7 +172,7 @@
   (enums)
   (structs)
   (subs
-    (subdef main main void
+    (subdef start main void
       (params)
       (block
         (for i
@@ -183,7 +183,7 @@
               (call txt.print
                 (str "x")))))))))
 
-;;; 'main { repeat { break } }'
+;;; 'main {\n  sub start() { repeat { break }   }\n}'
 (program
   (address $4000)
   (output raw)
@@ -193,14 +193,14 @@
   (enums)
   (structs)
   (subs
-    (subdef main main void
+    (subdef start main void
       (params)
       (block
         (repeat
           (block
             (break)))))))
 
-;;; 'main { repeat 5 { txt.print(".") } }'
+;;; 'main {\n  sub start() { repeat 5 { txt.print(".") }   }\n}'
 (program
   (address $4000)
   (output raw)
@@ -210,7 +210,7 @@
   (enums)
   (structs)
   (subs
-    (subdef main main void
+    (subdef start main void
       (params)
       (block
         (repeat
@@ -220,7 +220,7 @@
               (call txt.print
                 (str ".")))))))))
 
-;;; 'ubyte i\nmain { for i in 0 to 3 { if i == 2 { continue } txt.print("y") } }'
+;;; 'ubyte i\nmain {\n  sub start() { for i in 0 to 3 { if i == 2 { continue } txt.print("y") }   }\n}'
 (program
   (address $4000)
   (output raw)
@@ -231,7 +231,7 @@
   (enums)
   (structs)
   (subs
-    (subdef main main void
+    (subdef start main void
       (params)
       (block
         (for i
@@ -384,7 +384,7 @@
       (block
         (return)))))
 
-;;; 'main { @($f001) = 7 }'
+;;; 'main {\n  sub start() { @($f001) = 7   }\n}'
 (program
   (address $4000)
   (output raw)
@@ -394,7 +394,7 @@
   (enums)
   (structs)
   (subs
-    (subdef main main void
+    (subdef start main void
       (params)
       (block
         (assign =
@@ -402,7 +402,7 @@
             (int 61441))
           (int 7))))))
 
-;;; 'ubyte[4] arr\nmain { arr[0] = 1 arr[1] = arr[0] + 2 }'
+;;; 'ubyte[4] arr\nmain {\n  sub start() { arr[0] = 1 arr[1] = arr[0] + 2   }\n}'
 (program
   (address $4000)
   (output raw)
@@ -413,7 +413,7 @@
   (enums)
   (structs)
   (subs
-    (subdef main main void
+    (subdef start main void
       (params)
       (block
         (assign =
@@ -431,7 +431,7 @@
               (int 0))
             (int 2)))))))
 
-;;; 'main { %asm {{\nnop\n}} }'
+;;; 'main {\n  sub start() { %asm {{\nnop\n}}   }\n}'
 (program
   (address $4000)
   (output raw)
@@ -441,12 +441,12 @@
   (enums)
   (structs)
   (subs
-    (subdef main main void
+    (subdef start main void
       (params)
       (block
         (asm "nop")))))
 
-;;; 'ubyte a\nubyte b\nmain { while a < 8 { for b in 0 to a { if b == 3 { break } } a = a + 1 } }'
+;;; 'ubyte a\nubyte b\nmain {\n  sub start() { while a < 8 { for b in 0 to a { if b == 3 { break } } a = a + 1 }   }\n}'
 (program
   (address $4000)
   (output raw)
@@ -458,7 +458,7 @@
   (enums)
   (structs)
   (subs
-    (subdef main main void
+    (subdef start main void
       (params)
       (block
         (while

@@ -10,6 +10,7 @@
 ubyte[6] buf
 
 main {
+  sub start() {
     lcd.clear()
 
     ; Get the buffer's address into a uword "pointer".
@@ -25,4 +26,5 @@ main {
     for i in 0 to 5 {
         txt.print_ub(@(p + i))
     }
+  }
 }

@@ -120,20 +120,15 @@ class Parser:
             if t.kind == "DIRECTIVE":
                 self.parse_directive(prog)
             elif t.kind == "KW" and t.value == "main":
-                # `main { ... }` has two accepted shapes:
-                #   - entry-body form (p8c's own): a block of STATEMENTS; it is
-                #     the `sub main()` entry directly.
-                #   - upstream namespace form: a block of DECLARATIONS (subs,
-                #     vars, consts) containing a `sub start()` entry. `main` is
-                #     just a namespace; its members flatten into the program and
-                #     `start` becomes the entry sub.
+                # `main { ... }` is the upstream namespace form: a block of
+                # DECLARATIONS (subs, vars, consts) containing a `sub start()`
+                # entry. `main` is just a namespace; its members flatten into
+                # the program and `start` becomes the entry sub. The lenient
+                # entry-body form (`main { <statements> }`) is NOT upstream
+                # Prog8 and is no longer accepted -- write `main { sub start() {
+                # ... } }`.
                 self.pos += 1                       # consume 'main'
-                if self._main_block_is_namespace():
-                    self._parse_main_namespace(prog)
-                else:
-                    body = self.parse_block()
-                    prog.subs.append(Sub(loc=self.loc(t), name="main",
-                                         body=body, is_main=True))
+                self._parse_main_namespace(prog)
             else:
                 self._parse_toplevel_decl(prog)
         return prog
@@ -184,29 +179,6 @@ class Parser:
                 f"or variable declaration, got {t.kind} {t.value!r}"
             )
 
-    def _main_block_is_namespace(self) -> bool:
-        """With pos at the `{` after `main`, decide whether the block is the
-        upstream namespace form (contains a top-level `sub`/`asmsub` decl) vs
-        the entry-body form (plain statements). Scans the matching braces
-        without consuming."""
-        i = self.pos
-        if self.toks[i].kind != "{":
-            return False
-        depth = 0
-        while i < len(self.toks):
-            k = self.toks[i].kind
-            if k == "{":
-                depth += 1
-            elif k == "}":
-                depth -= 1
-                if depth == 0:
-                    return False
-            elif (depth == 1 and k == "KW"
-                  and self.toks[i].value in ("sub", "asmsub", "inline")):
-                return True
-            i += 1
-        return False
-
     def _parse_main_namespace(self, prog: Program) -> None:
         """Parse `main { <decls incl. `sub start()`> }`: flatten the members
         into `prog` and mark `start` as the entry (`is_main`)."""
@@ -217,7 +189,9 @@ class Parser:
         start = next((s for s in prog.subs if s.name == "start"), None)
         if start is None:
             raise ParseError(
-                f"{self.filename}: `main` block has no `sub start()` entry")
+                f"{self.filename}: `main` block has no `sub start()` entry "
+                f"(the lenient `main {{ <statements> }}` form is not upstream "
+                f"Prog8; wrap the body in `sub start() {{ ... }}`)")
         start.is_main = True
 
     def parse_directive(self, prog: Program) -> None:

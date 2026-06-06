@@ -13,7 +13,9 @@ sub work() {
 }
 
 main {
+  sub start() {
     lcd.clear()
     work()
     txt.print(" done")
+  }
 }

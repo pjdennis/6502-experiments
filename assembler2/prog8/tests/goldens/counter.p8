@@ -6,6 +6,7 @@
 ubyte total
 
 main {
+  sub start() {
     lcd.clear()
 
     ubyte i
@@ -25,4 +26,5 @@ main {
     } else {
         txt.print(" NO")
     }
+  }
 }

@@ -8,6 +8,7 @@
 ubyte[8] buf
 
 main {
+  sub start() {
     lcd.clear()
 
     ; Fill buf[i] = $10 + i.
@@ -20,4 +21,5 @@ main {
     for i in 0 to 7 {
         txt.print_ub(buf[i])
     }
+  }
 }

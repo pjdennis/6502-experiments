@@ -12,6 +12,7 @@ const uword ADDR = $4080
 ubyte[10] tab
 
 main {
+  sub start() {
     lcd.clear()
 
     ; const folding: txt.print_uw(mkword(HI, LO)) -> "ABCD"
@@ -26,4 +27,5 @@ main {
     ; len of an array: prints " A" (10 -> $0A).
     txt.print(" ")
     txt.print_ub(len(tab))
+  }
 }

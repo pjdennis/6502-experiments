@@ -16,6 +16,7 @@ const ubyte N = 64
 ubyte[64] sieve
 
 main {
+  sub start() {
     lcd.clear()
 
     ; Initialize: sieve[0..N-1] = 0 (composite-flag, 0 = prime so far).
@@ -53,4 +54,5 @@ main {
             }
         }
     }
+  }
 }

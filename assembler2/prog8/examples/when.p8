@@ -20,9 +20,11 @@ sub classify(ubyte c) {
 }
 
 main {
+  sub start() {
     lcd.clear()
     classify($61)               ; -> "A "
     classify($62)               ; -> "BC "
     classify($63)               ; -> "BC "
     classify($7a)               ; -> "? "
+  }
 }

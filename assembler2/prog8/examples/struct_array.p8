@@ -13,6 +13,7 @@ struct Token {
 Token[4] toks
 
 main {
+  sub start() {
     lcd.clear()
 
     ubyte i
@@ -27,4 +28,5 @@ main {
         txt.print_uw(toks[i].value)
         txt.print(" ")
     }
+  }
 }

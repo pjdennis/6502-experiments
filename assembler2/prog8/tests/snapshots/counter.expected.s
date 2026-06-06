@@ -12,7 +12,7 @@ __p8c_ptr0  = $26                    ; indirect-Y pointer (2 bytes)
 __p8c_aptr  = $28                    ; array element pointer (2 bytes)
 
   .org $4000
-  jmp p8s_main
+  jmp p8s_start
 
   .include delay_routines.inc
   .include display_routines_4bit.inc
@@ -21,28 +21,28 @@ __p8c_aptr  = $28                    ; array element pointer (2 bytes)
 
 ; ---- ZP variable allocations ----
 p8v_total = $40
-p8v_main_i = $41
+p8v_start_i = $41
 
 
-; ---- sub main ----
-p8s_main:
+; ---- sub start ----
+p8s_start:
   jsr clear_display
   lda #$00
-  sta p8v_main_i
+  sta p8v_start_i
 .Lwhile_top_0:
-  lda p8v_main_i
+  lda p8v_start_i
   cmp #$04
   bcc .Lbrs_2
   jmp .Lwhile_end_1
 .Lbrs_2:
   lda p8v_total
   clc
-  adc p8v_main_i
+  adc p8v_start_i
   sta p8v_total
-  lda p8v_main_i
+  lda p8v_start_i
   clc
   adc #$01
-  sta p8v_main_i
+  sta p8v_start_i
   jmp .Lwhile_top_0
 .Lwhile_end_1:
   lda #<p8c_str_0
@@ -79,9 +79,9 @@ p8s_main:
   ldx #>p8c_str_2
   jsr display_string
 .Lendif_9:
-.Lp8s_main_ret:
-.Lhalt_p8s_main:
-  bra .Lhalt_p8s_main
+.Lp8s_start_ret:
+.Lhalt_p8s_start:
+  bra .Lhalt_p8s_start
 
 ; ---- string pool ----
 p8c_str_0:

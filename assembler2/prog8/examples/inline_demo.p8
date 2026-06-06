@@ -12,8 +12,10 @@ inline sub print_bracket(ubyte ch) {
 }
 
 main {
+  sub start() {
     lcd.clear()
     print_bracket($1a)
     print_bracket($b2)
     print_bracket($ff)
+  }
 }

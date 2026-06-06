@@ -1262,6 +1262,7 @@ sub parse_if() {
 ; ---- main compile loop ----
 
 main {
+  sub start() {
     ; arg[0] = input file, arg[1] = output file
     uword fn
     fn = sys_argv(0)
@@ -1316,4 +1317,5 @@ main {
 
     sys_close(src_hand)
     sys_close(dst_hand)
+  }
 }

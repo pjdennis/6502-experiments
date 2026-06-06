@@ -29,9 +29,11 @@ sub combine(ubyte lo, ubyte hi) -> uword {
 }
 
 main {
+  sub start() {
     lcd.clear()
     txt.print("d=")
     txt.print_ub(doubled($07))    ; -> "0E"
     txt.print(" w=")
     txt.print_uw(combine($cd, $ab))  ; -> "ABCD"
+  }
 }

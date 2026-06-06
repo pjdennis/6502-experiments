@@ -12,7 +12,7 @@ __p8c_ptr0  = $26                    ; indirect-Y pointer (2 bytes)
 __p8c_aptr  = $28                    ; array element pointer (2 bytes)
 
   .org $4000
-  jmp p8s_main
+  jmp p8s_start
 
   .include delay_routines.inc
   .include display_routines_4bit.inc
@@ -20,36 +20,36 @@ __p8c_aptr  = $28                    ; array element pointer (2 bytes)
   .include display_hex.inc
 
 ; ---- ZP variable allocations ----
-p8v_main_i = $40
-p8v_main_w = $41
+p8v_start_i = $40
+p8v_start_w = $41
 
 
-; ---- sub main ----
-p8s_main:
+; ---- sub start ----
+p8s_start:
   jsr clear_display
   lda #$00
-  sta p8v_main_i
+  sta p8v_start_i
 .Lfor_top_0:
-  lda p8v_main_i
+  lda p8v_start_i
   jsr display_hex
 .Lfor_cont_2:
-  lda p8v_main_i
+  lda p8v_start_i
   cmp #$03
   bne .Lbrs_3
   jmp .Lfor_end_1
 .Lbrs_3:
-  inc p8v_main_i
+  inc p8v_start_i
   jmp .Lfor_top_0
 .Lfor_end_1:
   lda #$34
   ldy #$12
-  sta p8v_main_w
-  sty p8v_main_w+1
+  sta p8v_start_w
+  sty p8v_start_w+1
   lda #<p8c_str_0
   ldx #>p8c_str_0
   jsr display_string
-  lda p8v_main_w
-  ldy p8v_main_w+1
+  lda p8v_start_w
+  ldy p8v_start_w+1
   pha
   tya
   jsr display_hex
@@ -60,9 +60,9 @@ p8s_main:
   jsr display_string
   lda $8000
   jsr display_hex
-.Lp8s_main_ret:
-.Lhalt_p8s_main:
-  bra .Lhalt_p8s_main
+.Lp8s_start_ret:
+.Lhalt_p8s_start:
+  bra .Lhalt_p8s_start
 
 ; ---- string pool ----
 p8c_str_0:

@@ -12,7 +12,7 @@ __p8c_ptr0  = $26                    ; indirect-Y pointer (2 bytes)
 __p8c_aptr  = $28                    ; array element pointer (2 bytes)
 
   .org $4000
-  jmp p8s_main
+  jmp p8s_start
 
   .include delay_routines.inc
   .include display_routines_4bit.inc
@@ -20,15 +20,15 @@ __p8c_aptr  = $28                    ; array element pointer (2 bytes)
   .include display_hex.inc
 
 
-; ---- sub main ----
-p8s_main:
+; ---- sub start ----
+p8s_start:
   jsr clear_display
   lda #<p8c_str_0
   ldx #>p8c_str_0
   jsr display_string
-.Lp8s_main_ret:
-.Lhalt_p8s_main:
-  bra .Lhalt_p8s_main
+.Lp8s_start_ret:
+.Lhalt_p8s_start:
+  bra .Lhalt_p8s_start
 
 ; ---- string pool ----
 p8c_str_0:

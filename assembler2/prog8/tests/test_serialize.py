@@ -78,7 +78,7 @@ LEXER_CORPUS = [
     # adjacency: no spaces, the lexer must still split correctly
     "x<<=1 a==b c->d e.f.g h(i,j) k[l]",
     # a realistic mixed line
-    'main { txt.print("hi") x <<= $0f i = i + 1 }',
+    'main {\n  sub start() { txt.print("hi") x <<= $0f i = i + 1   }\n}',
 ]
 
 
@@ -162,7 +162,7 @@ class SerializeFormat(unittest.TestCase):
         return serialize(parse(lex(src, "<t>"), "<t>"))
 
     def test_program_skeleton(self):
-        got = self._ser_prog("main { }")
+        got = self._ser_prog('main {\n  sub start() {   }\n}')
         self.assertEqual(got, "\n".join([
             "(program",
             "  (address $4000)",
@@ -173,13 +173,13 @@ class SerializeFormat(unittest.TestCase):
             "  (enums)",
             "  (structs)",
             "  (subs",
-            "    (subdef main main void",
+            "    (subdef start main void",
             "      (params)",
             "      (block))))",
         ]) + "\n")
 
     def test_if_else_and_assign(self):
-        got = self._ser_prog("ubyte x\nmain { if x == 0 { x = 1 } else { x += 2 } }")
+        got = self._ser_prog('ubyte x\nmain {\n  sub start() { if x == 0 { x = 1 } else { x += 2 }   }\n}')
         self.assertIn("\n".join([
             "        (if",
             "          (==",
@@ -215,7 +215,7 @@ class SerializeFormat(unittest.TestCase):
 
     def test_defer_and_for(self):
         got = self._ser_prog(
-            'ubyte i\nmain { for i in 0 to 3 { defer txt.print("d") } }')
+            'ubyte i\nmain {\n  sub start() { for i in 0 to 3 { defer txt.print("d") }   }\n}')
         self.assertIn("\n".join([
             "        (for i",
             "          (int 0)",
@@ -229,10 +229,7 @@ class SerializeFormat(unittest.TestCase):
 
     def test_enum_struct_imports_directives(self):
         got = self._ser_prog(
-            "%import textio\n"
-            "enum E { A, B = 5 }\n"
-            "struct P { ubyte x uword y }\n"
-            "main { }")
+            '%import textio\nenum E { A, B = 5 }\nstruct P { ubyte x uword y }\nmain {\n  sub start() {   }\n}')
         # target is selected externally now (no %target directive); the parser
         # serializes its default.
         self.assertIn("  (target wendy2c)", got)
@@ -252,9 +249,7 @@ class SerializeFormat(unittest.TestCase):
 
     def test_asmsub_and_array_var(self):
         got = self._ser_prog(
-            "extsub $f009 = putc(ubyte c @A)\n"
-            "ubyte[4] buf\n"
-            "main { }")
+            'extsub $f009 = putc(ubyte c @A)\nubyte[4] buf\nmain {\n  sub start() {   }\n}')
         self.assertIn("\n".join([
             "    (var ubyte[4] buf)",
         ]), got)

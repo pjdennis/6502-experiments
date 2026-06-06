@@ -13,6 +13,7 @@
 %import lcd
 
 main {
+  sub start() {
     lcd.clear()
 
     ubyte i
@@ -26,4 +27,5 @@ main {
 
     txt.print(" ")
     txt.print_ub(peek($8000))
+  }
 }

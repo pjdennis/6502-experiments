@@ -7,6 +7,7 @@
 %import lcd
 
 main {
+  sub start() {
     lcd.clear()
 
     uword w = $00FE
@@ -23,4 +24,5 @@ main {
     w = w + $00FF                ; -> 01FF
     txt.print(" ")
     txt.print_uw(w)              ; 01FF
+  }
 }

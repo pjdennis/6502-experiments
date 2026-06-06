@@ -9,6 +9,7 @@
 ubyte total
 
 main {
+  sub start() {
     lcd.clear()
 
     ; -- loop 1: count 0..3 via while, accumulate into `total`.
@@ -31,4 +32,5 @@ main {
     } else {
         txt.print(" NO")
     }
+  }
 }

@@ -6,9 +6,11 @@
 %import lcd
 
 main {
+  sub start() {
     lcd.clear()
     ubyte i
     for i in 0 to 7 {
         txt.print_ub(i * i)
     }
+  }
 }

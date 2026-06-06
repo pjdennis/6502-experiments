@@ -27,6 +27,7 @@ sub kind_to_letter(ubyte k) -> ubyte {
 }
 
 main {
+  sub start() {
     lcd.clear()
     txt.print_ub(kind_to_letter(Token.NONE))
     txt.print_ub(kind_to_letter(Token.NUMBER))
@@ -37,4 +38,5 @@ main {
     txt.print_ub(kind_to_letter(Token.RPAREN))
     txt.print(" ")
     txt.print_ub(kind_to_letter(99))      ; -> '?'
+  }
 }

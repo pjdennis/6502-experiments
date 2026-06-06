@@ -54,8 +54,8 @@ class StrCompare(unittest.TestCase):
         shutil.rmtree(cls.workdir, ignore_errors=True)
 
     def _run_case(self, body: str, expected: bytes) -> None:
-        src = (_SHIM_STR + "main {\n    dst = _openout(_argv(1))\n    "
-               + body + "\n    _close(dst)\n}\n")
+        src = (_SHIM_STR + "main {\n  sub start() {\n    dst = _openout(_argv(1))\n    "
+               + body + "\n    _close(dst)\n  }\n}\n")
         stem = f"case_{abs(hash(body)) & 0xffffff:06x}"
         p8 = self.workdir / f"{stem}.p8"
         s = self.workdir / f"{stem}.s"
