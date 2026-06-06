@@ -274,6 +274,8 @@ uword entry_nm           ; name ident of the entry sub (`start`, the SUBK_MAIN)
 uword[16] call_slot      ; param sym index per arg
 ubyte[16] call_isw       ; 1 if that arg/param is uword
 ubyte call_n
+uword[16] call_arg       ; arg expr node per arg (source order), for the
+                         ; non-recursive call lowering (pushed in reverse)
 ; sub table (registered in source order before codegen, so calls
 ; resolve and pass B emits non-main subs in p8c's order).
 uword[32] sub_name       ; sub name ident id
@@ -281,15 +283,6 @@ ubyte[32] sub_kind       ; SUBK_SUB / MAIN / INLINE / ASMSUB
 ubyte[32] sub_ret        ; return type tag
 uword[32] sub_addr       ; asmsub target address ($F0xx); else 0
 uword sub_count
-; builtin-call node stack: emit_builtin is non-reentrant (static
-; locals), but a builtin arg may itself be a builtin, so the callnode
-; is stacked and args re-derived after each nested codegen.
-uword[8] bi_cn
-ubyte bi_sp
-; word-context call widening flag stack (word_dispatch is re-entered
-; by a ubyte-returning call's own arg eval, clobbering its locals).
-ubyte[8] wdn_stack
-ubyte wdn_sp
 ; the sub currently being codegen'd -- its return type + name ident,
 ; for `return` (the per-sub .Lp8s_<name>_ret label).
 ubyte cur_ret            ; current sub's return type tag
@@ -299,20 +292,15 @@ uword cur_ret_name       ; current sub's name ident id
 ; recorded str id indexes the parser's str_pool for the trailer.
 uword[48] strpool_sid    ; str id for label N (p8c_str_N)
 uword strpool_count
-; byte-expression codegen work stack (replaces p8c's recursion):
-; per entry a task -- 0 eval node, 1 binop-leaf, 2 pha, 3 sta tmp1,
-; 4 pla, 5 binop-tmp1.
-ubyte[36] cws_type
-uword[36] cws_node
-ubyte[36] cws_op
-ubyte cws_sp
-; word-expression codegen work stack (separate from the byte stack so
-; a byte expression's @() address can drive a word eval without
-; corrupting the byte stack -- the two never share state).
-ubyte[36] wws_type
-uword[36] wws_node
-ubyte[36] wws_op
-ubyte wws_sp
+; unified expression codegen work stack (replaces p8c's recursive
+; expression codegen entirely -- byte AND word evaluation, @() reads,
+; builtins, and calls all run on this one stack with NO subroutine
+; recursion, so upstream prog8c compiles + runs it correctly). Each
+; entry is a task (kind codes documented at codegen_expr's dispatch).
+ubyte[96] es_type
+uword[96] es_node
+ubyte[96] es_op
+ubyte es_sp
 ; statement work stack (control flow without recursion): a task is
 ; 0=emit stmt node, 1=emit label .L<kind>_<id>:, 2=emit jmp to it,
 ; 3=pop the loop-label stack.
@@ -1463,12 +1451,16 @@ sub parse_assign_or_expr() -> uword {
     k = cur_kind()
     if k == TK_ASSIGN {
         advance()
-        return new_node(ND_ASSIGN, TK_ASSIGN, e, parse_expr())
+        uword rhs1
+        rhs1 = parse_expr()
+        return new_node(ND_ASSIGN, TK_ASSIGN, e, rhs1)
     }
     if k >= TK_PLUSEQ {
         if k <= TK_SHREQ {
             advance()
-            return new_node(ND_ASSIGN, k, e, parse_expr())
+            uword rhs2
+            rhs2 = parse_expr()
+            return new_node(ND_ASSIGN, k, e, rhs2)
         }
     }
     return new_node(ND_EXPRSTMT, 0, e, 0)
@@ -1640,13 +1632,20 @@ sub parse_block() -> uword {
             if t == TK_KELSE {
                 advance()
             } else {
-                vals = cons_prepend(vals, parse_expr())
+                ; hoist parse_expr() into a temp before cons_prepend: parse_expr
+                ; can itself call cons_prepend (a call arg's own list), and prog8
+                ; gives every sub static parameter storage, so a nested call would
+                ; otherwise clobber the outer cons_prepend's args mid-evaluation.
+                uword ev
+                ev = parse_expr()
+                vals = cons_prepend(vals, ev)
                 repeat {
                     if cur_kind() != TK_COMMA {
                         break
                     }
                     advance()
-                    vals = cons_prepend(vals, parse_expr())
+                    ev = parse_expr()
+                    vals = cons_prepend(vals, ev)
                 }
             }
             advance()                       ; '->'
@@ -1807,7 +1806,9 @@ sub parse_const_decl() -> uword {
     nameid = cur_val()
     advance()                               ; name
     advance()                               ; '='
-    return new_node(ND_VARDECL, ctag, nameid, parse_expr())
+    uword cinit
+    cinit = parse_expr()
+    return new_node(ND_VARDECL, ctag, nameid, cinit)
 }
 
 sub parse_enum_decl() -> uword {
@@ -2016,19 +2017,30 @@ sub parse_decls_pass() {
             continue
         }
         if is_type_kw(t) != 0 {
-            prog_vars = cons_prepend(prog_vars, parse_var_decl())
+            ; hoist the parse_*_decl() result before cons_prepend -- the parse
+            ; can re-enter cons_prepend (nested lists), and prog8's static sub
+            ; params mean a nested call would clobber the outer args otherwise.
+            uword dvn
+            dvn = parse_var_decl()
+            prog_vars = cons_prepend(prog_vars, dvn)
             continue
         }
         if t == TK_KCONST {
-            prog_vars = cons_prepend(prog_vars, parse_const_decl())
+            uword dcn
+            dcn = parse_const_decl()
+            prog_vars = cons_prepend(prog_vars, dcn)
             continue
         }
         if t == TK_KENUM {
-            prog_enums = cons_prepend(prog_enums, parse_enum_decl())
+            uword den
+            den = parse_enum_decl()
+            prog_enums = cons_prepend(prog_enums, den)
             continue
         }
         if t == TK_KSTRUCT {
-            prog_structs = cons_prepend(prog_structs, parse_struct_decl())
+            uword dsn
+            dsn = parse_struct_decl()
+            prog_structs = cons_prepend(prog_structs, dsn)
             continue
         }
         if t == TK_KMAIN {
@@ -2050,7 +2062,9 @@ sub parse_decls_pass() {
         }
         if t == TK_IDENT {
             if is_struct_name(cur_val()) != 0 {
-                prog_vars = cons_prepend(prog_vars, parse_struct_var())
+                uword dsv
+                dsv = parse_struct_var()
+                prog_vars = cons_prepend(prog_vars, dsv)
                 continue
             }
         }
@@ -3079,7 +3093,10 @@ sub codegen_stmt(uword st) {
         uword e
         e = node_a[(st as ubyte)]
         if node_kind[(e as ubyte)] == ND_CALL {
-            codegen_call(e)
+            ; a bare call statement: emit it via the byte-context expr driver
+            ; (the result in A/A:Y is simply discarded). No widening is added,
+            ; matching p8c's call-statement lowering.
+            codegen_byte_expr(e)
         }
         return
     }
@@ -3451,18 +3468,6 @@ sub emit_when_choice(uword choice, uword packed) {
     push_block_stmts(body)             ; body (top)
 }
 
-; ---- byte expression codegen (work-stack; no recursion) -----
-; p8c's _emit_byte_expr_into_a recurses on operands; p1 can't recurse, so
-; the tree walk runs on an explicit work stack of tasks (cws_*). The
-; leaf-RHS fast path (left-nested chains like a+b+c) needs no spill; a
-; non-leaf RHS holds the LHS on the CPU stack across the RHS's evaluation
-; (-> __p8c_tmp1), matching the host's dual-scratch-safe sequence.
-sub cws_push(ubyte ty, uword nd, ubyte op) {
-    cws_type[cws_sp] = ty
-    cws_node[cws_sp] = nd
-    cws_op[cws_sp] = op
-    cws_sp = cws_sp + 1
-}
 ; a binop RHS that needs no evaluation (matches p8c's isinstance(rhs,
 ; (IntLit, Ident)) leaf-path test -- note: NOT BoolLit).
 sub is_leaf_rhs(uword e) -> ubyte {
@@ -4014,129 +4019,430 @@ sub emit_logic_tail(ubyte op) {
     o_nl()
 }
 ; evaluate a byte expression into A.
+; ---- unified, NON-RECURSIVE expression codegen --------------------------
+; codegen_byte_expr / codegen_word_expr are thin wrappers over codegen_expr,
+; which drives a single explicit work stack (es_*). Byte and word evaluation,
+; @() reads, builtins, and calls are all lowered to tasks pushed on that stack
+; -- no codegen subroutine ever calls another that calls back into it, so the
+; whole expression backend is recursion-free and upstream prog8c runs it.
+sub es_push(ubyte ty, uword nd, ubyte op) {
+    es_type[es_sp] = ty
+    es_node[es_sp] = nd
+    es_op[es_sp] = op
+    es_sp = es_sp + 1
+}
 sub codegen_byte_expr(uword root) {
-    cws_sp = 0
-    cws_push(0, root, 0)
+    codegen_expr(root, 0)
+}
+sub codegen_word_expr(uword root) {
+    codegen_expr(root, 1)
+}
+; ctx 0 = evaluate a byte expr into A; ctx 1 = a word expr into A:Y.
+sub codegen_expr(uword root, ubyte ctx) {
+    es_sp = 0
+    es_push(ctx, root, 0)
     repeat {
-        if cws_sp == 0 {
+        if es_sp == 0 {
             break
         }
-        cws_sp = cws_sp - 1
+        es_sp = es_sp - 1
         ubyte ty
         uword nd
         ubyte op
-        ty = cws_type[cws_sp]
-        nd = cws_node[cws_sp]
-        op = cws_op[cws_sp]
-        if ty == 0 {
-            if node_kind[(nd as ubyte)] == ND_BINOP {
-                uword lhs
-                uword rhs
-                lhs = node_a[(nd as ubyte)]
-                rhs = node_b[(nd as ubyte)]
-                if is_cmp_op(node_op[(nd as ubyte)]) != 0 {
-                    ; eval(lhs); sta tmp0; eval(rhs); sta tmp1; cmp-tail
-                    cws_push(7, nd, node_op[(nd as ubyte)])
-                    cws_push(3, 0, 0)
-                    cws_push(0, rhs, 0)
-                    cws_push(8, 0, 0)
-                    cws_push(0, lhs, 0)
-                } else {
-                    if is_logical_op(node_op[(nd as ubyte)]) != 0 {
-                        ; eval(lhs); logic-mid; eval(rhs); logic-tail
-                        cws_push(10, 0, node_op[(nd as ubyte)])
-                        cws_push(0, rhs, 0)
-                        cws_push(9, 0, node_op[(nd as ubyte)])
-                        cws_push(0, lhs, 0)
-                    } else {
-                        if node_op[(nd as ubyte)] == TK_KXOR {
-                            ; eval(lhs); pha; eval(rhs); sta tmp0; pla; eor tmp0
-                            cws_push(11, 0, 0)
-                            cws_push(4, 0, 0)
-                            cws_push(8, 0, 0)
-                            cws_push(0, rhs, 0)
-                            cws_push(2, 0, 0)
-                            cws_push(0, lhs, 0)
-                        } else {
-                            if is_leaf_rhs(rhs) != 0 {
-                                ; eval(lhs); binop_leaf(op, rhs)
-                                cws_push(1, rhs, node_op[(nd as ubyte)])
-                                cws_push(0, lhs, 0)
-                            } else {
-                                ; eval(lhs); pha; eval(rhs); sta tmp1; pla; binop_tmp1
-                                cws_push(5, 0, node_op[(nd as ubyte)])
-                                cws_push(4, 0, 0)
-                                cws_push(3, 0, 0)
-                                cws_push(0, rhs, 0)
-                                cws_push(2, 0, 0)
-                                cws_push(0, lhs, 0)
-                            }
-                        }
-                    }
-                }
-            } else {
-                if node_kind[(nd as ubyte)] == ND_UNOP {
-                    ; eval(operand); apply-unary(op)
-                    cws_push(6, 0, node_op[(nd as ubyte)])
-                    cws_push(0, node_a[(nd as ubyte)], 0)
-                } else {
-                    if node_kind[(nd as ubyte)] == ND_MEMAT {
-                        ; @(addr) byte read -- self-contained (result in A)
-                        emit_memat_read(nd)
-                    } else {
-                        if node_kind[(nd as ubyte)] == ND_CALL {
-                            codegen_call(nd)   ; byte-returning call -> A
-                        } else {
-                            emit_byte_leaf_load(nd)
-                        }
-                    }
+        ty = es_type[es_sp]
+        nd = es_node[es_sp]
+        op = es_op[es_sp]
+        when ty {
+            0 -> { eval_byte_dispatch(nd) }
+            1 -> { eval_word_dispatch(nd) }
+            2 -> { emit_byte_binop_leaf(op, nd) }
+            3 -> { o_pha() }
+            4 -> { o_sta_tmp1() }
+            5 -> { o_pla() }
+            6 -> { emit_byte_binop_zp(op) }
+            7 -> { emit_unary_apply(op) }
+            8 -> { emit_cmp_tail(nd, op) }
+            9 -> { o_sta_tmp0() }
+            10 -> { emit_logic_mid(op) }
+            11 -> { emit_logic_tail(op) }
+            12 -> {
+                out_text("  eor __p8c_tmp0")
+                o_nl()
+            }
+            13 -> {
+                o_pha()
+                o_tya()
+                o_pha()
+            }
+            14 -> {
+                o_sta_wtmp0()
+                o_sty_wtmp0h()
+                o_pla()
+                o_tay()
+                o_pla()
+            }
+            15 -> { emit_word_combine(op) }
+            16 -> {
+                o_sta_wtmp0()
+                o_sty_wtmp0h()
+            }
+            17 -> { emit_wshl_const(op) }
+            18 -> { emit_wshr_const(op) }
+            19 -> { emit_wshift_loop(op) }
+            20 -> { emit_word_unary(op) }
+            21 -> {
+                out_text("  sta __p8c_ptr0")
+                o_nl()
+                out_text("  sty __p8c_ptr0+1")
+                o_nl()
+                out_text("  ldy #$00")
+                o_nl()
+                out_text("  lda (__p8c_ptr0),y")
+                o_nl()
+            }
+            22 -> {
+                out_text("  jsr ")
+                emit_sub_label(nd)
+                o_nl()
+            }
+            23 -> { emit_call_popslots(nd) }
+            24 -> {
+                emit_sta_sym(nd)
+                if op != 0 {
+                    emit_sty_sym_hi(nd)
                 }
             }
+            25 -> {
+                o_ldy() o_imm()
+                out_text("00")
+                o_nl()
+            }
+            26 -> { o_tya() }
+            27 -> {
+                out_text("  sta $")
+                out_hex4(node_a[(nd as ubyte)])
+                o_nl()
+            }
+            else -> {
+                ; 28: mkword tail (msb on the CPU stack, lsb in A) -> A=lo, Y=hi
+                o_tax()
+                o_pla()
+                o_tay()
+                o_txa()
+            }
+        }
+    }
+}
+; dispatch a byte-context node: push the task sequence that evaluates it into A.
+sub eval_byte_dispatch(uword nd) {
+    ubyte k
+    k = node_kind[(nd as ubyte)]
+    if k == ND_BINOP {
+        uword lhs
+        uword rhs
+        ubyte bop
+        lhs = node_a[(nd as ubyte)]
+        rhs = node_b[(nd as ubyte)]
+        bop = node_op[(nd as ubyte)]
+        if is_cmp_op(bop) != 0 {
+            ; eval(lhs); sta tmp0; eval(rhs); sta tmp1; cmp-tail
+            es_push(8, nd, bop)
+            es_push(4, 0, 0)
+            es_push(0, rhs, 0)
+            es_push(9, 0, 0)
+            es_push(0, lhs, 0)
         } else {
-            if ty == 1 {
-                emit_byte_binop_leaf(op, nd)
+            if is_logical_op(bop) != 0 {
+                ; eval(lhs); logic-mid; eval(rhs); logic-tail
+                es_push(11, 0, bop)
+                es_push(0, rhs, 0)
+                es_push(10, 0, bop)
+                es_push(0, lhs, 0)
             } else {
-                if ty == 2 {
-                    o_pha()
+                if bop == TK_KXOR {
+                    ; eval(lhs); pha; eval(rhs); sta tmp0; pla; eor tmp0
+                    es_push(12, 0, 0)
+                    es_push(5, 0, 0)
+                    es_push(9, 0, 0)
+                    es_push(0, rhs, 0)
+                    es_push(3, 0, 0)
+                    es_push(0, lhs, 0)
                 } else {
-                    if ty == 3 {
-                        o_sta_tmp1()
+                    if is_leaf_rhs(rhs) != 0 {
+                        ; eval(lhs); binop_leaf(op, rhs)
+                        es_push(2, rhs, bop)
+                        es_push(0, lhs, 0)
                     } else {
-                        if ty == 4 {
-                            o_pla()
-                        } else {
-                            if ty == 5 {
-                                emit_byte_binop_zp(op)
-                            } else {
-                                if ty == 6 {
-                                    emit_unary_apply(op)
-                                } else {
-                                    if ty == 7 {
-                                        emit_cmp_tail(nd, op)
-                                    } else {
-                                        if ty == 8 {
-                                            o_sta_tmp0()
-                                        } else {
-                                            if ty == 9 {
-                                                emit_logic_mid(op)
-                                            } else {
-                                                if ty == 10 {
-                                                    emit_logic_tail(op)
-                                                } else {
-                                                    out_text("  eor __p8c_tmp0")
-                                                    o_nl()
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        ; eval(lhs); pha; eval(rhs); sta tmp1; pla; binop_tmp1
+                        es_push(6, 0, bop)
+                        es_push(5, 0, 0)
+                        es_push(4, 0, 0)
+                        es_push(0, rhs, 0)
+                        es_push(3, 0, 0)
+                        es_push(0, lhs, 0)
                     }
                 }
             }
         }
+        return
     }
+    if k == ND_UNOP {
+        ; eval(operand); apply-unary(op)
+        es_push(7, 0, node_op[(nd as ubyte)])
+        es_push(0, node_a[(nd as ubyte)], 0)
+        return
+    }
+    if k == ND_MEMAT {
+        ; @(addr) byte read (result in A)
+        uword addr
+        addr = node_a[(nd as ubyte)]
+        if node_kind[(addr as ubyte)] == ND_INT {
+            out_text("  lda $")
+            out_hex4(node_a[(addr as ubyte)])
+            o_nl()
+        } else {
+            es_push(21, 0, 0)               ; MEMAT_TAIL
+            es_push(1, addr, 0)             ; evaluate the address (word)
+        }
+        return
+    }
+    if k == ND_CALL {
+        handle_call(nd)                     ; byte-returning call -> A
+        return
+    }
+    emit_byte_leaf_load(nd)
+}
+; dispatch a word-context node: push the task sequence that evaluates it -> A:Y.
+sub eval_word_dispatch(uword nd) {
+    ubyte k
+    k = node_kind[(nd as ubyte)]
+    if k == ND_ADDROF {
+        emit_addrof(nd)
+        return
+    }
+    if k == ND_CALL {
+        ; word-returning call -> A:Y; a ubyte-returning call widens (ldy #0).
+        if call_returns_ubyte(nd) != 0 {
+            es_push(25, 0, 0)               ; CALL_WIDEN runs after the call
+        }
+        handle_call(nd)
+        return
+    }
+    if k == ND_BINOP {
+        ubyte bop
+        bop = node_op[(nd as ubyte)]
+        if bop == TK_SHL {
+            word_shift_push(nd, 1)
+            return
+        }
+        if bop == TK_SHR {
+            word_shift_push(nd, 0)
+            return
+        }
+        ; arithmetic / bitwise: eval lhs; save; eval rhs; stash; combine.
+        es_push(15, 0, bop)
+        es_push(14, 0, 0)
+        es_push(1, node_b[(nd as ubyte)], 0)
+        es_push(13, 0, 0)
+        es_push(1, node_a[(nd as ubyte)], 0)
+        return
+    }
+    if k == ND_UNOP {
+        es_push(20, 0, node_op[(nd as ubyte)])
+        es_push(1, node_a[(nd as ubyte)], 0)
+        return
+    }
+    ; leaf: int / ident / string
+    codegen_word_leaf(nd)
+}
+; push the task sequence for a word shift: const count (0..16) unrolls; else
+; the variable path stashes the lhs into wtmp0, evaluates the count, and loops.
+sub word_shift_push(uword nd, ubyte is_left) {
+    uword rhsn
+    rhsn = node_b[(nd as ubyte)]
+    if node_kind[(rhsn as ubyte)] == ND_INT {
+        if node_a[(rhsn as ubyte)] <= 16 {
+            ubyte n
+            n = lsb(node_a[(rhsn as ubyte)]) & $0f
+            if is_left != 0 {
+                es_push(17, 0, n)
+            } else {
+                es_push(18, 0, n)
+            }
+            es_push(1, node_a[(nd as ubyte)], 0)
+            return
+        }
+    }
+    es_push(19, 0, is_left)                 ; shift loop tail (after count in A)
+    es_push(0, node_b[(nd as ubyte)], 0)    ; evaluate the count (byte)
+    es_push(16, 0, 0)                       ; lhs -> wtmp0
+    es_push(1, node_a[(nd as ubyte)], 0)    ; evaluate the lhs (word)
+}
+; variable-count shift loop tail: LHS in __p8c_wtmp0, count in A.
+sub emit_wshift_loop(ubyte is_left) {
+    o_tax()
+    uword top_id
+    uword end_id
+    top_id = label_seq
+    label_seq = label_seq + 1
+    end_id = label_seq
+    label_seq = label_seq + 1
+    out_text("  cpx #$00")
+    o_nl()
+    out_text("  beq ")
+    emit_wshift_label(is_left, 0, end_id)
+    o_nl()
+    emit_wshift_label(is_left, 1, top_id)
+    out_byte($3a)
+    o_nl()
+    if is_left != 0 {
+        out_text("  asl __p8c_wtmp0")
+        o_nl()
+        out_text("  rol __p8c_wtmp0+1")
+        o_nl()
+    } else {
+        out_text("  lsr __p8c_wtmp0+1")
+        o_nl()
+        o_ror_wtmp0()
+    }
+    out_text("  dex")
+    o_nl()
+    out_text("  bne ")
+    emit_wshift_label(is_left, 1, top_id)
+    o_nl()
+    emit_wshift_label(is_left, 0, end_id)
+    out_byte($3a)
+    o_nl()
+    o_lda_wtmp0()
+    o_ldy_wtmp0h()
+}
+; lower a call (regular sub or builtin) by pushing its argument-eval + jsr
+; tasks. Args are evaluated (in source order) onto the CPU stack, then popped
+; into the param slots before the jsr -- all on the unified work stack.
+sub handle_call(uword callnode) {
+    uword callee
+    callee = node_a[(callnode as ubyte)]
+    ubyte bk
+    bk = builtin_kind(callee)
+    if bk != 0 {
+        handle_builtin(callnode, bk)
+        return
+    }
+    collect_params(callee)
+    if call_n == 1 {
+        ; single arg: evaluate straight into the slot, then jsr.
+        uword arg1
+        arg1 = cons_val[(reverse_cons(node_b[(callnode as ubyte)]) as ubyte)]
+        es_push(22, callee, 0)              ; jsr callee
+        es_push(24, call_slot[0], call_isw[0])  ; store result into the slot
+        if call_isw[0] != 0 {
+            es_push(1, arg1, 0)
+        } else {
+            es_push(0, arg1, 0)
+        }
+        return
+    }
+    if call_n != 0 {
+        ; snapshot the arg nodes (source order) so the reverse push is simple.
+        uword acell
+        acell = reverse_cons(node_b[(callnode as ubyte)])
+        ubyte j
+        j = 0
+        repeat {
+            if acell == 0 {
+                break
+            }
+            call_arg[j] = cons_val[(acell as ubyte)]
+            j = j + 1
+            acell = cons_next[(acell as ubyte)]
+        }
+        es_push(22, callee, 0)              ; jsr callee
+        es_push(23, callee, 0)              ; pop CPU stack into param slots
+        ; push each arg's (eval; pha) pair in reverse so they run source-order.
+        ubyte jj
+        jj = call_n
+        repeat {
+            if jj == 0 {
+                break
+            }
+            jj = jj - 1
+            if call_isw[jj] != 0 {
+                es_push(13, 0, 0)           ; pha/tya/pha (save A:Y)
+                es_push(1, call_arg[jj], 0)
+            } else {
+                es_push(3, 0, 0)            ; pha
+                es_push(0, call_arg[jj], 0)
+            }
+        }
+        return
+    }
+    es_push(22, callee, 0)                  ; no args: just jsr
+}
+; pop the CPU-stacked args (reverse order) into callee's param slots.
+sub emit_call_popslots(uword callee) {
+    collect_params(callee)
+    ubyte jp
+    jp = call_n
+    repeat {
+        if jp == 0 {
+            break
+        }
+        jp = jp - 1
+        uword psi
+        psi = call_slot[jp]
+        if call_isw[jp] != 0 {
+            out_text("  pla")               ; high byte
+            o_nl()
+            o_sta()
+            emit_sym_mangled(psi)
+            o_plus1()
+            o_nl()
+            out_text("  pla")               ; low byte
+            o_nl()
+            emit_sta_sym(psi)
+        } else {
+            o_pla()
+            emit_sta_sym(psi)
+        }
+    }
+}
+; lower a builtin call (lsb/msb/peek/poke/mkword) to its task sequence.
+sub handle_builtin(uword callnode, ubyte bk) {
+    uword h
+    h = node_b[(callnode as ubyte)]
+    uword a0
+    uword a1
+    a1 = cons_val[(h as ubyte)]                          ; second (= head)
+    if cons_next[(h as ubyte)] == 0 {
+        a0 = cons_val[(h as ubyte)]                      ; single arg
+    } else {
+        a0 = cons_val[(cons_next[(h as ubyte)] as ubyte)]   ; first of two
+    }
+    if bk == 1 {                       ; lsb(uword) -> low byte in A
+        es_push(1, a0, 0)
+        return
+    }
+    if bk == 2 {                       ; msb(uword) -> high byte in A
+        es_push(26, 0, 0)              ; tya
+        es_push(1, a0, 0)
+        return
+    }
+    if bk == 3 {                       ; peek(literal) -> lda $XXXX
+        out_text("  lda $")
+        out_hex4(node_a[(a0 as ubyte)])
+        o_nl()
+        return
+    }
+    if bk == 4 {                       ; poke(literal, byteexpr) -> sta $XXXX
+        es_push(27, a0, 0)             ; sta $XXXX (a0 = literal addr node)
+        es_push(0, a1, 0)              ; evaluate the byte value (a1)
+        return
+    }
+    ; mkword(msb, lsb) -> A=low, Y=high (Y-safe via X).
+    es_push(28, 0, 0)                  ; tax; pla; tay; txa
+    es_push(0, a1, 0)                  ; evaluate lsb
+    es_push(3, 0, 0)                   ; pha (save msb)
+    es_push(0, a0, 0)                  ; evaluate msb
 }
 ; map an augmented-assignment token to its binop token.
 sub aug_to_binop(ubyte op) -> ubyte {
@@ -4212,13 +4518,6 @@ sub codegen_word_leaf(uword e) {
         o_nl()
         return
     }
-}
-
-sub wws_push(ubyte ty, uword nd, ubyte op) {
-    wws_type[wws_sp] = ty
-    wws_node[wws_sp] = nd
-    wws_op[wws_sp] = op
-    wws_sp = wws_sp + 1
 }
 ; &name (address-of) -> a uword value (lda #< / ldy #> the mangled label).
 sub emit_addrof(uword e) {
@@ -4411,214 +4710,6 @@ sub emit_wshift_label(ubyte is_left, ubyte is_top, uword id) {
         }
     }
     out_dec(id)
-}
-; variable-count shift tail: LHS already in __p8c_wtmp0 (lo,hi). Evaluate the
-; count into A (-> X) and loop. NOTE: the count goes through codegen_byte_expr,
-; which resets the byte work stack -- safe at top level, but a word shift with
-; a non-leaf count nested inside a byte expr's @() address would corrupt it.
-sub emit_wshift_var_tail(uword nd, ubyte is_left) {
-    codegen_byte_expr(node_b[(nd as ubyte)])
-    o_tax()
-    uword top_id
-    uword end_id
-    top_id = label_seq
-    label_seq = label_seq + 1
-    end_id = label_seq
-    label_seq = label_seq + 1
-    out_text("  cpx #$00")
-    o_nl()
-    out_text("  beq ")
-    emit_wshift_label(is_left, 0, end_id)
-    o_nl()
-    emit_wshift_label(is_left, 1, top_id)
-    out_byte($3a)
-    o_nl()
-    if is_left != 0 {
-        out_text("  asl __p8c_wtmp0")
-        o_nl()
-        out_text("  rol __p8c_wtmp0+1")
-        o_nl()
-    } else {
-        out_text("  lsr __p8c_wtmp0+1")
-        o_nl()
-        o_ror_wtmp0()
-    }
-    out_text("  dex")
-    o_nl()
-    out_text("  bne ")
-    emit_wshift_label(is_left, 1, top_id)
-    o_nl()
-    emit_wshift_label(is_left, 0, end_id)
-    out_byte($3a)
-    o_nl()
-    o_lda_wtmp0()
-    o_ldy_wtmp0h()
-}
-; dispatch a word shift: const count (IntLit 0..16) unrolls; else loop. The
-; const path evaluates the lhs then unrolls; the variable path stashes the lhs
-; into wtmp0 first (STA_WTMP0 task), then the tail evaluates the count + loops.
-sub word_dispatch_shift(uword nd, ubyte is_left) {
-    uword rhsn
-    rhsn = node_b[(nd as ubyte)]
-    if node_kind[(rhsn as ubyte)] == ND_INT {
-        if node_a[(rhsn as ubyte)] <= 16 {
-            ubyte n
-            n = lsb(node_a[(rhsn as ubyte)]) & $0f
-            if is_left != 0 {
-                wws_push(5, 0, n)
-            } else {
-                wws_push(6, 0, n)
-            }
-            wws_push(0, node_a[(nd as ubyte)], 0)
-            return
-        }
-    }
-    if is_left != 0 {
-        wws_push(7, nd, 0)
-    } else {
-        wws_push(8, nd, 0)
-    }
-    wws_push(4, 0, 0)
-    wws_push(0, node_a[(nd as ubyte)], 0)
-}
-sub word_dispatch(uword nd) {
-    ubyte k
-    k = node_kind[(nd as ubyte)]
-    if k == ND_ADDROF {
-        emit_addrof(nd)
-        return
-    }
-    if k == ND_CALL {
-        ; word-returning call -> A:Y; a ubyte-returning call widens (ldy #0).
-        ; codegen_call re-enters word_dispatch (the call's own arg eval), so
-        ; stack the widen flag rather than re-reading the clobbered `nd`.
-        wdn_stack[wdn_sp] = call_returns_ubyte(nd)
-        wdn_sp = wdn_sp + 1
-        codegen_call(nd)
-        wdn_sp = wdn_sp - 1
-        if wdn_stack[wdn_sp] != 0 {
-            o_ldy() o_imm()
-            out_text("00")
-            o_nl()
-        }
-        return
-    }
-    if k == ND_BINOP {
-        ubyte bop
-        bop = node_op[(nd as ubyte)]
-        if bop == TK_SHL {
-            word_dispatch_shift(nd, 1)
-            return
-        }
-        if bop == TK_SHR {
-            word_dispatch_shift(nd, 0)
-            return
-        }
-        ; arithmetic / bitwise: eval lhs; save; eval rhs; stash; combine.
-        wws_push(3, 0, bop)
-        wws_push(2, 0, 0)
-        wws_push(0, node_b[(nd as ubyte)], 0)
-        wws_push(1, 0, 0)
-        wws_push(0, node_a[(nd as ubyte)], 0)
-        return
-    }
-    if k == ND_UNOP {
-        wws_push(11, 0, node_op[(nd as ubyte)])
-        wws_push(0, node_a[(nd as ubyte)], 0)
-        return
-    }
-    ; leaf: int / ident / string
-    codegen_word_leaf(nd)
-}
-; evaluate a uword expression into A (low) / Y (high), on the word work stack
-; (no recursion). Port of _emit_word_expr_into_ay + _emit_word_binop_into_ay.
-; Covers leaves, `&name`, the arithmetic/bitwise binops (+ - & | ^), and the
-; word unary ~ / -. (Shifts, comparison, indexing, calls arrive next.)
-sub codegen_word_expr(uword root) {
-    wws_sp = 0
-    wws_push(0, root, 0)
-    repeat {
-        if wws_sp == 0 {
-            break
-        }
-        wws_sp = wws_sp - 1
-        ubyte ty
-        uword nd
-        ubyte op
-        ty = wws_type[wws_sp]
-        nd = wws_node[wws_sp]
-        op = wws_op[wws_sp]
-        if ty == 0 {
-            word_dispatch(nd)
-        } else {
-            if ty == 1 {
-                ; save LHS (A:Y) on the CPU stack across the RHS eval
-                o_pha()
-                o_tya()
-                o_pha()
-            } else {
-                if ty == 2 {
-                    ; RHS -> wtmp0; restore LHS to A:Y
-                    o_sta_wtmp0()
-                    o_sty_wtmp0h()
-                    o_pla()
-                    o_tay()
-                    o_pla()
-                } else {
-                    if ty == 3 {
-                        emit_word_combine(op)
-                    } else {
-                        if ty == 4 {
-                            ; LHS -> wtmp0 (for the variable-shift loop)
-                            o_sta_wtmp0()
-                            o_sty_wtmp0h()
-                        } else {
-                            if ty == 5 {
-                                emit_wshl_const(op)
-                            } else {
-                                if ty == 6 {
-                                    emit_wshr_const(op)
-                                } else {
-                                    if ty == 7 {
-                                        emit_wshift_var_tail(nd, 1)
-                                    } else {
-                                        if ty == 8 {
-                                            emit_wshift_var_tail(nd, 0)
-                                        } else {
-                                            emit_word_unary(op)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-; ---- @() memory read (byte) ---------------------------------
-; @(IntLit) -> a direct absolute load; @(<word expr>) -> evaluate the address
-; into __p8c_ptr0 and load via (ptr0),y.
-sub emit_memat_read(uword nd) {
-    uword addr
-    addr = node_a[(nd as ubyte)]
-    if node_kind[(addr as ubyte)] == ND_INT {
-        out_text("  lda $")
-        out_hex4(node_a[(addr as ubyte)])
-        o_nl()
-        return
-    }
-    codegen_word_expr(addr)
-    out_text("  sta __p8c_ptr0")
-    o_nl()
-    out_text("  sty __p8c_ptr0+1")
-    o_nl()
-    out_text("  ldy #$00")
-    o_nl()
-    out_text("  lda (__p8c_ptr0),y")
-    o_nl()
 }
 
 ; sym-addressed loads/stores (the sym index is already resolved).
@@ -4813,57 +4904,6 @@ sub builtin_kind(uword identid) -> ubyte {
     if ident_eq(identid, "mkword") != 0 { return 5 }
     return 0
 }
-; the 1st / 2nd argument of the builtin whose callnode is on top of bi_cn.
-; node_b is the reversed args cons (last pushed = head), so for f(x,y) the
-; head is y and head.next is x. Re-derived fresh each call so re-entrant
-; nested-builtin codegen can't leave a stale node id.
-sub bi_arg0() -> uword {
-    uword h
-    h = node_b[(bi_cn[bi_sp - 1] as ubyte)]
-    if cons_next[(h as ubyte)] == 0 {
-        return cons_val[(h as ubyte)]              ; single arg
-    }
-    return cons_val[(cons_next[(h as ubyte)] as ubyte)]       ; first of two
-}
-sub bi_arg1() -> uword {
-    return cons_val[(node_b[(bi_cn[bi_sp - 1] as ubyte)] as ubyte)]   ; second (= head)
-}
-; lower a builtin call to inline asm (port of _emit_builtin_call).
-sub emit_builtin(uword callnode, ubyte bk) {
-    bi_cn[bi_sp] = callnode
-    bi_sp = bi_sp + 1
-    if bk == 1 {                       ; lsb(uword) -> low byte in A
-        codegen_word_expr(bi_arg0())
-    } else {
-        if bk == 2 {                   ; msb(uword) -> high byte in A
-            codegen_word_expr(bi_arg0())
-            o_tya()
-        } else {
-            if bk == 3 {               ; peek(literal) -> lda $XXXX
-                out_text("  lda $")
-                out_hex4(node_a[(bi_arg0() as ubyte)])
-                o_nl()
-            } else {
-                if bk == 4 {           ; poke(literal, byteexpr) -> sta $XXXX
-                    codegen_byte_expr(bi_arg1())
-                    out_text("  sta $")
-                    out_hex4(node_a[(bi_arg0() as ubyte)])
-                    o_nl()
-                } else {
-                    ; mkword(msb, lsb) -> A=low, Y=high (Y-safe via X).
-                    codegen_byte_expr(bi_arg0())
-                    o_pha()
-                    codegen_byte_expr(bi_arg1())
-                    o_tax()
-                    o_pla()
-                    o_tay()
-                    o_txa()
-                }
-            }
-        }
-    }
-    bi_sp = bi_sp - 1
-}
 ; does a call's result type widen as ubyte in word context?
 sub call_returns_ubyte(uword callnode) -> ubyte {
     uword callee
@@ -4909,97 +4949,6 @@ sub collect_params(uword callee) {
         }
         i = i + 1
     }
-}
-; codegen a call. Regular sub: evaluate every arg onto the CPU stack (so a
-; later arg's evaluation can't clobber an earlier arg's param slot -- the slots
-; are not reentrant), then pop them into the param slots in reverse and jsr.
-; Result: A (ubyte/byte) or A:Y (uword). (NOTE: call_slot is global, so an arg
-; that is itself a call would corrupt it -- not yet handled; args are simple.)
-sub codegen_call(uword callnode) {
-    uword callee
-    callee = node_a[(callnode as ubyte)]
-    ubyte bk
-    bk = builtin_kind(callee)
-    if bk != 0 {
-        emit_builtin(callnode, bk)
-        return
-    }
-    uword cs
-    cs = find_sub(callee)
-    collect_params(callee)
-    if call_n == 1 {
-        ; single arg: store straight into the slot after eval (no reentrancy
-        ; hazard -- nothing writes the slot between the store and the jsr).
-        uword arg1
-        arg1 = cons_val[(reverse_cons(node_b[(callnode as ubyte)]) as ubyte)]
-        uword psi1
-        psi1 = call_slot[0]
-        if call_isw[0] != 0 {
-            codegen_word_expr(arg1)
-            emit_sta_sym(psi1)
-            emit_sty_sym_hi(psi1)
-        } else {
-            codegen_byte_expr(arg1)
-            emit_sta_sym(psi1)
-        }
-        out_text("  jsr ")
-        emit_sub_label(callee)
-        o_nl()
-        return
-    }
-    if call_n != 0 {
-        ; push each arg (source order) onto the CPU stack.
-        uword ahead
-        ahead = reverse_cons(node_b[(callnode as ubyte)])
-        uword acell
-        acell = ahead
-        ubyte j
-        j = 0
-        repeat {
-            if acell == 0 {
-                break
-            }
-            uword arg
-            arg = cons_val[(acell as ubyte)]
-            if call_isw[j] != 0 {
-                codegen_word_expr(arg)
-                o_pha()
-                o_tya()
-                o_pha()
-            } else {
-                codegen_byte_expr(arg)
-                o_pha()
-            }
-            j = j + 1
-            acell = cons_next[(acell as ubyte)]
-        }
-        ; pop into param slots in reverse order.
-        repeat {
-            if j == 0 {
-                break
-            }
-            j = j - 1
-            uword psi
-            psi = call_slot[j]
-            if call_isw[j] != 0 {
-                out_text("  pla")          ; high byte
-                o_nl()
-                o_sta()
-                emit_sym_mangled(psi)
-                o_plus1()
-                o_nl()
-                out_text("  pla")          ; low byte
-                o_nl()
-                emit_sta_sym(psi)
-            } else {
-                o_pla()
-                emit_sta_sym(psi)
-            }
-        }
-    }
-    out_text("  jsr ")
-    emit_sub_label(callee)
-    o_nl()
 }
 ; inline `%asm{ "..." }` -> emit each line of the (str-pooled) text with a
 ; 2-space indent (port of _emit_stmt's InlineAsm; splitlines semantics).
