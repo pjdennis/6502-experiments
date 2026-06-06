@@ -53,6 +53,14 @@ for i, n in enumerate(order):
     s = re.sub(r'\$%04x\b' % bases[i], '\x00PH%d\x00' % i, s, flags=re.IGNORECASE)
 for i, n in enumerate(order):
     s = s.replace('\x00PH%d\x00' % i, '$%04x' % newbase[n])
+
+# keep the upstream `%memtop $XXXX` directive in sync with the new slab floor
+# (the lowest base) so `upstream prog8c` keeps its allocator below the slabs.
+memtop_re = re.compile(r'(?m)^(%memtop[ \t]+)\$[0-9a-fA-F]{4}\b')
+if memtop_re.search(s):
+    s = memtop_re.sub(r'\g<1>$%04x' % floor, s)
+    print("    %-14s $%04x  (memtop directive synced to floor)" % ("%memtop", floor))
+
 open(path, "w").write(s)
 
 # verify no stale base literals survived

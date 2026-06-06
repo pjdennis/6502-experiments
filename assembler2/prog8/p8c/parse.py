@@ -207,6 +207,11 @@ class Parser:
             # `%launcher none` -- upstream directive; p8c emits no launcher, so
             # accept and ignore it (keeps the converged source one-dialect).
             self.eat("IDENT")
+        elif name == "memtop":
+            # `%memtop $XXXX` -- upstream allocator ceiling, so its code/data/BSS
+            # stays below the baked peek/poke slab region. p8c lays storage out
+            # explicitly (it never allocates over the slabs), so accept + ignore.
+            self.eat("INT")
         elif name == "import":
             v = self.eat("IDENT")
             prog.imports.append(v.value)

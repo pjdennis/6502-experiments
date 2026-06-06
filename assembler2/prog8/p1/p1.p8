@@ -1949,9 +1949,13 @@ sub handle_directive() {
         advance()
         return
     }
-    ; %output (or other): consume a single ident arg if present
+    ; %output / %memtop / other: consume a single ident-or-int arg if present
     if cur_kind() == TK_IDENT {
         advance()
+    } else {
+        if cur_kind() == TK_INT {
+            advance()
+        }
     }
 }
 

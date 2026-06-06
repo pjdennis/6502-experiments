@@ -20,6 +20,7 @@
 ; driver (port of parse.py::parse_block_iter).
 
 %address $0200
+%memtop $a9e8
 
 ; ---- token kinds ----
 
