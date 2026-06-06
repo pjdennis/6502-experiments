@@ -64,6 +64,14 @@ any are missing.
 | `t4_bank_counters` | 8 independent per-bank counters: `33333333` |
 | `t5_multibank_code` | **code in 3 banks**, self-installed by the binary, executed across: `123 n=3` |
 | `t6_overlays` | **code in 3 banks** loaded from disk (LOAD-into-bank), executed across: `abc n=3` |
+| `d5_banked_app` | **code in 3 banks placed by the loader** from one packaged `.w2x` image: `123 n=3` |
+
+Three ways to get code into upper banks: the binary self-installs blobs
+(`bank_store`, t5); the program loads overlay files at runtime (t6); or a
+single packaged multi-segment **`.w2x`** image has its segments distributed
+to banks by the monitor loader (d5). Build a `.w2x` with `wendy2_pack.py`:
+
+    wendy2_pack.py -o app.w2x main.bin overlay1.bin@1@A000 overlay2.bin@2@A000
 
 ## Disk boot (file I/O OS calls + monitor ROM)
 

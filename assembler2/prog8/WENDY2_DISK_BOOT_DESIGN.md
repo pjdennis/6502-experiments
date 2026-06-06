@@ -6,15 +6,15 @@ the design doc for that subsystem; it resolves and consumes the `$F800+`
 OS-call file I/O from
 [`WENDY2_BANKING_TARGET_PLAN.md`](./WENDY2_BANKING_TARGET_PLAN.md) S2.6 (M5).
 
-> **Status: D1-D2 + D4 built and green, plus banked-code loading (T5/T6).**
+> **Status: D1-D2 + D4 built and green, plus banked-code loading (T5/T6) and packaged multi-bank images (D5).**
 > The `$F800+` OS-call port chip + `--disk` (D1), the monitor ROM with autoexec
 > load+run (D2), return-to-monitor + multi-command autoexec (D4), and loading
 > code into multiple banks + executing across them (T5/T6) are implemented and
-> tested (`make -C assembler2 wendy2-test`: 11 e2e goldens). Implementation:
+> tested (`make -C assembler2 wendy2-test`: 12 e2e goldens). Implementation:
 > `assembler2/emulator/chips/syscall_ports.{c,h}`, `wendy2c_monitor.s`,
-> `assembler2/prog8/upstream/libraries/wendy2/os.p8`, demos `d1_*`/`d2_*`/`d4_*`/`t5_*`/`t6_*`.
-> Remaining: D3 (interactive serial commands), D5 (program header for banked
-> programs), D6 (real SPI-flash backing).
+> `assembler2/prog8/upstream/libraries/wendy2/os.p8`, demos `d1_*`/`d2_*`/`d4_*`/`t5_*`/`t6_*`/`d5_*` + `wendy2_pack.py`.
+> Remaining (future work): D3 (interactive serial commands -- deferred),
+> D6 (real SPI-flash image backing).
 
 Companion:
 [`upstream/libraries/wendy2/README.md`](./upstream/libraries/wendy2/README.md)
@@ -147,10 +147,20 @@ A small ROM at `$8000-$FFFF` (the reset/config-`$00` view). Flow:
   ; run: switch to bank $01, JMP $4000
 ```
 
-Program format **for now:** raw binary, load `$4000`, entry `$4000`
-(exactly what `prog8c -target wendy2` emits). Length = file length. A later
-v2 header (`load addr | entry | banked segments`) lets programs span banks
-or load elsewhere -- but the raw `$4000` form covers every current demo.
+Program format: either a **flat** binary (load `$4000`, entry `$4000` --
+exactly what `prog8c -target wendy2` emits), or a **multi-segment `.w2x`
+image** (BUILT, D5). The monitor auto-detects the `"W2X"` magic prefix:
+
+    "W2X"  nseg(1)  then nseg x [ bank(1) addr_lo addr_hi len_lo len_hi data... ]
+
+bank 0 = the fixed lower 32K (main @ `$4000`); banks 1-7 = an upper RAM
+bank (code/data @ a `$8000-$EFFF` window addr). The monitor streams each
+segment into its target bank, then launches `$4000`. `upstream/wendy2_pack.py`
+builds the image (`wendy2_pack.py -o app.w2x main.bin ov.bin@1@A000 ...`).
+This is the "loader distributes a packaged program's code across banks"
+model (vs. the binary self-installing it, T5, or runtime overlay loading,
+T6). Per-segment streaming runs from a lower-RAM stub because the monitor
+runs from ROM and can't hold a RAM bank in the window while executing.
 
 **Return-to-monitor convention:** programs end either by
 `os.exit_to_monitor()` (`$F80E` -> chip forces a warm-start jump back into
@@ -261,8 +271,10 @@ the switch.
 * **D3 -- serial command loop.** `run`/`load`/`dir` over `--serial-input`.
 * **D4 -- warm-start / exit-to-monitor** so multiple commands / an
   interactive session work; `os.exit_to_monitor()`.
-* **D5 -- richer program format** (header for load addr/entry/banked
-  segments), enabling programs that use the upper banks for code.
+* **D5 `[done]` -- richer program format** (`.w2x` multi-segment image:
+  per-segment bank + addr + len) so the loader places code/data into upper
+  banks. `wendy2_pack.py` builds it; the monitor auto-detects the `W2X`
+  magic. Demo `d5_banked_app` -> `123 n=3`.
 * **D6 (later, hardware) -- real SPI flash backing** behind the same ABI: a
   flat image + a tiny FS, and a real SPI driver in the monitor; the guest
   ABI and prog8 programs are unchanged.
