@@ -41,48 +41,70 @@ All facts below were read from the emulator + PLD, not assumed.
   (`pld_viacs` ignores `c0..c4`, `clock_22v10_pld_generated.h:14-17`).
   This is essential: the bank-select register *is* a VIA port, so it must
   stay reachable in every bank.
-* **`$8000-$FFFF` (minus the VIA) -- the banked window.** ROM when the
-  bank config is `$00` or `$10`; otherwise a RAM bank
-  (`pld_romcs`/`pld_ramcs`, lines 10-21).
+* **`$F800-$FFFF` (2 KB) -- fixed RAM for every config except `$00`.**
+  Verified by executing the PLD equations: across all configs `$10-$1F`
+  this region maps to one physical address (`$0F800-$0FFFF`); it is ROM
+  *only* in config `$00`. The CPU vectors `$FFFA-$FFFF` live here, so once
+  the program leaves config `$00` they are in stable RAM regardless of
+  which upper bank is selected (see S2.3).
+* **`$8000-$EFFF` (28 KB) -- the switchable window.** ROM when the bank
+  config is `$00` or `$10`; otherwise a RAM bank
+  (`pld_romcs`/`pld_ramcs`, lines 10-21). This (not the full upper 32 K)
+  is where banked code/data lives.
 * The lower and upper CPU windows always land in **disjoint physical
   RAM halves** (CPU A15 -> RAM A14, `chips/ram_628128.c:5-27`), so
   switching the upper bank never disturbs the lower 32K.
 
-### 2.2 Bank-select register & the "8 upper banks"
+### 2.2 Bank-select register & the 8 upper RAM banks
 Bank config = VIA **PORT B bits 0-4** (`base_config_wendy2c.inc:6-7`,
-`BANK_PORT=PORTB`, `BANK_MASK=%00011111`). Decoding the PLD r-bit
-equations (`clock_22v10_pld_generated.h:23-41`) for the upper window:
+`BANK_PORT=PORTB`, `BANK_MASK=%00011111`). Rather than derive the mapping
+by hand, the full 32-config space was enumerated by executing the PLD
+equations (`clock_22v10_pld_generated.h`). The configs that keep the
+**lower 32K constant** are `$00, $01, $10-$17`, and among those the
+switchable window resolves to exactly **8 distinct RAM banks plus ROM**:
 
-* **bit 3 (`c3`) must stay 0** -- it drives *lower*-window banking; with
-  `c3=0` the lower 32K maps to a fixed physical region regardless of the
-  other bits. (We do not use lower banking.)
-* **bit 4 (`c4`) = 1 enables upper-window RAM banking.** With `c4=0` the
-  upper window does not bank by `c0-c2`.
-* **bits 0-2 (`c0..c2`) select the bank.** So the upper-window configs are
-  `PORTB = $10 | n`:
+  | logical bank | PORTB | upper-window phys ($8000) | window |
+  |--------------|-------|---------------------------|--------|
+  | 0 | `$01` | `$04000` | RAM |
+  | 1 | `$11` | `$14000` | RAM |
+  | 2 | `$12` | `$24000` | RAM |
+  | 3 | `$13` | `$34000` | RAM |
+  | 4 | `$14` | `$44000` | RAM |
+  | 5 | `$15` | `$54000` | RAM |
+  | 6 | `$16` | `$64000` | RAM |
+  | 7 | `$17` | `$74000` | RAM |
+  | (reset) | `$00` | -- | **ROM** |
+  | (ROM)   | `$10` | -- | **ROM** |
 
-  | PORTB | config | upper window |
-  |-------|--------|--------------|
-  | `$10` | %10000 | **ROM / boot** (bank 0) |
-  | `$11`..`$17` | %10001..%10111 | **RAM banks 1-7** |
+So there are **8 upper RAM banks** (not 7), with the lower 32K constant
+across all of them. The nuance the hardware exploits: by the raw r-bit
+math config `$10` would be a **duplicate of bank 0 (`$01`)** -- both
+select upper phys `$04000` -- so that otherwise-redundant config is
+**repurposed to map ROM** into the window instead. `$00` is the power-on
+reset config (also ROM). `$11-$17` are the same `%10xxx` values
+`verification_wendy2c.s:95-150` exercises and passes on this emulator
+(and real hardware).
 
-  That is the user's "8 upper banks": bank 0 = the boot ROM view, banks
-  1-7 = switchable RAM, lower 32K fixed throughout. These are exactly the
-  `%10xxx` values `verification_wendy2c.s:95-150` already exercises and
-  passes on this emulator (and real hardware). (Each PORTB value actually
-  maps two 16K half-windows to physical banks `2n`/`2n+1`; the demos use
-  a single window address per bank and a **probe test (T1) pins down the
-  precise distinct-bank set empirically** rather than trusting this
-  derivation.)
+The bank field is therefore not a clean contiguous bitfield; the target's
+`set_upper_bank(0..7)` uses a small const translation table
+`[$01,$11,$12,$13,$14,$15,$16,$17]` (S4.4). (Each PORTB value also maps
+the window's two 16K halves to physical `2k`/`2k+1`; a probe test (T1)
+confirms distinctness/non-aliasing empirically.)
 
-### 2.3 What is fixed vs. switched, and the vector caveat
-* Fixed across a switch: `$0000-$7FFF` (code/ZP/stack/data) and the VIA
-  at `$F000-$F7FF`.
-* Switched: `$8000-$EFFF` and `$F800-$FFFF`. **The CPU vectors
-  `$FFFA-$FFFF` live in the banked window**, so when a RAM bank is active
-  the IRQ/NMI vectors come from that bank. The bank-switch helper
-  therefore brackets switches with `SEI`/`CLI`, and the demos do not rely
-  on interrupts. (Documented as a constraint, not solved here.)
+### 2.3 What is fixed vs. switched (vectors are NOT a problem)
+* Fixed across a switch: `$0000-$7FFF` (code/ZP/stack/data), the VIA at
+  `$F000-$F7FF`, **and `$F800-$FFFF`** -- the latter is fixed RAM for every
+  config except `$00` (verified: identical physical `$0F800-$0FFFF` across
+  `$01,$10-$17`).
+* Switched: only `$8000-$EFFF`.
+* **CPU vectors are stable.** `$FFFA-$FFFF` sit in the fixed `$F800-$FFFF`
+  RAM, so the design is: config `$00` is the power-on/startup view only;
+  the program switches away from it immediately, and (if it needs
+  interrupts) installs the handler address into `$FFFE/$FFFF` *after* that
+  switch. The vector then holds regardless of which upper RAM bank is
+  selected -- interrupts and banking coexist. The bank-switch helper still
+  brackets the switch+access with `SEI`/`CLI` for atomicity (so an ISR that
+  also banks can't interleave), not for vector safety.
 
 ### 2.4 Boot/load path (how a wendy2c program actually runs)
 From `p8c/__main__.py:38,63-90`: the emulator runs a **boot ROM at
@@ -170,8 +192,10 @@ Start from `libraries/nmos/syslib.p8` and change:
   no `$F00F` exit syscall in wendy2c mode (that's the nmos machine).
 * **`init_system`**: set VIA DDRA/DDRB for the 4-bit LCD + bank bits
   (mirror `base_config_wendy2c.inc` + the existing init), HD44780 4-bit
-  init, and select a known default bank (`$10`). Keep a **PORTB shadow
-  byte in ZP** so bank/LCD-E bits compose without read-back surprises.
+  init, and **switch away from config `$00`** to a known default (e.g.
+  bank 0 = config `$01`, or `$10` to keep boot-ROM services visible). Keep
+  a **PORTB shadow byte in ZP** so bank/LCD-E bits compose without
+  read-back surprises.
 
 ### 4.3 `upstream/libraries/wendy2/textio.p8` (output)
 Port the 4-bit HD44780 driver (`display_routines_4bit.inc`,
@@ -183,15 +207,17 @@ banking work. (Upstream `.p8` can't `.include` the vasm `.inc` files, so
 they're reimplemented.)
 
 ### 4.4 The banking runtime (`libraries/wendy2/banking.p8`)
-All in the fixed lower 32K (so it survives a switch). Bank IDs 1-7;
-`PORTB = $10 | (n & 7)`, preserving the LCD-E bit (bit 5) via the shadow.
+All in the fixed lower 32K (so it survives a switch). Logical bank IDs
+**0-7** map to PORTB configs via the const table
+`BANKCFG = [$01,$11,$12,$13,$14,$15,$16,$17]` (S2.2); the LCD-E bit
+(bit 5) is preserved via the ZP PORTB shadow.
 
 * `wendy2.set_upper_bank(ubyte n)` -- `SEI`; shadow = (shadow & %11100000)
-  | $10 | (n & 7); `sta PORTB`; settle nops (hardware fidelity); leaves
-  IRQs masked is *not* desired, so it restores the prior I flag -- or the
-  callers bracket their own critical sections. (Pick: helper does
-  `SEI`...write...`CLI` only if IRQs were enabled; demos run with IRQs
-  off, so plain write is fine. Decide at impl time; default to SEI/CLI.)
+  | BANKCFG[n & 7]; `sta PORTB`; settle nops (hardware fidelity); `CLI`
+  (or restore the saved I flag). IRQs are bracketed for atomicity, not for
+  vector safety (vectors are in fixed RAM, S2.3).
+* `wendy2.set_rom()` -- select config `$10` (ROM in the window), e.g. to
+  call back into boot-ROM services; rarely needed by demos.
 * `wendy2.get_upper_bank() -> ubyte`.
 * `wendy2.bank_poke(ubyte n, uword win, ubyte v)` /
   `bank_peek(ubyte n, uword win) -> ubyte` -- save current bank, switch to
@@ -236,30 +262,31 @@ captured frame against a `.expected.lcd` golden (same discipline as
 `test_e2e_lcd.py`). All live under `upstream/libraries/wendy2/tests/` (or
 `prog8/tests/wendy2/`).
 
-* **T1 `bank_probe.p8` -- data banking proof + bank-set discovery.**
-  For `n in 1..7`: `bank_poke(n, $2000, $40+n)`. Then read all back with
-  `bank_peek` and verify each equals `$40+n` (proves writes land in
-  distinct banks and the lower-32K program is undisturbed). Print
-  `bank N OK` / count of distinct banks. *This test empirically fixes the
-  usable bank set* referenced in S2.2.
-  Golden: `|bankprobe  OK   |` (exact text TBD).
+(`win` below is an absolute address in the switchable window `$8000-$EFFF`.)
 
-* **T2 `banked_data.p8` -- banked arrays.** Fill `$2000..$20FF` in bank 1
-  with `i`, and in bank 2 with `255-i`; then for a few indices read
-  `bank_peek(1,..)+bank_peek(2,..)` and assert it's always `255`; print
-  the checksum in hex. Demonstrates banked **data** that exceeds a single
-  32K map.
+* **T1 `bank_probe.p8` -- data banking proof + bank-set discovery.**
+  For `bank in 0..7`: `bank_poke(bank, $A000, $40+bank)`. Then read all
+  back with `bank_peek` and verify each equals `$40+bank` (proves the 8
+  writes land in distinct banks and the lower-32K program is undisturbed).
+  Print `bank8 OK` / the count of distinct banks. *This test empirically
+  confirms the 8-bank set* derived in S2.2.
+
+* **T2 `banked_data.p8` -- banked arrays.** Fill `$A000..$A0FF` in bank 0
+  with `i`, and in bank 1 with `255-i`; then for several indices read
+  `bank_peek(0,..)+bank_peek(1,..)` and assert it's always `255`; print
+  the checksum in hex. Demonstrates banked **data** beyond one 32K map.
 
 * **T3 `banked_code.p8` -- banked code via far-call.** At startup copy a
-  tiny routine (hand-written `%asm{{ }}`, position-correct for `$8000`)
-  into bank 3's window, then `wendy2.callfar(3, $8000)`; the routine
+  tiny routine (hand-written `%asm{{ }}`, position-correct for `$A000`)
+  into bank 2's window, then `wendy2.callfar(2, $A000)`; the routine
   returns `A=$2A`; print it as `*`. Proves a `jsr` into a switched-in bank
   works and control returns with the original bank restored.
 
 * **T4 `bank_counters.p8` -- round-trip/persistence.** Keep a 1-byte
-  counter at `$2010` in each of banks 1-7; loop 3 times incrementing every
-  bank's counter; finally read them out -> expect `3 3 3 3 3 3 3`. Stresses
-  repeated switching + restore and that banks retain state.
+  counter at `$A010` in each of banks 0-7; loop 3 times incrementing every
+  bank's counter; finally read them out -> expect eight `3`s. Stresses
+  repeated switching + restore and that all 8 banks retain independent
+  state.
 
 A `test_wendy2_banking.py` registers one test per `.p8`/`.expected.lcd`
 pair, skips if `prog8c.jar`/`64tass`/`vasm`/emulator are absent, and is
@@ -292,14 +319,16 @@ banking itself (M2-M4) is small once output works.
 * **LCD driver port (largest task).** Must match the emulator's HD44780
   protocol/timing exactly. Mitigate by mirroring `display_routines_4bit.inc`
   and gating M1 behind an LCD golden before touching banking.
-* **Exact bank count (7 vs 8).** With `c3=0` the PLD gives 7 switchable
-  RAM banks (`$11-$17`) plus the ROM/boot view (`$10`). If a true 8th RAM
-  bank is required, T1's probe should also test whether any `c3=1`/other
-  value yields an 8th *without* disturbing the lower 32K -- but the safe,
-  lower-fixed model is 7. Flag the discrepancy with the user's "8."
-* **Vectors in banked space.** IRQs are masked during switches and unused
-  by the demos; a real interrupt-driven program needs every bank's
-  `$FFFA-$FFFF` populated or a fixed-region vector strategy -- deferred.
+* **Bank count -- RESOLVED (8).** Enumerating all 32 configs confirms 8
+  upper RAM banks (configs `$01,$11-$17`) with the lower 32K constant, plus
+  ROM via `$00`/`$10` (the repurposed duplicate of bank 0). T1 verifies
+  empirically.
+* **Vectors -- RESOLVED (not banked).** `$F800-$FFFF` (incl. `$FFFA-$FFFF`)
+  is fixed RAM for every config except `$00`. The program leaves config
+  `$00` at startup and installs any IRQ/NMI handler into `$FFFE/$FFFF`
+  once; it then holds across all bank switches. Interrupt-driven banked
+  programs are fully supported (a banking ISR should still save/restore the
+  current bank itself).
 * **Assembler coupling.** This target uses 64tass (upstream's fixed
   assembler). It does not depend on the on-host-assembler migration
   ([`ASM_MIGRATION_PLAN.md`](./ASM_MIGRATION_PLAN.md)); the two are
