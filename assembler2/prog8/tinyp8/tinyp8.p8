@@ -11,6 +11,9 @@
 ; in a module-level `src_eof` byte.
 
 %address $0200
+%output raw
+%launcher none
+main {
 
 ; Load address constant -- used to compute absolute addresses for the
 ; in-output __hex_print helper that v2 emits when a variable is
@@ -1261,7 +1264,6 @@ sub parse_if() {
 
 ; ---- main compile loop ----
 
-main {
   sub start() {
     ; arg[0] = input file, arg[1] = output file
     uword fn
