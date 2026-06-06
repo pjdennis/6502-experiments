@@ -15,7 +15,10 @@
 ; assignment (symbol table + ZP bindings + leaf/augmented assignment).
 
 %address $0200
+%output raw
+%launcher none
 %import strings
+main {
 
 ; ---- token kinds ----
 const ubyte TK_EOF    = 0
@@ -413,25 +416,25 @@ asmsub sys_write(ubyte b @A, ubyte handle @X) {
 
 ; ---- I/O (sticky-EOF; emulator rewinds on EOF) ----
 sub read_src() -> ubyte {
-    if peek_ok {
+    if peek_ok != 0 {
         peek_ok = 0
         return peek_buf
     }
-    if src_eof {
+    if src_eof != 0 {
         return 0
     }
     return sys_read(src_hand)
 }
 sub peek_src() -> ubyte {
-    if peek_ok {
+    if peek_ok != 0 {
         return peek_buf
     }
-    if src_eof {
+    if src_eof != 0 {
         return 0
     }
     ubyte b
     b = sys_read(src_hand)
-    if src_eof {
+    if src_eof != 0 {
         return 0
     }
     peek_buf = b
@@ -468,13 +471,13 @@ sub is_alpha_us(ubyte c) -> ubyte {
     return 0
 }
 sub is_alnum_us(ubyte c) -> ubyte {
-    if is_alpha_us(c) {
+    if is_alpha_us(c) != 0 {
         return 1
     }
     return is_digit(c)
 }
 sub is_hexdig(ubyte c) -> ubyte {
-    if is_digit(c) {
+    if is_digit(c) != 0 {
         return 1
     }
     if c >= 'a' {
@@ -510,10 +513,10 @@ sub out_dec_place(uword p) {
         dec_v = dec_v - p
         d = d + 1
     }
-    if d {
+    if d != 0 {
         dec_started = 1
     }
-    if dec_started {
+    if dec_started != 0 {
         out_byte(d + $30)
     }
 }
@@ -533,13 +536,13 @@ sub read_hex() {
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof {
+        if src_eof != 0 {
             return
         }
         if c == $5f {
             c = read_src()
         } else {
-            if is_hexdig(c) {
+            if is_hexdig(c) != 0 {
                 c = read_src()
                 int_val = (int_val << 4) + hex_nibble(c)
             } else {
@@ -553,7 +556,7 @@ sub read_bin() {
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof {
+        if src_eof != 0 {
             return
         }
         if c == $5f {
@@ -578,13 +581,13 @@ sub read_dec() {
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof {
+        if src_eof != 0 {
             return
         }
         if c == $5f {
             c = read_src()
         } else {
-            if is_digit(c) {
+            if is_digit(c) != 0 {
                 c = read_src()
                 int_val = (int_val << 3) + (int_val << 1) + (c - $30)
             } else {
@@ -617,13 +620,13 @@ sub read_ident() {
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof {
+        if src_eof != 0 {
             return
         }
-        if is_alnum_us(c) {
+        if is_alnum_us(c) != 0 {
             c = read_src()
             if name_len < 64 {
-                name_buf[name_len] = c
+                name_buf[(name_len as ubyte)] = c
                 name_len = name_len + 1
             }
         } else {
@@ -648,19 +651,19 @@ sub intern_name() -> uword {
             if j >= name_len {
                 break
             }
-            if ident_pool[off + j] != name_buf[j] {
+            if ident_pool[(off + j as ubyte)] != name_buf[(j as ubyte)] {
                 match = 0
                 break
             }
             j = j + 1
         }
-        if match {
-            if ident_pool[off + name_len] == 0 {
+        if match != 0 {
+            if ident_pool[(off + name_len as ubyte)] == 0 {
                 return off
             }
         }
         repeat {
-            if ident_pool[off] == 0 {
+            if ident_pool[(off as ubyte)] == 0 {
                 off = off + 1
                 break
             }
@@ -675,11 +678,11 @@ sub intern_name() -> uword {
         if k >= name_len {
             break
         }
-        ident_pool[ident_pool_len] = name_buf[k]
+        ident_pool[(ident_pool_len as ubyte)] = name_buf[(k as ubyte)]
         ident_pool_len = ident_pool_len + 1
         k = k + 1
     }
-    ident_pool[ident_pool_len] = 0
+    ident_pool[(ident_pool_len as ubyte)] = 0
     ident_pool_len = ident_pool_len + 1
     return id
 }
@@ -688,7 +691,7 @@ sub ident_len_at(uword id) -> uword {
     uword n
     n = 0
     repeat {
-        if ident_pool[id + n] == 0 {
+        if ident_pool[(id + n as ubyte)] == 0 {
             break
         }
         n = n + 1
@@ -710,47 +713,47 @@ sub kw_is(uword kw) -> ubyte {
 }
 
 sub classify_name() -> ubyte {
-    name_buf[name_len] = 0                  ; NUL-terminate for strings.compare
-    if kw_is("if") { return TK_KIF }
-    if kw_is("in") { return TK_KIN }
-    if kw_is("or") { return TK_KOR }
-    if kw_is("to") { return TK_KTO }
-    if kw_is("and") { return TK_KAND }
-    if kw_is("for") { return TK_KFOR }
-    if kw_is("not") { return TK_KNOT }
-    if kw_is("str") { return TK_KSTR }
-    if kw_is("sub") { return TK_KSUB }
-    if kw_is("xor") { return TK_KXOR }
-    if kw_is("bool") { return TK_KBOOL }
-    if kw_is("byte") { return TK_KBYTE }
-    if kw_is("else") { return TK_KELSE }
-    if kw_is("enum") { return TK_KENUM }
-    if kw_is("main") { return TK_KMAIN }
-    if kw_is("true") { return TK_TRUE }
-    if kw_is("void") { return TK_KVOID }
-    if kw_is("when") { return TK_KWHEN }
-    if kw_is("break") { return TK_KBREAK }
-    if kw_is("const") { return TK_KCONST }
-    if kw_is("defer") { return TK_KDEFER }
-    if kw_is("false") { return TK_FALSE }
-    if kw_is("ubyte") { return TK_KUBYTE }
-    if kw_is("uword") { return TK_KUWORD }
-    if kw_is("while") { return TK_KWHILE }
-    if kw_is("inline") { return TK_KINLINE }
-    if kw_is("repeat") { return TK_KREPEAT }
-    if kw_is("return") { return TK_KRETURN }
-    if kw_is("struct") { return TK_KSTRUCT }
-    if kw_is("continue") { return TK_KCONTINUE }
+    name_buf[(name_len as ubyte)] = 0                  ; NUL-terminate for strings.compare
+    if kw_is("if") != 0 { return TK_KIF }
+    if kw_is("in") != 0 { return TK_KIN }
+    if kw_is("or") != 0 { return TK_KOR }
+    if kw_is("to") != 0 { return TK_KTO }
+    if kw_is("and") != 0 { return TK_KAND }
+    if kw_is("for") != 0 { return TK_KFOR }
+    if kw_is("not") != 0 { return TK_KNOT }
+    if kw_is("str") != 0 { return TK_KSTR }
+    if kw_is("sub") != 0 { return TK_KSUB }
+    if kw_is("xor") != 0 { return TK_KXOR }
+    if kw_is("bool") != 0 { return TK_KBOOL }
+    if kw_is("byte") != 0 { return TK_KBYTE }
+    if kw_is("else") != 0 { return TK_KELSE }
+    if kw_is("enum") != 0 { return TK_KENUM }
+    if kw_is("main") != 0 { return TK_KMAIN }
+    if kw_is("true") != 0 { return TK_TRUE }
+    if kw_is("void") != 0 { return TK_KVOID }
+    if kw_is("when") != 0 { return TK_KWHEN }
+    if kw_is("break") != 0 { return TK_KBREAK }
+    if kw_is("const") != 0 { return TK_KCONST }
+    if kw_is("defer") != 0 { return TK_KDEFER }
+    if kw_is("false") != 0 { return TK_FALSE }
+    if kw_is("ubyte") != 0 { return TK_KUBYTE }
+    if kw_is("uword") != 0 { return TK_KUWORD }
+    if kw_is("while") != 0 { return TK_KWHILE }
+    if kw_is("inline") != 0 { return TK_KINLINE }
+    if kw_is("repeat") != 0 { return TK_KREPEAT }
+    if kw_is("return") != 0 { return TK_KRETURN }
+    if kw_is("struct") != 0 { return TK_KSTRUCT }
+    if kw_is("continue") != 0 { return TK_KCONTINUE }
     return TK_IDENT
 }
 
 ; classify a directive name (already copied into name_buf):
 ; 0=address, 1=output, 2=import, 4=other.
 sub dir_classify() -> ubyte {
-    name_buf[name_len] = 0                  ; NUL-terminate for strings.compare
-    if kw_is("import") { return 2 }
-    if kw_is("output") { return 1 }
-    if kw_is("address") { return 0 }
+    name_buf[(name_len as ubyte)] = 0                  ; NUL-terminate for strings.compare
+    if kw_is("import") != 0 { return 2 }
+    if kw_is("output") != 0 { return 1 }
+    if kw_is("address") != 0 { return 0 }
     return 4
 }
 
@@ -765,7 +768,7 @@ sub next_raw_token() {
     repeat {
         ubyte c
         c = peek_src()
-        if src_eof {
+        if src_eof != 0 {
             ntok_kind = TK_EOF
             ntok_val = 0
             return
@@ -777,7 +780,7 @@ sub next_raw_token() {
         if c == ';' {
             repeat {
                 c = read_src()
-                if src_eof { break }
+                if src_eof != 0 { break }
                 if c == '\n' { break }
             }
             continue
@@ -789,7 +792,7 @@ sub next_raw_token() {
             if src_eof == 0 {
                 if c2 == '0' { read_bin()  push_token(TK_INT, int_val)  return }
                 if c2 == '1' { read_bin()  push_token(TK_INT, int_val)  return }
-                if is_alpha_us(c2) {
+                if is_alpha_us(c2) != 0 {
                     read_ident()
                     push_token(TK_DIRECTIVE, intern_name())
                     return
@@ -804,7 +807,7 @@ sub next_raw_token() {
             push_token(TK_INT, int_val)
             return
         }
-        if is_digit(c) {
+        if is_digit(c) != 0 {
             read_dec()
             push_token(TK_INT, int_val)
             return
@@ -825,10 +828,10 @@ sub next_raw_token() {
         }
         if c == '"' {
             c = read_src()
-            str_off[str_count] = str_pool_len
+            str_off[(str_count as ubyte)] = str_pool_len
             repeat {
                 c = read_src()
-                if src_eof { break }
+                if src_eof != 0 { break }
                 if c == '"' { break }
                 ubyte rb
                 if c == '\\' {
@@ -838,15 +841,15 @@ sub next_raw_token() {
                 } else {
                     rb = c
                 }
-                str_pool[str_pool_len] = rb
+                str_pool[(str_pool_len as ubyte)] = rb
                 str_pool_len = str_pool_len + 1
             }
-            str_len[str_count] = str_pool_len - str_off[str_count]
+            str_len[(str_count as ubyte)] = str_pool_len - str_off[(str_count as ubyte)]
             push_token(TK_STR, str_count)
             str_count = str_count + 1
             return
         }
-        if is_alpha_us(c) {
+        if is_alpha_us(c) != 0 {
             read_ident()
             ubyte k
             k = classify_name()
@@ -986,12 +989,12 @@ sub lex_init() {
 sub new_node(ubyte kind, ubyte op, uword a, uword b) -> uword {
     uword id
     id = node_count
-    node_kind[id] = kind
-    node_op[id] = op
-    node_a[id] = a
-    node_b[id] = b
-    node_c[id] = 0
-    node_d[id] = 0
+    node_kind[(id as ubyte)] = kind
+    node_op[(id as ubyte)] = op
+    node_a[(id as ubyte)] = a
+    node_b[(id as ubyte)] = b
+    node_c[(id as ubyte)] = 0
+    node_d[(id as ubyte)] = 0
     node_count = node_count + 1
     return id
 }
@@ -1000,8 +1003,8 @@ sub new_node(ubyte kind, ubyte op, uword a, uword b) -> uword {
 sub cons_prepend(uword head, uword val) -> uword {
     uword c
     c = cons_count
-    cons_val[c] = val
-    cons_next[c] = head
+    cons_val[(c as ubyte)] = val
+    cons_next[(c as ubyte)] = head
     cons_count = cons_count + 1
     return c
 }
@@ -1036,54 +1039,54 @@ sub is_binop(ubyte k) -> ubyte {
 
 ; ---- shunting-yard ----
 sub push_operand(uword node) {
-    operand_stack[operand_sp] = node
+    operand_stack[(operand_sp as ubyte)] = node
     operand_sp = operand_sp + 1
 }
 sub push_op(ubyte k, ubyte op, ubyte prec) {
-    op_kind[op_sp] = k
-    op_op[op_sp] = op
-    op_prec[op_sp] = prec
+    op_kind[(op_sp as ubyte)] = k
+    op_op[(op_sp as ubyte)] = op
+    op_prec[(op_sp as ubyte)] = prec
     op_sp = op_sp + 1
 }
 sub push_marker(ubyte k, uword floor) {
-    op_kind[op_sp] = k
-    op_floor[op_sp] = floor
-    op_b[op_sp] = 0
+    op_kind[(op_sp as ubyte)] = k
+    op_floor[(op_sp as ubyte)] = floor
+    op_b[(op_sp as ubyte)] = 0
     op_sp = op_sp + 1
 }
 sub apply_top() {
     op_sp = op_sp - 1
     ubyte k
-    k = op_kind[op_sp]
+    k = op_kind[(op_sp as ubyte)]
     if k == OPK_BINOP {
         operand_sp = operand_sp - 1
         uword rhs
-        rhs = operand_stack[operand_sp]
+        rhs = operand_stack[(operand_sp as ubyte)]
         operand_sp = operand_sp - 1
         uword lhs
-        lhs = operand_stack[operand_sp]
-        operand_stack[operand_sp] = new_node(ND_BINOP, op_op[op_sp], lhs, rhs)
+        lhs = operand_stack[(operand_sp as ubyte)]
+        operand_stack[(operand_sp as ubyte)] = new_node(ND_BINOP, op_op[(op_sp as ubyte)], lhs, rhs)
         operand_sp = operand_sp + 1
     } else {
         operand_sp = operand_sp - 1
         uword operand
-        operand = operand_stack[operand_sp]
-        operand_stack[operand_sp] = new_node(ND_UNOP, op_op[op_sp], operand, 0)
+        operand = operand_stack[(operand_sp as ubyte)]
+        operand_stack[(operand_sp as ubyte)] = new_node(ND_UNOP, op_op[(op_sp as ubyte)], operand, 0)
         operand_sp = operand_sp + 1
     }
 }
 sub top_prec() -> ubyte {
-    if op_kind[op_sp - 1] == OPK_UNOP {
+    if op_kind[(op_sp - 1 as ubyte)] == OPK_UNOP {
         return UNARY_PREC
     }
-    return op_prec[op_sp - 1]
+    return op_prec[(op_sp - 1 as ubyte)]
 }
 sub reduce_to_marker() {
     repeat {
         if op_sp == 0 {
             return
         }
-        if op_kind[op_sp - 1] >= OPK_LPAREN {
+        if op_kind[(op_sp - 1 as ubyte)] >= OPK_LPAREN {
             return
         }
         apply_top()
@@ -1101,7 +1104,7 @@ sub append_ident_to_namebuf(uword id) {
         if j >= n {
             break
         }
-        name_buf[name_len] = ident_pool[off + j]
+        name_buf[(name_len as ubyte)] = ident_pool[(off + j as ubyte)]
         name_len = name_len + 1
         j = j + 1
     }
@@ -1118,7 +1121,7 @@ sub append_ident_to_pathbuf(uword id) {
         if j >= n {
             break
         }
-        path_buf[path_len] = ident_pool[off + j]
+        path_buf[(path_len as ubyte)] = ident_pool[(off + j as ubyte)]
         path_len = path_len + 1
         j = j + 1
     }
@@ -1139,7 +1142,7 @@ sub read_dotted_path() -> uword {
             break
         }
         advance()
-        path_buf[path_len] = $2e
+        path_buf[(path_len as ubyte)] = $2e
         path_len = path_len + 1
         append_ident_to_pathbuf(cur_val())
         advance()
@@ -1152,7 +1155,7 @@ sub read_dotted_path() -> uword {
         if i >= path_len {
             break
         }
-        name_buf[i] = path_buf[i]
+        name_buf[(i as ubyte)] = path_buf[(i as ubyte)]
         i = i + 1
     }
     return intern_name()
@@ -1162,18 +1165,18 @@ sub close_index() {
     op_sp = op_sp - 1
     operand_sp = operand_sp - 1
     uword index
-    index = operand_stack[operand_sp]
+    index = operand_stack[(operand_sp as ubyte)]
     operand_sp = operand_sp - 1
     uword array
-    array = operand_stack[operand_sp]
+    array = operand_stack[(operand_sp as ubyte)]
     advance()
     uword node
     node = new_node(ND_INDEX, 0, array, index)
     if cur_kind() == TK_DOT {
         if peek1_kind() == TK_IDENT {
             advance()
-            node_c[node] = cur_val()
-            node_op[node] = 1
+            node_c[(node as ubyte)] = cur_val()
+            node_op[(node as ubyte)] = 1
             advance()
         }
     }
@@ -1183,12 +1186,12 @@ sub close_call() {
     uword head
     uword path
     uword floor
-    head = op_b[op_sp - 1]
-    path = op_a[op_sp - 1]
-    floor = op_floor[op_sp - 1]
+    head = op_b[(op_sp - 1 as ubyte)]
+    path = op_a[(op_sp - 1 as ubyte)]
+    floor = op_floor[(op_sp - 1 as ubyte)]
     if operand_sp > floor {
         operand_sp = operand_sp - 1
-        head = cons_prepend(head, operand_stack[operand_sp])
+        head = cons_prepend(head, operand_stack[(operand_sp as ubyte)])
     }
     op_sp = op_sp - 1
     uword node
@@ -1214,7 +1217,7 @@ sub parse_expr() -> uword {
                 break
             }
             ubyte mk
-            mk = op_kind[op_sp - 1]
+            mk = op_kind[(op_sp - 1 as ubyte)]
             if mk == OPK_LPAREN {
                 op_sp = op_sp - 1
                 advance()
@@ -1225,7 +1228,7 @@ sub parse_expr() -> uword {
             if mk == OPK_MEMAT {
                 op_sp = op_sp - 1
                 operand_sp = operand_sp - 1
-                push_operand(new_node(ND_MEMAT, 0, operand_stack[operand_sp], 0))
+                push_operand(new_node(ND_MEMAT, 0, operand_stack[(operand_sp as ubyte)], 0))
                 advance()
                 expect_operand = 0
                 index_ok = 0
@@ -1245,7 +1248,7 @@ sub parse_expr() -> uword {
             if op_sp == 0 {
                 break
             }
-            if op_kind[op_sp - 1] != OPK_LBRACK {
+            if op_kind[(op_sp - 1 as ubyte)] != OPK_LBRACK {
                 break
             }
             close_index()
@@ -1258,18 +1261,18 @@ sub parse_expr() -> uword {
             if op_sp == 0 {
                 break
             }
-            if op_kind[op_sp - 1] != OPK_CALL {
+            if op_kind[(op_sp - 1 as ubyte)] != OPK_CALL {
                 break
             }
             operand_sp = operand_sp - 1
-            op_b[op_sp - 1] = cons_prepend(op_b[op_sp - 1], operand_stack[operand_sp])
+            op_b[(op_sp - 1 as ubyte)] = cons_prepend(op_b[(op_sp - 1 as ubyte)], operand_stack[(operand_sp as ubyte)])
             advance()
             expect_operand = 1
             index_ok = 0
             continue
         }
 
-        if expect_operand {
+        if expect_operand != 0 {
             index_ok = 0
             if t == TK_INT {
                 push_operand(new_node(ND_INT, 0, cur_val(), 0))
@@ -1340,7 +1343,7 @@ sub parse_expr() -> uword {
                 if cur_kind() == TK_LPAREN {
                     advance()
                     push_marker(OPK_CALL, operand_sp)
-                    op_a[op_sp - 1] = path
+                    op_a[(op_sp - 1 as ubyte)] = path
                 } else {
                     push_operand(new_node(ND_IDENT, 0, path, 0))
                     expect_operand = 0
@@ -1351,14 +1354,14 @@ sub parse_expr() -> uword {
             break
         }
 
-        if is_binop(t) {
+        if is_binop(t) != 0 {
             ubyte prec
             prec = bin_prec(t)
             repeat {
                 if op_sp == 0 {
                     break
                 }
-                if op_kind[op_sp - 1] >= OPK_LPAREN {
+                if op_kind[(op_sp - 1 as ubyte)] >= OPK_LPAREN {
                     break
                 }
                 if top_prec() < prec {
@@ -1373,7 +1376,7 @@ sub parse_expr() -> uword {
             continue
         }
         if t == TK_LBRACK {
-            if index_ok {
+            if index_ok != 0 {
                 push_marker(OPK_LBRACK, operand_sp)
                 advance()
                 expect_operand = 1
@@ -1392,7 +1395,7 @@ sub parse_expr() -> uword {
         apply_top()
     }
     operand_sp = operand_sp - 1
-    return operand_stack[operand_sp]
+    return operand_stack[(operand_sp as ubyte)]
 }
 
 
@@ -1443,7 +1446,7 @@ sub parse_var_decl() -> uword {
     }
     uword node
     node = new_node(ND_VARDECL, tag, nameid, init)
-    node_c[node] = arrsize
+    node_c[(node as ubyte)] = arrsize
     return node
 }
 
@@ -1488,7 +1491,7 @@ sub fr_push_block(ubyte kind, ubyte deferflag) {
 sub stmt_dispatch(ubyte deferflag) -> ubyte {
     ubyte t
     t = cur_kind()
-    if is_type_kw(t) {
+    if is_type_kw(t) != 0 {
         last_simple = parse_var_decl()
         return 0
     }
@@ -1626,7 +1629,7 @@ sub parse_block() -> uword {
                 ubyte df
                 df = fr_defer[fi]
                 fr_sp = fr_sp - 1
-                if df {
+                if df != 0 {
                     node = new_node(ND_DEFER, 0, node, 0)
                 }
                 fr_attach(node)
@@ -1697,15 +1700,15 @@ sub parse_block() -> uword {
             } else {
                 if kind == FR_ELSE {
                     node = new_node(ND_IF, 0, fr_cond[fi], fr_then[fi])
-                    node_c[node] = block
+                    node_c[(node as ubyte)] = block
                 } else {
                     if kind == FR_WHILE {
                         node = new_node(ND_WHILE, 0, fr_cond[fi], block)
                     } else {
                         if kind == FR_FOR {
                             node = new_node(ND_FOR, 0, fr_var[fi], fr_lo[fi])
-                            node_c[node] = fr_hi[fi]
-                            node_d[node] = block
+                            node_c[(node as ubyte)] = fr_hi[fi]
+                            node_d[(node as ubyte)] = block
                         } else {
                             ; FR_REPEAT
                             node = new_node(ND_REPEAT, 0, fr_cond[fi], block)
@@ -1713,7 +1716,7 @@ sub parse_block() -> uword {
                     }
                 }
             }
-            if fr_defer[fi] {
+            if fr_defer[fi] != 0 {
                 node = new_node(ND_DEFER, 0, node, 0)
             }
             fr_attach(node)
@@ -1732,7 +1735,7 @@ sub parse_block() -> uword {
         opened = stmt_dispatch(mod)
         if opened == 0 {
             node = last_simple
-            if mod {
+            if mod != 0 {
                 node = new_node(ND_DEFER, 0, node, 0)
             }
             fr_attach(node)
@@ -1784,8 +1787,8 @@ sub parse_sub(ubyte kind) -> uword {
     body = parse_block()
     uword node
     node = new_node(ND_SUB, kind, nameid, params)
-    node_c[node] = body
-    node_d[node] = rettag
+    node_c[(node as ubyte)] = body
+    node_d[(node as ubyte)] = rettag
     return node
 }
 
@@ -1877,10 +1880,10 @@ sub is_struct_name(uword id) -> ubyte {
         if cell == 0 {
             return 0
         }
-        if node_a[cons_val[cell]] == id {
+        if node_a[(cons_val[(cell as ubyte)] as ubyte)] == id {
             return 1
         }
-        cell = cons_next[cell]
+        cell = cons_next[(cell as ubyte)]
     }
 }
 
@@ -1901,8 +1904,8 @@ sub parse_struct_var() -> uword {
     advance()                               ; instance name
     uword node
     node = new_node(ND_VARDECL, TY_STRUCT, nameid, 0)
-    node_c[node] = arrsize
-    node_d[node] = sname
+    node_c[(node as ubyte)] = arrsize
+    node_d[(node as ubyte)] = sname
     return node
 }
 
@@ -2012,7 +2015,7 @@ sub parse_decls_pass() {
             handle_directive()
             continue
         }
-        if is_type_kw(t) {
+        if is_type_kw(t) != 0 {
             prog_vars = cons_prepend(prog_vars, parse_var_decl())
             continue
         }
@@ -2059,12 +2062,12 @@ sub parse_decls_pass() {
 ; `main { ... }`. Used to descend the namespace-main block and tag `sub start`
 ; as the SUBK_MAIN entry.
 sub id_is_start(uword id) -> ubyte {
-    if ident_pool[id] != $73 { return 0 }       ; 's'
-    if ident_pool[id + 1] != $74 { return 0 }   ; 't'
-    if ident_pool[id + 2] != $61 { return 0 }   ; 'a'
-    if ident_pool[id + 3] != $72 { return 0 }   ; 'r'
-    if ident_pool[id + 4] != $74 { return 0 }   ; 't'
-    if ident_pool[id + 5] != 0 { return 0 }     ; exact length 5
+    if ident_pool[(id as ubyte)] != $73 { return 0 }       ; 's'
+    if ident_pool[(id + 1 as ubyte)] != $74 { return 0 }   ; 't'
+    if ident_pool[(id + 2 as ubyte)] != $61 { return 0 }   ; 'a'
+    if ident_pool[(id + 3 as ubyte)] != $72 { return 0 }   ; 'r'
+    if ident_pool[(id + 4 as ubyte)] != $74 { return 0 }   ; 't'
+    if ident_pool[(id + 5 as ubyte)] != 0 { return 0 }     ; exact length 5
     return 1
 }
 
@@ -2121,7 +2124,7 @@ sub out_ident_text(uword id) {
         if j >= n {
             break
         }
-        out_byte(ident_pool[off + j])
+        out_byte(ident_pool[(off + j as ubyte)])
         j = j + 1
     }
 }
@@ -2129,23 +2132,23 @@ sub out_ident_text(uword id) {
 ; param -> p8v_<sub>_arg_<name>, local -> p8v_<sub>_<name>.
 sub emit_sym_mangled(uword si) {
     ; arrays live in main memory under a p8a_ label; everything else is p8v_.
-    if sym_arr_size[si] != 0 {
+    if sym_arr_size[(si as ubyte)] != 0 {
         out_text("p8a_")
-        out_ident_text(sym_ident[si])
+        out_ident_text(sym_ident[(si as ubyte)])
         return
     }
     out_text("p8v_")
-    if sym_mkind[si] == 0 {
-        out_ident_text(sym_ident[si])
+    if sym_mkind[(si as ubyte)] == 0 {
+        out_ident_text(sym_ident[(si as ubyte)])
         return
     }
-    out_ident_text(sym_scope[si])
-    if sym_mkind[si] == 1 {
+    out_ident_text(sym_scope[(si as ubyte)])
+    if sym_mkind[(si as ubyte)] == 1 {
         out_text("_arg_")
     } else {
         out_byte($5f)
     }
-    out_ident_text(sym_ident[si])
+    out_ident_text(sym_ident[(si as ubyte)])
 }
 ; emit a var reference by ident, resolved in the current scope.
 sub emit_mangled(uword identid) {
@@ -2191,8 +2194,8 @@ sub reverse_cons(uword head) -> uword {
         if cell == 0 {
             break
         }
-        rev = cons_prepend(rev, cons_val[cell])
-        cell = cons_next[cell]
+        rev = cons_prepend(rev, cons_val[(cell as ubyte)])
+        cell = cons_next[(cell as ubyte)]
     }
     return rev
 }
@@ -2211,8 +2214,8 @@ sub find_sym(uword identid) -> uword {
         if i >= sym_count {
             break
         }
-        if sym_ident[i] == identid {
-            if sym_scope[i] == cur_scope {
+        if sym_ident[(i as ubyte)] == identid {
+            if sym_scope[(i as ubyte)] == cur_scope {
                 return i
             }
         }
@@ -2223,8 +2226,8 @@ sub find_sym(uword identid) -> uword {
         if i >= sym_count {
             break
         }
-        if sym_ident[i] == identid {
-            if sym_scope[i] == 0 {
+        if sym_ident[(i as ubyte)] == identid {
+            if sym_scope[(i as ubyte)] == 0 {
                 return i
             }
         }
@@ -2241,10 +2244,10 @@ sub ident_is_const(uword identid) -> ubyte {
     if si == $ffff {
         return 0
     }
-    return sym_is_const[si]
+    return sym_is_const[(si as ubyte)]
 }
 sub ident_const_val(uword identid) -> uword {
-    return sym_cval[find_sym(identid)]
+    return sym_cval[(find_sym(identid) as ubyte)]
 }
 ; allocate ZP for every scalar module var, in declaration order, exactly
 ; as p8c's sema does (bump from $40; ubyte/byte = 1 byte, uword = 2).
@@ -2260,16 +2263,16 @@ sub build_symbols() {
             break
         }
         uword vd
-        vd = cons_val[cell]
-        if node_kind[vd] == ND_VARDECL {
-            if node_c[vd] == 0 {               ; scalar (not an array)
+        vd = cons_val[(cell as ubyte)]
+        if node_kind[(vd as ubyte)] == ND_VARDECL {
+            if node_c[(vd as ubyte)] == 0 {               ; scalar (not an array)
                 ubyte tag
-                tag = node_op[vd]
+                tag = node_op[(vd as ubyte)]
                 if tag <= TY_UWORD {           ; ubyte / byte / uword
                     ubyte sz
                     sz = 1
                     if tag == TY_UWORD { sz = 2 }
-                    sym_ident[sym_count] = node_a[vd]
+                    sym_ident[sym_count] = node_a[(vd as ubyte)]
                     sym_type[sym_count] = tag
                     sym_scope[sym_count] = 0
                     sym_mkind[sym_count] = 0
@@ -2296,13 +2299,13 @@ sub build_symbols() {
                         bt = TY_UBYTE
                         if tag == TY_CONST_BYTE { bt = TY_BYTE }
                         if tag == TY_CONST_UWORD { bt = TY_UWORD }
-                        sym_ident[sym_count] = node_a[vd]
+                        sym_ident[sym_count] = node_a[(vd as ubyte)]
                         sym_type[sym_count] = bt
                         sym_addr[sym_count] = 0
                         sym_scope[sym_count] = 0
                         sym_mkind[sym_count] = 0
                         sym_is_const[sym_count] = 1
-                        sym_cval[sym_count] = node_a[node_b[vd]]
+                        sym_cval[sym_count] = node_a[(node_b[(vd as ubyte)] as ubyte)]
                         sym_arr_size[sym_count] = 0
                         sym_count = sym_count + 1
                     }
@@ -2312,20 +2315,20 @@ sub build_symbols() {
                 ; block (p8a_<name>) in main memory, not ZP. Element type tag in
                 ; node_op, count in node_c. (Only ubyte/uword element types.)
                 ubyte etag
-                etag = node_op[vd]
+                etag = node_op[(vd as ubyte)]
                 if etag <= TY_UWORD {
-                    sym_ident[sym_count] = node_a[vd]
+                    sym_ident[sym_count] = node_a[(vd as ubyte)]
                     sym_type[sym_count] = etag
                     sym_addr[sym_count] = 0
                     sym_scope[sym_count] = 0
                     sym_mkind[sym_count] = 0
                     sym_is_const[sym_count] = 0
-                    sym_arr_size[sym_count] = node_c[vd]
+                    sym_arr_size[sym_count] = node_c[(vd as ubyte)]
                     sym_count = sym_count + 1
                 }
             }
         }
-        cell = cons_next[cell]
+        cell = cons_next[(cell as ubyte)]
     }
 }
 
@@ -2349,7 +2352,10 @@ sub reject_no_start() {
 }
 
 sub emit_prologue() {
-    out_text("; ---- generated by p8c -- DO NOT EDIT ----\n; source: SRC\n; target: nmos (vasm builds a self-contained 6502 binary, reset vector\n;               at $FFFC points to p8s_main; intended for the emulator's\n;               nmos-default machine with file-I/O stubs at $F006-$F03C).\n\n__p8c_tmp0 = $20                     ; codegen scratch (byte)\n__p8c_tmp1 = $21                     ; codegen scratch (byte)\n__p8c_wtmp0 = $22                   ; codegen scratch (word)\n__p8c_wtmp1 = $24                   ; codegen scratch (word)\n__p8c_ptr0  = $26                    ; indirect-Y pointer (2 bytes)\n__p8c_aptr  = $28                    ; array element pointer (2 bytes)\n\n  .org $")
+    out_text("; ---- generated by p8c -- DO NOT EDIT ----\n; source: SRC\n; target: nmos (vasm builds a self-contained 6502 binary, reset vector\n;               at $FFFC points to p8s_main; intended for the emulator'")
+    out_text("s\n;               nmos-default machine with file-I/O stubs at $F006-$F03C).\n\n__p8c_tmp0 = $20                     ; codegen scratch (byte)\n__p8c_tmp1 = $21                     ; codegen scratch (byte)")
+    out_text("\n__p8c_wtmp0 = $22                   ; codegen scratch (word)\n__p8c_wtmp1 = $24                   ; codegen scratch (word)\n__p8c_ptr0  = $26                    ; indirect-Y pointer (2 bytes)\n__p8c_apt")
+    out_text("r  = $28                    ; array element pointer (2 bytes)\n\n  .org $")
     out_hex4(prog_address)
     out_text("\n  jmp ")
     emit_sub_label(entry_nm)
@@ -2372,9 +2378,9 @@ sub emit_zp_bindings() {
         if j >= sym_count {
             break
         }
-        if sym_is_const[j] == 0 {
-            if sym_arr_size[j] == 0 {
-                if sym_addr[j] != $ffff {
+        if sym_is_const[(j as ubyte)] == 0 {
+            if sym_arr_size[(j as ubyte)] == 0 {
+                if sym_addr[(j as ubyte)] != $ffff {
                     any = 1
                     break
                 }
@@ -2393,12 +2399,12 @@ sub emit_zp_bindings() {
         if i >= sym_count {
             break
         }
-        if sym_is_const[i] == 0 {
-            if sym_arr_size[i] == 0 {
-                if sym_addr[i] != $ffff {
+        if sym_is_const[(i as ubyte)] == 0 {
+            if sym_arr_size[(i as ubyte)] == 0 {
+                if sym_addr[(i as ubyte)] != $ffff {
                     emit_sym_mangled(i)
                     out_text(" = $")
-                    out_hex2(lsb(sym_addr[i]))
+                    out_hex2(lsb(sym_addr[(i as ubyte)]))
                     o_nl()
                 }
             }
@@ -2419,9 +2425,9 @@ sub emit_memvars() {
         if j >= sym_count {
             break
         }
-        if sym_arr_size[j] == 0 {
-            if sym_is_const[j] == 0 {
-                if sym_addr[j] == $ffff {
+        if sym_arr_size[(j as ubyte)] == 0 {
+            if sym_is_const[(j as ubyte)] == 0 {
+                if sym_addr[(j as ubyte)] == $ffff {
                     any = 1
                     break
                 }
@@ -2441,14 +2447,14 @@ sub emit_memvars() {
         if i >= sym_count {
             break
         }
-        if sym_arr_size[i] == 0 {
-            if sym_is_const[i] == 0 {
-                if sym_addr[i] == $ffff {
+        if sym_arr_size[(i as ubyte)] == 0 {
+            if sym_is_const[(i as ubyte)] == 0 {
+                if sym_addr[(i as ubyte)] == $ffff {
                     emit_sym_mangled(i)
                     out_byte($3a)
                     o_nl()
                     out_text("  .byte 0")
-                    if sym_type[i] == TY_UWORD {
+                    if sym_type[(i as ubyte)] == TY_UWORD {
                         out_text(", 0")
                     }
                     o_nl()
@@ -2507,7 +2513,7 @@ sub emit_arrays() {
         if j >= sym_count {
             break
         }
-        if sym_arr_size[j] != 0 {
+        if sym_arr_size[(j as ubyte)] != 0 {
             any = 1
             break
         }
@@ -2525,10 +2531,10 @@ sub emit_arrays() {
         if i >= sym_count {
             break
         }
-        if sym_arr_size[i] != 0 {
+        if sym_arr_size[(i as ubyte)] != 0 {
             uword count
-            count = sym_arr_size[i]
-            if sym_type[i] == TY_UWORD {
+            count = sym_arr_size[(i as ubyte)]
+            if sym_type[(i as ubyte)] == TY_UWORD {
                 ; split lo/hi byte storage (upstream @split model)
                 emit_sym_mangled(i)
                 out_text("_lo:")
@@ -2580,8 +2586,8 @@ sub str_char_plain(ubyte c) -> ubyte {
 sub emit_string_byte_list(uword sid) {
     uword off
     uword n
-    off = str_off[sid]
-    n = str_len[sid]
+    off = str_off[(sid as ubyte)]
+    n = str_len[(sid as ubyte)]
     ubyte in_run        ; inside an open "..." run
     ubyte any           ; emitted at least one part (need ", " before next)
     in_run = 0
@@ -2593,7 +2599,7 @@ sub emit_string_byte_list(uword sid) {
             break
         }
         ubyte c
-        c = str_pool[off + j]
+        c = str_pool[(off + j as ubyte)]
         if str_char_plain(c) != 0 {
             if in_run == 0 {
                 if any != 0 {
@@ -2627,22 +2633,22 @@ sub emit_string_byte_list(uword sid) {
 }
 ; two string-pool ids are equal iff same length and same bytes.
 sub str_sid_equal(uword a, uword b) -> ubyte {
-    if str_len[a] != str_len[b] {
+    if str_len[(a as ubyte)] != str_len[(b as ubyte)] {
         return 0
     }
     uword n
-    n = str_len[a]
+    n = str_len[(a as ubyte)]
     uword oa
     uword ob
-    oa = str_off[a]
-    ob = str_off[b]
+    oa = str_off[(a as ubyte)]
+    ob = str_off[(b as ubyte)]
     uword j
     j = 0
     repeat {
         if j >= n {
             break
         }
-        if str_pool[oa + j] != str_pool[ob + j] {
+        if str_pool[(oa + j as ubyte)] != str_pool[(ob + j as ubyte)] {
             return 0
         }
         j = j + 1
@@ -2659,12 +2665,12 @@ sub intern_str_label(uword sid) -> uword {
         if di >= strpool_count {
             break
         }
-        if str_sid_equal(strpool_sid[di], sid) != 0 {
+        if str_sid_equal(strpool_sid[(di as ubyte)], sid) != 0 {
             return di
         }
         di = di + 1
     }
-    strpool_sid[strpool_count] = sid
+    strpool_sid[(strpool_count as ubyte)] = sid
     di = strpool_count
     strpool_count = strpool_count + 1
     return di
@@ -2695,7 +2701,7 @@ sub emit_string_pool() {
         out_byte($3a)                   ; :
         o_nl()
         out_text("  .byte ")
-        emit_string_byte_list(strpool_sid[i])
+        emit_string_byte_list(strpool_sid[(i as ubyte)])
         out_text(", 0")
         o_nl()
         i = i + 1
@@ -2762,14 +2768,14 @@ sub emit_br(ubyte brcode, ubyte tkind, uword tid) {
 ; idents resolve via the symbol table; &name is a uword. (Nested expr typing
 ; is a tracked gap, as in the byte comparison signedness.)
 sub expr_is_word(uword e) -> ubyte {
-    if node_kind[e] == ND_ADDROF {
+    if node_kind[(e as ubyte)] == ND_ADDROF {
         return 1
     }
-    if node_kind[e] == ND_IDENT {
+    if node_kind[(e as ubyte)] == ND_IDENT {
         uword si
-        si = find_sym(node_a[e])
+        si = find_sym(node_a[(e as ubyte)])
         if si != $ffff {
-            if sym_type[si] == TY_UWORD {
+            if sym_type[(si as ubyte)] == TY_UWORD {
                 return 1
             }
         }
@@ -2829,14 +2835,14 @@ sub emit_neg_signed(ubyte op, ubyte tkind, uword tid) {
 ; is FALSE. Comparison conditions emit the compare straight into the branch
 ; (no 0/1 materialized); anything else evaluates to A and branches on zero.
 sub emit_cond_branch_if_false(uword cond, ubyte tkind, uword tid) {
-    if node_kind[cond] == ND_BINOP {
+    if node_kind[(cond as ubyte)] == ND_BINOP {
         ubyte op
-        op = node_op[cond]
+        op = node_op[(cond as ubyte)]
         if is_cmp_op(op) != 0 {
             uword lhs
             uword rhs
-            lhs = node_a[cond]
-            rhs = node_b[cond]
+            lhs = node_a[(cond as ubyte)]
+            rhs = node_b[(cond as ubyte)]
             ubyte isw
             isw = 0
             if expr_is_word(lhs) != 0 { isw = 1 }
@@ -2972,13 +2978,13 @@ sub push_block_stmts(uword blk) {
         return
     }
     uword cell
-    cell = node_a[blk]
+    cell = node_a[(blk as ubyte)]
     repeat {
         if cell == 0 {
             break
         }
-        sws_push(0, cons_val[cell], 0)
-        cell = cons_next[cell]
+        sws_push(0, cons_val[(cell as ubyte)], 0)
+        cell = cons_next[(cell as ubyte)]
     }
 }
 ; the statement-driver entry: emit a whole block (and everything nested) with
@@ -3032,7 +3038,7 @@ sub codegen_body(uword body) {
 
 sub codegen_stmt(uword st) {
     ubyte k
-    k = node_kind[st]
+    k = node_kind[(st as ubyte)]
     if k == ND_ASSIGN {
         codegen_assign(st)
         return
@@ -3071,8 +3077,8 @@ sub codegen_stmt(uword st) {
     }
     if k == ND_EXPRSTMT {
         uword e
-        e = node_a[st]
-        if node_kind[e] == ND_CALL {
+        e = node_a[(st as ubyte)]
+        if node_kind[(e as ubyte)] == ND_CALL {
             codegen_call(e)
         }
         return
@@ -3085,11 +3091,11 @@ sub codegen_stmt(uword st) {
         ; a local declaration is storage only; an initializer lowers to a
         ; store. (p8c: UBYTE -> byte path, everything else -> word path.)
         uword init
-        init = node_b[st]
+        init = node_b[(st as ubyte)]
         if init != 0 {
             uword si
-            si = find_sym(node_a[st])
-            if sym_type[si] == TY_UBYTE {
+            si = find_sym(node_a[(st as ubyte)])
+            if sym_type[(si as ubyte)] == TY_UBYTE {
                 codegen_byte_expr(init)
                 emit_sta_sym(si)
             } else {
@@ -3107,9 +3113,9 @@ sub codegen_if(uword st) {
     uword thenb
     uword elseb
     uword endif_id
-    cond = node_a[st]
-    thenb = node_b[st]
-    elseb = node_c[st]
+    cond = node_a[(st as ubyte)]
+    thenb = node_b[(st as ubyte)]
+    elseb = node_c[(st as ubyte)]
     if elseb != 0 {
         uword else_id
         else_id = label_seq
@@ -3133,8 +3139,8 @@ sub codegen_if(uword st) {
 sub codegen_while(uword st) {
     uword cond
     uword body
-    cond = node_a[st]
-    body = node_b[st]
+    cond = node_a[(st as ubyte)]
+    body = node_b[(st as ubyte)]
     uword top_id
     uword end_id
     top_id = label_seq
@@ -3163,8 +3169,8 @@ sub codegen_while(uword st) {
 sub codegen_repeat(uword st) {
     uword count
     uword body
-    count = node_a[st]
-    body = node_b[st]
+    count = node_a[(st as ubyte)]
+    body = node_b[(st as ubyte)]
     uword top_id
     uword end_id
     top_id = label_seq
@@ -3251,9 +3257,9 @@ sub codegen_for(uword st) {
     uword var
     uword lo
     uword body
-    var = node_a[st]
-    lo = node_b[st]
-    body = node_d[st]
+    var = node_a[(st as ubyte)]
+    lo = node_b[(st as ubyte)]
+    body = node_d[(st as ubyte)]
     uword si
     si = find_sym(var)
     uword top_id
@@ -3289,23 +3295,23 @@ sub emit_for_cont(uword st, uword end_id) {
     top_id = end_id - 1
     cont_id = end_id + 1
     uword si
-    si = find_sym(node_a[st])
+    si = find_sym(node_a[(st as ubyte)])
     uword hi
-    hi = node_c[st]
+    hi = node_c[(st as ubyte)]
     emit_ctrl_label_ref(5, cont_id)
     out_byte($3a)
     o_nl()
     out_text("  lda ")
-    emit_mangled(node_a[st])
+    emit_mangled(node_a[(st as ubyte)])
     o_nl()
-    if node_kind[hi] == ND_INT {
+    if node_kind[(hi as ubyte)] == ND_INT {
         out_text("  cmp #$")
-        out_hex2(lsb(node_a[hi]))
+        out_hex2(lsb(node_a[(hi as ubyte)]))
         o_nl()
     } else {
-        if node_kind[hi] == ND_IDENT {
+        if node_kind[(hi as ubyte)] == ND_IDENT {
             out_text("  cmp ")
-            emit_mangled(node_a[hi])
+            emit_mangled(node_a[(hi as ubyte)])
             o_nl()
         } else {
             o_sta_tmp0()
@@ -3318,7 +3324,7 @@ sub emit_for_cont(uword st, uword end_id) {
     }
     emit_br(1, 6, end_id)               ; beq for_end
     out_text("  inc ")
-    emit_mangled(node_a[st])
+    emit_mangled(node_a[(st as ubyte)])
     o_nl()
     out_text("  jmp ")
     emit_ctrl_label_ref(4, top_id)
@@ -3336,7 +3342,7 @@ sub codegen_when(uword st) {
     endw_id = label_seq
     label_seq = label_seq + 1
     uword expr
-    expr = node_a[st]
+    expr = node_a[(st as ubyte)]
     ubyte isw
     isw = expr_is_word(expr)
     if isw != 0 {
@@ -3356,13 +3362,13 @@ sub codegen_when(uword st) {
     ; arm first); pushing it directly pops the arms in source order.
     sws_push(1, 11, endw_id)            ; when_end label
     uword cell
-    cell = node_b[st]
+    cell = node_b[(st as ubyte)]
     repeat {
         if cell == 0 {
             break
         }
-        sws_push(7, cons_val[cell], packed)
-        cell = cons_next[cell]
+        sws_push(7, cons_val[(cell as ubyte)], packed)
+        cell = cons_next[(cell as ubyte)]
     }
 }
 ; emit one when arm. Allocates body+next labels (always, even for else, to
@@ -3385,8 +3391,8 @@ sub emit_when_choice(uword choice, uword packed) {
     label_seq = label_seq + 1
     uword values
     uword body
-    values = node_a[choice]
-    body = node_b[choice]
+    values = node_a[(choice as ubyte)]
+    body = node_b[(choice as ubyte)]
     if values == 0 {
         ; else arm: body, jmp when_end (no next label).
         sws_push(2, 11, endw_id)        ; jmp when_end
@@ -3403,7 +3409,7 @@ sub emit_when_choice(uword choice, uword packed) {
             break
         }
         uword v
-        v = cons_val[cell]
+        v = cons_val[(cell as ubyte)]
         if isw != 0 {
             codegen_word_expr(v)
             out_text("  sta __p8c_wtmp1")
@@ -3431,7 +3437,7 @@ sub emit_when_choice(uword choice, uword packed) {
             o_nl()
             emit_br(1, 12, body_id)     ; beq when_body
         }
-        cell = cons_next[cell]
+        cell = cons_next[(cell as ubyte)]
     }
     out_text("  jmp ")
     emit_ctrl_label_ref(13, next_id)    ; jmp when_next
@@ -3461,7 +3467,7 @@ sub cws_push(ubyte ty, uword nd, ubyte op) {
 ; (IntLit, Ident)) leaf-path test -- note: NOT BoolLit).
 sub is_leaf_rhs(uword e) -> ubyte {
     ubyte k
-    k = node_kind[e]
+    k = node_kind[(e as ubyte)]
     if k == ND_INT {
         return 1
     }
@@ -3476,12 +3482,12 @@ sub is_leaf_rhs(uword e) -> ubyte {
 ; eval), so we exclude it here to stay byte-identical.
 sub is_cmp_leaf_rhs(uword e) -> ubyte {
     ubyte k
-    k = node_kind[e]
+    k = node_kind[(e as ubyte)]
     if k == ND_INT {
         return 1
     }
     if k == ND_IDENT {
-        if ident_is_const(node_a[e]) != 0 {
+        if ident_is_const(node_a[(e as ubyte)]) != 0 {
             return 0
         }
         return 1
@@ -3491,28 +3497,28 @@ sub is_cmp_leaf_rhs(uword e) -> ubyte {
 ; byte expression leaf -> A.
 sub emit_byte_leaf_load(uword e) {
     ubyte k
-    k = node_kind[e]
+    k = node_kind[(e as ubyte)]
     if k == ND_INT {
         o_lda() o_imm()
-        out_hex2(lsb(node_a[e]))
+        out_hex2(lsb(node_a[(e as ubyte)]))
         o_nl()
         return
     }
     if k == ND_BOOL {
         o_lda() o_imm()
-        out_hex2(lsb(node_a[e]))
+        out_hex2(lsb(node_a[(e as ubyte)]))
         o_nl()
         return
     }
     if k == ND_IDENT {
-        if ident_is_const(node_a[e]) != 0 {
+        if ident_is_const(node_a[(e as ubyte)]) != 0 {
             o_lda() o_imm()
-            out_hex2(lsb(ident_const_val(node_a[e])))
+            out_hex2(lsb(ident_const_val(node_a[(e as ubyte)])))
             o_nl()
             return
         }
         o_lda()
-        emit_mangled(node_a[e])
+        emit_mangled(node_a[(e as ubyte)])
         o_nl()
         return
     }
@@ -3522,24 +3528,24 @@ sub emit_byte_leaf_load(uword e) {
         ; byte-var index -> lda idx / tay / lda arr,y. (uword arrays, >256, and
         ; uword/complex indices need the __p8c_aptr path -- not here yet.)
         uword asi
-        asi = find_sym(node_a[node_a[e]])
+        asi = find_sym(node_a[(node_a[(e as ubyte)] as ubyte)])
         uword idx
-        idx = node_b[e]
-        if sym_type[asi] == TY_UBYTE {
-            if sym_arr_size[asi] <= 256 {
-                if node_kind[idx] == ND_INT {
+        idx = node_b[(e as ubyte)]
+        if sym_type[(asi as ubyte)] == TY_UBYTE {
+            if sym_arr_size[(asi as ubyte)] <= 256 {
+                if node_kind[(idx as ubyte)] == ND_INT {
                     o_lda()
                     emit_sym_mangled(asi)
                     out_byte($2b)
-                    out_dec(node_a[idx])
+                    out_dec(node_a[(idx as ubyte)])
                     o_nl()
                     return
                 }
-                if node_kind[idx] == ND_IDENT {
-                    if ident_is_const(node_a[idx]) == 0 {
+                if node_kind[(idx as ubyte)] == ND_IDENT {
+                    if ident_is_const(node_a[(idx as ubyte)]) == 0 {
                         if expr_is_word(idx) == 0 {
                             o_lda()
-                            emit_mangled(node_a[idx])
+                            emit_mangled(node_a[(idx as ubyte)])
                             o_nl()
                             o_tay()
                             o_lda()
@@ -3559,11 +3565,11 @@ sub emit_byte_leaf_load(uword e) {
 ; spill slot (the rhs node is ignored).
 sub emit_byte_operand(ubyte mode, uword rhs) {
     if mode == 0 {
-        if node_kind[rhs] == ND_INT {
+        if node_kind[(rhs as ubyte)] == ND_INT {
             o_imm()
-            out_hex2(lsb(node_a[rhs]))
+            out_hex2(lsb(node_a[(rhs as ubyte)]))
         } else {
-            emit_mangled(node_a[rhs])
+            emit_mangled(node_a[(rhs as ubyte)])
         }
     } else {
         out_text("__p8c_tmp1")
@@ -3699,9 +3705,9 @@ sub emit_byte_binop_core(ubyte op, ubyte mode, uword rhs) {
     is_imm = 0
     imm_val = 0
     if mode == 0 {
-        if node_kind[rhs] == ND_INT {
+        if node_kind[(rhs as ubyte)] == ND_INT {
             is_imm = 1
-            imm_val = lsb(node_a[rhs])
+            imm_val = lsb(node_a[(rhs as ubyte)])
         }
     }
     if op == TK_SHL {
@@ -3788,23 +3794,23 @@ sub is_logical_op(ubyte op) -> ubyte {
 ; that p8c would infer as BYTE are treated as unsigned here -- a known gap
 ; until p1 does full expression typing; the corpus uses leaf operands.
 sub is_byte_signed(uword nd) -> ubyte {
-    if node_kind[nd] == ND_IDENT {
+    if node_kind[(nd as ubyte)] == ND_IDENT {
         uword si
-        si = find_sym(node_a[nd])
+        si = find_sym(node_a[(nd as ubyte)])
         if si == $ffff {
             return 0
         }
-        if sym_type[si] == TY_BYTE {
+        if sym_type[(si as ubyte)] == TY_BYTE {
             return 1
         }
     }
     return 0
 }
 sub cmp_is_signed(uword e) -> ubyte {
-    if is_byte_signed(node_a[e]) == 0 {
+    if is_byte_signed(node_a[(e as ubyte)]) == 0 {
         return 0
     }
-    if is_byte_signed(node_b[e]) == 0 {
+    if is_byte_signed(node_b[(e as ubyte)]) == 0 {
         return 0
     }
     return 1
@@ -4023,27 +4029,27 @@ sub codegen_byte_expr(uword root) {
         nd = cws_node[cws_sp]
         op = cws_op[cws_sp]
         if ty == 0 {
-            if node_kind[nd] == ND_BINOP {
+            if node_kind[(nd as ubyte)] == ND_BINOP {
                 uword lhs
                 uword rhs
-                lhs = node_a[nd]
-                rhs = node_b[nd]
-                if is_cmp_op(node_op[nd]) != 0 {
+                lhs = node_a[(nd as ubyte)]
+                rhs = node_b[(nd as ubyte)]
+                if is_cmp_op(node_op[(nd as ubyte)]) != 0 {
                     ; eval(lhs); sta tmp0; eval(rhs); sta tmp1; cmp-tail
-                    cws_push(7, nd, node_op[nd])
+                    cws_push(7, nd, node_op[(nd as ubyte)])
                     cws_push(3, 0, 0)
                     cws_push(0, rhs, 0)
                     cws_push(8, 0, 0)
                     cws_push(0, lhs, 0)
                 } else {
-                    if is_logical_op(node_op[nd]) != 0 {
+                    if is_logical_op(node_op[(nd as ubyte)]) != 0 {
                         ; eval(lhs); logic-mid; eval(rhs); logic-tail
-                        cws_push(10, 0, node_op[nd])
+                        cws_push(10, 0, node_op[(nd as ubyte)])
                         cws_push(0, rhs, 0)
-                        cws_push(9, 0, node_op[nd])
+                        cws_push(9, 0, node_op[(nd as ubyte)])
                         cws_push(0, lhs, 0)
                     } else {
-                        if node_op[nd] == TK_KXOR {
+                        if node_op[(nd as ubyte)] == TK_KXOR {
                             ; eval(lhs); pha; eval(rhs); sta tmp0; pla; eor tmp0
                             cws_push(11, 0, 0)
                             cws_push(4, 0, 0)
@@ -4054,11 +4060,11 @@ sub codegen_byte_expr(uword root) {
                         } else {
                             if is_leaf_rhs(rhs) != 0 {
                                 ; eval(lhs); binop_leaf(op, rhs)
-                                cws_push(1, rhs, node_op[nd])
+                                cws_push(1, rhs, node_op[(nd as ubyte)])
                                 cws_push(0, lhs, 0)
                             } else {
                                 ; eval(lhs); pha; eval(rhs); sta tmp1; pla; binop_tmp1
-                                cws_push(5, 0, node_op[nd])
+                                cws_push(5, 0, node_op[(nd as ubyte)])
                                 cws_push(4, 0, 0)
                                 cws_push(3, 0, 0)
                                 cws_push(0, rhs, 0)
@@ -4069,16 +4075,16 @@ sub codegen_byte_expr(uword root) {
                     }
                 }
             } else {
-                if node_kind[nd] == ND_UNOP {
+                if node_kind[(nd as ubyte)] == ND_UNOP {
                     ; eval(operand); apply-unary(op)
-                    cws_push(6, 0, node_op[nd])
-                    cws_push(0, node_a[nd], 0)
+                    cws_push(6, 0, node_op[(nd as ubyte)])
+                    cws_push(0, node_a[(nd as ubyte)], 0)
                 } else {
-                    if node_kind[nd] == ND_MEMAT {
+                    if node_kind[(nd as ubyte)] == ND_MEMAT {
                         ; @(addr) byte read -- self-contained (result in A)
                         emit_memat_read(nd)
                     } else {
-                        if node_kind[nd] == ND_CALL {
+                        if node_kind[(nd as ubyte)] == ND_CALL {
                             codegen_call(nd)   ; byte-returning call -> A
                         } else {
                             emit_byte_leaf_load(nd)
@@ -4157,33 +4163,33 @@ sub aug_to_binop(ubyte op) -> ubyte {
 ; word expression leaf -> A (low) / Y (high), widening ubyte to uword.
 sub codegen_word_leaf(uword e) {
     ubyte k
-    k = node_kind[e]
+    k = node_kind[(e as ubyte)]
     if k == ND_INT {
         o_lda() o_imm()
-        out_hex2(lsb(node_a[e]))
+        out_hex2(lsb(node_a[(e as ubyte)]))
         o_nl()
         o_ldy() o_imm()
-        out_hex2(lsb(node_a[e] >> 8))
+        out_hex2(lsb(node_a[(e as ubyte)] >> 8))
         o_nl()
         return
     }
     if k == ND_IDENT {
         uword si
-        si = find_sym(node_a[e])
-        if sym_is_const[si] != 0 {
+        si = find_sym(node_a[(e as ubyte)])
+        if sym_is_const[(si as ubyte)] != 0 {
             ; const folds to its literal (lo in A, hi in Y), matching p8c.
             uword cv
-            cv = sym_cval[si]
+            cv = sym_cval[(si as ubyte)]
             o_lda() o_imm() out_hex2(lsb(cv)) o_nl()
             o_ldy() o_imm() out_hex2(lsb(cv >> 8)) o_nl()
             return
         }
         o_lda()
-        emit_mangled(node_a[e])
+        emit_mangled(node_a[(e as ubyte)])
         o_nl()
-        if sym_type[si] == TY_UWORD {
+        if sym_type[(si as ubyte)] == TY_UWORD {
             o_ldy()
-            emit_mangled(node_a[e])
+            emit_mangled(node_a[(e as ubyte)])
             o_plus1()
             o_nl()
         } else {
@@ -4197,7 +4203,7 @@ sub codegen_word_leaf(uword e) {
         ; a string literal is its pool address. Intern its content (dedup),
         ; getting the p8c_str_N label number for the pool trailer.
         uword lbl
-        lbl = intern_str_label(node_a[e])
+        lbl = intern_str_label(node_a[(e as ubyte)])
         out_text("  lda #<p8c_str_")
         out_dec(lbl)
         o_nl()
@@ -4217,10 +4223,10 @@ sub wws_push(ubyte ty, uword nd, ubyte op) {
 ; &name (address-of) -> a uword value (lda #< / ldy #> the mangled label).
 sub emit_addrof(uword e) {
     out_text("  lda #<")
-    emit_mangled(node_a[e])
+    emit_mangled(node_a[(e as ubyte)])
     o_nl()
     out_text("  ldy #>")
-    emit_mangled(node_a[e])
+    emit_mangled(node_a[(e as ubyte)])
     o_nl()
 }
 ; the combine tail of a word + / - / & | ^ binop: LHS in A:Y, RHS in
@@ -4411,7 +4417,7 @@ sub emit_wshift_label(ubyte is_left, ubyte is_top, uword id) {
 ; which resets the byte work stack -- safe at top level, but a word shift with
 ; a non-leaf count nested inside a byte expr's @() address would corrupt it.
 sub emit_wshift_var_tail(uword nd, ubyte is_left) {
-    codegen_byte_expr(node_b[nd])
+    codegen_byte_expr(node_b[(nd as ubyte)])
     o_tax()
     uword top_id
     uword end_id
@@ -4453,17 +4459,17 @@ sub emit_wshift_var_tail(uword nd, ubyte is_left) {
 ; into wtmp0 first (STA_WTMP0 task), then the tail evaluates the count + loops.
 sub word_dispatch_shift(uword nd, ubyte is_left) {
     uword rhsn
-    rhsn = node_b[nd]
-    if node_kind[rhsn] == ND_INT {
-        if node_a[rhsn] <= 16 {
+    rhsn = node_b[(nd as ubyte)]
+    if node_kind[(rhsn as ubyte)] == ND_INT {
+        if node_a[(rhsn as ubyte)] <= 16 {
             ubyte n
-            n = lsb(node_a[rhsn]) & $0f
+            n = lsb(node_a[(rhsn as ubyte)]) & $0f
             if is_left != 0 {
                 wws_push(5, 0, n)
             } else {
                 wws_push(6, 0, n)
             }
-            wws_push(0, node_a[nd], 0)
+            wws_push(0, node_a[(nd as ubyte)], 0)
             return
         }
     }
@@ -4473,11 +4479,11 @@ sub word_dispatch_shift(uword nd, ubyte is_left) {
         wws_push(8, nd, 0)
     }
     wws_push(4, 0, 0)
-    wws_push(0, node_a[nd], 0)
+    wws_push(0, node_a[(nd as ubyte)], 0)
 }
 sub word_dispatch(uword nd) {
     ubyte k
-    k = node_kind[nd]
+    k = node_kind[(nd as ubyte)]
     if k == ND_ADDROF {
         emit_addrof(nd)
         return
@@ -4499,7 +4505,7 @@ sub word_dispatch(uword nd) {
     }
     if k == ND_BINOP {
         ubyte bop
-        bop = node_op[nd]
+        bop = node_op[(nd as ubyte)]
         if bop == TK_SHL {
             word_dispatch_shift(nd, 1)
             return
@@ -4511,14 +4517,14 @@ sub word_dispatch(uword nd) {
         ; arithmetic / bitwise: eval lhs; save; eval rhs; stash; combine.
         wws_push(3, 0, bop)
         wws_push(2, 0, 0)
-        wws_push(0, node_b[nd], 0)
+        wws_push(0, node_b[(nd as ubyte)], 0)
         wws_push(1, 0, 0)
-        wws_push(0, node_a[nd], 0)
+        wws_push(0, node_a[(nd as ubyte)], 0)
         return
     }
     if k == ND_UNOP {
-        wws_push(11, 0, node_op[nd])
-        wws_push(0, node_a[nd], 0)
+        wws_push(11, 0, node_op[(nd as ubyte)])
+        wws_push(0, node_a[(nd as ubyte)], 0)
         return
     }
     ; leaf: int / ident / string
@@ -4597,10 +4603,10 @@ sub codegen_word_expr(uword root) {
 ; into __p8c_ptr0 and load via (ptr0),y.
 sub emit_memat_read(uword nd) {
     uword addr
-    addr = node_a[nd]
-    if node_kind[addr] == ND_INT {
+    addr = node_a[(nd as ubyte)]
+    if node_kind[(addr as ubyte)] == ND_INT {
         out_text("  lda $")
-        out_hex4(node_a[addr])
+        out_hex4(node_a[(addr as ubyte)])
         o_nl()
         return
     }
@@ -4639,12 +4645,12 @@ sub emit_sty_sym_hi(uword si) {
 sub codegen_assign_memat(uword st, uword target) {
     uword rhs
     uword addr
-    rhs = node_b[st]
-    addr = node_a[target]
-    if node_kind[addr] == ND_INT {
+    rhs = node_b[(st as ubyte)]
+    addr = node_a[(target as ubyte)]
+    if node_kind[(addr as ubyte)] == ND_INT {
         codegen_byte_expr(rhs)
         out_text("  sta $")
-        out_hex4(node_a[addr])
+        out_hex4(node_a[(addr as ubyte)])
         o_nl()
         return
     }
@@ -4671,17 +4677,17 @@ sub codegen_assign(uword st) {
     uword target
     uword rhs
     ubyte op
-    target = node_a[st]
-    op = node_op[st]
-    rhs = node_b[st]
-    if node_kind[target] == ND_MEMAT {
+    target = node_a[(st as ubyte)]
+    op = node_op[(st as ubyte)]
+    rhs = node_b[(st as ubyte)]
+    if node_kind[(target as ubyte)] == ND_MEMAT {
         codegen_assign_memat(st, target)
         return
     }
     uword si
-    si = find_sym(node_a[target])
+    si = find_sym(node_a[(target as ubyte)])
     ubyte ttype
-    ttype = sym_type[si]
+    ttype = sym_type[(si as ubyte)]
     if op == TK_ASSIGN {
         if ttype == TY_UWORD {
             codegen_word_expr(rhs)
@@ -4764,7 +4770,7 @@ sub find_sub(uword identid) -> uword {
         if i >= sub_count {
             break
         }
-        if sub_name[i] == identid {
+        if sub_name[(i as ubyte)] == identid {
             return i
         }
         i = i + 1
@@ -4791,7 +4797,7 @@ sub ident_eq(uword identid, uword s) -> ubyte {
         if j >= n {
             return 0
         }
-        if ident_pool[off + j] != ch {
+        if ident_pool[(off + j as ubyte)] != ch {
             return 0
         }
         j = j + 1
@@ -4813,14 +4819,14 @@ sub builtin_kind(uword identid) -> ubyte {
 ; nested-builtin codegen can't leave a stale node id.
 sub bi_arg0() -> uword {
     uword h
-    h = node_b[bi_cn[bi_sp - 1]]
-    if cons_next[h] == 0 {
-        return cons_val[h]              ; single arg
+    h = node_b[(bi_cn[bi_sp - 1] as ubyte)]
+    if cons_next[(h as ubyte)] == 0 {
+        return cons_val[(h as ubyte)]              ; single arg
     }
-    return cons_val[cons_next[h]]       ; first of two
+    return cons_val[(cons_next[(h as ubyte)] as ubyte)]       ; first of two
 }
 sub bi_arg1() -> uword {
-    return cons_val[node_b[bi_cn[bi_sp - 1]]]   ; second (= head)
+    return cons_val[(node_b[(bi_cn[bi_sp - 1] as ubyte)] as ubyte)]   ; second (= head)
 }
 ; lower a builtin call to inline asm (port of _emit_builtin_call).
 sub emit_builtin(uword callnode, ubyte bk) {
@@ -4835,13 +4841,13 @@ sub emit_builtin(uword callnode, ubyte bk) {
         } else {
             if bk == 3 {               ; peek(literal) -> lda $XXXX
                 out_text("  lda $")
-                out_hex4(node_a[bi_arg0()])
+                out_hex4(node_a[(bi_arg0() as ubyte)])
                 o_nl()
             } else {
                 if bk == 4 {           ; poke(literal, byteexpr) -> sta $XXXX
                     codegen_byte_expr(bi_arg1())
                     out_text("  sta $")
-                    out_hex4(node_a[bi_arg0()])
+                    out_hex4(node_a[(bi_arg0() as ubyte)])
                     o_nl()
                 } else {
                     ; mkword(msb, lsb) -> A=low, Y=high (Y-safe via X).
@@ -4861,7 +4867,7 @@ sub emit_builtin(uword callnode, ubyte bk) {
 ; does a call's result type widen as ubyte in word context?
 sub call_returns_ubyte(uword callnode) -> ubyte {
     uword callee
-    callee = node_a[callnode]
+    callee = node_a[(callnode as ubyte)]
     ubyte bk
     bk = builtin_kind(callee)
     if bk != 0 {
@@ -4873,7 +4879,7 @@ sub call_returns_ubyte(uword callnode) -> ubyte {
     uword si
     si = find_sub(callee)
     if si != $ffff {
-        if sub_ret[si] == TY_UBYTE {
+        if sub_ret[(si as ubyte)] == TY_UBYTE {
             return 1
         }
     }
@@ -4890,10 +4896,10 @@ sub collect_params(uword callee) {
         if i >= sym_count {
             break
         }
-        if sym_scope[i] == callee {
-            if sym_mkind[i] == 1 {
+        if sym_scope[(i as ubyte)] == callee {
+            if sym_mkind[(i as ubyte)] == 1 {
                 call_slot[call_n] = i
-                if sym_type[i] == TY_UWORD {
+                if sym_type[(i as ubyte)] == TY_UWORD {
                     call_isw[call_n] = 1
                 } else {
                     call_isw[call_n] = 0
@@ -4911,7 +4917,7 @@ sub collect_params(uword callee) {
 ; that is itself a call would corrupt it -- not yet handled; args are simple.)
 sub codegen_call(uword callnode) {
     uword callee
-    callee = node_a[callnode]
+    callee = node_a[(callnode as ubyte)]
     ubyte bk
     bk = builtin_kind(callee)
     if bk != 0 {
@@ -4925,7 +4931,7 @@ sub codegen_call(uword callnode) {
         ; single arg: store straight into the slot after eval (no reentrancy
         ; hazard -- nothing writes the slot between the store and the jsr).
         uword arg1
-        arg1 = cons_val[reverse_cons(node_b[callnode])]
+        arg1 = cons_val[(reverse_cons(node_b[(callnode as ubyte)]) as ubyte)]
         uword psi1
         psi1 = call_slot[0]
         if call_isw[0] != 0 {
@@ -4944,7 +4950,7 @@ sub codegen_call(uword callnode) {
     if call_n != 0 {
         ; push each arg (source order) onto the CPU stack.
         uword ahead
-        ahead = reverse_cons(node_b[callnode])
+        ahead = reverse_cons(node_b[(callnode as ubyte)])
         uword acell
         acell = ahead
         ubyte j
@@ -4954,7 +4960,7 @@ sub codegen_call(uword callnode) {
                 break
             }
             uword arg
-            arg = cons_val[acell]
+            arg = cons_val[(acell as ubyte)]
             if call_isw[j] != 0 {
                 codegen_word_expr(arg)
                 o_pha()
@@ -4965,7 +4971,7 @@ sub codegen_call(uword callnode) {
                 o_pha()
             }
             j = j + 1
-            acell = cons_next[acell]
+            acell = cons_next[(acell as ubyte)]
         }
         ; pop into param slots in reverse order.
         repeat {
@@ -5002,7 +5008,7 @@ sub codegen_call(uword callnode) {
 ; between -- none yet), then jmp the per-sub return label.
 sub codegen_return(uword st) {
     uword value
-    value = node_a[st]
+    value = node_a[(st as ubyte)]
     if value != 0 {
         if cur_ret == TY_UWORD {
             codegen_word_expr(value)
@@ -5030,25 +5036,25 @@ sub push_walk_block(uword blk) {
         return
     }
     uword cell
-    cell = node_a[blk]
+    cell = node_a[(blk as ubyte)]
     repeat {
         if cell == 0 {
             break
         }
-        sws_a[sws_sp] = cons_val[cell]
+        sws_a[sws_sp] = cons_val[(cell as ubyte)]
         sws_sp = sws_sp + 1
-        cell = cons_next[cell]
+        cell = cons_next[(cell as ubyte)]
     }
 }
 sub push_walk_when(uword st) {
     uword cell
-    cell = node_b[st]
+    cell = node_b[(st as ubyte)]
     repeat {
         if cell == 0 {
             break
         }
-        push_walk_block(node_b[cons_val[cell]])
-        cell = cons_next[cell]
+        push_walk_block(node_b[(cons_val[(cell as ubyte)] as ubyte)])
+        cell = cons_next[(cell as ubyte)]
     }
 }
 ; allocate a sub's local vardecls (p8v_<sub>_<name>), in p8c's _walk_block
@@ -5065,16 +5071,16 @@ sub walk_locals(uword body, uword subname) {
         uword st
         st = sws_a[sws_sp]
         ubyte k
-        k = node_kind[st]
+        k = node_kind[(st as ubyte)]
         if k == ND_VARDECL {
-            if node_c[st] == 0 {               ; scalar (not an array)
+            if node_c[(st as ubyte)] == 0 {               ; scalar (not an array)
                 ubyte tag
-                tag = node_op[st]
+                tag = node_op[(st as ubyte)]
                 if tag <= TY_UWORD {
                     ubyte sz
                     sz = 1
                     if tag == TY_UWORD { sz = 2 }
-                    sym_ident[sym_count] = node_a[st]
+                    sym_ident[sym_count] = node_a[(st as ubyte)]
                     sym_type[sym_count] = tag
                     sym_scope[sym_count] = subname
                     sym_mkind[sym_count] = 2
@@ -5091,17 +5097,17 @@ sub walk_locals(uword body, uword subname) {
             }
         }
         if k == ND_IF {
-            push_walk_block(node_c[st])         ; else (bottom)
-            push_walk_block(node_b[st])         ; then (top)
+            push_walk_block(node_c[(st as ubyte)])         ; else (bottom)
+            push_walk_block(node_b[(st as ubyte)])         ; then (top)
         }
         if k == ND_WHILE {
-            push_walk_block(node_b[st])
+            push_walk_block(node_b[(st as ubyte)])
         }
         if k == ND_FOR {
-            push_walk_block(node_d[st])
+            push_walk_block(node_d[(st as ubyte)])
         }
         if k == ND_REPEAT {
-            push_walk_block(node_b[st])
+            push_walk_block(node_b[(st as ubyte)])
         }
         if k == ND_WHEN {
             push_walk_when(st)
@@ -5135,7 +5141,7 @@ sub register_subs() {
         issub = 1
         if t == TK_KSUB {
             advance()
-            if id_is_start(cur_val()) {
+            if id_is_start(cur_val()) != 0 {
                 snode = parse_sub(SUBK_MAIN)
             } else {
                 snode = parse_sub(SUBK_SUB)
@@ -5151,20 +5157,20 @@ sub register_subs() {
             }
         }
         if issub != 0 {
-            sub_name[sub_count] = node_a[snode]
-            sub_kind[sub_count] = node_op[snode]
-            if node_op[snode] == SUBK_MAIN {
-                entry_nm = node_a[snode]    ; the entry label (before emit_prologue)
+            sub_name[(sub_count as ubyte)] = node_a[(snode as ubyte)]
+            sub_kind[(sub_count as ubyte)] = node_op[(snode as ubyte)]
+            if node_op[(snode as ubyte)] == SUBK_MAIN {
+                entry_nm = node_a[(snode as ubyte)]    ; the entry label (before emit_prologue)
             }
-            sub_ret[sub_count] = lsb(node_d[snode])
-            sub_addr[sub_count] = 0
-            if node_op[snode] == SUBK_ASMSUB {
-                sub_addr[sub_count] = node_c[snode]   ; node_c is the $F0xx addr
+            sub_ret[(sub_count as ubyte)] = lsb(node_d[(snode as ubyte)])
+            sub_addr[(sub_count as ubyte)] = 0
+            if node_op[(snode as ubyte)] == SUBK_ASMSUB {
+                sub_addr[(sub_count as ubyte)] = node_c[(snode as ubyte)]   ; node_c is the $F0xx addr
             }
             sub_count = sub_count + 1
             ; allocate this sub's params (source order), continuing zp_next.
             uword phead
-            phead = reverse_cons(node_b[snode])
+            phead = reverse_cons(node_b[(snode as ubyte)])
             uword pcell
             pcell = phead
             repeat {
@@ -5172,15 +5178,15 @@ sub register_subs() {
                     break
                 }
                 uword pnode
-                pnode = cons_val[pcell]
+                pnode = cons_val[(pcell as ubyte)]
                 ubyte ptag
-                ptag = node_op[pnode]
+                ptag = node_op[(pnode as ubyte)]
                 ubyte psz
                 psz = 1
                 if ptag == TY_UWORD { psz = 2 }
-                sym_ident[sym_count] = node_a[pnode]
+                sym_ident[sym_count] = node_a[(pnode as ubyte)]
                 sym_type[sym_count] = ptag
-                sym_scope[sym_count] = node_a[snode]
+                sym_scope[sym_count] = node_a[(snode as ubyte)]
                 sym_mkind[sym_count] = 1
                 sym_is_const[sym_count] = 0
                 sym_arr_size[sym_count] = 0
@@ -5191,12 +5197,12 @@ sub register_subs() {
                     zp_next = zp_next + psz
                 }
                 sym_count = sym_count + 1
-                pcell = cons_next[pcell]
+                pcell = cons_next[(pcell as ubyte)]
             }
             ; then this sub's locals (walk the body), continuing zp_next.
             ; (asmsub has no body -- node_c is its address -- so skip the walk.)
-            if node_op[snode] != SUBK_ASMSUB {
-                walk_locals(node_c[snode], node_a[snode])
+            if node_op[(snode as ubyte)] != SUBK_ASMSUB {
+                walk_locals(node_c[(snode as ubyte)], node_a[(snode as ubyte)])
             }
             reset_nodes()
         }
@@ -5205,20 +5211,20 @@ sub register_subs() {
 ; emit one non-main sub: header, body, per-sub return label + rts.
 sub emit_sub(uword snode) {
     label_seq = 0
-    cur_ret = lsb(node_d[snode])
-    cur_ret_name = node_a[snode]
-    cur_scope = node_a[snode]
+    cur_ret = lsb(node_d[(snode as ubyte)])
+    cur_ret_name = node_a[(snode as ubyte)]
+    cur_scope = node_a[(snode as ubyte)]
     o_nl()
     out_text("; ---- sub ")
-    out_ident_text(node_a[snode])
+    out_ident_text(node_a[(snode as ubyte)])
     out_text(" ----")
     o_nl()
-    emit_sub_label(node_a[snode])
+    emit_sub_label(node_a[(snode as ubyte)])
     out_byte($3a)
     o_nl()
-    codegen_body(node_c[snode])
+    codegen_body(node_c[(snode as ubyte)])
     out_text(".Lp8s_")
-    out_ident_text(node_a[snode])
+    out_ident_text(node_a[(snode as ubyte)])
     out_text("_ret:")
     o_nl()
     out_text("  rts")
@@ -5252,7 +5258,7 @@ sub emit_subs() {
         issub = 1
         if t == TK_KSUB {
             advance()
-            if id_is_start(cur_val()) {
+            if id_is_start(cur_val()) != 0 {
                 snode = parse_sub(SUBK_MAIN)
                 kind = SUBK_MAIN
             } else {
@@ -5284,7 +5290,6 @@ sub emit_subs() {
 ; every module var's ZP address. Then: prologue, ZP bindings, pass M
 ; (find + codegen `main`), trailers. (Pass B -- non-main subs -- and the
 ; symbol-table per-sub locals arrive at later milestones.)
-main {
   sub start() {
     uword fn
     fn = sys_argv(0)
@@ -5348,14 +5353,14 @@ main {
         }
         if t == TK_KSUB {
             advance()                   ; 'sub'
-            if id_is_start(cur_val()) {
+            if id_is_start(cur_val()) != 0 {
                 uword snode
                 snode = parse_sub(SUBK_MAIN)
-                mainbody = node_c[snode]
+                mainbody = node_c[(snode as ubyte)]
                 cur_ret = TY_VOID
-                cur_ret_name = node_a[snode]
-                cur_scope = node_a[snode]
-                entry_nm = node_a[snode]
+                cur_ret_name = node_a[(snode as ubyte)]
+                cur_scope = node_a[(snode as ubyte)]
+                entry_nm = node_a[(snode as ubyte)]
                 break
             } else {
                 skip_sub_body()         ; a non-entry sub; emitted in pass B
