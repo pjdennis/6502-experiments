@@ -763,8 +763,13 @@ PASS2_SRC = P1 / "p1_pass2_sh.p8"
 class P1SelfHost(unittest.TestCase):
     """The strict self-host test: the two-pass on-target pipeline
     (p1_pass1_sh.p8 parse+symbols+AST-dump, then p1_pass2_sh.p8
-    AST-load+codegen), built with p8c+vasm and run on the emulator,
-    compiles p1.p8 ITSELF to assembly byte-identical to `p8c -o p1.p8`.
+    AST-load+codegen), built with p8c+vasm and run on the emulator, compiles
+    its OWN two source files to assembly byte-identical to `p8c -o`.
+
+    (The pipeline is sized for its own two passes -- NOT for the p1.p8 monolith,
+    which combines both passes' globals and overflows the on-target symbol
+    arrays. That is the whole reason the compiler was split into two passes;
+    p1.p8 is exercised only as a host-p8c compilation, by the corpus tests.)
 
     The only normalization is the `; source:` comment line (_norm), exactly
     as the snapshot/equivalence tests do: the on-target compiler echoes the
@@ -797,34 +802,40 @@ class P1SelfHost(unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree(cls.workdir, ignore_errors=True)
 
-    def test_pipeline_compiles_p1_byte_identical(self):
-        dump = self.workdir / "p1.dump"
-        out = self.workdir / "pipeline.s"
+    def _assert_self_hosts(self, src: Path, name: str):
+        dump = self.workdir / f"{name}.dump"
+        out = self.workdir / f"{name}.pipeline.s"
         # pass 1: parse + build symbols + dump the AST (binary).
         r = subprocess.run(
             [str(EMU), str(self.pass1_bin), "--cycle-cap", "30000000000",
-             str(P1_SRC), str(dump)],
+             str(src), str(dump)],
             capture_output=True, text=True)
         self.assertEqual(r.returncode, 0,
-                         msg=f"pass1 failed:\n{r.stdout}\n{r.stderr}")
+                         msg=f"pass1 failed on {name}:\n{r.stdout}\n{r.stderr}")
         # pass 2: load the AST + codegen the .s.
         r = subprocess.run(
             [str(EMU), str(self.pass2_bin), "--cycle-cap", "30000000000",
              "--no-dump", str(dump), str(out)],
             capture_output=True, text=True)
         self.assertEqual(r.returncode, 0,
-                         msg=f"pass2 failed:\n{r.stdout}\n{r.stderr}")
+                         msg=f"pass2 failed on {name}:\n{r.stdout}\n{r.stderr}")
         # oracle: host p8c compiling the same source.
-        oracle = self.workdir / "oracle.s"
+        oracle = self.workdir / f"{name}.oracle.s"
         r = subprocess.run(
             [sys.executable, "-m", "p8c", "--target", "nmos",
-             str(P1_SRC), "-o", str(oracle)],
+             str(src), "-o", str(oracle)],
             capture_output=True, text=True, cwd=str(PROG8))
         self.assertEqual(r.returncode, 0,
-                         msg=f"oracle failed:\n{r.stdout}\n{r.stderr}")
+                         msg=f"oracle failed on {name}:\n{r.stdout}\n{r.stderr}")
         self.assertEqual(_norm(out.read_text()), _norm(oracle.read_text()),
-                         msg="self-host pipeline output diverged from p8c on "
-                             "p1.p8 (see RESUME_NOTES.md self-host section)")
+                         msg=f"self-host pipeline output diverged from p8c on "
+                             f"{name} (see RESUME_NOTES.md self-host section)")
+
+    def test_pass1_self_hosts(self):
+        self._assert_self_hosts(PASS1_SRC, "p1_pass1_sh")
+
+    def test_pass2_self_hosts(self):
+        self._assert_self_hosts(PASS2_SRC, "p1_pass2_sh")
 
 
 if __name__ == "__main__":
