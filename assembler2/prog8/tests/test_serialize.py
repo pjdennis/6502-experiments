@@ -197,8 +197,8 @@ class SerializeFormat(unittest.TestCase):
 
     def test_when_choices_and_else(self):
         got = self._ser_prog(
-            'sub f(ubyte c) { when c { $61 -> { return } '
-            'else -> { return } } }')
+            'main {\n  sub start() {   }\n  sub f(ubyte c) { when c { $61 -> { return } '
+            'else -> { return } } }\n}')
         self.assertIn("\n".join([
             "        (when",
             "          (id c)",
@@ -215,7 +215,7 @@ class SerializeFormat(unittest.TestCase):
 
     def test_defer_and_for(self):
         got = self._ser_prog(
-            'ubyte i\nmain {\n  sub start() { for i in 0 to 3 { defer txt.print("d") }   }\n}')
+            'main {\nubyte i\n  sub start() { for i in 0 to 3 { defer txt.print("d") }   }\n}')
         self.assertIn("\n".join([
             "        (for i",
             "          (int 0)",
@@ -229,7 +229,7 @@ class SerializeFormat(unittest.TestCase):
 
     def test_enum_struct_imports_directives(self):
         got = self._ser_prog(
-            '%import textio\nenum E { A, B = 5 }\nstruct P { ubyte x uword y }\nmain {\n  sub start() {   }\n}')
+            '%import textio\nmain {\nenum E { A, B = 5 }\nstruct P { ubyte x uword y }\n  sub start() {   }\n}')
         # target is selected externally now (no %target directive); the parser
         # serializes its default.
         self.assertIn("  (target wendy2c)", got)

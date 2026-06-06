@@ -405,10 +405,12 @@ class Sema:
             return
         if isinstance(st, If):
             self._walk_expr(st.cond)
-            if st.cond.type not in (BOOL, UBYTE, UWORD):
+            if st.cond.type is not BOOL:
                 raise SemaError(
                     f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
-                    f"if condition must be bool or integer"
+                    f"if condition must be a boolean (got {st.cond.type!r}); "
+                    f"integer/truthy conditions are not upstream Prog8 -- "
+                    f"write an explicit comparison such as `!= 0`"
                 )
             self._walk_block(st.then_block, sub_name=sub_name)
             if st.else_block is not None:
@@ -428,10 +430,12 @@ class Sema:
             return
         if isinstance(st, While):
             self._walk_expr(st.cond)
-            if st.cond.type not in (BOOL, UBYTE, UWORD):
+            if st.cond.type is not BOOL:
                 raise SemaError(
                     f"{st.loc.file}:{st.loc.line}:{st.loc.col}: "
-                    f"while condition must be bool or integer"
+                    f"while condition must be a boolean (got {st.cond.type!r}); "
+                    f"integer/truthy conditions are not upstream Prog8 -- "
+                    f"write an explicit comparison such as `!= 0`"
                 )
             self._walk_block(st.body, sub_name=sub_name)
             return

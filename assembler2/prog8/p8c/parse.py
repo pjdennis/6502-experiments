@@ -130,7 +130,14 @@ class Parser:
                 self.pos += 1                       # consume 'main'
                 self._parse_main_namespace(prog)
             else:
-                self._parse_toplevel_decl(prog)
+                # Strict upstream Prog8: the top level holds only directives
+                # and named blocks (`main { ... }`). Bare declarations outside
+                # a block were a lenient p8c extension and are no longer
+                # accepted -- wrap them in `main { ... }`.
+                raise ParseError(
+                    f"{self.filename}:{t.line}:{t.col}: top-level declarations "
+                    f"outside a block are not upstream Prog8; put them inside "
+                    f"`main {{ ... }}` (got {t.kind} {t.value!r})")
         return prog
 
     def _parse_toplevel_decl(self, prog: Program) -> None:

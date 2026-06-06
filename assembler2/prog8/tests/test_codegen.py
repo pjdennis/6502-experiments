@@ -209,12 +209,12 @@ class InitializedArrays(unittest.TestCase):
     def test_size_mismatch_is_error(self):
         from p8c.sema import SemaError
         with self.assertRaises(SemaError):
-            compile_text('ubyte[3] t = [1, 2]\nmain {\n  sub start() {   }\n}')
+            compile_text('main {\nubyte[3] t = [1, 2]\n  sub start() {   }\n}')
 
     def test_inferred_size_needs_list(self):
         from p8c.parse import ParseError
         with self.assertRaises(ParseError):
-            compile_text('ubyte[] t = 5\nmain {\n  sub start() {   }\n}')
+            compile_text('main {\nubyte[] t = 5\n  sub start() {   }\n}')
 
 
 class StringCompare(unittest.TestCase):

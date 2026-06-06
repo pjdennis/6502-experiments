@@ -165,7 +165,7 @@
                 (id i)
                 (int 1)))))))))
 
-;;; 'ubyte i\nmain {\n  sub start() { for i in 0 to 7 { txt.print("x") }   }\n}'
+;;; 'main {\nubyte i\n  sub start() { for i in 0 to 7 { txt.print("x") }   }\n}'
 (program
   (address $4000)
   (output raw)
@@ -224,7 +224,7 @@
               (call txt.print
                 (str ".")))))))))
 
-;;; 'ubyte i\nmain {\n  sub start() { for i in 0 to 3 { if i == 2 { continue } txt.print("y") }   }\n}'
+;;; 'main {\nubyte i\n  sub start() { for i in 0 to 3 { if i == 2 { continue } txt.print("y") }   }\n}'
 (program
   (address $4000)
   (output raw)
@@ -252,7 +252,7 @@
               (call txt.print
                 (str "y")))))))))
 
-;;; 'sub f(ubyte c) { when c { $61 -> { txt.print("a") } $62, $63 -> { txt.print("bc") } else -> { txt.print("?") } } }'
+;;; 'main {\n  sub start() {   }\n  sub f(ubyte c) { when c { $61 -> { txt.print("a") } $62, $63 -> { txt.print("bc") } else -> { txt.print("?") } } }\n}'
 (program
   (address $4000)
   (output raw)
@@ -262,6 +262,9 @@
   (enums)
   (structs)
   (subs
+    (subdef start main void
+      (params)
+      (block))
     (subdef f sub void
       (params
         (param ubyte c))
@@ -290,7 +293,7 @@
                 (call txt.print
                   (str "?"))))))))))
 
-;;; 'ubyte x\nsub g() { defer txt.print("3") defer txt.print("2") txt.print("body") }'
+;;; 'main {\nubyte x\n  sub start() {   }\n  sub g() { defer txt.print("3") defer txt.print("2") txt.print("body") }\n}'
 (program
   (address $4000)
   (output raw)
@@ -301,6 +304,9 @@
   (enums)
   (structs)
   (subs
+    (subdef start main void
+      (params)
+      (block))
     (subdef g sub void
       (params)
       (block
@@ -316,7 +322,7 @@
           (call txt.print
             (str "body")))))))
 
-;;; 'ubyte x\nsub h() { defer if x { txt.print("z") } x = 1 }'
+;;; 'main {\nubyte x\n  sub start() {   }\n  sub h() { defer if x != 0 { txt.print("z") } x = 1 }\n}'
 (program
   (address $4000)
   (output raw)
@@ -327,12 +333,17 @@
   (enums)
   (structs)
   (subs
+    (subdef start main void
+      (params)
+      (block))
     (subdef h sub void
       (params)
       (block
         (defer
           (if
-            (id x)
+            (!=
+              (id x)
+              (int 0))
             (block
               (exprstmt
                 (call txt.print
@@ -341,7 +352,7 @@
           (id x)
           (int 1))))))
 
-;;; 'sub r() -> ubyte { return 5 }'
+;;; 'main {\n  sub start() {   }\n  sub r() -> ubyte { return 5 }\n}'
 (program
   (address $4000)
   (output raw)
@@ -351,13 +362,16 @@
   (enums)
   (structs)
   (subs
+    (subdef start main void
+      (params)
+      (block))
     (subdef r sub ubyte
       (params)
       (block
         (return
           (int 5))))))
 
-;;; 'sub r2() -> bool { return true }'
+;;; 'main {\n  sub start() {   }\n  sub r2() -> bool { return true }\n}'
 (program
   (address $4000)
   (output raw)
@@ -367,13 +381,16 @@
   (enums)
   (structs)
   (subs
+    (subdef start main void
+      (params)
+      (block))
     (subdef r2 sub bool
       (params)
       (block
         (return
           (bool true))))))
 
-;;; 'sub r3() { return }'
+;;; 'main {\n  sub start() {   }\n  sub r3() { return }\n}'
 (program
   (address $4000)
   (output raw)
@@ -383,6 +400,9 @@
   (enums)
   (structs)
   (subs
+    (subdef start main void
+      (params)
+      (block))
     (subdef r3 sub void
       (params)
       (block

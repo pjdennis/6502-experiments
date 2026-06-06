@@ -262,19 +262,19 @@ STMT_PROGRAMS = [
     # nested if / else
     '%output raw\n%launcher none\nmain {\nubyte x\nubyte y\n  sub start() { if x != 0 { if y != 0 { x = 1 } else { x = 2 } } else { y = 3 }   }\n}',
     '%output raw\n%launcher none\nmain {\nubyte i\n  sub start() { while i < 10 { i = i + 1 }   }\n}',
-    'ubyte i\nmain {\n  sub start() { for i in 0 to 7 { txt.print("x") }   }\n}',
+    'main {\nubyte i\n  sub start() { for i in 0 to 7 { txt.print("x") }   }\n}',
     '%output raw\n%launcher none\nmain {\n  sub start() { repeat { break }   }\n}',
     'main {\n  sub start() { repeat 5 { txt.print(".") }   }\n}',
-    'ubyte i\nmain {\n  sub start() { for i in 0 to 3 { if i == 2 { continue } txt.print("y") }   }\n}',
+    'main {\nubyte i\n  sub start() { for i in 0 to 3 { if i == 2 { continue } txt.print("y") }   }\n}',
     # when: multi-value choices + else
-    "sub f(ubyte c) { when c { $61 -> { txt.print(\"a\") } $62, $63 -> { txt.print(\"bc\") } else -> { txt.print(\"?\") } } }",
+    "main {\n  sub start() {   }\n  sub f(ubyte c) { when c { $61 -> { txt.print(\"a\") } $62, $63 -> { txt.print(\"bc\") } else -> { txt.print(\"?\") } } }\n}",
     # defer (simple) and defer before a compound
-    "ubyte x\nsub g() { defer txt.print(\"3\") defer txt.print(\"2\") txt.print(\"body\") }",
-    "ubyte x\nsub h() { defer if x { txt.print(\"z\") } x = 1 }",
+    "main {\nubyte x\n  sub start() {   }\n  sub g() { defer txt.print(\"3\") defer txt.print(\"2\") txt.print(\"body\") }\n}",
+    "main {\nubyte x\n  sub start() {   }\n  sub h() { defer if x != 0 { txt.print(\"z\") } x = 1 }\n}",
     # returns
-    "sub r() -> ubyte { return 5 }",
-    "sub r2() -> bool { return true }",
-    "sub r3() { return }",
+    "main {\n  sub start() {   }\n  sub r() -> ubyte { return 5 }\n}",
+    "main {\n  sub start() {   }\n  sub r2() -> bool { return true }\n}",
+    "main {\n  sub start() {   }\n  sub r3() { return }\n}",
     # memory + array statements
     '%output raw\n%launcher none\nmain {\n  sub start() { @($f001) = 7   }\n}',
     '%output raw\n%launcher none\nmain {\nubyte[4] arr\n  sub start() { arr[0] = 1 arr[1] = arr[0] + 2   }\n}',

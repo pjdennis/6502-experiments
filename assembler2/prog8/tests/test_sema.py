@@ -74,7 +74,7 @@ class SemaPhase2(unittest.TestCase):
 
     def test_duplicate_var_in_same_scope_errors(self):
         with self.assertRaises(SemaError):
-            compile_to_sema('ubyte x\nubyte x\nmain {\n  sub start() {   }\n}')
+            compile_to_sema('main {\nubyte x\nubyte x\n  sub start() {   }\n}')
 
     def test_comparison_requires_ubyte_operands(self):
         # Bool == ubyte is a type error.
@@ -84,7 +84,7 @@ class SemaPhase2(unittest.TestCase):
     def test_assignment_type_mismatch_errors(self):
         # Cannot assign string to ubyte.
         with self.assertRaises(SemaError):
-            compile_to_sema('%import txt\nubyte x\nmain {\n  sub start() { x = "abc"   }\n}')
+            compile_to_sema('%import txt\nmain {\nubyte x\n  sub start() { x = "abc"   }\n}')
 
     def test_repeat_count_must_be_ubyte(self):
         with self.assertRaises(SemaError):
