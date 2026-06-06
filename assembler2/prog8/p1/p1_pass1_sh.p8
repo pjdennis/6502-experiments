@@ -2135,6 +2135,19 @@ sub parse_ret() -> uword {
     return tag
 }
 
+; is this interned ident the entry sub name "start"? The on-target descends into
+; the program's `main { }` block and treats the inner `sub start()` as the entry
+; (SUBK_MAIN), matching upstream/p8c. ($8700 = ident_pool base.)
+sub id_is_start(uword id) -> ubyte {
+    if peek($8700 + (id)) != $73 { return 0 }       ; 's'
+    if peek($8700 + (id + 1)) != $74 { return 0 }   ; 't'
+    if peek($8700 + (id + 2)) != $61 { return 0 }   ; 'a'
+    if peek($8700 + (id + 3)) != $72 { return 0 }   ; 'r'
+    if peek($8700 + (id + 4)) != $74 { return 0 }   ; 't'
+    if peek($8700 + (id + 5)) != 0 { return 0 }     ; exact length 5
+    return 1
+}
+
 sub parse_sub(ubyte kind) -> uword {
     ; current token is the name (IDENT or main keyword handled by caller)
     uword nameid
@@ -2489,7 +2502,12 @@ sub parse_decls_pass() {
             continue
         }
         if t == TK_KMAIN {
-            skip_sub_body()
+            advance()                   ; 'main'
+            advance()                   ; '{'  -- descend into the program block
+            continue
+        }
+        if t == TK_RBRACE {
+            advance()                   ; the program block's closing '}'
             continue
         }
         if t == TK_KSUB {
@@ -3013,6 +3031,15 @@ sub register_subs() {
         if t == TK_EOF {
             break
         }
+        if t == TK_KMAIN {
+            advance()
+            advance()
+            continue
+        }
+        if t == TK_RBRACE {
+            advance()
+            continue
+        }
         uword snode
         ubyte issub
         issub = 1
@@ -3021,7 +3048,11 @@ sub register_subs() {
         } else {
             if t == TK_KSUB {
                 advance()
-                snode = parse_sub(SUBK_SUB)
+                if id_is_start(cur_val()) != 0 {
+                    snode = parse_sub(SUBK_MAIN)
+                } else {
+                    snode = parse_sub(SUBK_SUB)
+                }
             } else {
                 if t == TK_KINLINE {
                     advance()
@@ -3221,6 +3252,15 @@ sub start() {
         t = cur_kind()
         if t == TK_EOF { break }
         if t == TK_KMAIN {
+            advance()
+            advance()
+            continue
+        }
+        if t == TK_RBRACE {
+            advance()
+            continue
+        }
+        if t == TK_KMAIN {
             reset_nodes()
             snode = parse_main()
             dump_record(0, snode)
@@ -3228,8 +3268,13 @@ sub start() {
             if t == TK_KSUB {
                 advance()
                 reset_nodes()
-                snode = parse_sub(SUBK_SUB)
-                dump_record(1, snode)
+                if id_is_start(cur_val()) != 0 {
+                    snode = parse_sub(SUBK_MAIN)
+                    dump_record(0, snode)
+                } else {
+                    snode = parse_sub(SUBK_SUB)
+                    dump_record(1, snode)
+                }
             } else {
                 if t == TK_KINLINE {
                     advance()

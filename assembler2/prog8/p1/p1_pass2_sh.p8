@@ -191,23 +191,23 @@ ubyte src_eof
 ; fit. next_raw_token() produces one token into ntok_*.
 
 ; identifier text pool (reset per top-level unit while streaming)
-const uword ident_pool = $a29c
+const uword ident_pool = $a3f4
 uword ident_pool_len
 
 ; string literal pool (null-terminated; a string's id is its start offset)
-const uword str_pool = $b69c
+const uword str_pool = $b7f4
 uword str_pool_len
 
 ubyte[64] name_buf
 
 
 ; node arena
-const uword node_kind = $c4fc
-const uword node_op = $c6e6
-const uword node_a = $c8d0
-const uword node_b = $cca4
-const uword node_c = $d078
-const uword node_d = $d44c
+const uword node_kind = $c654
+const uword node_op = $c80c
+const uword node_a = $c9c4
+const uword node_b = $cd34
+const uword node_c = $d0a4
+const uword node_d = $d414
 uword node_count
 
 ; expression stacks
@@ -229,14 +229,14 @@ uword prog_structs       ; cons of struct node ids (reversed)
 uword prog_subs          ; cons of sub node ids (reversed)
 
 ; ---- codegen symbol table (persistent across passes) ----
-const uword sym_ident = $d820      ; var name ident id
-const uword sym_type = $dba8       ; type tag (TY_UBYTE / TY_BYTE / TY_UWORD)
-const uword sym_addr = $dd6c       ; ZP address
-const uword sym_scope = $e0f4      ; owning sub name ident (0 = module scope)
-const uword sym_mkind = $e47c      ; 0 = module var, 1 = param, 2 = local
-const uword sym_is_const = $e640   ; 1 = compile-time const (no storage); folded
-const uword sym_cval = $e804       ; const value (when sym_is_const)
-const uword sym_arr_size = $eb8c   ; element count if an array (0 = scalar); the
+const uword sym_ident = $d784      ; var name ident id
+const uword sym_type = $db0c       ; type tag (TY_UBYTE / TY_BYTE / TY_UWORD)
+const uword sym_addr = $dcd0       ; ZP address
+const uword sym_scope = $e058      ; owning sub name ident (0 = module scope)
+const uword sym_mkind = $e3e0      ; 0 = module var, 1 = param, 2 = local
+const uword sym_is_const = $e5a4   ; 1 = compile-time const (no storage); folded
+const uword sym_cval = $e768       ; const value (when sym_is_const)
+const uword sym_arr_size = $eaf0   ; element count if an array (0 = scalar); the
                          ; element type is in sym_type; mangle is p8a_
 uword sym_count
 uword zp_next            ; ZP bump allocator (from $40)
@@ -280,6 +280,8 @@ ubyte[222] sub_kind       ; SUBK_SUB / MAIN / INLINE / ASMSUB / ASMSUB_BODY
 ubyte[222] sub_ret        ; return type tag
 uword[222] sub_addr       ; asmsub target address ($F0xx); else 0
 uword sub_count
+uword entry_nm           ; name id of the entry sub (the SUBK_MAIN one: `start`
+                         ; in a `main { ... sub start() }` block, else `main`)
 ; builtin-call node stack: emit_builtin is non-reentrant (static
 ; locals), but a builtin arg may itself be a builtin, so the callnode
 ; is stacked and args re-derived after each nested codegen.
@@ -471,7 +473,7 @@ sub ident_len_at(uword id) -> uword {
     uword n
     n = 0
     repeat {
-        if peek($a29c + (id + n)) == 0 {
+        if peek($a3f4 + (id + n)) == 0 {
             break
         }
         n = n + 1
@@ -488,12 +490,12 @@ sub ident_len_at(uword id) -> uword {
 sub new_node(ubyte kind, ubyte op, uword a, uword b) -> uword {
     uword id
     id = node_count
-    poke($c4fc + (id), kind)
-    poke($c6e6 + (id), op)
-    pokew($c8d0 + ((id) << 1), a)
-    pokew($cca4 + ((id) << 1), b)
-    pokew($d078 + ((id) << 1), 0)
-    pokew($d44c + ((id) << 1), 0)
+    poke($c654 + (id), kind)
+    poke($c80c + (id), op)
+    pokew($c9c4 + ((id) << 1), a)
+    pokew($cd34 + ((id) << 1), b)
+    pokew($d0a4 + ((id) << 1), 0)
+    pokew($d414 + ((id) << 1), 0)
     node_count = node_count + 1
     return id
 }
@@ -567,7 +569,7 @@ sub out_ident_text(uword id) {
         if j >= n {
             break
         }
-        out_byte(peek($a29c + (off + j)))
+        out_byte(peek($a3f4 + (off + j)))
         j = j + 1
     }
 }
@@ -576,23 +578,23 @@ sub out_ident_text(uword id) {
 
 sub emit_sym_mangled(uword si) {
     ; arrays live in main memory under a p8a_ label; everything else is p8v_.
-    if peekw($eb8c + ((si) << 1)) != 0 {
+    if peekw($eaf0 + ((si) << 1)) != 0 {
         out_text("p8a_")
-        out_ident_text(peekw($d820 + ((si) << 1)))
+        out_ident_text(peekw($d784 + ((si) << 1)))
         return
     }
     out_text("p8v_")
-    if peek($e47c + (si)) == 0 {
-        out_ident_text(peekw($d820 + ((si) << 1)))
+    if peek($e3e0 + (si)) == 0 {
+        out_ident_text(peekw($d784 + ((si) << 1)))
         return
     }
-    out_ident_text(peekw($e0f4 + ((si) << 1)))
-    if peek($e47c + (si)) == 1 {
+    out_ident_text(peekw($e058 + ((si) << 1)))
+    if peek($e3e0 + (si)) == 1 {
         out_text("_arg_")
     } else {
         out_byte('_')
     }
-    out_ident_text(peekw($d820 + ((si) << 1)))
+    out_ident_text(peekw($d784 + ((si) << 1)))
 }
 ; emit a var reference by ident, resolved in the current scope.
 
@@ -697,8 +699,8 @@ sub find_sym(uword identid) -> uword {
         if i >= sym_count {
             break
         }
-        if peekw($d820 + ((i) << 1)) == identid {
-            if peekw($e0f4 + ((i) << 1)) == cur_scope {
+        if peekw($d784 + ((i) << 1)) == identid {
+            if peekw($e058 + ((i) << 1)) == cur_scope {
                 return i
             }
         }
@@ -709,8 +711,8 @@ sub find_sym(uword identid) -> uword {
         if i >= sym_count {
             break
         }
-        if peekw($d820 + ((i) << 1)) == identid {
-            if peekw($e0f4 + ((i) << 1)) == 0 {
+        if peekw($d784 + ((i) << 1)) == identid {
+            if peekw($e058 + ((i) << 1)) == 0 {
                 return i
             }
         }
@@ -728,11 +730,11 @@ sub ident_is_const(uword identid) -> ubyte {
     if si == $ffff {
         return 0
     }
-    return peek($e640 + (si))
+    return peek($e5a4 + (si))
 }
 
 sub ident_const_val(uword identid) -> uword {
-    return peekw($e804 + ((find_sym(identid)) << 1))
+    return peekw($e768 + ((find_sym(identid)) << 1))
 }
 ; allocate ZP for every scalar module var, in declaration order, exactly
 ; as p8c's sema does (bump from $40; ubyte/byte = 1 byte, uword = 2).
@@ -743,7 +745,7 @@ sub emit_prologue() {
     out_text("\n__p8c_wtmp0 = $22                   ; codegen scratch (word)\n__p8c_wtmp1 = $24                   ; codegen scratch (word)\n__p8c_ptr0  = $26                    ; indirect-Y pointer (2 bytes)\n__p8c_apt")
     out_text("r  = $28                    ; array element pointer (2 bytes)\n\n  .org $")
     out_hex4(prog_address)
-    out_text("\n  jmp p8s_main\n")
+    out_text("\n  jmp ") emit_sub_label(entry_nm) o_nl()
 }
 
 ; Emit the `; ---- ZP variable allocations ----` block + one
@@ -752,13 +754,16 @@ sub emit_prologue() {
 ; when there are no module vars, matching p8c.)
 
 sub emit_main(uword body) {
-    out_text("\n\n; ---- sub main ----\np8s_main:\n")
+    out_text("\n\n; ---- sub ") out_ident_text(entry_nm) out_text(" ----\n")
+    emit_sub_label(entry_nm) out_text(":\n")
     codegen_body(body)
-    out_text(".Lp8s_main_ret:\n  lda #$00\n  jsr $f00f\n  brk\n")
+    out_text(".L") emit_sub_label(entry_nm)
+    out_text("_ret:\n  lda #$00\n  jsr $f00f\n  brk\n")
 }
 
 sub emit_trailers() {
-    out_text("\n  ; ---- reset vector ----\n  .org $FFFC\n  .word p8s_main\n  .word $0000\n\n")
+    out_text("\n  ; ---- reset vector ----\n  .org $FFFC\n  .word ") emit_sub_label(entry_nm)
+    out_text("\n  .word $0000\n\n")
 }
 
 ; emit the `; ---- arrays ----` storage block: one `p8a_<name>:` label + a
@@ -792,7 +797,7 @@ sub emit_arrays() {
         if j >= sym_count {
             break
         }
-        if peekw($eb8c + ((j) << 1)) != 0 {
+        if peekw($eaf0 + ((j) << 1)) != 0 {
             any = 1
             break
         }
@@ -810,10 +815,10 @@ sub emit_arrays() {
         if i >= sym_count {
             break
         }
-        if peekw($eb8c + ((i) << 1)) != 0 {
+        if peekw($eaf0 + ((i) << 1)) != 0 {
             uword count
-            count = peekw($eb8c + ((i) << 1))
-            if peek($dba8 + (i)) == TY_UWORD {
+            count = peekw($eaf0 + ((i) << 1))
+            if peek($db0c + (i)) == TY_UWORD {
                 ; split lo/hi byte storage (upstream @split model)
                 emit_sym_mangled(i)
                 out_text("_lo:")
@@ -879,7 +884,7 @@ sub str_len_at(uword off) -> uword {
     uword n
     n = 0
     repeat {
-        if peek($b69c + (off + n)) == 0 { break }
+        if peek($b7f4 + (off + n)) == 0 { break }
         n = n + 1
     }
     return n
@@ -901,7 +906,7 @@ sub emit_string_byte_list(uword sid) {
             break
         }
         ubyte c
-        c = peek($b69c + (off + j))
+        c = peek($b7f4 + (off + j))
         if str_char_plain(c) != 0 {
             if in_run == 0 {
                 if any != 0 {
@@ -939,8 +944,8 @@ sub str_sid_equal(uword a, uword b) -> ubyte {
     repeat {
         ubyte ca
         ubyte cb
-        ca = peek($b69c + (a))
-        cb = peek($b69c + (b))
+        ca = peek($b7f4 + (a))
+        cb = peek($b7f4 + (b))
         if ca != cb {
             return 0
         }
@@ -1055,17 +1060,17 @@ sub emit_br(ubyte brcode, ubyte tkind, uword tid) {
 ; is a tracked gap, as in the byte comparison signedness.)
 
 sub expr_is_word(uword e) -> ubyte {
-    if peek($c4fc + (e)) == ND_CAST {
+    if peek($c654 + (e)) == ND_CAST {
         ; (operand as TYPE): the cast's target type (node_op) decides.
-        if peek($c6e6 + (e)) == TY_UWORD {
+        if peek($c80c + (e)) == TY_UWORD {
             return 1
         }
         return 0
     }
-    if peek($c4fc + (e)) == ND_ADDROF {
+    if peek($c654 + (e)) == ND_ADDROF {
         return 1
     }
-    if peek($c4fc + (e)) == ND_CALL {
+    if peek($c654 + (e)) == ND_CALL {
         ; a call's result type is its return type (peekw -> uword, peek/lsb ->
         ; ubyte). p8c types call operands this way for compares/widening.
         if call_returns_ubyte(e) == 0 {
@@ -1073,33 +1078,33 @@ sub expr_is_word(uword e) -> ubyte {
         }
         return 0
     }
-    if peek($c4fc + (e)) == ND_IDENT {
+    if peek($c654 + (e)) == ND_IDENT {
         uword si
-        si = find_sym(peekw($c8d0 + ((e) << 1)))
+        si = find_sym(peekw($c9c4 + ((e) << 1)))
         if si != $ffff {
-            if peek($dba8 + (si)) == TY_UWORD {
+            if peek($db0c + (si)) == TY_UWORD {
                 return 1
             }
         }
     }
-    if peek($c4fc + (e)) == ND_INDEX {
+    if peek($c654 + (e)) == ND_INDEX {
         ; arr[i] has the array's element type; a uword[] element is a word.
         uword ai
-        ai = find_sym(peekw($c8d0 + ((peekw($c8d0 + ((e) << 1))) << 1)))
+        ai = find_sym(peekw($c9c4 + ((peekw($c9c4 + ((e) << 1))) << 1)))
         if ai != $ffff {
-            if peek($dba8 + (ai)) == TY_UWORD {
+            if peek($db0c + (ai)) == TY_UWORD {
                 return 1
             }
         }
     }
-    if peek($c4fc + (e)) == ND_BINOP {
+    if peek($c654 + (e)) == ND_BINOP {
         ; arith/bitwise/shift binop (TK_PLUS..TK_SHR) widens to word if either
         ; operand is word (e.g. zp_next + sz -> uword); comparison ops stay
         ; bool. Matches p8c's `result type is UWORD` typing of the condition.
-        if peek($c6e6 + (e)) >= TK_PLUS {
-            if peek($c6e6 + (e)) <= TK_SHR {
-                if expr_is_word(peekw($c8d0 + ((e) << 1))) != 0 { return 1 }
-                if expr_is_word(peekw($cca4 + ((e) << 1))) != 0 { return 1 }
+        if peek($c80c + (e)) >= TK_PLUS {
+            if peek($c80c + (e)) <= TK_SHR {
+                if expr_is_word(peekw($c9c4 + ((e) << 1))) != 0 { return 1 }
+                if expr_is_word(peekw($cd34 + ((e) << 1))) != 0 { return 1 }
             }
         }
     }
@@ -1171,11 +1176,11 @@ sub emit_cmp_u(ubyte op, ubyte tkind, uword tid, ubyte jit) {
 ; of p8c is omitted here.)
 sub emit_cmp_cond(uword cond, ubyte tkind, uword tid, ubyte jit) {
     ubyte op
-    op = peek($c6e6 + (cond))
+    op = peek($c80c + (cond))
     uword lhs
     uword rhs
-    lhs = peekw($c8d0 + ((cond) << 1))
-    rhs = peekw($cca4 + ((cond) << 1))
+    lhs = peekw($c9c4 + ((cond) << 1))
+    rhs = peekw($cd34 + ((cond) << 1))
     ubyte isw
     isw = 0
     if expr_is_word(lhs) != 0 { isw = 1 }
@@ -1253,26 +1258,26 @@ sub cb_pop() {
 sub emit_cond_branch(uword cond, ubyte tkind, uword tid, ubyte jit) {
     ubyte k
     uword skip
-    k = peek($c4fc + (cond))
+    k = peek($c654 + (cond))
     if k == ND_UNOP {
-        if peek($c6e6 + (cond)) == UN_NOT {
-            emit_cond_branch(peekw($c8d0 + ((cond) << 1)), tkind, tid, jit ^ 1)
+        if peek($c80c + (cond)) == UN_NOT {
+            emit_cond_branch(peekw($c9c4 + ((cond) << 1)), tkind, tid, jit ^ 1)
             return
         }
     }
     if k == ND_BINOP {
         ubyte bop
-        bop = peek($c6e6 + (cond))
+        bop = peek($c80c + (cond))
         if bop == TK_KAND {
             if jit != 0 {
                 ; jump iff both true: lhs false -> skip; else jump iff rhs true.
                 skip = label_seq
                 label_seq = label_seq + 1
                 cb_push(cond, tkind, tid, skip)
-                emit_cond_branch(peekw($c8d0 + ((cond) << 1)), 15, skip, 0)
+                emit_cond_branch(peekw($c9c4 + ((cond) << 1)), 15, skip, 0)
                 cb_pop()
                 cb_push(0, 0, 0, cbr_skip)
-                emit_cond_branch(peekw($cca4 + ((cbr_cond) << 1)), cbr_tkind, cbr_tid, 1)
+                emit_cond_branch(peekw($cd34 + ((cbr_cond) << 1)), cbr_tkind, cbr_tid, 1)
                 cb_pop()
                 emit_ctrl_label_ref(15, cbr_skip)
                 out_byte(':')
@@ -1280,9 +1285,9 @@ sub emit_cond_branch(uword cond, ubyte tkind, uword tid, ubyte jit) {
             } else {
                 ; jump iff and is false: either operand false -> target.
                 cb_push(cond, tkind, tid, 0)
-                emit_cond_branch(peekw($c8d0 + ((cond) << 1)), tkind, tid, 0)
+                emit_cond_branch(peekw($c9c4 + ((cond) << 1)), tkind, tid, 0)
                 cb_pop()
-                emit_cond_branch(peekw($cca4 + ((cbr_cond) << 1)), cbr_tkind, cbr_tid, 0)
+                emit_cond_branch(peekw($cd34 + ((cbr_cond) << 1)), cbr_tkind, cbr_tid, 0)
             }
             return
         }
@@ -1290,18 +1295,18 @@ sub emit_cond_branch(uword cond, ubyte tkind, uword tid, ubyte jit) {
             if jit != 0 {
                 ; jump iff either true.
                 cb_push(cond, tkind, tid, 0)
-                emit_cond_branch(peekw($c8d0 + ((cond) << 1)), tkind, tid, 1)
+                emit_cond_branch(peekw($c9c4 + ((cond) << 1)), tkind, tid, 1)
                 cb_pop()
-                emit_cond_branch(peekw($cca4 + ((cbr_cond) << 1)), cbr_tkind, cbr_tid, 1)
+                emit_cond_branch(peekw($cd34 + ((cbr_cond) << 1)), cbr_tkind, cbr_tid, 1)
             } else {
                 ; jump iff both false: lhs true -> skip; else jump iff rhs false.
                 skip = label_seq
                 label_seq = label_seq + 1
                 cb_push(cond, tkind, tid, skip)
-                emit_cond_branch(peekw($c8d0 + ((cond) << 1)), 16, skip, 1)
+                emit_cond_branch(peekw($c9c4 + ((cond) << 1)), 16, skip, 1)
                 cb_pop()
                 cb_push(0, 0, 0, cbr_skip)
-                emit_cond_branch(peekw($cca4 + ((cbr_cond) << 1)), cbr_tkind, cbr_tid, 0)
+                emit_cond_branch(peekw($cd34 + ((cbr_cond) << 1)), cbr_tkind, cbr_tid, 0)
                 cb_pop()
                 emit_ctrl_label_ref(16, cbr_skip)
                 out_byte(':')
@@ -1353,7 +1358,7 @@ sub push_block_stmts(uword blk) {
         return
     }
     uword cell
-    cell = peekw($c8d0 + ((blk) << 1))
+    cell = peekw($c9c4 + ((blk) << 1))
     repeat {
         if cell == 0 {
             break
@@ -1414,7 +1419,7 @@ sub codegen_body(uword body) {
 
 sub codegen_stmt(uword st) {
     ubyte k
-    k = peek($c4fc + (st))
+    k = peek($c654 + (st))
     if k == ND_ASSIGN {
         codegen_assign(st)
         return
@@ -1453,8 +1458,8 @@ sub codegen_stmt(uword st) {
     }
     if k == ND_EXPRSTMT {
         uword e
-        e = peekw($c8d0 + ((st) << 1))
-        if peek($c4fc + (e)) == ND_CALL {
+        e = peekw($c9c4 + ((st) << 1))
+        if peek($c654 + (e)) == ND_CALL {
             codegen_call(e)
         }
         return
@@ -1471,11 +1476,11 @@ sub codegen_stmt(uword st) {
         ; a local declaration is storage only; an initializer lowers to a
         ; store. (p8c: UBYTE -> byte path, everything else -> word path.)
         uword init
-        init = peekw($cca4 + ((st) << 1))
+        init = peekw($cd34 + ((st) << 1))
         if init != 0 {
             uword si
-            si = find_sym(peekw($c8d0 + ((st) << 1)))
-            if peek($dba8 + (si)) == TY_UBYTE {
+            si = find_sym(peekw($c9c4 + ((st) << 1)))
+            if peek($db0c + (si)) == TY_UBYTE {
                 codegen_byte_expr(init)
                 emit_sta_sym(si)
             } else {
@@ -1494,9 +1499,9 @@ sub codegen_if(uword st) {
     uword thenb
     uword elseb
     uword endif_id
-    cond = peekw($c8d0 + ((st) << 1))
-    thenb = peekw($cca4 + ((st) << 1))
-    elseb = peekw($d078 + ((st) << 1))
+    cond = peekw($c9c4 + ((st) << 1))
+    thenb = peekw($cd34 + ((st) << 1))
+    elseb = peekw($d0a4 + ((st) << 1))
     if elseb != 0 {
         uword else_id
         else_id = label_seq
@@ -1521,8 +1526,8 @@ sub codegen_if(uword st) {
 sub codegen_while(uword st) {
     uword cond
     uword body
-    cond = peekw($c8d0 + ((st) << 1))
-    body = peekw($cca4 + ((st) << 1))
+    cond = peekw($c9c4 + ((st) << 1))
+    body = peekw($cd34 + ((st) << 1))
     uword top_id
     uword end_id
     top_id = label_seq
@@ -1552,8 +1557,8 @@ sub codegen_while(uword st) {
 sub codegen_repeat(uword st) {
     uword count
     uword body
-    count = peekw($c8d0 + ((st) << 1))
-    body = peekw($cca4 + ((st) << 1))
+    count = peekw($c9c4 + ((st) << 1))
+    body = peekw($cd34 + ((st) << 1))
     uword top_id
     uword end_id
     top_id = label_seq
@@ -1642,9 +1647,9 @@ sub codegen_for(uword st) {
     uword var
     uword lo
     uword body
-    var = peekw($c8d0 + ((st) << 1))
-    lo = peekw($cca4 + ((st) << 1))
-    body = peekw($d44c + ((st) << 1))
+    var = peekw($c9c4 + ((st) << 1))
+    lo = peekw($cd34 + ((st) << 1))
+    body = peekw($d414 + ((st) << 1))
     uword si
     si = find_sym(var)
     uword top_id
@@ -1681,23 +1686,23 @@ sub emit_for_cont(uword st, uword end_id) {
     top_id = end_id - 1
     cont_id = end_id + 1
     uword si
-    si = find_sym(peekw($c8d0 + ((st) << 1)))
+    si = find_sym(peekw($c9c4 + ((st) << 1)))
     uword hi
-    hi = peekw($d078 + ((st) << 1))
+    hi = peekw($d0a4 + ((st) << 1))
     emit_ctrl_label_ref(5, cont_id)
     out_byte(':')
     o_nl()
     out_text("  lda ")
-    emit_mangled(peekw($c8d0 + ((st) << 1)))
+    emit_mangled(peekw($c9c4 + ((st) << 1)))
     o_nl()
-    if peek($c4fc + (hi)) == ND_INT {
+    if peek($c654 + (hi)) == ND_INT {
         out_text("  cmp #$")
-        out_hex2(lsb(peekw($c8d0 + ((hi) << 1))))
+        out_hex2(lsb(peekw($c9c4 + ((hi) << 1))))
         o_nl()
     } else {
-        if peek($c4fc + (hi)) == ND_IDENT {
+        if peek($c654 + (hi)) == ND_IDENT {
             out_text("  cmp ")
-            emit_mangled(peekw($c8d0 + ((hi) << 1)))
+            emit_mangled(peekw($c9c4 + ((hi) << 1)))
             o_nl()
         } else {
             o_sta_tmp0()
@@ -1710,7 +1715,7 @@ sub emit_for_cont(uword st, uword end_id) {
     }
     emit_br(1, 6, end_id)               ; beq for_end
     out_text("  inc ")
-    emit_mangled(peekw($c8d0 + ((st) << 1)))
+    emit_mangled(peekw($c9c4 + ((st) << 1)))
     o_nl()
     out_text("  jmp ")
     emit_ctrl_label_ref(4, top_id)
@@ -1729,7 +1734,7 @@ sub codegen_when(uword st) {
     endw_id = label_seq
     label_seq = label_seq + 1
     uword expr
-    expr = peekw($c8d0 + ((st) << 1))
+    expr = peekw($c9c4 + ((st) << 1))
     ubyte isw
     isw = expr_is_word(expr)
     if isw != 0 {
@@ -1749,7 +1754,7 @@ sub codegen_when(uword st) {
     ; arm first); pushing it directly pops the arms in source order.
     sws_push(1, 11, endw_id)            ; when_end label
     uword cell
-    cell = peekw($cca4 + ((st) << 1))
+    cell = peekw($cd34 + ((st) << 1))
     repeat {
         if cell == 0 {
             break
@@ -1779,8 +1784,8 @@ sub emit_when_choice(uword choice, uword packed) {
     label_seq = label_seq + 1
     uword values
     uword body
-    values = peekw($c8d0 + ((choice) << 1))
-    body = peekw($cca4 + ((choice) << 1))
+    values = peekw($c9c4 + ((choice) << 1))
+    body = peekw($cd34 + ((choice) << 1))
     if values == 0 {
         ; else arm: body, jmp when_end (no next label).
         sws_push(2, 11, endw_id)        ; jmp when_end
@@ -1857,7 +1862,7 @@ sub cws_push(ubyte ty, uword nd, ubyte op) {
 
 sub is_leaf_rhs(uword e) -> ubyte {
     ubyte k
-    k = peek($c4fc + (e))
+    k = peek($c654 + (e))
     if k == ND_INT {
         return 1
     }
@@ -1873,12 +1878,12 @@ sub is_leaf_rhs(uword e) -> ubyte {
 
 sub is_cmp_leaf_rhs(uword e) -> ubyte {
     ubyte k
-    k = peek($c4fc + (e))
+    k = peek($c654 + (e))
     if k == ND_INT {
         return 1
     }
     if k == ND_IDENT {
-        if ident_is_const(peekw($c8d0 + ((e) << 1))) != 0 {
+        if ident_is_const(peekw($c9c4 + ((e) << 1))) != 0 {
             return 0
         }
         return 1
@@ -1889,28 +1894,28 @@ sub is_cmp_leaf_rhs(uword e) -> ubyte {
 
 sub emit_byte_leaf_load(uword e) {
     ubyte k
-    k = peek($c4fc + (e))
+    k = peek($c654 + (e))
     if k == ND_INT {
         o_lda() o_imm()
-        out_hex2(lsb(peekw($c8d0 + ((e) << 1))))
+        out_hex2(lsb(peekw($c9c4 + ((e) << 1))))
         o_nl()
         return
     }
     if k == ND_BOOL {
         o_lda() o_imm()
-        out_hex2(lsb(peekw($c8d0 + ((e) << 1))))
+        out_hex2(lsb(peekw($c9c4 + ((e) << 1))))
         o_nl()
         return
     }
     if k == ND_IDENT {
-        if ident_is_const(peekw($c8d0 + ((e) << 1))) != 0 {
+        if ident_is_const(peekw($c9c4 + ((e) << 1))) != 0 {
             o_lda() o_imm()
-            out_hex2(lsb(ident_const_val(peekw($c8d0 + ((e) << 1)))))
+            out_hex2(lsb(ident_const_val(peekw($c9c4 + ((e) << 1)))))
             o_nl()
             return
         }
         o_lda()
-        emit_mangled(peekw($c8d0 + ((e) << 1)))
+        emit_mangled(peekw($c9c4 + ((e) << 1)))
         o_nl()
         return
     }
@@ -1921,10 +1926,10 @@ sub emit_byte_leaf_load(uword e) {
         ; Everything else (uword[], >256, word index) -> __p8c_aptr pointer
         ; path, loading the low byte.
         uword asi
-        asi = find_sym(peekw($c8d0 + ((peekw($c8d0 + ((e) << 1))) << 1)))
+        asi = find_sym(peekw($c9c4 + ((peekw($c9c4 + ((e) << 1))) << 1)))
         uword idx
-        idx = peekw($cca4 + ((e) << 1))
-        if peek($dba8 + (asi)) == TY_UWORD {
+        idx = peekw($cd34 + ((e) << 1))
+        if peek($db0c + (asi)) == TY_UWORD {
             ; uword[] read in byte context: low half only (split lo array).
             codegen_word_expr(idx)
             o_tay()
@@ -1935,11 +1940,11 @@ sub emit_byte_leaf_load(uword e) {
             return
         }
         if array_fast(asi, idx) != 0 {
-            if peek($c4fc + (idx)) == ND_INT {
+            if peek($c654 + (idx)) == ND_INT {
                 o_lda()
                 emit_sym_mangled(asi)
                 out_byte('+')
-                out_dec(peekw($c8d0 + ((idx) << 1)))
+                out_dec(peekw($c9c4 + ((idx) << 1)))
                 o_nl()
                 return
             }
@@ -1972,11 +1977,11 @@ sub emit_byte_leaf_load(uword e) {
 
 sub emit_byte_operand(ubyte mode, uword rhs) {
     if mode == 0 {
-        if peek($c4fc + (rhs)) == ND_INT {
+        if peek($c654 + (rhs)) == ND_INT {
             o_imm()
-            out_hex2(lsb(peekw($c8d0 + ((rhs) << 1))))
+            out_hex2(lsb(peekw($c9c4 + ((rhs) << 1))))
         } else {
-            emit_mangled(peekw($c8d0 + ((rhs) << 1)))
+            emit_mangled(peekw($c9c4 + ((rhs) << 1)))
         }
     } else {
         out_text("__p8c_tmp1")
@@ -2115,9 +2120,9 @@ sub emit_byte_binop_core(ubyte op, ubyte mode, uword rhs) {
     is_imm = 0
     imm_val = 0
     if mode == 0 {
-        if peek($c4fc + (rhs)) == ND_INT {
+        if peek($c654 + (rhs)) == ND_INT {
             is_imm = 1
-            imm_val = lsb(peekw($c8d0 + ((rhs) << 1)))
+            imm_val = lsb(peekw($c9c4 + ((rhs) << 1)))
         }
     }
     if op == TK_SHL {
@@ -2210,13 +2215,13 @@ sub is_logical_op(ubyte op) -> ubyte {
 ; until p1 does full expression typing; the corpus uses leaf operands.
 
 sub is_byte_signed(uword nd) -> ubyte {
-    if peek($c4fc + (nd)) == ND_IDENT {
+    if peek($c654 + (nd)) == ND_IDENT {
         uword si
-        si = find_sym(peekw($c8d0 + ((nd) << 1)))
+        si = find_sym(peekw($c9c4 + ((nd) << 1)))
         if si == $ffff {
             return 0
         }
-        if peek($dba8 + (si)) == TY_BYTE {
+        if peek($db0c + (si)) == TY_BYTE {
             return 1
         }
     }
@@ -2224,10 +2229,10 @@ sub is_byte_signed(uword nd) -> ubyte {
 }
 
 sub cmp_is_signed(uword e) -> ubyte {
-    if is_byte_signed(peekw($c8d0 + ((e) << 1))) == 0 {
+    if is_byte_signed(peekw($c9c4 + ((e) << 1))) == 0 {
         return 0
     }
-    if is_byte_signed(peekw($cca4 + ((e) << 1))) == 0 {
+    if is_byte_signed(peekw($cd34 + ((e) << 1))) == 0 {
         return 0
     }
     return 1
@@ -2458,27 +2463,27 @@ sub codegen_byte_expr(uword root) {
             break
         }
         if ty == 0 {
-            if peek($c4fc + (nd)) == ND_BINOP {
+            if peek($c654 + (nd)) == ND_BINOP {
                 uword lhs
                 uword rhs
-                lhs = peekw($c8d0 + ((nd) << 1))
-                rhs = peekw($cca4 + ((nd) << 1))
-                if is_cmp_op(peek($c6e6 + (nd))) != 0 {
+                lhs = peekw($c9c4 + ((nd) << 1))
+                rhs = peekw($cd34 + ((nd) << 1))
+                if is_cmp_op(peek($c80c + (nd))) != 0 {
                     ; eval(lhs); sta tmp0; eval(rhs); sta tmp1; cmp-tail
-                    cws_push(7, nd, peek($c6e6 + (nd)))
+                    cws_push(7, nd, peek($c80c + (nd)))
                     cws_push(3, 0, 0)
                     cws_push(0, rhs, 0)
                     cws_push(8, 0, 0)
                     cws_push(0, lhs, 0)
                 } else {
-                    if is_logical_op(peek($c6e6 + (nd))) != 0 {
+                    if is_logical_op(peek($c80c + (nd))) != 0 {
                         ; eval(lhs); logic-mid; eval(rhs); logic-tail
-                        cws_push(10, 0, peek($c6e6 + (nd)))
+                        cws_push(10, 0, peek($c80c + (nd)))
                         cws_push(0, rhs, 0)
-                        cws_push(9, 0, peek($c6e6 + (nd)))
+                        cws_push(9, 0, peek($c80c + (nd)))
                         cws_push(0, lhs, 0)
                     } else {
-                        if peek($c6e6 + (nd)) == TK_KXOR {
+                        if peek($c80c + (nd)) == TK_KXOR {
                             ; eval(lhs); pha; eval(rhs); sta tmp0; pla; eor tmp0
                             cws_push(11, 0, 0)
                             cws_push(4, 0, 0)
@@ -2489,11 +2494,11 @@ sub codegen_byte_expr(uword root) {
                         } else {
                             if is_leaf_rhs(rhs) != 0 {
                                 ; eval(lhs); binop_leaf(op, rhs)
-                                cws_push(1, rhs, peek($c6e6 + (nd)))
+                                cws_push(1, rhs, peek($c80c + (nd)))
                                 cws_push(0, lhs, 0)
                             } else {
                                 ; eval(lhs); pha; eval(rhs); sta tmp1; pla; binop_tmp1
-                                cws_push(5, 0, peek($c6e6 + (nd)))
+                                cws_push(5, 0, peek($c80c + (nd)))
                                 cws_push(4, 0, 0)
                                 cws_push(3, 0, 0)
                                 cws_push(0, rhs, 0)
@@ -2504,26 +2509,26 @@ sub codegen_byte_expr(uword root) {
                     }
                 }
             } else {
-                if peek($c4fc + (nd)) == ND_CAST {
+                if peek($c654 + (nd)) == ND_CAST {
                     ; (operand as TYPE) in byte context: low byte of operand -> A.
                     uword cop
-                    cop = peekw($c8d0 + ((nd) << 1))
+                    cop = peekw($c9c4 + ((nd) << 1))
                     if expr_is_word(cop) != 0 {
                         codegen_word_expr(cop)     ; narrow word: low byte in A
                     } else {
                         cws_push(0, cop, 0)        ; byte operand: eval transparently
                     }
                 } else {
-                if peek($c4fc + (nd)) == ND_UNOP {
+                if peek($c654 + (nd)) == ND_UNOP {
                     ; eval(operand); apply-unary(op)
-                    cws_push(6, 0, peek($c6e6 + (nd)))
-                    cws_push(0, peekw($c8d0 + ((nd) << 1)), 0)
+                    cws_push(6, 0, peek($c80c + (nd)))
+                    cws_push(0, peekw($c9c4 + ((nd) << 1)), 0)
                 } else {
-                    if peek($c4fc + (nd)) == ND_MEMAT {
+                    if peek($c654 + (nd)) == ND_MEMAT {
                         ; @(addr) byte read -- self-contained (result in A)
                         emit_memat_read(nd)
                     } else {
-                        if peek($c4fc + (nd)) == ND_CALL {
+                        if peek($c654 + (nd)) == ND_CALL {
                             codegen_call(nd)   ; byte-returning call -> A
                         } else {
                             emit_byte_leaf_load(nd)
@@ -2605,33 +2610,33 @@ sub aug_to_binop(ubyte op) -> ubyte {
 
 sub codegen_word_leaf(uword e) {
     ubyte k
-    k = peek($c4fc + (e))
+    k = peek($c654 + (e))
     if k == ND_INT {
         o_lda() o_imm()
-        out_hex2(lsb(peekw($c8d0 + ((e) << 1))))
+        out_hex2(lsb(peekw($c9c4 + ((e) << 1))))
         o_nl()
         o_ldy() o_imm()
-        out_hex2(lsb(peekw($c8d0 + ((e) << 1)) >> 8))
+        out_hex2(lsb(peekw($c9c4 + ((e) << 1)) >> 8))
         o_nl()
         return
     }
     if k == ND_IDENT {
         uword si
-        si = find_sym(peekw($c8d0 + ((e) << 1)))
-        if peek($e640 + (si)) != 0 {
+        si = find_sym(peekw($c9c4 + ((e) << 1)))
+        if peek($e5a4 + (si)) != 0 {
             ; const folds to its literal (lo in A, hi in Y), matching p8c.
             uword cv
-            cv = peekw($e804 + ((si) << 1))
+            cv = peekw($e768 + ((si) << 1))
             o_lda() o_imm() out_hex2(lsb(cv)) o_nl()
             o_ldy() o_imm() out_hex2(lsb(cv >> 8)) o_nl()
             return
         }
         o_lda()
-        emit_mangled(peekw($c8d0 + ((e) << 1)))
+        emit_mangled(peekw($c9c4 + ((e) << 1)))
         o_nl()
-        if peek($dba8 + (si)) == TY_UWORD {
+        if peek($db0c + (si)) == TY_UWORD {
             o_ldy()
-            emit_mangled(peekw($c8d0 + ((e) << 1)))
+            emit_mangled(peekw($c9c4 + ((e) << 1)))
             o_plus1()
             o_nl()
         } else {
@@ -2645,7 +2650,7 @@ sub codegen_word_leaf(uword e) {
         ; a string literal is its pool address. Intern its content (dedup),
         ; getting the p8c_str_N label number for the pool trailer.
         uword lbl
-        lbl = intern_str_label(peekw($c8d0 + ((e) << 1)))
+        lbl = intern_str_label(peekw($c9c4 + ((e) << 1)))
         out_text("  lda #<p8c_str_")
         out_dec(lbl)
         o_nl()
@@ -2666,10 +2671,10 @@ sub wws_push(ubyte ty, uword nd, ubyte op) {
 
 sub emit_addrof(uword e) {
     out_text("  lda #<")
-    emit_mangled(peekw($c8d0 + ((e) << 1)))
+    emit_mangled(peekw($c9c4 + ((e) << 1)))
     o_nl()
     out_text("  ldy #>")
-    emit_mangled(peekw($c8d0 + ((e) << 1)))
+    emit_mangled(peekw($c9c4 + ((e) << 1)))
     o_nl()
 }
 ; the combine tail of a word + / - / & | ^ binop: LHS in A:Y, RHS in
@@ -2869,7 +2874,7 @@ sub emit_wshift_label(ubyte is_left, ubyte is_top, uword id) {
 ; a non-leaf count nested inside a byte expr's @() address would corrupt it.
 
 sub emit_wshift_var_tail(uword nd, ubyte is_left) {
-    codegen_byte_expr(peekw($cca4 + ((nd) << 1)))
+    codegen_byte_expr(peekw($cd34 + ((nd) << 1)))
     o_tax()
     uword top_id
     uword end_id
@@ -2912,17 +2917,17 @@ sub emit_wshift_var_tail(uword nd, ubyte is_left) {
 
 sub word_dispatch_shift(uword nd, ubyte is_left) {
     uword rhsn
-    rhsn = peekw($cca4 + ((nd) << 1))
-    if peek($c4fc + (rhsn)) == ND_INT {
-        if peekw($c8d0 + ((rhsn) << 1)) <= 16 {
+    rhsn = peekw($cd34 + ((nd) << 1))
+    if peek($c654 + (rhsn)) == ND_INT {
+        if peekw($c9c4 + ((rhsn) << 1)) <= 16 {
             ubyte n
-            n = lsb(peekw($c8d0 + ((rhsn) << 1))) & $0f
+            n = lsb(peekw($c9c4 + ((rhsn) << 1))) & $0f
             if is_left != 0 {
                 wws_push(5, 0, n)
             } else {
                 wws_push(6, 0, n)
             }
-            wws_push(0, peekw($c8d0 + ((nd) << 1)), 0)
+            wws_push(0, peekw($c9c4 + ((nd) << 1)), 0)
             return
         }
     }
@@ -2932,7 +2937,7 @@ sub word_dispatch_shift(uword nd, ubyte is_left) {
         wws_push(8, nd, 0)
     }
     wws_push(4, 0, 0)
-    wws_push(0, peekw($c8d0 + ((nd) << 1)), 0)
+    wws_push(0, peekw($c9c4 + ((nd) << 1)), 0)
 }
 
 ; ---- array element addressing (port of p8c _array_fast_byte and the Index
@@ -2942,8 +2947,8 @@ sub word_dispatch_shift(uword nd, ubyte is_left) {
 ; array is <=256 elements); uword arrays use split lo/hi byte arrays.
 
 sub array_fast(uword asi, uword idx) -> ubyte {
-    if peek($dba8 + (asi)) != TY_UBYTE { return 0 }
-    if peekw($eb8c + ((asi) << 1)) > 256 { return 0 }
+    if peek($db0c + (asi)) != TY_UBYTE { return 0 }
+    if peekw($eaf0 + ((asi) << 1)) > 256 { return 0 }
     if expr_is_word(idx) != 0 { return 0 }
     return 1
 }
@@ -2951,7 +2956,7 @@ sub array_fast(uword asi, uword idx) -> ubyte {
 ; continuation (word work stack): A:Y = index -> load uword element into A:Y.
 sub emit_word_arr_load(uword e) {
     uword asi
-    asi = find_sym(peekw($c8d0 + ((peekw($c8d0 + ((e) << 1))) << 1)))
+    asi = find_sym(peekw($c9c4 + ((peekw($c9c4 + ((e) << 1))) << 1)))
     ; split lo/hi: A:Y holds the index; low byte -> Y, byte-indexed load.
     o_tay()
     out_text("  lda ") emit_sym_mangled(asi) out_text("_lo,y") o_nl()
@@ -2965,7 +2970,7 @@ sub emit_word_arr_load(uword e) {
 ; (low byte of index), widened to uword.
 sub emit_byte_arr_load_widened(uword e) {
     uword asi
-    asi = find_sym(peekw($c8d0 + ((peekw($c8d0 + ((e) << 1))) << 1)))
+    asi = find_sym(peekw($c9c4 + ((peekw($c9c4 + ((e) << 1))) << 1)))
     o_tay()
     out_text("  lda ") emit_sym_mangled(asi) out_text(",y") o_nl()
     o_ldy0()
@@ -2982,12 +2987,12 @@ sub emit_word_arr_fast(uword asi, uword idx) {
 
 sub word_dispatch(uword nd) {
     ubyte k
-    k = peek($c4fc + (nd))
+    k = peek($c654 + (nd))
     if k == ND_CAST {
         ; (operand as TYPE) in word context (port of p8c's word-ctx Cast).
         uword cop
-        cop = peekw($c8d0 + ((nd) << 1))
-        if peek($c6e6 + (nd)) == TY_UWORD {
+        cop = peekw($c9c4 + ((nd) << 1))
+        if peek($c80c + (nd)) == TY_UWORD {
             codegen_word_expr(cop)             ; widen / identity to uword
         } else {
             if expr_is_word(cop) != 0 {
@@ -3001,18 +3006,18 @@ sub word_dispatch(uword nd) {
     }
     if k == ND_INDEX {
         uword asi
-        asi = find_sym(peekw($c8d0 + ((peekw($c8d0 + ((nd) << 1))) << 1)))
-        if peek($dba8 + (asi)) == TY_UWORD {
+        asi = find_sym(peekw($c9c4 + ((peekw($c9c4 + ((nd) << 1))) << 1)))
+        if peek($db0c + (asi)) == TY_UWORD {
             wws_push(12, nd, 0)
-            wws_push(0, peekw($cca4 + ((nd) << 1)), 0)
+            wws_push(0, peekw($cd34 + ((nd) << 1)), 0)
             return
         }
-        if array_fast(asi, peekw($cca4 + ((nd) << 1))) != 0 {
-            emit_word_arr_fast(asi, peekw($cca4 + ((nd) << 1)))
+        if array_fast(asi, peekw($cd34 + ((nd) << 1))) != 0 {
+            emit_word_arr_fast(asi, peekw($cd34 + ((nd) << 1)))
             return
         }
         wws_push(13, nd, 0)
-        wws_push(0, peekw($cca4 + ((nd) << 1)), 0)
+        wws_push(0, peekw($cd34 + ((nd) << 1)), 0)
         return
     }
     if k == ND_ADDROF {
@@ -3036,7 +3041,7 @@ sub word_dispatch(uword nd) {
     }
     if k == ND_BINOP {
         ubyte bop
-        bop = peek($c6e6 + (nd))
+        bop = peek($c80c + (nd))
         if bop == TK_SHL {
             word_dispatch_shift(nd, 1)
             return
@@ -3048,14 +3053,14 @@ sub word_dispatch(uword nd) {
         ; arithmetic / bitwise: eval lhs; save; eval rhs; stash; combine.
         wws_push(3, 0, bop)
         wws_push(2, 0, 0)
-        wws_push(0, peekw($cca4 + ((nd) << 1)), 0)
+        wws_push(0, peekw($cd34 + ((nd) << 1)), 0)
         wws_push(1, 0, 0)
-        wws_push(0, peekw($c8d0 + ((nd) << 1)), 0)
+        wws_push(0, peekw($c9c4 + ((nd) << 1)), 0)
         return
     }
     if k == ND_UNOP {
-        wws_push(11, 0, peek($c6e6 + (nd)))
-        wws_push(0, peekw($c8d0 + ((nd) << 1)), 0)
+        wws_push(11, 0, peek($c80c + (nd)))
+        wws_push(0, peekw($c9c4 + ((nd) << 1)), 0)
         return
     }
     ; leaf: int / ident / string
@@ -3146,10 +3151,10 @@ sub codegen_word_expr(uword root) {
 
 sub emit_memat_read(uword nd) {
     uword addr
-    addr = peekw($c8d0 + ((nd) << 1))
-    if peek($c4fc + (addr)) == ND_INT {
+    addr = peekw($c9c4 + ((nd) << 1))
+    if peek($c654 + (addr)) == ND_INT {
         out_text("  lda $")
-        out_hex4(peekw($c8d0 + ((addr) << 1)))
+        out_hex4(peekw($c9c4 + ((addr) << 1)))
         o_nl()
         return
     }
@@ -3191,12 +3196,12 @@ sub emit_sty_sym_hi(uword si) {
 sub codegen_assign_memat(uword st, uword target) {
     uword rhs
     uword addr
-    rhs = peekw($cca4 + ((st) << 1))
-    addr = peekw($c8d0 + ((target) << 1))
-    if peek($c4fc + (addr)) == ND_INT {
+    rhs = peekw($cd34 + ((st) << 1))
+    addr = peekw($c9c4 + ((target) << 1))
+    if peek($c654 + (addr)) == ND_INT {
         codegen_byte_expr(rhs)
         out_text("  sta $")
-        out_hex4(peekw($c8d0 + ((addr) << 1)))
+        out_hex4(peekw($c9c4 + ((addr) << 1)))
         o_nl()
         return
     }
@@ -3222,10 +3227,10 @@ sub codegen_assign_memat(uword st, uword target) {
 ; arr[idx] = expr  (port of _emit_assign's Index-target arm; plain `=` only).
 sub codegen_assign_index(uword target, uword rhs) {
     uword asi
-    asi = find_sym(peekw($c8d0 + ((peekw($c8d0 + ((target) << 1))) << 1)))
+    asi = find_sym(peekw($c9c4 + ((peekw($c9c4 + ((target) << 1))) << 1)))
     uword idx
-    idx = peekw($cca4 + ((target) << 1))
-    if peek($dba8 + (asi)) == TY_UWORD {
+    idx = peekw($cd34 + ((target) << 1))
+    if peek($db0c + (asi)) == TY_UWORD {
         ; split lo/hi uword[] write: rhs (widened) -> A:Y, parked on the CPU
         ; stack while the byte index is computed, then stored hi then lo.
         codegen_word_expr(rhs)
@@ -3241,9 +3246,9 @@ sub codegen_assign_index(uword target, uword rhs) {
         return
     }
     if array_fast(asi, idx) != 0 {
-        if peek($c4fc + (idx)) == ND_INT {
+        if peek($c654 + (idx)) == ND_INT {
             codegen_byte_expr(rhs)
-            out_text("  sta ") emit_sym_mangled(asi) out_byte('+') out_dec(peekw($c8d0 + ((idx) << 1))) o_nl()
+            out_text("  sta ") emit_sym_mangled(asi) out_byte('+') out_dec(peekw($c9c4 + ((idx) << 1))) o_nl()
             return
         }
         codegen_byte_expr(rhs)
@@ -3267,21 +3272,21 @@ sub codegen_assign(uword st) {
     uword target
     uword rhs
     ubyte op
-    target = peekw($c8d0 + ((st) << 1))
-    op = peek($c6e6 + (st))
-    rhs = peekw($cca4 + ((st) << 1))
-    if peek($c4fc + (target)) == ND_MEMAT {
+    target = peekw($c9c4 + ((st) << 1))
+    op = peek($c80c + (st))
+    rhs = peekw($cd34 + ((st) << 1))
+    if peek($c654 + (target)) == ND_MEMAT {
         codegen_assign_memat(st, target)
         return
     }
-    if peek($c4fc + (target)) == ND_INDEX {
+    if peek($c654 + (target)) == ND_INDEX {
         codegen_assign_index(target, rhs)
         return
     }
     uword si
-    si = find_sym(peekw($c8d0 + ((target) << 1)))
+    si = find_sym(peekw($c9c4 + ((target) << 1)))
     ubyte ttype
-    ttype = peek($dba8 + (si))
+    ttype = peek($db0c + (si))
     if op == TK_ASSIGN {
         if ttype == TY_UWORD {
             codegen_word_expr(rhs)
@@ -3354,7 +3359,7 @@ sub ident_eq(uword identid, uword s) -> ubyte {
         if j >= n {
             return 0
         }
-        if peek($a29c + (off + j)) != ch {
+        if peek($a3f4 + (off + j)) != ch {
             return 0
         }
         j = j + 1
@@ -3381,7 +3386,7 @@ sub builtin_kind(uword identid) -> ubyte {
 
 sub bi_arg0() -> uword {
     uword h
-    h = peekw($cca4 + ((bi_cn[(bi_sp - 1 as ubyte)]) << 1))
+    h = peekw($cd34 + ((bi_cn[(bi_sp - 1 as ubyte)]) << 1))
     if cons_next[(h as ubyte)] == 0 {
         return cons_val[(h as ubyte)]              ; single arg
     }
@@ -3389,23 +3394,23 @@ sub bi_arg0() -> uword {
 }
 
 sub bi_arg1() -> uword {
-    return cons_val[(peekw($cca4 + ((bi_cn[(bi_sp - 1 as ubyte)]) << 1)) as ubyte)]   ; second (= head)
+    return cons_val[(peekw($cd34 + ((bi_cn[(bi_sp - 1 as ubyte)]) << 1)) as ubyte)]   ; second (= head)
 }
 ; compute a uword address expression into __p8c_aptr. Recognizes the slab form
 ; `<int base> + <offset>` and folds the base into the final adc (matching p8c's
 ; _emit_addr_into_aptr), so peek/poke/peekw/pokew on a fixed-base arena are tight.
 
 sub emit_addr_into_aptr(uword addr) {
-    if peek($c4fc + (addr)) == ND_BINOP {
-        if peek($c6e6 + (addr)) == TK_PLUS {
+    if peek($c654 + (addr)) == ND_BINOP {
+        if peek($c80c + (addr)) == TK_PLUS {
             uword lhs
-            lhs = peekw($c8d0 + ((addr) << 1))
-            if peek($c4fc + (lhs)) == ND_INT {
+            lhs = peekw($c9c4 + ((addr) << 1))
+            if peek($c654 + (lhs)) == ND_INT {
                 ; stack the base: codegen_word_expr below may recurse into this
                 ; sub (nested peekw) and clobber the static-local base.
-                eai_base[(eai_sp as ubyte)] = peekw($c8d0 + ((lhs) << 1))
+                eai_base[(eai_sp as ubyte)] = peekw($c9c4 + ((lhs) << 1))
                 eai_sp = eai_sp + 1
-                codegen_word_expr(peekw($cca4 + ((addr) << 1)))   ; offset -> A:Y
+                codegen_word_expr(peekw($cd34 + ((addr) << 1)))   ; offset -> A:Y
                 eai_sp = eai_sp - 1
                 uword base
                 base = eai_base[(eai_sp as ubyte)]
@@ -3436,9 +3441,9 @@ sub emit_builtin(uword callnode, ubyte bk) {
             o_tya()
         } else {
             if bk == 3 {               ; peek(addr) -> ubyte in A
-                if peek($c4fc + (bi_arg0())) == ND_INT {
+                if peek($c654 + (bi_arg0())) == ND_INT {
                     out_text("  lda $")
-                    out_hex4(peekw($c8d0 + ((bi_arg0()) << 1)))
+                    out_hex4(peekw($c9c4 + ((bi_arg0()) << 1)))
                     o_nl()
                 } else {
                     emit_addr_into_aptr(bi_arg0())
@@ -3447,10 +3452,10 @@ sub emit_builtin(uword callnode, ubyte bk) {
                 }
             } else {
                 if bk == 4 {           ; poke(addr, byteexpr)
-                    if peek($c4fc + (bi_arg0())) == ND_INT {
+                    if peek($c654 + (bi_arg0())) == ND_INT {
                         codegen_byte_expr(bi_arg1())
                         out_text("  sta $")
-                        out_hex4(peekw($c8d0 + ((bi_arg0()) << 1)))
+                        out_hex4(peekw($c9c4 + ((bi_arg0()) << 1)))
                         o_nl()
                     } else {
                         codegen_byte_expr(bi_arg1())
@@ -3524,7 +3529,7 @@ sub emit_builtin(uword callnode, ubyte bk) {
 
 sub call_returns_ubyte(uword callnode) -> ubyte {
     uword callee
-    callee = peekw($c8d0 + ((callnode) << 1))
+    callee = peekw($c9c4 + ((callnode) << 1))
     ubyte bk
     bk = builtin_kind(callee)
     if bk != 0 {
@@ -3557,10 +3562,10 @@ sub collect_params(uword callee) {
         if i >= sym_count {
             break
         }
-        if peekw($e0f4 + ((i) << 1)) == callee {
-            if peek($e47c + (i)) == 1 {
+        if peekw($e058 + ((i) << 1)) == callee {
+            if peek($e3e0 + (i)) == 1 {
                 call_slot[(call_n as ubyte)] = i
-                if peek($dba8 + (i)) == TY_UWORD {
+                if peek($db0c + (i)) == TY_UWORD {
                     call_isw[(call_n as ubyte)] = 1
                 } else {
                     call_isw[(call_n as ubyte)] = 0
@@ -3606,19 +3611,19 @@ sub emit_regabi_pass(ubyte n, ubyte want_a) {
 
 sub codegen_asmsub_call(uword callnode, uword cs) {
     uword callee
-    callee = peekw($c8d0 + ((callnode) << 1))
+    callee = peekw($c9c4 + ((callnode) << 1))
     collect_params(callee)
     ubyte n
     n = call_n
     ; capture each arg's expr + its param's register/width (source order).
     uword acell
-    acell = reverse_cons_ip(peekw($cca4 + ((callnode) << 1)))
+    acell = reverse_cons_ip(peekw($cd34 + ((callnode) << 1)))
     ubyte j
     j = 0
     repeat {
         if j >= n { break }
         rb_arg[(j as ubyte)] = cons_val[(acell as ubyte)]
-        rb_reg[(j as ubyte)] = lsb(peekw($e804 + ((call_slot[(j as ubyte)]) << 1)))
+        rb_reg[(j as ubyte)] = lsb(peekw($e768 + ((call_slot[(j as ubyte)]) << 1)))
         rb_isw[(j as ubyte)] = call_isw[(j as ubyte)]
         acell = cons_next[(acell as ubyte)]
         j = j + 1
@@ -3653,7 +3658,7 @@ sub codegen_asmsub_call(uword callnode, uword cs) {
 
 sub codegen_call(uword callnode) {
     uword callee
-    callee = peekw($c8d0 + ((callnode) << 1))
+    callee = peekw($c9c4 + ((callnode) << 1))
     ubyte bk
     bk = builtin_kind(callee)
     if bk != 0 {
@@ -3679,7 +3684,7 @@ sub codegen_call(uword callnode) {
         ; static-ZP locals (callee, call_slot, ...), so save callee across the
         ; eval and re-derive the slot afterwards (collect_params is pure).
         uword arg1
-        arg1 = cons_val[(reverse_cons_ip(peekw($cca4 + ((callnode) << 1))) as ubyte)]
+        arg1 = cons_val[(reverse_cons_ip(peekw($cd34 + ((callnode) << 1))) as ubyte)]
         ubyte isw1
         isw1 = call_isw[0]
         ccs_callee[(ccs_sp as ubyte)] = callee
@@ -3712,7 +3717,7 @@ sub codegen_call(uword callnode) {
         ; re-enter codegen_call and clobber callee/acell/j, so save them on the
         ; ccs stack around each eval and re-collect_params (refills call_isw).
         uword acell
-        acell = reverse_cons_ip(peekw($cca4 + ((callnode) << 1)))
+        acell = reverse_cons_ip(peekw($cd34 + ((callnode) << 1)))
         ubyte j
         j = 0
         repeat {
@@ -3775,7 +3780,7 @@ sub codegen_call(uword callnode) {
 
 sub codegen_inline_asm(uword st) {
     uword sid
-    sid = peekw($c8d0 + ((st) << 1))
+    sid = peekw($c9c4 + ((st) << 1))
     uword off
     uword n
     off = sid
@@ -3792,7 +3797,7 @@ sub codegen_inline_asm(uword st) {
                 break
             }
             ubyte c
-            c = peek($b69c + (off + j))
+            c = peek($b7f4 + (off + j))
             j = j + 1
             if c == $0a {
                 break
@@ -3808,7 +3813,7 @@ sub codegen_inline_asm(uword st) {
 
 sub codegen_return(uword st) {
     uword value
-    value = peekw($c8d0 + ((st) << 1))
+    value = peekw($c9c4 + ((st) << 1))
     if value != 0 {
         if cur_ret == TY_UWORD {
             codegen_word_expr(value)
@@ -3835,7 +3840,7 @@ sub codegen_return(uword st) {
 sub emit_sub(uword snode) {
     label_seq = 0
     uword nm
-    nm = peekw($c8d0 + ((snode) << 1))
+    nm = peekw($c9c4 + ((snode) << 1))
     ; an inline-body asmsub emits `; ---- asmsub NAME ----` + label + the raw
     ; %asm lines (the body has its own rts); no prologue/epilogue.
     uword acs
@@ -3851,24 +3856,24 @@ sub emit_sub(uword snode) {
             out_byte(':')
             o_nl()
             cur_scope = nm
-            codegen_body(peekw($d078 + ((snode) << 1)))
+            codegen_body(peekw($d0a4 + ((snode) << 1)))
             return
         }
     }
-    cur_ret = lsb(peekw($d44c + ((snode) << 1)))
-    cur_ret_name = peekw($c8d0 + ((snode) << 1))
-    cur_scope = peekw($c8d0 + ((snode) << 1))
+    cur_ret = lsb(peekw($d414 + ((snode) << 1)))
+    cur_ret_name = peekw($c9c4 + ((snode) << 1))
+    cur_scope = peekw($c9c4 + ((snode) << 1))
     o_nl()
     out_text("; ---- sub ")
-    out_ident_text(peekw($c8d0 + ((snode) << 1)))
+    out_ident_text(peekw($c9c4 + ((snode) << 1)))
     out_text(" ----")
     o_nl()
-    emit_sub_label(peekw($c8d0 + ((snode) << 1)))
+    emit_sub_label(peekw($c9c4 + ((snode) << 1)))
     out_byte(':')
     o_nl()
-    codegen_body(peekw($d078 + ((snode) << 1)))
+    codegen_body(peekw($d0a4 + ((snode) << 1)))
     out_text(".Lp8s_")
-    out_ident_text(peekw($c8d0 + ((snode) << 1)))
+    out_ident_text(peekw($c9c4 + ((snode) << 1)))
     out_text("_ret:")
     o_nl()
     out_text("  rts")
@@ -3897,8 +3902,8 @@ sub load_global() {
     i = 0
     repeat {
         if i >= sym_count { break }
-        pokew($d820 + ((i) << 1), l16()) poke($dba8 + (i), read_src()) pokew($dd6c + ((i) << 1), l16()) pokew($e0f4 + ((i) << 1), l16())
-        poke($e47c + (i), read_src()) poke($e640 + (i), read_src()) pokew($e804 + ((i) << 1), l16()) pokew($eb8c + ((i) << 1), l16())
+        pokew($d784 + ((i) << 1), l16()) poke($db0c + (i), read_src()) pokew($dcd0 + ((i) << 1), l16()) pokew($e058 + ((i) << 1), l16())
+        poke($e3e0 + (i), read_src()) poke($e5a4 + (i), read_src()) pokew($e768 + ((i) << 1), l16()) pokew($eaf0 + ((i) << 1), l16())
         i = i + 1
     }
     resident_sym_count = sym_count
@@ -3907,14 +3912,15 @@ sub load_global() {
     repeat {
         if i >= sub_count { break }
         sub_name[(i as ubyte)] = l16() sub_kind[(i as ubyte)] = read_src() sub_ret[(i as ubyte)] = read_src() sub_addr[(i as ubyte)] = l16()
+        if sub_kind[(i as ubyte)] == SUBK_MAIN { entry_nm = sub_name[(i as ubyte)] }
         i = i + 1
     }
     ident_pool_len = l16()
     i = 0
-    repeat { if i >= ident_pool_len { break } poke($a29c + (i), read_src()) i = i + 1 }
+    repeat { if i >= ident_pool_len { break } poke($a3f4 + (i), read_src()) i = i + 1 }
     str_pool_len = l16()
     i = 0
-    repeat { if i >= str_pool_len { break } poke($b69c + (i), read_src()) i = i + 1 }
+    repeat { if i >= str_pool_len { break } poke($b7f4 + (i), read_src()) i = i + 1 }
 }
 ; load one record's nodes into the (reset) node arena; returns the snode.
 sub load_record() {
@@ -3928,8 +3934,8 @@ sub load_record() {
     i = 0
     repeat {
         if i >= lc { break }
-        pokew($d820 + ((sym_count) << 1), l16()) poke($dba8 + (sym_count), read_src()) pokew($dd6c + ((sym_count) << 1), l16()) pokew($e0f4 + ((sym_count) << 1), l16())
-        poke($e47c + (sym_count), read_src()) poke($e640 + (sym_count), read_src()) pokew($e804 + ((sym_count) << 1), l16()) pokew($eb8c + ((sym_count) << 1), l16())
+        pokew($d784 + ((sym_count) << 1), l16()) poke($db0c + (sym_count), read_src()) pokew($dcd0 + ((sym_count) << 1), l16()) pokew($e058 + ((sym_count) << 1), l16())
+        poke($e3e0 + (sym_count), read_src()) poke($e5a4 + (sym_count), read_src()) pokew($e768 + ((sym_count) << 1), l16()) pokew($eaf0 + ((sym_count) << 1), l16())
         sym_count = sym_count + 1
         i = i + 1
     }
@@ -3937,8 +3943,8 @@ sub load_record() {
     i = 0
     repeat {
         if i >= node_count { break }
-        poke($c4fc + (i), read_src()) poke($c6e6 + (i), read_src())
-        pokew($c8d0 + ((i) << 1), l16()) pokew($cca4 + ((i) << 1), l16()) pokew($d078 + ((i) << 1), l16()) pokew($d44c + ((i) << 1), l16())
+        poke($c654 + (i), read_src()) poke($c80c + (i), read_src())
+        pokew($c9c4 + ((i) << 1), l16()) pokew($cd34 + ((i) << 1), l16()) pokew($d0a4 + ((i) << 1), l16()) pokew($d414 + ((i) << 1), l16())
         i = i + 1
     }
     cons_count = l16()
@@ -4007,9 +4013,9 @@ sub start() {
         if rec_kind == $ff { break }
         if rec_kind == 0 {
             cur_ret = TY_VOID
-            cur_ret_name = peekw($c8d0 + ((rec_snode) << 1))
-            cur_scope = peekw($c8d0 + ((rec_snode) << 1))
-            emit_main(peekw($d078 + ((rec_snode) << 1)))
+            cur_ret_name = peekw($c9c4 + ((rec_snode) << 1))
+            cur_scope = peekw($c9c4 + ((rec_snode) << 1))
+            emit_main(peekw($d0a4 + ((rec_snode) << 1)))
         }
     }
     ; drain to EOF so the emulator rewinds the dump to offset 0, then re-read
