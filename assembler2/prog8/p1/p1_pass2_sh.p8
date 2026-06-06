@@ -297,6 +297,10 @@ ubyte eai_sp
 ; by a ubyte-returning call's own arg eval, clobbering its locals).
 ubyte[8] wdn_stack
 ubyte wdn_sp
+; explicit operand stack for expr_is_word's iterative OR-walk (de-recursed:
+; an arith/bitwise/shift binop is word if EITHER operand is word).
+uword[24] eiw_stk
+ubyte eiw_sp
 ; the sub currently being codegen'd -- its return type + name ident,
 ; for `return` (the per-sub .Lp8s_<name>_ret label).
 ubyte cur_ret            ; current sub's return type tag
@@ -1115,51 +1119,65 @@ sub emit_br(ubyte brcode, ubyte tkind, uword tid) {
 ; is a tracked gap, as in the byte comparison signedness.)
 
 sub expr_is_word(uword e) -> ubyte {
-    if peek($ccf0 + (e)) == ND_CAST {
-        ; (operand as TYPE): the cast's target type (node_op) decides.
-        if peek($ce26 + (e)) == TY_UWORD {
-            return 1
+    ; iterative OR-walk (no recursion): the expression is word-typed if the
+    ; node itself is word, or -- for an arith/bitwise/shift binop -- if either
+    ; operand is. Operands to still-visit are held on eiw_stk.
+    eiw_sp = 0
+    eiw_stk[eiw_sp] = e
+    eiw_sp = eiw_sp + 1
+    repeat {
+        if eiw_sp == 0 {
+            break
         }
-        return 0
-    }
-    if peek($ccf0 + (e)) == ND_ADDROF {
-        return 1
-    }
-    if peek($ccf0 + (e)) == ND_CALL {
-        ; a call's result type is its return type (peekw -> uword, peek/lsb ->
-        ; ubyte). p8c types call operands this way for compares/widening.
-        if call_returns_ubyte(e) == 0 {
-            return 1
-        }
-        return 0
-    }
-    if peek($ccf0 + (e)) == ND_IDENT {
-        uword si
-        si = find_sym(peekw($cf5c + ((e) << 1)))
-        if si != $ffff {
-            if peek($dc94 + (si)) == TY_UWORD {
+        eiw_sp = eiw_sp - 1
+        uword n
+        n = eiw_stk[eiw_sp]
+        if peek($ccf0 + (n)) == ND_CAST {
+            ; (operand as TYPE): the cast's target type (node_op) decides.
+            if peek($ce26 + (n)) == TY_UWORD {
                 return 1
             }
         }
-    }
-    if peek($ccf0 + (e)) == ND_INDEX {
-        ; arr[i] has the array's element type; a uword[] element is a word.
-        uword ai
-        ai = find_sym(peekw($cf5c + ((peekw($cf5c + ((e) << 1))) << 1)))
-        if ai != $ffff {
-            if peek($dc94 + (ai)) == TY_UWORD {
+        if peek($ccf0 + (n)) == ND_ADDROF {
+            return 1
+        }
+        if peek($ccf0 + (n)) == ND_CALL {
+            ; a call's result type is its return type (peekw -> uword, peek/lsb ->
+            ; ubyte). p8c types call operands this way for compares/widening.
+            if call_returns_ubyte(n) == 0 {
                 return 1
             }
         }
-    }
-    if peek($ccf0 + (e)) == ND_BINOP {
-        ; arith/bitwise/shift binop (TK_PLUS..TK_SHR) widens to word if either
-        ; operand is word (e.g. zp_next + sz -> uword); comparison ops stay
-        ; bool. Matches p8c's `result type is UWORD` typing of the condition.
-        if peek($ce26 + (e)) >= TK_PLUS {
-            if peek($ce26 + (e)) <= TK_SHR {
-                if expr_is_word(peekw($cf5c + ((e) << 1))) != 0 { return 1 }
-                if expr_is_word(peekw($d1c8 + ((e) << 1))) != 0 { return 1 }
+        if peek($ccf0 + (n)) == ND_IDENT {
+            uword si
+            si = find_sym(peekw($cf5c + ((n) << 1)))
+            if si != $ffff {
+                if peek($dc94 + (si)) == TY_UWORD {
+                    return 1
+                }
+            }
+        }
+        if peek($ccf0 + (n)) == ND_INDEX {
+            ; arr[i] has the array's element type; a uword[] element is a word.
+            uword ai
+            ai = find_sym(peekw($cf5c + ((peekw($cf5c + ((n) << 1))) << 1)))
+            if ai != $ffff {
+                if peek($dc94 + (ai)) == TY_UWORD {
+                    return 1
+                }
+            }
+        }
+        if peek($ccf0 + (n)) == ND_BINOP {
+            ; arith/bitwise/shift binop (TK_PLUS..TK_SHR) widens to word if either
+            ; operand is word (e.g. zp_next + sz -> uword); comparison ops stay
+            ; bool. Matches p8c's `result type is UWORD` typing of the condition.
+            if peek($ce26 + (n)) >= TK_PLUS {
+                if peek($ce26 + (n)) <= TK_SHR {
+                    eiw_stk[eiw_sp] = peekw($cf5c + ((n) << 1))
+                    eiw_sp = eiw_sp + 1
+                    eiw_stk[eiw_sp] = peekw($d1c8 + ((n) << 1))
+                    eiw_sp = eiw_sp + 1
+                }
             }
         }
     }
