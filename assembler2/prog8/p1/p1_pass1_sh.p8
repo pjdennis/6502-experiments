@@ -28,6 +28,7 @@
 %output raw
 %launcher none
 
+main {
 uword hoist_arg
 
 ; ---- token kinds ----
@@ -768,39 +769,39 @@ sub kw_is(uword kw) -> ubyte {
 
 sub classify_name() -> ubyte {
     name_buf[(name_len as ubyte)] = 0                  ; NUL-terminate for strings.compare
-    if kw_is("if") { return TK_KIF }
-    if kw_is("in") { return TK_KIN }
-    if kw_is("or") { return TK_KOR }
-    if kw_is("to") { return TK_KTO }
-    if kw_is("and") { return TK_KAND }
-    if kw_is("for") { return TK_KFOR }
-    if kw_is("not") { return TK_KNOT }
-    if kw_is("str") { return TK_KSTR }
-    if kw_is("sub") { return TK_KSUB }
-    if kw_is("xor") { return TK_KXOR }
-    if kw_is("bool") { return TK_KBOOL }
-    if kw_is("byte") { return TK_KBYTE }
-    if kw_is("else") { return TK_KELSE }
-    if kw_is("enum") { return TK_KENUM }
-    if kw_is("main") { return TK_KMAIN }
-    if kw_is("true") { return TK_TRUE }
-    if kw_is("void") { return TK_KVOID }
-    if kw_is("when") { return TK_KWHEN }
-    if kw_is("break") { return TK_KBREAK }
-    if kw_is("const") { return TK_KCONST }
-    if kw_is("defer") { return TK_KDEFER }
-    if kw_is("false") { return TK_FALSE }
-    if kw_is("ubyte") { return TK_KUBYTE }
-    if kw_is("uword") { return TK_KUWORD }
-    if kw_is("while") { return TK_KWHILE }
-    if kw_is("asmsub") { return TK_KASMSUB }
-    if kw_is("inline") { return TK_KINLINE }
-    if kw_is("repeat") { return TK_KREPEAT }
-    if kw_is("return") { return TK_KRETURN }
-    if kw_is("struct") { return TK_KSTRUCT }
-    if kw_is("continue") { return TK_KCONTINUE }
-    if kw_is("extsub") { return TK_KEXTSUB }
-    if kw_is("as") { return TK_KAS }
+    if kw_is("if") != 0 { return TK_KIF }
+    if kw_is("in") != 0 { return TK_KIN }
+    if kw_is("or") != 0 { return TK_KOR }
+    if kw_is("to") != 0 { return TK_KTO }
+    if kw_is("and") != 0 { return TK_KAND }
+    if kw_is("for") != 0 { return TK_KFOR }
+    if kw_is("not") != 0 { return TK_KNOT }
+    if kw_is("str") != 0 { return TK_KSTR }
+    if kw_is("sub") != 0 { return TK_KSUB }
+    if kw_is("xor") != 0 { return TK_KXOR }
+    if kw_is("bool") != 0 { return TK_KBOOL }
+    if kw_is("byte") != 0 { return TK_KBYTE }
+    if kw_is("else") != 0 { return TK_KELSE }
+    if kw_is("enum") != 0 { return TK_KENUM }
+    if kw_is("main") != 0 { return TK_KMAIN }
+    if kw_is("true") != 0 { return TK_TRUE }
+    if kw_is("void") != 0 { return TK_KVOID }
+    if kw_is("when") != 0 { return TK_KWHEN }
+    if kw_is("break") != 0 { return TK_KBREAK }
+    if kw_is("const") != 0 { return TK_KCONST }
+    if kw_is("defer") != 0 { return TK_KDEFER }
+    if kw_is("false") != 0 { return TK_FALSE }
+    if kw_is("ubyte") != 0 { return TK_KUBYTE }
+    if kw_is("uword") != 0 { return TK_KUWORD }
+    if kw_is("while") != 0 { return TK_KWHILE }
+    if kw_is("asmsub") != 0 { return TK_KASMSUB }
+    if kw_is("inline") != 0 { return TK_KINLINE }
+    if kw_is("repeat") != 0 { return TK_KREPEAT }
+    if kw_is("return") != 0 { return TK_KRETURN }
+    if kw_is("struct") != 0 { return TK_KSTRUCT }
+    if kw_is("continue") != 0 { return TK_KCONTINUE }
+    if kw_is("extsub") != 0 { return TK_KEXTSUB }
+    if kw_is("as") != 0 { return TK_KAS }
     return TK_IDENT
 }
 
@@ -808,9 +809,9 @@ sub classify_name() -> ubyte {
 ; 0=address, 1=output, 2=import, 4=other.
 sub dir_classify() -> ubyte {
     name_buf[(name_len as ubyte)] = 0                  ; NUL-terminate for strings.compare
-    if kw_is("address") { return 0 }
-    if kw_is("output") { return 1 }
-    if kw_is("import") { return 2 }
+    if kw_is("address") != 0 { return 0 }
+    if kw_is("output") != 0 { return 1 }
+    if kw_is("import") != 0 { return 2 }
     return 4
 }
 
@@ -3183,7 +3184,7 @@ sub dump_record(ubyte kind, uword snode) {
 }
 
 
-main {
+sub start() {
     uword fn
     fn = sys_argv(0)
     src_hand = sys_open(fn)
@@ -3259,5 +3260,6 @@ main {
     out_byte($ff)
     sys_close(src_hand)
     sys_close(dst_hand)
+}
 }
 

@@ -26,6 +26,7 @@
 %output raw
 %launcher none
 
+main {
 const ubyte TK_EOF    = 0
 const ubyte TK_INT    = 1
 const ubyte TK_STR    = 2
@@ -3983,7 +3984,7 @@ sub cg_skip_decl() { return }
 sub emit_subs() { return }
 
 
-main {
+sub start() {
     uword fn
     fn = sys_argv(0)
     src_hand = sys_open(fn)
@@ -4044,5 +4045,6 @@ main {
     emit_trailers()
     sys_close(src_hand)
     sys_close(dst_hand)
+}
 }
 
