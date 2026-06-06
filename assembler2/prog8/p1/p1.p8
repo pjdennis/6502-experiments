@@ -2051,7 +2051,6 @@ sub parse_decls_pass() {
     }
 }
 
-; main is `main { ... }` -- no params, void return, kind=main.
 ; true if ident `id` is exactly "start" -- the upstream entry sub inside
 ; `main { ... }`. Used to descend the namespace-main block and tag `sub start`
 ; as the SUBK_MAIN entry.
@@ -2063,25 +2062,6 @@ sub id_is_start(uword id) -> ubyte {
     if ident_pool[id + 4] != $74 { return 0 }   ; 't'
     if ident_pool[id + 5] != 0 { return 0 }     ; exact length 5
     return 1
-}
-
-sub parse_main() -> uword {
-    uword nameid
-    name_len = 0
-    name_buf[0] = $6d
-    name_buf[1] = $61
-    name_buf[2] = $69
-    name_buf[3] = $6e
-    name_len = 4
-    nameid = intern_name()
-    advance()                               ; consume 'main'
-    uword body
-    body = parse_block()
-    uword node
-    node = new_node(ND_SUB, SUBK_MAIN, nameid, 0)
-    node_c[node] = body
-    node_d[node] = TY_VOID
-    return node
 }
 
 ; ============================================================
@@ -5149,25 +5129,21 @@ sub register_subs() {
         uword snode
         ubyte issub
         issub = 1
-        if t == TK_KMAIN {
-            snode = parse_main()
-        } else {
-            if t == TK_KSUB {
-                advance()
-                if id_is_start(cur_val()) {
-                    snode = parse_sub(SUBK_MAIN)
-                } else {
-                    snode = parse_sub(SUBK_SUB)
-                }
+        if t == TK_KSUB {
+            advance()
+            if id_is_start(cur_val()) {
+                snode = parse_sub(SUBK_MAIN)
             } else {
-                if t == TK_KINLINE {
-                    advance()
-                    advance()
-                    snode = parse_sub(SUBK_INLINE)
-                } else {
-                    issub = 0
-                    cg_skip_decl()
-                }
+                snode = parse_sub(SUBK_SUB)
+            }
+        } else {
+            if t == TK_KINLINE {
+                advance()
+                advance()
+                snode = parse_sub(SUBK_INLINE)
+            } else {
+                issub = 0
+                cg_skip_decl()
             }
         }
         if issub != 0 {
@@ -5270,29 +5246,24 @@ sub emit_subs() {
         ubyte kind
         ubyte issub
         issub = 1
-        if t == TK_KMAIN {
-            snode = parse_main()
-            kind = SUBK_MAIN
-        } else {
-            if t == TK_KSUB {
-                advance()
-                if id_is_start(cur_val()) {
-                    snode = parse_sub(SUBK_MAIN)
-                    kind = SUBK_MAIN
-                } else {
-                    snode = parse_sub(SUBK_SUB)
-                    kind = SUBK_SUB
-                }
+        if t == TK_KSUB {
+            advance()
+            if id_is_start(cur_val()) {
+                snode = parse_sub(SUBK_MAIN)
+                kind = SUBK_MAIN
             } else {
-                if t == TK_KINLINE {
-                    advance()
-                    advance()
-                    snode = parse_sub(SUBK_INLINE)
-                    kind = SUBK_INLINE
-                } else {
-                    issub = 0
-                    cg_skip_decl()
-                }
+                snode = parse_sub(SUBK_SUB)
+                kind = SUBK_SUB
+            }
+        } else {
+            if t == TK_KINLINE {
+                advance()
+                advance()
+                snode = parse_sub(SUBK_INLINE)
+                kind = SUBK_INLINE
+            } else {
+                issub = 0
+                cg_skip_decl()
             }
         }
         if issub != 0 {
@@ -5348,9 +5319,9 @@ main {
     emit_prologue()
     emit_zp_bindings()
 
-    ; ---- pass M: find `main` and codegen its body ----
+    ; ---- pass M: descend into `main` and codegen `sub start`'s body ----
     ; reset_nodes (not reset_arena): keep the persistent ident/str pools so
-    ; the symbol table's ident ids stay valid as main is re-lexed.
+    ; the symbol table's ident ids stay valid as the source is re-lexed.
     reset_source()
     reset_nodes()
     lex_init()

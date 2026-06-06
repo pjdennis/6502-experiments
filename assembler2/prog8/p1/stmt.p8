@@ -1980,25 +1980,6 @@ sub id_is_start(uword id) -> ubyte {
     return 1
 }
 
-; main is `main { ... }` -- no params, void return, kind=main.
-sub parse_main() -> uword {
-    uword nameid
-    name_len = 0
-    name_buf[0] = $6d
-    name_buf[1] = $61
-    name_buf[2] = $69
-    name_buf[3] = $6e
-    name_len = 4
-    nameid = intern_name()
-    advance()                               ; consume 'main'
-    uword body
-    body = parse_block()
-    uword node
-    node = new_node(ND_SUB, SUBK_MAIN, nameid, 0)
-    node_c[node] = body
-    node_d[node] = TY_VOID
-    return node
-}
 
 
 ; ---- serialization ----
@@ -2500,25 +2481,21 @@ sub serialize_subs_streaming() {
         uword snode
         ubyte issub
         issub = 1
-        if t == TK_KMAIN {
-            snode = parse_main()
-        } else {
-            if t == TK_KSUB {
-                advance()
-                if id_is_start(cur_val()) {
-                    snode = parse_sub(SUBK_MAIN)
-                } else {
-                    snode = parse_sub(SUBK_SUB)
-                }
+        if t == TK_KSUB {
+            advance()
+            if id_is_start(cur_val()) {
+                snode = parse_sub(SUBK_MAIN)
             } else {
-                if t == TK_KINLINE {
-                    advance()
-                    advance()
-                    snode = parse_sub(SUBK_INLINE)
-                } else {
-                    issub = 0
-                    skip_decl_pass_b()
-                }
+                snode = parse_sub(SUBK_SUB)
+            }
+        } else {
+            if t == TK_KINLINE {
+                advance()
+                advance()
+                snode = parse_sub(SUBK_INLINE)
+            } else {
+                issub = 0
+                skip_decl_pass_b()
             }
         }
         if issub {

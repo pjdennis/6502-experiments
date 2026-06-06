@@ -2629,27 +2629,6 @@ sub parse_decls_pass() {
     }
 }
 
-; main is `main { ... }` -- no params, void return, kind=main.
-
-sub parse_main() -> uword {
-    uword nameid
-    name_len = 0
-    name_buf[0] = $6d
-    name_buf[1] = $61
-    name_buf[2] = $69
-    name_buf[3] = $6e
-    name_len = 4
-    nameid = intern_name()
-    advance()                               ; consume 'main'
-    uword body
-    body = parse_block()
-    uword node
-    node = new_node(ND_SUB, SUBK_MAIN, nameid, 0)
-    pokew($bcc0 + ((node) << 1), body)
-    pokew($c03a + ((node) << 1), TY_VOID)
-    return node
-}
-
 sub out_text(uword p) {
     uword q
     q = p
@@ -3240,31 +3219,27 @@ sub register_subs() {
         uword snode
         ubyte issub
         issub = 1
-        if t == TK_KMAIN {
-            snode = parse_main()
-        } else {
-            if t == TK_KSUB {
-                advance()
-                if id_is_start(cur_val()) != 0 {
-                    snode = parse_sub(SUBK_MAIN)
-                } else {
-                    snode = parse_sub(SUBK_SUB)
-                }
+        if t == TK_KSUB {
+            advance()
+            if id_is_start(cur_val()) != 0 {
+                snode = parse_sub(SUBK_MAIN)
             } else {
-                if t == TK_KINLINE {
-                    advance()
-                    advance()
-                    snode = parse_sub(SUBK_INLINE)
+                snode = parse_sub(SUBK_SUB)
+            }
+        } else {
+            if t == TK_KINLINE {
+                advance()
+                advance()
+                snode = parse_sub(SUBK_INLINE)
+            } else {
+                if t == TK_KASMSUB {
+                    snode = parse_asmsub()
                 } else {
-                    if t == TK_KASMSUB {
-                        snode = parse_asmsub()
+                    if t == TK_KEXTSUB {
+                        snode = parse_extsub()
                     } else {
-                        if t == TK_KEXTSUB {
-                            snode = parse_extsub()
-                        } else {
-                            issub = 0
-                            cg_skip_decl()
-                        }
+                        issub = 0
+                        cg_skip_decl()
                     }
                 }
             }
@@ -3448,43 +3423,37 @@ sub start() {
             advance()
             continue
         }
-        if t == TK_KMAIN {
+        if t == TK_KSUB {
+            advance()
             reset_nodes()
-            snode = parse_main()
-            dump_record(0, snode)
+            if id_is_start(cur_val()) != 0 {
+                snode = parse_sub(SUBK_MAIN)
+                dump_record(0, snode)
+            } else {
+                snode = parse_sub(SUBK_SUB)
+                dump_record(1, snode)
+            }
         } else {
-            if t == TK_KSUB {
+            if t == TK_KINLINE {
+                advance()
                 advance()
                 reset_nodes()
-                if id_is_start(cur_val()) != 0 {
-                    snode = parse_sub(SUBK_MAIN)
-                    dump_record(0, snode)
-                } else {
-                    snode = parse_sub(SUBK_SUB)
-                    dump_record(1, snode)
-                }
+                snode = parse_sub(SUBK_INLINE)
             } else {
-                if t == TK_KINLINE {
-                    advance()
-                    advance()
+                if t == TK_KASMSUB {
                     reset_nodes()
-                    snode = parse_sub(SUBK_INLINE)
+                    snode = parse_asmsub()
+                    ; inline-body asmsubs stream a record (emitted in pass B);
+                    ; the `= $ADDR` decl form has no body, so no record.
+                    if peek($b40f + (snode)) == SUBK_ASMSUB_BODY {
+                        dump_record(1, snode)
+                    }
                 } else {
-                    if t == TK_KASMSUB {
+                    if t == TK_KEXTSUB {
                         reset_nodes()
-                        snode = parse_asmsub()
-                        ; inline-body asmsubs stream a record (emitted in pass B);
-                        ; the `= $ADDR` decl form has no body, so no record.
-                        if peek($b40f + (snode)) == SUBK_ASMSUB_BODY {
-                            dump_record(1, snode)
-                        }
+                        snode = parse_extsub()
                     } else {
-                        if t == TK_KEXTSUB {
-                            reset_nodes()
-                            snode = parse_extsub()
-                        } else {
-                            cg_skip_decl()
-                        }
+                        cg_skip_decl()
                     }
                 }
             }
