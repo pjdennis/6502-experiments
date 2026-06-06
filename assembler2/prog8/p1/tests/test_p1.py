@@ -410,38 +410,61 @@ def _have_vasm() -> bool:
 @unittest.skipUnless(_have_vasm(), "vasm6502_oldstyle not on PATH")
 @unittest.skipUnless(EMU.exists(), f"emulator not built at {EMU}")
 class P1Equivalence(unittest.TestCase):
-    """Codegen-equivalence corpus: the two-pass on-target pipeline
-    (p1_pass1_sh.p8 parse+symbols+AST-dump, then p1_pass2_sh.p8 codegen),
-    built with p8c+vasm and run on the emulator, must reproduce p8c's `.s`
-    byte-for-byte for each corpus program.
+    """Codegen-equivalence corpus: the p1.p8 monolith (single-pass parse +
+    codegen), built with p8c+vasm and run on the emulator, must reproduce
+    p8c's `.s` byte-for-byte for each corpus program.
 
-    (Was run against the p1.p8 monolith. The monolith is lenient-only and the
-    corpus is now upstream-strict `main { sub start() {...} }`, so the corpus
-    is exercised through the strict-capable _sh pipeline instead -- which is
-    also the live self-hosting compiler.)
+    The monolith parses the upstream-strict `main { sub start() {...} }` form
+    (descend into the namespace, `start` is the SUBK_MAIN entry) -- the same
+    one dialect as p8c and the _sh pipeline. It is the fuller reference: unlike
+    the _sh pass2, it emits p8c's signed-`byte`/`word` compare arm, so the
+    signed corpus programs are checked here too.
+
+    # The emulator injects its file-I/O syscall stub jmp table + routines from
+    # $F006 up to ~$F0B0 (over p1.bin once loaded), so p1.bin's code + arenas
+    # MUST end below $F006. The read-only string pool is parked ABOVE the stub
+    # routines at $F0C0, so it has its own ceiling: the emulator's argv-string
+    # window at $FE00 (ARGV_BASE). Both are enforced from the vasm listing.
     """
+
+    STUB_FLOOR = 0xF000
+    POOL_CEIL  = 0xFE00
 
     @classmethod
     def setUpClass(cls):
         cls.workdir = Path(tempfile.mkdtemp(prefix="p1_codegen_"))
-        cls.pass1_bin = cls._build(PASS1_SRC, "pass1")
-        cls.pass2_bin = cls._build(PASS2_SRC, "pass2")
-
-    @classmethod
-    def _build(cls, src: Path, name: str) -> Path:
-        s_path = cls.workdir / f"{name}.s"
-        bin_path = cls.workdir / f"{name}.bin"
+        s_path = cls.workdir / "p1.s"
+        lst_path = cls.workdir / "p1.lst"
+        cls.p1_bin = cls.workdir / "p1.bin"
         r = subprocess.run(
             [sys.executable, "-m", "p8c", "--target", "nmos",
-             str(src), "-o", str(s_path)],
+             str(P1_SRC), "-o", str(s_path)],
             capture_output=True, text=True, cwd=str(PROG8))
-        assert r.returncode == 0, f"p8c {name} failed:\n{r.stdout}\n{r.stderr}"
+        assert r.returncode == 0, f"p8c failed:\n{r.stdout}\n{r.stderr}"
         r = subprocess.run(
             ["vasm6502_oldstyle", "-Fbin", "-dotdir", "-ignore-mult-inc",
-             "-esc", "-wfail", "-o", str(bin_path), str(s_path)],
+             "-esc", "-wfail", "-L", str(lst_path), "-o", str(cls.p1_bin),
+             str(s_path)],
             capture_output=True, text=True)
-        assert r.returncode == 0, f"vasm {name} failed:\n{r.stdout}\n{r.stderr}"
-        return bin_path
+        assert r.returncode == 0, f"vasm failed:\n{r.stdout}\n{r.stderr}"
+        code_top = 0
+        pool_top = 0
+        for m in re.finditer(r"^([0-9A-Fa-f]{4})\s+(p8a_|p8c_str_|p8s_|p8v_)",
+                             lst_path.read_text(), re.MULTILINE):
+            a = int(m.group(1), 16)
+            if a >= 0xFFF0:
+                continue
+            if m.group(2) == "p8c_str_":
+                if a > pool_top:
+                    pool_top = a
+            elif a > code_top:
+                code_top = a
+        assert 0 < code_top < cls.STUB_FLOOR, (
+            f"p1.bin code+arena top ${code_top:04X} reached the emulator stub "
+            f"floor ${cls.STUB_FLOOR:04X}; shrink ARENA_SIZES in build_p1.py")
+        assert pool_top < cls.POOL_CEIL, (
+            f"p1.bin string-pool top ${pool_top:04X} reached the argv window "
+            f"${cls.POOL_CEIL:04X}")
 
     @classmethod
     def tearDownClass(cls):
@@ -461,32 +484,17 @@ class P1Equivalence(unittest.TestCase):
 
     def _ontarget(self, src: str) -> str:
         inp = self.workdir / "in.p8"
-        dump = self.workdir / "in.dump"
         out = self.workdir / "out.s"
         inp.write_text(src)
         r = subprocess.run(
-            [str(EMU), str(self.pass1_bin), "--cycle-cap", "30000000000",
-             str(inp), str(dump)],
+            [str(EMU), str(self.p1_bin), str(inp), str(out), "--no-dump"],
             capture_output=True, text=True)
         self.assertEqual(r.returncode, 0,
-                         msg=f"pass1 failed on {src!r}:\n{r.stdout}\n{r.stderr}")
-        r = subprocess.run(
-            [str(EMU), str(self.pass2_bin), "--cycle-cap", "30000000000",
-             "--no-dump", str(dump), str(out)],
-            capture_output=True, text=True)
-        self.assertEqual(r.returncode, 0,
-                         msg=f"pass2 failed on {src!r}:\n{r.stdout}\n{r.stderr}")
+                         msg=f"emulator p1 failed on {src!r}:\n"
+                             f"{r.stdout}\n{r.stderr}")
         return _norm(out.read_text())
 
-    # The _sh pass2 is specialized for ubyte/uword (p1.p8 has no signed
-    # types), so its emit_cmp_cond omits p8c's signed-compare arm. Programs
-    # that declare a signed `byte`/`word` are therefore a KNOWN divergence
-    # (the pipeline still compiles them, just not byte-identically to p8c).
-    _SIGNED = re.compile(r"(?m)^\s*(byte|word)\s+\w")
-
     def _equiv(self, src: str) -> None:
-        if self._SIGNED.search(src):
-            return  # known: pipeline lacks the signed-compare arm
         self.assertEqual(self._oracle(src), self._ontarget(src),
                          msg=f"codegen .s differs for {src!r}")
 
