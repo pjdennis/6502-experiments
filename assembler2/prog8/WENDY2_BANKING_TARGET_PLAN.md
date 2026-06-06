@@ -11,6 +11,16 @@ scaffolding this builds on).
 
 ---
 
+> **Status (in progress):** M0-M4 + M6 done -- the custom `wendy2` target
+> compiles with upstream prog8c, boots on the emulator, drives the LCD, and
+> demonstrates banked **data** (T1/T2/T4) and banked **code** (T3); 6 e2e
+> golden tests green (`make -C assembler2 wendy2-test`). Implementation lives
+> in `upstream/wendy2.properties` + `upstream/libraries/wendy2/` +
+> `upstream/demos/` + `upstream/tests/`; see
+> [`upstream/libraries/wendy2/README.md`](./upstream/libraries/wendy2/README.md).
+> **M5** (the `$F800+` OS-call read/write emulator enhancement, S2.6) is the
+> remaining milestone.
+
 ## 1. Goal & scope
 
 * A custom upstream-Prog8 target `wendy2` (a `.properties` file +

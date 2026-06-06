@@ -51,6 +51,15 @@ test: $(C_TESTS) wendy2c-goldens wendy2c-lcd-trace wendy2c-merge-sort wendy2c-se
 prog8-test: emulator/emulator.out
 	@cd prog8 && python3 -m unittest discover -s tests -v
 
+# wendy2: the custom external prog8 target with upper-window memory banking.
+# Compiles the demos with upstream prog8c (-target wendy2.properties), runs
+# them on the wendy2c emulator via the boot-ROM upload path, and diffs the
+# LCD frame against goldens. Skips cleanly if prog8c.jar / 64tass /
+# vasm6502_oldstyle / the emulator are missing. See
+# prog8/WENDY2_BANKING_TARGET_PLAN.md.
+wendy2-test: emulator/emulator.out
+	@cd prog8/upstream && python3 tests/test_wendy2.py
+
 # tinyp8: the 6502-native compiler proof-of-concept. Two tests:
 #   * test_e2e        -- the hand-written tinyp8.s compiles each .tp8
 #                        and the resulting binary's stdout matches a
@@ -116,7 +125,7 @@ wendy2c-web: emulator/emulator.out
 wendy2c-lcd5x10: emulator/emulator.out
 	@python3 emulator/tests/lcd_5x10_playwright_test.py
 
-.PHONY: wendy2c-goldens wendy2c-lcd-trace wendy2c-merge-sort wendy2c-live-sigint wendy2c-web wendy2c-lcd5x10 prog8-test tinyp8-test p1-test
+.PHONY: wendy2c-goldens wendy2c-lcd-trace wendy2c-merge-sort wendy2c-live-sigint wendy2c-web wendy2c-lcd5x10 prog8-test wendy2-test tinyp8-test p1-test
 
 emulator/tests/out/test_smoke.out: emulator/tests/test_smoke.c emulator/tests/greatest.h
 	@mkdir -p emulator/tests/out
