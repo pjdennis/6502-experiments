@@ -1132,6 +1132,13 @@ sub lex_operator(ubyte c) {
         push_token(TK_MINUS, 0)
         return
     }
+    lex_operator2(c)
+}
+
+; comparison/shift/assign operators, split out of lex_operator to keep each
+; sub's node count under the per-sub arena cap.
+sub lex_operator2(ubyte c) {
+    ubyte c2
     if c == '<' {
         c2 = peek_src()
         if c2 == '<' {
