@@ -26,6 +26,9 @@ REPO = PROG8.parents[1]
 EMU = REPO / "assembler2" / "emulator" / "emulator.out"
 
 _SHIM = """%address $0200
+%output raw
+%launcher none
+main {
 ubyte dst
 uword s
 extsub $F015 = _close(ubyte handle @A)
@@ -97,7 +100,7 @@ class StringData(unittest.TestCase):
         shutil.rmtree(cls.workdir, ignore_errors=True)
 
     def _run_case(self, body: str, expected: bytes) -> None:
-        src = (_SHIM + "main {\n  sub start() {\n    dst = _openout(_argv(1))\n    "
+        src = (_SHIM + "  sub start() {\n    dst = _openout(_argv(1))\n    "
                + body + "\n    _close(dst)\n  }\n}\n")
         stem = f"case_{abs(hash(body)) & 0xffffff:06x}"
         p8 = self.workdir / f"{stem}.p8"

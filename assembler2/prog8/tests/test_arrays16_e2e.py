@@ -22,6 +22,9 @@ REPO = PROG8.parents[1]
 EMU = REPO / "assembler2" / "emulator" / "emulator.out"
 
 _SHIM = """%address $0200
+%output raw
+%launcher none
+main {
 ubyte dst
 uword[8] w
 ubyte[8] sb
@@ -64,8 +67,8 @@ _CASES = [
      "_write(lsb(w[1]), dst)  _write(msb(w[1]), dst)",
      [0x34, 0x12, 0x78, 0x56]),
     # uword array indexed by a uword variable
-    ("idx = 3  w[idx] = $abcd  "
-     "_write(lsb(w[idx]), dst)  _write(msb(w[idx]), dst)",
+    ("idx = 3  w[idx as ubyte] = $abcd  "
+     "_write(lsb(w[idx as ubyte]), dst)  _write(msb(w[idx as ubyte]), dst)",
      [0xcd, 0xab]),
     # uword-array arithmetic: s = w[0] + w[1]
     ("w[0] = $0102  w[1] = $0304  s = w[0] + w[1]  "
@@ -75,7 +78,7 @@ _CASES = [
     ("sb[2] = 200  s = sb[2]  _write(lsb(s), dst)  _write(msb(s), dst)",
      [200, 0]),
     # ubyte element read at a uword variable index (truncated to a byte)
-    ("idx = 5  sb[idx] = 170  s = sb[idx]  "
+    ("idx = 5  sb[idx as ubyte] = 170  s = sb[idx as ubyte]  "
      "_write(lsb(s), dst)  _write(msb(s), dst)",
      [170, 0]),
 ]
@@ -97,7 +100,7 @@ class Arrays16(unittest.TestCase):
         shutil.rmtree(cls.workdir, ignore_errors=True)
 
     def _run_case(self, body: str, expected: list[int]) -> None:
-        src = (_SHIM + "main {\n  sub start() {\n    dst = _openout(_argv(1))\n    "
+        src = (_SHIM + "  sub start() {\n    dst = _openout(_argv(1))\n    "
                + body + "\n    _close(dst)\n  }\n}\n")
         stem = f"arr_{abs(hash(body)) & 0xffffff:06x}"
         p8 = self.workdir / f"{stem}.p8"
