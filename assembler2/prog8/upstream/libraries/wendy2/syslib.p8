@@ -395,10 +395,18 @@ p8_sys_startup {
     }
 
     asmsub  cleanup_at_exit() {
-        ; executed when the main subroutine does rts
+        ; executed when the main subroutine does rts.
+        ; If the boot monitor is present (signature $A5 at $02FF), jump to its
+        ; return stub at $0320 (maps the ROM back + re-enters the monitor);
+        ; otherwise halt with STP (standalone / upload-boot runs), and the
+        ; emulator dumps the LCD frame.
         %asm {{
-            lda  _exitcode
-            stp                 ; halt; the wendy2c emulator dumps the LCD frame
+            lda  $02ff
+            cmp  #$a5
+            bne  +
+            jmp  $0320          ; return to the boot monitor
++           lda  _exitcode
+            stp
 
             .section BSS
 _exitcarry  .byte ?
