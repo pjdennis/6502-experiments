@@ -116,5 +116,55 @@ for _name, (_ax, _files, _raw) in CASES.items():
     if _g.exists():
         setattr(Wendy2MonitorGoldens, f"test_{_name}", _make(_ax, _files, _raw, _g))
 
+
+# ---- packed multi-segment image (.w2x) cases ----
+# golden name -> (main demo, [(bank, addr, bytes), ...])
+PACKED = {
+    "d5_banked_app": ("d5_banked_app", [
+        (1, 0xA000, _ov("1")), (2, 0xA000, _ov("2")), (3, 0xA000, _ov("3")),
+    ]),
+}
+
+
+def _run_packed(main_demo: str, segs: list) -> str:
+    rom = _monitor_rom()
+    disk = Path(tempfile.mkdtemp(prefix="wdisk_pack_"))
+    work = Path(tempfile.mkdtemp(prefix="wpack_"))
+    try:
+        main_bin = _compile(main_demo)
+        args = ["python3", str(UP / "wendy2_pack.py"), "-o", str(disk / "app"), str(main_bin)]
+        for bank, addr, data in segs:
+            blob = work / f"seg{bank}.bin"
+            blob.write_bytes(data)
+            args.append(f"{blob}@{bank}@{addr:X}")
+        r = subprocess.run(args, capture_output=True, text=True)
+        if r.returncode != 0:
+            raise AssertionError(f"pack failed:\n{r.stdout}\n{r.stderr}")
+        (disk / "autoexec").write_text("app\n")
+        r = subprocess.run(
+            [str(EMU), str(rom), "--machine", "wendy2c", "--disk", str(disk),
+             "--cycle-cap", "6000000"], capture_output=True, text=True)
+        rows = [ln for ln in r.stderr.splitlines()
+                if ln.startswith("  |") and ln.endswith("|")]
+        if not rows:
+            raise AssertionError(f"no LCD frame:\n{r.stdout}\n{r.stderr}")
+        return "\n".join(rows) + "\n"
+    finally:
+        shutil.rmtree(disk, ignore_errors=True)
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def _make_packed(main_demo, segs, golden):
+    def t(self):
+        self.assertEqual(_run_packed(main_demo, segs), golden.read_text())
+    return t
+
+
+for _name, (_main, _segs) in PACKED.items():
+    _g = GOLDENS / f"{_name}.expected.lcd"
+    if _g.exists():
+        setattr(Wendy2MonitorGoldens, f"test_{_name}", _make_packed(_main, _segs, _g))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

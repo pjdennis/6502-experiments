@@ -34,6 +34,13 @@ DESTL  = $10
 DESTH  = $11
 HANDLE = $12
 NP     = $14                    ; name pointer (2 bytes)
+SBANK  = $16                    ; segment target bank
+SLENL  = $17                    ; segment length (2 bytes)
+SLENH  = $18
+MAG0   = $19                    ; 3-byte magic peek
+MAG1   = $1a
+MAG2   = $1b
+NSEG   = $1c                    ; segment count
 
 PROGRAM_LOAD = $4000
 
@@ -41,6 +48,8 @@ PROGRAM_LOAD = $4000
 MON_SIG      = $02ff            ; = $A5 tells the syslib a monitor is present
 LAUNCH_RAM   = $0300            ; launch stub (bank $01 + jmp $4000)
 RETURN_RAM   = $0320            ; return stub (config $00 + jmp run_next) -- exit target
+SEG_STREAM_RAM = $0340          ; segment-stream stub (switch bank, stream, restore ROM)
+CFGTAB_RAM   = $0380            ; logical bank 0..7 -> PORTB config byte
 LINEBUF      = $0400            ; current program-name line
 AX_POS       = $04fe            ; autoexec cursor
 AX_LEN       = $04ff            ; autoexec length
@@ -82,6 +91,20 @@ reset:
   inx
   cpx #(return_stub_end - return_stub_src)
   bne .copy_return
+  ldx #0
+.copy_stream:
+  lda seg_stream_src,x
+  sta SEG_STREAM_RAM,x
+  inx
+  cpx #(seg_stream_end - seg_stream_src)
+  bne .copy_stream
+  ldx #0
+.copy_cfgtab:
+  lda cfgtab_src,x
+  sta CFGTAB_RAM,x
+  inx
+  cpx #8
+  bne .copy_cfgtab
 
   ; mark the monitor present so program exits return here
   lda #$a5
@@ -130,7 +153,11 @@ run_next:
   stp
 
 
-; ---- load the file named in LINEBUF to $4000, then launch it ----
+; ---- load the file named in LINEBUF and launch it ----
+; A "W2X" magic prefix selects a multi-segment image (segments placed into
+; their target banks by the loader); anything else is a flat binary loaded at
+; $4000. Header reads use the OS ports (fixed, work from ROM); per-segment
+; streaming into a bank runs from the lower-RAM stub (survives the switch).
 load_and_run:
   lda #<LINEBUF
   ldx #>LINEBUF
@@ -145,20 +172,66 @@ load_and_run:
 .ok:
   sta HANDLE
   sta P_SEL
-  lda #<PROGRAM_LOAD
-  sta DESTL
-  lda #>PROGRAM_LOAD
-  sta DESTH
-.rd:
-  lda P_EOF
-  bmi .eof
+  ; peek the 3-byte magic
   lda P_READ
-  sta (DESTL)                ; 65C02 (zp) store
+  sta MAG0
+  lda P_READ
+  sta MAG1
+  lda P_READ
+  sta MAG2
+  lda MAG0
+  cmp #'W'
+  bne .flat
+  lda MAG1
+  cmp #'2'
+  bne .flat
+  lda MAG2
+  cmp #'X'
+  beq .segmented
+
+.flat:
+  ; flat binary: the 3 peeked bytes are its first 3 bytes at $4000
+  lda MAG0
+  sta PROGRAM_LOAD+0
+  lda MAG1
+  sta PROGRAM_LOAD+1
+  lda MAG2
+  sta PROGRAM_LOAD+2
+  lda #<(PROGRAM_LOAD+3)
+  sta DESTL
+  lda #>(PROGRAM_LOAD+3)
+  sta DESTH
+.frd:
+  lda P_EOF
+  bmi .launch
+  lda P_READ
+  sta (DESTL)
   inc DESTL
-  bne .rd
+  bne .frd
   inc DESTH
-  bra .rd
-.eof:
+  bra .frd
+
+.segmented:
+  lda P_READ                 ; segment count
+  sta NSEG
+.sloop:
+  lda NSEG
+  beq .launch
+  dec NSEG
+  lda P_READ                 ; descriptor: bank, addr_lo, addr_hi, len_lo, len_hi
+  sta SBANK
+  lda P_READ
+  sta DESTL
+  lda P_READ
+  sta DESTH
+  lda P_READ
+  sta SLENL
+  lda P_READ
+  sta SLENH
+  jsr SEG_STREAM_RAM         ; stream SLEN bytes into bank SBANK at DEST (runs in RAM)
+  bra .sloop
+
+.launch:
   lda HANDLE
   sta P_CLOSE
   jmp LAUNCH_RAM             ; switch to bank $01 and jmp $4000
@@ -221,6 +294,41 @@ return_stub_src:
   trb BANK_PORT              ; config $00 -> ROM mapped back at $8000+
   jmp run_next
 return_stub_end:
+
+; Segment-stream stub: switch the window to bank SBANK, stream SLEN bytes from
+; the OS read port into DEST, then restore config $00 (ROM) and return. Runs
+; from lower RAM (copied to SEG_STREAM_RAM) so it survives the bank switch.
+; Only relative branches + absolute/zp operands -> position-independent.
+seg_stream_src:
+  ldx SBANK
+  lda #BANK_MASK
+  trb BANK_PORT
+  lda CFGTAB_RAM,x          ; PORTB config for logical bank SBANK
+  tsb BANK_PORT
+.sl:
+  lda SLENL
+  ora SLENH
+  beq .sd
+  lda P_READ
+  sta (DESTL)
+  inc DESTL
+  bne .noih
+  inc DESTH
+.noih:
+  lda SLENL
+  bne .nodh
+  dec SLENH
+.nodh:
+  dec SLENL
+  bra .sl
+.sd:
+  lda #BANK_MASK
+  trb BANK_PORT             ; config $00 -> ROM mapped back at $8000+
+  rts
+seg_stream_end:
+
+cfgtab_src:
+  .byte $01, $11, $12, $13, $14, $15, $16, $17   ; logical bank 0..7 -> PORTB cfg
 
 banner:        asciiz "wendy2 monitor"
 autoexec_name: asciiz "autoexec"
