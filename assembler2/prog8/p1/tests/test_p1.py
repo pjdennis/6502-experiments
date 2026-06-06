@@ -498,6 +498,20 @@ class P1Equivalence(unittest.TestCase):
         self.assertEqual(self._oracle(src), self._ontarget(src),
                          msg=f"codegen .s differs for {src!r}")
 
+    def test_lenient_main_rejected(self):
+        # The non-upstream `main { <statements> }` form (no `sub start()`) is
+        # rejected with a non-zero exit + a message on stderr, mirroring p8c's
+        # ParseError -- not silently mis-compiled.
+        inp = self.workdir / "len.p8"
+        out = self.workdir / "len.s"
+        inp.write_text("ubyte a\nmain {\n    a = 5\n}\n")
+        r = subprocess.run(
+            [str(EMU), str(self.p1_bin), str(inp), str(out), "--no-dump"],
+            capture_output=True, text=True)
+        self.assertNotEqual(r.returncode, 0,
+                            msg="lenient `main { <stmts> }` should be rejected")
+        self.assertIn("sub start", r.stderr)
+
     def test_m1_programs(self):
         for src in M1_PROGRAMS:
             with self.subTest(src=src):

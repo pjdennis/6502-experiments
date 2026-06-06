@@ -1941,7 +1941,12 @@ sub parse_decls_pass() {
             continue
         }
         if t == TK_KMAIN {
-            skip_sub_body()
+            advance()                       ; 'main'
+            advance()                       ; '{'  -- descend into the program block
+            continue
+        }
+        if t == TK_RBRACE {
+            advance()                       ; the program block's closing '}'
             continue
         }
         if t == TK_KSUB {
@@ -1960,6 +1965,19 @@ sub parse_decls_pass() {
         }
         advance()                           ; skip an unknown token
     }
+}
+
+; true if ident `id` is exactly "start" -- the upstream entry sub inside
+; `main { ... }`. Used to descend the namespace-main block and tag `sub start`
+; as the SUBK_MAIN entry.
+sub id_is_start(uword id) -> ubyte {
+    if ident_pool[id] != $73 { return 0 }       ; 's'
+    if ident_pool[id + 1] != $74 { return 0 }   ; 't'
+    if ident_pool[id + 2] != $61 { return 0 }   ; 'a'
+    if ident_pool[id + 3] != $72 { return 0 }   ; 'r'
+    if ident_pool[id + 4] != $74 { return 0 }   ; 't'
+    if ident_pool[id + 5] != 0 { return 0 }     ; exact length 5
+    return 1
 }
 
 ; main is `main { ... }` -- no params, void return, kind=main.
@@ -2470,6 +2488,15 @@ sub serialize_subs_streaming() {
         if t == TK_EOF {
             break
         }
+        if t == TK_KMAIN {
+            advance()                       ; 'main'
+            advance()                       ; '{'  -- descend
+            continue
+        }
+        if t == TK_RBRACE {
+            advance()
+            continue
+        }
         uword snode
         ubyte issub
         issub = 1
@@ -2478,7 +2505,11 @@ sub serialize_subs_streaming() {
         } else {
             if t == TK_KSUB {
                 advance()
-                snode = parse_sub(SUBK_SUB)
+                if id_is_start(cur_val()) {
+                    snode = parse_sub(SUBK_MAIN)
+                } else {
+                    snode = parse_sub(SUBK_SUB)
+                }
             } else {
                 if t == TK_KINLINE {
                     advance()
