@@ -19,7 +19,10 @@ scaffolding this builds on).
 > `upstream/demos/` + `upstream/tests/`; see
 > [`upstream/libraries/wendy2/README.md`](./upstream/libraries/wendy2/README.md).
 > **M5** (the `$F800+` OS-call read/write emulator enhancement, S2.6) is the
-> remaining milestone.
+> remaining milestone -- now folded into the disk-boot subsystem:
+> [`WENDY2_DISK_BOOT_DESIGN.md`](./WENDY2_DISK_BOOT_DESIGN.md) (alternate
+> monitor ROM + simulated SPI storage + loading programs over the file-I/O
+> OS calls).
 
 ## 1. Goal & scope
 

@@ -16,9 +16,12 @@ language-surface checklist, see [`README.md`](./README.md).
   p8c vs. upstream prog8 binary sizes (p8c emits ~1.5-1.65x the code).
 * [`CODEGEN_LOW_HANGING_FRUIT.md`](./CODEGEN_LOW_HANGING_FRUIT.md) -- ranked
   peephole/branch-relaxation wins (~2.4 KB cheap) for the p8c backend.
-* [`WENDY2_BANKING_TARGET_PLAN.md`](./WENDY2_BANKING_TARGET_PLAN.md) -- plan
-  for a custom external Prog8 target exposing wendy2 upper-bank memory
-  banking, with code/data banking demos on the emulator.
+* [`WENDY2_BANKING_TARGET_PLAN.md`](./WENDY2_BANKING_TARGET_PLAN.md) -- custom
+  external Prog8 target exposing wendy2 upper-bank memory banking (M0-M4+M6
+  built: code/data banking demos green on the emulator).
+* [`WENDY2_DISK_BOOT_DESIGN.md`](./WENDY2_DISK_BOOT_DESIGN.md) -- design for an
+  alternate monitor boot ROM + simulated SPI storage that loads/runs programs
+  over the file-I/O OS calls (with autoexec); folds in the M5 OS-call ABI.
 
 When you finish a feature, update this file. When you finish a
 session, update `RESUME_NOTES.md`.
