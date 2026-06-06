@@ -68,11 +68,15 @@ def _make(name: str, golden: Path):
     return t
 
 
-if GOLDENS.exists():
-    for g in sorted(GOLDENS.glob("*.expected.lcd")):
-        name = g.name[: -len(".expected.lcd")]
-        if (DEMOS / f"{name}.p8").exists():
-            setattr(Wendy2Goldens, f"test_{name}", _make(name, g))
+# Plain demos run via the serial-upload boot ROM (no --disk). The disk- and
+# monitor-backed demos have their own suites (test_wendy2_disk / _monitor).
+PLAIN = ["m0_exit", "m1_hello", "t1_bank_probe", "t2_banked_data",
+         "t3_banked_code", "t4_bank_counters"]
+
+for name in PLAIN:
+    g = GOLDENS / f"{name}.expected.lcd"
+    if g.exists() and (DEMOS / f"{name}.p8").exists():
+        setattr(Wendy2Goldens, f"test_{name}", _make(name, g))
 
 
 if __name__ == "__main__":

@@ -58,7 +58,7 @@ prog8-test: emulator/emulator.out
 # vasm6502_oldstyle / the emulator are missing. See
 # prog8/WENDY2_BANKING_TARGET_PLAN.md.
 wendy2-test: emulator/emulator.out
-	@cd prog8/upstream && python3 tests/test_wendy2.py && python3 tests/test_wendy2_disk.py
+	@cd prog8/upstream && python3 tests/test_wendy2.py && python3 tests/test_wendy2_disk.py && python3 tests/test_wendy2_monitor.py
 
 # tinyp8: the 6502-native compiler proof-of-concept. Two tests:
 #   * test_e2e        -- the hand-written tinyp8.s compiles each .tp8
