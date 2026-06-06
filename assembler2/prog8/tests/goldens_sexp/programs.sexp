@@ -1,4 +1,4 @@
-;;; 'main {\n  sub start() {   }\n}'
+;;; '%output raw\n%launcher none\nmain {\n  sub start() {   }\n}'
 (program
   (address $4000)
   (output raw)
@@ -29,7 +29,7 @@
           (call txt.print
             (str "hi")))))))
 
-;;; 'ubyte x\nmain {\n  sub start() { x = 1 x += 2 x <<= 1   }\n}'
+;;; '%output raw\n%launcher none\nmain {\nubyte x\n  sub start() { x = 1 x += 2 x <<= 1   }\n}'
 (program
   (address $4000)
   (output raw)
@@ -53,7 +53,7 @@
           (id x)
           (int 1))))))
 
-;;; 'ubyte x\nmain {\n  sub start() { if x == 0 { x = 1 }   }\n}'
+;;; '%output raw\n%launcher none\nmain {\nubyte x\n  sub start() { if x == 0 { x = 1 }   }\n}'
 (program
   (address $4000)
   (output raw)
@@ -76,7 +76,7 @@
               (id x)
               (int 1))))))))
 
-;;; 'ubyte x\nmain {\n  sub start() { if x == 0 { x = 1 } else { x = 2 }   }\n}'
+;;; '%output raw\n%launcher none\nmain {\nubyte x\n  sub start() { if x == 0 { x = 1 } else { x = 2 }   }\n}'
 (program
   (address $4000)
   (output raw)
@@ -103,7 +103,7 @@
               (id x)
               (int 2))))))))
 
-;;; 'ubyte x\nubyte y\nmain {\n  sub start() { if x { if y { x = 1 } else { x = 2 } } else { y = 3 }   }\n}'
+;;; '%output raw\n%launcher none\nmain {\nubyte x\nubyte y\n  sub start() { if x != 0 { if y != 0 { x = 1 } else { x = 2 } } else { y = 3 }   }\n}'
 (program
   (address $4000)
   (output raw)
@@ -119,10 +119,14 @@
       (params)
       (block
         (if
-          (id x)
+          (!=
+            (id x)
+            (int 0))
           (block
             (if
-              (id y)
+              (!=
+                (id y)
+                (int 0))
               (block
                 (assign =
                   (id x)
@@ -136,7 +140,7 @@
               (id y)
               (int 3))))))))
 
-;;; 'ubyte i\nmain {\n  sub start() { while i < 10 { i = i + 1 }   }\n}'
+;;; '%output raw\n%launcher none\nmain {\nubyte i\n  sub start() { while i < 10 { i = i + 1 }   }\n}'
 (program
   (address $4000)
   (output raw)
@@ -183,7 +187,7 @@
               (call txt.print
                 (str "x")))))))))
 
-;;; 'main {\n  sub start() { repeat { break }   }\n}'
+;;; '%output raw\n%launcher none\nmain {\n  sub start() { repeat { break }   }\n}'
 (program
   (address $4000)
   (output raw)
@@ -384,7 +388,7 @@
       (block
         (return)))))
 
-;;; 'main {\n  sub start() { @($f001) = 7   }\n}'
+;;; '%output raw\n%launcher none\nmain {\n  sub start() { @($f001) = 7   }\n}'
 (program
   (address $4000)
   (output raw)
@@ -402,7 +406,7 @@
             (int 61441))
           (int 7))))))
 
-;;; 'ubyte[4] arr\nmain {\n  sub start() { arr[0] = 1 arr[1] = arr[0] + 2   }\n}'
+;;; '%output raw\n%launcher none\nmain {\nubyte[4] arr\n  sub start() { arr[0] = 1 arr[1] = arr[0] + 2   }\n}'
 (program
   (address $4000)
   (output raw)
@@ -431,7 +435,7 @@
               (int 0))
             (int 2)))))))
 
-;;; 'main {\n  sub start() { %asm {{\nnop\n}}   }\n}'
+;;; '%output raw\n%launcher none\nmain {\n  sub start() { %asm {{\nnop\n}}   }\n}'
 (program
   (address $4000)
   (output raw)
@@ -446,7 +450,7 @@
       (block
         (asm "nop")))))
 
-;;; 'ubyte a\nubyte b\nmain {\n  sub start() { while a < 8 { for b in 0 to a { if b == 3 { break } } a = a + 1 }   }\n}'
+;;; '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\n  sub start() { while a < 8 { for b in 0 to a { if b == 3 { break } } a = a + 1 }   }\n}'
 (program
   (address $4000)
   (output raw)

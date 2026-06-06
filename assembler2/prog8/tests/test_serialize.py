@@ -162,7 +162,7 @@ class SerializeFormat(unittest.TestCase):
         return serialize(parse(lex(src, "<t>"), "<t>"))
 
     def test_program_skeleton(self):
-        got = self._ser_prog('main {\n  sub start() {   }\n}')
+        got = self._ser_prog('%output raw\n%launcher none\nmain {\n  sub start() {   }\n}')
         self.assertEqual(got, "\n".join([
             "(program",
             "  (address $4000)",
@@ -179,7 +179,7 @@ class SerializeFormat(unittest.TestCase):
         ]) + "\n")
 
     def test_if_else_and_assign(self):
-        got = self._ser_prog('ubyte x\nmain {\n  sub start() { if x == 0 { x = 1 } else { x += 2 }   }\n}')
+        got = self._ser_prog('%output raw\n%launcher none\nmain {\nubyte x\n  sub start() { if x == 0 { x = 1 } else { x += 2 }   }\n}')
         self.assertIn("\n".join([
             "        (if",
             "          (==",
@@ -249,7 +249,7 @@ class SerializeFormat(unittest.TestCase):
 
     def test_asmsub_and_array_var(self):
         got = self._ser_prog(
-            'extsub $f009 = putc(ubyte c @A)\nubyte[4] buf\nmain {\n  sub start() {   }\n}')
+            '%output raw\n%launcher none\nmain {\nextsub $f009 = putc(ubyte c @A)\nubyte[4] buf\n  sub start() {   }\n}')
         self.assertIn("\n".join([
             "    (var ubyte[4] buf)",
         ]), got)

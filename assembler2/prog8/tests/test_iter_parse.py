@@ -254,16 +254,16 @@ class IterParseEquivalence(unittest.TestCase):
 # recursive statement parser and the iterative frame-stack driver
 # (iter_stmt=True); the resulting whole-program ASTs must be identical.
 STMT_PROGRAMS = [
-    'main {\n  sub start() {   }\n}',
+    '%output raw\n%launcher none\nmain {\n  sub start() {   }\n}',
     'main {\n  sub start() { txt.print("hi")   }\n}',
-    'ubyte x\nmain {\n  sub start() { x = 1 x += 2 x <<= 1   }\n}',
-    'ubyte x\nmain {\n  sub start() { if x == 0 { x = 1 }   }\n}',
-    'ubyte x\nmain {\n  sub start() { if x == 0 { x = 1 } else { x = 2 }   }\n}',
+    '%output raw\n%launcher none\nmain {\nubyte x\n  sub start() { x = 1 x += 2 x <<= 1   }\n}',
+    '%output raw\n%launcher none\nmain {\nubyte x\n  sub start() { if x == 0 { x = 1 }   }\n}',
+    '%output raw\n%launcher none\nmain {\nubyte x\n  sub start() { if x == 0 { x = 1 } else { x = 2 }   }\n}',
     # nested if / else
-    'ubyte x\nubyte y\nmain {\n  sub start() { if x { if y { x = 1 } else { x = 2 } } else { y = 3 }   }\n}',
-    'ubyte i\nmain {\n  sub start() { while i < 10 { i = i + 1 }   }\n}',
+    '%output raw\n%launcher none\nmain {\nubyte x\nubyte y\n  sub start() { if x != 0 { if y != 0 { x = 1 } else { x = 2 } } else { y = 3 }   }\n}',
+    '%output raw\n%launcher none\nmain {\nubyte i\n  sub start() { while i < 10 { i = i + 1 }   }\n}',
     'ubyte i\nmain {\n  sub start() { for i in 0 to 7 { txt.print("x") }   }\n}',
-    'main {\n  sub start() { repeat { break }   }\n}',
+    '%output raw\n%launcher none\nmain {\n  sub start() { repeat { break }   }\n}',
     'main {\n  sub start() { repeat 5 { txt.print(".") }   }\n}',
     'ubyte i\nmain {\n  sub start() { for i in 0 to 3 { if i == 2 { continue } txt.print("y") }   }\n}',
     # when: multi-value choices + else
@@ -276,12 +276,12 @@ STMT_PROGRAMS = [
     "sub r2() -> bool { return true }",
     "sub r3() { return }",
     # memory + array statements
-    'main {\n  sub start() { @($f001) = 7   }\n}',
-    'ubyte[4] arr\nmain {\n  sub start() { arr[0] = 1 arr[1] = arr[0] + 2   }\n}',
+    '%output raw\n%launcher none\nmain {\n  sub start() { @($f001) = 7   }\n}',
+    '%output raw\n%launcher none\nmain {\nubyte[4] arr\n  sub start() { arr[0] = 1 arr[1] = arr[0] + 2   }\n}',
     # inline asm
-    'main {\n  sub start() { %asm {{\nnop\n}}   }\n}',
+    '%output raw\n%launcher none\nmain {\n  sub start() { %asm {{\nnop\n}}   }\n}',
     # deeply nested mix
-    'ubyte a\nubyte b\nmain {\n  sub start() { while a < 8 { for b in 0 to a { if b == 3 { break } } a = a + 1 }   }\n}',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\n  sub start() { while a < 8 { for b in 0 to a { if b == 3 { break } } a = a + 1 }   }\n}',
 ]
 
 
