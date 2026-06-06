@@ -22,7 +22,6 @@
 #include "chips/lcd_hd44780.h"
 #include "chips/serial_usb.h"
 #include "chips/syscall_ports.h"
-#include "file_io.h"
 #include <unistd.h>
 #include "chips/led_buttons.h"
 #include "chips/cpu_65c02.h"
@@ -589,7 +588,6 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
             fprintf(stderr, "wendy2c: could not chdir to --disk %s\n", opts->disk_dir);
             return 1;
         }
-        files_init(NULL);
         syscall_ports_init(&sysc_chip, &sysc_state);
     }
 
