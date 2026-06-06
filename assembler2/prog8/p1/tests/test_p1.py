@@ -48,10 +48,10 @@ def _norm(s: str) -> str:
 # externally (the oracle passes `--target nmos`; the on-target p1 parser
 # defaults to nmos/$0200) -- the source carries no `%target` directive.
 M1_PROGRAMS = [
-    '%address $0200\n\nmain {\n  sub start() {\n  }\n}\n',
-    '\nmain {\n  sub start() {\n  }\n}\n',                      # nmos default address -> $0200
-    '%address $1000\n\nmain {\n  sub start() {\n  }\n}\n',
-    '%address $c000\n\nmain {\n  sub start() {\n  }\n}\n',
+    '%address $0200\n%output raw\n%launcher none\nmain {\n\n  sub start() {\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\n\n  sub start() {\n  }\n}\n',                      # nmos default address -> $0200
+    '%address $1000\n%output raw\n%launcher none\nmain {\n\n  sub start() {\n  }\n}\n',
+    '%address $c000\n%output raw\n%launcher none\nmain {\n\n  sub start() {\n  }\n}\n',
 ]
 
 # P7-M2 corpus: module scalar vars (ubyte / byte / uword, in various
@@ -62,15 +62,15 @@ M1_PROGRAMS = [
 # byte/word leaf-expression + store codegen.
 M2_PROGRAMS = [
     # all three scalar types, plain leaf assignment + widening
-    '\nubyte x\nubyte y\nuword w\n\nmain {\n  sub start() {\n    x = 1\n    y = x\n    w = $1234\n    w = x\n    w = y\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\n\nubyte x\nubyte y\nuword w\n\n  sub start() {\n    x = 1\n    y = x\n    w = $1234\n    w = x\n    w = y\n  }\n}\n',
     # byte type + augmented add of a var
-    '\nbyte a\nbyte b\n\nmain {\n  sub start() {\n    a = 5\n    b = a\n    a += b\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\n\nbyte a\nbyte b\n\n  sub start() {\n    a = 5\n    b = a\n    a += b\n  }\n}\n',
     # every supported byte augmented op, literal + var operands
-    '\nubyte x\nubyte y\n\nmain {\n  sub start() {\n    x = $10\n    y = 2\n    x += 3\n    x -= 1\n    x += y\n    x -= y\n    x &= $0f\n    x |= y\n    x ^= 2\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\n\nubyte x\nubyte y\n\n  sub start() {\n    x = $10\n    y = 2\n    x += 3\n    x -= 1\n    x += y\n    x -= y\n    x &= $0f\n    x |= y\n    x ^= 2\n  }\n}\n',
     # uword-only program (2-byte ZP slots), word leaf copy
-    '\nuword p\nuword q\n\nmain {\n  sub start() {\n    p = $beef\n    q = p\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\n\nuword p\nuword q\n\n  sub start() {\n    p = $beef\n    q = p\n  }\n}\n',
     # interleaved types -> non-trivial ZP addresses ($40 ub, $41 uw, $43 ub)
-    '\nubyte a\nuword b\nubyte c\n\nmain {\n  sub start() {\n    a = 1\n    b = a\n    c = 9\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\n\nubyte a\nuword b\nubyte c\n\n  sub start() {\n    a = 1\n    b = a\n    c = 9\n  }\n}\n',
 ]
 
 # Phase-7 "strings" slice (the p8c string-literal-as-data feature dogfooded
@@ -82,18 +82,18 @@ M2_PROGRAMS = [
 # reset vector.
 M3_STR_PROGRAMS = [
     # one string
-    '\nuword s\n\nmain {\n  sub start() {\n    s = "hi"\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\n\nuword s\n\n  sub start() {\n    s = "hi"\n  }\n}\n',
     # several, in order; escapes (newline) and the empty string
-    '\nuword s\nuword t\n\nmain {\n  sub start() {\n    s = "hi"\n    t = "a\\nb"\n    s = ""\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\n\nuword s\nuword t\n\n  sub start() {\n    s = "hi"\n    t = "a\\nb"\n    s = ""\n  }\n}\n',
     # strings interleaved with scalar assignments (label order = encounter)
-    '\nubyte x\nuword msg\n\nmain {\n  sub start() {\n    x = 1\n    msg = "result: "\n    x += 2\n    msg = "done\\n"\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\n\nubyte x\nuword msg\n\n  sub start() {\n    x = 1\n    msg = "result: "\n    x += 2\n    msg = "done\\n"\n  }\n}\n',
     # every escape the pool emitter special-cases: \\ " \t \r plus a high byte
-    '\nuword s\n\nmain {\n  sub start() {\n    s = "tab\\there\\"q\\\\b\\r"\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\n\nuword s\n\n  sub start() {\n    s = "tab\\there\\"q\\\\b\\r"\n  }\n}\n',
     # DUPLICATE strings dedup to one pool label: "x" appears 3x and "y" 2x,
     # interleaved with a unique "z". Labels: x=str_0, y=str_1, z=str_2 (each
     # distinct content interned once, in first-encounter order). Guards that
     # p8c's value-dedup and p1's intern_str_label agree.
-    '\nuword s\n\nmain {\n  sub start() {\n    s = "x"\n    s = "y"\n    s = "x"\n    s = "z"\n    s = "y"\n    s = "x"\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\n\nuword s\n\n  sub start() {\n    s = "x"\n    s = "y"\n    s = "x"\n    s = "z"\n    s = "y"\n    s = "x"\n  }\n}\n',
 ]
 
 # Phase-7 byte-expression slice: arithmetic / bitwise binops (+ - & | ^) in a
@@ -104,13 +104,13 @@ M3_STR_PROGRAMS = [
 # Augmented assignment now shares the same binop emitter.
 M3_EXPR_PROGRAMS = [
     # flat leaf op leaf, every supported op, literal + var operands
-    'ubyte a\nubyte b\nubyte c\n\nmain {\n  sub start() {\n    a = b + 1\n    a = b + c\n    a = b - c\n    a = b & c\n    a = b | 3\n    a = b ^ c\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\nubyte c\n\n  sub start() {\n    a = b + 1\n    a = b + c\n    a = b - c\n    a = b & c\n    a = b | 3\n    a = b ^ c\n  }\n}\n',
     # left-nested chains (leaf-RHS fast path, no spill)
-    'ubyte a\nubyte b\nubyte c\nubyte d\n\nmain {\n  sub start() {\n    a = b + c + a\n    a = b + c - d\n    a = ((b | c) & d) ^ a\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\nubyte c\nubyte d\n\n  sub start() {\n    a = b + c + a\n    a = b + c - d\n    a = ((b | c) & d) ^ a\n  }\n}\n',
     # right-nested / parenthesized RHS (generic spill path)
-    'ubyte a\nubyte b\nubyte c\nubyte d\n\nmain {\n  sub start() {\n    a = (b + c) - (a + 1)\n    a = b + (c + (d + 1))\n    a = (b - c) + (d - 1)\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\nubyte c\nubyte d\n\n  sub start() {\n    a = (b + c) - (a + 1)\n    a = b + (c + (d + 1))\n    a = (b - c) + (d - 1)\n  }\n}\n',
     # augmented assignment shares the binop emitter
-    'ubyte x\nubyte y\n\nmain {\n  sub start() {\n    x = $10\n    y = 2\n    x += 3\n    x -= y\n    x &= $0f\n    x |= y\n    x ^= 2\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte x\nubyte y\n\n  sub start() {\n    x = $10\n    y = 2\n    x += 3\n    x -= y\n    x &= $0f\n    x |= y\n    x ^= 2\n  }\n}\n',
 ]
 
 # Phase-7 byte mul + shift slice: `*` (via the __p8c_mul_u8 runtime helper,
@@ -121,14 +121,14 @@ M3_EXPR_PROGRAMS = [
 # the generic spill path, the dual-scratch pattern, and augmented <<= / >>=.
 M3_MULSHIFT_PROGRAMS = [
     # mul: leaf-RHS (literal + var) and the generic spill path
-    'ubyte a\nubyte b\nubyte c\nubyte d\n\nmain {\n  sub start() {\n    a = b * c\n    a = b * 3\n    a = (b + c) * d\n    a = d * (b + c)\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\nubyte c\nubyte d\n\n  sub start() {\n    a = b * c\n    a = b * 3\n    a = (b + c) * d\n    a = d * (b + c)\n  }\n}\n',
     # shifts: immediate (unrolled) and variable (loop, label pairs) counts
-    'ubyte a\nubyte b\nubyte c\nubyte d\n\nmain {\n  sub start() {\n    a = b << 2\n    a = b >> 1\n    a = b << c\n    a = b >> d\n    a = b << 0\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\nubyte c\nubyte d\n\n  sub start() {\n    a = b << 2\n    a = b >> 1\n    a = b << c\n    a = b >> d\n    a = b << 0\n  }\n}\n',
     # the dual-scratch pattern (two shift sub-expressions in one binop) +
     # variable-count shifts in a binop (two label pairs, sequential ids)
-    'ubyte a\nubyte b\nubyte c\nubyte d\n\nmain {\n  sub start() {\n    a = (b << 3) + (b << 1)\n    a = (b << c) - (b >> d)\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\nubyte c\nubyte d\n\n  sub start() {\n    a = (b << 3) + (b << 1)\n    a = (b << c) - (b >> d)\n  }\n}\n',
     # augmented <<= / >>= (leaf + variable count) alongside mul
-    'ubyte x\nubyte y\n\nmain {\n  sub start() {\n    x = $10\n    y = 2\n    x <<= 3\n    x >>= 1\n    x <<= y\n    x >>= y\n    y = x * x\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte x\nubyte y\n\n  sub start() {\n    x = $10\n    y = 2\n    x <<= 3\n    x >>= 1\n    x <<= y\n    x >>= y\n    y = x * x\n  }\n}\n',
 ]
 
 # Phase-7 byte unary slice: ~ (eor #$ff), - (two's complement: eor #$ff / clc /
@@ -138,11 +138,11 @@ M3_MULSHIFT_PROGRAMS = [
 # land, so it is not in this corpus.)
 M3_UNARY_PROGRAMS = [
     # ~ and - on a leaf operand
-    'ubyte a\nubyte b\n\nmain {\n  sub start() {\n    a = ~b\n    a = -b\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\n\n  sub start() {\n    a = ~b\n    a = -b\n  }\n}\n',
     # operand is a nested expression (the work-stack handles the recursion)
-    'ubyte a\nubyte b\nubyte c\n\nmain {\n  sub start() {\n    a = ~(b + c)\n    a = -(b * c)\n    a = ~b + c\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\nubyte c\n\n  sub start() {\n    a = ~(b + c)\n    a = -(b * c)\n    a = ~b + c\n  }\n}\n',
     # nested unary + unary mixed with mul/shift
-    'ubyte a\nubyte b\nubyte c\n\nmain {\n  sub start() {\n    a = - -b\n    a = ~b * c\n    a = -(b << 2)\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\nubyte c\n\n  sub start() {\n    a = - -b\n    a = ~b * c\n    a = -(b << 2)\n  }\n}\n',
 ]
 
 # Phase-7 byte comparison slice: == != < <= > >= producing a 0/1 byte value
@@ -155,16 +155,16 @@ M3_UNARY_PROGRAMS = [
 # allocated after the operands evaluate, matching p8c's _label_id order.
 M3_CMP_PROGRAMS = [
     # unsigned, every op, leaf operands (var/var and var/literal)
-    'ubyte a\nubyte b\nubyte c\n\nmain {\n  sub start() {\n    a = b == c\n    a = b != c\n    a = b < c\n    a = b <= c\n    a = b > c\n    a = b >= c\n    a = b < 5\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\nubyte c\n\n  sub start() {\n    a = b == c\n    a = b != c\n    a = b < c\n    a = b <= c\n    a = b > c\n    a = b >= c\n    a = b < 5\n  }\n}\n',
     # signed (both operands byte) -- the SBC / overflow path
-    'ubyte a\nbyte s\nbyte t\n\nmain {\n  sub start() {\n    a = s == t\n    a = s != t\n    a = s < t\n    a = s <= t\n    a = s > t\n    a = s >= t\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nbyte s\nbyte t\n\n  sub start() {\n    a = s == t\n    a = s != t\n    a = s < t\n    a = s <= t\n    a = s > t\n    a = s >= t\n  }\n}\n',
     # not of a comparison (bool -> not) + nested (non-leaf) operand
-    'ubyte a\nubyte b\nubyte c\n\nmain {\n  sub start() {\n    a = not (b < c)\n    a = (b + 1) < c\n    a = b > (c - 1)\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\nubyte c\n\n  sub start() {\n    a = not (b < c)\n    a = (b + 1) < c\n    a = b > (c - 1)\n  }\n}\n',
     # uword operands: p8c's comparison codegen evaluates operands as BYTES
     # (it compares only low bytes -- a p8c limitation; _emit_word_cmp_into_a
     # is unreachable for comparison-as-value), so the existing byte cmp path
     # already matches. Locks that equivalence in.
-    'ubyte a\nuword x\nuword y\n\nmain {\n  sub start() {\n    a = x < y\n    a = x == y\n    a = x >= y\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nuword x\nuword y\n\n  sub start() {\n    a = x < y\n    a = x == y\n    a = x >= y\n  }\n}\n',
 ]
 
 # Phase-7 byte logical slice: short-circuit `and` / `or` (port of
@@ -175,11 +175,11 @@ M3_CMP_PROGRAMS = [
 # also exercises nested and/or and `not` of a logical.
 M3_LOGICAL_PROGRAMS = [
     # and / or / xor, each over two comparison operands
-    'ubyte a\nubyte b\nubyte c\nubyte d\n\nmain {\n  sub start() {\n    a = (b < c) and (b > d)\n    a = (b < c) or (b > d)\n    a = (b == c) xor (c == d)\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\nubyte c\nubyte d\n\n  sub start() {\n    a = (b < c) and (b > d)\n    a = (b < c) or (b > d)\n    a = (b == c) xor (c == d)\n  }\n}\n',
     # nested and/or (LIFO label-stack discipline) + mixed
-    'ubyte a\nubyte b\nubyte c\nubyte d\n\nmain {\n  sub start() {\n    a = (b < c) and (c < d) and (b != d)\n    a = (b < c) or ((c < d) and (b != d))\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\nubyte c\nubyte d\n\n  sub start() {\n    a = (b < c) and (c < d) and (b != d)\n    a = (b < c) or ((c < d) and (b != d))\n  }\n}\n',
     # not of a logical
-    'ubyte a\nubyte b\nubyte c\nubyte d\n\nmain {\n  sub start() {\n    a = not ((b < c) and (c < d))\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\nubyte c\nubyte d\n\n  sub start() {\n    a = not ((b < c) and (c < d))\n  }\n}\n',
 ]
 
 # Phase-7 @() memory + &name slice (8-bit memory ops):
@@ -191,11 +191,11 @@ M3_LOGICAL_PROGRAMS = [
 # binop operand (a = @(p) + 1) since the read is a self-contained byte leaf.
 M3_MEMAT_PROGRAMS = [
     # @() read: literal, uword-var, and &var addresses
-    'ubyte a\nubyte b\nuword p\n\nmain {\n  sub start() {\n    a = @($d020)\n    a = @(p)\n    a = @(&b)\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\nuword p\n\n  sub start() {\n    a = @($d020)\n    a = @(p)\n    a = @(&b)\n  }\n}\n',
     # @() write: literal, uword-var, &var; literal and computed RHS
-    'ubyte a\nubyte b\nuword p\n\nmain {\n  sub start() {\n    @($d020) = a\n    @(p) = a\n    @(&b) = 7\n    @(p) = a + 1\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\nuword p\n\n  sub start() {\n    @($d020) = a\n    @(p) = a\n    @(&b) = 7\n    @(p) = a + 1\n  }\n}\n',
     # @() as a binop operand + &name assigned to a uword
-    'ubyte a\nubyte b\nuword p\n\nmain {\n  sub start() {\n    a = @(p) + 1\n    p = &b\n    p = &a\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\nuword p\n\n  sub start() {\n    a = @(p) + 1\n    p = &b\n    p = &a\n  }\n}\n',
 ]
 
 # Phase-7 WORD arithmetic/bitwise slice (16-bit): uword + - & | ^ on the word
@@ -206,11 +206,11 @@ M3_MEMAT_PROGRAMS = [
 # (Word unary ~/- is a faithful port but p8c's sema rejects it, so untested.)
 M3_WORDARITH_PROGRAMS = [
     # each binop, var/var and var/ubyte (widening)
-    'uword w\nuword x\nuword y\nubyte b\n\nmain {\n  sub start() {\n    w = x + y\n    w = x - y\n    w = x & y\n    w = x | y\n    w = x ^ y\n    w = x + b\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nuword w\nuword x\nuword y\nubyte b\n\n  sub start() {\n    w = x + y\n    w = x - y\n    w = x & y\n    w = x | y\n    w = x ^ y\n    w = x + b\n  }\n}\n',
     # left-nested chains and parenthesized (nesting-safety of the CPU-stack LHS)
-    'uword w\nuword x\nuword y\n\nmain {\n  sub start() {\n    w = x + y + w\n    w = (x + y) - (w + 1)\n    w = x + (y - w)\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nuword w\nuword x\nuword y\n\n  sub start() {\n    w = x + y + w\n    w = (x + y) - (w + 1)\n    w = x + (y - w)\n  }\n}\n',
     # word augmented assignment (synthetic binop: w op= e -> w = w op e)
-    'uword w\nuword x\n\nmain {\n  sub start() {\n    w = $1000\n    w += x\n    w -= 1\n    w &= x\n    w |= $00ff\n    w ^= x\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nuword w\nuword x\n\n  sub start() {\n    w = $1000\n    w += x\n    w -= 1\n    w &= x\n    w |= $00ff\n    w ^= x\n  }\n}\n',
 ]
 
 # Phase-7 WORD shift slice (16-bit): uword << / >> (port of _emit_word_shl /
@@ -221,11 +221,11 @@ M3_WORDARITH_PROGRAMS = [
 # <<= / >>= (the synthetic word binop path).
 M3_WORDSHIFT_PROGRAMS = [
     # constant counts: <8, ==8, >8, ==16 (n&15==0 -> no-op), for both directions
-    'uword w\nuword x\n\nmain {\n  sub start() {\n    w = x << 1\n    w = x << 3\n    w = x << 8\n    w = x << 9\n    w = x << 16\n    w = x >> 1\n    w = x >> 4\n    w = x >> 8\n    w = x >> 12\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nuword w\nuword x\n\n  sub start() {\n    w = x << 1\n    w = x << 3\n    w = x << 8\n    w = x << 9\n    w = x << 16\n    w = x >> 1\n    w = x >> 4\n    w = x >> 8\n    w = x >> 12\n  }\n}\n',
     # variable counts (loop) + a nested lhs
-    'uword w\nuword x\nubyte n\n\nmain {\n  sub start() {\n    w = x << n\n    w = x >> n\n    w = (x + 1) << 2\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nuword w\nuword x\nubyte n\n\n  sub start() {\n    w = x << n\n    w = x >> n\n    w = (x + 1) << 2\n  }\n}\n',
     # augmented word shifts (synthetic binop, const + variable)
-    'uword w\nubyte n\n\nmain {\n  sub start() {\n    w = $0100\n    w <<= 2\n    w >>= 1\n    w <<= n\n    w >>= n\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nuword w\nubyte n\n\n  sub start() {\n    w = $0100\n    w <<= 2\n    w >>= 1\n    w <<= n\n    w >>= n\n  }\n}\n',
 ]
 
 # P7-M4 control flow: if / if-else / while + break / continue. Conditions emit
@@ -235,13 +235,13 @@ M3_WORDSHIFT_PROGRAMS = [
 # stack (no recursion), so blocks nest arbitrarily.
 M4_CONTROL_PROGRAMS = [
     # if (no else), every byte comparison op as the condition
-    'ubyte a\nubyte b\nubyte c\n\nmain {\n  sub start() {\n    if a == b {\n        c = 1\n    }\n    if a < b {\n        c = 2\n    }\n    if a >= b {\n        c = 3\n    }\n    if a > b {\n        c = 4\n    }\n    if a <= b {\n        c = 5\n    }\n    if a != b {\n        c = 6\n    }\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\nubyte c\n\n  sub start() {\n    if a == b {\n        c = 1\n    }\n    if a < b {\n        c = 2\n    }\n    if a >= b {\n        c = 3\n    }\n    if a > b {\n        c = 4\n    }\n    if a <= b {\n        c = 5\n    }\n    if a != b {\n        c = 6\n    }\n  }\n}\n',
     # if / else, signed-byte and uword conditions
-    'ubyte a\nbyte s\nbyte t\nuword x\nuword y\n\nmain {\n  sub start() {\n    if s < t {\n        a = 1\n    } else {\n        a = 2\n    }\n    if x < y {\n        a = 3\n    } else {\n        a = 4\n    }\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nbyte s\nbyte t\nuword x\nuword y\n\n  sub start() {\n    if s < t {\n        a = 1\n    } else {\n        a = 2\n    }\n    if x < y {\n        a = 3\n    } else {\n        a = 4\n    }\n  }\n}\n',
     # while + break + continue, and a non-comparison condition (a plain var)
-    'ubyte a\nubyte b\nubyte c\n\nmain {\n  sub start() {\n    while a < b {\n        a = a + 1\n        if a == c {\n            break\n        }\n        if a == 9 {\n            continue\n        }\n        b = b - 1\n    }\n    while c {\n        c = c - 1\n    }\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\nubyte c\n\n  sub start() {\n    while a < b {\n        a = a + 1\n        if a == c {\n            break\n        }\n        if a == 9 {\n            continue\n        }\n        b = b - 1\n    }\n    while c != 0 {\n        c = c - 1\n    }\n  }\n}\n',
     # nested if inside if/else inside while
-    'ubyte a\nubyte b\nubyte c\n\nmain {\n  sub start() {\n    while a > b {\n        if c != 0 {\n            if a == b {\n                a = 7\n            } else {\n                a = 8\n            }\n        }\n        a = a - 1\n    }\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\nubyte c\n\n  sub start() {\n    while a > b {\n        if c != 0 {\n            if a == b {\n                a = 7\n            } else {\n                a = 8\n            }\n        }\n        a = a - 1\n    }\n  }\n}\n',
 ]
 
 # P7-M4 repeat: forever (count 0 -> top/jmp/end) and counted (push count on the
@@ -249,11 +249,11 @@ M4_CONTROL_PROGRAMS = [
 # the saved counter first). Literal and variable counts, with break/continue.
 M4_REPEAT_PROGRAMS = [
     # forever loop with a break
-    'ubyte a\nubyte b\n\nmain {\n  sub start() {\n    repeat {\n        a = a + 1\n        if a == b {\n            break\n        }\n    }\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\n\n  sub start() {\n    repeat {\n        a = a + 1\n        if a == b {\n            break\n        }\n    }\n  }\n}\n',
     # counted (literal) loop
-    'ubyte a\n\nmain {\n  sub start() {\n    repeat 10 {\n        a = a + 1\n    }\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\n\n  sub start() {\n    repeat 10 {\n        a = a + 1\n    }\n  }\n}\n',
     # counted (variable) loop with break + continue
-    'ubyte a\nubyte b\nubyte n\n\nmain {\n  sub start() {\n    repeat n {\n        b = b - 1\n        if b == 0 {\n            break\n        }\n        if b == a {\n            continue\n        }\n        a = a + 1\n    }\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\nubyte n\n\n  sub start() {\n    repeat n {\n        b = b - 1\n        if b == 0 {\n            break\n        }\n        if b == a {\n            continue\n        }\n        a = a + 1\n    }\n  }\n}\n',
 ]
 
 # P7-M4 for: `for v in lo to hi` (inclusive ubyte range; v is a pre-declared
@@ -261,11 +261,11 @@ M4_REPEAT_PROGRAMS = [
 # variable range, computed hi (the tmp0/tmp1 spill path), break/continue.
 M4_FOR_PROGRAMS = [
     # literal range
-    'ubyte i\nubyte s\n\nmain {\n  sub start() {\n    for i in 0 to 9 {\n        s = s + i\n    }\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte i\nubyte s\n\n  sub start() {\n    for i in 0 to 9 {\n        s = s + i\n    }\n  }\n}\n',
     # variable range + break
-    'ubyte i\nubyte s\nubyte lo\nubyte hi\nubyte a\n\nmain {\n  sub start() {\n    for i in lo to hi {\n        s = s + 1\n        if s == a {\n            break\n        }\n    }\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte i\nubyte s\nubyte lo\nubyte hi\nubyte a\n\n  sub start() {\n    for i in lo to hi {\n        s = s + 1\n        if s == a {\n            break\n        }\n    }\n  }\n}\n',
     # computed hi (spill path) + continue
-    'ubyte i\nubyte s\nubyte hi\nubyte a\n\nmain {\n  sub start() {\n    for i in 1 to (hi - 1) {\n        s = s + i\n        if i == 3 {\n            continue\n        }\n        a = a + 1\n    }\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte i\nubyte s\nubyte hi\nubyte a\n\n  sub start() {\n    for i in 1 to (hi - 1) {\n        s = s + i\n        if i == 3 {\n            continue\n        }\n        a = a + 1\n    }\n  }\n}\n',
 ]
 
 # P7-M4 when: `when expr { v -> body  v1,v2 -> body  else -> body }`. expr is
@@ -275,13 +275,13 @@ M4_FOR_PROGRAMS = [
 # with a nested if (the classify_name shape).
 M4_WHEN_PROGRAMS = [
     # byte selector: single + multi-value arms + else
-    'ubyte x\nubyte r\n\nmain {\n  sub start() {\n    when x {\n        1 -> { r = 10 }\n        2, 3 -> { r = 20 }\n        else -> { r = 99 }\n    }\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte x\nubyte r\n\n  sub start() {\n    when x {\n        1 -> { r = 10 }\n        2, 3 -> { r = 20 }\n        else -> { r = 99 }\n    }\n  }\n}\n',
     # byte selector, no else
-    'ubyte x\nubyte r\n\nmain {\n  sub start() {\n    when x {\n        5 -> { r = 1 }\n        6 -> { r = 2 }\n    }\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte x\nubyte r\n\n  sub start() {\n    when x {\n        5 -> { r = 1 }\n        6 -> { r = 2 }\n    }\n  }\n}\n',
     # word selector (16-bit value compare) + multi-value + else
-    'uword w\nuword wr\n\nmain {\n  sub start() {\n    when w {\n        $1000 -> { wr = 1 }\n        $2000, $3000 -> { wr = 2 }\n        else -> { wr = 9 }\n    }\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nuword w\nuword wr\n\n  sub start() {\n    when w {\n        $1000 -> { wr = 1 }\n        $2000, $3000 -> { wr = 2 }\n        else -> { wr = 9 }\n    }\n  }\n}\n',
     # arm bodies with nested control flow
-    'ubyte x\nubyte a\nubyte b\nubyte r\n\nmain {\n  sub start() {\n    when x {\n        1 -> { if a == b { r = 1 } else { r = 2 } }\n        2 -> { while a < b { a = a + 1 } }\n        else -> { r = 0 }\n    }\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte x\nubyte a\nubyte b\nubyte r\n\n  sub start() {\n    when x {\n        1 -> { if a == b { r = 1 } else { r = 2 } }\n        2 -> { while a < b { a = a + 1 } }\n        else -> { r = 0 }\n    }\n  }\n}\n',
 ]
 
 # P7-M5 subs (slice 1): regular void subs with no params/locals, called as
@@ -290,16 +290,16 @@ M4_WHEN_PROGRAMS = [
 # (jsr p8s_<name>). Bodies use module vars + control flow.
 M5_SUB_PROGRAMS = [
     # two subs called from main, bodies touch module vars
-    'ubyte x\nubyte y\n\nsub foo() {\n    x = 5\n}\nsub bar() {\n    y = x + 1\n}\nmain {\n  sub start() {\n    foo()\n    bar()\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte x\nubyte y\n\nsub foo() {\n    x = 5\n}\nsub bar() {\n    y = x + 1\n}\n  sub start() {\n    foo()\n    bar()\n  }\n}\n',
     # a sub whose body has control flow + a call from inside a loop
-    'ubyte a\nubyte b\n\nsub bump() {\n    if a < b {\n        a = a + 1\n    }\n}\nmain {\n  sub start() {\n    a = 0\n    b = 5\n    while a < b {\n        bump()\n    }\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\n\nsub bump() {\n    if a < b {\n        a = a + 1\n    }\n}\n  sub start() {\n    a = 0\n    b = 5\n    while a < b {\n        bump()\n    }\n  }\n}\n',
     # subs in source order foo, baz, qux -- emission order must match
-    'ubyte x\n\nsub foo() {\n    x = 1\n}\nsub baz() {\n    x = x + 2\n}\nsub qux() {\n    x = x * 3\n}\nmain {\n  sub start() {\n    foo()\n    baz()\n    qux()\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte x\n\nsub foo() {\n    x = 1\n}\nsub baz() {\n    x = x + 2\n}\nsub qux() {\n    x = x * 3\n}\n  sub start() {\n    foo()\n    baz()\n    qux()\n  }\n}\n',
     # string literals in subs declared BEFORE main: pool labels must be
     # numbered in main-first EMISSION order (main's "M"=str_0, then first's
     # "F"=str_1, second's "S"=str_2), not source order. Regression guard
     # for the p8c/p1 string-label ordering divergence.
-    'uword s\n\nsub first() {\n    s = "F"\n}\nsub second() {\n    s = "S"\n}\nmain {\n  sub start() {\n    s = "M"\n    first()\n    second()\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nuword s\n\nsub first() {\n    s = "F"\n}\nsub second() {\n    s = "S"\n}\n  sub start() {\n    s = "M"\n    first()\n    second()\n  }\n}\n',
 ]
 
 # P7 const slice: `const ubyte/uword NAME = <int>` declares a compile-time
@@ -313,13 +313,13 @@ M5_SUB_PROGRAMS = [
 # this corpus avoids those, matching what p1.p8 itself can use.
 CONST_PROGRAMS = [
     # byte-leaf + word-leaf folding, no ZP binding for the consts
-    'const ubyte LO = 5\nconst ubyte HI = 200\nubyte a\nuword w\n\nmain {\n  sub start() {\n    a = LO\n    w = HI\n    a = HI\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nconst ubyte LO = 5\nconst ubyte HI = 200\nubyte a\nuword w\n\n  sub start() {\n    a = LO\n    w = HI\n    a = HI\n  }\n}\n',
     # const in comparison conditions (if / while -> spill path folds the const)
-    'const ubyte K = 7\nubyte a\n\nmain {\n  sub start() {\n    a = 0\n    if a == K {\n        a = K\n    }\n    while a == K {\n        a = K\n    }\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nconst ubyte K = 7\nubyte a\n\n  sub start() {\n    a = 0\n    if a == K {\n        a = K\n    }\n    while a == K {\n        a = K\n    }\n  }\n}\n',
     # const passed as a call arg (folds via the arg's byte/word leaf eval)
-    'const ubyte N = 42\nubyte a\n\nsub id(ubyte v) -> ubyte {\n    return v\n}\nmain {\n  sub start() {\n    a = id(N)\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nconst ubyte N = 42\nubyte a\n\nsub id(ubyte v) -> ubyte {\n    return v\n}\n  sub start() {\n    a = id(N)\n  }\n}\n',
     # a program whose ONLY module symbols are consts -> no ZP-binding block
-    'const ubyte A = 1\nconst ubyte B = 2\n\nmain {\n  sub start() {\n    if A == B {\n    }\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nconst ubyte A = 1\nconst ubyte B = 2\n\n  sub start() {\n    if A == B {\n    }\n  }\n}\n',
 ]
 
 # P7 array DECLARATION slice: `ubyte[N] / uword[N] name` reserves a labeled
@@ -331,10 +331,10 @@ CONST_PROGRAMS = [
 ARRAY_DECL_PROGRAMS = [
     # ubyte + uword arrays interleaved with scalars: trailer order = source
     # order, scalars still get ZP bindings, arrays do not.
-    'ubyte[4] buf\nubyte x\nuword[3] tab\n\nmain {\n  sub start() {\n    x = 1\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte[4] buf\nubyte x\nuword[3] tab\n\n  sub start() {\n    x = 1\n  }\n}\n',
     # an array as the only module symbol -> ZP-binding block omitted, trailer
     # present.
-    'ubyte[8] mem\n\nmain {\n  sub start() {\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte[8] mem\n\n  sub start() {\n  }\n}\n',
 ]
 
 # P7 array READ slice (ubyte fast `,y` path, matching p8c _array_fast_byte):
@@ -345,7 +345,7 @@ ARRAY_DECL_PROGRAMS = [
 ARRAY_READ_PROGRAMS = [
     # const index (absolute) and byte-var index (tay / ,y), plus a read feeding
     # an arithmetic op (the read is the leaf of `buf[i] + 1`).
-    'ubyte[8] buf\nubyte i\nubyte x\n\nmain {\n  sub start() {\n    i = 3\n    x = buf[2]\n    x = buf[i]\n    x = buf[i] + 1\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte[8] buf\nubyte i\nubyte x\n\n  sub start() {\n    i = 3\n    x = buf[2]\n    x = buf[i]\n    x = buf[i] + 1\n  }\n}\n',
 ]
 
 # P7-M5 subs (slice 2): return values + call-as-value (still no params/locals).
@@ -354,11 +354,11 @@ ARRAY_READ_PROGRAMS = [
 # its result in A (byte) or A:Y (word, ubyte-returning calls widen with ldy #0).
 M5_RET_PROGRAMS = [
     # byte + word returns, call as a value (byte and word context)
-    'ubyte a\nuword w\n\nsub get5() -> ubyte {\n    return 5\n}\nsub dbl() -> ubyte {\n    return a + a\n}\nsub bigw() -> uword {\n    return $1234\n}\nmain {\n  sub start() {\n    a = get5()\n    a = dbl() + 1\n    w = bigw()\n    w = get5()\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nuword w\n\nsub get5() -> ubyte {\n    return 5\n}\nsub dbl() -> ubyte {\n    return a + a\n}\nsub bigw() -> uword {\n    return $1234\n}\n  sub start() {\n    a = get5()\n    a = dbl() + 1\n    w = bigw()\n    w = get5()\n  }\n}\n',
     # conditional return (return inside an if, plus a fall-through return)
-    'ubyte a\n\nsub cls() -> ubyte {\n    if a > 3 {\n        return 1\n    }\n    return 0\n}\nmain {\n  sub start() {\n    a = cls()\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\n\nsub cls() -> ubyte {\n    if a > 3 {\n        return 1\n    }\n    return 0\n}\n  sub start() {\n    a = cls()\n  }\n}\n',
     # void sub with a bare `return` (early exit)
-    'ubyte a\nubyte b\n\nsub maybe() {\n    if a == 0 {\n        return\n    }\n    b = b + 1\n}\nmain {\n  sub start() {\n    maybe()\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\n\nsub maybe() {\n    if a == 0 {\n        return\n    }\n    b = b + 1\n}\n  sub start() {\n    maybe()\n  }\n}\n',
 ]
 
 # P7-M5 subs (slice 3): params + call-with-args. Pass S now allocates each
@@ -368,11 +368,11 @@ M5_RET_PROGRAMS = [
 # into the param slots in reverse before the jsr (the reentrant-safe order).
 M5_PARAM_PROGRAMS = [
     # one ubyte param, used in the body + returned
-    'ubyte g\n\nsub addone(ubyte v) -> ubyte {\n    return v + 1\n}\nmain {\n  sub start() {\n    g = addone(5)\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte g\n\nsub addone(ubyte v) -> ubyte {\n    return v + 1\n}\n  sub start() {\n    g = addone(5)\n  }\n}\n',
     # two ubyte params + a uword param
-    'ubyte g\nuword gw\n\nsub store2(ubyte a, ubyte b) {\n    g = a + b\n}\nsub setw(uword w) {\n    gw = w\n}\nmain {\n  sub start() {\n    store2(3, 4)\n    setw($abcd)\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte g\nuword gw\n\nsub store2(ubyte a, ubyte b) {\n    g = a + b\n}\nsub setw(uword w) {\n    gw = w\n}\n  sub start() {\n    store2(3, 4)\n    setw($abcd)\n  }\n}\n',
     # three params, arg is an expression / a module var (shadowing check)
-    'ubyte g\n\nsub add3(ubyte a, ubyte b, ubyte c) -> ubyte {\n    return a + b + c\n}\nmain {\n  sub start() {\n    g = add3(1, 2, g)\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte g\n\nsub add3(ubyte a, ubyte b, ubyte c) -> ubyte {\n    return a + b + c\n}\n  sub start() {\n    g = add3(1, 2, g)\n  }\n}\n',
 ]
 
 # P7-M5 subs (slice 4): local variables. Pass S walks each sub body in p8c's
@@ -382,11 +382,11 @@ M5_PARAM_PROGRAMS = [
 # lowers to a store; locals (and params) shadow module vars by scope.
 M5_LOCAL_PROGRAMS = [
     # top-level locals in main + a sub, init + use
-    'ubyte g\n\nsub twice(ubyte v) -> ubyte {\n    ubyte r\n    r = v + v\n    return r\n}\nmain {\n  sub start() {\n    ubyte x\n    x = 3\n    g = twice(x)\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte g\n\nsub twice(ubyte v) -> ubyte {\n    ubyte r\n    r = v + v\n    return r\n}\n  sub start() {\n    ubyte x\n    x = 3\n    g = twice(x)\n  }\n}\n',
     # a local loop var + a local accumulator (for-loop body)
-    'ubyte g\n\nsub compute(ubyte n) -> ubyte {\n    ubyte sum\n    sum = 0\n    ubyte i\n    for i in 0 to n {\n        sum = sum + i\n    }\n    return sum\n}\nmain {\n  sub start() {\n    g = compute(5)\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte g\n\nsub compute(ubyte n) -> ubyte {\n    ubyte sum\n    sum = 0\n    ubyte i\n    for i in 0 to n {\n        sum = sum + i\n    }\n    return sum\n}\n  sub start() {\n    g = compute(5)\n  }\n}\n',
     # locals declared INSIDE nested blocks (if / while) -- allocation order
-    'ubyte g\nuword gw\n\nsub nested() {\n    ubyte a\n    a = 1\n    if g > 0 {\n        ubyte b\n        b = a + g\n        while b > 0 {\n            uword w\n            w = gw + 1\n            gw = w\n            b = b - 1\n        }\n    }\n    g = a\n}\nmain {\n  sub start() {\n    nested()\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte g\nuword gw\n\nsub nested() {\n    ubyte a\n    a = 1\n    if g > 0 {\n        ubyte b\n        b = a + g\n        while b > 0 {\n            uword w\n            w = gw + 1\n            gw = w\n            b = b - 1\n        }\n    }\n    g = a\n}\n  sub start() {\n    nested()\n  }\n}\n',
 ]
 
 # P7-M5 builtins: lsb / msb (uword -> ubyte), peek / poke (literal address),
@@ -395,11 +395,11 @@ M5_LOCAL_PROGRAMS = [
 # and ubyte-result widening in word context.
 M5_BUILTIN_PROGRAMS = [
     # lsb / msb / peek / poke / mkword, plain
-    'ubyte b\nuword w\n\nmain {\n  sub start() {\n    w = $1234\n    b = lsb(w)\n    b = msb(w)\n    b = peek($d020)\n    poke($d021, b)\n    w = mkword($ab, $cd)\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte b\nuword w\n\n  sub start() {\n    w = $1234\n    b = lsb(w)\n    b = msb(w)\n    b = peek($d020)\n    poke($d021, b)\n    w = mkword($ab, $cd)\n  }\n}\n',
     # nested builtins (poke value + mkword arg contain lsb) -- reentrancy
-    'ubyte b\nuword w\n\nmain {\n  sub start() {\n    w = $beef\n    poke($c000, lsb(w) + 1)\n    w = mkword(msb(w), lsb(w))\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte b\nuword w\n\n  sub start() {\n    w = $beef\n    poke($c000, lsb(w) + 1)\n    w = mkword(msb(w), lsb(w))\n  }\n}\n',
     # lsb in word context (ubyte result widens with ldy #0)
-    'uword w\nuword v\n\nmain {\n  sub start() {\n    v = $0102\n    w = lsb(v)\n    w = mkword($00, msb(v))\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nuword w\nuword v\n\n  sub start() {\n    v = $0102\n    w = lsb(v)\n    w = mkword($00, msb(v))\n  }\n}\n',
 ]
 
 
