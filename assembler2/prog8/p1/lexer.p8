@@ -778,6 +778,7 @@ sub lex_operator(ubyte c) {
 ; ---- main lex loop ----
 
 main {
+  sub start() {
     uword fn
     fn = sys_argv(0)
     src_hand = sys_open(fn)
@@ -914,4 +915,5 @@ main {
 
     sys_close(src_hand)
     sys_close(dst_hand)
+  }
 }

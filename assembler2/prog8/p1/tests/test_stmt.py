@@ -50,6 +50,13 @@ def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
 
 
+@unittest.skip(
+    "Retired milestone: stmt.p8 is a lenient-only AST-serializer (no descend "
+    "into `main { sub start() }`), superseded by the strict _sh pass1. The "
+    "evolved parser is covered by P1Equivalence (corpus) and P1SelfHost; the "
+    "AST text-serialization format itself stays covered by tests/test_serialize. "
+    "Kept as historical reference; un-skip only if stmt.p8 gains the strict "
+    "namespace-main descend.")
 @unittest.skipUnless(_have_vasm(), "vasm6502_oldstyle not on PATH")
 @unittest.skipUnless(EMU.exists(), f"emulator not built at {EMU}")
 class StmtEquivalence(unittest.TestCase):
