@@ -1,11 +1,18 @@
 #!/bin/bash
-# p8c self-host check: build both pipeline passes with the host p8c, run them on
-# p1.p8, and diff the emitted asm against the p8c oracle for p1.p8. PASS = the
-# p8c-compiled pipeline reproduces p8c's own output byte-for-byte (0-line diff).
+# Self-host gate for the Prog8 pipeline.
 #
-# The pipeline source (p1_pass1_sh.p8 / p1_pass2_sh.p8) is upstream-dialect and
-# carries no %target, so it is built with `--target nmos`. p1.p8 (the self-host
-# input + oracle) still uses its own directives.
+# The pipeline is two passes -- p1/p1_pass1_sh.p8 (parse -> binary dump) and
+# p1/p1_pass2_sh.p8 (dump -> 6502 asm) -- each written in upstream-legal Prog8
+# (a `main { sub start() {...} }` block; NO lenient `main { <statements> }`,
+# which is not upstream syntax). Build both passes with the host p8c, then run
+# the pipeline on EACH pass's OWN source and diff the emitted asm against p8c's
+# output for that source. PASS = the on-target pipeline reproduces p8c byte-for-
+# byte for the files that make up the pipeline (true self-hosting).
+#
+# (The old monolith p1/p1.p8 is NOT a pipeline input: it combines both passes'
+# globals -- >780 module symbols -- and overflows pass1's on-target arenas. That
+# is exactly why the compiler was split into two passes. p1.p8 is kept only as a
+# large p8c-compilation sanity check below.)
 set -e
 cd "$(dirname "$0")"
 EMU=../emulator/emulator.out
@@ -19,13 +26,25 @@ O2=$(vasm6502_oldstyle -Fbin -dotdir -ignore-mult-inc -esc -wfail -o /tmp/p2.bin
    || { echo "PASS2 VASM FAIL"; echo "$O2" | grep -iE 'error|overlap'; exit 1; }
 s1=$(echo "$O1" | grep 'org0001' | grep -oE '[0-9]+ bytes' | grep -oE '[0-9]+')
 s2=$(echo "$O2" | grep 'org0001' | grep -oE '[0-9]+ bytes' | grep -oE '[0-9]+')
-
-$EMU /tmp/p1.bin --cycle-cap $CAP p1/p1.p8 /tmp/p1dump.bin >/dev/null 2>&1 \
-   || { echo "PASS1 RUN FAIL"; exit 1; }
-$EMU /tmp/p2.bin --cycle-cap $CAP --no-dump /tmp/p1dump.bin /tmp/p1out.s >/dev/null 2>&1 \
-   || { echo "PASS2 RUN FAIL"; exit 1; }
-python3 -m p8c --target nmos p1/p1.p8 -o /tmp/p1_oracle.s >/dev/null 2>&1
-n=$(diff <(sed 's/^; source:.*/X/' /tmp/p1out.s) <(sed 's/^; source:.*/X/' /tmp/p1_oracle.s) | wc -l)
 python3 -c "print(f'pass1 top \${0x200+$s1:04X} ({0xF000-0x200-$s1} B free)  pass2 top \${0x200+$s2:04X} ({0xF000-0x200-$s2} B free)')"
-echo "SELF-HOST normalized diff: $n lines"
-[ "$n" -eq 0 ] && echo "PASS: p8c-compiled p1 pipeline self-hosts byte-identically to p8c."
+
+fail=0
+for f in p1_pass1_sh p1_pass2_sh; do
+  $EMU /tmp/p1.bin --cycle-cap $CAP p1/$f.p8 /tmp/${f}_dump.bin >/dev/null 2>&1 \
+     || { echo "$f: PASS1 RUN FAIL"; fail=1; continue; }
+  $EMU /tmp/p2.bin --cycle-cap $CAP --no-dump /tmp/${f}_dump.bin /tmp/${f}_out.s >/dev/null 2>&1 \
+     || { echo "$f: PASS2 RUN FAIL"; fail=1; continue; }
+  python3 -m p8c --target nmos p1/$f.p8 -o /tmp/${f}_oracle.s >/dev/null 2>&1
+  n=$(diff <(sed 's/^; source:.*/X/' /tmp/${f}_out.s) <(sed 's/^; source:.*/X/' /tmp/${f}_oracle.s) | wc -l)
+  if [ "$n" -eq 0 ]; then echo "$f: SELF-HOST diff=0 PASS"; else echo "$f: SELF-HOST diff=$n FAIL"; fail=1; fi
+done
+
+# p8c sanity: the monolith still compiles with the host p8c (upstream-legal form).
+if python3 -m p8c --target nmos p1/p1.p8 -o /tmp/p1_oracle.s >/dev/null 2>&1; then
+  echo "p1.p8: p8c compiles OK"
+else
+  echo "p1.p8: p8c FAIL"; fail=1
+fi
+
+[ "$fail" -eq 0 ] && echo "PASS: pipeline self-hosts byte-identically on both _sh passes."
+exit $fail
