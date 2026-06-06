@@ -275,6 +275,7 @@ uword[18] fr_choices     ; when: choices cons head
 uword[18] fr_values      ; when_choice: values cons head
 ubyte fr_sp
 ubyte pending_defer
+uword parse_result       ; parse_block's completed-root block (set by close_frame)
 
 ; program structure
 uword prog_address
@@ -953,6 +954,71 @@ sub lex_asm_directive(uword nameid) {
 
 ; produce one token into ntok_kind / ntok_val (TK_EOF at end of input).
 
+; lex a `%...` token (the leading '%' already seen): %0.../%1... binary int,
+; %asm -> inline-asm directive, %name -> TK_DIRECTIVE, else TK_OTHER. Split out
+; of next_raw_token to keep its node count under the per-sub arena cap.
+sub lex_directive() {
+    ubyte c
+    c = read_src()
+    ubyte c2
+    c2 = peek_src()
+    if src_eof == 0 {
+        if c2 == '0' { read_bin()  push_token(TK_INT, int_val)  return }
+        if c2 == '1' { read_bin()  push_token(TK_INT, int_val)  return }
+        if is_alpha_us(c2) != 0 {
+            read_ident()
+            ubyte is_asm
+            is_asm = 0
+            if name_len == 3 {
+                if name_buf[0] == 'a' {
+                    if name_buf[1] == 's' {
+                        if name_buf[2] == 'm' { is_asm = 1 }
+                    }
+                }
+            }
+            uword nameid
+            nameid = intern_name()
+            if is_asm != 0 {
+                lex_asm_directive(nameid)
+                return
+            }
+            push_token(TK_DIRECTIVE, nameid)
+            return
+        }
+    }
+    push_token(TK_OTHER, 0)
+}
+
+; lex a `"..."` string literal (the opening quote already seen) into the
+; null-terminated string pool; a literal's "id" is the pool OFFSET where it
+; starts, so identical content dedups to that same offset and the pool holds
+; each distinct value once (no str_off/len index arrays). The emitted
+; p8c_str_N label is still assigned at codegen-encounter order by
+; intern_str_label, so this is transparent to output. Split out of
+; next_raw_token for the per-sub arena cap.
+sub lex_strlit() {
+    ubyte c
+    c = read_src()
+    uword start
+    start = str_pool_len
+    repeat {
+        c = read_src()
+        if src_eof != 0 { break }
+        if c == '"' { break }
+        ubyte rb
+        if c == '\\' {
+            ubyte se
+            se = read_src()
+            rb = decode_escape_val(se)
+        } else {
+            rb = c
+        }
+        poke($a300 + (str_pool_len), rb)
+        str_pool_len = str_pool_len + 1
+    }
+    push_token(TK_STR, intern_strpool(start))
+}
+
 sub next_raw_token() {
     if pend_i < pend_n {
         ntok_kind = pendk[(pend_i as ubyte)]
@@ -980,37 +1046,7 @@ sub next_raw_token() {
             }
             continue
         }
-        if c == '%' {                              ; '%'
-            c = read_src()
-            ubyte c2
-            c2 = peek_src()
-            if src_eof == 0 {
-                if c2 == '0' { read_bin()  push_token(TK_INT, int_val)  return }
-                if c2 == '1' { read_bin()  push_token(TK_INT, int_val)  return }
-                if is_alpha_us(c2) != 0 {
-                    read_ident()
-                    ubyte is_asm
-                    is_asm = 0
-                    if name_len == 3 {
-                        if name_buf[0] == 'a' {
-                            if name_buf[1] == 's' {
-                                if name_buf[2] == 'm' { is_asm = 1 }
-                            }
-                        }
-                    }
-                    uword nameid
-                    nameid = intern_name()
-                    if is_asm != 0 {
-                        lex_asm_directive(nameid)
-                        return
-                    }
-                    push_token(TK_DIRECTIVE, nameid)
-                    return
-                }
-            }
-            push_token(TK_OTHER, 0)
-            return
-        }
+        if c == '%' { lex_directive()  return }    ; '%'
         if c == '$' {
             c = read_src()
             read_hex()
@@ -1037,32 +1073,7 @@ sub next_raw_token() {
             return
         }
         if c == '"' {
-            c = read_src()
-            ; null-terminated string pool: a literal's "id" is the pool OFFSET
-            ; where it starts; identical content dedups to that same offset, so
-            ; the pool holds each distinct value once and needs no str_off/len
-            ; index arrays. (The emitted p8c_str_N label is still assigned at
-            ; codegen-encounter order by intern_str_label, so this is transparent
-            ; to output -- it only shrinks the pass-1 str arenas: p1.p8 has 512
-            ; literal occurrences but only ~183 distinct values.)
-            uword start
-            start = str_pool_len
-            repeat {
-                c = read_src()
-                if src_eof != 0 { break }
-                if c == '"' { break }
-                ubyte rb
-                if c == '\\' {
-                    ubyte se
-                    se = read_src()
-                    rb = decode_escape_val(se)
-                } else {
-                    rb = c
-                }
-                poke($a300 + (str_pool_len), rb)
-                str_pool_len = str_pool_len + 1
-            }
-            push_token(TK_STR, intern_strpool(start))
+            lex_strlit()
             return
         }
         if is_alpha_us(c) != 0 {
@@ -1975,6 +1986,71 @@ sub parse_when_choice(ubyte fi) {
     fr_sp = fr_sp + 1
 }
 
+; close the top block frame on `}`: build its ND_BLOCK and fold it into the
+; enclosing construct (root result / when-choice / if-then-else / while / for /
+; repeat), honoring a pending defer wrapper. Extracted from parse_block to keep
+; that sub's node count under the per-sub arena cap.
+sub close_frame(ubyte fi) {
+    uword block
+    block = new_node(ND_BLOCK, 0, fr_stmts[(fi as ubyte)], 0)
+    ubyte kind
+    kind = fr_kind[(fi as ubyte)]
+    fr_sp = fr_sp - 1
+    if kind == FR_ROOT {
+        parse_result = block
+        return
+    }
+    if kind == FR_CHOICE {
+        uword chvals
+        chvals = fr_values[(fi as ubyte)]
+        uword ch
+        ch = new_node(ND_WHENCHOICE, 0, chvals, block)
+        uword pch
+        pch = cons_prepend(fr_choices[(fr_sp - 1 as ubyte)], ch)
+        fr_choices[(fr_sp - 1 as ubyte)] = pch
+        return
+    }
+    uword node
+    node = 0
+    if kind == FR_THEN {
+        if cur_kind() == TK_KELSE {
+            advance()
+            advance()               ; '{'
+            fr_kind[(fr_sp as ubyte)] = FR_ELSE
+            fr_mode[(fr_sp as ubyte)] = 0
+            fr_stmts[(fr_sp as ubyte)] = 0
+            fr_defer[(fr_sp as ubyte)] = fr_defer[(fi as ubyte)]
+            fr_cond[(fr_sp as ubyte)] = fr_cond[(fi as ubyte)]
+            fr_then[(fr_sp as ubyte)] = block
+            fr_sp = fr_sp + 1
+            return
+        }
+        node = new_node(ND_IF, 0, fr_cond[(fi as ubyte)], block)
+    } else {
+        if kind == FR_ELSE {
+            node = new_node(ND_IF, 0, fr_cond[(fi as ubyte)], fr_then[(fi as ubyte)])
+            pokew($bc60 + ((node) << 1), block)
+        } else {
+            if kind == FR_WHILE {
+                node = new_node(ND_WHILE, 0, fr_cond[(fi as ubyte)], block)
+            } else {
+                if kind == FR_FOR {
+                    node = new_node(ND_FOR, 0, fr_var[(fi as ubyte)], fr_lo[(fi as ubyte)])
+                    pokew($bc60 + ((node) << 1), fr_hi[(fi as ubyte)])
+                    pokew($bf80 + ((node) << 1), block)
+                } else {
+                    ; FR_REPEAT
+                    node = new_node(ND_REPEAT, 0, fr_cond[(fi as ubyte)], block)
+                }
+            }
+        }
+    }
+    if fr_defer[(fi as ubyte)] != 0 {
+        node = new_node(ND_DEFER, 0, node, 0)
+    }
+    fr_attach(node)
+}
+
 sub parse_block() -> uword {
     advance()                               ; consume opening '{'
     fr_sp = 0
@@ -1984,8 +2060,7 @@ sub parse_block() -> uword {
     fr_stmts[(fr_sp as ubyte)] = 0
     fr_defer[(fr_sp as ubyte)] = 0
     fr_sp = fr_sp + 1
-    uword result
-    result = 0
+    parse_result = 0
 
     repeat {
         if fr_sp == 0 {
@@ -2004,63 +2079,7 @@ sub parse_block() -> uword {
         t = cur_kind()
         if t == TK_RBRACE {
             advance()
-            uword block
-            block = new_node(ND_BLOCK, 0, fr_stmts[(fi as ubyte)], 0)
-            ubyte kind
-            kind = fr_kind[(fi as ubyte)]
-            fr_sp = fr_sp - 1
-            if kind == FR_ROOT {
-                result = block
-                continue
-            }
-            if kind == FR_CHOICE {
-                uword chvals
-                chvals = fr_values[(fi as ubyte)]
-                uword ch
-                ch = new_node(ND_WHENCHOICE, 0, chvals, block)
-                uword pch
-                pch = cons_prepend(fr_choices[(fr_sp - 1 as ubyte)], ch)
-                fr_choices[(fr_sp - 1 as ubyte)] = pch
-                continue
-            }
-            node = 0
-            if kind == FR_THEN {
-                if cur_kind() == TK_KELSE {
-                    advance()
-                    advance()               ; '{'
-                    fr_kind[(fr_sp as ubyte)] = FR_ELSE
-                    fr_mode[(fr_sp as ubyte)] = 0
-                    fr_stmts[(fr_sp as ubyte)] = 0
-                    fr_defer[(fr_sp as ubyte)] = fr_defer[(fi as ubyte)]
-                    fr_cond[(fr_sp as ubyte)] = fr_cond[(fi as ubyte)]
-                    fr_then[(fr_sp as ubyte)] = block
-                    fr_sp = fr_sp + 1
-                    continue
-                }
-                node = new_node(ND_IF, 0, fr_cond[(fi as ubyte)], block)
-            } else {
-                if kind == FR_ELSE {
-                    node = new_node(ND_IF, 0, fr_cond[(fi as ubyte)], fr_then[(fi as ubyte)])
-                    pokew($bc60 + ((node) << 1), block)
-                } else {
-                    if kind == FR_WHILE {
-                        node = new_node(ND_WHILE, 0, fr_cond[(fi as ubyte)], block)
-                    } else {
-                        if kind == FR_FOR {
-                            node = new_node(ND_FOR, 0, fr_var[(fi as ubyte)], fr_lo[(fi as ubyte)])
-                            pokew($bc60 + ((node) << 1), fr_hi[(fi as ubyte)])
-                            pokew($bf80 + ((node) << 1), block)
-                        } else {
-                            ; FR_REPEAT
-                            node = new_node(ND_REPEAT, 0, fr_cond[(fi as ubyte)], block)
-                        }
-                    }
-                }
-            }
-            if fr_defer[(fi as ubyte)] != 0 {
-                node = new_node(ND_DEFER, 0, node, 0)
-            }
-            fr_attach(node)
+            close_frame(fi)
             continue
         }
 
@@ -2085,7 +2104,7 @@ sub parse_block() -> uword {
             ; fr_push_block(.., mod) already; nothing to do here.
         }
     }
-    return result
+    return parse_result
 }
 
 
@@ -2773,6 +2792,81 @@ sub ai_record(uword symidx, uword head) {
     ai_count = ai_count + 1
 }
 
+; register one module-scalar / const vardecl in the symbol table (continuing
+; zp_next). Split out of build_symbols to keep its node count under the arena cap.
+sub bs_scalar(uword vd) {
+    ubyte tag
+    tag = peek($b490 + (vd))
+    if tag <= TY_UWORD {           ; ubyte / byte / uword
+        ubyte sz
+        sz = 1
+        if tag == TY_UWORD { sz = 2 }
+        pokew($c6e0 + ((sym_count) << 1), peekw($b620 + ((vd) << 1)))
+        poke($ccf8 + (sym_count), tag)
+        pokew($d61c + ((sym_count) << 1), 0)
+        poke($dc34 + (sym_count), 0)
+        poke($df40 + (sym_count), 0)
+        pokew($e864 + ((sym_count) << 1), 0)
+        ; ZP runs $40..$FF; a scalar that won't fit overflows into
+        ; main memory (sentinel $FFFF -> emit_memvars), matching p8c.
+        if zp_next + sz > $ff {
+            pokew($d004 + ((sym_count) << 1), $ffff)
+        } else {
+            pokew($d004 + ((sym_count) << 1), zp_next)
+            zp_next = zp_next + sz
+        }
+        sym_count = sym_count + 1
+    } else {
+        ; const ubyte/byte/uword: TY_CONST_* (6/7/8) -> base type.
+        ; No ZP storage; the int-literal init (node_b) is folded in
+        ; at every use site, matching p8c. (Map the tag with explicit
+        ; compares, not arithmetic: p8c only folds a const in leaf /
+        ; comparison positions, not as a `-` operand.) Tags above
+        ; TY_CONST_UWORD (e.g. TY_STRUCT) are not consts -> skip.
+        if tag <= TY_CONST_UWORD {
+            ubyte bt
+            bt = TY_UBYTE
+            if tag == TY_CONST_BYTE { bt = TY_BYTE }
+            if tag == TY_CONST_UWORD { bt = TY_UWORD }
+            pokew($c6e0 + ((sym_count) << 1), peekw($b620 + ((vd) << 1)))
+            poke($ccf8 + (sym_count), bt)
+            pokew($d004 + ((sym_count) << 1), 0)
+            pokew($d61c + ((sym_count) << 1), 0)
+            poke($dc34 + (sym_count), 0)
+            poke($df40 + (sym_count), 1)
+            pokew($e24c + ((sym_count) << 1), peekw($b620 + ((peekw($b940 + ((vd) << 1))) << 1)))
+            pokew($e864 + ((sym_count) << 1), 0)
+            sym_count = sym_count + 1
+        }
+    }
+}
+
+; register one module-array vardecl: storage is a labeled .byte block
+; (p8a_<name>) in main memory, not ZP. Element type tag in node_op, count in
+; node_c (only ubyte/uword element types). A `[...]` initializer is recorded
+; for the data-init section. Split out of build_symbols for the arena cap.
+sub bs_array(uword vd) {
+    ubyte etag
+    etag = peek($b490 + (vd))
+    if etag <= TY_UWORD {
+        pokew($c6e0 + ((sym_count) << 1), peekw($b620 + ((vd) << 1)))
+        poke($ccf8 + (sym_count), etag)
+        pokew($d004 + ((sym_count) << 1), 0)
+        pokew($d61c + ((sym_count) << 1), 0)
+        poke($dc34 + (sym_count), 0)
+        poke($df40 + (sym_count), 0)
+        pokew($e864 + ((sym_count) << 1), peekw($bc60 + ((vd) << 1)))
+        uword aini
+        aini = peekw($b940 + ((vd) << 1))              ; node_b = init
+        if aini != 0 {
+            if peek($b300 + (aini)) == ND_ARRAYLIT {
+                ai_record(sym_count, peekw($b620 + ((aini) << 1)))
+            }
+        }
+        sym_count = sym_count + 1
+    }
+}
+
 sub build_symbols() {
     sym_count = 0
     ai_count = 0
@@ -2790,73 +2884,9 @@ sub build_symbols() {
         vd = peekw($c2a0 + ((cell) << 1))
         if peek($b300 + (vd)) == ND_VARDECL {
             if peekw($bc60 + ((vd) << 1)) == 0 {               ; scalar (not an array)
-                ubyte tag
-                tag = peek($b490 + (vd))
-                if tag <= TY_UWORD {           ; ubyte / byte / uword
-                    ubyte sz
-                    sz = 1
-                    if tag == TY_UWORD { sz = 2 }
-                    pokew($c6e0 + ((sym_count) << 1), peekw($b620 + ((vd) << 1)))
-                    poke($ccf8 + (sym_count), tag)
-                    pokew($d61c + ((sym_count) << 1), 0)
-                    poke($dc34 + (sym_count), 0)
-                    poke($df40 + (sym_count), 0)
-                    pokew($e864 + ((sym_count) << 1), 0)
-                    ; ZP runs $40..$FF; a scalar that won't fit overflows into
-                    ; main memory (sentinel $FFFF -> emit_memvars), matching p8c.
-                    if zp_next + sz > $ff {
-                        pokew($d004 + ((sym_count) << 1), $ffff)
-                    } else {
-                        pokew($d004 + ((sym_count) << 1), zp_next)
-                        zp_next = zp_next + sz
-                    }
-                    sym_count = sym_count + 1
-                } else {
-                    ; const ubyte/byte/uword: TY_CONST_* (6/7/8) -> base type.
-                    ; No ZP storage; the int-literal init (node_b) is folded in
-                    ; at every use site, matching p8c. (Map the tag with explicit
-                    ; compares, not arithmetic: p8c only folds a const in leaf /
-                    ; comparison positions, not as a `-` operand.) Tags above
-                    ; TY_CONST_UWORD (e.g. TY_STRUCT) are not consts -> skip.
-                    if tag <= TY_CONST_UWORD {
-                        ubyte bt
-                        bt = TY_UBYTE
-                        if tag == TY_CONST_BYTE { bt = TY_BYTE }
-                        if tag == TY_CONST_UWORD { bt = TY_UWORD }
-                        pokew($c6e0 + ((sym_count) << 1), peekw($b620 + ((vd) << 1)))
-                        poke($ccf8 + (sym_count), bt)
-                        pokew($d004 + ((sym_count) << 1), 0)
-                        pokew($d61c + ((sym_count) << 1), 0)
-                        poke($dc34 + (sym_count), 0)
-                        poke($df40 + (sym_count), 1)
-                        pokew($e24c + ((sym_count) << 1), peekw($b620 + ((peekw($b940 + ((vd) << 1))) << 1)))
-                        pokew($e864 + ((sym_count) << 1), 0)
-                        sym_count = sym_count + 1
-                    }
-                }
+                bs_scalar(vd)
             } else {
-                ; array: `ubyte[N] / uword[N] name`. Storage is a labeled .byte
-                ; block (p8a_<name>) in main memory, not ZP. Element type tag in
-                ; node_op, count in node_c. (Only ubyte/uword element types.)
-                ubyte etag
-                etag = peek($b490 + (vd))
-                if etag <= TY_UWORD {
-                    pokew($c6e0 + ((sym_count) << 1), peekw($b620 + ((vd) << 1)))
-                    poke($ccf8 + (sym_count), etag)
-                    pokew($d004 + ((sym_count) << 1), 0)
-                    pokew($d61c + ((sym_count) << 1), 0)
-                    poke($dc34 + (sym_count), 0)
-                    poke($df40 + (sym_count), 0)
-                    pokew($e864 + ((sym_count) << 1), peekw($bc60 + ((vd) << 1)))
-                    uword aini
-                    aini = peekw($b940 + ((vd) << 1))              ; node_b = init
-                    if aini != 0 {
-                        if peek($b300 + (aini)) == ND_ARRAYLIT {
-                            ai_record(sym_count, peekw($b620 + ((aini) << 1)))
-                        }
-                    }
-                    sym_count = sym_count + 1
-                }
+                bs_array(vd)
             }
         }
         cell = peekw($c4c0 + ((cell) << 1))
@@ -3097,6 +3127,50 @@ sub walk_locals(uword body, uword subname) {
 
 sub d16(uword v) { out_byte(lsb(v)) out_byte(lsb(v >> 8)) }
 
+; allocate a sub's params (source order) into the symbol table, continuing
+; zp_next. A register-ABI param (reg code in ND_PARAM node_b) gets NO storage
+; (the call passes it in a register); the reg code rides sym_cval. Extracted
+; from register_subs to keep that sub's node count under the per-sub arena cap.
+sub alloc_sub_params(uword snode) {
+    uword phead
+    phead = reverse_cons(peekw($b940 + ((snode) << 1)))
+    uword pcell
+    pcell = phead
+    repeat {
+        if pcell == 0 {
+            break
+        }
+        uword pnode
+        pnode = peekw($c2a0 + ((pcell) << 1))
+        ubyte ptag
+        ptag = peek($b490 + (pnode))
+        ubyte preg
+        preg = lsb(peekw($b940 + ((pnode) << 1)))
+        ubyte psz
+        psz = 1
+        if ptag == TY_UWORD { psz = 2 }
+        pokew($c6e0 + ((sym_count) << 1), peekw($b620 + ((pnode) << 1)))
+        poke($ccf8 + (sym_count), ptag)
+        pokew($d61c + ((sym_count) << 1), peekw($b620 + ((snode) << 1)))
+        poke($dc34 + (sym_count), 1)
+        poke($df40 + (sym_count), 0)
+        pokew($e24c + ((sym_count) << 1), preg)
+        pokew($e864 + ((sym_count) << 1), 0)
+        if preg != 0 {
+            pokew($d004 + ((sym_count) << 1), $fffe)   ; reg param: no storage
+        } else {
+            if zp_next + psz > $ff {
+                pokew($d004 + ((sym_count) << 1), $ffff)
+            } else {
+                pokew($d004 + ((sym_count) << 1), zp_next)
+                zp_next = zp_next + psz
+            }
+        }
+        sym_count = sym_count + 1
+        pcell = peekw($c4c0 + ((pcell) << 1))
+    }
+}
+
 sub register_subs() {
     sub_count = 0
     reset_source()
@@ -3160,46 +3234,7 @@ sub register_subs() {
                 sub_addr[(sub_count as ubyte)] = peekw($bc60 + ((snode) << 1))   ; node_c is the $F0xx addr
             }
             sub_count = sub_count + 1
-            ; allocate this sub's params (source order), continuing zp_next.
-            ; a register-ABI param (reg code in ND_PARAM node_b) gets NO storage
-            ; (the call passes it in a register); the reg code rides sym_cval.
-            uword phead
-            phead = reverse_cons(peekw($b940 + ((snode) << 1)))
-            uword pcell
-            pcell = phead
-            repeat {
-                if pcell == 0 {
-                    break
-                }
-                uword pnode
-                pnode = peekw($c2a0 + ((pcell) << 1))
-                ubyte ptag
-                ptag = peek($b490 + (pnode))
-                ubyte preg
-                preg = lsb(peekw($b940 + ((pnode) << 1)))
-                ubyte psz
-                psz = 1
-                if ptag == TY_UWORD { psz = 2 }
-                pokew($c6e0 + ((sym_count) << 1), peekw($b620 + ((pnode) << 1)))
-                poke($ccf8 + (sym_count), ptag)
-                pokew($d61c + ((sym_count) << 1), peekw($b620 + ((snode) << 1)))
-                poke($dc34 + (sym_count), 1)
-                poke($df40 + (sym_count), 0)
-                pokew($e24c + ((sym_count) << 1), preg)
-                pokew($e864 + ((sym_count) << 1), 0)
-                if preg != 0 {
-                    pokew($d004 + ((sym_count) << 1), $fffe)   ; reg param: no storage
-                } else {
-                    if zp_next + psz > $ff {
-                        pokew($d004 + ((sym_count) << 1), $ffff)
-                    } else {
-                        pokew($d004 + ((sym_count) << 1), zp_next)
-                        zp_next = zp_next + psz
-                    }
-                }
-                sym_count = sym_count + 1
-                pcell = peekw($c4c0 + ((pcell) << 1))
-            }
+            alloc_sub_params(snode)
             ; then this sub's locals (walk the body), continuing zp_next.
             ; (asmsubs have no var locals -- raw asm body / address -- so skip.)
             if sk != SUBK_ASMSUB {
