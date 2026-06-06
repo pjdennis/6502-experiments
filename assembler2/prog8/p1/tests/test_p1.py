@@ -7,10 +7,10 @@ the `.s` assembly it writes is byte-identical to the host oracle
 `; source: <path>` comment line (exactly what the snapshot tests
 normalize), since the on-target compiler has no host path to echo.
 
-p1.p8 reuses stmt.p8's streaming front-end (lexer + shunting-yard
-expression parser + frame-stack statement driver + node arena) and
-replaces the AST serializer with a codegen back-end (port of
-p8c/codegen.py). See ../PHASE7_DESIGN.md.
+p1.p8 is a single-pass streaming compiler (lexer + shunting-yard expression
+parser + frame-stack statement driver + node arena + a codegen back-end that
+is a port of p8c/codegen.py). It is hand-maintained, upstream-Prog8 dialect.
+See ../PHASE7_DESIGN.md.
 
 Milestone P7-M1: `main { }` (nmos) -> prologue + ZP scratch bindings +
 empty p8s_main + the nmos exit epilogue + reset vector.
@@ -461,7 +461,7 @@ class P1Equivalence(unittest.TestCase):
                 code_top = a
         assert 0 < code_top < cls.STUB_FLOOR, (
             f"p1.bin code+arena top ${code_top:04X} reached the emulator stub "
-            f"floor ${cls.STUB_FLOOR:04X}; shrink ARENA_SIZES in build_p1.py")
+            f"floor ${cls.STUB_FLOOR:04X}; shrink p1.p8's arena array sizes")
         assert pool_top < cls.POOL_CEIL, (
             f"p1.bin string-pool top ${pool_top:04X} reached the argv window "
             f"${cls.POOL_CEIL:04X}")
