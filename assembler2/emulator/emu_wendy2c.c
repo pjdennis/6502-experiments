@@ -21,6 +21,9 @@
 #include "chips/via_6522.h"
 #include "chips/lcd_hd44780.h"
 #include "chips/serial_usb.h"
+#include "chips/syscall_ports.h"
+#include "file_io.h"
+#include <unistd.h>
 #include "chips/led_buttons.h"
 #include "chips/cpu_65c02.h"
 
@@ -544,7 +547,9 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
     static struct serial_usb_state  ser_state;
     static struct led_buttons_state ledbtn_state;
     static struct cpu_65c02_state   cpu_state;
+    static struct syscall_ports_state sysc_state;
     struct chip clk_chip, rom_chip, ram_chip, via_chip, lcd_chip, ser_chip, ledbtn_chip, cpu_chip;
+    struct chip sysc_chip;
 
     clock_22v10_init(&clk_chip, &clk_state);
     rom_28c256_init(&rom_chip, &rom_state);
@@ -574,11 +579,27 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
         return 1;
     }
 
+    /* --disk: install the $F800+ OS-call port chip backed by a host directory
+     * (the simulated SPI "disk"). Only when requested, so default runs are
+     * byte-for-byte unchanged. The ROM + --serial-input were loaded above via
+     * their own paths; chdir now so file_open()/dir_open() resolve in DIR. */
+    int have_disk = (opts->disk_dir != NULL);
+    if (have_disk) {
+        if (chdir(opts->disk_dir) != 0) {
+            fprintf(stderr, "wendy2c: could not chdir to --disk %s\n", opts->disk_dir);
+            return 1;
+        }
+        files_init(NULL);
+        syscall_ports_init(&sysc_chip, &sysc_state);
+    }
+
     struct bus b;
     bus_init(&b);
     /* The clock must be the FIRST chip so wendy2c_cpu_read/write can
      * tick it before bus_read/bus_write fans out to ROM/RAM. */
     bus_add_chip(&b, &clk_chip);
+    /* The OS-call ports must come before RAM/ROM so they intercept $F800-$F80F. */
+    if (have_disk) bus_add_chip(&b, &sysc_chip);
     bus_add_chip(&b, &rom_chip);
     bus_add_chip(&b, &ram_chip);
     bus_add_chip(&b, &via_chip);

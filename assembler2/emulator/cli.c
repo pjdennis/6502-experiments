@@ -32,6 +32,7 @@ void emu_opts_init(struct emu_opts *opts) {
     opts->cpu_variant_opt = CPU_VARIANT_UNSET;
     opts->rom_filename = NULL;
     opts->serial_input_filename = NULL;
+    opts->disk_dir = NULL;
     opts->cycle_cap = 200000000ULL;
     opts->cycle_cap_set = 0;
     opts->live = 0;
@@ -76,6 +77,7 @@ void emu_opts_usage(FILE *fp) {
 "  --cpu <variant>        'nmos' or '65c02' (wendy2c forces '65c02')\n"
 "  --rom <path>           wendy2c: ROM image (else falls back to <code file>)\n"
 "  --serial-input <path>  wendy2c: bytes pre-queued into the SERIAL_USB chip\n"
+"  --disk <dir>           wendy2c: host dir backing the $F800+ file-I/O OS calls\n"
 "  --live                 wendy2c: live ANSI render of LCD, LED, button, VIA pin state\n"
 "                         (saves the terminal; q/ESC/Ctrl-C to quit; space toggles button)\n"
 "  --wav <path>           wendy2c: record the PB7 piezo line to a WAV file\n"
@@ -249,6 +251,8 @@ int parse_args(int argc, char **argv, struct emu_opts *opts) {
             if (take_str_value(argc, argv, &i, "--rom", &opts->rom_filename)) return 1;
         } else if (strcmp(argv[i], "--serial-input") == 0) {
             if (take_str_value(argc, argv, &i, "--serial-input", &opts->serial_input_filename)) return 1;
+        } else if (strcmp(argv[i], "--disk") == 0) {
+            if (take_str_value(argc, argv, &i, "--disk", &opts->disk_dir)) return 1;
         } else if (strcmp(argv[i], "--live") == 0) {
             opts->live = 1;
             i++;

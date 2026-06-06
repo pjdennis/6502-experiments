@@ -64,6 +64,9 @@ struct emu_opts {
                                          * the run loop. Format: a "--- osc=N cpu=N pc=$NNNN ---" header
                                          * line followed by one "|...|"-bracketed row per LCD row. */
     int lcd_panel;                      /* --lcd-panel; LCD_PANEL_* constants. Default = 16x2 5x8. */
+    const char *disk_dir;               /* --disk DIR (wendy2c only): host directory backing the
+                                         * $F800+ file-I/O OS calls (the simulated SPI "disk").
+                                         * NULL = the OS-call port chip is not installed. */
 };
 
 /* Initialize an emu_opts with the documented defaults. */
