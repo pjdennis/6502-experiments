@@ -483,6 +483,11 @@ PEEK_POKE_PROGRAMS = [
     '%output raw\n%launcher none\nmain {\nubyte a\nuword w\n  sub start() {\n    a = peek(w + 1)\n  }\n}\n',
     '%output raw\n%launcher none\nmain {\nubyte a\nuword w\n  sub start() {\n    poke(w + 1, a)\n  }\n}\n',
     '%output raw\n%launcher none\nmain {\nubyte a\n  sub start() {\n    a = peek($d020)\n    poke($d020, a)\n  }\n}\n',
+    # peekw / pokew (uword via aptr): read into A:Y, write lo/hi.
+    '%output raw\n%launcher none\nmain {\nuword w\nuword v\n  sub start() {\n    w = peekw(v)\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nuword w\nuword v\n  sub start() {\n    pokew(w, v)\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nuword w\nuword v\n  sub start() {\n    w = peekw(v + 2)\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nuword w\nuword v\n  sub start() {\n    pokew(w + 2, v)\n  }\n}\n',
 ]
 
 

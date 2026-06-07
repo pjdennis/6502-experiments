@@ -4388,10 +4388,31 @@ sub codegen_expr(uword root, ubyte ctx) {
                 out_text("  ldy #$00") o_nl()
                 out_text("  lda (__p8c_aptr),y") o_nl()
             }
-            else -> {                          ; 34 poke tail: value on CPU stack,
+            34 -> {                            ; poke tail: value on CPU stack,
                 out_text("  sta __p8c_aptr") o_nl()   ; addr in A:Y
                 out_text("  sty __p8c_aptr+1") o_nl()
                 out_text("  pla") o_nl()
+                out_text("  ldy #$00") o_nl()
+                out_text("  sta (__p8c_aptr),y") o_nl()
+            }
+            35 -> {                            ; peekw tail: addr A:Y -> A:Y (uword)
+                out_text("  sta __p8c_aptr") o_nl()
+                out_text("  sty __p8c_aptr+1") o_nl()
+                out_text("  ldy #$00") o_nl()
+                out_text("  lda (__p8c_aptr),y") o_nl()
+                out_text("  pha") o_nl()
+                out_text("  ldy #$01") o_nl()
+                out_text("  lda (__p8c_aptr),y") o_nl()
+                out_text("  tay") o_nl()
+                out_text("  pla") o_nl()
+            }
+            else -> {                          ; 36 pokew tail: value lo/hi on stack,
+                out_text("  sta __p8c_aptr") o_nl()   ; addr in A:Y
+                out_text("  sty __p8c_aptr+1") o_nl()
+                out_text("  pla") o_nl()           ; hi
+                out_text("  ldy #$01") o_nl()
+                out_text("  sta (__p8c_aptr),y") o_nl()
+                out_text("  pla") o_nl()           ; lo
                 out_text("  ldy #$00") o_nl()
                 out_text("  sta (__p8c_aptr),y") o_nl()
             }
@@ -4773,6 +4794,18 @@ sub handle_builtin(uword callnode, ubyte bk) {
             es_push(3, 0, 0)           ; pha (save the value)
             es_push(0, a1, 0)          ; evaluate the byte value (a1)
         }
+        return
+    }
+    if bk == 6 {                       ; peekw(addr) -> A:Y (uword read via aptr)
+        es_push(35, 0, 0)              ; peekw tail
+        es_push(1, a0, 0)              ; evaluate the address (word)
+        return
+    }
+    if bk == 7 {                       ; pokew(addr, wordexpr) -> write uword
+        es_push(36, 0, 0)              ; pokew tail (value lo/hi on stack, addr A:Y)
+        es_push(1, a0, 0)              ; evaluate the address (word)
+        es_push(13, 0, 0)             ; pha/tya/pha (save the value lo/hi)
+        es_push(1, a1, 0)             ; evaluate the value (word)
         return
     }
     ; mkword(msb, lsb) -> A=low, Y=high (Y-safe via X).
@@ -5305,6 +5338,8 @@ sub builtin_kind(uword identid) -> ubyte {
     if ident_eq(identid, "peek") != 0 { return 3 }
     if ident_eq(identid, "poke") != 0 { return 4 }
     if ident_eq(identid, "mkword") != 0 { return 5 }
+    if ident_eq(identid, "peekw") != 0 { return 6 }
+    if ident_eq(identid, "pokew") != 0 { return 7 }
     return 0
 }
 ; does a call's result type widen as ubyte in word context?
@@ -5314,7 +5349,7 @@ sub call_returns_ubyte(uword callnode) -> ubyte {
     ubyte bk
     bk = builtin_kind(callee)
     if bk != 0 {
-        if bk == 5 {                   ; mkword -> uword
+        if bk >= 5 {                   ; mkword / peekw -> uword, pokew -> void
             return 0
         }
         return 1                        ; lsb / msb / peek -> ubyte
