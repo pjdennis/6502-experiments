@@ -226,12 +226,12 @@ uword name_len
 uword int_val
 
 ; node arena
-ubyte[60] node_kind
-ubyte[60] node_op
-uword[60] node_a
-uword[60] node_b
-uword[60] node_c
-uword[60] node_d
+ubyte[256] node_kind
+ubyte[256] node_op
+uword[256] node_a
+uword[256] node_b
+uword[256] node_c
+uword[256] node_d
 uword node_count
 
 ; expression stacks
@@ -251,8 +251,8 @@ ubyte expect_operand
 ubyte index_ok
 
 ; cons cells
-uword[60] cons_val
-uword[60] cons_next
+uword[256] cons_val
+uword[256] cons_next
 uword cons_count
 
 ; statement frame stack
@@ -304,10 +304,10 @@ uword[16] call_arg       ; arg expr node per arg (source order), for the
                          ; non-recursive call lowering (pushed in reverse)
 ; sub table (registered in source order before codegen, so calls
 ; resolve and pass B emits non-main subs in p8c's order).
-uword[32] sub_name       ; sub name ident id
-ubyte[32] sub_kind       ; SUBK_SUB / MAIN / INLINE / ASMSUB
-ubyte[32] sub_ret        ; return type tag
-uword[32] sub_addr       ; asmsub target address ($F0xx); else 0
+uword[256] sub_name       ; sub name ident id
+ubyte[256] sub_kind       ; SUBK_SUB / MAIN / INLINE / ASMSUB
+ubyte[256] sub_ret        ; return type tag
+uword[256] sub_addr       ; asmsub target address ($F0xx); else 0
 uword sub_count
 ; the sub currently being codegen'd -- its return type + name ident,
 ; for `return` (the per-sub .Lp8s_<name>_ret label).
