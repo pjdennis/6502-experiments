@@ -132,12 +132,25 @@ from the `_sh` chain (`reg_code`, `parse_param @REG`, `parse_ret`,
 
 ## 6. Risks / open questions
 
-* **One-bank capacity.** ~19 KB free for arenas today; a compiler-sized
-  self-host input may exceed it. The per-sub arena reset bounds the
-  transient (node/cons) tables, so only the persistent tables (sym/sub/
-  ident/str) consume the bank long-term. If they exceed ~19 KB → M6
-  multi-bank data (pin each slab region to a known bank, switch per
-  region behind a tiny accessor).
+* **One-bank capacity — MEASURED, INSUFFICIENT.** Compiling p1.p8 itself
+  needs (measured via p8c on the real source): **237** subs, **265**
+  module vars, a **~770-entry** persistent sym-table peak (module vars +
+  223 params + 282 scalar locals). At ~14 B/sym that sym table alone is
+  ~11 KB; with the sub table (~1.4 KB), ident_pool (~7 KB) and str_pool
+  (~5 KB) the persistent slabs total **~24 KB** — past the ~22 KB free in
+  one held bank (code+data top ~$9795). So the monolith self-host needs
+  **multi-bank data (M6), not the one-bank model.** (The `_sh` chain's
+  sym table is likewise sized ~780 entries; it only fits flat-64K because
+  each split pass holds far less code AND its slabs reach to ~$EA88.)
+  Per-sub-resetting *locals* (keeping only module vars + all params +
+  one sub's locals persistent) would shave the sym table ~3.8 KB but not
+  enough to reach one bank — multi-bank is the robust answer.
+* **Multi-bank partition (M6 made primary).** Pin each slab region to a
+  known bank: e.g. bank 0 (default-mapped) holds sym + sub + node + cons;
+  a second bank holds ident_pool + str_pool. The ident/str accessors
+  switch the window to their bank, peek/poke, switch back — frequent but
+  localized. node/cons (per-sub reset, transient) and the sym/sub tables
+  (hottest) stay in the default bank to avoid switching on the hot path.
 * **Slab base vs. the bank window.** Slab base + memtop must land within
   `$8000-$EFFF`, clear of `$F000` VIA / `$F800` ports. `memtop $F000`
   caps it.
