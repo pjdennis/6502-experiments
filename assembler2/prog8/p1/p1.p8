@@ -68,6 +68,7 @@ const ubyte TK_KWHEN  = 61
 const ubyte TK_KCONST = 62
 const ubyte TK_KENUM  = 63
 const ubyte TK_KSTRUCT= 64
+const ubyte TK_KEXTSUB = 65  ; `extsub` (address-first asmsub decl)
 const ubyte TK_KAS    = 66   ; `as` (type cast)
 ; operator punctuation
 const ubyte TK_PLUS   = 70
@@ -146,7 +147,8 @@ const ubyte TY_STRUCT      = 9   ; struct-typed var; struct name id in node_d
 const ubyte SUBK_SUB    = 0
 const ubyte SUBK_MAIN   = 1
 const ubyte SUBK_INLINE = 2
-const ubyte SUBK_ASMSUB = 3
+const ubyte SUBK_ASMSUB = 3        ; `extsub $ADDR = name(...)` decl (jsr $ADDR)
+const ubyte SUBK_ASMSUB_BODY = 4   ; inline-body asmsub (emit label + raw asm)
 
 ; unary op-ids
 const ubyte UN_NEG = 0
@@ -281,6 +283,8 @@ ubyte[32] sym_is_const   ; 1 = compile-time const (no storage); folded
 uword[32] sym_cval       ; const value (when sym_is_const)
 uword[32] sym_arr_size   ; element count if an array (0 = scalar); the
                          ; element type is in sym_type; mangle is p8a_
+ubyte[32] sym_reg        ; param register-ABI code (0=none/static slot,
+                         ; 1=A 2=X 3=Y 4=AY) -- set for asmsub/extsub params
 ubyte sym_count
 uword zp_next            ; ZP bump allocator (from $40)
 uword cur_scope          ; the sub being codegen'd (for var resolution)
@@ -288,6 +292,7 @@ uword entry_nm           ; name ident of the entry sub (`start`, the SUBK_MAIN)
 ; call-arg scratch (push args -> pop into param slots before the jsr).
 uword[16] call_slot      ; param sym index per arg
 ubyte[16] call_isw       ; 1 if that arg/param is uword
+ubyte[16] call_reg       ; param register-ABI code per arg (0 = static slot)
 ubyte call_n
 uword[16] call_arg       ; arg expr node per arg (source order), for the
                          ; non-recursive call lowering (pushed in reverse)
@@ -755,6 +760,8 @@ sub classify_name() -> ubyte {
     if kw_is("uword") != 0 { return TK_KUWORD }
     if kw_is("while") != 0 { return TK_KWHILE }
     if kw_is("inline") != 0 { return TK_KINLINE }
+    if kw_is("asmsub") != 0 { return TK_KASMSUB }
+    if kw_is("extsub") != 0 { return TK_KEXTSUB }
     if kw_is("repeat") != 0 { return TK_KREPEAT }
     if kw_is("return") != 0 { return TK_KRETURN }
     if kw_is("struct") != 0 { return TK_KSTRUCT }
@@ -1928,11 +1935,39 @@ sub parse_block() -> uword {
 
 
 ; ---- top-level program parser ----
-sub parse_sub(ubyte kind) -> uword {
-    ; current token is the name (IDENT or main keyword handled by caller)
-    uword nameid
-    nameid = cur_val()
-    advance()                               ; consume name
+; map a register-ABI annotation ident (A / X / Y / AY) to a code:
+; 0=none, 1=A, 2=X, 3=Y, 4=AY.
+sub reg_code(uword id) -> ubyte {
+    ubyte b0
+    b0 = ident_pool[(id as ubyte)]
+    if b0 == 'A' {
+        if ident_pool[(id + 1 as ubyte)] == 'Y' { return 4 }
+        return 1
+    }
+    if b0 == 'X' { return 2 }
+    if b0 == 'Y' { return 3 }
+    return 0
+}
+; parse one parameter: `type name` with an optional `@REG` annotation. The reg
+; code rides ND_PARAM's node_b (0 = no register / static-param slot).
+sub parse_param() -> uword {
+    ubyte ptag
+    ptag = type_tag(cur_kind())
+    advance()                               ; type
+    uword pname
+    pname = cur_val()
+    advance()                               ; name
+    ubyte reg
+    reg = 0
+    if cur_kind() == TK_AT {
+        advance()                           ; @
+        reg = reg_code(cur_val())
+        advance()                           ; REG ident
+    }
+    return new_node(ND_PARAM, ptag, pname, reg)
+}
+; parse `( p, p, ... )` -> cons head (reversed source order); cursor past `)`.
+sub parse_param_list() -> uword {
     advance()                               ; '('
     uword params
     params = 0
@@ -1940,14 +1975,8 @@ sub parse_sub(ubyte kind) -> uword {
         if cur_kind() == TK_RPAREN {
             break
         }
-        ubyte ptag
-        ptag = type_tag(cur_kind())
-        advance()                           ; type
-        uword pname
-        pname = cur_val()
-        advance()                           ; name
         uword pnode
-        pnode = new_node(ND_PARAM, ptag, pname, 0)
+        pnode = parse_param()
         params = cons_prepend(params, pnode)
         if cur_kind() != TK_COMMA {
             break
@@ -1955,13 +1984,33 @@ sub parse_sub(ubyte kind) -> uword {
         advance()
     }
     advance()                               ; ')'
+    return params
+}
+; parse an optional `-> rt [@REG]` return annotation -> the return type tag. The
+; `@REG` is consumed but not stored (a return register is implied by rt).
+sub parse_ret() -> ubyte {
     ubyte rettag
     rettag = TY_VOID
     if cur_kind() == TK_ARROW {
-        advance()
+        advance()                           ; ->
         rettag = type_tag(cur_kind())
-        advance()
+        advance()                           ; rt
+        if cur_kind() == TK_AT {
+            advance()                       ; @
+            advance()                       ; REG ident
+        }
     }
+    return rettag
+}
+sub parse_sub(ubyte kind) -> uword {
+    ; current token is the name (IDENT or main keyword handled by caller)
+    uword nameid
+    nameid = cur_val()
+    advance()                               ; consume name
+    uword params
+    params = parse_param_list()
+    ubyte rettag
+    rettag = parse_ret()
     uword body
     body = parse_block()
     uword node
@@ -1969,6 +2018,68 @@ sub parse_sub(ubyte kind) -> uword {
     node_c[(node as ubyte)] = body
     node_d[(node as ubyte)] = rettag
     return node
+}
+; `asmsub name(params @REG) -> rt @REG { %asm {{ ... }} }`  (inline-body form).
+sub parse_asmsub() -> uword {
+    advance()                               ; 'asmsub'
+    uword nameid
+    nameid = cur_val()
+    advance()                               ; name
+    uword params
+    params = parse_param_list()
+    ubyte rettag
+    rettag = parse_ret()
+    uword body
+    body = parse_block()                    ; block holds one ND_INLINEASM
+    uword node
+    node = new_node(ND_SUB, SUBK_ASMSUB_BODY, nameid, params)
+    node_c[(node as ubyte)] = body
+    node_d[(node as ubyte)] = rettag
+    return node
+}
+; `extsub $ADDR = name(params @REG) -> rt @REG`  (address-first decl form).
+sub parse_extsub() -> uword {
+    advance()                               ; 'extsub'
+    uword addr
+    addr = cur_val()                        ; $ADDR (INT)
+    advance()
+    advance()                               ; '='
+    uword nameid
+    nameid = cur_val()
+    advance()                               ; name
+    uword params
+    params = parse_param_list()
+    ubyte rettag
+    rettag = parse_ret()
+    uword node
+    node = new_node(ND_SUB, SUBK_ASMSUB, nameid, params)
+    node_c[(node as ubyte)] = addr          ; node_c = $ADDR for an extsub decl
+    node_d[(node as ubyte)] = rettag
+    return node
+}
+; PASS A: consume an `extsub $ADDR = name(params) [-> rt [@REG]]` decl (it has
+; no body block, so skip_sub_body's "advance to `{`" would overrun).
+sub skip_extsub_decl() {
+    repeat {
+        ubyte t
+        t = cur_kind()
+        if t == TK_EOF {
+            return
+        }
+        if t == TK_RPAREN {
+            advance()                       ; param-list close
+            break
+        }
+        advance()
+    }
+    if cur_kind() == TK_ARROW {
+        advance()                           ; ->
+        advance()                           ; rt
+        if cur_kind() == TK_AT {
+            advance()                       ; @
+            advance()                       ; REG
+        }
+    }
 }
 
 sub const_type_tag(ubyte k) -> ubyte {
@@ -2238,6 +2349,14 @@ sub parse_decls_pass() {
         }
         if t == TK_KINLINE {
             skip_sub_body()
+            continue
+        }
+        if t == TK_KASMSUB {
+            skip_sub_body()                 ; has a `{ %asm {{...}} }` body
+            continue
+        }
+        if t == TK_KEXTSUB {
+            skip_extsub_decl()              ; address-first decl, no body
             continue
         }
         if t == TK_IDENT {
@@ -2621,9 +2740,11 @@ sub emit_memvars() {
         }
         if sym_arr_size[(j as ubyte)] == 0 {
             if sym_is_const[(j as ubyte)] == 0 {
-                if sym_addr[(j as ubyte)] == $ffff {
-                    any = 1
-                    break
+                if sym_reg[(j as ubyte)] == 0 {            ; regabi params have no storage
+                    if sym_addr[(j as ubyte)] == $ffff {
+                        any = 1
+                        break
+                    }
                 }
             }
         }
@@ -2643,15 +2764,17 @@ sub emit_memvars() {
         }
         if sym_arr_size[(i as ubyte)] == 0 {
             if sym_is_const[(i as ubyte)] == 0 {
-                if sym_addr[(i as ubyte)] == $ffff {
-                    emit_sym_mangled(i)
-                    out_byte($3a)
-                    o_nl()
-                    out_text("  .byte 0")
-                    if sym_type[(i as ubyte)] == TY_UWORD {
-                        out_text(", 0")
+                if sym_reg[(i as ubyte)] == 0 {            ; regabi params have no storage
+                    if sym_addr[(i as ubyte)] == $ffff {
+                        emit_sym_mangled(i)
+                        out_byte($3a)
+                        o_nl()
+                        out_text("  .byte 0")
+                        if sym_type[(i as ubyte)] == TY_UWORD {
+                            out_text(", 0")
+                        }
+                        o_nl()
                     }
-                    o_nl()
                 }
             }
         }
@@ -4578,7 +4701,7 @@ sub codegen_expr(uword root, ubyte ctx) {
                 out_text("  tay") o_nl()
                 out_text("  pla") o_nl()
             }
-            else -> {                          ; 36 pokew tail: value lo/hi on stack,
+            36 -> {                            ; pokew tail: value lo/hi on stack,
                 out_text("  sta __p8c_aptr") o_nl()   ; addr in A:Y
                 out_text("  sty __p8c_aptr+1") o_nl()
                 out_text("  pla") o_nl()           ; hi
@@ -4587,6 +4710,13 @@ sub codegen_expr(uword root, ubyte ctx) {
                 out_text("  pla") o_nl()           ; lo
                 out_text("  ldy #$00") o_nl()
                 out_text("  sta (__p8c_aptr),y") o_nl()
+            }
+            37 -> { o_tax() }                  ; regabi: transfer A -> X
+            38 -> { o_tay() }                  ; regabi: transfer A -> Y
+            else -> {                          ; 39 regabi extsub call: jsr $ADDR
+                out_text("  jsr $")
+                out_hex4(nd)
+                o_nl()
             }
         }
     }
@@ -4836,6 +4966,58 @@ sub emit_wshift_loop(ubyte is_left) {
 ; lower a call (regular sub or builtin) by pushing its argument-eval + jsr
 ; tasks. Args are evaluated (in source order) onto the CPU stack, then popped
 ; into the param slots before the jsr -- all on the unified work stack.
+; lower a register-ABI asmsub/extsub call: load each arg into its annotated
+; register (X/Y-bound args first, then A/AY-bound, so the A-evaluator can't
+; clobber an already-loaded X/Y), then jsr the address (extsub) or label
+; (asmsub-body). Port of p8c's _emit_regabi_args + the asmsub jsr.
+sub handle_regabi_call(uword callnode, uword callee, uword si, ubyte is_ext) {
+    collect_params(callee)                  ; fills call_reg / call_isw / call_n
+    ; snapshot the arg nodes (source order).
+    uword acell
+    acell = reverse_cons(node_b[(callnode as ubyte)])
+    ubyte j
+    j = 0
+    repeat {
+        if acell == 0 {
+            break
+        }
+        call_arg[j] = cons_val[(acell as ubyte)]
+        j = j + 1
+        acell = cons_next[(acell as ubyte)]
+    }
+    ; push tasks in REVERSE execution order (the es stack is LIFO).
+    ; (1) the jsr target -- executes last.
+    if is_ext != 0 {
+        es_push(39, sub_addr[(si as ubyte)], 0)   ; jsr $ADDR
+    } else {
+        es_push(22, callee, 0)                     ; jsr p8s_<name>
+    }
+    ubyte jj
+    ubyte r
+    ; (2) the A/AY-bound args (reverse source order) -- execute after X/Y.
+    jj = call_n
+    repeat {
+        if jj == 0 {
+            break
+        }
+        jj = jj - 1
+        r = call_reg[jj]
+        if r == 1 { es_push(0, call_arg[jj], 0) }   ; A:  eval byte into A
+        if r == 4 { es_push(1, call_arg[jj], 0) }   ; AY: eval word into A:Y
+    }
+    ; (3) the X/Y-bound args (reverse source order) -- on top, execute first.
+    ;     transfer pushed before eval so the pop order is eval-then-transfer.
+    jj = call_n
+    repeat {
+        if jj == 0 {
+            break
+        }
+        jj = jj - 1
+        r = call_reg[jj]
+        if r == 2 { es_push(37, 0, 0)  es_push(0, call_arg[jj], 0) }   ; X: eval; tax
+        if r == 3 { es_push(38, 0, 0)  es_push(0, call_arg[jj], 0) }   ; Y: eval; tay
+    }
+}
 sub handle_call(uword callnode) {
     uword callee
     callee = node_a[(callnode as ubyte)]
@@ -4844,6 +5026,20 @@ sub handle_call(uword callnode) {
     if bk != 0 {
         handle_builtin(callnode, bk)
         return
+    }
+    uword si
+    si = find_sub(callee)
+    if si != $ffff {
+        ubyte sk
+        sk = sub_kind[(si as ubyte)]
+        if sk == SUBK_ASMSUB {
+            handle_regabi_call(callnode, callee, si, 1)    ; extsub -> jsr $ADDR
+            return
+        }
+        if sk == SUBK_ASMSUB_BODY {
+            handle_regabi_call(callnode, callee, si, 0)    ; asmsub -> jsr label
+            return
+        }
     }
     collect_params(callee)
     if call_n == 1 {
@@ -5554,6 +5750,7 @@ sub collect_params(uword callee) {
                 } else {
                     call_isw[call_n] = 0
                 }
+                call_reg[call_n] = sym_reg[(i as ubyte)]
                 call_n = call_n + 1
             }
         }
@@ -5711,8 +5908,16 @@ sub register_subs() {
                 advance()
                 snode = parse_sub(SUBK_INLINE)
             } else {
-                issub = 0
-                cg_skip_decl()
+                if t == TK_KASMSUB {
+                    snode = parse_asmsub()
+                } else {
+                    if t == TK_KEXTSUB {
+                        snode = parse_extsub()
+                    } else {
+                        issub = 0
+                        cg_skip_decl()
+                    }
+                }
             }
         }
         if issub != 0 {
@@ -5740,6 +5945,8 @@ sub register_subs() {
                 pnode = cons_val[(pcell as ubyte)]
                 ubyte ptag
                 ptag = node_op[(pnode as ubyte)]
+                ubyte preg
+                preg = lsb(node_b[(pnode as ubyte)])    ; register-ABI code (0 = static slot)
                 ubyte psz
                 psz = 1
                 if ptag == TY_UWORD { psz = 2 }
@@ -5749,17 +5956,26 @@ sub register_subs() {
                 sym_mkind[sym_count] = 1
                 sym_is_const[sym_count] = 0
                 sym_arr_size[sym_count] = 0
-                if zp_next + psz > $ff {
+                sym_reg[sym_count] = preg
+                if preg != 0 {
+                    ; register-bound param: arrives in A/X/Y/AY, no ZP storage,
+                    ; and crucially no zp_next bump (so other vars' ZP addresses
+                    ; stay byte-identical to p8c, which gives asmsub params none).
                     sym_addr[sym_count] = $ffff
                 } else {
-                    sym_addr[sym_count] = zp_next
-                    zp_next = zp_next + psz
+                    if zp_next + psz > $ff {
+                        sym_addr[sym_count] = $ffff
+                    } else {
+                        sym_addr[sym_count] = zp_next
+                        zp_next = zp_next + psz
+                    }
                 }
                 sym_count = sym_count + 1
                 pcell = cons_next[(pcell as ubyte)]
             }
             ; then this sub's locals (walk the body), continuing zp_next.
-            ; (asmsub has no body -- node_c is its address -- so skip the walk.)
+            ; (an extsub has no body -- node_c is its address -- so skip the
+            ; walk; an asmsub-body's block holds only %asm, so it finds none.)
             if node_op[(snode as ubyte)] != SUBK_ASMSUB {
                 walk_locals(node_c[(snode as ubyte)], node_a[(snode as ubyte)])
             }
@@ -5788,6 +6004,20 @@ sub emit_sub(uword snode) {
     o_nl()
     out_text("  rts")
     o_nl()
+}
+; emit an inline-body asmsub: blank line, `; ---- asmsub <name> ----`, the
+; `p8s_<name>:` label, then the raw %asm body (no static-param prologue, no
+; per-sub return label -- the body has its own rts). Mirrors p8c's _emit_sub.
+sub emit_asmsub(uword snode) {
+    o_nl()
+    out_text("; ---- asmsub ")
+    out_ident_text(node_a[(snode as ubyte)])
+    out_text(" ----")
+    o_nl()
+    emit_sub_label(node_a[(snode as ubyte)])
+    out_byte($3a)
+    o_nl()
+    codegen_body(node_c[(snode as ubyte)])
 }
 ; pass B: re-scan the source and codegen every non-main regular sub in source
 ; order (main was emitted by pass M; asmsub has no body; inline is spliced at
@@ -5831,13 +6061,26 @@ sub emit_subs() {
                 snode = parse_sub(SUBK_INLINE)
                 kind = SUBK_INLINE
             } else {
-                issub = 0
-                cg_skip_decl()
+                if t == TK_KASMSUB {
+                    snode = parse_asmsub()
+                    kind = SUBK_ASMSUB_BODY
+                } else {
+                    if t == TK_KEXTSUB {
+                        snode = parse_extsub()
+                        kind = SUBK_ASMSUB       ; pure decl, emits nothing
+                    } else {
+                        issub = 0
+                        cg_skip_decl()
+                    }
+                }
             }
         }
         if issub != 0 {
             if kind == SUBK_SUB {
                 emit_sub(snode)
+            }
+            if kind == SUBK_ASMSUB_BODY {
+                emit_asmsub(snode)
             }
             reset_nodes()
         }

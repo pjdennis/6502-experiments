@@ -534,6 +534,28 @@ INLINE_ASM_PROGRAMS = [
 ]
 
 
+# asmsub / extsub with register-ABI params (@A/@X/@Y/@AY). extsub is a pure
+# `jsr $ADDR` decl; an asmsub-body emits a `p8s_<name>:` label + raw %asm. The
+# call ABI loads X/Y-bound args first, then the A/AY-bound arg (so the
+# A-evaluator can't clobber an already-loaded X/Y), then jsr. Register-bound
+# params get no ZP/main storage. Byte-identical to p8c. (Placed inside `main`,
+# as upstream requires -- p1.p8's own syscall asmsubs sit inside its main too.)
+ASMSUB_PROGRAMS = [
+    # extsub decl + register-ABI call (ubyte @A)
+    '%output raw\n%launcher none\nmain {\n  extsub $F00F = sx(ubyte c @A)\n  sub start() {\n    ubyte x\n    x = 7\n    sx(x)\n  }\n}\n',
+    # asmsub-body, ubyte @A -> ubyte @A, used as an expression
+    '%output raw\n%launcher none\nmain {\n  asmsub dbl(ubyte v @A) -> ubyte @A {\n    %asm {{\n    asl  a\n    rts\n    }}\n  }\n  sub start() {\n    ubyte x\n    x = dbl(21)\n  }\n}\n',
+    # multi-arg: @A + @X ordering (X loaded first, A last)
+    '%output raw\n%launcher none\nmain {\n  asmsub wr(ubyte b @A, ubyte h @X) {\n    %asm {{\n    sta $d020\n    rts\n    }}\n  }\n  sub start() {\n    wr(5, 2)\n  }\n}\n',
+    # @A + @Y ordering
+    '%output raw\n%launcher none\nmain {\n  asmsub pp(ubyte a @A, ubyte i @Y) {\n    %asm {{\n    sta $1000,y\n    rts\n    }}\n  }\n  sub start() {\n    pp(7, 3)\n  }\n}\n',
+    # extsub taking a uword @AY arg, returning ubyte @A
+    '%output raw\n%launcher none\nmain {\n  extsub $F012 = op(uword fn @AY) -> ubyte @A\n  sub start() {\n    uword w\n    ubyte h\n    w = $1234\n    h = op(w)\n  }\n}\n',
+    # asmsub returning uword @AY
+    '%output raw\n%launcher none\nmain {\n  asmsub gw(ubyte i @A) -> uword @AY {\n    %asm {{\n    tay\n    lda #$00\n    rts\n    }}\n  }\n  sub start() {\n    uword w\n    w = gw(4)\n  }\n}\n',
+]
+
+
 def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
 
@@ -741,6 +763,11 @@ class P1Equivalence(unittest.TestCase):
 
     def test_inline_asm_programs(self):
         for src in INLINE_ASM_PROGRAMS:
+            with self.subTest(src=src):
+                self._equiv(src)
+
+    def test_asmsub_programs(self):
+        for src in ASMSUB_PROGRAMS:
             with self.subTest(src=src):
                 self._equiv(src)
 
