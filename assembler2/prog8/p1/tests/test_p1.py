@@ -403,6 +403,22 @@ M5_BUILTIN_PROGRAMS = [
 ]
 
 
+# Type casts (`expr as TYPE`): byte<->word narrowing/widening in byte and word
+# context, casts of leaves and of compound (word-typed) expressions, and casts
+# nested inside larger expressions. Byte-identical to p8c (the cast selects the
+# operand-evaluation width; a uword->ubyte cast keeps the low byte, high = 0).
+CAST_PROGRAMS = [
+    '%output raw\n%launcher none\nmain {\nubyte x\nuword w\n  sub start() {\n    w = 300\n    x = w as ubyte\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte x\nuword w\n  sub start() {\n    x = 5\n    w = x as uword\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte x\nubyte y\nuword w\n  sub start() {\n    w = (x + y) as uword\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte x\nuword w\nuword v\n  sub start() {\n    x = (w + v) as ubyte\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte x\nuword v\nuword w\n  sub start() {\n    w = v + (x as uword)\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte x\nuword w\n  sub start() {\n    x = (w as ubyte) + 1\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte x\nuword v\n  sub start() {\n    v = (x as uword) << 2\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte x\nuword w\nuword v\n  sub start() {\n    x = (w + v + 5) as ubyte\n  }\n}\n',
+]
+
+
 def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
 
@@ -609,6 +625,11 @@ class P1Equivalence(unittest.TestCase):
 
     def test_m5_ret_programs(self):
         for src in M5_RET_PROGRAMS:
+            with self.subTest(src=src):
+                self._equiv(src)
+
+    def test_cast_programs(self):
+        for src in CAST_PROGRAMS:
             with self.subTest(src=src):
                 self._equiv(src)
 

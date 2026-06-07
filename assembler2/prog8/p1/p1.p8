@@ -68,6 +68,7 @@ const ubyte TK_KWHEN  = 61
 const ubyte TK_KCONST = 62
 const ubyte TK_KENUM  = 63
 const ubyte TK_KSTRUCT= 64
+const ubyte TK_KAS    = 66   ; `as` (type cast)
 ; operator punctuation
 const ubyte TK_PLUS   = 70
 const ubyte TK_MINUS  = 71
@@ -127,6 +128,7 @@ const ubyte ND_ENUM  = 28   ; a=name id, b=members cons head
 const ubyte ND_ENUMMEMBER = 29 ; op=has_value, a=name id, b=value
 const ubyte ND_STRUCT= 30   ; a=name id, b=fields cons head
 const ubyte ND_FIELD = 31   ; op=type tag, a=field name id
+const ubyte ND_CAST  = 32   ; op=target type tag, a=operand node (expr as TYPE)
 
 ; type tags
 const ubyte TY_UBYTE = 0
@@ -226,6 +228,11 @@ uword[16] op_a
 uword[16] op_b
 uword[16] op_floor
 uword op_sp
+; shunting-yard parser state (module-level so pe_cast can share them with
+; parse_expr): expect_operand = next token should be an operand; index_ok =
+; a postfix `[`/`as` may follow.
+ubyte expect_operand
+ubyte index_ok
 
 ; cons cells
 uword[60] cons_val
@@ -301,6 +308,9 @@ ubyte[96] es_type
 uword[96] es_node
 ubyte[96] es_op
 ubyte es_sp
+; expr_is_word's iterative OR-walk stack (operands still to visit).
+uword[24] eiw_stk
+ubyte eiw_sp
 ; statement work stack (control flow without recursion): a task is
 ; 0=emit stmt node, 1=emit label .L<kind>_<id>:, 2=emit jmp to it,
 ; 3=pop the loop-label stack.
@@ -732,6 +742,7 @@ sub classify_name() -> ubyte {
     if kw_is("return") != 0 { return TK_KRETURN }
     if kw_is("struct") != 0 { return TK_KSTRUCT }
     if kw_is("continue") != 0 { return TK_KCONTINUE }
+    if kw_is("as") != 0 { return TK_KAS }
     return TK_IDENT
 }
 
@@ -1187,11 +1198,27 @@ sub close_call() {
     push_operand(node)
 }
 
+; ND_CAST -- `<operand> as TYPE`. Reduce pending higher-or-equal operators,
+; then wrap the top operand in a cast node. Split out of parse_expr (per-sub
+; arena cap, mirroring the self-hosting pass1).
+sub pe_cast() {
+    repeat {
+        if op_sp == 0 { break }
+        if op_kind[(op_sp - 1 as ubyte)] >= OPK_LPAREN { break }
+        apply_top()
+    }
+    advance()                              ; 'as'
+    ubyte tt
+    tt = type_tag(cur_kind())
+    advance()                              ; type keyword
+    operand_sp = operand_sp - 1
+    push_operand(new_node(ND_CAST, tt, operand_stack[(operand_sp as ubyte)], 0))
+    expect_operand = 0
+    index_ok = 0
+}
 sub parse_expr() -> uword {
     operand_sp = 0
     op_sp = 0
-    ubyte expect_operand
-    ubyte index_ok
     expect_operand = 1
     index_ok = 0
 
@@ -1372,6 +1399,10 @@ sub parse_expr() -> uword {
                 continue
             }
             break
+        }
+        if t == TK_KAS {
+            pe_cast()
+            continue
         }
         break
     }
@@ -2781,16 +2812,62 @@ sub emit_br(ubyte brcode, ubyte tkind, uword tid) {
 ; is this expression a uword (for the word-compare condition path)? Leaf
 ; idents resolve via the symbol table; &name is a uword. (Nested expr typing
 ; is a tracked gap, as in the byte comparison signedness.)
+; is this expression word-typed? Iterative OR-walk (no recursion): word if the
+; node itself is word, or -- for an arith/bitwise/shift binop -- if either
+; operand is. Operands still to visit are held on eiw_stk. Matches p8c's typing.
 sub expr_is_word(uword e) -> ubyte {
-    if node_kind[(e as ubyte)] == ND_ADDROF {
-        return 1
-    }
-    if node_kind[(e as ubyte)] == ND_IDENT {
-        uword si
-        si = find_sym(node_a[(e as ubyte)])
-        if si != $ffff {
-            if sym_type[(si as ubyte)] == TY_UWORD {
+    eiw_sp = 0
+    eiw_stk[eiw_sp] = e
+    eiw_sp = eiw_sp + 1
+    repeat {
+        if eiw_sp == 0 {
+            break
+        }
+        eiw_sp = eiw_sp - 1
+        uword n
+        n = eiw_stk[eiw_sp]
+        if node_kind[(n as ubyte)] == ND_CAST {
+            ; (operand as TYPE): the cast's target type decides.
+            if node_op[(n as ubyte)] == TY_UWORD {
                 return 1
+            }
+        }
+        if node_kind[(n as ubyte)] == ND_ADDROF {
+            return 1
+        }
+        if node_kind[(n as ubyte)] == ND_CALL {
+            if call_returns_ubyte(n) == 0 {
+                return 1
+            }
+        }
+        if node_kind[(n as ubyte)] == ND_IDENT {
+            uword si
+            si = find_sym(node_a[(n as ubyte)])
+            if si != $ffff {
+                if sym_type[(si as ubyte)] == TY_UWORD {
+                    return 1
+                }
+            }
+        }
+        if node_kind[(n as ubyte)] == ND_INDEX {
+            ; arr[i] has the array's element type; a uword[] element is a word.
+            uword ai
+            ai = find_sym(node_a[(node_a[(n as ubyte)] as ubyte)])
+            if ai != $ffff {
+                if sym_type[(ai as ubyte)] == TY_UWORD {
+                    return 1
+                }
+            }
+        }
+        if node_kind[(n as ubyte)] == ND_BINOP {
+            ; arith/bitwise/shift binop widens to word if either operand is word.
+            if node_op[(n as ubyte)] >= TK_PLUS {
+                if node_op[(n as ubyte)] <= TK_SHR {
+                    eiw_stk[eiw_sp] = node_a[(n as ubyte)]
+                    eiw_sp = eiw_sp + 1
+                    eiw_stk[eiw_sp] = node_b[(n as ubyte)]
+                    eiw_sp = eiw_sp + 1
+                }
             }
         }
     }
@@ -4210,6 +4287,17 @@ sub eval_byte_dispatch(uword nd) {
         handle_call(nd)                     ; byte-returning call -> A
         return
     }
+    if k == ND_CAST {
+        ; (operand as TYPE) in byte context: low byte of the operand -> A.
+        uword cop
+        cop = node_a[(nd as ubyte)]
+        if expr_is_word(cop) != 0 {
+            es_push(1, cop, 0)              ; word operand -> A (low) / Y (hi)
+        } else {
+            es_push(0, cop, 0)              ; byte operand -> A
+        }
+        return
+    }
     emit_byte_leaf_load(nd)
 }
 ; dispatch a word-context node: push the task sequence that evaluates it -> A:Y.
@@ -4250,6 +4338,23 @@ sub eval_word_dispatch(uword nd) {
     if k == ND_UNOP {
         es_push(20, 0, node_op[(nd as ubyte)])
         es_push(1, node_a[(nd as ubyte)], 0)
+        return
+    }
+    if k == ND_CAST {
+        ; (operand as TYPE) in word context. Cast to uword = widen/identity;
+        ; cast to ubyte = low byte in A, high byte 0 (ldy #0 after the eval).
+        uword cop
+        cop = node_a[(nd as ubyte)]
+        if node_op[(nd as ubyte)] == TY_UWORD {
+            es_push(1, cop, 0)
+        } else {
+            es_push(25, 0, 0)               ; ldy #$00 (high byte = 0), runs after
+            if expr_is_word(cop) != 0 {
+                es_push(1, cop, 0)          ; narrow uword -> low byte in A
+            } else {
+                es_push(0, cop, 0)          ; byte operand -> A
+            }
+        }
         return
     }
     ; leaf: int / ident / string
