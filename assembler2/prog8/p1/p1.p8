@@ -3441,13 +3441,13 @@ sub codegen_inline_asm(uword st) {
     sid = node_a[(st as ubyte)]
     uword off
     off = str_off[(sid as ubyte)]
-    uword len
-    len = str_len[(sid as ubyte)]
+    uword slen
+    slen = str_len[(sid as ubyte)]
     out_text("  ")
     uword i
     i = 0
     repeat {
-        if i >= len {
+        if i >= slen {
             break
         }
         ubyte c
