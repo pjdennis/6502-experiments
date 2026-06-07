@@ -458,6 +458,17 @@ void write6502(uint16_t address, uint8_t value) {
     }
 
     memory[address] = value;
+    {
+        static int watch_init = 0;
+        static int watch_addr = -1;
+        if (!watch_init) {
+            watch_init = 1;
+            const char *w = getenv("E6502_WATCH");
+            if (w) watch_addr = (int)strtol(w, NULL, 16);
+        }
+        if (watch_addr >= 0 && address == (uint16_t)watch_addr)
+            fprintf(stderr, "[WATCH] write $%02X to $%04X from pc=$%04X\n", value, address, pc);
+    }
 }
 
 void show_commandline(int argc, char**argv) {
