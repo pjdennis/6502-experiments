@@ -3605,41 +3605,31 @@ sub emit_byte_leaf_load(uword e) {
         return
     }
     if k == ND_INDEX {
-        ; ubyte-array read, fast `,y` path (matches p8c _array_fast_byte: ubyte
-        ; element, <=256 elems, byte index). Const index -> absolute; simple
-        ; byte-var index -> lda idx / tay / lda arr,y. (uword arrays, >256, and
-        ; uword/complex indices need the __p8c_aptr path -- not here yet.)
+        ; byte-context array read (pushes a load-tail task + the index eval, so
+        ; complex indices run on the work stack). uword[] -> low byte of the
+        ; split lo array; ubyte[] fast path (const -> absolute, else idx -> A
+        ; then `lda arr,y`); ubyte[] with a uword index -> byte-index load.
         uword asi
         asi = find_sym(node_a[(node_a[(e as ubyte)] as ubyte)])
         uword idx
         idx = node_b[(e as ubyte)]
-        if sym_type[(asi as ubyte)] == TY_UBYTE {
-            if sym_arr_size[(asi as ubyte)] <= 256 {
-                if node_kind[(idx as ubyte)] == ND_INT {
-                    o_lda()
-                    emit_sym_mangled(asi)
-                    out_byte($2b)
-                    out_dec(node_a[(idx as ubyte)])
-                    o_nl()
-                    return
-                }
-                if node_kind[(idx as ubyte)] == ND_IDENT {
-                    if ident_is_const(node_a[(idx as ubyte)]) == 0 {
-                        if expr_is_word(idx) == 0 {
-                            o_lda()
-                            emit_mangled(node_a[(idx as ubyte)])
-                            o_nl()
-                            o_tay()
-                            o_lda()
-                            emit_sym_mangled(asi)
-                            out_text(",y")
-                            o_nl()
-                            return
-                        }
-                    }
-                }
-            }
+        if sym_type[(asi as ubyte)] == TY_UWORD {
+            es_push(31, asi, 0)             ; tay; lda arr_lo,y
+            es_push(1, idx, 0)              ; evaluate the index (word)
+            return
         }
+        if array_fast(asi, idx) != 0 {
+            if node_kind[(idx as ubyte)] == ND_INT {
+                o_lda() emit_sym_mangled(asi) out_byte($2b) out_dec(node_a[(idx as ubyte)]) o_nl()
+                return
+            }
+            es_push(32, asi, 0)             ; tay; lda arr,y
+            es_push(0, idx, 0)              ; byte index
+            return
+        }
+        es_push(32, asi, 0)
+        es_push(1, idx, 0)                  ; uword index (<=256)
+        return
     }
 }
 ; emit the right-hand operand text of a byte binop. mode 0: a leaf rhs node
@@ -4200,15 +4190,39 @@ sub codegen_expr(uword root, ubyte ctx) {
                 out_hex4(node_a[(nd as ubyte)])
                 o_nl()
             }
-            else -> {
-                ; 28: mkword tail (msb on the CPU stack, lsb in A) -> A=lo, Y=hi
+            28 -> {
+                ; mkword tail (msb on the CPU stack, lsb in A) -> A=lo, Y=hi
                 o_tax()
                 o_pla()
                 o_tay()
                 o_txa()
             }
+            29 -> { emit_word_arr_load(nd) }   ; word-ctx uword[]: idx in A -> A:Y
+            30 -> {                            ; word-ctx ubyte[]: idx -> A, widen
+                o_tay()
+                o_lda() emit_sym_mangled(nd) out_text(",y") o_nl()
+                o_ldy() o_imm() out_text("00") o_nl()
+            }
+            31 -> {                            ; byte-ctx uword[]: idx -> low byte
+                o_tay()
+                o_lda() emit_sym_mangled(nd) out_text("_lo,y") o_nl()
+            }
+            else -> {                          ; 32: byte-ctx ubyte[]: idx -> A
+                o_tay()
+                o_lda() emit_sym_mangled(nd) out_text(",y") o_nl()
+            }
         }
     }
+}
+; word-ctx uword[] element load: index (low byte) in A -> A:Y = arr[index]
+; (split lo/hi byte arrays, byte-indexed).
+sub emit_word_arr_load(uword asi) {
+    o_tay()
+    o_lda() emit_sym_mangled(asi) out_text("_lo,y") o_nl()
+    o_pha()
+    o_lda() emit_sym_mangled(asi) out_text("_hi,y") o_nl()
+    o_tay()
+    o_pla()
 }
 ; dispatch a byte-context node: push the task sequence that evaluates it into A.
 sub eval_byte_dispatch(uword nd) {
@@ -4338,6 +4352,27 @@ sub eval_word_dispatch(uword nd) {
     if k == ND_UNOP {
         es_push(20, 0, node_op[(nd as ubyte)])
         es_push(1, node_a[(nd as ubyte)], 0)
+        return
+    }
+    if k == ND_INDEX {
+        ; word-context array read. uword[] -> split lo/hi element into A:Y;
+        ; ubyte[] -> low byte into A, widened (high = 0).
+        uword asi
+        asi = find_sym(node_a[(node_a[(nd as ubyte)] as ubyte)])
+        uword idx
+        idx = node_b[(nd as ubyte)]
+        if sym_type[(asi as ubyte)] == TY_UWORD {
+            es_push(29, asi, 0)             ; emit_word_arr_load (index in A -> A:Y)
+            es_push(1, idx, 0)              ; evaluate the index (word)
+            return
+        }
+        if array_fast(asi, idx) != 0 {
+            es_push(30, asi, 0)             ; widen: tay; lda arr,y; ldy #0
+            es_push(0, idx, 0)              ; byte index
+            return
+        }
+        es_push(30, asi, 0)
+        es_push(1, idx, 0)                  ; uword index (<=256)
         return
     }
     if k == ND_CAST {

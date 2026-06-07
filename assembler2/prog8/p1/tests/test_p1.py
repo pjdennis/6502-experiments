@@ -433,6 +433,19 @@ ARRAY_STORE_PROGRAMS = [
 ]
 
 
+# Word-context and uword[] array reads: uword[] element -> A:Y (split lo/hi),
+# ubyte[] widened to uword, const/byte-var/expr/uword indices, reads inside
+# larger expressions, and a uword[] element narrowed via an explicit cast.
+ARRAY_READ_WORD_PROGRAMS = [
+    '%output raw\n%launcher none\nmain {\nuword[6] warr\nubyte i\nuword w\n  sub start() {\n    w = warr[i]\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte[8] arr\nubyte i\nuword w\n  sub start() {\n    w = arr[i]\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nuword[6] warr\nuword w\n  sub start() {\n    w = warr[2]\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nuword[6] warr\nubyte i\nuword w\n  sub start() {\n    w = warr[i + 1]\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte[8] arr\nuword[6] warr\nubyte i\nuword w\n  sub start() {\n    w = arr[i] + warr[2]\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nuword[6] warr\nubyte i\nubyte x\n  sub start() {\n    x = warr[i] as ubyte\n  }\n}\n',
+]
+
+
 def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
 
@@ -649,6 +662,11 @@ class P1Equivalence(unittest.TestCase):
 
     def test_array_store_programs(self):
         for src in ARRAY_STORE_PROGRAMS:
+            with self.subTest(src=src):
+                self._equiv(src)
+
+    def test_array_read_word_programs(self):
+        for src in ARRAY_READ_WORD_PROGRAMS:
             with self.subTest(src=src):
                 self._equiv(src)
 
