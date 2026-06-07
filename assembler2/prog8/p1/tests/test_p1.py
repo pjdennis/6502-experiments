@@ -474,6 +474,18 @@ COMPOUND_COND_PROGRAMS = [
 ]
 
 
+# peek()/poke() with a computed (non-literal) address: the address is parked
+# in __p8c_aptr and accessed via (aptr),y (literal addresses still use the
+# direct lda/sta $XXXX). Byte-identical to p8c.
+PEEK_POKE_PROGRAMS = [
+    '%output raw\n%launcher none\nmain {\nubyte a\nuword w\n  sub start() {\n    a = peek(w)\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nuword w\n  sub start() {\n    poke(w, a)\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nuword w\n  sub start() {\n    a = peek(w + 1)\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nuword w\n  sub start() {\n    poke(w + 1, a)\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\n  sub start() {\n    a = peek($d020)\n    poke($d020, a)\n  }\n}\n',
+]
+
+
 def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
 
@@ -705,6 +717,11 @@ class P1Equivalence(unittest.TestCase):
 
     def test_compound_cond_programs(self):
         for src in COMPOUND_COND_PROGRAMS:
+            with self.subTest(src=src):
+                self._equiv(src)
+
+    def test_peek_poke_programs(self):
+        for src in PEEK_POKE_PROGRAMS:
             with self.subTest(src=src):
                 self._equiv(src)
 

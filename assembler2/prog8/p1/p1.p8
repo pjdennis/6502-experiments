@@ -4378,9 +4378,22 @@ sub codegen_expr(uword root, ubyte ctx) {
                 o_tay()
                 o_lda() emit_sym_mangled(nd) out_text("_lo,y") o_nl()
             }
-            else -> {                          ; 32: byte-ctx ubyte[]: idx -> A
+            32 -> {                            ; byte-ctx ubyte[]: idx -> A
                 o_tay()
                 o_lda() emit_sym_mangled(nd) out_text(",y") o_nl()
+            }
+            33 -> {                            ; peek tail: addr in A:Y -> A
+                out_text("  sta __p8c_aptr") o_nl()
+                out_text("  sty __p8c_aptr+1") o_nl()
+                out_text("  ldy #$00") o_nl()
+                out_text("  lda (__p8c_aptr),y") o_nl()
+            }
+            else -> {                          ; 34 poke tail: value on CPU stack,
+                out_text("  sta __p8c_aptr") o_nl()   ; addr in A:Y
+                out_text("  sty __p8c_aptr+1") o_nl()
+                out_text("  pla") o_nl()
+                out_text("  ldy #$00") o_nl()
+                out_text("  sta (__p8c_aptr),y") o_nl()
             }
         }
     }
@@ -4738,15 +4751,28 @@ sub handle_builtin(uword callnode, ubyte bk) {
         es_push(1, a0, 0)
         return
     }
-    if bk == 3 {                       ; peek(literal) -> lda $XXXX
-        out_text("  lda $")
-        out_hex4(node_a[(a0 as ubyte)])
-        o_nl()
+    if bk == 3 {                       ; peek(addr): literal -> lda $XXXX; else
+        if node_kind[(a0 as ubyte)] == ND_INT {   ; computed -> aptr indirect.
+            out_text("  lda $")
+            out_hex4(node_a[(a0 as ubyte)])
+            o_nl()
+        } else {
+            es_push(33, 0, 0)          ; peek tail (addr -> A via aptr)
+            es_push(1, a0, 0)          ; evaluate the address (word)
+        }
         return
     }
-    if bk == 4 {                       ; poke(literal, byteexpr) -> sta $XXXX
-        es_push(27, a0, 0)             ; sta $XXXX (a0 = literal addr node)
-        es_push(0, a1, 0)              ; evaluate the byte value (a1)
+    if bk == 4 {                       ; poke(addr, byteexpr)
+        if node_kind[(a0 as ubyte)] == ND_INT {
+            es_push(27, a0, 0)         ; sta $XXXX (a0 = literal addr node)
+            es_push(0, a1, 0)          ; evaluate the byte value (a1)
+        } else {
+            ; computed addr: eval value -> A; pha; eval addr -> A:Y; poke tail.
+            es_push(34, 0, 0)          ; poke tail (value on stack, addr via aptr)
+            es_push(1, a0, 0)          ; evaluate the address (word)
+            es_push(3, 0, 0)           ; pha (save the value)
+            es_push(0, a1, 0)          ; evaluate the byte value (a1)
+        }
         return
     }
     ; mkword(msb, lsb) -> A=low, Y=high (Y-safe via X).
