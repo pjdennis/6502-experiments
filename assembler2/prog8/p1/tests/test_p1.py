@@ -446,6 +446,19 @@ ARRAY_READ_WORD_PROGRAMS = [
 ]
 
 
+# Byte augmented assignment with a non-leaf RHS (array read / nested expr):
+# p8c emits `lda lhs` then, for a non-leaf RHS, evaluates it to __p8c_tmp0,
+# reloads lhs, and combines (the first `lda lhs` is dead). Leaf RHS applies in
+# place. Byte-identical to p8c.
+AUG_NONLEAF_PROGRAMS = [
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\nubyte[8] arr\n  sub start() {\n    a += arr[b]\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\nubyte[8] arr\n  sub start() {\n    a -= arr[b]\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\nubyte[8] arr\n  sub start() {\n    a |= arr[b]\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\nubyte[8] arr\n  sub start() {\n    a ^= arr[b]\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\nubyte[8] arr\n  sub start() {\n    a += arr[b] + 1\n  }\n}\n',
+]
+
+
 def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
 
@@ -667,6 +680,11 @@ class P1Equivalence(unittest.TestCase):
 
     def test_array_read_word_programs(self):
         for src in ARRAY_READ_WORD_PROGRAMS:
+            with self.subTest(src=src):
+                self._equiv(src)
+
+    def test_aug_nonleaf_programs(self):
+        for src in AUG_NONLEAF_PROGRAMS:
             with self.subTest(src=src):
                 self._equiv(src)
 

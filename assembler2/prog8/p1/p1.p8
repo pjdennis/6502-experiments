@@ -3644,7 +3644,11 @@ sub emit_byte_operand(ubyte mode, uword rhs) {
             emit_mangled(node_a[(rhs as ubyte)])
         }
     } else {
-        out_text("__p8c_tmp1")
+        if mode == 2 {
+            out_text("__p8c_tmp0")     ; augmented-assign spill slot
+        } else {
+            out_text("__p8c_tmp1")
+        }
     }
 }
 ; one shift label: ".Lshl_top_<id>" / ".Lshr_end_<id>" etc. (matching p8c's
@@ -4998,9 +5002,18 @@ sub codegen_assign(uword st) {
         emit_sty_sym_hi(si)
         return
     }
-    ; byte augmented: lda LHS; <op> leaf-operand; sta LHS.
+    ; byte augmented (port of p8c _emit_assign): lda LHS; a leaf rhs applies
+    ; in place; a non-leaf rhs evaluates to __p8c_tmp0, then LHS is reloaded
+    ; and combined (the first lda LHS is dead in that case, matching p8c).
     emit_lda_sym(si)
-    emit_byte_binop_leaf(aug_to_binop(op), rhs)
+    if is_leaf_rhs(rhs) != 0 {
+        emit_byte_binop_leaf(aug_to_binop(op), rhs)
+    } else {
+        codegen_byte_expr(rhs)
+        o_sta_tmp0()
+        emit_lda_sym(si)
+        emit_byte_binop_core(aug_to_binop(op), 2, 0)
+    }
     emit_sta_sym(si)
 }
 
