@@ -213,8 +213,8 @@ uword ident_pool_len
 ; same reason (p1.p8 interns ~3.4 KB of string-literal bytes). str_off/str_len
 ; stay small arrays (one entry per string; <256 strings).
 const uword str_pool = $e000
-uword[20]  str_off
-uword[20]  str_len
+uword[256] str_off
+uword[256] str_len
 uword str_count
 uword str_pool_len
 
@@ -316,7 +316,7 @@ uword cur_ret_name       ; current sub's name ident id
 ; string pool: one label per string-literal *occurrence*, numbered
 ; in codegen encounter order (matching p8c's sema-walk order); the
 ; recorded str id indexes the parser's str_pool for the trailer.
-uword[48] strpool_sid    ; str id for label N (p8c_str_N)
+uword[256] strpool_sid    ; str id for label N (p8c_str_N)
 uword strpool_count
 ; unified expression codegen work stack (replaces p8c's recursive
 ; expression codegen entirely -- byte AND word evaluation, @() reads,
@@ -987,8 +987,33 @@ sub next_raw_token() {
                 str_pool_len = str_pool_len + 1
             }
             str_len[(str_count as ubyte)] = str_pool_len - str_off[(str_count as ubyte)]
-            push_token(TK_STR, str_count)
-            str_count = str_count + 1
+            ; dedup against an earlier identical string (like idents intern):
+            ; this keeps str_count = the number of DISTINCT strings, bounded
+            ; (~240 for p1.p8 itself, < 256), instead of growing per occurrence
+            ; per lex pass -- otherwise str_off/str_len overflow on self-host.
+            ; The codegen label numbering (intern_str_label, encounter order) is
+            ; unchanged, so output stays byte-identical to p8c.
+            uword se2
+            ubyte sfound
+            sfound = 0
+            se2 = 0
+            repeat {
+                if se2 >= str_count {
+                    break
+                }
+                if str_sid_equal(se2, str_count) != 0 {
+                    sfound = 1
+                    break
+                }
+                se2 = se2 + 1
+            }
+            if sfound != 0 {
+                str_pool_len = str_off[(str_count as ubyte)]   ; discard the dup bytes
+                push_token(TK_STR, se2)
+            } else {
+                push_token(TK_STR, str_count)
+                str_count = str_count + 1
+            }
             return
         }
         if is_alpha_us(c) != 0 {
