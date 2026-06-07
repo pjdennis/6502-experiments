@@ -22,7 +22,13 @@
  * The wendy2c's TRANSLATE table reverses on receive, so applications
  * see X. The chip queues bytes pre-translated by the host. */
 
-#define SERIAL_USB_BUF_SIZE 4096
+/* RX queue capacity. Sized to hold a full uploaded program plus framing in a
+ * single --serial-input pre-load: the wendy2c boot ROM streams a RAW program
+ * (<= 64 KiB) + a 4-byte length/checksum frame, and the emulator pre-loads the
+ * whole --serial-input file into this queue at once (dropping any overflow), so
+ * a 4 KiB queue capped uploads at ~3.8 KB. 0x11000 (68 KiB) clears 64 KiB +
+ * frame. The boot ROM reads at its own pace, so an oversized queue is harmless. */
+#define SERIAL_USB_BUF_SIZE 0x11000
 
 struct serial_usb_state {
     uint8_t buf[SERIAL_USB_BUF_SIZE];

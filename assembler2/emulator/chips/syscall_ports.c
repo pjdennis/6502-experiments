@@ -67,8 +67,16 @@ static bool syscall_ports_read(struct chip *self, struct bus *bus,
         *data_out = 0;
         if (f) {
             int b = fgetc(f);
-            if (b == EOF) *data_out = 0x80;
-            else ungetc(b, f);
+            if (b == EOF) {
+                *data_out = 0x80;
+                /* Rewind on EOF, matching the nmos machine's read stubs
+                 * (emulator.c). A multi-pass reader (e.g. the p1.p8 compiler)
+                 * re-scans its input by just clearing its own sticky-EOF flag
+                 * and reading again from offset 0 -- no explicit seek port. */
+                fseek(f, 0, SEEK_SET);
+            } else {
+                ungetc(b, f);
+            }
         }
         return true;
     }

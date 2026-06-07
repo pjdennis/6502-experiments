@@ -14,10 +14,15 @@
 ; + empty p8s_main + nmos exit + reset vector); P7-M2 module vars + simple
 ; assignment (symbol table + ZP bindings + leaf/augmented assignment).
 
-%address $0200
+; load address comes from the build target (.properties load_address): $0200
+; for nmos (the corpus + self-host oracle), $4000 for wendy2 (the boot ROM
+; uploads the program there). No %address here so one source serves both.
 %output raw
 %launcher none
 %import strings
+%import sysio          ; file/exit syscalls -- target-specific (nmos $F006 stubs
+                       ; vs wendy2 $F800 disk ports), picked from the build
+                       ; target's library dir. The ONE per-target source.
 main {
 
 ; ---- token kinds ----
@@ -367,71 +372,14 @@ uword dec_v
 ubyte dec_started
 
 
-; ---- syscall asmsubs (register ABI; emulator $F006+ stubs) ----
-extsub $F00F = sys_exit(ubyte code @A)
-extsub $F015 = sys_close(ubyte handle @A)
-
-asmsub sys_argv(ubyte i @A) -> uword @AY {
-    %asm {{
-        jsr  $f01e
-        pha
-        txa
-        tay
-        pla
-        rts
-    }}
-}
-
-asmsub sys_open(uword filename @AY) -> ubyte @A {
-    %asm {{
-        pha
-        tya
-        tax
-        pla
-        jsr  $f012
-        rts
-    }}
-}
-
-asmsub sys_openout(uword filename @AY) -> ubyte @A {
-    %asm {{
-        pha
-        tya
-        tax
-        pla
-        jsr  $f021
-        rts
-    }}
-}
-
-; sys_read_raw returns A=byte, Y=EOF flag (Y!=0 => EOF). The prog8 wrapper
-; sys_read sets src_eof from Y, so no asm body references the (per-compiler
-; mangled) src_eof symbol -- one source form both compilers build.
-asmsub sys_read_raw(ubyte handle @A) -> uword @AY {
-    %asm {{
-        jsr  $f018
-        bcc  sys_read_ok
-        lda  #0
-        ldy  #1
-        rts
-        sys_read_ok:
-        ldy  #0
-        rts
-    }}
-}
-
+; The file/exit syscalls live in the imported `sysio` module (target-specific).
+; sys_read wraps sysio.sys_read_raw here so the EOF flag lands in this unit's
+; src_eof global (a module sub can't see main's vars).
 sub sys_read(ubyte handle) -> ubyte {
     uword r
-    r = sys_read_raw(handle)
+    r = sysio.sys_read_raw(handle)
     src_eof = msb(r)
     return lsb(r)
-}
-
-asmsub sys_write(ubyte b @A, ubyte handle @X) {
-    %asm {{
-        jsr  $f024
-        rts
-    }}
 }
 
 ; ---- I/O (sticky-EOF; emulator rewinds on EOF) ----
@@ -462,7 +410,7 @@ sub peek_src() -> ubyte {
     return peek_buf
 }
 sub out_byte(ubyte b) {
-    sys_write(b, dst_hand)
+    sysio.sys_write(b, dst_hand)
 }
 
 ; ---- character classes ----
@@ -2661,7 +2609,7 @@ sub reject_no_start() {
         poke($f002, c)
         p = p + 1
     }
-    sys_exit(1)
+    sysio.sys_exit(1)
 }
 
 sub emit_prologue() {
@@ -6094,10 +6042,10 @@ sub emit_subs() {
 ; symbol-table per-sub locals arrive at later milestones.)
   sub start() {
     uword fn
-    fn = sys_argv(0)
-    src_hand = sys_open(fn)
-    fn = sys_argv(1)
-    dst_hand = sys_openout(fn)
+    fn = sysio.sys_argv(0)
+    src_hand = sysio.sys_open(fn)
+    fn = sysio.sys_argv(1)
+    dst_hand = sysio.sys_openout(fn)
 
     reset_arena()
     prog_address = $0200                     ; nmos default load address
@@ -6183,7 +6131,7 @@ sub emit_subs() {
     emit_string_pool()
     emit_trailers()
 
-    sys_close(src_hand)
-    sys_close(dst_hand)
+    sysio.sys_close(src_hand)
+    sysio.sys_close(dst_hand)
   }
 }
