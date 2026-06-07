@@ -67,7 +67,7 @@ def build_p1_upstream(workdir: Path, src: Path = P1_SRC) -> Path:
     return img
 
 
-WENDY2_PROPS = "wendy2_mono.properties"        # 65c02, load $4000, memtop $F000
+WENDY2_PROPS = "wendy2_selfhost.properties"  # 65c02, load $0200, memtop $C000
 BOOT_SRC = REPO / "upload_and_run_eeprom_wendy2c.s"
 
 
@@ -649,7 +649,7 @@ class P1Equivalence(unittest.TestCase):
             out.unlink()
         r = subprocess.run(
             [str(EMU), str(self.boot_rom), "--machine", "wendy2c",
-             "--wendy2-prog", str(self.prog_bin), "--load", "4000",
+             "--wendy2-prog", str(self.prog_bin), "--load", "0200",
              "--disk", str(self.disk), "--cycle-cap", self.CAP],
             capture_output=True, text=True)
         return (out.read_text() if out.exists() else None), r

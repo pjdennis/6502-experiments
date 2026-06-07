@@ -201,13 +201,18 @@ uword[6] pendv
 ubyte pend_i
 ubyte pend_n
 
-; identifier text pool (reset per top-level unit while streaming)
-ubyte[120] ident_pool
+; identifier text pool -- a raw-RAM peek/poke SLAB (held-bank $01, above the
+; code) so it can exceed 256 bytes for self-host (p1.p8 itself interns ~6.6 KB
+; of identifier text). Accessed via peek()/poke(); the monolith already
+; compiles those, so this stays self-hostable. $C000-$DFFF (8 KB).
+const uword ident_pool = $c000
 uword ident_count
 uword ident_pool_len
 
-; string literal pool
-ubyte[208] str_pool
+; string literal pool -- a raw-RAM peek/poke SLAB ($E000-$EFFF, 4 KB) for the
+; same reason (p1.p8 interns ~3.4 KB of string-literal bytes). str_off/str_len
+; stay small arrays (one entry per string; <256 strings).
+const uword str_pool = $e000
 uword[20]  str_off
 uword[20]  str_len
 uword str_count
@@ -664,19 +669,19 @@ sub intern_name() -> uword {
             if j >= name_len {
                 break
             }
-            if ident_pool[(off + j as ubyte)] != name_buf[(j as ubyte)] {
+            if peek(ident_pool + (off + j)) != name_buf[(j as ubyte)] {
                 match = 0
                 break
             }
             j = j + 1
         }
         if match != 0 {
-            if ident_pool[(off + name_len as ubyte)] == 0 {
+            if peek(ident_pool + (off + name_len)) == 0 {
                 return off
             }
         }
         repeat {
-            if ident_pool[(off as ubyte)] == 0 {
+            if peek(ident_pool + (off)) == 0 {
                 off = off + 1
                 break
             }
@@ -691,11 +696,11 @@ sub intern_name() -> uword {
         if k >= name_len {
             break
         }
-        ident_pool[(ident_pool_len as ubyte)] = name_buf[(k as ubyte)]
+        poke(ident_pool + (ident_pool_len), name_buf[(k as ubyte)])
         ident_pool_len = ident_pool_len + 1
         k = k + 1
     }
-    ident_pool[(ident_pool_len as ubyte)] = 0
+    poke(ident_pool + (ident_pool_len), 0)
     ident_pool_len = ident_pool_len + 1
     return id
 }
@@ -704,7 +709,7 @@ sub ident_len_at(uword id) -> uword {
     uword n
     n = 0
     repeat {
-        if ident_pool[(id + n as ubyte)] == 0 {
+        if peek(ident_pool + (id + n)) == 0 {
             break
         }
         n = n + 1
@@ -839,19 +844,19 @@ sub build_asm_body() -> uword {
         }
         if sol != 0 {
             if started != 0 {
-                str_pool[(str_pool_len as ubyte)] = '\n'
+                poke(str_pool + (str_pool_len), '\n')
                 str_pool_len = str_pool_len + 1
             }
             sol = 0
         } else {
             repeat {
                 if sp == 0 { break }
-                str_pool[(str_pool_len as ubyte)] = ' '
+                poke(str_pool + (str_pool_len), ' ')
                 str_pool_len = str_pool_len + 1
                 sp = sp - 1
             }
         }
-        str_pool[(str_pool_len as ubyte)] = c
+        poke(str_pool + (str_pool_len), c)
         str_pool_len = str_pool_len + 1
         started = 1
     }
@@ -978,7 +983,7 @@ sub next_raw_token() {
                 } else {
                     rb = c
                 }
-                str_pool[(str_pool_len as ubyte)] = rb
+                poke(str_pool + (str_pool_len), rb)
                 str_pool_len = str_pool_len + 1
             }
             str_len[(str_count as ubyte)] = str_pool_len - str_off[(str_count as ubyte)]
@@ -1243,7 +1248,7 @@ sub append_ident_to_namebuf(uword id) {
         if j >= n {
             break
         }
-        name_buf[(name_len as ubyte)] = ident_pool[(off + j as ubyte)]
+        name_buf[(name_len as ubyte)] = peek(ident_pool + (off + j))
         name_len = name_len + 1
         j = j + 1
     }
@@ -1260,7 +1265,7 @@ sub append_ident_to_pathbuf(uword id) {
         if j >= n {
             break
         }
-        path_buf[(path_len as ubyte)] = ident_pool[(off + j as ubyte)]
+        path_buf[(path_len as ubyte)] = peek(ident_pool + (off + j))
         path_len = path_len + 1
         j = j + 1
     }
@@ -1947,9 +1952,9 @@ sub parse_block() -> uword {
 ; 0=none, 1=A, 2=X, 3=Y, 4=AY.
 sub reg_code(uword id) -> ubyte {
     ubyte b0
-    b0 = ident_pool[(id as ubyte)]
+    b0 = peek(ident_pool + (id))
     if b0 == 'A' {
-        if ident_pool[(id + 1 as ubyte)] == 'Y' { return 4 }
+        if peek(ident_pool + (id + 1)) == 'Y' { return 4 }
         return 1
     }
     if b0 == 'X' { return 2 }
@@ -2383,12 +2388,12 @@ sub parse_decls_pass() {
 ; `main { ... }`. Used to descend the namespace-main block and tag `sub start`
 ; as the SUBK_MAIN entry.
 sub id_is_start(uword id) -> ubyte {
-    if ident_pool[(id as ubyte)] != $73 { return 0 }       ; 's'
-    if ident_pool[(id + 1 as ubyte)] != $74 { return 0 }   ; 't'
-    if ident_pool[(id + 2 as ubyte)] != $61 { return 0 }   ; 'a'
-    if ident_pool[(id + 3 as ubyte)] != $72 { return 0 }   ; 'r'
-    if ident_pool[(id + 4 as ubyte)] != $74 { return 0 }   ; 't'
-    if ident_pool[(id + 5 as ubyte)] != 0 { return 0 }     ; exact length 5
+    if peek(ident_pool + (id)) != $73 { return 0 }       ; 's'
+    if peek(ident_pool + (id + 1)) != $74 { return 0 }   ; 't'
+    if peek(ident_pool + (id + 2)) != $61 { return 0 }   ; 'a'
+    if peek(ident_pool + (id + 3)) != $72 { return 0 }   ; 'r'
+    if peek(ident_pool + (id + 4)) != $74 { return 0 }   ; 't'
+    if peek(ident_pool + (id + 5)) != 0 { return 0 }     ; exact length 5
     return 1
 }
 
@@ -2445,7 +2450,7 @@ sub out_ident_text(uword id) {
         if j >= n {
             break
         }
-        out_byte(ident_pool[(off + j as ubyte)])
+        out_byte(peek(ident_pool + (off + j)))
         j = j + 1
     }
 }
@@ -2924,7 +2929,7 @@ sub emit_string_byte_list(uword sid) {
             break
         }
         ubyte c
-        c = str_pool[(off + j as ubyte)]
+        c = peek(str_pool + (off + j))
         if str_char_plain(c) != 0 {
             if in_run == 0 {
                 if any != 0 {
@@ -2973,7 +2978,7 @@ sub str_sid_equal(uword a, uword b) -> ubyte {
         if j >= n {
             break
         }
-        if str_pool[(oa + j as ubyte)] != str_pool[(ob + j as ubyte)] {
+        if peek(str_pool + (oa + j)) != peek(str_pool + (ob + j)) {
             return 0
         }
         j = j + 1
@@ -3582,7 +3587,7 @@ sub codegen_inline_asm(uword st) {
             break
         }
         ubyte c
-        c = str_pool[((off + i) as ubyte)]
+        c = peek(str_pool + ((off + i)))
         if c == '\n' {
             o_nl()
             out_text("  ")
@@ -5700,7 +5705,7 @@ sub ident_eq(uword identid, uword s) -> ubyte {
         if j >= n {
             return 0
         }
-        if ident_pool[(off + j as ubyte)] != ch {
+        if peek(ident_pool + (off + j)) != ch {
             return 0
         }
         j = j + 1
@@ -6139,10 +6144,16 @@ sub emit_subs() {
     emit_zp_bindings()
 
     ; ---- pass M: descend into `main` and codegen `sub start`'s body ----
-    ; reset_nodes (not reset_arena): keep the persistent ident/str pools so
-    ; the symbol table's ident ids stay valid as the source is re-lexed.
+    ; reset_nodes (not reset_arena): keep the persistent IDENT pool so the
+    ; symbol table's ident ids stay valid as the source is re-lexed. The STRING
+    ; pool, however, IS reset here: str ids are pass-local (nodes -- which carry
+    ; them -- are rebuilt every pass), and not resetting it lets str_count
+    ; accumulate across all four lex passes (A/S/M/B), overflowing str_off/
+    ; str_len. Resetting before pass M caps it at the M+B codegen passes.
     reset_source()
     reset_nodes()
+    str_count = 0
+    str_pool_len = 0
     lex_init()
     strpool_count = 0
     mul_used = 0
