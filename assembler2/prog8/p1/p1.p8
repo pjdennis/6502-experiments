@@ -205,7 +205,7 @@ ubyte pend_n
 ; code) so it can exceed 256 bytes for self-host (p1.p8 itself interns ~6.6 KB
 ; of identifier text). Accessed via peek()/poke(); the monolith already
 ; compiles those, so this stays self-hostable. $C000-$DFFF (8 KB).
-const uword ident_pool = $c480
+const uword ident_pool = $c500
 uword ident_count
 uword ident_pool_len
 
@@ -437,43 +437,42 @@ sub sys_exit(ubyte code) {
 ; ident/str slabs, so it lives in logical bank 1 (PORTB cfg $11) in the
 ; $8000-$EFFF window. The compiler's own code occupies bank 0 ($01) at $8000+,
 ; so it CANNOT switch the bank itself (that would unmap its own code mid-run).
-; Instead a tiny read/write routine installed in FIXED high RAM ($F810/$F830 --
-; present in every bank cfg) does: save bits5-7, select bank 1, access ($fc/$fd
-; pointer), restore bank 0. The caller (in bank 0) jsr's it; while $F810 runs,
+; Instead, tiny routines installed in FIXED high RAM ($F810+ -- present in every
+; bank cfg) do: select bank 1, access (ZP $04/$05 pointer, $06/$07 word value),
+; restore bank 0. The caller (in bank 0) jsr's them; while the routine runs,
 ; bank 0 (the caller's page) is unmapped but PC is in fixed RAM, and it is
 ; restored before the rts. Ports/ZP/stack are in always-mapped RAM, so the
-; switch is transparent to the caller. (cfg table: bank0=$01, bank1=$11.)
+; switch is transparent. Bank bits are written directly (lda #$11/#$01 sta
+; $f000) -- the compiler never uses PORTB bits 5-7, so preserving them is
+; unneeded, saving cycles on the hot path. There are WORD read/write routines
+; ($F850/$F870) so a 16-bit slab access costs ONE bank switch, not two.
 sub install_bank_accessors() {
-    ; read: A=byte at ($fc) in bank 1, bank restored to 0. (23 bytes @ $F810)
-    poke($f810, $ad) poke($f811, $00) poke($f812, $f0)   ; lda $f000
-    poke($f813, $29) poke($f814, $e0)                    ; and #$e0
-    poke($f815, $09) poke($f816, $11)                    ; ora #$11   (bank 1)
-    poke($f817, $8d) poke($f818, $00) poke($f819, $f0)   ; sta $f000
-    poke($f81a, $a0) poke($f81b, $00)                    ; ldy #0
-    poke($f81c, $b1) poke($f81d, $04)                    ; lda ($04),y
-    poke($f81e, $aa)                                      ; tax
-    poke($f81f, $ad) poke($f820, $00) poke($f821, $f0)   ; lda $f000
-    poke($f822, $29) poke($f823, $e0)                    ; and #$e0
-    poke($f824, $09) poke($f825, $01)                    ; ora #$01   (bank 0)
-    poke($f826, $8d) poke($f827, $00) poke($f828, $f0)   ; sta $f000
-    poke($f829, $8a)                                      ; txa
-    poke($f82a, $60)                                      ; rts
-    ; write: store A at ($fc) in bank 1, bank restored to 0. (24 bytes @ $F830)
-    poke($f830, $48)                                      ; pha  (save value)
-    poke($f831, $ad) poke($f832, $00) poke($f833, $f0)   ; lda $f000
-    poke($f834, $29) poke($f835, $e0)                    ; and #$e0
-    poke($f836, $09) poke($f837, $11)                    ; ora #$11
-    poke($f838, $8d) poke($f839, $00) poke($f83a, $f0)   ; sta $f000
-    poke($f83b, $68)                                      ; pla  (value)
-    poke($f83c, $a0) poke($f83d, $00)                    ; ldy #0
-    poke($f83e, $91) poke($f83f, $04)                    ; sta ($04),y
-    poke($f840, $ad) poke($f841, $00) poke($f842, $f0)   ; lda $f000
-    poke($f843, $29) poke($f844, $e0)                    ; and #$e0
-    poke($f845, $09) poke($f846, $01)                    ; ora #$01
-    poke($f847, $8d) poke($f848, $00) poke($f849, $f0)   ; sta $f000
-    poke($f84a, $60)                                      ; rts
+    ; $F810 read byte: A = ($04) in bank 1, bank restored to 0.
+    poke($f810, $a9) poke($f811, $11) poke($f812, $8d) poke($f813, $00) poke($f814, $f0) ; lda #$11 / sta $f000
+    poke($f815, $a0) poke($f816, $00) poke($f817, $b1) poke($f818, $04)                   ; ldy #0 / lda ($04),y
+    poke($f819, $aa)                                                                       ; tax
+    poke($f81a, $a9) poke($f81b, $01) poke($f81c, $8d) poke($f81d, $00) poke($f81e, $f0)  ; lda #$01 / sta $f000
+    poke($f81f, $8a) poke($f820, $60)                                                      ; txa / rts
+    ; $F830 write byte: store A at ($04) in bank 1, restore bank 0.
+    poke($f830, $aa)                                                                       ; tax (save val)
+    poke($f831, $a9) poke($f832, $11) poke($f833, $8d) poke($f834, $00) poke($f835, $f0)  ; lda #$11 / sta $f000
+    poke($f836, $8a) poke($f837, $a0) poke($f838, $00) poke($f839, $91) poke($f83a, $04)  ; txa / ldy #0 / sta ($04),y
+    poke($f83b, $a9) poke($f83c, $01) poke($f83d, $8d) poke($f83e, $00) poke($f83f, $f0)  ; lda #$01 / sta $f000
+    poke($f840, $60)                                                                       ; rts
+    ; $F850 read word: returns A=lo, Y=hi of the word at ($04) in bank 1.
+    poke($f850, $a9) poke($f851, $11) poke($f852, $8d) poke($f853, $00) poke($f854, $f0)  ; lda #$11 / sta $f000
+    poke($f855, $a0) poke($f856, $01) poke($f857, $b1) poke($f858, $04) poke($f859, $85) poke($f85a, $06) ; ldy #1 / lda ($04),y / sta $06 (hi)
+    poke($f85b, $88) poke($f85c, $b1) poke($f85d, $04) poke($f85e, $aa)                    ; dey / lda ($04),y / tax (lo)
+    poke($f85f, $a9) poke($f860, $01) poke($f861, $8d) poke($f862, $00) poke($f863, $f0)  ; lda #$01 / sta $f000
+    poke($f864, $a4) poke($f865, $06) poke($f866, $8a) poke($f867, $60)                    ; ldy $06 (hi) / txa (lo) / rts
+    ; $F870 write word: store $06/$07 (lo/hi) at ($04) in bank 1, restore bank 0.
+    poke($f870, $a9) poke($f871, $11) poke($f872, $8d) poke($f873, $00) poke($f874, $f0)  ; lda #$11 / sta $f000
+    poke($f875, $a0) poke($f876, $00) poke($f877, $a5) poke($f878, $06) poke($f879, $91) poke($f87a, $04) ; ldy #0 / lda $06 / sta ($04),y
+    poke($f87b, $c8) poke($f87c, $a5) poke($f87d, $07) poke($f87e, $91) poke($f87f, $04)  ; iny / lda $07 / sta ($04),y
+    poke($f880, $a9) poke($f881, $01) poke($f882, $8d) poke($f883, $00) poke($f884, $f0)  ; lda #$01 / sta $f000
+    poke($f885, $60)                                                                       ; rts
 }
-; read/write one byte of a bank-1 slab at window addr (@AY); $fc/$fd = pointer.
+; one byte of a bank-1 slab at window addr (@AY); ZP $04/$05 = pointer.
 asmsub sb_peek(uword addr @AY) -> ubyte @A {
     %asm {{
         sta  $04
@@ -491,17 +490,27 @@ asmsub sb_poke(uword addr @AY, ubyte val @X) {
         rts
     }}
 }
-; word access: two byte accesses (low then high), so no dedicated word routine.
-sub sb_peekw(uword addr) -> uword {
-    ubyte lo
-    ubyte hi
-    lo = sb_peek(addr)
-    hi = sb_peek(addr + 1)
-    return mkword(hi, lo)
+; one WORD of a bank-1 slab (one bank switch). $F850 returns A=lo/Y=hi.
+asmsub sb_peekw(uword addr @AY) -> uword @AY {
+    %asm {{
+        sta  $04
+        sty  $05
+        jsr  $f850
+        rts
+    }}
 }
 sub sb_pokew(uword addr, uword val) {
-    sb_poke(addr, lsb(val))
-    sb_poke(addr + 1, msb(val))
+    @($06) = lsb(val)
+    @($07) = msb(val)
+    sb_pokew_go(addr)
+}
+asmsub sb_pokew_go(uword addr @AY) {
+    %asm {{
+        sta  $04
+        sty  $05
+        jsr  $f870
+        rts
+    }}
 }
 
 ; ---- I/O (sticky-EOF; emulator rewinds on EOF) ----
