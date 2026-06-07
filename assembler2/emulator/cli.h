@@ -47,6 +47,9 @@ struct emu_opts {
     int cpu_variant_opt;                /* --cpu; CPU_NMOS or CPU_65C02 (from cpu_core.h) */
     const char *rom_filename;           /* --rom PATH (wendy2c only); NULL falls back to code_filename */
     const char *serial_input_filename;  /* --serial-input PATH; bytes queued into the SERIAL_USB chip */
+    const char *wendy2_prog_filename;   /* --wendy2-prog PATH (wendy2c): RAW program preloaded directly
+                                         * into RAM at --load (default $4000), bank $01 mapped, CPU
+                                         * started there -- skips the slow serial boot for big programs */
     uint64_t cycle_cap;                 /* --cycle-cap N; max cycles before forced exit. Default 200000000.
                                          * For wendy2c this counts oscillator ticks (~2 per CPU cycle);
                                          * for nmos-default and --server it counts CPU cycles. */

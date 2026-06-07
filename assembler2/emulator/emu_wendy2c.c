@@ -631,6 +631,47 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
     for (int i = 0; i < 8; i++) bus_step(&b);
     b.res = 0;
 
+    /* --wendy2-prog: preload a RAW program straight into RAM and start the
+     * CPU there, bypassing the slow byte-at-a-time serial boot (impractical
+     * for a ~38 KB program). The image is written with RAM bank $01 mapped,
+     * so bytes >= $8000 land in the held upper-window bank just as the boot
+     * ROM's loader would place them; the bank stays mapped for the run (the
+     * program assumes the boot mapped it). */
+    if (opts->wendy2_prog_filename) {
+        FILE *pf = fopen(opts->wendy2_prog_filename, "rb");
+        if (!pf) {
+            fprintf(stderr, "wendy2c: could not open --wendy2-prog %s\n",
+                    opts->wendy2_prog_filename);
+            return 1;
+        }
+        uint16_t load = (opts->load_address >= 0)
+                      ? (uint16_t)opts->load_address : 0x4000;
+        b.bank_config = 0x01;        /* map RAM bank $01 into $8000-$EFFF */
+        b.rwb = 0;                   /* drive write cycles */
+        uint32_t off = 0;
+        int byte;
+        while ((byte = fgetc(pf)) != EOF) {
+            uint16_t a = (uint16_t)(load + off);
+            b.addr = a;
+            clock_22v10_refresh_combinational(&b);   /* r_bits/ramcs for a + cfg $01 */
+            bus_write(&b, a, (uint8_t)byte);
+            off++;
+        }
+        fclose(pf);
+        /* Hold bank $01 mapped and enter at the load address with a fresh
+         * stack (the boot ROM would have done lda #$01/sta PORTB; ldx #$ff,
+         * txs; jmp). bank_config only changes on a VIA PORTB write, which the
+         * program won't do, so it stays $01 for the whole run. */
+        via_state.orb = 0x01;
+        via_state.ddrb = 0x1F;
+        b.bank_config = 0x01;
+        b.rwb = 1;
+        pc = load;
+        sp = 0xFF;
+        fprintf(stderr, "wendy2c: --wendy2-prog preloaded %u bytes at $%04X "
+                        "(bank $01), PC=$%04X\n", off, load, load);
+    }
+
     /* Run until STP halts the CPU or we hit the cycle cap. The cap also
      * limits run-away tests; the wendy2c sample programs that use STP
      * (e.g. wendy2c_eeprom_show.s) terminate well within the default.
