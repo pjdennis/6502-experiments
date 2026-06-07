@@ -491,6 +491,17 @@ PEEK_POKE_PROGRAMS = [
 ]
 
 
+# inline `%asm {{ ... }}` blocks: the lexer captures the raw body, normalizes
+# each line (strip + join with '\n') into a string, and codegen re-emits each
+# line with a 2-space indent -- a port of p8c's InlineAsm. Byte-identical.
+INLINE_ASM_PROGRAMS = [
+    '%output raw\n%launcher none\nmain {\n  sub start() {\n    %asm {{\n    nop\n    }}\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\n  sub start() {\n    %asm {{\n    lda #$01\n    clc\n    adc #$02\n    sta $d021\n    }}\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\n  sub start() {\n    a = 1\n    %asm {{\n    lda #$05\n    sta $d020\n    }}\n    a = 2\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\n  sub start() {\n    %asm {{\nloop:\n    dex\n    bne loop\n    }}\n  }\n}\n',
+]
+
+
 def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
 
@@ -727,6 +738,11 @@ class P1Equivalence(unittest.TestCase):
 
     def test_peek_poke_programs(self):
         for src in PEEK_POKE_PROGRAMS:
+            with self.subTest(src=src):
+                self._equiv(src)
+
+    def test_inline_asm_programs(self):
+        for src in INLINE_ASM_PROGRAMS:
             with self.subTest(src=src):
                 self._equiv(src)
 

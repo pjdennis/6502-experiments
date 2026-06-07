@@ -189,6 +189,14 @@ ubyte tk1_kind
 uword tk1_val
 ubyte ntok_kind
 uword ntok_val
+; pending-token queue: a raw `%asm {{ ... }}` block is lexed in one shot (the
+; body captured + normalized into a STR), then the synthesized `{ { STR } }`
+; tokens are emitted from here so parse_inline_asm's `{{ STR }}` path is reused.
+; pend_i >= pend_n => empty.
+ubyte[6] pendk
+uword[6] pendv
+ubyte pend_i
+ubyte pend_n
 
 ; identifier text pool (reset per top-level unit while streaming)
 ubyte[120] ident_pool
@@ -304,28 +312,28 @@ uword strpool_count
 ; builtins, and calls all run on this one stack with NO subroutine
 ; recursion, so upstream prog8c compiles + runs it correctly). Each
 ; entry is a task (kind codes documented at codegen_expr's dispatch).
-ubyte[96] es_type
-uword[96] es_node
-ubyte[96] es_op
+ubyte[48] es_type
+uword[48] es_node
+ubyte[48] es_op
 ubyte es_sp
 ; expr_is_word's iterative OR-walk stack (operands still to visit).
-uword[24] eiw_stk
+uword[16] eiw_stk
 ubyte eiw_sp
 ; emit_cond_branch's short-circuit task stack (and/or/not, no recursion). Per
 ; entry: cb_cond = condition node, cb_tkind = target/label kind, cb_tid =
 ; target/label id, cb_skip = task discriminator (0 = eval node jit 0, 1 = eval
 ; node jit 1, 2 = emit a skip label).
-uword[24] cb_cond
-ubyte[24] cb_tkind
-uword[24] cb_tid
-uword[24] cb_skip
+uword[16] cb_cond
+ubyte[16] cb_tkind
+uword[16] cb_tid
+uword[16] cb_skip
 ubyte cb_sp
 ; statement work stack (control flow without recursion): a task is
 ; 0=emit stmt node, 1=emit label .L<kind>_<id>:, 2=emit jmp to it,
 ; 3=pop the loop-label stack.
-ubyte[64] sws_type
-uword[64] sws_a
-uword[64] sws_b
+ubyte[40] sws_type
+uword[40] sws_a
+uword[40] sws_b
 ubyte sws_sp
 ; loop-label stack for break/continue (break -> bk kind/id, continue
 ; -> ck kind/id), pushed per loop.
@@ -771,8 +779,99 @@ sub push_token(ubyte kind, uword val) {
     ntok_val = val
 }
 
+sub asm_ws(ubyte c) -> ubyte {
+    if c == ' ' { return 1 }
+    if c == $09 { return 1 }
+    return 0
+}
+sub skip_asm_ws() {
+    repeat {
+        ubyte c
+        c = peek_src()
+        if src_eof != 0 { break }
+        if asm_ws(c) == 0 {
+            if c != '\n' { break }
+        }
+        c = read_src()
+    }
+}
+; capture a raw `%asm {{ ... }}` body (leading `{{` already consumed) up to the
+; closing `}}` (consumed); normalize (strip each line, drop blank lines, join
+; with '\n') into str_pool as a new TK_STR entry; return its str index. Mirrors
+; p8c's lexer normalization so a raw block emits the same asm as a quoted one.
+sub build_asm_body() -> uword {
+    uword sidx
+    sidx = str_count
+    str_off[(str_count as ubyte)] = str_pool_len
+    ubyte started
+    ubyte sol
+    uword sp
+    started = 0
+    sol = 1
+    sp = 0
+    repeat {
+        ubyte c
+        c = read_src()
+        if src_eof != 0 { break }
+        if c == '}' {
+            if peek_src() == '}' { c = read_src()  break }   ; closing `}}`
+        }
+        if c == '\n' { sol = 1  sp = 0  continue }
+        if c == $0d { continue }
+        if asm_ws(c) != 0 {
+            if sol == 0 { sp = sp + 1 }                       ; defer (skip if leading)
+            continue
+        }
+        if sol != 0 {
+            if started != 0 {
+                str_pool[(str_pool_len as ubyte)] = '\n'
+                str_pool_len = str_pool_len + 1
+            }
+            sol = 0
+        } else {
+            repeat {
+                if sp == 0 { break }
+                str_pool[(str_pool_len as ubyte)] = ' '
+                str_pool_len = str_pool_len + 1
+                sp = sp - 1
+            }
+        }
+        str_pool[(str_pool_len as ubyte)] = c
+        str_pool_len = str_pool_len + 1
+        started = 1
+    }
+    str_len[(sidx as ubyte)] = str_pool_len - str_off[(sidx as ubyte)]
+    str_count = str_count + 1
+    return sidx
+}
+; lex `%asm {{ ... }}`: emit the DIRECTIVE token now, capture the raw body, and
+; queue the synthesized `{ { STR } }` tokens for parse_inline_asm to consume.
+sub lex_asm_directive(uword nameid) {
+    ntok_kind = TK_DIRECTIVE
+    ntok_val = nameid
+    skip_asm_ws()                           ; up to `{{`
+    ubyte b
+    b = read_src()                          ; first '{'
+    b = read_src()                          ; second '{'
+    skip_asm_ws()                           ; to the raw body
+    uword off
+    off = build_asm_body()
+    pendk[0] = TK_LBRACE  pendv[0] = 0
+    pendk[1] = TK_LBRACE  pendv[1] = 0
+    pendk[2] = TK_STR     pendv[2] = off
+    pendk[3] = TK_RBRACE  pendv[3] = 0
+    pendk[4] = TK_RBRACE  pendv[4] = 0
+    pend_i = 0
+    pend_n = 5
+}
 ; produce one token into ntok_kind / ntok_val (TK_EOF at end of input).
 sub next_raw_token() {
+    if pend_i < pend_n {                    ; drain the %asm pending-token queue
+        ntok_kind = pendk[(pend_i as ubyte)]
+        ntok_val = pendv[(pend_i as ubyte)]
+        pend_i = pend_i + 1
+        return
+    }
     repeat {
         ubyte c
         c = peek_src()
@@ -802,7 +901,22 @@ sub next_raw_token() {
                 if c2 == '1' { read_bin()  push_token(TK_INT, int_val)  return }
                 if is_alpha_us(c2) != 0 {
                     read_ident()
-                    push_token(TK_DIRECTIVE, intern_name())
+                    ubyte is_asm
+                    is_asm = 0
+                    if name_len == 3 {
+                        if name_buf[0] == 'a' {
+                            if name_buf[1] == 's' {
+                                if name_buf[2] == 'm' { is_asm = 1 }
+                            }
+                        }
+                    }
+                    uword nameid
+                    nameid = intern_name()
+                    if is_asm != 0 {
+                        lex_asm_directive(nameid)
+                        return
+                    }
+                    push_token(TK_DIRECTIVE, nameid)
                     return
                 }
             }
@@ -985,6 +1099,8 @@ sub advance() {
     tk1_val = ntok_val
 }
 sub lex_init() {
+    pend_i = 0
+    pend_n = 0
     next_raw_token()
     tk0_kind = ntok_kind
     tk0_val = ntok_val
@@ -1632,6 +1748,19 @@ sub stmt_dispatch(ubyte deferflag) -> ubyte {
 
 ; the frame-stack block driver: parse a `{ ... }` block (and everything
 ; nested) into a Block node; returns its node id.
+; `%asm {{ STR }}` -> ND_INLINEASM (a = str index). The lexer already queued
+; the `{ { STR } }` tokens after the DIRECTIVE.
+sub parse_inline_asm() -> uword {
+    advance()                               ; DIRECTIVE asm
+    advance()                               ; {
+    advance()                               ; {
+    uword sid
+    sid = cur_val()                         ; STR
+    advance()
+    advance()                               ; }
+    advance()                               ; }
+    return new_node(ND_INLINEASM, 0, sid, 0)
+}
 sub parse_block() -> uword {
     advance()                               ; consume opening '{'
     fr_sp = 0
@@ -1765,6 +1894,17 @@ sub parse_block() -> uword {
         if t == TK_KDEFER {
             advance()
             pending_defer = 1
+            continue
+        }
+        if t == TK_DIRECTIVE {                  ; `%asm {{ ... }}` statement
+            node = parse_inline_asm()
+            ubyte dm
+            dm = pending_defer
+            pending_defer = 0
+            if dm != 0 {
+                node = new_node(ND_DEFER, 0, node, 0)
+            }
+            fr_attach(node)
             continue
         }
         ubyte mod
@@ -3294,11 +3434,43 @@ sub codegen_body(uword body) {
     }
 }
 
+; inline `%asm{{ ... }}` -> emit each captured line with a 2-space indent
+; (port of p8c's InlineAsm: `for line in text.splitlines(): emit("  " + line)`).
+sub codegen_inline_asm(uword st) {
+    uword sid
+    sid = node_a[(st as ubyte)]
+    uword off
+    off = str_off[(sid as ubyte)]
+    uword len
+    len = str_len[(sid as ubyte)]
+    out_text("  ")
+    uword i
+    i = 0
+    repeat {
+        if i >= len {
+            break
+        }
+        ubyte c
+        c = str_pool[((off + i) as ubyte)]
+        if c == '\n' {
+            o_nl()
+            out_text("  ")
+        } else {
+            out_byte(c)
+        }
+        i = i + 1
+    }
+    o_nl()
+}
 sub codegen_stmt(uword st) {
     ubyte k
     k = node_kind[(st as ubyte)]
     if k == ND_ASSIGN {
         codegen_assign(st)
+        return
+    }
+    if k == ND_INLINEASM {
+        codegen_inline_asm(st)
         return
     }
     if k == ND_IF {
