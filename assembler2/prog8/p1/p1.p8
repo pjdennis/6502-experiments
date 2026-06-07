@@ -205,14 +205,14 @@ ubyte pend_n
 ; code) so it can exceed 256 bytes for self-host (p1.p8 itself interns ~6.6 KB
 ; of identifier text). Accessed via peek()/poke(); the monolith already
 ; compiles those, so this stays self-hostable. $C000-$DFFF (8 KB).
-const uword ident_pool = $c000
+const uword ident_pool = $c400
 uword ident_count
 uword ident_pool_len
 
 ; string literal pool -- a raw-RAM peek/poke SLAB ($E000-$EFFF, 4 KB) for the
 ; same reason (p1.p8 interns ~3.4 KB of string-literal bytes). str_off/str_len
 ; stay small arrays (one entry per string; <256 strings).
-const uword str_pool = $e000
+const uword str_pool = $de00
 uword[256] str_off
 uword[256] str_len
 uword str_count
@@ -280,18 +280,18 @@ uword prog_structs       ; cons of struct node ids (reversed)
 uword prog_subs          ; cons of sub node ids (reversed)
 
 ; ---- codegen symbol table (persistent across passes) ----
-uword[32] sym_ident      ; var name ident id
-ubyte[32] sym_type       ; type tag (TY_UBYTE / TY_BYTE / TY_UWORD)
-uword[32] sym_addr       ; ZP address
-uword[32] sym_scope      ; owning sub name ident (0 = module scope)
-ubyte[32] sym_mkind      ; 0 = module var, 1 = param, 2 = local
-ubyte[32] sym_is_const   ; 1 = compile-time const (no storage); folded
-uword[32] sym_cval       ; const value (when sym_is_const)
-uword[32] sym_arr_size   ; element count if an array (0 = scalar); the
+const uword sym_ident = $8000      ; var name ident id
+const uword sym_type = $8800       ; type tag (TY_UBYTE / TY_BYTE / TY_UWORD)
+const uword sym_addr = $8c00       ; ZP address
+const uword sym_scope = $9400      ; owning sub name ident (0 = module scope)
+const uword sym_mkind = $9c00      ; 0 = module var, 1 = param, 2 = local
+const uword sym_is_const = $a000   ; 1 = compile-time const (no storage); folded
+const uword sym_cval = $a400       ; const value (when sym_is_const)
+const uword sym_arr_size = $ac00   ; element count if an array (0 = scalar); the
                          ; element type is in sym_type; mangle is p8a_
-ubyte[32] sym_reg        ; param register-ABI code (0=none/static slot,
+const uword sym_reg = $b400        ; param register-ABI code (0=none/static slot,
                          ; 1=A 2=X 3=Y 4=AY) -- set for asmsub/extsub params
-ubyte sym_count
+uword sym_count
 uword zp_next            ; ZP bump allocator (from $40)
 uword cur_scope          ; the sub being codegen'd (for var resolution)
 uword entry_nm           ; name ident of the entry sub (`start`, the SUBK_MAIN)
@@ -430,6 +430,78 @@ sub sys_close(ubyte handle) {
 }
 sub sys_exit(ubyte code) {
     @($f80f) = code                         ; power off / halt
+}
+
+; ---- banked-slab access (wendy2c upper-window banking) -------------------
+; The sym table is too big to fit in held bank $01 alongside the code + the
+; ident/str slabs, so it lives in logical bank 1 (PORTB cfg $11) in the
+; $8000-$EFFF window. The compiler's own code occupies bank 0 ($01) at $8000+,
+; so it CANNOT switch the bank itself (that would unmap its own code mid-run).
+; Instead a tiny read/write routine installed in FIXED high RAM ($F810/$F830 --
+; present in every bank cfg) does: save bits5-7, select bank 1, access ($fc/$fd
+; pointer), restore bank 0. The caller (in bank 0) jsr's it; while $F810 runs,
+; bank 0 (the caller's page) is unmapped but PC is in fixed RAM, and it is
+; restored before the rts. Ports/ZP/stack are in always-mapped RAM, so the
+; switch is transparent to the caller. (cfg table: bank0=$01, bank1=$11.)
+sub install_bank_accessors() {
+    ; read: A=byte at ($fc) in bank 1, bank restored to 0. (23 bytes @ $F810)
+    poke($f810, $ad) poke($f811, $00) poke($f812, $f0)   ; lda $f000
+    poke($f813, $29) poke($f814, $e0)                    ; and #$e0
+    poke($f815, $09) poke($f816, $11)                    ; ora #$11   (bank 1)
+    poke($f817, $8d) poke($f818, $00) poke($f819, $f0)   ; sta $f000
+    poke($f81a, $a0) poke($f81b, $00)                    ; ldy #0
+    poke($f81c, $b1) poke($f81d, $fc)                    ; lda ($fc),y
+    poke($f81e, $aa)                                      ; tax
+    poke($f81f, $ad) poke($f820, $00) poke($f821, $f0)   ; lda $f000
+    poke($f822, $29) poke($f823, $e0)                    ; and #$e0
+    poke($f824, $09) poke($f825, $01)                    ; ora #$01   (bank 0)
+    poke($f826, $8d) poke($f827, $00) poke($f828, $f0)   ; sta $f000
+    poke($f829, $8a)                                      ; txa
+    poke($f82a, $60)                                      ; rts
+    ; write: store A at ($fc) in bank 1, bank restored to 0. (24 bytes @ $F830)
+    poke($f830, $48)                                      ; pha  (save value)
+    poke($f831, $ad) poke($f832, $00) poke($f833, $f0)   ; lda $f000
+    poke($f834, $29) poke($f835, $e0)                    ; and #$e0
+    poke($f836, $09) poke($f837, $11)                    ; ora #$11
+    poke($f838, $8d) poke($f839, $00) poke($f83a, $f0)   ; sta $f000
+    poke($f83b, $68)                                      ; pla  (value)
+    poke($f83c, $a0) poke($f83d, $00)                    ; ldy #0
+    poke($f83e, $91) poke($f83f, $fc)                    ; sta ($fc),y
+    poke($f840, $ad) poke($f841, $00) poke($f842, $f0)   ; lda $f000
+    poke($f843, $29) poke($f844, $e0)                    ; and #$e0
+    poke($f845, $09) poke($f846, $01)                    ; ora #$01
+    poke($f847, $8d) poke($f848, $00) poke($f849, $f0)   ; sta $f000
+    poke($f84a, $60)                                      ; rts
+}
+; read/write one byte of a bank-1 slab at window addr (@AY); $fc/$fd = pointer.
+asmsub sb_peek(uword addr @AY) -> ubyte @A {
+    %asm {{
+        sta  $fc
+        sty  $fd
+        jsr  $f810
+        rts
+    }}
+}
+asmsub sb_poke(uword addr @AY, ubyte val @X) {
+    %asm {{
+        sta  $fc
+        sty  $fd
+        txa
+        jsr  $f830
+        rts
+    }}
+}
+; word access: two byte accesses (low then high), so no dedicated word routine.
+sub sb_peekw(uword addr) -> uword {
+    ubyte lo
+    ubyte hi
+    lo = sb_peek(addr)
+    hi = sb_peek(addr + 1)
+    return mkword(hi, lo)
+}
+sub sb_pokew(uword addr, uword val) {
+    sb_poke(addr, lsb(val))
+    sb_poke(addr + 1, msb(val))
 }
 
 ; ---- I/O (sticky-EOF; emulator rewinds on EOF) ----
@@ -2483,23 +2555,23 @@ sub out_ident_text(uword id) {
 ; param -> p8v_<sub>_arg_<name>, local -> p8v_<sub>_<name>.
 sub emit_sym_mangled(uword si) {
     ; arrays live in main memory under a p8a_ label; everything else is p8v_.
-    if sym_arr_size[(si as ubyte)] != 0 {
+    if sb_peekw(sym_arr_size + ((si) << 1)) != 0 {
         out_text("p8a_")
-        out_ident_text(sym_ident[(si as ubyte)])
+        out_ident_text(sb_peekw(sym_ident + ((si) << 1)))
         return
     }
     out_text("p8v_")
-    if sym_mkind[(si as ubyte)] == 0 {
-        out_ident_text(sym_ident[(si as ubyte)])
+    if sb_peek(sym_mkind + (si)) == 0 {
+        out_ident_text(sb_peekw(sym_ident + ((si) << 1)))
         return
     }
-    out_ident_text(sym_scope[(si as ubyte)])
-    if sym_mkind[(si as ubyte)] == 1 {
+    out_ident_text(sb_peekw(sym_scope + ((si) << 1)))
+    if sb_peek(sym_mkind + (si)) == 1 {
         out_text("_arg_")
     } else {
         out_byte($5f)
     }
-    out_ident_text(sym_ident[(si as ubyte)])
+    out_ident_text(sb_peekw(sym_ident + ((si) << 1)))
 }
 ; emit a var reference by ident, resolved in the current scope.
 sub emit_mangled(uword identid) {
@@ -2565,8 +2637,8 @@ sub find_sym(uword identid) -> uword {
         if i >= sym_count {
             break
         }
-        if sym_ident[(i as ubyte)] == identid {
-            if sym_scope[(i as ubyte)] == cur_scope {
+        if sb_peekw(sym_ident + ((i) << 1)) == identid {
+            if sb_peekw(sym_scope + ((i) << 1)) == cur_scope {
                 return i
             }
         }
@@ -2577,8 +2649,8 @@ sub find_sym(uword identid) -> uword {
         if i >= sym_count {
             break
         }
-        if sym_ident[(i as ubyte)] == identid {
-            if sym_scope[(i as ubyte)] == 0 {
+        if sb_peekw(sym_ident + ((i) << 1)) == identid {
+            if sb_peekw(sym_scope + ((i) << 1)) == 0 {
                 return i
             }
         }
@@ -2595,10 +2667,10 @@ sub ident_is_const(uword identid) -> ubyte {
     if si == $ffff {
         return 0
     }
-    return sym_is_const[(si as ubyte)]
+    return sb_peek(sym_is_const + (si))
 }
 sub ident_const_val(uword identid) -> uword {
-    return sym_cval[(find_sym(identid) as ubyte)]
+    return sb_peekw(sym_cval + ((find_sym(identid)) << 1))
 }
 ; allocate ZP for every scalar module var, in declaration order, exactly
 ; as p8c's sema does (bump from $40; ubyte/byte = 1 byte, uword = 2).
@@ -2623,18 +2695,18 @@ sub build_symbols() {
                     ubyte sz
                     sz = 1
                     if tag == TY_UWORD { sz = 2 }
-                    sym_ident[sym_count] = node_a[(vd as ubyte)]
-                    sym_type[sym_count] = tag
-                    sym_scope[sym_count] = 0
-                    sym_mkind[sym_count] = 0
-                    sym_is_const[sym_count] = 0
-                    sym_arr_size[sym_count] = 0
+                    sb_pokew(sym_ident + ((sym_count) << 1), node_a[(vd as ubyte)])
+                    sb_poke(sym_type + (sym_count), tag)
+                    sb_pokew(sym_scope + ((sym_count) << 1), 0)
+                    sb_poke(sym_mkind + (sym_count), 0)
+                    sb_poke(sym_is_const + (sym_count), 0)
+                    sb_pokew(sym_arr_size + ((sym_count) << 1), 0)
                     ; ZP runs $40..$FF; a scalar that won't fit overflows into
                     ; main memory (sentinel $FFFF -> emit_memvars), matching p8c.
                     if zp_next + sz > $ff {
-                        sym_addr[sym_count] = $ffff
+                        sb_pokew(sym_addr + ((sym_count) << 1), $ffff)
                     } else {
-                        sym_addr[sym_count] = zp_next
+                        sb_pokew(sym_addr + ((sym_count) << 1), zp_next)
                         zp_next = zp_next + sz
                     }
                     sym_count = sym_count + 1
@@ -2650,14 +2722,14 @@ sub build_symbols() {
                         bt = TY_UBYTE
                         if tag == TY_CONST_BYTE { bt = TY_BYTE }
                         if tag == TY_CONST_UWORD { bt = TY_UWORD }
-                        sym_ident[sym_count] = node_a[(vd as ubyte)]
-                        sym_type[sym_count] = bt
-                        sym_addr[sym_count] = 0
-                        sym_scope[sym_count] = 0
-                        sym_mkind[sym_count] = 0
-                        sym_is_const[sym_count] = 1
-                        sym_cval[sym_count] = node_a[(node_b[(vd as ubyte)] as ubyte)]
-                        sym_arr_size[sym_count] = 0
+                        sb_pokew(sym_ident + ((sym_count) << 1), node_a[(vd as ubyte)])
+                        sb_poke(sym_type + (sym_count), bt)
+                        sb_pokew(sym_addr + ((sym_count) << 1), 0)
+                        sb_pokew(sym_scope + ((sym_count) << 1), 0)
+                        sb_poke(sym_mkind + (sym_count), 0)
+                        sb_poke(sym_is_const + (sym_count), 1)
+                        sb_pokew(sym_cval + ((sym_count) << 1), node_a[(node_b[(vd as ubyte)] as ubyte)])
+                        sb_pokew(sym_arr_size + ((sym_count) << 1), 0)
                         sym_count = sym_count + 1
                     }
                 }
@@ -2668,13 +2740,13 @@ sub build_symbols() {
                 ubyte etag
                 etag = node_op[(vd as ubyte)]
                 if etag <= TY_UWORD {
-                    sym_ident[sym_count] = node_a[(vd as ubyte)]
-                    sym_type[sym_count] = etag
-                    sym_addr[sym_count] = 0
-                    sym_scope[sym_count] = 0
-                    sym_mkind[sym_count] = 0
-                    sym_is_const[sym_count] = 0
-                    sym_arr_size[sym_count] = node_c[(vd as ubyte)]
+                    sb_pokew(sym_ident + ((sym_count) << 1), node_a[(vd as ubyte)])
+                    sb_poke(sym_type + (sym_count), etag)
+                    sb_pokew(sym_addr + ((sym_count) << 1), 0)
+                    sb_pokew(sym_scope + ((sym_count) << 1), 0)
+                    sb_poke(sym_mkind + (sym_count), 0)
+                    sb_poke(sym_is_const + (sym_count), 0)
+                    sb_pokew(sym_arr_size + ((sym_count) << 1), node_c[(vd as ubyte)])
                     sym_count = sym_count + 1
                 }
             }
@@ -2729,9 +2801,9 @@ sub emit_zp_bindings() {
         if j >= sym_count {
             break
         }
-        if sym_is_const[(j as ubyte)] == 0 {
-            if sym_arr_size[(j as ubyte)] == 0 {
-                if sym_addr[(j as ubyte)] != $ffff {
+        if sb_peek(sym_is_const + (j)) == 0 {
+            if sb_peekw(sym_arr_size + ((j) << 1)) == 0 {
+                if sb_peekw(sym_addr + ((j) << 1)) != $ffff {
                     any = 1
                     break
                 }
@@ -2750,12 +2822,12 @@ sub emit_zp_bindings() {
         if i >= sym_count {
             break
         }
-        if sym_is_const[(i as ubyte)] == 0 {
-            if sym_arr_size[(i as ubyte)] == 0 {
-                if sym_addr[(i as ubyte)] != $ffff {
+        if sb_peek(sym_is_const + (i)) == 0 {
+            if sb_peekw(sym_arr_size + ((i) << 1)) == 0 {
+                if sb_peekw(sym_addr + ((i) << 1)) != $ffff {
                     emit_sym_mangled(i)
                     out_text(" = $")
-                    out_hex2(lsb(sym_addr[(i as ubyte)]))
+                    out_hex2(lsb(sb_peekw(sym_addr + ((i) << 1))))
                     o_nl()
                 }
             }
@@ -2776,10 +2848,10 @@ sub emit_memvars() {
         if j >= sym_count {
             break
         }
-        if sym_arr_size[(j as ubyte)] == 0 {
-            if sym_is_const[(j as ubyte)] == 0 {
-                if sym_reg[(j as ubyte)] == 0 {            ; regabi params have no storage
-                    if sym_addr[(j as ubyte)] == $ffff {
+        if sb_peekw(sym_arr_size + ((j) << 1)) == 0 {
+            if sb_peek(sym_is_const + (j)) == 0 {
+                if sb_peek(sym_reg + (j)) == 0 {            ; regabi params have no storage
+                    if sb_peekw(sym_addr + ((j) << 1)) == $ffff {
                         any = 1
                         break
                     }
@@ -2800,15 +2872,15 @@ sub emit_memvars() {
         if i >= sym_count {
             break
         }
-        if sym_arr_size[(i as ubyte)] == 0 {
-            if sym_is_const[(i as ubyte)] == 0 {
-                if sym_reg[(i as ubyte)] == 0 {            ; regabi params have no storage
-                    if sym_addr[(i as ubyte)] == $ffff {
+        if sb_peekw(sym_arr_size + ((i) << 1)) == 0 {
+            if sb_peek(sym_is_const + (i)) == 0 {
+                if sb_peek(sym_reg + (i)) == 0 {            ; regabi params have no storage
+                    if sb_peekw(sym_addr + ((i) << 1)) == $ffff {
                         emit_sym_mangled(i)
                         out_byte($3a)
                         o_nl()
                         out_text("  .byte 0")
-                        if sym_type[(i as ubyte)] == TY_UWORD {
+                        if sb_peek(sym_type + (i)) == TY_UWORD {
                             out_text(", 0")
                         }
                         o_nl()
@@ -2868,7 +2940,7 @@ sub emit_arrays() {
         if j >= sym_count {
             break
         }
-        if sym_arr_size[(j as ubyte)] != 0 {
+        if sb_peekw(sym_arr_size + ((j) << 1)) != 0 {
             any = 1
             break
         }
@@ -2886,10 +2958,10 @@ sub emit_arrays() {
         if i >= sym_count {
             break
         }
-        if sym_arr_size[(i as ubyte)] != 0 {
+        if sb_peekw(sym_arr_size + ((i) << 1)) != 0 {
             uword count
-            count = sym_arr_size[(i as ubyte)]
-            if sym_type[(i as ubyte)] == TY_UWORD {
+            count = sb_peekw(sym_arr_size + ((i) << 1))
+            if sb_peek(sym_type + (i)) == TY_UWORD {
                 ; split lo/hi byte storage (upstream @split model)
                 emit_sym_mangled(i)
                 out_text("_lo:")
@@ -3156,7 +3228,7 @@ sub expr_is_word(uword e) -> ubyte {
             uword si
             si = find_sym(node_a[(n as ubyte)])
             if si != $ffff {
-                if sym_type[(si as ubyte)] == TY_UWORD {
+                if sb_peek(sym_type + (si)) == TY_UWORD {
                     return 1
                 }
             }
@@ -3166,7 +3238,7 @@ sub expr_is_word(uword e) -> ubyte {
             uword ai
             ai = find_sym(node_a[(node_a[(n as ubyte)] as ubyte)])
             if ai != $ffff {
-                if sym_type[(ai as ubyte)] == TY_UWORD {
+                if sb_peek(sym_type + (ai)) == TY_UWORD {
                     return 1
                 }
             }
@@ -3689,7 +3761,7 @@ sub codegen_stmt(uword st) {
         if init != 0 {
             uword si
             si = find_sym(node_a[(st as ubyte)])
-            if sym_type[(si as ubyte)] == TY_UBYTE {
+            if sb_peek(sym_type + (si)) == TY_UBYTE {
                 codegen_byte_expr(init)
                 emit_sta_sym(si)
             } else {
@@ -4113,7 +4185,7 @@ sub emit_byte_leaf_load(uword e) {
         asi = find_sym(node_a[(node_a[(e as ubyte)] as ubyte)])
         uword idx
         idx = node_b[(e as ubyte)]
-        if sym_type[(asi as ubyte)] == TY_UWORD {
+        if sb_peek(sym_type + (asi)) == TY_UWORD {
             es_push(31, asi, 0)             ; tay; lda arr_lo,y
             es_push(1, idx, 0)              ; evaluate the index (word)
             return
@@ -4376,7 +4448,7 @@ sub is_byte_signed(uword nd) -> ubyte {
         if si == $ffff {
             return 0
         }
-        if sym_type[(si as ubyte)] == TY_BYTE {
+        if sb_peek(sym_type + (si)) == TY_BYTE {
             return 1
         }
     }
@@ -4906,7 +4978,7 @@ sub eval_word_dispatch(uword nd) {
         asi = find_sym(node_a[(node_a[(nd as ubyte)] as ubyte)])
         uword idx
         idx = node_b[(nd as ubyte)]
-        if sym_type[(asi as ubyte)] == TY_UWORD {
+        if sb_peek(sym_type + (asi)) == TY_UWORD {
             es_push(29, asi, 0)             ; emit_word_arr_load (index in A -> A:Y)
             es_push(1, idx, 0)              ; evaluate the index (word)
             return
@@ -5258,10 +5330,10 @@ sub codegen_word_leaf(uword e) {
     if k == ND_IDENT {
         uword si
         si = find_sym(node_a[(e as ubyte)])
-        if sym_is_const[(si as ubyte)] != 0 {
+        if sb_peek(sym_is_const + (si)) != 0 {
             ; const folds to its literal (lo in A, hi in Y), matching p8c.
             uword cv
-            cv = sym_cval[(si as ubyte)]
+            cv = sb_peekw(sym_cval + ((si) << 1))
             o_lda() o_imm() out_hex2(lsb(cv)) o_nl()
             o_ldy() o_imm() out_hex2(lsb(cv >> 8)) o_nl()
             return
@@ -5269,7 +5341,7 @@ sub codegen_word_leaf(uword e) {
         o_lda()
         emit_mangled(node_a[(e as ubyte)])
         o_nl()
-        if sym_type[(si as ubyte)] == TY_UWORD {
+        if sb_peek(sym_type + (si)) == TY_UWORD {
             o_ldy()
             emit_mangled(node_a[(e as ubyte)])
             o_plus1()
@@ -5543,8 +5615,8 @@ sub codegen_assign_memat(uword st, uword target) {
 ; fast-path test for a ubyte `arr[i]` (matches p8c _array_fast_byte): ubyte
 ; element, <=256 elements, byte-typed index -> tight `,y` addressing.
 sub array_fast(uword asi, uword idx) -> ubyte {
-    if sym_type[(asi as ubyte)] != TY_UBYTE { return 0 }
-    if sym_arr_size[(asi as ubyte)] > 256 { return 0 }
+    if sb_peek(sym_type + (asi)) != TY_UBYTE { return 0 }
+    if sb_peekw(sym_arr_size + ((asi) << 1)) > 256 { return 0 }
     if expr_is_word(idx) != 0 { return 0 }
     return 1
 }
@@ -5556,7 +5628,7 @@ sub codegen_assign_index(uword target, uword rhs) {
     asi = find_sym(node_a[(node_a[(target as ubyte)] as ubyte)])
     uword idx
     idx = node_b[(target as ubyte)]
-    if sym_type[(asi as ubyte)] == TY_UWORD {
+    if sb_peek(sym_type + (asi)) == TY_UWORD {
         ; rhs (widened) -> A:Y, parked on the CPU stack while the byte index is
         ; computed, then stored hi then lo into the split arrays.
         codegen_word_expr(rhs)
@@ -5611,7 +5683,7 @@ sub codegen_assign(uword st) {
     uword si
     si = find_sym(node_a[(target as ubyte)])
     ubyte ttype
-    ttype = sym_type[(si as ubyte)]
+    ttype = sb_peek(sym_type + (si))
     if op == TK_ASSIGN {
         if ttype == TY_UWORD {
             codegen_word_expr(rhs)
@@ -5780,15 +5852,15 @@ sub collect_params(uword callee) {
         if i >= sym_count {
             break
         }
-        if sym_scope[(i as ubyte)] == callee {
-            if sym_mkind[(i as ubyte)] == 1 {
+        if sb_peekw(sym_scope + ((i) << 1)) == callee {
+            if sb_peek(sym_mkind + (i)) == 1 {
                 call_slot[call_n] = i
-                if sym_type[(i as ubyte)] == TY_UWORD {
+                if sb_peek(sym_type + (i)) == TY_UWORD {
                     call_isw[call_n] = 1
                 } else {
                     call_isw[call_n] = 0
                 }
-                call_reg[call_n] = sym_reg[(i as ubyte)]
+                call_reg[call_n] = sb_peek(sym_reg + (i))
                 call_n = call_n + 1
             }
         }
@@ -5874,16 +5946,16 @@ sub walk_locals(uword body, uword subname) {
                     ubyte sz
                     sz = 1
                     if tag == TY_UWORD { sz = 2 }
-                    sym_ident[sym_count] = node_a[(st as ubyte)]
-                    sym_type[sym_count] = tag
-                    sym_scope[sym_count] = subname
-                    sym_mkind[sym_count] = 2
-                    sym_is_const[sym_count] = 0
-                    sym_arr_size[sym_count] = 0
+                    sb_pokew(sym_ident + ((sym_count) << 1), node_a[(st as ubyte)])
+                    sb_poke(sym_type + (sym_count), tag)
+                    sb_pokew(sym_scope + ((sym_count) << 1), subname)
+                    sb_poke(sym_mkind + (sym_count), 2)
+                    sb_poke(sym_is_const + (sym_count), 0)
+                    sb_pokew(sym_arr_size + ((sym_count) << 1), 0)
                     if zp_next + sz > $ff {
-                        sym_addr[sym_count] = $ffff
+                        sb_pokew(sym_addr + ((sym_count) << 1), $ffff)
                     } else {
-                        sym_addr[sym_count] = zp_next
+                        sb_pokew(sym_addr + ((sym_count) << 1), zp_next)
                         zp_next = zp_next + sz
                     }
                     sym_count = sym_count + 1
@@ -5988,23 +6060,23 @@ sub register_subs() {
                 ubyte psz
                 psz = 1
                 if ptag == TY_UWORD { psz = 2 }
-                sym_ident[sym_count] = node_a[(pnode as ubyte)]
-                sym_type[sym_count] = ptag
-                sym_scope[sym_count] = node_a[(snode as ubyte)]
-                sym_mkind[sym_count] = 1
-                sym_is_const[sym_count] = 0
-                sym_arr_size[sym_count] = 0
-                sym_reg[sym_count] = preg
+                sb_pokew(sym_ident + ((sym_count) << 1), node_a[(pnode as ubyte)])
+                sb_poke(sym_type + (sym_count), ptag)
+                sb_pokew(sym_scope + ((sym_count) << 1), node_a[(snode as ubyte)])
+                sb_poke(sym_mkind + (sym_count), 1)
+                sb_poke(sym_is_const + (sym_count), 0)
+                sb_pokew(sym_arr_size + ((sym_count) << 1), 0)
+                sb_poke(sym_reg + (sym_count), preg)
                 if preg != 0 {
                     ; register-bound param: arrives in A/X/Y/AY, no ZP storage,
                     ; and crucially no zp_next bump (so other vars' ZP addresses
                     ; stay byte-identical to p8c, which gives asmsub params none).
-                    sym_addr[sym_count] = $ffff
+                    sb_pokew(sym_addr + ((sym_count) << 1), $ffff)
                 } else {
                     if zp_next + psz > $ff {
-                        sym_addr[sym_count] = $ffff
+                        sb_pokew(sym_addr + ((sym_count) << 1), $ffff)
                     } else {
-                        sym_addr[sym_count] = zp_next
+                        sb_pokew(sym_addr + ((sym_count) << 1), zp_next)
                         zp_next = zp_next + psz
                     }
                 }
@@ -6131,6 +6203,7 @@ sub emit_subs() {
 ; (find + codegen `main`), trailers. (Pass B -- non-main subs -- and the
 ; symbol-table per-sub locals arrive at later milestones.)
   sub start() {
+    install_bank_accessors()                 ; $F810/$F830 banked-slab routines
     uword fn
     fn = sys_argv(0)
     src_hand = sys_open(fn)
