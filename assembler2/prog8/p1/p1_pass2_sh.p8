@@ -262,19 +262,16 @@ uword[16] ccs_callee
 uword[16] ccs_node
 ubyte[16] ccs_j
 ubyte ccs_sp
-; emit_cond_branch recurses over and/or/not with static-ZP params, so save its
-; frame (cond/target/polarity/skip) here around each recursive call.
+; emit_cond_branch is de-recursed onto this explicit task stack (reusing the
+; arrays the old reentrancy frame used -- no extra RAM). Per entry: cb_cond =
+; condition node; cb_tkind = target/label kind; cb_tid = target/label id;
+; cb_skip = task discriminator (0 = eval node jit 0, 1 = eval node jit 1,
+; 2 = emit a skip label).
 uword[16] cb_cond
 ubyte[16] cb_tkind
 uword[16] cb_tid
 uword[16] cb_skip
 ubyte cb_sp
-; cb_pop unpacks the top frame into these globals (read by the caller before
-; the next push/recursion overwrites them) -- avoids per-site local copies.
-uword cbr_cond
-ubyte cbr_tkind
-uword cbr_tid
-uword cbr_skip
 ; sub table (registered in source order before codegen, so calls
 ; resolve and pass B emits non-main subs in p8c's order).
 uword[222] sub_name       ; sub name ident id
@@ -1309,104 +1306,115 @@ sub emit_cmp_cond(uword cond, ubyte tkind, uword tid, ubyte jit) {
     emit_cmp_u(op, tkind, tid, jit)
 }
 
-; branch to (tkind,tid) when `cond` is (jit ? true : false). and/or/not are
-; short-circuited recursively (per-operand branches, no 0/1 byte). Port of
-; p8c _emit_cond_branch. codegen_call etc. clobber the static-ZP params, so the
-; frame is saved on the cb stack around each recursive call.
-sub cb_push(uword cond, ubyte tkind, uword tid, uword skip) {
+sub cb_push(uword cond, ubyte kind, uword id, uword disc) {
     cb_cond[(cb_sp as ubyte)] = cond
-    cb_tkind[(cb_sp as ubyte)] = tkind
-    cb_tid[(cb_sp as ubyte)] = tid
-    cb_skip[(cb_sp as ubyte)] = skip
+    cb_tkind[(cb_sp as ubyte)] = kind
+    cb_tid[(cb_sp as ubyte)] = id
+    cb_skip[(cb_sp as ubyte)] = disc
     cb_sp = cb_sp + 1
 }
-sub cb_pop() {
-    cb_sp = cb_sp - 1
-    cbr_cond = cb_cond[(cb_sp as ubyte)]
-    cbr_tkind = cb_tkind[(cb_sp as ubyte)]
-    cbr_tid = cb_tid[(cb_sp as ubyte)]
-    cbr_skip = cb_skip[(cb_sp as ubyte)]
-}
-
+; branch to (tkind,tid) when `cond` is (jit ? true : false). and/or/not are
+; short-circuited per-operand (no 0/1 byte). Port of p8c _emit_cond_branch,
+; de-recursed onto the cb_* task stack: disc 0/1 = evaluate a condition node
+; with that polarity, disc 2 = emit a trailing skip label. The eval logic is
+; in ecb_eval (kept a separate sub so neither overruns pass2's 256-node
+; per-sub arena when the pipeline compiles its own source).
 sub emit_cond_branch(uword cond, ubyte tkind, uword tid, ubyte jit) {
+    cb_sp = 0
+    uword jw
+    jw = jit
+    cb_push(cond, tkind, tid, jw)
+    repeat {
+        if cb_sp == 0 {
+            break
+        }
+        cb_sp = cb_sp - 1
+        uword c
+        ubyte tk
+        uword ti
+        uword disc
+        c = cb_cond[(cb_sp as ubyte)]
+        tk = cb_tkind[(cb_sp as ubyte)]
+        ti = cb_tid[(cb_sp as ubyte)]
+        disc = cb_skip[(cb_sp as ubyte)]
+        if disc == 2 {
+            ; skip-label task: tk = label kind (15 and / 16 or), ti = label id.
+            emit_ctrl_label_ref(tk, ti)
+            out_byte(':')
+            o_nl()
+        } else {
+            ecb_eval(c, tk, ti, lsb(disc))
+        }
+    }
+}
+; evaluate one condition node: push the branch tasks for it (no recursion).
+sub ecb_eval(uword c, ubyte tk, uword ti, ubyte ji) {
     ubyte k
     uword skip
-    k = peek($ccf0 + (cond))
+    k = peek($ccf0 + (c))
     if k == ND_UNOP {
-        if peek($ce26 + (cond)) == UN_NOT {
-            emit_cond_branch(peekw($cf5c + ((cond) << 1)), tkind, tid, jit ^ 1)
+        if peek($ce26 + (c)) == UN_NOT {
+            ubyte nj
+            nj = ji ^ 1
+            uword njw
+            njw = nj
+            cb_push(peekw($cf5c + ((c) << 1)), tk, ti, njw)
             return
         }
     }
     if k == ND_BINOP {
         ubyte bop
-        bop = peek($ce26 + (cond))
+        bop = peek($ce26 + (c))
         if bop == TK_KAND {
-            if jit != 0 {
+            if ji != 0 {
                 ; jump iff both true: lhs false -> skip; else jump iff rhs true.
                 skip = label_seq
                 label_seq = label_seq + 1
-                cb_push(cond, tkind, tid, skip)
-                emit_cond_branch(peekw($cf5c + ((cond) << 1)), 15, skip, 0)
-                cb_pop()
-                cb_push(0, 0, 0, cbr_skip)
-                emit_cond_branch(peekw($d1c8 + ((cbr_cond) << 1)), cbr_tkind, cbr_tid, 1)
-                cb_pop()
-                emit_ctrl_label_ref(15, cbr_skip)
-                out_byte(':')
-                o_nl()
+                cb_push(0, 15, skip, 2)
+                cb_push(peekw($d1c8 + ((c) << 1)), tk, ti, 1)
+                cb_push(peekw($cf5c + ((c) << 1)), 15, skip, 0)
             } else {
                 ; jump iff and is false: either operand false -> target.
-                cb_push(cond, tkind, tid, 0)
-                emit_cond_branch(peekw($cf5c + ((cond) << 1)), tkind, tid, 0)
-                cb_pop()
-                emit_cond_branch(peekw($d1c8 + ((cbr_cond) << 1)), cbr_tkind, cbr_tid, 0)
+                cb_push(peekw($d1c8 + ((c) << 1)), tk, ti, 0)
+                cb_push(peekw($cf5c + ((c) << 1)), tk, ti, 0)
             }
             return
         }
         if bop == TK_KOR {
-            if jit != 0 {
+            if ji != 0 {
                 ; jump iff either true.
-                cb_push(cond, tkind, tid, 0)
-                emit_cond_branch(peekw($cf5c + ((cond) << 1)), tkind, tid, 1)
-                cb_pop()
-                emit_cond_branch(peekw($d1c8 + ((cbr_cond) << 1)), cbr_tkind, cbr_tid, 1)
+                cb_push(peekw($d1c8 + ((c) << 1)), tk, ti, 1)
+                cb_push(peekw($cf5c + ((c) << 1)), tk, ti, 1)
             } else {
                 ; jump iff both false: lhs true -> skip; else jump iff rhs false.
                 skip = label_seq
                 label_seq = label_seq + 1
-                cb_push(cond, tkind, tid, skip)
-                emit_cond_branch(peekw($cf5c + ((cond) << 1)), 16, skip, 1)
-                cb_pop()
-                cb_push(0, 0, 0, cbr_skip)
-                emit_cond_branch(peekw($d1c8 + ((cbr_cond) << 1)), cbr_tkind, cbr_tid, 0)
-                cb_pop()
-                emit_ctrl_label_ref(16, cbr_skip)
-                out_byte(':')
-                o_nl()
+                cb_push(0, 16, skip, 2)
+                cb_push(peekw($d1c8 + ((c) << 1)), tk, ti, 0)
+                cb_push(peekw($cf5c + ((c) << 1)), 16, skip, 1)
             }
             return
         }
         if is_cmp_op(bop) != 0 {
-            emit_cmp_cond(cond, tkind, tid, jit)
+            emit_cmp_cond(c, tk, ti, ji)
             return
         }
     }
     ; generic: evaluate to A and branch on (non)zero. A uword is true iff
     ; either byte is nonzero, so OR the two halves together first.
-    if expr_is_word(cond) != 0 {
-        codegen_word_expr(cond)
+    if expr_is_word(c) != 0 {
+        codegen_word_expr(c)
         out_text("  sty __p8c_tmp0")
         o_nl()
         out_text("  ora __p8c_tmp0")
         o_nl()
     } else {
-        codegen_byte_expr(cond)
+        codegen_byte_expr(c)
     }
-    if jit != 0 {
-        emit_br(0, tkind, tid)
+    if ji != 0 {
+        emit_br(0, tk, ti)
     } else {
-        emit_br(1, tkind, tid)
+        emit_br(1, tk, ti)
     }
 }
 
