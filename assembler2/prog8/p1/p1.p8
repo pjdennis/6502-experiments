@@ -311,6 +311,15 @@ ubyte es_sp
 ; expr_is_word's iterative OR-walk stack (operands still to visit).
 uword[24] eiw_stk
 ubyte eiw_sp
+; emit_cond_branch's short-circuit task stack (and/or/not, no recursion). Per
+; entry: cb_cond = condition node, cb_tkind = target/label kind, cb_tid =
+; target/label id, cb_skip = task discriminator (0 = eval node jit 0, 1 = eval
+; node jit 1, 2 = emit a skip label).
+uword[24] cb_cond
+ubyte[24] cb_tkind
+uword[24] cb_tid
+uword[24] cb_skip
+ubyte cb_sp
 ; statement work stack (control flow without recursion): a task is
 ; 0=emit stmt node, 1=emit label .L<kind>_<id>:, 2=emit jmp to it,
 ; 3=pop the loop-label stack.
@@ -2773,6 +2782,8 @@ sub emit_ctrl_label_ref(ubyte kind, uword id) {
     if kind == 12 { out_text(".Lwhen_body_") }
     if kind == 13 { out_text(".Lwhen_next_") }
     if kind == 14 { out_text(".Lwhen_skip_") }
+    if kind == 15 { out_text(".Land_skip_") }
+    if kind == 16 { out_text(".Lor_skip_") }
     out_dec(id)
 }
 ; branch mnemonics by code: 0 bne 1 beq 2 bcc 3 bcs 4 bmi 5 bpl 6 bvc 7 bvs.
@@ -2922,136 +2933,292 @@ sub emit_neg_signed(ubyte op, ubyte tkind, uword tid) {
     out_byte($3a)
     o_nl()
 }
+; the positive (branch-if-TRUE) sequence for an UNSIGNED compare op.
+sub emit_pos_unsigned(ubyte op, ubyte tkind, uword tid) {
+    if op == TK_EQ { emit_br(1, tkind, tid) return }      ; beq
+    if op == TK_NE { emit_br(0, tkind, tid) return }      ; bne
+    if op == TK_LT { emit_br(2, tkind, tid) return }      ; bcc
+    if op == TK_GE { emit_br(3, tkind, tid) return }      ; bcs
+    if op == TK_GT {                                        ; beq <no>; bcs target; no:
+        uword sk
+        sk = label_seq
+        label_seq = label_seq + 1
+        out_text("  beq .Lgt_no_")
+        out_dec(sk)
+        o_nl()
+        emit_br(3, tkind, tid)
+        out_text(".Lgt_no_")
+        out_dec(sk)
+        out_byte($3a)
+        o_nl()
+        return
+    }
+    ; TK_LE: beq target; bcc target
+    emit_br(1, tkind, tid)
+    emit_br(2, tkind, tid)
+}
+; the positive (branch-if-TRUE) sequence for a SIGNED compare op.
+sub emit_pos_signed(ubyte op, ubyte tkind, uword tid) {
+    if op == TK_EQ { emit_br(1, tkind, tid) return }      ; beq
+    if op == TK_NE { emit_br(0, tkind, tid) return }      ; bne
+    if op == TK_LT { emit_br(4, tkind, tid) return }      ; bmi
+    if op == TK_GE { emit_br(5, tkind, tid) return }      ; bpl
+    if op == TK_GT {                                        ; beq <no>; bpl target; no:
+        uword sk
+        sk = label_seq
+        label_seq = label_seq + 1
+        out_text("  beq .Lsgt_no_")
+        out_dec(sk)
+        o_nl()
+        emit_br(5, tkind, tid)
+        out_text(".Lsgt_no_")
+        out_dec(sk)
+        out_byte($3a)
+        o_nl()
+        return
+    }
+    ; TK_LE: beq target; bmi target
+    emit_br(1, tkind, tid)
+    emit_br(4, tkind, tid)
+}
 ; evaluate `cond` as bool and branch to the control label (tkind,tid) if it
 ; is FALSE. Comparison conditions emit the compare straight into the branch
 ; (no 0/1 materialized); anything else evaluates to A and branches on zero.
-sub emit_cond_branch_if_false(uword cond, ubyte tkind, uword tid) {
-    if node_kind[(cond as ubyte)] == ND_BINOP {
-        ubyte op
-        op = node_op[(cond as ubyte)]
-        if is_cmp_op(op) != 0 {
-            uword lhs
-            uword rhs
-            lhs = node_a[(cond as ubyte)]
-            rhs = node_b[(cond as ubyte)]
-            ubyte isw
-            isw = 0
-            if expr_is_word(lhs) != 0 { isw = 1 }
-            if expr_is_word(rhs) != 0 { isw = 1 }
-            if isw != 0 {
-                ; 16-bit compare (always unsigned)
-                codegen_word_expr(lhs)
-                o_sta_wtmp0()
-                o_sty_wtmp0h()
-                codegen_word_expr(rhs)
-                out_text("  sta __p8c_wtmp1")
+sub cb_push(uword cond, ubyte kind, uword id, uword disc) {
+    cb_cond[(cb_sp as ubyte)] = cond
+    cb_tkind[(cb_sp as ubyte)] = kind
+    cb_tid[(cb_sp as ubyte)] = id
+    cb_skip[(cb_sp as ubyte)] = disc
+    cb_sp = cb_sp + 1
+}
+; select the branch sequence after the flags are set (jit polarity + signedness).
+sub emit_cmp_br(ubyte op, ubyte tkind, uword tid, ubyte jit, ubyte signed) {
+    if signed != 0 {
+        if jit != 0 { emit_pos_signed(op, tkind, tid) } else { emit_neg_signed(op, tkind, tid) }
+    } else {
+        if jit != 0 { emit_pos_unsigned(op, tkind, tid) } else { emit_neg_unsigned(op, tkind, tid) }
+    }
+}
+; compare cond.lhs vs cond.rhs and branch to (tkind,tid) on the wanted truth
+; value (jit), without materializing a 0/1 byte. Port of p8c _emit_cmp_cond.
+sub emit_cmp_cond(uword cond, ubyte tkind, uword tid, ubyte jit) {
+    ubyte op
+    op = node_op[(cond as ubyte)]
+    uword lhs
+    uword rhs
+    lhs = node_a[(cond as ubyte)]
+    rhs = node_b[(cond as ubyte)]
+    ubyte isw
+    isw = 0
+    if expr_is_word(lhs) != 0 { isw = 1 }
+    if expr_is_word(rhs) != 0 { isw = 1 }
+    if isw != 0 {
+        ; 16-bit compare (always unsigned)
+        codegen_word_expr(lhs)
+        o_sta_wtmp0()
+        o_sty_wtmp0h()
+        codegen_word_expr(rhs)
+        out_text("  sta __p8c_wtmp1")
+        o_nl()
+        out_text("  sty __p8c_wtmp1+1")
+        o_nl()
+        out_text("  lda __p8c_wtmp0+1")
+        o_nl()
+        out_text("  cmp __p8c_wtmp1+1")
+        o_nl()
+        uword wlo
+        wlo = label_seq
+        label_seq = label_seq + 1
+        out_text("  bne .Lwcmp_lo_")
+        out_dec(wlo)
+        o_nl()
+        o_lda_wtmp0()
+        out_text("  cmp __p8c_wtmp1")
+        o_nl()
+        out_text(".Lwcmp_lo_")
+        out_dec(wlo)
+        out_byte($3a)
+        o_nl()
+        emit_cmp_br(op, tkind, tid, jit, 0)
+        return
+    }
+    ; byte compare
+    ubyte iss
+    iss = cmp_is_signed(cond)
+    if is_cmp_leaf_rhs(rhs) != 0 {
+        codegen_byte_expr(lhs)
+        ubyte do_signed
+        do_signed = 0
+        if iss != 0 {
+            if op != TK_EQ {
+                if op != TK_NE {
+                    do_signed = 1
+                }
+            }
+        }
+        if do_signed != 0 {
+            o_sec()
+            out_text("  sbc ")
+            emit_byte_operand(0, rhs)
+            o_nl()
+            uword sg2
+            sg2 = label_seq
+            label_seq = label_seq + 1
+            out_text("  bvc .Lsgn_ok_")
+            out_dec(sg2)
+            o_nl()
+            out_text("  eor #$80")
+            o_nl()
+            out_text(".Lsgn_ok_")
+            out_dec(sg2)
+            out_byte($3a)
+            o_nl()
+            emit_cmp_br(op, tkind, tid, jit, 1)
+            return
+        }
+        out_text("  cmp ")
+        emit_byte_operand(0, rhs)
+        o_nl()
+        emit_cmp_br(op, tkind, tid, jit, 0)
+        return
+    }
+    codegen_byte_expr(lhs)
+    o_sta_tmp0()
+    codegen_byte_expr(rhs)
+    o_sta_tmp1()
+    o_lda_tmp0()
+    if iss != 0 {
+        if op != TK_EQ {
+            if op != TK_NE {
+                o_sec()
+                out_text("  sbc __p8c_tmp1")
                 o_nl()
-                out_text("  sty __p8c_wtmp1+1")
-                o_nl()
-                out_text("  lda __p8c_wtmp0+1")
-                o_nl()
-                out_text("  cmp __p8c_wtmp1+1")
-                o_nl()
-                uword wlo
-                wlo = label_seq
+                uword sg
+                sg = label_seq
                 label_seq = label_seq + 1
-                out_text("  bne .Lwcmp_lo_")
-                out_dec(wlo)
+                out_text("  bvc .Lsgn_ok_")
+                out_dec(sg)
                 o_nl()
-                o_lda_wtmp0()
-                out_text("  cmp __p8c_wtmp1")
+                out_text("  eor #$80")
                 o_nl()
-                out_text(".Lwcmp_lo_")
-                out_dec(wlo)
+                out_text(".Lsgn_ok_")
+                out_dec(sg)
                 out_byte($3a)
                 o_nl()
-                emit_neg_unsigned(op, tkind, tid)
+                emit_cmp_br(op, tkind, tid, jit, 1)
                 return
             }
-            ; byte compare
-            ubyte iss
-            iss = cmp_is_signed(cond)
-            if is_cmp_leaf_rhs(rhs) != 0 {
-                ; leaf rhs (literal / var): no tmp0/tmp1 spill -- eval lhs into
-                ; A and compare directly. (Matches p8c's _emit_cmp_cond.)
-                codegen_byte_expr(lhs)
-                ubyte do_signed
-                do_signed = 0
-                if iss != 0 {
-                    if op != TK_EQ {
-                        if op != TK_NE {
-                            do_signed = 1
-                        }
-                    }
-                }
-                if do_signed != 0 {
-                    o_sec()
-                    out_text("  sbc ")
-                    emit_byte_operand(0, rhs)
-                    o_nl()
-                    uword sg2
-                    sg2 = label_seq
-                    label_seq = label_seq + 1
-                    out_text("  bvc .Lsgn_ok_")
-                    out_dec(sg2)
-                    o_nl()
-                    out_text("  eor #$80")
-                    o_nl()
-                    out_text(".Lsgn_ok_")
-                    out_dec(sg2)
-                    out_byte($3a)
-                    o_nl()
-                    emit_neg_signed(op, tkind, tid)
-                    return
-                }
-                out_text("  cmp ")
-                emit_byte_operand(0, rhs)
-                o_nl()
-                emit_neg_unsigned(op, tkind, tid)
-                return
-            }
-            codegen_byte_expr(lhs)
-            o_sta_tmp0()
-            codegen_byte_expr(rhs)
-            o_sta_tmp1()
-            o_lda_tmp0()
-            if iss != 0 {
-                if op != TK_EQ {
-                    if op != TK_NE {
-                        o_sec()
-                        out_text("  sbc __p8c_tmp1")
-                        o_nl()
-                        uword sg
-                        sg = label_seq
-                        label_seq = label_seq + 1
-                        out_text("  bvc .Lsgn_ok_")
-                        out_dec(sg)
-                        o_nl()
-                        out_text("  eor #$80")
-                        o_nl()
-                        out_text(".Lsgn_ok_")
-                        out_dec(sg)
-                        out_byte($3a)
-                        o_nl()
-                        emit_neg_signed(op, tkind, tid)
-                        return
-                    }
-                }
-                ; signed == / != still use cmp
-                out_text("  cmp __p8c_tmp1")
-                o_nl()
-                emit_neg_signed(op, tkind, tid)
-                return
-            }
-            out_text("  cmp __p8c_tmp1")
-            o_nl()
-            emit_neg_unsigned(op, tkind, tid)
+        }
+        out_text("  cmp __p8c_tmp1")
+        o_nl()
+        emit_cmp_br(op, tkind, tid, jit, 1)
+        return
+    }
+    out_text("  cmp __p8c_tmp1")
+    o_nl()
+    emit_cmp_br(op, tkind, tid, jit, 0)
+}
+; evaluate one condition node: short-circuit and/or/not by pushing operand
+; branch tasks (and a trailing skip label) onto cb_*; cmp -> emit_cmp_cond;
+; anything else -> materialize to A and branch on (non)zero.
+sub ecb_eval(uword c, ubyte tk, uword ti, ubyte ji) {
+    ubyte k
+    uword skip
+    k = node_kind[(c as ubyte)]
+    if k == ND_UNOP {
+        if node_op[(c as ubyte)] == UN_NOT {
+            ubyte nj
+            nj = ji ^ 1
+            uword njw
+            njw = nj
+            cb_push(node_a[(c as ubyte)], tk, ti, njw)
             return
         }
     }
-    ; generic: evaluate to 0/1 in A, branch to target on zero.
-    codegen_byte_expr(cond)
-    emit_br(1, tkind, tid)
+    if k == ND_BINOP {
+        ubyte bop
+        bop = node_op[(c as ubyte)]
+        if bop == TK_KAND {
+            if ji != 0 {
+                ; jump iff both true: lhs false -> skip; else jump iff rhs true.
+                skip = label_seq
+                label_seq = label_seq + 1
+                cb_push(0, 15, skip, 2)
+                cb_push(node_b[(c as ubyte)], tk, ti, 1)
+                cb_push(node_a[(c as ubyte)], 15, skip, 0)
+            } else {
+                cb_push(node_b[(c as ubyte)], tk, ti, 0)
+                cb_push(node_a[(c as ubyte)], tk, ti, 0)
+            }
+            return
+        }
+        if bop == TK_KOR {
+            if ji != 0 {
+                cb_push(node_b[(c as ubyte)], tk, ti, 1)
+                cb_push(node_a[(c as ubyte)], tk, ti, 1)
+            } else {
+                ; jump iff both false: lhs true -> skip; else jump iff rhs false.
+                skip = label_seq
+                label_seq = label_seq + 1
+                cb_push(0, 16, skip, 2)
+                cb_push(node_b[(c as ubyte)], tk, ti, 0)
+                cb_push(node_a[(c as ubyte)], 16, skip, 1)
+            }
+            return
+        }
+        if is_cmp_op(bop) != 0 {
+            emit_cmp_cond(c, tk, ti, ji)
+            return
+        }
+    }
+    ; generic: evaluate to A and branch on (non)zero. A uword is true iff either
+    ; byte is nonzero, so OR the two halves together first.
+    if expr_is_word(c) != 0 {
+        codegen_word_expr(c)
+        out_text("  sty __p8c_tmp0")
+        o_nl()
+        out_text("  ora __p8c_tmp0")
+        o_nl()
+    } else {
+        codegen_byte_expr(c)
+    }
+    if ji != 0 {
+        emit_br(0, tk, ti)
+    } else {
+        emit_br(1, tk, ti)
+    }
+}
+; branch to (tkind,tid) when `cond` is (jit ? true : false). and/or/not are
+; short-circuited per-operand on the cb_* task stack (no recursion).
+sub emit_cond_branch(uword cond, ubyte tkind, uword tid, ubyte jit) {
+    cb_sp = 0
+    uword jw
+    jw = jit
+    cb_push(cond, tkind, tid, jw)
+    repeat {
+        if cb_sp == 0 {
+            break
+        }
+        cb_sp = cb_sp - 1
+        uword c
+        ubyte tk
+        uword ti
+        uword disc
+        c = cb_cond[(cb_sp as ubyte)]
+        tk = cb_tkind[(cb_sp as ubyte)]
+        ti = cb_tid[(cb_sp as ubyte)]
+        disc = cb_skip[(cb_sp as ubyte)]
+        if disc == 2 {
+            emit_ctrl_label_ref(tk, ti)
+            out_byte($3a)
+            o_nl()
+        } else {
+            ecb_eval(c, tk, ti, lsb(disc))
+        }
+    }
+}
+sub emit_cond_branch_if_false(uword cond, ubyte tkind, uword tid) {
+    emit_cond_branch(cond, tkind, tid, 0)
 }
 
 ; ---- statement codegen (work stack; control flow w/o recursion) ----

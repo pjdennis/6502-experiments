@@ -459,6 +459,21 @@ AUG_NONLEAF_PROGRAMS = [
 ]
 
 
+# Compound conditions (`and`/`or`/`not` short-circuit) in if/while: per-operand
+# branching (no 0/1 materialized), with byte and word comparison leaves, nested
+# and-chains, or with else, and the and_skip/or_skip labels. Byte-identical to
+# p8c's _emit_cond_branch.
+COMPOUND_COND_PROGRAMS = [
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\nubyte c\nubyte d\n  sub start() {\n    if a > b and c < d { a = 1 }\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\n  sub start() {\n    if a == 1 or b == 2 { a = 1 }\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\nubyte c\n  sub start() {\n    if a > 0 and b > 0 and c > 0 { a = 1 }\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\n  sub start() {\n    while a > 0 and b < 10 { a = a - 1 }\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\nubyte c\nubyte d\n  sub start() {\n    if (a > b) or (c == d) { a = 1 } else { a = 2 }\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nuword w\nuword v\nubyte a\nubyte b\n  sub start() {\n    if w > v and a > b { a = 1 }\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte a\nubyte b\n  sub start() {\n    if not (a == b) { a = 1 }\n  }\n}\n',
+]
+
+
 def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
 
@@ -685,6 +700,11 @@ class P1Equivalence(unittest.TestCase):
 
     def test_aug_nonleaf_programs(self):
         for src in AUG_NONLEAF_PROGRAMS:
+            with self.subTest(src=src):
+                self._equiv(src)
+
+    def test_compound_cond_programs(self):
+        for src in COMPOUND_COND_PROGRAMS:
             with self.subTest(src=src):
                 self._equiv(src)
 
