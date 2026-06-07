@@ -593,11 +593,14 @@ def _have_vasm() -> bool:
 
 
 @unittest.skipUnless(_have_prog8c(), f"upstream prog8c not found at {PROG8C_JAR}")
+@unittest.skipUnless(_have_vasm(), "vasm6502_oldstyle not on PATH")
 @unittest.skipUnless(EMU.exists(), f"emulator not built at {EMU}")
 class P1Equivalence(unittest.TestCase):
     """Codegen-equivalence corpus: the p1.p8 monolith (single-pass parse +
-    codegen), built with UPSTREAM prog8c and run on the emulator, must
-    reproduce p8c's `.s` byte-for-byte for each corpus program.
+    codegen), built for the wendy2c MACHINE (65c02, banking) and run on the
+    wendy2c emulator -- reading source / writing output over the simulated
+    $F800 disk with the upper-window RAM bank held mapped -- must reproduce
+    p8c's `.s` byte-for-byte for each corpus program.
 
     The monolith parses the upstream-strict `main { sub start() {...} }` form
     (descend into the namespace, `start` is the SUBK_MAIN entry) -- the same
@@ -605,24 +608,28 @@ class P1Equivalence(unittest.TestCase):
     the _sh pass2, it emits p8c's signed-`byte`/`word` compare arm, so the
     signed corpus programs are checked here too.
 
-    Built with upstream prog8c (not p8c+vasm): upstream's codegen is ~2.5x
-    tighter, so the binary leaves headroom for the >256 peek/poke arena slabs
-    self-hosting needs, and it is the real wendy2 build path. The emitted .s is
-    byte-identical either way -- the monolith's codegen logic does not depend on
-    how the monolith binary was compiled. See WENDY2_MONOLITH_BANKING_PLAN.md.
+    The monolith's file I/O is the inline $F800 disk ABI (no %import), which
+    only exists on the wendy2c machine, so the corpus runs there -- the same
+    machine the banked self-host targets. The emitted .s is machine-independent
+    (the monolith always emits nmos-target asm). See
+    WENDY2_MONOLITH_BANKING_PLAN.md.
     """
+
+    CAP = "2000000000"
 
     @classmethod
     def setUpClass(cls):
         cls.workdir = Path(tempfile.mkdtemp(prefix="p1_codegen_"))
-        cls.p1_bin = build_p1_upstream(cls.workdir)
+        cls.prog_bin, cls.boot_rom = build_p1_wendy(cls.workdir)
+        cls.disk = cls.workdir / "disk"
+        cls.disk.mkdir()
 
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.workdir, ignore_errors=True)
 
     def _oracle(self, src: str) -> str:
-        inp = self.workdir / "in.p8"
+        inp = self.workdir / "oin.p8"
         out = self.workdir / "oracle.s"
         inp.write_text(src)
         r = subprocess.run(
@@ -633,17 +640,26 @@ class P1Equivalence(unittest.TestCase):
                          msg=f"oracle failed on {src!r}:\n{r.stdout}\n{r.stderr}")
         return _norm(out.read_text())
 
-    def _ontarget(self, src: str) -> str:
-        inp = self.workdir / "in.p8"
-        out = self.workdir / "out.s"
-        inp.write_text(src)
+    def _run_wendy(self, src: str):
+        """Run the wendy2c monolith on `src` (staged as in.p8); return
+        (out_text_or_None, completed_process)."""
+        (self.disk / "in.p8").write_text(src)
+        out = self.disk / "out.s"
+        if out.exists():
+            out.unlink()
         r = subprocess.run(
-            [str(EMU), str(self.p1_bin), str(inp), str(out), "--no-dump"],
+            [str(EMU), str(self.boot_rom), "--machine", "wendy2c",
+             "--wendy2-prog", str(self.prog_bin), "--load", "4000",
+             "--disk", str(self.disk), "--cycle-cap", self.CAP],
             capture_output=True, text=True)
-        self.assertEqual(r.returncode, 0,
-                         msg=f"emulator p1 failed on {src!r}:\n"
-                             f"{r.stdout}\n{r.stderr}")
-        return _norm(out.read_text())
+        return (out.read_text() if out.exists() else None), r
+
+    def _ontarget(self, src: str) -> str:
+        text, r = self._run_wendy(src)
+        self.assertIsNotNone(text,
+                             msg=f"wendy2 p1 produced no out.s on {src!r}:\n"
+                                 f"{r.stdout}\n{r.stderr}")
+        return _norm(text)
 
     def _equiv(self, src: str) -> None:
         self.assertEqual(self._oracle(src), self._ontarget(src),
@@ -651,17 +667,13 @@ class P1Equivalence(unittest.TestCase):
 
     def test_lenient_main_rejected(self):
         # The non-upstream `main { <statements> }` form (no `sub start()`) is
-        # rejected with a non-zero exit + a message on stderr, mirroring p8c's
-        # ParseError -- not silently mis-compiled.
-        inp = self.workdir / "len.p8"
-        out = self.workdir / "len.s"
-        inp.write_text("ubyte a\nmain {\n    a = 5\n}\n")
-        r = subprocess.run(
-            [str(EMU), str(self.p1_bin), str(inp), str(out), "--no-dump"],
-            capture_output=True, text=True)
-        self.assertNotEqual(r.returncode, 0,
-                            msg="lenient `main { <stmts> }` should be rejected")
-        self.assertIn("sub start", r.stderr)
+        # rejected -- the monolith bails (sys_exit) before emitting any asm,
+        # mirroring p8c's ParseError -- not mis-compiled. (out.s is created
+        # empty because it is opened before the parse, so check it stays empty.)
+        text, r = self._run_wendy("ubyte a\nmain {\n    a = 5\n}\n")
+        self.assertFalse(text,
+                         msg="lenient `main { <stmts> }` should emit no asm "
+                             f"(out.s empty/absent):\n{r.stdout}\n{r.stderr}")
 
     def test_m1_programs(self):
         for src in M1_PROGRAMS:
@@ -815,81 +827,6 @@ class P1Equivalence(unittest.TestCase):
 
     def test_m5_builtin_programs(self):
         for src in M5_BUILTIN_PROGRAMS:
-            with self.subTest(src=src):
-                self._equiv(src)
-
-
-# A representative cross-section of the corpus to run through the wendy2c
-# pipeline (each case boots the emulator, so this is a smoke set, not the full
-# corpus -- the full feature coverage is in P1Equivalence on nmos).
-WENDY2_SMOKE_PROGRAMS = (
-    M2_PROGRAMS[:1] + M3_STR_PROGRAMS[:1] + M3_EXPR_PROGRAMS[:1]
-    + M4_CONTROL_PROGRAMS[:1] + M4_WHEN_PROGRAMS[:1] + M5_PARAM_PROGRAMS[:1]
-    + M5_LOCAL_PROGRAMS[:1] + M5_BUILTIN_PROGRAMS[:1] + ARRAY_STORE_PROGRAMS[:1]
-    + PEEK_POKE_PROGRAMS[:1] + INLINE_ASM_PROGRAMS[:1] + ASMSUB_PROGRAMS[:1]
-)
-
-
-@unittest.skipUnless(_have_prog8c(), f"upstream prog8c not found at {PROG8C_JAR}")
-@unittest.skipUnless(_have_vasm(), "vasm6502_oldstyle not on PATH")
-@unittest.skipUnless(EMU.exists(), f"emulator not built at {EMU}")
-class P1WendyEquivalence(unittest.TestCase):
-    """The monolith p1.p8 built for the wendy2c MACHINE (65c02, banking) and run
-    on the wendy2c emulator -- reading source / writing output over the
-    simulated $F800 disk, with the upper-window RAM bank held mapped -- must
-    reproduce p8c's `.s` byte-for-byte. Proves the wendy2 retarget end to end:
-    the per-target sysio module ($F800 disk I/O + fixed in.p8/out.s names), the
-    held-bank code+data layout, and the disk rewind-on-EOF the multi-pass
-    compiler relies on. See WENDY2_MONOLITH_BANKING_PLAN.md (M3/M4).
-    """
-
-    CAP = "2000000000"
-
-    @classmethod
-    def setUpClass(cls):
-        cls.workdir = Path(tempfile.mkdtemp(prefix="p1_wendy_"))
-        cls.prog_bin, cls.boot_rom = build_p1_wendy(cls.workdir)
-        cls.disk = cls.workdir / "disk"
-        cls.disk.mkdir()
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.workdir, ignore_errors=True)
-
-    def _oracle(self, src: str) -> str:
-        inp = self.workdir / "oin.p8"
-        out = self.workdir / "oracle.s"
-        inp.write_text(src)
-        r = subprocess.run(
-            [sys.executable, "-m", "p8c", "--target", "nmos",
-             str(inp), "-o", str(out)],
-            capture_output=True, text=True, cwd=str(PROG8))
-        self.assertEqual(r.returncode, 0,
-                         msg=f"oracle failed on {src!r}:\n{r.stdout}\n{r.stderr}")
-        return _norm(out.read_text())
-
-    def _ontarget(self, src: str) -> str:
-        # The wendy2 monolith reads the fixed staged name in.p8 and writes out.s.
-        (self.disk / "in.p8").write_text(src)
-        out = self.disk / "out.s"
-        if out.exists():
-            out.unlink()
-        r = subprocess.run(
-            [str(EMU), str(self.boot_rom), "--machine", "wendy2c",
-             "--wendy2-prog", str(self.prog_bin), "--load", "4000",
-             "--disk", str(self.disk), "--cycle-cap", self.CAP],
-            capture_output=True, text=True)
-        self.assertTrue(out.exists(),
-                        msg=f"wendy2 p1 produced no out.s on {src!r}:\n"
-                            f"{r.stdout}\n{r.stderr}")
-        return _norm(out.read_text())
-
-    def _equiv(self, src: str) -> None:
-        self.assertEqual(self._oracle(src), self._ontarget(src),
-                         msg=f"wendy2 codegen .s differs for {src!r}")
-
-    def test_wendy2_smoke(self):
-        for src in WENDY2_SMOKE_PROGRAMS:
             with self.subTest(src=src):
                 self._equiv(src)
 

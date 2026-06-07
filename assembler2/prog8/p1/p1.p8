@@ -15,14 +15,10 @@
 ; assignment (symbol table + ZP bindings + leaf/augmented assignment).
 
 ; load address comes from the build target (.properties load_address): $0200
-; for nmos (the corpus + self-host oracle), $4000 for wendy2 (the boot ROM
-; uploads the program there). No %address here so one source serves both.
+; for nmos, $4000 for wendy2 (the boot ROM uploads the program there). No
+; %address here so one source serves both.
 %output raw
 %launcher none
-%import strings
-%import sysio          ; file/exit syscalls -- target-specific (nmos $F006 stubs
-                       ; vs wendy2 $F800 disk ports), picked from the build
-                       ; target's library dir. The ONE per-target source.
 main {
 
 ; ---- token kinds ----
@@ -372,14 +368,63 @@ uword dec_v
 ubyte dec_started
 
 
-; The file/exit syscalls live in the imported `sysio` module (target-specific).
-; sys_read wraps sysio.sys_read_raw here so the EOF flag lands in this unit's
-; src_eof global (a module sub can't see main's vars).
+; ---- file/exit syscalls (wendy2c $F800-$F80F disk OS-call ports; the
+; emulator installs them with --disk DIR, and they live in fixed high RAM so
+; they work from any mapped bank). Kept INLINE (not an %import module) so the
+; monolith can parse its own source for self-host without import resolution,
+; and so p8c/upstream compile it unchanged. The compiler reads/writes the fixed
+; staged names in.p8 -> out.s (wendy2c has no argv). Mirrors libraries' os.p8.
+sub sys_argv(ubyte i) -> uword {
+    uword nm
+    if i == 0 {
+        nm = "in.p8"
+    } else {
+        nm = "out.s"
+    }
+    return nm
+}
+sub sys_setname(uword fn) {
+    @($f801) = 0                            ; clear filename buffer
+    uword p
+    p = fn
+    repeat {
+        ubyte c
+        c = @(p)
+        if c == 0 {
+            break
+        }
+        @($f800) = c                        ; append filename byte
+        p = p + 1
+    }
+}
+sub sys_open(uword fn) -> ubyte {
+    sys_setname(fn)
+    return @($f802)                         ; open-for-read -> handle
+}
+sub sys_openout(uword fn) -> ubyte {
+    sys_setname(fn)
+    return @($f803)                         ; open-for-write -> handle
+}
+; read one byte from `handle`; sets src_eof on EOF (the disk port rewinds on
+; EOF, so a later pass re-reads from offset 0 once src_eof is cleared).
 sub sys_read(ubyte handle) -> ubyte {
-    uword r
-    r = sysio.sys_read_raw(handle)
-    src_eof = msb(r)
-    return lsb(r)
+    @($f804) = handle                       ; select handle
+    if (@($f806) & $80) != 0 {              ; EOF?
+        src_eof = 1
+        return 0
+    }
+    return @($f805)                         ; read byte
+}
+sub sys_write(ubyte b, ubyte handle) {
+    @($f804) = handle                       ; select handle
+    @($f807) = b                            ; write byte
+}
+sub sys_close(ubyte handle) {
+    @($f804) = handle
+    @($f808) = 0                            ; close
+}
+sub sys_exit(ubyte code) {
+    @($f80f) = code                         ; power off / halt
 }
 
 ; ---- I/O (sticky-EOF; emulator rewinds on EOF) ----
@@ -410,7 +455,7 @@ sub peek_src() -> ubyte {
     return peek_buf
 }
 sub out_byte(ubyte b) {
-    sysio.sys_write(b, dst_hand)
+    sys_write(b, dst_hand)
 }
 
 ; ---- character classes ----
@@ -673,11 +718,26 @@ sub ident_len_at(uword id) -> uword {
 ; this file itself without overflowing. (Behaviour is identical; the helpers
 ; return TK_IDENT when no keyword matches, which classify_name passes through.)
 ; true iff name_buf (NUL-terminated by the caller) equals the keyword `kw`.
+; compare the NUL-terminated name_buf against the NUL-terminated string at `kw`;
+; 1 if equal. A manual byte loop (not strings.compare) so p1.p8 needs no
+; %import -- the monolith parses its own source for self-host with no import
+; resolution, and the output is unchanged (this is internal compiler logic).
 sub kw_is(uword kw) -> ubyte {
-    if strings.compare(&name_buf, kw) == 0 {
-        return 1
+    ubyte j
+    j = 0
+    repeat {
+        ubyte a
+        ubyte b
+        a = name_buf[(j as ubyte)]
+        b = @(kw + j)
+        if a != b {
+            return 0
+        }
+        if a == 0 {
+            return 1
+        }
+        j = j + 1
     }
-    return 0
 }
 
 sub classify_name() -> ubyte {
@@ -2609,7 +2669,7 @@ sub reject_no_start() {
         poke($f002, c)
         p = p + 1
     }
-    sysio.sys_exit(1)
+    sys_exit(1)
 }
 
 sub emit_prologue() {
@@ -6042,10 +6102,10 @@ sub emit_subs() {
 ; symbol-table per-sub locals arrive at later milestones.)
   sub start() {
     uword fn
-    fn = sysio.sys_argv(0)
-    src_hand = sysio.sys_open(fn)
-    fn = sysio.sys_argv(1)
-    dst_hand = sysio.sys_openout(fn)
+    fn = sys_argv(0)
+    src_hand = sys_open(fn)
+    fn = sys_argv(1)
+    dst_hand = sys_openout(fn)
 
     reset_arena()
     prog_address = $0200                     ; nmos default load address
@@ -6131,7 +6191,7 @@ sub emit_subs() {
     emit_string_pool()
     emit_trailers()
 
-    sysio.sys_close(src_hand)
-    sysio.sys_close(dst_hand)
+    sys_close(src_hand)
+    sys_close(dst_hand)
   }
 }

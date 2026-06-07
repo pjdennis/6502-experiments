@@ -755,7 +755,7 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
             for (int i = 0; i < BATCH && b.osc_ticks < cap; i++) {
                 bus_step(&b);
                 audio_step(&audio, b.osc_ticks, via_6522_portb_pins(&via_state));
-                if (cpu_stp_pending()) { stp = 1; break; }
+                if (cpu_stp_pending() || sysc_state.poweroff) { stp = 1; break; }
                 if (link && serial_link_needs_repoll(link, b.osc_ticks)) {
                     serial_link_poll(link, b.osc_ticks, &b, &via_state);
                     if (serial_link_should_stall(link, b.osc_ticks)) break;
@@ -775,7 +775,7 @@ int emu_run_wendy2c(const struct emu_opts *opts) {
             for (int i = 0; i < BATCH && b.osc_ticks < cap; i++) {
                 bus_step(&b);
                 audio_step(&audio, b.osc_ticks, via_6522_portb_pins(&via_state));
-                if (cpu_stp_pending()) { stp = 1; break; }
+                if (cpu_stp_pending() || sysc_state.poweroff) { stp = 1; break; }
                 if (link && serial_link_needs_repoll(link, b.osc_ticks)) {
                     serial_link_poll(link, b.osc_ticks, &b, &via_state);
                     if (serial_link_should_stall(link, b.osc_ticks)) break;
