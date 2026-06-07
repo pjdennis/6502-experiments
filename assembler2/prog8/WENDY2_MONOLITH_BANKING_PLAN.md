@@ -1,5 +1,14 @@
 # Plan: self-host the *monolith* p1.p8 on wendy2 using banking
 
+> **STATUS: ACHIEVED.** The single-binary monolith, built for wendy2c and run
+> on the emulator, compiles its own ~6300-line source to assembly
+> **byte-for-byte identical** to the host p8c oracle (41058 lines), exiting
+> cleanly (STP) after ~11.25 G cycles / ~18 min. sym/node/cons live in a second
+> RAM bank (logical bank 1) reached via a fixed-high-RAM ($F810/$F830/$F850/
+> $F870) bank-switch accessor; ident/str slabs + code + BSS live in bank 0.
+> Gated regression test: `P1WendySelfHost` (set `P1_WENDY_SELFHOST=1`).
+
+
 Run the **single-binary** monolith compiler (`p1/p1.p8` — lex + parse +
 codegen in one program, no inter-pass disk hand-off) on the **wendy2c**
 machine, reproducing its own host-compiled `.s` byte-for-byte (the

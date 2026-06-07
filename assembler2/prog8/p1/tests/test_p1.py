@@ -915,5 +915,61 @@ class P1SelfHost(unittest.TestCase):
         self._assert_self_hosts(PASS2_SRC, "p1_pass2_sh")
 
 
+@unittest.skipUnless(os.environ.get("P1_WENDY_SELFHOST"),
+                     "slow (~18 min): set P1_WENDY_SELFHOST=1 to run")
+@unittest.skipUnless(_have_prog8c(), f"upstream prog8c not found at {PROG8C_JAR}")
+@unittest.skipUnless(_have_vasm(), "vasm6502_oldstyle not on PATH")
+@unittest.skipUnless(EMU.exists(), f"emulator not built at {EMU}")
+class P1WendySelfHost(unittest.TestCase):
+    """The BANKED MONOLITH self-host: p1.p8 built for the wendy2c machine
+    (65c02, multi-bank) and run on the wendy2c emulator compiles its OWN source
+    (p1.p8) -- reading it from the simulated $F800 disk, holding the sym/node/
+    cons arenas in a second RAM bank (logical bank 1) reached via the fixed-RAM
+    $F810/$F830/$F850/$F870 accessor -- and emits assembly byte-for-byte
+    identical to the host p8c oracle's compilation of the same p1.p8.
+
+    This is the single-binary banked compiler self-hosting. It is SLOW (~18 min:
+    the on-target compiler's O(n^2) identifier/string interning over its own
+    ~6300-line source at the emulator's ~10 MHz 65c02 rate, ~11 G cycles), so it
+    is gated behind P1_WENDY_SELFHOST. See WENDY2_MONOLITH_BANKING_PLAN.md (M5).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.workdir = Path(tempfile.mkdtemp(prefix="p1_wselfhost_"))
+        cls.prog_bin, cls.boot_rom = build_p1_wendy(cls.workdir)
+        cls.disk = cls.workdir / "disk"
+        cls.disk.mkdir()
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.workdir, ignore_errors=True)
+
+    def test_monolith_self_hosts(self):
+        # stage p1.p8 itself as the fixed input name the wendy2 compiler reads.
+        (self.disk / "in.p8").write_text(P1_SRC.read_text())
+        out = self.disk / "out.s"
+        if out.exists():
+            out.unlink()
+        r = subprocess.run(
+            [str(EMU), str(self.boot_rom), "--machine", "wendy2c",
+             "--wendy2-prog", str(self.prog_bin), "--load", "0200",
+             "--disk", str(self.disk), "--cycle-cap", "60000000000"],
+            capture_output=True, text=True)
+        self.assertTrue(out.exists() and out.stat().st_size > 0,
+                        msg=f"banked self-host produced no out.s:\n{r.stdout}\n{r.stderr}")
+        # oracle: host p8c compiling the same p1.p8.
+        oracle = self.workdir / "oracle.s"
+        ro = subprocess.run(
+            [sys.executable, "-m", "p8c", "--target", "nmos",
+             str(P1_SRC), "-o", str(oracle)],
+            capture_output=True, text=True, cwd=str(PROG8))
+        self.assertEqual(ro.returncode, 0,
+                         msg=f"oracle failed:\n{ro.stdout}\n{ro.stderr}")
+        self.assertEqual(_norm(oracle.read_text()), _norm(out.read_text()),
+                         msg="banked monolith self-host diverged from the p8c "
+                             "oracle on p1.p8")
+
+
 if __name__ == "__main__":
     unittest.main()
