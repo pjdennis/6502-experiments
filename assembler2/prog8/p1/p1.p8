@@ -205,14 +205,14 @@ ubyte pend_n
 ; code) so it can exceed 256 bytes for self-host (p1.p8 itself interns ~6.6 KB
 ; of identifier text). Accessed via peek()/poke(); the monolith already
 ; compiles those, so this stays self-hostable. $C000-$DFFF (8 KB).
-const uword ident_pool = $c800
+const uword ident_pool = $c480
 uword ident_count
 uword ident_pool_len
 
 ; string literal pool -- a raw-RAM peek/poke SLAB ($E000-$EFFF, 4 KB) for the
 ; same reason (p1.p8 interns ~3.4 KB of string-literal bytes). str_off/str_len
 ; stay small arrays (one entry per string; <256 strings).
-const uword str_pool = $e200
+const uword str_pool = $e080
 uword[256] str_off
 uword[256] str_len
 uword str_count
