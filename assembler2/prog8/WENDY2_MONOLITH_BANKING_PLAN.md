@@ -103,23 +103,38 @@ Everything else (parser, codegen, AST format) is unchanged.
 
 ## 4. Milestones
 
-* **M1 — corpus build → upstream.** Switch `P1Equivalence` to build the
-  monolith with upstream `prog8c` + `mkimage.py`; full corpus green.
-  (Unblocks slabs; validated byte-identical.)
-* **M2 — slab conversion.** Convert persistent tables to peek/poke slabs
-  at absolute addresses; raise caps past 256. Corpus green after each
-  arena. (Self-host capacity; also the user's explicit ask.)
-* **M3 — wendy2 retarget.** I/O shim → `$F800+`; fixed-filename argv shim;
-  wendy2 monolith `.properties`; build switch so nmos corpus build is
-  unaffected. Prove read-a-file/write-a-file on wendy2 with a bank mapped.
-* **M4 — monolith on wendy2.** Run the monolith from the SPI disk under
-  the monitor with a bank mapped: compile a small `.p8`, diff `.s` vs the
-  host oracle.
+* **M1 — corpus build → upstream. DONE.** `P1Equivalence` builds the
+  monolith with upstream `prog8c` + `mkimage.py`; corpus byte-identical.
+  (Unblocked slabs AND the asmsub/extsub feature -- the headroom the flat
+  p8c+vasm build lacked.)
+* **M3 — wendy2 retarget. DONE.** `%address` dropped (load address from
+  the target); I/O extracted into a per-target `sysio` module (nmos $F006
+  asmsubs / wendy2 $F800 disk ports + fixed in.p8/out.s names); wendy2
+  monolith `.properties` (65c02, load $4000, memtop $F000). nmos binary
+  byte-identical (corpus 32/32). Two emulator fixes: serial RX queue sized
+  to a full program, and disk rewind-on-EOF so the multi-pass reader
+  re-scans (reset_source just clears its flag).
+* **M4 — monolith on wendy2. DONE.** The monolith built for wendy2c and
+  run on the emulator (held bank $01, $F800 disk I/O) reproduces p8c's .s
+  byte-for-byte. New emulator `--wendy2-prog` preloads the RAW program
+  straight into RAM (bank $01) and starts it -- the serial boot is far too
+  slow for ~38 KB. Regression test: `P1WendyEquivalence` (12-program
+  cross-section), each byte-identical.
+* **M2 — slab conversion. NEXT.** Convert persistent tables to peek/poke
+  slabs at absolute addresses; raise caps past 256. Corpus green after
+  each arena. (Self-host capacity; also the user's explicit ask.) Now also
+  feeds M6 -- the slabs are what get partitioned across banks.
 * **M5 — self-host fixpoint on wendy2.** Compile `p1.p8` itself on
   wendy2; emitted `p1.s` equals host `prog8c`/p8c output (normalized for
-  `; source:`). Wire `make wendy2-mono-selfhost` behind skip guards.
-* **M6 (only if needed) — capacity.** Multi-bank data (or, last resort,
-  code overlays) if a self-host input outgrows one held bank.
+  `; source:`). Needs M2 (capacity) + M6 (the ~24 KB of slabs exceed one
+  bank, S6). Wire `make wendy2-mono-selfhost` behind skip guards. Also
+  needs the monolith to PARSE its own dialect fully (it already handles
+  qualified calls like strings.compare / sysio.* via the parser, but
+  %import handling for self-parse is unverified -- shake out at M5).
+* **M6 — multi-bank data (now primary, not "only if needed").** p1.p8's
+  ~24 KB persistent slabs exceed the ~22 KB free in one held bank (S6), so
+  partition: sym/sub/node/cons in the default bank, ident_pool/str_pool in
+  a second bank with switching accessors.
 
 ## 5. Feature completeness (parallel prerequisite)
 
