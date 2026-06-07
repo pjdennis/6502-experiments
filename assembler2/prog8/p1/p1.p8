@@ -205,14 +205,14 @@ ubyte pend_n
 ; code) so it can exceed 256 bytes for self-host (p1.p8 itself interns ~6.6 KB
 ; of identifier text). Accessed via peek()/poke(); the monolith already
 ; compiles those, so this stays self-hostable. $C000-$DFFF (8 KB).
-const uword ident_pool = $c400
+const uword ident_pool = $c800
 uword ident_count
 uword ident_pool_len
 
 ; string literal pool -- a raw-RAM peek/poke SLAB ($E000-$EFFF, 4 KB) for the
 ; same reason (p1.p8 interns ~3.4 KB of string-literal bytes). str_off/str_len
 ; stay small arrays (one entry per string; <256 strings).
-const uword str_pool = $de00
+const uword str_pool = $e200
 uword[256] str_off
 uword[256] str_len
 uword str_count
@@ -235,14 +235,14 @@ const uword node_d = $d800
 uword node_count
 
 ; expression stacks
-uword[16] operand_stack
+uword[32] operand_stack
 uword operand_sp
-ubyte[16] op_kind
-ubyte[16] op_op
-ubyte[16] op_prec
-uword[16] op_a
-uword[16] op_b
-uword[16] op_floor
+ubyte[32] op_kind
+ubyte[32] op_op
+ubyte[32] op_prec
+uword[32] op_a
+uword[32] op_b
+uword[32] op_floor
 uword op_sp
 ; shunting-yard parser state (module-level so pe_cast can share them with
 ; parse_expr): expect_operand = next token should be an operand; index_ok =
@@ -256,17 +256,17 @@ const uword cons_next = $e800
 uword cons_count
 
 ; statement frame stack
-ubyte[18] fr_kind
-ubyte[18] fr_mode        ; 0=stmts, 1=choices
-uword[18] fr_stmts       ; cons head (reversed)
-ubyte[18] fr_defer       ; 1 if defer-prefixed
-uword[18] fr_cond        ; cond / when-expr / repeat-count
-uword[18] fr_then        ; saved then block (else frame)
-uword[18] fr_var
-uword[18] fr_lo
-uword[18] fr_hi
-uword[18] fr_choices     ; when: choices cons head
-uword[18] fr_values      ; when_choice: values cons head
+ubyte[28] fr_kind
+ubyte[28] fr_mode        ; 0=stmts, 1=choices
+uword[28] fr_stmts       ; cons head (reversed)
+ubyte[28] fr_defer       ; 1 if defer-prefixed
+uword[28] fr_cond        ; cond / when-expr / repeat-count
+uword[28] fr_then        ; saved then block (else frame)
+uword[28] fr_var
+uword[28] fr_lo
+uword[28] fr_hi
+uword[28] fr_choices     ; when: choices cons head
+uword[28] fr_values      ; when_choice: values cons head
 ubyte fr_sp
 ubyte pending_defer
 
@@ -323,41 +323,41 @@ uword strpool_count
 ; builtins, and calls all run on this one stack with NO subroutine
 ; recursion, so upstream prog8c compiles + runs it correctly). Each
 ; entry is a task (kind codes documented at codegen_expr's dispatch).
-ubyte[48] es_type
-uword[48] es_node
-ubyte[48] es_op
+ubyte[64] es_type
+uword[64] es_node
+ubyte[64] es_op
 ubyte es_sp
 ; expr_is_word's iterative OR-walk stack (operands still to visit).
-uword[16] eiw_stk
+uword[32] eiw_stk
 ubyte eiw_sp
 ; emit_cond_branch's short-circuit task stack (and/or/not, no recursion). Per
 ; entry: cb_cond = condition node, cb_tkind = target/label kind, cb_tid =
 ; target/label id, cb_skip = task discriminator (0 = eval node jit 0, 1 = eval
 ; node jit 1, 2 = emit a skip label).
-uword[16] cb_cond
-ubyte[16] cb_tkind
-uword[16] cb_tid
-uword[16] cb_skip
+uword[32] cb_cond
+ubyte[32] cb_tkind
+uword[32] cb_tid
+uword[32] cb_skip
 ubyte cb_sp
 ; statement work stack (control flow without recursion): a task is
 ; 0=emit stmt node, 1=emit label .L<kind>_<id>:, 2=emit jmp to it,
 ; 3=pop the loop-label stack.
-ubyte[40] sws_type
-uword[40] sws_a
-uword[40] sws_b
+ubyte[64] sws_type
+uword[64] sws_a
+uword[64] sws_b
 ubyte sws_sp
 ; loop-label stack for break/continue (break -> bk kind/id, continue
 ; -> ck kind/id), pushed per loop.
-ubyte[16] lp_bk
-uword[16] lp_bi
-ubyte[16] lp_ck
-uword[16] lp_ci
+ubyte[24] lp_bk
+uword[24] lp_bi
+ubyte[24] lp_ck
+uword[24] lp_ci
 ubyte lp_sp
 ; short-circuit and/or label stack: a label-id pair is allocated mid-
 ; evaluation (after the lhs) and consumed by the tail (after the rhs);
 ; LIFO nesting matches the work-stack task order.
-uword[32] lstk_id1
-uword[32] lstk_id2
+uword[48] lstk_id1
+uword[48] lstk_id2
 ubyte lstk_sp
 ; codegen scratch flags/counters (reset before pass M):
 ubyte mul_used           ; `*` was emitted -> emit __p8c_mul_u8 trailer
