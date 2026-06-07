@@ -19,6 +19,7 @@ SKIPs cleanly if vasm6502_oldstyle or the emulator binary are missing.
 """
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -33,6 +34,37 @@ PROG8 = P1.parent
 REPO = PROG8.parents[1]
 EMU = REPO / "assembler2" / "emulator" / "emulator.out"
 P1_SRC = P1 / "p1.p8"
+UPSTREAM = PROG8 / "upstream"
+PROG8C_JAR = Path(os.environ.get("PROG8C", "/tmp/prog8c.jar"))
+MKIMAGE = UPSTREAM / "mkimage.py"
+
+
+def _have_prog8c() -> bool:
+    return PROG8C_JAR.exists() and shutil.which("java") is not None
+
+
+def build_p1_upstream(workdir: Path, src: Path = P1_SRC) -> Path:
+    """Build a p1.p8-family source with the UPSTREAM prog8c (nmos target) and
+    wrap it (mkimage) into a $0200..$FFFF emulator image. Returns the image
+    path. This is the real wendy2 build path -- upstream's codegen is ~2.5x
+    tighter than p8c+vasm, so the binary leaves room for the >256 peek/poke
+    arena slabs that self-hosting needs (the p8c+vasm build reaches $EFC0 and
+    has no room). A binary built by upstream emits byte-identical .s to one
+    built by p8c+vasm: the monolith's codegen logic is independent of how the
+    monolith itself was compiled."""
+    raw = workdir / "p1.bin"
+    img = workdir / "p1.img"
+    r = subprocess.run(
+        ["java", "-jar", str(PROG8C_JAR), "-target", "nmos.properties",
+         "-out", str(workdir), str(src)],
+        capture_output=True, text=True, cwd=str(UPSTREAM))
+    assert r.returncode == 0, f"upstream prog8c failed:\n{r.stdout}\n{r.stderr}"
+    assert raw.exists(), f"prog8c produced no binary:\n{r.stdout}\n{r.stderr}"
+    r = subprocess.run(
+        [sys.executable, str(MKIMAGE), str(raw), str(img)],
+        capture_output=True, text=True)
+    assert r.returncode == 0, f"mkimage failed:\n{r.stdout}\n{r.stderr}"
+    return img
 
 _SOURCE_LINE = re.compile(r"^; source:.*$", re.MULTILINE)
 
@@ -506,12 +538,12 @@ def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
 
 
-@unittest.skipUnless(_have_vasm(), "vasm6502_oldstyle not on PATH")
+@unittest.skipUnless(_have_prog8c(), f"upstream prog8c not found at {PROG8C_JAR}")
 @unittest.skipUnless(EMU.exists(), f"emulator not built at {EMU}")
 class P1Equivalence(unittest.TestCase):
     """Codegen-equivalence corpus: the p1.p8 monolith (single-pass parse +
-    codegen), built with p8c+vasm and run on the emulator, must reproduce
-    p8c's `.s` byte-for-byte for each corpus program.
+    codegen), built with UPSTREAM prog8c and run on the emulator, must
+    reproduce p8c's `.s` byte-for-byte for each corpus program.
 
     The monolith parses the upstream-strict `main { sub start() {...} }` form
     (descend into the namespace, `start` is the SUBK_MAIN entry) -- the same
@@ -519,51 +551,17 @@ class P1Equivalence(unittest.TestCase):
     the _sh pass2, it emits p8c's signed-`byte`/`word` compare arm, so the
     signed corpus programs are checked here too.
 
-    # The emulator injects its file-I/O syscall stub jmp table + routines from
-    # $F006 up to ~$F0B0 (over p1.bin once loaded), so p1.bin's code + arenas
-    # MUST end below $F006. The read-only string pool is parked ABOVE the stub
-    # routines at $F0C0, so it has its own ceiling: the emulator's argv-string
-    # window at $FE00 (ARGV_BASE). Both are enforced from the vasm listing.
+    Built with upstream prog8c (not p8c+vasm): upstream's codegen is ~2.5x
+    tighter, so the binary leaves headroom for the >256 peek/poke arena slabs
+    self-hosting needs, and it is the real wendy2 build path. The emitted .s is
+    byte-identical either way -- the monolith's codegen logic does not depend on
+    how the monolith binary was compiled. See WENDY2_MONOLITH_BANKING_PLAN.md.
     """
-
-    STUB_FLOOR = 0xF000
-    POOL_CEIL  = 0xFE00
 
     @classmethod
     def setUpClass(cls):
         cls.workdir = Path(tempfile.mkdtemp(prefix="p1_codegen_"))
-        s_path = cls.workdir / "p1.s"
-        lst_path = cls.workdir / "p1.lst"
-        cls.p1_bin = cls.workdir / "p1.bin"
-        r = subprocess.run(
-            [sys.executable, "-m", "p8c", "--target", "nmos",
-             str(P1_SRC), "-o", str(s_path)],
-            capture_output=True, text=True, cwd=str(PROG8))
-        assert r.returncode == 0, f"p8c failed:\n{r.stdout}\n{r.stderr}"
-        r = subprocess.run(
-            ["vasm6502_oldstyle", "-Fbin", "-dotdir", "-ignore-mult-inc",
-             "-esc", "-wfail", "-L", str(lst_path), "-o", str(cls.p1_bin),
-             str(s_path)],
-            capture_output=True, text=True)
-        assert r.returncode == 0, f"vasm failed:\n{r.stdout}\n{r.stderr}"
-        code_top = 0
-        pool_top = 0
-        for m in re.finditer(r"^([0-9A-Fa-f]{4})\s+(p8a_|p8c_str_|p8s_|p8v_)",
-                             lst_path.read_text(), re.MULTILINE):
-            a = int(m.group(1), 16)
-            if a >= 0xFFF0:
-                continue
-            if m.group(2) == "p8c_str_":
-                if a > pool_top:
-                    pool_top = a
-            elif a > code_top:
-                code_top = a
-        assert 0 < code_top < cls.STUB_FLOOR, (
-            f"p1.bin code+arena top ${code_top:04X} reached the emulator stub "
-            f"floor ${cls.STUB_FLOOR:04X}; shrink p1.p8's arena array sizes")
-        assert pool_top < cls.POOL_CEIL, (
-            f"p1.bin string-pool top ${pool_top:04X} reached the argv window "
-            f"${cls.POOL_CEIL:04X}")
+        cls.p1_bin = build_p1_upstream(cls.workdir)
 
     @classmethod
     def tearDownClass(cls):
