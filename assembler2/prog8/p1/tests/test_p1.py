@@ -419,6 +419,20 @@ CAST_PROGRAMS = [
 ]
 
 
+# Array-element assignment (`arr[i] = rhs`): ubyte[] (const / byte-var /
+# byte-expr / uword index) and uword[] (split lo/hi) stores. Byte-identical to
+# p8c (the fast `,y` path, absolute for a const index, and the parked-rhs
+# byte-index path).
+ARRAY_STORE_PROGRAMS = [
+    '%output raw\n%launcher none\nmain {\nubyte[8] arr\nubyte i\nubyte x\n  sub start() {\n    arr[3] = 9\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte[8] arr\nubyte i\nubyte x\n  sub start() {\n    arr[i] = x\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte[8] arr\nubyte i\nubyte x\n  sub start() {\n    arr[i] = x + 1\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nubyte[8] arr\nubyte i\nubyte x\n  sub start() {\n    arr[i + 1] = x\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nuword[6] warr\nubyte i\nuword w\n  sub start() {\n    warr[2] = w\n  }\n}\n',
+    '%output raw\n%launcher none\nmain {\nuword[6] warr\nubyte i\nuword w\n  sub start() {\n    warr[i] = w\n  }\n}\n',
+]
+
+
 def _have_vasm() -> bool:
     return shutil.which("vasm6502_oldstyle") is not None
 
@@ -630,6 +644,11 @@ class P1Equivalence(unittest.TestCase):
 
     def test_cast_programs(self):
         for src in CAST_PROGRAMS:
+            with self.subTest(src=src):
+                self._equiv(src)
+
+    def test_array_store_programs(self):
+        for src in ARRAY_STORE_PROGRAMS:
             with self.subTest(src=src):
                 self._equiv(src)
 

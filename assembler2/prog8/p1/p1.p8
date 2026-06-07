@@ -4869,6 +4869,59 @@ sub codegen_assign_memat(uword st, uword target) {
 ; (arithmetic + - & | ^ * << >> cmp logical, leaf or nested) with
 ; ubyte->uword widening on word stores; `=` of a word expr; byte augmented
 ; (+= -= &= |= ^= <<= >>=) with a leaf operand.
+; fast-path test for a ubyte `arr[i]` (matches p8c _array_fast_byte): ubyte
+; element, <=256 elements, byte-typed index -> tight `,y` addressing.
+sub array_fast(uword asi, uword idx) -> ubyte {
+    if sym_type[(asi as ubyte)] != TY_UBYTE { return 0 }
+    if sym_arr_size[(asi as ubyte)] > 256 { return 0 }
+    if expr_is_word(idx) != 0 { return 0 }
+    return 1
+}
+; `arr[i] = rhs`. uword[] uses split lo/hi byte arrays; a fast ubyte[] uses the
+; tight `,y` path (absolute for a const index); else the byte-index store. Port
+; of pass2's codegen_assign_index.
+sub codegen_assign_index(uword target, uword rhs) {
+    uword asi
+    asi = find_sym(node_a[(node_a[(target as ubyte)] as ubyte)])
+    uword idx
+    idx = node_b[(target as ubyte)]
+    if sym_type[(asi as ubyte)] == TY_UWORD {
+        ; rhs (widened) -> A:Y, parked on the CPU stack while the byte index is
+        ; computed, then stored hi then lo into the split arrays.
+        codegen_word_expr(rhs)
+        o_pha()
+        o_tya()
+        o_pha()
+        codegen_word_expr(idx)
+        o_tay()
+        o_pla()
+        out_text("  sta ") emit_sym_mangled(asi) out_text("_hi,y") o_nl()
+        o_pla()
+        out_text("  sta ") emit_sym_mangled(asi) out_text("_lo,y") o_nl()
+        return
+    }
+    if array_fast(asi, idx) != 0 {
+        if node_kind[(idx as ubyte)] == ND_INT {
+            codegen_byte_expr(rhs)
+            out_text("  sta ") emit_sym_mangled(asi) out_byte($2b) out_dec(node_a[(idx as ubyte)]) o_nl()
+            return
+        }
+        codegen_byte_expr(rhs)
+        o_sta_tmp0()
+        codegen_byte_expr(idx)
+        o_tay()
+        o_lda_tmp0()
+        out_text("  sta ") emit_sym_mangled(asi) out_text(",y") o_nl()
+        return
+    }
+    ; ubyte element, uword index (<=256): byte-index store.
+    codegen_byte_expr(rhs)
+    o_pha()
+    codegen_word_expr(idx)
+    o_tay()
+    o_pla()
+    out_text("  sta ") emit_sym_mangled(asi) out_text(",y") o_nl()
+}
 sub codegen_assign(uword st) {
     uword target
     uword rhs
@@ -4878,6 +4931,10 @@ sub codegen_assign(uword st) {
     rhs = node_b[(st as ubyte)]
     if node_kind[(target as ubyte)] == ND_MEMAT {
         codegen_assign_memat(st, target)
+        return
+    }
+    if node_kind[(target as ubyte)] == ND_INDEX {
+        codegen_assign_index(target, rhs)
         return
     }
     uword si
