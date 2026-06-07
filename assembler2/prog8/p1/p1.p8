@@ -450,7 +450,7 @@ sub install_bank_accessors() {
     poke($f815, $09) poke($f816, $11)                    ; ora #$11   (bank 1)
     poke($f817, $8d) poke($f818, $00) poke($f819, $f0)   ; sta $f000
     poke($f81a, $a0) poke($f81b, $00)                    ; ldy #0
-    poke($f81c, $b1) poke($f81d, $fc)                    ; lda ($fc),y
+    poke($f81c, $b1) poke($f81d, $04)                    ; lda ($04),y
     poke($f81e, $aa)                                      ; tax
     poke($f81f, $ad) poke($f820, $00) poke($f821, $f0)   ; lda $f000
     poke($f822, $29) poke($f823, $e0)                    ; and #$e0
@@ -466,7 +466,7 @@ sub install_bank_accessors() {
     poke($f838, $8d) poke($f839, $00) poke($f83a, $f0)   ; sta $f000
     poke($f83b, $68)                                      ; pla  (value)
     poke($f83c, $a0) poke($f83d, $00)                    ; ldy #0
-    poke($f83e, $91) poke($f83f, $fc)                    ; sta ($fc),y
+    poke($f83e, $91) poke($f83f, $04)                    ; sta ($04),y
     poke($f840, $ad) poke($f841, $00) poke($f842, $f0)   ; lda $f000
     poke($f843, $29) poke($f844, $e0)                    ; and #$e0
     poke($f845, $09) poke($f846, $01)                    ; ora #$01
@@ -476,16 +476,16 @@ sub install_bank_accessors() {
 ; read/write one byte of a bank-1 slab at window addr (@AY); $fc/$fd = pointer.
 asmsub sb_peek(uword addr @AY) -> ubyte @A {
     %asm {{
-        sta  $fc
-        sty  $fd
+        sta  $04
+        sty  $05
         jsr  $f810
         rts
     }}
 }
 asmsub sb_poke(uword addr @AY, ubyte val @X) {
     %asm {{
-        sta  $fc
-        sty  $fd
+        sta  $04
+        sty  $05
         txa
         jsr  $f830
         rts
