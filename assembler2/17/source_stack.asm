@@ -353,9 +353,9 @@ source_stack_empty:
 
 
 ; INTERNAL helper -- callers should use push_file_source or
-; push_memory_source rather than calling this directly. Those two
-; routines own the calling-convention details (saving X, opening the
-; file, ordering of SS_MEM_PTR16 updates, etc.).
+; push_memory_source_reserve_payload rather than calling this directly.
+; Those two routines own the calling-convention details (saving X,
+; opening the file, ordering of SS_MEM_PTR16 updates, etc.).
 ;
 ; Builds a stack frame for a new source. Frame size is name_len + 8 +
 ; payload (fixed-size prev_data slot regardless of parent type). On

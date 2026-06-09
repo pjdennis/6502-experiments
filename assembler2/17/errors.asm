@@ -200,7 +200,7 @@ err_operand_in_zeropage:
 ; --- Command line/usage errors (240-241) ---
 err_usage:
   BRK
-  .asciiz 240, "Usage: <assembler> <input> <output> [debug]"
+  .asciiz 240, "Usage: <assembler> <input> <output> [define:label ...]"
 
 err_invalid_arg:
   BRK

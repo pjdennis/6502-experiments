@@ -31,8 +31,9 @@ Memory Map
                 macro activation state now lives on the source stack)
   $0500-$05FF   Free (was a 256-byte macro argument buffer pre-Phase-4.10)
   $0600-$067F   TOKEN buffer (128 bytes)
-  $0680-$068F   ELSE_SEEN_ARRAY (16 bytes, one per .ifdef nesting level)
-  $0690-$06AF   Free (was MACRO_ACTIVATION, a 32-byte staging buffer
+  $0680-$0690   ELSE_SEEN_ARRAY (17 bytes; indexed by COND_DEPTH 1..16,
+                index 0 unused)
+  $0691-$06AF   Free (was MACRO_ACTIVATION, a 32-byte staging buffer
                 for the per-macro activation payload, until expand_macro
                 switched to writing parsed slots directly into the new
                 macro frame's payload region)
@@ -153,31 +154,36 @@ starts with a single-byte parameter count, then the param names
 
 Expand-time consumers read N from the count byte and walk N names; no
 trailing empty-string sentinel is needed. dir_macro enforces
-MACRO_MAX_ARGS = 64 at definition time so the count byte can't overflow.
+MACRO_MAX_ARGS = 32 at definition time so the count byte can't overflow.
 During capture, the body is compressed (comments stripped, consecutive
 spaces collapsed, string/char literals preserved verbatim). Nested .macro
 directives are rejected. In pass 2, the body is skipped since it was
 already captured in pass 1.
 
 Expansion (macro_expansion.asm): Macro invocation reads N from the def,
-pre-checks that the new frame fits (worst-case frame_size = 15 + name_len
-+ 3*N <= 255), then writes parsed slot values directly into the
+pre-checks that the new frame fits (worst-case frame_size = 19 + name_len
++ 3*N <= 255; 8-byte fixed header + 11-byte scope tail), then writes
+parsed slot values directly into the
 unallocated source-stack memory just below SS_P16 -- the area that will
 become the new frame's payload once the push commits. SS_P16 / SS_SRC_TYPE
 / SS_MEM_PTR16 / SS_CURR_LINE16 stay unchanged during arg parsing, so the
 parent's source remains active for read_char and any error fires with the
 correct line and frame name.
 
-After all args are written and the 7-byte scope tail (LABEL_SCOPE16,
-CACHED_HASH, prev_macro_lookup, MACRO_ENTRY16) is appended,
-push_memory_source_reserve_payload commits the frame: it advances SS_P16
-down by frame_size, writes the source-stack header (frame_size, curr_type,
-prev_type, prev_line, name, prev_data) in the bytes above the pre-written
-payload, and sets SS_SRC_TYPE = MEMORY. The new scope (EXPANSION_ID16,
-LABEL_SCOPE16, CACHED_HASH, SCOPE_DEPTH) is set up only after the parent's
-scope_block has been captured into the frame, and MACRO_LOOKUP_FRAME16 is
-anchored at SS_P16 last so the body's identifier lookups find this frame
-in O(1).
+The frame is reserved up front via ss_reserve_frame, which performs the
+OOM check and writes frame_size, the fixed header (curr_type, prev_type,
+prev_line), and the macro name into the pending region -- all before
+argument parsing, so TOKEN is then free to be clobbered. After all args
+are written and the 11-byte scope tail (LABEL_SCOPE16, CACHED_HASH,
+prev_macro_lookup, the previous lookup slot/param pointers, and
+MACRO_ENTRY16) is appended, ss_commit_pending_frame commits the frame:
+it captures the parent's current read state into prev_data, advances
+SS_P16 := SS_PEND_P16, and sets SS_SRC_TYPE = MEMORY. The new scope
+(EXPANSION_ID16, LABEL_SCOPE16, CACHED_HASH, SCOPE_DEPTH) is set up only
+after the parent's scope_block has been captured into the frame, and the
+lookup pointer triple (MACRO_LOOKUP_FRAME16 / _SLOTS16 / _PARAMS16) is
+anchored at the new frame last so the body's identifier lookups find
+this frame in O(1).
 
 Identifier resolution (expressions.asm: resolve_identifier): when SCOPE_DEPTH
 > 0, lookup reads MACRO_LOOKUP_FRAME16 (the innermost macro frame's
@@ -237,30 +243,38 @@ frame's reserved payload region by expand_macro -- there is no separate
 staging buffer:
 
   parameter slots [0..N-1]   3 bytes each: fwdref, value_L, value_H
-  scope tail (7 bytes):
+  scope tail (11 bytes):
     LABEL_SCOPE16 lo/hi      restored on pop
     CACHED_HASH              restored on pop
     prev_macro_lookup lo/hi  threads the macro-frame chain so
                              check_macro_recursion and
                              pop_label_scope_from_frame can walk
                              innermost-first in O(1) per step
+    prev_macro_lookup_slots lo/hi
+                             restored on pop; cached slot[0] pointer
+                             kept in lockstep with MACRO_LOOKUP_FRAME16
+    prev_macro_lookup_params lo/hi
+                             restored on pop; cached param-name-list
+                             pointer kept in lockstep with
+                             MACRO_LOOKUP_FRAME16
     MACRO_ENTRY16 lo/hi      this expansion's macro definition; sits
                              at frame_size - 2..-1 so recursion check
                              reads it without further offset math
 
 N is read from the macro definition (the count byte at MACRO_ENTRY16),
-not from the frame -- there is no per-frame arg_count byte. Two
-source-stack entry points support this:
+not from the frame -- there is no per-frame arg_count byte. The
+source-stack entry point supporting this is:
 
-  push_memory_source_with_payload    copies SS_PAYLOAD16 -> payload region
   push_memory_source_reserve_payload reserves the payload region without
                                      copying (caller pre-wrote the bytes
                                      just below SS_P16 before the push)
 
-Memory pop is dispatched via a runtime hook installed by the assembler at
-startup -- ss_install_memory_pop registers pop_label_scope_from_frame,
-which reads the scope tail and restores LABEL_SCOPE16, CACHED_HASH, and
-MACRO_LOOKUP_FRAME16 when the macro frame is popped.
+Memory pop is dispatched through MEMORY_POP_HANDLER, a compile-time
+equate the host program defines before including source_stack.asm. The
+assembler points it at pop_label_scope_from_frame, which reads the scope
+tail and restores LABEL_SCOPE16, CACHED_HASH, and the lookup pointer
+triple (MACRO_LOOKUP_FRAME16 / _SLOTS16 / _PARAMS16) when the macro
+frame is popped.
 
 
 Conditional Assembly

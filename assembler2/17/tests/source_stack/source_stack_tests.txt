@@ -753,7 +753,7 @@ EXPECT_STDOUT:
 #   1 (size byte) + 1 (curr_type) + 1 (prev_type) + 2 (line)
 #   + 2 (prev_data, fixed) + 7 (name "PAYLOAD") + 1 (null) + N (payload)
 # = 15 + N regardless of parent type.
-# Verifies push_memory_source_with_payload sizes the frame correctly.
+# Verifies push_memory_source_reserve_payload sizes the frame correctly.
 
 ---
 NAME: payload_memory_zero

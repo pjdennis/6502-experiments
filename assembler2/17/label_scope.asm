@@ -15,6 +15,12 @@
 ;                                       of macro frames so resolve_identifier
 ;                                       can find the innermost macro frame in
 ;                                       O(1) via MACRO_LOOKUP_FRAME16
+;   prev_macro_lookup_slots lo/hi (2 bytes)  - restored on pop; cached
+;                                       slot[0] pointer kept in lockstep
+;                                       with MACRO_LOOKUP_FRAME16
+;   prev_macro_lookup_params lo/hi (2 bytes) - restored on pop; cached
+;                                       param-name-list pointer kept in
+;                                       lockstep with MACRO_LOOKUP_FRAME16
 ;   MACRO_ENTRY16    lo/hi (2 bytes) - saved but not restored (read by
 ;                                       check_macro_recursion to detect
 ;                                       recursive expansions). Sits at the
@@ -22,12 +28,13 @@
 ;                                       check_macro_recursion locates it via
 ;                                       frame_size - 2.
 ;
-; expand_macro writes these 7 bytes (after the parameter slots) directly
+; expand_macro writes these 11 bytes (after the parameter slots) directly
 ; into the frame's reserved payload region after reserving via
 ; ss_reserve_frame -- there is no longer a staging buffer between the
 ; parser and the source-stack frame.
-; pop_label_scope_from_frame (installed via ss_install_memory_pop at startup)
-; reads them back when the frame is popped.
+; pop_label_scope_from_frame (wired in as the source stack's
+; MEMORY_POP_HANDLER compile-time equate in asm.asm) reads them back when
+; the frame is popped.
 ;
 ; Pre-Phase-3.6 there was a separate SCOPE_STACK at $0400 with its own
 ; SCOPE_PTR16, push_label_scope, pop_label_scope, and a hard 51-entry
@@ -96,20 +103,24 @@ init_scope_state:
   RTS
 
 
-; Memory-source pop hook installed at startup via ss_install_memory_pop.
-; Called from pop_source's curr_type=memory dispatch when a macro frame
-; is popped. The frame's last 7 bytes hold the activation payload that
-; expand_macro stashed in via push_memory_source_with_payload:
+; Memory-source pop handler, wired in at compile time as the source
+; stack's MEMORY_POP_HANDLER equate (asm.asm). Called from pop_source's
+; curr_type=memory dispatch when a macro frame is popped. The frame's
+; last 11 bytes hold the scope tail that expand_macro wrote into the
+; reserved payload region:
 ;
-;   payload offset 0..1: prev LABEL_SCOPE16 lo/hi
-;   payload offset 2:    prev CACHED_HASH
-;   payload offset 3..4: prev MACRO_LOOKUP_FRAME16 lo/hi
-;   payload offset 5..6: prev MACRO_ENTRY16 (for recursion detection;
-;                                            not restored on pop)
+;   tail offset 0..1:  prev LABEL_SCOPE16 lo/hi
+;   tail offset 2:     prev CACHED_HASH
+;   tail offset 3..4:  prev MACRO_LOOKUP_FRAME16 lo/hi
+;   tail offset 5..6:  prev MACRO_LOOKUP_SLOTS16 lo/hi
+;   tail offset 7..8:  prev MACRO_LOOKUP_PARAMS16 lo/hi
+;   tail offset 9..10: MACRO_ENTRY16 (for recursion detection;
+;                                     not restored on pop)
 ;
-; Restores LABEL_SCOPE16, CACHED_HASH, and MACRO_LOOKUP_FRAME16;
-; decrements SCOPE_DEPTH. The pop_source dispatch preserves Y/X around
-; this call, so we can clobber them freely.
+; Restores LABEL_SCOPE16, CACHED_HASH, and the lookup pointer triple
+; (MACRO_LOOKUP_FRAME16 / _SLOTS16 / _PARAMS16); decrements SCOPE_DEPTH.
+; The pop_source dispatch preserves Y/X around this call, so we can
+; clobber them freely.
 pop_label_scope_from_frame:
   LDY #0
   LDA (SS_P16),Y          ; frame_size

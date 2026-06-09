@@ -80,7 +80,11 @@ echo "--- Version 12 ---"
   ../emulator/emulator.out out/instgen.out --load 2000 --output out/inst.asm.out &&
   ../emulator/emulator.out ../11/out/asm.out asm.asm out/asm.out)
 run_version_tests 12
-diff <(hexdump -C 11/out/asm.out) <(hexdump -C 12/out/asm.out)
+# cmp (not diff of hexdump output): hexdump may be missing from the
+# environment, and a failure inside a process substitution doesn't
+# propagate through set -e -- the diff would silently compare two empty
+# streams and pass.
+cmp 11/out/asm.out 12/out/asm.out
 echo "--- Version 13 ---"
 (cd 13 && mkdir -p out &&
   ../emulator/emulator.out ../12/out/asm.out instgen.asm out/instgen.out &&
@@ -122,10 +126,10 @@ python3 17/tests/opendir/test_opendir.py
 echo "--- Self-assembly test ---"
 # Self-assembly test (without debug - smaller)
 (cd 17 && ../emulator/emulator.out out/asm.out asm.asm out/asm_2.out)
-diff <(hexdump -C 17/out/asm.out) <(hexdump -C 17/out/asm_2.out)
+cmp 17/out/asm.out 17/out/asm_2.out
 # Self-assembly test (with debug)
 (cd 17 && ../emulator/emulator.out out/asm_debug.out asm.asm out/asm_debug_2.out define:enable_debug)
-diff <(hexdump -C 17/out/asm_debug.out) <(hexdump -C 17/out/asm_debug_2.out)
+cmp 17/out/asm_debug.out 17/out/asm_debug_2.out
 echo "--- Self-hosted tests ---"
 (cd 17 && ../emulator/emulator.out out/asm.out asm.asm out/test_runner.out define:enable_test_runner define:enable_debug)
 (cd 17/tests/asm && ../../../emulator/emulator.out ../../out/test_runner.out -q)

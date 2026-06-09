@@ -29,9 +29,13 @@ FWDREF_LIMIT    = FWDREF_LIST + $0200 ; Limit for forward reference list data
                          ; $0690-$06AF was MACRO_ACTIVATION (the activation-
                          ; payload staging buffer) until expand_macro switched
                          ; to writing parsed slots directly into the new
-                         ; macro frame's payload region. Now free.
+                         ; macro frame's payload region. $0690 now holds
+                         ; ELSE_SEEN_ARRAY's last entry (depth 16);
+                         ; $0691-$06AF is free.
 TOKEN           = $0600  ; Buffer for the current token being read
-ELSE_SEEN_ARRAY = $0680  ; Array tracking .else seen per nesting level (16 bytes)
+ELSE_SEEN_ARRAY = $0680  ; Array tracking .else seen per nesting level
+                         ; (17 bytes, $0680-$0690: indexed by COND_DEPTH,
+                         ; which ranges 1..16; index 0 is unused)
 MACRO_MAX_ARGS  = $20    ; Hard cap on parameters per macro definition (32).
                          ; Set deliberately well below what the 1-byte
                          ; frame_size could otherwise allow, so the
@@ -40,7 +44,9 @@ MACRO_MAX_ARGS  = $20    ; Hard cap on parameters per macro definition (32).
                          ; to think about whether their name length
                          ; eats into their arg budget. Worst case at
                          ; this cap (using the 127-char TOKEN limit
-                         ; as the name) is 15 + 127 + 96 = 238 bytes,
+                         ; as the name) is 19 + 127 + 96 = 242 bytes
+                         ; (frame_size = 19 + name_len + 3*N: 8-byte
+                         ; fixed header + 11-byte scope tail),
                          ; comfortably under the 256-byte frame_size
                          ; ceiling. expand_macro's runtime frame-size
                          ; guard remains in place as defense in case
@@ -133,8 +139,9 @@ assemble_code:
   STA SKIP_DEPTH         ; Clear skip depth
   STA IN_MACRO_DEF       ; Clear macro definition flag
   STA IFDEF_INDEX        ; Clear .ifdef decision index
-  ; Clear ELSE_SEEN_ARRAY (16 bytes)
-  LDY #15
+  ; Clear ELSE_SEEN_ARRAY (17 bytes: indices 1..16 are used, one per
+  ; COND_DEPTH level; index 0 is unused)
+  LDY #16
 .clear_else_seen:
   STA ELSE_SEEN_ARRAY,Y
   DEY
