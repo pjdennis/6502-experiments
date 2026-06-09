@@ -1,0 +1,34 @@
+al 4102 .prog8_program_end
+al 40fd .prog8_struct_instances
+al 4024 .p8_sys_startup
+al 4024 .p8_sys_startup:init_system
+al 402a .p8_sys_startup:cleanup_at_exit
+al 40fe .p8_sys_startup:cleanup_at_exit:_exitcarry
+al 40ff .p8_sys_startup:cleanup_at_exit:_exitcode
+al 4100 .p8_sys_startup:cleanup_at_exit:_exitcodeX
+al 4101 .p8_sys_startup:cleanup_at_exit:_exitcodeY
+al 4029 .p8_sys_startup:init_system_phase2
+al 4038 .prog8_interned_strings
+al 4038 .prog8_interned_strings:string_1
+al 4017 .p8b_main
+al 4017 .p8b_main:p8s_start
+al 4000 .prog8_program_start
+al 40c9 .sys
+al 40c9 .sys:reset_system
+al 40cd .prog8_lib
+al 40df .prog8_lib:memset
+al 40e9 .prog8_lib:memset:_fullpage
+al 40f3 .prog8_lib:memset:_lastpage
+al 40cd .prog8_lib:program_startup_clear_bss
+al 40fd .prog8_lib:orig_stackpointer
+al 40fe .prog8_bss_section_start
+al 4102 .prog8_struct_instances_bss
+al 4043 .txt
+al 404a .txt:print
+al 4043 .txt:clear
+al 4064 .txt:send_byte
+al 409c .txt:send_byte:_busy
+al 409a .txt:send_byte:_wait
+; breakpoint list now follows
+; 0 breakpoints have been defined
+del

@@ -1,0 +1,23 @@
+
+Prog8 compiler v12.1.1 by Irmen de Jong (irmen@razorvine.net)
+This software is licensed under the GNU GPL 3.0, see https://www.gnu.org/licenses/gpl.html
+
+Compiling program demos/d1_catfile.p8
+Compiler target: wendy2
+Generating assembly code... 
+
+Creating raw binary for target wendy2.
+64tass Turbo Assembler Macro V1.59.3120
+64TASS comes with ABSOLUTELY NO WARRANTY; This is free software, and you
+are welcome to redistribute it under certain conditions; See LICENSE!
+
+Assembling file:   /home/user/6502-experiments/assembler2/prog8/upstream/out/d1_catfile/d1_catfile.asm
+Output file:       /home/user/6502-experiments/assembler2/prog8/upstream/out/d1_catfile/d1_catfile.bin
+Data:        367   $4000-$416e   $016f
+Section:       0   $416f         $0000    STRUCTINSTANCES
+Gap:           1   $416f-$416f   $0001    BSS_NOCLEAR
+Gap:           4   $4170-$4173   $0004    BSS
+Section:       0   $4174         $0000    BSS_SLABS
+Passes:            5
+
+Total compilation+assemble time: 1.225s.

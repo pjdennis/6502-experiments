@@ -1,0 +1,46 @@
+al 40d7 .p8_sys_startup
+al 40d7 .p8_sys_startup:init_system
+al 40dd .p8_sys_startup:cleanup_at_exit
+al 423c .p8_sys_startup:cleanup_at_exit:_exitcarry
+al 423d .p8_sys_startup:cleanup_at_exit:_exitcode
+al 423e .p8_sys_startup:cleanup_at_exit:_exitcodeX
+al 423f .p8_sys_startup:cleanup_at_exit:_exitcodeY
+al 40dc .p8_sys_startup:init_system_phase2
+al 40eb .prog8_interned_strings
+al 40eb .prog8_interned_strings:string_1
+al 4240 .prog8_program_end
+al 4000 .prog8_program_start
+al 4207 .sys
+al 4207 .sys:reset_system
+al 420b .prog8_lib
+al 421d .prog8_lib:memset
+al 4227 .prog8_lib:memset:_fullpage
+al 4231 .prog8_lib:memset:_lastpage
+al 420b .prog8_lib:program_startup_clear_bss
+al 423b .prog8_lib:orig_stackpointer
+al 423c .prog8_bss_section_start
+al 4240 .prog8_struct_instances_bss
+al 423b .prog8_struct_instances
+al 40ef .txt
+al 40ff .txt:print
+al 40f6 .txt:chrout
+al 40ef .txt:clear
+al 4119 .txt:send_byte
+al 4151 .txt:send_byte:_busy
+al 414f .txt:send_byte:_wait
+al 4017 .p8b_main
+al 4017 .p8b_main:p8v_r1
+al 4023 .p8b_main:p8v_r3
+al 401d .p8b_main:p8v_r2
+al 4029 .p8b_main:p8s_start
+al 417e .banking
+al 4193 .banking:get_raw
+al 4186 .banking:set_raw
+al 41e2 .banking:bank_call
+al 417e .banking:cfgtab
+al 4200 .banking:call_indirect
+al 4199 .banking:bank_store
+al 420b .cx16
+; breakpoint list now follows
+; 0 breakpoints have been defined
+del

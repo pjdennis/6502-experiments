@@ -1,0 +1,23 @@
+
+Prog8 compiler v12.1.1 by Irmen de Jong (irmen@razorvine.net)
+This software is licensed under the GNU GPL 3.0, see https://www.gnu.org/licenses/gpl.html
+
+Compiling program demos/m0_exit.p8
+Compiler target: wendy2
+Generating assembly code... 
+
+Creating raw binary for target wendy2.
+64tass Turbo Assembler Macro V1.59.3120
+64TASS comes with ABSOLUTELY NO WARRANTY; This is free software, and you
+are welcome to redistribute it under certain conditions; See LICENSE!
+
+Assembling file:   /home/user/6502-experiments/assembler2/prog8/upstream/out/m0_exit/m0_exit.asm
+Output file:       /home/user/6502-experiments/assembler2/prog8/upstream/out/m0_exit/m0_exit.bin
+Data:         99   $4000-$4062   $0063
+Section:       0   $4063         $0000    STRUCTINSTANCES
+Gap:           1   $4063-$4063   $0001    BSS_NOCLEAR
+Gap:           4   $4064-$4067   $0004    BSS
+Section:       0   $4068         $0000    BSS_SLABS
+Passes:            5
+
+Total compilation+assemble time: 0.704s.

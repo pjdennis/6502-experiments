@@ -1,0 +1,23 @@
+
+Prog8 compiler v12.1.1 by Irmen de Jong (irmen@razorvine.net)
+This software is licensed under the GNU GPL 3.0, see https://www.gnu.org/licenses/gpl.html
+
+Compiling program demos/t2_banked_data.p8
+Compiler target: wendy2
+Generating assembly code... 
+
+Creating raw binary for target wendy2.
+64tass Turbo Assembler Macro V1.59.3120
+64TASS comes with ABSOLUTELY NO WARRANTY; This is free software, and you
+are welcome to redistribute it under certain conditions; See LICENSE!
+
+Assembling file:   /home/user/6502-experiments/assembler2/prog8/upstream/out/t2_banked_data/t2_banked_data.asm
+Output file:       /home/user/6502-experiments/assembler2/prog8/upstream/out/t2_banked_data/t2_banked_data.bin
+Data:        620   $4000-$426b   $026c
+Section:       0   $426c         $0000    STRUCTINSTANCES
+Gap:           1   $426c-$426c   $0001    BSS_NOCLEAR
+Gap:           4   $426d-$4270   $0004    BSS
+Section:       0   $4271         $0000    BSS_SLABS
+Passes:            5
+
+Total compilation+assemble time: 0.994s.

@@ -1,0 +1,23 @@
+
+Prog8 compiler v12.1.1 by Irmen de Jong (irmen@razorvine.net)
+This software is licensed under the GNU GPL 3.0, see https://www.gnu.org/licenses/gpl.html
+
+Compiling program demos/t4_bank_counters.p8
+Compiler target: wendy2
+Generating assembly code... 
+
+Creating raw binary for target wendy2.
+64tass Turbo Assembler Macro V1.59.3120
+64TASS comes with ABSOLUTELY NO WARRANTY; This is free software, and you
+are welcome to redistribute it under certain conditions; See LICENSE!
+
+Assembling file:   /home/user/6502-experiments/assembler2/prog8/upstream/out/t4_bank_counters/t4_bank_counters.asm
+Output file:       /home/user/6502-experiments/assembler2/prog8/upstream/out/t4_bank_counters/t4_bank_counters.bin
+Data:        469   $4000-$41d4   $01d5
+Section:       0   $41d5         $0000    STRUCTINSTANCES
+Gap:           1   $41d5-$41d5   $0001    BSS_NOCLEAR
+Gap:           4   $41d6-$41d9   $0004    BSS
+Section:       0   $41da         $0000    BSS_SLABS
+Passes:            5
+
+Total compilation+assemble time: 0.903s.
