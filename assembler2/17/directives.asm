@@ -351,13 +351,14 @@ dir_else:
   ; 1. Validate we're in a conditional block
   LDA COND_DEPTH
   BEQ .error_else_without_ifdef
-  ; 2. Check if this conditional already has .else
+  ; 2. Check if this conditional already has .else. The -1 biased
+  ; access maps COND_DEPTH (1..16) onto array entries 0..15.
   TAY                          ; Y = COND_DEPTH (use Y, not X!)
-  LDA ELSE_SEEN_ARRAY,Y
+  LDA ELSE_SEEN_ARRAY - 1,Y
   BNE .error_duplicate_else
   ; 3. Mark .else seen at this depth
   LDA #$FF
-  STA ELSE_SEEN_ARRAY,Y
+  STA ELSE_SEEN_ARRAY - 1,Y
   ; 4. Toggle skip state
   LDA SKIP_DEPTH
   BNE .currently_skipping
@@ -386,10 +387,11 @@ dir_endif:
   BNE .has_ifdef       ; In a conditional block
   JMP err_endif_without_ifdef
 .has_ifdef:
-  ; Clear ELSE_SEEN_ARRAY entry for this depth before decrementing
+  ; Clear ELSE_SEEN_ARRAY entry for this depth (-1 biased access)
+  ; before decrementing
   TAY                  ; Y = COND_DEPTH (use Y, not X!)
   LDA #$00
-  STA ELSE_SEEN_ARRAY,Y
+  STA ELSE_SEEN_ARRAY - 1,Y
   DEC COND_DEPTH
   ; Check if this ends our skip block
   LDA SKIP_DEPTH

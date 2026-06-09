@@ -56,9 +56,9 @@ Each version builds into its own `NN/out/` directory (e.g., `16/out/asm.out`). T
   frame BEFORE arg parsing)
 - `$0500-$05FF`: free (was `MACRO_ARG_BUF` before Phase 4.8)
 - `$0600`: `TOKEN` buffer (current token being read, 128 bytes)
-- `$0680-$0690`: `ELSE_SEEN_ARRAY` (per-nesting-level `.else` flags, 17 bytes;
-  indexed by `COND_DEPTH` 1..16, index 0 unused)
-- `$0691-$06AF`: free (was `MACRO_ACTIVATION` 32-byte staging buffer until
+- `$0680-$068F`: `ELSE_SEEN_ARRAY` (per-nesting-level `.else` flags, 16 bytes,
+  all used; accessed as `ELSE_SEEN_ARRAY - 1,Y` with Y = `COND_DEPTH` 1..16)
+- `$0690-$06AF`: free (was `MACRO_ACTIVATION` 32-byte staging buffer until
   `expand_macro` switched to writing parsed slots directly into the new
   macro frame's payload region)
 - `$0700`: `LHASHTAB` (label hash table)
