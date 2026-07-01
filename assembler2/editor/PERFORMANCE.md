@@ -57,6 +57,23 @@ buffered matching keys after x. Pending deletes are counted and executed
 with a single `buf_shift_left` via `buf_delete_chars`, with one
 `buf_adjust_lines_dec` call for the batch.
 
+### Indent/unindent range repaint
+
+`>>`, `<<`, `:N,M>`, `:N,M<`, and their undo use a dedicated render path
+(`RENDER_FLAG=$0B`): the handler pre-computes the affected range's screen
+rows; after the edit only those rows are repainted. If wrapping changed
+the row count, the region below is scrolled by the difference and only
+the range plus newly exposed rows are drawn. No-op shifts (nothing to
+remove, all-empty lines) skip both the repaint and the MODIFIED flag.
+
+### Direct echo for r and ~
+
+`r` and `~` write their result chars straight to the terminal (no repaint)
+while staying inside the cursor's wrap row; every visited char is echoed
+so the terminal cursor tracks the buffer position. On hitting the wrap
+boundary or an unprintable char, the rest of the line is repainted from
+that column only.
+
 ## Future Work
 
 ### Step 4: Gap buffer

@@ -52,6 +52,8 @@ FNAME_BUF   = $0200   ; Filename buffer (256 bytes)
   .include editor/buffer.asm
   .include editor/undo_state.asm
   .include editor/render.asm
+  .include editor/render_decide.asm
+  .include editor/render_scroll.asm
   .include editor/yank.asm
   .include editor/search.asm
   .include editor/word.asm
@@ -59,6 +61,7 @@ FNAME_BUF   = $0200   ; Filename buffer (256 bytes)
   .include editor/normal.asm
   .include editor/normal_move.asm
   .include editor/normal_edit.asm
+  .include editor/normal_shift.asm
   .include editor/insert.asm
   .include editor/command.asm
   .include editor/mark.asm

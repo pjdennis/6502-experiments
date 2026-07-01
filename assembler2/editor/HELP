@@ -124,7 +124,10 @@ All editing commands are blocked in read-only mode.
                  Single-level: undoes the most recent operation, then
                  pressing u again redoes it. A new edit replaces the
                  undo history. Supports undo of: dd, x, D, dw, db, de,
-                 d$, d0, cw, cb, ce, cc, s, C, S, J, o, O, p, P
+                 d$, d0, cw, cb, ce, cc, s, C, S, J, o, O, p, P, r, ~,
+                 >>, <<, :[range]> and :[range]<
+                 Rapidly typed (batched) keys execute together but undo
+                 as if processed one at a time: u undoes the last one.
 
 
 NORMAL MODE - SEARCH

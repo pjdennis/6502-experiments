@@ -57,7 +57,7 @@ This is simpler but effective. No per-line dirty tracking, no character-level in
 
 **Vi**: Multi-level undo with five undo types (`UNDCHANGE`, `UNDMOVE`, `UNDALL`, `UNDNONE`, `UNDPUT`). Saves original lines between `dol` and `unddol` in the temp file. Visual mode adds single-line undo (`vutmp` buffer) and the `U` command (full line restore). The `FIXUNDO` macro controls recording granularity.
 
-**Our editor**: **No undo mechanism**. This is the most significant missing feature. The yank buffer provides paste-back capability, but there's no general undo.
+**Our editor**: Single-level undo/redo: `u` undoes the most recent operation and toggles to redo on repeat. Covers delete/change/substitute/join/open/paste plus `r`, `~`, `>>`, `<<`, and range shift commands. Deleted content is restored from the yank buffer; small per-operation state (replaced chars, per-line indent widths, join offsets) lives in a shared 256-byte undo data page.
 
 ---
 
@@ -114,7 +114,7 @@ Our mark adjustment is actually more robust than vi's.
 | Feature | Vi | Our Editor |
 |---------|-----|------------|
 | File size limit | Disk-bounded | ~40KB RAM |
-| Undo | Multi-level | None |
+| Undo | Multi-level | Single-level undo/redo toggle |
 | Regex search | Full (ed-style) | Literal only |
 | Operator-motion | Composable (`d3w`) | Explicit combos (`dd`, `dw`) |
 | Named registers | 26 + numbered | 1 yank buffer |

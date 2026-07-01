@@ -1175,6 +1175,40 @@ class EditorTestRunner:
             else:
                 self._pass("Server: screen size output")
 
+    def run_self_editability_checks(self):
+        """Every editor source file must be editable by the editor itself.
+
+        The text buffer spans from TEXT_BUF (page-aligned after the code,
+        which loads at $0400) up to TEXT_LIMIT ($D600), and the line table
+        holds at most MAX_LINES (1023) lines.  Guard both limits for every
+        source file so the editor stays self-hosting as it grows.
+        """
+        MAX_LINES = 1023
+        TEXT_LIMIT = 0xD600
+        LOAD_ADDR = 0x0400
+
+        code_size = self.editor_bin.stat().st_size
+        text_buf = (LOAD_ADDR + code_size + 0xFF) & ~0xFF
+        capacity = TEXT_LIMIT - text_buf
+
+        editor_dir = self.editor_asm.parent
+        sources = sorted(editor_dir.glob("*.asm"))
+        for src in sources:
+            data = src.read_bytes()
+            n_lines = data.count(b"\n")
+            name = f"Self-editable: {src.name}"
+            if len(data) > capacity:
+                self._fail(name,
+                    f"{src.name} is {len(data)} bytes but the text buffer "
+                    f"holds only {capacity} (code ends at "
+                    f"${text_buf:04X})")
+            elif n_lines > MAX_LINES:
+                self._fail(name,
+                    f"{src.name} has {n_lines} lines but MAX_LINES is "
+                    f"{MAX_LINES}")
+            else:
+                self._pass(name)
+
     def run_all_tests(self):
         """Run all editor tests."""
         print("=" * 60)
@@ -1198,6 +1232,20 @@ class EditorTestRunner:
             return
 
         self._run_server_editor_tests()
+
+        self._group("Self-editability:")
+        self.run_self_editability_checks()
+
+        # End-to-end: the editor edits its own largest source file
+        largest = max(self.editor_asm.parent.glob("*.asm"),
+                      key=lambda f: f.stat().st_size)
+        src_text = largest.read_text()
+        self.run_test(
+            f"Editor edits its own largest source ({largest.name})",
+            src_text,
+            b"Gox\x1b:wq\r",
+            expected_content=src_text + "x\n"
+        )
 
         self._group("Basic operations:")
 

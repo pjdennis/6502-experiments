@@ -16,9 +16,17 @@ project's 6502 emulator in console/ANSI mode.
   incremental line-table adjustment.
 - `buffer_mem.asm`: page-optimized memory copy routines (`mem_copy_up`,
   `mem_copy_down`).
-- `render.asm`: full-screen ANSI renderer with line wrapping, status bar,
-  cursor positioning, and snapshot-based render optimization
-  (`render_snapshot`/`render_decide`).
+- `undo_state.asm` / `undo.asm`: single-level undo/redo — types, zeropage
+  state, and the shared 256-byte undo data page ($D700), plus the
+  undo/redo handlers for every undoable operation.
+- `render.asm`: core ANSI drawing — full-screen render with line wrapping,
+  status bar, cursor positioning, current-line repaint.
+- `render_decide.asm`: snapshot-based render decision engine
+  (`render_snapshot`/`render_decide`) and viewport scroll-region
+  optimization.
+- `render_scroll.asm`: scroll-region repaints for line insert/delete and
+  in-place range changes, limited-row rendering, wrap math, cursor
+  visibility.
 - `input.asm`: console key reader, escape sequence parsing (arrow keys,
   Home/End/PgUp/PgDn/Delete, Ctrl+Left/Right), pushback, decoded key
   buffering, non-blocking polling, batch key counting.
@@ -33,8 +41,10 @@ project's 6502 emulator in console/ANSI mode.
 - `normal_move.asm`: normal-mode movement commands (h/l/j/k, 0/$, ^, w/b/e,
   G/gg, Ctrl-F/B, search entry, mark jump, command mode entry).
 - `normal_edit.asm`: normal-mode editing commands (paste, toggle case, join
-  lines, substitute, change, replace, indent/unindent, delete/change/yank
-  word).
+  lines, substitute, change, replace).
+- `normal_shift.asm`: indent/unindent (`>>`/`<<`) built on shared
+  insert/remove-spaces cores (also used by range commands and undo),
+  dollar/word operator commands, line-content helpers.
 - `normal_util.asm`: shared utilities — generic key dispatcher, cursor/line
   helpers, vertical/horizontal movement loops, count prefix system, pair
   batching.
@@ -88,14 +98,17 @@ project's 6502 emulator in console/ANSI mode.
   newline-delimited.  Always ends with a newline; empty buffer is one newline.
   `TEXT_BUF` floats automatically as code grows:
   `TEXT_BUF = _code_end + $00FF >> $08 << $08`.
-- **Line table**: `LINE_TBL = $C000`, 16-bit pointers to each line start.
+- **Line table**: `LINE_TBL = $D800`, 16-bit pointers to each line start.
   `LINE_COUNT16` is maintained by `buf_rebuild_lines` (after newline edits)
   and `buf_adjust_lines_inc/dec` (single-char edits without newlines).
   Max 1023 lines (`MAX_LINES = $03FF`).
 - **Buffer limits**: `TEXT_LIMIT` is conditionally defined at compile-time:
-  - Normal build: `$C000` (buffer extends from TEXT_BUF up to LINE_TBL)
+  - Normal build: `$D600` (buffer extends from TEXT_BUF up to BATCH_BUF)
   - Small buffer build (`define:small_buffer`): `TEXT_BUF + $0100` (256 bytes,
     for testing)
+- **Self-editability**: every `editor/*.asm` source file must fit the text
+  buffer and `MAX_LINES` so the editor can edit its own source (guarded by
+  the test suite).
 - **Editor state**: `CURSOR_ROW`, `CURSOR_COL16` (16-bit), `VIEW_TOP16`,
   `FILE_LINE16`, `MODE`, `MODIFIED`, `READONLY` live in zero page.
   `FILE_LINE16` is the authoritative current line number; `CURSOR_ROW` is
@@ -112,11 +125,12 @@ project's 6502 emulator in console/ANSI mode.
 | `$0200-$02FF` | 256 B | Filename buffer (`FNAME_BUF`) |
 | `$0300-$03FF` | 256 B | Command buffer (`CMD_BUF`) |
 | `$0400+` | Variable | Editor code (loads here) |
-| `TEXT_BUF` | Variable | Text buffer (page-aligned after code, up to `TEXT_LIMIT`) |
-| `$C000-$DEFF` | ~7.7 KB | Line pointer table (`LINE_TBL`), 2 bytes/entry |
-| `$DF00-$DF1F` | 32 B | Batch insert staging buffer (`BATCH_BUF`) |
-| `$DF20-$DF53` | 52 B | Mark table (`MARK_TBL`), 26 marks x 2 bytes |
-| `$DF54-$DFFF` | 172 B | Search pattern buffer (`SEARCH_BUF`) |
+| `TEXT_BUF` | Variable | Text buffer (page-aligned after code, up to `$D5FF`) |
+| `$D600-$D61F` | 32 B | Batch insert staging buffer (`BATCH_BUF`) |
+| `$D620-$D653` | 52 B | Mark table (`MARK_TBL`), 26 marks x 2 bytes |
+| `$D654-$D6FF` | 172 B | Search pattern buffer (`SEARCH_BUF`) |
+| `$D700-$D7FF` | 256 B | Undo data page (`UNDO_DATA_BUF`) |
+| `$D800-$DFFF` | 2 KB | Line pointer table (`LINE_TBL`), 2 bytes/entry |
 | `$E000-$EFFF` | 4 KB | Yank buffer (`YANK_BUF`) |
 | `$F000+` | | Emulator I/O |
 
@@ -177,6 +191,7 @@ project's 6502 emulator in console/ANSI mode.
 | `yb` | Yank word backward (with count, character yank) |
 | `p` | Paste below/after cursor (with count) |
 | `P` | Paste above/before cursor (with count) |
+| `u` | Undo last edit / redo (single-level toggle; covers deletes, changes, joins, opens, pastes, `r`, `~`, `>>`, `<<`, range shifts) |
 
 ### Normal mode — marks
 
@@ -261,6 +276,14 @@ Range positions can be: decimal number (1-based), `'a` (mark), or `.`
   processing 256 bytes per page.
 - **Incremental line table updates**: single-char edits without newlines use
   `buf_adjust_lines_inc/dec` instead of full rebuild.
+- **Range repaint**: `>>`/`<<`/range shifts and their undo repaint only the
+  affected screen rows; wrap growth/shrink scrolls the region below instead
+  of a full repaint. No-op shifts repaint nothing.
+- **Direct echo**: `r` and `~` echo changed chars in place (no repaint) up
+  to the wrap-row boundary, deferring the remainder to a partial line
+  render.
+- **Batching vs undo**: batching merges execution only; undo always behaves
+  as if the keys were processed one at a time (u undoes the last one).
 
 ## Conditional compilation
 
