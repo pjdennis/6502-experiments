@@ -28,6 +28,14 @@ normal_paste_below:
   ; lines, so scroll walk would start at wrong position.
   CLC
   ADCA16 FILE_LINE16, FILE_LINE16
+  ; Batching must not widen undo: record only the last pasted copy.
+  ; It occupies YANK_LINES16 lines starting (N-1)*YANK_LINES16 + 1 past
+  ; the original cursor line.
+  DEC16 UNDO_PASTE_COUNT16
+  JSR undo_compute_paste_lines    ; BUF_TEMP16 = (N-1) * YANK_LINES16
+  CLC
+  ADC16 UNDO_LINE16, BUF_TEMP16, UNDO_LINE16
+  SET16 $0001, UNDO_PASTE_COUNT16
   JMP .paste_below_done           ; RENDER_FLAG stays 0 → full repaint
 .paste_below_scroll:
   LDA #$03
@@ -56,6 +64,11 @@ normal_paste_above:
   LDA #$03
   STA RENDER_FLAG        ; Signal line-insert for scroll optimization
   ; No cursor adjustment - yank_paste_above_n doesn't change FILE_LINE16
+  ; Batching must not widen undo: the last pasted copy sits at the top
+  ; of the block (paste-above prepends), i.e. at UNDO_LINE16 already.
+  LDA BATCH_EXTRA
+  BEQ .paste_above_done
+  SET16 $0001, UNDO_PASTE_COUNT16
 .paste_above_done:
   JMP clear_count
 
@@ -83,6 +96,26 @@ char_paste_below:
   BCS .cpb_done
   LDA #UNDO_CHAR_PASTE_BELOW
   STA UNDO_TYPE
+  ; Batching must not widen undo: record only the last pasted copy,
+  ; which starts (N-1)*yank_size bytes past the insertion column.
+  LDA BATCH_EXTRA
+  BEQ .cpb_done
+  JSR yank_has_newline
+  BCS .cpb_no_undo           ; multi-line char yank: column math invalid
+  JSR yank_get_size          ; BUF_LEN16 = single copy size
+  DEC16 UNDO_PASTE_COUNT16
+.cpb_col_adj:
+  TST16 UNDO_PASTE_COUNT16
+  BEQ .cpb_col_done
+  CLC
+  ADC16 UNDO_COL16, BUF_LEN16, UNDO_COL16
+  DEC16 UNDO_PASTE_COUNT16
+  JMP .cpb_col_adj
+.cpb_col_done:
+  SET16 $0001, UNDO_PASTE_COUNT16
+  JMP .cpb_done
+.cpb_no_undo:
+  JSR undo_clear
 .cpb_done:
   JMP clear_count
 
@@ -179,6 +212,11 @@ char_paste_above:
   BCS .cpa_done
   LDA #UNDO_CHAR_PASTE_ABOVE
   STA UNDO_TYPE
+  ; Batching must not widen undo: the last pasted copy sits first
+  ; (paste-above inserts before the cursor), i.e. at UNDO_COL16 already.
+  LDA BATCH_EXTRA
+  BEQ .cpa_done
+  SET16 $0001, UNDO_PASTE_COUNT16
 .cpa_done:
   JMP clear_count
 

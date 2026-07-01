@@ -14660,12 +14660,66 @@ class EditorTestRunner:
             expected_content="A\nA\nA\nB\n"
         )
 
-        # yy then pp (batched) then u: undo removes entire batched paste
+        # Batching must not affect undo semantics: batched pp executes
+        # both pastes but u undoes only the LAST one, exactly as if the
+        # keys had been processed separately. A numeric count (2p) is one
+        # logical command and undoes in full.
         self.run_test(
-            "yyppu undo removes batched paste",
+            "yyppu undo removes last batched paste only",
             "A\nB\n",
             b"yyppu:wq\r",
+            expected_content="A\nA\nB\n"
+        )
+
+        self.run_test(
+            "yy2pu undo removes full counted paste",
+            "A\nB\n",
+            b"yy2pu:wq\r",
             expected_content="A\nB\n"
+        )
+
+        self.run_test(
+            "yyppu u redo re-pastes last copy",
+            "A\nB\n",
+            b"yyppu u:wq\r",
+            expected_content="A\nA\nA\nB\n"
+        )
+
+        self.run_test(
+            "yyPPu undo removes last batched paste only",
+            "A\nB\n",
+            b"yyPPu:wq\r",
+            expected_content="A\nA\nB\n"
+        )
+
+        # Multi-line yank: undo removes one copy-aligned block
+        self.run_test(
+            "2yy pp u removes last two-line copy",
+            "a\nb\nc\n",
+            b"2yyppu:wq\r",
+            expected_content="a\na\nb\nb\nc\n"
+        )
+
+        # Char paste batching: same rule
+        self.run_test(
+            "x pp u removes last batched char paste",
+            "AB\n",
+            b"xppu:wq\r",
+            expected_content="BA\n"
+        )
+
+        self.run_test(
+            "x PP u removes last batched char paste",
+            "AB\n",
+            b"xPPu:wq\r",
+            expected_content="AB\n"
+        )
+
+        self.run_test(
+            "x 2p u removes full counted char paste",
+            "AB\n",
+            b"x2pu:wq\r",
+            expected_content="B\n"
         )
 
         # Cursor position after undo: back to pre-paste line+col
