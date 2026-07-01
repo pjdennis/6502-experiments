@@ -13929,12 +13929,46 @@ class EditorTestRunner:
             expected_content="  aaa\n bbb\nccc\n"
         )
 
-        # Batched >>>> (width 4) undo
+        # Batched >>>> merges execution (4 spaces at once) but undo must
+        # behave as if >> ran twice: u removes only the last step
         self.run_test(
-            ">>>> batched undo restores content",
+            ">>>> batched undo removes last step only",
             "Hello\n",
             b">>>>u:wq\r",
+            expected_content="  Hello\n"
+        )
+
+        self.run_test(
+            ">>>> batched undo then redo",
+            "Hello\n",
+            b">>>>u u:wq\r",
+            expected_content="    Hello\n"
+        )
+
+        # Batched <<<< : u restores only what the last << removed
+        self.run_test(
+            "<<<< batched undo restores last step only",
+            "    Hello\n",
+            b"<<<<u:wq\r",
+            expected_content="  Hello\n"
+        )
+
+        # Batched <<<< where earlier steps consumed all the indent: the
+        # last << removed nothing, so there is nothing to undo
+        self.run_test(
+            "<<<< batched undo noop when last step removed nothing",
+            "  Hello\n",
+            b"<<<<u:wq\r",
             expected_content="Hello\n"
+        )
+
+        # Batched 2>>>> on two lines: undo removes the last 2-space step
+        # from both lines of the range
+        self.run_test(
+            "2>>>> batched undo removes last step from range",
+            "aaa\nbbb\nccc\n",
+            b"2>>>>u:wq\r",
+            expected_content="  aaa\n  bbb\nccc\n"
         )
 
         # << that removes nothing is a no-op and records no undo:
@@ -15968,20 +16002,30 @@ class EditorTestRunner:
             expect_lines=[(0, "ABCDEFGHZZ"), (1, "ZZM"), (2, "x")],
         )
 
-        # Batched ~ undo: ~~~ batches into one op, u restores the span
+        # Batching is a performance optimization and must not change undo
+        # semantics: u after batched ~~~ undoes only the LAST ~, exactly
+        # as if the keys had been processed separately.
         self.run_test(
-            "Batched tilde undo restores span",
+            "Batched tilde undo covers last keystroke only",
             "abc\n",
             b"~~~u:wq\r",
-            expected_content="abc\n"
+            expected_content="ABc\n"
         )
 
-        # ...and a second u redoes the whole batched toggle
         self.run_test(
-            "Batched tilde redo re-applies span",
+            "Batched tilde undo then redo",
             "abc\n",
             b"~~~u u:wq\r",
             expected_content="ABC\n"
+        )
+
+        # Batched ~ where the last ~ hit a non-alpha char: that keystroke
+        # changed nothing, so there is nothing to undo
+        self.run_test(
+            "Batched tilde undo noop when last char non-alpha",
+            "ab.x\n",
+            b"~~~u:wq\r",
+            expected_content="AB.x\n"
         )
 
         # --- Insert mode specifics ---

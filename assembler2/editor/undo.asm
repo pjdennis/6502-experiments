@@ -706,6 +706,7 @@ undo_shift_step:
   CP16 UNDO_PASTE_COUNT16, BUF_TEMP16
   LDA UNDO_JOIN_COUNT
   STA BUF_DELTA
+  STA SHIFT_UNDO_WIDTH
   LDA UNDO_TYPE
   CMP #UNDO_UNINDENT
   BEQ .reinsert
@@ -768,16 +769,8 @@ undo_tilde_span:
   LDY #0
 .loop:
   LDA (BUF_PTR16),Y
-  CMP #'A'
+  JSR toggle_alpha
   BCC .next
-  CMP #$5B
-  BCC .flip
-  CMP #'a'
-  BCC .next
-  CMP #$7B
-  BCS .next
-.flip:
-  EOR #$20
   STA (BUF_PTR16),Y
 .next:
   INY

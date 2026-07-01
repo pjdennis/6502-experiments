@@ -1746,26 +1746,9 @@ render_range_repaint:
   SBC RENDER_WRAP
   STA SCROLL_DELTA
   JSR ansi_cursor_hide
-  ; Scroll region: first_row + old + 1 (1-based) .. SCREEN_ROWS-1
-  LDA RENDER_ROW
-  CLC
-  ADC RENDER_WRAP
-  CLC
-  ADC #1
-  STA ANSI_ROW
-  LDA SCREEN_ROWS
-  SEC
-  SBC #1
-  STA ANSI_COL
-  CMP ANSI_ROW
-  BCC .grew_skip_scroll        ; nothing below the old range to shift
-  JSR ansi_set_scroll_region
-  LDA SCROLL_DELTA
-  JSR ansi_scroll_down
-  JSR ansi_reset_scroll_region
-.grew_skip_scroll:
-  ; Repaint all of the range's new rows = old + delta (X was clobbered
-  ; by the ANSI calls above)
+  LDX #$FF                     ; scroll down
+  JSR rr_scroll_below
+  ; Repaint all of the range's new rows = old + delta
   LDA RENDER_WRAP
   CLC
   ADC SCROLL_DELTA
@@ -1786,24 +1769,8 @@ render_range_repaint:
   PHA                          ; save old-new for the bottom rows
   STA SCROLL_DELTA
   JSR ansi_cursor_hide
-  ; Scroll region: first_row + new + 1 (1-based) .. SCREEN_ROWS-1
-  LDA RENDER_ROW
-  CLC
-  ADC RENDER_WRAP
-  CLC
-  ADC #1
-  STA ANSI_ROW
-  LDA SCREEN_ROWS
-  SEC
-  SBC #1
-  STA ANSI_COL
-  CMP ANSI_ROW
-  BCC .shrunk_skip_scroll
-  JSR ansi_set_scroll_region
-  LDA SCROLL_DELTA
-  JSR ansi_scroll_up
-  JSR ansi_reset_scroll_region
-.shrunk_skip_scroll:
+  LDX #0                       ; scroll up
+  JSR rr_scroll_below
   ; Repaint the range's new rows
   LDA RENDER_WRAP
   STA SCROLL_DELTA
@@ -1843,6 +1810,38 @@ render_range_repaint:
   STA DELETE_SCREEN_ROWS
 .rr_full_reset:
   JMP render_screen
+
+; Scroll the region below the range (rows RENDER_ROW + RENDER_WRAP + 1
+; 1-based through SCREEN_ROWS-1) by SCROLL_DELTA.  X = 0: scroll up,
+; X != 0: scroll down.  Skips silently if the region is empty.
+rr_scroll_below:
+  LDA RENDER_ROW
+  CLC
+  ADC RENDER_WRAP
+  CLC
+  ADC #1
+  STA ANSI_ROW
+  LDA SCREEN_ROWS
+  SEC
+  SBC #1
+  STA ANSI_COL
+  CMP ANSI_ROW
+  BCC .skip                    ; nothing below the range to shift
+  TXA
+  PHA                          ; direction (ANSI calls clobber X)
+  JSR ansi_set_scroll_region
+  PLA
+  BNE .down
+  LDA SCROLL_DELTA
+  JSR ansi_scroll_up
+  JMP .reset
+.down:
+  LDA SCROLL_DELTA
+  JSR ansi_scroll_down
+.reset:
+  JMP ansi_reset_scroll_region
+.skip:
+  RTS
 
 ; Render limited rows: renders SCROLL_DELTA rows starting at
 ; RENDER_ROW/RENDER_LINE16/RENDER_WRAP, then draws status bar + cursor.

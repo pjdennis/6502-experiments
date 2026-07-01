@@ -379,29 +379,85 @@ contiguous_fill:
   BNE .loop
   RTS
 
-; --- Toggle case (~) ---
-; Echo optimization: every visited char is echoed in place (toggled or
-; not) so the terminal cursor tracks the buffer position -- skipping
-; non-alpha chars without echoing would misplace later writes.  Echo
+; --- Shared r/~ echo machinery ---
+; Both r and ~ modify chars in place and echo them directly so no
+; repaint is needed in the common case.  Every visited char is echoed
+; (changed or not) so the terminal cursor tracks the buffer position --
+; skipping chars without echoing would misplace later writes.  Echo
 ; stops at the wrap-row boundary or on an unprintable char; the rest of
-; the line is repainted via a partial line render from that column.
-normal_toggle_case:
-  JSR undo_clear
-  JSR get_batched_count      ; X = count
-  ; Record span start for undo (valid only once UNDO_TYPE is set)
+; the line is then repainted via a partial line render from that column.
+
+; Record the span start for undo and compute the direct-echo budget
+; (columns left in the cursor's wrap row).  Clobbers A, X.
+echo_span_setup:
   CP16 FILE_LINE16, UNDO_LINE16
   CP16 CURSOR_COL16, UNDO_COL16
-  ; Echo budget: columns left in the cursor's wrap row
-  STX NORMAL_TEMP
   CP16 CURSOR_COL16, DIV_INPUT16
-  JSR div_mod_screen_cols_16 ; A = col % SCREEN_COLS (clobbers X)
+  JSR div_mod_screen_cols_16 ; A = col % SCREEN_COLS
   STA BUF_DELTA
   LDA SCREEN_COLS
   SEC
   SBC BUF_DELTA
   STA BUF_DELTA              ; BUF_DELTA = echo budget (0 = deferred)
   LDA #0
-  STA UNDO_JOIN_COUNT        ; chars visited (span length)
+  STA UNDO_JOIN_COUNT        ; span length
+  RTS
+
+; Echo the char at (BUF_PTR16),Y if the budget allows and it is
+; printable; otherwise stop echoing and defer the rest of the line to a
+; partial repaint from the cursor column.  Preserves X, Y.
+echo_or_defer:
+  LDA BUF_DELTA
+  BEQ echo_defer
+  LDA (BUF_PTR16),Y
+  CMP #' '
+  BCC echo_defer             ; control char: defer to renderer
+  CMP #$7F
+  BCS echo_defer             ; DEL/high-bit: defer to renderer
+  JSR io_write
+  DEC BUF_DELTA
+  RTS
+echo_defer:
+  LDA RENDER_FLAG
+  BNE .done                  ; already deferring
+  LDA #1
+  STA RENDER_FLAG            ; partial line repaint from this column
+  CP16 CURSOR_COL16, RENDER_FROM_COL16
+  LDA #0
+  STA BUF_DELTA              ; no more direct echo
+.done:
+  RTS
+
+; Toggle alpha case in A.  Carry set if A was alpha (and toggled).
+toggle_alpha:
+  CMP #'A'
+  BCC .no
+  CMP #$5B
+  BCC .yes
+  CMP #'a'
+  BCC .no
+  CMP #$7B
+  BCS .no
+.yes:
+  EOR #$20
+  SEC
+  RTS
+.no:
+  CLC
+  RTS
+
+; --- Toggle case (~) ---
+normal_toggle_case:
+  JSR undo_clear
+  JSR get_batched_count      ; X = count + pending, BUF_DELTA = count
+  ; Batched pending keys merge execution, but undo must behave as if
+  ; the keys ran separately: it covers only the last ~ keystroke.
+  TXA
+  SEC
+  SBC BUF_DELTA
+  STA BUF_LEN16              ; nonzero = batched
+  STX NORMAL_TEMP
+  JSR echo_span_setup
   LDX NORMAL_TEMP
 
 .tilde_loop:
@@ -412,44 +468,22 @@ normal_toggle_case:
   JSR get_cursor_buf_ptr
   LDY #0
   INC UNDO_JOIN_COUNT
+  ; Track the last visited char for batched undo grouping
+  CP16 CURSOR_COL16, UNDO_PASTE_COUNT16
+  LDA #0
+  STA SHIFT_MODE             ; last-char-toggled flag
   LDA (BUF_PTR16),Y
-  CMP #'A'
-  BCC .tilde_echo
-  CMP #$5B
-  BCC .tilde_toggle
-  CMP #'a'
-  BCC .tilde_echo
-  CMP #$7B
-  BCS .tilde_echo
-
-.tilde_toggle:
-  EOR #$20
+  JSR toggle_alpha
+  BCC .tilde_echo            ; not alpha: echo as-is
   STA (BUF_PTR16),Y
+  LDA #$FF
+  STA SHIFT_MODE
+  STA MODIFIED
   LDA #UNDO_TILDE
   STA UNDO_TYPE
-  LDA #$FF
-  STA MODIFIED
 
 .tilde_echo:
-  ; Echo the visited char (toggled or not) if still in echo range
-  LDA BUF_DELTA
-  BEQ .tilde_defer
-  LDA (BUF_PTR16),Y
-  CMP #' '
-  BCC .tilde_defer           ; control char: defer to renderer
-  CMP #$7F
-  BCS .tilde_defer           ; DEL/high-bit: defer to renderer
-  JSR io_write
-  DEC BUF_DELTA
-  JMP .tilde_advance
-.tilde_defer:
-  LDA RENDER_FLAG
-  BNE .tilde_advance         ; already deferring
-  LDA #1
-  STA RENDER_FLAG            ; partial line repaint from this column
-  CP16 CURSOR_COL16, RENDER_FROM_COL16
-  LDA #0
-  STA BUF_DELTA              ; no more direct echo
+  JSR echo_or_defer
 
 .tilde_advance:
   SEC
@@ -464,11 +498,20 @@ normal_toggle_case:
   BNE .tilde_loop
 
 .tilde_done:
-  ; Finalize undo record (UNDO_TYPE set if anything toggled)
   LDA UNDO_TYPE
-  BEQ .tilde_no_undo
-  CP16 CURSOR_COL16, UNDO_PASTE_COUNT16 ; final cursor col (for redo)
-.tilde_no_undo:
+  BEQ .tilde_end             ; nothing toggled: undo stays clear
+  LDA BUF_LEN16
+  BEQ .tilde_end             ; not batched: span already correct
+  ; Batched: undo only the last ~ (one char at the last visited col)
+  LDA SHIFT_MODE
+  BEQ .tilde_clear           ; last ~ toggled nothing: nothing to undo
+  CP16 UNDO_PASTE_COUNT16, UNDO_COL16
+  LDA #1
+  STA UNDO_JOIN_COUNT
+  JMP .tilde_end
+.tilde_clear:
+  JSR undo_clear
+.tilde_end:
   JMP clear_count
 
 ; --- Join lines (J) ---
@@ -675,24 +718,10 @@ normal_change_to_eol:
   JMP enter_insert_mode
 
 ; --- Replace char (r) ---
-; Same echo strategy as ~: echo the replacement until the wrap-row
-; boundary or an unprintable char, then defer to a partial line render.
 do_replace_char:
   JSR undo_clear
   JSR get_count
-  ; Record span start for undo (valid only once UNDO_TYPE is set)
-  CP16 FILE_LINE16, UNDO_LINE16
-  CP16 CURSOR_COL16, UNDO_COL16
-  ; Echo budget: columns left in the cursor's wrap row
-  CP16 CURSOR_COL16, DIV_INPUT16
-  JSR div_mod_screen_cols_16 ; A = col % SCREEN_COLS (clobbers X)
-  STA BUF_DELTA
-  LDA SCREEN_COLS
-  SEC
-  SBC BUF_DELTA
-  STA BUF_DELTA              ; BUF_DELTA = echo budget
-  LDA #0
-  STA UNDO_JOIN_COUNT        ; chars replaced
+  JSR echo_span_setup
   ; Count, clamped to 255 (replacement span is recorded in one page)
   LDX BUF_TEMP16
   LDA BUF_TEMP16 + 1
@@ -711,29 +740,10 @@ do_replace_char:
   LDX UNDO_JOIN_COUNT
   STA UNDO_DATA_BUF,X
   INC UNDO_JOIN_COUNT
-  ; Store the replacement
+  ; Store the replacement, echo it or defer
   LDA BUF_TEMP
   STA (BUF_PTR16),Y
-  ; Echo if still in range and printable
-  LDX BUF_DELTA
-  BEQ .replace_defer
-  CMP #' '
-  BCC .replace_defer
-  CMP #$7F
-  BCS .replace_defer
-  JSR io_write
-  DEC BUF_DELTA
-  JMP .replace_next
-.replace_defer:
-  LDA RENDER_FLAG
-  BNE .replace_next          ; already deferring
-  LDA #1
-  STA RENDER_FLAG            ; partial line repaint from this column
-  CP16 CURSOR_COL16, RENDER_FROM_COL16
-  LDA #0
-  STA BUF_DELTA
-
-.replace_next:
+  JSR echo_or_defer
   LDA #$FF
   STA MODIFIED
   LDX NORMAL_TEMP
@@ -838,7 +848,11 @@ cc_have_count:
 
   .zeropage
 
-SHIFT_MODE: .byte     ; insert_spaces_core width source (0=const, $FF=data)
+SHIFT_MODE: .byte       ; insert_spaces_core width source (0=const, $FF=data)
+SHIFT_UNDO_WIDTH: .byte ; width of the LAST logical op for undo recording
+                        ; (batched pairs multiply BUF_DELTA, but undo must
+                        ; behave as if the keys ran separately, so undo
+                        ; covers only the final op's contribution)
 
   .code
 
@@ -872,6 +886,8 @@ shift_normal_setup:
   DEX
   BNE .mul_width
   STA BUF_DELTA                ; BUF_DELTA = INDENT_WIDTH * repeat count
+  LDA #INDENT_WIDTH
+  STA SHIFT_UNDO_WIDTH         ; undo = last >> / << only
   LDA BATCH_EXTRA
   BEQ .no_count_fix
   LDA COUNT16
@@ -905,6 +921,15 @@ shift_prologue:
   JSR compute_delete_screen_rows
 .done:
   RTS
+
+; Record undo (A = type) unless the range was too big for undo data,
+; then fall through to the render epilogue.
+shift_finish:
+  LDX UNDO_PASTE_COUNT16 + 1
+  BNE shift_set_render         ; Big range: not undoable
+  STA UNDO_TYPE
+  LDA SHIFT_UNDO_WIDTH
+  STA UNDO_JOIN_COUNT          ; Width of the last logical op (for undo)
 
 ; Common core epilogue for a successful change: set MODIFIED and pick the
 ; render level.  Partial repaint ($0B) requires pre-computed screen rows
@@ -1064,14 +1089,8 @@ insert_spaces_core:
 .no_col_adj:
 
   ; Record undo: u removes the recorded per-line widths via unindent
-  LDA UNDO_PASTE_COUNT16 + 1
-  BNE .no_undo                 ; Big range: not undoable
-  LDA BUF_DELTA
-  STA UNDO_JOIN_COUNT          ; Width (for redo)
   LDA #UNDO_INDENT
-  STA UNDO_TYPE
-.no_undo:
-  JMP shift_set_render
+  JMP shift_finish
 
 ; Shared no-op exit: leave MODIFIED/RENDER_FLAG untouched
 shift_noop:
@@ -1090,6 +1109,12 @@ remove_spaces_core:
   STA COUNT16                  ; COUNT16 = total removed
   STA COUNT16 + 1
   STA UNDO_JOIN_COUNT          ; Line index for UNDO_DATA_BUF
+  STA SHIFT_MODE               ; Accumulates recorded (last-op) removals
+  ; Removal attributable to earlier ops of a batch (per line)
+  LDA BUF_DELTA
+  SEC
+  SBC SHIFT_UNDO_WIDTH
+  STA BUF_LEN16                ; BUF_LEN16 = prev-ops width (temp)
 
   ; Set write ptr = first line start
   LDAX16 UNDO_LINE16
@@ -1117,12 +1142,20 @@ remove_spaces_core:
 .have_spaces:
   ; Y = spaces to remove for this line (0..BUF_DELTA)
 
-  ; Record removal count (small ranges only)
+  ; Record the last logical op's removal (small ranges only):
+  ; removed minus what earlier ops of the batch took, floored at 0
   LDA UNDO_PASTE_COUNT16 + 1
   BNE .no_record
   TYA
+  SEC
+  SBC BUF_LEN16                ; minus prev-ops width
+  BCS .record_ok
+  LDA #0
+.record_ok:
   LDX UNDO_JOIN_COUNT
   STA UNDO_DATA_BUF,X
+  ORA SHIFT_MODE
+  STA SHIFT_MODE               ; nonzero if any last-op removal recorded
 .no_record:
 
   ; If cursor line, save actual removal in NORMAL_TEMP
@@ -1179,13 +1212,13 @@ remove_spaces_core:
   JSR clamp_cursor_col
 .no_cursor_adj:
 
-  ; Record undo: u re-inserts the recorded per-line counts
-  LDA UNDO_PASTE_COUNT16 + 1
-  BNE .no_undo                 ; Big range: not undoable
-  LDA BUF_DELTA
-  STA UNDO_JOIN_COUNT          ; Width (for redo)
+  ; Record undo: u re-inserts the recorded per-line counts.  If the
+  ; last logical op removed nothing (earlier batch ops took it all),
+  ; there is nothing to undo -- matches unbatched no-op << behavior.
+  LDA SHIFT_MODE
+  BEQ .no_undo
   LDA #UNDO_UNINDENT
-  STA UNDO_TYPE
+  JMP shift_finish
 .no_undo:
   JMP shift_set_render
 
