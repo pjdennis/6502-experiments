@@ -15,6 +15,11 @@
 ;   7 = char-paste-below (p with char yank)
 ;   8 = char-paste-above (P with char yank)
 ;   9 = open-line (o/O opened blank line(s))
+;  10 = indent (spaces were added; undo removes them via unindent)
+;  11 = unindent (spaces were removed; undo re-inserts recorded counts)
+;
+; Types 10/11 are self-morphing: undoing an indent re-records as an
+; unindent and vice versa, so repeated 'u' toggles without UNDO_IS_REDO.
 
 UNDO_NONE = 0
 UNDO_LINE = 1
@@ -26,8 +31,12 @@ UNDO_LINE_PASTE_ABOVE = 6
 UNDO_CHAR_PASTE_BELOW = 7
 UNDO_CHAR_PASTE_ABOVE = 8
 UNDO_OPEN = 9
+UNDO_INDENT = 10
+UNDO_UNINDENT = 11
 
-JOIN_UNDO_BUF = $D700     ; 256 bytes for 16-bit offsets
+; Shared per-operation undo data (single-level undo, so one page serves
+; all users): join = 16-bit offsets, indent/unindent = per-line widths.
+UNDO_DATA_BUF = $D700     ; 256 bytes
 JOIN_UNDO_MAX = 128       ; 256 / 2 bytes per entry
 
   .zeropage
@@ -105,6 +114,10 @@ undo_handle:
 ; --- Undo ---
 undo_do_undo:
   LDA UNDO_TYPE
+  CMP #UNDO_INDENT
+  BCC .old_types
+  JMP undo_shift_step        ; indent/unindent (self-morphing)
+.old_types:
   CMP #UNDO_OPEN
   BEQ .undo_open
   CMP #UNDO_LINE_PASTE_BELOW
@@ -271,6 +284,10 @@ undo_do_undo:
 ; --- Redo ---
 undo_do_redo:
   LDA UNDO_TYPE
+  CMP #UNDO_INDENT
+  BCC .old_types
+  JMP undo_shift_step        ; indent/unindent (self-morphing)
+.old_types:
   CMP #UNDO_OPEN
   BEQ .redo_open
   CMP #UNDO_LINE_PASTE_BELOW
@@ -392,10 +409,10 @@ undo_join_undo:
   LDA UNDO_JOIN_COUNT
   STA NORMAL_TEMP               ; loop counter
 .undo_join_loop:
-  LDA JOIN_UNDO_BUF,X
+  LDA UNDO_DATA_BUF,X
   STA BUF_PTR16
   INX
-  LDA JOIN_UNDO_BUF,X
+  LDA UNDO_DATA_BUF,X
   STA BUF_PTR16 + 1
   INX
   ; BUF_PTR16 = offset; compute address = BUF_SRC16 + offset
@@ -459,10 +476,10 @@ undo_join_redo:
   LDA UNDO_JOIN_COUNT
   STA NORMAL_TEMP               ; loop counter
 .redo_join_loop:
-  LDA JOIN_UNDO_BUF,X
+  LDA UNDO_DATA_BUF,X
   STA BUF_PTR16
   INX
-  LDA JOIN_UNDO_BUF,X
+  LDA UNDO_DATA_BUF,X
   STA BUF_PTR16 + 1
   INX
   ; Compute address = BUF_SRC16 + offset
@@ -725,3 +742,29 @@ undo_open_redo:
 .redo_open_fail:
   JMP clear_count
 
+
+; --- Indent/unindent undo step (self-morphing) ---
+; UNDO_INDENT: spaces were added; undo removes them (remove_spaces_core
+; with the recorded width re-records as UNDO_UNINDENT).
+; UNDO_UNINDENT: spaces were removed; undo re-inserts the recorded
+; per-line counts (insert_spaces_core in data mode re-records as
+; UNDO_INDENT).  Cursor returns to the recorded position both ways.
+undo_shift_step:
+  CP16 UNDO_LINE16, FILE_LINE16
+  CP16 UNDO_COL16, CURSOR_COL16
+  CP16 UNDO_PASTE_COUNT16, BUF_TEMP16
+  LDA UNDO_JOIN_COUNT
+  STA BUF_DELTA
+  LDA UNDO_TYPE
+  CMP #UNDO_UNINDENT
+  BEQ .reinsert
+  JSR remove_spaces_core
+  JMP .restore_cursor
+.reinsert:
+  LDA #$FF
+  STA SHIFT_MODE
+  JSR insert_spaces_core
+.restore_cursor:
+  CP16 UNDO_COL16, CURSOR_COL16
+  JSR clamp_cursor_col
+  JMP clear_count

@@ -543,31 +543,30 @@ range_do_delete:
   RTS
 
   ; --- Range indent ---
+  ; The cores adjust the cursor column when the cursor's line is inside
+  ; the range; the cursor line itself never moves.
 range_do_indent:
-  PUSH16 FILE_LINE16           ; Save cursor line
-  PUSH16 CURSOR_COL16          ; Save cursor column
-  PUSH16 BUF_TEMP16            ; Save count for message
-  CP16 BUF_SRC16, FILE_LINE16  ; FILE_LINE16 = range start
-  CP16 BUF_TEMP16, COUNT16     ; COUNT16 = count
-  JSR do_indent
+  JSR range_shift_setup
+  JSR insert_spaces_core
   JMP range_shift_finish
 
   ; --- Range unindent ---
 range_do_unindent:
-  PUSH16 FILE_LINE16           ; Save cursor line
-  PUSH16 CURSOR_COL16          ; Save cursor column
-  PUSH16 BUF_TEMP16            ; Save count for message
-  CP16 BUF_SRC16, FILE_LINE16  ; FILE_LINE16 = range start
-  CP16 BUF_TEMP16, COUNT16     ; COUNT16 = count
-  JSR do_unindent
+  JSR range_shift_setup
+  JSR remove_spaces_core
   JMP range_shift_finish
 
+range_shift_setup:
+  CP16 BUF_SRC16, UNDO_LINE16  ; Range start (BUF_TEMP16 = count already)
+  LDA #INDENT_WIDTH
+  STA BUF_DELTA
+  LDA #0
+  STA SHIFT_MODE
+  RTS
+
 range_shift_finish:
-  POP16 BUF_TEMP16             ; Restore count
-  CP16 BUF_TEMP16, TO_DECIMAL_VALUE16
-  POP16 CURSOR_COL16           ; Restore cursor column
-  POP16 FILE_LINE16            ; Restore cursor line
   JSR clamp_cursor_col         ; Clamp (unindent may shorten line)
+  CP16 UNDO_PASTE_COUNT16, TO_DECIMAL_VALUE16
   JSR to_decimal
   JSR command_show_prompt
   PRINT_STR TO_DECIMAL_RESULT

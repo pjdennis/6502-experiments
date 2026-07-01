@@ -487,7 +487,7 @@ normal_join_lines:
 .set_undo_count:
   STA UNDO_JOIN_COUNT
 
-  ; Limit check: undo_count must fit in JOIN_UNDO_BUF
+  ; Limit check: undo_count must fit in UNDO_DATA_BUF
   CMP #JOIN_UNDO_MAX + 1
   BCC .join_limit_ok
   JMP .join_limit_exceeded
@@ -528,10 +528,10 @@ normal_join_lines:
   SEC
   LDA BUF_PTR16
   SBC BUF_SRC16
-  STA JOIN_UNDO_BUF,X
+  STA UNDO_DATA_BUF,X
   LDA BUF_PTR16 + 1
   SBC BUF_SRC16 + 1
-  STA JOIN_UNDO_BUF + 1,X
+  STA UNDO_DATA_BUF + 1,X
   ; Advance write index only if not batching
   LDA UNDO_COL16             ; batching flag
   BNE .skip_advance
@@ -732,191 +732,284 @@ cc_have_count:
   JSR show_buffer_full_msg
   JMP clear_count
 
-; --- Indent (>>) ---
+; --- Indent (>>) and unindent (<<) ---
+;
+; Both are built on two shared cores that operate on an arbitrary line
+; range: insert_spaces_core (add leading spaces) and remove_spaces_core
+; (strip leading spaces).  The cores are also used by the :[range]> and
+; :[range]< commands and by undo/redo of these operations.
+;
+; Core input contract:
+;   UNDO_LINE16  = first line of the range
+;   BUF_TEMP16   = number of lines in the range (>= 1)
+;   BUF_DELTA    = space width W (insert per non-empty line / max removal)
+;   SHIFT_MODE   = insert core only: 0 = constant width W per non-empty
+;                  line; $FF = per-line widths from UNDO_DATA_BUF (undo)
+;
+; On change the cores set MODIFIED and render flags ($0B partial repaint
+; when possible, else $FF), and record undo (ranges up to 255 lines).
+; On no-op (nothing inserted/removed) they leave MODIFIED and RENDER_FLAG
+; untouched so the frame is a pure cursor/status update.
+
+  .zeropage
+
+SHIFT_MODE: .byte     ; insert_spaces_core width source (0=const, $FF=data)
+
+  .code
+
 INDENT_WIDTH = 2
 
 do_indent:
-  JSR undo_clear
-  ; Compute BUF_DELTA = INDENT_WIDTH * (1 + BATCH_EXTRA) = spaces per non-empty line
+  JSR shift_normal_setup
+  JSR insert_spaces_core
+  JMP clear_count
+
+do_unindent:
+  JSR shift_normal_setup
+  JSR remove_spaces_core
+  JMP clear_count
+
+; Shared >> / << entry setup.
+; Computes BUF_DELTA = INDENT_WIDTH * (1 + BATCH_EXTRA) (batched pairs
+; multiply the width), removes the batch extras that batch_pending_pairs
+; added to COUNT16 (for >> the count means lines, not repeats), clamps the
+; line count, and sets the range start to the cursor line.
+shift_normal_setup:
   LDA BATCH_EXTRA
   CLC
-  ADC #1                       ; A = 1 + BATCH_EXTRA
-  STA BUF_DELTA                ; temp = repeat_count
+  ADC #1                       ; A = repeat count (1 + extra pairs)
+  STA BUF_DELTA
   LDA #0
   LDX #INDENT_WIDTH
-.indent_mul_bd:
+.mul_width:
   CLC
   ADC BUF_DELTA
   DEX
-  BNE .indent_mul_bd
-  STA BUF_DELTA                ; BUF_DELTA = INDENT_WIDTH * repeat_count
-
-  ; Undo batch_pending_pairs COUNT16 addition (>> count = line count, not repeat)
+  BNE .mul_width
+  STA BUF_DELTA                ; BUF_DELTA = INDENT_WIDTH * repeat count
   LDA BATCH_EXTRA
-  BEQ .indent_no_undo
+  BEQ .no_count_fix
   LDA COUNT16
   SEC
   SBC BATCH_EXTRA
   STA COUNT16
-  LDA COUNT16+1
+  LDA COUNT16 + 1
   SBC #0
-  STA COUNT16+1
-.indent_no_undo:
-  JSR get_count_clamp_lines
-  CP16 FILE_LINE16, LINE_LEN16
-
+  STA COUNT16 + 1
+.no_count_fix:
+  JSR get_count_clamp_lines    ; BUF_TEMP16 = line count
+  CP16 FILE_LINE16, UNDO_LINE16
   LDA #0
-  STA NORMAL_TEMP              ; Cursor-line-indented flag
-  STA COUNT16                  ; N_ne = 0 (non-empty line count)
-  STA COUNT16+1
+  STA SHIFT_MODE
+  RTS
 
-  ; --- Pre-scan: count non-empty lines ---
-  PUSH16 BUF_TEMP16            ; Save loop count for redistribute
+; Common core prologue: clear undo, save range/cursor for undo recording,
+; pre-compute the range's current screen rows for the $0B render path,
+; and set the line iterator (LINE_LEN16) to the range start.
+shift_prologue:
+  JSR undo_clear
+  CP16 BUF_TEMP16, UNDO_PASTE_COUNT16
+  CP16 CURSOR_COL16, UNDO_COL16
+  CP16 UNDO_LINE16, LINE_LEN16
+  LDA #0
+  STA DELETE_SCREEN_ROWS       ; 0 = no partial repaint (fall back to full)
+  LDA BUF_TEMP16 + 1
+  BNE .done                    ; > 255 lines: full repaint, no undo
+  CP16 UNDO_LINE16, RENDER_LINE16
+  LDA BUF_TEMP16
+  JSR compute_delete_screen_rows
+.done:
+  RTS
 
-.indent_prescan:
+; Common core epilogue for a successful change: set MODIFIED and pick the
+; render level.  Partial repaint ($0B) requires pre-computed screen rows
+; and the cursor sitting on the first line of the range (render derives
+; the range's screen position from the cursor).
+shift_set_render:
+  LDA #$FF
+  STA MODIFIED
+  LDA DELETE_SCREEN_ROWS
+  BEQ .full
+  CMP16 FILE_LINE16, UNDO_LINE16
+  BNE .full
+  LDA UNDO_PASTE_COUNT16
+  STA INSERT_LINE_COUNT        ; range line count for render
+  LDA #$0B
+  STA RENDER_FLAG              ; range repaint
+  RTS
+.full:
+  LDA #0
+  STA DELETE_SCREEN_ROWS
+  LDA #$FF
+  STA RENDER_FLAG
+  RTS
+
+; Insert leading spaces into each line of a range (see contract above).
+; Constant mode skips empty lines; data mode uses UNDO_DATA_BUF widths.
+insert_spaces_core:
+  JSR shift_prologue
+
+  ; --- Pre-scan: compute per-line widths and total shift ---
+  LDA #0
+  STA NORMAL_TEMP              ; Cursor line width (for column adjust)
+  STA COUNT16                  ; COUNT16 = total shift
+  STA COUNT16 + 1
+  STA UNDO_JOIN_COUNT          ; Line index for UNDO_DATA_BUF
+  PUSH16 BUF_TEMP16            ; Save line count for redistribute
+
+.prescan:
   TST16 BUF_TEMP16
-  BEQ .indent_prescan_done
+  BEQ .prescan_done
 
+  ; A = width for this line
+  LDA SHIFT_MODE
+  BEQ .const_width
+  LDX UNDO_JOIN_COUNT
+  LDA UNDO_DATA_BUF,X
+  JMP .have_width
+.const_width:
   LDAX16 LINE_LEN16
   JSR buf_get_line_ptr
   LDY #0
   LDA (BUF_PTR16),Y
   CMP #'\n'
-  BEQ .indent_prescan_next
-
-  ; Non-empty line
-  INC16 COUNT16
-  ; Check if cursor line
+  BNE .non_empty
+  LDA #0
+  JMP .record_width
+.non_empty:
+  LDA BUF_DELTA
+.record_width:
+  ; Record width for redistribute/undo (small ranges only)
+  LDX UNDO_PASTE_COUNT16 + 1
+  BNE .have_width
+  LDX UNDO_JOIN_COUNT
+  STA UNDO_DATA_BUF,X
+.have_width:
+  ; Cursor line: remember width for column adjust
+  TAY
   CMP16 LINE_LEN16, FILE_LINE16
-  BNE .indent_prescan_next
-  LDA #$FF
-  STA NORMAL_TEMP
+  BNE .not_cursor_line
+  STY NORMAL_TEMP
+.not_cursor_line:
+  ; total shift += width
+  TYA
+  CLC
+  ADCA16 COUNT16, COUNT16
 
-.indent_prescan_next:
+  INC UNDO_JOIN_COUNT
   INC16 LINE_LEN16
   DEC16 BUF_TEMP16
-  JMP .indent_prescan
+  JMP .prescan
 
-.indent_prescan_done:
-  POP16 BUF_TEMP16             ; Restore loop count
-  CP16 FILE_LINE16, LINE_LEN16 ; Reset line counter
+.prescan_done:
+  POP16 BUF_TEMP16             ; Restore line count
 
-  ; If no non-empty lines, nothing to do
+  ; Nothing to insert (all lines empty): pure no-op
   TST16 COUNT16
-  BNE .indent_has_ne
-  JMP .indent_no_col_adj
-.indent_has_ne:
+  BNE .has_work
+  JMP shift_noop
+.has_work:
 
-  ; total_shift = N_ne * BUF_DELTA
-  LDA #0
-  STA BUF_LEN16
-  STA BUF_LEN16+1              ; BUF_LEN16 = 0
-  LDX BUF_DELTA
-.indent_mul_ts:
-  CLC
-  ADC16 BUF_LEN16, COUNT16, BUF_LEN16
-  DEX
-  BNE .indent_mul_ts
-  ; BUF_LEN16 = total_shift
-
-  ; Get first line start
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_ptr         ; BUF_PTR16 = first line start
-
-  ; Single buffer shift right
+  ; Single buffer shift right at first line start
+  CP16 COUNT16, BUF_LEN16
+  LDAX16 UNDO_LINE16
+  JSR buf_get_line_ptr
   JSR buf_shift_right_16
-  BCS .indent_no_col_adj       ; Buffer full, bail
+  BCC .shifted
+  JMP shift_noop               ; Buffer full: nothing changed
+.shifted:
 
-  ; --- Redistribute: insert spaces into non-empty lines ---
-  CP16 BUF_PTR16, JUMP_TARGET16
+  ; --- Redistribute: write per-line spaces, copy line content down ---
+  CP16 BUF_PTR16, JUMP_TARGET16 ; write ptr = first line start
   CLC
-  ADC16 BUF_PTR16, BUF_LEN16, BUF_PTR16
+  ADC16 BUF_PTR16, BUF_LEN16, BUF_PTR16 ; read ptr = start + total shift
+  LDA #0
+  STA UNDO_JOIN_COUNT          ; Reset line index
 
-.indent_redist:
+.redist:
   TST16 BUF_TEMP16
-  BEQ .indent_redist_done
+  BEQ .redist_done
 
-  ; Check first byte of line at read_ptr
+  ; A = width for this line (recorded widths, or re-derive for big ranges)
+  LDA UNDO_PASTE_COUNT16 + 1
+  BNE .redist_derive
+  LDX UNDO_JOIN_COUNT
+  LDA UNDO_DATA_BUF,X
+  JMP .redist_have_w
+.redist_derive:
+  ; Big constant-mode range: empty line = 0, else BUF_DELTA
   LDY #0
-  LDA (BUF_PTR16),Y
+  LDA (BUF_PTR16),Y            ; read ptr = line start (pre-shift content)
   CMP #'\n'
-  BEQ .indent_copy_line
-
-  ; Non-empty: write BUF_DELTA spaces at write_ptr
+  BNE .redist_non_empty
+  LDA #0
+  JMP .redist_have_w
+.redist_non_empty:
+  LDA BUF_DELTA
+.redist_have_w:
+  TAX
+  BEQ .redist_copy             ; Width 0: no spaces
   LDY #0
-  LDX BUF_DELTA
-.indent_write_sp:
+.write_spaces:
   LDA #' '
   STA (JUMP_TARGET16),Y
   INY
   DEX
-  BNE .indent_write_sp
-  ; Advance write_ptr by BUF_DELTA
-  LDA BUF_DELTA
+  BNE .write_spaces
+  ; Advance write ptr by width
+  TYA
   CLC
   ADCA16 JUMP_TARGET16, JUMP_TARGET16
 
-.indent_copy_line:
+.redist_copy:
   JSR copy_line_to_nl
 
+  INC UNDO_JOIN_COUNT
   DEC16 BUF_TEMP16
-  JMP .indent_redist
+  JMP .redist
 
-.indent_redist_done:
+.redist_done:
   JSR buf_rebuild_lines
 
-  ; Only adjust cursor col if cursor line was indented
+  ; Adjust cursor column if the cursor's line was indented
   LDA NORMAL_TEMP
-  BEQ .indent_no_col_adj
-  LDA BUF_DELTA
+  BEQ .no_col_adj
   CLC
   ADCA16 CURSOR_COL16, CURSOR_COL16
-.indent_no_col_adj:
-  LDA #$FF
-  STA RENDER_FLAG        ; Multi-line edit; BUF_END16 change only triggers current-line
-  STA MODIFIED
-  JMP clear_count
+.no_col_adj:
 
-; --- Unindent (<<) ---
-do_unindent:
-  JSR undo_clear
-  ; Compute BUF_DELTA = INDENT_WIDTH * (1 + BATCH_EXTRA) = max spaces to remove per line
-  LDA BATCH_EXTRA
-  CLC
-  ADC #1                       ; A = 1 + BATCH_EXTRA
-  STA BUF_DELTA                ; temp = repeat_count
+  ; Record undo: u removes the recorded per-line widths via unindent
+  LDA UNDO_PASTE_COUNT16 + 1
+  BNE .no_undo                 ; Big range: not undoable
+  LDA BUF_DELTA
+  STA UNDO_JOIN_COUNT          ; Width (for redo)
+  LDA #UNDO_INDENT
+  STA UNDO_TYPE
+.no_undo:
+  JMP shift_set_render
+
+; Shared no-op exit: leave MODIFIED/RENDER_FLAG untouched
+shift_noop:
   LDA #0
-  LDX #INDENT_WIDTH
-.unindent_mul_bd:
-  CLC
-  ADC BUF_DELTA
-  DEX
-  BNE .unindent_mul_bd
-  STA BUF_DELTA                ; BUF_DELTA = INDENT_WIDTH * repeat_count
+  STA DELETE_SCREEN_ROWS
+  RTS
 
-  ; Undo batch_pending_pairs COUNT16 addition (<< count = line count, not repeat)
-  LDA BATCH_EXTRA
-  BEQ .unindent_no_undo
-  LDA COUNT16
-  SEC
-  SBC BATCH_EXTRA
-  STA COUNT16
-  LDA COUNT16+1
-  SBC #0
-  STA COUNT16+1
-.unindent_no_undo:
-  JSR get_count_clamp_lines
-  CP16 FILE_LINE16, LINE_LEN16
+; Remove up to BUF_DELTA leading spaces from each line of a range
+; (see contract above).  Per-line removal counts are recorded to
+; UNDO_DATA_BUF so undo can restore exactly what was removed.
+remove_spaces_core:
+  JSR shift_prologue
 
   LDA #0
-  STA NORMAL_TEMP              ; Cursor line total spaces removed
-  STA COUNT16                  ; total_shrink = 0
-  STA COUNT16+1
+  STA NORMAL_TEMP              ; Cursor line spaces removed
+  STA COUNT16                  ; COUNT16 = total removed
+  STA COUNT16 + 1
+  STA UNDO_JOIN_COUNT          ; Line index for UNDO_DATA_BUF
 
-  ; Set write_ptr = first line start
-  LDAX16 FILE_LINE16
+  ; Set write ptr = first line start
+  LDAX16 UNDO_LINE16
   JSR buf_get_line_ptr
-  CP16 BUF_PTR16, JUMP_TARGET16  ; JUMP_TARGET16 = write_ptr
+  CP16 BUF_PTR16, JUMP_TARGET16
 
 .unindent_loop:
   TST16 BUF_TEMP16
@@ -928,24 +1021,32 @@ do_unindent:
 
   ; Count leading spaces up to BUF_DELTA
   LDY #0
-.unindent_count_sp:
+.count_spaces:
   CPY BUF_DELTA
-  BCS .unindent_have_sp
+  BCS .have_spaces
   LDA (BUF_PTR16),Y
   CMP #' '
-  BNE .unindent_have_sp
+  BNE .have_spaces
   INY
-  JMP .unindent_count_sp
-.unindent_have_sp:
+  JMP .count_spaces
+.have_spaces:
   ; Y = spaces to remove for this line (0..BUF_DELTA)
+
+  ; Record removal count (small ranges only)
+  LDA UNDO_PASTE_COUNT16 + 1
+  BNE .no_record
+  TYA
+  LDX UNDO_JOIN_COUNT
+  STA UNDO_DATA_BUF,X
+.no_record:
 
   ; If cursor line, save actual removal in NORMAL_TEMP
   CMP16 LINE_LEN16, FILE_LINE16
-  BNE .unindent_not_cursor
+  BNE .not_cursor
   STY NORMAL_TEMP
-.unindent_not_cursor:
+.not_cursor:
 
-  ; Add Y to total_shrink
+  ; Add Y to total removed
   TYA
   CLC
   ADCA16 COUNT16, COUNT16
@@ -955,17 +1056,20 @@ do_unindent:
   CLC
   ADCA16 BUF_PTR16, BUF_PTR16
 
-  ; Copy remaining line (including newline) to write_ptr
+  ; Copy remaining line (including newline) to write ptr
   JSR copy_line_to_nl
 
+  INC UNDO_JOIN_COUNT
   INC16 LINE_LEN16
   DEC16 BUF_TEMP16
   JMP .unindent_loop
 
 .unindent_done_loop:
-  ; If nothing was removed, skip shift
+  ; If nothing was removed, pure no-op (no MODIFIED, no repaint)
   TST16 COUNT16
-  BEQ .unindent_no_cursor_adj
+  BNE .has_change
+  JMP shift_noop
+.has_change:
 
   ; Single shift left: close the gap after processed range
   CP16 JUMP_TARGET16, BUF_PTR16
@@ -975,25 +1079,30 @@ do_unindent:
 
   ; Cursor adjustment: subtract actual spaces removed, clamp to 0
   LDA NORMAL_TEMP
-  BEQ .unindent_no_cursor_adj
+  BEQ .no_cursor_adj
   LDA CURSOR_COL16
   SEC
   SBC NORMAL_TEMP
   STA CURSOR_COL16
-  LDA CURSOR_COL16+1
+  LDA CURSOR_COL16 + 1
   SBC #0
-  STA CURSOR_COL16+1
-  BCS .unindent_col_ok
+  STA CURSOR_COL16 + 1
+  BCS .col_ok
   LDA #0
   STA_LH16 CURSOR_COL16
-.unindent_col_ok:
+.col_ok:
   JSR clamp_cursor_col
+.no_cursor_adj:
 
-.unindent_no_cursor_adj:
-  LDA #$FF
-  STA RENDER_FLAG        ; Multi-line edit; BUF_END16 change only triggers current-line
-  STA MODIFIED
-  JMP clear_count
+  ; Record undo: u re-inserts the recorded per-line counts
+  LDA UNDO_PASTE_COUNT16 + 1
+  BNE .no_undo                 ; Big range: not undoable
+  LDA BUF_DELTA
+  STA UNDO_JOIN_COUNT          ; Width (for redo)
+  LDA #UNDO_UNINDENT
+  STA UNDO_TYPE
+.no_undo:
+  JMP shift_set_render
 
 ; Copy bytes from (BUF_PTR16) to (JUMP_TARGET16) until '\n' is copied.
 ; Advances both pointers past the copied data.

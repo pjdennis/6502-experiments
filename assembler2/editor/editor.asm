@@ -22,7 +22,7 @@
 ;   $D600-$D61F   Batch insert staging buffer (BATCH_BUF)
 ;   $D620-$D653   Mark table (MARK_TBL)
 ;   $D654-$D6FF   Search buffer (SEARCH_BUF)
-;   $D700-$D7FF   Join undo buffer (JOIN_UNDO_BUF)
+;   $D700-$D7FF   Undo data buffer (UNDO_DATA_BUF)
 ;   $D800-$DFFF   Line pointer table (LINE_TBL)
 ;   $E000-$EFFF   Yank buffer (4KB)
 ;   $F000+        Emulator I/O

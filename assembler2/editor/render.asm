@@ -25,7 +25,7 @@ RENDER_ROW:     .byte   ; Current row being rendered
 RENDER_LINE16:  .word   ; Current file line being rendered
 RENDER_COL:     .byte   ; Column counter during rendering
 FNAME_PTR16:    .word   ; Pointer to filename string (null-terminated)
-RENDER_FLAG:    .byte   ; $FF=full, $01=current line, $02/$06=line delete, $03/$04/$05=line insert. $00=auto
+RENDER_FLAG:    .byte   ; $FF=full, $01=current line, $02/$06=line delete, $03/$04/$05=line insert, $0B=range repaint. $00=auto
 VIEW_TOP_WRAP:  .byte   ; Wrap row offset for first visible line (0 = start of line)
 WRAP_QUOT:      .byte   ; Scratch: quotient from CURSOR_COL / SCREEN_COLS
 WRAP_REM:       .byte   ; Scratch: remainder from CURSOR_COL % SCREEN_COLS
@@ -708,6 +708,9 @@ render_decide:
   ; VIEW_TOP_WRAP changed: require LINE_COUNT unchanged for safety
   CMP16 SNAP_LINE_COUNT16, LINE_COUNT16
   BNE .full
+  LDA RENDER_FLAG
+  CMP #$0B
+  BEQ .full                  ; range repaint + viewport change: full
   JMP .wrap_changed
 .wrap_same:
 
@@ -756,6 +759,10 @@ render_decide:
 
 .current_line:
   LDA RENDER_FLAG
+  CMP #$0B
+  BNE .not_range
+  JMP render_range_repaint
+.not_range:
   ORA #$01
   STA RENDER_FLAG
   JMP render_current_line_and_status
@@ -1165,6 +1172,10 @@ render_decide:
   ; Requirement: LINE_COUNT16 unchanged (content not structurally modified)
   CMP16 SNAP_LINE_COUNT16, LINE_COUNT16
   BNE .ins_full
+  ; Range repaint can't combine with a viewport change: full repaint
+  LDA RENDER_FLAG
+  CMP #$0B
+  BEQ .ins_full
 
   ; Determine direction: new > old = scrolled down (scroll up on screen)
   CMP16 VIEW_TOP16, SNAP_VIEW_TOP16
@@ -1673,6 +1684,165 @@ render_line_insert_scroll:
   ; Find the file line at RENDER_ROW
   JSR find_line_at_render_row
   JMP render_limited_rows
+
+; Range repaint (RENDER_FLAG=$0B): INSERT_LINE_COUNT lines changed in
+; place starting at FILE_LINE16 (line count unchanged; wrap rows may
+; differ).  DELETE_SCREEN_ROWS = the range's screen rows before the edit.
+; The cursor sits on the first line of the range, so the range's first
+; screen row is CURSOR_ROW - WRAP_QUOT.
+; Unchanged row count: repaint just the range's rows.  Grew/shrank
+; (wrap change): scroll the region below and repaint the range plus any
+; newly exposed bottom rows.
+render_range_repaint:
+  ; first_row = CURSOR_ROW - WRAP_QUOT (bail if line extends above view)
+  LDA WRAP_QUOT
+  CMP CURSOR_ROW
+  BEQ .first_row_ok
+  BCC .first_row_ok
+  JMP .rr_full               ; WRAP_QUOT > CURSOR_ROW: line starts above view
+.first_row_ok:
+  LDA CURSOR_ROW
+  SEC
+  SBC WRAP_QUOT
+  STA RENDER_ROW
+
+  ; RENDER_WRAP = old rows (temp), then compute the range's new rows
+  LDA DELETE_SCREEN_ROWS
+  STA RENDER_WRAP
+  CP16 FILE_LINE16, RENDER_LINE16
+  LDA INSERT_LINE_COUNT
+  JSR compute_delete_screen_rows
+  LDX DELETE_SCREEN_ROWS       ; X = new rows (0 = overflow)
+  LDA #0
+  STA DELETE_SCREEN_ROWS       ; reset for next frame
+  CPX #0
+  BNE .have_new_rows
+  JMP .rr_full_reset           ; overflow: full repaint
+.have_new_rows:
+
+  ; Bounds: first_row + max(old, new) must fit above the status bar,
+  ; else just repaint from first_row to the bottom (no scroll)
+  TXA
+  CMP RENDER_WRAP
+  BCS .max_is_new
+  LDA RENDER_WRAP
+.max_is_new:
+  CLC
+  ADC RENDER_ROW
+  BCS .to_bottom_far           ; 8-bit overflow
+  CMP SCREEN_ROWS
+  BCC .in_bounds
+.to_bottom_far:
+  JMP .rr_to_bottom            ; extends into/past status row
+.in_bounds:
+
+  TXA
+  CMP RENDER_WRAP
+  BEQ .rr_same_rows
+  BCC .rr_shrunk
+
+  ; --- Range grew: scroll rows below the old range down by new-old ---
+  SEC
+  SBC RENDER_WRAP
+  STA SCROLL_DELTA
+  JSR ansi_cursor_hide
+  ; Scroll region: first_row + old + 1 (1-based) .. SCREEN_ROWS-1
+  LDA RENDER_ROW
+  CLC
+  ADC RENDER_WRAP
+  CLC
+  ADC #1
+  STA ANSI_ROW
+  LDA SCREEN_ROWS
+  SEC
+  SBC #1
+  STA ANSI_COL
+  CMP ANSI_ROW
+  BCC .grew_skip_scroll        ; nothing below the old range to shift
+  JSR ansi_set_scroll_region
+  LDA SCROLL_DELTA
+  JSR ansi_scroll_down
+  JSR ansi_reset_scroll_region
+.grew_skip_scroll:
+  ; Repaint all of the range's new rows = old + delta (X was clobbered
+  ; by the ANSI calls above)
+  LDA RENDER_WRAP
+  CLC
+  ADC SCROLL_DELTA
+  STA SCROLL_DELTA
+  JMP .rr_render_range
+
+.rr_same_rows:
+  STX SCROLL_DELTA
+  JSR ansi_cursor_hide
+  JMP .rr_render_range
+
+.rr_shrunk:
+  ; --- Range shrank: scroll rows below the new range up by old-new ---
+  LDA RENDER_WRAP              ; A = old
+  STX RENDER_WRAP              ; RENDER_WRAP = new
+  SEC
+  SBC RENDER_WRAP
+  PHA                          ; save old-new for the bottom rows
+  STA SCROLL_DELTA
+  JSR ansi_cursor_hide
+  ; Scroll region: first_row + new + 1 (1-based) .. SCREEN_ROWS-1
+  LDA RENDER_ROW
+  CLC
+  ADC RENDER_WRAP
+  CLC
+  ADC #1
+  STA ANSI_ROW
+  LDA SCREEN_ROWS
+  SEC
+  SBC #1
+  STA ANSI_COL
+  CMP ANSI_ROW
+  BCC .shrunk_skip_scroll
+  JSR ansi_set_scroll_region
+  LDA SCROLL_DELTA
+  JSR ansi_scroll_up
+  JSR ansi_reset_scroll_region
+.shrunk_skip_scroll:
+  ; Repaint the range's new rows
+  LDA RENDER_WRAP
+  STA SCROLL_DELTA
+  CP16 FILE_LINE16, RENDER_LINE16
+  LDA #0
+  STA RENDER_WRAP
+  JSR render_limited_loop
+  ; Repaint the newly exposed bottom rows
+  PLA
+  STA SCROLL_DELTA
+  LDA SCREEN_ROWS
+  SEC
+  SBC #1
+  SEC
+  SBC SCROLL_DELTA
+  STA RENDER_ROW
+  JSR find_line_at_render_row
+  JMP render_limited_rows
+
+.rr_to_bottom:
+  ; Repaint everything from first_row to the bottom of the screen
+  LDA SCREEN_ROWS
+  SEC
+  SBC #1
+  SEC
+  SBC RENDER_ROW
+  STA SCROLL_DELTA
+  JSR ansi_cursor_hide
+.rr_render_range:
+  CP16 FILE_LINE16, RENDER_LINE16
+  LDA #0
+  STA RENDER_WRAP
+  JMP render_limited_rows
+
+.rr_full:
+  LDA #0
+  STA DELETE_SCREEN_ROWS
+.rr_full_reset:
+  JMP render_screen
 
 ; Render limited rows: renders SCROLL_DELTA rows starting at
 ; RENDER_ROW/RENDER_LINE16/RENDER_WRAP, then draws status bar + cursor.

@@ -12502,32 +12502,30 @@ class EditorTestRunner:
 
         # >> undo (indent)
         # Frames: 0=initial, 1=jjj, 2=>>, 3=u
-        self._skip("Minimal repaint: >> undo", ">> undo not yet implemented")
-        # self.run_test_screen(
-        #     "Minimal repaint: >> undo",
-        #     make_lines(15),
-        #     b"jjj>>u:q!\r",
-        #     rows=10, cols=40,
-        #     expect_content_rows=[(3, {3})],
-        #     expect_scrolled_at_frame=[(3, False)]
-        # )
+        self.run_test_screen(
+            "Minimal repaint: >> undo",
+            make_lines(15),
+            b"jjj>>u:q!\r",
+            rows=10, cols=40,
+            expect_content_rows=[(3, {3})],
+            expect_scrolled_at_frame=[(3, False)]
+        )
 
         # << undo (dedent, need leading spaces)
         # Frames: 0=initial, 1=jjj, 2=<<, 3=u
-        self._skip("Minimal repaint: << undo", "<< undo not yet implemented")
-        # indent_content = ''.join(
-        #     f"  Line {i}\n" if i == 4 else f"Line {i}\n"
-        #     for i in range(1, 16)
-        # )
-        # self.run_test_screen(
-        #     "Minimal repaint: << undo",
-        #     indent_content,
-        #     b"jjj<<u:q!\r",
-        #     rows=10, cols=40,
-        #     expect_cursor=(3, 0),
-        #     expect_content_rows=[(3, {3})],
-        #     expect_scrolled_at_frame=[(3, False)]
-        # )
+        indent_content = ''.join(
+            f"  Line {i}\n" if i == 4 else f"Line {i}\n"
+            for i in range(1, 16)
+        )
+        self.run_test_screen(
+            "Minimal repaint: << undo",
+            indent_content,
+            b"jjj<<u:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(3, 0),
+            expect_content_rows=[(3, {3})],
+            expect_scrolled_at_frame=[(3, False)]
+        )
 
         # --- Character-mode paste: undo/redo (no line count change) ---
 
@@ -13864,6 +13862,100 @@ class EditorTestRunner:
             "A\nB\nC\n",
             b"2ddu:wq\r",
             expected_content="A\nB\nC\n"
+        )
+
+        # --- Indent/unindent undo ---
+
+        self.run_test(
+            ">> undo restores content",
+            "Hello\nWorld\n",
+            b">>u:wq\r",
+            expected_content="Hello\nWorld\n"
+        )
+
+        self.run_test(
+            ">> undo then redo",
+            "Hello\nWorld\n",
+            b">>u u:wq\r",
+            expected_content="  Hello\nWorld\n"
+        )
+
+        # 3>> over mixed lines: empty line untouched, undo exact
+        self.run_test(
+            "3>> undo restores mixed lines (empty untouched)",
+            "aaa\n\nccc\nddd\n",
+            b"3>>u:wq\r",
+            expected_content="aaa\n\nccc\nddd\n"
+        )
+
+        self.run_test(
+            "3>> undo redo cycles (u u u)",
+            "aaa\n\nccc\nddd\n",
+            b"3>>u u u:wq\r",
+            expected_content="aaa\n\nccc\nddd\n"
+        )
+
+        # << with uneven indents: per-line removal counts restored exactly
+        self.run_test(
+            "3<< undo restores uneven indents",
+            " a\n  b\n    c\n",
+            b"3<<u:wq\r",
+            expected_content=" a\n  b\n    c\n"
+        )
+
+        self.run_test(
+            "3<< undo then redo",
+            " a\n  b\n    c\n",
+            b"3<<u u:wq\r",
+            expected_content="a\nb\n  c\n"
+        )
+
+        # >> preserving pre-existing indentation on undo
+        self.run_test(
+            ">> undo preserves existing indent",
+            "  already\n",
+            b">>u:wq\r",
+            expected_content="  already\n"
+        )
+
+        # Range indent undo
+        self.run_test(
+            ":1,3> undo restores content",
+            "aaa\nbbb\nccc\nddd\n",
+            b":1,3>\ru:wq\r",
+            expected_content="aaa\nbbb\nccc\nddd\n"
+        )
+
+        self.run_test(
+            ":1,2< undo restores content",
+            "  aaa\n bbb\nccc\n",
+            b":1,2<\ru:wq\r",
+            expected_content="  aaa\n bbb\nccc\n"
+        )
+
+        # Batched >>>> (width 4) undo
+        self.run_test(
+            ">>>> batched undo restores content",
+            "Hello\n",
+            b">>>>u:wq\r",
+            expected_content="Hello\n"
+        )
+
+        # << that removes nothing is a no-op and records no undo:
+        # u then re-executes nothing (prior undo state was cleared)
+        self.run_test(
+            "<< no-op leaves file unmodified (q without !)",
+            "Hello\nWorld\n",
+            b"<<:q\r",
+            expected_content="Hello\nWorld\n"
+        )
+
+        # >> then movement then u: undo applies to the recorded range
+        self.run_test(
+            ">> j u undoes indent from another line",
+            "aaa\nbbb\n",
+            b">>ju:wq\r",
+            expected_content="aaa\nbbb\n"
         )
 
         # dd then dd then undo: first dd stays, second dd undone
@@ -16714,211 +16806,196 @@ class EditorTestRunner:
 
         # >> single line: only row 0 redrawn (not full screen).
         # Frames: 0=initial, 1=>>
-        self._skip("Render opt: >> single line partial redraw", "not ready to implement")
-        # self.run_test_screen(
-        #     "Render opt: >> single line partial redraw",
-        #     "Hello\nWorld\nThird\n",
-        #     b">>:q!\r",
-        #     rows=10, cols=40,
-        #     expect_lines=[(0, "  Hello"), (1, "World"), (2, "Third")],
-        #     expect_cursor=(0, 2),
-        #     expect_content_rows=[(1, {0})]
-        # )
+        self.run_test_screen(
+            "Render opt: >> single line partial redraw",
+            "Hello\nWorld\nThird\n",
+            b">>:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "  Hello"), (1, "World"), (2, "Third")],
+            expect_cursor=(0, 2),
+            expect_content_rows=[(1, {0})]
+        )
 
         # << single line: only row 0 redrawn.
-        self._skip("Render opt: << single line partial redraw", "not ready to implement")
-        # self.run_test_screen(
-        #     "Render opt: << single line partial redraw",
-        #     "  Hello\nWorld\nThird\n",
-        #     b"<<:q!\r",
-        #     rows=10, cols=40,
-        #     expect_lines=[(0, "Hello"), (1, "World"), (2, "Third")],
-        #     expect_cursor=(0, 0),
-        #     expect_content_rows=[(1, {0})]
-        # )
+        self.run_test_screen(
+            "Render opt: << single line partial redraw",
+            "  Hello\nWorld\nThird\n",
+            b"<<:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello"), (1, "World"), (2, "Third")],
+            expect_cursor=(0, 0),
+            expect_content_rows=[(1, {0})]
+        )
 
         # 2>> two lines: only rows 0-1 redrawn.
         # Frames: 0=initial, 1='2' count, 2=>>
-        self._skip("Render opt: 2>> partial redraw two rows", "not ready to implement")
-        # self.run_test_screen(
-        #     "Render opt: 2>> partial redraw two rows",
-        #     "Hello\nWorld\nThird\nFourth\n",
-        #     b"2>>:q!\r",
-        #     rows=10, cols=40,
-        #     expect_lines=[
-        #         (0, "  Hello"), (1, "  World"),
-        #         (2, "Third"), (3, "Fourth"),
-        #     ],
-        #     expect_cursor=(0, 2),
-        #     expect_content_rows=[(2, {0, 1})]
-        # )
+        self.run_test_screen(
+            "Render opt: 2>> partial redraw two rows",
+            "Hello\nWorld\nThird\nFourth\n",
+            b"2>>:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "  Hello"), (1, "  World"),
+                (2, "Third"), (3, "Fourth"),
+            ],
+            expect_cursor=(0, 2),
+            expect_content_rows=[(2, {0, 1})]
+        )
 
         # 2<< two lines: only rows 0-1 redrawn.
-        self._skip("Render opt: 2<< partial redraw two rows", "not ready to implement")
-        # self.run_test_screen(
-        #     "Render opt: 2<< partial redraw two rows",
-        #     "  Hello\n  World\nThird\nFourth\n",
-        #     b"2<<:q!\r",
-        #     rows=10, cols=40,
-        #     expect_lines=[
-        #         (0, "Hello"), (1, "World"),
-        #         (2, "Third"), (3, "Fourth"),
-        #     ],
-        #     expect_cursor=(0, 0),
-        #     expect_content_rows=[(2, {0, 1})]
-        # )
+        self.run_test_screen(
+            "Render opt: 2<< partial redraw two rows",
+            "  Hello\n  World\nThird\nFourth\n",
+            b"2<<:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Hello"), (1, "World"),
+                (2, "Third"), (3, "Fourth"),
+            ],
+            expect_cursor=(0, 0),
+            expect_content_rows=[(2, {0, 1})]
+        )
 
         # >>>> batched: 4 spaces added, only row 0 redrawn.
         # batch_pending_pairs consumes the second >> pair, single frame.
-        self._skip("Render opt: >>>> batched partial redraw", "not ready to implement")
-        # self.run_test_screen(
-        #     "Render opt: >>>> batched partial redraw",
-        #     "Hello\nWorld\n",
-        #     b">>>>:q!\r",
-        #     rows=10, cols=40,
-        #     expect_lines=[(0, "    Hello"), (1, "World")],
-        #     expect_cursor=(0, 4),
-        #     expect_content_rows=[(1, {0})]
-        # )
+        self.run_test_screen(
+            "Render opt: >>>> batched partial redraw",
+            "Hello\nWorld\n",
+            b">>>>:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "    Hello"), (1, "World")],
+            expect_cursor=(0, 4),
+            expect_content_rows=[(1, {0})]
+        )
 
         # <<<< batched: removes up to 4 spaces.
-        self._skip("Render opt: <<<< batched partial redraw", "not ready to implement")
-        # self.run_test_screen(
-        #     "Render opt: <<<< batched partial redraw",
-        #     "    Hello\nWorld\n",
-        #     b"<<<<:q!\r",
-        #     rows=10, cols=40,
-        #     expect_lines=[(0, "Hello"), (1, "World")],
-        #     expect_cursor=(0, 0),
-        #     expect_content_rows=[(1, {0})]
-        # )
+        self.run_test_screen(
+            "Render opt: <<<< batched partial redraw",
+            "    Hello\nWorld\n",
+            b"<<<<:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello"), (1, "World")],
+            expect_cursor=(0, 0),
+            expect_content_rows=[(1, {0})]
+        )
 
         # >> at mid-screen: only affected row (row 2), not row 0.
         # Frames: 0=initial, 1=jj (batched), 2=>>
-        self._skip("Render opt: >> mid-screen partial redraw", "not ready to implement")
-        # self.run_test_screen(
-        #     "Render opt: >> mid-screen partial redraw",
-        #     make_lines(10),
-        #     b"jj>>:q!\r",
-        #     rows=10, cols=40,
-        #     expect_lines=[
-        #         (0, "Line 1"), (1, "Line 2"),
-        #         (2, "  Line 3"),
-        #         (3, "Line 4"),
-        #     ],
-        #     expect_cursor=(2, 2),
-        #     expect_content_rows=[(2, {2})]
-        # )
+        self.run_test_screen(
+            "Render opt: >> mid-screen partial redraw",
+            make_lines(10),
+            b"jj>>:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "Line 1"), (1, "Line 2"),
+                (2, "  Line 3"),
+                (3, "Line 4"),
+            ],
+            expect_cursor=(2, 2),
+            expect_content_rows=[(2, {2})]
+        )
 
         # >> causes wrap: line grows from 1 to 2 screen rows.
         # "A"*39 at 40 cols = 1 row. After >>: "  "+"A"*39 = 41 chars = 2 rows.
         # Scroll down by 1 in region below, repaint 2 rows of affected line.
         # Frames: 0=initial, 1=>>
-        self._skip("Render opt: >> causes wrap scrolls down", "not ready to implement")
-        # self.run_test_screen(
-        #     "Render opt: >> causes wrap scrolls down",
-        #     "A" * 39 + "\nSecond\nThird\n",
-        #     b">>:q!\r",
-        #     rows=10, cols=40,
-        #     expect_lines=[
-        #         (0, "  " + "A" * 38),   # wrap row 0
-        #         (1, "A"),                # wrap row 1
-        #         (2, "Second"),
-        #         (3, "Third"),
-        #     ],
-        #     expect_cursor=(0, 2),
-        #     # Rows 0-1 are affected line (repainted), row 2+ from scroll
-        #     expect_scrolled_at_frame=[(1, True)],
-        # )
+        self.run_test_screen(
+            "Render opt: >> causes wrap scrolls down",
+            "A" * 39 + "\nSecond\nThird\n",
+            b">>:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "  " + "A" * 38),   # wrap row 0
+                (1, "A"),                # wrap row 1
+                (2, "Second"),
+                (3, "Third"),
+            ],
+            expect_cursor=(0, 2),
+            # Rows 0-1 are affected line (repainted), row 2+ from scroll
+            expect_scrolled_at_frame=[(1, True)],
+        )
 
         # << removes wrap: line shrinks from 2 to 1 screen row.
         # "  "+"A"*39 = 41 chars = 2 rows. After <<: "A"*39 = 1 row.
         # Scroll up by 1 in region below, repaint affected row.
-        self._skip("Render opt: << removes wrap scrolls up", "not ready to implement")
-        # self.run_test_screen(
-        #     "Render opt: << removes wrap scrolls up",
-        #     "  " + "A" * 39 + "\nSecond\nThird\n",
-        #     b"<<:q!\r",
-        #     rows=10, cols=40,
-        #     expect_lines=[
-        #         (0, "A" * 39),
-        #         (1, "Second"),
-        #         (2, "Third"),
-        #     ],
-        #     expect_cursor=(0, 0),
-        #     expect_scrolled_at_frame=[(1, True)],
-        # )
+        self.run_test_screen(
+            "Render opt: << removes wrap scrolls up",
+            "  " + "A" * 39 + "\nSecond\nThird\n",
+            b"<<:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "A" * 39),
+                (1, "Second"),
+                (2, "Third"),
+            ],
+            expect_cursor=(0, 0),
+            expect_scrolled_at_frame=[(1, True)],
+        )
 
         # << no-op (no leading spaces): no content redraw needed.
-        self._skip("Render opt: << no-op no content redraw", "not ready to implement")
-        # self.run_test_screen(
-        #     "Render opt: << no-op no content redraw",
-        #     "Hello\nWorld\n",
-        #     b"<<:q!\r",
-        #     rows=10, cols=40,
-        #     expect_lines=[(0, "Hello"), (1, "World")],
-        #     expect_cursor=(0, 0),
-        #     expect_content_redraws=[True, False, False]
-        # )
+        self.run_test_screen(
+            "Render opt: << no-op no content redraw",
+            "Hello\nWorld\n",
+            b"<<:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "Hello"), (1, "World")],
+            expect_cursor=(0, 0),
+            expect_content_redraws=[True, False, False]
+        )
 
         # >> all empty lines in range: nothing changes, no content redraw.
-        self._skip("Render opt: >> all empty lines no content redraw", "not ready to implement")
-        # self.run_test_screen(
-        #     "Render opt: >> all empty lines no content redraw",
-        #     "\n\nThird\n",
-        #     b"2>>:q!\r",
-        #     rows=10, cols=40,
-        #     expect_lines=[(0, ""), (1, ""), (2, "Third")],
-        #     expect_cursor=(0, 0),
-        #     expect_content_redraws=[True, False, False, False]
-        # )
+        self.run_test_screen(
+            "Render opt: >> all empty lines no content redraw",
+            "\n\nThird\n",
+            b"2>>:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, ""), (1, ""), (2, "Third")],
+            expect_cursor=(0, 0),
+            expect_content_redraws=[True, False, False, False]
+        )
 
         # 2>>>> batched multi-line: 2 lines, 4 spaces each, rows 0-1 redrawn.
-        self._skip("Render opt: 2>>>> batched multi-line partial redraw", "not ready to implement")
-        # self.run_test_screen(
-        #     "Render opt: 2>>>> batched multi-line partial redraw",
-        #     "Hello\nWorld\nThird\n",
-        #     b"2>>>>:q!\r",
-        #     rows=10, cols=40,
-        #     expect_lines=[
-        #         (0, "    Hello"), (1, "    World"), (2, "Third"),
-        #     ],
-        #     expect_cursor=(0, 4),
-        #     expect_content_rows=[(2, {0, 1})]
-        # )
+        self.run_test_screen(
+            "Render opt: 2>>>> batched multi-line partial redraw",
+            "Hello\nWorld\nThird\n",
+            b"2>>>>:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "    Hello"), (1, "    World"), (2, "Third"),
+            ],
+            expect_cursor=(0, 4),
+            expect_content_rows=[(2, {0, 1})]
+        )
 
         # :1,3> range indent: only rows 0-2 redrawn.
-        # Frames: 0=initial, 1=: (command mode entered), then command processes
-        # internally. The render frame after :1,3> finishes is frame 1.
-        # Actually, :1,3> returns from command_handle and renders one frame.
-        self._skip("Render opt: :1,3> range partial redraw", "not ready to implement")
-        # self.run_test_screen(
-        #     "Render opt: :1,3> range partial redraw",
-        #     "aaa\nbbb\nccc\nddd\neee\n",
-        #     b":1,3>\r:q!\r",
-        #     rows=10, cols=40,
-        #     expect_lines=[
-        #         (0, "  aaa"), (1, "  bbb"), (2, "  ccc"),
-        #         (3, "ddd"), (4, "eee"),
-        #     ],
-        #     expect_cursor=(0, 2),
-        #     expect_content_rows=[(1, {0, 1, 2})]
-        # )
+        # Frames: 0=initial, 1=':' entry (status only), 2=command completes
+        # and renders the partial repaint.
+        self.run_test_screen(
+            "Render opt: :1,3> range partial redraw",
+            "aaa\nbbb\nccc\nddd\neee\n",
+            b":1,3>\r:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "  aaa"), (1, "  bbb"), (2, "  ccc"),
+                (3, "ddd"), (4, "eee"),
+            ],
+            expect_cursor=(0, 2),
+            expect_content_rows=[(2, {0, 1, 2})]
+        )
 
         # :1,3< range unindent: only rows 0-2 redrawn.
-        self._skip("Render opt: :1,3< range partial redraw", "not ready to implement")
-        # self.run_test_screen(
-        #     "Render opt: :1,3< range partial redraw",
-        #     "  aaa\n  bbb\n  ccc\nddd\neee\n",
-        #     b":1,3<\r:q!\r",
-        #     rows=10, cols=40,
-        #     expect_lines=[
-        #         (0, "aaa"), (1, "bbb"), (2, "ccc"),
-        #         (3, "ddd"), (4, "eee"),
-        #     ],
-        #     expect_cursor=(0, 0),
-        #     expect_content_rows=[(1, {0, 1, 2})]
-        # )
+        self.run_test_screen(
+            "Render opt: :1,3< range partial redraw",
+            "  aaa\n  bbb\n  ccc\nddd\neee\n",
+            b":1,3<\r:q!\r",
+            rows=10, cols=40,
+            expect_lines=[
+                (0, "aaa"), (1, "bbb"), (2, "ccc"),
+                (3, "ddd"), (4, "eee"),
+            ],
+            expect_cursor=(0, 0),
+            expect_content_rows=[(2, {0, 1, 2})]
+        )
 
         print()
         print("=" * 60)
