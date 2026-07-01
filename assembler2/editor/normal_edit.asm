@@ -380,10 +380,29 @@ contiguous_fill:
   RTS
 
 ; --- Toggle case (~) ---
+; Echo optimization: every visited char is echoed in place (toggled or
+; not) so the terminal cursor tracks the buffer position -- skipping
+; non-alpha chars without echoing would misplace later writes.  Echo
+; stops at the wrap-row boundary or on an unprintable char; the rest of
+; the line is repainted via a partial line render from that column.
 normal_toggle_case:
   JSR undo_clear
-  JSR get_batched_count
-  CP16 CURSOR_COL16, RENDER_FROM_COL16
+  JSR get_batched_count      ; X = count
+  ; Record span start for undo (valid only once UNDO_TYPE is set)
+  CP16 FILE_LINE16, UNDO_LINE16
+  CP16 CURSOR_COL16, UNDO_COL16
+  ; Echo budget: columns left in the cursor's wrap row
+  STX NORMAL_TEMP
+  CP16 CURSOR_COL16, DIV_INPUT16
+  JSR div_mod_screen_cols_16 ; A = col % SCREEN_COLS (clobbers X)
+  STA BUF_DELTA
+  LDA SCREEN_COLS
+  SEC
+  SBC BUF_DELTA
+  STA BUF_DELTA              ; BUF_DELTA = echo budget (0 = deferred)
+  LDA #0
+  STA UNDO_JOIN_COUNT        ; chars visited (span length)
+  LDX NORMAL_TEMP
 
 .tilde_loop:
   STX NORMAL_TEMP
@@ -392,22 +411,45 @@ normal_toggle_case:
 
   JSR get_cursor_buf_ptr
   LDY #0
+  INC UNDO_JOIN_COUNT
   LDA (BUF_PTR16),Y
   CMP #'A'
-  BCC .tilde_advance
+  BCC .tilde_echo
   CMP #$5B
   BCC .tilde_toggle
   CMP #'a'
-  BCC .tilde_advance
+  BCC .tilde_echo
   CMP #$7B
-  BCS .tilde_advance
+  BCS .tilde_echo
 
 .tilde_toggle:
   EOR #$20
   STA (BUF_PTR16),Y
-  JSR io_write             ; direct write toggled char
+  LDA #UNDO_TILDE
+  STA UNDO_TYPE
   LDA #$FF
   STA MODIFIED
+
+.tilde_echo:
+  ; Echo the visited char (toggled or not) if still in echo range
+  LDA BUF_DELTA
+  BEQ .tilde_defer
+  LDA (BUF_PTR16),Y
+  CMP #' '
+  BCC .tilde_defer           ; control char: defer to renderer
+  CMP #$7F
+  BCS .tilde_defer           ; DEL/high-bit: defer to renderer
+  JSR io_write
+  DEC BUF_DELTA
+  JMP .tilde_advance
+.tilde_defer:
+  LDA RENDER_FLAG
+  BNE .tilde_advance         ; already deferring
+  LDA #1
+  STA RENDER_FLAG            ; partial line repaint from this column
+  CP16 CURSOR_COL16, RENDER_FROM_COL16
+  LDA #0
+  STA BUF_DELTA              ; no more direct echo
 
 .tilde_advance:
   SEC
@@ -422,6 +464,11 @@ normal_toggle_case:
   BNE .tilde_loop
 
 .tilde_done:
+  ; Finalize undo record (UNDO_TYPE set if anything toggled)
+  LDA UNDO_TYPE
+  BEQ .tilde_no_undo
+  CP16 CURSOR_COL16, UNDO_PASTE_COUNT16 ; final cursor col (for redo)
+.tilde_no_undo:
   JMP clear_count
 
 ; --- Join lines (J) ---
@@ -628,11 +675,29 @@ normal_change_to_eol:
   JMP enter_insert_mode
 
 ; --- Replace char (r) ---
+; Same echo strategy as ~: echo the replacement until the wrap-row
+; boundary or an unprintable char, then defer to a partial line render.
 do_replace_char:
   JSR undo_clear
   JSR get_count
+  ; Record span start for undo (valid only once UNDO_TYPE is set)
+  CP16 FILE_LINE16, UNDO_LINE16
+  CP16 CURSOR_COL16, UNDO_COL16
+  ; Echo budget: columns left in the cursor's wrap row
+  CP16 CURSOR_COL16, DIV_INPUT16
+  JSR div_mod_screen_cols_16 ; A = col % SCREEN_COLS (clobbers X)
+  STA BUF_DELTA
+  LDA SCREEN_COLS
+  SEC
+  SBC BUF_DELTA
+  STA BUF_DELTA              ; BUF_DELTA = echo budget
+  LDA #0
+  STA UNDO_JOIN_COUNT        ; chars replaced
+  ; Count, clamped to 255 (replacement span is recorded in one page)
   LDX BUF_TEMP16
-  CP16 CURSOR_COL16, RENDER_FROM_COL16
+  LDA BUF_TEMP16 + 1
+  BEQ .replace_loop
+  LDX #$FF
 
 .replace_loop:
   STX NORMAL_TEMP
@@ -641,24 +706,36 @@ do_replace_char:
 
   JSR get_cursor_buf_ptr
   LDY #0
+  ; Save the original char for undo
+  LDA (BUF_PTR16),Y
+  LDX UNDO_JOIN_COUNT
+  STA UNDO_DATA_BUF,X
+  INC UNDO_JOIN_COUNT
+  ; Store the replacement
   LDA BUF_TEMP
   STA (BUF_PTR16),Y
-  ; Direct write if printable
+  ; Echo if still in range and printable
+  LDX BUF_DELTA
+  BEQ .replace_defer
   CMP #' '
-  BCC .replace_need_render
+  BCC .replace_defer
   CMP #$7F
-  BCS .replace_need_render
+  BCS .replace_defer
   JSR io_write
-  JMP .replace_modified
-
-.replace_need_render:
+  DEC BUF_DELTA
+  JMP .replace_next
+.replace_defer:
+  LDA RENDER_FLAG
+  BNE .replace_next          ; already deferring
   LDA #1
-  STA RENDER_FLAG
+  STA RENDER_FLAG            ; partial line repaint from this column
+  CP16 CURSOR_COL16, RENDER_FROM_COL16
+  LDA #0
+  STA BUF_DELTA
 
-.replace_modified:
+.replace_next:
   LDA #$FF
   STA MODIFIED
-
   LDX NORMAL_TEMP
   DEX
   BEQ .replace_done
@@ -666,6 +743,14 @@ do_replace_char:
   JMP .replace_loop
 
 .replace_done:
+  ; Finalize undo record
+  LDA UNDO_JOIN_COUNT
+  BEQ .replace_no_undo
+  LDA #UNDO_REPLACE
+  STA UNDO_TYPE
+  LDA BUF_TEMP
+  STA UNDO_PASTE_COUNT16     ; replacement char (for redo)
+.replace_no_undo:
   JMP clear_count
 
 ; --- Change line (cc) ---

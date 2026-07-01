@@ -12299,53 +12299,49 @@ class EditorTestRunner:
 
         # r undo
         # Frames: 0=initial, 1=jjj, 2=rZ (r waits for char), 3=u
-        self._skip("Minimal repaint: r undo", "r undo not yet implemented")
-        # self.run_test_screen(
-        #     "Minimal repaint: r undo",
-        #     make_lines(15),
-        #     b"jjjrZu:q!\r",
-        #     rows=10, cols=40,
-        #     expect_cursor=(3, 0),
-        #     expect_content_rows=[(3, {3})],
-        #     expect_scrolled_at_frame=[(3, False)]
-        # )
+        self.run_test_screen(
+            "Minimal repaint: r undo",
+            make_lines(15),
+            b"jjjrZu:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(3, 0),
+            expect_content_rows=[(3, {3})],
+            expect_scrolled_at_frame=[(3, False)]
+        )
 
         # r redo
         # Frames: 0=initial, 1=jjj, 2=rZ, 3=u, 4=space, 5=u redo
-        self._skip("Minimal repaint: r redo", "r undo not yet implemented")
-        # self.run_test_screen(
-        #     "Minimal repaint: r redo",
-        #     make_lines(15),
-        #     b"jjjrZu u:q!\r",
-        #     rows=10, cols=40,
-        #     expect_cursor=(3, 0),
-        #     expect_content_rows=[(5, {3})],
-        #     expect_scrolled_at_frame=[(5, False)]
-        # )
+        self.run_test_screen(
+            "Minimal repaint: r redo",
+            make_lines(15),
+            b"jjjrZu u:q!\r",
+            rows=10, cols=40,
+            expect_cursor=(3, 0),
+            expect_content_rows=[(5, {3})],
+            expect_scrolled_at_frame=[(5, False)]
+        )
 
         # ~ undo: ~ toggles case and advances cursor. Undo restores char.
         # Frames: 0=initial, 1=jjj, 2=~, 3=u
-        self._skip("Minimal repaint: ~ undo", "~ undo not yet implemented")
-        # self.run_test_screen(
-        #     "Minimal repaint: ~ undo",
-        #     make_lines(15),
-        #     b"jjj~u:q!\r",
-        #     rows=10, cols=40,
-        #     expect_content_rows=[(3, {3})],
-        #     expect_scrolled_at_frame=[(3, False)]
-        # )
+        self.run_test_screen(
+            "Minimal repaint: ~ undo",
+            make_lines(15),
+            b"jjj~u:q!\r",
+            rows=10, cols=40,
+            expect_content_rows=[(3, {3})],
+            expect_scrolled_at_frame=[(3, False)]
+        )
 
         # ~ redo
         # Frames: 0=initial, 1=jjj, 2=~, 3=u, 4=space, 5=u redo
-        self._skip("Minimal repaint: ~ redo", "~ undo not yet implemented")
-        # self.run_test_screen(
-        #     "Minimal repaint: ~ redo",
-        #     make_lines(15),
-        #     b"jjj~u u:q!\r",
-        #     rows=10, cols=40,
-        #     expect_content_rows=[(5, {3})],
-        #     expect_scrolled_at_frame=[(5, False)]
-        # )
+        self.run_test_screen(
+            "Minimal repaint: ~ redo",
+            make_lines(15),
+            b"jjj~u u:q!\r",
+            rows=10, cols=40,
+            expect_content_rows=[(5, {3})],
+            expect_scrolled_at_frame=[(5, False)]
+        )
 
         # D undo (single line, cursor at col 2)
         # Frames: 0=initial, 1=jjj, 2=ll, 3=D, 4=u
@@ -13956,6 +13952,80 @@ class EditorTestRunner:
             "aaa\nbbb\n",
             b">>ju:wq\r",
             expected_content="aaa\nbbb\n"
+        )
+
+        # --- Replace char (r) undo ---
+
+        self.run_test(
+            "r undo restores char",
+            "Hello\n",
+            b"rXu:wq\r",
+            expected_content="Hello\n"
+        )
+
+        self.run_test(
+            "r undo then redo",
+            "Hello\n",
+            b"rXu u:wq\r",
+            expected_content="Xello\n"
+        )
+
+        self.run_test(
+            "3rX undo restores all chars",
+            "Hello\n",
+            b"3rXu:wq\r",
+            expected_content="Hello\n"
+        )
+
+        self.run_test(
+            "3rX undo redo cycle",
+            "Hello\n",
+            b"3rXu u:wq\r",
+            expected_content="XXXlo\n"
+        )
+
+        self.run_test(
+            "r undo restores mixed punctuation",
+            "a.b\n",
+            b"3rZu:wq\r",
+            expected_content="a.b\n"
+        )
+
+        self.run_test(
+            "r j u undoes replace from another line",
+            "abc\ndef\n",
+            b"rXju:wq\r",
+            expected_content="abc\ndef\n"
+        )
+
+        # --- Toggle case (~) undo ---
+
+        self.run_test(
+            "~ undo restores case",
+            "Hello\n",
+            b"~u:wq\r",
+            expected_content="Hello\n"
+        )
+
+        self.run_test(
+            "~ undo then redo",
+            "Hello\n",
+            b"~u u:wq\r",
+            expected_content="hello\n"
+        )
+
+        self.run_test(
+            "5~ undo restores span with punctuation",
+            "a.b.c\n",
+            b"5~u:wq\r",
+            expected_content="a.b.c\n"
+        )
+
+        self.run_test(
+            "~ j u undoes toggle from another line",
+            "abc\ndef\n",
+            b"3~ju:wq\r",
+            expected_content="abc\ndef\n"
         )
 
         # dd then dd then undo: first dd stays, second dd undone
@@ -15877,11 +15947,40 @@ class EditorTestRunner:
             expected_content="X" * 33 + "\n"
         )
 
-        # Batched ~ undo: tilde clears undo, so u after ~~~ should be no-op
+        # ~ echo over skipped punctuation: chars must land in the right
+        # columns (regression: skipped non-alpha chars used to shift all
+        # later direct writes left)
+        self.run_test_screen(
+            "Tilde echo positions correctly over punctuation",
+            "a.b.c\nsecond\n",
+            b"5~:q!\r",
+            rows=10, cols=40,
+            expect_lines=[(0, "A.B.C"), (1, "second")],
+        )
+
+        # r spanning a wrap-row boundary: echo stops at the boundary and
+        # the wrapped row is repainted correctly
+        self.run_test_screen(
+            "Replace across wrap boundary renders correctly",
+            "ABCDEFGHIJKLM\nx\n",
+            b"8l4rZ:q!\r",
+            rows=10, cols=10,
+            expect_lines=[(0, "ABCDEFGHZZ"), (1, "ZZM"), (2, "x")],
+        )
+
+        # Batched ~ undo: ~~~ batches into one op, u restores the span
         self.run_test(
-            "Batched tilde undo is no-op",
+            "Batched tilde undo restores span",
             "abc\n",
             b"~~~u:wq\r",
+            expected_content="abc\n"
+        )
+
+        # ...and a second u redoes the whole batched toggle
+        self.run_test(
+            "Batched tilde redo re-applies span",
+            "abc\n",
+            b"~~~u u:wq\r",
             expected_content="ABC\n"
         )
 

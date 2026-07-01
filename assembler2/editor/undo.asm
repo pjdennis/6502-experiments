@@ -1,55 +1,6 @@
-; Undo/redo support for normal mode deletion commands
-;
-; Single-level undo: 'u' toggles between undo and redo.
-; The yank buffer stores deleted content, so undo = paste it back,
-; redo = re-delete it.
-;
-; UNDO_TYPE values:
-;   0 = none (no undoable operation)
-;   1 = line-delete (dd, 2dd, etc.)
-;   2 = char-delete (x, D, dw, db, de)
-;   3 = cc/S line-delete (like line-delete but cc inserted blank line)
-;   4 = join (J, NJ)
-;   5 = line-paste-below (p with line yank)
-;   6 = line-paste-above (P with line yank)
-;   7 = char-paste-below (p with char yank)
-;   8 = char-paste-above (P with char yank)
-;   9 = open-line (o/O opened blank line(s))
-;  10 = indent (spaces were added; undo removes them via unindent)
-;  11 = unindent (spaces were removed; undo re-inserts recorded counts)
-;
-; Types 10/11 are self-morphing: undoing an indent re-records as an
-; unindent and vice versa, so repeated 'u' toggles without UNDO_IS_REDO.
-
-UNDO_NONE = 0
-UNDO_LINE = 1
-UNDO_CHAR = 2
-UNDO_CC   = 3
-UNDO_JOIN = 4
-UNDO_LINE_PASTE_BELOW = 5
-UNDO_LINE_PASTE_ABOVE = 6
-UNDO_CHAR_PASTE_BELOW = 7
-UNDO_CHAR_PASTE_ABOVE = 8
-UNDO_OPEN = 9
-UNDO_INDENT = 10
-UNDO_UNINDENT = 11
-
-; Shared per-operation undo data (single-level undo, so one page serves
-; all users): join = 16-bit offsets, indent/unindent = per-line widths.
-UNDO_DATA_BUF = $D700     ; 256 bytes
-JOIN_UNDO_MAX = 128       ; 256 / 2 bytes per entry
-
-  .zeropage
-
-UNDO_TYPE:       .byte    ; 0=none, 1-4=delete/cc/join, 5-8=paste
-UNDO_LINE16:     .word    ; FILE_LINE16 at time of operation
-UNDO_COL16:      .word    ; CURSOR_COL16 at time of operation
-UNDO_IS_REDO:    .byte    ; 0=undo pending, $FF=redo pending
-INSERT_CHANGED:  .byte    ; tracks if insert mode modified buffer
-UNDO_JOIN_COUNT: .byte    ; Number of joins recorded (1-128)
-UNDO_PASTE_COUNT16: .word ; Paste multiplier N (for redo), 16-bit
-
-  .code
+; Undo/redo implementation.  Types, state, and the shared data buffer
+; live in undo_state.asm (included early so all modules can reference
+; them without forward references).
 
 ; Initialize undo state (call once at startup)
 undo_init:
@@ -116,7 +67,7 @@ undo_do_undo:
   LDA UNDO_TYPE
   CMP #UNDO_INDENT
   BCC .old_types
-  JMP undo_shift_step        ; indent/unindent (self-morphing)
+  JMP undo_new_undo          ; indent/unindent/tilde/replace
 .old_types:
   CMP #UNDO_OPEN
   BEQ .undo_open
@@ -286,7 +237,7 @@ undo_do_redo:
   LDA UNDO_TYPE
   CMP #UNDO_INDENT
   BCC .old_types
-  JMP undo_shift_step        ; indent/unindent (self-morphing)
+  JMP undo_new_redo          ; indent/unindent/tilde/replace
 .old_types:
   CMP #UNDO_OPEN
   BEQ .redo_open
@@ -768,3 +719,126 @@ undo_shift_step:
   CP16 UNDO_COL16, CURSOR_COL16
   JSR clamp_cursor_col
   JMP clear_count
+
+; --- New-style type dispatch (A = UNDO_TYPE >= UNDO_INDENT) ---
+undo_new_undo:
+  CMP #UNDO_TILDE
+  BNE .not_tilde
+  JMP undo_tilde_undo
+.not_tilde:
+  CMP #UNDO_REPLACE
+  BNE .not_replace
+  JMP undo_replace_undo
+.not_replace:
+  JMP undo_shift_step        ; indent/unindent (self-morphing)
+
+undo_new_redo:
+  CMP #UNDO_TILDE
+  BNE .not_tilde
+  JMP undo_tilde_redo
+.not_tilde:
+  CMP #UNDO_REPLACE
+  BNE .not_replace
+  JMP undo_replace_redo
+.not_replace:
+  JMP undo_shift_step
+
+; Point BUF_PTR16 at the recorded span and move to the recorded line
+undo_span_setup:
+  CP16 UNDO_LINE16, FILE_LINE16
+  LDAX16 UNDO_LINE16
+  JSR buf_get_line_ptr
+  CLC
+  ADC16 BUF_PTR16, UNDO_COL16, BUF_PTR16
+  RTS
+
+; Common finish: single-line partial repaint from the span start
+undo_span_finish:
+  LDA #$FF
+  STA MODIFIED
+  LDA #1
+  STA RENDER_FLAG
+  CP16 UNDO_COL16, RENDER_FROM_COL16
+  JMP clear_count
+
+; --- Toggle case undo/redo: self-inverse, re-toggle the span ---
+undo_tilde_span:
+  JSR undo_span_setup
+  LDX UNDO_JOIN_COUNT
+  LDY #0
+.loop:
+  LDA (BUF_PTR16),Y
+  CMP #'A'
+  BCC .next
+  CMP #$5B
+  BCC .flip
+  CMP #'a'
+  BCC .next
+  CMP #$7B
+  BCS .next
+.flip:
+  EOR #$20
+  STA (BUF_PTR16),Y
+.next:
+  INY
+  DEX
+  BNE .loop
+  RTS
+
+undo_tilde_undo:
+  JSR undo_tilde_span
+  CP16 UNDO_COL16, CURSOR_COL16
+  LDA #$FF
+  STA UNDO_IS_REDO
+  JMP undo_span_finish
+
+undo_tilde_redo:
+  JSR undo_tilde_span
+  ; Cursor advances past the span as the original ~ did (clamped)
+  CP16 UNDO_COL16, CURSOR_COL16
+  LDA UNDO_JOIN_COUNT
+  CLC
+  ADCA16 CURSOR_COL16, CURSOR_COL16
+  JSR clamp_cursor_col
+  LDA #0
+  STA UNDO_IS_REDO
+  JMP undo_span_finish
+
+; --- Replace char undo: restore the saved originals ---
+undo_replace_undo:
+  JSR undo_span_setup
+  LDX #0
+  LDY #0
+.loop:
+  LDA UNDO_DATA_BUF,X
+  STA (BUF_PTR16),Y
+  INY
+  INX
+  CPX UNDO_JOIN_COUNT
+  BNE .loop
+  CP16 UNDO_COL16, CURSOR_COL16
+  LDA #$FF
+  STA UNDO_IS_REDO
+  JMP undo_span_finish
+
+; --- Replace char redo: re-write the replacement char ---
+undo_replace_redo:
+  JSR undo_span_setup
+  LDA UNDO_PASTE_COUNT16     ; replacement char
+  LDX UNDO_JOIN_COUNT
+  LDY #0
+.loop:
+  STA (BUF_PTR16),Y
+  INY
+  DEX
+  BNE .loop
+  ; Cursor lands on the last replaced char, as the original r did
+  CP16 UNDO_COL16, CURSOR_COL16
+  LDA UNDO_JOIN_COUNT
+  SEC
+  SBC #1
+  CLC
+  ADCA16 CURSOR_COL16, CURSOR_COL16
+  LDA #0
+  STA UNDO_IS_REDO
+  JMP undo_span_finish
