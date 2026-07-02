@@ -552,8 +552,7 @@ render_scroll_down:
 clamp_delta_avail:
   LDA SCREEN_ROWS
   SEC
-  SBC #1
-  SEC
+  SBC #1              ; SCREEN_ROWS >= 1 always, so C=1 here (no 2nd SEC needed)
   SBC CURSOR_ROW
   CMP SCROLL_DELTA
   BCS .ok                    ; available >= delta, OK
