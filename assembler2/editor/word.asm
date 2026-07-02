@@ -9,6 +9,19 @@ WORD_PREV:     .byte     ; Previous character class (for boundary detection)
 
   .code
 
+; Classify char at cursor -> A = class (see char_class)
+; Clobbers: A, X, Y (Y = 0), BUF_PTR16
+class_at_cursor:
+  JSR get_cursor_buf_ptr
+  ; fall through into class_at_ptr
+
+; Classify char at BUF_PTR16 -> A = class (see char_class)
+; Clobbers: A, Y (Y = 0)
+class_at_ptr:
+  LDY #0
+  LDA (BUF_PTR16),Y
+  ; fall through into char_class
+
 ; Classify byte in A -> A = 0 (whitespace), 1 (word: a-zA-Z0-9_), 2 (punct)
 char_class:
   CMP #' '
@@ -66,37 +79,26 @@ word_forward_x:
   STX NORMAL_TEMP         ; Save counter
 
   ; Get current line length
-  JSR get_current_line_len
-  STAX16 LINE_LEN16
-  TST16 LINE_LEN16
+  JSR get_line_len_z
   BEQ .w_next_line        ; Empty line -> try next line
 
   ; If cursor at or past end, go to next line
   CMP16 CURSOR_COL16, LINE_LEN16
   BCS .w_next_line
 
-  ; Get line pointer + cursor col
-  JSR get_cursor_buf_ptr  ; BUF_PTR16 = cursor position
-
   ; Get class of current char
-  LDY #0
-  LDA (BUF_PTR16),Y
-  JSR char_class
+  JSR class_at_cursor
   STA WORD_CLASS
 
   ; If current char is whitespace, just skip whitespace
-  CMP #0
   BEQ .w_skip_ws
 
   ; Skip chars of same class as current
 .w_skip_same:
-  INC16 CURSOR_COL16
+  JSR inc_cursor_col
   CMP16 CURSOR_COL16, LINE_LEN16
   BCS .w_at_eol
-  JSR get_cursor_buf_ptr
-  LDY #0
-  LDA (BUF_PTR16),Y
-  JSR char_class
+  JSR class_at_cursor
   CMP WORD_CLASS
   BEQ .w_skip_same
 
@@ -106,14 +108,10 @@ word_forward_x:
 
   ; Skip whitespace
 .w_skip_ws:
-  INC16 CURSOR_COL16
+  JSR inc_cursor_col
   CMP16 CURSOR_COL16, LINE_LEN16
   BCS .w_at_eol
-  JSR get_cursor_buf_ptr
-  LDY #0
-  LDA (BUF_PTR16),Y
-  JSR char_class
-  CMP #0
+  JSR class_at_cursor
   BEQ .w_skip_ws
   ; Found non-whitespace = word start
   JMP .w_done_one
@@ -121,14 +119,8 @@ word_forward_x:
 .w_at_eol:
   ; At end of line - go to next line col 0 (acts like reaching word start)
 .w_next_line:
-  ; Check if there's a next line
-  CLC
-  ADCI16 FILE_LINE16, 1, BUF_PTR16
-  CMP16 BUF_PTR16, LINE_COUNT16
+  JSR advance_next_line
   BCS .w_done_final       ; No next line, stay put
-  INC16 FILE_LINE16
-  LDA #0
-  STA_LH16 CURSOR_COL16
 
 .w_done_one:
   LDX NORMAL_TEMP
@@ -162,29 +154,23 @@ word_backward_x:
   TST16 FILE_LINE16
   BEQ .b_done_final       ; Already at first line, col 0
   DEC16 FILE_LINE16
-  JSR get_current_line_len
-  STAX16 LINE_LEN16
-  TST16 LINE_LEN16
+  JSR get_line_len_z
   BEQ .b_done_one         ; Prev line is empty, at col 0
   CP16 LINE_LEN16, CURSOR_COL16  ; Set col = line_len (one past end)
   ; Fall through to .b_not_bol which DECs then scans backward to word start
 
 .b_not_bol:
   ; Move left one to start scanning
-  DEC16 CURSOR_COL16
+  JSR dec_cursor_col
 
   ; Skip whitespace backward
 .b_skip_ws:
-  JSR get_cursor_buf_ptr
-  LDY #0
-  LDA (BUF_PTR16),Y
-  JSR char_class
-  CMP #0
+  JSR class_at_cursor
   BNE .b_found_nonws
   ; Still whitespace - move left
   TST16 CURSOR_COL16
   BEQ .b_done_one         ; Hit col 0 during whitespace skip
-  DEC16 CURSOR_COL16
+  JSR dec_cursor_col
   JMP .b_skip_ws
 
 .b_found_nonws:
@@ -195,15 +181,12 @@ word_backward_x:
 .b_skip_same:
   TST16 CURSOR_COL16
   BEQ .b_done_one         ; At col 0, this is the word start
-  DEC16 CURSOR_COL16
-  JSR get_cursor_buf_ptr
-  LDY #0
-  LDA (BUF_PTR16),Y
-  JSR char_class
+  JSR dec_cursor_col
+  JSR class_at_cursor
   CMP WORD_CLASS
   BEQ .b_skip_same
   ; Different class - word start is one to the right
-  INC16 CURSOR_COL16
+  JSR inc_cursor_col
 
 .b_done_one:
   LDX NORMAL_TEMP
@@ -230,9 +213,7 @@ word_end_x:
   STX NORMAL_TEMP         ; Save counter
 
   ; Get current line length
-  JSR get_current_line_len
-  STAX16 LINE_LEN16
-  TST16 LINE_LEN16
+  JSR get_line_len_z
   BNE .e_not_empty
   JMP .e_next_line        ; Empty line -> try next line
 .e_not_empty:
@@ -245,7 +226,7 @@ word_end_x:
   JMP .e_next_line        ; Already at or past last char
 .e_can_move:
 
-  INC16 CURSOR_COL16
+  JSR inc_cursor_col
 
   ; Skip whitespace
 .e_skip_ws:
@@ -253,13 +234,9 @@ word_end_x:
   BCC .e_ws_in_range
   JMP .e_next_line        ; At EOL during whitespace skip
 .e_ws_in_range:
-  JSR get_cursor_buf_ptr
-  LDY #0
-  LDA (BUF_PTR16),Y
-  JSR char_class
-  CMP #0
+  JSR class_at_cursor
   BNE .e_found_nonws
-  INC16 CURSOR_COL16
+  JSR inc_cursor_col
   JMP .e_skip_ws
 
 .e_found_nonws:
@@ -274,14 +251,11 @@ word_end_x:
   CMP16 BUF_PTR16, LINE_LEN16
   BCS .e_done_one         ; Next would be past end, current is the end
   CP16 BUF_PTR16, CURSOR_COL16  ; Advance cursor
-  JSR get_cursor_buf_ptr
-  LDY #0
-  LDA (BUF_PTR16),Y
-  JSR char_class
+  JSR class_at_cursor
   CMP WORD_CLASS
   BEQ .e_skip_same
   ; Different class - back up one
-  DEC16 CURSOR_COL16
+  JSR dec_cursor_col
 
 .e_done_one:
   LDX NORMAL_TEMP
@@ -294,20 +268,11 @@ word_end_x:
 
 .e_next_line:
   ; Move to next line and find first word end
-  CLC
-  ADCI16 FILE_LINE16, 1, BUF_PTR16
-  CMP16 BUF_PTR16, LINE_COUNT16
-  BCC .e_has_next
-  JMP .e_done_final       ; No next line
-.e_has_next:
-  INC16 FILE_LINE16
-  LDA #0
-  STA_LH16 CURSOR_COL16
+  JSR advance_next_line
+  BCS .e_done_final       ; No next line
 
   ; Skip whitespace on new line
-  JSR get_current_line_len
-  STAX16 LINE_LEN16
-  TST16 LINE_LEN16
+  JSR get_line_len_z
   BNE .e_nl_not_empty
   JMP .e_done_one         ; Empty line counts as done for e
 .e_nl_not_empty:
@@ -317,34 +282,15 @@ word_end_x:
   BCC .e_nl_ws_ok
   JMP .e_done_one         ; All whitespace line
 .e_nl_ws_ok:
-  JSR get_cursor_buf_ptr
-  LDY #0
-  LDA (BUF_PTR16),Y
-  JSR char_class
-  CMP #0
+  JSR class_at_cursor
   BNE .e_newline_found
-  INC16 CURSOR_COL16
+  JSR inc_cursor_col
   JMP .e_newline_skip_ws
 
 .e_newline_found:
-  ; Found non-whitespace, now skip to end of this word
-  STA WORD_CLASS
-.e_newline_same:
-  CLC
-  ADCI16 CURSOR_COL16, 1, BUF_PTR16
-  CMP16 BUF_PTR16, LINE_LEN16
-  BCC .e_nl_same_ok
-  JMP .e_done_one         ; At end of line
-.e_nl_same_ok:
-  CP16 BUF_PTR16, CURSOR_COL16
-  JSR get_cursor_buf_ptr
-  LDY #0
-  LDA (BUF_PTR16),Y
-  JSR char_class
-  CMP WORD_CLASS
-  BEQ .e_newline_same
-  DEC16 CURSOR_COL16
-  JMP .e_done_one
+  ; Found non-whitespace (class in A); skip to end of this word
+  ; via the shared same-class scan (out of branch range for the BNE above)
+  JMP .e_found_nonws
 
 
 ; Compute forward character range from cursor
@@ -363,13 +309,7 @@ compute_char_range_forward:
   BEQ .ok
   CP16 BUF_DST16, BUF_LEN16     ; Clamp to available
 .ok:
-  TST16 BUF_LEN16
-  BEQ .nothing
-  CLC
-  RTS
-.nothing:
-  SEC
-  RTS
+  JMP range_epilogue
 
 
 ; --- Multi-line range computation routines ---
@@ -401,13 +341,7 @@ compute_multiline_word_range_forward:
   SBC16 BUF_PTR16, BUF_SRC16, BUF_LEN16
   POP16 FILE_LINE16                 ; restore cursor
   POP16 CURSOR_COL16
-  TST16 BUF_LEN16
-  BEQ .cmwrf_nothing
-  CLC
-  RTS
-.cmwrf_nothing:
-  SEC
-  RTS
+  JMP range_epilogue
 
 ; Compute forward cw-semantics word range (multi-line) for cw
 ; Like word range but strips trailing whitespace when cursor starts on non-whitespace
@@ -417,10 +351,7 @@ compute_multiline_word_range_forward:
 ; Clobbers: A, X, Y, NORMAL_TEMP, WORD_CLASS, LINE_LEN16, BUF_PTR16
 compute_multiline_cw_range_forward:
   STX NORMAL_TEMP                   ; save word count (X clobbered by get_cursor_buf_ptr)
-  JSR get_cursor_buf_ptr            ; get char under cursor
-  LDY #0
-  LDA (BUF_PTR16),Y
-  JSR char_class
+  JSR class_at_cursor               ; get class of char under cursor
   PHA                               ; save original char class on stack
   PUSH16 CURSOR_COL16              ; save original cursor
   PUSH16 FILE_LINE16
@@ -434,31 +365,23 @@ compute_multiline_cw_range_forward:
   ; Check original char class to determine cw behavior
   TSX
   LDA $0105,X                      ; peek at original char class (under 4 bytes of PUSH16s)
-  CMP #0
   BEQ .cmcrf_on_ws                 ; cursor was on whitespace: extend past word
   ; Non-whitespace: strip trailing whitespace (ce semantics)
 .cmcrf_strip_loop:
   CMP16 BUF_PTR16, BUF_SRC16       ; would range become 0?
   BEQ .cmcrf_strip_done
   DEC16 BUF_PTR16                   ; back up
-  LDY #0
-  LDA (BUF_PTR16),Y
-  JSR char_class
-  CMP #0
+  JSR class_at_ptr
   BEQ .cmcrf_strip_loop             ; still whitespace, keep stripping
   INC16 BUF_PTR16                   ; non-ws, include this char
   JMP .cmcrf_strip_done
 .cmcrf_on_ws:
   ; On whitespace: w landed at start of next word, extend past same-class chars
-  LDY #0
-  LDA (BUF_PTR16),Y
-  JSR char_class
+  JSR class_at_ptr
   STA WORD_CLASS
 .cmcrf_ws_extend:
   INC16 BUF_PTR16
-  LDY #0
-  LDA (BUF_PTR16),Y
-  JSR char_class
+  JSR class_at_ptr
   CMP WORD_CLASS
   BEQ .cmcrf_ws_extend
 .cmcrf_strip_done:
@@ -467,13 +390,7 @@ compute_multiline_cw_range_forward:
   POP16 FILE_LINE16                 ; restore cursor
   POP16 CURSOR_COL16
   PLA                               ; clean up char class from stack
-  TST16 BUF_LEN16
-  BEQ .cmcrf_nothing
-  CLC
-  RTS
-.cmcrf_nothing:
-  SEC
-  RTS
+  JMP range_epilogue
 
 ; Compute backward word range (multi-line) for db/yb/cb
 ; Input: X = word count
@@ -489,13 +406,7 @@ compute_multiline_word_range_backward:
   JSR get_cursor_buf_ptr            ; BUF_PTR16 = new position (start of range)
   SEC
   SBC16 BUF_SRC16, BUF_PTR16, BUF_LEN16  ; range = end - start
-  TST16 BUF_LEN16
-  BEQ .cmwrb_nothing
-  CLC
-  RTS
-.cmwrb_nothing:
-  SEC
-  RTS
+  JMP range_epilogue
 
 ; Compute forward word-end range (multi-line) for de/ye/ce
 ; e is an inclusive motion: range includes the character at the end position.
@@ -517,11 +428,15 @@ compute_multiline_word_end_range_forward:
   SBC16 BUF_PTR16, BUF_SRC16, BUF_LEN16
   POP16 FILE_LINE16                 ; restore cursor
   POP16 CURSOR_COL16
+  ; fall through into range_epilogue
+
+; Shared range-computation epilogue: carry clear if BUF_LEN16 != 0
+range_epilogue:
   TST16 BUF_LEN16
-  BEQ .cmwerf_nothing
+  BEQ .nothing
   CLC
   RTS
-.cmwerf_nothing:
+.nothing:
   SEC
   RTS
 
@@ -530,13 +445,10 @@ normal_first_nonblank:
   LDA #0
   STA_LH16 CURSOR_COL16
 
-  JSR get_current_line_len
-  STAX16 LINE_LEN16
-  TST16 LINE_LEN16
+  JSR get_line_len_z
   BEQ .done               ; Empty line
 
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_ptr     ; BUF_PTR16 = start of line
+  JSR get_current_line_ptr     ; BUF_PTR16 = start of line
 
   LDY #0
 .scan:
@@ -556,3 +468,35 @@ normal_first_nonblank:
 
 .done:
   JMP clear_count
+
+; --- Shared small helpers ---
+
+; Move cursor to start of next line, if any
+; Output: carry set if no next line (cursor unchanged), clear if advanced
+; Clobbers: A, BUF_PTR16
+advance_next_line:
+  CLC
+  ADCI16 FILE_LINE16, 1, BUF_PTR16
+  CMP16 BUF_PTR16, LINE_COUNT16
+  BCS .no_next            ; No next line
+  INC16 FILE_LINE16
+  LDA #0
+  STA_LH16 CURSOR_COL16
+.no_next:
+  RTS
+
+; Get current line length into LINE_LEN16
+; Output: A/X = length, Z flag set if line empty
+get_line_len_z:
+  JSR get_current_line_len
+  STAX16 LINE_LEN16
+  TST16 LINE_LEN16
+  RTS
+
+; Increment / decrement CURSOR_COL16 (JSR-able to save macro bytes)
+inc_cursor_col:
+  INC16 CURSOR_COL16
+  RTS
+dec_cursor_col:
+  DEC16 CURSOR_COL16
+  RTS

@@ -202,23 +202,9 @@ normal_delete_char:
   JSR check_cursor_in_line
   BCS .done
 
-  ; Normalize batching: count_pending_key → BATCH_EXTRA
-  JSR get_count              ; BUF_TEMP16 = count prefix
-  LDX BUF_TEMP16
-  STX BUF_DELTA              ; Save count prefix
-  JSR count_pending_key      ; X = extra x keys from typeahead
-  STX BATCH_EXTRA
-  TXA
-  BEQ .no_extras
-  CLC
-  ADC BUF_DELTA
-  BCS .cap_total
-  STA BUF_TEMP16             ; total = count + extras
-  JMP .no_extras
-.cap_total:
-  LDA #$FF
-  STA BUF_TEMP16
-.no_extras:
+  ; Normalize batching: count + pending x keys, capped at 255
+  JSR get_batched_count      ; X = total, BATCH_EXTRA = extras
+  STX BUF_TEMP16
   CP16 CURSOR_COL16, RENDER_FROM_COL16
   JMP batched_char_delete
 .done:
@@ -297,14 +283,11 @@ normal_enter_insert:
   JMP enter_insert_mode
 
 normal_enter_insert_after:
-  JSR get_current_line_len
-  STAX16 LINE_LEN16
-  TST16 LINE_LEN16
-  BEQ .enter
-  CMP16 LINE_LEN16, CURSOR_COL16
-  BEQ .enter
-  BCC .enter
-  INC16 CURSOR_COL16
+  JSR get_line_len_z
+  ; Increment iff cursor < len (empty line: cursor 0 >= len 0, no move)
+  CMP16 CURSOR_COL16, LINE_LEN16
+  BCS .enter
+  JSR inc_cursor_col
 .enter:
   JMP enter_insert_mode
 
@@ -314,13 +297,12 @@ normal_enter_insert_eol:
   JMP enter_insert_mode
 
 normal_open_below:
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_ptr
+  JSR get_current_line_ptr
   JSR advance_past_line_end
 
   LDA #'\n'
   JSR buf_insert_char
-  BCS .open_below_full
+  BCS open_full
   JSR buf_rebuild_lines
 
   ; Adjust marks: new line inserted at FILE_LINE16+1
@@ -338,6 +320,9 @@ normal_open_below:
   CP16 FILE_LINE16, UNDO_COL16   ; Restore cursor to original line
   INC16 FILE_LINE16
   CP16 FILE_LINE16, UNDO_LINE16  ; Opened line position
+
+; Shared o/O tail: reset undo redo flag, cursor to col 0, enter insert mode
+open_common_finish:
   LDA #0
   STA UNDO_IS_REDO
   STA_LH16 CURSOR_COL16
@@ -346,17 +331,18 @@ normal_open_below:
   LDA #$03
   STA RENDER_FLAG        ; Signal line-insert for scroll optimization
   JMP enter_insert_mode
-.open_below_full:
+
+; Shared o/O buffer-full handler
+open_full:
   JSR show_buffer_full_msg
   JMP clear_count
 
 normal_open_above:
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_ptr
+  JSR get_current_line_ptr
 
   LDA #'\n'
   JSR buf_insert_char
-  BCS .open_above_full
+  BCS open_full
   JSR buf_rebuild_lines
 
   ; Adjust marks: new line inserted at FILE_LINE16
@@ -368,15 +354,5 @@ normal_open_above:
   STA UNDO_TYPE
   CP16 FILE_LINE16, UNDO_LINE16  ; Opened line position
   CP16 FILE_LINE16, UNDO_COL16   ; Restore cursor to same line
-  LDA #0
-  STA UNDO_IS_REDO
-  STA_LH16 CURSOR_COL16
-  LDA #$FF
-  STA MODIFIED
-  LDA #$03
-  STA RENDER_FLAG        ; Signal line-insert for scroll optimization
-  JMP enter_insert_mode
-.open_above_full:
-  JSR show_buffer_full_msg
-  JMP clear_count
+  JMP open_common_finish
 

@@ -82,17 +82,14 @@ yank_add_lines:
   SEC
   SBC16 BUF_PTR16, BUF_SRC16, BUF_LEN16
 
-  ; Check if YANK_END16 + size <= YANK_LIMIT
+  ; Check if YANK_END16 + size <= YANK_LIMIT (full iff end >= LIMIT+1)
   CLC
   ADC16 YANK_END16, BUF_LEN16, BUF_DST16
-  LDA BUF_DST16 + 1
-  CMP #>YANK_LIMIT
-  BCC .has_room
-  BNE .full
   LDA BUF_DST16
-  BEQ .has_room           ; Exactly at limit is ok
-  BNE .full
-.has_room:
+  CMP #<YANK_LIMIT+$01
+  LDA BUF_DST16 + 1
+  SBC #>YANK_LIMIT+$01
+  BCS .full
 
   ; mem_copy_down(start, end, YANK_END16)
   ;   BUF_SRC16 = start (already set)
@@ -119,17 +116,14 @@ yank_add_lines:
 ; Clears yank buffer first, copies bytes, sets YANK_TYPE = YANK_CHAR
 ; Returns carry set = buffer full, carry clear = success
 yank_add_chars:
-  ; Check if YANK_BUF + size <= YANK_LIMIT
+  ; Check if YANK_BUF + size <= YANK_LIMIT (full iff end >= LIMIT+1)
   CLC
   ADCI16 BUF_LEN16, YANK_BUF, BUF_DST16
-  LDA BUF_DST16 + 1
-  CMP #>YANK_LIMIT
-  BCC .has_room
-  BNE .full
   LDA BUF_DST16
-  BEQ .has_room             ; Exactly at limit is ok
-  BNE .full
-.has_room:
+  CMP #<YANK_LIMIT+$01
+  LDA BUF_DST16 + 1
+  SBC #>YANK_LIMIT+$01
+  BCS .full
 
   ; Reset yank buffer
   SET16 YANK_BUF, YANK_END16
@@ -175,49 +169,43 @@ yank_get_size:
 ; Returns carry set = error (empty/full), carry clear = success
 yank_paste_below_n:
   JSR yank_paste_setup
-  BCC .has_data
-  RTS
-.has_data:
+  BCS yank_paste_ret          ; Empty yank
 
   ; Find insertion point: after current line's newline
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_ptr        ; BUF_PTR16 = start of current line
+  JSR get_current_line_ptr    ; BUF_PTR16 = start of current line
   JSR advance_past_line_end   ; BUF_PTR16 = insertion point (after newline)
 
   JSR yank_paste_core
-  BCS .done
+  BCS yank_paste_ret
 
   ; Move cursor to first pasted line
   INC16 FILE_LINE16
-  LDA #0
-  STA_LH16 CURSOR_COL16
-  JSR clamp_cursor_col
-  CLC
-.done:
-  RTS
+  BCC yank_paste_finish       ; Always taken (BCS above not taken;
+                              ; INC16 = INC/BNE/INC touches no carry)
 
 ; Paste yank buffer above current line, N times in one batch operation
 ; Input: BUF_TEMP16 = count of times to paste (16-bit)
 ; Returns carry set = error (empty/full), carry clear = success
 yank_paste_above_n:
   JSR yank_paste_setup
-  BCC .has_data
-  RTS
-.has_data:
+  BCS yank_paste_ret          ; Empty yank
 
   ; Insertion point: start of current line
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_ptr        ; BUF_PTR16 = start of current line
+  JSR get_current_line_ptr    ; BUF_PTR16 = start of current line
 
   JSR yank_paste_core
-  BCS .done
+  BCS yank_paste_ret
 
   ; Cursor stays at same line number
+  ; fall through
+
+; Shared paste tail: cursor to col 0 (clamped), carry clear = success
+yank_paste_finish:
   LDA #0
   STA_LH16 CURSOR_COL16
   JSR clamp_cursor_col
   CLC
-.done:
+yank_paste_ret:
   RTS
 
 ; Compute yank size and total paste size
@@ -262,8 +250,9 @@ yank_paste_core:
   ; Shift right to make room
   JSR buf_shift_right_16
   BCC .shift_ok
-  SET16 str_buffer_full, STR_PTR16
-  JSR show_status_message
+  LDA #<str_buffer_full
+  LDX #>str_buffer_full
+  JSR show_message_ax
   SEC
   RTS
 .shift_ok:
@@ -329,24 +318,19 @@ paste_adjust_marks:
   RTS
 
 ; Check if yank buffer contains a newline character
-; Input: YANK_SIZE16 = single yank size (set by yank_paste_setup)
+; Input: yank buffer contents and YANK_END16 must be stable (not mid-mutation)
 ; Output: carry set if newline found, carry clear if not
-; Clobbers: A, Y, BUF_SRC16, BUF_DST16
+; Clobbers: A, Y, BUF_SRC16
 yank_has_newline:
   SET16 YANK_BUF, BUF_SRC16
-  CP16 YANK_SIZE16, BUF_DST16       ; BUF_DST16 = remaining count
   LDY #0
 .loop:
-  TST16 BUF_DST16
+  CMP16 BUF_SRC16, YANK_END16
   BEQ .not_found
   LDA (BUF_SRC16),Y
   CMP #'\n'
   BEQ .found
-  INY
-  BNE .no_page
-  INC BUF_SRC16 + 1
-.no_page:
-  DEC16 BUF_DST16
+  INC16 BUF_SRC16
   JMP .loop
 .not_found:
   CLC

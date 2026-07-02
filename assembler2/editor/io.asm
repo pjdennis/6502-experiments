@@ -74,37 +74,11 @@ io_ready:
 ; Parses response ESC[{rows};{cols}R
 ; Stores results in SCREEN_ROWS and SCREEN_COLS
 query_terminal_size:
-  ; Send ESC[999;999H (move cursor to max position)
-  LDA #$1B
-  JSR io_write
-  LDA #'['
-  JSR io_write
-  LDA #'9'
-  JSR io_write
-  LDA #'9'
-  JSR io_write
-  LDA #'9'
-  JSR io_write
-  LDA #';'
-  JSR io_write
-  LDA #'9'
-  JSR io_write
-  LDA #'9'
-  JSR io_write
-  LDA #'9'
-  JSR io_write
-  LDA #'H'
-  JSR io_write
-
-  ; Send ESC[6n (request cursor position)
-  LDA #$1B
-  JSR io_write
-  LDA #'['
-  JSR io_write
-  LDA #'6'
-  JSR io_write
-  LDA #'n'
-  JSR io_write
+  ; Send ESC[999;999H (move cursor to max position, clamped by terminal)
+  ; followed by ESC[6n (request cursor position)
+  ; Clobbers Y, STR_PTR16 via write_string
+  SET16 dsr_query_str, STR_PTR16
+  JSR write_string
 
   ; Read response: ESC[{rows};{cols}R
   ; Skip ESC
@@ -124,14 +98,8 @@ query_terminal_size:
   LDA DSR_VALUE
   STA SCREEN_COLS
 
-  ; Send ESC[H to move cursor back to home position
-  LDA #$1B
-  JSR io_write
-  LDA #'['
-  JSR io_write
-  LDA #'H'
-  JSR io_write
-  RTS
+  ; Move cursor back to home position (emits ESC[H)
+  JMP ansi_cursor_home
 
 ; Parse decimal digits from serial input until terminator char
 ; Input: A = terminator character
@@ -163,5 +131,10 @@ parse_dsr_value:
   JMP .loop
 .done:
   RTS
+
+; DSR query: ESC[999;999H ESC[6n (no escape decoding in .byte strings,
+; so ESC is a raw $1B byte; explicit $00 terminator required)
+dsr_query_str:
+  .byte $1B, "[999;999H", $1B, "[6n", $00
 
   .endif

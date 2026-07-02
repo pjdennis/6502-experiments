@@ -87,6 +87,7 @@ editor_main:
   JSR argv
   ; A;X = pointer to filename string, copy to FNAME_BUF and set FNAME_PTR16
   STAX16 BUF_PTR16
+.set_fname:
   LDY #0
 .copy_fname:
   LDA (BUF_PTR16),Y
@@ -119,10 +120,9 @@ editor_main:
 
 .no_file:
   ; No file specified - use default name and empty buffer
-  SET16 str_untitled, FNAME_PTR16
+  ; (FNAME_PTR16 is set at .fname_copied after the copy)
   SET16 str_untitled, BUF_PTR16
-  LDY #0
-  JMP .copy_fname
+  JMP .set_fname
 
 .new_file:
   ; File doesn't exist or no file specified - start with empty buffer
@@ -143,8 +143,9 @@ editor_main:
   ; Show truncation warning if file was truncated
   LDA READONLY
   BEQ .no_truncation_warning
-  SET16 str_truncated, STR_PTR16
-  JSR show_status_message
+  LDA #<str_truncated
+  LDX #>str_truncated
+  JSR show_message_ax
 .no_truncation_warning:
 
 ; ============================================================================

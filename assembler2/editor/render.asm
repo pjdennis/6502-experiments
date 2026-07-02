@@ -333,8 +333,7 @@ render_current_line_and_status:
 
   STX RENDER_WRAP              ; save loop counter (LDAX16 clobbers X)
   JSR ansi_cursor_hide
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_ptr
+  JSR get_current_line_ptr
   LDX RENDER_WRAP              ; restore loop counter
 
   ; Position cursor for first row only
@@ -575,8 +574,7 @@ move_to_partial_pos:
 render_partial_first_row:
   JSR move_to_partial_pos
   ; Get line pointer, advance to wrap row
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_ptr
+  JSR get_current_line_ptr
   LDX RENDER_WRAP
   JSR buf_ptr_advance_x
   LDA WRAP_REM

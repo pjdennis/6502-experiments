@@ -3,17 +3,24 @@
 
 ; --- Paste ---
 
+; Shared paste prologue: record undo position, get batched paste count
+; Output: BUF_TEMP16 = count + extras, BATCH_EXTRA = extras,
+;         UNDO_LINE16/UNDO_COL16/UNDO_PASTE_COUNT16 recorded
+paste_prologue:
+  CP16 FILE_LINE16, UNDO_LINE16
+  CP16 CURSOR_COL16, UNDO_COL16
+  JSR get_count              ; BUF_TEMP16 = count
+  JSR count_paste_extras     ; BUF_TEMP16 += extras, BATCH_EXTRA = extras
+  CP16 BUF_TEMP16, UNDO_PASTE_COUNT16
+  RTS
+
 normal_paste_below:
   JSR undo_clear
   LDA YANK_TYPE
   BEQ .line_paste
   JMP char_paste_below
 .line_paste:
-  CP16 FILE_LINE16, UNDO_LINE16
-  CP16 CURSOR_COL16, UNDO_COL16
-  JSR get_count              ; BUF_TEMP16 = count
-  JSR count_paste_extras     ; BUF_TEMP16 += extras, BATCH_EXTRA = extras
-  CP16 BUF_TEMP16, UNDO_PASTE_COUNT16
+  JSR paste_prologue
   PUSH16 BUF_TEMP16          ; Save paste count for paste_adjust_marks
   JSR yank_paste_below_n
   POP16 BUF_TEMP16           ; Restore paste count (carry preserved by PLA/STA)
@@ -49,11 +56,7 @@ normal_paste_above:
   BEQ .line_paste
   JMP char_paste_above
 .line_paste:
-  CP16 FILE_LINE16, UNDO_LINE16
-  CP16 CURSOR_COL16, UNDO_COL16
-  JSR get_count              ; BUF_TEMP16 = count
-  JSR count_paste_extras     ; BUF_TEMP16 += extras
-  CP16 BUF_TEMP16, UNDO_PASTE_COUNT16
+  JSR paste_prologue
   PUSH16 BUF_TEMP16          ; Save paste count for paste_adjust_marks
   JSR yank_paste_above_n
   POP16 BUF_TEMP16           ; Restore paste count (carry preserved by PLA/STA)
@@ -76,14 +79,11 @@ normal_paste_above:
 ; For non-empty lines, inserts after cursor char; for empty lines, inserts at line start
 ; Handles newlines in yanked content via find_line_for_ptr
 char_paste_below:
-  CP16 FILE_LINE16, UNDO_LINE16
-  JSR get_count              ; BUF_TEMP16 = count
-  JSR count_paste_extras     ; BUF_TEMP16 += extras
-  CP16 BUF_TEMP16, UNDO_PASTE_COUNT16
+  ; paste_prologue's UNDO_COL16 copy is a dead store here: both branches
+  ; below overwrite UNDO_COL16 before any read
+  JSR paste_prologue
   ; Compute insertion column for undo: cursor+1 (non-empty) or 0 (empty)
-  JSR get_current_line_len
-  STAX16 LINE_LEN16
-  TST16 LINE_LEN16
+  JSR get_line_len_z
   BEQ .cpb_empty
   CLC
   ADCI16 CURSOR_COL16, 1, UNDO_COL16
@@ -131,9 +131,7 @@ do_char_paste_below:
   PUSH16 BUF_LEN16
 
   ; Compute insertion point
-  JSR get_current_line_len
-  STAX16 LINE_LEN16
-  TST16 LINE_LEN16
+  JSR get_line_len_z
   BEQ .empty_line
 
   ; Non-empty line: insert after cursor
@@ -161,39 +159,19 @@ do_char_paste_below:
   CLC
   ADC16 BUF_PTR16, BUF_LEN16, BUF_PTR16
   DEC16 BUF_PTR16
-  JMP .find_pos
+  JMP paste_find_pos
 
 .multiline:
   ; Adjust marks for inserted lines (paste below: at_line = FILE_LINE16 + 1)
-  SEC
-  SBC16 LINE_COUNT16, COUNT16, BUF_TEMP16
-  LDAX16 FILE_LINE16
-  CLC
+  JSR paste_mark_prefix
   ADC #1
   BCC .mark_adj
   INX
 .mark_adj:
   JSR mark_adjust_insert
-  ; Skip cursor row in scroll region (save/restore BUF_PTR16 across buf_get_line_len)
-  PUSH16 BUF_PTR16
-  JSR file_line_rows
-  STA PREV_LINE_ROWS
-  POP16 BUF_PTR16
-  LDA #$09
-  STA RENDER_FLAG            ; Line-insert scroll, skip cursor row
-  ; INSERT_LINE_COUNT = new_lines + 1 (for split cursor line)
-  LDA BUF_TEMP16
-  CLC
-  ADC #1
-  STA INSERT_LINE_COUNT
-  ; Cursor at first pasted byte (BUF_PTR16 already set)
+  ; Shared multiline finish + cursor positioning (in do_char_paste_above)
+  JMP paste_finish
 
-.find_pos:
-  JSR find_line_for_ptr      ; sets FILE_LINE16, CURSOR_COL16
-  JSR clamp_cursor_col
-  LDA #$FF
-  STA MODIFIED
-  CLC
 .done:
   RTS
 
@@ -201,11 +179,7 @@ do_char_paste_below:
 ; Handles newlines in yanked content via find_line_for_ptr
 ; Single-shift interleaved fill for all yank sizes
 char_paste_above:
-  CP16 FILE_LINE16, UNDO_LINE16
-  CP16 CURSOR_COL16, UNDO_COL16
-  JSR get_count              ; BUF_TEMP16 = count C
-  JSR count_paste_extras     ; BUF_TEMP16 += extras, BATCH_EXTRA = extras
-  CP16 BUF_TEMP16, UNDO_PASTE_COUNT16
+  JSR paste_prologue
   JSR do_char_paste_above
   BCS .cpa_done
   LDA #UNDO_CHAR_PASTE_ABOVE
@@ -244,7 +218,7 @@ do_char_paste_above:
   ; Single buffer shift
   JSR buf_shift_right_16
   BCC .shift_ok
-  JMP .shift_fail
+  JMP paste_shift_fail
 .shift_ok:
 
   ; Choose fill strategy based on yank content
@@ -271,25 +245,26 @@ do_char_paste_above:
   BCS .multiline
 
   ; Single-line: cursor at insertion + total_size - 1 - BATCH_EXTRA
+  ; (BUF_LEN16 -= BATCH_EXTRA + 1 via carry-clear SBC, then one add;
+  ; BUF_LEN16 is dead after this point)
+  CLC
+  LDA BUF_LEN16
+  SBC BATCH_EXTRA
+  STA BUF_LEN16
+  LDA BUF_LEN16+1
+  SBC #0
+  STA BUF_LEN16+1
   CLC
   ADC16 BUF_PTR16, BUF_LEN16, BUF_PTR16
-  DEC16 BUF_PTR16
-  LDA BUF_PTR16
-  SEC
-  SBC BATCH_EXTRA
-  STA BUF_PTR16
-  LDA BUF_PTR16+1
-  SBC #0
-  STA BUF_PTR16+1
-  JMP .find_pos
+  JMP paste_find_pos
 
 .multiline:
   ; Adjust marks for inserted lines
-  SEC
-  SBC16 LINE_COUNT16, COUNT16, BUF_TEMP16
-  LDAX16 FILE_LINE16
-  CLC
+  JSR paste_mark_prefix
   JSR mark_adjust_col
+
+; Shared multiline char-paste finish (below path JMPs here too)
+paste_finish:
   ; Skip cursor row in scroll region (save/restore BUF_PTR16 across buf_get_line_len)
   PUSH16 BUF_PTR16
   JSR file_line_rows
@@ -304,7 +279,7 @@ do_char_paste_above:
   STA INSERT_LINE_COUNT
   ; Cursor at first pasted byte (BUF_PTR16 = insertion point)
 
-.find_pos:
+paste_find_pos:
   JSR find_line_for_ptr      ; sets FILE_LINE16, CURSOR_COL16
   JSR clamp_cursor_col
   LDA #$FF
@@ -312,11 +287,20 @@ do_char_paste_above:
   CLC
   RTS
 
-.shift_fail:
+paste_shift_fail:
   POP16 BUF_PTR16            ; Clean up stack
   POP16 BUF_LEN16
   JSR show_buffer_full_msg
   SEC
+  RTS
+
+; Shared multiline paste mark-adjust prefix:
+; BUF_TEMP16 = lines inserted, A/X = FILE_LINE16, carry clear
+paste_mark_prefix:
+  SEC
+  SBC16 LINE_COUNT16, COUNT16, BUF_TEMP16
+  LDAX16 FILE_LINE16
+  CLC
   RTS
 
 ; Interleaved fill for single-line char paste above
@@ -524,7 +508,7 @@ normal_toggle_case:
   SBCI16 LINE_LEN16, 1, BUF_TEMP16
   CMP16 CURSOR_COL16, BUF_TEMP16
   BCS .tilde_done            ; at end of line, stop
-  INC16 CURSOR_COL16
+  JSR inc_cursor_col
 
 .tilde_next:
   LDX NORMAL_TEMP
@@ -625,8 +609,7 @@ normal_join_lines:
   STA UNDO_IS_REDO
 
   ; Get line start for offset calculations
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_ptr        ; BUF_PTR16 = line start
+  JSR get_current_line_ptr        ; BUF_PTR16 = line start
   CP16 BUF_PTR16, BUF_SRC16  ; BUF_SRC16 = line start (base for offsets)
 
   JSR find_line_end           ; (BUF_PTR16),Y points to '\n'
@@ -704,8 +687,9 @@ normal_join_lines:
   JMP clear_count
 
 .join_limit_exceeded:
-  SET16 str_join_limit, STR_PTR16
-  JSR show_status_message
+  LDA #<str_join_limit
+  LDX #>str_join_limit
+  JSR show_message_ax
   JMP clear_count
 
 str_join_limit: .asciiz "Too many lines to join"
@@ -713,7 +697,7 @@ str_join_limit: .asciiz "Too many lines to join"
 ; --- Substitute char (s) ---
 normal_substitute_char:
   JSR check_cursor_in_line
-  BCS .sub_insert
+  BCS sub_change_insert
 
   ; available = LINE_LEN16 - CURSOR_COL16
   SEC
@@ -726,28 +710,25 @@ normal_substitute_char:
   CP16 BUF_LEN16, BUF_TEMP16
 .sub_count_ok:
   CP16 BUF_TEMP16, BUF_LEN16
+
+; Shared s/C tail: change range at cursor
+sub_change_tail:
   CP16 CURSOR_COL16, RENDER_FROM_COL16
   LDA #OP_CHANGE
-  JSR apply_char_operator
-  RTS
+  JMP apply_char_operator
 
-.sub_insert:
+; Shared s/C empty-line entry to insert mode
+sub_change_insert:
   JMP enter_insert_mode
 
 ; --- Change to EOL (C) ---
 normal_change_to_eol:
   JSR check_cursor_in_line
-  BCS .c_insert
+  BCS sub_change_insert
 
   JSR get_count
   JSR compute_dollar_range
-  CP16 CURSOR_COL16, RENDER_FROM_COL16
-  LDA #OP_CHANGE
-  JSR apply_char_operator
-  RTS
-
-.c_insert:
-  JMP enter_insert_mode
+  JMP sub_change_tail
 
 ; --- Replace char (r) ---
 do_replace_char:
@@ -781,7 +762,7 @@ do_replace_char:
   LDX NORMAL_TEMP
   DEX
   BEQ .replace_done
-  INC16 CURSOR_COL16
+  JSR inc_cursor_col
   JMP .replace_loop
 
 .replace_done:
@@ -819,14 +800,11 @@ cc_have_count:
   JSR yank_delete_current_lines
   BCS .cc_overflow
   ; Check if current line is already empty (from buf_delete_lines empty handling)
-  JSR get_current_line_len
-  STAX16 LINE_LEN16
-  TST16 LINE_LEN16
+  JSR get_line_len_z
   BEQ .cc_already_empty
 
   ; Insert a blank line at FILE_LINE16
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_ptr       ; BUF_PTR16 = start of current line
+  JSR get_current_line_ptr       ; BUF_PTR16 = start of current line
   LDA #'\n'
   JSR buf_insert_char
   BCS .cc_buf_full

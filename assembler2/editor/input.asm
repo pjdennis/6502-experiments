@@ -140,15 +140,19 @@ read_key:
   JSR input_read_byte
   STA INPUT_TEMP
 
-  ; Check for arrow keys: A=up, B=down, C=right, D=left
+  ; Check for arrow keys: A=up, B=down, C=right, D=left (table lookup)
   CMP #'A'
-  BEQ .key_up
-  CMP #'B'
-  BEQ .key_down
-  CMP #'C'
-  BEQ .key_right
-  CMP #'D'
-  BEQ .key_left
+  BCC .not_arrow
+  CMP #'E'
+  BCS .not_arrow
+  SBC #'A'-1              ; C=0 from failed BCS: yields 0-3
+  TAX
+  LDA .arrow_tbl,X
+  RTS
+.arrow_tbl:
+  .byte $80, $81, $83, $82  ; KEY_UP, KEY_DOWN, KEY_RIGHT, KEY_LEFT
+                            ; (C -> right, D -> left: non-linear order)
+.not_arrow:
   CMP #'H'
   BEQ .key_home
   CMP #'F'
@@ -203,18 +207,6 @@ read_key:
   LDA #$00
   RTS
 
-.key_up:
-  LDA #KEY_UP
-  RTS
-.key_down:
-  LDA #KEY_DOWN
-  RTS
-.key_right:
-  LDA #KEY_RIGHT
-  RTS
-.key_left:
-  LDA #KEY_LEFT
-  RTS
 .key_home:
   LDA #KEY_HOME
   RTS

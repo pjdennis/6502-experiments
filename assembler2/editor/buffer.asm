@@ -36,13 +36,8 @@ BUF_LIMIT:     .byte     ; High byte of buffer limit (default >TEXT_LIMIT)
 ; Sets up an empty buffer with one empty line
 buf_init:
   SET16 TEXT_BUF, BUF_END16
-  ; Add a newline to have at least one line
-  LDY #0
-  LDA #'\n'
-  STA (BUF_END16),Y
-  INC16 BUF_END16
-  ; Build line table
-  JMP buf_rebuild_lines
+  ; Empty buffer: appends a newline for one empty line, builds line table
+  JMP buf_ensure_nonempty_rebuild
 
 ; Load file into buffer
 ; File handle in A (already opened)
@@ -85,10 +80,7 @@ buf_load_file:
   LDA BUF_TEMP
   BNE .overwrite_last
   ; Not truncated - append trailing newline
-  LDA #'\n'
-  LDY #0
-  STA (BUF_END16),Y
-  INC16 BUF_END16
+  JSR buf_append_nl
   JMP .has_newline
 .overwrite_last:
   ; Truncated - overwrite last byte to stay within buffer limit
@@ -98,16 +90,7 @@ buf_load_file:
 .has_newline:
 
   ; If buffer is empty (nothing read), add a newline for one empty line
-  CMPI16 BUF_END16, TEXT_BUF
-  BNE .not_empty
-  ; Empty buffer
-  LDY #0
-  LDA #'\n'
-  STA (BUF_END16),Y
-  INC16 BUF_END16
-.not_empty:
-
-  JSR buf_rebuild_lines
+  JSR buf_ensure_nonempty_rebuild
   LDA BUF_TEMP
   BEQ .return_ok
   SEC                    ; Truncated
@@ -247,14 +230,9 @@ buf_shift_right_16:
   RTS
 .has_room:
 
-  ; Check if nothing to move (insert at end)
-  LDA BUF_END16 + 1
-  CMP BUF_PTR16 + 1
-  BNE .need_shift
-  LDA BUF_END16
-  CMP BUF_PTR16
+  ; Check if nothing to move (insert at end; equality-only test)
+  JSR cmp_ptr_end
   BEQ .shift_done
-.need_shift:
 
   ; Set up mem_copy_up parameters:
   ;   BUF_SRC16 = source start (insert point = BUF_PTR16)
@@ -315,16 +293,8 @@ buf_delete_lines:
   ; Shift left by BUF_LEN16 bytes
   JSR buf_shift_left_16
 
-  ; If buffer is now empty, add a newline
-  CMPI16 BUF_END16, TEXT_BUF
-  BNE .not_empty
-  LDY #0
-  LDA #'\n'
-  STA (BUF_END16),Y
-  INC16 BUF_END16
-.not_empty:
-
-  JMP buf_rebuild_lines
+  ; If buffer is now empty, add a newline; rebuild line table
+  JMP buf_ensure_nonempty_rebuild
 
 ; Shift buffer left by BUF_LEN16 bytes at BUF_PTR16 (16-bit version)
 ; Input: BUF_PTR16 = delete point, BUF_LEN16 = shift amount (16-bit)
@@ -359,6 +329,23 @@ buf_shift_left_16:
 
   RTS
 
+; Append a '\n' at BUF_END16 and advance it
+; Clobbers: A, Y (Y = 0)
+buf_append_nl:
+  LDY #0
+  LDA #'\n'
+  STA (BUF_END16),Y
+  INC16 BUF_END16
+  RTS
+
+; If the buffer is empty, append a newline (one empty line), then
+; rebuild the line table (falls through into buf_rebuild_lines)
+buf_ensure_nonempty_rebuild:
+  CMPI16 BUF_END16, TEXT_BUF
+  BNE buf_rebuild_lines
+  JSR buf_append_nl
+  ; fall through
+
 ; Rebuild line pointer table by scanning for newlines
 ; Sets LINE_COUNT16 and fills LINE_TBL
 buf_rebuild_lines:
@@ -367,22 +354,11 @@ buf_rebuild_lines:
   SET16 LINE_TBL, BUF_DST16
 
   ; First line starts at TEXT_BUF
-  LDY #0
-  LDA BUF_PTR16
-  STA (BUF_DST16),Y
-  INY
-  LDA BUF_PTR16 + 1
-  STA (BUF_DST16),Y
-  INC16 LINE_COUNT16
+  JSR store_line_entry
 
 .scan_loop:
   ; Check if we've reached the end
-  LDA BUF_PTR16 + 1
-  CMP BUF_END16 + 1
-  BCC .scan_byte
-  BNE .scan_done
-  LDA BUF_PTR16
-  CMP BUF_END16
+  JSR cmp_ptr_end
   BCS .scan_done
 
 .scan_byte:
@@ -394,12 +370,7 @@ buf_rebuild_lines:
   BNE .scan_loop
 
   ; Found a newline - check if there's more text after it
-  LDA BUF_PTR16 + 1
-  CMP BUF_END16 + 1
-  BCC .add_line
-  BNE .scan_done
-  LDA BUF_PTR16
-  CMP BUF_END16
+  JSR cmp_ptr_end
   BCS .scan_done
 
 .add_line:
@@ -408,18 +379,34 @@ buf_rebuild_lines:
   ADCI16 BUF_DST16, $0002, BUF_DST16
 
   ; Store line start pointer
+  JSR store_line_entry
+
+  JMP .scan_loop
+
+.scan_done:
+  RTS
+
+; Store BUF_PTR16 into the line table entry at BUF_DST16, count the line
+; Clobbers: A, Y (Y = 1)
+store_line_entry:
   LDY #0
   LDA BUF_PTR16
   STA (BUF_DST16),Y
   INY
   LDA BUF_PTR16 + 1
   STA (BUF_DST16),Y
-
   INC16 LINE_COUNT16
+  RTS
 
-  JMP .scan_loop
-
-.scan_done:
+; Compare BUF_PTR16 with BUF_END16 (CMP16 semantics: C/Z as after CMP)
+; Clobbers: A
+cmp_ptr_end:
+  LDA BUF_PTR16 + 1
+  CMP BUF_END16 + 1
+  BNE .d
+  LDA BUF_PTR16
+  CMP BUF_END16
+.d:
   RTS
 
 ; Common setup for buf_adjust_lines_inc/dec

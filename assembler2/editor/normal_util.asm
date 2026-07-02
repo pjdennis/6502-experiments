@@ -26,14 +26,17 @@ dispatch_key:
   LDY #0
 .loop:
   LDA (DISPATCH_PTR16),Y
-  BEQ .no_match
+  BEQ dispatch_no_match
   CMP BUF_TEMP
-  BEQ .found
+  BEQ dispatch_fetch_jump
   INY
   INY
   INY
   JMP .loop
-.found:
+
+; Shared dispatch tail: fetch handler at Y+1/Y+2 and call it, return C=0
+; (also used by dispatch_pending_key)
+dispatch_fetch_jump:
   INY
   LDA (DISPATCH_PTR16),Y
   STA JUMP_TARGET16
@@ -43,11 +46,11 @@ dispatch_key:
   JSR .do_jump
   CLC
   RTS
-.no_match:
-  SEC
-  RTS
 .do_jump:
   JMP (JUMP_TARGET16)
+dispatch_no_match:
+  SEC
+  RTS
 
 ; --- Pending key dispatcher ---
 ; Input: A = low byte, X = high byte of dispatch table address
@@ -63,7 +66,7 @@ dispatch_pending_key:
   LDY #0
 .loop:
   LDA (DISPATCH_PTR16),Y
-  BEQ .no_match
+  BEQ dispatch_no_match
   CMP LAST_KEY
   BNE .next5
   INY
@@ -82,15 +85,7 @@ dispatch_pending_key:
   PLA
   TAY
 .no_batch:
-  INY
-  LDA (DISPATCH_PTR16),Y
-  STA JUMP_TARGET16
-  INY
-  LDA (DISPATCH_PTR16),Y
-  STA JUMP_TARGET16 + 1
-  JSR .do_jump
-  CLC
-  RTS
+  JMP dispatch_fetch_jump
 .next5:
   INY
 .next4:
@@ -99,11 +94,6 @@ dispatch_pending_key:
   INY
   INY
   JMP .loop
-.no_match:
-  SEC
-  RTS
-.do_jump:
-  JMP (JUMP_TARGET16)
 
 ; --- Cursor and line utilities ---
 
@@ -112,10 +102,8 @@ dispatch_pending_key:
 ;          carry set = line empty or cursor at/past end
 ; Clobbers: A, X
 check_cursor_in_line:
-  JSR get_current_line_len
-  STAX16 LINE_LEN16
-  TST16 LINE_LEN16
-  BEQ .bail
+  JSR get_line_len_z
+  ; Empty line needs no separate test: cursor >= 0 = len bails below
   CMP16 CURSOR_COL16, LINE_LEN16
   BCS .bail
   CLC
@@ -128,20 +116,22 @@ get_current_line_len:
   LDAX16 FILE_LINE16
   JMP buf_get_line_len
 
+; Get buffer pointer to start of current line into BUF_PTR16
+get_current_line_ptr:
+  LDAX16 FILE_LINE16
+  JMP buf_get_line_ptr
+
 ; Get buffer pointer at cursor position on current line
 ; Sets BUF_PTR16 to start of FILE_LINE16 + CURSOR_COL16
 ; Clobbers A, X, Y
 get_cursor_buf_ptr:
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_ptr
+  JSR get_current_line_ptr
   CLC
   ADC16 CURSOR_COL16, BUF_PTR16, BUF_PTR16
   RTS
 
 clamp_cursor_col:
-  JSR get_current_line_len
-  STAX16 LINE_LEN16
-  TST16 LINE_LEN16
+  JSR get_line_len_z
   BEQ .set_zero
   SEC
   SBCI16 LINE_LEN16, 1, LINE_LEN16  ; LINE_LEN16 = len - 1
@@ -196,7 +186,7 @@ move_up_x:
 move_left_x:
   TST16 CURSOR_COL16
   BEQ .done
-  DEC16 CURSOR_COL16
+  JSR dec_cursor_col
   DEX
   BNE move_left_x
 .done:
@@ -205,10 +195,9 @@ move_left_x:
 ; Move right X positions, clamped to LINE_LEN16
 ; Input: X = count, LINE_LEN16 = max col. Clobbers: A, X
 move_right_x:
-  CMP16 LINE_LEN16, CURSOR_COL16
-  BCC .done
-  BEQ .done
-  INC16 CURSOR_COL16
+  CMP16 CURSOR_COL16, LINE_LEN16
+  BCS .done
+  JSR inc_cursor_col
   DEX
   BNE move_right_x
 .done:
@@ -301,6 +290,12 @@ clear_count:
   STA BATCH_EXTRA
   RTS
 
+; Move cursor to col 0, clamp, then clear count (shared terminal tail)
+zero_col_clamp_clear:
+  LDA #0
+  STA_LH16 CURSOR_COL16
+  ; fall through
+
 ; Clamp cursor column, then clear count state (shared terminal tail)
 clamp_and_clear_count:
   JSR clamp_cursor_col
@@ -358,12 +353,15 @@ count_accumulate_digit:
 ; Gets count prefix, adds pending matching keys
 ; Input: BUF_TEMP = key code to match (set by normal_handle_key)
 ; Output: X = total count (count + pending), capped at 255
+;         BATCH_EXTRA = pending key count (cleared later by clear_count;
+;         callers that skip clear_count must not let it leak)
 ; Clobbers: A
 get_batched_count:
   JSR get_count
   LDX BUF_TEMP16         ; X = count (low byte, capped at 255)
   STX BUF_DELTA
   JSR count_pending_key  ; X = pending matching keys
+  STX BATCH_EXTRA
   TXA
   CLC
   ADC BUF_DELTA          ; Total = count + pending
@@ -483,8 +481,9 @@ batch_pending_pairs:
 ; Used when yank buffer is too full to complete an operation
 show_yank_overflow:
   JSR yank_clear
-  SET16 str_yank_full, STR_PTR16
-  JSR show_status_message
+  LDA #<str_yank_full
+  LDX #>str_yank_full
+  JSR show_message_ax
   JMP clear_count
 
 ; Yank then delete N lines starting at FILE_LINE16

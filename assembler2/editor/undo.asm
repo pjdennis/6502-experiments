@@ -244,8 +244,7 @@ undo_do_redo:
   STAX16 LINE_LEN16
   TST16 LINE_LEN16
   BEQ .redo_cc_done
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_ptr
+  JSR get_current_line_ptr
   LDA #'\n'
   JSR buf_insert_char
   BCS .redo_cc_done
@@ -363,8 +362,7 @@ undo_join_redo:
 ; mark-adjust call (BUF_TEMP16 = join count, A/X = FILE_LINE16 + 1).
 undo_join_apply:
   STA BUF_TEMP16               ; Stash char (BUF_TEMP16 free until epilogue)
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_ptr          ; BUF_PTR16 = line start
+  JSR get_current_line_ptr          ; BUF_PTR16 = line start
   CP16 BUF_PTR16, BUF_SRC16    ; BUF_SRC16 = line start (base for offsets)
 
   LDX #0                       ; X = buffer index

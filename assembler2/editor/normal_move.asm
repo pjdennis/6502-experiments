@@ -11,11 +11,9 @@ normal_move_right:
   JSR get_batched_count
   ; Hoist line length calculation outside loop (line doesn't change)
   STX BUF_TEMP           ; Save count
-  JSR get_current_line_len
-  STAX16 LINE_LEN16
-  LDX BUF_TEMP           ; Restore count
-  TST16 LINE_LEN16
+  JSR get_line_len_z
   BEQ .right_done        ; Empty line
+  LDX BUF_TEMP           ; Restore count
   SEC
   SBCI16 LINE_LEN16, 1, LINE_LEN16  ; LINE_LEN16 = len - 1
   JSR move_right_x
@@ -47,10 +45,7 @@ normal_page_down:
   JSR scroll_view_down
   DEC BUF_DELTA
   BNE .page_loop
-
-  LDA #0
-  STA_LH16 CURSOR_COL16
-  JMP clamp_and_clear_count
+  JMP zero_col_clamp_clear
 
 normal_page_up:
   JSR get_batched_count
@@ -66,10 +61,7 @@ normal_page_up:
   JSR scroll_view_up
   DEC BUF_DELTA
   BNE .page_loop
-
-  LDA #0
-  STA_LH16 CURSOR_COL16
-  JMP clamp_and_clear_count
+  JMP zero_col_clamp_clear
 
 ; --- Shared scroll subroutines ---
 
@@ -248,9 +240,7 @@ normal_line_start:
   JMP clear_count
 
 normal_line_end:
-  JSR get_current_line_len
-  STAX16 LINE_LEN16
-  TST16 LINE_LEN16
+  JSR get_line_len_z
   BEQ .empty
   SEC
   SBCI16 LINE_LEN16, 1, CURSOR_COL16
@@ -284,9 +274,8 @@ normal_goto_last:
 
 .goto_set:
   LDA #0
-  STA_LH16 CURSOR_COL16
   STA VIEW_TOP_WRAP
-  JMP clamp_and_clear_count
+  JMP zero_col_clamp_clear
 
 ; gg: go to top of file
 do_gg:
@@ -294,9 +283,8 @@ do_gg:
   STA_LH16 FILE_LINE16
   STA_LH16 VIEW_TOP16
   STA CURSOR_ROW
-  STA_LH16 CURSOR_COL16
   STA VIEW_TOP_WRAP
-  JMP clamp_and_clear_count
+  JMP zero_col_clamp_clear
 
 ; --- Yank ---
 
@@ -383,12 +371,11 @@ do_mark_goto:
   JSR mark_get
   BCS .mark_not_set
   STAX16 FILE_LINE16
-  LDA #0
-  STA_LH16 CURSOR_COL16
-  JMP clamp_and_clear_count
+  JMP zero_col_clamp_clear
 .mark_not_set:
-  SET16 str_mark_not_set, STR_PTR16
-  JSR show_status_message
+  LDA #<str_mark_not_set
+  LDX #>str_mark_not_set
+  JSR show_message_ax
   JMP clear_count
 
 ; --- Mode switch ---

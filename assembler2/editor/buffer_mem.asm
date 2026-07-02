@@ -6,14 +6,8 @@
 ; Preserves BUF_SRC16. Clobbers A, Y, BUF_PTR16, BUF_DST16
 mem_copy_up:
   ; Check empty case (SRC >= END)
-  LDA BUF_SRC16 + 1
-  CMP BUF_PTR16 + 1
-  BCC .not_empty
-  BNE .done
-  LDA BUF_SRC16
-  CMP BUF_PTR16
+  JSR cmp_src_ptr
   BCS .done
-.not_empty:
 
   ; Compute offset = BUF_DST16 - BUF_SRC16 (constant shift amount)
   ; Store in BUF_DST16 temporarily
@@ -79,14 +73,8 @@ mem_copy_up:
 ; Preserves BUF_PTR16. Clobbers A, Y, BUF_SRC16, BUF_DST16
 mem_copy_down:
   ; Check empty case (SRC >= END)
-  LDA BUF_SRC16 + 1
-  CMP BUF_PTR16 + 1
-  BCC .not_empty
-  BNE .done
-  LDA BUF_SRC16
-  CMP BUF_PTR16
+  JSR cmp_src_ptr
   BCS .done
-.not_empty:
 
   ; Set up page-aligned source and Y offset
   ; Y = low byte of BUF_SRC16, BUF_SRC16 = page base
@@ -142,4 +130,15 @@ mem_copy_down:
   JMP .last_page
 
 .done:
+  RTS
+
+; Compare BUF_SRC16 with BUF_PTR16 (CMP16 semantics: C/Z as after CMP)
+; Clobbers: A
+cmp_src_ptr:
+  LDA BUF_SRC16 + 1
+  CMP BUF_PTR16 + 1
+  BNE .d
+  LDA BUF_SRC16
+  CMP BUF_PTR16
+.d:
   RTS

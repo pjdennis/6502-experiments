@@ -68,7 +68,7 @@ insert_exit:
   ; Move cursor back one per vi convention (unless at column 0)
   TST16 CURSOR_COL16
   BEQ .done
-  DEC16 CURSOR_COL16
+  JSR dec_cursor_col
 .done:
   RTS
 
@@ -112,8 +112,12 @@ insert_batch:
   LDA BUF_TEMP
   JMP .collect_key
 
-.collect_loop:
-  CPY #0
+.key_del:
+  INC BUF_TEMP16 + 1        ; fwd++
+  ; fall through: consume capacity and fetch next key
+
+.dec_cap:
+  DEY                       ; DEY sets Z, no CPY needed
   BEQ .collect_done
   JSR key_ready
   CMP #$FF
@@ -138,31 +142,20 @@ insert_batch:
 .key_printable:
   STA BATCH_BUF,X
   INX
-  DEY
-  JMP .collect_loop
+  JMP .dec_cap
 
 .key_enter:
   LDA #'\n'
-  STA BATCH_BUF,X
-  INX
-  DEY
-  JMP .collect_loop
+  BNE .key_printable        ; Always taken ($0A != 0)
 
 .key_bs:
   CPX #0
   BEQ .key_bs_overflow
   DEX                       ; Cancel last char in batch
-  DEY
-  JMP .collect_loop
+  JMP .dec_cap
 .key_bs_overflow:
   INC BUF_TEMP16            ; back++
-  DEY
-  JMP .collect_loop
-
-.key_del:
-  INC BUF_TEMP16 + 1        ; fwd++
-  DEY
-  JMP .collect_loop
+  JMP .dec_cap
 
 .key_other:
   JSR unget_key
@@ -383,18 +376,8 @@ insert_batch:
   ; Fast path: no newlines at all
   ; ========================================
 .fast_path:
-  ; CURSOR_COL16 -= back
-  SEC
-  LDA CURSOR_COL16
-  SBC BUF_TEMP16
-  STA CURSOR_COL16
-  LDA CURSOR_COL16 + 1
-  SBC #0
-  STA CURSOR_COL16 + 1
-  ; CURSOR_COL16 += insert_len
-  LDA BUF_DELTA
-  CLC
-  ADCA16 CURSOR_COL16, CURSOR_COL16
+  ; CURSOR_COL16 = CURSOR_COL16 - back + insert_len
+  JSR adjust_cursor_col_ins
 
   ; RENDER_FROM_COL16 = CURSOR_COL16 - insert_len (first affected col)
   SEC
@@ -452,21 +435,8 @@ insert_batch:
   ADC LINE_LEN16 + 1         ; + fwd_nl
   BEQ .no_mark_del
 
-  ; BUF_TEMP16 = count of deleted lines
-  JSR set_buf_temp16_a
-
-  ; first_line = FILE_LINE16 + 1 - back_nl
-  CLC
-  ADCI16 FILE_LINE16, $0001, BUF_DST16
-  SEC
-  LDA BUF_DST16
-  SBC LINE_LEN16             ; - back_nl
-  STA BUF_DST16
-  LDA BUF_DST16 + 1
-  SBC #0
-  STA BUF_DST16 + 1
-
-  LDAX16 BUF_DST16
+  ; BUF_TEMP16 = count of deleted lines, A/X = first affected line
+  JSR ins_mark_adjust_args
   JSR mark_adjust_delete
 
 .no_mark_del:
@@ -474,20 +444,7 @@ insert_batch:
   LDA NORMAL_TEMP            ; ins_nl
   BEQ .no_mark_ins
 
-  JSR set_buf_temp16_a
-
-  ; Same first_line = FILE_LINE16 + 1 - back_nl
-  CLC
-  ADCI16 FILE_LINE16, $0001, BUF_DST16
-  SEC
-  LDA BUF_DST16
-  SBC LINE_LEN16
-  STA BUF_DST16
-  LDA BUF_DST16 + 1
-  SBC #0
-  STA BUF_DST16 + 1
-
-  LDAX16 BUF_DST16
+  JSR ins_mark_adjust_args
   JSR mark_adjust_insert
 
 .no_mark_ins:
@@ -502,17 +459,8 @@ insert_batch:
   ; FILE_LINE16 unchanged
   ; CURSOR_COL16 = CURSOR_COL16 - back + insert_len
   PLA                        ; back
-  STA BUF_SRC16              ; temp
-  SEC
-  LDA CURSOR_COL16
-  SBC BUF_SRC16
-  STA CURSOR_COL16
-  LDA CURSOR_COL16 + 1
-  SBC #0
-  STA CURSOR_COL16 + 1
-  LDA BUF_DELTA
-  CLC
-  ADCA16 CURSOR_COL16, CURSOR_COL16
+  STA BUF_TEMP16             ; temp (mark counts fully consumed above)
+  JSR adjust_cursor_col_ins
   ; Clean up cursor_buf_pos from stack
   PLA
   PLA
@@ -523,7 +471,7 @@ insert_batch:
   ADC #1                     ; + cursor line
   JSR compute_delete_screen_rows
   ; Check if pure join (cursor at end of line = joined lines were empty)
-  LDA BUF_SRC16              ; back
+  LDA BUF_TEMP16             ; back
   ORA BUF_DELTA              ; insert_len
   BNE .fwd_not_pure
   JSR get_current_line_len    ; A = low, X = high
@@ -598,8 +546,7 @@ insert_batch:
   STA FILE_LINE16 + 1
 
   ; CURSOR_COL16 = cursor_buf_pos - LINE_TBL[new FILE_LINE16]
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_ptr       ; BUF_PTR16 = start of current line
+  JSR get_current_line_ptr       ; BUF_PTR16 = start of current line
 
   ; Pop back
   PLA
@@ -687,8 +634,7 @@ insert_counted_move:
 .right:
   ; Hoist line length calculation (line doesn't change)
   STX BUF_DELTA
-  JSR get_current_line_len
-  STAX16 LINE_LEN16
+  JSR get_line_len_z
   LDX BUF_DELTA
   JMP move_right_x
 .word_fwd:
@@ -712,21 +658,57 @@ insert_home:
   RTS
 
 insert_end:
-  JSR get_current_line_len
-  STAX16 LINE_LEN16
-  CMP16 LINE_LEN16, CURSOR_COL16
-  BEQ .done            ; Already at end
-  BCC .done
+  JSR ins_len_cmp_col
+  BCC .done            ; Cursor past end: leave (clamp handles elsewhere)
+  ; At end the copy rewrites CURSOR_COL16 with its own value (no-op)
   CP16 LINE_LEN16, CURSOR_COL16
 .done:
   RTS
 
 ; Clamp cursor for insert mode (can be one past end of line content)
 clamp_cursor_col_insert:
-  JSR get_current_line_len
-  STAX16 LINE_LEN16
-  CMP16 LINE_LEN16, CURSOR_COL16
+  JSR ins_len_cmp_col
   BCS .ok
   CP16 LINE_LEN16, CURSOR_COL16
 .ok:
+  RTS
+
+; Get current line length into LINE_LEN16 and compare with CURSOR_COL16
+; Output: flags as after CMP16 LINE_LEN16, CURSOR_COL16
+ins_len_cmp_col:
+  JSR get_current_line_len
+  STAX16 LINE_LEN16
+  CMP16 LINE_LEN16, CURSOR_COL16
+  RTS
+
+; CURSOR_COL16 = CURSOR_COL16 - back (BUF_TEMP16 low) + insert_len (BUF_DELTA)
+; Clobbers: A
+adjust_cursor_col_ins:
+  SEC
+  LDA CURSOR_COL16
+  SBC BUF_TEMP16
+  STA CURSOR_COL16
+  LDA CURSOR_COL16 + 1
+  SBC #0
+  STA CURSOR_COL16 + 1
+  LDA BUF_DELTA
+  CLC
+  ADCA16 CURSOR_COL16, CURSOR_COL16
+  RTS
+
+; Compute mark-adjust args for insert_batch's newline path:
+; BUF_TEMP16 = A (line count), A/X = FILE_LINE16 + 1 - back_nl (LINE_LEN16)
+; Clobbers: A, X, BUF_DST16, BUF_TEMP16
+ins_mark_adjust_args:
+  JSR set_buf_temp16_a
+  ; first_line = FILE_LINE16 - back_nl + 1 (identical mod 2^16 to +1 first)
+  SEC
+  LDA FILE_LINE16
+  SBC LINE_LEN16             ; - back_nl
+  STA BUF_DST16
+  LDA FILE_LINE16 + 1
+  SBC #0
+  STA BUF_DST16 + 1
+  INC16 BUF_DST16
+  LDAX16 BUF_DST16
   RTS

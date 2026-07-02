@@ -148,9 +148,7 @@ command_parse_keys:
 cmd_parse_w:
   LDA READONLY
   BEQ .not_readonly
-  SET16 str_readonly, STR_PTR16
-  JSR show_status_message
-  RTS
+  JMP show_readonly_msg
 .not_readonly:
   LDA CMD_BUF + 1
   BEQ .do_write       ; Just ":w"
@@ -182,8 +180,9 @@ cmd_parse_q:
   LDA MODIFIED
   BEQ .quit_ok
   ; Show warning
-  SET16 str_no_write, STR_PTR16
-  JMP show_status_message
+  LDA #<str_no_write
+  LDX #>str_no_write
+  JMP show_message_ax
 
 .quit_ok:
   LDA #$FF
@@ -204,8 +203,9 @@ cmd_parse_bare_shift:
   JMP range_dispatch
 
 cmd_unknown:
-  SET16 str_unknown_cmd, STR_PTR16
-  JMP show_status_message
+  LDA #<str_unknown_cmd
+  LDX #>str_unknown_cmd
+  JMP show_message_ax
 
 ; Parse decimal number from CMD_BUF starting at offset X
 ; Returns: BUF_LEN16 = parsed number, X = updated offset past digits
@@ -332,8 +332,15 @@ command_write_file:
 
 ; Show "Buffer full" status message
 show_buffer_full_msg:
-  SET16 str_buffer_full, STR_PTR16
-  JMP show_status_message
+  LDA #<str_buffer_full
+  LDX #>str_buffer_full
+  ; fall through
+
+; Show status message with string address in A (low) / X (high)
+show_message_ax:
+  STA STR_PTR16
+  STX STR_PTR16 + 1
+  ; fall through
 
 ; Show a status message and wait for keypress
 ; STR_PTR16 must be set to the message string before calling
@@ -451,9 +458,7 @@ range_dispatch:
   CMP #'y'
   BEQ .range_dispatch_cmd
   LDA READONLY
-  BEQ .range_dispatch_cmd
-  SET16 str_readonly, STR_PTR16
-  JMP show_status_message
+  BNE show_readonly_msg
 
 .range_dispatch_cmd:
   LDA CMD_IDX
@@ -462,9 +467,15 @@ range_dispatch:
   LDX #>range_action_keys
   JSR dispatch_key
   BCC .done
-  JMP range_unknown
+  JMP cmd_unknown
 .done:
   RTS
+
+; Shared read-only rejection message (also used by cmd_parse_w)
+show_readonly_msg:
+  LDA #<str_readonly
+  LDX #>str_readonly
+  JMP show_message_ax
 
 ; --- Range action dispatch table ---
 range_action_keys:
@@ -482,18 +493,15 @@ range_do_yank:
   BCS range_yank_full
 
   ; Show "N lines yanked"
-  CP16 YANK_LINES16, TO_DECIMAL_VALUE16
-  JSR to_decimal
-  JSR command_show_prompt
-  JSR print_decimal_result
-  PRINT_STR str_lines_yanked
-  JSR io_flush
-  RTS
+  LDA #<str_lines_yanked
+  LDX #>str_lines_yanked
+  JMP report_yank_lines_ax
 
 range_yank_full:
   JSR yank_clear
-  SET16 str_yank_full, STR_PTR16
-  JMP show_status_message
+  LDA #<str_yank_full
+  LDX #>str_yank_full
+  JMP show_message_ax
 
   ; --- Range delete ---
 range_do_delete:
@@ -534,13 +542,9 @@ range_do_delete:
   JSR clamp_cursor_col
 
   ; Show "N lines deleted"
-  CP16 YANK_LINES16, TO_DECIMAL_VALUE16
-  JSR to_decimal
-  JSR command_show_prompt
-  JSR print_decimal_result
-  PRINT_STR str_lines_deleted
-  JSR io_flush
-  RTS
+  LDA #<str_lines_deleted
+  LDX #>str_lines_deleted
+  JMP report_yank_lines_ax
 
   ; --- Range indent ---
   ; The cores adjust the cursor column when the cursor's line is inside
@@ -568,20 +572,39 @@ range_shift_setup:
 range_shift_finish:
   JSR clamp_cursor_col         ; Clamp (unindent may shorten line)
   CP16 UNDO_PASTE_COUNT16, TO_DECIMAL_VALUE16
-  JSR to_decimal
+  LDA #<str_lines_shifted
+  LDX #>str_lines_shifted
+  ; fall through
+
+; Report count on the status line: "N <suffix>"
+; Input: A/X = suffix string, TO_DECIMAL_VALUE16 = count
+report_lines_ax:
+  STA STR_PTR16
+  STX STR_PTR16 + 1
+report_lines:
+  ; command_show_prompt clobbers STR_PTR16 and TO_DECIMAL state
+  ; (its cursor positioning goes through write_byte_dec/to_decimal)
+  PUSH16 STR_PTR16
+  PUSH16 TO_DECIMAL_VALUE16
   JSR command_show_prompt
+  POP16 TO_DECIMAL_VALUE16
+  JSR to_decimal
   JSR print_decimal_result
-  PRINT_STR str_lines_shifted
-  JSR io_flush
-  RTS
+  POP16 STR_PTR16
+  JSR write_string
+  JMP io_flush
+
+; Same, with count taken from YANK_LINES16
+report_yank_lines_ax:
+  STA STR_PTR16
+  STX STR_PTR16 + 1
+  CP16 YANK_LINES16, TO_DECIMAL_VALUE16
+  JMP report_lines
 
 range_mark_err:
-  SET16 str_mark_not_set, STR_PTR16
-  JMP show_status_message
-
-range_unknown:
-  SET16 str_unknown_cmd, STR_PTR16
-  JMP show_status_message
+  LDA #<str_mark_not_set
+  LDX #>str_mark_not_set
+  JMP show_message_ax
 
 str_lines_yanked:  .asciiz " lines yanked"
 str_lines_deleted: .asciiz " lines deleted"

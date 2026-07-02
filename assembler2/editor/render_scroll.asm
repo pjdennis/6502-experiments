@@ -137,8 +137,7 @@ render_line_delete_scroll:
   CLC
   ADC #1           ; ANSI 1-based
   STA ANSI_ROW
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_ptr
+  JSR get_current_line_ptr
   ; Check for partial render
   LDA RENDER_FROM_COL16 + 1
   AND RENDER_FROM_COL16

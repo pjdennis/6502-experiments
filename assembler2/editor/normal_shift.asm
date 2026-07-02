@@ -54,14 +54,7 @@ shift_normal_setup:
   LDA BATCH_EXTRA
   CLC
   ADC #1                       ; A = repeat count (1 + extra pairs)
-  STA BUF_DELTA
-  LDA #0
-  LDX #INDENT_WIDTH
-.mul_width:
-  CLC
-  ADC BUF_DELTA
-  DEX
-  BNE .mul_width
+  ASL                          ; *INDENT_WIDTH (hardcoded: ASL assumes INDENT_WIDTH = 2)
   STA BUF_DELTA                ; BUF_DELTA = INDENT_WIDTH * repeat count
   LDA #INDENT_WIDTH
   STA SHIFT_UNDO_WIDTH         ; undo = last >> / << only
@@ -414,17 +407,24 @@ copy_line_to_nl:
 
 ; --- Dollar motion operations: d$, y$, d0, y0 ---
 
+; Shared d0/y0 core: apply operator in A from BOL to cursor
+; (BUF_LEN16 = cursor col, cursor moved to col 0)
+zero_col_op:
+  PHA                         ; Save operator (CP16/LDA clobber A)
+  ; BUF_LEN16 = CURSOR_COL16 (bytes from BOL to cursor)
+  CP16 CURSOR_COL16, BUF_LEN16
+  ; Move cursor to col 0 (operation is forward from cursor)
+  LDA #0
+  STA_LH16 CURSOR_COL16
+  PLA
+  JMP apply_char_operator
+
 ; d0 handler: delete from BOL to cursor (count ignored)
 do_d_zero:
   TST16 CURSOR_COL16
   BEQ .done                   ; Already at col 0, nothing to delete
-  ; BUF_LEN16 = CURSOR_COL16 (bytes from BOL to cursor)
-  CP16 CURSOR_COL16, BUF_LEN16
-  ; Move cursor to col 0 (delete is forward from cursor)
-  LDA #0
-  STA_LH16 CURSOR_COL16
   LDA #OP_DELETE
-  JSR apply_char_operator
+  JSR zero_col_op
 .done:
   JMP clear_count
 
@@ -432,37 +432,34 @@ do_d_zero:
 do_y_zero:
   TST16 CURSOR_COL16
   BEQ .done                   ; Already at col 0, nothing to yank
-  ; Save cursor col, move to 0 for yank, then restore
+  ; Save cursor col, restore after yank
   PUSH16 CURSOR_COL16
-  CP16 CURSOR_COL16, BUF_LEN16
-  LDA #0
-  STA_LH16 CURSOR_COL16
   LDA #OP_YANK
-  JSR apply_char_operator
+  JSR zero_col_op
   POP16 CURSOR_COL16
-.done:
-  JMP clear_count
-
-; y$ handler: yank from cursor to EOL, with count support
-do_y_dollar:
-  JSR get_count
-  JSR check_cursor_in_line
-  BCS .done
-  JSR compute_dollar_range
-  LDA #OP_YANK
-  JSR apply_char_operator
 .done:
   JMP clear_count
 
 ; d$ handler: delete from cursor to EOL, with count support
 do_d_dollar:
+  LDA #OP_DELETE
+  BNE dy_dollar_common        ; Always taken (OP_DELETE = 1)
+
+; y$ handler: yank from cursor to EOL, with count support
+do_y_dollar:
+  LDA #OP_YANK
+  ; fall through
+dy_dollar_common:
+  PHA                         ; Save operator
   JSR get_count
   JSR check_cursor_in_line
-  BCS .done
+  BCS .bail
   JSR compute_dollar_range
-  LDA #OP_DELETE
+  PLA
   JSR apply_char_operator
-.done:
+  JMP clear_count
+.bail:
+  PLA
   JMP clear_count
 
 ; Compute byte range for $ motion with count
@@ -547,14 +544,16 @@ do_cb:
 
 ; de: delete to end of N words forward
 do_de:
-  SET16 compute_multiline_word_end_range_forward, JUMP_TARGET16
-  LDA #OP_DELETE
-  JMP word_op_forward
+  LDX #OP_DELETE
+  BNE de_ce_common            ; Always taken (OP_DELETE = 1)
 
 ; ce: change to end of N words forward
 do_ce:
+  LDX #OP_CHANGE
+  ; fall through
+de_ce_common:
   SET16 compute_multiline_word_end_range_forward, JUMP_TARGET16
-  LDA #OP_CHANGE
+  TXA                         ; A = operator (SET16 clobbers A)
   JMP word_op_forward
 
 ; --- Shared word operation helpers ---
@@ -569,7 +568,7 @@ word_op_forward:
   PHA                          ; Save operator
   JSR get_count                ; BUF_TEMP16 = N
   JSR check_cursor_in_line
-  BCS .bail
+  BCS word_op_bail
 
   CP16 CURSOR_COL16, RENDER_FROM_COL16
 
@@ -579,32 +578,36 @@ word_op_forward:
   CMP #OP_DELETE
   BNE .non_batched
   LDA BATCH_EXTRA
-  BNE .batched
+  BNE word_op_fwd_batched
 
 .non_batched:
   LDX BUF_TEMP16
-  JSR .call_range              ; BUF_LEN16 = range
-  BCS .bail
+  JSR word_op_call_range       ; BUF_LEN16 = range
+  BCS word_op_bail
+
+; Shared success tail (word_op_backward jumps here too;
+; stack: return addr + pushed operator in both routines)
+word_op_tail:
   PLA                          ; A = operator
   CMP #OP_CHANGE
   PHA                          ; Re-save (A preserved, flags from CMP)
-  BEQ .do_change
+  BEQ word_op_do_change
   ; OP_DELETE or OP_YANK
   JSR apply_char_operator
   PLA
   JMP clamp_and_clear_count
 
-.do_change:
+word_op_do_change:
   PLA                          ; A = OP_CHANGE
-  JSR apply_char_operator      ; Enters insert mode + clear_count
-  RTS
+  JMP apply_char_operator      ; Enters insert mode + clear_count
 
-.batched:
+word_op_fwd_batched:
   PLA                          ; Discard operator (always DELETE)
   JSR batched_word_delete_fwd
   JMP clamp_and_clear_count
 
-.bail:
+; Shared bail (word_op_backward branches here too)
+word_op_bail:
   PLA                          ; Recover operator
   CMP #OP_CHANGE
   BEQ .bail_insert
@@ -613,7 +616,7 @@ word_op_forward:
 .bail_insert:
   JMP enter_insert_mode_render
 
-.call_range:
+word_op_call_range:
   JMP (JUMP_TARGET16)
 
 ; Backward word operation: handles delete, yank, and change for b motion.
@@ -629,7 +632,7 @@ word_op_backward:
   TST16 CURSOR_COL16
   BNE .ok
   TST16 FILE_LINE16
-  BEQ .bail
+  BEQ word_op_bail
 .ok:
   ; Check for batched delete (OP_DELETE with BATCH_EXTRA > 0)
   TSX
@@ -642,35 +645,14 @@ word_op_backward:
 .non_batched:
   LDX BUF_TEMP16
   JSR compute_multiline_word_range_backward
-  BCS .bail
+  BCS word_op_bail
   CP16 CURSOR_COL16, RENDER_FROM_COL16
-  PLA                          ; A = operator
-  CMP #OP_CHANGE
-  PHA                          ; Re-save (A preserved, flags from CMP)
-  BEQ .do_change
-  ; OP_DELETE or OP_YANK
-  JSR apply_char_operator
-  PLA
-  JMP clamp_and_clear_count
-
-.do_change:
-  PLA                          ; A = OP_CHANGE
-  JSR apply_char_operator      ; Enters insert mode + clear_count
-  RTS
+  JMP word_op_tail             ; Shared success tail (in word_op_forward)
 
 .batched:
   PLA                          ; Discard operator (always DELETE)
   JSR batched_word_delete_bwd
   JMP clamp_and_clear_count
-
-.bail:
-  PLA                          ; Recover operator
-  CMP #OP_CHANGE
-  BEQ .bail_insert
-  JMP clear_count
-
-.bail_insert:
-  JMP enter_insert_mode_render
 
 ; --- Batched word delete helpers ---
 

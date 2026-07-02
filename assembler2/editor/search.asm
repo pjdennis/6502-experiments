@@ -56,11 +56,7 @@ search_input_handle:
 
   CMP #KEY_ESC
   BEQ .cancel
-  CMP #$1B
-  BEQ .cancel
   CMP #KEY_ENTER
-  BEQ .execute
-  CMP #'\r'
   BEQ .execute
   CMP #KEY_BS
   BEQ .backspace
@@ -198,22 +194,15 @@ search_backward:
 
 .search_whole_current:
   ; CURSOR_COL > 255, search entire current line for rightmost
-  LDA #0
-  STA SEARCH_COL
-  JSR search_in_line_last
+  JSR search_in_line_last_all
   BCC .found
 
 .skip_current:
-  ; Move to previous line
+  ; Move to previous line (SEARCH_LINE16 still == FILE_LINE16 here,
+  ; copied at routine entry and untouched since)
   TST16 FILE_LINE16
-  BNE .no_wrap_start
-  ; FILE_LINE16 is 0, wrap to last line
-  SEC
-  SBCI16 LINE_COUNT16, $0001, SEARCH_LINE16
-  JMP .loop
-.no_wrap_start:
-  SEC
-  SBCI16 FILE_LINE16, $0001, SEARCH_LINE16
+  BEQ .wrap                    ; At line 0, wrap to last line
+  DEC16 SEARCH_LINE16
 
 .loop:
   ; Check if we've wrapped all the way back to start line
@@ -221,9 +210,7 @@ search_backward:
   BEQ .check_current
 
   ; Search this line for rightmost match
-  LDA #0
-  STA SEARCH_COL
-  JSR search_in_line_last
+  JSR search_in_line_last_all
   BCC .found
 
   ; Previous line
@@ -240,9 +227,7 @@ search_backward:
 
 .check_current:
   ; Wrapped back: search entire current line for rightmost match
-  LDA #0
-  STA SEARCH_COL
-  JSR search_in_line_last
+  JSR search_in_line_last_all
   BCC .found
 
   ; Not found
@@ -329,6 +314,12 @@ search_match_from:
 .not_found_in_line:
   SEC
   RTS
+
+; Entry with no upper bound: search the entire line for the rightmost match
+search_in_line_last_all:
+  LDA #0
+  STA SEARCH_COL
+  ; fall through
 
 ; Find the rightmost match in line SEARCH_LINE16
 ; Input: SEARCH_COL = exclusive upper bound column (0 = search entire line)

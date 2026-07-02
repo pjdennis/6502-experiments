@@ -64,13 +64,11 @@ mark_get:
   JSR mark_calculate_pointer_offset
   BCS .invalid
   TAX
+  ; Unset iff both bytes are $FF, i.e. (hi AND lo) == $FF
   LDA MARK_TBL + 1,X
-  CMP #$FF
-  BNE .valid
-  LDA MARK_TBL,X
+  AND MARK_TBL,X
   CMP #$FF
   BEQ .unset
-.valid:
   LDA MARK_TBL,X
   PHA
   LDA MARK_TBL + 1,X
@@ -101,14 +99,12 @@ marks_display:
   ASL
   TAX
 
-  ; Skip unset marks
+  ; Skip unset marks (both bytes $FF)
   LDA MARK_TBL + 1,X
+  AND MARK_TBL,X
   CMP #$FF
   BNE .marks_set
-  LDA MARK_TBL,X
-  CMP #$FF
-  BNE .marks_set
-  JMP .marks_next
+  JMP .marks_next        ; (out of BEQ range)
 .marks_set:
 
   ; Save mark table offset on stack
@@ -261,14 +257,11 @@ mark_adjust_range:
 .loop_start:
   LDX #0               ; Index into MARK_TBL
 .loop:
-  ; Skip unset marks
+  ; Skip unset marks (both bytes $FF)
   LDA MARK_TBL + 1,X
-  CMP #$FF
-  BNE .not_unset
-  LDA MARK_TBL,X
+  AND MARK_TBL,X
   CMP #$FF
   BEQ .next
-.not_unset:
 
   ; Compare mark >= end_line (BUF_DST16)?
   LDA MARK_TBL + 1,X
