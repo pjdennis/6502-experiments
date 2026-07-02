@@ -317,10 +317,7 @@ do_yy:
   JSR get_count              ; BUF_TEMP16 = count (16-bit)
   LDA BATCH_EXTRA
   BEQ .do_yank
-  LDA #1
-  STA BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1
+  JSR set_buf_temp16_one
 .do_yank:
   LDAX16 FILE_LINE16
   JSR yank_add_lines

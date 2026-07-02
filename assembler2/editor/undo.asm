@@ -8,27 +8,6 @@ undo_init:
 undo_clear:
   LDA #UNDO_NONE
   STA UNDO_TYPE
-  LDA #0
-  STA UNDO_IS_REDO
-  RTS
-
-; Record a line-delete for undo
-; Call after yank succeeds, before delete.
-; Saves: type=1, FILE_LINE16
-undo_record_line_delete:
-  LDA #UNDO_LINE
-  STA UNDO_TYPE
-  CP16 FILE_LINE16, UNDO_LINE16
-  LDA #0
-  STA UNDO_IS_REDO
-  RTS
-
-; Record a cc/S line-delete for undo
-; Like undo_record_line_delete but type=3 (cc inserted blank line to remove)
-undo_record_cc:
-  LDA #UNDO_CC
-  STA UNDO_TYPE
-  LDA #0
   STA UNDO_IS_REDO
   RTS
 
@@ -36,13 +15,30 @@ undo_record_cc:
 ; Call at entry of yank_delete_at_cursor (before anything modified).
 ; Saves: type=2, FILE_LINE16, CURSOR_COL16
 undo_record_char_delete:
+  CP16 CURSOR_COL16, UNDO_COL16
   LDA #UNDO_CHAR
+  BNE undo_rec_set           ; Always (UNDO_CHAR != 0)
+
+; Record a line-delete for undo
+; Call after yank succeeds, before delete.
+; Saves: type=1, FILE_LINE16
+undo_record_line_delete:
+  LDA #UNDO_LINE
+undo_rec_set:
   STA UNDO_TYPE
   CP16 FILE_LINE16, UNDO_LINE16
-  CP16 CURSOR_COL16, UNDO_COL16
+undo_rec_tail:
   LDA #0
   STA UNDO_IS_REDO
   RTS
+
+; Record a cc/S line-delete for undo
+; Like undo_record_line_delete but type=3 (cc inserted blank line to
+; remove); keeps UNDO_LINE16 from the prior line-delete record.
+undo_record_cc:
+  LDA #UNDO_CC
+  STA UNDO_TYPE
+  BNE undo_rec_tail          ; Always (UNDO_CC != 0)
 
 ; Handle 'u' key: dispatch undo or redo based on UNDO_IS_REDO
 ; Batching: consume pending 'u' keys. Since u toggles undo/redo,
@@ -63,53 +59,49 @@ undo_handle:
   JMP clear_count
 
 ; --- Undo ---
+; Per-type handler dispatch via address table (RTS trick): entries are
+; handler - 1, indexed by UNDO_TYPE (1..13, 0 is filtered by undo_handle).
 undo_do_undo:
   LDA UNDO_TYPE
-  CMP #UNDO_INDENT
-  BCC .old_types
-  JMP undo_new_undo          ; indent/unindent/tilde/replace
-.old_types:
-  CMP #UNDO_OPEN
-  BEQ .undo_open
-  CMP #UNDO_LINE_PASTE_BELOW
-  BCS .undo_paste
-  CMP #UNDO_JOIN
-  BEQ .undo_join
-  CMP #UNDO_CC
-  BEQ .undo_cc
-  CMP #UNDO_LINE
-  BEQ .undo_line
-  JMP .undo_char
-
-.undo_open:
-  JMP undo_open_undo
-.undo_paste:
-  JMP undo_paste_undo
-.undo_join:
-  JMP undo_join_undo
+  ASL
+  TAX
+  LDA .undo_table - 1,X      ; High byte of handler - 1
+  PHA
+  LDA .undo_table - 2,X      ; Low byte
+  PHA
+  RTS                        ; Jump to handler
+.undo_table:
+  .word .undo_line - 1               ; 1 UNDO_LINE
+  .word .undo_char - 1               ; 2 UNDO_CHAR
+  .word .undo_cc - 1                 ; 3 UNDO_CC
+  .word undo_join_undo - 1           ; 4 UNDO_JOIN
+  .word undo_paste_undo - 1          ; 5 UNDO_LINE_PASTE_BELOW
+  .word undo_paste_undo - 1          ; 6 UNDO_LINE_PASTE_ABOVE
+  .word undo_char_paste_undo - 1     ; 7 UNDO_CHAR_PASTE_BELOW
+  .word undo_char_paste_undo - 1     ; 8 UNDO_CHAR_PASTE_ABOVE
+  .word undo_open_undo - 1           ; 9 UNDO_OPEN
+  .word undo_shift_step - 1          ; 10 UNDO_INDENT
+  .word undo_shift_step - 1          ; 11 UNDO_UNINDENT
+  .word undo_tilde_undo - 1          ; 12 UNDO_TILDE
+  .word undo_replace_undo - 1        ; 13 UNDO_REPLACE
 
 .undo_cc:
   ; cc undo: first delete the blank line cc inserted, then paste original lines
-  CP16 UNDO_LINE16, FILE_LINE16
-  LDA #1
-  STA BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1
+  JSR undo_restore_line
+  JSR set_buf_temp16_one
   ; Check if current line is empty (should be if cc + ESC without typing)
   JSR get_current_line_len
   STAX16 LINE_LEN16
   TST16 LINE_LEN16
-  BNE .undo_cc_has_content
+  BNE .undo_line_paste       ; Line has content (shouldn't happen if insert
+                             ; exited clean, but be safe)
   ; Delete the blank line (with mark adjustment)
   JSR delete_current_lines
-  JMP .undo_line_paste
-.undo_cc_has_content:
-  ; Line has content (shouldn't happen if insert exited clean, but be safe)
   JMP .undo_line_paste
 
 .undo_line:
   ; Restore FILE_LINE16 to saved position
-  CP16 UNDO_LINE16, FILE_LINE16
+  JSR undo_restore_line
   ; If file has single empty line (synthetic from dd on all lines), remove it
   ; so paste doesn't leave an extra blank line
   CMPI16 LINE_COUNT16, 1
@@ -122,22 +114,15 @@ undo_do_undo:
 
 .undo_line_paste:
   ; Paste above: reuses existing yank_paste_above_n
-  LDA #1
-  STA BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1
+  JSR set_buf_temp16_one
   JSR yank_paste_above_n
-  BCC .undo_line_ok
-  JMP .undo_fail
-.undo_line_ok:
+  BCS .undo_line_fail
   ; Adjust marks for inserted lines
   CP16 YANK_LINES16, BUF_TEMP16
   LDAX16 FILE_LINE16
   JSR mark_adjust_insert
   ; Set flags
-  LDA #$FF
-  STA UNDO_IS_REDO
-  STA MODIFIED
+  JSR undo_set_done_flags
   LDA YANK_LINES16           ; Actual lines inserted (may differ from net delta)
   STA INSERT_LINE_COUNT
   LDA UNDO_TYPE
@@ -151,6 +136,7 @@ undo_do_undo:
   BCS .undo_cc_multi
   LDA #$01
   STA RENDER_FLAG            ; Single line repaint
+.undo_line_fail:
   JMP clear_count
 .undo_cc_multi:
   ; Ncc undo: compute SCROLL_DELTA = total_screen_rows(pasted) - 1
@@ -167,29 +153,22 @@ undo_do_undo:
   LDA #0
   STA DELETE_SCREEN_ROWS         ; Reset (not needed for insert-scroll)
   LDA #$0A
-  STA RENDER_FLAG                ; Pre-computed insert-scroll
-  JMP clear_count
+  JMP set_render_clear_count     ; Pre-computed insert-scroll
 .undo_cc_full:
   LDA #0
   STA DELETE_SCREEN_ROWS
   LDA #$FF
-  STA RENDER_FLAG                ; Fall back to full repaint
-  JMP clear_count
+  JMP set_render_clear_count     ; Fall back to full repaint
 .undo_line_scroll:
   LDA #$03
-  STA RENDER_FLAG            ; Signal line-insert for scroll optimization
-  JMP clear_count
+  JMP set_render_clear_count     ; Signal line-insert for scroll optimization
 
 .undo_char:
   ; Restore position
-  CP16 UNDO_LINE16, FILE_LINE16
-  CP16 UNDO_COL16, CURSOR_COL16
+  JSR undo_restore_line_col
   CP16 UNDO_COL16, RENDER_FROM_COL16
   ; Set up paste: BUF_TEMP16 = 1
-  LDA #1
-  STA BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1
+  JSR set_buf_temp16_one
   CP16 LINE_COUNT16, COUNT16 ; Save line count for mark adjustment
   JSR yank_paste_setup       ; BUF_LEN16 = yank size
   BCS .undo_fail
@@ -222,45 +201,40 @@ undo_do_undo:
   STA RENDER_FLAG
 .undo_char_set_flags:
   ; Restore cursor position (yank_paste_core may have moved things)
-  CP16 UNDO_COL16, CURSOR_COL16
+  JSR undo_restore_col
   ; Set flags
-  LDA #$FF
-  STA UNDO_IS_REDO
-  STA MODIFIED
-  JMP clear_count
-
+  JSR undo_set_done_flags
 .undo_fail:
   JMP clear_count
 
 ; --- Redo ---
 undo_do_redo:
   LDA UNDO_TYPE
-  CMP #UNDO_INDENT
-  BCC .old_types
-  JMP undo_new_redo          ; indent/unindent/tilde/replace
-.old_types:
-  CMP #UNDO_OPEN
-  BEQ .redo_open
-  CMP #UNDO_LINE_PASTE_BELOW
-  BCS .redo_paste
-  CMP #UNDO_JOIN
-  BEQ .redo_join
-  CMP #UNDO_CC
-  BEQ .redo_cc
-  CMP #UNDO_LINE
-  BEQ .redo_line
-  JMP .redo_char
-
-.redo_open:
-  JMP undo_open_redo
-.redo_paste:
-  JMP undo_paste_redo
-.redo_join:
-  JMP undo_join_redo
+  ASL
+  TAX
+  LDA .redo_table - 1,X      ; High byte of handler - 1
+  PHA
+  LDA .redo_table - 2,X      ; Low byte
+  PHA
+  RTS                        ; Jump to handler
+.redo_table:
+  .word .redo_line - 1               ; 1 UNDO_LINE
+  .word .redo_char - 1               ; 2 UNDO_CHAR
+  .word .redo_cc - 1                 ; 3 UNDO_CC
+  .word undo_join_redo - 1           ; 4 UNDO_JOIN
+  .word undo_paste_redo - 1          ; 5 UNDO_LINE_PASTE_BELOW
+  .word undo_paste_redo - 1          ; 6 UNDO_LINE_PASTE_ABOVE
+  .word undo_char_paste_redo - 1     ; 7 UNDO_CHAR_PASTE_BELOW
+  .word undo_char_paste_redo - 1     ; 8 UNDO_CHAR_PASTE_ABOVE
+  .word undo_open_redo - 1           ; 9 UNDO_OPEN
+  .word undo_shift_step - 1          ; 10 UNDO_INDENT
+  .word undo_shift_step - 1          ; 11 UNDO_UNINDENT
+  .word undo_tilde_redo - 1          ; 12 UNDO_TILDE
+  .word undo_replace_redo - 1        ; 13 UNDO_REPLACE
 
 .redo_cc:
   ; cc redo: delete lines, insert blank line (reproduces cc effect)
-  CP16 UNDO_LINE16, FILE_LINE16
+  JSR undo_restore_line
   CP16 YANK_LINES16, BUF_TEMP16
   ; Pre-compute screen rows for displacement-based scroll
   CP16 FILE_LINE16, RENDER_LINE16
@@ -288,12 +262,11 @@ undo_do_redo:
   LDA #$FF
   STA MODIFIED
   LDA #$06
-  STA RENDER_FLAG        ; displacement-based scroll
-  JMP clear_count
+  JMP set_render_clear_count ; displacement-based scroll
 
 .redo_line:
   ; Restore FILE_LINE16
-  CP16 UNDO_LINE16, FILE_LINE16
+  JSR undo_restore_line
   ; Get yank size to know how many lines to delete
   CP16 YANK_LINES16, BUF_TEMP16
   ; Pre-compute screen rows for line-delete scroll
@@ -321,76 +294,32 @@ undo_do_redo:
   LDA #$07
   STA RENDER_FLAG            ; Line-delete scroll, skip cursor repaint
   JSR clamp_cursor_col
+.redo_fail:
   JMP clear_count
 
 .redo_char:
   ; Restore position
-  CP16 UNDO_LINE16, FILE_LINE16
-  CP16 UNDO_COL16, CURSOR_COL16
+  JSR undo_restore_line_col
   CP16 UNDO_COL16, RENDER_FROM_COL16
   ; Get yank size for delete count
   JSR yank_get_size          ; BUF_LEN16 = yank size
   BCS .redo_fail
   JSR delete_at_cursor       ; Delete BUF_LEN16 bytes at cursor (sets RENDER_FLAG=$02 if multi-line)
   ; Restore cursor
-  CP16 UNDO_COL16, CURSOR_COL16
+  JSR undo_restore_col
   JSR clamp_cursor_col
   ; Set flags (keep RENDER_FLAG from delete_at_cursor if > 1)
-  LDA #0
-  STA UNDO_IS_REDO
-  LDA RENDER_FLAG
-  CMP #2
-  BCS .redo_char_done
-  LDA #1
-  STA RENDER_FLAG
-.redo_char_done:
-  JMP clear_count
-
-.redo_fail:
-  JMP clear_count
+  JMP undo_finish_not_redo
 
 ; --- Join undo: replace spaces back to newlines ---
 undo_join_undo:
-  CP16 UNDO_LINE16, FILE_LINE16
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_ptr          ; BUF_PTR16 = line start
-  CP16 BUF_PTR16, BUF_SRC16    ; BUF_SRC16 = line start (base for offsets)
-
-  LDX #0                       ; X = buffer index
-  LDA UNDO_JOIN_COUNT
-  STA NORMAL_TEMP               ; loop counter
-.undo_join_loop:
-  LDA UNDO_DATA_BUF,X
-  STA BUF_PTR16
-  INX
-  LDA UNDO_DATA_BUF,X
-  STA BUF_PTR16 + 1
-  INX
-  ; BUF_PTR16 = offset; compute address = BUF_SRC16 + offset
-  CLC
-  ADC16 BUF_SRC16, BUF_PTR16, BUF_PTR16
-  LDY #0
+  JSR undo_restore_line
   LDA #'\n'
-  STA (BUF_PTR16),Y
-  DEC NORMAL_TEMP
-  BNE .undo_join_loop
-
-  JSR buf_rebuild_lines
-
-  ; Adjust marks: insert UNDO_JOIN_COUNT lines after FILE_LINE16
-  LDA UNDO_JOIN_COUNT
-  STA BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1
-  CLC
-  ADCI16 FILE_LINE16, 1, BUF_PTR16
-  LDAX16 BUF_PTR16
+  JSR undo_join_apply
   JSR mark_adjust_insert
 
   ; Set flags
-  LDA #$FF
-  STA UNDO_IS_REDO
-  STA MODIFIED
+  JSR undo_set_done_flags
   ; Repaint cursor line + restored lines (cursor line content also changed)
   LDA UNDO_JOIN_COUNT
   CLC
@@ -399,14 +328,13 @@ undo_join_undo:
   LDA #$04
   STA RENDER_FLAG            ; Line-insert scroll, skip cursor row
   LDA #0
-  STA CURSOR_COL16
-  STA CURSOR_COL16 + 1
+  STA_LH16 CURSOR_COL16
   JSR clamp_cursor_col
   JMP clear_count
 
 ; --- Join redo: replace newlines back to spaces ---
 undo_join_redo:
-  CP16 UNDO_LINE16, FILE_LINE16
+  JSR undo_restore_line
 
   ; Pre-compute old_total screen rows for displacement-based scroll
   CP16 FILE_LINE16, RENDER_LINE16
@@ -419,39 +347,8 @@ undo_join_redo:
   STA RENDER_FROM_COL16
   STX RENDER_FROM_COL16 + 1
 
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_ptr          ; BUF_PTR16 = line start
-  CP16 BUF_PTR16, BUF_SRC16    ; BUF_SRC16 = line start (base for offsets)
-
-  LDX #0                       ; X = buffer index
-  LDA UNDO_JOIN_COUNT
-  STA NORMAL_TEMP               ; loop counter
-.redo_join_loop:
-  LDA UNDO_DATA_BUF,X
-  STA BUF_PTR16
-  INX
-  LDA UNDO_DATA_BUF,X
-  STA BUF_PTR16 + 1
-  INX
-  ; Compute address = BUF_SRC16 + offset
-  CLC
-  ADC16 BUF_SRC16, BUF_PTR16, BUF_PTR16
-  LDY #0
   LDA #' '
-  STA (BUF_PTR16),Y
-  DEC NORMAL_TEMP
-  BNE .redo_join_loop
-
-  JSR buf_rebuild_lines
-
-  ; Adjust marks: delete UNDO_JOIN_COUNT lines after FILE_LINE16
-  LDA UNDO_JOIN_COUNT
-  STA BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1
-  CLC
-  ADCI16 FILE_LINE16, 1, BUF_PTR16
-  LDAX16 BUF_PTR16
+  JSR undo_join_apply
   JSR mark_adjust_delete
 
   ; Set flags
@@ -461,17 +358,52 @@ undo_join_redo:
   STA MODIFIED
   LDA #$06
   STA RENDER_FLAG        ; Line-delete, skip cursor row scroll
-  CP16 UNDO_COL16, CURSOR_COL16
+  JSR undo_restore_col
   JSR clamp_cursor_col
   JMP clear_count
 
-; --- Paste undo ---
+; Shared join undo/redo body: write the char in A at each recorded join
+; offset on the current line, rebuild lines, then set up the caller's
+; mark-adjust call (BUF_TEMP16 = join count, A/X = FILE_LINE16 + 1).
+undo_join_apply:
+  STA BUF_TEMP16               ; Stash char (BUF_TEMP16 free until epilogue)
+  LDAX16 FILE_LINE16
+  JSR buf_get_line_ptr          ; BUF_PTR16 = line start
+  CP16 BUF_PTR16, BUF_SRC16    ; BUF_SRC16 = line start (base for offsets)
+
+  LDX #0                       ; X = buffer index
+  LDA UNDO_JOIN_COUNT
+  STA NORMAL_TEMP               ; loop counter
+.loop:
+  LDA UNDO_DATA_BUF,X
+  STA BUF_PTR16
+  INX
+  LDA UNDO_DATA_BUF,X
+  STA BUF_PTR16 + 1
+  INX
+  ; BUF_PTR16 = offset; compute address = BUF_SRC16 + offset
+  CLC
+  ADC16 BUF_SRC16, BUF_PTR16, BUF_PTR16
+  LDY #0
+  LDA BUF_TEMP16               ; The stashed char
+  STA (BUF_PTR16),Y
+  DEC NORMAL_TEMP
+  BNE .loop
+
+  JSR buf_rebuild_lines
+
+  ; Mark adjustment: count = UNDO_JOIN_COUNT lines after FILE_LINE16
+  LDA UNDO_JOIN_COUNT
+  JSR set_buf_temp16_a
+  CLC
+  ADCI16 FILE_LINE16, 1, BUF_PTR16
+  LDAX16 BUF_PTR16
+  RTS
+
+; --- Line paste undo (types 5/6; char paste types 7/8 dispatch directly) ---
 undo_paste_undo:
-  LDA UNDO_TYPE
-  CMP #UNDO_CHAR_PASTE_BELOW
-  BCS .undo_char_paste
   ; Line paste undo: set FILE_LINE16 to first pasted line
-  CP16 UNDO_LINE16, FILE_LINE16
+  JSR undo_restore_line
   LDA UNDO_TYPE
   CMP #UNDO_LINE_PASTE_BELOW
   BNE .undo_line_paste
@@ -482,13 +414,10 @@ undo_paste_undo:
   JSR undo_compute_paste_lines
   JSR delete_current_lines
   ; Restore cursor
-  CP16 UNDO_LINE16, FILE_LINE16
-  CP16 UNDO_COL16, CURSOR_COL16
+  JSR undo_restore_line_col
   JSR clamp_cursor_col
   ; Set flags
-  LDA #$FF
-  STA UNDO_IS_REDO
-  STA MODIFIED
+  JSR undo_set_done_flags
   ; Paste-below undo: cursor row unchanged, skip it in scroll region ($07)
   ; Paste-above undo: cursor row changes, include it ($02)
   LDA UNDO_TYPE
@@ -500,26 +429,18 @@ undo_paste_undo:
   JSR line_screen_rows
   STA DELETE_SCREEN_ROWS
   LDA #$07
-  STA RENDER_FLAG
-  JMP clear_count
+  JMP set_render_clear_count
 .undo_paste_above_flag:
   ; Cursor row filled by scroll (original line pulled up), skip repaint
   LDA #0
   STA DELETE_SCREEN_ROWS
   LDA #$07
-  STA RENDER_FLAG
-  JMP clear_count
+  JMP set_render_clear_count
 
-.undo_char_paste:
-  JMP undo_char_paste_undo
-
-; --- Paste redo ---
+; --- Line paste redo (types 5/6) ---
 undo_paste_redo:
-  LDA UNDO_TYPE
-  CMP #UNDO_CHAR_PASTE_BELOW
-  BCS .redo_char_paste
   ; Line paste redo: common setup
-  CP16 UNDO_LINE16, FILE_LINE16
+  JSR undo_restore_line
   CP16 UNDO_PASTE_COUNT16, BUF_TEMP16
   LDA UNDO_TYPE
   CMP #UNDO_LINE_PASTE_ABOVE
@@ -543,13 +464,8 @@ undo_paste_redo:
   STA INSERT_LINE_COUNT
   LDA #$03
   STA RENDER_FLAG
-  JMP clear_count
-
 .redo_fail:
   JMP clear_count
-
-.redo_char_paste:
-  JMP undo_char_paste_redo
 
 ; Compute BUF_TEMP16 = YANK_LINES16 * UNDO_PASTE_COUNT16 (16-bit)
 ; Clobbers: A, COUNT16
@@ -568,52 +484,49 @@ undo_compute_paste_lines:
 .done:
   RTS
 
+; CURSOR_COL16 = max(UNDO_COL16 - 1, 0)
+; (the cursor position just before a char paste-below)
+set_col_before_paste:
+  TST16 UNDO_COL16
+  BEQ .zero
+  SEC
+  SBCI16 UNDO_COL16, 1, CURSOR_COL16
+  RTS
+.zero:
+  LDA #0
+  STA_LH16 CURSOR_COL16
+  RTS
+
 ; --- Char paste undo (handles both BELOW and ABOVE) ---
 undo_char_paste_undo:
   ; Position at insertion point and delete pasted content
-  CP16 UNDO_LINE16, FILE_LINE16
-  CP16 UNDO_COL16, CURSOR_COL16
+  JSR undo_restore_line_col
   CP16 UNDO_COL16, RENDER_FROM_COL16
   CP16 UNDO_PASTE_COUNT16, BUF_TEMP16
   JSR yank_paste_setup         ; BUF_LEN16 = total paste size
   BCS .undo_cp_fail
   JSR delete_at_cursor         ; Deletes BUF_LEN16 bytes, handles marks
   ; Restore cursor
-  CP16 UNDO_LINE16, FILE_LINE16
+  JSR undo_restore_line
   LDA UNDO_TYPE
   CMP #UNDO_CHAR_PASTE_ABOVE
   BEQ .undo_cp_above
   ; BELOW: pre-paste col = max(insertion_col - 1, 0)
-  TST16 UNDO_COL16
-  BEQ .undo_cp_col_zero
-  SEC
-  SBCI16 UNDO_COL16, 1, CURSOR_COL16
+  JSR set_col_before_paste
   JMP .undo_cp_flags
 .undo_cp_above:
-  CP16 UNDO_COL16, CURSOR_COL16
-  JMP .undo_cp_flags
-.undo_cp_col_zero:
-  LDA #0
-  STA_LH16 CURSOR_COL16
+  JSR undo_restore_col
 .undo_cp_flags:
   JSR clamp_cursor_col
-  LDA #$FF
-  STA UNDO_IS_REDO
-  STA MODIFIED
+  JSR undo_set_done_flags
   ; Keep RENDER_FLAG from delete_at_cursor if > 1 (multi-line scroll)
-  LDA RENDER_FLAG
-  CMP #2
-  BCS .undo_cp_done
-  LDA #1
-  STA RENDER_FLAG
-.undo_cp_done:
-  JMP clear_count
+  JMP undo_keep_render_flag
 .undo_cp_fail:
   JMP clear_count
 
 ; --- Char paste redo (handles both BELOW and ABOVE) ---
 undo_char_paste_redo:
-  CP16 UNDO_LINE16, FILE_LINE16
+  JSR undo_restore_line
   LDA #0
   STA BATCH_EXTRA
   CP16 UNDO_PASTE_COUNT16, BUF_TEMP16
@@ -621,52 +534,45 @@ undo_char_paste_redo:
   CMP #UNDO_CHAR_PASTE_ABOVE
   BEQ .redo_cpa
   ; BELOW: cursor = max(insertion_col - 1, 0)
-  TST16 UNDO_COL16
-  BEQ .redo_cp_col_zero
-  SEC
-  SBCI16 UNDO_COL16, 1, CURSOR_COL16
-  JMP .redo_cpb_paste
-.redo_cp_col_zero:
-  LDA #0
-  STA_LH16 CURSOR_COL16
-.redo_cpb_paste:
+  JSR set_col_before_paste
   JSR do_char_paste_below
-  JMP .redo_cp_flags
+  JMP undo_finish_not_redo
 .redo_cpa:
-  CP16 UNDO_COL16, CURSOR_COL16
+  JSR undo_restore_col
   JSR do_char_paste_above
-.redo_cp_flags:
+  ; Fall through into undo_finish_not_redo
+
+; Common finish: clear the redo flag, then keep RENDER_FLAG from the
+; operation if > 1 (multi-line scroll), else single-line repaint
+undo_finish_not_redo:
   LDA #0
   STA UNDO_IS_REDO
-  ; Keep RENDER_FLAG from do_char_paste if > 1 (multi-line scroll)
+undo_keep_render_flag:
   LDA RENDER_FLAG
   CMP #2
-  BCS .redo_cp_done
+  BCS .done
   LDA #1
   STA RENDER_FLAG
-.redo_cp_done:
+.done:
   JMP clear_count
 
 ; --- Open-line undo: delete the opened blank line(s) ---
 undo_open_undo:
   ; Delete the opened line
-  CP16 UNDO_LINE16, FILE_LINE16
-  SET16 1, BUF_TEMP16
+  JSR undo_restore_line
+  JSR set_buf_temp16_one
   LDA #0
   STA DELETE_SCREEN_ROWS     ; Cursor row filled by scroll
   JSR delete_current_lines
-  ; Restore cursor to original position
+  ; Restore cursor to original position (saved in UNDO_COL16)
   CP16 UNDO_COL16, FILE_LINE16
   LDA #0
   STA_LH16 CURSOR_COL16
   JSR clamp_cursor_col
   ; Set flags
-  LDA #$FF
-  STA UNDO_IS_REDO
-  STA MODIFIED
+  JSR undo_set_done_flags
   LDA #$07
-  STA RENDER_FLAG            ; Delete scroll, skip cursor repaint
-  JMP clear_count
+  JMP set_render_clear_count ; Delete scroll, skip cursor repaint
 
 ; --- Open-line redo: re-insert blank line ---
 undo_open_redo:
@@ -681,7 +587,7 @@ undo_open_redo:
   LDAX16 UNDO_LINE16
   JSR mark_insert_one
   ; Set cursor on opened line
-  CP16 UNDO_LINE16, FILE_LINE16
+  JSR undo_restore_line
   LDA #0
   STA UNDO_IS_REDO
   STA_LH16 CURSOR_COL16
@@ -689,7 +595,6 @@ undo_open_redo:
   STA MODIFIED
   LDA #$03
   STA RENDER_FLAG            ; Insert scroll
-  JMP clear_count
 .redo_open_fail:
   JMP clear_count
 
@@ -701,8 +606,7 @@ undo_open_redo:
 ; per-line counts (insert_spaces_core in data mode re-records as
 ; UNDO_INDENT).  Cursor returns to the recorded position both ways.
 undo_shift_step:
-  CP16 UNDO_LINE16, FILE_LINE16
-  CP16 UNDO_COL16, CURSOR_COL16
+  JSR undo_restore_line_col
   CP16 UNDO_PASTE_COUNT16, BUF_TEMP16
   LDA UNDO_JOIN_COUNT
   STA BUF_DELTA
@@ -717,36 +621,13 @@ undo_shift_step:
   STA SHIFT_MODE
   JSR insert_spaces_core
 .restore_cursor:
-  CP16 UNDO_COL16, CURSOR_COL16
+  JSR undo_restore_col
   JSR clamp_cursor_col
   JMP clear_count
 
-; --- New-style type dispatch (A = UNDO_TYPE >= UNDO_INDENT) ---
-undo_new_undo:
-  CMP #UNDO_TILDE
-  BNE .not_tilde
-  JMP undo_tilde_undo
-.not_tilde:
-  CMP #UNDO_REPLACE
-  BNE .not_replace
-  JMP undo_replace_undo
-.not_replace:
-  JMP undo_shift_step        ; indent/unindent (self-morphing)
-
-undo_new_redo:
-  CMP #UNDO_TILDE
-  BNE .not_tilde
-  JMP undo_tilde_redo
-.not_tilde:
-  CMP #UNDO_REPLACE
-  BNE .not_replace
-  JMP undo_replace_redo
-.not_replace:
-  JMP undo_shift_step
-
 ; Point BUF_PTR16 at the recorded span and move to the recorded line
 undo_span_setup:
-  CP16 UNDO_LINE16, FILE_LINE16
+  JSR undo_restore_line
   LDAX16 UNDO_LINE16
   JSR buf_get_line_ptr
   CLC
@@ -780,7 +661,7 @@ undo_tilde_span:
 
 undo_tilde_undo:
   JSR undo_tilde_span
-  CP16 UNDO_COL16, CURSOR_COL16
+  JSR undo_restore_col
   LDA #$FF
   STA UNDO_IS_REDO
   JMP undo_span_finish
@@ -788,7 +669,7 @@ undo_tilde_undo:
 undo_tilde_redo:
   JSR undo_tilde_span
   ; Cursor advances past the span as the original ~ did (clamped)
-  CP16 UNDO_COL16, CURSOR_COL16
+  JSR undo_restore_col
   LDA UNDO_JOIN_COUNT
   CLC
   ADCA16 CURSOR_COL16, CURSOR_COL16
@@ -809,7 +690,7 @@ undo_replace_undo:
   INX
   CPX UNDO_JOIN_COUNT
   BNE .loop
-  CP16 UNDO_COL16, CURSOR_COL16
+  JSR undo_restore_col
   LDA #$FF
   STA UNDO_IS_REDO
   JMP undo_span_finish
@@ -826,7 +707,7 @@ undo_replace_redo:
   DEX
   BNE .loop
   ; Cursor lands on the last replaced char, as the original r did
-  CP16 UNDO_COL16, CURSOR_COL16
+  JSR undo_restore_col
   LDA UNDO_JOIN_COUNT
   SEC
   SBC #1
@@ -835,3 +716,24 @@ undo_replace_redo:
   LDA #0
   STA UNDO_IS_REDO
   JMP undo_span_finish
+
+; --- Restore helpers: copy the undo record back into cursor state ---
+; Restore FILE_LINE16 and CURSOR_COL16 from the undo record
+undo_restore_line_col:
+  CP16 UNDO_LINE16, FILE_LINE16
+; Restore CURSOR_COL16 from the undo record
+undo_restore_col:
+  CP16 UNDO_COL16, CURSOR_COL16
+  RTS
+
+; Restore FILE_LINE16 from the undo record
+undo_restore_line:
+  CP16 UNDO_LINE16, FILE_LINE16
+  RTS
+
+; Mark the operation undone: next 'u' redoes, buffer is modified
+undo_set_done_flags:
+  LDA #$FF
+  STA UNDO_IS_REDO
+  STA MODIFIED
+  RTS

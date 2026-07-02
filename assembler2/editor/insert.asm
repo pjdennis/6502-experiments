@@ -453,9 +453,7 @@ insert_batch:
   BEQ .no_mark_del
 
   ; BUF_TEMP16 = count of deleted lines
-  STA BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1
+  JSR set_buf_temp16_a
 
   ; first_line = FILE_LINE16 + 1 - back_nl
   CLC
@@ -476,9 +474,7 @@ insert_batch:
   LDA NORMAL_TEMP            ; ins_nl
   BEQ .no_mark_ins
 
-  STA BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1
+  JSR set_buf_temp16_a
 
   ; Same first_line = FILE_LINE16 + 1 - back_nl
   CLC

@@ -337,10 +337,7 @@ mark_adjust_col:
 ; Insert 1 line at A/X, adjust marks
 mark_insert_one:
   PHA
-  LDA #1
-  STA BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1
+  JSR set_buf_temp16_one
   PLA
   JMP mark_adjust_insert
 

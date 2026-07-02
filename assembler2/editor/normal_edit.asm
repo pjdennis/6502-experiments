@@ -689,9 +689,7 @@ normal_join_lines:
 
   ; Single mark adjust for all removed lines
   LDA NORMAL_TEMP
-  STA BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16+1
+  JSR set_buf_temp16_a
   LDAX16 FILE_LINE16
   CLC
   ADC #1

@@ -269,10 +269,7 @@ do_dd:
   ; BUF_TEMP16 = last line number; set count=1 via BUF_LEN16, then swap
   LDAX16 BUF_TEMP16          ; A/X = last line number
   PHA                        ; Save A (line number low byte)
-  LDA #1
-  STA BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1         ; BUF_TEMP16 = 1 (count)
+  JSR set_buf_temp16_one     ; BUF_TEMP16 = 1 (count)
   PLA                        ; Restore A = last line number low byte
   JSR yank_add_lines
   ; Restore total count and delete all lines

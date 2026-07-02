@@ -283,6 +283,11 @@ enter_insert_mode:
   STA INSERT_CHANGED
   JMP clear_count
 
+; Set RENDER_FLAG from A, then clear count state
+set_render_clear_count:
+  STA RENDER_FLAG
+  ; fall through
+
 ; Clear count state: zeroes COUNT16, COUNT_ACTIVE, LAST_KEY
 ; If BATCH_RESTORE_KEY is set, restores it to LAST_KEY (for partial pair e.g. dddw)
 clear_count:
@@ -385,18 +390,23 @@ count_paste_extras:
 get_count:
   LDA COUNT16
   ORA COUNT16 + 1
-  BNE .has_count
-  ; Zero = no count, return 1
-  LDA #1
-  STA BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1
-  RTS
-.has_count:
+  BEQ set_buf_temp16_one     ; Zero = no count, return 1
   ; Copy COUNT16 to BUF_TEMP16
   LDA COUNT16
   STA BUF_TEMP16
   LDA COUNT16 + 1
+  STA BUF_TEMP16 + 1
+  RTS
+
+; Set BUF_TEMP16 = 1
+; Returns A = 0
+set_buf_temp16_one:
+  LDA #1
+; Set BUF_TEMP16 = A (high byte 0)
+; Returns A = 0
+set_buf_temp16_a:
+  STA BUF_TEMP16
+  LDA #0
   STA BUF_TEMP16 + 1
   RTS
 
@@ -596,9 +606,7 @@ delete_at_cursor:
   JSR buf_rebuild_lines
   ; Adjust marks for deleted newlines (NORMAL_TEMP = count)
   LDA NORMAL_TEMP
-  STA BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1
+  JSR set_buf_temp16_a
   LDAX16 FILE_LINE16
   SEC
   JSR mark_adjust_col
