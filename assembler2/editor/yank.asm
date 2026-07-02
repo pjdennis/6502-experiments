@@ -170,17 +170,6 @@ yank_get_size:
   SEC
   RTS
 
-; Paste yank buffer below current line
-; Inserts yank content after current line's newline
-; Sets cursor to first pasted line, col 0
-; Returns carry set = buffer full or empty yank, carry clear = success
-yank_paste_below:
-  LDA #1
-  STA BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1
-  ; Fall through
-
 ; Paste yank buffer below current line, N times in one batch operation
 ; Input: BUF_TEMP16 = count of times to paste (16-bit)
 ; Returns carry set = error (empty/full), carry clear = success
@@ -206,17 +195,6 @@ yank_paste_below_n:
   CLC
 .done:
   RTS
-
-; Paste yank buffer above current line
-; Inserts yank content at start of current line
-; Sets cursor to first pasted line (same line number), col 0
-; Returns carry set = buffer full or empty yank, carry clear = success
-yank_paste_above:
-  LDA #1
-  STA BUF_TEMP16
-  LDA #0
-  STA BUF_TEMP16 + 1
-  ; Fall through
 
 ; Paste yank buffer above current line, N times in one batch operation
 ; Input: BUF_TEMP16 = count of times to paste (16-bit)
@@ -374,36 +352,5 @@ yank_has_newline:
   CLC
   RTS
 .found:
-  SEC
-  RTS
-
-; Check if count (X) pastes of BUF_LEN16 bytes fit in the text buffer
-; Call after yank_get_size (which sets BUF_LEN16)
-; Returns carry clear = fits, carry set = doesn't fit
-; Clobbers A, X, BUF_SRC16
-check_paste_fits:
-  ; available = BUF_LIMIT:00 - BUF_END16
-  LDA #0
-  SEC
-  SBC BUF_END16
-  STA BUF_SRC16
-  LDA BUF_LIMIT
-  SBC BUF_END16 + 1
-  STA BUF_SRC16 + 1
-  ; Subtract BUF_LEN16 from available, count times
-.loop:
-  SEC
-  LDA BUF_SRC16
-  SBC BUF_LEN16
-  STA BUF_SRC16
-  LDA BUF_SRC16 + 1
-  SBC BUF_LEN16 + 1
-  BCC .no_room
-  STA BUF_SRC16 + 1
-  DEX
-  BNE .loop
-  CLC
-  RTS
-.no_room:
   SEC
   RTS

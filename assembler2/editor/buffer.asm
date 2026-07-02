@@ -142,11 +142,6 @@ buf_save_file:
 .write_done:
   RTS
 
-; Return line count in LINE_COUNT16
-; (Already maintained by rebuild)
-buf_line_count:
-  RTS
-
 ; Get pointer to start of line N (N in A/X, low/high)
 ; Returns pointer in BUF_PTR16
 ; Clobbers A, Y
@@ -217,35 +212,17 @@ advance_past_line_end:
 ; Shifts all following bytes right by 1
 ; Returns carry set = buffer full, carry clear = success
 buf_insert_char:
-  STA BATCH_BUF
+  PHA
   LDA #1
-  STA BUF_DELTA
-  ; fall through
-
-; Insert multiple characters from BATCH_BUF at position in buffer
-; BUF_PTR16 = position to insert at
-; BUF_DELTA = number of characters to insert
-; Characters in BATCH_BUF[0..BUF_DELTA-1]
-; Returns carry set = buffer full, carry clear = success
-buf_insert_chars:
-  LDA BUF_DELTA
   STA BUF_LEN16
   LDA #0
-  STA BUF_LEN16+1
+  STA BUF_LEN16 + 1
   JSR buf_shift_right_16
-  BCS .batch_full
-  ; Copy BUF_DELTA bytes from BATCH_BUF into the gap at BUF_PTR16
+  PLA
+  BCS .done                  ; Buffer full (carry preserved for caller)
   LDY #0
-.batch_copy:
-  LDA BATCH_BUF,Y
   STA (BUF_PTR16),Y
-  INY
-  CPY BUF_DELTA
-  BNE .batch_copy
-  CLC
-  RTS
-.batch_full:
-  SEC
+.done:
   RTS
 
 ; Shift buffer right by BUF_LEN16 bytes at BUF_PTR16 (16-bit version)
@@ -348,16 +325,6 @@ buf_delete_lines:
 .not_empty:
 
   JMP buf_rebuild_lines
-
-; Delete BUF_DELTA characters at BUF_PTR16 / shift buffer left by BUF_DELTA
-; Input: BUF_PTR16 = position, BUF_DELTA = shift amount
-; Updates BUF_END16 on completion
-buf_delete_chars:
-  LDA BUF_DELTA
-  STA BUF_LEN16
-  LDA #0
-  STA BUF_LEN16 + 1
-  ; Fall through to 16 bit version
 
 ; Shift buffer left by BUF_LEN16 bytes at BUF_PTR16 (16-bit version)
 ; Input: BUF_PTR16 = delete point, BUF_LEN16 = shift amount (16-bit)
