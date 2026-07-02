@@ -229,7 +229,7 @@ write_decimal_rjust:
   INX
   BNE .pad_loop   ; Always taken
 .print:
-  PRINT_STR TO_DECIMAL_RESULT
+  JSR print_decimal_result
   RTS
 
 str_marks_header: .asciiz "mark line text"

@@ -141,7 +141,7 @@ undo_do_undo:
 .undo_cc_multi:
   ; Ncc undo: compute SCROLL_DELTA = total_screen_rows(pasted) - 1
   ; (subtract 1 for the deleted blank line)
-  CP16 FILE_LINE16, RENDER_LINE16
+  JSR set_render_line_to_cursor
   LDA YANK_LINES16
   JSR compute_delete_screen_rows  ; Walks YANK_LINES16 lines, sets DELETE_SCREEN_ROWS
   LDA DELETE_SCREEN_ROWS
@@ -184,9 +184,7 @@ undo_do_undo:
   CLC
   JSR mark_adjust_col
   ; Multi-line: set scroll optimization, skip cursor row in scroll region
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_len
-  JSR line_screen_rows
+  JSR file_line_rows
   STA PREV_LINE_ROWS
   LDA #$09
   STA RENDER_FLAG
@@ -237,7 +235,7 @@ undo_do_redo:
   JSR undo_restore_line
   CP16 YANK_LINES16, BUF_TEMP16
   ; Pre-compute screen rows for displacement-based scroll
-  CP16 FILE_LINE16, RENDER_LINE16
+  JSR set_render_line_to_cursor
   LDA BUF_TEMP16
   JSR compute_delete_screen_rows
   JSR delete_current_lines
@@ -272,7 +270,7 @@ undo_do_redo:
   ; Pre-compute screen rows for line-delete scroll
   LDA BUF_TEMP16 + 1
   BNE .redo_line_skip_pre
-  CP16 FILE_LINE16, RENDER_LINE16
+  JSR set_render_line_to_cursor
   LDA BUF_TEMP16
   JSR compute_delete_screen_rows
   JMP .redo_line_del
@@ -329,15 +327,14 @@ undo_join_undo:
   STA RENDER_FLAG            ; Line-insert scroll, skip cursor row
   LDA #0
   STA_LH16 CURSOR_COL16
-  JSR clamp_cursor_col
-  JMP clear_count
+  JMP clamp_and_clear_count
 
 ; --- Join redo: replace newlines back to spaces ---
 undo_join_redo:
   JSR undo_restore_line
 
   ; Pre-compute old_total screen rows for displacement-based scroll
-  CP16 FILE_LINE16, RENDER_LINE16
+  JSR set_render_line_to_cursor
   LDA UNDO_JOIN_COUNT
   CLC
   ADC #1           ; +1 for cursor line
@@ -359,8 +356,7 @@ undo_join_redo:
   LDA #$06
   STA RENDER_FLAG        ; Line-delete, skip cursor row scroll
   JSR undo_restore_col
-  JSR clamp_cursor_col
-  JMP clear_count
+  JMP clamp_and_clear_count
 
 ; Shared join undo/redo body: write the char in A at each recorded join
 ; offset on the current line, rebuild lines, then set up the caller's
@@ -622,8 +618,7 @@ undo_shift_step:
   JSR insert_spaces_core
 .restore_cursor:
   JSR undo_restore_col
-  JSR clamp_cursor_col
-  JMP clear_count
+  JMP clamp_and_clear_count
 
 ; Point BUF_PTR16 at the recorded span and move to the recorded line
 undo_span_setup:

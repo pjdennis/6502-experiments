@@ -245,7 +245,7 @@ do_dd:
   ; Pre-compute screen rows of lines being deleted (before deletion)
   LDA BUF_TEMP16 + 1
   BNE .dd_skip_precompute    ; Count > 255, skip
-  CP16 FILE_LINE16, RENDER_LINE16
+  JSR set_render_line_to_cursor
   LDA BUF_TEMP16
   JSR compute_delete_screen_rows
   JMP .dd_after_precompute
@@ -288,8 +288,7 @@ do_dd:
   STA MODIFIED
   LDA #$02
   STA RENDER_FLAG        ; Signal line-delete for scroll optimization
-  JSR clamp_cursor_col
-  JMP clear_count
+  JMP clamp_and_clear_count
 
 .yank_overflow:
   JMP show_yank_overflow

@@ -55,8 +55,7 @@ char_class:
 normal_word_forward:
   JSR get_batched_count
   JSR word_forward_x
-  JSR clamp_cursor_col
-  JMP clear_count
+  JMP clamp_and_clear_count
 
 ; Core word-forward motion: move cursor forward X words
 ; Input: X = count of words to move
@@ -145,8 +144,7 @@ word_forward_x:
 normal_word_backward:
   JSR get_batched_count
   JSR word_backward_x
-  JSR clamp_cursor_col
-  JMP clear_count
+  JMP clamp_and_clear_count
 
 ; Core word-backward motion: move cursor backward X words
 ; Input: X = count of words to move
@@ -221,8 +219,7 @@ word_backward_x:
 normal_word_end:
   JSR get_batched_count
   JSR word_end_x
-  JSR clamp_cursor_col
-  JMP clear_count
+  JMP clamp_and_clear_count
 
 ; Core word-end motion: move cursor to end of Xth word
 ; Input: X = count of words to move

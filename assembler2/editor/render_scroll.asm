@@ -37,30 +37,17 @@ render_line_delete_scroll:
   CLC
   ADC DELETE_SCREEN_ROWS ; past end of combined line (0-based)
 .skip_del_cursor_rows:
-  CLC
-  ADC #1                 ; 1-based
-  JMP .set_del_scroll_start
+  JMP .to_one_based
 .scroll_at_cursor_del:
   LDA CURSOR_ROW
   SEC
   SBC WRAP_QUOT     ; first_row (0-based); no-op when WRAP_QUOT=0
+.to_one_based:
   CLC
   ADC #1           ; Convert to 1-based
 .set_del_scroll_start:
-  STA ANSI_ROW
-  LDA SCREEN_ROWS
-  SEC
-  SBC #1
-  STA ANSI_COL
-  ; Guard: skip scroll if region is single row or invalid (no rows to shift)
-  CMP ANSI_ROW
-  BCC .skip_del_scroll
-  BEQ .skip_del_scroll
-  JSR ansi_set_scroll_region
-  LDA SCROLL_DELTA
-  JSR ansi_scroll_up
-  JSR ansi_reset_scroll_region
-.skip_del_scroll:
+  LDX #0                 ; scroll up
+  JSR scroll_region_from_a
 
   ; $07 (paste-below undo): cursor unchanged, skip repaint entirely.
   LDA RENDER_FLAG
@@ -100,16 +87,10 @@ render_line_delete_scroll:
   SEC
   SBC WRAP_QUOT
   STA RENDER_ROW
-  CP16 FILE_LINE16, RENDER_LINE16
+  JSR set_render_line_to_cursor
   ; Check for partial render
-  LDA RENDER_FROM_COL16 + 1
-  AND RENDER_FROM_COL16
-  CMP #$FF
-  BEQ .wrap_render_all
-  ; Partial: compute from_wrap / from_col
-  CP16 RENDER_FROM_COL16, DIV_INPUT16
-  JSR div_mod_screen_cols_16   ; X = from_wrap, A = from_col
-  STA WRAP_REM
+  JSR check_from_col           ; X = from_wrap, A = WRAP_REM = from_col
+  BCS .wrap_render_all         ; $FFFF: render all
   CPX RENDER_LIMIT
   BCS .wrap_partial_done       ; from_wrap >= total: skip cursor render
   ; Advance RENDER_ROW by from_wrap, set RENDER_WRAP
@@ -119,37 +100,7 @@ render_line_delete_scroll:
   ADC RENDER_ROW
   STA RENDER_ROW
   ; Render partial first visible wrap row
-  LDA RENDER_ROW
-  CLC
-  ADC #1
-  STA ANSI_ROW
-  LDA WRAP_REM
-  CLC
-  ADC #1
-  STA ANSI_COL
-  JSR ansi_move_cursor
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_ptr
-  ; Advance BUF_PTR16 by from_wrap * SCREEN_COLS
-  LDX RENDER_WRAP
-  BEQ .wpc_no_advance
-.wpc_advance_loop:
-  CLC
-  LDA SCREEN_COLS
-  ADCA16 BUF_PTR16, BUF_PTR16
-  DEX
-  BNE .wpc_advance_loop
-.wpc_no_advance:
-  LDA WRAP_REM
-  STA RENDER_COL
-  JSR render_line_chars_from
-  LDA RENDER_COL
-  CMP SCREEN_COLS
-  BCS .wpc_no_clear
-  JSR ansi_clear_line
-.wpc_no_clear:
-  INC RENDER_ROW
-  INC RENDER_WRAP
+  JSR render_partial_first_row
   ; Remaining rows = RENDER_LIMIT - RENDER_WRAP
   LDA RENDER_LIMIT
   SEC
@@ -217,25 +168,7 @@ render_line_delete_scroll:
 
 .del_bottom_rows:
   ; Render the bottom SCROLL_DELTA rows (newly exposed content).
-  ; RENDER_ROW = SCREEN_ROWS - 1 - SCROLL_DELTA
-  LDA SCREEN_ROWS
-  SEC
-  SBC #1
-  SEC
-  SBC SCROLL_DELTA
-  STA RENDER_ROW
-  ; If no newly-exposed rows below cursor, skip to status+cursor
-  CMP CURSOR_ROW
-  BCC .delete_status_only     ; RENDER_ROW < CURSOR_ROW (safety)
-  BEQ .delete_status_only     ; RENDER_ROW = CURSOR_ROW (already rendered)
-  ; Find the file line at RENDER_ROW
-  JSR find_line_at_render_row
-  JMP render_limited_rows
-.delete_status_only:
-  JSR render_status_line
-  JSR render_position_cursor
-  JSR ansi_cursor_show
-  JMP io_flush
+  JMP render_bottom_rows_guarded
 
 ; Scroll for line insertion at cursor.
 ; SCROLL_DELTA = lines inserted. CURSOR_ROW = screen row of insertion.
@@ -263,9 +196,7 @@ render_line_insert_scroll:
   SBC WRAP_QUOT          ; first_row (0-based)
   CLC
   ADC PREV_LINE_ROWS     ; past end of cursor line (0-based)
-  CLC
-  ADC #1                 ; 1-based
-  JMP .set_scroll_start
+  JMP .to_one_based
 .scroll_at_enter:
   ; For start-of-line Enter (bit 1 set): include old cursor row in scroll
   ; scroll_start = CURSOR_ROW + 1 - SCROLL_DELTA (1-based)
@@ -283,28 +214,15 @@ render_line_insert_scroll:
   LDA CURSOR_ROW
   SEC
   SBC SCROLL_DELTA
-  CLC
-  ADC #1
-  JMP .set_scroll_start
+  JMP .to_one_based
 .scroll_at_cursor:
   LDA CURSOR_ROW
+.to_one_based:
   CLC
   ADC #1           ; Convert to 1-based
 .set_scroll_start:
-  STA ANSI_ROW
-  LDA SCREEN_ROWS
-  SEC
-  SBC #1
-  STA ANSI_COL
-  ; Guard: skip scroll if region is single row or invalid (no rows to shift)
-  CMP ANSI_ROW
-  BCC .skip_ins_scroll
-  BEQ .skip_ins_scroll
-  JSR ansi_set_scroll_region
-  LDA SCROLL_DELTA
-  JSR ansi_scroll_down
-  JSR ansi_reset_scroll_region
-.skip_ins_scroll:
+  LDX #$FF               ; scroll down
+  JSR scroll_region_from_a
 
   ; For Enter ($05): render split line + blank lines + cursor line
   LDA RENDER_FLAG
@@ -320,13 +238,9 @@ render_line_insert_scroll:
   SBC SCROLL_DELTA
   STA RENDER_ROW
   INC SCROLL_DELTA           ; +1 for the split line row
-  JSR find_line_at_render_row
-  JMP render_limited_rows
+  JMP find_and_render
 .enter_status_only:
-  JSR render_status_line
-  JSR render_position_cursor
-  JSR ansi_cursor_show
-  JMP io_flush
+  JMP render_finish
 .no_enter_render:
 
   ; If INSERT_LINE_COUNT is set, the actual repaint needs more rows than the
@@ -335,17 +249,11 @@ render_line_insert_scroll:
   LDA INSERT_LINE_COUNT
   BEQ .ins_repaint_default
 
-  CP16 FILE_LINE16, RENDER_LINE16
+  JSR set_render_line_to_cursor
   LDA #0
   STA SCROLL_DELTA           ; Recompute as repaint row count
 .walk_repaint:
-  LDAX16 RENDER_LINE16
-  JSR buf_get_line_len
-  JSR line_screen_rows
-  CLC
-  ADC SCROLL_DELTA
-  STA SCROLL_DELTA
-  INC16 RENDER_LINE16
+  JSR render_line_rows_step
   DEC INSERT_LINE_COUNT
   BNE .walk_repaint
 
@@ -353,10 +261,7 @@ render_line_insert_scroll:
   ; Render SCROLL_DELTA rows at CURSOR_ROW (newly inserted content).
   LDA CURSOR_ROW
   STA RENDER_ROW
-
-  ; Find the file line at RENDER_ROW
-  JSR find_line_at_render_row
-  JMP render_limited_rows
+  JMP find_and_render
 
 ; Range repaint (RENDER_FLAG=$0B): INSERT_LINE_COUNT lines changed in
 ; place starting at FILE_LINE16 (line count unchanged; wrap rows may
@@ -382,7 +287,7 @@ render_range_repaint:
   ; RENDER_WRAP = old rows (temp), then compute the range's new rows
   LDA DELETE_SCREEN_ROWS
   STA RENDER_WRAP
-  CP16 FILE_LINE16, RENDER_LINE16
+  JSR set_render_line_to_cursor
   LDA INSERT_LINE_COUNT
   JSR compute_delete_screen_rows
   LDX DELETE_SCREEN_ROWS       ; X = new rows (0 = overflow)
@@ -447,21 +352,12 @@ render_range_repaint:
   ; Repaint the range's new rows
   LDA RENDER_WRAP
   STA SCROLL_DELTA
-  CP16 FILE_LINE16, RENDER_LINE16
-  LDA #0
-  STA RENDER_WRAP
+  JSR setup_render_at_cursor
   JSR render_limited_loop
   ; Repaint the newly exposed bottom rows
   PLA
   STA SCROLL_DELTA
-  LDA SCREEN_ROWS
-  SEC
-  SBC #1
-  SEC
-  SBC SCROLL_DELTA
-  STA RENDER_ROW
-  JSR find_line_at_render_row
-  JMP render_limited_rows
+  JMP render_bottom_rows
 
 .rr_to_bottom:
   ; Repaint everything from first_row to the bottom of the screen
@@ -473,9 +369,7 @@ render_range_repaint:
   STA SCROLL_DELTA
   JSR ansi_cursor_hide
 .rr_render_range:
-  CP16 FILE_LINE16, RENDER_LINE16
-  LDA #0
-  STA RENDER_WRAP
+  JSR setup_render_at_cursor
   JMP render_limited_rows
 
 .rr_full:
@@ -500,6 +394,40 @@ rr_scroll_below:
   STA ANSI_COL
   CMP ANSI_ROW
   BCC .skip                    ; nothing below the range to shift
+  JMP scroll_region_go
+.skip:
+  RTS
+
+; === Scroll-region helpers ===
+; Set scroll region [A .. SCREEN_ROWS-1] (A = 1-based start row) and
+; scroll it by SCROLL_DELTA rows.  X = 0: scroll up, X != 0: scroll down.
+; Guarded entries skip (C=0) if the region is a single row or invalid;
+; C=1 after a scroll.  Clobbers A, X, Y.
+scroll_region_from_a:
+  STA ANSI_ROW
+  ; fall through (guarded entry with ANSI_ROW already set)
+scroll_region_check:
+  LDA SCREEN_ROWS
+  SEC
+  SBC #1
+  STA ANSI_COL
+  ; Guard: skip scroll if region is single row or invalid (no rows to shift)
+  CMP ANSI_ROW
+  BCC .skip
+  BEQ .skip
+  BNE scroll_region_go         ; always taken (Z=0 after BEQ not taken)
+.skip:
+  CLC
+  RTS
+; Unguarded entry: A = 1-based start row, X = direction
+scroll_region_set_go:
+  STA ANSI_ROW
+  LDA SCREEN_ROWS
+  SEC
+  SBC #1
+  STA ANSI_COL
+  ; fall through (region rows already set, X = direction)
+scroll_region_go:
   TXA
   PHA                          ; direction (ANSI calls clobber X)
   JSR ansi_set_scroll_region
@@ -512,14 +440,43 @@ rr_scroll_below:
   LDA SCROLL_DELTA
   JSR ansi_scroll_down
 .reset:
-  JMP ansi_reset_scroll_region
-.skip:
+  JSR ansi_reset_scroll_region
+  SEC
   RTS
+
+; Repaint the newly exposed bottom SCROLL_DELTA rows:
+; RENDER_ROW = SCREEN_ROWS - 1 - SCROLL_DELTA, then find the file line
+; there and render to the bottom.  The guarded entry skips the content
+; repaint (status + cursor only) when RENDER_ROW <= CURSOR_ROW (those
+; rows were already rendered by the caller).
+render_bottom_rows_guarded:
+  LDA SCREEN_ROWS
+  SEC
+  SBC #1
+  SEC
+  SBC SCROLL_DELTA
+  STA RENDER_ROW
+  CMP CURSOR_ROW
+  BCC render_finish            ; RENDER_ROW < CURSOR_ROW (safety)
+  BEQ render_finish            ; RENDER_ROW = CURSOR_ROW (already rendered)
+  ; fall through (recomputes the same RENDER_ROW)
+render_bottom_rows:
+  LDA SCREEN_ROWS
+  SEC
+  SBC #1
+  SEC
+  SBC SCROLL_DELTA
+  STA RENDER_ROW
+find_and_render:
+  JSR find_line_at_render_row
+  ; fall through to render_limited_rows
 
 ; Render limited rows: renders SCROLL_DELTA rows starting at
 ; RENDER_ROW/RENDER_LINE16/RENDER_WRAP, then draws status bar + cursor.
 render_limited_rows:
   JSR render_limited_loop
+; Frame epilogue: status bar, cursor, show, flush (shared tail)
+render_finish:
   JSR render_status_line
   JSR render_position_cursor
   JSR ansi_cursor_show
@@ -565,20 +522,8 @@ render_limited_loop:
   JSR buf_get_line_ptr
 
   ; Advance BUF_PTR16 by RENDER_WRAP * SCREEN_COLS
-  LDA RENDER_WRAP
-  BEQ .limited_no_wrap
-  TAX
-.limited_wrap_loop:
-  CLC
-  LDA BUF_PTR16
-  ADC SCREEN_COLS
-  STA BUF_PTR16
-  LDA BUF_PTR16 + 1
-  ADC #0
-  STA BUF_PTR16 + 1
-  DEX
-  BNE .limited_wrap_loop
-.limited_no_wrap:
+  LDX RENDER_WRAP
+  JSR buf_ptr_advance_x
 
   JSR render_line_chars
 
@@ -629,9 +574,7 @@ find_line_at_render_row:
   BEQ .found
   STA RENDER_LIMIT         ; remaining rows to skip
 .walk:
-  LDAX16 RENDER_LINE16
-  JSR buf_get_line_len
-  JSR line_screen_rows     ; A = total screen rows for this line
+  JSR render_line_rows     ; A = total screen rows for this line
   SEC
   SBC RENDER_WRAP           ; visible rows = total - RENDER_WRAP
   CMP RENDER_LIMIT
@@ -661,10 +604,7 @@ find_line_at_render_row:
 ; Render just the status bar and reposition cursor (no content redraw)
 render_cursor_and_status:
   JSR ansi_cursor_hide
-  JSR render_status_line
-  JSR render_position_cursor
-  JSR ansi_cursor_show
-  JMP io_flush
+  JMP render_finish
 
 ; Print line characters from BUF_PTR16 up to SCREEN_COLS or newline
 ; Control chars: tab as '>' reverse, others as '.' reverse. Clobbers A, Y.
@@ -708,6 +648,22 @@ render_line_chars_from:
 .done:
   RTS
 
+; Check RENDER_FROM_COL16 for the partial-render paths.
+; Returns C=1 if $FFFF (unknown change: render the full line).
+; Otherwise returns C=0 with X = from_wrap and A = WRAP_REM = from_col.
+; Clobbers DIV_INPUT16
+check_from_col:
+  LDA RENDER_FROM_COL16 + 1
+  AND RENDER_FROM_COL16
+  CMP #$FF
+  BEQ .ffff                    ; $FFFF: CMP left C=1
+  CP16 RENDER_FROM_COL16, DIV_INPUT16
+  JSR div_mod_screen_cols_16   ; X = from_wrap, A = from_col
+  STA WRAP_REM                 ; save from_col
+  CLC                          ; div can exit with C=1 on the cap path
+.ffff:
+  RTS
+
 ; === Wrap utility functions ===
 
 ; Divide 16-bit value in DIV_INPUT16 by SCREEN_COLS using repeated subtraction
@@ -738,6 +694,32 @@ div_mod_screen_cols_16:
   LDA #0                     ; Remainder doesn't matter at cap
 .div_done:
   RTS
+
+; Walk step for the scroll-delta walks: add the screen rows of the line
+; at RENDER_LINE16 to SCROLL_DELTA, then advance RENDER_LINE16.
+; Clobbers A, X
+render_line_rows_step:
+  JSR render_line_rows
+  CLC
+  ADC SCROLL_DELTA
+  STA SCROLL_DELTA
+  INC16 RENDER_LINE16
+  RTS
+
+; Screen rows of the line at RENDER_LINE16
+; Returns: A = rows. Clobbers X
+render_line_rows:
+  LDAX16 RENDER_LINE16
+  JMP get_len_rows
+
+; Screen rows of the line at FILE_LINE16
+; Returns: A = rows. Clobbers X
+file_line_rows:
+  LDAX16 FILE_LINE16
+  ; fall through
+get_len_rows:
+  JSR buf_get_line_len
+  JMP line_screen_rows
 
 ; Compute number of screen rows a line occupies
 ; Input: A/X = 16-bit line length (A=low, X=high)
@@ -772,9 +754,7 @@ compute_delete_screen_rows:
   LDA #0
   STA DELETE_SCREEN_ROWS
 .loop:
-  LDAX16 RENDER_LINE16
-  JSR buf_get_line_len
-  JSR line_screen_rows
+  JSR render_line_rows
   CLC
   ADC DELETE_SCREEN_ROWS
   BCS .overflow              ; > 255
@@ -842,9 +822,7 @@ ensure_cursor_visible:
 
 .walk_top:
   ; Add screen rows for VIEW_TOP16 line (minus VIEW_TOP_WRAP)
-  LDAX16 RENDER_LINE16
-  JSR buf_get_line_len
-  JSR line_screen_rows
+  JSR render_line_rows
   ; A = total screen rows for this line
   SEC
   SBC VIEW_TOP_WRAP
@@ -859,9 +837,7 @@ ensure_cursor_visible:
   BEQ .at_cursor
 
   ; Add screen rows for this intermediate line
-  LDAX16 RENDER_LINE16
-  JSR buf_get_line_len
-  JSR line_screen_rows
+  JSR render_line_rows
   CLC
   ADC CURSOR_ROW
   BCS .need_scroll_down  ; 8-bit overflow: cursor far below screen

@@ -485,7 +485,7 @@ range_do_yank:
   CP16 YANK_LINES16, TO_DECIMAL_VALUE16
   JSR to_decimal
   JSR command_show_prompt
-  PRINT_STR TO_DECIMAL_RESULT
+  JSR print_decimal_result
   PRINT_STR str_lines_yanked
   JSR io_flush
   RTS
@@ -537,7 +537,7 @@ range_do_delete:
   CP16 YANK_LINES16, TO_DECIMAL_VALUE16
   JSR to_decimal
   JSR command_show_prompt
-  PRINT_STR TO_DECIMAL_RESULT
+  JSR print_decimal_result
   PRINT_STR str_lines_deleted
   JSR io_flush
   RTS
@@ -570,7 +570,7 @@ range_shift_finish:
   CP16 UNDO_PASTE_COUNT16, TO_DECIMAL_VALUE16
   JSR to_decimal
   JSR command_show_prompt
-  PRINT_STR TO_DECIMAL_RESULT
+  JSR print_decimal_result
   PRINT_STR str_lines_shifted
   JSR io_flush
   RTS

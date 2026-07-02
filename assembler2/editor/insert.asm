@@ -517,7 +517,7 @@ insert_batch:
   PLA
   PLA
   ; Pre-compute screen rows for fwd_nl join scroll optimization
-  CP16 FILE_LINE16, RENDER_LINE16
+  JSR set_render_line_to_cursor
   LDA LINE_LEN16 + 1         ; fwd_nl
   CLC
   ADC #1                     ; + cursor line

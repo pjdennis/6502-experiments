@@ -25,14 +25,12 @@ normal_move_right:
 normal_move_down:
   JSR get_batched_count
   JSR move_down_x
-  JSR clamp_cursor_col
-  JMP clear_count
+  JMP clamp_and_clear_count
 
 normal_move_up:
   JSR get_batched_count
   JSR move_up_x
-  JSR clamp_cursor_col
-  JMP clear_count
+  JMP clamp_and_clear_count
 
 normal_page_down:
   JSR get_batched_count
@@ -52,8 +50,7 @@ normal_page_down:
 
   LDA #0
   STA_LH16 CURSOR_COL16
-  JSR clamp_cursor_col
-  JMP clear_count
+  JMP clamp_and_clear_count
 
 normal_page_up:
   JSR get_batched_count
@@ -72,8 +69,7 @@ normal_page_up:
 
   LDA #0
   STA_LH16 CURSOR_COL16
-  JSR clamp_cursor_col
-  JMP clear_count
+  JMP clamp_and_clear_count
 
 ; --- Shared scroll subroutines ---
 
@@ -230,8 +226,7 @@ normal_half_page_down:
   JSR scroll_view_down
   DEC BUF_DELTA
   BNE .loop
-  JSR clamp_cursor_col
-  JMP clear_count
+  JMP clamp_and_clear_count
 
 ; Ctrl-U: half-page up
 ; Scroll up by half a screen (or count lines). Column preserved.
@@ -245,8 +240,7 @@ normal_half_page_up:
   JSR scroll_view_up
   DEC BUF_DELTA
   BNE .loop
-  JSR clamp_cursor_col
-  JMP clear_count
+  JMP clamp_and_clear_count
 
 normal_line_start:
   LDA #0
@@ -292,8 +286,7 @@ normal_goto_last:
   LDA #0
   STA_LH16 CURSOR_COL16
   STA VIEW_TOP_WRAP
-  JSR clamp_cursor_col
-  JMP clear_count
+  JMP clamp_and_clear_count
 
 ; gg: go to top of file
 do_gg:
@@ -303,8 +296,7 @@ do_gg:
   STA CURSOR_ROW
   STA_LH16 CURSOR_COL16
   STA VIEW_TOP_WRAP
-  JSR clamp_cursor_col
-  JMP clear_count
+  JMP clamp_and_clear_count
 
 ; --- Yank ---
 
@@ -393,8 +385,7 @@ do_mark_goto:
   STAX16 FILE_LINE16
   LDA #0
   STA_LH16 CURSOR_COL16
-  JSR clamp_cursor_col
-  JMP clear_count
+  JMP clamp_and_clear_count
 .mark_not_set:
   SET16 str_mark_not_set, STR_PTR16
   JSR show_status_message

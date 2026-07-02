@@ -176,9 +176,7 @@ do_char_paste_below:
   JSR mark_adjust_insert
   ; Skip cursor row in scroll region (save/restore BUF_PTR16 across buf_get_line_len)
   PUSH16 BUF_PTR16
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_len
-  JSR line_screen_rows
+  JSR file_line_rows
   STA PREV_LINE_ROWS
   POP16 BUF_PTR16
   LDA #$09
@@ -294,9 +292,7 @@ do_char_paste_above:
   JSR mark_adjust_col
   ; Skip cursor row in scroll region (save/restore BUF_PTR16 across buf_get_line_len)
   PUSH16 BUF_PTR16
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_len
-  JSR line_screen_rows
+  JSR file_line_rows
   STA PREV_LINE_ROWS
   POP16 BUF_PTR16
   LDA #$09
@@ -594,7 +590,7 @@ normal_join_lines:
 .join_has_work:
 
   ; Pre-compute old_total screen rows for displacement-based scroll
-  CP16 FILE_LINE16, RENDER_LINE16
+  JSR set_render_line_to_cursor
   LDA NORMAL_TEMP
   CLC
   ADC #1           ; +1 for cursor line
@@ -812,7 +808,7 @@ cc_have_count:
   ; Pre-compute screen rows for displacement-based scroll
   LDA BUF_TEMP16 + 1
   BNE .cc_skip_precompute    ; Count > 255, skip
-  CP16 FILE_LINE16, RENDER_LINE16
+  JSR set_render_line_to_cursor
   LDA BUF_TEMP16
   JSR compute_delete_screen_rows
   JMP .cc_after_precompute

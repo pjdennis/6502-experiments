@@ -78,27 +78,36 @@ render_screen:
   STA RENDER_WRAP
   JMP render_from_row
 
+; Point RENDER_LINE16 at the cursor line (RENDER_LINE16 = FILE_LINE16)
+; Clobbers A
+set_render_line_to_cursor:
+  CP16 FILE_LINE16, RENDER_LINE16
+  RTS
+
+; Set RENDER_ROW to the cursor line's first screen row, then point
+; RENDER_LINE16 at the cursor line with RENDER_WRAP = 0.  Clobbers A
+setup_first_row:
+  LDA CURSOR_ROW
+  SEC
+  SBC WRAP_QUOT
+  STA RENDER_ROW
+  ; fall through
+; Point RENDER_LINE16 at the cursor line with RENDER_WRAP = 0
+setup_render_at_cursor:
+  JSR set_render_line_to_cursor
+  LDA #0
+  STA RENDER_WRAP
+  RTS
+
 ; Set up RENDER_ROW/RENDER_LINE16/RENDER_WRAP from cursor first_row,
 ; then fall through to render_from_row.
 ; Expects ansi_cursor_hide already called.
 render_from_first_row_limited:
-  LDA CURSOR_ROW
-  SEC
-  SBC WRAP_QUOT
-  STA RENDER_ROW
-  CP16 FILE_LINE16, RENDER_LINE16
-  LDA #0
-  STA RENDER_WRAP
+  JSR setup_first_row
   JMP render_limited_rows
 
 render_from_first_row:
-  LDA CURSOR_ROW
-  SEC
-  SBC WRAP_QUOT
-  STA RENDER_ROW
-  CP16 FILE_LINE16, RENDER_LINE16
-  LDA #0
-  STA RENDER_WRAP
+  JSR setup_first_row
 
 ; Render rows from RENDER_ROW/RENDER_LINE16/RENDER_WRAP to end of screen
 ; Expects ansi_cursor_hide already called
@@ -131,20 +140,8 @@ render_from_row:
   JSR buf_get_line_ptr
 
   ; Advance BUF_PTR16 by RENDER_WRAP * SCREEN_COLS
-  LDA RENDER_WRAP
-  BEQ .no_wrap_offset
-  TAX
-.wrap_offset_loop:
-  CLC
-  LDA BUF_PTR16
-  ADC SCREEN_COLS
-  STA BUF_PTR16
-  LDA BUF_PTR16 + 1
-  ADC #0
-  STA BUF_PTR16 + 1
-  DEX
-  BNE .wrap_offset_loop
-.no_wrap_offset:
+  LDX RENDER_WRAP
+  JSR buf_ptr_advance_x
 
   JSR render_line_chars
 
@@ -187,14 +184,8 @@ render_from_row:
   JMP .row_loop
 
 .row_done:
-  ; Draw status line
-  JSR render_status_line
-
-  ; Position cursor
-  JSR render_position_cursor
-
-  JSR ansi_cursor_show
-  JMP io_flush
+  ; Status line, cursor, show, flush
+  JMP render_finish
 
 ; Render just the status line (last row)
 render_status_line:
@@ -221,7 +212,7 @@ render_status_line:
 .not_modified:
 
   ; Print separator
-  PRINT_STR str_separator
+  JSR print_separator
 
   ; Print mode
   LDA MODE
@@ -234,7 +225,7 @@ render_status_line:
   JSR write_string
 
   ; Print separator and count (if active) or line/col
-  PRINT_STR str_separator
+  JSR print_separator
 
   ; Show count/pending-key prefix if active
   LDA COUNT16
@@ -245,21 +236,19 @@ render_status_line:
   JMP .no_prefix_display
 .has_count:
   CP16 COUNT16, TO_DECIMAL_VALUE16
-  JSR to_decimal
-  PRINT_STR TO_DECIMAL_RESULT
+  JSR print_decimal
 .has_pending_no_count:
   LDA LAST_KEY
   BEQ .done_prefix
   JSR io_write
 .done_prefix:
-  PRINT_STR str_separator
+  JSR print_separator
 .no_prefix_display:
 
   ; Line number (1-based)
   CLC
   ADCI16 FILE_LINE16, $0001, TO_DECIMAL_VALUE16
-  JSR to_decimal
-  PRINT_STR TO_DECIMAL_RESULT
+  JSR print_decimal
 
   LDA #','
   JSR io_write
@@ -267,8 +256,7 @@ render_status_line:
   ; Column (1-based, 16-bit)
   CLC
   ADCI16 CURSOR_COL16, $0001, TO_DECIMAL_VALUE16
-  JSR to_decimal
-  PRINT_STR TO_DECIMAL_RESULT
+  JSR print_decimal
 
   ; Print total lines
   LDA #' '
@@ -277,8 +265,7 @@ render_status_line:
   JSR io_write
 
   CP16 LINE_COUNT16, TO_DECIMAL_VALUE16
-  JSR to_decimal
-  PRINT_STR TO_DECIMAL_RESULT
+  JSR print_decimal
 
   ; Clear rest of status line and restore normal video
   JSR ansi_clear_line
@@ -298,6 +285,22 @@ render_position_cursor:
   ADC #1           ; ANSI 1-based
   STA ANSI_COL
   JMP ansi_move_cursor
+
+; Print TO_DECIMAL_VALUE16 in decimal (convert + write)
+; Clobbers A, Y
+print_decimal:
+  JSR to_decimal
+  ; fall through
+; Write an already-converted TO_DECIMAL_RESULT
+print_decimal_result:
+  SET16 TO_DECIMAL_RESULT, STR_PTR16
+  JMP write_string
+
+; Print the status-line separator " - "
+; Clobbers A, Y
+print_separator:
+  SET16 str_separator, STR_PTR16
+  JMP write_string
 
 ; Redraw current line's wrap rows plus status bar (for single-line edits)
 ; If row count unchanged: renders just the line's rows + status bar.
@@ -349,23 +352,14 @@ render_current_line_and_status:
   JSR ansi_move_cursor
 
   ; --- Partial render check ---
-  LDA RENDER_FROM_COL16 + 1
-  AND RENDER_FROM_COL16
-  CMP #$FF
-  BEQ .wrap_loop              ; $FFFF → render all rows normally
-
-  ; Compute from_wrap and from_col
-  CP16 RENDER_FROM_COL16, DIV_INPUT16
-  JSR div_mod_screen_cols_16   ; X=from_wrap, A=from_col
-  STA WRAP_REM                 ; save from_col
+  JSR check_from_col           ; X=from_wrap, A=WRAP_REM=from_col
+  BCS .wrap_loop               ; $FFFF → render all rows normally
 
   ; Skip from_wrap wrap rows
   CPX #0
   BEQ .partial_same_row
 .partial_skip_loop:
-  CLC
-  LDA SCREEN_COLS
-  ADCA16 BUF_PTR16, BUF_PTR16
+  JSR buf_add_cols
   INC RENDER_ROW
   LDY RENDER_WRAP
   DEY
@@ -376,15 +370,7 @@ render_current_line_and_status:
 
 .partial_same_row:
   ; Reposition cursor at (RENDER_ROW+1, from_col+1)
-  LDA RENDER_ROW
-  CLC
-  ADC #1
-  STA ANSI_ROW
-  LDA WRAP_REM
-  CLC
-  ADC #1
-  STA ANSI_COL
-  JSR ansi_move_cursor
+  JSR move_to_partial_pos
 
   ; Render from from_col
   LDA WRAP_REM
@@ -401,13 +387,7 @@ render_current_line_and_status:
   JSR ansi_clear_line
 .no_clear:
   ; Advance BUF_PTR16 by SCREEN_COLS for next wrap row
-  CLC
-  LDA BUF_PTR16
-  ADC SCREEN_COLS
-  STA BUF_PTR16
-  LDA BUF_PTR16 + 1
-  ADC #0
-  STA BUF_PTR16 + 1
+  JSR buf_add_cols
   INC RENDER_ROW
   LDX RENDER_WRAP              ; restore loop counter
   DEX
@@ -422,10 +402,7 @@ render_current_line_and_status:
   JMP .wrap_loop
 
 .wrap_done:
-  JSR render_status_line
-  JSR render_position_cursor
-  JSR ansi_cursor_show
-  JMP io_flush
+  JMP render_finish
 
 .rows_changed:
   ; A = current rows, PREV_LINE_ROWS = old rows
@@ -456,29 +433,11 @@ render_current_line_and_status:
   ADC DELETE_SCREEN_ROWS
   CLC
   ADC #1                        ; 1-based
-  STA ANSI_ROW
-  LDA SCREEN_ROWS
-  SEC
-  SBC #1
-  STA ANSI_COL
-  CMP ANSI_ROW
-  BCC .rc_no_scroll
-  BEQ .rc_no_scroll
-  JSR ansi_set_scroll_region
-  LDA SCROLL_DELTA
-  JSR ansi_scroll_up
-  JSR ansi_reset_scroll_region
-.rc_no_scroll:
+  LDX #0                        ; scroll up
+  JSR scroll_region_from_a
   ; Check if cursor line rendering can be skipped/reduced
-  LDA RENDER_FROM_COL16 + 1
-  AND RENDER_FROM_COL16
-  CMP #$FF
-  BNE .rc_check_partial        ; not $FFFF: check for partial render
-  JMP .rc_render_all_cursor    ; $FFFF = unknown change, render all
-.rc_check_partial:
-  CP16 RENDER_FROM_COL16, DIV_INPUT16
-  JSR div_mod_screen_cols_16   ; X = change_wrap_row, A = from_col
-  STA WRAP_REM                 ; save from_col
+  JSR check_from_col           ; X = change_wrap_row, A = WRAP_REM = from_col
+  BCS .rc_render_all_cursor    ; $FFFF = unknown change, render all
   CPX DELETE_SCREEN_ROWS       ; compare with current_rows
   BCS .rc_skip_cursor          ; change >= current: skip cursor rendering
   ; Partial: render from change_wrap_row
@@ -497,46 +456,12 @@ render_current_line_and_status:
   LDA WRAP_REM
   BEQ .rc_full_rows            ; from_col=0: render full rows
   ; --- Partial first row ---
-  LDA RENDER_ROW
-  CLC
-  ADC #1
-  STA ANSI_ROW
-  LDA WRAP_REM
-  CLC
-  ADC #1
-  STA ANSI_COL
-  JSR ansi_move_cursor
-  ; Get line pointer, advance to wrap row
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_ptr
-  LDX RENDER_WRAP
-  BEQ .rc_no_advance
-.rc_advance_loop:
-  CLC
-  LDA BUF_PTR16
-  ADC SCREEN_COLS
-  STA BUF_PTR16
-  LDA BUF_PTR16 + 1
-  ADC #0
-  STA BUF_PTR16 + 1
-  DEX
-  BNE .rc_advance_loop
-.rc_no_advance:
-  LDA WRAP_REM
-  STA RENDER_COL
-  JSR render_line_chars_from
-  LDA RENDER_COL
-  CMP SCREEN_COLS
-  BCS .rc_partial_no_clear
-  JSR ansi_clear_line
-.rc_partial_no_clear:
-  INC RENDER_ROW
-  INC RENDER_WRAP
+  JSR render_partial_first_row
   DEC SCROLL_DELTA
 .rc_full_rows:
   LDA #0
   STA DELETE_SCREEN_ROWS
-  CP16 FILE_LINE16, RENDER_LINE16
+  JSR set_render_line_to_cursor
   JSR render_limited_loop
   PLA
   STA SCROLL_DELTA             ; restore displacement
@@ -548,28 +473,11 @@ render_current_line_and_status:
 .rc_render_all_cursor:
   LDA #0
   STA DELETE_SCREEN_ROWS
-  CP16 FILE_LINE16, RENDER_LINE16
-  LDA #0
-  STA RENDER_WRAP
+  JSR setup_render_at_cursor
   JSR render_limited_loop
 .rc_bottom_rows:
   ; Render bottom exposed rows
-  LDA SCREEN_ROWS
-  SEC
-  SBC #1
-  SEC
-  SBC SCROLL_DELTA
-  STA RENDER_ROW
-  CMP CURSOR_ROW
-  BCC .rc_status_only
-  BEQ .rc_status_only
-  JSR find_line_at_render_row
-  JMP render_limited_rows
-.rc_status_only:
-  JSR render_status_line
-  JSR render_position_cursor
-  JSR ansi_cursor_show
-  JMP io_flush
+  JMP render_bottom_rows_guarded
 
 .rc_render_from_row:
   ; --- Rows increased: scroll DOWN ---
@@ -585,27 +493,11 @@ render_current_line_and_status:
   ADC PREV_LINE_ROWS
   CLC
   ADC #1                        ; 1-based
-  STA ANSI_ROW
-  LDA SCREEN_ROWS
-  SEC
-  SBC #1
-  STA ANSI_COL
-  CMP ANSI_ROW
-  BCC .ri_no_scroll
-  BEQ .ri_no_scroll
-  JSR ansi_set_scroll_region
-  LDA SCROLL_DELTA
-  JSR ansi_scroll_down
-  JSR ansi_reset_scroll_region
-.ri_no_scroll:
+  LDX #$FF                      ; scroll down
+  JSR scroll_region_from_a
   ; Check if old wrap rows can be skipped
-  LDA RENDER_FROM_COL16 + 1
-  AND RENDER_FROM_COL16
-  CMP #$FF
-  BEQ .ri_all_rows             ; $FFFF = unknown change, render all
-  CP16 RENDER_FROM_COL16, DIV_INPUT16
-  JSR div_mod_screen_cols_16   ; X = change_wrap_row, A = from_col
-  STA WRAP_REM                 ; save from_col
+  JSR check_from_col           ; X = change_wrap_row, A = WRAP_REM = from_col
+  BCS .ri_all_rows             ; $FFFF = unknown change, render all
   STX RENDER_WRAP
   ; SCROLL_DELTA = current_rows - change_wrap_row
   LDA SCROLL_DELTA             ; displacement
@@ -623,6 +515,49 @@ render_current_line_and_status:
   LDA WRAP_REM
   BEQ .ri_full_rows            ; from_col=0: render full rows
   ; --- Partial first row ---
+  JSR render_partial_first_row
+  DEC SCROLL_DELTA
+.ri_full_rows:
+  JSR set_render_line_to_cursor
+  JMP render_limited_rows
+.ri_all_rows:
+  LDA SCROLL_DELTA
+  CLC
+  ADC PREV_LINE_ROWS           ; = current_rows
+  STA SCROLL_DELTA
+  JSR setup_render_at_cursor
+  JMP render_limited_rows
+
+.do_full:
+  JMP render_screen
+
+; Advance BUF_PTR16 by SCREEN_COLS (one wrap row)
+; Clobbers A. Preserves X, Y
+buf_add_cols:
+  CLC
+  LDA BUF_PTR16
+  ADC SCREEN_COLS
+  STA BUF_PTR16
+  LDA BUF_PTR16 + 1
+  ADC #0
+  STA BUF_PTR16 + 1
+  RTS
+
+; Advance BUF_PTR16 by X * SCREEN_COLS (X wrap rows; X may be 0)
+; Clobbers A, X. Preserves Y
+buf_ptr_advance_x:
+  CPX #0
+  BEQ .done
+.loop:
+  JSR buf_add_cols
+  DEX
+  BNE .loop
+.done:
+  RTS
+
+; Position the terminal cursor at (RENDER_ROW+1, WRAP_REM+1)
+; Clobbers A, X, Y
+move_to_partial_pos:
   LDA RENDER_ROW
   CLC
   ADC #1
@@ -631,45 +566,27 @@ render_current_line_and_status:
   CLC
   ADC #1
   STA ANSI_COL
-  JSR ansi_move_cursor
+  JMP ansi_move_cursor
+
+; Render the partial first wrap row of the cursor line: position the
+; cursor at (RENDER_ROW+1, WRAP_REM+1), render from column WRAP_REM,
+; clear the row remainder, then step RENDER_ROW/RENDER_WRAP past it.
+; Clobbers A, X, Y, BUF_PTR16, RENDER_COL
+render_partial_first_row:
+  JSR move_to_partial_pos
+  ; Get line pointer, advance to wrap row
   LDAX16 FILE_LINE16
   JSR buf_get_line_ptr
   LDX RENDER_WRAP
-  BEQ .ri_no_advance
-.ri_advance_loop:
-  CLC
-  LDA BUF_PTR16
-  ADC SCREEN_COLS
-  STA BUF_PTR16
-  LDA BUF_PTR16 + 1
-  ADC #0
-  STA BUF_PTR16 + 1
-  DEX
-  BNE .ri_advance_loop
-.ri_no_advance:
+  JSR buf_ptr_advance_x
   LDA WRAP_REM
   STA RENDER_COL
   JSR render_line_chars_from
   LDA RENDER_COL
   CMP SCREEN_COLS
-  BCS .ri_partial_no_clear
+  BCS .partial_no_clear
   JSR ansi_clear_line
-.ri_partial_no_clear:
+.partial_no_clear:
   INC RENDER_ROW
   INC RENDER_WRAP
-  DEC SCROLL_DELTA
-.ri_full_rows:
-  CP16 FILE_LINE16, RENDER_LINE16
-  JMP render_limited_rows
-.ri_all_rows:
-  LDA SCROLL_DELTA
-  CLC
-  ADC PREV_LINE_ROWS           ; = current_rows
-  STA SCROLL_DELTA
-  CP16 FILE_LINE16, RENDER_LINE16
-  LDA #0
-  STA RENDER_WRAP
-  JMP render_limited_rows
-
-.do_full:
-  JMP render_screen
+  RTS

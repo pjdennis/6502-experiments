@@ -301,6 +301,11 @@ clear_count:
   STA BATCH_EXTRA
   RTS
 
+; Clamp cursor column, then clear count state (shared terminal tail)
+clamp_and_clear_count:
+  JSR clamp_cursor_col
+  JMP clear_count
+
 ; Accumulate digit in A ('0'-'9') into COUNT16
 ; COUNT16 = COUNT16 * 10 + digit
 ; If COUNT16 >= 1000, digit is ignored (prevents overflow)
@@ -563,24 +568,20 @@ delete_at_cursor:
   BEQ .no_precompute
   ; Walk cursor line + deleted lines to sum old screen rows
   ; NORMAL_TEMP = number of newlines = number of extra lines
-  CP16 FILE_LINE16, RENDER_LINE16
+  JSR set_render_line_to_cursor
   LDA #0
   STA SCROLL_DELTA            ; accumulator for old screen rows
   LDA NORMAL_TEMP
   STA SCROLL_AMOUNT           ; loop counter (lines after cursor)
   ; First: cursor line
-  LDAX16 RENDER_LINE16
-  JSR buf_get_line_len
-  JSR line_screen_rows
+  JSR render_line_rows
   STA SCROLL_DELTA
   ; Then: each deleted line
 .precomp_walk:
   LDA SCROLL_AMOUNT
   BEQ .precomp_done
   INC16 RENDER_LINE16
-  LDAX16 RENDER_LINE16
-  JSR buf_get_line_len
-  JSR line_screen_rows
+  JSR render_line_rows
   CLC
   ADC SCROLL_DELTA
   STA SCROLL_DELTA
@@ -611,9 +612,7 @@ delete_at_cursor:
   SEC
   JSR mark_adjust_col
   ; Signal line-delete scroll, skip cursor row in scroll region
-  LDAX16 FILE_LINE16
-  JSR buf_get_line_len
-  JSR line_screen_rows
+  JSR file_line_rows
   STA DELETE_SCREEN_ROWS     ; Cursor line screen rows (new)
   ; Compute SCROLL_DELTA = old_total - new_cursor_rows
   LDA SCROLL_DELTA            ; old total screen rows

@@ -592,8 +592,7 @@ word_op_forward:
   ; OP_DELETE or OP_YANK
   JSR apply_char_operator
   PLA
-  JSR clamp_cursor_col
-  JMP clear_count
+  JMP clamp_and_clear_count
 
 .do_change:
   PLA                          ; A = OP_CHANGE
@@ -603,8 +602,7 @@ word_op_forward:
 .batched:
   PLA                          ; Discard operator (always DELETE)
   JSR batched_word_delete_fwd
-  JSR clamp_cursor_col
-  JMP clear_count
+  JMP clamp_and_clear_count
 
 .bail:
   PLA                          ; Recover operator
@@ -653,8 +651,7 @@ word_op_backward:
   ; OP_DELETE or OP_YANK
   JSR apply_char_operator
   PLA
-  JSR clamp_cursor_col
-  JMP clear_count
+  JMP clamp_and_clear_count
 
 .do_change:
   PLA                          ; A = OP_CHANGE
@@ -664,8 +661,7 @@ word_op_backward:
 .batched:
   PLA                          ; Discard operator (always DELETE)
   JSR batched_word_delete_bwd
-  JSR clamp_cursor_col
-  JMP clear_count
+  JMP clamp_and_clear_count
 
 .bail:
   PLA                          ; Recover operator
