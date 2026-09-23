@@ -67,47 +67,30 @@ Implications for phase 13:
   for `INITIAL_INTERVAL` + 8·`SUBSEQUENT_INTERVAL` half-bit periods
   shifting one bit into SR per T2 underflow.
 
-## 2. RAM size — 628128 (128 KiB), 17 address lines, default; emulator should still support 512 KiB
+## 2. RAM size — 512 KiB, all four R-bits wired (resolved)
 
-**Pinned (with one open question)**: the chip name `628128` in the plan
-implies a 128 KiB SRAM with 17 address pins (A0..A16). The CPU provides
-A0..A14 (15 lines), and the PLD generates `R15` and `R16` as the two
-high bank-select bits → 17 lines total. That matches the 628128
-exactly.
+**Resolved**: the board has a 512 KiB SRAM (confirmed by the hardware
+owner). The PLD's `R15..R18` all drive RAM address lines, so every
+bank the PLD can select is physically distinct. The emulator module
+keeps the historical name `chips/ram_628128.c/.h`, but it models the
+512 KiB chip (`uint8_t[0x80000]`) with a fixed size.
 
-But: the PLD also drives `R17` and `R18` (`22V10-wendy2c.pld:55-65`).
-These are emitted unconditionally based on `C0..C4` and the address.
-With the configs that on-target programs actually use
-(`base_config_wendy2c.inc:8-11` — `BANK_START=%00000001`,
-`BANK_STOP=%00010000`, mask `%00011111`), several bank values produce
-non-zero R17/R18 in the equations. So one of:
+RAM address wiring (19 lines):
 
-  a. The chip is actually a 512 KiB SRAM (A0..A18, 19 address lines) and
-     R17/R18 are wired.
-  b. The chip is a 128 KiB SRAM (A0..A16) and R17/R18 are PLD outputs
-     left unconnected on the breadboard. In that case, software that
-     uses bank values where the PLD would otherwise drive R17/R18 will
-     silently alias onto the lower banks.
+- `A18..A15` ← PLD `R18..R15`
+- `A14`      ← CPU `A15` (CPU `A14` goes only to the PLD)
+- `A13..A0`  ← CPU `A13..A0`
 
-No schematic file is present in the repo to pin this down:
+This splits every 32 KiB physical bank into two 16 KiB halves. CPU
+addresses below `$8000` use the low half and addresses from `$8000` up
+use the high half, which is why the lower and upper windows never alias.
 
-```
-$ find . -maxdepth 3 -name 'schematic*' -o -name '*.kicad_*' -o -name '*.sch'
-(no results)
-```
+The per-config memory map is in `README.md` ("wendy2c memory map").
 
-**Decision for the emulator**: model the full 19-bit physical address
-space (`uint8_t[0x80000]`, 512 KiB) and apply all four R-bits. This is
-upward-compatible with both physical chips; we will not introduce a
-divergence vs. real hardware in case (a), and in case (b) we should expose
-an opt-in `--ram-128k` flag that masks R17/R18 to 0 before forming the
-physical address, so the emulator reproduces the aliasing behavior of a
-128 KiB physical chip. Default the flag's value to `512k` since the
-on-target programs in the tree behave the same way under (a); we'll flip
-the default if (b) is confirmed later by inspection of the breadboard.
-
-Phase 7 will name the module `chips/ram_628128.c/.h` for consistency
-with the plan, but its constructor will take a size parameter.
+(Earlier versions of this note assumed a 128 KiB 628128 fed by CPU
+`A0..A14` + `R15..R16`, and proposed a `--ram-128k` aliasing flag.
+Neither the 128 KiB chip nor that wiring matches the hardware, and the
+flag was never built.)
 
 ## 3. LED + button bit positions — PB6 LED, button input deferred
 
@@ -246,10 +229,5 @@ boundary between instructions.
 
 ## Open questions still being deferred
 
-- **RAM physical size (128 KiB vs 512 KiB)**: see section 2. Default
-  emulator behavior chosen pending a hardware-side confirmation. Will
-  ask the user explicitly if any wendy2c on-target program ever stores
-  to a bank whose C-value sets R17 or R18 — if so, and the program
-  expects no aliasing, the chip must be 512 KiB.
 - **Button bit (PA5 vs other)**: section 3. Deferred until any
   on-target program actually reads it.

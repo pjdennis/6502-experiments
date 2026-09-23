@@ -4,13 +4,9 @@
 #include <stdint.h>
 #include "../bus.h"
 
-/* RAM chip on the wendy2c. The investigation note pinned the chip to
- * a 128 KiB 628128 (A0..A16, 17 address pins), but the PLD drives
- * four high address lines R15..R18 unconditionally -- so we emulate
- * the full 512 KiB physical address space (sufficient as a superset
- * of either 128 KiB or 512 KiB physical chips). The breadboard
- * inspection has not yet confirmed which is installed; banks beyond
- * what 128 KiB supports may alias on real hardware.
+/* RAM chip on the wendy2c: a 512 KiB SRAM (the module keeps its
+ * historical 628128 name). The PLD's R15..R18 all drive RAM address
+ * lines, so every bank it selects is physically distinct.
  *
  * Physical address = (r_bits & 0x0F) << 15 | CPU A15 << 14 | (A13..A0).
  * CPU A14 goes only to the PLD; see physical_addr() in ram_628128.c.
@@ -20,7 +16,7 @@
  * VIA window ($F000..$F7FF) and ROM region, so no additional address
  * filtering is needed here. */
 
-#define RAM_628128_SIZE 0x80000  /* 512 KiB superset */
+#define RAM_628128_SIZE 0x80000  /* 512 KiB */
 
 struct ram_628128_state {
     uint8_t contents[RAM_628128_SIZE];

@@ -17,7 +17,7 @@
 These get a 1-commit "investigation note" file (`assembler2/emulator/INVESTIGATION-wendy2c.md`) at the start of phase 1, and the answers feed every following phase.
 
 1. **Serial wiring.** From the source we have so far, wendy2c serial RX is on the VIA: `PCR = PCR_CB2_IND_NEG_E`, `ACR = ACR_SR_IN_T2`, `SR` is read after a CB2 start-bit interrupt fires, and T2 is reloaded for half-bit timing. So the SERIAL_USB module talks to the VIA's CB2 (start-bit edge) + SR (shifted-in byte), not to a separate UART. The investigation note records this and pins down: TX side appears unused by `upload_and_run_ram_wendy2c.s` (it only receives); confirm by grepping every `BPS_*` and `SR` write in `upload_and_run.inc` etc. before writing the SERIAL module.
-2. **RAM size.** `R15..R18` PLD gives 4 bank-select bits over 32 KiB → 4·32 KiB·banks above $8000 driven by `C0..C4`. Confirm the physical RAM chip (`628128` is 128 KiB / 17 address lines — that matches A0..A14 + R15..R16 = 17 lines). Check the schematics file (if present in repo) before writing `RAM_628128`. Note the result in INVESTIGATION-wendy2c.md.
+2. **RAM size.** *(Resolved: 512 KiB chip, see INVESTIGATION-wendy2c.md §2.)* The PLD's `R15..R18` drive RAM `A18..A15`, CPU `A15` drives RAM `A14`, and CPU `A14` goes only to the PLD. `C0..C4` bank two windows, `$0000-$3FFF` and `$8000-$EFFF`; the per-config map is in `README.md`.
 3. **LED + button bit positions.** The `multitasking_test_wendy2c.s` uses `LED_PORT = PORTB`, `LED_MASK = %01000000` (PB6) and `T1_SQWAVE_OUT = %10000000` (PB7). No button bit is actually wired in `multitasking_test_wendy2c.s`; the comments mention PORTA bit 5 = `CONTROL_BUTTON`. Confirm whether `wendy2c_led_test.s` or any other on-target program reads it — if not, defer button input plumbing past LED rendering and revisit.
 4. **20x4 vs 16x2 LCD.** `base_config_wendy2c.inc` defines 16x2 active and 20x4 commented out. Default LCD module to 16x2; expose `--lcd-rows N --lcd-cols N` to override.
 5. **CKS/CK ordering.** The PLD has `CKS.R = /CKS` and `CK.R = CK*/CKS + /CK*CKS + /ROMCS*/CK`. CKS is OSC/2 unconditional. CK transitions on CKS edges; with /ROMCS true, the third term keeps CK low for one extra OSC cycle so a ROM access takes 2 CPU cycles' worth of OSC ticks. Document the chosen scheduling: each OSC tick: (1) latch combinational inputs visible to PLD from the previous tick, (2) update CKS registered output, (3) update CK registered output, (4) on the falling edge of CK, advance one CPU bus phase. This avoids any combinational loop.
@@ -149,10 +149,10 @@ After phase 4, you can run `emulator.out --machine wendy2c some.bin` and it just
 - New `--rom path/to/rom.bin` CLI option (only honored under `--machine wendy2c`).
 - **Commit**: `wendy2: rom_28c256 module + --rom flag`.
 
-### Phase 7 — RAM (628128 128 KiB, banked)
+### Phase 7 — RAM (512 KiB, banked; module keeps the `628128` name)
 
-- `chips/ram_628128.c/.h`. Internal `uint8_t[0x20000]` (or 0x80000 if the investigation note pins down a 512 KiB chip). Read/write claim when `/RAMCS` asserted; physical-address formed as `(R18 R17 R16 R15) << 15 | A14..A0`.
-- Tests: write to `$0000` with `C0..C4 = 0`, read back with `C0..C4 = 1`; verify the two banks are physically distinct. Also verify writes around `$f800` follow the PLD `C4=1` overlay rule (RAM at `$f800` even though normally selected ROM).
+- `chips/ram_628128.c/.h`. Internal `uint8_t[0x80000]` (512 KiB). Read/write claim when `/RAMCS` asserted; physical address formed as `(R18 R17 R16 R15) << 15 | CPU A15 << 14 | A13..A0`.
+- Tests: write to `$0000` with `C0..C4 = 1`, read back with `C0..C4 = 2`; verify the two lower banks are physically distinct (configs `$00` and `$01` both select lower bank 1, so they share `$0000`). Also verify writes around `$f800` follow the PLD `C4=1` overlay rule (RAM at `$f800` even though normally selected ROM).
 - **Commit**: `wendy2: ram_628128 module with bank-mapped addresses`.
 
 ### Phase 8 — CPU on the bus
@@ -312,7 +312,7 @@ Commits stay small and single-purpose. Each new C source goes in with a same-com
 ## Acknowledged uncertainty
 
 - **CPU-on-bus strategy 1 vs 2** in phase 8: strategy 1 (per-instruction, then "credit") is recommended but the call should be made only after phase 3h shows the Harte cycle-log assertion is *not* needed by anything wendy2c does. If the wendy2c serial RX in phase 13 turns out to depend on intra-instruction bus order (it probably doesn't — the SR fires at T2 underflow, which happens between instructions), this becomes a strategy-2 follow-up.
-- **RAM chip size** (128 KiB vs 512 KiB): pinned by the investigation note in phase 0; affects `RAM_628128` constructor only.
+- **RAM chip size**: resolved as 512 KiB (INVESTIGATION-wendy2c.md §2).
 - **Button bit**: still uncertain whether any program actually reads it; phase 11 lands the LED first and adds a `// TODO: confirm bit-5 vs bit-other` note that gets resolved when (or if) a program reads `CONTROL_BUTTON`.
 - **Per-cycle clock pacing of CPU vs OSC**: documented in phase 0; if the chosen ordering produces flaky test behavior on a real wendy2c ROM, the fix lives in `clock_22v10.c` not in any chip — that isolation is the whole point of the chip-vtable layout.
 

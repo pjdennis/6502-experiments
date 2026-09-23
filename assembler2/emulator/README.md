@@ -7,7 +7,7 @@ A two-machine 6502 emulator:
   `$F006`/`$F009`/`$F00C` (read/write/error byte ports) and the rest of
   the file/console/socket ports the assembler relies on.
 - **`wendy2c`** — a board-level model of the wendy2c machine: 28C256
-  ROM, 628128 banked RAM, 22V10 PLD clock + chip-select decoder, 6522
+  ROM, 512 KiB banked RAM, 22V10 PLD clock + chip-select decoder, 6522
   VIA, HD44780 LCD, serial-USB bridge, LED + button, all wired to a
   W65C02S core. Selected with `--machine wendy2c`.
 
@@ -136,7 +136,7 @@ emulator/
 │   ├── osc.c               oscillator (drives bus->osc_ticks)
 │   ├── clock_22v10.c       PLD model: chip-selects + CPU clock
 │   ├── rom_28c256.c        32 KiB ROM
-│   ├── ram_628128.c        128 KiB banked RAM
+│   ├── ram_628128.c        512 KiB banked RAM (name is historical)
 │   ├── cpu_65c02.c         CPU-on-bus wrapper for the wendy2c machine
 │   ├── via_6522.c          6522 VIA: regs + T1/T2 + IRQ + CB2/SR
 │   ├── lcd_hd44780.c       4-bit HD44780 + DDRAM/CGRAM render
@@ -150,6 +150,63 @@ emulator/
     ├── harte/              optional Tom-Harte ProcessorTests harness
     └── wendy2c_goldens.sh  end-to-end golden-LCD checks
 ```
+
+## wendy2c memory map
+
+Decoded by `22V10-wendy2c.pld` (emulated in `chips/clock_22v10.c` via
+the generated `clock_22v10_pld_generated.h`). The config is `C4..C0` =
+VIA `PB4..PB0`; it reads as `$00` after reset because DDRB is 0.
+
+Wiring:
+
+- ROM (28C256, 32 KiB) sees CPU `A14..A0`, so ROM offset = address & `$7FFF`.
+- RAM (512 KiB) sees `R18..R15` from the PLD on its `A18..A15`, CPU `A15`
+  on its `A14`, and CPU `A13..A0`. CPU `A14` goes only to the PLD.
+  Physical = `R << 15 | A15 << 14 | A13..A0`.
+- `/RAMCS` is asserted whenever `/ROMCS` and `/VIACS` are not.
+- CK runs at half speed while ROM is selected.
+
+Per config (RAM entries are the physical address of the region's first
+byte; `n` = `C3..C0`, `m` = `C2..C0`):
+
+| Config        | `$0000-$3FFF`  | `$4000-$7FFF` | `$8000-$BFFF`       | `$C000-$EFFF`       | `$F000-$F7FF` | `$F800-$FFFF` |
+|---------------|----------------|---------------|---------------------|---------------------|---------------|---------------|
+| `$00`         | `$08000`       | `$00000`      | ROM `$0000`         | ROM `$4000`         | VIA           | ROM `$7800`   |
+| `$01-$0F`     | `n * $8000`    | `$00000`      | `$04000`            | `$0C000`            | VIA           | `$0F800`      |
+| `$10`         | `$08000`       | `$00000`      | ROM `$0000`         | ROM `$4000`         | VIA           | `$0F800`      |
+| `$18`         | `$10000`       | `$00000`      | ROM `$0000`         | ROM `$4000`         | VIA           | `$0F800`      |
+| `$11-$17`     | `$08000`       | `$00000`      | `m * $10000 + $4000`| `m * $10000 + $C000`| VIA           | `$0F800`      |
+| `$19-$1F`     | `$10000`       | `$00000`      | `m * $10000 + $4000`| `m * $10000 + $C000`| VIA           | `$0F800`      |
+
+In words:
+
+- `$4000-$7FFF` is common RAM and `$F000-$F7FF` is the VIA (16
+  registers on `A3..A0`, mirrored) in every config. `$F800-$FFFF` is
+  common RAM in every config except `$00`, where it is ROM.
+- Configs `$01-$0F` give 60 KiB of flat RAM; only the lower window
+  (which holds zero page and the stack) switches, across banks 1-15.
+  `$00` and `$01` share lower bank 1.
+- With `C4` set, `C3` picks lower bank 1 or 2 and `C2..C0` picks the
+  upper window: `0` maps ROM (`$10`, `$18`), `1-7` map a 28 KiB RAM
+  upper bank.
+
+Physical RAM, in 16 KiB halves of 32 KiB bank `k`:
+
+| Physical                        | Reached from                                          |
+|---------------------------------|-------------------------------------------------------|
+| `$00000-$03FFF`                 | `$4000-$7FFF`, all configs                            |
+| `$04000-$07FFF`                 | `$8000-$BFFF`, configs `$01-$0F`                      |
+| `$08000-$0BFFF`                 | lower bank 1                                          |
+| `$0C000-$0EFFF`                 | `$C000-$EFFF`, configs `$01-$0F`                      |
+| `$0F800-$0FFFF`                 | `$F800-$FFFF`, all configs except `$00`               |
+| `k * $8000 + $0000-$3FFF`, k≥2  | lower bank `k`                                        |
+| `k * $8000 + $4000-$7FFF`, k≥2  | upper bank `m = k / 2` (`$C000` half when `k` is odd) |
+
+Lower banks only ever use the low half of a 32 KiB bank and upper
+windows only the high half, so the two windows never alias. Never
+reachable: `$0F000-$0F7FF` and `m * $10000 + $F000-$FFFF` for
+`m = 1-7` (30 KiB in total). `tests/test_pld_config_map.c` pins these
+mappings, including that all 32 configs are distinct.
 
 ## Testing references
 
