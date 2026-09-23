@@ -461,7 +461,7 @@ test_all:
   stx $2000
   inx
   inc
-  cmp #%01111
+  cmp #%10000
   bne .fill_lower_bank
 
 ; 16         in lower fixed ram    config 00001        $6000
@@ -484,7 +484,7 @@ test_all:
   stx $a000
   inx
   inc
-  cmp #%10111
+  cmp #%11000
   bne .fill_upper_bank_l
 
 ; 25         in upper bank 1 H     config 00001        $e000
@@ -501,7 +501,7 @@ test_all:
   stx $e000
   inx
   inc
-  cmp #%10111
+  cmp #%11000
   bne .fill_upper_bank_h
 
 ; Check Values
@@ -515,7 +515,7 @@ test_all:
   bne .check_lower_bank_failed
   inx
   inc
-  cmp #%01111
+  cmp #%10000
   bne .check_lower_bank
 
   lda #'Y'
@@ -576,7 +576,7 @@ test_all:
   bne .check_upper_bank_l_failed
   inx
   inc
-  cmp #%10111
+  cmp #%11000
   bne .check_upper_bank_l
   lda #'Y'
   jsr display_character
@@ -617,7 +617,7 @@ test_all:
   bne .check_upper_bank_h_failed
   inx
   inc
-  cmp #%10111
+  cmp #%11000
   bne .check_upper_bank_h
   lda #'Y'
   jsr display_character
