@@ -210,6 +210,21 @@ test_fixed_upper_ram:
   lda #'Y'
   jsr display_character
 
+  ; The same page is also the $f800 RAM for the non-C4 configs
+  ldx #%00001
+.check_value_in_lower_config:
+  txa
+  jsr switch_to_space
+  lda #1
+  cmp TEST_FIXED_UPPER_VALUE
+  bne .failed
+  inx
+  cpx #%10000
+  bne .check_value_in_lower_config
+
+  lda #'Y'
+  jsr display_character
+
   bra .done
 
 .failed:
@@ -302,6 +317,46 @@ test_access_eeprom:
   lda #%10000
   jsr test_access_eeprom_2
 
+  ; cfg=$00 maps upper memory, including $f800, to ROM
+  lda #%00000
+  jsr test_access_eeprom_2
+  jsr test_fixed_upper_eeprom
+
+  rts
+
+
+; Verify that $f800 in cfg=$00 is ROM: changing the RAM at $f800
+; (via cfg=$01) must not change what cfg=$00 reads there.
+test_fixed_upper_eeprom:
+  lda #%00000
+  jsr switch_to_space
+  ldy TEST_FIXED_UPPER_VALUE
+
+  lda #%00001
+  jsr switch_to_space
+  tya
+  eor #$ff
+  sta TEST_FIXED_UPPER_VALUE
+
+  lda #%00000
+  jsr switch_to_space
+  cpy TEST_FIXED_UPPER_VALUE
+  bne .failed
+
+  lda #'Y'
+  jsr display_character
+
+  bra .done
+
+.failed:
+  lda #'N'
+  jsr display_character
+  lda #1
+  sta tests_failed
+
+.done:
+  lda #1
+  jsr switch_to_space
   rts
 
 
