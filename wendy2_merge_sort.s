@@ -21,7 +21,12 @@ N_ELEMENTS = 57344
 ; ----- switch_to_space macro -----
 ;
 ; Update the low 5 bits of BANK_PORT (PORTB) to the new cfg in A,
-; preserving the upper 3 bits (LCD-E, LED, T1 squarewave). Inlined
+; preserving the upper 3 bits (LCD-E, LED, T1 squarewave).
+;
+; The demo numbers its 8 upper banks as cfgs $18..$1F so that stepping
+; to the next bank is an INC. On the PLD, cfg $18 maps ROM into the
+; upper window, so the macro substitutes cfg $02, which gives the
+; required lower bank 2 + upper RAM bank 0. Inlined
 ; because the merge inner loop calls this twice per emitted element
 ; (once for the target write, once for the source read), so a JSR-
 ; based version's overhead costs ~20% of the demo's total runtime.
@@ -36,9 +41,10 @@ N_ELEMENTS = 57344
 ; The macro uses ZP \$02 (TEMP) for the one byte of scratch needed to
 ; combine the preserved upper bits with the new bank bits before the
 ; single write. ZP is in the banked lower 16K, but this is fine:
-;   - All sustained-state switches happen between cfgs $18..$1F,
-;     which share lower bank 2, so ZP doesn't change across them.
-;   - On the very first switch (boot ROM's cfg $01 -> our cfg $18),
+;   - All sustained-state switches happen between cfgs $02 and
+;     $19..$1F, which share lower bank 2, so ZP doesn't change across
+;     them.
+;   - On the very first switch (boot ROM's cfg $01 -> our cfg $02),
 ;     the lower bank does change, but only AFTER the sta BANK_PORT.
 ;     Both the sta TEMP and the ora TEMP execute with BANK_PORT
 ;     still holding the old cfg, so they see the same ZP \$02 in the
@@ -56,6 +62,10 @@ INV_BANK_MASK = BANK_MASK ^ $FF
   sta TEMP                    ; ZP scratch
   tya
   and #BANK_MASK              ; A = new bank bits only
+  cmp #%11000                 ; bank 0 is cfg $02, not $18 (ROM)
+  bne .bank_cfg\@
+  lda #%00010
+.bank_cfg\@:
   ora TEMP                    ; A = preserved upper bits | new bank bits
   sta BANK_PORT               ; single atomic write to the bank-select reg
   .endmacro
@@ -107,11 +117,10 @@ CUR_OFFSET_TGT       = 6
   .include display_string_immediate.inc
 
 program_entry:
-  ; Pick a stable lower bank (bank 2) + upper bank 0. cfg %11000 = $18.
-  ; This is the C3=1 group, the one the PLD fix in commit 8a8eb82 made
-  ; valid for upper-RAM access. The fill/sort phases will only ever
-  ; touch cfgs $18..$1F, so the lower 16K mapping stays put after this
-  ; initial switch.
+  ; Pick a stable lower bank (bank 2) + upper bank 0: demo cfg $18,
+  ; which switch_to_space turns into cfg $02. The fill/sort phases
+  ; only ever touch demo cfgs $18..$1F, so the lower 16K mapping stays
+  ; put after this initial switch.
   lda #%11000
   switch_to_space
   ldx #$ff

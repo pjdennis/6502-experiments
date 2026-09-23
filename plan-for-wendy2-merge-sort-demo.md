@@ -2,6 +2,10 @@
 
 ## Context
 
+> **Update:** commit `8a8eb82` was later reverted: cfg `$18` maps ROM into the upper window again
+> (the lower-bank-2 analogue of cfg `$10`). The demo still numbers its banks `$18..$1F`, and its
+> `switch_to_space` macro substitutes cfg `$02` (lower bank 2, upper RAM bank 0) for `$18`.
+
 The wendy2 PLD was just fixed (commit `8a8eb82` cherry-picked onto `michael_keyboard_wip`) so that cfgs `$18..$1F` correctly map all 8 upper-RAM banks instead of `$18` aliasing to a ROM config. This demo exercises every one of those upper banks end-to-end by doing a real workload — a bottom-up merge sort of ~57k 16-bit values across 4 "source" banks and 4 "target" banks — while showing live progress and a final verification pass on the LCD.
 
 Goals:
