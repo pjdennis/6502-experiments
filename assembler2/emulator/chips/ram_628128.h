@@ -12,7 +12,8 @@
  * inspection has not yet confirmed which is installed; banks beyond
  * what 128 KiB supports may alias on real hardware.
  *
- * Physical address = (r_bits & 0x0F) << 15 | (A14..A0).
+ * Physical address = (r_bits & 0x0F) << 15 | CPU A15 << 14 | (A13..A0).
+ * CPU A14 goes only to the PLD; see physical_addr() in ram_628128.c.
  *
  * Reads claim when bus->ramcs && bus->rwb. Writes claim when
  * bus->ramcs && !bus->rwb. The PLD's RAMCS already excludes the

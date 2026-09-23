@@ -243,12 +243,12 @@ test_lower_bank_with_upper:
   lda #'4'
   jsr display_character
 
-  lda #00001
+  lda #%00001
   jsr switch_to_space
   lda #1
   sta TEST_VALUE
 
-  lda #00010
+  lda #%00010
   jsr switch_to_space
   lda #2
   sta TEST_VALUE
@@ -389,11 +389,9 @@ test_access_eeprom_2:
 
 ; Test 7: write/read-back at $a000 and $e000 for cfgs %11000..%11111
 ; (the "lower bank 2" upper-bank-select group). Mirrors the test_all
-; upper-L / upper-H sub-tests but for the C3=1 group. Currently
-; cfg=%11000 fails because the .pld maps its upper memory to ROM
-; instead of RAM bank 0 (writes silently dropped, readback returns
-; ROM contents). After the PLD fix (drop $18 from the C4-mode ROM
-; terms), all 8 cfgs should pass.
+; upper-L / upper-H sub-tests but for the C3=1 group. Includes
+; cfg=%11000, which maps upper memory to RAM bank 0 (only cfg=%10000
+; keeps ROM there among the C4 configs).
 test_upper_lower_bank_2:
   lda #'7'
   jsr display_character
