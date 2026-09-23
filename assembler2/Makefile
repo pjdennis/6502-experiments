@@ -223,7 +223,7 @@ emulator/tests/out/test_pld_config_map.out: emulator/tests/test_pld_config_map.c
 	@mkdir -p emulator/tests/out
 	gcc -Wall -Werror -o $@ emulator/tests/test_pld_config_map.c emulator/chips/clock_22v10.c emulator/bus.c
 
-emulator/tests/out/test_pld_literal.out: emulator/tests/test_pld_literal.c emulator/chips/clock_22v10.c emulator/chips/clock_22v10.h emulator/bus.c emulator/bus.h emulator/tests/greatest.h
+emulator/tests/out/test_pld_literal.out: emulator/tests/test_pld_literal.c emulator/chips/clock_22v10.c emulator/chips/clock_22v10.h emulator/chips/clock_22v10_pld_generated.h emulator/bus.c emulator/bus.h emulator/tests/greatest.h
 	@mkdir -p emulator/tests/out
 	gcc -Wall -Werror -o $@ emulator/tests/test_pld_literal.c emulator/chips/clock_22v10.c emulator/bus.c
 

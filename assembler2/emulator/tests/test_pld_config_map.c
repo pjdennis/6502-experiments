@@ -4,11 +4,10 @@
  * the breadboard's address map.
  *
  * This is the "design-intent" test: it captures what each config SHOULD
- * mean from the on-target software's point of view. Currently cfg=$18
- * (the second ROM-upper variant) fails -- the .pld treats it as
- * "ROM upper, RAM top" same as cfg=$10, but the design intends cfg=$18
- * to be the C3=1 / lower-bank-2 analogue of cfg=$01 (lower=bank 2,
- * upper=RAM banks 0/1). See PLD_BANK_ALIASING_NOTES.md for the history.
+ * mean from the on-target software's point of view. cfg=$18 is the
+ * lower-bank-2 analogue of cfg=$10 (ROM upper, RAM top). Decoding it as
+ * RAM upper would make it a duplicate of cfg=$02, so every one of the
+ * 32 configs must produce a distinct memory map.
  */
 
 #include <stdint.h>
@@ -76,6 +75,16 @@ static const struct expect cfg10[] = {
     EXPECT_RAM(0xF800, 1, "$10 top=RAM bank 1"),
 };
 
+/* cfg=$18 -- ROM upper, RAM top, lower=bank 2 */
+static const struct expect cfg18[] = {
+    EXPECT_RAM(0x2000, 2, "$18 lower=bank 2"),
+    EXPECT_RAM(0x6000, 0, "$18 fixed=bank 0"),
+    EXPECT_ROM(0xA000,    "$18 upper L=ROM"),
+    EXPECT_ROM(0xE000,    "$18 upper H=ROM"),
+    EXPECT_VIA(0xF000,    "$18 VIA"),
+    EXPECT_RAM(0xF800, 1, "$18 top=RAM bank 1"),
+};
+
 /* For all "lower-bank-only" configs cfg=$01..$0F we get:
  *   $2000 -> RAM bank cfg
  *   $6000 -> RAM bank 0 (fixed)
@@ -139,8 +148,8 @@ UPPER_LB1_EXPECT(cfg16, 12, 13);
 UPPER_LB1_EXPECT(cfg17, 14, 15);
 
 /* Upper-bank configs with lower=bank 2 (C4=1, C3=1).
- * Same C2 C1 C0 selector layout. cfg=$18 selector 000 must give
- * RAM upper bank 0/1, NOT ROM. */
+ * Same C2 C1 C0 selector layout; selector 000 is cfg=$18 (ROM upper,
+ * above). */
 #define UPPER_LB2_EXPECT(NAME, BL, BH) \
     static const struct expect NAME[] = { \
         EXPECT_RAM(0x2000, 2,    "lower=bank 2"), \
@@ -150,7 +159,6 @@ UPPER_LB1_EXPECT(cfg17, 14, 15);
         EXPECT_VIA(0xF000,       "VIA"), \
         EXPECT_RAM(0xF800, 1,    "top=bank 1"), \
     }
-UPPER_LB2_EXPECT(cfg18,  0,  1);   /* THE FIX: cfg=$18 must be RAM */
 UPPER_LB2_EXPECT(cfg19,  2,  3);
 UPPER_LB2_EXPECT(cfg1A,  4,  5);
 UPPER_LB2_EXPECT(cfg1B,  6,  7);
@@ -185,7 +193,7 @@ static struct cfg_expect ALL[] = {
     C(cfg15, "$15: upper banks (10,11),lower bank 1"),
     C(cfg16, "$16: upper banks (12,13),lower bank 1"),
     C(cfg17, "$17: upper banks (14,15),lower bank 1"),
-    C(cfg18, "$18: upper banks (0,1),  lower bank 2  [post-fix]"),
+    C(cfg18, "$18: ROM upper + RAM top, lower bank 2"),
     C(cfg19, "$19: upper banks (2,3),  lower bank 2"),
     C(cfg1A, "$1A: upper banks (4,5),  lower bank 2"),
     C(cfg1B, "$1B: upper banks (6,7),  lower bank 2"),
@@ -296,13 +304,14 @@ TEST window_transitions_in_canonical_configs(void) {
     emu_set(0xF7FF, 0x10); ASSERT(bus_.viacs);
     emu_set(0xF800, 0x10); ASSERT(bus_.ramcs && bus_.r_bits == 1);  /* top RAM (not ROM!) */
 
-    /* cfg=$18: post-fix should be RAM upper bank 0/1, NOT ROM */
-    emu_set(0x8000, 0x18); ASSERT(bus_.ramcs && bus_.r_bits == 0);
-    emu_set(0xBFFF, 0x18); ASSERT(bus_.ramcs && bus_.r_bits == 0);
-    emu_set(0xC000, 0x18); ASSERT(bus_.ramcs && bus_.r_bits == 1);
-    emu_set(0xEFFF, 0x18); ASSERT(bus_.ramcs && bus_.r_bits == 1);
+    /* cfg=$18: ROM upper, RAM top, like cfg=$10 but lower bank 2 */
+    emu_set(0x3FFF, 0x18); ASSERT(bus_.ramcs && bus_.r_bits == 2);  /* lower bank 2 */
+    emu_set(0x8000, 0x18); ASSERT(bus_.romcs);
+    emu_set(0xBFFF, 0x18); ASSERT(bus_.romcs);
+    emu_set(0xC000, 0x18); ASSERT(bus_.romcs);
+    emu_set(0xEFFF, 0x18); ASSERT(bus_.romcs);
     emu_set(0xF000, 0x18); ASSERT(bus_.viacs);
-    emu_set(0xF800, 0x18); ASSERT(bus_.ramcs && bus_.r_bits == 1);
+    emu_set(0xF800, 0x18); ASSERT(bus_.ramcs && bus_.r_bits == 1);  /* top RAM */
 
     /* cfg=$00 startup: ROM at $8000-$EFFF AND $F800-$FFFF, VIA at $F000-$F7FF */
     emu_set(0x8000, 0x00); ASSERT(bus_.romcs);
@@ -314,10 +323,40 @@ TEST window_transitions_in_canonical_configs(void) {
     PASS();
 }
 
+/* No two configs may decode identically: a duplicate wastes one of the
+ * 32 config values. Signature = chip select (and R-bits for RAM) at
+ * every 2 KiB block, the PLD's address granularity (A15..A11). */
+TEST all_32_configs_are_distinct(void) {
+    bus_init(&bus_);
+    clock_22v10_init(&clk_ch, &clk_state);
+    bus_add_chip(&bus_, &clk_ch);
+
+    uint8_t sig[32][32];
+    for (int cfg = 0; cfg < 32; cfg++) {
+        for (int blk = 0; blk < 32; blk++) {
+            emu_set((uint16_t)(blk << 11), (uint8_t)cfg);
+            sig[cfg][blk] = bus_.romcs ? 0x40 : bus_.viacs ? 0x20
+                          : bus_.ramcs ? (uint8_t)(0x10 | bus_.r_bits) : 0;
+        }
+    }
+    int dups = 0;
+    for (int a = 0; a < 32; a++) {
+        for (int b = a + 1; b < 32; b++) {
+            if (memcmp(sig[a], sig[b], sizeof(sig[a])) == 0) {
+                fprintf(stderr, "cfg=$%02X decodes identically to cfg=$%02X\n", b, a);
+                dups++;
+            }
+        }
+    }
+    ASSERT_EQ_FMT(0, dups, "%d");
+    PASS();
+}
+
 SUITE(pld_config_map_suite) {
     RUN_TEST(all_32_configs_match_design);
     RUN_TEST(exactly_one_cs_at_every_boundary_for_all_configs);
     RUN_TEST(window_transitions_in_canonical_configs);
+    RUN_TEST(all_32_configs_are_distinct);
 }
 
 GREATEST_MAIN_DEFS();

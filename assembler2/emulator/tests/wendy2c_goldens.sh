@@ -90,7 +90,7 @@ run_case multitasking multitasking_test_wendy2c.s 150000000 " X "
 # Memory-map verification against the PLD. Each test prints its number
 # then one Y/N per sub-check; line 2 ends in " OK" only if all pass.
 # Two cases because run_case matches a single-line substring.
-run_case verification_l1 verification_wendy2c.s 20000000 "|1Y2YY3YYY4YY5YYY|"
+run_case verification_l1 verification_wendy2c.s 20000000 "|1Y2YY3YYY4YY5YY |"
 run_case verification_l2 verification_wendy2c.s 20000000 "|6YYYYYY7Y OK"
 
 echo "wendy2c_goldens: all PASS"

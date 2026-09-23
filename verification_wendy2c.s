@@ -262,7 +262,7 @@ test_lower_bank_with_upper:
   cpx #16
   bne .set_value_in_bank
  
-  ldx #%10001
+  ldx #%10000
 .check_value_in_bank:
   txa
   jsr switch_to_space
@@ -276,7 +276,7 @@ test_lower_bank_with_upper:
   lda #'Y'
   jsr display_character
 
-  ldx #%11001
+  ldx #%11000
 .check_value_in_bank_copy:
   txa
   jsr switch_to_space
@@ -311,17 +311,54 @@ test_access_eeprom:
   stz $a000
   stz $a000 + 3
 
-  ; Only cfg=$10 (%10000) still maps upper memory to ROM. cfg=$18
-  ; (%11000) now exposes upper RAM (see test 7 below), so it is no
-  ; longer a valid EEPROM-access config.
-  lda #%10000
-  jsr test_access_eeprom_2
-
-  ; cfg=$00 maps upper memory, including $f800, to ROM
+  ; cfgs $00, $10 and $18 map upper memory to ROM
   lda #%00000
-  jsr test_access_eeprom_2
+  jsr check_eeprom_at_a000
+  bne .failed
+
+  lda #%10000
+  jsr check_eeprom_at_a000
+  bne .failed
+
+  lda #%11000
+  jsr check_eeprom_at_a000
+  bne .failed
+
+  lda #'Y'
+  jsr display_character
+
+  ; cfg=$00 also maps $f800 to ROM
   jsr test_fixed_upper_eeprom
 
+  rts
+
+.failed:
+  lda #'N'
+  jsr display_character
+  lda #1
+  sta tests_failed
+  rts
+
+
+; On entry A contains the space to check. Returns with Z set if the
+; ROM's code is visible at $a000 in that space.
+check_eeprom_at_a000:
+  jsr switch_to_space
+  ldx #0
+  lda $a000
+  cmp #$20 ; JSR
+  bne .not_eeprom
+
+  lda $a000 + 3
+  cmp #$A9 ; LDA (immediate)
+  bne .not_eeprom
+
+  inx
+
+.not_eeprom:
+  lda #1
+  jsr switch_to_space
+  cpx #1
   rts
 
 
@@ -360,46 +397,18 @@ test_fixed_upper_eeprom:
   rts
 
 
-test_access_eeprom_2:
-  jsr switch_to_space
-  lda $a000
-  cmp #$20 ; JSR
-  bne .failed
-
-  lda $a000 + 3
-  cmp #$A9 ; LDA (immediate)
-  bne .failed
-
-  lda #'Y'
-  jsr display_character
-
-  bra .done
-
-.failed:
-  lda #'N'
-  jsr display_character
-  lda #1
-  sta tests_failed
-
-.done:
-  lda #1
-  jsr switch_to_space
-  rts
-
-
-; Test 7: write/read-back at $a000 and $e000 for cfgs %11000..%11111
+; Test 7: write/read-back at $a000 and $e000 for cfgs %11001..%11111
 ; (the "lower bank 2" upper-bank-select group). Mirrors the test_all
-; upper-L / upper-H sub-tests but for the C3=1 group. Includes
-; cfg=%11000, which maps upper memory to RAM bank 0 (only cfg=%10000
-; keeps ROM there among the C4 configs).
+; upper-L / upper-H sub-tests but for the C3=1 group. cfg=%11000 is
+; excluded: it maps upper memory to ROM, which must not be written.
 test_upper_lower_bank_2:
   lda #'7'
   jsr display_character
 
-  ; Fill phase: each cfg in $18..$1F writes the cfg byte to $a000
+  ; Fill phase: each cfg in $19..$1F writes the cfg byte to $a000
   ; and (cfg + $20) to $e000.
-  ldx #%11000               ; $18
-  lda #%11000
+  ldx #%11001               ; $19
+  lda #%11001
 .t7_fill:
   jsr switch_to_space
   stx $a000
@@ -413,8 +422,8 @@ test_upper_lower_bank_2:
   bne .t7_fill
 
   ; Check phase: same loop but read and compare.
-  ldx #%11000
-  lda #%11000
+  ldx #%11001
+  lda #%11001
 .t7_check:
   jsr switch_to_space
   cpx $a000
