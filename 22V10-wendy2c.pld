@@ -8,78 +8,124 @@ Wendy2c    ; Max 8 characters
 ;13    14   15   16   17   18   19      20      21      22  23   24
 
 
-; Clock
+; Memory map. C4..C0 = VIA PB4..PB0 (config; reads $00 after reset).
+; Ln = lower RAM bank n, Un = upper RAM bank n.
+;
+;   Config    $0000-$3FFF  $4000-$7FFF  $8000-$EFFF  $F000-$F7FF  $F800-$FFFF
+;   $00       L1           common       ROM          VIA          ROM
+;   $01-$0F   L1-L15       common       U1           VIA          common
+;   $10       L1           common       ROM          VIA          common
+;   $11-$17   L1           common       U2-U8        VIA          common
+;   $18       L2           common       ROM          VIA          common
+;   $19-$1F   L2           common       U2-U8        VIA          common
+;
+; RAM (512K) address = R18..R15 : CPU A15 : CPU A13..A0. CPU A14 reaches
+; RAM only through the R bits. CPU A15 on RAM A14 puts $0000-$7FFF in the
+; low 16K half of a 32K bank and $8000-$FFFF in the high half, so the
+; lower and upper windows can never alias whatever R is.
+
+
+; Clock (registered on OSC). CKS = OSC/2. The first two terms alone
+; (CK.next = CK xor CKS) give CK = CKS/2, the slow speed for the EEPROM.
+; The last term applies when ROM is not selected and raises CK early, so
+; CK runs at CKS speed for RAM and VIA accesses.
+;
+; Signal names in equations are logical (ROMCS true = ROM selected); a /
+; in the pin list only makes that pin active low.
 CKS.R = /CKS
 
 CK.R = CK * /CKS  +  /CK * CKS  +  /ROMCS * /CK
 
 
-; Write Enable
+; Write strobe: only during CK high, when the address is stable.
 WR = /RWRB * CK
 
 
-; Chip Select
-ROMCS  = /C4 * /C3 * /C2 * /C1 * /C0 * A15 *  A14 *  A13 *  A12 * A11
-       + /C4 * /C3 * /C2 * /C1 * /C0 * A15 * /A14
-       + /C4 * /C3 * /C2 * /C1 * /C0 * A15 *  A14 * /A13
-       + /C4 * /C3 * /C2 * /C1 * /C0 * A15 *  A14 *  A13 * /A12
-       +  C4       * /C2 * /C1 * /C0 * A15 * /A14                     ; ROM with RAM at $f800
-       +  C4       * /C2 * /C1 * /C0 * A15 *  A14 * /A13              ; .
-       +  C4       * /C2 * /C1 * /C0 * A15 *  A14 * A13 * /A12        ; .
+; Chip selects. GALasm has no parentheses, so each config condition is
+; repeated on every address term. A ROM range is split into A15..A11
+; prefixes: $8000-$BFFF, $C000-$DFFF, $E000-$EFFF, $F800-$FFFF.
+ROMCS  = /C4 * /C3 * /C2 * /C1 * /C0 * A15 *  A14 *  A13 *  A12 * A11 ; cfg $00: $F800-$FFFF
+       + /C4 * /C3 * /C2 * /C1 * /C0 * A15 * /A14                     ; cfg $00: $8000-$BFFF
+       + /C4 * /C3 * /C2 * /C1 * /C0 * A15 *  A14 * /A13              ; cfg $00: $C000-$DFFF
+       + /C4 * /C3 * /C2 * /C1 * /C0 * A15 *  A14 *  A13 * /A12       ; cfg $00: $E000-$EFFF
+       +  C4       * /C2 * /C1 * /C0 * A15 * /A14                     ; cfg $10/$18 (any C3):
+       +  C4       * /C2 * /C1 * /C0 * A15 *  A14 * /A13              ;   $8000-$EFFF only,
+       +  C4       * /C2 * /C1 * /C0 * A15 *  A14 * A13 * /A12        ;   RAM at $F800-$FFFF
 
+; VIA in every config; only A15..A11 are decoded, so its 16 registers
+; repeat throughout $F000-$F7FF.
 VIACS  = A15 * A14 * A13 * A12 * /A11
 
-/RAMCS = /C4 * /C3 * /C2 * /C1 * /C0 * A15 *  A14 *  A13 *  A12 * A11 ; ROM Selected
+; RAM is selected wherever ROM and VIA are not. The equation defines
+; /RAMCS (RAM not selected) as the ROMCS terms plus the VIACS term, so the
+; inverse costs no extra terms. Using ROMCS and VIACS as feedback inputs
+; instead would add a second pass through the array.
+/RAMCS = /C4 * /C3 * /C2 * /C1 * /C0 * A15 *  A14 *  A13 *  A12 * A11 ; = ROMCS terms
        + /C4 * /C3 * /C2 * /C1 * /C0 * A15 * /A14                     ; .
        + /C4 * /C3 * /C2 * /C1 * /C0 * A15 *  A14 * /A13              ; .
        + /C4 * /C3 * /C2 * /C1 * /C0 * A15 *  A14 *  A13 * /A12       ; .
-       +  C4       * /C2 * /C1 * /C0 * A15 * /A14                     ; ROM with RAM at $f800
+       +  C4       * /C2 * /C1 * /C0 * A15 * /A14                     ; .
        +  C4       * /C2 * /C1 * /C0 * A15 *  A14 * /A13              ; .
        +  C4       * /C2 * /C1 * /C0 * A15 *  A14 * A13 * /A12        ; .
-       + A15 * A14 * A13 * A12 * /A11                                 ; VIA Selected
+       + A15 * A14 * A13 * A12 * /A11                                 ; = VIACS term
 
 
-; Address decoding
-R15 = /A15 * /A14 * /C4 * /C3 * /C2 * /C1 * /C0 ; $0000..$3fff config $00000         => Bank $00001         ROM at $8000
-    + /A15 * /A14 * /C4 *  C0                   ; $0000..$3fff config $00001..$01111 => Bank $00001..$01111 RAM at $8000
-    + /A15 * /A14 *  C4 * /C3                   ; $0000..$3fff config $10000..$10111 => Bank $00001         RAM at $8000
-    +  A15 *  A14                               ; $8000..$ffff config $10000..$11111 => Bank $1X000..$1X111 RAM at $8000
+; RAM bank bits R18..R15 (32K physical bank). An output with no true term
+; is 0, so the regions needing no terms sit in bank 0.
+;
+;   CPU range       C4=0                   C4=1 (m = C2..C0)
+;   $0000-$3FFF     R = C3..C0 (0 -> 1)    R = 1 (C3=0) or 2 (C3=1)
+;   $4000-$7FFF     R = 0 (common)         R = 0 (common)
+;   $8000-$BFFF     R = 0 (U1)             R = 2m   (U[m+1])
+;   $C000-$EFFF     R = 1 (U1)             R = 2m+1 (U[m+1])
+;   $F800-$FFFF     R = 1 (common)         R = 1 (common)
+;
+; In the upper window R15 copies CPU A14 (the A15*A14 term), so each 28K
+; upper bank spans the high halves of banks 2m and 2m+1. The C4=1 upper
+; terms carry /A14 + /A13 + /A12 + /A11 ("below $F800", four terms without
+; parentheses) so that $F800-$FFFF stays common. They also match the VIA
+; range, which is harmless: RAM is not selected there.
 
-R16 = /A15 * /A14 * /C4 * C1                    ; $0000..$3fff config $00001..$01111 => Bank $00001..$01111 RAM at $8000
-    + /A15 * /A14 *  C4 * C3                    ; $0000..$3fff config $10000..$10111 => Bank $00010         RAM at $8000
-    +  A15 * /A14 *  C4 * C0                    ; $8000..$ffff config $10000..$11111 => Bank $1X000..$1X111 RAM at $8000
-    +  A15 * /A13 *  C4 * C0
-    +  A15 * /A12 *  C4 * C0
-    +  A15 * /A11 *  C4 * C0
+R15 = /A15 * /A14 * /C4 * /C3 * /C2 * /C1 * /C0 ; lower, cfg $00: bank 1
+    + /A15 * /A14 * /C4 *  C0                   ; lower, C4=0: bit 0 of C3..C0
+    + /A15 * /A14 *  C4 * /C3                   ; lower, C4=1, C3=0: bank 1
+    +  A15 *  A14                               ; upper, all configs: R15 = CPU A14
 
-R17 = /A15 * /A14 * /C4 * C2                    ; $0000..$3fff config $00001..$01111 => Bank $00001..$01111 RAM at $8000
-    +  A15 * /A14 *  C4 * C1                    ; $8000..$ffff config $10000..$11111 => Bank $1X000..$1X111 RAM at $8000
-    +  A15 * /A13 *  C4 * C1
-    +  A15 * /A12 *  C4 * C1
-    +  A15 * /A11 *  C4 * C1
+R16 = /A15 * /A14 * /C4 * C1                    ; lower, C4=0: bit 1 of C3..C0
+    + /A15 * /A14 *  C4 * C3                    ; lower, C4=1, C3=1: bank 2
+    +  A15 * /A14 *  C4 * C0                    ; upper, C4=1, below $F800: C0
+    +  A15 * /A13 *  C4 * C0                    ; .
+    +  A15 * /A12 *  C4 * C0                    ; .
+    +  A15 * /A11 *  C4 * C0                    ; .
 
-R18 = /A15 * /A14 * /C4 * C3                    ; $0000..$3fff config $00001..$01111 => Bank $00001..$01111 RAM at $8000
-    +  A15 * /A14 *  C4 * C2                    ; $8000..$ffff config $10000..$11111 => Bank $1X000..$1X111 RAM at $8000
-    +  A15 * /A13 *  C4 * C2
-    +  A15 * /A12 *  C4 * C2
-    +  A15 * /A11 *  C4 * C2
+R17 = /A15 * /A14 * /C4 * C2                    ; lower, C4=0: bit 2 of C3..C0
+    +  A15 * /A14 *  C4 * C1                    ; upper, C4=1, below $F800: C1
+    +  A15 * /A13 *  C4 * C1                    ; .
+    +  A15 * /A12 *  C4 * C1                    ; .
+    +  A15 * /A11 *  C4 * C1                    ; .
+
+R18 = /A15 * /A14 * /C4 * C3                    ; lower, C4=0: bit 3 of C3..C0
+    +  A15 * /A14 *  C4 * C2                    ; upper, C4=1, below $F800: C2
+    +  A15 * /A13 *  C4 * C2                    ; .
+    +  A15 * /A12 *  C4 * C2                    ; .
+    +  A15 * /A11 *  C4 * C2                    ; .
 
 DESCRIPTION
 
 Glue logic for Ben Eater-inspired "Wendy2c" breadboard computer
 
 Inputs:
-OSC       Crystal oscillator
-A11..A15  Address lines from 65C02
+OSC       Crystal oscillator (also the register clock)
+A11..A15  Address lines from 65C02 (2K decode granularity)
 RWRB      Read signal from 65C02
-C0..C4    Memory configuration selection from the VIA
+C0..C4    Memory configuration from VIA PB0..PB4
 
 Outputs:
-CKS       System clock with speed fixed at half the speed of OSC
-CK        Variable speed clock. Half the speed of CKS when ROM is
-          selected, otherwise the same speed as CKS
-/WR       Active low write signal suitable for RAM and ROM chips
-/ROMCS    ROM chip select
-/RAMCS    RAM chip select
+CKS       System clock, fixed at half the OSC frequency
+CK        CPU clock. Half the speed of CKS while ROM is selected,
+          otherwise the same speed as CKS
+/WR       Active low write signal for the RAM and ROM chips
+/ROMCS    ROM chip select (28C256 sees CPU A14..A0)
+/RAMCS    RAM chip select (512K SRAM)
 /VIACS    VIA chip select
-R15..R18  RAM address lines. Vary based on bank address C0..C4 and A11..A15
+R15..R18  RAM address lines A15..A18, from C0..C4 and A11..A15
