@@ -1,0 +1,50 @@
+name: CI
+
+# Regression gate for the reorganization (docs/REORGANIZATION_PLAN.md, Phase 0).
+# Every job runs one suite of tools/check_all.sh.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # The release tarball is unversioned, so the firmware manifest records the
+  # vasm version it was made with and `check` fails loudly if they differ.
+  VASM_URL: http://sun.hasenbraten.de/vasm/release/vasm.tar.gz
+  PROG8C_URL: https://github.com/irmen/prog8/releases/download/v12.1.1/prog8c-12.1.1-all.jar
+  PROG8C: /tmp/prog8c.jar
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [firmware, asm1, asm2, emulator]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build vasm6502_oldstyle
+        run: |
+          curl -sSfL -o /tmp/vasm.tar.gz "$VASM_URL"
+          tar -xzf /tmp/vasm.tar.gz -C /tmp
+          make -s -C /tmp/vasm CPU=6502 SYNTAX=oldstyle >/dev/null
+          sudo install /tmp/vasm/vasm6502_oldstyle /usr/local/bin/
+          vasm6502_oldstyle </dev/null | head -1
+
+      - name: Install asm1 tools
+        if: matrix.suite == 'asm1'
+        run: command -v hexdump || (sudo apt-get update -q && sudo apt-get install -y -q bsdextrautils)
+
+      - name: Install emulator-suite tools (64tass, prog8c, playwright)
+        if: matrix.suite == 'emulator'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q 64tass default-jre-headless
+          curl -sSfL -o "$PROG8C" "$PROG8C_URL"
+          pip install -q playwright
+          python3 -m playwright install --with-deps chromium
+
+      - name: Run ${{ matrix.suite }} checks
+        run: tools/check_all.sh ${{ matrix.suite }}
