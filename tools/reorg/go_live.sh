@@ -23,6 +23,10 @@ die() { echo "error: $*" >&2; exit 1; }
 
 [ "$APPLY" = 1 ] || echo "DRY RUN: nothing will change. Re-run with --apply to perform these steps."
 
+# Annotated tags need a tagger; check before changing anything.
+git var GIT_COMMITTER_IDENT >/dev/null 2>&1 \
+    || die "no git identity: set user.name and user.email (needed for annotated tags)"
+
 git fetch -q "$REMOTE" --prune
 if [ "$(git rev-parse --is-shallow-repository)" = true ]; then git fetch -q --unshallow "$REMOTE"; fi
 

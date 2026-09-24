@@ -41,6 +41,8 @@ class GoLiveTest(unittest.TestCase):
         git(work, 'push', '-q', self.remote, 'main', 'old-feature', 'unmerged', 'trial')
         self.clone = os.path.join(self.tmp, 'clone')
         git(self.tmp, 'clone', '-q', self.remote, self.clone)
+        for k, v in (('user.email', 't@example.com'), ('user.name', 'T')):
+            git(self.clone, 'config', k, v)
         self.milestones = os.path.join(self.tmp, 'milestones.txt')
         with open(self.milestones, 'w') as f:
             f.write(f'# tag commit message\nm/first {self.first} The first commit\n')
@@ -48,9 +50,9 @@ class GoLiveTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp)
 
-    def run_script(self, *args):
+    def run_script(self, *args, **extra_env):
         env = dict(os.environ, TRIAL_BRANCH='trial', MILESTONES=self.milestones,
-                   REORG_BEFORE=self.first)
+                   REORG_BEFORE=self.first, **extra_env)
         return subprocess.run(['bash', SCRIPT, *args], cwd=self.clone, env=env,
                               capture_output=True, text=True)
 
@@ -80,6 +82,22 @@ class GoLiveTest(unittest.TestCase):
         # the unmerged work is still reachable through its archive tag
         self.assertEqual(git(self.remote, 'rev-parse', 'archive/unmerged^{commit}'),
                          git(self.remote, 'rev-parse', 'archive/unmerged^{commit}'))
+
+    def test_refuses_without_a_git_identity_before_changing_anything(self):
+        git(self.clone, 'config', '--unset', 'user.name')
+        git(self.clone, 'config', '--unset', 'user.email')
+        git(self.clone, 'config', 'user.useConfigOnly', 'true')
+        empty = os.path.join(self.tmp, 'empty-gitconfig')
+        open(empty, 'w').close()
+        before = self.remote_refs()
+        env = {'GIT_CONFIG_GLOBAL': empty, 'GIT_CONFIG_NOSYSTEM': '1'}
+        env.update({k: '' for k in ('GIT_AUTHOR_NAME', 'GIT_AUTHOR_EMAIL',
+                                    'GIT_COMMITTER_NAME', 'GIT_COMMITTER_EMAIL', 'EMAIL')})
+        result = self.run_script('--apply', **env)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('identity', result.stdout + result.stderr)
+        self.assertNotIn('== 1.', result.stdout)
+        self.assertEqual(self.remote_refs(), before)
 
     def test_refuses_when_main_is_not_an_ancestor_of_trial(self):
         other = os.path.join(self.tmp, 'other')
