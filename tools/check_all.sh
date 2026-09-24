@@ -40,8 +40,9 @@ asm2() {
 }
 
 emulator() {
-  # Emulator C tests + wendy2c goldens; must run from the repo root.
-  make test
+  # Emulator C tests + wendy2c goldens; must run from the repo root. Clean
+  # first so stale test binaries cannot mask a broken build rule.
+  make -s clean && make test
 }
 
 prog8() {
