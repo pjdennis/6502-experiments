@@ -124,6 +124,15 @@ class FirmwareManifestTest(unittest.TestCase):
         self.assertEqual(sorted(self.entries()),
                          ['bad.s', 'excluded/skip.s', 'good.s', 'sub/other.s'])
 
+    def test_include_list_file_adds_each_listed_dir(self):
+        for d in ('lib/a', 'lib/b'):
+            os.makedirs(os.path.join(self.root, d))
+        shutil.move(os.path.join(self.root, 'lib.inc'),
+                    os.path.join(self.root, 'lib/b/lib.inc'))
+        self.write('dirs.txt', '# comment\nlib/a\n\nlib/b\n')
+        self.tool('update', '--include-list', os.path.join(self.root, 'dirs.txt'))
+        self.assertNotIn('FAIL', self.entries()['good.s'][0])
+
     def test_include_dir_option_is_passed_to_vasm(self):
         os.makedirs(os.path.join(self.root, 'libdir'))
         shutil.move(os.path.join(self.root, 'lib.inc'),

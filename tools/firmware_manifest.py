@@ -56,6 +56,11 @@ def assemble(root, source, flags, includes):
             return hashlib.sha256(f.read()).hexdigest()
 
 
+def read_include_list(path):
+    with open(path) as f:
+        return [l.strip() for l in f if l.strip() and not l.lstrip().startswith('#')]
+
+
 def build(root, excludes, includes):
     return {src: [f'{name}={assemble(root, src, flags, includes)}'
                   for name, flags in FLAG_SETS]
@@ -119,8 +124,12 @@ def main(argv=None):
                         help=f'directory to skip, relative to root (default: {DEFAULT_EXCLUDES})')
     parser.add_argument('--include', action='append', default=[],
                         help='extra vasm -I directory, relative to root')
+    parser.add_argument('--include-list',
+                        help='file listing vasm -I directories (relative to root), one per line')
     args = parser.parse_args(argv)
     excludes = args.exclude if args.exclude is not None else DEFAULT_EXCLUDES
+    if args.include_list:
+        args.include += read_include_list(args.include_list)
 
     actual = build(args.root, excludes, args.include)
     if args.command == 'update':
