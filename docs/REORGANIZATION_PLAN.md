@@ -1,6 +1,6 @@
 # Repository reorganization plan
 
-Status: **proposal**. Nothing described here has been done yet. Analysis date: 2026-09-24.
+Status: **trial in progress** on branch `claude/repo-org-restructure-plan-e0got9`, which is based on `claude/pld-hardware-memory-map-3hslxb`. `main`, the other branches and the tags haven't been touched. Analysis date: 2026-09-24. See the [progress log](#5-progress-log).
 
 ## 1. Current state
 
@@ -142,10 +142,10 @@ Design notes:
    - `assembler2/asmtestgen.sh` (bootstrap chain, stage 17 self-assembles identically, 104 in-assembler tests)
    - `assembler2/verify.sh` (editor and terminal tests)
 3. **New test, firmware golden manifest.**
-   - Write `tools/check_firmware.sh`. It assembles every buildable firmware `.s` with its board's config and compares sha256 values against `firmware-manifest.txt`.
+   - Write `tools/firmware_manifest.py`. It assembles every firmware `.s`/`.asm` with both vasm flag sets (RAM upload `-esc`, EEPROM without it) and compares sha256 values against `firmware-manifest.txt`.
    - Red: the manifest doesn't exist yet, or an entry was deliberately corrupted. Green: the manifest is generated from the current tree.
    - Record the files that don't build today, such as the `wendy2_*` files that include a missing `base_config_wendy2.inc`, and the stand-alone `lcd.asm`. That way "already broken" is never confused with "broken by the move".
-4. Add a GitHub Actions workflow that runs all four checks.
+4. Add `tools/check_all.sh` (the suites firmware, asm1, asm2, emulator) and a GitHub Actions workflow that runs it.
    - The runner needs `vasm6502_oldstyle` (build it from source in CI); prog8c and 64tass are needed for the upstream tests.
    - Every later PR must pass this workflow.
 
@@ -238,3 +238,34 @@ Still open:
 2. Install-hexdump socket API: port it or archive it? What it is: 7 TCP calls (create/bind/listen/accept/recv/send/close) that hand 6502 programs real host sockets, one byte per call. Its only user is a demo HTTP server, `webserver.asm`. Porting means ~200 lines of C as a new emulator module, stubs moved to the free addresses after `opendir` ($F03F+), and I/O ports moved out of the argv area ($FE00–$FFDF). It works on `nmos-default` only; real hardware has no equivalent.
 3. `asm-unified-parsing` refactor: archive only (recommended; its target, stage 23, is gone) or re-do it on stage 17?
 4. Rename the repository?
+
+## 5. Progress log
+
+### Phase 0: done 2026-09-24
+
+- **Trial branch.** The plan commits were rebased onto `claude/pld-hardware-memory-map-3hslxb` (`dd0cf45`). No tags have been pushed yet: the `archive/*` tags wait for go-live, as agreed. Before go-live, the owner makes their own backup with `git clone --mirror`.
+- **`tools/firmware_manifest.py`** and its tests (`tools/tests/`), written test-first.
+  - `firmware-manifest.txt` covers **122 sources**, of which **87 build** and **35 were already broken** before any reorganization. The broken ones have `FAIL` entries:
+    - old programs whose `6522.inc`/`base_config` includes clash since later `.inc` changes;
+    - the 4 wendy2-era files that need the deleted `base_config_wendy2.inc`;
+    - the `test/` vasm experiments;
+    - the "illegal relocation" errors, which may just be stricter checking in current vasm (2.0f).
+  - `michael_graphics_keyboard.s` and `michael_keyboard_show_names.s` build only with `-esc`.
+  - The manifest records the vasm version, and `check` fails if the vasm on PATH differs.
+- **`tools/check_all.sh [firmware|asm1|asm2|emulator]`** runs every suite:
+  - `firmware`: the tool tests plus the manifest check.
+  - `asm1`: `assembler/asmtestgen.sh`. This script always exits 0, and without `hexdump` it "passes" by diffing two empty dumps. The wrapper therefore requires `hexdump` and checks for the printed `OK` / `Assembled` lines.
+  - `asm2`: `assembler2/verify.sh`, which covers the stage 00→17 chain, stage 17 self-assembly, 501 in-assembler tests, 1,548 editor tests and 10 terminal tests.
+  - `emulator`: `make -C assembler2 test`, which covers 32 C suites, the wendy2c goldens, and the prog8, tinyp8 and p1 tests.
+  - Not run (slow, opt-in): Harte, the Dormann binaries (they need cc65), `P1_WENDY_SELFHOST`, `MERGE_SORT_FULL_N`.
+- **`.github/workflows/ci.yml`** runs the 4 suites as a matrix. It builds vasm from source and installs 64tass, prog8c 12.1.1 and Playwright.
+- **Baseline: all 4 suites green** on the trial branch. The two Playwright web tests also pass locally.
+- **Environment notes** for later sessions in this container type:
+  - `git fetch --unshallow`.
+  - Build vasm from `sun.hasenbraten.de`.
+  - `apt-get install 64tass`.
+  - prog8c jar at `/tmp/prog8c.jar`.
+  - `pip install playwright==1.56.0` to match the pre-installed `/opt/pw-browsers` Chromium.
+  - The apt mirrors were unreachable for `bsdextrautils` (`hexdump`), so a local `od`-based `hexdump -C` stand-in was used. It isn't committed.
+
+### Next: Phase 1 (branch consolidation) on the trial branch
