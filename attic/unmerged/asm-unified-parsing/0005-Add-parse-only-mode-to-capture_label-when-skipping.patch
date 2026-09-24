@@ -1,0 +1,40 @@
+From 7a1e45af8331196582882057cea25658368a9845 Mon Sep 17 00:00:00 2001
+From: Phil Dennis <pjdennis@gmail.com>
+Date: Tue, 10 Feb 2026 07:20:36 -0600
+Subject: [PATCH 05/16] Add parse-only mode to capture_label when skipping
+
+When SKIP_FLAG indicates conditional skip mode, capture_label parses label syntax (including '=' assignments) but doesn't add labels to the hash table or modify LABEL_SCOPE16. This allows syntax validation while suppressing state changes during false .ifdef blocks.
+---
+ assembler2/23/labels.asm | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/assembler2/23/labels.asm b/assembler2/23/labels.asm
+index 3bb083d..146ce84 100644
+--- a/assembler2/23/labels.asm
++++ b/assembler2/23/labels.asm
+@@ -149,6 +149,9 @@ capture_label:
+   JSR read_value
+   JMP .return_processed
+ .pass_1:
++  ; Check if skipping - if so, just parse but don't capture
++  BIT SKIP_FLAG
++  BMI .skip_capture_parse_only
+   ; LABEL_TYPE already set
+   ; Add key to hash table first (before read_value may overwrite TOKEN)
+   JSR select_label_hash_table
+@@ -183,3 +186,12 @@ capture_label:
+   JMP err_unexpected_text
+ .duplicate_label:
+   JMP err_duplicate_label
++.skip_capture_parse_only:
++  ; Parse the syntax but don't capture to hash
++  JSR check_for_value
++  BCS .skip_has_equals
++  ; No = found, just skip spaces and return processed flag
++  JMP .skip_spaces_and_return_processed_flag
++.skip_has_equals:
++  JSR read_value  ; Parse but don't store
++  JMP .return_processed
+-- 
+2.43.0
+

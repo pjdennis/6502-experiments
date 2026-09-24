@@ -26,3 +26,23 @@ For each item, decide whether to **delete** it (it stays in git history), **rest
 | `assembler2/REVIEW` | 2026-02 | Review of asm22 (before the renumber) |
 | `assembler2/archive/` | 2026-02 | Earlier plan documents |
 | `assembler2/UNIFIED_PARSING_ANALYSIS.md` | 2026-07 | Analysis for the `asm-unified-parsing` refactor, which was never ported to stage 17 (tag `archive/asm-unified-parsing`) |
+
+## Restored after the michael_keyboard_wip merge
+
+The merge accepted michael_keyboard_wip's 2023 deletions of these files. They were restored here, as they were at `claude/pld-hardware-memory-map-3hslxb` (`dd0cf45`), so every program from every branch stays reviewable. Their earlier history is under their original root-level paths (`git log -- <name>`).
+
+| Item | Why it's here |
+|---|---|
+| `compile_and_upload*.sh` (15), `transfer_*.py` (9) | Per-baud and per-board copies of the upload scripts. They were replaced by the parameterised `transfer.py` (`--port`, `--baudrate`, `--noreset`, USB auto-detect) and `compile_and_upload_{michael,wendy,wendy2,wendy2_noreset}.sh`. `transfer_with_length*.py` are older protocol variants. |
+| `wendy2_call_eeprom.s`, `wendy2_hello_in_eeprom.s`, `wendy2_relocate_test.s`, `wendy2relocate.s`, `test_delay_wendy2.s` | Wendy 2 / rev b-era programs (2022). They include `base_config_wendy2.inc`, which no longer exists, and were deleted on michael_keyboard_wip in 2023. |
+
+## Unmerged branch work (`unmerged/`)
+
+Commits that exist only on branches that were never merged, exported with `git format-patch` so they can be read here. The branches themselves are kept as `archive/*` tags at go-live.
+
+| Item | What it is |
+|---|---|
+| `unmerged/asm-unified-parsing/` (16 patches, 2026-02-10) | A "unified parsing" refactor of the old stage-23 assembler that replaces the SKIP_DEPTH skip path with a SKIP_FLAG, plus a backport to stage 22 and a test split. Stage 23 was later renumbered away, and stage 17 still uses SKIP_DEPTH, so these don't apply as-is. |
+| `unmerged/install-hexdump/` (5 patches, 2026-03-28) | The emulator TCP socket API (patches 3–5, against the old single-file `assembler2/emulator.c`), the 6502 web server demo, and a Python hello-world web app. Only the demos reached the tree (now `attic/assembler2/webserver/` etc.); the emulator socket code was never ported. |
+
+`claude/prog8-assembler-gap-analysis-pJ7nG` holds only generated build output (`__pycache__`, a test `.wav`, `prog8/upstream/out/*.asm`), so nothing from it is kept.

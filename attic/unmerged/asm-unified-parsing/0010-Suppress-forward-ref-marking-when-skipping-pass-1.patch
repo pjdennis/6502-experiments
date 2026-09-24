@@ -1,0 +1,29 @@
+From ee30ed17da9b1fc783852ed329bbb1eb1a7626d7 Mon Sep 17 00:00:00 2001
+From: Phil Dennis <pjdennis@gmail.com>
+Date: Tue, 10 Feb 2026 07:28:06 -0600
+Subject: [PATCH 10/16] Suppress forward ref marking when skipping (pass 1)
+
+Add SKIP_FLAG check in expressions.asm before setting IS_FWDREF in pass 1. This prevents forward references from being recorded when assembling skipped conditional blocks, which would cause pass divergence. Pass 2 already had this guard, now pass 1 matches.
+---
+ assembler2/23/expressions.asm | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/assembler2/23/expressions.asm b/assembler2/23/expressions.asm
+index e899f24..4e36467 100644
+--- a/assembler2/23/expressions.asm
++++ b/assembler2/23/expressions.asm
+@@ -112,7 +112,10 @@ parse_term:
+   ; Label not found - check pass
+   BIT PASS
+   BMI .label_not_found_pass2
+-  ; Pass 1 - forward reference: use zero values
++  ; Pass 1 - check if skipping first
++  BIT SKIP_FLAG
++  BMI .skip_mode_dummy    ; Skipping - use dummy value, don't mark as fwdref
++  ; Forward reference: use zero values
+   LDA #$FF
+   STA IS_FWDREF        ; Mark as forward reference
+   LDA #$00
+-- 
+2.43.0
+

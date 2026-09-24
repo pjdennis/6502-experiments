@@ -1,0 +1,49 @@
+From 9b974e81b2de1cd113aa333f26728fe3eb88f41f Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 28 Mar 2026 10:59:36 +0000
+Subject: [PATCH 5/5] Handle broken pipe in socket_send using carry flag
+
+Use MSG_NOSIGNAL to prevent SIGPIPE crash when client disconnects
+mid-send, and signal the error to 6502 code via the carry flag,
+consistent with how socket_recv reports connection close.
+
+https://claude.ai/code/session_01WQEBoeVubK2XdXyseNFQWk
+---
+ assembler2/23/environment.asm | 2 +-
+ assembler2/emulator.c         | 8 +++++++-
+ 2 files changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/assembler2/23/environment.asm b/assembler2/23/environment.asm
+index 488c877..8d80957 100644
+--- a/assembler2/23/environment.asm
++++ b/assembler2/23/environment.asm
+@@ -32,5 +32,5 @@ socket_bind   = $F039 ; Binds socket in A to port X(lo);Y(hi); returns 0=ok
+ socket_listen = $F03C ; Listens on socket in A; returns 0=ok
+ socket_accept = $F03F ; Accepts on socket in A; returns client handle (blocks)
+ socket_recv   = $F042 ; Reads byte from socket in A; byte in A, C set on close
+-socket_send   = $F045 ; Sends byte in A to socket in X
++socket_send   = $F045 ; Sends byte in A to socket in X; C set on error
+ socket_close  = $F048 ; Closes socket in A
+diff --git a/assembler2/emulator.c b/assembler2/emulator.c
+index 3140f35..9dd5a76 100644
+--- a/assembler2/emulator.c
++++ b/assembler2/emulator.c
+@@ -1119,8 +1119,14 @@ uint8_t emu_socket_recv(uint8_t handle) {
+     return buf;
+ }
+ 
++// Sends byte; sets carry flag in 6502 status on error (e.g. broken pipe)
+ void emu_socket_send(uint8_t handle, uint8_t value) {
+-    send(sock_fd(handle), &value, 1, 0);
++    ssize_t n = send(sock_fd(handle), &value, 1, MSG_NOSIGNAL);
++    if (n <= 0) {
++        setcarry();
++    } else {
++        clearcarry();
++    }
+ }
+ 
+ void emu_socket_close(uint8_t handle) {
+-- 
+2.43.0
+

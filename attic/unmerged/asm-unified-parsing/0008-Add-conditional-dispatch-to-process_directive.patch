@@ -1,0 +1,39 @@
+From 65acb8b79f2ba7e05ecf5f2412f714105c47515b Mon Sep 17 00:00:00 2001
+From: Phil Dennis <pjdennis@gmail.com>
+Date: Tue, 10 Feb 2026 07:21:07 -0600
+Subject: [PATCH 08/16] Add conditional dispatch to process_directive
+
+When SKIP_FLAG is set, process_directive only dispatches to conditional assembly directives (.ifdef, .ifndef, .else, .endif). All other directives are skipped by jumping to skip_rest_of_line. This prevents non-conditional directives from executing while in false .ifdef blocks.
+---
+ assembler2/23/directives.asm | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/assembler2/23/directives.asm b/assembler2/23/directives.asm
+index 9a6b3f6..b6e08ef 100644
+--- a/assembler2/23/directives.asm
++++ b/assembler2/23/directives.asm
+@@ -74,6 +74,21 @@ process_directive:
+   INY
+   LDA (TABP16),Y
+   STA JUMP_TARGET16 + 1
++  ; Check if skipping
++  BIT SKIP_FLAG
++  BPL .dispatch         ; Not skipping, dispatch normally
++  ; In skip mode - only allow conditional directives
++  CMPI16 JUMP_TARGET16, dir_ifdef
++  BEQ .dispatch
++  CMPI16 JUMP_TARGET16, dir_ifndef
++  BEQ .dispatch
++  CMPI16 JUMP_TARGET16, dir_else
++  BEQ .dispatch
++  CMPI16 JUMP_TARGET16, dir_endif
++  BEQ .dispatch
++  ; Not conditional - skip rest of line and return
++  JMP skip_rest_of_line
++.dispatch:
+   JMP do_jump           ; Tail call: handler RTS returns to our caller
+ .not_found:
+   JMP err_unknown_directive
+-- 
+2.43.0
+

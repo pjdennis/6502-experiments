@@ -1,0 +1,71 @@
+From 455f7176770c717335af0ca8a6a130c8ee2a0462 Mon Sep 17 00:00:00 2001
+From: Phil Dennis <pjdennis@gmail.com>
+Date: Tue, 10 Feb 2026 07:20:34 -0600
+Subject: [PATCH 07/16] Handle macro directives in skip mode
+
+When SKIP_FLAG is set, .macro parses the macro definition syntax (name and parameters) but doesn't add the macro to the hash table or enter capture mode. .endmacro in skip mode returns silently instead of raising an error. This allows macro definitions in false .ifdef blocks to be parsed without affecting state.
+---
+ assembler2/23/directives.asm      |  5 +++++
+ assembler2/23/macro_expansion.asm | 22 ++++++++++++++++++++++
+ 2 files changed, 27 insertions(+)
+
+diff --git a/assembler2/23/directives.asm b/assembler2/23/directives.asm
+index a15eee1..9a6b3f6 100644
+--- a/assembler2/23/directives.asm
++++ b/assembler2/23/directives.asm
+@@ -119,7 +119,12 @@ dir_asciiz:
+ .zp_asciiz_err:
+   JMP err_asciiz_in_zeropage
+ dir_endmacro:
++  ; Check if we're skipping - if so, just ignore (don't error)
++  BIT SKIP_FLAG
++  BMI .skip_endmacro
+   JMP err_endmacro_without_macro
++.skip_endmacro:
++  JMP skip_rest_of_line
+ 
+ dir_zp_alloc:
+   ; A = DATA_MODE (1=byte, 2=word)
+diff --git a/assembler2/23/macro_expansion.asm b/assembler2/23/macro_expansion.asm
+index 37b6506..190dfe3 100644
+--- a/assembler2/23/macro_expansion.asm
++++ b/assembler2/23/macro_expansion.asm
+@@ -29,6 +29,11 @@ IN_MACRO_DEF:    .byte        ; Flag: currently capturing macro body ($FF = capt
+ ; Syntax: .macro NAME [param1 param2 ...]
+ ; Creates entry in LHASHTAB: [escape header][name $00][params...][$00][body $00]
+ dir_macro:
++  ; Check if skipping - if so, just parse line and return
++  BIT SKIP_FLAG
++  BPL .not_skipping
++  JMP .skip_macro_def
++.not_skipping:
+   ; Skip spaces and read macro name
+   JSR check_for_end_of_line
+   BCC .has_name
+@@ -104,6 +109,23 @@ dir_macro:
+   STA IN_MACRO_DEF
+   ; Skip rest of line (already done by check_for_end_of_line)
+   RTS
++.skip_macro_def:
++  ; Parse the macro name and parameters without capturing
++  JSR check_for_end_of_line
++  BCS .skip_done       ; End of line, no name
++  JSR read_token       ; Read macro name
++.skip_param_loop:
++  JSR check_for_end_of_line
++  BCS .skip_done       ; End of line, done
++  JSR read_token       ; Read parameter
++  JSR check_for_end_of_line
++  BCS .skip_done
++  CMP #','
++  BNE .skip_done       ; Not a comma, done
++  JSR read_char        ; Skip comma
++  JMP .skip_param_loop
++.skip_done:
++  RTS
+ 
+ 
+ ; Check if macro is already being expanded (recursion check)
+-- 
+2.43.0
+

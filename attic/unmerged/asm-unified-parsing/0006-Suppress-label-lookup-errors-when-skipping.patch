@@ -1,0 +1,42 @@
+From a80cf34668202812298b463f6bab94b735c70cac Mon Sep 17 00:00:00 2001
+From: Phil Dennis <pjdennis@gmail.com>
+Date: Tue, 10 Feb 2026 07:20:15 -0600
+Subject: [PATCH 06/16] Suppress label lookup errors when skipping
+
+When SKIP_FLAG indicates skip mode and a label is not found in pass 2, use a dummy zero value instead of raising an error. This allows expressions with undefined labels in false .ifdef blocks to be parsed without failing assembly.
+---
+ assembler2/23/expressions.asm | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/assembler2/23/expressions.asm b/assembler2/23/expressions.asm
+index 72ca51a..1189e5d 100644
+--- a/assembler2/23/expressions.asm
++++ b/assembler2/23/expressions.asm
+@@ -7,6 +7,7 @@
+ ; Requires:
+ ;   CURR_CHAR (asm.asm alias; backing storage in file_stack.asm)
+ ;   TOKEN, HEX16, OPERAND16, PASS, IS_FWDREF (asm.asm)
++;   SKIP_FLAG (directives.asm)
+ ;   LABEL_TYPE, LABEL_TYPE_GLOBAL, LABEL_TYPE_MACRO (common.asm)
+ ;   SCOPE_DEPTH (label_scope.asm)
+ ;   read_char (asm.asm alias; implemented in file_stack.asm)
+@@ -119,7 +120,16 @@ parse_term:
+   STA_LH16 HEX16
+   BEQ .label_store     ; Always taken
+ .label_not_found_pass2:
++  ; Check if skipping - if so, use dummy value instead of error
++  BIT SKIP_FLAG
++  BMI .skip_mode_dummy
+   JMP err_label_not_found
++.skip_mode_dummy:
++  ; Use dummy zero value and continue
++  LDA #$00
++  STA IS_FWDREF
++  STA_LH16 HEX16
++  RTS
+ .label_found:
+   ; Label found - clear forward ref flag
+   LDA #$00
+-- 
+2.43.0
+

@@ -1,0 +1,42 @@
+From 7a801c98b9f2fdefe071994675b1cc8299b85fac Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 28 Mar 2026 08:40:17 +0000
+Subject: [PATCH 1/5] Add simple hello world web app
+
+https://claude.ai/code/session_01WQEBoeVubK2XdXyseNFQWk
+---
+ assembler2/webapp/server.py | 22 ++++++++++++++++++++++
+ 1 file changed, 22 insertions(+)
+ create mode 100644 assembler2/webapp/server.py
+
+diff --git a/assembler2/webapp/server.py b/assembler2/webapp/server.py
+new file mode 100644
+index 0000000..c6f0699
+--- /dev/null
++++ b/assembler2/webapp/server.py
+@@ -0,0 +1,22 @@
++from http.server import HTTPServer, BaseHTTPRequestHandler
++
++class Handler(BaseHTTPRequestHandler):
++    def do_GET(self):
++        self.send_response(200)
++        self.send_header("Content-Type", "text/html")
++        self.end_headers()
++        self.wfile.write(b"""<!DOCTYPE html>
++<html>
++<head>
++  <meta name="viewport" content="width=device-width, initial-scale=1">
++  <title>Hello World</title>
++  <style>
++    body { font-family: sans-serif; display: flex; justify-content: center;
++           align-items: center; height: 100vh; margin: 0; background: #1a1a2e; color: #e94560; }
++    h1 { font-size: 3rem; }
++  </style>
++</head>
++<body><h1>Hello, World!</h1></body>
++</html>""")
++
++HTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
+-- 
+2.43.0
+

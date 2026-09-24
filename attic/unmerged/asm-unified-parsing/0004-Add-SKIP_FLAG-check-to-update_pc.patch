@@ -1,0 +1,35 @@
+From f0de13e1b53214d5bd7b3616dbb8fc6a4077e579 Mon Sep 17 00:00:00 2001
+From: Phil Dennis <pjdennis@gmail.com>
+Date: Tue, 10 Feb 2026 07:20:52 -0600
+Subject: [PATCH 04/16] Add SKIP_FLAG check to update_pc()
+
+Suppresses PC updates when in conditional skip mode. Uses BIT SKIP_FLAG to test without clobbering registers. When skipping, the PC remains unchanged even when '* = $xxxx' directives are encountered.
+---
+ assembler2/23/output.asm | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/assembler2/23/output.asm b/assembler2/23/output.asm
+index 8984fb4..9a57981 100644
+--- a/assembler2/23/output.asm
++++ b/assembler2/23/output.asm
+@@ -48,6 +48,9 @@ emit:
+ ; On exit
+ ; Raises 'Cannot move PC backwards' error if attempting to move PC backwards
+ update_pc:
++  ; Check if skipping conditional assembly
++  BIT SKIP_FLAG
++  BMI .skip_update     ; Skip if in false .ifdef block
+   BIT IN_ZEROPAGE
+   BMI .no_fill         ; No fill or STARTED check in zeropage
+   BIT STARTED
+@@ -62,6 +65,7 @@ update_pc:
+   JMP err_cannot_move_pc_backwards
+ .no_fill:
+   CP16 HEX16, PC16
++.skip_update:
+   RTS
+ 
+ 
+-- 
+2.43.0
+

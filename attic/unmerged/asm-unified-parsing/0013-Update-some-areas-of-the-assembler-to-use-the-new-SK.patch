@@ -1,0 +1,64 @@
+From 85a03c6a1f3f5201e2e91f83d3bca9202b5703ad Mon Sep 17 00:00:00 2001
+From: Phil Dennis <pjdennis@gmail.com>
+Date: Tue, 10 Feb 2026 07:35:56 -0600
+Subject: [PATCH 13/16] Update some areas of the assembler to use the new
+ SKIP_FLAG vs. testing SKIP_DEPTH
+
+---
+ assembler2/23/instructions.asm |  4 ++--
+ assembler2/23/output.asm       | 10 +++++-----
+ 2 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/assembler2/23/instructions.asm b/assembler2/23/instructions.asm
+index ce18e07..a93de15 100644
+--- a/assembler2/23/instructions.asm
++++ b/assembler2/23/instructions.asm
+@@ -106,8 +106,8 @@ find_opcode_for_mode:
+ ; Raises error if addressing mode is not valid for this instruction
+ emit_instruction:
+   ; Check if skipping - if so, return immediately
+-  LDA SKIP_DEPTH
+-  BNE .skip_emit
++  BIT SKIP_FLAG
++  BMI .skip_emit
+   ; Find opcode for this addressing mode
+   JSR find_opcode_for_mode
+   BCS .invalid_mode
+diff --git a/assembler2/23/output.asm b/assembler2/23/output.asm
+index 2490743..23c9578 100644
+--- a/assembler2/23/output.asm
++++ b/assembler2/23/output.asm
+@@ -3,7 +3,7 @@
+ ; Provides: emit, update_pc, advance_pc_to_hex16
+ ;
+ ; Requires:
+-;   HEX16, PC16, PASS, IN_ZEROPAGE, STARTED, SKIP_FLAG, SKIP_DEPTH (asm.asm)
++;   HEX16, PC16, PASS, IN_ZEROPAGE, STARTED, SKIP_FLAG (asm.asm)
+ ;   write (environment.asm)
+ ;   INC16, CMP16, CP16 (macros.asm)
+ ;   err_zeropage_overflow, err_cannot_move_pc_backwards (errors.asm)
+@@ -21,8 +21,8 @@ emit:
+   ; Check if skipping conditional assembly
+   ; Save A temporarily
+   PHA
+-  LDA SKIP_DEPTH
+-  BNE .is_skipping
++  BIT SKIP_FLAG
++  BMI .is_skipping
+   ; Not skipping, restore A and continue
+   PLA
+   BIT IN_ZEROPAGE
+@@ -55,8 +55,8 @@ emit:
+ ; Raises 'Cannot move PC backwards' error if attempting to move PC backwards
+ update_pc:
+   ; Check if skipping conditional assembly
+-  LDA SKIP_DEPTH
+-  BNE .skip_update     ; Skip if in false .ifdef block
++  BIT SKIP_FLAG
++  BMI .skip_update     ; Skip if in false .ifdef block
+   BIT IN_ZEROPAGE
+   BMI .no_fill         ; No fill or STARTED check in zeropage
+   BIT STARTED
+-- 
+2.43.0
+

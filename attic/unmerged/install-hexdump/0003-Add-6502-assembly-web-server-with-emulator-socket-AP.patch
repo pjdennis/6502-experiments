@@ -1,0 +1,810 @@
+From c3d9641cebbea2fa1d9c85366bc999eee11f9c5c Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 28 Mar 2026 10:05:28 +0000
+Subject: [PATCH 3/5] Add 6502 assembly web server with emulator socket API
+
+Extend the emulator with a TCP sockets API (create, bind, listen, accept,
+recv, send, close) exposed as memory-mapped I/O at $FEA0-$FEA8 with jump
+table entries at $F036-$F048. Add --no-cycle-limit CLI flag for long-running
+programs. Write a 6502 assembly web server serving "Hello from 6502 asm"
+over HTTP/1.0 on port 8080. Include integration test and Playwright screenshot.
+
+https://claude.ai/code/session_01WQEBoeVubK2XdXyseNFQWk
+---
+ assembler2/23/environment.asm       |  12 ++
+ assembler2/emulator.c               | 197 +++++++++++++++++++++++++++-
+ assembler2/tests/test_webserver.py  | 108 +++++++++++++++
+ assembler2/webserver/screenshot.png | Bin 0 -> 12731 bytes
+ assembler2/webserver/webserver.asm  | 158 ++++++++++++++++++++++
+ 5 files changed, 472 insertions(+), 3 deletions(-)
+ create mode 100644 assembler2/tests/test_webserver.py
+ create mode 100644 assembler2/webserver/screenshot.png
+ create mode 100644 assembler2/webserver/webserver.asm
+
+diff --git a/assembler2/23/environment.asm b/assembler2/23/environment.asm
+index 8cfc5ed..2f701f5 100644
+--- a/assembler2/23/environment.asm
++++ b/assembler2/23/environment.asm
+@@ -25,3 +25,15 @@ con_flush = $F02A ; Flush stdout
+ con_ready = $F02D ; Non-blocking poll: A=$FF if byte ready, A=$00 if not
+ term_rows = $F030 ; Returns terminal height in A
+ term_cols = $F033 ; Returns terminal width in A
++
++; Socket API
++socket_create = $F036 ; Creates TCP socket; returns handle in A
++socket_bind   = $F039 ; Binds socket in A to pre-set port; returns 0=ok
++socket_listen = $F03C ; Listens on socket in A; returns 0=ok
++socket_accept = $F03F ; Accepts on socket in A; returns client handle (blocks)
++socket_recv   = $F042 ; Reads byte from socket in A; byte in A, C set on close
++socket_send   = $F045 ; Sends byte in A to socket in X
++socket_close  = $F048 ; Closes socket in A
++
++port_bind_l   = $FEA7 ; Write: set bind port low byte
++port_bind_h   = $FEA8 ; Write: set bind port high byte
+diff --git a/assembler2/emulator.c b/assembler2/emulator.c
+index 909327d..501383b 100644
+--- a/assembler2/emulator.c
++++ b/assembler2/emulator.c
+@@ -115,6 +115,9 @@
+ #include <termios.h>
+ #include <sys/ioctl.h>
+ #include <sys/select.h>
++#include <sys/socket.h>
++#include <netinet/in.h>
++#include <arpa/inet.h>
+ #include <time.h>
+ 
+ #define STDIN_FILENO  0
+@@ -1006,6 +1009,16 @@ void hookexternal(void *funcptr) {
+ #define port_term_cols 0xfe93
+ #define port_con_ready 0xfe94
+ 
++#define port_socket_create  0xfea0
++#define port_socket_bind    0xfea1
++#define port_socket_listen  0xfea2
++#define port_socket_accept  0xfea3
++#define port_socket_recv    0xfea4
++#define port_socket_send    0xfea5
++#define port_socket_close   0xfea6
++#define port_socket_port_l  0xfea7
++#define port_socket_port_h  0xfea8
++
+ uint8_t memory[0x10001];
+ 
+ FILE* files[255];
+@@ -1020,6 +1033,115 @@ int done = 0;
+ int exitcode_set = -1;
+ int error_output_started = 0;  // Track if emulated program wrote to stderr
+ int console_mode = 0;
++int no_cycle_limit = 0;
++
++// Socket support
++int sock_fds[255];
++uint16_t socket_bind_port = 0;
++
++void sockets_init() {
++    for (int i = 0; i < 255; i++) sock_fds[i] = -1;
++}
++
++uint8_t emu_socket_create() {
++    int fd = socket(AF_INET, SOCK_STREAM, 0);
++    if (fd < 0) {
++        fprintf(stderr, "socket() failed\n");
++        exit(1);
++    }
++    int opt = 1;
++    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
++    for (int i = 0; i < 255; i++) {
++        if (sock_fds[i] == -1) {
++            sock_fds[i] = fd;
++            return i + 1;
++        }
++    }
++    fprintf(stderr, "too many sockets open\n");
++    close(fd);
++    exit(1);
++}
++
++int sock_fd(uint8_t handle) {
++    if (handle < 1 || sock_fds[handle - 1] == -1) {
++        fprintf(stderr, "socket %i is not open\n", (int)handle);
++        exit(1);
++    }
++    return sock_fds[handle - 1];
++}
++
++uint8_t emu_socket_bind(uint8_t handle) {
++    int fd = sock_fd(handle);
++    struct sockaddr_in addr;
++    memset(&addr, 0, sizeof(addr));
++    addr.sin_family = AF_INET;
++    addr.sin_addr.s_addr = INADDR_ANY;
++    addr.sin_port = htons(socket_bind_port);
++    if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
++        fprintf(stderr, "bind() failed on port %d\n", socket_bind_port);
++        exit(1);
++    }
++    return 0;
++}
++
++uint8_t emu_socket_listen(uint8_t handle) {
++    if (listen(sock_fd(handle), 5) < 0) {
++        fprintf(stderr, "listen() failed\n");
++        exit(1);
++    }
++    return 0;
++}
++
++uint8_t emu_socket_accept(uint8_t handle) {
++    int client_fd = accept(sock_fd(handle), NULL, NULL);
++    if (client_fd < 0) {
++        fprintf(stderr, "accept() failed\n");
++        exit(1);
++    }
++    for (int i = 0; i < 255; i++) {
++        if (sock_fds[i] == -1) {
++            sock_fds[i] = client_fd;
++            return i + 1;
++        }
++    }
++    fprintf(stderr, "too many sockets open\n");
++    close(client_fd);
++    exit(1);
++}
++
++// Returns byte read; sets carry flag in 6502 status on close/error
++uint8_t emu_socket_recv(uint8_t handle) {
++    uint8_t buf;
++    ssize_t n = recv(sock_fd(handle), &buf, 1, 0);
++    if (n <= 0) {
++        setcarry();
++        return 0;
++    }
++    clearcarry();
++    return buf;
++}
++
++void emu_socket_send(uint8_t handle, uint8_t value) {
++    send(sock_fd(handle), &value, 1, 0);
++}
++
++void emu_socket_close(uint8_t handle) {
++    if (handle < 1 || sock_fds[handle - 1] == -1) {
++        fprintf(stderr, "socket %i is not open\n", (int)handle);
++        exit(1);
++    }
++    close(sock_fds[handle - 1]);
++    sock_fds[handle - 1] = -1;
++}
++
++void sockets_destroy() {
++    for (int i = 0; i < 255; i++) {
++        if (sock_fds[i] != -1) {
++            close(sock_fds[i]);
++            sock_fds[i] = -1;
++        }
++    }
++}
+ double target_mhz = 0.0;
+ int override_rows = 0;
+ int override_cols = 0;
+@@ -1601,6 +1723,16 @@ uint8_t read6502(uint16_t address) {
+         } else {
+             return 0xFF;  // In file mode, always ready
+         }
++    } else if (address == port_socket_create) {        // socket_create
++        return emu_socket_create();
++    } else if (address == port_socket_bind) {          // socket_bind
++        return emu_socket_bind(a);
++    } else if (address == port_socket_listen) {        // socket_listen
++        return emu_socket_listen(a);
++    } else if (address == port_socket_accept) {        // socket_accept
++        return emu_socket_accept(a);
++    } else if (address == port_socket_recv) {          // socket_recv
++        return emu_socket_recv(a);
+     } else if (address == 0xfffe && memory[0xfffe] == 0 && memory[0xffff] == 0) {
+         done = 1;
+     }/* else if (address == 0xfe) {
+@@ -1651,6 +1783,18 @@ void write6502(uint16_t address, uint8_t value) {
+     } else if (address == port_con_flush) {          // con_flush
+         fflush(stdout);
+         return;
++    } else if (address == port_socket_send) {        // socket_send
++        emu_socket_send(x, value);
++        return;
++    } else if (address == port_socket_close) {       // socket_close
++        emu_socket_close(value);
++        return;
++    } else if (address == port_socket_port_l) {      // socket port low
++        socket_bind_port = (socket_bind_port & 0xFF00) | value;
++        return;
++    } else if (address == port_socket_port_h) {      // socket port high
++        socket_bind_port = (socket_bind_port & 0x00FF) | (value << 8);
++        return;
+     }
+ 
+     memory[address] = value;
+@@ -1678,7 +1822,7 @@ void show_commandline(int argc, char**argv) {
+ 
+ int main(int argc, char **argv) {
+     if (argc < 2) {
+-        fprintf(stderr, "usage: emulator <code file> [--load <hex load address>] [--input <input file>] [--output <output file>] [--console] [--mhz <speed>] [--rows N] [--cols N] [<arguments>]\n");
++        fprintf(stderr, "usage: emulator <code file> [--load <hex load address>] [--input <input file>] [--output <output file>] [--console] [--mhz <speed>] [--rows N] [--cols N] [--no-cycle-limit] [<arguments>]\n");
+         return 1;
+     }
+ 
+@@ -1689,7 +1833,10 @@ int main(int argc, char **argv) {
+ 
+     int i = 2;
+     while (i < argc && strncmp(argv[i], "--", 2) == 0) {
+-        if (strcmp(argv[i], "--console") == 0) {
++        if (strcmp(argv[i], "--no-cycle-limit") == 0) {
++            no_cycle_limit = 1;
++            i++;
++        } else if (strcmp(argv[i], "--console") == 0) {
+             console_mode = 1;
+             i++;
+         } else if (strcmp(argv[i], "--load") == 0) {
+@@ -1845,6 +1992,20 @@ int main(int argc, char **argv) {
+     save_address(addr_term_rows);
+     emit_byte(inst_jmp);        // f033     jmp term_cols
+     save_address(addr_term_cols);
++    emit_byte(inst_jmp);        // f036     jmp socket_create
++    save_address(addr_socket_create);
++    emit_byte(inst_jmp);        // f039     jmp socket_bind
++    save_address(addr_socket_bind);
++    emit_byte(inst_jmp);        // f03c     jmp socket_listen
++    save_address(addr_socket_listen);
++    emit_byte(inst_jmp);        // f03f     jmp socket_accept
++    save_address(addr_socket_accept);
++    emit_byte(inst_jmp);        // f042     jmp socket_recv
++    save_address(addr_socket_recv);
++    emit_byte(inst_jmp);        // f045     jmp socket_send
++    save_address(addr_socket_send);
++    emit_byte(inst_jmp);        // f048     jmp socket_close
++    save_address(addr_socket_close);
+     fill_address(addr_read_b);
+     emit_byte(inst_lda);        // read_b:  lda $f004
+     emit_address(port_read_b);
+@@ -1924,6 +2085,34 @@ int main(int argc, char **argv) {
+     emit_byte(inst_lda);        // term_cols: lda $fe93
+     emit_address(port_term_cols);
+     emit_byte(inst_rts);        //            rts
++    fill_address(addr_socket_create);
++    emit_byte(inst_lda);        // socket_create: lda $fea0
++    emit_address(port_socket_create);
++    emit_byte(inst_rts);        //                rts
++    fill_address(addr_socket_bind);
++    emit_byte(inst_lda);        // socket_bind: lda $fea1
++    emit_address(port_socket_bind);
++    emit_byte(inst_rts);        //              rts
++    fill_address(addr_socket_listen);
++    emit_byte(inst_lda);        // socket_listen: lda $fea2
++    emit_address(port_socket_listen);
++    emit_byte(inst_rts);        //                rts
++    fill_address(addr_socket_accept);
++    emit_byte(inst_lda);        // socket_accept: lda $fea3
++    emit_address(port_socket_accept);
++    emit_byte(inst_rts);        //                rts
++    fill_address(addr_socket_recv);
++    emit_byte(inst_lda);        // socket_recv: lda $fea4
++    emit_address(port_socket_recv);
++    emit_byte(inst_rts);        //              rts
++    fill_address(addr_socket_send);
++    emit_byte(inst_sta);        // socket_send: sta $fea5
++    emit_address(port_socket_send);
++    emit_byte(inst_rts);        //              rts
++    fill_address(addr_socket_close);
++    emit_byte(inst_sta);        // socket_close: sta $fea6
++    emit_address(port_socket_close);
++    emit_byte(inst_rts);        //               rts
+ 
+     if (console_mode) {
+         input_file_ptr = stdin;
+@@ -1959,6 +2148,7 @@ int main(int argc, char **argv) {
+     }
+ 
+     files_init(input_file_ptr);
++    sockets_init();
+ 
+     arg_count = argc - arg_base;
+     arg_addresses = malloc(arg_count * sizeof(uint16_t));
+@@ -2022,7 +2212,7 @@ int main(int argc, char **argv) {
+             }
+         }
+ 
+-        if (!console_mode && clockticks6502 > max_cycles) {
++        if (!console_mode && !no_cycle_limit && clockticks6502 > max_cycles) {
+             fprintf(stderr, "\ndid not terminate within %i cycles\n", max_cycles);
+             free(arg_addresses);
+             fclose(output_file_ptr);
+@@ -2033,6 +2223,7 @@ int main(int argc, char **argv) {
+ 
+     free(arg_addresses);
+ 
++    sockets_destroy();
+     files_destroy();
+ 
+     if (!console_mode && strcmp(output_filename, "-") != 0) {
+diff --git a/assembler2/tests/test_webserver.py b/assembler2/tests/test_webserver.py
+new file mode 100644
+index 0000000..6415da4
+--- /dev/null
++++ b/assembler2/tests/test_webserver.py
+@@ -0,0 +1,108 @@
++#!/usr/bin/env python3
++"""Integration test for 6502 web server running in the emulator."""
++
++import os
++import signal
++import subprocess
++import sys
++import time
++import urllib.request
++import urllib.error
++
++SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
++BASE_DIR = os.path.dirname(SCRIPT_DIR)
++EMULATOR = os.path.join(BASE_DIR, "emulator.out")
++ASSEMBLER = os.path.join(BASE_DIR, "23", "out", "asm_debug.out")
++WEBSERVER_SRC = os.path.join(BASE_DIR, "webserver", "webserver.asm")
++WEBSERVER_BIN = os.path.join(BASE_DIR, "webserver", "out", "webserver.out")
++PORT = 8080
++URL = f"http://localhost:{PORT}"
++
++
++def build_emulator():
++    print("Building emulator...")
++    result = subprocess.run(["make", "--quiet"], cwd=BASE_DIR)
++    if result.returncode != 0:
++        print("FAIL: emulator build failed")
++        sys.exit(1)
++
++
++def assemble_webserver():
++    print("Assembling web server...")
++    os.makedirs(os.path.dirname(WEBSERVER_BIN), exist_ok=True)
++    result = subprocess.run(
++        [EMULATOR, ASSEMBLER, WEBSERVER_SRC, WEBSERVER_BIN],
++        cwd=BASE_DIR,
++        capture_output=True, text=True
++    )
++    if result.returncode != 0:
++        print(f"FAIL: assembly failed\nstderr: {result.stderr}")
++        sys.exit(1)
++    print("Assembly OK")
++
++
++def wait_for_port(port, timeout=10):
++    start = time.time()
++    while time.time() - start < timeout:
++        try:
++            urllib.request.urlopen(f"http://localhost:{port}", timeout=1)
++            return True
++        except (urllib.error.URLError, ConnectionRefusedError, OSError):
++            time.sleep(0.2)
++    return False
++
++
++def test_webserver():
++    print(f"Starting web server on port {PORT}...")
++    proc = subprocess.Popen(
++        [EMULATOR, WEBSERVER_BIN, "--no-cycle-limit", "--load", "1000"],
++        cwd=BASE_DIR,
++        stdout=subprocess.DEVNULL,
++        stderr=subprocess.PIPE
++    )
++
++    try:
++        if not wait_for_port(PORT):
++            print("FAIL: web server did not start within timeout")
++            stderr = proc.stderr.read().decode(errors='replace')
++            if stderr:
++                print(f"stderr: {stderr[:500]}")
++            return False
++
++        print(f"Requesting {URL}...")
++        response = urllib.request.urlopen(URL, timeout=5)
++        body = response.read().decode()
++        print(f"Response status: {response.status}")
++        print(f"Response body ({len(body)} bytes): {body[:200]}...")
++
++        if "Hello from 6502 asm" not in body:
++            print("FAIL: response does not contain 'Hello from 6502 asm'")
++            return False
++
++        if response.status != 200:
++            print(f"FAIL: expected status 200, got {response.status}")
++            return False
++
++        print("PASS: web server returned expected content")
++        return True
++
++    finally:
++        proc.send_signal(signal.SIGTERM)
++        try:
++            proc.wait(timeout=3)
++        except subprocess.TimeoutExpired:
++            proc.kill()
++            proc.wait()
++
++
++if __name__ == "__main__":
++    build_emulator()
++
++    if not os.path.exists(ASSEMBLER):
++        print(f"Assembler not found at {ASSEMBLER}")
++        print("Run ./asmtestgen.sh first to build the assembler")
++        sys.exit(1)
++
++    assemble_webserver()
++    success = test_webserver()
++    sys.exit(0 if success else 1)
+diff --git a/assembler2/webserver/screenshot.png b/assembler2/webserver/screenshot.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..ae4a95cb1164986ebe9da233f19c911ec808e94d
+GIT binary patch
+literal 12731
+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
+
+literal 0
+HcmV?d00001
+
+diff --git a/assembler2/webserver/webserver.asm b/assembler2/webserver/webserver.asm
+new file mode 100644
+index 0000000..6284f33
+--- /dev/null
++++ b/assembler2/webserver/webserver.asm
+@@ -0,0 +1,158 @@
++* = $1000
++
++  .include 23/environment.asm
++
++start
++  ; Set bind port to 8080 ($1F90)
++  LDA #$90
++  STA port_bind_l
++  LDA #$1F
++  STA port_bind_h
++
++  ; Create socket
++  JSR socket_create
++  STA LISTEN_HANDLE
++
++  ; Bind
++  LDA LISTEN_HANDLE
++  JSR socket_bind
++
++  ; Listen
++  LDA LISTEN_HANDLE
++  JSR socket_listen
++
++  ; Print listening message
++  LDA #<listening_msg
++  STA MSG_PTR
++  LDA #>listening_msg
++  STA MSG_PTR+$01
++  JSR print_msg
++
++accept_loop
++  ; Accept a connection
++  LDA LISTEN_HANDLE
++  JSR socket_accept
++  STA CLIENT_HANDLE
++
++  ; Read request headers until \r\n\r\n
++  LDA #$00
++  STA HEADER_STATE
++
++read_loop
++  LDA CLIENT_HANDLE
++  JSR socket_recv
++  BCS client_closed
++
++  ; Track \r\n\r\n pattern
++  ; State 0: waiting for \r
++  ; State 1: got \r, waiting for \n
++  ; State 2: got \r\n, waiting for \r
++  ; State 3: got \r\n\r, waiting for \n
++  LDX HEADER_STATE
++
++  CPX #$00
++  BEQ .check_cr
++  CPX #$01
++  BEQ .check_lf1
++  CPX #$02
++  BEQ .check_cr2
++  ; State 3: expecting \n
++  CMP #$0A
++  BEQ headers_done
++  JMP .reset_state
++
++.check_cr
++  CMP #$0D
++  BNE .reset_state
++  LDA #$01
++  STA HEADER_STATE
++  JMP read_loop
++
++.check_lf1
++  CMP #$0A
++  BNE .reset_state
++  LDA #$02
++  STA HEADER_STATE
++  JMP read_loop
++
++.check_cr2
++  CMP #$0D
++  BNE .reset_state
++  LDA #$03
++  STA HEADER_STATE
++  JMP read_loop
++
++.reset_state
++  LDA #$00
++  STA HEADER_STATE
++  JMP read_loop
++
++headers_done
++  ; Send HTTP response
++  LDA #<http_response
++  STA MSG_PTR
++  LDA #>http_response
++  STA MSG_PTR+$01
++
++  LDY #$00
++send_loop
++  LDA (MSG_PTR),Y
++  BEQ send_done
++  LDX CLIENT_HANDLE
++  JSR socket_send
++  INY
++  BNE send_loop
++  ; Handle crossing page boundary
++  INC MSG_PTR+$01
++  JMP send_loop
++
++send_done
++client_closed
++  ; Close client socket
++  LDA CLIENT_HANDLE
++  JSR socket_close
++
++  ; Loop back to accept next connection
++  JMP accept_loop
++
++
++; Print a null-terminated message to stderr
++; MSG_PTR/MSG_PTR+1 = pointer to message
++print_msg
++  LDY #$00
++.loop
++  LDA (MSG_PTR),Y
++  BEQ .done
++  JSR write_d
++  INY
++  BNE .loop
++.done
++  RTS
++
++
++  .zeropage
++
++* = $01
++
++LISTEN_HANDLE  .byte
++CLIENT_HANDLE  .byte
++HEADER_STATE   .byte
++MSG_PTR        .word
++
++  .code
++
++listening_msg
++  .byte "Listening on port 8080\n", $00
++
++http_response
++  .byte "HTTP/1.0 200 OK\r\n"
++  .byte "Content-Type: text/html\r\n"
++  .byte "Connection: close\r\n"
++  .byte "\r\n"
++  .byte "<html><body>"
++  .byte "<h1>Hello from 6502 asm</h1>"
++  .byte "<p>This page is served by a 6502 assembly web server running in an emulator.</p>"
++  .byte "</body></html>"
++  .byte $00
++
++  .word start
+-- 
+2.43.0
+

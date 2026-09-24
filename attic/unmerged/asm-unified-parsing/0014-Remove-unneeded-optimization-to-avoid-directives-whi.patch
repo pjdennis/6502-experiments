@@ -1,0 +1,39 @@
+From b338d88ba5cd8806b5e0668966027b186962cdc0 Mon Sep 17 00:00:00 2001
+From: Phil Dennis <pjdennis@gmail.com>
+Date: Tue, 10 Feb 2026 07:37:48 -0600
+Subject: [PATCH 14/16] Remove unneeded optimization to avoid directives while
+ skipping
+
+---
+ assembler2/23/directives.asm | 15 ---------------
+ 1 file changed, 15 deletions(-)
+
+diff --git a/assembler2/23/directives.asm b/assembler2/23/directives.asm
+index a982403..d0c9dd9 100644
+--- a/assembler2/23/directives.asm
++++ b/assembler2/23/directives.asm
+@@ -73,21 +73,6 @@ process_directive:
+   INY
+   LDA (TABP16),Y
+   STA JUMP_TARGET16 + 1
+-  ; Check if skipping
+-  BIT SKIP_FLAG
+-  BPL .dispatch         ; Not skipping, dispatch normally
+-  ; In skip mode - only allow conditional directives
+-  CMPI16 JUMP_TARGET16, dir_ifdef
+-  BEQ .dispatch
+-  CMPI16 JUMP_TARGET16, dir_ifndef
+-  BEQ .dispatch
+-  CMPI16 JUMP_TARGET16, dir_else
+-  BEQ .dispatch
+-  CMPI16 JUMP_TARGET16, dir_endif
+-  BEQ .dispatch
+-  ; Not conditional - skip rest of line and return
+-  JMP skip_rest_of_line
+-.dispatch:
+   JMP do_jump           ; Tail call: handler RTS returns to our caller
+ .not_found:
+   JMP err_unknown_directive
+-- 
+2.43.0
+
