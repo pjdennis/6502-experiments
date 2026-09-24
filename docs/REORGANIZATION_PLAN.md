@@ -298,4 +298,11 @@ Still open:
   - `assembler2/README.md` is flagged as outdated and points to `BOOTSTRAP-OVERVIEW`. It gets a full rewrite in Phase 4, once the paths are final.
   - Comments in `assembler2/emulator/` still mention `transfer_115200_wendy.py`, which is now `transfer.py --baudrate=115200`. These are fixed with Phase 3's path updates.
 
+- **Coverage audit** (owner request: every program from every branch stays in the tree or in `attic/`).
+  - Every path at the tips of `claude/pld-hardware-memory-map-3hslxb` and `michael_keyboard_wip` was checked against the tree. Each one is either present (counting `attic/`), renamed (the mkwip `wendy2_*` names are now `*_wendy2c`, and `michael_graphics_keyboard.s` is now `keyboard_driver.inc`), or an identical copy (the `legacy/` duplicates).
+  - The 24 upload scripts and 5 wendy2-era programs that the mkwip merge deleted were restored to `attic/`.
+  - The unique commits of the unmerged `asm-unified-parsing` and `install-hexdump` branches are in `attic/unmerged/` as patches.
+  - Older files missing from the tree were removed in the branches' own history, mostly by the February 2026 stage renumbering (00–23 → 00–17). They remain in history.
+  - Phase 3 moves are pure renames, so this coverage holds automatically.
+
 ### Next: Phase 3 (restructure) on the trial branch
