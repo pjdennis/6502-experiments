@@ -11,7 +11,7 @@ EMU_HDRS = emulator/file_io.h emulator/console.h emulator/cpu_core.h emulator/st
 # Path to the .pld source whose equations define the wendy2c memory
 # map. clock_22v10_pld_generated.h is rebuilt by pld_to_c.py whenever
 # either the .pld or the generator script changes.
-WENDY2C_PLD = ../22V10-wendy2c.pld
+WENDY2C_PLD = ../hardware/wendy2/22V10-wendy2c.pld
 
 emulator/chips/clock_22v10_pld_generated.h: $(WENDY2C_PLD) emulator/pld_to_c.py
 	emulator/pld_to_c.py $(WENDY2C_PLD) -o $@
