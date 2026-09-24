@@ -287,4 +287,15 @@ Still open:
   - Porting to current vasm is future work, outside the reorganization.
 - **1d (go-live only).** Delete the merged branches, and tag-then-delete `asm-unified-parsing` / `claude/install-hexdump-5CahY`. The socket-port issue stays open.
 
-### Next: Phase 2 (hygiene in place) on the trial branch
+### Phase 2: done on the trial branch 2026-09-24
+
+- **`.gitignore`**: no change was needed. A full test run leaves the tree clean.
+- **`assembler2/legacy/`**: the 45 files that were byte-identical copies of `assembler/` were removed. The 18 files unique to assembler2's early history stay.
+- **`attic/`**: 48 files were moved there as pure renames, keeping their original paths. `attic/README.md` lists each item and why it's there, for the owner to decide: delete, restore or keep.
+  - The firmware manifest skips `attic/` and lost only the 9 parked programs.
+  - The May 2026 assembler design notes were *not* attic'd. They are real documentation and move with the assembler in Phase 3.
+- **Stale paths**: the stale `23/` paths all lived in the demos that are now in the attic.
+  - `assembler2/README.md` is flagged as outdated and points to `BOOTSTRAP-OVERVIEW`. It gets a full rewrite in Phase 4, once the paths are final.
+  - Comments in `assembler2/emulator/` still mention `transfer_115200_wendy.py`, which is now `transfer.py --baudrate=115200`. These are fixed with Phase 3's path updates.
+
+### Next: Phase 3 (restructure) on the trial branch
