@@ -116,6 +116,14 @@ class FirmwareManifestTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('assembler', result.stdout)
 
+    def test_default_excludes_skip_attic_and_assemblers(self):
+        for d in ('attic', 'assembler', 'assembler2'):
+            self.write(f'{d}/parked.s', BAD)
+        result = run('update', '--root', self.root, '--manifest', self.manifest)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(sorted(self.entries()),
+                         ['bad.s', 'excluded/skip.s', 'good.s', 'sub/other.s'])
+
     def test_include_dir_option_is_passed_to_vasm(self):
         os.makedirs(os.path.join(self.root, 'libdir'))
         shutil.move(os.path.join(self.root, 'lib.inc'),
