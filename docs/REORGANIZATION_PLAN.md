@@ -1,6 +1,6 @@
 # Repository reorganization plan
 
-Status: **trial in progress** on branch `claude/repo-org-restructure-plan-e0got9`, which is based on `claude/pld-hardware-memory-map-3hslxb`. `main`, the other branches and the tags haven't been touched. Analysis date: 2026-09-24. See the [progress log](#5-progress-log).
+Status: **trial complete, awaiting go-live.** Phases 0–4 are done on branch `claude/repo-org-restructure-plan-e0got9`. `main`, the other branches and the tags haven't been touched yet; the go-live steps are in [§6](#6-go-live-checklist-not-yet-run). Analysis date: 2026-09-24. See the [progress log](#5-progress-log).
 
 ## 1. Current state
 
@@ -63,6 +63,12 @@ Because of this coupling, splitting into several repos would need submodules or 
 - Rename the repo? `6502-experiments` → `6502-workbench`. This is optional; GitHub redirects old URLs.
 
 ### 2.2 Target layout
+
+> **As built (2026-09-24), this differs from the sketch below in four places. The root `README.md` describes the real layout.**
+> - The board directories are named `wendy`, `michael` and `wendy2`.
+> - There is no `firmware/Makefile`. `firmware/vasm` plus `firmware/include-dirs` provide the include path, and board config files keep their original names.
+> - The asm2 stages stay flat (`toolchain/asm2/00`…`17`).
+> - The editor stays in `toolchain/asm2/editor/`.
 
 ```
 README.md                  map of the repo + quick "how to build X"
@@ -234,7 +240,7 @@ Decided 2026-09-24:
 
 Still open:
 
-1. Is `claude/pld-hardware-memory-map-3hslxb` ready to become `main`?
+1. Is `claude/pld-hardware-memory-map-3hslxb` ready to become `main`? The trial branch is built on it, so going live makes it part of `main`.
 2. Install-hexdump socket API: port it or archive it? What it is: 7 TCP calls (create/bind/listen/accept/recv/send/close) that hand 6502 programs real host sockets, one byte per call. Its only user is a demo HTTP server, `webserver.asm`. Porting means ~200 lines of C as a new emulator module, stubs moved to the free addresses after `opendir` ($F03F+), and I/O ports moved out of the argv area ($FE00–$FFDF). It works on `nmos-default` only; real hardware has no equivalent.
 3. `asm-unified-parsing` refactor: archive only (recommended; its target, stage 23, is gone) or re-do it on stage 17?
 4. Rename the repository?
@@ -305,7 +311,7 @@ Still open:
   - Older files missing from the tree were removed in the branches' own history, mostly by the February 2026 stage renumbering (00–23 → 00–17). They remain in history.
   - Phase 3 moves are pure renames, so this coverage holds automatically.
 
-### Phase 3: in progress on the trial branch
+### Phase 3: done on the trial branch 2026-09-24
 
 Each step is a pure-rename commit followed by a path-fix commit. All suites pass after every pair, with an unchanged skipped-test set and unchanged test counts.
 
@@ -318,4 +324,38 @@ Each step is a pure-rename commit followed by a path-fix commit. All suites pass
 - **Deviations from §2.2, both to avoid rewriting code for no gain:**
   - The stage directories stay flat (`toolchain/asm2/00` … `17`), with no `stages/` level.
   - The editor stays at `toolchain/asm2/editor/`. Its sources include paths relative to the asm2 root (`editor/…`, `17/…`), so it is effectively an asm2 application.
-- **Next:** firmware (`firmware/lib`, `boards`, `programs`), then tools, `michael/` → `hardware/michael/arduino`, fonts, research, and the root `CLAUDE.md`.
+- **Fix (CI caught it).** In the root Makefile, `test: $(C_TESTS)` came before `C_TESTS` was defined, so a clean checkout built no C tests. It had only passed locally because stale binaries were still on disk. The rule is now placed after the definition, and `check_all.sh` cleans before the emulator suite.
+- **Step 6 (done): firmware.** Root `*.inc`/`*.s` moved to `firmware/{lib/<area>,boards/<board>,programs/<board>}`; host tools to `tools/{upload,lcd-ocr}`; the Michael ROM to `hardware/michael/`.
+  - `firmware/vasm` wraps vasm with every directory in `firmware/include-dirs` on `-I`. **No `.include` line in any program changed**, apart from two `../` includes in an Arduino-era program. All 119 binaries are byte-identical, and the manifest now lives at `firmware/manifest.txt`.
+  - The upload scripts, emulator goldens, demos, Playwright tests and every prog8 vasm call use the wrapper.
+  - Board config files keep their names (`base_config_v1.inc` etc.), so each program's include line still says which board it targets.
+- **Step 7 (done).** `michael/` moved to `hardware/michael/arduino/`, `font8x8/` to `firmware/fonts/`, and `bbc-basic-four-analysis/` to `research/bbc-basic-iv/`. The asm2 `CLAUDE.md` moved out of `.claude/`.
+- **Coverage re-checked.** Every path at the pld and mkwip tips is still present, possibly renamed. The only paths not found by name are the two known renames (`michael_graphics_keyboard.s` → `keyboard_driver.inc`, and mkwip's `22V10-wendy2.pld` → `22V10-wendy2c.pld`).
+
+### Phase 4: done on the trial branch 2026-09-24
+
+- Root `README.md` (map, quick start) and `CLAUDE.md`.
+- `docs/history.md`: timeline, how to build each era, and where files moved.
+- READMEs for `firmware/`, `hardware/` (with the Wendy 2 revision history), `tools/` and `toolchain/`. `toolchain/asm2/README.md` was rewritten for the 00–17 chain.
+- `tools/tests/test_doc_links.py` checks that the relative links in these guides resolve.
+- **Milestone tags are not created yet.** They are listed in `tools/reorg/milestones.txt`, and `go_live.sh` creates them.
+
+## 6. Go-live checklist (not yet run)
+
+Only these steps change shared state. They need the owner's go-ahead.
+
+1. **Review.** Look through the trial branch, e.g. `git log --stat origin/main..origin/claude/repo-org-restructure-plan-e0got9`, or ask for a draft PR into `main`. Check CI is green on its tip.
+2. **Backup.** Run `git clone --mirror https://github.com/pjdennis/6502-experiments.git` on your own machine.
+3. **Dry run.** `tools/reorg/go_live.sh` checks that `main` fast-forwards to the trial branch and prints every command. It is tested in `tools/tests/test_go_live.py`.
+4. **Apply.** `tools/reorg/go_live.sh --apply`:
+   - creates 18 `archive/<branch>` tags, 16 milestone tags, `reorg/before` (`dd0cf45`) and `reorg/after`;
+   - pushes the tags;
+   - fast-forwards `main`, never forcing;
+   - deletes the 17 other branches. The trial branch is kept.
+
+   Every deleted branch stays reachable through its `archive/` tag, and all but three are also contained in `main`.
+5. **Afterwards.**
+   - Confirm CI on `main`.
+   - Review `attic/README.md` and decide what to delete or restore.
+   - The trial branch can be deleted once you're happy.
+
