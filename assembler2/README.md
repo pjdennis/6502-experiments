@@ -1,5 +1,7 @@
 # 6502 Assembler Bootstrap Chain
 
+> **Outdated (2026-09-24).** This README describes the chain before it was renumbered to 00–17, and it mentions `emulator.c`, `gogen.sh` and `tests/`, which have since moved or been removed. For current information see `BOOTSTRAP-OVERVIEW` (the milestones for 00–17), `.claude/CLAUDE.md` (build commands) and `17/README-BOOTSTRAP`. A rewrite is planned for Phase 4 of `docs/REORGANIZATION_PLAN.md`.
+
 A fully self-hosting 6502 assembler built through progressive bootstrapping, with no external assembler dependencies. The bootstrap starts from a minimal C program and builds up to a full-featured assembler that can assemble its own source code.
 
 ## Prerequisites
