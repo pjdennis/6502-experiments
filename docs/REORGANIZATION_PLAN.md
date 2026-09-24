@@ -305,4 +305,17 @@ Still open:
   - Older files missing from the tree were removed in the branches' own history, mostly by the February 2026 stage renumbering (00–23 → 00–17). They remain in history.
   - Phase 3 moves are pure renames, so this coverage holds automatically.
 
-### Next: Phase 3 (restructure) on the trial branch
+### Phase 3: in progress on the trial branch
+
+Each step is a pure-rename commit followed by a path-fix commit. All suites pass after every pair, with an unchanged skipped-test set and unchanged test counts.
+
+- **Step 1 (done).** `22V10-wendy2c.pld` and the pin notes moved to `hardware/wendy2/`. Regenerating the PLD header changed only its source-path comment.
+- **Step 2 (done).** `assembler2/emulator/` moved to `emulator/`, and `persistent_emulator.py` into it.
+  - A new repository-level `Makefile` holds the emulator build and tests, which run from the repo root. The emulator's own `emulator/...` paths are therefore unchanged.
+- **Step 3 (done).** `assembler/` moved to `toolchain/asm1/`. The asm1 scripts now use vasm from PATH.
+- **Step 4 (done).** `assembler2/prog8/` moved to `toolchain/prog8/`, with its own Makefile. prog8 is now a separate `check_all`/CI suite.
+- **Step 5 (done).** The rest of `assembler2/` moved to `toolchain/asm2/`.
+- **Deviations from §2.2, both to avoid rewriting code for no gain:**
+  - The stage directories stay flat (`toolchain/asm2/00` … `17`), with no `stages/` level.
+  - The editor stays at `toolchain/asm2/editor/`. Its sources include paths relative to the asm2 root (`editor/…`, `17/…`), so it is effectively an asm2 application.
+- **Next:** firmware (`firmware/lib`, `boards`, `programs`), then tools, `michael/` → `hardware/michael/arduino`, fonts, research, and the root `CLAUDE.md`.
