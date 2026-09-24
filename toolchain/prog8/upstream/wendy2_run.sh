@@ -2,7 +2,7 @@
 # Compile a .p8 with upstream prog8c for the custom 'wendy2' target, then
 # boot+upload+run it on the wendy2c emulator and print the final LCD frame.
 #
-# Mirrors the proven `p8c --run` path (assembler2/prog8/p8c/__main__.py):
+# Mirrors the proven `p8c --run` path (toolchain/prog8/p8c/__main__.py):
 #   prog8c -target wendy2.properties  ->  RAW binary loaded at $4000
 #   wendy2_upload.py                  ->  serial-upload framing
 #   emulator + wendy2c boot ROM + --serial-input
@@ -10,13 +10,12 @@
 # Prereqs: /tmp/prog8c.jar, 64tass on PATH, vasm6502_oldstyle on PATH,
 #          the emulator built. Usage: wendy2_run.sh demos/foo.p8 [cyclecap]
 set -e
-HERE="$(cd "$(dirname "$0")" && pwd)"          # .../assembler2/prog8/upstream
-PROG8="$HERE/.."                                # .../assembler2/prog8
-ASM2="$PROG8/.."                               # .../assembler2
-REPO="$ASM2/.."                                # repo root
+HERE="$(cd "$(dirname "$0")" && pwd)"          # .../toolchain/prog8/upstream
+PROG8="$HERE/.."                                # .../toolchain/prog8
+REPO="$PROG8/../.."                            # repo root
 JAR="${PROG8C:-/tmp/prog8c.jar}"
-EMU="$ASM2/../emulator/emulator.out"
-UPLOAD="$ASM2/../emulator/wendy2_upload.py"
+EMU="$REPO/emulator/emulator.out"
+UPLOAD="$REPO/emulator/wendy2_upload.py"
 BOOT_SRC="$REPO/upload_and_run_eeprom_wendy2c.s"
 CAP="${2:-3000000}"
 

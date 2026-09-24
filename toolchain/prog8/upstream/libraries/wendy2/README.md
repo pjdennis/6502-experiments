@@ -42,7 +42,7 @@ in `RTS`; the trampoline lives in the fixed lower 32K so the return works.
 ## Build / run / test
 
     # one demo (prints the final LCD frame):
-    cd assembler2/prog8/upstream && ./wendy2_run.sh demos/t1_bank_probe.p8
+    cd toolchain/prog8/upstream && ./wendy2_run.sh demos/t1_bank_probe.p8
 
     # the golden test suite:
     make -C assembler2 wendy2-test

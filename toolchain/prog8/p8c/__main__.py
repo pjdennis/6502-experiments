@@ -32,9 +32,8 @@ from .serialize import serialize, serialize_tokens
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-ASM2 = REPO_ROOT / "assembler2"
-EMULATOR = ASM2.parent / "emulator" / "emulator.out"
-WENDY2_UPLOAD = ASM2.parent / "emulator" / "wendy2_upload.py"
+EMULATOR = REPO_ROOT / "emulator" / "emulator.out"
+WENDY2_UPLOAD = REPO_ROOT / "emulator" / "wendy2_upload.py"
 BOOT_SRC = REPO_ROOT / "upload_and_run_eeprom_wendy2c.s"
 
 

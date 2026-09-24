@@ -82,7 +82,7 @@ its own version series (v2..v8) rather than being a single Phase
 
 ### Phase 0 -- Scaffolding `[done]`
 
-* Directory layout under `assembler2/prog8/`.
+* Directory layout under `toolchain/prog8/`.
 * Host compiler driver (`python3 -m p8c`).
 * Test harness: unit / snapshot / golden tiers.
 
@@ -372,12 +372,12 @@ Phase 7 grind.
 
 ## How a fresh session should orient itself
 
-1. Read `assembler2/prog8/PLAN.md` (this file) -- gives you the
+1. Read `toolchain/prog8/PLAN.md` (this file) -- gives you the
    strategic map.
-2. Read `assembler2/prog8/RESUME_NOTES.md` -- tells you what
+2. Read `toolchain/prog8/RESUME_NOTES.md` -- tells you what
    landed in the most recent session and what the concrete
    ready-to-pick-up next pushes are.
-3. (Optional) Skim `assembler2/prog8/README.md` -- the per-feature
+3. (Optional) Skim `toolchain/prog8/README.md` -- the per-feature
    language-surface checklist.
 4. `make -C assembler2 prog8-test tinyp8-test` -- confirm
    everything's actually green before you start changing things.

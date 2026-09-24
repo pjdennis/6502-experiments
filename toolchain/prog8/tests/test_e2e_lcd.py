@@ -17,7 +17,7 @@ import sys
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]   # assembler2/prog8
+ROOT = Path(__file__).resolve().parents[1]   # toolchain/prog8
 REPO = ROOT.parents[1]                        # repo root
 EMULATOR = ROOT.parent.parent / "emulator" / "emulator.out"
 GOLDENS = ROOT / "tests" / "goldens"

@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [firmware, asm1, asm2, emulator]
+        suite: [firmware, asm1, asm2, emulator, prog8]
     steps:
       - uses: actions/checkout@v5
 
@@ -38,14 +38,18 @@ jobs:
         if: matrix.suite == 'asm1'
         run: command -v hexdump || (sudo apt-get update -q && sudo apt-get install -y -q bsdextrautils)
 
-      - name: Install emulator-suite tools (64tass, prog8c, playwright)
+      - name: Install emulator-suite tools (playwright)
         if: matrix.suite == 'emulator'
+        run: |
+          pip install -q playwright
+          python3 -m playwright install --with-deps chromium
+
+      - name: Install prog8-suite tools (64tass, prog8c)
+        if: matrix.suite == 'prog8'
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q 64tass default-jre-headless
           curl -sSfL -o "$PROG8C" "$PROG8C_URL"
-          pip install -q playwright
-          python3 -m playwright install --with-deps chromium
 
       - name: Run ${{ matrix.suite }} checks
         run: tools/check_all.sh ${{ matrix.suite }}

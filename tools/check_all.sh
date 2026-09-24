@@ -2,11 +2,11 @@
 # Run every regression check the repo has. The reorganization must keep all of
 # these green (docs/REORGANIZATION_PLAN.md, rule R1). CI runs the same steps.
 #
-#   tools/check_all.sh [firmware|asm1|asm2|emulator]...   (default: all)
+#   tools/check_all.sh [firmware|asm1|asm2|emulator|prog8]...   (default: all)
 #
 # Needs on PATH: vasm6502_oldstyle (1.9f -- see .github/workflows/ci.yml), gcc, g++, make, python3, hexdump.
-# The emulator suite also uses 64tass, java + $PROG8C (default /tmp/prog8c.jar)
-# and Python playwright; those tests SKIP when the tool is missing.
+# The emulator suite also uses Python playwright; the prog8 suite uses 64tass and
+# java + $PROG8C (default /tmp/prog8c.jar). Those tests SKIP when the tool is missing.
 # The slow opt-in suites (Harte, P1_WENDY_SELFHOST, MERGE_SORT_FULL_N) are not run.
 
 set -u
@@ -40,12 +40,16 @@ asm2() {
 }
 
 emulator() {
-  # Emulator C tests + wendy2c goldens (repo root), then the prog8 suites.
-  make test && make -C assembler2 test
+  # Emulator C tests + wendy2c goldens; must run from the repo root.
+  make test
+}
+
+prog8() {
+  make -C toolchain/prog8 test
 }
 
 suites=("$@")
-[ ${#suites[@]} -eq 0 ] && suites=(firmware asm1 asm2 emulator)
+[ ${#suites[@]} -eq 0 ] && suites=(firmware asm1 asm2 emulator prog8)
 
 for s in "${suites[@]}"; do
   echo "=== $s ==="

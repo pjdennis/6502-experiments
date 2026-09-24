@@ -15,9 +15,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 UP = HERE.parent
-ASM2 = UP.parents[1]
-REPO = ASM2.parent
-EMU = ASM2.parent / "emulator" / "emulator.out"
+REPO = UP.parents[2]
+EMU = REPO / "emulator" / "emulator.out"
 JAR = Path(os.environ.get("PROG8C", "/tmp/prog8c.jar"))
 MON_SRC = REPO / "wendy2c_monitor.s"
 GOLDENS = HERE / "goldens"

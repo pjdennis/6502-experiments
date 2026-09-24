@@ -12,7 +12,7 @@ OS-call file I/O from
 > code into multiple banks + executing across them (T5/T6) are implemented and
 > tested (`make -C assembler2 wendy2-test`: 12 e2e goldens). Implementation:
 > `emulator/chips/syscall_ports.{c,h}`, `wendy2c_monitor.s`,
-> `assembler2/prog8/upstream/libraries/wendy2/os.p8`, demos `d1_*`/`d2_*`/`d4_*`/`t5_*`/`t6_*`/`d5_*` + `wendy2_pack.py`.
+> `toolchain/prog8/upstream/libraries/wendy2/os.p8`, demos `d1_*`/`d2_*`/`d4_*`/`t5_*`/`t6_*`/`d5_*` + `wendy2_pack.py`.
 > Remaining (future work): D3 (interactive serial commands -- deferred),
 > D6 (real SPI-flash image backing).
 

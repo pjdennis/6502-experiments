@@ -19,7 +19,7 @@
 #
 # Prereqs: /tmp/prog8c.jar (upstream prog8c), vasm6502_oldstyle, the emulator.
 set -e
-cd "$(dirname "$0")/.."                       # .../assembler2/prog8
+cd "$(dirname "$0")/.."                       # .../toolchain/prog8
 EMU=../../emulator/emulator.out
 JAR=${PROG8C:-/tmp/prog8c.jar}
 CAP=30000000000
