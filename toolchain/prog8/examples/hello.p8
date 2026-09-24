@@ -3,7 +3,7 @@
 ;
 ;   python3 -m p8c examples/hello.p8 --run
 ;
-; Equivalent in spirit to hello_ram_4000_wendy2c.s in the repo root.
+; Equivalent in spirit to firmware/programs/wendy2/hello_ram_4000_wendy2c.s.
 
 %address $4000
 %output raw

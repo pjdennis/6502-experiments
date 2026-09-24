@@ -12,7 +12,7 @@ This script writes that framed sequence to a file (or stdout). The
 framed file feeds the emulator's --serial-input flag.
 
 In real wendy2 hardware, the equivalent flow is the live serial port
-write done by transfer_115200_wendy.py. The on-target code's
+write done by tools/upload/transfer.py (at 115200 baud). The on-target code's
 TRANSLATE table un-bit-reverses each byte the SR captures, so the
 bytes we emit here are interpreted directly (no host-side bit
 reversal needed).

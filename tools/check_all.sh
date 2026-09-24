@@ -13,10 +13,7 @@ set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-# Older upload scripts call ./vasm6502_oldstyle at the repo root (gitignored);
-# point it at the one on PATH if it is missing.
-VASM="$(command -v vasm6502_oldstyle)" || { echo "vasm6502_oldstyle not on PATH"; exit 1; }
-[ -e vasm6502_oldstyle ] || ln -s "$VASM" vasm6502_oldstyle
+command -v vasm6502_oldstyle >/dev/null || { echo "vasm6502_oldstyle not on PATH"; exit 1; }
 
 failed=()
 

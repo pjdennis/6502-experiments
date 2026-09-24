@@ -4,7 +4,7 @@
 # Builds the wendy2c boot ROM (upload_and_run_eeprom_wendy2c.s) and a
 # small "Hi! I'm Wendy 2." payload (hello_ram_4000_wendy2c.s) using
 # vasm, frames the payload with the same length+payload+BSD-checksum
-# layout as transfer_115200_wendy.py, then launches the emulator with
+# layout as tools/upload/transfer.py (at 115200 baud), then launches the emulator with
 # the boot ROM in the EEPROM and the framed bytes preloaded into the
 # serial-USB chip's queue.
 #

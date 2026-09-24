@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Upload-and-run a payload to a running wendy2c emulator.
 
-Companion to the real-hardware transfer_115200_wendy.py: this version
+Companion to the real-hardware tools/upload/transfer.py (at 115200 baud): this version
 talks to the emulator's --serial-link Unix socket instead of a tty.
 The wire protocol is line-level (CB2 high/low + emulated-time deltas);
 this script generates the same UART bit sequence a real serial cable
