@@ -17,7 +17,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent / "emulator"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "emulator"))
 from persistent_emulator import PersistentEmulator
 
 from ansi_screen import AnsiScreen
@@ -132,7 +132,7 @@ class EditorTestRunner:
         self.base_dir = base_dir
         self.verbose = verbose
         self.quiet = quiet
-        self.emulator = base_dir.parent / "emulator" / "emulator.out"
+        self.emulator = base_dir.parents[1] / "emulator" / "emulator.out"
         self.assembler = base_dir / "17" / "out" / "asm.out"
         self.editor_asm = base_dir / "editor" / "editor.asm"
         self.editor_bin = base_dir / "editor" / "out" / "editor.out"

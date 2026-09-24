@@ -305,7 +305,7 @@ Range positions can be: decimal number (1-based), `'a` (mark), or `.`
 
 ### Quick commands
 ```bash
-# Run tests (from assembler2 directory):
+# Run tests (from toolchain/asm2):
 python3 editor/tests/editor_tests.py -q
 
 # Run editor (console):

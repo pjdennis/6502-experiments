@@ -1,7 +1,7 @@
 #!/bin/sh
 # Launch the wendy2c emulator in web mode with the 5x10 LCD demo
 # (lcd_5x10_demo_wendy2c.s) uploaded as the RAM payload. Convenience
-# wrapper around assembler2/emulator/demo_wendy2c.sh -- by default
+# wrapper around emulator/demo_wendy2c.sh -- by default
 # starts the embedded HTTP+WebSocket server on http://127.0.0.1:8080/
 # so you can open the page in a browser and watch the 10-row glyphs +
 # walking underline cursor.
@@ -44,4 +44,4 @@ if [ "$panel_set" -eq 0 ]; then
     set -- "$@" --lcd-panel 16x1-5x10
 fi
 
-exec ./assembler2/emulator/demo_wendy2c.sh "$@"
+exec ./emulator/demo_wendy2c.sh "$@"

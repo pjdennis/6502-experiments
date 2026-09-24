@@ -40,10 +40,10 @@ wendy2c, mirroring the asm00..asm17 chain.
 ## Building / running
 
     # Build the emulator (needed by the e2e golden test):
-    make -C assembler2 emulator/emulator.out
+    make emulator/emulator.out        # from the repository root
 
     # Run the test suite:
-    make -C assembler2 prog8-test
+    make -C toolchain/prog8 prog8-test
 
     # Compile a .p8 by hand and inspect the .s:
     python3 -m p8c toolchain/prog8/examples/hello.p8 -o /tmp/hello.s

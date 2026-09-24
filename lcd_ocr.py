@@ -40,7 +40,7 @@ REPO_ROOT = Path(__file__).resolve().parent
 DEFAULT_INPUT = "/mnt/c/temp/wendy2-snap.jpg"
 WORKDIR = Path("/tmp/lcd-ocr")
 CALIB_JSON = REPO_ROOT / "lcd_calibration.json"
-FONT_HEADER = REPO_ROOT / "assembler2/emulator/chips/hd44780_a00_font.h"
+FONT_HEADER = REPO_ROOT / "emulator/chips/hd44780_a00_font.h"
 
 # 16 char columns x 2 char rows, each cell 5 dots wide x 8 dots tall.
 LCD_COLS = 16

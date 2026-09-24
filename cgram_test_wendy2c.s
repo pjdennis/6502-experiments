@@ -6,7 +6,7 @@
 ; wendy2c web UI / live render.
 ;
 ; Loads at $4000 like the other "uploaded payload" demos -- launch via
-; assembler2/emulator/demo_wendy2c.sh DEMO_PAYLOAD=cgram_test_wendy2c.s.
+; emulator/demo_wendy2c.sh DEMO_PAYLOAD=cgram_test_wendy2c.s.
 
   .include base_config_wendy2c.inc
 

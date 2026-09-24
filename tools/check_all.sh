@@ -36,7 +36,7 @@ asm1() {
 }
 
 asm2() {
-  (cd assembler2 && ./verify.sh)
+  (cd toolchain/asm2 && ./verify.sh)
 }
 
 emulator() {

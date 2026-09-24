@@ -11,7 +11,7 @@ language-surface checklist, see [`README.md`](./README.md).
 
 * [`ASM_MIGRATION_PLAN.md`](./ASM_MIGRATION_PLAN.md) -- gap analysis +
   plan for swapping vasm out for the in-tree on-host assembler
-  (`assembler2/17/`), so pass 1 + pass 2 + assembler all run on target.
+  (`toolchain/asm2/17/`), so pass 1 + pass 2 + assembler all run on target.
 * [`CODEGEN_SIZE_COMPARISON.md`](./CODEGEN_SIZE_COMPARISON.md) -- measured
   p8c vs. upstream prog8 binary sizes (p8c emits ~1.5-1.65x the code).
 * [`CODEGEN_LOW_HANGING_FRUIT.md`](./CODEGEN_LOW_HANGING_FRUIT.md) -- ranked
@@ -379,7 +379,7 @@ Phase 7 grind.
    ready-to-pick-up next pushes are.
 3. (Optional) Skim `toolchain/prog8/README.md` -- the per-feature
    language-surface checklist.
-4. `make -C assembler2 prog8-test tinyp8-test` -- confirm
+4. `make -C toolchain/prog8 prog8-test tinyp8-test` -- confirm
    everything's actually green before you start changing things.
 5. Pick one push from RESUME_NOTES.md, work it, commit, push.
    Update RESUME_NOTES.md (and this file's status markers if a

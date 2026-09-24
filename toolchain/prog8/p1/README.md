@@ -128,7 +128,7 @@ differs (stmt.p8 serializes the AST, p1.p8 emits assembly).
 ## Running
 
     # all p1 milestone tests (SKIPs without vasm6502_oldstyle + emulator):
-    make -C assembler2 p1-test
+    make -C toolchain/prog8 p1-test
 
     # by hand: build, run on the emulator, diff against the oracle
     python3 -m p8c p1/lexer.p8 -o /tmp/lexer.s

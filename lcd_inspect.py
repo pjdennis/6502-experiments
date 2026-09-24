@@ -88,7 +88,7 @@ def make_cell_panel(warped, row, col, captured_glyph,
 
 
 def load_rom_font() -> dict[int, tuple[int, ...]]:
-    text = (REPO_ROOT / "assembler2/emulator/chips/hd44780_a00_font.h").read_text()
+    text = (REPO_ROOT / "emulator/chips/hd44780_a00_font.h").read_text()
     pat = re.compile(
         r"\{\s*(0x[0-9a-fA-F]{2}(?:,\s*0x[0-9a-fA-F]{2}){7})\s*\}"
         r"\s*,\s*/\*\s*(0x[0-9a-fA-F]{2})\b[^*]*\*/"

@@ -45,11 +45,11 @@ in `RTS`; the trampoline lives in the fixed lower 32K so the return works.
     cd toolchain/prog8/upstream && ./wendy2_run.sh demos/t1_bank_probe.p8
 
     # the golden test suite:
-    make -C assembler2 wendy2-test
+    make -C toolchain/prog8 wendy2-test
 
 Prereqs: `prog8c.jar` at `/tmp/prog8c.jar` (or `$PROG8C`), `64tass` and
 `vasm6502_oldstyle` on PATH, and the emulator built
-(`make -C assembler2 emulator/emulator.out`). The suite skips cleanly if
+(`make emulator/emulator.out` from the repository root). The suite skips cleanly if
 any are missing.
 
 ## Demos / tests
