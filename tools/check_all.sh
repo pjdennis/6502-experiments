@@ -13,11 +13,10 @@ set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-# Upload scripts and asm1's Makefile call ./vasm6502_oldstyle and ../vasm6502_oldstyle
-# (both gitignored); point them at the one on PATH if they are missing.
+# Older upload scripts call ./vasm6502_oldstyle at the repo root (gitignored);
+# point it at the one on PATH if it is missing.
 VASM="$(command -v vasm6502_oldstyle)" || { echo "vasm6502_oldstyle not on PATH"; exit 1; }
 [ -e vasm6502_oldstyle ] || ln -s "$VASM" vasm6502_oldstyle
-[ -e ../vasm6502_oldstyle ] || ln -s "$VASM" ../vasm6502_oldstyle 2>/dev/null || true
 
 failed=()
 
@@ -31,7 +30,7 @@ asm1() {
   # empty dumps -- so require hexdump and check the printed verdicts instead.
   command -v hexdump >/dev/null || { echo "hexdump not on PATH"; return 1; }
   local log
-  log="$(cd assembler && ./asmtestgen.sh </dev/null 2>&1)"
+  log="$(cd toolchain/asm1 && ./asmtestgen.sh </dev/null 2>&1)"
   echo "$log" | tail -3
   echo "$log" | grep -qx 'OK' && echo "$log" | grep -qx 'Assembled'
 }

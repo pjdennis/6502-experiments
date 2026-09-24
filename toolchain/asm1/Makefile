@@ -11,5 +11,5 @@ sidebyside.out: sidebyside.cpp
 	g++ -O2 -march=native -flto -DNDEBUG -o sidebyside.out sidebyside.cpp
 
 asm4v.out: asm4v.asm
-	../vasm6502_oldstyle -quiet -wfail -Fbin -dotdir -esc -o asm4v.out asm4v.asm
+	vasm6502_oldstyle -quiet -wfail -Fbin -dotdir -esc -o asm4v.out asm4v.asm
 
