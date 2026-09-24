@@ -27,6 +27,13 @@ For each item, decide whether to **delete** it (it stays in git history), **rest
 | `assembler2/archive/` | 2026-02 | Earlier plan documents |
 | `assembler2/UNIFIED_PARSING_ANALYSIS.md` | 2026-07 | Analysis for the `asm-unified-parsing` refactor, which was never ported to stage 17 (tag `archive/asm-unified-parsing`) |
 
+## Michael Arduino directory cleanup (2026-09-24)
+
+| Item | Why it's here |
+|---|---|
+| `hardware/michael/arduino/hello-again.s` | Byte-identical to `firmware/programs/wendy/hello.s` (Ben Eater's hello world, copied to test the new board) |
+| `hardware/michael/arduino/compile_and_program.sh` | Same as `tools/upload/compile_and_program.sh` (minipro EEPROM burner) |
+
 ## Restored after the michael_keyboard_wip merge
 
 The merge accepted michael_keyboard_wip's 2023 deletions of these files. They were restored here, as they were at `claude/pld-hardware-memory-map-3hslxb` (`dd0cf45`), so every program from every branch stays reviewable. Their earlier history is under their original root-level paths (`git log -- <name>`).

@@ -23,7 +23,8 @@ Then build it the way that era did, using the table below.
 |---|---|---|---|
 | 2020-07-20 | **Wendy** (v1) first programs, Ben Eater-style breadboard | `d297d44` (`wendy/first-light`) | Root `*.s` with vasm. `makerom.py` for the earliest ROM. |
 | 2020-08 | Serial upload-and-run loader, per-baud `transfer_*.py` scripts, `base_config_v1.inc` | — | `./compile_and_upload_<baud>.sh prog.s` |
-| 2021-01-22 | Arduino monitor/programmer for the next board | `6b02ccc` | Arduino IDE; `michael/` |
+| 2021-01-22 | **Michael bring-up**: an Arduino emulates ROM/RAM/IO and the clock around a bare CPU, then loads real RAM (01-22) and programs the EEPROM in circuit (01-28) | `6b02ccc`, `cb4fc57` | Arduino IDE; `michael/` (now `hardware/michael/arduino/`) |
+| 2021-04-06 | Michael runs standalone: first bring-up programs | `e8c33fc` | `michael/*.s` (now `firmware/programs/michael/bringup/`) |
 | 2021-04-09 | **Michael** (v2): RAM upload working, v1/v2 config split | `eb3853c` (`michael/ram-upload`) | `./compile_and_upload*.sh`, with `base_config_v2.inc` |
 | 2022-04-10 | **Wendy 2**: 65C02 + 22V10 | `6be57cd` (`wendy2/upload`) | as above, `base_config_wendy2.inc` |
 | 2022-04-23 | Wendy 2 rev b (2 × 32K banks) | `14951d4` (`wendy2b/intro`) | `base_config_wendy2b.inc` |
@@ -68,7 +69,8 @@ Then build it the way that era did, using the table below.
 | root `*.s` programs | `firmware/programs/<board>/` |
 | root `transfer.py`, `compile_and_*.sh`; LCD webcam tools | `tools/upload/`; `tools/lcd-ocr/` |
 | `22V10-wendy2c.pld`, `notes` | `hardware/wendy2/` |
-| `michael/`, `michael-2023-12-04.rom` | `hardware/michael/arduino/`, `hardware/michael/` |
+| `michael/` sketches; its emulated-machine programs; its host scripts; its real-board programs | `hardware/michael/arduino/{6502-*,programs,host}/`; `firmware/programs/michael/bringup/` |
+| `michael-2023-12-04.rom` | `hardware/michael/` |
 | `font8x8/` | `firmware/fonts/` |
 | `assembler/` | `toolchain/asm1/` |
 | `assembler2/` (incl. `editor/`) | `toolchain/asm2/` |

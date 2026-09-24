@@ -22,6 +22,7 @@ firmware/
     serial/       upload_and_run.inc, the bit-banged serial loader
   programs/
     wendy/  michael/  wendy2/   programs for each board (by the base_config they include)
+    michael/bringup/            first standalone-board programs (2021-04), hard-coded addresses
     michael/bbc-basic/          BBC BASIC MOS shim (needs the external ../BeebEater tree)
     common/                     board-independent experiments
   fonts/          font8x8 sources and dumpers
