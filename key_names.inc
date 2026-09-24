@@ -1,5 +1,4 @@
 key_names:
-  .asciiz KEY_RESERVED,     "RESERVED"
   .asciiz KEY_F1,           "F1"
   .asciiz KEY_ESC,          "ESC"
   .asciiz KEY_TAB,          "TAB"

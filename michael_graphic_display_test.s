@@ -1,7 +1,11 @@
   .include base_config_v2.inc
 
-DISPLAY_STRING_PARAM = $00 ; 2 bytes
-GD_ZERO_PAGE_BASE    = $02
+DISPLAY_STRING_PARAM     = $00 ; 2 bytes
+MULTIPLY_8X8_RESULT_LOW  = $02 ; 1 byte
+MULTIPLY_8X8_TEMP        = $03 ; 1 byte
+COUNTER                  = $04 ; 2 bytes
+
+GD_ZERO_PAGE_BASE        = $06
 
   .org $2000
   jmp initialize_machine
@@ -13,6 +17,7 @@ GD_ZERO_PAGE_BASE    = $02
   .include initialize_machine_v2.inc
   .include display_routines.inc
   .include display_string.inc
+  .include multiply8x8.inc
   .include graphics_display.inc
 
 program_start:
@@ -26,29 +31,18 @@ program_start:
   ldx #>start_message
   jsr display_string
 
+  jsr gd_prepare_vertical
+
   jsr gd_select
-  jsr gd_reset
-  jsr gd_initialize
+  jsr show_stripes
   jsr gd_unselect
 
-;  jsr gd_select
-;  jsr show_content
-;  jsr gd_unselect
+  lda #100
+  jsr delay_hundredths
 
-
-   jsr gd_select
-; set screen orientation
-  lda #ILI9341_MADCTL
-  jsr gd_send_command
-  lda #%10101000    ; original $48
-  jsr gd_send_data
-
+  jsr gd_select
   jsr gd_clear_screen
 
-  lda #0
-  sta GD_ROW
-  lda #0
-  sta GD_COL
   lda #<hello_message
   sta GD_STRING_PTR
   lda #>hello_message
@@ -70,19 +64,8 @@ done_message:   asciiz "Done."
 hello_message:  asciiz "Hello, World! The\nquick brown fox\njumps over the lazy dog.\n\n\n   Phil\n        (\\/)\n         \\/\n             Angel"
 
 
-show_content:
+show_stripes:
   lda #ILI9341_CASET
-  jsr gd_send_command
-  lda #0
-  jsr gd_send_data
-  lda #0
-  jsr gd_send_data
-  lda #>(ILI9341_TFTWIDTH - 1)
-  jsr gd_send_data
-  lda #<(ILI9341_TFTWIDTH - 1)
-  jsr gd_send_data
-
-  lda #ILI9341_PASET
   jsr gd_send_command
   lda #0
   jsr gd_send_data
@@ -93,12 +76,23 @@ show_content:
   lda #<(ILI9341_TFTHEIGHT - 1)
   jsr gd_send_data
 
+  lda #ILI9341_PASET
+  jsr gd_send_command
+  lda #0
+  jsr gd_send_data
+  lda #0
+  jsr gd_send_data
+  lda #>(ILI9341_TFTWIDTH - 1)
+  jsr gd_send_data
+  lda #<(ILI9341_TFTWIDTH - 1)
+  jsr gd_send_data
+
   lda #ILI9341_RAMWR
   jsr gd_send_command
 
-STRIPE_HEIGHT = 10
+STRIPE_WIDTH = 10
 
-  ldy #ILI9341_TFTHEIGHT / STRIPE_HEIGHT / 4
+  ldy #ILI9341_TFTWIDTH / STRIPE_WIDTH / 4
 .stripe_loop:
   lda #<ILI9341_RED
   sta GD_COLOR
@@ -115,9 +109,9 @@ STRIPE_HEIGHT = 10
   lda #>ILI9341_ORANGE
   sta GD_COLOR + 1
   jsr send_stripe
-  lda #<ILI9341_NAVY
+  lda #<ILI9341_YELLOW
   sta GD_COLOR
-  lda #>ILI9341_NAVY
+  lda #>ILI9341_YELLOW
   sta GD_COLOR + 1
   jsr send_stripe
   dey
@@ -127,10 +121,13 @@ STRIPE_HEIGHT = 10
 
 send_stripe:
   phy
-  ldy #STRIPE_HEIGHT
-.height_loop:
-  ldx #ILI9341_TFTWIDTH
+  ldy #STRIPE_WIDTH
 .width_loop:
+  lda #<(-ILI9341_TFTHEIGHT)
+  sta COUNTER
+  lda #>(-ILI9341_TFTHEIGHT)
+  sta COUNTER + 1
+.height_loop:
   lda GD_COLOR + 1
 ;  jsr gd_send_data
   sta PORTB
@@ -145,9 +142,12 @@ send_stripe:
   tsb GD_PORT
   trb GD_PORT
 
-  dex
-  bne .width_loop
-  dey
+  inc COUNTER
   bne .height_loop
+  inc COUNTER + 1
+  bne .height_loop
+
+  dey
+  bne .width_loop
   ply
   rts

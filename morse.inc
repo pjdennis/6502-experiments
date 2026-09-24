@@ -2,7 +2,7 @@
 MORSE_PORT = PORTA
   .endif
 
-MORSE_TIME_UNIT         = 100 ; Milliseconds
+MORSE_TIME_UNIT         = 200 ; Milliseconds
 MORSE_DELAY_PENDING     = 1
 MORSE_DELAY_NOT_PENDING = 0
 

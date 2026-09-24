@@ -1,4 +1,34 @@
+CHAR_6x8   = 0
+CHAR_12x16 = 1
+
+CHAR_RESOLUTION=CHAR_12x16
+
+  .if CHAR_RESOLUTION == CHAR_6x8
+
+  .include character_patterns_6x8.inc
+character_patterns = character_patterns_6x8
+GD_CHAR_WIDTH  = 6
+GD_CHAR_HEIGHT = 8
+GD_CHAR_ROWS   = 40
+GD_CHAR_COLS   = 40
+GDC_CURSOR_HEIGHT = 1
+
+  .endif
+
+  .if CHAR_RESOLUTION == CHAR_12x16
+
   .include character_patterns_12x16.inc
+character_patterns = character_patterns_12x16
+GD_CHAR_WIDTH  = 12
+GD_CHAR_HEIGHT = 16
+GD_CHAR_ROWS   = 20
+GD_CHAR_COLS   = 20
+GDC_CURSOR_HEIGHT = 2
+  .endif
+
+  .include macros.inc
+  .include graphics_macros.inc
+
 
 ; PORT A
 GD_PORT = PORTA
@@ -7,6 +37,11 @@ GD_E    = %00000001
 GD_CSB  = %00000010
 GD_RSTB = %00000100
 GD_DC   = %00100000
+
+GD_CHAR_BYTES = GD_CHAR_WIDTH * GD_CHAR_HEIGHT / 8
+
+BYTES_PER_PIXEL          = 2
+BYTES_PER_SEND_ZERO_LOOP = 16
 
 ILI9341_TFTWIDTH  = 240 ; ILI9341 max TFT width
 ILI9341_TFTHEIGHT = 320 ; ILI9341 max TFT height
@@ -67,6 +102,14 @@ ILI9341_GMCTRP1 = $e0 ; Positive Gamma Correction
 ILI9341_GMCTRN1 = $e1 ; Negative Gamma Correction
 ;ILI9341_PWCTR6 = $fc
 
+; Parameter definitions for the ILI9341_MADCTL command
+ILI9341_MADCTL_MY  = %10000000 ; Starts from bottom when set, top otherwise
+ILI9341_MADCTL_MX  = %01000000 ; Starts from right of screen when set, left otherwise
+ILI9341_MADCTL_MV  = %00100000 ; Orientation vertical when set, horizontal otherwise
+ILI9341_MADCTL_ML  = %00010000 ; Affects vertical scrolling orientation
+ILI9341_MADCTL_BGR = %00001000 ; LCD pixel color order is BGR when set, RGB otherwise
+ILI9341_MADCTL_MH  = %00000100 ; Affects horizontal refresh direction
+
 ; Color definitions
 ILI9341_BLACK       = $0000 ;   0,   0,   0
 ILI9341_NAVY        = $000f ;   0,   0, 123
@@ -88,9 +131,6 @@ ILI9341_ORANGE      = $fd20 ; 255, 165,   0
 ILI9341_GREENYELLOW = $afe5 ; 173, 255,  41
 ILI9341_PINK        = $fc18 ; 255, 130, 198
 
-GD_CHAR_ROWS = 20
-GD_CHAR_COLS = 20
-
 GD_CMD_PTR           = GD_ZERO_PAGE_BASE + $00 ; 2 bytes
 GD_COLOR             = GD_ZERO_PAGE_BASE + $02 ; 2 bytes
 GD_ROW               = GD_ZERO_PAGE_BASE + $04 ; 1 byte
@@ -102,6 +142,28 @@ GD_CHAR_DATA_PTR     = GD_ZERO_PAGE_BASE + $0c ; 2 bytes
 GD_STRING_PTR        = GD_ZERO_PAGE_BASE + $0e ; 2 bytes
 GD_BYTE              = GD_ZERO_PAGE_BASE + $10 ; 1 byte
 GD_SCROLL_ROWS       = GD_ZERO_PAGE_BASE + $11 ; 1 byte
+GD_ZERO_PAGE_STOP    = GD_ZERO_PAGE_BASE + $12
+
+
+gd_prepare_vertical:
+  jsr gd_configure
+  jsr gd_reset
+
+  jsr gd_select
+  jsr gd_initialize
+
+; set screen orientation
+  gd_send_command_immediate ILI9341_MADCTL
+; Original value was ILI9341_MADCTL_MX | ILI9341_MADCTL_BGR
+  gd_send_data_immediate ILI9341_MADCTL_MY | ILI9341_MADCTL_MV | ILI9341_MADCTL_BGR
+
+  jsr gd_clear_screen
+  jsr gd_unselect
+
+  stz GD_ROW
+  stz GD_COL
+  rts
+
 
 gd_configure:
   lda #GD_E
@@ -186,25 +248,16 @@ gd_scroll_up:
   lda #GD_CHAR_ROWS
   sbc GD_SCROLL_ROWS
 .row_ok2:
-  sta GD_TEMP
-  lsr
-  lsr
-  lsr
-  lsr
+  ldy #GD_CHAR_HEIGHT
+  jsr multiply8x8
   sta GD_Y + 1
-  lda GD_TEMP
-  asl
-  asl
-  asl
-  asl
+  lda MULTIPLY_8X8_RESULT_LOW
   sta GD_Y
+
 ; send command
-  lda #ILI9341_VSCRSADD
-  jsr gd_send_command
-  lda GD_Y + 1
-  jsr gd_send_data
-  lda GD_Y
-  jsr gd_send_data
+  gd_send_command_immediate ILI9341_VSCRSADD
+  gd_send_word GD_Y
+
   ply
   plx
   rts
@@ -212,120 +265,60 @@ gd_scroll_up:
 
 ; Input GD_ROW, GD_COL, GD_ROW2, GD_COL2
 gd_clear_line:
-  pha
-  phx
-  phy
-  jsr gd_clear_character_row
+  .ifdef gdc_clear_line
+  jsr gdc_clear_line
+  .endif
+
   stz GD_COL
   jsr x_y_from_row_col
-  lda #ILI9341_CASET
-  jsr gd_send_command
-  lda GD_Y + 1
-  jsr gd_send_data
-  lda GD_Y
-  jsr gd_send_data
+  gd_send_command_immediate ILI9341_CASET
+  gd_send_word GD_Y
 
-  clc
-  lda GD_Y
-  adc #<15 ; character height
-  sta GD_Y
-  lda GD_Y + 1
-  adc #>15 ; character height
-  sta GD_Y + 1
+  add16iTo16usingA GD_Y, GD_CHAR_HEIGHT-1
 
-  lda GD_Y + 1
-  jsr gd_send_data
-  lda GD_Y
-  jsr gd_send_data
+  gd_send_word GD_Y
 
-  lda #ILI9341_PASET
-  jsr gd_send_command
-  lda GD_X + 1
-  jsr gd_send_data
-  lda GD_X
-  jsr gd_send_data
+  gd_send_command_immediate ILI9341_PASET
+  gd_send_word GD_X
 
-  clc
-  lda GD_X
-  adc #<(ILI9341_TFTWIDTH-1)
-  sta GD_X
-  lda GD_X + 1
-  adc #>(ILI9341_TFTWIDTH-1)
-  sta GD_X + 1
+  add16iTo16usingA GD_X, ILI9341_TFTWIDTH-1
 
-  lda GD_X + 1
-  jsr gd_send_data
-  lda GD_X
-  jsr gd_send_data
+  gd_send_word GD_X
 
-  lda #ILI9341_RAMWR
-  jsr gd_send_command
+  gd_send_command_immediate ILI9341_RAMWR
 
-CLEAR_LINE_LOOP_COUNT = -480 ; 256 * 240 * 1 = 480 * 16 * 8
+CLEAR_LINE_LOOP_COUNT = -(ILI9341_TFTWIDTH * GD_CHAR_HEIGHT * BYTES_PER_PIXEL / BYTES_PER_SEND_ZERO_LOOP)
 
-  lda #<CLEAR_LINE_LOOP_COUNT
-  sta GD_TEMP
-  lda #>CLEAR_LINE_LOOP_COUNT
-  sta GD_TEMP + 1
+  sti16usingA GD_TEMP, CLEAR_LINE_LOOP_COUNT
 
-  jsr send_zero_data ; tail call
-  ply
-  plx
-  pla
-  rts
+  jmp send_zero_data ; tail call
 
 
 gd_clear_screen:
-  pha
-  phx
-  phy
-  jsr gd_clear_character_screen
-  lda #ILI9341_DISPOFF
-  jsr gd_send_command
+  .ifdef gdc_char_buffer_clear
+  jsr gdc_char_buffer_clear
+  .endif
 
-  lda #ILI9341_CASET
-  jsr gd_send_command
-  lda #0
-  jsr gd_send_data
-  lda #0
-  jsr gd_send_data
-  lda #>(ILI9341_TFTHEIGHT - 1)
-  jsr gd_send_data
-  lda #<(ILI9341_TFTHEIGHT - 1)
-  jsr gd_send_data
+  gd_send_command_immediate ILI9341_DISPOFF
 
-  lda #ILI9341_PASET
-  jsr gd_send_command
-  lda #0
-  jsr gd_send_data
-  lda #0
-  jsr gd_send_data
-  lda #>(ILI9341_TFTWIDTH - 1)
-  jsr gd_send_data
-  lda #<(ILI9341_TFTWIDTH - 1)
-  jsr gd_send_data
+  gd_send_command_immediate ILI9341_CASET
+  gd_send_word_immediate 0
+  gd_send_word_immediate ILI9341_TFTHEIGHT-1
 
-  lda #ILI9341_RAMWR
-  jsr gd_send_command
+  gd_send_command_immediate ILI9341_PASET
+  gd_send_word_immediate 0
+  gd_send_word_immediate ILI9341_TFTWIDTH-1
 
-CLEAR_SCREEN_LOOP_COUNT = -9600 ; 256 * 240 * 20 = 320 * 240 * 16 = 9600 * 16 * 8
+  gd_send_command_immediate ILI9341_RAMWR
 
-  lda #<CLEAR_SCREEN_LOOP_COUNT
-  sta GD_TEMP
-  lda #>CLEAR_SCREEN_LOOP_COUNT
-  sta GD_TEMP + 1
+CLEAR_SCREEN_LOOP_COUNT = -(ILI9341_TFTWIDTH * ILI9341_TFTHEIGHT * BYTES_PER_PIXEL / BYTES_PER_SEND_ZERO_LOOP)
+
+  sti16usingA GD_TEMP, CLEAR_SCREEN_LOOP_COUNT
 
   jsr send_zero_data
 
-  lda #ILI9341_DISPON
-  jsr gd_send_command
+  gd_send_command_immediate ILI9341_DISPON
 
-  stz GD_ROW
-  stz GD_COL
-
-  ply
-  plx
-  pla
   rts
 
 
@@ -339,39 +332,22 @@ send_zero_data:
   ldy #0
   ora #GD_E
 
+  .macro .toggleX2
+  sta PORTA,Y
+  stx PORTA
+  sta PORTA,Y
+  stx PORTA
+  .endm
+
 .loop:
-  sta PORTA,Y ;  1
-  stx PORTA
-  sta PORTA,Y ;  2
-  stx PORTA
-  sta PORTA,Y ;  3
-  stx PORTA
-  sta PORTA,Y ;  4
-  stx PORTA
-  sta PORTA,Y ;  5
-  stx PORTA
-  sta PORTA,Y ;  6
-  stx PORTA
-  sta PORTA,Y ;  7
-  stx PORTA
-  sta PORTA,Y ;  8
-  stx PORTA
-  sta PORTA,Y ;  9
-  stx PORTA
-  sta PORTA,Y ; 10
-  stx PORTA
-  sta PORTA,Y ; 11
-  stx PORTA
-  sta PORTA,Y ; 12
-  stx PORTA
-  sta PORTA,Y ; 13
-  stx PORTA
-  sta PORTA,Y ; 14
-  stx PORTA
-  sta PORTA,Y ; 15
-  stx PORTA
-  sta PORTA,Y ; 16
-  stx PORTA
+  .toggleX2 ;  2
+  .toggleX2 ;  4
+  .toggleX2 ;  6
+  .toggleX2 ;  8
+  .toggleX2 ; 10
+  .toggleX2 ; 12
+  .toggleX2 ; 14
+  .toggleX2 ; 16
 
   inc GD_TEMP
   bne .loop
@@ -402,104 +378,57 @@ gd_show_string:
   bra .continue
 
 
+; On entry A contains the character to display (in ASCII)
+; On exit X, Y are preserved
+;         A is not preserved
 gd_show_character:
   phx
   phy
-  jsr gd_store_character
+
+  .ifdef gdc_char_store
+  jsr gdc_char_store
+  .endif
 
   jsr set_char_data_ptr
   jsr x_y_from_row_col
 
-  lda #ILI9341_CASET
-  jsr gd_send_command
-  lda GD_Y + 1
-  jsr gd_send_data
-  lda GD_Y
-  jsr gd_send_data
+  gd_send_command_immediate ILI9341_CASET
+  gd_send_word GD_Y
+  add8iTo16usingA GD_Y, GD_CHAR_HEIGHT-1
+  gd_send_word GD_Y
 
-  clc
-  lda GD_Y
-  adc #15
-  sta GD_Y
-  lda GD_Y + 1
-  adc #0
-  sta GD_Y + 1
+  gd_send_command_immediate ILI9341_PASET
+  gd_send_word GD_X
+  add8iTo16usingA GD_X, GD_CHAR_WIDTH-1
+  gd_send_word GD_X
 
-  lda GD_Y + 1
-  jsr gd_send_data
-  lda GD_Y
-  jsr gd_send_data
-
-  lda #ILI9341_PASET
-  jsr gd_send_command
-  lda GD_X + 1
-  jsr gd_send_data
-  lda GD_X
-  jsr gd_send_data
-
-  clc
-  lda GD_X
-  adc #11
-  sta GD_X
-  lda GD_X + 1
-  adc #0
-  sta GD_X + 1
-
-  lda GD_X + 1
-  jsr gd_send_data
-  lda GD_X
-  jsr gd_send_data
-
-  lda #ILI9341_RAMWR
-  jsr gd_send_command
+  gd_send_command_immediate ILI9341_RAMWR
 
   ldy #0
 .col_loop:
   lda (GD_CHAR_DATA_PTR),Y
-; show column
   sta GD_BYTE
   ldx #8
 .row_loop:
   lsr GD_BYTE
   bcc .low_bit
-; high bit
-  lda #>ILI9341_WHITE
-;  jsr gd_send_data
-  sta PORTB
-  lda #GD_E
-  tsb GD_PORT
-  trb GD_PORT
-;  lda #<ILI9341_WHITE
-;;  jsr gd_send_data
-;  sta PORTB
-;  lda #GD_E
-  tsb GD_PORT
-  trb GD_PORT
+  gd_send_x2 >ILI9341_WHITE ; relies on high and low bits being the same
   bra .color_done
 .low_bit:
-  lda #>ILI9341_BLACK
-;  jsr gd_send_data
-  sta PORTB
-  lda #GD_E
-  tsb GD_PORT
-  trb GD_PORT
-;  lda #<ILI9341_BLACK
-;;  jsr gd_send_data
-;  sta PORTB
-;  lda #GD_E
-  tsb GD_PORT
-  trb GD_PORT
+  gd_send_x2 >ILI9341_BLACK ; relies on high and low bits being the same
 .color_done:
   dex
   bne .row_loop
   iny
-  cpy #24
+  cpy #GD_CHAR_BYTES
   bne .col_loop
   ply
   plx
   rts
 
 
+; On exit X, Y are preserved
+;         A is not preserved
 gd_next_character:
   lda GD_COL
   inc
@@ -509,7 +438,7 @@ gd_next_character:
   rts
 .next_row:
   lda GD_ROW
-  cmp #GD_CHAR_ROWS - 1
+  cmp #GD_CHAR_ROWS-1
   beq .at_bottom
   stz GD_COL
   inc GD_ROW
@@ -521,91 +450,29 @@ gd_next_character:
 gd_previous_character:
   lda GD_COL
   dec
-  cmp #0xff
+  cmp #$ff
   beq .previous_row
   sta GD_COL
   rts
 .previous_row:
   lda GD_ROW
   beq .at_top
-  lda #GD_CHAR_COLS - 1
+  lda #GD_CHAR_COLS-1
   sta GD_COL
   dec GD_ROW
   rts
 .at_top:
   rts
 
-
+; On exit X, Y are preserved
+;         A is not preserved
 gd_next_line:
   lda GD_ROW
-  cmp #GD_CHAR_ROWS - 1
+  cmp #GD_CHAR_ROWS-1
   beq .row_ready
   inc GD_ROW
 .row_ready:
   stz GD_COL
-  rts
-
-; On entry A              contains the character to store
-;          GD_ROW, GD_COL contain the location to store the character
-; On exit  A is preserved
-;          X, Y are not preserved
-gd_store_character:
-  pha
-  ; calculate GD_TEMP = GD_ROW * GD_CHAR_COLS
-  lda GD_ROW
-  ldy #GD_CHAR_COLS
-  jsr multiply8
-  sta GD_TEMP+1
-  clc
-  lda GD_TEMP
-  adc GD_COL
-  sta GD_TEMP
-  lda GD_TEMP + 1
-  adc #0
-  sta GD_TEMP + 1
-  clc
-  lda GD_TEMP
-  adc #<GD_CHAR_BUFFER
-  sta GD_TEMP
-  lda GD_TEMP + 1
-  adc #>GD_CHAR_BUFFER
-  sta GD_TEMP + 1
-  pla
-  sta (GD_TEMP)
-  rts
-
-; On entry GD_ROW contains the row to clear
-gd_clear_character_row:
-  lda GD_ROW
-  ldy #GD_CHAR_COLS
-  jsr multiply8
-  sta GD_TEMP+1
-  clc
-  lda GD_TEMP
-  adc #<GD_CHAR_BUFFER
-  sta GD_TEMP
-  lda GD_TEMP + 1
-  adc #>GD_CHAR_BUFFER
-  sta GD_TEMP + 1
-  lda #' '
-  ldy #0
-.loop:
-  sta (GD_TEMP),Y
-  iny
-  cpy #GD_CHAR_COLS
-  bne .loop
-  rts
-
-
-gd_clear_character_screen:
-  lda #0
-.loop
-  sta GD_ROW
-  jsr gd_clear_character_row
-  lda GD_ROW
-  inc
-  cmp #GD_CHAR_ROWS
-  bne .loop
   rts
 
 
@@ -614,43 +481,24 @@ set_char_data_ptr:
   sec
   sbc #' '
 
-  ; GD_CHAR_DATA_PTR = character offset * 24 = co * 16 + co * 8
-  sta GD_TEMP
-  lsr
-  lsr
-  lsr
-  lsr
-  sta GD_TEMP + 1
-  lsr
-  sta GD_CHAR_DATA_PTR + 1
-  lda GD_TEMP
-  asl
-  asl
-  asl
-  sta GD_CHAR_DATA_PTR
-  asl
-  ;sta GD_TEMP
-  clc
-  ;lda GD_TEMP
-  adc GD_CHAR_DATA_PTR
-  sta GD_CHAR_DATA_PTR
-  lda GD_TEMP + 1
-  adc GD_CHAR_DATA_PTR + 1
+  ; GD_CHAR_DATA_PTR = character offset * 24
+  ldy #GD_CHAR_BYTES
+  jsr multiply8x8
   sta GD_CHAR_DATA_PTR + 1
 
   ; Add the table base address
   clc
-  lda GD_CHAR_DATA_PTR
-  adc #<character_patterns_12x16
+  lda MULTIPLY_8X8_RESULT_LOW
+  adc #<character_patterns
   sta GD_CHAR_DATA_PTR
   lda GD_CHAR_DATA_PTR + 1
-  adc #>character_patterns_12x16
+  adc #>character_patterns
   sta GD_CHAR_DATA_PTR + 1
   rts
 
 
 x_y_from_row_col:
-  ; GD_Y = GD_ROW * 16
+  ; GD_Y = GD_ROW * GD_CHAR_HEIGHT
   clc
   lda GD_ROW
   adc GD_SCROLL_ROWS
@@ -659,72 +507,18 @@ x_y_from_row_col:
   sec
   sbc #GD_CHAR_ROWS
 .row_ok:
-  sta GD_TEMP
-  lsr
-  lsr
-  lsr
-  lsr
+  ldy #GD_CHAR_HEIGHT
+  jsr multiply8x8
   sta GD_Y + 1
-  lda GD_TEMP
-  asl
-  asl
-  asl
-  asl
+  lda MULTIPLY_8X8_RESULT_LOW
   sta GD_Y
-  ; GD_X = GD_COL * 12 = GD_COL * 8 + GD_COL * 4
+  ; GD_X = GD_COL * GD_CHAR_WIDTH
   lda GD_COL
-  rol
-  rol
-  rol
-  rol
-  and #$07
-  sta GD_TEMP + 1
-  lsr
+  ldy #GD_CHAR_WIDTH
+  jsr multiply8x8
   sta GD_X + 1
-  lda GD_COL
-  asl
-  asl
+  lda MULTIPLY_8X8_RESULT_LOW
   sta GD_X
-  asl
-  ;sta GD_TEMP
-  clc
-  ;lda GD_TEMP
-  adc GD_X
-  sta GD_X
-  lda GD_TEMP + 1
-  adc GD_X + 1
-  sta GD_X + 1
-  rts
-
-
-; Multiplies two 8-bit factors to produce a 16-bit product
-; in about 153 cycles.
-; @param A one factor
-; @param Y another factor
-; @return high 8 bits in A; low 8 bits in $0000
-;         Y and $0001 are trashed; X is untouched
-multiply8:
-prodlo  = GD_TEMP
-factor2 = GD_TEMP+1
-
-  ; Factor 1 is stored in the lower bits of prodlo; the low byte of
-  ; the product is stored in the upper bits.
-  lsr ; prime the carry bit for the loop
-  sta prodlo
-  sty factor2
-  lda #0
-  ldy #8
-.loop:
-  ; At the start of the loop, one bit of prodlo has already been
-  ; shifted out into the carry.
-  bcc .noadd
-  clc
-  adc factor2
-.noadd:
-  ror
-  ror prodlo  ; pull another bit out for the next iteration
-  dey         ; inc/dec don't modify carry; only shifts and adds do
-  bne .loop
   rts
 
 

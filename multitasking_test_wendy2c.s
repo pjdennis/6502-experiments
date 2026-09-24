@@ -1,37 +1,21 @@
   .include base_config_wendy2c.inc
 
-LED_MASK             = %01000000
-LED_PORT             = PORTB
-
-MORSE_LED = LED_MASK
-MORSE_PORT = LED_PORT
+MUSIC_BPM = 92
+;MUSIC_BPM = 240 ; for ditty
 
 ; PORTA assignments
-; PA1/PA2 are repurposed from the (disabled) graphic-display pins
-; GD_RSTB/GD_CSB; see base_config_wendy2c.inc.
 CONTROL_BUTTON      = %00000010
 CONTROL_BUTTON_PORT = PORTA
+
 CONTROL_LED         = %00000100
 CONTROL_LED_PORT    = PORTA
 
-;PORTA_OUT_MASK    = BANK_MASK | CONTROL_LED | MORSE_LED | SD_CSB
-;;PORTA_OUT_MASK     = BANK_MASK
-
-;SD_DATA           = %00001000
-;SD_CLK            = %00010000
-;SD_DC             = %00100000
-;SD_CS_PORT        = PORTA
-;SD_DATA_PORT      = PORTB
-
 ; PORTB assignments
+MORSE_LED         = %01000000
+MORSE_PORT        = PORTB
+
 T1_SQWAVE_OUT     = %10000000
 T1_SQWAVE_PORT    = PORTB
-
-;PORTB_OUT_MASK    = DISPLAY_BITS_MASK | E | T1_SQWAVE_OUT
-;;PORTB_OUT_MASK     = DISPLAY_BITS_MASK | E
-
-MUSIC_BPM = 92
-  .include musical_notes.inc
 
 DELAY                  = CLOCK_FREQ_KHZ * 2  ; 1 KHz / 2 = 500 Hz
 
@@ -67,22 +51,30 @@ BUFFER_DATA            = $7d00
   .include display_hex.inc
   .include musical_notes_tables.inc
   .include utilities.inc
-;  .include copy_memory_inline.inc
   .include sound.inc
   .include console.inc
   .include buffer.inc
   .include morse.inc
-;  .include character_patterns_6x8.inc
 
   ; Programs
   .include prg_counters.inc
   .include prg_chase.inc
   .include prg_play_song.inc
+  .include musical_notes.inc
   .include prg_star_spangled_banner.inc
+;  .include prg_ditty.inc
 ;  .include prg_print_ticks_counter.inc
   .include prg_led_control.inc
   .include prg_morse_demo.inc
-;  .include prg_small_display_demo.inc
+  .include macros.inc
+
+
+  .macro add_program,address
+  lda #<\address
+  ldx #>\address
+  jsr initialize_additional_process
+  .endm
+
 
 program_start:
   ldx #$ff                                 ; Initialize stack
@@ -93,11 +85,11 @@ program_start:
   plp
 
 ; initialize LED
-  lda #LED_MASK
-  trb LED_PORT
-  tsb LED_PORT + DDR_OFFSET
+  lda #MORSE_LED
+  trb MORSE_PORT
+  tsb MORSE_PORT + DDR_OFFSET
 
-; initialize control LED (output, off) and control button (input)
+; initialize LED control
   lda #CONTROL_LED
   trb CONTROL_LED_PORT
   tsb CONTROL_LED_PORT + DDR_OFFSET
@@ -136,40 +128,16 @@ program_start:
   jsr reset_and_enable_display_no_cursor
 
   ; Configure the additional processes
-
-  lda #<run_counter_top_left
-  ldx #>run_counter_top_left
-  jsr initialize_additional_process
-
-  lda #<run_counter_top_right
-  ldx #>run_counter_top_right
-  jsr initialize_additional_process
-
-  lda #<run_counter_bottom_left
-  ldx #>run_counter_bottom_left
-  jsr initialize_additional_process
-
-  lda #<run_counter_bottom_right
-  ldx #>run_counter_bottom_right
-  jsr initialize_additional_process
-
-  lda #<run_chase
-  ldx #>run_chase
-  jsr initialize_additional_process
-
-  lda #<play_star_spangled_banner
-  ldx #>play_star_spangled_banner
-  jsr initialize_additional_process
-
-  lda #<led_control
-  ldx #>led_control
-  jsr initialize_additional_process
-
+  add_program run_counter_top_left
+  add_program run_counter_top_right
+  add_program run_counter_bottom_left
+  add_program run_counter_bottom_right
+  add_program run_chase
+  add_program play_star_spangled_banner
+; add_program play_ditty
+  add_program led_control
   jsr add_morse_demo
-
-;  lda #<mini_display_demo
-;  ldx #>mini_display_demo
-;  jsr initialize_additional_process 
+; add_program mini_display_demo
 
   ; Configure timer 2 to be used for task switching
   lda #0                   ; Timer 2 one shot run mode 
@@ -184,11 +152,11 @@ program_start:
   lda #(IERSETCLEAR | IT2) ; Enable timer 2 interrupts
   sta IER
 
-busy_loop:
+.busy_loop:
   lda #<100
   ldx #>100
   jsr sleep_milliseconds
-  bra busy_loop
+  bra .busy_loop
 
 
 ; Set up stack, etc. so that additional process will start running on next interrupt
@@ -198,9 +166,9 @@ initialize_additional_process:
   tay            ; low order address in Y
   lda FIRST_UNUSED_BANK
   cmp #BANK_STOP
-  bne banks_exist
+  bne .banks_exist
   rts            ; Silently ignore attempts to add too many processes
-banks_exist:
+.banks_exist:
   txa            ; Save first bank stack pointer to save location
   tsx
   stx STACK_POINTER_SAVE
@@ -290,26 +258,23 @@ interrupt:
   phx                     ; Finish saving outgoing bank registers to stack
   phy
 
-  inc TICKS_COUNTER       ; Increment the ticks counter
-  bne interrupt_high_ticks_ok
-  inc TICKS_COUNTER + 1
-interrupt_high_ticks_ok:
+  inc16 TICKS_COUNTER     ; Increment the ticks counter
 
 switch_to_next_bank:
   tsx                     ; Save outgoing bank stack pointer to save location
   stx STACK_POINTER_SAVE
 
-find_next_bank:
+.find_next_bank:
   lda BANK_PORT
   and #BANK_MASK
   sta BANK_TEMP
 
-next_bank:  
+.next_bank:
   inc                     ; Increment the memory bank
   cmp FIRST_UNUSED_BANK
-  bne interrupt_bank_ok
+  bne .bank_ok
   lda #BANK_START         ; We were on the last bank so start over at the first
-interrupt_bank_ok:
+.bank_ok:
   tax
   lda #BANK_MASK
   trb BANK_PORT
@@ -317,18 +282,18 @@ interrupt_bank_ok:
   tsb BANK_PORT           ; Switch to incoming bank
 
   lda SLEEPING
-  beq not_sleeping        ; Branch if not sleeping
+  beq .not_sleeping       ; Branch if not sleeping
 
   lda WAKE_AT             ; Compare WAKE_AT - TICKS_COUNTER
   cmp TICKS_COUNTER
   lda WAKE_AT + 1
   sbc TICKS_COUNTER + 1
-  bmi stop_sleeping       ; Stop sleeping if WAKE_AT <= TICKS_COUNTER
+  bmi .stop_sleeping      ; Stop sleeping if WAKE_AT <= TICKS_COUNTER
 
   lda BANK_PORT
   and #BANK_MASK
   cmp BANK_TEMP
-  bne next_bank
+  bne .next_bank
 
   ; Everything is sleeping
   wai
@@ -338,14 +303,10 @@ interrupt_bank_ok:
   lda #>DELAY
   sta T2CH                ; (Store to the high register starts the timer and clears interrupt)
 
-  inc TICKS_COUNTER       ; Increment the ticks counter
-  bne interrupt_high_ticks_ok2
-  inc TICKS_COUNTER + 1
-interrupt_high_ticks_ok2:
+  inc16 TICKS_COUNTER     ; Increment the ticks counter
+  bra .find_next_bank
 
-  bra find_next_bank
-
-stop_sleeping:
+.stop_sleeping:
   stz SLEEPING            ; Stop sleeping
 
   ldx STACK_POINTER_SAVE
@@ -353,7 +314,7 @@ stop_sleeping:
   cli
   rts
 
-not_sleeping:
+.not_sleeping:
   ldx STACK_POINTER_SAVE ; Restore incoming bank stack pointer from save location
   txs
 
