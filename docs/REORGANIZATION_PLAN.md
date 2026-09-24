@@ -262,10 +262,29 @@ Still open:
 - **Baseline: all 4 suites green** on the trial branch. The two Playwright web tests also pass locally.
 - **Environment notes** for later sessions in this container type:
   - `git fetch --unshallow`.
-  - Build vasm from `sun.hasenbraten.de`.
   - `apt-get install 64tass`.
   - prog8c jar at `/tmp/prog8c.jar`.
+  - vasm from `phoenix.owl.de/tags/vasm1_9f.tar.gz` (see Phase 1 notes).
   - `pip install playwright==1.56.0` to match the pre-installed `/opt/pw-browsers` Chromium.
   - The apt mirrors were unreachable for `bsdextrautils` (`hexdump`), so a local `od`-based `hexdump -C` stand-in was used. It isn't committed.
 
-### Next: Phase 1 (branch consolidation) on the trial branch
+### Phase 1: done on the trial branch 2026-09-24 (go-live steps pending)
+
+- **1a.** The trial branch is based on `claude/pld-hardware-memory-map-3hslxb`. Fast-forwarding `main` happens at go-live.
+- **1c.** Merged `claude/bbc-basic-four-analysis-JBZDp` (`47ae72a`). There was no content change; the merge adds its 3 commits to the history.
+- **1b.** Merged `michael_keyboard_wip` (`922d661`), bringing in all 235 commits. The merge commit message records each conflict resolution. In short:
+  - `wendy2c` names are kept.
+  - The PLD keeps cfg `$18` as upper ROM.
+  - `musical_notes.inc` is ours.
+  - `upload_and_run.inc` is ours plus the overridable `INTERRUPT_ROUTINE`.
+  - The multitasking test is mkwip's version.
+  - mkwip's deletions are accepted: the per-baud scripts and 5 wendy2-era programs.
+  - Every changed firmware hash is explained. All suites are green.
+- **vasm pinned to 1.9f** (owner decision). vasm 2.0+ rejects `lda #(>X)`, which the Michael graphics macros use. vasm 2.0d+ no longer NUL-terminates `.ascii`, so `4bit_hello.s` assembled "fine" but was broken.
+  - With 1.9f, 8 Michael graphics programs build (RAM-upload mode) and `4bit_hello.s` regains its terminator.
+  - Every other binary is byte-identical under 1.9f and 2.0f.
+  - All suites are green with 1.9f.
+  - Porting to current vasm is future work, outside the reorganization.
+- **1d (go-live only).** Delete the merged branches, and tag-then-delete `asm-unified-parsing` / `claude/install-hexdump-5CahY`. The socket-port issue stays open.
+
+### Next: Phase 2 (hygiene in place) on the trial branch

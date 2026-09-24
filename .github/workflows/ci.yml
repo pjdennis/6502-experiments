@@ -9,9 +9,10 @@ on:
   workflow_dispatch:
 
 env:
-  # The release tarball is unversioned, so the firmware manifest records the
-  # vasm version it was made with and `check` fails loudly if they differ.
-  VASM_URL: http://sun.hasenbraten.de/vasm/release/vasm.tar.gz
+  # Pinned to vasm 1.9f: vasm 2.0+ rejects `lda #(>X)` (Michael graphics
+  # macros) and 2.0d+ no longer NUL-terminates `.ascii`, which the code relies
+  # on. The firmware manifest records the version and `check` fails if it differs.
+  VASM_URL: http://phoenix.owl.de/tags/vasm1_9f.tar.gz
   PROG8C_URL: https://github.com/irmen/prog8/releases/download/v12.1.1/prog8c-12.1.1-all.jar
   PROG8C: /tmp/prog8c.jar
 
@@ -23,15 +24,15 @@ jobs:
       matrix:
         suite: [firmware, asm1, asm2, emulator]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Build vasm6502_oldstyle
         run: |
           curl -sSfL -o /tmp/vasm.tar.gz "$VASM_URL"
-          tar -xzf /tmp/vasm.tar.gz -C /tmp
+          mkdir -p /tmp/vasm && tar -xzf /tmp/vasm.tar.gz -C /tmp/vasm --strip-components=1
           make -s -C /tmp/vasm CPU=6502 SYNTAX=oldstyle >/dev/null
           sudo install /tmp/vasm/vasm6502_oldstyle /usr/local/bin/
-          vasm6502_oldstyle </dev/null | head -1
+          vasm6502_oldstyle </dev/null 2>/dev/null | head -1
 
       - name: Install asm1 tools
         if: matrix.suite == 'asm1'
