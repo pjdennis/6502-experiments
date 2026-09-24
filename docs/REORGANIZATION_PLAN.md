@@ -73,13 +73,13 @@ docs/
 hardware/
   wendy/                   v1 notes (6522 @ $6000, 5 MHz, 4-bit LCD, PORTA banking)
   michael/                 v2 notes; arduino/ (from michael/: monitor/programmer sketches)
-  wendy2c/                 22V10-wendy2c.pld, memory-map docs, PLD history notes
+  wendy2/                  board "Wendy 2"; revisions.md (2 → 2b → 2c), 22V10-wendy2c.pld, memory map
 firmware/                  everything assembled by vasm for real boards
-  Makefile                 BOARD=wendy|michael|wendy2c; -I lib/... ; build-all + manifest
+  Makefile                 BOARD=wendy|michael|wendy2; -I lib/... ; build-all + manifest
   boards/
     wendy/     base_config.inc  initialize_machine.inc  upload_and_run_{ram,eeprom}.s
     michael/   (same)            + beeb/ (BBC BASIC MOS shim; expects external BeebEater)
-    wendy2c/   (same)            + verification, monitor, eeprom tools
+    wendy2/    (same)            + verification, monitor, eeprom tools (rev c hardware)
   lib/
     core/      6522, delay, utilities, copy_memory, to_decimal, convert_to_hex, buffer
     lcd/       display_routines{,_4bit,_8bit}, display_update*, display_* helpers
@@ -90,14 +90,14 @@ firmware/                  everything assembled by vasm for real boards
     serial/    upload_and_run.inc
   programs/
     common/    board-agnostic tests/demos (buffer_test, to_decimal_test, …)
-    wendy/  michael/  wendy2c/    board-specific demos and tests
+    wendy/  michael/  wendy2/     board-specific demos and tests
   fonts/       font8x8/ sources + generators
 tools/                     host-side
   upload/      transfer.py (the single parameterised version from mkwip: --port --baudrate
                --noreset, USB autodetect), compile_and_upload.sh, compile_and_program.sh
   makerom.py, keynames/ (COMMANDS generator), lcd-ocr/ (lcd_ocr, lcd_inspect, calibrate)
 emulator/                  from assembler2/emulator/ + persistent_emulator.py
-  (Makefile references ../hardware/wendy2c/22V10-wendy2c.pld and ../firmware/…)
+  (Makefile references ../hardware/wendy2/22V10-wendy2c.pld and ../firmware/…)
 toolchain/
   asm1/                    from assembler/ (+ extras only found in assembler2/legacy/)
   asm2/
@@ -118,7 +118,12 @@ Design notes:
 
 - **Firmware include paths.** vasm's `-I` means the `.include "display_routines.inc"` lines don't need to change when the `.inc` files move into `lib/*`. The Makefile passes `-I` for each lib subdirectory and the board directory, so a program picks up its board's `base_config.inc` from `-I boards/$(BOARD)`. This replaces the `_v1` / `_v2` / `_wendy2c` filename suffixes.
 - **Stage 17 vs a `src/` rename.** If moving stage 17 to `src/` makes the chain script awkward, keep the directory named `17/`. What matters is that the frozen stages are visibly separate from the live one.
-- **Board name.** Use **`wendy2c`**. The emulator (`--machine wendy2c`), the PLD file and all 2026 work use it. The mkwip rename `wendy2c → wendy2` (`5440a45`) gets resolved in favour of `wendy2c` during the merge.
+- **Board name (decided 2026-09-24).** The board is **Wendy 2**, and the original v1 is **Wendy**. "2c" is *revision c* of Wendy 2, and the history supports this:
+  - **Wendy 2** (`6be57cd`, 2022-04-10): 65C02, 4 MHz, VIA at `$F000`, no RAM banking.
+  - **Rev b** (`14951d4`, 2022-04-23): 4 bank lines on PORTB, "2 banks of 32K".
+  - **Rev c** (`ae2865b`, 2022-04-30): the commit message says the new memory map is "designed for a 512K RAM chip". It adds a 5th bank line (PB4), and the 22V10 PLD adds a dual-speed clock and 32 bank configurations.
+  - The later crystal swap to 9.72 MHz (`ba13b19`) and the PLD edits happened within rev c.
+  - So directories use `wendy2`, and revision-specific artifacts keep the `c`: `22V10-wendy2c.pld` and the emulator's `--machine wendy2c`, which models rev c exactly. `hardware/wendy2/revisions.md` records 2 / 2b / 2c. The `_wendy2c` filename suffixes go away with the move into `boards/wendy2/`, which also agrees with mkwip's 2023 rename (`5440a45`).
 
 ## 3. Migration plan
 
@@ -148,8 +153,8 @@ Design notes:
 
 - **1a.** Fast-forward `main` to `claude/pld-hardware-memory-map-3hslxb`. Before that, check the September PLD decision (`17e4a78`: cfg `$18` = ROM upper + lower bank 2).
 - **1b.** Merge `michael_keyboard_wip` into `main` with a real merge, so the 235 commits (graphics console, keyboard driver, BBC BASIC shim, generic transfer.py) become ancestors. Expected conflicts and how to resolve them:
-  - **wendy2 ↔ wendy2c renames.** Keep the `wendy2c` names. Carry over mkwip's content edits (LED control `71298d5`; CONTROL_BUTTON/LED is already ported in `67e1a40`).
-  - **PLD cfg `$18`.** mkwip `27bbc44` makes it RAM; main `17e4a78` (newer) makes it ROM. **The owner must decide.** The default is main's version, and the emulator config-map tests enforce it.
+  - **wendy2 ↔ wendy2c renames.** Keep main's `*_wendy2c` names during the merge (all 2026 work and the emulator tests use them); Phase 3 step 7–8 then drops the suffix for everyone. Carry over mkwip's content edits (LED control `71298d5`; CONTROL_BUTTON/LED is already ported in `67e1a40`).
+  - **PLD cfg `$18`.** mkwip `27bbc44` makes it RAM; main `17e4a78` makes it ROM. **Decided: upper ROM** (main's version), which the emulator config-map tests enforce. Take mkwip's other `27bbc44` changes only where they don't conflict with this.
   - **transfer.py and upload scripts.** Take mkwip's parameterised `transfer.py` and its `compile_and_upload_{board}.sh`. Delete the per-baud copies.
   - **Diverged `.inc` files** (base_config_v2, upload_and_run.inc, graphics_display, key_codes, key_names, morse, musical_notes, …). Take mkwip for Michael-specific changes. For shared files, merge by hand and let the firmware manifest show which outputs changed on purpose.
   - Binary `michael-2023-12-04.rom`, `a.out.old`, `a.out.reference`: keep the ROM (document it in `hardware/michael/`) and drop the `a.out.*` files.
@@ -175,7 +180,7 @@ Design notes:
 
 Do the most depended-upon pieces first, so later steps only need their paths fixed once:
 
-1. `22V10-wendy2c.pld` → `hardware/wendy2c/`. Fix the emulator Makefile and `pld_to_c.py` paths.
+1. `22V10-wendy2c.pld` → `hardware/wendy2/`. Fix the emulator Makefile and `pld_to_c.py` paths.
 2. `assembler2/emulator/` and `persistent_emulator.py` → `emulator/`. Fix the Makefile split (the emulator gets its own Makefile; the prog8 targets move with prog8) and the Python imports.
 3. `assembler/` → `toolchain/asm1/`.
 4. `assembler2/{00..17}`, the chain scripts, `run_tests.py` and `pyasm.py` → `toolchain/asm2/`.
@@ -184,7 +189,7 @@ Do the most depended-upon pieces first, so later steps only need their paths fix
 7. Root `*.inc` → `firmware/lib/*`, and board configs → `firmware/boards/*` (dropping the suffixes).
    - This is the one step where the `.inc` files need a rename *with* different basenames, e.g. `base_config_v1.inc` → `boards/wendy/base_config.inc`.
    - Do it as pure renames first, then update the `.include` lines in a separate commit. The firmware manifest proves the outputs are identical.
-8. Root `*.s` → `firmware/programs/{common,wendy,michael,wendy2c}/`. Classify each file by the `base_config_*` it includes; the Phase 0 script can print this.
+8. Root `*.s` → `firmware/programs/{common,wendy,michael,wendy2}/`. Classify each file by the `base_config_*` it includes; the Phase 0 script can print this.
 9. Host tools → `tools/`. `michael/` → `hardware/michael/arduino/`. `font8x8/` → `firmware/fonts/`.
 10. `bbc-basic-four-analysis/` → `research/bbc-basic-iv/`. The stale demos and plan docs → `attic/`.
 11. Move the per-area `.claude/CLAUDE.md` and `.vscode` settings to the root and update them.
@@ -198,8 +203,9 @@ Add annotated **milestone tags**. Each tag message says how the thing was built 
 | `wendy/first-light` | `d297d44` | 2020-07-20 | first Wendy (v1) programs, Ben Eater-style |
 | `michael/ram-upload` | `eb3853c` | 2021-04-09 | Michael (v2) board: RAM upload working, v1/v2 config split |
 | `wendy2/upload` | `6be57cd` | 2022-04-10 | first Wendy2 (65C02 + PLD) |
-| `wendy2c/intro` | `ae2865b` | 2022-04-30 | wendy2c advanced memory map, first `22V10-wendy2c.pld` |
-| `wendy2c/full` | `ca09ca6` | 2022-07-22 | full wendy2c code set |
+| `wendy2b/intro` | `14951d4` | 2022-04-23 | Wendy 2 rev b: 2 × 32K banks |
+| `wendy2c/intro` | `ae2865b` | 2022-04-30 | Wendy 2 rev c: 512K memory map, first `22V10-wendy2c.pld` |
+| `wendy2c/full` | `ca09ca6` | 2022-07-22 | full wendy2c code set, 2b removed |
 | `asm1/start` | `60be16b` | 2022-11-19 | asm1 bootstrap begins |
 | `fork/michael-keyboard` | `536f200` | 2023-04-22 | michael_keyboard_wip forks |
 | `michael/bbc-basic` | `ecfa0b0` | 2024-02-11 | BBC BASIC on Michael via the MOS shim |
@@ -218,11 +224,17 @@ Also write `docs/history.md`, a timeline narrative per area covering the three b
 
 If an area gets outside users, for example the emulator or the editor, extract it with `git filter-repo --subdirectory-filter emulator`, which keeps that area's full history across the moves when `--path-rename` is also used for the old paths. Before that, the wendy2c PLD becomes an input that is copied or pinned, not read through `../`.
 
-## 4. Decisions the owner needs to make
+## 4. Decisions
+
+Decided 2026-09-24:
+
+- PLD cfg `$18` is **upper ROM**.
+- The board is named **Wendy 2** (`wendy2`), and rev c is kept where it's revision-specific (see §2.2).
+- Stale material goes to **`attic/`** for later review, not deletion.
+
+Still open:
 
 1. Is `claude/pld-hardware-memory-map-3hslxb` ready to become `main`?
-2. PLD cfg `$18`: ROM upper (main, Sept 2026) or RAM (mkwip, May 2026)?
-3. Board naming: `wendy2c` (recommended) or `wendy2`?
-4. `asm-unified-parsing` refactor and install-hexdump socket API: archive only, or port?
-5. Keep `attic/`, or delete stale demos outright (they stay in history either way)?
-6. Rename the repository?
+2. Install-hexdump socket API: port it or archive it? What it is: 7 TCP calls (create/bind/listen/accept/recv/send/close) that hand 6502 programs real host sockets, one byte per call. Its only user is a demo HTTP server, `webserver.asm`. Porting means ~200 lines of C as a new emulator module, stubs moved to the free addresses after `opendir` ($F03F+), and I/O ports moved out of the argv area ($FE00–$FFDF). It works on `nmos-default` only; real hardware has no equivalent.
+3. `asm-unified-parsing` refactor: archive only (recommended; its target, stage 23, is gone) or re-do it on stage 17?
+4. Rename the repository?
